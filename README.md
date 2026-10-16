@@ -91,15 +91,15 @@ The Windows and Linux apps keep separate settings files (`athanor-config.json`, 
 
 Close the app, download the new release for your system and extract it in the same place, so that its `athanor` folder merges into yours. Your `.env`, settings, `logs/` and `tools/` are not in the archive, so they are kept.
 
-### Build from source
+### From the source code
 
-```bash
-git clone https://github.com/Aprilox/Athanor.git && cd Athanor/app
-./build.sh                   # Linux/macOS/WSL: builds ../Athanor.exe and ../athanor
-build.cmd                    # Windows (needs Go 1.24+: winget install GoLang.Go)
-```
+Downloaded *Code → Download ZIP* or cloned the repository instead of a release? Build the app in one step, at the root of the folder:
 
-Standard library only, plus three vendored packages for the WebView2 window: no network access is needed to build.
+| Windows | Linux / macOS / WSL |
+|---|---|
+| double-click **`build.cmd`**: it offers to install Go through winget if it is missing, then builds `Athanor.exe` | `./build.sh`: builds `athanor` (and `Athanor.exe`); needs Go 1.24+ (`apt install golang-go`, `dnf install golang`, `brew install go`…) |
+
+Then follow the quick start from step 2. The app only uses Go's standard library plus three vendored packages for the WebView2 window, so the build needs no network access.
 
 ---
 
@@ -303,7 +303,7 @@ Without a folder, the commands use `<tool>/projet`. The request is read and writ
 ## Repository layout
 
 ```
-Athanor.exe, athanor   the app for Windows / Linux (in the release)
+Athanor.exe, athanor   the app for Windows / Linux (in the release, or built with build.cmd / build.sh)
 app/                   the app's Go sources, static UI (HTML, CSS, JS without dependencies), Windows resources
 commands/              install, configure, start, stop, stop-after-cycle, follow, test-sandbox, repair,
                        allow-admin, unreal-network (.cmd for Windows, .sh for Linux/WSL)
