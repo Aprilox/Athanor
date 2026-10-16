@@ -9,7 +9,7 @@ if exist "%ProgramFiles%\Go\bin\go.exe" ( set "GO=%ProgramFiles%\Go\bin\go.exe" 
 echo Go (the compiler of Athanor) is not installed.
 where winget >nul 2>nul || ( echo Install it from https://go.dev/dl/ then run build.cmd again. & pause & exit /b 1 )
 choice /m "Install Go now with winget"
-if errorlevel 2 exit /b 1
+if errorlevel 2 ( echo Cancelled: install Go from https://go.dev/dl/ then run build.cmd again. & pause & exit /b 1 )
 winget install --id GoLang.Go -e --accept-source-agreements --accept-package-agreements
 if not exist "%ProgramFiles%\Go\bin\go.exe" ( echo Go was not installed: install it from https://go.dev/dl/ then run build.cmd again. & pause & exit /b 1 )
 set "GO=%ProgramFiles%\Go\bin\go.exe"
