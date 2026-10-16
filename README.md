@@ -11,7 +11,6 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Aprilox/Athanor/releases/latest"><img src="https://img.shields.io/github/v/release/Aprilox/Athanor?style=flat-square&color=3fc6a5&label=release" alt="Latest release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-3fc6a5?style=flat-square" alt="MIT license"></a>
   <img src="https://img.shields.io/badge/platform-Windows%2010%2F11%20%C2%B7%20Linux-1b2430?style=flat-square" alt="Windows 10/11 and Linux">
   <a href="https://claude.com/claude-code"><img src="https://img.shields.io/badge/runs-Claude%20Code-d97757?style=flat-square" alt="Runs Claude Code"></a>
@@ -27,6 +26,10 @@
   <a href="#security"><b>Security</b></a> ·
   <a href="#faq"><b>FAQ</b></a> ·
   <a href="README.fr.md"><b>Français</b></a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/Aprilox/Athanor/releases/latest"><img src="https://img.shields.io/badge/Download-Windows%20%C2%B7%20Linux-3fc6a5?style=for-the-badge" alt="Download for Windows and Linux"></a>
 </p>
 
 <p align="center">
@@ -62,7 +65,7 @@ You describe what you want: a game, a website, an app, a tool. Athanor runs [Cla
 
 ### Windows
 
-1. Download **`athanor-vX.Y.Z.zip`** from the [latest release](https://github.com/Aprilox/Athanor/releases/latest) and unzip it anywhere, the Desktop for example.
+1. Download **`athanor-vX.Y.Z.zip`** from the [latest release](https://github.com/Aprilox/Athanor/releases/latest) and unzip it anywhere, the Desktop for example. It contains the whole tool with `Athanor.exe` (Windows) and `athanor` (Linux) side by side.
 2. Double-click **`Athanor.exe`**. Pick a language, a theme and an accent: the first-launch guide takes you through the rest.
 3. **Install**: one window installs WSL2, Claude Code and the sandbox. Linux asks for a password once; the very first time may need a restart.
 4. **Connect**: *Setup & health* → *Check everything*. On the *Token* line, click *Repair*: a window signs you in to your Claude account. Paste the token in *Settings*.
@@ -82,6 +85,10 @@ commands/configure.sh        # token, models, language
 ```
 
 Each app keeps its own settings file (`athanor-config.json` on Windows, `athanor-config-linux.json` on Linux), so one folder can serve both systems.
+
+### Updating
+
+Download the new release and unzip it in the same place, so that its `athanor` folder merges into yours (close the app first). Your `.env`, settings, `logs/` and `tools/` are not in the zip, so they are kept. To update only the app, replace `Athanor.exe` (or `athanor`) with the one attached to the release.
 
 ### Build from source
 
@@ -294,6 +301,16 @@ Yes. Nothing is tied to a user name or a drive letter: paths come from your prof
 </details>
 
 ---
+
+## Releasing
+
+Push a version tag and GitHub builds both apps and publishes the release ([`.github/workflows/release.yml`](.github/workflows/release.yml)):
+
+```bash
+git tag v2.0.1 && git push origin v2.0.1
+```
+
+Keep the version in [`app/winres/athanor.rc`](app/winres/athanor.rc) in step with the tag.
 
 ## Contributing
 

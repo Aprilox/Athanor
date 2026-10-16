@@ -1,0 +1,75 @@
+# Builds Athanor.exe (Windows) and athanor (Linux) and publishes a GitHub Release
+# every time a version tag is pushed:   git tag v2.0.1 && git push origin v2.0.1
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: app/go.mod
+          cache: false
+
+      - name: Check
+        working-directory: app
+        run: |
+          go vet .
+          GOOS=windows GOARCH=amd64 go vet .
+          go test ./...
+
+      - name: Build
+        working-directory: app
+        env:
+          CGO_ENABLED: "0"
+        run: |
+          mkdir -p ../dist
+          # Windows: GUI app, icon and version info come from the committed rsrc_windows_amd64.syso
+          GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-s -w -H windowsgui" -o ../dist/Athanor.exe .
+          # Linux: static binary, runs on any distribution
+          GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o ../dist/athanor-linux-amd64 .
+
+      - name: Package
+        run: |
+          name="athanor-${GITHUB_REF_NAME}"
+          mkdir -p pkg
+          # the repository as committed (modes and line endings preserved), plus both apps side by side
+          git archive --format=tar --prefix=athanor/ HEAD | tar -x -C pkg
+          cp dist/Athanor.exe pkg/athanor/Athanor.exe
+          cp dist/athanor-linux-amd64 pkg/athanor/athanor
+          chmod 755 pkg/athanor/athanor
+          (cd pkg && zip -qr -X "../dist/${name}.zip" athanor)
+          (cd dist && sha256sum ./* > SHA256SUMS.txt)
+          ls -l dist
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: Athanor ${{ github.ref_name }}
+          generate_release_notes: true
+          body: |
+            ## Download
+
+            | You use | Download | Then |
+            |---|---|---|
+            | **Windows 10/11** | `athanor-${{ github.ref_name }}.zip` | unzip anywhere, double-click **Athanor.exe** |
+            | **Linux** | `athanor-${{ github.ref_name }}.zip` | unzip, `commands/install.sh`, then `./athanor` |
+
+            The zip contains the whole tool with both apps side by side: run the one for your system.
+            `Athanor.exe` and `athanor-linux-amd64` are also attached on their own, to update an existing installation
+            (replace the file in your tool folder). Checksums: `SHA256SUMS.txt`.
+
+            First launch: see the [Quick start](https://github.com/${{ github.repository }}#quick-start).
+          files: |
+            dist/athanor-${{ github.ref_name }}.zip
+            dist/Athanor.exe
+            dist/athanor-linux-amd64
+            dist/SHA256SUMS.txt
