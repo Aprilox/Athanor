@@ -49,7 +49,7 @@ Vous décrivez ce que vous voulez : un jeu, un site, une application, un outil. 
 | | |
 |---|---|
 | **Une boucle autonome** | Un jalon par cycle et un contexte neuf à chaque fois : les tours restent économes et le projet ne dérive pas. Quota atteint → pause jusqu'à sa réouverture, ou bascule sur un modèle de secours. Erreur → nouvel essai avec un délai croissant. Cycle muet ou trop long → coupé et repris. PC redémarré → reprise là où il s'était arrêté. Tout l'état est dans des fichiers. |
-| **Mode parallèle** | Un interrupteur par projet. Le plan est organisé en vagues de jalons indépendants ; chaque jalon est réalisé par son propre ouvrier, dans sa propre copie de travail git, tous en même temps. Le chef fusionne ensuite, vérifie et coche. |
+| **Mode parallèle** | Un interrupteur par projet. Un plan fin avec dépendances ; jusqu'à 10 ouvriers réalisent des jalons indépendants en même temps, chacun dans sa copie de travail git ; le pilote fusionne chacun dès qu'il termine et lance le suivant, et le chef vérifie une fois à la fin. |
 | **Une vraie équipe** | Un chef de projet et des sous-agents : `architect`, `creator`, `developer`, `tester`, `critic`, et un `executor` bon marché (Haiku par défaut) pour le travail mécanique. Le plan, les tests indépendants et la critique finale sont toujours délégués. |
 | **Une barrière** | Les commandes de Claude tournent sous bubblewrap + seccomp. Elles ne peuvent écrire que dans le projet et ne lisent jamais le reste de votre machine ; Internet reste ouvert. |
 | **Vos logiciels** | Unreal Engine, Blender, le SDK Android, Docker et winget sont joignables par un pont contrôlé, commande par commande. |
@@ -163,7 +163,7 @@ L'application n'utilise que la bibliothèque standard de Go et trois paquets emb
 | Cadrage | `docs/REQUIREMENTS.md`, `docs/DESIGN.md`, `docs/ARCHITECTURE.md`, et un plan de 8 à 25 jalons, chacun avec des critères d'acceptation vérifiables |
 | Squelette | un squelette exécutable et le `check.sh` propre au projet (compilation, tests, captures) |
 | Tranche complète | une fonctionnalité qui marche de bout en bout, vérifiée par le `tester` |
-| Production | les jalons restants, un par cycle, ou une vague à la fois en mode parallèle |
+| Production | les jalons restants, un par cycle, ou plusieurs à la fois en mode parallèle |
 | Finition | le `critic` utilise le résultat comme un utilisateur exigeant et note les bugs dans `BUGS.md` |
 | Livraison | `deliverable/`, `TEST_GUIDE.md`, puis `FINAL_REPORT.md` avec `STATUS: DONE`. Le pilote prend la demande suivante de la file, ou s'arrête |
 
@@ -171,15 +171,17 @@ L'application n'utilise que la bibliothèque standard de Go et trois paquets emb
 
 ## Mode parallèle
 
-*Suivi → Mode de travail → Mode parallèle*, par projet, avec 2 à 5 ouvriers par vague.
+*Suivi → Mode de travail → Mode parallèle*, par projet, avec 2 à 10 ouvriers en même temps.
 
-1. Dès le cycle suivant, le chef réorganise `PLAN.md` en sections `## Wave N` : la vague 1 contient le squelette et les contrats communs, les vagues suivantes des jalons qui ne se touchent pas.
-2. Chaque jalon de la vague en cours a son **ouvrier** : sa propre session Claude, sa propre copie de travail git (`.athanor/work/M5`) et sa propre branche (`auto/M5`). Tous les ouvriers travaillent en même temps.
-3. Le chef fusionne ensuite les branches, lance la vérification complète, coche ce qui est réussi et note le reste dans `BUGS.md` pour un cycle suivant. Les rapports des ouvriers sont dans `.athanor/WORKER_REPORTS.md`.
+1. Le chef écrit un **plan fin avec des dépendances explicites** : beaucoup de petits jalons autonomes, chacun avec les fichiers qu'il touche, `Depends on:` les jalons dont il a besoin, et ses critères d'acceptation. M1 est toujours la fondation (squelette, `check.sh`, contrats partagés).
+2. Le pilote fait tourner un **ordonnanceur** : chaque jalon dont les dépendances sont fusionnées reçoit un **ouvrier** (sa propre session Claude, sa propre copie de travail git `.athanor/work/M5` et sa branche `auto/M5`), jusqu'au nombre choisi en même temps.
+3. Dès qu'un ouvrier termine, le pilote **fusionne sa branche immédiatement** quand elle s'applique sans conflit, coche le jalon et lance les jalons suivants devenus prêts. Personne n'attend l'ouvrier le plus lent.
+4. En fin de cycle, **une seule** session du chef vérifie tout : elle fusionne les branches en conflit, lance la vérification complète, corrige ce que les fusions ont cassé et note le reste dans `BUGS.md`.
+5. **Les demandes en attente n'attendent pas.** Au début de chaque cycle, elles rejoignent la demande en cours : le chef ajoute leurs jalons au plan, avec leurs dépendances.
 
-4. **Les demandes en attente n'attendent pas.** Au début de chaque cycle, elles rejoignent la demande en cours : le chef ajoute leurs jalons au plan, en vagues, à côté du travail restant, avec une seule livraison finale à la fin.
+Chaque ouvrier ne porte que son jalon en contexte : le travail est découpé en petites sessions économes au lieu d'une seule énorme. La page *Équipe* montre une carte par ouvrier et le *Journal* étiquette leurs lignes `[M5]`. Le mode parallèle consomme plus de quota par heure (une session par ouvrier) mais beaucoup moins de temps.
 
-La page *Équipe* montre une carte par ouvrier et le *Journal* étiquette leurs lignes `[M5]`. Le mode parallèle est bien plus rapide sur les gros plans et consomme plus de quota (une session par ouvrier).
+---
 
 ---
 
@@ -356,7 +358,7 @@ Athanor.exe, athanor   l'application pour Windows / Linux (dans la version tél�
 app/                   les sources Go de l'application, l'interface (HTML, CSS, JS sans dépendance), ressources Windows
 commands/              install, configure, start, stop, stop-after-cycle, follow, test-sandbox, repair,
                        allow-admin, unreal-network (.cmd pour Windows, .sh pour Linux/WSL)
-system/                pilot.sh (la boucle), parallel.sh (vagues et ouvriers), safety.sh, bridge.py, settings.py
+system/                pilot.sh (la boucle), parallel.sh (ordonnanceur, ouvriers, fusions), safety.sh, bridge.py, settings.py
                        (barrière), guard.py, detect-tools.sh, athanor.py (carte, archives, captures),
                        bin/ (passerelles), windows/ (aides PowerShell)
 template/              CLAUDE.md (consignes de Claude), PC_TOOLS_GUIDE.md, .claude/agents/ (l'équipe)

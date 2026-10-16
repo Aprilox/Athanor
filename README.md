@@ -49,7 +49,7 @@ You describe what you want: a game, a website, an app, a tool. Athanor runs [Cla
 | | |
 |---|---|
 | **An autonomous loop** | One milestone per cycle, a fresh context each time, so turns stay cheap and the project never drifts. Usage limit reached → pause until it reopens, or switch to a fallback model. Error → retry with a growing delay. Silent or over-long cycle → cut and resumed. PC restarted → resumes where it stopped. All state lives in files. |
-| **Parallel mode** | One switch per project. The plan is organized in waves of independent milestones; each milestone is built by its own worker in its own git worktree, all at the same time, then the lead merges, checks and ticks. |
+| **Parallel mode** | One switch per project. A fine-grained plan with dependencies; up to 10 workers build independent milestones at once, each in its own git worktree; the pilot merges each one as soon as it finishes and starts the next, and the lead verifies once at the end. |
 | **A real team** | A project lead plus sub-agents: `architect`, `creator`, `developer`, `tester`, `critic`, and a cheap `executor` (Haiku by default) for mechanical work. The plan, independent tests and the final critique are always delegated. |
 | **A sandbox** | Claude's commands run under bubblewrap + seccomp. They can write only in the project, never read the rest of your machine, and Internet stays open. |
 | **Your PC's software** | Unreal Engine, Blender, the Android SDK, Docker and winget are reached through a controlled bridge, command by command. |
@@ -163,7 +163,7 @@ The app only uses Go's standard library plus three vendored packages for the Web
 | Framing | `docs/REQUIREMENTS.md`, `docs/DESIGN.md`, `docs/ARCHITECTURE.md`, and a plan of 8 to 25 milestones, each with verifiable acceptance criteria |
 | Skeleton | an executable skeleton and the project's own `check.sh` (build, tests, screenshots) |
 | Complete slice | one feature working end to end, checked by the `tester` |
-| Production | the remaining milestones, one per cycle, or one wave at a time in parallel mode |
+| Production | the remaining milestones, one per cycle, or several at once in parallel mode |
 | Polish | the `critic` uses the result like a demanding user and files bugs in `BUGS.md` |
 | Delivery | `deliverable/`, `TEST_GUIDE.md`, then `FINAL_REPORT.md` with `STATUS: DONE`. The pilot takes the next queued request, or stops |
 
@@ -171,15 +171,17 @@ The app only uses Go's standard library plus three vendored packages for the Web
 
 ## Parallel mode
 
-*Overview → Working mode → Parallel mode*, per project, with 2 to 5 workers per wave.
+*Overview → Working mode → Parallel mode*, per project, with 2 to 10 workers at once.
 
-1. From the next cycle the lead reorganizes `PLAN.md` into `## Wave N` sections: wave 1 holds the skeleton and the shared contracts, and the later waves hold milestones that do not touch each other.
-2. Each milestone of the current wave gets a **worker**: its own Claude session, its own git worktree (`.athanor/work/M5`) and its own branch (`auto/M5`). All workers run at the same time.
-3. The lead then merges the branches, runs the full check, ticks what passed and files the rest in `BUGS.md` for a later cycle. Workers' reports land in `.athanor/WORKER_REPORTS.md`.
+1. The lead writes a **fine-grained plan with explicit dependencies**: many small, self-contained milestones, each with the files it touches, `Depends on:` the milestones it needs, and acceptance criteria. M1 is always the foundation (skeleton, `check.sh`, shared contracts).
+2. The pilot runs a **scheduler**: every milestone whose dependencies are merged gets a **worker** (its own Claude session, its own git worktree `.athanor/work/M5` and branch `auto/M5`), up to the chosen number at once.
+3. As soon as a worker finishes, the pilot **merges its branch immediately** when it applies cleanly, ticks the milestone, and starts the next ready milestones. Nobody waits for the slowest worker.
+4. At the end of the cycle, **one** session of the lead verifies everything: it merges the branches that conflicted, runs the full check, fixes what the merges broke, and files the rest in `BUGS.md`.
+5. **Queued requests don't wait.** At the start of each cycle they join the current request: the lead adds their milestones to the plan, with their dependencies.
 
-4. **Queued requests don't wait.** At the start of each cycle they join the current request: the lead folds their milestones into the plan as waves, next to the remaining work, with a single final delivery at the end.
+Each worker only carries its own milestone in context, so the work is split into small, cheap sessions instead of one huge one. The Team page shows one card per worker, and the Log tags their lines `[M5]`. Parallel mode uses more quota per hour (one session per worker) but far less wall-clock time.
 
-The Team page shows one card per worker, and the Log tags their lines `[M5]`. Parallel mode is much faster on large plans and uses more quota, one session per worker.
+---
 
 ---
 
@@ -354,7 +356,7 @@ Athanor.exe, athanor   the app for Windows / Linux (in the release, or built wit
 app/                   the app's Go sources, static UI (HTML, CSS, JS without dependencies), Windows resources
 commands/              install, configure, start, stop, stop-after-cycle, follow, test-sandbox, repair,
                        allow-admin, unreal-network (.cmd for Windows, .sh for Linux/WSL)
-system/                pilot.sh (the loop), parallel.sh (waves and workers), safety.sh, bridge.py, settings.py
+system/                pilot.sh (the loop), parallel.sh (scheduler, workers, merges), safety.sh, bridge.py, settings.py
                        (sandbox), guard.py, detect-tools.sh, athanor.py (map, archives, screenshots),
                        bin/ (gateways), windows/ (PowerShell helpers)
 template/              CLAUDE.md (Claude's instructions), PC_TOOLS_GUIDE.md, .claude/agents/ (the team)

@@ -334,8 +334,8 @@ $("#assistant").addEventListener("click", async (ev) => {
 async function rendreMode() {
   const m = await api("mode").catch(() => null); if (!m) return "";
   return `<div class="bloc"><h2>${t("Working mode")}</h2>
-    <label class="interrupteur"><input type="checkbox" id="md-parallele" ${m.parallele ? "checked" : ""}><span><b>${t("Parallel mode")}</b> — ${t("the plan is organized in waves of independent milestones; several workers build a wave at the same time, each in its own git working copy, then the project lead merges, checks and fixes. Much faster; uses more quota (one session per worker).")}</span></label>
-    <div class="ligne ${m.parallele ? "" : "muet"}"><span class="petit">${t("Workers per wave")}</span><div class="choix m0">${[2, 3, 4, 5].map((n) => `<button type="button" data-max="${n}" class="${m.parallele_max === n ? "actif" : ""}" ${m.parallele ? "" : "disabled"}>${n}</button>`).join("")}</div><span class="muet petit">${t("Applies from the next cycle.")}</span></div>
+    <label class="interrupteur"><input type="checkbox" id="md-parallele" ${m.parallele ? "checked" : ""}><span><b>${t("Parallel mode")}</b> — ${t("the lead writes a fine-grained plan with dependencies; workers build independent milestones at the same time, each in its own git working copy; the pilot merges each one as soon as it finishes and starts the next, and the lead verifies and fixes. Much faster; uses more quota (one session per worker).")}</span></label>
+    <div class="ligne ${m.parallele ? "" : "muet"}"><span class="petit">${t("Workers at once")}</span><div class="choix m0">${[2, 3, 4, 6, 8, 10].map((n) => `<button type="button" data-max="${n}" class="${m.parallele_max === n ? "actif" : ""}" ${m.parallele ? "" : "disabled"}>${n}</button>`).join("")}</div><span class="muet petit">${t("Applies from the next cycle.")}</span></div>
   </div>`;
 }
 async function enregistrerMode(parallele, max) {
