@@ -66,7 +66,7 @@ You describe what you want: a game, a website, an app, a tool. Athanor runs [Cla
 
 ### Windows
 
-1. Download **`athanor-vX.Y.Z.zip`** from the [latest release](https://github.com/Aprilox/Athanor/releases/latest) and unzip it anywhere, the Desktop for example. It contains the whole tool with `Athanor.exe` (Windows) and `athanor` (Linux) side by side.
+1. Download **`Athanor-X.Y.Z-Windows.zip`** from the [latest release](https://github.com/Aprilox/Athanor/releases/latest) and unzip it anywhere, the Desktop for example. It is the complete tool, ready to use.
 2. Double-click **`Athanor.exe`**. Pick a language, a theme and an accent: the first-launch guide takes you through the rest.
 3. **Install**: one window installs WSL2, Claude Code and the sandbox. Linux asks for a password once; the very first time may need a restart.
 4. **Connect**: *Setup & health* → *Check everything*. On the *Token* line, click *Repair*: a window signs you in to your Claude account. Paste the token in *Settings*.
@@ -76,20 +76,20 @@ You describe what you want: a game, a website, an app, a tool. Athanor runs [Cla
 
 ### Linux
 
-The release contains both apps side by side: `Athanor.exe` for Windows, `athanor` for Linux. The scripts run natively, without WSL.
+Download **`Athanor-X.Y.Z-Linux.tar.gz`** from the [latest release](https://github.com/Aprilox/Athanor/releases/latest). The scripts run natively, without WSL.
 
 ```bash
-unzip athanor-vX.Y.Z.zip && cd athanor
+tar xzf Athanor-X.Y.Z-Linux.tar.gz && cd athanor
 commands/install.sh          # Claude Code, sandbox, tools (asks for sudo once)
 commands/configure.sh        # token, models, language
 ./athanor                    # the app, opens in your browser
 ```
 
-Each app keeps its own settings file (`athanor-config.json` on Windows, `athanor-config-linux.json` on Linux), so one folder can serve both systems.
+The Windows and Linux apps keep separate settings files (`athanor-config.json`, `athanor-config-linux.json`), so a tool folder shared between the two systems (dual boot, for example) works with both.
 
 ### Updating
 
-Download the new release and unzip it in the same place, so that its `athanor` folder merges into yours (close the app first). Your `.env`, settings, `logs/` and `tools/` are not in the zip, so they are kept. To update only the app, replace `Athanor.exe` (or `athanor`) with the one attached to the release.
+Close the app, download the new release for your system and extract it in the same place, so that its `athanor` folder merges into yours. Your `.env`, settings, `logs/` and `tools/` are not in the archive, so they are kept.
 
 ### Build from source
 
