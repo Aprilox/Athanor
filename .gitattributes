@@ -12,3 +12,8 @@ system/bin/* text eol=lf
 *.png       binary
 *.ico       binary
 *.syso      binary
+# GitHub language stats: vendored code is not ours
+app/third_party/** linguist-vendored
+app/tools/*.cs     linguist-vendored
+# Not needed in the release zip
+.github/           export-ignore
