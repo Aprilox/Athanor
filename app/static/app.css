@@ -236,7 +236,7 @@ table.tab tr:last-child td { border-bottom: 0; }
 
 /* --- team */
 .equipe { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
-.agent { background: var(--panel); border: 1px solid var(--line); border-radius: var(--rayon); padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.agent { background: var(--panel); border: 1px solid var(--line); border-radius: var(--rayon); padding: 16px; display: flex; flex-direction: column; gap: 10px; min-width: 0; overflow: hidden; }
 .agent.chef { grid-column: 1 / -1; }
 .agent-tete { display: flex; gap: 12px; align-items: flex-start; }
 .agent-identite { flex: 1; min-width: 0; }
@@ -245,12 +245,15 @@ table.tab tr:last-child td { border-bottom: 0; }
 .agent.disponible { opacity: .6; border-style: dashed; }
 .agent.disponible .avatar { color: var(--muted); }
 .agent-nom { font-weight: 600; }
-.agent-mission { color: var(--muted); font-size: 13px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.agent-mission { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .agent-statut { flex: 0 1 auto; max-width: 45%; font-size: 12.5px; color: var(--muted); text-align: right; padding-top: 2px; }
 .agent-statut.travaille { color: var(--ok); }
-.bulle { background: var(--panel-2); border-radius: 12px; padding: 10px 14px; position: relative; font-size: 14px; max-height: 160px; overflow: auto; white-space: pre-wrap; }
+/* "Improve with Claude" bar under a request text area */
+.ameliorer { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: -4px 0 14px; }
+textarea.en-attente { opacity: .55; }
+.bulle { background: var(--panel-2); border-radius: 12px; padding: 10px 14px; position: relative; font-size: 14px; max-height: 160px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
 .bulle::before { content: ""; position: absolute; left: 18px; top: -7px; border: 7px solid transparent; border-top: 0; border-bottom-color: var(--panel-2); }
-.activite { color: var(--muted); font-size: 13px; font-family: var(--mono); }
+.activite { color: var(--muted); font-size: 13px; font-family: var(--mono); overflow-wrap: anywhere; min-width: 0; }
 
 /* --- requests */
 .flux { display: flex; flex-direction: column; gap: 8px; }

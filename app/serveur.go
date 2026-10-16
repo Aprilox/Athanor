@@ -278,6 +278,7 @@ func (s *Serveur) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/demandes/ordre", s.garde(false, s.apiOrdreDemandes))
 	mux.HandleFunc("DELETE /api/demandes/{fichier}", s.garde(false, s.apiSupprimerDemande))
 	mux.HandleFunc("POST /api/remarque", s.garde(false, s.apiRemarque))
+	mux.HandleFunc("POST /api/ameliorer", s.garde(false, s.apiAmeliorerDemande))
 	mux.HandleFunc("PUT /api/demande", s.garde(false, s.apiEcrireDemande))
 
 	mux.HandleFunc("GET /api/env", s.garde(false, s.apiEnv))
