@@ -121,7 +121,7 @@ Les deux options donnent le même dossier : `Athanor.exe` (ou `athanor`) à côt
 2. **Installer** : une fenêtre installe WSL2, Claude Code et la barrière. Linux demande un mot de passe une fois. La toute première fois, un redémarrage peut être nécessaire : ouvrez ensuite « Ubuntu » une fois pour créer votre utilisateur, puis relancez l'installation.
 3. **Se connecter** : *Installation & santé* → *Tout vérifier*. Sur la ligne *Jeton et accès au modèle*, cliquez sur *Réparer* : une fenêtre vous connecte à votre compte Claude. Collez le jeton dans *Réglages*.
 4. **Facultatif, recommandé** : *Installation & santé* → *Droits administrateur pour les installations* → *Réparer*. Windows vous demande votre accord **une seule fois** ; Claude n'aura plus jamais besoin d'un clic UAC.
-5. **Ajouter un projet** : un nom, son dossier (existant ou à créer, sur n'importe quel disque) et ce que vous voulez. Les technologies sont libres sauf si vous en imposez.
+5. **Ajouter un projet** : un nom, son dossier (existant ou à créer, sur n'importe quel disque) et ce que vous voulez. Les technologies sont libres sauf si vous en imposez. ✨ *Améliorer avec Claude* transforme quelques mots en une demande complète ; vous pouvez revenir à la vôtre.
 6. **Démarrer.** Ajoutez d'autres projets de la même façon et faites-les tourner en même temps.
 
 **Linux** (les scripts tournent nativement, sans WSL)
@@ -210,7 +210,7 @@ Les captures sont en anglais ; l'interface s'affiche dans la langue choisie.
 |---|---|
 | **Suivi** | état en une phrase, jalon en cours, dernier commit, plan coché, consommation (cycles, durée, coût catalogue, cache) ; *Démarrer*, *Arrêter après le cycle*, *Arrêter maintenant*, *Mode de travail* |
 | **Équipe** | une carte par session Claude (chef de projet, sous-agents, ouvriers) : ce qu'elle fait, sa dernière parole, son rapport |
-| **Demandes** | la demande en cours et son plan, les demandes à la suite (horodatées, réordonnables), les remarques en cours de route |
+| **Demandes** | la demande en cours et son plan, les demandes à la suite (horodatées, réordonnables), les remarques en cours de route ; ✨ *Améliorer avec Claude* reformule une demande plus claire et plus complète, et vous pouvez revenir à la vôtre |
 | **Journal** | le journal lisible (Claude parle, outils, résultats, sous-agents, pilote) ou brut (JSON), filtrable |
 | **Installation & santé** | *Tout vérifier*, *Tout installer*, *Tester la barrière* pour de vrai, *Réparer* ligne par ligne, *Demander à Claude* de réparer ou d'installer quelque chose |
 | **Réglages** | le `.env` (jeton masqué, modèles, effort, surveillance…), *Enregistrer et redémarrer après le cycle* |

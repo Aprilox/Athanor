@@ -121,7 +121,7 @@ Both options give the same folder: `Athanor.exe` (or `athanor`) next to `command
 2. **Install**: one window installs WSL2, Claude Code and the sandbox. Linux asks for a password once. The very first time may need a restart: then open "Ubuntu" once to create your user, and run the installation again.
 3. **Connect**: *Setup & health* → *Check everything*. On the *Token and model access* line, click *Repair*: a window signs you in to your Claude account. Paste the token in *Settings*.
 4. **Optional, recommended**: *Setup & health* → *Administrator rights for installations* → *Repair*. Windows asks for your consent **once**; Claude never needs a UAC click again.
-5. **Add a project**: a name, its folder (existing or new, on any drive) and what you want. Technologies are free unless you impose some.
+5. **Add a project**: a name, its folder (existing or new, on any drive) and what you want. Technologies are free unless you impose some. ✨ *Improve with Claude* turns a few words into a complete request; you can go back to yours.
 6. **Start.** Add more projects the same way and run them side by side.
 
 **Linux** (the scripts run natively, without WSL)
@@ -210,7 +210,7 @@ The screenshots show the dark "Slate" and the "Light" palettes.
 |---|---|
 | **Overview** | the state in one sentence, current milestone, last commit, ticked plan, usage (cycles, time, list-price cost, cache); *Start*, *Stop after cycle*, *Stop now*, *Working mode* |
 | **Team** | one card per Claude session (lead, sub-agents, workers): what it does, its last words, its report |
-| **Requests** | the current request and its plan, the queued requests (time-stamped, reorderable), notes along the way |
+| **Requests** | the current request and its plan, the queued requests (time-stamped, reorderable), notes along the way; ✨ *Improve with Claude* rewrites a request clearer and more complete, and you can go back to yours |
 | **Log** | the readable log (Claude speaks, tools, results, sub-agents, pilot) or the raw JSON, filterable |
 | **Setup & health** | *Check everything*, *Install everything*, *Test the sandbox* for real, *Repair* line by line, *Ask Claude* to repair or install something |
 | **Settings** | the `.env` (token masked, models, effort, watchdog…), *Save and restart after cycle* |

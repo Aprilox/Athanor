@@ -75,6 +75,23 @@ func (s *Suiveur) NouvellesLignes() []string {
 	return out
 }
 
+// cheminLisible shortens an absolute file path for display: the part inside the workshop
+// (".athanor/PLAN.md"), else the last two components ("…/docs/REQUIREMENTS.md"). The full path stays in the detail.
+func cheminLisible(p string) string {
+	q := strings.ReplaceAll(p, "\\", "/")
+	if i := strings.LastIndex(q, "/.athanor/"); i >= 0 {
+		return q[i+1:]
+	}
+	if !strings.HasPrefix(q, "/") && !(len(q) > 2 && q[1] == ':') {
+		return p // already relative to the project
+	}
+	parts := strings.Split(strings.Trim(q, "/"), "/")
+	if len(parts) <= 2 {
+		return q
+	}
+	return "…/" + strings.Join(parts[len(parts)-2:], "/")
+}
+
 func court(s string, n int) string {
 	s = strings.Join(strings.Fields(s), " ")
 	r := []rune(s)
@@ -150,10 +167,10 @@ func Traduire(ligne string) []Evenement {
 					}
 					ev("outil", "Runs: "+court(desc, 150), cmd, contexte)
 				case "Read":
-					ev("outil", "Reads "+court(chemin, 120), joli(input), contexte)
+					ev("outil", "Reads "+court(cheminLisible(chemin), 120), joli(input), contexte)
 				case "Edit", "Write", "MultiEdit", "NotebookEdit":
 					verbe := map[string]string{"Edit": "Edits", "Write": "Writes", "MultiEdit": "Edits", "NotebookEdit": "Edits"}[nom]
-					ev("outil", verbe+" "+court(chemin, 120), joli(input), contexte)
+					ev("outil", verbe+" "+court(cheminLisible(chemin), 120), joli(input), contexte)
 				case "Glob", "Grep":
 					ev("outil", "Searches "+court(str(input["pattern"]), 100), joli(input), contexte)
 				case "Agent", "Task":

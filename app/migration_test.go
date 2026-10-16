@@ -48,3 +48,18 @@ func TestMigrerAtelierDejaFait(t *testing.T) {
 		t.Fatal("a real .athanor must never be replaced")
 	}
 }
+
+func TestCheminLisible(t *testing.T) {
+	cas := map[string]string{
+		"/mnt/wsl/docker-desktop-bind-mounts/Ubuntu/23c3f/docs/REQUIREMENTS.md": "…/docs/REQUIREMENTS.md",
+		"/mnt/c/Users/x/Desktop/montre/.athanor/PLAN.md":                        ".athanor/PLAN.md",
+		"src/enemies/enemy.gd":                 "src/enemies/enemy.gd",
+		"/tmp/a.txt":                           "/tmp/a.txt",
+		`C:\Users\x\Desktop\montre\index.html`: "…/montre/index.html",
+	}
+	for in, want := range cas {
+		if got := cheminLisible(in); got != want {
+			t.Errorf("cheminLisible(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

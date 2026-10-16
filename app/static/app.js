@@ -70,6 +70,65 @@ async function action(promesse, genreOk = "ok") {
   catch (e) { if (e.message !== t("Locked")) toast(e.message, "erreur"); return null; }
 }
 
+// ----------------------------------------------------------------------------- "Improve with Claude"
+// Under a request text area: Claude rewrites the request (clearer, richer, same intent); the user's
+// version is kept and both can be swapped at will. Edits made to either version are kept too.
+const versionsDemande = new WeakMap(); // textarea → { mienne, claude, vue: "mienne" | "claude" }
+function barreAmeliorer(id) {
+  return `<div class="ameliorer" data-pour="${id}">
+    <button type="button" class="btn btn-petit" data-ameliorer="${id}" title="${h(t("Claude rewrites your request: clearer, more complete, same intent. You can go back to yours."))}">✨ ${t("Improve with Claude")}</button>
+    <button type="button" class="btn btn-petit" data-version="${id}" hidden></button>
+    <span class="muet petit" data-etat-ameliorer="${id}"></span>
+  </div>`;
+}
+function majBarreAmeliorer(id) {
+  const zone = document.getElementById(id), v = zone && versionsDemande.get(zone);
+  const bascule = document.querySelector(`[data-version="${id}"]`), etiquette = document.querySelector(`[data-etat-ameliorer="${id}"]`);
+  if (!bascule || !etiquette) return;
+  bascule.hidden = !v;
+  if (!v) { etiquette.textContent = ""; return; }
+  bascule.textContent = v.vue === "claude" ? "↩ " + t("Back to my version") : "✨ " + t("Use Claude's version");
+  etiquette.textContent = v.vue === "claude" ? t("Claude's version") : t("Your version");
+}
+document.addEventListener("input", (ev) => {
+  const v = versionsDemande.get(ev.target);
+  if (v) v[v.vue] = ev.target.value;
+});
+document.addEventListener("click", async (ev) => {
+  const bAm = ev.target.closest("[data-ameliorer]"), bVe = ev.target.closest("[data-version]");
+  if (bVe) {
+    const zone = document.getElementById(bVe.dataset.version), v = versionsDemande.get(zone);
+    if (!v) return;
+    v.vue = v.vue === "claude" ? "mienne" : "claude";
+    zone.value = v[v.vue];
+    majBarreAmeliorer(zone.id);
+    return;
+  }
+  if (!bAm) return;
+  const zone = document.getElementById(bAm.dataset.ameliorer);
+  if (!zone) return;
+  if (!zone.value.trim()) { toast(t("Write your request first"), "erreur"); zone.focus(); return; }
+  const avant = versionsDemande.get(zone);
+  const mienne = avant ? avant.mienne : zone.value; // always rewrite from the user's own text
+  const etiquette = document.querySelector(`[data-etat-ameliorer="${zone.id}"]`);
+  const libelleBouton = bAm.innerHTML;
+  bAm.disabled = true; zone.readOnly = true; zone.classList.add("en-attente");
+  bAm.textContent = t("Claude is rewriting your request…");
+  if (etiquette) etiquette.textContent = t("about 30 seconds");
+  try {
+    const r = await api("ameliorer", "POST", { texte: mienne });
+    versionsDemande.set(zone, { mienne, claude: r.texte, vue: "claude" });
+    zone.value = r.texte;
+    toast(t("Request improved: check it, edit it, or go back to yours."), "ok");
+  } catch (e) {
+    if (e.message !== t("Locked")) toast(e.message, "erreur");
+  } finally {
+    bAm.disabled = false; zone.readOnly = false; zone.classList.remove("en-attente");
+    bAm.innerHTML = libelleBouton;
+    majBarreAmeliorer(zone.id);
+  }
+});
+
 // ----------------------------------------------------------------------------- helpers
 function fmtTokens(n) { n = Number(n) || 0; return n >= 1e6 ? (n / 1e6).toFixed(1) + " M" : n >= 1000 ? Math.round(n / 1000) + " k" : String(n); }
 // "2026-10-16T19:21:07" → "19:21:07" today, or the local date and time otherwise.
@@ -315,6 +374,7 @@ pages.nouveau = async () => `<div class="grille grille-2">
       <label class="champ"><span>${t("Name")}</span><input type="text" id="np-nom" placeholder="${h(t("e.g. watch-store"))}"></label>
       <label class="champ"><span>${t("Development folder")}</span><input type="text" id="np-dossier" placeholder="${h(t("e.g. D:\\Dev\\watch-store"))}"></label>
       <label class="champ"><span>${t("What you want (you can complete it later)")}</span><textarea id="np-demande" rows="7" placeholder="${h(t("Describe the expected result, for whom, on which platform. Technologies are free unless you impose one."))}"></textarea></label>
+      ${barreAmeliorer("np-demande")}
       <button class="btn btn-primaire" id="np-creer">${t("Create the project")}</button>
     </div>
     <div class="bloc"><h2>${t("Pick a folder")}</h2>
@@ -369,6 +429,7 @@ pages.demandes = async () => {
         <p class="intro petit">${t("It is time-stamped and queued. Claude takes it when the current request is finished; you can change the order.")}</p>
         <label class="champ"><span>${t("Short title")}</span><input type="text" id="nd-titre" placeholder="${h(t("e.g. ten levels, each with its own music"))}"></label>
         <label class="champ"><span>${t("What you want")}</span><textarea id="nd-texte" rows="6" placeholder="${h(t("Describe the expected result, for whom, on which platform. Technologies are free unless you impose one."))}"></textarea></label>
+        ${barreAmeliorer("nd-texte")}
         <button class="btn btn-primaire" id="nd-ajouter">${t("Add to the queue")}</button>
       </div>
       <div class="bloc"><h2>${t("Note along the way")}</h2>
