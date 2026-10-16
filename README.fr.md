@@ -66,7 +66,7 @@ Vous décrivez ce que vous voulez : un jeu, un site, une application, un outil. 
 
 ### Windows
 
-1. Téléchargez **`athanor-vX.Y.Z.zip`** depuis la [dernière version](https://github.com/Aprilox/Athanor/releases/latest) et dézippez-le où vous voulez, par exemple sur le Bureau. Il contient tout l'outil, avec `Athanor.exe` (Windows) et `athanor` (Linux) côte à côte.
+1. Téléchargez **`Athanor-X.Y.Z-Windows.zip`** depuis la [dernière version](https://github.com/Aprilox/Athanor/releases/latest) et dézippez-le où vous voulez, par exemple sur le Bureau. C'est l'outil complet, prêt à l'emploi.
 2. Double-cliquez sur **`Athanor.exe`**. Choisissez la langue, le thème et l'accent : le guide du premier démarrage vous accompagne ensuite. La langue vaut pour l'application **et** pour les documents que Claude écrit dans vos nouveaux projets.
 3. **Installer** : une fenêtre installe WSL2, Claude Code et la barrière. Linux demande un mot de passe une fois. La toute première fois, un redémarrage peut être nécessaire : ouvrez ensuite « Ubuntu » une fois pour créer votre utilisateur, puis relancez l'installation.
 4. **Se connecter** : *Installation & santé* → *Tout vérifier*. Sur la ligne *Jeton et accès au modèle*, cliquez sur *Réparer* : une fenêtre vous connecte à votre compte Claude. Collez le jeton dans *Réglages*.
@@ -76,20 +76,20 @@ Vous décrivez ce que vous voulez : un jeu, un site, une application, un outil. 
 
 ### Linux
 
-La version téléchargée contient les deux applications côte à côte : `Athanor.exe` pour Windows, `athanor` pour Linux. Les scripts tournent nativement, sans WSL.
+Téléchargez **`Athanor-X.Y.Z-Linux.tar.gz`** depuis la [dernière version](https://github.com/Aprilox/Athanor/releases/latest). Les scripts tournent nativement, sans WSL.
 
 ```bash
-unzip athanor-vX.Y.Z.zip && cd athanor
+tar xzf Athanor-X.Y.Z-Linux.tar.gz && cd athanor
 commands/install.sh          # Claude Code, barrière, outils (sudo demandé une fois)
 commands/configure.sh        # jeton, modèles, langue
 ./athanor                    # l'application, s'ouvre dans votre navigateur
 ```
 
-Chaque application garde son propre fichier de réglages (`athanor-config.json` sous Windows, `athanor-config-linux.json` sous Linux) : un même dossier peut servir aux deux systèmes.
+Les applications Windows et Linux gardent des fichiers de réglages séparés (`athanor-config.json`, `athanor-config-linux.json`) : un dossier de l'outil partagé entre les deux systèmes (double démarrage, par exemple) fonctionne avec les deux.
 
 ### Mettre à jour
 
-Téléchargez la nouvelle version et dézippez-la au même endroit, pour que son dossier `athanor` se fusionne avec le vôtre (fermez l'application avant). Votre `.env`, vos réglages, `logs/` et `tools/` ne sont pas dans le zip : ils sont conservés. Pour ne mettre à jour que l'application, remplacez `Athanor.exe` (ou `athanor`) par celui joint à la version.
+Fermez l'application, téléchargez la nouvelle version pour votre système et extrayez-la au même endroit, pour que son dossier `athanor` se fusionne avec le vôtre. Votre `.env`, vos réglages, `logs/` et `tools/` ne sont pas dans l'archive : ils sont conservés.
 
 ### Compiler depuis les sources
 
