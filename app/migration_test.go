@@ -63,3 +63,35 @@ func TestCheminLisible(t *testing.T) {
 		}
 	}
 }
+
+func TestPlanBlocs(t *testing.T) {
+	plan := "# Plan\n\n- [x] M1 : a — Depends on: none. Acceptance: ok.\n- [ ] M2 : b — Files: x. Depends on: M1. Acceptance: a.\n  - note 1\n- [ ] M3 : c — Depends on: M1, M2. Acceptance: b.\n- [ ] M4 : d — Depends on: M2. Acceptance: c.\n"
+	blocs := decouperPlan(plan)
+	if len(blocs) != 7 || !blocs[3].jalon || blocs[3].id != "M2" || len(blocs[3].lignes) != 2 {
+		t.Fatalf("blocs: %+v", blocs)
+	}
+	if assemblerPlan(blocs) != plan {
+		t.Fatal("round trip changed the plan")
+	}
+	j := decouperJalon("M2 : Home page — Files: index.html, js/home.js. Depends on: M1, M4.1. Acceptance: tests green.")
+	if j.ID != "M2" || j.Titre != "M2 : Home page" || j.Fichiers != "index.html, js/home.js" || len(j.Depend) != 2 || j.Depend[1] != "M4_1" || j.Acceptation != "tests green." || j.Detail != "" {
+		t.Fatalf("jalon: %+v", j)
+	}
+}
+
+func TestDemandesFaites(t *testing.T) {
+	d := t.TempDir()
+	os.WriteFile(filepath.Join(d, "20261017-001830-01-footer.md"), []byte("# Un beau footer, vraiment\n\nDemandée le 2026-10-17.\n"), 0o644)
+	os.WriteFile(filepath.Join(d, "20250101-0930-sans-titre.md"), []byte("du texte sans titre\n# pas un titre\n"), 0o644)
+	stamp, date, titre := lireDemandeFaite(d, "20261017-001830-01-footer.md")
+	if stamp != "20261017001830" || date != "2026-10-17 00h18" || titre != "Un beau footer, vraiment" {
+		t.Fatalf("got %q %q %q", stamp, date, titre)
+	}
+	stamp, date, titre = lireDemandeFaite(d, "20250101-0930-sans-titre.md")
+	if stamp != "20250101093000" || date != "2025-01-01 09h30" || titre != "sans titre" {
+		t.Fatalf("old format: got %q %q %q", stamp, date, titre)
+	}
+	if _, date, titre = lireDemandeFaite(d, "nimporte.md"); date != "" || titre != "nimporte" {
+		t.Fatalf("free name: got %q %q", date, titre)
+	}
+}

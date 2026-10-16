@@ -13,7 +13,7 @@ const md = (s) => h(s).replace(/`([^`]+)`/g, "<code>$1</code>");
 // every milestone a worker is building), or to do.
 function etatDuJalon(j, premierLibre) {
   if (j.fait) return "coche";
-  const ouvriers = ((etat.vue && etat.vue.etat && etat.vue.etat.ouvriers) || "").split(/\s+/).filter(Boolean);
+  const ouvriers = (etat.vue && etat.vue.actif && etat.vue.etat && etat.vue.etat.ouvriers || "").split(/\s+/).filter(Boolean);
   if (ouvriers.length) {
     const m = j.titre.match(/^([A-Za-z]+\d+(?:[.\-]?[A-Za-z0-9]+)?)/);
     const id = m ? m[1].replace(/[^A-Za-z0-9_]/g, "_").slice(0, 20) : "";
@@ -30,9 +30,23 @@ function titreJalon(texte) {
   const coupe = texte.split(/ — | – /)[0];
   return coupe.length > 90 ? coupe.slice(0, 88) + "…" : coupe;
 }
+// A milestone: one line with its title; a click opens the details (files, dependencies, acceptance,
+// notes) and the actions (move, remove) that edit PLAN.md. `etat.ouverts` remembers which are open.
 function rendreJalon(j, etatJalon, compact) {
   const ico = j.fait ? "✔" : etatJalon === "en-cours" ? "▶" : "○";
-  return `${j.vague ? `<li class="vague">${h(j.vague)}</li>` : ""}<li class="${etatJalon}" title="${h(j.complet)}"><span class="jalon-ico">${ico}</span><div class="jalon-corps"><div class="jalon-titre">${md(j.titre)}${j.detail ? `<span class="jalon-detail"> — ${md(j.detail)}</span>` : ""}</div>${!compact && j.acceptation ? `<div class="jalon-accept">✓ ${md(j.acceptation)}</div>` : ""}</div></li>`;
+  const cle = "jalon:" + (j.id || j.titre), ouvert = etat.ouverts.has(cle);
+  const peutEditer = !j.fait && !(etatJalon === "en-cours" && etat.vue && etat.vue.actif); // "next up" while stopped is still editable
+  const details = ouvert ? `<div class="jalon-details">
+      ${j.detail ? `<div>${md(j.detail)}</div>` : ""}
+      ${j.fichiers ? `<div><span class="muet">${t("Files")}</span> <code>${h(j.fichiers)}</code></div>` : ""}
+      ${j.depend && j.depend.length ? `<div><span class="muet">${t("Depends on")}</span> ${j.depend.map((d) => `<code>${h(d)}</code>`).join(" ")}</div>` : ""}
+      ${j.acceptation ? `<div><span class="muet">${t("Acceptance")}</span> ${md(j.acceptation)}</div>` : ""}
+      ${j.notes && j.notes.length ? `<ul class="jalon-notes">${j.notes.map((n) => `<li>${md(n)}</li>`).join("")}</ul>` : ""}
+      ${j.id ? `<div class="ligne jalon-actions">
+        ${peutEditer ? `<button class="btn btn-petit" data-jalon="${h(j.id)}" data-jalon-action="monter" title="${h(t("Move up"))}">↑</button><button class="btn btn-petit" data-jalon="${h(j.id)}" data-jalon-action="descendre" title="${h(t("Move down"))}">↓</button><button class="btn btn-petit btn-danger" data-jalon="${h(j.id)}" data-jalon-action="retirer">${t("Remove from the plan")}</button>` : `<span class="muet petit">${j.fait ? t("Done: it stays in the plan.") : t("Being built: stop after the cycle to change it.")}</span>`}
+      </div>` : ""}
+    </div>` : "";
+  return `${j.vague ? `<li class="vague">${h(j.vague)}</li>` : ""}<li class="${etatJalon} ${ouvert ? "ouvert" : ""}" data-jalon-cle="${h(cle)}"><span class="jalon-ico">${ico}</span><div class="jalon-corps"><div class="jalon-titre">${md(j.titre)}<span class="jalon-chevron">${ouvert ? "▾" : "▸"}</span></div>${details}</div></li>`;
 }
 
 // ----------------------------------------------------------------------------- state
@@ -477,6 +491,7 @@ pages.equipe = async () => {
 // --- requests
 pages.demandes = async () => {
   const d = await api("demandes");
+  const planTexte = (await api("plan").catch(() => ({ texte: "" }))).texte || "";
   const plan = d.plan || [];
   let premier = true;
   const enCours = d.demande && !/^\s*$/.test(d.demande.replace(/^#.*$/gm, "").replace(/^\(.*\)$/gm, ""));
@@ -499,11 +514,15 @@ pages.demandes = async () => {
       <div class="bloc"><details><summary>${t("REQUEST.md, the full file")}</summary>
         <textarea id="dm-texte" class="code" rows="18">${h(d.demande)}</textarea>
         <div class="ligne mt-1"><button class="btn" id="dm-enregistrer">${t("Save the file")}</button><button class="btn" data-ouvrir="demande">${t("Open in the editor")}</button></div></details></div>
+      <div class="bloc"><details><summary>${t("PLAN.md, the full plan")}</summary>
+        <p class="muet petit">${t("Claude's working document: milestones, files, dependencies, acceptance criteria. Edit it here when the buttons on the milestones are not enough; Claude follows it from the next cycle.")}</p>
+        <textarea id="pl-texte" class="code" rows="18">${h(planTexte)}</textarea>
+        <div class="ligne mt-1"><button class="btn" id="pl-enregistrer">${t("Save the plan")}</button><button class="btn" data-ouvrir="plan">${t("Open in the editor")}</button></div></details></div>
     </div>
     <div class="colonne">
       <div class="bloc"><h2>${t("Where things stand")}</h2>
       <div class="flux">
-        ${d.faites.map((f) => `<div class="carte-demande faite"><div class="num">✔</div><div class="corps"><div class="titre">${h(f.titre)}</div><div class="meta">${t("done")} · ${h(f.date)}</div></div></div>`).join("")}
+        ${[...d.faites.filter((f) => f.livree), ...d.faites.filter((f) => !f.livree)].map((f) => `<div class="carte-demande ${f.livree ? "faite" : "integree"}"><div class="num">${f.livree ? "✔" : "+"}</div><div class="corps"><div class="titre">${h(f.titre)}</div><div class="meta">${f.livree ? t("done") : t("added to the plan")}${f.date ? " · " + h(f.date) : ""}</div></div></div>`).join("")}
         ${enCours ? `<div class="carte-demande en-cours"><div class="num">▶</div><div class="corps"><div class="titre">${h(titreDemande)}</div><div class="meta">${etat.vue && etat.vue.actif ? t("in progress") : t("current request, pilot stopped")}</div>
           ${plan.length ? `<ul class="plan jalons-mini">${plan.map((j) => { const c = etatDuJalon(j, () => premier ? (premier = false, true) : false); return rendreJalon(j, c, true); }).join("")}</ul>` : ""}
           </div></div>` : `<div class="vide">${t("No current request. Write the first one on the left: it becomes the project's request.")}</div>`}
@@ -700,6 +719,19 @@ async function changerApparence(theme, accent) {
   if (etat.assistant < 0) rendrePage();
 }
 
+// Milestones of the plan: a click on the line opens or closes its details; the buttons inside edit the plan.
+$("#page").addEventListener("click", async (ev) => {
+  const li = ev.target.closest("li[data-jalon-cle]"), bJ = ev.target.closest("[data-jalon-action]");
+  if (bJ) {
+    const id = bJ.dataset.jalon, act = bJ.dataset.jalonAction;
+    if (act === "retirer" && !(await confirmer(t("Remove milestone {0} from the plan? Its work, if any, stays in the project; the other milestones no longer depend on it.", [id]), { ok: t("Remove"), danger: true }))) return;
+    const r = await action(api("plan/jalon", "POST", { id, action: act }));
+    if (r) { await rafraichir(); rendrePage(); }
+    return;
+  }
+  if (li && !ev.target.closest("a, button, code")) { const c = li.dataset.jalonCle; etat.ouverts.has(c) ? etat.ouverts.delete(c) : etat.ouverts.add(c); rendrePage(); }
+});
+
 $("#page").addEventListener("click", async (ev) => {
   const b = ev.target.closest("button, .titre[data-voir], .ev.cliquable, .explorateur div[data-chemin]"); if (!b) return;
   const page = etat.page;
@@ -729,6 +761,7 @@ $("#page").addEventListener("click", async (ev) => {
     if (b.id === "nd-ajouter") { if (b.disabled) return; b.disabled = true; const r = await action(api("demandes", "POST", { titre: $("#nd-titre").value, texte: $("#nd-texte").value })); b.disabled = false; if (r) rendrePage(); return; }
     if (b.id === "rq-ajouter") { if (b.disabled) return; b.disabled = true; const r = await action(api("remarque", "POST", { texte: $("#rq-texte").value })); b.disabled = false; if (r) rendrePage(); return; }
     if (b.id === "dm-enregistrer") return action(api("demande", "PUT", { texte: $("#dm-texte").value }));
+    if (b.id === "pl-enregistrer") { const r = await action(api("plan", "PUT", { texte: $("#pl-texte").value })); if (r) { await rafraichir(); } return; }
     if (carte && b.hasAttribute("data-monter")) return reordonner(carte.dataset.fichier, -1);
     if (carte && b.hasAttribute("data-descendre")) return reordonner(carte.dataset.fichier, 1);
     if (carte && b.hasAttribute("data-retirer")) { if (await confirmer(t("Remove this request from the queue?"), { ok: t("Remove"), danger: true })) { await action(api("demandes/" + encodeURIComponent(carte.dataset.fichier), "DELETE")); rendrePage(); } return; }

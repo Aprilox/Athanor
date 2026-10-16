@@ -409,12 +409,31 @@ func (p Projet) AjouterRemarque(texte, marque, aide string) error {
 // Jalon: a checkable line of the plan. Claude writes "M1 : Title — detail… Acceptance: criterion" on a
 // single line; it is split for display (short title, detail, acceptance criterion).
 type Jalon struct {
-	Fait        bool   `json:"fait"`
-	Titre       string `json:"titre"`
-	Detail      string `json:"detail"`
-	Acceptation string `json:"acceptation"`
-	Complet     string `json:"complet"`
-	Vague       string `json:"vague,omitempty"` // parallel mode: title of the wave ("Wave 2") that starts at this milestone
+	ID          string   `json:"id"` // "M4", "M4_1": the identifier the pilot uses for workers and merges
+	Fait        bool     `json:"fait"`
+	Titre       string   `json:"titre"`
+	Detail      string   `json:"detail"`
+	Fichiers    string   `json:"fichiers,omitempty"` // "Files: …" of a dependency plan
+	Depend      []string `json:"depend,omitempty"`   // "Depends on: …" identifiers
+	Acceptation string   `json:"acceptation"`
+	Notes       []string `json:"notes,omitempty"` // indented sub-bullets under the milestone
+	Complet     string   `json:"complet"`
+	Vague       string   `json:"vague,omitempty"` // parallel mode: title of the wave ("Wave 2") that starts at this milestone
+}
+
+var reIdentJalon = regexp.MustCompile(`^([A-Za-z]+\d+(?:[.\-]?[A-Za-z0-9]+)?)`)
+
+// identJalon normalises a milestone identifier like system/parallel.sh does ("M4.1" → "M4_1").
+func identJalon(ligne string) string {
+	m := reIdentJalon.FindStringSubmatch(ligne)
+	if m == nil {
+		return ""
+	}
+	id := regexp.MustCompile(`[^A-Za-z0-9_]`).ReplaceAllString(m[1], "_")
+	if len(id) > 20 {
+		id = id[:20]
+	}
+	return id
 }
 
 func decouperJalon(ligne string) Jalon {
@@ -443,6 +462,29 @@ func decouperJalon(ligne string) Jalon {
 			break
 		}
 	}
+	// dependency plan: "Files: a, b. Depends on: M1, M2." carried in the detail
+	if i := strings.Index(j.Detail, "Depends on:"); i >= 0 {
+		reste := j.Detail[i+len("Depends on:"):]
+		// the list ends at "; " or at a period followed by a space or the end ("M4.1" keeps its dot)
+		fin := len(reste)
+		for k := 0; k < len(reste); k++ {
+			if reste[k] == ';' || (reste[k] == '.' && (k+1 == len(reste) || reste[k+1] == ' ')) {
+				fin = k
+				break
+			}
+		}
+		for _, d := range strings.FieldsFunc(reste[:fin], func(r rune) bool { return r == ',' || r == ' ' }) {
+			if d = identJalon(d); d != "" {
+				j.Depend = append(j.Depend, d)
+			}
+		}
+		j.Detail = strings.TrimRight(strings.TrimSpace(j.Detail[:i]), ".;,")
+	}
+	if i := strings.Index(j.Detail, "Files:"); i >= 0 {
+		j.Fichiers = strings.TrimRight(strings.TrimSpace(j.Detail[i+len("Files:"):]), ".;,")
+		j.Detail = strings.TrimRight(strings.TrimSpace(j.Detail[:i]), ".;,—–- ")
+	}
+	j.ID = identJalon(j.Complet)
 	return j
 }
 
@@ -458,11 +500,16 @@ func (p Projet) LirePlan() []Jalon {
 		switch {
 		case strings.HasPrefix(t, "## ") && (strings.HasPrefix(strings.ToLower(t), "## wave") || strings.HasPrefix(strings.ToLower(t), "## vague")):
 			vague = strings.TrimSpace(t[3:])
-		case strings.HasPrefix(t, "- [x] "), strings.HasPrefix(t, "- [X] "), strings.HasPrefix(t, "- [ ] "):
+		case (strings.HasPrefix(t, "- [x] ") || strings.HasPrefix(t, "- [X] ") || strings.HasPrefix(t, "- [ ] ")) && len(l) > 0 && l[0] != ' ' && l[0] != '\t':
 			j := decouperJalon(strings.TrimSpace(t[6:]))
 			j.Fait = t[3] != ' '
 			j.Vague, vague = vague, ""
 			v = append(v, j)
+		case len(v) > 0 && len(l) > 0 && (l[0] == ' ' || l[0] == '\t') && strings.TrimSpace(l) != "":
+			// indented line under the last milestone: a sub-bullet (criteria, files, notes)
+			note := strings.TrimSpace(l)
+			note = strings.TrimPrefix(strings.TrimPrefix(note, "- "), "* ")
+			v[len(v)-1].Notes = append(v[len(v)-1].Notes, note)
 		}
 	}
 	return v
