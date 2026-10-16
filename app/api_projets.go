@@ -464,7 +464,7 @@ func (p Projet) LireMode() ModeVue {
 		case "PARALLEL":
 			m.Parallele = l.Valeur == "1"
 		case "PARALLEL_MAX":
-			if n, err := strconv.Atoi(l.Valeur); err == nil && n >= 2 && n <= 6 {
+			if n, err := strconv.Atoi(l.Valeur); err == nil && n >= 2 && n <= 10 {
 				m.ParalleleMax = n
 			}
 		}
@@ -490,7 +490,7 @@ func (s *Serveur) apiEcrireMode(w http.ResponseWriter, r *http.Request) {
 		s.erreur(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if m.ParalleleMax < 2 || m.ParalleleMax > 6 {
+	if m.ParalleleMax < 2 || m.ParalleleMax > 10 {
 		m.ParalleleMax = 3
 	}
 	v := map[string]string{"PARALLEL": "0", "PARALLEL_MAX": strconv.Itoa(m.ParalleleMax)}
