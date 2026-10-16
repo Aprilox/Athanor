@@ -129,7 +129,7 @@ Les deux options donnent le même dossier : `Athanor.exe` (ou `athanor`) à côt
 ```bash
 cd athanor                   # ou Athanor, si vous l'avez compilé depuis les sources
 commands/install.sh          # Claude Code, barrière, outils (sudo demandé une fois)
-commands/configure.sh        # jeton, modèles, langue
+commands/configure.sh        # jeton, modèles, options
 ./athanor                    # l'application, s'ouvre dans votre navigateur
 ```
 
@@ -162,7 +162,7 @@ L'application n'utilise que la bibliothèque standard de Go et trois paquets emb
 |---|---|
 | Cadrage | `docs/REQUIREMENTS.md`, `docs/DESIGN.md`, `docs/ARCHITECTURE.md`, et un plan de 8 à 25 jalons, chacun avec des critères d'acceptation vérifiables |
 | Squelette | un squelette exécutable et le `check.sh` propre au projet (compilation, tests, captures) |
-| Tranche complète | une fonctionnalité qui marche de bout en bout, relue par le `critic` |
+| Tranche complète | une fonctionnalité qui marche de bout en bout, vérifiée par le `tester` |
 | Production | les jalons restants, un par cycle, ou une vague à la fois en mode parallèle |
 | Finition | le `critic` utilise le résultat comme un utilisateur exigeant et note les bugs dans `BUGS.md` |
 | Livraison | `deliverable/`, `TEST_GUIDE.md`, puis `FINAL_REPORT.md` avec `STATUS: DONE`. Le pilote prend la demande suivante de la file, ou s'arrête |
@@ -286,7 +286,7 @@ Tout se modifie dans l'application (*Réglages*), ou dans `.env` ([`.env.example
 | `IDLE_MAX_MIN`, `CYCLE_MAX_MIN`, `CLOSE_AFTER_MILESTONE` | surveillance des cycles (muet 30 min ou plus long que 3 h → coupé et repris), un jalon par cycle |
 | `RTK`, `TZ` | compression des sorties de commandes, fuseau horaire des journaux (vide = celui du système) |
 | `UNREAL_MCP`, `UNREAL_MCP_URL` | laisser Claude piloter l'éditeur Unreal ouvert |
-| `UE_DIR`, `BLENDER_EXE`, `ANDROID_SDK_DIR` | chemins des outils quand la détection automatique les manque |
+| `UE_DIR`, `BLENDER_EXE`, `ANDROID_SDK_DIR`, `ANDROID_JDK_DIR` | chemins des outils quand la détection automatique les manque (facultatifs, absents par défaut) |
 
 Si le quota global est épuisé (tous modèles), le pilote attend la réouverture et reprend seul.
 
@@ -331,7 +331,7 @@ Dans `commands/` : sous Windows, double-clic ou `commands\start.cmd D:\Dev\mon-p
 | Windows | Linux / WSL | Pour |
 |---|---|---|
 | `commands\install.cmd` | `commands/install.sh` | tout installer ou réparer |
-| `commands\configure.cmd` | `commands/configure.sh` | jeton, modèles, langue, options |
+| `commands\configure.cmd` | `commands/configure.sh` | jeton, modèles, options (la langue se règle dans l'application) |
 | `commands\start.cmd DOSSIER` | `commands/start.sh --background DOSSIER` | lancer le pilote sur un projet |
 | `commands\follow.cmd DOSSIER` | `commands/follow.sh DOSSIER` | suivre en direct |
 | `commands\stop-after-cycle.cmd DOSSIER` | `commands/stop-after-cycle.sh DOSSIER` | arrêter proprement à la fin du jalon en cours |

@@ -11,6 +11,18 @@
 PARALLELE_MAX_DEFAUT=3
 
 # Re-reads PARALLEL / PARALLEL_MAX from the project's .env on every cycle (editable from the app).
+# Worktrees of a wave that did not finish (stop, crash): removed, the branches auto/* are kept (they hold
+# the work and are recreated or merged by the next wave). Called at stop and at startup.
+parallele_nettoyer_worktrees() {
+  local t
+  for t in "$ETAT"/work/*/; do
+    [ -d "$t" ] || continue
+    g -C "$PROJECT" worktree remove --force "${t%/}" >/dev/null 2>&1 || rm -rf "${t%/}"
+  done
+  g -C "$PROJECT" worktree prune >/dev/null 2>&1
+  return 0
+}
+
 parallele_lire_reglage() {
   PARALLEL=0; PARALLEL_MAX=$PARALLELE_MAX_DEFAUT
   [ -f "$ETAT/.env" ] || return 0
@@ -18,8 +30,8 @@ parallele_lire_reglage() {
   while IFS= read -r ligne || [ -n "$ligne" ]; do
     ligne=${ligne%$'\r'}
     case "$ligne" in
-      PARALLEL=*) PARALLEL="${ligne#PARALLEL=}" ;;
-      PARALLEL_MAX=*) PARALLEL_MAX="${ligne#PARALLEL_MAX=}" ;;
+      PARALLEL=*|PARALLELE=*) PARALLEL="${ligne#*=}" ;;
+      PARALLEL_MAX=*|PARALLELE_MAX=*) PARALLEL_MAX="${ligne#*=}" ;;
     esac
   done < "$ETAT/.env"
   # Claude can edit this file: only two exact values are accepted
@@ -75,9 +87,10 @@ for v in vagues:
         continue
     vus = set()
     for i, t in enumerate(restants[:maxi], 1):
-        # worker identifier: "M4", "M4b", "M4.1" -> M4, M4b, M4-1; unique within the wave
+        # worker identifier: "M4", "M4b", "M4.1" -> M4, M4b, M4_1 (never "-": it separates the worker
+        # from the cycle in the log file names); unique within the wave
         m = re.match(r"^([A-Za-z]+\d+(?:[.\-]?[A-Za-z0-9]+)?)", t)
-        ident = re.sub(r"[^A-Za-z0-9_-]", "-", m.group(1))[:20] if m else ""
+        ident = re.sub(r"[^A-Za-z0-9_]", "_", m.group(1))[:20] if m else ""
         if not ident or ident in vus:
             ident = "J%d" % i
             while ident in vus: ident += "x"
@@ -146,7 +159,8 @@ parallele_lancer_ouvrier() {
   { cat "$CONSIGNES"; parallele_consignes_ouvrier "$ident" "$ligne"; } > "$PRIVE/CLAUDE.ouvrier-$ident.md"
   # The worker's sandbox: its worktree (PROJECT = the worktree, for the guard and the tools),
   # plus write access to the project's .git, where git stores the worktree's objects and branch.
-  PROJECT="$trav" python3 "$SYSTEME/settings.py" "$KIT" "$PRIVE/reglages-$ident.json" > /dev/null || { log "Worker $ident: cannot build the settings."; return 1; }
+  local principal="$PROJECT"
+  ATHANOR_PROJET_PRINCIPAL="$principal" PROJECT="$trav" python3 "$SYSTEME/settings.py" "$KIT" "$PRIVE/reglages-$ident.json" > /dev/null || { log "Worker $ident: cannot build the settings."; return 1; }
   python3 - "$PRIVE/reglages-$ident.json" "$PROJECT/.git" <<'PY' || return 1
 import json, sys
 f, git = sys.argv[1], sys.argv[2]
@@ -178,10 +192,18 @@ parallele_cycle() {
   log "Cycle $cycle (parallel): ${#idents[@]} workers on ${idents[*]}${template:+ with $template}"
   statut "Wave in parallel: ${idents[*]}"
   mkdir -p "$ETAT/work"
+  # uncommitted changes in the main checkout (a lead session cut short) would make the merge fail:
+  # they are committed first, the lead reviews them like the workers' branches
+  if [ -n "$(g -C "$PROJECT" status --porcelain --untracked-files=no 2>/dev/null)" ]; then
+    g -C "$PROJECT" add -u >/dev/null 2>&1 && g -C "$PROJECT" commit -q -m "Work in progress before the wave ${idents[*]} (lead)" >/dev/null 2>&1 && log "Uncommitted changes of the lead committed before the wave."
+  fi
   rm -f "$PRIVE"/ouvrier_*.sid "$PRIVE"/ouvrier_*.code "$PRIVE"/ouvrier_*.pid
+  local lances=()
   for i in "${!idents[@]}"; do
-    parallele_lancer_ouvrier "${idents[$i]}" "${lignes[$i]}" "$prefixe-${idents[$i]}.jsonl" "$template"
+    parallele_lancer_ouvrier "${idents[$i]}" "${lignes[$i]}" "$prefixe-${idents[$i]}.jsonl" "$template" && lances+=("${idents[$i]}")
   done
+  idents=("${lances[@]}"); ETAT_OUVRIERS="${idents[*]}"
+  [ "${#idents[@]}" -gt 0 ] || { log "No worker could start: back to the serial mode for this cycle."; return 3; }
   # Watchdog: a worker silent for too long is stopped; the whole wave gets the maximum duration of one cycle.
   debut=$(date +%s)
   while :; do
@@ -210,7 +232,7 @@ parallele_cycle() {
       g -C "$trav" add -A >/dev/null 2>&1 && g -C "$trav" commit -qm "$ident: uncommitted worker work (recorded by the pilot)" >/dev/null 2>&1 \
         && log "Worker $ident: uncommitted work recorded on auto/$ident."
     fi
-    enregistrer_stats "$prefixe-$ident.jsonl" "$([ "$(cat "$PRIVE/ouvrier_$ident.code" 2>/dev/null)" = 0 ] && echo ok || echo erreur)" "$cycle·$ident"
+    enregistrer_stats "$prefixe-$ident.jsonl" "$([ "$(cat "$PRIVE/ouvrier_$ident.code" 2>/dev/null)" = 0 ] && echo ok || echo erreur)" "$cycle·$ident" "ref:auto/$ident"
   done
   # Reports for the lead, then merge by the lead in the project.
   {

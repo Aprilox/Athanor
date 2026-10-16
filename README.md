@@ -129,7 +129,7 @@ Both options give the same folder: `Athanor.exe` (or `athanor`) next to `command
 ```bash
 cd athanor                   # or Athanor, if you built it from source
 commands/install.sh          # Claude Code, sandbox, tools (asks for sudo once)
-commands/configure.sh        # token, models, language
+commands/configure.sh        # token, models, options
 ./athanor                    # the app, opens in your browser
 ```
 
@@ -162,7 +162,7 @@ The app only uses Go's standard library plus three vendored packages for the Web
 |---|---|
 | Framing | `docs/REQUIREMENTS.md`, `docs/DESIGN.md`, `docs/ARCHITECTURE.md`, and a plan of 8 to 25 milestones, each with verifiable acceptance criteria |
 | Skeleton | an executable skeleton and the project's own `check.sh` (build, tests, screenshots) |
-| Complete slice | one feature working end to end, reviewed by the `critic` |
+| Complete slice | one feature working end to end, checked by the `tester` |
 | Production | the remaining milestones, one per cycle, or one wave at a time in parallel mode |
 | Polish | the `critic` uses the result like a demanding user and files bugs in `BUGS.md` |
 | Delivery | `deliverable/`, `TEST_GUIDE.md`, then `FINAL_REPORT.md` with `STATUS: DONE`. The pilot takes the next queued request, or stops |
@@ -284,7 +284,7 @@ Everything is editable in the app (*Settings*), or in `.env` ([`.env.example`](.
 | `IDLE_MAX_MIN`, `CYCLE_MAX_MIN`, `CLOSE_AFTER_MILESTONE` | cycle watchdog, one milestone per cycle |
 | `RTK`, `TZ` | command output compression, time zone of the logs (empty = the system's) |
 | `UNREAL_MCP`, `UNREAL_MCP_URL` | let Claude drive the open Unreal editor |
-| `UE_DIR`, `BLENDER_EXE`, `ANDROID_SDK_DIR` | tool paths when auto-detection misses them |
+| `UE_DIR`, `BLENDER_EXE`, `ANDROID_SDK_DIR`, `ANDROID_JDK_DIR` | tool paths when auto-detection misses them (optional, absent by default) |
 
 When the quota is exhausted for every model, the pilot waits for it to reopen and resumes on its own.
 
@@ -327,7 +327,7 @@ Found a vulnerability? Please open a [private security advisory](https://github.
 | Windows | Linux / WSL | |
 |---|---|---|
 | `commands\install.cmd` | `commands/install.sh` | install everything |
-| `commands\configure.cmd` | `commands/configure.sh` | token, models, language, options |
+| `commands\configure.cmd` | `commands/configure.sh` | token, models, options (the language is set in the app) |
 | `commands\start.cmd D:\Dev\game` | `commands/start.sh --background DIR` | start the pilot on a project |
 | `commands\follow.cmd D:\Dev\game` | `commands/follow.sh DIR` | follow it live |
 | `commands\stop-after-cycle.cmd D:\Dev\game` | `commands/stop-after-cycle.sh DIR` | stop cleanly after the current milestone |
