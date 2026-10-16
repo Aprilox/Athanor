@@ -32,6 +32,20 @@ migrer_atelier() {
   return 0
 }
 
+# pid of the live pilot of project $1: the one in the private folder, else the one announced in the
+# workshop (a pilot started with another path or from another copy of the tool), but only if that
+# process really is a pilot. Prints nothing and fails when no pilot runs.
+pilote_vivant() {
+  local p
+  p=$(pid_sur "$(cat "$(prive_de "$1")/pilot.pid" 2>/dev/null)")
+  if [ -n "$p" ] && kill -0 "$p" 2>/dev/null; then printf '%s' "$p"; return 0; fi
+  p=$(pid_sur "$(cat "$1/.athanor/pilot.pid" 2>/dev/null)")
+  if [ -n "$p" ] && kill -0 "$p" 2>/dev/null && tr '\0' ' ' < "/proc/$p/cmdline" 2>/dev/null | grep -q 'system/pilot\.sh'; then
+    printf '%s' "$p"; return 0
+  fi
+  return 1
+}
+
 prive_de() {
   local kit="${KIT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
   printf '%s/logs/pilotes/%s' "$kit" "$(printf '%s' "$1" | sha1sum | cut -c1-16)"

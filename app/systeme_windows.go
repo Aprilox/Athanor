@@ -27,7 +27,6 @@ import (
 
 const (
 	createNoWindow         = 0x08000000
-	detachedProcess        = 0x00000008
 	createNewProcessGroup  = 0x00000200
 	createBreakawayFromJob = 0x01000000
 )
@@ -58,11 +57,13 @@ func DemarrerDetache(k Kit, script string) error {
 	c := exec.Command("wsl.exe", "-d", k.Distro(), "--cd", k.Racine, "--", "bash", "-l", "./"+nom)
 	c.Env = append(os.Environ(), "WSL_UTF8=1")
 	// Outside the application's "job" if possible: closing the application must not take the pilot with it.
-	c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: createNoWindow | detachedProcess | createNewProcessGroup | createBreakawayFromJob}
+	// CREATE_NO_WINDOW only, never with DETACHED_PROCESS: Windows ignores CREATE_NO_WINDOW when both are
+	// given, and wsl.exe (a console program) then opens a console window of its own.
+	c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: createNoWindow | createNewProcessGroup | createBreakawayFromJob}
 	if err := c.Start(); err != nil {
 		c = exec.Command("wsl.exe", "-d", k.Distro(), "--cd", k.Racine, "--", "bash", "-l", "./"+nom)
 		c.Env = append(os.Environ(), "WSL_UTF8=1")
-		c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: createNoWindow | detachedProcess | createNewProcessGroup}
+		c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: createNoWindow | createNewProcessGroup}
 		if err := c.Start(); err != nil {
 			return err
 		}

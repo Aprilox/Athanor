@@ -177,6 +177,8 @@ L'application n'utilise que la bibliothèque standard de Go et trois paquets emb
 2. Chaque jalon de la vague en cours a son **ouvrier** : sa propre session Claude, sa propre copie de travail git (`.athanor/work/M5`) et sa propre branche (`auto/M5`). Tous les ouvriers travaillent en même temps.
 3. Le chef fusionne ensuite les branches, lance la vérification complète, coche ce qui est réussi et note le reste dans `BUGS.md` pour un cycle suivant. Les rapports des ouvriers sont dans `.athanor/WORKER_REPORTS.md`.
 
+4. **Les demandes en attente n'attendent pas.** Au début de chaque cycle, elles rejoignent la demande en cours : le chef ajoute leurs jalons au plan, en vagues, à côté du travail restant, avec une seule livraison finale à la fin.
+
 La page *Équipe* montre une carte par ouvrier et le *Journal* étiquette leurs lignes `[M5]`. Le mode parallèle est bien plus rapide sur les gros plans et consomme plus de quota (une session par ouvrier).
 
 ---

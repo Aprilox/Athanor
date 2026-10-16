@@ -235,11 +235,12 @@ func (s *Serveur) demarrerProjetsAuto() {
 		return
 	}
 	// Pilots that survived the application being closed: attach them a command that keeps WSL
-	// alive (start.sh --keep restarts nothing, it waits for the pilot to end).
+	// alive. --attach never starts a pilot: a pilot stopped meanwhile stays stopped (only the
+	// "restart the pilots" option below starts anything).
 	for _, p := range projets {
 		if p.Existe() && p.PiloteActif() {
 			pp := p
-			go func() { _ = DemarrerDetache(s.kitCourant(), ligneProjet(pp, "start.sh", "--keep")) }()
+			go func() { _ = DemarrerDetache(s.kitCourant(), ligneProjet(pp, "start.sh", "--attach")) }()
 		}
 	}
 	if !lancer {

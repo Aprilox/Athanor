@@ -70,6 +70,46 @@ async function action(promesse, genreOk = "ok") {
   catch (e) { if (e.message !== t("Locked")) toast(e.message, "erreur"); return null; }
 }
 
+// ----------------------------------------------------------------------------- confirmation dialog
+// The app's own dialog: the browser's confirm()/alert() would show the page address and look like a web page.
+// confirmer(message, { ok, annuler, danger }) → Promise<boolean>
+function confirmer(message, options = {}) {
+  const fond = $("#dialogue"), ok = $("#dialogue-ok"), annuler = $("#dialogue-annuler");
+  $("#dialogue-texte").textContent = message;
+  ok.textContent = options.ok || t("OK");
+  annuler.textContent = options.annuler || t("Cancel");
+  ok.className = "btn " + (options.danger ? "btn-danger" : "btn-primaire");
+  const avant = document.activeElement;
+  fond.hidden = false;
+  ok.focus();
+  return new Promise((resoudre) => {
+    const fin = (valeur) => {
+      fond.hidden = true;
+      ok.onclick = annuler.onclick = fond.onclick = null;
+      document.removeEventListener("keydown", clavier, true);
+      if (avant && avant.focus) avant.focus();
+      resoudre(valeur);
+    };
+    const clavier = (e) => {
+      if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); fin(false); }
+      else if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); fin(document.activeElement !== annuler); }
+      else if (e.key === "Tab") { e.preventDefault(); (document.activeElement === ok ? annuler : ok).focus(); }
+    };
+    ok.onclick = () => fin(true);
+    annuler.onclick = () => fin(false);
+    fond.onclick = (e) => { if (e.target === fond) fin(false); };
+    document.addEventListener("keydown", clavier, true);
+  });
+}
+
+// Desktop app, not a web page: no browser context menu outside the text fields (copy/paste stay available there).
+document.addEventListener("contextmenu", (e) => { if (!e.target.closest("input, textarea, [contenteditable], .journal, pre, code")) e.preventDefault(); });
+// …and none of the browser's own shortcuts (reload, print, find, view source, developer tools, downloads).
+document.addEventListener("keydown", (e) => {
+  const k = e.key.toLowerCase(), ctrl = e.ctrlKey || e.metaKey;
+  if (["f3", "f5", "f7", "f12"].includes(k) || (ctrl && ["r", "p", "f", "g", "h", "j", "u", "o", "s"].includes(k)) || (ctrl && e.shiftKey && ["i", "j", "c"].includes(k))) e.preventDefault();
+}, true);
+
 // ----------------------------------------------------------------------------- "Improve with Claude"
 // Under a request text area: Claude rewrites the request (clearer, richer, same intent); the user's
 // version is kept and both can be swapped at will. Edits made to either version are kept too.
@@ -156,13 +196,15 @@ function phraseEtat(v) {
     return { classe: "", titre: t("Pilot stopped"), sous: e.dernier_commit ? t("Last saved work: {0}", [e.dernier_commit]) : t("Click Start to resume.") };
   }
   switch (e.phase) {
+    // the pilot has just stopped (its last heartbeat is still recent): same wording as a stopped pilot
+    case "arrete": return { classe: "", titre: t("Pilot stopped"), sous: e.dernier_commit ? t("Last saved work: {0}", [e.dernier_commit]) : t("Click Start to resume.") };
     case "travail": return { classe: "travaille", titre: e.ouvriers ? t("{0} workers in parallel: {1}", [e.ouvriers.split(/\s+/).length, e.ouvriers.split(/\s+/).join(", ")]) : /^Merging/.test(e.etat || "") ? t("The lead merges the workers' branches") : e.jalon_en_cours ? t("Claude is working on {0}", [titreJalon(e.jalon_en_cours)]) : t("Claude is working"), sous: [e.debut_cycle && t("for {0}", [depuis(e.debut_cycle)]), t("cycle {0}", [e.cycle]), e.template, v.contexte && t("context {0} tokens", [fmtTokens(v.contexte)])].filter(Boolean).join(" · ") };
     case "quota": return { classe: "quota", titre: t("Usage limit reached, Claude is waiting"), sous: t("Resumes {0} · cycle {1}", [e.reprise_prevue || t("as soon as possible"), e.cycle]) };
     case "entre_cycles": return { classe: "entre_cycles", titre: t("Between two cycles"), sous: t("Cycle {0} is done, the next one starts with a fresh context.", [e.cycle]) };
     case "erreur": return { classe: "erreur", titre: t("Error, retry scheduled"), sous: e.etat };
     case "connexion": return { classe: "connexion", titre: t("Connection problem"), sous: t("Check the token in Settings, or go through Setup & health.") };
     case "termine": return { classe: "", titre: t("Project finished"), sous: t("The deliverable and the final report are in the project folder.") };
-    default: return { classe: "", titre: e.etat || t("Pilot started"), sous: t("cycle {0}", [e.cycle || 0]) };
+    default: return { classe: "", titre: e.etat ? t(e.etat) : t("Pilot started"), sous: t("cycle {0}", [e.cycle || 0]) };
   }
 }
 
@@ -403,7 +445,23 @@ pages.equipe = async () => {
   const initiales = (n) => n.split(/\s+/).map((x) => x[0]).join("").slice(0, 2).toUpperCase();
   const libelle = { travaille: t("working"), attend: t("waiting"), termine: t("finished"), disponible: t("available") };
   const nomAgent = (a) => a.id === "chef" ? t("Project lead") : t(a.nom);
-  const mission = (a) => a.id === "chef" ? t("Leads the current milestone: reads the plan, codes, checks, commits.") : t(a.mission || "");
+  // Available agents: a short, translated role. Working ones: the task as Claude wrote it (already in the
+  // project's language), never half-translated by the prefix rules; workers keep their translated label.
+  const ROLES = {
+    architect: "Requirements, architecture and the milestone plan",
+    creator: "Content: story, world, dialogue, texts, generated assets",
+    developer: "One precise development task, with its tests",
+    tester: "Automated tests, screenshots, bug reports",
+    critic: "Uses the result like a demanding end user",
+    executor: "Mechanical work, on the cheap model",
+  };
+  const mission = (a) => {
+    if (a.id === "chef") return t("Leads the current milestone: reads the plan, codes, checks, commits.");
+    const role = ROLES[String(nomAgent(a) || "").toLowerCase()];
+    if (a.statut === "disponible" && role) return t(role);
+    if (/^Builds milestone /.test(a.mission || "")) return t(a.mission);
+    return a.mission || "";
+  };
   return `<p class="intro">${t("Each card is a Claude session: what it does, its last words, and its report when done. The project lead reviews the sub-agents' work before going on.")} ${t("The lead works alone by default and calls a sub-agent for framing, big independent chunks, testing and the final critic.")}</p>
   <div class="equipe">${agents.map((a) => `
     <div class="agent ${a.id === "chef" ? "chef" : ""} ${h(a.statut)}">
@@ -656,19 +714,23 @@ $("#page").addEventListener("click", async (ev) => {
     if (b.dataset.chemin) return rendreExplorateur(b.dataset.chemin);
     if (b.id === "np-utiliser") { $("#np-dossier").value = etat.explorateur; return; }
     if (b.id === "np-creer") {
+      if (b.disabled) return;
+      b.disabled = true; // one project per click, even on a double-click
       const r = await action(api("projets", "POST", { nom: $("#np-nom").value, dossier: $("#np-dossier").value, demande: $("#np-demande").value }));
+      b.disabled = false;
       if (r) { etat.projet = r.nom; etat.evenements = []; etat.dernierJournal = 0; await rafraichir(); location.hash = "#suivi"; }
       return;
     }
   }
   if (page === "demandes") {
     const carte = b.closest("[data-fichier]");
-    if (b.id === "nd-ajouter") { const r = await action(api("demandes", "POST", { titre: $("#nd-titre").value, texte: $("#nd-texte").value })); if (r) rendrePage(); return; }
-    if (b.id === "rq-ajouter") { const r = await action(api("remarque", "POST", { texte: $("#rq-texte").value })); if (r) rendrePage(); return; }
+    // one request / note per click, even on a double-click
+    if (b.id === "nd-ajouter") { if (b.disabled) return; b.disabled = true; const r = await action(api("demandes", "POST", { titre: $("#nd-titre").value, texte: $("#nd-texte").value })); b.disabled = false; if (r) rendrePage(); return; }
+    if (b.id === "rq-ajouter") { if (b.disabled) return; b.disabled = true; const r = await action(api("remarque", "POST", { texte: $("#rq-texte").value })); b.disabled = false; if (r) rendrePage(); return; }
     if (b.id === "dm-enregistrer") return action(api("demande", "PUT", { texte: $("#dm-texte").value }));
     if (carte && b.hasAttribute("data-monter")) return reordonner(carte.dataset.fichier, -1);
     if (carte && b.hasAttribute("data-descendre")) return reordonner(carte.dataset.fichier, 1);
-    if (carte && b.hasAttribute("data-retirer")) { if (confirm(t("Remove this request from the queue?"))) { await action(api("demandes/" + encodeURIComponent(carte.dataset.fichier), "DELETE")); rendrePage(); } return; }
+    if (carte && b.hasAttribute("data-retirer")) { if (await confirmer(t("Remove this request from the queue?"), { ok: t("Remove"), danger: true })) { await action(api("demandes/" + encodeURIComponent(carte.dataset.fichier), "DELETE")); rendrePage(); } return; }
   }
   if (page === "journal" && b.classList.contains("ev")) { const n = Number(b.dataset.n); etat.ouverts.has(n) ? etat.ouverts.delete(n) : etat.ouverts.add(n); etat.suiviAutoScroll = false; return rendreJournal(); }
   if (page === "sante") {
@@ -688,7 +750,7 @@ $("#page").addEventListener("click", async (ev) => {
     if (b.id === "rg-redemarrer") { const r = await action(api("env", "POST", lireEnvFormulaire())); if (r) await action(api("pilote/redemarrer-apres-cycle", "POST")); return; }
   }
   if (page === "options") {
-    if (b.dataset.retirerProjet) { if (confirm(t("Remove “{0}” from the list? Its folder stays intact.", [b.dataset.retirerProjet]))) { await action(api("projets/" + encodeURIComponent(b.dataset.retirerProjet), "DELETE")); if (etat.projet === b.dataset.retirerProjet) etat.projet = ""; await rafraichir(); rendrePage(); } return; }
+    if (b.dataset.retirerProjet) { if (await confirmer(t("Remove “{0}” from the list? Its folder stays intact.", [b.dataset.retirerProjet]), { ok: t("Remove from list"), danger: true })) { await action(api("projets/" + encodeURIComponent(b.dataset.retirerProjet), "DELETE")); if (etat.projet === b.dataset.retirerProjet) etat.projet = ""; await rafraichir(); rendrePage(); } return; }
     if (b.id === "op-guide") { await action(api("preferences", "POST", { bienvenue_vue: false })); etat.assistant = 0; return rendreAssistant(); }
     if (b.id === "mdp-enregistrer") { const r = await action(api("mot-de-passe", "POST", { ancien: ($("#mdp-ancien") || {}).value || "", nouveau: $("#mdp-nouveau").value })); if (r) { toast(r.defini ? t("Lock enabled: the padlock is at the bottom left.") : t("Lock removed."), "ok"); rendrePage(); rafraichir(); } return; }
   }

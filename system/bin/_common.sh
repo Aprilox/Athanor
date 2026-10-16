@@ -35,7 +35,7 @@ passer_par_le_pont() {
     echo "$outil: the pilot's bridge is not responding (pilot stopped?). Restart the pilot." >&2; exit 127
   fi
   id="$(date +%s%N)-$$"; demande="$dossier/demande-$id.json"; sortie="$dossier/sortie-$id.log"; code_f="$dossier/code-$id"
-  python3 - "$demande.tmp" "$outil" "$(pwd -P)" "${UNREAL_MCP_URL:-}" "$@" <<'PY'
+  python3 - "$demande.tmp" "$outil" "$(pwd)" "${UNREAL_MCP_URL:-}" "$@" <<'PY'
 import json, sys
 f, outil, cwd, mcp, *args = sys.argv[1:]
 json.dump({"outil": outil, "cwd": cwd, "args": args, "env": {"UNREAL_MCP_URL": mcp} if mcp else {}}, open(f, "w"))
