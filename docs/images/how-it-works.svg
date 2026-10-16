@@ -1,0 +1,105 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 590" width="1200" height="590" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="fl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 Z" fill="#8fa3b8"/>
+    </marker>
+    <marker id="fa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 Z" fill="#3fc6a5"/>
+    </marker>
+  </defs>
+  <style>
+    .t { fill: #e8eef5; font-size: 17px; font-weight: 600; }
+    .s { fill: #9fb0c2; font-size: 13.5px; }
+    .k { fill: #3fc6a5; font-size: 12.5px; font-weight: 600; letter-spacing: 1.2px; }
+    .box { fill: #1c2633; stroke: #2e3c4d; stroke-width: 1.5; }
+    .acc { fill: #17352f; stroke: #3fc6a5; stroke-width: 1.5; }
+    .w { fill: #1f2a38; stroke: #4a5d73; stroke-width: 1.3; }
+    .ln { stroke: #8fa3b8; stroke-width: 1.8; fill: none; marker-end: url(#fl); }
+    .la { stroke: #3fc6a5; stroke-width: 2; fill: none; marker-end: url(#fa); }
+    .dash { stroke-dasharray: 6 5; }
+  </style>
+  <rect width="1200" height="590" rx="24" fill="#111821"/>
+
+  <!-- you + app -->
+  <rect class="box" x="40" y="70" width="230" height="120" rx="14"/>
+  <text class="k" x="60" y="100">YOU</text>
+  <text class="t" x="60" y="128">Describe the project</text>
+  <text class="s" x="60" y="152">queue requests, add notes,</text>
+  <text class="s" x="60" y="172">follow it live in the app</text>
+
+  <rect class="box" x="40" y="400" width="230" height="150" rx="14"/>
+  <text class="k" x="60" y="430">THE APP</text>
+  <text class="t" x="60" y="458">Athanor.exe / athanor</text>
+  <text class="s" x="60" y="482">state, plan and usage,</text>
+  <text class="s" x="60" y="502">live team and log, health</text>
+  <text class="s" x="60" y="522">checks with one-click repair</text>
+
+  <!-- pilot -->
+  <rect class="acc" x="330" y="70" width="250" height="120" rx="14"/>
+  <text class="k" x="350" y="100">THE PILOT · LOOP</text>
+  <text class="t" x="350" y="128">system/pilot.sh</text>
+  <text class="s" x="350" y="152">one milestone per cycle,</text>
+  <text class="s" x="350" y="172">watchdog, quota, recovery</text>
+
+  <!-- lead -->
+  <rect class="box" x="640" y="70" width="250" height="120" rx="14"/>
+  <text class="k" x="660" y="100">PROJECT LEAD</text>
+  <text class="t" x="660" y="128">Claude Code session</text>
+  <text class="s" x="660" y="152">fresh context, reads the plan,</text>
+  <text class="s" x="660" y="172">delegates to sub-agents</text>
+
+  <!-- sub-agents -->
+  <rect class="box" x="950" y="70" width="210" height="120" rx="14"/>
+  <text class="k" x="970" y="100">SUB-AGENTS</text>
+  <text class="s" x="970" y="126">architect · creator</text>
+  <text class="s" x="970" y="148">developer · tester</text>
+  <text class="s" x="970" y="170">critic · executor (Haiku)</text>
+
+  <!-- wave of workers -->
+  <rect class="box dash" x="330" y="250" width="560" height="160" rx="14" fill="none"/>
+  <text class="k" x="350" y="280">PARALLEL MODE · ONE WAVE</text>
+  <rect class="w" x="350" y="298" width="160" height="92" rx="10"/>
+  <text class="t" x="368" y="326">Worker M5</text>
+  <text class="s" x="368" y="350">git worktree</text>
+  <text class="s" x="368" y="370">branch auto/M5</text>
+  <rect class="w" x="530" y="298" width="160" height="92" rx="10"/>
+  <text class="t" x="548" y="326">Worker M6</text>
+  <text class="s" x="548" y="350">git worktree</text>
+  <text class="s" x="548" y="370">branch auto/M6</text>
+  <rect class="w" x="710" y="298" width="160" height="92" rx="10"/>
+  <text class="t" x="728" y="326">Worker M7</text>
+  <text class="s" x="728" y="350">git worktree</text>
+  <text class="s" x="728" y="370">branch auto/M7</text>
+
+  <!-- merge / check / commit -->
+  <rect class="acc" x="330" y="460" width="560" height="90" rx="14"/>
+  <text class="k" x="350" y="490">EVERY CYCLE ENDS THE SAME WAY</text>
+  <text class="t" x="350" y="518">merge → check.sh → tick the milestone → git commit</text>
+  <text class="s" x="350" y="539">what fails goes to BUGS.md and is picked up by a later cycle</text>
+
+  <!-- sandbox + bridge -->
+  <rect class="box" x="950" y="250" width="210" height="300" rx="14"/>
+  <text class="k" x="970" y="280">SANDBOX</text>
+  <text class="s" x="970" y="304">bubblewrap + seccomp:</text>
+  <text class="s" x="970" y="324">writes only in the project,</text>
+  <text class="s" x="970" y="344">never reads your PC</text>
+  <line x1="970" y1="370" x2="1140" y2="370" stroke="#2e3c4d" stroke-width="1.5"/>
+  <text class="k" x="970" y="398">BRIDGE</text>
+  <text class="s" x="970" y="422">Unreal · Blender · Android</text>
+  <text class="s" x="970" y="442">SDK · Docker · winget</text>
+  <text class="s" x="970" y="468">admin installs without UAC</text>
+  <text class="s" x="970" y="488">(one consent, then silent)</text>
+  <text class="s" x="970" y="520">command by command,</text>
+  <text class="s" x="970" y="540">outside the sandbox</text>
+
+  <!-- arrows -->
+  <path class="ln" d="M270 130 H324"/>
+  <path class="la" d="M580 130 H634"/>
+  <path class="ln" d="M890 130 H944"/>
+  <path class="ln" d="M765 190 V244"/>
+  <path class="ln" d="M610 410 V454"/>
+  <path class="la" d="M330 505 H300 Q290 505 290 495 V230 Q290 220 300 220 H445 V196"/>
+  <path class="ln dash" d="M890 330 H944"/>
+  <path class="ln dash" d="M330 520 H276"/>
+  <text class="s" x="300" y="44" fill="#9fb0c2">Your project folder: one git commit per milestone · the tool only adds a .athanor/ workshop</text>
+</svg>

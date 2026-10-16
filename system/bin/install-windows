@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# install-windows WINGET_ID           installs a Windows program with winget (for the user, without a window;
+#                                     with administrator rights through the authorised task when needed, no UAC)
+# install-windows --search WORDS      searches the winget identifier of a program (e.g. --search android studio)
+# install-windows --file SETUP [ARGS] runs a downloaded installer (.exe/.msi) with administrator rights, without
+#                                     UAC; pass its silent flags as ARGS (e.g. /S, /quiet, /VERYSILENT)
+# Every installation is logged in tools/INSTALLS.md (section "On Windows").
+. "$(dirname "$0")/_common.sh"
+passer_par_le_pont "$@"
+command -v powershell.exe >/dev/null 2>&1 || { echo "powershell.exe not found: Windows interoperability disabled?" >&2; exit 127; }
+if [ "${1:-}" = "--search" ]; then
+  shift; mots="$*"
+  [[ "$mots" =~ ^[A-Za-z0-9\ ._+-]+$ ]] || { echo "Search words: letters, digits, spaces, . _ + -" >&2; exit 2; }
+  exec timeout 180 powershell.exe -NoProfile -Command "winget search --accept-source-agreements --disable-interactivity '$mots'"
+fi
+if [ "${1:-}" = "--file" ]; then
+  shift; exec "$(dirname "$0")/pc-exec" --admin "$@"
+fi
+id="${1:-}"
+[[ "$id" =~ ^[A-Za-z0-9._+-]+$ ]] || { echo "Usage: install-windows WINGET_ID   (to find the ID: install-windows --search NAME)" >&2; exit 2; }
+sortie=$(mktemp)
+essai() {  # $1 = scope options
+  timeout "${2:-1200}" powershell.exe -NoProfile -Command "winget install --id '$id' --exact --silent $1 --accept-package-agreements --accept-source-agreements --disable-interactivity; exit \$LASTEXITCODE" 2>&1 | tr -d '\r' | tee -a "$sortie"
+  local c=${PIPESTATUS[0]}
+  # Also matches the French winget messages ("deja installe", "Aucune mise a niveau"), accents written as wildcards.
+  grep -qiE "already installed|d.{1,2}j.{1,2} install|No newer package|Aucune mise .{1,2} niveau" "$sortie" && c=0
+  return $c
+}
+TACHE="Athanor - installations"
+essai "--scope user"; code=$?
+if [ $code -ne 0 ] && (cd /mnt/c && schtasks.exe /query /tn "$TACHE" >/dev/null 2>&1); then
+  # Installation with administrator rights, allowed once by the user (install.cmd):
+  # drop the identifier, the scheduled task installs it without a window, wait for its result.
+  echo "(installing with administrator rights via the '$TACHE' task)"
+  file="$KIT/tools/windows/admin-requests"; mkdir -p "$file"
+  n="$(date +%s)-$$"; printf '%s' "$id" > "$file/demande-$n.txt"
+  (cd /mnt/c && schtasks.exe /run /tn "$TACHE" >/dev/null 2>&1)
+  for i in $(seq 1 240); do [ -f "$file/resultat-$n.txt" ] && break; sleep 5; done
+  if [ -f "$file/resultat-$n.txt" ]; then
+    tr -d '\r' < "$file/resultat-$n.txt" | tee -a "$sortie"; code=$(sed -n 's/^code=//p' "$file/resultat-$n.txt" | tr -d '\r' | head -n1); code=${code:-1}
+    rm -f "$file/resultat-$n.txt"
+  else
+    echo "No answer from the administrator task after 20 min." >&2; rm -f "$file/demande-$n.txt"; code=124
+  fi
+elif [ $code -ne 0 ]; then
+  # Never trigger a UAC prompt (nobody is there to click it): without the authorised task, stop here.
+  echo "Administrator rights not allowed yet: in the app, Setup & health -> Administrator rights -> Repair (one UAC prompt, once)." >&2
+fi
+journal="$KIT/tools/INSTALLS.md"
+grep -q '^## On Windows' "$journal" 2>/dev/null || printf '\n## On Windows (winget, logged automatically)\n\n| Date | Software (winget ID) | Result | Uninstall |\n|---|---|---|---|\n' >> "$journal"
+if [ $code -eq 0 ]; then res="installed"; else res="failed (code $code)"; fi
+printf '| %s | `%s` | %s | `winget uninstall --id %s` |\n' "$(date '+%Y-%m-%d %H:%M')" "$id" "$res" "$id" >> "$journal"
+rm -f "$sortie"
+if [ $code -ne 0 ]; then
+  echo "FAILED to install $id. Administrator rights are probably needed: note it in TODO_FOR_YOU.md (at the project root) and continue with an alternative (portable version in \$TOOLS/windows, another tool)." >&2
+fi
+exit $code

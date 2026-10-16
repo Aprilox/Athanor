@@ -1,0 +1,14 @@
+# Line endings are fixed per file type, whatever the contributor's git settings:
+# Linux scripts must keep LF (bash in WSL fails on CRLF), Windows scripts keep CRLF.
+* text=auto
+*.sh        text eol=lf
+*.py        text eol=lf
+system/bin/* text eol=lf
+*.cmd       text eol=crlf
+*.bat       text eol=crlf
+*.ps1       text eol=crlf
+*.go        text eol=lf
+# Binary files
+*.png       binary
+*.ico       binary
+*.syso      binary

@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# Starts the pilot on a project: start.sh [--background | --keep] [PROJECT_FOLDER]
+# Without a folder: KIT/projet. --background: in the background, returns immediately (Linux).
+# --keep (Windows app): pilot detached like --background, then this command stays open as long as it
+# runs, so that Windows keeps WSL alive; if it is killed, the pilot goes on. Pilot already running: it
+# simply waits (the app relaunches it when it opens).
+cd "$(dirname "$0")/.." || exit 1
+KIT=$(pwd); BACKGROUND=0
+. system/safety.sh
+KEEP=0
+for a in "$@"; do case "$a" in --background) BACKGROUND=1 ;; --keep) BACKGROUND=1; KEEP=1 ;; *) PROJECT="$a" ;; esac; done
+PROJECT="${PROJECT:-$KIT/projet}"
+# A Windows path (D:\Dev\x) is accepted and converted.
+case "$PROJECT" in [A-Za-z]:*) PROJECT=$(wslpath -u "$PROJECT") ;; esac
+[ -d "$PROJECT" ] && migrer_atelier "$PROJECT"
+mkdir -p "$PROJECT/.athanor" || { echo "Project folder not accessible: $PROJECT"; exit 1; }
+PROJECT=$(cd "$PROJECT" && pwd -P)
+PRIVE="$(prive_de "$PROJECT")"; mkdir -p "$PRIVE"
+# The reference pid and the pilot's output live in its private folder (out of Claude's reach).
+PID="$PRIVE/pilot.pid"; SORTIE="$PRIVE/output.log"
+garder() {  # waits for the pilot to end (keeps WSL alive)
+  [ "$KEEP" = 1 ] || return 0
+  sleep 5
+  while [ -f "$PID" ] && kill -0 "$(pid_sur "$(cat "$PID" 2>/dev/null)")" 2>/dev/null; do sleep 30; done
+}
+if [ -f "$PID" ]; then
+  if kill -0 "$(pid_sur "$(cat "$PID")")" 2>/dev/null; then echo "The pilot is already running on this project (PID $(cat "$PID"))."; garder; exit 0; fi
+  rm -f "$PID"   # stale file (pilot killed before it could clean up)
+fi
+[ -f .env ] || { echo "No .env: set the token in the app (Settings)."; exit 1; }
+[ -e "$PROJECT/.athanor/STOP" ] && rm -f "$PROJECT/.athanor/STOP" && echo "(previous end-of-cycle stop cancelled: the pilot restarts)"
+if [ "$BACKGROUND" = 1 ]; then
+  setsid nohup bash system/pilot.sh "$PROJECT" >> "$SORTIE" 2>&1 < /dev/null &
+  echo "Pilot started in the background on $PROJECT"
+  garder
+else
+  bash system/pilot.sh "$PROJECT" 2>&1 | tee -a "$SORTIE"
+fi

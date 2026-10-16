@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Athanor</title>
+<meta name="csrf" content="__CSRF__">
+<link rel="icon" href="logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div id="app" class="app">
+  <aside class="nav">
+    <div class="marque">
+      <img src="logo.svg" width="30" height="30" alt="" class="marque-logo">
+      <div><div class="marque-nom">Athanor</div><div class="marque-sous" id="nav-sous">—</div></div>
+    </div>
+    <div class="selecteur">
+      <button id="sel-projet" class="sel-projet" type="button" aria-haspopup="listbox"></button>
+      <div id="menu-projets" class="menu-projets" hidden></div>
+    </div>
+    <div class="nav-titre" id="nav-titre-projet">Project</div>
+    <nav id="nav-liens">
+      <a href="#suivi" data-page="suivi">Overview</a>
+      <a href="#equipe" data-page="equipe">Team</a>
+      <a href="#demandes" data-page="demandes">Requests</a>
+      <a href="#journal" data-page="journal">Log</a>
+    </nav>
+    <div class="nav-titre" id="nav-titre-outil">Tool</div>
+    <nav id="nav-outil">
+      <a href="#sante" data-page="sante">Setup &amp; health</a>
+      <a href="#reglages" data-page="reglages">Settings</a>
+      <a href="#options" data-page="options">Options</a>
+    </nav>
+    <div class="nav-pied">
+      <button id="btn-verrou" class="btn-fantome" type="button">🔒 Lock</button>
+      <div class="nav-kit" id="nav-kit"></div>
+    </div>
+  </aside>
+
+  <main class="principal">
+    <header class="bandeau" id="bandeau"></header>
+    <section class="page" id="page"></section>
+    <div class="toast" id="toast" hidden></div>
+  </main>
+
+  <div class="assistant" id="assistant" hidden></div>
+  <div class="verrou" id="verrou" hidden>
+    <div class="verrou-carte">
+      <div class="verrou-cadenas">🔒</div>
+      <h1 id="verrou-titre">Application locked</h1>
+      <p id="verrou-etat"></p>
+      <form id="verrou-form">
+        <input type="password" id="verrou-mdp" placeholder="Password" autocomplete="current-password" autofocus>
+        <button type="submit" class="btn btn-primaire" id="verrou-bouton">Unlock</button>
+      </form>
+      <p class="verrou-erreur" id="verrou-erreur"></p>
+    </div>
+  </div>
+</div>
+<script src="i18n.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

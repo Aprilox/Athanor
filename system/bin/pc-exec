@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# pc-exec [--admin] PROGRAM [ARGUMENTS...]: runs a Windows program (.exe, .msi, .bat, .cmd, .ps1) that you
+# installed as a portable copy in $TOOLS/windows, or that lives in the project. Linux paths are converted.
+# --admin: run with administrator rights, without any UAC prompt (installers, drivers, services). When a program
+# refuses to start without elevation (Windows error 740), pc-exec retries it elevated automatically.
+. "$(dirname "$0")/_common.sh"
+passer_par_le_pont "$@"
+admin=0; [ "${1:-}" = "--admin" ] && { admin=1; shift; }
+prog="${1:-}"; shift || true
+[ -n "$prog" ] && [ -f "$prog" ] || { echo "Usage: pc-exec PATH/program.exe [arguments...]" >&2; exit 2; }
+reel=$(realpath "$prog")
+case "$reel" in
+  "$KIT/tools/windows/"*|"$PROJECT/"*|"${ANDROID_SDK_DIR:-/nulle-part}/"*|"${ANDROID_JDK_DIR:-/nulle-part}/"*) ;;
+  *) echo "Refused: pc-exec only runs programs located in \$TOOLS/windows or in the project ($reel)." >&2; exit 2 ;;
+esac
+convertir_args "$@"
+eleve() {  # elevated run through the administrator task (no UAC)
+  local ligne="" a
+  for a in "${ARGS[@]}"; do case "$a" in *" "*) ligne+=" \"$a\"" ;; *) ligne+=" $a" ;; esac; done
+  executer_admin "run: \"$(wslpath -w "$reel")\"${ligne}"
+  local c=$?
+  [ $c -eq 127 ] && echo "Administrator rights not allowed yet: in the app, Setup & health -> Administrator rights -> Repair (one UAC prompt, once). Note it in TODO_FOR_YOU.md and continue with a portable alternative." >&2
+  return $c
+}
+case "${reel,,}" in
+  *.exe|*.msi|*.bat|*.cmd|*.ps1) ;;
+  *) echo "Refused: only .exe, .msi, .bat, .cmd or .ps1." >&2; exit 2 ;;
+esac
+if [ "$admin" = 1 ]; then eleve; exit $?; fi
+case "${reel,,}" in
+  *.exe) "$reel" "${ARGS[@]}"; code=$? ;;
+  *.msi) msiexec.exe /i "$(wslpath -w "$reel")" /qn /norestart "${ARGS[@]}"; code=$? ;;
+  *.ps1) powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(wslpath -w "$reel")" "${ARGS[@]}"; code=$? ;;
+  *) cmd.exe /c "$(wslpath -w "$reel")" "${ARGS[@]}"; code=$? ;;
+esac
+# 740 = ERROR_ELEVATION_REQUIRED (the program's manifest asks for administrator rights); 1603 = MSI needs elevation.
+if [ "$code" = 740 ] || { [ "$code" = 1603 ] && [[ "${reel,,}" == *.msi ]]; }; then
+  echo "(the program requires administrator rights: retrying through the administrator task, without UAC)" >&2
+  eleve; code=$?
+fi
+exit $code
