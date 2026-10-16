@@ -141,8 +141,8 @@ prochaine_demande() {  # the current request is done: move on to the first one i
   return 0
 }
 
-enregistrer_stats() {  # one line per cycle in .athanor/stats.tsv (read by the application); $3 = cycle label
-  local f="$1" etat="$2" etiquette="${3:-$cycle}" res
+enregistrer_stats() {  # one line per cycle in .athanor/stats.tsv (read by the application); $3 = cycle label, $4 = git folder
+  local f="$1" etat="$2" etiquette="${3:-$cycle}" depot="${4:-$PROJECT}" res
   [ -s "$PRIVE/stats.tsv" ] || printf 'horodatage\tcycle\tmodele\tetat\tminutes\tminutes_api\ttours\tcout_usd\tentree_tokens\tcache_lu\tcache_ecrit\tsortie_tokens\tcontexte_max\tcommit\n' > "$PRIVE/stats.tsv"
   res=$(jq -cR 'fromjson? | select(type=="object" and .type=="result")' "$f" 2>/dev/null | tail -n 1)
   if [ -z "$res" ]; then
@@ -163,7 +163,7 @@ enregistrer_stats() {  # one line per cycle in .athanor/stats.tsv (read by the a
     "$(printf '%s' "$res" | jq -r '.usage.cache_read_input_tokens//0' 2>/dev/null)" \
     "$(printf '%s' "$res" | jq -r '.usage.cache_creation_input_tokens//0' 2>/dev/null)" \
     "$(printf '%s' "$res" | jq -r '.usage.output_tokens//0' 2>/dev/null)" \
-    "${pic:-0}" "$(g -C "$PROJECT" log -1 --pretty=%h 2>/dev/null)" >> "$PRIVE/stats.tsv"
+    "${pic:-0}" "$(case "$depot" in ref:*) g -C "$PROJECT" log -1 --pretty=%h "${depot#ref:}" 2>/dev/null ;; *) g -C "$depot" log -1 --pretty=%h 2>/dev/null ;; esac)" >> "$PRIVE/stats.tsv"
   publier "$ETAT/stats.tsv" < "$PRIVE/stats.tsv"
 }
 
@@ -341,6 +341,7 @@ attente_quota() {  # reads "resets 3:45pm" or "resets Mon 12:00am" when possible
 
 # Parallel mode (simultaneous workers on a wave of milestones, then merge by the lead): separate functions.
 . "$SYSTEME/parallel.sh"
+parallele_nettoyer_worktrees   # leftovers of a wave interrupted by a stop or a crash
 
 # ----------------------------------------------------------------------------- startup
 cd "$PROJECT" || { echo "Folder $PROJECT not accessible"; exit 1; }
@@ -359,6 +360,7 @@ arreter_tout() {  # Ctrl+C, window closed or stop.sh: Claude is stopped too
   local sid f; sid=$(pid_sur "$(cat "$PRIVE/claude_sid" 2>/dev/null)")
   [ -n "$sid" ] && pkill -TERM -s "$sid" 2>/dev/null
   for f in "$PRIVE"/ouvrier_*.sid; do [ -f "$f" ] && sid=$(pid_sur "$(cat "$f")") && [ -n "$sid" ] && pkill -KILL -s "$sid" 2>/dev/null; done
+  parallele_nettoyer_worktrees
   [ -n "${PONT_PID:-}" ] && kill "$PONT_PID" 2>/dev/null
   [ -n "${BATTEMENT_PID:-}" ] && kill "$BATTEMENT_PID" 2>/dev/null
   log "Pilot stopped."; ETAT_PHASE=arrete; statut "Stopped (restart with start)"; rm -f "$PRIVE/pilot.pid" "$ETAT/pilot.pid"; exit 0
@@ -487,7 +489,9 @@ DEBUT=$(entier "$(cat "$PRIVE/debut" 2>/dev/null)" "$(date +%s)")
 
 BUT="/goal The next unticked milestone of .athanor/PLAN.md is completed and verified according to your instructions: bash .athanor/check.sh has been run and its output, showing success, is displayed in this conversation; .athanor/PLAN.md ticks this milestone; .athanor/LOG.md has a new entry; git log shows the commit. If .athanor/PLAN.md does not exist yet, this milestone is the framing phase described in your instructions, with no check.sh required. If all milestones are already ticked, the goal is reached when .athanor/FINAL_REPORT.md exists and contains the line STATUS: DONE. Or stop after ${MAX_TURNS_PER_CYCLE} turns."
 
-cycle=0
+cycle=$(entier "$(cat "$PRIVE/cycle" 2>/dev/null)" 0)   # continues across restarts (stats.tsv, logs)
+# installations older than this counter: continue after the last cycle recorded in the statistics
+[ "$cycle" = 0 ] && [ -s "$PRIVE/stats.tsv" ] && cycle=$(entier "$(cut -f2 "$PRIVE/stats.tsv" | sed 's/·.*//' | grep -E '^[0-9]+$' | sort -n | tail -n 1)" 0)
 erreurs=0
 sans_progres=0
 
@@ -512,7 +516,7 @@ while true; do
 
   synchroniser_demande
   preparer_cycle
-  cycle=$(( cycle + 1 ))
+  cycle=$(( cycle + 1 )); echo "$cycle" > "$PRIVE/cycle"
   fichier_log="$ETAT/logs/cycle-$(date '+%Y%m%d-%H%M%S')-$(printf '%04d' "$cycle").jsonl"
   avant=$(g -C "$PROJECT" rev-parse HEAD 2>/dev/null || echo aucun)
   coches_cycle_debut=$(coches_plan); coches_cycle_debut=${coches_cycle_debut:-0}
@@ -533,13 +537,16 @@ while true; do
 
   # Serial mode (one lead, one milestone) or parallel (a wave of workers, then merge by the lead).
   parallele_lire_reglage
-  mode=serie; but_cycle="$BUT"; consignes="$CONSIGNES"
+  if [ "$PARALLEL" = 1 ]; then parallele_absorber_file; synchroniser_demande; fi
+  mode=serie; but_cycle="$BUT"; consignes="$CONSIGNES"; plan_seul=0
   if [ "$PARALLEL" = 1 ]; then
-    parallele_absorber_file
-    synchroniser_demande
     { cat "$CONSIGNES"; parallele_consignes; } > "$PRIVE/CLAUDE.cycle.md"; consignes="$PRIVE/CLAUDE.cycle.md"
-    # a changed request (an additional one, or edited by hand) is first folded into the plan by the lead alone
-    if [ -f "$ETAT/PLAN.md" ] && [ ! -f "$ETAT/RECHECK" ] && [ ! -f "$ETAT/REQUEST_CHANGED" ]; then
+    # a changed request (an additional one, or edited by hand) is first folded into the plan by the lead
+    # alone, without any code: the milestones themselves are for the workers of the next cycles
+    if [ -f "$ETAT/PLAN.md" ] && [ -f "$ETAT/REQUEST_CHANGED" ] && parallele_plan_a_des_vagues; then
+      but_cycle="/goal The change of .athanor/REQUEST.md (flagged by .athanor/REQUEST_CHANGED) is folded into .athanor/PLAN.md as waves according to your parallel-mode instructions, the change is noted in .athanor/LOG.md, .athanor/REQUEST_CHANGED is deleted and the plan is committed, without writing any code. Or stop after 15 turns."
+      plan_seul=1; log "Parallel mode: the request changed, the lead updates the plan first."
+    elif [ -f "$ETAT/PLAN.md" ] && [ ! -f "$ETAT/RECHECK" ] && [ ! -f "$ETAT/REQUEST_CHANGED" ]; then
       if parallele_plan_a_des_vagues; then
         [ "$(parallele_vague_courante | wc -l)" -ge 2 ] && mode=parallele
       else
@@ -551,7 +558,9 @@ while true; do
   if [ "$mode" = parallele ]; then
     parallele_cycle "${fichier_log%.jsonl}" "$modele_cycle"
     code=$?
-  else
+    [ "$code" = 3 ] && mode=serie
+  fi
+  if [ "$mode" = serie ]; then
     args=(-p "$but_cycle" --permission-mode bypassPermissions --settings "$REGLAGES" --permission-prompts none --output-format stream-json --verbose
           "${ARGS_SURS[@]}" --append-system-prompt "$(cat "$consignes")")
     [ "$AGENTS_PAR_JSON" = 1 ] && args+=(--agents "$AGENTS_JSON")
@@ -566,6 +575,8 @@ while true; do
     code=$?
   fi
   ETAT_PHASE=entre_cycles
+  # the plan-only cycle had its chance: the flag never blocks the workers a second time
+  [ "$plan_seul" = 1 ] && rm -f "$ETAT/REQUEST_CHANGED"
 
   apres=$(g -C "$PROJECT" rev-parse HEAD 2>/dev/null || echo aucun)
   resultat=$(jq -cR 'fromjson? | select(type == "object" and .type == "result")' "$fichier_log" 2>/dev/null | tail -n 1)
@@ -618,7 +629,7 @@ while true; do
             echo "Look at .athanor/LOG.md, BLOCKERS.md and logs/. You can refine your request."
           } > "$ETAT/ALERT.md"
           log "ALERT: $sans_progres cycles without progress, 30 min pause (see .athanor/ALERT.md)."
-          statut "Paused after $sans_progres cycles without progress"
+          ETAT_PHASE=erreur; statut "Paused after $sans_progres cycles without progress"
           sans_progres=0
           dormir 1800
         fi
@@ -662,7 +673,7 @@ while true; do
     bloque)
       erreurs=$(( erreurs + 1 ))
       log "Cycle $cycle stopped by the watchdog ($motif_arret). The work already done stays in the folder; resuming in $ERROR_WAIT_MIN min."
-      statut "Cycle stopped ($motif_arret), resuming in $ERROR_WAIT_MIN min"
+      ETAT_PHASE=erreur; statut "Cycle stopped ($motif_arret), resuming in $ERROR_WAIT_MIN min"
       dormir $(( ERROR_WAIT_MIN * 60 ))
       ;;
     erreur)

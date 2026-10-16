@@ -15,7 +15,8 @@ function etatDuJalon(j, premierLibre) {
   if (j.fait) return "coche";
   const ouvriers = ((etat.vue && etat.vue.etat && etat.vue.etat.ouvriers) || "").split(/\s+/).filter(Boolean);
   if (ouvriers.length) {
-    const id = (j.titre.match(/^([A-Za-z]*\d+[a-z]?)\b/) || [])[1];
+    const m = j.titre.match(/^([A-Za-z]+\d+(?:[.\-]?[A-Za-z0-9]+)?)/);
+    const id = m ? m[1].replace(/[^A-Za-z0-9_]/g, "_").slice(0, 20) : "";
     return id && ouvriers.includes(id) ? "en-cours" : "a-faire";
   }
   return premierLibre() ? "en-cours" : "a-faire";
@@ -55,7 +56,7 @@ async function api(chemin, methode = "GET", corps) {
     body: corps === undefined ? undefined : JSON.stringify(corps),
   });
   const data = await r.json().catch(() => ({}));
-  if (r.status === 401 && chemin.indexOf("deverrouiller") !== 0) { etat.verrouille = true; afficherVerrou(); throw new Error(t("Locked")); }
+  if (r.status === 401 && data.erreur_key === "Locked") { etat.verrouille = true; afficherVerrou(); throw new Error(t("Locked")); }
   if (!r.ok) throw new Error(data.erreur_key ? t(data.erreur_key, data.args || []) : (data.erreur || t("Error {0}", [r.status])));
   return data;
 }

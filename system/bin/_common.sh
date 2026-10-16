@@ -28,7 +28,7 @@ absent() { echo "$1 is not installed on this PC (or not detected). See .athanor/
 # Called at the top of every gateway: passer_par_le_pont "$@"
 passer_par_le_pont() {
   [ "${PONT_DIRECT:-}" = 1 ] && return 0          # already outside the sandbox: run directly
-  local dossier="$PROJECT/.athanor/pont" outil id demande sortie code_f vivant i taille=0 nouveau
+  local dossier="${ATHANOR_PONT:-$PROJECT/.athanor/pont}" outil id demande sortie code_f vivant i taille=0 nouveau
   outil=$(basename "$0")
   vivant="$dossier/vivant"
   if [ ! -f "$vivant" ] || [ $(( $(date +%s) - $(stat -c %Y "$vivant" 2>/dev/null || echo 0) )) -gt 10 ]; then

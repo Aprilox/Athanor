@@ -51,6 +51,8 @@ reglages = {
     "env": {
         "TOOLS": tools,
         "PROJECT": projet,
+        # the bridge of the main project (a parallel worker works in a worktree, the bridge stays with the lead)
+        "ATHANOR_PONT": os.path.join(os.environ.get("ATHANOR_PROJET_PRINCIPAL") or os.environ.get("PROJECT") or os.path.join(kit, "projet"), ".athanor", "pont"),
         "XDG_CACHE_HOME": os.path.join(tools, "cache"),
         "PIP_CACHE_DIR": os.path.join(tools, "cache", "pip"),
         "npm_config_cache": os.path.join(tools, "cache", "npm"),
