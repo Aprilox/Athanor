@@ -25,6 +25,7 @@
   <a href="#the-app"><b>The app</b></a> ·
   <a href="#security"><b>Security</b></a> ·
   <a href="#faq"><b>FAQ</b></a> ·
+  <a href="#troubleshooting"><b>Troubleshooting</b></a> ·
   <a href="README.fr.md"><b>Français</b></a>
 </p>
 
@@ -158,17 +159,39 @@ The agents live in [`template/.claude/agents/`](template/.claude/agents): edit t
 | <img src="docs/images/team.png" alt="Team page: the project lead, finished sub-agents and three workers with their last words"><br>**Team**: what every agent does and says, live | <img src="docs/images/log.png" alt="Log page in the light theme: pilot events, Claude's words, tools and sub-agents, worker lines tagged [M5]"><br>**Log**: readable or raw, filtered, workers tagged |
 | <img src="docs/images/requests.png" alt="Requests page: the current request with its plan in waves, and two queued requests that can be reordered"><br>**Requests**: a queue you can reorder, notes along the way | <img src="docs/images/options.png" alt="Options page: language, five palettes and five accents, startup options, tool folder"><br>**Options**: 6 languages, 5 palettes × 5 accents |
 
-It also offers:
+The screenshots show the dark "Slate" and the "Light" palettes.
 
-- A project selector with search.
-- The current state summed up in one sentence.
-- *Setup & health*: every check with a *Repair* button, plus *Ask Claude* to repair the tooling.
-- *Settings*: the `.env` with its secrets masked.
-- A password lock.
-- Start with Windows.
-- A **"Claude" virtual desktop**: while a pilot runs, the windows it opens (Unreal, Blender, a game under test) go to a dedicated desktop, so they never pop up over your work. A window you bring back is never moved again.
+| Page | What you do there |
+|---|---|
+| **Overview** | the state in one sentence, current milestone, last commit, ticked plan, usage (cycles, time, list-price cost, cache); *Start*, *Stop after cycle*, *Stop now*, *Working mode* |
+| **Team** | one card per Claude session (lead, sub-agents, workers): what it does, its last words, its report |
+| **Requests** | the current request and its plan, the queued requests (time-stamped, reorderable), notes along the way |
+| **Log** | the readable log (Claude speaks, tools, results, sub-agents, pilot) or the raw JSON, filterable |
+| **Setup & health** | *Check everything*, *Install everything*, *Test the sandbox* for real, *Repair* line by line, *Ask Claude* to repair or install something |
+| **Settings** | the `.env` (token masked, models, effort, watchdog…), *Save and restart after cycle* |
+| **Options** | language, palette and accent, project list (removing a project never touches its folder), restart the pilots on opening, start with Windows, "Claude" virtual desktop, password, tool folder |
+
+**Lock**: with a password (*Options*), the 🔒 button locks the app. Claude keeps working, but nothing can be seen or changed (token included) without the password, and the app starts locked.
+
+**"Claude" virtual desktop**: while a pilot runs, the windows it opens (Unreal, Blender, a game under test) go to a dedicated Windows desktop, so they never pop up over your work or your game. A window you bring back is never moved again. *View Claude's desktop* / *Come back*, or Ctrl + Win + ← / →.
 
 The interface is translated into English, French, Spanish, German, Italian and Portuguese. The language you choose is also the one Claude writes the plan, log and documents in.
+
+---
+
+## What Claude can and cannot do
+
+| | |
+|---|---|
+| Write | only in the project folder (and in the tool's `tools/` for what it installs) |
+| Read | only the project, `tools/` and the Linux system files; not your documents, not the Windows drives, not `.env` |
+| Internet | yes, freely |
+| Install tools | yes: in `tools/` (Linux tools, portable Windows software in `tools/windows/`), or in a disposable Docker container; every installation is recorded in `tools/INSTALLS.md` |
+| Install Windows software | yes, with winget or an installer: for your user, or with administrator rights if you allowed it (one Windows consent) |
+| Windows firewall | set automatically with the same permission: the project's programs can accept connections **from the local network only** |
+| Your Windows software | yes, through the gateways below. **This is an intended exit from the sandbox**: those programs run with your Windows rights |
+| `cmd.exe`, `powershell.exe` | no, blocked from the sandbox (the gateways remain available) |
+| Change the pilot, the sandbox or its settings | no (`system/` is outside its folders) |
 
 ---
 
@@ -186,7 +209,15 @@ Claude works in Linux (WSL2 on Windows) and reaches your Windows software throug
 | `pc-exec [--admin] program.exe` | runs a Windows program the project built or downloaded |
 | `windows-var NAME PATH` | sets a Windows environment variable for the development tools (`ANDROID_HOME`, `JAVA_HOME`…) |
 
-Installed software is detected on **every drive** (`C:`, `D:`…), and the newest version wins. Claude records every installation in `tools/INSTALLS.md` so it can be reproduced. Paths can be forced in `.env` when detection misses them.
+Installed software is detected on **every drive** (`C:`, `D:`…), and the newest version wins. The detected list is written before each cycle to `.athanor/PC_TOOLS.md`. Paths can be forced in *Settings* when detection misses them (`UE_DIR`, `BLENDER_EXE`, `ANDROID_SDK_DIR`).
+
+**Unreal Engine (MCP)**: set `UNREAL_MCP=1` in *Settings* and run `commands\unreal-network.cmd` once. Claude enables the MCP plugins in the Unreal project itself, and the pilot opens the editor before each cycle. Claude drives it (actors, lights, materials, tests), runs tests and screenshots with `unreal-cmd`, and packages the Windows game with `unreal-uat` into `deliverable/`. The Unreal MCP is experimental: when it does not answer, Claude carries on without it.
+
+**Missing software**: Claude sorts it out on its own (a portable version in `tools/windows/`, else winget, else the administrator task if allowed). If an installation fails, it writes it to `.athanor/TODO_FOR_YOU.md` and finds another way.
+
+**Mobile games (Unreal)**: Android first (portable SDK and Java, `.apk` installed on a phone plugged in over USB), iOS kept portable (`docs/IOS_PORT.md`).
+
+**Docker (optional)**: needs Docker Desktop with *Settings > Resources > WSL integration*.
 
 ---
 
@@ -208,6 +239,8 @@ Everything is editable in the app (*Settings*), or in `.env` ([`.env.example`](.
 | `UNREAL_MCP`, `UNREAL_MCP_URL` | let Claude drive the open Unreal editor |
 | `UE_DIR`, `BLENDER_EXE`, `ANDROID_SDK_DIR` | tool paths when auto-detection misses them |
 
+When the quota is exhausted for every model, the pilot waits for it to reopen and resumes on its own.
+
 ---
 
 ## Security
@@ -226,6 +259,22 @@ Found a vulnerability? Please open a [private security advisory](https://github.
 
 ---
 
+## Running for days
+
+- The pilots run in WSL without a window: you can close the app.
+- Disable sleep mode (*Settings > System > Power > Sleep: Never*).
+- *Options*: "Open the app when Windows starts (without a window)" and "Restart the pilots that were running, when the app opens".
+- Safety stop after `MAX_HOURS` (counted from the project's first start); raise it in *Settings* to go on.
+
+## Finished project, follow-ups, new project
+
+- **Follow-up requests**: *Requests* page. As soon as the current request is done, the pilot takes the first queued one, appends it to `REQUEST.md` and reopens the project with a resume milestone.
+- **Note along the way**: *Requests* page, read at the start of the next cycle, without a restart.
+- **Reopen by hand**: replace `STATUS: DONE` with `STATUS: REOPENED` in `.athanor/FINAL_REPORT.md`, then *Start*.
+- **New project**: selector → *+ New project*. **Clean a finished project**: delete its `.athanor/` folder (and `.claude/` if present).
+
+---
+
 ## Commands without the app
 
 | Windows | Linux / WSL | |
@@ -238,7 +287,16 @@ Found a vulnerability? Please open a [private security advisory](https://github.
 | `commands\stop.cmd D:\Dev\game` | `commands/stop.sh DIR` | stop now |
 | `commands\test-sandbox.cmd` | `commands/test-sandbox.sh` | prove the sandbox with a real session |
 | `commands\allow-admin.cmd [remove]` | | allow or remove administrator installations |
-| `commands\unreal-network.cmd` | | WSL network for the Unreal MCP |
+| `commands\unreal-network.cmd` | | WSL network for the Unreal MCP (once) |
+
+Without a folder, the commands use `<tool>/projet`. The request is read and written in `DIR/.athanor/REQUEST.md`, the next ones in `DIR/.athanor/queue/` (one file per request, taken in order).
+
+## Where to look
+
+- `.athanor/STATE.json`: phase, cycle, model, current milestone, planned resume; `stats.tsv`: one line per cycle.
+- `.athanor/PLAN.md`, `LOG.md`; `pilot.log` (cycles, quotas, fallbacks); `logs/` (raw log of each cycle).
+- At the end: `.athanor/FINAL_REPORT.md`, `TEST_GUIDE.md`, and the deliverable in `deliverable/`.
+- On the tool side: `logs/` (repairs, sandbox test, `TODO_FOR_YOU.md`).
 
 ---
 
@@ -299,6 +357,22 @@ Yes: delete `.athanor/` when you are done, plus `.claude/` if your Claude Code v
 
 Yes. Nothing is tied to a user name or a drive letter: paths come from your profile, the tool folder can live anywhere, and software is detected on every drive. Copy the folder or clone the repository, then run the setup on each PC.
 </details>
+
+---
+
+## Troubleshooting
+
+| Symptom | Fix |
+|---|---|
+| "Run install.cmd first" / WSL failing in the health checks | *Install everything* (or `install.cmd`) has not chosen the WSL distribution yet |
+| The pilot stops at once, with a message about the sandbox | *Repair* on the *System sandbox* line: bubblewrap, socat or the seccomp filter is missing |
+| Sandbox test: "CMD.EXE LAUNCHED FROM THE SANDBOX" | the seccomp filter is missing: *Repair* on the *System sandbox* line |
+| Unreal: "MCP unavailable for this cycle" | editor 5.8 with the Unreal MCP plugins, *Auto Start Server* checked, WSL network "mirrored" (`unreal-network.cmd`) |
+| `tool`: "Docker not found" | start Docker Desktop, enable *WSL integration* |
+| "Usage limit reached, Claude is waiting" | expected; with `FALLBACK_MODEL`, Claude goes on with the fallback model |
+| "Connection problem" | missing or wrong token: *Settings*, or *Repair* on the *Token and model access* line |
+| An installation needs administrator rights | *Setup & health* → *Administrator rights for installations* → *Repair* (once) |
+| A `.sh` script fails with `$'\r'` | Windows line endings: save it with "LF" (the repository enforces it through `.gitattributes`) |
 
 ---
 
