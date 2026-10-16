@@ -1,152 +1,405 @@
-<p align="center"><img src="docs/images/logo.svg" width="96" height="96" alt="Logo Athanor"></p>
+<p align="center">
+  <img src="docs/images/logo.svg" width="112" height="112" alt="Logo Athanor">
+</p>
 
-<h1 align="center">Athanor · guide en français</h1>
+<h1 align="center">Athanor</h1>
 
-<p align="center"><a href="README.md">English</a> · <a href="https://github.com/Aprilox/Athanor/releases/latest">Télécharger</a></p>
+<h3 align="center">Laissez Claude Code construire des projets entiers pendant que vous faites autre chose.</h3>
 
-> *L'athanor était le four des alchimistes, conçu pour brûler des jours entiers sans s'éteindre et sans que personne ne le surveille.*
+<p align="center">
+  <i>L'athanor était le four des alchimistes, conçu pour brûler des jours entiers sans s'éteindre et sans que personne ne le surveille.</i>
+</p>
 
-Vous décrivez ce que vous voulez (un jeu, une application, un site, un outil…). Claude s'en occupe seul, cycle après cycle : cadrage, conception, code, contenus, tests, corrections, livraison. Claude tourne sur votre PC (dans WSL2, le Linux intégré à Windows), avec votre abonnement Claude, et peut utiliser **vos logiciels** (Unreal Engine, Blender, SDK Android, Docker…). Une barrière du système l'empêche d'écrire ou de lire en dehors du projet.
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/licence-MIT-3fc6a5?style=flat-square" alt="Licence MIT"></a>
+  <img src="https://img.shields.io/badge/plateforme-Windows%2010%2F11%20%C2%B7%20Linux-1b2430?style=flat-square" alt="Windows 10/11 et Linux">
+  <a href="https://claude.com/claude-code"><img src="https://img.shields.io/badge/moteur-Claude%20Code-d97757?style=flat-square" alt="Fonctionne avec Claude Code"></a>
+  <img src="https://img.shields.io/badge/app-Go%20%C2%B7%20un%20seul%20fichier-00add8?style=flat-square" alt="Application Go en un seul fichier">
+  <img src="https://img.shields.io/badge/interface-6%20langues-7c8da1?style=flat-square" alt="6 langues">
+</p>
 
-**Tout se fait depuis l'application `Athanor.exe`.** Les commandes à la main sont décrites plus bas pour qui préfère le terminal.
+<p align="center">
+  <a href="#démarrage-rapide"><b>Démarrage rapide</b></a> ·
+  <a href="#comment-ça-marche"><b>Comment ça marche</b></a> ·
+  <a href="#mode-parallèle"><b>Mode parallèle</b></a> ·
+  <a href="#lapplication"><b>L'application</b></a> ·
+  <a href="#sécurité"><b>Sécurité</b></a> ·
+  <a href="#faq"><b>FAQ</b></a> ·
+  <a href="#dépannage"><b>Dépannage</b></a> ·
+  <a href="README.md"><b>English</b></a>
+</p>
 
-## L'outil et vos projets
+<p align="center">
+  <a href="https://github.com/Aprilox/Athanor/releases/latest"><img src="https://img.shields.io/badge/T%C3%A9l%C3%A9charger-Windows%20%C2%B7%20Linux-3fc6a5?style=for-the-badge" alt="Télécharger pour Windows et Linux"></a>
+</p>
 
-- **L'outil** : ce dossier (`Athanor.exe`, `commands\`, `system\`, `template\`, votre `.env`). Il reste tel qu'il est sur GitHub, plus votre jeton. Il ne contient aucun projet.
-- **Un projet** : n'importe quel dossier de développement de votre PC, existant ou à créer (`D:\Dev\mon-site`, un projet Unreal déjà commencé…). Vous en ajoutez autant que vous voulez, ils tournent en même temps ou non, comme des conversations : on choisit le projet dans le sélecteur en haut à gauche.
-- **L'atelier `.athanor\`** : le seul sous-dossier que l'outil ajoute dans un projet. Il contient la demande (`REQUEST.md`), le plan (`PLAN.md`), le journal, les demandes en attente (`queue\`) et faites (`done\`), le script de vérification (`check.sh`), les captures d'écran, l'état du pilote et ses logs. **Supprimez-le à la fin : le projet est propre.** Il est exclu de git automatiquement (`.git\info\exclude`).
+<p align="center">
+  <img src="docs/images/overview.png" alt="Page Suivi d'Athanor : trois ouvriers réalisent des jalons en parallèle, le plan du projet organisé en vagues et la consommation" width="100%">
+</p>
 
-## Ce qu'il faut
+Vous décrivez ce que vous voulez : un jeu, un site, une application, un outil. Athanor lance [Claude Code](https://claude.com/claude-code) **cycle après cycle** sur votre propre PC, avec votre abonnement Claude. Chaque cycle termine **un jalon du plan** : Claude fait le travail, lance les vérifications du projet, coche le jalon et le commite. Puis une session neuve prend le suivant, jusqu'à la livraison. Vous pouvez fermer l'application, la verrouiller ou aller dormir : le four continue de brûler.
 
-- **Windows 11** (ou 10 récent) avec WSL2 ; ou **Linux**.
-- Un abonnement **Claude Pro, Max ou Team** (Max pour Fable).
-- Facultatif : **Unreal Engine 5.8** (pilotage par MCP), **Blender**, **Docker Desktop** (commande `tool`).
+> [!NOTE]
+> Athanor est un projet open source indépendant. Il n'est ni affilié à Anthropic ni approuvé par Anthropic. Il pilote la commande officielle Claude Code avec votre propre abonnement.
 
-## Démarrer
+---
 
-1. Double-cliquez sur **`Athanor.exe`** (sous Linux : lancez `./athanor`, la version Linux rangée juste à côté ; chacune garde ses propres réglages). Au premier lancement, choisissez la langue (anglais par défaut ; français, espagnol, allemand, italien, portugais) : elle vaut pour l'application **et** pour les documents que Claude écrit dans vos nouveaux projets.
-2. **Installer l'outillage** : une fenêtre installe WSL2, Claude Code, la barrière et les outils de base (mot de passe Linux demandé une fois ; la toute première fois, un redémarrage du PC peut être nécessaire, puis ouvrez « Ubuntu » une fois pour créer votre utilisateur et relancez l'installation).
-3. **Vérifier et connecter** : *Installation & santé* → *Tout vérifier*. Chaque ligne en défaut a son bouton *Réparer* ou *Demander à Claude*. Pour le jeton : *Réparer* sur la ligne *Jeton* ouvre une fenêtre de connexion ; collez le jeton dans *Réglages*.
-4. **Ajouter un projet** : son nom, son dossier de développement (l'explorateur intégré ou un chemin tapé ; il sera créé s'il n'existe pas) et ce que vous voulez. Les technologies sont libres sauf si vous en imposez.
-5. **Démarrer**. Fermez l'application ou verrouillez-la : Claude continue dans WSL, en arrière-plan.
+## Points forts
+
+| | |
+|---|---|
+| **Une boucle autonome** | Un jalon par cycle et un contexte neuf à chaque fois : les tours restent économes et le projet ne dérive pas. Quota atteint → pause jusqu'à sa réouverture, ou bascule sur un modèle de secours. Erreur → nouvel essai avec un délai croissant. Cycle muet ou trop long → coupé et repris. PC redémarré → reprise là où il s'était arrêté. Tout l'état est dans des fichiers. |
+| **Mode parallèle** | Un interrupteur par projet. Le plan est organisé en vagues de jalons indépendants ; chaque jalon est réalisé par son propre ouvrier, dans sa propre copie de travail git, tous en même temps. Le chef fusionne ensuite, vérifie et coche. |
+| **Une vraie équipe** | Un chef de projet et des sous-agents : `architect`, `creator`, `developer`, `tester`, `critic`, et un `executor` bon marché (Haiku par défaut) pour le travail mécanique. Le plan, les tests indépendants et la critique finale sont toujours délégués. |
+| **Une barrière** | Les commandes de Claude tournent sous bubblewrap + seccomp. Elles ne peuvent écrire que dans le projet et ne lisent jamais le reste de votre machine ; Internet reste ouvert. |
+| **Vos logiciels** | Unreal Engine, Blender, le SDK Android, Docker et winget sont joignables par un pont contrôlé, commande par commande. |
+| **Aucune fenêtre UAC** | Sur autorisation. Un seul consentement, puis Claude installe et lance ce dont le projet a besoin avec les droits administrateur, sans rien vous demander. |
+| **Une application de bureau** | Un seul fichier. Elle montre l'équipe en direct, le plan, la consommation, le journal lisible et la file des demandes, avec des vérifications qui se réparent en un clic. Elle fait aussi tourner plusieurs projets à la fois et range les fenêtres de Claude sur leur propre bureau virtuel. Thèmes, 6 langues. |
+| **Des projets propres** | Un projet est n'importe quel dossier de votre PC. Athanor n'y ajoute qu'un atelier `.athanor/` (exclu de git) : supprimez-le à la fin et il ne reste aucune trace. |
+| **Économe par conception** | Règles de lecture ciblées, vérification rapide pendant le jalon et complète une seule fois, captures assemblées en planches, carte du projet refaite avant chaque cycle, archives automatiques, compression des sorties de commandes. La page *Suivi* montre en direct quelle part de chaque session est relue depuis le cache. |
+
+---
+
+## Démarrage rapide
+
+**Il faut :** Windows 10/11 avec WSL2 (installé pour vous) ou Linux, et un abonnement Claude (Pro, Max ou Team). Facultatif : Unreal Engine 5.8, Blender, Docker Desktop.
+
+### Windows
+
+1. Téléchargez **`athanor-vX.Y.Z.zip`** depuis la [dernière version](https://github.com/Aprilox/Athanor/releases/latest) et dézippez-le où vous voulez, par exemple sur le Bureau. Il contient tout l'outil, avec `Athanor.exe` (Windows) et `athanor` (Linux) côte à côte.
+2. Double-cliquez sur **`Athanor.exe`**. Choisissez la langue, le thème et l'accent : le guide du premier démarrage vous accompagne ensuite. La langue vaut pour l'application **et** pour les documents que Claude écrit dans vos nouveaux projets.
+3. **Installer** : une fenêtre installe WSL2, Claude Code et la barrière. Linux demande un mot de passe une fois. La toute première fois, un redémarrage peut être nécessaire : ouvrez ensuite « Ubuntu » une fois pour créer votre utilisateur, puis relancez l'installation.
+4. **Se connecter** : *Installation & santé* → *Tout vérifier*. Sur la ligne *Jeton et accès au modèle*, cliquez sur *Réparer* : une fenêtre vous connecte à votre compte Claude. Collez le jeton dans *Réglages*.
+5. **Facultatif, recommandé** : *Installation & santé* → *Droits administrateur pour les installations* → *Réparer*. Windows vous demande votre accord **une seule fois** ; Claude n'aura plus jamais besoin d'un clic UAC.
+6. **Ajouter un projet** : un nom, son dossier (existant ou à créer, sur n'importe quel disque) et ce que vous voulez. Les technologies sont libres sauf si vous en imposez.
+7. **Démarrer.** Ajoutez d'autres projets de la même façon et faites-les tourner en même temps.
+
+### Linux
+
+La version téléchargée contient les deux applications côte à côte : `Athanor.exe` pour Windows, `athanor` pour Linux. Les scripts tournent nativement, sans WSL.
+
+```bash
+unzip athanor-vX.Y.Z.zip && cd athanor
+commands/install.sh          # Claude Code, barrière, outils (sudo demandé une fois)
+commands/configure.sh        # jeton, modèles, langue
+./athanor                    # l'application, s'ouvre dans votre navigateur
+```
+
+Chaque application garde son propre fichier de réglages (`athanor-config.json` sous Windows, `athanor-config-linux.json` sous Linux) : un même dossier peut servir aux deux systèmes.
+
+### Mettre à jour
+
+Téléchargez la nouvelle version et dézippez-la au même endroit, pour que son dossier `athanor` se fusionne avec le vôtre (fermez l'application avant). Votre `.env`, vos réglages, `logs/` et `tools/` ne sont pas dans le zip : ils sont conservés. Pour ne mettre à jour que l'application, remplacez `Athanor.exe` (ou `athanor`) par celui joint à la version.
+
+### Compiler depuis les sources
+
+```bash
+git clone https://github.com/Aprilox/Athanor.git && cd Athanor/app
+./build.sh                   # Linux/macOS/WSL : construit ../Athanor.exe et ../athanor
+build.cmd                    # Windows (Go 1.24 ou plus : winget install GoLang.Go)
+```
+
+Bibliothèque standard uniquement, plus trois paquets embarqués pour la fenêtre WebView2 : aucun accès réseau n'est nécessaire pour compiler.
+
+---
+
+## Comment ça marche
+
+<p align="center">
+  <img src="docs/images/how-it-works.svg" alt="Fonctionnement d'Athanor : vous décrivez le projet, la boucle du pilote lance une session Claude Code par cycle, le chef délègue à des sous-agents ou à des ouvriers en parallèle, chaque cycle se termine par fusion, vérification, coche et commit" width="100%">
+</p>
+
+**Un cycle.** Le pilote (`system/pilot.sh`) synchronise la demande, archive les vieux jalons, refait la carte du projet (`.athanor/MAP.md`), ouvre l'éditeur Unreal si le projet en a un, puis lance une session Claude Code avec [`template/CLAUDE.md`](template/CLAUDE.md) comme consignes, dans votre langue. Claude prend le premier jalon non coché de `.athanor/PLAN.md`, le réalise, lance `check.sh`, le coche, le note dans `LOG.md` et commite. Le pilote ferme le cycle peu après le commit et lance le suivant.
+
+**La vie d'un projet.**
+
+| Phase | Ce qui se passe |
+|---|---|
+| Cadrage | `docs/REQUIREMENTS.md`, `docs/DESIGN.md`, `docs/ARCHITECTURE.md`, et un plan de 8 à 25 jalons, chacun avec des critères d'acceptation vérifiables |
+| Squelette | un squelette exécutable et le `check.sh` propre au projet (compilation, tests, captures) |
+| Tranche complète | une fonctionnalité qui marche de bout en bout, relue par le `critic` |
+| Production | les jalons restants, un par cycle, ou une vague à la fois en mode parallèle |
+| Finition | le `critic` utilise le résultat comme un utilisateur exigeant et note les bugs dans `BUGS.md` |
+| Livraison | `deliverable/`, `TEST_GUIDE.md`, puis `FINAL_REPORT.md` avec `STATUS: DONE`. Le pilote prend la demande suivante de la file, ou s'arrête |
+
+---
+
+## Mode parallèle
+
+*Suivi → Mode de travail → Mode parallèle*, par projet, avec 2 à 5 ouvriers par vague.
+
+1. Dès le cycle suivant, le chef réorganise `PLAN.md` en sections `## Wave N` : la vague 1 contient le squelette et les contrats communs, les vagues suivantes des jalons qui ne se touchent pas.
+2. Chaque jalon de la vague en cours a son **ouvrier** : sa propre session Claude, sa propre copie de travail git (`.athanor/work/M5`) et sa propre branche (`auto/M5`). Tous les ouvriers travaillent en même temps.
+3. Le chef fusionne ensuite les branches, lance la vérification complète, coche ce qui est réussi et note le reste dans `BUGS.md` pour un cycle suivant. Les rapports des ouvriers sont dans `.athanor/WORKER_REPORTS.md`.
+
+La page *Équipe* montre une carte par ouvrier et le *Journal* étiquette leurs lignes `[M5]`. Le mode parallèle est bien plus rapide sur les gros plans et consomme plus de quota (une session par ouvrier).
+
+---
+
+## L'équipe
+
+| Agent | Rôle | Modèle |
+|---|---|---|
+| **Chef de projet** | lit le plan, code les jalons ordinaires, délègue, relit chaque rapport, commite | `MODEL` |
+| `architect` | exigences, architecture et plan des jalons ; révise le plan si besoin | `SUBAGENT_MODEL` |
+| `creator` | contenus : histoire, monde, dialogues, textes d'interface, ressources 2D/3D/son générées par programme | `SUBAGENT_MODEL` |
+| `developer` | une tâche de développement précise, avec ses tests | `SUBAGENT_MODEL` |
+| `tester` | tests automatiques, captures, rapports de bugs (ne corrige jamais le code lui-même) | `SUBAGENT_MODEL` |
+| `critic` | utilise le résultat comme un utilisateur final exigeant, sans complaisance (lecture seule) | `SUBAGENT_MODEL` |
+| `executor` | travail mécanique sans décision de conception : sorties de commandes longues, recherches, modifications en série, copies de fichiers | `CHEAP_MODEL` (Haiku) |
+
+Les agents sont dans [`template/.claude/agents/`](template/.claude/agents) : modifiez-les pour changer la façon de travailler de votre équipe.
+
+---
 
 ## L'application
 
+| | |
+|:---:|:---:|
+| <img src="docs/images/team.png" alt="Page Équipe : le chef de projet, des sous-agents terminés et trois ouvriers avec leurs dernières paroles"><br>**Équipe** : ce que chaque agent fait et dit, en direct | <img src="docs/images/log.png" alt="Page Journal en thème clair : événements du pilote, paroles de Claude, outils et sous-agents, lignes des ouvriers étiquetées [M5]"><br>**Journal** : lisible ou brut, filtrable, ouvriers étiquetés |
+| <img src="docs/images/requests.png" alt="Page Demandes : la demande en cours avec son plan en vagues, et deux demandes en attente réordonnables"><br>**Demandes** : une file réordonnable, des remarques en cours de route | <img src="docs/images/options.png" alt="Page Options : langue, cinq palettes et cinq accents, démarrage, dossier de l'outil"><br>**Options** : 6 langues, 5 palettes × 5 accents |
+
+Les captures sont en anglais ; l'interface s'affiche dans la langue choisie.
+
 | Page | Ce qu'on y fait |
 |---|---|
-| **Suivi** | état en une phrase, jalon en cours, dernier commit, plan coché, consommation (cycles, durée, coût catalogue, cache) ; boutons Démarrer, Arrêter après le cycle, Arrêter maintenant, Voir le bureau Claude |
-| **Équipe** | une carte par session Claude (chef de projet, sous-agents) : ce qu'elle fait, sa dernière parole, son rapport |
-| **Demandes** | la demande en cours, les demandes à la suite (horodatées, réordonnables), les remarques en cours de route, le fichier `REQUEST.md` complet |
+| **Suivi** | état en une phrase, jalon en cours, dernier commit, plan coché, consommation (cycles, durée, coût catalogue, cache) ; *Démarrer*, *Arrêter après le cycle*, *Arrêter maintenant*, *Mode de travail* |
+| **Équipe** | une carte par session Claude (chef de projet, sous-agents, ouvriers) : ce qu'elle fait, sa dernière parole, son rapport |
+| **Demandes** | la demande en cours et son plan, les demandes à la suite (horodatées, réordonnables), les remarques en cours de route |
 | **Journal** | le journal lisible (Claude parle, outils, résultats, sous-agents, pilote) ou brut (JSON), filtrable |
-| **Installation & santé** | tout vérifier, tout installer, tester la barrière pour de vrai, réparer ligne par ligne, demander à Claude de réparer ou d'installer quelque chose |
-| **Réglages** | le `.env` (jeton masqué, modèles, effort, surveillance…), « Enregistrer et redémarrer après le cycle » |
-| **Options** | langue, liste des projets (retirer de la liste ne touche jamais au dossier), relance des pilotes à l'ouverture, démarrage avec Windows, bureau virtuel « Claude », mot de passe, dossier de l'outil |
+| **Installation & santé** | *Tout vérifier*, *Tout installer*, *Tester la barrière* pour de vrai, *Réparer* ligne par ligne, *Demander à Claude* de réparer ou d'installer quelque chose |
+| **Réglages** | le `.env` (jeton masqué, modèles, effort, surveillance…), *Enregistrer et redémarrer après le cycle* |
+| **Options** | langue, palette et accent, liste des projets (retirer de la liste ne touche jamais au dossier), relance des pilotes à l'ouverture, démarrage avec Windows, bureau virtuel « Claude », mot de passe, dossier de l'outil |
 
-**Mode parallèle** (page *Suivi* → *Mode de travail*, par projet) : le plan est organisé en **vagues** de jalons indépendants ; chaque jalon d'une vague est réalisé par un **ouvrier** (sa propre session Claude, sa propre copie de travail git sur la branche `auto/Mx`), tous en même temps, puis le chef de projet fusionne les branches, lance la vérification complète, coche ce qui est réussi et note le reste dans `BUGS.md`. Beaucoup plus rapide ; consomme plus de quota (une session par ouvrier, 2 à 5 par vague). S'applique au prochain cycle : si le plan n'a pas encore de vagues, le chef le réorganise d'abord (`## Wave 1`, `## Wave 2`…, la vague 1 = squelette et contrats communs). La page *Équipe* montre une carte par ouvrier, le *Journal* étiquette leurs lignes `[M4]`, et `.athanor\WORKER_REPORTS.md` garde leurs rapports.
+**Cadenas** : avec un mot de passe (*Options*), le bouton 🔒 verrouille l'application. Claude continue, mais rien n'est visible ni modifiable (jeton compris) sans le mot de passe, et l'application démarre verrouillée.
 
-**Cadenas** : avec un mot de passe (Options), le bouton 🔒 verrouille l'application : Claude continue, mais rien n'est visible ni modifiable (jeton compris) sans le mot de passe. L'application démarre verrouillée.
+**Bureau virtuel « Claude »** : pendant qu'un pilote tourne, les fenêtres qu'il ouvre (Unreal, Blender, un jeu en test) vont sur un bureau Windows dédié. Vous continuez à travailler ou à jouer sans qu'elles surgissent. Une fenêtre que vous ramenez n'est plus jamais déplacée. *Voir le bureau Claude* / *Revenir*, ou Ctrl + Win + ← / →.
 
-**Bureau virtuel « Claude »** : les fenêtres que le pilote ouvre (Unreal, Blender, navigateurs de test…) sont envoyées sur un bureau Windows dédié. Vous continuez à travailler ou à jouer sans alt-tab ; *Voir le bureau Claude* / *Revenir* ou Ctrl + Win + ← / →.
+L'interface est traduite en anglais, français, espagnol, allemand, italien et portugais.
+
+---
 
 ## Ce que Claude peut et ne peut pas faire
 
 | | |
 |---|---|
-| Écrire | seulement dans le dossier du projet (et `tools\` de l'outil pour ce qu'il installe) |
-| Lire | seulement le projet, `tools\` et les fichiers du système Linux ; ni vos documents, ni le disque Windows, ni `.env` |
+| Écrire | seulement dans le dossier du projet (et dans `tools/` de l'outil pour ce qu'il installe) |
+| Lire | seulement le projet, `tools/` et les fichiers du système Linux ; ni vos documents, ni les disques Windows, ni `.env` |
 | Internet | oui, librement |
-| Installer des outils | oui : dans `tools\` (outils Linux, logiciels Windows portables dans `tools\windows\`), ou dans un conteneur Docker jetable ; chaque installation est notée dans `tools\INSTALLS.md` |
-| Installer des logiciels Windows | oui, avec winget : pour votre utilisateur, ou avec les droits administrateur si vous l'avez autorisé (ligne *Droits administrateur* de la santé, une seule demande Windows) |
-| Pare-feu Windows | réglé tout seul avec la même autorisation : les programmes du projet peuvent recevoir des joueurs **du réseau local seulement** |
-| Vos logiciels Windows | oui, par les passerelles prévues : `unreal-editor`, `unreal-cmd`, `unreal-uat`, `blender`, `adb`, `tool`, `pc-exec`, `windows-var`. **C'est une sortie voulue de la barrière** : ces programmes tournent avec vos droits Windows, et `pc-exec` lance n'importe quel programme Windows que Claude dépose dans le projet ou dans `tools\windows`. Traitez un projet comme du code que vous lanceriez vous-même |
-| `cmd.exe`, `powershell.exe` | non, bloqués depuis la barrière (les passerelles ci-dessus restent possibles) |
-| Modifier le pilote, la barrière, ses réglages | non (`system\` est hors de ses dossiers) |
+| Installer des outils | oui : dans `tools/` (outils Linux, logiciels Windows portables dans `tools/windows/`), ou dans un conteneur Docker jetable ; chaque installation est notée dans `tools/INSTALLS.md` |
+| Installer des logiciels Windows | oui, avec winget ou un installateur : pour votre utilisateur, ou avec les droits administrateur si vous l'avez autorisé (une seule demande Windows) |
+| Pare-feu Windows | réglé tout seul avec la même autorisation : les programmes du projet peuvent recevoir des connexions **du réseau local seulement** |
+| Vos logiciels Windows | oui, par les passerelles prévues (voir ci-dessous). **C'est une sortie voulue de la barrière** : ces programmes tournent avec vos droits Windows |
+| `cmd.exe`, `powershell.exe` | non, bloqués depuis la barrière (les passerelles restent possibles) |
+| Modifier le pilote, la barrière, ses réglages | non (`system/` est hors de ses dossiers) |
 
-Deux protections se complètent : la **barrière du système** (bac à sable de Claude Code) pour toutes ses commandes, et un **garde-fou** pour ses outils de lecture et d'écriture. *Tester la barrière* contrôle la barrière pour de vrai (une minute, très peu de quota) ; le garde-fou est un simple filtre de chemins (`system\guard.py`).
-
-Le pilote, lui, tourne hors de la barrière et ne fait jamais confiance au dossier du projet : son état (pid, verrou, réglages de la barrière, consignes, compteurs) est dans `logs\pilotes\` de l'outil, hors de portée de Claude ; il n'écrit jamais à travers un lien symbolique posé dans `.athanor\` ; il vérifie chaque valeur relue ; il appelle git sans hooks, filtres ni fsmonitor ; il ne charge que ses propres réglages et serveurs MCP. L'application refuse un dossier de projet qui contiendrait l'outil, une racine de disque ou tout votre dossier personnel.
+---
 
 ## Vos outils
 
-La liste détectée est écrite avant chaque cycle dans `.athanor\PC_TOOLS.md`. Si un logiciel est installé ailleurs que dans `C:\Program Files`, indiquez son chemin dans *Réglages* (`UE_DIR`, `BLENDER_EXE`).
+Claude travaille sous Linux (WSL2 sous Windows) et atteint vos logiciels Windows par des passerelles. Le pont exécute chaque commande **hors** de la barrière, avec vos droits :
 
-**Unreal Engine (MCP)** : mettez `UNREAL_MCP=1` dans *Réglages* et lancez une fois `commands\unreal-network.cmd`. Claude active lui-même les plugins du MCP dans le projet Unreal, et le pilote ouvre l'éditeur avant chaque cycle. Claude le pilote (acteurs, lumières, matériaux, tests), lance tests et captures d'écran avec `unreal-cmd`, fabrique le jeu Windows avec `unreal-uat` dans `deliverable\`. Le MCP d'Unreal est expérimental : s'il ne répond pas, Claude continue sans.
-
-**Logiciels manquants** : Claude se débrouille seul (portable dans `tools\windows\`, sinon winget, sinon tâche administrateur si autorisée). Si une installation échoue, il l'écrit dans `.athanor\TODO_FOR_YOU.md` et continue autrement.
-
-**Jeu mobile (Unreal)** : Android d'abord (SDK et Java portables, `.apk` installé sur le téléphone branché en USB), iOS gardé portable (`docs\IOS_PORT.md`).
-
-**Docker (facultatif)** : `tool IMAGE COMMAND` lance une commande dans un conteneur jetable qui ne voit que le projet. Il faut Docker Desktop avec Settings > Resources > WSL integration.
-
-## Modèles et quota
-
-| Dans *Réglages* | Effet |
+| Passerelle | Ce qu'elle fait |
 |---|---|
-| `MODEL` | `claude-fable-5-1` (le plus puissant, abonnement Max), `claude-opus-5-5`, `claude-sonnet-5-5` (plus économe), `claude-haiku-5-5`, ou les alias `fable`, `opus`, `sonnet` |
+| `unreal-editor`, `unreal-cmd`, `unreal-uat` | ouvre l'éditeur Unreal (piloté par Unreal MCP si activé), lance commandlets et tests, fabrique les versions Windows et Android |
+| `blender` | le Blender du PC, généralement en arrière-plan avec un script Python (`blender -b -P scene.py`) |
+| `adb` | l'outil Android du PC : installer et tester sur un téléphone branché en USB |
+| `tool IMAGE CMD…` | lance une commande dans un conteneur Docker jetable qui ne voit que le projet |
+| `install-windows ID` / `--file setup.exe` | installe un logiciel Windows (winget ou installateur), avec élévation si autorisée |
+| `pc-exec [--admin] programme.exe` | lance un programme Windows construit ou téléchargé par le projet |
+| `windows-var NOM CHEMIN` | définit une variable d'environnement Windows pour les outils de développement (`ANDROID_HOME`, `JAVA_HOME`…) |
+
+Les logiciels installés sont détectés sur **tous les disques** (`C:`, `D:`…), et la version la plus récente l'emporte. La liste détectée est écrite avant chaque cycle dans `.athanor/PC_TOOLS.md`. Si la détection manque un logiciel, indiquez son chemin dans *Réglages* (`UE_DIR`, `BLENDER_EXE`, `ANDROID_SDK_DIR`).
+
+**Unreal Engine (MCP)** : mettez `UNREAL_MCP=1` dans *Réglages* et lancez une fois `commands\unreal-network.cmd`. Claude active lui-même les plugins du MCP dans le projet Unreal, et le pilote ouvre l'éditeur avant chaque cycle. Claude le pilote (acteurs, lumières, matériaux, tests), lance tests et captures avec `unreal-cmd`, et fabrique le jeu Windows avec `unreal-uat` dans `deliverable/`. Le MCP d'Unreal est expérimental : s'il ne répond pas, Claude continue sans.
+
+**Logiciels manquants** : Claude se débrouille seul (version portable dans `tools/windows/`, sinon winget, sinon la tâche administrateur si elle est autorisée). Si une installation échoue, il l'écrit dans `.athanor/TODO_FOR_YOU.md` et continue autrement.
+
+**Jeu mobile (Unreal)** : Android d'abord (SDK et Java portables, `.apk` installé sur le téléphone branché en USB), iOS gardé portable (`docs/IOS_PORT.md`).
+
+**Docker (facultatif)** : il faut Docker Desktop avec *Settings > Resources > WSL integration*.
+
+---
+
+## Réglages
+
+Tout se modifie dans l'application (*Réglages*), ou dans `.env` ([`.env.example`](.env.example) documente chaque clé).
+
+| Clé | Rôle |
+|---|---|
+| `CLAUDE_CODE_OAUTH_TOKEN` | jeton de votre abonnement (`claude setup-token`), jamais partagé |
+| `MODEL` | modèle du chef : `claude-fable-5-1`, `claude-opus-5-5`, `claude-sonnet-5-5` (plus économe), `claude-haiku-5-5`, ou les alias `fable`, `opus`, `sonnet` |
 | `FALLBACK_MODEL` | pris **automatiquement** quand le quota de `MODEL` est épuisé, jusqu'à sa réouverture, puis retour au principal. Vide = pause |
-| `EFFORT` | vide = normal ; `medium` plus rapide ; `high`, `xhigh`, `max` réfléchissent davantage |
-| `SUBAGENT_MODEL` | vide = le même ; `claude-sonnet-5-5` économise le quota |
-| `CHEAP_MODEL` | modèle bon marché (par défaut `haiku`) du sous-agent `executor`, à qui le chef confie le travail mécanique : sorties de commandes longues, recherches dans tout le code, modifications en série, copies et conversions de fichiers. Le contexte et le quota du chef restent pour la réflexion. Vide = comme les autres sous-agents |
+| `SUBAGENT_MODEL` | modèle des sous-agents ; vide = le même que le chef, `claude-sonnet-5-5` économise le quota |
+| `CHEAP_MODEL` | modèle du sous-agent `executor` (par défaut `haiku`) : le contexte et le quota du chef restent pour la réflexion |
+| `EFFORT` | effort de réflexion : vide = normal, `low` à `max` |
+| `LANGUAGE` | langue dans laquelle Claude travaille et documente (réglée par l'application) |
+| `MAX_HOURS` | arrêt de sécurité (168 par défaut, une semaine) |
+| `QUOTA_WAIT_MIN` | attente quand l'heure de réouverture du quota est illisible |
+| `IDLE_MAX_MIN`, `CYCLE_MAX_MIN`, `CLOSE_AFTER_MILESTONE` | surveillance des cycles (muet 30 min ou plus long que 3 h → coupé et repris), un jalon par cycle |
+| `RTK`, `TZ` | compression des sorties de commandes, fuseau horaire des journaux (vide = celui du système) |
+| `UNREAL_MCP`, `UNREAL_MCP_URL` | laisser Claude piloter l'éditeur Unreal ouvert |
+| `UE_DIR`, `BLENDER_EXE`, `ANDROID_SDK_DIR` | chemins des outils quand la détection automatique les manque |
 
 Si le quota global est épuisé (tous modèles), le pilote attend la réouverture et reprend seul.
 
-## Optimisations automatiques
+---
 
-- **Un jalon par cycle** (`CLOSE_AFTER_MILESTONE`), contexte neuf à chaque cycle.
-- **Surveillance** : cycle muet 30 min ou plus long que 3 h → arrêté, repris au cycle suivant.
-- **RTK** : sorties de `git`, `ls`, `grep`, `find`… compressées avant que Claude les lise.
-- **Captures comparées**, **carte du projet** (`.athanor\MAP.md`) refaite avant chaque cycle, **archives** des vieux jalons.
-- **Consignes allégées** : le mode d'emploi des logiciels du PC est dans `PC_TOOLS_GUIDE.md`, lu seulement si le projet en a besoin.
-- **Garde-fou** : jalon coché sans `CHECK: PASSED` vue par le pilote → vérification complète obligatoire au cycle suivant.
+## Sécurité
+
+Ce que la barrière garantit, et ce qu'elle ne fait volontairement pas :
+
+- **Les commandes de Claude** tournent dans le bac à sable de Claude Code (bubblewrap + seccomp). Elles ne peuvent écrire que dans le dossier du projet et `tools/`. Elles ne peuvent lire ni le reste de votre dossier Linux, ni les disques Windows, ni lancer `cmd.exe` ou `powershell.exe` directement. *Installation & santé → Tester la barrière* le prouve avec une vraie session. Les outils de fichiers de Claude (Read, Edit, Write…) sont limités de la même façon par un garde-fou ([`system/guard.py`](system/guard.py)).
+- **Les logiciels Windows sont une sortie voulue.** Les passerelles tournent hors de la barrière, avec vos droits, et `pc-exec` lance n'importe quel programme Windows que Claude dépose dans le projet ou dans `tools/windows`. Traitez un projet comme du code que vous lanceriez vous-même.
+- **Les droits administrateur sont sur autorisation.** *Droits administrateur pour les installations → Réparer* vous demande votre accord une fois et crée une tâche planifiée élevée (`Athanor - installations`). Son script est copié dans `C:\ProgramData\Athanor`, que seuls les administrateurs peuvent modifier. La tâche ne lance que des paquets winget et des programmes situés dans vos dossiers de projets ou dans `tools\windows`. Elle laisse aussi les programmes du projet accepter des connexions du réseau local sans la fenêtre du pare-feu. Retirez-la quand vous voulez avec `commands\allow-admin.cmd remove`.
+- **Le pilote ne fait jamais confiance au dossier du projet.** Il garde son propre état (pid, verrou, réglages de la barrière, consignes, compteurs) dans `logs/`, hors de portée de Claude, et n'écrit jamais à travers un lien symbolique posé dans `.athanor/`. Il vérifie chaque valeur relue, et appelle git sans hooks, filtres, fsmonitor ni diff externe. Il lance Claude Code avec ses seuls réglages et serveurs MCP (`--setting-sources user`, `--strict-mcp-config` quand la commande les connaît), et `tools/` n'est jamais dans son `PATH`.
+- **L'application** n'écoute que sur `127.0.0.1` et refuse tout autre en-tête `Host` (DNS rebinding). Elle exige un en-tête secret propre à la session sur chaque appel et stocke le mot de passe salé et haché. Elle n'envoie jamais les secrets du `.env` sans demande, et, verrouillée, n'affiche que « en marche / phase / cycle ». Elle refuse un dossier de projet qui contiendrait l'outil, une racine de disque ou tout votre dossier personnel.
+- **Les sessions « Demander à Claude »** (réparation de l'outillage) tournent hors de la barrière, dans le dossier de l'outil, sans `sudo` : c'est voulu, pour réparer l'outillage lui-même. Ce qui demande `sudo` ou Windows est écrit pour vous dans `logs/TODO_FOR_YOU.md`.
+- **Rien de personnel n'est jamais commité** : `.env`, `logs/`, `tools/` et les réglages de l'application sont ignorés par git, et les projets vivent hors du dossier de l'outil.
+
+Vous avez trouvé une faille ? Ouvrez plutôt un [avis de sécurité privé](https://github.com/Aprilox/Athanor/security/advisories/new) qu'une issue publique.
+
+---
 
 ## Laisser tourner plusieurs jours
 
 - Les pilotes tournent dans WSL sans fenêtre : vous pouvez fermer l'application.
-- Empêchez la mise en veille (Paramètres > Système > Alimentation > Veille : Jamais).
-- *Options* : « Ouvrir l'application à l'allumage de Windows » et « Relancer les pilotes qui tournaient ».
+- Empêchez la mise en veille (*Paramètres > Système > Alimentation > Veille : Jamais*).
+- *Options* : « Ouvrir l'application à l'allumage de Windows (sans fenêtre) » et « Relancer les pilotes qui tournaient, à l'ouverture de l'application ».
 - Arrêt de sécurité au bout de `MAX_HOURS` (depuis le premier démarrage du projet) ; pour continuer, augmentez la valeur dans *Réglages*.
 
 ## Projet terminé, suite, nouveau projet
 
-- **Demandes à la suite** : page *Demandes*. Dès que la demande en cours est terminée, le pilote prend la première, l'ajoute à `REQUEST.md`, rouvre le projet avec un jalon de reprise.
+- **Demandes à la suite** : page *Demandes*. Dès que la demande en cours est terminée, le pilote prend la première de la file, l'ajoute à `REQUEST.md` et rouvre le projet avec un jalon de reprise.
 - **Remarque en cours de route** : page *Demandes*, lue au début du cycle suivant, sans redémarrage.
-- **Rouvrir à la main** : remplacez `STATUS: DONE` par `STATUS: REOPENED` dans `.athanor\FINAL_REPORT.md`, puis Démarrer.
-- **Nouveau projet** : sélecteur → *+ Nouveau projet*. **Nettoyer un projet fini** : supprimez son dossier `.athanor\` (et `.claude\` s'il existe).
+- **Rouvrir à la main** : remplacez `STATUS: DONE` par `STATUS: REOPENED` dans `.athanor/FINAL_REPORT.md`, puis *Démarrer*.
+- **Nouveau projet** : sélecteur → *+ Nouveau projet*. **Nettoyer un projet fini** : supprimez son dossier `.athanor/` (et `.claude/` s'il existe).
+
+---
 
 ## Les commandes à la main (sans l'application)
 
-Dans `commands\` (Windows : double-clic ou `commands\start.cmd D:\Dev\mon-projet` ; Linux : les `.sh` depuis le dossier de l'outil, avec le dossier du projet en argument).
+Dans `commands/` : sous Windows, double-clic ou `commands\start.cmd D:\Dev\mon-projet` ; sous Linux, les `.sh` depuis le dossier de l'outil, avec le dossier du projet en argument.
 
-| Pour | Windows | Linux / WSL |
+| Windows | Linux / WSL | Pour |
 |---|---|---|
-| Installer ou réparer | `install.cmd` | `commands/install.sh` |
-| Configurer le `.env` | `configure.cmd` | `commands/configure.sh` |
-| Vérifier la barrière | `test-sandbox.cmd` | `commands/test-sandbox.sh` |
-| Lancer le pilote sur un projet | `start.cmd DOSSIER` | `commands/start.sh --background DOSSIER` |
-| Suivre en direct | `follow.cmd DOSSIER` | `commands/follow.sh DOSSIER` |
-| Arrêter tout de suite | `stop.cmd DOSSIER` | `commands/stop.sh DOSSIER` |
-| Arrêter à la fin du cycle | `stop-after-cycle.cmd DOSSIER` | `commands/stop-after-cycle.sh DOSSIER` |
-| Rendre le MCP d'Unreal joignable (une fois) | `unreal-network.cmd` | — |
-| Autoriser les installations administrateur | `allow-admin.cmd` | — |
+| `commands\install.cmd` | `commands/install.sh` | tout installer ou réparer |
+| `commands\configure.cmd` | `commands/configure.sh` | jeton, modèles, langue, options |
+| `commands\start.cmd DOSSIER` | `commands/start.sh --background DOSSIER` | lancer le pilote sur un projet |
+| `commands\follow.cmd DOSSIER` | `commands/follow.sh DOSSIER` | suivre en direct |
+| `commands\stop-after-cycle.cmd DOSSIER` | `commands/stop-after-cycle.sh DOSSIER` | arrêter proprement à la fin du jalon en cours |
+| `commands\stop.cmd DOSSIER` | `commands/stop.sh DOSSIER` | arrêter tout de suite |
+| `commands\test-sandbox.cmd` | `commands/test-sandbox.sh` | prouver la barrière avec une vraie session |
+| `commands\allow-admin.cmd [remove]` | | autoriser ou retirer les installations administrateur |
+| `commands\unreal-network.cmd` | | réseau WSL pour le MCP d'Unreal (une fois) |
 
-Sans dossier, les commandes utilisent `<outil>\projet`. La demande se lit et s'écrit dans `DOSSIER\.athanor\REQUEST.md` ; les demandes suivantes dans `DOSSIER\.athanor\queue\` (`01-….md`, prises dans l'ordre).
+Sans dossier, les commandes utilisent `<outil>\projet`. La demande se lit et s'écrit dans `DOSSIER\.athanor\REQUEST.md`, les demandes suivantes dans `DOSSIER\.athanor\queue\` (un fichier par demande, prises dans l'ordre).
 
 ## Où regarder
 
-- `.athanor\STATE.json` : phase, cycle, modèle, jalon en cours, reprise prévue ; `stats.tsv` : une ligne par cycle.
-- `.athanor\PLAN.md`, `LOG.md` ; `pilot.log` (cycles, quotas, bascules) ; `logs\` (brut de chaque cycle).
-- À la fin : `.athanor\FINAL_REPORT.md`, `TEST_GUIDE.md`, et le livrable dans `deliverable\`.
-- Côté outil : `logs\` (réparations, test de barrière, `TODO_FOR_YOU.md`).
+- `.athanor/STATE.json` : phase, cycle, modèle, jalon en cours, reprise prévue ; `stats.tsv` : une ligne par cycle.
+- `.athanor/PLAN.md`, `LOG.md` ; `pilot.log` (cycles, quotas, bascules) ; `logs/` (brut de chaque cycle).
+- À la fin : `.athanor/FINAL_REPORT.md`, `TEST_GUIDE.md`, et le livrable dans `deliverable/`.
+- Côté outil : `logs/` (réparations, test de la barrière, `TODO_FOR_YOU.md`).
+
+## Organisation du dépôt
+
+```
+Athanor.exe, athanor   l'application pour Windows / Linux (dans la version téléchargée)
+app/                   les sources Go de l'application, l'interface (HTML, CSS, JS sans dépendance), ressources Windows
+commands/              install, configure, start, stop, stop-after-cycle, follow, test-sandbox, repair,
+                       allow-admin, unreal-network (.cmd pour Windows, .sh pour Linux/WSL)
+system/                pilot.sh (la boucle), parallel.sh (vagues et ouvriers), safety.sh, bridge.py, settings.py
+                       (barrière), guard.py, detect-tools.sh, athanor.py (carte, archives, captures),
+                       bin/ (passerelles), windows/ (aides PowerShell)
+template/              CLAUDE.md (consignes de Claude), PC_TOOLS_GUIDE.md, .claude/agents/ (l'équipe)
+docs/images/           images du README
+.env.example           tous les réglages, documentés
+logs/, tools/          créés à l'usage, jamais commités
+```
+
+---
+
+## FAQ
+
+<details>
+<summary><b>Combien ça coûte ?</b></summary>
+
+Seulement votre abonnement Claude : Athanor enchaîne des sessions Claude Code, rien d'autre. Les modèles les plus puissants consomment le quota le plus vite ; Sonnet dure plus longtemps. `FALLBACK_MODEL` prend le relais quand le quota du modèle principal est épuisé, et `CHEAP_MODEL` s'occupe du travail mécanique. La page *Suivi* montre le coût de chaque cycle au prix catalogue, c'est-à-dire ce que paie le quota de votre abonnement.
+</details>
+
+<details>
+<summary><b>Que peut-il construire ?</b></summary>
+
+Tout ce que Claude Code peut construire et vérifier seul dans un dossier : sites et applications web, outils de bureau et en ligne de commande, jeux (Unreal Engine, Godot, web), applications Android, bibliothèques. Les projets qui ont besoin de vos logiciels Windows passent par les passerelles. Les vérifications sont écrites par Claude pour chaque projet (`check.sh`), avec des captures pour tout ce qui est visuel.
+</details>
+
+<details>
+<summary><b>Puis-je le guider pendant qu'il travaille ?</b></summary>
+
+Oui. *Demandes → Remarque en cours de route* est lue au début du cycle suivant. Les nouvelles demandes vont dans la file et se réordonnent. *Arrêter après le cycle* termine le jalon en cours, l'enregistre, puis s'arrête : rien n'est perdu.
+</details>
+
+<details>
+<summary><b>Va-t-il me gêner pendant que j'utilise le PC ?</b></summary>
+
+Les pilotes tournent dans WSL sans fenêtre. Les fenêtres qu'ils ouvrent (un éditeur, un jeu en test) vont sur le bureau virtuel « Claude » pendant qu'un pilote tourne. Pensez à désactiver la mise en veille pour les longues sessions.
+</details>
+
+<details>
+<summary><b>Le projet reste-t-il propre ?</b></summary>
+
+Oui : supprimez `.athanor/` à la fin, ainsi que `.claude/` si votre version de Claude Code ne connaissait pas `--agents`. Les deux sont exclus de git par `.git/info/exclude`.
+</details>
+
+<details>
+<summary><b>Puis-je l'utiliser sur plusieurs PC ?</b></summary>
+
+Oui. Rien n'est lié à un nom d'utilisateur ni à une lettre de disque : les chemins viennent de votre profil, le dossier de l'outil peut être n'importe où, et les logiciels sont détectés sur tous les disques. Copiez le dossier ou clonez le dépôt, puis lancez l'installation sur chaque PC.
+</details>
+
+---
 
 ## Dépannage
 
 | Symptôme | Solution |
 |---|---|
 | « Lancez d'abord install.cmd » / WSL en défaut dans la santé | *Tout installer* (ou `install.cmd`) n'a pas encore choisi la distribution WSL |
-| Le pilote s'arrête aussitôt, message sur la barrière | *Réparer* sur la ligne *Barrière* : bubblewrap, socat ou le filtre seccomp manquent |
-| Test de barrière : « cmd.exe lancé depuis la barrière » | le filtre seccomp manque : *Réparer* sur la ligne *Barrière* |
-| Unreal : « MCP indisponible pour ce cycle » | éditeur 5.8 avec les plugins Unreal MCP, Auto Start Server coché, réseau WSL « mirrored » (`unreal-network.cmd`) |
-| `tool` : « Docker introuvable » | lancez Docker Desktop, activez WSL integration |
+| Le pilote s'arrête aussitôt, message sur la barrière | *Réparer* sur la ligne *Barrière du système* : bubblewrap, socat ou le filtre seccomp manquent |
+| Test de la barrière : « cmd.exe lancé depuis la barrière » | le filtre seccomp manque : *Réparer* sur la ligne *Barrière du système* |
+| Unreal : « MCP indisponible pour ce cycle » | éditeur 5.8 avec les plugins Unreal MCP, *Auto Start Server* coché, réseau WSL « mirrored » (`unreal-network.cmd`) |
+| `tool` : « Docker introuvable » | lancez Docker Desktop, activez *WSL integration* |
 | « Quota atteint, Claude patiente » | normal ; avec `FALLBACK_MODEL`, Claude continue sur le modèle de secours |
-| « Problème de connexion » | jeton absent ou faux : *Réglages*, ou *Réparer* sur la ligne *Jeton* |
-| Un script `.sh` échoue avec `$'\r'` | fins de ligne Windows : réenregistrez-le en « LF » |
+| « Problème de connexion » | jeton absent ou faux : *Réglages*, ou *Réparer* sur la ligne *Jeton et accès au modèle* |
+| Une installation demande les droits administrateur | *Installation & santé* → *Droits administrateur pour les installations* → *Réparer* (une seule fois) |
+| Un script `.sh` échoue avec `$'\r'` | fins de ligne Windows : réenregistrez-le en « LF » (le dépôt l'impose via `.gitattributes`) |
+
+---
+
+## Publier une version
+
+Poussez un tag de version : GitHub compile les deux applications et publie la version ([`.github/workflows/release.yml`](.github/workflows/release.yml)).
+
+```bash
+git tag v2.0.1 && git push origin v2.0.1
+```
+
+Gardez la version de [`app/winres/athanor.rc`](app/winres/athanor.rc) alignée sur le tag.
+
+## Contribuer
+
+Les issues et pull requests sont les bienvenues. Avant d'en ouvrir une :
+
+- `cd app && go vet . && GOOS=windows go vet .` doit passer, ainsi que `go test ./...`.
+- Les scripts shell doivent passer `bash -n` et `shellcheck -S warning`.
+- Les commentaires et les textes de l'interface sont en anglais. Certains identifiants internes sont en français, parce que le projet a commencé en français ; gardez les noms existants quand vous les touchez. Les nouveaux textes d'interface passent par `t()` et reçoivent leurs traductions dans [`app/static/i18n.js`](app/static/i18n.js).
+
+## Remerciements
+
+- [Claude Code](https://claude.com/claude-code), qui fait le vrai travail.
+- [VirtualDesktop](https://github.com/MScholtes/VirtualDesktop) de Markus Scholtes (MIT), compilé au premier usage pour le bureau « Claude ».
+- [go-webview2](https://github.com/jchv/go-webview2) (MIT) pour la fenêtre Windows, et [bubblewrap](https://github.com/containers/bubblewrap) pour la barrière.
+
+## Licence
+
+[MIT](LICENSE) © Aprilox
