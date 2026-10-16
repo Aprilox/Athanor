@@ -91,15 +91,15 @@ Les applications Windows et Linux gardent des fichiers de réglages séparés (`
 
 Fermez l'application, téléchargez la nouvelle version pour votre système et extrayez-la au même endroit, pour que son dossier `athanor` se fusionne avec le vôtre. Votre `.env`, vos réglages, `logs/` et `tools/` ne sont pas dans l'archive : ils sont conservés.
 
-### Compiler depuis les sources
+### Depuis le code source
 
-```bash
-git clone https://github.com/Aprilox/Athanor.git && cd Athanor/app
-./build.sh                   # Linux/macOS/WSL : construit ../Athanor.exe et ../athanor
-build.cmd                    # Windows (Go 1.24 ou plus : winget install GoLang.Go)
-```
+Vous avez pris *Code → Download ZIP* ou cloné le dépôt au lieu d'une version ? Compilez l'application en une étape, à la racine du dossier :
 
-Bibliothèque standard uniquement, plus trois paquets embarqués pour la fenêtre WebView2 : aucun accès réseau n'est nécessaire pour compiler.
+| Windows | Linux / macOS / WSL |
+|---|---|
+| double-cliquez sur **`build.cmd`** : il propose d'installer Go avec winget s'il manque, puis construit `Athanor.exe` | `./build.sh` : construit `athanor` (et `Athanor.exe`) ; il faut Go 1.24 ou plus (`apt install golang-go`, `dnf install golang`, `brew install go`…) |
+
+Suivez ensuite le démarrage rapide à partir de l'étape 2. L'application n'utilise que la bibliothèque standard de Go et trois paquets embarqués pour la fenêtre WebView2 : la compilation ne demande aucun accès réseau.
 
 ---
 
@@ -305,7 +305,7 @@ Sans dossier, les commandes utilisent `<outil>\projet`. La demande se lit et s'�
 ## Organisation du dépôt
 
 ```
-Athanor.exe, athanor   l'application pour Windows / Linux (dans la version téléchargée)
+Athanor.exe, athanor   l'application pour Windows / Linux (dans la version téléchargée, ou construite par build.cmd / build.sh)
 app/                   les sources Go de l'application, l'interface (HTML, CSS, JS sans dépendance), ressources Windows
 commands/              install, configure, start, stop, stop-after-cycle, follow, test-sandbox, repair,
                        allow-admin, unreal-network (.cmd pour Windows, .sh pour Linux/WSL)
