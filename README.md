@@ -62,44 +62,89 @@ You describe what you want: a game, a website, an app, a tool. Athanor runs [Cla
 
 ## Quick start
 
-**You need:** Windows 10/11 with WSL2 (installed for you), or Linux, and a Claude subscription (Pro, Max or Team).
+**You need:** Windows 10/11 (WSL2 is installed for you) or Linux, and a Claude subscription (Pro, Max or Team).
 
-### Windows
+### 1. Get Athanor
 
-1. Download **`Athanor-X.Y.Z-Windows.zip`** from the [latest release](https://github.com/Aprilox/Athanor/releases/latest) and unzip it anywhere, the Desktop for example. It is the complete tool, ready to use.
-2. Double-click **`Athanor.exe`**. Pick a language, a theme and an accent: the first-launch guide takes you through the rest.
-3. **Install**: one window installs WSL2, Claude Code and the sandbox. Linux asks for a password once; the very first time may need a restart.
-4. **Connect**: *Setup & health* → *Check everything*. On the *Token* line, click *Repair*: a window signs you in to your Claude account. Paste the token in *Settings*.
-5. **Optional, recommended**: *Setup & health* → *Administrator rights* → *Repair*. Windows asks for your consent **once**; Claude never needs a UAC click again.
-6. **Add a project**: a name, its folder (existing or new, on any drive) and what you want. Technologies are free unless you impose some.
-7. **Start.** Add more projects the same way and run them side by side.
+<table>
+<tr>
+<th width="50%">Option A · Download a release <i>(recommended)</i></th>
+<th width="50%">Option B · Build it yourself</th>
+</tr>
+<tr>
+<td valign="top">
 
-### Linux
+From the [**latest release**](https://github.com/Aprilox/Athanor/releases/latest):
 
-Download **`Athanor-X.Y.Z-Linux.tar.gz`** from the [latest release](https://github.com/Aprilox/Athanor/releases/latest). The scripts run natively, without WSL.
+- **Windows**: `Athanor-X.Y.Z-Windows.zip`, unzip it anywhere (the Desktop, for example).
+- **Linux**: `Athanor-X.Y.Z-Linux.tar.gz`, then `tar xzf Athanor-X.Y.Z-Linux.tar.gz`.
+
+Each download is the complete tool, ready to use.
+
+</td>
+<td valign="top">
+
+From the source code, with [Go](https://go.dev/dl/) 1.24 or later.
+
+**Windows** (PowerShell):
+
+```powershell
+git clone https://github.com/Aprilox/Athanor.git
+cd Athanor
+.\build.cmd
+```
+
+No git? *Code → Download ZIP*, unzip, double-click `build.cmd`. If Go is missing, `build.cmd` offers to install it with winget.
+
+**Linux**:
 
 ```bash
-tar xzf Athanor-X.Y.Z-Linux.tar.gz && cd athanor
+git clone https://github.com/Aprilox/Athanor.git
+cd Athanor
+./build.sh
+```
+
+</td>
+</tr>
+</table>
+
+Both options give the same folder: `Athanor.exe` (or `athanor`) next to `commands/`, `system/` and `template/`. The app needs them, so always keep the whole folder together.
+
+> [!TIP]
+> On a downloaded release, Windows SmartScreen may show *"Windows protected your PC"* the first time, because the app is not code-signed. Click *More info → Run anyway*. An `Athanor.exe` you built yourself does not trigger it.
+
+### 2. First launch
+
+**Windows**
+
+1. Double-click **`Athanor.exe`**. Pick a language, a theme and an accent: the first-launch guide takes you through the rest.
+2. **Install**: one window installs WSL2, Claude Code and the sandbox. Linux asks for a password once. The very first time may need a restart: then open "Ubuntu" once to create your user, and run the installation again.
+3. **Connect**: *Setup & health* → *Check everything*. On the *Token and model access* line, click *Repair*: a window signs you in to your Claude account. Paste the token in *Settings*.
+4. **Optional, recommended**: *Setup & health* → *Administrator rights for installations* → *Repair*. Windows asks for your consent **once**; Claude never needs a UAC click again.
+5. **Add a project**: a name, its folder (existing or new, on any drive) and what you want. Technologies are free unless you impose some.
+6. **Start.** Add more projects the same way and run them side by side.
+
+**Linux** (the scripts run natively, without WSL)
+
+```bash
+cd athanor                   # or Athanor, if you built it from source
 commands/install.sh          # Claude Code, sandbox, tools (asks for sudo once)
 commands/configure.sh        # token, models, language
 ./athanor                    # the app, opens in your browser
 ```
 
-The Windows and Linux apps keep separate settings files (`athanor-config.json`, `athanor-config-linux.json`), so a tool folder shared between the two systems (dual boot, for example) works with both.
+Then add a project and start it, as on Windows (steps 5 and 6).
 
-### Updating
+### 3. Updating
 
-Close the app, download the new release for your system and extract it in the same place, so that its `athanor` folder merges into yours. Your `.env`, settings, `logs/` and `tools/` are not in the archive, so they are kept.
-
-### From the source code
-
-Downloaded *Code → Download ZIP* or cloned the repository instead of a release? Build the app in one step, at the root of the folder:
-
-| Windows | Linux / macOS / WSL |
+| You installed | To update |
 |---|---|
-| double-click **`build.cmd`**: it offers to install Go through winget if it is missing, then builds `Athanor.exe` | `./build.sh`: builds `athanor` (and `Athanor.exe`); needs Go 1.24+ (`apt install golang-go`, `dnf install golang`, `brew install go`…) |
+| a release | close the app, download the new release and extract it in the same place, so that its `athanor` folder merges into yours |
+| from source | close the app, then `git pull` and run `build.cmd` (or `./build.sh`) again |
 
-Then follow the quick start from step 2. The app only uses Go's standard library plus three vendored packages for the WebView2 window, so the build needs no network access.
+Your `.env`, settings, `logs/` and `tools/` are never touched by an update. The Windows and Linux apps keep separate settings files (`athanor-config.json`, `athanor-config-linux.json`), so a tool folder shared between both systems (dual boot, for example) works with both.
+
+The app only uses Go's standard library plus three vendored packages for the WebView2 window, so building needs no network access once the source is on your disk.
 
 ---
 

@@ -62,44 +62,89 @@ Vous décrivez ce que vous voulez : un jeu, un site, une application, un outil. 
 
 ## Démarrage rapide
 
-**Il faut :** Windows 10/11 avec WSL2 (installé pour vous) ou Linux, et un abonnement Claude (Pro, Max ou Team). Facultatif : Unreal Engine 5.8, Blender, Docker Desktop.
+**Il faut :** Windows 10/11 (WSL2 est installé pour vous) ou Linux, et un abonnement Claude (Pro, Max ou Team). Facultatif : Unreal Engine 5.8, Blender, Docker Desktop.
 
-### Windows
+### 1. Récupérer Athanor
 
-1. Téléchargez **`Athanor-X.Y.Z-Windows.zip`** depuis la [dernière version](https://github.com/Aprilox/Athanor/releases/latest) et dézippez-le où vous voulez, par exemple sur le Bureau. C'est l'outil complet, prêt à l'emploi.
-2. Double-cliquez sur **`Athanor.exe`**. Choisissez la langue, le thème et l'accent : le guide du premier démarrage vous accompagne ensuite. La langue vaut pour l'application **et** pour les documents que Claude écrit dans vos nouveaux projets.
-3. **Installer** : une fenêtre installe WSL2, Claude Code et la barrière. Linux demande un mot de passe une fois. La toute première fois, un redémarrage peut être nécessaire : ouvrez ensuite « Ubuntu » une fois pour créer votre utilisateur, puis relancez l'installation.
-4. **Se connecter** : *Installation & santé* → *Tout vérifier*. Sur la ligne *Jeton et accès au modèle*, cliquez sur *Réparer* : une fenêtre vous connecte à votre compte Claude. Collez le jeton dans *Réglages*.
-5. **Facultatif, recommandé** : *Installation & santé* → *Droits administrateur pour les installations* → *Réparer*. Windows vous demande votre accord **une seule fois** ; Claude n'aura plus jamais besoin d'un clic UAC.
-6. **Ajouter un projet** : un nom, son dossier (existant ou à créer, sur n'importe quel disque) et ce que vous voulez. Les technologies sont libres sauf si vous en imposez.
-7. **Démarrer.** Ajoutez d'autres projets de la même façon et faites-les tourner en même temps.
+<table>
+<tr>
+<th width="50%">Option A · Télécharger une version <i>(recommandé)</i></th>
+<th width="50%">Option B · Le compiler soi-même</th>
+</tr>
+<tr>
+<td valign="top">
 
-### Linux
+Depuis la [**dernière version**](https://github.com/Aprilox/Athanor/releases/latest) :
 
-Téléchargez **`Athanor-X.Y.Z-Linux.tar.gz`** depuis la [dernière version](https://github.com/Aprilox/Athanor/releases/latest). Les scripts tournent nativement, sans WSL.
+- **Windows** : `Athanor-X.Y.Z-Windows.zip`, à dézipper où vous voulez (sur le Bureau, par exemple).
+- **Linux** : `Athanor-X.Y.Z-Linux.tar.gz`, puis `tar xzf Athanor-X.Y.Z-Linux.tar.gz`.
+
+Chaque téléchargement est l'outil complet, prêt à l'emploi.
+
+</td>
+<td valign="top">
+
+Depuis le code source, avec [Go](https://go.dev/dl/) 1.24 ou plus.
+
+**Windows** (PowerShell) :
+
+```powershell
+git clone https://github.com/Aprilox/Athanor.git
+cd Athanor
+.\build.cmd
+```
+
+Pas de git ? *Code → Download ZIP*, dézippez, double-cliquez sur `build.cmd`. Si Go manque, `build.cmd` propose de l'installer avec winget.
+
+**Linux** :
 
 ```bash
-tar xzf Athanor-X.Y.Z-Linux.tar.gz && cd athanor
+git clone https://github.com/Aprilox/Athanor.git
+cd Athanor
+./build.sh
+```
+
+</td>
+</tr>
+</table>
+
+Les deux options donnent le même dossier : `Athanor.exe` (ou `athanor`) à côté de `commands/`, `system/` et `template/`. L'application en a besoin : gardez toujours le dossier entier.
+
+> [!TIP]
+> Avec une version téléchargée, Windows SmartScreen peut afficher *« Windows a protégé votre ordinateur »* au premier lancement, parce que l'application n'est pas signée. Cliquez sur *Informations complémentaires → Exécuter quand même*. Un `Athanor.exe` compilé par vous-même ne le déclenche pas.
+
+### 2. Premier lancement
+
+**Windows**
+
+1. Double-cliquez sur **`Athanor.exe`**. Choisissez la langue, le thème et l'accent : le guide du premier démarrage vous accompagne ensuite. La langue vaut pour l'application **et** pour les documents que Claude écrit dans vos nouveaux projets.
+2. **Installer** : une fenêtre installe WSL2, Claude Code et la barrière. Linux demande un mot de passe une fois. La toute première fois, un redémarrage peut être nécessaire : ouvrez ensuite « Ubuntu » une fois pour créer votre utilisateur, puis relancez l'installation.
+3. **Se connecter** : *Installation & santé* → *Tout vérifier*. Sur la ligne *Jeton et accès au modèle*, cliquez sur *Réparer* : une fenêtre vous connecte à votre compte Claude. Collez le jeton dans *Réglages*.
+4. **Facultatif, recommandé** : *Installation & santé* → *Droits administrateur pour les installations* → *Réparer*. Windows vous demande votre accord **une seule fois** ; Claude n'aura plus jamais besoin d'un clic UAC.
+5. **Ajouter un projet** : un nom, son dossier (existant ou à créer, sur n'importe quel disque) et ce que vous voulez. Les technologies sont libres sauf si vous en imposez.
+6. **Démarrer.** Ajoutez d'autres projets de la même façon et faites-les tourner en même temps.
+
+**Linux** (les scripts tournent nativement, sans WSL)
+
+```bash
+cd athanor                   # ou Athanor, si vous l'avez compilé depuis les sources
 commands/install.sh          # Claude Code, barrière, outils (sudo demandé une fois)
 commands/configure.sh        # jeton, modèles, langue
 ./athanor                    # l'application, s'ouvre dans votre navigateur
 ```
 
-Les applications Windows et Linux gardent des fichiers de réglages séparés (`athanor-config.json`, `athanor-config-linux.json`) : un dossier de l'outil partagé entre les deux systèmes (double démarrage, par exemple) fonctionne avec les deux.
+Ajoutez ensuite un projet et démarrez-le, comme sous Windows (étapes 5 et 6).
 
-### Mettre à jour
+### 3. Mettre à jour
 
-Fermez l'application, téléchargez la nouvelle version pour votre système et extrayez-la au même endroit, pour que son dossier `athanor` se fusionne avec le vôtre. Votre `.env`, vos réglages, `logs/` et `tools/` ne sont pas dans l'archive : ils sont conservés.
-
-### Depuis le code source
-
-Vous avez pris *Code → Download ZIP* ou cloné le dépôt au lieu d'une version ? Compilez l'application en une étape, à la racine du dossier :
-
-| Windows | Linux / macOS / WSL |
+| Vous avez installé | Pour mettre à jour |
 |---|---|
-| double-cliquez sur **`build.cmd`** : il propose d'installer Go avec winget s'il manque, puis construit `Athanor.exe` | `./build.sh` : construit `athanor` (et `Athanor.exe`) ; il faut Go 1.24 ou plus (`apt install golang-go`, `dnf install golang`, `brew install go`…) |
+| une version téléchargée | fermez l'application, téléchargez la nouvelle version et extrayez-la au même endroit, pour que son dossier `athanor` se fusionne avec le vôtre |
+| depuis les sources | fermez l'application, puis `git pull` et relancez `build.cmd` (ou `./build.sh`) |
 
-Suivez ensuite le démarrage rapide à partir de l'étape 2. L'application n'utilise que la bibliothèque standard de Go et trois paquets embarqués pour la fenêtre WebView2 : la compilation ne demande aucun accès réseau.
+Votre `.env`, vos réglages, `logs/` et `tools/` ne sont jamais touchés par une mise à jour. Les applications Windows et Linux gardent des fichiers de réglages séparés (`athanor-config.json`, `athanor-config-linux.json`) : un dossier de l'outil partagé entre les deux systèmes (double démarrage, par exemple) fonctionne avec les deux.
+
+L'application n'utilise que la bibliothèque standard de Go et trois paquets embarqués pour la fenêtre WebView2 : une fois les sources sur votre disque, la compilation ne demande aucun accès réseau.
 
 ---
 
