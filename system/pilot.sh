@@ -504,6 +504,9 @@ while true; do
     terminer "Maximum duration reached (${MAX_HOURS} h). The work in progress is in the project folder."
   fi
   if est_termine; then
+    # moment of the delivery: the requests moved to done/ before it are delivered, the later ones are
+    # only added to the plan (the app shows the difference)
+    date '+%Y%m%d-%H%M%S' > "$ETAT/done/.last-delivery" 2>/dev/null
     prochaine_demande || terminer "DONE: the deliverable and FINAL_REPORT.md are in the project folder."
   fi
 

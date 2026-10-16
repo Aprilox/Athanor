@@ -212,7 +212,15 @@ details[open] summary { margin-bottom: 10px; }
 .plan li.vague { border-bottom: 0; padding: 10px 0 2px; color: var(--faible); font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; }
 .plan li.vague:first-child { padding-top: 0; }
 .plan .jalon-corps { min-width: 0; flex: 1; }
-.plan .jalon-titre { font-weight: 600; }
+.plan li[data-jalon-cle] { cursor: pointer; }
+.plan li[data-jalon-cle]:hover .jalon-titre { color: var(--accent); }
+.plan .jalon-titre { font-weight: 600; display: flex; justify-content: space-between; gap: 8px; }
+.plan .jalon-chevron { color: var(--faible); font-weight: 400; flex: none; }
+.plan .jalon-details { margin-top: 8px; font-size: 13px; color: var(--ink); display: flex; flex-direction: column; gap: 6px; cursor: default; }
+.plan .jalon-details code { font-size: 12px; background: var(--panel-2); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+.plan .jalon-notes { margin: 0; padding-left: 18px; color: var(--muted); }
+.plan .jalon-notes li { display: list-item; border: 0; padding: 2px 0; }
+.plan .jalon-actions { margin-top: 4px; }
 .plan .jalon-detail { font-weight: 400; color: var(--muted); }
 .plan .jalon-accept { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
 .plan .coche .jalon-ico, .plan .coche .jalon-titre { color: var(--ok); }
@@ -263,6 +271,8 @@ textarea.en-attente { opacity: .55; }
 .carte-demande .num { width: 28px; height: 28px; border-radius: 50%; background: var(--panel-2); display: grid; place-items: center; font-weight: 600; flex: none; font-size: 13px; }
 .carte-demande.en-cours .num { background: var(--attention); color: var(--sur-attention); }
 .carte-demande.faite .num { color: var(--ok); }
+.carte-demande.integree .num { color: var(--attention); }
+.carte-demande .titre { overflow-wrap: anywhere; }
 .carte-demande .corps { flex: 1; min-width: 0; }
 .carte-demande .titre { font-weight: 600; }
 .carte-demande .meta { color: var(--muted); font-size: 12.5px; }

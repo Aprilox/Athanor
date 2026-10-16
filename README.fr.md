@@ -220,6 +220,8 @@ Les captures sont en anglais ; l'interface s'affiche dans la langue choisie.
 | **Réglages** | le `.env` (jeton masqué, modèles, effort, surveillance…), *Enregistrer et redémarrer après le cycle* |
 | **Options** | langue, palette et accent, liste des projets (retirer de la liste ne touche jamais au dossier), relance des pilotes à l'ouverture, démarrage avec Windows, bureau virtuel « Claude », mot de passe, dossier de l'outil |
 
+**Le plan se façonne** : un clic sur un jalon montre ses fichiers, ses dépendances et ses critères d'acceptation ; on peut le monter, le descendre ou le retirer (les autres jalons n'en dépendent plus), ou éditer `PLAN.md` en entier.
+
 **Cadenas** : avec un mot de passe (*Options*), le bouton 🔒 verrouille l'application. Claude continue, mais rien n'est visible ni modifiable (jeton compris) sans le mot de passe, et l'application démarre verrouillée.
 
 **Bureau virtuel « Claude »** : pendant qu'un pilote tourne, les fenêtres qu'il ouvre (Unreal, Blender, un jeu en test) vont sur un bureau Windows dédié. Vous continuez à travailler ou à jouer sans qu'elles surgissent. Une fenêtre que vous ramenez n'est plus jamais déplacée. *Voir le bureau Claude* / *Revenir*, ou Ctrl + Win + ← / →.

@@ -220,6 +220,8 @@ The screenshots show the dark "Slate" and the "Light" palettes.
 | **Settings** | the `.env` (token masked, models, effort, watchdog…), *Save and restart after cycle* |
 | **Options** | language, palette and accent, project list (removing a project never touches its folder), restart the pilots on opening, start with Windows, "Claude" virtual desktop, password, tool folder |
 
+**A plan you can shape**: click a milestone to see its files, dependencies and acceptance criteria; move it up or down, or remove it (the other milestones stop depending on it), or edit `PLAN.md` as a whole.
+
 **Lock**: with a password (*Options*), the 🔒 button locks the app. Claude keeps working, but nothing can be seen or changed (token included) without the password, and the app starts locked.
 
 **"Claude" virtual desktop**: while a pilot runs, the windows it opens (Unreal, Blender, a game under test) go to a dedicated Windows desktop, so they never pop up over your work or your game. A window you bring back is never moved again. *View Claude's desktop* / *Come back*, or Ctrl + Win + ← / →.

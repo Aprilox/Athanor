@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -13,6 +14,49 @@ type DemandeFaite struct {
 	Fichier string `json:"fichier"`
 	Date    string `json:"date"`
 	Titre   string `json:"titre"`
+	Livree  bool   `json:"livree"` // false: taken into the current request and its plan, not delivered yet
+}
+
+var reLivre = regexp.MustCompile(`STATUS: *DONE`)
+
+// projetLivre: same test as the pilot's est_termine (FINAL_REPORT.md with STATUS: DONE).
+func projetLivre(p Projet) bool {
+	b, err := os.ReadFile(filepath.Join(p.Atelier(), "FINAL_REPORT.md"))
+	return err == nil && reLivre.Match(b)
+}
+
+// done/<date>-<time>-<NN>-<slug>.md, time as HHMMSS (pilot) or HHMM (older versions), NN = queue position
+var reNomFaite = regexp.MustCompile(`^(\d{8})-(\d{6}|\d{4})-(?:\d{1,3}-)?(.+)$`)
+
+// lireDemandeFaite: date and readable title of a request moved to done/. The title is the request's
+// "# " heading (written by the app); otherwise the slug of the file name.
+func lireDemandeFaite(dossier, nom string) (stamp, date, titre string) {
+	n := strings.TrimSuffix(nom, ".md")
+	titre = n
+	if m := reNomFaite.FindStringSubmatch(n); m != nil {
+		heure := m[2]
+		stamp = m[1] + heure + strings.Repeat("0", 6-len(heure))
+		date = m[1][:4] + "-" + m[1][4:6] + "-" + m[1][6:8] + " " + heure[:2] + "h" + heure[2:4]
+		titre = strings.TrimSpace(strings.ReplaceAll(m[3], "-", " "))
+	}
+	if f, err := os.Open(filepath.Join(dossier, nom)); err == nil {
+		buf := make([]byte, 4096)
+		k, _ := f.Read(buf)
+		f.Close()
+		for _, l := range strings.Split(string(buf[:k]), "\n") {
+			l = strings.TrimSpace(l)
+			if strings.HasPrefix(l, "# ") {
+				if t := strings.TrimSpace(l[2:]); t != "" {
+					titre = t
+				}
+				break
+			}
+			if l != "" {
+				break // the heading, when there is one, is the first line
+			}
+		}
+	}
+	return
 }
 
 // demandeVide: nothing but headings and lines in parentheses.
@@ -38,17 +82,20 @@ func (s *Serveur) apiDemandes(w http.ResponseWriter, r *http.Request) {
 	b, _ := os.ReadFile(p.Demande())
 	faites := []DemandeFaite{}
 	if entrees, err := os.ReadDir(p.DemandesFaites()); err == nil {
+		// Moved to done/ = taken into the current request (and its plan). Delivered only if the project
+		// is finished now, or if a delivery happened after it was taken.
+		livraison := ""
+		if b, err := os.ReadFile(filepath.Join(p.DemandesFaites(), ".last-delivery")); err == nil {
+			livraison = strings.TrimSpace(string(b))
+		}
+		fini := projetLivre(p)
 		for _, e := range entrees {
-			if !strings.HasSuffix(e.Name(), ".md") {
+			if !nomFichierSur(e.Name()) || e.IsDir() {
 				continue
 			}
-			n := strings.TrimSuffix(e.Name(), ".md")
-			date, titre := "", n
-			if len(n) > 14 && n[8] == '-' && n[13] == '-' {
-				date = n[:4] + "-" + n[4:6] + "-" + n[6:8] + " " + n[9:11] + "h" + n[11:13]
-				titre = n[14:]
-			}
-			faites = append(faites, DemandeFaite{e.Name(), date, titre})
+			stamp, date, titre := lireDemandeFaite(p.DemandesFaites(), e.Name())
+			livree := fini || (stamp != "" && livraison != "" && stamp < livraison)
+			faites = append(faites, DemandeFaite{e.Name(), date, titre, livree})
 		}
 	}
 	att := p.LireFileAttente()
