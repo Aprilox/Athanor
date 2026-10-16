@@ -16,7 +16,7 @@ KIT="$(dirname "$SYSTEME")"
 # The project = the user's development folder (argument 1, or PROJECT, or KIT/projet).
 # Everything used for piloting lives in PROJECT/.athanor (the "workshop"): the project stays clean.
 PROJECT="${1:-${PROJECT:-$KIT/projet}}"
-PROJECT="$(mkdir -p "$PROJECT" && cd "$PROJECT" && pwd -P)"
+PROJECT="$(mkdir -p "$PROJECT" && cd "$PROJECT" && pwd)"   # logical path, stable (see start.sh)
 TOOLS="$KIT/tools"
 ETAT="$PROJECT/.athanor"
 . "$SYSTEME/safety.sh"
@@ -535,8 +535,11 @@ while true; do
   parallele_lire_reglage
   mode=serie; but_cycle="$BUT"; consignes="$CONSIGNES"
   if [ "$PARALLEL" = 1 ]; then
+    parallele_absorber_file
+    synchroniser_demande
     { cat "$CONSIGNES"; parallele_consignes; } > "$PRIVE/CLAUDE.cycle.md"; consignes="$PRIVE/CLAUDE.cycle.md"
-    if [ -f "$ETAT/PLAN.md" ] && [ ! -f "$ETAT/RECHECK" ]; then
+    # a changed request (an additional one, or edited by hand) is first folded into the plan by the lead alone
+    if [ -f "$ETAT/PLAN.md" ] && [ ! -f "$ETAT/RECHECK" ] && [ ! -f "$ETAT/REQUEST_CHANGED" ]; then
       if parallele_plan_a_des_vagues; then
         [ "$(parallele_vague_courante | wc -l)" -ge 2 ] && mode=parallele
       else

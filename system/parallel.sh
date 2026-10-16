@@ -34,6 +34,27 @@ parallele_lire_reglage() {
   fi
 }
 
+# Parallel mode: the queued requests do not wait for the current one to be delivered. They join the
+# current request right away (appended to REQUEST.md, moved to done/); the change of REQUEST.md makes
+# the lead fold their milestones into the plan as waves, so they are built alongside the rest.
+parallele_absorber_file() {
+  local f nom faite n=0
+  for f in "$ETAT"/queue/*.md; do
+    [ -f "$f" ] && [ ! -L "$f" ] || continue
+    nom=$(basename "$f" .md)
+    faite="$ETAT/done/$(date '+%Y%m%d-%H%M%S')-$nom.md"
+    mkdir -p "$ETAT/done" && mv -f "$f" "$faite" || continue
+    {
+      printf '\n\n## Additional request (%s, %s)\n\n' "$(date '+%Y-%m-%d %H:%M')" "$nom"
+      tr -d '\r' < "$faite"
+      printf '\n'
+    } >> "$ETAT/REQUEST.md"
+    n=$((n + 1))
+  done
+  [ "$n" -gt 0 ] && log "Parallel mode: $n queued request(s) joined the current plan."
+  return 0
+}
+
 parallele_plan_a_des_vagues() { grep -qiE '^## +Wave' "$ETAT/PLAN.md" 2>/dev/null; }
 
 # Unchecked milestones of the first unfinished wave (at most PARALLEL_MAX), one per line: "M4<TAB>full line".
@@ -74,8 +95,10 @@ parallele_consignes() {  # section appended to the lead's instructions when the 
 The plan `.athanor/PLAN.md` must be organised in **waves**: a heading `## Wave 1`, `## Wave 2`... followed by the checkable milestones of that wave. Rules:
 - Milestones within the same wave are **independent**: separate files, no dependency between them, each one doable alone by a worker who only knows the documents, the skeleton and its own milestone. Prefer 2 to 4 milestones per wave.
 - Wave 1 contains a single milestone: the runnable skeleton, `check.sh` and the **contracts** (data structures, interfaces, conventions, shared stylesheet, shared header and footer) that the following waves depend on. Whatever is shared is built before being parallelised.
+- A milestone that tests, reviews or polishes the work of other milestones (cross-cutting tests, a tester or critic pass, polish) goes in a wave **after** them, never in the same wave: in parallel it would run before what it checks exists.
 - Every milestone states explicitly which files it creates or modifies. A file modified by two milestones of the same wave = plan error: move one of them to a later wave.
 - The last waves (polish, delivery) often hold a single milestone: that is normal.
+- **Additional requests** (sections "Additional request" of REQUEST.md, flagged by `.athanor/REQUEST_CHANGED`): turn each into milestones and fold them into the plan as waves: into an existing future wave when they are independent of it, otherwise into new waves; keep a single final delivery milestone at the very end, covering everything.
 If the plan already exists without waves, reorganise it into waves without changing the milestones' content (commit), and stop there for this cycle.
 EOF
 }

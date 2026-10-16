@@ -20,6 +20,9 @@ func commandeWSL(k Kit, script string) *exec.Cmd {
 
 // DemarrerDetache: on Linux, the pilot simply goes to the background (setsid in start.sh --background).
 func DemarrerDetache(k Kit, script string) error {
+	if strings.Contains(script, "--attach") {
+		return nil // no WSL to keep awake outside Windows
+	}
 	c := exec.Command("bash", "-lc", strings.Replace(script, "--keep", "--background", 1))
 	c.Dir = k.Racine
 	_, err := c.Output()

@@ -9,6 +9,9 @@ import json, os, shlex, shutil, sys
 kit = os.path.realpath(sys.argv[1]); sortie = sys.argv[2]
 tools, system = (os.path.join(kit, d) for d in ("tools", "system"))
 projet = os.path.realpath(os.environ.get("PROJECT") or os.path.join(kit, "projet"))
+# The pilot works in the logical path (/mnt/c/...); on some PCs it resolves to another one (Docker Desktop
+# bind mounts). The sandbox gets both forms, so that reads work whichever one a tool uses.
+projets = sorted({projet, os.path.abspath(os.environ.get("PROJECT") or os.path.join(kit, "projet"))})
 unreal_mcp = os.environ.get("UNREAL_MCP", "0") == "1"
 # Hooks run OUTSIDE the sandbox: never a program taken from tools/ (modifiable by Claude).
 rtk_bin = os.path.join(system, "bin", "rtk")
@@ -64,7 +67,7 @@ reglages = {
         "filesystem": {
             "allowWrite": [tools],
             "denyRead": ["~/", "/mnt"],
-            "allowRead": [projet, tools, system] + logiciels,   # system: read-only (RTK, pilot tools)
+            "allowRead": projets + [tools, system] + logiciels,   # system: read-only (RTK, pilot tools)
         },
         "network": {"allowedDomains": ["*"]},
         "credentials": {"envVars": [{"name": "CLAUDE_CODE_OAUTH_TOKEN", "mode": "deny"},

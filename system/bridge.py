@@ -12,7 +12,9 @@ import json, os, signal, subprocess, sys, threading, time
 
 KIT = os.path.realpath(sys.argv[1])
 SYSTEME, TOOLS = (os.path.join(KIT, d) for d in ("system", "tools"))
-PROJECT = os.path.realpath(sys.argv[2]) if len(sys.argv) > 2 else os.path.join(KIT, "projet")
+# kept as given (logical): dedans() resolves both sides at each request, so a mount path that changes
+# while the pilot runs (Docker Desktop bind mounts) does not lock the gateways out
+PROJECT = os.path.abspath(sys.argv[2]) if len(sys.argv) > 2 else os.path.join(KIT, "projet")
 DOSSIER = os.path.join(PROJECT, ".athanor", "pont")
 AUTORISES = {"tool", "unreal-editor", "unreal-cmd", "unreal-uat", "blender",
              "install-windows", "pc-exec", "windows-var", "adb"}

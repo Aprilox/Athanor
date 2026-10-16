@@ -177,6 +177,8 @@ The app only uses Go's standard library plus three vendored packages for the Web
 2. Each milestone of the current wave gets a **worker**: its own Claude session, its own git worktree (`.athanor/work/M5`) and its own branch (`auto/M5`). All workers run at the same time.
 3. The lead then merges the branches, runs the full check, ticks what passed and files the rest in `BUGS.md` for a later cycle. Workers' reports land in `.athanor/WORKER_REPORTS.md`.
 
+4. **Queued requests don't wait.** At the start of each cycle they join the current request: the lead folds their milestones into the plan as waves, next to the remaining work, with a single final delivery at the end.
+
 The Team page shows one card per worker, and the Log tags their lines `[M5]`. Parallel mode is much faster on large plans and uses more quota, one session per worker.
 
 ---

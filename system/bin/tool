@@ -8,6 +8,6 @@ image="${1:-}"; shift || true
 if [ -z "$image" ] || [[ "$image" == -* ]] || [ $# -eq 0 ]; then
   echo "Usage: tool IMAGE COMMAND...   (no Docker options: the container only sees the project)" >&2; exit 2
 fi
-ici=$(pwd -P); rel=""
+ici=$(pwd); rel=""
 case "$ici/" in "$PROJECT"/*) rel=${ici#"$PROJECT"} ;; esac
 exec docker run --rm -i -v "$PROJECT:/work" -w "/work$rel" -e HOME=/tmp "$image" "$@"

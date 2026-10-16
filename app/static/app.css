@@ -345,6 +345,11 @@ textarea.en-attente { opacity: .55; }
 .toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); background: var(--panel-2); border: 1px solid var(--line); border-left: 3px solid var(--attention); padding: 10px 16px; border-radius: 6px; max-width: 640px; box-shadow: var(--ombre); z-index: 30; }
 .toast.erreur { border-left-color: var(--erreur); }
 .toast.ok { border-left-color: var(--ok); }
+/* the app's own confirmation dialog (never the browser's confirm/alert) */
+.dialogue { position: fixed; inset: 0; background: var(--voile); display: grid; place-items: center; z-index: 50; padding: 16px; }
+.dialogue-carte { width: min(420px, 100%); background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--ombre); padding: 20px; display: flex; flex-direction: column; gap: 18px; }
+.dialogue-carte p { margin: 0; font-size: 15px; line-height: 1.5; overflow-wrap: anywhere; }
+.dialogue-boutons { display: flex; justify-content: flex-end; gap: 8px; }
 .verrou { position: fixed; inset: 0; background: var(--voile); display: grid; place-items: center; z-index: 40; }
 .verrou-carte { width: 360px; text-align: center; display: flex; flex-direction: column; gap: 12px; }
 .verrou-cadenas { font-size: 40px; }
