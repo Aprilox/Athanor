@@ -1,0 +1,27 @@
+# Secrets and local state: never in the repository (all paths anchored at the root of the tool)
+/.env
+/tools/
+/logs/
+/athanor-config.json
+/athanor-config-*.json
+/_a_supprimer/
+/_old-*/
+/system/distro.txt
+/system/pc_tools.env
+/system/unreal_relay.txt
+/system/mirrored_unavailable.txt
+/system/.claude_settings.json
+/system/bin/rtk
+__pycache__/
+# Legacy single-project layout (projects now live outside the tool)
+/projet/
+/projet-ancien-*/
+# Previous name of the tool (Claude Autopilote)
+/autopilote-config.json
+/Autopilote.exe
+# Binaries: provided in Releases (Windows and Linux side by side in the tool folder)
+/Athanor.exe
+/athanor
+/athanor-linux-*
+/app/Athanor.exe
+/app/athanor

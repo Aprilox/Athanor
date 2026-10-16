@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# blender ARGUMENTS...: the Blender installed on the PC (e.g. blender -b -P tools/scene.py).
+. "$(dirname "$0")/_common.sh"
+passer_par_le_pont "$@"
+[ -n "${BLENDER_EXE:-}" ] && [ -f "$BLENDER_EXE" ] || absent Blender
+convertir_args "$@"
+exec "$BLENDER_EXE" "${ARGS[@]}"

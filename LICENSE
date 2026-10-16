@@ -1,0 +1,133 @@
+Athanor
+Copyright (c) 2026 Aprilox. All rights reserved.
+
+Required Notice: Copyright 2026 Aprilox (https://github.com/Aprilox/Athanor)
+
+Athanor is source-available, not open source. It is licensed under the
+PolyForm Strict License 1.0.0 (its full text is below), together with the
+additional terms that follow: an additional permission and an attribution
+condition. To get any license for the software, you must agree to both. The
+licensor is Aprilox.
+
+## Additional permission
+
+In addition to what the PolyForm Strict License 1.0.0 allows, Aprilox gives you
+permission to use unmodified copies of the software for commercial purposes, as
+long as both of these are true:
+
+1. The use is free of charge: nobody pays you, and you charge nobody, for the
+   software, for access to it or for its use (for example as a hosted or
+   managed service, or as part of a paid offer).
+2. What you create with the software (code, applications, games, documents or
+   any other result) is not intended to be sold, rented or provided for a fee,
+   including work done for a paying client.
+
+Aprilox also gives you permission to keep the files the software writes into
+your projects (such as its guides in .athanor/) in those projects, and to share
+or publish them unchanged with those projects, but not to use them apart from
+those projects.
+
+These permissions do not allow you to change the software, to make new works
+based on it or to distribute it otherwise, and they end together with your
+other licenses under these terms.
+
+## Attribution
+
+Every project you create or change with the software must say so:
+
+1. in the project's README (or, without one, its main documentation), this line:
+   Made with Athanor (https://github.com/Aprilox/Athanor), created by Aprilox.
+2. at the root of its source code, a file named NOTICE that contains the same
+   line.
+
+Keep these mentions in every copy and every version of the project that you
+share or publish, and do not remove them or make them hard to see.
+
+## Asking for permission
+
+Anything these terms do not allow (changing the software, using any part of its
+source code in another work, sharing or distributing it, any commercial use
+beyond the additional permission above) needs Aprilox's written permission
+beforehand. Ask for it by opening an issue on https://github.com/Aprilox/Athanor.
+A permission counts only when Aprilox gives it in writing, and only for what it
+says.
+
+Selling or distributing the software, or any work based on it, for a fee, and
+using its source code to build a third-party tool, product or service offered
+for a fee, are reserved to Aprilox.
+
+## Third-party components
+
+Parts of Athanor that come from third parties keep their own licenses (listed in
+the README's Acknowledgements, their texts next to them); these terms do not
+reduce the rights those licenses give for those parts.
+
+## Earlier versions
+
+Versions up to and including 2.51.0 were first published under the MIT License.
+Since version 2.51.1 was published, Aprilox offers every version of Athanor,
+those included, only under these terms, and no longer under the MIT License.
+Copies obtained under the MIT License before that date keep the rights it gave
+them.
+
+---
+
+# PolyForm Strict License 1.0.0
+
+<https://polyformproject.org/licenses/strict/1.0.0>
+
+## Acceptance
+
+In order to get any license under these terms, you must agree to them as both strict obligations and conditions to all your licenses.
+
+## Copyright License
+
+The licensor grants you a copyright license for the software to do everything you might do with the software that would otherwise infringe the licensor's copyright in it for any permitted purpose, other than distributing the software or making changes or new works based on the software.
+
+## Patent License
+
+The licensor grants you a patent license for the software that covers patent claims the licensor can license, or becomes able to license, that you would infringe by using the software.
+
+## Noncommercial Purposes
+
+Any noncommercial purpose is a permitted purpose.
+
+## Personal Uses
+
+Personal use for research, experiment, and testing for the benefit of public knowledge, personal study, private entertainment, hobby projects, amateur pursuits, or religious observance, without any anticipated commercial application, is use for a permitted purpose.
+
+## Noncommercial Organizations
+
+Use by any charitable organization, educational institution, public research organization, public safety or health organization, environmental protection organization, or government institution is use for a permitted purpose regardless of the source of funding or obligations resulting from the funding.
+
+## Fair Use
+
+You may have "fair use" rights for the software under the law. These terms do not limit them.
+
+## No Other Rights
+
+These terms do not allow you to sublicense or transfer any of your licenses to anyone else, or prevent the licensor from granting licenses to anyone else.  These terms do not imply any other licenses.
+
+## Patent Defense
+
+If you make any written claim that the software infringes or contributes to infringement of any patent, your patent license for the software granted under these terms ends immediately. If your company makes such a claim, your patent license ends immediately for work on behalf of your company.
+
+## Violations
+
+The first time you are notified in writing that you have violated any of these terms, or done anything with the software not covered by your licenses, your licenses can nonetheless continue if you come into full compliance with these terms, and take practical steps to correct past violations, within 32 days of receiving notice.  Otherwise, all your licenses end immediately.
+
+## No Liability
+
+***As far as the law allows, the software comes as is, without any warranty or condition, and the licensor will not be liable to you for any damages arising out of these terms or the use or nature of the software, under any kind of legal claim.***
+
+## Definitions
+
+The **licensor** is the individual or entity offering these terms, and the **software** is the software the licensor makes available under these terms.
+
+**You** refers to the individual or entity agreeing to these terms.
+
+**Your company** is any legal entity, sole proprietorship, or other kind of organization that you work for, plus all organizations that have control over, are under the control of, or are under common control with that organization.  **Control** means ownership of substantially all the assets of an entity, or the power to direct its management and policies by vote, contract, or otherwise.  Control can be direct or indirect.
+
+**Your licenses** are all the licenses granted to you for the software under these terms.
+
+**Use** means anything you do with the software requiring one of your licenses.

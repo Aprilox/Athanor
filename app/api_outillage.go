@@ -1,0 +1,323 @@
+package main
+
+// Settings (the tool's .env), tooling health, tasks, options, virtual desktop, opening folders.
+
+import (
+	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
+)
+
+// ----------------------------------------------------------------------------- .env
+
+const masque = "••••••••"
+
+func (s *Serveur) apiEnv(w http.ResponseWriter, r *http.Request) {
+	chemin := s.kitCourant().Env()
+	if _, err := os.Stat(chemin); err != nil {
+		chemin = s.kitCourant().EnvExemple()
+	}
+	montrer := r.URL.Query().Get("secrets") == "1"
+	out := []LigneEnv{}
+	lignes := LireEnv(chemin)
+	// Settings added by a newer version of the tool: present in .env.example but not yet in the
+	// user's .env. They appear with their default value and are written on save. The help text
+	// always comes from .env.example (up to date, translatable).
+	presents, aides := map[string]bool{}, map[string]string{}
+	for _, l := range lignes {
+		presents[l.Cle] = true
+	}
+	for _, l := range LireEnv(s.kitCourant().EnvExemple()) {
+		if l.Cle == "" {
+			continue
+		}
+		aides[l.Cle] = l.Aide
+		if !presents[l.Cle] {
+			lignes = append(lignes, l)
+		}
+	}
+	for _, l := range lignes {
+		if l.Cle == "" {
+			continue
+		}
+		if a := aides[l.Cle]; a != "" {
+			l.Aide = a
+		}
+		if l.Secret && !montrer && l.Valeur != "" {
+			l.Valeur = masque // never the real value without an explicit request
+		}
+		out = append(out, l)
+	}
+	s.ecrireJSON(w, out)
+}
+
+func (s *Serveur) apiEcrireEnv(w http.ResponseWriter, r *http.Request) {
+	var valeurs map[string]string
+	if err := lireCorps(r, &valeurs); err != nil {
+		s.erreur(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	for k, v := range valeurs {
+		if !reCle.MatchString(k) || strings.ContainsAny(v, "\n\r") {
+			s.erreur(w, http.StatusBadRequest, "Invalid setting: "+k)
+			return
+		}
+		if v == masque {
+			delete(valeurs, k) // secret unchanged
+		}
+	}
+	chemin := s.kitCourant().Env()
+	if _, err := os.Stat(chemin); err != nil {
+		if b, err := os.ReadFile(s.kitCourant().EnvExemple()); err == nil {
+			_ = os.WriteFile(chemin, b, 0o600)
+		}
+	}
+	if err := EcrireEnv(chemin, valeurs); err != nil {
+		s.erreur(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.msg(w, "Settings saved. They apply to pilots started afterwards (“Restart after cycle” on a running project).")
+}
+
+// ----------------------------------------------------------------------------- health
+
+func (s *Serveur) apiSante(w http.ResponseWriter, r *http.Request) {
+	vues := []VerifVue{}
+	for _, v := range s.verifs {
+		vues = append(vues, v.Vue())
+	}
+	s.ecrireJSON(w, vues)
+}
+
+func (s *Serveur) trouverVerif(id string) *Verif {
+	for _, v := range s.verifs {
+		if v.ID == id {
+			return v
+		}
+	}
+	return nil
+}
+
+func (s *Serveur) apiVerifier(w http.ResponseWriter, r *http.Request) {
+	var c struct {
+		ID string `json:"id"`
+	}
+	_ = lireCorps(r, &c)
+	if c.ID == "" || c.ID == "tout" {
+		for _, v := range s.verifs {
+			v.Verifier(s.kitCourant())
+		}
+		s.msg(w, "Checks started (the model connection takes up to a minute).")
+		return
+	}
+	v := s.trouverVerif(c.ID)
+	if v == nil {
+		s.erreur(w, http.StatusNotFound, "Unknown check")
+		return
+	}
+	v.Verifier(s.kitCourant())
+	s.ecrireJSON(w, map[string]any{"message_key": "Check started again.", "tache": v.tache.ID})
+}
+
+func (s *Serveur) apiReparer(w http.ResponseWriter, r *http.Request) {
+	var c struct {
+		ID string `json:"id"`
+	}
+	_ = lireCorps(r, &c)
+	v := s.trouverVerif(c.ID)
+	if v == nil {
+		s.erreur(w, http.StatusNotFound, "Unknown check")
+		return
+	}
+	msg, err := v.Reparer(s.kitCourant())
+	if err != nil {
+		s.erreur(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	s.ecrireJSON(w, map[string]any{"message_key": msg, "tache": v.Vue().ReparationID})
+}
+
+func (s *Serveur) apiClaude(w http.ResponseWriter, r *http.Request) {
+	var c struct {
+		ID         string `json:"id"`
+		Complement string `json:"complement"`
+	}
+	_ = lireCorps(r, &c)
+	v := s.trouverVerif(c.ID)
+	if v == nil {
+		s.erreur(w, http.StatusNotFound, "Unknown check")
+		return
+	}
+	t, err := v.DemanderAClaude(s.kitCourant(), c.Complement)
+	if err != nil {
+		s.erreur(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.ecrireJSON(w, map[string]any{"message_key": "Claude is repairing “{0}”.", "args": []string{v.Titre}, "tache": t.ID})
+}
+
+func (s *Serveur) apiLibre(w http.ResponseWriter, r *http.Request) {
+	var c struct {
+		Texte string `json:"texte"`
+	}
+	_ = lireCorps(r, &c)
+	if strings.TrimSpace(c.Texte) == "" {
+		s.erreur(w, http.StatusBadRequest, "Missing text")
+		return
+	}
+	t, err := DemandeLibre(s.kitCourant(), c.Texte)
+	if err != nil {
+		s.erreur(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.ecrireJSON(w, map[string]any{"message_key": "Request sent to Claude.", "tache": t.ID})
+}
+
+func (s *Serveur) apiBarriere(w http.ResponseWriter, r *http.Request) {
+	t := TestBarriere(s.kitCourant())
+	s.ecrireJSON(w, map[string]any{"message_key": "Sandbox test started (1 to 2 minutes).", "tache": t.ID})
+}
+
+func (s *Serveur) apiInstaller(w http.ResponseWriter, r *http.Request) {
+	if err := FenetrePowerShell(s.kitCourant(), `commands\install.ps1`); err != nil {
+		s.erreur(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.msg(w, "Installer opened in a window. When it is done, come back here and run “Check everything”.")
+}
+
+func (s *Serveur) apiTache(w http.ResponseWriter, r *http.Request) {
+	t := TrouverTache(r.PathValue("id"))
+	if t == nil {
+		s.erreur(w, http.StatusNotFound, "Unknown task")
+		return
+	}
+	vue := t.Vue(600)
+	ev := []Evenement{}
+	for _, l := range vue.Sortie {
+		if strings.HasPrefix(l, "{") {
+			ev = append(ev, Traduire(l)...)
+		} else {
+			ev = append(ev, Evenement{Genre: "brut", Titre: l, Brut: l})
+		}
+	}
+	s.ecrireJSON(w, map[string]any{"tache": vue, "evenements": ev})
+}
+
+// ----------------------------------------------------------------------------- options
+
+type OptionsVue struct {
+	Projets                   []Projet   `json:"projets"`
+	Kit                       string     `json:"kit"`
+	KitValide                 bool       `json:"kit_valide"`
+	LancerPiloteAuDemarrage   bool       `json:"lancer_pilote_au_demarrage"`
+	BureauVirtuel             bool       `json:"bureau_virtuel"`
+	ProgrammesSupplementaires string     `json:"programmes_supplementaires"`
+	DemarrageWindows          bool       `json:"demarrage_windows"`
+	MotDePasse                bool       `json:"mot_de_passe"`
+	Bureau                    EtatBureau `json:"bureau"`
+}
+
+func (s *Serveur) apiOptions(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	c := s.config
+	s.mu.Unlock()
+	projets := append([]Projet{}, c.Projets...)
+	if projets == nil {
+		projets = []Projet{}
+	}
+	s.ecrireJSON(w, OptionsVue{projets, c.Kit, s.kitCourant().Valide(), c.LancerPiloteAuDemarrage, c.BureauVirtuel, c.ProgrammesSupplementaires, DemarrageWindowsActif(), c.MotDePasseHash != "", s.bureau.Etat()})
+}
+
+func (s *Serveur) apiEcrireOptions(w http.ResponseWriter, r *http.Request) {
+	var c struct {
+		Kit                       string `json:"kit"`
+		LancerPiloteAuDemarrage   bool   `json:"lancer_pilote_au_demarrage"`
+		BureauVirtuel             bool   `json:"bureau_virtuel"`
+		ProgrammesSupplementaires string `json:"programmes_supplementaires"`
+		DemarrageWindows          bool   `json:"demarrage_windows"`
+	}
+	if err := lireCorps(r, &c); err != nil {
+		s.erreur(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	nouveau := Kit{strings.TrimSpace(c.Kit)}
+	if nouveau.Racine != s.kitCourant().Racine {
+		if !nouveau.Valide() {
+			s.erreur(w, http.StatusBadRequest, "This folder does not contain system\\pilot.sh")
+			return
+		}
+		s.kitMu.Lock()
+		s.kit = nouveau
+		s.kitMu.Unlock()
+		s.bureau.DefinirKit(nouveau)
+		s.ecrireListeProjets()
+	}
+	s.config.Kit = nouveau.Racine
+	s.config.LancerPiloteAuDemarrage = c.LancerPiloteAuDemarrage
+	s.config.BureauVirtuel = c.BureauVirtuel
+	s.config.ProgrammesSupplementaires = c.ProgrammesSupplementaires
+	s.bureau.DefinirReglages(c.BureauVirtuel, strings.Split(c.ProgrammesSupplementaires, "\n"))
+	if c.DemarrageWindows != DemarrageWindowsActif() {
+		if err := DemarrageWindows(c.DemarrageWindows); err != nil {
+			s.erreur(w, http.StatusInternalServerError, "Start with Windows: "+err.Error())
+			return
+		}
+	}
+	if err := ecrireConfig(s.config); err != nil {
+		s.erreur(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.msg(w, "Options saved.")
+}
+
+func (s *Serveur) apiBureau(w http.ResponseWriter, r *http.Request) {
+	var err error
+	switch r.PathValue("action") {
+	case "voir":
+		err = s.bureau.Voir()
+	case "revenir":
+		err = s.bureau.Revenir()
+	case "ramener":
+		err = s.bureau.RamenerTout()
+	default:
+		s.erreur(w, http.StatusNotFound, "Unknown action")
+		return
+	}
+	if err != nil {
+		s.erreur(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.ecrireJSON(w, map[string]bool{"ok": true})
+}
+
+func (s *Serveur) apiOuvrir(w http.ResponseWriter, r *http.Request) {
+	var c struct {
+		Quoi string `json:"quoi"`
+	}
+	_ = lireCorps(r, &c)
+	k := s.kitCourant()
+	chemins := map[string]string{"kit": k.Racine, "logs": k.Journaux(), "a_faire": filepath.Join(k.Journaux(), "TODO_FOR_YOU.md")}
+	if p, ok := s.projet(r); ok {
+		chemins["projet"] = p.Dossier
+		chemins["atelier"] = p.Atelier()
+		chemins["plan"] = p.Plan()
+		chemins["log"] = p.PiloteLog()
+		chemins["demande"] = p.Demande()
+		chemins["attente"] = p.FileAttente()
+		chemins["deliverable"] = filepath.Join(p.Dossier, "deliverable")
+	}
+	ch, ok := chemins[c.Quoi]
+	if !ok {
+		s.erreur(w, http.StatusBadRequest, "Unknown")
+		return
+	}
+	if err := Ouvrir(ch); err != nil {
+		s.erreur(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.ecrireJSON(w, map[string]bool{"ok": true})
+}
