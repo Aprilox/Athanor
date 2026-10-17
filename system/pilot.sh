@@ -429,7 +429,9 @@ for f in sorted(os.listdir(d)):
     if not m: continue
     meta = dict((l.split(":", 1)[0].strip(), l.split(":", 1)[1].strip()) for l in m.group(1).splitlines() if ":" in l)
     a = {"description": meta.get("description", ""), "prompt": m.group(2).strip()}
+    # tools: an allowlist (MCP tools and skills are lost unless named); disallowedTools: the rest is inherited
     if meta.get("tools"): a["tools"] = [x.strip() for x in meta["tools"].split(",")]
+    if meta.get("disallowedTools"): a["disallowedTools"] = [x.strip() for x in meta["disallowedTools"].split(",")]
     nom = meta.get("name", f[:-3])
     template = meta.get("model") or (simple if nom == "executor" else "") or sous
     if template:
