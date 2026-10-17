@@ -479,3 +479,22 @@ input.large { flex: 1; min-width: 200px; width: auto; }
 .membre .badge { margin-left: 4px; white-space: nowrap; display: inline-block; }
 .agent-form textarea { width: 100%; }
 
+
+/* For you: tasks only the user can do */
+.pastille-alerte { background: var(--attention); color: var(--sur-attention); }
+.pv-bandeau { display: block; text-decoration: none; color: inherit; border-color: var(--attention); }
+.pv-bandeau:hover { filter: brightness(1.1); }
+.pv-carte.pv-close { opacity: .8; }
+.pv-tete { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.pv-etat { font-size: 12px; padding: 1px 8px; border-radius: 10px; border: 1px solid currentColor; white-space: nowrap; }
+.pv-vous { color: var(--attention); }
+.pv-claude { color: var(--accent); }
+.pv-ok { color: var(--ok); }
+.pv-details { white-space: pre-wrap; margin: 10px 0; line-height: 1.5; }
+.pv-note { border-left: 3px solid var(--attention); padding: 6px 10px; margin: 10px 0; white-space: pre-wrap; }
+.pv-note-ok { border-left-color: var(--ok); }
+.pv-donne { color: var(--ok); font-size: 12px; }
+.pv-form { margin-top: 10px; }
+.pv-form textarea, .pv-form input[type=password] { width: 100%; }
+.pv-histo { margin: 6px 0 0 0; padding-left: 18px; }
+.pv-histo li { margin: 3px 0; white-space: pre-wrap; }

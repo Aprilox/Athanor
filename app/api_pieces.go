@@ -123,6 +123,8 @@ func (s *Serveur) apiPiece(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case cible == "demande":
 		fichier, sous = p.Demande(), "request"
+	case reCibleTache.MatchString(cible): // a file for an answer to a task (api_pourvous.go): listed in the answer
+		sous = "for-you-" + reCibleTache.FindStringSubmatch(cible)[1]
 	case nomFichierSur(cible):
 		if _, err := dossierSur(p.Dossier, ".athanor", "queue"); err != nil {
 			s.erreur(w, http.StatusBadRequest, err.Error())
@@ -188,6 +190,10 @@ func (s *Serveur) apiPiece(w http.ResponseWriter, r *http.Request) {
 	entete := enteteFichiers[s.langue()]
 	if entete == "" {
 		entete = enteteFichiers["en"]
+	}
+	if fichier == "" {
+		s.ecrireJSON(w, map[string]any{"nom": final, "chemin": chemin, "taille": n})
+		return
 	}
 	if err := ajouterLignePiece(fichier, "- `"+chemin+"` ("+genre+", "+tailleLisible(n)+")", entete); err != nil {
 		s.erreur(w, http.StatusInternalServerError, err.Error())

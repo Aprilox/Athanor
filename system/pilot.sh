@@ -211,6 +211,45 @@ synchroniser_demande() {  # flags a change of .athanor/REQUEST.md (Claude re-rea
   fi
 }
 
+# Tasks for the user (system/taches.py; page "For you" of the application): what Claude cannot do itself.
+taches_etat() {
+  local j; j=$(timeout 20 python3 -B "$SYSTEME/taches.py" etat "$PROJECT" 2>/dev/null 9>&-)
+  POUR_VOUS=$(entier "$(printf '%s' "$j" | jq -r '.pour_vous // 0' 2>/dev/null)" 0)
+  A_TRAITER=$(entier "$(printf '%s' "$j" | jq -r '.a_traiter // 0' 2>/dev/null)" 0)
+}
+signaler_reponses() {  # before a cycle: tasks the user answered are checked first (FOR_YOU_ANSWERED, CLAUDE.md)
+  taches_etat
+  if [ "$A_TRAITER" -gt 0 ]; then
+    [ -f "$ETAT/FOR_YOU_ANSWERED" ] || log "You answered $A_TRAITER task(s): Claude checks them first."
+    date '+%Y-%m-%d %H:%M' | publier "$ETAT/FOR_YOU_ANSWERED"
+  else
+    rm -f "$ETAT/FOR_YOU_ANSWERED"
+  fi
+  if [ -f "$ETAT/WAITING_FOR_YOU" ] && { [ "$POUR_VOUS" = 0 ] || [ "$A_TRAITER" -gt 0 ]; }; then rm -f "$ETAT/WAITING_FOR_YOU"; fi
+  return 0
+}
+attendre_utilisateur() {  # every remaining milestone waits for the user: no cycle until an answer
+  taches_etat
+  if [ "$POUR_VOUS" = 0 ] || [ "$A_TRAITER" -gt 0 ]; then rm -f "$ETAT/WAITING_FOR_YOU"; return 0; fi
+  log "Waiting for you: $POUR_VOUS task(s) on the For you page. The pilot resumes as soon as you answer one."
+  ETAT_PHASE=attente_vous; statut "Waiting for you ($POUR_VOUS task(s))"
+  local sha debut_attente=$(date +%s) n=0
+  sha=$(sha256sum "$ETAT/REQUEST.md" 2>/dev/null | cut -d' ' -f1)
+  while [ -f "$ETAT/WAITING_FOR_YOU" ] && [ ! -f "$ETAT/STOP" ]; do
+    dormir 10
+    taches_etat
+    { [ "$A_TRAITER" -gt 0 ] || [ "$POUR_VOUS" = 0 ]; } && break
+    [ "$(sha256sum "$ETAT/REQUEST.md" 2>/dev/null | cut -d' ' -f1)" != "$sha" ] && break   # a note added to the request
+    n=$(( n + 1 )); [ $(( n % 30 )) = 0 ] && statut "Waiting for you ($POUR_VOUS task(s))"
+  done
+  rm -f "$ETAT/WAITING_FOR_YOU"
+  # the time spent waiting for the user does not count towards MAX_HOURS
+  DEBUT=$(( DEBUT + $(date +%s) - debut_attente )); echo "$DEBUT" > "$PRIVE/debut"
+  [ -f "$ETAT/STOP" ] || log "Resuming: an answer arrived (or the request changed)."
+  ETAT_PHASE=entre_cycles
+  return 0
+}
+
 afficher_en_direct() {  # turns Claude's JSON stream into readable lines
   jq --unbuffered -rR '
     def court(n): tostring | gsub("\\s+"; " ") | if length > n then .[0:n] + "…" else . end;
@@ -600,7 +639,7 @@ fi
 [ -f "$PRIVE/debut" ] || entier "$(cat "$ETAT/debut" 2>/dev/null)" "$(date +%s)" > "$PRIVE/debut"
 DEBUT=$(entier "$(cat "$PRIVE/debut" 2>/dev/null)" "$(date +%s)")
 
-BUT="/goal The next unticked milestone of .athanor/PLAN.md is completed and verified according to your instructions: bash .athanor/check.sh has been run and its output, showing success, is displayed in this conversation; .athanor/PLAN.md ticks this milestone; .athanor/LOG.md has a new entry; git log shows the commit. If .athanor/PLAN.md does not exist yet, this milestone is the framing phase described in your instructions, with no check.sh required. If all milestones are already ticked, the goal is reached when .athanor/FINAL_REPORT.md exists and contains the line STATUS: DONE. Or stop after ${MAX_TURNS_PER_CYCLE} turns. ${PHRASE_LANGUE}"
+BUT="/goal The next unticked milestone of .athanor/PLAN.md is completed and verified according to your instructions: bash .athanor/check.sh has been run and its output, showing success, is displayed in this conversation; .athanor/PLAN.md ticks this milestone; .athanor/LOG.md has a new entry; git log shows the commit. If .athanor/PLAN.md does not exist yet, this milestone is the framing phase described in your instructions, with no check.sh required. If all milestones are already ticked, the goal is reached when .athanor/FINAL_REPORT.md exists and contains the line STATUS: DONE. A milestone that waits for a task of the user (athanor todo list) is passed over for the next one; if .athanor/FOR_YOU_ANSWERED exists, every answered task is handled first (athanor todo ok, missing or resolved); if every unticked milestone waits for the user, the goal is reached once athanor todo wait has run. Or stop after ${MAX_TURNS_PER_CYCLE} turns. ${PHRASE_LANGUE}"
 
 # GitHub (system/github.sh): when the user linked the project to a repository with automatic push,
 # its commits go there after each successful milestone and at the delivery. Silent when not linked;
@@ -651,6 +690,7 @@ while true; do
   fi
 
   synchroniser_demande
+  signaler_reponses
   preparer_cycle
   appliquer_identite
   preparer_equipe
@@ -691,7 +731,7 @@ while true; do
     if [ -f "$ETAT/PLAN.md" ] && [ -f "$ETAT/REQUEST_CHANGED" ] && parallele_plan_a_des_vagues; then
       but_cycle="/goal The change of .athanor/REQUEST.md (flagged by .athanor/REQUEST_CHANGED) is folded into .athanor/PLAN.md as waves according to your parallel-mode instructions, the change is noted in .athanor/LOG.md, .athanor/REQUEST_CHANGED is deleted and the plan is committed, without writing any code. Or stop after 15 turns. ${PHRASE_LANGUE}"
       plan_seul=1; log "Parallel mode: the request changed, the lead updates the plan first."
-    elif [ -f "$ETAT/PLAN.md" ] && [ ! -f "$ETAT/RECHECK" ] && [ ! -f "$ETAT/REQUEST_CHANGED" ] && [ ! -f "$ETAT/REVERIFY" ] && [ ! -f "$ETAT/SECRETS_FOUND.md" ] && [ ! -f "$ETAT/TIDY" ]; then
+    elif [ -f "$ETAT/PLAN.md" ] && [ ! -f "$ETAT/RECHECK" ] && [ ! -f "$ETAT/REQUEST_CHANGED" ] && [ ! -f "$ETAT/REVERIFY" ] && [ ! -f "$ETAT/SECRETS_FOUND.md" ] && [ ! -f "$ETAT/TIDY" ] && [ ! -f "$ETAT/FOR_YOU_ANSWERED" ]; then
       if parallele_plan_a_des_vagues; then
         [ "$(parallele_vague_courante | wc -l)" -ge 2 ] && mode=parallele
       else
@@ -762,10 +802,20 @@ while true; do
     log "Warning: milestone ticked without a visible successful full check; Claude will recheck first on the next cycle."
   fi
 
+  # a real wait only: a task waits for the user and no answer is pending (never a way to dodge the
+  # "cycles without progress" alert)
+  attente_vous=0
+  if [ "$etat" = ok ] && [ -f "$ETAT/WAITING_FOR_YOU" ]; then
+    taches_etat
+    if [ "$POUR_VOUS" -gt 0 ] && [ "$A_TRAITER" = 0 ]; then attente_vous=1; else rm -f "$ETAT/WAITING_FOR_YOU"; fi
+  fi
+  [ "$etat" = ok ] || rm -f "$ETAT/WAITING_FOR_YOU"
   case "$etat" in
     ok)
       erreurs=0
-      if [ "$avant" = "$apres" ]; then
+      if [ "$avant" = "$apres" ] && [ "$attente_vous" = 1 ]; then
+        sans_progres=0   # a cycle that only handed tasks to the user is not a cycle without progress
+      elif [ "$avant" = "$apres" ]; then
         sans_progres=$(( sans_progres + 1 ))
         log "Cycle $cycle finished without a new commit ($sans_progres/$MAX_CYCLES_WITHOUT_PROGRESS)."
         if [ "$sans_progres" -ge "$MAX_CYCLES_WITHOUT_PROGRESS" ]; then
@@ -834,4 +884,5 @@ while true; do
       dormir $(( pause * 60 ))
       ;;
   esac
+  [ "$attente_vous" = 1 ] && attendre_utilisateur
 done

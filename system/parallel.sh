@@ -155,6 +155,7 @@ You carry out **only** this milestone, in this folder (git worktree of the proje
 - Do not modify \`.athanor/PLAN.md\` or \`.athanor/LOG.md\`: the project lead handles them after the merge.
 - $aides
 - Check with \`bash .athanor/check.sh quick <pattern>\` (or your milestone's tests if there is no script), then \`git add -A && git commit -m "$1: ..."\` on your branch. Commit even partial work, and say so.
+- Something only the user can do (an account, a payment, a code, a key)? Do not ask anyone and do not create a task: do what you can without it and say exactly what is missing in your report; the lead hands it to the user.
 - End with a report of at most 10 lines: done / not done / files touched / what the lead needs to know to merge.
 EOF
 }
@@ -185,7 +186,7 @@ parallele_lancer_ouvrier() {
   g -C "$PROJECT" branch -D "auto/$ident" >/dev/null 2>&1 || true
   g -C "$PROJECT" worktree add -q -b "auto/$ident" "$trav" HEAD >/dev/null 2>&1 || { log "Worker $ident: cannot create the worktree."; return 1; }
   rm -rf "$trav/.athanor" && mkdir -p "$trav/.athanor/screenshots" "$trav/.athanor/.verif"
-  for f in PLAN.md REQUEST.md check.sh PC_TOOLS.md PC_TOOLS_GUIDE.md MAP.md BUGS.md; do
+  for f in PLAN.md REQUEST.md check.sh PC_TOOLS.md PC_TOOLS_GUIDE.md MAP.md BUGS.md secrets.env; do
     [ -f "$ETAT/$f" ] && [ ! -L "$ETAT/$f" ] && cp -f "$ETAT/$f" "$trav/.athanor/$f"
   done
   # the working documents and the files attached to the requests: the worker's sandbox only sees its

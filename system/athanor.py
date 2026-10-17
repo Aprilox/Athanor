@@ -7,6 +7,8 @@
   athanor map                 writes .athanor/MAP.md: files, functions, outlines
   athanor archive              archives old checked milestones and old
                                    log entries into .athanor/archives/
+  athanor todo ...             tasks for the user (what you cannot do yourself):
+                                   add, edit, list, ok, missing, resolved, wait
 
 Everything is deterministic: nothing is summarised or guessed, nothing is deleted.
 """
@@ -292,6 +294,11 @@ def archiver(args):
 
 # ============================================================================
 def main():
+    if len(sys.argv) >= 2 and sys.argv[1] == "todo":
+        sys.dont_write_bytecode = True
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import taches
+        return taches.main(sys.argv[2:], str(RACINE))
     if len(sys.argv) < 2 or sys.argv[1] not in ("screenshots", "map", "archive"):
         print(__doc__)
         return 1

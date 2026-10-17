@@ -3,8 +3,8 @@
 1 ICON "athanor.ico"
 
 1 VERSIONINFO
-FILEVERSION     2,10,0,0
-PRODUCTVERSION  2,10,0,0
+FILEVERSION     2,11,0,0
+PRODUCTVERSION  2,11,0,0
 FILEOS          0x40004
 FILETYPE        0x1
 BEGIN
@@ -13,11 +13,11 @@ BEGIN
     BLOCK "040904B0"
     BEGIN
       VALUE "FileDescription",  "Athanor"
-      VALUE "FileVersion",      "2.10.0.0"
+      VALUE "FileVersion",      "2.11.0.0"
       VALUE "InternalName",     "Athanor"
       VALUE "OriginalFilename", "Athanor.exe"
       VALUE "ProductName",      "Athanor"
-      VALUE "ProductVersion",   "2.10.0"
+      VALUE "ProductVersion",   "2.11.0"
       VALUE "LegalCopyright",   "MIT License"
     END
   END

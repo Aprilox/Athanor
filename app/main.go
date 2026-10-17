@@ -49,6 +49,7 @@ func main() {
 	s := nouveauServeur(config)
 	s.cleAcces = aleatoire(24) // only the windows Athanor opens can use the interface (acces.go)
 	s.demarrerProjetsAuto()
+	go s.surveillerTaches() // system notifications for the tasks of the user (api_pourvous.go)
 
 	mux := http.NewServeMux()
 	s.routes(mux)
@@ -65,7 +66,7 @@ func main() {
 		b, _ := fs.ReadFile(sous, "index.html")
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-store")
-		w.Header().Set("Content-Security-Policy", "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'")
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'")
 		_, _ = w.Write([]byte(strings.Replace(string(b), "__CSRF__", s.csrf, 1)))
 	})
 
