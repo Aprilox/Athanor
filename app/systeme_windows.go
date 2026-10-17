@@ -18,6 +18,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 	"unsafe"
@@ -44,7 +45,23 @@ func fichierScript(k Kit, script string) (string, error) {
 	}
 	h := sha256.Sum256([]byte(script))
 	nom := "logs/.cmd-" + hex.EncodeToString(h[:5]) + ".sh"
-	return nom, os.WriteFile(filepath.Join(k.Racine, filepath.FromSlash(nom)), []byte("#!/usr/bin/env bash\n"+script+"\n"), 0o644)
+	// written aside then renamed: a bash already reading the same script never sees it half written
+	dest := filepath.Join(k.Racine, filepath.FromSlash(nom))
+	tmp, err := os.CreateTemp(filepath.Dir(dest), ".cmd-*.tmp")
+	if err != nil {
+		return nom, err
+	}
+	_, err = tmp.WriteString("#!/usr/bin/env bash\n" + script + "\n")
+	if e := tmp.Close(); err == nil {
+		err = e
+	}
+	if err == nil {
+		err = os.Rename(tmp.Name(), dest)
+	}
+	if err != nil {
+		os.Remove(tmp.Name())
+	}
+	return nom, err
 }
 
 // DemarrerDetache runs a WSL script in a hidden wsl.exe, detached from the application (it survives it);
@@ -136,7 +153,11 @@ func FenetreApp(url string) bool {
 	defer w.Destroy()
 	w.SetSize(1240, 820, webview2.HintMin)
 	w.Navigate(url)
+	fenetreHWND.Store(uintptr(w.Window()))
+	fenetreOuverte.Store(true)
 	w.Run()
+	fenetreOuverte.Store(false)
+	fenetreHWND.Store(0)
 	return true
 }
 
@@ -171,7 +192,7 @@ func DemarrageWindows(actif bool) error {
 	}
 	var c *exec.Cmd
 	if actif {
-		c = exec.Command("reg.exe", "add", cleRun, "/v", nomRun, "/t", "REG_SZ", "/d", fmt.Sprintf("\"%s\" --reduit", exe), "/f")
+		c = exec.Command("reg.exe", "add", cleRun, "/v", nomRun, "/t", "REG_SZ", "/d", fmt.Sprintf("\"%s\"", exe), "/f")
 	} else {
 		c = exec.Command("reg.exe", "delete", cleRun, "/v", nomRun, "/f")
 	}
@@ -226,6 +247,7 @@ var (
 	pQueryFullProcessImageNameW = kernel32.NewProc("QueryFullProcessImageNameW")
 	pCloseHandle                = kernel32.NewProc("CloseHandle")
 	pGetCurrentProcessId        = kernel32.NewProc("GetCurrentProcessId")
+	pEnumDesktopWindows         = user32.NewProc("EnumDesktopWindows")
 )
 
 type fenetre struct {
@@ -235,10 +257,13 @@ type fenetre struct {
 	pid   uint32
 }
 
-func listerFenetres() []fenetre {
-	var liste []fenetre
-	moi, _, _ := pGetCurrentProcessId.Call()
-	cb := syscall.NewCallback(func(hwnd uintptr, _ uintptr) uintptr {
+// One callback for the whole program: Go allows only a limited number of callbacks (about 2000) and
+// never frees them, so a closure created at every scan would end the application after a while.
+var (
+	enumMu    sync.Mutex
+	enumListe []fenetre
+	enumMoi   uintptr
+	enumCB    = syscall.NewCallback(func(hwnd uintptr, _ uintptr) uintptr {
 		if v, _, _ := pIsWindowVisible.Call(hwnd); v == 0 {
 			return 1
 		}
@@ -246,64 +271,180 @@ func listerFenetres() []fenetre {
 		if uint32(ex)&0x80 != 0 {                                   // WS_EX_TOOLWINDOW
 			return 1
 		}
+		var pid uint32 // checked first: asking our own window for its title could wait on our own threads
+		pGetWindowThreadProcessId.Call(hwnd, uintptr(unsafe.Pointer(&pid)))
+		if pid == 0 || uintptr(pid) == enumMoi {
+			return 1
+		}
 		buf := make([]uint16, 256)
 		n, _, _ := pGetWindowTextW.Call(hwnd, uintptr(unsafe.Pointer(&buf[0])), 256)
 		if n == 0 {
 			return 1
 		}
-		var pid uint32
-		pGetWindowThreadProcessId.Call(hwnd, uintptr(unsafe.Pointer(&pid)))
-		if pid == 0 || uintptr(pid) == moi {
-			return 1
-		}
-		exe := ""
-		h, _, _ := pOpenProcess.Call(0x1000, 0, uintptr(pid)) // PROCESS_QUERY_LIMITED_INFORMATION
-		if h != 0 {
-			b := make([]uint16, 1024)
-			taille := uint32(len(b))
-			if r, _, _ := pQueryFullProcessImageNameW.Call(h, 0, uintptr(unsafe.Pointer(&b[0])), uintptr(unsafe.Pointer(&taille))); r != 0 {
-				exe = syscall.UTF16ToString(b[:taille])
-			}
-			pCloseHandle.Call(h)
-		}
-		liste = append(liste, fenetre{hwnd, syscall.UTF16ToString(buf[:n]), exe, pid})
+		enumListe = append(enumListe, fenetre{hwnd, syscall.UTF16ToString(buf[:n]), exeDuPid(pid), pid})
 		return 1
 	})
-	pEnumWindows.Call(cb, 0)
-	return liste
+)
+
+// listerFenetres: the visible, titled windows of other programs on the current desktop.
+func listerFenetres() []fenetre {
+	enumMu.Lock()
+	defer enumMu.Unlock()
+	enumListe = nil
+	enumMoi, _, _ = pGetCurrentProcessId.Call()
+	pEnumWindows.Call(enumCB, 0)
+	return enumListe
 }
 
+// fenetresDuBureau: the same, on another desktop (Claude's isolated desktop).
+func fenetresDuBureau(bureau uintptr) []fenetre {
+	enumMu.Lock()
+	defer enumMu.Unlock()
+	enumListe = nil
+	enumMoi, _, _ = pGetCurrentProcessId.Call()
+	pEnumDesktopWindows.Call(bureau, enumCB, 0)
+	return enumListe
+}
+
+// exeDuPid returns the full path of a process's executable ("" when unknown); kept in a small cache
+// because the window hook asks for it on every new window.
+// Entries live 10 s: a process number can be given again to another program.
+type exeConnu struct {
+	exe   string
+	quand time.Time
+}
+
+var (
+	cacheExeMu sync.Mutex
+	cacheExe   = map[uint32]exeConnu{}
+)
+
+func exeDuPid(pid uint32) string {
+	cacheExeMu.Lock()
+	defer cacheExeMu.Unlock()
+	if e, ok := cacheExe[pid]; ok && time.Since(e.quand) < 10*time.Second {
+		return e.exe
+	}
+	exe := ""
+	h, _, _ := pOpenProcess.Call(0x1000, 0, uintptr(pid)) // PROCESS_QUERY_LIMITED_INFORMATION
+	if h != 0 {
+		b := make([]uint16, 1024)
+		taille := uint32(len(b))
+		if r, _, _ := pQueryFullProcessImageNameW.Call(h, 0, uintptr(unsafe.Pointer(&b[0])), uintptr(unsafe.Pointer(&taille))); r != 0 {
+			exe = syscall.UTF16ToString(b[:taille])
+		}
+		pCloseHandle.Call(h)
+	}
+	if len(cacheExe) > 512 {
+		cacheExe = map[uint32]exeConnu{}
+	}
+	if exe != "" {
+		cacheExe[pid] = exeConnu{exe, time.Now()}
+	}
+	return exe
+}
+
+var (
+	pSetWinEventHook            = user32.NewProc("SetWinEventHook")
+	pGetMessageW                = user32.NewProc("GetMessageW")
+	pGetAncestor                = user32.NewProc("GetAncestor")
+	pIsWindow                   = user32.NewProc("IsWindow")
+	pSetWindowLongW             = user32.NewProc("SetWindowLongW")
+	pSetLayeredWindowAttributes = user32.NewProc("SetLayeredWindowAttributes")
+)
+
+const (
+	gwlExStyle     = uintptr(0xFFFFFFEC) // GWL_EXSTYLE = -20 (an int: the upper half is ignored)
+	wsExToolwindow = 0x80
+	wsExLayered    = 0x80000
+	evObjetAffiche = 0x8002 // EVENT_OBJECT_SHOW
+)
+
+// rendreInvisible makes a window fully transparent while it is sent to the "Claude" desktop, so it
+// never shows on the user's screen. It returns the original extended style to put back, or false
+// when the window cannot be made transparent (already layered: it is then only moved).
+func rendreInvisible(h uintptr) (uint32, bool) {
+	ex, _, _ := pGetWindowLongW.Call(h, gwlExStyle)
+	if uint32(ex)&wsExLayered != 0 {
+		return 0, false
+	}
+	pSetWindowLongW.Call(h, gwlExStyle, uintptr(uint32(ex)|wsExLayered))
+	if r, _, _ := pSetLayeredWindowAttributes.Call(h, 0, 0, 2); r == 0 { // LWA_ALPHA, alpha 0
+		pSetWindowLongW.Call(h, gwlExStyle, uintptr(uint32(ex)))
+		return 0, false
+	}
+	return uint32(ex), true
+}
+
+func rendreVisible(h uintptr, ex uint32) { pSetWindowLongW.Call(h, gwlExStyle, uintptr(ex)) }
+
+// pasMasquee: a window being handled whose style was not changed (nothing to put back).
+const pasMasquee = ^uint32(0)
+
 type Bureau struct {
-	mu            sync.Mutex
+	mu            sync.Mutex // settings, state shown in the app, desktop switches
+	mf            sync.Mutex // the window maps below (short critical sections only)
+	mh            sync.Mutex // one call to the utility at a time
 	kit           Kit
 	helper        string
 	disponible    bool
 	message       string
 	numClaude     int // number of the "Claude" desktop (-1 = unknown)
+	verifie       time.Time
 	deplacees     map[uintptr]bool
-	exclues       map[uintptr]bool // windows the user brought back: never moved again
-	PilotesActifs func() bool      // set by the server: at least one pilot running
+	exclues       map[uintptr]bool   // windows the user brought back: never moved again
+	masquees      map[uintptr]uint32 // windows made transparent, on their way (original extended style)
+	aDeplacer     chan uintptr
+	regles        atomic.Value // *reglesBureau: what the window hook needs, without waiting for mu
+	PilotesActifs func() bool  // set by the server: at least one pilot running
 	vues          []string
 	nbDeplacees   int
 	retour        int
 	dossiers      []string
 	Programmes    []string
 	Actif         bool
+	isole         uintptr // Claude's isolated desktop (0 = not available: virtual desktop instead)
+	restantes     int     // windows open on it
+	barre         barreRetour
+	Langue        func() string
+}
+
+// reglesBureau is a snapshot read by the window hook: it must answer at once, even while the
+// loop or a desktop switch holds mu.
+type reglesBureau struct {
+	actif      bool // option on, desktop ready, at least one pilot running
+	numClaude  int
+	programmes []string
+	dossiers   []string
 }
 
 func NouveauBureau(k Kit) *Bureau {
-	b := &Bureau{kit: k, numClaude: -1, retour: 0, deplacees: map[uintptr]bool{}, exclues: map[uintptr]bool{}, Actif: true}
+	b := &Bureau{kit: k, numClaude: -1, retour: 0, deplacees: map[uintptr]bool{}, exclues: map[uintptr]bool{},
+		masquees: map[uintptr]uint32{}, aDeplacer: make(chan uintptr, 64), Actif: true}
+	b.regles.Store(&reglesBureau{numClaude: -1})
 	go b.boucle()
+	go b.ecouter()
+	go b.deplaceur()
 	return b
 }
 
-func (b *Bureau) DefinirKit(k Kit)           { b.mu.Lock(); b.kit = k; b.mu.Unlock() }
+func (b *Bureau) DefinirKit(k Kit) {
+	b.mu.Lock()
+	if b.kit.Racine != "" && b.kit.Racine != k.Racine { // the previous tool folder's gateways stop isolating
+		os.Remove(filepath.Join(b.kit.Racine, "logs", "bureau-isole"))
+	}
+	b.kit = k
+	b.mu.Unlock()
+}
 func (b *Bureau) DefinirDossiers(d []string) { b.mu.Lock(); b.dossiers = d; b.mu.Unlock() }
 
 // DefinirReglages changes the activation and the list of programs (under lock: the loop reads them).
 func (b *Bureau) DefinirReglages(actif bool, programmes []string) {
 	b.mu.Lock()
 	b.Actif, b.Programmes = actif, programmes
+	if !actif {
+		b.regles.Store(&reglesBureau{numClaude: -1})
+	}
 	b.mu.Unlock()
 }
 
@@ -341,6 +482,8 @@ func (b *Bureau) preparerHelper() error {
 
 // appel runs the utility; the exit code is the desktop number of the "pipeline" (or -1).
 func (b *Bureau) appel(args ...string) (int, string, error) {
+	b.mh.Lock()
+	defer b.mh.Unlock()
 	c := exec.Command(b.helper, append([]string{"/Quiet"}, args...)...)
 	cacherFenetre(c)
 	out, err := c.CombinedOutput()
@@ -371,16 +514,19 @@ func (b *Bureau) assurerBureau() (int, error) {
 	return n, nil
 }
 
-func (b *Bureau) appartient(f fenetre) bool {
-	exe := strings.ToLower(f.exe)
+func appartient(r *reglesBureau, exe string) bool {
+	exe = strings.ToLower(exe)
+	if exe == "" {
+		return false
+	}
 	base := exe[strings.LastIndex(exe, "\\")+1:]
-	for _, p := range b.Programmes {
+	for _, p := range r.programmes {
 		p = strings.ToLower(strings.TrimSpace(p))
 		if p != "" && (base == p || strings.HasPrefix(base, strings.TrimSuffix(p, ".exe"))) {
 			return true
 		}
 	}
-	for _, d := range append([]string{filepath.Join(b.kit.Racine, "tools")}, b.dossiers...) {
+	for _, d := range r.dossiers {
 		if d != "" && strings.HasPrefix(exe, strings.ToLower(d)) {
 			return true
 		}
@@ -389,12 +535,138 @@ func (b *Bureau) appartient(f fenetre) bool {
 	return false
 }
 
+// ecouter asks Windows to report every window that appears (out-of-context event hook, on a
+// thread of its own with its message loop): a pilot's window is caught the moment it shows,
+// made transparent and handed to the mover, instead of waiting for the next scan.
+func (b *Bureau) ecouter() {
+	runtime.LockOSThread()
+	cb := syscall.NewCallback(func(hook, ev, hwnd, objet, enfant, thread, temps uintptr) uintptr {
+		if int32(objet) != 0 || int32(enfant) != 0 || hwnd == 0 { // OBJID_WINDOW, CHILDID_SELF
+			return 0
+		}
+		if racine, _, _ := pGetAncestor.Call(hwnd, 2); racine != hwnd { // GA_ROOT: top-level windows only
+			return 0
+		}
+		b.nouvelleFenetre(hwnd)
+		return 0
+	})
+	// WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS
+	if h, _, _ := pSetWinEventHook.Call(evObjetAffiche, evObjetAffiche, 0, cb, 0, 0, 0x0000|0x0002); h == 0 {
+		return // the scan of the loop still does the job
+	}
+	var msg [48]byte
+	for {
+		if r, _, _ := pGetMessageW.Call(uintptr(unsafe.Pointer(&msg[0])), 0, 0, 0); int32(r) <= 0 {
+			return
+		}
+	}
+}
+
+func (b *Bureau) nouvelleFenetre(h uintptr) {
+	r, _ := b.regles.Load().(*reglesBureau)
+	if r == nil || !r.actif || r.numClaude < 0 {
+		return
+	}
+	if ex, _, _ := pGetWindowLongW.Call(h, gwlExStyle); uint32(ex)&wsExToolwindow != 0 {
+		return // tooltips, menus, floating palettes: they follow their owner
+	}
+	var pid uint32
+	pGetWindowThreadProcessId.Call(h, uintptr(unsafe.Pointer(&pid)))
+	if pid == 0 || !appartient(r, exeDuPid(pid)) {
+		return
+	}
+	b.mf.Lock()
+	_, deja := b.masquees[h]
+	if b.deplacees[h] || b.exclues[h] {
+		b.mf.Unlock()
+		return
+	}
+	if !deja {
+		b.masquees[h] = pasMasquee // reserved: the style change below is done outside the lock
+	}
+	b.mf.Unlock()
+	if !deja {
+		// (changing the style of another program's window waits for it: never under mf)
+		if ex, ok := rendreInvisible(h); ok {
+			b.mf.Lock()
+			b.masquees[h] = ex
+			b.mf.Unlock()
+		}
+	}
+	select {
+	case b.aDeplacer <- h:
+	default: // queue full: the loop's scan catches it
+	}
+}
+
+// deplaceur sends the caught windows to the "Claude" desktop, then makes them visible again there.
+// A window that has just appeared is not always movable yet: a few tries, 120 ms apart.
+func (b *Bureau) deplaceur() {
+	for h := range b.aDeplacer {
+		r, _ := b.regles.Load().(*reglesBureau)
+		ok := false
+		for essai := 0; r != nil && r.numClaude >= 0 && essai < 6 && !ok; essai++ {
+			if essai > 0 {
+				time.Sleep(120 * time.Millisecond)
+			}
+			if v, _, _ := pIsWindow.Call(h); v == 0 {
+				break
+			}
+			if n, _, err := b.appel("/GetDesktop:"+strconv.Itoa(r.numClaude), "/MoveWindowHandle:"+strconv.FormatUint(uint64(h), 10)); err == nil && n >= 0 {
+				ok = true
+			}
+		}
+		b.mf.Lock()
+		ex, masquee := b.masquees[h]
+		delete(b.masquees, h)
+		if ok && !b.deplacees[h] {
+			b.deplacees[h] = true
+			b.nbDeplacees++
+		}
+		b.mf.Unlock()
+		if masquee && ex != pasMasquee {
+			rendreVisible(h, ex) // on the "Claude" desktop, or back here if it could not be moved
+		}
+	}
+}
+
 func (b *Bureau) boucle() {
 	for {
 		time.Sleep(1500 * time.Millisecond)
+		// Read before taking mu: PilotesActifs takes the server's lock, and the server calls the
+		// Definir* setters (which take mu) while holding it.
+		actifs := b.PilotesActifs == nil || b.PilotesActifs()
 		b.mu.Lock()
 		if !b.Actif {
 			b.message = "Virtual desktop disabled (Options)."
+			b.marquerIsole(false)
+			b.regles.Store(&reglesBureau{numClaude: -1})
+			// Programs started while the option was on stay on Claude's desktop until they close: it stays
+			// reachable ("View Claude's desktop") as long as windows remain there, to go and close them.
+			if b.isole == 0 {
+				b.isole = ouvrirBureauIsoleExistant()
+			}
+			b.restantes = 0
+			if b.isole != 0 {
+				b.restantes = len(fenetresDuBureau(b.isole))
+			}
+			b.disponible = b.restantes > 0
+			b.mu.Unlock()
+			continue
+		}
+		// Claude's isolated desktop: the gateways start the programs there (logs/bureau-isole tells them to),
+		// so nothing has to be moved. The virtual desktop below is only the fallback.
+		if b.isole == 0 {
+			if h, err := ouvrirBureauIsole(); err == nil {
+				b.isole = h // kept open while the application runs
+			}
+		}
+		if b.isole != 0 {
+			b.marquerIsole(true)
+			b.restantes = len(fenetresDuBureau(b.isole))
+			b.disponible = true
+			b.message = "“Claude” desktop ready: the programs Claude starts open there, never on your screen."
+			b.regles.Store(&reglesBureau{numClaude: -1})
 			b.mu.Unlock()
 			continue
 		}
@@ -403,37 +675,70 @@ func (b *Bureau) boucle() {
 			b.mu.Unlock()
 			continue
 		}
-		n, err := b.assurerBureau()
-		if err != nil {
-			b.disponible, b.message = false, err.Error()
-			b.mu.Unlock()
-			continue
+		// The desktop is checked every 30 s (the user may remove it), not at every scan.
+		if b.numClaude < 0 || time.Since(b.verifie) > 30*time.Second {
+			if _, err := b.assurerBureau(); err != nil {
+				b.disponible, b.message = false, err.Error()
+				b.regles.Store(&reglesBureau{numClaude: -1})
+				b.mu.Unlock()
+				continue
+			}
+			b.verifie = time.Now()
 		}
+		n := b.numClaude
 		b.disponible = true
 		b.message = "“Claude” desktop ready: the pilots' windows are sent there automatically."
-		// Only while a pilot is running: the user's own use of the same programs is never touched when
-		// nothing is working, and a window brought back by the user stays where the user put it.
-		actifs := b.PilotesActifs == nil || b.PilotesActifs()
+		// Only while a pilot is running (actifs): the user's own use of the same programs is never touched
+		// when nothing is working, and a window brought back by the user stays where the user put it.
+		r := &reglesBureau{actif: actifs, numClaude: n, programmes: append([]string{}, b.Programmes...),
+			dossiers: append([]string{filepath.Join(b.kit.Racine, "tools")}, b.dossiers...)}
+		b.regles.Store(r)
+		b.mu.Unlock()
+
+		// Scan: windows the hook missed (opened before the app, or while the queue was full).
 		var vues []string
+		var aBouger []uintptr
 		for _, f := range listerFenetres() {
-			if !b.appartient(f) {
+			if !appartient(r, f.exe) {
 				continue
 			}
 			vues = append(vues, f.titre+" — "+f.exe[strings.LastIndex(f.exe, "\\")+1:])
+			b.mf.Lock()
 			if !actifs {
 				b.exclues[f.hwnd] = true // open while nothing runs: the user's own window
-				continue
+			} else if _, enCours := b.masquees[f.hwnd]; !b.deplacees[f.hwnd] && !b.exclues[f.hwnd] && !enCours {
+				aBouger = append(aBouger, f.hwnd)
 			}
-			if b.deplacees[f.hwnd] || b.exclues[f.hwnd] {
-				continue
-			}
-			if r, _, err := b.appel("/GetDesktop:"+strconv.Itoa(n), "/MoveWindowHandle:"+strconv.FormatUint(uint64(f.hwnd), 10)); err == nil && r >= 0 {
-				b.deplacees[f.hwnd] = true
+			b.mf.Unlock()
+		}
+		for _, h := range aBouger {
+			if r2, _, err := b.appel("/GetDesktop:"+strconv.Itoa(n), "/MoveWindowHandle:"+strconv.FormatUint(uint64(h), 10)); err == nil && r2 >= 0 {
+				b.mf.Lock()
+				b.deplacees[h] = true
 				b.nbDeplacees++
+				b.mf.Unlock()
 			}
 		}
+		b.mu.Lock()
 		b.vues = vues
 		b.mu.Unlock()
+	}
+}
+
+// marquerIsole writes or removes logs/bureau-isole in the tool folder: the gateways read it to start
+// the programs on Claude's desktop (Athanor.exe --isole), even when the application is closed.
+func (b *Bureau) marquerIsole(oui bool) {
+	if b.kit.Racine == "" {
+		return
+	}
+	f := filepath.Join(b.kit.Racine, "logs", "bureau-isole")
+	if !oui {
+		os.Remove(f)
+		return
+	}
+	if _, err := os.Stat(f); err != nil {
+		os.MkdirAll(filepath.Dir(f), 0o755)
+		os.WriteFile(f, []byte(nomBureauIsole+"\n"), 0o644)
 	}
 }
 
@@ -442,19 +747,41 @@ type EtatBureau struct {
 	Message    string   `json:"message"`
 	Deplacees  int      `json:"deplacees"`
 	Vues       []string `json:"vues"`
+	Isole      bool     `json:"isole"`
+	Restantes  int      `json:"restantes"` // windows still open on Claude's isolated desktop
+	Ecran      bool     `json:"ecran"`     // Linux: "View" shows Claude's screen (always false here)
 }
 
 func (b *Bureau) Etat() EtatBureau {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	return EtatBureau{b.disponible, b.message, b.nbDeplacees, append([]string{}, b.vues...)}
+	b.mf.Lock()
+	nb := b.nbDeplacees
+	b.mf.Unlock()
+	return EtatBureau{b.disponible, b.message, nb, append([]string{}, b.vues...), b.isole != 0, b.restantes, false}
 }
 
 func (b *Bureau) Voir() error {
+	langue := "" // read before taking mu (Langue takes the server's lock)
+	if b.Langue != nil {
+		langue = b.Langue()
+	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if !b.disponible {
 		return errors.New(b.message)
+	}
+	if b.isole != 0 {
+		// Never switch without the way back: the bar must exist on Claude's desktop first, and a
+		// watchdog brings the user back if the application disappears meanwhile.
+		if b.barre.texte == "" {
+			b.barre.texte, b.barre.revenir = texteBarre(langue), func() { basculer("Default") }
+		}
+		if err := b.barre.demarrer(b.isole); err != nil {
+			return fmt.Errorf("Cannot show Claude's desktop: %v", err)
+		}
+		lancerGardien()
+		return basculer(nomBureauIsole)
 	}
 	if n, _, err := b.appel("/GetCurrentDesktop"); err == nil && n >= 0 && n != b.numClaude {
 		b.retour = n
@@ -466,6 +793,9 @@ func (b *Bureau) Voir() error {
 func (b *Bureau) Revenir() error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	if b.isole != 0 { // always possible, even once nothing is left there
+		return basculer("Default")
+	}
 	if !b.disponible {
 		return errors.New(b.message)
 	}
@@ -479,10 +809,16 @@ func (b *Bureau) RamenerTout() error {
 	if !b.disponible {
 		return errors.New(b.message)
 	}
+	b.mf.Lock()
+	var liste []uintptr
 	for h := range b.deplacees {
-		b.appel("/GetDesktop:"+strconv.Itoa(b.retour), "/MoveWindowHandle:"+strconv.FormatUint(uint64(h), 10))
+		liste = append(liste, h)
 		b.exclues[h] = true
 	}
 	b.deplacees = map[uintptr]bool{}
+	b.mf.Unlock()
+	for _, h := range liste {
+		b.appel("/GetDesktop:"+strconv.Itoa(b.retour), "/MoveWindowHandle:"+strconv.FormatUint(uint64(h), 10))
+	}
 	return nil
 }

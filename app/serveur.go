@@ -60,6 +60,11 @@ func nouveauServeur(config Config) *Serveur {
 		}
 		return false
 	}
+	s.bureau.Langue = func() string {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		return s.config.Langue
+	}
 	s.bureau.DefinirReglages(config.BureauVirtuel, strings.Split(config.ProgrammesSupplementaires, "\n"))
 	s.bureau.DefinirDossiers(s.dossiersProjets())
 	return s
@@ -302,6 +307,8 @@ func (s *Serveur) routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/options", s.garde(false, s.apiOptions))
 	mux.HandleFunc("POST /api/options", s.garde(false, s.apiEcrireOptions))
 	mux.HandleFunc("POST /api/bureau/{action}", s.garde(false, s.apiBureau))
+	mux.HandleFunc("GET /api/ecran", s.garde(false, s.apiEcran))
+	mux.HandleFunc("POST /api/instance/{action}", s.apiInstance) // second launch (its own secret, see instance.go)
 	mux.HandleFunc("POST /api/ouvrir", s.garde(false, s.apiOuvrir))
 	mux.HandleFunc("POST /api/fin-vue", s.garde(false, s.apiFinVue))
 	mux.HandleFunc("GET /api/extensions", s.garde(false, s.apiExtensions))

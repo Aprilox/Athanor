@@ -55,7 +55,7 @@ Vous décrivez ce que vous voulez : un jeu, un site, une application, un outil. 
 | **Une barrière** | Les commandes de Claude tournent sous bubblewrap + seccomp. Elles ne peuvent écrire que dans le projet et ne lisent jamais le reste de votre machine ; Internet reste ouvert. |
 | **Vos logiciels** | Unreal Engine, Blender, le SDK Android, Docker et winget sont joignables par un pont contrôlé, commande par commande. |
 | **Aucune fenêtre UAC** | Sur autorisation. Un seul consentement, puis Claude installe et lance ce dont le projet a besoin avec les droits administrateur, sans rien vous demander. |
-| **Une application de bureau** | Un seul fichier. Elle montre l'équipe en direct, le plan, la consommation, le journal lisible et la file des demandes, avec des vérifications qui se réparent en un clic. Elle fait aussi tourner plusieurs projets à la fois et range les fenêtres de Claude sur leur propre bureau virtuel. Thèmes, 6 langues. |
+| **Une application de bureau** | Un seul fichier. Elle montre l'équipe en direct, le plan, la consommation, le journal lisible et la file des demandes, avec des vérifications qui se réparent en un clic. Elle fait aussi tourner plusieurs projets à la fois et garde les programmes que Claude lance sur leur propre bureau, loin de vous. Thèmes, 6 langues. |
 | **Des projets propres** | Un projet est n'importe quel dossier de votre PC. Athanor n'y ajoute qu'un atelier `.athanor/` (exclu de git) : supprimez-le à la fin et il ne reste aucune trace. |
 | **Économe par conception** | Règles de lecture ciblées, vérification rapide pendant le jalon et complète une seule fois, captures assemblées en planches, carte du projet refaite avant chaque cycle, archives automatiques, compression des sorties de commandes. La page *Suivi* montre en direct quelle part de chaque session est relue depuis le cache. |
 
@@ -221,15 +221,20 @@ Les captures sont en anglais ; l'interface s'affiche dans la langue choisie.
 | **Skills & MCP** | la bibliothèque (catalogue vérifié, recherche dans SkillsMP et le registre MCP, lien GitHub, vos propres skills, configurations MCP collées), un interrupteur par projet, les clés d'API des serveurs (rangées à part, jamais réaffichées), *Tester* démarre un serveur dans sa cage et liste ses outils |
 | **Installation & santé** | *Tout vérifier*, *Tout installer*, *Tester la barrière* pour de vrai, *Réparer* ligne par ligne, *Demander à Claude* de réparer ou d'installer quelque chose |
 | **Réglages** | le `.env` (jeton masqué, modèles, effort, surveillance…), *Enregistrer et redémarrer après le cycle* |
-| **Options** | langue, palette et accent, liste des projets (retirer de la liste ne touche jamais au dossier), relance des pilotes à l'ouverture, démarrage avec Windows, bureau virtuel « Claude », mot de passe, dossier de l'outil |
+| **Options** | langue, palette et accent, liste des projets (retirer de la liste ne touche jamais au dossier), relance des pilotes à l'ouverture, démarrage avec Windows (icône dans la zone de notification), bureau « Claude », mot de passe, dossier de l'outil |
 
 **Skills & MCP, en sécurité** : les skills sont chargés comme un plugin de session (`--plugin-dir`) : Claude ne lit un skill que quand il en a besoin, et peut les lire mais jamais les modifier. Les serveurs MCP s'ajoutent à la configuration MCP de la session ; un serveur local démarre dans une cage bubblewrap (`system/mcp-jail.sh`) : système en lecture seule, seuls le projet et les caches de l'outil en écriture, ni dossier personnel, ni disques Windows, ni dossier d'Athanor, ni jeton Claude. Les skills demandent une version de Claude Code qui a `--plugin-dir`.
 
 **Le plan se façonne** : un clic sur un jalon montre ses fichiers, ses dépendances et ses critères d'acceptation ; on peut le monter, le descendre ou le retirer (les autres jalons n'en dépendent plus), ou éditer `PLAN.md` en entier.
 
+**Démarrage avec Windows** : Athanor démarre en icône dans la zone de notification (près de l'horloge, ou sous la flèche ^). Un clic ouvre la fenêtre ; la fermer ramène à l'icône ; clic droit → *Quitter* (les pilotes continuent). Avec *Relancer les pilotes qui tournaient*, les projets que vous aviez démarrés, ni arrêtés ni livrés, repartent. Relancer Athanor alors qu'il tourne déjà affiche simplement sa fenêtre : il n'y en a jamais deux.
+
 **Cadenas** : avec un mot de passe (*Options*), le bouton 🔒 verrouille l'application. Claude continue, mais rien n'est visible ni modifiable (jeton compris) sans le mot de passe, et l'application démarre verrouillée.
 
-**Bureau virtuel « Claude »** : pendant qu'un pilote tourne, les fenêtres qu'il ouvre (Unreal, Blender, un jeu en test) vont sur un bureau Windows dédié. Vous continuez à travailler ou à jouer sans qu'elles surgissent. Une fenêtre que vous ramenez n'est plus jamais déplacée. *Voir le bureau Claude* / *Revenir*, ou Ctrl + Win + ← / →.
+**Bureau « Claude »** : les programmes que Claude lance ne s'ouvrent jamais sur votre écran. Ils n'interrompent ni votre travail ni un jeu en plein écran.
+- **Windows** : Unreal, Blender, un jeu en test et tout ce qu'ils lancent s'ouvrent sur un bureau Windows à part, comme celui de l'invite UAC (les passerelles les lancent avec `Athanor.exe --isole`). Ils ne peuvent pas prendre la main. *Voir le bureau Claude* bascule l'écran dessus ; la barre en haut, ou Ctrl + Alt + B, vous ramène.
+- **Linux**, et les programmes Linux sous WSL que WSLg afficherait sur Windows : chaque pilote fait tourner un serveur X privé (Xvfb). Claude, ses outils et ses serveurs MCP ne voient que cet écran (`system/ecran.sh`), et votre affichage, X11 ou Wayland, leur est inaccessible. *Voir l'écran de Claude* l'affiche en direct dans l'application.
+- Option désactivée, les nouveaux programmes s'ouvrent à nouveau sur votre écran. Ceux qui tournent déjà restent où ils sont jusqu'à leur fermeture : l'application vous laisse aller les fermer.
 
 L'interface est traduite en anglais, français, espagnol, allemand, italien et portugais.
 
@@ -366,10 +371,12 @@ app/                   les sources Go de l'application, l'interface (HTML, CSS, 
 commands/              install, configure, start, stop, stop-after-cycle, follow, test-sandbox, repair,
                        allow-admin, unreal-network (.cmd pour Windows, .sh pour Linux/WSL)
 system/                pilot.sh (la boucle), parallel.sh (ordonnanceur, ouvriers, fusions), safety.sh, bridge.py,
-                       extensions.py + mcp-jail.sh (Skills & MCP), settings.py (barrière), guard.py, detect-tools.sh, athanor.py (carte, archives, captures),
+                       extensions.py + mcp-jail.sh (Skills & MCP), ecran.sh (écran de Claude),
+                       settings.py (barrière), guard.py, detect-tools.sh, athanor.py (carte, archives, captures),
                        bin/ (passerelles), windows/ (aides PowerShell)
 template/              CLAUDE.md (consignes de Claude), PC_TOOLS_GUIDE.md, .claude/agents/ (l'équipe)
 docs/images/           images du README
+docs/releases/         les nouveautés de chaque version (affichées sur la page de la version)
 .env.example           tous les réglages, documentés
 logs/, tools/,         créés à l'usage, jamais commités
 extensions/
@@ -400,7 +407,7 @@ Oui. *Demandes → Remarque en cours de route* est lue au début du cycle suivan
 <details>
 <summary><b>Va-t-il me gêner pendant que j'utilise le PC ?</b></summary>
 
-Les pilotes tournent dans WSL sans fenêtre. Les fenêtres qu'ils ouvrent (un éditeur, un jeu en test) vont sur le bureau virtuel « Claude » pendant qu'un pilote tourne. Pensez à désactiver la mise en veille pour les longues sessions.
+Les pilotes tournent dans WSL sans fenêtre. Les programmes qu'ils ouvrent (un éditeur, un jeu en test) vont sur le bureau « Claude », jamais sur votre écran. Pensez à désactiver la mise en veille pour les longues sessions.
 </details>
 
 <details>
@@ -438,10 +445,10 @@ Oui. Rien n'est lié à un nom d'utilisateur ni à une lettre de disque : les ch
 Poussez un tag de version : GitHub compile les deux applications et publie la version ([`.github/workflows/release.yml`](.github/workflows/release.yml)).
 
 ```bash
-git tag v2.5.1 && git push origin v2.5.1
+git tag v2.6.0 && git push origin v2.6.0
 ```
 
-Gardez la version de [`app/winres/athanor.rc`](app/winres/athanor.rc) alignée sur le tag.
+Gardez la version de [`app/winres/athanor.rc`](app/winres/athanor.rc) alignée sur le tag, et écrivez les nouveautés dans `docs/releases/VERSION.md` (par ex. [`docs/releases/2.6.0.md`](docs/releases/2.6.0.md)) : elles ouvrent la page de la version.
 
 ## Contribuer
 
@@ -454,7 +461,7 @@ Les issues et pull requests sont les bienvenues. Avant d'en ouvrir une :
 ## Remerciements
 
 - [Claude Code](https://claude.com/claude-code), qui fait le vrai travail.
-- [VirtualDesktop](https://github.com/MScholtes/VirtualDesktop) de Markus Scholtes (MIT), compilé au premier usage pour le bureau « Claude ».
+- [VirtualDesktop](https://github.com/MScholtes/VirtualDesktop) de Markus Scholtes (MIT), compilé au premier usage : solution de secours quand le bureau « Claude » ne peut pas être créé (fenêtres déplacées sur un bureau virtuel).
 - [go-webview2](https://github.com/jchv/go-webview2) (MIT) pour la fenêtre Windows, et [bubblewrap](https://github.com/containers/bubblewrap) pour la barrière.
 
 ## Licence

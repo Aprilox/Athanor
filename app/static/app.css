@@ -397,6 +397,11 @@ textarea.en-attente { opacity: .55; }
 .dialogue-carte h3 { margin: 0 0 -8px; font-size: 17px; overflow-wrap: anywhere; }
 .dialogue-carte p { margin: 0; font-size: 15px; line-height: 1.5; overflow-wrap: anywhere; }
 .dialogue-boutons { display: flex; justify-content: flex-end; gap: 8px; }
+/* Claude's screen (Linux side): a live picture, refreshed every 2 s */
+.ecran-carte { width: min(1100px, 100%); gap: 12px; }
+.ecran-tete { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.ecran-tete h3 { margin: 0; }
+#ecran-img { width: 100%; height: auto; border-radius: 8px; border: 1px solid var(--line); background: #000; }
 .verrou { position: fixed; inset: 0; background: var(--voile); display: grid; place-items: center; z-index: 40; }
 .verrou-carte { width: 360px; text-align: center; display: flex; flex-direction: column; gap: 12px; }
 .verrou-cadenas { font-size: 40px; }

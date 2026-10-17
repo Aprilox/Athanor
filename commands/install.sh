@@ -33,13 +33,13 @@ if command -v apt-get >/dev/null 2>&1; then
   sudo dpkg --configure -a >/dev/null 2>&1 || true
   sudo apt-get -f install -y -qq >/dev/null 2>&1 || true
   sudo apt-get update -qq && sudo apt-get install -y -qq git curl ca-certificates jq ripgrep procps \
-    python3 python3-venv python3-pip python3-pil nodejs npm imagemagick ffmpeg zip unzip bubblewrap socat \
+    python3 python3-venv python3-pip python3-pil nodejs npm imagemagick ffmpeg zip unzip bubblewrap socat xvfb \
     && ok "Packages installed" || alerte "Package installation incomplete: read the messages above."
 elif command -v dnf >/dev/null 2>&1; then
-  sudo dnf install -y git curl jq ripgrep procps-ng python3 python3-pillow nodejs npm ImageMagick ffmpeg zip unzip bubblewrap socat \
+  sudo dnf install -y git curl jq ripgrep procps-ng python3 python3-pillow nodejs npm ImageMagick ffmpeg zip unzip bubblewrap socat xorg-x11-server-Xvfb \
     && ok "Packages installed" || alerte "Package installation incomplete."
 else
-  alerte "Unknown package manager: install by hand git curl jq python3 python3-pil nodejs npm imagemagick bubblewrap socat."
+  alerte "Unknown package manager: install by hand git curl jq python3 python3-pil nodejs npm imagemagick bubblewrap socat Xvfb."
 fi
 
 etape "System sandbox"

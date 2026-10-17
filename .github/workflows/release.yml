@@ -56,22 +56,28 @@ jobs:
           tar -C pkg-linux -czf "dist/Athanor-${version}-Linux.tar.gz" athanor
           (cd dist && sha256sum ./* | sed 's#\./##' > SHA256SUMS.txt)
           ls -l dist
+          # Release text: what is new (docs/releases/VERSION.md, when present), then the downloads.
+          depot="https://github.com/${GITHUB_REPOSITORY}"
+          telecharger="${depot}/releases/download/${GITHUB_REF_NAME}"
+          {
+            if [ -f "docs/releases/${version}.md" ]; then cat "docs/releases/${version}.md"; echo; fi
+            echo "## Download"
+            echo
+            echo "| Your system | Download | Then |"
+            echo "|---|---|---|"
+            echo "| **Windows 10 / 11** | [**Athanor-${version}-Windows.zip**](${telecharger}/Athanor-${version}-Windows.zip) | unzip anywhere, double-click **\`Athanor.exe\`** |"
+            echo "| **Linux** (x86-64) | [**Athanor-${version}-Linux.tar.gz**](${telecharger}/Athanor-${version}-Linux.tar.gz) | \`tar xzf Athanor-${version}-Linux.tar.gz && cd athanor && commands/install.sh && ./athanor\` |"
+            echo
+            echo "Each download is the complete tool, ready to use. **Updating:** close the app (right click on its icon → *Quit* if it started with Windows) and extract the new version in the same place: your token, settings, \`logs/\` and \`tools/\` are kept."
+            echo
+            echo "First launch: see the [Quick start](${depot}#quick-start) ([en français](${depot}/blob/main/README.fr.md#démarrage-rapide)). Checksums: \`SHA256SUMS.txt\`."
+          } > release.md
 
       - uses: softprops/action-gh-release@v2
         with:
           name: Athanor ${{ env.VERSION }}
           generate_release_notes: true
-          body: |
-            ## Download
-
-            | Your system | Download | Then |
-            |---|---|---|
-            | **Windows 10 / 11** | [**Athanor-${{ env.VERSION }}-Windows.zip**](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/Athanor-${{ env.VERSION }}-Windows.zip) | unzip anywhere, double-click **`Athanor.exe`** |
-            | **Linux** (x86-64) | [**Athanor-${{ env.VERSION }}-Linux.tar.gz**](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/Athanor-${{ env.VERSION }}-Linux.tar.gz) | `tar xzf Athanor-${{ env.VERSION }}-Linux.tar.gz && cd athanor && commands/install.sh && ./athanor` |
-
-            Each download is the complete tool, ready to use. **Updating:** close the app and extract the new version in the same place: your token, settings, `logs/` and `tools/` are kept.
-
-            First launch: see the [Quick start](https://github.com/${{ github.repository }}#quick-start) ([en français](https://github.com/${{ github.repository }}/blob/main/README.fr.md#démarrage-rapide)). Checksums: `SHA256SUMS.txt`.
+          body_path: release.md
           files: |
             dist/Athanor-${{ env.VERSION }}-Windows.zip
             dist/Athanor-${{ env.VERSION }}-Linux.tar.gz

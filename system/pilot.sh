@@ -243,7 +243,7 @@ lancer_claude_surveille() {  # $1 = log; stops the cycle if it stays silent or r
   # setsid: Claude and everything it launches (engine, browser...) form one group that can be stopped at once.
   # (9>&-: the pilot's lock must not be inherited by Claude nor by the display pipeline)
   { setsid bash -c 'echo $$ > "$1"; f="$2"; b="$3"; PATH="$4"; shift 4; "$b" "$@" < /dev/null 2>&1; echo $? > "$f"' \
-    _ "$f_sid" "$f_code" "$CLAUDE_BIN" "$CHEMIN_CLAUDE" "${args[@]}" | tee "$journal" | afficher_en_direct; } 9>&- &
+    _ "$f_sid" "$f_code" "$BASH" "$CHEMIN_CLAUDE" "$SYSTEME/ecran.sh" lancer "$CLAUDE_BIN" "${args[@]}" | tee "$journal" | afficher_en_direct; } 9>&- &
   pid_flux=$!
   debut=$(date +%s)
   while kill -0 "$pid_flux" 2>/dev/null; do
@@ -367,7 +367,7 @@ arreter_tout() {  # Ctrl+C, window closed or stop.sh: Claude is stopped too
 }
 trap arreter_tout TERM INT HUP
 # Any end of the pilot (STOP, DONE, error) also stops the bridge.
-trap '[ -n "${PONT_PID:-}" ] && kill "$PONT_PID" 2>/dev/null; [ -n "${BATTEMENT_PID:-}" ] && kill "$BATTEMENT_PID" 2>/dev/null; rm -f "$PRIVE/pilot.pid" "$ETAT/pilot.pid"' EXIT
+trap '[ -n "${PONT_PID:-}" ] && kill "$PONT_PID" 2>/dev/null; [ -n "${BATTEMENT_PID:-}" ] && kill "$BATTEMENT_PID" 2>/dev/null; [ -n "${ECRAN_PID:-}" ] && kill "$ECRAN_PID" 2>/dev/null; rm -f "$PRIVE/pilot.pid" "$ETAT/pilot.pid" "$PRIVE/ecran"' EXIT
 
 [ -n "$CLAUDE_BIN" ] && [ -x "$CLAUDE_BIN" ] || { log "Claude Code not found: run install.sh first."; exit 1; }
 # History from a previous pilot (before the private folder): taken over once, without following links.
@@ -394,14 +394,20 @@ done
 # Instructions and team: always the kit's version, copied into the workshop (never into the project itself).
 CONSIGNES="$PRIVE/CLAUDE.md"
 cp -f "$KIT/template/CLAUDE.md" "$CONSIGNES"
+# The language also goes at the end of each cycle's goal: the goal is written in English, and Claude
+# answers in the language of the message it receives unless told otherwise.
 case "${LANGUAGE:-en}" in
-  fr) printf '\n## Langue\n\nTravaille, documente et réponds en français (les fichiers .athanor aussi).\n' ;;
-  es) printf '\n## Idioma\n\nTrabaja, documenta y responde en español (los archivos del taller .athanor también).\n' ;;
-  de) printf '\n## Sprache\n\nArbeite, dokumentiere und antworte auf Deutsch (auch die Dateien der Werkstatt .athanor).\n' ;;
-  it) printf '\n## Lingua\n\nLavora, documenta e rispondi in italiano (anche i file del laboratorio .athanor).\n' ;;
-  pt) printf '\n## Idioma\n\nTrabalhe, documente e responda em português (também os ficheiros da oficina .athanor).\n' ;;
-  *)  printf '\n## Language\n\nWork, document and answer in English (the .athanor workshop files too).\n' ;;
+  fr) PHRASE_LANGUE="Écris tous tes messages en français (ils s'affichent dans le journal de l'application), ainsi que les documents, les fichiers .athanor et les consignes des sous-agents." ;;
+  es) PHRASE_LANGUE="Escribe todos tus mensajes en español (se muestran en el registro de la aplicación), así como los documentos, los archivos .athanor y las instrucciones de los subagentes." ;;
+  de) PHRASE_LANGUE="Schreibe alle deine Nachrichten auf Deutsch (sie erscheinen im Protokoll der Anwendung), ebenso die Dokumente, die .athanor-Dateien und die Anweisungen an die Sub-Agenten." ;;
+  it) PHRASE_LANGUE="Scrivi tutti i tuoi messaggi in italiano (compaiono nel registro dell'applicazione), così come i documenti, i file .athanor e le istruzioni dei sub-agenti." ;;
+  pt) PHRASE_LANGUE="Escreve todas as tuas mensagens em português (aparecem no registo da aplicação), assim como os documentos, os ficheiros .athanor e as instruções dos subagentes." ;;
+  *)  PHRASE_LANGUE="Write all your messages in English (they show in the application's log), as well as the documents, the .athanor files and the sub-agents' briefs." ;;
+esac
+case "${LANGUAGE:-en}" in
+  fr) printf '\n## Langue\n\n' ;; es|pt) printf '\n## Idioma\n\n' ;; de) printf '\n## Sprache\n\n' ;; it) printf '\n## Lingua\n\n' ;; *) printf '\n## Language\n\n' ;;
 esac >> "$CONSIGNES"
+printf '%s\n' "$PHRASE_LANGUE" >> "$CONSIGNES"
 [ -f "$KIT/template/PC_TOOLS_GUIDE.md" ] && cp -f "$KIT/template/PC_TOOLS_GUIDE.md" "$ETAT/PC_TOOLS_GUIDE.md"
 rm -rf "$ETAT/agents" "$ETAT/CLAUDE.md" "$ETAT/CLAUDE.cycle.md" "$ETAT/mcp.json" "$ETAT/claude_settings.json"   # older versions
 rm -rf "$PRIVE/agents" && mkdir -p "$PRIVE/agents" && cp "$KIT/template/.claude/agents/"*.md "$PRIVE/agents/" 2>/dev/null
@@ -477,6 +483,62 @@ preparer_extensions() {
 }
 preparer_extensions
 
+# Claude's screen (Linux side, see system/ecran.sh): with the "Claude's desktop" option, a private X server
+# per pilot. Claude, its tools and its MCP servers see only that server: the Linux windows they open
+# (a game under test, Godot, a headed browser) never reach the user's screen nor take the focus.
+ECRAN_PID=""; ECRAN_SIGNALE=""
+ECRAN_VARIABLES=(DISPLAY WAYLAND_DISPLAY XAUTHORITY DBUS_SESSION_BUS_ADDRESS XDG_SESSION_TYPE GDK_BACKEND QT_QPA_PLATFORM SDL_VIDEODRIVER ELECTRON_OZONE_PLATFORM_HINT)
+declare -A ECRAN_AVANT=()
+for v in "${ECRAN_VARIABLES[@]}"; do [ -n "${!v+x}" ] && ECRAN_AVANT[$v]="${!v}"; done
+arreter_ecran() {
+  [ -n "$ECRAN_PID" ] && kill "$ECRAN_PID" 2>/dev/null
+  ECRAN_PID=""
+  rm -f "$PRIVE/ecran"
+  if [ -n "${ATHANOR_X11_DIR:-}" ]; then   # back to the user's display
+    unset ATHANOR_X11_DIR
+    local v
+    for v in "${ECRAN_VARIABLES[@]}"; do
+      if [ -n "${ECRAN_AVANT[$v]+x}" ]; then export "$v=${ECRAN_AVANT[$v]}"; else unset "$v"; fi
+    done
+  fi
+}
+preparer_ecran() {
+  if [ ! -f "$KIT/logs/bureau-isole" ] || [ -n "${ECRAN_IMPOSSIBLE:-}" ]; then arreter_ecran; return; fi
+  if ! command -v Xvfb > /dev/null 2>&1 || ! command -v bwrap > /dev/null 2>&1; then
+    [ -z "$ECRAN_SIGNALE" ] && log "Claude's screen: Xvfb is missing (Setup & health -> Install everything): Linux windows open on your screen."
+    ECRAN_SIGNALE=1; arreter_ecran; return
+  fi
+  local n="" dir="" i
+  if [ -z "$ECRAN_PID" ] || ! kill -0 "$ECRAN_PID" 2>/dev/null; then
+    arreter_ecran
+    # The socket folder is private (mounted over /tmp/.X11-unix for Claude only) and there is no lock file
+    # (-nolock): any number works; one no other X server uses avoids any confusion.
+    dir="${TMPDIR:-/tmp}/athanor-ecran-$(id -u)-$(basename "$PRIVE")"
+    rm -rf "$dir" && mkdir -m 700 "$dir" || { log "Claude's screen: cannot create $dir."; return; }
+    for n in $(seq 90 189); do [ -e "/tmp/.X$n-lock" ] || break; done
+    bwrap --dev-bind / / --bind "$dir" /tmp/.X11-unix --die-with-parent -- \
+      Xvfb ":$n" -screen 0 1920x1080x24 -nolisten tcp -nolisten local -nolock >> "$PRIVE/ecran.log" 2>&1 9>&- &
+    ECRAN_PID=$!
+    for i in $(seq 1 50); do [ -S "$dir/X$n" ] && break; sleep 0.1; done
+    if [ ! -S "$dir/X$n" ]; then
+      log "Claude's screen: Xvfb did not start (see $PRIVE/ecran.log): Linux windows open on your screen."
+      kill "$ECRAN_PID" 2>/dev/null; ECRAN_PID=""; ECRAN_IMPOSSIBLE=1; return
+    fi
+    # Claude's own sandbox (bubblewrap) must still work inside: otherwise no Claude screen, Claude first.
+    if ! ATHANOR_X11_DIR="$dir" "$BASH" "$SYSTEME/ecran.sh" lancer bwrap --ro-bind / / --dev /dev --proc /proc --unshare-net -- true 2>> "$PRIVE/ecran.log"; then
+      log "Claude's screen: the system sandbox cannot run inside it on this system: Linux windows open on your screen."
+      kill "$ECRAN_PID" 2>/dev/null; ECRAN_PID=""; ECRAN_IMPOSSIBLE=1; return
+    fi
+    printf '%s %s\n' "$n" "$dir" > "$PRIVE/ecran"
+    log "Claude's screen ready: Linux windows open there (:$n), never on your screen."
+  fi
+  read -r n dir < "$PRIVE/ecran"
+  export ATHANOR_X11_DIR="$dir" DISPLAY=":$n" XDG_SESSION_TYPE=x11 GDK_BACKEND=x11 QT_QPA_PLATFORM=xcb \
+         SDL_VIDEODRIVER=x11 ELECTRON_OZONE_PLATFORM_HINT=x11
+  unset WAYLAND_DISPLAY XAUTHORITY DBUS_SESSION_BUS_ADDRESS   # the user's session stays out of reach
+}
+preparer_ecran
+
 # Bridge to the PC tools (outside the sandbox): the gateways Claude runs go through it.
 python3 "$SYSTEME/bridge.py" "$KIT" "$PROJECT" >> "$PRIVE/pont.log" 2>&1 9>&- &
 PONT_PID=$!
@@ -503,7 +565,7 @@ fi
 [ -f "$PRIVE/debut" ] || entier "$(cat "$ETAT/debut" 2>/dev/null)" "$(date +%s)" > "$PRIVE/debut"
 DEBUT=$(entier "$(cat "$PRIVE/debut" 2>/dev/null)" "$(date +%s)")
 
-BUT="/goal The next unticked milestone of .athanor/PLAN.md is completed and verified according to your instructions: bash .athanor/check.sh has been run and its output, showing success, is displayed in this conversation; .athanor/PLAN.md ticks this milestone; .athanor/LOG.md has a new entry; git log shows the commit. If .athanor/PLAN.md does not exist yet, this milestone is the framing phase described in your instructions, with no check.sh required. If all milestones are already ticked, the goal is reached when .athanor/FINAL_REPORT.md exists and contains the line STATUS: DONE. Or stop after ${MAX_TURNS_PER_CYCLE} turns."
+BUT="/goal The next unticked milestone of .athanor/PLAN.md is completed and verified according to your instructions: bash .athanor/check.sh has been run and its output, showing success, is displayed in this conversation; .athanor/PLAN.md ticks this milestone; .athanor/LOG.md has a new entry; git log shows the commit. If .athanor/PLAN.md does not exist yet, this milestone is the framing phase described in your instructions, with no check.sh required. If all milestones are already ticked, the goal is reached when .athanor/FINAL_REPORT.md exists and contains the line STATUS: DONE. Or stop after ${MAX_TURNS_PER_CYCLE} turns. ${PHRASE_LANGUE}"
 
 cycle=$(entier "$(cat "$PRIVE/cycle" 2>/dev/null)" 0)   # continues across restarts (stats.tsv, logs)
 # installations older than this counter: continue after the last cycle recorded in the statistics
@@ -523,7 +585,8 @@ while true; do
     # moment of the delivery: the requests moved to done/ before it are delivered, the later ones are
     # only added to the plan (the app shows the difference)
     date '+%Y%m%d-%H%M%S' > "$ETAT/done/.last-delivery" 2>/dev/null
-    prochaine_demande || terminer "DONE: the deliverable and FINAL_REPORT.md are in the project folder."
+    # delivered: not restarted when the application opens again (.athanor/auto, written by the app)
+    prochaine_demande || { rm -f "$ETAT/auto"; terminer "DONE: the deliverable and FINAL_REPORT.md are in the project folder."; }
   fi
 
   if ! connexion_presente; then
@@ -552,6 +615,7 @@ while true; do
   fi
   log "Cycle $cycle: Claude is working${modele_cycle:+ with $modele_cycle} (log: .athanor/logs/$(basename "$fichier_log"))"
   ETAT_PHASE=travail; ETAT_REPRISE=""; ETAT_DEBUT_CYCLE=$(date '+%Y-%m-%dT%H:%M:%S')
+  preparer_ecran
   preparer_extensions
   statut "Claude is working (cycle $cycle)"
 
@@ -564,13 +628,13 @@ while true; do
     # a changed request (an additional one, or edited by hand) is first folded into the plan by the lead
     # alone, without any code: the milestones themselves are for the workers of the next cycles
     if [ -f "$ETAT/PLAN.md" ] && [ -f "$ETAT/REQUEST_CHANGED" ] && parallele_plan_a_des_vagues; then
-      but_cycle="/goal The change of .athanor/REQUEST.md (flagged by .athanor/REQUEST_CHANGED) is folded into .athanor/PLAN.md as waves according to your parallel-mode instructions, the change is noted in .athanor/LOG.md, .athanor/REQUEST_CHANGED is deleted and the plan is committed, without writing any code. Or stop after 15 turns."
+      but_cycle="/goal The change of .athanor/REQUEST.md (flagged by .athanor/REQUEST_CHANGED) is folded into .athanor/PLAN.md as waves according to your parallel-mode instructions, the change is noted in .athanor/LOG.md, .athanor/REQUEST_CHANGED is deleted and the plan is committed, without writing any code. Or stop after 15 turns. ${PHRASE_LANGUE}"
       plan_seul=1; log "Parallel mode: the request changed, the lead updates the plan first."
     elif [ -f "$ETAT/PLAN.md" ] && [ ! -f "$ETAT/RECHECK" ] && [ ! -f "$ETAT/REQUEST_CHANGED" ]; then
       if parallele_plan_a_des_vagues; then
         [ "$(parallele_vague_courante | wc -l)" -ge 2 ] && mode=parallele
       else
-        but_cycle="/goal .athanor/PLAN.md is reorganised into waves (## Wave 1, ## Wave 2…) according to your parallel-mode instructions, without writing any code. Or stop after 15 turns."
+        but_cycle="/goal .athanor/PLAN.md is reorganised into waves (## Wave 1, ## Wave 2…) according to your parallel-mode instructions, without writing any code. Or stop after 15 turns. ${PHRASE_LANGUE}"
         log "Parallel mode: the plan has no waves yet, the lead reorganises it first."
       fi
     fi

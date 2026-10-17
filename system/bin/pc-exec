@@ -28,13 +28,14 @@ case "${reel,,}" in
 esac
 if [ "$admin" = 1 ]; then eleve; exit $?; fi
 case "${reel,,}" in
-  *.exe) "$reel" "${ARGS[@]}"; code=$? ;;
+  *.exe) lancer_windows "$reel" "${ARGS[@]}"; code=$? ;;
   *.msi) msiexec.exe /i "$(wslpath -w "$reel")" /qn /norestart "${ARGS[@]}"; code=$? ;;
-  *.ps1) powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(wslpath -w "$reel")" "${ARGS[@]}"; code=$? ;;
-  *) cmd.exe /c "$(wslpath -w "$reel")" "${ARGS[@]}"; code=$? ;;
+  *.ps1) lancer_windows powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(wslpath -w "$reel")" "${ARGS[@]}"; code=$? ;;
+  *) lancer_windows cmd.exe /c "$(wslpath -w "$reel")" "${ARGS[@]}"; code=$? ;;
 esac
 # 740 = ERROR_ELEVATION_REQUIRED (the program's manifest asks for administrator rights); 1603 = MSI needs elevation.
-if [ "$code" = 740 ] || { [ "$code" = 1603 ] && [[ "${reel,,}" == *.msi ]]; }; then
+# (seen from WSL as 740 % 256 = 228)
+if [ "$code" = 740 ] || [ "$code" = 228 ] || { [ "$code" = 1603 ] && [[ "${reel,,}" == *.msi ]]; }; then
   echo "(the program requires administrator rights: retrying through the administrator task, without UAC)" >&2
   eleve; code=$?
 fi

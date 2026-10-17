@@ -44,6 +44,8 @@ done
 for d in "${lecture[@]}"; do [ -d "$d" ] && a+=(--ro-bind "$d" "$d"); done
 for d in "${ecriture[@]}"; do [ -d "$d" ] && a+=(--bind "$d" "$d"); done
 a+=(--bind "$outils" "$outils")
+# Claude's screen (system/ecran.sh): a server's windows (Godot, a browser) open there, never on the user's screen.
+[ -n "${ATHANOR_X11_DIR:-}" ] && [ -d "$ATHANOR_X11_DIR" ] && a+=(--bind "$ATHANOR_X11_DIR" /tmp/.X11-unix)
 a+=(--setenv HOME "$maison" --setenv XDG_CACHE_HOME "$outils/cache" --setenv npm_config_cache "$outils/cache/npm"
     --setenv UV_CACHE_DIR "$outils/cache/uv" --setenv PLAYWRIGHT_BROWSERS_PATH "$outils/cache/ms-playwright"
     --unsetenv CLAUDE_CODE_OAUTH_TOKEN --unsetenv ANTHROPIC_API_KEY --unsetenv WSL_INTEROP
