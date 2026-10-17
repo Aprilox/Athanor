@@ -91,6 +91,8 @@ async function action(promesse, genreOk = "ok") {
 function confirmer(message, options = {}) {
   const fond = $("#dialogue"), ok = $("#dialogue-ok"), annuler = $("#dialogue-annuler");
   $("#dialogue-texte").textContent = message;
+  $("#dialogue-titre").textContent = options.titre || "";
+  $("#dialogue-titre").hidden = !options.titre;
   ok.textContent = options.ok || t("OK");
   annuler.textContent = options.annuler || t("Cancel");
   ok.className = "btn " + (options.danger ? "btn-danger" : "btn-primaire");
@@ -119,11 +121,60 @@ function confirmer(message, options = {}) {
 
 // Desktop app, not a web page: no browser context menu outside the text fields (copy/paste stay available there).
 document.addEventListener("contextmenu", (e) => { if (!e.target.closest("input, textarea, [contenteditable], .journal, pre, code")) e.preventDefault(); });
-// …and none of the browser's own shortcuts (reload, print, find, view source, developer tools, downloads).
+// …and none of the browser's own shortcuts (reload, print, find, view source, developer tools, downloads, new window).
 document.addEventListener("keydown", (e) => {
   const k = e.key.toLowerCase(), ctrl = e.ctrlKey || e.metaKey;
-  if (["f3", "f5", "f7", "f12"].includes(k) || (ctrl && ["r", "p", "f", "g", "h", "j", "u", "o", "s"].includes(k)) || (ctrl && e.shiftKey && ["i", "j", "c"].includes(k))) e.preventDefault();
+  if (["f3", "f5", "f7", "f12"].includes(k) || (ctrl && ["r", "p", "f", "g", "h", "j", "u", "o", "s", "n", "t"].includes(k)) || (ctrl && e.shiftKey && ["i", "j", "c"].includes(k))) e.preventDefault();
 }, true);
+// One window only: Ctrl, Shift or middle click on a link would open a browser-like window; it acts as a
+// plain click instead. Dragging a link or dropping a file on the window does not navigate either.
+document.addEventListener("click", (e) => {
+  const a = e.target.closest("a[href]");
+  if (!a || !(e.ctrlKey || e.shiftKey || e.metaKey || e.altKey)) return;
+  e.preventDefault();
+  const cible = a.getAttribute("href");
+  if (cible.startsWith("#") && location.hash !== cible) location.hash = cible;
+}, true);
+document.addEventListener("auxclick", (e) => { if (e.target.closest("a[href], a[data-href]")) e.preventDefault(); }, true);
+// Internal links carry their target in data-href, not href: a link under the mouse is never previewed at
+// the bottom of the window (which would show a web page), whatever window shows the app (WebView2, Edge…).
+function sansHref(racine) {
+  const liens = racine.matches && racine.matches('a[href^="#"]') ? [racine] : [...(racine.querySelectorAll ? racine.querySelectorAll('a[href^="#"]') : [])];
+  for (const a of liens) { a.dataset.href = a.getAttribute("href"); a.removeAttribute("href"); if (!a.hasAttribute("tabindex")) a.tabIndex = 0; }
+}
+new MutationObserver((ms) => { for (const m of ms) for (const n of m.addedNodes) if (n.nodeType === 1) sansHref(n); }).observe(document.documentElement, { childList: true, subtree: true });
+sansHref(document);
+document.addEventListener("click", (e) => {
+  const a = e.target.closest("a[data-href]");
+  if (!a || e.defaultPrevented || a.getAttribute("aria-disabled") === "true") return;
+  e.preventDefault();
+  if (location.hash !== a.dataset.href) location.hash = a.dataset.href;
+});
+document.addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.matches && e.target.matches("a[data-href]")) e.target.click(); });
+document.addEventListener("mousedown", (e) => { if (e.button === 1) e.preventDefault(); }, true);
+document.addEventListener("dragstart", (e) => { if (e.target.closest && e.target.closest("a, img")) e.preventDefault(); });
+const fichiersGlisses = (e) => e.dataTransfer && [...(e.dataTransfer.types || [])].includes("Files");
+document.addEventListener("dragover", (e) => { if (fichiersGlisses(e) || !e.target.closest("input, textarea")) e.preventDefault(); });
+document.addEventListener("drop", (e) => { if (fichiersGlisses(e) || !e.target.closest("input, textarea")) e.preventDefault(); });
+window.open = () => null;
+document.addEventListener("focusin", (e) => { if (e.target.matches && e.target.matches("input, textarea") && !e.target.hasAttribute("autocomplete")) e.target.setAttribute("autocomplete", "off"); });
+
+// A pilot that ended on its own (delivery, maximum duration…) is announced once, inside the app, for
+// every project in the list; the end stays announced until the user has seen it (even after a restart).
+const finsAnnoncees = new Set();
+async function annoncerFins(v) {
+  if (v.verrouille || !$("#dialogue").hidden || !$("#assistant").hidden) return;
+  const p = (v.projets || []).find((x) => x.fin && !finsAnnoncees.has(x.nom + "|" + x.fin.cle));
+  if (!p) return;
+  finsAnnoncees.add(p.nom + "|" + p.fin.cle);
+  const livre = p.fin.livre || /^DONE/.test(p.fin.message || "");
+  const texte = livre ? t("The deliverable and the final report are in the project folder.")
+    : /^Maximum duration reached/.test(p.fin.message || "") ? t("It reached the maximum duration (MAX_HOURS in the settings). The work in progress is in the project folder; start it again to go on.")
+    : t(p.fin.message || "");
+  const ouvrir = await confirmer(texte, { titre: livre ? t("“{0}” is finished", [p.nom]) : t("The pilot of “{0}” has stopped", [p.nom]), ok: t("Open the folder"), annuler: t("Close") });
+  await api("fin-vue?p=" + encodeURIComponent(p.nom), "POST", { cle: p.fin.cle }).catch(() => {});
+  if (ouvrir) await api("ouvrir?p=" + encodeURIComponent(p.nom), "POST", { quoi: "projet" }).catch(() => {});
+}
 
 // ----------------------------------------------------------------------------- "Improve with Claude"
 // Under a request text area: Claude rewrites the request (clearer, richer, same intent); the user's
@@ -871,6 +922,7 @@ async function rafraichir() {
     if (!v.verrouille && v.bienvenue && etat.assistant < 0) { etat.assistant = 0; rendreAssistant(); }
     if (v.verrouille !== etat.verrouille) { etat.verrouille = v.verrouille; afficherVerrou(); if (!v.verrouille) rendrePage(); }
     rendreBandeau(v);
+    annoncerFins(v);
     if (!v.verrouille) {
       await lireJournal();
       // the Team page follows live, except while text is selected in it (a brief, a report)

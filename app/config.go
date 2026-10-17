@@ -24,6 +24,8 @@ type Config struct {
 	Theme                     string   `json:"theme"`  // interface palette (see themesConnus)
 	Accent                    string   `json:"accent"` // interface accent color (see accentsConnus)
 	BienvenueVue              bool     `json:"bienvenue_vue"`
+	// end of a pilot already announced to the user (project folder → STATE.json "maj" of that end)
+	FinsVues map[string]string `json:"fins_vues,omitempty"`
 }
 
 func configDefaut() Config {
