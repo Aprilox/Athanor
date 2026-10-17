@@ -124,6 +124,8 @@ func NewWithOptions(options WebViewOptions) WebView {
 	if err != nil {
 		log.Fatal(err)
 	}
+	// Athanor: an application window, not a browser (see pkg/edge/athanor_settings.go)
+	settings.CommeUneApp()
 
 	return w
 }

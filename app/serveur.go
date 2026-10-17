@@ -303,6 +303,7 @@ func (s *Serveur) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/options", s.garde(false, s.apiEcrireOptions))
 	mux.HandleFunc("POST /api/bureau/{action}", s.garde(false, s.apiBureau))
 	mux.HandleFunc("POST /api/ouvrir", s.garde(false, s.apiOuvrir))
+	mux.HandleFunc("POST /api/fin-vue", s.garde(false, s.apiFinVue))
 }
 
 // ----------------------------------------------------------------------------- locking

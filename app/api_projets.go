@@ -14,25 +14,42 @@ import (
 )
 
 type ProjetVue struct {
-	Nom     string `json:"nom"`
-	Dossier string `json:"dossier"`
-	Existe  bool   `json:"existe"`
-	Actif   bool   `json:"actif"`
-	Phase   string `json:"phase"`
-	Jalon   string `json:"jalon"`
-	Attente int    `json:"attente"`
-	Courant bool   `json:"courant"`
+	Nom     string  `json:"nom"`
+	Dossier string  `json:"dossier"`
+	Existe  bool    `json:"existe"`
+	Actif   bool    `json:"actif"`
+	Phase   string  `json:"phase"`
+	Jalon   string  `json:"jalon"`
+	Attente int     `json:"attente"`
+	Courant bool    `json:"courant"`
+	Fin     *FinVue `json:"fin,omitempty"`
+}
+
+// FinVue: the pilot of a project stopped by itself (delivery, maximum duration…) and the user has not
+// been told yet; the interface shows it in a dialog, then acknowledges it (POST /api/fin-vue).
+type FinVue struct {
+	Cle     string `json:"cle"`
+	Livre   bool   `json:"livre"`
+	Message string `json:"message"`
 }
 
 func (s *Serveur) vuesProjets(courant string) []ProjetVue {
 	s.mu.Lock()
 	projets := append([]Projet{}, s.config.Projets...)
+	vues := map[string]string{}
+	for k, x := range s.config.FinsVues {
+		vues[k] = x
+	}
 	s.mu.Unlock()
 	v := []ProjetVue{}
 	for _, p := range projets {
 		pv := ProjetVue{Nom: p.Nom, Dossier: p.Dossier, Existe: p.Existe(), Actif: p.PiloteActif(), Courant: p.Nom == courant}
 		if e, ok := p.LireEtat(); ok {
 			pv.Phase, pv.Jalon = e.Phase, e.JalonEnCours
+			// "termine": the pilot ended on its own (a stop asked by the user is "arrete")
+			if e.Phase == "termine" && e.Maj != "" && vues[p.Dossier] != e.Maj {
+				pv.Fin = &FinVue{Cle: e.Maj, Livre: projetLivre(p), Message: e.Etat}
+			}
 		}
 		pv.Attente = len(p.LireFileAttente())
 		s.surveillerRelance(p, pv.Actif) // "restart after the cycle" works for every project
@@ -577,4 +594,30 @@ func dossierInterdit(dossier, kit string) string {
 		return "Choose a folder for the project, not your whole personal folder"
 	}
 	return ""
+}
+
+// apiFinVue: the user has seen the end of this project's pilot; it is not announced again.
+func (s *Serveur) apiFinVue(w http.ResponseWriter, r *http.Request) {
+	var c struct {
+		Cle string `json:"cle"`
+	}
+	if err := lireCorps(r, &c); err != nil || c.Cle == "" {
+		s.erreur(w, http.StatusBadRequest, "Missing text")
+		return
+	}
+	p, ok := s.projetRequis(w, r)
+	if !ok {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.config.FinsVues == nil {
+		s.config.FinsVues = map[string]string{}
+	}
+	s.config.FinsVues[p.Dossier] = c.Cle
+	if err := ecrireConfig(s.config); err != nil {
+		s.erreur(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.ecrireJSON(w, map[string]bool{"ok": true})
 }
