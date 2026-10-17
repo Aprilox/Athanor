@@ -224,7 +224,7 @@ The screenshots show the dark "Slate" and the "Light" palettes.
 | **Requests** | the current request and its plan, the queued requests (time-stamped, reorderable), notes along the way; ✨ *Improve with Claude* rewrites a request clearer and more complete, and you can go back to yours; 📎 attach files to a request (specification, mock-ups, photos, PDF, data): they stay in the workshop and Claude reads them with the request |
 | **Log** | the readable log (Claude speaks, tools, results, sub-agents, pilot) or the raw JSON, filterable |
 | **Manage** | rename the project; move or rename its folder; point it to another folder (the plan and requests come along, the milestones are checked against what it contains); check the milestones; archive it; delete it (from the list, its workshop or the whole folder, to the recycle bin); link it to GitHub |
-| **Skills & MCP** | the library (verified catalog, search in SkillsMP and the MCP Registry, GitHub link, your own skills, pasted MCP configurations), a switch per project, the API keys of the servers (stored apart, never shown), *Test* starts a server in its cage and lists its tools; *Sign in* once to a remote server that asks for it (OAuth), for every project; **Plugins**: the whole catalog of Claude Code plugins (official marketplace plus yours), searchable, installed in one click and switched on per project |
+| **Skills & MCP** | the library (verified catalog, search in SkillsMP and the MCP Registry, GitHub link, your own skills, pasted MCP configurations), a switch per project, the API keys of the servers (stored apart, never shown) and their settings (an address, a port, a path: detected in the configuration, shown in clear with their default), *Test* starts a server in its cage and lists its tools; *Sign in* once to a remote server that asks for it (OAuth), for every project; **Plugins**: the whole catalog of Claude Code plugins (official marketplace plus yours), searchable, installed in one click and switched on per project |
 | **Setup & health** | *Check everything*, *Install everything*, *Test the sandbox* for real, *Repair* line by line, *Ask Claude* to repair or install something |
 | **Settings** | the `.env` (token masked, models, effort, watchdog…), *Save and restart after cycle* |
 | **Options** | language, palette and accent, project list (removing a project never touches its folder), restart the pilots on opening, start with the computer, "Claude" desktop, password, tool folder |
@@ -284,7 +284,7 @@ Claude works in Linux (WSL2 on Windows) and reaches your Windows software throug
 
 Installed software is detected on **every drive** (`C:`, `D:`…), and the newest version wins. The detected list is written before each cycle to `.athanor/PC_TOOLS.md`. Paths can be forced in *Settings* when detection misses them (`UE_DIR`, `BLENDER_EXE`, `ANDROID_SDK_DIR`).
 
-**Unreal Engine (MCP)**: set `UNREAL_MCP=1` in *Settings* and run `commands\unreal-network.cmd` once. Claude enables the MCP plugins in the Unreal project itself, and the pilot opens the editor before each cycle. Claude drives it (actors, lights, materials, tests), runs tests and screenshots with `unreal-cmd`, and packages the Windows game with `unreal-uat` into `deliverable/`. The Unreal MCP is experimental: when it does not answer, Claude carries on without it.
+**Unreal Engine (MCP)**: install **Unreal Engine** from the verified catalog of *Skills & MCP*, switch it on for the project (its address is a setting of the server) and run `commands\unreal-network.cmd` once. Claude enables the MCP plugins in the Unreal project itself, and the pilot opens the editor before each cycle. Claude drives it (actors, lights, materials, tests), runs tests and screenshots with `unreal-cmd`, and packages the Windows game with `unreal-uat` into `deliverable/`. The Unreal MCP is experimental: when it does not answer, Claude carries on without it.
 
 **Missing software**: Claude sorts it out on its own (a portable version in `tools/windows/`, else winget, else the administrator task if allowed). If an installation fails, it writes it to `.athanor/TODO_FOR_YOU.md` and finds another way.
 
@@ -309,7 +309,6 @@ Everything is editable in the app (*Settings*), or in `.env` ([`.env.example`](.
 | `QUOTA_WAIT_MIN` | wait when the quota reset time cannot be read |
 | `IDLE_MAX_MIN`, `CYCLE_MAX_MIN`, `CLOSE_AFTER_MILESTONE` | cycle watchdog, one milestone per cycle |
 | `RTK`, `TZ` | command output compression, time zone of the logs (empty = the system's) |
-| `UNREAL_MCP`, `UNREAL_MCP_URL` | let Claude drive the open Unreal editor |
 | `UE_DIR`, `BLENDER_EXE`, `ANDROID_SDK_DIR`, `ANDROID_JDK_DIR` | tool paths when auto-detection misses them (optional, absent by default) |
 
 When the quota is exhausted for every model, the pilot waits for it to reopen and resumes on its own.
@@ -458,10 +457,10 @@ Yes. Nothing is tied to a user name or a drive letter: paths come from your prof
 Push a version tag and GitHub builds both apps and publishes the release ([`.github/workflows/release.yml`](.github/workflows/release.yml)):
 
 ```bash
-git tag v2.12.0 && git push origin v2.12.0
+git tag v2.13.0 && git push origin v2.13.0
 ```
 
-Keep the version in [`app/winres/athanor.rc`](app/winres/athanor.rc) in step with the tag, and write what is new in `docs/releases/VERSION.md` (e.g. [`docs/releases/2.12.0.md`](docs/releases/2.12.0.md)): it opens the release page.
+Keep the version in [`app/winres/athanor.rc`](app/winres/athanor.rc) in step with the tag, and write what is new in `docs/releases/VERSION.md` (e.g. [`docs/releases/2.13.0.md`](docs/releases/2.13.0.md)): it opens the release page.
 
 ## Contributing
 

@@ -49,7 +49,7 @@ PROJECT="${PROJECT:-$KIT/projet}"; mkdir -p "$PROJECT/.athanor" "$KIT/tools/wind
     echo "  - \`unreal-editor [--wait-mcp] Game.uproject\`: opens the editor (window) without blocking"
     echo "  - \`unreal-cmd Game.uproject -ExecCmds=\"...\" -unattended -nullrhi\`: commandlets and tests without a window"
     echo "  - \`unreal-uat BuildCookRun -project=Game.uproject -platform=Win64 -clientconfig=Shipping -build -cook -stage -pak -archive -archivedirectory=deliverable\`: Windows game (\`-platform=Android -cookflavor=ASTC\` for Android)"
-    [ "${UNREAL_MCP:-0}" = 1 ] && echo "  - **Unreal MCP active**: \`mcp__unreal-mcp__*\` tools when the editor is open (the pilot opens it before each cycle if a .uproject exists)"
+    [ "${UNREAL_MCP:-0}" = 1 ] && echo "  - **Unreal MCP active**: \`mcp__unreal__*\` tools when the editor is open (the pilot opens it before each cycle if a .uproject exists)"
   else
     echo "- Unreal Engine: not detected"
   fi

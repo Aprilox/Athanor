@@ -224,7 +224,7 @@ Les captures sont en anglais ; l'interface s'affiche dans la langue choisie.
 | **Demandes** | la demande en cours et son plan, les demandes à la suite (horodatées, réordonnables), les remarques en cours de route ; ✨ *Améliorer avec Claude* reformule une demande plus claire et plus complète, et vous pouvez revenir à la vôtre ; 📎 joignez des fichiers à une demande (cahier des charges, maquettes, photos, PDF, données) : ils restent dans l'atelier et Claude les lit avec la demande |
 | **Journal** | le journal lisible (Claude parle, outils, résultats, sous-agents, pilote) ou brut (JSON), filtrable |
 | **Gérer** | renommer le projet ; déplacer ou renommer son dossier ; le faire pointer vers un autre dossier (le plan et les demandes suivent, les jalons sont vérifiés d'après son contenu) ; vérifier les jalons ; l'archiver ; le supprimer (de la liste, son atelier ou tout le dossier, à la corbeille) ; le lier à GitHub |
-| **Skills & MCP** | la bibliothèque (catalogue vérifié, recherche dans SkillsMP et le registre MCP, lien GitHub, vos propres skills, configurations MCP collées), un interrupteur par projet, les clés d'API des serveurs (rangées à part, jamais réaffichées), *Tester* démarre un serveur dans sa cage et liste ses outils ; *Se connecter* une fois à un serveur distant qui le demande (OAuth), pour tous les projets ; **Plugins** : tout le catalogue des plugins Claude Code (catalogue officiel plus les vôtres), avec recherche, installés en un clic et activés projet par projet |
+| **Skills & MCP** | la bibliothèque (catalogue vérifié, recherche dans SkillsMP et le registre MCP, lien GitHub, vos propres skills, configurations MCP collées), un interrupteur par projet, les clés d'API des serveurs (rangées à part, jamais réaffichées) et leurs réglages (une adresse, un port, un chemin : détectés dans la configuration, affichés en clair avec leur valeur par défaut), *Tester* démarre un serveur dans sa cage et liste ses outils ; *Se connecter* une fois à un serveur distant qui le demande (OAuth), pour tous les projets ; **Plugins** : tout le catalogue des plugins Claude Code (catalogue officiel plus les vôtres), avec recherche, installés en un clic et activés projet par projet |
 | **Installation & santé** | *Tout vérifier*, *Tout installer*, *Tester la barrière* pour de vrai, *Réparer* ligne par ligne, *Demander à Claude* de réparer ou d'installer quelque chose |
 | **Réglages** | le `.env` (jeton masqué, modèles, effort, surveillance…), *Enregistrer et redémarrer après le cycle* |
 | **Options** | langue, palette et accent, liste des projets (retirer de la liste ne touche jamais au dossier), relance des pilotes à l'ouverture, démarrage avec l'ordinateur, bureau « Claude », mot de passe, dossier de l'outil |
@@ -284,7 +284,7 @@ Claude travaille sous Linux (WSL2 sous Windows) et atteint vos logiciels Windows
 
 Les logiciels installés sont détectés sur **tous les disques** (`C:`, `D:`…), et la version la plus récente l'emporte. La liste détectée est écrite avant chaque cycle dans `.athanor/PC_TOOLS.md`. Si la détection manque un logiciel, indiquez son chemin dans *Réglages* (`UE_DIR`, `BLENDER_EXE`, `ANDROID_SDK_DIR`).
 
-**Unreal Engine (MCP)** : mettez `UNREAL_MCP=1` dans *Réglages* et lancez une fois `commands\unreal-network.cmd`. Claude active lui-même les plugins du MCP dans le projet Unreal, et le pilote ouvre l'éditeur avant chaque cycle. Claude le pilote (acteurs, lumières, matériaux, tests), lance tests et captures avec `unreal-cmd`, et fabrique le jeu Windows avec `unreal-uat` dans `deliverable/`. Le MCP d'Unreal est expérimental : s'il ne répond pas, Claude continue sans.
+**Unreal Engine (MCP)** : installez **Unreal Engine** depuis le catalogue vérifié de *Skills & MCP*, activez-le pour le projet (son adresse est un réglage du serveur) et lancez une fois `commands\unreal-network.cmd`. Claude active lui-même les plugins du MCP dans le projet Unreal, et le pilote ouvre l'éditeur avant chaque cycle. Claude le pilote (acteurs, lumières, matériaux, tests), lance tests et captures avec `unreal-cmd`, et fabrique le jeu Windows avec `unreal-uat` dans `deliverable/`. Le MCP d'Unreal est expérimental : s'il ne répond pas, Claude continue sans.
 
 **Logiciels manquants** : Claude se débrouille seul (version portable dans `tools/windows/`, sinon winget, sinon la tâche administrateur si elle est autorisée). Si une installation échoue, il l'écrit dans `.athanor/TODO_FOR_YOU.md` et continue autrement.
 
@@ -311,7 +311,6 @@ Tout se modifie dans l'application (*Réglages*), ou dans `.env` ([`.env.example
 | `QUOTA_WAIT_MIN` | attente quand l'heure de réouverture du quota est illisible |
 | `IDLE_MAX_MIN`, `CYCLE_MAX_MIN`, `CLOSE_AFTER_MILESTONE` | surveillance des cycles (muet 30 min ou plus long que 3 h → coupé et repris), un jalon par cycle |
 | `RTK`, `TZ` | compression des sorties de commandes, fuseau horaire des journaux (vide = celui du système) |
-| `UNREAL_MCP`, `UNREAL_MCP_URL` | laisser Claude piloter l'éditeur Unreal ouvert |
 | `UE_DIR`, `BLENDER_EXE`, `ANDROID_SDK_DIR`, `ANDROID_JDK_DIR` | chemins des outils quand la détection automatique les manque (facultatifs, absents par défaut) |
 
 Si le quota global est épuisé (tous modèles), le pilote attend la réouverture et reprend seul.
@@ -458,10 +457,10 @@ Oui. Rien n'est lié à un nom d'utilisateur ni à une lettre de disque : les ch
 Poussez un tag de version : GitHub compile les deux applications et publie la version ([`.github/workflows/release.yml`](.github/workflows/release.yml)).
 
 ```bash
-git tag v2.12.0 && git push origin v2.12.0
+git tag v2.13.0 && git push origin v2.13.0
 ```
 
-Gardez la version de [`app/winres/athanor.rc`](app/winres/athanor.rc) alignée sur le tag, et écrivez les nouveautés dans `docs/releases/VERSION.md` (par ex. [`docs/releases/2.12.0.md`](docs/releases/2.12.0.md)) : elles ouvrent la page de la version.
+Gardez la version de [`app/winres/athanor.rc`](app/winres/athanor.rc) alignée sur le tag, et écrivez les nouveautés dans `docs/releases/VERSION.md` (par ex. [`docs/releases/2.13.0.md`](docs/releases/2.13.0.md)) : elles ouvrent la page de la version.
 
 ## Contribuer
 

@@ -77,3 +77,62 @@ func (p Projet) MigrerAtelier() {
 }
 
 func existe(chemin string) bool { _, err := os.Lstat(chemin); return err == nil }
+
+// MigrerUnreal: UNREAL_MCP=1 in the .env (versions before 2.13.0) becomes the "unreal" server of the
+// verified catalog, switched on for every project, with the address the user had set. The .env keys
+// are then turned off and no longer shown on the Settings page.
+func (s *Serveur) MigrerUnreal() {
+	k := s.kitCourant()
+	actif, url := false, ""
+	for _, l := range LireEnv(k.Env()) {
+		switch l.Cle {
+		case "UNREAL_MCP":
+			actif = strings.TrimSpace(l.Valeur) == "1"
+		case "UNREAL_MCP_URL":
+			url = strings.TrimSpace(l.Valeur)
+		}
+	}
+	if !actif {
+		return
+	}
+	extMu.Lock()
+	defer extMu.Unlock()
+	b, choix, secrets := lireBiblio(k), lireChoix(k), lireSecrets(k)
+	if _, ok := b.MCP["unreal"]; !ok {
+		for _, m := range lireCatalogue().MCP {
+			if m.ID != "unreal" {
+				continue
+			}
+			x := MCPInstalle{Nom: m.Nom, Catalogue: m.ID, Config: m.Config, Reglages: map[string]string{}, Ajoute: maintenantISO()}
+			for _, rg := range m.Reglages {
+				x.Reglages[rg.Nom] = rg.Defaut
+			}
+			b.MCP["unreal"] = x
+		}
+	}
+	if url != "" && url != "http://127.0.0.1:8000/mcp" {
+		if secrets["unreal"] == nil {
+			secrets["unreal"] = map[string]string{}
+		}
+		secrets["unreal"]["UNREAL_MCP_URL"] = url
+	}
+	s.mu.Lock()
+	projets := append([]Projet{}, s.config.Projets...)
+	s.mu.Unlock()
+	for _, p := range projets {
+		ch := choix[cleProjet(p)]
+		if !contient(ch.MCP, "unreal") {
+			ch.MCP = append(ch.MCP, "unreal")
+		}
+		if ch.Skills == nil {
+			ch.Skills = []string{}
+		}
+		choix[cleProjet(p)] = ch
+	}
+	if ecrireJSONFichier(filepath.Join(dossierExt(k), "bibliotheque.json"), b, 0o644) != nil ||
+		ecrireJSONFichier(filepath.Join(dossierExt(k), "secrets.json"), secrets, 0o600) != nil ||
+		ecrireJSONFichier(filepath.Join(dossierExt(k), "projets.json"), choix, 0o644) != nil {
+		return
+	}
+	_ = EcrireEnv(k.Env(), map[string]string{"UNREAL_MCP": "0"})
+}

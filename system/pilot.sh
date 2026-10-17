@@ -489,15 +489,18 @@ synchroniser_demande
 export ATHANOR_PLUGIN="$PRIVE/plugin"
 export ATHANOR_PLUGINS="$PRIVE/plugins"   # the plugins switched on for the project (Plugins tab), read-only too
 python3 "$SYSTEME/settings.py" "$KIT" "$REGLAGES" > /dev/null || { log "Cannot write Claude's settings."; exit 1; }
-if [ "${UNREAL_MCP:-0}" = "1" ] && [ -f "$SYSTEME/unreal_relay.txt" ]; then
-  # "Mirrored" networking unavailable: go through the Windows relay (unreal-network.cmd), seen from WSL
-  # at the gateway address (it changes on every WSL start).
-  passerelle=$(ip route show default 2>/dev/null | awk '{print $3; exit}')
-  [ -n "$passerelle" ] && export UNREAL_MCP_URL="http://$passerelle:$(tr -dc '0-9' < "$SYSTEME/unreal_relay.txt")/mcp"
-fi
-export UNREAL_MCP_URL="${UNREAL_MCP_URL:-http://127.0.0.1:8000/mcp}"
-[ "${UNREAL_MCP:-0}" = "1" ] && log "Unreal MCP: $UNREAL_MCP_URL"
-export UNREAL_MCP
+# Unreal MCP: the "unreal" server of the Skills & MCP page, switched on per project (its address, relay
+# included, comes from system/extensions.py; the .env keys of older versions are migrated by the app).
+UNREAL_MCP=0; export UNREAL_MCP UNREAL_MCP_URL
+unreal_depuis_mcp() {
+  UNREAL_MCP=0
+  if [ -f "$PRIVE/mcp.json" ] && jq -e '.mcpServers.unreal.url' "$PRIVE/mcp.json" >/dev/null 2>&1; then
+    UNREAL_MCP=1; UNREAL_MCP_URL=$(jq -r '.mcpServers.unreal.url' "$PRIVE/mcp.json")
+    [ "$UNREAL_MCP_URL" != "${UNREAL_PRECEDENT:-}" ] && log "Unreal MCP: $UNREAL_MCP_URL"
+    UNREAL_PRECEDENT="$UNREAL_MCP_URL"
+  fi
+  export UNREAL_MCP UNREAL_MCP_URL
+}
 
 # Skills and MCP servers chosen in the app (Skills & MCP page), plus Unreal MCP: rebuilt at the start of
 # every cycle, so a change made in the app applies from the next cycle. Local MCP servers run in a cage
@@ -518,6 +521,7 @@ preparer_extensions() {
   done
   [ -n "$r" ] && [ "$r" != "$EXTENSIONS_AVANT" ] && log "Skills & MCP: $r"
   EXTENSIONS_AVANT="$r"
+  unreal_depuis_mcp
 }
 preparer_extensions
 

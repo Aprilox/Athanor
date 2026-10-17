@@ -21,7 +21,7 @@ Read only when the project needs Windows software, Unreal Engine or a mobile pla
 
 ## Unreal Engine
 
-- **Unreal Engine**: when the Unreal MCP is active, the pilot opens the editor on the project's `.uproject` before each cycle and you have its tools (`mcp__unreal-mcp__...`). Create the Unreal project in this folder (for example `Game/Game.uproject`), from one of the engine's templates, and enable in the `.uproject` the required plugins, including the MCP one (its exact name is in the engine's `Engine/Plugins` folder, which you can read): the pilot will open it at the next cycle and start its MCP server by itself. The Unreal, Blender and Android SDK folders are readable (not writable): use them for templates, documentation and examples. Build the Windows game with `unreal-uat BuildCookRun ...` into `deliverable/`.
+- **Unreal Engine**: when the Unreal MCP is active, the pilot opens the editor on the project's `.uproject` before each cycle and you have its tools (`mcp__unreal__...`). Create the Unreal project in this folder (for example `Game/Game.uproject`), from one of the engine's templates, and enable in the `.uproject` the required plugins, including the MCP one (its exact name is in the engine's `Engine/Plugins` folder, which you can read): the pilot will open it at the next cycle and start its MCP server by itself. The Unreal, Blender and Android SDK folders are readable (not writable): use them for templates, documentation and examples. Build the Windows game with `unreal-uat BuildCookRun ...` into `deliverable/`.
 
 ## Android then iOS
 

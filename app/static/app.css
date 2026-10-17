@@ -498,3 +498,4 @@ input.large { flex: 1; min-width: 200px; width: auto; }
 .pv-form textarea, .pv-form input[type=password] { width: 100%; }
 .pv-histo { margin: 6px 0 0 0; padding-left: 18px; }
 .pv-histo li { margin: 3px 0; white-space: pre-wrap; }
+.ext-reglage input { width: min(360px, 100%); font-family: var(--mono, ui-monospace, monospace); }

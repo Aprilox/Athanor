@@ -16,6 +16,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -483,12 +484,13 @@ type infoPlugin struct {
 	Nom, Description, Version, Auteur, Homepage string
 	Skills, Commandes, Agents, Ecartes          []string
 	MCP                                         map[string]ConfigMCP
+	Reglages                                    map[string]string // userConfig options that are not sensitive: name → default
 }
 
 // analyserPlugin reads the unpacked plugin, keeps its MCP servers apart, removes what would run
 // outside the sandbox (hooks, LSP servers, monitors) and writes the manifest Claude Code will read.
 func analyserPlugin(dossier string, entree map[string]any) (infoPlugin, error) {
-	info := infoPlugin{MCP: map[string]ConfigMCP{}}
+	info := infoPlugin{MCP: map[string]ConfigMCP{}, Reglages: map[string]string{}}
 	cheminManifeste := filepath.Join(dossier, ".claude-plugin", "plugin.json")
 	manifeste := map[string]any{}
 	avecManifeste := false
@@ -527,6 +529,23 @@ func analyserPlugin(dossier string, entree map[string]any) (infoPlugin, error) {
 	}
 	_ = os.Remove(filepath.Join(dossier, ".mcp.json"))
 	delete(manifeste, "mcpServers")
+	// the plugin's options (userConfig): those that are not sensitive are settings shown in clear
+	if uc, ok := manifeste["userConfig"].(map[string]any); ok {
+		for nom, v := range uc {
+			o, _ := v.(map[string]any)
+			if sensible, _ := o["sensitive"].(bool); sensible || estNomSecret(nom) || !regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,63}$`).MatchString(nom) {
+				continue
+			}
+			defaut := ""
+			switch d := o["default"].(type) {
+			case string:
+				defaut = d
+			case float64, bool:
+				defaut = fmt.Sprint(d)
+			}
+			info.Reglages[nom] = defaut
+		}
+	}
 	// what would run outside Claude's sandbox, or pull other plugins in: never kept. The manifest keeps
 	// only what describes the plugin and where its skills, commands, sub-agents and styles are.
 	ecarter := func(nom string) {
@@ -966,6 +985,15 @@ func (s *Serveur) apiPluginsInstaller(w http.ResponseWriter, r *http.Request) {
 			delete(secrets, sid)
 		}
 		valeurs := separerSecrets(&conf)
+		reglages := separerReglages(&conf)
+		for nom, d := range info.Reglages { // the plugin's own options used by this server
+			if contient(secretsRequis(conf), nom) {
+				if reglages == nil {
+					reglages = map[string]string{}
+				}
+				reglages[nom] = d
+			}
+		}
 		if len(valeurs) > 0 {
 			if secrets[sid] == nil {
 				secrets[sid] = map[string]string{}
@@ -974,7 +1002,7 @@ func (s *Serveur) apiPluginsInstaller(w http.ResponseWriter, r *http.Request) {
 				secrets[sid][k2] = v
 			}
 		}
-		b.MCP[sid] = MCPInstalle{Nom: n, Description: info.Nom, Source: "plugin:" + id, Plugin: id, Config: conf, Ajoute: maintenantISO()}
+		b.MCP[sid] = MCPInstalle{Nom: n, Description: info.Nom, Source: "plugin:" + id, Plugin: id, Config: conf, Reglages: reglages, Ajoute: maintenantISO()}
 		ids = append(ids, sid)
 		delete(anciens, sid)
 	}

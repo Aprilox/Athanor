@@ -1015,10 +1015,7 @@ pages.extensions = async () => {
   const liste = o === "skills" ? d.skills : d.mcp;
   const cat = (o === "skills" ? d.catalogue.skills : d.catalogue.mcp) || [];
   const occupe = (cle) => ext.occupe === cle ? "disabled" : "";
-  const secrets = (x) => (x.secrets || []).map((sc) => `<div class="ext-secret ${sc.defini ? "" : sc.optionnel ? "" : "manquant"}">
-      <code>${h(sc.nom)}</code> <span class="petit">${sc.defini ? "✓ " + t("key saved") : sc.optionnel ? t("optional key: better limits") : t("key required: the server is skipped without it")}</span>
-      <input type="password" autocomplete="off" data-ext-cle="${h(x.id)}|${h(sc.nom)}" placeholder="${h(sc.defini ? t("Replace the key") : t("Paste the key"))}">
-      <button class="btn btn-petit" data-ext-cle-ok="${h(x.id)}|${h(sc.nom)}">${t("Save")}</button>${sc.lien ? ` <span class="muet petit">${h(sc.lien.replace(/^https:\/\//, ""))}</span>` : ""}</div>`).join("");
+  const secrets = (x) => champsServeur(x);
   const test = (x) => { const r = ext.tests[x.id]; if (!r) return ""; if (r === "…") return `<div class="muet petit">${t("Starting the server in its cage… (the first time, it downloads it: up to two minutes)")}</div>`;
     return r.ok ? `<div class="ext-test ok">✓ ${r.outils && r.outils.length ? t("Works: {0} tools ({1})", [r.outils.length, h(r.outils.slice(0, 8).join(", ")) + (r.outils.length > 8 ? "…" : "")]) : t(r.note || "Works.")}</div>`
       : `<div class="ext-test echec">✕ ${h(t(r.erreur || "Failed"))}${r.details && r.details.length ? `<pre class="texte-agent">${h(r.details.join("\n"))}</pre>` : ""}</div>`; };
@@ -1036,14 +1033,14 @@ pages.extensions = async () => {
         ${secrets(x)}${test(x)}${voir(x)}
       </div>
       <div class="ext-actions"><button class="btn btn-petit" data-ext-voir="${type}|${h(x.id)}">${ext.voir && ext.voir.id === x.id && ext.voir.type === type ? t("Close") : type === "skill" ? t("View / edit") : t("View")}</button>
-        ${type === "mcp" && (x.type === "http" || x.type === "sse") ? `<button class="btn btn-petit" data-ext-connexion="${h(x.id)}" title="${h(t("For a server that asks you to sign in (OAuth): once, valid for every project."))}">${t("Sign in")}</button>` : ""}
+        ${type === "mcp" && (x.type === "http" || x.type === "sse") && !/^https?:\/\/(localhost|127\.|0\.0\.0\.0|\[::1\]|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(x.resume || "") ? `<button class="btn btn-petit" data-ext-connexion="${h(x.id)}" title="${h(t("For a server that asks you to sign in (OAuth): once, valid for every project."))}">${t("Sign in")}</button>` : ""}
         ${type === "mcp" ? `<button class="btn btn-petit" data-ext-tester="${h(x.id)}" ${d.projet ? "" : "disabled"} ${ext.tests[x.id] === "…" ? "disabled" : ""}>${t("Test")}</button>` : ""}
         <button class="btn btn-petit btn-danger" data-ext-retirer="${type}|${h(x.id)}" title="${h(t("Remove"))}">✕</button></div>
     </div>`).join("");
   const cartes = cat.map((c) => `<div class="ext-carte">
       <div class="ext-nom">${h(c.nom)} <span class="muet petit">${h(c.licence)}</span></div>
       <div class="ext-desc">${h(c.description)}</div>
-      <div class="muet petit">github.com/${h(c.depot)}${c.prerequis ? " · " + t("needs {0}", [c.prerequis]) : ""}${(c.secrets || []).length ? " · " + c.secrets.map((sc) => sc.optionnel ? t("optional key") : t("key required")).join(", ") : ""}${c.scripts ? " · " + t("scripts") : ""}</div>
+      <div class="muet petit">${[c.depot ? "github.com/" + h(c.depot) : "", c.prerequis ? t("needs {0}", [c.prerequis]) : ""].filter(Boolean).join(" · ")}${(c.secrets || []).length ? " · " + c.secrets.map((sc) => sc.optionnel ? t("optional key") : t("key required")).join(", ") : ""}${c.scripts ? " · " + t("scripts") : ""}</div>
       <div class="ligne">${c.installe ? `<span class="ok petit">✓ ${t("Installed")}</span>` : `<button class="btn btn-petit btn-primaire" data-ext-installer="${type}|${h(c.id)}" ${occupe(type + "|" + c.id)}>${ext.occupe === type + "|" + c.id ? t("Installing…") : t("Install")}</button>`}</div>
     </div>`).join("");
   // search: SkillsMP for skills, the official MCP Registry for servers
@@ -1102,11 +1099,20 @@ function resumePlugin(x) {
   const n = (l) => (l || []).length;
   return [n(x.skills) && t("{0} skill(s)", [n(x.skills)]), n(x.commandes) && t("{0} command(s)", [n(x.commandes)]), n(x.agents) && t("{0} sub-agent(s)", [n(x.agents)]), n(x.mcp) && t("{0} MCP server(s)", [n(x.mcp)])].filter(Boolean).join(" · ");
 }
+// The keys (hidden, asked once for the whole application) and the settings (an address, a port, a path:
+// shown in clear, with their default) of an MCP server. Both are saved by the same button.
+function champsServeur(x) {
+  return (x.secrets || []).map((sc) => sc.reglage ? `<div class="ext-secret ext-reglage">
+      <code>${h(sc.nom)}</code> <span class="petit muet">${t("setting")}${sc.defaut && sc.valeur !== sc.defaut ? " · " + t("default: {0}", [h(sc.defaut)]) : ""}</span>
+      <input type="text" autocomplete="off" spellcheck="false" data-ext-cle="${h(x.id)}|${h(sc.nom)}" value="${h(sc.valeur || "")}" placeholder="${h(sc.defaut || "")}">
+      <button class="btn btn-petit" data-ext-cle-ok="${h(x.id)}|${h(sc.nom)}">${t("Save")}</button></div>`
+    : `<div class="ext-secret ${sc.defini || sc.optionnel ? "" : "manquant"}">
+      <code>${h(sc.nom)}</code> <span class="petit">${sc.defini ? "✓ " + t("key saved") : sc.optionnel ? t("optional key: better limits") : t("key required: the server is skipped without it")}</span>
+      <input type="password" autocomplete="off" data-ext-cle="${h(x.id)}|${h(sc.nom)}" placeholder="${h(sc.defini ? t("Replace the key") : t("Paste the key"))}">
+      <button class="btn btn-petit" data-ext-cle-ok="${h(x.id)}|${h(sc.nom)}">${t("Save")}</button>${sc.lien ? ` <span class="muet petit">${h(sc.lien.replace(/^https:\/\//, ""))}</span>` : ""}</div>`).join("");
+}
 function serveurPlugin(x, d) {
-  const sc = (x.secrets || []).map((s) => `<div class="ext-secret ${s.defini || s.optionnel ? "" : "manquant"}">
-      <code>${h(s.nom)}</code> <span class="petit">${s.defini ? "✓ " + t("key saved") : s.optionnel ? t("optional key: better limits") : t("key required: the server is skipped without it")}</span>
-      <input type="password" autocomplete="off" data-ext-cle="${h(x.id)}|${h(s.nom)}" placeholder="${h(s.defini ? t("Replace the key") : t("Paste the key"))}">
-      <button class="btn btn-petit" data-ext-cle-ok="${h(x.id)}|${h(s.nom)}">${t("Save")}</button></div>`).join("");
+  const sc = champsServeur(x);
   const distant = x.type === "http" || x.type === "sse";
   return `<div class="plg-serveur"><div class="ligne"><span>🔌 <b>${h(x.nom)}</b> <span class="etiquette">${distant ? t("remote") : t("local, in a cage")}</span></span>
       <span class="espace"></span>${distant ? `<button class="btn btn-petit" data-ext-connexion="${h(x.id)}" title="${h(t("For a server that asks you to sign in (OAuth): once, valid for every project."))}">${t("Sign in")}</button>` : ""}

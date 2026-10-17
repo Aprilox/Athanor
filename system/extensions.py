@@ -21,7 +21,10 @@ Usage:
   extensions.py connexion KIT ID FILE
       FILE: an MCP configuration with the remote server ID alone, exactly as the pilot gives it, for the
       one-time sign-in window of the app (Claude Code keeps the sign-in, valid for every project).
-Unreal MCP (UNREAL_MCP=1, UNREAL_MCP_URL) is part of the MCP file as before.
+A server's settings (an address, a port, a path: "reglages" in the library, name -> default) are
+${NAME} placeholders like the keys, with the default when the user set nothing. The "unreal" server of
+the verified catalog goes through the Windows relay (system/unreal_relay.txt) when "mirrored"
+networking is unavailable.
 """
 import json, os, re, select, shutil, subprocess, sys, time
 
@@ -139,6 +142,11 @@ def serveur(kit, sid, definition, secrets, dossier, principal):
     c = definition.get("config") if isinstance(definition, dict) else None
     if not isinstance(c, dict):
         return None, "no configuration"
+    # settings: the default unless the user set a value
+    reglages = {k: str(v) for k, v in (definition.get("reglages") or {}).items() if isinstance(k, str)} if isinstance(definition.get("reglages"), dict) else {}
+    secrets = dict(reglages, **{k: v for k, v in (secrets or {}).items() if v != ""})
+    if definition.get("catalogue") == "unreal":
+        secrets["UNREAL_MCP_URL"] = adresse_unreal(kit, secrets.get("UNREAL_MCP_URL", ""))
     manquants = set()
     # an optional key (a header or variable that only improves limits) is left out when it is not set
     optionnels = set(definition.get("optionnels") or [])
@@ -198,10 +206,27 @@ def serveur(kit, sid, definition, secrets, dossier, principal):
     return s, ""
 
 
+def adresse_unreal(kit, url):
+    """The Unreal MCP as seen from WSL: through the Windows relay (commands/unreal-network.cmd) when
+    "mirrored" networking is unavailable; the relay's port is in system/unreal_relay.txt and the Windows
+    host is WSL's default gateway (it changes at every WSL start)."""
+    url = url or "http://127.0.0.1:8000/mcp"
+    relais = os.path.join(kit, "system", "unreal_relay.txt")
+    if not os.path.isfile(relais) or not re.match(r"^https?://(127\.0\.0\.1|localhost)(:\d+)?(/|$)", url):
+        return url
+    try:
+        port = re.sub(r"\D", "", open(relais, encoding="utf-8").read())
+        route = subprocess.run(["ip", "route", "show", "default"], capture_output=True, text=True, timeout=5).stdout.split()
+        passerelle = route[route.index("via") + 1] if "via" in route else ""
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return url
+    if not port or not passerelle:
+        return url
+    return re.sub(r"^(https?://)[^/]+", r"\g<1>%s:%s" % (passerelle, port), url, count=1)
+
+
 def construire_mcp(kit, choix, projet, fichier, dossier, principal):
     serveurs, notes = {}, []
-    if os.environ.get("UNREAL_MCP", "0") == "1":
-        serveurs["unreal-mcp"] = {"type": "http", "url": os.environ.get("UNREAL_MCP_URL") or "http://127.0.0.1:8000/mcp"}
     biblio = lire_json(os.path.join(kit, "extensions", "bibliotheque.json"), {}).get("mcp", {})
     tous_secrets = lire_json(os.path.join(kit, "extensions", "secrets.json"), {})
     # the servers switched on, and those of the plugins switched on (on and off with their plugin)
@@ -223,7 +248,7 @@ def construire_mcp(kit, choix, projet, fichier, dossier, principal):
         os.replace(neuf, fichier)
     elif os.path.exists(fichier):
         os.remove(fichier)
-    return [k for k in serveurs if k != "unreal-mcp"], notes
+    return list(serveurs), notes
 
 
 def options(args):

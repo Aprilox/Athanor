@@ -12,7 +12,14 @@ projet = os.path.realpath(os.environ.get("PROJECT") or os.path.join(kit, "projet
 # The pilot works in the logical path (/mnt/c/...); on some PCs it resolves to another one (Docker Desktop
 # bind mounts). The sandbox gets both forms, so that reads work whichever one a tool uses.
 projets = sorted({projet, os.path.abspath(os.environ.get("PROJECT") or os.path.join(kit, "projet"))})
-unreal_mcp = os.environ.get("UNREAL_MCP", "0") == "1"
+# Unreal MCP: the "unreal" server of the library switched on for this project (Skills & MCP page)
+sys.dont_write_bytecode = True
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:
+    from extensions import choix_du_projet
+    unreal_mcp = "unreal" in choix_du_projet(kit, os.environ.get("ATHANOR_PROJET_PRINCIPAL") or os.environ.get("PROJECT") or projet)["mcp"]
+except Exception:
+    unreal_mcp = False
 # The skills chosen in the app (Skills & MCP page), copied by system/extensions.py: readable, never writable.
 plugin = os.environ.get("ATHANOR_PLUGIN") or ""
 plugins_tiers = os.environ.get("ATHANOR_PLUGINS") or ""   # the plugins switched on (Plugins tab)
@@ -48,7 +55,7 @@ reglages = {
         "defaultMode": "bypassPermissions",
         "allow": ["WebFetch", "WebFetch(domain:*)", "WebSearch"]
                  + [f"Bash({p} *)" for p in passerelles]
-                 + (["mcp__unreal-mcp"] if unreal_mcp else []),
+                 + (["mcp__unreal"] if unreal_mcp else []),
         "deny": ["Bash(git push --force *)", "Bash(git push -f *)"],
         "additionalDirectories": [tools],
     },
