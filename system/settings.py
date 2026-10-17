@@ -13,6 +13,9 @@ projet = os.path.realpath(os.environ.get("PROJECT") or os.path.join(kit, "projet
 # bind mounts). The sandbox gets both forms, so that reads work whichever one a tool uses.
 projets = sorted({projet, os.path.abspath(os.environ.get("PROJECT") or os.path.join(kit, "projet"))})
 unreal_mcp = os.environ.get("UNREAL_MCP", "0") == "1"
+# The skills chosen in the app (Skills & MCP page), copied by system/extensions.py: readable, never writable.
+plugin = os.environ.get("ATHANOR_PLUGIN") or ""
+lectures = [system] + ([plugin] if plugin else [])
 # Hooks run OUTSIDE the sandbox: never a program taken from tools/ (modifiable by Claude).
 rtk_bin = os.path.join(system, "bin", "rtk")
 rtk = os.environ.get("RTK", "1") != "0" and os.access(rtk_bin, os.X_OK)
@@ -69,7 +72,7 @@ reglages = {
         "filesystem": {
             "allowWrite": [tools],
             "denyRead": ["~/", "/mnt"],
-            "allowRead": projets + [tools, system] + logiciels,   # system: read-only (RTK, pilot tools)
+            "allowRead": projets + [tools] + lectures + logiciels,   # system, skills: read-only
         },
         "network": {"allowedDomains": ["*"]},
         "credentials": {"envVars": [{"name": "CLAUDE_CODE_OAUTH_TOKEN", "mode": "deny"},
@@ -79,7 +82,7 @@ reglages = {
     "hooks": {"PreToolUse": [
         {"matcher": "Read|Edit|Write|MultiEdit|NotebookEdit|Glob|Grep",
          "hooks": [{"type": "command", "timeout": 10,
-                    "command": " ".join(shlex.quote(x) for x in [python, os.path.join(system, "guard.py"), projet, tools, "/tmp", f"--lecture={system}"] + [f"--lecture={d}" for d in logiciels])}]},
+                    "command": " ".join(shlex.quote(x) for x in [python, os.path.join(system, "guard.py"), projet, tools, "/tmp"] + [f"--lecture={d}" for d in lectures] + [f"--lecture={d}" for d in logiciels])}]},
     ]},
 }
 if rtk:

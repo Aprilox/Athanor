@@ -412,3 +412,35 @@ textarea.en-attente { opacity: .55; }
 .assistant .recap { display: grid; gap: 8px; }
 .assistant .recap div { display: flex; gap: 12px; align-items: baseline; }
 .assistant .recap b { width: 26px; height: 26px; border-radius: 50%; background: var(--panel-2); display: inline-grid; place-items: center; font-size: 13px; flex: none; }
+
+/* --- skills & MCP */
+.onglets { display: flex; gap: 4px; margin: 0 0 12px; border-bottom: 1px solid var(--line); }
+.onglets button { background: none; border: 0; border-bottom: 2px solid transparent; color: var(--muted); padding: 8px 14px; font-size: 14.5px; cursor: pointer; margin-bottom: -1px; }
+.onglets button.actif { color: var(--ink); border-bottom-color: var(--accent); }
+.onglets button:hover { color: var(--ink); }
+.ext-ligne { display: flex; gap: 12px; align-items: flex-start; padding: 12px 0; border-top: 1px solid var(--line-2); }
+.ext-ligne:first-of-type { border-top: 0; }
+.ext-ligne .interrupteur { margin: 2px 0 0; }
+.ext-corps { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.ext-nom { font-weight: 600; overflow-wrap: anywhere; }
+.ext-desc { font-size: 13.5px; overflow-wrap: anywhere; }
+.ext-source { overflow-wrap: anywhere; }
+.ext-source code { font-size: 12px; }
+.ext-actions { flex: none; display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; max-width: 40%; }
+.etiquette { font-size: 11.5px; font-weight: 500; color: var(--muted); border: 1px solid var(--line); border-radius: 10px; padding: 0 7px; white-space: nowrap; }
+.ext-secret { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; font-size: 13px; }
+.ext-secret input { width: min(260px, 100%); padding: 4px 8px; }
+.ext-secret.manquant > span { color: var(--attention); }
+.ext-test { font-size: 13px; overflow-wrap: anywhere; }
+.ext-test.ok { color: var(--ok); } .ext-test.echec { color: var(--erreur); }
+.ext-voir { margin-top: 6px; display: flex; flex-direction: column; gap: 6px; }
+.ext-catalogue { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr)); gap: 10px; }
+.ext-carte { border: 1px solid var(--line); border-radius: var(--rayon); padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.ext-carte .ligne { margin-top: auto; }
+.ext-avert { background: var(--panel-2); border-left: 3px solid var(--attention); border-radius: 6px; padding: 8px 12px; font-size: 13px; margin-bottom: 12px; }
+.ext-trouves { margin: 10px 0; padding: 4px 12px; border: 1px solid var(--line); border-radius: var(--rayon); }
+.bloc h3 { margin: 16px 0 6px; }
+.bloc h3:first-of-type { margin-top: 4px; }
+input.large { flex: 1; min-width: 200px; width: auto; }
+.ext-resultats { margin-top: 10px; max-height: 640px; overflow: auto; border-top: 1px solid var(--line-2); }
+.ext-apercu { max-height: 360px; overflow: auto; }
