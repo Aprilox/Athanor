@@ -339,7 +339,7 @@ $("#menu-projets").addEventListener("click", async (ev) => {
 document.addEventListener("click", (ev) => { if (etat.selecteurOuvert && !ev.target.closest("#sel-projet, #menu-projets")) fermerSelecteur(); });
 
 function traduireNav() {
-  const libelles = { suivi: t("Overview"), equipe: t("Team"), demandes: t("Requests"), journal: t("Log"), sante: t("Setup & health"), reglages: t("Settings"), options: t("Options") };
+  const libelles = { suivi: t("Overview"), equipe: t("Team"), demandes: t("Requests"), journal: t("Log"), extensions: t("Skills & MCP"), sante: t("Setup & health"), reglages: t("Settings"), options: t("Options") };
   document.querySelectorAll("#nav-liens a, #nav-outil a").forEach((a) => { if (libelles[a.dataset.page]) a.textContent = libelles[a.dataset.page]; });
   $("#nav-titre-projet").textContent = t("Project");
   $("#nav-titre-outil").textContent = t("Tool");
@@ -584,6 +584,181 @@ pages.equipe = async () => {
     <div class="equipe">${ouvriers.map((o) => rendreSession(o, appelsDe(o.id), t("Worker " + o.jalon), o.mission || t("Builds milestone " + o.jalon), o.jalon.replace(/_/g, "."))).join("")}</div>` : ""}
   ${membres ? `<h3 class="equipe-section">${t("Who can be called")}</h3><div class="roster">${membres}</div>` : ""}`;
 };
+
+// --- skills & MCP
+// A library kept in Athanor (verified catalog, GitHub link, written by hand, pasted configuration) and,
+// for the current project, a switch per skill or server. The pilot applies the choice at the next cycle.
+const ext = { onglet: "skills", lien: "", trouves: null, voir: null, tests: {}, occupe: "", recherche: { skills: { q: "", res: null }, mcp: { q: "", res: null } }, apercu: null };
+pages.extensions = async () => {
+  const d = await api("extensions");
+  const o = ext.onglet, type = o === "skills" ? "skill" : "mcp";
+  const liste = o === "skills" ? d.skills : d.mcp;
+  const cat = (o === "skills" ? d.catalogue.skills : d.catalogue.mcp) || [];
+  const occupe = (cle) => ext.occupe === cle ? "disabled" : "";
+  const secrets = (x) => (x.secrets || []).map((sc) => `<div class="ext-secret ${sc.defini ? "" : sc.optionnel ? "" : "manquant"}">
+      <code>${h(sc.nom)}</code> <span class="petit">${sc.defini ? "✓ " + t("key saved") : sc.optionnel ? t("optional key: better limits") : t("key required: the server is skipped without it")}</span>
+      <input type="password" autocomplete="off" data-ext-cle="${h(x.id)}|${h(sc.nom)}" placeholder="${h(sc.defini ? t("Replace the key") : t("Paste the key"))}">
+      <button class="btn btn-petit" data-ext-cle-ok="${h(x.id)}|${h(sc.nom)}">${t("Save")}</button>${sc.lien ? ` <span class="muet petit">${h(sc.lien.replace(/^https:\/\//, ""))}</span>` : ""}</div>`).join("");
+  const test = (x) => { const r = ext.tests[x.id]; if (!r) return ""; if (r === "…") return `<div class="muet petit">${t("Starting the server in its cage… (the first time, it downloads it: up to two minutes)")}</div>`;
+    return r.ok ? `<div class="ext-test ok">✓ ${r.outils && r.outils.length ? t("Works: {0} tools ({1})", [r.outils.length, r.outils.slice(0, 8).join(", ") + (r.outils.length > 8 ? "…" : "")]) : t(r.note || "Works.")}</div>`
+      : `<div class="ext-test echec">✕ ${h(t(r.erreur || "Failed"))}${r.details && r.details.length ? `<pre class="texte-agent">${h(r.details.join("\n"))}</pre>` : ""}</div>`; };
+  const voir = (x) => ext.voir && ext.voir.id === x.id && ext.voir.type === type ? `<div class="ext-voir">
+      ${type === "skill" ? `<textarea class="code" rows="14" data-ext-texte="${h(x.id)}">${h(ext.voir.texte)}</textarea>
+        ${ext.voir.fichiers && ext.voir.fichiers.length > 1 ? `<div class="muet petit">${t("Files")}: ${ext.voir.fichiers.map((f) => `<code>${h(f)}</code>`).join(" ")}</div>` : ""}
+        <div class="ligne"><button class="btn btn-petit" data-ext-enregistrer="${h(x.id)}">${t("Save the skill")}</button></div>`
+        : `<pre class="texte-agent">${h(ext.voir.texte)}</pre>`}</div>` : "";
+  const lignes = liste.map((x) => `<div class="ext-ligne ${x.actif ? "actif" : ""}">
+      <label class="interrupteur" title="${h(d.projet ? t("Used by “{0}”", [d.projet]) : t("Choose a project first"))}"><input type="checkbox" data-ext-actif="${type}|${h(x.id)}" ${x.actif ? "checked" : ""} ${d.projet ? "" : "disabled"}></label>
+      <div class="ext-corps">
+        <div class="ext-nom">${h(x.nom)}${x.scripts ? ` <span class="etiquette" title="${h(t("Contains scripts: Claude runs them inside its sandbox."))}">${t("scripts")}</span>` : ""}${!x.source && !x.catalogue ? ` <span class="etiquette">${t("yours")}</span>` : ""}${x.type ? ` <span class="etiquette">${x.type === "stdio" ? t("local, in a cage") : t("remote")}</span>` : ""}</div>
+        ${x.description ? `<div class="ext-desc">${h(x.description)}</div>` : ""}
+        <div class="muet petit ext-source">${[x.source ? h(x.source.startsWith("registry:") ? t("MCP Registry") + " · " + x.source.slice(9) : x.source) : x.catalogue ? "" : h(t("written in Athanor")), x.resume ? `<code>${h(x.resume)}</code>` : ""].filter(Boolean).join(" · ")}</div>
+        ${secrets(x)}${test(x)}${voir(x)}
+      </div>
+      <div class="ext-actions"><button class="btn btn-petit" data-ext-voir="${type}|${h(x.id)}">${ext.voir && ext.voir.id === x.id && ext.voir.type === type ? t("Close") : type === "skill" ? t("View / edit") : t("View")}</button>
+        ${type === "mcp" ? `<button class="btn btn-petit" data-ext-tester="${h(x.id)}" ${d.projet ? "" : "disabled"} ${ext.tests[x.id] === "…" ? "disabled" : ""}>${t("Test")}</button>` : ""}
+        <button class="btn btn-petit btn-danger" data-ext-retirer="${type}|${h(x.id)}" title="${h(t("Remove"))}">✕</button></div>
+    </div>`).join("");
+  const cartes = cat.map((c) => `<div class="ext-carte">
+      <div class="ext-nom">${h(c.nom)} <span class="muet petit">${h(c.licence)}</span></div>
+      <div class="ext-desc">${h(c.description)}</div>
+      <div class="muet petit">github.com/${h(c.depot)}${c.prerequis ? " · " + t("needs {0}", [c.prerequis]) : ""}${(c.secrets || []).length ? " · " + c.secrets.map((sc) => sc.optionnel ? t("optional key") : t("key required")).join(", ") : ""}${c.scripts ? " · " + t("scripts") : ""}</div>
+      <div class="ligne">${c.installe ? `<span class="ok petit">✓ ${t("Installed")}</span>` : `<button class="btn btn-petit btn-primaire" data-ext-installer="${type}|${h(c.id)}" ${occupe(type + "|" + c.id)}>${ext.occupe === type + "|" + c.id ? t("Installing…") : t("Install")}</button>`}</div>
+    </div>`).join("");
+  // search: SkillsMP for skills, the official MCP Registry for servers
+  const rech = ext.recherche[o];
+  const resultats = !rech.res ? "" : !rech.res.length ? `<div class="vide">${t("Nothing found: try another word, in English (e.g. testing, react, docs).")}</div>` : rech.res.map((x, i) => o === "skills" ? `<div class="ext-ligne">
+      <div class="ext-corps"><div class="ext-nom">${h(x.nom)} <span class="muet petit">${x.auteur ? t("by {0}", [h(x.auteur)]) : ""}${x.etoiles ? " · ★ " + x.etoiles : ""}</span></div>
+        ${x.description ? `<div class="ext-desc">${h(x.description)}</div>` : ""}<div class="muet petit ext-source">${h(x.url.replace(/^https:\/\//, ""))}</div>
+        ${ext.apercu && ext.apercu.i === i ? (ext.apercu.texte === "…" ? `<div class="muet petit">${t("Downloading…")}</div>` : `<pre class="texte-agent ext-apercu">${h(ext.apercu.texte)}</pre>`) : ""}</div>
+      <div class="ext-actions"><button class="btn btn-petit" data-ext-apercu="${i}">${ext.apercu && ext.apercu.i === i ? t("Close") : t("View")}</button>
+        ${x.installe ? `<span class="ok petit">✓ ${t("Installed")}</span>` : `<button class="btn btn-petit btn-primaire" data-ext-installer-res="${i}" ${occupe("res|" + i)}>${ext.occupe === "res|" + i ? t("Installing…") : t("Install")}</button>`}</div></div>`
+    : `<div class="ext-ligne">
+      <div class="ext-corps"><div class="ext-nom">${h(x.titre)} <span class="muet petit">${h(x.version || "")}</span>${x.genre ? ` <span class="etiquette">${x.genre === "remote" ? t("remote") : t("local, in a cage") + " · " + h(x.genre)}</span>` : ""}</div>
+        ${x.description ? `<div class="ext-desc">${h(x.description)}</div>` : ""}
+        <div class="muet petit ext-source">${h(x.nom)}${x.depot ? " · " + h(x.depot.replace(/^https:\/\//, "")) : ""}${x.cles && x.cles.length ? " · " + t("keys: {0}", [x.cles.join(", ")]) : ""}</div>
+        ${x.installable ? "" : `<div class="muet petit">${h(t(x.raison || ""))}</div>`}</div>
+      <div class="ext-actions">${x.installe ? `<span class="ok petit">✓ ${t("Installed")}</span>` : x.installable ? `<button class="btn btn-petit btn-primaire" data-ext-installer-res="${i}" ${occupe("res|" + i)}>${ext.occupe === "res|" + i ? t("Installing…") : t("Install")}</button>` : ""}</div></div>`).join("");
+  const blocRecherche = `<div class="bloc"><h2>${o === "skills" ? t("Search the community") : t("Search the MCP Registry")}</h2>
+    <p class="muet petit">${o === "skills" ? t("Thousands of skills published on GitHub, found through SkillsMP. Not checked by hand: read a skill (View) before installing it.") : t("The official directory of MCP servers. Not checked by hand: only install servers you trust; local ones run in a cage.")}</p>
+    <div class="ligne"><input type="text" id="ext-q" class="large" value="${h(rech.q)}" placeholder="${h(o === "skills" ? t("e.g. front-end, testing, react, documentation") : t("e.g. github, database, figma, search"))}"><button class="btn" data-ext-rechercher ${occupe("recherche")}>${ext.occupe === "recherche" ? t("Looking…") : t("Search")}</button></div>
+    ${resultats ? `<div class="ext-resultats">${resultats}</div>` : ""}</div>`;
+  const ajouter = o === "skills" ? `
+      <h3>${t("From a GitHub link")}</h3>
+      <p class="muet petit">${t("A repository or a folder holding one or several skills (a SKILL.md each), e.g. https://github.com/anthropics/skills/tree/main/skills/webapp-testing")}</p>
+      <div class="ligne"><input type="text" id="ext-lien" class="large" value="${h(ext.lien)}" placeholder="https://github.com/…"><button class="btn" data-ext-chercher ${occupe("github")}>${ext.occupe === "github" ? t("Looking…") : t("Look")}</button></div>
+      ${ext.trouves ? `<div class="ext-trouves">${ext.trouves.skills.map((x, i) => `<label class="interrupteur"><input type="checkbox" data-ext-trouve="${i}" ${x.installe ? "" : "checked"}><span><b>${h(x.nom)}</b>${x.installe ? ` <span class="muet petit">(${t("already installed: it will be updated")})</span>` : ""}${x.scripts ? ` <span class="etiquette">${t("scripts")}</span>` : ""}<br><span class="muet petit">${h(x.description || "")}</span></span></label>`).join("")}
+        <div class="ligne"><button class="btn btn-primaire" data-ext-installer-trouves ${occupe("github")}>${t("Install the selected skills")}</button></div></div>` : ""}
+      <h3>${t("Write a skill")}</h3>
+      <div class="grille grille-2"><input type="text" id="ext-nom" placeholder="${h(t("Name, e.g. house-style"))}"><input type="text" id="ext-description" placeholder="${h(t("When Claude should use it, e.g. Use when writing CSS for this site."))}"></div>
+      <textarea id="ext-contenu" rows="6" class="mt-1" placeholder="${h(t("The instructions, in Markdown: rules, steps, examples…"))}"></textarea>
+      <div class="ligne mt-1"><button class="btn" data-ext-creer>${t("Create the skill")}</button></div>`
+    : `
+      <h3>${t("Paste a configuration")}</h3>
+      <p class="muet petit">${t("The JSON block or the “claude mcp add …” command given in the server's README. API keys found in it are stored apart, never shown again.")}</p>
+      <div class="grille grille-2"><input type="text" id="ext-mcp-nom" placeholder="${h(t("Name (optional)"))}"><input type="text" id="ext-mcp-source" placeholder="${h(t("Link to its GitHub page (optional)"))}"></div>
+      <textarea id="ext-mcp-texte" rows="7" class="code mt-1" placeholder='{"mcpServers": {"name": {"command": "npx", "args": ["-y", "…"]}}}'></textarea>
+      <div class="ligne mt-1"><button class="btn" data-ext-mcp-ajouter>${t("Add the server")}</button></div>`;
+  return `<p class="intro">${t("Skills give Claude expertise it reads only when it needs it; MCP servers give it new tools (up-to-date documentation, code navigation, a browser…). Install them once in Athanor, then switch on what each project uses: it applies from the next cycle, for the lead and for the parallel workers.")}</p>
+  <div class="onglets"><button class="${o === "skills" ? "actif" : ""}" data-ext-onglet="skills">Skills <span class="muet">${d.skills.length}</span></button><button class="${o === "mcp" ? "actif" : ""}" data-ext-onglet="mcp">MCP <span class="muet">${d.mcp.length}</span></button></div>
+  <div class="bloc"><h2>${t("In Athanor")}</h2>
+    <p class="muet petit">${d.projet ? t("The switch turns it on or off for “{0}”.", [d.projet]) : t("Choose a project to switch them on or off.")}</p>
+    ${lignes || `<div class="vide">${t("Nothing installed yet: pick from the catalog below or add your own.")}</div>`}</div>
+  ${blocRecherche}
+  <div class="bloc"><h2>${t("Verified catalog")}</h2>
+    <p class="muet petit">${t("Well-known open-source projects, checked by hand. Installing copies them into Athanor; nothing is used until you switch it on for a project.")}</p>
+    <div class="ext-catalogue">${cartes}</div></div>
+  <div class="bloc"><h2>${t("Add your own")}</h2>
+    <div class="ext-avert">⚠ ${o === "skills" ? t("A skill guides Claude: only add skills from sources you trust. Read it first (View / edit).") : t("An MCP server runs code on your PC: only add servers you trust. Local servers run in a cage: no access to your personal files, your Windows drives or the Claude token.")}</div>
+    ${ajouter}</div>`;
+};
+
+$("#page").addEventListener("click", async (ev) => {
+  if (etat.page !== "extensions") return;
+  const b = ev.target.closest("[data-ext-rechercher], [data-ext-apercu], [data-ext-installer-res], [data-ext-onglet], [data-ext-installer], [data-ext-chercher], [data-ext-installer-trouves], [data-ext-creer], [data-ext-mcp-ajouter], [data-ext-voir], [data-ext-enregistrer], [data-ext-tester], [data-ext-retirer], [data-ext-cle-ok]");
+  if (!b) return;
+  const d = b.dataset;
+  if (d.extOnglet) { ext.onglet = d.extOnglet; ext.voir = null; ext.apercu = null; return rendrePage(); }
+  if (d.extRechercher !== undefined) {
+    const o = ext.onglet, q = $("#ext-q").value.trim(); if (!q) return;
+    ext.recherche[o].q = q; ext.occupe = "recherche"; ext.apercu = null; await rendrePage();
+    const r = await action(api("extensions/recherche", "POST", { type: o === "skills" ? "skill" : "mcp", q }));
+    ext.occupe = ""; ext.recherche[o].res = r ? r.resultats : ext.recherche[o].res; return rendrePage();
+  }
+  if (d.extApercu !== undefined) {
+    const i = Number(d.extApercu), x = ext.recherche.skills.res[i];
+    if (ext.apercu && ext.apercu.i === i) { ext.apercu = null; return rendrePage(); }
+    ext.apercu = { i, texte: "…" }; await rendrePage();
+    const r = await action(api("extensions/github", "POST", { url: x.url, nom: x.nom, apercu: true }));
+    ext.apercu = r ? { i, texte: r.texte || "" } : null; return rendrePage();
+  }
+  if (d.extInstallerRes !== undefined) {
+    const o = ext.onglet, i = Number(d.extInstallerRes), x = ext.recherche[o].res[i];
+    ext.occupe = "res|" + i; await rendrePage();
+    const r = o === "skills" ? await action(api("extensions/github", "POST", { url: x.url, nom: x.nom })) : await action(api("extensions/registre", "POST", { nom: x.nom }));
+    ext.occupe = ""; if (r) x.installe = true; return rendrePage();
+  }
+  if (d.extInstaller) {
+    const [type, id] = d.extInstaller.split("|"); ext.occupe = d.extInstaller; await rendrePage();
+    await action(api("extensions/catalogue", "POST", { type, id })); ext.occupe = ""; return rendrePage();
+  }
+  if (d.extChercher !== undefined) {
+    ext.lien = $("#ext-lien").value.trim(); if (!ext.lien) return;
+    ext.occupe = "github"; ext.trouves = null; await rendrePage();
+    const r = await action(api("extensions/github", "POST", { url: ext.lien }));
+    ext.occupe = ""; ext.trouves = r && r.skills ? r : null; return rendrePage();
+  }
+  if (d.extInstallerTrouves !== undefined && ext.trouves) {
+    const chemins = [...document.querySelectorAll("[data-ext-trouve]")].filter((c) => c.checked).map((c) => ext.trouves.skills[Number(c.dataset.extTrouve)].chemin);
+    if (!chemins.length) return;
+    ext.occupe = "github"; await rendrePage();
+    const r = await action(api("extensions/github", "POST", { url: ext.lien, chemins }));
+    ext.occupe = ""; if (r) { ext.trouves = null; ext.lien = ""; } return rendrePage();
+  }
+  if (d.extCreer !== undefined) {
+    const r = await action(api("extensions/skill", "POST", { nom: $("#ext-nom").value, description: $("#ext-description").value, contenu: $("#ext-contenu").value }));
+    if (r) rendrePage(); return;
+  }
+  if (d.extMcpAjouter !== undefined) {
+    const r = await action(api("extensions/mcp", "POST", { nom: $("#ext-mcp-nom").value, source: $("#ext-mcp-source").value, texte: $("#ext-mcp-texte").value }));
+    if (r) rendrePage(); return;
+  }
+  if (d.extVoir) {
+    const [type, id] = d.extVoir.split("|");
+    if (ext.voir && ext.voir.id === id && ext.voir.type === type) { ext.voir = null; return rendrePage(); }
+    const r = await action(api(`extensions/voir?type=${type}&id=${encodeURIComponent(id)}`));
+    if (r) { ext.voir = { type, id, texte: r.texte, fichiers: r.fichiers }; rendrePage(); } return;
+  }
+  if (d.extEnregistrer) {
+    const texte = document.querySelector(`[data-ext-texte="${CSS.escape(d.extEnregistrer)}"]`).value;
+    const r = await action(api("extensions/skill", "POST", { id: d.extEnregistrer, contenu: texte }));
+    if (r) { ext.voir = null; rendrePage(); } return;
+  }
+  if (d.extTester) {
+    const id = d.extTester; ext.tests[id] = "…"; await rendrePage();
+    ext.tests[id] = await api("extensions/tester", "POST", { id }).catch((e) => ({ ok: false, erreur: e.message }));
+    return rendrePage();
+  }
+  if (d.extCleOk) {
+    const [id, nom] = d.extCleOk.split("|"); const champ = document.querySelector(`[data-ext-cle="${CSS.escape(d.extCleOk)}"]`);
+    const r = await action(api("extensions/secret", "POST", { id, nom, valeur: champ.value })); if (r) rendrePage(); return;
+  }
+  if (d.extRetirer) {
+    const [type, id] = d.extRetirer.split("|");
+    if (!(await confirmer(t("Remove “{0}” from Athanor? It is switched off in every project.", [id]), { ok: t("Remove"), danger: true }))) return;
+    const r = await action(api("extensions/retirer", "POST", { type, id })); if (r) { delete ext.tests[id]; rendrePage(); } return;
+  }
+});
+$("#page").addEventListener("change", async (ev) => {
+  const c = ev.target.closest("[data-ext-actif]"); if (!c) return;
+  const [type, id] = c.dataset.extActif.split("|");
+  const r = await action(api("extensions/projet", "POST", { type, id, actif: c.checked }));
+  if (!r) c.checked = !c.checked; else c.closest(".ext-ligne").classList.toggle("actif", c.checked);
+});
+$("#page").addEventListener("keydown", (ev) => {
+  if (ev.key === "Enter" && ev.target.id === "ext-lien") { ev.preventDefault(); document.querySelector("[data-ext-chercher]").click(); }
+  if (ev.key === "Enter" && ev.target.id === "ext-q") { ev.preventDefault(); document.querySelector("[data-ext-rechercher]").click(); }
+});
 
 // --- requests
 pages.demandes = async () => {

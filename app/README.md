@@ -10,6 +10,7 @@ One executable, standard library only (plus three vendored packages for the WebV
 | `api_projets.go` | state, log, team, pilot start/stop, add/choose/remove project, folder browser, preferences (language, theme, accent, first-launch guide) |
 | `api_demandes.go` | current request, queue (reorder, remove), notes along the way, requests taken into the plan or delivered |
 | `api_plan.go` | plan editing: move a milestone up or down, remove it (its dependents are updated), edit `PLAN.md` as a whole |
+| `api_extensions.go`, `api_recherche.go`, `catalogue.json` | Skills & MCP page: library in `extensions/` of the tool folder, verified catalog, install from a GitHub link (zip, no links, size limits), pasted MCP configurations (JSON or `claude mcp add`, keys stored apart), search in SkillsMP and the official MCP Registry (configuration built from the registry entry), per-project choice, test of a server in its cage |
 | `api_ameliorer.go` | "Improve with Claude": one Claude turn rewrites a request clearer and more complete |
 | `migration.go` | moves the files of the previous name (Claude Autopilote) to Athanor's |
 | `api_outillage.go` | `.env` (secrets masked), health checks, repairs, "Ask Claude", options, virtual desktop, open files |

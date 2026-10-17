@@ -446,6 +446,8 @@ synchroniser_demande
 
 # PC tools, sandbox settings, Unreal MCP
 "$SYSTEME/detect-tools.sh"
+# The skills of the Skills & MCP page are copied there (read-only for Claude: settings.py and the guard).
+export ATHANOR_PLUGIN="$PRIVE/plugin"
 python3 "$SYSTEME/settings.py" "$KIT" "$REGLAGES" > /dev/null || { log "Cannot write Claude's settings."; exit 1; }
 if [ "${UNREAL_MCP:-0}" = "1" ] && [ -f "$SYSTEME/unreal_relay.txt" ]; then
   # "Mirrored" networking unavailable: go through the Windows relay (unreal-network.cmd), seen from WSL
@@ -454,12 +456,26 @@ if [ "${UNREAL_MCP:-0}" = "1" ] && [ -f "$SYSTEME/unreal_relay.txt" ]; then
   [ -n "$passerelle" ] && export UNREAL_MCP_URL="http://$passerelle:$(tr -dc '0-9' < "$SYSTEME/unreal_relay.txt")/mcp"
 fi
 export UNREAL_MCP_URL="${UNREAL_MCP_URL:-http://127.0.0.1:8000/mcp}"
-if [ "${UNREAL_MCP:-0}" = "1" ]; then
-  log "Unreal MCP: $UNREAL_MCP_URL"
-  printf '{\n  "mcpServers": {\n    "unreal-mcp": { "type": "http", "url": "%s" }\n  }\n}\n' "${UNREAL_MCP_URL:-http://127.0.0.1:8000/mcp}" > "$PRIVE/mcp.json"
-else
-  rm -f "$PRIVE/mcp.json"
-fi
+[ "${UNREAL_MCP:-0}" = "1" ] && log "Unreal MCP: $UNREAL_MCP_URL"
+export UNREAL_MCP
+
+# Skills and MCP servers chosen in the app (Skills & MCP page), plus Unreal MCP: rebuilt at the start of
+# every cycle, so a change made in the app applies from the next cycle. Local MCP servers run in a cage
+# (system/mcp-jail.sh); the skills form a plugin loaded with --plugin-dir.
+PLUGIN_DIR_OK=0
+printf '%s' "$AIDE_CLAUDE" | grep -q -- '--plugin-dir' && PLUGIN_DIR_OK=1
+EXTENSIONS_AVANT=""
+preparer_extensions() {
+  local r; r=$(python3 "$SYSTEME/extensions.py" preparer "$KIT" "$PROJECT" "$PRIVE" 2>> "$PRIVE/pilot.log")
+  PLUGIN_ATHANOR=""
+  if [ -f "$PRIVE/plugin/.claude-plugin/plugin.json" ]; then
+    if [ "$PLUGIN_DIR_OK" = 1 ]; then PLUGIN_ATHANOR="$PRIVE/plugin"
+    else r="$r (skills ignored: this Claude Code version has no --plugin-dir, update it with repair)"; fi
+  fi
+  [ -n "$r" ] && [ "$r" != "$EXTENSIONS_AVANT" ] && log "Skills & MCP: $r"
+  EXTENSIONS_AVANT="$r"
+}
+preparer_extensions
 
 # Bridge to the PC tools (outside the sandbox): the gateways Claude runs go through it.
 python3 "$SYSTEME/bridge.py" "$KIT" "$PROJECT" >> "$PRIVE/pont.log" 2>&1 9>&- &
@@ -536,6 +552,7 @@ while true; do
   fi
   log "Cycle $cycle: Claude is working${modele_cycle:+ with $modele_cycle} (log: .athanor/logs/$(basename "$fichier_log"))"
   ETAT_PHASE=travail; ETAT_REPRISE=""; ETAT_DEBUT_CYCLE=$(date '+%Y-%m-%dT%H:%M:%S')
+  preparer_extensions
   statut "Claude is working (cycle $cycle)"
 
   # Serial mode (one lead, one milestone) or parallel (a wave of workers, then merge by the lead).
@@ -568,6 +585,7 @@ while true; do
           "${ARGS_SURS[@]}" --append-system-prompt "$(cat "$consignes")")
     [ "$AGENTS_PAR_JSON" = 1 ] && args+=(--agents "$AGENTS_JSON")
     [ -f "$PRIVE/mcp.json" ] && args+=(--mcp-config "$PRIVE/mcp.json")
+    [ -n "$PLUGIN_ATHANOR" ] && args+=(--plugin-dir "$PLUGIN_ATHANOR")
     [ -n "$modele_cycle" ] && args+=(--model "$modele_cycle")
     # Model overloaded or unavailable: Claude Code switches to the fallback model on its own.
     [ -n "$FALLBACK_MODEL" ] && [ "$modele_cycle" != "$FALLBACK_MODEL" ] && args+=(--fallback-model "$FALLBACK_MODEL")

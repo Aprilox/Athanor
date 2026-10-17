@@ -207,7 +207,10 @@ PY
   local a=(-p "$but" --permission-mode bypassPermissions --settings "$PRIVE/reglages-$ident.json" --permission-prompts none --output-format stream-json --verbose
            "${ARGS_SURS[@]}" --append-system-prompt "$(cat "$PRIVE/CLAUDE.ouvrier-$ident.md")")
   [ -n "$agents_ouvrier" ] && a+=(--agents "$agents_ouvrier")
-  [ -f "$PRIVE/mcp.json" ] && a+=(--mcp-config "$PRIVE/mcp.json")
+  # its MCP servers work on its worktree; the skills are the project's
+  python3 "$SYSTEME/extensions.py" mcp "$KIT" "$PROJECT" "$PRIVE/mcp-$ident.json" --dossier-mcp "$trav" --principal "$PROJECT" 2>> "$PRIVE/pilot.log"
+  [ -f "$PRIVE/mcp-$ident.json" ] && a+=(--mcp-config "$PRIVE/mcp-$ident.json")
+  [ -n "${PLUGIN_ATHANOR:-}" ] && a+=(--plugin-dir "$PLUGIN_ATHANOR")
   [ -n "$template" ] && a+=(--model "$template")
   [ -n "$FALLBACK_MODEL" ] && [ "$template" != "$FALLBACK_MODEL" ] && a+=(--fallback-model "$FALLBACK_MODEL")
   [ -n "$EFFORT" ] && a+=(--effort "$EFFORT")
@@ -276,7 +279,7 @@ parallele_cycle() {
   if [ -n "$(g -C "$PROJECT" status --porcelain --untracked-files=no 2>/dev/null)" ]; then
     g -C "$PROJECT" add -u >/dev/null 2>&1 && g -C "$PROJECT" commit -q -m "Work in progress before the parallel cycle (lead)" >/dev/null 2>&1 && log "Uncommitted changes of the lead committed before the cycle."
   fi
-  rm -f "$PRIVE"/ouvrier_*.sid "$PRIVE"/ouvrier_*.code "$PRIVE"/ouvrier_*.pid "$PRIVE/rapports_ouvriers.md"
+  rm -f "$PRIVE"/ouvrier_*.sid "$PRIVE"/ouvrier_*.code "$PRIVE"/ouvrier_*.pid "$PRIVE"/mcp-*.json "$PRIVE/rapports_ouvriers.md"
   echo "# Worker reports ($(date '+%Y-%m-%d %H:%M'))" > "$PRIVE/rapports_ouvriers.md"
   debut=$(date +%s)
   lancer_prets() {  # fills the free slots with ready milestones
@@ -333,6 +336,7 @@ parallele_cycle() {
         "${ARGS_SURS[@]}" --append-system-prompt "$(cat "$CONSIGNES"; parallele_consignes_fusion "${fusionnes[*]}" "${a_fusionner[*]}" "${echoues[*]}")")
   [ "$AGENTS_PAR_JSON" = 1 ] && args+=(--agents "$AGENTS_JSON")
   [ -f "$PRIVE/mcp.json" ] && args+=(--mcp-config "$PRIVE/mcp.json")
+  [ -n "${PLUGIN_ATHANOR:-}" ] && args+=(--plugin-dir "$PLUGIN_ATHANOR")
   [ -n "$template" ] && args+=(--model "$template")
   [ -n "$FALLBACK_MODEL" ] && [ "$template" != "$FALLBACK_MODEL" ] && args+=(--fallback-model "$FALLBACK_MODEL")
   [ -n "$EFFORT" ] && args+=(--effort "$EFFORT")

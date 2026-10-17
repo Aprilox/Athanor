@@ -304,6 +304,18 @@ func (s *Serveur) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/bureau/{action}", s.garde(false, s.apiBureau))
 	mux.HandleFunc("POST /api/ouvrir", s.garde(false, s.apiOuvrir))
 	mux.HandleFunc("POST /api/fin-vue", s.garde(false, s.apiFinVue))
+	mux.HandleFunc("GET /api/extensions", s.garde(false, s.apiExtensions))
+	mux.HandleFunc("GET /api/extensions/voir", s.garde(false, s.apiExtVoir))
+	mux.HandleFunc("POST /api/extensions/catalogue", s.garde(false, s.apiExtCatalogue))
+	mux.HandleFunc("POST /api/extensions/github", s.garde(false, s.apiExtGitHub))
+	mux.HandleFunc("POST /api/extensions/skill", s.garde(false, s.apiExtSkillPerso))
+	mux.HandleFunc("POST /api/extensions/mcp", s.garde(false, s.apiExtMCPPerso))
+	mux.HandleFunc("POST /api/extensions/projet", s.garde(false, s.apiExtProjet))
+	mux.HandleFunc("POST /api/extensions/secret", s.garde(false, s.apiExtSecret))
+	mux.HandleFunc("POST /api/extensions/retirer", s.garde(false, s.apiExtRetirer))
+	mux.HandleFunc("POST /api/extensions/tester", s.garde(false, s.apiExtTester))
+	mux.HandleFunc("POST /api/extensions/recherche", s.garde(false, s.apiExtRecherche))
+	mux.HandleFunc("POST /api/extensions/registre", s.garde(false, s.apiExtRegistre))
 }
 
 // ----------------------------------------------------------------------------- locking

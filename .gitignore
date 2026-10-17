@@ -12,6 +12,8 @@
 /system/mirrored_unavailable.txt
 /system/.claude_settings.json
 /system/bin/rtk
+# Skills & MCP library of the app (and API keys of the servers)
+/extensions/
 __pycache__/
 # Legacy single-project layout (projects now live outside the tool)
 /projet/
