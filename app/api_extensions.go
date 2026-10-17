@@ -103,17 +103,21 @@ type MCPInstalle struct {
 	Config      ConfigMCP         `json:"config"`
 	Optionnels  []string          `json:"optionnels,omitempty"` // keys the server works without
 	Liens       map[string]string `json:"liens,omitempty"`      // where to get each key
+	Plugin      string            `json:"plugin,omitempty"`     // the plugin it comes with (api_plugins.go): on and off with it
 	Ajoute      string            `json:"ajoute"`
 }
 
 type Bibliotheque struct {
-	Skills map[string]SkillInstalle `json:"skills"`
-	MCP    map[string]MCPInstalle   `json:"mcp"`
+	Skills  map[string]SkillInstalle  `json:"skills"`
+	MCP     map[string]MCPInstalle    `json:"mcp"`
+	Plugins map[string]PluginInstalle `json:"plugins,omitempty"`
+	Marches []MarcheInstalle          `json:"marches,omitempty"` // marketplaces added by the user
 }
 
 type ChoixProjet struct {
-	Skills []string `json:"skills"`
-	MCP    []string `json:"mcp"`
+	Skills  []string `json:"skills"`
+	MCP     []string `json:"mcp"`
+	Plugins []string `json:"plugins,omitempty"`
 }
 
 var extMu sync.Mutex // the library files: one writer at a time
@@ -149,6 +153,9 @@ func lireBiblio(k Kit) Bibliotheque {
 	}
 	if b.MCP == nil {
 		b.MCP = map[string]MCPInstalle{}
+	}
+	if b.Plugins == nil {
+		b.Plugins = map[string]PluginInstalle{}
 	}
 	return b
 }
@@ -517,6 +524,9 @@ func extraireSkill(k Kit, z *zip.Reader, dossier, id string) error {
 
 var reVarSecret = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
 
+// variablesPlugin: set by the pilot for a plugin's servers (system/extensions.py), never keys to ask for
+var variablesPlugin = map[string]bool{"CLAUDE_PLUGIN_ROOT": true, "CLAUDE_PLUGIN_DATA": true, "CLAUDE_PROJECT_DIR": true}
+
 // estNomSecret: the name of an API key, token or password (API_KEY, GITHUB_PAT, x-api-key…), not
 // MEMORY_FILE_PATH or NODE_ENV.
 func estNomSecret(nom string) bool {
@@ -724,7 +734,7 @@ func secretsRequis(c ConfigMCP) []string {
 	var out []string
 	ajouter := func(s string) {
 		for _, m := range reVarSecret.FindAllStringSubmatch(s, -1) {
-			if !vus[m[1]] {
+			if !vus[m[1]] && !variablesPlugin[m[1]] {
 				vus[m[1]] = true
 				out = append(out, m[1])
 			}
@@ -765,6 +775,7 @@ type ExtVue struct {
 	Type        string      `json:"type,omitempty"`
 	Resume      string      `json:"resume,omitempty"`
 	Secrets     []SecretVue `json:"secrets,omitempty"`
+	Plugin      string      `json:"plugin,omitempty"`
 }
 
 func (s *Serveur) apiExtensions(w http.ResponseWriter, r *http.Request) {
@@ -795,7 +806,13 @@ func (s *Serveur) apiExtensions(w http.ResponseWriter, r *http.Request) {
 		skills = append(skills, v)
 	}
 	for id, x := range b.MCP {
-		v := ExtVue{ID: id, Nom: x.Nom, Description: x.Description, Source: x.Source, Catalogue: x.Catalogue, Actif: contient(ch.MCP, id), Type: x.Config.Type}
+		v := ExtVue{ID: id, Nom: x.Nom, Description: x.Description, Source: x.Source, Catalogue: x.Catalogue, Actif: contient(ch.MCP, id), Type: x.Config.Type, Plugin: x.Plugin}
+		if x.Plugin != "" {
+			v.Actif = contient(ch.Plugins, x.Plugin)
+			if pl, ok := b.Plugins[x.Plugin]; ok {
+				v.Description = pl.Nom
+			}
+		}
 		if d := descCat["mcp:"+x.Catalogue]; d != "" {
 			v.Description = d
 		}
@@ -845,7 +862,7 @@ func (s *Serveur) apiExtensions(w http.ResponseWriter, r *http.Request) {
 	if avecProjet {
 		nomProjet = p.Nom
 	}
-	s.ecrireJSON(w, map[string]any{"projet": nomProjet, "skills": skills, "mcp": mcp, "catalogue": map[string]any{"skills": cs, "mcp": cm}})
+	s.ecrireJSON(w, map[string]any{"projet": nomProjet, "skills": skills, "mcp": mcp, "plugins": len(b.Plugins), "catalogue": map[string]any{"skills": cs, "mcp": cm}})
 }
 
 // ----------------------------------------------------------------------------- actions
@@ -1203,8 +1220,13 @@ func (s *Serveur) apiExtProjet(w http.ResponseWriter, r *http.Request) {
 		}
 		ch.Skills = basculer(ch.Skills)
 	case "mcp":
-		if _, ok := b.MCP[c.ID]; !ok {
+		x, ok := b.MCP[c.ID]
+		if !ok {
 			s.erreur(w, http.StatusNotFound, "Unknown")
+			return
+		}
+		if x.Plugin != "" {
+			s.erreur(w, http.StatusBadRequest, "This server comes with a plugin: switch the plugin on or off (Plugins tab).")
 			return
 		}
 		ch.MCP = basculer(ch.MCP)
@@ -1269,6 +1291,10 @@ func (s *Serveur) apiExtRetirer(w http.ResponseWriter, r *http.Request) {
 	extMu.Lock()
 	defer extMu.Unlock()
 	b, choix, secrets := lireBiblio(k), lireChoix(k), lireSecrets(k)
+	if c.Type == "mcp" && b.MCP[c.ID].Plugin != "" {
+		s.erreur(w, http.StatusBadRequest, "This server comes with a plugin: remove the plugin instead (Plugins tab).")
+		return
+	}
 	for cle, ch := range choix {
 		var garde []string
 		liste := ch.Skills

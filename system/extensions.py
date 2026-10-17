@@ -4,17 +4,23 @@
 The library lives in the tool folder, out of Claude's reach (the app writes it, the pilot reads it):
   extensions/bibliotheque.json   {"skills": {id: {...}}, "mcp": {id: {"config": {...}, ...}}}
   extensions/skills/<id>/        the skill folders (SKILL.md and its files)
-  extensions/projets.json        {project folder: {"skills": [ids], "mcp": [ids]}}
+  extensions/projets.json        {project folder: {"skills": [ids], "mcp": [ids], "plugins": [ids]}}
   extensions/secrets.json        {mcp id: {VARIABLE: value}}   (API keys, never in a log)
+  extensions/plugins/<id>/       Claude Code plugins, taken apart by the app (api_plugins.go): their MCP
+                                 servers are in the library (on with the plugin), their hooks removed
 
 Usage:
   extensions.py preparer KIT PROJECT PRIVATE_DIR [--mcp FILE] [--dossier-mcp DIR] [--principal DIR]
-      rebuilds PRIVATE_DIR/plugin (the project's skills, loaded with --plugin-dir) and the MCP file
-      (default PRIVATE_DIR/mcp.json); prints one summary line.
+      rebuilds PRIVATE_DIR/plugin (the project's skills, loaded with --plugin-dir), PRIVATE_DIR/plugins/
+      (a copy of each plugin switched on, one --plugin-dir each) and the MCP file (default
+      PRIVATE_DIR/mcp.json); prints one summary line.
   extensions.py mcp KIT PROJECT FILE [--dossier-mcp DIR] [--principal DIR]
       only the MCP file (a parallel worker: its servers see its worktree).
   extensions.py tester KIT PROJECT ID
       starts the server ID in its cage, lists its tools, prints a JSON result (the app's "Test" button).
+  extensions.py connexion KIT ID FILE
+      FILE: an MCP configuration with the remote server ID alone, exactly as the pilot gives it, for the
+      one-time sign-in window of the app (Claude Code keeps the sign-in, valid for every project).
 Unreal MCP (UNREAL_MCP=1, UNREAL_MCP_URL) is part of the MCP file as before.
 """
 import json, os, re, select, shutil, subprocess, sys, time
@@ -49,9 +55,8 @@ def choix_du_projet(kit, projet):
             pass
     for cle, v in projets.items():
         if normaliser(cle) in noms and isinstance(v, dict):
-            return {"skills": [x for x in v.get("skills", []) if isinstance(x, str) and ID_SUR.match(x)],
-                    "mcp": [x for x in v.get("mcp", []) if isinstance(x, str) and ID_SUR.match(x)]}
-    return {"skills": [], "mcp": []}
+            return {k: [x for x in (v.get(k) or []) if isinstance(x, str) and ID_SUR.match(x)] for k in ("skills", "mcp", "plugins")}
+    return {"skills": [], "mcp": [], "plugins": []}
 
 
 def construire_plugin(kit, choix, prive):
@@ -79,6 +84,40 @@ def construire_plugin(kit, choix, prive):
         os.rename(neuf, final)
     shutil.rmtree(vieux, ignore_errors=True)
     shutil.rmtree(neuf, ignore_errors=True)
+    return copies
+
+
+def construire_plugins(kit, choix, prive):
+    """PRIVATE_DIR/plugins/<id>: a copy of each plugin switched on for the project (the app already took
+    out their hooks and MCP servers). Copies, not links, read-only for Claude (settings.py)."""
+    source = os.path.join(kit, "extensions", "plugins")
+    biblio = lire_json(os.path.join(kit, "extensions", "bibliotheque.json"), {}).get("plugins") or {}
+    neuf, final, vieux = (os.path.join(prive, n) for n in ("plugins.neuf", "plugins", "plugins.vieux"))
+    shutil.rmtree(neuf, ignore_errors=True)
+    os.makedirs(neuf)
+    copies = []
+    for pid in choix.get("plugins", []):
+        d = os.path.join(source, pid)
+        if pid in biblio and os.path.isdir(d) and not os.path.islink(d):
+            shutil.copytree(d, os.path.join(neuf, pid), symlinks=True,
+                            ignore=shutil.ignore_patterns(".git", "__pycache__"))
+            for r, ds, fs in os.walk(os.path.join(neuf, pid)):   # a link is never followed nor kept
+                for n in ds + fs:
+                    if os.path.islink(os.path.join(r, n)):
+                        os.remove(os.path.join(r, n))
+            for f in ("hooks/hooks.json", ".mcp.json", ".lsp.json", "settings.json"):   # never run outside the sandbox
+                try:
+                    os.remove(os.path.join(neuf, pid, f))
+                except OSError:
+                    pass
+            for f in ("monitors", "workflows"):
+                shutil.rmtree(os.path.join(neuf, pid, f), ignore_errors=True)
+            copies.append(pid)
+    shutil.rmtree(vieux, ignore_errors=True)
+    if os.path.isdir(final):
+        os.rename(final, vieux)
+    os.rename(neuf, final)
+    shutil.rmtree(vieux, ignore_errors=True)
     return copies
 
 
@@ -114,6 +153,13 @@ def serveur(kit, sid, definition, secrets, dossier, principal):
             manquants.update(m)
             garde[str(k)] = val
         return garde
+    # a plugin's server: its own variables (the plugin's folder, read-only in the cage; a data folder of its own)
+    pid = definition.get("plugin") if isinstance(definition.get("plugin"), str) and ID_SUR.match(definition.get("plugin")) else ""
+    racine_plugin = os.path.join(kit, "extensions", "plugins", pid) if pid else ""
+    if pid:
+        donnees = os.path.join(kit, "tools", "plugin-data", pid)
+        os.makedirs(donnees, exist_ok=True)
+        secrets = dict(secrets, CLAUDE_PLUGIN_ROOT=racine_plugin, CLAUDE_PLUGIN_DATA=donnees, CLAUDE_PROJECT_DIR=dossier)
     t = c.get("type") or ("http" if c.get("url") else "stdio")
     if t in ("http", "sse"):
         url = remplacer(c.get("url", ""), secrets, dossier, manquants)
@@ -135,10 +181,16 @@ def serveur(kit, sid, definition, secrets, dossier, principal):
             cage = [sid, os.path.join(kit, "tools"), "--ro", principal, "--rw", dossier]
             if os.path.isdir(os.path.join(principal, ".git")):
                 cage += ["--rw", os.path.join(principal, ".git")]
+        if racine_plugin:
+            cage += ["--ro", racine_plugin]
+        # the server's variables go to the cage as arguments, set inside it (bwrap --setenv): never in the
+        # environment of mcp-jail.sh itself, which runs outside the cage (BASH_ENV, LD_PRELOAD, PATH…)
+        for k, v in sorted(env.items()):
+            if not re.match(r"^[A-Za-z_][A-Za-z0-9_]{0,127}$", k) or "\0" in v:
+                return None, "invalid variable " + k[:40]
+            cage += ["--env", k, v]
         s = {"type": "stdio", "command": os.path.join(kit, "system", "mcp-jail.sh"),
              "args": cage + ["--", remplacer(cmd, secrets, dossier, manquants)] + args}
-        if env:
-            s["env"] = env
     else:
         return None, "unknown type " + str(t)
     if manquants:
@@ -152,7 +204,10 @@ def construire_mcp(kit, choix, projet, fichier, dossier, principal):
         serveurs["unreal-mcp"] = {"type": "http", "url": os.environ.get("UNREAL_MCP_URL") or "http://127.0.0.1:8000/mcp"}
     biblio = lire_json(os.path.join(kit, "extensions", "bibliotheque.json"), {}).get("mcp", {})
     tous_secrets = lire_json(os.path.join(kit, "extensions", "secrets.json"), {})
-    for sid in choix["mcp"]:
+    # the servers switched on, and those of the plugins switched on (on and off with their plugin)
+    ids = [x for x in choix["mcp"] if not (biblio.get(x) or {}).get("plugin")]
+    ids += sorted(x for x, d in biblio.items() if isinstance(d, dict) and d.get("plugin") in choix.get("plugins", []) and ID_SUR.match(x))
+    for sid in ids:
         if sid not in biblio:
             continue
         s, raison = serveur(kit, sid, biblio[sid], tous_secrets.get(sid) or {}, dossier, principal)
@@ -246,13 +301,26 @@ def main():
         sid = sys.argv[4] if len(sys.argv) > 4 else ""
         print(json.dumps(tester(kit, projet, sid) if ID_SUR.match(sid) else {"ok": False, "erreur": "invalid id"}))
         return 0
+    if action == "connexion":
+        sid, fichier = (sys.argv[3], sys.argv[4]) if len(sys.argv) > 4 else ("", "")
+        biblio = lire_json(os.path.join(kit, "extensions", "bibliotheque.json"), {}).get("mcp", {})
+        if not ID_SUR.match(sid) or sid not in biblio:
+            print("unknown server", file=sys.stderr); return 1
+        s, raison = serveur(kit, sid, biblio[sid], (lire_json(os.path.join(kit, "extensions", "secrets.json"), {}).get(sid) or {}), os.getcwd(), None)
+        if not s or s.get("type") not in ("http", "sse"):
+            print(raison or "not a remote server", file=sys.stderr); return 1
+        fd = os.open(fichier, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump({"mcpServers": {sid: s}}, f)
+        return 0
     choix = choix_du_projet(kit, projet)
     if action == "preparer":
         prive = sys.argv[4]; o = options(sys.argv[5:])
         os.makedirs(prive, exist_ok=True)
         skills = construire_plugin(kit, choix, prive)
+        plugins = construire_plugins(kit, choix, prive)
         mcp, notes = construire_mcp(kit, choix, projet, o.get("mcp") or os.path.join(prive, "mcp.json"), o.get("dossier-mcp") or projet, o.get("principal"))
-        print("skills: " + (", ".join(skills) or "none") + " · MCP: " + (", ".join(mcp) or "none") + ("" if not notes else " · " + "; ".join(notes)))
+        print("skills: " + (", ".join(skills) or "none") + " · plugins: " + (", ".join(plugins) or "none") + " · MCP: " + (", ".join(mcp) or "none") + ("" if not notes else " · " + "; ".join(notes)))
         return 0
     if action == "mcp":
         fichier = sys.argv[4]; o = options(sys.argv[5:])

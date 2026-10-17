@@ -1,19 +1,25 @@
-#!/bin/bash
+#!/bin/bash -p
 # Runs a local MCP server (stdio) in a cage (bubblewrap), the way Claude's own commands run in the
 # system sandbox. Inside: the system read-only, the project folder writable, the tool caches (tools/)
 # writable, the network. Hidden: the user's home (except the toolchains: nvm, uv, cargo…), the Windows
 # drives (/mnt), Athanor's folder and its secrets, the WSL bridge to Windows. The Claude token never
 # reaches the server.
 #
-# Usage: mcp-jail.sh NAME TOOLS [--rw DIR]... [--ro DIR]... -- COMMAND [ARGS...]
+# Usage: mcp-jail.sh NAME TOOLS [--rw DIR]... [--ro DIR]... [--env NAME VALUE]... -- COMMAND [ARGS...]
+# The server's variables come as --env (set inside the cage only): this script runs outside the cage, so
+# its own environment is never taken from a server's configuration (-p: no BASH_ENV, no imported functions).
 # (written into the MCP configuration by system/extensions.py; never called by hand)
 set -u
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin   # bwrap is found here, never elsewhere
+unset LD_PRELOAD LD_LIBRARY_PATH LD_AUDIT GCONV_PATH
 nom="${1:-}"; outils="${2:-}"; shift 2 2>/dev/null || { echo "mcp-jail: usage: NAME TOOLS [--rw DIR]... -- COMMAND" >&2; exit 2; }
-ecriture=(); lecture=()
+ecriture=(); lecture=(); variables=()
 while [ $# -gt 0 ] && [ "$1" != "--" ]; do
   case "$1" in
     --rw) ecriture+=("$2"); shift 2 ;;
     --ro) lecture+=("$2"); shift 2 ;;
+    --env) [[ "${2:-}" =~ ^[A-Za-z_][A-Za-z0-9_]{0,127}$ ]] || { echo "mcp-jail: invalid variable" >&2; exit 2; }
+           variables+=(--setenv "$2" "${3-}"); shift 3 ;;
     *) echo "mcp-jail: unknown option $1" >&2; exit 2 ;;
   esac
 done
@@ -46,6 +52,7 @@ for d in "${ecriture[@]}"; do [ -d "$d" ] && a+=(--bind "$d" "$d"); done
 a+=(--bind "$outils" "$outils")
 # Claude's screen (system/ecran.sh): a server's windows (Godot, a browser) open there, never on the user's screen.
 [ -n "${ATHANOR_X11_DIR:-}" ] && [ -d "$ATHANOR_X11_DIR" ] && a+=(--bind "$ATHANOR_X11_DIR" /tmp/.X11-unix)
+a+=("${variables[@]}")   # the server's own variables, before the cage's (HOME, caches…) which win
 a+=(--setenv HOME "$maison" --setenv XDG_CACHE_HOME "$outils/cache" --setenv npm_config_cache "$outils/cache/npm"
     --setenv UV_CACHE_DIR "$outils/cache/uv" --setenv PLAYWRIGHT_BROWSERS_PATH "$outils/cache/ms-playwright"
     --unsetenv CLAUDE_CODE_OAUTH_TOKEN --unsetenv ANTHROPIC_API_KEY --unsetenv WSL_INTEROP

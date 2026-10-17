@@ -224,6 +224,7 @@ PY
   python3 "$SYSTEME/extensions.py" mcp "$KIT" "$PROJECT" "$PRIVE/mcp-$ident.json" --dossier-mcp "$trav" --principal "$PROJECT" 2>> "$PRIVE/pilot.log"
   [ -f "$PRIVE/mcp-$ident.json" ] && a+=(--mcp-config "$PRIVE/mcp-$ident.json")
   [ -n "${PLUGIN_ATHANOR:-}" ] && a+=(--plugin-dir "$PLUGIN_ATHANOR")
+  local dp; for dp in "${PLUGINS_DIRS[@]}"; do a+=(--plugin-dir "$dp"); done
   [ -n "$template" ] && a+=(--model "$template")
   [ -n "$FALLBACK_MODEL" ] && [ "$template" != "$FALLBACK_MODEL" ] && a+=(--fallback-model "$FALLBACK_MODEL")
   [ -n "$EFFORT" ] && a+=(--effort "$EFFORT")
@@ -350,6 +351,7 @@ parallele_cycle() {
   [ "$AGENTS_PAR_JSON" = 1 ] && args+=(--agents "$AGENTS_JSON")
   [ -f "$PRIVE/mcp.json" ] && args+=(--mcp-config "$PRIVE/mcp.json")
   [ -n "${PLUGIN_ATHANOR:-}" ] && args+=(--plugin-dir "$PLUGIN_ATHANOR")
+  local dp; for dp in "${PLUGINS_DIRS[@]}"; do args+=(--plugin-dir "$dp"); done
   [ -n "$template" ] && args+=(--model "$template")
   [ -n "$FALLBACK_MODEL" ] && [ "$template" != "$FALLBACK_MODEL" ] && args+=(--fallback-model "$FALLBACK_MODEL")
   [ -n "$EFFORT" ] && args+=(--effort "$EFFORT")
