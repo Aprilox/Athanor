@@ -58,5 +58,8 @@ PROJECT="${PROJECT:-$KIT/projet}"; mkdir -p "$PROJECT/.athanor" "$KIT/tools/wind
   if [ -n "$ANDROID_JDK_DIR" ]; then echo "- **Java for Android**: \`$ANDROID_JDK_DIR\`"; else echo "- Java (JDK) for Android: missing"; fi
   if [ "$WINGET" = 1 ]; then echo "- **winget**: \`install-windows ID\` installs a Windows program (\`install-windows --search NAME\` to find the ID)"; else echo "- winget: unavailable"; fi
   if [ "$WINDOWS" = 1 ]; then echo "- **Portable Windows programs**: install them in \`\$TOOLS/windows\`, run them with \`pc-exec PATH.exe ...\`; Windows variables with \`windows-var NAME PATH\`"; fi
+  if [ -f "$KIT/logs/bureau-isole" ]; then
+    echo "- **Claude's desktop**: the programs you open never show on the user's screen (Windows programs through the gateways: a Windows desktop of their own; Linux programs: a private X screen, \`DISPLAY\` is set). Check what they show with screenshots: the program's own, or \`import -window root shot.png\` for the Linux screen."
+  fi
   if command -v docker >/dev/null 2>&1 && timeout 20 docker info >/dev/null 2>&1; then echo "- **Docker**: \`tool IMAGE COMMAND...\` (disposable container, project mounted on /work)"; else echo "- Docker: not available (Docker Desktop stopped, or WSL integration not enabled)"; fi
 } > "$PROJECT/.athanor/PC_TOOLS.md"

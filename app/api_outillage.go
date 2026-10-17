@@ -3,6 +3,7 @@ package main
 // Settings (the tool's .env), tooling health, tasks, options, virtual desktop, opening folders.
 
 import (
+	"encoding/base64"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -272,6 +273,24 @@ func (s *Serveur) apiEcrireOptions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.msg(w, "Options saved.")
+}
+
+// apiEcran returns a picture of the project's Claude screen on the Linux side (system/ecran.sh: the
+// Linux windows of a game under test, Godot, a headed browser), for the "Claude's screen" window.
+func (s *Serveur) apiEcran(w http.ResponseWriter, r *http.Request) {
+	p, ok := s.projetRequis(w, r)
+	if !ok {
+		return
+	}
+	dossier := strings.ReplaceAll(p.Dossier, "'", "'\\''")
+	c := commandeWSL(s.kitCourant(), "P=\"$(wslpath -u '"+dossier+"' 2>/dev/null || printf '%s' '"+dossier+"')\"; bash system/ecran.sh capture \"$P\"")
+	cacherFenetre(c)
+	png, err := c.Output()
+	if err != nil || len(png) < 8 || string(png[1:4]) != "PNG" {
+		s.erreur(w, http.StatusNotFound, "Claude's screen is not running for this project (pilot stopped, or the option is off).")
+		return
+	}
+	s.ecrireJSON(w, map[string]string{"png": base64.StdEncoding.EncodeToString(png)})
 }
 
 func (s *Serveur) apiBureau(w http.ResponseWriter, r *http.Request) {

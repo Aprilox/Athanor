@@ -55,7 +55,7 @@ You describe what you want: a game, a website, an app, a tool. Athanor runs [Cla
 | **A sandbox** | Claude's commands run under bubblewrap + seccomp. They can write only in the project, never read the rest of your machine, and Internet stays open. |
 | **Your PC's software** | Unreal Engine, Blender, the Android SDK, Docker and winget are reached through a controlled bridge, command by command. |
 | **No UAC prompts** | Opt-in. One consent, and from then on Claude installs and runs what the project needs with administrator rights, silently. |
-| **A desktop app** | One file. It shows the live team, the plan, usage, the readable log and the request queue, plus health checks with one-click repair. It also runs several projects at once and keeps Claude's windows on their own virtual desktop. Themes, 6 languages. |
+| **A desktop app** | One file. It shows the live team, the plan, usage, the readable log and the request queue, plus health checks with one-click repair. It also runs several projects at once and keeps the programs Claude starts on a desktop of their own, out of your way. Themes, 6 languages. |
 | **Clean projects** | A project is any folder on your PC. Athanor only adds a `.athanor/` workshop (excluded from git); delete it at the end and nothing is left behind. |
 | **Frugal by design** | Targeted reading rules, a quick check during the milestone and the full check once, screenshots assembled into contact sheets, a project map regenerated before each cycle, automatic archives, command output compression. The Overview page shows live how much of each session is re-read from the prompt cache. |
 
@@ -221,15 +221,20 @@ The screenshots show the dark "Slate" and the "Light" palettes.
 | **Skills & MCP** | the library (verified catalog, search in SkillsMP and the MCP Registry, GitHub link, your own skills, pasted MCP configurations), a switch per project, the API keys of the servers (stored apart, never shown), *Test* starts a server in its cage and lists its tools |
 | **Setup & health** | *Check everything*, *Install everything*, *Test the sandbox* for real, *Repair* line by line, *Ask Claude* to repair or install something |
 | **Settings** | the `.env` (token masked, models, effort, watchdog…), *Save and restart after cycle* |
-| **Options** | language, palette and accent, project list (removing a project never touches its folder), restart the pilots on opening, start with Windows, "Claude" virtual desktop, password, tool folder |
+| **Options** | language, palette and accent, project list (removing a project never touches its folder), restart the pilots on opening, start with Windows (icon in the notification area), "Claude" desktop, password, tool folder |
 
 **Skills & MCP, safely**: skills are loaded as a session plugin (`--plugin-dir`), so Claude only reads one when it needs it; it can read them but never change them. MCP servers are added to the session's own MCP configuration; a local one starts in a bubblewrap cage (`system/mcp-jail.sh`): system read-only, only the project and the tool caches writable, no home folder, no Windows drives, no Athanor folder, no Claude token. Requires Claude Code with `--plugin-dir` for skills.
 
 **A plan you can shape**: click a milestone to see its files, dependencies and acceptance criteria; move it up or down, or remove it (the other milestones stop depending on it), or edit `PLAN.md` as a whole.
 
+**Start with Windows**: Athanor starts as an icon in the notification area (near the clock, or under the ^ arrow). A click opens the window; closing it brings the icon back; right click → *Quit* (the pilots keep running). With *Restart the pilots that were running*, the projects you started and neither stopped nor saw delivered start again. Launching Athanor while it already runs only shows its window: there is never a second copy.
+
 **Lock**: with a password (*Options*), the 🔒 button locks the app. Claude keeps working, but nothing can be seen or changed (token included) without the password, and the app starts locked.
 
-**"Claude" virtual desktop**: while a pilot runs, the windows it opens (Unreal, Blender, a game under test) go to a dedicated Windows desktop, so they never pop up over your work or your game. A window you bring back is never moved again. *View Claude's desktop* / *Come back*, or Ctrl + Win + ← / →.
+**"Claude" desktop**: the programs Claude starts never open on your screen, so they never interrupt your work or a full-screen game.
+- **Windows**: Unreal, Blender, a game under test and everything they start open on a Windows desktop of their own, the way the UAC prompt has its own (the gateways start them with `Athanor.exe --isole`). They cannot take the focus. *View Claude's desktop* switches the screen to it; the bar at the top, or Ctrl + Alt + B, brings you back.
+- **Linux**, and the Linux programs under WSL that WSLg would show on Windows: each pilot runs a private X server (Xvfb). Claude, its tools and its MCP servers only see that screen (`system/ecran.sh`), and the user's display, X11 or Wayland, is out of their reach. *View Claude's screen* shows it live in the app.
+- With the option off, new programs open on your screen again. Those already running stay where they are until they close: the app still lets you go and close them.
 
 The interface is translated into English, French, Spanish, German, Italian and Portuguese. The language you choose is also the one Claude writes the plan, log and documents in.
 
@@ -364,10 +369,12 @@ app/                   the app's Go sources, static UI (HTML, CSS, JS without de
 commands/              install, configure, start, stop, stop-after-cycle, follow, test-sandbox, repair,
                        allow-admin, unreal-network (.cmd for Windows, .sh for Linux/WSL)
 system/                pilot.sh (the loop), parallel.sh (scheduler, workers, merges), safety.sh, bridge.py,
-                       extensions.py + mcp-jail.sh (Skills & MCP), settings.py (sandbox), guard.py, detect-tools.sh, athanor.py (map, archives, screenshots),
+                       extensions.py + mcp-jail.sh (Skills & MCP), ecran.sh (Claude's screen),
+                       settings.py (sandbox), guard.py, detect-tools.sh, athanor.py (map, archives, screenshots),
                        bin/ (gateways), windows/ (PowerShell helpers)
 template/              CLAUDE.md (Claude's instructions), PC_TOOLS_GUIDE.md, .claude/agents/ (the team)
 docs/images/           README images
+docs/releases/         what is new in each version (shown on the release page)
 .env.example           every setting, documented
 logs/, tools/,         created at run time, never committed
 extensions/
@@ -400,7 +407,7 @@ Yes. *Requests → Note along the way* is read at the start of the next cycle. N
 <details>
 <summary><b>Will it get in my way while I use the PC?</b></summary>
 
-The pilots run in WSL without a window. The windows they open (an editor, a game under test) go to the "Claude" virtual desktop while a pilot runs. Remember to disable sleep mode for long runs.
+The pilots run in WSL without a window. The programs they open (an editor, a game under test) go to the "Claude" desktop, never on your screen. Remember to disable sleep mode for long runs.
 </details>
 
 <details>
@@ -438,10 +445,10 @@ Yes. Nothing is tied to a user name or a drive letter: paths come from your prof
 Push a version tag and GitHub builds both apps and publishes the release ([`.github/workflows/release.yml`](.github/workflows/release.yml)):
 
 ```bash
-git tag v2.5.1 && git push origin v2.5.1
+git tag v2.6.0 && git push origin v2.6.0
 ```
 
-Keep the version in [`app/winres/athanor.rc`](app/winres/athanor.rc) in step with the tag.
+Keep the version in [`app/winres/athanor.rc`](app/winres/athanor.rc) in step with the tag, and write what is new in `docs/releases/VERSION.md` (e.g. [`docs/releases/2.6.0.md`](docs/releases/2.6.0.md)): it opens the release page.
 
 ## Contributing
 
@@ -454,7 +461,7 @@ Issues and pull requests are welcome. Before opening one:
 ## Acknowledgements
 
 - [Claude Code](https://claude.com/claude-code), which does the actual work.
-- [VirtualDesktop](https://github.com/MScholtes/VirtualDesktop) by Markus Scholtes (MIT), compiled on first use for the "Claude" desktop.
+- [VirtualDesktop](https://github.com/MScholtes/VirtualDesktop) by Markus Scholtes (MIT), compiled on first use: fallback when the "Claude" desktop cannot be created (windows moved to a virtual desktop).
 - [go-webview2](https://github.com/jchv/go-webview2) (MIT) for the Windows window, and [bubblewrap](https://github.com/containers/bubblewrap) for the sandbox.
 
 ## License

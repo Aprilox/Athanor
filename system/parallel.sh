@@ -203,7 +203,7 @@ fs["allowWrite"] = fs.get("allowWrite", []) + [git]
 fs["allowRead"] = fs.get("allowRead", []) + [git]
 json.dump(r, open(f, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
 PY
-  local but="/goal The milestone $ident of .athanor/PLAN.md is carried out according to your worker instructions, checked, and committed on branch auto/$ident (git log shows it), with your report as the final answer. Or stop after ${MAX_TURNS_PER_CYCLE} turns."
+  local but="/goal The milestone $ident of .athanor/PLAN.md is carried out according to your worker instructions, checked, and committed on branch auto/$ident (git log shows it), with your report as the final answer. Or stop after ${MAX_TURNS_PER_CYCLE} turns. ${PHRASE_LANGUE}"
   local a=(-p "$but" --permission-mode bypassPermissions --settings "$PRIVE/reglages-$ident.json" --permission-prompts none --output-format stream-json --verbose
            "${ARGS_SURS[@]}" --append-system-prompt "$(cat "$PRIVE/CLAUDE.ouvrier-$ident.md")")
   [ -n "$agents_ouvrier" ] && a+=(--agents "$agents_ouvrier")
@@ -216,7 +216,7 @@ PY
   [ -n "$EFFORT" ] && a+=(--effort "$EFFORT")
   : > "$journal"
   setsid bash -c 'echo $$ > "$1"; f="$2"; d="$3"; b="$4"; PATH="$5"; export PROJECT="$d"; shift 5; cd "$d" && "$b" "$@" < /dev/null 2>&1; echo $? > "$f"' \
-    _ "$PRIVE/ouvrier_$ident.sid" "$PRIVE/ouvrier_$ident.code" "$trav" "$CLAUDE_BIN" "$CHEMIN_CLAUDE" "${a[@]}" > "$journal" 9>&- &
+    _ "$PRIVE/ouvrier_$ident.sid" "$PRIVE/ouvrier_$ident.code" "$trav" "$BASH" "$CHEMIN_CLAUDE" "$SYSTEME/ecran.sh" lancer "$CLAUDE_BIN" "${a[@]}" > "$journal" 9>&- &
   echo $! > "$PRIVE/ouvrier_$ident.pid"
 }
 
@@ -331,7 +331,7 @@ parallele_cycle() {
   log "Workers finished: merged ${fusionnes[*]:-none}; to merge ${a_fusionner[*]:-none}; failed ${echoues[*]:-none}. The lead verifies."
   statut "Merging milestones ${a_fusionner[*]} ${fusionnes[*]}"
   fichier_log="$prefixe.jsonl"
-  local but="/goal The parallel cycle is verified according to your verification instructions: the branches ${a_fusionner[*]:-(none)} are merged, bash .athanor/check.sh has been run and its output is shown, .athanor/PLAN.md ticks exactly the milestones that pass, .athanor/LOG.md has a new entry, git log shows the commit. Or stop after ${MAX_TURNS_PER_CYCLE} turns."
+  local but="/goal The parallel cycle is verified according to your verification instructions: the branches ${a_fusionner[*]:-(none)} are merged, bash .athanor/check.sh has been run and its output is shown, .athanor/PLAN.md ticks exactly the milestones that pass, .athanor/LOG.md has a new entry, git log shows the commit. Or stop after ${MAX_TURNS_PER_CYCLE} turns. ${PHRASE_LANGUE}"
   args=(-p "$but" --permission-mode bypassPermissions --settings "$REGLAGES" --permission-prompts none --output-format stream-json --verbose
         "${ARGS_SURS[@]}" --append-system-prompt "$(cat "$CONSIGNES"; parallele_consignes_fusion "${fusionnes[*]}" "${a_fusionner[*]}" "${echoues[*]}")")
   [ "$AGENTS_PAR_JSON" = 1 ] && args+=(--agents "$AGENTS_JSON")

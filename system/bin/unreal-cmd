@@ -5,4 +5,5 @@ passer_par_le_pont "$@"
 exe="${UE_DIR:-}/Engine/Binaries/Win64/UnrealEditor-Cmd.exe"
 [ -f "$exe" ] || absent "Unreal Engine"
 convertir_args "$@"
-exec "$exe" "${ARGS[@]}"
+lancer_windows "$exe" "${ARGS[@]}"
+exit $?

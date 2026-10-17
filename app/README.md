@@ -13,13 +13,16 @@ One executable, standard library only (plus three vendored packages for the WebV
 | `api_extensions.go`, `api_recherche.go`, `catalogue.json` | Skills & MCP page: library in `extensions/` of the tool folder, verified catalog, install from a GitHub link (zip, no links, size limits), pasted MCP configurations (JSON or `claude mcp add`, keys stored apart), search in SkillsMP and the official MCP Registry (configuration built from the registry entry), per-project choice, test of a server in its cage |
 | `api_ameliorer.go` | "Improve with Claude": one Claude turn rewrites a request clearer and more complete |
 | `migration.go` | moves the files of the previous name (Claude Autopilote) to Athanor's |
-| `api_outillage.go` | `.env` (secrets masked), health checks, repairs, "Ask Claude", options, virtual desktop, open files |
+| `api_outillage.go` | `.env` (secrets masked), health checks, repairs, "Ask Claude", options, Claude's desktop and Linux screen picture, open files |
 | `kit.go` | tool folder and project workshop (`.athanor/`): `.env`, requests, `STATE.json`, `stats.tsv`, plan |
 | `journal.go` | incremental reading of Claude Code `stream-json`, readable translation, team tracking (lead and workers, the sub-agents each one called, their brief, report and model) |
 | `taches.go` | background tasks with live output |
 | `sante.go` | checks, repairs, Claude repair sessions (`commands/repair.sh`), real sandbox test |
 | `textes.go` | known languages, themes and accents; per-language labels written into project files |
-| `systeme_windows.go` | WSL without a window, WebView2 window, start with Windows, "Claude" virtual desktop ([VirtualDesktop](https://github.com/MScholtes/VirtualDesktop) by Markus Scholtes, MIT, compiled at first run with Windows' `csc.exe`) |
+| `systeme_windows.go` | WSL without a window, WebView2 window, start with Windows, window hook, "Claude" virtual desktop as a fallback ([VirtualDesktop](https://github.com/MScholtes/VirtualDesktop) by Markus Scholtes, MIT, compiled at first run with Windows' `csc.exe`) |
+| `isole_windows.go` | Claude's isolated desktop: `Athanor.exe --isole [--detache] -- PROGRAM` (used by the kit's gateways: the program and its children run on a Windows desktop of their own, in a kill-on-close job), and the switch to it with the bar that brings the user back (Ctrl + Alt + B) |
+| `instance.go` | one Athanor at a time: a second launch asks the running one to show its window (port and secret in `instance.json`, mode 0600) |
+| `notification_windows.go` | the notification area icon of the application started with Windows (`--reduit`): click to open, right click to quit |
 | `systeme_autre.go` | Linux/macOS equivalents (native kit, tests) |
 | `static/` | interface: HTML, CSS, JavaScript without dependencies; `logo.svg` is the app logo (favicon and header) |
 | `winres/` | Windows icon (`athanor.ico`, rendered from `static/logo.svg`) and version info (`athanor.rc`), compiled into `rsrc_windows_amd64.syso` by `build.sh` and linked into the exe (`go build` picks up any `.syso`); the window uses it through `IconId: 1` |

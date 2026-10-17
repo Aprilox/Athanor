@@ -4,4 +4,5 @@
 passer_par_le_pont "$@"
 [ -n "${BLENDER_EXE:-}" ] && [ -f "$BLENDER_EXE" ] || absent Blender
 convertir_args "$@"
-exec "$BLENDER_EXE" "${ARGS[@]}"
+lancer_windows "$BLENDER_EXE" "${ARGS[@]}"
+exit $?

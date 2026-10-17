@@ -23,6 +23,40 @@ convertir_args() {
 
 absent() { echo "$1 is not installed on this PC (or not detected). See .athanor/PC_TOOLS.md." >&2; exit 127; }
 
+# Programs with windows (Unreal, Blender, a game under test) open on Claude's own Windows desktop when the
+# option is on in the app (it writes logs/bureau-isole): never on the user's screen, never taking the focus,
+# and what they start stays there too. Usage: lancer_windows [--detache] PROGRAM ARGUMENTS...
+# Returns the program's exit code (--detache: returns at once, the program keeps running).
+lancer_windows() {
+  local detache=() prog pid_f p code
+  [ "${1:-}" = "--detache" ] && { detache=(--detache); shift; }
+  if [ -f "$KIT/logs/bureau-isole" ] && [ -x "$KIT/Athanor.exe" ]; then
+    prog=$1
+    [[ "$prog" == */* ]] || prog=$(command -v "$prog" 2>/dev/null || echo "$prog")
+    [[ "$prog" == /* ]] && prog=$(wslpath -w "$prog")
+    if [ ${#detache[@]} -gt 0 ]; then
+      "$KIT/Athanor.exe" --isole --detache -- "$prog" "${@:2}"
+      return
+    fi
+    # A cancelled command (the bridge stops this process group) only stops the Linux side of WSL
+    # interop: the Windows process tree is stopped explicitly, from the PID Athanor.exe writes.
+    pid_f=$(mktemp -p "$KIT/logs" .isole-XXXXXX)
+    "$KIT/Athanor.exe" --isole --pid "$(wslpath -w "$pid_f")" -- "$prog" "${@:2}" &
+    p=$!
+    trap 'w=$(cat "$pid_f" 2>/dev/null); [[ "$w" =~ ^[0-9]+$ ]] && (cd /mnt/c 2>/dev/null; taskkill.exe /T /F /PID "$w" >/dev/null 2>&1); kill "$p" 2>/dev/null; rm -f "$pid_f"; exit 143' TERM INT HUP
+    wait "$p"; code=$?
+    trap - TERM INT HUP
+    rm -f "$pid_f"
+    return "$code"
+  fi
+  if [ ${#detache[@]} -gt 0 ]; then
+    nohup "$@" >/dev/null 2>&1 &
+    disown
+    return 0
+  fi
+  "$@"
+}
+
 # Bridge: inside the sandbox, a gateway cannot start a Windows program or reach Docker.
 # It therefore hands the command to the bridge (system/bridge.py, outside the sandbox) and shows its output live.
 # Called at the top of every gateway: passer_par_le_pont "$@"

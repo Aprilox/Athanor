@@ -287,7 +287,9 @@ function rendreBandeau(v) {
       const enDemarrage = (etat.demarrage[v.projet.nom] || 0) > Date.now();
       boutons.push(`<button class="btn btn-primaire" data-act="demarrer" ${enDemarrage ? "disabled" : ""}>${enDemarrage ? t("Starting…") : t("Start")}</button>`);
     }
-    if (v.bureau && v.bureau.disponible) boutons.push(`<button class="btn" data-bureau="voir" title="${h(t("Go and see what Claude is showing (windows on the “Claude” desktop)"))}">${t("View Claude's desktop")}</button>`);
+    if (v.bureau && v.bureau.disponible) boutons.push(v.bureau.ecran
+      ? `<button class="btn" data-ecran title="${h(t("Go and see what Claude is showing (windows on the “Claude” desktop)"))}">${t("View Claude's desktop")}</button>`
+      : `<button class="btn" data-bureau="voir" title="${h(t("Go and see what Claude is showing (windows on the “Claude” desktop)"))}">${t("View Claude's desktop")}</button>`);
   }
   const nomProjet = v.projet ? `<div class="muet petit">${h(v.projet.nom)} · ${h(v.projet.dossier)}</div>` : "";
   const nbActifs = (v.projets || []).filter((x) => x.actif).length;
@@ -322,7 +324,37 @@ $("#bandeau").addEventListener("click", async (ev) => {
   const b = ev.target.closest("button"); if (!b) return;
   if (b.dataset.act) { b.disabled = true; if (b.dataset.act === "demarrer") etat.demarrage[etat.projet] = Date.now() + 25000; await action(api("pilote/" + b.dataset.act, "POST")); setTimeout(rafraichir, 800); }
   if (b.dataset.bureau) await action(api("bureau/" + b.dataset.bureau, "POST"));
+  if (b.hasAttribute("data-ecran")) ouvrirEcran();
 });
+
+// Claude's screen on the Linux side (Linux, or Linux programs under WSL): a picture refreshed every 2 s
+// while the window is open.
+let minuterieEcran = null;
+// one picture at a time: the next one is asked 2 s after the previous one arrived (a capture can take longer)
+async function majEcran() {
+  minuterieEcran = null;
+  if ($("#ecran").hidden) return;
+  try {
+    const r = await api("ecran");
+    if ($("#ecran").hidden) return;
+    $("#ecran-img").src = "data:image/png;base64," + r.png;
+    $("#ecran-img").hidden = false; $("#ecran-msg").hidden = true;
+  } catch (e) {
+    $("#ecran-img").hidden = true; $("#ecran-msg").hidden = false; $("#ecran-msg").textContent = e.message;
+  }
+  if (!$("#ecran").hidden && !minuterieEcran) minuterieEcran = setTimeout(majEcran, 2000);
+}
+function ouvrirEcran() {
+  $("#ecran-titre").textContent = t("Claude's screen");
+  $("#ecran-fermer").textContent = t("Close");
+  $("#ecran-msg").textContent = t("Loading…"); $("#ecran-msg").hidden = false; $("#ecran-img").hidden = true;
+  $("#ecran").hidden = false;
+  clearTimeout(minuterieEcran); majEcran();
+}
+function fermerEcran() { $("#ecran").hidden = true; clearTimeout(minuterieEcran); minuterieEcran = null; }
+$("#ecran-fermer").addEventListener("click", fermerEcran);
+$("#ecran").addEventListener("click", (ev) => { if (ev.target.id === "ecran") fermerEcran(); });
+document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && !$("#ecran").hidden) fermerEcran(); });
 function fermerSelecteur() { etat.selecteurOuvert = false; $("#menu-projets").hidden = true; $("#sel-projet").setAttribute("aria-expanded", "false"); }
 $("#sel-projet").addEventListener("click", () => { etat.selecteurOuvert = !etat.selecteurOuvert; etat.rechercheProjet = ""; $("#sel-projet").setAttribute("aria-expanded", etat.selecteurOuvert ? "true" : "false"); if (etat.vue) rendreSelecteur(etat.vue); });
 document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && etat.selecteurOuvert) fermerSelecteur(); });
@@ -444,7 +476,7 @@ pages.suivi = async () => {
   <div class="bloc"><h2>${t("Usage")}</h2>
     ${stats.length ? `<div class="chiffres">
       <div class="chiffre"><b>${stats.filter((s) => !String(s.cycle).includes("·")).length}</b><span>${t("cycles")}</span></div>
-      <div class="chiffre"><b>${Math.floor(somme("minutes") / 60)} h ${String(Math.round(somme("minutes") % 60)).padStart(2, "0")}</b><span>${t("of work")}</span></div>
+      <div class="chiffre"><b>${(() => { const m = Math.round(somme("minutes")); return `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")}`; })()}</b><span>${t("of work")}</span></div>
       <div class="chiffre"><b>${somme("tours")}</b><span>${t("turns")}</span></div>
       <div class="chiffre"><b>${somme("cout_usd").toFixed(2)} $</b><span>${t("at list price (your subscription quota pays)")}</span></div>
       <div class="chiffre"><b>${ratio} %</b><span>${t("of tokens re-read from cache")}</span></div>
@@ -936,7 +968,7 @@ pages.options = async () => {
       </div>
       <div class="bloc"><h2>${t("Startup")}</h2>
         <label class="interrupteur"><input type="checkbox" id="op-lancer" data-option ${o.lancer_pilote_au_demarrage ? "checked" : ""}><span>${t("Restart the pilots that were running, when the app opens")}</span></label>
-        <label class="interrupteur"><input type="checkbox" id="op-windows" data-option ${o.demarrage_windows ? "checked" : ""}><span>${t("Open the app when Windows starts (without a window)")}</span></label>
+        <label class="interrupteur"><input type="checkbox" id="op-windows" data-option ${o.demarrage_windows ? "checked" : ""}><span>${t("Open Athanor when the computer starts (Windows, or your Linux desktop session)")}</span></label>
         <p class="muet petit">${t("Pilots run in WSL in the background, without a window. Remember to disable the PC's sleep mode.")}</p>
       </div>
       <div class="bloc"><h2>${t("Lock")}</h2>
@@ -951,13 +983,18 @@ pages.options = async () => {
         ${(o.projets || []).length ? `<table class="tab"><tbody>${o.projets.map((p) => `<tr><td><b>${h(p.nom)}</b></td><td class="muet">${h(p.dossier)}</td><td class="droite"><button class="btn btn-petit btn-danger" data-retirer-projet="${h(p.nom)}">${t("Remove from list")}</button></td></tr>`).join("")}</tbody></table>` : `<div class="vide">${t("No project.")}</div>`}
         <p class="muet petit mt-2">${t("Removing a project never touches its folder. To clean it, delete its .athanor subfolder.")}</p>
       </div>
-      <div class="bloc"${b.message === "Virtual desktop: Windows only." ? " hidden" : ""}><h2>${t("“Claude” virtual desktop")}</h2>
-        <label class="interrupteur"><input type="checkbox" id="op-bureau" data-option ${o.bureau_virtuel ? "checked" : ""}><span>${t("Send the windows opened by the pilots to a dedicated desktop")}</span></label>
+      <div class="bloc"${b.message === "Virtual desktop: Windows only." ? " hidden" : ""}><h2>${t("“Claude” desktop")}</h2>
+        <label class="interrupteur"><input type="checkbox" id="op-bureau" data-option ${o.bureau_virtuel ? "checked" : ""}><span>${t("Open the programs Claude starts (Unreal, Blender, a game under test) on a desktop of their own")}</span></label>
         <p class="petit ${b.disponible ? "ok" : "attention"}">${h(t(b.message || ""))}</p>
-        <div class="ligne"><button class="btn btn-petit" data-bureau="voir" ${b.disponible ? "" : "disabled"}>${t("View Claude's desktop")}</button><button class="btn btn-petit" data-bureau="revenir" ${b.disponible ? "" : "disabled"}>${t("Come back")}</button><button class="btn btn-petit" data-bureau="ramener" ${b.disponible ? "" : "disabled"}>${t("Bring the windows back here")}</button><span class="muet petit">${t("{0} window(s) moved", [b.deplacees || 0])}</span></div>
-        ${(b.vues || []).length ? `<ul class="muet petit mt-1">${b.vues.slice(0, 10).map((f) => `<li>${h(f)}</li>`).join("")}</ul>` : ""}
-        <label class="champ mt-2"><span>${t("Recognized: programs inside the projects and in tools\\, “Athanor” windows, and these executables (one per line)")}</span><textarea id="op-programmes" data-option class="code" rows="5">${h(o.programmes_supplementaires)}</textarea></label>
-        <p class="muet petit">${t("Windows shortcut to switch desktops: Ctrl + Win + ← / →.")}</p>
+        ${b.ecran ? `<p class="muet petit">${t("The Linux windows Claude opens (a game under test, Godot, a browser) go to a private screen: never on yours, never taking the focus.")}</p>
+        <div class="ligne"><button class="btn btn-petit" data-ecran>${t("View Claude's screen")}</button></div>`
+        : b.isole ? `<p class="muet petit">${t("They never show on your screen and never take the focus: a full-screen game is not interrupted. On Claude's desktop, the bar at the top (or Ctrl + Alt + B) brings you back.")}</p>
+        ${!o.bureau_virtuel && b.restantes ? `<p class="petit attention">${t("{0} window(s) still open on Claude's desktop: close them there, they will then open on your screen.", [b.restantes])}</p>` : ""}
+        <div class="ligne"><button class="btn btn-petit" data-bureau="voir" ${b.disponible ? "" : "disabled"}>${t("View Claude's desktop")}</button><button class="btn btn-petit" data-ecran title="${h(t("The Linux windows Claude opens (a game under test, Godot, a browser) go to a private screen: never on yours, never taking the focus."))}">${t("Claude's Linux screen")}</button></div>`
+        : `<div class="ligne"><button class="btn btn-petit" data-bureau="voir" ${b.disponible ? "" : "disabled"}>${t("View Claude's desktop")}</button><button class="btn btn-petit" data-bureau="revenir" ${b.disponible ? "" : "disabled"}>${t("Come back")}</button><button class="btn btn-petit" data-bureau="ramener" ${b.disponible ? "" : "disabled"}>${t("Bring the windows back here")}</button><span class="muet petit">${t("{0} window(s) moved", [b.deplacees || 0])}</span></div>
+        ${(b.vues || []).length ? `<ul class="muet petit mt-1">${b.vues.slice(0, 10).map((f) => `<li>${h(f)}</li>`).join("")}</ul>` : ""}`}
+        <label class="champ mt-2"${b.isole || b.ecran ? " hidden" : ""}><span>${t("Recognized: programs inside the projects and in tools\\, “Athanor” windows, and these executables (one per line)")}</span><textarea id="op-programmes" data-option class="code" rows="5">${h(o.programmes_supplementaires)}</textarea></label>
+        <p class="muet petit"${b.isole || b.ecran ? " hidden" : ""}>${t("Windows shortcut to switch desktops: Ctrl + Win + ← / →.")}</p>
       </div>
       <div class="bloc"><h2>${t("Tool folder")}</h2>
         <input type="text" id="op-kit" data-option value="${h(o.kit)}"><div class="muet petit mt-1">${o.kit_valide ? "✔ " + t("tool recognized (system\\pilot.sh present)") : "✖ " + t("this folder is not the tool")}</div>
@@ -1015,6 +1052,7 @@ $("#page").addEventListener("click", async (ev) => {
   if (b.dataset.accent) return changerApparence(etat.theme, b.dataset.accent);
   if (b.dataset.ouvrir) return action(api("ouvrir", "POST", { quoi: b.dataset.ouvrir }));
   if (b.dataset.bureau) return action(api("bureau/" + b.dataset.bureau, "POST")).then(rendrePage);
+  if (b.hasAttribute("data-ecran")) return ouvrirEcran();
   if (b.dataset.act) { b.disabled = true; if (b.dataset.act === "demarrer") etat.demarrage[etat.projet] = Date.now() + 25000; await action(api("pilote/" + b.dataset.act, "POST")); return setTimeout(rafraichir, 800); }
   if (b.hasAttribute("data-installer")) return action(api("sante/installer", "POST"));
   if (b.dataset.max && page === "suivi") return enregistrerMode($("#md-parallele").checked, Number(b.dataset.max));
