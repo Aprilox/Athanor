@@ -5,7 +5,7 @@ const CSRF = document.querySelector('meta[name="csrf"]').content;
 const $ = (s, r = document) => r.querySelector(s);
 const h = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 // pilot phase (STATE.json) -> status dot class
-const classePhase = (x) => !x || !x.actif ? "" : ({ travail: "travaille", quota: "quota", erreur: "erreur", connexion: "erreur", entre_cycles: "entre_cycles" }[x.phase] || "travaille");
+const classePhase = (x) => !x || !x.actif ? "" : ({ travail: "travaille", quota: "quota", attente_vous: "quota", erreur: "erreur", connexion: "erreur", entre_cycles: "entre_cycles" }[x.phase] || "travaille");
 // escaped text with `code` spans rendered (the plan and requests are Markdown-ish)
 const md = (s) => h(s).replace(/`([^`]+)`/g, "<code>$1</code>");
 // a milestone as the pilot reports it is the full plan line: find its short title in the plan
@@ -52,6 +52,8 @@ function rendreJalon(j, etatJalon, compact) {
 // ----------------------------------------------------------------------------- state
 const etat = {
   pieces: {}, // files waiting to be attached, per form
+  pvTic: 0, pvAnnonces: {}, pvSignature: "",
+  pvForm: {}, // answers being written on the For you page (text and secret values, per task; memory only)
   page: "suivi", projet: "", vue: null, verrouille: false, langue: "en", theme: "", accent: "", assistant: -1, demarrage: {},
   dernierJournal: 0, evenements: [], ouverts: new Set(),
   filtres: { pilote: true, texte: true, outil: true, resultat: false, sous_agent: true, brut: false }, recherche: "",
@@ -163,6 +165,15 @@ document.addEventListener("focusin", (e) => { if (e.target.matches && e.target.m
 // A pilot that ended on its own (delivery, maximum duration…) is announced once, inside the app, for
 // every project in the list; the end stays announced until the user has seen it (even after a restart).
 const finsAnnoncees = new Set();
+// a new task for the user in the current project: a dialog (once per task and round), unless already on the page
+async function annoncerTaches(v) {
+  if (v.verrouille || !v.projet || !$("#dialogue").hidden || !$("#assistant").hidden) return;
+  const n = v.pour_vous || 0, cle = v.projet.nom;
+  const avant = etat.pvAnnonces[cle];
+  etat.pvAnnonces[cle] = n;
+  if (avant === undefined || n <= avant || etat.page === "pourvous") return;
+  if (await confirmer(t("Claude needs you for something it cannot do itself (an account, a payment, a key…). Open the For you page?"), { titre: t("“{0}”: a task for you", [cle]), ok: t("Open"), annuler: t("Later") })) location.hash = "#pourvous";
+}
 async function annoncerFins(v) {
   if (v.verrouille || !$("#dialogue").hidden || !$("#assistant").hidden) return;
   const p = (v.projets || []).find((x) => x.fin && !finsAnnoncees.has(x.nom + "|" + x.fin.cle));
@@ -269,6 +280,7 @@ function phraseEtat(v) {
     case "arrete": return { classe: "", titre: t("Pilot stopped"), sous: e.dernier_commit ? t("Last saved work: {0}", [e.dernier_commit]) : t("Click Start to resume.") };
     case "travail": return { classe: "travaille", titre: e.ouvriers ? t("{0} workers in parallel: {1}", [e.ouvriers.split(/\s+/).length, e.ouvriers.split(/\s+/).join(", ")]) : /^Merging/.test(e.etat || "") ? t("The lead merges the workers' branches") : e.jalon_en_cours ? t("Claude is working on {0}", [titreJalon(e.jalon_en_cours)]) : t("Claude is working"), sous: [e.debut_cycle && t("for {0}", [depuis(e.debut_cycle)]), t("cycle {0}", [e.cycle]), e.template, v.contexte && t("context {0} tokens", [fmtTokens(v.contexte)])].filter(Boolean).join(" · ") };
     case "quota": return { classe: "quota", titre: t("Usage limit reached, Claude is waiting"), sous: t("Resumes {0} · cycle {1}", [e.reprise_prevue || t("as soon as possible"), e.cycle]) };
+    case "attente_vous": return { classe: "quota", titre: t("Claude is waiting for you"), sous: t("{0} task(s) on the For you page: the pilot resumes as soon as you answer one.", [v.pour_vous || 0]) };
     case "entre_cycles": return { classe: "entre_cycles", titre: t("Between two cycles"), sous: t("Cycle {0} is done, the next one starts with a fresh context.", [e.cycle]) };
     case "erreur": return { classe: "erreur", titre: t("Error, retry scheduled"), sous: e.etat };
     case "connexion": return { classe: "connexion", titre: t("Connection problem"), sous: t("Check the token in Settings, or go through Setup & health.") };
@@ -304,6 +316,8 @@ function rendreBandeau(v) {
   sel.innerHTML = v.projet ? `<span class="dot ${classePhase(v.projet)}"></span><span class="nom">${h(v.projet.nom)}</span><span class="chevron">▾</span>` : `<span class="nom muet">${t("Choose a project")}</span><span class="chevron">▾</span>`;
   const lien = $('#nav-liens a[data-page="demandes"]');
   lien.innerHTML = t("Requests") + (v.attente ? ` <span class="pastille">${v.attente}</span>` : "");
+  const lienPv = $('#nav-liens a[data-page="pourvous"]');
+  if (lienPv) lienPv.innerHTML = t("For you") + (v.pour_vous ? ` <span class="pastille pastille-alerte">${v.pour_vous}</span>` : "");
   $("#btn-verrou").hidden = !v.mot_de_passe;
   if (v.projet && etat.projet !== v.projet.nom) etat.projet = v.projet.nom;
   rendreSelecteur(v);
@@ -319,7 +333,7 @@ function rendreSelecteur(v) {
   const avaitFocus = document.activeElement && document.activeElement.id === "sel-recherche";
   const pos = avaitFocus ? document.activeElement.selectionStart : 0;
   m.innerHTML = `<input type="text" id="sel-recherche" placeholder="${h(t("Search a project…"))}" value="${h(etat.rechercheProjet || "")}">
-    <div class="menu-liste">${liste.map((x) => `<a href="#suivi" data-projet="${h(x.nom)}" class="${x.courant ? "actif" : ""}"><span class="dot ${classePhase(x)}"></span><span class="nom">${h(x.nom)}</span><span class="muet petit">${x.actif ? t(x.phase === "quota" ? "waiting" : "running") : t("stopped")}${x.attente ? " · " + t("{0} queued", [x.attente]) : ""}</span></a>`).join("") || `<div class="vide">${t("No project.")}</div>`}</div>
+    <div class="menu-liste">${liste.map((x) => `<a href="#suivi" data-projet="${h(x.nom)}" class="${x.courant ? "actif" : ""}"><span class="dot ${classePhase(x)}"></span><span class="nom">${h(x.nom)}</span><span class="muet petit">${x.actif ? t(x.phase === "quota" || x.phase === "attente_vous" ? "waiting" : "running") : t("stopped")}${x.attente ? " · " + t("{0} queued", [x.attente]) : ""}${x.pour_vous ? " · " + t("{0} for you", [x.pour_vous]) : ""}</span></a>`).join("") || `<div class="vide">${t("No project.")}</div>`}</div>
     <a href="#nouveau" class="menu-nouveau">+ ${t("New project")}</a>
     ${archives ? `<a href="#archives" class="menu-nouveau menu-archives">🗄 ${t("Archived projects ({0})", [archives])}</a>` : ""}`;
   const r = $("#sel-recherche"); if (r) { r.focus(); r.setSelectionRange(pos, pos); }
@@ -376,7 +390,7 @@ $("#menu-projets").addEventListener("click", async (ev) => {
 document.addEventListener("click", (ev) => { if (etat.selecteurOuvert && !ev.target.closest("#sel-projet, #menu-projets")) fermerSelecteur(); });
 
 function traduireNav() {
-  const libelles = { suivi: t("Overview"), equipe: t("Team"), demandes: t("Requests"), journal: t("Log"), projet: t("Manage"), extensions: t("Skills & MCP"), sante: t("Setup & health"), reglages: t("Settings"), options: t("Options") };
+  const libelles = { suivi: t("Overview"), equipe: t("Team"), demandes: t("Requests"), pourvous: t("For you"), journal: t("Log"), projet: t("Manage"), extensions: t("Skills & MCP"), sante: t("Setup & health"), reglages: t("Settings"), options: t("Options") };
   document.querySelectorAll("#nav-liens a, #nav-outil a").forEach((a) => { if (libelles[a.dataset.page]) a.textContent = libelles[a.dataset.page]; });
   $("#nav-titre-projet").textContent = t("Project");
   $("#nav-titre-outil").textContent = t("Tool");
@@ -456,7 +470,7 @@ pages.suivi = async () => {
   const cache = somme("cache_lu"), plein = somme("entree_tokens") + somme("cache_ecrit");
   const ratio = cache + plein ? Math.round((cache / (cache + plein)) * 100) : 0;
   let premier = true;
-  return `
+  return `${v.pour_vous ? `<a class="bloc pv-bandeau" href="#pourvous">🙋 <strong>${t("Claude needs you")}</strong> · ${t("{0} task(s) on the For you page", [v.pour_vous])} →</a>` : ""}
   <div class="grille grille-2">
     <div class="bloc"><h2>${t("Right now")}</h2>
       <dl class="fiche">
@@ -804,6 +818,112 @@ function rendreSession(a, appels, nom, mission, avatar) {
       ${long ? `<span class="rapport-tete petit">${rapportOuvert ? t("Show less") : t("Read it all")}</span>` : ""}</div>` : ""}
     ${appels.length ? `<div class="appels"><div class="appels-titre">${t("Sub-agents called ({0})", [appels.length])}</div>${appels.map(rendreAppel).join("")}</div>` : ""}
   </div>`;
+}
+
+// ----------------------------------------------------------------------------- For you: tasks only the user can do
+// Claude hands over what it cannot do itself (an account, a payment, a code, a key…); the user answers
+// "done" (with a text, files, secret values) or "skip" (Claude finds another way), and sees Claude's verdict.
+// Links in Claude's text open in the default browser (POST /api/lien), never inside the application.
+function avecLiens(texte) {
+  // links are cut from the raw text, then every piece is escaped
+  const brut = String(texte || ""), re = /https?:\/\/[^\s<>"'`]+/g;
+  let html = "", i = 0, m;
+  while ((m = re.exec(brut))) {
+    const u = m[0].replace(/[.,;:!?)\]]+$/, "");
+    html += h(brut.slice(i, m.index)) + `<a href="#" data-lien="${h(u)}">${h(u)}</a>`;
+    i = m.index + u.length; re.lastIndex = i;
+  }
+  return html + h(brut.slice(i));
+}
+const ETATS_TACHE = () => ({
+  pour_vous: [t("Waits for you"), "pv-vous"],
+  a_verifier: [t("Claude checks it"), "pv-claude"],
+  a_contourner: [t("Claude looks for another way"), "pv-claude"],
+});
+function etiquetteTache(x) {
+  if (x.etat === "close") return x.statut === "verifiee" ? [t("Verified ✓"), "pv-ok"] : [t("Resolved"), "pv-ok"];
+  if (x.etat === "pour_vous" && x.statut === "manque") return [t("Something is missing"), "pv-vous"];
+  return ETATS_TACHE()[x.etat] || [x.etat, ""];
+}
+// drafts belong to the project they were typed for: forgotten when another project is shown
+function pvProjet() {
+  if (etat.pvProjet === etat.projet) return;
+  etat.pvProjet = etat.projet; etat.pvForm = {};
+  for (const k of Object.keys(etat.pieces)) if (k.startsWith("pv-")) delete etat.pieces[k];
+}
+function brouillonTache(id) { pvProjet(); return (etat.pvForm[id] = etat.pvForm[id] || { texte: "", secrets: {} }); }
+
+function carteTache(x) {
+  const [libelle, classe] = etiquetteTache(x);
+  const rep = x.reponses || [];
+  const derniere = rep[rep.length - 1];
+  const b = brouillonTache(x.id);
+  const meta = [x.jalons && x.jalons.length ? t("blocks {0}", [x.jalons.join(", ")]) : "", heureMaj(x.cree)].filter(Boolean).join(" · ");
+  let corps = "";
+  if (x.etat === "pour_vous" && x.statut === "manque" && x.note) corps += `<div class="pv-note"><strong>🔁 ${t("Claude: still missing")}</strong><div>${avecLiens(x.note)}</div></div>`;
+  if (x.etat !== "close") {
+    if (x.details) corps += `<div class="pv-details">${avecLiens(x.details)}</div>`;
+    if (x.attendu) corps += `<p class="petit"><strong>${t("What Claude needs back:")}</strong> ${avecLiens(x.attendu)}</p>`;
+  }
+  if (x.etat === "pour_vous") {
+    corps += `<div class="pv-form">
+      ${(x.secrets || []).map((n) => `<label class="champ"><span><code>${h(n)}</code> ${x.donnes && x.donnes[n] ? `<span class="pv-donne">✓ ${t("already given: leave empty to keep it")}</span>` : ""}</span>
+        <input type="password" autocomplete="off" spellcheck="false" data-pv-secret="${h(x.id)}|${h(n)}" value="${h(b.secrets[n] || "")}" placeholder="${h(t("paste it here: it stays on this PC, in the workshop, never in git"))}"></label>`).join("")}
+      <label class="champ"><span>${t("Your answer (optional)")}</span><textarea rows="3" data-pv-texte="${h(x.id)}" placeholder="${h(t("e.g. Done, here is the address you asked for: … Or, to skip: I do not want a paid plan, use a free alternative."))}">${h(b.texte)}</textarea></label>
+      ${zonePieces("pv-" + x.id)}
+      <div class="ligne mt-1">
+        <button class="btn btn-primaire" data-pv="fait" data-id="${h(x.id)}">✓ ${t("It's done")}</button>
+        <button class="btn" data-pv="passer" data-id="${h(x.id)}" title="${h(t("Claude will not ask again: it finds another way, guided by your text if you wrote one."))}">⏭ ${t("Skip: find another way")}</button>
+      </div></div>`;
+  } else if (derniere && x.etat !== "close") {
+    corps += `<p class="muet petit">${x.etat === "a_contourner" ? t("You skipped it: Claude finds another way at the start of its next cycle.") : t("You said it is done: Claude checks it at the start of its next cycle.")}${derniere.texte ? " " + h(t("Your answer: {0}", [derniere.texte])) : ""}</p>`;
+  } else if (x.etat === "close" && x.note) {
+    corps += `<div class="pv-note pv-note-ok">${avecLiens(x.note)}</div>`;
+  }
+  // the rounds so far: the user's answers and Claude's verdicts
+  const tours = [];
+  rep.forEach((r) => {
+    tours.push(`<li><strong>${t("You")}</strong> · ${h(heureMaj(r.le))} · ${r.action === "passer" ? t("skipped") : t("done")}${r.texte ? ": " + avecLiens(r.texte) : ""}${(r.fichiers || []).length ? ` <span class="muet">(${r.fichiers.map((f) => h(f.split("/").pop())).join(", ")})</span>` : ""}${(r.secrets || []).length ? ` <span class="muet">(${h(t("secret given: {0}", [r.secrets.join(", ")]))})</span>` : ""}</li>`);
+    (x.historique || []).filter((j) => j.tour === r.tour).forEach((j) => tours.push(`<li><strong>Claude</strong> · ${h(heureMaj(j.le))} · ${avecLiens(j.note)}</li>`));
+  });
+  const historique = tours.length > 1 || (tours.length && x.etat === "pour_vous") ? `<details class="mt-1"><summary class="petit">${t("History ({0})", [tours.length])}</summary><ul class="pv-histo petit">${tours.join("")}</ul></details>` : "";
+  return `<div class="bloc pv-carte ${x.etat === "close" ? "pv-close" : ""}" data-tache="${h(x.id)}">
+    <div class="pv-tete"><span class="badge">${h(x.id)}</span> <strong>${h(x.titre)}</strong> <span class="pv-etat ${classe}">${libelle}</span></div>
+    <div class="muet petit">${h(meta)}</div>
+    ${corps}${historique}</div>`;
+}
+
+pages.pourvous = async () => {
+  pvProjet();
+  const r = await api("pourvous");
+  const l = r.taches || [];
+  const actives = l.filter((x) => x.etat !== "close"), closes = l.filter((x) => x.etat === "close");
+  etat.pvSignature = JSON.stringify(l);
+  return `<div class="bloc"><h2>${t("For you")}</h2>
+      <p class="intro petit">${t("What Claude cannot do itself: create an account, pay, receive a code by email or SMS, generate a key… Do it, then answer here: Claude checks it at the start of its next cycle and tells you whether it works. Or skip it, and Claude finds another way.")}</p></div>
+    ${actives.length ? actives.map(carteTache).join("") : `<div class="vide">${t("Nothing for you right now: Claude manages on its own. When it needs you, the task appears here and the menu shows it.")}</div>`}
+    ${closes.length ? `<details class="bloc"><summary>${t("Done ({0})", [closes.length])}</summary>${closes.map(carteTache).join("")}</details>` : ""}`;
+};
+
+async function repondreTache(b) {
+  const p = etat.projet, id = b.dataset.id, act = b.dataset.pv, br = brouillonTache(id);
+  if (etat.pvProjet !== p) return;
+  if (act === "passer" && !(await confirmer(t("Skip this task? Claude will not ask for it again and finds another way, guided by your answer if you wrote one."), { ok: t("Skip it") }))) return;
+  b.disabled = true;
+  try {
+    // files first (they go to .athanor/attachments/for-you-ID/), then the answer that lists them
+    const fichiers = [];
+    for (const f of etat.pieces["pv-" + id] || []) {
+      const r = await fetch("/api/pieces?p=" + encodeURIComponent(p) + "&cible=todo-" + encodeURIComponent(id), {
+        method: "POST", headers: { "X-Athanor": CSRF, "X-Nom-Fichier": encodeURIComponent(f.name) }, body: f });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(t("{0} could not be attached: {1}", [f.name, d.erreur_key ? t(d.erreur_key, d.args || []) : t("Error {0}", [r.status])]));
+      fichiers.push(d.chemin);
+    }
+    const r = await action(api("pourvous", "POST", { id, action: act, texte: br.texte, fichiers, secrets: act === "fait" ? br.secrets : {} }));
+    if (r) { delete etat.pvForm[id]; etat.pieces["pv-" + id] = []; await rafraichir(); rendrePage(); }
+  } catch (e) { toast(e.message, "erreur"); }
+  finally { b.disabled = false; }
 }
 
 pages.equipe = async () => {
@@ -1371,6 +1491,7 @@ $("#page").addEventListener("click", async (ev) => {
   if (b.dataset.gestion) return gererProjet(b.dataset.gestion, b.dataset.nom || etat.projet, b);
   if (b.dataset.gh) return actionGitHub(b.dataset.gh, b);
   if (b.dataset.ag) return actionAgent(b.dataset.ag, b);
+  if (b.dataset.pv) return repondreTache(b);
   if (b.dataset.choisirPieces) return $("#" + b.dataset.choisirPieces + "-fichiers").click();
   if (b.dataset.retirerPiece) { const [id, i] = b.dataset.retirerPiece.split("|"); (etat.pieces[id] || []).splice(Number(i), 1); $("#" + id + "-liste").innerHTML = listePieces(id); return; }
   if (b.dataset.max && page === "suivi") return enregistrerMode($("#md-parallele").checked, Number(b.dataset.max));
@@ -1471,6 +1592,18 @@ $("#page").addEventListener("change", (ev) => {
   if (i.type === "file" && i.id.endsWith("-fichiers")) { ajouterPieces(i.id.slice(0, -"-fichiers".length), i.files); i.value = ""; }
 });
 // the sub-agent being written keeps its fields if the page is drawn again
+// links in Claude's texts (For you page) open in the default browser
+$("#page").addEventListener("click", (ev) => {
+  const a = ev.target.closest("a[data-lien]"); if (!a) return;
+  ev.preventDefault();
+  action(api("lien", "POST", { url: a.dataset.lien }));
+});
+// answers being written on the For you page survive the page being drawn again
+$("#page").addEventListener("input", (ev) => {
+  const d = ev.target.dataset;
+  if (d.pvTexte) brouillonTache(d.pvTexte).texte = ev.target.value;
+  if (d.pvSecret) { const [id, nom] = d.pvSecret.split("|"); brouillonTache(id).secrets[nom] = ev.target.value; }
+});
 const CHAMPS_AGENT = { "ag-nom": "nom", "ag-description": "description", "ag-consignes": "consignes", "ag-modele": "modele", "ag-lecture": "lecture_seule", "ag-tous": "tous" };
 for (const genre of ["input", "change"]) $("#page").addEventListener(genre, (ev) => {
   const c = CHAMPS_AGENT[ev.target.id];
@@ -1511,6 +1644,11 @@ async function rafraichir() {
       await lireJournal();
       // the Team page follows live, except while text is selected in it (a brief, a report)
       if ((etat.page === "equipe" && !String(window.getSelection() || "") && !etat.agForm) || (etat.page === "suivi" && !document.activeElement.matches("input, textarea"))) rendrePage();
+      if (etat.page === "pourvous" && !document.activeElement.matches("input, textarea") && ++etat.pvTic % 4 === 0) {
+        const r = await api("pourvous").catch(() => null);
+        if (r && JSON.stringify(r.taches || []) !== etat.pvSignature) rendrePage();
+      }
+      annoncerTaches(v);
       if (etat.page === "sante" && (document.querySelector(".verif.v-en_cours") || etat.tacheChoisie)) { const tk = etat.tacheChoisie; await rendrePage(); etat.tacheChoisie = tk; }
     }
   } catch (e) { /* server briefly unreachable */ }

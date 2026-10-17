@@ -16,16 +16,17 @@ import (
 )
 
 type ProjetVue struct {
-	Nom     string  `json:"nom"`
-	Dossier string  `json:"dossier"`
-	Existe  bool    `json:"existe"`
-	Actif   bool    `json:"actif"`
-	Phase   string  `json:"phase"`
-	Jalon   string  `json:"jalon"`
-	Attente int     `json:"attente"`
-	Courant bool    `json:"courant"`
-	Fin     *FinVue `json:"fin,omitempty"`
-	Archive bool    `json:"archive,omitempty"`
+	Nom      string  `json:"nom"`
+	Dossier  string  `json:"dossier"`
+	Existe   bool    `json:"existe"`
+	Actif    bool    `json:"actif"`
+	Phase    string  `json:"phase"`
+	Jalon    string  `json:"jalon"`
+	Attente  int     `json:"attente"`
+	PourVous int     `json:"pour_vous,omitempty"` // tasks waiting for the user (api_pourvous.go)
+	Courant  bool    `json:"courant"`
+	Fin      *FinVue `json:"fin,omitempty"`
+	Archive  bool    `json:"archive,omitempty"`
 	// milestones unticked by the folder check, waiting for their files
 	AVerifier bool `json:"a_verifier,omitempty"`
 }
@@ -65,6 +66,7 @@ func (s *Serveur) vuesProjets(courant string) []ProjetVue {
 			}
 		}
 		pv.Attente = len(p.LireFileAttente())
+		pv.PourVous = p.PourVous()
 		s.surveillerRelance(p, pv.Actif) // "restart after the cycle" works for every project
 		v = append(v, pv)
 	}
@@ -84,6 +86,7 @@ type EtatVue struct {
 	Contexte    int64       `json:"contexte"`
 	Plan        []Jalon     `json:"plan"`
 	Attente     int         `json:"attente"`
+	PourVous    int         `json:"pour_vous"`
 	Stats       []LigneStat `json:"stats"`
 	Bureau      EtatBureau  `json:"bureau"`
 	Maintenant  string      `json:"maintenant"`
@@ -137,6 +140,7 @@ func (s *Serveur) apiEtat(w http.ResponseWriter, r *http.Request) {
 		_, vue.Contexte, _ = s.journalDe(p).Lire(1 << 62)
 		vue.Plan = p.LirePlan()
 		vue.Attente = len(p.LireFileAttente())
+		vue.PourVous = p.PourVous()
 		vue.Stats = p.LireStats()
 		b, err := os.ReadFile(p.Demande())
 		vue.DemandeVide = err != nil || demandeVide(string(b))

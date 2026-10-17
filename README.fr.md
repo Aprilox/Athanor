@@ -52,6 +52,7 @@ Vous décrivez ce que vous voulez : un jeu, un site, une application, un outil. 
 | **Mode parallèle** | Un interrupteur par projet. Un plan fin avec dépendances ; jusqu'à 10 ouvriers réalisent des jalons indépendants en même temps, chacun dans sa copie de travail git ; le pilote fusionne chacun dès qu'il termine et lance le suivant, et le chef vérifie une fois à la fin. |
 | **Une vraie équipe** | Un chef de projet et des sous-agents : `architect`, `creator`, `developer`, `tester`, `critic`, et un `executor` bon marché (Haiku par défaut) pour le travail mécanique. Le plan, les tests indépendants et la critique finale sont toujours délégués. |
 | **Skills & MCP** | Donnez à Claude de l'expertise et des outils : un catalogue vérifié (skills d'Anthropic, superpowers, Context7, Serena, Playwright, GitHub…), une recherche dans des milliers de skills communautaires (SkillsMP) et dans le registre officiel MCP, n'importe quel skill depuis un lien GitHub, vos propres skills, n'importe quel serveur MCP collé depuis son README. Activés projet par projet, pour le chef comme pour les ouvriers en parallèle. Les serveurs MCP locaux tournent dans une cage, loin de vos fichiers et du jeton Claude. |
+| **Des tâches pour vous** | Ce que Claude ne peut pas faire lui-même (créer un compte, payer, recevoir un code par SMS, générer une clé) devient une tâche sur la page *Pour vous*, avec les étapes exactes ; en attendant, Claude continue le reste, et le pilote se met en pause s'il n'y a plus rien d'autre à faire. Vous répondez *c'est fait* (avec un texte, des fichiers, des clés dans un champ protégé) ou *passer : trouve une autre solution* ; Claude vérifie aussitôt et vous dit si ça marche ou ce qui manque encore. |
 | **Une barrière** | Les commandes de Claude tournent sous bubblewrap + seccomp. Elles ne peuvent écrire que dans le projet et ne lisent jamais le reste de votre machine ; Internet reste ouvert. |
 | **Vos logiciels** | Unreal Engine, Blender, le SDK Android, Docker et winget sont joignables par un pont contrôlé, commande par commande. |
 | **Aucune fenêtre UAC** | Sur autorisation. Un seul consentement, puis Claude installe et lance ce dont le projet a besoin avec les droits administrateur, sans rien vous demander. |
@@ -219,6 +220,7 @@ Les captures sont en anglais ; l'interface s'affiche dans la langue choisie.
 |---|---|
 | **Suivi** | état en une phrase, jalon en cours, dernier commit, plan coché, consommation (cycles, durée, coût catalogue, cache) ; *Démarrer*, *Arrêter après le cycle*, *Arrêter maintenant*, *Mode de travail* |
 | **Équipe** | un arbre : le chef et chaque ouvrier avec les sous-agents qu'il a appelés ; un clic sur un sous-agent montre la consigne reçue et le rapport rendu ; le modèle de chacun ; qui peut être appelé, et vos propres sous-agents (créer, modifier, retirer) |
+| **Pour vous** | ce dont Claude a besoin de vous : chaque tâche avec ses étapes et ses liens, un champ protégé pour chaque clé demandée, des fichiers ; *C'est fait* ou *Passer : trouve une autre solution* ; le verdict de Claude (vérifiée, ou ce qui manque encore) et l'historique. Une pastille dans le menu, un bandeau sur *Suivi* et une notification système annoncent une nouvelle tâche |
 | **Demandes** | la demande en cours et son plan, les demandes à la suite (horodatées, réordonnables), les remarques en cours de route ; ✨ *Améliorer avec Claude* reformule une demande plus claire et plus complète, et vous pouvez revenir à la vôtre ; 📎 joignez des fichiers à une demande (cahier des charges, maquettes, photos, PDF, données) : ils restent dans l'atelier et Claude les lit avec la demande |
 | **Journal** | le journal lisible (Claude parle, outils, résultats, sous-agents, pilote) ou brut (JSON), filtrable |
 | **Gérer** | renommer le projet ; déplacer ou renommer son dossier ; le faire pointer vers un autre dossier (le plan et les demandes suivent, les jalons sont vérifiés d'après son contenu) ; vérifier les jalons ; l'archiver ; le supprimer (de la liste, son atelier ou tout le dossier, à la corbeille) ; le lier à GitHub |
@@ -379,7 +381,7 @@ Athanor.exe, athanor   l'application pour Windows / Linux (dans la version tél�
 app/                   les sources Go de l'application, l'interface (HTML, CSS, JS sans dépendance), ressources Windows
 commands/              install, configure, start, stop, stop-after-cycle, follow, test-sandbox, repair,
                        allow-admin, unreal-network (.cmd pour Windows, .sh pour Linux/WSL)
-system/                pilot.sh (la boucle), parallel.sh (ordonnanceur, ouvriers, fusions), equipe.py (l'équipe), safety.sh, bridge.py,
+system/                pilot.sh (la boucle), parallel.sh (ordonnanceur, ouvriers, fusions), equipe.py (l'équipe), taches.py (tâches pour vous), safety.sh, bridge.py,
                        extensions.py + mcp-jail.sh (Skills & MCP), ecran.sh (écran de Claude), github.sh (GitHub),
                        settings.py (barrière), guard.py, detect-tools.sh, athanor.py (carte, archives, captures),
                        bin/ (passerelles), windows/ (aides PowerShell)
@@ -454,10 +456,10 @@ Oui. Rien n'est lié à un nom d'utilisateur ni à une lettre de disque : les ch
 Poussez un tag de version : GitHub compile les deux applications et publie la version ([`.github/workflows/release.yml`](.github/workflows/release.yml)).
 
 ```bash
-git tag v2.10.0 && git push origin v2.10.0
+git tag v2.11.0 && git push origin v2.11.0
 ```
 
-Gardez la version de [`app/winres/athanor.rc`](app/winres/athanor.rc) alignée sur le tag, et écrivez les nouveautés dans `docs/releases/VERSION.md` (par ex. [`docs/releases/2.10.0.md`](docs/releases/2.10.0.md)) : elles ouvrent la page de la version.
+Gardez la version de [`app/winres/athanor.rc`](app/winres/athanor.rc) alignée sur le tag, et écrivez les nouveautés dans `docs/releases/VERSION.md` (par ex. [`docs/releases/2.11.0.md`](docs/releases/2.11.0.md)) : elles ouvrent la page de la version.
 
 ## Contribuer
 

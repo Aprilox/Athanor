@@ -14,8 +14,8 @@ The pilot keeps the workshop out of git by itself (`.git/info/exclude`, local to
 
 ## The non-negotiable rules
 
-1. **Never block.** Ask no question, wait for no approval. Faced with a choice, take the simplest option that respects `.athanor/REQUEST.md`, note it in one line in `.athanor/DECISIONS.md`, and move on.
-2. **Work around instead of stopping.** Missing tool: install it (`sudo apt-get install -y ...`, `npm`, `pip install --break-system-packages ...`, download). Repeated failure (3 attempts): note the problem in `.athanor/BLOCKERS.md` with what you tried, pick an alternative (another library, another approach, a simplified feature) and move on. Never go round in circles on the same obstacle.
+1. **Never block.** Ask no question, wait for no approval. Faced with a choice, take the simplest option that respects `.athanor/REQUEST.md`, note it in one line in `.athanor/DECISIONS.md`, and move on. What only the user can do (create an account, pay, receive a code by email or SMS, pass a captcha or an identity check, accept a contract, generate a key) becomes a task for the user (see *Tasks for the user*), never a question in a message.
+2. **Work around instead of stopping.** Missing tool: install it (`sudo apt-get install -y ...`, `npm`, `pip install --break-system-packages ...`, download). Repeated failure (3 attempts): note the problem in `.athanor/BLOCKERS.md` with what you tried, pick an alternative (another library, another approach, a simplified feature) and move on. Never go round in circles on the same obstacle. If only the user can remove the obstacle, hand it to them as a task and carry on with the rest.
 3. **The files are the memory.** Every cycle starts with an empty context. Everything that matters must be written into the repository.
 4. **Done means verified.** Nothing is finished until `bash .athanor/check.sh` passes and you have looked at the result (screenshots included).
 5. **Small and complete rather than big and broken.** First deliver a whole version that works end to end, then enrich it. If the request is too large, reduce the scope sensibly and say so in the final report.
@@ -33,6 +33,7 @@ The pilot keeps the workshop out of git by itself (`.git/info/exclude`, local to
 - **Windows software, Unreal Engine, Android/iOS**: everything is in `.athanor/PC_TOOLS_GUIDE.md` (portable installation in `$TOOLS/windows`, `install-windows`, the `pc-exec`, `unreal-cmd`, `unreal-uat`, `blender` gateways, Unreal MCP, Android SDK). Read it **only** when the project needs it, and only the relevant section. The list of software present on this PC is in `.athanor/PC_TOOLS.md`.
 - You can **see** your screenshots: open the `.png` file with the Read tool and judge it as a human would.
 - Never read `.env` and never print a token or a secret variable.
+- The values the user gave for your tasks (keys, passwords, tokens) are in `.athanor/secrets.env` (`NAME=value` lines). Load them only in the command that needs them (`set -a; . .athanor/secrets.env; set +a; ./import.sh`), never print them, never copy a value into a project file, a commit, a log, a report or a screenshot: the product reads them from environment variables, listed with placeholders in `.env.example`.
 
 ## Start and end of each cycle
 
@@ -43,7 +44,8 @@ At the start:
 4. If `.athanor/REVERIFY` exists, the project's folder changed (moved, or the user pointed the project to another folder; the file says which): before any new work, check every ticked milestone of `.athanor/PLAN.md` against what is really in the folder (its files, what its acceptance criteria require, the quick check when one exists). Untick each milestone whose result is missing or broken, and tick again an unticked one whose result is fully there and verified. Note what changed in `.athanor/LOG.md`, commit, then delete that file.
 5. If `.athanor/TIDY` exists, the project still holds files of the piloting from an older version (the file lists them). For each one written by the piloting (never a document of the user's own): `docs/REQUIREMENTS.md`, `docs/DESIGN.md`, `docs/ARCHITECTURE.md` and `docs/DECISIONS.md` move to `.athanor/docs/` (`git rm --cached FILE`, then move it; delete `docs/` if it is left empty); a `.athanor/` or `.claude/` line of the project's `.gitignore` is removed (and the `.gitignore` itself if nothing else is left in it). One commit, then delete that file.
 6. If `.athanor/SECRETS_FOUND.md` exists, the pilot found what looks like a secret (key, token, password file) in commits it was about to push to GitHub, and pushed nothing: do what that file says before any other work (take the secret out of the code, rewrite the unpushed commits without it), then delete that file.
-7. Take the first unchecked milestone of `.athanor/PLAN.md` and finish it entirely.
+7. If `.athanor/FOR_YOU_ANSWERED` exists, the user answered tasks: run `athanor todo list` and handle each answered one before any other work (see *Tasks for the user*).
+8. Take the first unchecked milestone of `.athanor/PLAN.md` that does not wait for a task of the user, and finish it entirely.
 
 At the end:
 1. Tick the milestone in `.athanor/PLAN.md`.
@@ -89,6 +91,29 @@ The subscription quota is the scarcest resource. Everything you read or print st
 - `deliverable/`: the ready-to-use result. For the web: a static site whose `deliverable/index.html` works when the folder is served as is (the user will see it at http://localhost:8080). For a program: the executable or the archive for the user's platform (Windows by default if `.athanor/REQUEST.md` says nothing), with its instructions.
 - `TEST_GUIDE.md`: how to launch, controls or user manual, and a list of things to test by hand.
 - `.athanor/FINAL_REPORT.md` (see the template below), which contains the line `STATUS: DONE`. That line stops the loop: write it only when everything is delivered and verified.
+
+## Tasks for the user
+
+Some steps only the user can do: create an account (Shopify, Cloudflare, a supplier, a store…), pay or choose a plan, receive a code by email or SMS, pass a captcha or an identity check, accept terms, generate an API key with the right permissions, buy a domain. First make sure it really needs them (an API, a CLI, a free alternative, a test mode?), then hand it over with `athanor todo` (never by editing `.athanor/for-you/` or `.athanor/secrets.env` by hand):
+
+```
+athanor todo add "Create a Shopify development store" --need "the store's address (xxx.myshopify.com)" \
+  --secret SHOPIFY_ADMIN_TOKEN --milestone M3 <<'EOF'
+1. Open https://partners.shopify.com and create a free Partner account.
+2. Stores › Add store › Create development store; any name.
+3. In the store: Settings › Apps › Develop apps › Create an app; Admin API scopes: write_products, write_themes.
+4. Install the app and paste the Admin API access token into the protected field.
+EOF
+```
+
+- One task = one thing the user can do in a few minutes. Title in the imperative; numbered steps with the exact links, menus and settings to choose; `--need` says what to give back; one `--secret NAME` per key, password or token (the user types it in a protected field and it lands in `.athanor/secrets.env`, never in the text); `--milestone` the milestones it blocks. Group what goes together, check `athanor todo list` first so as never to ask twice, and refine a task with `athanor todo edit ID`.
+- The user sees it at once in the application (page *For you*). Do not wait: note `(waits for T1)` at the end of the blocked milestones in `.athanor/PLAN.md` and go on with the others, preparing everything around the missing piece (code, scripts, configuration read from environment variables).
+- If every unticked milestone waits for the user, run `athanor todo wait`, note it in `.athanor/LOG.md`, commit and end the cycle: the pilot pauses and starts the next cycle as soon as the user answers.
+- **Answers** (`.athanor/FOR_YOU_ANSWERED`, `athanor todo list`):
+  - *done*: check it for real by retrying what was blocked (the API call, the sign-in, the deployment, the DNS record…). It works: `athanor todo ok ID "what you checked"`. It does not: `athanor todo missing ID "exactly what is still missing or wrong, and how to fix it"`; the task goes back to the user with your message.
+  - *skipped* ("find another way"): the user will not do it. Find a way without it (another service, a free alternative, a simplified feature, a step documented for after the delivery), adapt `.athanor/PLAN.md` (remove the `(waits for …)` mark), then `athanor todo resolved ID "what you did instead"`. Never ask for the same thing again; their text may say what they prefer.
+  - A task no longer needed (you found a way yourself): `athanor todo resolved ID "why"`.
+- The delivery waits for the tasks that block it; an optional one still open goes into the final report under "Known limits".
 
 ## Default technical choices
 
