@@ -1009,6 +1009,9 @@ const ext = { onglet: "skills", lien: "", trouves: null, voir: null, tests: {}, 
 pages.extensions = async () => {
   const d = await api("extensions");
   const o = ext.onglet, type = o === "skills" ? "skill" : "mcp";
+  const intro = `<p class="intro">${t("Skills give Claude expertise it reads only when it needs it; MCP servers give it new tools (up-to-date documentation, code navigation, a browser…). Install them once in Athanor, then switch on what each project uses: it applies from the next cycle, for the lead and for the parallel workers.")}</p>
+  <div class="onglets"><button class="${o === "skills" ? "actif" : ""}" data-ext-onglet="skills">Skills <span class="muet">${d.skills.length}</span></button><button class="${o === "mcp" ? "actif" : ""}" data-ext-onglet="mcp">MCP <span class="muet">${d.mcp.length}</span></button><button class="${o === "plugins" ? "actif" : ""}" data-ext-onglet="plugins">Plugins <span class="muet">${d.plugins || 0}</span></button></div>`;
+  if (o === "plugins") return intro + await pagePlugins(d);
   const liste = o === "skills" ? d.skills : d.mcp;
   const cat = (o === "skills" ? d.catalogue.skills : d.catalogue.mcp) || [];
   const occupe = (cle) => ext.occupe === cle ? "disabled" : "";
@@ -1017,7 +1020,7 @@ pages.extensions = async () => {
       <input type="password" autocomplete="off" data-ext-cle="${h(x.id)}|${h(sc.nom)}" placeholder="${h(sc.defini ? t("Replace the key") : t("Paste the key"))}">
       <button class="btn btn-petit" data-ext-cle-ok="${h(x.id)}|${h(sc.nom)}">${t("Save")}</button>${sc.lien ? ` <span class="muet petit">${h(sc.lien.replace(/^https:\/\//, ""))}</span>` : ""}</div>`).join("");
   const test = (x) => { const r = ext.tests[x.id]; if (!r) return ""; if (r === "…") return `<div class="muet petit">${t("Starting the server in its cage… (the first time, it downloads it: up to two minutes)")}</div>`;
-    return r.ok ? `<div class="ext-test ok">✓ ${r.outils && r.outils.length ? t("Works: {0} tools ({1})", [r.outils.length, r.outils.slice(0, 8).join(", ") + (r.outils.length > 8 ? "…" : "")]) : t(r.note || "Works.")}</div>`
+    return r.ok ? `<div class="ext-test ok">✓ ${r.outils && r.outils.length ? t("Works: {0} tools ({1})", [r.outils.length, h(r.outils.slice(0, 8).join(", ")) + (r.outils.length > 8 ? "…" : "")]) : t(r.note || "Works.")}</div>`
       : `<div class="ext-test echec">✕ ${h(t(r.erreur || "Failed"))}${r.details && r.details.length ? `<pre class="texte-agent">${h(r.details.join("\n"))}</pre>` : ""}</div>`; };
   const voir = (x) => ext.voir && ext.voir.id === x.id && ext.voir.type === type ? `<div class="ext-voir">
       ${type === "skill" ? `<textarea class="code" rows="14" data-ext-texte="${h(x.id)}">${h(ext.voir.texte)}</textarea>
@@ -1025,14 +1028,15 @@ pages.extensions = async () => {
         <div class="ligne"><button class="btn btn-petit" data-ext-enregistrer="${h(x.id)}">${t("Save the skill")}</button></div>`
         : `<pre class="texte-agent">${h(ext.voir.texte)}</pre>`}</div>` : "";
   const lignes = liste.map((x) => `<div class="ext-ligne ${x.actif ? "actif" : ""}">
-      <label class="interrupteur" title="${h(d.projet ? t("Used by “{0}”", [d.projet]) : t("Choose a project first"))}"><input type="checkbox" data-ext-actif="${type}|${h(x.id)}" ${x.actif ? "checked" : ""} ${d.projet ? "" : "disabled"}></label>
+      <label class="interrupteur" title="${h(d.projet ? t("Used by “{0}”", [d.projet]) : t("Choose a project first"))}"><input type="checkbox" data-ext-actif="${type}|${h(x.id)}" ${x.actif ? "checked" : ""} ${d.projet && !x.plugin ? "" : "disabled"}></label>
       <div class="ext-corps">
-        <div class="ext-nom">${h(x.nom)}${x.scripts ? ` <span class="etiquette" title="${h(t("Contains scripts: Claude runs them inside its sandbox."))}">${t("scripts")}</span>` : ""}${!x.source && !x.catalogue ? ` <span class="etiquette">${t("yours")}</span>` : ""}${x.type ? ` <span class="etiquette">${x.type === "stdio" ? t("local, in a cage") : t("remote")}</span>` : ""}</div>
+        <div class="ext-nom">${h(x.nom)}${x.scripts ? ` <span class="etiquette" title="${h(t("Contains scripts: Claude runs them inside its sandbox."))}">${t("scripts")}</span>` : ""}${!x.source && !x.catalogue ? ` <span class="etiquette">${t("yours")}</span>` : ""}${x.type ? ` <span class="etiquette">${x.type === "stdio" ? t("local, in a cage") : t("remote")}</span>` : ""}${x.plugin ? ` <span class="etiquette" title="${h(t("On and off with its plugin (Plugins tab)"))}">${t("plugin {0}", [h(x.plugin)])}</span>` : ""}</div>
         ${x.description ? `<div class="ext-desc">${h(x.description)}</div>` : ""}
         <div class="muet petit ext-source">${[x.source ? h(x.source.startsWith("registry:") ? t("MCP Registry") + " · " + x.source.slice(9) : x.source) : x.catalogue ? "" : h(t("written in Athanor")), x.resume ? `<code>${h(x.resume)}</code>` : ""].filter(Boolean).join(" · ")}</div>
         ${secrets(x)}${test(x)}${voir(x)}
       </div>
       <div class="ext-actions"><button class="btn btn-petit" data-ext-voir="${type}|${h(x.id)}">${ext.voir && ext.voir.id === x.id && ext.voir.type === type ? t("Close") : type === "skill" ? t("View / edit") : t("View")}</button>
+        ${type === "mcp" && (x.type === "http" || x.type === "sse") ? `<button class="btn btn-petit" data-ext-connexion="${h(x.id)}" title="${h(t("For a server that asks you to sign in (OAuth): once, valid for every project."))}">${t("Sign in")}</button>` : ""}
         ${type === "mcp" ? `<button class="btn btn-petit" data-ext-tester="${h(x.id)}" ${d.projet ? "" : "disabled"} ${ext.tests[x.id] === "…" ? "disabled" : ""}>${t("Test")}</button>` : ""}
         <button class="btn btn-petit btn-danger" data-ext-retirer="${type}|${h(x.id)}" title="${h(t("Remove"))}">✕</button></div>
     </div>`).join("");
@@ -1076,8 +1080,7 @@ pages.extensions = async () => {
       <div class="grille grille-2"><input type="text" id="ext-mcp-nom" placeholder="${h(t("Name (optional)"))}"><input type="text" id="ext-mcp-source" placeholder="${h(t("Link to its GitHub page (optional)"))}"></div>
       <textarea id="ext-mcp-texte" rows="7" class="code mt-1" placeholder='{"mcpServers": {"name": {"command": "npx", "args": ["-y", "…"]}}}'></textarea>
       <div class="ligne mt-1"><button class="btn" data-ext-mcp-ajouter>${t("Add the server")}</button></div>`;
-  return `<p class="intro">${t("Skills give Claude expertise it reads only when it needs it; MCP servers give it new tools (up-to-date documentation, code navigation, a browser…). Install them once in Athanor, then switch on what each project uses: it applies from the next cycle, for the lead and for the parallel workers.")}</p>
-  <div class="onglets"><button class="${o === "skills" ? "actif" : ""}" data-ext-onglet="skills">Skills <span class="muet">${d.skills.length}</span></button><button class="${o === "mcp" ? "actif" : ""}" data-ext-onglet="mcp">MCP <span class="muet">${d.mcp.length}</span></button></div>
+  return `${intro}
   <div class="bloc"><h2>${t("In Athanor")}</h2>
     <p class="muet petit">${d.projet ? t("The switch turns it on or off for “{0}”.", [d.projet]) : t("Choose a project to switch them on or off.")}</p>
     ${lignes || `<div class="vide">${t("Nothing installed yet: pick from the catalog below or add your own.")}</div>`}</div>
@@ -1089,6 +1092,124 @@ pages.extensions = async () => {
     <div class="ext-avert">⚠ ${o === "skills" ? t("A skill guides Claude: only add skills from sources you trust. Read it first (View / edit).") : t("An MCP server runs code on your PC: only add servers you trust. Local servers run in a cage: no access to your personal files, your Windows drives or the Claude token.")}</div>
     ${ajouter}</div>`;
 };
+
+// --- plugins (Skills & MCP page, Plugins tab)
+// Claude Code plugins from marketplaces (the official one, plus those the user adds): installed once in
+// Athanor, switched on per project. Their MCP servers join the library: keys and sign-in are given once
+// here, for every project. Hooks and LSP servers are left out (they would run outside the sandbox).
+const plg = { q: "", categorie: "", n: 60, occupe: "", chargeAuto: false, marche: "" };
+function resumePlugin(x) {
+  const n = (l) => (l || []).length;
+  return [n(x.skills) && t("{0} skill(s)", [n(x.skills)]), n(x.commandes) && t("{0} command(s)", [n(x.commandes)]), n(x.agents) && t("{0} sub-agent(s)", [n(x.agents)]), n(x.mcp) && t("{0} MCP server(s)", [n(x.mcp)])].filter(Boolean).join(" · ");
+}
+function serveurPlugin(x, d) {
+  const sc = (x.secrets || []).map((s) => `<div class="ext-secret ${s.defini || s.optionnel ? "" : "manquant"}">
+      <code>${h(s.nom)}</code> <span class="petit">${s.defini ? "✓ " + t("key saved") : s.optionnel ? t("optional key: better limits") : t("key required: the server is skipped without it")}</span>
+      <input type="password" autocomplete="off" data-ext-cle="${h(x.id)}|${h(s.nom)}" placeholder="${h(s.defini ? t("Replace the key") : t("Paste the key"))}">
+      <button class="btn btn-petit" data-ext-cle-ok="${h(x.id)}|${h(s.nom)}">${t("Save")}</button></div>`).join("");
+  const distant = x.type === "http" || x.type === "sse";
+  return `<div class="plg-serveur"><div class="ligne"><span>🔌 <b>${h(x.nom)}</b> <span class="etiquette">${distant ? t("remote") : t("local, in a cage")}</span></span>
+      <span class="espace"></span>${distant ? `<button class="btn btn-petit" data-ext-connexion="${h(x.id)}" title="${h(t("For a server that asks you to sign in (OAuth): once, valid for every project."))}">${t("Sign in")}</button>` : ""}
+      <button class="btn btn-petit" data-ext-tester="${h(x.id)}" ${d.projet && ext.tests[x.id] !== "…" ? "" : "disabled"}>${t("Test")}</button></div>${sc}${testExt(x)}</div>`;
+}
+function testExt(x) {
+  const r = ext.tests[x.id]; if (!r) return "";
+  if (r === "…") return `<div class="muet petit">${t("Starting the server in its cage… (the first time, it downloads it: up to two minutes)")}</div>`;
+  return r.ok ? `<div class="ext-test ok">✓ ${r.outils && r.outils.length ? t("Works: {0} tools ({1})", [r.outils.length, h(r.outils.slice(0, 8).join(", ")) + (r.outils.length > 8 ? "…" : "")]) : t(r.note || "Works.")}</div>`
+    : `<div class="ext-test echec">✕ ${h(t(r.erreur || "Failed"))}${r.details && r.details.length ? `<pre class="texte-agent">${h(r.details.join("\n"))}</pre>` : ""}</div>`;
+}
+async function pagePlugins(d) {
+  let p = await api("plugins");
+  const officiel = (p.marches || [])[0];
+  if (officiel && !officiel.charge && !officiel.erreur && !plg.chargeAuto) {
+    // the first visit: the official catalog is downloaded once (then on "Refresh")
+    plg.chargeAuto = true;
+    await api("plugins/marche", "POST", { action: "actualiser", id: officiel.id }).catch(() => {});
+    p = await api("plugins");
+  }
+  const occ = (c) => plg.occupe === c ? "disabled" : "";
+  const serveurs = {}; for (const x of d.mcp || []) if (x.plugin) (serveurs[x.plugin] = serveurs[x.plugin] || []).push(x);
+  const installes = (p.plugins || []).map((x) => `<div class="ext-ligne ${x.actif ? "actif" : ""}">
+      <label class="interrupteur" title="${h(d.projet ? t("Used by “{0}”", [d.projet]) : t("Choose a project first"))}"><input type="checkbox" data-plg-actif="${h(x.id)}" ${x.actif ? "checked" : ""} ${d.projet ? "" : "disabled"}></label>
+      <div class="ext-corps">
+        <div class="ext-nom">${h(x.nom)} ${x.version ? `<span class="muet petit">${h(x.version)}</span>` : ""} ${x.auteur ? `<span class="muet petit">· ${t("by {0}", [h(x.auteur)])}</span>` : ""}</div>
+        ${x.description ? `<div class="ext-desc">${h(x.description)}</div>` : ""}
+        <div class="muet petit ext-source">${h(resumePlugin(x))}${x.source ? " · " + h(x.source) : ""}</div>
+        ${(x.ecartes || []).length ? `<div class="muet petit">⚠ ${t("Left out, they would run outside Claude's sandbox: {0}", [x.ecartes.join(", ")])}</div>` : ""}
+        ${(serveurs[x.id] || []).map((s) => serveurPlugin(s, d)).join("")}
+      </div>
+      <div class="ext-actions"><button class="btn btn-petit" data-plg-maj data-plg-installer="${h(x.marche)}|${h(x.entree || x.id)}" ${occ("i|" + x.marche + "|" + (x.entree || x.id))} title="${h(t("Download its latest version"))}">${plg.occupe === "i|" + x.marche + "|" + (x.entree || x.id) ? t("Updating…") : t("Update")}</button>
+        <button class="btn btn-petit btn-danger" data-plg-retirer="${h(x.id)}" title="${h(t("Remove"))}">✕</button></div></div>`).join("");
+  // the catalog: every plugin of every marketplace, filtered here
+  const q = plg.q.toLowerCase(), cat = p.catalogue || [];
+  const categories = [...new Set(cat.map((x) => x.categorie).filter(Boolean))].sort();
+  const filtres = cat.filter((x) => (!plg.categorie || x.categorie === plg.categorie) && (!plg.marche || x.marche === plg.marche)
+    && (!q || (x.nom + " " + x.description + " " + (x.auteur || "")).toLowerCase().includes(q)));
+  const cartes = filtres.slice(0, plg.n).map((x) => `<div class="ext-carte">
+      <div class="ext-nom">${h(x.nom)} ${x.categorie ? `<span class="etiquette">${h(x.categorie)}</span>` : ""}</div>
+      <div class="ext-desc">${h(x.description)}</div>
+      <div class="muet petit">${[x.auteur && t("by {0}", [h(x.auteur)]), x.source && h(x.source)].filter(Boolean).join(" · ")}</div>
+      ${x.raison ? `<div class="muet petit">${h(t(x.raison))}</div>` : ""}
+      <div class="ligne">${x.installe ? `<span class="ok petit">✓ ${t("Installed")}</span>` : x.raison ? "" : `<button class="btn btn-petit btn-primaire" data-plg-installer="${h(x.marche)}|${h(x.nom)}" ${occ("i|" + x.marche + "|" + x.nom)}>${plg.occupe === "i|" + x.marche + "|" + x.nom ? t("Installing…") : t("Install")}</button>`}
+        ${x.homepage && /^https:\/\//.test(x.homepage) ? `<a href="#" class="petit" data-lien="${h(x.homepage)}">${t("Web page")}</a>` : ""}</div></div>`).join("");
+  const marches = (p.marches || []).map((m) => `<div class="ligne petit"><span><b>${h(m.nom)}</b> <span class="muet">${m.depot ? "github.com/" + h(m.depot) : h(m.url || "")} · ${m.charge ? t("{0} plugin(s)", [m.n]) : m.erreur ? h(t(m.erreur)) : t("not loaded yet")}${m.maj ? " · " + t("updated {0}", [h(m.maj)]) : ""}</span></span><span class="espace"></span>
+      <button class="btn btn-petit" data-plg-marche="actualiser|${h(m.id)}" ${occ("m|" + m.id)}>${plg.occupe === "m|" + m.id ? t("Loading…") : t("Refresh")}</button>
+      ${m.id === "claude-plugins-official" ? "" : `<button class="btn btn-petit btn-danger" data-plg-marche="retirer|${h(m.id)}" title="${h(t("Remove"))}">✕</button>`}</div>`).join("");
+  return `<div class="bloc"><h2>${t("In Athanor")}</h2>
+      <p class="muet petit">${d.projet ? t("The switch turns it on or off for “{0}”.", [d.projet]) : t("Choose a project to switch them on or off.")} ${t("A plugin brings skills, commands, sub-agents and MCP servers at once. Keys and sign-ins are given once here, for every project.")}</p>
+      ${installes || `<div class="vide">${t("No plugin installed yet: pick one from the catalog below.")}</div>`}</div>
+    <div class="bloc"><h2>${t("Catalog")} <span class="muet petit">${cat.length}</span></h2>
+      <p class="muet petit">${t("The plugins of Claude Code's official marketplace and of the marketplaces you add. Not checked by Athanor: install what you trust. Their hooks and LSP servers are always left out; their MCP servers run like the others (local ones in a cage).")}</p>
+      <div class="ligne"><input type="text" id="plg-q" class="large" value="${h(plg.q)}" placeholder="${h(t("Search: shopify, stripe, notion, figma, database…"))}">
+        <select id="plg-categorie"><option value="">${t("All categories")}</option>${categories.map((c) => `<option value="${h(c)}" ${plg.categorie === c ? "selected" : ""}>${h(c)}</option>`).join("")}</select>
+        ${(p.marches || []).length > 1 ? `<select id="plg-marche"><option value="">${t("All marketplaces")}</option>${p.marches.map((m) => `<option value="${h(m.id)}" ${plg.marche === m.id ? "selected" : ""}>${h(m.nom)}</option>`).join("")}</select>` : ""}</div>
+      <div class="muet petit mt-1">${t("{0} plugin(s) found", [filtres.length])}</div>
+      <div class="ext-catalogue mt-1">${cartes || `<div class="vide">${cat.length ? t("Nothing found: try another word.") : t("The catalog is not loaded: Refresh below.")}</div>`}</div>
+      ${filtres.length > plg.n ? `<div class="ligne mt-1"><button class="btn" data-plg-plus>${t("Show more")}</button></div>` : ""}</div>
+    <div class="bloc"><h2>${t("Marketplaces")}</h2>${marches}
+      <h3>${t("Add a marketplace")}</h3>
+      <p class="muet petit">${t("A GitHub repository holding .claude-plugin/marketplace.json (owner/repo or its link), or the https address of a marketplace.json.")}</p>
+      <div class="ligne"><input type="text" id="plg-marche-texte" class="large" placeholder="owner/repo"><button class="btn" data-plg-marche="ajouter|" ${occ("m|")}>${plg.occupe === "m|" ? t("Loading…") : t("Add")}</button></div></div>`;
+}
+$("#page").addEventListener("click", async (ev) => {
+  if (etat.page !== "extensions") return;
+  const b = ev.target.closest("[data-plg-installer], [data-plg-retirer], [data-plg-marche], [data-plg-plus], [data-ext-connexion]"); if (!b) return;
+  const d = b.dataset;
+  if (d.plgPlus !== undefined) { plg.n += 60; return rendrePage(); }
+  if (d.extConnexion) return action(api("extensions/connexion", "POST", { id: d.extConnexion }));
+  if (d.plgInstaller) {
+    const [marche, ...nom] = d.plgInstaller.split("|");
+    plg.occupe = "i|" + d.plgInstaller; await rendrePage();
+    // an update first reads the marketplace again: it gives the plugin's latest commit
+    if (d.plgMaj !== undefined) await api("plugins/marche", "POST", { action: "actualiser", id: marche }).catch(() => {});
+    await action(api("plugins/installer", "POST", { marche, nom: nom.join("|") })); plg.occupe = ""; return rendrePage();
+  }
+  if (d.plgRetirer) {
+    if (!(await confirmer(t("Remove the plugin “{0}” from Athanor? It is switched off in every project, with its MCP servers and their keys.", [d.plgRetirer]), { ok: t("Remove"), danger: true }))) return;
+    if (await action(api("plugins/retirer", "POST", { id: d.plgRetirer }))) rendrePage(); return;
+  }
+  if (d.plgMarche) {
+    const [act, id] = d.plgMarche.split("|");
+    if (act === "retirer" && !(await confirmer(t("Remove this marketplace? The plugins installed from it stay."), { ok: t("Remove"), danger: true }))) return;
+    const texte = act === "ajouter" ? $("#plg-marche-texte").value.trim() : "";
+    if (act === "ajouter" && !texte) return;
+    plg.occupe = "m|" + (id || ""); await rendrePage();
+    await action(api("plugins/marche", "POST", { action: act, id, texte })); plg.occupe = ""; return rendrePage();
+  }
+});
+$("#page").addEventListener("input", (ev) => {
+  if (ev.target.id !== "plg-q") return;
+  plg.q = ev.target.value; plg.n = 60;
+  clearTimeout(plg.minuterie); plg.minuterie = setTimeout(async () => { const pos = ev.target.selectionStart; await rendrePage(); const z = $("#plg-q"); if (z) { z.focus(); z.setSelectionRange(pos, pos); } }, 250);
+});
+$("#page").addEventListener("change", async (ev) => {
+  const i = ev.target;
+  if (i.id === "plg-categorie") { plg.categorie = i.value; plg.n = 60; return rendrePage(); }
+  if (i.id === "plg-marche") { plg.marche = i.value; plg.n = 60; return rendrePage(); }
+  if (!i.dataset.plgActif) return;
+  const r = await action(api("plugins/projet", "POST", { id: i.dataset.plgActif, actif: i.checked }));
+  if (!r) i.checked = !i.checked; else rendrePage();
+});
 
 $("#page").addEventListener("click", async (ev) => {
   if (etat.page !== "extensions") return;

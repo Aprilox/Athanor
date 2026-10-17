@@ -15,7 +15,8 @@ projets = sorted({projet, os.path.abspath(os.environ.get("PROJECT") or os.path.j
 unreal_mcp = os.environ.get("UNREAL_MCP", "0") == "1"
 # The skills chosen in the app (Skills & MCP page), copied by system/extensions.py: readable, never writable.
 plugin = os.environ.get("ATHANOR_PLUGIN") or ""
-lectures = [system] + ([plugin] if plugin else [])
+plugins_tiers = os.environ.get("ATHANOR_PLUGINS") or ""   # the plugins switched on (Plugins tab)
+lectures = [system] + ([plugin] if plugin else []) + ([plugins_tiers] if plugins_tiers else [])
 # Hooks run OUTSIDE the sandbox: never a program taken from tools/ (modifiable by Claude).
 rtk_bin = os.path.join(system, "bin", "rtk")
 rtk = os.environ.get("RTK", "1") != "0" and os.access(rtk_bin, os.X_OK)

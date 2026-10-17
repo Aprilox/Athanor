@@ -487,6 +487,7 @@ synchroniser_demande
 "$SYSTEME/detect-tools.sh"
 # The skills of the Skills & MCP page are copied there (read-only for Claude: settings.py and the guard).
 export ATHANOR_PLUGIN="$PRIVE/plugin"
+export ATHANOR_PLUGINS="$PRIVE/plugins"   # the plugins switched on for the project (Plugins tab), read-only too
 python3 "$SYSTEME/settings.py" "$KIT" "$REGLAGES" > /dev/null || { log "Cannot write Claude's settings."; exit 1; }
 if [ "${UNREAL_MCP:-0}" = "1" ] && [ -f "$SYSTEME/unreal_relay.txt" ]; then
   # "Mirrored" networking unavailable: go through the Windows relay (unreal-network.cmd), seen from WSL
@@ -506,11 +507,15 @@ printf '%s' "$AIDE_CLAUDE" | grep -q -- '--plugin-dir' && PLUGIN_DIR_OK=1
 EXTENSIONS_AVANT=""
 preparer_extensions() {
   local r; r=$(python3 "$SYSTEME/extensions.py" preparer "$KIT" "$PROJECT" "$PRIVE" 2>> "$PRIVE/pilot.log")
-  PLUGIN_ATHANOR=""
+  PLUGIN_ATHANOR=""; PLUGINS_DIRS=()
   if [ -f "$PRIVE/plugin/.claude-plugin/plugin.json" ]; then
     if [ "$PLUGIN_DIR_OK" = 1 ]; then PLUGIN_ATHANOR="$PRIVE/plugin"
     else r="$r (skills ignored: this Claude Code version has no --plugin-dir, update it with repair)"; fi
   fi
+  local d
+  for d in "$PRIVE/plugins"/*/; do
+    [ -f "$d.claude-plugin/plugin.json" ] && [ ! -L "${d%/}" ] && [ "$PLUGIN_DIR_OK" = 1 ] && PLUGINS_DIRS+=("${d%/}")
+  done
   [ -n "$r" ] && [ "$r" != "$EXTENSIONS_AVANT" ] && log "Skills & MCP: $r"
   EXTENSIONS_AVANT="$r"
 }
@@ -751,6 +756,7 @@ while true; do
     [ "$AGENTS_PAR_JSON" = 1 ] && args+=(--agents "$AGENTS_JSON")
     [ -f "$PRIVE/mcp.json" ] && args+=(--mcp-config "$PRIVE/mcp.json")
     [ -n "$PLUGIN_ATHANOR" ] && args+=(--plugin-dir "$PLUGIN_ATHANOR")
+    for dp in "${PLUGINS_DIRS[@]}"; do args+=(--plugin-dir "$dp"); done
     [ -n "$modele_cycle" ] && args+=(--model "$modele_cycle")
     # Model overloaded or unavailable: Claude Code switches to the fallback model on its own.
     [ -n "$FALLBACK_MODEL" ] && [ "$modele_cycle" != "$FALLBACK_MODEL" ] && args+=(--fallback-model "$FALLBACK_MODEL")
