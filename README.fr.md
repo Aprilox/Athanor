@@ -208,6 +208,7 @@ Les agents sont dans [`template/.claude/agents/`](template/.claude/agents) : mod
 |:---:|:---:|
 | <img src="docs/images/team.png" alt="Page Équipe : le chef de projet avec les sous-agents qu'il a appelés, et trois ouvriers, chacun avec son executor"><br>**Équipe** : qui a appelé qui, ce que fait chacun, en direct | <img src="docs/images/log.png" alt="Page Journal en thème clair : événements du pilote, paroles de Claude, outils et sous-agents, lignes des ouvriers étiquetées [M5]"><br>**Journal** : lisible ou brut, filtrable, ouvriers étiquetés |
 | <img src="docs/images/requests.png" alt="Page Demandes : la demande en cours avec son plan en vagues, et deux demandes en attente réordonnables"><br>**Demandes** : une file réordonnable, des remarques en cours de route | <img src="docs/images/options.png" alt="Page Options : langue, cinq palettes et cinq accents, démarrage, dossier de l'outil"><br>**Options** : 6 langues, 5 palettes × 5 accents |
+| <img src="docs/images/skills.png" alt="Page Skills &amp; MCP, onglet Skills : quatre skills installés depuis le catalogue vérifié, dont trois activés pour ce projet, et la recherche communautaire en dessous"><br>**Skills** : installés une fois, activés par projet | <img src="docs/images/mcp.png" alt="Page Skills &amp; MCP, onglet MCP : Context7 et Godot activés, un champ de clé API facultative, un test réussi, et la recherche dans le MCP Registry"><br>**MCP** : distants ou locaux dans une cage, testés en un clic |
 
 Les captures sont en anglais ; l'interface s'affiche dans la langue choisie.
 
@@ -364,13 +365,14 @@ Athanor.exe, athanor   l'application pour Windows / Linux (dans la version tél�
 app/                   les sources Go de l'application, l'interface (HTML, CSS, JS sans dépendance), ressources Windows
 commands/              install, configure, start, stop, stop-after-cycle, follow, test-sandbox, repair,
                        allow-admin, unreal-network (.cmd pour Windows, .sh pour Linux/WSL)
-system/                pilot.sh (la boucle), parallel.sh (ordonnanceur, ouvriers, fusions), extensions.py + mcp-jail.sh (Skills & MCP), safety.sh, bridge.py, settings.py
-                       (barrière), guard.py, detect-tools.sh, athanor.py (carte, archives, captures),
+system/                pilot.sh (la boucle), parallel.sh (ordonnanceur, ouvriers, fusions), safety.sh, bridge.py,
+                       extensions.py + mcp-jail.sh (Skills & MCP), settings.py (barrière), guard.py, detect-tools.sh, athanor.py (carte, archives, captures),
                        bin/ (passerelles), windows/ (aides PowerShell)
 template/              CLAUDE.md (consignes de Claude), PC_TOOLS_GUIDE.md, .claude/agents/ (l'équipe)
 docs/images/           images du README
 .env.example           tous les réglages, documentés
-logs/, tools/          créés à l'usage, jamais commités
+logs/, tools/,         créés à l'usage, jamais commités
+extensions/
 ```
 
 ---
@@ -436,7 +438,7 @@ Oui. Rien n'est lié à un nom d'utilisateur ni à une lettre de disque : les ch
 Poussez un tag de version : GitHub compile les deux applications et publie la version ([`.github/workflows/release.yml`](.github/workflows/release.yml)).
 
 ```bash
-git tag v2.0.1 && git push origin v2.0.1
+git tag v2.5.1 && git push origin v2.5.1
 ```
 
 Gardez la version de [`app/winres/athanor.rc`](app/winres/athanor.rc) alignée sur le tag.
