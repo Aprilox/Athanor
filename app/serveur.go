@@ -48,6 +48,7 @@ func nouveauServeur(config Config) *Serveur {
 		relancer:     map[string]bool{},
 	}
 	MigrerEnv(kit.Env()) // old French keys of the .env → English names
+	s.MigrerUnreal()     // UNREAL_MCP of the .env → the "unreal" server of the MCP library (2.13.0)
 	for _, p := range s.config.Projets {
 		p.MigrerAtelier() // .autopilote/ → .athanor/ (previous name)
 	}

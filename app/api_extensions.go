@@ -69,14 +69,18 @@ type Catalogue struct {
 		Description texteLangues `json:"description"`
 	} `json:"skills"`
 	MCP []struct {
-		ID          string            `json:"id"`
-		Nom         string            `json:"nom"`
-		Depot       string            `json:"depot"`
-		Licence     string            `json:"licence"`
-		Prerequis   string            `json:"prerequis"`
-		Config      ConfigMCP         `json:"config"`
-		Secrets     []SecretCatalogue `json:"secrets"`
-		Description texteLangues      `json:"description"`
+		ID        string            `json:"id"`
+		Nom       string            `json:"nom"`
+		Depot     string            `json:"depot"`
+		Licence   string            `json:"licence"`
+		Prerequis string            `json:"prerequis"`
+		Config    ConfigMCP         `json:"config"`
+		Secrets   []SecretCatalogue `json:"secrets"`
+		Reglages  []struct {
+			Nom    string `json:"nom"`
+			Defaut string `json:"defaut"`
+		} `json:"reglages"`
+		Description texteLangues `json:"description"`
 	} `json:"mcp"`
 }
 
@@ -103,6 +107,7 @@ type MCPInstalle struct {
 	Config      ConfigMCP         `json:"config"`
 	Optionnels  []string          `json:"optionnels,omitempty"` // keys the server works without
 	Liens       map[string]string `json:"liens,omitempty"`      // where to get each key
+	Reglages    map[string]string `json:"reglages,omitempty"`   // settings (an address, a port, a path…): name → default, shown in clear
 	Plugin      string            `json:"plugin,omitempty"`     // the plugin it comes with (api_plugins.go): on and off with it
 	Ajoute      string            `json:"ajoute"`
 }
@@ -576,6 +581,72 @@ func separerSecrets(c *ConfigMCP) map[string]string {
 	return secrets
 }
 
+// estNomReglage: an environment variable or option that is a setting (an address, a port, a path…),
+// shown in clear and editable, never a key.
+func estNomReglage(nom string) bool {
+	if estNomSecret(nom) {
+		return false
+	}
+	for _, m := range regexp.MustCompile(`[A-Za-z0-9]+`).FindAllString(strings.ToUpper(nom), -1) {
+		switch m {
+		case "URL", "URI", "HOST", "HOSTNAME", "PORT", "ENDPOINT", "ADDRESS", "ADDR", "PATH", "DIR", "DIRECTORY", "FOLDER", "ROOT", "WORKSPACE", "PROJECT", "DATABASE", "DB", "MODEL", "REGION", "ORG", "ORGANIZATION", "WORKSPACEID", "PROJECTID", "TEAMID", "SITEID", "ACCOUNTID":
+			return true
+		}
+	}
+	return false
+}
+
+var reAdresseLocale = regexp.MustCompile(`^https?://(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\]|10\.[0-9.]+|192\.168\.[0-9.]+|172\.(1[6-9]|2[0-9]|3[01])\.[0-9.]+|host\.docker\.internal)(:[0-9]+)?(/.*)?$`)
+
+// separerReglages turns what the user will want to adjust into settings (${NAME} with a default kept
+// in the library): environment variables named like an address, a port or a path; "--port 8080"-like
+// options; the address of a server on this PC. Public addresses and keys are left alone.
+func separerReglages(c *ConfigMCP) map[string]string {
+	reglages := map[string]string{}
+	nommer := func(cle string) string {
+		return strings.Trim(strings.ToUpper(regexp.MustCompile(`[^A-Za-z0-9]+`).ReplaceAllString(cle, "_")), "_")
+	}
+	for k, v := range c.Env {
+		if reVarSecret.MatchString(v) || !estNomReglage(k) || strings.ContainsAny(v, "\n\r") {
+			continue
+		}
+		n := nommer(k)
+		if n == "" || !regexp.MustCompile(`^[A-Za-z_]`).MatchString(n) {
+			continue
+		}
+		reglages[n] = v
+		c.Env[k] = "${" + n + "}"
+	}
+	options := map[string]string{"--port": "PORT", "-p": "PORT", "--host": "HOST", "--url": "URL", "--endpoint": "ENDPOINT", "--base-url": "BASE_URL", "--server-url": "SERVER_URL", "--api-url": "API_URL", "--address": "ADDRESS", "--workspace": "WORKSPACE", "--project": "PROJECT", "--root": "ROOT", "--path": "PATH_TO_USE", "--dir": "DIR"}
+	for i := 0; i < len(c.Args); i++ {
+		a := c.Args[i]
+		if n, ok := options[strings.ToLower(a)]; ok && i+1 < len(c.Args) && !reVarSecret.MatchString(c.Args[i+1]) && !strings.HasPrefix(c.Args[i+1], "-") {
+			if _, deja := reglages[n]; !deja {
+				reglages[n] = c.Args[i+1]
+				c.Args[i+1] = "${" + n + "}"
+			}
+			i++
+			continue
+		}
+		if j := strings.Index(a, "="); j > 2 && strings.HasPrefix(a, "--") {
+			if n, ok := options[strings.ToLower(a[:j])]; ok && !reVarSecret.MatchString(a[j+1:]) {
+				if _, deja := reglages[n]; !deja {
+					reglages[n] = a[j+1:]
+					c.Args[i] = a[:j+1] + "${" + n + "}"
+				}
+			}
+		}
+	}
+	if c.URL != "" && !reVarSecret.MatchString(c.URL) && reAdresseLocale.MatchString(c.URL) {
+		reglages["URL"] = c.URL
+		c.URL = "${URL}"
+	}
+	if len(reglages) == 0 {
+		return nil
+	}
+	return reglages
+}
+
 // decouperCommande splits a shell-like command line (quotes and backslashes).
 func decouperCommande(s string) []string {
 	var out []string
@@ -762,6 +833,9 @@ type SecretVue struct {
 	Defini    bool   `json:"defini"`
 	Optionnel bool   `json:"optionnel"`
 	Lien      string `json:"lien,omitempty"`
+	Reglage   bool   `json:"reglage,omitempty"` // a setting, not a key: shown in clear, with its default
+	Valeur    string `json:"valeur,omitempty"`
+	Defaut    string `json:"defaut,omitempty"`
 }
 
 type ExtVue struct {
@@ -817,7 +891,13 @@ func (s *Serveur) apiExtensions(w http.ResponseWriter, r *http.Request) {
 			v.Description = d
 		}
 		if x.Config.URL != "" {
-			v.Resume = reVarSecret.ReplaceAllString(x.Config.URL, "…")
+			v.Resume = reVarSecret.ReplaceAllStringFunc(x.Config.URL, func(m string) string {
+				nom := m[2 : len(m)-1]
+				if d, ok := x.Reglages[nom]; ok { // a setting shows its value, a key never
+					return firstNonEmpty(secrets[id][nom], d)
+				}
+				return "…"
+			})
 			if v.Type == "" {
 				v.Type = "http"
 			}
@@ -826,6 +906,10 @@ func (s *Serveur) apiExtensions(w http.ResponseWriter, r *http.Request) {
 			v.Type = "stdio"
 		}
 		for _, nom := range secretsRequis(x.Config) {
+			if d, ok := x.Reglages[nom]; ok {
+				v.Secrets = append(v.Secrets, SecretVue{Nom: nom, Defini: true, Reglage: true, Valeur: firstNonEmpty(secrets[id][nom], d), Defaut: d})
+				continue
+			}
 			v.Secrets = append(v.Secrets, SecretVue{Nom: nom, Defini: secrets[id][nom] != "", Optionnel: contient(x.Optionnels, nom), Lien: x.Liens[nom]})
 		}
 		mcp = append(mcp, v)
@@ -886,6 +970,15 @@ func (s *Serveur) apiExtCatalogue(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			x := MCPInstalle{Nom: m.Nom, Source: "github.com/" + m.Depot, Catalogue: m.ID, Config: m.Config, Liens: map[string]string{}, Ajoute: maintenantISO()}
+			if m.Depot == "" {
+				x.Source = ""
+			}
+			for _, rg := range m.Reglages {
+				if x.Reglages == nil {
+					x.Reglages = map[string]string{}
+				}
+				x.Reglages[rg.Nom] = rg.Defaut
+			}
 			for _, sec := range m.Secrets {
 				if sec.Optionnel {
 					x.Optionnels = append(x.Optionnels, sec.Nom)
@@ -1148,6 +1241,7 @@ func (s *Serveur) apiExtMCPPerso(w http.ResponseWriter, r *http.Request) {
 			conf.Type = "stdio"
 		}
 		valeurs := separerSecrets(&conf)
+		reglages := separerReglages(&conf)
 		if len(valeurs) > 0 {
 			if secrets[id] == nil {
 				secrets[id] = map[string]string{}
@@ -1156,7 +1250,7 @@ func (s *Serveur) apiExtMCPPerso(w http.ResponseWriter, r *http.Request) {
 				secrets[id][k2] = v
 			}
 		}
-		b.MCP[id] = MCPInstalle{Nom: strings.TrimSpace(nom), Source: strings.TrimSpace(c.Source), Config: conf, Ajoute: maintenantISO()}
+		b.MCP[id] = MCPInstalle{Nom: strings.TrimSpace(nom), Source: strings.TrimSpace(c.Source), Config: conf, Reglages: reglages, Ajoute: maintenantISO()}
 		ajoutes = append(ajoutes, strings.TrimSpace(nom))
 	}
 	if err := ecrireJSONFichier(filepath.Join(dossierExt(k), "secrets.json"), secrets, 0o600); err != nil {
@@ -1265,13 +1359,23 @@ func (s *Serveur) apiExtSecret(w http.ResponseWriter, r *http.Request) {
 	if secrets[c.ID] == nil {
 		secrets[c.ID] = map[string]string{}
 	}
-	if strings.TrimSpace(c.Valeur) == "" {
+	_, reglage := lireBiblio(k).MCP[c.ID].Reglages[c.Nom]
+	c.Valeur = strings.TrimSpace(c.Valeur)
+	if reglage && c.Valeur != "" && strings.Contains(c.Nom, "URL") && !regexp.MustCompile(`^https?://[^\s"'<>]+$`).MatchString(c.Valeur) {
+		s.erreur(w, http.StatusBadRequest, "Invalid setting: "+c.Nom)
+		return
+	}
+	if c.Valeur == "" {
 		delete(secrets[c.ID], c.Nom)
 	} else {
-		secrets[c.ID][c.Nom] = strings.TrimSpace(c.Valeur)
+		secrets[c.ID][c.Nom] = c.Valeur
 	}
 	if err := ecrireJSONFichier(filepath.Join(dossierExt(k), "secrets.json"), secrets, 0o600); err != nil {
 		s.erreur(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if reglage {
+		s.msg(w, "Setting saved. It applies from the next cycle.")
 		return
 	}
 	s.msg(w, "Key saved. It applies from the next cycle.")

@@ -439,7 +439,8 @@ func (s *Serveur) apiExtRegistre(w http.ResponseWriter, r *http.Request) {
 		s.erreur(w, http.StatusBadRequest, "Invalid name")
 		return
 	}
-	b.MCP[id] = MCPInstalle{Nom: titreRegistre(*sv), Description: court(sv.Description, 400), Source: source, Config: conf, Optionnels: optionnels, Ajoute: maintenantISO()}
+	reglages := separerReglages(&conf)
+	b.MCP[id] = MCPInstalle{Nom: titreRegistre(*sv), Description: court(sv.Description, 400), Source: source, Config: conf, Optionnels: optionnels, Reglages: reglages, Ajoute: maintenantISO()}
 	if err := ecrireJSONFichier(filepath.Join(dossierExt(k), "bibliotheque.json"), b, 0o644); err != nil {
 		s.erreur(w, http.StatusInternalServerError, err.Error())
 		return

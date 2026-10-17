@@ -14,6 +14,9 @@ import (
 
 const masque = "••••••••"
 
+// clesEnvCachees: settings of older versions that moved elsewhere (Unreal: the MCP library).
+var clesEnvCachees = map[string]bool{"UNREAL_MCP": true, "UNREAL_MCP_URL": true}
+
 func (s *Serveur) apiEnv(w http.ResponseWriter, r *http.Request) {
 	chemin := s.kitCourant().Env()
 	if _, err := os.Stat(chemin); err != nil {
@@ -39,7 +42,7 @@ func (s *Serveur) apiEnv(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	for _, l := range lignes {
-		if l.Cle == "" {
+		if l.Cle == "" || clesEnvCachees[l.Cle] {
 			continue
 		}
 		if a := aides[l.Cle]; a != "" {
