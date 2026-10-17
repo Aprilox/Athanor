@@ -312,6 +312,7 @@ func (s *Serveur) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/remarque", s.garde(false, s.apiRemarque))
 	mux.HandleFunc("POST /api/ameliorer", s.garde(false, s.apiAmeliorerDemande))
 	mux.HandleFunc("PUT /api/demande", s.garde(false, s.apiEcrireDemande))
+	mux.HandleFunc("POST /api/pieces", s.garde(false, s.apiPiece))
 	mux.HandleFunc("GET /api/plan", s.garde(false, s.apiPlanTexte))
 	mux.HandleFunc("PUT /api/plan", s.garde(false, s.apiEcrirePlan))
 	mux.HandleFunc("POST /api/plan/jalon", s.garde(false, s.apiActionJalon))
