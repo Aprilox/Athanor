@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 )
 
 type Config struct {
@@ -54,7 +55,28 @@ func lireConfig() Config {
 	if b, err := os.ReadFile(cheminConfig()); err == nil {
 		_ = json.Unmarshal(b, &c)
 	}
+	// folders saved by older versions with a final dot or space ("montre3."): Windows drops it, Linux keeps
+	// it, so the pilot would have worked in another folder than the one shown in Explorer
+	for i, p := range c.Projets {
+		c.Projets[i].Dossier = cheminWindowsPropre(p.Dossier)
+	}
 	return c
+}
+
+// cheminWindowsPropre removes the final dots and spaces of each folder name of a Windows path, as
+// Windows itself does ("C:\Dev\site." is "C:\Dev\site"). Linux and WSL keep them, and would see
+// another folder. Other paths are returned as they are.
+func cheminWindowsPropre(d string) string {
+	if len(d) < 3 || d[1] != ':' || (d[2] != '\\' && d[2] != '/') {
+		return d
+	}
+	parties := strings.FieldsFunc(d[3:], func(r rune) bool { return r == '\\' || r == '/' })
+	for i, x := range parties {
+		if y := strings.TrimRight(x, ". "); y != "" {
+			parties[i] = y
+		}
+	}
+	return d[:2] + `\` + strings.Join(parties, `\`)
 }
 
 func ecrireConfig(c Config) error {

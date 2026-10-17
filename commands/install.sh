@@ -33,13 +33,30 @@ if command -v apt-get >/dev/null 2>&1; then
   sudo dpkg --configure -a >/dev/null 2>&1 || true
   sudo apt-get -f install -y -qq >/dev/null 2>&1 || true
   sudo apt-get update -qq && sudo apt-get install -y -qq git curl ca-certificates jq ripgrep procps \
-    python3 python3-venv python3-pip python3-pil nodejs npm imagemagick ffmpeg zip unzip bubblewrap socat xvfb \
+    python3 python3-venv python3-pip python3-pil nodejs npm imagemagick ffmpeg zip unzip bubblewrap socat xvfb openssh-client \
     && ok "Packages installed" || alerte "Package installation incomplete: read the messages above."
 elif command -v dnf >/dev/null 2>&1; then
-  sudo dnf install -y git curl jq ripgrep procps-ng python3 python3-pillow nodejs npm ImageMagick ffmpeg zip unzip bubblewrap socat xorg-x11-server-Xvfb \
+  sudo dnf install -y git curl jq ripgrep procps-ng python3 python3-pillow nodejs npm ImageMagick ffmpeg zip unzip bubblewrap socat xorg-x11-server-Xvfb openssh-clients \
     && ok "Packages installed" || alerte "Package installation incomplete."
 else
   alerte "Unknown package manager: install by hand git curl jq python3 python3-pil nodejs npm imagemagick bubblewrap socat Xvfb."
+fi
+
+etape "GitHub CLI (to link projects to GitHub)"
+if gh auth login --help 2>/dev/null | grep -q -- '--skip-ssh-key'; then
+  ok "GitHub CLI already installed ($(gh --version 2>/dev/null | head -n1))"
+elif command -v apt-get >/dev/null 2>&1; then
+  # GitHub's own package repository: the distribution's gh is often too old
+  sudo mkdir -p -m 755 /etc/apt/keyrings \
+    && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null \
+    && sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+    && sudo apt-get update -qq && sudo apt-get install -y -qq gh \
+    && ok "GitHub CLI installed" || alerte "GitHub CLI not installed: linking a project to GitHub will not be possible."
+elif command -v dnf >/dev/null 2>&1; then
+  sudo dnf install -y gh && ok "GitHub CLI installed" || alerte "GitHub CLI not installed: linking a project to GitHub will not be possible."
+else
+  alerte "Install the GitHub CLI by hand (https://cli.github.com) to link projects to GitHub."
 fi
 
 etape "System sandbox"

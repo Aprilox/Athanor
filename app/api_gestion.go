@@ -379,7 +379,7 @@ func (s *Serveur) cheminCible(d string, p Projet) (string, error) {
 	if !filepath.IsAbs(d) {
 		return "", errors.New("Give the full path of the development folder (e.g. D:\\Dev\\my-site)")
 	}
-	d = filepath.Clean(d)
+	d = cheminWindowsPropre(filepath.Clean(d))
 	if cle := dossierInterdit(d, s.kitCourant().Racine); cle != "" {
 		return "", errors.New(cle)
 	}
@@ -511,6 +511,7 @@ func (s *Serveur) apiGestion(w http.ResponseWriter, r *http.Request) {
 			s.erreur(w, http.StatusInternalServerError, err.Error())
 			return
 		}
+		s.suivreGitHub(p.Dossier, cible)
 		s.msg(w, "Folder moved.")
 
 	case "dossier": // point the project to another folder: the workshop follows, the milestones are checked
@@ -537,6 +538,7 @@ func (s *Serveur) apiGestion(w http.ResponseWriter, r *http.Request) {
 			s.erreur(w, http.StatusInternalServerError, err.Error())
 			return
 		}
+		s.suivreGitHub(p.Dossier, cible)
 		decoches, recoches, _ := nouveau.VerifierJalons()
 		demanderReverification(nouveau, "project pointed from "+p.Dossier+" to "+cible)
 		s.ecrireJSON(w, map[string]any{"message_key": "Folder changed: the milestones were checked against its content; Claude checks them again at the next start.", "args": []string{}, "decoches": decoches, "recoches": recoches})
@@ -618,6 +620,9 @@ func (s *Serveur) apiGestion(w http.ResponseWriter, r *http.Request) {
 		if err := s.retirerProjet(p); err != nil {
 			s.erreur(w, http.StatusInternalServerError, err.Error())
 			return
+		}
+		if c.Mode != "liste" {
+			s.oublierGitHub(p) // its GitHub key goes with its Athanor data (kept when only removed from the list)
 		}
 		switch c.Mode {
 		case "liste":

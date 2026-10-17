@@ -47,6 +47,7 @@ func main() {
 		config.Kit = devinerKit()
 	}
 	s := nouveauServeur(config)
+	s.cleAcces = aleatoire(24) // only the windows Athanor opens can use the interface (acces.go)
 	s.demarrerProjetsAuto()
 
 	mux := http.NewServeMux()
@@ -56,6 +57,9 @@ func main() {
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
 			fichiers.ServeHTTP(w, r)
+			return
+		}
+		if !s.pageAcces(w, r) {
 			return
 		}
 		b, _ := fs.ReadFile(sous, "index.html")
@@ -89,13 +93,13 @@ func main() {
 	srv := &http.Server{Handler: filtre, ReadHeaderTimeout: 10 * time.Second}
 	go func() { log.Fatal(srv.Serve(ecoute)) }()
 	time.Sleep(150 * time.Millisecond)
-	urlApp = url
+	lienApp = func() string { return s.lienOuverture(url) }
 	ecrireInstance(port)
-	if !FenetreApp(url) {
+	if !FenetreApp(lienApp()) {
 		// Edge/Chrome window or the browser: the application keeps serving; a new launch opens another window.
-		OuvrirFenetreApp(url)
+		OuvrirFenetreApp(lienApp())
 		for range demandesFenetre {
-			OuvrirFenetreApp(url)
+			OuvrirFenetreApp(lienApp())
 		}
 	}
 	// The window was closed: the application stops (the pilots keep running in WSL).
@@ -103,5 +107,5 @@ func main() {
 	remettreBureau()
 }
 
-// urlApp: the address of the interface (for a window opened later).
-var urlApp string
+// lienApp: a single-use address of the interface, for a window opened now (acces.go).
+var lienApp = func() string { return "" }

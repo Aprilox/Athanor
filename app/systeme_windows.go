@@ -99,27 +99,42 @@ func commandeWSL(k Kit, script string) *exec.Cmd {
 	return c
 }
 
-// Visible console window for an interactive step (sudo, token).
+// Visible console window for an interactive step (sudo, token, GitHub sign-in). Each opening is noted
+// in logs/fenetres.log (date and terminal), to tell "the window did not start" from "the step failed".
 func FenetreWSL(k Kit, titre, script string) error {
-	nom, err := fichierScript(k, script+"\necho\nread -p 'Press Enter to close' _\n")
+	nom, err := fichierScript(k, "echo \"$(date '+%F %T') $(tty 2>&1) "+citerShell(titre)+"\" >> logs/fenetres.log 2>/dev/null\n"+
+		script+"\necho\nread -p 'Press Enter to close' _\n")
 	if err != nil {
 		return err
 	}
 	return demarrerFenetre(titre, "wsl.exe", "-d", k.Distro(), "--cd", k.Racine, "--", "bash", "-l", "./"+nom)
 }
 
-// demarrerFenetre opens a visible console with "cmd /c start". The command line is written by
-// hand, each argument in quotes: otherwise a "&" in a path (D:\Dev\R&D) would cut the
-// command and cmd would run what follows.
+// demarrerFenetre opens a visible console of its own (CreateProcess, CREATE_NEW_CONSOLE), without
+// handing it any of the application's standard handles: started through "cmd /c start" from the
+// application (which has no console), the window received an empty input, so every question, and
+// the final "Press Enter", returned at once and the window closed straight away. No cmd in between:
+// a "&" in a path (D:\Dev\R&D) is just a character of an argument.
 func demarrerFenetre(titre string, args ...string) error {
-	q := func(a string) string { return `"` + strings.ReplaceAll(a, `"`, "") + `"` }
-	ligne := `cmd.exe /c start ` + q(titre)
-	for _, a := range args {
-		ligne += " " + q(a)
+	ligne := make([]string, len(args))
+	for i, a := range args {
+		ligne[i] = syscall.EscapeArg(a)
 	}
-	c := exec.Command("cmd.exe")
-	c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: createNoWindow, CmdLine: ligne}
-	return c.Start()
+	cl, err := syscall.UTF16PtrFromString(strings.Join(ligne, " "))
+	if err != nil {
+		return err
+	}
+	t, _ := syscall.UTF16PtrFromString(titre)
+	si := &syscall.StartupInfo{Title: t}
+	si.Cb = uint32(unsafe.Sizeof(*si))
+	var pi syscall.ProcessInformation
+	const createNewConsole, createUnicodeEnvironment = 0x00000010, 0x00000400
+	if err := syscall.CreateProcess(nil, cl, nil, nil, false, createNewConsole|createUnicodeEnvironment, nil, nil, si, &pi); err != nil {
+		return err
+	}
+	syscall.CloseHandle(pi.Thread)
+	syscall.CloseHandle(pi.Process)
+	return nil
 }
 
 func FenetrePowerShell(k Kit, scriptRelatif string) error {

@@ -10,6 +10,8 @@ One executable, standard library only (plus three vendored packages for the WebV
 | `api_projets.go` | state, log, team, pilot start/stop, add/choose/remove project, folder browser, preferences (language, theme, accent, first-launch guide) |
 | `api_demandes.go` | current request, queue (reorder, remove), notes along the way, requests taken into the plan or delivered |
 | `api_gestion.go`, `corbeille_windows.go`, `corbeille_autre.go` | managing a project: rename, move or rename its folder, point it to another folder (workshop copied, milestones checked against the folder, `.athanor/REVERIFY` for Claude), archive, delete (from the list, or the workshop or the whole folder to the recycle bin) |
+| `api_github.go` | a project's GitHub link: state, link (sign-in window), push now or anyway, automatic push, branch, unlink, open on GitHub; the work is done by `system/github.sh` in WSL |
+| `acces.go` | only the windows Athanor opens can use the interface: single-use opening address, then an HttpOnly cookie checked on the page and every API call |
 | `api_plan.go` | plan editing: move a milestone up or down, remove it (its dependents are updated), edit `PLAN.md` as a whole |
 | `api_extensions.go`, `api_recherche.go`, `catalogue.json` | Skills & MCP page: library in `extensions/` of the tool folder, verified catalog, install from a GitHub link (zip, no links, size limits), pasted MCP configurations (JSON or `claude mcp add`, keys stored apart), search in SkillsMP and the official MCP Registry (configuration built from the registry entry), per-project choice, test of a server in its cage |
 | `api_ameliorer.go` | "Improve with Claude": one Claude turn rewrites a request clearer and more complete |

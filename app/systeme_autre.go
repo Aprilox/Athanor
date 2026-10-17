@@ -33,8 +33,33 @@ func DemarrerDetache(k Kit, script string) error {
 	return err
 }
 
+// FenetreWSL on Linux: the step runs in a terminal window of the desktop (the first one found).
 func FenetreWSL(k Kit, titre, script string) error {
-	return errors.New("Interactive window: Windows only; run in a terminal: " + script)
+	if os.Getenv("DISPLAY") == "" && os.Getenv("WAYLAND_DISPLAY") == "" {
+		return errors.New("Interactive window: no graphical session; run in a terminal: " + script)
+	}
+	if err := os.MkdirAll(k.Journaux(), 0o755); err != nil {
+		return err
+	}
+	f, err := os.CreateTemp(k.Journaux(), "window-*.sh")
+	if err != nil {
+		return err
+	}
+	_, err = f.WriteString("cd " + citerShell(k.Racine) + " || exit 1\n" + script + "\necho\nread -p 'Press Enter to close' _\nrm -f -- \"$0\"\n")
+	f.Close()
+	if err != nil {
+		return err
+	}
+	for _, t := range [][]string{{"x-terminal-emulator", "-e"}, {"gnome-terminal", "--"}, {"konsole", "-e"}, {"xfce4-terminal", "-x"},
+		{"mate-terminal", "-x"}, {"kitty"}, {"alacritty", "-e"}, {"xterm", "-e"}} {
+		if chemin, err := exec.LookPath(t[0]); err == nil {
+			c := exec.Command(chemin, append(t[1:], "bash", "-l", f.Name())...)
+			c.Dir = k.Racine
+			return c.Start()
+		}
+	}
+	os.Remove(f.Name())
+	return errors.New("Interactive window: no terminal found; run in a terminal: " + script)
 }
 func FenetrePowerShell(k Kit, s string) error { return errors.New("PowerShell: Windows only") }
 func Ouvrir(chemin string) error              { return exec.Command("xdg-open", chemin).Start() }
@@ -43,7 +68,7 @@ func FenetreApp(url string) bool              { return false }
 
 // Linux: the window is the browser's (no notification area icon); a second launch opens another one.
 func permettrePremierPlan()                                               {}
-func montrerFenetre()                                                     { OuvrirFenetreApp(urlApp) }
+func montrerFenetre()                                                     { OuvrirFenetreApp(lienApp()) }
 func IconeNotification(langue func() string, ouvrir, quitter func()) bool { return false }
 
 // Linux: "open when the computer starts" = the desktop session's autostart entry

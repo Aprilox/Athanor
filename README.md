@@ -56,6 +56,7 @@ You describe what you want: a game, a website, an app, a tool. Athanor runs [Cla
 | **Your PC's software** | Unreal Engine, Blender, the Android SDK, Docker and winget are reached through a controlled bridge, command by command. |
 | **No UAC prompts** | Opt-in. One consent, and from then on Claude installs and runs what the project needs with administrator rights, silently. |
 | **A desktop app** | One file. It shows the live team, the plan, usage, the readable log and the request queue, plus health checks with one-click repair. It also runs several projects at once and keeps the programs Claude starts on a desktop of their own, out of your way. Themes, 6 languages. |
+| **GitHub, one repository at a time** | Link a project to a new private repository or one of yours, and its commits go there after each milestone. The key Athanor pushes with only works for that repository and stays out of Claude's reach; every push is checked for secrets and never forced. |
 | **Clean projects** | A project is any folder on your PC. Athanor only adds a `.athanor/` workshop (excluded from git); delete it at the end and nothing is left behind. |
 | **Frugal by design** | Targeted reading rules, a quick check during the milestone and the full check once, screenshots assembled into contact sheets, a project map regenerated before each cycle, automatic archives, command output compression. The Overview page shows live how much of each session is re-read from the prompt cache. |
 
@@ -218,7 +219,7 @@ The screenshots show the dark "Slate" and the "Light" palettes.
 | **Team** | a tree: the lead and each worker with the sub-agents it called; click a sub-agent for the brief it was given and the report it handed back; the model each one runs on; who can be called |
 | **Requests** | the current request and its plan, the queued requests (time-stamped, reorderable), notes along the way; ✨ *Improve with Claude* rewrites a request clearer and more complete, and you can go back to yours |
 | **Log** | the readable log (Claude speaks, tools, results, sub-agents, pilot) or the raw JSON, filterable |
-| **Manage** | rename the project; move or rename its folder; point it to another folder (the plan and requests come along, the milestones are checked against what it contains); check the milestones; archive it; delete it (from the list, its workshop or the whole folder, to the recycle bin) |
+| **Manage** | rename the project; move or rename its folder; point it to another folder (the plan and requests come along, the milestones are checked against what it contains); check the milestones; archive it; delete it (from the list, its workshop or the whole folder, to the recycle bin); link it to GitHub |
 | **Skills & MCP** | the library (verified catalog, search in SkillsMP and the MCP Registry, GitHub link, your own skills, pasted MCP configurations), a switch per project, the API keys of the servers (stored apart, never shown), *Test* starts a server in its cage and lists its tools |
 | **Setup & health** | *Check everything*, *Install everything*, *Test the sandbox* for real, *Repair* line by line, *Ask Claude* to repair or install something |
 | **Settings** | the `.env` (token masked, models, effort, watchdog…), *Save and restart after cycle* |
@@ -227,6 +228,8 @@ The screenshots show the dark "Slate" and the "Light" palettes.
 **Skills & MCP, safely**: skills are loaded as a session plugin (`--plugin-dir`), so Claude only reads one when it needs it; it can read them but never change them. MCP servers are added to the session's own MCP configuration; a local one starts in a bubblewrap cage (`system/mcp-jail.sh`): system read-only, only the project and the tool caches writable, no home folder, no Windows drives, no Athanor folder, no Claude token. Requires Claude Code with `--plugin-dir` for skills.
 
 **Projects that follow their folder**: when a project points to another folder, Athanor compares the ticked milestones with what is there. In an empty folder nothing is done any more; a milestone whose listed files are missing is unticked; when the files come back, it is ticked again by itself. At the next start, Claude checks every milestone more thoroughly (`.athanor/REVERIFY`) and unticks what is really missing. Archived projects leave the list and are never restarted: *Archived projects*, at the bottom of the project list, brings them back.
+
+**GitHub, automatically**: when you create a project, or later under *Manage*, choose *Create a private repository* or *Use one of my repositories*. A window opens once to sign in to GitHub; Athanor then gives that repository its own key (a GitHub *deploy key*, accepted for that repository and nothing else) and signs out: no GitHub sign-in is kept on your PC (you can also revoke “GitHub CLI” in your GitHub settings, the key does not need it). From then on, the pilot pushes after each milestone and at the delivery (switch it off to push only with *Push now*). Pushes are never forced: if GitHub has commits the project does not, Athanor stops and says so. Before each push, the new commits are checked for secrets (keys, tokens, `.env` files, private keys); if one is found nothing is pushed, and Claude removes it from the unpushed commits on its next cycle. A change to the repository's GitHub Actions workflows (code GitHub runs, with the repository's secrets) waits for you: check it, then *Push anyway*. The same block sets the **author of the commits** (your name, and your GitHub email or your private GitHub *noreply* address, proposed from your account) and whether Claude appears as co-author; Claude writes each commit subject as `M3: what the milestone delivers`.
 
 **A plan you can shape**: click a milestone to see its files, dependencies and acceptance criteria; move it up or down, or remove it (the other milestones stop depending on it), or edit `PLAN.md` as a whole.
 
@@ -315,8 +318,9 @@ What the sandbox guarantees, and what it deliberately does not:
 - **Windows software is an intended exit.** The gateways run outside the sandbox, with your user rights, and `pc-exec` runs any Windows program Claude places in the project or in `tools/windows`. Treat a project like code you run yourself.
 - **Administrator rights are opt-in.** *Administrator rights → Repair* asks for your consent once and registers an elevated scheduled task (`Athanor - installations`). Its script is copied to `C:\ProgramData\Athanor`, which only administrators can modify. The task only runs winget packages and programs located inside your project folders or `tools\windows`. It also lets the project's programs accept local-network connections without the firewall dialog. Remove it any time with `commands\allow-admin.cmd remove`.
 - **The pilot never trusts the project folder.** It keeps its own state (pid, lock, sandbox settings, instructions, counters) in `logs/`, out of Claude's reach, and never writes through a symbolic link placed in `.athanor/`. It validates every value it reads back, and runs git with hooks, filters, fsmonitor and external diff disabled. It starts Claude Code with only its own settings and MCP servers (`--setting-sources user`, `--strict-mcp-config` when the CLI supports them), and `tools/` is never in its `PATH`.
-- **The app** listens on `127.0.0.1` only and rejects any other `Host` header (DNS rebinding). It requires a per-session secret header on every API call and stores the password salted and hashed. It never sends `.env` secrets unless asked, and while locked it shows only "running / phase / cycle".
+- **The app** listens on `127.0.0.1` only and rejects any other `Host` header (DNS rebinding). Only the windows it opens itself can use it: each one is opened on a single-use address that gives it a cookie, so a program of the computer that finds the port (a command Claude runs, for instance) gets neither the page nor the API. It also requires a per-session secret header on every API call and stores the password salted and hashed. It never sends `.env` secrets unless asked, and while locked it shows only "running / phase / cycle".
 - **"Ask Claude" repair sessions** run outside the sandbox, in the tool folder, without `sudo`: on purpose, to repair the tooling itself. Anything that needs `sudo` or Windows is written to `logs/TODO_FOR_YOU.md` for you instead.
+- **GitHub**: the sign-in used to link a project lives in a temporary folder, deleted when the link is made. Pushes use a key that GitHub accepts for the project's repository only, kept in your Linux home (`~/.local/share/athanor/github`), which the sandbox cannot read; even a leaked key cannot touch your other repositories. The pilot pushes from a private git folder: nothing in the project's `.git` (which Claude can write) is used, GitHub's server identity is checked against the keys GitHub publishes, and `GH_TOKEN`/`GITHUB_TOKEN` are removed from Claude's environment.
 - **Nothing personal is ever committed**: `.env`, `logs/`, `tools/` and the app's settings are git-ignored, and projects live outside the tool folder.
 
 Found a vulnerability? Please open a [private security advisory](https://github.com/Aprilox/Athanor/security/advisories/new) rather than a public issue.
@@ -372,7 +376,7 @@ app/                   the app's Go sources, static UI (HTML, CSS, JS without de
 commands/              install, configure, start, stop, stop-after-cycle, follow, test-sandbox, repair,
                        allow-admin, unreal-network (.cmd for Windows, .sh for Linux/WSL)
 system/                pilot.sh (the loop), parallel.sh (scheduler, workers, merges), safety.sh, bridge.py,
-                       extensions.py + mcp-jail.sh (Skills & MCP), ecran.sh (Claude's screen),
+                       extensions.py + mcp-jail.sh (Skills & MCP), ecran.sh (Claude's screen), github.sh (GitHub),
                        settings.py (sandbox), guard.py, detect-tools.sh, athanor.py (map, archives, screenshots),
                        bin/ (gateways), windows/ (PowerShell helpers)
 template/              CLAUDE.md (Claude's instructions), PC_TOOLS_GUIDE.md, .claude/agents/ (the team)
@@ -448,10 +452,10 @@ Yes. Nothing is tied to a user name or a drive letter: paths come from your prof
 Push a version tag and GitHub builds both apps and publishes the release ([`.github/workflows/release.yml`](.github/workflows/release.yml)):
 
 ```bash
-git tag v2.7.0 && git push origin v2.7.0
+git tag v2.8.0 && git push origin v2.8.0
 ```
 
-Keep the version in [`app/winres/athanor.rc`](app/winres/athanor.rc) in step with the tag, and write what is new in `docs/releases/VERSION.md` (e.g. [`docs/releases/2.7.0.md`](docs/releases/2.7.0.md)): it opens the release page.
+Keep the version in [`app/winres/athanor.rc`](app/winres/athanor.rc) in step with the tag, and write what is new in `docs/releases/VERSION.md` (e.g. [`docs/releases/2.8.0.md`](docs/releases/2.8.0.md)): it opens the release page.
 
 ## Contributing
 

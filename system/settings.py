@@ -75,8 +75,11 @@ reglages = {
             "allowRead": projets + [tools] + lectures + logiciels,   # system, skills: read-only
         },
         "network": {"allowedDomains": ["*"]},
-        "credentials": {"envVars": [{"name": "CLAUDE_CODE_OAUTH_TOKEN", "mode": "deny"},
-                                     {"name": "ANTHROPIC_API_KEY", "mode": "deny"}]},
+        # tokens Claude must never inherit from the user's environment (GitHub: Athanor pushes with a
+        # key valid for the project's repository alone, see github.sh)
+        "credentials": {"envVars": [{"name": v, "mode": "deny"} for v in (
+            "CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY",
+            "GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN")]},
     },
     "enableAllProjectMcpServers": unreal_mcp,
     "hooks": {"PreToolUse": [
@@ -88,6 +91,11 @@ reglages = {
 if rtk:
     reglages["hooks"]["PreToolUse"].append(
         {"matcher": "Bash", "hooks": [{"type": "command", "timeout": 10, "command": "exec " + shlex.quote(rtk_bin) + " hook claude"}]})
+
+# Commits without Claude as co-author (GitHub block of the Manage page, read by the pilot through github.sh)
+if os.environ.get("ATHANOR_SANS_COAUTEUR") == "1":
+    reglages["attribution"] = {"commit": "", "pr": ""}
+    reglages["includeCoAuthoredBy"] = False   # older Claude Code versions
 
 os.makedirs(os.path.dirname(sortie), exist_ok=True)
 with open(sortie, "w", encoding="utf-8") as f:

@@ -458,3 +458,12 @@ input.large { flex: 1; min-width: 200px; width: auto; }
 .gestion .ligne.fin { justify-content: flex-end; }
 .gestion code { overflow-wrap: anywhere; }
 .badge { font-size: 11.5px; padding: 1px 7px; border-radius: 10px; border: 1px solid var(--line); color: var(--muted); }
+.gh-champ { width: 100%; margin: 2px 0 6px 26px; max-width: calc(100% - 26px); }
+.gh-nouveau label.radio { display: flex; align-items: center; gap: 8px; margin: 6px 0; font-size: 14px; }
+.gh-dernier { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; margin: 8px 0; }
+.gh-dernier ul { margin: 6px 0 0; padding-left: 18px; }
+.gh-nouveau { margin-bottom: 14px; }
+.gh-auteur { margin: 4px 0 10px 48px; }
+.gh-auteur .ligne input[type="text"] { flex: 1; min-width: 0; }
+.gh-auteur select { max-width: 55%; }
+.gh-auteur .gh-champ { margin-left: 0; max-width: 100%; }
