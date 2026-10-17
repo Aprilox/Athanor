@@ -57,7 +57,7 @@ You describe what you want: a game, a website, an app, a tool. Athanor runs [Cla
 | **No UAC prompts** | Opt-in. One consent, and from then on Claude installs and runs what the project needs with administrator rights, silently. |
 | **A desktop app** | One file. It shows the live team, the plan, usage, the readable log and the request queue, plus health checks with one-click repair. It also runs several projects at once and keeps the programs Claude starts on a desktop of their own, out of your way. Themes, 6 languages. |
 | **GitHub, one repository at a time** | Link a project to a new private repository or one of yours, and its commits go there after each milestone. The key Athanor pushes with only works for that repository and stays out of Claude's reach; every push is checked for secrets and never forced. |
-| **Clean projects** | A project is any folder on your PC. Athanor only adds a `.athanor/` workshop (excluded from git); delete it at the end and nothing is left behind. |
+| **Clean projects** | A project is any folder on your PC. Athanor only adds a `.athanor/` workshop, with its working documents (requirements, design, architecture), kept out of git on your computer alone, never through your `.gitignore`; delete it at the end and nothing is left behind. |
 | **Frugal by design** | Targeted reading rules, a quick check during the milestone and the full check once, screenshots assembled into contact sheets, a project map regenerated before each cycle, automatic archives, command output compression. The Overview page shows live how much of each session is re-read from the prompt cache. |
 
 ---
@@ -162,7 +162,7 @@ The app only uses Go's standard library plus three vendored packages for the Web
 
 | Phase | What happens |
 |---|---|
-| Framing | `docs/REQUIREMENTS.md`, `docs/DESIGN.md`, `docs/ARCHITECTURE.md`, and a plan of 8 to 25 milestones, each with verifiable acceptance criteria |
+| Framing | `.athanor/docs/REQUIREMENTS.md`, `DESIGN.md`, `ARCHITECTURE.md` (working documents, in the workshop), and a plan of 8 to 25 milestones, each with verifiable acceptance criteria |
 | Skeleton | an executable skeleton and the project's own `check.sh` (build, tests, screenshots) |
 | Complete slice | one feature working end to end, checked by the `tester` |
 | Production | the remaining milestones, one per cycle, or several at once in parallel mode |
@@ -452,10 +452,10 @@ Yes. Nothing is tied to a user name or a drive letter: paths come from your prof
 Push a version tag and GitHub builds both apps and publishes the release ([`.github/workflows/release.yml`](.github/workflows/release.yml)):
 
 ```bash
-git tag v2.8.0 && git push origin v2.8.0
+git tag v2.8.1 && git push origin v2.8.1
 ```
 
-Keep the version in [`app/winres/athanor.rc`](app/winres/athanor.rc) in step with the tag, and write what is new in `docs/releases/VERSION.md` (e.g. [`docs/releases/2.8.0.md`](docs/releases/2.8.0.md)): it opens the release page.
+Keep the version in [`app/winres/athanor.rc`](app/winres/athanor.rc) in step with the tag, and write what is new in `docs/releases/VERSION.md` (e.g. [`docs/releases/2.8.1.md`](docs/releases/2.8.1.md)): it opens the release page.
 
 ## Contributing
 

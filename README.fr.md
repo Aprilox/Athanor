@@ -57,7 +57,7 @@ Vous décrivez ce que vous voulez : un jeu, un site, une application, un outil. 
 | **Aucune fenêtre UAC** | Sur autorisation. Un seul consentement, puis Claude installe et lance ce dont le projet a besoin avec les droits administrateur, sans rien vous demander. |
 | **Une application de bureau** | Un seul fichier. Elle montre l'équipe en direct, le plan, la consommation, le journal lisible et la file des demandes, avec des vérifications qui se réparent en un clic. Elle fait aussi tourner plusieurs projets à la fois et garde les programmes que Claude lance sur leur propre bureau, loin de vous. Thèmes, 6 langues. |
 | **GitHub, un dépôt à la fois** | Liez un projet à un nouveau dépôt privé ou à un des vôtres : ses commits y partent après chaque jalon. La clé avec laquelle Athanor envoie ne marche que pour ce dépôt et reste hors de portée de Claude ; chaque envoi est vérifié à la recherche de secrets et n'est jamais forcé. |
-| **Des projets propres** | Un projet est n'importe quel dossier de votre PC. Athanor n'y ajoute qu'un atelier `.athanor/` (exclu de git) : supprimez-le à la fin et il ne reste aucune trace. |
+| **Des projets propres** | Un projet est n'importe quel dossier de votre PC. Athanor n'y ajoute qu'un atelier `.athanor/`, avec ses documents de travail (exigences, design, architecture), tenu hors de git sur votre ordinateur seulement, jamais via votre `.gitignore` : supprimez-le à la fin et il ne reste aucune trace. |
 | **Économe par conception** | Règles de lecture ciblées, vérification rapide pendant le jalon et complète une seule fois, captures assemblées en planches, carte du projet refaite avant chaque cycle, archives automatiques, compression des sorties de commandes. La page *Suivi* montre en direct quelle part de chaque session est relue depuis le cache. |
 
 ---
@@ -162,7 +162,7 @@ L'application n'utilise que la bibliothèque standard de Go et trois paquets emb
 
 | Phase | Ce qui se passe |
 |---|---|
-| Cadrage | `docs/REQUIREMENTS.md`, `docs/DESIGN.md`, `docs/ARCHITECTURE.md`, et un plan de 8 à 25 jalons, chacun avec des critères d'acceptation vérifiables |
+| Cadrage | `.athanor/docs/REQUIREMENTS.md`, `DESIGN.md`, `ARCHITECTURE.md` (documents de travail, dans l'atelier), et un plan de 8 à 25 jalons, chacun avec des critères d'acceptation vérifiables |
 | Squelette | un squelette exécutable et le `check.sh` propre au projet (compilation, tests, captures) |
 | Tranche complète | une fonctionnalité qui marche de bout en bout, vérifiée par le `tester` |
 | Production | les jalons restants, un par cycle, ou plusieurs à la fois en mode parallèle |
@@ -452,10 +452,10 @@ Oui. Rien n'est lié à un nom d'utilisateur ni à une lettre de disque : les ch
 Poussez un tag de version : GitHub compile les deux applications et publie la version ([`.github/workflows/release.yml`](.github/workflows/release.yml)).
 
 ```bash
-git tag v2.8.0 && git push origin v2.8.0
+git tag v2.8.1 && git push origin v2.8.1
 ```
 
-Gardez la version de [`app/winres/athanor.rc`](app/winres/athanor.rc) alignée sur le tag, et écrivez les nouveautés dans `docs/releases/VERSION.md` (par ex. [`docs/releases/2.8.0.md`](docs/releases/2.8.0.md)) : elles ouvrent la page de la version.
+Gardez la version de [`app/winres/athanor.rc`](app/winres/athanor.rc) alignée sur le tag, et écrivez les nouveautés dans `docs/releases/VERSION.md` (par ex. [`docs/releases/2.8.1.md`](docs/releases/2.8.1.md)) : elles ouvrent la page de la version.
 
 ## Contribuer
 
