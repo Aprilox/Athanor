@@ -208,6 +208,7 @@ The agents live in [`template/.claude/agents/`](template/.claude/agents): edit t
 |:---:|:---:|
 | <img src="docs/images/team.png" alt="Team page: the project lead with the sub-agents it called, and three workers, each with its own executor"><br>**Team**: who called whom, what each one does, live | <img src="docs/images/log.png" alt="Log page in the light theme: pilot events, Claude's words, tools and sub-agents, worker lines tagged [M5]"><br>**Log**: readable or raw, filtered, workers tagged |
 | <img src="docs/images/requests.png" alt="Requests page: the current request with its plan in waves, and two queued requests that can be reordered"><br>**Requests**: a queue you can reorder, notes along the way | <img src="docs/images/options.png" alt="Options page: language, five palettes and five accents, startup options, tool folder"><br>**Options**: 6 languages, 5 palettes × 5 accents |
+| <img src="docs/images/skills.png" alt="Skills &amp; MCP page, Skills tab: four skills installed from the verified catalog, three of them switched on for this project, and the community search below"><br>**Skills**: installed once, switched on per project | <img src="docs/images/mcp.png" alt="Skills &amp; MCP page, MCP tab: Context7 and Godot switched on, an optional API key field, a successful test, and the MCP Registry search"><br>**MCP**: remote or local in a cage, tested in one click |
 
 The screenshots show the dark "Slate" and the "Light" palettes.
 
@@ -362,13 +363,14 @@ Athanor.exe, athanor   the app for Windows / Linux (in the release, or built wit
 app/                   the app's Go sources, static UI (HTML, CSS, JS without dependencies), Windows resources
 commands/              install, configure, start, stop, stop-after-cycle, follow, test-sandbox, repair,
                        allow-admin, unreal-network (.cmd for Windows, .sh for Linux/WSL)
-system/                pilot.sh (the loop), parallel.sh (scheduler, workers, merges), extensions.py + mcp-jail.sh (Skills & MCP), safety.sh, bridge.py, settings.py
-                       (sandbox), guard.py, detect-tools.sh, athanor.py (map, archives, screenshots),
+system/                pilot.sh (the loop), parallel.sh (scheduler, workers, merges), safety.sh, bridge.py,
+                       extensions.py + mcp-jail.sh (Skills & MCP), settings.py (sandbox), guard.py, detect-tools.sh, athanor.py (map, archives, screenshots),
                        bin/ (gateways), windows/ (PowerShell helpers)
 template/              CLAUDE.md (Claude's instructions), PC_TOOLS_GUIDE.md, .claude/agents/ (the team)
 docs/images/           README images
 .env.example           every setting, documented
-logs/, tools/          created at run time, never committed
+logs/, tools/,         created at run time, never committed
+extensions/
 ```
 
 Inside each project, `.athanor/` holds REQUEST.md, PLAN.md, LOG.md, queue/, done/, check.sh, STATE.json, stats.tsv and logs/. It is the only thing Athanor adds.
@@ -436,7 +438,7 @@ Yes. Nothing is tied to a user name or a drive letter: paths come from your prof
 Push a version tag and GitHub builds both apps and publishes the release ([`.github/workflows/release.yml`](.github/workflows/release.yml)):
 
 ```bash
-git tag v2.0.1 && git push origin v2.0.1
+git tag v2.5.1 && git push origin v2.5.1
 ```
 
 Keep the version in [`app/winres/athanor.rc`](app/winres/athanor.rc) in step with the tag.
