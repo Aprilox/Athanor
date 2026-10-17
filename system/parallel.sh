@@ -159,6 +159,10 @@ You carry out **only** this milestone, in this folder (git worktree of the proje
 EOF
 }
 
+parallele_consignes_base() {  # Claude's instructions, with the commit-author rule of this cycle (pilot.sh)
+  if [ "${ATHANOR_SANS_COAUTEUR:-0}" = 1 ] && [ -f "$PRIVE/CLAUDE.auteur.md" ]; then echo "$PRIVE/CLAUDE.auteur.md"; else echo "$CONSIGNES"; fi
+}
+
 parallele_consignes_fusion() {  # $1 = auto-merged, $2 = to merge (conflicts), $3 = failed
   cat <<EOF
 
@@ -189,7 +193,7 @@ parallele_lancer_ouvrier() {
   [ "$AGENTS_PAR_JSON" = 1 ] && agents_ouvrier=$(printf '%s' "$AGENTS_JSON" | python3 -c 'import json, sys
 d = {k: v for k, v in json.load(sys.stdin).items() if k == "executor"}
 print(json.dumps(d, ensure_ascii=False) if d else "")' 2>/dev/null)
-  { cat "$CONSIGNES"; parallele_consignes_ouvrier "$ident" "$ligne" "$([ -n "$agents_ouvrier" ] && echo 1)"; } > "$PRIVE/CLAUDE.ouvrier-$ident.md"
+  { cat "$(parallele_consignes_base)"; parallele_consignes_ouvrier "$ident" "$ligne" "$([ -n "$agents_ouvrier" ] && echo 1)"; } > "$PRIVE/CLAUDE.ouvrier-$ident.md"
   # The worker's sandbox: its worktree (PROJECT = the worktree, for the guard and the tools),
   # plus write access to the project's .git, where git stores the worktree's objects and branch.
   local principal="$PROJECT"
@@ -333,7 +337,7 @@ parallele_cycle() {
   fichier_log="$prefixe.jsonl"
   local but="/goal The parallel cycle is verified according to your verification instructions: the branches ${a_fusionner[*]:-(none)} are merged, bash .athanor/check.sh has been run and its output is shown, .athanor/PLAN.md ticks exactly the milestones that pass, .athanor/LOG.md has a new entry, git log shows the commit. Or stop after ${MAX_TURNS_PER_CYCLE} turns. ${PHRASE_LANGUE}"
   args=(-p "$but" --permission-mode bypassPermissions --settings "$REGLAGES" --permission-prompts none --output-format stream-json --verbose
-        "${ARGS_SURS[@]}" --append-system-prompt "$(cat "$CONSIGNES"; parallele_consignes_fusion "${fusionnes[*]}" "${a_fusionner[*]}" "${echoues[*]}")")
+        "${ARGS_SURS[@]}" --append-system-prompt "$(cat "$(parallele_consignes_base)"; parallele_consignes_fusion "${fusionnes[*]}" "${a_fusionner[*]}" "${echoues[*]}")")
   [ "$AGENTS_PAR_JSON" = 1 ] && args+=(--agents "$AGENTS_JSON")
   [ -f "$PRIVE/mcp.json" ] && args+=(--mcp-config "$PRIVE/mcp.json")
   [ -n "${PLUGIN_ATHANOR:-}" ] && args+=(--plugin-dir "$PLUGIN_ATHANOR")

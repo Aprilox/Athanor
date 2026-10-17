@@ -15,7 +15,7 @@ The folder you work in is **the user's project, exactly as it will be delivered*
 3. **The files are the memory.** Every cycle starts with an empty context. Everything that matters must be written into the repository.
 4. **Done means verified.** Nothing is finished until `bash .athanor/check.sh` passes and you have looked at the result (screenshots included).
 5. **Small and complete rather than big and broken.** First deliver a whole version that works end to end, then enrich it. If the request is too large, reduce the scope sensibly and say so in the final report.
-6. **Commit often.** `git add -A && git commit -m "..."` after every validated task. Never rewrite history.
+6. **Commit often, with clear messages.** `git add -A && git commit -m "..."` after every validated task. The subject line says what the commit delivers, in the imperative, in at most 72 characters, starting with the milestone: `M3: Add the contact form with validation`. For a larger commit, a blank line then a few `- ` lines with the main changes. Never a vague subject (`update`, `wip`, `fix`, `changes`), never the name of a tool or of this session. Write them in the language you document in. Never rewrite history (the one exception: what `.athanor/SECRETS_FOUND.md` asks, on commits never pushed).
 7. **Everything is original.** No protected character, brand, logo, music, text or image. Create everything yourself (programmatically if needed); a freely licensed asset (CC0) is acceptable only if its source is noted in `docs/CREDITS.md`. **Exception**: a real brand or institution that `.athanor/REQUEST.md` declares **authorized** may be named; its logos and visuals come only from the official files supplied by the user (never redrawn), and every use is noted in `docs/BRANDS.md`.
 
 ## Your environment
@@ -37,12 +37,13 @@ At the start:
 2. If `.athanor/RECHECK` exists, the pilot did not see a `CHECK: PASSED` in the cycle that ticked the last milestone: run the full `bash .athanor/check.sh` first, fix what fails, commit, then delete that file.
 3. If `.athanor/REQUEST_CHANGED` exists, the user changed the request: reread it, adapt `.athanor/PLAN.md` (add, remove or reorder milestones), note it in the log, then delete that file.
 4. If `.athanor/REVERIFY` exists, the project's folder changed (moved, or the user pointed the project to another folder; the file says which): before any new work, check every ticked milestone of `.athanor/PLAN.md` against what is really in the folder (its files, what its acceptance criteria require, the quick check when one exists). Untick each milestone whose result is missing or broken, and tick again an unticked one whose result is fully there and verified. Note what changed in `.athanor/LOG.md`, commit, then delete that file.
-5. Take the first unchecked milestone of `.athanor/PLAN.md` and finish it entirely.
+5. If `.athanor/SECRETS_FOUND.md` exists, the pilot found what looks like a secret (key, token, password file) in commits it was about to push to GitHub, and pushed nothing: do what that file says before any other work (take the secret out of the code, rewrite the unpushed commits without it), then delete that file.
+6. Take the first unchecked milestone of `.athanor/PLAN.md` and finish it entirely.
 
 At the end:
 1. Tick the milestone in `.athanor/PLAN.md`.
 2. Add a dated entry to `.athanor/LOG.md`: what was done, what was verified, the next step.
-3. Commit.
+3. Commit (`Mn: what the milestone delivers`).
 4. Show in your answer the last lines of the output of the full `bash .athanor/check.sh` that prove success.
 5. **Stop there: one milestone per cycle.** Never start the next milestone in the same cycle: the pilot immediately starts a fresh cycle, whose light context makes every turn much cheaper. (The pilot itself closes the cycle a few minutes after a milestone commit.)
 

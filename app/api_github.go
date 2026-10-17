@@ -1,0 +1,284 @@
+package main
+
+// GitHub link of a project. The work is done in WSL by system/github.sh, outside Claude's reach:
+// linking signs in to GitHub once, in a visible window, gives the repository its own key (valid for
+// that repository alone) and signs out; the pilot then pushes after each milestone with that key.
+
+import (
+	"encoding/json"
+	"errors"
+	"net/http"
+	"os/exec"
+	"regexp"
+	"runtime"
+	"strings"
+)
+
+var (
+	reDepotGitHub   = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100}$`)
+	reNomGitHub     = regexp.MustCompile(`^[A-Za-z0-9._-]{1,100}$`)
+	reBrancheGitHub = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/-]{0,99}$`)
+	reShaGitHub     = regexp.MustCompile(`^[0-9a-f]{40}([0-9a-f]{24})?$`)
+	reEmailAuteur   = regexp.MustCompile(`^[^\s<>@"]{1,64}@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$`)
+)
+
+// GitHubVue: what github.sh etat prints.
+type GitHubVue struct {
+	Gh      bool            `json:"gh"`
+	Ssh     bool            `json:"ssh"`
+	Lie     bool            `json:"lie"`
+	Depot   string          `json:"depot,omitempty"`
+	URL     string          `json:"url,omitempty"`
+	Branche string          `json:"branche,omitempty"`
+	Auto    bool            `json:"auto"`
+	Compte  string          `json:"compte,omitempty"`
+	LieLe   string          `json:"lie_le,omitempty"`
+	Dernier json.RawMessage `json:"dernier,omitempty"`
+	// author of the commits: chosen name and email, Claude co-author or not, and what to propose
+	Identite json.RawMessage `json:"identite,omitempty"`
+}
+
+func citerShell(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
+
+// cheminWSL: shell code giving the Linux path of a project folder in variable v.
+func cheminWSL(v, dossier string) string {
+	d := citerShell(dossier)
+	return v + "=\"$(wslpath -u " + d + " 2>/dev/null || printf '%s' " + d + ")\"; "
+}
+
+func ligneGitHub(p Projet, commande string, args ...string) string {
+	l := cheminWSL("P", p.Dossier) + "bash system/github.sh " + commande + " \"$P\""
+	for _, a := range args {
+		l += " " + citerShell(a)
+	}
+	return l
+}
+
+func nomDepotPropose(nom string) string {
+	b := strings.Builder{}
+	for _, r := range nom {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '.', r == '_', r == '-':
+			b.WriteRune(r)
+		case r == ' ':
+			b.WriteRune('-')
+		}
+	}
+	s := strings.Trim(b.String(), ".-")
+	if len(s) > 100 {
+		s = s[:100]
+	}
+	if s == "" {
+		s = "athanor-project"
+	}
+	return s
+}
+
+func (s *Serveur) etatGitHub(p Projet) (GitHubVue, error) {
+	var v GitHubVue
+	out, err := executerKit(s.kitCourant(), ligneGitHub(p, "etat"))
+	if err != nil {
+		return v, err
+	}
+	if i := strings.Index(out, "{"); i > 0 { // a login shell may print something first
+		out = out[i:]
+	}
+	if err := json.Unmarshal([]byte(out), &v); err != nil {
+		return v, errors.New("GitHub: unreadable answer from WSL")
+	}
+	return v, nil
+}
+
+func (s *Serveur) apiGitHubVoir(w http.ResponseWriter, r *http.Request) {
+	p, ok := s.projetRequis(w, r)
+	if !ok {
+		return
+	}
+	v, err := s.etatGitHub(p)
+	if err != nil {
+		s.erreur(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.ecrireJSON(w, map[string]any{"github": v, "nom_propose": nomDepotPropose(p.Nom)})
+}
+
+// lierGitHub opens the window where the user signs in to GitHub once and the repository gets its key.
+func (s *Serveur) lierGitHub(p Projet, mode, cible string, auto bool, branche string) error {
+	switch mode {
+	case "creer":
+		if !reNomGitHub.MatchString(cible) || cible == "." || cible == ".." {
+			return errors.New("Invalid repository name: letters, digits, dots, dashes and underscores only.")
+		}
+	case "existant":
+		cible = strings.TrimSuffix(strings.TrimPrefix(strings.TrimSpace(cible), "https://github.com/"), ".git")
+		if !reDepotGitHub.MatchString(cible) {
+			return errors.New("Invalid repository: write it as OWNER/NAME (e.g. octocat/my-site).")
+		}
+	default:
+		return errors.New("Unknown")
+	}
+	if branche != "" && (!reBrancheGitHub.MatchString(branche) || strings.Contains(branche, "..")) {
+		return errors.New("Invalid branch name.")
+	}
+	a := "1"
+	if !auto {
+		a = "0"
+	}
+	return FenetreWSL(s.kitCourant(), "GitHub", ligneGitHub(p, "lier", mode, cible, a, branche))
+}
+
+func ouvrirLien(url string) error {
+	if runtime.GOOS == "windows" {
+		return exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
+	}
+	return exec.Command("xdg-open", url).Start()
+}
+
+func (s *Serveur) apiGitHub(w http.ResponseWriter, r *http.Request) {
+	p, ok := s.projetRequis(w, r)
+	if !ok {
+		return
+	}
+	var c struct {
+		Action  string `json:"action"`
+		Mode    string `json:"mode"`
+		Valeur  string `json:"valeur"`
+		Auto    bool   `json:"auto"`
+		Branche string `json:"branche"`
+		Nom     string `json:"nom"`
+		Email   string `json:"email"`
+		SansCo  bool   `json:"sans_coauteur"`
+	}
+	if err := lireCorps(r, &c); err != nil {
+		s.erreur(w, http.StatusBadRequest, "Invalid request")
+		return
+	}
+	k := s.kitCourant()
+	switch c.Action {
+	case "lier":
+		if err := s.lierGitHub(p, c.Mode, strings.TrimSpace(c.Valeur), c.Auto, strings.TrimSpace(c.Branche)); err != nil {
+			s.erreur(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		s.msg(w, "A window opens: sign in to GitHub there. Athanor then gives the repository its own key and signs out.")
+	case "pousser", "malgre":
+		args := []string{}
+		if c.Action == "malgre" {
+			// exactly the commit the user reviewed (github.sh refuses any other)
+			if !reShaGitHub.MatchString(c.Valeur) {
+				s.erreur(w, http.StatusBadRequest, "Invalid request")
+				return
+			}
+			args = append(args, "--malgre="+c.Valeur)
+		}
+		avant, _ := s.etatGitHub(p)
+		out, _ := executerKit(k, ligneGitHub(p, "pousser", args...))
+		v, err := s.etatGitHub(p)
+		if err != nil {
+			s.erreur(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if quandDernier(v) == quandDernier(avant) { // nothing new recorded: say why
+			s.erreur(w, http.StatusConflict, raisonPoussee(out))
+			return
+		}
+		s.ecrireJSON(w, map[string]any{"github": v})
+	case "auto":
+		a := "0"
+		if c.Auto {
+			a = "1"
+		}
+		if _, err := executerKit(k, ligneGitHub(p, "auto", a)); err != nil {
+			s.erreur(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		s.msg(w, "Saved.")
+	case "branche":
+		b := strings.TrimSpace(c.Valeur)
+		if b != "" && (!reBrancheGitHub.MatchString(b) || strings.Contains(b, "..")) {
+			s.erreur(w, http.StatusBadRequest, "Invalid branch name.")
+			return
+		}
+		if _, err := executerKit(k, ligneGitHub(p, "branche", b)); err != nil {
+			if strings.Contains(err.Error(), "Not linked") {
+				s.erreur(w, http.StatusBadRequest, "Not linked to GitHub.")
+			} else {
+				s.erreur(w, http.StatusBadRequest, "Invalid branch name.")
+			}
+			return
+		}
+		s.msg(w, "Saved.")
+	case "identite": // author of the commits (name, email) and Claude as co-author or not
+		nom, email := strings.TrimSpace(c.Nom), strings.TrimSpace(c.Email)
+		if nom == "" || len(nom) > 100 || strings.ContainsAny(nom, "<>\n\r\t") {
+			s.erreur(w, http.StatusBadRequest, "Invalid name.")
+			return
+		}
+		if !reEmailAuteur.MatchString(email) {
+			s.erreur(w, http.StatusBadRequest, "Invalid email.")
+			return
+		}
+		sans := "0"
+		if c.SansCo {
+			sans = "1"
+		}
+		if _, err := executerKit(k, ligneGitHub(p, "regler-identite", nom, email, sans)); err != nil {
+			s.erreur(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		s.msg(w, "Saved: the next commits are signed this way (from the next cycle).")
+	case "delier":
+		if _, err := executerKit(k, ligneGitHub(p, "delier")); err != nil {
+			s.erreur(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		s.msg(w, "Unlinked: the key is deleted from this PC. GitHub keeps an unusable entry under the repository's Settings › Deploy keys, which you can remove.")
+	case "ouvrir":
+		v, err := s.etatGitHub(p)
+		if err != nil || !v.Lie || !reDepotGitHub.MatchString(v.Depot) {
+			s.erreur(w, http.StatusBadRequest, "Not linked to GitHub.")
+			return
+		}
+		if err := ouvrirLien("https://github.com/" + v.Depot); err != nil {
+			s.erreur(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		s.ecrireJSON(w, map[string]bool{"ok": true})
+	default:
+		s.erreur(w, http.StatusBadRequest, "Unknown")
+	}
+}
+
+func quandDernier(v GitHubVue) string {
+	var d struct {
+		Quand string `json:"quand"`
+	}
+	_ = json.Unmarshal(v.Dernier, &d)
+	return d.Quand
+}
+
+// raisonPoussee: why github.sh pousser recorded nothing (a key translated by the interface).
+func raisonPoussee(out string) string {
+	for _, c := range []string{"Another push is under way.", "Not linked to GitHub.", "This push is no longer the one that was blocked: refresh.", "Cannot prepare the push folder."} {
+		if strings.Contains(out, c) {
+			return c
+		}
+	}
+	if strings.Contains(out, "Automatic push is off.") {
+		return "Not linked to GitHub."
+	}
+	if out = strings.TrimSpace(out); out != "" {
+		return out
+	}
+	return "GitHub: unreadable answer from WSL"
+}
+
+// suivreGitHub: the project's folder changed, its GitHub link follows (best effort).
+func (s *Serveur) suivreGitHub(ancien, nouveau string) {
+	_, _ = executerKit(s.kitCourant(), cheminWSL("A", ancien)+cheminWSL("B", nouveau)+`bash system/github.sh suivre "$A" "$B"`)
+}
+
+// oublierGitHub: the project's folder went to the recycle bin, its key is deleted (best effort).
+func (s *Serveur) oublierGitHub(p Projet) {
+	_, _ = executerKit(s.kitCourant(), ligneGitHub(p, "delier"))
+}

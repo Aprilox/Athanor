@@ -25,6 +25,8 @@ migrer_atelier "$PROJECT"
 rm -f "$ETAT/verification.json"
 # Pilot runtime state: inside the tool, out of Claude's reach (see safety.sh).
 PRIVE="$(prive_de "$PROJECT")"
+# a GitHub token of the user's environment never reaches Claude (the GitHub push uses its own key, github.sh)
+unset GH_TOKEN GITHUB_TOKEN GH_ENTERPRISE_TOKEN GITHUB_ENTERPRISE_TOKEN
 mkdir -p "$PRIVE"
 REGLAGES="$PRIVE/claude_settings.json"
 assainir "$ETAT"
@@ -556,10 +558,32 @@ grep -qx '.claude/' "$PROJECT/.git/info/exclude" 2>/dev/null || echo '.claude/' 
 for motif in /.bashrc /.bash_profile /.profile /.zshrc /.zprofile /.gitconfig /.gitmodules /.ripgreprc /.idea /.vscode /.mcp.json; do
   grep -qxF "$motif" "$PROJECT/.git/info/exclude" 2>/dev/null || echo "$motif" >> "$PROJECT/.git/info/exclude"
 done
-g -C "$PROJECT" config user.name  >/dev/null 2>&1 || g -C "$PROJECT" config user.name  "Athanor"
-g -C "$PROJECT" config user.email >/dev/null 2>&1 || g -C "$PROJECT" config user.email "athanor@localhost"
+# Author of the commits: the one chosen in the GitHub block (Manage page), else the user's git settings;
+# and Claude as co-author or not. Applied again before every cycle (a change in the app takes effect then).
+IDENTITE_PRECEDENTE=""
+appliquer_identite() {
+  local l nom email sans
+  l=$(bash "$SYSTEME/github.sh" identite-pilote "$PROJECT" 2>/dev/null)
+  IFS=$'\t' read -r nom email sans <<< "$l"
+  if [ -n "$nom" ] && [ -n "$email" ]; then
+    export GIT_AUTHOR_NAME="$nom" GIT_COMMITTER_NAME="$nom" GIT_AUTHOR_EMAIL="$email" GIT_COMMITTER_EMAIL="$email"
+    g -C "$PROJECT" config user.name "$nom"; g -C "$PROJECT" config user.email "$email"
+  else
+    unset GIT_AUTHOR_NAME GIT_COMMITTER_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_EMAIL
+    g -C "$PROJECT" config user.name  >/dev/null 2>&1 || g -C "$PROJECT" config user.name  "Athanor"
+    g -C "$PROJECT" config user.email >/dev/null 2>&1 || g -C "$PROJECT" config user.email "athanor@localhost"
+  fi
+  if [ "$sans" = 1 ]; then export ATHANOR_SANS_COAUTEUR=1; else unset ATHANOR_SANS_COAUTEUR; fi
+  bash "$SYSTEME/github.sh" crochet "$PROJECT" "${sans:-0}" 2>/dev/null
+  if [ "$l" != "$IDENTITE_PRECEDENTE" ]; then
+    [ -n "${REGLAGES:-}" ] && [ -f "$REGLAGES" ] && python3 "$SYSTEME/settings.py" "$KIT" "$REGLAGES" > /dev/null
+    [ -n "$nom" ] && log "Commits by $nom <$email>$([ "$sans" = 1 ] && echo ", without Claude as co-author")."
+    IDENTITE_PRECEDENTE="$l"
+  fi
+}
+appliquer_identite
 if ! g -C "$PROJECT" rev-parse HEAD >/dev/null 2>&1; then
-  g -C "$PROJECT" add -A >/dev/null 2>&1 && g -C "$PROJECT" commit -qm "Start (Athanor)" >/dev/null 2>&1 || g -C "$PROJECT" commit -q --allow-empty -m "Start (Athanor)"
+  g -C "$PROJECT" add -A >/dev/null 2>&1 && g -C "$PROJECT" commit -qm "Initial commit" >/dev/null 2>&1 || g -C "$PROJECT" commit -q --allow-empty -m "Initial commit"
 fi
 
 # Project start (MAX_HOURS safety stop): in the private folder, taken over from an older version
@@ -568,6 +592,18 @@ fi
 DEBUT=$(entier "$(cat "$PRIVE/debut" 2>/dev/null)" "$(date +%s)")
 
 BUT="/goal The next unticked milestone of .athanor/PLAN.md is completed and verified according to your instructions: bash .athanor/check.sh has been run and its output, showing success, is displayed in this conversation; .athanor/PLAN.md ticks this milestone; .athanor/LOG.md has a new entry; git log shows the commit. If .athanor/PLAN.md does not exist yet, this milestone is the framing phase described in your instructions, with no check.sh required. If all milestones are already ticked, the goal is reached when .athanor/FINAL_REPORT.md exists and contains the line STATUS: DONE. Or stop after ${MAX_TURNS_PER_CYCLE} turns. ${PHRASE_LANGUE}"
+
+# GitHub (system/github.sh): when the user linked the project to a repository with automatic push,
+# its commits go there after each successful milestone and at the delivery. Silent when not linked;
+# a failure is logged and never stops the pilot. GITHUB_CODE: 0 pushed, 3 nothing to do, 4 secret found.
+github_pousser() {
+  GITHUB_CODE=3
+  [ -f "$SYSTEME/github.sh" ] || return 0
+  local sortie
+  sortie=$(timeout 900 bash "$SYSTEME/github.sh" pousser "$PROJECT" --auto 2>&1 9>&-); GITHUB_CODE=$?
+  [ "$GITHUB_CODE" = 3 ] || log "$(printf '%s' "$sortie" | tail -n 1 | cut -c1-300)"
+  return 0
+}
 
 cycle=$(entier "$(cat "$PRIVE/cycle" 2>/dev/null)" 0)   # continues across restarts (stats.tsv, logs)
 # installations older than this counter: continue after the last cycle recorded in the statistics
@@ -587,8 +623,15 @@ while true; do
     # moment of the delivery: the requests moved to done/ before it are delivered, the later ones are
     # only added to the plan (the app shows the difference)
     date '+%Y%m%d-%H%M%S' > "$ETAT/done/.last-delivery" 2>/dev/null
-    # delivered: not restarted when the application opens again (.athanor/auto, written by the app)
-    prochaine_demande || { rm -f "$ETAT/auto"; terminer "DONE: the deliverable and FINAL_REPORT.md are in the project folder."; }
+    github_pousser
+    if [ "$GITHUB_CODE" = 4 ] && [ -f "$ETAT/SECRETS_FOUND.md" ]; then
+      # never delivered with a secret in the commits: Claude removes it first (CLAUDE.md), then delivers again
+      sed -i -E 's/STATUS: *DONE[^*]*/STATUS: REOPENED (a secret must leave the commits before the GitHub push)/' "$ETAT/FINAL_REPORT.md"
+      log "Delivery reopened: a secret must leave the commits before the GitHub push (.athanor/SECRETS_FOUND.md)."
+    else
+      # delivered: not restarted when the application opens again (.athanor/auto, written by the app)
+      prochaine_demande || { rm -f "$ETAT/auto"; terminer "DONE: the deliverable and FINAL_REPORT.md are in the project folder."; }
+    fi
   fi
 
   if ! connexion_presente; then
@@ -600,6 +643,7 @@ while true; do
 
   synchroniser_demande
   preparer_cycle
+  appliquer_identite
   cycle=$(( cycle + 1 )); echo "$cycle" > "$PRIVE/cycle"
   fichier_log="$ETAT/logs/cycle-$(date '+%Y%m%d-%H%M%S')-$(printf '%04d' "$cycle").jsonl"
   avant=$(g -C "$PROJECT" rev-parse HEAD 2>/dev/null || echo aucun)
@@ -625,14 +669,19 @@ while true; do
   parallele_lire_reglage
   if [ "$PARALLEL" = 1 ]; then parallele_absorber_file; synchroniser_demande; fi
   mode=serie; but_cycle="$BUT"; consignes="$CONSIGNES"; plan_seul=0
+  if [ "${ATHANOR_SANS_COAUTEUR:-0}" = 1 ]; then
+    # the user does not want Claude as co-author: no such line in the commit messages, whatever the habit
+    { cat "$CONSIGNES"; printf '\n## Commit messages\n\nNever add a `Co-Authored-By` line, a "Generated with" line or any mention of Claude or of an AI tool to a commit message: the commits are signed by the user alone.\n'; } > "$PRIVE/CLAUDE.auteur.md"
+    consignes="$PRIVE/CLAUDE.auteur.md"
+  fi
   if [ "$PARALLEL" = 1 ]; then
-    { cat "$CONSIGNES"; parallele_consignes; } > "$PRIVE/CLAUDE.cycle.md"; consignes="$PRIVE/CLAUDE.cycle.md"
+    { cat "$consignes"; parallele_consignes; } > "$PRIVE/CLAUDE.cycle.md"; consignes="$PRIVE/CLAUDE.cycle.md"
     # a changed request (an additional one, or edited by hand) is first folded into the plan by the lead
     # alone, without any code: the milestones themselves are for the workers of the next cycles
     if [ -f "$ETAT/PLAN.md" ] && [ -f "$ETAT/REQUEST_CHANGED" ] && parallele_plan_a_des_vagues; then
       but_cycle="/goal The change of .athanor/REQUEST.md (flagged by .athanor/REQUEST_CHANGED) is folded into .athanor/PLAN.md as waves according to your parallel-mode instructions, the change is noted in .athanor/LOG.md, .athanor/REQUEST_CHANGED is deleted and the plan is committed, without writing any code. Or stop after 15 turns. ${PHRASE_LANGUE}"
       plan_seul=1; log "Parallel mode: the request changed, the lead updates the plan first."
-    elif [ -f "$ETAT/PLAN.md" ] && [ ! -f "$ETAT/RECHECK" ] && [ ! -f "$ETAT/REQUEST_CHANGED" ] && [ ! -f "$ETAT/REVERIFY" ]; then
+    elif [ -f "$ETAT/PLAN.md" ] && [ ! -f "$ETAT/RECHECK" ] && [ ! -f "$ETAT/REQUEST_CHANGED" ] && [ ! -f "$ETAT/REVERIFY" ] && [ ! -f "$ETAT/SECRETS_FOUND.md" ]; then
       if parallele_plan_a_des_vagues; then
         [ "$(parallele_vague_courante | wc -l)" -ge 2 ] && mode=parallele
       else
@@ -727,6 +776,7 @@ while true; do
         command -v athanor >/dev/null 2>&1 && PROJECT="$PROJECT" athanor screenshots --accept > /dev/null 2>&1
         log "Cycle $cycle succeeded: $(g -C "$PROJECT" log -1 --pretty=%s 2>/dev/null)"
         [ "$clos" = 1 ] && log "(cycle closed by the pilot after the milestone: the next one starts with a fresh context)"
+        github_pousser
       fi
       ;;
     quota)

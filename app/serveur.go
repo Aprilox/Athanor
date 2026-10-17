@@ -26,7 +26,9 @@ type Serveur struct {
 	verifs       []*Verif
 	session      string // session token when a password is set ("" = locked)
 	csrf         string
-	relancer     map[string]bool // projects to restart as soon as their pilot has stopped (settings change)
+	cleAcces     string               // cookie of the windows Athanor opened (acces.go); empty = no check (tests)
+	ouvertures   map[string]time.Time // single-use window addresses
+	relancer     map[string]bool      // projects to restart as soon as their pilot has stopped (settings change)
 	dernierActif map[string]bool
 	// last quick check of the milestones of a project waiting for its files (folder → time)
 	derniereVerif map[string]time.Time
@@ -108,7 +110,7 @@ func (s *Serveur) garde(libre bool, h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Every API route requires the secret header, reads included: a web page can neither know it
 		// nor send it (the Host header check, in main.go, blocks "DNS rebinding").
-		if !egal(r.Header.Get("X-Athanor"), s.csrf) {
+		if !s.accesValide(r) || !egal(r.Header.Get("X-Athanor"), s.csrf) {
 			s.erreur(w, http.StatusForbidden, "Request refused (origin)")
 			return
 		}
@@ -299,6 +301,8 @@ func (s *Serveur) routes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/projets/{nom}", s.garde(false, s.apiRetirerProjet))
 	mux.HandleFunc("GET /api/projets/gestion", s.garde(false, s.apiGestionVoir))
 	mux.HandleFunc("POST /api/projets/gestion", s.garde(false, s.apiGestion))
+	mux.HandleFunc("GET /api/github", s.garde(false, s.apiGitHubVoir))
+	mux.HandleFunc("POST /api/github", s.garde(false, s.apiGitHub))
 	mux.HandleFunc("GET /api/dossiers", s.garde(false, s.apiDossiers))
 
 	mux.HandleFunc("GET /api/demandes", s.garde(false, s.apiDemandes))

@@ -517,6 +517,7 @@ pages.projet = async () => {
   const g = await api("projets/gestion?nom=" + encodeURIComponent(etat.projet));
   const p = g.projet, dis = p.actif ? "disabled" : "";
   const decoches = Object.entries(g.decoches || {});
+  setTimeout(() => majGitHub(), 0); // the GitHub block asks WSL: filled in once the page is shown
   return `<div class="gestion">
   ${p.actif ? `<div class="bloc"><p class="attention">${t("The pilot is running: stop it to rename, move, archive or delete the project.")}</p></div>` : ""}
   <div class="grille grille-2">
@@ -538,6 +539,7 @@ pages.projet = async () => {
     <label class="champ mt-2"><span>${t("Use another folder (created if needed): the plan and the requests come along, the milestones are checked against what it contains")}</span>
       <div class="ligne"><input type="text" id="gp-dossier" placeholder="${h(t("e.g. D:\\Dev\\my-site"))}"><button class="btn" data-gestion="dossier" ${dis}>${t("Use this folder")}</button></div></label>
   </div>
+  <div class="bloc" id="gh-bloc"><h2>GitHub</h2><p class="muet petit">${t("Loading…")}</p></div>
   <div class="grille grille-2">
     <div class="bloc"><h2>${t("Archive")}</h2>
       <p class="muet petit">${t("An archived project leaves the project list and is never restarted. Bring it back at any time from “Archived projects”, at the bottom of the project list.")}</p>
@@ -602,6 +604,119 @@ async function gererProjet(act, nom, bouton) {
   rendrePage();
 }
 
+// --- GitHub: the project's repository (system/github.sh). The sign-in is never kept: the repository gets
+// its own key, valid for it alone and out of Claude's reach; the pilot pushes after each milestone.
+function nomDepot(nom) {
+  const s = String(nom || "").replace(/ /g, "-").replace(/[^A-Za-z0-9._-]/g, "").replace(/^[.-]+|[.-]+$/g, "").slice(0, 100);
+  return s || "athanor-project";
+}
+function choixGitHub(pre, nomPropose) {
+  return `${pre === "np" ? `<label class="radio"><input type="radio" name="np-gh" value="" checked> ${t("No GitHub for now")}</label>` : ""}
+    <label class="radio"><input type="radio" name="${pre}-gh" value="creer" ${pre === "np" ? "" : "checked"}> ${t("Create a private repository")}</label>
+    <input type="text" class="gh-champ" id="${pre}-gh-nom" placeholder="${h(nomPropose)}">
+    <label class="radio"><input type="radio" name="${pre}-gh" value="existant"> ${t("Use one of my repositories")}</label>
+    <input type="text" class="gh-champ" id="${pre}-gh-depot" placeholder="${h(t("OWNER/NAME, e.g. octocat/my-site"))}">
+    <label class="interrupteur"><input type="checkbox" id="${pre}-gh-auto" checked><span>${t("Push automatically after each milestone")}</span></label>
+    <p class="muet petit">${t("A window opens once to sign in to GitHub. Athanor gives the repository its own key, valid for that repository alone, then signs out: Claude can never touch your other repositories.")}</p>`;
+}
+// null: no GitHub; false: incomplete or invalid (said in a toast); else what to send to /api/github
+function lireChoixGitHub(pre, nomProjet) {
+  const mode = (document.querySelector(`input[name=${pre}-gh]:checked`) || {}).value || "";
+  if (!mode) return null;
+  const auto = !!($("#" + pre + "-gh-auto") || {}).checked;
+  if (mode === "creer") {
+    const tape = $("#" + pre + "-gh-nom").value.trim();
+    const valeur = tape ? nomDepot(tape) : nomDepot(nomProjet);
+    if (tape && valeur !== tape) $("#" + pre + "-gh-nom").value = valeur; // spaces and accents become a valid name
+    return { action: "lier", mode, valeur, auto };
+  }
+  // OWNER/NAME, or the repository's address as GitHub shows it
+  const v = $("#" + pre + "-gh-depot").value.trim().replace(/^(https?:\/\/)?(www\.)?github\.com\//i, "").replace(/^git@github\.com:/i, "").replace(/\/+$/, "").replace(/\.git$/i, "");
+  if (!/^[A-Za-z0-9][A-Za-z0-9-]{0,38}\/[A-Za-z0-9._-]{1,100}$/.test(v)) { toast(t("Write the repository as OWNER/NAME (e.g. octocat/my-site)."), "erreur"); return false; }
+  return { action: "lier", mode, valeur: v, auto };
+}
+// Author of the commits (name, email proposed from the GitHub account) and Claude as co-author or not.
+function rendreAuteur(id) {
+  id = id || {};
+  const emails = id.emails || [];
+  const libelle = (e) => e.genre === "noreply" ? t("{0} (private GitHub address, recommended)", [e.email]) : e.genre === "github" ? t("{0} (GitHub account)", [e.email]) : t("{0} (git settings)", [e.email]);
+  const choisi = id.email || (emails[0] && emails[0].email) || "";
+  const connu = emails.some((e) => e.email === choisi);
+  return `<label class="interrupteur"><input type="checkbox" data-gh-coauteur ${id.sans_coauteur ? "checked" : ""}><span>${t("Commit without Claude as co-author (no “Co-Authored-By: Claude” line in the commits)")}</span></label>
+    <div class="gh-auteur"><div class="muet petit">${t("Author of the commits")}</div>
+      <div class="ligne"><input type="text" id="gh-auteur-nom" list="gh-noms" value="${h(id.nom || (id.noms || [])[0] || "")}" placeholder="${h(t("Your name"))}">
+        <select id="gh-auteur-email">${emails.map((e) => `<option value="${h(e.email)}" ${e.email === choisi ? "selected" : ""}>${h(libelle(e))}</option>`).join("")}<option value="" ${connu ? "" : "selected"}>${t("Other email…")}</option></select></div>
+      <input type="text" inputmode="email" class="gh-champ" id="gh-auteur-autre" value="${h(connu ? "" : choisi)}" placeholder="${h(t("you@example.com"))}" ${connu ? "hidden" : ""}>
+      <datalist id="gh-noms">${(id.noms || []).map((n) => `<option value="${h(n)}">`).join("")}</datalist>
+      <div class="ligne"><button class="btn btn-petit" data-gh="identite">${t("Save the author")}</button>${id.defini ? "" : `<span class="muet petit">${t("Not chosen yet for this project: the commits use your last choice, else your git settings, else “Athanor”.")}</span>`}</div></div>`;
+}
+const LIBELLES_GH = { ok: "Last push", bloque: "Push blocked", rejete: "Push refused", erreur: "Push failed", attente: "Waiting for a first commit" };
+function rendreGitHub(r) {
+  if (r.erreur) return `<h2>GitHub</h2><p class="bloque petit">${h(r.erreur)}</p><button class="btn btn-petit" data-gh="actualiser">${t("Refresh")}</button>`;
+  const g = r.github || {}, d = g.dernier;
+  const manque = !g.gh || !g.ssh ? `<p class="attention petit">${t("The GitHub CLI or OpenSSH is missing in Linux: open the check and repair “Basic Linux packages”.")} <a href="#sante">${t("Open the check")}</a></p>` : "";
+  if (!g.lie) return `<h2>GitHub</h2>
+    <p class="muet petit">${t("Send the project's commits to one of your GitHub repositories, by itself after each milestone.")}</p>${manque}
+    ${choixGitHub("gh", r.nom_propose || "")}
+    ${rendreAuteur(g.identite)}
+    <div class="ligne"><button class="btn btn-primaire" data-gh="lier">${t("Link to GitHub")}</button><button class="btn btn-petit" data-gh="actualiser">${t("Refresh")}</button></div>`;
+  const cls = !d ? "" : d.resultat === "ok" ? "ok" : d.resultat === "attente" ? "muet" : "bloque";
+  const quand = d && d.quand ? String(d.quand).replace("T", " ").slice(0, 16) : "";
+  return `<h2>GitHub</h2>${manque}
+    <p>${t("Linked to")} <b>${h(g.depot)}</b> · ${t("branch")} <code>${h(g.branche)}</code>${g.compte ? ` · ${t("account")} ${h(g.compte)}` : ""} <button class="btn btn-petit" data-gh="ouvrir">${t("Open on GitHub")}</button></p>
+    <label class="interrupteur"><input type="checkbox" data-gh-auto ${g.auto ? "checked" : ""}><span>${t("Push automatically after each milestone")}</span></label>
+    ${rendreAuteur(g.identite)}
+    ${d ? `<div class="gh-dernier"><b class="${cls}">${h(t(LIBELLES_GH[d.resultat] || d.resultat))}</b> <span class="muet petit">${h(quand)}${d.commit ? " · " + h(d.commit) : ""}</span>
+      <div class="petit">${h(t(d.modele || d.message || "", d.args || []))}</div>
+      ${(d.fichiers || []).length ? `<ul class="petit">${d.fichiers.map((x) => `<li><code>${h(x.f)}</code> — ${h(t(x.genre))}</li>`).join("")}</ul>` : ""}</div>`
+      : `<p class="muet petit">${t("Nothing pushed yet.")}</p>`}
+    <div class="ligne"><button class="btn" data-gh="pousser">${t("Push now")}</button>${d && d.resultat === "bloque" && d.sha ? `<button class="btn btn-danger" data-gh="malgre" data-sha="${h(d.sha)}">${t("Push anyway")}</button>` : ""}</div>
+    <label class="champ mt-2"><span>${t("GitHub branch")}</span><div class="ligne"><input type="text" id="gh-branche" value="${h(g.branche)}"><button class="btn btn-petit" data-gh="branche">${t("Change")}</button></div></label>
+    <p class="muet petit">${t("The key Athanor pushes with works for this repository only and stays out of Claude's reach. Athanor never overwrites what is on GitHub and checks every push for secrets (keys, tokens, .env files).")}</p>
+    <button class="btn btn-petit btn-danger" data-gh="delier">${t("Unlink")}</button>`;
+}
+async function majGitHub(jusqua) {
+  clearTimeout(etat.ghMinuteur);
+  // a later call (another page render, another click) takes over; a running follow-up is kept
+  const n = etat.ghNumero = (etat.ghNumero || 0) + 1;
+  if (!jusqua && etat.ghSuivi && etat.ghSuivi.projet === etat.projet && Date.now() < etat.ghSuivi.jusqua) jusqua = etat.ghSuivi.jusqua;
+  if (!$("#gh-bloc") || etat.page !== "projet") return;
+  const nom = etat.projet;
+  const r = await api("github").catch((e) => ({ erreur: e.message }));
+  const bloc = $("#gh-bloc");
+  if (n !== etat.ghNumero || !bloc || etat.projet !== nom || etat.page !== "projet") return;
+  const saisis = {}; bloc.querySelectorAll("input[id]").forEach((i) => { saisis[i.id] = i.type === "checkbox" ? i.checked : i.value; });
+  const choix = (bloc.querySelector("input[name=gh-gh]:checked") || {}).value;
+  bloc.innerHTML = rendreGitHub(r);
+  bloc.querySelectorAll("input[id]").forEach((i) => { if (i.id in saisis && i.id !== "gh-branche") { if (i.type === "checkbox") i.checked = saisis[i.id]; else i.value = saisis[i.id]; } });
+  if (choix) { const c = bloc.querySelector(`input[name=gh-gh][value="${choix}"]`); if (c) c.checked = true; }
+  const g = r.github || {};
+  // after "Link": the window is the user's; the block follows until the link and its first push are there
+  if (jusqua && Date.now() < jusqua && !(g.lie && g.dernier)) etat.ghMinuteur = setTimeout(() => majGitHub(jusqua), 4000);
+  else etat.ghSuivi = null;
+}
+function lireAuteur() {
+  const sel = $("#gh-auteur-email");
+  return { nom: ($("#gh-auteur-nom") || {}).value || "", email: (sel && sel.value) || ($("#gh-auteur-autre") || {}).value || "", sans_coauteur: !!(document.querySelector("[data-gh-coauteur]") || {}).checked };
+}
+async function actionGitHub(act, b) {
+  if (act === "actualiser") return majGitHub();
+  const corps = { action: act };
+  if (act === "lier") { const c = lireChoixGitHub("gh", etat.projet); if (!c) return; Object.assign(corps, c); }
+  if (act === "branche") corps.valeur = $("#gh-branche").value;
+  if (act === "malgre") corps.valeur = b.dataset.sha || "";
+  if (act === "identite") Object.assign(corps, lireAuteur());
+  if (act === "malgre" && !(await confirmer(t("Push anyway? What Athanor flagged becomes readable on GitHub, in the history, even if it is deleted later. Only do it if these are not real secrets."), { ok: t("Push anyway"), danger: true }))) return;
+  if (act === "delier" && !(await confirmer(t("Unlink “{0}” from GitHub? Nothing is deleted on GitHub: Athanor deletes its key and stops pushing.", [etat.projet]), { ok: t("Unlink"), danger: true }))) return;
+  b.disabled = true;
+  if (act === "pousser" || act === "malgre") b.textContent = t("Pushing…");
+  const r = await action(api("github", "POST", corps));
+  b.disabled = false;
+  if (r && r.github && r.github.dernier) { const d = r.github.dernier; toast(t(d.modele || d.message || "", d.args || []), d.resultat === "ok" ? "ok" : "erreur"); }
+  if (act === "lier" && r) etat.ghSuivi = { projet: etat.projet, jusqua: Date.now() + 5 * 60000 };
+  majGitHub();
+}
+
 pages.nouveau = async () => `<div class="grille grille-2">
     <div class="bloc"><h2>${t("New project")}</h2>
       <p class="intro petit">${t("A project = a development folder, anywhere on the PC (existing or new). The tool only adds a .athanor subfolder (request, plan, log, checks): delete it at the end and the project is clean.")}</p>
@@ -609,6 +724,7 @@ pages.nouveau = async () => `<div class="grille grille-2">
       <label class="champ"><span>${t("Development folder")}</span><input type="text" id="np-dossier" placeholder="${h(t("e.g. D:\\Dev\\watch-store"))}"></label>
       <label class="champ"><span>${t("What you want (you can complete it later)")}</span><textarea id="np-demande" rows="7" placeholder="${h(t("Describe the expected result, for whom, on which platform. Technologies are free unless you impose one."))}"></textarea></label>
       ${barreAmeliorer("np-demande")}
+      <div class="champ gh-nouveau"><span>GitHub</span>${choixGitHub("np", nomDepot(""))}</div>
       <button class="btn btn-primaire" id="np-creer">${t("Create the project")}</button>
     </div>
     <div class="bloc"><h2>${t("Pick a folder")}</h2>
@@ -1103,9 +1219,15 @@ async function enregistrerOptions() {
 }
 
 // ----------------------------------------------------------------------------- rendering and events
+let numeroRendu = 0;
 async function rendrePage() {
+  // renders overlap (a live refresh of one page, a click to another): only the last one asked is shown
+  const n = ++numeroRendu;
   const p = pages[etat.page] || pages.suivi;
-  try { $("#page").innerHTML = await p(); } catch (e) { if (e.message !== t("Locked")) $("#page").innerHTML = `<div class="vide">${h(e.message)}</div>`; }
+  let html;
+  try { html = await p(); } catch (e) { if (e.message === t("Locked")) return; html = `<div class="vide">${h(e.message)}</div>`; }
+  if (n !== numeroRendu) return;
+  $("#page").innerHTML = html;
   if (etat.page === "journal") rendreJournal();
   if (etat.page === "sante") rendreSortie();
   if (etat.page === "nouveau") rendreExplorateur(etat.explorateur);
@@ -1150,16 +1272,22 @@ $("#page").addEventListener("click", async (ev) => {
   if (b.dataset.act) { b.disabled = true; if (b.dataset.act === "demarrer") etat.demarrage[etat.projet] = Date.now() + 25000; await action(api("pilote/" + b.dataset.act, "POST")); return setTimeout(rafraichir, 800); }
   if (b.hasAttribute("data-installer")) return action(api("sante/installer", "POST"));
   if (b.dataset.gestion) return gererProjet(b.dataset.gestion, b.dataset.nom || etat.projet, b);
+  if (b.dataset.gh) return actionGitHub(b.dataset.gh, b);
   if (b.dataset.max && page === "suivi") return enregistrerMode($("#md-parallele").checked, Number(b.dataset.max));
   if (page === "nouveau") {
     if (b.dataset.chemin) return rendreExplorateur(b.dataset.chemin);
     if (b.id === "np-utiliser") { $("#np-dossier").value = etat.explorateur; return; }
     if (b.id === "np-creer") {
       if (b.disabled) return;
+      const gh = lireChoixGitHub("np", $("#np-nom").value); if (gh === false) return;
       b.disabled = true; // one project per click, even on a double-click
       const r = await action(api("projets", "POST", { nom: $("#np-nom").value, dossier: $("#np-dossier").value, demande: $("#np-demande").value }));
       b.disabled = false;
-      if (r) { etat.projet = r.nom; etat.evenements = []; etat.dernierJournal = 0; await rafraichir(); location.hash = "#suivi"; }
+      if (r) {
+        etat.projet = r.nom; etat.evenements = []; etat.dernierJournal = 0;
+        if (gh) await action(api("github", "POST", gh)); // the sign-in window opens; the link shows under Manage
+        await rafraichir(); location.hash = "#suivi";
+      }
       return;
     }
   }
@@ -1205,9 +1333,18 @@ $("#page").addEventListener("change", (ev) => {
   if (i.id === "rg-secrets") { etat.envSecrets = i.checked; rendrePage(); }
   if (i.type === "checkbox" && i.dataset.cle) i.nextElementSibling.textContent = i.checked ? t("enabled") : t("disabled");
   if (etat.page === "options" && i.hasAttribute("data-option")) enregistrerOptions();
+  if (i.hasAttribute("data-gh-coauteur")) action(api("github", "POST", Object.assign({ action: "identite" }, lireAuteur()))).then((r) => { if (!r) i.checked = !i.checked; });
+  if (i.id === "gh-auteur-email") { const a = $("#gh-auteur-autre"); a.hidden = i.value !== ""; if (!a.hidden) a.focus(); }
+  if (i.hasAttribute("data-gh-auto")) action(api("github", "POST", { action: "auto", auto: i.checked })).then((r) => { if (!r) i.checked = !i.checked; });
   if (i.id === "md-parallele") { const actif = $("#page .choix button.actif"); enregistrerMode(i.checked, actif ? Number(actif.dataset.max) : 3); }
 });
-$("#page").addEventListener("input", (ev) => { if (ev.target.id === "jr-recherche") { etat.recherche = ev.target.value; rendreJournal(); } });
+$("#page").addEventListener("input", (ev) => {
+  if (ev.target.id === "jr-recherche") { etat.recherche = ev.target.value; rendreJournal(); }
+  if (ev.target.id === "np-nom" && $("#np-gh-nom")) $("#np-gh-nom").placeholder = nomDepot(ev.target.value);
+  // typing a repository picks its option
+  const m = /^(np|gh)-gh-(nom|depot)$/.exec(ev.target.id);
+  if (m) { const r = document.querySelector(`input[name=${m[1]}-gh][value=${m[2] === "nom" ? "creer" : "existant"}]`); if (r) r.checked = true; }
+});
 
 // --- lock
 function afficherVerrou() {

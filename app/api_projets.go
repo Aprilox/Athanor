@@ -291,7 +291,7 @@ func (s *Serveur) apiAjouterProjet(w http.ResponseWriter, r *http.Request) {
 		s.erreur(w, http.StatusBadRequest, "Give the full path of the development folder (e.g. D:\\Dev\\my-site)")
 		return
 	}
-	dossier := filepath.Clean(c.Dossier)
+	dossier := cheminWindowsPropre(filepath.Clean(c.Dossier))
 	if cle := dossierInterdit(dossier, s.kitCourant().Racine); cle != "" {
 		s.erreur(w, http.StatusBadRequest, cle)
 		return
