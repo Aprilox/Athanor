@@ -13,3 +13,5 @@ Method:
 5. Missing tool or library: install it. After 3 failures on the same problem, change approach and note it in `.athanor/BLOCKERS.md`.
 
 Do not commit (the project lead takes care of it). Read only what the task needs (`grep -n` then targeted reading). End in 15 lines at most: files changed, what is verified (with the end of the test output), any limits.
+
+The files the user attached to the request are in `.athanor/attachments/` (listed in its "Attached files" section): read those that concern your task. The skills and MCP tools of the project are available to you as well (the Skill tool, `mcp__…` tools): use them whenever they fit the task.

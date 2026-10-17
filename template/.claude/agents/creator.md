@@ -16,3 +16,5 @@ Assets (all original, no protected element):
 - Keep files light (512 px or 1024 px textures, short compressed sounds).
 
 End with the list of files created and one sentence on each important choice.
+
+The files the user attached to the request are in `.athanor/attachments/` (listed in its "Attached files" section): read those that concern your task. The skills and MCP tools of the project are available to you as well (the Skill tool, `mcp__…` tools): use them whenever they fit the task.

@@ -475,4 +475,7 @@ input.large { flex: 1; min-width: 200px; width: auto; }
 .pieces-liste li > span:first-child { overflow-wrap: anywhere; }
 .btn-lien { background: none; border: 0; color: var(--muted); cursor: pointer; padding: 0 4px; }
 .btn-lien:hover { color: var(--erreur); }
+.membre.perso { border-color: var(--accent); }
+.membre .badge { margin-left: 4px; white-space: nowrap; display: inline-block; }
+.agent-form textarea { width: 100%; }
 
