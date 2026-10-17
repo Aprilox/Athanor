@@ -21,6 +21,8 @@ TOOLS="$KIT/tools"
 ETAT="$PROJECT/.athanor"
 . "$SYSTEME/safety.sh"
 migrer_atelier "$PROJECT"
+# what the application's quick folder check unticked is Claude's to judge now (REVERIFY, CLAUDE.md)
+rm -f "$ETAT/verification.json"
 # Pilot runtime state: inside the tool, out of Claude's reach (see safety.sh).
 PRIVE="$(prive_de "$PROJECT")"
 mkdir -p "$PRIVE"
@@ -630,7 +632,7 @@ while true; do
     if [ -f "$ETAT/PLAN.md" ] && [ -f "$ETAT/REQUEST_CHANGED" ] && parallele_plan_a_des_vagues; then
       but_cycle="/goal The change of .athanor/REQUEST.md (flagged by .athanor/REQUEST_CHANGED) is folded into .athanor/PLAN.md as waves according to your parallel-mode instructions, the change is noted in .athanor/LOG.md, .athanor/REQUEST_CHANGED is deleted and the plan is committed, without writing any code. Or stop after 15 turns. ${PHRASE_LANGUE}"
       plan_seul=1; log "Parallel mode: the request changed, the lead updates the plan first."
-    elif [ -f "$ETAT/PLAN.md" ] && [ ! -f "$ETAT/RECHECK" ] && [ ! -f "$ETAT/REQUEST_CHANGED" ]; then
+    elif [ -f "$ETAT/PLAN.md" ] && [ ! -f "$ETAT/RECHECK" ] && [ ! -f "$ETAT/REQUEST_CHANGED" ] && [ ! -f "$ETAT/REVERIFY" ]; then
       if parallele_plan_a_des_vagues; then
         [ "$(parallele_vague_courante | wc -l)" -ge 2 ] && mode=parallele
       else

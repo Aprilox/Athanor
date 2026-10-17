@@ -311,12 +311,14 @@ function rendreSelecteur(v) {
   m.hidden = !etat.selecteurOuvert;
   if (!etat.selecteurOuvert) return;
   const q = (etat.rechercheProjet || "").toLowerCase();
-  const liste = (v.projets || []).filter((x) => !q || x.nom.toLowerCase().includes(q) || x.dossier.toLowerCase().includes(q));
+  const liste = (v.projets || []).filter((x) => !x.archive && (!q || x.nom.toLowerCase().includes(q) || x.dossier.toLowerCase().includes(q)));
+  const archives = (v.projets || []).filter((x) => x.archive).length;
   const avaitFocus = document.activeElement && document.activeElement.id === "sel-recherche";
   const pos = avaitFocus ? document.activeElement.selectionStart : 0;
   m.innerHTML = `<input type="text" id="sel-recherche" placeholder="${h(t("Search a project…"))}" value="${h(etat.rechercheProjet || "")}">
     <div class="menu-liste">${liste.map((x) => `<a href="#suivi" data-projet="${h(x.nom)}" class="${x.courant ? "actif" : ""}"><span class="dot ${classePhase(x)}"></span><span class="nom">${h(x.nom)}</span><span class="muet petit">${x.actif ? t(x.phase === "quota" ? "waiting" : "running") : t("stopped")}${x.attente ? " · " + t("{0} queued", [x.attente]) : ""}</span></a>`).join("") || `<div class="vide">${t("No project.")}</div>`}</div>
-    <a href="#nouveau" class="menu-nouveau">+ ${t("New project")}</a>`;
+    <a href="#nouveau" class="menu-nouveau">+ ${t("New project")}</a>
+    ${archives ? `<a href="#archives" class="menu-nouveau menu-archives">🗄 ${t("Archived projects ({0})", [archives])}</a>` : ""}`;
   const r = $("#sel-recherche"); if (r) { r.focus(); r.setSelectionRange(pos, pos); }
 }
 
@@ -371,7 +373,7 @@ $("#menu-projets").addEventListener("click", async (ev) => {
 document.addEventListener("click", (ev) => { if (etat.selecteurOuvert && !ev.target.closest("#sel-projet, #menu-projets")) fermerSelecteur(); });
 
 function traduireNav() {
-  const libelles = { suivi: t("Overview"), equipe: t("Team"), demandes: t("Requests"), journal: t("Log"), extensions: t("Skills & MCP"), sante: t("Setup & health"), reglages: t("Settings"), options: t("Options") };
+  const libelles = { suivi: t("Overview"), equipe: t("Team"), demandes: t("Requests"), journal: t("Log"), projet: t("Manage"), extensions: t("Skills & MCP"), sante: t("Setup & health"), reglages: t("Settings"), options: t("Options") };
   document.querySelectorAll("#nav-liens a, #nav-outil a").forEach((a) => { if (libelles[a.dataset.page]) a.textContent = libelles[a.dataset.page]; });
   $("#nav-titre-projet").textContent = t("Project");
   $("#nav-titre-outil").textContent = t("Tool");
@@ -508,6 +510,98 @@ function rendreGuide(v) {
 }
 
 // --- new project
+// --- managing a project: name, folder, milestones check, archive, delete
+pages.projet = async () => {
+  if (!etat.projet) await rafraichir(); // opened straight on this page: the project is known after the first refresh
+  if (!etat.projet) return `<div class="vide">${t("No project.")}</div>`;
+  const g = await api("projets/gestion?nom=" + encodeURIComponent(etat.projet));
+  const p = g.projet, dis = p.actif ? "disabled" : "";
+  const decoches = Object.entries(g.decoches || {});
+  return `<div class="gestion">
+  ${p.actif ? `<div class="bloc"><p class="attention">${t("The pilot is running: stop it to rename, move, archive or delete the project.")}</p></div>` : ""}
+  <div class="grille grille-2">
+    <div class="bloc"><h2>${t("Name")}</h2>
+      <div class="ligne"><input type="text" id="gp-nom" value="${h(p.nom)}"><button class="btn" data-gestion="renommer" ${dis}>${t("Rename")}</button></div>
+      <p class="muet petit">${t("Only the name shown in Athanor: the folder keeps its name.")}</p>
+    </div>
+    <div class="bloc"><h2>${t("Milestones")}</h2>
+      <p class="muet petit">${t("Athanor compares the ticked milestones with what the folder contains: in an empty folder nothing is done, and a milestone whose files are missing is unticked. When the files come back, it is ticked again by itself. Claude checks more thoroughly at the next start.")}</p>
+      ${decoches.length ? `<ul class="petit">${decoches.map(([id, r]) => `<li><b>${h(id)}</b> <span class="muet">${h(t(r.startsWith("missing: ") ? "missing: {0}" : r, [r.slice(9)]))}</span></li>`).join("")}</ul>` : ""}
+      ${g.reverifier ? `<p class="petit ok">${t("Claude checks the milestones at the next start.")}</p>` : ""}
+      <div class="ligne"><button class="btn btn-petit" data-gestion="verifier" ${dis}>${t("Check now")}</button><button class="btn btn-petit" data-gestion="verifier-claude" ${dis}>${t("Have Claude check them at the next start")}</button></div>
+    </div>
+  </div>
+  <div class="bloc"><h2>${t("Folder")}</h2>
+    <p><code>${h(p.dossier)}</code>${g.vide ? ` <span class="muet petit">(${t("empty")})</span>` : ""}</p>
+    <label class="champ"><span>${t("Move or rename the folder, with everything in it (same drive)")}</span>
+      <div class="ligne"><input type="text" id="gp-deplacer" value="${h(p.dossier)}"><button class="btn" data-gestion="deplacer" ${dis}>${t("Move")}</button></div></label>
+    <label class="champ mt-2"><span>${t("Use another folder (created if needed): the plan and the requests come along, the milestones are checked against what it contains")}</span>
+      <div class="ligne"><input type="text" id="gp-dossier" placeholder="${h(t("e.g. D:\\Dev\\my-site"))}"><button class="btn" data-gestion="dossier" ${dis}>${t("Use this folder")}</button></div></label>
+  </div>
+  <div class="grille grille-2">
+    <div class="bloc"><h2>${t("Archive")}</h2>
+      <p class="muet petit">${t("An archived project leaves the project list and is never restarted. Bring it back at any time from “Archived projects”, at the bottom of the project list.")}</p>
+      <button class="btn" data-gestion="archiver" ${dis}>${t("Archive the project")}</button>
+    </div>
+    <div class="bloc"><h2>${t("Delete")}</h2>
+      <label class="radio"><input type="radio" name="gp-suppr" value="liste" checked> ${t("Remove from the list only: the folder stays as it is")}</label>
+      <label class="radio"><input type="radio" name="gp-suppr" value="atelier"> ${t("Also send its workshop (.athanor: plan, requests, log) to the recycle bin")}</label>
+      <label class="radio"><input type="radio" name="gp-suppr" value="dossier"> ${t("Send the whole folder to the recycle bin")}</label>
+      <button class="btn btn-danger mt-2" data-gestion="supprimer" data-dossier="${h(p.dossier)}" ${dis}>${t("Delete the project")}</button>
+    </div>
+  </div></div>`;
+};
+
+pages.archives = async () => {
+  if (!etat.vue) await rafraichir();
+  const l = ((etat.vue && etat.vue.projets) || []).filter((x) => x.archive);
+  return `<div class="bloc gestion"><h2>${t("Archived projects")}</h2>
+    <p class="muet petit">${t("Out of the project list and never restarted. Bring one back to work on it again.")}</p>
+    ${l.length ? `<table class="tab"><tbody>${l.map((p) => `<tr><td><b>${h(p.nom)}</b></td><td class="muet">${h(p.dossier)}</td><td class="droite"><div class="ligne fin">
+      <button class="btn btn-petit" data-gestion="desarchiver" data-nom="${h(p.nom)}">${t("Bring back")}</button>
+      <select data-mode-suppr><option value="liste">${t("Remove from the list only")}</option><option value="atelier">${t("+ its workshop to the recycle bin")}</option><option value="dossier">${t("The whole folder to the recycle bin")}</option></select>
+      <button class="btn btn-petit btn-danger" data-gestion="supprimer" data-nom="${h(p.nom)}" data-dossier="${h(p.dossier)}">${t("Delete")}</button></div></td></tr>`).join("")}</tbody></table>`
+      : `<div class="vide">${t("No archived project.")}</div>`}
+  </div>`;
+};
+
+async function gererProjet(act, nom, bouton) {
+  const corps = { nom, action: act };
+  if (act === "renommer") corps.valeur = $("#gp-nom").value;
+  if (act === "deplacer") corps.valeur = $("#gp-deplacer").value;
+  if (act === "dossier") {
+    corps.valeur = $("#gp-dossier").value;
+    if (!corps.valeur.trim() || !(await confirmer(t("Work on “{0}” in {1} from now on? Its plan and requests come along; its milestones are checked against what this folder contains. The current folder stays as it is.", [nom, corps.valeur]), { ok: t("Use this folder") }))) return;
+  }
+  if (act === "verifier-claude") { corps.action = "verifier"; corps.mode = "claude"; }
+  if (act === "archiver" && !(await confirmer(t("Archive “{0}”? It leaves the project list; bring it back at any time.", [nom]), { ok: t("Archive the project") }))) return;
+  if (act === "supprimer") {
+    const sel = bouton && bouton.closest("tr") ? bouton.closest("tr").querySelector("[data-mode-suppr]") : null;
+    corps.mode = sel ? sel.value : ((document.querySelector("input[name=gp-suppr]:checked") || {}).value || "liste");
+    const textes = {
+      liste: t("Remove “{0}” from the list? Its folder stays intact.", [nom]),
+      atelier: t("Remove “{0}” and send its workshop (.athanor: plan, requests, log) to the recycle bin? The project's own files stay.", [nom]),
+      dossier: t("Send the whole folder of “{0}” to the recycle bin? {1} and everything in it go, and can be restored from the recycle bin.", [nom, (bouton && bouton.dataset.dossier) || ""]),
+    };
+    if (!(await confirmer(textes[corps.mode], { ok: t("Delete the project"), danger: true }))) return;
+  }
+  if (bouton) bouton.disabled = true;
+  const r = await action(api("projets/gestion", "POST", corps));
+  if (bouton) bouton.disabled = false;
+  if (!r) return;
+  if (corps.action === "verifier") {
+    const d = (r.decoches || []).length, c = (r.recoches || []).length;
+    toast(d || c ? t("{0} milestone(s) unticked, {1} ticked again.", [d, c]) : t("The milestones match the folder."), "ok");
+    if (corps.mode === "claude") toast(t("Claude checks the milestones at the next start."), "ok");
+  }
+  if (act === "renommer" && r.nom) etat.projet = r.nom;
+  if ((act === "archiver" || act === "supprimer") && nom === etat.projet) { etat.projet = ""; etat.evenements = []; etat.dernierJournal = 0; }
+  if (act === "desarchiver") { etat.projet = nom; etat.evenements = []; etat.dernierJournal = 0; }
+  await rafraichir();
+  if (act === "desarchiver" || (act === "archiver" || act === "supprimer") && etat.page === "projet") { location.hash = "#suivi"; return; }
+  rendrePage();
+}
+
 pages.nouveau = async () => `<div class="grille grille-2">
     <div class="bloc"><h2>${t("New project")}</h2>
       <p class="intro petit">${t("A project = a development folder, anywhere on the PC (existing or new). The tool only adds a .athanor subfolder (request, plan, log, checks): delete it at the end and the project is clean.")}</p>
@@ -980,8 +1074,8 @@ pages.options = async () => {
     </div>
     <div class="colonne">
       <div class="bloc"><h2>${t("Projects")}</h2>
-        ${(o.projets || []).length ? `<table class="tab"><tbody>${o.projets.map((p) => `<tr><td><b>${h(p.nom)}</b></td><td class="muet">${h(p.dossier)}</td><td class="droite"><button class="btn btn-petit btn-danger" data-retirer-projet="${h(p.nom)}">${t("Remove from list")}</button></td></tr>`).join("")}</tbody></table>` : `<div class="vide">${t("No project.")}</div>`}
-        <p class="muet petit mt-2">${t("Removing a project never touches its folder. To clean it, delete its .athanor subfolder.")}</p>
+        ${(o.projets || []).length ? `<table class="tab"><tbody>${o.projets.map((p) => `<tr><td><b>${h(p.nom)}</b>${p.archive ? ` <span class="badge">${t("archived")}</span>` : ""}</td><td class="muet">${h(p.dossier)}</td><td class="droite"><button class="btn btn-petit" data-gerer="${h(p.nom)}" data-archive="${p.archive ? 1 : ""}">${t("Manage")}</button></td></tr>`).join("")}</tbody></table>` : `<div class="vide">${t("No project.")}</div>`}
+        <p class="muet petit mt-2">${t("Rename a project, move its folder, archive or delete it: “Manage”.")}</p>
       </div>
       <div class="bloc"${b.message === "Virtual desktop: Windows only." ? " hidden" : ""}><h2>${t("“Claude” desktop")}</h2>
         <label class="interrupteur"><input type="checkbox" id="op-bureau" data-option ${o.bureau_virtuel ? "checked" : ""}><span>${t("Open the programs Claude starts (Unreal, Blender, a game under test) on a desktop of their own")}</span></label>
@@ -1055,6 +1149,7 @@ $("#page").addEventListener("click", async (ev) => {
   if (b.hasAttribute("data-ecran")) return ouvrirEcran();
   if (b.dataset.act) { b.disabled = true; if (b.dataset.act === "demarrer") etat.demarrage[etat.projet] = Date.now() + 25000; await action(api("pilote/" + b.dataset.act, "POST")); return setTimeout(rafraichir, 800); }
   if (b.hasAttribute("data-installer")) return action(api("sante/installer", "POST"));
+  if (b.dataset.gestion) return gererProjet(b.dataset.gestion, b.dataset.nom || etat.projet, b);
   if (b.dataset.max && page === "suivi") return enregistrerMode($("#md-parallele").checked, Number(b.dataset.max));
   if (page === "nouveau") {
     if (b.dataset.chemin) return rendreExplorateur(b.dataset.chemin);
@@ -1097,6 +1192,7 @@ $("#page").addEventListener("click", async (ev) => {
     if (b.id === "rg-redemarrer") { const r = await action(api("env", "POST", lireEnvFormulaire())); if (r) await action(api("pilote/redemarrer-apres-cycle", "POST")); return; }
   }
   if (page === "options") {
+    if (b.dataset.gerer) { if (b.dataset.archive) { location.hash = "#archives"; return; } etat.projet = b.dataset.gerer; etat.evenements = []; etat.dernierJournal = 0; await rafraichir(); location.hash = "#projet"; return; }
     if (b.dataset.retirerProjet) { if (await confirmer(t("Remove “{0}” from the list? Its folder stays intact.", [b.dataset.retirerProjet]), { ok: t("Remove from list"), danger: true })) { await action(api("projets/" + encodeURIComponent(b.dataset.retirerProjet), "DELETE")); if (etat.projet === b.dataset.retirerProjet) etat.projet = ""; await rafraichir(); rendrePage(); } return; }
     if (b.id === "op-guide") { await action(api("preferences", "POST", { bienvenue_vue: false })); etat.assistant = 0; return rendreAssistant(); }
     if (b.id === "mdp-enregistrer") { const r = await action(api("mot-de-passe", "POST", { ancien: ($("#mdp-ancien") || {}).value || "", nouveau: $("#mdp-nouveau").value })); if (r) { toast(r.defini ? t("Lock enabled: the padlock is at the bottom left.") : t("Lock removed."), "ok"); rendrePage(); rafraichir(); } return; }

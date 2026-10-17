@@ -3,11 +3,13 @@ package main
 // General state, projects, pilot, log, team.
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -23,6 +25,9 @@ type ProjetVue struct {
 	Attente int     `json:"attente"`
 	Courant bool    `json:"courant"`
 	Fin     *FinVue `json:"fin,omitempty"`
+	Archive bool    `json:"archive,omitempty"`
+	// milestones unticked by the folder check, waiting for their files
+	AVerifier bool `json:"a_verifier,omitempty"`
 }
 
 // FinVue: the pilot of a project stopped by itself (delivery, maximum duration…) and the user has not
@@ -43,7 +48,15 @@ func (s *Serveur) vuesProjets(courant string) []ProjetVue {
 	s.mu.Unlock()
 	v := []ProjetVue{}
 	for _, p := range projets {
-		pv := ProjetVue{Nom: p.Nom, Dossier: p.Dossier, Existe: p.Existe(), Actif: p.PiloteActif(), Courant: p.Nom == courant}
+		pv := ProjetVue{Nom: p.Nom, Dossier: p.Dossier, Existe: p.Existe(), Actif: p.PiloteActif(), Courant: p.Nom == courant, Archive: p.Archive}
+		if p.Archive {
+			v = append(v, pv) // archived: listed (archived projects page), nothing else
+			continue
+		}
+		if pv.Courant {
+			s.verifierEnFond(p)
+		}
+		pv.AVerifier = p.AVerifier()
 		if e, ok := p.LireEtat(); ok {
 			pv.Phase, pv.Jalon = e.Phase, e.JalonEnCours
 			// "termine": the pilot ended on its own (a stop asked by the user is "arrete")
@@ -292,6 +305,10 @@ func (s *Serveur) apiAjouterProjet(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s.mu.Unlock()
+	if err := s.conflitProjets(dossier, ""); err != nil {
+		s.erreur(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	p := Projet{Nom: c.Nom, Dossier: dossier}
 	if err := os.MkdirAll(p.Atelier(), 0o755); err != nil {
 		s.erreur(w, http.StatusInternalServerError, "Cannot create the folder: "+err.Error())
@@ -312,8 +329,7 @@ func (s *Serveur) apiAjouterProjet(w http.ResponseWriter, r *http.Request) {
 		s.erreur(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	s.bureau.DefinirDossiers(s.dossiersProjets())
-	s.ecrireListeProjets()
+	s.apresChangementProjets()
 	s.ecrireJSON(w, map[string]any{"message_key": "Project “{0}” added.", "args": []string{p.Nom}, "nom": p.Nom})
 }
 
@@ -390,7 +406,7 @@ func (s *Serveur) apiChoisirProjet(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, p := range s.config.Projets {
-		if p.Nom == c.Nom {
+		if p.Nom == c.Nom && !p.Archive {
 			s.config.ProjetActif = p.Nom
 			_ = ecrireConfig(s.config)
 			s.ecrireJSON(w, map[string]bool{"ok": true})
@@ -400,31 +416,36 @@ func (s *Serveur) apiChoisirProjet(w http.ResponseWriter, r *http.Request) {
 	s.erreur(w, http.StatusNotFound, "Unknown project")
 }
 
-// Removes a project from the list. The folder and its workshop are never deleted by the application.
+// Removes a project from the list. The folder and its workshop are never deleted here.
 func (s *Serveur) apiRetirerProjet(w http.ResponseWriter, r *http.Request) {
 	nom := r.PathValue("nom")
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	for i, p := range s.config.Projets {
-		if p.Nom != nom {
-			continue
+	var p Projet
+	trouve := false
+	for _, x := range s.config.Projets {
+		if x.Nom == nom {
+			p, trouve = x, true
 		}
-		if p.PiloteActif() {
-			s.erreur(w, http.StatusBadRequest, "Stop its pilot first")
-			return
-		}
-		s.config.Projets = append(s.config.Projets[:i], s.config.Projets[i+1:]...)
-		if s.config.ProjetActif == nom {
-			s.config.ProjetActif = ""
-		}
-		delete(s.logs, nom)
-		_ = ecrireConfig(s.config)
-		s.bureau.DefinirDossiers(s.dossiersProjets())
-		s.ecrireListeProjets()
-		s.msg(w, "Project removed from the list. Its folder is intact; delete its .athanor subfolder to clean it.")
+	}
+	s.mu.Unlock()
+	if !trouve {
+		s.erreur(w, http.StatusNotFound, "Unknown project")
 		return
 	}
-	s.erreur(w, http.StatusNotFound, "Unknown project")
+	if p.PiloteActif() {
+		s.erreur(w, http.StatusBadRequest, "Stop its pilot first")
+		return
+	}
+	if !s.occuper(nom) {
+		s.erreur(w, http.StatusBadRequest, "Another action is under way on this project.")
+		return
+	}
+	defer s.liberer(nom)
+	if err := s.retirerProjet(p); err != nil {
+		s.erreur(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.msg(w, "Project removed from the list. Its folder is intact; delete its .athanor subfolder to clean it.")
 }
 
 // Small folder browser to pick a project's folder.
@@ -478,6 +499,12 @@ func ligneProjet(p Projet, script string, args ...string) string {
 // the last wsl.exe ends, which would kill a backgrounded pilot: the pilot therefore runs in the
 // foreground of a hidden, detached wsl.exe that survives the application being closed.
 func (s *Serveur) demarrerPilote(p Projet) (string, error) {
+	if s.estOccupe(p.Nom) {
+		return "", errors.New("Another action is under way on this project.")
+	}
+	if p.Archive {
+		return "", errors.New("This project is archived: bring it back first.")
+	}
 	if p.PiloteActif() {
 		return "The pilot is already running on this project.", nil // message key
 	}
@@ -590,10 +617,25 @@ func dossierInterdit(dossier, kit string) string {
 	if filepath.Dir(filepath.Clean(dossier)) == filepath.Clean(dossier) || len(strings.Trim(filepath.Clean(dossier), `\/:.`)) <= 1 {
 		return "Choose a folder for the project, not a whole drive"
 	}
-	if home, err := os.UserHomeDir(); err == nil && norm(home) == d {
+	if home, err := os.UserHomeDir(); err == nil && strings.HasPrefix(norm(home), d) {
 		return "Choose a folder for the project, not your whole personal folder"
 	}
+	// system folders: never a project there (deleting a project can send its folder to the recycle bin)
+	for _, sys := range dossiersSysteme() {
+		if sys != "" && strings.HasPrefix(d, norm(sys)) {
+			return "Choose a folder for the project, not a system folder"
+		}
+	}
 	return ""
+}
+
+// dossiersSysteme: folders a project can never be in.
+func dossiersSysteme() []string {
+	if runtime.GOOS == "windows" {
+		return []string{os.Getenv("WINDIR"), os.Getenv("ProgramFiles"), os.Getenv("ProgramFiles(x86)"), os.Getenv("ProgramData"),
+			os.Getenv("ProgramW6432"), os.Getenv("LocalAppData") + `\Programs`}
+	}
+	return []string{"/usr", "/etc", "/bin", "/sbin", "/lib", "/lib32", "/lib64", "/boot", "/proc", "/sys", "/dev", "/run", "/var/lib", "/var/log", "/snap", "/root"}
 }
 
 // apiFinVue: the user has seen the end of this project's pilot; it is not announced again.

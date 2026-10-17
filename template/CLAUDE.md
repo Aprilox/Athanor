@@ -36,7 +36,8 @@ At the start:
 1. Read `.athanor/REQUEST.md`, `.athanor/PLAN.md`, the end of `.athanor/LOG.md`, `.athanor/BUGS.md` and `.athanor/BLOCKERS.md` if they exist. To find code or a section of a document, use `.athanor/MAP.md` (rebuilt by the pilot before each cycle: every file with its functions, every document with its headings, and their line numbers): `grep -n word .athanor/MAP.md`, then read only the useful lines. In a large document such as `docs/DESIGN.md`, read only the relevant section.
 2. If `.athanor/RECHECK` exists, the pilot did not see a `CHECK: PASSED` in the cycle that ticked the last milestone: run the full `bash .athanor/check.sh` first, fix what fails, commit, then delete that file.
 3. If `.athanor/REQUEST_CHANGED` exists, the user changed the request: reread it, adapt `.athanor/PLAN.md` (add, remove or reorder milestones), note it in the log, then delete that file.
-4. Take the first unchecked milestone of `.athanor/PLAN.md` and finish it entirely.
+4. If `.athanor/REVERIFY` exists, the project's folder changed (moved, or the user pointed the project to another folder; the file says which): before any new work, check every ticked milestone of `.athanor/PLAN.md` against what is really in the folder (its files, what its acceptance criteria require, the quick check when one exists). Untick each milestone whose result is missing or broken, and tick again an unticked one whose result is fully there and verified. Note what changed in `.athanor/LOG.md`, commit, then delete that file.
+5. Take the first unchecked milestone of `.athanor/PLAN.md` and finish it entirely.
 
 At the end:
 1. Tick the milestone in `.athanor/PLAN.md`.
