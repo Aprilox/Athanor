@@ -452,40 +452,86 @@ async function rendreExplorateur(chemin) {
 }
 
 // --- team
+// A tree: the project lead and the parallel workers (the Claude sessions of the cycle), each with the
+// sub-agents it called. A click on a sub-agent shows the brief it received and the report it handed back.
+const ROLES = {
+  architect: "Requirements, architecture and the milestone plan",
+  creator: "Content: story, world, dialogue, texts, generated assets",
+  developer: "One precise development task, with its tests",
+  tester: "Automated tests, screenshots, bug reports",
+  critic: "Uses the result like a demanding end user",
+  executor: "Mechanical work, on the cheap model",
+};
+function modeleLisible(m) {
+  if (!m) return "";
+  const n = String(m).replace(/^claude-/, "").replace(/\[.*\]$/, "").replace(/-\d{8}$/, "");
+  const [nom, ...v] = n.split("-");
+  return nom.charAt(0).toUpperCase() + nom.slice(1) + (v.length ? " " + v.join(".") : "");
+}
+function dureeLisible(ms) { return ms >= 60000 ? Math.round(ms / 60000) + " min" : Math.max(1, Math.round(ms / 1000)) + " s"; }
+const LIBELLES_STATUT = { travaille: "working", attend: "waiting", termine: "finished", disponible: "available", arrete: "stopped" };
+const pastille = (st) => `<span class="pastille ${h(st)}">${t(LIBELLES_STATUT[st] || st)}</span>`;
+
+function rendreAppel(a) {
+  const cle = "agent:" + a.id, ouvert = etat.ouverts.has(cle);
+  const meta = [a.duree_ms && dureeLisible(a.duree_ms), modeleLisible(a.modele)].filter(Boolean).join(" · ");
+  const chiffres = [a.outils && (a.outils === 1 ? t("1 tool") : t("{0} tools", [a.outils])), a.jetons && fmtTokens(a.jetons) + " tokens"].filter(Boolean).join(" · ");
+  return `<div class="appel ${h(a.statut)} ${ouvert ? "ouvert" : ""}" data-agent-cle="${h(cle)}">
+    <div class="appel-ligne"><span class="avatar petit">${h((a.nom || "?").charAt(0).toUpperCase())}</span>
+      <div class="appel-corps"><div class="appel-tete"><span class="appel-nom">${h(a.nom)}</span> ${pastille(a.statut)}${meta ? ` <span class="appel-meta">· ${h(meta)}</span>` : ""}</div>
+        ${a.mission ? `<div class="appel-mission">${h(a.mission)}</div>` : ""}
+        ${a.statut === "travaille" && a.activite ? `<div class="activite">${h(t(a.activite))}</div>` : ""}</div>
+      <span class="jalon-chevron">${ouvert ? "▾" : "▸"}</span></div>
+    ${ouvert ? `<div class="appel-details">
+      ${a.bulle && a.statut !== "termine" ? `<div class="bulle">${h(a.bulle.length > 700 ? a.bulle.slice(0, 700) + "…" : a.bulle)}</div>` : ""}
+      ${a.consigne ? `<div><div class="muet petit">${t("Brief it was given")}</div><pre class="texte-agent">${h(a.consigne)}</pre></div>` : ""}
+      ${a.rapport ? `<div><div class="muet petit">${t("Report it handed back")}</div><pre class="texte-agent">${h(a.rapport)}</pre></div>` : a.statut === "termine" ? "" : `<div class="muet petit">${a.statut === "arrete" ? t("Stopped before handing back a report.") : t("No report yet: it is still working.")}</div>`}
+      ${chiffres ? `<div class="muet petit">${h(chiffres)}</div>` : ""}
+    </div>` : ""}
+  </div>`;
+}
+
+function rendreSession(a, appels, nom, mission, avatar) {
+  const cleR = "rapport:" + a.id, rapportOuvert = etat.ouverts.has(cleR);
+  const meta = [a.statut !== "disponible" && (a.tours === 1 ? t("1 turn") : t("{0} turns", [a.tours || 0])), a.contexte && fmtTokens(a.contexte) + " tokens", modeleLisible(a.modele)].filter(Boolean).join(" · ");
+  const fini = a.statut === "termine" && a.rapport, long = fini && a.rapport.length > 600;
+  return `<div class="agent ${h(a.genre || "")} ${h(a.statut)}">
+    <div class="agent-tete"><div class="avatar">${h(avatar)}</div>
+      <div class="agent-identite"><div class="agent-nom">${h(nom)} ${pastille(a.statut)}</div>
+        ${mission ? `<div class="agent-mission" title="${h(mission)}">${h(mission)}</div>` : ""}
+        ${meta ? `<div class="agent-meta">${h(meta)}</div>` : ""}</div></div>
+    ${!fini && a.activite && a.statut !== "disponible" ? `<div class="activite">${h(t(a.activite))}</div>` : ""}
+    ${!fini && a.bulle ? `<div class="bulle">${h(a.bulle.length > 700 ? a.bulle.slice(0, 700) + "…" : a.bulle)}</div>` : ""}
+    ${fini ? `<div class="rapport-session" data-agent-cle="${h(cleR)}"><div class="muet petit">${a.genre === "chef" ? t("End of the cycle") : t("Report to the project lead")}</div>
+      ${rapportOuvert ? `<pre class="texte-agent">${h(a.rapport)}</pre>` : `<div class="bulle">${h(long ? a.rapport.slice(0, 600) + "…" : a.rapport)}</div>`}
+      ${long ? `<span class="rapport-tete petit">${rapportOuvert ? t("Show less") : t("Read it all")}</span>` : ""}</div>` : ""}
+    ${appels.length ? `<div class="appels"><div class="appels-titre">${t("Sub-agents called ({0})", [appels.length])}</div>${appels.map(rendreAppel).join("")}</div>` : ""}
+  </div>`;
+}
+
 pages.equipe = async () => {
-  const agents = await api("agents").catch(() => []);
+  const r = await api("agents").catch(() => ({}));
   const v = etat.vue || {};
-  if (!agents.length) return `<div class="vide">${t("The team appears here as soon as the pilot works: the project lead and the sub-agents it calls, with what each one does and says.")}</div>`;
-  if (!agents.some((a) => a.id === "chef")) agents.unshift({ id: "chef", nom: "", mission: "", statut: v.actif ? "travaille" : "disponible", tours: 0 });
-  const initiales = (n) => n.split(/\s+/).map((x) => x[0]).join("").slice(0, 2).toUpperCase();
-  const libelle = { travaille: t("working"), attend: t("waiting"), termine: t("finished"), disponible: t("available") };
-  const nomAgent = (a) => a.id === "chef" ? t("Project lead") : t(a.nom);
-  // Available agents: a short, translated role. Working ones: the task as Claude wrote it (already in the
-  // project's language), never half-translated by the prefix rules; workers keep their translated label.
-  const ROLES = {
-    architect: "Requirements, architecture and the milestone plan",
-    creator: "Content: story, world, dialogue, texts, generated assets",
-    developer: "One precise development task, with its tests",
-    tester: "Automated tests, screenshots, bug reports",
-    critic: "Uses the result like a demanding end user",
-    executor: "Mechanical work, on the cheap model",
-  };
-  const mission = (a) => {
-    if (a.id === "chef") return t("Leads the current milestone: reads the plan, codes, checks, commits.");
-    const role = ROLES[String(nomAgent(a) || "").toLowerCase()];
-    if (a.statut === "disponible" && role) return t(role);
-    if (/^Builds milestone /.test(a.mission || "")) return t(a.mission);
-    return a.mission || "";
-  };
-  return `<p class="intro">${t("Each card is a Claude session: what it does, its last words, and its report when done. The project lead reviews the sub-agents' work before going on.")} ${t("The lead works alone by default and calls a sub-agent for framing, big independent chunks, testing and the final critic.")}</p>
-  <div class="equipe">${agents.map((a) => `
-    <div class="agent ${a.id === "chef" ? "chef" : ""} ${h(a.statut)}">
-      <div class="agent-tete"><div class="avatar">${h(initiales(nomAgent(a)))}</div>
-        <div class="agent-identite"><div class="agent-nom">${h(nomAgent(a))}</div><div class="agent-mission" title="${h(mission(a) || "")}">${h(mission(a) || "")}</div></div>
-        <div class="agent-statut ${h(a.statut)}">${libelle[a.statut] || h(a.statut)}${a.statut !== "disponible" ? " · " + (a.tours === 1 ? t("1 turn") : t("{0} turns", [a.tours])) : ""}${a.contexte ? " · " + fmtTokens(a.contexte) + " tokens" : ""}</div></div>
-      ${a.bulle ? `<div class="bulle">${h(a.bulle.length > 700 ? a.bulle.slice(0, 700) + "…" : a.bulle)}</div>` : ""}
-      ${a.statut === "disponible" ? "" : `<div class="activite">${h(t(a.activite || "—"))}</div>`}
-    </div>`).join("")}</div>`;
+  const agents = r.agents || [], equipe = r.equipe || [];
+  const appelsDe = (id) => agents.filter((a) => a.genre === "sous_agent" && a.parent === id);
+  const ouvriers = agents.filter((a) => a.genre === "ouvrier");
+  const chef = Object.assign({ id: "chef", genre: "chef", statut: v.actif ? "travaille" : "disponible", tours: 0 }, agents.find((a) => a.id === "chef") || {});
+  if (!v.actif && chef.statut === "attend" && !chef.tours && !ouvriers.length) chef.statut = "disponible";
+  if (ouvriers.length && !chef.tours && chef.statut !== "termine") { chef.statut = "attend"; chef.activite = "Waits for the workers, then verifies and merges their work."; }
+  if (!chef.modele) chef.modele = r.modele_chef || "";
+  // pilot stopped in the middle of a cycle: nobody is still working
+  if (!v.actif) for (const a of [chef, ...agents]) if (a.statut === "travaille" || a.statut === "attend") { a.statut = "arrete"; a.activite = ""; }
+  const appelsCycle = {};
+  for (const a of agents) if (a.genre === "sous_agent") appelsCycle[a.nom] = (appelsCycle[a.nom] || 0) + 1;
+  const membres = equipe.map((m) => `<div class="membre ${appelsCycle[m.nom] ? "utilise" : ""}">
+      <div class="membre-nom">${h(m.nom)} <span class="muet">· ${m.modele ? h(modeleLisible(m.modele)) : t("lead's model")}</span></div>
+      <div class="membre-role">${h(ROLES[m.nom] ? t(ROLES[m.nom]) : m.mission)}</div>
+      <div class="muet petit">${m.appele_par === "chef_ouvriers" ? t("called by the lead and the workers") : t("called by the lead")}${appelsCycle[m.nom] ? " · " + t("called {0}× this cycle", [appelsCycle[m.nom]]) : ""}</div></div>`).join("");
+  return `<p class="intro">${t("Who works on this cycle and who called whom. Click a sub-agent to read the brief it was given and the report it handed back.")}</p>
+  ${rendreSession(chef, appelsDe("chef"), t("Project lead"), t("Leads the current milestone: reads the plan, codes, checks, commits."), ((w) => (w[0][0] + (w.length > 1 ? w[w.length - 1][0] : w[0][1] || "")).toUpperCase())(t("Project lead").split(/\s+/)))}
+  ${ouvriers.length ? `<h3 class="equipe-section">${t("Workers in parallel ({0})", [ouvriers.length])}</h3>
+    <div class="equipe">${ouvriers.map((o) => rendreSession(o, appelsDe(o.id), t("Worker " + o.jalon), o.mission || t("Builds milestone " + o.jalon), o.jalon.replace(/_/g, "."))).join("")}</div>` : ""}
+  ${membres ? `<h3 class="equipe-section">${t("Who can be called")}</h3><div class="roster">${membres}</div>` : ""}`;
 };
 
 // --- requests
@@ -729,7 +775,10 @@ $("#page").addEventListener("click", async (ev) => {
     if (r) { await rafraichir(); rendrePage(); }
     return;
   }
-  if (li && !ev.target.closest("a, button, code")) { const c = li.dataset.jalonCle; etat.ouverts.has(c) ? etat.ouverts.delete(c) : etat.ouverts.add(c); rendrePage(); }
+  if (li && !ev.target.closest("a, button, code")) { const c = li.dataset.jalonCle; etat.ouverts.has(c) ? etat.ouverts.delete(c) : etat.ouverts.add(c); rendrePage(); return; }
+  // Team: a sub-agent or a session report opens or closes (text inside stays selectable)
+  const ag = ev.target.closest(".appel-ligne, .rapport-tete");
+  if (ag && !String(window.getSelection() || "")) { const c = ag.closest("[data-agent-cle]").dataset.agentCle; etat.ouverts.has(c) ? etat.ouverts.delete(c) : etat.ouverts.add(c); rendrePage(); }
 });
 
 $("#page").addEventListener("click", async (ev) => {
@@ -824,7 +873,8 @@ async function rafraichir() {
     rendreBandeau(v);
     if (!v.verrouille) {
       await lireJournal();
-      if (etat.page === "equipe" || (etat.page === "suivi" && !document.activeElement.matches("input, textarea"))) rendrePage();
+      // the Team page follows live, except while text is selected in it (a brief, a report)
+      if ((etat.page === "equipe" && !String(window.getSelection() || "")) || (etat.page === "suivi" && !document.activeElement.matches("input, textarea"))) rendrePage();
       if (etat.page === "sante" && (document.querySelector(".verif.v-en_cours") || etat.tacheChoisie)) { const tk = etat.tacheChoisie; await rendrePage(); etat.tacheChoisie = tk; }
     }
   } catch (e) { /* server briefly unreachable */ }

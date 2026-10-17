@@ -179,7 +179,7 @@ L'application n'utilise que la bibliothèque standard de Go et trois paquets emb
 4. En fin de cycle, **une seule** session du chef vérifie tout : elle fusionne les branches en conflit, lance la vérification complète, corrige ce que les fusions ont cassé et note le reste dans `BUGS.md`.
 5. **Les demandes en attente n'attendent pas.** Au début de chaque cycle, elles rejoignent la demande en cours : le chef ajoute leurs jalons au plan, avec leurs dépendances.
 
-Chaque ouvrier ne porte que son jalon en contexte : le travail est découpé en petites sessions économes au lieu d'une seule énorme. La page *Équipe* montre une carte par ouvrier et le *Journal* étiquette leurs lignes `[M5]`. Le mode parallèle consomme plus de quota par heure (une session par ouvrier) mais beaucoup moins de temps.
+Chaque ouvrier ne porte que son jalon en contexte : le travail est découpé en petites sessions économes au lieu d'une seule énorme. Un ouvrier peut confier ses longues séries de tests et ses recherches à `executor` (modèle bon marché) et ne lire que les échecs ; il n'appelle aucun autre sous-agent. La page *Équipe* montre une carte par ouvrier avec les sous-agents qu'il a appelés, et le *Journal* étiquette leurs lignes `[M5]`. Le mode parallèle consomme plus de quota par heure (une session par ouvrier) mais beaucoup moins de temps.
 
 ---
 
@@ -195,7 +195,7 @@ Chaque ouvrier ne porte que son jalon en contexte : le travail est découpé en 
 | `developer` | une tâche de développement précise, avec ses tests | `SUBAGENT_MODEL` |
 | `tester` | tests automatiques, captures, rapports de bugs (ne corrige jamais le code lui-même) | `SUBAGENT_MODEL` |
 | `critic` | utilise le résultat comme un utilisateur final exigeant, sans complaisance (lecture seule) | `SUBAGENT_MODEL` |
-| `executor` | travail mécanique sans décision de conception : sorties de commandes longues, recherches, modifications en série, copies de fichiers | `CHEAP_MODEL` (Haiku) |
+| `executor` | travail mécanique sans décision de conception : sorties de commandes longues, recherches, modifications en série, copies de fichiers ; le seul sous-agent que les ouvriers en parallèle peuvent appeler | `CHEAP_MODEL` (Haiku) |
 
 Les agents sont dans [`template/.claude/agents/`](template/.claude/agents) : modifiez-les pour changer la façon de travailler de votre équipe.
 
@@ -205,7 +205,7 @@ Les agents sont dans [`template/.claude/agents/`](template/.claude/agents) : mod
 
 | | |
 |:---:|:---:|
-| <img src="docs/images/team.png" alt="Page Équipe : le chef de projet, des sous-agents terminés et trois ouvriers avec leurs dernières paroles"><br>**Équipe** : ce que chaque agent fait et dit, en direct | <img src="docs/images/log.png" alt="Page Journal en thème clair : événements du pilote, paroles de Claude, outils et sous-agents, lignes des ouvriers étiquetées [M5]"><br>**Journal** : lisible ou brut, filtrable, ouvriers étiquetés |
+| <img src="docs/images/team.png" alt="Page Équipe : le chef de projet avec les sous-agents qu'il a appelés, et trois ouvriers, chacun avec son executor"><br>**Équipe** : qui a appelé qui, ce que fait chacun, en direct | <img src="docs/images/log.png" alt="Page Journal en thème clair : événements du pilote, paroles de Claude, outils et sous-agents, lignes des ouvriers étiquetées [M5]"><br>**Journal** : lisible ou brut, filtrable, ouvriers étiquetés |
 | <img src="docs/images/requests.png" alt="Page Demandes : la demande en cours avec son plan en vagues, et deux demandes en attente réordonnables"><br>**Demandes** : une file réordonnable, des remarques en cours de route | <img src="docs/images/options.png" alt="Page Options : langue, cinq palettes et cinq accents, démarrage, dossier de l'outil"><br>**Options** : 6 langues, 5 palettes × 5 accents |
 
 Les captures sont en anglais ; l'interface s'affiche dans la langue choisie.
@@ -213,7 +213,7 @@ Les captures sont en anglais ; l'interface s'affiche dans la langue choisie.
 | Page | Ce qu'on y fait |
 |---|---|
 | **Suivi** | état en une phrase, jalon en cours, dernier commit, plan coché, consommation (cycles, durée, coût catalogue, cache) ; *Démarrer*, *Arrêter après le cycle*, *Arrêter maintenant*, *Mode de travail* |
-| **Équipe** | une carte par session Claude (chef de projet, sous-agents, ouvriers) : ce qu'elle fait, sa dernière parole, son rapport |
+| **Équipe** | un arbre : le chef et chaque ouvrier avec les sous-agents qu'il a appelés ; un clic sur un sous-agent montre la consigne reçue et le rapport rendu ; le modèle de chacun ; qui peut être appelé |
 | **Demandes** | la demande en cours et son plan, les demandes à la suite (horodatées, réordonnables), les remarques en cours de route ; ✨ *Améliorer avec Claude* reformule une demande plus claire et plus complète, et vous pouvez revenir à la vôtre |
 | **Journal** | le journal lisible (Claude parle, outils, résultats, sous-agents, pilote) ou brut (JSON), filtrable |
 | **Installation & santé** | *Tout vérifier*, *Tout installer*, *Tester la barrière* pour de vrai, *Réparer* ligne par ligne, *Demander à Claude* de réparer ou d'installer quelque chose |

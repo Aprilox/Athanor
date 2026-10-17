@@ -95,3 +95,59 @@ func TestDemandesFaites(t *testing.T) {
 		t.Fatalf("free name: got %q %q", date, titre)
 	}
 }
+
+func TestEquipeArbre(t *testing.T) {
+	j := &Journal{max: 1000}
+	j.nouveauCycle()
+	chef := []string{
+		`{"type":"system","subtype":"init","model":"claude-fable-5-1"}`,
+		`{"type":"assistant","parent_tool_use_id":null,"message":{"model":"claude-fable-5-1","usage":{"input_tokens":10,"cache_read_input_tokens":50000},"content":[{"type":"tool_use","id":"t1","name":"Agent","input":{"subagent_type":"architect","description":"Requirements and plan","prompt":"Write the plan."}}]}}`,
+		`{"type":"assistant","parent_tool_use_id":"t1","message":{"model":"claude-sonnet-5-5","usage":{},"content":[{"type":"tool_use","id":"t2","name":"Write","input":{"file_path":"/p/.athanor/PLAN.md"}}]}}`,
+		`{"type":"user","parent_tool_use_id":null,"message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":[{"type":"text","text":"Plan written: 5 milestones."}]}]},"tool_use_result":{"totalDurationMs":61000,"totalTokens":9000,"totalToolUseCount":4}}`,
+	}
+	for _, l := range chef {
+		j.pousserCycle(l, "")
+	}
+	ouvrier := []string{
+		`{"type":"system","subtype":"init","model":"claude-fable-5-1"}`,
+		`{"type":"assistant","parent_tool_use_id":null,"message":{"usage":{"input_tokens":10,"cache_read_input_tokens":30000},"content":[{"type":"tool_use","id":"x1","name":"Agent","input":{"subagent_type":"executor","description":"Run the tests","prompt":"Run them, failures only."}}]}}`,
+		`{"type":"assistant","parent_tool_use_id":"x1","message":{"model":"claude-haiku-5-5","usage":{},"content":[{"type":"text","text":"0 failure."}]}}`,
+	}
+	for _, l := range ouvrier {
+		j.pousserCycle(l, "M2")
+	}
+	par := map[string]Agent{}
+	for _, a := range j.Agents() {
+		par[a.ID] = a
+	}
+	if a := par["t1"]; a.Parent != "chef" || a.Nom != "architect" || a.Consigne != "Write the plan." || a.Rapport != "Plan written: 5 milestones." || a.Statut != "termine" || a.DureeMs != 61000 || a.Modele != "claude-sonnet-5-5" || a.Outils != 4 {
+		t.Fatalf("architect: %+v", a)
+	}
+	if c := par["chef"]; c.Statut != "travaille" || c.Modele != "claude-fable-5-1" || c.Contexte != 50010 {
+		t.Fatalf("lead: %+v", c)
+	}
+	if o := par["ouvrier-M2"]; o.Genre != "ouvrier" || o.Jalon != "M2" || o.Statut != "attend" {
+		t.Fatalf("worker: %+v", o)
+	}
+	if x := par["x1"]; x.Parent != "ouvrier-M2" || x.Nom != "executor" || x.Mission != "Run the tests" || x.Statut != "travaille" || x.Bulle != "0 failure." || x.Modele != "claude-haiku-5-5" {
+		t.Fatalf("executor of the worker: %+v", x)
+	}
+}
+
+func TestEquipeAttenteParallele(t *testing.T) {
+	j := &Journal{max: 1000}
+	j.nouveauCycle()
+	for _, l := range []string{
+		`{"type":"assistant","parent_tool_use_id":null,"message":{"content":[{"type":"tool_use","id":"a","name":"Agent","input":{"subagent_type":"executor","description":"x","prompt":"x"}},{"type":"tool_use","id":"b","name":"Agent","input":{"subagent_type":"tester","description":"y","prompt":"y"}}]}}`,
+		`{"type":"user","parent_tool_use_id":null,"message":{"content":[{"type":"tool_result","tool_use_id":"a","content":"done"}]}}`,
+	} {
+		j.pousserCycle(l, "")
+	}
+	if c := j.agents["chef"]; c.Statut != "attend" || c.Activite != "Waits for sub-agent tester" {
+		t.Fatalf("lead should still wait for tester: %+v", c)
+	}
+	j.pousserCycle(`{"type":"user","parent_tool_use_id":null,"message":{"content":[{"type":"tool_result","tool_use_id":"b","content":"ok"}]}}`, "")
+	if c := j.agents["chef"]; c.Statut != "travaille" || c.Activite != "Reviews the report of tester" {
+		t.Fatalf("lead back to work: %+v", c)
+	}
+}

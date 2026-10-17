@@ -23,6 +23,14 @@ type Evenement struct {
 	OutilID   string `json:"-"`     // id of the tool_use (sub-agents) or of the tool_result
 	ParentID  string `json:"-"`     // parent_tool_use_id
 	Agent     string `json:"agent"` // name of the agent speaking (lead or sub-agent)
+	// for the team: model of the session or sub-agent, type and task of a sub-agent call,
+	// figures of a finished sub-agent (when Claude Code gives them)
+	Modele    string `json:"-"`
+	SousType  string `json:"-"`
+	SousTache string `json:"-"`
+	DureeMs   int64  `json:"-"`
+	Jetons    int64  `json:"-"`
+	NbOutils  int64  `json:"-"`
 }
 
 // Suiveur reads a file as it grows (only what was appended).
@@ -126,14 +134,17 @@ func Traduire(ligne string) []Evenement {
 	parent := str(v["parent_tool_use_id"])
 	var out []Evenement
 	outilID := ""
+	modele := ""
 	ev := func(genre, titre, detail string, contexte int64) {
-		out = append(out, Evenement{Genre: genre, Titre: titre, Detail: detail, SousAgent: sousAgent, Brut: ligne, Contexte: contexte, OutilID: outilID, ParentID: parent})
+		out = append(out, Evenement{Genre: genre, Titre: titre, Detail: detail, SousAgent: sousAgent, Brut: ligne, Contexte: contexte, OutilID: outilID, ParentID: parent, Modele: modele})
 	}
 	msg, _ := v["message"].(map[string]any)
+	modele = str(msg["model"])
 	switch str(v["type"]) {
 	case "system":
 		if str(v["subtype"]) == "init" {
-			ev("system", "Session opened, model "+str(v["model"]), "", 0)
+			modele = str(v["model"])
+			ev("system", "Session opened, model "+modele, "", 0)
 		}
 	case "assistant":
 		var contexte int64
@@ -175,6 +186,7 @@ func Traduire(ligne string) []Evenement {
 					ev("outil", "Searches "+court(str(input["pattern"]), 100), joli(input), contexte)
 				case "Agent", "Task":
 					ev("sous_agent", "Sub-agent "+str(input["subagent_type"])+": "+court(str(input["description"]), 120), str(input["prompt"]), contexte)
+					out[len(out)-1].SousType, out[len(out)-1].SousTache = str(input["subagent_type"]), str(input["description"])
 				default:
 					ev("outil", nom+" "+court(joli(input), 110), joli(input), contexte)
 				}
@@ -210,6 +222,19 @@ func Traduire(ligne string) []Evenement {
 				genre = "erreur"
 			}
 			ev(genre, court(texte, 150), texte, 0)
+			// end of a sub-agent: Claude Code adds its figures next to the message
+			if r, ok := v["tool_use_result"].(map[string]any); ok {
+				e := &out[len(out)-1]
+				if f, ok := r["totalDurationMs"].(float64); ok {
+					e.DureeMs = int64(f)
+				}
+				if f, ok := r["totalTokens"].(float64); ok {
+					e.Jetons = int64(f)
+				}
+				if f, ok := r["totalToolUseCount"].(float64); ok {
+					e.NbOutils = int64(f)
+				}
+			}
 		}
 	case "result":
 		r := str(v["result"])
@@ -238,15 +263,25 @@ func LignePilote(l string) Evenement {
 	return Evenement{Genre: genre, Titre: l, Brut: l}
 }
 
-// Agent: the project lead or a sub-agent, with what it is doing right now.
+// Agent: a Claude session (the project lead, a parallel worker) or a sub-agent called by one of them,
+// with who called it, what it was asked, what it is doing and what it handed back.
 type Agent struct {
 	ID       string `json:"id"`
 	Nom      string `json:"nom"`
+	Genre    string `json:"genre"`  // chef, ouvrier, sous_agent
+	Parent   string `json:"parent"` // sub-agent: id of the agent that called it
+	Jalon    string `json:"jalon"`  // worker: its milestone
 	Mission  string `json:"mission"`
+	Consigne string `json:"consigne"` // sub-agent: the brief it was given
+	Rapport  string `json:"rapport"`  // what it handed back (report, end of cycle)
+	Modele   string `json:"modele"`
 	Statut   string `json:"statut"` // travaille, termine, attend
 	Activite string `json:"activite"`
 	Bulle    string `json:"bulle"`
 	Tours    int    `json:"tours"`
+	Outils   int64  `json:"outils"`
+	DureeMs  int64  `json:"duree_ms"`
+	Jetons   int64  `json:"jetons"`
 	Depuis   string `json:"depuis"`
 	Fin      string `json:"fin"`
 	Contexte int64  `json:"contexte"`
@@ -333,8 +368,17 @@ func (j *Journal) pousser(e Evenement) {
 }
 
 func (j *Journal) nouveauCycle() {
-	j.agents = map[string]*Agent{"chef": {ID: "chef", Nom: "Project lead", Mission: "Leads the current milestone: reads the plan, codes, checks, commits.", Statut: "attend", Depuis: heureCourte()}}
+	j.agents = map[string]*Agent{"chef": {ID: "chef", Nom: "Project lead", Genre: "chef", Mission: "Leads the current milestone: reads the plan, codes, checks, commits.", Statut: "attend", Depuis: heureCourte()}}
 	j.ordreAgents = []string{"chef"}
+}
+
+// limiter keeps a long text readable in the interface (the full text stays in the log).
+func limiter(s string, n int) string {
+	r := []rune(strings.TrimSpace(s))
+	if len(r) > n {
+		return string(r[:n]) + "…"
+	}
+	return string(r)
 }
 
 // pousserCycle translates a line of a cycle log; ouvrier = "" for the lead, otherwise the worker's
@@ -344,7 +388,7 @@ func (j *Journal) pousserCycle(l string, ouvrier string) {
 		if e.Contexte > 0 && ouvrier == "" {
 			j.Contexte = e.Contexte
 		}
-		// who is speaking?
+		// who is speaking: the session (lead or worker), or one of its sub-agents
 		id := "chef"
 		if ouvrier != "" {
 			id = "ouvrier-" + ouvrier
@@ -354,12 +398,19 @@ func (j *Journal) pousserCycle(l string, ouvrier string) {
 		}
 		a := j.agents[id]
 		if a == nil {
-			a = &Agent{ID: id, Nom: "Sub-agent", Statut: "travaille", Depuis: heureCourte()}
+			a = &Agent{ID: id, Nom: "Sub-agent", Genre: "sous_agent", Statut: "travaille", Depuis: heureCourte()}
 			if ouvrier != "" && !e.SousAgent {
-				a.Nom, a.Mission = "Worker "+ouvrier, "Builds milestone "+ouvrier
+				a.Nom, a.Genre, a.Jalon, a.Mission = "Worker "+ouvrier, "ouvrier", ouvrier, "Builds milestone "+ouvrier
+			} else if ouvrier != "" {
+				a.Parent = "ouvrier-" + ouvrier
+			} else {
+				a.Parent = "chef"
 			}
 			j.agents[id] = a
 			j.ordreAgents = append(j.ordreAgents, id)
+		}
+		if e.Modele != "" {
+			a.Modele = e.Modele
 		}
 		e.Agent = a.Nom
 		if ouvrier != "" {
@@ -367,47 +418,68 @@ func (j *Journal) pousserCycle(l string, ouvrier string) {
 		}
 		switch e.Genre {
 		case "sous_agent":
-			nom := strings.TrimPrefix(e.Titre, "Sub-agent ")
-			mission := ""
-			if i := strings.Index(nom, ": "); i > 0 {
-				mission = nom[i+2:]
-				nom = nom[:i]
+			nom := e.SousType
+			if nom == "" {
+				nom = "general-purpose"
 			}
-			j.agents[e.OutilID] = &Agent{ID: e.OutilID, Nom: strings.Title(nom), Mission: mission, Statut: "travaille", Depuis: heureCourte()}
+			j.agents[e.OutilID] = &Agent{ID: e.OutilID, Nom: nom, Genre: "sous_agent", Parent: a.ID, Mission: e.SousTache,
+				Consigne: limiter(e.Detail, 6000), Statut: "travaille", Activite: "Reads its brief", Depuis: heureCourte()}
 			j.ordreAgents = append(j.ordreAgents, e.OutilID)
 			a.Activite = "Waits for sub-agent " + nom
 			a.Statut = "attend"
+			a.Outils++
 		case "texte":
 			a.Bulle = e.Detail
 			a.Statut = "travaille"
 			a.Tours++
 		case "outil":
 			a.Activite = e.Titre
+			if ouvrier != "" {
+				a.Activite = strings.TrimPrefix(e.Titre, "["+ouvrier+"] ")
+			}
 			a.Statut = "travaille"
 			a.Tours++
+			a.Outils++
 		case "resultat", "erreur":
-			if sa, ok := j.agents[e.OutilID]; ok && sa.ID != "chef" {
+			if sa, ok := j.agents[e.OutilID]; ok && sa.Genre == "sous_agent" {
 				sa.Statut, sa.Fin = "termine", heureCourte()
+				sa.Rapport = limiter(e.Detail, 8000)
+				sa.DureeMs, sa.Jetons = e.DureeMs, e.Jetons
+				if e.NbOutils > sa.Outils {
+					sa.Outils = e.NbOutils
+				}
 				if e.Genre == "erreur" {
 					sa.Activite = "Finished with an error"
 				} else {
-					sa.Activite = "Report handed to the project lead"
+					sa.Activite = "Report handed over"
 				}
-				if chef := j.agents["chef"]; chef != nil {
-					chef.Statut = "travaille"
-					if strings.HasPrefix(chef.Activite, "Waits for sub-agent ") {
-						chef.Activite = "Reviews the report of " + strings.ToLower(sa.Nom)
+				// the agent that called it gets back to work once none of its sub-agents is still running
+				if p := j.agents[sa.Parent]; p != nil {
+					var encore []string
+					for _, id := range j.ordreAgents {
+						if x := j.agents[id]; x != nil && x.Parent == p.ID && x.Genre == "sous_agent" && x.Statut == "travaille" {
+							encore = append(encore, x.Nom)
+						}
+					}
+					if len(encore) > 0 {
+						p.Statut, p.Activite = "attend", "Waits for sub-agent "+strings.Join(encore, ", ")
+					} else {
+						p.Statut = "travaille"
+						if strings.HasPrefix(p.Activite, "Waits for sub-agent ") {
+							p.Activite = "Reviews the report of " + sa.Nom
+						}
 					}
 				}
 			}
 		case "fin":
+			a.Rapport = limiter(e.Detail, 8000)
 			if ouvrier != "" {
 				a.Statut, a.Fin, a.Activite = "termine", heureCourte(), "Report handed to the project lead"
 			} else {
 				a.Statut, a.Fin, a.Activite = "termine", heureCourte(), "Cycle finished"
 			}
 		}
-		if !e.SousAgent {
+		if !e.SousAgent && e.Contexte > 0 {
 			a.Contexte = e.Contexte
 		}
 		j.pousser(e)

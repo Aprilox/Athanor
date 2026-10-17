@@ -8,10 +8,13 @@ One executable, standard library only (plus three vendored packages for the WebV
 | `config.go` | `athanor-config.json` next to the exe: tool folder, projects, language, theme, options, password hash |
 | `serveur.go` | routes, session lock, CSRF, JSON helpers, per-project state, auto-restart of pilots |
 | `api_projets.go` | state, log, team, pilot start/stop, add/choose/remove project, folder browser, preferences (language, theme, accent, first-launch guide) |
-| `api_demandes.go` | current request, queue (reorder, remove), notes along the way |
+| `api_demandes.go` | current request, queue (reorder, remove), notes along the way, requests taken into the plan or delivered |
+| `api_plan.go` | plan editing: move a milestone up or down, remove it (its dependents are updated), edit `PLAN.md` as a whole |
+| `api_ameliorer.go` | "Improve with Claude": one Claude turn rewrites a request clearer and more complete |
+| `migration.go` | moves the files of the previous name (Claude Autopilote) to Athanor's |
 | `api_outillage.go` | `.env` (secrets masked), health checks, repairs, "Ask Claude", options, virtual desktop, open files |
 | `kit.go` | tool folder and project workshop (`.athanor/`): `.env`, requests, `STATE.json`, `stats.tsv`, plan |
-| `journal.go` | incremental reading of Claude Code `stream-json`, readable translation, team tracking (lead + sub-agents) |
+| `journal.go` | incremental reading of Claude Code `stream-json`, readable translation, team tracking (lead and workers, the sub-agents each one called, their brief, report and model) |
 | `taches.go` | background tasks with live output |
 | `sante.go` | checks, repairs, Claude repair sessions (`commands/repair.sh`), real sandbox test |
 | `textes.go` | known languages, themes and accents; per-language labels written into project files |
