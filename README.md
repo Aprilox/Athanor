@@ -179,7 +179,7 @@ The app only uses Go's standard library plus three vendored packages for the Web
 4. At the end of the cycle, **one** session of the lead verifies everything: it merges the branches that conflicted, runs the full check, fixes what the merges broke, and files the rest in `BUGS.md`.
 5. **Queued requests don't wait.** At the start of each cycle they join the current request: the lead adds their milestones to the plan, with their dependencies.
 
-Each worker only carries its own milestone in context, so the work is split into small, cheap sessions instead of one huge one. The Team page shows one card per worker, and the Log tags their lines `[M5]`. Parallel mode uses more quota per hour (one session per worker) but far less wall-clock time.
+Each worker only carries its own milestone in context, so the work is split into small, cheap sessions instead of one huge one. A worker may hand its long test runs and searches to `executor` (cheap model) and read only the failures; it calls no other sub-agent. The Team page shows one card per worker with the sub-agents it called, and the Log tags their lines `[M5]`. Parallel mode uses more quota per hour (one session per worker) but far less wall-clock time.
 
 ---
 
@@ -195,7 +195,7 @@ Each worker only carries its own milestone in context, so the work is split into
 | `developer` | one precise development task with its tests | `SUBAGENT_MODEL` |
 | `tester` | automated tests, screenshots, bug reports (never fixes the code itself) | `SUBAGENT_MODEL` |
 | `critic` | uses the result like a demanding end user, without complacency (read only) | `SUBAGENT_MODEL` |
-| `executor` | mechanical work with no design decision: long command outputs, searches, bulk edits, file copies | `CHEAP_MODEL` (Haiku) |
+| `executor` | mechanical work with no design decision: long command outputs, searches, bulk edits, file copies; the only sub-agent parallel workers may call | `CHEAP_MODEL` (Haiku) |
 
 The agents live in [`template/.claude/agents/`](template/.claude/agents): edit them to change how your team works.
 
@@ -205,7 +205,7 @@ The agents live in [`template/.claude/agents/`](template/.claude/agents): edit t
 
 | | |
 |:---:|:---:|
-| <img src="docs/images/team.png" alt="Team page: the project lead, finished sub-agents and three workers with their last words"><br>**Team**: what every agent does and says, live | <img src="docs/images/log.png" alt="Log page in the light theme: pilot events, Claude's words, tools and sub-agents, worker lines tagged [M5]"><br>**Log**: readable or raw, filtered, workers tagged |
+| <img src="docs/images/team.png" alt="Team page: the project lead with the sub-agents it called, and three workers, each with its own executor"><br>**Team**: who called whom, what each one does, live | <img src="docs/images/log.png" alt="Log page in the light theme: pilot events, Claude's words, tools and sub-agents, worker lines tagged [M5]"><br>**Log**: readable or raw, filtered, workers tagged |
 | <img src="docs/images/requests.png" alt="Requests page: the current request with its plan in waves, and two queued requests that can be reordered"><br>**Requests**: a queue you can reorder, notes along the way | <img src="docs/images/options.png" alt="Options page: language, five palettes and five accents, startup options, tool folder"><br>**Options**: 6 languages, 5 palettes × 5 accents |
 
 The screenshots show the dark "Slate" and the "Light" palettes.
@@ -213,7 +213,7 @@ The screenshots show the dark "Slate" and the "Light" palettes.
 | Page | What you do there |
 |---|---|
 | **Overview** | the state in one sentence, current milestone, last commit, ticked plan, usage (cycles, time, list-price cost, cache); *Start*, *Stop after cycle*, *Stop now*, *Working mode* |
-| **Team** | one card per Claude session (lead, sub-agents, workers): what it does, its last words, its report |
+| **Team** | a tree: the lead and each worker with the sub-agents it called; click a sub-agent for the brief it was given and the report it handed back; the model each one runs on; who can be called |
 | **Requests** | the current request and its plan, the queued requests (time-stamped, reorderable), notes along the way; ✨ *Improve with Claude* rewrites a request clearer and more complete, and you can go back to yours |
 | **Log** | the readable log (Claude speaks, tools, results, sub-agents, pilot) or the raw JSON, filterable |
 | **Setup & health** | *Check everything*, *Install everything*, *Test the sandbox* for real, *Repair* line by line, *Ask Claude* to repair or install something |

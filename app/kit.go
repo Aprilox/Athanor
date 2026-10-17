@@ -531,6 +531,7 @@ func QueueFichier(chemin string, n int) []string {
 type MembreEquipe struct {
 	Nom     string
 	Mission string
+	Modele  string // "model:" set in the agent file, if any
 }
 
 func (k Kit) Equipe() []MembreEquipe {
@@ -553,6 +554,8 @@ func (k Kit) Equipe() []MembreEquipe {
 				m.Nom = strings.TrimSpace(l[5:])
 			} else if strings.HasPrefix(l, "description:") {
 				m.Mission = strings.TrimSpace(l[12:])
+			} else if strings.HasPrefix(l, "model:") {
+				m.Modele = strings.TrimSpace(l[6:])
 			}
 		}
 		v = append(v, m)

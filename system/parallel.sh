@@ -140,7 +140,9 @@ If the plan already exists without `Depends on:` nor waves, add the dependencies
 EOF
 }
 
-parallele_consignes_ouvrier() {  # $1 = identifier, $2 = milestone line
+parallele_consignes_ouvrier() {  # $1 = identifier, $2 = milestone line, $3 = 1 if the executor sub-agent is available
+  local aides="Do not launch any subagent."
+  [ "$3" = 1 ] && aides="The only sub-agent you may call is \`executor\` (cheap model), for mechanical work that would flood your context: running the test suite or a long build and returning only the failures, searching the code, the same small edit on many of your files. Give it a closed brief: what, where (only your milestone's files, in this folder), how to verify. A short command, run it yourself."
   cat <<EOF
 
 ## You are a parallel worker
@@ -150,7 +152,8 @@ You carry out **only** this milestone, in this folder (git worktree of the proje
 > $2
 
 - Other workers are doing other milestones at the same time, each in their own worktree; the pilot merges your branch as soon as you finish. Touch only the files of your milestone; if you must modify a shared file (common stylesheet, header...), make the minimal change and flag it in your report.
-- Do not modify \`.athanor/PLAN.md\` or \`.athanor/LOG.md\`: the project lead handles them after the merge. Do not launch any subagent.
+- Do not modify \`.athanor/PLAN.md\` or \`.athanor/LOG.md\`: the project lead handles them after the merge.
+- $aides
 - Check with \`bash .athanor/check.sh quick <pattern>\` (or your milestone's tests if there is no script), then \`git add -A && git commit -m "$1: ..."\` on your branch. Commit even partial work, and say so.
 - End with a report of at most 10 lines: done / not done / files touched / what the lead needs to know to merge.
 EOF
@@ -181,7 +184,12 @@ parallele_lancer_ouvrier() {
   for f in PLAN.md REQUEST.md check.sh PC_TOOLS.md PC_TOOLS_GUIDE.md MAP.md BUGS.md; do
     [ -f "$ETAT/$f" ] && [ ! -L "$ETAT/$f" ] && cp -f "$ETAT/$f" "$trav/.athanor/$f"
   done
-  { cat "$CONSIGNES"; parallele_consignes_ouvrier "$ident" "$ligne"; } > "$PRIVE/CLAUDE.ouvrier-$ident.md"
+  # The worker's team: only "executor" (cheap model), so that long outputs do not fill its context.
+  local agents_ouvrier=""
+  [ "$AGENTS_PAR_JSON" = 1 ] && agents_ouvrier=$(printf '%s' "$AGENTS_JSON" | python3 -c 'import json, sys
+d = {k: v for k, v in json.load(sys.stdin).items() if k == "executor"}
+print(json.dumps(d, ensure_ascii=False) if d else "")' 2>/dev/null)
+  { cat "$CONSIGNES"; parallele_consignes_ouvrier "$ident" "$ligne" "$([ -n "$agents_ouvrier" ] && echo 1)"; } > "$PRIVE/CLAUDE.ouvrier-$ident.md"
   # The worker's sandbox: its worktree (PROJECT = the worktree, for the guard and the tools),
   # plus write access to the project's .git, where git stores the worktree's objects and branch.
   local principal="$PROJECT"
@@ -198,6 +206,7 @@ PY
   local but="/goal The milestone $ident of .athanor/PLAN.md is carried out according to your worker instructions, checked, and committed on branch auto/$ident (git log shows it), with your report as the final answer. Or stop after ${MAX_TURNS_PER_CYCLE} turns."
   local a=(-p "$but" --permission-mode bypassPermissions --settings "$PRIVE/reglages-$ident.json" --permission-prompts none --output-format stream-json --verbose
            "${ARGS_SURS[@]}" --append-system-prompt "$(cat "$PRIVE/CLAUDE.ouvrier-$ident.md")")
+  [ -n "$agents_ouvrier" ] && a+=(--agents "$agents_ouvrier")
   [ -f "$PRIVE/mcp.json" ] && a+=(--mcp-config "$PRIVE/mcp.json")
   [ -n "$template" ] && a+=(--model "$template")
   [ -n "$FALLBACK_MODEL" ] && [ "$template" != "$FALLBACK_MODEL" ] && a+=(--fallback-model "$FALLBACK_MODEL")

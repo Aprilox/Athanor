@@ -129,27 +129,67 @@ func (s *Serveur) apiJournal(w http.ResponseWriter, r *http.Request) {
 	s.ecrireJSON(w, map[string]any{"evenements": ev, "contexte": contexte, "fichier": filepath.Base(fichier)})
 }
 
+// MembreVue: a member of the team that can be called, with its model and who may call it.
+type MembreVue struct {
+	Nom       string `json:"nom"`
+	Mission   string `json:"mission"`
+	Modele    string `json:"modele"`     // "" = the lead's model
+	AppelePar string `json:"appele_par"` // chef, chef_ouvriers
+}
+
+// apiAgents: the team of the current cycle (sessions and the sub-agents each one called) and the
+// members that can be called.
 func (s *Serveur) apiAgents(w http.ResponseWriter, r *http.Request) {
+	reponse := map[string]any{"agents": []Agent{}, "equipe": []MembreVue{}}
 	p, ok := s.projet(r)
 	if !ok {
-		s.ecrireJSON(w, []Agent{})
+		s.ecrireJSON(w, reponse)
 		return
 	}
-	a := s.journalDe(p).Agents()
-	if a == nil {
-		a = []Agent{}
+	agents := s.journalDe(p).Agents()
+	if agents == nil {
+		agents = []Agent{}
 	}
-	// the available team (template/.claude/agents/*.md) appears even before being called
-	vus := map[string]bool{}
-	for _, x := range a {
-		vus[strings.ToLower(x.Nom)] = true
+	titres := map[string]string{}
+	for _, jl := range p.LirePlan() {
+		titres[jl.ID] = jl.Titre
 	}
-	for _, x := range s.kitCourant().Equipe() {
-		if !vus[strings.ToLower(x.Nom)] {
-			a = append(a, Agent{ID: x.Nom, Nom: x.Nom, Mission: x.Mission, Statut: "disponible"})
+	for i := range agents {
+		if agents[i].Genre == "ouvrier" {
+			if t := titres[agents[i].Jalon]; t != "" {
+				agents[i].Mission = t
+			}
 		}
 	}
-	s.ecrireJSON(w, a)
+	// models as the pilot gives them (system/pilot.sh): CHEAP_MODEL for executor (absent = haiku,
+	// empty = like the others), SUBAGENT_MODEL for the others (empty = the lead's); never the token.
+	reglages := map[string]string{}
+	presents := map[string]bool{}
+	for _, l := range LireEnv(s.kitCourant().Env()) {
+		if l.Cle == "MODEL" || l.Cle == "SUBAGENT_MODEL" || l.Cle == "CHEAP_MODEL" {
+			reglages[l.Cle], presents[l.Cle] = strings.TrimSpace(l.Valeur), true
+		}
+	}
+	simple := "haiku"
+	if presents["CHEAP_MODEL"] {
+		simple = reglages["CHEAP_MODEL"]
+	}
+	equipe := []MembreVue{}
+	for _, x := range s.kitCourant().Equipe() {
+		m := MembreVue{Nom: x.Nom, Mission: x.Mission, Modele: x.Modele, AppelePar: "chef"}
+		if m.Modele == "" && x.Nom == "executor" {
+			m.Modele = simple
+		}
+		if m.Modele == "" {
+			m.Modele = reglages["SUBAGENT_MODEL"]
+		}
+		if x.Nom == "executor" {
+			m.AppelePar = "chef_ouvriers"
+		}
+		equipe = append(equipe, m)
+	}
+	reponse["agents"], reponse["equipe"], reponse["modele_chef"] = agents, equipe, reglages["MODEL"]
+	s.ecrireJSON(w, reponse)
 }
 
 func (s *Serveur) apiPilote(w http.ResponseWriter, r *http.Request) {
