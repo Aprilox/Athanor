@@ -41,6 +41,7 @@ func (k Kit) Distro() string {
 type Projet struct {
 	Nom     string `json:"nom"`
 	Dossier string `json:"dossier"`
+	Archive bool   `json:"archive,omitempty"` // archived: out of the selector and of the automatic restarts
 }
 
 func (p Projet) Atelier() string        { return filepath.Join(p.Dossier, ".athanor") }

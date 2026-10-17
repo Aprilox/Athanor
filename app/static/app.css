@@ -164,6 +164,7 @@ a[data-href] { cursor: pointer; }
 textarea { width: 100%; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; resize: vertical; min-height: 80px; }
 textarea.code, .code { font-family: var(--mono); font-size: 13px; }
 input[type=text], input[type=password] { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; width: 100%; }
+select { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
 input:focus, textarea:focus { border-color: var(--accent); outline: none; }
 label.champ { display: block; margin: 8px 0; }
 label.champ > span { display: block; color: var(--muted); font-size: 13px; margin-bottom: 4px; }
@@ -450,3 +451,10 @@ textarea.en-attente { opacity: .55; }
 input.large { flex: 1; min-width: 200px; width: auto; }
 .ext-resultats { margin-top: 10px; max-height: 640px; overflow: auto; border-top: 1px solid var(--line-2); }
 .ext-apercu { max-height: 360px; overflow: auto; }
+
+/* managing a project */
+.gestion .ligne input[type="text"] { flex: 1; min-width: 0; }
+.gestion label.radio { display: flex; align-items: center; gap: 8px; margin: 6px 0; font-size: 14px; }
+.gestion .ligne.fin { justify-content: flex-end; }
+.gestion code { overflow-wrap: anywhere; }
+.badge { font-size: 11.5px; padding: 1px 7px; border-radius: 10px; border: 1px solid var(--line); color: var(--muted); }

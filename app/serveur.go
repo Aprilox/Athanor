@@ -28,6 +28,10 @@ type Serveur struct {
 	csrf         string
 	relancer     map[string]bool // projects to restart as soon as their pilot has stopped (settings change)
 	dernierActif map[string]bool
+	// last quick check of the milestones of a project waiting for its files (folder → time)
+	derniereVerif map[string]time.Time
+	occupes       map[string]bool // projects with a management action under way (no pilot start meanwhile)
+	majProjets    sync.Mutex      // one update of the folder lists at a time
 }
 
 func nouveauServeur(config Config) *Serveur {
@@ -153,7 +157,9 @@ func lireCorps(r *http.Request, v any) error {
 func (s *Serveur) dossiersProjets() []string {
 	var d []string
 	for _, p := range s.config.Projets {
-		d = append(d, p.Dossier)
+		if !p.Archive {
+			d = append(d, p.Dossier)
+		}
 	}
 	return d
 }
@@ -173,13 +179,24 @@ func (s *Serveur) projet(r *http.Request) (Projet, bool) {
 	if nom == "" {
 		nom = s.config.ProjetActif
 	}
+	explicite := r.URL.Query().Get("p") != ""
 	for _, p := range s.config.Projets {
 		if p.Nom == nom {
+			if p.Archive {
+				if explicite { // never swapped for another project behind the user's back
+					return Projet{}, false
+				}
+				break
+			}
 			return p, true
 		}
 	}
-	if nom == "" && len(s.config.Projets) > 0 {
-		return s.config.Projets[0], true
+	if !explicite { // no active project (or an archived one): the first project in use
+		for _, p := range s.config.Projets {
+			if !p.Archive {
+				return p, true
+			}
+		}
 	}
 	return Projet{}, false
 }
@@ -243,6 +260,9 @@ func (s *Serveur) demarrerProjetsAuto() {
 	// alive. --attach never starts a pilot: a pilot stopped meanwhile stays stopped (only the
 	// "restart the pilots" option below starts anything).
 	for _, p := range projets {
+		if p.Archive {
+			continue
+		}
 		if p.Existe() && p.PiloteActif() {
 			pp := p
 			go func() { _ = DemarrerDetache(s.kitCourant(), ligneProjet(pp, "start.sh", "--attach")) }()
@@ -252,7 +272,7 @@ func (s *Serveur) demarrerProjetsAuto() {
 		return
 	}
 	for _, p := range projets {
-		if p.Existe() && !p.PiloteActif() && lancerAuDemarrage(p) {
+		if !p.Archive && p.Existe() && !p.PiloteActif() && lancerAuDemarrage(p) {
 			pp := p
 			go func() { _, _ = s.demarrerPilote(pp) }()
 		}
@@ -277,6 +297,8 @@ func (s *Serveur) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/projets", s.garde(false, s.apiAjouterProjet))
 	mux.HandleFunc("POST /api/projets/choisir", s.garde(false, s.apiChoisirProjet))
 	mux.HandleFunc("DELETE /api/projets/{nom}", s.garde(false, s.apiRetirerProjet))
+	mux.HandleFunc("GET /api/projets/gestion", s.garde(false, s.apiGestionVoir))
+	mux.HandleFunc("POST /api/projets/gestion", s.garde(false, s.apiGestion))
 	mux.HandleFunc("GET /api/dossiers", s.garde(false, s.apiDossiers))
 
 	mux.HandleFunc("GET /api/demandes", s.garde(false, s.apiDemandes))

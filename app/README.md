@@ -9,6 +9,7 @@ One executable, standard library only (plus three vendored packages for the WebV
 | `serveur.go` | routes, session lock, CSRF, JSON helpers, per-project state, auto-restart of pilots |
 | `api_projets.go` | state, log, team, pilot start/stop, add/choose/remove project, folder browser, preferences (language, theme, accent, first-launch guide) |
 | `api_demandes.go` | current request, queue (reorder, remove), notes along the way, requests taken into the plan or delivered |
+| `api_gestion.go`, `corbeille_windows.go`, `corbeille_autre.go` | managing a project: rename, move or rename its folder, point it to another folder (workshop copied, milestones checked against the folder, `.athanor/REVERIFY` for Claude), archive, delete (from the list, or the workshop or the whole folder to the recycle bin) |
 | `api_plan.go` | plan editing: move a milestone up or down, remove it (its dependents are updated), edit `PLAN.md` as a whole |
 | `api_extensions.go`, `api_recherche.go`, `catalogue.json` | Skills & MCP page: library in `extensions/` of the tool folder, verified catalog, install from a GitHub link (zip, no links, size limits), pasted MCP configurations (JSON or `claude mcp add`, keys stored apart), search in SkillsMP and the official MCP Registry (configuration built from the registry entry), per-project choice, test of a server in its cage |
 | `api_ameliorer.go` | "Improve with Claude": one Claude turn rewrites a request clearer and more complete |
@@ -22,7 +23,7 @@ One executable, standard library only (plus three vendored packages for the WebV
 | `systeme_windows.go` | WSL without a window, WebView2 window, start with Windows, window hook, "Claude" virtual desktop as a fallback ([VirtualDesktop](https://github.com/MScholtes/VirtualDesktop) by Markus Scholtes, MIT, compiled at first run with Windows' `csc.exe`) |
 | `isole_windows.go` | Claude's isolated desktop: `Athanor.exe --isole [--detache] -- PROGRAM` (used by the kit's gateways: the program and its children run on a Windows desktop of their own, in a kill-on-close job), and the switch to it with the bar that brings the user back (Ctrl + Alt + B) |
 | `instance.go` | one Athanor at a time: a second launch asks the running one to show its window (port and secret in `instance.json`, mode 0600) |
-| `notification_windows.go` | the notification area icon of the application started with Windows (`--reduit`): click to open, right click to quit |
+| `fenetre_windows.go` | brings the open window to the front when Athanor is launched again |
 | `systeme_autre.go` | Linux/macOS equivalents (native kit, tests) |
 | `static/` | interface: HTML, CSS, JavaScript without dependencies; `logo.svg` is the app logo (favicon and header) |
 | `winres/` | Windows icon (`athanor.ico`, rendered from `static/logo.svg`) and version info (`athanor.rc`), compiled into `rsrc_windows_amd64.syso` by `build.sh` and linked into the exe (`go build` picks up any `.syso`); the window uses it through `IconId: 1` |

@@ -106,6 +106,9 @@ func (s *Serveur) apiEcrirePlan(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	verrouPlan.Lock()
+	defer verrouPlan.Unlock()
+	p.oublierVerif() // edited by hand: the folder check no longer ticks anything back by itself
 	if err := ecrirePlan(p, c.Texte); err != nil {
 		s.erreur(w, http.StatusInternalServerError, err.Error())
 		return
@@ -128,6 +131,8 @@ func (s *Serveur) apiActionJalon(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	verrouPlan.Lock()
+	defer verrouPlan.Unlock()
 	b, err := os.ReadFile(p.Plan())
 	if err != nil {
 		s.erreur(w, http.StatusNotFound, "No plan yet")
@@ -200,6 +205,7 @@ func (s *Serveur) apiActionJalon(w http.ResponseWriter, r *http.Request) {
 		s.erreur(w, http.StatusBadRequest, "Unknown action")
 		return
 	}
+	p.oublierVerif()
 	if err := ecrirePlan(p, assemblerPlan(blocs)); err != nil {
 		s.erreur(w, http.StatusInternalServerError, err.Error())
 		return

@@ -62,7 +62,24 @@ func ecrireConfig(c Config) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(cheminConfig(), b, 0o600)
+	// written aside then renamed: a crash never leaves half a file (the project list would be lost)
+	f := cheminConfig()
+	t, err := os.CreateTemp(filepath.Dir(f), ".athanor-config-*.tmp")
+	if err != nil {
+		return err
+	}
+	_ = t.Chmod(0o600)
+	_, err = t.Write(b)
+	if e := t.Close(); err == nil {
+		err = e
+	}
+	if err == nil {
+		err = os.Rename(t.Name(), f)
+	}
+	if err != nil {
+		os.Remove(t.Name())
+	}
+	return err
 }
 
 // devinerKit looks for the tool folder: the executable's folder, its parents, or the current folder.
