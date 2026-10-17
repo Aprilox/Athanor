@@ -188,6 +188,14 @@ parallele_lancer_ouvrier() {
   for f in PLAN.md REQUEST.md check.sh PC_TOOLS.md PC_TOOLS_GUIDE.md MAP.md BUGS.md; do
     [ -f "$ETAT/$f" ] && [ ! -L "$ETAT/$f" ] && cp -f "$ETAT/$f" "$trav/.athanor/$f"
   done
+  # the working documents and the files attached to the requests: the worker's sandbox only sees its
+  # worktree (copied, never linked: a worker's edit stays its own; links Claude planted are not followed)
+  for f in docs attachments; do
+    if [ -d "$ETAT/$f" ] && [ ! -L "$ETAT/$f" ]; then
+      cp -R -P "$ETAT/$f" "$trav/.athanor/$f" 2>/dev/null
+      find "$trav/.athanor/$f" -type l -delete 2>/dev/null
+    fi
+  done
   # The worker's team: only "executor" (cheap model), so that long outputs do not fill its context.
   local agents_ouvrier=""
   [ "$AGENTS_PAR_JSON" = 1 ] && agents_ouvrier=$(printf '%s' "$AGENTS_JSON" | python3 -c 'import json, sys
