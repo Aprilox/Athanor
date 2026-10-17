@@ -137,7 +137,7 @@ func (s *Serveur) apiAjouterDemande(w http.ResponseWriter, r *http.Request) {
 		s.erreur(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	s.ecrireJSON(w, map[string]any{"message_key": "Queued: {0}", "args": []string{f}, "ou": "attente"})
+	s.ecrireJSON(w, map[string]any{"message_key": "Queued: {0}", "args": []string{f}, "ou": "attente", "fichier": filepath.Base(f)})
 }
 
 func (s *Serveur) apiOrdreDemandes(w http.ResponseWriter, r *http.Request) {

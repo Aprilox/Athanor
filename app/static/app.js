@@ -51,6 +51,7 @@ function rendreJalon(j, etatJalon, compact) {
 
 // ----------------------------------------------------------------------------- state
 const etat = {
+  pieces: {}, // files waiting to be attached, per form
   page: "suivi", projet: "", vue: null, verrouille: false, langue: "en", theme: "", accent: "", assistant: -1, demarrage: {},
   dernierJournal: 0, evenements: [], ouverts: new Set(),
   filtres: { pilote: true, texte: true, outil: true, resultat: false, sous_agent: true, brut: false }, recherche: "",
@@ -724,6 +725,7 @@ pages.nouveau = async () => `<div class="grille grille-2">
       <label class="champ"><span>${t("Development folder")}</span><input type="text" id="np-dossier" placeholder="${h(t("e.g. D:\\Dev\\watch-store"))}"></label>
       <label class="champ"><span>${t("What you want (you can complete it later)")}</span><textarea id="np-demande" rows="7" placeholder="${h(t("Describe the expected result, for whom, on which platform. Technologies are free unless you impose one."))}"></textarea></label>
       ${barreAmeliorer("np-demande")}
+      ${zonePieces("np")}
       <div class="champ gh-nouveau"><span>GitHub</span>${choixGitHub("np", nomDepot(""))}</div>
       <button class="btn btn-primaire" id="np-creer">${t("Create the project")}</button>
     </div>
@@ -1003,6 +1005,46 @@ $("#page").addEventListener("keydown", (ev) => {
 });
 
 // --- requests
+// --- attached files: kept in the browser until the request is saved, then sent to the workshop
+// (.athanor/attachments/), listed in the request for Claude
+const TAILLE_PIECE_MAX = 50 * 1024 * 1024;
+function tailleCourte(n) { return n >= 1048576 ? (n / 1048576).toFixed(1) + " MB" : n >= 1024 ? Math.ceil(n / 1024) + " KB" : n + " B"; }
+function zonePieces(id) {
+  return `<div class="pieces" data-pieces="${id}">
+    <input type="file" multiple hidden id="${id}-fichiers">
+    <div class="ligne"><button type="button" class="btn btn-petit" data-choisir-pieces="${id}">📎 ${t("Attach files")}</button>
+      <span class="muet petit">${t("or drop them here: images, PDF, text, documents, data (50 MB at most each)")}</span></div>
+    <ul class="pieces-liste" id="${id}-liste">${listePieces(id)}</ul></div>`;
+}
+function listePieces(id) {
+  return (etat.pieces[id] || []).map((f, i) => `<li><span>${h(f.name)}</span> <span class="muet petit">${h(tailleCourte(f.size))}</span> <button type="button" class="btn-lien" data-retirer-piece="${id}|${i}" title="${h(t("Remove"))}">✕</button></li>`).join("");
+}
+function ajouterPieces(id, fichiers) {
+  const l = etat.pieces[id] = etat.pieces[id] || [];
+  for (const f of fichiers) {
+    if (f.size > TAILLE_PIECE_MAX) { toast(t("{0} is too large (50 MB at most).", [f.name]), "erreur"); continue; }
+    if (!l.some((x) => x.name === f.name && x.size === f.size)) l.push(f);
+  }
+  const ul = $("#" + id + "-liste"); if (ul) ul.innerHTML = listePieces(id);
+}
+// cible: "demande" (REQUEST.md) or a queue file; projet: the project's name
+async function envoyerPieces(id, cible, projet) {
+  const fichiers = etat.pieces[id] || [];
+  let ok = 0;
+  for (const f of fichiers) {
+    try {
+      const r = await fetch("/api/pieces?p=" + encodeURIComponent(projet) + "&cible=" + encodeURIComponent(cible), {
+        method: "POST", headers: { "X-Athanor": CSRF, "X-Nom-Fichier": encodeURIComponent(f.name) }, body: f });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.erreur_key ? t(d.erreur_key, d.args || []) : t("Error {0}", [r.status]));
+      ok++;
+    } catch (e) { toast(t("{0} could not be attached: {1}", [f.name, e.message]), "erreur"); }
+  }
+  etat.pieces[id] = [];
+  const ul = $("#" + id + "-liste"); if (ul) ul.innerHTML = "";
+  if (ok) toast(t("{0} file(s) attached to the request.", [ok]), "ok");
+}
+
 pages.demandes = async () => {
   const d = await api("demandes");
   const planTexte = (await api("plan").catch(() => ({ texte: "" }))).texte || "";
@@ -1018,11 +1060,13 @@ pages.demandes = async () => {
         <label class="champ"><span>${t("Short title")}</span><input type="text" id="nd-titre" placeholder="${h(t("e.g. ten levels, each with its own music"))}"></label>
         <label class="champ"><span>${t("What you want")}</span><textarea id="nd-texte" rows="6" placeholder="${h(t("Describe the expected result, for whom, on which platform. Technologies are free unless you impose one."))}"></textarea></label>
         ${barreAmeliorer("nd-texte")}
+        ${zonePieces("nd")}
         <button class="btn btn-primaire" id="nd-ajouter">${t("Add to the queue")}</button>
       </div>
       <div class="bloc"><h2>${t("Note along the way")}</h2>
         <p class="intro petit">${t("To correct without waiting: Claude reads it at the start of the next cycle, during the current request.")}</p>
         <textarea id="rq-texte" rows="2" placeholder="${h(t("e.g. the footstep sounds are too high-pitched, lower them."))}"></textarea>
+        ${zonePieces("rq")}
         <div class="ligne mt-1"><button class="btn" id="rq-ajouter">${t("Add the note")}</button></div>
       </div>
       <div class="bloc"><details><summary>${t("REQUEST.md, the full file")}</summary>
@@ -1273,6 +1317,8 @@ $("#page").addEventListener("click", async (ev) => {
   if (b.hasAttribute("data-installer")) return action(api("sante/installer", "POST"));
   if (b.dataset.gestion) return gererProjet(b.dataset.gestion, b.dataset.nom || etat.projet, b);
   if (b.dataset.gh) return actionGitHub(b.dataset.gh, b);
+  if (b.dataset.choisirPieces) return $("#" + b.dataset.choisirPieces + "-fichiers").click();
+  if (b.dataset.retirerPiece) { const [id, i] = b.dataset.retirerPiece.split("|"); (etat.pieces[id] || []).splice(Number(i), 1); $("#" + id + "-liste").innerHTML = listePieces(id); return; }
   if (b.dataset.max && page === "suivi") return enregistrerMode($("#md-parallele").checked, Number(b.dataset.max));
   if (page === "nouveau") {
     if (b.dataset.chemin) return rendreExplorateur(b.dataset.chemin);
@@ -1285,6 +1331,7 @@ $("#page").addEventListener("click", async (ev) => {
       b.disabled = false;
       if (r) {
         etat.projet = r.nom; etat.evenements = []; etat.dernierJournal = 0;
+        if ((etat.pieces.np || []).length) await envoyerPieces("np", "demande", r.nom);
         if (gh) await action(api("github", "POST", gh)); // the sign-in window opens; the link shows under Manage
         await rafraichir(); location.hash = "#suivi";
       }
@@ -1294,8 +1341,19 @@ $("#page").addEventListener("click", async (ev) => {
   if (page === "demandes") {
     const carte = b.closest("[data-fichier]");
     // one request / note per click, even on a double-click
-    if (b.id === "nd-ajouter") { if (b.disabled) return; b.disabled = true; const r = await action(api("demandes", "POST", { titre: $("#nd-titre").value, texte: $("#nd-texte").value })); b.disabled = false; if (r) rendrePage(); return; }
-    if (b.id === "rq-ajouter") { if (b.disabled) return; b.disabled = true; const r = await action(api("remarque", "POST", { texte: $("#rq-texte").value })); b.disabled = false; if (r) rendrePage(); return; }
+    if (b.id === "nd-ajouter") {
+      if (b.disabled) return; b.disabled = true;
+      const r = await action(api("demandes", "POST", { titre: $("#nd-titre").value, texte: $("#nd-texte").value }));
+      if (r && (etat.pieces.nd || []).length) await envoyerPieces("nd", r.ou === "attente" && r.fichier ? r.fichier : "demande", etat.projet);
+      b.disabled = false; if (r) rendrePage(); return;
+    }
+    if (b.id === "rq-ajouter") {
+      if (b.disabled) return; b.disabled = true;
+      const texte = $("#rq-texte").value, avecPieces = (etat.pieces.rq || []).length > 0;
+      const r = texte.trim() || !avecPieces ? await action(api("remarque", "POST", { texte })) : true;
+      if (r && avecPieces) await envoyerPieces("rq", "demande", etat.projet); // added to the current request: Claude takes them at the next cycle
+      b.disabled = false; if (r) rendrePage(); return;
+    }
     if (b.id === "dm-enregistrer") return action(api("demande", "PUT", { texte: $("#dm-texte").value }));
     if (b.id === "pl-enregistrer") { const r = await action(api("plan", "PUT", { texte: $("#pl-texte").value })); if (r) { await rafraichir(); } return; }
     if (carte && b.hasAttribute("data-monter")) return reordonner(carte.dataset.fichier, -1);
@@ -1337,6 +1395,26 @@ $("#page").addEventListener("change", (ev) => {
   if (i.id === "gh-auteur-email") { const a = $("#gh-auteur-autre"); a.hidden = i.value !== ""; if (!a.hidden) a.focus(); }
   if (i.hasAttribute("data-gh-auto")) action(api("github", "POST", { action: "auto", auto: i.checked })).then((r) => { if (!r) i.checked = !i.checked; });
   if (i.id === "md-parallele") { const actif = $("#page .choix button.actif"); enregistrerMode(i.checked, actif ? Number(actif.dataset.max) : 3); }
+});
+// attached files: chosen with the button or dropped on a form's zone; a file dropped elsewhere is ignored
+// (otherwise the window would open it in place of the application)
+window.addEventListener("dragover", (ev) => {
+  if (!fichiersGlisses(ev)) return;
+  const z = ev.target.closest && ev.target.closest("[data-pieces]");
+  document.querySelectorAll(".pieces.survol").forEach((x) => x !== z && x.classList.remove("survol"));
+  if (z) z.classList.add("survol");
+  ev.dataTransfer.dropEffect = z ? "copy" : "none";
+});
+window.addEventListener("dragleave", (ev) => { if (!ev.relatedTarget) document.querySelectorAll(".pieces.survol").forEach((x) => x.classList.remove("survol")); });
+window.addEventListener("drop", (ev) => {
+  if (!fichiersGlisses(ev)) return;
+  document.querySelectorAll(".pieces.survol").forEach((x) => x.classList.remove("survol"));
+  const z = ev.target.closest && ev.target.closest("[data-pieces]");
+  if (z && ev.dataTransfer.files.length) ajouterPieces(z.dataset.pieces, ev.dataTransfer.files);
+});
+$("#page").addEventListener("change", (ev) => {
+  const i = ev.target;
+  if (i.type === "file" && i.id.endsWith("-fichiers")) { ajouterPieces(i.id.slice(0, -"-fichiers".length), i.files); i.value = ""; }
 });
 $("#page").addEventListener("input", (ev) => {
   if (ev.target.id === "jr-recherche") { etat.recherche = ev.target.value; rendreJournal(); }
