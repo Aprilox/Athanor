@@ -153,8 +153,10 @@ def _fichiers_suivis():
 
 def carte(args):
     code, docs = [], []
-    for rel in _fichiers_suivis():
-        if rel.startswith((".athanor/", ".pilote/", ".git/", ".claude/", "node_modules/", ".godot/", ".verif/")):
+    # the project's files, plus the working documents of the workshop (requirements, design, architecture)
+    atelier_docs = sorted(str(p.relative_to(RACINE)) for p in (ETAT / "docs").rglob("*.md") if p.is_file() and not p.is_symlink()) if (ETAT / "docs").is_dir() else []
+    for rel in dict.fromkeys(_fichiers_suivis() + atelier_docs):
+        if rel.startswith((".athanor/", ".pilote/", ".git/", ".claude/", "node_modules/", ".godot/", ".verif/")) and not rel.startswith(".athanor/docs/"):
             continue
         p = RACINE / rel
         if not p.is_file() or p.stat().st_size > TAILLE_MAX_FICHIER:

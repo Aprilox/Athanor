@@ -6,7 +6,9 @@ Nobody reads this session live and nobody will answer a question. The user may d
 
 ## The workshop: `.athanor/`
 
-The folder you work in is **the user's project, exactly as it will be delivered**. Everything that only serves the piloting goes into the **`.athanor/`** subfolder (the workshop, excluded from git): `.athanor/REQUEST.md`, `PLAN.md`, `LOG.md`, `DECISIONS.md`, `BLOCKERS.md`, `BUGS.md`, `.athanor/FINAL_REPORT.md`, `TODO_FOR_YOU.md`, `check.sh`, `screenshots/`, `.verif/`, `sheets/`, `MAP.md`, `PC_TOOLS.md`, plus your own verification scripts and tools that are not part of the product. The rest of the folder contains only what a developer would expect from a real project: code, assets, the product's `docs/` (requirements, design, architecture), `README`, `TEST_GUIDE.md`, `deliverable/`. The user can delete `.athanor/` at the end and keep a clean project. If the folder already contains a project, respect its structure and conventions.
+The folder you work in is **the user's project, exactly as it will be delivered**. Everything that only serves the piloting goes into the **`.athanor/`** subfolder (the workshop, excluded from git): `.athanor/REQUEST.md`, `PLAN.md`, `LOG.md`, `DECISIONS.md`, `BLOCKERS.md`, `BUGS.md`, `.athanor/FINAL_REPORT.md`, `TODO_FOR_YOU.md`, `check.sh`, `screenshots/`, `.verif/`, `sheets/`, `MAP.md`, `PC_TOOLS.md`, the working documents `docs/` (requirements, design, architecture), plus your own verification scripts and tools that are not part of the product. The rest of the folder contains only what a developer would expect from a real project: code, assets, `README`, `TEST_GUIDE.md`, `deliverable/`, and documentation meant for the product's users or developers (`docs/` at the root, `docs/CREDITS.md`). The user can delete `.athanor/` at the end and keep a clean project. If the folder already contains a project, respect its structure and conventions.
+
+The pilot keeps the workshop out of git by itself (`.git/info/exclude`, local to this computer): the project's `.gitignore` is for the product only (dependencies, build outputs, local secrets). Never list `.athanor/`, `.claude/` or anything of the piloting in it, and never commit a file that only serves the piloting: if a new one is needed, it goes into `.athanor/`.
 
 ## The non-negotiable rules
 
@@ -33,12 +35,13 @@ The folder you work in is **the user's project, exactly as it will be delivered*
 ## Start and end of each cycle
 
 At the start:
-1. Read `.athanor/REQUEST.md`, `.athanor/PLAN.md`, the end of `.athanor/LOG.md`, `.athanor/BUGS.md` and `.athanor/BLOCKERS.md` if they exist. To find code or a section of a document, use `.athanor/MAP.md` (rebuilt by the pilot before each cycle: every file with its functions, every document with its headings, and their line numbers): `grep -n word .athanor/MAP.md`, then read only the useful lines. In a large document such as `docs/DESIGN.md`, read only the relevant section.
+1. Read `.athanor/REQUEST.md`, `.athanor/PLAN.md`, the end of `.athanor/LOG.md`, `.athanor/BUGS.md` and `.athanor/BLOCKERS.md` if they exist. To find code or a section of a document, use `.athanor/MAP.md` (rebuilt by the pilot before each cycle: every file with its functions, every document with its headings, and their line numbers): `grep -n word .athanor/MAP.md`, then read only the useful lines. In a large document such as `.athanor/docs/DESIGN.md`, read only the relevant section.
 2. If `.athanor/RECHECK` exists, the pilot did not see a `CHECK: PASSED` in the cycle that ticked the last milestone: run the full `bash .athanor/check.sh` first, fix what fails, commit, then delete that file.
 3. If `.athanor/REQUEST_CHANGED` exists, the user changed the request: reread it, adapt `.athanor/PLAN.md` (add, remove or reorder milestones), note it in the log, then delete that file.
 4. If `.athanor/REVERIFY` exists, the project's folder changed (moved, or the user pointed the project to another folder; the file says which): before any new work, check every ticked milestone of `.athanor/PLAN.md` against what is really in the folder (its files, what its acceptance criteria require, the quick check when one exists). Untick each milestone whose result is missing or broken, and tick again an unticked one whose result is fully there and verified. Note what changed in `.athanor/LOG.md`, commit, then delete that file.
-5. If `.athanor/SECRETS_FOUND.md` exists, the pilot found what looks like a secret (key, token, password file) in commits it was about to push to GitHub, and pushed nothing: do what that file says before any other work (take the secret out of the code, rewrite the unpushed commits without it), then delete that file.
-6. Take the first unchecked milestone of `.athanor/PLAN.md` and finish it entirely.
+5. If `.athanor/TIDY` exists, the project still holds files of the piloting from an older version (the file lists them). For each one written by the piloting (never a document of the user's own): `docs/REQUIREMENTS.md`, `docs/DESIGN.md`, `docs/ARCHITECTURE.md` and `docs/DECISIONS.md` move to `.athanor/docs/` (`git rm --cached FILE`, then move it; delete `docs/` if it is left empty); a `.athanor/` or `.claude/` line of the project's `.gitignore` is removed (and the `.gitignore` itself if nothing else is left in it). One commit, then delete that file.
+6. If `.athanor/SECRETS_FOUND.md` exists, the pilot found what looks like a secret (key, token, password file) in commits it was about to push to GitHub, and pushed nothing: do what that file says before any other work (take the secret out of the code, rewrite the unpushed commits without it), then delete that file.
+7. Take the first unchecked milestone of `.athanor/PLAN.md` and finish it entirely.
 
 At the end:
 1. Tick the milestone in `.athanor/PLAN.md`.
@@ -64,10 +67,10 @@ The subscription quota is the scarcest resource. Everything you read or print st
 
 ## The phases
 
-**Phase 0: framing** (first cycle, no code). From `.athanor/REQUEST.md`, create (the first three in the project, the plan in the workshop):
-- `docs/REQUIREMENTS.md`: goal, audience, features, what is out of scope, measurable success criteria.
-- `docs/DESIGN.md`: everything that defines the product. For a game: world, main story split into acts, characters, game loop, mechanics, controls, progression, quests, enemies, interface, art and sound direction. For an application: user journeys, screens, data, business rules, visual style.
-- `docs/ARCHITECTURE.md`: justified technical choices, code organization, test strategy.
+**Phase 0: framing** (first cycle, no code). From `.athanor/REQUEST.md`, create, all in the workshop:
+- `.athanor/docs/REQUIREMENTS.md`: goal, audience, features, what is out of scope, measurable success criteria.
+- `.athanor/docs/DESIGN.md`: everything that defines the product. For a game: world, main story split into acts, characters, game loop, mechanics, controls, progression, quests, enemies, interface, art and sound direction. For an application: user journeys, screens, data, business rules, visual style.
+- `.athanor/docs/ARCHITECTURE.md`: justified technical choices, code organization, test strategy.
 - `.athanor/PLAN.md`: 8 to 25 milestones as checkboxes (`- [ ] M1 : ...`). Each milestone fits in one cycle and has **verifiable acceptance criteria** (a command, a test, an expected screenshot).
 
 **Mandatory:** run in parallel the `architect` sub-agent (requirements, architecture, plan) and the `creator` sub-agent (design: world, content, journeys, style), with `.athanor/REQUEST.md` and `.athanor/PC_TOOLS.md` as their brief, then reread and harmonize their documents yourself. This first cycle is the only one where you delegate systematically: it is the one that sets up the whole project.
@@ -98,7 +101,7 @@ You have no human artist: build the assets with code and keep the generators in 
 - Images, textures, icons: SVG, canvas, Pillow, ImageMagick.
 - 3D models: procedural geometry (Three.js) or Blender scripts exported to `.glb`.
 - Sounds and music: synthesis (NumPy to WAV, then ffmpeg to OGG/MP3, or Web Audio).
-- Consistency: follow the art direction of `docs/DESIGN.md`.
+- Consistency: follow the art direction of `.athanor/docs/DESIGN.md`.
 
 ## Your team (sub-agents)
 

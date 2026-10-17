@@ -582,6 +582,25 @@ appliquer_identite() {
   fi
 }
 appliquer_identite
+# Files of the piloting that versions before 2.8.0 put in the project itself (the working documents, a
+# .athanor/ line in the project's .gitignore): Claude moves them into the workshop on its next cycle
+# (.athanor/TIDY, CLAUDE.md), never a document of the user's own. Looked for once per project.
+if [ ! -f "$PRIVE/rangement" ]; then
+  a_ranger=""
+  for f in docs/REQUIREMENTS.md docs/DESIGN.md docs/ARCHITECTURE.md docs/DECISIONS.md; do
+    [ -f "$PROJECT/$f" ] && [ ! -L "$PROJECT/$f" ] && a_ranger+="- \`$f\`"$'\n'
+  done
+  if [ -f "$PROJECT/.gitignore" ] && [ ! -L "$PROJECT/.gitignore" ] && grep -Eq '^[[:space:]]*/?\.(athanor|claude)(/|/\*)?[[:space:]]*$' "$PROJECT/.gitignore"; then
+    a_ranger+="- the \`.athanor/\` or \`.claude/\` line of \`.gitignore\`"$'\n'
+  fi
+  if [ -n "$a_ranger" ]; then
+    printf '# Files of the piloting to take out of the project
+
+%s' "$a_ranger" | publier "$ETAT/TIDY" \
+      && log "Files of the piloting found in the project: Claude moves them into the workshop first (.athanor/TIDY)."
+  fi
+  date '+%Y-%m-%d %H:%M' > "$PRIVE/rangement"
+fi
 if ! g -C "$PROJECT" rev-parse HEAD >/dev/null 2>&1; then
   g -C "$PROJECT" add -A >/dev/null 2>&1 && g -C "$PROJECT" commit -qm "Initial commit" >/dev/null 2>&1 || g -C "$PROJECT" commit -q --allow-empty -m "Initial commit"
 fi
@@ -681,7 +700,7 @@ while true; do
     if [ -f "$ETAT/PLAN.md" ] && [ -f "$ETAT/REQUEST_CHANGED" ] && parallele_plan_a_des_vagues; then
       but_cycle="/goal The change of .athanor/REQUEST.md (flagged by .athanor/REQUEST_CHANGED) is folded into .athanor/PLAN.md as waves according to your parallel-mode instructions, the change is noted in .athanor/LOG.md, .athanor/REQUEST_CHANGED is deleted and the plan is committed, without writing any code. Or stop after 15 turns. ${PHRASE_LANGUE}"
       plan_seul=1; log "Parallel mode: the request changed, the lead updates the plan first."
-    elif [ -f "$ETAT/PLAN.md" ] && [ ! -f "$ETAT/RECHECK" ] && [ ! -f "$ETAT/REQUEST_CHANGED" ] && [ ! -f "$ETAT/REVERIFY" ] && [ ! -f "$ETAT/SECRETS_FOUND.md" ]; then
+    elif [ -f "$ETAT/PLAN.md" ] && [ ! -f "$ETAT/RECHECK" ] && [ ! -f "$ETAT/REQUEST_CHANGED" ] && [ ! -f "$ETAT/REVERIFY" ] && [ ! -f "$ETAT/SECRETS_FOUND.md" ] && [ ! -f "$ETAT/TIDY" ]; then
       if parallele_plan_a_des_vagues; then
         [ "$(parallele_vague_courante | wc -l)" -ge 2 ] && mode=parallele
       else
