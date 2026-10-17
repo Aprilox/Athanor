@@ -198,9 +198,9 @@ parallele_lancer_ouvrier() {
   done
   # The worker's team: only "executor" (cheap model), so that long outputs do not fill its context.
   local agents_ouvrier=""
-  [ "$AGENTS_PAR_JSON" = 1 ] && agents_ouvrier=$(printf '%s' "$AGENTS_JSON" | python3 -c 'import json, sys
-d = {k: v for k, v in json.load(sys.stdin).items() if k == "executor"}
-print(json.dumps(d, ensure_ascii=False) if d else "")' 2>/dev/null)
+  # plus the project's own sub-agents (created by the user, or proposed by the lead): system/equipe.py
+  [ "$AGENTS_PAR_JSON" = 1 ] && agents_ouvrier=$(SUBAGENT_MODEL="$SUBAGENT_MODEL" CHEAP_MODEL="$CHEAP_MODEL" python3 "$SYSTEME/equipe.py" json "$KIT" "$PROJECT" "$PRIVE/agents" --ouvrier 2>/dev/null)
+  [ "$agents_ouvrier" = "{}" ] && agents_ouvrier=""
   { cat "$(parallele_consignes_base)"; parallele_consignes_ouvrier "$ident" "$ligne" "$([ -n "$agents_ouvrier" ] && echo 1)"; } > "$PRIVE/CLAUDE.ouvrier-$ident.md"
   # The worker's sandbox: its worktree (PROJECT = the worktree, for the guard and the tools),
   # plus write access to the project's .git, where git stores the worktree's objects and branch.

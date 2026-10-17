@@ -32,12 +32,31 @@ The request:
 %s
 >>>`
 
+const consigneAmeliorerAgent = `You improve the standing instructions of a sub-agent for an autonomous AI developer (Claude Code, driven by a tool called Athanor). The project lead calls this sub-agent with the Task tool for a precise piece of work; the sub-agent starts with no memory, reads these instructions, does the work alone (nobody answers its questions) and hands back a report.
+Sub-agent: %n
+When the lead uses it: %d
+Rewrite its instructions so that they are clear, complete and actionable, WITHOUT changing what the user wants it to be:
+- Keep every rule, constraint, name, tool and technology the user gave. Never contradict or drop them.
+- Structure: its role in one sentence; how it works (the steps it follows, what it reads first, the quality bar); what it must always do; what it must never do; what it hands back (a short report: done, checked, left).
+- When something important is unspecified, add a sensible default marked "(suggestion)". Do not widen its role beyond what the user describes.
+- Write it addressed to the sub-agent ("You ..."), in plain Markdown with short headings and bullet lists, about 350 words at most.
+- Write in the same language as the instructions.
+- Output ONLY the improved instructions: no preamble, no comment, no code fence around them.
+
+The instructions:
+<<<
+%s
+>>>`
+
 // one rewrite at a time: each one is a Claude session on the user's quota
 var ameliorationEnCours sync.Mutex
 
 func (s *Serveur) apiAmeliorerDemande(w http.ResponseWriter, r *http.Request) {
 	var c struct {
-		Texte string `json:"texte"`
+		Texte       string `json:"texte"`
+		Genre       string `json:"genre"` // "" a request, "agent" a sub-agent's instructions
+		Nom         string `json:"nom"`
+		Description string `json:"description"`
 	}
 	if err := lireCorps(r, &c); err != nil || strings.TrimSpace(c.Texte) == "" {
 		s.erreur(w, http.StatusBadRequest, "Write your request first")
@@ -63,6 +82,11 @@ func (s *Serveur) apiAmeliorerDemande(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	consigne := strings.Replace(consigneAmeliorer, "%s", strings.TrimSpace(c.Texte), 1)
+	if c.Genre == "agent" {
+		// one pass over the template: a "%s" typed by the user is never taken for a placeholder
+		consigne = strings.NewReplacer("%n", court(strings.TrimSpace(c.Nom), 40), "%d", court(strings.TrimSpace(c.Description), 400),
+			"%s", strings.TrimSpace(c.Texte)).Replace(consigneAmeliorerAgent)
+	}
 	if err := os.WriteFile(chemin, []byte(consigne), 0o600); err != nil {
 		s.erreur(w, http.StatusInternalServerError, err.Error())
 		return

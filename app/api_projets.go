@@ -165,6 +165,8 @@ type MembreVue struct {
 	Mission   string `json:"mission"`
 	Modele    string `json:"modele"`     // "" = the lead's model
 	AppelePar string `json:"appele_par"` // chef, chef_ouvriers
+	// the project's own sub-agents (Team page, or proposed by the lead): their definition, to edit it
+	Perso *AgentPerso `json:"perso,omitempty"`
 }
 
 // apiAgents: the team of the current cycle (sessions and the sub-agents each one called) and the
@@ -218,7 +220,21 @@ func (s *Serveur) apiAgents(w http.ResponseWriter, r *http.Request) {
 		}
 		equipe = append(equipe, m)
 	}
-	reponse["agents"], reponse["equipe"], reponse["modele_chef"] = agents, equipe, reglages["MODEL"]
+	perso, refus := s.agentsDuProjet(p)
+	for i := range perso {
+		a := perso[i]
+		m := MembreVue{Nom: a.Nom, Mission: a.Description, Modele: reglages["SUBAGENT_MODEL"], AppelePar: "chef_ouvriers", Perso: &a}
+		switch a.Modele {
+		case "eco":
+			if simple != "" {
+				m.Modele = simple
+			}
+		case "fort":
+			m.Modele = "opus"
+		}
+		equipe = append(equipe, m)
+	}
+	reponse["agents"], reponse["equipe"], reponse["modele_chef"], reponse["refuses"] = agents, equipe, reglages["MODEL"], refus
 	s.ecrireJSON(w, reponse)
 }
 

@@ -413,36 +413,24 @@ case "${LANGUAGE:-en}" in
 esac >> "$CONSIGNES"
 printf '%s\n' "$PHRASE_LANGUE" >> "$CONSIGNES"
 [ -f "$KIT/template/PC_TOOLS_GUIDE.md" ] && cp -f "$KIT/template/PC_TOOLS_GUIDE.md" "$ETAT/PC_TOOLS_GUIDE.md"
-rm -rf "$ETAT/agents" "$ETAT/CLAUDE.md" "$ETAT/CLAUDE.cycle.md" "$ETAT/mcp.json" "$ETAT/claude_settings.json"   # older versions
+rm -rf "$ETAT/CLAUDE.md" "$ETAT/CLAUDE.cycle.md" "$ETAT/mcp.json" "$ETAT/claude_settings.json"   # older versions
 rm -rf "$PRIVE/agents" && mkdir -p "$PRIVE/agents" && cp "$KIT/template/.claude/agents/"*.md "$PRIVE/agents/" 2>/dev/null
 # Sub-agents are passed to Claude Code as JSON (--agents); failing that, copied into PROJECT/.claude/agents.
 # Model of each sub-agent: CHEAP_MODEL for "executor", SUBAGENT_MODEL for the others
 # (empty = the lead's), unless a model is set in the agent file. Also written into the .md copies.
-AGENTS_JSON=$(SUBAGENT_MODEL="$SUBAGENT_MODEL" CHEAP_MODEL="$CHEAP_MODEL" python3 - "$PRIVE/agents" <<'PY'
-import json, os, re, sys
-d = sys.argv[1]; out = {}
-sous, simple = os.environ.get("SUBAGENT_MODEL", ""), os.environ.get("CHEAP_MODEL", "")
-for f in sorted(os.listdir(d)):
-    if not f.endswith(".md"): continue
-    t = open(os.path.join(d, f), encoding="utf-8").read()
-    m = re.match(r"^---\n(.*?)\n---\n(.*)$", t, re.S)
-    if not m: continue
-    meta = dict((l.split(":", 1)[0].strip(), l.split(":", 1)[1].strip()) for l in m.group(1).splitlines() if ":" in l)
-    a = {"description": meta.get("description", ""), "prompt": m.group(2).strip()}
-    # tools: an allowlist (MCP tools and skills are lost unless named); disallowedTools: the rest is inherited
-    if meta.get("tools"): a["tools"] = [x.strip() for x in meta["tools"].split(",")]
-    if meta.get("disallowedTools"): a["disallowedTools"] = [x.strip() for x in meta["disallowedTools"].split(",")]
-    nom = meta.get("name", f[:-3])
-    template = meta.get("model") or (simple if nom == "executor" else "") or sous
-    if template:
-        a["model"] = template
-        if not meta.get("model"):  # .md copy (if --agents does not exist): same model
-            entete = m.group(1) + "\nmodel: " + template
-            open(os.path.join(d, f), "w", encoding="utf-8").write("---\n" + entete + "\n---\n" + m.group(2))
-    out[nom] = a
-print(json.dumps(out, ensure_ascii=False))
-PY
-)
+# The team (system/equipe.py): Athanor's sub-agents, plus the ones the user created in the app and the
+# ones the lead proposed (.athanor/agents/, imported before each cycle). Rebuilt before every cycle.
+preparer_equipe() {
+  local l
+  while IFS= read -r l; do [ -n "$l" ] && log "$l"; done < <(python3 "$SYSTEME/equipe.py" importer "$KIT" "$PROJECT" 2>/dev/null)
+  AGENTS_JSON=$(SUBAGENT_MODEL="$SUBAGENT_MODEL" CHEAP_MODEL="$CHEAP_MODEL" python3 "$SYSTEME/equipe.py" json "$KIT" "$PROJECT" "$PRIVE/agents" 2>/dev/null)
+  [ -n "$AGENTS_JSON" ] || AGENTS_JSON='{}'
+  python3 "$SYSTEME/equipe.py" fiche "$KIT" "$PROJECT" "$PRIVE/agents" 2>/dev/null
+  return 0
+}
+# copies of Athanor's agents left in the workshop by older versions (the folder now holds the lead's proposals)
+for f in architect creator developer tester critic executor; do rm -f "$ETAT/agents/$f.md"; done
+preparer_equipe
 AIDE_CLAUDE=$("$CLAUDE_BIN" --help 2>/dev/null)
 # Settings and MCP servers: only the pilot's, never those a project file might declare.
 ARGS_SURS=()
@@ -665,6 +653,7 @@ while true; do
   synchroniser_demande
   preparer_cycle
   appliquer_identite
+  preparer_equipe
   cycle=$(( cycle + 1 )); echo "$cycle" > "$PRIVE/cycle"
   fichier_log="$ETAT/logs/cycle-$(date '+%Y%m%d-%H%M%S')-$(printf '%04d' "$cycle").jsonl"
   avant=$(g -C "$PROJECT" rev-parse HEAD 2>/dev/null || echo aucun)

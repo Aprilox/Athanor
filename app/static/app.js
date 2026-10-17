@@ -181,9 +181,10 @@ async function annoncerFins(v) {
 // Under a request text area: Claude rewrites the request (clearer, richer, same intent); the user's
 // version is kept and both can be swapped at will. Edits made to either version are kept too.
 const versionsDemande = new WeakMap(); // textarea → { mienne, claude, vue: "mienne" | "claude" }
-function barreAmeliorer(id) {
+function barreAmeliorer(id, genre = "") {
+  const aide = genre === "agent" ? t("Claude rewrites these instructions: clearer, more complete, same intent. You can go back to yours.") : t("Claude rewrites your request: clearer, more complete, same intent. You can go back to yours.");
   return `<div class="ameliorer" data-pour="${id}">
-    <button type="button" class="btn btn-petit" data-ameliorer="${id}" title="${h(t("Claude rewrites your request: clearer, more complete, same intent. You can go back to yours."))}">✨ ${t("Improve with Claude")}</button>
+    <button type="button" class="btn btn-petit" data-ameliorer="${id}" data-genre="${genre}" title="${h(aide)}">✨ ${t("Improve with Claude")}</button>
     <button type="button" class="btn btn-petit" data-version="${id}" hidden></button>
     <span class="muet petit" data-etat-ameliorer="${id}"></span>
   </div>`;
@@ -214,19 +215,20 @@ document.addEventListener("click", async (ev) => {
   if (!bAm) return;
   const zone = document.getElementById(bAm.dataset.ameliorer);
   if (!zone) return;
-  if (!zone.value.trim()) { toast(t("Write your request first"), "erreur"); zone.focus(); return; }
+  const agent = bAm.dataset.genre === "agent";
+  if (!zone.value.trim()) { toast(agent ? t("Write its instructions first") : t("Write your request first"), "erreur"); zone.focus(); return; }
   const avant = versionsDemande.get(zone);
   const mienne = avant ? avant.mienne : zone.value; // always rewrite from the user's own text
   const etiquette = document.querySelector(`[data-etat-ameliorer="${zone.id}"]`);
   const libelleBouton = bAm.innerHTML;
   bAm.disabled = true; zone.readOnly = true; zone.classList.add("en-attente");
-  bAm.textContent = t("Claude is rewriting your request…");
+  bAm.textContent = agent ? t("Claude is rewriting the instructions…") : t("Claude is rewriting your request…");
   if (etiquette) etiquette.textContent = t("about 30 seconds");
   try {
-    const r = await api("ameliorer", "POST", { texte: mienne });
+    const r = await api("ameliorer", "POST", agent ? { texte: mienne, genre: "agent", nom: ($("#ag-nom") || {}).value || "", description: ($("#ag-description") || {}).value || "" } : { texte: mienne });
     versionsDemande.set(zone, { mienne, claude: r.texte, vue: "claude" });
     zone.value = r.texte;
-    toast(t("Request improved: check it, edit it, or go back to yours."), "ok");
+    toast(agent ? t("Instructions improved: check them, edit them, or go back to yours.") : t("Request improved: check it, edit it, or go back to yours."), "ok");
   } catch (e) {
     if (e.message !== t("Locked")) toast(e.message, "erreur");
   } finally {
@@ -818,16 +820,67 @@ pages.equipe = async () => {
   if (!v.actif) for (const a of [chef, ...agents]) if (a.statut === "travaille" || a.statut === "attend") { a.statut = "arrete"; a.activite = ""; }
   const appelsCycle = {};
   for (const a of agents) if (a.genre === "sous_agent") appelsCycle[a.nom] = (appelsCycle[a.nom] || 0) + 1;
-  const membres = equipe.map((m) => `<div class="membre ${appelsCycle[m.nom] ? "utilise" : ""}">
-      <div class="membre-nom">${h(m.nom)} <span class="muet">· ${m.modele ? h(modeleLisible(m.modele)) : t("lead's model")}</span></div>
+  etat.agPerso = {};
+  const membres = equipe.map((m) => { if (m.perso) etat.agPerso[m.nom] = m.perso; return `<div class="membre ${appelsCycle[m.nom] ? "utilise" : ""} ${m.perso ? "perso" : ""}">
+      <div class="membre-nom">${h(m.nom)} <span class="muet">· ${m.modele ? h(modeleLisible(m.modele)) : t("lead's model")}</span>${m.perso ? ` <span class="badge">${m.perso.origine === "chef" ? t("proposed by the lead") : t("created by you")}${m.perso.projet ? "" : " · " + t("all projects")}${m.perso.lecture_seule ? " · " + t("read only") : ""}</span>` : ""}</div>
       <div class="membre-role">${h(ROLES[m.nom] ? t(ROLES[m.nom]) : m.mission)}</div>
-      <div class="muet petit">${m.appele_par === "chef_ouvriers" ? t("called by the lead and the workers") : t("called by the lead")}${appelsCycle[m.nom] ? " · " + t("called {0}× this cycle", [appelsCycle[m.nom]]) : ""}</div></div>`).join("");
+      <div class="muet petit">${m.appele_par === "chef_ouvriers" ? t("called by the lead and the workers") : t("called by the lead")}${appelsCycle[m.nom] ? " · " + t("called {0}× this cycle", [appelsCycle[m.nom]]) : ""}</div>
+      ${m.perso ? `<div class="ligne mt-1"><button class="btn btn-petit" data-ag="modifier" data-nom="${h(m.nom)}">${t("Edit")}</button><button class="btn btn-petit btn-danger" data-ag="supprimer" data-nom="${h(m.nom)}">${t("Remove")}</button></div>` : ""}</div>`; }).join("");
   return `<p class="intro">${t("Who works on this cycle and who called whom. Click a sub-agent to read the brief it was given and the report it handed back.")}</p>
   ${rendreSession(chef, appelsDe("chef"), t("Project lead"), t("Leads the current milestone: reads the plan, codes, checks, commits."), ((w) => (w[0][0] + (w.length > 1 ? w[w.length - 1][0] : w[0][1] || "")).toUpperCase())(t("Project lead").split(/\s+/)))}
   ${ouvriers.length ? `<h3 class="equipe-section">${t("Workers in parallel ({0})", [ouvriers.length])}</h3>
     <div class="equipe">${ouvriers.map((o) => rendreSession(o, appelsDe(o.id), t("Worker " + o.jalon), o.mission || t("Builds milestone " + o.jalon), o.jalon.replace(/_/g, "."))).join("")}</div>` : ""}
-  ${membres ? `<h3 class="equipe-section">${t("Who can be called")}</h3><div class="roster">${membres}</div>` : ""}`;
+  ${membres ? `<h3 class="equipe-section">${t("Who can be called")}</h3><div class="roster">${membres}</div>` : ""}
+  ${(r.refuses || []).length ? `<p class="muet petit">${t("Removed proposals of the lead (never proposed again): {0}", [r.refuses.map(h).join(", ")])}</p>` : ""}
+  ${formulaireAgent()}`;
 };
+
+// A sub-agent of the user's: the lead sees it in its team (.athanor/TEAM.md) and calls it when its
+// description fits or when a request names it. Saved in extensions/agents.json (system/equipe.py).
+function formulaireAgent() {
+  const f = etat.agForm;
+  if (!f) return `<div class="ligne mt-2"><button class="btn" data-ag="nouveau">＋ ${t("New sub-agent")}</button>
+    <span class="muet petit">${t("A specialist of your own (a translator, a researcher, a level designer…): the lead calls it when its description fits, or when your request names it. The lead can also propose some.")}</span></div>`;
+  return `<div class="bloc agent-form mt-2"><h2>${f.ancien ? t("Edit {0}", [f.ancien]) : t("New sub-agent")}</h2>
+    <div class="grille grille-2">
+      <label class="champ"><span>${t("Name")}</span><input type="text" id="ag-nom" value="${h(f.nom || "")}" placeholder="${h(t("e.g. translator"))}"></label>
+      <label class="champ"><span>${t("Model")}</span><select id="ag-modele">
+        <option value="" ${!f.modele ? "selected" : ""}>${t("Like the other sub-agents")}</option>
+        <option value="eco" ${f.modele === "eco" ? "selected" : ""}>${t("Cheap model (mechanical work)")}</option>
+        <option value="fort" ${f.modele === "fort" ? "selected" : ""}>${t("Most capable model (hard reasoning)")}</option></select></label>
+    </div>
+    <label class="champ"><span>${t("When the lead should call it")}</span><input type="text" id="ag-description" value="${h(f.description || "")}" placeholder="${h(t("e.g. Translates the interface texts into Spanish and German, keeping the tone of the brand."))}"></label>
+    <label class="champ"><span>${t("Its instructions")}</span><textarea id="ag-consignes" rows="9" placeholder="${h(t("Its role, how it works, what it must always and never do, what it hands back. Write it as you would brief a colleague: ✨ Improve with Claude can structure it."))}">${h(f.consignes || "")}</textarea></label>
+    ${barreAmeliorer("ag-consignes", "agent")}
+    <label class="interrupteur"><input type="checkbox" id="ag-lecture" ${f.lecture_seule ? "checked" : ""}><span>${t("Read only: it reads and reports, never writes a file")}</span></label>
+    <label class="interrupteur"><input type="checkbox" id="ag-tous" ${f.tous ? "checked" : ""}><span>${t("For all my projects (otherwise this project only)")}</span></label>
+    <p class="muet petit">${t("Like the other sub-agents, it works inside the project's sandbox and has its skills, MCP tools and attached files.")}</p>
+    <div class="ligne"><button class="btn btn-primaire" data-ag="enregistrer">${t("Save the sub-agent")}</button><button class="btn" data-ag="annuler">${t("Cancel")}</button></div></div>`;
+}
+async function actionAgent(act, b) {
+  if (act === "nouveau") { etat.agForm = { nom: "", description: "", consignes: "", modele: "", lecture_seule: false, tous: false }; return rendrePage(); }
+  if (act === "annuler") { etat.agForm = null; return rendrePage(); }
+  if (act === "modifier") {
+    const a = (etat.agPerso || {})[b.dataset.nom]; if (!a) return;
+    etat.agForm = { ancien: a.nom, nom: a.nom, description: a.description, consignes: a.consignes, modele: a.modele, lecture_seule: a.lecture_seule, tous: !a.projet };
+    await rendrePage(); const z = $("#ag-nom"); if (z) z.scrollIntoView({ block: "center" }); return;
+  }
+  if (act === "supprimer") {
+    const a = (etat.agPerso || {})[b.dataset.nom]; if (!a) return;
+    const texte = a.origine === "chef" ? t("Remove “{0}” from the team? The lead proposed it: it will not propose it again in this project.", [a.nom]) : t("Remove “{0}” from the team?", [a.nom]);
+    if (!(await confirmer(texte, { ok: t("Remove"), danger: true }))) return;
+    if (await action(api("equipe/agents", "POST", { action: "supprimer", ancien: a.nom }))) rendrePage();
+    return;
+  }
+  if (act === "enregistrer") {
+    const f = etat.agForm || {};
+    const agent = { nom: $("#ag-nom").value.trim().toLowerCase(), description: $("#ag-description").value, consignes: $("#ag-consignes").value, modele: $("#ag-modele").value, lecture_seule: $("#ag-lecture").checked };
+    b.disabled = true;
+    const r = await action(api("equipe/agents", "POST", { action: "enregistrer", ancien: f.ancien || "", agent, tous: $("#ag-tous").checked }));
+    b.disabled = false;
+    if (r) { etat.agForm = null; rendrePage(); }
+  }
+}
 
 // --- skills & MCP
 // A library kept in Athanor (verified catalog, GitHub link, written by hand, pasted configuration) and,
@@ -1317,6 +1370,7 @@ $("#page").addEventListener("click", async (ev) => {
   if (b.hasAttribute("data-installer")) return action(api("sante/installer", "POST"));
   if (b.dataset.gestion) return gererProjet(b.dataset.gestion, b.dataset.nom || etat.projet, b);
   if (b.dataset.gh) return actionGitHub(b.dataset.gh, b);
+  if (b.dataset.ag) return actionAgent(b.dataset.ag, b);
   if (b.dataset.choisirPieces) return $("#" + b.dataset.choisirPieces + "-fichiers").click();
   if (b.dataset.retirerPiece) { const [id, i] = b.dataset.retirerPiece.split("|"); (etat.pieces[id] || []).splice(Number(i), 1); $("#" + id + "-liste").innerHTML = listePieces(id); return; }
   if (b.dataset.max && page === "suivi") return enregistrerMode($("#md-parallele").checked, Number(b.dataset.max));
@@ -1416,6 +1470,12 @@ $("#page").addEventListener("change", (ev) => {
   const i = ev.target;
   if (i.type === "file" && i.id.endsWith("-fichiers")) { ajouterPieces(i.id.slice(0, -"-fichiers".length), i.files); i.value = ""; }
 });
+// the sub-agent being written keeps its fields if the page is drawn again
+const CHAMPS_AGENT = { "ag-nom": "nom", "ag-description": "description", "ag-consignes": "consignes", "ag-modele": "modele", "ag-lecture": "lecture_seule", "ag-tous": "tous" };
+for (const genre of ["input", "change"]) $("#page").addEventListener(genre, (ev) => {
+  const c = CHAMPS_AGENT[ev.target.id];
+  if (c && etat.agForm) etat.agForm[c] = ev.target.type === "checkbox" ? ev.target.checked : ev.target.value;
+});
 $("#page").addEventListener("input", (ev) => {
   if (ev.target.id === "jr-recherche") { etat.recherche = ev.target.value; rendreJournal(); }
   if (ev.target.id === "np-nom" && $("#np-gh-nom")) $("#np-gh-nom").placeholder = nomDepot(ev.target.value);
@@ -1450,7 +1510,7 @@ async function rafraichir() {
     if (!v.verrouille) {
       await lireJournal();
       // the Team page follows live, except while text is selected in it (a brief, a report)
-      if ((etat.page === "equipe" && !String(window.getSelection() || "")) || (etat.page === "suivi" && !document.activeElement.matches("input, textarea"))) rendrePage();
+      if ((etat.page === "equipe" && !String(window.getSelection() || "") && !etat.agForm) || (etat.page === "suivi" && !document.activeElement.matches("input, textarea"))) rendrePage();
       if (etat.page === "sante" && (document.querySelector(".verif.v-en_cours") || etat.tacheChoisie)) { const tk = etat.tacheChoisie; await rendrePage(); etat.tacheChoisie = tk; }
     }
   } catch (e) { /* server briefly unreachable */ }

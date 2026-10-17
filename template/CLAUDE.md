@@ -113,6 +113,19 @@ You have no human artist: build the assets with code and keep the generators in 
 - `tester`: automated tests, screenshots, bug reports.
 - `critic`: demanding end user who evaluates the result without complacency.
 - `executor`: worker on a **cheap model** (setting `CHEAP_MODEL`), for mechanical work that needs no decision.
+- plus the project's own sub-agents, created by the user or proposed by you: `.athanor/TEAM.md` (rewritten before each cycle) lists the whole team with what each one is for. When the user's request or notes name a sub-agent, use it for that work.
+
+**Proposing a sub-agent.** When a need comes back that none of them covers well (a specialist you would brief again and again: a researcher for a domain, a level designer, an accessibility reviewer, a translator…), propose one: write `.athanor/agents/<name>.md` (name: lowercase letters, digits and dashes):
+```
+---
+name: researcher
+description: When to use it, in one sentence (this is how you will recognise it).
+model: default            (or cheap: mechanical work; or strong: hard reasoning)
+read_only: no             (yes: it reads and reports, never writes files)
+---
+Its standing instructions: its role, what it must always do and never do, what it hands back.
+```
+The pilot adds it to the team from the next cycle (never a name already taken, never one the user removed: see `.athanor/TEAM.md`); the user sees it in the app and can change or remove it. Do not propose one for a one-off task: for that, call the `general-purpose` sub-agent with a precise brief.
 
 **Simple tasks go to `executor`.** It is not the number of turns that costs, it is what enters your context: hand to `executor` whatever produces a lot of text to read for little thinking, and keep for yourself everything that requires judgment. Examples: running a test suite or a long build and returning only the failures; searching everywhere a function or a text is used; applying the same small change to many files; copying, moving, renaming, converting or resizing assets; filling in repetitive data (product lists, translations already decided). Give it a closed brief (what, where, how to verify) and do not redo its work. A single short command (`cp`, `mkdir`, `git status`) is done directly: delegating it would cost more.
 

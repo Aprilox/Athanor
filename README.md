@@ -201,6 +201,8 @@ Each worker only carries its own milestone in context, so the work is split into
 
 The agents live in [`template/.claude/agents/`](template/.claude/agents): edit them to change how your team works.
 
+**Your own sub-agents.** On the Team page, **+ New sub-agent** adds a specialist of your own (a translator, a researcher for a domain, a level designer…): a name, when the lead should call it, its instructions (**✨ Improve with Claude** turns a few lines into a structured brief), a model (like the others, cheap or most capable), read only or not, this project or all your projects. The lead can also propose one when a need keeps coming back: it writes `.athanor/agents/<name>.md`, the pilot checks it and adds it to the team at the next cycle, labelled *proposed by the lead*; you keep it, edit it or remove it (a removed proposal is never made again). These sub-agents work like the others: same sandbox, skills, MCP tools and attached files, callable by the lead and by parallel workers; the lead finds them in `.athanor/TEAM.md`, and a request can name one ("have `translator` do the texts"). They are stored in `extensions/agents.json` (12 per project at most).
+
 ---
 
 ## The app
@@ -216,7 +218,7 @@ The screenshots show the dark "Slate" and the "Light" palettes.
 | Page | What you do there |
 |---|---|
 | **Overview** | the state in one sentence, current milestone, last commit, ticked plan, usage (cycles, time, list-price cost, cache); *Start*, *Stop after cycle*, *Stop now*, *Working mode* |
-| **Team** | a tree: the lead and each worker with the sub-agents it called; click a sub-agent for the brief it was given and the report it handed back; the model each one runs on; who can be called |
+| **Team** | a tree: the lead and each worker with the sub-agents it called; click a sub-agent for the brief it was given and the report it handed back; the model each one runs on; who can be called, and your own sub-agents (create, edit, remove) |
 | **Requests** | the current request and its plan, the queued requests (time-stamped, reorderable), notes along the way; ✨ *Improve with Claude* rewrites a request clearer and more complete, and you can go back to yours; 📎 attach files to a request (specification, mock-ups, photos, PDF, data): they stay in the workshop and Claude reads them with the request |
 | **Log** | the readable log (Claude speaks, tools, results, sub-agents, pilot) or the raw JSON, filterable |
 | **Manage** | rename the project; move or rename its folder; point it to another folder (the plan and requests come along, the milestones are checked against what it contains); check the milestones; archive it; delete it (from the list, its workshop or the whole folder, to the recycle bin); link it to GitHub |
@@ -375,7 +377,7 @@ Athanor.exe, athanor   the app for Windows / Linux (in the release, or built wit
 app/                   the app's Go sources, static UI (HTML, CSS, JS without dependencies), Windows resources
 commands/              install, configure, start, stop, stop-after-cycle, follow, test-sandbox, repair,
                        allow-admin, unreal-network (.cmd for Windows, .sh for Linux/WSL)
-system/                pilot.sh (the loop), parallel.sh (scheduler, workers, merges), safety.sh, bridge.py,
+system/                pilot.sh (the loop), parallel.sh (scheduler, workers, merges), equipe.py (the team), safety.sh, bridge.py,
                        extensions.py + mcp-jail.sh (Skills & MCP), ecran.sh (Claude's screen), github.sh (GitHub),
                        settings.py (sandbox), guard.py, detect-tools.sh, athanor.py (map, archives, screenshots),
                        bin/ (gateways), windows/ (PowerShell helpers)
@@ -452,10 +454,10 @@ Yes. Nothing is tied to a user name or a drive letter: paths come from your prof
 Push a version tag and GitHub builds both apps and publishes the release ([`.github/workflows/release.yml`](.github/workflows/release.yml)):
 
 ```bash
-git tag v2.9.1 && git push origin v2.9.1
+git tag v2.10.0 && git push origin v2.10.0
 ```
 
-Keep the version in [`app/winres/athanor.rc`](app/winres/athanor.rc) in step with the tag, and write what is new in `docs/releases/VERSION.md` (e.g. [`docs/releases/2.9.1.md`](docs/releases/2.9.1.md)): it opens the release page.
+Keep the version in [`app/winres/athanor.rc`](app/winres/athanor.rc) in step with the tag, and write what is new in `docs/releases/VERSION.md` (e.g. [`docs/releases/2.10.0.md`](docs/releases/2.10.0.md)): it opens the release page.
 
 ## Contributing
 
