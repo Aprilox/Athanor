@@ -24,7 +24,8 @@ Usage:
 A server's settings (an address, a port, a path: "reglages" in the library, name -> default) are
 ${NAME} placeholders like the keys, with the default when the user set nothing. The "unreal" server of
 the verified catalog goes through the Windows relay (system/unreal_relay.txt) when "mirrored"
-networking is unavailable.
+networking is unavailable. A "windows" server (a Windows program: Roblox Studio's, a .exe, a .bat) is
+started on Windows through WSL interop by system/windows-mcp.sh, outside the cage.
 """
 import json, os, re, select, shutil, subprocess, sys, time
 
@@ -199,11 +200,42 @@ def serveur(kit, sid, definition, secrets, dossier, principal):
             cage += ["--env", k, v]
         s = {"type": "stdio", "command": os.path.join(kit, "system", "mcp-jail.sh"),
              "args": cage + ["--", remplacer(cmd, secrets, dossier, manquants)] + args}
+    elif t == "windows":
+        # a Windows program: started on Windows (WSL interop), outside the cage; its variables reach it alone
+        cmd = c.get("command")
+        if not isinstance(cmd, str) or not cmd.strip():
+            return None, "no command"
+        if not interop_windows():
+            return None, "Windows program: Windows is not reachable from here"
+        dossier_w = chemin_windows(dossier)   # {PROJECT} as the Windows program knows it (C:\…)
+        args = [remplacer(str(a), secrets, dossier_w, manquants) for a in (c.get("args") or [])]
+        lancement = []
+        for k, v in sorted(facultatif(c.get("env")).items()):
+            if not re.match(r"^[A-Za-z_][A-Za-z0-9_]{0,127}$", k) or "\0" in v:
+                return None, "invalid variable " + k[:40]
+            lancement += ["--env", k, v]
+        s = {"type": "stdio", "command": os.path.join(kit, "system", "windows-mcp.sh"),
+             "args": lancement + ["--", remplacer(cmd, secrets, dossier_w, manquants)] + args}
     else:
         return None, "unknown type " + str(t)
     if manquants:
         return None, "missing key " + ", ".join(sorted(manquants))
     return s, ""
+
+
+def interop_windows():
+    """WSL can start Windows programs (interop on): the condition of a "windows" server."""
+    return any(os.path.exists("/proc/sys/fs/binfmt_misc/" + n) for n in ("WSLInterop", "WSLInterop-late")) \
+        or bool(os.environ.get("WSL_INTEROP"))
+
+
+def chemin_windows(dossier):
+    """A WSL folder as Windows names it (/mnt/c/x -> C:\\x); left as it is when wslpath cannot say."""
+    try:
+        w = subprocess.run(["wslpath", "-w", dossier], capture_output=True, text=True, timeout=10).stdout.strip()
+        return w or dossier
+    except (OSError, subprocess.SubprocessError):
+        return dossier
 
 
 def adresse_unreal(kit, url):
@@ -310,12 +342,43 @@ def tester(kit, projet, sid, delai=150):
         outils = [t.get("name", "") for t in ((r or {}).get("result") or {}).get("tools", [])]
         return {"ok": True, "outils": outils, "serveur": info}
     except (RuntimeError, OSError, BrokenPipeError) as e:
-        p.kill()
-        erreur = (p.stderr.read() or b"").decode("utf-8", "replace").strip().splitlines()[-6:]
+        arreter(p)
+        erreur = lire_reste(p.stderr).decode("utf-8", "replace").strip().splitlines()[-6:]
         return {"ok": False, "erreur": str(e), "details": erreur}
     finally:
-        if p.poll() is None:
-            p.kill()
+        arreter(p)
+
+
+def lire_reste(flux, delai=3, taille_max=1 << 20):
+    """What a stopped server left on a pipe, without waiting for ever: a Windows program can outlive its
+    launcher and keep the pipe open."""
+    morceaux, fin = [], time.time() + delai
+    while time.time() < fin and sum(map(len, morceaux)) < taille_max:
+        pret, _, _ = select.select([flux], [], [], max(0, fin - time.time()))
+        if not pret:
+            break
+        bout = os.read(flux.fileno(), 65536)
+        if not bout:
+            break
+        morceaux.append(bout)
+    return b"".join(morceaux)
+
+
+def arreter(p):
+    """Stops a server the way Claude Code does: end of its input, then TERM (a Windows program's launcher
+    stops the whole Windows process tree on TERM), KILL only if it is still there."""
+    if p.poll() is not None:
+        return
+    try:
+        p.stdin.close()
+    except OSError:
+        pass
+    p.terminate()
+    try:
+        p.wait(5)
+    except subprocess.TimeoutExpired:
+        p.kill()
+        p.wait()
 
 
 def main():

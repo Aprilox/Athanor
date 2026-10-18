@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -101,3 +102,69 @@ func TestReglagesMCP(t *testing.T) {
 }
 
 func mustJSON(v any) []byte { b, _ := json.Marshal(v); return b }
+
+func TestMCPWindows(t *testing.T) {
+	kit := t.TempDir()
+	p := Projet{Nom: "a", Dossier: t.TempDir()}
+	s := nouveauServeur(Config{Kit: kit, Projets: []Projet{p}, ProjetActif: "a", Langue: "en"})
+	s.csrf = "jeton"
+	mux := http.NewServeMux()
+	s.routes(mux)
+	appel := func(chemin string, corps any) (int, map[string]any) {
+		b, _ := json.Marshal(corps)
+		methode := "POST"
+		if corps == nil {
+			methode = "GET"
+		}
+		r := httptest.NewRequest(methode, chemin, bytes.NewReader(b))
+		r.Header.Set("X-Athanor", "jeton")
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, r)
+		var v map[string]any
+		json.Unmarshal(w.Body.Bytes(), &v)
+		return w.Code, v
+	}
+	// Studio's own configuration, pasted: recognized as a Windows program, added only once the user says so
+	studio := `{"mcpServers":{"Roblox_Studio":{"command":"cmd.exe","args":["/c","%LOCALAPPDATA%\\Roblox\\mcp.bat"]}}}`
+	if c, r := appel("/api/extensions/mcp", map[string]any{"texte": studio}); c != 400 || !strings.Contains(fmt.Sprint(r), "Tick") {
+		t.Fatalf("a Windows program pasted without the option must be refused: %d %v", c, r)
+	}
+	if _, ok := lireBiblio(s.kitCourant()).MCP["roblox_studio"]; ok {
+		t.Fatal("added without the option")
+	}
+	if c, r := appel("/api/extensions/mcp", map[string]any{"texte": studio, "windows": true}); c != 200 {
+		t.Fatalf("paste: %d %v", c, r)
+	}
+	// the option forces it for a command that does not look like one; without it, a Linux server stays caged
+	appel("/api/extensions/mcp", map[string]any{"nom": "outil", "texte": `{"command":"mon-serveur","args":["--stdio"]}`, "windows": true})
+	appel("/api/extensions/mcp", map[string]any{"nom": "linux", "texte": `{"command":"npx","args":["-y","pkg"]}`})
+	if c, r := appel("/api/extensions/catalogue", map[string]any{"type": "mcp", "id": "roblox-studio"}); c != 200 {
+		t.Fatalf("catalog: %d %v", c, r)
+	}
+	b := lireBiblio(s.kitCourant())
+	for id, attendu := range map[string]string{"roblox_studio": "windows", "outil": "windows", "linux": "stdio", "roblox-studio": "windows"} {
+		if b.MCP[id].Config.Type != attendu {
+			t.Errorf("%s: type %q, expected %q", id, b.MCP[id].Config.Type, attendu)
+		}
+	}
+	if b.MCP["roblox-studio"].Reglages["ROBLOX_STUDIO_MCP"] != `%LOCALAPPDATA%\Roblox\mcp.bat` {
+		t.Errorf("setting: %v", b.MCP["roblox-studio"].Reglages)
+	}
+	// the view keeps the type, shows the command and the setting in clear
+	_, v := appel("/api/extensions?p=a", nil)
+	for _, x := range v["mcp"].([]any) {
+		m := x.(map[string]any)
+		if m["id"] != "roblox-studio" {
+			continue
+		}
+		if m["type"] != "windows" || m["resume"] != `cmd.exe /c %LOCALAPPDATA%\Roblox\mcp.bat` {
+			t.Errorf("view: %v", m)
+		}
+		sc := m["secrets"].([]any)[0].(map[string]any)
+		if sc["reglage"] != true || sc["valeur"] != `%LOCALAPPDATA%\Roblox\mcp.bat` {
+			t.Errorf("setting in the view: %v", sc)
+		}
+		return
+	}
+	t.Fatal("roblox-studio missing from the view")
+}

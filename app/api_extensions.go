@@ -49,7 +49,7 @@ type SecretCatalogue struct {
 }
 
 type ConfigMCP struct {
-	Type    string            `json:"type,omitempty"`
+	Type    string            `json:"type,omitempty"` // stdio (in a cage), windows (a Windows program, system/windows-mcp.sh), http, sse
 	Command string            `json:"command,omitempty"`
 	Args    []string          `json:"args,omitempty"`
 	Env     map[string]string `json:"env,omitempty"`
@@ -784,6 +784,16 @@ func lireConfigCollee(texte, nomDonne string) (map[string]ConfigMCP, error) {
 	return serveurs, nil
 }
 
+// reProgWindows: the command of a Windows program, as Claude Desktop's configuration gives it on Windows
+// ("C:\…\server.exe", "cmd.exe" with "/c %LOCALAPPDATA%\…\mcp.bat", a .bat, a .ps1).
+var reProgWindows = regexp.MustCompile(`(?i)(^[a-z]:[\\/]|^\\\\|\.(exe|bat|cmd|ps1)$|%[a-z_][a-z0-9_()]*%)`)
+
+// estProgrammeWindows: a local server that is a Windows program. It runs on Windows (WSL interop),
+// never in the Linux cage, which could not start it.
+func estProgrammeWindows(c ConfigMCP) bool {
+	return c.URL == "" && reProgWindows.MatchString(strings.TrimSpace(c.Command))
+}
+
 func verifierConfig(c ConfigMCP) error {
 	if c.URL != "" {
 		if !regexp.MustCompile(`^https?://[^\s]+$`).MatchString(c.URL) {
@@ -890,20 +900,25 @@ func (s *Serveur) apiExtensions(w http.ResponseWriter, r *http.Request) {
 		if d := descCat["mcp:"+x.Catalogue]; d != "" {
 			v.Description = d
 		}
-		if x.Config.URL != "" {
-			v.Resume = reVarSecret.ReplaceAllStringFunc(x.Config.URL, func(m string) string {
+		montrer := func(texte string) string {
+			return reVarSecret.ReplaceAllStringFunc(texte, func(m string) string {
 				nom := m[2 : len(m)-1]
 				if d, ok := x.Reglages[nom]; ok { // a setting shows its value, a key never
 					return firstNonEmpty(secrets[id][nom], d)
 				}
 				return "…"
 			})
+		}
+		if x.Config.URL != "" {
+			v.Resume = montrer(x.Config.URL)
 			if v.Type == "" {
 				v.Type = "http"
 			}
 		} else {
-			v.Resume = strings.TrimSpace(x.Config.Command + " " + strings.Join(x.Config.Args, " "))
-			v.Type = "stdio"
+			v.Resume = montrer(strings.TrimSpace(x.Config.Command + " " + strings.Join(x.Config.Args, " ")))
+			if v.Type != "windows" {
+				v.Type = "stdio"
+			}
 		}
 		for _, nom := range secretsRequis(x.Config) {
 			if d, ok := x.Reglages[nom]; ok {
@@ -1203,9 +1218,10 @@ func (s *Serveur) apiExtSkillPerso(w http.ResponseWriter, r *http.Request) {
 // apiExtMCPPerso adds the MCP server(s) of a pasted configuration.
 func (s *Serveur) apiExtMCPPerso(w http.ResponseWriter, r *http.Request) {
 	var c struct {
-		Nom    string `json:"nom"`
-		Texte  string `json:"texte"`
-		Source string `json:"source"`
+		Nom     string `json:"nom"`
+		Texte   string `json:"texte"`
+		Source  string `json:"source"`
+		Windows bool   `json:"windows"` // "Windows program": started on Windows, outside the cage
 	}
 	if err := lireCorps(r, &c); err != nil {
 		s.erreur(w, http.StatusBadRequest, err.Error())
@@ -1239,6 +1255,13 @@ func (s *Serveur) apiExtMCPPerso(w http.ResponseWriter, r *http.Request) {
 		}
 		if conf.URL == "" {
 			conf.Type = "stdio"
+			if c.Windows {
+				conf.Type = "windows"
+			} else if estProgrammeWindows(conf) {
+				// never uncaged on syntax alone: the user says it is a Windows program
+				s.erreur(w, http.StatusBadRequest, "This server is a Windows program: it would run on Windows, outside the cage, with your rights. Tick “Windows program” to add it.")
+				return
+			}
 		}
 		valeurs := separerSecrets(&conf)
 		reglages := separerReglages(&conf)

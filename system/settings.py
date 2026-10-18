@@ -44,7 +44,7 @@ except OSError:
 
 # Gateways to the PC tools and Docker: they leave the sandbox, so they live
 # in system/ (not modifiable by Claude) and must be allowed one by one.
-passerelles = ["tool", "unreal-editor", "unreal-cmd", "unreal-uat", "blender",
+passerelles = ["tool", "unreal-editor", "unreal-cmd", "unreal-uat", "blender", "roblox-studio",
                "install-windows", "pc-exec", "windows-var", "adb"]
 
 reglages = {

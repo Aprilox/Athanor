@@ -229,7 +229,7 @@ Les captures sont en anglais ; l'interface s'affiche dans la langue choisie.
 | **Réglages** | le `.env` (jeton masqué, modèles, effort, surveillance…), *Enregistrer et redémarrer après le cycle* |
 | **Options** | langue, palette et accent, liste des projets (retirer de la liste ne touche jamais au dossier), relance des pilotes à l'ouverture, démarrage avec l'ordinateur, bureau « Claude », mot de passe, dossier de l'outil |
 
-**Skills & MCP, en sécurité** : les skills sont chargés comme un plugin de session (`--plugin-dir`) : Claude ne lit un skill que quand il en a besoin, et peut les lire mais jamais les modifier. Les serveurs MCP s'ajoutent à la configuration MCP de la session ; un serveur local démarre dans une cage bubblewrap (`system/mcp-jail.sh`) : système en lecture seule, seuls le projet et les caches de l'outil en écriture, ni dossier personnel, ni disques Windows, ni dossier d'Athanor, ni jeton Claude. Les skills demandent une version de Claude Code qui a `--plugin-dir`.
+**Skills & MCP, en sécurité** : les skills sont chargés comme un plugin de session (`--plugin-dir`) : Claude ne lit un skill que quand il en a besoin, et peut les lire mais jamais les modifier. Les serveurs MCP s'ajoutent à la configuration MCP de la session ; un serveur local démarre dans une cage bubblewrap (`system/mcp-jail.sh`) : système en lecture seule, seuls le projet et les caches de l'outil en écriture, ni dossier personnel, ni disques Windows, ni dossier d'Athanor, ni jeton Claude. Un *programme Windows* (le serveur de Roblox Studio, un `.exe` ou un `.bat`, reconnu au collage et confirmé par l'option *Programme Windows*) ne peut pas être mis en cage depuis WSL : il démarre sous Windows via l'interopérabilité de WSL (`system/windows-mcp.sh`), avec vos droits, et ne reçoit que ses propres variables ; Claude ne voit que ses outils, et tout son arbre de processus s'arrête avec la session. Les skills demandent une version de Claude Code qui a `--plugin-dir`.
 
 **Les plugins, démontés** : un plugin est téléchargé une fois dans le dossier de l'outil (depuis GitHub, figé sur le commit que donne son catalogue) et activé projet par projet. Ses skills, ses commandes et ses sous-agents sont chargés avec `--plugin-dir`, en lecture seule pour Claude ; ses serveurs MCP rejoignent la bibliothèque MCP (les locaux dans la cage, les clés rangées à part, un serveur distant connecté une fois pour tous les projets) ; ses hooks, ses serveurs LSP et ses moniteurs sont écartés, car ils tourneraient hors de la barrière. Les plugins construits par une commande ou publiés seulement sur npm sont listés mais pas installés.
 
@@ -275,6 +275,7 @@ Claude travaille sous Linux (WSL2 sous Windows) et atteint vos logiciels Windows
 | Passerelle | Ce qu'elle fait |
 |---|---|
 | `unreal-editor`, `unreal-cmd`, `unreal-uat` | ouvre l'éditeur Unreal (piloté par Unreal MCP si activé), lance commandlets et tests, fabrique les versions Windows et Android |
+| `roblox-studio` | ouvre Roblox Studio sur une place du projet (rien si un Studio est déjà ouvert) |
 | `blender` | le Blender du PC, généralement en arrière-plan avec un script Python (`blender -b -P scene.py`) |
 | `adb` | l'outil Android du PC : installer et tester sur un téléphone branché en USB |
 | `tool IMAGE CMD…` | lance une commande dans un conteneur Docker jetable qui ne voit que le projet |
@@ -285,6 +286,8 @@ Claude travaille sous Linux (WSL2 sous Windows) et atteint vos logiciels Windows
 Les logiciels installés sont détectés sur **tous les disques** (`C:`, `D:`…), et la version la plus récente l'emporte. La liste détectée est écrite avant chaque cycle dans `.athanor/PC_TOOLS.md`. Si la détection manque un logiciel, indiquez son chemin dans *Réglages* (`UE_DIR`, `BLENDER_EXE`, `ANDROID_SDK_DIR`).
 
 **Unreal Engine (MCP)** : installez **Unreal Engine** depuis le catalogue vérifié de *Skills & MCP*, activez-le pour le projet (son adresse est un réglage du serveur) et lancez une fois `commands\unreal-network.cmd`. Claude active lui-même les plugins du MCP dans le projet Unreal, et le pilote ouvre l'éditeur avant chaque cycle. Claude le pilote (acteurs, lumières, matériaux, tests), lance tests et captures avec `unreal-cmd`, et fabrique le jeu Windows avec `unreal-uat` dans `deliverable/`. Le MCP d'Unreal est expérimental : s'il ne répond pas, Claude continue sans.
+
+**Roblox Studio (MCP)** : installez **Roblox Studio** depuis le catalogue vérifié de *Skills & MCP* et activez-le pour le projet. Dans Studio, *Assistant > … > Manage MCP Servers*, activez *Enable Studio as MCP server*. Avant chaque cycle, le pilote ouvre dans Studio la première place `.rbxl`/`.rbxlx` du projet (sur le bureau de Claude si cette option est activée), sauf si un Studio est déjà ouvert : Claude travaille alors dans le vôtre. Claude modifie scripts et instances, lance des tests en jeu et insère des ressources via le serveur MCP intégré à Studio. C'est un programme Windows : il tourne sous Windows, hors de la cage (voir *Skills & MCP, en sécurité* plus haut). Expérimental.
 
 **Logiciels manquants** : Claude se débrouille seul (version portable dans `tools/windows/`, sinon winget, sinon la tâche administrateur si elle est autorisée). Si une installation échoue, il l'écrit dans `.athanor/TODO_FOR_YOU.md` et continue autrement.
 
@@ -457,10 +460,10 @@ Oui. Rien n'est lié à un nom d'utilisateur ni à une lettre de disque : les ch
 Poussez un tag de version : GitHub compile les deux applications et publie la version ([`.github/workflows/release.yml`](.github/workflows/release.yml)).
 
 ```bash
-git tag v2.14.0 && git push origin v2.14.0
+git tag v2.15.0 && git push origin v2.15.0
 ```
 
-Gardez la version de [`app/winres/athanor.rc`](app/winres/athanor.rc) alignée sur le tag, et écrivez les nouveautés dans `docs/releases/VERSION.md` (par ex. [`docs/releases/2.14.0.md`](docs/releases/2.14.0.md)) : elles ouvrent la page de la version.
+Gardez la version de [`app/winres/athanor.rc`](app/winres/athanor.rc) alignée sur le tag, et écrivez les nouveautés dans `docs/releases/VERSION.md` (par ex. [`docs/releases/2.15.0.md`](docs/releases/2.15.0.md)) : elles ouvrent la page de la version.
 
 ## Contribuer
 

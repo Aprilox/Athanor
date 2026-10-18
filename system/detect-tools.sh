@@ -38,6 +38,7 @@ if [ -z "$ANDROID_JDK_DIR" ]; then
     [ -f "$d/bin/java.exe" ] && { ANDROID_JDK_DIR="$d"; break; }
   done
 fi
+ROBLOX_STUDIO=""; [ -n "$PROFIL" ] && ROBLOX_STUDIO=$(ls -t "$PROFIL"/AppData/Local/Roblox/Versions/*/RobloxStudioBeta.exe 2>/dev/null | head -n 1)
 WINGET=0; [ "$WINDOWS" = 1 ] && (cd /mnt/c && timeout 30 powershell.exe -NoProfile -Command "Get-Command winget" >/dev/null 2>&1) && WINGET=1
 { echo "UE_DIR='${UE_DIR}'"; echo "BLENDER_EXE='${BLENDER_EXE}'"; echo "ANDROID_SDK_DIR='${ANDROID_SDK_DIR}'"; echo "ANDROID_JDK_DIR='${ANDROID_JDK_DIR}'"; echo "WIN_PROFIL='${PROFIL}'"; } > "$SYSTEME/pc_tools.env"
 PROJECT="${PROJECT:-$KIT/projet}"; mkdir -p "$PROJECT/.athanor" "$KIT/tools/windows"
@@ -52,6 +53,10 @@ PROJECT="${PROJECT:-$KIT/projet}"; mkdir -p "$PROJECT/.athanor" "$KIT/tools/wind
     [ "${UNREAL_MCP:-0}" = 1 ] && echo "  - **Unreal MCP active**: \`mcp__unreal__*\` tools when the editor is open (the pilot opens it before each cycle if a .uproject exists)"
   else
     echo "- Unreal Engine: not detected"
+  fi
+  if [ -n "$ROBLOX_STUDIO" ]; then
+    echo "- **Roblox Studio**: \`roblox-studio [--wait] PLACE.rbxl\` opens it on a place of the project, without blocking (nothing if a Studio is already open)"
+    [ "${ROBLOX_MCP:-0}" = 1 ] && echo "  - **Roblox Studio MCP active**: \`mcp__roblox-studio__*\` tools on the open Studio (the pilot opens it before each cycle on the project's first .rbxl/.rbxlx place)"
   fi
   if [ -n "$BLENDER_EXE" ]; then echo "- **Blender**: \`blender -b -P script.py\`"; else echo "- Blender: not detected"; fi
   if [ -n "$ANDROID_SDK_DIR" ]; then echo "- **Android SDK**: \`$ANDROID_SDK_DIR\`; \`adb devices\`, \`adb install -r game.apk\` (phone plugged in over USB)"; else echo "- Android SDK: missing (install it as a portable copy in \`\$TOOLS/windows/android-sdk\`, see PC_TOOLS_GUIDE.md)"; fi
