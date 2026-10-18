@@ -16,7 +16,7 @@ SYSTEME, TOOLS = (os.path.join(KIT, d) for d in ("system", "tools"))
 # while the pilot runs (Docker Desktop bind mounts) does not lock the gateways out
 PROJECT = os.path.abspath(sys.argv[2]) if len(sys.argv) > 2 else os.path.join(KIT, "projet")
 DOSSIER = os.path.join(PROJECT, ".athanor", "pont")
-AUTORISES = {"tool", "unreal-editor", "unreal-cmd", "unreal-uat", "blender",
+AUTORISES = {"tool", "unreal-editor", "unreal-cmd", "unreal-uat", "blender", "roblox-studio",
              "install-windows", "pc-exec", "windows-var", "adb"}
 en_cours = {}
 NOFOLLOW = getattr(os, "O_NOFOLLOW", 0)

@@ -1016,7 +1016,7 @@ pages.extensions = async () => {
   const cat = (o === "skills" ? d.catalogue.skills : d.catalogue.mcp) || [];
   const occupe = (cle) => ext.occupe === cle ? "disabled" : "";
   const secrets = (x) => champsServeur(x);
-  const test = (x) => { const r = ext.tests[x.id]; if (!r) return ""; if (r === "…") return `<div class="muet petit">${t("Starting the server in its cage… (the first time, it downloads it: up to two minutes)")}</div>`;
+  const test = (x) => { const r = ext.tests[x.id]; if (!r) return ""; if (r === "…") return `<div class="muet petit">${x.type === "windows" ? t("Starting the Windows program…") : t("Starting the server in its cage… (the first time, it downloads it: up to two minutes)")}</div>`;
     return r.ok ? `<div class="ext-test ok">✓ ${r.outils && r.outils.length ? t("Works: {0} tools ({1})", [r.outils.length, h(r.outils.slice(0, 8).join(", ")) + (r.outils.length > 8 ? "…" : "")]) : t(r.note || "Works.")}</div>`
       : `<div class="ext-test echec">✕ ${h(t(r.erreur || "Failed"))}${r.details && r.details.length ? `<pre class="texte-agent">${h(r.details.join("\n"))}</pre>` : ""}</div>`; };
   const voir = (x) => ext.voir && ext.voir.id === x.id && ext.voir.type === type ? `<div class="ext-voir">
@@ -1027,7 +1027,7 @@ pages.extensions = async () => {
   const lignes = liste.map((x) => `<div class="ext-ligne ${x.actif ? "actif" : ""}">
       <label class="interrupteur" title="${h(d.projet ? t("Used by “{0}”", [d.projet]) : t("Choose a project first"))}"><input type="checkbox" data-ext-actif="${type}|${h(x.id)}" ${x.actif ? "checked" : ""} ${d.projet && !x.plugin ? "" : "disabled"}></label>
       <div class="ext-corps">
-        <div class="ext-nom">${h(x.nom)}${x.scripts ? ` <span class="etiquette" title="${h(t("Contains scripts: Claude runs them inside its sandbox."))}">${t("scripts")}</span>` : ""}${!x.source && !x.catalogue ? ` <span class="etiquette">${t("yours")}</span>` : ""}${x.type ? ` <span class="etiquette">${x.type === "stdio" ? t("local, in a cage") : t("remote")}</span>` : ""}${x.plugin ? ` <span class="etiquette" title="${h(t("On and off with its plugin (Plugins tab)"))}">${t("plugin {0}", [h(x.plugin)])}</span>` : ""}</div>
+        <div class="ext-nom">${h(x.nom)}${x.scripts ? ` <span class="etiquette" title="${h(t("Contains scripts: Claude runs them inside its sandbox."))}">${t("scripts")}</span>` : ""}${!x.source && !x.catalogue ? ` <span class="etiquette">${t("yours")}</span>` : ""}${x.type ? ` <span class="etiquette" ${x.type === "windows" ? `title="${h(t("Runs on Windows, outside the cage, with your rights: Claude only sees its tools."))}"` : ""}>${genreServeur(x.type)}</span>` : ""}${x.plugin ? ` <span class="etiquette" title="${h(t("On and off with its plugin (Plugins tab)"))}">${t("plugin {0}", [h(x.plugin)])}</span>` : ""}</div>
         ${x.description ? `<div class="ext-desc">${h(x.description)}</div>` : ""}
         <div class="muet petit ext-source">${[x.source ? h(x.source.startsWith("registry:") ? t("MCP Registry") + " · " + x.source.slice(9) : x.source) : x.catalogue ? "" : h(t("written in Athanor")), x.resume ? `<code>${h(x.resume)}</code>` : ""].filter(Boolean).join(" · ")}</div>
         ${secrets(x)}${test(x)}${voir(x)}
@@ -1076,6 +1076,7 @@ pages.extensions = async () => {
       <p class="muet petit">${t("The JSON block or the “claude mcp add …” command given in the server's README. API keys found in it are stored apart, never shown again.")}</p>
       <div class="grille grille-2"><input type="text" id="ext-mcp-nom" placeholder="${h(t("Name (optional)"))}"><input type="text" id="ext-mcp-source" placeholder="${h(t("Link to its GitHub page (optional)"))}"></div>
       <textarea id="ext-mcp-texte" rows="7" class="code mt-1" placeholder='{"mcpServers": {"name": {"command": "npx", "args": ["-y", "…"]}}}'></textarea>
+      <label class="interrupteur mt-1"><input type="checkbox" id="ext-mcp-windows"><span>${t("Windows program (a .exe, a .bat, a C:\\ path): it runs on Windows, outside the cage, with your rights")}</span></label>
       <div class="ligne mt-1"><button class="btn" data-ext-mcp-ajouter>${t("Add the server")}</button></div>`;
   return `${intro}
   <div class="bloc"><h2>${t("In Athanor")}</h2>
@@ -1099,6 +1100,10 @@ function resumePlugin(x) {
   const n = (l) => (l || []).length;
   return [n(x.skills) && t("{0} skill(s)", [n(x.skills)]), n(x.commandes) && t("{0} command(s)", [n(x.commandes)]), n(x.agents) && t("{0} sub-agent(s)", [n(x.agents)]), n(x.mcp) && t("{0} MCP server(s)", [n(x.mcp)])].filter(Boolean).join(" · ");
 }
+// Where a server runs: in a cage (Linux), on Windows (a Windows program), or online.
+function genreServeur(type) {
+  return type === "stdio" ? t("local, in a cage") : type === "windows" ? t("Windows program") : t("remote");
+}
 // The keys (hidden, asked once for the whole application) and the settings (an address, a port, a path:
 // shown in clear, with their default) of an MCP server. Both are saved by the same button.
 function champsServeur(x) {
@@ -1114,13 +1119,13 @@ function champsServeur(x) {
 function serveurPlugin(x, d) {
   const sc = champsServeur(x);
   const distant = x.type === "http" || x.type === "sse";
-  return `<div class="plg-serveur"><div class="ligne"><span>🔌 <b>${h(x.nom)}</b> <span class="etiquette">${distant ? t("remote") : t("local, in a cage")}</span></span>
+  return `<div class="plg-serveur"><div class="ligne"><span>🔌 <b>${h(x.nom)}</b> <span class="etiquette">${genreServeur(x.type)}</span></span>
       <span class="espace"></span>${distant ? `<button class="btn btn-petit" data-ext-connexion="${h(x.id)}" title="${h(t("For a server that asks you to sign in (OAuth): once, valid for every project."))}">${t("Sign in")}</button>` : ""}
       <button class="btn btn-petit" data-ext-tester="${h(x.id)}" ${d.projet && ext.tests[x.id] !== "…" ? "" : "disabled"}>${t("Test")}</button></div>${sc}${testExt(x)}</div>`;
 }
 function testExt(x) {
   const r = ext.tests[x.id]; if (!r) return "";
-  if (r === "…") return `<div class="muet petit">${t("Starting the server in its cage… (the first time, it downloads it: up to two minutes)")}</div>`;
+  if (r === "…") return `<div class="muet petit">${x.type === "windows" ? t("Starting the Windows program…") : t("Starting the server in its cage… (the first time, it downloads it: up to two minutes)")}</div>`;
   return r.ok ? `<div class="ext-test ok">✓ ${r.outils && r.outils.length ? t("Works: {0} tools ({1})", [r.outils.length, h(r.outils.slice(0, 8).join(", ")) + (r.outils.length > 8 ? "…" : "")]) : t(r.note || "Works.")}</div>`
     : `<div class="ext-test echec">✕ ${h(t(r.erreur || "Failed"))}${r.details && r.details.length ? `<pre class="texte-agent">${h(r.details.join("\n"))}</pre>` : ""}</div>`;
 }
@@ -1264,7 +1269,7 @@ $("#page").addEventListener("click", async (ev) => {
     if (r) rendrePage(); return;
   }
   if (d.extMcpAjouter !== undefined) {
-    const r = await action(api("extensions/mcp", "POST", { nom: $("#ext-mcp-nom").value, source: $("#ext-mcp-source").value, texte: $("#ext-mcp-texte").value }));
+    const r = await action(api("extensions/mcp", "POST", { nom: $("#ext-mcp-nom").value, source: $("#ext-mcp-source").value, texte: $("#ext-mcp-texte").value, windows: $("#ext-mcp-windows").checked }));
     if (r) rendrePage(); return;
   }
   if (d.extVoir) {

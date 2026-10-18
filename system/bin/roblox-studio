@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# roblox-studio [--wait] [PLACE.rbxl|PLACE.rbxlx]: opens Roblox Studio (window) on a place of the project,
+# without blocking, on Claude's desktop when that option is on. Does nothing if a Studio is already open
+# (yours included: its MCP server then drives that one). --wait: returns once Studio runs (1 min at most).
+. "$(dirname "$0")/_common.sh"
+passer_par_le_pont "$@"
+studio_ouvert() {
+  (cd /mnt/c 2>/dev/null; tasklist.exe /FI "IMAGENAME eq RobloxStudioBeta.exe" /NH 2>/dev/null) | grep -qi 'RobloxStudioBeta'
+}
+attendre=0; [ "${1:-}" = "--wait" ] && { attendre=1; shift; }
+place="${1:-}"
+if studio_ouvert; then echo "Roblox Studio is already open."; exit 0; fi
+# the newest version (Studio updates itself into a new Versions folder)
+exe=$(ls -t "${WIN_PROFIL:-/nulle-part}"/AppData/Local/Roblox/Versions/*/RobloxStudioBeta.exe 2>/dev/null | head -n 1)
+[ -n "$exe" ] && [ -f "$exe" ] || absent "Roblox Studio"
+if [ -n "$place" ]; then
+  [ -f "$place" ] || { echo "Place not found: $place" >&2; exit 2; }
+  case "${place,,}" in *.rbxl|*.rbxlx) ;; *) echo "Refused: a .rbxl or .rbxlx place only." >&2; exit 2 ;; esac
+  reel=$(realpath "$place")
+  case "$reel" in "$(realpath "$PROJECT")/"*) ;; *) echo "Refused: the place must be inside the project ($reel)." >&2; exit 2 ;; esac
+  lancer_windows --detache "$exe" --task EditFile --localPlaceFile "$(wslpath -w "$reel")"
+else
+  lancer_windows --detache "$exe"
+fi
+if [ "$attendre" = 1 ]; then
+  for _ in $(seq 1 30); do studio_ouvert && { echo "Roblox Studio started."; exit 0; }; sleep 2; done
+  echo "Roblox Studio did not start (signed in to Roblox? up to date?)." >&2; exit 1
+fi
+echo "Roblox Studio started."

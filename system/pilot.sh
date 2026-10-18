@@ -355,6 +355,22 @@ preparer_cycle() {  # non-AI tools: archives and project map, before Claude read
       PROJECT="$PROJECT" unreal-editor --wait-mcp "$uproject" >> "$PRIVE/pilot.log" 2>&1 || log "Unreal MCP unavailable for this cycle."
     fi
   fi
+  # Roblox Studio: its MCP server drives the open Studio. A Studio already open (yours included) is used
+  # as it is; otherwise the pilot opens the project's first place, on Claude's desktop when that option is on.
+  if [ "${ROBLOX_MCP:-0}" = "1" ]; then
+    local place; place=$(find "$PROJECT" -maxdepth 3 \( -name .athanor -o -name .git -o -name node_modules \) -prune -o \( -iname '*.rbxl' -o -iname '*.rbxlx' \) -type f -print -quit 2>/dev/null)
+    if [ -n "$place" ]; then
+      local sortie; sortie=$(PROJECT="$PROJECT" roblox-studio --wait "$place" 2>&1)
+      case "$sortie" in
+        *"already open"*) ;;
+        *started*) log "Roblox Studio opened on $(basename "$place") for its MCP server." ;;
+        *) log "Roblox Studio unavailable for this cycle: $(printf '%s' "$sortie" | tail -n 1 | cut -c1-200)" ;;
+      esac
+    elif [ "${ROBLOX_SANS_PLACE:-}" != 1 ]; then
+      ROBLOX_SANS_PLACE=1
+      log "Roblox Studio MCP: no .rbxl/.rbxlx place in the project, the pilot does not open Studio (open it yourself, or let Claude save the place into the project)."
+    fi
+  fi
 }
 
 attente_quota() {  # reads "resets 3:45pm" or "resets Mon 12:00am" when possible
@@ -501,6 +517,15 @@ unreal_depuis_mcp() {
   fi
   export UNREAL_MCP UNREAL_MCP_URL
 }
+# Roblox Studio MCP: a server of the Skills & MCP page that drives Studio (the verified catalog's
+# "roblox-studio", or Studio's configuration pasted by hand), switched on for the project.
+ROBLOX_MCP=0; export ROBLOX_MCP
+roblox_depuis_mcp() {
+  ROBLOX_MCP=0
+  [ -f "$PRIVE/mcp.json" ] && jq -e '.mcpServers | to_entries[] | select((.key | test("roblox"; "i")) or ((.value.args // []) | map(tostring) | join(" ") | test("Roblox\\\\mcp\\.bat"; "i")))' "$PRIVE/mcp.json" >/dev/null 2>&1 \
+    && ROBLOX_MCP=1
+  export ROBLOX_MCP
+}
 
 # Skills and MCP servers chosen in the app (Skills & MCP page), plus Unreal MCP: rebuilt at the start of
 # every cycle, so a change made in the app applies from the next cycle. Local MCP servers run in a cage
@@ -522,6 +547,7 @@ preparer_extensions() {
   [ -n "$r" ] && [ "$r" != "$EXTENSIONS_AVANT" ] && log "Skills & MCP: $r"
   EXTENSIONS_AVANT="$r"
   unreal_depuis_mcp
+  roblox_depuis_mcp
 }
 preparer_extensions
 

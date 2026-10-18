@@ -117,11 +117,13 @@ type limitesJob struct { // JOBOBJECT_EXTENDED_LIMIT_INFORMATION (64-bit layout)
 // the program, and stopping Athanor.exe (a cancelled command) stops the program and everything it started.
 // If the desktop cannot be created, the program runs on the current desktop: the work goes on.
 func LancerIsole(args []string) int {
-	detache, fichierPID := false, ""
+	detache, ici, fichierPID := false, false, ""
 	for len(args) > 0 && args[0] != "--" {
 		switch {
 		case args[0] == "--detache":
 			detache = true
+		case args[0] == "--ici": // on the current desktop (a Windows MCP server when Claude's desktop is off)
+			ici = true
 		case args[0] == "--pid" && len(args) > 1: // the gateway stops this process tree (taskkill /T) on cancel
 			fichierPID = args[1]
 			args = args[1:]
@@ -135,15 +137,17 @@ func LancerIsole(args []string) int {
 		args = args[1:]
 	}
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "Usage: Athanor.exe --isole [--detache] [--pid FILE] -- PROGRAM [ARGUMENTS...]")
+		fmt.Fprintln(os.Stderr, "Usage: Athanor.exe --isole [--detache] [--ici] [--pid FILE] -- PROGRAM [ARGUMENTS...]")
 		return 2
 	}
-	var nomBureau *uint16
-	if h, err := ouvrirBureauIsole(); err == nil {
-		defer pCloseDesktop.Call(h) // the desktop lives on as long as programs run on it
-		nomBureau, _ = syscall.UTF16PtrFromString(`WinSta0\` + nomBureauIsole)
-	} else {
-		fmt.Fprintln(os.Stderr, "Athanor: Claude's desktop is not available (", err, "): the program opens on the current desktop.")
+	var nomBureau *uint16 // nil: the current desktop
+	if !ici {
+		if h, err := ouvrirBureauIsole(); err == nil {
+			defer pCloseDesktop.Call(h) // the desktop lives on as long as programs run on it
+			nomBureau, _ = syscall.UTF16PtrFromString(`WinSta0\` + nomBureauIsole)
+		} else {
+			fmt.Fprintln(os.Stderr, "Athanor: Claude's desktop is not available (", err, "): the program opens on the current desktop.")
+		}
 	}
 	parties := make([]string, len(args))
 	for i, a := range args {
@@ -153,7 +157,7 @@ func LancerIsole(args []string) int {
 	// cmd.exe /c with several quoted arguments (a .bat in "Program Files", a path with spaces): cmd only
 	// keeps the line intact between /s /c "…" (it removes the first and last quote, nothing else).
 	if b := strings.ToLower(args[0]); len(args) > 2 && (b == "cmd.exe" || b == "cmd" || strings.HasSuffix(b, `\cmd.exe`)) && strings.EqualFold(args[1], "/c") {
-		texteLigne = parties[0] + ` /s /c "` + strings.Join(parties[2:], " ") + `"`
+		texteLigne = parties[0] + ` /s /c "` + strings.Join(entreGuillemetsCmd(args[2:], parties[2:]), " ") + `"`
 	}
 	ligne, err := syscall.UTF16PtrFromString(texteLigne)
 	if err != nil {

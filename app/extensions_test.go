@@ -150,3 +150,60 @@ func TestNomSecret(t *testing.T) {
 		}
 	}
 }
+
+func TestProgrammeWindows(t *testing.T) {
+	// Roblox Studio's own configuration, as its "Setup instructions" give it on Windows
+	s, err := lireConfigCollee(`{"mcpServers":{"Roblox_Studio":{"command":"cmd.exe","args":["/c","%LOCALAPPDATA%\\Roblox\\mcp.bat"]}}}`, "")
+	if err != nil || !estProgrammeWindows(s["Roblox_Studio"]) {
+		t.Fatalf("Roblox Studio not seen as a Windows program: %+v %v", s, err)
+	}
+	for _, cmd := range []string{`C:\Tools\server.exe`, `c:/tools/server.exe`, `\\pc\share\srv.exe`, `start.BAT`, `run.ps1`, `%USERPROFILE%\srv`, `python.exe`} {
+		if !estProgrammeWindows(ConfigMCP{Command: cmd}) {
+			t.Fatalf("%s: a Windows program", cmd)
+		}
+	}
+	for _, cmd := range []string{"npx", "uvx", "node", "/usr/bin/python3", "docker", "./server", "bun"} {
+		if estProgrammeWindows(ConfigMCP{Command: cmd}) {
+			t.Fatalf("%s: not a Windows program", cmd)
+		}
+	}
+	if estProgrammeWindows(ConfigMCP{URL: "http://127.0.0.1:8000/mcp", Command: "x.exe"}) {
+		t.Fatal("a remote server is never a Windows program")
+	}
+}
+
+func TestCatalogueRobloxStudio(t *testing.T) {
+	for _, m := range lireCatalogue().MCP {
+		if m.ID != "roblox-studio" {
+			continue
+		}
+		if m.Config.Type != "windows" || m.Config.Command != "cmd.exe" || len(m.Config.Args) != 2 || m.Config.Args[1] != "${ROBLOX_STUDIO_MCP}" {
+			t.Fatalf("config: %+v", m.Config)
+		}
+		if len(m.Reglages) != 1 || m.Reglages[0].Nom != "ROBLOX_STUDIO_MCP" || m.Reglages[0].Defaut != `%LOCALAPPDATA%\Roblox\mcp.bat` {
+			t.Fatalf("setting: %+v", m.Reglages)
+		}
+		if got := secretsRequis(m.Config); len(got) != 1 || got[0] != "ROBLOX_STUDIO_MCP" {
+			t.Fatalf("the setting must be the only value it asks for: %v", got)
+		}
+		for _, l := range []string{"en", "fr", "es", "de", "it", "pt"} {
+			if m.Description[l] == "" {
+				t.Fatalf("description %s missing", l)
+			}
+		}
+		return
+	}
+	t.Fatal("roblox-studio missing from the verified catalog")
+}
+
+func TestGuillemetsCmd(t *testing.T) {
+	args := []string{`C:\Users\R&D\AppData\Local\Roblox\mcp.bat`, `--port`, `a|b`, `C:\x(y)\`, `déjà "cité"`}
+	echappes := []string{`C:\Users\R&D\AppData\Local\Roblox\mcp.bat`, `--port`, `a|b`, `C:\x(y)\`, `"déjà \"cité\""`}
+	got := entreGuillemetsCmd(args, echappes)
+	attendu := []string{`"C:\Users\R&D\AppData\Local\Roblox\mcp.bat"`, `--port`, `"a|b"`, `"C:\x(y)\\"`, `"déjà \"cité\""`}
+	for i := range attendu {
+		if got[i] != attendu[i] {
+			t.Errorf("%d: %s, expected %s", i, got[i], attendu[i])
+		}
+	}
+}
