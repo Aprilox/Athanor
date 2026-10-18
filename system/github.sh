@@ -26,6 +26,7 @@
 #   github.sh regler-identite PROJECT NAME EMAIL 0|1   author of the commits, Claude co-author (0) or not (1)
 #   github.sh identite-pilote PROJECT              "name<TAB>email<TAB>0|1" for the pilot
 #   github.sh crochet PROJECT 0|1                  the project's commit-msg hook that removes Claude's co-author lines
+#   github.sh publie PROJECT FILE...               0 when one of these files is in a commit already pushed to GitHub
 #
 # Exit codes of pousser: 0 pushed or up to date, 3 nothing to do (not linked, automatic push off,
 # no commit yet), 4 blocked (secret found), 5 refused by GitHub (branch ahead, key removed...), 1 error.
@@ -254,6 +255,18 @@ consigne_secrets() {  # $1 project, $2 base or empty, then "place<TAB>kind" line
     echo
     echo "If it is not a real secret (a test value, a documented example), leave the code as it is, say so in \`.athanor/BLOCKERS.md\` and delete this file: the user can push anyway from the application."
   } | atelier "$p" SECRETS_FOUND.md ecrire
+}
+
+# Was one of these files in a commit already pushed to GitHub (refs/athanor/pousse/*)? 0 yes, 1 no or unknown.
+publie() {
+  local projet; projet=$(chemin_projet "${1:-}") || return 1; shift
+  [ "$#" -gt 0 ] || return 1
+  local d; d=$(dossier_de "$projet")
+  MIROIR="$d/miroir.git"
+  [ -d "$MIROIR" ] && [ ! -L "$MIROIR" ] && lire_projet "$projet" || return 1
+  exec 8> "$d/verrou" && flock -w 60 8 || return 1
+  printf '%s\n' "$OBJETS" > "$MIROIR/objects/info/alternates" || return 1
+  [ -n "$(GIT_LITERAL_PATHSPECS=1 gm log --glob='refs/athanor/pousse/*' -1 --format=%H -- "$@" 2>/dev/null)" ]
 }
 
 pousser() {
@@ -692,6 +705,7 @@ case "${1:-}" in
   regler-identite) regler_identite "${2:-}" "${3:-}" "${4:-}" "${5:-0}" ;;
   identite-pilote) identite_pilote "${2:-}" ;;
   crochet) crochet "${2:-}" "${3:-0}" ;;
+  publie)  shift; publie "$@" ;;
   lier)    shift; lier "$@" ;;
   pousser) shift; pousser "$@" ;;
   auto)    reglage auto "${2:-}" "${3:-}" ;;

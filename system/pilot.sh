@@ -596,6 +596,21 @@ grep -qx '.claude/' "$PROJECT/.git/info/exclude" 2>/dev/null || echo '.claude/' 
 for motif in /.bashrc /.bash_profile /.profile /.zshrc /.zprofile /.gitconfig /.gitmodules /.ripgreprc /.idea /.vscode /.mcp.json; do
   grep -qxF "$motif" "$PROJECT/.git/info/exclude" 2>/dev/null || echo "$motif" >> "$PROJECT/.git/info/exclude"
 done
+# Local secrets (.env and its variants, never their templates) never enter the history: excluded here
+# (this computer, before the first commit), and listed in the project's .gitignore when it does not
+# already mention them (a copy of the project elsewhere ignores them too).
+MOTIFS_SECRETS=(.env '.env.*' '!.env.example' '!.env.sample' '!.env.template' '!.env.dist')
+for motif in "${MOTIFS_SECRETS[@]}"; do
+  grep -qxF -- "$motif" "$PROJECT/.git/info/exclude" 2>/dev/null || printf '%s\n' "$motif" >> "$PROJECT/.git/info/exclude"
+done
+gi="$PROJECT/.gitignore"
+if [ ! -L "$gi" ] && { [ ! -e "$gi" ] || [ -f "$gi" ]; } \
+   && ! grep -Eq '^[[:space:]]*!?(\*\*/|/)?\*?\.env\*?[[:space:]]*$' "$gi" 2>/dev/null; then
+  { if [ -s "$gi" ]; then [ -n "$(tail -c 1 "$gi")" ] && echo; echo; fi
+    echo "# Local secrets (added by Athanor)"; printf '%s\n' "${MOTIFS_SECRETS[@]}"; } >> "$gi" \
+    && log "Local secrets (.env) added to the project's .gitignore."
+fi
+unset gi
 # Author of the commits: the one chosen in the GitHub block (Manage page), else the user's git settings;
 # and Claude as co-author or not. Applied again before every cycle (a change in the app takes effect then).
 IDENTITE_PRECEDENTE=""
@@ -638,6 +653,39 @@ if [ ! -f "$PRIVE/rangement" ]; then
       && log "Files of the piloting found in the project: Claude moves them into the workshop first (.athanor/TIDY)."
   fi
   date '+%Y-%m-%d %H:%M' > "$PRIVE/rangement"
+fi
+# Local secret files git already follows (committed by hand, or by a version before 2.14.0): taken out of
+# git, kept on disk. Already pushed somewhere, their values stay readable in that history: Claude asks
+# the user to change them (.athanor/SECRETS_PUBLISHED.md, CLAUDE.md).
+mapfile -d '' SECRETS_SUIVIS < <(g -C "$PROJECT" ls-files -z 2>/dev/null \
+  | grep -zE '(^|/)\.env(\.[^/]+)?$' | grep -zvE '(^|/)\.env\.(example|sample|template|dist)$' \
+  | g -C "$PROJECT" check-ignore -z --stdin --no-index 2>/dev/null)   # a "!.env" of the user's .gitignore wins
+if [ "${#SECRETS_SUIVIS[@]}" -gt 0 ]; then
+  liste=$(printf '%s\n' "${SECRETS_SUIVIS[@]}" | head -n 20 | sed 's/^/- `/; s/$/`/')
+  if GIT_LITERAL_PATHSPECS=1 g -C "$PROJECT" rm -q --cached -- "${SECRETS_SUIVIS[@]}" >/dev/null 2>&1; then
+    # the commit holds this removal only, never what the user had staged: built on a temporary index
+    if ancien=$(g -C "$PROJECT" rev-parse -q --verify 'HEAD^{commit}' 2>/dev/null); then
+      idx="$PRIVE/index.secrets.$$"; rm -f "$idx"
+      GIT_INDEX_FILE="$idx" g -C "$PROJECT" read-tree "$ancien" 2>/dev/null \
+        && GIT_INDEX_FILE="$idx" GIT_LITERAL_PATHSPECS=1 g -C "$PROJECT" rm -q --cached -- "${SECRETS_SUIVIS[@]}" >/dev/null 2>&1 \
+        && arbre=$(GIT_INDEX_FILE="$idx" g -C "$PROJECT" write-tree 2>/dev/null) \
+        && nouveau=$(g -C "$PROJECT" commit-tree "$arbre" -p "$ancien" -m "Stop tracking local secret files" 2>/dev/null) \
+        && g -C "$PROJECT" update-ref -m "athanor: stop tracking local secret files" HEAD "$nouveau" "$ancien" 2>/dev/null \
+        || log "Local secret files: taken out of git, but the commit failed (Claude commits it with its next change)."
+      rm -f "$idx"; unset idx arbre nouveau
+    fi
+    unset ancien
+    log "Local secret files taken out of git (still on disk, now ignored): $(printf '%s ' "${SECRETS_SUIVIS[@]}" | cut -c1-300)"
+    if [ -n "$(GIT_LITERAL_PATHSPECS=1 g -C "$PROJECT" log --remotes -1 --format=%H -- "${SECRETS_SUIVIS[@]}" 2>/dev/null)" ] \
+       || bash "$SYSTEME/github.sh" publie "$PROJECT" "${SECRETS_SUIVIS[@]}" >/dev/null 2>&1; then
+      printf '# Secret files that were published\n\nThese files hold local secrets and were in commits already pushed (to GitHub or another remote):\n\n%s\n\nThe pilot took them out of git (they are still on disk, and now ignored), but their values stay readable in the published history: only changing them protects the project.\n\n1. Add one task for the user (`athanor todo add`): regenerate (revoke, then replace) each key, token or password these files hold, at the service that issued it, then put the new value back in the file. Name the files and the services or variable names concerned, never a value.\n2. Note it in `.athanor/LOG.md`, then delete this file.\n' "$liste" \
+        | publier "$ETAT/SECRETS_PUBLISHED.md" \
+        && log "These secret files were already pushed: Claude asks you to change their values (For you page)."
+    fi
+  else
+    log "Local secret files followed by git could not be taken out of it: $(printf '%s ' "${SECRETS_SUIVIS[@]}" | cut -c1-300)"
+  fi
+  unset liste
 fi
 if ! g -C "$PROJECT" rev-parse HEAD >/dev/null 2>&1; then
   g -C "$PROJECT" add -A >/dev/null 2>&1 && g -C "$PROJECT" commit -qm "Initial commit" >/dev/null 2>&1 || g -C "$PROJECT" commit -q --allow-empty -m "Initial commit"
@@ -740,7 +788,7 @@ while true; do
     if [ -f "$ETAT/PLAN.md" ] && [ -f "$ETAT/REQUEST_CHANGED" ] && parallele_plan_a_des_vagues; then
       but_cycle="/goal The change of .athanor/REQUEST.md (flagged by .athanor/REQUEST_CHANGED) is folded into .athanor/PLAN.md as waves according to your parallel-mode instructions, the change is noted in .athanor/LOG.md, .athanor/REQUEST_CHANGED is deleted and the plan is committed, without writing any code. Or stop after 15 turns. ${PHRASE_LANGUE}"
       plan_seul=1; log "Parallel mode: the request changed, the lead updates the plan first."
-    elif [ -f "$ETAT/PLAN.md" ] && [ ! -f "$ETAT/RECHECK" ] && [ ! -f "$ETAT/REQUEST_CHANGED" ] && [ ! -f "$ETAT/REVERIFY" ] && [ ! -f "$ETAT/SECRETS_FOUND.md" ] && [ ! -f "$ETAT/TIDY" ] && [ ! -f "$ETAT/FOR_YOU_ANSWERED" ]; then
+    elif [ -f "$ETAT/PLAN.md" ] && [ ! -f "$ETAT/RECHECK" ] && [ ! -f "$ETAT/REQUEST_CHANGED" ] && [ ! -f "$ETAT/REVERIFY" ] && [ ! -f "$ETAT/SECRETS_FOUND.md" ] && [ ! -f "$ETAT/SECRETS_PUBLISHED.md" ] && [ ! -f "$ETAT/TIDY" ] && [ ! -f "$ETAT/FOR_YOU_ANSWERED" ]; then
       if parallele_plan_a_des_vagues; then
         [ "$(parallele_vague_courante | wc -l)" -ge 2 ] && mode=parallele
       else
