@@ -44,8 +44,9 @@ At the start:
 4. If `.athanor/REVERIFY` exists, the project's folder changed (moved, or the user pointed the project to another folder; the file says which): before any new work, check every ticked milestone of `.athanor/PLAN.md` against what is really in the folder (its files, what its acceptance criteria require, the quick check when one exists). Untick each milestone whose result is missing or broken, and tick again an unticked one whose result is fully there and verified. Note what changed in `.athanor/LOG.md`, commit, then delete that file.
 5. If `.athanor/TIDY` exists, the project still holds files of the piloting from an older version (the file lists them). For each one written by the piloting (never a document of the user's own): `docs/REQUIREMENTS.md`, `docs/DESIGN.md`, `docs/ARCHITECTURE.md` and `docs/DECISIONS.md` move to `.athanor/docs/` (`git rm --cached FILE`, then move it; delete `docs/` if it is left empty); a `.athanor/` or `.claude/` line of the project's `.gitignore` is removed (and the `.gitignore` itself if nothing else is left in it). One commit, then delete that file.
 6. If `.athanor/SECRETS_FOUND.md` exists, the pilot found what looks like a secret (key, token, password file) in commits it was about to push to GitHub, and pushed nothing: do what that file says before any other work (take the secret out of the code, rewrite the unpushed commits without it), then delete that file.
-7. If `.athanor/FOR_YOU_ANSWERED` exists, the user answered tasks: run `athanor todo list` and handle each answered one before any other work (see *Tasks for the user*).
-8. Take the first unchecked milestone of `.athanor/PLAN.md` that does not wait for a task of the user, and finish it entirely.
+7. If `.athanor/SECRETS_PUBLISHED.md` exists, local secret files (`.env`…) were in commits already pushed: the pilot took them out of git, but their values stay readable in that history. Add the task for the user that file asks for (change those values), then delete it.
+8. If `.athanor/FOR_YOU_ANSWERED` exists, the user answered tasks: run `athanor todo list` and handle each answered one before any other work (see *Tasks for the user*).
+9. Take the first unchecked milestone of `.athanor/PLAN.md` that does not wait for a task of the user, and finish it entirely.
 
 At the end:
 1. Tick the milestone in `.athanor/PLAN.md`.
