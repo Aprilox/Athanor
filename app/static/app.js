@@ -451,7 +451,7 @@ async function rendreMode() {
   const m = await api("mode").catch(() => null); if (!m) return "";
   return `<div class="bloc"><h2>${t("Working mode")}</h2>
     <label class="interrupteur"><input type="checkbox" id="md-parallele" ${m.parallele ? "checked" : ""}><span><b>${t("Parallel mode")}</b> — ${t("the lead writes a fine-grained plan with dependencies; workers build independent milestones at the same time, each in its own git working copy; the pilot merges each one as soon as it finishes and starts the next, and the lead verifies and fixes. Much faster; uses more quota (one session per worker).")}</span></label>
-    <div class="ligne ${m.parallele ? "" : "muet"}"><span class="petit">${t("Workers at once")}</span><div class="choix m0">${[2, 3, 4, 6, 8, 10].map((n) => `<button type="button" data-max="${n}" class="${m.parallele_max === n ? "actif" : ""}" ${m.parallele ? "" : "disabled"}>${n}</button>`).join("")}</div><span class="muet petit">${t("Applies from the next cycle.")}</span></div>
+    <div class="ligne ${m.parallele ? "" : "muet"}"><span class="petit">${t("Workers at most")}</span><div class="choix m0">${[2, 3, 4, 6, 8, 10].map((n) => `<button type="button" data-max="${n}" class="${m.parallele_max === n ? "actif" : ""}" ${m.parallele ? "" : "disabled"}>${n}</button>`).join("")}</div><span class="muet petit">${t("Starts with 2, adds one each time a worker delivers, and starts no more once the quota is met. Applies from the next cycle.")}</span></div>
   </div>`;
 }
 async function enregistrerMode(parallele, max) {
@@ -772,6 +772,7 @@ const ROLES = {
   tester: "Automated tests, screenshots, bug reports",
   critic: "Uses the result like a demanding end user",
   executor: "Mechanical work, on the cheap model",
+  scout: "Reads and summarises one question for the framing",
 };
 function modeleLisible(m) {
   if (!m) return "";
@@ -1488,11 +1489,11 @@ async function rendreSortie() {
 // --- settings (.env)
 pages.reglages = async () => {
   const lignes = await api("env" + (etat.envSecrets ? "?secrets=1" : ""));
-  const modeles = ["", "fable", "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5", "haiku"];
+  const modeles = ["", "fable", "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5", "sonnet", "haiku"];
   const efforts = ["", "low", "medium", "high", "xhigh", "max"];
   const champ = (l) => {
     const id = "env-" + l.cle;
-    if (["MODEL", "FALLBACK_MODEL", "SUBAGENT_MODEL", "CHEAP_MODEL"].includes(l.cle)) return `<input type="text" id="${id}" data-cle="${h(l.cle)}" value="${h(l.valeur)}"><div class="choix">${modeles.map((m) => `<button type="button" data-pour="${id}" data-val="${h(m)}" class="${l.valeur === m ? "actif" : ""}">${m || t("account default")}</button>`).join("")}</div>`;
+    if (["MODEL", "FALLBACK_MODEL", "SUBAGENT_MODEL", "CHEAP_MODEL", "FRAMING_MODEL", "WORKER_MODEL"].includes(l.cle)) return `<input type="text" id="${id}" data-cle="${h(l.cle)}" value="${h(l.valeur)}"><div class="choix">${modeles.map((m) => `<button type="button" data-pour="${id}" data-val="${h(m)}" class="${l.valeur === m ? "actif" : ""}">${m || t("account default")}</button>`).join("")}</div>`;
     if (l.cle === "EFFORT") return `<input type="text" id="${id}" data-cle="${h(l.cle)}" value="${h(l.valeur)}"><div class="choix">${efforts.map((m) => `<button type="button" data-pour="${id}" data-val="${h(m)}" class="${l.valeur === m ? "actif" : ""}">${m || t("normal")}</button>`).join("")}</div>`;
     if (["RTK", "UNREAL_MCP", "CLOSE_AFTER_MILESTONE"].includes(l.cle) && (l.valeur === "0" || l.valeur === "1")) return `<label class="interrupteur m0"><input type="checkbox" id="${id}" data-cle="${h(l.cle)}" ${l.valeur === "1" ? "checked" : ""}> <span>${l.valeur === "1" ? t("enabled") : t("disabled")}</span></label>`;
     return `<input type="${l.secret && !etat.envSecrets ? "password" : "text"}" id="${id}" data-cle="${h(l.cle)}" value="${h(l.valeur)}" ${l.secret ? 'autocomplete="off"' : ""}>`;

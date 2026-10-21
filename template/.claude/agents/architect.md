@@ -14,4 +14,4 @@ Principles: the simplest solution that works; a complete version early, enriched
 
 End with a summary of 10 lines at most: key choices, number of milestones, main risks.
 
-The files the user attached to the request are in `.athanor/attachments/` (listed in its "Attached files" section): read those that concern your task. The skills and MCP tools of the project are available to you as well (the Skill tool, `mcp__…` tools): use them whenever they fit the task.
+The files the user attached to the request are in `.athanor/attachments/` (listed in its "Attached files" section): read those that concern your task. The skills and MCP tools of the project are available to you as well (the Skill tool, `mcp__…` tools): use them whenever they fit the task. Read `.athanor/SOLUTIONS.md` and `$TOOLS/SOLUTIONS.md` first when they exist (problems already solved, one per line), and add a line there when you solve a problem that cost you more than one try: `$TOOLS/SOLUTIONS.md` for the machine and its tools, `.athanor/SOLUTIONS.md` for this project.

@@ -6,9 +6,12 @@
 #      in its own git worktree (.athanor/work/Mx, branch auto/Mx), all at the same time;
 #   2. when all of them are done, the project lead merges the branches, runs the full check,
 #      ticks what passed, notes the rest in BUGS.md and commits.
-# Much faster; uses more quota (one session per worker).
+# Much faster; uses more quota (one session per worker). So the pilot starts with 2 workers and adds one
+# each time a worker delivers, up to PARALLEL_MAX; once a worker meets the quota, no other one starts
+# (they would all fail on it together). Workers run on WORKER_MODEL (pilot.sh), the lead on its own.
 
 PARALLELE_MAX_DEFAUT=3
+PARALLELE_DEPART=2
 
 # Re-reads PARALLEL / PARALLEL_MAX from the project's .env on every cycle (editable from the app).
 # Worktrees of a wave that did not finish (stop, crash): removed, the branches auto/* are kept (they hold
@@ -130,7 +133,7 @@ Workers build milestones **at the same time**, each in its own git worktree and 
 
 Plan rules (`.athanor/PLAN.md`):
 - One milestone = one worker session = a small, self-contained piece of work (one page, one module, one feature with its tests), doable alone by someone who only knows the documents, the skeleton and the milestone text. Prefer many small milestones (10 to 25) to a few big ones.
-- Every milestone line ends with `Files: <files it creates or modifies>. Depends on: <milestone ids, or none>. Acceptance: <verifiable criteria>.` Example: `- [ ] M7 : Contact form with client-side validation — Files: contact.html, css/contact.css, js/contact.js, tests/e2e/test_contact.py. Depends on: M1. Acceptance: empty submit shows 5 errors; valid submit shows "Thank you"; check.sh quick contact passes.`
+- Every milestone line ends with `Files: <files it creates or modifies>. Depends on: <milestone ids, or none>. Acceptance: <verifiable criteria>. Read: <the document sections the worker needs>.` Example: `- [ ] M7 : Contact form with client-side validation — Files: contact.html, css/contact.css, js/contact.js, tests/e2e/test_contact.py. Depends on: M1. Acceptance: empty submit shows 5 errors; valid submit shows "Thank you"; check.sh quick contact passes. Read: DESIGN.md §Contact.` A worker reads only its line and what `Read` names: everything it needs is there.
 - **M1 is always the foundation**: the runnable skeleton, `check.sh`, and the **contracts** everything else relies on (data structures, interfaces, conventions, shared stylesheet, header/footer, test helpers). Everything shared is built before it is parallelised; milestones that only depend on M1 can all run at once.
 - Two milestones that modify the same file must depend on one another (one after the other). A shared file discovered later is changed minimally and flagged in the worker's report.
 - Milestones that test, review or polish the work of others (cross-cutting tests, tester/critic passes, polish, documentation, delivery) depend on everything they cover; the final delivery milestone depends on all the others.
@@ -140,7 +143,7 @@ If the plan already exists without `Depends on:` nor waves, add the dependencies
 EOF
 }
 
-parallele_consignes_ouvrier() {  # $1 = identifier, $2 = milestone line, $3 = 1 if the executor sub-agent is available
+parallele_consignes_ouvrier() {  # $1 = identifier, $2 = milestone line, $3 = 1 if the executor sub-agent is available, $4 = 1 if resuming
   local aides="Do not launch any subagent."
   [ "$3" = 1 ] && aides="The only sub-agent you may call is \`executor\` (cheap model), for mechanical work that would flood your context: running the test suite or a long build and returning only the failures, searching the code, the same small edit on many of your files. Give it a closed brief: what, where (only your milestone's files, in this folder), how to verify. A short command, run it yourself."
   cat <<EOF
@@ -151,6 +154,7 @@ You carry out **only** this milestone, in this folder (git worktree of the proje
 
 > $2
 
+$([ "${4:-0}" = 1 ] && printf -- '- **This branch already holds partial work** from an earlier attempt that was stopped (quota, watchdog): read its commits (`git log --oneline -5`, `git show --stat HEAD`) and carry on from there, never start over.\n')
 - Other workers are doing other milestones at the same time, each in their own worktree; the pilot merges your branch as soon as you finish. Touch only the files of your milestone; if you must modify a shared file (common stylesheet, header...), make the minimal change and flag it in your report.
 - Do not modify \`.athanor/PLAN.md\` or \`.athanor/LOG.md\`: the project lead handles them after the merge.
 - $aides
@@ -180,13 +184,20 @@ EOF
 # Launches a worker: $1 = identifier, $2 = milestone line, $3 = log file, $4 = model (empty = default).
 parallele_lancer_ouvrier() {
   local ident="$1" ligne="$2" journal="$3" template="$4"
-  local trav="$ETAT/work/$ident"
+  local trav="$ETAT/work/$ident" reprise=0
   g -C "$PROJECT" worktree remove --force "$trav" >/dev/null 2>&1 || rm -rf "$trav"
   g -C "$PROJECT" worktree prune >/dev/null 2>&1
-  g -C "$PROJECT" branch -D "auto/$ident" >/dev/null 2>&1 || true
-  g -C "$PROJECT" worktree add -q -b "auto/$ident" "$trav" HEAD >/dev/null 2>&1 || { log "Worker $ident: cannot create the worktree."; return 1; }
+  # an earlier attempt left commits on its branch (stopped by the quota or the watchdog): kept, resumed
+  if g -C "$PROJECT" rev-parse -q --verify "auto/$ident^{commit}" >/dev/null 2>&1 \
+     && [ "$(entier "$(g -C "$PROJECT" rev-list --count HEAD.."auto/$ident" 2>/dev/null)" 0)" -gt 0 ] \
+     && g -C "$PROJECT" worktree add -q "$trav" "auto/$ident" >/dev/null 2>&1; then
+    reprise=1; log "Worker $ident: resumes the work already on auto/$ident."
+  else
+    g -C "$PROJECT" branch -D "auto/$ident" >/dev/null 2>&1 || true
+    g -C "$PROJECT" worktree add -q -b "auto/$ident" "$trav" HEAD >/dev/null 2>&1 || { log "Worker $ident: cannot create the worktree."; return 1; }
+  fi
   rm -rf "$trav/.athanor" && mkdir -p "$trav/.athanor/screenshots" "$trav/.athanor/.verif"
-  for f in PLAN.md REQUEST.md check.sh PC_TOOLS.md PC_TOOLS_GUIDE.md MAP.md BUGS.md secrets.env; do
+  for f in PLAN.md REQUEST.md check.sh PC_TOOLS.md PC_TOOLS_GUIDE.md MAP.md BUGS.md SOLUTIONS.md secrets.env; do
     [ -f "$ETAT/$f" ] && [ ! -L "$ETAT/$f" ] && cp -f "$ETAT/$f" "$trav/.athanor/$f"
   done
   # the working documents and the files attached to the requests: the worker's sandbox only sees its
@@ -202,7 +213,7 @@ parallele_lancer_ouvrier() {
   # plus the project's own sub-agents (created by the user, or proposed by the lead): system/equipe.py
   [ "$AGENTS_PAR_JSON" = 1 ] && agents_ouvrier=$(SUBAGENT_MODEL="$SUBAGENT_MODEL" CHEAP_MODEL="$CHEAP_MODEL" python3 "$SYSTEME/equipe.py" json "$KIT" "$PROJECT" "$PRIVE/agents" --ouvrier 2>/dev/null)
   [ "$agents_ouvrier" = "{}" ] && agents_ouvrier=""
-  { cat "$(parallele_consignes_base)"; parallele_consignes_ouvrier "$ident" "$ligne" "$([ -n "$agents_ouvrier" ] && echo 1)"; } > "$PRIVE/CLAUDE.ouvrier-$ident.md"
+  { cat "$(parallele_consignes_base)"; parallele_consignes_ouvrier "$ident" "$ligne" "$([ -n "$agents_ouvrier" ] && echo 1)" "$reprise"; } > "$PRIVE/CLAUDE.ouvrier-$ident.md"
   # The worker's sandbox: its worktree (PROJECT = the worktree, for the guard and the tools),
   # plus write access to the project's .git, where git stores the worktree's objects and branch.
   local principal="$PROJECT"
@@ -246,7 +257,9 @@ parallele_terminer_ouvrier() {
     g -C "$trav" add -A >/dev/null 2>&1 && g -C "$trav" commit -qm "$ident: uncommitted worker work (recorded by the pilot)" >/dev/null 2>&1 \
       && log "Worker $ident: uncommitted work recorded on auto/$ident."
   fi
-  enregistrer_stats "$prefixe-$ident.jsonl" "$([ "$code" = 0 ] && echo ok || echo erreur)" "$cycle·$ident" "ref:auto/$ident"
+  modele_cycle="${modele_ouvrier:-$modele_cycle}" enregistrer_stats "$prefixe-$ident.jsonl" "$(if journal_quota "$prefixe-$ident.jsonl"; then echo quota; elif [ "$code" = 0 ]; then echo ok; else echo erreur; fi)" "$cycle·$ident" "ref:auto/$ident"
+  # what the worker learned about the tools or the project: kept for everyone
+  fusionner_solutions "$ETAT/SOLUTIONS.md" "$trav/.athanor/SOLUTIONS.md"
   commits=$(g -C "$PROJECT" rev-list --count HEAD.."auto/$ident" 2>/dev/null || echo 0)
   {
     echo; echo "## $ident (branch auto/$ident, exit code $code, commits: $commits)"
@@ -286,6 +299,8 @@ PY
 parallele_cycle() {
   local prefixe="$1" template="$2" ident fait deps ligne debut maintenant derniere sid issue
   local -a courants=() fusionnes=() a_fusionner=() echoues=() traites=()
+  local modele_ouvrier="${WORKER_MODEL:-$template}" quota_vu=0
+  local limite=$(( PARALLEL_MAX < PARALLELE_DEPART ? PARALLEL_MAX : PARALLELE_DEPART ))
   declare -A lignes=()
   mkdir -p "$ETAT/work"
   # uncommitted changes in the main checkout (a lead session cut short) would make the merges fail:
@@ -296,15 +311,16 @@ parallele_cycle() {
   rm -f "$PRIVE"/ouvrier_*.sid "$PRIVE"/ouvrier_*.code "$PRIVE"/ouvrier_*.pid "$PRIVE"/mcp-*.json "$PRIVE/rapports_ouvriers.md"
   echo "# Worker reports ($(date '+%Y-%m-%d %H:%M'))" > "$PRIVE/rapports_ouvriers.md"
   debut=$(date +%s)
-  lancer_prets() {  # fills the free slots with ready milestones
+  lancer_prets() {  # fills the free slots with ready milestones (none once the quota was met)
     local n
-    while [ "${#courants[@]}" -lt "$PARALLEL_MAX" ]; do
+    [ "$quota_vu" = 1 ] && return 0
+    while [ "${#courants[@]}" -lt "$limite" ]; do
       n=${#courants[@]}
       while IFS=$'\t' read -r ident fait deps ligne; do
-        [ "${#courants[@]}" -lt "$PARALLEL_MAX" ] || break
+        [ "${#courants[@]}" -lt "$limite" ] || break
         case " ${traites[*]} " in *" $ident "*) continue ;; esac
         traites+=("$ident"); lignes[$ident]="$ligne"
-        if parallele_lancer_ouvrier "$ident" "$ligne" "$prefixe-$ident.jsonl" "$template"; then
+        if parallele_lancer_ouvrier "$ident" "$ligne" "$prefixe-$ident.jsonl" "$modele_ouvrier"; then
           courants+=("$ident"); log "Worker $ident started: ${ligne%% — *}"
         else
           echoues+=("$ident")
@@ -315,7 +331,7 @@ parallele_cycle() {
     ETAT_OUVRIERS="${courants[*]}"
     statut "Workers in parallel: ${courants[*]:-none}${fusionnes[*]:+ · merged: ${fusionnes[*]}}"
   }
-  log "Cycle $cycle (parallel): up to $PARALLEL_MAX workers${template:+ with $template}"
+  log "Cycle $cycle (parallel): $limite workers to start with, up to $PARALLEL_MAX${modele_ouvrier:+, with $modele_ouvrier}"
   lancer_prets
   [ "${#courants[@]}" -gt 0 ] || { log "No worker could start: back to the serial mode for this cycle."; return 3; }
   while [ "${#courants[@]}" -gt 0 ]; do
@@ -335,6 +351,12 @@ parallele_cycle() {
       assainir "$ETAT"
       parallele_terminer_ouvrier "$ident" "$prefixe"
       case "$issue" in fusionne) fusionnes+=("$ident") ;; a_fusionner) a_fusionner+=("$ident") ;; *) echoues+=("$ident") ;; esac
+      if journal_quota "$prefixe-$ident.jsonl"; then
+        [ "$quota_vu" = 1 ] || log "Worker $ident met the quota: no other worker starts in this cycle."
+        quota_vu=1
+      elif [ "$issue" != echoue ] && [ "$limite" -lt "$PARALLEL_MAX" ]; then
+        limite=$(( limite + 1 ))   # a delivery without quota trouble: one more worker at once
+      fi
       publier "$ETAT/WORKER_REPORTS.md" < "$PRIVE/rapports_ouvriers.md"
     done
     courants=("${restants[@]}")
@@ -342,6 +364,20 @@ parallele_cycle() {
     [ $(( maintenant - debut )) -lt $(( CYCLE_MAX_MIN * SECONDS_PER_MINUTE )) ] && lancer_prets || { ETAT_OUVRIERS="${courants[*]}"; statut "Workers in parallel: ${courants[*]:-none}"; }
   done
   ETAT_OUVRIERS=""
+  # every worker met the quota and nothing came in: no verification session (it would meet it too); the
+  # pilot reads the quota, and its reset time, from a worker's log, then waits as after a serial cycle
+  if [ "$quota_vu" = 1 ] && [ "${#fusionnes[@]}" = 0 ] && [ "${#a_fusionner[@]}" = 0 ]; then
+    log "Workers finished: all stopped by the quota (${echoues[*]}). No verification by the lead."
+    for ident in "${echoues[@]}"; do
+      journal_quota "$prefixe-$ident.jsonl" || continue
+      jq -c -R 'fromjson? | select(type == "object" and (.type == "rate_limit_event" or .type == "result")) | if .type == "result" then {type, subtype, is_error, result} else . end' \
+        "$prefixe-$ident.jsonl" > "$prefixe.jsonl" 2>/dev/null
+      break
+    done
+    QUOTA_OUVRIERS=1
+    fichier_log="$prefixe.jsonl"
+    return 1
+  fi
   log "Workers finished: merged ${fusionnes[*]:-none}; to merge ${a_fusionner[*]:-none}; failed ${echoues[*]:-none}. The lead verifies."
   statut "Merging milestones ${a_fusionner[*]} ${fusionnes[*]}"
   fichier_log="$prefixe.jsonl"

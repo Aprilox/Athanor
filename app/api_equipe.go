@@ -38,7 +38,7 @@ type fichierAgents struct {
 var (
 	verrouAgents   sync.Mutex
 	reNomAgent     = regexp.MustCompile(`^[a-z][a-z0-9-]{1,30}$`)
-	agentsReserves = map[string]bool{"architect": true, "creator": true, "developer": true, "tester": true, "critic": true, "executor": true,
+	agentsReserves = map[string]bool{"architect": true, "creator": true, "developer": true, "tester": true, "critic": true, "executor": true, "scout": true,
 		"general-purpose": true, "explore": true, "plan": true, "statusline-setup": true, "output-style-setup": true, "claude-code-guide": true, "fork": true}
 )
 

@@ -67,4 +67,37 @@ PROJECT="${PROJECT:-$KIT/projet}"; mkdir -p "$PROJECT/.athanor" "$KIT/tools/wind
     echo "- **Claude's desktop**: the programs you open never show on the user's screen (Windows programs through the gateways: a Windows desktop of their own; Linux programs: a private X screen, \`DISPLAY\` is set). Check what they show with screenshots: the program's own, or \`import -window root shot.png\` for the Linux screen."
   fi
   if command -v docker >/dev/null 2>&1 && timeout 20 docker info >/dev/null 2>&1; then echo "- **Docker**: \`tool IMAGE COMMAND...\` (disposable container, project mounted on /work)"; else echo "- Docker: not available (Docker Desktop stopped, or WSL integration not enabled)"; fi
+  # What is already installed, checked here once: the agents never spend turns probing it again.
+  echo
+  echo "## Toolchain (checked by the pilot when it started)"
+  echo
+  echo "Installed on the system and usable from your sandbox (\`\$TOOLS/bin\` comes last in your PATH). Do not check these again: install what is missing into \`\$TOOLS\` within a milestone."
+  echo
+  version() {  # $1 = name shown, then the command; first line of its output, or "not installed"
+    local nom="$1" v; shift
+    command -v "$1" >/dev/null 2>&1 || { echo "- $nom: not installed"; return; }
+    v=$(timeout 8 "$@" 2>&1 </dev/null) || { echo "- $nom: not installed"; return; }
+    v=$(printf '%s\n' "$v" | tr -d '\r' | grep -v '^Picked up' | grep -m1 -E '[0-9]+\.[0-9]+' | cut -c1-90)
+    echo "- $nom: ${v:-installed}"
+  }
+  # never run from tools/: what is there was written from the sandbox, and this check runs outside it
+  version Node node --version
+  version npm npm --version
+  version Python python3 --version
+  version pip python3 -m pip --version
+  version PHP php --version
+  version Composer composer --version
+  version Git git --version
+  version Java java -version
+  version Go go version
+  version Rust rustc --version
+  version .NET dotnet --version
+  version "PostgreSQL client" psql --version
+  version SQLite sqlite3 --version
+  version ImageMagick convert -version
+  version ffmpeg ffmpeg -version
+  local_outils=$(find "$KIT/tools" -mindepth 1 -maxdepth 1 -type d ! -name cache ! -name bin ! -name mcp ! -name windows ! -name plugin-data -printf '%f\n' 2>/dev/null | sort | head -n 30 | tr '\n' ' ')
+  [ -n "$local_outils" ] && echo "- Portable installs already in \`\$TOOLS\`: $local_outils"
+  local_bin=$(find "$KIT/tools/bin" -mindepth 1 -maxdepth 1 \( -type f -o -type l \) -printf '%f\n' 2>/dev/null | sort | head -n 40 | tr '\n' ' ')
+  [ -n "$local_bin" ] && echo "- Commands already in \`\$TOOLS/bin\` (not checked here): $local_bin"
 } > "$PROJECT/.athanor/PC_TOOLS.md"

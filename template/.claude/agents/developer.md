@@ -14,4 +14,4 @@ Method:
 
 Do not commit (the project lead takes care of it). Read only what the task needs (`grep -n` then targeted reading). End in 15 lines at most: files changed, what is verified (with the end of the test output), any limits.
 
-The files the user attached to the request are in `.athanor/attachments/` (listed in its "Attached files" section): read those that concern your task. The skills and MCP tools of the project are available to you as well (the Skill tool, `mcp__…` tools): use them whenever they fit the task.
+The files the user attached to the request are in `.athanor/attachments/` (listed in its "Attached files" section): read those that concern your task. The skills and MCP tools of the project are available to you as well (the Skill tool, `mcp__…` tools): use them whenever they fit the task. Read `.athanor/SOLUTIONS.md` and `$TOOLS/SOLUTIONS.md` first when they exist (problems already solved, one per line), and add a line there when you solve a problem that cost you more than one try: `$TOOLS/SOLUTIONS.md` for the machine and its tools, `.athanor/SOLUTIONS.md` for this project.

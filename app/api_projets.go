@@ -198,7 +198,7 @@ func (s *Serveur) apiAgents(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	// models as the pilot gives them (system/pilot.sh): CHEAP_MODEL for executor (absent = haiku,
-	// empty = like the others), SUBAGENT_MODEL for the others (empty = the lead's); never the token.
+	// empty = like the others), SUBAGENT_MODEL for the others (empty = the lead's, or sonnet for scout); never the token.
 	reglages := map[string]string{}
 	presents := map[string]bool{}
 	for _, l := range LireEnv(s.kitCourant().Env()) {
@@ -218,6 +218,9 @@ func (s *Serveur) apiAgents(w http.ResponseWriter, r *http.Request) {
 		}
 		if m.Modele == "" {
 			m.Modele = reglages["SUBAGENT_MODEL"]
+		}
+		if m.Modele == "" && x.Nom == "scout" {
+			m.Modele = "sonnet" // reading is execution work: Sonnet unless SUBAGENT_MODEL says otherwise
 		}
 		if x.Nom == "executor" {
 			m.AppelePar = "chef_ouvriers"

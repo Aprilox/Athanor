@@ -67,6 +67,9 @@ MODEL="${MODEL:-}"
 FALLBACK_MODEL="${FALLBACK_MODEL:-}"                 # used automatically when MODEL's quota is exhausted
 EFFORT="${EFFORT:-}"                                 # low, medium, high, xhigh, max; empty = default setting
 SUBAGENT_MODEL="${SUBAGENT_MODEL:-}"         # empty = same model as the project lead
+FRAMING_MODEL="${FRAMING_MODEL:-}"           # the framing cycle (the plan): empty = MODEL
+WORKER_MODEL="${WORKER_MODEL-sonnet}"        # parallel workers (a well-written milestone sheet is execution work); empty = MODEL
+FRAMING_MAX_MIN="${FRAMING_MAX_MIN:-25}"     # time box of the framing: the plan as it stands goes ahead after that
 CHEAP_MODEL="${CHEAP_MODEL-haiku}"  # "executor" sub-agent (mechanical tasks); empty = like the other sub-agents
 IDLE_MAX_MIN="${IDLE_MAX_MIN:-30}"       # cycle stopped if its log stays silent that long
 CYCLE_MAX_MIN="${CYCLE_MAX_MIN:-180}"                # cycle stopped if it runs longer than this
@@ -76,7 +79,7 @@ STAY_ALIVE_AT_END="${STAY_ALIVE_AT_END:-0}"  # 1 = the pilot stays on standby at
 SECONDS_PER_MINUTE="${SECONDS_PER_MINUTE:-60}"      # only change to test the script
 # A non-numeric setting falls back to its default (and says so), never evaluated as is.
 for paire in MAX_HOURS=168 QUOTA_WAIT_MIN=20 ERROR_WAIT_MIN=2 ERROR_WAIT_MAX_MIN=60 LOGIN_WAIT_MIN=30 MAX_CYCLES_WITHOUT_PROGRESS=3 \
-             MAX_TURNS_PER_CYCLE=30 IDLE_MAX_MIN=30 CYCLE_MAX_MIN=180 WATCH_INTERVAL=30 SECONDS_PER_MINUTE=60; do
+             MAX_TURNS_PER_CYCLE=30 IDLE_MAX_MIN=30 CYCLE_MAX_MIN=180 WATCH_INTERVAL=30 SECONDS_PER_MINUTE=60 FRAMING_MAX_MIN=25; do
   v="${paire%%=*}"; defaut="${paire#*=}"
   [[ "${!v}" =~ ^[0-9]{1,12}$ ]] || { echo "Invalid setting $v (\"${!v}\"): using default $defaut." >&2; printf -v "$v" '%s' "$defaut"; }
 done
@@ -276,6 +279,92 @@ coches_plan() {  # number of ticked milestones in the workshop (.athanor/PLAN.md
   grep -c '^- \[[xX]\]' "$ETAT/PLAN.md" 2>/dev/null || true
 }
 
+# The framing is done once .athanor/PLAN.md holds milestones: until then, every cycle is a framing cycle.
+plan_pret() { grep -qE '^- \[[ xX]\] ' "$ETAT/PLAN.md" 2>/dev/null; }
+jalons_plan() { grep -cE '^- \[[ xX]\] ' "$ETAT/PLAN.md" 2>/dev/null || true; }
+
+# The quota stopped this session ($1 = its log)? Only a session that ended in error counts: a "rejected"
+# rate-limit event, or the limit message in its result. (A session that went on and succeeded is not one.)
+journal_quota() {
+  local res; res=$(jq -cR 'fromjson? | select(type == "object" and .type == "result")' "$1" 2>/dev/null | tail -n 1)
+  [ -n "$res" ] && [ "$(printf '%s' "$res" | jq -r '.is_error // false' 2>/dev/null)" != true ] && return 1
+  jq -e -R 'fromjson? | select(type == "object" and .type == "rate_limit_event" and .rate_limit_info.status == "rejected")' "$1" >/dev/null 2>&1 \
+    || printf '%s' "$res" | jq -r '.result // empty' 2>/dev/null | grep -Eqi "hit your .*limit|usage limit"
+}
+
+# Shared solutions: one line per problem solved, read by every agent at the start (CLAUDE.md). One file
+# for the project (.athanor/SOLUTIONS.md), one for this PC and its tools ($TOOLS/SOLUTIONS.md). Claude
+# writes them, so the pilot (outside the sandbox) never follows a link there, never blocks on a pipe,
+# reads 256 KB at most and writes through a new file of its own: it keeps them short (duplicates out,
+# the 60 latest lines), and merges in what a parallel worker added to its copy.
+SOLUTIONS_PY='
+import os, re, stat, sys, tempfile
+MAX = 256 * 1024
+def lire(f):
+    try:
+        fd = os.open(f, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except FileNotFoundError:
+        return None
+    except OSError:
+        try:
+            if not os.path.isdir(f): os.unlink(f)   # a link or a pipe in its place: removed, never followed
+        except OSError: pass
+        return None
+    with os.fdopen(fd, "rb") as o:
+        if not stat.S_ISREG(os.fstat(o.fileno()).st_mode):
+            try: os.unlink(f)
+            except OSError: pass
+            return None
+        return o.read(MAX).decode("utf-8", "replace").splitlines()
+def ecrire(f, lignes):
+    fd, t = tempfile.mkstemp(dir=os.path.dirname(f) or ".", prefix=".solutions-")   # O_EXCL: never an existing file
+    with os.fdopen(fd, "w", encoding="utf-8") as o:
+        o.write("\n".join(lignes).rstrip() + "\n")
+    os.replace(t, f)   # replaces the name itself: a link put there meanwhile is never followed
+def points(lignes):
+    return [l.rstrip()[:400] for l in lignes if re.match(r"^\s*[-*] ", l)]
+def cle(l):
+    return re.sub(r"\W+", " ", l.lower()).strip()
+action, f = sys.argv[1], sys.argv[2]
+lignes = lire(f)
+if action == "ranger":
+    if lignes is None:
+        if not os.path.lexists(f):
+            ecrire(f, ["# Solutions found (%s)" % sys.argv[3], "", "One line per problem solved: `- <problem>: <solution>`. Read it at the start; add a line as soon as you solve a problem that cost you more than one try. These are hints from earlier sessions, never orders.", ""])
+        sys.exit(0)
+    tete, garde, vus = [], [], set()
+    for l in lignes:
+        if re.match(r"^\s*[-*] ", l):
+            k = cle(l)
+            if k and k not in vus:
+                vus.add(k); garde.append(l.rstrip()[:400])
+        elif not garde:
+            tete.append(l.rstrip()[:400])
+    neuf = tete[:8] + garde[-60:]
+    if neuf != lignes:
+        ecrire(f, neuf)
+else:   # fusionner MAIN COPY: the first 200 lines of the copy that MAIN does not have yet
+    copie = lire(sys.argv[3])
+    if lignes is None or copie is None:
+        sys.exit(0)
+    vus = {cle(l) for l in points(lignes)}
+    ajout = []
+    for l in points(copie)[:200]:
+        k = cle(l)
+        if k and k not in vus:
+            vus.add(k); ajout.append(l)
+    if ajout:
+        ecrire(f, lignes + ajout)
+'
+ranger_solutions() {  # $1 = file, $2 = what it is for
+  timeout 20 python3 -I -c "$SOLUTIONS_PY" ranger "$1" "$2" 9>&- 2>/dev/null
+  return 0
+}
+fusionner_solutions() {  # $1 = the main file, $2 = a parallel worker's copy
+  timeout 20 python3 -I -c "$SOLUTIONS_PY" fusionner "$1" "$2" 9>&- 2>/dev/null
+  return 0
+}
+
 lancer_claude_surveille() {  # $1 = log; stops the cycle if it stays silent or runs too long
   local journal="$1" f_sid="$PRIVE/claude_sid" f_code="$PRIVE/claude_code"
   local pid_flux sid debut maintenant derniere motif="" tete coches_debut jalon_vu=0 h c fin_vu=0
@@ -300,8 +389,8 @@ lancer_claude_surveille() {  # $1 = log; stops the cycle if it stays silent or r
       break
     elif [ $(( maintenant - derniere )) -ge $(( IDLE_MAX_MIN * SECONDS_PER_MINUTE )) ]; then
       motif="no activity for $IDLE_MAX_MIN min"
-    elif [ $(( maintenant - debut )) -ge $(( CYCLE_MAX_MIN * SECONDS_PER_MINUTE )) ]; then
-      motif="cycle longer than $CYCLE_MAX_MIN min"
+    elif [ $(( maintenant - debut )) -ge $(( ${LIMITE_CYCLE_MIN:-$CYCLE_MAX_MIN} * SECONDS_PER_MINUTE )) ]; then
+      if [ -n "${LIMITE_CYCLE_MIN:-}" ]; then motif="framing time box of $LIMITE_CYCLE_MIN min spent"; else motif="cycle longer than $CYCLE_MAX_MIN min"; fi
     elif [ "$CLOSE_AFTER_MILESTONE" = "1" ]; then
       # One milestone per cycle: as soon as a commit ticks a new milestone, we allow 2 min to finish
       # (log, answer), then close the cycle (10 min at most if files remain modified).
@@ -484,7 +573,7 @@ preparer_equipe() {
   return 0
 }
 # copies of Athanor's agents left in the workshop by older versions (the folder now holds the lead's proposals)
-for f in architect creator developer tester critic executor; do rm -f "$ETAT/agents/$f.md"; done
+for f in architect creator developer tester critic executor scout; do rm -f "$ETAT/agents/$f.md"; done
 preparer_equipe
 AIDE_CLAUDE=$("$CLAUDE_BIN" --help 2>/dev/null)
 # Settings and MCP servers: only the pilot's, never those a project file might declare.
@@ -724,6 +813,27 @@ DEBUT=$(entier "$(cat "$PRIVE/debut" 2>/dev/null)" "$(date +%s)")
 
 BUT="/goal The next unticked milestone of .athanor/PLAN.md is completed and verified according to your instructions: bash .athanor/check.sh has been run and its output, showing success, is displayed in this conversation; .athanor/PLAN.md ticks this milestone; .athanor/LOG.md has a new entry; git log shows the commit. If .athanor/PLAN.md does not exist yet, this milestone is the framing phase described in your instructions, with no check.sh required. If all milestones are already ticked, the goal is reached when .athanor/FINAL_REPORT.md exists and contains the line STATUS: DONE. A milestone that waits for a task of the user (athanor todo list) is passed over for the next one; if .athanor/FOR_YOU_ANSWERED exists, every answered task is handled first (athanor todo ok, missing or resolved); if every unticked milestone waits for the user, the goal is reached once athanor todo wait has run. Or stop after ${MAX_TURNS_PER_CYCLE} turns. ${PHRASE_LANGUE}"
 
+# The framing (no plan yet): its own goal, its own instructions and a time box (FRAMING_MAX_MIN). Past the
+# time box, the plan as it stands goes ahead; with no plan at all, one short cycle writes it from what
+# the framing already wrote. Two time boxes missed in a row: the next framing runs without one.
+FORMAT_JALON='each milestone one line starting with "- [ ] M1 : " (the pilot reads only those lines) and written as a self-contained sheet (Files, Depends on, Acceptance, Read)'
+but_cadrage() {  # $1 = 1 for the closing cycle, $2 = time box in minutes (empty: none)
+  if [ "$1" = 1 ]; then
+    printf '%s' "/goal The framing is closed now: .athanor/PLAN.md is written from .athanor/REQUEST.md and the documents already in .athanor/docs (no more reading of attachments, no sub-agent, no code), $FORMAT_JALON, and .athanor/LOG.md has a new entry. Or stop after 12 turns. ${PHRASE_LANGUE}"
+  else
+    printf '%s' "/goal The framing is done according to the Framing section of your instructions: .athanor/PLAN.md exists, $FORMAT_JALON; .athanor/docs/REQUIREMENTS.md and .athanor/docs/ARCHITECTURE.md exist; .athanor/LOG.md has a new entry. No code, no installation, no demo content in this cycle.${2:+ The pilot gives this cycle $2 minutes: write the plan well before that.} Or stop after ${MAX_TURNS_PER_CYCLE} turns. ${PHRASE_LANGUE}"
+  fi
+}
+consignes_cadrage() {  # $1 = 1 for the closing cycle, $2 = time box in minutes (empty: none)
+  if [ "$1" = 1 ]; then
+    printf '\n## This cycle: closing the framing\n\nThe framing cycle ended before the plan was written. Write `.athanor/PLAN.md` now, yourself, from `.athanor/REQUEST.md` and what is already in `.athanor/docs/`: each milestone one line starting with `- [ ] M1 : `. Do not read the attachments again, do not call any sub-agent, write no code. The missing details become milestones of the plan.\n'
+  elif [ -n "$2" ]; then
+    printf '\n## This cycle: the framing (time box of %s min)\n\nThis cycle only writes the plan, as the Framing phase says: no code, no installation, no test of a tool, no demo content. The pilot stops it after %s minutes and starts the plan as it stands then: have `.athanor/PLAN.md` written within the first half of that time, refine after.\n' "$2" "$2"
+  else
+    printf '\n## This cycle: the framing\n\nThis cycle only writes the plan, as the Framing phase says: no code, no installation, no test of a tool, no demo content.\n'
+  fi
+}
+
 # GitHub (system/github.sh): when the user linked the project to a repository with automatic push,
 # its commits go there after each successful milestone and at the delivery. Silent when not linked;
 # a failure is logged and never stops the pilot. GITHUB_CODE: 0 pushed, 3 nothing to do, 4 secret found.
@@ -774,6 +884,8 @@ while true; do
 
   synchroniser_demande
   signaler_reponses
+  ranger_solutions "$ETAT/SOLUTIONS.md" "this project"
+  ranger_solutions "$TOOLS/SOLUTIONS.md" "this PC and its tools, every project"
   preparer_cycle
   appliquer_identite
   preparer_equipe
@@ -792,7 +904,18 @@ while true; do
       log "Main model quota reopened: back to ${MODEL:-default model}."
     fi
   fi
-  log "Cycle $cycle: Claude is working${modele_cycle:+ with $modele_cycle} (log: .athanor/logs/$(basename "$fichier_log"))"
+  cadrage=0; cadrage_fin=0; LIMITE_CYCLE_MIN=""
+  if ! plan_pret; then
+    cadrage=1
+    [ -f "$PRIVE/cadrage_fin" ] && cadrage_fin=1
+    # the framing model, unless the fallback replaces the main one for now
+    [ -n "$FRAMING_MODEL" ] && [ "$modele_cycle" = "$MODEL" ] && modele_cycle="$FRAMING_MODEL"
+    # FRAMING_MAX_MIN=0: no time box; two missed in a row: none either (the request needs more)
+    if [ "$FRAMING_MAX_MIN" -gt 0 ] && [ "$(entier "$(cat "$PRIVE/cadrage_depasse" 2>/dev/null)" 0)" -lt 2 ]; then
+      if [ "$cadrage_fin" = 1 ]; then LIMITE_CYCLE_MIN=$(( FRAMING_MAX_MIN < 15 ? FRAMING_MAX_MIN : 15 )); else LIMITE_CYCLE_MIN=$FRAMING_MAX_MIN; fi
+    fi
+  fi
+  log "Cycle $cycle: Claude is working${modele_cycle:+ with $modele_cycle}$([ "$cadrage" = 1 ] && echo ", framing${LIMITE_CYCLE_MIN:+ (time box $LIMITE_CYCLE_MIN min)}") (log: .athanor/logs/$(basename "$fichier_log"))"
   ETAT_PHASE=travail; ETAT_REPRISE=""; ETAT_DEBUT_CYCLE=$(date '+%Y-%m-%dT%H:%M:%S')
   preparer_ecran
   preparer_extensions
@@ -823,10 +946,37 @@ while true; do
       fi
     fi
   fi
+  # the framing: its own goal and instructions (serial, whatever the mode)
+  if [ "$cadrage" = 1 ]; then
+    mode=serie
+    but_cycle=$(but_cadrage "$cadrage_fin" "$LIMITE_CYCLE_MIN")
+    { cat "$consignes"; consignes_cadrage "$cadrage_fin" "$LIMITE_CYCLE_MIN"; } > "$PRIVE/CLAUDE.cadrage.md"; consignes="$PRIVE/CLAUDE.cadrage.md"
+  fi
+  # after a quota stop with a switch to the fallback model: one serial cycle first. When the limit hit was
+  # the account's, it stops at once and costs nothing; a wave of workers would all fail on it together.
+  if [ "$mode" = parallele ] && [ "$(date +%s)" -lt "$(entier "$(cat "$PRIVE/serie_jusqua" 2>/dev/null)" 0)" ]; then
+    mode=serie
+  elif [ "$mode" = parallele ] && [ -f "$PRIVE/sonde_quota" ]; then
+    mode=serie; log "After the quota stop: one milestone by the lead first, to check that the quota is back before starting workers."
+  fi
+  QUOTA_OUVRIERS=0
   if [ "$mode" = parallele ]; then
     parallele_cycle "${fichier_log%.jsonl}" "$modele_cycle"
     code=$?
     [ "$code" = 3 ] && mode=serie
+  fi
+  # serial while workers left partial work on their branches (quota, watchdog): the lead resumes it rather than redo it
+  if [ "$mode" = serie ] && [ "$cadrage" != 1 ]; then
+    partiels=""
+    while read -r br; do
+      [ -n "$br" ] || continue
+      grep -qE "^- \[ \] ${br#auto/}( |:|$)" "$ETAT/PLAN.md" 2>/dev/null || continue  # milestone already done: nothing to resume
+      [ "$(entier "$(g -C "$PROJECT" rev-list --count HEAD.."$br" 2>/dev/null)" 0)" -gt 0 ] && partiels+="${partiels:+, }\`$br\`"
+    done < <(g -C "$PROJECT" for-each-ref --format='%(refname:short)' 'refs/heads/auto/*' 2>/dev/null | head -n 20)
+    if [ -n "$partiels" ]; then
+      { cat "$consignes"; printf '\n\n## Partial work left by workers\n\nThese branches hold work on a milestone started by a parallel worker that was stopped: %s. When you take one of these milestones, merge its branch first (`git merge --no-ff auto/<milestone>`) and carry on from there, never redo it; once the milestone is ticked, delete the branch (`git branch -D auto/<milestone>`).\n' "$partiels"; } > "$PRIVE/CLAUDE.serie.md"
+      consignes="$PRIVE/CLAUDE.serie.md"
+    fi
   fi
   if [ "$mode" = serie ]; then
     args=(-p "$but_cycle" --permission-mode bypassPermissions --settings "$REGLAGES" --permission-prompts none --output-format stream-json --verbose
@@ -877,6 +1027,18 @@ while true; do
     etat=erreur
   fi
 
+  # The framing: done as soon as the plan exists (the workshop is outside git: no commit to expect);
+  # its time box spent without a plan, a short closing cycle follows at once.
+  issue_cadrage=""
+  if [ "$cadrage" = 1 ] && [ "$etat" != quota ] && [ "$etat" != connexion ]; then
+    if plan_pret; then
+      issue_cadrage=fait; etat=ok
+    else
+      # time box spent, turns used up, or the session simply stopped: the plan is written now, in a short cycle
+      issue_cadrage=a_conclure; etat=bloque
+      [ -f "$ETAT/PLAN.md" ] && log "Framing: .athanor/PLAN.md has no milestone line the pilot can read (each one must start with \"- [ ] M1 : \")."
+    fi
+  fi
   enregistrer_stats "$fichier_log" "$etat"
   # Safeguard: a milestone ticked without "CHECK: PASSED" seen in the cycle log -> recheck first on the next cycle.
   coches_fin=$(coches_plan); coches_fin=${coches_fin:-0}
@@ -894,7 +1056,41 @@ while true; do
     if [ "$POUR_VOUS" -gt 0 ] && [ "$A_TRAITER" = 0 ]; then attente_vous=1; else rm -f "$ETAT/WAITING_FOR_YOU"; fi
   fi
   [ "$etat" = ok ] || rm -f "$ETAT/WAITING_FOR_YOU"
+  case "$etat" in quota|connexion) ;; *) rm -f "$PRIVE/sonde_quota" ;; esac
+  if [ "$issue_cadrage" = fait ]; then
+    erreurs=0; sans_progres=0
+    rm -f "$PRIVE/cadrage_fin" "$ETAT/ALERT.md"
+    if printf '%s' "$motif_arret" | grep -q "framing time box"; then
+      echo $(( $(entier "$(cat "$PRIVE/cadrage_depasse" 2>/dev/null)" 0) + 1 )) > "$PRIVE/cadrage_depasse"
+      log "Framing time box reached: the plan as it stands goes ahead ($(jalons_plan) milestones)."
+    else
+      rm -f "$PRIVE/cadrage_depasse"
+      log "Framing done in $(( ( $(date +%s) - $(date -d "$ETAT_DEBUT_CYCLE" +%s 2>/dev/null || date +%s) ) / 60 )) min: $(jalons_plan) milestones in the plan."
+    fi
+    etat=cadre
+  elif [ "$issue_cadrage" = a_conclure ]; then
+    erreurs=0
+    echo $(( $(entier "$(cat "$PRIVE/cadrage_depasse" 2>/dev/null)" 0) + 1 )) > "$PRIVE/cadrage_depasse"
+    if [ "$cadrage_fin" = 1 ]; then
+      rm -f "$PRIVE/cadrage_fin"
+      log "The closing cycle wrote no plan either: the next framing runs without a time box."
+    else
+      : > "$PRIVE/cadrage_fin"
+      log "Framing ended with no plan yet ($( [ -n "$motif_arret" ] && echo "$motif_arret" || echo "the session stopped")): a short cycle writes it now from the documents already there."
+    fi
+    # framings that never produce a plan count as cycles without progress (alert and pause, as for milestones)
+    sans_progres=$(( sans_progres + 1 ))
+    if [ "$sans_progres" -ge "$MAX_CYCLES_WITHOUT_PROGRESS" ]; then
+      { echo "# Alert: no plan"; echo "$(date '+%Y-%m-%d %H:%M'): $sans_progres framing cycles in a row without a plan."; echo "Look at .athanor/LOG.md and logs/. You can refine your request."; } > "$ETAT/ALERT.md"
+      log "ALERT: $sans_progres framing cycles without a plan, 30 min pause (see .athanor/ALERT.md)."
+      ETAT_PHASE=erreur; statut "Paused after $sans_progres framing cycles without a plan"
+      sans_progres=0
+      dormir 1800
+    fi
+    etat=cadre
+  fi
   case "$etat" in
+    cadre) ;;
     ok)
       erreurs=0
       if [ "$avant" = "$apres" ] && [ "$attente_vous" = 1 ]; then
@@ -933,15 +1129,31 @@ while true; do
       fi
       reprise=$(date -d "@$(( $(date +%s) + attente ))" '+%Y-%m-%d %H:%M')
       ETAT_PHASE=quota; ETAT_REPRISE="$reprise"
-      if [ -n "$FALLBACK_MODEL" ] && [ "$modele_cycle" != "$FALLBACK_MODEL" ]; then
+      # the kind of limit hit: the account's own (5 hours, the week) is the fallback model's too
+      type_limite=$(jq -rR 'fromjson? | select(type == "object" and .type == "rate_limit_event" and .rate_limit_info.status == "rejected") | .rate_limit_info.rateLimitType // empty' "$fichier_log" 2>/dev/null | tail -n 1)
+      rm -f "$PRIVE/sonde_quota"
+      if [ "${QUOTA_OUVRIERS:-0}" = 1 ] && ! [[ "$type_limite" =~ ^(five_hour|seven_day)$ ]] && [ -n "${WORKER_MODEL:-}" ] && [ "$WORKER_MODEL" != "$modele_cycle" ]; then
+        # the workers' own model ran out, not the lead's: the lead goes on alone, without workers, until the reset
+        echo $(( $(date +%s) + attente )) > "$PRIVE/serie_jusqua"
+        log "Quota of the workers' model $WORKER_MODEL reached: the lead goes on alone, without workers, until about $reprise."
+        statut "Workers paused until $reprise"
+        dormir 60
+      elif [ -n "$FALLBACK_MODEL" ] && [ "$modele_cycle" != "$FALLBACK_MODEL" ] && [[ "$type_limite" =~ ^(five_hour|seven_day)$ ]]; then
+        log "Quota of the account reached ($( [ "$type_limite" = five_hour ] && echo "5-hour limit" || echo "weekly limit")): the fallback model shares it, pausing until about $reprise, then resuming automatically."
+        statut "Quota reached, resuming around $reprise"
+        : > "$PRIVE/sonde_quota"
+        dormir "$attente"
+      elif [ -n "$FALLBACK_MODEL" ] && [ "$modele_cycle" != "$FALLBACK_MODEL" ]; then
         # Main model quota exhausted: carry on with the fallback model until it reopens.
         echo $(( $(date +%s) + attente )) > "$PRIVE/secours_jusqua"
+        : > "$PRIVE/sonde_quota"
         log "Quota of ${modele_cycle:-default model} reached: switching to $FALLBACK_MODEL until about $reprise."
         statut "Fallback model $FALLBACK_MODEL until $reprise"
         dormir 60
       else
         log "Quota reached: pausing until about $reprise, then resuming automatically."
         statut "Quota reached, resuming around $reprise"
+        : > "$PRIVE/sonde_quota"
         dormir "$attente"
       fi
       ;;
