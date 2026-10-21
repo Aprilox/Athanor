@@ -149,18 +149,22 @@ prochaine_demande() {  # the current request is done: move on to the first one i
 }
 
 enregistrer_stats() {  # one line per cycle in .athanor/stats.tsv (read by the application); $3 = cycle label, $4 = git folder
-  local f="$1" etat="$2" etiquette="${3:-$cycle}" depot="${4:-$PROJECT}" res
-  [ -s "$PRIVE/stats.tsv" ] || printf 'horodatage\tcycle\tmodele\tetat\tminutes\tminutes_api\ttours\tcout_usd\tentree_tokens\tcache_lu\tcache_ecrit\tsortie_tokens\tcontexte_max\tcommit\n' > "$PRIVE/stats.tsv"
+  local f="$1" etat="$2" etiquette="${3:-$cycle}" depot="${4:-$PROJECT}" res estime=0 tarifs="$KIT/logs/tarifs.json"
+  [ -s "$PRIVE/stats.tsv" ] || printf 'horodatage\tcycle\tmodele\tetat\tminutes\tminutes_api\ttours\tcout_usd\tentree_tokens\tcache_lu\tcache_ecrit\tsortie_tokens\tcontexte_max\tcommit\testimation\n' > "$PRIVE/stats.tsv"
   res=$(jq -cR 'fromjson? | select(type=="object" and .type=="result")' "$f" 2>/dev/null | tail -n 1)
-  if [ -z "$res" ]; then
-    # Cycle closed by the pilot (no "result" line): add up the project lead's turns.
+  if [ -n "$res" ]; then
+    # its cost per model teaches this PC's prices, for the cycles that end without one
+    timeout 20 python3 -I "$SYSTEME/cout.py" apprendre "$tarifs" "$f" 2>> "$PRIVE/pilot.log"
+  else
+    # Cycle closed by the pilot or stopped (no "result" line, so no cost from Claude Code): the lead's
+    # turns, each message counted once, at the learned prices. Its sub-agents are not in the log: a floor.
     local debut_s; debut_s=$(date -d "${ETAT_DEBUT_CYCLE:-now}" +%s 2>/dev/null || date +%s)
-    res=$(jq -sR --argjson d "$(( $(date +%s) - debut_s ))" '[split("\n")[] | fromjson? | select(type=="object" and .type=="assistant" and .parent_tool_use_id==null) | .message.usage]
-      | {duration_ms:($d*1000), num_turns:length, usage:{input_tokens:(map(.input_tokens//0)|add//0), cache_read_input_tokens:(map(.cache_read_input_tokens//0)|add//0),
-         cache_creation_input_tokens:(map(.cache_creation_input_tokens//0)|add//0), output_tokens:(map(.output_tokens//0)|add//0)}}' "$f" 2>/dev/null)
+    res=$(timeout 30 python3 -I "$SYSTEME/cout.py" estimer "$tarifs" "$f" 2>> "$PRIVE/pilot.log" \
+      | jq -c --argjson d "$(( $(date +%s) - debut_s ))" '. + {duration_ms: ($d*1000)}' 2>/dev/null)
+    [ -n "$res" ] && estime=1
   fi
   local pic; pic=$(jq -rR 'fromjson? | select(type=="object" and .type=="assistant" and .parent_tool_use_id==null) | .message.usage | ((.input_tokens//0)+(.cache_read_input_tokens//0)+(.cache_creation_input_tokens//0))' "$f" 2>/dev/null | sort -n | tail -n 1)
-  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
     "$(date '+%Y-%m-%dT%H:%M:%S')" "$etiquette" "${modele_cycle:-defaut}" "$etat" \
     "$(printf '%s' "$res" | jq -r '((.duration_ms//0)/60000*10|round/10)' 2>/dev/null)" \
     "$(printf '%s' "$res" | jq -r '((.duration_api_ms//0)/60000*10|round/10)' 2>/dev/null)" \
@@ -170,7 +174,7 @@ enregistrer_stats() {  # one line per cycle in .athanor/stats.tsv (read by the a
     "$(printf '%s' "$res" | jq -r '.usage.cache_read_input_tokens//0' 2>/dev/null)" \
     "$(printf '%s' "$res" | jq -r '.usage.cache_creation_input_tokens//0' 2>/dev/null)" \
     "$(printf '%s' "$res" | jq -r '.usage.output_tokens//0' 2>/dev/null)" \
-    "${pic:-0}" "$(case "$depot" in ref:*) g -C "$PROJECT" log -1 --pretty=%h "${depot#ref:}" 2>/dev/null ;; *) g -C "$depot" log -1 --pretty=%h 2>/dev/null ;; esac)" >> "$PRIVE/stats.tsv"
+    "${pic:-0}" "$(case "$depot" in ref:*) g -C "$PROJECT" log -1 --pretty=%h "${depot#ref:}" 2>/dev/null ;; *) g -C "$depot" log -1 --pretty=%h 2>/dev/null ;; esac)" "$estime" >> "$PRIVE/stats.tsv"
   publier "$ETAT/stats.tsv" < "$PRIVE/stats.tsv"
 }
 

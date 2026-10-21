@@ -177,6 +177,7 @@ type LigneStat struct {
 	SortieTokens int64   `json:"sortie_tokens"`
 	ContexteMax  int64   `json:"contexte_max"`
 	Commit       string  `json:"commit"`
+	Estime       bool    `json:"estime"` // cost worked out by the pilot from the turns (no "result" line): sub-agents not included
 }
 
 func (p Projet) LireStats() []LigneStat {
@@ -198,7 +199,7 @@ func (p Projet) LireStats() []LigneStat {
 		}
 		f := func(n int) float64 { v, _ := strconv.ParseFloat(g(n), 64); return v }
 		e := func(n int) int64 { v, _ := strconv.ParseInt(g(n), 10, 64); return v }
-		out = append(out, LigneStat{g(0), g(1), g(2), g(3), f(4), f(5), e(6), f(7), e(8), e(9), e(10), e(11), e(12), g(13)})
+		out = append(out, LigneStat{g(0), g(1), g(2), g(3), f(4), f(5), e(6), f(7), e(8), e(9), e(10), e(11), e(12), g(13), g(14) == "1"})
 	}
 	return out
 }
