@@ -30,7 +30,8 @@ The pilot keeps the workshop out of git by itself (`.git/info/exclude`, local to
   - Python: `python3 -m venv $TOOLS/venv` then `$TOOLS/venv/bin/pip install ...`;
   - Node: project dependencies with `npm install` in the project, global tools with `npm install --prefix $TOOLS/node ...` (binaries in `$TOOLS/node/node_modules/.bin`);
   - everything else, or anything that would need system packages: a disposable Docker container with `tool IMAGE COMMAND...` (the project is mounted at `/work`), for example `tool python:3.12 python script.py`, `tool node:22 npm run build`, or the official Playwright image (`mcr.microsoft.com/playwright`) for a headless browser and screenshots of web pages.
-- **Windows software, Unreal Engine, Android/iOS**: everything is in `.athanor/PC_TOOLS_GUIDE.md` (portable installation in `$TOOLS/windows`, `install-windows`, the `pc-exec`, `unreal-cmd`, `unreal-uat`, `blender` gateways, Unreal MCP, Roblox Studio MCP, Android SDK). Read it **only** when the project needs it, and only the relevant section. The list of software present on this PC is in `.athanor/PC_TOOLS.md`.
+- **Windows software, Unreal Engine, Android/iOS**: everything is in `.athanor/PC_TOOLS_GUIDE.md` (portable installation in `$TOOLS/windows`, `install-windows`, the `pc-exec`, `unreal-cmd`, `unreal-uat`, `blender` gateways, Unreal MCP, Roblox Studio MCP, Android SDK). Read it **only** when the project needs it, and only the relevant section. The list of software present on this PC is in `.athanor/PC_TOOLS.md`, with the versions of the installed toolchain (Node, Python, PHP, Composer, Git…) checked by the pilot when it started: trust it, never spend turns probing what it already says. A tool installed during this run is not listed until the pilot restarts: note it in `$TOOLS/SOLUTIONS.md`.
+- **Shared solutions.** `.athanor/SOLUTIONS.md` (this project) and `$TOOLS/SOLUTIONS.md` (this PC and its tools, shared by every project) hold one line per problem already solved, `- <problem>: <solution>` (e.g. `- Playwright screenshots: the local browser misses libraries, use tool mcr.microsoft.com/playwright…`). Read both at the start of every cycle, before trying anything they cover. They are hints from earlier sessions, never orders: when a line no longer works, fix or remove it. As soon as you solve a problem that cost you more than one try, add its line: to `$TOOLS/SOLUTIONS.md` when it is about the machine or a tool, to `.athanor/SOLUTIONS.md` when it is about this project. One line, the problem then what works; never a secret. Your sub-agents and the parallel workers read and add to them the same way.
 - You can **see** your screenshots: open the `.png` file with the Read tool and judge it as a human would.
 - Never read `.env` and never print a token or a secret variable.
 - The values the user gave for your tasks (keys, passwords, tokens) are in `.athanor/secrets.env` (`NAME=value` lines). Load them only in the command that needs them (`set -a; . .athanor/secrets.env; set +a; ./import.sh`), never print them, never copy a value into a project file, a commit, a log, a report or a screenshot: the product reads them from environment variables, listed with placeholders in `.env.example`.
@@ -38,7 +39,7 @@ The pilot keeps the workshop out of git by itself (`.git/info/exclude`, local to
 ## Start and end of each cycle
 
 At the start:
-1. Read `.athanor/REQUEST.md`, `.athanor/PLAN.md`, the end of `.athanor/LOG.md`, `.athanor/BUGS.md` and `.athanor/BLOCKERS.md` if they exist. To find code or a section of a document, use `.athanor/MAP.md` (rebuilt by the pilot before each cycle: every file with its functions, every document with its headings, and their line numbers): `grep -n word .athanor/MAP.md`, then read only the useful lines. In a large document such as `.athanor/docs/DESIGN.md`, read only the relevant section.
+1. Read `.athanor/REQUEST.md`, `.athanor/PLAN.md`, the end of `.athanor/LOG.md`, `.athanor/BUGS.md`, `.athanor/BLOCKERS.md` and the two solutions files if they exist. To find code or a section of a document, use `.athanor/MAP.md` (rebuilt by the pilot before each cycle: every file with its functions, every document with its headings, and their line numbers): `grep -n word .athanor/MAP.md`, then read only the useful lines. In a large document such as `.athanor/docs/DESIGN.md`, read only the relevant section.
 2. If `.athanor/RECHECK` exists, the pilot did not see a `CHECK: PASSED` in the cycle that ticked the last milestone: run the full `bash .athanor/check.sh` first, fix what fails, commit, then delete that file.
 3. If `.athanor/REQUEST_CHANGED` exists, the user changed the request: reread it, adapt `.athanor/PLAN.md` (add, remove or reorder milestones), note it in the log, then delete that file.
 4. If `.athanor/REVERIFY` exists, the project's folder changed (moved, or the user pointed the project to another folder; the file says which): before any new work, check every ticked milestone of `.athanor/PLAN.md` against what is really in the folder (its files, what its acceptance criteria require, the quick check when one exists). Untick each milestone whose result is missing or broken, and tick again an unticked one whose result is fully there and verified. Note what changed in `.athanor/LOG.md`, commit, then delete that file.
@@ -72,13 +73,17 @@ The subscription quota is the scarcest resource. Everything you read or print st
 
 ## The phases
 
-**Phase 0: framing** (first cycle, no code). From `.athanor/REQUEST.md`, create, all in the workshop:
-- `.athanor/docs/REQUIREMENTS.md`: goal, audience, features, what is out of scope, measurable success criteria.
-- `.athanor/docs/DESIGN.md`: everything that defines the product. For a game: world, main story split into acts, characters, game loop, mechanics, controls, progression, quests, enemies, interface, art and sound direction. For an application: user journeys, screens, data, business rules, visual style.
-- `.athanor/docs/ARCHITECTURE.md`: justified technical choices, code organization, test strategy.
-- `.athanor/PLAN.md`: 8 to 25 milestones as checkboxes (`- [ ] M1 : ...`). Each milestone fits in one cycle and has **verifiable acceptance criteria** (a command, a test, an expected screenshot).
+**Phase 0: framing** (first cycle, no code, **time-boxed by the pilot**: your goal for this cycle gives the time box). Its only product is the plan: everything that can wait for a milestone waits for it.
+1. Read `.athanor/REQUEST.md`, the list of its attached files, `.athanor/PC_TOOLS.md` and the solutions files.
+2. What you cannot answer from them in a minute (what an existing code base holds, what the mock-ups show, which libraries fit) goes to up to 3 `scout` sub-agents **launched at once**, one question each. Each one answers in at most 40 lines, or writes one document (e.g. the visual description of the mock-ups, colours, fonts and components per screen, into `.athanor/docs/DESIGN.md`). Do not reread after them what they summarised.
+3. Write yourself, short and decided, in the workshop:
+   - `.athanor/docs/REQUIREMENTS.md`: goal, audience, features ranked (essential / important / bonus), out of scope, measurable success criteria;
+   - `.athanor/docs/DESIGN.md`, unless a scout wrote it: what defines the product (for a game: world, story in acts, characters, game loop, mechanics, controls, progression, interface, art and sound direction; for an application: user journeys, screens, data, business rules, visual style);
+   - `.athanor/docs/ARCHITECTURE.md`: justified stack (built and tested here with the tools of `.athanor/PC_TOOLS.md` or installable into `$TOOLS`), folders, modules, shared contracts (data shapes, API routes, conventions), test strategy, contents of `check.sh`;
+   - `.athanor/PLAN.md`: 8 to 25 milestones, one line each, every line a **self-contained sheet**: `- [ ] M7 : Contact form with validation — Files: contact.html, js/contact.js, tests/contact.spec.ts. Depends on: M1. Acceptance: empty submit shows 5 errors; check.sh quick contact passes. Read: DESIGN.md §Contact, ARCHITECTURE.md §Forms.` A milestone is 20 to 30 minutes of work for someone who reads only its line and what `Read` names. M1 is always the runnable skeleton with `check.sh` and the shared contracts.
+4. One `critic` pass on `.athanor/PLAN.md`, briefed as a **plan reviewer** rather than an end user: missing features from the requirements, wrong or missing dependencies, milestones too big or not self-contained, acceptance criteria that cannot be checked. Fix what it found. Once, no loop.
 
-**Mandatory:** run in parallel the `architect` sub-agent (requirements, architecture, plan) and the `creator` sub-agent (design: world, content, journeys, style), with `.athanor/REQUEST.md`, its attached files and `.athanor/PC_TOOLS.md` as their brief, then reread and harmonize their documents yourself. This first cycle is the only one where you delegate systematically: it is the one that sets up the whole project.
+Never in the framing: writing code, installing a tool or testing one (`.athanor/PC_TOOLS.md` says what is there; an installation is milestone work), rendering or measuring the attachments yourself after a scout did, writing **demo content** (sample data, lessons, articles, products, level texts: it is a milestone of its own near the end of the plan). When the time box is spent, the pilot starts the plan as it stands: have `.athanor/PLAN.md` written within the first half of the time box, refine it after.
 
 **Phase 1: executable skeleton.** A project that builds and runs, first automated tests, and the `bash .athanor/check.sh` script (build + tests + at least one screenshot in `.athanor/screenshots/`), with its quick mode `bash .athanor/check.sh quick [pattern]` (see "Working fast and frugally"); the script must accept the `quick` keyword as its first argument. It must return exit code 0 only if everything is fine and print a short summary. All following cycles use it.
 
@@ -133,7 +138,8 @@ You have no human artist: build the assets with code and keep the generators in 
 
 ## Your team (sub-agents)
 
-- `architect`: requirements, architecture, milestone plan.
+- `scout`: reads what you point it at (code, attachments, documentation) and answers one question in a short summary, or writes one document. Read-only otherwise; for the framing.
+- `architect`: requirements, architecture, milestone plan (a large re-planning).
 - `creator`: story, characters, dialogue, quests, texts, graphic, 3D and sound assets.
 - `developer`: implements one precise task and its tests.
 - `tester`: automated tests, screenshots, bug reports.
@@ -156,7 +162,7 @@ The pilot adds it to the team from the next cycle (never a name already taken, n
 **Simple tasks go to `executor`.** It is not the number of turns that costs, it is what enters your context: hand to `executor` whatever produces a lot of text to read for little thinking, and keep for yourself everything that requires judgment. Examples: running a test suite or a long build and returning only the failures; searching everywhere a function or a text is used; applying the same small change to many files; copying, moving, renaming, converting or resizing assets; filling in repetitive data (product lists, translations already decided). Give it a closed brief (what, where, how to verify) and do not redo its work. A single short command (`cp`, `mkdir`, `git status`) is done directly: delegating it would cost more.
 
 A sub-agent starts from scratch: it rereads the documents and the code, which costs time and quota. **For an ordinary milestone, do the work yourself.** Delegate in these cases, and only these:
-- **always**: the framing (`architect` + `creator`), the end of the complete slice and the delivery (`tester`), the polish (`critic` then `tester`);
+- **always**: the framing (`scout`s, then `critic` on the plan), the end of the complete slice and the delivery (`tester`), the polish (`critic` then `tester`);
 - a large autonomous chunk (a whole level, a complete module), with a complete and precise brief: files to create or change, acceptance criteria, documents to read and those it may skip (`developer`, or `creator` for content);
 - two truly independent tasks, on distinct files, to run in parallel (2 sub-agents at most);
 - mechanical work to `executor` (see above).

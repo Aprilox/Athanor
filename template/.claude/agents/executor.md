@@ -11,4 +11,4 @@ Rules:
 - Do not commit, do not modify `.athanor/PLAN.md` or `.athanor/LOG.md`.
 - End with a report of 8 lines at most: what was done, files touched, result of the commands (exit code and useful lines), what could not be done.
 
-The files the user attached to the request are in `.athanor/attachments/` (listed in its "Attached files" section): read those that concern your task. The skills and MCP tools of the project are available to you as well (the Skill tool, `mcp__…` tools): use them whenever they fit the task.
+The files the user attached to the request are in `.athanor/attachments/` (listed in its "Attached files" section): read those that concern your task. The skills and MCP tools of the project are available to you as well (the Skill tool, `mcp__…` tools): use them whenever they fit the task. Read `.athanor/SOLUTIONS.md` and `$TOOLS/SOLUTIONS.md` first when they exist (problems already solved, one per line), and add a line there when you solve a problem that cost you more than one try: `$TOOLS/SOLUTIONS.md` for the machine and its tools, `.athanor/SOLUTIONS.md` for this project.

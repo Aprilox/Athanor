@@ -20,7 +20,7 @@ followed, and a proposed sub-agent gets nothing more than the others (same sandb
 import datetime, json, os, re, shutil, subprocess, sys
 
 NOM_SUR = re.compile(r"^[a-z][a-z0-9-]{1,30}$")
-RESERVES = {"architect", "creator", "developer", "tester", "critic", "executor", "general-purpose",
+RESERVES = {"architect", "creator", "developer", "tester", "critic", "executor", "scout", "general-purpose",
             "explore", "plan", "statusline-setup", "output-style-setup", "claude-code-guide", "fork"}
 MAX_DESCRIPTION, MAX_CONSIGNES, MAX_PAR_PROJET, MAX_DU_CHEF = 400, 6000, 12, 5
 MODELES = {"", "eco", "fort"}
@@ -244,7 +244,7 @@ def agents_athanor(dossier):
         if meta.get("disallowedTools"):
             a["disallowedTools"] = [x.strip() for x in meta["disallowedTools"].split(",")]
         nom = meta.get("name", f[:-3])
-        modele = meta.get("model") or (simple if nom == "executor" else "") or sous
+        modele = meta.get("model") or (simple if nom == "executor" else "") or sous or ("sonnet" if nom == "scout" else "")
         if modele:
             a["model"] = modele
             if not meta.get("model"):  # .md copy (when --agents does not exist): same model

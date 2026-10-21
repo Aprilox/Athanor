@@ -50,7 +50,7 @@ Vous décrivez ce que vous voulez : un jeu, un site, une application, un outil. 
 |---|---|
 | **Une boucle autonome** | Un jalon par cycle et un contexte neuf à chaque fois : les tours restent économes et le projet ne dérive pas. Quota atteint → pause jusqu'à sa réouverture, ou bascule sur un modèle de secours. Erreur → nouvel essai avec un délai croissant. Cycle muet ou trop long → coupé et repris. PC redémarré → reprise là où il s'était arrêté. Tout l'état est dans des fichiers. |
 | **Mode parallèle** | Un interrupteur par projet. Un plan fin avec dépendances ; jusqu'à 10 ouvriers réalisent des jalons indépendants en même temps, chacun dans sa copie de travail git ; le pilote fusionne chacun dès qu'il termine et lance le suivant, et le chef vérifie une fois à la fin. |
-| **Une vraie équipe** | Un chef de projet et des sous-agents : `architect`, `creator`, `developer`, `tester`, `critic`, et un `executor` bon marché (Haiku par défaut) pour le travail mécanique. Le plan, les tests indépendants et la critique finale sont toujours délégués. |
+| **Une vraie équipe** | Un chef de projet et des sous-agents : `scout`, `architect`, `creator`, `developer`, `tester`, `critic`, et un `executor` bon marché (Haiku par défaut) pour le travail mécanique. Les éclaireurs lisent pour le cadrage, les tests indépendants et la critique finale sont toujours délégués. |
 | **Skills & MCP** | Donnez à Claude de l'expertise et des outils : un catalogue vérifié (skills d'Anthropic, superpowers, Context7, Serena, Playwright, GitHub…), une recherche dans des milliers de skills communautaires (SkillsMP) et dans le registre officiel MCP, n'importe quel skill depuis un lien GitHub, vos propres skills, n'importe quel serveur MCP collé depuis son README, et les plugins Claude Code du catalogue officiel (et de tout autre que vous ajoutez), comme ceux de Shopify ou de Stripe. Activés projet par projet, pour le chef comme pour les ouvriers en parallèle. Les serveurs MCP locaux tournent dans une cage, loin de vos fichiers et du jeton Claude. |
 | **Des tâches pour vous** | Ce que Claude ne peut pas faire lui-même (créer un compte, payer, recevoir un code par SMS, générer une clé) devient une tâche sur la page *Pour vous*, avec les étapes exactes ; en attendant, Claude continue le reste, et le pilote se met en pause s'il n'y a plus rien d'autre à faire. Vous répondez *c'est fait* (avec un texte, des fichiers, des clés dans un champ protégé) ou *passer : trouve une autre solution* ; Claude vérifie aussitôt et vous dit si ça marche ou ce qui manque encore. |
 | **Une barrière** | Les commandes de Claude tournent sous bubblewrap + seccomp. Elles ne peuvent écrire que dans le projet et ne lisent jamais le reste de votre machine ; Internet reste ouvert. |
@@ -159,11 +159,13 @@ L'application n'utilise que la bibliothèque standard de Go et trois paquets emb
 
 **Un cycle.** Le pilote (`system/pilot.sh`) synchronise la demande, archive les vieux jalons, refait la carte du projet (`.athanor/MAP.md`), ouvre l'éditeur Unreal si le projet en a un, puis lance une session Claude Code avec [`template/CLAUDE.md`](template/CLAUDE.md) comme consignes, dans votre langue. Claude prend le premier jalon non coché de `.athanor/PLAN.md`, le réalise, lance `check.sh`, le coche, le note dans `LOG.md` et commite. Le pilote ferme le cycle peu après le commit et lance le suivant.
 
+**Ce que chaque agent sait dès le départ.** `.athanor/PC_TOOLS.md` liste les outils déjà installés et leurs versions (Node, Python, PHP, Composer, Git…), vérifiés par le pilote : personne ne dépense de tours à les sonder. Deux fichiers courts rassemblent les problèmes déjà résolus, une ligne chacun : `.athanor/SOLUTIONS.md` pour le projet et `tools/SOLUTIONS.md` pour le PC, partagé par tous les projets. Chaque agent les lit en premier et ajoute une ligne quand il résout quelque chose ; le pilote retire les doublons, garde les 60 dernières lignes et récupère ce que les ouvriers en parallèle ont appris.
+
 **La vie d'un projet.**
 
 | Phase | Ce qui se passe |
 |---|---|
-| Cadrage | `.athanor/docs/REQUIREMENTS.md`, `DESIGN.md`, `ARCHITECTURE.md` (documents de travail, dans l'atelier), et un plan de 8 à 25 jalons, chacun avec des critères d'acceptation vérifiables |
+| Cadrage | un cycle limité dans le temps (`FRAMING_MAX_MIN`, 25 min par défaut) qui n'écrit que le plan : jusqu'à 3 `scout` lisent en même temps les pièces jointes et le code existant, le chef écrit `.athanor/docs/REQUIREMENTS.md`, `DESIGN.md`, `ARCHITECTURE.md` et un plan de 8 à 25 jalons, chaque ligne étant une fiche autonome (fichiers, dépendances, critères d'acceptation, ce qu'il faut lire), et le `critic` relit le plan une fois. Ni code, ni installation, ni contenu de démo ; une fois le temps écoulé, le plan tel qu'il est part en développement |
 | Squelette | un squelette exécutable et le `check.sh` propre au projet (compilation, tests, captures) |
 | Tranche complète | une fonctionnalité qui marche de bout en bout, vérifiée par le `tester` |
 | Production | les jalons restants, un par cycle, ou plusieurs à la fois en mode parallèle |
@@ -174,10 +176,10 @@ L'application n'utilise que la bibliothèque standard de Go et trois paquets emb
 
 ## Mode parallèle
 
-*Suivi → Mode de travail → Mode parallèle*, par projet, avec 2 à 10 ouvriers en même temps.
+*Suivi → Mode de travail → Mode parallèle*, par projet, avec 2 à 10 ouvriers au maximum. Les ouvriers tournent sur `WORKER_MODEL` (Sonnet par défaut) : une fiche de jalon bien écrite est du travail d'exécution, le chef garde son modèle pour le plan et les fusions.
 
 1. Le chef écrit un **plan fin avec des dépendances explicites** : beaucoup de petits jalons autonomes, chacun avec les fichiers qu'il touche, `Depends on:` les jalons dont il a besoin, et ses critères d'acceptation. M1 est toujours la fondation (squelette, `check.sh`, contrats partagés).
-2. Le pilote fait tourner un **ordonnanceur** : chaque jalon dont les dépendances sont fusionnées reçoit un **ouvrier** (sa propre session Claude, sa propre copie de travail git `.athanor/work/M5` et sa branche `auto/M5`), jusqu'au nombre choisi en même temps.
+2. Le pilote fait tourner un **ordonnanceur** : chaque jalon dont les dépendances sont fusionnées reçoit un **ouvrier** (sa propre session Claude, sa propre copie de travail git `.athanor/work/M5` et sa branche `auto/M5`), en commençant par 2 et en en ajoutant un chaque fois qu'un ouvrier livre, jusqu'au nombre choisi. Dès qu'un ouvrier atteint le quota, plus aucun ne démarre ; s'ils l'ont tous atteint, la vérification du chef est sautée et le pilote attend, puis fait un jalon avec le chef seul avant de relancer des ouvriers.
 3. Dès qu'un ouvrier termine, le pilote **fusionne sa branche immédiatement** quand elle s'applique sans conflit, coche le jalon et lance les jalons suivants devenus prêts. Personne n'attend l'ouvrier le plus lent.
 4. En fin de cycle, **une seule** session du chef vérifie tout : elle fusionne les branches en conflit, lance la vérification complète, corrige ce que les fusions ont cassé et note le reste dans `BUGS.md`.
 5. **Les demandes en attente n'attendent pas.** Au début de chaque cycle, elles rejoignent la demande en cours : le chef ajoute leurs jalons au plan, avec leurs dépendances.
@@ -193,7 +195,8 @@ Chaque ouvrier ne porte que son jalon en contexte : le travail est découpé en 
 | Agent | Rôle | Modèle |
 |---|---|---|
 | **Chef de projet** | lit le plan, code les jalons ordinaires, délègue, relit chaque rapport, commite | `MODEL` |
-| `architect` | exigences, architecture et plan des jalons ; révise le plan si besoin | `SUBAGENT_MODEL` |
+| `scout` | lit ce qu'on lui désigne (code, pièces jointes, documentation) et répond à une question en un court résumé, ou écrit un document ; pour le cadrage | `SUBAGENT_MODEL`, Sonnet s'il est vide |
+| `architect` | exigences, architecture et plan des jalons pour une grosse révision du plan | `SUBAGENT_MODEL` |
 | `creator` | contenus : histoire, monde, dialogues, textes d'interface, ressources 2D/3D/son générées par programme | `SUBAGENT_MODEL` |
 | `developer` | une tâche de développement précise, avec ses tests | `SUBAGENT_MODEL` |
 | `tester` | tests automatiques, captures, rapports de bugs (ne corrige jamais le code lui-même) | `SUBAGENT_MODEL` |
@@ -308,6 +311,9 @@ Tout se modifie dans l'application (*Réglages*), ou dans `.env` ([`.env.example
 | `FALLBACK_MODEL` | pris **automatiquement** quand le quota de `MODEL` est épuisé, jusqu'à sa réouverture, puis retour au principal. Vide = pause |
 | `SUBAGENT_MODEL` | modèle des sous-agents ; vide = le même que le chef, `claude-sonnet-5-5` économise le quota |
 | `CHEAP_MODEL` | modèle du sous-agent `executor` (par défaut `haiku`) : le contexte et le quota du chef restent pour la réflexion |
+| `FRAMING_MODEL` | modèle du cycle de cadrage, qui écrit le plan ; vide = `MODEL` |
+| `WORKER_MODEL` | modèle des ouvriers en mode parallèle ; par défaut `sonnet`, vide = `MODEL` |
+| `FRAMING_MAX_MIN` | durée maximale du cadrage, en minutes (25 par défaut) |
 | `EFFORT` | effort de réflexion : vide = normal, `low` à `max` |
 | `LANGUAGE` | langue dans laquelle Claude travaille et documente (réglée par l'application) |
 | `MAX_HOURS` | arrêt de sécurité (168 par défaut, une semaine) |
@@ -448,7 +454,7 @@ Oui. Rien n'est lié à un nom d'utilisateur ni à une lettre de disque : les ch
 | Test de la barrière : « cmd.exe lancé depuis la barrière » | le filtre seccomp manque : *Réparer* sur la ligne *Barrière du système* |
 | Unreal : « MCP indisponible pour ce cycle » | éditeur 5.8 avec les plugins Unreal MCP, *Auto Start Server* coché, réseau WSL « mirrored » (`unreal-network.cmd`) |
 | `tool` : « Docker introuvable » | lancez Docker Desktop, activez *WSL integration* |
-| « Quota atteint, Claude patiente » | normal ; avec `FALLBACK_MODEL`, Claude continue sur le modèle de secours |
+| « Quota atteint, Claude patiente » | normal ; avec `FALLBACK_MODEL`, Claude continue sur le modèle de secours, sauf si la limite atteinte est celle du compte (5 heures, la semaine), que le modèle de secours partage |
 | « Problème de connexion » | jeton absent ou faux : *Réglages*, ou *Réparer* sur la ligne *Jeton et accès au modèle* |
 | Une installation demande les droits administrateur | *Installation & santé* → *Droits administrateur pour les installations* → *Réparer* (une seule fois) |
 | Un script `.sh` échoue avec `$'\r'` | fins de ligne Windows : réenregistrez-le en « LF » (le dépôt l'impose via `.gitattributes`) |
@@ -460,10 +466,10 @@ Oui. Rien n'est lié à un nom d'utilisateur ni à une lettre de disque : les ch
 Poussez un tag de version : GitHub compile les deux applications et publie la version ([`.github/workflows/release.yml`](.github/workflows/release.yml)).
 
 ```bash
-git tag v2.15.0 && git push origin v2.15.0
+git tag v2.16.0 && git push origin v2.16.0
 ```
 
-Gardez la version de [`app/winres/athanor.rc`](app/winres/athanor.rc) alignée sur le tag, et écrivez les nouveautés dans `docs/releases/VERSION.md` (par ex. [`docs/releases/2.15.0.md`](docs/releases/2.15.0.md)) : elles ouvrent la page de la version.
+Gardez la version de [`app/winres/athanor.rc`](app/winres/athanor.rc) alignée sur le tag, et écrivez les nouveautés dans `docs/releases/VERSION.md` (par ex. [`docs/releases/2.16.0.md`](docs/releases/2.16.0.md)) : elles ouvrent la page de la version.
 
 ## Contribuer
 

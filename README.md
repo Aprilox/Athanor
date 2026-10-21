@@ -50,7 +50,7 @@ You describe what you want: a game, a website, an app, a tool. Athanor runs [Cla
 |---|---|
 | **An autonomous loop** | One milestone per cycle, a fresh context each time, so turns stay cheap and the project never drifts. Usage limit reached → pause until it reopens, or switch to a fallback model. Error → retry with a growing delay. Silent or over-long cycle → cut and resumed. PC restarted → resumes where it stopped. All state lives in files. |
 | **Parallel mode** | One switch per project. A fine-grained plan with dependencies; up to 10 workers build independent milestones at once, each in its own git worktree; the pilot merges each one as soon as it finishes and starts the next, and the lead verifies once at the end. |
-| **A real team** | A project lead plus sub-agents: `architect`, `creator`, `developer`, `tester`, `critic`, and a cheap `executor` (Haiku by default) for mechanical work. The plan, independent tests and the final critique are always delegated. |
+| **A real team** | A project lead plus sub-agents: `scout`, `architect`, `creator`, `developer`, `tester`, `critic`, and a cheap `executor` (Haiku by default) for mechanical work. Scouts read for the framing, independent tests and the final critique are always delegated. |
 | **Skills & MCP** | Give Claude expertise and tools: a verified catalog (Anthropic skills, superpowers, Context7, Serena, Playwright, GitHub…), a search over thousands of community skills (SkillsMP) and over the official MCP Registry, any skill from a GitHub link, skills you write yourself, any MCP server pasted from its README, and Claude Code plugins from the official marketplace (and any other you add), like Shopify's or Stripe's. Switched on per project, for the lead and the parallel workers. Local MCP servers run in a cage, away from your files and the Claude token. |
 | **Tasks for you** | What Claude cannot do itself (create an account, pay, receive a code by SMS, generate a key) becomes a task on the *For you* page, with the exact steps; meanwhile Claude carries on with the rest, and the pilot pauses if nothing else can be done. You answer *done* (with a text, files, keys in a protected field) or *skip: find another way*; Claude checks it at once and tells you whether it works or what is still missing. |
 | **A sandbox** | Claude's commands run under bubblewrap + seccomp. They can write only in the project, never read the rest of your machine, and Internet stays open. |
@@ -159,11 +159,13 @@ The app only uses Go's standard library plus three vendored packages for the Web
 
 **A cycle.** The pilot (`system/pilot.sh`) syncs the request, archives old milestones, rebuilds the project map (`.athanor/MAP.md`), opens the Unreal editor if the project has one, then starts a Claude Code session with [`template/CLAUDE.md`](template/CLAUDE.md) as instructions, in your language. Claude takes the first unchecked milestone of `.athanor/PLAN.md`, does it, runs `check.sh`, ticks it, logs it in `LOG.md` and commits. The pilot closes the cycle shortly after the commit and starts the next one.
 
+**What every agent knows from the start.** `.athanor/PC_TOOLS.md` lists the toolchain already installed and its versions (Node, Python, PHP, Composer, Git…), checked by the pilot, so nobody spends turns probing it. Two short files collect the problems already solved, one line each: `.athanor/SOLUTIONS.md` for the project and `tools/SOLUTIONS.md` for the PC, shared by every project. Every agent reads them first and adds a line when it solves something; the pilot removes duplicates and keeps the latest 60 lines, and merges what parallel workers learned.
+
 **A project's life.**
 
 | Phase | What happens |
 |---|---|
-| Framing | `.athanor/docs/REQUIREMENTS.md`, `DESIGN.md`, `ARCHITECTURE.md` (working documents, in the workshop), and a plan of 8 to 25 milestones, each with verifiable acceptance criteria |
+| Framing | one time-boxed cycle (`FRAMING_MAX_MIN`, 25 min by default) that only writes the plan: up to 3 `scout`s read the attachments and the existing code at once, the lead writes `.athanor/docs/REQUIREMENTS.md`, `DESIGN.md`, `ARCHITECTURE.md` and a plan of 8 to 25 milestones, each line a self-contained sheet (files, dependencies, acceptance criteria, what to read), and the `critic` checks the plan once. No code, no installation, no demo content; past the time box, the plan as it stands goes ahead |
 | Skeleton | an executable skeleton and the project's own `check.sh` (build, tests, screenshots) |
 | Complete slice | one feature working end to end, checked by the `tester` |
 | Production | the remaining milestones, one per cycle, or several at once in parallel mode |
@@ -174,10 +176,10 @@ The app only uses Go's standard library plus three vendored packages for the Web
 
 ## Parallel mode
 
-*Overview → Working mode → Parallel mode*, per project, with 2 to 10 workers at once.
+*Overview → Working mode → Parallel mode*, per project, with 2 to 10 workers at most. Workers run on `WORKER_MODEL` (Sonnet by default): a well-written milestone sheet is execution work, the lead keeps its own model for the plan and the merges.
 
 1. The lead writes a **fine-grained plan with explicit dependencies**: many small, self-contained milestones, each with the files it touches, `Depends on:` the milestones it needs, and acceptance criteria. M1 is always the foundation (skeleton, `check.sh`, shared contracts).
-2. The pilot runs a **scheduler**: every milestone whose dependencies are merged gets a **worker** (its own Claude session, its own git worktree `.athanor/work/M5` and branch `auto/M5`), up to the chosen number at once.
+2. The pilot runs a **scheduler**: every milestone whose dependencies are merged gets a **worker** (its own Claude session, its own git worktree `.athanor/work/M5` and branch `auto/M5`), starting with 2 and adding one each time a worker delivers, up to the chosen number. As soon as a worker meets the quota, no other one starts; if they all met it, the lead's verification is skipped and the pilot waits, then runs one milestone with the lead alone before starting workers again.
 3. As soon as a worker finishes, the pilot **merges its branch immediately** when it applies cleanly, ticks the milestone, and starts the next ready milestones. Nobody waits for the slowest worker.
 4. At the end of the cycle, **one** session of the lead verifies everything: it merges the branches that conflicted, runs the full check, fixes what the merges broke, and files the rest in `BUGS.md`.
 5. **Queued requests don't wait.** At the start of each cycle they join the current request: the lead adds their milestones to the plan, with their dependencies.
@@ -193,7 +195,8 @@ Each worker only carries its own milestone in context, so the work is split into
 | Agent | Role | Model |
 |---|---|---|
 | **Project lead** | reads the plan, codes ordinary milestones, delegates, reviews every report, commits | `MODEL` |
-| `architect` | requirements, architecture and the milestone plan; revises the plan when needed | `SUBAGENT_MODEL` |
+| `scout` | reads what it is pointed at (code, attachments, documentation) and answers one question in a short summary, or writes one document; for the framing | `SUBAGENT_MODEL`, Sonnet when empty |
+| `architect` | requirements, architecture and the milestone plan for a large re-planning | `SUBAGENT_MODEL` |
 | `creator` | content: story, world, dialogue, interface texts, programmatic 2D/3D/sound assets | `SUBAGENT_MODEL` |
 | `developer` | one precise development task with its tests | `SUBAGENT_MODEL` |
 | `tester` | automated tests, screenshots, bug reports (never fixes the code itself) | `SUBAGENT_MODEL` |
@@ -306,6 +309,8 @@ Everything is editable in the app (*Settings*), or in `.env` ([`.env.example`](.
 | `CLAUDE_CODE_OAUTH_TOKEN` | token of your subscription (`claude setup-token`), never shared |
 | `MODEL` / `FALLBACK_MODEL` / `SUBAGENT_MODEL` | lead model, model used while the lead's quota is exhausted, sub-agents model |
 | `CHEAP_MODEL` | model of the `executor` sub-agent (default `haiku`) |
+| `FRAMING_MODEL` / `WORKER_MODEL` | model of the framing cycle (empty = `MODEL`), model of the parallel workers (default `sonnet`, empty = `MODEL`) |
+| `FRAMING_MAX_MIN` | time box of the framing, in minutes (default 25) |
 | `EFFORT` | reasoning effort, `low` to `max` |
 | `LANGUAGE` | language Claude works and documents in (set by the app) |
 | `MAX_HOURS` | safety stop (default 168, one week) |
@@ -448,7 +453,7 @@ Yes. Nothing is tied to a user name or a drive letter: paths come from your prof
 | Sandbox test: "CMD.EXE LAUNCHED FROM THE SANDBOX" | the seccomp filter is missing: *Repair* on the *System sandbox* line |
 | Unreal: "MCP unavailable for this cycle" | editor 5.8 with the Unreal MCP plugins, *Auto Start Server* checked, WSL network "mirrored" (`unreal-network.cmd`) |
 | `tool`: "Docker not found" | start Docker Desktop, enable *WSL integration* |
-| "Usage limit reached, Claude is waiting" | expected; with `FALLBACK_MODEL`, Claude goes on with the fallback model |
+| "Usage limit reached, Claude is waiting" | expected; with `FALLBACK_MODEL`, Claude goes on with the fallback model, unless the limit hit is the account's own (5 hours, the week), which the fallback model shares |
 | "Connection problem" | missing or wrong token: *Settings*, or *Repair* on the *Token and model access* line |
 | An installation needs administrator rights | *Setup & health* → *Administrator rights for installations* → *Repair* (once) |
 | A `.sh` script fails with `$'\r'` | Windows line endings: save it with "LF" (the repository enforces it through `.gitattributes`) |
@@ -460,10 +465,10 @@ Yes. Nothing is tied to a user name or a drive letter: paths come from your prof
 Push a version tag and GitHub builds both apps and publishes the release ([`.github/workflows/release.yml`](.github/workflows/release.yml)):
 
 ```bash
-git tag v2.15.0 && git push origin v2.15.0
+git tag v2.16.0 && git push origin v2.16.0
 ```
 
-Keep the version in [`app/winres/athanor.rc`](app/winres/athanor.rc) in step with the tag, and write what is new in `docs/releases/VERSION.md` (e.g. [`docs/releases/2.15.0.md`](docs/releases/2.15.0.md)): it opens the release page.
+Keep the version in [`app/winres/athanor.rc`](app/winres/athanor.rc) in step with the tag, and write what is new in `docs/releases/VERSION.md` (e.g. [`docs/releases/2.16.0.md`](docs/releases/2.16.0.md)): it opens the release page.
 
 ## Contributing
 
