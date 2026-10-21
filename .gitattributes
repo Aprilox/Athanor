@@ -4,6 +4,7 @@
 *.sh        text eol=lf
 *.py        text eol=lf
 system/bin/* text eol=lf
+system/natif/* text eol=lf
 *.cmd       text eol=crlf
 *.bat       text eol=crlf
 *.ps1       text eol=crlf

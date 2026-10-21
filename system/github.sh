@@ -104,13 +104,20 @@ gm() {
         -c protocol.allow=never -c push.recurseSubmodules=no -c push.gpgSign=false "$@"
 }
 commande_ssh() {  # $1 dir, $2 port
-  printf "ssh -F /dev/null -p %s -i '%s' -o IdentitiesOnly=yes -o IdentityAgent=none -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile='%s' -o GlobalKnownHostsFile=/dev/null -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -o LogLevel=ERROR" \
+  # native Windows: Git's own ssh (MSYS, understands /c/... and /dev/null), never Windows' OpenSSH
+  local ssh=ssh; [ "${NATIF:-0}" = 1 ] && [ -x /usr/bin/ssh ] && ssh=/usr/bin/ssh
+  printf "$ssh -F /dev/null -p %s -i '%s' -o IdentitiesOnly=yes -o IdentityAgent=none -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile='%s' -o GlobalKnownHostsFile=/dev/null -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -o LogLevel=ERROR" \
     "$2" "$1/cle" "$1/known_hosts"
 }
 
 # The project's own repository, and nothing else. Claude can write the project's .git: a gitfile, a
 # commondir file, symbolic links or alternates would make the pilot read, then push, another repository
 # of the computer. Sets SHA (HEAD) and OBJETS; RAISON = absent (no repository or no commit yet) | detourne.
+# The project's objects folder as git.exe reads it in a file (native Windows: C:/..., never /c/...).
+objets_pour_git() {
+  if [ "${NATIF:-0}" = 1 ]; then cygpath -m "$OBJETS"; else printf '%s\n' "$OBJETS"; fi
+}
+
 lire_projet() {
   local gd="$1/.git"; SHA=""; OBJETS=""; RAISON=absent
   [ -e "$gd" ] || [ -L "$gd" ] || return 1
@@ -214,6 +221,21 @@ atelier() {
   python3 -I -c '
 import os, sys
 p, nom, action = sys.argv[1:4]
+if os.name == "nt":   # native Windows: no dir_fd; links checked by path
+    d = os.path.join(p, ".athanor")
+    if os.path.islink(d) or not os.path.isdir(d):
+        sys.exit(1)
+    cible = os.path.join(d, nom)
+    if os.path.islink(cible):
+        os.unlink(cible)
+    if action == "effacer":
+        try: os.unlink(cible)
+        except FileNotFoundError: pass
+    else:
+        tmp = os.path.join(d, ".%s.%d" % (nom, os.getpid()))
+        with open(tmp, "wb") as o: o.write(sys.stdin.buffer.read())
+        os.replace(tmp, cible)
+    sys.exit(0)
 try:
     fd = os.open(os.path.join(p, ".athanor"), os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
 except OSError:
@@ -265,7 +287,7 @@ publie() {
   MIROIR="$d/miroir.git"
   [ -d "$MIROIR" ] && [ ! -L "$MIROIR" ] && lire_projet "$projet" || return 1
   exec 8> "$d/verrou" && flock -w 60 8 || return 1
-  printf '%s\n' "$OBJETS" > "$MIROIR/objects/info/alternates" || return 1
+  objets_pour_git > "$MIROIR/objects/info/alternates" || return 1
   [ -n "$(GIT_LITERAL_PATHSPECS=1 gm log --glob='refs/athanor/pousse/*' -1 --format=%H -- "$@" 2>/dev/null)" ]
 }
 
@@ -300,7 +322,7 @@ pousser() {
   fi
   MIROIR="$d/miroir.git"
   [ -d "$MIROIR" ] || { git init -q --bare "$MIROIR" >/dev/null 2>&1 && GIT_DIR="$MIROIR" git config gc.auto 0; } || { echo "Cannot prepare the push folder."; return 1; }
-  mkdir -p "$MIROIR/objects/info" && printf '%s\n' "$OBJETS" > "$MIROIR/objects/info/alternates" || { echo "Cannot prepare the push folder."; return 1; }
+  mkdir -p "$MIROIR/objects/info" && objets_pour_git > "$MIROIR/objects/info/alternates" || { echo "Cannot prepare the push folder."; return 1; }
   # pushed commits that no longer exist (history rewritten) are forgotten, never an error
   local r; while IFS= read -r r; do
     gm cat-file -e "$(gm rev-parse -q --verify "$r" 2>/dev/null)^{commit}" 2>/dev/null || gm update-ref -d "$r" 2>/dev/null
@@ -392,8 +414,10 @@ lier() {
   esac
   [ "$auto" = 0 ] || auto=1
   [ -z "$branche" ] || branche_valide "$branche" || { echo "Invalid branch name: $branche"; return 2; }
-  command -v gh >/dev/null 2>&1 || { echo "GitHub CLI (gh) is missing: run Repair in the application's Options (Linux packages)."; return 1; }
-  command -v ssh-keygen >/dev/null 2>&1 && command -v ssh >/dev/null 2>&1 || { echo "OpenSSH is missing: run Repair in the application's Options (Linux packages)."; return 1; }
+  local reparer="run Repair in the application's Options (Linux packages)"
+  [ "${NATIF:-0}" = 1 ] && reparer="Setup & health -> Install everything (native Windows mode)"
+  command -v gh >/dev/null 2>&1 || { echo "GitHub CLI (gh) is missing: $reparer."; return 1; }
+  command -v ssh-keygen >/dev/null 2>&1 && command -v ssh >/dev/null 2>&1 || { echo "OpenSSH is missing: $reparer."; return 1; }
   local aide; aide=$(gh auth login --help 2>&1)
   printf '%s' "$aide" | grep -q -- '--skip-ssh-key' || { echo "GitHub CLI is too old: run Repair in the application's Options to update it."; return 1; }
 
@@ -416,6 +440,8 @@ lier() {
     else echo 'exec xdg-open "$1" >/dev/null 2>&1'; fi
   } > "$tmp/navigateur"; chmod 700 "$tmp/navigateur"
   export BROWSER="$tmp/navigateur"
+  # native Windows: gh.exe cannot run a shell script; it opens the default browser by itself
+  [ "${NATIF:-0}" = 1 ] && unset BROWSER
 
   echo "=== Link this project to GitHub ==="
   echo
@@ -661,6 +687,26 @@ p, actif = sys.argv[1], sys.argv[2] == "1"
 MARQUE = b"# athanor: commits without Claude as co-author"
 texte = b"#!/bin/sh\n" + MARQUE + b" (option of the GitHub block, Manage page)\n" \
     b"sed -i -e \"/^[Cc]o-[Aa]uthored-[Bb]y:.*[Cc]laude/d\" -e \"/Generated with \\[Claude Code\\]/d\" -e \"/^.\\{0,4\\}Generated with Claude/d\" \"$1\"\n"
+if os.name == "nt":   # native Windows: no dir_fd; links checked by path
+    h = os.path.join(p, ".git", "hooks")
+    if os.path.islink(os.path.join(p, ".git")) or os.path.islink(h):
+        sys.exit(0)
+    f = os.path.join(h, "commit-msg")
+    actuel = None
+    if os.path.islink(f):
+        sys.exit(0)
+    if os.path.isfile(f):
+        actuel = open(f, "rb").read(4096)
+    if actuel is not None and MARQUE not in actuel:
+        sys.exit(0)
+    if actif:
+        os.makedirs(h, exist_ok=True)
+        tmp = f + ".%d" % os.getpid()
+        with open(tmp, "wb") as o: o.write(texte)
+        os.replace(tmp, f)
+    elif actuel is not None:
+        os.unlink(f)
+    sys.exit(0)
 try:
     g = os.open(os.path.join(p, ".git"), os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
 except OSError:

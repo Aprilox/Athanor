@@ -14,13 +14,39 @@ watchdog stopped it): Claude Code only writes the cost in that last line.
 Prices are never written here: they change, and depend on the plan. They are learned from this PC's
 own results, at least 3 of them per model, in TARIFS (a JSON file of the kit's logs, outside the sandbox).
 """
-import fcntl
 import glob
 import json
 import os
 import re
 import sys
 import tempfile
+import time
+
+# Native Windows (no O_NOFOLLOW, O_NONBLOCK nor fcntl there): links are checked by path before opening,
+# and locks are msvcrt's. In WSL and on Linux, nothing changes.
+NOFOLLOW, NONBLOCK, BINAIRE = (getattr(os, n, 0) for n in ("O_NOFOLLOW", "O_NONBLOCK", "O_BINARY"))
+try:
+    import fcntl
+
+    def verrouiller(fd):
+        fcntl.flock(fd, fcntl.LOCK_EX)
+except ImportError:
+    import msvcrt
+
+    def verrouiller(fd):
+        while True:
+            try:
+                msvcrt.locking(fd, msvcrt.LK_LOCK, 1)
+                return
+            except OSError:
+                time.sleep(0.2)
+
+
+def pas_un_lien(chemin):
+    """Where O_NOFOLLOW does not exist, a link is refused before opening."""
+    if not NOFOLLOW and os.path.islink(chemin):
+        raise OSError("%s is a link" % chemin)
+    return chemin
 
 MAX_ECHANTILLONS = 40
 MAX_FICHIER = 1 << 20
@@ -49,7 +75,7 @@ def entier(v):
 
 def lire_tarifs(chemin):
     try:
-        fd = os.open(chemin, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        fd = os.open(pas_un_lien(chemin), os.O_RDONLY | NOFOLLOW | NONBLOCK | BINAIRE)
     except OSError:
         return {}
     try:
@@ -132,7 +158,7 @@ def apprendre(tarifs, journal):
         return
     verrou = open(tarifs + ".lock", "a")
     try:
-        fcntl.flock(verrou, fcntl.LOCK_EX)
+        verrouiller(verrou.fileno())
         d = lire_tarifs(tarifs)
         modeles = d.get("modeles") if isinstance(d.get("modeles"), dict) else {}
         for nom, u in list(mu.items())[:10]:

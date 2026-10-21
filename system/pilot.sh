@@ -52,6 +52,13 @@ export TOOLS PROJECT
 export PATH="$SYSTEME/bin:$HOME/.local/bin:$PATH"
 CLAUDE_BIN="${CLAUDE_BIN:-$(command -v claude)}"
 CHEMIN_CLAUDE="$PATH:$TOOLS/bin"
+if [ "$NATIF" = 1 ]; then
+  # the shims of system/natif are the pilot's: Claude's shell keeps the real programs (its python3 writes
+  # binary output, its pkill kills by name…)
+  CHEMIN_CLAUDE=$(printf '%s' "$CHEMIN_CLAUDE" | tr ':' '\n' | grep -vxF "$SYSTEME/natif" | paste -sd: -)
+  # Claude Code's Bash tool and hooks: this very Git Bash
+  [ -n "${CLAUDE_CODE_GIT_BASH_PATH:-}" ] || export CLAUDE_CODE_GIT_BASH_PATH="$(cygpath -w /usr/bin/bash.exe 2>/dev/null)"
+fi
 mkdir -p "$ETAT/logs" "$TOOLS/bin" "$TOOLS/cache"
 [ -n "${TZ:-}" ] && export TZ
 
@@ -308,7 +315,9 @@ import os, re, stat, sys, tempfile
 MAX = 256 * 1024
 def lire(f):
     try:
-        fd = os.open(f, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        if not getattr(os, "O_NOFOLLOW", 0) and os.path.islink(f):   # native Windows: no O_NOFOLLOW
+            os.unlink(f); return []
+        fd = os.open(f, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_BINARY", 0))
     except FileNotFoundError:
         return None
     except OSError:
@@ -388,18 +397,64 @@ produit_change() {
   ! g -C "$PROJECT" diff --quiet "$1" "$2" 2>/dev/null
 }
 
+# Native Windows: Claude is a Windows program. The pilot's paths become Windows paths, the long texts go
+# through files (a Windows command line holds 32,767 characters at most), and Git Bash is told not to
+# rewrite any other argument (EXCL_CLAUDE): the goal starts with "/goal", which it would take for a path.
+# $1 = name of the argument array, $2 = prefix of the files written for it. Nothing to do in WSL.
+EXCL_CLAUDE=""
+[ "$NATIF" = 1 ] && EXCL_CLAUDE="*"
+args_natifs() {
+  [ "$NATIF" = 1 ] || return 0
+  local -n _a="$1"
+  local -a n=()
+  local i=0 k=0 o v f
+  while [ "$i" -lt "${#_a[@]}" ]; do
+    o="${_a[$i]}"; v="${_a[$((i + 1))]:-}"
+    case "$o" in
+      --settings|--mcp-config|--plugin-dir|--append-system-prompt-file)
+        n+=("$o" "$(cygpath -m "$v")"); i=$((i + 2)) ;;
+      --append-system-prompt)
+        if [ "${APPEND_FICHIER_OK:-0}" = 1 ]; then
+          k=$((k + 1)); f="$2.consignes$k.md"; printf '%s' "$v" > "$f"
+          n+=(--append-system-prompt-file "$(cygpath -m "$f")")
+        else n+=("$o" "$v"); fi
+        i=$((i + 2)) ;;
+      --agents)
+        if [ "${AGENTS_FICHIER_OK:-0}" = 1 ]; then f="$2.agents.json"; printf '%s' "$v" > "$f"; n+=(--agents "$(cygpath -m "$f")")
+        else n+=("$o" "$v"); fi
+        i=$((i + 2)) ;;
+      *) n+=("$o"); i=$((i + 1)) ;;
+    esac
+  done
+  _a=("${n[@]}")
+}
+
+# The program to start for Claude. Native Windows: through Athanor.exe, which puts Claude in a Windows job:
+# stopping it stops everything Claude started, and what is left when Claude ends stops with it (no dev
+# server or browser keeps the cycle's output open); on Claude's desktop when that option is on.
+prog_claude() {
+  PROG_CLAUDE=("$CLAUDE_BIN")
+  if [ "$NATIF" = 1 ] && [ -f "$KIT/Athanor.exe" ]; then
+    PROG_CLAUDE=("$KIT/Athanor.exe" --isole --fin-tout)
+    [ -f "$KIT/logs/bureau-isole" ] || PROG_CLAUDE+=(--ici)
+    PROG_CLAUDE+=(-- "$(cygpath -w "$CLAUDE_BIN")")
+  fi
+}
+
 lancer_claude_surveille() {  # $1 = log; stops the cycle if it stays silent or runs too long
   local journal="$1" f_sid="$PRIVE/claude_sid" f_code="$PRIVE/claude_code"
   local pid_flux sid debut maintenant derniere motif="" tete coches_debut jalon_vu=0 h c fin_vu=0 ecart verifie
   local relais_vu=0 dernier_ctx=0 ctx
+  args_natifs args "$PRIVE/claude"
+  prog_claude
   rm -f "$f_sid" "$f_code" "$PRIVE/cycle_arrete" "$PRIVE/cycle_clos" "$PRIVE/cycle_relais"
   tete=$(g -C "$PROJECT" rev-parse HEAD 2>/dev/null || echo aucun)
   coches_debut=$(coches_plan); coches_debut=${coches_debut:-0}
   : > "$journal"
   # setsid: Claude and everything it launches (engine, browser...) form one group that can be stopped at once.
   # (9>&-: the pilot's lock must not be inherited by Claude nor by the display pipeline)
-  { setsid bash -c 'echo $$ > "$1"; f="$2"; b="$3"; PATH="$4"; shift 4; "$b" "$@" < /dev/null 2>&1; echo $? > "$f"' \
-    _ "$f_sid" "$f_code" "$BASH" "$CHEMIN_CLAUDE" "$SYSTEME/ecran.sh" lancer "$CLAUDE_BIN" "${args[@]}" | tee "$journal" | afficher_en_direct; } 9>&- &
+  { MSYS2_ARG_CONV_EXCL="$EXCL_CLAUDE" setsid bash -c 'echo $$ > "$1"; f="$2"; b="$3"; PATH="$4"; shift 4; "$b" "$@" < /dev/null 2>&1; echo $? > "$f"' \
+    _ "$f_sid" "$f_code" "$BASH" "$CHEMIN_CLAUDE" "$SYSTEME/ecran.sh" lancer "${PROG_CLAUDE[@]}" "${args[@]}" | tee "$journal" | afficher_en_direct; } 9>&- &
   pid_flux=$!
   debut=$(date +%s)
   while kill -0 "$pid_flux" 2>/dev/null; do
@@ -482,7 +537,7 @@ preparer_cycle() {  # non-AI tools: archives and project map, before Claude read
   PROJECT="$PROJECT" athanor map > /dev/null 2>&1 || true
   # Windows firewall kept up to date for Unreal and the project's programs (administrator task, no window),
   # otherwise Windows pops up "Allow access" as soon as a program waits for players.
-  (cd /mnt/c 2>/dev/null && schtasks.exe /run /tn "Athanor - installations" >/dev/null 2>&1) || true
+  (cd /mnt/c 2>/dev/null; MSYS2_ARG_CONV_EXCL='*' schtasks.exe /run /tn "Athanor - installations" >/dev/null 2>&1) || true
   # Unreal: the editor must be open so that Claude has its MCP tools during the cycle.
   if [ "${UNREAL_MCP:-0}" = "1" ]; then
     local uproject; uproject=$(find "$PROJECT" -maxdepth 2 -name '*.uproject' -print -quit 2>/dev/null)
@@ -540,6 +595,9 @@ parallele_nettoyer_worktrees   # leftovers of a wave interrupted by a stop or a 
 
 # ----------------------------------------------------------------------------- startup
 cd "$PROJECT" || { echo "Folder $PROJECT not accessible"; exit 1; }
+if [ "$NATIF" = 1 ] && ! [[ "$PROJECT" =~ ^/[a-zA-Z](/|$) ]]; then
+  echo "Native Windows mode: the project must be in a folder of a Windows drive (C:\..., D:\...), not $PROJECT. Move it, or use the WSL mode."; exit 1
+fi
 mkdir -p "$ETAT/logs" "$ETAT/queue" "$ETAT/done"
 
 # One pilot per project (double click on Start, automatic startup...).
@@ -592,6 +650,8 @@ cp -f "$KIT/template/CLAUDE.md" "$CONSIGNES"
 # SUBAGENT_MODEL=auto: the lead chooses the model of each sub-agent call (the Agent tool's "model"
 # parameter wins over the agent's own model); the defaults stay for a call that sets none
 [ "${SUBAGENT_MODEL,,}" = auto ] && cat "$KIT/template/guides/SUBAGENT_MODELS.md" >> "$CONSIGNES" 2>/dev/null
+# native Windows mode: what changes for Claude (Git Bash, Windows programs, no sandbox)
+[ "$NATIF" = 1 ] && cat "$KIT/template/guides/NATIVE.md" >> "$CONSIGNES" 2>/dev/null
 # The language also goes at the end of each cycle's goal: the goal is written in English, and Claude
 # answers in the language of the message it receives unless told otherwise.
 case "${LANGUAGE:-en}" in
@@ -633,6 +693,15 @@ AIDE_CLAUDE=$("$CLAUDE_BIN" --help 2>/dev/null)
 ARGS_SURS=()
 printf '%s' "$AIDE_CLAUDE" | grep -q -- '--strict-mcp-config' && ARGS_SURS+=(--strict-mcp-config)
 printf '%s' "$AIDE_CLAUDE" | grep -q -- '--setting-sources' && ARGS_SURS+=(--setting-sources user)
+# native Windows: the instructions go through a file (a Windows command line holds 32,767 characters)
+APPEND_FICHIER_OK=0
+printf '%s' "$AIDE_CLAUDE" | grep -q -- '--append-system-prompt-file' && APPEND_FICHIER_OK=1
+if [ "$NATIF" = 1 ] && [ "$APPEND_FICHIER_OK" = 0 ]; then
+  log "Native Windows mode: this Claude Code has no --append-system-prompt-file; update it (Setup & health -> Claude Code), cycles may fail."
+fi
+AGENTS_FICHIER_OK=0
+v_claude=$("$CLAUDE_BIN" --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n 1)
+[ -n "$v_claude" ] && [ "$(printf '%s\n2.1.281\n' "$v_claude" | sort -V | head -n 1)" = 2.1.281 ] && AGENTS_FICHIER_OK=1
 if printf '%s' "$AIDE_CLAUDE" | grep -q -- '--agents'; then
   AGENTS_PAR_JSON=1
 else
@@ -713,7 +782,8 @@ arreter_ecran() {
   fi
 }
 preparer_ecran() {
-  if [ ! -f "$KIT/logs/bureau-isole" ] || [ -n "${ECRAN_IMPOSSIBLE:-}" ]; then arreter_ecran; return; fi
+  # native Windows: no Linux windows (Claude's desktop, on the Windows side, keeps its programs away)
+  if [ "$NATIF" = 1 ] || [ ! -f "$KIT/logs/bureau-isole" ] || [ -n "${ECRAN_IMPOSSIBLE:-}" ]; then arreter_ecran; return; fi
   if ! command -v Xvfb > /dev/null 2>&1 || ! command -v bwrap > /dev/null 2>&1; then
     [ -z "$ECRAN_SIGNALE" ] && log "Claude's screen: Xvfb is missing (Setup & health -> Install everything): Linux windows open on your screen."
     ECRAN_SIGNALE=1; arreter_ecran; return
@@ -750,11 +820,20 @@ preparer_ecran() {
 preparer_ecran
 
 # Bridge to the PC tools (outside the sandbox): the gateways Claude runs go through it.
-python3 "$SYSTEME/bridge.py" "$KIT" "$PROJECT" >> "$PRIVE/pont.log" 2>&1 9>&- &
-PONT_PID=$!
+# (native Windows: no sandbox, the gateways run directly, PONT_DIRECT in settings.py)
+PONT_PID=""
+if [ "$NATIF" != 1 ]; then
+  python3 "$SYSTEME/bridge.py" "$KIT" "$PROJECT" >> "$PRIVE/pont.log" 2>&1 9>&- &
+  PONT_PID=$!
+fi
 
 if [ ! -d "$PROJECT/.git" ]; then
   g -C "$PROJECT" init -q -b main
+fi
+if [ "$NATIF" = 1 ]; then
+  # the same repository as in WSL: Git for Windows must neither rewrite the line ends nor see every
+  # file as changed because of the executable bits NTFS does not keep
+  g -C "$PROJECT" config core.autocrlf false; g -C "$PROJECT" config core.fileMode false
 fi
 # The workshop must never enter the project's history.
 grep -qx '.athanor/' "$PROJECT/.git/info/exclude" 2>/dev/null || { mkdir -p "$PROJECT/.git/info"; echo '.athanor/' >> "$PROJECT/.git/info/exclude"; }

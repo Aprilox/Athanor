@@ -2,6 +2,11 @@
 # Really tests the sandbox: a short Claude session (Haiku, very little quota) tries
 # to write outside the project, read one of your files, launch cmd.exe and reach the Internet.
 cd "$(dirname "$0")/.." || exit 1
+case "$(uname -s 2>/dev/null)" in MINGW*|MSYS*|CYGWIN*)
+  echo "Native Windows mode: Claude Code has no sandbox on Windows, so there is nothing to test here."
+  echo "Claude can read and change any file of this PC; switch back to the WSL mode (Options) for the sandbox."
+  exit 0 ;;
+esac
 KIT=$(pwd); export PATH="$KIT/system/bin:$HOME/.local/bin:$PATH"
 mkdir -p "$KIT/logs"; exec > >(tee -a "$KIT/logs/test-sandbox.log") 2>&1
 echo "===== $(date '+%Y-%m-%d %H:%M:%S') test-sandbox.sh"

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 )
 
@@ -88,14 +89,22 @@ func (s *Serveur) apiEcrireEnv(w http.ResponseWriter, r *http.Request) {
 
 func (s *Serveur) apiSante(w http.ResponseWriter, r *http.Request) {
 	vues := []VerifVue{}
-	for _, v := range s.verifs {
+	for _, v := range s.listeVerifs() {
 		vues = append(vues, v.Vue())
 	}
 	s.ecrireJSON(w, vues)
 }
 
+// listeVerifs: the checks of the current mode (WSL, or native Windows).
+func (s *Serveur) listeVerifs() []*Verif {
+	if modeNatif.Load() {
+		return s.verifsNatif
+	}
+	return s.verifs
+}
+
 func (s *Serveur) trouverVerif(id string) *Verif {
-	for _, v := range s.verifs {
+	for _, v := range s.listeVerifs() {
 		if v.ID == id {
 			return v
 		}
@@ -109,7 +118,7 @@ func (s *Serveur) apiVerifier(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = lireCorps(r, &c)
 	if c.ID == "" || c.ID == "tout" {
-		for _, v := range s.verifs {
+		for _, v := range s.listeVerifs() {
 			v.Verifier(s.kitCourant())
 		}
 		s.msg(w, "Checks started (the model connection takes up to a minute).")
@@ -184,7 +193,11 @@ func (s *Serveur) apiBarriere(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Serveur) apiInstaller(w http.ResponseWriter, r *http.Request) {
-	if err := FenetrePowerShell(s.kitCourant(), `commands\install.ps1`); err != nil {
+	script := `commands\install.ps1`
+	if modeNatif.Load() {
+		script = `commands\install-natif.ps1` // native Windows: Git for Windows, jq, Python, Claude Code for Windows
+	}
+	if err := FenetrePowerShell(s.kitCourant(), script); err != nil {
 		s.erreur(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -221,6 +234,9 @@ type OptionsVue struct {
 	DemarrageWindows          bool       `json:"demarrage_windows"`
 	MotDePasse                bool       `json:"mot_de_passe"`
 	Bureau                    EtatBureau `json:"bureau"`
+	ModeNatif                 bool       `json:"mode_natif"`
+	Windows                   bool       `json:"windows"`
+	GitBash                   string     `json:"git_bash"` // its bash.exe, "" when missing
 }
 
 func (s *Serveur) apiOptions(w http.ResponseWriter, r *http.Request) {
@@ -231,7 +247,7 @@ func (s *Serveur) apiOptions(w http.ResponseWriter, r *http.Request) {
 	if projets == nil {
 		projets = []Projet{}
 	}
-	s.ecrireJSON(w, OptionsVue{projets, c.Kit, s.kitCourant().Valide(), c.LancerPiloteAuDemarrage, c.BureauVirtuel, c.ProgrammesSupplementaires, DemarrageWindowsActif(), c.MotDePasseHash != "", s.bureau.Etat()})
+	s.ecrireJSON(w, OptionsVue{projets, c.Kit, s.kitCourant().Valide(), c.LancerPiloteAuDemarrage, c.BureauVirtuel, c.ProgrammesSupplementaires, DemarrageWindowsActif(), c.MotDePasseHash != "", s.bureau.Etat(), modeNatif.Load(), runtime.GOOS == "windows", bashNatif()})
 }
 
 func (s *Serveur) apiEcrireOptions(w http.ResponseWriter, r *http.Request) {
@@ -241,6 +257,7 @@ func (s *Serveur) apiEcrireOptions(w http.ResponseWriter, r *http.Request) {
 		BureauVirtuel             bool   `json:"bureau_virtuel"`
 		ProgrammesSupplementaires string `json:"programmes_supplementaires"`
 		DemarrageWindows          bool   `json:"demarrage_windows"`
+		ModeNatif                 *bool  `json:"mode_natif"`
 	}
 	if err := lireCorps(r, &c); err != nil {
 		s.erreur(w, http.StatusBadRequest, err.Error())
@@ -259,6 +276,21 @@ func (s *Serveur) apiEcrireOptions(w http.ResponseWriter, r *http.Request) {
 		s.kitMu.Unlock()
 		s.bureau.DefinirKit(nouveau)
 		s.ecrireListeProjets()
+	}
+	if c.ModeNatif != nil && *c.ModeNatif != modeNatif.Load() {
+		// never while a pilot runs: the one started in the other mode would be left on its own
+		for _, p := range s.config.Projets {
+			if p.PiloteActif() {
+				s.erreur(w, http.StatusConflict, "Stop the running pilots first: the mode changes for the pilots started afterwards.")
+				return
+			}
+		}
+		if *c.ModeNatif && runtime.GOOS != "windows" {
+			s.erreur(w, http.StatusBadRequest, "Native Windows mode: Windows only.")
+			return
+		}
+		s.config.ModeNatif = *c.ModeNatif
+		modeNatif.Store(*c.ModeNatif)
 	}
 	s.config.Kit = nouveau.Racine
 	s.config.LancerPiloteAuDemarrage = c.LancerPiloteAuDemarrage

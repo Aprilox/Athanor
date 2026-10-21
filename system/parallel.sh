@@ -335,27 +335,31 @@ parallele_lancer_ouvrier() {
 import json, sys
 f, git = sys.argv[1], sys.argv[2]
 r = json.load(open(f, encoding="utf-8"))
-fs = r["sandbox"]["filesystem"]
-fs["allowWrite"] = fs.get("allowWrite", []) + [git]
-fs["allowRead"] = fs.get("allowRead", []) + [git]
+if "sandbox" in r:   # native Windows: no sandbox, nothing to open
+    fs = r["sandbox"]["filesystem"]
+    fs["allowWrite"] = fs.get("allowWrite", []) + [git]
+    fs["allowRead"] = fs.get("allowRead", []) + [git]
 json.dump(r, open(f, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
 PY
   local but="/goal The milestone $ident of .athanor/PLAN.md is carried out according to your worker instructions, checked, and committed on branch auto/$ident (git log shows it), with your report as the final answer. Or stop after ${MAX_TURNS_PER_CYCLE} turns. ${PHRASE_LANGUE}"
+  # its MCP servers work on its worktree; the skills are the project's
+  python3 "$SYSTEME/extensions.py" mcp "$KIT" "$PROJECT" "$PRIVE/mcp-$ident.json" --dossier-mcp "$trav" --principal "$PROJECT" 2>> "$PRIVE/pilot.log"
+  # how to save the work done in the programs of its MCP servers: in its instructions (one system prompt)
+  [ -f "$PRIVE/mcp-$ident.json" ] && [ -s "$PRIVE/mcp-$ident.json.sauvegarde.md" ] && { printf '\n'; cat "$PRIVE/mcp-$ident.json.sauvegarde.md"; } >> "$PRIVE/CLAUDE.ouvrier-$ident.md"
   local a=(-p "$but" --permission-mode bypassPermissions --settings "$PRIVE/reglages-$ident.json" --permission-prompts none --output-format stream-json --verbose
            "${ARGS_SURS[@]}" --append-system-prompt "$(cat "$PRIVE/CLAUDE.ouvrier-$ident.md")")
   [ -n "$agents_ouvrier" ] && a+=(--agents "$agents_ouvrier")
-  # its MCP servers work on its worktree; the skills are the project's
-  python3 "$SYSTEME/extensions.py" mcp "$KIT" "$PROJECT" "$PRIVE/mcp-$ident.json" --dossier-mcp "$trav" --principal "$PROJECT" 2>> "$PRIVE/pilot.log"
   [ -f "$PRIVE/mcp-$ident.json" ] && a+=(--mcp-config "$PRIVE/mcp-$ident.json")
-  [ -f "$PRIVE/mcp-$ident.json" ] && [ -s "$PRIVE/mcp-$ident.json.sauvegarde.md" ] && a+=(--append-system-prompt "$(cat "$PRIVE/mcp-$ident.json.sauvegarde.md")")
   [ -n "${PLUGIN_ATHANOR:-}" ] && a+=(--plugin-dir "$PLUGIN_ATHANOR")
   local dp; for dp in "${PLUGINS_DIRS[@]}"; do a+=(--plugin-dir "$dp"); done
   [ -n "$template" ] && a+=(--model "$template")
   [ -n "$FALLBACK_MODEL" ] && [ "$template" != "$FALLBACK_MODEL" ] && a+=(--fallback-model "$FALLBACK_MODEL")
   [ -n "$EFFORT" ] && a+=(--effort "$EFFORT")
+  args_natifs a "$PRIVE/ouvrier-$ident"
+  prog_claude
   : > "$journal"
-  setsid bash -c 'echo $$ > "$1"; f="$2"; d="$3"; b="$4"; PATH="$5"; export PROJECT="$d"; shift 5; cd "$d" && "$b" "$@" < /dev/null 2>&1; echo $? > "$f"' \
-    _ "$PRIVE/ouvrier_$ident.sid" "$PRIVE/ouvrier_$ident.code" "$trav" "$BASH" "$CHEMIN_CLAUDE" "$SYSTEME/ecran.sh" lancer "$CLAUDE_BIN" "${a[@]}" > "$journal" 9>&- &
+  MSYS2_ARG_CONV_EXCL="$EXCL_CLAUDE" setsid bash -c 'echo $$ > "$1"; f="$2"; d="$3"; b="$4"; PATH="$5"; export PROJECT="$d"; shift 5; cd "$d" && "$b" "$@" < /dev/null 2>&1; echo $? > "$f"' \
+    _ "$PRIVE/ouvrier_$ident.sid" "$PRIVE/ouvrier_$ident.code" "$trav" "$BASH" "$CHEMIN_CLAUDE" "$SYSTEME/ecran.sh" lancer "${PROG_CLAUDE[@]}" "${a[@]}" > "$journal" 9>&- &
   echo $! > "$PRIVE/ouvrier_$ident.pid"
 }
 

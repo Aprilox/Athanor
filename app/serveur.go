@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -23,8 +24,9 @@ type Serveur struct {
 	kitMu        sync.RWMutex
 	logs         map[string]*Journal
 	bureau       *Bureau
-	verifs       []*Verif
-	session      string // session token when a password is set ("" = locked)
+	verifs       []*Verif // WSL mode
+	verifsNatif  []*Verif // native Windows mode
+	session      string   // session token when a password is set ("" = locked)
 	csrf         string
 	cleAcces     string               // cookie of the windows Athanor opened (acces.go); empty = no check (tests)
 	ouvertures   map[string]time.Time // single-use window addresses
@@ -38,11 +40,13 @@ type Serveur struct {
 
 func nouveauServeur(config Config) *Serveur {
 	kit := Kit{config.Kit}
+	modeNatif.Store(config.ModeNatif && runtime.GOOS == "windows")
 	s := &Serveur{
 		config:       config,
 		kit:          kit,
 		logs:         map[string]*Journal{},
 		verifs:       Verifications(),
+		verifsNatif:  VerificationsNatives(),
 		csrf:         aleatoire(16),
 		dernierActif: map[string]bool{},
 		relancer:     map[string]bool{},

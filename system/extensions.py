@@ -27,7 +27,7 @@ the verified catalog goes through the Windows relay (system/unreal_relay.txt) wh
 networking is unavailable. A "windows" server (a Windows program: Roblox Studio's, a .exe, a .bat) is
 started on Windows through WSL interop by system/windows-mcp.sh, outside the cage.
 """
-import json, os, re, select, shutil, subprocess, sys, time
+import json, os, queue, re, select, shutil, subprocess, sys, threading, time
 
 ID_SUR = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
 
@@ -184,6 +184,14 @@ def serveur(kit, sid, definition, secrets, dossier, principal):
             return None, "no command"
         args = [remplacer(str(a), secrets, dossier, manquants) for a in (c.get("args") or [])]
         env = facultatif(c.get("env"))
+        if os.name == "nt":
+            # native Windows: no cage (no bubblewrap), the server runs as it is, its variables with it
+            s = {"type": "stdio", **commande_windows(remplacer(cmd, secrets, dossier, manquants), args)}
+            if env:
+                s["env"] = env
+            if manquants:
+                return None, "missing key " + ", ".join(sorted(manquants))
+            return s, ""
         cage = [sid, os.path.join(kit, "tools"), "--rw", dossier]
         if principal and os.path.realpath(principal) != os.path.realpath(dossier):
             # a worker: its worktree writable, the main project readable, its .git writable (git objects)
@@ -205,6 +213,16 @@ def serveur(kit, sid, definition, secrets, dossier, principal):
         cmd = c.get("command")
         if not isinstance(cmd, str) or not cmd.strip():
             return None, "no command"
+        if os.name == "nt":
+            # native Windows: the program is started directly, {PROJECT} is already a Windows path
+            args = [remplacer(str(a), secrets, dossier, manquants) for a in (c.get("args") or [])]
+            s = {"type": "stdio", **commande_windows(remplacer(cmd, secrets, dossier, manquants), args)}
+            env = facultatif(c.get("env"))
+            if env:
+                s["env"] = env
+            if manquants:
+                return None, "missing key " + ", ".join(sorted(manquants))
+            return s, ""
         if not interop_windows():
             return None, "Windows program: Windows is not reachable from here"
         dossier_w = chemin_windows(dossier)   # {PROJECT} as the Windows program knows it (C:\…)
@@ -221,6 +239,40 @@ def serveur(kit, sid, definition, secrets, dossier, principal):
     if manquants:
         return None, "missing key " + ", ".join(sorted(manquants))
     return s, ""
+
+
+def commande_windows(cmd, args):
+    """Native Windows: a .cmd or .bat launcher (npx, uvx…) cannot be started directly, it goes through
+    cmd /c (what Claude Code's documentation asks for on Windows)."""
+    w = shutil.which(cmd) or ""
+    if w.lower().endswith((".cmd", ".bat")) and os.path.basename(cmd).lower() not in ("cmd", "cmd.exe"):
+        return {"command": "cmd", "args": ["/c", cmd] + list(args)}
+    return {"command": cmd, "args": list(args)}
+
+
+class Lecteur:
+    """Reads a pipe in a thread: on Windows, select() does not work on pipes."""
+
+    def __init__(self, flux):
+        self.q = queue.Queue()
+        threading.Thread(target=self._lire, args=(flux,), daemon=True).start()
+
+    def _lire(self, flux):
+        try:
+            while True:
+                b = os.read(flux.fileno(), 65536)
+                self.q.put(b)
+                if not b:
+                    return
+        except (OSError, ValueError):
+            self.q.put(b"")
+
+    def lire(self, delai):
+        """The next bytes, b"" at the end, None when nothing came within delai seconds."""
+        try:
+            return self.q.get(timeout=max(0, delai))
+        except queue.Empty:
+            return None
 
 
 def interop_windows():
@@ -243,6 +295,8 @@ def adresse_unreal(kit, url):
     "mirrored" networking is unavailable; the relay's port is in system/unreal_relay.txt and the Windows
     host is WSL's default gateway (it changes at every WSL start)."""
     url = url or "http://127.0.0.1:8000/mcp"
+    if os.name == "nt":
+        return url   # native Windows: the editor is on this very machine
     relais = os.path.join(kit, "system", "unreal_relay.txt")
     if not os.path.isfile(relais) or not re.match(r"^https?://(127\.0\.0\.1|localhost)(:\d+)?(/|$)", url):
         return url
@@ -320,17 +374,26 @@ def tester(kit, projet, sid, delai=150):
         p = subprocess.Popen([s["command"]] + s["args"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, cwd=projet if os.path.isdir(projet) else None)
     except OSError as e:
         return {"ok": False, "erreur": str(e)}
+    sortie = Lecteur(p.stdout) if os.name == "nt" else None
+    p.athanor_erreurs = Lecteur(p.stderr) if os.name == "nt" else None
     def envoyer(m):
         p.stdin.write((json.dumps(m) + "\n").encode()); p.stdin.flush()
     def attendre(i, fin):
         tampon = b""
         while time.time() < fin:
-            pret, _, _ = select.select([p.stdout], [], [], 1)
-            if not pret:
-                if p.poll() is not None:
-                    return None
-                continue
-            bout = os.read(p.stdout.fileno(), 65536)
+            if sortie:
+                bout = sortie.lire(1)
+                if bout is None:
+                    if p.poll() is not None:
+                        return None
+                    continue
+            else:
+                pret, _, _ = select.select([p.stdout], [], [], 1)
+                if not pret:
+                    if p.poll() is not None:
+                        return None
+                    continue
+                bout = os.read(p.stdout.fileno(), 65536)
             if not bout:
                 return None
             tampon += bout
@@ -357,7 +420,7 @@ def tester(kit, projet, sid, delai=150):
         return {"ok": True, "outils": outils, "serveur": info}
     except (RuntimeError, OSError, BrokenPipeError) as e:
         arreter(p)
-        erreur = lire_reste(p.stderr).decode("utf-8", "replace").strip().splitlines()[-6:]
+        erreur = lire_reste(p.athanor_erreurs or p.stderr).decode("utf-8", "replace").strip().splitlines()[-6:]
         return {"ok": False, "erreur": str(e), "details": erreur}
     finally:
         arreter(p)
@@ -367,6 +430,13 @@ def lire_reste(flux, delai=3, taille_max=1 << 20):
     """What a stopped server left on a pipe, without waiting for ever: a Windows program can outlive its
     launcher and keep the pipe open."""
     morceaux, fin = [], time.time() + delai
+    if isinstance(flux, Lecteur):   # native Windows
+        while time.time() < fin and sum(map(len, morceaux)) < taille_max:
+            bout = flux.lire(fin - time.time())
+            if not bout:
+                break
+            morceaux.append(bout)
+        return b"".join(morceaux)
     while time.time() < fin and sum(map(len, morceaux)) < taille_max:
         pret, _, _ = select.select([flux], [], [], max(0, fin - time.time()))
         if not pret:
@@ -387,6 +457,8 @@ def arreter(p):
         p.stdin.close()
     except OSError:
         pass
+    if os.name == "nt":   # native Windows: the server and everything it started (node, python…)
+        subprocess.run(["taskkill", "/T", "/F", "/PID", str(p.pid)], capture_output=True)
     p.terminate()
     try:
         p.wait(5)

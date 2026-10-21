@@ -4,14 +4,22 @@
 SYSTEME="$(cd "$(dirname "$0")" && pwd)"; KIT="$(dirname "$SYSTEME")"
 UE_DIR="${UE_DIR:-}"; BLENDER_EXE="${BLENDER_EXE:-}"; ANDROID_SDK_DIR="${ANDROID_SDK_DIR:-}"; ANDROID_JDK_DIR="${ANDROID_JDK_DIR:-}"
 WINDOWS=0; command -v cmd.exe >/dev/null 2>&1 && WINDOWS=1
+# native Windows mode (Git Bash): the drives are /c, /d…, the profile is in the environment
+NATIF=0; case "$(uname -s 2>/dev/null)" in MINGW*|MSYS*|CYGWIN*) NATIF=1; WINDOWS=1 ;; esac
 PROFIL=""
-if [ "$WINDOWS" = 1 ]; then
+if [ "$NATIF" = 1 ]; then
+  [ -n "${USERPROFILE:-}" ] && PROFIL=$(cygpath -u "$USERPROFILE" 2>/dev/null)
+elif [ "$WINDOWS" = 1 ]; then
   p=$(cd /mnt/c 2>/dev/null && cmd.exe /c "echo %USERPROFILE%" 2>/dev/null | tr -d '\r')
   [ -n "$p" ] && PROFIL=$(wslpath -u "$p" 2>/dev/null)
 fi
-# Windows drives mounted in WSL (C:, D:, ...): software can be installed on any of them.
+# Windows drives (WSL: /mnt/c…; Git Bash: /c…): software can be installed on any of them.
 LECTEURS=()
-if [ "$WINDOWS" = 1 ]; then
+if [ "$NATIF" = 1 ]; then
+  for m in /[a-z]; do
+    { [ -d "$m/Program Files" ] || [ -d "$m/Epic Games" ] || [ -d "$m/Windows" ]; } && LECTEURS+=("$m")
+  done
+elif [ "$WINDOWS" = 1 ]; then
   for m in /mnt/[a-z]; do
     { [ -d "$m/Program Files" ] || [ -d "$m/Epic Games" ] || [ -d "$m/Windows" ]; } && LECTEURS+=("$m")
   done
@@ -39,7 +47,9 @@ if [ -z "$ANDROID_JDK_DIR" ]; then
   done
 fi
 ROBLOX_STUDIO=""; [ -n "$PROFIL" ] && ROBLOX_STUDIO=$(ls -t "$PROFIL"/AppData/Local/Roblox/Versions/*/RobloxStudioBeta.exe 2>/dev/null | head -n 1)
-WINGET=0; [ "$WINDOWS" = 1 ] && (cd /mnt/c && timeout 30 powershell.exe -NoProfile -Command "Get-Command winget" >/dev/null 2>&1) && WINGET=1
+WINGET=0
+if [ "$NATIF" = 1 ]; then command -v winget.exe >/dev/null 2>&1 && WINGET=1
+elif [ "$WINDOWS" = 1 ]; then (cd /mnt/c && timeout 30 powershell.exe -NoProfile -Command "Get-Command winget" >/dev/null 2>&1) && WINGET=1; fi
 { echo "UE_DIR='${UE_DIR}'"; echo "BLENDER_EXE='${BLENDER_EXE}'"; echo "ANDROID_SDK_DIR='${ANDROID_SDK_DIR}'"; echo "ANDROID_JDK_DIR='${ANDROID_JDK_DIR}'"; echo "WIN_PROFIL='${PROFIL}'"; } > "$SYSTEME/pc_tools.env"
 PROJECT="${PROJECT:-$KIT/projet}"; mkdir -p "$PROJECT/.athanor" "$KIT/tools/windows"
 {
@@ -62,11 +72,12 @@ PROJECT="${PROJECT:-$KIT/projet}"; mkdir -p "$PROJECT/.athanor" "$KIT/tools/wind
   if [ -n "$ANDROID_SDK_DIR" ]; then echo "- **Android SDK**: \`$ANDROID_SDK_DIR\`; \`adb devices\`, \`adb install -r game.apk\` (phone plugged in over USB)"; else echo "- Android SDK: missing (install it as a portable copy in \`\$TOOLS/windows/android-sdk\`, see PC_TOOLS_GUIDE.md)"; fi
   if [ -n "$ANDROID_JDK_DIR" ]; then echo "- **Java for Android**: \`$ANDROID_JDK_DIR\`"; else echo "- Java (JDK) for Android: missing"; fi
   if [ "$WINGET" = 1 ]; then echo "- **winget**: \`install-windows ID\` installs a Windows program (\`install-windows --search NAME\` to find the ID)"; else echo "- winget: unavailable"; fi
-  if [ "$WINDOWS" = 1 ]; then echo "- **Portable Windows programs**: install them in \`\$TOOLS/windows\`, run them with \`pc-exec PATH.exe ...\`; Windows variables with \`windows-var NAME PATH\`"; fi
+  if [ "$NATIF" = 1 ]; then echo "- **Native Windows**: you run on Windows itself (Git Bash): Windows programs run directly from your shell (\`program.exe ...\`, \`cmd //c ...\`, \`powershell -Command ...\`); portable ones go in \`\$TOOLS/windows\`"
+  elif [ "$WINDOWS" = 1 ]; then echo "- **Portable Windows programs**: install them in \`\$TOOLS/windows\`, run them with \`pc-exec PATH.exe ...\`; Windows variables with \`windows-var NAME PATH\`"; fi
   if [ -f "$KIT/logs/bureau-isole" ]; then
     echo "- **Claude's desktop**: the programs you open never show on the user's screen (Windows programs through the gateways: a Windows desktop of their own; Linux programs: a private X screen, \`DISPLAY\` is set). Check what they show with screenshots: the program's own, or \`import -window root shot.png\` for the Linux screen."
   fi
-  if command -v docker >/dev/null 2>&1 && timeout 20 docker info >/dev/null 2>&1; then echo "- **Docker**: \`tool IMAGE COMMAND...\` (disposable container, project mounted on /work)"; else echo "- Docker: not available (Docker Desktop stopped, or WSL integration not enabled)"; fi
+  if command -v docker >/dev/null 2>&1 && timeout 20 docker info >/dev/null 2>&1; then echo "- **Docker**: \`tool IMAGE COMMAND...\` (disposable container, project mounted on /work)"; else echo "- Docker: not available (Docker Desktop stopped$([ "$NATIF" = 1 ] || echo ", or WSL integration not enabled"))"; fi
   # What is already installed, checked here once: the agents never spend turns probing it again.
   echo
   echo "## Toolchain (checked by the pilot when it started)"
@@ -94,7 +105,8 @@ PROJECT="${PROJECT:-$KIT/projet}"; mkdir -p "$PROJECT/.athanor" "$KIT/tools/wind
   version .NET dotnet --version
   version "PostgreSQL client" psql --version
   version SQLite sqlite3 --version
-  version ImageMagick convert -version
+  # (Windows has a convert.exe of its own, which converts disks: ImageMagick is "magick" there)
+  if [ "$NATIF" = 1 ]; then version ImageMagick magick -version; else version ImageMagick convert -version; fi
   version ffmpeg ffmpeg -version
   local_outils=$(find "$KIT/tools" -mindepth 1 -maxdepth 1 -type d ! -name cache ! -name bin ! -name mcp ! -name windows ! -name plugin-data -printf '%f\n' 2>/dev/null | sort | head -n 30 | tr '\n' ' ')
   [ -n "$local_outils" ] && echo "- Portable installs already in \`\$TOOLS\`: $local_outils"

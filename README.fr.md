@@ -275,6 +275,19 @@ L'interface est traduite en anglais, français, espagnol, allemand, italien et p
 | `cmd.exe`, `powershell.exe` | non, bloqués depuis la barrière (les passerelles restent possibles) |
 | Modifier le pilote, la barrière, ses réglages | non (`system/` est hors de ses dossiers) |
 
+Ce tableau décrit le mode WSL, celui par défaut. Dans le mode Windows natif ci-dessous, il n'y a pas de barrière.
+
+### Mode Windows natif (expérimental)
+
+*Options → Mode d'exécution → Windows natif*. Le pilote tourne dans **Git Bash** (Git pour Windows, le shell que Claude Code utilise sous Windows) et Claude Code est le programme Windows : pas de WSL, le dossier Windows du projet et les programmes Windows sont atteints directement, sans les passerelles, et l'accès aux fichiers est plus rapide.
+
+**Il n'y a pas de barrière dans ce mode** (Claude Code n'a pas de bac à sable sous Windows natif) : Claude peut lire et modifier n'importe quel fichier de votre PC et lancer n'importe quel programme, sans demander. Le garde-fichiers limite toujours ses outils de fichiers au projet et à `tools/`, et ses consignes lui disent d'y rester, mais rien ne l'impose à ses commandes. À réserver aux projets de confiance. Cela vaut aussi pour les fichiers d'Athanor : dans ce mode, les commandes de Claude pourraient lire le `.env` de l'outil (votre jeton), les clés des serveurs MCP et la clé GitHub, et modifier le pilote lui-même.
+
+- Prérequis : Git pour Windows, jq, Python, GitHub CLI et Claude Code pour Windows ; *Installation et santé → Tout installer* les installe (winget, puis l'installeur de Claude Code).
+- Le projet doit être dans un dossier d'un lecteur Windows (`C:\...`, `D:\...`), pas dans le système de fichiers WSL. Son historique (cycles, statistiques) passe d'un mode à l'autre.
+- Le mode s'applique aux pilotes lancés ensuite ; arrêtez d'abord ceux qui tournent. Si vous fermez Athanor pendant que des pilotes natifs tournent, il demande s'ils continuent en arrière-plan ou s'arrêtent.
+- L'écran Linux de Claude n'existe pas dans ce mode ; le bureau Windows de Claude garde toujours à l'écart les programmes qu'il ouvre.
+
 ---
 
 ## Vos outils
@@ -473,10 +486,10 @@ Oui. Rien n'est lié à un nom d'utilisateur ni à une lettre de disque : les ch
 Poussez un tag de version : GitHub compile les deux applications et publie la version ([`.github/workflows/release.yml`](.github/workflows/release.yml)).
 
 ```bash
-git tag v2.18.0 && git push origin v2.18.0
+git tag v2.19.3 && git push origin v2.19.3
 ```
 
-Gardez la version de [`app/winres/athanor.rc`](app/winres/athanor.rc) alignée sur le tag, et écrivez les nouveautés dans `docs/releases/VERSION.md` (par ex. [`docs/releases/2.18.0.md`](docs/releases/2.18.0.md)) : elles ouvrent la page de la version.
+Gardez la version de [`app/winres/athanor.rc`](app/winres/athanor.rc) alignée sur le tag, et écrivez les nouveautés dans `docs/releases/VERSION.md` (par ex. [`docs/releases/2.19.3.md`](docs/releases/2.19.3.md)) : elles ouvrent la page de la version.
 
 ## Contribuer
 

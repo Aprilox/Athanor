@@ -28,13 +28,13 @@ essai() {  # $1 = scope options
 }
 TACHE="Athanor - installations"
 essai "--scope user"; code=$?
-if [ $code -ne 0 ] && (cd /mnt/c && schtasks.exe /query /tn "$TACHE" >/dev/null 2>&1); then
+if [ $code -ne 0 ] && (cd /mnt/c 2>/dev/null; schtasks.exe /query /tn "$TACHE" >/dev/null 2>&1); then
   # Installation with administrator rights, allowed once by the user (install.cmd):
   # drop the identifier, the scheduled task installs it without a window, wait for its result.
   echo "(installing with administrator rights via the '$TACHE' task)"
   file="$KIT/tools/windows/admin-requests"; mkdir -p "$file"
   n="$(date +%s)-$$"; printf '%s' "$id" > "$file/demande-$n.txt"
-  (cd /mnt/c && schtasks.exe /run /tn "$TACHE" >/dev/null 2>&1)
+  (cd /mnt/c 2>/dev/null; schtasks.exe /run /tn "$TACHE" >/dev/null 2>&1)
   for i in $(seq 1 240); do [ -f "$file/resultat-$n.txt" ] && break; sleep 5; done
   if [ -f "$file/resultat-$n.txt" ]; then
     tr -d '\r' < "$file/resultat-$n.txt" | tee -a "$sortie"; code=$(sed -n 's/^code=//p' "$file/resultat-$n.txt" | tr -d '\r' | head -n1); code=${code:-1}

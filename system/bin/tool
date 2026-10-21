@@ -10,4 +10,5 @@ if [ -z "$image" ] || [[ "$image" == -* ]] || [ $# -eq 0 ]; then
 fi
 ici=$(pwd); rel=""
 case "$ici/" in "$PROJECT"/*) rel=${ici#"$PROJECT"} ;; esac
-exec docker run --rm -i -v "$PROJECT:/work" -w "/work$rel" -e HOME=/tmp "$image" "$@"
+montage="$PROJECT"; [ "$NATIF" = 1 ] && montage=$(cygpath -m "$PROJECT")   # docker.exe wants C:/...
+exec docker run --rm -i -v "$montage:/work" -w "/work$rel" -e HOME=/tmp "$image" "$@"

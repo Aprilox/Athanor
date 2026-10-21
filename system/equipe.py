@@ -31,6 +31,13 @@ PIED = ("\n\nNobody will answer your questions: when a detail is missing, choose
         "use them whenever they fit the task. End with a short report: what you did, what you checked, what is left.")
 
 
+
+def _pas_un_lien(chemin):
+    """Native Windows has no O_NOFOLLOW: a link is refused before opening."""
+    if not getattr(os, "O_NOFOLLOW", 0) and os.path.islink(chemin):
+        raise OSError("%s is a link" % chemin)
+    return chemin
+
 def normaliser(p):
     p = (p or "").replace("\\", "/").rstrip("/").lower()
     return "//wsl.localhost/" + p[len("//wsl$/"):] if p.startswith("//wsl$/") else p
@@ -120,7 +127,7 @@ def refuses_du_projet(d, projet):
 
 
 def lire_sans_lien(chemin, taille_max):
-    fd = os.open(chemin, os.O_RDONLY | os.O_NOFOLLOW)
+    fd = os.open(_pas_un_lien(chemin), os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0))
     with os.fdopen(fd, "rb") as f:
         b = f.read(taille_max + 1)
     if len(b) > taille_max:
@@ -203,7 +210,7 @@ def journal_refus(projet, nom, raison):
     # kept in the workshop for the lead (TEAM.md lists them); data only, never read back by the pilot
     f = os.path.join(projet, ".athanor", "agents", ".refused.txt")
     try:
-        fd = os.open(f, os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW, 0o644)
+        fd = os.open(_pas_un_lien(f), os.O_WRONLY | os.O_APPEND | os.O_CREAT | getattr(os, 'O_NOFOLLOW', 0), 0o644)
         with os.fdopen(fd, "a", encoding="utf-8") as o:
             o.write("%s: %s\n" % (re.sub(r"[^a-z0-9.-]", "", nom.lower())[:40], raison))
     except OSError:
@@ -292,7 +299,7 @@ def fiche(kit, projet, dossier):
         except (OSError, ValueError):
             pass
     t = os.path.join(etat, ".TEAM.md.%d" % os.getpid())
-    fd = os.open(t, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644)
+    fd = os.open(_pas_un_lien(t), os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, 'O_NOFOLLOW', 0), 0o644)
     with os.fdopen(fd, "w", encoding="utf-8") as o:
         o.write("\n".join(lignes) + "\n")
     os.replace(t, os.path.join(etat, "TEAM.md"))
