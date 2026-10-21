@@ -272,6 +272,20 @@ def construire_mcp(kit, choix, projet, fichier, dossier, principal):
             serveurs[sid] = s
         else:
             notes.append(f"{sid} skipped ({raison})")
+    # how to save what was done in the program a server drives (its "sauvegarde" line in the catalogue,
+    # or in the library for a server added by hand): given to Claude with that server
+    catalogue = {m.get("id"): m for m in lire_json(os.path.join(kit, "app", "catalogue.json"), {}).get("mcp", []) if isinstance(m, dict)}
+    aides = []
+    for sid in serveurs:
+        d = biblio.get(sid) or {}
+        a = d.get("sauvegarde") or (catalogue.get(d.get("catalogue") or sid) or {}).get("sauvegarde")
+        if isinstance(a, str) and a.strip():
+            aides.append("- **%s**: %s" % (sid, a.strip()[:1500]))
+    if aides:
+        with open(fichier + ".sauvegarde.md", "w", encoding="utf-8") as f:
+            f.write("## Saving the work done through your MCP servers\n\nThese programs keep what you do in them until it is saved. Before you tick a milestone, save it into the project folder so that the commit holds it:\n" + "\n".join(aides) + "\n")
+    elif os.path.exists(fichier + ".sauvegarde.md"):
+        os.remove(fichier + ".sauvegarde.md")
     if serveurs:
         neuf = fichier + ".neuf"
         fd = os.open(neuf, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
