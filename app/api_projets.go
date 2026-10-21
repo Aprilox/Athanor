@@ -96,6 +96,7 @@ type EtatVue struct {
 	Accent      string      `json:"accent"`
 	Bienvenue   bool        `json:"bienvenue"`
 	Natif       bool        `json:"natif"` // native Windows mode: no Linux screen
+	Quota       *EtatQuota  `json:"quota,omitempty"`
 }
 
 func (s *Serveur) apiEtat(w http.ResponseWriter, r *http.Request) {
@@ -132,6 +133,10 @@ func (s *Serveur) apiEtat(w http.ResponseWriter, r *http.Request) {
 	vue.Projets = s.vuesProjets(courant)
 	vue.Bureau = s.bureau.Etat()
 	vue.Natif = modeNatif.Load()
+	s.mu.Lock()
+	tous := append([]Projet{}, s.config.Projets...)
+	s.mu.Unlock()
+	vue.Quota = quotaActuel(tous)
 	if ok {
 		for i := range vue.Projets {
 			if vue.Projets[i].Nom == p.Nom {
