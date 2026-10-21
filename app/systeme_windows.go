@@ -67,6 +67,17 @@ func fichierScript(k Kit, script string) (string, error) {
 // DemarrerDetache runs a WSL script in a hidden wsl.exe, detached from the application (it survives it);
 // the output goes into the script itself (start.sh writes the project's output.log).
 func DemarrerDetache(k Kit, script string) error {
+	if modeNatif.Load() {
+		// native Windows: no WSL to keep awake; the pilot goes to the background as on Linux
+		if strings.Contains(script, "--attach") {
+			return nil
+		}
+		nom, err := fichierScript(k, strings.Replace(script, "--keep", "--background", 1))
+		if err != nil {
+			return err
+		}
+		return demarrerNatifDetache(k, nom)
+	}
 	nom, err := fichierScript(k, script)
 	if err != nil {
 		return err
@@ -94,6 +105,9 @@ func commandeWSL(k Kit, script string) *exec.Cmd {
 	if err != nil {
 		return exec.Command("cmd.exe", "/c", "echo Cannot write the script in logs\\: "+err.Error()+" & exit 1")
 	}
+	if modeNatif.Load() {
+		return commandeNative(k, nom)
+	}
 	c := exec.Command("wsl.exe", "-d", k.Distro(), "--cd", k.Racine, "--", "bash", "-l", "./"+nom)
 	c.Env = append(os.Environ(), "WSL_UTF8=1")
 	return c
@@ -102,10 +116,18 @@ func commandeWSL(k Kit, script string) *exec.Cmd {
 // Visible console window for an interactive step (sudo, token, GitHub sign-in). Each opening is noted
 // in logs/fenetres.log (date and terminal), to tell "the window did not start" from "the step failed".
 func FenetreWSL(k Kit, titre, script string) error {
-	nom, err := fichierScript(k, "echo \"$(date '+%F %T') $(tty 2>&1) "+citerShell(titre)+"\" >> logs/fenetres.log 2>/dev/null\n"+
-		script+"\necho\nread -p 'Press Enter to close' _\n")
+	contenu := "echo \"$(date '+%F %T') $(tty 2>&1) " + citerShell(titre) + "\" >> logs/fenetres.log 2>/dev/null\n" +
+		script + "\necho\nread -p 'Press Enter to close' _\n"
+	if modeNatif.Load() {
+		// the console does not start in the kit folder: the script goes there first
+		contenu = "cd " + citerShell(cheminPosix(k.Racine)) + " || exit 1\n" + contenu
+	}
+	nom, err := fichierScript(k, contenu)
 	if err != nil {
 		return err
+	}
+	if modeNatif.Load() {
+		return fenetreNative(k, titre, nom)
 	}
 	return demarrerFenetre(titre, "wsl.exe", "-d", k.Distro(), "--cd", k.Racine, "--", "bash", "-l", "./"+nom)
 }

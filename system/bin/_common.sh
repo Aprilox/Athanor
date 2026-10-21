@@ -3,6 +3,17 @@
 SYSTEME="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 KIT="$(dirname "$SYSTEME")"
 PROJECT="${PROJECT:-$KIT/projet}"
+# Native Windows mode (Git Bash): the shims (wslpath…), Windows options passed as they are ("/c", "/T": the
+# gateways convert their paths themselves), and the project in Git Bash form (pwd and realpath say /c/...,
+# Claude's environment says C:/...)
+NATIF=0
+case "$(uname -s 2>/dev/null)" in MINGW*|MSYS*|CYGWIN*)
+  NATIF=1
+  export PATH="$SYSTEME/natif:$PATH" MSYS2_ARG_CONV_EXCL='*'
+  PROJECT=$(cygpath -u "$PROJECT")
+  [ -n "${TOOLS:-}" ] && TOOLS=$(cygpath -u "$TOOLS")
+  ;;
+esac
 [ -f "$SYSTEME/pc_tools.env" ] && . "$SYSTEME/pc_tools.env"
 
 # Converts Linux paths to Windows paths for a .exe program (also "-opt=/path").
@@ -96,10 +107,10 @@ PY
 # Usage: executer_admin "C:\path\program.exe" "arg1 arg2"   or   executer_admin WINGET_ID
 executer_admin() {
   local tache="Athanor - installations" dossier="$KIT/tools/windows/admin-requests" n code
-  (cd /mnt/c 2>/dev/null && schtasks.exe /query /tn "$tache" >/dev/null 2>&1) || return 127
+  (cd /mnt/c 2>/dev/null; schtasks.exe /query /tn "$tache" >/dev/null 2>&1) || return 127
   mkdir -p "$dossier"; n="$(date +%s)-$$"
   printf '%s' "$1${2:+ $2}" > "$dossier/demande-$n.txt"
-  (cd /mnt/c && schtasks.exe /run /tn "$tache" >/dev/null 2>&1)
+  (cd /mnt/c 2>/dev/null; schtasks.exe /run /tn "$tache" >/dev/null 2>&1)
   for _ in $(seq 1 240); do [ -f "$dossier/resultat-$n.txt" ] && break; sleep 5; done
   if [ -f "$dossier/resultat-$n.txt" ]; then
     tr -d '\r' < "$dossier/resultat-$n.txt" | grep -v '^code='

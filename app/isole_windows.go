@@ -117,13 +117,15 @@ type limitesJob struct { // JOBOBJECT_EXTENDED_LIMIT_INFORMATION (64-bit layout)
 // the program, and stopping Athanor.exe (a cancelled command) stops the program and everything it started.
 // If the desktop cannot be created, the program runs on the current desktop: the work goes on.
 func LancerIsole(args []string) int {
-	detache, ici, fichierPID := false, false, ""
+	detache, ici, finTout, fichierPID := false, false, false, ""
 	for len(args) > 0 && args[0] != "--" {
 		switch {
 		case args[0] == "--detache":
 			detache = true
 		case args[0] == "--ici": // on the current desktop (a Windows MCP server when Claude's desktop is off)
 			ici = true
+		case args[0] == "--fin-tout": // native Windows pilot: whatever the program left running stops with it
+			finTout = true
 		case args[0] == "--pid" && len(args) > 1: // the gateway stops this process tree (taskkill /T) on cancel
 			fichierPID = args[1]
 			args = args[1:]
@@ -137,7 +139,7 @@ func LancerIsole(args []string) int {
 		args = args[1:]
 	}
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "Usage: Athanor.exe --isole [--detache] [--ici] [--pid FILE] -- PROGRAM [ARGUMENTS...]")
+		fmt.Fprintln(os.Stderr, "Usage: Athanor.exe --isole [--detache] [--ici] [--fin-tout] [--pid FILE] -- PROGRAM [ARGUMENTS...]")
 		return 2
 	}
 	var nomBureau *uint16 // nil: the current desktop
@@ -218,7 +220,7 @@ func LancerIsole(args []string) int {
 	}
 	pResumeThread.Call(uintptr(pi.Thread))
 	syscall.WaitForSingleObject(pi.Process, syscall.INFINITE)
-	if job != 0 {
+	if job != 0 && !finTout {
 		l := limitesJob{}
 		pSetInformationJobObject.Call(job, 9, uintptr(unsafe.Pointer(&l)), unsafe.Sizeof(l))
 	}

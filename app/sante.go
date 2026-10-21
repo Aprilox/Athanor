@@ -50,6 +50,14 @@ type VerifVue struct {
 
 const chargerEnv = `export PATH="$HOME/.local/bin:$PWD/system/bin:$PATH"; if [ -f .env ]; then while IFS= read -r l || [ -n "$l" ]; do l=${l%$'\r'}; [[ "$l" =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]] && export "${BASH_REMATCH[1]}=${BASH_REMATCH[2]}"; done < .env; fi; `
 
+// the token check, the same in both modes (WSL, native Windows)
+const scriptJeton = `grep -q '^CLAUDE_CODE_OAUTH_TOKEN=.\{20,\}' .env || { echo 'Token ABSENT from .env (Settings)'; exit 3; }
+export PATH="$HOME/.local/bin:$PATH"
+sortie=$(timeout 120 claude -p 'Answer exactly: TOKEN_OK' --model haiku --max-turns 1 < /dev/null 2>&1); code=$?
+if printf '%s' "$sortie" | grep -q TOKEN_OK; then echo 'Connection OK'; else echo "Test session FAILED (code $code): $(printf '%s\n' "$sortie" | grep -v '^[[:space:]]*$' | tail -n 1 | cut -c1-200)"; echo '--- full output ---'; printf '%s\n' "$sortie" | tail -n 12; exit 1; fi`
+
+var reparationJeton = Reparation{Genre: "fenetre", Titre: "Get a token", Script: `export PATH="$HOME/.local/bin:$PATH"; claude setup-token`, Explication: "Opens a window: sign in in the browser, then paste the token shown into Settings → CLAUDE_CODE_OAUTH_TOKEN."}
+
 func Verifications() []*Verif {
 	v := func(id, titre, explication, script string, facultatif bool, rep Reparation) *Verif {
 		return &Verif{ID: id, Titre: titre, Explication: explication, Script: script, Facultatif: facultatif, Reparation: rep, tache: NouvelleTache("verif-"+id, titre)}
@@ -70,11 +78,7 @@ func Verifications() []*Verif {
 			`export PATH="$HOME/.local/bin:$PATH"; claude --version`, false,
 			Reparation{Genre: "wsl", Script: `curl -fsSL https://claude.ai/install.sh | bash && { grep -q '.local/bin' ~/.bashrc || echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc; }`}),
 		v("jeton", "Token and model access", "The token of your subscription (CLAUDE_CODE_OAUTH_TOKEN in .env) is accepted: a tiny Haiku session answers.",
-			`grep -q '^CLAUDE_CODE_OAUTH_TOKEN=.\{20,\}' .env || { echo 'Token ABSENT from .env (Settings)'; exit 3; }
-export PATH="$HOME/.local/bin:$PATH"
-sortie=$(timeout 120 claude -p 'Answer exactly: TOKEN_OK' --model haiku --max-turns 1 < /dev/null 2>&1); code=$?
-if printf '%s' "$sortie" | grep -q TOKEN_OK; then echo 'Connection OK'; else echo "Test session FAILED (code $code): $(printf '%s\n' "$sortie" | grep -v '^[[:space:]]*$' | tail -n 1 | cut -c1-200)"; echo '--- full output ---'; printf '%s\n' "$sortie" | tail -n 12; exit 1; fi`, false,
-			Reparation{Genre: "fenetre", Titre: "Get a token", Script: `export PATH="$HOME/.local/bin:$PATH"; claude setup-token`, Explication: "Opens a window: sign in in the browser, then paste the token shown into Settings → CLAUDE_CODE_OAUTH_TOKEN."}),
+			scriptJeton, false, reparationJeton),
 		v("rtk", "RTK, output compression", "Optional: reduces what Claude reads for git, ls, grep…",
 			`test -x system/bin/rtk && system/bin/rtk --version`, true,
 			Reparation{Genre: "wsl", Script: `cd system/bin && curl -fsSL https://github.com/rtk-ai/rtk/releases/download/v0.50.0/rtk-x86_64-unknown-linux-musl.tar.gz | tar -xz rtk && chmod +x rtk && ./rtk --version`}),

@@ -4,7 +4,24 @@ permissions, file guard, RTK and Unreal MCP. Called by the pilot at every start.
 
 Usage: settings.py KIT OUTPUT.json   (PROJECT in the environment)
 """
-import json, os, shlex, shutil, sys
+import json, os, shlex, shutil, sys, tempfile
+
+# Native Windows mode (Git Bash, no WSL): Claude Code has no sandbox there (its docs: "On native Windows,
+# Claude Code runs commands unsandboxed"; with failIfUnavailable it would not even start). The user chose
+# that mode in the application, which says so; the file guard and the deny rules stay.
+NATIF = os.name == "nt"
+
+
+def chemin(p):
+    """Native Windows: a Git Bash path the environment passed unconverted (/c/x) as Windows knows it (C:/x)."""
+    if NATIF and p and len(p) >= 2 and p[0] == "/" and p[1].isalpha() and (len(p) == 2 or p[2] == "/"):
+        return p[1] + ":/" + p[3:]
+    return p
+
+
+for v in ("PROJECT", "ATHANOR_PROJET_PRINCIPAL", "ATHANOR_PLUGIN", "ATHANOR_PLUGINS"):
+    if os.environ.get(v):
+        os.environ[v] = chemin(os.environ[v])
 
 kit = os.path.realpath(sys.argv[1]); sortie = sys.argv[2]
 tools, system = (os.path.join(kit, d) for d in ("tools", "system"))
@@ -93,9 +110,22 @@ reglages = {
     "hooks": {"PreToolUse": [
         {"matcher": "Read|Edit|Write|MultiEdit|NotebookEdit|Glob|Grep",
          "hooks": [{"type": "command", "timeout": 10,
-                    "command": " ".join(shlex.quote(x) for x in [python, os.path.join(system, "guard.py"), projet, tools, "/tmp"] + [f"--lecture={d}" for d in lectures] + [f"--lecture={d}" for d in logiciels])}]},
+                    "command": " ".join(shlex.quote(x) for x in [python, os.path.join(system, "guard.py"), projet, tools, tempfile.gettempdir() if NATIF else "/tmp"] + [f"--lecture={d}" for d in lectures] + [f"--lecture={d}" for d in logiciels])}]},
     ]},
 }
+if NATIF:
+    # no sandbox: no sandbox settings; the gateways run directly (no bridge); Windows paths written with
+    # "/" so that the Git Bash of Claude's commands reads them as they are
+    del reglages["sandbox"]
+    reglages["env"]["PONT_DIRECT"] = "1"
+    # the pilot tells Git Bash not to rewrite Claude's own arguments; Claude's commands get the usual rewriting back
+    reglages["env"]["MSYS2_ARG_CONV_EXCL"] = ""
+    # the guard reads paths in UTF-8 whatever the Windows code page
+    reglages["hooks"]["PreToolUse"][0]["hooks"][0]["command"] = reglages["hooks"]["PreToolUse"][0]["hooks"][0]["command"].replace(
+        shlex.quote(python), shlex.quote(python.replace("\\", "/")) + " -X utf8", 1)
+    reglages["env"] = {k: (v.replace("\\", "/") if isinstance(v, str) else v) for k, v in reglages["env"].items()}
+    reglages["permissions"]["additionalDirectories"] = [d.replace("\\", "/") for d in reglages["permissions"]["additionalDirectories"]]
+    rtk = False   # RTK here is a Linux program
 if rtk:
     reglages["hooks"]["PreToolUse"].append(
         {"matcher": "Bash", "hooks": [{"type": "command", "timeout": 10, "command": "exec " + shlex.quote(rtk_bin) + " hook claude"}]})

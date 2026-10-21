@@ -8,16 +8,32 @@ Exit code 2 = the action is refused and Claude receives the explanation.
 
 Usage (PreToolUse hook): guard.py ALLOWED_FOLDER [ALLOWED_FOLDER...]
 """
-import json, os, sys
+import json, os, re, sys
+
+NATIF = os.name == "nt"   # native Windows: C:\x, C:/x and /c/x (Git Bash) are the same path, any case
 
 ECRITURE = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
 
 
+def windows(chemin):
+    chemin = str(chemin)
+    if NATIF:
+        m = re.match(r"^/([a-zA-Z])(/|$)", chemin)
+        if m:
+            chemin = m.group(1) + ":/" + chemin[3:]
+    return chemin
+
+
+def propre(chemin):
+    chemin = os.path.realpath(chemin)
+    return chemin.replace("\\", "/").lower() if NATIF else chemin
+
+
 def normaliser(chemin, base):
-    chemin = os.path.expanduser(str(chemin))
+    chemin = os.path.expanduser(windows(chemin))
     if not os.path.isabs(chemin):
-        chemin = os.path.join(base, chemin)
-    return os.path.realpath(chemin)
+        chemin = os.path.join(windows(base), chemin)
+    return propre(chemin)
 
 
 def dedans(chemin, racines):
@@ -25,8 +41,8 @@ def dedans(chemin, racines):
 
 
 def main():
-    racines = [os.path.realpath(r) for r in sys.argv[1:] if not r.startswith("--lecture=")]
-    lecture = [os.path.realpath(r[len("--lecture="):]) for r in sys.argv[1:] if r.startswith("--lecture=")]
+    racines = [propre(windows(r)) for r in sys.argv[1:] if not r.startswith("--lecture=")]
+    lecture = [propre(windows(r[len("--lecture="):])) for r in sys.argv[1:] if r.startswith("--lecture=")]
     try:
         entree = json.load(sys.stdin)
     except Exception:
@@ -39,7 +55,7 @@ def main():
         if param.get(cle):
             candidats.append(param[cle])
     motif = param.get("pattern")
-    if outil == "Glob" and isinstance(motif, str) and (motif.startswith(("/", "~")) or ".." in motif):
+    if outil == "Glob" and isinstance(motif, str) and (motif.startswith(("/", "~")) or ".." in motif or re.match(r"^[A-Za-z]:[\\/]", motif)):
         candidats.append(motif.split("*")[0] or "/")
     if not candidats and outil in ("Glob", "Grep"):
         candidats.append(base)

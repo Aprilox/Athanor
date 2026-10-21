@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Native Windows mode: jq is jq.exe, told not to turn the line ends into \r\n (-b). Found in the PATH,
+# else where winget puts it (its Links folder, or the package itself: jq.exe or jq-windows-amd64.exe),
+# else in $TOOLS/bin.
+j=$(command -v jq.exe 2>/dev/null)
+if [ -z "$j" ]; then
+  la="${LOCALAPPDATA:-}"; [ -n "$la" ] && la=$(cygpath -u "$la")
+  ici=$(cd "$(dirname "$0")" && pwd)
+  for c in "$la/Microsoft/WinGet/Links/jq.exe" "$la"/Microsoft/WinGet/Packages/jqlang.jq_*/jq.exe \
+           "$la"/Microsoft/WinGet/Packages/jqlang.jq_*/jq-windows-amd64.exe "/c/ProgramData/chocolatey/bin/jq.exe" \
+           "$ici/../../tools/bin/jq.exe"; do
+    [ -f "$c" ] && { j="$c"; break; }
+  done
+fi
+[ -n "$j" ] || { echo "jq is missing (Setup & health -> Install everything, then restart Athanor)." >&2; exit 127; }
+exec "$j" -b "$@"

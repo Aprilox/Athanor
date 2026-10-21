@@ -95,6 +95,7 @@ def resume(journal, handoff):
             if b.get("type") == "tool_use":
                 i = b.get("input") if isinstance(b.get("input"), dict) else {}
                 chemin = i.get("file_path") if isinstance(i.get("file_path"), str) else ""
+                chemin = chemin.replace("\\", "/")
                 if chemin.count("/") > 3:
                     chemin = "…/" + "/".join(chemin.split("/")[-3:])
                 quoi = i.get("description") or chemin or i.get("command") or i.get("pattern") or i.get("prompt") or ""

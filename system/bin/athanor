@@ -1,2 +1,4 @@
 #!/usr/bin/env bash
+# native Windows mode: Windows' Python, through the shim (Claude's shell does not have the shims)
+case "$(uname -s 2>/dev/null)" in MINGW*|MSYS*|CYGWIN*) exec "$(dirname "$0")/../natif/python3" "$(dirname "$0")/../athanor.py" "$@" ;; esac
 exec python3 "$(dirname "$0")/../athanor.py" "$@"

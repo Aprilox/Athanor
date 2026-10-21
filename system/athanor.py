@@ -15,7 +15,10 @@ Everything is deterministic: nothing is summarised or guessed, nothing is delete
 import os, re, subprocess, sys, shutil
 from pathlib import Path
 
-RACINE = Path(os.environ.get("PROJECT", "/projet"))
+_p = os.environ.get("PROJECT", "/projet")
+if os.name == "nt" and re.match(r"^/[A-Za-z](/|$)", _p):   # native Windows: /c/x is C:/x
+    _p = _p[1] + ":/" + _p[3:]
+RACINE = Path(_p)
 ETAT = RACINE / ".athanor"
 
 # ============================================================================ screenshots
@@ -150,13 +153,13 @@ def _fichiers_suivis():
                                 capture_output=True, text=True, timeout=60).stdout
         return sorted(set(sortie.split("\n")) - {""})
     except Exception:
-        return sorted(str(p.relative_to(RACINE)) for p in RACINE.rglob("*") if p.is_file())
+        return sorted(p.relative_to(RACINE).as_posix() for p in RACINE.rglob("*") if p.is_file())
 
 
 def carte(args):
     code, docs = [], []
     # the project's files, plus the working documents of the workshop (requirements, design, architecture)
-    atelier_docs = sorted(str(p.relative_to(RACINE)) for p in (ETAT / "docs").rglob("*.md") if p.is_file() and not p.is_symlink()) if (ETAT / "docs").is_dir() else []
+    atelier_docs = sorted(p.relative_to(RACINE).as_posix() for p in (ETAT / "docs").rglob("*.md") if p.is_file() and not p.is_symlink()) if (ETAT / "docs").is_dir() else []
     for rel in dict.fromkeys(_fichiers_suivis() + atelier_docs):
         if rel.startswith((".athanor/", ".pilote/", ".git/", ".claude/", "node_modules/", ".godot/", ".verif/")) and not rel.startswith(".athanor/docs/"):
             continue

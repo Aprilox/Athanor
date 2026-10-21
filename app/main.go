@@ -103,7 +103,9 @@ func main() {
 			OuvrirFenetreApp(lienApp())
 		}
 	}
-	// The window was closed: the application stops (the pilots keep running in WSL).
+	// The window was closed: the application stops (the pilots keep running in WSL; in native Windows
+	// mode, the user chooses).
+	s.fermetureNative()
 	effacerInstance()
 	remettreBureau()
 }

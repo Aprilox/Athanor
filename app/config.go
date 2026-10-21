@@ -25,6 +25,9 @@ type Config struct {
 	Theme                     string   `json:"theme"`  // interface palette (see themesConnus)
 	Accent                    string   `json:"accent"` // interface accent color (see accentsConnus)
 	BienvenueVue              bool     `json:"bienvenue_vue"`
+	// native Windows mode: the scripts run in Git Bash and Claude Code is the Windows program, without
+	// WSL nor sandbox (natif_windows.go)
+	ModeNatif bool `json:"mode_natif"`
 	// end of a pilot already announced to the user (project folder → STATE.json "maj" of that end)
 	FinsVues map[string]string `json:"fins_vues,omitempty"`
 }

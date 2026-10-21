@@ -24,7 +24,33 @@ States of a task (derived, the same in the application):
   athanor todo wait                  every remaining milestone waits for the user: the pilot pauses
   taches.py etat PROJECT             (pilot) {"pour_vous": n, "a_traiter": n, "attente": 0|1}
 """
-import datetime, fcntl, json, os, re, stat, sys, time
+import datetime, json, os, re, stat, sys, time
+
+# Native Windows (no O_NOFOLLOW, O_NONBLOCK nor fcntl there): links are checked by path before opening,
+# and locks are msvcrt's. In WSL and on Linux, nothing changes.
+NOFOLLOW, NONBLOCK, BINAIRE = (getattr(os, n, 0) for n in ("O_NOFOLLOW", "O_NONBLOCK", "O_BINARY"))
+try:
+    import fcntl
+
+    def verrouiller(fd):
+        fcntl.flock(fd, fcntl.LOCK_EX)
+except ImportError:
+    import msvcrt
+
+    def verrouiller(fd):
+        while True:
+            try:
+                msvcrt.locking(fd, msvcrt.LK_LOCK, 1)
+                return
+            except OSError:
+                time.sleep(0.2)
+
+
+def pas_un_lien(chemin):
+    """Where O_NOFOLLOW does not exist, a link is refused before opening."""
+    if not NOFOLLOW and os.path.islink(chemin):
+        raise OSError("%s is a link" % chemin)
+    return chemin
 
 MAX_TITRE, MAX_DETAILS, MAX_ATTENDU, MAX_NOTE = 150, 8000, 1000, 2000
 MAX_OUVERTES, MAX_TOTAL, MAX_FICHIER = 30, 200, 2 << 20
@@ -68,7 +94,7 @@ def dossier_sur(projet, *parties):
 
 def lire_octets(chemin, taille_max):
     """A regular file only: never through a link, never blocking on a pipe Claude put in its place."""
-    fd = os.open(chemin, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    fd = os.open(pas_un_lien(chemin), os.O_RDONLY | NOFOLLOW | NONBLOCK | BINAIRE)
     with os.fdopen(fd, "rb") as f:
         if not stat.S_ISREG(os.fstat(f.fileno()).st_mode):
             raise OSError("not a regular file")
@@ -92,8 +118,8 @@ def lire_json(chemin, defaut):
 
 def ecrire_json(chemin, d):
     t = "%s.%d.tmp" % (chemin, os.getpid())
-    fd = os.open(t, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW | os.O_NONBLOCK, 0o644)
-    with os.fdopen(fd, "w", encoding="utf-8") as o:
+    fd = os.open(pas_un_lien(t), os.O_WRONLY | os.O_CREAT | os.O_TRUNC | NOFOLLOW | NONBLOCK | BINAIRE, 0o644)
+    with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as o:
         json.dump(d, o, ensure_ascii=False, indent=2)
     os.replace(t, chemin)
 
@@ -174,8 +200,8 @@ def court(s, n):
 # ----------------------------------------------------------------------------- commands (Claude)
 def verrou(projet):
     d = dossier_sur(projet, "for-you")
-    fd = os.open(os.path.join(d, ".lock"), os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK, 0o644)
-    fcntl.flock(fd, fcntl.LOCK_EX)
+    fd = os.open(pas_un_lien(os.path.join(d, ".lock")), os.O_WRONLY | os.O_CREAT | NOFOLLOW | NONBLOCK, 0o644)
+    verrouiller(fd)
     return d, fd
 
 

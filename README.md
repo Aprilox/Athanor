@@ -275,6 +275,19 @@ The interface is translated into English, French, Spanish, German, Italian and P
 | `cmd.exe`, `powershell.exe` | no, blocked from the sandbox (the gateways remain available) |
 | Change the pilot, the sandbox or its settings | no (`system/` is outside its folders) |
 
+This table is the WSL mode, the default. In the native Windows mode below, there is no sandbox.
+
+### Native Windows mode (experimental)
+
+*Options → Execution mode → Native Windows*. The pilot runs in **Git Bash** (Git for Windows, the shell Claude Code uses on Windows) and Claude Code is the Windows program: no WSL, the project's Windows folder and Windows programs are reached directly, without the gateways, and file access is faster.
+
+**There is no sandbox in this mode** (Claude Code has none on native Windows): Claude can read and change any file of your PC and run any program, without asking. The file guard still limits its file tools to the project and `tools/`, and its instructions tell it to stay there, but nothing enforces it for its commands. Use it for projects you trust. That includes Athanor's own files: in this mode Claude's commands could read the tool's `.env` (your token), the keys of the MCP servers and the GitHub key, and change the pilot itself.
+
+- Requirements: Git for Windows, jq, Python, GitHub CLI and Claude Code for Windows; *Setup & health → Install everything* installs them (winget, then Claude Code's installer).
+- The project must be in a folder of a Windows drive (`C:\...`, `D:\...`), not in the WSL file system. Its history (cycles, statistics) carries over between the two modes.
+- The mode applies to the pilots started afterwards; stop the running ones first. When you close Athanor while native pilots run, it asks whether they go on in the background or stop.
+- Claude's Linux screen does not exist in this mode; Claude's Windows desktop still keeps the programs it opens away from yours.
+
 ---
 
 ## Your PC's tools
@@ -472,10 +485,10 @@ Yes. Nothing is tied to a user name or a drive letter: paths come from your prof
 Push a version tag and GitHub builds both apps and publishes the release ([`.github/workflows/release.yml`](.github/workflows/release.yml)):
 
 ```bash
-git tag v2.18.0 && git push origin v2.18.0
+git tag v2.19.3 && git push origin v2.19.3
 ```
 
-Keep the version in [`app/winres/athanor.rc`](app/winres/athanor.rc) in step with the tag, and write what is new in `docs/releases/VERSION.md` (e.g. [`docs/releases/2.18.0.md`](docs/releases/2.18.0.md)): it opens the release page.
+Keep the version in [`app/winres/athanor.rc`](app/winres/athanor.rc) in step with the tag, and write what is new in `docs/releases/VERSION.md` (e.g. [`docs/releases/2.19.3.md`](docs/releases/2.19.3.md)): it opens the release page.
 
 ## Contributing
 

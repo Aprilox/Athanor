@@ -9,6 +9,18 @@
 #   - calls git with its automatic commands disabled (hooks, filters, fsmonitor, external diff),
 #     which Claude could otherwise configure in .git/config to run outside the sandbox.
 
+# Native Windows mode (Git Bash, no WSL): the shims of system/natif come first in the PATH (wslpath,
+# setsid, pkill, python3, jq, flock), and NATIF=1 tells the scripts. Claude has no sandbox there: the
+# user chose it in the application, which says so.
+NATIF=0
+case "$(uname -s 2>/dev/null)" in MINGW*|MSYS*|CYGWIN*) NATIF=1 ;; esac
+if [ "$NATIF" = 1 ]; then
+  _natif="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/natif"
+  case ":$PATH:" in *":$_natif:"*) ;; *) export PATH="$_natif:$PATH" ;; esac
+  export ATHANOR_NATIF=1
+  unset _natif
+fi
+
 # The pilot's private folder for a project: $1 = absolute path of the project.
 # Previous name of the tool (Claude Autopilote): the workshop was PROJECT/.autopilote. It is renamed
 # to .athanor (never while an old pilot is alive in it); a near-empty .athanor (only a STOP file,
@@ -48,7 +60,11 @@ pilote_vivant() {
 
 prive_de() {
   local kit="${KIT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
-  printf '%s/logs/pilotes/%s' "$kit" "$(printf '%s' "$1" | sha1sum | cut -c1-16)"
+  local p="$1"
+  # native Windows: the same folder as in WSL for the same project (/c/x is /mnt/c/x there), so that its
+  # history (cycles, statistics) carries over when the mode changes
+  if [ "${NATIF:-0}" = 1 ] && [[ "$p" =~ ^/([a-zA-Z])(/.*)?$ ]]; then p="/mnt/${BASH_REMATCH[1],,}${BASH_REMATCH[2]}"; fi
+  printf '%s/logs/pilotes/%s' "$kit" "$(printf '%s' "$p" | sha1sum | cut -c1-16)"
 }
 
 # Positive integer read from a file or a variable, else the default value. $1 = text, $2 = default.

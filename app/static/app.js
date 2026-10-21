@@ -1557,6 +1557,12 @@ pages.options = async () => {
         <label class="champ mt-2"${b.isole || b.ecran ? " hidden" : ""}><span>${t("Recognized: programs inside the projects and in tools\\, “Athanor” windows, and these executables (one per line)")}</span><textarea id="op-programmes" data-option class="code" rows="5">${h(o.programmes_supplementaires)}</textarea></label>
         <p class="muet petit"${b.isole || b.ecran ? " hidden" : ""}>${t("Windows shortcut to switch desktops: Ctrl + Win + ← / →.")}</p>
       </div>
+      <div class="bloc"${o.windows ? "" : " hidden"}><h2>${t("Execution mode")}</h2>
+        <label class="interrupteur"><input type="checkbox" id="op-natif" data-option ${o.mode_natif ? "checked" : ""}><span>${t("Native Windows (experimental): the pilot runs in Git Bash and Claude Code is the Windows program, without WSL")}</span></label>
+        <p class="petit attention">${t("No sandbox in this mode: Claude can read and change any file of your PC and run any program, without asking. The file guard only covers its file tools. Use it for projects you trust.")}</p>
+        <p class="petit ${o.git_bash ? "ok" : "attention"}">${o.git_bash ? h(t("Git Bash: {0}", [o.git_bash])) : t("Git for Windows is missing: Setup & health → Install everything.")}</p>
+        <p class="muet petit">${t("Applies to the pilots started afterwards. When you close Athanor while native pilots run, it asks whether they go on in the background.")}</p>
+      </div>
       <div class="bloc"><h2>${t("Tool folder")}</h2>
         <input type="text" id="op-kit" data-option value="${h(o.kit)}"><div class="muet petit mt-1">${o.kit_valide ? "✔ " + t("tool recognized (system\\pilot.sh present)") : "✖ " + t("this folder is not the tool")}</div>
         <div class="ligne mt-1"><button class="btn btn-petit" data-ouvrir="kit">${t("Open the folder")}</button><button class="btn btn-petit" data-ouvrir="logs">${t("Logs folder")}</button><span class="espace"></span><button class="btn btn-petit" id="op-guide">${t("Show the first-launch guide again")}</button></div>
@@ -1564,8 +1570,10 @@ pages.options = async () => {
     </div>
   </div>`;
 };
+// the native Windows switch is sent only where it is shown (Windows)
+function o_windows() { const b = $("#op-natif"); return !!(b && !b.closest(".bloc").hidden); }
 async function enregistrerOptions() {
-  const r = await action(api("options", "POST", { kit: $("#op-kit").value, lancer_pilote_au_demarrage: $("#op-lancer").checked, bureau_virtuel: $("#op-bureau").checked, programmes_supplementaires: $("#op-programmes").value, demarrage_windows: $("#op-windows").checked }));
+  const r = await action(api("options", "POST", { kit: $("#op-kit").value, lancer_pilote_au_demarrage: $("#op-lancer").checked, bureau_virtuel: $("#op-bureau").checked, programmes_supplementaires: $("#op-programmes").value, demarrage_windows: $("#op-windows").checked, mode_natif: $("#op-natif") && o_windows() ? $("#op-natif").checked : undefined }));
   if (r && document.activeElement && document.activeElement.matches("input[type=checkbox]")) rendrePage();
 }
 
