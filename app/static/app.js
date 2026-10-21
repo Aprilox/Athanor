@@ -675,6 +675,12 @@ pages.chat = async () => {
   </div>`;
 };
 
+async function action_quota(fenetre, seuil, quoi) {
+  document.activeElement.blur();
+  const r = await action(api("quota/arret", "POST", { fenetre, seuil, action: quoi }));
+  if (r) { await rafraichir(); rendrePage(); }
+}
+
 async function envoyerChat() {
   const zone = $("#chat-texte"); if (!zone || chat.envoi) return;
   const message = zone.value.trim(); if (!message) return;
@@ -704,7 +710,18 @@ function nomFenetre(n) {
   if (m) return t("This week, {0}", [m[1].replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase())]);
   return n.replace(/_/g, " ");
 }
-function rendreQuota(q) {
+// automatic stop of a window: the rule key ("modele" = every model's own week) and its two lists
+function regleFenetre(n) { return n === "five_hour" || n === "seven_day" ? n : "modele"; }
+function arretAuto(nom, regles) {
+  const cle = regleFenetre(nom), r = (regles || {})[cle] || { seuil: 0, action: "apres" };
+  const seuils = [0, 50, 60, 70, 75, 80, 85, 90, 95];
+  if (r.seuil && !seuils.includes(r.seuil)) seuils.push(r.seuil);
+  const actions = [["apres", t("stop after the cycle")], ["maintenant", t("stop now")], ["pause", t("pause until the reset")]];
+  return `<div class="quota-arret petit"><span class="muet">${t("Auto stop")}</span>
+    <select data-quota-seuil="${cle}">${seuils.sort((a, b) => a - b).map((s) => `<option value="${s}" ${r.seuil === s ? "selected" : ""}>${s ? t("at {0} %", [s]) : t("off")}</option>`).join("")}</select>
+    ${r.seuil ? `<select data-quota-action="${cle}">${actions.map(([v, l]) => `<option value="${v}" ${r.action === v ? "selected" : ""}>${h(l)}</option>`).join("")}</select>` : ""}</div>`;
+}
+function rendreQuota(q, regles) {
   if (!q || !(q.fenetres || []).length) return `<div class="bloc"><h2>${t("Subscription quota")}</h2><div class="vide petit">${t("Shown once a cycle has run: Claude Code reports it as it works.")}</div></div>`;
   const maintenant = Date.now() / 1000;
   const lignes = q.fenetres.map((f) => {
@@ -712,10 +729,11 @@ function rendreQuota(q) {
     const u = passe ? 0 : f.utilisation;
     const pct = u == null ? null : Math.round(u * 100);
     const classe = pct == null ? "" : pct >= 90 ? "plein" : pct >= 70 ? "haut" : "";
+    const r = (regles || {})[regleFenetre(f.nom)];
     return `<div class="quota-ligne ${classe}">
       <div class="ligne m0"><b>${h(nomFenetre(f.nom))}</b><span class="espace"></span><span>${pct == null ? "—" : pct + " %"}</span></div>
-      <div class="barre m0"><i style="width:${Math.min(100, pct || 0)}%"></i></div>
-      <div class="muet petit">${passe ? t("started again") : f.reinit ? t("Resets: {0} ({1})", [quandLisible(f.reinit), dans(f.reinit)]) : ""}</div>
+      <div class="barre m0 quota-barre"><i style="width:${Math.min(100, pct || 0)}%"></i>${r ? `<b class="quota-seuil" style="left:${Math.min(100, r.seuil)}%" title="${h(t("Auto stop"))} ${r.seuil} %"></b>` : ""}</div>
+      <div class="ligne m0 quota-pied"><span class="muet petit">${passe ? t("started again") : f.reinit ? t("Resets: {0} ({1})", [quandLisible(f.reinit), dans(f.reinit)]) : ""}</span><span class="espace"></span>${arretAuto(f.nom, regles)}</div>
     </div>`;
   }).join("");
   const age = Math.round(maintenant - (q.lu || maintenant));
@@ -804,7 +822,7 @@ pages.suivi = async () => {
         <button class="btn btn-petit" data-ouvrir="deliverable">${t("Deliverable")}</button>
       </div>
     </div>
-    ${rendreQuota(v.quota)}</div>
+    ${rendreQuota(v.quota, v.quota_arret)}</div>
     <div class="bloc"><h2>${t("Project plan")}</h2>
       ${plan.length ? `<div class="barre"><i style="width:${(faits / plan.length) * 100}%"></i></div><div class="muet petit">${t("{0} / {1} milestones done", [faits, plan.length])}</div>
       <ul class="plan">${listePlan(plan, false)}</ul>`
@@ -2072,6 +2090,13 @@ $("#page").addEventListener("keydown", (ev) => {
 $("#page").addEventListener("change", (ev) => {
   const i = ev.target;
   if (i.id === "chat-question") chat.questionSeule = i.checked;
+  if (i.dataset.quotaSeuil || i.dataset.quotaAction) {
+    const cle = i.dataset.quotaSeuil || i.dataset.quotaAction, bloc = i.closest(".quota-arret");
+    const seuil = Number((bloc.querySelector("[data-quota-seuil]") || {}).value || 0);
+    const choix = bloc.querySelector("[data-quota-action]");
+    const quoi = choix ? choix.value : ((etat.vue && etat.vue.quota_arret || {})[cle] || {}).action || "apres";
+    action_quota(cle, seuil, quoi);
+  }
   if (i.dataset.filtre) { etat.filtres[i.dataset.filtre] = i.checked; rendreJournal(); }
   if (i.id === "rg-secrets") { etat.envSecrets = i.checked; rendrePage(); }
   if (i.type === "checkbox" && i.dataset.cle) i.nextElementSibling.textContent = i.checked ? t("enabled") : t("disabled");
@@ -2153,7 +2178,7 @@ async function rafraichir() {
     if (!v.verrouille) {
       await lireJournal();
       // the Team page follows live, except while text is selected in it (a brief, a report)
-      if ((etat.page === "equipe" && !String(window.getSelection() || "") && !etat.agForm) || (etat.page === "suivi" && !document.activeElement.matches("input, textarea"))) rendrePage();
+      if ((etat.page === "equipe" && !String(window.getSelection() || "") && !etat.agForm) || (etat.page === "suivi" && !document.activeElement.matches("input, textarea, select"))) rendrePage();
       if (etat.page === "chat") majChat(false);
       if (etat.page === "pourvous" && !document.activeElement.matches("input, textarea") && ++etat.pvTic % 4 === 0) {
         const r = await api("pourvous").catch(() => null);

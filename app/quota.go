@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
@@ -165,4 +166,71 @@ func borner(u *float64) *float64 {
 		x = 1.5
 	}
 	return &x
+}
+
+// ----------------------------------------------------------------------------- automatic stops
+// The rules of the automatic stops (Overview -> Subscription quota): read by every pilot at each check
+// (system/quota.py, from the kit's logs/quota-arret.json). "modele" is every model's own week.
+
+type RegleQuota struct {
+	Seuil  int    `json:"seuil"`  // percent of the window used
+	Action string `json:"action"` // apres (after the cycle), maintenant (now), pause (until the reset)
+}
+
+var fenetresRegles = map[string]bool{"five_hour": true, "seven_day": true, "modele": true}
+var actionsRegles = map[string]bool{"apres": true, "maintenant": true, "pause": true}
+
+func fichierReglesQuota(k Kit) string { return filepath.Join(k.Journaux(), "quota-arret.json") }
+
+func lireReglesQuota(k Kit) map[string]RegleQuota {
+	out := map[string]RegleQuota{}
+	b, err := os.ReadFile(fichierReglesQuota(k))
+	if err != nil || len(b) > 64<<10 {
+		return out
+	}
+	var d map[string]RegleQuota
+	if json.Unmarshal(b, &d) != nil {
+		return out
+	}
+	for f, r := range d {
+		if fenetresRegles[f] && actionsRegles[r.Action] && r.Seuil >= 1 && r.Seuil <= 100 {
+			out[f] = r
+		}
+	}
+	return out
+}
+
+var reglesQuotaMu sync.Mutex
+
+func (s *Serveur) apiReglesQuota(w http.ResponseWriter, r *http.Request) {
+	var c struct {
+		Fenetre string `json:"fenetre"`
+		Seuil   int    `json:"seuil"` // 0: no automatic stop for this window
+		Action  string `json:"action"`
+	}
+	if err := lireCorps(r, &c); err != nil || !fenetresRegles[c.Fenetre] || c.Seuil < 0 || c.Seuil > 100 || (c.Seuil > 0 && !actionsRegles[c.Action]) {
+		s.erreur(w, http.StatusBadRequest, "Invalid setting")
+		return
+	}
+	k := s.kitCourant()
+	reglesQuotaMu.Lock()
+	defer reglesQuotaMu.Unlock()
+	d := lireReglesQuota(k)
+	if c.Seuil == 0 {
+		delete(d, c.Fenetre)
+	} else {
+		d[c.Fenetre] = RegleQuota{Seuil: c.Seuil, Action: c.Action}
+	}
+	b, _ := json.MarshalIndent(d, "", " ")
+	_ = os.MkdirAll(k.Journaux(), 0o755)
+	f := fichierReglesQuota(k)
+	if err := os.WriteFile(f+".tmp", b, 0o644); err != nil {
+		s.erreur(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if err := os.Rename(f+".tmp", f); err != nil {
+		s.erreur(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.msg(w, "Automatic stop saved: the running pilots apply it at once.")
 }
