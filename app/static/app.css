@@ -165,8 +165,10 @@ a[data-href] { cursor: pointer; }
 .etat-phrase { flex: 1; min-width: 0; }
 .etat-phrase { flex-basis: 420px; }
 .etat-phrase h1 { font-size: clamp(18px, 1.6vw, 24px); display: flex; align-items: center; gap: 12px; }
-.etat-phrase h1 > span:last-child { overflow-wrap: anywhere; }
-.etat-phrase .sous { color: var(--muted); margin-top: 4px; font-size: 14px; }
+.etat-phrase h1 > span:last-child { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.etat-phrase .sous { color: var(--muted); margin-top: 4px; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mode-ligne .ligne { align-items: center; gap: 10px 16px; }
+.mode-ligne h2 { font-size: 15px; margin: 0; }
 .point { width: 12px; height: 12px; border-radius: 50%; background: var(--faible); flex: none; }
 .point.travaille { background: var(--ok); animation: pulse 2.2s ease-out infinite; }
 .point.quota { background: var(--attention); }
@@ -239,7 +241,8 @@ details[open] summary { margin-bottom: 10px; }
 .plan li.vague { border-bottom: 0; padding: 10px 0 2px; color: var(--faible); font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; }
 .plan li.vague:first-child { padding-top: 0; }
 .plan .jalon-corps { min-width: 0; flex: 1; }
-.plan li[data-jalon-cle] { cursor: pointer; }
+.plan li[data-jalon-cle], .plan li[data-plan-archives] { cursor: pointer; }
+.plan li.plan-archives .jalon-titre { color: var(--muted); }
 .plan li[data-jalon-cle]:hover .jalon-titre { color: var(--accent); }
 .plan .jalon-titre { font-weight: 600; display: flex; justify-content: space-between; gap: 8px; }
 .plan .jalon-chevron { color: var(--faible); font-weight: 400; flex: none; }
@@ -393,6 +396,13 @@ textarea.en-attente { opacity: .55; }
 .reglage:last-child { border-bottom: 0; }
 .reglage .cle { font-family: var(--mono); font-size: 13px; font-weight: 600; }
 .reglage .aide { color: var(--muted); font-size: 12.5px; }
+.reglage .nom-reglage { font-weight: 600; }
+.reglage .cle-env { font-family: var(--mono); font-size: 11px; color: var(--faible); font-weight: 400; margin-left: 4px; }
+.reglage select { width: 260px; max-width: 100%; }
+.reglages-tete { margin-bottom: 12px; align-items: center; }
+.reglages-tete p { min-width: 240px; }
+.bloc details > summary { cursor: pointer; font-weight: 600; }
+.bloc details[open] > summary { margin-bottom: 8px; }
 
 /* --- appearance: language, palette and accent pickers */
 .langues { display: flex; flex-wrap: wrap; gap: 8px; }

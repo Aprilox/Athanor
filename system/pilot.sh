@@ -20,6 +20,7 @@ PROJECT="$(mkdir -p "$PROJECT" && cd "$PROJECT" && pwd)"   # logical path, stabl
 TOOLS="$KIT/tools"
 ETAT="$PROJECT/.athanor"
 . "$SYSTEME/safety.sh"
+. "$SYSTEME/roblox.sh"
 migrer_atelier "$PROJECT"
 # what the application's quick folder check unticked is Claude's to judge now (REVERIFY, CLAUDE.md)
 rm -f "$ETAT/verification.json"
@@ -549,7 +550,19 @@ preparer_cycle() {  # non-AI tools: archives and project map, before Claude read
   # Roblox Studio: its MCP server drives the open Studio. A Studio already open (yours included) is used
   # as it is; otherwise the pilot opens the project's first place, on Claude's desktop when that option is on.
   if [ "${ROBLOX_MCP:-0}" = "1" ]; then
-    local place; place=$(find "$PROJECT" -maxdepth 3 \( -name .athanor -o -name .git -o -name node_modules \) -prune -o \( -iname '*.rbxl' -o -iname '*.rbxlx' \) -type f -print -quit 2>/dev/null)
+    local place="" rojo_f
+    # Rojo project: the files are the place (system/roblox.sh). Studio works on .athanor/studio/NAME.rbxl,
+    # rebuilt from them whenever Studio is closed, and gets the scripts live (SYNC.luau) while it is open.
+    rojo_f=$(roblox_projet_rojo)
+    if [ -n "$rojo_f" ]; then
+      roblox_sync_demarrer
+      place=$(roblox_place_studio "$rojo_f")
+      if ! roblox_studio_ouvert && ! roblox_construire "$rojo_f" "$place" 2>> "$PRIVE/pilot.log"; then
+        log "Roblox Studio: rojo build failed (see the pilot's log), Studio opens on the place built last."
+        [ -f "$place" ] || place=""
+      fi
+    fi
+    [ -n "$place" ] || place=$(find "$PROJECT" -maxdepth 3 \( -name .athanor -o -name .git -o -name node_modules \) -prune -o \( -iname '*.rbxl' -o -iname '*.rbxlx' \) -type f -print -quit 2>/dev/null)
     if [ -n "$place" ]; then
       local sortie; sortie=$(PROJECT="$PROJECT" roblox-studio --wait "$place" 2>&1)
       case "$sortie" in
@@ -562,6 +575,18 @@ preparer_cycle() {  # non-AI tools: archives and project map, before Claude read
       log "Roblox Studio MCP: no .rbxl/.rbxlx place in the project, the pilot does not open Studio (open it yourself, or let Claude save the place into the project)."
     fi
   fi
+}
+
+# The live sync of a Rojo project's scripts into the open Studio (roblox-sync.py): one server for the
+# pilot's whole life, outside Claude's sandbox; it writes .athanor/studio/SYNC.luau, the code Claude runs.
+SYNC_PID=""
+roblox_sync_demarrer() {
+  [ -n "$SYNC_PID" ] && kill -0 "$SYNC_PID" 2>/dev/null && return 0
+  python3 "$SYSTEME/roblox-sync.py" serve "$PROJECT" "$PRIVE/pilot.pid" >> "$PRIVE/roblox-sync.log" 2>&1 9>&- &
+  SYNC_PID=$!
+  [ -n "${SYNC_ANNONCE:-}" ] && return 0
+  SYNC_ANNONCE=1
+  log "Roblox Studio: Rojo project, the scripts reach the open Studio live (.athanor/studio/SYNC.luau), without restarting it."
 }
 
 attente_quota() {  # reads "resets 3:45pm" or "resets Mon 12:00am" when possible
@@ -616,11 +641,12 @@ arreter_tout() {  # Ctrl+C, window closed or stop.sh: Claude is stopped too
   parallele_nettoyer_worktrees
   [ -n "${PONT_PID:-}" ] && kill "$PONT_PID" 2>/dev/null
   [ -n "${BATTEMENT_PID:-}" ] && kill "$BATTEMENT_PID" 2>/dev/null
+  [ -n "${SYNC_PID:-}" ] && kill "$SYNC_PID" 2>/dev/null
   log "Pilot stopped."; ETAT_PHASE=arrete; statut "Stopped (restart with start)"; rm -f "$PRIVE/pilot.pid" "$ETAT/pilot.pid"; exit 0
 }
 trap arreter_tout TERM INT HUP
 # Any end of the pilot (STOP, DONE, error) also stops the bridge.
-trap '[ -n "${PONT_PID:-}" ] && kill "$PONT_PID" 2>/dev/null; [ -n "${BATTEMENT_PID:-}" ] && kill "$BATTEMENT_PID" 2>/dev/null; [ -n "${ECRAN_PID:-}" ] && kill "$ECRAN_PID" 2>/dev/null; rm -f "$PRIVE/pilot.pid" "$ETAT/pilot.pid" "$PRIVE/ecran"' EXIT
+trap '[ -n "${PONT_PID:-}" ] && kill "$PONT_PID" 2>/dev/null; [ -n "${SYNC_PID:-}" ] && kill "$SYNC_PID" 2>/dev/null; [ -n "${BATTEMENT_PID:-}" ] && kill "$BATTEMENT_PID" 2>/dev/null; [ -n "${ECRAN_PID:-}" ] && kill "$ECRAN_PID" 2>/dev/null; rm -f "$PRIVE/pilot.pid" "$ETAT/pilot.pid" "$PRIVE/ecran"' EXIT
 
 [ -n "$CLAUDE_BIN" ] && [ -x "$CLAUDE_BIN" ] || { log "Claude Code not found: run install.sh first."; exit 1; }
 # History from a previous pilot (before the private folder): taken over once, without following links.
