@@ -41,6 +41,13 @@ except Exception:
 plugin = os.environ.get("ATHANOR_PLUGIN") or ""
 plugins_tiers = os.environ.get("ATHANOR_PLUGINS") or ""   # the plugins switched on (Plugins tab)
 lectures = [system] + ([plugin] if plugin else []) + ([plugins_tiers] if plugins_tiers else [])
+# Claude Code's own folder for this project (CONFIG/projects/<project path, non-alphanumerics as "-">):
+# a long command output is saved there and Claude reads it back. Read-only, and only this project's.
+import re
+config_claude = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.join(os.path.expanduser("~"), ".claude")
+for p in sorted({os.environ.get("PROJECT") or "", projet}):
+    if p:
+        lectures.append(os.path.join(config_claude, "projects", re.sub(r"[^A-Za-z0-9]", "-", p)))
 # Hooks run OUTSIDE the sandbox: never a program taken from tools/ (modifiable by Claude).
 rtk_bin = os.path.join(system, "bin", "rtk")
 rtk = os.environ.get("RTK", "1") != "0" and os.access(rtk_bin, os.X_OK)

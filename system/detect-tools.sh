@@ -74,7 +74,9 @@ PROJECT="${PROJECT:-$KIT/projet}"; mkdir -p "$PROJECT/.athanor" "$KIT/tools/wind
   if [ "$WINGET" = 1 ]; then echo "- **winget**: \`install-windows ID\` installs a Windows program (\`install-windows --search NAME\` to find the ID)"; else echo "- winget: unavailable"; fi
   if [ "$NATIF" = 1 ]; then echo "- **Native Windows**: you run on Windows itself (Git Bash): Windows programs run directly from your shell (\`program.exe ...\`, \`cmd //c ...\`, \`powershell -Command ...\`); portable ones go in \`\$TOOLS/windows\`"
   elif [ "$WINDOWS" = 1 ]; then echo "- **Portable Windows programs**: install them in \`\$TOOLS/windows\`, run them with \`pc-exec PATH.exe ...\`; Windows variables with \`windows-var NAME PATH\`"; fi
-  if [ -f "$KIT/logs/bureau-isole" ]; then
+  if [ -f "$KIT/logs/bureau-isole" ] && [ "$NATIF" = 1 ]; then
+    echo "- **Claude's desktop**: the Windows programs you open never show on the user's screen (a Windows desktop of their own) and never take the focus. Check what they show with screenshots (the program's own, or a PowerShell capture of its window)."
+  elif [ -f "$KIT/logs/bureau-isole" ]; then
     echo "- **Claude's desktop**: the programs you open never show on the user's screen (Windows programs through the gateways: a Windows desktop of their own; Linux programs: a private X screen, \`DISPLAY\` is set). Check what they show with screenshots: the program's own, or \`import -window root shot.png\` for the Linux screen."
   fi
   if command -v docker >/dev/null 2>&1 && timeout 20 docker info >/dev/null 2>&1; then echo "- **Docker**: \`tool IMAGE COMMAND...\` (disposable container, project mounted on /work)"; else echo "- Docker: not available (Docker Desktop stopped$([ "$NATIF" = 1 ] || echo ", or WSL integration not enabled"))"; fi
@@ -88,7 +90,7 @@ PROJECT="${PROJECT:-$KIT/projet}"; mkdir -p "$PROJECT/.athanor" "$KIT/tools/wind
     local nom="$1" v; shift
     command -v "$1" >/dev/null 2>&1 || { echo "- $nom: not installed"; return; }
     v=$(timeout 8 "$@" 2>&1 </dev/null) || { echo "- $nom: not installed"; return; }
-    v=$(printf '%s\n' "$v" | tr -d '\r' | grep -v '^Picked up' | grep -m1 -E '[0-9]+\.[0-9]+' | cut -c1-90)
+    v=$(printf '%s\n' "$v" | tr -d '\r' | sed 's/\x1b\[[0-9;]*[A-Za-z]//g' | grep -v '^Picked up' | grep -m1 -E '[0-9]+\.[0-9]+' | cut -c1-90)
     echo "- $nom: ${v:-installed}"
   }
   # never run from tools/: what is there was written from the sandbox, and this check runs outside it
