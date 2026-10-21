@@ -266,7 +266,7 @@ details[open] summary { margin-bottom: 10px; }
 .quota-ligne .barre { margin: 6px 0 4px; }
 .quota-ligne.haut .barre i { background: var(--attention); }
 .quota-ligne.plein .barre i { background: var(--erreur); }
-.avancement { width: 100%; height: auto; display: block; margin-top: 4px; }
+.avancement { width: 100%; height: auto; max-height: 230px; display: block; margin-top: 4px; }
 .av-grille { stroke: var(--line-2); stroke-width: 1; }
 .av-axe { stroke: var(--line); stroke-width: 1; }
 .av-txt { fill: var(--faible); font-size: 11px; font-family: var(--police); }

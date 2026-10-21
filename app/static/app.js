@@ -749,7 +749,8 @@ function rendreAvancement(stats, plan, faits, actif) {
     heuresReste = (parJalon * reste) / 3600000;
     coutReste = cout * reste;
   }
-  const fin = eta || dernier.fin, L = 800, H = 210, g = 34, d = 40, hautB = 168, basB = 186;
+  const largeur = ($("#page") || {}).clientWidth || 1000;
+  const fin = eta || dernier.fin, L = Math.round(Math.max(520, Math.min(1800, largeur - 110))), H = 210, g = 34, d = 40, hautB = 168, basB = 186;
   const x = (tm) => g + ((tm - debut) / Math.max(1, fin - debut)) * (L - g - d);
   const y = (k) => hautB - (k / total) * (hautB - 12);
   const maxCout = Math.max(...lignes.map((s) => Number(s.cout_usd) || 0), 0.01);
@@ -779,7 +780,7 @@ function rendreAvancement(stats, plan, faits, actif) {
 
 pages.suivi = async () => {
   const v = etat.vue; if (!v) return "";
-  if (!v.kit_installe || !v.projet || v.demande_vide) return rendreGuide(v) + (v.projet ? await rendreMode() : "");
+  if (!v.kit_installe || !v.projet || v.demande_vide) return rendreGuide(v);
   const e = v.etat || {};
   const plan = v.plan || [];
   const faits = plan.filter((j) => j.fait).length;
@@ -825,8 +826,7 @@ pages.suivi = async () => {
     ${stats.slice(etat.ouverts.has("stats:tous") ? -200 : -5).reverse().map((s) => `<tr><td>${s.cycle}</td><td>${h((s.horodatage || "").slice(11, 16))}</td><td>${h(s.template)}</td><td class="${h(s.etat)}">${h(s.etat)}</td><td>${Math.round(s.minutes)}</td><td>${s.tours}</td><td${s.estime ? ` title="${h(t("≈: estimated from the turns of the lead and its sub-agents (cycle closed by the pilot); ?: price of this model not learned yet"))}"` : ""}>${s.estime && !Number(s.cout_usd) && s.tours ? "?" : (s.estime ? "≈ " : "") + Number(s.cout_usd).toFixed(2)}</td><td>${fmtTokens(s.contexte_max)}</td></tr>`).join("")}
     </tbody></table></div>
     ${stats.length > 5 ? `<button type="button" class="btn btn-petit mt-1" data-stats-tous>${etat.ouverts.has("stats:tous") ? t("Last 5 cycles only") : t("All {0} cycles", [stats.length])}</button>` : ""}` : `<div class="vide">${t("Numbers appear at the end of the first cycle.")}</div>`}
-  </div>
-  ${await rendreMode()}`;
+  </div>`;
 };
 
 function rendreGuide(v) {
@@ -857,6 +857,7 @@ pages.projet = async () => {
   setTimeout(() => majGitHub(), 0); // the GitHub block asks WSL: filled in once the page is shown
   return `<div class="gestion">
   ${p.actif ? `<div class="bloc"><p class="attention">${t("The pilot is running: stop it to rename, move, archive or delete the project.")}</p></div>` : ""}
+  ${await rendreMode()}
   <div class="grille grille-2">
     <div class="bloc"><h2>${t("Name")}</h2>
       <div class="ligne"><input type="text" id="gp-nom" value="${h(p.nom)}"><button class="btn" data-gestion="renommer" ${dis}>${t("Rename")}</button></div>
@@ -1990,7 +1991,7 @@ $("#page").addEventListener("click", async (ev) => {
   if (b.dataset.pv) return repondreTache(b);
   if (b.dataset.choisirPieces) return $("#" + b.dataset.choisirPieces + "-fichiers").click();
   if (b.dataset.retirerPiece) { const [id, i] = b.dataset.retirerPiece.split("|"); (etat.pieces[id] || []).splice(Number(i), 1); $("#" + id + "-liste").innerHTML = listePieces(id); return; }
-  if (b.dataset.max && page === "suivi") return enregistrerMode($("#md-parallele").checked, Number(b.dataset.max));
+  if (b.dataset.max && page === "projet") return enregistrerMode($("#md-parallele").checked, Number(b.dataset.max));
   if (page === "nouveau") {
     if (b.dataset.chemin) return rendreExplorateur(b.dataset.chemin);
     if (b.id === "np-utiliser") { $("#np-dossier").value = etat.explorateur; return; }
