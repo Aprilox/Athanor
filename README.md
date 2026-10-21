@@ -203,6 +203,8 @@ Each worker only carries its own milestone in context, so the work is split into
 | `critic` | uses the result like a demanding end user, without complacency (read only) | `SUBAGENT_MODEL` |
 | `executor` | mechanical work with no design decision: long command outputs, searches, bulk edits, file copies; the only sub-agent parallel workers may call | `CHEAP_MODEL` (Haiku) |
 
+With `SUBAGENT_MODEL=auto` (*Settings*, "chosen by the lead"), the lead picks the model of each call itself: Haiku for mechanical work, Sonnet for most of the work, Opus only for judgement (architecture, a bug not understood, the final critique). A call that sets none keeps the model of the table.
+
 The agents live in [`template/.claude/agents/`](template/.claude/agents): edit them to change how your team works.
 
 **Your own sub-agents.** On the Team page, **+ New sub-agent** adds a specialist of your own (a translator, a researcher for a domain, a level designer…): a name, when the lead should call it, its instructions (**✨ Improve with Claude** turns a few lines into a structured brief), a model (like the others, cheap or most capable), read only or not, this project or all your projects. The lead can also propose one when a need keeps coming back: it writes `.athanor/agents/<name>.md`, the pilot checks it and adds it to the team at the next cycle, labelled *proposed by the lead*; you keep it, edit it or remove it (a removed proposal is never made again). These sub-agents work like the others: same sandbox, skills, MCP tools and attached files, callable by the lead and by parallel workers; the lead finds them in `.athanor/TEAM.md`, and a request can name one ("have `translator` do the texts"). They are stored in `extensions/agents.json` (12 per project at most).
@@ -307,7 +309,7 @@ Everything is editable in the app (*Settings*), or in `.env` ([`.env.example`](.
 | Key | Role |
 |---|---|
 | `CLAUDE_CODE_OAUTH_TOKEN` | token of your subscription (`claude setup-token`), never shared |
-| `MODEL` / `FALLBACK_MODEL` / `SUBAGENT_MODEL` | lead model, model used while the lead's quota is exhausted, sub-agents model |
+| `MODEL` / `FALLBACK_MODEL` / `SUBAGENT_MODEL` | lead model, model used while the lead's quota is exhausted, sub-agents model (`auto`: chosen by the lead for each call) |
 | `CHEAP_MODEL` | model of the `executor` sub-agent (default `haiku`) |
 | `FRAMING_MODEL` / `WORKER_MODEL` | model of the framing cycle (empty = `MODEL`), model of the parallel workers (default `sonnet`, empty = `MODEL`) |
 | `FRAMING_MAX_MIN` | time box of the framing, in minutes (default 25) |
@@ -392,7 +394,7 @@ system/                pilot.sh (the loop), parallel.sh (scheduler, workers, mer
                        extensions.py + mcp-jail.sh (Skills & MCP), ecran.sh (Claude's screen), github.sh (GitHub),
                        settings.py (sandbox), guard.py, detect-tools.sh, athanor.py (map, archives, screenshots),
                        bin/ (gateways), windows/ (PowerShell helpers)
-template/              CLAUDE.md (Claude's instructions), PC_TOOLS_GUIDE.md, .claude/agents/ (the team)
+template/              CLAUDE.md (Claude's instructions), guides/ (the parts only some cycles need), PC_TOOLS_GUIDE.md, .claude/agents/ (the team)
 docs/images/           README images
 docs/releases/         what is new in each version (shown on the release page)
 .env.example           every setting, documented
@@ -465,10 +467,10 @@ Yes. Nothing is tied to a user name or a drive letter: paths come from your prof
 Push a version tag and GitHub builds both apps and publishes the release ([`.github/workflows/release.yml`](.github/workflows/release.yml)):
 
 ```bash
-git tag v2.16.1 && git push origin v2.16.1
+git tag v2.17.0 && git push origin v2.17.0
 ```
 
-Keep the version in [`app/winres/athanor.rc`](app/winres/athanor.rc) in step with the tag, and write what is new in `docs/releases/VERSION.md` (e.g. [`docs/releases/2.16.1.md`](docs/releases/2.16.1.md)): it opens the release page.
+Keep the version in [`app/winres/athanor.rc`](app/winres/athanor.rc) in step with the tag, and write what is new in `docs/releases/VERSION.md` (e.g. [`docs/releases/2.17.0.md`](docs/releases/2.17.0.md)): it opens the release page.
 
 ## Contributing
 

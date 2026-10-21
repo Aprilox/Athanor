@@ -203,6 +203,8 @@ Chaque ouvrier ne porte que son jalon en contexte : le travail est découpé en 
 | `critic` | utilise le résultat comme un utilisateur final exigeant, sans complaisance (lecture seule) | `SUBAGENT_MODEL` |
 | `executor` | travail mécanique sans décision de conception : sorties de commandes longues, recherches, modifications en série, copies de fichiers ; le seul sous-agent que les ouvriers en parallèle peuvent appeler | `CHEAP_MODEL` (Haiku) |
 
+Avec `SUBAGENT_MODEL=auto` (*Réglages*, « choisi par le chef »), le chef choisit lui-même le modèle de chaque appel : Haiku pour le travail mécanique, Sonnet pour l'essentiel du travail, Opus seulement pour le jugement (architecture, bug incompris, critique finale). Un appel qui n'en précise pas garde le modèle du tableau.
+
 Les agents sont dans [`template/.claude/agents/`](template/.claude/agents) : modifiez-les pour changer la façon de travailler de votre équipe.
 
 **Vos propres sous-agents.** Sur la page *Équipe*, **+ Nouveau sous-agent** ajoute un spécialiste à vous (un traducteur, un chercheur dans un domaine, un level designer…) : un nom, quand le chef doit l'appeler, ses consignes (**✨ Améliorer avec Claude** transforme quelques lignes en consignes structurées), un modèle (comme les autres, économique ou le plus puissant), lecture seule ou non, ce projet ou tous vos projets. Le chef peut aussi en proposer un quand un besoin revient : il écrit `.athanor/agents/<nom>.md`, le pilote le vérifie et l'ajoute à l'équipe au cycle suivant, marqué *proposé par le chef* ; vous le gardez, le modifiez ou le retirez (une proposition retirée n'est jamais refaite). Ces sous-agents fonctionnent comme les autres : même barrière, skills, outils MCP et fichiers joints, appelables par le chef et par les ouvriers en parallèle ; le chef les trouve dans `.athanor/TEAM.md`, et une demande peut en nommer un (« fais faire les textes par `traducteur` »). Ils sont rangés dans `extensions/agents.json` (12 par projet au maximum).
@@ -309,7 +311,7 @@ Tout se modifie dans l'application (*Réglages*), ou dans `.env` ([`.env.example
 | `CLAUDE_CODE_OAUTH_TOKEN` | jeton de votre abonnement (`claude setup-token`), jamais partagé |
 | `MODEL` | modèle du chef : `claude-fable-5-1`, `claude-opus-5-5`, `claude-sonnet-5-5` (plus économe), `claude-haiku-5-5`, ou les alias `fable`, `opus`, `sonnet` |
 | `FALLBACK_MODEL` | pris **automatiquement** quand le quota de `MODEL` est épuisé, jusqu'à sa réouverture, puis retour au principal. Vide = pause |
-| `SUBAGENT_MODEL` | modèle des sous-agents ; vide = le même que le chef, `claude-sonnet-5-5` économise le quota |
+| `SUBAGENT_MODEL` | modèle des sous-agents ; vide = le même que le chef, `claude-sonnet-5-5` économise le quota, `auto` = le chef le choisit à chaque appel |
 | `CHEAP_MODEL` | modèle du sous-agent `executor` (par défaut `haiku`) : le contexte et le quota du chef restent pour la réflexion |
 | `FRAMING_MODEL` | modèle du cycle de cadrage, qui écrit le plan ; vide = `MODEL` |
 | `WORKER_MODEL` | modèle des ouvriers en mode parallèle ; par défaut `sonnet`, vide = `MODEL` |
@@ -395,7 +397,7 @@ system/                pilot.sh (la boucle), parallel.sh (ordonnanceur, ouvriers
                        extensions.py + mcp-jail.sh (Skills & MCP), ecran.sh (écran de Claude), github.sh (GitHub),
                        settings.py (barrière), guard.py, detect-tools.sh, athanor.py (carte, archives, captures),
                        bin/ (passerelles), windows/ (aides PowerShell)
-template/              CLAUDE.md (consignes de Claude), PC_TOOLS_GUIDE.md, .claude/agents/ (l'équipe)
+template/              CLAUDE.md (consignes de Claude), guides/ (les parties dont seuls certains cycles ont besoin), PC_TOOLS_GUIDE.md, .claude/agents/ (l'équipe)
 docs/images/           images du README
 docs/releases/         les nouveautés de chaque version (affichées sur la page de la version)
 .env.example           tous les réglages, documentés
@@ -466,10 +468,10 @@ Oui. Rien n'est lié à un nom d'utilisateur ni à une lettre de disque : les ch
 Poussez un tag de version : GitHub compile les deux applications et publie la version ([`.github/workflows/release.yml`](.github/workflows/release.yml)).
 
 ```bash
-git tag v2.16.1 && git push origin v2.16.1
+git tag v2.17.0 && git push origin v2.17.0
 ```
 
-Gardez la version de [`app/winres/athanor.rc`](app/winres/athanor.rc) alignée sur le tag, et écrivez les nouveautés dans `docs/releases/VERSION.md` (par ex. [`docs/releases/2.16.1.md`](docs/releases/2.16.1.md)) : elles ouvrent la page de la version.
+Gardez la version de [`app/winres/athanor.rc`](app/winres/athanor.rc) alignée sur le tag, et écrivez les nouveautés dans `docs/releases/VERSION.md` (par ex. [`docs/releases/2.17.0.md`](docs/releases/2.17.0.md)) : elles ouvrent la page de la version.
 
 ## Contribuer
 

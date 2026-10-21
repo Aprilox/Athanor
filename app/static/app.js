@@ -776,6 +776,7 @@ const ROLES = {
 };
 function modeleLisible(m) {
   if (!m) return "";
+  if (String(m).toLowerCase() === "auto") return t("chosen by the lead");
   const n = String(m).replace(/^claude-/, "").replace(/\[.*\]$/, "").replace(/-\d{8}$/, "");
   const [nom, ...v] = n.split("-");
   return nom.charAt(0).toUpperCase() + nom.slice(1) + (v.length ? " " + v.join(".") : "");
@@ -1493,7 +1494,7 @@ pages.reglages = async () => {
   const efforts = ["", "low", "medium", "high", "xhigh", "max"];
   const champ = (l) => {
     const id = "env-" + l.cle;
-    if (["MODEL", "FALLBACK_MODEL", "SUBAGENT_MODEL", "CHEAP_MODEL", "FRAMING_MODEL", "WORKER_MODEL"].includes(l.cle)) return `<input type="text" id="${id}" data-cle="${h(l.cle)}" value="${h(l.valeur)}"><div class="choix">${modeles.map((m) => `<button type="button" data-pour="${id}" data-val="${h(m)}" class="${l.valeur === m ? "actif" : ""}">${m || t("account default")}</button>`).join("")}</div>`;
+    if (["MODEL", "FALLBACK_MODEL", "SUBAGENT_MODEL", "CHEAP_MODEL", "FRAMING_MODEL", "WORKER_MODEL"].includes(l.cle)) return `<input type="text" id="${id}" data-cle="${h(l.cle)}" value="${h(l.valeur)}"><div class="choix">${(l.cle === "SUBAGENT_MODEL" ? [...modeles, "auto"] : modeles).map((m) => `<button type="button" data-pour="${id}" data-val="${h(m)}" class="${l.valeur === m ? "actif" : ""}">${m === "auto" ? t("chosen by the lead") : m || t("account default")}</button>`).join("")}</div>`;
     if (l.cle === "EFFORT") return `<input type="text" id="${id}" data-cle="${h(l.cle)}" value="${h(l.valeur)}"><div class="choix">${efforts.map((m) => `<button type="button" data-pour="${id}" data-val="${h(m)}" class="${l.valeur === m ? "actif" : ""}">${m || t("normal")}</button>`).join("")}</div>`;
     if (["RTK", "UNREAL_MCP", "CLOSE_AFTER_MILESTONE"].includes(l.cle) && (l.valeur === "0" || l.valeur === "1")) return `<label class="interrupteur m0"><input type="checkbox" id="${id}" data-cle="${h(l.cle)}" ${l.valeur === "1" ? "checked" : ""}> <span>${l.valeur === "1" ? t("enabled") : t("disabled")}</span></label>`;
     return `<input type="${l.secret && !etat.envSecrets ? "password" : "text"}" id="${id}" data-cle="${h(l.cle)}" value="${h(l.valeur)}" ${l.secret ? 'autocomplete="off"' : ""}>`;

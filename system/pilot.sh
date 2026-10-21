@@ -546,6 +546,9 @@ done
 # Instructions and team: always the kit's version, copied into the workshop (never into the project itself).
 CONSIGNES="$PRIVE/CLAUDE.md"
 cp -f "$KIT/template/CLAUDE.md" "$CONSIGNES"
+# SUBAGENT_MODEL=auto: the lead chooses the model of each sub-agent call (the Agent tool's "model"
+# parameter wins over the agent's own model); the defaults stay for a call that sets none
+[ "${SUBAGENT_MODEL,,}" = auto ] && cat "$KIT/template/guides/SUBAGENT_MODELS.md" >> "$CONSIGNES" 2>/dev/null
 # The language also goes at the end of each cycle's goal: the goal is written in English, and Claude
 # answers in the language of the message it receives unless told otherwise.
 case "${LANGUAGE:-en}" in
@@ -561,6 +564,9 @@ case "${LANGUAGE:-en}" in
 esac >> "$CONSIGNES"
 printf '%s\n' "$PHRASE_LANGUE" >> "$CONSIGNES"
 [ -f "$KIT/template/PC_TOOLS_GUIDE.md" ] && cp -f "$KIT/template/PC_TOOLS_GUIDE.md" "$ETAT/PC_TOOLS_GUIDE.md"
+# the parts of the instructions only some cycles need (framing, the user's tasks, the final report): read
+# when they apply rather than sent with every turn
+mkdir -p "$ETAT/guides" && cp -f "$KIT/template/guides/"*.md "$ETAT/guides/" 2>/dev/null
 rm -rf "$ETAT/CLAUDE.md" "$ETAT/CLAUDE.cycle.md" "$ETAT/mcp.json" "$ETAT/claude_settings.json"   # older versions
 rm -rf "$PRIVE/agents" && mkdir -p "$PRIVE/agents" && cp "$KIT/template/.claude/agents/"*.md "$PRIVE/agents/" 2>/dev/null
 # Sub-agents are passed to Claude Code as JSON (--agents); failing that, copied into PROJECT/.claude/agents.
@@ -825,16 +831,18 @@ but_cadrage() {  # $1 = 1 for the closing cycle, $2 = time box in minutes (empty
   if [ "$1" = 1 ]; then
     printf '%s' "/goal The framing is closed now: .athanor/PLAN.md is written from .athanor/REQUEST.md and the documents already in .athanor/docs (no more reading of attachments, no sub-agent, no code), $FORMAT_JALON, and .athanor/LOG.md has a new entry. Or stop after 12 turns. ${PHRASE_LANGUE}"
   else
-    printf '%s' "/goal The framing is done according to the Framing section of your instructions: .athanor/PLAN.md exists, $FORMAT_JALON; .athanor/docs/REQUIREMENTS.md and .athanor/docs/ARCHITECTURE.md exist; .athanor/LOG.md has a new entry. No code, no installation, no demo content in this cycle.${2:+ The pilot gives this cycle $2 minutes: write the plan well before that.} Or stop after ${MAX_TURNS_PER_CYCLE} turns. ${PHRASE_LANGUE}"
+    printf '%s' "/goal The framing is done according to the framing steps of your instructions: .athanor/PLAN.md exists, $FORMAT_JALON; .athanor/docs/REQUIREMENTS.md and .athanor/docs/ARCHITECTURE.md exist; .athanor/LOG.md has a new entry. No code, no installation, no demo content in this cycle.${2:+ The pilot gives this cycle $2 minutes: write the plan well before that.} Or stop after ${MAX_TURNS_PER_CYCLE} turns. ${PHRASE_LANGUE}"
   fi
 }
 consignes_cadrage() {  # $1 = 1 for the closing cycle, $2 = time box in minutes (empty: none)
   if [ "$1" = 1 ]; then
     printf '\n## This cycle: closing the framing\n\nThe framing cycle ended before the plan was written. Write `.athanor/PLAN.md` now, yourself, from `.athanor/REQUEST.md` and what is already in `.athanor/docs/`: each milestone one line starting with `- [ ] M1 : `. Do not read the attachments again, do not call any sub-agent, write no code. The missing details become milestones of the plan.\n'
   elif [ -n "$2" ]; then
-    printf '\n## This cycle: the framing (time box of %s min)\n\nThis cycle only writes the plan, as the Framing phase says: no code, no installation, no test of a tool, no demo content. The pilot stops it after %s minutes and starts the plan as it stands then: have `.athanor/PLAN.md` written within the first half of that time, refine after.\n' "$2" "$2"
+    printf '\n## This cycle: the framing (time box of %s min)\n\nThis cycle only writes the plan, with the steps below: no code, no installation, no test of a tool, no demo content. The pilot stops it after %s minutes and starts the plan as it stands then: have `.athanor/PLAN.md` written within the first half of that time, refine after.\n\n' "$2" "$2"
+    cat "$KIT/template/guides/FRAMING.md" 2>/dev/null
   else
-    printf '\n## This cycle: the framing\n\nThis cycle only writes the plan, as the Framing phase says: no code, no installation, no test of a tool, no demo content.\n'
+    printf '\n## This cycle: the framing\n\nThis cycle only writes the plan, with the steps below: no code, no installation, no test of a tool, no demo content.\n\n'
+    cat "$KIT/template/guides/FRAMING.md" 2>/dev/null
   fi
 }
 
@@ -929,6 +937,10 @@ while true; do
   parallele_lire_reglage
   if [ "$PARALLEL" = 1 ]; then parallele_absorber_file; synchroniser_demande; fi
   mode=serie; but_cycle="$BUT"; consignes="$CONSIGNES"; plan_seul=0
+  # the user answered tasks: how to handle the answers comes with this cycle
+  if [ -f "$ETAT/FOR_YOU_ANSWERED" ] && [ -f "$KIT/template/guides/FOR_YOU.md" ]; then
+    { cat "$consignes"; printf '\n\n'; cat "$KIT/template/guides/FOR_YOU.md"; } > "$PRIVE/CLAUDE.reponses.md"; consignes="$PRIVE/CLAUDE.reponses.md"
+  fi
   if [ "${ATHANOR_SANS_COAUTEUR:-0}" = 1 ]; then
     # the user does not want Claude as co-author: no such line in the commit messages, whatever the habit
     { cat "$CONSIGNES"; printf '\n## Commit messages\n\nNever add a `Co-Authored-By` line, a "Generated with" line or any mention of Claude or of an AI tool to a commit message: the commits are signed by the user alone.\n'; } > "$PRIVE/CLAUDE.auteur.md"
@@ -963,7 +975,7 @@ while true; do
   elif [ "$mode" = parallele ] && [ -f "$PRIVE/sonde_quota" ]; then
     mode=serie; log "After the quota stop: one milestone by the lead first, to check that the quota is back before starting workers."
   fi
-  QUOTA_OUVRIERS=0
+  QUOTA_OUVRIERS=0 MODELE_VERIF=""
   if [ "$mode" = parallele ]; then
     parallele_cycle "${fichier_log%.jsonl}" "$modele_cycle"
     code=$?
@@ -972,11 +984,7 @@ while true; do
   # serial while workers left partial work on their branches (quota, watchdog): the lead resumes it rather than redo it
   if [ "$mode" = serie ] && [ "$cadrage" != 1 ]; then
     partiels=""
-    while read -r br; do
-      [ -n "$br" ] || continue
-      grep -qE "^- \[ \] ${br#auto/}( |:|$)" "$ETAT/PLAN.md" 2>/dev/null || continue  # milestone already done: nothing to resume
-      [ "$(entier "$(g -C "$PROJECT" rev-list --count HEAD.."$br" 2>/dev/null)" 0)" -gt 0 ] && partiels+="${partiels:+, }\`$br\`"
-    done < <(g -C "$PROJECT" for-each-ref --format='%(refname:short)' 'refs/heads/auto/*' 2>/dev/null | head -n 20)
+    while read -r br; do partiels+="${partiels:+, }\`auto/$br\`"; done < <(parallele_branches_partielles | head -n 20)
     if [ -n "$partiels" ]; then
       { cat "$consignes"; printf '\n\n## Partial work left by workers\n\nThese branches hold work on a milestone started by a parallel worker that was stopped: %s. When you take one of these milestones, merge its branch first (`git merge --no-ff auto/<milestone>`) and carry on from there, never redo it; once the milestone is ticked, delete the branch (`git branch -D auto/<milestone>`).\n' "$partiels"; } > "$PRIVE/CLAUDE.serie.md"
       consignes="$PRIVE/CLAUDE.serie.md"
@@ -1043,7 +1051,7 @@ while true; do
       [ -f "$ETAT/PLAN.md" ] && log "Framing: .athanor/PLAN.md has no milestone line the pilot can read (each one must start with \"- [ ] M1 : \")."
     fi
   fi
-  enregistrer_stats "$fichier_log" "$etat"
+  modele_cycle="${MODELE_VERIF:-$modele_cycle}" enregistrer_stats "$fichier_log" "$etat"
   # Safeguard: a milestone ticked without "CHECK: PASSED" seen in the cycle log -> recheck first on the next cycle.
   coches_fin=$(coches_plan); coches_fin=${coches_fin:-0}
   if [ "$avant" != "$apres" ] && [ "$coches_fin" -gt "${coches_cycle_debut:-0}" ] \

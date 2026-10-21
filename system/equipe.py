@@ -220,14 +220,20 @@ def definition(a):
         x["model"] = simple
     elif a.get("modele") == "fort":
         x["model"] = "opus"
-    elif os.environ.get("SUBAGENT_MODEL"):
-        x["model"] = os.environ["SUBAGENT_MODEL"]
+    elif sous_agents():
+        x["model"] = sous_agents()
     return x
+
+
+def sous_agents():
+    """SUBAGENT_MODEL, or "" when it is empty or "auto" (the lead then chooses the model of each call)."""
+    m = os.environ.get("SUBAGENT_MODEL", "").strip()
+    return "" if m.lower() == "auto" else m
 
 
 def agents_athanor(dossier):
     """Athanor's sub-agents (template/.claude/agents copies), with their model."""
-    sous, simple = os.environ.get("SUBAGENT_MODEL", ""), os.environ.get("CHEAP_MODEL", "")
+    sous, simple = sous_agents(), os.environ.get("CHEAP_MODEL", "")
     out = {}
     for f in sorted(os.listdir(dossier)) if os.path.isdir(dossier) else []:
         if not f.endswith(".md"):
