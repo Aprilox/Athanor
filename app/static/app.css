@@ -264,6 +264,11 @@ details[open] summary { margin-bottom: 10px; }
 .jalons-mini .jalon-titre { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .quota-ligne { padding: 6px 0 8px; }
 .quota-ligne .barre { margin: 6px 0 4px; }
+.quota-barre { position: relative; overflow: visible; }
+.quota-seuil { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; background: var(--erreur); border-radius: 1px; }
+.quota-pied { align-items: center; gap: 8px; flex-wrap: wrap; }
+.quota-arret { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.quota-arret select { padding: 2px 6px; font-size: 12px; height: 24px; }
 .quota-ligne.haut .barre i { background: var(--attention); }
 .quota-ligne.plein .barre i { background: var(--erreur); }
 .avancement { width: 100%; height: auto; max-height: 230px; display: block; margin-top: 4px; }

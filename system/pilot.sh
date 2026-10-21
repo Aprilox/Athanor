@@ -445,7 +445,7 @@ prog_claude() {
 lancer_claude_surveille() {  # $1 = log; stops the cycle if it stays silent or runs too long
   local journal="$1" f_sid="$PRIVE/claude_sid" f_code="$PRIVE/claude_code"
   local pid_flux sid debut maintenant derniere motif="" tete coches_debut jalon_vu=0 h c fin_vu=0 ecart verifie
-  local relais_vu=0 dernier_ctx=0 ctx
+  local relais_vu=0 dernier_ctx=0 ctx dernier_quota=0 lq
   args_natifs args "$PRIVE/claude"
   prog_claude
   rm -f "$f_sid" "$f_code" "$PRIVE/cycle_arrete" "$PRIVE/cycle_clos" "$PRIVE/cycle_relais"
@@ -511,6 +511,12 @@ lancer_claude_surveille() {  # $1 = log; stops the cycle if it stays silent or r
           motif="context full ($(( ctx / 1000 ))k tokens): a fresh session takes over"
         fi
       fi
+    fi
+    # Quota threshold with "stop now" (the application's auto stop): the cycle is cut; the loop then stops
+    if [ -z "$motif" ] && [ -s "$REGLES_QUOTA" ] && [ $(( maintenant - dernier_quota )) -ge 60 ]; then
+      dernier_quota=$maintenant
+      lq=$(seuil_quota)
+      case "$lq" in maintenant$'\t'*) motif="quota threshold reached: ${lq##*$'\t'}" ;; esac
     fi
     if [ -n "$motif" ]; then
       echo "$motif" > "$PRIVE/cycle_arrete"
@@ -587,6 +593,39 @@ roblox_sync_demarrer() {
   [ -n "${SYNC_ANNONCE:-}" ] && return 0
   SYNC_ANNONCE=1
   log "Roblox Studio: Rojo project, the scripts reach the open Studio live (.athanor/studio/SYNC.luau), without restarting it."
+}
+
+# Automatic stops on the quota (Overview -> Subscription quota -> Auto stop): the rules the application
+# writes in the kit's logs/quota-arret.json, checked against the latest quota report of the cycle logs.
+# Read at each check: a rule changed in the application applies at once, without restarting the pilot.
+REGLES_QUOTA="$KIT/logs/quota-arret.json"
+seuil_quota() {  # prints "action<TAB>reset<TAB>message" when a rule is met
+  [ -s "$REGLES_QUOTA" ] || return 0
+  local js
+  mapfile -t js < <(ls -t "$ETAT/logs"/*.jsonl 2>/dev/null | head -n 6)
+  [ ${#js[@]} -gt 0 ] || return 0
+  timeout 20 python3 -I "$SYSTEME/quota.py" verifier "$REGLES_QUOTA" "${js[@]}" 2>/dev/null | head -n 1
+}
+appliquer_seuil_quota() {  # before a cycle: the pilot stops, or pauses until the window resets
+  local l action reinit message reprise
+  l=$(seuil_quota); [ -n "$l" ] || return 0
+  IFS=$'\t' read -r action reinit message <<< "$l"
+  reinit=$(entier "$reinit" 0)
+  if [ "$action" = pause ] && [ "$reinit" -gt 0 ]; then
+    reprise=$(date -d "@$(( reinit + 60 ))" '+%Y-%m-%d %H:%M')
+    ETAT_PHASE=quota; ETAT_REPRISE="$reprise"
+    log "Quota threshold reached: $message. Pausing until about $reprise, then resuming automatically."
+    statut "Quota threshold reached ($message), resuming around $reprise"
+    while [ "$(date +%s)" -lt $(( reinit + 60 )) ] && [ ! -f "$ETAT/STOP" ]; do
+      dormir 300
+      [ -n "$(seuil_quota)" ] || break   # the rule was lifted or changed in the application
+    done
+    ETAT_PHASE=""; ETAT_REPRISE=""
+    [ -f "$ETAT/STOP" ] || log "Quota threshold: resuming."
+    return 0
+  fi
+  ETAT_PHASE=arrete
+  terminer "Quota threshold reached: $message. The pilot stopped (Start to resume)."
 }
 
 attente_quota() {  # reads "resets 3:45pm" or "resets Mon 12:00am" when possible
@@ -1044,6 +1083,8 @@ while true; do
     continue
   fi
 
+  appliquer_seuil_quota
+  [ -f "$ETAT/STOP" ] && continue   # stopped while pausing: the loop's start ends the pilot
   synchroniser_demande
   signaler_reponses
   ranger_solutions "$ETAT/SOLUTIONS.md" "this project"

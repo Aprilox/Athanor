@@ -74,29 +74,30 @@ func (s *Serveur) vuesProjets(courant string) []ProjetVue {
 }
 
 type EtatVue struct {
-	KitValide   bool        `json:"kit_valide"`
-	KitInstalle bool        `json:"kit_installe"`
-	Kit         string      `json:"kit"`
-	Verrouille  bool        `json:"verrouille"`
-	MotDePasse  bool        `json:"mot_de_passe"`
-	Projets     []ProjetVue `json:"projets"`
-	Projet      *ProjetVue  `json:"projet"`
-	Actif       bool        `json:"actif"`
-	Etat        *Etat       `json:"etat"`
-	Contexte    int64       `json:"contexte"`
-	Plan        []Jalon     `json:"plan"`
-	Attente     int         `json:"attente"`
-	PourVous    int         `json:"pour_vous"`
-	Stats       []LigneStat `json:"stats"`
-	Bureau      EtatBureau  `json:"bureau"`
-	Maintenant  string      `json:"maintenant"`
-	DemandeVide bool        `json:"demande_vide"`
-	Langue      string      `json:"langue"`
-	Theme       string      `json:"theme"`
-	Accent      string      `json:"accent"`
-	Bienvenue   bool        `json:"bienvenue"`
-	Natif       bool        `json:"natif"` // native Windows mode: no Linux screen
-	Quota       *EtatQuota  `json:"quota,omitempty"`
+	KitValide   bool                  `json:"kit_valide"`
+	KitInstalle bool                  `json:"kit_installe"`
+	Kit         string                `json:"kit"`
+	Verrouille  bool                  `json:"verrouille"`
+	MotDePasse  bool                  `json:"mot_de_passe"`
+	Projets     []ProjetVue           `json:"projets"`
+	Projet      *ProjetVue            `json:"projet"`
+	Actif       bool                  `json:"actif"`
+	Etat        *Etat                 `json:"etat"`
+	Contexte    int64                 `json:"contexte"`
+	Plan        []Jalon               `json:"plan"`
+	Attente     int                   `json:"attente"`
+	PourVous    int                   `json:"pour_vous"`
+	Stats       []LigneStat           `json:"stats"`
+	Bureau      EtatBureau            `json:"bureau"`
+	Maintenant  string                `json:"maintenant"`
+	DemandeVide bool                  `json:"demande_vide"`
+	Langue      string                `json:"langue"`
+	Theme       string                `json:"theme"`
+	Accent      string                `json:"accent"`
+	Bienvenue   bool                  `json:"bienvenue"`
+	Natif       bool                  `json:"natif"` // native Windows mode: no Linux screen
+	Quota       *EtatQuota            `json:"quota,omitempty"`
+	QuotaArret  map[string]RegleQuota `json:"quota_arret"`
 }
 
 func (s *Serveur) apiEtat(w http.ResponseWriter, r *http.Request) {
@@ -137,6 +138,7 @@ func (s *Serveur) apiEtat(w http.ResponseWriter, r *http.Request) {
 	tous := append([]Projet{}, s.config.Projets...)
 	s.mu.Unlock()
 	vue.Quota = quotaActuel(tous)
+	vue.QuotaArret = lireReglesQuota(kit)
 	if ok {
 		for i := range vue.Projets {
 			if vue.Projets[i].Nom == p.Nom {
