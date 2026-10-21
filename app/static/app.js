@@ -289,6 +289,123 @@ function phraseEtat(v) {
   }
 }
 
+// ----------------------------------------------------------------------------- the window's own title bar
+// In Athanor's Windows window only (Go says so with window.__athanorCadre, see cadre_windows.go): the page
+// draws the bar, Windows moves, resizes and snaps the window. The three buttons are under invisible
+// windows of Go's that answer Windows (snap layouts on "maximize"): Go sends their hover and pressed
+// states. Elsewhere (a browser), nothing changes.
+const cadre = { actif: false, etat: {} };
+const CLIC_BARRE = "button, a, input, select, textarea";
+
+function rendreBarre(v) {
+  if (!cadre.actif) return;
+  const p = v.projet;
+  const projet = p ? `<span class="dot ${classePhase(p)}"></span><span>${h(p.nom)}</span>` : "";
+  const b = v.bureau || {}, act = [];
+  if (b.disponible && b.ecran) act.push(`<button type="button" class="fb-action" data-ecran title="${h(t("Go and see what Claude is showing (windows on the “Claude” desktop)"))}">${t("View Claude's screen")}</button>`);
+  else {
+    if (b.disponible) act.push(`<button type="button" class="fb-action" data-bureau="voir" title="${h(t("Go and see what Claude is showing (windows on the “Claude” desktop)"))}">${t("View Claude's desktop")}</button>`);
+    if (b.isole && !v.natif) act.push(`<button type="button" class="fb-action" data-ecran title="${h(t("The Linux windows Claude opens (a game under test, Godot, a browser) go to a private screen: never on yours, never taking the focus."))}">${t("Claude's Linux screen")}</button>`);
+  }
+  const html = act.join("");
+  if ($("#fb-projet").innerHTML !== projet) $("#fb-projet").innerHTML = projet;
+  if ($("#fb-actions").dataset.html !== html) { $("#fb-actions").dataset.html = html; $("#fb-actions").innerHTML = html; }
+}
+
+function peindreCadre() {
+  const e = cadre.etat;
+  document.documentElement.classList.toggle("fenetre-inactive", e.actif === false);
+  const max = $('[data-fenetre="agrandir"]');
+  max.textContent = e.max ? "\uE923" : "\uE922";
+  const noms = { reduire: t("Minimize"), agrandir: e.max ? t("Restore") : t("Maximize"), fermer: t("Close") };
+  document.querySelectorAll("[data-fenetre]").forEach((b) => {
+    const n = b.dataset.fenetre;
+    b.classList.toggle("survol", e.survol === n);
+    b.classList.toggle("appui", e.appui === n);
+    b.setAttribute("aria-label", noms[n]); b.title = noms[n];
+  });
+}
+
+// Go's state: hover, pressed, maximized, focus; {cadre: false} gives the bar back to Windows
+window.athanorCadre = (e) => {
+  if (!e) return;
+  if (e.cadre === false) { cadre.actif = false; document.documentElement.classList.remove("cadre"); $("#fenetre-barre").hidden = true; if (etat.vue) rendreBandeau(etat.vue); return; }
+  cadre.etat = e; peindreCadre();
+};
+
+function envoyerZones() {
+  if (!cadre.actif) return;
+  const z = (n) => { const r = $(`[data-fenetre="${n}"]`).getBoundingClientRect(); return [window.innerWidth - r.left, r.top, r.width, r.height]; };
+  window.athanorZones({ largeur: window.innerWidth, min: z("reduire"), max: z("agrandir"), fermer: z("fermer") }).catch(() => {}); // Go answers with athanorCadre
+}
+
+function initCadre() {
+  if (!window.__athanorCadre || typeof window.athanorFenetre !== "function" || typeof window.athanorZones !== "function") return;
+  cadre.actif = true;
+  document.documentElement.classList.add("cadre");
+  const barre = $("#fenetre-barre");
+  barre.hidden = false;
+  peindreCadre();
+  envoyerZones();
+  let attente = 0;
+  window.addEventListener("resize", () => { cancelAnimationFrame(attente); attente = requestAnimationFrame(envoyerZones); });
+  // dragging the bar moves the window (from 3 pixels on, so that a double click still maximizes)
+  let depart = null;
+  barre.addEventListener("mousedown", (e) => {
+    const libre = !e.target.closest(CLIC_BARRE);
+    if (libre) e.preventDefault(); // like Windows' bar: the field being typed in keeps the focus
+    depart = e.button === 0 && e.detail === 1 && libre ? [e.screenX, e.screenY] : null;
+  });
+  barre.addEventListener("dragstart", (e) => e.preventDefault());
+  window.addEventListener("mousemove", (e) => {
+    if (!depart) return;
+    if (!(e.buttons & 1)) { depart = null; return; }
+    if (Math.abs(e.screenX - depart[0]) + Math.abs(e.screenY - depart[1]) < 3) return;
+    depart = null; window.athanorFenetre("deplacer");
+  });
+  window.addEventListener("mouseup", () => { depart = null; });
+  barre.addEventListener("dblclick", (e) => { if (!e.target.closest(CLIC_BARRE)) window.athanorFenetre("agrandir"); });
+  barre.addEventListener("contextmenu", (e) => { e.preventDefault(); if (!e.target.closest(CLIC_BARRE)) window.athanorFenetre("menu"); });
+  barre.addEventListener("click", async (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    if (b.dataset.fenetre) return window.athanorFenetre(b.dataset.fenetre); // the keyboard (the mouse goes through Go)
+    if (b.dataset.bureau) return action(api("bureau/" + b.dataset.bureau, "POST"));
+    if (b.hasAttribute("data-ecran")) return ouvrirEcran();
+  });
+}
+initCadre();
+
+// Closing Athanor's window while native pilots run (fermeture_windows.go): the question in our own dialog.
+// Go waits for the answer: they go on in the background, they stop, or the window stays open.
+window.athanorFermeture = (noms) => {
+  if (typeof window.athanorFermer !== "function") return;
+  const fond = $("#fermeture");
+  const liste = Array.isArray(noms) ? noms.map(String) : [];
+  $("#fermeture-titre").textContent = t("Pilots are still running");
+  // locked: no project name (nothing of the projects shows while locked)
+  $("#fermeture-texte").textContent = etat.verrouille || !liste.length ? t("Pilots are running in native Windows mode.") : t("Pilots are running in native Windows mode: {0}.", [liste.join(", ")]);
+  $("#fermeture-aide").textContent = t("In the background, they go on without the window: reopen Athanor to follow them or stop them. Stopping them interrupts the cycle under way.");
+  const libelles = { annuler: t("Cancel"), arreter: t("Stop them"), continuer: t("Keep them running") };
+  fond.querySelectorAll("[data-fermer]").forEach((b) => { b.textContent = libelles[b.dataset.fermer]; });
+  const fin = (choix) => {
+    fond.hidden = true;
+    fond.onclick = null;
+    document.removeEventListener("keydown", clavier, true);
+    window.athanorFermer(choix);
+  };
+  const clavier = (e) => {
+    if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); fin("annuler"); }
+    else if (e.key === "Enter" && !document.activeElement.closest("[data-fermer]")) { e.preventDefault(); e.stopPropagation(); fin("continuer"); }
+  };
+  document.removeEventListener("keydown", fond._clavier || (() => {}), true);
+  fond._clavier = clavier;
+  document.addEventListener("keydown", clavier, true);
+  fond.onclick = (e) => { const b = e.target.closest("[data-fermer]"); if (b) fin(b.dataset.fermer); };
+  fond.hidden = false;
+  $('#fermeture [data-fermer="continuer"]').focus();
+  window.athanorFermer("affiche");
+};
+
 // ----------------------------------------------------------------------------- shell: header, sidebar, project picker
 function rendreBandeau(v) {
   const p = phraseEtat(v);
@@ -302,10 +419,11 @@ function rendreBandeau(v) {
       const enDemarrage = (etat.demarrage[v.projet.nom] || 0) > Date.now();
       boutons.push(`<button class="btn btn-primaire" data-act="demarrer" ${enDemarrage ? "disabled" : ""}>${enDemarrage ? t("Starting…") : t("Start")}</button>`);
     }
-    if (v.bureau && v.bureau.disponible) boutons.push(v.bureau.ecran
+    if (v.bureau && v.bureau.disponible && !cadre.actif) boutons.push(v.bureau.ecran
       ? `<button class="btn" data-ecran title="${h(t("Go and see what Claude is showing (windows on the “Claude” desktop)"))}">${t("View Claude's desktop")}</button>`
       : `<button class="btn" data-bureau="voir" title="${h(t("Go and see what Claude is showing (windows on the “Claude” desktop)"))}">${t("View Claude's desktop")}</button>`);
   }
+  rendreBarre(v);
   const nomProjet = v.projet ? `<div class="muet petit">${h(v.projet.nom)} · ${h(v.projet.dossier)}</div>` : "";
   const nbActifs = (v.projets || []).filter((x) => x.actif).length;
   $("#bandeau").innerHTML = `<div class="etat-phrase">${nomProjet}<h1><span class="point ${p.classe}"></span><span>${h(p.titre)}</span></h1><div class="sous">${h(p.sous)}</div></div><div class="actions">${boutons.join("")}</div>`;
@@ -1531,6 +1649,7 @@ pages.options = async () => {
         <label class="interrupteur"><input type="checkbox" id="op-lancer" data-option ${o.lancer_pilote_au_demarrage ? "checked" : ""}><span>${t("Restart the pilots that were running, when the app opens")}</span></label>
         <label class="interrupteur"><input type="checkbox" id="op-windows" data-option ${o.demarrage_windows ? "checked" : ""}><span>${t("Open Athanor when the computer starts (Windows, or your Linux desktop session)")}</span></label>
         <p class="muet petit">${t("Pilots run in WSL in the background, without a window. Remember to disable the PC's sleep mode.")}</p>
+        ${o.windows ? `<label class="interrupteur"><input type="checkbox" id="op-barre" data-option ${o.barre_windows ? "checked" : ""}><span>${t("Windows' own title bar instead of Athanor's (when Athanor opens again)")}</span></label>` : ""}
       </div>
       <div class="bloc"><h2>${t("Lock")}</h2>
         <p class="intro petit">${t("With a password, the padlock locks the app: Claude keeps working, but nothing can be seen, changed or read (keys included) without the password. The app starts locked.")}</p>
@@ -1573,7 +1692,7 @@ pages.options = async () => {
 // the native Windows switch is sent only where it is shown (Windows)
 function o_windows() { const b = $("#op-natif"); return !!(b && !b.closest(".bloc").hidden); }
 async function enregistrerOptions() {
-  const r = await action(api("options", "POST", { kit: $("#op-kit").value, lancer_pilote_au_demarrage: $("#op-lancer").checked, bureau_virtuel: $("#op-bureau").checked, programmes_supplementaires: $("#op-programmes").value, demarrage_windows: $("#op-windows").checked, mode_natif: $("#op-natif") && o_windows() ? $("#op-natif").checked : undefined }));
+  const r = await action(api("options", "POST", { kit: $("#op-kit").value, lancer_pilote_au_demarrage: $("#op-lancer").checked, bureau_virtuel: $("#op-bureau").checked, programmes_supplementaires: $("#op-programmes").value, demarrage_windows: $("#op-windows").checked, mode_natif: $("#op-natif") && o_windows() ? $("#op-natif").checked : undefined, barre_windows: $("#op-barre") ? $("#op-barre").checked : undefined }));
   if (r && document.activeElement && document.activeElement.matches("input[type=checkbox]")) rendrePage();
 }
 

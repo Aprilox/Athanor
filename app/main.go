@@ -96,6 +96,8 @@ func main() {
 	time.Sleep(150 * time.Millisecond)
 	lienApp = func() string { return s.lienOuverture(url) }
 	ecrireInstance(port)
+	barreDeWindows.Store(config.BarreWindows)
+	pilotesAvantFermeture = func() []string { _, noms := s.pilotesNatifs(); return noms }
 	if !FenetreApp(lienApp()) {
 		// Edge/Chrome window or the browser: the application keeps serving; a new launch opens another window.
 		OuvrirFenetreApp(lienApp())
