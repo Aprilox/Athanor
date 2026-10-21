@@ -9,7 +9,8 @@ PROJECT="${PROJECT:-$KIT/projet}"
 NATIF=0
 case "$(uname -s 2>/dev/null)" in MINGW*|MSYS*|CYGWIN*)
   NATIF=1
-  export PATH="$SYSTEME/natif:$PATH" MSYS2_ARG_CONV_EXCL='*'
+  # no sandbox, so no bridge: the gateways always run directly (for Claude, and for the pilot itself)
+  export PATH="$SYSTEME/natif:$PATH" MSYS2_ARG_CONV_EXCL='*' PONT_DIRECT=1
   PROJECT=$(cygpath -u "$PROJECT")
   [ -n "${TOOLS:-}" ] && TOOLS=$(cygpath -u "$TOOLS")
   ;;

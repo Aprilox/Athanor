@@ -47,6 +47,11 @@ func fichierScript(k Kit, script string) (string, error) {
 	nom := "logs/.cmd-" + hex.EncodeToString(h[:5]) + ".sh"
 	// written aside then renamed: a bash already reading the same script never sees it half written
 	dest := filepath.Join(k.Racine, filepath.FromSlash(nom))
+	// the name comes from the content: a file already there holds this very script. It may also be running
+	// (Git Bash keeps it open in native mode, and Windows refuses to replace an open file): kept as it is.
+	if st, err := os.Stat(dest); err == nil && st.Mode().IsRegular() {
+		return nom, nil
+	}
 	tmp, err := os.CreateTemp(filepath.Dir(dest), ".cmd-*.tmp")
 	if err != nil {
 		return nom, err
@@ -57,10 +62,13 @@ func fichierScript(k Kit, script string) (string, error) {
 	}
 	if err == nil {
 		err = os.Rename(tmp.Name(), dest)
+		if err != nil {
+			if st, e := os.Stat(dest); e == nil && st.Mode().IsRegular() {
+				err = nil // written meanwhile by the same command started twice: the same content
+			}
+		}
 	}
-	if err != nil {
-		os.Remove(tmp.Name())
-	}
+	os.Remove(tmp.Name()) // nothing left behind (once renamed, no file has that name any more)
 	return nom, err
 }
 

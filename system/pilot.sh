@@ -696,12 +696,14 @@ printf '%s' "$AIDE_CLAUDE" | grep -q -- '--setting-sources' && ARGS_SURS+=(--set
 # native Windows: the instructions go through a file (a Windows command line holds 32,767 characters)
 APPEND_FICHIER_OK=0
 printf '%s' "$AIDE_CLAUDE" | grep -q -- '--append-system-prompt-file' && APPEND_FICHIER_OK=1
-if [ "$NATIF" = 1 ] && [ "$APPEND_FICHIER_OK" = 0 ]; then
-  log "Native Windows mode: this Claude Code has no --append-system-prompt-file; update it (Setup & health -> Claude Code), cycles may fail."
-fi
 AGENTS_FICHIER_OK=0
 v_claude=$("$CLAUDE_BIN" --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n 1)
 [ -n "$v_claude" ] && [ "$(printf '%s\n2.1.281\n' "$v_claude" | sort -V | head -n 1)" = 2.1.281 ] && AGENTS_FICHIER_OK=1
+# --help does not list every option: a version that reads --agents from a file has this one too
+[ "$AGENTS_FICHIER_OK" = 1 ] && APPEND_FICHIER_OK=1
+if [ "$NATIF" = 1 ] && [ "$APPEND_FICHIER_OK" = 0 ]; then
+  log "Native Windows mode: Claude Code ${v_claude:-?} cannot read its instructions from a file; update it (Setup & health -> Install everything), long instructions may not fit on a Windows command line."
+fi
 if printf '%s' "$AIDE_CLAUDE" | grep -q -- '--agents'; then
   AGENTS_PAR_JSON=1
 else
