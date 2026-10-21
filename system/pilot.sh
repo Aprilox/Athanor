@@ -70,6 +70,7 @@ SUBAGENT_MODEL="${SUBAGENT_MODEL:-}"         # empty = same model as the project
 FRAMING_MODEL="${FRAMING_MODEL:-}"           # the framing cycle (the plan): empty = MODEL
 WORKER_MODEL="${WORKER_MODEL-sonnet}"        # parallel workers (a well-written milestone sheet is execution work); empty = MODEL
 FRAMING_MAX_MIN="${FRAMING_MAX_MIN:-25}"     # time box of the framing: the plan as it stands goes ahead after that
+RELAY_CONTEXT_K="${RELAY_CONTEXT_K:-150}"    # context (thousands of tokens) past which a fresh session takes over; 0 = never
 CHEAP_MODEL="${CHEAP_MODEL-haiku}"  # "executor" sub-agent (mechanical tasks); empty = like the other sub-agents
 IDLE_MAX_MIN="${IDLE_MAX_MIN:-30}"       # cycle stopped if its log stays silent that long
 CYCLE_MAX_MIN="${CYCLE_MAX_MIN:-180}"                # cycle stopped if it runs longer than this
@@ -79,7 +80,7 @@ STAY_ALIVE_AT_END="${STAY_ALIVE_AT_END:-0}"  # 1 = the pilot stays on standby at
 SECONDS_PER_MINUTE="${SECONDS_PER_MINUTE:-60}"      # only change to test the script
 # A non-numeric setting falls back to its default (and says so), never evaluated as is.
 for paire in MAX_HOURS=168 QUOTA_WAIT_MIN=20 ERROR_WAIT_MIN=2 ERROR_WAIT_MAX_MIN=60 LOGIN_WAIT_MIN=30 MAX_CYCLES_WITHOUT_PROGRESS=3 \
-             MAX_TURNS_PER_CYCLE=30 IDLE_MAX_MIN=30 CYCLE_MAX_MIN=180 WATCH_INTERVAL=30 SECONDS_PER_MINUTE=60 FRAMING_MAX_MIN=25; do
+             MAX_TURNS_PER_CYCLE=30 IDLE_MAX_MIN=30 CYCLE_MAX_MIN=180 WATCH_INTERVAL=30 SECONDS_PER_MINUTE=60 FRAMING_MAX_MIN=25 RELAY_CONTEXT_K=150; do
   v="${paire%%=*}"; defaut="${paire#*=}"
   [[ "${!v}" =~ ^[0-9]{1,12}$ ]] || { echo "Invalid setting $v (\"${!v}\"): using default $defaut." >&2; printf -v "$v" '%s' "$defaut"; }
 done
@@ -390,7 +391,8 @@ produit_change() {
 lancer_claude_surveille() {  # $1 = log; stops the cycle if it stays silent or runs too long
   local journal="$1" f_sid="$PRIVE/claude_sid" f_code="$PRIVE/claude_code"
   local pid_flux sid debut maintenant derniere motif="" tete coches_debut jalon_vu=0 h c fin_vu=0 ecart verifie
-  rm -f "$f_sid" "$f_code" "$PRIVE/cycle_arrete" "$PRIVE/cycle_clos"
+  local relais_vu=0 dernier_ctx=0 ctx
+  rm -f "$f_sid" "$f_code" "$PRIVE/cycle_arrete" "$PRIVE/cycle_clos" "$PRIVE/cycle_relais"
   tete=$(g -C "$PROJECT" rev-parse HEAD 2>/dev/null || echo aucun)
   coches_debut=$(coches_plan); coches_debut=${coches_debut:-0}
   : > "$journal"
@@ -435,6 +437,22 @@ lancer_claude_surveille() {  # $1 = log; stops the cycle if it stays silent or r
         if [ "$ecart" -ge 1200 ] || { [ "$verifie" = 1 ] && { [ "$ecart" -ge 600 ] \
            || { [ "$ecart" -ge 120 ] && timeout 20 bash -c '. "$1"; shift; g "$@"' _ "$SYSTEME/safety.sh" -C "$PROJECT" diff --quiet --no-ext-diff --no-textconv HEAD 2>/dev/null; }; }; }; then
           motif="milestone delivered and committed"; : > "$PRIVE/cycle_clos"
+        fi
+      fi
+    fi
+    # Context full: a fresh session takes over the milestone (cheaper turns, and no automatic compaction
+    # that would blur the thread). Only between two steps (no tool running), or 10 min later at most; the
+    # relay notes say where the session was. Not in the framing, nor in a verification after workers.
+    if [ -z "$motif" ] && [ "$RELAY_CONTEXT_K" -gt 0 ] && [ "${RELAIS_OK:-1}" = 1 ] && [ "${cadrage:-0}" != 1 ] && [ "$jalon_vu" = 0 ] \
+       && [ $(( maintenant - dernier_ctx )) -ge 60 ]; then
+      dernier_ctx=$maintenant
+      ctx=$(entier "$(timeout 20 python3 -I "$SYSTEME/relais.py" contexte "$journal" 2>/dev/null)" 0)
+      if [ "$ctx" -ge $(( RELAY_CONTEXT_K * 1000 )) ]; then
+        [ "$relais_vu" = 0 ] && relais_vu=$maintenant
+        if timeout 20 python3 -I "$SYSTEME/relais.py" sur "$journal" 2>/dev/null || [ $(( maintenant - relais_vu )) -ge 600 ]; then
+          timeout 30 python3 -I "$SYSTEME/relais.py" resume "$journal" "$ETAT/HANDOFF.md" > "$PRIVE/relais.md" 2>/dev/null
+          echo "$(( ctx / 1000 ))" > "$PRIVE/relais_k"; : > "$PRIVE/cycle_relais"
+          motif="context full ($(( ctx / 1000 ))k tokens): a fresh session takes over"
         fi
       fi
     fi
@@ -978,7 +996,7 @@ while true; do
     if [ -f "$ETAT/PLAN.md" ] && [ -f "$ETAT/REQUEST_CHANGED" ] && parallele_plan_a_des_vagues; then
       but_cycle="/goal The change of .athanor/REQUEST.md (flagged by .athanor/REQUEST_CHANGED) is folded into .athanor/PLAN.md as waves according to your parallel-mode instructions, the change is noted in .athanor/LOG.md, .athanor/REQUEST_CHANGED is deleted and the plan is committed, without writing any code. Or stop after 15 turns. ${PHRASE_LANGUE}"
       plan_seul=1; log "Parallel mode: the request changed, the lead updates the plan first."
-    elif [ -f "$ETAT/PLAN.md" ] && [ ! -f "$ETAT/RECHECK" ] && [ ! -f "$ETAT/REQUEST_CHANGED" ] && [ ! -f "$ETAT/REVERIFY" ] && [ ! -f "$ETAT/SECRETS_FOUND.md" ] && [ ! -f "$ETAT/SECRETS_PUBLISHED.md" ] && [ ! -f "$ETAT/TIDY" ] && [ ! -f "$ETAT/FOR_YOU_ANSWERED" ]; then
+    elif [ -f "$ETAT/PLAN.md" ] && [ ! -f "$ETAT/RECHECK" ] && [ ! -f "$ETAT/REQUEST_CHANGED" ] && [ ! -f "$ETAT/REVERIFY" ] && [ ! -f "$ETAT/SECRETS_FOUND.md" ] && [ ! -f "$ETAT/SECRETS_PUBLISHED.md" ] && [ ! -f "$ETAT/TIDY" ] && [ ! -f "$ETAT/FOR_YOU_ANSWERED" ] && [ ! -f "$ETAT/SAVE_CHECK" ] && [ ! -s "$PRIVE/relais.md" ]; then
       if parallele_plan_a_des_vagues; then
         # the pilot picks the mode of each cycle: workers only when they pay off (parallel.sh)
         raison_serie=$(parallele_raison_serie)
@@ -1022,6 +1040,14 @@ while true; do
       consignes="$PRIVE/CLAUDE.serie.md"
     fi
   fi
+  if [ "$mode" = serie ] && [ "$cadrage" != 1 ] && [ -s "$PRIVE/relais.md" ]; then
+    { cat "$consignes"; printf '\n\n'; cat "$PRIVE/relais.md"; } > "$PRIVE/CLAUDE.relais.md"; consignes="$PRIVE/CLAUDE.relais.md"
+    rm -f "$PRIVE/relais.md"
+  fi
+  # how to save what was done in the programs driven by the MCP servers of this cycle (system/extensions.py)
+  if [ "$mode" = serie ] && [ -f "$PRIVE/mcp.json" ] && [ -s "$PRIVE/mcp.json.sauvegarde.md" ]; then
+    { cat "$consignes"; printf '\n\n'; cat "$PRIVE/mcp.json.sauvegarde.md"; } > "$PRIVE/CLAUDE.mcp.md"; consignes="$PRIVE/CLAUDE.mcp.md"
+  fi
   if [ "$mode" = serie ]; then
     args=(-p "$but_cycle" --permission-mode bypassPermissions --settings "$REGLAGES" --permission-prompts none --output-format stream-json --verbose
           "${ARGS_SURS[@]}" --append-system-prompt "$(cat "$consignes")")
@@ -1052,6 +1078,7 @@ while true; do
   motif_arret=$(cat "$PRIVE/cycle_arrete" 2>/dev/null || true)
   rm -f "$PRIVE/cycle_arrete"
   clos=0; [ -f "$PRIVE/cycle_clos" ] && clos=1; rm -f "$PRIVE/cycle_clos"
+  relais=0; [ -f "$PRIVE/cycle_relais" ] && relais=1; rm -f "$PRIVE/cycle_relais"
 
   if printf '%s' "$texte_resultat" | grep -Eqi "hit your .*limit"; then
     etat=quota
@@ -1059,6 +1086,8 @@ while true; do
     etat=quota
   elif [ "$clos" = 1 ]; then
     etat=ok
+  elif [ "$relais" = 1 ]; then
+    etat=relais
   elif [ -n "$motif_arret" ]; then
     etat=bloque
   elif [ "$code" -eq 0 ] && [ "$en_erreur" != "true" ]; then
@@ -1086,6 +1115,17 @@ while true; do
   modele_cycle="${MODELE_VERIF:-$modele_cycle}" enregistrer_stats "$fichier_log" "$etat"
   # Safeguard: a milestone ticked without "CHECK: PASSED" seen in the cycle log -> recheck first on the next cycle.
   coches_fin=$(coches_plan); coches_fin=${coches_fin:-0}
+  if [ "$coches_fin" -gt "${coches_cycle_debut:-0}" ]; then
+    rm -f "$ETAT/HANDOFF.md"   # the milestone is done: its handover notes with it
+    # MCP servers drive programs that keep their work in memory (an editor, an engine…): used for a
+    # milestone whose commit changed no file, that work may exist nowhere yet. Claude saves it first.
+    serveurs=$(jq -rR 'fromjson? | select(type == "object" and .type == "assistant") | .message.content[]? | select(.type == "tool_use") | .name // empty' "$fichier_log" 2>/dev/null \
+      | awk -F'__' '/^mcp__/ && $2 != "" {print $2}' | sort -u | head -n 10 | tr '\n' ' ')
+    if [ -n "$serveurs" ] && ! produit_change "$avant" "$apres"; then
+      printf '%s\n' $serveurs > "$ETAT/SAVE_CHECK"
+      log "The milestone used MCP servers (${serveurs% }) but its commit changed no file: Claude first saves their work into the project on the next cycle."
+    fi
+  fi
   if produit_change "$avant" "$apres" && [ "$coches_fin" -gt "${coches_cycle_debut:-0}" ] \
      && [ -f "$ETAT/check.sh" ] && ! check_reussi "$fichier_log" "$(date -d "$ETAT_DEBUT_CYCLE" +%s 2>/dev/null || echo 0)"; then
     date '+%Y-%m-%d %H:%M' > "$ETAT/RECHECK"
@@ -1200,6 +1240,10 @@ while true; do
         : > "$PRIVE/sonde_quota"
         dormir "$attente"
       fi
+      ;;
+    relais)
+      erreurs=0
+      log "Cycle $cycle: context full ($(cat "$PRIVE/relais_k" 2>/dev/null)k tokens). A fresh session takes over the milestone now, from the relay notes."
       ;;
     connexion)
       ETAT_PHASE=connexion

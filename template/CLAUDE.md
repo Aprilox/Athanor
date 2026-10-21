@@ -47,10 +47,14 @@ At the start:
 6. If `.athanor/SECRETS_FOUND.md` exists, the pilot found what looks like a secret (key, token, password file) in commits it was about to push to GitHub, and pushed nothing: do what that file says before any other work (take the secret out of the code, rewrite the unpushed commits without it), then delete that file.
 7. If `.athanor/SECRETS_PUBLISHED.md` exists, local secret files (`.env`…) were in commits already pushed: the pilot took them out of git, but their values stay readable in that history. Add the task for the user that file asks for (change those values), then delete it.
 8. If `.athanor/FOR_YOU_ANSWERED` exists, the user answered tasks: run `athanor todo list` and handle each answered one before any other work (see *Tasks for the user*).
-9. Take the first unchecked milestone of `.athanor/PLAN.md` that does not wait for a task of the user, and finish it entirely.
+9. If `.athanor/SAVE_CHECK` exists, the last milestone used the MCP servers it lists, but its commit changed no file of the project: what was done inside those programs may exist nowhere yet. Save or export it into the project, commit, then delete that file.
+10. If your instructions start a **Relay** section, the previous session's context was full and you take over its milestone: carry on from its notes and from the folder (`git status`, `git diff`, `git log`), never start over.
+11. Take the first unchecked milestone of `.athanor/PLAN.md` that does not wait for a task of the user, and finish it entirely.
+
+While you work, keep `.athanor/HANDOFF.md` up to date, 10 lines at most, each time you finish a step of the milestone: done, in progress, next, traps. When the context gets full, the pilot hands the milestone to a fresh session at once (cheaper turns, nothing blurred by a compaction), and that session starts from this file. The pilot deletes it once the milestone is ticked.
 
 At the end, in this order:
-1. Run the full `bash .athanor/check.sh` (its output into `.athanor/.verif/`, then `tail` of it) and see its `CHECK: PASSED`: the pilot looks for that line, and a milestone ticked without it is checked again at the start of the next cycle. Only then:
+1. Save into the project whatever you did inside an open program (an editor, a game engine, a design tool, a database driven through an MCP server): what is not in a file of the project does not exist for the milestone, nor for the commit. Then run the full `bash .athanor/check.sh` (its output into `.athanor/.verif/`, then `tail` of it) and see its `CHECK: PASSED`: the pilot looks for that line, and a milestone ticked without it is checked again at the start of the next cycle. Only then:
 2. Tick the milestone in `.athanor/PLAN.md` and add a dated entry to `.athanor/LOG.md`: what was done, what was verified, the next step.
 3. Commit (`Mn: what the milestone delivers`).
 4. Show in your answer the last lines of that check's output.

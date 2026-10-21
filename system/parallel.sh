@@ -122,7 +122,8 @@ parallele_prets() {
 }
 
 # Two workers must not change the same files at once (their merges would conflict, and the lead would
-# merge them by hand). $1 = the line of a ready milestone, then "ident<TAB>line" for each running worker;
+# merge them by hand). $1 = the line of a ready milestone, then "ident<TAB>line[<TAB>reserved files,…]"
+# for each running worker;
 # prints the first running worker whose "Files:" share a file with it, nothing otherwise. Files listed by
 # 3 milestones or more of the plan (routes, package.json, shared types…) are left out: waiting on them
 # would make every milestone serial, and their small conflicts stay with the lead.
@@ -136,7 +137,7 @@ def fichiers(l):
         return set()
     out = set()
     for f in re.split(r"[,;]", m.group(1)):
-        f = re.sub(r"\s*\(.*$", "", f).strip().strip("`'\" ").lstrip("./").rstrip("/")
+        f = re.sub(r"\s*\(.*$", "", f).strip().strip("`'\" ").lstrip("./").rstrip("/.")
         f = f.split("*")[0].rstrip("/")   # a glob: its folder
         if f and " " not in f and len(f) < 200:
             out.add(f)
@@ -153,8 +154,10 @@ communs = {f for f, n in compte.items() if n >= 3}
 communs |= {"package-lock.json", "yarn.lock", "pnpm-lock.yaml", "composer.lock", "poetry.lock", "Cargo.lock", "go.sum"}
 miens = {f for f in fichiers(ligne) if f not in communs and f.rsplit("/", 1)[-1] not in communs}
 for a in autres:
-    ident, _, l = a.partition("\t")
-    if any(touche(x, y) for x in miens for y in fichiers(l) if y not in communs):
+    ident, _, reste = a.partition("\t")
+    l, _, res = reste.partition("\t")
+    siens = fichiers(l) | {f.strip().lstrip("./").rstrip("/") for f in res.split(",") if f.strip()}
+    if any(touche(x, y) for x in miens for y in siens if y not in communs):
         print(ident)
         break
 PY
@@ -255,6 +258,8 @@ You carry out **only** this milestone, in this folder (git worktree of the proje
 
 $([ "${4:-0}" = 1 ] && printf -- '- **This branch already holds partial work** from an earlier attempt that was stopped (quota, watchdog): read its commits (`git log --oneline -5`, `git show --stat HEAD`) and carry on from there, never start over.\n')
 - Other workers are doing other milestones at the same time, each in their own worktree; the pilot merges your branch as soon as you finish. Touch only the files of your milestone; if you must modify a shared file (common stylesheet, header...), make the minimal change and flag it in your report.
+- **The team board** \`.athanor/BOARD.md\` (written by the pilot every few seconds) shows what every other worker is doing and the files each one holds: its sheet's Files and the files it reserved. Read it before you start, and before you modify any file that is not in your sheet's Files. To take such a file, first add its path to \`.athanor/RESERVE\` (one path per line, relative to the project), wait 20 s, then read the board: it shows the file under your name, or the reservation refused because another worker holds it. Never modify a file another worker holds: do without it, or say in your report exactly what change it needs, for the lead.
+- Keep \`.athanor/HANDOFF.md\` up to date, 10 lines at most, each time you finish a step: done, in progress, next, traps. If your context gets full, the pilot hands your branch to a fresh worker, who starts from that file.
 - Do not modify \`.athanor/PLAN.md\` or \`.athanor/LOG.md\`: the project lead handles them after the merge.
 - $aides
 - Check with \`bash .athanor/check.sh quick <pattern>\` (or your milestone's tests if there is no script), then \`git add -A && git commit -m "$1: ..."\` on your branch. Commit even partial work, and say so.
@@ -319,7 +324,9 @@ parallele_lancer_ouvrier() {
   # plus the project's own sub-agents (created by the user, or proposed by the lead): system/equipe.py
   [ "$AGENTS_PAR_JSON" = 1 ] && agents_ouvrier=$(SUBAGENT_MODEL="$SUBAGENT_MODEL" CHEAP_MODEL="$CHEAP_MODEL" python3 "$SYSTEME/equipe.py" json "$KIT" "$PROJECT" "$PRIVE/agents" --ouvrier 2>/dev/null)
   [ "$agents_ouvrier" = "{}" ] && agents_ouvrier=""
-  { cat "$(parallele_consignes_base)"; parallele_consignes_ouvrier "$ident" "$ligne" "$([ -n "$agents_ouvrier" ] && echo 1)" "$reprise"; } > "$PRIVE/CLAUDE.ouvrier-$ident.md"
+  { cat "$(parallele_consignes_base)"; parallele_consignes_ouvrier "$ident" "$ligne" "$([ -n "$agents_ouvrier" ] && echo 1)" "$reprise"
+    if [ -s "$PRIVE/relais-$ident.md" ]; then printf '\n'; cat "$PRIVE/relais-$ident.md"; fi; } > "$PRIVE/CLAUDE.ouvrier-$ident.md"
+  rm -f "$PRIVE/relais-$ident.md"
   # The worker's sandbox: its worktree (PROJECT = the worktree, for the guard and the tools),
   # plus write access to the project's .git, where git stores the worktree's objects and branch.
   local principal="$PROJECT"
@@ -340,6 +347,7 @@ PY
   # its MCP servers work on its worktree; the skills are the project's
   python3 "$SYSTEME/extensions.py" mcp "$KIT" "$PROJECT" "$PRIVE/mcp-$ident.json" --dossier-mcp "$trav" --principal "$PROJECT" 2>> "$PRIVE/pilot.log"
   [ -f "$PRIVE/mcp-$ident.json" ] && a+=(--mcp-config "$PRIVE/mcp-$ident.json")
+  [ -f "$PRIVE/mcp-$ident.json" ] && [ -s "$PRIVE/mcp-$ident.json.sauvegarde.md" ] && a+=(--append-system-prompt "$(cat "$PRIVE/mcp-$ident.json.sauvegarde.md")")
   [ -n "${PLUGIN_ATHANOR:-}" ] && a+=(--plugin-dir "$PLUGIN_ATHANOR")
   local dp; for dp in "${PLUGINS_DIRS[@]}"; do a+=(--plugin-dir "$dp"); done
   [ -n "$template" ] && a+=(--model "$template")
@@ -405,7 +413,8 @@ PY
 parallele_cycle() {
   local prefixe="$1" template="$2" ident fait deps ligne debut maintenant derniere sid issue
   local -a courants=() fusionnes=() a_fusionner=() echoues=() traites=()
-  local modele_ouvrier="${WORKER_MODEL:-$template}" quota_vu=0 attentes=""
+  local modele_ouvrier="${WORKER_MODEL:-$template}" quota_vu=0 attentes="" ctx refuses="" attendus=""
+  declare -A reserves=() res_lus=() ctx_vu=() relais_vu=() relais_n=() debuts=()
   local limite=$(( PARALLEL_MAX < PARALLELE_DEPART ? PARALLEL_MAX : PARALLELE_DEPART ))
   declare -A lignes=()
   mkdir -p "$ETAT/work"
@@ -427,13 +436,14 @@ parallele_cycle() {
         [ "${#courants[@]}" -lt "$limite" ] || break
         case " ${traites[*]} " in *" $ident "*) continue ;; esac
         local occupe="" c; local -a encours=()
-        for c in "${courants[@]}"; do encours+=("$c"$'\t'"${lignes[$c]}"); done
+        for c in "${courants[@]}"; do encours+=("$c"$'\t'"${lignes[$c]}"$'\t'"${reserves[$c]:-}"); done
         [ "${#encours[@]}" -gt 0 ] && occupe=$(parallele_chevauchement "$ligne" "${encours[@]}")
         if [ -n "$occupe" ]; then   # it starts as soon as the other one is done
           case " $attentes " in *" $ident "*) ;; *) attentes+=" $ident"; log "Worker $ident waits for $occupe: they change the same files." ;; esac
+          attendus+=" $ident($occupe)"
           continue
         fi
-        traites+=("$ident"); lignes[$ident]="$ligne"
+        traites+=("$ident"); lignes[$ident]="$ligne"; debuts[$ident]=$(date '+%H:%M')
         if parallele_lancer_ouvrier "$ident" "$ligne" "$prefixe-$ident.jsonl" "$modele_ouvrier"; then
           courants+=("$ident"); log "Worker $ident started: ${ligne%% — *}"
         else
@@ -444,6 +454,52 @@ parallele_cycle() {
     done
     ETAT_OUVRIERS="${courants[*]}"
     statut "Workers in parallel: ${courants[*]:-none}${fusionnes[*]:+ · merged: ${fusionnes[*]}}"
+    tableau
+  }
+  # The team board, in every running worker's workshop: who does what, which files each one holds.
+  tableau() {
+    local c t
+    t=$({
+      echo "# Team board"
+      echo
+      echo "Written by the pilot every few seconds ($(date '+%H:%M:%S')). Never modify a file another worker holds: the Files of its sheet, or a file it reserved."
+      echo
+      echo "## At work now"
+      for c in "${courants[@]}"; do
+        printf -- '- **%s** since %s: %s%s\n' "$c" "${debuts[$c]:-?}" "$(printf '%s' "${lignes[$c]}" | cut -c1-400)" "${reserves[$c]:+ · reserved: ${reserves[$c]}}"
+      done
+      [ "${#fusionnes[@]}${#a_fusionner[@]}${#echoues[@]}" = 000 ] || { echo; echo "## Done in this cycle"; echo "- merged: ${fusionnes[*]:-none} · to merge by the lead: ${a_fusionner[*]:-none} · failed: ${echoues[*]:-none}"; }
+      [ -n "$attendus" ] && { echo; echo "## Waiting for a file a worker holds"; echo "-$attendus"; }
+      [ -n "$refuses" ] && { echo; echo "## Reservations refused"; printf '%s' "$refuses"; }
+    })
+    for c in "${courants[@]}"; do
+      [ -d "$ETAT/work/$c/.athanor" ] && [ ! -L "$ETAT/work/$c/.athanor" ] || continue
+      [ "$(cat "$ETAT/work/$c/.athanor/BOARD.md" 2>/dev/null | sed 1,3d)" = "$(printf '%s\n' "$t" | sed 1,3d)" ] && continue
+      # the worker can write in its workshop: never through a link it left there (rm, then a new file only)
+      rm -f "$ETAT/work/$c/.athanor/BOARD.md.neuf"
+      ( set -C; printf '%s\n' "$t" > "$ETAT/work/$c/.athanor/BOARD.md.neuf" ) 2>/dev/null && mv -f "$ETAT/work/$c/.athanor/BOARD.md.neuf" "$ETAT/work/$c/.athanor/BOARD.md"
+    done
+    attendus=""
+  }
+  # New lines of a worker's .athanor/RESERVE: granted unless another running worker holds the file.
+  reservations() {  # $1 = worker
+    local c="$1" f n=0 l d autre; local -a autres=()
+    f="$ETAT/work/$c/.athanor/RESERVE"
+    [ -f "$f" ] && [ ! -L "$f" ] || return 0
+    for d in "${courants[@]}"; do [ "$d" = "$c" ] || autres+=("$d"$'\t'"${lignes[$d]}"$'\t'"${reserves[$d]:-}"); done
+    while IFS= read -r l; do
+      n=$(( n + 1 )); [ "$n" -le "${res_lus[$c]:-0}" ] && continue
+      l=$(printf '%s' "$l" | tr -d '\r' | sed 's/^[[:space:]`]*//; s/[[:space:]`]*$//; s#^\./##')
+      [ -n "$l" ] || continue
+      case "$l" in /*|*..*|*,*|.athanor*) refuses+="- $c: $l (not a file of the project)"$'\n'; continue ;; esac
+      autre=""; [ "${#autres[@]}" -gt 0 ] && autre=$(parallele_chevauchement "Files: $l" "${autres[@]}")
+      if [ -n "$autre" ]; then
+        refuses+="- $c: $l (held by $autre)"$'\n'; log "Worker $c: reservation of $l refused, $autre holds it."
+      else
+        reserves[$c]+="${reserves[$c]:+,}$l"
+      fi
+    done < <(head -n 200 "$f")
+    res_lus[$c]=$n
   }
   log "Cycle $cycle (parallel): $limite workers to start with, up to $PARALLEL_MAX${modele_ouvrier:+, with $modele_ouvrier}"
   lancer_prets
@@ -454,6 +510,22 @@ parallele_cycle() {
     local -a restants=()
     for ident in "${courants[@]}"; do
       if kill -0 "$(pid_sur "$(cat "$PRIVE/ouvrier_$ident.pid" 2>/dev/null)")" 2>/dev/null; then
+        reservations "$ident"
+        # context full: its branch goes to a fresh worker, between two steps (10 min later at most), 3 times a cycle at most
+        if [ "$RELAY_CONTEXT_K" -gt 0 ] && [ "${relais_n[$ident]:-0}" -lt 3 ] && [ $(( maintenant - ${ctx_vu[$ident]:-0} )) -ge 60 ] && [ ! -f "$PRIVE/relais_ouvrier-$ident" ]; then
+          ctx_vu[$ident]=$maintenant
+          ctx=$(entier "$(timeout 20 python3 -I "$SYSTEME/relais.py" contexte "$prefixe-$ident.jsonl" 2>/dev/null)" 0)
+          if [ "$ctx" -ge $(( RELAY_CONTEXT_K * 1000 )) ]; then
+            [ -n "${relais_vu[$ident]:-}" ] || relais_vu[$ident]=$maintenant
+            if timeout 20 python3 -I "$SYSTEME/relais.py" sur "$prefixe-$ident.jsonl" 2>/dev/null || [ $(( maintenant - ${relais_vu[$ident]} )) -ge 600 ]; then
+              timeout 30 python3 -I "$SYSTEME/relais.py" resume "$prefixe-$ident.jsonl" "$ETAT/work/$ident/.athanor/HANDOFF.md" > "$PRIVE/relais-$ident.md" 2>/dev/null
+              : > "$PRIVE/relais_ouvrier-$ident"
+              log "Worker $ident: context full ($(( ctx / 1000 ))k tokens), a fresh worker takes over its branch."
+              sid=$(pid_sur "$(cat "$PRIVE/ouvrier_$ident.sid" 2>/dev/null)")
+              [ -n "$sid" ] && { pkill -TERM -s "$sid" 2>/dev/null; sleep 5; pkill -KILL -s "$sid" 2>/dev/null; }
+            fi
+          fi
+        fi
         derniere=$(entier "$(stat -c %Y "$prefixe-$ident.jsonl" 2>/dev/null)" "$debut")
         if [ $(( maintenant - derniere )) -ge $(( IDLE_MAX_MIN * SECONDS_PER_MINUTE )) ] || [ $(( maintenant - debut )) -ge $(( CYCLE_MAX_MIN * SECONDS_PER_MINUTE )) ]; then
           log "Worker $ident stopped by the watchdog."
@@ -464,6 +536,16 @@ parallele_cycle() {
       fi
       assainir "$ETAT"
       parallele_terminer_ouvrier "$ident" "$prefixe"
+      if [ -f "$PRIVE/relais_ouvrier-$ident" ]; then
+        # relayed: its work is committed on its branch, a fresh worker resumes it at once (relay notes kept)
+        rm -f "$PRIVE/relais_ouvrier-$ident"; relais_n[$ident]=$(( ${relais_n[$ident]:-0} + 1 )); unset "relais_vu[$ident]"
+        if [ "$issue" = echoue ]; then
+          local -a garde=(); local x; for x in "${traites[@]}"; do [ "$x" = "$ident" ] || garde+=("$x"); done; traites=("${garde[@]}")
+          unset "reserves[$ident]" "res_lus[$ident]"
+          continue
+        fi
+      fi
+      unset "reserves[$ident]" "res_lus[$ident]"
       case "$issue" in fusionne) fusionnes+=("$ident") ;; a_fusionner) a_fusionner+=("$ident") ;; *) echoues+=("$ident") ;; esac
       if journal_quota "$prefixe-$ident.jsonl"; then
         [ "$quota_vu" = 1 ] || log "Worker $ident met the quota: no other worker starts in this cycle."
@@ -474,6 +556,7 @@ parallele_cycle() {
       publier "$ETAT/WORKER_REPORTS.md" < "$PRIVE/rapports_ouvriers.md"
     done
     courants=("${restants[@]}")
+    tableau
     # the cycle's time budget is spent: no new worker, the lead verifies what is there
     [ $(( maintenant - debut )) -lt $(( CYCLE_MAX_MIN * SECONDS_PER_MINUTE )) ] && lancer_prets || { ETAT_OUVRIERS="${courants[*]}"; statut "Workers in parallel: ${courants[*]:-none}"; }
   done
@@ -515,7 +598,7 @@ parallele_cycle() {
   [ -n "$FALLBACK_MODEL" ] && [ "$verif" != "$FALLBACK_MODEL" ] && args+=(--fallback-model "$FALLBACK_MODEL")
   [ -n "$EFFORT" ] && args+=(--effort "$EFFORT")
   local clore="$CLOSE_AFTER_MILESTONE"; CLOSE_AFTER_MILESTONE=0   # the verification touches several milestones: do not close at the first one
-  lancer_claude_surveille "$fichier_log"
+  RELAIS_OK=0 lancer_claude_surveille "$fichier_log"
   local code=$?
   CLOSE_AFTER_MILESTONE="$clore"
   # the workers' model ran out during the verification: the pilot treats it as the workers' quota
