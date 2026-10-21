@@ -195,7 +195,18 @@ func LancerIsole(args []string) int {
 		drapeaux |= 0x4 // CREATE_SUSPENDED: placed in the job before it runs
 	}
 	var pi syscall.ProcessInformation
-	if err := syscall.CreateProcess(nil, ligne, nil, nil, heriter, drapeaux, nil, nil, si, &pi); err != nil {
+	if detache {
+		// out of the job Athanor.exe runs in (a native Windows cycle's, see finTout): a detached program (an
+		// editor) stays open after the cycle; refused by a job that does not allow it, it starts in it
+		err := syscall.CreateProcess(nil, ligne, nil, nil, heriter, drapeaux|createBreakawayFromJob, nil, nil, si, &pi)
+		if err != nil {
+			err = syscall.CreateProcess(nil, ligne, nil, nil, heriter, drapeaux, nil, nil, si, &pi)
+		}
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "Athanor: cannot start", args[0], ":", err)
+			return 127
+		}
+	} else if err := syscall.CreateProcess(nil, ligne, nil, nil, heriter, drapeaux, nil, nil, si, &pi); err != nil {
 		fmt.Fprintln(os.Stderr, "Athanor: cannot start", args[0], ":", err)
 		if err == syscall.Errno(740) { // ERROR_ELEVATION_REQUIRED: pc-exec retries through the administrator task
 			return 740
@@ -215,6 +226,9 @@ func LancerIsole(args []string) int {
 	job, _, _ := pCreateJobObjectW.Call(0, 0)
 	if job != 0 {
 		l := limitesJob{drapeaux: 0x2000} // JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+		if finTout {
+			l.drapeaux |= 0x800 // JOB_OBJECT_LIMIT_BREAKAWAY_OK: only for what asks for it (a detached editor)
+		}
 		pSetInformationJobObject.Call(job, 9, uintptr(unsafe.Pointer(&l)), unsafe.Sizeof(l))
 		pAssignProcessToJob.Call(job, uintptr(pi.Process))
 	}

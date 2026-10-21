@@ -420,7 +420,8 @@ type Jalon struct {
 	Acceptation string   `json:"acceptation"`
 	Notes       []string `json:"notes,omitempty"` // indented sub-bullets under the milestone
 	Complet     string   `json:"complet"`
-	Vague       string   `json:"vague,omitempty"` // parallel mode: title of the wave ("Wave 2") that starts at this milestone
+	Vague       string   `json:"vague,omitempty"`   // parallel mode: title of the wave ("Wave 2") that starts at this milestone
+	Archive     bool     `json:"archive,omitempty"` // done long ago: moved by the pilot to archives/PLAN_TERMINE.md
 }
 
 var reIdentJalon = regexp.MustCompile(`^([A-Za-z]+\d+(?:[.\-]?[A-Za-z0-9]+)?)`)
@@ -490,14 +491,42 @@ func decouperJalon(ligne string) Jalon {
 	return j
 }
 
+// LirePlan: the plan's milestones, the archived ones first (the pilot moves the oldest done milestones to
+// archives/PLAN_TERMINE.md to keep PLAN.md short: they are still part of the project's plan).
 func (p Projet) LirePlan() []Jalon {
 	b, err := os.ReadFile(p.Plan())
 	if err != nil {
 		return nil
 	}
+	plan := analyserPlan(string(b))
+	a, err := os.ReadFile(filepath.Join(p.Atelier(), "archives", "PLAN_TERMINE.md"))
+	if err != nil || len(a) > 8<<20 {
+		return plan
+	}
+	presents := map[string]bool{}
+	for _, j := range plan {
+		if j.ID != "" {
+			presents[j.ID] = true
+		}
+	}
+	var v []Jalon
+	for _, j := range analyserPlan(string(a)) {
+		if !j.Fait || (j.ID != "" && presents[j.ID]) {
+			continue
+		}
+		if j.ID != "" {
+			presents[j.ID] = true
+		}
+		j.Archive, j.Vague = true, ""
+		v = append(v, j)
+	}
+	return append(v, plan...)
+}
+
+func analyserPlan(texte string) []Jalon {
 	var v []Jalon
 	vague := ""
-	for _, l := range strings.Split(string(b), "\n") {
+	for _, l := range strings.Split(texte, "\n") {
 		t := strings.TrimLeft(l, " \t")
 		switch {
 		case strings.HasPrefix(t, "## ") && (strings.HasPrefix(strings.ToLower(t), "## wave") || strings.HasPrefix(strings.ToLower(t), "## vague")):

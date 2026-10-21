@@ -49,6 +49,16 @@ function rendreJalon(j, etatJalon, compact) {
   return `${j.vague ? `<li class="vague">${h(j.vague)}</li>` : ""}<li class="${etatJalon} ${ouvert ? "ouvert" : ""}" data-jalon-cle="${h(cle)}"><span class="jalon-ico">${ico}</span><div class="jalon-corps"><div class="jalon-titre">${md(j.titre)}<span class="jalon-chevron">${ouvert ? "▾" : "▸"}</span></div>${details}</div></li>`;
 }
 
+// The plan's list: the milestones the pilot archived (done long ago) are folded into one line that opens them.
+function listePlan(plan, compact) {
+  let premier = true;
+  const archives = plan.filter((j) => j.archive), reste = plan.filter((j) => !j.archive);
+  const ouvert = etat.ouverts.has("plan:archives");
+  const ligne = (j) => rendreJalon(j, etatDuJalon(j, () => premier ? (premier = false, true) : false), compact);
+  const tete = archives.length ? `<li class="coche plan-archives" data-plan-archives><span class="jalon-ico">✔</span><div class="jalon-corps"><div class="jalon-titre">${t("{0} milestone(s) done earlier", [archives.length])}<span class="jalon-chevron">${ouvert ? "▾" : "▸"}</span></div></div></li>` : "";
+  return tete + (ouvert ? archives.map(ligne).join("") : "") + reste.map(ligne).join("");
+}
+
 // ----------------------------------------------------------------------------- state
 const etat = {
   pieces: {}, // files waiting to be attached, per form
@@ -426,7 +436,7 @@ function rendreBandeau(v) {
   rendreBarre(v);
   const nomProjet = v.projet ? `<div class="muet petit">${h(v.projet.nom)} · ${h(v.projet.dossier)}</div>` : "";
   const nbActifs = (v.projets || []).filter((x) => x.actif).length;
-  $("#bandeau").innerHTML = `<div class="etat-phrase">${nomProjet}<h1><span class="point ${p.classe}"></span><span>${h(p.titre)}</span></h1><div class="sous">${h(p.sous)}</div></div><div class="actions">${boutons.join("")}</div>`;
+  $("#bandeau").innerHTML = `<div class="etat-phrase">${nomProjet}<h1 title="${h(p.titre)}"><span class="point ${p.classe}"></span><span>${h(p.titre)}</span></h1><div class="sous" title="${h(p.sous)}">${h(p.sous)}</div></div><div class="actions">${boutons.join("")}</div>`;
   $("#nav-sous").textContent = nbActifs ? t("{0} project(s) running", [nbActifs]) : t("idle");
   $("#nav-kit").textContent = v.kit || "";
   const sel = $("#sel-projet");
@@ -452,6 +462,7 @@ function rendreSelecteur(v) {
   const pos = avaitFocus ? document.activeElement.selectionStart : 0;
   m.innerHTML = `<input type="text" id="sel-recherche" placeholder="${h(t("Search a project…"))}" value="${h(etat.rechercheProjet || "")}">
     <div class="menu-liste">${liste.map((x) => `<a href="#suivi" data-projet="${h(x.nom)}" class="${x.courant ? "actif" : ""}"><span class="dot ${classePhase(x)}"></span><span class="nom">${h(x.nom)}</span><span class="muet petit">${x.actif ? t(x.phase === "quota" || x.phase === "attente_vous" ? "waiting" : "running") : t("stopped")}${x.attente ? " · " + t("{0} queued", [x.attente]) : ""}${x.pour_vous ? " · " + t("{0} for you", [x.pour_vous]) : ""}</span></a>`).join("") || `<div class="vide">${t("No project.")}</div>`}</div>
+    ${v.projet ? `<a href="#projet" class="menu-nouveau menu-gerer">⚙ ${t("Manage this project")}</a>` : ""}
     <a href="#nouveau" class="menu-nouveau">+ ${t("New project")}</a>
     ${archives ? `<a href="#archives" class="menu-nouveau menu-archives">🗄 ${t("Archived projects ({0})", [archives])}</a>` : ""}`;
   const r = $("#sel-recherche"); if (r) { r.focus(); r.setSelectionRange(pos, pos); }
@@ -519,7 +530,9 @@ function traduireNav() {
 }
 
 function naviguer() {
-  const page = (location.hash || "#suivi").slice(1);
+  let page = (location.hash || "#suivi").slice(1);
+  // the application's options are a tab of the settings now (older links, and the texts that say "Options")
+  if (page === "options") { etat.ongletReglages = "options"; history.replaceState(null, "", "#reglages"); page = "reglages"; }
   etat.page = page;
   document.querySelectorAll("#nav-liens a, #nav-outil a").forEach((a) => a.classList.toggle("actif", a.dataset.page === page));
   rendrePage();
@@ -567,10 +580,14 @@ $("#assistant").addEventListener("click", async (ev) => {
 // --- working mode of the project (serial lead, or parallel workers + merge)
 async function rendreMode() {
   const m = await api("mode").catch(() => null); if (!m) return "";
-  return `<div class="bloc"><h2>${t("Working mode")}</h2>
-    <label class="interrupteur"><input type="checkbox" id="md-parallele" ${m.parallele ? "checked" : ""}><span><b>${t("Parallel mode")}</b> — ${t("the lead writes a fine-grained plan with dependencies; workers build independent milestones at the same time, each in its own git working copy; the pilot merges each one as soon as it finishes and starts the next, and the lead verifies and fixes. Much faster; uses more quota (one session per worker).")}</span></label>
-    <div class="ligne ${m.parallele ? "" : "muet"}"><span class="petit">${t("Workers at most")}</span><div class="choix m0">${[2, 3, 4, 6, 8, 10].map((n) => `<button type="button" data-max="${n}" class="${m.parallele_max === n ? "actif" : ""}" ${m.parallele ? "" : "disabled"}>${n}</button>`).join("")}</div><span class="muet petit">${t("Starts with 2, adds one each time a worker delivers, and starts no more once the quota is met. Applies from the next cycle.")}</span></div>
-  </div>`;
+  // one line: the long explanations are in the tooltips
+  const long = t("the lead writes a fine-grained plan with dependencies; workers build independent milestones at the same time, each in its own git working copy; the pilot merges each one as soon as it finishes and starts the next, and the lead verifies and fixes. Much faster; uses more quota (one session per worker).");
+  return `<div class="bloc mode-ligne"><div class="ligne m0">
+    <h2 class="m0">${t("Working mode")}</h2>
+    <label class="interrupteur m0" title="${h(long)}"><input type="checkbox" id="md-parallele" ${m.parallele ? "checked" : ""}><span><b>${t("Parallel mode")}</b></span></label>
+    <span class="muet petit" title="${h(long)}">${m.parallele ? t("several workers at once: faster, uses more quota") : t("one milestone at a time; parallel: several workers at once, faster, more quota")}</span>
+    ${m.parallele ? `<span class="espace"></span><span class="petit" title="${h(t("Starts with 2, adds one each time a worker delivers, and starts no more once the quota is met. Applies from the next cycle."))}">${t("Workers at most")}</span><div class="choix m0">${[2, 3, 4, 6, 8, 10].map((n) => `<button type="button" data-max="${n}" class="${m.parallele_max === n ? "actif" : ""}">${n}</button>`).join("")}</div>` : ""}
+  </div></div>`;
 }
 async function enregistrerMode(parallele, max) {
   const r = await action(api("mode", "POST", { parallele, parallele_max: max }));
@@ -587,7 +604,6 @@ pages.suivi = async () => {
   const somme = (k) => stats.reduce((a, s) => a + (Number(s[k]) || 0), 0);
   const cache = somme("cache_lu"), plein = somme("entree_tokens") + somme("cache_ecrit");
   const ratio = cache + plein ? Math.round((cache / (cache + plein)) * 100) : 0;
-  let premier = true;
   return `${v.pour_vous ? `<a class="bloc pv-bandeau" href="#pourvous">🙋 <strong>${t("Claude needs you")}</strong> · ${t("{0} task(s) on the For you page", [v.pour_vous])} →</a>` : ""}
   <div class="grille grille-2">
     <div class="bloc"><h2>${t("Right now")}</h2>
@@ -606,7 +622,7 @@ pages.suivi = async () => {
     </div>
     <div class="bloc"><h2>${t("Project plan")}</h2>
       ${plan.length ? `<div class="barre"><i style="width:${(faits / plan.length) * 100}%"></i></div><div class="muet petit">${t("{0} / {1} milestones done", [faits, plan.length])}</div>
-      <ul class="plan">${plan.map((j) => { const c = etatDuJalon(j, () => premier ? (premier = false, true) : false); return rendreJalon(j, c, false); }).join("")}</ul>`
+      <ul class="plan">${listePlan(plan, false)}</ul>`
         : `<div class="vide">${t("No plan yet: Claude writes it during the first cycle (framing).")}</div>`}
     </div>
   </div>
@@ -615,14 +631,15 @@ pages.suivi = async () => {
       <div class="chiffre"><b>${stats.filter((s) => !String(s.cycle).includes("·")).length}</b><span>${t("cycles")}</span></div>
       <div class="chiffre"><b>${(() => { const m = Math.round(somme("minutes")); return `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")}`; })()}</b><span>${t("of work")}</span></div>
       <div class="chiffre"><b>${somme("tours")}</b><span>${t("turns")}</span></div>
-      <div class="chiffre"><b>${stats.some((s) => s.estime) ? "≈ " : ""}${somme("cout_usd").toFixed(2)} $</b><span>${t("at list price (your subscription quota pays)")}</span></div>
+      <div class="chiffre" title="${h(t("at list price (your subscription quota pays)"))}"><b>${stats.some((s) => s.estime) ? "≈ " : ""}${somme("cout_usd").toFixed(2)} $</b><span>${t("at list price")}</span></div>
       <div class="chiffre"><b>${ratio} %</b><span>${t("of tokens re-read from cache")}</span></div>
       <div class="chiffre"><b>${fmtTokens(somme("sortie_tokens"))}</b><span>${t("tokens produced")}</span></div>
       <div class="chiffre"><b>${fmtTokens(somme("contexte_max") / stats.length)}</b><span>${t("average peak context")}</span></div>
     </div>
     <div class="tableau mt-2"><table class="tab"><thead><tr><th>${t("Cycle")}</th><th>${t("Time")}</th><th>${t("Model")}</th><th>${t("State")}</th><th>${t("Minutes")}</th><th>${t("Turns")}</th><th>${t("Cost $")}</th><th>${t("Peak context")}</th></tr></thead><tbody>
-    ${stats.slice(-25).reverse().map((s) => `<tr><td>${s.cycle}</td><td>${h((s.horodatage || "").slice(11, 16))}</td><td>${h(s.template)}</td><td class="${h(s.etat)}">${h(s.etat)}</td><td>${Math.round(s.minutes)}</td><td>${s.tours}</td><td${s.estime ? ` title="${h(t("≈: estimated from the turns of the lead and its sub-agents (cycle closed by the pilot); ?: price of this model not learned yet"))}"` : ""}>${s.estime && !Number(s.cout_usd) && s.tours ? "?" : (s.estime ? "≈ " : "") + Number(s.cout_usd).toFixed(2)}</td><td>${fmtTokens(s.contexte_max)}</td></tr>`).join("")}
-    </tbody></table></div>` : `<div class="vide">${t("Numbers appear at the end of the first cycle.")}</div>`}
+    ${stats.slice(etat.ouverts.has("stats:tous") ? -200 : -5).reverse().map((s) => `<tr><td>${s.cycle}</td><td>${h((s.horodatage || "").slice(11, 16))}</td><td>${h(s.template)}</td><td class="${h(s.etat)}">${h(s.etat)}</td><td>${Math.round(s.minutes)}</td><td>${s.tours}</td><td${s.estime ? ` title="${h(t("≈: estimated from the turns of the lead and its sub-agents (cycle closed by the pilot); ?: price of this model not learned yet"))}"` : ""}>${s.estime && !Number(s.cout_usd) && s.tours ? "?" : (s.estime ? "≈ " : "") + Number(s.cout_usd).toFixed(2)}</td><td>${fmtTokens(s.contexte_max)}</td></tr>`).join("")}
+    </tbody></table></div>
+    ${stats.length > 5 ? `<button type="button" class="btn btn-petit mt-1" data-stats-tous>${etat.ouverts.has("stats:tous") ? t("Last 5 cycles only") : t("All {0} cycles", [stats.length])}</button>` : ""}` : `<div class="vide">${t("Numbers appear at the end of the first cycle.")}</div>`}
   </div>
   ${await rendreMode()}`;
 };
@@ -1474,7 +1491,6 @@ pages.demandes = async () => {
   const d = await api("demandes");
   const planTexte = (await api("plan").catch(() => ({ texte: "" }))).texte || "";
   const plan = d.plan || [];
-  let premier = true;
   const enCours = d.demande && !/^\s*$/.test(d.demande.replace(/^#.*$/gm, "").replace(/^\(.*\)$/gm, ""));
   const titreDemande = (d.demande.match(/^#\s*(.+)$/m) || [])[1] || t("Current request");
   return `
@@ -1507,7 +1523,7 @@ pages.demandes = async () => {
       <div class="flux">
         ${[...d.faites.filter((f) => f.livree), ...d.faites.filter((f) => !f.livree)].map((f) => `<div class="carte-demande ${f.livree ? "faite" : "integree"}"><div class="num">${f.livree ? "✔" : "+"}</div><div class="corps"><div class="titre">${h(f.titre)}</div><div class="meta">${f.livree ? t("done") : t("added to the plan")}${f.date ? " · " + h(f.date) : ""}</div></div></div>`).join("")}
         ${enCours ? `<div class="carte-demande en-cours"><div class="num">▶</div><div class="corps"><div class="titre">${h(titreDemande)}</div><div class="meta">${etat.vue && etat.vue.actif ? t("in progress") : t("current request, pilot stopped")}</div>
-          ${plan.length ? `<ul class="plan jalons-mini">${plan.map((j) => { const c = etatDuJalon(j, () => premier ? (premier = false, true) : false); return rendreJalon(j, c, true); }).join("")}</ul>` : ""}
+          ${plan.length ? `<ul class="plan jalons-mini">${listePlan(plan, true)}</ul>` : ""}
           </div></div>` : `<div class="vide">${t("No current request. Write the first one on the left: it becomes the project's request.")}</div>`}
         ${d.attente.map((a, i) => `<div class="carte-demande" data-fichier="${h(a.fichier)}"><div class="num">${i + 1}</div><div class="corps"><div class="titre">${h(a.apercu || a.nom)}</div><div class="meta">${t("queued")} · ${h(a.nom)}</div></div>
           <div class="tools"><button class="btn btn-petit" data-monter title="${h(t("Move up"))}" ${i === 0 ? "disabled" : ""}>↑</button><button class="btn btn-petit" data-descendre title="${h(t("Move down"))}" ${i === d.attente.length - 1 ? "disabled" : ""}>↓</button><button class="btn btn-petit btn-danger" data-retirer title="${h(t("Remove"))}">✕</button></div></div>`).join("")}
@@ -1606,26 +1622,60 @@ async function rendreSortie() {
 }
 
 // --- settings (.env)
-pages.reglages = async () => {
-  const lignes = await api("env" + (etat.envSecrets ? "?secrets=1" : ""));
-  const modeles = ["", "fable", "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5", "sonnet", "haiku"];
-  const efforts = ["", "low", "medium", "high", "xhigh", "max"];
-  const champ = (l) => {
-    const id = "env-" + l.cle;
-    if (["MODEL", "FALLBACK_MODEL", "SUBAGENT_MODEL", "CHEAP_MODEL", "FRAMING_MODEL", "WORKER_MODEL"].includes(l.cle)) return `<input type="text" id="${id}" data-cle="${h(l.cle)}" value="${h(l.valeur)}"><div class="choix">${(l.cle === "SUBAGENT_MODEL" ? [...modeles, "auto"] : modeles).map((m) => `<button type="button" data-pour="${id}" data-val="${h(m)}" class="${l.valeur === m ? "actif" : ""}">${m === "auto" ? t("chosen by the lead") : m || t("account default")}</button>`).join("")}</div>`;
-    if (l.cle === "EFFORT") return `<input type="text" id="${id}" data-cle="${h(l.cle)}" value="${h(l.valeur)}"><div class="choix">${efforts.map((m) => `<button type="button" data-pour="${id}" data-val="${h(m)}" class="${l.valeur === m ? "actif" : ""}">${m || t("normal")}</button>`).join("")}</div>`;
-    if (["RTK", "UNREAL_MCP", "CLOSE_AFTER_MILESTONE"].includes(l.cle) && (l.valeur === "0" || l.valeur === "1")) return `<label class="interrupteur m0"><input type="checkbox" id="${id}" data-cle="${h(l.cle)}" ${l.valeur === "1" ? "checked" : ""}> <span>${l.valeur === "1" ? t("enabled") : t("disabled")}</span></label>`;
-    return `<input type="${l.secret && !etat.envSecrets ? "password" : "text"}" id="${id}" data-cle="${h(l.cle)}" value="${h(l.valeur)}" ${l.secret ? 'autocomplete="off"' : ""}>`;
+// --- settings: one page, two tabs. "Claude": the pilot's settings (the kit's .env), grouped, with plain
+// names (the variable stays shown small, as in the documentation); "Options": the application's.
+// The labels of the settings Athanor knows: [group, name]. Unknown ones go to "Advanced".
+const REGLAGES = {
+  CLAUDE_CODE_OAUTH_TOKEN: ["connexion", "Connection token"],
+  MODEL: ["modeles", "Model of the lead"], FALLBACK_MODEL: ["modeles", "Fallback model"],
+  FRAMING_MODEL: ["modeles", "Model of the framing"], WORKER_MODEL: ["modeles", "Model of the parallel workers"],
+  SUBAGENT_MODEL: ["modeles", "Model of the sub-agents"], CHEAP_MODEL: ["modeles", "Cheap model"], EFFORT: ["modeles", "Thinking effort"],
+  CLOSE_AFTER_MILESTONE: ["marche", "One milestone per cycle"], RELAY_CONTEXT_K: ["marche", "Fresh session beyond"],
+  MAX_HOURS: ["marche", "Safety stop after"], CYCLE_MAX_MIN: ["marche", "Longest cycle"], IDLE_MAX_MIN: ["marche", "Silent cycle stopped after"],
+  FRAMING_MAX_MIN: ["marche", "Longest framing"], RTK: ["marche", "Compressed command outputs"],
+  LANGUAGE: ["avance", "Language of Claude's documents"], TZ: ["avance", "Time zone of the logs"],
+  QUOTA_WAIT_MIN: ["avance", "Wait when the quota's end is unknown"], ERROR_WAIT_MIN: ["avance", "Wait after an error"],
+};
+const GROUPES_REGLAGES = [["connexion", "Connection"], ["modeles", "Models"], ["marche", "How the pilot works"]];
+const MODELES = ["", "fable", "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5", "opus", "sonnet", "haiku"];
+const EFFORTS = ["", "low", "medium", "high", "xhigh", "max"];
+
+function champReglage(l) {
+  const id = "env-" + l.cle;
+  const liste = (valeurs, nom) => {
+    const connu = valeurs.includes(l.valeur);
+    return `<div class="ligne m0"><select data-modele="${id}">${valeurs.map((m) => `<option value="${h(m)}" ${l.valeur === m ? "selected" : ""}>${h(nom(m))}</option>`).join("")}<option value="__autre" ${connu ? "" : "selected"}>${t("Other…")}</option></select>
+      <input type="text" id="${id}" data-cle="${h(l.cle)}" value="${h(l.valeur)}" class="croit" ${connu ? "hidden" : ""} placeholder="${h(t("model name"))}"></div>`;
   };
+  const nomModele = (m) => m === "auto" ? t("chosen by the lead, call by call") : m || t("account default");
+  if (["MODEL", "FALLBACK_MODEL", "FRAMING_MODEL", "WORKER_MODEL", "CHEAP_MODEL"].includes(l.cle)) return liste(MODELES, nomModele);
+  if (l.cle === "SUBAGENT_MODEL") return liste([...MODELES, "auto"], nomModele);
+  if (l.cle === "EFFORT") return liste(EFFORTS, (m) => m || t("normal"));
+  if (["RTK", "UNREAL_MCP", "CLOSE_AFTER_MILESTONE"].includes(l.cle) && (l.valeur === "0" || l.valeur === "1")) return `<label class="interrupteur m0"><input type="checkbox" id="${id}" data-cle="${h(l.cle)}" ${l.valeur === "1" ? "checked" : ""}> <span>${l.valeur === "1" ? t("enabled") : t("disabled")}</span></label>`;
+  return `<input type="${l.secret && !etat.envSecrets ? "password" : "text"}" id="${id}" data-cle="${h(l.cle)}" value="${h(l.valeur)}" ${l.secret ? 'autocomplete="off"' : ""}>`;
+}
+
+pages.reglages = async () => {
+  const onglet = etat.ongletReglages === "options" ? "options" : "claude";
+  const tete = `<div class="onglets"><button class="${onglet === "claude" ? "actif" : ""}" data-onglet-reglages="claude">${t("Claude")}</button><button class="${onglet === "options" ? "actif" : ""}" data-onglet-reglages="options">${t("Options")}</button></div>`;
+  if (onglet === "options") return tete + await rendreOptions();
+  const lignes = await api("env" + (etat.envSecrets ? "?secrets=1" : ""));
+  const ligne = (l) => {
+    const nom = (REGLAGES[l.cle] || [])[1];
+    return `<div class="reglage"><div>${nom ? `<div class="nom-reglage">${h(t(nom))} <code class="cle-env">${h(l.cle)}</code></div>` : `<div class="cle">${h(l.cle)}</div>`}<div class="aide">${h(t(l.aide))}</div></div><div>${champReglage(l)}</div></div>`;
+  };
+  const groupe = (g) => lignes.filter((l) => (REGLAGES[l.cle] || ["avance"])[0] === g);
   const actif = etat.vue && etat.vue.actif;
-  return `<div class="ligne">
+  const avance = groupe("avance");
+  return `${tete}
+  <div class="ligne reglages-tete">
     <p class="muet m0 croit">${t("The pilot reads these settings when it starts. The token gives access to your subscription: never share it.")}</p>
-    <span class="espace"></span>
     <label class="interrupteur m0"><input type="checkbox" id="rg-secrets" ${etat.envSecrets ? "checked" : ""}> <span>${t("Show secrets")}</span></label>
     <button class="btn btn-primaire" id="rg-enregistrer">${t("Save")}</button>
     ${actif ? `<button class="btn" id="rg-redemarrer" title="${h(t("Saves, lets the current milestone finish, then restarts the pilot with the new settings."))}">${t("Save and restart after cycle")}</button>` : ""}
   </div>
-  <div class="bloc">${lignes.map((l) => `<div class="reglage"><div><div class="cle">${h(l.cle)}</div><div class="aide">${h(t(l.aide))}</div></div><div>${champ(l)}</div></div>`).join("")}</div>`;
+  ${GROUPES_REGLAGES.map(([g, titre]) => { const l = groupe(g); return l.length ? `<div class="bloc"><h2>${t(titre)}</h2>${l.map(ligne).join("")}</div>` : ""; }).join("")}
+  ${avance.length ? `<div class="bloc"><details><summary>${t("Advanced")} <span class="muet petit">${t("{0} setting(s)", [avance.length])}</span></summary>${avance.map(ligne).join("")}</details></div>` : ""}`;
 };
 
 function lireEnvFormulaire() {
@@ -1634,8 +1684,8 @@ function lireEnvFormulaire() {
   return v;
 }
 
-// --- options (saved as soon as a switch or a field changes)
-pages.options = async () => {
+// --- options (saved as soon as a switch or a field changes): the "Options" tab of the settings
+async function rendreOptions() {
   const o = await api("options");
   const b = o.bureau || {};
   return `<div class="grille grille-2">
@@ -1724,6 +1774,8 @@ async function changerApparence(theme, accent) {
 
 // Milestones of the plan: a click on the line opens or closes its details; the buttons inside edit the plan.
 $("#page").addEventListener("click", async (ev) => {
+  if (ev.target.closest("[data-stats-tous]")) { etat.ouverts.has("stats:tous") ? etat.ouverts.delete("stats:tous") : etat.ouverts.add("stats:tous"); rendrePage(); return; }
+  if (ev.target.closest("[data-plan-archives]")) { etat.ouverts.has("plan:archives") ? etat.ouverts.delete("plan:archives") : etat.ouverts.add("plan:archives"); rendrePage(); return; }
   const li = ev.target.closest("li[data-jalon-cle]"), bJ = ev.target.closest("[data-jalon-action]");
   if (bJ) {
     const id = bJ.dataset.jalon, act = bJ.dataset.jalonAction;
@@ -1809,11 +1861,11 @@ $("#page").addEventListener("click", async (ev) => {
     if (b.hasAttribute("data-claude")) { const r = await action(api("sante/claude", "POST", { id, complement: $("#st-complement").value })); if (r) { etat.tacheChoisie = r.tache; etat.verifChoisie = id; } return rendrePage(); }
   }
   if (page === "reglages") {
-    if (b.dataset.pour) { const i = $("#" + b.dataset.pour); i.value = b.dataset.val; b.parentElement.querySelectorAll("button").forEach((x) => x.classList.toggle("actif", x === b)); return; }
+    if (b.dataset.ongletReglages) { etat.ongletReglages = b.dataset.ongletReglages; return rendrePage(); }
     if (b.id === "rg-enregistrer") return action(api("env", "POST", lireEnvFormulaire()));
     if (b.id === "rg-redemarrer") { const r = await action(api("env", "POST", lireEnvFormulaire())); if (r) await action(api("pilote/redemarrer-apres-cycle", "POST")); return; }
   }
-  if (page === "options") {
+  if (page === "reglages") {
     if (b.dataset.gerer) { if (b.dataset.archive) { location.hash = "#archives"; return; } etat.projet = b.dataset.gerer; etat.evenements = []; etat.dernierJournal = 0; await rafraichir(); location.hash = "#projet"; return; }
     if (b.dataset.retirerProjet) { if (await confirmer(t("Remove “{0}” from the list? Its folder stays intact.", [b.dataset.retirerProjet]), { ok: t("Remove from list"), danger: true })) { await action(api("projets/" + encodeURIComponent(b.dataset.retirerProjet), "DELETE")); if (etat.projet === b.dataset.retirerProjet) etat.projet = ""; await rafraichir(); rendrePage(); } return; }
     if (b.id === "op-guide") { await action(api("preferences", "POST", { bienvenue_vue: false })); etat.assistant = 0; return rendreAssistant(); }
@@ -1826,7 +1878,8 @@ $("#page").addEventListener("change", (ev) => {
   if (i.dataset.filtre) { etat.filtres[i.dataset.filtre] = i.checked; rendreJournal(); }
   if (i.id === "rg-secrets") { etat.envSecrets = i.checked; rendrePage(); }
   if (i.type === "checkbox" && i.dataset.cle) i.nextElementSibling.textContent = i.checked ? t("enabled") : t("disabled");
-  if (etat.page === "options" && i.hasAttribute("data-option")) enregistrerOptions();
+  if (etat.page === "reglages" && i.hasAttribute("data-option")) enregistrerOptions();
+  if (i.dataset.modele) { const champ = $("#" + i.dataset.modele); if (i.value === "__autre") { champ.hidden = false; champ.focus(); } else { champ.hidden = true; champ.value = i.value; } }
   if (i.hasAttribute("data-gh-coauteur")) action(api("github", "POST", Object.assign({ action: "identite" }, lireAuteur()))).then((r) => { if (!r) i.checked = !i.checked; });
   if (i.id === "gh-auteur-email") { const a = $("#gh-auteur-autre"); a.hidden = i.value !== ""; if (!a.hidden) a.focus(); }
   if (i.hasAttribute("data-gh-auto")) action(api("github", "POST", { action: "auto", auto: i.checked })).then((r) => { if (!r) i.checked = !i.checked; });

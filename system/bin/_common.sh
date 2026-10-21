@@ -40,14 +40,17 @@ absent() { echo "$1 is not installed on this PC (or not detected). See .athanor/
 # and what they start stays there too. Usage: lancer_windows [--detache] PROGRAM ARGUMENTS...
 # Returns the program's exit code (--detache: returns at once, the program keeps running).
 lancer_windows() {
-  local detache=() prog pid_f p code
+  local detache=() prog pid_f p code ici=()
   [ "${1:-}" = "--detache" ] && { detache=(--detache); shift; }
-  if [ -f "$KIT/logs/bureau-isole" ] && [ -x "$KIT/Athanor.exe" ]; then
+  [ -f "$KIT/logs/bureau-isole" ] || ici=(--ici)
+  # Native Windows: a detached program (an editor) goes through Athanor.exe too, which takes it out of the
+  # cycle's Windows job: it stays open for the next cycles instead of stopping with this one.
+  if [ -x "$KIT/Athanor.exe" ] && { [ ${#ici[@]} -eq 0 ] || { [ "$NATIF" = 1 ] && [ ${#detache[@]} -gt 0 ]; }; }; then
     prog=$1
     [[ "$prog" == */* ]] || prog=$(command -v "$prog" 2>/dev/null || echo "$prog")
     [[ "$prog" == /* ]] && prog=$(wslpath -w "$prog")
     if [ ${#detache[@]} -gt 0 ]; then
-      "$KIT/Athanor.exe" --isole --detache -- "$prog" "${@:2}"
+      "$KIT/Athanor.exe" --isole "${ici[@]}" --detache -- "$prog" "${@:2}"
       return
     fi
     # A cancelled command (the bridge stops this process group) only stops the Linux side of WSL
