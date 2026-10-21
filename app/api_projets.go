@@ -219,6 +219,9 @@ func (s *Serveur) apiAgents(w http.ResponseWriter, r *http.Request) {
 		if m.Modele == "" {
 			m.Modele = reglages["SUBAGENT_MODEL"]
 		}
+		if strings.EqualFold(m.Modele, "auto") && (x.Nom == "executor" || x.Nom == "scout") {
+			m.Modele = map[string]string{"executor": simple, "scout": "sonnet"}[x.Nom] // their default when the lead sets none
+		}
 		if m.Modele == "" && x.Nom == "scout" {
 			m.Modele = "sonnet" // reading is execution work: Sonnet unless SUBAGENT_MODEL says otherwise
 		}

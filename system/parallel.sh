@@ -121,6 +121,63 @@ parallele_prets() {
   return 0
 }
 
+# Two workers must not change the same files at once (their merges would conflict, and the lead would
+# merge them by hand). $1 = the line of a ready milestone, then "ident<TAB>line" for each running worker;
+# prints the first running worker whose "Files:" share a file with it, nothing otherwise. Files listed by
+# 3 milestones or more of the plan (routes, package.json, shared types…) are left out: waiting on them
+# would make every milestone serial, and their small conflicts stay with the lead.
+parallele_chevauchement() {
+  python3 -I - "$ETAT/PLAN.md" "$@" <<'PY'
+import re, sys
+from collections import Counter
+def fichiers(l):
+    m = re.search(r"Files?:\s*(.*?)(?:\.\s+(?:Depends on|Acceptance|Read)\b|$)", l, re.I)
+    if not m:
+        return set()
+    out = set()
+    for f in re.split(r"[,;]", m.group(1)):
+        f = re.sub(r"\s*\(.*$", "", f).strip().strip("`'\" ").lstrip("./").rstrip("/")
+        f = f.split("*")[0].rstrip("/")   # a glob: its folder
+        if f and " " not in f and len(f) < 200:
+            out.add(f)
+    return out
+def touche(a, b):
+    return a == b or a.startswith(b + "/") or b.startswith(a + "/")
+plan, ligne, autres = sys.argv[1], sys.argv[2], sys.argv[3:]
+try:
+    lignes = [l for l in open(plan, encoding="utf-8").read().splitlines() if re.match(r"^- \[[ xX]\] ", l)]
+except OSError:
+    lignes = []
+compte = Counter(f for l in lignes for f in fichiers(l))
+communs = {f for f, n in compte.items() if n >= 3}
+communs |= {"package-lock.json", "yarn.lock", "pnpm-lock.yaml", "composer.lock", "poetry.lock", "Cargo.lock", "go.sum"}
+miens = {f for f in fichiers(ligne) if f not in communs and f.rsplit("/", 1)[-1] not in communs}
+for a in autres:
+    ident, _, l = a.partition("\t")
+    if any(touche(x, y) for x in miens for y in fichiers(l) if y not in communs):
+        print(ident)
+        break
+PY
+}
+
+# Branches auto/<milestone> left with work not merged (a worker stopped by the quota or the watchdog), for
+# milestones still open: one identifier per line. The branches of milestones already ticked are deleted:
+# their work is in, or was redone.
+parallele_branches_partielles() {
+  local br id ident fait deps ligne
+  declare -A etat=()
+  while IFS=$'\t' read -r ident fait deps ligne; do etat[$ident]=$fait; done < <(parallele_plan 2>/dev/null)
+  while read -r br; do
+    [ -n "$br" ] || continue
+    id=${br#auto/}
+    case "${etat[$id]:-}" in
+      1) g -C "$PROJECT" branch -D "$br" >/dev/null 2>&1 && log "Branch $br deleted: its milestone is done." >&2 ;;
+      0) [ "$(entier "$(g -C "$PROJECT" rev-list --count HEAD.."$br" 2>/dev/null)" 0)" -gt 0 ] && printf '%s\n' "$id" ;;
+    esac
+  done < <(g -C "$PROJECT" for-each-ref --format='%(refname:short)' 'refs/heads/auto/*' 2>/dev/null | head -n 50)
+  return 0
+}
+
 # Kept for the pilot: number of milestones that could start right now.
 parallele_vague_courante() { parallele_prets "" | head -n "$PARALLEL_MAX"; }
 
@@ -191,7 +248,14 @@ parallele_lancer_ouvrier() {
   if g -C "$PROJECT" rev-parse -q --verify "auto/$ident^{commit}" >/dev/null 2>&1 \
      && [ "$(entier "$(g -C "$PROJECT" rev-list --count HEAD.."auto/$ident" 2>/dev/null)" 0)" -gt 0 ] \
      && g -C "$PROJECT" worktree add -q "$trav" "auto/$ident" >/dev/null 2>&1; then
-    reprise=1; log "Worker $ident: resumes the work already on auto/$ident."
+    reprise=1
+    # on top of what was merged since, so that its own merge does not conflict; as it was if that fails
+    if g -C "$trav" rebase -q "$(g -C "$PROJECT" rev-parse HEAD)" >/dev/null 2>&1; then
+      log "Worker $ident: resumes the work already on auto/$ident, brought up to date."
+    else
+      g -C "$trav" rebase --abort >/dev/null 2>&1
+      log "Worker $ident: resumes the work already on auto/$ident (not brought up to date: it conflicts, the merge will tell)."
+    fi
   else
     g -C "$PROJECT" branch -D "auto/$ident" >/dev/null 2>&1 || true
     g -C "$PROJECT" worktree add -q -b "auto/$ident" "$trav" HEAD >/dev/null 2>&1 || { log "Worker $ident: cannot create the worktree."; return 1; }
@@ -299,7 +363,7 @@ PY
 parallele_cycle() {
   local prefixe="$1" template="$2" ident fait deps ligne debut maintenant derniere sid issue
   local -a courants=() fusionnes=() a_fusionner=() echoues=() traites=()
-  local modele_ouvrier="${WORKER_MODEL:-$template}" quota_vu=0
+  local modele_ouvrier="${WORKER_MODEL:-$template}" quota_vu=0 attentes=""
   local limite=$(( PARALLEL_MAX < PARALLELE_DEPART ? PARALLEL_MAX : PARALLELE_DEPART ))
   declare -A lignes=()
   mkdir -p "$ETAT/work"
@@ -308,6 +372,7 @@ parallele_cycle() {
   if [ -n "$(g -C "$PROJECT" status --porcelain --untracked-files=no 2>/dev/null)" ]; then
     g -C "$PROJECT" add -u >/dev/null 2>&1 && g -C "$PROJECT" commit -q -m "Work in progress before the parallel cycle (lead)" >/dev/null 2>&1 && log "Uncommitted changes of the lead committed before the cycle."
   fi
+  parallele_branches_partielles >/dev/null   # stale branches out before any worktree is made
   rm -f "$PRIVE"/ouvrier_*.sid "$PRIVE"/ouvrier_*.code "$PRIVE"/ouvrier_*.pid "$PRIVE"/mcp-*.json "$PRIVE/rapports_ouvriers.md"
   echo "# Worker reports ($(date '+%Y-%m-%d %H:%M'))" > "$PRIVE/rapports_ouvriers.md"
   debut=$(date +%s)
@@ -319,6 +384,13 @@ parallele_cycle() {
       while IFS=$'\t' read -r ident fait deps ligne; do
         [ "${#courants[@]}" -lt "$limite" ] || break
         case " ${traites[*]} " in *" $ident "*) continue ;; esac
+        local occupe="" c; local -a encours=()
+        for c in "${courants[@]}"; do encours+=("$c"$'\t'"${lignes[$c]}"); done
+        [ "${#encours[@]}" -gt 0 ] && occupe=$(parallele_chevauchement "$ligne" "${encours[@]}")
+        if [ -n "$occupe" ]; then   # it starts as soon as the other one is done
+          case " $attentes " in *" $ident "*) ;; *) attentes+=" $ident"; log "Worker $ident waits for $occupe: they change the same files." ;; esac
+          continue
+        fi
         traites+=("$ident"); lignes[$ident]="$ligne"
         if parallele_lancer_ouvrier "$ident" "$ligne" "$prefixe-$ident.jsonl" "$modele_ouvrier"; then
           courants+=("$ident"); log "Worker $ident started: ${ligne%% — *}"
@@ -378,7 +450,16 @@ parallele_cycle() {
     fichier_log="$prefixe.jsonl"
     return 1
   fi
-  log "Workers finished: merged ${fusionnes[*]:-none}; to merge ${a_fusionner[*]:-none}; failed ${echoues[*]:-none}. The lead verifies."
+  # every worker merged cleanly: the verification only runs the checks and ticks the plan, execution work
+  # for the workers' model; a conflict or a failure needs the lead's judgement, on its own model
+  local verif="$template"
+  if [ "${#a_fusionner[@]}" = 0 ] && [ "${#echoues[@]}" = 0 ] && [ -n "$modele_ouvrier" ] && [ "$modele_ouvrier" != "$template" ]; then
+    verif="$modele_ouvrier"
+    log "Workers finished: merged ${fusionnes[*]}, all cleanly. The verification runs with $verif."
+  else
+    log "Workers finished: merged ${fusionnes[*]:-none}; to merge ${a_fusionner[*]:-none}; failed ${echoues[*]:-none}. The lead verifies."
+  fi
+  MODELE_VERIF="$verif"
   statut "Merging milestones ${a_fusionner[*]} ${fusionnes[*]}"
   fichier_log="$prefixe.jsonl"
   local but="/goal The parallel cycle is verified according to your verification instructions: the branches ${a_fusionner[*]:-(none)} are merged, bash .athanor/check.sh has been run and its output is shown, .athanor/PLAN.md ticks exactly the milestones that pass, .athanor/LOG.md has a new entry, git log shows the commit. Or stop after ${MAX_TURNS_PER_CYCLE} turns. ${PHRASE_LANGUE}"
@@ -388,13 +469,15 @@ parallele_cycle() {
   [ -f "$PRIVE/mcp.json" ] && args+=(--mcp-config "$PRIVE/mcp.json")
   [ -n "${PLUGIN_ATHANOR:-}" ] && args+=(--plugin-dir "$PLUGIN_ATHANOR")
   local dp; for dp in "${PLUGINS_DIRS[@]}"; do args+=(--plugin-dir "$dp"); done
-  [ -n "$template" ] && args+=(--model "$template")
-  [ -n "$FALLBACK_MODEL" ] && [ "$template" != "$FALLBACK_MODEL" ] && args+=(--fallback-model "$FALLBACK_MODEL")
+  [ -n "$verif" ] && args+=(--model "$verif")
+  [ -n "$FALLBACK_MODEL" ] && [ "$verif" != "$FALLBACK_MODEL" ] && args+=(--fallback-model "$FALLBACK_MODEL")
   [ -n "$EFFORT" ] && args+=(--effort "$EFFORT")
   local clore="$CLOSE_AFTER_MILESTONE"; CLOSE_AFTER_MILESTONE=0   # the verification touches several milestones: do not close at the first one
   lancer_claude_surveille "$fichier_log"
   local code=$?
   CLOSE_AFTER_MILESTONE="$clore"
+  # the workers' model ran out during the verification: the pilot treats it as the workers' quota
+  [ "$verif" != "$template" ] && journal_quota "$fichier_log" && QUOTA_OUVRIERS=1
   # Merged branches: deleted; the others stay visible (git branch) until the next attempt.
   for ident in "${a_fusionner[@]}" "${echoues[@]}"; do
     g -C "$PROJECT" branch --merged HEAD 2>/dev/null | grep -qx "  auto/$ident" && g -C "$PROJECT" branch -d "auto/$ident" >/dev/null 2>&1

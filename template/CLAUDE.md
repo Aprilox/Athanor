@@ -73,17 +73,7 @@ The subscription quota is the scarcest resource. Everything you read or print st
 
 ## The phases
 
-**Phase 0: framing** (first cycle, no code, **time-boxed by the pilot**: your goal for this cycle gives the time box). Its only product is the plan: everything that can wait for a milestone waits for it.
-1. Read `.athanor/REQUEST.md`, the list of its attached files, `.athanor/PC_TOOLS.md` and the solutions files.
-2. What you cannot answer from them in a minute (what an existing code base holds, what the mock-ups show, which libraries fit) goes to up to 3 `scout` sub-agents **launched at once**, one question each. Each one answers in at most 40 lines, or writes one document (e.g. the visual description of the mock-ups, colours, fonts and components per screen, into `.athanor/docs/DESIGN.md`). Do not reread after them what they summarised.
-3. Write yourself, short and decided, in the workshop:
-   - `.athanor/docs/REQUIREMENTS.md`: goal, audience, features ranked (essential / important / bonus), out of scope, measurable success criteria;
-   - `.athanor/docs/DESIGN.md`, unless a scout wrote it: what defines the product (for a game: world, story in acts, characters, game loop, mechanics, controls, progression, interface, art and sound direction; for an application: user journeys, screens, data, business rules, visual style);
-   - `.athanor/docs/ARCHITECTURE.md`: justified stack (built and tested here with the tools of `.athanor/PC_TOOLS.md` or installable into `$TOOLS`), folders, modules, shared contracts (data shapes, API routes, conventions), test strategy, contents of `check.sh`;
-   - `.athanor/PLAN.md`: 8 to 25 milestones, one line each, every line a **self-contained sheet**: `- [ ] M7 : Contact form with validation — Files: contact.html, js/contact.js, tests/contact.spec.ts. Depends on: M1. Acceptance: empty submit shows 5 errors; check.sh quick contact passes. Read: DESIGN.md §Contact, ARCHITECTURE.md §Forms.` A milestone is 20 to 30 minutes of work for someone who reads only its line and what `Read` names. M1 is always the runnable skeleton with `check.sh` and the shared contracts.
-4. One `critic` pass on `.athanor/PLAN.md`, briefed as a **plan reviewer** rather than an end user: missing features from the requirements, wrong or missing dependencies, milestones too big or not self-contained, acceptance criteria that cannot be checked. Fix what it found. Once, no loop.
-
-Never in the framing: writing code, installing a tool or testing one (`.athanor/PC_TOOLS.md` says what is there; an installation is milestone work), rendering or measuring the attachments yourself after a scout did, writing **demo content** (sample data, lessons, articles, products, level texts: it is a milestone of its own near the end of the plan). When the time box is spent, the pilot starts the plan as it stands: have `.athanor/PLAN.md` written within the first half of the time box, refine it after.
+**Phase 0: framing** (first cycle, no code, time-boxed by the pilot). Its only product is the plan: `.athanor/docs/REQUIREMENTS.md`, `DESIGN.md`, `ARCHITECTURE.md` and `.athanor/PLAN.md`, one self-contained line per milestone. The pilot gives the detailed steps in that cycle (`.athanor/guides/FRAMING.md`).
 
 **Phase 1: executable skeleton.** A project that builds and runs, first automated tests, and the `bash .athanor/check.sh` script (build + tests + at least one screenshot in `.athanor/screenshots/`), with its quick mode `bash .athanor/check.sh quick [pattern]` (see "Working fast and frugally"); the script must accept the `quick` keyword as its first argument. It must return exit code 0 only if everything is fine and print a short summary. All following cycles use it.
 
@@ -96,37 +86,11 @@ Never in the framing: writing code, installing a tool or testing one (`.athanor/
 **Phase 5: delivery.**
 - `deliverable/`: the ready-to-use result. For the web: a static site whose `deliverable/index.html` works when the folder is served as is (the user will see it at http://localhost:8080). For a program: the executable or the archive for the user's platform (Windows by default if `.athanor/REQUEST.md` says nothing), with its instructions.
 - `TEST_GUIDE.md`: how to launch, controls or user manual, and a list of things to test by hand.
-- `.athanor/FINAL_REPORT.md` (see the template below), which contains the line `STATUS: DONE`. That line stops the loop: write it only when everything is delivered and verified.
+- `.athanor/FINAL_REPORT.md`, with the headings of `.athanor/guides/FINAL_REPORT.md`, which contains the line `STATUS: DONE`. That line stops the loop: write it only when everything is delivered and verified.
 
 ## Tasks for the user
 
-Some steps only the user can do: create an account (Shopify, Cloudflare, a supplier, a store…), pay or choose a plan, receive a code by email or SMS, pass a captcha or an identity check, accept terms, generate an API key with the right permissions, buy a domain. First make sure it really needs them (an API, a CLI, a free alternative, a test mode?), then hand it over with `athanor todo` (never by editing `.athanor/for-you/` or `.athanor/secrets.env` by hand):
-
-```
-athanor todo add "Create a Shopify development store" --need "the store's address (xxx.myshopify.com)" \
-  --secret SHOPIFY_ADMIN_TOKEN --milestone M3 <<'EOF'
-1. Open https://partners.shopify.com and create a free Partner account.
-2. Stores › Add store › Create development store; any name.
-3. In the store: Settings › Apps › Develop apps › Create an app; Admin API scopes: write_products, write_themes.
-4. Install the app and paste the Admin API access token into the protected field.
-EOF
-```
-
-- One task = one thing the user can do in a few minutes. Title in the imperative; numbered steps with the exact links, menus and settings to choose; `--need` says what to give back; one `--secret NAME` per key, password or token (the user types it in a protected field and it lands in `.athanor/secrets.env`, never in the text); `--milestone` the milestones it blocks. Group what goes together, check `athanor todo list` first so as never to ask twice, and refine a task with `athanor todo edit ID`.
-- The user sees it at once in the application (page *For you*). Do not wait: note `(waits for T1)` at the end of the blocked milestones in `.athanor/PLAN.md` and go on with the others, preparing everything around the missing piece (code, scripts, configuration read from environment variables).
-- If every unticked milestone waits for the user, run `athanor todo wait`, note it in `.athanor/LOG.md`, commit and end the cycle: the pilot pauses and starts the next cycle as soon as the user answers.
-- **Answers** (`.athanor/FOR_YOU_ANSWERED`, `athanor todo list`):
-  - *done*: check it for real by retrying what was blocked (the API call, the sign-in, the deployment, the DNS record…). It works: `athanor todo ok ID "what you checked"`. It does not: `athanor todo missing ID "exactly what is still missing or wrong, and how to fix it"`; the task goes back to the user with your message.
-  - *skipped* ("find another way"): the user will not do it. Find a way without it (another service, a free alternative, a simplified feature, a step documented for after the delivery), adapt `.athanor/PLAN.md` (remove the `(waits for …)` mark), then `athanor todo resolved ID "what you did instead"`. Never ask for the same thing again; their text may say what they prefer.
-  - A task no longer needed (you found a way yourself): `athanor todo resolved ID "why"`.
-- The delivery waits for the tasks that block it; an optional one still open goes into the final report under "Known limits".
-
-## Default technical choices
-
-If `.athanor/REQUEST.md` imposes nothing, favor what can be built and tested entirely here, without human intervention:
-- **Game**: web, TypeScript + Vite, Three.js for 3D or Phaser for 2D. Logic tests with Vitest, browser tests and screenshots with Playwright (through `tool`). If **Unreal Engine** is requested and present in `.athanor/PC_TOOLS.md`, use it (C++ or Blueprints, MCP, `unreal-cmd` for automated tests and screenshots, `unreal-uat` for the executable). Another engine requested: install it in `$TOOLS` and drive it from the command line.
-- **Application or website**: web (TypeScript + Vite; React if the interface is rich).
-- **Tool, script, automation**: Python or Node.
+Some steps only the user can do: create an account, pay or choose a plan, receive a code by email or SMS, pass a captcha, accept terms, generate an API key, buy a domain. First make sure it really needs them (an API, a CLI, a free alternative, a test mode?). Then **read `.athanor/guides/FOR_YOU.md`** and hand it over with `athanor todo` as it explains (never by editing `.athanor/for-you/` or `.athanor/secrets.env` by hand). Do not wait for the answer: mark the blocked milestones `(waits for T1)` and go on with the others. The same guide says how to handle the user's answers (`.athanor/FOR_YOU_ANSWERED`).
 
 ## Programmatically created assets
 
@@ -169,22 +133,6 @@ A sub-agent starts from scratch: it rereads the documents and the code, which co
 When you delegate, note it in `.athanor/LOG.md` ("architect: ..."), so that the user sees who did what.
 
 Wait for their answer directly: never launch a sub-agent or a command in the background and then wait with `sleep`, a loop or a wake-up. Reread what they return without redoing their work.
-
-## Template for .athanor/FINAL_REPORT.md
-
-```
-# Final report
-STATUS: DONE
-
-## In short
-## How to launch and test
-## What was built
-## Deviations from the request and why
-## Known limits and remaining bugs
-## Important decisions
-## Figures (milestones, tests, commits, duration)
-## Ideas for later
-```
 
 ## Never freeze
 
