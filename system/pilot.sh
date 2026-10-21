@@ -157,9 +157,10 @@ enregistrer_stats() {  # one line per cycle in .athanor/stats.tsv (read by the a
     timeout 20 python3 -I "$SYSTEME/cout.py" apprendre "$tarifs" "$f" 2>> "$PRIVE/pilot.log"
   else
     # Cycle closed by the pilot or stopped (no "result" line, so no cost from Claude Code): the lead's
-    # turns, each message counted once, at the learned prices. Its sub-agents are not in the log: a floor.
+    # turns, each message counted once, at the learned prices, plus its sub-agents' turns, from the
+    # transcripts Claude Code keeps of them (CONFIG_CLAUDE/projects/*/<session>/subagents)
     local debut_s; debut_s=$(date -d "${ETAT_DEBUT_CYCLE:-now}" +%s 2>/dev/null || date +%s)
-    res=$(timeout 30 python3 -I "$SYSTEME/cout.py" estimer "$tarifs" "$f" 2>> "$PRIVE/pilot.log" \
+    res=$(timeout 60 python3 -I "$SYSTEME/cout.py" estimer "$tarifs" "$f" "$CONFIG_CLAUDE" 2>> "$PRIVE/pilot.log" \
       | jq -c --argjson d "$(( $(date +%s) - debut_s ))" '. + {duration_ms: ($d*1000)}' 2>/dev/null)
     [ -n "$res" ] && estime=1
   fi
@@ -369,9 +370,26 @@ fusionner_solutions() {  # $1 = the main file, $2 = a parallel worker's copy
   return 0
 }
 
+# A successful check.sh run seen for this cycle: in Claude's log, or in a check output file written during
+# the cycle (the lead often sends the long output to .athanor/.verif/*.log and only shows its tail; the
+# last "CHECK:" line of the newest one counts). $1 = log, $2 = start of the cycle (seconds).
+check_reussi() {
+  grep -q "CHECK: PASSED" "$1" 2>/dev/null && return 0
+  local f
+  f=$(find "$ETAT/.verif" "$ETAT/check-logs" -maxdepth 2 -type f -newermt "@$2" -size -20M -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n 1 | cut -d' ' -f2-)
+  [ -n "$f" ] && grep -a "CHECK: " "$f" 2>/dev/null | tail -n 1 | grep -q "CHECK: PASSED"
+}
+# The commits between $1 and $2 change tracked files (the product). A cycle that only updated the plan
+# (the workshop is outside git) needs no check.
+produit_change() {
+  [ "$1" != "$2" ] || return 1
+  [ "$1" = aucun ] && return 0
+  ! g -C "$PROJECT" diff --quiet "$1" "$2" 2>/dev/null
+}
+
 lancer_claude_surveille() {  # $1 = log; stops the cycle if it stays silent or runs too long
   local journal="$1" f_sid="$PRIVE/claude_sid" f_code="$PRIVE/claude_code"
-  local pid_flux sid debut maintenant derniere motif="" tete coches_debut jalon_vu=0 h c fin_vu=0
+  local pid_flux sid debut maintenant derniere motif="" tete coches_debut jalon_vu=0 h c fin_vu=0 ecart verifie
   rm -f "$f_sid" "$f_code" "$PRIVE/cycle_arrete" "$PRIVE/cycle_clos"
   tete=$(g -C "$PROJECT" rev-parse HEAD 2>/dev/null || echo aucun)
   coches_debut=$(coches_plan); coches_debut=${coches_debut:-0}
@@ -407,8 +425,15 @@ lancer_claude_surveille() {  # $1 = log; stops the cycle if it stays silent or r
         fi
       fi
       if [ "$jalon_vu" != 0 ]; then
-        if [ $(( maintenant - jalon_vu )) -ge 600 ] \
-           || { [ $(( maintenant - jalon_vu )) -ge 120 ] && timeout 20 bash -c '. "$1"; shift; g "$@"' _ "$SYSTEME/safety.sh" -C "$PROJECT" diff --quiet --no-ext-diff --no-textconv HEAD 2>/dev/null; }; then
+        # a milestone can be ticked and committed before its full check has run: the cycle is closed once
+        # the check is visible (or the commits only touched the plan), so that the next cycle does not
+        # spend its start on a recheck; 20 min at most
+        ecart=$(( maintenant - jalon_vu )); verifie=1
+        if [ -f "$ETAT/check.sh" ] && produit_change "$tete" "$(g -C "$PROJECT" rev-parse HEAD 2>/dev/null || echo aucun)" && ! check_reussi "$journal" "$debut"; then
+          verifie=0
+        fi
+        if [ "$ecart" -ge 1200 ] || { [ "$verifie" = 1 ] && { [ "$ecart" -ge 600 ] \
+           || { [ "$ecart" -ge 120 ] && timeout 20 bash -c '. "$1"; shift; g "$@"' _ "$SYSTEME/safety.sh" -C "$PROJECT" diff --quiet --no-ext-diff --no-textconv HEAD 2>/dev/null; }; }; }; then
           motif="milestone delivered and committed"; : > "$PRIVE/cycle_clos"
         fi
       fi
@@ -955,7 +980,14 @@ while true; do
       plan_seul=1; log "Parallel mode: the request changed, the lead updates the plan first."
     elif [ -f "$ETAT/PLAN.md" ] && [ ! -f "$ETAT/RECHECK" ] && [ ! -f "$ETAT/REQUEST_CHANGED" ] && [ ! -f "$ETAT/REVERIFY" ] && [ ! -f "$ETAT/SECRETS_FOUND.md" ] && [ ! -f "$ETAT/SECRETS_PUBLISHED.md" ] && [ ! -f "$ETAT/TIDY" ] && [ ! -f "$ETAT/FOR_YOU_ANSWERED" ]; then
       if parallele_plan_a_des_vagues; then
-        [ "$(parallele_vague_courante | wc -l)" -ge 2 ] && mode=parallele
+        # the pilot picks the mode of each cycle: workers only when they pay off (parallel.sh)
+        raison_serie=$(parallele_raison_serie)
+        if [ -z "$raison_serie" ]; then
+          mode=parallele
+        elif [ "$raison_serie" != "$(cat "$PRIVE/raison_serie" 2>/dev/null)" ]; then
+          log "Parallel mode: the lead works alone this cycle ($raison_serie)."
+        fi
+        printf '%s' "$raison_serie" > "$PRIVE/raison_serie"
       else
         but_cycle="/goal .athanor/PLAN.md is reorganised into waves (## Wave 1, ## Wave 2…) according to your parallel-mode instructions, without writing any code. Or stop after 15 turns. ${PHRASE_LANGUE}"
         log "Parallel mode: the plan has no waves yet, the lead reorganises it first."
@@ -1054,8 +1086,8 @@ while true; do
   modele_cycle="${MODELE_VERIF:-$modele_cycle}" enregistrer_stats "$fichier_log" "$etat"
   # Safeguard: a milestone ticked without "CHECK: PASSED" seen in the cycle log -> recheck first on the next cycle.
   coches_fin=$(coches_plan); coches_fin=${coches_fin:-0}
-  if [ "$avant" != "$apres" ] && [ "$coches_fin" -gt "${coches_cycle_debut:-0}" ] \
-     && [ -f "$ETAT/check.sh" ] && ! grep -q "CHECK: PASSED" "$fichier_log"; then
+  if produit_change "$avant" "$apres" && [ "$coches_fin" -gt "${coches_cycle_debut:-0}" ] \
+     && [ -f "$ETAT/check.sh" ] && ! check_reussi "$fichier_log" "$(date -d "$ETAT_DEBUT_CYCLE" +%s 2>/dev/null || echo 0)"; then
     date '+%Y-%m-%d %H:%M' > "$ETAT/RECHECK"
     log "Warning: milestone ticked without a visible successful full check; Claude will recheck first on the next cycle."
   fi

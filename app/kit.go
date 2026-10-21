@@ -177,7 +177,7 @@ type LigneStat struct {
 	SortieTokens int64   `json:"sortie_tokens"`
 	ContexteMax  int64   `json:"contexte_max"`
 	Commit       string  `json:"commit"`
-	Estime       bool    `json:"estime"` // cost worked out by the pilot from the turns (no "result" line): sub-agents not included
+	Estime       bool    `json:"estime"` // cost worked out by the pilot from the turns of the lead and its sub-agents (no "result" line)
 }
 
 func (p Projet) LireStats() []LigneStat {
