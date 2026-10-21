@@ -871,3 +871,15 @@ func (b *Bureau) RamenerTout() error {
 	}
 	return nil
 }
+
+// arreterArbre stops a command and everything it started (taskkill /T: the Windows process tree).
+func arreterArbre(c *exec.Cmd) {
+	if c == nil || c.Process == nil {
+		return
+	}
+	k := exec.Command("taskkill.exe", "/T", "/F", "/PID", strconv.Itoa(c.Process.Pid))
+	cacherFenetre(k)
+	if k.Run() != nil {
+		_ = c.Process.Kill()
+	}
+}

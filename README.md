@@ -231,6 +231,7 @@ The screenshots show the dark "Slate" and the "Light" palettes.
 | **Team** | a tree: the lead and each worker with the sub-agents it called; click a sub-agent for the brief it was given and the report it handed back; the model each one runs on; who can be called, and your own sub-agents (create, edit, remove) |
 | **For you** | what Claude needs from you: each task with its steps and links, a protected field for each key it asks for, files; *It's done* or *Skip: find another way*; Claude's verdict (verified, or what is still missing) and the history. A badge in the menu, a banner on Overview and a system notification announce a new task |
 | **Requests** | the current request and its plan, the queued requests (time-stamped, reorderable), notes along the way; ✨ *Improve with Claude* rewrites a request clearer and more complete, and you can go back to yours; 📎 attach files to a request (specification, mock-ups, photos, PDF, data): they stay in the workshop and Claude reads them with the request |
+| **Chat** | talk with Claude about the project: questions at any time (it reads the code, the plan, the log); while the pilot is stopped it can also change files (no commands) and Athanor commits them; while the pilot runs, a change becomes a note for the pilot, sent with one click; model to choose |
 | **Log** | the readable log (Claude speaks, tools, results, sub-agents, pilot) or the raw JSON, filterable |
 | **Manage** (in the project picker) | rename the project; move or rename its folder; point it to another folder (the plan and requests come along, the milestones are checked against what it contains); check the milestones; archive it; delete it (from the list, its workshop or the whole folder, to the recycle bin); link it to GitHub |
 | **Skills & MCP** | the library (verified catalog, search in SkillsMP and the MCP Registry, GitHub link, your own skills, pasted MCP configurations), a switch per project, the API keys of the servers (stored apart, never shown) and their settings (an address, a port, a path: detected in the configuration, shown in clear with their default), *Test* starts a server in its cage and lists its tools; *Sign in* once to a remote server that asks for it (OAuth), for every project; **Plugins**: the whole catalog of Claude Code plugins (official marketplace plus yours), searchable, installed in one click and switched on per project |
@@ -485,10 +486,10 @@ Yes. Nothing is tied to a user name or a drive letter: paths come from your prof
 Push a version tag and GitHub builds both apps and publishes the release ([`.github/workflows/release.yml`](.github/workflows/release.yml)):
 
 ```bash
-git tag v2.21.1 && git push origin v2.21.1
+git tag v2.22.0 && git push origin v2.22.0
 ```
 
-Keep the version in [`app/winres/athanor.rc`](app/winres/athanor.rc) in step with the tag, and write what is new in `docs/releases/VERSION.md` (e.g. [`docs/releases/2.21.1.md`](docs/releases/2.21.1.md)): it opens the release page.
+Keep the version in [`app/winres/athanor.rc`](app/winres/athanor.rc) in step with the tag, and write what is new in `docs/releases/VERSION.md` (e.g. [`docs/releases/2.22.0.md`](docs/releases/2.22.0.md)): it opens the release page.
 
 ## Contributing
 

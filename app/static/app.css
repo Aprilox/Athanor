@@ -262,6 +262,27 @@ details[open] summary { margin-bottom: 10px; }
 .jalons-mini { max-height: none; margin-top: 8px; font-size: 13px; }
 .jalons-mini li { padding: 3px 0; border-bottom: 0; }
 .jalons-mini .jalon-titre { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.quota-ligne { padding: 6px 0 8px; }
+.quota-ligne .barre { margin: 6px 0 4px; }
+.quota-ligne.haut .barre i { background: var(--attention); }
+.quota-ligne.plein .barre i { background: var(--erreur); }
+.avancement { width: 100%; height: auto; display: block; margin-top: 4px; }
+.av-grille { stroke: var(--line-2); stroke-width: 1; }
+.av-axe { stroke: var(--line); stroke-width: 1; }
+.av-txt { fill: var(--faible); font-size: 11px; font-family: var(--police); }
+.av-aire { fill: var(--accent-halo); }
+.av-ligne { fill: none; stroke: var(--accent); stroke-width: 2.2; stroke-linejoin: round; }
+.av-point { fill: var(--accent); stroke: var(--panel); stroke-width: 1.5; }
+.av-projection { stroke: var(--muted); stroke-width: 1.6; stroke-dasharray: 5 5; }
+.av-but { fill: var(--panel); stroke: var(--muted); stroke-width: 2; }
+.av-cout { fill: var(--info); opacity: .35; }
+.av-cout:hover { opacity: .8; }
+.av-resume { margin: 6px 0 0; }
+.av-legende { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 6px; }
+.av-legende i { display: inline-block; width: 14px; height: 3px; margin-right: 6px; vertical-align: middle; border-radius: 2px; }
+.av-l-ligne { background: var(--accent); }
+.av-l-proj { background: repeating-linear-gradient(90deg, var(--muted) 0 4px, transparent 4px 7px); }
+.av-l-cout { background: var(--info); opacity: .5; height: 8px !important; }
 .barre { height: 8px; background: var(--panel-2); border-radius: 4px; overflow: hidden; margin: 8px 0 12px; }
 .barre i { display: block; height: 100%; background: var(--accent); transition: width .4s; }
 
@@ -398,7 +419,6 @@ textarea.en-attente { opacity: .55; }
 .reglage .aide { color: var(--muted); font-size: 12.5px; }
 .reglage .nom-reglage { font-weight: 600; }
 .reglage .cle-env { font-family: var(--mono); font-size: 11px; color: var(--faible); font-weight: 400; margin-left: 4px; }
-.reglage select { width: 260px; max-width: 100%; }
 .reglages-tete { margin-bottom: 12px; align-items: center; }
 .reglages-tete p { min-width: 240px; }
 .bloc details > summary { cursor: pointer; font-weight: 600; }
@@ -535,3 +555,26 @@ input.large { flex: 1; min-width: 200px; width: auto; }
 .pv-histo { margin: 6px 0 0 0; padding-left: 18px; }
 .pv-histo li { margin: 3px 0; white-space: pre-wrap; }
 .ext-reglage input { width: min(360px, 100%); font-family: var(--mono, ui-monospace, monospace); }
+
+/* ------------------------------------------------------------------ chat with Claude */
+.chat { display: flex; flex-direction: column; height: calc(100vh - 200px - var(--barre-h)); min-height: 420px; }
+.chat-tete { gap: 10px 16px; align-items: center; flex-wrap: wrap; }
+.chat-tete .croit { flex: 1; min-width: 240px; }
+.chat-tete .croit .interrupteur { display: inline-flex; margin-left: 10px; vertical-align: middle; }
+.chat-fil { flex: 1; overflow: auto; margin: 12px 0; padding: 4px 2px; display: flex; flex-direction: column; gap: 12px; }
+.chat-msg { display: flex; flex-direction: column; max-width: 82%; }
+.chat-vous { align-self: flex-end; align-items: flex-end; }
+.chat-claude { align-self: flex-start; }
+.chat-bulle { padding: 10px 14px; border-radius: 12px; background: var(--panel-2); line-height: 1.55; overflow-wrap: anywhere; }
+.chat-vous .chat-bulle { background: var(--accent-halo); border: 1px solid var(--accent); }
+.chat-erreur { color: var(--erreur); }
+.chat-meta { color: var(--faible); font-size: 11.5px; margin: 3px 6px 0; }
+.chat-code { background: var(--sombre); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; overflow: auto; font-family: var(--mono); font-size: 12.5px; margin: 6px 0; white-space: pre; }
+.chat-note { margin-top: 10px; padding: 8px 10px; border-left: 3px solid var(--attention); background: var(--panel); border-radius: 6px; }
+.chat-actions { margin-top: 8px; font-size: 12.5px; color: var(--muted); }
+.chat-actions summary { cursor: pointer; }
+.chat-actions div { font-family: var(--mono); font-size: 11.5px; padding: 1px 0; }
+.chat-saisie textarea { width: 100%; resize: vertical; }
+.chat-points i { display: inline-block; width: 5px; height: 5px; margin-right: 3px; border-radius: 50%; background: var(--muted); animation: chat-point 1.2s infinite ease-in-out; }
+.chat-points i:nth-child(2) { animation-delay: .2s; } .chat-points i:nth-child(3) { animation-delay: .4s; }
+@keyframes chat-point { 0%, 80%, 100% { opacity: .25; } 40% { opacity: 1; } }

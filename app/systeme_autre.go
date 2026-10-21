@@ -191,3 +191,10 @@ func LancerIsole(args []string) int {
 func remettreBureau() {}
 
 func GardienRetour(args []string) int { return 2 }
+
+// arreterArbre stops a command (its own process; the script's timeout bounds the rest).
+func arreterArbre(c *exec.Cmd) {
+	if c != nil && c.Process != nil {
+		_ = c.Process.Kill()
+	}
+}

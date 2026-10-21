@@ -519,7 +519,7 @@ $("#menu-projets").addEventListener("click", async (ev) => {
 document.addEventListener("click", (ev) => { if (etat.selecteurOuvert && !ev.target.closest("#sel-projet, #menu-projets")) fermerSelecteur(); });
 
 function traduireNav() {
-  const libelles = { suivi: t("Overview"), equipe: t("Team"), demandes: t("Requests"), pourvous: t("For you"), journal: t("Log"), projet: t("Manage"), extensions: t("Skills & MCP"), sante: t("Setup & health"), reglages: t("Settings"), options: t("Options") };
+  const libelles = { suivi: t("Overview"), equipe: t("Team"), demandes: t("Requests"), pourvous: t("For you"), journal: t("Log"), projet: t("Manage"), chat: t("Chat"), extensions: t("Skills & MCP"), sante: t("Setup & health"), reglages: t("Settings"), options: t("Options") };
   document.querySelectorAll("#nav-liens a, #nav-outil a").forEach((a) => { if (libelles[a.dataset.page]) a.textContent = libelles[a.dataset.page]; });
   $("#nav-titre-projet").textContent = t("Project");
   $("#nav-titre-outil").textContent = t("Tool");
@@ -594,6 +594,189 @@ async function enregistrerMode(parallele, max) {
   if (r) rendrePage();
 }
 
+// --- chat with Claude about the project (api_chat.go): questions always; changes while the pilot is
+// stopped (Athanor commits them); while it runs, Claude writes the change as a note for the pilot
+const chat = { modele: (() => { try { return localStorage.getItem("chatModele") ?? "sonnet"; } catch (e) { return "sonnet"; } })(), questionSeule: false, signature: "", modeles: null, envoi: false };
+
+function mdChat(s) {
+  return String(s || "").split(/```/).map((bloc, i) => {
+    if (i % 2) return `<pre class="chat-code">${h(bloc.replace(/^[a-zA-Z0-9_+-]*\n/, ""))}</pre>`;
+    return h(bloc).replace(/`([^`\n]+)`/g, "<code>$1</code>").replace(/\*\*([^*\n]+)\*\*/g, "<b>$1</b>")
+      .replace(/^(\s*)[-*] (.*)$/gm, "$1• $2").replace(/^#{1,4} (.*)$/gm, "<b>$1</b>").replace(/\n/g, "<br>");
+  }).join("");
+}
+
+function messageChat(m, i) {
+  const quand = m.quand ? new Date(m.quand).toLocaleTimeString(document.documentElement.lang || "en", { hour: "2-digit", minute: "2-digit" }) : "";
+  if (m.role === "vous") return `<div class="chat-msg chat-vous"><div class="chat-bulle">${mdChat(m.texte)}</div><div class="chat-meta">${h(quand)}${m.mode === "modif" ? " · " + t("may change the files") : ""}</div></div>`;
+  if (m.role === "erreur") return `<div class="chat-msg chat-claude"><div class="chat-bulle chat-erreur">${h(t(m.texte))}</div></div>`;
+  const note = (m.texte.match(/<note>([\s\S]*?)<\/note>/) || [])[1];
+  const texte = m.texte.replace(/<note>[\s\S]*?<\/note>/g, "").trim();
+  const actions = (m.outils || []).length ? `<details class="chat-actions"><summary>${t("{0} action(s)", [m.outils.length])}</summary>${m.outils.map((o) => `<div>${h(t(o))}</div>`).join("")}</details>` : "";
+  return `<div class="chat-msg chat-claude"><div class="chat-bulle">${mdChat(texte)}
+    ${note ? `<div class="chat-note"><div class="muet petit">${t("Note for the pilot")}</div><div>${mdChat(note.trim())}</div>
+      <div class="ligne m0 mt-1">${m.note ? `<span class="ok petit">✔ ${t("Sent to the pilot")}</span>` : `<button type="button" class="btn btn-petit btn-primaire" data-chat-note="${i}">${t("Send to the pilot")}</button>`}</div></div>` : ""}
+    ${actions}</div>
+    <div class="chat-meta">${h(quand)}${m.modele ? " · " + h(m.modele) : ""}${m.cout ? " · " + Number(m.cout).toFixed(3) + " $" : ""}${m.commit ? ` · <span class="ok">${t("committed {0}", [h(m.commit)])}</span>` : ""}</div></div>`;
+}
+
+function filChat(d) {
+  const msgs = d.messages || [];
+  let html = msgs.length ? msgs.map(messageChat).join("") : `<div class="vide">${t("Ask anything about the project: how a part works, where something is, what the pilot did, why a milestone failed. With the pilot stopped, Claude can also change files.")}</div>`;
+  if (d.en_cours) {
+    const p = d.partiel || {};
+    const textes = p.textes || [], outils = p.outils || [];
+    html += `<div class="chat-msg chat-claude"><div class="chat-bulle chat-attente">${textes.length ? mdChat(textes[textes.length - 1]) : ""}
+      <div class="muet petit"><span class="chat-points"><i></i><i></i><i></i></span> ${outils.length ? h(t(outils[outils.length - 1])) : t("Claude is thinking…")}</div></div></div>`;
+  }
+  return html;
+}
+
+async function majChat(force) {
+  if (etat.page !== "chat") return;
+  const d = await api("chat").catch(() => null); if (!d) return;
+  const sig = JSON.stringify([d.messages.length, d.en_cours, d.partiel, d.pilote_actif, (d.messages[d.messages.length - 1] || {}).note]);
+  if (!force && sig === chat.signature) return;
+  chat.signature = sig;
+  const fil = $("#chat-fil"); if (!fil) return;
+  const enBas = fil.scrollHeight - fil.scrollTop - fil.clientHeight < 80;
+  fil.innerHTML = filChat(d);
+  if (enBas || force) fil.scrollTop = fil.scrollHeight;
+  const b = $("#chat-envoyer"), s = $("#chat-stop"), m = $("#chat-mode");
+  if (b) b.hidden = d.en_cours;
+  if (s) s.hidden = !d.en_cours;
+  if (m) m.innerHTML = modeChat(d.pilote_actif);
+}
+
+function modeChat(piloteActif) {
+  if (piloteActif) return `<span class="attention">●</span> ${t("The pilot is running: Claude only reads and answers. A change becomes a note for the pilot, sent with one click.")}`;
+  return `<span class="ok">●</span> ${t("The pilot is stopped: Claude can change the project's files (no commands), and Athanor commits them.")}
+    <label class="interrupteur m0 petit"><input type="checkbox" id="chat-question" ${chat.questionSeule ? "checked" : ""}><span>${t("question only")}</span></label>`;
+}
+
+pages.chat = async () => {
+  const [d, mod] = await Promise.all([api("chat"), chat.modeles ? Promise.resolve({ modeles: chat.modeles }) : api("modeles").catch(() => ({ modeles: [] }))]);
+  chat.modeles = mod.modeles || [];
+  chat.signature = "";
+  const modeles = ["", ...chat.modeles];
+  if (!modeles.includes(chat.modele)) modeles.push(chat.modele);
+  setTimeout(() => majChat(true), 0);
+  return `<div class="bloc chat">
+    <div class="ligne m0 chat-tete"><h2 class="m0">${t("Chat with Claude")}</h2><span class="muet petit croit" id="chat-mode">${modeChat(d.pilote_actif)}</span>
+      <button type="button" class="btn btn-petit" id="chat-nouveau">${t("New conversation")}</button></div>
+    <div class="chat-fil" id="chat-fil"></div>
+    <div class="chat-saisie">
+      <textarea id="chat-texte" rows="3" placeholder="${h(t("Your question or the change you want… (Enter sends, Shift+Enter: new line)"))}"></textarea>
+      <div class="ligne m0 mt-1"><span class="petit muet">${t("Model")}</span><div class="choix m0" id="chat-modeles">${modeles.map((m) => `<button type="button" data-chat-modele="${h(m)}" class="${chat.modele === m ? "actif" : ""}">${h(m || t("account default"))}</button>`).join("")}</div>
+        <span class="espace"></span>
+        <button type="button" class="btn" id="chat-stop" hidden>${t("Stop")}</button>
+        <button type="button" class="btn btn-primaire" id="chat-envoyer">${t("Send")}</button></div>
+    </div>
+  </div>`;
+};
+
+async function envoyerChat() {
+  const zone = $("#chat-texte"); if (!zone || chat.envoi) return;
+  const message = zone.value.trim(); if (!message) return;
+  chat.envoi = true;
+  const r = await action(api("chat", "POST", { message, modele: chat.modele, mode: chat.questionSeule ? "question" : "" }));
+  chat.envoi = false;
+  if (r) { zone.value = ""; await majChat(true); }
+}
+
+// --- the subscription's quota, as Claude Code last reported it (rate_limit_event of the newest cycle log)
+function quandLisible(sec) {
+  const d = new Date(sec * 1000), lang = document.documentElement.lang || "en";
+  const heure = d.toLocaleTimeString(lang, { hour: "2-digit", minute: "2-digit" });
+  const jours = Math.round((new Date(d.toDateString()) - new Date(new Date().toDateString())) / 86400000);
+  if (jours === 0) return heure;
+  if (jours === 1) return t("tomorrow {0}", [heure]);
+  return d.toLocaleDateString(lang, { weekday: "long" }) + " " + heure;
+}
+function dans(sec) {
+  const m = Math.max(0, Math.round((sec * 1000 - Date.now()) / 60000));
+  return m < 60 ? t("in {0} min", [m]) : m < 48 * 60 ? t("in {0} h {1}", [Math.floor(m / 60), String(m % 60).padStart(2, "0")]) : t("in {0} days", [Math.round(m / 1440)]);
+}
+function nomFenetre(n) {
+  if (n === "five_hour") return t("Current session (5 h)");
+  if (n === "seven_day") return t("This week, all models");
+  const m = n.match(/^seven_day_(.+)$/);
+  if (m) return t("This week, {0}", [m[1].replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase())]);
+  return n.replace(/_/g, " ");
+}
+function rendreQuota(q) {
+  if (!q || !(q.fenetres || []).length) return `<div class="bloc"><h2>${t("Subscription quota")}</h2><div class="vide petit">${t("Shown once a cycle has run: Claude Code reports it as it works.")}</div></div>`;
+  const maintenant = Date.now() / 1000;
+  const lignes = q.fenetres.map((f) => {
+    const passe = f.reinit && f.reinit < maintenant;
+    const u = passe ? 0 : f.utilisation;
+    const pct = u == null ? null : Math.round(u * 100);
+    const classe = pct == null ? "" : pct >= 90 ? "plein" : pct >= 70 ? "haut" : "";
+    return `<div class="quota-ligne ${classe}">
+      <div class="ligne m0"><b>${h(nomFenetre(f.nom))}</b><span class="espace"></span><span>${pct == null ? "—" : pct + " %"}</span></div>
+      <div class="barre m0"><i style="width:${Math.min(100, pct || 0)}%"></i></div>
+      <div class="muet petit">${passe ? t("started again") : f.reinit ? t("Resets: {0} ({1})", [quandLisible(f.reinit), dans(f.reinit)]) : ""}</div>
+    </div>`;
+  }).join("");
+  const age = Math.round(maintenant - (q.lu || maintenant));
+  const vieux = age > 15 * 60;
+  return `<div class="bloc quota-bloc"><h2>${t("Subscription quota")}</h2>${lignes}
+    <div class="muet petit mt-1">${q.statut === "rejected" ? `<span class="attention">${t("Limit reached: the pilot waits for it to start again.")}</span> ` : ""}${vieux ? t("As of the last cycle, {0} ago: it may have changed since.", [age < 7200 ? t("{0} min", [Math.round(age / 60)]) : t("{0} h", [Math.round(age / 3600)])]) : t("As Claude Code reported it a moment ago.")}</div></div>`;
+}
+
+// --- progress: the milestones done over time, the projection to the last one (time and cost), the cost of
+// each cycle. A cycle that ends with a new commit is a milestone done (one milestone per cycle); the curve
+// is anchored on the true count of the plan.
+function rendreAvancement(stats, plan, faits, actif) {
+  const total = plan.length;
+  const lignes = stats.map((s) => ({ ...s, fin: new Date(s.horodatage).getTime() })).filter((s) => !isNaN(s.fin)).sort((a, b) => a.fin - b.fin);
+  if (lignes.length < 2 || !total) return "";
+  let precedent = "";
+  lignes.forEach((s) => { s.jalon = s.etat === "ok" && s.commit && s.commit !== precedent; if (s.commit) precedent = s.commit; });
+  let n = faits;
+  for (let i = lignes.length - 1; i >= 0; i--) { lignes[i].faits = Math.max(0, n); if (lignes[i].jalon) n--; }
+  const debut = lignes[0].fin - (Number(lignes[0].minutes) || 0) * 60000, dernier = lignes[lignes.length - 1];
+  // pace: over the last 8 milestones (their cycles' time, waits included), and their cost
+  const jalons = lignes.filter((s) => s.jalon).slice(-8);
+  let eta = null, coutReste = null, heuresReste = null;
+  const reste = total - faits;
+  if (reste > 0 && jalons.length >= 2) {
+    const i0 = lignes.indexOf(jalons[0]);
+    const t0 = i0 > 0 ? lignes[i0 - 1].fin : jalons[0].fin - (Number(jalons[0].minutes) || 0) * 60000;
+    const parJalon = (jalons[jalons.length - 1].fin - t0) / jalons.length;
+    const cout = lignes.slice(i0).reduce((a, s) => a + (Number(s.cout_usd) || 0), 0) / jalons.length;
+    eta = Math.max(Date.now(), dernier.fin) + parJalon * reste;
+    heuresReste = (parJalon * reste) / 3600000;
+    coutReste = cout * reste;
+  }
+  const fin = eta || dernier.fin, L = 800, H = 210, g = 34, d = 40, hautB = 168, basB = 186;
+  const x = (tm) => g + ((tm - debut) / Math.max(1, fin - debut)) * (L - g - d);
+  const y = (k) => hautB - (k / total) * (hautB - 12);
+  const maxCout = Math.max(...lignes.map((s) => Number(s.cout_usd) || 0), 0.01);
+  const lang = document.documentElement.lang || "en";
+  const plusieursJours = new Date(debut).toDateString() !== new Date(fin).toDateString();
+  const etiquette = (tm) => { const dt = new Date(tm); const hm = dt.toLocaleTimeString(lang, { hour: "2-digit", minute: "2-digit" }); return plusieursJours ? dt.toLocaleDateString(lang, { weekday: "short" }) + " " + hm : hm; };
+  const points = [[debut, 0], ...lignes.map((s) => [s.fin, s.faits])];
+  const chemin = points.map(([tm, k], i) => `${i ? "L" : "M"}${x(tm).toFixed(1)},${y(k).toFixed(1)}`).join(" ");
+  const aire = `${chemin} L${x(dernier.fin).toFixed(1)},${hautB} L${x(debut).toFixed(1)},${hautB} Z`;
+  const barres = lignes.map((s) => { const hb = ((Number(s.cout_usd) || 0) / maxCout) * 46; return `<rect class="av-cout" x="${(x(s.fin) - 3).toFixed(1)}" y="${(hautB - hb).toFixed(1)}" width="6" height="${hb.toFixed(1)}" rx="1.5"><title>${h(t("Cycle {0}", [s.cycle]))} · ${h(etiquette(s.fin))} · ${Number(s.cout_usd).toFixed(2)} $ · ${Math.round(s.minutes)} min${s.jalon ? " · " + h(t("milestone done")) : ""}</title></rect>`; }).join("");
+  const grilles = [0.25, 0.5, 0.75, 1].map((f) => `<line class="av-grille" x1="${g}" x2="${L - d}" y1="${y(total * f).toFixed(1)}" y2="${y(total * f).toFixed(1)}"/><text class="av-txt" x="${g - 6}" y="${(y(total * f) + 4).toFixed(1)}" text-anchor="end">${Math.round(total * f)}</text>`).join("");
+  const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => { const tm = debut + f * (fin - debut); return `<text class="av-txt" x="${x(tm).toFixed(1)}" y="${basB + 14}" text-anchor="${f === 0 ? "start" : f === 1 ? "end" : "middle"}">${h(etiquette(tm))}</text>`; }).join("");
+  const projection = eta ? `<line class="av-projection" x1="${x(dernier.fin).toFixed(1)}" y1="${y(faits).toFixed(1)}" x2="${x(eta).toFixed(1)}" y2="${y(total).toFixed(1)}"/><circle class="av-but" cx="${x(eta).toFixed(1)}" cy="${y(total).toFixed(1)}" r="4"><title>${h(t("Estimated end: {0}", [quandLisible(eta / 1000)]))}</title></circle>` : "";
+  const pts = lignes.filter((s) => s.jalon).map((s) => `<circle class="av-point" cx="${x(s.fin).toFixed(1)}" cy="${y(s.faits).toFixed(1)}" r="3"><title>${h(t("{0} / {1} milestones done", [s.faits, total]))} · ${h(etiquette(s.fin))}</title></circle>`).join("");
+  const resume = reste <= 0 ? t("Every milestone of the plan is done.")
+    : eta ? t("At this pace, the last milestone around {0}: about {1} h of work and ≈ {2} $ more at list price.", [quandLisible(eta / 1000), heuresReste.toLocaleString(lang, { maximumFractionDigits: heuresReste < 10 ? 1 : 0 }), Math.round(coutReste)])
+    : t("The estimate appears after two milestones.");
+  return `<div class="bloc"><div class="ligne m0"><h2 class="m0">${t("Progress")}</h2><span class="espace"></span><span class="muet petit">${t("{0} milestone(s) left", [Math.max(0, reste)])}</span></div>
+    <p class="av-resume">${h(resume)}</p>
+    <svg class="avancement" viewBox="0 0 ${L} ${H}" role="img" aria-label="${h(resume)}">
+      ${grilles}<path class="av-aire" d="${aire}"/>${barres}<path class="av-ligne" d="${chemin}"/>${projection}${pts}
+      <line class="av-axe" x1="${g}" x2="${L - d}" y1="${hautB}" y2="${hautB}"/>${ticks}
+    </svg>
+    <div class="av-legende muet petit"><span><i class="av-l-ligne"></i>${t("milestones done")}</span>${eta ? `<span><i class="av-l-proj"></i>${t("projection")}</span>` : ""}<span><i class="av-l-cout"></i>${t("cost of each cycle (max {0} $)", [maxCout.toFixed(2)])}</span></div>
+  </div>`;
+}
+
 pages.suivi = async () => {
   const v = etat.vue; if (!v) return "";
   if (!v.kit_installe || !v.projet || v.demande_vide) return rendreGuide(v) + (v.projet ? await rendreMode() : "");
@@ -606,7 +789,7 @@ pages.suivi = async () => {
   const ratio = cache + plein ? Math.round((cache / (cache + plein)) * 100) : 0;
   return `${v.pour_vous ? `<a class="bloc pv-bandeau" href="#pourvous">🙋 <strong>${t("Claude needs you")}</strong> · ${t("{0} task(s) on the For you page", [v.pour_vous])} →</a>` : ""}
   <div class="grille grille-2">
-    <div class="bloc"><h2>${t("Right now")}</h2>
+    <div class="colonne"><div class="bloc"><h2>${t("Right now")}</h2>
       <dl class="fiche">
         <dt>${t("Milestone")}</dt><dd>${e.jalon_en_cours ? `<b>${md(titreJalon(e.jalon_en_cours))}</b>${(() => { const j = plan.find((x) => x.titre === titreJalon(e.jalon_en_cours)); return j && j.detail ? `<div class="muet petit">${md(j.detail)}</div>` : ""; })()}` : "—"}</dd>
         <dt>${t("Last commit")}</dt><dd class="muet">${h(e.dernier_commit || "—")}</dd>
@@ -620,12 +803,14 @@ pages.suivi = async () => {
         <button class="btn btn-petit" data-ouvrir="deliverable">${t("Deliverable")}</button>
       </div>
     </div>
+    ${rendreQuota(v.quota)}</div>
     <div class="bloc"><h2>${t("Project plan")}</h2>
       ${plan.length ? `<div class="barre"><i style="width:${(faits / plan.length) * 100}%"></i></div><div class="muet petit">${t("{0} / {1} milestones done", [faits, plan.length])}</div>
       <ul class="plan">${listePlan(plan, false)}</ul>`
         : `<div class="vide">${t("No plan yet: Claude writes it during the first cycle (framing).")}</div>`}
     </div>
   </div>
+  ${rendreAvancement(stats, plan, faits, v.actif)}
   <div class="bloc"><h2>${t("Usage")}</h2>
     ${stats.length ? `<div class="chiffres">
       <div class="chiffre"><b>${stats.filter((s) => !String(s.cycle).includes("·")).length}</b><span>${t("cycles")}</span></div>
@@ -1637,20 +1822,17 @@ const REGLAGES = {
   QUOTA_WAIT_MIN: ["avance", "Wait when the quota's end is unknown"], ERROR_WAIT_MIN: ["avance", "Wait after an error"],
 };
 const GROUPES_REGLAGES = [["connexion", "Connection"], ["modeles", "Models"], ["marche", "How the pilot works"]];
-const MODELES = ["", "fable", "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5", "opus", "sonnet", "haiku"];
 const EFFORTS = ["", "low", "medium", "high", "xhigh", "max"];
 
-function champReglage(l) {
+// modeles: the proposals, from the server (the aliases, then the models this PC has used: a new model
+// appears by itself once a cycle has run on it); any other name can be typed in the field
+function champReglage(l, modeles) {
   const id = "env-" + l.cle;
-  const liste = (valeurs, nom) => {
-    const connu = valeurs.includes(l.valeur);
-    return `<div class="ligne m0"><select data-modele="${id}">${valeurs.map((m) => `<option value="${h(m)}" ${l.valeur === m ? "selected" : ""}>${h(nom(m))}</option>`).join("")}<option value="__autre" ${connu ? "" : "selected"}>${t("Other…")}</option></select>
-      <input type="text" id="${id}" data-cle="${h(l.cle)}" value="${h(l.valeur)}" class="croit" ${connu ? "hidden" : ""} placeholder="${h(t("model name"))}"></div>`;
-  };
-  const nomModele = (m) => m === "auto" ? t("chosen by the lead, call by call") : m || t("account default");
-  if (["MODEL", "FALLBACK_MODEL", "FRAMING_MODEL", "WORKER_MODEL", "CHEAP_MODEL"].includes(l.cle)) return liste(MODELES, nomModele);
-  if (l.cle === "SUBAGENT_MODEL") return liste([...MODELES, "auto"], nomModele);
-  if (l.cle === "EFFORT") return liste(EFFORTS, (m) => m || t("normal"));
+  const choix = (valeurs, nom) => `<input type="text" id="${id}" data-cle="${h(l.cle)}" value="${h(l.valeur)}"><div class="choix">${valeurs.map((m) => `<button type="button" data-pour="${id}" data-val="${h(m)}" class="${l.valeur === m ? "actif" : ""}">${h(nom(m))}</button>`).join("")}</div>`;
+  const nomModele = (m) => m === "auto" ? t("chosen by the lead") : m || t("account default");
+  if (["MODEL", "FALLBACK_MODEL", "FRAMING_MODEL", "WORKER_MODEL", "CHEAP_MODEL"].includes(l.cle)) return choix(["", ...modeles], nomModele);
+  if (l.cle === "SUBAGENT_MODEL") return choix(["", ...modeles, "auto"], nomModele);
+  if (l.cle === "EFFORT") return choix(EFFORTS, (m) => m || t("normal"));
   if (["RTK", "UNREAL_MCP", "CLOSE_AFTER_MILESTONE"].includes(l.cle) && (l.valeur === "0" || l.valeur === "1")) return `<label class="interrupteur m0"><input type="checkbox" id="${id}" data-cle="${h(l.cle)}" ${l.valeur === "1" ? "checked" : ""}> <span>${l.valeur === "1" ? t("enabled") : t("disabled")}</span></label>`;
   return `<input type="${l.secret && !etat.envSecrets ? "password" : "text"}" id="${id}" data-cle="${h(l.cle)}" value="${h(l.valeur)}" ${l.secret ? 'autocomplete="off"' : ""}>`;
 }
@@ -1659,10 +1841,11 @@ pages.reglages = async () => {
   const onglet = etat.ongletReglages === "options" ? "options" : "claude";
   const tete = `<div class="onglets"><button class="${onglet === "claude" ? "actif" : ""}" data-onglet-reglages="claude">${t("Claude")}</button><button class="${onglet === "options" ? "actif" : ""}" data-onglet-reglages="options">${t("Options")}</button></div>`;
   if (onglet === "options") return tete + await rendreOptions();
-  const lignes = await api("env" + (etat.envSecrets ? "?secrets=1" : ""));
+  const [lignes, mod] = await Promise.all([api("env" + (etat.envSecrets ? "?secrets=1" : "")), api("modeles").catch(() => ({ modeles: [] }))]);
+  const modeles = mod.modeles || [];
   const ligne = (l) => {
     const nom = (REGLAGES[l.cle] || [])[1];
-    return `<div class="reglage"><div>${nom ? `<div class="nom-reglage">${h(t(nom))} <code class="cle-env">${h(l.cle)}</code></div>` : `<div class="cle">${h(l.cle)}</div>`}<div class="aide">${h(t(l.aide))}</div></div><div>${champReglage(l)}</div></div>`;
+    return `<div class="reglage"><div>${nom ? `<div class="nom-reglage">${h(t(nom))} <code class="cle-env">${h(l.cle)}</code></div>` : `<div class="cle">${h(l.cle)}</div>`}<div class="aide">${h(t(l.aide))}</div></div><div>${champReglage(l, modeles)}</div></div>`;
   };
   const groupe = (g) => lignes.filter((l) => (REGLAGES[l.cle] || ["avance"])[0] === g);
   const actif = etat.vue && etat.vue.actif;
@@ -1860,8 +2043,16 @@ $("#page").addEventListener("click", async (ev) => {
     if (b.hasAttribute("data-reparer")) { const r = await action(api("sante/reparer", "POST", { id })); if (r && r.tache) { etat.tacheChoisie = r.tache; etat.verifChoisie = id; } return rendrePage(); }
     if (b.hasAttribute("data-claude")) { const r = await action(api("sante/claude", "POST", { id, complement: $("#st-complement").value })); if (r) { etat.tacheChoisie = r.tache; etat.verifChoisie = id; } return rendrePage(); }
   }
+  if (page === "chat") {
+    if (b.id === "chat-envoyer") return envoyerChat();
+    if (b.id === "chat-stop") { await action(api("chat/arreter", "POST")); return majChat(true); }
+    if (b.id === "chat-nouveau") { if (await confirmer(t("Start a new conversation? Claude forgets this one."), { ok: t("New conversation") })) { await action(api("chat/effacer", "POST")); majChat(true); } return; }
+    if (b.dataset.chatModele !== undefined) { chat.modele = b.dataset.chatModele; try { localStorage.setItem("chatModele", chat.modele); } catch (e) { /* ignore */ } b.parentElement.querySelectorAll("button").forEach((x) => x.classList.toggle("actif", x === b)); return; }
+    if (b.dataset.chatNote !== undefined) { b.disabled = true; await action(api("chat/note", "POST", { index: Number(b.dataset.chatNote) })); return majChat(true); }
+  }
   if (page === "reglages") {
     if (b.dataset.ongletReglages) { etat.ongletReglages = b.dataset.ongletReglages; return rendrePage(); }
+    if (b.dataset.pour) { const i = $("#" + b.dataset.pour); i.value = b.dataset.val; b.parentElement.querySelectorAll("button").forEach((x) => x.classList.toggle("actif", x === b)); return; }
     if (b.id === "rg-enregistrer") return action(api("env", "POST", lireEnvFormulaire()));
     if (b.id === "rg-redemarrer") { const r = await action(api("env", "POST", lireEnvFormulaire())); if (r) await action(api("pilote/redemarrer-apres-cycle", "POST")); return; }
   }
@@ -1873,13 +2064,17 @@ $("#page").addEventListener("click", async (ev) => {
   }
 });
 
+$("#page").addEventListener("keydown", (ev) => {
+  if (ev.target.id === "chat-texte" && ev.key === "Enter" && !ev.shiftKey && !ev.isComposing) { ev.preventDefault(); envoyerChat(); }
+});
+
 $("#page").addEventListener("change", (ev) => {
   const i = ev.target;
+  if (i.id === "chat-question") chat.questionSeule = i.checked;
   if (i.dataset.filtre) { etat.filtres[i.dataset.filtre] = i.checked; rendreJournal(); }
   if (i.id === "rg-secrets") { etat.envSecrets = i.checked; rendrePage(); }
   if (i.type === "checkbox" && i.dataset.cle) i.nextElementSibling.textContent = i.checked ? t("enabled") : t("disabled");
   if (etat.page === "reglages" && i.hasAttribute("data-option")) enregistrerOptions();
-  if (i.dataset.modele) { const champ = $("#" + i.dataset.modele); if (i.value === "__autre") { champ.hidden = false; champ.focus(); } else { champ.hidden = true; champ.value = i.value; } }
   if (i.hasAttribute("data-gh-coauteur")) action(api("github", "POST", Object.assign({ action: "identite" }, lireAuteur()))).then((r) => { if (!r) i.checked = !i.checked; });
   if (i.id === "gh-auteur-email") { const a = $("#gh-auteur-autre"); a.hidden = i.value !== ""; if (!a.hidden) a.focus(); }
   if (i.hasAttribute("data-gh-auto")) action(api("github", "POST", { action: "auto", auto: i.checked })).then((r) => { if (!r) i.checked = !i.checked; });
@@ -1958,6 +2153,7 @@ async function rafraichir() {
       await lireJournal();
       // the Team page follows live, except while text is selected in it (a brief, a report)
       if ((etat.page === "equipe" && !String(window.getSelection() || "") && !etat.agForm) || (etat.page === "suivi" && !document.activeElement.matches("input, textarea"))) rendrePage();
+      if (etat.page === "chat") majChat(false);
       if (etat.page === "pourvous" && !document.activeElement.matches("input, textarea") && ++etat.pvTic % 4 === 0) {
         const r = await api("pourvous").catch(() => null);
         if (r && JSON.stringify(r.taches || []) !== etat.pvSignature) rendrePage();
