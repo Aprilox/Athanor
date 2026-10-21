@@ -178,6 +178,48 @@ parallele_branches_partielles() {
   return 0
 }
 
+# Whether a parallel cycle pays off now; prints why the lead alone is better, nothing when it does. Workers
+# are worth their verification with 3 milestones ready at least, for code (documentation milestones link
+# to each other and conflict), and with room left in the quota (a wave spends it fast: near the 5-hour
+# or the weekly limit, going faster only brings the stop forward).
+PARALLELE_MIN_PRETS=3
+parallele_raison_serie() {
+  local prets n quota
+  prets=$(parallele_prets "")
+  n=$(printf '%s\n' "$prets" | grep -c .)
+  if [ "$n" = 0 ]; then echo "the other milestones wait for the next one"; return 0; fi
+  if [ "$n" -lt "$PARALLELE_MIN_PRETS" ]; then echo "only $n milestone$([ "$n" -gt 1 ] && echo s) can start now"; return 0; fi
+  if printf '%s\n' "$prets" | cut -f4 | python3 -I -c '
+import re, sys
+def fichiers(l):
+    m = re.search(r"Files?:\s*(.*?)(?:\.\s+(?:Depends on|Acceptance|Read)\b|$)", l, re.I)
+    return [re.sub(r"\s*\(.*$", "", f).strip().strip("`\x27\" ").lstrip("./") for f in re.split(r"[,;]", m.group(1))] if m else []
+def doc(f):
+    return bool(re.search(r"\.(md|markdown|txt|rst|adoc)$", f, re.I)) or f.lower().startswith("docs/")
+lignes = [l for l in sys.stdin.read().splitlines() if l.strip()]
+sys.exit(0 if lignes and all(fichiers(l) and all(doc(f) for f in fichiers(l) if f) for l in lignes) else 1)
+'; then echo "the milestones ready are documentation only"; return 0; fi
+  quota=$(parallele_quota_restant)
+  [ -n "$quota" ] && echo "$quota"
+  return 0
+}
+# From the latest rate-limit event in the cycle logs: "5-hour quota at N%" (75% or more) or "weekly quota
+# at N%" (85% or more), while that window is still open; nothing otherwise.
+parallele_quota_restant() {
+  local f ev
+  for f in $(ls -t "$ETAT/logs"/*.jsonl 2>/dev/null | head -n 6); do
+    ev=$(grep -a '"rate_limit_event"' "$f" 2>/dev/null | tail -n 1)
+    [ -n "$ev" ] && break
+  done
+  [ -n "$ev" ] || return 0
+  printf '%s' "$ev" | jq -r --argjson t "$(date +%s)" '
+    (.rate_limit_info.unifiedWindows // {}) as $w
+    | def ouvert(x): (x.resetsAt // 0) > $t;
+    if ($w.five_hour.utilization // 0) >= 0.75 and ouvert($w.five_hour) then "5-hour quota at \(($w.five_hour.utilization * 100) | floor)%"
+    elif ($w.seven_day.utilization // 0) >= 0.85 and ouvert($w.seven_day) then "weekly quota at \(($w.seven_day.utilization * 100) | floor)%"
+    else empty end' 2>/dev/null
+}
+
 # Kept for the pilot: number of milestones that could start right now.
 parallele_vague_courante() { parallele_prets "" | head -n "$PARALLEL_MAX"; }
 

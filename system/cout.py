@@ -4,16 +4,21 @@ watchdog stopped it): Claude Code only writes the cost in that last line.
 
   cout.py apprendre TARIFS LOG   learns the price of each model from the "result" line of LOG
                                  (its modelUsage: tokens and cost per model)
-  cout.py estimer TARIFS LOG     prints, as JSON, the lead's turns of LOG (each message counted once)
-                                 and their cost at the learned prices; total_cost_usd is absent when no
-                                 price is known yet for a model used in LOG
+  cout.py estimer TARIFS LOG [CONFIG]
+                                 prints, as JSON, the lead's turns of LOG (each message counted once)
+                                 and their cost at the learned prices, plus the cost of the sub-agents
+                                 of that session, read from Claude Code's own transcripts in CONFIG
+                                 (~/.claude: projects/*/<session>/subagents/*.jsonl); total_cost_usd is
+                                 absent when no price is known yet for a model used
 
 Prices are never written here: they change, and depend on the plan. They are learned from this PC's
 own results, at least 3 of them per model, in TARIFS (a JSON file of the kit's logs, outside the sandbox).
 """
 import fcntl
+import glob
 import json
 import os
+import re
 import sys
 import tempfile
 
@@ -147,10 +152,12 @@ def apprendre(tarifs, journal):
         verrou.close()
 
 
-def estimer(tarifs, journal):
+def messages_de(chemin, chef_seul):
+    """{message id: (model, usage)} of a log, each message once (one line per content block, and the
+    streamed partial lines: the last one has the final usage), in order."""
     messages, ordre = {}, []
-    for o in lignes(journal):
-        if o.get("type") != "assistant" or o.get("parent_tool_use_id") is not None:
+    for o in lignes(chemin):
+        if o.get("type") != "assistant" or (chef_seul and o.get("parent_tool_use_id") is not None):
             continue
         m = o.get("message") if isinstance(o.get("message"), dict) else {}
         u = m.get("usage") if isinstance(m.get("usage"), dict) else {}
@@ -160,28 +167,74 @@ def estimer(tarifs, journal):
         cle = m.get("id") if isinstance(m.get("id"), str) else "n%d" % len(ordre)
         if cle not in messages:
             ordre.append(cle)
-        messages[cle] = (modele, u)  # one line per content block, same usage: counted once
-    prix = {k: v.get("prix_par_million") for k, v in (lire_tarifs(tarifs).get("modeles") or {}).items()
-            if isinstance(v, dict)}
-    tot = {"input_tokens": 0, "cache_read_input_tokens": 0, "cache_creation_input_tokens": 0, "output_tokens": 0}
+        messages[cle] = (modele, u)
+    return messages, ordre
+
+
+def sessions(journal):
+    vus = []
+    for o in lignes(journal):
+        sid = o.get("session_id")
+        if isinstance(sid, str) and re.fullmatch(r"[0-9a-fA-F-]{8,64}", sid) and sid not in vus:
+            vus.append(sid)
+    return vus[:5]
+
+
+def transcripts_sous_agents(journal, config):
+    """Claude Code keeps each sub-agent's turns in projects/<folder>/<session>/subagents/agent-*.jsonl."""
+    out = []
+    if not config:
+        return out
+    for sid in sessions(journal):
+        for f in sorted(glob.glob(os.path.join(glob.escape(config), "projects", "*", sid, "subagents", "agent-*.jsonl")))[:200]:
+            try:
+                if os.path.isfile(f) and not os.path.islink(f) and os.path.getsize(f) < 200 * MAX_FICHIER:
+                    out.append(f)
+            except OSError:
+                pass
+    return out
+
+
+def cout_de(messages, ordre, prix, tot=None):
     cout, connu = 0.0, True
     for cle in ordre:
         modele, u = messages[cle]
-        i, cr, cw, o = (entier(u.get(k)) for k in tot)
-        for k, v in zip(tot, (i, cr, cw, o)):
-            tot[k] += v
+        i, cr, cw, o = (entier(u.get(k)) for k in CLES)
+        if tot is not None:
+            for k, v in zip(CLES, (i, cr, cw, o)):
+                tot[k] += v
         p = prix.get(modele)
         if isinstance(p, list) and len(p) == 3:
             cout += sum(a * b for a, b in zip(variables(i, cr, cw, o), p)) / 1e6
         elif i + cr + cw + o:
             connu = False
-    out = {"num_turns": len(ordre), "usage": tot}
+    return cout, connu
+
+
+CLES = ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens", "output_tokens")
+
+
+def estimer(tarifs, journal, config=None):
+    messages, ordre = messages_de(journal, True)
+    prix = {k: v.get("prix_par_million") for k, v in (lire_tarifs(tarifs).get("modeles") or {}).items()
+            if isinstance(v, dict)}
+    tot = {k: 0 for k in CLES}   # the lead's tokens, as in a "result" line
+    cout, connu = cout_de(messages, ordre, prix, tot)
+    fichiers = transcripts_sous_agents(journal, config)
+    for f in fichiers:
+        c, k = cout_de(*messages_de(f, False), prix)
+        cout += c
+        connu = connu and k
+    out = {"num_turns": len(ordre), "usage": tot, "sous_agents": len(fichiers)}
     if connu:
         out["total_cost_usd"] = round(cout, 4)
     print(json.dumps(out))
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 4 or sys.argv[1] not in ("apprendre", "estimer"):
-        sys.exit("usage: cout.py apprendre|estimer TARIFS LOG")
-    (apprendre if sys.argv[1] == "apprendre" else estimer)(sys.argv[2], sys.argv[3])
+    if len(sys.argv) not in (4, 5) or sys.argv[1] not in ("apprendre", "estimer"):
+        sys.exit("usage: cout.py apprendre TARIFS LOG | estimer TARIFS LOG [CONFIG]")
+    if sys.argv[1] == "apprendre":
+        apprendre(sys.argv[2], sys.argv[3])
+    else:
+        estimer(sys.argv[2], sys.argv[3], sys.argv[4] if len(sys.argv) == 5 else None)

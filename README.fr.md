@@ -179,7 +179,7 @@ L'application n'utilise que la bibliothèque standard de Go et trois paquets emb
 *Suivi → Mode de travail → Mode parallèle*, par projet, avec 2 à 10 ouvriers au maximum. Les ouvriers tournent sur `WORKER_MODEL` (Sonnet par défaut) : une fiche de jalon bien écrite est du travail d'exécution, le chef garde son modèle pour le plan et les fusions.
 
 1. Le chef écrit un **plan fin avec des dépendances explicites** : beaucoup de petits jalons autonomes, chacun avec les fichiers qu'il touche, `Depends on:` les jalons dont il a besoin, et ses critères d'acceptation. M1 est toujours la fondation (squelette, `check.sh`, contrats partagés).
-2. Le pilote fait tourner un **ordonnanceur** : chaque jalon dont les dépendances sont fusionnées reçoit un **ouvrier** (sa propre session Claude, sa propre copie de travail git `.athanor/work/M5` et sa branche `auto/M5`), en commençant par 2 et en en ajoutant un chaque fois qu'un ouvrier livre, jusqu'au nombre choisi. Dès qu'un ouvrier atteint le quota, plus aucun ne démarre ; s'ils l'ont tous atteint, la vérification du chef est sautée et le pilote attend, puis fait un jalon avec le chef seul avant de relancer des ouvriers.
+2. Le pilote fait tourner un **ordonnanceur** : chaque jalon dont les dépendances sont fusionnées reçoit un **ouvrier** (sa propre session Claude, sa propre copie de travail git `.athanor/work/M5` et sa branche `auto/M5`), en commençant par 2 et en en ajoutant un chaque fois qu'un ouvrier livre, jusqu'au nombre choisi. Dès qu'un ouvrier atteint le quota, plus aucun ne démarre ; s'ils l'ont tous atteint, la vérification du chef est sautée et le pilote attend, puis fait un jalon avec le chef seul avant de relancer des ouvriers. Le pilote laisse aussi le chef travailler seul, le temps d'un cycle, quand des ouvriers ne seraient pas rentables : moins de 3 jalons prêts en même temps, uniquement des jalons de documentation (ils se citent entre eux et entrent en conflit), ou le quota des 5 heures à 75 % ou celui de la semaine à 85 %. Deux jalons dont les fiches citent les mêmes fichiers ne tournent jamais en même temps.
 3. Dès qu'un ouvrier termine, le pilote **fusionne sa branche immédiatement** quand elle s'applique sans conflit, coche le jalon et lance les jalons suivants devenus prêts. Personne n'attend l'ouvrier le plus lent.
 4. En fin de cycle, **une seule** session du chef vérifie tout : elle fusionne les branches en conflit, lance la vérification complète, corrige ce que les fusions ont cassé et note le reste dans `BUGS.md`.
 5. **Les demandes en attente n'attendent pas.** Au début de chaque cycle, elles rejoignent la demande en cours : le chef ajoute leurs jalons au plan, avec leurs dépendances.
@@ -468,10 +468,10 @@ Oui. Rien n'est lié à un nom d'utilisateur ni à une lettre de disque : les ch
 Poussez un tag de version : GitHub compile les deux applications et publie la version ([`.github/workflows/release.yml`](.github/workflows/release.yml)).
 
 ```bash
-git tag v2.17.0 && git push origin v2.17.0
+git tag v2.17.1 && git push origin v2.17.1
 ```
 
-Gardez la version de [`app/winres/athanor.rc`](app/winres/athanor.rc) alignée sur le tag, et écrivez les nouveautés dans `docs/releases/VERSION.md` (par ex. [`docs/releases/2.17.0.md`](docs/releases/2.17.0.md)) : elles ouvrent la page de la version.
+Gardez la version de [`app/winres/athanor.rc`](app/winres/athanor.rc) alignée sur le tag, et écrivez les nouveautés dans `docs/releases/VERSION.md` (par ex. [`docs/releases/2.17.1.md`](docs/releases/2.17.1.md)) : elles ouvrent la page de la version.
 
 ## Contribuer
 

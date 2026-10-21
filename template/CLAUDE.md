@@ -49,11 +49,11 @@ At the start:
 8. If `.athanor/FOR_YOU_ANSWERED` exists, the user answered tasks: run `athanor todo list` and handle each answered one before any other work (see *Tasks for the user*).
 9. Take the first unchecked milestone of `.athanor/PLAN.md` that does not wait for a task of the user, and finish it entirely.
 
-At the end:
-1. Tick the milestone in `.athanor/PLAN.md`.
-2. Add a dated entry to `.athanor/LOG.md`: what was done, what was verified, the next step.
+At the end, in this order:
+1. Run the full `bash .athanor/check.sh` (its output into `.athanor/.verif/`, then `tail` of it) and see its `CHECK: PASSED`: the pilot looks for that line, and a milestone ticked without it is checked again at the start of the next cycle. Only then:
+2. Tick the milestone in `.athanor/PLAN.md` and add a dated entry to `.athanor/LOG.md`: what was done, what was verified, the next step.
 3. Commit (`Mn: what the milestone delivers`).
-4. Show in your answer the last lines of the output of the full `bash .athanor/check.sh` that prove success.
+4. Show in your answer the last lines of that check's output.
 5. **Stop there: one milestone per cycle.** Never start the next milestone in the same cycle: the pilot immediately starts a fresh cycle, whose light context makes every turn much cheaper. (The pilot itself closes the cycle a few minutes after a milestone commit.)
 
 ## Working fast and frugally
