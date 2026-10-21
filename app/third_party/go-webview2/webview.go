@@ -103,6 +103,11 @@ func NewWithOptions(options WebViewOptions) WebView {
 	chromium.MessageCallback = w.msgcb
 	chromium.DataPath = options.DataPath
 	chromium.SetPermission(edge.CoreWebView2PermissionKindClipboardRead, edge.CoreWebView2PermissionStateAllow)
+	chromium.NavigationCompletedCallback = func(_ *edge.ICoreWebView2, a *edge.ICoreWebView2NavigationCompletedEventArgs) {
+		if NavigationHook != nil {
+			NavigationHook(a.Reussie())
+		}
+	}
 
 	w.browser = chromium
 	w.mainthread, _, _ = w32.Kernel32GetCurrentThreadID.Call()
@@ -221,9 +226,23 @@ func (w *webview) callbinding(d rpcMessage) (interface{}, error) {
 	}
 }
 
+// WndProcHook (added for Athanor): the application sees the window's messages first, its own title bar
+// among them; handled == true skips the default handling and returns r.
+var WndProcHook func(hwnd, msg, wp, lp uintptr) (r uintptr, handled bool)
+
+// NavigationHook (added for Athanor): told after each navigation whether its page loaded.
+var NavigationHook func(ok bool)
+
 func wndproc(hwnd, msg, wp, lp uintptr) uintptr {
+	if WndProcHook != nil {
+		if r, ok := WndProcHook(hwnd, msg, wp, lp); ok {
+			return r
+		}
+	}
 	if w, ok := getWindowContext(hwnd).(*webview); ok {
 		switch msg {
+		case w32.WMApp: // Dispatch (see there)
+			w.viderFile()
 		case w32.WMMove, w32.WMMoving:
 			_ = w.browser.NotifyParentWindowPositionChanged()
 		case w32.WMNCLButtonDown:
@@ -360,12 +379,9 @@ func (w *webview) Run() {
 			0,
 		)
 		if msg.Message == w32.WMApp {
-			w.m.Lock()
-			q := append([]func(){}, w.dispatchq...)
-			w.dispatchq = []func(){}
-			w.m.Unlock()
-			for _, v := range q {
-				v()
+			w.viderFile()
+			if msg.Hwnd != 0 {
+				continue
 			}
 		} else if msg.Message == w32.WMQuit {
 			return
@@ -377,6 +393,17 @@ func (w *webview) Run() {
 		}
 		_, _, _ = w32.User32TranslateMessage.Call(uintptr(unsafe.Pointer(&msg)))
 		_, _, _ = w32.User32DispatchMessageW.Call(uintptr(unsafe.Pointer(&msg)))
+	}
+}
+
+// viderFile runs the functions given to Dispatch.
+func (w *webview) viderFile() {
+	w.m.Lock()
+	q := append([]func(){}, w.dispatchq...)
+	w.dispatchq = []func(){}
+	w.m.Unlock()
+	for _, v := range q {
+		v()
 	}
 }
 
@@ -446,6 +473,13 @@ func (w *webview) Dispatch(f func()) {
 	w.m.Lock()
 	w.dispatchq = append(w.dispatchq, f)
 	w.m.Unlock()
+	// Athanor: posted to the window rather than to the thread, so that a modal loop (moving or resizing
+	// the window, a menu), which drops thread messages, delivers it all the same (wndproc runs the queue)
+	if w.hwnd != 0 {
+		if r, _, _ := w32.User32PostMessageW.Call(w.hwnd, w32.WMApp, 0, 0); r != 0 {
+			return
+		}
+	}
 	_, _, _ = w32.User32PostThreadMessageW.Call(w.mainthread, w32.WMApp, 0, 0)
 }
 

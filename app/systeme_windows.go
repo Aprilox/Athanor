@@ -187,6 +187,8 @@ func Ouvrir(chemin string) error {
 // Windows 11). Blocking: call it from the main thread. Returns false when WebView2 is missing.
 func FenetreApp(url string) bool {
 	runtime.LockOSThread()
+	preparerCadre()
+	webview2.WndProcHook = messageFenetre
 	w := webview2.NewWithOptions(webview2.WebViewOptions{
 		AutoFocus:     true,
 		DataPath:      filepath.Join(os.Getenv("LocalAppData"), "Athanor", "webview2"),
@@ -197,6 +199,8 @@ func FenetreApp(url string) bool {
 	}
 	defer w.Destroy()
 	w.SetSize(1240, 820, webview2.HintMin)
+	installerCadre(w)
+	installerFermeture(w)
 	w.Navigate(url)
 	fenetreHWND.Store(uintptr(w.Window()))
 	fenetreOuverte.Store(true)

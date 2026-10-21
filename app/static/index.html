@@ -9,6 +9,19 @@
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
+<header id="fenetre-barre" class="fb" hidden>
+  <div class="fb-glisser">
+    <img src="logo.svg" width="16" height="16" alt="" class="fb-logo" draggable="false">
+    <span class="fb-nom">Athanor</span>
+    <span class="fb-projet" id="fb-projet"></span>
+  </div>
+  <div class="fb-actions" id="fb-actions"></div>
+  <div class="fb-boutons">
+    <button type="button" class="fb-btn" data-fenetre="reduire" tabindex="-1">&#xE921;</button>
+    <button type="button" class="fb-btn" data-fenetre="agrandir" tabindex="-1">&#xE922;</button>
+    <button type="button" class="fb-btn fb-fermer" data-fenetre="fermer" tabindex="-1">&#xE8BB;</button>
+  </div>
+</header>
 <div id="app" class="app">
   <aside class="nav">
     <div class="marque">
@@ -55,6 +68,18 @@
       <div class="dialogue-boutons">
         <button type="button" class="btn" id="dialogue-annuler"></button>
         <button type="button" class="btn btn-primaire" id="dialogue-ok"></button>
+      </div>
+    </div>
+  </div>
+  <div class="dialogue dialogue-fermeture" id="fermeture" hidden role="alertdialog" aria-modal="true" aria-labelledby="fermeture-titre">
+    <div class="dialogue-carte">
+      <h3 id="fermeture-titre"></h3>
+      <p id="fermeture-texte"></p>
+      <p id="fermeture-aide" class="muet petit"></p>
+      <div class="dialogue-boutons">
+        <button type="button" class="btn" data-fermer="annuler"></button>
+        <button type="button" class="btn btn-danger" data-fermer="arreter"></button>
+        <button type="button" class="btn btn-primaire" data-fermer="continuer"></button>
       </div>
     </div>
   </div>

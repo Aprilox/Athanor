@@ -95,6 +95,7 @@ type EtatVue struct {
 	Theme       string      `json:"theme"`
 	Accent      string      `json:"accent"`
 	Bienvenue   bool        `json:"bienvenue"`
+	Natif       bool        `json:"natif"` // native Windows mode: no Linux screen
 }
 
 func (s *Serveur) apiEtat(w http.ResponseWriter, r *http.Request) {
@@ -130,6 +131,7 @@ func (s *Serveur) apiEtat(w http.ResponseWriter, r *http.Request) {
 	vue.Kit = kit.Racine
 	vue.Projets = s.vuesProjets(courant)
 	vue.Bureau = s.bureau.Etat()
+	vue.Natif = modeNatif.Load()
 	if ok {
 		for i := range vue.Projets {
 			if vue.Projets[i].Nom == p.Nom {

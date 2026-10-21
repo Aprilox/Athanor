@@ -237,6 +237,7 @@ type OptionsVue struct {
 	ModeNatif                 bool       `json:"mode_natif"`
 	Windows                   bool       `json:"windows"`
 	GitBash                   string     `json:"git_bash"` // its bash.exe, "" when missing
+	BarreWindows              bool       `json:"barre_windows"`
 }
 
 func (s *Serveur) apiOptions(w http.ResponseWriter, r *http.Request) {
@@ -247,7 +248,7 @@ func (s *Serveur) apiOptions(w http.ResponseWriter, r *http.Request) {
 	if projets == nil {
 		projets = []Projet{}
 	}
-	s.ecrireJSON(w, OptionsVue{projets, c.Kit, s.kitCourant().Valide(), c.LancerPiloteAuDemarrage, c.BureauVirtuel, c.ProgrammesSupplementaires, DemarrageWindowsActif(), c.MotDePasseHash != "", s.bureau.Etat(), modeNatif.Load(), runtime.GOOS == "windows", bashNatif()})
+	s.ecrireJSON(w, OptionsVue{projets, c.Kit, s.kitCourant().Valide(), c.LancerPiloteAuDemarrage, c.BureauVirtuel, c.ProgrammesSupplementaires, DemarrageWindowsActif(), c.MotDePasseHash != "", s.bureau.Etat(), modeNatif.Load(), runtime.GOOS == "windows", bashNatif(), c.BarreWindows})
 }
 
 func (s *Serveur) apiEcrireOptions(w http.ResponseWriter, r *http.Request) {
@@ -258,6 +259,7 @@ func (s *Serveur) apiEcrireOptions(w http.ResponseWriter, r *http.Request) {
 		ProgrammesSupplementaires string `json:"programmes_supplementaires"`
 		DemarrageWindows          bool   `json:"demarrage_windows"`
 		ModeNatif                 *bool  `json:"mode_natif"`
+		BarreWindows              *bool  `json:"barre_windows"`
 	}
 	if err := lireCorps(r, &c); err != nil {
 		s.erreur(w, http.StatusBadRequest, err.Error())
@@ -291,6 +293,9 @@ func (s *Serveur) apiEcrireOptions(w http.ResponseWriter, r *http.Request) {
 		}
 		s.config.ModeNatif = *c.ModeNatif
 		modeNatif.Store(*c.ModeNatif)
+	}
+	if c.BarreWindows != nil {
+		s.config.BarreWindows = *c.BarreWindows
 	}
 	s.config.Kit = nouveau.Racine
 	s.config.LancerPiloteAuDemarrage = c.LancerPiloteAuDemarrage

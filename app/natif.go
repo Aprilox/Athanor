@@ -6,7 +6,15 @@ package main
 import (
 	"fmt"
 	"strings"
+	"sync/atomic"
 )
+
+// The answer given in the application's own dialog when its window was closed (fermeture_windows.go):
+// 0 not asked there (Windows' dialog asks then), 1 the native pilots go on, 2 they stop.
+var decisionFermeture atomic.Int32
+
+// pilotesAvantFermeture: the names of the native pilots running (set by main, asked when the window closes).
+var pilotesAvantFermeture = func() []string { return nil }
 
 // VerificationsNatives: the checks of the native Windows mode (Git Bash, the Windows programs the pilot
 // needs, Claude Code for Windows, the token, the kit's scripts).
@@ -40,12 +48,37 @@ echo 'scripts OK'`, false, Reparation{Genre: "aucune"}),
 // fermetureNative: the window was closed while pilots run in native Windows mode. They can go on in the
 // background (they were started outside the application's job) or stop now: the user says.
 func (s *Serveur) fermetureNative() {
-	if !modeNatif.Load() {
+	actifs, noms := s.pilotesNatifs()
+	if len(actifs) == 0 {
+		return
+	}
+	switch decisionFermeture.Load() {
+	case 1:
+		return
+	case 2:
+		for _, p := range actifs {
+			_, _ = s.scriptProjet(p, "stop.sh")
+		}
 		return
 	}
 	s.mu.Lock()
-	projets := append([]Projet{}, s.config.Projets...)
 	langue := s.config.Langue
+	s.mu.Unlock()
+	if questionOuiNon(libelle(langue, "natif_titre"), fmt.Sprintf(libelle(langue, "natif_texte"), strings.Join(noms, ", "))) {
+		return
+	}
+	for _, p := range actifs {
+		_, _ = s.scriptProjet(p, "stop.sh")
+	}
+}
+
+// pilotesNatifs: the projects whose pilot runs in native Windows mode, and their names.
+func (s *Serveur) pilotesNatifs() ([]Projet, []string) {
+	if !modeNatif.Load() {
+		return nil, nil
+	}
+	s.mu.Lock()
+	projets := append([]Projet{}, s.config.Projets...)
 	s.mu.Unlock()
 	var actifs []Projet
 	var noms []string
@@ -55,13 +88,5 @@ func (s *Serveur) fermetureNative() {
 			noms = append(noms, p.Nom)
 		}
 	}
-	if len(actifs) == 0 {
-		return
-	}
-	if questionOuiNon(libelle(langue, "natif_titre"), fmt.Sprintf(libelle(langue, "natif_texte"), strings.Join(noms, ", "))) {
-		return
-	}
-	for _, p := range actifs {
-		_, _ = s.scriptProjet(p, "stop.sh")
-	}
+	return actifs, noms
 }
