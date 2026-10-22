@@ -132,8 +132,38 @@ function confirmer(message, options = {}) {
   });
 }
 
-// Desktop app, not a web page: no browser context menu outside the text fields (copy/paste stay available there).
-document.addEventListener("contextmenu", (e) => { if (!e.target.closest("input, textarea, [contenteditable], .journal, pre, code")) e.preventDefault(); });
+// Desktop app, not a web page: the context menu (copy, paste…) only on text fields, logs and selected text.
+document.addEventListener("contextmenu", (e) => {
+  const selection = String(window.getSelection ? window.getSelection() : "").trim();
+  if (!e.target.closest("input, textarea, [contenteditable], .journal, pre, code") && !selection) e.preventDefault();
+});
+// Progress chart: a bubble over a milestone point, its details on click (rendreAvancement).
+function bulleAvancement() {
+  let b = $("#av-bulle");
+  if (!b) { b = document.createElement("div"); b.id = "av-bulle"; b.className = "av-bulle"; document.body.appendChild(b); }
+  return b;
+}
+document.addEventListener("mousemove", (e) => {
+  const z = e.target.closest && e.target.closest(".av-zone");
+  const p = z && (etat.avInfos || [])[Number(z.dataset.av)];
+  const b = $("#av-bulle");
+  if (!p) { if (b) b.style.display = "none"; return; }
+  const bulle = bulleAvancement();
+  bulle.innerHTML = `<b>${md(p.titre)}</b><div class="muet petit">${h(p.quand)} · ${p.cout.toFixed(2)} $</div>`;
+  bulle.style.display = "block";
+  const l = bulle.offsetWidth, hb = bulle.offsetHeight;
+  bulle.style.left = Math.max(8, Math.min(window.innerWidth - l - 8, e.clientX - l / 2)) + "px";
+  bulle.style.top = Math.max(8, e.clientY - hb - 14) + "px";
+});
+document.addEventListener("click", (e) => {
+  const z = e.target.closest(".av-zone"), f = e.target.closest("[data-av-fermer]");
+  if (!z && !f) return;
+  const p = z && (etat.avInfos || [])[Number(z.dataset.av)];
+  etat.avChoix = f || !p || etat.avChoix === p.cle ? null : p.cle;
+  const b = $("#av-bulle"); if (b) b.style.display = "none";
+  rendrePage();
+});
+
 // …and none of the browser's own shortcuts (reload, print, find, view source, developer tools, downloads, new window).
 document.addEventListener("keydown", (e) => {
   const k = e.key.toLowerCase(), ctrl = e.ctrlKey || e.metaKey;
@@ -782,7 +812,32 @@ function rendreAvancement(stats, plan, faits, actif) {
   const grilles = [0.25, 0.5, 0.75, 1].map((f) => `<line class="av-grille" x1="${g}" x2="${L - d}" y1="${y(total * f).toFixed(1)}" y2="${y(total * f).toFixed(1)}"/><text class="av-txt" x="${g - 6}" y="${(y(total * f) + 4).toFixed(1)}" text-anchor="end">${Math.round(total * f)}</text>`).join("");
   const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => { const tm = debut + f * (fin - debut); return `<text class="av-txt" x="${x(tm).toFixed(1)}" y="${basB + 14}" text-anchor="${f === 0 ? "start" : f === 1 ? "end" : "middle"}">${h(etiquette(tm))}</text>`; }).join("");
   const projection = eta ? `<line class="av-projection" x1="${x(dernier.fin).toFixed(1)}" y1="${y(faits).toFixed(1)}" x2="${x(eta).toFixed(1)}" y2="${y(total).toFixed(1)}"/><circle class="av-but" cx="${x(eta).toFixed(1)}" cy="${y(total).toFixed(1)}" r="4"><title>${h(t("Estimated end: {0}", [quandLisible(eta / 1000)]))}</title></circle>` : "";
-  const pts = lignes.filter((s) => s.jalon).map((s) => `<circle class="av-point" cx="${x(s.fin).toFixed(1)}" cy="${y(s.faits).toFixed(1)}" r="3"><title>${h(t("{0} / {1} milestones done", [s.faits, total]))} · ${h(etiquette(s.fin))}</title></circle>`).join("");
+  // each milestone point: what it delivered, and the cycles it took since the previous one (hover: a
+  // bubble; click: the details under the chart, kept across the live refreshes by its commit)
+  const infos = [];
+  let depuis = 0;
+  lignes.forEach((s, i) => {
+    if (!s.jalon) return;
+    const tranche = lignes.slice(depuis, i + 1); depuis = i + 1;
+    const id = (s.titre || "").split(":")[0].trim();
+    const prevu = id ? plan.find((j) => j.id === id || (j.titre || "").split(":")[0].trim() === id) : null;
+    infos.push({ s, cle: s.commit + "·" + s.cycle, titre: s.titre || t("{0} / {1} milestones done", [s.faits, total]), detail: prevu && [prevu.detail, ...(prevu.notes || [])].filter(Boolean).join(" · "),
+      cycles: tranche.map((r) => r.cycle), minutes: tranche.reduce((a, r) => a + (Number(r.minutes) || 0), 0),
+      cout: tranche.reduce((a, r) => a + (Number(r.cout_usd) || 0), 0), quand: etiquette(s.fin) });
+  });
+  etat.avInfos = infos;
+  const choisi = infos.find((p) => p.cle === etat.avChoix);
+  const pts = infos.map((p, i) => `<circle class="av-point${p === choisi ? " actif" : ""}" cx="${x(p.s.fin).toFixed(1)}" cy="${y(p.s.faits).toFixed(1)}" r="${p === choisi ? 5 : 3.5}"/><circle class="av-zone" data-av="${i}" cx="${x(p.s.fin).toFixed(1)}" cy="${y(p.s.faits).toFixed(1)}" r="10"/>`).join("");
+  const duree = (m) => m >= 90 ? t("{0} h {1} min", [Math.floor(m / 60), Math.round(m % 60)]) : t("{0} min", [Math.round(m)]);
+  const detail = choisi ? `<div class="av-detail"><div class="ligne m0"><b class="croit">${md(choisi.titre)}</b><button class="btn btn-petit" data-av-fermer title="${h(t("Close"))}">✕</button></div>
+      ${choisi.detail ? `<div class="muet petit mt-1">${md(choisi.detail)}</div>` : ""}
+      <dl class="fiche mt-2"><dt>${t("Finished")}</dt><dd>${h(choisi.quand)} · ${h(t("{0} / {1} milestones done", [choisi.s.faits, total]))}</dd>
+      <dt>${t("Cycles")}</dt><dd>${h(choisi.cycles.join(", "))}</dd>
+      <dt>${t("Working time")}</dt><dd>${h(duree(choisi.minutes))}</dd>
+      <dt>${t("Cost")}</dt><dd>${choisi.cout.toFixed(2)} $</dd>
+      ${choisi.s.commit ? `<dt>${t("Commit")}</dt><dd><code>${h(choisi.s.commit)}</code></dd>` : ""}
+      ${choisi.s.template ? `<dt>${t("Model")}</dt><dd>${h(choisi.s.template)}</dd>` : ""}</dl></div>`
+    : infos.length ? `<p class="muet petit mt-1">${t("Click a point to see its milestone.")}</p>` : "";
   const resume = reste <= 0 ? t("Every milestone of the plan is done.")
     : eta ? t("At this pace, the last milestone around {0}: about {1} h of work and ≈ {2} $ more at list price.", [quandLisible(eta / 1000), heuresReste.toLocaleString(lang, { maximumFractionDigits: heuresReste < 10 ? 1 : 0 }), Math.round(coutReste)])
     : t("The estimate appears after two milestones.");
@@ -793,6 +848,7 @@ function rendreAvancement(stats, plan, faits, actif) {
       <line class="av-axe" x1="${g}" x2="${L - d}" y1="${hautB}" y2="${hautB}"/>${ticks}
     </svg>
     <div class="av-legende muet petit"><span><i class="av-l-ligne"></i>${t("milestones done")}</span>${eta ? `<span><i class="av-l-proj"></i>${t("projection")}</span>` : ""}<span><i class="av-l-cout"></i>${t("cost of each cycle (max {0} $)", [maxCout.toFixed(2)])}</span></div>
+    ${detail}
   </div>`;
 }
 

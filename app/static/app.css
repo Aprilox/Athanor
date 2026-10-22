@@ -278,6 +278,12 @@ details[open] summary { margin-bottom: 10px; }
 .av-aire { fill: var(--accent-halo); }
 .av-ligne { fill: none; stroke: var(--accent); stroke-width: 2.2; stroke-linejoin: round; }
 .av-point { fill: var(--accent); stroke: var(--panel); stroke-width: 1.5; }
+.av-point.actif { stroke: var(--accent); stroke-width: 3; stroke-opacity: .35; }
+.av-zone { fill: transparent; cursor: pointer; }
+.av-zone:hover { fill: var(--accent); fill-opacity: .12; }
+.av-detail { margin-top: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+.av-bulle { position: fixed; z-index: 50; display: none; max-width: 360px; padding: 6px 10px; border-radius: 6px; pointer-events: none;
+  background: var(--panel-2); color: var(--ink); border: 1px solid var(--line); box-shadow: var(--ombre); font-size: 13px; }
 .av-projection { stroke: var(--muted); stroke-width: 1.6; stroke-dasharray: 5 5; }
 .av-but { fill: var(--panel); stroke: var(--muted); stroke-width: 2; }
 .av-cout { fill: var(--info); opacity: .35; }

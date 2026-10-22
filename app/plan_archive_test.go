@@ -25,3 +25,17 @@ func TestPlanAvecArchives(t *testing.T) {
 		t.Fatal("without archives")
 	}
 }
+
+func TestTitresCycles(t *testing.T) {
+	d := t.TempDir()
+	f := filepath.Join(d, "pilot.log")
+	_ = os.WriteFile(f, []byte("[2026-10-22 20:36:12] Cycle 12 succeeded: M8a: Add abilities\r\n[2026-10-22 20:47:08] Cycle 13 finished without a new commit (1/3).\n[2026-10-22 20:47:09] Cycle 13 succeeded: M8b: Add the chassis\n"), 0o644)
+	m := titresCycles(f)
+	if m["12"] != "M8a: Add abilities" || m["13"] != "M8b: Add the chassis" || len(m) != 2 {
+		t.Fatalf("titles: %v", m)
+	}
+	_ = os.WriteFile(f, []byte("[x] Cycle 14 succeeded: M9: Next\n"), 0o644)
+	if m := titresCycles(f); m["14"] != "M9: Next" {
+		t.Fatalf("cache not refreshed: %v", m)
+	}
+}
