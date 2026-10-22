@@ -1169,6 +1169,10 @@ while true; do
   signaler_reponses
   ranger_solutions "$ETAT/SOLUTIONS.md" "this project"
   ranger_solutions "$TOOLS/SOLUTIONS.md" "this PC and its tools, every project"
+  # the MCP servers of this cycle first: a server switched on in the app since the last cycle has its
+  # program (Unreal, Roblox Studio, Blender) opened by preparer_cycle right away
+  preparer_ecran
+  preparer_extensions
   preparer_cycle
   appliquer_identite
   preparer_equipe
@@ -1200,8 +1204,6 @@ while true; do
   fi
   log "Cycle $cycle: Claude is working${modele_cycle:+ with $modele_cycle}$([ "$cadrage" = 1 ] && echo ", framing${LIMITE_CYCLE_MIN:+ (time box $LIMITE_CYCLE_MIN min)}") (log: .athanor/logs/$(basename "$fichier_log"))"
   ETAT_PHASE=travail; ETAT_REPRISE=""; ETAT_DEBUT_CYCLE=$(date '+%Y-%m-%dT%H:%M:%S')
-  preparer_ecran
-  preparer_extensions
   statut "Claude is working (cycle $cycle)"
 
   # Serial mode (one lead, one milestone) or parallel (a wave of workers, then merge by the lead).
