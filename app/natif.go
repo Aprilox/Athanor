@@ -27,7 +27,7 @@ func VerificationsNatives() []*Verif {
 		v("git_bash", "Git for Windows (Git Bash)", "In native Windows mode, the pilot and Claude's commands run in Git Bash, the shell Claude Code uses on Windows.",
 			`echo "Git Bash OK: bash $BASH_VERSION ($(uname -s))"`, false, installer),
 		v("outils", "Programs the pilot needs", "git, jq, Python and curl for Windows; Node.js for the projects that use it, GitHub CLI to link a project to GitHub.",
-			`export PATH="$PWD/system/natif:$PATH"; m=0; for p in git jq python3 curl node gh; do if v=$($p --version 2>&1 | head -n 1) && [ -n "$v" ]; then echo "ok  $p: $v"; else echo "MISSING $p"; case $p in node|gh) ;; *) m=1 ;; esac; fi; done; exit $m`, false, installer),
+			`export PATH="$PWD/system/natif:$PATH"; m=0; for p in git jq python3 curl node gh uv; do if v=$($p --version 2>&1 | head -n 1) && [ -n "$v" ]; then echo "ok  $p: $v"; else echo "MISSING $p"; case $p in node|gh|uv) ;; *) m=1 ;; esac; fi; done; exit $m`, false, installer),
 		v("claude", "Claude Code for Windows", "The claude.exe program (%USERPROFILE%\\.local\\bin).",
 			`export PATH="$HOME/.local/bin:$PATH"; v=$(claude --version 2>&1 | head -n 1); echo "$v"
 n=$(printf '%s' "$v" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n 1); [ -n "$n" ] || exit 1
