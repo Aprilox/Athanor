@@ -356,7 +356,7 @@ PY
   [ -n "$FALLBACK_MODEL" ] && [ "$template" != "$FALLBACK_MODEL" ] && a+=(--fallback-model "$FALLBACK_MODEL")
   [ -n "$EFFORT" ] && a+=(--effort "$EFFORT")
   args_natifs a "$PRIVE/ouvrier-$ident"
-  prog_claude
+  prog_claude "$PRIVE/ouvrier_$ident.winpid"
   : > "$journal"
   MSYS2_ARG_CONV_EXCL="$EXCL_CLAUDE" setsid bash -c 'echo $$ > "$1"; f="$2"; d="$3"; b="$4"; PATH="$5"; export PROJECT="$d"; shift 5; cd "$d" && "$b" "$@" < /dev/null 2>&1; echo $? > "$f"' \
     _ "$PRIVE/ouvrier_$ident.sid" "$PRIVE/ouvrier_$ident.code" "$trav" "$BASH" "$CHEMIN_CLAUDE" "$SYSTEME/ecran.sh" lancer "${PROG_CLAUDE[@]}" "${a[@]}" > "$journal" 9>&- &
@@ -369,7 +369,7 @@ PY
 parallele_terminer_ouvrier() {
   local ident="$1" prefixe="$2" trav="$ETAT/work/$1" code sid commits
   wait "$(pid_sur "$(cat "$PRIVE/ouvrier_$ident.pid" 2>/dev/null)")" 2>/dev/null
-  sid=$(pid_sur "$(cat "$PRIVE/ouvrier_$ident.sid" 2>/dev/null)"); [ -n "$sid" ] && pkill -KILL -s "$sid" 2>/dev/null
+  arreter_session KILL "$PRIVE/ouvrier_$ident.sid" "$PRIVE/ouvrier_$ident.winpid"; rm -f "$PRIVE/ouvrier_$ident.winpid"
   code=$(entier "$(cat "$PRIVE/ouvrier_$ident.code" 2>/dev/null)" 1)
   if [ -d "$trav" ] && [ -n "$(g -C "$trav" status --porcelain 2>/dev/null)" ]; then
     g -C "$trav" add -A >/dev/null 2>&1 && g -C "$trav" commit -qm "$ident: uncommitted worker work (recorded by the pilot)" >/dev/null 2>&1 \
@@ -525,16 +525,16 @@ parallele_cycle() {
               timeout 30 python3 -I "$SYSTEME/relais.py" resume "$prefixe-$ident.jsonl" "$ETAT/work/$ident/.athanor/HANDOFF.md" > "$PRIVE/relais-$ident.md" 2>/dev/null
               : > "$PRIVE/relais_ouvrier-$ident"
               log "Worker $ident: context full ($(( ctx / 1000 ))k tokens), a fresh worker takes over its branch."
-              sid=$(pid_sur "$(cat "$PRIVE/ouvrier_$ident.sid" 2>/dev/null)")
-              [ -n "$sid" ] && { pkill -TERM -s "$sid" 2>/dev/null; sleep 5; pkill -KILL -s "$sid" 2>/dev/null; }
+              arreter_session TERM "$PRIVE/ouvrier_$ident.sid" "$PRIVE/ouvrier_$ident.winpid"; sleep 5
+              arreter_session KILL "$PRIVE/ouvrier_$ident.sid" "$PRIVE/ouvrier_$ident.winpid"
             fi
           fi
         fi
         derniere=$(entier "$(stat -c %Y "$prefixe-$ident.jsonl" 2>/dev/null)" "$debut")
         if [ $(( maintenant - derniere )) -ge $(( IDLE_MAX_MIN * SECONDS_PER_MINUTE )) ] || [ $(( maintenant - debut )) -ge $(( CYCLE_MAX_MIN * SECONDS_PER_MINUTE )) ]; then
           log "Worker $ident stopped by the watchdog."
-          sid=$(pid_sur "$(cat "$PRIVE/ouvrier_$ident.sid" 2>/dev/null)")
-          [ -n "$sid" ] && { pkill -TERM -s "$sid" 2>/dev/null; sleep 5; pkill -KILL -s "$sid" 2>/dev/null; }
+          arreter_session TERM "$PRIVE/ouvrier_$ident.sid" "$PRIVE/ouvrier_$ident.winpid"; sleep 5
+          arreter_session KILL "$PRIVE/ouvrier_$ident.sid" "$PRIVE/ouvrier_$ident.winpid"
         fi
         restants+=("$ident"); continue
       fi

@@ -6,12 +6,21 @@
 # built from the files when missing.
 # roblox-studio --rebuild: Rojo project: closes the Studio of the project, rebuilds its place from the files
 # and opens Studio on it again (for what the live sync, .athanor/studio/SYNC.luau, does not carry).
+# roblox-studio --screen: says whether Studio can draw right now (a locked Windows session draws nothing:
+# captures time out, play tests show nothing).
 . "$(dirname "$0")/_common.sh"
 passer_par_le_pont "$@"
 . "$SYSTEME/roblox.sh"
 studio_ouvert() { roblox_studio_ouvert; }
 attendre=0; reconstruire=0
 case "${1:-}" in
+  --screen)
+    if windows_verrouille; then
+      echo "Windows session LOCKED (lock screen up): Studio draws nothing until the user unlocks it. Do not retry captures nor restart Studio: note it in .athanor/BUGS.md and go on with what needs no image."
+      exit 3
+    fi
+    if studio_ouvert; then echo "Windows session unlocked, Roblox Studio running: it can draw."; else echo "Windows session unlocked, but Roblox Studio is not running (roblox-studio --wait opens it)."; fi
+    exit 0 ;;
   --wait) attendre=1; shift ;;
   --rebuild) reconstruire=1; attendre=1; shift ;;
 esac

@@ -66,9 +66,9 @@ PROJECT="${PROJECT:-$KIT/projet}"; mkdir -p "$PROJECT/.athanor" "$KIT/tools/wind
   fi
   if [ -n "$ROBLOX_STUDIO" ]; then
     echo "- **Roblox Studio**: \`roblox-studio [--wait] PLACE.rbxl\` opens it on a place of the project, without blocking (nothing if a Studio is already open)"
-    [ "${ROBLOX_MCP:-0}" = 1 ] && echo "  - **Roblox Studio MCP active**: \`mcp__roblox-studio__*\` tools on the open Studio (the pilot opens it before each cycle; Rojo project: \`.athanor/studio/SYNC.luau\` updates its scripts live, \`roblox-studio --rebuild\` rebuilds the place)"
+    [ "${ROBLOX_MCP:-0}" = 1 ] && echo "  - **Roblox Studio MCP active**: \`mcp__roblox-studio__*\` tools on the open Studio (the pilot opens it before each cycle; Rojo project: \`.athanor/studio/SYNC.luau\` updates its scripts live, \`roblox-studio --rebuild\` rebuilds the place; a capture that times out: \`roblox-studio --screen\` says whether the Windows session is locked)"
   fi
-  if [ -n "$BLENDER_EXE" ]; then echo "- **Blender**: \`blender -b -P script.py\`"; else echo "- Blender: not detected"; fi
+  if [ -n "$BLENDER_EXE" ]; then echo "- **Blender**: \`blender -b -P script.py\` (headless), \`blender --open FILE.blend\` (its window, for the Blender MCP)"; else echo "- Blender: not detected"; fi
   if [ -n "$ANDROID_SDK_DIR" ]; then echo "- **Android SDK**: \`$ANDROID_SDK_DIR\`; \`adb devices\`, \`adb install -r game.apk\` (phone plugged in over USB)"; else echo "- Android SDK: missing (install it as a portable copy in \`\$TOOLS/windows/android-sdk\`, see PC_TOOLS_GUIDE.md)"; fi
   if [ -n "$ANDROID_JDK_DIR" ]; then echo "- **Java for Android**: \`$ANDROID_JDK_DIR\`"; else echo "- Java (JDK) for Android: missing"; fi
   if [ "$WINGET" = 1 ]; then echo "- **winget**: \`install-windows ID\` installs a Windows program (\`install-windows --search NAME\` to find the ID)"; else echo "- winget: unavailable"; fi

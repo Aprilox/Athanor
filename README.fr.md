@@ -299,7 +299,7 @@ Claude travaille sous Linux (WSL2 sous Windows) et atteint vos logiciels Windows
 |---|---|
 | `unreal-editor`, `unreal-cmd`, `unreal-uat` | ouvre l'éditeur Unreal (piloté par Unreal MCP si activé), lance commandlets et tests, fabrique les versions Windows et Android |
 | `roblox-studio` | ouvre Roblox Studio sur une place du projet (rien si un Studio est déjà ouvert) |
-| `blender` | le Blender du PC, généralement en arrière-plan avec un script Python (`blender -b -P scene.py`) |
+| `blender` | le Blender du PC, généralement en arrière-plan avec un script Python (`blender -b -P scene.py`) ; `blender --open FICHIER.blend` ouvre sa fenêtre (rien si un Blender est déjà ouvert) |
 | `adb` | l'outil Android du PC : installer et tester sur un téléphone branché en USB |
 | `tool IMAGE CMD…` | lance une commande dans un conteneur Docker jetable qui ne voit que le projet |
 | `install-windows ID` / `--file setup.exe` | installe un logiciel Windows (winget ou installateur), avec élévation si autorisée |
@@ -311,6 +311,8 @@ Les logiciels installés sont détectés sur **tous les disques** (`C:`, `D:`…
 **Unreal Engine (MCP)** : installez **Unreal Engine** depuis le catalogue vérifié de *Skills & MCP*, activez-le pour le projet (son adresse est un réglage du serveur) et lancez une fois `commands\unreal-network.cmd`. Claude active lui-même les plugins du MCP dans le projet Unreal, et le pilote ouvre l'éditeur avant chaque cycle. Claude le pilote (acteurs, lumières, matériaux, tests), lance tests et captures avec `unreal-cmd`, et fabrique le jeu Windows avec `unreal-uat` dans `deliverable/`. Le MCP d'Unreal est expérimental : s'il ne répond pas, Claude continue sans.
 
 **Roblox Studio (MCP)** : installez **Roblox Studio** depuis le catalogue vérifié de *Skills & MCP* et activez-le pour le projet. Dans Studio, *Assistant > … > Manage MCP Servers*, activez *Enable Studio as MCP server*. Avant chaque cycle, le pilote ouvre dans Studio la première place `.rbxl`/`.rbxlx` du projet (sur le bureau de Claude si cette option est activée), sauf si un Studio est déjà ouvert : Claude travaille alors dans le vôtre. Claude modifie scripts et instances, lance des tests en jeu et insère des ressources via le serveur MCP intégré à Studio. C'est un programme Windows : il tourne sous Windows, hors de la cage (voir *Skills & MCP, en sécurité* plus haut). Expérimental.
+
+**Blender (MCP)** : installez **Blender** depuis le catalogue vérifié de *Skills & MCP* (le serveur officiel de Blender Lab ; nécessite Blender 5.1+, uv et Git pour Windows) et activez-le pour le projet. Dans Blender, installez le module MCP depuis [blender.org/lab/mcp-server](https://www.blender.org/lab/mcp-server/), activez son *Auto Start* et autorisez l'*accès en ligne* (*Préférences > Système*). Avant chaque cycle, le pilote ouvre le premier `.blend` du projet (ou un Blender vide), sauf si un Blender est déjà ouvert : Claude travaille alors dans le vôtre. Claude exécute du Python dans Blender, inspecte la scène, prend des captures et cherche dans la documentation de Blender ; il enregistre la scène dans le projet en `.blend`. Le serveur exécute dans Blender le code écrit par Claude, avec vos droits, hors de la cage. Expérimental.
 
 **Logiciels manquants** : Claude se débrouille seul (version portable dans `tools/windows/`, sinon winget, sinon la tâche administrateur si elle est autorisée). Si une installation échoue, il l'écrit dans `.athanor/TODO_FOR_YOU.md` et continue autrement.
 
@@ -340,6 +342,7 @@ Tout se modifie dans l'application (*Réglages*), ou dans `.env` ([`.env.example
 | `MAX_HOURS` | arrêt de sécurité (168 par défaut, une semaine) |
 | `QUOTA_WAIT_MIN` | attente quand l'heure de réouverture du quota est illisible |
 | `IDLE_MAX_MIN`, `CYCLE_MAX_MIN`, `CLOSE_AFTER_MILESTONE` | surveillance des cycles (muet 30 min ou plus long que 3 h → coupé et repris), un jalon par cycle |
+| `KEEP_AWAKE` | le PC reste éveillé tant qu'un pilote tourne : `1` (par défaut ; l'écran aussi pour Roblox Studio et Unreal), `screen` (l'écran toujours), `0` (désactivé) |
 | `RTK`, `TZ` | compression des sorties de commandes, fuseau horaire des journaux (vide = celui du système) |
 | `UE_DIR`, `BLENDER_EXE`, `ANDROID_SDK_DIR`, `ANDROID_JDK_DIR` | chemins des outils quand la détection automatique les manque (facultatifs, absents par défaut) |
 
@@ -367,7 +370,7 @@ Vous avez trouvé une faille ? Ouvrez plutôt un [avis de sécurité privé](htt
 ## Laisser tourner plusieurs jours
 
 - Les pilotes tournent dans WSL sans fenêtre : vous pouvez fermer l'application.
-- Empêchez la mise en veille (*Paramètres > Système > Alimentation > Veille : Jamais*).
+- Le PC reste éveillé tant qu'un pilote tourne (`KEEP_AWAKE`), même application fermée ; pour Roblox Studio et Unreal, l'écran reste allumé aussi, car une session Windows verrouillée n'affiche rien (ni captures, ni tests en jeu). Ne verrouillez pas vous-même la session (Win + L) avant une nuit de Roblox ou d'Unreal, et vérifiez que l'écran de veille ne demande pas de reconnexion à la reprise.
 - *Options* : « Ouvrir l'application à l'allumage de Windows (sans fenêtre) » et « Relancer les pilotes qui tournaient, à l'ouverture de l'application ».
 - Arrêt de sécurité au bout de `MAX_HOURS` (depuis le premier démarrage du projet) ; pour continuer, augmentez la valeur dans *Réglages*.
 
@@ -449,7 +452,7 @@ Oui. *Demandes → Remarque en cours de route* est lue au début du cycle suivan
 <details>
 <summary><b>Va-t-il me gêner pendant que j'utilise le PC ?</b></summary>
 
-Les pilotes tournent dans WSL sans fenêtre. Les programmes qu'ils ouvrent (un éditeur, un jeu en test) vont sur le bureau « Claude », jamais sur votre écran. Pensez à désactiver la mise en veille pour les longues sessions.
+Les pilotes tournent dans WSL sans fenêtre. Les programmes qu'ils ouvrent (un éditeur, un jeu en test) vont sur le bureau « Claude », jamais sur votre écran. Le PC reste éveillé tout seul tant qu'un pilote tourne.
 </details>
 
 <details>
@@ -487,10 +490,10 @@ Oui. Rien n'est lié à un nom d'utilisateur ni à une lettre de disque : les ch
 Poussez un tag de version : GitHub compile les deux applications et publie la version ([`.github/workflows/release.yml`](.github/workflows/release.yml)).
 
 ```bash
-git tag v2.23.0 && git push origin v2.23.0
+git tag v2.24.0 && git push origin v2.24.0
 ```
 
-Gardez la version de [`app/winres/athanor.rc`](app/winres/athanor.rc) alignée sur le tag, et écrivez les nouveautés dans `docs/releases/VERSION.md` (par ex. [`docs/releases/2.23.0.md`](docs/releases/2.23.0.md)) : elles ouvrent la page de la version.
+Gardez la version de [`app/winres/athanor.rc`](app/winres/athanor.rc) alignée sur le tag, et écrivez les nouveautés dans `docs/releases/VERSION.md` (par ex. [`docs/releases/2.24.0.md`](docs/releases/2.24.0.md)) : elles ouvrent la page de la version.
 
 ## Contribuer
 

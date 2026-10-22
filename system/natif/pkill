@@ -12,6 +12,6 @@ done
 [[ "$sid" =~ ^[0-9]+$ ]] || exit 1
 w=$(cat "/proc/$sid/winpid" 2>/dev/null)
 [[ "$w" =~ ^[0-9]+$ ]] || exit 1
-taskkill //T //F //PID "$w" >/dev/null 2>&1
+MSYS2_ARG_CONV_EXCL='*' taskkill /T /F /PID "$w" >/dev/null 2>&1
 kill "-$sig" "$sid" 2>/dev/null
 exit 0

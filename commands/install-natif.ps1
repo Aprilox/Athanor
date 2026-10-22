@@ -1,6 +1,6 @@
 ﻿# =============================================================================
 #  Athanor, native Windows mode: installs what the pilot needs (no WSL).
-#  1. with winget: Git for Windows (Git Bash), jq, Python, Node.js, GitHub CLI
+#  1. with winget: Git for Windows (Git Bash), jq, Python, Node.js, GitHub CLI, uv
 #  2. Claude Code for Windows (the official installer, in %USERPROFILE%\.local\bin)
 #  Opened by the app: Setup & health -> Install everything (native Windows mode).
 # =============================================================================
@@ -26,6 +26,7 @@ Paquet 'jqlang.jq' 'jq'
 Paquet 'Python.Python.3.12' 'Python'
 Paquet 'OpenJS.NodeJS.LTS' 'Node.js'
 Paquet 'GitHub.cli' 'GitHub CLI (to link a project to GitHub)'
+Paquet 'astral-sh.uv' 'uv (MCP servers written in Python, such as Blender''s)'
 
 $claude = Join-Path $env:USERPROFILE '.local\bin\claude.exe'
 if (Test-Path $claude) {

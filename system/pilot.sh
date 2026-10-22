@@ -86,6 +86,8 @@ CLOSE_AFTER_MILESTONE="${CLOSE_AFTER_MILESTONE:-1}"          # 1 = cycle closed 
 WATCH_INTERVAL="${WATCH_INTERVAL:-30}"  # seconds between two checks
 STAY_ALIVE_AT_END="${STAY_ALIVE_AT_END:-0}"  # 1 = the pilot stays on standby at the end
 SECONDS_PER_MINUTE="${SECONDS_PER_MINUTE:-60}"      # only change to test the script
+KEEP_AWAKE="${KEEP_AWAKE:-1}"   # 1 = the PC stays awake while the pilot runs (the screen too for Roblox Studio and Unreal); screen = always the screen too; 0 = off
+case "$KEEP_AWAKE" in 0|1|screen) ;; *) echo "Invalid setting KEEP_AWAKE (\"$KEEP_AWAKE\"): using default 1." >&2; KEEP_AWAKE=1 ;; esac
 # A non-numeric setting falls back to its default (and says so), never evaluated as is.
 for paire in MAX_HOURS=168 QUOTA_WAIT_MIN=20 ERROR_WAIT_MIN=2 ERROR_WAIT_MAX_MIN=60 LOGIN_WAIT_MIN=30 MAX_CYCLES_WITHOUT_PROGRESS=3 \
              MAX_TURNS_PER_CYCLE=30 IDLE_MAX_MIN=30 CYCLE_MAX_MIN=180 WATCH_INTERVAL=30 SECONDS_PER_MINUTE=60 FRAMING_MAX_MIN=25 RELAY_CONTEXT_K=150; do
@@ -433,10 +435,12 @@ args_natifs() {
 # The program to start for Claude. Native Windows: through Athanor.exe, which puts Claude in a Windows job:
 # stopping it stops everything Claude started, and what is left when Claude ends stops with it (no dev
 # server or browser keeps the cycle's output open); on Claude's desktop when that option is on.
+# $1 = file where Athanor.exe writes its Windows PID (arreter_session stops the cycle with it).
 prog_claude() {
   PROG_CLAUDE=("$CLAUDE_BIN")
   if [ "$NATIF" = 1 ] && [ -f "$KIT/Athanor.exe" ]; then
     PROG_CLAUDE=("$KIT/Athanor.exe" --isole --fin-tout)
+    [ -n "${1:-}" ] && { rm -f "$1"; PROG_CLAUDE+=(--pid "$(cygpath -w "$1")"); }
     [ -f "$KIT/logs/bureau-isole" ] || PROG_CLAUDE+=(--ici)
     PROG_CLAUDE+=(-- "$(cygpath -w "$CLAUDE_BIN")")
   fi
@@ -444,10 +448,10 @@ prog_claude() {
 
 lancer_claude_surveille() {  # $1 = log; stops the cycle if it stays silent or runs too long
   local journal="$1" f_sid="$PRIVE/claude_sid" f_code="$PRIVE/claude_code"
-  local pid_flux sid debut maintenant derniere motif="" tete coches_debut jalon_vu=0 h c fin_vu=0 ecart verifie
-  local relais_vu=0 dernier_ctx=0 ctx dernier_quota=0 lq
+  local pid_flux debut maintenant derniere motif="" tete coches_debut jalon_vu=0 h c fin_vu=0 ecart verifie
+  local relais_vu=0 dernier_ctx=0 ctx dernier_quota=0 lq f_win="$PRIVE/claude_winpid" attente dernier_verrou=0
   args_natifs args "$PRIVE/claude"
-  prog_claude
+  prog_claude "$f_win"
   rm -f "$f_sid" "$f_code" "$PRIVE/cycle_arrete" "$PRIVE/cycle_clos" "$PRIVE/cycle_relais"
   tete=$(g -C "$PROJECT" rev-parse HEAD 2>/dev/null || echo aucun)
   coches_debut=$(coches_plan); coches_debut=${coches_debut:-0}
@@ -465,7 +469,7 @@ lancer_claude_surveille() {  # $1 = log; stops the cycle if it stays silent or r
     # Claude has finished but a program it launched keeps the output open: we do not wait for the watchdog.
     if [ -s "$f_code" ]; then [ "$fin_vu" = 0 ] && fin_vu=$maintenant; fi
     if [ "$fin_vu" != 0 ] && [ $(( maintenant - fin_vu )) -ge 30 ]; then
-      sid=$(pid_sur "$(cat "$f_sid" 2>/dev/null)"); [ -n "$sid" ] && pkill -KILL -s "$sid" 2>/dev/null
+      arreter_session KILL "$f_sid" "$f_win"
       break
     elif [ $(( maintenant - derniere )) -ge $(( IDLE_MAX_MIN * SECONDS_PER_MINUTE )) ]; then
       motif="no activity for $IDLE_MAX_MIN min"
@@ -512,6 +516,17 @@ lancer_claude_surveille() {  # $1 = log; stops the cycle if it stays silent or r
         fi
       fi
     fi
+    # A locked Windows session draws nothing: Roblox Studio and Unreal captures and play tests fail until the
+    # user unlocks it. Said once in the log (each time it locks), so that a quiet night is understood.
+    if { [ "${ROBLOX_MCP:-0}" = 1 ] || [ "${UNREAL_MCP:-0}" = 1 ] || [ "${BLENDER_MCP:-0}" = 1 ]; } && [ $(( maintenant - dernier_verrou )) -ge 300 ]; then
+      dernier_verrou=$maintenant
+      if windows_verrouille; then
+        [ "$verrou_vu" = 0 ] && log "Windows session locked: Roblox Studio, Unreal and Blender draw nothing until you unlock it (captures, play tests). Claude goes on with what needs no image."
+        verrou_vu=1
+      elif [ "$verrou_vu" = 1 ]; then
+        verrou_vu=0; log "Windows session unlocked: the programs draw again."
+      fi
+    fi
     # Quota threshold with "stop now" (the application's auto stop): the cycle is cut; the loop then stops
     if [ -z "$motif" ] && [ -s "$REGLES_QUOTA" ] && [ $(( maintenant - dernier_quota )) -ge 60 ]; then
       dernier_quota=$maintenant
@@ -520,17 +535,28 @@ lancer_claude_surveille() {  # $1 = log; stops the cycle if it stays silent or r
     fi
     if [ -n "$motif" ]; then
       echo "$motif" > "$PRIVE/cycle_arrete"
-      sid=$(pid_sur "$(cat "$f_sid" 2>/dev/null)")
-      [ -n "$sid" ] && pkill -TERM -s "$sid" 2>/dev/null
+      arreter_session TERM "$f_sid" "$f_win"
       sleep 10
-      [ -n "$sid" ] && pkill -KILL -s "$sid" 2>/dev/null
+      arreter_session KILL "$f_sid" "$f_win"
       break
     fi
   done
+  # Claude must really be gone before anything else runs in the project: as long as its output stays
+  # open, the pilot tries again every minute and says so (it never starts a second Claude beside it).
+  attente=0
+  while kill -0 "$pid_flux" 2>/dev/null; do
+    sleep 5 9>&- & wait $! 2>/dev/null
+    attente=$(( attente + 5 ))
+    if [ $(( attente % 60 )) = 0 ]; then
+      [ "$attente" = 60 ] && log "Cycle $cycle: Claude is still running after the stop${motif:+ ($motif)}; the pilot keeps stopping it (taskkill output: arret.log in the pilot's folder)."
+      arreter_session KILL "$f_sid" "$f_win"
+    fi
+  done
   wait "$pid_flux" 2>/dev/null
+  [ "$attente" -ge 60 ] && log "Cycle $cycle: Claude stopped after $(( attente / 60 )) min of attempts."
   # Cleanup: no program launched during this cycle may keep running.
-  sid=$(pid_sur "$(cat "$f_sid" 2>/dev/null)")
-  [ -n "$sid" ] && pkill -KILL -s "$sid" 2>/dev/null
+  arreter_session KILL "$f_sid" "$f_win"
+  rm -f "$f_win"
   assainir "$ETAT"
   if [ -s "$f_code" ]; then return "$(entier "$(cat "$f_code")" 1)"; fi
   return 124
@@ -580,6 +606,21 @@ preparer_cycle() {  # non-AI tools: archives and project map, before Claude read
       ROBLOX_SANS_PLACE=1
       log "Roblox Studio MCP: no .rbxl/.rbxlx place in the project, the pilot does not open Studio (open it yourself, or let Claude save the place into the project)."
     fi
+  fi
+  # Blender MCP: its tools act on an open Blender whose MCP add-on runs (its "Auto Start" on): opened
+  # before the cycle on the project's first .blend, unless a Blender already runs (the user's included).
+  if [ "${BLENDER_MCP:-0}" = "1" ]; then
+    local blend sortie_b
+    blend=$(find "$PROJECT" -maxdepth 3 \( -name .athanor -o -name .git -o -name node_modules \) -prune -o -iname '*.blend' -type f -print -quit 2>/dev/null)
+    sortie_b=$(PROJECT="$PROJECT" blender --open ${blend:+"$blend"} 2>&1)
+    case "$sortie_b" in
+      *"already open"*) ;;
+      *started*) log "Blender opened${blend:+ on $(basename "$blend")} for its MCP server." ;;
+      *) sortie_b=$(printf '%s' "$sortie_b" | tail -n 1 | cut -c1-200)
+         [ "$sortie_b" != "${BLENDER_ECHEC:-}" ] && log "Blender unavailable for this cycle: $sortie_b"
+         BLENDER_ECHEC=$sortie_b; return 0 ;;
+    esac
+    BLENDER_ECHEC=""
   fi
 }
 
@@ -671,12 +712,41 @@ echo $$ > "$PRIVE/pilot.pid"
 echo $$ | publier "$ETAT/pilot.pid"
 # Heartbeat: the pid is republished every 20 s in the workshop; the application considers the pilot
 # dead if the file is older than 90 s (WSL or the PC shut down before the pilot could exit).
-( while kill -0 $$ 2>/dev/null && [ -f "$PRIVE/pilot.pid" ]; do echo $$ | publier "$ETAT/pilot.pid"; sleep 20; done ) 9>&- &
+EVEIL="$PRIVE/eveil"
+verrou_vu=0   # the Windows session was seen locked (lancer_claude_surveille)
+export JOURNAL_ARRET="$PRIVE/arret.log"   # what taskkill said when a cycle was stopped (native Windows)
+( while kill -0 $$ 2>/dev/null && [ -f "$PRIVE/pilot.pid" ]; do echo $$ | publier "$ETAT/pilot.pid"; [ -f "$EVEIL" ] && touch "$EVEIL"; sleep 20; done ) 9>&- &
 BATTEMENT_PID=$!
+# The PC stays awake while the pilot runs (KEEP_AWAKE), even with the application closed: a sleeping PC
+# stops every cycle until someone wakes it. Windows (native and WSL): Athanor.exe --eveil, which ends by
+# itself once the pilot stops touching $EVEIL (the heartbeat above); Linux: systemd-inhibit. "screen" in
+# $EVEIL also keeps the screen on, so that the screen timeout does not lock the session: a locked Windows
+# session draws nothing (Roblox Studio, Unreal: captures and play tests fail).
+rm -f "$EVEIL"
+demarrer_eveil() {
+  [ "$KEEP_AWAKE" = 0 ] && return 0
+  echo system > "$EVEIL"
+  if [ -f "$KIT/Athanor.exe" ] && { [ "$NATIF" = 1 ] || grep -qi microsoft /proc/version 2>/dev/null; }; then
+    (cd /mnt/c 2>/dev/null; exec "$KIT/Athanor.exe" --eveil "$(wslpath -w "$EVEIL")") < /dev/null > /dev/null 2>&1 9>&- &
+  elif command -v systemd-inhibit > /dev/null 2>&1; then
+    systemd-inhibit --what=sleep:idle --who=Athanor --why="Athanor: a pilot is running" --mode=block \
+      tail --pid=$$ -f /dev/null < /dev/null > /dev/null 2>&1 9>&- &
+  else
+    rm -f "$EVEIL"
+  fi
+}
+# Before each cycle: the screen too when the cycle drives a Windows program's window.
+mode_eveil() {
+  [ -f "$EVEIL" ] || return 0
+  local m=system
+  if [ "$KEEP_AWAKE" = screen ] || { [ "$KEEP_AWAKE" = 1 ] && { [ "${ROBLOX_MCP:-0}" = 1 ] || [ "${UNREAL_MCP:-0}" = 1 ] || [ "${BLENDER_MCP:-0}" = 1 ]; }; }; then m=screen; fi
+  [ "$(cat "$EVEIL" 2>/dev/null)" = "$m" ] || echo "$m" > "$EVEIL"
+}
+demarrer_eveil
 arreter_tout() {  # Ctrl+C, window closed or stop.sh: Claude is stopped too
-  local sid f; sid=$(pid_sur "$(cat "$PRIVE/claude_sid" 2>/dev/null)")
-  [ -n "$sid" ] && pkill -TERM -s "$sid" 2>/dev/null
-  for f in "$PRIVE"/ouvrier_*.sid; do [ -f "$f" ] && sid=$(pid_sur "$(cat "$f")") && [ -n "$sid" ] && pkill -KILL -s "$sid" 2>/dev/null; done
+  local f
+  arreter_session TERM "$PRIVE/claude_sid" "$PRIVE/claude_winpid"
+  for f in "$PRIVE"/ouvrier_*.sid; do [ -f "$f" ] && arreter_session KILL "$f" "${f%.sid}.winpid"; done
   parallele_nettoyer_worktrees
   [ -n "${PONT_PID:-}" ] && kill "$PONT_PID" 2>/dev/null
   [ -n "${BATTEMENT_PID:-}" ] && kill "$BATTEMENT_PID" 2>/dev/null
@@ -685,7 +755,7 @@ arreter_tout() {  # Ctrl+C, window closed or stop.sh: Claude is stopped too
 }
 trap arreter_tout TERM INT HUP
 # Any end of the pilot (STOP, DONE, error) also stops the bridge.
-trap '[ -n "${PONT_PID:-}" ] && kill "$PONT_PID" 2>/dev/null; [ -n "${SYNC_PID:-}" ] && kill "$SYNC_PID" 2>/dev/null; [ -n "${BATTEMENT_PID:-}" ] && kill "$BATTEMENT_PID" 2>/dev/null; [ -n "${ECRAN_PID:-}" ] && kill "$ECRAN_PID" 2>/dev/null; rm -f "$PRIVE/pilot.pid" "$ETAT/pilot.pid" "$PRIVE/ecran"' EXIT
+trap '[ -n "${PONT_PID:-}" ] && kill "$PONT_PID" 2>/dev/null; [ -n "${SYNC_PID:-}" ] && kill "$SYNC_PID" 2>/dev/null; [ -n "${BATTEMENT_PID:-}" ] && kill "$BATTEMENT_PID" 2>/dev/null; [ -n "${ECRAN_PID:-}" ] && kill "$ECRAN_PID" 2>/dev/null; rm -f "$PRIVE/pilot.pid" "$ETAT/pilot.pid" "$PRIVE/ecran" "$EVEIL"' EXIT
 
 [ -n "$CLAUDE_BIN" ] && [ -x "$CLAUDE_BIN" ] || { log "Claude Code not found: run install.sh first."; exit 1; }
 # History from a previous pilot (before the private folder): taken over once, without following links.
@@ -805,6 +875,14 @@ roblox_depuis_mcp() {
   export ROBLOX_MCP
 }
 
+# Blender MCP: the verified catalog's "blender" (Blender Lab's server), or a server whose name says Blender.
+BLENDER_MCP=0; export BLENDER_MCP
+blender_depuis_mcp() {
+  BLENDER_MCP=0
+  [ -f "$PRIVE/mcp.json" ] && jq -e '.mcpServers | keys[] | select(test("blender"; "i"))' "$PRIVE/mcp.json" >/dev/null 2>&1 && BLENDER_MCP=1
+  export BLENDER_MCP
+}
+
 # Skills and MCP servers chosen in the app (Skills & MCP page), plus Unreal MCP: rebuilt at the start of
 # every cycle, so a change made in the app applies from the next cycle. Local MCP servers run in a cage
 # (system/mcp-jail.sh); the skills form a plugin loaded with --plugin-dir.
@@ -826,6 +904,8 @@ preparer_extensions() {
   EXTENSIONS_AVANT="$r"
   unreal_depuis_mcp
   roblox_depuis_mcp
+  blender_depuis_mcp
+  mode_eveil
 }
 preparer_extensions
 
