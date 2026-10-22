@@ -119,8 +119,9 @@ func NewWithOptions(options WebViewOptions) WebView {
 	if err != nil {
 		log.Fatal(err)
 	}
-	// disable context menu
-	err = settings.PutAreDefaultContextMenusEnabled(options.Debug)
+	// Athanor: the context menu stays (copy, cut, paste in the text fields and on selected text); the page
+	// itself keeps it off everywhere else (app.js), and without the developer tools it has no "Inspect"
+	err = settings.PutAreDefaultContextMenusEnabled(true)
 	if err != nil {
 		log.Fatal(err)
 	}

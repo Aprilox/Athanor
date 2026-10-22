@@ -4,14 +4,17 @@ package main
 // statistics (stats.tsv), plan.
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -178,6 +181,7 @@ type LigneStat struct {
 	ContexteMax  int64   `json:"contexte_max"`
 	Commit       string  `json:"commit"`
 	Estime       bool    `json:"estime"` // cost worked out by the pilot from the turns of the lead and its sub-agents (no "result" line)
+	Titre        string  `json:"titre,omitempty"` // the cycle's milestone, as the pilot's log says it ("Cycle 12 succeeded: M8a: …")
 }
 
 func (p Projet) LireStats() []LigneStat {
@@ -199,7 +203,64 @@ func (p Projet) LireStats() []LigneStat {
 		}
 		f := func(n int) float64 { v, _ := strconv.ParseFloat(g(n), 64); return v }
 		e := func(n int) int64 { v, _ := strconv.ParseInt(g(n), 10, 64); return v }
-		out = append(out, LigneStat{g(0), g(1), g(2), g(3), f(4), f(5), e(6), f(7), e(8), e(9), e(10), e(11), e(12), g(13), g(14) == "1"})
+		out = append(out, LigneStat{g(0), g(1), g(2), g(3), f(4), f(5), e(6), f(7), e(8), e(9), e(10), e(11), e(12), g(13), g(14) == "1", ""})
+	}
+	if len(out) > 0 {
+		titres := titresCycles(p.PiloteLog())
+		for i := range out {
+			out[i].Titre = titres[out[i].Cycle]
+		}
+	}
+	return out
+}
+
+var reCycleReussi = regexp.MustCompile(`^\[[^\]]*\] Cycle ([0-9]{1,6}) succeeded: (.{1,300})$`)
+
+type titresEnCache struct {
+	taille int64
+	date   time.Time
+	titres map[string]string
+}
+
+var (
+	titresMu    sync.Mutex
+	titresCache = map[string]titresEnCache{}
+)
+
+// titresCycles: cycle number -> what the pilot's log says that cycle delivered (the end of the log only),
+// read again only when the log changes (the page asks every 1.5 s).
+func titresCycles(chemin string) map[string]string {
+	st, err := os.Stat(chemin)
+	if err != nil {
+		return map[string]string{}
+	}
+	titresMu.Lock()
+	defer titresMu.Unlock()
+	if c, ok := titresCache[chemin]; ok && c.taille == st.Size() && c.date.Equal(st.ModTime()) {
+		return c.titres
+	}
+	out := lireTitresCycles(chemin)
+	titresCache[chemin] = titresEnCache{st.Size(), st.ModTime(), out}
+	return out
+}
+
+func lireTitresCycles(chemin string) map[string]string {
+	out := map[string]string{}
+	f, err := os.Open(chemin)
+	if err != nil {
+		return out
+	}
+	defer f.Close()
+	const fin = 4 << 20
+	if st, err := f.Stat(); err == nil && st.Size() > fin {
+		_, _ = f.Seek(st.Size()-fin, io.SeekStart)
+	}
+	sc := bufio.NewScanner(f)
+	sc.Buffer(make([]byte, 64<<10), 1<<20)
+	for sc.Scan() {
+		if m := reCycleReussi.FindStringSubmatch(strings.TrimRight(sc.Text(), "\r")); m != nil {
+			out[m[1]] = m[2]
+		}
 	}
 	return out
 }
