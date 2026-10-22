@@ -987,6 +987,8 @@ func (s *Serveur) apiExtCatalogue(w http.ResponseWriter, r *http.Request) {
 			x := MCPInstalle{Nom: m.Nom, Source: "github.com/" + m.Depot, Catalogue: m.ID, Config: m.Config, Liens: map[string]string{}, Ajoute: maintenantISO()}
 			if m.Depot == "" {
 				x.Source = ""
+			} else if i := strings.Index(m.Depot, "://"); i >= 0 { // a repository outside GitHub: its own address
+				x.Source = m.Depot[i+3:]
 			}
 			for _, rg := range m.Reglages {
 				if x.Reglages == nil {

@@ -372,6 +372,11 @@ def tester(kit, projet, sid, delai=150):
     env = dict(os.environ, **s.get("env", {}))
     try:
         p = subprocess.Popen([s["command"]] + s["args"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, cwd=projet if os.path.isdir(projet) else None)
+    except FileNotFoundError:
+        nom = os.path.basename(str(s["command"]))
+        aide = {"uvx": " (it comes with uv: winget install --id astral-sh.uv -e, or Setup & health -> Install everything)",
+                "npx": " (it comes with Node.js: Setup & health -> Install everything)"}.get(nom.lower().removesuffix(".exe").removesuffix(".cmd"), "")
+        return {"ok": False, "erreur": f"program not found on this PC: {nom}{aide}"}
     except OSError as e:
         return {"ok": False, "erreur": str(e)}
     sortie = Lecteur(p.stdout) if os.name == "nt" else None
