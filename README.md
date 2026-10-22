@@ -299,7 +299,7 @@ Claude works in Linux (WSL2 on Windows) and reaches your Windows software throug
 |---|---|
 | `unreal-editor`, `unreal-cmd`, `unreal-uat` | opens the Unreal editor (optionally driven through Unreal MCP), runs commandlets and tests, packages Windows and Android builds |
 | `roblox-studio` | opens Roblox Studio on a place of the project (nothing if a Studio is already open) |
-| `blender` | the PC's Blender, typically in the background with a Python script (`blender -b -P scene.py`) |
+| `blender` | the PC's Blender, typically in the background with a Python script (`blender -b -P scene.py`); `blender --open FILE.blend` opens its window (nothing if a Blender is already open) |
 | `adb` | the PC's Android tool: install and test on a phone plugged in over USB |
 | `tool IMAGE CMD…` | runs a command in a disposable Docker container, with only the project mounted |
 | `install-windows ID` / `--file setup.exe` | installs Windows software (winget or an installer), elevated when allowed |
@@ -311,6 +311,8 @@ Installed software is detected on **every drive** (`C:`, `D:`…), and the newes
 **Unreal Engine (MCP)**: install **Unreal Engine** from the verified catalog of *Skills & MCP*, switch it on for the project (its address is a setting of the server) and run `commands\unreal-network.cmd` once. Claude enables the MCP plugins in the Unreal project itself, and the pilot opens the editor before each cycle. Claude drives it (actors, lights, materials, tests), runs tests and screenshots with `unreal-cmd`, and packages the Windows game with `unreal-uat` into `deliverable/`. The Unreal MCP is experimental: when it does not answer, Claude carries on without it.
 
 **Roblox Studio (MCP)**: install **Roblox Studio** from the verified catalog of *Skills & MCP* and switch it on for the project. In Studio, *Assistant > … > Manage MCP Servers*, turn on *Enable Studio as MCP server*. Before each cycle, the pilot opens the project's first `.rbxl`/`.rbxlx` place in Studio (on Claude's desktop when that option is on), unless a Studio is already open: then Claude works in yours. Claude edits scripts and instances, runs play tests and inserts assets through Studio's built-in MCP server. It is a Windows program: it runs on Windows, outside the cage (see *Skills & MCP, safely* above). Experimental.
+
+**Blender (MCP)**: install **Blender** from the verified catalog of *Skills & MCP* (Blender Lab's official server; needs Blender 5.1+, uv and Git for Windows) and switch it on for the project. In Blender, install the MCP add-on from [blender.org/lab/mcp-server](https://www.blender.org/lab/mcp-server/), turn on its *Auto Start*, and allow *Online Access* (*Preferences > System*). Before each cycle, the pilot opens the project's first `.blend` (or an empty Blender), unless a Blender is already open: then Claude works in yours. Claude runs Python in Blender, inspects the scene, takes screenshots and searches Blender's documentation; it saves the scene into the project as a `.blend`. The server runs the code Claude writes inside Blender with your rights, outside the cage. Experimental.
 
 **Missing software**: Claude sorts it out on its own (a portable version in `tools/windows/`, else winget, else the administrator task if allowed). If an installation fails, it writes it to `.athanor/TODO_FOR_YOU.md` and finds another way.
 
@@ -337,6 +339,7 @@ Everything is editable in the app (*Settings*), or in `.env` ([`.env.example`](.
 | `MAX_HOURS` | safety stop (default 168, one week) |
 | `QUOTA_WAIT_MIN` | wait when the quota reset time cannot be read |
 | `IDLE_MAX_MIN`, `CYCLE_MAX_MIN`, `CLOSE_AFTER_MILESTONE` | cycle watchdog, one milestone per cycle |
+| `KEEP_AWAKE` | the PC stays awake while a pilot runs: `1` (default; the screen too for Roblox Studio and Unreal), `screen` (the screen always), `0` (off) |
 | `RTK`, `TZ` | command output compression, time zone of the logs (empty = the system's) |
 | `UE_DIR`, `BLENDER_EXE`, `ANDROID_SDK_DIR`, `ANDROID_JDK_DIR` | tool paths when auto-detection misses them (optional, absent by default) |
 
@@ -364,7 +367,7 @@ Found a vulnerability? Please open a [private security advisory](https://github.
 ## Running for days
 
 - The pilots run in WSL without a window: you can close the app.
-- Disable sleep mode (*Settings > System > Power > Sleep: Never*).
+- The PC stays awake while a pilot runs (`KEEP_AWAKE`), even with the app closed; for Roblox Studio and Unreal the screen stays on too, because a locked Windows session draws nothing (no captures, no play tests). Do not lock the session yourself (Win + L) before a night of Roblox or Unreal, and check that the screen saver does not ask for a sign-in on resume.
 - *Options*: "Open the app when Windows starts (without a window)" and "Restart the pilots that were running, when the app opens".
 - Safety stop after `MAX_HOURS` (counted from the project's first start); raise it in *Settings* to go on.
 
@@ -448,7 +451,7 @@ Yes. *Requests → Note along the way* is read at the start of the next cycle. N
 <details>
 <summary><b>Will it get in my way while I use the PC?</b></summary>
 
-The pilots run in WSL without a window. The programs they open (an editor, a game under test) go to the "Claude" desktop, never on your screen. Remember to disable sleep mode for long runs.
+The pilots run in WSL without a window. The programs they open (an editor, a game under test) go to the "Claude" desktop, never on your screen. The PC stays awake on its own while a pilot runs.
 </details>
 
 <details>
@@ -486,10 +489,10 @@ Yes. Nothing is tied to a user name or a drive letter: paths come from your prof
 Push a version tag and GitHub builds both apps and publishes the release ([`.github/workflows/release.yml`](.github/workflows/release.yml)):
 
 ```bash
-git tag v2.23.0 && git push origin v2.23.0
+git tag v2.24.0 && git push origin v2.24.0
 ```
 
-Keep the version in [`app/winres/athanor.rc`](app/winres/athanor.rc) in step with the tag, and write what is new in `docs/releases/VERSION.md` (e.g. [`docs/releases/2.23.0.md`](docs/releases/2.23.0.md)): it opens the release page.
+Keep the version in [`app/winres/athanor.rc`](app/winres/athanor.rc) in step with the tag, and write what is new in `docs/releases/VERSION.md` (e.g. [`docs/releases/2.24.0.md`](docs/releases/2.24.0.md)): it opens the release page.
 
 ## Contributing
 

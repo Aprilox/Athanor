@@ -73,6 +73,25 @@ entier() { [[ "$1" =~ ^[0-9]{1,12}$ ]] && printf '%s' "$1" || printf '%s' "$2"; 
 # Session or process id that is safe to signal (never 0 or 1, which would target everyone).
 pid_sur() { [[ "$1" =~ ^[0-9]{2,9}$ ]] && printf '%s' "$1"; }
 
+# Stops a Claude session and everything it started. $1 = signal, $2 = file holding its session id,
+# $3 = (native Windows) file where Athanor.exe --isole wrote its Windows PID. Native Windows: Athanor.exe is
+# ended by its own PID, which closes its job, so every program of the cycle stops with it (Claude, its
+# commands, what they opened), whatever the parent links say; then the Git Bash side. What taskkill says
+# goes to $JOURNAL_ARRET when it is set.
+arreter_session() {
+  local sid w
+  if [ "${NATIF:-0}" = 1 ] && [ -n "${3:-}" ]; then
+    w=$(pid_sur "$(cat "$3" 2>/dev/null)")
+    # only while that PID still is Athanor.exe (Windows reuses the PIDs of ended processes)
+    if [ -n "$w" ] && MSYS2_ARG_CONV_EXCL='*' tasklist /FI "PID eq $w" /NH 2>/dev/null | grep -qi 'athanor'; then
+      { date '+%F %T'; MSYS2_ARG_CONV_EXCL='*' taskkill /T /F /PID "$w" 2>&1; } >> "${JOURNAL_ARRET:-/dev/null}" 2>/dev/null
+    fi
+  fi
+  sid=$(pid_sur "$(cat "$2" 2>/dev/null)")
+  [ -n "$sid" ] && pkill "-$1" -s "$sid" 2>/dev/null
+  return 0
+}
+
 # Writes standard input to $1 (a workshop file) without ever following a link planted in its place.
 publier() {
   local dest="$1" t

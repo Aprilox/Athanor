@@ -40,7 +40,13 @@ roblox_construire() {
 }
 
 roblox_studio_ouvert() {
-  (cd /mnt/c 2>/dev/null; tasklist.exe /FI "IMAGENAME eq RobloxStudioBeta.exe" /NH 2>/dev/null) | grep -qi 'RobloxStudioBeta'
+  (cd /mnt/c 2>/dev/null; MSYS2_ARG_CONV_EXCL='*' tasklist.exe /FI "IMAGENAME eq RobloxStudioBeta.exe" /NH 2>/dev/null) | grep -qi 'RobloxStudioBeta'
+}
+
+# The Windows session is locked (its lock screen, LogonUI.exe, is up): Windows programs draw nothing then,
+# so Studio's captures time out and its play tests show nothing, until the user unlocks the session.
+windows_verrouille() {
+  (cd /mnt/c 2>/dev/null; MSYS2_ARG_CONV_EXCL='*' tasklist.exe /FI "IMAGENAME eq LogonUI.exe" /NH 2>/dev/null) | grep -qi 'LogonUI'
 }
 
 # roblox_fermer_projet: closes the Studios opened on a place of this project (never another one, the

@@ -118,6 +118,10 @@ reglages = {
         {"matcher": "Read|Edit|Write|MultiEdit|NotebookEdit|Glob|Grep",
          "hooks": [{"type": "command", "timeout": 10,
                     "command": " ".join(shlex.quote(x) for x in [python, os.path.join(system, "guard.py"), projet, tools, tempfile.gettempdir() if NATIF else "/tmp"] + [f"--lecture={d}" for d in lectures] + [f"--lecture={d}" for d in logiciels])}]},
+        # no long waits, no closing the user's Studio or Unreal by program name (system/bash_guard.py)
+        {"matcher": "Bash",
+         "hooks": [{"type": "command", "timeout": 10,
+                    "command": " ".join(shlex.quote(x) for x in [python, os.path.join(system, "bash_guard.py")])}]},
     ]},
 }
 if NATIF:
@@ -128,8 +132,11 @@ if NATIF:
     # the pilot tells Git Bash not to rewrite Claude's own arguments; Claude's commands get the usual rewriting back
     reglages["env"]["MSYS2_ARG_CONV_EXCL"] = ""
     # the guard reads paths in UTF-8 whatever the Windows code page
-    reglages["hooks"]["PreToolUse"][0]["hooks"][0]["command"] = reglages["hooks"]["PreToolUse"][0]["hooks"][0]["command"].replace(
-        shlex.quote(python), shlex.quote(python.replace("\\", "/")) + " -X utf8", 1)
+    for crochet in reglages["hooks"]["PreToolUse"][:2]:
+        crochet["hooks"][0]["command"] = crochet["hooks"][0]["command"].replace(
+            shlex.quote(python), shlex.quote(python.replace("\\", "/")) + " -X utf8", 1)
+    reglages["hooks"]["PreToolUse"][1]["hooks"][0]["command"] = reglages["hooks"]["PreToolUse"][1]["hooks"][0]["command"].replace(
+        shlex.quote(os.path.join(system, "bash_guard.py")), shlex.quote(os.path.join(system, "bash_guard.py").replace("\\", "/")), 1)
     reglages["env"] = {k: (v.replace("\\", "/") if isinstance(v, str) else v) for k, v in reglages["env"].items()}
     reglages["permissions"]["additionalDirectories"] = [d.replace("\\", "/") for d in reglages["permissions"]["additionalDirectories"]]
     rtk = False   # RTK here is a Linux program
