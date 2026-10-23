@@ -518,11 +518,11 @@ parallele_cycle() {
         # context full: its branch goes to a fresh worker, between two steps (10 min later at most), 3 times a cycle at most
         if [ "$RELAY_CONTEXT_K" -gt 0 ] && [ "${relais_n[$ident]:-0}" -lt 3 ] && [ $(( maintenant - ${ctx_vu[$ident]:-0} )) -ge 60 ] && [ ! -f "$PRIVE/relais_ouvrier-$ident" ]; then
           ctx_vu[$ident]=$maintenant
-          ctx=$(entier "$(timeout 20 python3 -I "$SYSTEME/relais.py" contexte "$prefixe-$ident.jsonl" 2>/dev/null)" 0)
+          ctx=$(entier "$(timeout 20 "${OUTIL_RELAIS[@]}" contexte "$prefixe-$ident.jsonl" 2>/dev/null)" 0)
           if [ "$ctx" -ge $(( RELAY_CONTEXT_K * 1000 )) ]; then
             [ -n "${relais_vu[$ident]:-}" ] || relais_vu[$ident]=$maintenant
-            if timeout 20 python3 -I "$SYSTEME/relais.py" sur "$prefixe-$ident.jsonl" 2>/dev/null || [ $(( maintenant - ${relais_vu[$ident]} )) -ge 600 ]; then
-              timeout 30 python3 -I "$SYSTEME/relais.py" resume "$prefixe-$ident.jsonl" "$ETAT/work/$ident/.athanor/HANDOFF.md" > "$PRIVE/relais-$ident.md" 2>/dev/null
+            if timeout 20 "${OUTIL_RELAIS[@]}" sur "$prefixe-$ident.jsonl" 2>/dev/null || [ $(( maintenant - ${relais_vu[$ident]} )) -ge 600 ]; then
+              timeout 30 "${OUTIL_RELAIS[@]}" resume "$prefixe-$ident.jsonl" "$ETAT/work/$ident/.athanor/HANDOFF.md" > "$PRIVE/relais-$ident.md" 2>/dev/null
               : > "$PRIVE/relais_ouvrier-$ident"
               log "Worker $ident: context full ($(( ctx / 1000 ))k tokens), a fresh worker takes over its branch."
               arreter_session TERM "$PRIVE/ouvrier_$ident.sid" "$PRIVE/ouvrier_$ident.winpid"; sleep 5

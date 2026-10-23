@@ -108,6 +108,24 @@ export BASH_MAX_OUTPUT_LENGTH="${BASH_MAX_OUTPUT_LENGTH:-20000}"
 [ -n "$EFFORT" ] && export CLAUDE_CODE_EFFORT_LEVEL="$EFFORT"
 CONFIG_CLAUDE="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 
+# The helpers that moved to Go (the move of the kit to Go, phase 1): the sub-commands of the kit's
+# executable when it runs on this system and knows them (Athanor.exe in native Windows, athanor on Linux
+# and in WSL), else the Python scripts they replace, as before. ATHANOR_OUTILS=python forces the scripts.
+ATHANOR_GO=""
+if [ "${ATHANOR_OUTILS:-}" != python ]; then
+  if [ "$NATIF" = 1 ]; then candidat="$KIT/Athanor.exe"; else candidat="$KIT/athanor"; fi
+  if [ -f "$candidat" ] && [ -x "$candidat" ] && aide_go=$(timeout 15 "$candidat" aide < /dev/null 2> /dev/null) \
+     && printf '%s' "$aide_go" | grep -q '^  relais ' && printf '%s' "$aide_go" | grep -q '^  cout ' && printf '%s' "$aide_go" | grep -q '^  quota '; then
+    ATHANOR_GO="$candidat"
+  fi
+  unset candidat aide_go
+fi
+if [ -n "$ATHANOR_GO" ]; then
+  OUTIL_RELAIS=("$ATHANOR_GO" relais); OUTIL_COUT=("$ATHANOR_GO" cout); OUTIL_QUOTA=("$ATHANOR_GO" quota)
+else
+  OUTIL_RELAIS=(python3 -I "$SYSTEME/relais.py"); OUTIL_COUT=(python3 -I "$SYSTEME/cout.py"); OUTIL_QUOTA=(python3 -I "$SYSTEME/quota.py")
+fi
+
 # The pilot's output may go to a terminal or a pipe that disappears (window closed, application
 # quit): writing to it must never kill the pilot (SIGPIPE ignored, the write simply fails).
 trap '' PIPE
@@ -170,13 +188,13 @@ enregistrer_stats() {  # one line per cycle in .athanor/stats.tsv (read by the a
   res=$(jq -cR 'fromjson? | select(type=="object" and .type=="result")' "$f" 2>/dev/null | tail -n 1)
   if [ -n "$res" ]; then
     # its cost per model teaches this PC's prices, for the cycles that end without one
-    timeout 20 python3 -I "$SYSTEME/cout.py" apprendre "$tarifs" "$f" 2>> "$PRIVE/pilot.log"
+    timeout 20 "${OUTIL_COUT[@]}" apprendre "$tarifs" "$f" 2>> "$PRIVE/pilot.log"
   else
     # Cycle closed by the pilot or stopped (no "result" line, so no cost from Claude Code): the lead's
     # turns, each message counted once, at the learned prices, plus its sub-agents' turns, from the
     # transcripts Claude Code keeps of them (CONFIG_CLAUDE/projects/*/<session>/subagents)
     local debut_s; debut_s=$(date -d "${ETAT_DEBUT_CYCLE:-now}" +%s 2>/dev/null || date +%s)
-    res=$(timeout 60 python3 -I "$SYSTEME/cout.py" estimer "$tarifs" "$f" "$CONFIG_CLAUDE" 2>> "$PRIVE/pilot.log" \
+    res=$(timeout 60 "${OUTIL_COUT[@]}" estimer "$tarifs" "$f" "$CONFIG_CLAUDE" 2>> "$PRIVE/pilot.log" \
       | jq -c --argjson d "$(( $(date +%s) - debut_s ))" '. + {duration_ms: ($d*1000)}' 2>/dev/null)
     [ -n "$res" ] && estime=1
   fi
@@ -511,11 +529,11 @@ lancer_claude_surveille() {  # $1 = log; stops the cycle if it stays silent or r
     if [ -z "$motif" ] && [ "$RELAY_CONTEXT_K" -gt 0 ] && [ "${RELAIS_OK:-1}" = 1 ] && [ "${cadrage:-0}" != 1 ] && [ "$jalon_vu" = 0 ] \
        && [ $(( maintenant - dernier_ctx )) -ge 60 ]; then
       dernier_ctx=$maintenant
-      ctx=$(entier "$(timeout 20 python3 -I "$SYSTEME/relais.py" contexte "$journal" 2>/dev/null)" 0)
+      ctx=$(entier "$(timeout 20 "${OUTIL_RELAIS[@]}" contexte "$journal" 2>/dev/null)" 0)
       if [ "$ctx" -ge $(( RELAY_CONTEXT_K * 1000 )) ]; then
         [ "$relais_vu" = 0 ] && relais_vu=$maintenant
-        if timeout 20 python3 -I "$SYSTEME/relais.py" sur "$journal" 2>/dev/null || [ $(( maintenant - relais_vu )) -ge 600 ]; then
-          timeout 30 python3 -I "$SYSTEME/relais.py" resume "$journal" "$ETAT/HANDOFF.md" > "$PRIVE/relais.md" 2>/dev/null
+        if timeout 20 "${OUTIL_RELAIS[@]}" sur "$journal" 2>/dev/null || [ $(( maintenant - relais_vu )) -ge 600 ]; then
+          timeout 30 "${OUTIL_RELAIS[@]}" resume "$journal" "$ETAT/HANDOFF.md" > "$PRIVE/relais.md" 2>/dev/null
           echo "$(( ctx / 1000 ))" > "$PRIVE/relais_k"; : > "$PRIVE/cycle_relais"
           motif="context full ($(( ctx / 1000 ))k tokens): a fresh session takes over"
         fi
@@ -650,7 +668,7 @@ seuil_quota() {  # prints "action<TAB>reset<TAB>message" when a rule is met
   local js
   mapfile -t js < <(ls -t "$ETAT/logs"/*.jsonl 2>/dev/null | head -n 6)
   [ ${#js[@]} -gt 0 ] || return 0
-  timeout 20 python3 -I "$SYSTEME/quota.py" verifier "$REGLES_QUOTA" "${js[@]}" 2>/dev/null | head -n 1
+  timeout 20 "${OUTIL_QUOTA[@]}" verifier "$REGLES_QUOTA" "${js[@]}" 2>/dev/null | head -n 1
 }
 appliquer_seuil_quota() {  # before a cycle: the pilot stops, or pauses until the window resets
   local l action reinit message reprise
@@ -767,6 +785,7 @@ trap '[ -n "${PONT_PID:-}" ] && kill "$PONT_PID" 2>/dev/null; [ -n "${SYNC_PID:-
 for f in pilot.log stats.tsv; do [ -f "$PRIVE/$f" ] || { [ -f "$ETAT/$f" ] && [ ! -L "$ETAT/$f" ] && cp "$ETAT/$f" "$PRIVE/$f"; }; done
 
 log "=== Athanor starting ==="
+if [ -n "$ATHANOR_GO" ]; then log "Helpers: Go ($(basename "$ATHANOR_GO") $(timeout 10 "$ATHANOR_GO" version < /dev/null 2> /dev/null | tr -d "\r"))."; else log "Helpers: Python scripts."; fi
 
 # Until the request is written, we wait.
 demande_remplie() {  # .athanor/REQUEST.md contains something other than headings and parenthesised lines

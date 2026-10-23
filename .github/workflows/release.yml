@@ -49,6 +49,8 @@ jobs:
           # Windows: zip, with Athanor.exe
           export_tree windows
           cp build/Athanor.exe pkg-windows/athanor/Athanor.exe
+          # its Linux twin: the pilots of the WSL mode run the kit's Go helpers with it (athanor relais…)
+          cp build/athanor pkg-windows/athanor/athanor
           (cd pkg-windows && zip -qr -X "../dist/Athanor-${version}-Windows.zip" athanor)
           # Linux: tar.gz (keeps the executable bits), with athanor
           export_tree linux
