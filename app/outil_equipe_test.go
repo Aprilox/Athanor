@@ -64,7 +64,8 @@ func TestPariteEquipe(t *testing.T) {
 	kg, pg, ag := preparerEquipe(t, dGo)
 	// the projects differ by their folder: the files are compared with it replaced
 	norm := func(b []byte, dir string) string {
-		return strings.ReplaceAll(strings.ReplaceAll(string(b), strings.ToUpper(dir), "D"), dir, "D")
+		s := strings.ReplaceAll(strings.ReplaceAll(string(b), strings.ToUpper(dir), "D"), dir, "D")
+		return strings.ReplaceAll(s, strings.ReplaceAll(dir, "/", `\\`), "D")
 	}
 	py, _ := python(t, s, "importer", kp, pp)
 	gl := strings.Join(equipeImporter(kg, pg), "\n")

@@ -142,6 +142,11 @@ func LancerIsole(args []string) int {
 		fmt.Fprintln(os.Stderr, "Usage: Athanor.exe --isole [--detache] [--ici] [--fin-tout] [--pid FILE] -- PROGRAM [ARGUMENTS...]")
 		return 2
 	}
+	if estScriptShellPilote(args[0]) {
+		if b := bashNatif(); b != "" {
+			args = append([]string{b, strings.ReplaceAll(args[0], `\`, "/")}, args[1:]...)
+		}
+	}
 	var nomBureau *uint16 // nil: the current desktop
 	if !ici {
 		if h, err := ouvrirBureauIsole(); err == nil {
