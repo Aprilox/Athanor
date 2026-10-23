@@ -76,7 +76,7 @@ lancer_windows() {
 # It therefore hands the command to the bridge (system/bridge.py, outside the sandbox) and shows its output live.
 # Called at the top of every gateway: passer_par_le_pont "$@"
 passer_par_le_pont() {
-  [ "${PONT_DIRECT:-}" = 1 ] && return 0          # already outside the sandbox: run directly
+  [ "${PONT_DIRECT:-}" = 1 ] && { passerelle_go "$@"; return 0; }   # already outside the sandbox: run directly
   local dossier="${ATHANOR_PONT:-$PROJECT/.athanor/pont}" outil id demande sortie code_f vivant i taille=0 nouveau
   outil=$(basename "$0")
   vivant="$dossier/vivant"
@@ -84,11 +84,17 @@ passer_par_le_pont() {
     echo "$outil: the pilot's bridge is not responding (pilot stopped?). Restart the pilot." >&2; exit 127
   fi
   id="$(date +%s%N)-$$"; demande="$dossier/demande-$id.json"; sortie="$dossier/sortie-$id.log"; code_f="$dossier/code-$id"
-  python3 - "$demande.tmp" "$outil" "$(pwd)" "${UNREAL_MCP_URL:-}" "$@" <<'PY'
+  if command -v jq >/dev/null 2>&1; then
+    jq -n --arg outil "$outil" --arg cwd "$(pwd)" --arg mcp "${UNREAL_MCP_URL:-}" \
+      '{outil: $outil, cwd: $cwd, args: $ARGS.positional, env: (if $mcp != "" then {UNREAL_MCP_URL: $mcp} else {} end)}' \
+      --args "$@" > "$demande.tmp"
+  else
+    python3 - "$demande.tmp" "$outil" "$(pwd)" "${UNREAL_MCP_URL:-}" "$@" <<'PY'
 import json, sys
 f, outil, cwd, mcp, *args = sys.argv[1:]
 json.dump({"outil": outil, "cwd": cwd, "args": args, "env": {"UNREAL_MCP_URL": mcp} if mcp else {}}, open(f, "w"))
 PY
+  fi
   mv "$demande.tmp" "$demande"
   trap 'touch "$dossier/annuler-$id"; exit 130' INT TERM
   while :; do
@@ -103,6 +109,17 @@ PY
     fi
     sleep 0.3
   done
+}
+
+# Outside the sandbox, in WSL: the gateway's work is done by the kit's executable (athanor passerelle) when
+# it runs here and knows that gateway, else by the script itself. ATHANOR_OUTILS=python keeps the scripts.
+passerelle_go() {
+  [ "$NATIF" = 1 ] || [ "${ATHANOR_OUTILS:-}" = python ] && return 0
+  local g="$KIT/athanor" outil; outil=$(basename "$0")
+  [ -f "$g" ] && [ -x "$g" ] || return 0
+  timeout 15 "$g" aide < /dev/null 2> /dev/null | grep -q "^  passerelle .*[ |]$outil[ |]" || return 0
+  export KIT PROJECT UE_DIR BLENDER_EXE ANDROID_SDK_DIR ANDROID_JDK_DIR WIN_PROFIL
+  exec "$g" passerelle "$outil" "$@"
 }
 
 # Runs "$@" with administrator rights through the scheduled task "Athanor - installations" (allowed once
