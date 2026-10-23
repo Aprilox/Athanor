@@ -64,7 +64,7 @@ const etat = {
   pieces: {}, // files waiting to be attached, per form
   pvTic: 0, pvAnnonces: {}, pvSignature: "",
   pvForm: {}, // answers being written on the For you page (text and secret values, per task; memory only)
-  page: "suivi", projet: "", vue: null, verrouille: false, langue: "en", theme: "", accent: "", assistant: -1, demarrage: {},
+  page: "suivi", projet: "", vue: null, verrouille: false, langue: "en", theme: "", accent: "", assistant: -1, visite: -1, demarrage: {},
   dernierJournal: 0, evenements: [], ouverts: new Set(),
   filtres: { pilote: true, texte: true, outil: true, resultat: false, sous_agent: true, brut: false }, recherche: "",
   tacheChoisie: null, verifChoisie: null, envSecrets: false, suiviAutoScroll: true, explorateur: "", selecteurOuvert: false, rechercheProjet: "",
@@ -96,6 +96,48 @@ function toast(msg, genre = "") {
 async function action(promesse, genreOk = "ok") {
   try { const r = await promesse; const m = messageDe(r); if (m) toast(m, genreOk); return r; }
   catch (e) { if (e.message !== t("Locked")) toast(e.message, "erreur"); return null; }
+}
+
+// choisir(message, [{ id, texte, primaire, danger }], { titre }) → Promise<id | null> (Escape: null)
+function choisir(message, boutons, options = {}) {
+  const fond = $("#choix");
+  $("#choix-texte").textContent = message;
+  $("#choix-titre").textContent = options.titre || ""; $("#choix-titre").hidden = !options.titre;
+  $("#choix-boutons").innerHTML = boutons.map((b) => `<button type="button" class="btn ${b.primaire ? "btn-primaire" : b.danger ? "btn-danger" : ""}" data-choix="${h(b.id)}">${h(b.texte)}</button>`).join("");
+  const avant = document.activeElement;
+  fond.hidden = false;
+  const premier = $("#choix-boutons .btn-primaire") || $("#choix-boutons button"); if (premier) premier.focus();
+  return new Promise((resoudre) => {
+    const fin = (v) => { fond.hidden = true; fond.onclick = null; document.removeEventListener("keydown", clavier, true); if (avant && avant.focus) avant.focus(); resoudre(v); };
+    const clavier = (e) => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); fin(null); } };
+    fond.onclick = (e) => { const b = e.target.closest("[data-choix]"); if (b) fin(b.dataset.choix); else if (e.target === fond) fin(null); };
+    document.addEventListener("keydown", clavier, true);
+  });
+}
+
+// Start: always there. When the tooling was not seen installed or the request is empty, the user is asked
+// first (install, open the check, or start anyway): nobody stays stuck on the first steps.
+async function demarrerPilote(b) {
+  const v = etat.vue || {};
+  if (v.demande_vide) {
+    const c = await choisir(t("The project has no request yet: Claude would wait for one. Write what you want first."), [
+      { id: "demande", texte: t("Write the request"), primaire: true }, { id: "", texte: t("Cancel") }]);
+    if (c === "demande") location.hash = "#demandes";
+    return;
+  }
+  if (!v.kit_installe) {
+    const mode = !v.windows ? t("the tooling (Claude Code and the system sandbox)") : v.natif ? t("the tooling of native Windows (Git for Windows, Node.js, Claude Code)") : t("the tooling of WSL (WSL2, Claude Code, the system sandbox)");
+    const c = await choisir(t("Athanor has not seen {0} installed yet. Did you install it?", [mode]), [
+      { id: "installer", texte: t("Install it now") }, { id: "sante", texte: t("Open the check") }, { id: "demarrer", texte: t("Start anyway"), primaire: true }],
+      { titre: t("Before starting") });
+    if (c === "installer") { location.hash = "#sante"; return action(api("sante/installer", "POST", { mode: v.windows ? (v.natif ? "natif" : "wsl") : "" })); }
+    if (c === "sante") { location.hash = "#sante"; return; }
+    if (c !== "demarrer") return;
+  }
+  if (b) b.disabled = true;
+  etat.demarrage[etat.projet] = Date.now() + 25000;
+  await action(api("pilote/demarrer", "POST"));
+  setTimeout(rafraichir, 800);
 }
 
 // ----------------------------------------------------------------------------- confirmation dialog
@@ -454,7 +496,7 @@ function rendreBandeau(v) {
     if (v.actif) {
       boutons.push(`<button class="btn" data-act="arreter-apres-cycle" title="${h(t("Finishes the current milestone, saves it, then stops. Nothing is lost."))}">${t("Stop after cycle")}</button>`);
       boutons.push(`<button class="btn btn-danger" data-act="arreter" title="${h(t("Cuts the current cycle: unsaved work will be redone."))}">${t("Stop now")}</button>`);
-    } else if (v.kit_installe && !v.demande_vide) {
+    } else {
       // right after a click, the pilot takes a few seconds to show up: no second start
       const enDemarrage = (etat.demarrage[v.projet.nom] || 0) > Date.now();
       boutons.push(`<button class="btn btn-primaire" data-act="demarrer" ${enDemarrage ? "disabled" : ""}>${enDemarrage ? t("Starting…") : t("Start")}</button>`);
@@ -500,7 +542,8 @@ function rendreSelecteur(v) {
 
 $("#bandeau").addEventListener("click", async (ev) => {
   const b = ev.target.closest("button"); if (!b) return;
-  if (b.dataset.act) { b.disabled = true; if (b.dataset.act === "demarrer") etat.demarrage[etat.projet] = Date.now() + 25000; await action(api("pilote/" + b.dataset.act, "POST")); setTimeout(rafraichir, 800); }
+  if (b.dataset.act === "demarrer") return demarrerPilote(b);
+  if (b.dataset.act) { b.disabled = true; await action(api("pilote/" + b.dataset.act, "POST")); setTimeout(rafraichir, 800); }
   if (b.dataset.bureau) await action(api("bureau/" + b.dataset.bureau, "POST"));
   if (b.hasAttribute("data-ecran")) ouvrirEcran();
 });
@@ -604,8 +647,65 @@ $("#assistant").addEventListener("click", async (ev) => {
   if (b.dataset.accent) { await changerApparence(etat.theme, b.dataset.accent); return rendreAssistant(); }
   if (b.dataset.assistant === "retour") { etat.assistant--; return rendreAssistant(); }
   if (b.dataset.assistant === "suite") { etat.assistant++; return rendreAssistant(); }
-  if (b.dataset.assistant === "fin") { await action(api("preferences", "POST", { bienvenue_vue: true })); etat.assistant = -1; rendreAssistant(); location.hash = "#suivi"; rendrePage(); }
+  if (b.dataset.assistant === "fin") { await action(api("preferences", "POST", { bienvenue_vue: true })); etat.assistant = -1; rendreAssistant(); location.hash = "#suivi"; await rendrePage(); demarrerVisite(); }
 });
+
+// --- the guided tour, right after the first-launch wizard (and from Options): a bubble shows each place
+// where things happen, on its own page: the mode, the installation and the check, a new project, Start.
+const VISITE = [
+  { page: "reglages", onglet: "options", cibles: ["#op-natif"], windows: true, titre: "How Claude works on this PC",
+    texte: "Native Windows is selected: nothing else to install, Claude runs directly on Windows. Choose WSL here if you want Claude in a sandbox (it installs Linux once)." },
+  { page: "sante", cibles: ["[data-onglet-sante]", "[data-installer-mode]", "[data-installer]"], titre: "Install, then check",
+    texte: "One tab per way Claude can run on this computer, the current one marked: “Install everything” installs what it needs. Then “Check everything”: each problem has its own Repair or Ask Claude button." },
+  { page: "nouveau", cibles: ["#np-nom"], titre: "Your project",
+    texte: "A name, the development folder (new or existing, anywhere on the PC), and what you want. A folder made with Athanor on another PC carries on where it was." },
+  { page: "suivi", cibles: ["#bandeau .actions .btn", "#sel-projet"], titre: "Start",
+    texte: "Start launches the pilot: Claude frames, plans milestones, builds and checks them, cycle after cycle. You follow everything here." },
+];
+function etapesVisite() { return VISITE.filter((e) => !e.windows || (etat.vue || {}).windows); }
+function demarrerVisite() { etat.visite = 0; montrerVisite(); }
+function finirVisite() {
+  etat.visite = -1; $("#visite").hidden = true;
+  document.querySelectorAll(".visite-cible").forEach((x) => x.classList.remove("visite-cible"));
+}
+async function montrerVisite() {
+  const etapes = etapesVisite(), n = etat.visite;
+  if (n < 0 || n >= etapes.length) return finirVisite();
+  const e = etapes[n];
+  if (e.onglet) etat.ongletReglages = e.onglet;
+  if (location.hash !== "#" + e.page) location.hash = "#" + e.page; else await rendrePage();
+  let cible = null;
+  for (let i = 0; i < 40 && !cible; i++) { // the page renders asynchronously
+    await new Promise((r) => setTimeout(r, 100));
+    for (const c of e.cibles) { const x = document.querySelector(c); if (x && x.offsetParent !== null) { cible = x; break; } }
+  }
+  if (n !== etat.visite) return;
+  document.querySelectorAll(".visite-cible").forEach((x) => x.classList.remove("visite-cible"));
+  const bulle = $("#visite");
+  bulle.innerHTML = `<div class="visite-titre">${h(t(e.titre))}</div><p>${h(t(e.texte))}</p>
+    <div class="visite-pied"><span class="muet petit">${t("Step {0} of {1}", [n + 1, etapes.length])}</span><span class="espace"></span>
+      <button class="btn btn-petit" data-visite="passer">${t("Skip the tour")}</button>
+      ${n > 0 ? `<button class="btn btn-petit" data-visite="retour">${t("Back")}</button>` : ""}
+      <button class="btn btn-petit btn-primaire" data-visite="suite">${n === etapes.length - 1 ? t("Finish") : t("Next")}</button></div>`;
+  bulle.hidden = false;
+  if (cible) {
+    cible.classList.add("visite-cible");
+    cible.scrollIntoView({ block: "center", behavior: "smooth" });
+    await new Promise((r) => setTimeout(r, 350));
+    const z = cible.getBoundingClientRect(), l = bulle.offsetWidth, hb = bulle.offsetHeight;
+    let haut = z.bottom + 12; if (haut + hb > window.innerHeight - 8) haut = Math.max(8, z.top - hb - 12);
+    bulle.style.top = haut + "px";
+    bulle.style.left = Math.max(8, Math.min(z.left, window.innerWidth - l - 8)) + "px";
+  } else { bulle.style.top = "80px"; bulle.style.left = Math.max(8, (window.innerWidth - bulle.offsetWidth) / 2) + "px"; }
+  bulle.querySelector('[data-visite="suite"]').focus();
+}
+$("#visite").addEventListener("click", (ev) => {
+  const b = ev.target.closest("[data-visite]"); if (!b) return;
+  if (b.dataset.visite === "passer") return finirVisite();
+  etat.visite += b.dataset.visite === "retour" ? -1 : 1;
+  montrerVisite();
+});
+document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && etat.visite >= 0 && !$("#visite").hidden) finirVisite(); });
 
 // --- working mode of the project (serial lead, or parallel workers + merge)
 async function rendreMode() {
@@ -903,17 +1003,34 @@ pages.suivi = async () => {
   </div>`;
 };
 
+// the installers of this system: on Windows, one per mode (choosing it also selects that mode)
+function boutonsInstallation(v, primaire) {
+  if (!v.windows) return `<button class="btn ${primaire ? "btn-primaire" : ""}" data-installer>${t("Install everything")}</button>`;
+  return `<button class="btn ${primaire ? "btn-primaire" : ""}" data-installer-mode="${v.natif ? "natif" : "wsl"}">${t("Install everything")}</button>`;
+}
+// the systems of the Setup page: one tab per way Claude can run here, the current one marked
+function modesSysteme(v) {
+  if (v.windows) return [
+    { id: "natif", nom: "Native Windows", actuel: !!v.natif,
+      texte: "Claude runs directly on Windows: Git for Windows, jq, Python, Node.js and Claude Code for Windows. Nothing else to install, no WSL. No sandbox: Claude can read and change any file of your PC. For projects you trust." },
+    { id: "wsl", nom: "WSL", actuel: !v.natif,
+      texte: "Claude runs in WSL2 (the Linux built into Windows), in a sandbox: it only writes in the project. Installs Linux once (a window opens, Linux asks for a password once)." }];
+  if (v.systeme === "darwin") return [{ id: "mac", nom: "macOS", actuel: true,
+    texte: "Claude Code and the tools, installed in a terminal (it asks for your password once)." }];
+  return [{ id: "linux", nom: "Linux", actuel: true,
+    texte: "Claude Code, the system sandbox (bubblewrap) and the tools, in a terminal; it asks for your password once." }];
+}
+
 function rendreGuide(v) {
   const e1 = v.kit_installe, e2 = !!v.projet, e3 = e2 && !v.demande_vide;
   // the tooling of this system: on Windows, WSL (Claude in a sandbox) or native Windows, chosen here
   const outillage = !v.windows ? "Claude Code, the system sandbox (bubblewrap) and the tools, in a terminal; it asks for your password once."
     : v.natif ? "Native Windows: Git for Windows, jq, Python, Node.js and Claude Code for Windows, without WSL. Claude has no sandbox in this mode."
     : "WSL2 (the Linux built into Windows), Claude Code, the system sandbox. A window opens; Linux asks for a password once.";
-  const autreMode = !v.windows ? "" : `<button type="button" class="btn btn-petit mt-1" data-mode-systeme="${v.natif ? "wsl" : "natif"}">${v.natif ? t("Use WSL instead (Claude in a sandbox)") : t("Native Windows instead (no WSL, no sandbox)")}</button>`;
   return `<div class="bloc"><h2>${t("First steps")}</h2><p class="intro">${t("Five steps, all from this window. Then you can let it run for days, on several projects at once.")}</p>
   <div class="etapes">
-    <div class="etape ${e1 ? "faite" : ""}"><div class="n">1</div><div><b>${t("Install the tooling")}</b><div class="d">${t(outillage)}</div>${autreMode}</div>
-      <button class="btn ${e1 ? "" : "btn-primaire"}" data-installer>${e1 ? t("Run again") : t("Install")}</button></div>
+    <div class="etape ${e1 ? "faite" : ""}"><div class="n">1</div><div><b>${t("Install the tooling")}</b><div class="d">${t(outillage)}</div>${v.windows ? `<div class="muet petit">${t("Current mode: {0}. To choose the other one: Setup & health.", [t(v.natif ? "Native Windows" : "WSL")])}</div>` : ""}</div>
+      ${boutonsInstallation(v, !e1)}</div>
     <div class="etape"><div class="n">2</div><div><b>${t("Check and connect")}</b><div class="d">${t("Checks all the tooling and the token of your Claude subscription. Every problem has its own “Repair” or “Ask Claude” button.")}</div></div>
       <a class="btn" href="#sante">${t("Open the check")}</a></div>
     <div class="etape ${e2 ? "faite" : ""}"><div class="n">3</div><div><b>${t("Add a project")}</b><div class="d">${t("Its name, its development folder (anywhere on the PC), and what you want: a game, a website, an app, a tool. The tool only writes in a .athanor subfolder, to delete at the end.")}</div></div>
@@ -921,7 +1038,7 @@ function rendreGuide(v) {
     <div class="etape ${e3 ? "faite" : ""}"><div class="n">4</div><div><b>${t("Say what you want")}</b><div class="d">${t("If not done yet: describe the expected result. Technologies are free unless you impose some.")}</div></div>
       <a class="btn ${e2 && !e3 ? "btn-primaire" : ""}" href="#demandes" ${e2 ? "" : 'aria-disabled="true"'}>${t("Write the request")}</a></div>
     <div class="etape"><div class="n">5</div><div><b>${t("Start")}</b><div class="d">${t("Claude frames, plans milestones, builds, checks and delivers, cycle after cycle. You follow everything here and can add requests along the way.")}</div></div>
-      <button class="btn ${e3 ? "btn-primaire" : ""}" data-act="demarrer" ${e3 ? "" : "disabled"}>${t("Start")}</button></div>
+      <button class="btn ${e3 ? "btn-primaire" : ""}" data-act="demarrer" ${e2 ? "" : "disabled"}>${t("Start")}</button></div>
   </div></div>`;
 }
 
@@ -933,7 +1050,7 @@ pages.projet = async () => {
   const g = await api("projets/gestion?nom=" + encodeURIComponent(etat.projet));
   const p = g.projet, dis = p.actif ? "disabled" : "";
   const decoches = Object.entries(g.decoches || {});
-  setTimeout(() => majGitHub(), 0); // the GitHub block asks WSL: filled in once the page is shown
+  setTimeout(() => majGitHub(), 0); // the GitHub block asks WSL: the last state known first, then updated
   return `<div class="gestion">
   ${p.actif ? `<div class="bloc"><p class="attention">${t("The pilot is running: stop it to rename, move, archive or delete the project.")}</p></div>` : ""}
   ${await rendreMode()}
@@ -956,7 +1073,7 @@ pages.projet = async () => {
     <label class="champ mt-2"><span>${t("Use another folder (created if needed): the plan and the requests come along, the milestones are checked against what it contains")}</span>
       <div class="ligne"><input type="text" id="gp-dossier" placeholder="${h(t("e.g. D:\\Dev\\my-site"))}"><button class="btn" data-gestion="dossier" ${dis}>${t("Use this folder")}</button></div></label>
   </div>
-  <div class="bloc" id="gh-bloc"><h2>GitHub</h2><p class="muet petit">${t("Loading…")}</p></div>
+  <div class="bloc" id="gh-bloc">${blocGitHubInitial()}</div>
   <div class="grille grille-2">
     <div class="bloc"><h2>${t("Archive")}</h2>
       <p class="muet petit">${t("An archived project leaves the project list and is never restarted. Bring it back at any time from “Archived projects”, at the bottom of the project list.")}</p>
@@ -1069,37 +1186,52 @@ function rendreAuteur(id) {
 }
 const LIBELLES_GH = { ok: "Last push", bloque: "Push blocked", rejete: "Push refused", erreur: "Push failed", attente: "Waiting for a first commit" };
 function rendreGitHub(r) {
-  if (r.erreur) return `<h2>GitHub</h2><p class="bloque petit">${h(r.erreur)}</p><button class="btn btn-petit" data-gh="actualiser">${t("Refresh")}</button>`;
+  if (r.erreur) return `<h2>GitHub</h2><p class="bloque petit">${h(t(r.erreur))}</p><button class="btn btn-petit" data-gh="actualiser">${t("Refresh")}</button>`;
   const g = r.github || {}, d = g.dernier;
   const manque = !g.gh || !g.ssh ? `<p class="attention petit">${t("The GitHub CLI or OpenSSH is missing in Linux: open the check and repair “Basic Linux packages”.")} <a href="#sante">${t("Open the check")}</a></p>` : "";
   if (!g.lie) return `<h2>GitHub</h2>
     <p class="muet petit">${t("Send the project's commits to one of your GitHub repositories, by itself after each milestone.")}</p>${manque}
-    ${choixGitHub("gh", r.nom_propose || "")}
-    ${rendreAuteur(g.identite)}
-    <div class="ligne"><button class="btn btn-primaire" data-gh="lier">${t("Link to GitHub")}</button><button class="btn btn-petit" data-gh="actualiser">${t("Refresh")}</button></div>`;
+    <div class="gh-etape"><b>1. ${t("Repository")}</b>${choixGitHub("gh", r.nom_propose || "")}</div>
+    <div class="gh-etape"><b>2. ${t("Commits")}</b>${rendreAuteur(g.identite)}</div>
+    <div class="gh-etape"><b>3. ${t("Link")}</b><div class="ligne"><button class="btn btn-primaire" data-gh="lier">${t("Link to GitHub")}</button><button class="btn btn-petit" data-gh="actualiser">${t("Refresh")}</button></div></div>`;
   const cls = !d ? "" : d.resultat === "ok" ? "ok" : d.resultat === "attente" ? "muet" : "bloque";
   const quand = d && d.quand ? String(d.quand).replace("T", " ").slice(0, 16) : "";
+  const test = etat.ghTest && etat.ghTest.projet === etat.projet ? `<p class="petit ${etat.ghTest.ok ? "ok" : "bloque"}">${etat.ghTest.ok ? "✔" : "✖"} ${h(t(etat.ghTest.message_key || "", etat.ghTest.args || []))}</p>` : "";
   return `<h2>GitHub</h2>${manque}
-    <p>${t("Linked to")} <b>${h(g.depot)}</b> · ${t("branch")} <code>${h(g.branche)}</code>${g.compte ? ` · ${t("account")} ${h(g.compte)}` : ""} <button class="btn btn-petit" data-gh="ouvrir">${t("Open on GitHub")}</button></p>
-    <label class="interrupteur"><input type="checkbox" data-gh-auto ${g.auto ? "checked" : ""}><span>${t("Push automatically after each milestone")}</span></label>
-    ${rendreAuteur(g.identite)}
+    <p class="gh-statut"><span class="ok">✔</span> ${t("Linked to")} <b>${h(g.depot)}</b> · ${t("branch")} <code>${h(g.branche)}</code>${g.compte ? ` · ${t("account")} ${h(g.compte)}` : ""} <button class="btn btn-petit" data-gh="ouvrir">${t("Open on GitHub")}</button></p>
+    <div class="ligne"><button class="btn" data-gh="tester">${t("Test the connection")}</button><button class="btn" data-gh="pousser">${t("Push now")}</button><button class="btn btn-primaire" data-gh="wip" title="${h(t("Commits what is in the folder now (“M3: … (in progress)”) and pushes it, without Claude: someone else can take over, even with no quota left."))}">${t("Save and push the work in progress")}</button>${d && d.resultat === "bloque" && d.sha ? `<button class="btn btn-danger" data-gh="malgre" data-sha="${h(d.sha)}">${t("Push anyway")}</button>` : ""}</div>
+    <p class="muet petit">${t("Commits what is in the folder now (“M3: … (in progress)”) and pushes it, without Claude: someone else can take over, even with no quota left.")}</p>
+    ${test}
     ${d ? `<div class="gh-dernier"><b class="${cls}">${h(t(LIBELLES_GH[d.resultat] || d.resultat))}</b> <span class="muet petit">${h(quand)}${d.commit ? " · " + h(d.commit) : ""}</span>
       <div class="petit">${h(t(d.modele || d.message || "", d.args || []))}</div>
       ${(d.fichiers || []).length ? `<ul class="petit">${d.fichiers.map((x) => `<li><code>${h(x.f)}</code> — ${h(t(x.genre))}</li>`).join("")}</ul>` : ""}</div>`
       : `<p class="muet petit">${t("Nothing pushed yet.")}</p>`}
-    <div class="ligne"><button class="btn" data-gh="pousser">${t("Push now")}</button>${d && d.resultat === "bloque" && d.sha ? `<button class="btn btn-danger" data-gh="malgre" data-sha="${h(d.sha)}">${t("Push anyway")}</button>` : ""}</div>
+    <label class="interrupteur"><input type="checkbox" data-gh-auto ${g.auto ? "checked" : ""}><span>${t("Push automatically after each milestone")}</span></label>
+    ${rendreAuteur(g.identite)}
     <label class="champ mt-2"><span>${t("GitHub branch")}</span><div class="ligne"><input type="text" id="gh-branche" value="${h(g.branche)}"><button class="btn btn-petit" data-gh="branche">${t("Change")}</button></div></label>
     <p class="muet petit">${t("The key Athanor pushes with works for this repository only and stays out of Claude's reach. Athanor never overwrites what is on GitHub and checks every push for secrets (keys, tokens, .env files).")}</p>
-    <button class="btn btn-petit btn-danger" data-gh="delier">${t("Unlink")}</button>`;
+    <div class="ligne"><button class="btn btn-petit" data-gh="actualiser">${t("Refresh")}</button><button class="btn btn-petit btn-danger" data-gh="delier">${t("Unlink")}</button></div>`;
+}
+// the GitHub block: the last state known is shown at once (WSL can take a while to answer), then updated
+function blocGitHubInitial() {
+  const c = (etat.ghCache || {})[etat.projet];
+  if (c) return rendreGitHub(c) + `<p class="muet petit gh-maj">${t("Updating…")}</p>`;
+  return `<h2>GitHub</h2><p class="muet petit gh-maj">${t("Loading…")}</p><button class="btn btn-petit" data-gh="actualiser">${t("Refresh")}</button>`;
 }
 async function majGitHub(jusqua) {
   clearTimeout(etat.ghMinuteur);
   // a later call (another page render, another click) takes over; a running follow-up is kept
   const n = etat.ghNumero = (etat.ghNumero || 0) + 1;
   if (!jusqua && etat.ghSuivi && etat.ghSuivi.projet === etat.projet && Date.now() < etat.ghSuivi.jusqua) jusqua = etat.ghSuivi.jusqua;
-  if (!$("#gh-bloc") || etat.page !== "projet") return;
+  // the page is still being built (its other blocks are awaited): the block comes a moment later
+  for (let i = 0; i < 100 && !$("#gh-bloc") && etat.page === "projet" && n === etat.ghNumero; i++) await new Promise((r) => setTimeout(r, 100));
+  if (!$("#gh-bloc") || etat.page !== "projet" || n !== etat.ghNumero) return;
   const nom = etat.projet;
+  // WSL slow to answer: say so, with the Refresh button already there
+  const lent = setTimeout(() => { const m = $("#gh-bloc .gh-maj"); if (m && n === etat.ghNumero) m.textContent = t("Still waiting for WSL (it may be starting)…"); }, 12000);
   const r = await api("github").catch((e) => ({ erreur: e.message }));
+  clearTimeout(lent);
+  if (!r.erreur) { etat.ghCache = etat.ghCache || {}; etat.ghCache[nom] = r; }
   const bloc = $("#gh-bloc");
   if (n !== etat.ghNumero || !bloc || etat.projet !== nom || etat.page !== "projet") return;
   const saisis = {}; bloc.querySelectorAll("input[id]").forEach((i) => { saisis[i.id] = i.type === "checkbox" ? i.checked : i.value; });
@@ -1118,6 +1250,12 @@ function lireAuteur() {
 }
 async function actionGitHub(act, b) {
   if (act === "actualiser") return majGitHub();
+  if (act === "tester") {
+    b.disabled = true; b.textContent = t("Testing…");
+    const r = await api("github", "POST", { action: "tester" }).catch((e) => { toast(e.message, "erreur"); return null; });
+    if (r) { etat.ghTest = Object.assign({ projet: etat.projet }, r); toast(t(r.message_key || "", r.args || []), r.ok ? "ok" : "erreur"); }
+    return majGitHub();
+  }
   const corps = { action: act };
   if (act === "lier") { const c = lireChoixGitHub("gh", etat.projet); if (!c) return; Object.assign(corps, c); }
   if (act === "branche") corps.valeur = $("#gh-branche").value;
@@ -1126,9 +1264,10 @@ async function actionGitHub(act, b) {
   if (act === "malgre" && !(await confirmer(t("Push anyway? What Athanor flagged becomes readable on GitHub, in the history, even if it is deleted later. Only do it if these are not real secrets."), { ok: t("Push anyway"), danger: true }))) return;
   if (act === "delier" && !(await confirmer(t("Unlink “{0}” from GitHub? Nothing is deleted on GitHub: Athanor deletes its key and stops pushing.", [etat.projet]), { ok: t("Unlink"), danger: true }))) return;
   b.disabled = true;
-  if (act === "pousser" || act === "malgre") b.textContent = t("Pushing…");
+  if (act === "pousser" || act === "malgre" || act === "wip") b.textContent = t("Pushing…");
   const r = await action(api("github", "POST", corps));
   b.disabled = false;
+  if (r && r.enregistre) toast(t("Saved: {0}", [r.enregistre]), "ok");
   if (r && r.github && r.github.dernier) { const d = r.github.dernier; toast(t(d.modele || d.message || "", d.args || []), d.resultat === "ok" ? "ok" : "erreur"); }
   if (act === "lier" && r) etat.ghSuivi = { projet: etat.projet, jusqua: Date.now() + 5 * 60000 };
   majGitHub();
@@ -1185,6 +1324,18 @@ function dureeLisible(ms) { return ms >= 60000 ? Math.round(ms / 60000) + " min"
 const LIBELLES_STATUT = { travaille: "working", attend: "waiting", termine: "finished", disponible: "available", arrete: "stopped" };
 const pastille = (st) => `<span class="pastille ${h(st)}">${t(LIBELLES_STATUT[st] || st)}</span>`;
 
+// what an agent did lately, live: its last actions and how long ago the last one was (a long build or
+// test run says nothing for minutes: the agent is still at work)
+function activiteVivante(a) {
+  if (a.statut !== "travaille" && a.statut !== "attend") return "";
+  const depuis = a.derniere ? Math.max(0, Math.round(Date.now() / 1000 - a.derniere)) : null;
+  const age = depuis === null ? "" : depuis < 60 ? t("last action {0} s ago", [depuis]) : t("last action {0} min ago", [Math.floor(depuis / 60)]);
+  const icone = { outil: "▶", texte: "💬", sous_agent: "👥" };
+  const liste = (a.actions || []).slice(-5).map((x) => `<li><span class="muet">${h(x.heure)}</span> ${icone[x.genre] || "•"} ${h(t(x.texte))}</li>`).join("");
+  const long = depuis !== null && depuis >= 120 && a.statut === "travaille" ? ` · ${t("a long command may be running (a build, tests): it is still working")}` : "";
+  return `<div class="vivant">${age ? `<div class="muet petit">⏱ ${age}${long}</div>` : ""}${liste ? `<ul class="actions-agent">${liste}</ul>` : ""}</div>`;
+}
+
 function rendreAppel(a) {
   const cle = "agent:" + a.id, ouvert = etat.ouverts.has(cle);
   const meta = [a.duree_ms && dureeLisible(a.duree_ms), modeleLisible(a.modele)].filter(Boolean).join(" · ");
@@ -1193,7 +1344,8 @@ function rendreAppel(a) {
     <div class="appel-ligne"><span class="avatar petit">${h((a.nom || "?").charAt(0).toUpperCase())}</span>
       <div class="appel-corps"><div class="appel-tete"><span class="appel-nom">${h(a.nom)}</span> ${pastille(a.statut)}${meta ? ` <span class="appel-meta">· ${h(meta)}</span>` : ""}</div>
         ${a.mission ? `<div class="appel-mission">${h(a.mission)}</div>` : ""}
-        ${a.statut === "travaille" && a.activite ? `<div class="activite">${h(t(a.activite))}</div>` : ""}</div>
+        ${a.statut === "travaille" && a.activite ? `<div class="activite">${h(t(a.activite))}</div>` : ""}
+        ${activiteVivante(a)}</div>
       <span class="jalon-chevron">${ouvert ? "▾" : "▸"}</span></div>
     ${ouvert ? `<div class="appel-details">
       ${a.bulle && a.statut !== "termine" ? `<div class="bulle">${h(a.bulle.length > 700 ? a.bulle.slice(0, 700) + "…" : a.bulle)}</div>` : ""}
@@ -1214,6 +1366,7 @@ function rendreSession(a, appels, nom, mission, avatar) {
         ${mission ? `<div class="agent-mission" title="${h(mission)}">${h(mission)}</div>` : ""}
         ${meta ? `<div class="agent-meta">${h(meta)}</div>` : ""}</div></div>
     ${!fini && a.activite && a.statut !== "disponible" ? `<div class="activite">${h(t(a.activite))}</div>` : ""}
+    ${!fini ? activiteVivante(a) : ""}
     ${!fini && a.bulle ? `<div class="bulle">${h(a.bulle.length > 700 ? a.bulle.slice(0, 700) + "…" : a.bulle)}</div>` : ""}
     ${fini ? `<div class="rapport-session" data-agent-cle="${h(cleR)}"><div class="muet petit">${a.genre === "chef" ? t("End of the cycle") : t("Report to the project lead")}</div>
       ${rapportOuvert ? `<pre class="texte-agent">${h(a.rapport)}</pre>` : `<div class="bulle">${h(long ? a.rapport.slice(0, 600) + "…" : a.rapport)}</div>`}
@@ -1340,6 +1493,9 @@ pages.equipe = async () => {
   if (!chef.modele) chef.modele = r.modele_chef || "";
   // pilot stopped in the middle of a cycle: nobody is still working
   if (!v.actif) for (const a of [chef, ...agents]) if (a.statut === "travaille" || a.statut === "attend") { a.statut = "arrete"; a.activite = ""; }
+  // the pilot runs but no cycle is under way (quota, waiting for you, a pause after an error): say why
+  const phase = (v.etat || {}).phase;
+  if (v.actif && phase && phase !== "travail" && chef.statut !== "termine") { chef.statut = "attend"; chef.activite = phraseEtat(v).titre; chef.actions = []; chef.derniere = 0; }
   const appelsCycle = {};
   for (const a of agents) if (a.genre === "sous_agent") appelsCycle[a.nom] = (appelsCycle[a.nom] || 0) + 1;
   etat.agPerso = {};
@@ -1882,10 +2038,18 @@ async function majSante() {
 pages.sante = async () => {
   const verifs = await api("sante");
   etat.santeListe = listeSante(verifs); etat.sortieSig = "";
-  return `<div class="ligne">
+  const v = etat.vue || {}, modes = modesSysteme(v);
+  const actuel = modes.find((m) => m.actuel) || modes[0];
+  const choisi = modes.find((m) => m.id === etat.ongletSante) || actuel;
+  const tete = `<div class="onglets">${modes.map((m) => `<button class="${m === choisi ? "actif" : ""}" data-onglet-sante="${m.id}">${t(m.nom)}${m.actuel ? ` <span class="badge">${t("current")}</span>` : ""}</button>`).join("")}</div>`;
+  const installer = v.windows ? `<button class="btn" data-installer-mode="${choisi.id}">${t("Install everything")}</button>` : `<button class="btn" data-installer>${t("Install everything")}</button>`;
+  if (!choisi.actuel) return tete + `<div class="bloc"><h2>${t(choisi.nom)}</h2><p class="intro">${t(choisi.texte)}</p>
+    <div class="ligne"><button class="btn btn-primaire" data-mode-systeme="${choisi.id}">${t("Use this mode")}</button>${installer}</div>
+    <p class="muet petit mt-2">${t("“Install everything” also switches to this mode. The checks below the tabs are those of the mode in use ({0}).", [t(actuel.nom)])}</p></div>`;
+  return tete + `<p class="intro">${t(choisi.texte)}</p><div class="ligne">
     <button class="btn btn-primaire" id="st-tout">${t("Check everything")}</button>
-    <button class="btn" id="st-installer" title="${h(t(!(etat.vue || {}).windows ? "Claude Code, the system sandbox (bubblewrap) and the tools, in a terminal; it asks for your password once." : (etat.vue || {}).natif ? "Native Windows: Git for Windows, jq, Python, Node.js and Claude Code for Windows, without WSL. Claude has no sandbox in this mode." : "The full installer in a window: WSL2, network, packages (password), Claude Code, administrator rights. Once."))}">${t("Install everything")}</button>
-    <button class="btn" id="st-barriere" title="${h(t("A short Claude session tries to leave the project, read your files, launch cmd.exe: everything must be blocked."))}">${t("Test the sandbox (2 min)")}</button>
+    ${installer}
+    ${v.windows && v.natif ? "" : `<button class="btn" id="st-barriere" title="${h(t("A short Claude session tries to leave the project, read your files, launch cmd.exe: everything must be blocked."))}">${t("Test the sandbox (2 min)")}</button>`}
     <button class="btn" id="st-recompiler" title="${h(t("After a repair of its Go code (app/): shows the change, checks it, rebuilds, runs the autotest, and only then replaces the executable, keeping the previous one."))}">${t("Rebuild Athanor")}</button>
   </div>
   <div class="bloc bloc-liste">${listeSante(verifs)}</div>
@@ -2024,8 +2188,9 @@ async function rendreOptions() {
         <p class="muet petit"${b.isole || b.ecran ? " hidden" : ""}>${t("Windows shortcut to switch desktops: Ctrl + Win + ← / →.")}</p>
       </div>
       <div class="bloc"${o.windows ? "" : " hidden"}><h2>${t("Execution mode")}</h2>
-        <label class="interrupteur"><input type="checkbox" id="op-natif" data-option ${o.mode_natif ? "checked" : ""}><span>${t("Native Windows (experimental): the pilot runs in Git Bash and Claude Code is the Windows program, without WSL")}</span></label>
+        <label class="radio"><input type="radio" name="op-mode" id="op-natif" data-option ${o.mode_natif ? "checked" : ""}> <b>${t("Native Windows")}</b> <span class="muet">${t("(recommended to begin: nothing else to install)")}</span></label>
         <p class="petit attention">${t("No sandbox in this mode: Claude can read and change any file of your PC and run any program, without asking. The file guard only covers its file tools. Use it for projects you trust.")}</p>
+        <label class="radio"><input type="radio" name="op-mode" id="op-wsl" data-option ${o.mode_natif ? "" : "checked"}> <b>WSL</b> <span class="muet">${t("(Claude works in a sandbox: it only writes in the project; installs Linux once)")}</span></label>
         <p class="petit ${o.git_bash ? "ok" : "attention"}">${o.git_bash ? h(t("Git Bash: {0}", [o.git_bash])) : t("Git for Windows is missing: Setup & health → Install everything.")}</p>
         <p class="muet petit">${t("Applies to the pilots started afterwards. When you close Athanor while native pilots run, it asks whether they go on in the background.")}</p>
       </div>
@@ -2096,7 +2261,9 @@ $("#page").addEventListener("click", async (ev) => {
   if (b.dataset.ouvrir) return action(api("ouvrir", "POST", { quoi: b.dataset.ouvrir }));
   if (b.dataset.bureau) return action(api("bureau/" + b.dataset.bureau, "POST")).then(rendrePage);
   if (b.hasAttribute("data-ecran")) return ouvrirEcran();
-  if (b.dataset.act) { b.disabled = true; if (b.dataset.act === "demarrer") etat.demarrage[etat.projet] = Date.now() + 25000; await action(api("pilote/" + b.dataset.act, "POST")); return setTimeout(rafraichir, 800); }
+  if (b.dataset.act === "demarrer") return demarrerPilote(b);
+  if (b.dataset.act) { b.disabled = true; await action(api("pilote/" + b.dataset.act, "POST")); return setTimeout(rafraichir, 800); }
+  if (b.dataset.installerMode !== undefined) { const r = await action(api("sante/installer", "POST", { mode: b.dataset.installerMode })); if (r) { await rafraichir(); rendrePage(); } return; }
   if (b.hasAttribute("data-installer")) return action(api("sante/installer", "POST"));
   if (b.dataset.modeSysteme) { const r = await action(api("mode-systeme", "POST", { natif: b.dataset.modeSysteme === "natif" })); if (r) { await rafraichir(); rendrePage(); } return; }
   if (b.dataset.gestion) return gererProjet(b.dataset.gestion, b.dataset.nom || etat.projet, b);
@@ -2148,6 +2315,7 @@ $("#page").addEventListener("click", async (ev) => {
   }
   if (page === "journal" && b.classList.contains("ev")) { const n = Number(b.dataset.n); etat.ouverts.has(n) ? etat.ouverts.delete(n) : etat.ouverts.add(n); etat.suiviAutoScroll = false; return rendreJournal(); }
   if (page === "sante") {
+    if (b.dataset.ongletSante) { etat.ongletSante = b.dataset.ongletSante; return rendrePage(); }
     const ligne = b.closest(".verif"); const id = ligne && ligne.dataset.id;
     if (b.id === "st-tout") { await action(api("sante/verifier", "POST", { id: "tout" })); return rendrePage(); }
     if (b.id === "st-installer") return action(api("sante/installer", "POST"));

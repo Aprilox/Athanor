@@ -207,6 +207,23 @@ func (s *Serveur) apiRecompiler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Serveur) apiInstaller(w http.ResponseWriter, r *http.Request) {
+	// "Install everything for native Windows" / "for WSL": the mode chosen first (never while a pilot runs)
+	var c struct {
+		Mode string `json:"mode"`
+	}
+	_ = lireCorps(r, &c)
+	if runtime.GOOS == "windows" && (c.Mode == "natif" || c.Mode == "wsl") {
+		s.mu.Lock()
+		code, err := s.changerMode(c.Mode == "natif")
+		if err == nil {
+			code, err = http.StatusInternalServerError, ecrireConfig(s.config)
+		}
+		s.mu.Unlock()
+		if err != nil {
+			s.erreur(w, code, err.Error())
+			return
+		}
+	}
 	if runtime.GOOS != "windows" { // Linux, macOS: the installer runs in a terminal (it asks for the password once)
 		if err := FenetreWSL(s.kitCourant(), "Athanor", "bash commands/install.sh"); err != nil {
 			s.erreur(w, http.StatusInternalServerError, err.Error())

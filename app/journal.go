@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 )
 
 type Evenement struct {
@@ -285,6 +286,28 @@ type Agent struct {
 	Depuis   string `json:"depuis"`
 	Fin      string `json:"fin"`
 	Contexte int64  `json:"contexte"`
+	// what it did lately, newest last (the Team page shows it live), and when it last did something
+	Actions  []ActionAgent `json:"actions,omitempty"`
+	Derniere int64         `json:"derniere,omitempty"` // Unix seconds
+}
+
+type ActionAgent struct {
+	Heure string `json:"heure"`
+	Texte string `json:"texte"`
+	Genre string `json:"genre"` // outil, texte, sous_agent
+}
+
+// noterAction: one more line of an agent's recent activity (8 kept).
+func (a *Agent) noterAction(genre, texte string) {
+	texte = limiter(strings.Join(strings.Fields(texte), " "), 220)
+	if texte == "" {
+		return
+	}
+	a.Actions = append(a.Actions, ActionAgent{heureCourte(), texte, genre})
+	if len(a.Actions) > 8 {
+		a.Actions = a.Actions[len(a.Actions)-8:]
+	}
+	a.Derniere = time.Now().Unix()
 }
 
 // Journal keeps the latest events in memory and serves them to the interface.
@@ -423,15 +446,17 @@ func (j *Journal) pousserCycle(l string, ouvrier string) {
 				nom = "general-purpose"
 			}
 			j.agents[e.OutilID] = &Agent{ID: e.OutilID, Nom: nom, Genre: "sous_agent", Parent: a.ID, Mission: e.SousTache,
-				Consigne: limiter(e.Detail, 6000), Statut: "travaille", Activite: "Reads its brief", Depuis: heureCourte()}
+				Consigne: limiter(e.Detail, 6000), Statut: "travaille", Activite: "Reads its brief", Depuis: heureCourte(), Derniere: time.Now().Unix()}
 			j.ordreAgents = append(j.ordreAgents, e.OutilID)
 			a.Activite = "Waits for sub-agent " + nom
+			a.noterAction("sous_agent", "→ "+nom+": "+firstNonEmpty(e.SousTache, e.Titre))
 			a.Statut = "attend"
 			a.Outils++
 		case "texte":
 			a.Bulle = e.Detail
 			a.Statut = "travaille"
 			a.Tours++
+			a.noterAction("texte", e.Detail)
 		case "outil":
 			a.Activite = e.Titre
 			if ouvrier != "" {
@@ -440,6 +465,7 @@ func (j *Journal) pousserCycle(l string, ouvrier string) {
 			a.Statut = "travaille"
 			a.Tours++
 			a.Outils++
+			a.noterAction("outil", a.Activite)
 		case "resultat", "erreur":
 			if sa, ok := j.agents[e.OutilID]; ok && sa.Genre == "sous_agent" {
 				sa.Statut, sa.Fin = "termine", heureCourte()
@@ -453,6 +479,7 @@ func (j *Journal) pousserCycle(l string, ouvrier string) {
 				} else {
 					sa.Activite = "Report handed over"
 				}
+				sa.Derniere = time.Now().Unix()
 				// the agent that called it gets back to work once none of its sub-agents is still running
 				if p := j.agents[sa.Parent]; p != nil {
 					var encore []string

@@ -1101,6 +1101,164 @@ func commandeGitHub(args []string, w io.Writer) (int, bool) {
 		return reglerIdentiteGH(reste, w), true
 	case "identite-pilote":
 		return identitePiloteGH(reste, w), true
+	case "tester":
+		return testerGH(reste, w), true
+	case "enregistrer":
+		return enregistrerGH(reste, w), true
 	}
 	return 0, false
+}
+
+// ---------------------------------------------------------------------------- test, work in progress
+
+// reponseTest: what github.sh tester prints (one JSON line): ok, and a sentence the app translates.
+func reponseTest(w io.Writer, ok bool, modele string, args ...string) int {
+	if args == nil {
+		args = []string{}
+	}
+	b, _ := json.Marshal(struct {
+		Ok     bool     `json:"ok"`
+		Modele string   `json:"modele"`
+		Args   []string `json:"args"`
+	}{ok, modele, args})
+	fmt.Fprintln(w, string(b))
+	if ok {
+		return 0
+	}
+	return 1
+}
+
+// testerGH: GitHub accepts Athanor's key for the repository, and a push of the project's commit would go
+// through (git push --dry-run: nothing is sent).
+func testerGH(args []string, w io.Writer) int {
+	projet, ok := cheminProjetGH(argGH(args, 0))
+	if !ok {
+		return 2
+	}
+	d := dossierGH(projet)
+	r, lie := lireReglagesGH(d)
+	if !lie {
+		return reponseTest(w, false, "Not linked to GitHub.")
+	}
+	branche := firstNonEmpty(r.Branche, "main")
+	miroir := d + "/miroir.git"
+	if !estDossierGH(miroir) {
+		if exec.Command("git", "init", "-q", "--bare", miroir).Run() == nil {
+			c := exec.Command("git", "config", "gc.auto", "0")
+			c.Env = append(os.Environ(), "GIT_DIR="+miroir)
+			_ = c.Run()
+		}
+	}
+	sortie, lu := "", false
+	var hote, port string
+	for _, essai := range []string{firstNonEmpty(os.Getenv("ATHANOR_GITHUB_SSH"), "github.com:22"), secoursSSHGH()} {
+		if essai == "" {
+			continue
+		}
+		hote, port = essai, essai
+		if i := strings.LastIndex(essai, ":"); i >= 0 {
+			hote, port = essai[:i], essai[i+1:]
+		}
+		out, err := gmGH(miroir, nil, "-c", "protocol.ssh.allow=always", "-c", "core.sshCommand="+commandeSSHGH(d, port),
+			"ls-remote", "--heads", fmt.Sprintf("ssh://git@%s:%s/%s.git", hote, port, r.Depot)).CombinedOutput()
+		sortie, lu = strings.TrimRight(string(out), "\n"), err == nil
+		if !reReseauGH.MatchString(sortie) {
+			break
+		}
+	}
+	switch {
+	case lu:
+	case contientGH(sortie, `host key verification failed|remote host identification has changed`):
+		return reponseTest(w, false, "GitHub's identity could not be verified: push refused. Link the project again to get GitHub's current keys.")
+	case reReseauGH.MatchString(sortie):
+		return reponseTest(w, false, "GitHub cannot be reached (network). The next milestone tries again.")
+	default:
+		return reponseTest(w, false, "GitHub refused Athanor's key for {0}: the key was removed from the repository, or the repository was deleted or renamed. Link the project again.", r.Depot)
+	}
+	sha, objets, raison := lireProjetGH(projet)
+	if raison != "" {
+		return reponseTest(w, true, "Connected: GitHub accepts Athanor's key for {0}. No commit to try a push with yet.", r.Depot)
+	}
+	v := verrouGH(d, 60*time.Second)
+	if v == nil {
+		return reponseTest(w, true, "Connected: GitHub accepts Athanor's key for {0}. No commit to try a push with yet.", r.Depot)
+	}
+	defer v.Close()
+	if preparerMiroirGH(miroir, objets) != nil {
+		return reponseTest(w, false, "Cannot prepare the push folder.")
+	}
+	url := fmt.Sprintf("ssh://git@%s:%s/%s.git", hote, port, r.Depot)
+	out, err := gmGH(miroir, nil, "-c", "protocol.ssh.allow=always", "-c", "core.sshCommand="+commandeSSHGH(d, port),
+		"push", "--dry-run", "--porcelain", "--no-verify", url, sha+":refs/heads/"+branche).CombinedOutput()
+	texte := string(out)
+	switch {
+	case err == nil:
+		return reponseTest(w, true, "Connected: Athanor can push to {0}, branch {1}.", r.Depot, branche)
+	case contientGH(texte, `non-fast-forward|fetch first|\[rejected\]|stale info`):
+		return reponseTest(w, false, "Connected to {0}, but GitHub's branch {1} has commits the project does not have: the push would be refused. Choose another branch, or bring those commits into the project.", r.Depot, branche)
+	case contientGH(texte, `GH006|protected branch`):
+		return reponseTest(w, false, "The branch {0} is protected on GitHub: choose another branch, or allow the push in the repository's settings.", branche)
+	case contientGH(texte, `permission denied|read only|not authorized|access denied|denied to deploy key`):
+		return reponseTest(w, false, "GitHub refused Athanor's key for {0}: the key was removed from the repository, or the repository was deleted or renamed. Link the project again.", r.Depot)
+	}
+	return reponseTest(w, false, "Push failed: {0}", coupeOctets(strings.Join(strings.Fields(texte), " "), 300))
+}
+
+// messageEnCours: "M3: title (in progress)", from the plan's first unticked milestone.
+func messageEnCours(projet string) string {
+	b, _ := os.ReadFile(projet + "/.athanor/PLAN.md")
+	for _, l := range strings.Split(string(b), "\n") {
+		if strings.HasPrefix(l, "- [ ] ") {
+			t := decouperJalon(strings.TrimSpace(strings.TrimRight(l[6:], "\r"))).Titre
+			t = strings.Replace(t, " : ", ": ", 1)
+			if utf8.RuneCountInString(t) > 72 {
+				t = string([]rune(t)[:72]) + "…"
+			}
+			if t != "" {
+				return t + " (in progress)"
+			}
+		}
+	}
+	return "Work in progress (saved from Athanor)"
+}
+
+// enregistrerGH: the work as it stands committed ("M3: title (in progress)"), by the app, without Claude:
+// to push it for someone else to take over, when the quota is out for instance.
+func enregistrerGH(args []string, w io.Writer) int {
+	projet, ok := cheminProjetGH(argGH(args, 0))
+	if !ok {
+		return 2
+	}
+	if _, _, raison := lireProjetGH(projet); raison == "detourne" {
+		fmt.Fprintln(w, "GitHub: not pushed, the project's .git folder points elsewhere.")
+		return 1
+	}
+	id := lireIdentiteGH(dossierGH(projet))
+	if id.nom == "" || id.email == "" {
+		gn, ge := gitGlobalGH("user.name"), gitGlobalGH("user.email")
+		if nomAuteurValideGH(gn) && emailValideGH(ge) {
+			id.nom, id.email = gn, ge
+		}
+	}
+	var env []string
+	if id.nom != "" && id.email != "" {
+		env = []string{"GIT_AUTHOR_NAME=" + id.nom, "GIT_COMMITTER_NAME=" + id.nom, "GIT_AUTHOR_EMAIL=" + id.email, "GIT_COMMITTER_EMAIL=" + id.email}
+	} else if gitP(projet, nil, "config", "user.email").Run() != nil {
+		env = []string{"GIT_AUTHOR_NAME=Athanor", "GIT_COMMITTER_NAME=Athanor", "GIT_AUTHOR_EMAIL=athanor@localhost", "GIT_COMMITTER_EMAIL=athanor@localhost"}
+	}
+	if out, err := gitP(projet, env, "add", "-A").CombinedOutput(); err != nil {
+		fmt.Fprintln(w, "Cannot save the work in progress: "+coupeOctets(strings.TrimSpace(string(out)), 300))
+		return 1
+	}
+	if gitP(projet, nil, "diff", "--cached", "--quiet").Run() == nil && gitP(projet, nil, "rev-parse", "-q", "--verify", "HEAD").Run() == nil {
+		fmt.Fprintln(w, "Nothing new to save: the last commit holds everything.")
+		return 0
+	}
+	m := messageEnCours(projet)
+	if out, err := gitP(projet, env, "commit", "-q", "-m", m).CombinedOutput(); err != nil {
+		fmt.Fprintln(w, "Cannot save the work in progress: "+coupeOctets(strings.TrimSpace(string(out)), 300))
+		return 1
+	}
+	fmt.Fprintln(w, "Saved: "+m)
+	return 0
 }

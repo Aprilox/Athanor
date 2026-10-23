@@ -55,10 +55,16 @@ func cheminConfig() string {
 	return filepath.Join(filepath.Dir(exe), nom)
 }
 
+// configNeuve: no configuration file yet (a first launch): native Windows is then the default mode, since
+// it needs nothing installed, unless this kit already has its WSL installation (nouveauServeur).
+var configNeuve bool
+
 func lireConfig() Config {
 	c := configDefaut()
 	if b, err := os.ReadFile(cheminConfig()); err == nil {
 		_ = json.Unmarshal(b, &c)
+	} else if os.IsNotExist(err) {
+		configNeuve = true
 	}
 	// folders saved by older versions with a final dot or space ("montre3."): Windows drops it, Linux keeps
 	// it, so the pilot would have worked in another folder than the one shown in Explorer

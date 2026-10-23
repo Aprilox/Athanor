@@ -97,6 +97,7 @@ type EtatVue struct {
 	Bienvenue   bool                  `json:"bienvenue"`
 	Natif       bool                  `json:"natif"`   // native Windows mode: no Linux screen
 	Windows     bool                  `json:"windows"` // the app runs on Windows: WSL or native mode to choose
+	Systeme     string                `json:"systeme"` // runtime.GOOS: windows, linux, darwin (the Setup page's tabs)
 	Quota       *EtatQuota            `json:"quota,omitempty"`
 	QuotaArret  map[string]RegleQuota `json:"quota_arret"`
 }
@@ -136,6 +137,7 @@ func (s *Serveur) apiEtat(w http.ResponseWriter, r *http.Request) {
 	vue.Bureau = s.bureau.Etat()
 	vue.Natif = modeNatif.Load()
 	vue.Windows = runtime.GOOS == "windows"
+	vue.Systeme = runtime.GOOS
 	s.mu.Lock()
 	tous := append([]Projet{}, s.config.Projets...)
 	s.mu.Unlock()
@@ -557,9 +559,26 @@ func ScriptKit(k Kit, script string, args ...string) (string, error) {
 }
 
 func executerKit(k Kit, ligne string) (string, error) {
+	return executerKitDelai(k, ligne, 20*time.Minute)
+}
+
+// executerKitDelai: executerKit, stopped after delai (WSL that does not answer, a command that hangs):
+// the caller gets an error instead of waiting for ever.
+func executerKitDelai(k Kit, ligne string, delai time.Duration) (string, error) {
 	c := commandeWSL(k, ligne)
 	cacherFenetre(c)
-	out, err := c.CombinedOutput()
+	c.WaitDelay = 5 * time.Second
+	var bout strings.Builder
+	c.Stdout, c.Stderr = &bout, &bout
+	err := c.Start()
+	if err == nil {
+		minuteur := time.AfterFunc(delai, func() { _ = c.Process.Kill() })
+		err = c.Wait()
+		if !minuteur.Stop() {
+			err = fmt.Errorf("no answer after %d s", int(delai.Seconds()))
+		}
+	}
+	out := []byte(bout.String())
 	texte := strings.TrimSpace(nettoyerANSI(string(out)))
 	if err != nil {
 		return texte, fmt.Errorf("%s (%v)", texte, err)

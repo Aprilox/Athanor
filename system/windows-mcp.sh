@@ -15,6 +15,13 @@
 # even if this script is killed outright (a watchdog outside its process group).
 # (written into the MCP configuration by system/extensions.py; never called by hand)
 set -u
+# Athanor's executable does this when it runs here (athanor mcp-windows, with the PATH as inherited: it
+# reads the Windows folders from it); ATHANOR_OUTILS=python keeps this script.
+_wm_k="$(dirname "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)")"
+if [ "${ATHANOR_OUTILS:-}" != python ] && [ -f "$_wm_k/athanor" ] && [ -x "$_wm_k/athanor" ] \
+   && /usr/bin/timeout 15 "$_wm_k/athanor" aide < /dev/null 2> /dev/null | /usr/bin/grep -q '^  mcp-windows '; then
+  KIT="$_wm_k" exec "$_wm_k/athanor" mcp-windows "$@"
+fi
 # System32 (cmd.exe, taskkill.exe): the Windows entry of the inherited PATH (Windows is not always on C:)
 _wm_sys32=/mnt/c/Windows/System32
 IFS=: read -ra _wm_chemins <<< "${PATH:-}"
