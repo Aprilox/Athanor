@@ -589,3 +589,22 @@ input.large { flex: 1; min-width: 200px; width: auto; }
 .chat-points i { display: inline-block; width: 5px; height: 5px; margin-right: 3px; border-radius: 50%; background: var(--muted); animation: chat-point 1.2s infinite ease-in-out; }
 .chat-points i:nth-child(2) { animation-delay: .2s; } .chat-points i:nth-child(3) { animation-delay: .4s; }
 @keyframes chat-point { 0%, 80%, 100% { opacity: .25; } 40% { opacity: 1; } }
+
+/* GitHub block: the steps of a link, the state of a linked project */
+.gh-etape { display: flex; flex-direction: column; gap: 6px; padding: 10px 0; border-top: 1px solid var(--line); }
+.gh-etape:first-of-type { border-top: 0; }
+.gh-etape > b { font-size: 14px; }
+.gh-statut { margin: 0 0 8px; }
+
+/* guided tour */
+.visite { position: fixed; z-index: 55; width: min(360px, calc(100vw - 32px)); background: var(--panel); border: 1px solid var(--accent, var(--line)); border-radius: 12px; box-shadow: var(--ombre); padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }
+.visite p { margin: 0; line-height: 1.5; }
+.visite-titre { font-weight: 600; font-size: 15px; }
+.visite-pied { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.visite-cible { outline: 3px solid var(--accent, #2a9d8f); outline-offset: 3px; border-radius: 6px; position: relative; z-index: 54; }
+
+/* Team: what each agent did lately */
+.vivant { margin-top: 4px; }
+.actions-agent { list-style: none; margin: 4px 0 0; padding: 0; font-size: 13px; display: flex; flex-direction: column; gap: 2px; }
+.actions-agent li { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.btn-primaire .muet { color: inherit; opacity: .7; }

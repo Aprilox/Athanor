@@ -12,6 +12,12 @@
 set -u
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin   # bwrap is found here, never elsewhere
 unset LD_PRELOAD LD_LIBRARY_PATH LD_AUDIT GCONV_PATH
+# Athanor's executable builds the cage when it runs here (athanor mcp-cage); ATHANOR_OUTILS=python keeps this script.
+_k="$(dirname "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)")"
+if [ "${ATHANOR_OUTILS:-}" != python ] && [ -f "$_k/athanor" ] && [ -x "$_k/athanor" ] \
+   && timeout 15 "$_k/athanor" aide < /dev/null 2> /dev/null | grep -q '^  mcp-cage '; then
+  exec "$_k/athanor" mcp-cage "$@"
+fi
 nom="${1:-}"; outils="${2:-}"; shift 2 2>/dev/null || { echo "mcp-jail: usage: NAME TOOLS [--rw DIR]... -- COMMAND" >&2; exit 2; }
 ecriture=(); lecture=(); variables=()
 while [ $# -gt 0 ] && [ "$1" != "--" ]; do

@@ -27,6 +27,8 @@
 #   github.sh identite-pilote PROJECT              "name<TAB>email<TAB>0|1" for the pilot
 #   github.sh crochet PROJECT 0|1                  the project's commit-msg hook that removes Claude's co-author lines
 #   github.sh publie PROJECT FILE...               0 when one of these files is in a commit already pushed to GitHub
+#   github.sh tester PROJECT                       JSON: GitHub accepts the key, a push would go through (dry run)
+#   github.sh enregistrer PROJECT                  commits the work as it stands ("M3: title (in progress)"), no Claude
 #
 # Exit codes of pousser: 0 pushed or up to date, 3 nothing to do (not linked, automatic push off,
 # no commit yet), 4 blocked (secret found), 5 refused by GitHub (branch ahead, key removed...), 1 error.
@@ -765,15 +767,90 @@ finally:
 # Athanor's executable does the rest of this script too (WSL and Linux; native Windows keeps the script,
 # whose locks are Git Bash's), linking aside: the same files, messages and exit codes.
 case "${1:-}" in
-  etat|pousser|publie|auto|branche|delier|suivre|identite|regler-identite|identite-pilote)
+  etat|pousser|publie|auto|branche|delier|suivre|identite|regler-identite|identite-pilote|tester|enregistrer)
     if [ "${NATIF:-0}" != 1 ] && [ "${ATHANOR_OUTILS:-}" != python ]; then
       c="$KIT/athanor"
-      if [ -f "$c" ] && [ -x "$c" ] && timeout 15 "$c" aide < /dev/null 2> /dev/null | grep -q '^  github .*pousser'; then
+      if [ -f "$c" ] && [ -x "$c" ] && timeout 15 "$c" aide < /dev/null 2> /dev/null | grep -q '^  github .*enregistrer'; then
         exec "$c" github "$@"
       fi
     fi ;;
 esac
+# ----------------------------------------------------------------------------- test, work in progress
+reponse_test() {  # $1 true|false, $2 template, then its values
+  local ok="$1" m="$2"; shift 2
+  jq -nc --argjson ok "$ok" --arg m "$m" '{ok:$ok, modele:$m, args:$ARGS.positional}' --args "$@"
+  [ "$ok" = true ]
+}
+tester() {
+  local projet d sortie="" essai hote port url branche
+  projet=$(chemin_projet "${1:-}") || return 2
+  d=$(dossier_de "$projet")
+  lire_reglages "$d" || { reponse_test false "Not linked to GitHub."; return; }
+  branche="${BRANCHE:-main}"
+  MIROIR="$d/miroir.git"
+  [ -d "$MIROIR" ] || { git init -q --bare "$MIROIR" >/dev/null 2>&1 && GIT_DIR="$MIROIR" git config gc.auto 0; }
+  local lu=1
+  for essai in "$HOTE_SSH" "$SECOURS_SSH"; do
+    [ -n "$essai" ] || continue
+    hote=${essai%:*}; port=${essai##*:}
+    sortie=$(gm -c protocol.ssh.allow=always -c core.sshCommand="$(commande_ssh "$d" "$port")" ls-remote --heads "ssh://git@$hote:$port/$DEPOT.git" 2>&1); lu=$?
+    printf '%s' "$sortie" | grep -Eqi 'connection timed out|connection refused|network is unreachable|could not resolve|no route to host|connection reset|operation timed out' || break
+  done
+  if [ "$lu" != 0 ]; then
+    if printf '%s' "$sortie" | grep -Eqi 'host key verification failed|remote host identification has changed'; then
+      reponse_test false "GitHub's identity could not be verified: push refused. Link the project again to get GitHub's current keys."
+    elif printf '%s' "$sortie" | grep -Eqi 'connection timed out|connection refused|network is unreachable|could not resolve|no route to host|connection reset|operation timed out'; then
+      reponse_test false "GitHub cannot be reached (network). The next milestone tries again."
+    else
+      reponse_test false "GitHub refused Athanor's key for {0}: the key was removed from the repository, or the repository was deleted or renamed. Link the project again." "$DEPOT"
+    fi
+    return
+  fi
+  if ! lire_projet "$projet"; then reponse_test true "Connected: GitHub accepts Athanor's key for {0}. No commit to try a push with yet." "$DEPOT"; return; fi
+  exec 8> "$d/verrou" && flock -w 60 8 || { reponse_test true "Connected: GitHub accepts Athanor's key for {0}. No commit to try a push with yet." "$DEPOT"; return; }
+  mkdir -p "$MIROIR/objects/info" && objets_pour_git > "$MIROIR/objects/info/alternates" || { reponse_test false "Cannot prepare the push folder."; return; }
+  url="ssh://git@$hote:$port/$DEPOT.git"
+  if sortie=$(gm -c protocol.ssh.allow=always -c core.sshCommand="$(commande_ssh "$d" "$port")" push --dry-run --porcelain --no-verify "$url" "$SHA:refs/heads/$branche" 2>&1); then
+    reponse_test true "Connected: Athanor can push to {0}, branch {1}." "$DEPOT" "$branche"
+  elif printf '%s' "$sortie" | grep -Eqi 'non-fast-forward|fetch first|\[rejected\]|stale info'; then
+    reponse_test false "Connected to {0}, but GitHub's branch {1} has commits the project does not have: the push would be refused. Choose another branch, or bring those commits into the project." "$DEPOT" "$branche"
+  elif printf '%s' "$sortie" | grep -Eqi 'GH006|protected branch'; then
+    reponse_test false "The branch {0} is protected on GitHub: choose another branch, or allow the push in the repository's settings." "$branche"
+  elif printf '%s' "$sortie" | grep -Eqi 'permission denied|read only|not authorized|access denied|denied to deploy key'; then
+    reponse_test false "GitHub refused Athanor's key for {0}: the key was removed from the repository, or the repository was deleted or renamed. Link the project again." "$DEPOT"
+  else
+    reponse_test false "Push failed: {0}" "$(printf '%s' "$sortie" | tr -s '[:space:]' ' ' | cut -c1-300)"
+  fi
+}
+message_en_cours() {  # "M3: title (in progress)" from the plan's first unticked milestone
+  local l t
+  l=$(grep -m1 '^- \[ \] ' "$1/.athanor/PLAN.md" 2>/dev/null | tr -d '\r')
+  t=${l#- \[ \] }; t=${t%% — *}; t=${t%% – *}; t=${t/ : /: }
+  t=$(printf '%s' "$t" | sed -E 's/^([A-Za-z]+[0-9][^:]*): ([^:]*): .*/\1: \2/' | cut -c1-80)
+  if [ -n "$l" ] && [ -n "$t" ]; then printf '%s (in progress)' "$t"; else printf 'Work in progress (saved from Athanor)'; fi
+}
+enregistrer() {
+  local projet nom email sortie m
+  projet=$(chemin_projet "${1:-}") || return 2
+  if ! lire_projet "$projet" && [ "$RAISON" = detourne ]; then echo "GitHub: not pushed, the project's .git folder points elsewhere."; return 1; fi
+  IFS=$'\t' read -r nom email _ <<< "$(identite_pilote "$projet")"
+  if [ -n "$nom" ] && [ -n "$email" ]; then
+    export GIT_AUTHOR_NAME="$nom" GIT_COMMITTER_NAME="$nom" GIT_AUTHOR_EMAIL="$email" GIT_COMMITTER_EMAIL="$email"
+  elif ! g -C "$projet" config user.email >/dev/null 2>&1; then
+    export GIT_AUTHOR_NAME=Athanor GIT_COMMITTER_NAME=Athanor GIT_AUTHOR_EMAIL=athanor@localhost GIT_COMMITTER_EMAIL=athanor@localhost
+  fi
+  sortie=$(g -C "$projet" add -A 2>&1) || { echo "Cannot save the work in progress: $(printf '%s' "$sortie" | tr '\n' ' ' | cut -c1-300)"; return 1; }
+  if g -C "$projet" diff --cached --quiet 2>/dev/null && g -C "$projet" rev-parse -q --verify HEAD >/dev/null 2>&1; then
+    echo "Nothing new to save: the last commit holds everything."; return 0
+  fi
+  m=$(message_en_cours "$projet")
+  sortie=$(g -C "$projet" commit -q -m "$m" 2>&1) || { echo "Cannot save the work in progress: $(printf '%s' "$sortie" | tr '\n' ' ' | cut -c1-300)"; return 1; }
+  echo "Saved: $m"
+}
+
 case "${1:-}" in
+  tester)  tester "${2:-}" ;;
+  enregistrer) enregistrer "${2:-}" ;;
   etat)    etat "${2:-}" ;;
   identite) identite_json "$(chemin_projet "${2:-}")" ;;
   regler-identite) regler_identite "${2:-}" "${3:-}" "${4:-}" "${5:-0}" ;;

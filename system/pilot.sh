@@ -117,7 +117,7 @@ ATHANOR_GO=""
 if [ "${ATHANOR_OUTILS:-}" != python ]; then
   if [ "$NATIF" = 1 ]; then candidat="$KIT/Athanor.exe"; else candidat="$KIT/athanor"; fi
   if [ -f "$candidat" ] && [ -x "$candidat" ] && aide_go=$(timeout 15 "$candidat" aide < /dev/null 2> /dev/null) \
-     && ( for c in relais cout quota hook reglages equipe extensions etat-taches plan solutions reglages-ouvrier pont roblox-sync detecter mcp-ouvrir; do printf '%s' "$aide_go" | grep -q "^  $c " || exit 1; done ); then
+     && ( for c in relais cout quota hook reglages equipe extensions etat-taches plan solutions reglages-ouvrier pont roblox-sync detecter mcp-ouvrir reprise; do printf '%s' "$aide_go" | grep -q "^  $c " || exit 1; done ); then
     ATHANOR_GO="$candidat"
   fi
   unset candidat aide_go
@@ -1133,6 +1133,11 @@ if ! g -C "$PROJECT" rev-parse HEAD >/dev/null 2>&1; then
   g -C "$PROJECT" add -A >/dev/null 2>&1 && g -C "$PROJECT" commit -qm "Initial commit" >/dev/null 2>&1 || g -C "$PROJECT" commit -q --allow-empty -m "Initial commit"
 fi
 
+# A session stopped in the middle, or a project brought from another PC: the git locks it left are removed,
+# the rest is written for Claude (.athanor/RESUME.md), and a plan under way is checked against the folder.
+if [ -n "$ATHANOR_GO" ]; then
+  while IFS= read -r l; do [ -n "$l" ] && log "$l"; done < <(timeout 60 "$ATHANOR_GO" reprise "$PROJECT" "$PRIVE" 2>> "$PRIVE/pilot.log" 9>&-)
+fi
 # Project start (MAX_HOURS safety stop): in the private folder, taken over from an older version
 # if valid. A non-numeric value is never evaluated.
 [ -f "$PRIVE/debut" ] || entier "$(cat "$ETAT/debut" 2>/dev/null)" "$(date +%s)" > "$PRIVE/debut"
@@ -1274,7 +1279,7 @@ while true; do
     if [ -f "$ETAT/PLAN.md" ] && [ -f "$ETAT/REQUEST_CHANGED" ] && parallele_plan_a_des_vagues; then
       but_cycle="/goal The change of .athanor/REQUEST.md (flagged by .athanor/REQUEST_CHANGED) is folded into .athanor/PLAN.md as waves according to your parallel-mode instructions, the change is noted in .athanor/LOG.md, .athanor/REQUEST_CHANGED is deleted and the plan is committed, without writing any code. Or stop after 15 turns. ${PHRASE_LANGUE}"
       plan_seul=1; log "Parallel mode: the request changed, the lead updates the plan first."
-    elif [ -f "$ETAT/PLAN.md" ] && [ ! -f "$ETAT/RECHECK" ] && [ ! -f "$ETAT/REQUEST_CHANGED" ] && [ ! -f "$ETAT/REVERIFY" ] && [ ! -f "$ETAT/SECRETS_FOUND.md" ] && [ ! -f "$ETAT/SECRETS_PUBLISHED.md" ] && [ ! -f "$ETAT/TIDY" ] && [ ! -f "$ETAT/FOR_YOU_ANSWERED" ] && [ ! -f "$ETAT/SAVE_CHECK" ] && [ ! -s "$PRIVE/relais.md" ]; then
+    elif [ -f "$ETAT/PLAN.md" ] && [ ! -f "$ETAT/RECHECK" ] && [ ! -f "$ETAT/RESUME.md" ] && [ ! -f "$ETAT/REQUEST_CHANGED" ] && [ ! -f "$ETAT/REVERIFY" ] && [ ! -f "$ETAT/SECRETS_FOUND.md" ] && [ ! -f "$ETAT/SECRETS_PUBLISHED.md" ] && [ ! -f "$ETAT/TIDY" ] && [ ! -f "$ETAT/FOR_YOU_ANSWERED" ] && [ ! -f "$ETAT/SAVE_CHECK" ] && [ ! -s "$PRIVE/relais.md" ]; then
       if parallele_plan_a_des_vagues; then
         # the pilot picks the mode of each cycle: workers only when they pay off (parallel.sh)
         raison_serie=$(parallele_raison_serie)

@@ -15,7 +15,7 @@ import (
 )
 
 // versionAthanor: kept equal to ProductVersion of winres/athanor.rc (TestVersionAlignee).
-const versionAthanor = "2.24.19"
+const versionAthanor = "2.24.21"
 
 type sousCommande struct {
 	aide  string
@@ -26,35 +26,40 @@ var sousCommandes map[string]sousCommande
 
 func init() {
 	sousCommandes = map[string]sousCommande{
-		"equipe":           {"equipe importer KIT PROJECT | json KIT PROJECT AGENTS_DIR [--ouvrier] | fiche KIT PROJECT AGENTS_DIR: the team of sub-agents (the pilot)", lancerEquipe},
-		"extensions":       {"extensions preparer KIT PROJECT PRIVATE_DIR [...] | mcp KIT PROJECT FILE [...] | tester KIT PROJECT ID | connexion KIT ID FILE: the skills, plugins and MCP servers of a session", lancerExtensions},
-		"screenshots":      {"screenshots [folder] | --accept: Claude's screenshots against the reference, sheets to look at (athanor screenshots in the workshop)", lancerAtelier("screenshots")},
-		"map":              {"map: writes .athanor/MAP.md, the files, functions and outlines of $PROJECT", lancerAtelier("map")},
-		"archive":          {"archive: old checked milestones and old log entries of $PROJECT into .athanor/archives/", lancerAtelier("archive")},
-		"todo":             {"todo add|edit|list|ok|missing|resolved|wait ...: the tasks for the user (Claude's command)", lancerTodo},
-		"etat-taches":      {"etat-taches PROJECT: how many tasks wait for the user or for Claude (the pilot)", lancerEtatTaches},
-		"plan":             {"plan lister PLAN | chevauchement PLAN LINE [RUNNING...] | documentation | cocher PLAN ID: the plan's milestones for the parallel mode (the pilot)", lancerPlan},
-		"solutions":        {"solutions ranger FILE WHAT | fusionner MAIN COPY: .athanor/SOLUTIONS.md kept short, a worker's merged (the pilot)", lancerSolutions},
-		"reglages-ouvrier": {"reglages-ouvrier SETTINGS GIT: a parallel worker's settings, the project's .git opened in its sandbox (the pilot)", lancerReglagesOuvrier},
-		"pont":             {"pont KIT [PROJECT]: the bridge between Claude's sandbox and the PC tools (the pilot, WSL and Linux)", lancerPont},
-		"roblox-sync":      {"roblox-sync serve PROJECT PIDFILE | payload PROJECT: a Rojo project's scripts, live in the open Roblox Studio (the pilot)", lancerRobloxSync},
-		"reparer":          {"reparer --diff | --recompiler [--tests] [--forcer] | --annuler [KIT]: rebuilds this executable from the kit's app/ (after a repair), checked, the previous one kept", lancerReparer},
-		"github":           {"github etat|pousser|publie|auto|branche|delier|suivre|identite|regler-identite|identite-pilote … | scanner | atelier | crochet: system/github.sh (WSL and Linux; linking stays in the script)", lancerGitHub},
-		"passerelle":       {"passerelle adb|blender|install-windows|pc-exec|roblox-studio|tool|unreal-cmd|unreal-editor|unreal-uat|windows-var ARGS: the PC side of the gateways of system/bin (WSL; the bridge and the pilot)", lancerPasserelle},
-		"mcp-ouvrir":       {"mcp-ouvrir KIT PROJECT OPENINGS.json: the programs the cycle's MCP servers drive, opened before it (the pilot)", lancerMCPOuvrir},
-		"detecter":         {"detecter [KIT]: the PC tools and the toolchain, into system/pc_tools.env and PROJECT/.athanor/PC_TOOLS.md (the pilot)", lancerDetecter},
-		"hook":             {"hook fichiers ALLOWED... [--lecture=DIR...] | hook bash: the PreToolUse hooks of Claude's tools (stdin: the call)", lancerHook},
-		"reglages":         {"reglages KIT OUTPUT.json: the Claude Code settings of a cycle (PROJECT in the environment; the pilot)", lancerReglages},
-		"chat":             {"chat settings PROJECT OUT: the Claude Code settings of the app's chat", lancerChatOutil},
-		"relais":           {"relais contexte LOG | sur LOG | resume LOG [HANDOFF]: taking over a milestone when a session's context is full (the pilot)", lancerRelais},
-		"cout":             {"cout apprendre TARIFS LOG | estimer TARIFS LOG [CONFIG]: the prices learned on this PC and the cost of a cycle (the pilot)", lancerCout},
-		"quota":            {"quota verifier RULES LOG...: the automatic stops on the subscription's quota (the pilot)", lancerQuota},
-		"version":          {"prints the version of Athanor", func([]string) int { fmt.Println(versionAthanor); return 0 }},
-		"aide":             {"lists the sub-commands", func([]string) int { afficherAide(); return 0 }},
-		"autotest":         {"autotest [KIT]: checks this executable and the kit (built-in files, scripts, texts, local/ replacements)", lancerAutotest},
-		"isole":            {"isole [--detache] [--ici] [--fin-tout] [--pid FILE] -- PROGRAM ARGS: runs a Windows program in a job, on Claude's desktop when that option is on", LancerIsole},
-		"eveil":            {"eveil FILE: keeps the PC awake while FILE is touched (a running pilot)", GarderEveille},
-		"retour":           {"retour PID: brings the user back from Claude's desktop when the app disappears", GardienRetour},
+		"equipe":            {"equipe importer KIT PROJECT | json KIT PROJECT AGENTS_DIR [--ouvrier] | fiche KIT PROJECT AGENTS_DIR: the team of sub-agents (the pilot)", lancerEquipe},
+		"extensions":        {"extensions preparer KIT PROJECT PRIVATE_DIR [...] | mcp KIT PROJECT FILE [...] | tester KIT PROJECT ID | connexion KIT ID FILE: the skills, plugins and MCP servers of a session", lancerExtensions},
+		"screenshots":       {"screenshots [folder] | --accept: Claude's screenshots against the reference, sheets to look at (athanor screenshots in the workshop)", lancerAtelier("screenshots")},
+		"map":               {"map: writes .athanor/MAP.md, the files, functions and outlines of $PROJECT", lancerAtelier("map")},
+		"archive":           {"archive: old checked milestones and old log entries of $PROJECT into .athanor/archives/", lancerAtelier("archive")},
+		"todo":              {"todo add|edit|list|ok|missing|resolved|wait ...: the tasks for the user (Claude's command)", lancerTodo},
+		"etat-taches":       {"etat-taches PROJECT: how many tasks wait for the user or for Claude (the pilot)", lancerEtatTaches},
+		"plan":              {"plan lister PLAN | chevauchement PLAN LINE [RUNNING...] | documentation | cocher PLAN ID: the plan's milestones for the parallel mode (the pilot)", lancerPlan},
+		"solutions":         {"solutions ranger FILE WHAT | fusionner MAIN COPY: .athanor/SOLUTIONS.md kept short, a worker's merged (the pilot)", lancerSolutions},
+		"reglages-ouvrier":  {"reglages-ouvrier SETTINGS GIT: a parallel worker's settings, the project's .git opened in its sandbox (the pilot)", lancerReglagesOuvrier},
+		"pont":              {"pont KIT [PROJECT]: the bridge between Claude's sandbox and the PC tools (the pilot, WSL and Linux)", lancerPont},
+		"roblox-sync":       {"roblox-sync serve PROJECT PIDFILE | payload PROJECT: a Rojo project's scripts, live in the open Roblox Studio (the pilot)", lancerRobloxSync},
+		"reparer":           {"reparer --diff | --recompiler [--tests] [--forcer] | --annuler [KIT]: rebuilds this executable from the kit's app/ (after a repair), checked, the previous one kept", lancerReparer},
+		"github":            {"github etat|pousser|publie|tester|enregistrer|auto|branche|delier|suivre|identite|regler-identite|identite-pilote … | scanner | atelier | crochet: system/github.sh (WSL and Linux; linking stays in the script)", lancerGitHub},
+		"passerelle":        {"passerelle adb|blender|install-windows|pc-exec|roblox-studio|tool|unreal-cmd|unreal-editor|unreal-uat|windows-var ARGS: the PC side of the gateways of system/bin (WSL; the bridge and the pilot)", lancerPasserelle},
+		"mcp-cage":          {"mcp-cage NAME TOOLS [--rw DIR]... [--ro DIR]... [--env NAME VALUE]... -- COMMAND...: a local MCP server in its cage (system/mcp-jail.sh)", lancerMCPCage},
+		"mcp-windows":       {"mcp-windows [--env NAME VALUE]... -- PROGRAM...: an MCP server that is a Windows program, through WSL (system/windows-mcp.sh)", lancerMCPWindows},
+		"mcp-windows-garde": {"mcp-windows-garde PIDFILE SYS32 LAUNCHER PARENT: mcp-windows' watchdog", lancerGardeMCPWindows},
+		"ecran":             {"ecran lancer PROGRAM... | capture PROJECT: Claude's screen on the Linux side (system/ecran.sh)", lancerEcran},
+		"reprise":           {"reprise PROJECT PRIVATE_DIR: at the pilot's start, what a stop in the middle or another PC left (git locks repaired, the rest in .athanor/RESUME.md for Claude)", lancerReprise},
+		"mcp-ouvrir":        {"mcp-ouvrir KIT PROJECT OPENINGS.json: the programs the cycle's MCP servers drive, opened before it (the pilot)", lancerMCPOuvrir},
+		"detecter":          {"detecter [KIT]: the PC tools and the toolchain, into system/pc_tools.env and PROJECT/.athanor/PC_TOOLS.md (the pilot)", lancerDetecter},
+		"hook":              {"hook fichiers ALLOWED... [--lecture=DIR...] | hook bash: the PreToolUse hooks of Claude's tools (stdin: the call)", lancerHook},
+		"reglages":          {"reglages KIT OUTPUT.json: the Claude Code settings of a cycle (PROJECT in the environment; the pilot)", lancerReglages},
+		"chat":              {"chat settings PROJECT OUT: the Claude Code settings of the app's chat", lancerChatOutil},
+		"relais":            {"relais contexte LOG | sur LOG | resume LOG [HANDOFF]: taking over a milestone when a session's context is full (the pilot)", lancerRelais},
+		"cout":              {"cout apprendre TARIFS LOG | estimer TARIFS LOG [CONFIG]: the prices learned on this PC and the cost of a cycle (the pilot)", lancerCout},
+		"quota":             {"quota verifier RULES LOG...: the automatic stops on the subscription's quota (the pilot)", lancerQuota},
+		"version":           {"prints the version of Athanor", func([]string) int { fmt.Println(versionAthanor); return 0 }},
+		"aide":              {"lists the sub-commands", func([]string) int { afficherAide(); return 0 }},
+		"autotest":          {"autotest [KIT]: checks this executable and the kit (built-in files, scripts, texts, local/ replacements)", lancerAutotest},
+		"isole":             {"isole [--detache] [--ici] [--fin-tout] [--pid FILE] -- PROGRAM ARGS: runs a Windows program in a job, on Claude's desktop when that option is on", LancerIsole},
+		"eveil":             {"eveil FILE: keeps the PC awake while FILE is touched (a running pilot)", GarderEveille},
+		"retour":            {"retour PID: brings the user back from Claude's desktop when the app disappears", GardienRetour},
 	}
 }
 

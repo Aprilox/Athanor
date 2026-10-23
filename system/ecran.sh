@@ -11,6 +11,14 @@
 set -u
 SYSTEME="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 KIT="${KIT:-$(dirname "$SYSTEME")}"
+# Athanor's executable does this when it runs here (athanor ecran); ATHANOR_OUTILS=python keeps this script.
+case "${1:-}:$(uname -s 2>/dev/null)" in
+  lancer:Linux|capture:Linux)
+    if [ "${ATHANOR_OUTILS:-}" != python ] && [ -f "$KIT/athanor" ] && [ -x "$KIT/athanor" ] \
+       && timeout 15 "$KIT/athanor" aide < /dev/null 2> /dev/null | grep -q '^  ecran '; then
+      export KIT; exec "$KIT/athanor" ecran "$@"
+    fi ;;
+esac
 
 case "${1:-}" in
   lancer)

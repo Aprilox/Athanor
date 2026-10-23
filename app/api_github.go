@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"time"
 )
 
 var (
@@ -76,8 +77,11 @@ func nomDepotPropose(nom string) string {
 
 func (s *Serveur) etatGitHub(p Projet) (GitHubVue, error) {
 	var v GitHubVue
-	out, err := executerKit(s.kitCourant(), ligneGitHub(p, "etat"))
+	out, err := executerKitDelai(s.kitCourant(), ligneGitHub(p, "etat"), 45*time.Second)
 	if err != nil {
+		if strings.Contains(err.Error(), "no answer after") {
+			return v, errors.New("GitHub: no answer from WSL after 45 s (still starting?). Try Refresh in a moment.")
+		}
 		return v, err
 	}
 	if i := strings.Index(out, "{"); i > 0 { // a login shell may print something first
@@ -183,6 +187,49 @@ func (s *Serveur) apiGitHub(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.ecrireJSON(w, map[string]any{"github": v})
+	case "tester": // GitHub accepts the key, a push would go through (nothing is sent)
+		out, _ := executerKitDelai(k, ligneGitHub(p, "tester"), 2*time.Minute)
+		if i := strings.LastIndex(out, "{"); i >= 0 {
+			out = out[i:]
+		}
+		var t struct {
+			Ok     bool     `json:"ok"`
+			Modele string   `json:"modele"`
+			Args   []string `json:"args"`
+		}
+		if json.Unmarshal([]byte(out), &t) != nil {
+			s.erreur(w, http.StatusBadGateway, raisonPoussee(out))
+			return
+		}
+		s.ecrireJSON(w, map[string]any{"ok": t.Ok, "message_key": t.Modele, "args": t.Args})
+	case "wip": // the work as it stands committed by Athanor itself, then pushed: no Claude, no quota needed
+		if e, ok := p.LireEtat(); ok && p.PiloteActif() && e.Phase == "travail" {
+			s.erreur(w, http.StatusConflict, "Claude is working on the project right now: use “Stop after cycle”, or wait for the end of the cycle, then save the work in progress.")
+			return
+		}
+		out, err := executerKitDelai(k, ligneGitHub(p, "enregistrer"), 2*time.Minute)
+		if err != nil {
+			s.erreur(w, http.StatusConflict, raisonPoussee(out))
+			return
+		}
+		enregistre := ""
+		for _, l := range strings.Split(out, "\n") {
+			if strings.HasPrefix(l, "Saved: ") {
+				enregistre = strings.TrimPrefix(l, "Saved: ")
+			}
+		}
+		avant, _ := s.etatGitHub(p)
+		sortie, _ := executerKit(k, ligneGitHub(p, "pousser"))
+		v, err := s.etatGitHub(p)
+		if err != nil {
+			s.erreur(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if quandDernier(v) == quandDernier(avant) {
+			s.erreur(w, http.StatusConflict, raisonPoussee(sortie))
+			return
+		}
+		s.ecrireJSON(w, map[string]any{"github": v, "enregistre": enregistre})
 	case "auto":
 		a := "0"
 		if c.Auto {
@@ -210,6 +257,27 @@ func (s *Serveur) apiGitHub(w http.ResponseWriter, r *http.Request) {
 		s.msg(w, "Saved.")
 	case "identite": // author of the commits (name, email) and Claude as co-author or not
 		nom, email := strings.TrimSpace(c.Nom), strings.TrimSpace(c.Email)
+		if nom == "" || email == "" { // the co-author switch alone: the author as it stands, else "Athanor"
+			if v, err := s.etatGitHub(p); err == nil {
+				var id struct {
+					Nom    string `json:"nom"`
+					Email  string `json:"email"`
+					Noms   []string
+					Emails []struct {
+						Email string `json:"email"`
+					} `json:"emails"`
+				}
+				_ = json.Unmarshal(v.Identite, &id)
+				nom, email = firstNonEmpty(nom, id.Nom), firstNonEmpty(email, id.Email)
+				if nom == "" && len(id.Noms) > 0 {
+					nom = id.Noms[0]
+				}
+				if email == "" && len(id.Emails) > 0 {
+					email = id.Emails[0].Email
+				}
+			}
+			nom, email = firstNonEmpty(nom, "Athanor"), firstNonEmpty(email, "athanor@localhost.localdomain")
+		}
 		if nom == "" || len(nom) > 100 || strings.ContainsAny(nom, "<>\n\r\t") {
 			s.erreur(w, http.StatusBadRequest, "Invalid name.")
 			return
