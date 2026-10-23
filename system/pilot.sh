@@ -115,15 +115,17 @@ ATHANOR_GO=""
 if [ "${ATHANOR_OUTILS:-}" != python ]; then
   if [ "$NATIF" = 1 ]; then candidat="$KIT/Athanor.exe"; else candidat="$KIT/athanor"; fi
   if [ -f "$candidat" ] && [ -x "$candidat" ] && aide_go=$(timeout 15 "$candidat" aide < /dev/null 2> /dev/null) \
-     && ( for c in relais cout quota hook reglages; do printf '%s' "$aide_go" | grep -q "^  $c " || exit 1; done ); then
+     && ( for c in relais cout quota hook reglages equipe extensions; do printf '%s' "$aide_go" | grep -q "^  $c " || exit 1; done ); then
     ATHANOR_GO="$candidat"
   fi
   unset candidat aide_go
 fi
 if [ -n "$ATHANOR_GO" ]; then
   OUTIL_RELAIS=("$ATHANOR_GO" relais); OUTIL_COUT=("$ATHANOR_GO" cout); OUTIL_QUOTA=("$ATHANOR_GO" quota); OUTIL_REGLAGES=("$ATHANOR_GO" reglages)
+  OUTIL_EQUIPE=("$ATHANOR_GO" equipe); OUTIL_EXTENSIONS=("$ATHANOR_GO" extensions)
 else
   OUTIL_RELAIS=(python3 -I "$SYSTEME/relais.py"); OUTIL_COUT=(python3 -I "$SYSTEME/cout.py"); OUTIL_QUOTA=(python3 -I "$SYSTEME/quota.py"); OUTIL_REGLAGES=(python3 "$SYSTEME/settings.py")
+  OUTIL_EQUIPE=(python3 "$SYSTEME/equipe.py"); OUTIL_EXTENSIONS=(python3 "$SYSTEME/extensions.py")
 fi
 
 # The pilot's output may go to a terminal or a pipe that disappears (window closed, application
@@ -834,14 +836,14 @@ rm -rf "$PRIVE/agents" && mkdir -p "$PRIVE/agents" && cp "$MODELES/.claude/agent
 # Sub-agents are passed to Claude Code as JSON (--agents); failing that, copied into PROJECT/.claude/agents.
 # Model of each sub-agent: CHEAP_MODEL for "executor", SUBAGENT_MODEL for the others
 # (empty = the lead's), unless a model is set in the agent file. Also written into the .md copies.
-# The team (system/equipe.py): Athanor's sub-agents, plus the ones the user created in the app and the
+# The team (athanor equipe, or system/equipe.py): Athanor's sub-agents, plus the ones the user created in the app and the
 # ones the lead proposed (.athanor/agents/, imported before each cycle). Rebuilt before every cycle.
 preparer_equipe() {
   local l
-  while IFS= read -r l; do [ -n "$l" ] && log "$l"; done < <(python3 "$SYSTEME/equipe.py" importer "$KIT" "$PROJECT" 2>/dev/null)
-  AGENTS_JSON=$(SUBAGENT_MODEL="$SUBAGENT_MODEL" CHEAP_MODEL="$CHEAP_MODEL" python3 "$SYSTEME/equipe.py" json "$KIT" "$PROJECT" "$PRIVE/agents" 2>/dev/null)
+  while IFS= read -r l; do [ -n "$l" ] && log "$l"; done < <("${OUTIL_EQUIPE[@]}" importer "$KIT" "$PROJECT" 2>/dev/null)
+  AGENTS_JSON=$(SUBAGENT_MODEL="$SUBAGENT_MODEL" CHEAP_MODEL="$CHEAP_MODEL" "${OUTIL_EQUIPE[@]}" json "$KIT" "$PROJECT" "$PRIVE/agents" 2>/dev/null)
   [ -n "$AGENTS_JSON" ] || AGENTS_JSON='{}'
-  python3 "$SYSTEME/equipe.py" fiche "$KIT" "$PROJECT" "$PRIVE/agents" 2>/dev/null
+  "${OUTIL_EQUIPE[@]}" fiche "$KIT" "$PROJECT" "$PRIVE/agents" 2>/dev/null
   return 0
 }
 # copies of Athanor's agents left in the workshop by older versions (the folder now holds the lead's proposals)
@@ -914,7 +916,7 @@ PLUGIN_DIR_OK=0
 printf '%s' "$AIDE_CLAUDE" | grep -q -- '--plugin-dir' && PLUGIN_DIR_OK=1
 EXTENSIONS_AVANT=""
 preparer_extensions() {
-  local r; r=$(python3 "$SYSTEME/extensions.py" preparer "$KIT" "$PROJECT" "$PRIVE" 2>> "$PRIVE/pilot.log")
+  local r; r=$("${OUTIL_EXTENSIONS[@]}" preparer "$KIT" "$PROJECT" "$PRIVE" 2>> "$PRIVE/pilot.log")
   PLUGIN_ATHANOR=""; PLUGINS_DIRS=()
   if [ -f "$PRIVE/plugin/.claude-plugin/plugin.json" ]; then
     if [ "$PLUGIN_DIR_OK" = 1 ]; then PLUGIN_ATHANOR="$PRIVE/plugin"
