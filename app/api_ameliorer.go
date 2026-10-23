@@ -98,7 +98,7 @@ func (s *Serveur) apiAmeliorerDemande(w http.ResponseWriter, r *http.Request) {
 	script := chargerEnv + `f="$PWD/logs/` + nom + `"
 d=$(mktemp -d) || exit 1
 cd "$d" || exit 1
-timeout 240 "${CLAUDE_BIN:-claude}" -p "$(cat "$f")" --max-turns 1 --output-format text ${MODEL:+--model "$MODEL"} < /dev/null
+timeout 240 env ENABLE_CLAUDEAI_MCP_SERVERS=false "${CLAUDE_BIN:-claude}" -p "$(cat "$f")" --max-turns 1 --output-format text ${MODEL:+--model "$MODEL"} < /dev/null
 code=$?
 cd / && rm -rf "$d"
 exit $code`

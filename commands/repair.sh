@@ -14,8 +14,9 @@ mkdir -p logs
 MODELE_REP="${REPAIR_MODEL:-${MODEL:-}}"
 args=(-p "$(cat "$1")" --permission-mode bypassPermissions --permission-prompts none --output-format stream-json --verbose --max-turns 80)
 [ -n "$MODELE_REP" ] && args+=(--model "$MODELE_REP")
+claude --help 2>/dev/null | grep -q -- '--strict-mcp-config' && args+=(--strict-mcp-config)   # no MCP server of the user's in a repair
 [ -n "${FALLBACK_MODEL:-}" ] && [ "$MODELE_REP" != "${FALLBACK_MODEL:-}" ] && args+=(--fallback-model "$FALLBACK_MODEL")
-export CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1
+export CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1 ENABLE_CLAUDEAI_MCP_SERVERS=false   # no claude.ai connectors (Shopify, Gmail…)
 echo "[reparer] Claude session${MODELE_REP:+ ($MODELE_REP)}: $(basename "$1")"
 timeout 1800 claude "${args[@]}" < /dev/null 2>&1 | tee -a logs/reparations.jsonl
 code=${PIPESTATUS[0]}
