@@ -80,6 +80,7 @@ type Catalogue struct {
 			Nom    string `json:"nom"`
 			Defaut string `json:"defaut"`
 		} `json:"reglages"`
+		Ouvrir      *OuvrirMCP   `json:"ouvrir,omitempty"` // the program the pilot opens before each cycle (outil_ouvrir.go)
 		Description texteLangues `json:"description"`
 	} `json:"mcp"`
 }
@@ -109,6 +110,7 @@ type MCPInstalle struct {
 	Liens       map[string]string `json:"liens,omitempty"`      // where to get each key
 	Reglages    map[string]string `json:"reglages,omitempty"`   // settings (an address, a port, a path…): name → default, shown in clear
 	Plugin      string            `json:"plugin,omitempty"`     // the plugin it comes with (api_plugins.go): on and off with it
+	Ouvrir      *OuvrirMCP        `json:"ouvrir,omitempty"`     // the program to open before each cycle; nil: the catalog's
 	Ajoute      string            `json:"ajoute"`
 }
 
@@ -920,7 +922,7 @@ func (s *Serveur) apiExtensions(w http.ResponseWriter, r *http.Request) {
 				v.Type = "stdio"
 			}
 		}
-		for _, nom := range secretsRequis(x.Config) {
+		for _, nom := range champsMCP(x, cat) {
 			if d, ok := x.Reglages[nom]; ok {
 				v.Secrets = append(v.Secrets, SecretVue{Nom: nom, Defini: true, Reglage: true, Valeur: firstNonEmpty(secrets[id][nom], d), Defaut: d})
 				continue
@@ -1479,8 +1481,7 @@ func (s *Serveur) apiExtVoir(w http.ResponseWriter, r *http.Request) {
 			s.erreur(w, http.StatusNotFound, "Unknown")
 			return
 		}
-		j, _ := json.MarshalIndent(x.Config, "", "  ")
-		s.ecrireJSON(w, map[string]string{"texte": string(j)})
+		s.ecrireJSON(w, map[string]any{"texte": texteMCP(x, lireCatalogue()), "modifiable": x.Plugin == ""})
 		return
 	}
 	if _, ok := b.Skills[id]; !ok {

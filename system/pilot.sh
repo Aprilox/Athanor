@@ -117,7 +117,7 @@ ATHANOR_GO=""
 if [ "${ATHANOR_OUTILS:-}" != python ]; then
   if [ "$NATIF" = 1 ]; then candidat="$KIT/Athanor.exe"; else candidat="$KIT/athanor"; fi
   if [ -f "$candidat" ] && [ -x "$candidat" ] && aide_go=$(timeout 15 "$candidat" aide < /dev/null 2> /dev/null) \
-     && ( for c in relais cout quota hook reglages equipe extensions etat-taches plan solutions reglages-ouvrier pont roblox-sync detecter; do printf '%s' "$aide_go" | grep -q "^  $c " || exit 1; done ); then
+     && ( for c in relais cout quota hook reglages equipe extensions etat-taches plan solutions reglages-ouvrier pont roblox-sync detecter mcp-ouvrir; do printf '%s' "$aide_go" | grep -q "^  $c " || exit 1; done ); then
     ATHANOR_GO="$candidat"
   fi
   unset candidat aide_go
@@ -549,10 +549,10 @@ lancer_claude_surveille() {  # $1 = log; stops the cycle if it stays silent or r
     fi
     # A locked Windows session draws nothing: Roblox Studio and Unreal captures and play tests fail until the
     # user unlocks it. Said once in the log (each time it locks), so that a quiet night is understood.
-    if { [ "${ROBLOX_MCP:-0}" = 1 ] || [ "${UNREAL_MCP:-0}" = 1 ] || [ "${BLENDER_MCP:-0}" = 1 ]; } && [ $(( maintenant - dernier_verrou )) -ge 300 ]; then
+    if { [ "${ROBLOX_MCP:-0}" = 1 ] || [ "${UNREAL_MCP:-0}" = 1 ] || [ "${BLENDER_MCP:-0}" = 1 ] || [ "${MCP_PROGRAMMES:-0}" = 1 ]; } && [ $(( maintenant - dernier_verrou )) -ge 300 ]; then
       dernier_verrou=$maintenant
       if windows_verrouille; then
-        [ "$verrou_vu" = 0 ] && log "Windows session locked: Roblox Studio, Unreal and Blender draw nothing until you unlock it (captures, play tests). Claude goes on with what needs no image."
+        [ "$verrou_vu" = 0 ] && log "Windows session locked: the programs your MCP servers drive (Roblox Studio, Unreal, Blender…) draw nothing until you unlock it (captures, play tests). Claude goes on with what needs no image."
         verrou_vu=1
       elif [ "$verrou_vu" = 1 ]; then
         verrou_vu=0; log "Windows session unlocked: the programs draw again."
@@ -652,6 +652,18 @@ preparer_cycle() {  # non-AI tools: archives and project map, before Claude read
          BLENDER_ECHEC=$sortie_b; return 0 ;;
     esac
     BLENDER_ECHEC=""
+  fi
+  # The programs the other MCP servers drive, as their catalog entry (or the library) describes them
+  # ("ouvrir": program, project file, port to wait for): athanor mcp-ouvrir. A line already said last cycle
+  # (a program missing, say) is not repeated.
+  if [ "${MCP_PROGRAMMES:-0}" = 1 ]; then
+    local l lignes=""
+    while IFS= read -r l; do
+      [ -n "$l" ] || continue
+      lignes+="$l"$'\n'
+      case "${OUVRIR_AVANT:-}" in *"$l"*) ;; *) log "$l" ;; esac
+    done < <(timeout 900 "$ATHANOR_GO" mcp-ouvrir "$KIT" "$PROJECT" "$PRIVE/ouvrir.json" 2>> "$PRIVE/pilot.log" 9>&-)
+    OUVRIR_AVANT=$lignes
   fi
 }
 
@@ -770,7 +782,7 @@ demarrer_eveil() {
 mode_eveil() {
   [ -f "$EVEIL" ] || return 0
   local m=system
-  if [ "$KEEP_AWAKE" = screen ] || { [ "$KEEP_AWAKE" = 1 ] && { [ "${ROBLOX_MCP:-0}" = 1 ] || [ "${UNREAL_MCP:-0}" = 1 ] || [ "${BLENDER_MCP:-0}" = 1 ]; }; }; then m=screen; fi
+  if [ "$KEEP_AWAKE" = screen ] || { [ "$KEEP_AWAKE" = 1 ] && { [ "${ROBLOX_MCP:-0}" = 1 ] || [ "${UNREAL_MCP:-0}" = 1 ] || [ "${BLENDER_MCP:-0}" = 1 ] || [ "${MCP_PROGRAMMES:-0}" = 1 ]; }; }; then m=screen; fi
   [ "$(cat "$EVEIL" 2>/dev/null)" = "$m" ] || echo "$m" > "$EVEIL"
 }
 demarrer_eveil
@@ -908,11 +920,15 @@ roblox_depuis_mcp() {
 }
 
 # Blender MCP: the verified catalog's "blender" (Blender Lab's server), or a server whose name says Blender.
-BLENDER_MCP=0; export BLENDER_MCP
+# With the Go helpers, a server whose catalog entry (or library entry) says which program to open goes
+# through athanor mcp-ouvrir instead (MCP_PROGRAMMES, PRIVATE_DIR/ouvrir.json written by extensions preparer).
+BLENDER_MCP=0; MCP_PROGRAMMES=0; export BLENDER_MCP MCP_PROGRAMMES
 blender_depuis_mcp() {
-  BLENDER_MCP=0
-  [ -f "$PRIVE/mcp.json" ] && jq -e '.mcpServers | keys[] | select(test("blender"; "i"))' "$PRIVE/mcp.json" >/dev/null 2>&1 && BLENDER_MCP=1
-  export BLENDER_MCP
+  BLENDER_MCP=0; MCP_PROGRAMMES=0
+  if [ -n "$ATHANOR_GO" ] && [ -s "$PRIVE/ouvrir.json" ]; then MCP_PROGRAMMES=1; else rm -f "$PRIVE/ouvrir.json"; fi
+  [ -f "$PRIVE/mcp.json" ] && jq -e --slurpfile o <(cat "$PRIVE/ouvrir.json" 2>/dev/null || echo '[]') \
+    '($o[0] // [] | map(.id)) as $g | .mcpServers | keys[] | select(test("blender"; "i")) | select(. as $k | $g | index($k) | not)' "$PRIVE/mcp.json" >/dev/null 2>&1 && BLENDER_MCP=1
+  export BLENDER_MCP MCP_PROGRAMMES
 }
 
 # Skills and MCP servers chosen in the app (Skills & MCP page), plus Unreal MCP: rebuilt at the start of

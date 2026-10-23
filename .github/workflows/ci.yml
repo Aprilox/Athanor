@@ -36,8 +36,11 @@ jobs:
         run: |
           go test ./... 2>&1 | tee test.log; code=${PIPESTATUS[0]}
           if [ "$code" != 0 ]; then
-            msg=$(grep -E -- '--- FAIL|^panic|^FAIL|_test\.go:[0-9]+:|\.go:[0-9]+:[0-9]+:' test.log | head -n 60 | sed -e 's/%/%25/g' -e 's/\r//g' | awk '{printf "%s%%0A", $0}')
-            echo "::error title=go test (${{ runner.os }})::${msg}"
+            enc() { sed -e 's/\r//g' -e 's/%/%25/g' | awk '{printf "%s%%0A", $0}'; }
+            lignes=$(grep -a -E -- '--- FAIL|^panic|^FAIL|_test\.go:[0-9]+:|\.go:[0-9]+:[0-9]+:' test.log | head -n 60)
+            [ -n "$lignes" ] || lignes=$(tail -n 40 test.log)
+            echo "::error title=go test ${{ runner.os }}::$(printf '%s\n' "$lignes" | enc)"
+            printf '%s\n' "$lignes" | grep -a -- '--- FAIL' | head -n 8 | while IFS= read -r l; do echo "::error title=failed::$(printf '%s\n' "$l" | enc)"; done
           fi
           exit "$code"
 
