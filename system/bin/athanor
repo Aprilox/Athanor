@@ -1,4 +1,16 @@
 #!/usr/bin/env bash
+# Claude's AI-free tools (screenshots, map, archive, todo): the kit's executable when it runs here and
+# knows the command (athanor in WSL and on Linux, Athanor.exe in native Windows), else system/athanor.py.
+# ATHANOR_OUTILS=python forces the script.
+K="$(dirname "$0")/../.."
+natif=0; case "$(uname -s 2>/dev/null)" in MINGW*|MSYS*|CYGWIN*) natif=1 ;; esac
+case "${1:-}" in
+  screenshots|map|archive|todo)
+    G="$K/athanor"; [ "$natif" = 1 ] && G="$K/Athanor.exe"
+    if [ "${ATHANOR_OUTILS:-}" != python ] && [ -f "$G" ] && [ -x "$G" ] && "$G" aide 2>/dev/null </dev/null | grep -q "^  $1 "; then
+      exec "$G" "$@"
+    fi ;;
+esac
 # native Windows mode: Windows' Python, through the shim (Claude's shell does not have the shims)
-case "$(uname -s 2>/dev/null)" in MINGW*|MSYS*|CYGWIN*) exec "$(dirname "$0")/../natif/python3" "$(dirname "$0")/../athanor.py" "$@" ;; esac
+[ "$natif" = 1 ] && exec "$(dirname "$0")/../natif/python3" "$(dirname "$0")/../athanor.py" "$@"
 exec python3 "$(dirname "$0")/../athanor.py" "$@"

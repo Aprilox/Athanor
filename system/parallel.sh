@@ -77,6 +77,7 @@ parallele_plan_a_des_vagues() { grep -qiE '^## +Wave|Depends on:' "$ETAT/PLAN.md
 # the earlier waves (## Wave N headings). Identifiers: "M4", "M4b", "M4.1" -> M4, M4b, M4_1 (never "-",
 # which separates the worker from the cycle in log file names); unique within the plan.
 parallele_plan() {
+  if [ -n "${ATHANOR_GO:-}" ]; then "$ATHANOR_GO" plan lister "$ETAT/PLAN.md"; return; fi   # athanor plan (Go), else:
   python3 - "$ETAT/PLAN.md" <<'PY'
 import re, sys
 lignes = open(sys.argv[1], encoding="utf-8").read().splitlines()
@@ -128,6 +129,7 @@ parallele_prets() {
 # 3 milestones or more of the plan (routes, package.json, shared types…) are left out: waiting on them
 # would make every milestone serial, and their small conflicts stay with the lead.
 parallele_chevauchement() {
+  if [ -n "${ATHANOR_GO:-}" ]; then "$ATHANOR_GO" plan chevauchement "$ETAT/PLAN.md" "$@"; return; fi
   python3 -I - "$ETAT/PLAN.md" "$@" <<'PY'
 import re, sys
 from collections import Counter
@@ -192,7 +194,15 @@ parallele_raison_serie() {
   n=$(printf '%s\n' "$prets" | grep -c .)
   if [ "$n" = 0 ]; then echo "the other milestones wait for the next one"; return 0; fi
   if [ "$n" -lt "$PARALLELE_MIN_PRETS" ]; then echo "only $n milestone$([ "$n" -gt 1 ] && echo s) can start now"; return 0; fi
-  if printf '%s\n' "$prets" | cut -f4 | python3 -I -c '
+  if printf '%s\n' "$prets" | cut -f4 | parallele_documentation_seule; then echo "the milestones ready are documentation only"; return 0; fi
+  quota=$(parallele_quota_restant)
+  [ -n "$quota" ] && echo "$quota"
+  return 0
+}
+# stdin: milestone lines; exit 0 when they only write documents (athanor plan documentation, else Python)
+parallele_documentation_seule() {
+  if [ -n "${ATHANOR_GO:-}" ]; then "$ATHANOR_GO" plan documentation; return; fi
+  python3 -I -c '
 import re, sys
 def fichiers(l):
     m = re.search(r"Files?:\s*(.*?)(?:\.\s+(?:Depends on|Acceptance|Read)\b|$)", l, re.I)
@@ -201,10 +211,7 @@ def doc(f):
     return bool(re.search(r"\.(md|markdown|txt|rst|adoc)$", f, re.I)) or f.lower().startswith("docs/")
 lignes = [l for l in sys.stdin.read().splitlines() if l.strip()]
 sys.exit(0 if lignes and all(fichiers(l) and all(doc(f) for f in fichiers(l) if f) for l in lignes) else 1)
-'; then echo "the milestones ready are documentation only"; return 0; fi
-  quota=$(parallele_quota_restant)
-  [ -n "$quota" ] && echo "$quota"
-  return 0
+'
 }
 # From the latest rate-limit event in the cycle logs: "5-hour quota at N%" (75% or more) or "weekly quota
 # at N%" (85% or more), while that window is still open; nothing otherwise.
@@ -331,7 +338,8 @@ parallele_lancer_ouvrier() {
   # plus write access to the project's .git, where git stores the worktree's objects and branch.
   local principal="$PROJECT"
   ATHANOR_PROJET_PRINCIPAL="$principal" PROJECT="$trav" "${OUTIL_REGLAGES[@]}" "$KIT" "$PRIVE/reglages-$ident.json" > /dev/null || { log "Worker $ident: cannot build the settings."; return 1; }
-  python3 - "$PRIVE/reglages-$ident.json" "$PROJECT/.git" <<'PY' || return 1
+  if [ -n "${ATHANOR_GO:-}" ]; then "$ATHANOR_GO" reglages-ouvrier "$PRIVE/reglages-$ident.json" "$PROJECT/.git" || return 1
+  else python3 - "$PRIVE/reglages-$ident.json" "$PROJECT/.git" <<'PY' || return 1
 import json, sys
 f, git = sys.argv[1], sys.argv[2]
 r = json.load(open(f, encoding="utf-8"))
@@ -341,6 +349,7 @@ if "sandbox" in r:   # native Windows: no sandbox, nothing to open
     fs["allowRead"] = fs.get("allowRead", []) + [git]
 json.dump(r, open(f, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
 PY
+  fi
   local but="/goal The milestone $ident of .athanor/PLAN.md is carried out according to your worker instructions, checked, and committed on branch auto/$ident (git log shows it), with your report as the final answer. Or stop after ${MAX_TURNS_PER_CYCLE} turns. ${PHRASE_LANGUE}"
   # its MCP servers work on its worktree; the skills are the project's
   "${OUTIL_EXTENSIONS[@]}" mcp "$KIT" "$PROJECT" "$PRIVE/mcp-$ident.json" --dossier-mcp "$trav" --principal "$PROJECT" 2>> "$PRIVE/pilot.log"
@@ -390,7 +399,8 @@ parallele_terminer_ouvrier() {
   # Automatic merge: clean = merged now (the lead verifies at the end of the cycle); conflict = for the lead.
   if g -C "$PROJECT" merge --no-ff --no-edit -q -m "Merge auto/$ident (worker $ident)" "auto/$ident" >/dev/null 2>&1; then
     issue=fusionne
-    python3 - "$ETAT/PLAN.md" "$ident" <<'PY'
+    if [ -n "${ATHANOR_GO:-}" ]; then "$ATHANOR_GO" plan cocher "$ETAT/PLAN.md" "$ident"
+    else python3 - "$ETAT/PLAN.md" "$ident" <<'PY'
 import re, sys
 p, ident = sys.argv[1], sys.argv[2]
 s = open(p, encoding="utf-8").read().splitlines(True); out = []
@@ -401,6 +411,7 @@ for l in s:
     out.append(l)
 open(p, "w", encoding="utf-8").write("".join(out))
 PY
+    fi
     printf -- '- %s — %s merged automatically by the pilot (branch auto/%s, %s commit(s)); verified by the lead at the end of the cycle.\n' "$(date '+%Y-%m-%d %H:%M')" "$ident" "$ident" "$commits" >> "$ETAT/LOG.md"
     g -C "$PROJECT" branch -d "auto/$ident" >/dev/null 2>&1
     log "Worker $ident merged automatically ($commits commit(s))."
