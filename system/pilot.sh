@@ -115,7 +115,7 @@ ATHANOR_GO=""
 if [ "${ATHANOR_OUTILS:-}" != python ]; then
   if [ "$NATIF" = 1 ]; then candidat="$KIT/Athanor.exe"; else candidat="$KIT/athanor"; fi
   if [ -f "$candidat" ] && [ -x "$candidat" ] && aide_go=$(timeout 15 "$candidat" aide < /dev/null 2> /dev/null) \
-     && ( for c in relais cout quota hook reglages equipe extensions etat-taches plan solutions reglages-ouvrier pont roblox-sync; do printf '%s' "$aide_go" | grep -q "^  $c " || exit 1; done ); then
+     && ( for c in relais cout quota hook reglages equipe extensions etat-taches plan solutions reglages-ouvrier pont roblox-sync detecter; do printf '%s' "$aide_go" | grep -q "^  $c " || exit 1; done ); then
     ATHANOR_GO="$candidat"
   fi
   unset candidat aide_go
@@ -877,8 +877,8 @@ else
 fi
 synchroniser_demande
 
-# PC tools, sandbox settings, Unreal MCP
-"$SYSTEME/detect-tools.sh"
+# PC tools (athanor detecter, else system/detect-tools.sh), sandbox settings, Unreal MCP
+if [ -n "$ATHANOR_GO" ]; then "$ATHANOR_GO" detecter "$KIT"; else "$SYSTEME/detect-tools.sh"; fi
 # The skills of the Skills & MCP page are copied there (read-only for Claude: settings.py and the guard).
 export ATHANOR_PLUGIN="$PRIVE/plugin"
 export ATHANOR_PLUGINS="$PRIVE/plugins"   # the plugins switched on for the project (Plugins tab), read-only too

@@ -71,8 +71,8 @@ const chiffrePy = `\p{Nd}`
 
 var (
 	reVague       = regexp.MustCompile(`(?i)^##` + blancPy + `+wave`)
-	reCasePlan        = regexp.MustCompile(`^- \[([ xX])\] (.*)$`)
-	reIdentPlan  = regexp.MustCompile(`^([A-Za-z]+` + chiffrePy + `+(?:[.\-]?[A-Za-z0-9]+)?)`)
+	reCasePlan    = regexp.MustCompile(`^- \[([ xX])\] (.*)$`)
+	reIdentPlan   = regexp.MustCompile(`^([A-Za-z]+` + chiffrePy + `+(?:[.\-]?[A-Za-z0-9]+)?)`)
 	reNonIdent    = regexp.MustCompile(`[^A-Za-z0-9_]`)
 	reDepend      = regexp.MustCompile(`(?i)Depends on:` + blancPy + `*([^.;]*)`)
 	reSepDepend   = regexp.MustCompile(`[,` + strings.Trim(blancPy, "[]") + `]+`)

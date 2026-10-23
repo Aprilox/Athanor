@@ -83,7 +83,7 @@ func Verifications() []*Verif {
 			`test -x system/bin/rtk && system/bin/rtk --version`, true,
 			Reparation{Genre: "wsl", Script: `cd system/bin && curl -fsSL https://github.com/rtk-ai/rtk/releases/download/v0.50.0/rtk-x86_64-unknown-linux-musl.tar.gz | tar -xz rtk && chmod +x rtk && ./rtk --version`}),
 		v("outils_pc", "PC software detected", "Unreal, Blender, Android SDK, Docker… found on this PC and made available to Claude (read-only).",
-			`export PROJECT="$PWD/logs/detection"; mkdir -p "$PROJECT" tools; bash system/detect-tools.sh >/dev/null 2>&1; sed -n '3,25p' "$PROJECT/.athanor/PC_TOOLS.md"`, true, Reparation{Genre: "aucune"}),
+			`export PROJECT="$PWD/logs/detection"; mkdir -p "$PROJECT" tools; `+outilKitRepli("detecter", "bash system/detect-tools.sh")+`"${X[@]}" >/dev/null 2>&1; sed -n '3,25p' "$PROJECT/.athanor/PC_TOOLS.md"`, true, Reparation{Genre: "aucune"}),
 		v("docker", "Docker", "Optional: disposable images for Claude (tool IMAGE COMMAND). Docker Desktop → Settings → Resources → WSL integration.",
 			`docker info >/dev/null 2>&1 && echo 'Docker reachable' || { echo 'Docker UNREACHABLE (optional)'; exit 1; }`, true, Reparation{Genre: "aucune"}),
 		v("admin", "Administrator rights for installations", "Scheduled task that lets Claude install winget software and set the firewall without bothering you.",

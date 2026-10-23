@@ -31,7 +31,15 @@ jobs:
       - name: Vet
         run: go vet .
       - name: Tests
-        run: go test ./...
+        shell: bash
+        # the failures also go into the run's annotations (readable without opening the whole log)
+        run: |
+          go test ./... 2>&1 | tee test.log; code=${PIPESTATUS[0]}
+          if [ "$code" != 0 ]; then
+            msg=$(grep -E -- '--- FAIL|^panic|^FAIL|_test\.go:[0-9]+:|\.go:[0-9]+:[0-9]+:' test.log | head -n 60 | sed -e 's/%/%25/g' -e 's/\r//g' | awk '{printf "%s%%0A", $0}')
+            echo "::error title=go test (${{ runner.os }})::${msg}"
+          fi
+          exit "$code"
 
   targets:
     runs-on: ubuntu-latest

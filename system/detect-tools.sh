@@ -24,8 +24,16 @@ elif [ "$WINDOWS" = 1 ]; then
     { [ -d "$m/Program Files" ] || [ -d "$m/Epic Games" ] || [ -d "$m/Windows" ]; } && LECTEURS+=("$m")
   done
 fi
-# Highest version among existing candidates (version sort: UE_5.10 comes after UE_5.8).
-plus_recent() { local x; for x in "$@"; do [ -e "$x" ] && printf '%s\n' "$x"; done | sort -V | tail -n 1; }
+# Highest version among existing candidates (version sort: UE_5.10 comes after UE_5.8), on the name that
+# carries the version (UE_5.10; Blender 4.2 for …/Blender 4.2/blender.exe), whatever drive it is on.
+plus_recent() {
+  local x k
+  for x in "$@"; do
+    [ -e "$x" ] || continue
+    k=$x; case "$k" in *.exe) k=${k%/*} ;; esac
+    printf '%s\t%s\n' "${k##*/}" "$x"
+  done | LC_ALL=C sort -t "$(printf '\t')" -k1,1V -k2,2 | tail -n 1 | cut -f2-
+}
 if [ -z "$UE_DIR" ]; then
   c=(); for m in "${LECTEURS[@]}"; do for d in "$m/Program Files/Epic Games"/UE_* "$m/Epic Games"/UE_*; do
     [ -f "$d/Engine/Binaries/Win64/UnrealEditor.exe" ] && c+=("$d"); done; done
