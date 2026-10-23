@@ -40,6 +40,21 @@ DONNEES="${ATHANOR_GITHUB_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/athanor/gith
 HOTE_SSH="${ATHANOR_GITHUB_SSH:-github.com:22}"
 SECOURS_SSH="${ATHANOR_GITHUB_SSH_SECOURS-ssh.github.com:443}"
 
+# The secret scan, the workshop file and the commit hook: athanor github (the kit's executable, when it
+# runs here and knows it), else the Python below. ATHANOR_OUTILS=python forces the Python.
+GITHUB_GO=""
+github_go() {
+  [ -n "$GITHUB_GO" ] && { [ "$GITHUB_GO" != - ]; return; }
+  GITHUB_GO=-
+  [ "${ATHANOR_OUTILS:-}" = python ] && return 1
+  local c="$KIT/athanor"; [ "${NATIF:-0}" = 1 ] && c="$KIT/Athanor.exe"
+  [ -f "$c" ] && [ -x "$c" ] && timeout 15 "$c" aide < /dev/null 2> /dev/null | grep -q '^  github ' && GITHUB_GO="$c"
+  [ "$GITHUB_GO" != - ]
+}
+scanner() {  # $1 messages|diff, stdin: git log
+  if github_go; then "$GITHUB_GO" github scanner "$1"; else python3 -I -c "$SCANNER" "$1"; fi
+}
+
 chemin_projet() {  # the logical path the pilot uses (cd + pwd), as given when the folder is gone
   local p="${1%/}"
   [ -n "$p" ] || return 1
@@ -207,9 +222,9 @@ print("#FIN#")
 '
 analyser() {  # $1 commit; what was already pushed (refs/athanor/pousse/*) is not scanned again
   local plage=("$1" --not --glob='refs/athanor/pousse/*') m d
-  m=$(set -o pipefail; gm log --format='%x01%H%n%B' "${plage[@]}" 2>/dev/null | python3 -I -c "$SCANNER" messages) || return 1
+  m=$(set -o pipefail; gm log --format='%x01%H%n%B' "${plage[@]}" 2>/dev/null | scanner messages) || return 1
   d=$(set -o pipefail; gm log -p --text --no-ext-diff --no-textconv --no-color --no-renames --diff-merges=first-parent \
-        --format='%x01%H' -U0 "${plage[@]}" 2>/dev/null | python3 -I -c "$SCANNER" diff) || return 1
+        --format='%x01%H' -U0 "${plage[@]}" 2>/dev/null | scanner diff) || return 1
   [ "${m##*$'\n'}" = "#FIN#" ] && [ "${d##*$'\n'}" = "#FIN#" ] || return 1
   printf '%s\n%s\n' "$d" "$m" | grep -v -e '^#FIN#$' -e '^$'
   return 0
@@ -218,6 +233,7 @@ analyser() {  # $1 commit; what was already pushed (refs/athanor/pousse/*) is no
 # Writes (stdin) or deletes a file of the project's workshop without following a link Claude could
 # have put in place of .athanor or of the file. Usage: atelier PROJECT NAME ecrire|effacer
 atelier() {
+  if github_go; then "$GITHUB_GO" github atelier "$1" "$2" "$3"; return; fi
   python3 -I -c '
 import os, sys
 p, nom, action = sys.argv[1:4]
@@ -681,6 +697,7 @@ identite_pilote() {  # $1 project: "name<TAB>email<TAB>0|1"; the user's git sett
 # Athanor's mark) is never replaced. Written without following a link Claude could have put in its place.
 crochet() {
   local projet; projet=$(chemin_projet "${1:-}") || return 2
+  if github_go; then "$GITHUB_GO" github crochet "$projet" "${2:-0}"; return; fi
   python3 -I -c '
 import os, sys
 p, actif = sys.argv[1], sys.argv[2] == "1"
