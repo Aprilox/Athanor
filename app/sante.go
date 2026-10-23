@@ -53,7 +53,7 @@ const chargerEnv = `export PATH="$HOME/.local/bin:$PWD/system/bin:$PATH"; if [ -
 // the token check, the same in both modes (WSL, native Windows)
 const scriptJeton = `grep -q '^CLAUDE_CODE_OAUTH_TOKEN=.\{20,\}' .env || { echo 'Token ABSENT from .env (Settings)'; exit 3; }
 export PATH="$HOME/.local/bin:$PATH"
-sortie=$(timeout 120 claude -p 'Answer exactly: TOKEN_OK' --model haiku --max-turns 1 < /dev/null 2>&1); code=$?
+sortie=$(ENABLE_CLAUDEAI_MCP_SERVERS=false timeout 120 claude -p 'Answer exactly: TOKEN_OK' --model haiku --max-turns 1 < /dev/null 2>&1); code=$?
 if printf '%s' "$sortie" | grep -q TOKEN_OK; then echo 'Connection OK'; else echo "Test session FAILED (code $code): $(printf '%s\n' "$sortie" | grep -v '^[[:space:]]*$' | tail -n 1 | cut -c1-200)"; echo '--- full output ---'; printf '%s\n' "$sortie" | tail -n 12; exit 1; fi`
 
 var reparationJeton = Reparation{Genre: "fenetre", Titre: "Get a token", Script: `export PATH="$HOME/.local/bin:$PATH"; claude setup-token`, Explication: "Opens a window: sign in in the browser, then paste the token shown into Settings → CLAUDE_CODE_OAUTH_TOKEN."}

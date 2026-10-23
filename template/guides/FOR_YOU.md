@@ -1,14 +1,13 @@
 # Tasks for the user
 
-Some steps only the user can do: create an account (Shopify, Cloudflare, a supplier, a store…), pay or choose a plan, receive a code by email or SMS, pass a captcha or an identity check, accept terms, generate an API key with the right permissions, buy a domain. First make sure it really needs them (an API, a CLI, a free alternative, a test mode?), then hand it over with `athanor todo` (never by editing `.athanor/for-you/` or `.athanor/secrets.env` by hand):
+Some steps only the user can do: create an account (on a service the request names, a supplier, a hosting…), pay or choose a plan, receive a code by email or SMS, pass a captcha or an identity check, accept terms, generate an API key with the right permissions, buy a domain. Ask only for what the request needs: a service that the request, its documents or the plan call for, never one taken from the example below. Never open a page in the user's browser yourself: the task is how you ask. First make sure it really needs them (an API, a CLI, a free alternative, a test mode?), then hand it over with `athanor todo` (never by editing `.athanor/for-you/` or `.athanor/secrets.env` by hand). The example is made up (Example Mail is not a real service): follow its form, never its content.
 
 ```
-athanor todo add "Create a Shopify development store" --need "the store's address (xxx.myshopify.com)" \
-  --secret SHOPIFY_ADMIN_TOKEN --milestone M3 <<'EOF'
-1. Open https://partners.shopify.com and create a free Partner account.
-2. Stores › Add store › Create development store; any name.
-3. In the store: Settings › Apps › Develop apps › Create an app; Admin API scopes: write_products, write_themes.
-4. Install the app and paste the Admin API access token into the protected field.
+athanor todo add "Create a test account on Example Mail" --need "the sender address it gives you" \
+  --secret EXAMPLEMAIL_API_KEY --milestone M3 <<'EOF'
+1. Open the address the request gives (here https://example.com/signup) and create a free account.
+2. Settings › API › Create a key; permission: send emails only.
+3. Paste the key into the protected field, and give back the sender address it shows.
 EOF
 ```
 

@@ -16,6 +16,17 @@ import tempfile
 NATIF = os.name == "nt"
 
 
+def plugins_utilisateur():
+    """The plugins switched on in the user's own Claude Code stay off in the chat (see settings.py)."""
+    config = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.join(os.path.expanduser("~"), ".claude")
+    try:
+        with open(os.path.join(config, "settings.json"), encoding="utf-8-sig") as f:
+            p = json.load(f).get("enabledPlugins")
+        return {k: False for k, v in p.items() if v is True} if isinstance(p, dict) else {}
+    except (OSError, ValueError, AttributeError):
+        return {}
+
+
 def main():
     if len(sys.argv) != 4 or sys.argv[1] != "settings":
         sys.exit("usage: chat.py settings PROJECT OUT")
@@ -34,6 +45,7 @@ def main():
              "hooks": [{"type": "command", "timeout": 10, "command": commande}]},
         ]},
         "includeCoAuthoredBy": False,
+        "enabledPlugins": plugins_utilisateur(),
     }
     d = os.path.dirname(sortie)
     if d:

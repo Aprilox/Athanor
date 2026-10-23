@@ -103,6 +103,8 @@ done
 # With nobody at the screen, sub-agents and commands run in the foreground:
 # Claude waits for their result directly instead of "waiting" in the background.
 export CLAUDE_CODE_DISABLE_BACKGROUND_TASKS="${CLAUDE_CODE_DISABLE_BACKGROUND_TASKS:-1}"
+# the connectors of the user's claude.ai account (Shopify, Gmail…) never load in Athanor's sessions
+export ENABLE_CLAUDEAI_MCP_SERVERS=false
 # Overly long command output is truncated (30,000 characters by default): we cap it lower.
 export BASH_MAX_OUTPUT_LENGTH="${BASH_MAX_OUTPUT_LENGTH:-20000}"
 [ -n "$EFFORT" ] && export CLAUDE_CODE_EFFORT_LEVEL="$EFFORT"

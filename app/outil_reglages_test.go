@@ -95,7 +95,11 @@ func TestPariteReglages(t *testing.T) {
 		{"ouvrier", `{"` + strings.ToUpper(projet) + `": {"mcp": ["unreal"]}}`, "", true,
 			map[string]string{"PROJECT": filepath.Join(projet, ".athanor", "work", "M2"), "ATHANOR_PROJET_PRINCIPAL": projet, "RTK": "0"}},
 		{"sans PROJECT", `pas du json`, "", false, map[string]string{}},
+		{"plugins de l'utilisateur", `{}`, "", false, map[string]string{"PROJECT": projet, "CLAUDE_CONFIG_DIR": filepath.Join(d, "conf")}},
 	}
+	// the user's own Claude Code: plugins switched on, off, broken; they must all be off in Athanor's sessions
+	_ = os.MkdirAll(filepath.Join(d, "conf"), 0o755)
+	_ = os.WriteFile(filepath.Join(d, "conf", "settings.json"), []byte("\ufeff"+`{"enabledPlugins": {"shopify@claude-plugins-official": true, "x@y": false, "z@w": "true", "a@b": true}, "model": "opus"}`), 0o644)
 	for _, c := range cas {
 		_ = os.WriteFile(filepath.Join(kit, "extensions", "projets.json"), []byte(c.projets), 0o644)
 		_ = os.WriteFile(filepath.Join(kit, "system", "pc_tools.env"), []byte(c.pcTools), 0o644)

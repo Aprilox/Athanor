@@ -48,6 +48,16 @@ config_claude = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.join(os.path.expa
 for p in sorted({os.environ.get("PROJECT") or "", projet}):
     if p:
         lectures.append(os.path.join(config_claude, "projects", re.sub(r"[^A-Za-z0-9]", "-", p)))
+# The plugins the user switched on in their own Claude Code (~/.claude/settings.json) stay off in Athanor's
+# sessions: their hooks would run outside the sandbox and their servers would open what nobody asked
+# for here; Athanor's plugins come from its Plugins tab (--plugin-dir).
+def plugins_utilisateur():
+    try:
+        with open(os.path.join(config_claude, "settings.json"), encoding="utf-8-sig") as f:
+            p = json.load(f).get("enabledPlugins")
+        return {k: False for k, v in p.items() if v is True} if isinstance(p, dict) else {}
+    except (OSError, ValueError, AttributeError):
+        return {}
 # Hooks run OUTSIDE the sandbox: never a program taken from tools/ (modifiable by Claude).
 rtk_bin = os.path.join(system, "bin", "rtk")
 rtk = os.environ.get("RTK", "1") != "0" and os.access(rtk_bin, os.X_OK)
@@ -114,6 +124,7 @@ reglages = {
             "GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN")]},
     },
     "enableAllProjectMcpServers": unreal_mcp,
+    "enabledPlugins": plugins_utilisateur(),
     "hooks": {"PreToolUse": [
         {"matcher": "Read|Edit|Write|MultiEdit|NotebookEdit|Glob|Grep",
          "hooks": [{"type": "command", "timeout": 10,

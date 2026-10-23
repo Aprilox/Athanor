@@ -389,6 +389,7 @@ func scriptChat(p Projet, id, mode, modele, session string) string {
 	}
 	return chargerEnv + `case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) export PATH="$PWD/system/natif:$PATH" ;; esac
 export MSYS2_ARG_CONV_EXCL='*'   # native Windows: Claude's arguments as they are (the paths go through w)
+export ENABLE_CLAUDEAI_MCP_SERVERS=false   # the connectors of the user's claude.ai account (Shopify, Gmail…) stay out
 K="$PWD"; C="$K/logs/chat/` + id + `"
 w() { if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s' "$1"; fi; }
 D=` + q(p.Dossier) + `
@@ -401,7 +402,7 @@ if [ "${ATHANOR_OUTILS:-}" != python ] && [ -x "$G" ] && "$G" aide 2>/dev/null <
 else
   python3 "$(w "$K/system/chat.py")" settings "$(w "$P")" "$(w "$C.settings.json")" > /dev/null || { echo "Cannot write the chat's settings" >&2; exit 2; }
 fi
-args=(-p "$(cat "$C.msg")" --output-format stream-json --verbose --max-turns 40 --settings "$(w "$C.settings.json")" --append-system-prompt "$(cat "$C.prompt")" ` + outils + `)
+args=(-p "$(cat "$C.msg")" --output-format stream-json --verbose --max-turns 40 --strict-mcp-config --settings "$(w "$C.settings.json")" --append-system-prompt "$(cat "$C.prompt")" ` + outils + `)
 M=` + q(modele) + `; [ -n "$M" ] && args+=(--model "$M")
 S=` + q(session) + `; [ -n "$S" ] && args+=(--resume "$S")
 timeout 1200 "${CLAUDE_BIN:-claude}" "${args[@]}" < /dev/null > "$C.jsonl" 2> "$C.err"

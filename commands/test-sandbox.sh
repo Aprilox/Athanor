@@ -34,7 +34,7 @@ cmd.exe /c \"echo %COMPUTERNAME%\"
 curl -s -o /dev/null -w 'code=%{http_code}' https://example.com
 ${PASSERELLE}"
 echo "Test session in progress (1 to 2 minutes)..."
-(cd "$PROJECT" && claude -p "$CONSIGNE" --model haiku --permission-mode bypassPermissions --settings "$PROJECT/.athanor/claude_settings.json" \
+(cd "$PROJECT" && ENABLE_CLAUDEAI_MCP_SERVERS=false claude -p "$CONSIGNE" --model haiku --permission-mode bypassPermissions --settings "$PROJECT/.athanor/claude_settings.json" \
    --permission-prompts none --output-format stream-json --verbose < /dev/null > "$J" 2>&1)
 
 ECHEC=0

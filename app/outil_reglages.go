@@ -282,6 +282,7 @@ func construireReglages(kitArg, sortie string) error {
 		r.mettre("sandbox", sandbox)
 	}
 	r.mettre("enableAllProjectMcpServers", unreal)
+	r.mettre("enabledPlugins", pluginsUtilisateur(config))
 	r.mettre("hooks", map[string]any{"PreToolUse": crochets})
 	if os.Getenv("ATHANOR_SANS_COAUTEUR") == "1" {
 		r.mettre("attribution", map[string]string{"commit": "", "pr": ""})
@@ -331,6 +332,28 @@ func lancerReglages(args []string) int {
 	return 0
 }
 
+// pluginsUtilisateur: the plugins switched on in the user's own Claude Code (CONFIG/settings.json), all
+// off in Athanor's sessions (their hooks would run outside the sandbox; Athanor's come from its Plugins tab).
+func pluginsUtilisateur(config string) objetJSON {
+	var r objetJSON
+	r.valeur = map[string]json.RawMessage{}
+	b, err := os.ReadFile(joinOS(config, "settings.json"))
+	if err != nil {
+		return r
+	}
+	var s objetJSON
+	if json.Unmarshal(bytes.TrimPrefix(b, []byte("\xef\xbb\xbf")), &s) != nil {
+		return r
+	}
+	p := s.objet("enabledPlugins")
+	for _, k := range p.cles {
+		if v, ok := p.brut(k).(bool); ok && v {
+			r.mettre(k, false)
+		}
+	}
+	return r
+}
+
 // ---------------------------------------------------------------- the app's chat (chat.py)
 
 // reglagesChat: Claude's file tools stay inside PROJECT (the file guard), no command, no web. The chat runs
@@ -351,6 +374,11 @@ func reglagesChat(projet, sortie string) error {
 	r.mettre("permissions", map[string]any{"deny": []string{"Bash", "WebFetch", "WebSearch", "NotebookEdit"}})
 	r.mettre("hooks", map[string]any{"PreToolUse": []objetJSON{c}})
 	r.mettre("includeCoAuthoredBy", false)
+	config := os.Getenv("CLAUDE_CONFIG_DIR")
+	if config == "" {
+		config = joinOS(expanduserPython("~"), ".claude")
+	}
+	r.mettre("enabledPlugins", pluginsUtilisateur(config))
 	d := filepath.Dir(sortie)
 	if d != "" {
 		if err := os.MkdirAll(d, 0o755); err != nil {

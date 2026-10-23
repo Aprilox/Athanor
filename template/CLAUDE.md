@@ -94,7 +94,7 @@ The subscription quota is the scarcest resource. Everything you read or print st
 
 ## Tasks for the user
 
-Some steps only the user can do: create an account, pay or choose a plan, receive a code by email or SMS, pass a captcha, accept terms, generate an API key, buy a domain. First make sure it really needs them (an API, a CLI, a free alternative, a test mode?). Then **read `.athanor/guides/FOR_YOU.md`** and hand it over with `athanor todo` as it explains (never by editing `.athanor/for-you/` or `.athanor/secrets.env` by hand). Do not wait for the answer: mark the blocked milestones `(waits for T1)` and go on with the others. The same guide says how to handle the user's answers (`.athanor/FOR_YOU_ANSWERED`).
+Some steps only the user can do: create an account, pay or choose a plan, receive a code by email or SMS, pass a captcha, accept terms, generate an API key, buy a domain. Ask only for what the request needs: never an account or a service that the request, its documents or the plan do not call for (the guide's example is only an example). Never open a page in the user's browser (`start`, `explorer.exe`, `xdg-open`, a browser through `pc-exec`): a task is how you ask. First make sure it really needs them (an API, a CLI, a free alternative, a test mode?). Then **read `.athanor/guides/FOR_YOU.md`** and hand it over with `athanor todo` as it explains (never by editing `.athanor/for-you/` or `.athanor/secrets.env` by hand). Do not wait for the answer: mark the blocked milestones `(waits for T1)` and go on with the others. The same guide says how to handle the user's answers (`.athanor/FOR_YOU_ANSWERED`).
 
 ## Programmatically created assets
 
