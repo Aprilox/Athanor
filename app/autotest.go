@@ -5,6 +5,7 @@ package main
 // well. A rebuilt executable must pass it before it replaces the running one (self-repair, plan 1.6).
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io/fs"
@@ -27,6 +28,15 @@ func autotest(racine string) []resultatAutotest {
 	}
 	var c Catalogue
 	ajouter("built-in catalog", json.Unmarshal(catalogueJSON, &c) == nil && len(c.MCP) > 0, fmt.Sprintf("%d MCP servers, %d skills", len(c.MCP), len(c.Skills)))
+	// the helpers answer as they must (a rebuilt executable that would let everything through fails here)
+	ajouter("hook bash", gardeBash([]byte(`{"tool_input":{"command":"sleep 900"}}`)) != "" && gardeBash([]byte(`{"tool_input":{"command":"ls"}}`)) == "", "a long wait refused, ls allowed")
+	ajouter("hook fichiers", gardeFichiers([]string{"/projet"}, []byte(`{"tool_name":"Read","cwd":"/projet","tool_input":{"file_path":"/etc/passwd"}}`)) != "", "a file outside the project refused")
+	ajouter("JSON as Python writes it", string(jsonPython(map[string]any{"a": []any{1, "é"}}, "", true)) == `{"a": [1, "\u00e9"]}` && reprFlottant(0.1) == "0.1", "")
+	petit := redimensionner(&imageRGB{l: 4, h: 2, pix: bytes.Repeat([]byte{200, 100, 50}, 8)}, 2, 1)
+	ajouter("image resize", petit.l == 2 && petit.h == 1 && petit.pix[0] == 200 && petit.pix[2] == 50, "")
+	n := 0
+	_ = fs.WalkDir(sourcesIntegrees, ".", func(string, fs.DirEntry, error) error { n++; return nil })
+	ajouter("built-in sources", n > 50, fmt.Sprintf("%d files (athanor reparer --diff)", n))
 	if racine == "" {
 		ajouter("kit", false, "not found (athanor autotest KIT)")
 		return r

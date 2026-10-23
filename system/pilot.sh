@@ -115,7 +115,7 @@ ATHANOR_GO=""
 if [ "${ATHANOR_OUTILS:-}" != python ]; then
   if [ "$NATIF" = 1 ]; then candidat="$KIT/Athanor.exe"; else candidat="$KIT/athanor"; fi
   if [ -f "$candidat" ] && [ -x "$candidat" ] && aide_go=$(timeout 15 "$candidat" aide < /dev/null 2> /dev/null) \
-     && ( for c in relais cout quota hook reglages equipe extensions etat-taches plan solutions reglages-ouvrier; do printf '%s' "$aide_go" | grep -q "^  $c " || exit 1; done ); then
+     && ( for c in relais cout quota hook reglages equipe extensions etat-taches plan solutions reglages-ouvrier pont roblox-sync; do printf '%s' "$aide_go" | grep -q "^  $c " || exit 1; done ); then
     ATHANOR_GO="$candidat"
   fi
   unset candidat aide_go
@@ -123,9 +123,11 @@ fi
 if [ -n "$ATHANOR_GO" ]; then
   OUTIL_RELAIS=("$ATHANOR_GO" relais); OUTIL_COUT=("$ATHANOR_GO" cout); OUTIL_QUOTA=("$ATHANOR_GO" quota); OUTIL_REGLAGES=("$ATHANOR_GO" reglages)
   OUTIL_EQUIPE=("$ATHANOR_GO" equipe); OUTIL_EXTENSIONS=("$ATHANOR_GO" extensions); OUTIL_ETAT_TACHES=("$ATHANOR_GO" etat-taches)
+  OUTIL_PONT=("$ATHANOR_GO" pont); OUTIL_ROBLOX_SYNC=("$ATHANOR_GO" roblox-sync)
 else
   OUTIL_RELAIS=(python3 -I "$SYSTEME/relais.py"); OUTIL_COUT=(python3 -I "$SYSTEME/cout.py"); OUTIL_QUOTA=(python3 -I "$SYSTEME/quota.py"); OUTIL_REGLAGES=(python3 "$SYSTEME/settings.py")
   OUTIL_EQUIPE=(python3 "$SYSTEME/equipe.py"); OUTIL_EXTENSIONS=(python3 "$SYSTEME/extensions.py"); OUTIL_ETAT_TACHES=(python3 -B "$SYSTEME/taches.py" etat)
+  OUTIL_PONT=(python3 "$SYSTEME/bridge.py"); OUTIL_ROBLOX_SYNC=(python3 "$SYSTEME/roblox-sync.py")
 fi
 
 # The pilot's output may go to a terminal or a pipe that disappears (window closed, application
@@ -656,7 +658,7 @@ preparer_cycle() {  # non-AI tools: archives and project map, before Claude read
 SYNC_PID=""
 roblox_sync_demarrer() {
   [ -n "$SYNC_PID" ] && kill -0 "$SYNC_PID" 2>/dev/null && return 0
-  python3 "$SYSTEME/roblox-sync.py" serve "$PROJECT" "$PRIVE/pilot.pid" >> "$PRIVE/roblox-sync.log" 2>&1 9>&- &
+  "${OUTIL_ROBLOX_SYNC[@]}" serve "$PROJECT" "$PRIVE/pilot.pid" >> "$PRIVE/roblox-sync.log" 2>&1 9>&- &
   SYNC_PID=$!
   [ -n "${SYNC_ANNONCE:-}" ] && return 0
   SYNC_ANNONCE=1
@@ -998,7 +1000,7 @@ preparer_ecran
 # (native Windows: no sandbox, the gateways run directly, PONT_DIRECT in settings.py)
 PONT_PID=""
 if [ "$NATIF" != 1 ]; then
-  python3 "$SYSTEME/bridge.py" "$KIT" "$PROJECT" >> "$PRIVE/pont.log" 2>&1 9>&- &
+  "${OUTIL_PONT[@]}" "$KIT" "$PROJECT" >> "$PRIVE/pont.log" 2>&1 9>&- &
   PONT_PID=$!
 fi
 

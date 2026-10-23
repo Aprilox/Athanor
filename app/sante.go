@@ -189,6 +189,7 @@ You are in the Athanor kit folder (WSL). A health check failed; diagnose and rep
 %s
 ## Rules
 - You may read and edit the kit files (system/, commands/, template/, .env except the token), install what is missing in ~/.local, $PWD/tools or with npm/pip/curl, and run the command again to verify.
+- The app and the athanor sub-commands are Go (app/). If you change app/, rebuild with `+"`./athanor reparer --recompiler`"+` (WSL and Linux; `+"`./Athanor.exe reparer --recompiler`"+` in native Windows): it shows your change, checks it, builds, runs the autotest and only then replaces the executable (the previous one is kept, `+"`reparer --annuler`"+` puts it back). Never replace Athanor.exe or athanor by hand.
 - sudo is not available in this session. If a step requires sudo or a Windows action (installer, UAC, restart), write the exact commands in logs/TODO_FOR_YOU.md and explain in two lines.
 - Never read the value of the token and never print it.
 - End with a summary of 5 lines at most: what was broken, what you did, what remains to be done. Answer in the user's language (code: %s).
@@ -219,7 +220,7 @@ You are in the Athanor kit folder (WSL), outside the sandbox. The user asks:
 
 %s
 
-Rules: act without asking questions; install what is missing in ~/.local, $PWD/tools (portable) or with npm/pip/curl; for Windows software, use system/bin/install-windows ID (winget) when available, otherwise write the steps in logs/TODO_FOR_YOU.md; sudo is not available (write the commands to run in that same file); never read or print the token; end with a summary of 5 lines at most, in the user's language (code: %s).
+Rules: act without asking questions; after a change of the Go sources in app/, rebuild with `+"`./athanor reparer --recompiler`"+` (`+"`./Athanor.exe reparer --recompiler`"+` in native Windows), never by hand; install what is missing in ~/.local, $PWD/tools (portable) or with npm/pip/curl; for Windows software, use system/bin/install-windows ID (winget) when available, otherwise write the steps in logs/TODO_FOR_YOU.md; sudo is not available (write the commands to run in that same file); never read or print the token; end with a summary of 5 lines at most, in the user's language (code: %s).
 `, strings.TrimSpace(texte), langueDe(k))
 	id := fmt.Sprintf("libre-%d", time.Now().UnixNano())
 	return lancerClaude(k, id, "Claude: "+court(texte, 60), id+".md", consigne, nil, nil)
