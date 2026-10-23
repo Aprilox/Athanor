@@ -120,6 +120,10 @@ if [ "${ATHANOR_OUTILS:-}" != python ]; then
      && ( for c in relais cout quota hook reglages equipe extensions etat-taches plan solutions reglages-ouvrier pont roblox-sync detecter mcp-ouvrir reprise; do printf '%s' "$aide_go" | grep -q "^  $c " || exit 1; done ); then
     ATHANOR_GO="$candidat"
   fi
+  if [ "${PILOT_ENGINE:-}" = go ] && [ -n "$ATHANOR_GO" ] && printf '%s' "$aide_go" | grep -q '^  pilote ' \
+     && ! grep -qxE 'PARALLELE?=1\r?' "$ETAT/.env" 2>/dev/null; then
+    exec "$ATHANOR_GO" pilote "$PROJECT"
+  fi
   unset candidat aide_go
 fi
 if [ -n "$ATHANOR_GO" ]; then

@@ -52,7 +52,7 @@ pilote_vivant() {
   p=$(pid_sur "$(cat "$(prive_de "$1")/pilot.pid" 2>/dev/null)")
   if [ -n "$p" ] && kill -0 "$p" 2>/dev/null; then printf '%s' "$p"; return 0; fi
   p=$(pid_sur "$(cat "$1/.athanor/pilot.pid" 2>/dev/null)")
-  if [ -n "$p" ] && kill -0 "$p" 2>/dev/null && tr '\0' ' ' < "/proc/$p/cmdline" 2>/dev/null | grep -q 'system/pilot\.sh'; then
+  if [ -n "$p" ] && kill -0 "$p" 2>/dev/null && tr '\0' ' ' < "/proc/$p/cmdline" 2>/dev/null | grep -qE 'system/pilot\.sh|athanor.*pilote?'; then
     printf '%s' "$p"; return 0
   fi
   return 1
