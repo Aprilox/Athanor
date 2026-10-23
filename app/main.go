@@ -22,17 +22,9 @@ var statique embed.FS
 var sourceVirtualDesktop []byte
 
 func main() {
-	// Athanor.exe --isole [--detache] -- PROGRAM ARGS: used by the kit's gateways (Claude's desktop).
-	if len(os.Args) > 1 && os.Args[1] == "--isole" {
-		os.Exit(LancerIsole(os.Args[2:]))
-	}
-	// Athanor.exe --eveil FILE: keeps the PC awake while a pilot runs (eveil_windows.go).
-	if len(os.Args) > 1 && os.Args[1] == "--eveil" {
-		os.Exit(GarderEveille(os.Args[2:]))
-	}
-	// Athanor.exe --retour PID: brings the user back from Claude's desktop if the application disappears.
-	if len(os.Args) > 1 && os.Args[1] == "--retour" {
-		os.Exit(GardienRetour(os.Args[2:]))
+	// athanor COMMAND ARGS…: the sub-commands of the single executable (commandes.go); without one, the app
+	if code, ok := lancerSousCommande(os.Args[1:]); ok {
+		os.Exit(code)
 	}
 	migrerConfig()  // autopilote-config.json → athanor-config.json (previous name)
 	migrerSysteme() // Windows: startup entry and local data folder of the previous name
