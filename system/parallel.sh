@@ -330,7 +330,7 @@ parallele_lancer_ouvrier() {
   # The worker's sandbox: its worktree (PROJECT = the worktree, for the guard and the tools),
   # plus write access to the project's .git, where git stores the worktree's objects and branch.
   local principal="$PROJECT"
-  ATHANOR_PROJET_PRINCIPAL="$principal" PROJECT="$trav" python3 "$SYSTEME/settings.py" "$KIT" "$PRIVE/reglages-$ident.json" > /dev/null || { log "Worker $ident: cannot build the settings."; return 1; }
+  ATHANOR_PROJET_PRINCIPAL="$principal" PROJECT="$trav" "${OUTIL_REGLAGES[@]}" "$KIT" "$PRIVE/reglages-$ident.json" > /dev/null || { log "Worker $ident: cannot build the settings."; return 1; }
   python3 - "$PRIVE/reglages-$ident.json" "$PROJECT/.git" <<'PY' || return 1
 import json, sys
 f, git = sys.argv[1], sys.argv[2]

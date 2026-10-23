@@ -99,7 +99,7 @@ func journalDeTest(t *testing.T, dir string, resultat bool, enCours bool) string
 		l = append(l, msg{"type": "result", "subtype": "success", "total_cost_usd": 4.21,
 			"modelUsage": msg{"claude-opus-5-5": msg{"inputTokens": 30, "cacheReadInputTokens": 15000, "cacheCreationInputTokens": 370, "outputTokens": 550, "costUSD": 2.5},
 				"claude-haiku-5-5": msg{"inputTokens": 7, "cacheReadInputTokens": 7000, "cacheCreationInputTokens": 70, "outputTokens": 700, "costUSD": 0.4},
-				"claude-mini": msg{"inputTokens": 1, "outputTokens": 1, "costUSD": 0.001}}})
+				"claude-mini":      msg{"inputTokens": 1, "outputTokens": 1, "costUSD": 0.001}}})
 	}
 	f := filepath.Join(dir, fmt.Sprintf("cycle-%v-%v.jsonl", resultat, enCours))
 	ecrireLignes(t, f, l...)
@@ -159,7 +159,7 @@ func TestPariteCout(t *testing.T) {
 	for n := 0; n < 4; n++ {
 		j := filepath.Join(d, fmt.Sprintf("r%d.jsonl", n))
 		ecrireLignes(t, j, msg{"type": "result", "modelUsage": msg{
-			"claude-opus-5-5":  msg{"inputTokens": 10 + n, "cacheReadInputTokens": 100000 * (n + 1), "cacheCreationInputTokens": 20000 + 5000*n*n, "outputTokens": 3000 + 700*n, "costUSD": 0.5 + 0.21*float64(n) + 0.05*float64(n*n)},
+			"claude-opus-5-5":   msg{"inputTokens": 10 + n, "cacheReadInputTokens": 100000 * (n + 1), "cacheCreationInputTokens": 20000 + 5000*n*n, "outputTokens": 3000 + 700*n, "costUSD": 0.5 + 0.21*float64(n) + 0.05*float64(n*n)},
 			"claude-sonnet-5-5": msg{"inputTokens": 5, "cacheReadInputTokens": 50000, "cacheCreationInputTokens": 10000, "outputTokens": 1000, "costUSD": 0.11},
 		}})
 		coutApprendre(tarifsGo, j)
