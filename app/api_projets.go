@@ -95,7 +95,8 @@ type EtatVue struct {
 	Theme       string                `json:"theme"`
 	Accent      string                `json:"accent"`
 	Bienvenue   bool                  `json:"bienvenue"`
-	Natif       bool                  `json:"natif"` // native Windows mode: no Linux screen
+	Natif       bool                  `json:"natif"`   // native Windows mode: no Linux screen
+	Windows     bool                  `json:"windows"` // the app runs on Windows: WSL or native mode to choose
 	Quota       *EtatQuota            `json:"quota,omitempty"`
 	QuotaArret  map[string]RegleQuota `json:"quota_arret"`
 }
@@ -134,6 +135,7 @@ func (s *Serveur) apiEtat(w http.ResponseWriter, r *http.Request) {
 	vue.Projets = s.vuesProjets(courant)
 	vue.Bureau = s.bureau.Etat()
 	vue.Natif = modeNatif.Load()
+	vue.Windows = runtime.GOOS == "windows"
 	s.mu.Lock()
 	tous := append([]Projet{}, s.config.Projets...)
 	s.mu.Unlock()

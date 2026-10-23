@@ -9,8 +9,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -25,9 +27,31 @@ func (k Kit) Valide() bool {
 	_, err := os.Stat(filepath.Join(k.Racine, "system", "pilot.sh"))
 	return err == nil
 }
+
+// Installe: the tooling of the mode in use is there. WSL: install.ps1 wrote the distribution's name.
+// Native Windows: Git Bash and Claude Code for Windows (commands\install-natif.ps1). Linux and macOS:
+// Claude Code (commands/install.sh), the pilot running on this very system.
 func (k Kit) Installe() bool {
-	_, err := os.Stat(filepath.Join(k.Racine, "system", "distro.txt"))
-	return err == nil
+	if _, err := os.Stat(filepath.Join(k.Racine, "system", "distro.txt")); err == nil && !modeNatif.Load() {
+		return true
+	}
+	if runtime.GOOS == "windows" {
+		return modeNatif.Load() && bashNatif() != "" && claudePresent("claude.exe")
+	}
+	return claudePresent("claude")
+}
+
+// claudePresent: Claude Code's program in the PATH or where its installer puts it (~/.local/bin).
+func claudePresent(nom string) bool {
+	if _, err := exec.LookPath(nom); err == nil {
+		return true
+	}
+	if d, err := os.UserHomeDir(); err == nil {
+		if st, err := os.Stat(filepath.Join(d, ".local", "bin", nom)); err == nil && st.Mode().IsRegular() {
+			return true
+		}
+	}
+	return false
 }
 func (k Kit) Env() string        { return filepath.Join(k.Racine, ".env") }
 func (k Kit) EnvExemple() string { return filepath.Join(k.Racine, ".env.example") }
@@ -180,7 +204,7 @@ type LigneStat struct {
 	SortieTokens int64   `json:"sortie_tokens"`
 	ContexteMax  int64   `json:"contexte_max"`
 	Commit       string  `json:"commit"`
-	Estime       bool    `json:"estime"` // cost worked out by the pilot from the turns of the lead and its sub-agents (no "result" line)
+	Estime       bool    `json:"estime"`          // cost worked out by the pilot from the turns of the lead and its sub-agents (no "result" line)
 	Titre        string  `json:"titre,omitempty"` // the cycle's milestone, as the pilot's log says it ("Cycle 12 succeeded: M8a: …")
 }
 

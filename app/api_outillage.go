@@ -4,6 +4,7 @@ package main
 
 import (
 	"encoding/base64"
+	"errors"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -193,6 +194,14 @@ func (s *Serveur) apiBarriere(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Serveur) apiInstaller(w http.ResponseWriter, r *http.Request) {
+	if runtime.GOOS != "windows" { // Linux, macOS: the installer runs in a terminal (it asks for the password once)
+		if err := FenetreWSL(s.kitCourant(), "Athanor", "bash commands/install.sh"); err != nil {
+			s.erreur(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		s.msg(w, "Installer opened in a window. When it is done, come back here and run “Check everything”.")
+		return
+	}
 	script := `commands\install.ps1`
 	if modeNatif.Load() {
 		script = `commands\install-natif.ps1` // native Windows: Git for Windows, jq, Python, Claude Code for Windows
@@ -279,20 +288,11 @@ func (s *Serveur) apiEcrireOptions(w http.ResponseWriter, r *http.Request) {
 		s.bureau.DefinirKit(nouveau)
 		s.ecrireListeProjets()
 	}
-	if c.ModeNatif != nil && *c.ModeNatif != modeNatif.Load() {
-		// never while a pilot runs: the one started in the other mode would be left on its own
-		for _, p := range s.config.Projets {
-			if p.PiloteActif() {
-				s.erreur(w, http.StatusConflict, "Stop the running pilots first: the mode changes for the pilots started afterwards.")
-				return
-			}
-		}
-		if *c.ModeNatif && runtime.GOOS != "windows" {
-			s.erreur(w, http.StatusBadRequest, "Native Windows mode: Windows only.")
+	if c.ModeNatif != nil {
+		if code, err := s.changerMode(*c.ModeNatif); err != nil {
+			s.erreur(w, code, err.Error())
 			return
 		}
-		s.config.ModeNatif = *c.ModeNatif
-		modeNatif.Store(*c.ModeNatif)
 	}
 	if c.BarreWindows != nil {
 		s.config.BarreWindows = *c.BarreWindows
@@ -379,4 +379,45 @@ func (s *Serveur) apiOuvrir(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.ecrireJSON(w, map[string]bool{"ok": true})
+}
+
+// changerMode: WSL or native Windows (s.mu held). Never while a pilot runs: the one started in the other
+// mode would be left on its own.
+func (s *Serveur) changerMode(natif bool) (int, error) {
+	if natif == modeNatif.Load() {
+		return 0, nil
+	}
+	for _, p := range s.config.Projets {
+		if p.PiloteActif() {
+			return http.StatusConflict, errors.New("Stop the running pilots first: the mode changes for the pilots started afterwards.")
+		}
+	}
+	if natif && runtime.GOOS != "windows" {
+		return http.StatusBadRequest, errors.New("Native Windows mode: Windows only.")
+	}
+	s.config.ModeNatif = natif
+	modeNatif.Store(natif)
+	return 0, nil
+}
+
+// apiModeSysteme: the choice of the first steps (WSL or native Windows), on its own.
+func (s *Serveur) apiModeSysteme(w http.ResponseWriter, r *http.Request) {
+	var c struct {
+		Natif bool `json:"natif"`
+	}
+	if err := lireCorps(r, &c); err != nil {
+		s.erreur(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if code, err := s.changerMode(c.Natif); err != nil {
+		s.erreur(w, code, err.Error())
+		return
+	}
+	if err := ecrireConfig(s.config); err != nil {
+		s.erreur(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.msg(w, "Options saved.")
 }
