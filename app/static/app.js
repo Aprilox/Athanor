@@ -905,9 +905,14 @@ pages.suivi = async () => {
 
 function rendreGuide(v) {
   const e1 = v.kit_installe, e2 = !!v.projet, e3 = e2 && !v.demande_vide;
+  // the tooling of this system: on Windows, WSL (Claude in a sandbox) or native Windows, chosen here
+  const outillage = !v.windows ? "Claude Code, the system sandbox (bubblewrap) and the tools, in a terminal; it asks for your password once."
+    : v.natif ? "Native Windows: Git for Windows, jq, Python, Node.js and Claude Code for Windows, without WSL. Claude has no sandbox in this mode."
+    : "WSL2 (the Linux built into Windows), Claude Code, the system sandbox. A window opens; Linux asks for a password once.";
+  const autreMode = !v.windows ? "" : `<button type="button" class="btn btn-petit mt-1" data-mode-systeme="${v.natif ? "wsl" : "natif"}">${v.natif ? t("Use WSL instead (Claude in a sandbox)") : t("Native Windows instead (no WSL, no sandbox)")}</button>`;
   return `<div class="bloc"><h2>${t("First steps")}</h2><p class="intro">${t("Five steps, all from this window. Then you can let it run for days, on several projects at once.")}</p>
   <div class="etapes">
-    <div class="etape ${e1 ? "faite" : ""}"><div class="n">1</div><div><b>${t("Install the tooling")}</b><div class="d">${t("WSL2 (the Linux built into Windows), Claude Code, the system sandbox. A window opens; Linux asks for a password once.")}</div></div>
+    <div class="etape ${e1 ? "faite" : ""}"><div class="n">1</div><div><b>${t("Install the tooling")}</b><div class="d">${t(outillage)}</div>${autreMode}</div>
       <button class="btn ${e1 ? "" : "btn-primaire"}" data-installer>${e1 ? t("Run again") : t("Install")}</button></div>
     <div class="etape"><div class="n">2</div><div><b>${t("Check and connect")}</b><div class="d">${t("Checks all the tooling and the token of your Claude subscription. Every problem has its own “Repair” or “Ask Claude” button.")}</div></div>
       <a class="btn" href="#sante">${t("Open the check")}</a></div>
@@ -1846,22 +1851,35 @@ async function lireJournal() {
 }
 
 // --- setup & health
-pages.sante = async () => {
-  const verifs = await api("sante");
+// the checks' list alone: refreshed in place while a check or a repair runs (majSante), so the fields
+// below keep what is typed in them and the output keeps its scroll
+function listeSante(verifs) {
   const ico = (v) => v.statut === "ok" ? ["✔", "ok"] : v.statut === "en_cours" ? ["◌", "en_cours"] : v.statut === "echec" ? (v.facultatif ? ["!", "facultatif"] : ["✖", "echec"]) : ["○", ""];
-  return `<div class="ligne">
-    <button class="btn btn-primaire" id="st-tout">${t("Check everything")}</button>
-    <button class="btn" id="st-installer" title="${h(t("The full installer in a window: WSL2, network, packages (password), Claude Code, administrator rights. Once."))}">${t("Install everything")}</button>
-    <button class="btn" id="st-barriere" title="${h(t("A short Claude session tries to leave the project, read your files, launch cmd.exe: everything must be blocked."))}">${t("Test the sandbox (2 min)")}</button>
-  </div>
-  <div class="bloc bloc-liste">${verifs.map((v) => { const [i, c] = ico(v); return `
+  return verifs.map((v) => { const [i, c] = ico(v); return `
     <div class="verif v-${h(v.statut)} ${v.facultatif ? "v-facultatif" : ""} ${etat.verifChoisie === v.id ? "choisi" : ""}" data-id="${h(v.id)}" data-tache="${h(v.tache_id)}">
       <div class="ico ${c}">${i}</div>
       <div><div class="titre" data-voir="${h(v.tache_id)}" title="${h(t(v.explication))}">${h(t(v.titre))}</div><div class="resume">${h(v.en_reparation ? t("repair in progress…") : v.resume || t(v.explication))}</div></div>
       <div class="ligne">
         ${v.statut === "echec" && !v.en_reparation ? `${v.reparation_auto ? `<button class="btn btn-petit" data-reparer title="${h(t(v.reparation_info))}">${t("Repair")}</button>` : ""}<button class="btn btn-petit" data-claude>${t("Ask Claude")}</button>` : ""}
         <button class="btn btn-petit" data-verifier ${v.statut === "en_cours" ? "disabled" : ""}>${t("Check")}</button>
-      </div></div>`; }).join("")}</div>
+      </div></div>`; }).join("");
+}
+async function majSante() {
+  const verifs = await api("sante").catch(() => null);
+  const el = $(".bloc-liste");
+  if (verifs && el && etat.page === "sante") { const html = listeSante(verifs); if (html !== etat.santeListe) { etat.santeListe = html; el.innerHTML = html; } }
+  await rendreSortie();
+}
+
+pages.sante = async () => {
+  const verifs = await api("sante");
+  etat.santeListe = listeSante(verifs); etat.sortieSig = "";
+  return `<div class="ligne">
+    <button class="btn btn-primaire" id="st-tout">${t("Check everything")}</button>
+    <button class="btn" id="st-installer" title="${h(t(!(etat.vue || {}).windows ? "Claude Code, the system sandbox (bubblewrap) and the tools, in a terminal; it asks for your password once." : (etat.vue || {}).natif ? "Native Windows: Git for Windows, jq, Python, Node.js and Claude Code for Windows, without WSL. Claude has no sandbox in this mode." : "The full installer in a window: WSL2, network, packages (password), Claude Code, administrator rights. Once."))}">${t("Install everything")}</button>
+    <button class="btn" id="st-barriere" title="${h(t("A short Claude session tries to leave the project, read your files, launch cmd.exe: everything must be blocked."))}">${t("Test the sandbox (2 min)")}</button>
+  </div>
+  <div class="bloc bloc-liste">${listeSante(verifs)}</div>
   <div class="bloc"><h2>${t("Ask Claude")}</h2>
     <p class="intro petit">${t("A Claude session in the tool folder, outside the sandbox and without sudo: it installs, fixes, then summarizes. Whatever needs sudo or Windows is written to logs\\TODO_FOR_YOU.md.")}</p>
     <div class="ligne"><input type="text" id="st-libre" class="croit" placeholder="${h(t("e.g. install Godot 4 · why does the pilot stop?"))}"><button class="btn" id="st-libre-btn">${t("Send")}</button></div>
@@ -1872,12 +1890,22 @@ pages.sante = async () => {
 
 async function rendreSortie() {
   const el = $("#st-sortie"); if (!el || !etat.tacheChoisie) return;
-  const r = await api("tache/" + etat.tacheChoisie).catch(() => null); if (!r) return;
+  const choisie = etat.tacheChoisie;
+  const r = await api("tache/" + choisie).catch(() => null); if (!r || choisie !== etat.tacheChoisie) return;
   const tk = r.tache;
   const st = { en_cours: [t("running"), "quota"], ok: [t("finished"), "ok"], echec: [t("failed, code {0}", [tk.code]), "echec"], jamais: ["", ""] }[tk.statut] || ["", ""];
-  el.innerHTML = `<div class="bloc"><div class="ligne"><h2 class="m0">${h(t(tk.nom))}</h2><span class="${st[1]}">${st[0]} · ${tk.duree_s} s</span><span class="espace"></span><button class="btn btn-petit" id="st-copier">${t("Copy output")}</button></div>
+  const duree = $("#st-duree", el);
+  // the output is rebuilt only when it changed, and never under a selection (copying a line): a long answer
+  // rebuilt every 1.5 s froze the page; it follows the end only when it was already at the end
+  const sig = choisie + "|" + tk.statut + "|" + r.evenements.length + "|" + ((r.evenements.at(-1) || {}).titre || "");
+  if (sig === etat.sortieSig && duree) { duree.textContent = `${st[0]} · ${tk.duree_s} s`; return; }
+  const ancienne = $(".sortie", el);
+  if (ancienne && String(window.getSelection() || "") && ancienne.contains(window.getSelection().anchorNode)) return;
+  const enBas = !ancienne || ancienne.scrollHeight - ancienne.scrollTop - ancienne.clientHeight < 40, haut = ancienne ? ancienne.scrollTop : 0;
+  etat.sortieSig = sig;
+  el.innerHTML = `<div class="bloc"><div class="ligne"><h2 class="m0">${h(t(tk.nom))}</h2><span class="${st[1]}" id="st-duree">${st[0]} · ${tk.duree_s} s</span><span class="espace"></span><button class="btn btn-petit" id="st-copier">${t("Copy output")}</button></div>
     <div class="sortie">${r.evenements.map((e) => `<div class="ev g-${h(e.genre)} ${e.sous_agent ? "sous" : ""}"><span class="h"></span><span class="m"></span><span class="t">${h(t(e.titre))}</span></div>`).join("") || '<div class="ev"><span class="h"></span><span class="m"></span><span class="t muet">…</span></div>'}</div></div>`;
-  const s = $(".sortie", el); s.scrollTop = s.scrollHeight;
+  const s = $(".sortie", el); s.scrollTop = enBas ? s.scrollHeight : haut;
   $("#st-copier").onclick = () => navigator.clipboard.writeText(tk.sortie.join("\n")).then(() => toast(t("Copied."), "ok"));
 }
 
@@ -2061,6 +2089,7 @@ $("#page").addEventListener("click", async (ev) => {
   if (b.hasAttribute("data-ecran")) return ouvrirEcran();
   if (b.dataset.act) { b.disabled = true; if (b.dataset.act === "demarrer") etat.demarrage[etat.projet] = Date.now() + 25000; await action(api("pilote/" + b.dataset.act, "POST")); return setTimeout(rafraichir, 800); }
   if (b.hasAttribute("data-installer")) return action(api("sante/installer", "POST"));
+  if (b.dataset.modeSysteme) { const r = await action(api("mode-systeme", "POST", { natif: b.dataset.modeSysteme === "natif" })); if (r) { await rafraichir(); rendrePage(); } return; }
   if (b.dataset.gestion) return gererProjet(b.dataset.gestion, b.dataset.nom || etat.projet, b);
   if (b.dataset.gh) return actionGitHub(b.dataset.gh, b);
   if (b.dataset.ag) return actionAgent(b.dataset.ag, b);
@@ -2243,7 +2272,8 @@ async function rafraichir() {
         if (r && JSON.stringify(r.taches || []) !== etat.pvSignature) rendrePage();
       }
       annoncerTaches(v);
-      if (etat.page === "sante" && (document.querySelector(".verif.v-en_cours") || etat.tacheChoisie)) { const tk = etat.tacheChoisie; await rendrePage(); etat.tacheChoisie = tk; }
+      // the checks and the output update in place: the page itself is never rebuilt under the user's typing
+      if (etat.page === "sante" && (document.querySelector(".verif.v-en_cours") || etat.tacheChoisie)) await majSante();
     }
   } catch (e) { /* server briefly unreachable */ }
 }

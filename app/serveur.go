@@ -349,6 +349,7 @@ func (s *Serveur) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/sante/libre", s.garde(false, s.apiLibre))
 	mux.HandleFunc("POST /api/sante/barriere", s.garde(false, s.apiBarriere))
 	mux.HandleFunc("POST /api/sante/installer", s.garde(false, s.apiInstaller))
+	mux.HandleFunc("POST /api/mode-systeme", s.garde(false, s.apiModeSysteme))
 	mux.HandleFunc("GET /api/tache/{id}", s.garde(false, s.apiTache))
 
 	mux.HandleFunc("GET /api/mode", s.garde(false, s.apiMode))
