@@ -30,6 +30,11 @@ PRIVE="$(prive_de "$PROJECT")"
 unset GH_TOKEN GITHUB_TOKEN GH_ENTERPRISE_TOKEN GITHUB_ENTERPRISE_TOKEN
 mkdir -p "$PRIVE"
 REGLAGES="$PRIVE/claude_settings.json"
+# The kit's texts (instructions, guides, sub-agents): template/, where a file of local/template/ takes the
+# place of the same one (a repair made on this PC: an update of the kit never overwrites local/).
+MODELES="$PRIVE/template"
+rm -rf "$MODELES" && cp -r "$KIT/template" "$MODELES"
+if [ -d "$KIT/local/template" ] && [ ! -L "$KIT/local/template" ]; then cp -r "$KIT/local/template/." "$MODELES/" 2>/dev/null; fi
 assainir "$ETAT"
 
 # Settings: the tool's .env, read line by line, never executed. (The workshop's .env, editable by Claude,
@@ -781,12 +786,12 @@ done
 
 # Instructions and team: always the kit's version, copied into the workshop (never into the project itself).
 CONSIGNES="$PRIVE/CLAUDE.md"
-cp -f "$KIT/template/CLAUDE.md" "$CONSIGNES"
+cp -f "$MODELES/CLAUDE.md" "$CONSIGNES"
 # SUBAGENT_MODEL=auto: the lead chooses the model of each sub-agent call (the Agent tool's "model"
 # parameter wins over the agent's own model); the defaults stay for a call that sets none
-[ "${SUBAGENT_MODEL,,}" = auto ] && cat "$KIT/template/guides/SUBAGENT_MODELS.md" >> "$CONSIGNES" 2>/dev/null
+[ "${SUBAGENT_MODEL,,}" = auto ] && cat "$MODELES/guides/SUBAGENT_MODELS.md" >> "$CONSIGNES" 2>/dev/null
 # native Windows mode: what changes for Claude (Git Bash, Windows programs, no sandbox)
-[ "$NATIF" = 1 ] && cat "$KIT/template/guides/NATIVE.md" >> "$CONSIGNES" 2>/dev/null
+[ "$NATIF" = 1 ] && cat "$MODELES/guides/NATIVE.md" >> "$CONSIGNES" 2>/dev/null
 # The language also goes at the end of each cycle's goal: the goal is written in English, and Claude
 # answers in the language of the message it receives unless told otherwise.
 case "${LANGUAGE:-en}" in
@@ -801,12 +806,12 @@ case "${LANGUAGE:-en}" in
   fr) printf '\n## Langue\n\n' ;; es|pt) printf '\n## Idioma\n\n' ;; de) printf '\n## Sprache\n\n' ;; it) printf '\n## Lingua\n\n' ;; *) printf '\n## Language\n\n' ;;
 esac >> "$CONSIGNES"
 printf '%s\n' "$PHRASE_LANGUE" >> "$CONSIGNES"
-[ -f "$KIT/template/PC_TOOLS_GUIDE.md" ] && cp -f "$KIT/template/PC_TOOLS_GUIDE.md" "$ETAT/PC_TOOLS_GUIDE.md"
+[ -f "$MODELES/PC_TOOLS_GUIDE.md" ] && cp -f "$MODELES/PC_TOOLS_GUIDE.md" "$ETAT/PC_TOOLS_GUIDE.md"
 # the parts of the instructions only some cycles need (framing, the user's tasks, the final report): read
 # when they apply rather than sent with every turn
-mkdir -p "$ETAT/guides" && cp -f "$KIT/template/guides/"*.md "$ETAT/guides/" 2>/dev/null
+mkdir -p "$ETAT/guides" && cp -f "$MODELES/guides/"*.md "$ETAT/guides/" 2>/dev/null
 rm -rf "$ETAT/CLAUDE.md" "$ETAT/CLAUDE.cycle.md" "$ETAT/mcp.json" "$ETAT/claude_settings.json"   # older versions
-rm -rf "$PRIVE/agents" && mkdir -p "$PRIVE/agents" && cp "$KIT/template/.claude/agents/"*.md "$PRIVE/agents/" 2>/dev/null
+rm -rf "$PRIVE/agents" && mkdir -p "$PRIVE/agents" && cp "$MODELES/.claude/agents/"*.md "$PRIVE/agents/" 2>/dev/null
 # Sub-agents are passed to Claude Code as JSON (--agents); failing that, copied into PROJECT/.claude/agents.
 # Model of each sub-agent: CHEAP_MODEL for "executor", SUBAGENT_MODEL for the others
 # (empty = the lead's), unless a model is set in the agent file. Also written into the .md copies.
@@ -1108,10 +1113,10 @@ consignes_cadrage() {  # $1 = 1 for the closing cycle, $2 = time box in minutes 
     printf '\n## This cycle: closing the framing\n\nThe framing cycle ended before the plan was written. Write `.athanor/PLAN.md` now, yourself, from `.athanor/REQUEST.md` and what is already in `.athanor/docs/`: each milestone one line starting with `- [ ] M1 : `. Do not read the attachments again, do not call any sub-agent, write no code. The missing details become milestones of the plan.\n'
   elif [ -n "$2" ]; then
     printf '\n## This cycle: the framing (time box of %s min)\n\nThis cycle only writes the plan, with the steps below: no code, no installation, no test of a tool, no demo content. The pilot stops it after %s minutes and starts the plan as it stands then: have `.athanor/PLAN.md` written within the first half of that time, refine after.\n\n' "$2" "$2"
-    cat "$KIT/template/guides/FRAMING.md" 2>/dev/null
+    cat "$MODELES/guides/FRAMING.md" 2>/dev/null
   else
     printf '\n## This cycle: the framing\n\nThis cycle only writes the plan, with the steps below: no code, no installation, no test of a tool, no demo content.\n\n'
-    cat "$KIT/template/guides/FRAMING.md" 2>/dev/null
+    cat "$MODELES/guides/FRAMING.md" 2>/dev/null
   fi
 }
 
@@ -1211,8 +1216,8 @@ while true; do
   if [ "$PARALLEL" = 1 ]; then parallele_absorber_file; synchroniser_demande; fi
   mode=serie; but_cycle="$BUT"; consignes="$CONSIGNES"; plan_seul=0
   # the user answered tasks: how to handle the answers comes with this cycle
-  if [ -f "$ETAT/FOR_YOU_ANSWERED" ] && [ -f "$KIT/template/guides/FOR_YOU.md" ]; then
-    { cat "$consignes"; printf '\n\n'; cat "$KIT/template/guides/FOR_YOU.md"; } > "$PRIVE/CLAUDE.reponses.md"; consignes="$PRIVE/CLAUDE.reponses.md"
+  if [ -f "$ETAT/FOR_YOU_ANSWERED" ] && [ -f "$MODELES/guides/FOR_YOU.md" ]; then
+    { cat "$consignes"; printf '\n\n'; cat "$MODELES/guides/FOR_YOU.md"; } > "$PRIVE/CLAUDE.reponses.md"; consignes="$PRIVE/CLAUDE.reponses.md"
   fi
   if [ "${ATHANOR_SANS_COAUTEUR:-0}" = 1 ]; then
     # the user does not want Claude as co-author: no such line in the commit messages, whatever the habit

@@ -15,7 +15,7 @@ import (
 )
 
 // versionAthanor: kept equal to ProductVersion of winres/athanor.rc (TestVersionAlignee).
-const versionAthanor = "2.24.5"
+const versionAthanor = "2.24.6"
 
 type sousCommande struct {
 	aide  string
@@ -26,11 +26,12 @@ var sousCommandes map[string]sousCommande
 
 func init() {
 	sousCommandes = map[string]sousCommande{
-		"version": {"prints the version of Athanor", func([]string) int { fmt.Println(versionAthanor); return 0 }},
-		"aide":    {"lists the sub-commands", func([]string) int { afficherAide(); return 0 }},
-		"isole":   {"isole [--detache] [--ici] [--fin-tout] [--pid FILE] -- PROGRAM ARGS: runs a Windows program in a job, on Claude's desktop when that option is on", LancerIsole},
-		"eveil":   {"eveil FILE: keeps the PC awake while FILE is touched (a running pilot)", GarderEveille},
-		"retour":  {"retour PID: brings the user back from Claude's desktop when the app disappears", GardienRetour},
+		"version":  {"prints the version of Athanor", func([]string) int { fmt.Println(versionAthanor); return 0 }},
+		"aide":     {"lists the sub-commands", func([]string) int { afficherAide(); return 0 }},
+		"autotest": {"autotest [KIT]: checks this executable and the kit (built-in files, scripts, texts, local/ replacements)", lancerAutotest},
+		"isole":    {"isole [--detache] [--ici] [--fin-tout] [--pid FILE] -- PROGRAM ARGS: runs a Windows program in a job, on Claude's desktop when that option is on", LancerIsole},
+		"eveil":    {"eveil FILE: keeps the PC awake while FILE is touched (a running pilot)", GarderEveille},
+		"retour":   {"retour PID: brings the user back from Claude's desktop when the app disappears", GardienRetour},
 	}
 }
 
@@ -61,6 +62,6 @@ func afficherAide() {
 	sort.Strings(noms)
 	fmt.Fprintf(os.Stdout, "Athanor %s\nUsage: athanor [COMMAND ARGUMENTS…]   (no command: the application)\n\n", versionAthanor)
 	for _, n := range noms {
-		fmt.Fprintf(os.Stdout, "  %-8s %s\n", n, sousCommandes[n].aide)
+		fmt.Fprintf(os.Stdout, "  %-9s %s\n", n, sousCommandes[n].aide)
 	}
 }

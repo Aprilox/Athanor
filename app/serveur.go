@@ -40,6 +40,7 @@ type Serveur struct {
 
 func nouveauServeur(config Config) *Serveur {
 	kit := Kit{config.Kit}
+	definirKitTextes(kit.Racine) // the texts of its local/ (textes.go)
 	modeNatif.Store(config.ModeNatif && runtime.GOOS == "windows")
 	s := &Serveur{
 		config:       config,
