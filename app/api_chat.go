@@ -394,7 +394,13 @@ w() { if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '
 D=` + q(p.Dossier) + `
 P=$(wslpath -u "$D" 2>/dev/null || cygpath -u "$D" 2>/dev/null || printf '%s' "$D")
 cd "$P" || { echo "Project folder not found: $D" >&2; exit 2; }
-python3 "$(w "$K/system/chat.py")" settings "$(w "$P")" "$(w "$C.settings.json")" > /dev/null || { echo "Cannot write the chat's settings" >&2; exit 2; }
+# its settings: the kit's executable when it runs here and knows them (its hook is then the Go file guard), else chat.py
+G="$K/athanor"; case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) G="$K/Athanor.exe" ;; esac
+if [ "${ATHANOR_OUTILS:-}" != python ] && [ -x "$G" ] && "$G" aide 2>/dev/null </dev/null | grep -q '^  chat ' && "$G" aide 2>/dev/null </dev/null | grep -q '^  hook '; then
+  "$G" chat settings "$(w "$P")" "$(w "$C.settings.json")" > /dev/null || { echo "Cannot write the chat's settings" >&2; exit 2; }
+else
+  python3 "$(w "$K/system/chat.py")" settings "$(w "$P")" "$(w "$C.settings.json")" > /dev/null || { echo "Cannot write the chat's settings" >&2; exit 2; }
+fi
 args=(-p "$(cat "$C.msg")" --output-format stream-json --verbose --max-turns 40 --settings "$(w "$C.settings.json")" --append-system-prompt "$(cat "$C.prompt")" ` + outils + `)
 M=` + q(modele) + `; [ -n "$M" ] && args+=(--model "$M")
 S=` + q(session) + `; [ -n "$S" ] && args+=(--resume "$S")

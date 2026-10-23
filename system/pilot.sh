@@ -115,15 +115,15 @@ ATHANOR_GO=""
 if [ "${ATHANOR_OUTILS:-}" != python ]; then
   if [ "$NATIF" = 1 ]; then candidat="$KIT/Athanor.exe"; else candidat="$KIT/athanor"; fi
   if [ -f "$candidat" ] && [ -x "$candidat" ] && aide_go=$(timeout 15 "$candidat" aide < /dev/null 2> /dev/null) \
-     && printf '%s' "$aide_go" | grep -q '^  relais ' && printf '%s' "$aide_go" | grep -q '^  cout ' && printf '%s' "$aide_go" | grep -q '^  quota '; then
+     && ( for c in relais cout quota hook reglages; do printf '%s' "$aide_go" | grep -q "^  $c " || exit 1; done ); then
     ATHANOR_GO="$candidat"
   fi
   unset candidat aide_go
 fi
 if [ -n "$ATHANOR_GO" ]; then
-  OUTIL_RELAIS=("$ATHANOR_GO" relais); OUTIL_COUT=("$ATHANOR_GO" cout); OUTIL_QUOTA=("$ATHANOR_GO" quota)
+  OUTIL_RELAIS=("$ATHANOR_GO" relais); OUTIL_COUT=("$ATHANOR_GO" cout); OUTIL_QUOTA=("$ATHANOR_GO" quota); OUTIL_REGLAGES=("$ATHANOR_GO" reglages)
 else
-  OUTIL_RELAIS=(python3 -I "$SYSTEME/relais.py"); OUTIL_COUT=(python3 -I "$SYSTEME/cout.py"); OUTIL_QUOTA=(python3 -I "$SYSTEME/quota.py")
+  OUTIL_RELAIS=(python3 -I "$SYSTEME/relais.py"); OUTIL_COUT=(python3 -I "$SYSTEME/cout.py"); OUTIL_QUOTA=(python3 -I "$SYSTEME/quota.py"); OUTIL_REGLAGES=(python3 "$SYSTEME/settings.py")
 fi
 
 # The pilot's output may go to a terminal or a pipe that disappears (window closed, application
@@ -876,7 +876,7 @@ synchroniser_demande
 # The skills of the Skills & MCP page are copied there (read-only for Claude: settings.py and the guard).
 export ATHANOR_PLUGIN="$PRIVE/plugin"
 export ATHANOR_PLUGINS="$PRIVE/plugins"   # the plugins switched on for the project (Plugins tab), read-only too
-python3 "$SYSTEME/settings.py" "$KIT" "$REGLAGES" > /dev/null || { log "Cannot write Claude's settings."; exit 1; }
+"${OUTIL_REGLAGES[@]}" "$KIT" "$REGLAGES" > /dev/null || { log "Cannot write Claude's settings."; exit 1; }
 # Unreal MCP: the "unreal" server of the Skills & MCP page, switched on per project (its address, relay
 # included, comes from system/extensions.py; the .env keys of older versions are migrated by the app).
 UNREAL_MCP=0; export UNREAL_MCP UNREAL_MCP_URL
@@ -1047,7 +1047,7 @@ appliquer_identite() {
   if [ "$sans" = 1 ]; then export ATHANOR_SANS_COAUTEUR=1; else unset ATHANOR_SANS_COAUTEUR; fi
   bash "$SYSTEME/github.sh" crochet "$PROJECT" "${sans:-0}" 2>/dev/null
   if [ "$l" != "$IDENTITE_PRECEDENTE" ]; then
-    [ -n "${REGLAGES:-}" ] && [ -f "$REGLAGES" ] && python3 "$SYSTEME/settings.py" "$KIT" "$REGLAGES" > /dev/null
+    [ -n "${REGLAGES:-}" ] && [ -f "$REGLAGES" ] && "${OUTIL_REGLAGES[@]}" "$KIT" "$REGLAGES" > /dev/null
     [ -n "$nom" ] && log "Commits by $nom <$email>$([ "$sans" = 1 ] && echo ", without Claude as co-author")."
     IDENTITE_PRECEDENTE="$l"
   fi

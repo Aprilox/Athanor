@@ -15,7 +15,7 @@ import (
 )
 
 // versionAthanor: kept equal to ProductVersion of winres/athanor.rc (TestVersionAlignee).
-const versionAthanor = "2.24.7"
+const versionAthanor = "2.24.8"
 
 type sousCommande struct {
 	aide  string
@@ -26,6 +26,9 @@ var sousCommandes map[string]sousCommande
 
 func init() {
 	sousCommandes = map[string]sousCommande{
+		"hook":     {"hook fichiers ALLOWED... [--lecture=DIR...] | hook bash: the PreToolUse hooks of Claude's tools (stdin: the call)", lancerHook},
+		"reglages": {"reglages KIT OUTPUT.json: the Claude Code settings of a cycle (PROJECT in the environment; the pilot)", lancerReglages},
+		"chat":     {"chat settings PROJECT OUT: the Claude Code settings of the app's chat", lancerChatOutil},
 		"relais":   {"relais contexte LOG | sur LOG | resume LOG [HANDOFF]: taking over a milestone when a session's context is full (the pilot)", lancerRelais},
 		"cout":     {"cout apprendre TARIFS LOG | estimer TARIFS LOG [CONFIG]: the prices learned on this PC and the cost of a cycle (the pilot)", lancerCout},
 		"quota":    {"quota verifier RULES LOG...: the automatic stops on the subscription's quota (the pilot)", lancerQuota},
