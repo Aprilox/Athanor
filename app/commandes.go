@@ -15,7 +15,7 @@ import (
 )
 
 // versionAthanor: kept equal to ProductVersion of winres/athanor.rc (TestVersionAlignee).
-const versionAthanor = "2.24.6"
+const versionAthanor = "2.24.7"
 
 type sousCommande struct {
 	aide  string
@@ -26,6 +26,9 @@ var sousCommandes map[string]sousCommande
 
 func init() {
 	sousCommandes = map[string]sousCommande{
+		"relais":   {"relais contexte LOG | sur LOG | resume LOG [HANDOFF]: taking over a milestone when a session's context is full (the pilot)", lancerRelais},
+		"cout":     {"cout apprendre TARIFS LOG | estimer TARIFS LOG [CONFIG]: the prices learned on this PC and the cost of a cycle (the pilot)", lancerCout},
+		"quota":    {"quota verifier RULES LOG...: the automatic stops on the subscription's quota (the pilot)", lancerQuota},
 		"version":  {"prints the version of Athanor", func([]string) int { fmt.Println(versionAthanor); return 0 }},
 		"aide":     {"lists the sub-commands", func([]string) int { afficherAide(); return 0 }},
 		"autotest": {"autotest [KIT]: checks this executable and the kit (built-in files, scripts, texts, local/ replacements)", lancerAutotest},
