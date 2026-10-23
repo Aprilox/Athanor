@@ -1425,6 +1425,9 @@ pages.extensions = async () => {
       ${type === "skill" ? `<textarea class="code" rows="14" data-ext-texte="${h(x.id)}">${h(ext.voir.texte)}</textarea>
         ${ext.voir.fichiers && ext.voir.fichiers.length > 1 ? `<div class="muet petit">${t("Files")}: ${ext.voir.fichiers.map((f) => `<code>${h(f)}</code>`).join(" ")}</div>` : ""}
         <div class="ligne"><button class="btn btn-petit" data-ext-enregistrer="${h(x.id)}">${t("Save the skill")}</button></div>`
+        : ext.voir.modifiable ? `<textarea class="code" rows="16" spellcheck="false" data-ext-texte="${h(x.id)}">${h(ext.voir.texte)}</textarea>
+        <div class="muet petit">${t("“reglages”: name → default value (the value used is in its field below the server). “ouvrir”: the program the pilot opens for this server before each cycle: “programme” (blender, roblox-studio, unreal-editor, or C:\\…\\name.exe), “args” ({FICHIER}: the project's file), “fichiers” (e.g. *.blend), “sans_fichier”, “processus”, the “port” to wait for, “delai” in seconds. ${NAME}: a setting or a key.")}</div>
+        <div class="ligne"><button class="btn btn-petit" data-ext-mcp-enregistrer="${h(x.id)}">${t("Save the server")}</button></div>`
         : `<pre class="texte-agent">${h(ext.voir.texte)}</pre>`}</div>` : "";
   const lignes = liste.map((x) => `<div class="ext-ligne ${x.actif ? "actif" : ""}">
       <label class="interrupteur" title="${h(d.projet ? t("Used by “{0}”", [d.projet]) : t("Choose a project first"))}"><input type="checkbox" data-ext-actif="${type}|${h(x.id)}" ${x.actif ? "checked" : ""} ${d.projet && !x.plugin ? "" : "disabled"}></label>
@@ -1434,7 +1437,7 @@ pages.extensions = async () => {
         <div class="muet petit ext-source">${[x.source ? h(x.source.startsWith("registry:") ? t("MCP Registry") + " · " + x.source.slice(9) : x.source.replace(/^github\.com\/https?:\/\//, "")) : x.catalogue ? "" : h(t("written in Athanor")), x.resume ? `<code>${h(x.resume)}</code>` : ""].filter(Boolean).join(" · ")}</div>
         ${secrets(x)}${test(x)}${voir(x)}
       </div>
-      <div class="ext-actions"><button class="btn btn-petit" data-ext-voir="${type}|${h(x.id)}">${ext.voir && ext.voir.id === x.id && ext.voir.type === type ? t("Close") : type === "skill" ? t("View / edit") : t("View")}</button>
+      <div class="ext-actions"><button class="btn btn-petit" data-ext-voir="${type}|${h(x.id)}">${ext.voir && ext.voir.id === x.id && ext.voir.type === type ? t("Close") : type === "skill" || !x.plugin ? t("View / edit") : t("View")}</button>
         ${type === "mcp" && (x.type === "http" || x.type === "sse") && !/^https?:\/\/(localhost|127\.|0\.0\.0\.0|\[::1\]|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(x.resume || "") ? `<button class="btn btn-petit" data-ext-connexion="${h(x.id)}" title="${h(t("For a server that asks you to sign in (OAuth): once, valid for every project."))}">${t("Sign in")}</button>` : ""}
         ${type === "mcp" ? `<button class="btn btn-petit" data-ext-tester="${h(x.id)}" ${d.projet ? "" : "disabled"} ${ext.tests[x.id] === "…" ? "disabled" : ""}>${t("Test")}</button>` : ""}
         <button class="btn btn-petit btn-danger" data-ext-retirer="${type}|${h(x.id)}" title="${h(t("Remove"))}">✕</button></div>
@@ -1626,7 +1629,7 @@ $("#page").addEventListener("change", async (ev) => {
 
 $("#page").addEventListener("click", async (ev) => {
   if (etat.page !== "extensions") return;
-  const b = ev.target.closest("[data-ext-rechercher], [data-ext-apercu], [data-ext-installer-res], [data-ext-onglet], [data-ext-installer], [data-ext-chercher], [data-ext-installer-trouves], [data-ext-creer], [data-ext-mcp-ajouter], [data-ext-voir], [data-ext-enregistrer], [data-ext-tester], [data-ext-retirer], [data-ext-cle-ok]");
+  const b = ev.target.closest("[data-ext-rechercher], [data-ext-apercu], [data-ext-installer-res], [data-ext-onglet], [data-ext-installer], [data-ext-chercher], [data-ext-installer-trouves], [data-ext-creer], [data-ext-mcp-ajouter], [data-ext-voir], [data-ext-enregistrer], [data-ext-mcp-enregistrer], [data-ext-tester], [data-ext-retirer], [data-ext-cle-ok]");
   if (!b) return;
   const d = b.dataset;
   if (d.extOnglet) { ext.onglet = d.extOnglet; ext.voir = null; ext.apercu = null; return rendrePage(); }
@@ -1678,7 +1681,12 @@ $("#page").addEventListener("click", async (ev) => {
     const [type, id] = d.extVoir.split("|");
     if (ext.voir && ext.voir.id === id && ext.voir.type === type) { ext.voir = null; return rendrePage(); }
     const r = await action(api(`extensions/voir?type=${type}&id=${encodeURIComponent(id)}`));
-    if (r) { ext.voir = { type, id, texte: r.texte, fichiers: r.fichiers }; rendrePage(); } return;
+    if (r) { ext.voir = { type, id, texte: r.texte, fichiers: r.fichiers, modifiable: !!r.modifiable }; rendrePage(); } return;
+  }
+  if (d.extMcpEnregistrer) {
+    const texte = document.querySelector(`[data-ext-texte="${CSS.escape(d.extMcpEnregistrer)}"]`).value;
+    const r = await action(api("extensions/mcp/modifier", "POST", { id: d.extMcpEnregistrer, texte }));
+    if (r) { ext.voir = null; rendrePage(); } return;
   }
   if (d.extEnregistrer) {
     const texte = document.querySelector(`[data-ext-texte="${CSS.escape(d.extEnregistrer)}"]`).value;

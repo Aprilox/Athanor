@@ -369,6 +369,7 @@ func (s *Serveur) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/extensions/github", s.garde(false, s.apiExtGitHub))
 	mux.HandleFunc("POST /api/extensions/skill", s.garde(false, s.apiExtSkillPerso))
 	mux.HandleFunc("POST /api/extensions/mcp", s.garde(false, s.apiExtMCPPerso))
+	mux.HandleFunc("POST /api/extensions/mcp/modifier", s.garde(false, s.apiExtMCPModifier))
 	mux.HandleFunc("POST /api/extensions/projet", s.garde(false, s.apiExtProjet))
 	mux.HandleFunc("POST /api/extensions/secret", s.garde(false, s.apiExtSecret))
 	mux.HandleFunc("POST /api/extensions/retirer", s.garde(false, s.apiExtRetirer))

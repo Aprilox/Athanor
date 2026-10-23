@@ -825,6 +825,7 @@ func lancerExtensions(args []string) int {
 		skills := construirePlugin(kit, choix, prive)
 		plugins := construirePlugins(kit, choix, prive)
 		mcp, notes := construireMCP(kit, choix, firstNonEmpty(o["mcp"], filepath.Join(prive, "mcp.json")), firstNonEmpty(o["dossier-mcp"], projet), o["principal"])
+		notes = append(notes, construireOuvertures(kit, mcp, filepath.Join(prive, "ouvrir.json"), firstNonEmpty(o["dossier-mcp"], projet))...)
 		aucun := func(l []string) string {
 			if len(l) == 0 {
 				return "none"
