@@ -1500,6 +1500,15 @@ func (s *Serveur) apiExtVoir(w http.ResponseWriter, r *http.Request) {
 	s.ecrireJSON(w, map[string]any{"texte": string(t), "fichiers": fichiers})
 }
 
+// outilKit: a shell line that puts in X the kit's helper NOM: the sub-command of the kit's executable when
+// it runs here and knows it (athanor in WSL and on Linux, Athanor.exe in native Windows), else the Python
+// script (ATHANOR_OUTILS=python forces it). The script runs in the kit's folder.
+func outilKit(nom, script string) string {
+	return `G="$PWD/athanor"; case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) G="$PWD/Athanor.exe" ;; esac; ` +
+		`if [ "${ATHANOR_OUTILS:-}" != python ] && [ -x "$G" ] && "$G" aide 2>/dev/null </dev/null | grep -q '^  ` + nom + ` '; ` +
+		`then X=("$G" ` + nom + `); else X=(python3 ` + script + `); fi; `
+}
+
 // apiExtTester starts a server in its cage, the way the pilot will, and lists its tools.
 func (s *Serveur) apiExtTester(w http.ResponseWriter, r *http.Request) {
 	var c struct {
@@ -1514,7 +1523,7 @@ func (s *Serveur) apiExtTester(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	dossier := strings.ReplaceAll(p.Dossier, "'", "'\\''")
-	sortie, _ := executerKit(s.kitCourant(), "P=\"$(wslpath -u '"+dossier+"' 2>/dev/null || printf '%s' '"+dossier+"')\"; python3 system/extensions.py tester \"$PWD\" \"$P\" "+c.ID)
+	sortie, _ := executerKit(s.kitCourant(), "P=\"$(wslpath -u '"+dossier+"' 2>/dev/null || printf '%s' '"+dossier+"')\"; "+outilKit("extensions", "system/extensions.py")+"\"${X[@]}\" tester \"$PWD\" \"$P\" "+c.ID)
 	var res map[string]any
 	for _, l := range strings.Split(sortie, "\n") {
 		if strings.HasPrefix(strings.TrimSpace(l), "{") && json.Unmarshal([]byte(strings.TrimSpace(l)), &res) == nil {

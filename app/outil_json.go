@@ -150,6 +150,15 @@ func nombreJSON(v any) (float64, bool) {
 var reCheminGitBash = regexp.MustCompile(`^/([a-zA-Z])(/.*)?$`)
 
 // cheminOutil: on Windows, a Git Bash path (/c/Users/…) becomes C:/Users/…; anything else as it is.
+// cheminsOutil: every argument that is a Git Bash path (/c/...) as Windows names it (native Windows only).
+func cheminsOutil(args []string) []string {
+	out := make([]string, len(args))
+	for i, a := range args {
+		out[i] = cheminOutil(a)
+	}
+	return out
+}
+
 func cheminOutil(p string) string {
 	if runtime.GOOS == "windows" {
 		if m := reCheminGitBash.FindStringSubmatch(p); m != nil {

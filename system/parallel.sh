@@ -322,7 +322,7 @@ parallele_lancer_ouvrier() {
   # The worker's team: only "executor" (cheap model), so that long outputs do not fill its context.
   local agents_ouvrier=""
   # plus the project's own sub-agents (created by the user, or proposed by the lead): system/equipe.py
-  [ "$AGENTS_PAR_JSON" = 1 ] && agents_ouvrier=$(SUBAGENT_MODEL="$SUBAGENT_MODEL" CHEAP_MODEL="$CHEAP_MODEL" python3 "$SYSTEME/equipe.py" json "$KIT" "$PROJECT" "$PRIVE/agents" --ouvrier 2>/dev/null)
+  [ "$AGENTS_PAR_JSON" = 1 ] && agents_ouvrier=$(SUBAGENT_MODEL="$SUBAGENT_MODEL" CHEAP_MODEL="$CHEAP_MODEL" "${OUTIL_EQUIPE[@]}" json "$KIT" "$PROJECT" "$PRIVE/agents" --ouvrier 2>/dev/null)
   [ "$agents_ouvrier" = "{}" ] && agents_ouvrier=""
   { cat "$(parallele_consignes_base)"; parallele_consignes_ouvrier "$ident" "$ligne" "$([ -n "$agents_ouvrier" ] && echo 1)" "$reprise"
     if [ -s "$PRIVE/relais-$ident.md" ]; then printf '\n'; cat "$PRIVE/relais-$ident.md"; fi; } > "$PRIVE/CLAUDE.ouvrier-$ident.md"
@@ -343,7 +343,7 @@ json.dump(r, open(f, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
 PY
   local but="/goal The milestone $ident of .athanor/PLAN.md is carried out according to your worker instructions, checked, and committed on branch auto/$ident (git log shows it), with your report as the final answer. Or stop after ${MAX_TURNS_PER_CYCLE} turns. ${PHRASE_LANGUE}"
   # its MCP servers work on its worktree; the skills are the project's
-  python3 "$SYSTEME/extensions.py" mcp "$KIT" "$PROJECT" "$PRIVE/mcp-$ident.json" --dossier-mcp "$trav" --principal "$PROJECT" 2>> "$PRIVE/pilot.log"
+  "${OUTIL_EXTENSIONS[@]}" mcp "$KIT" "$PROJECT" "$PRIVE/mcp-$ident.json" --dossier-mcp "$trav" --principal "$PROJECT" 2>> "$PRIVE/pilot.log"
   # how to save the work done in the programs of its MCP servers: in its instructions (one system prompt)
   [ -f "$PRIVE/mcp-$ident.json" ] && [ -s "$PRIVE/mcp-$ident.json.sauvegarde.md" ] && { printf '\n'; cat "$PRIVE/mcp-$ident.json.sauvegarde.md"; } >> "$PRIVE/CLAUDE.ouvrier-$ident.md"
   local a=(-p "$but" --permission-mode bypassPermissions --settings "$PRIVE/reglages-$ident.json" --permission-prompts none --output-format stream-json --verbose
