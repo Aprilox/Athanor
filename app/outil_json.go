@@ -8,10 +8,13 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
+	"math"
 	"os"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 )
 
@@ -166,4 +169,43 @@ func cheminOutil(p string) string {
 		}
 	}
 	return p
+}
+
+// reprFlottant: Python's repr of a float (the shortest digits that read back the same; an exponent below
+// 1e-4 and from 1e16 on; always a decimal point or an exponent).
+func reprFlottant(x float64) string {
+	switch {
+	case math.IsNaN(x):
+		return "nan"
+	case math.IsInf(x, 1):
+		return "inf"
+	case math.IsInf(x, -1):
+		return "-inf"
+	}
+	e := strconv.FormatFloat(x, 'e', -1, 64) // d.ddde±XX
+	signe := ""
+	if e[0] == '-' {
+		signe, e = "-", e[1:]
+	}
+	i := strings.IndexByte(e, 'e')
+	chiffres := strings.Replace(e[:i], ".", "", 1)
+	exp, _ := strconv.Atoi(e[i+1:])
+	if exp < -4 || exp >= 16 {
+		m := chiffres[:1]
+		if len(chiffres) > 1 {
+			m += "." + chiffres[1:]
+		}
+		s := "+"
+		if exp < 0 {
+			s, exp = "-", -exp
+		}
+		return fmt.Sprintf("%s%se%s%02d", signe, m, s, exp)
+	}
+	if exp < 0 {
+		return signe + "0." + strings.Repeat("0", -exp-1) + chiffres
+	}
+	if len(chiffres) <= exp+1 {
+		return signe + chiffres + strings.Repeat("0", exp+1-len(chiffres)) + ".0"
+	}
+	return signe + chiffres[:exp+1] + "." + chiffres[exp+1:]
 }

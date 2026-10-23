@@ -115,17 +115,17 @@ ATHANOR_GO=""
 if [ "${ATHANOR_OUTILS:-}" != python ]; then
   if [ "$NATIF" = 1 ]; then candidat="$KIT/Athanor.exe"; else candidat="$KIT/athanor"; fi
   if [ -f "$candidat" ] && [ -x "$candidat" ] && aide_go=$(timeout 15 "$candidat" aide < /dev/null 2> /dev/null) \
-     && ( for c in relais cout quota hook reglages equipe extensions; do printf '%s' "$aide_go" | grep -q "^  $c " || exit 1; done ); then
+     && ( for c in relais cout quota hook reglages equipe extensions etat-taches plan solutions reglages-ouvrier; do printf '%s' "$aide_go" | grep -q "^  $c " || exit 1; done ); then
     ATHANOR_GO="$candidat"
   fi
   unset candidat aide_go
 fi
 if [ -n "$ATHANOR_GO" ]; then
   OUTIL_RELAIS=("$ATHANOR_GO" relais); OUTIL_COUT=("$ATHANOR_GO" cout); OUTIL_QUOTA=("$ATHANOR_GO" quota); OUTIL_REGLAGES=("$ATHANOR_GO" reglages)
-  OUTIL_EQUIPE=("$ATHANOR_GO" equipe); OUTIL_EXTENSIONS=("$ATHANOR_GO" extensions)
+  OUTIL_EQUIPE=("$ATHANOR_GO" equipe); OUTIL_EXTENSIONS=("$ATHANOR_GO" extensions); OUTIL_ETAT_TACHES=("$ATHANOR_GO" etat-taches)
 else
   OUTIL_RELAIS=(python3 -I "$SYSTEME/relais.py"); OUTIL_COUT=(python3 -I "$SYSTEME/cout.py"); OUTIL_QUOTA=(python3 -I "$SYSTEME/quota.py"); OUTIL_REGLAGES=(python3 "$SYSTEME/settings.py")
-  OUTIL_EQUIPE=(python3 "$SYSTEME/equipe.py"); OUTIL_EXTENSIONS=(python3 "$SYSTEME/extensions.py")
+  OUTIL_EQUIPE=(python3 "$SYSTEME/equipe.py"); OUTIL_EXTENSIONS=(python3 "$SYSTEME/extensions.py"); OUTIL_ETAT_TACHES=(python3 -B "$SYSTEME/taches.py" etat)
 fi
 
 # The pilot's output may go to a terminal or a pipe that disappears (window closed, application
@@ -255,9 +255,9 @@ synchroniser_demande() {  # flags a change of .athanor/REQUEST.md (Claude re-rea
   fi
 }
 
-# Tasks for the user (system/taches.py; page "For you" of the application): what Claude cannot do itself.
+# Tasks for the user (athanor todo, or system/taches.py; page "For you" of the application): what Claude cannot do itself.
 taches_etat() {
-  local j; j=$(timeout 20 python3 -B "$SYSTEME/taches.py" etat "$PROJECT" 2>/dev/null 9>&-)
+  local j; j=$(timeout 20 "${OUTIL_ETAT_TACHES[@]}" "$PROJECT" 2>/dev/null 9>&-)
   POUR_VOUS=$(entier "$(printf '%s' "$j" | jq -r '.pour_vous // 0' 2>/dev/null)" 0)
   A_TRAITER=$(entier "$(printf '%s' "$j" | jq -r '.a_traiter // 0' 2>/dev/null)" 0)
 }
@@ -400,10 +400,12 @@ else:   # fusionner MAIN COPY: the first 200 lines of the copy that MAIN does no
         ecrire(f, lignes + ajout)
 '
 ranger_solutions() {  # $1 = file, $2 = what it is for
+  if [ -n "$ATHANOR_GO" ]; then timeout 20 "$ATHANOR_GO" solutions ranger "$1" "$2" 9>&- 2>/dev/null; return 0; fi
   timeout 20 python3 -I -c "$SOLUTIONS_PY" ranger "$1" "$2" 9>&- 2>/dev/null
   return 0
 }
 fusionner_solutions() {  # $1 = the main file, $2 = a parallel worker's copy
+  if [ -n "$ATHANOR_GO" ]; then timeout 20 "$ATHANOR_GO" solutions fusionner "$1" "$2" 9>&- 2>/dev/null; return 0; fi
   timeout 20 python3 -I -c "$SOLUTIONS_PY" fusionner "$1" "$2" 9>&- 2>/dev/null
   return 0
 }
