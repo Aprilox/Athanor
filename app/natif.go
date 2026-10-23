@@ -36,7 +36,7 @@ n=$(printf '%s' "$v" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n 1); [ -n "$n"
 		v("jeton", "Token and model access", "The token of your subscription (CLAUDE_CODE_OAUTH_TOKEN in .env) is accepted: a tiny Haiku session answers.",
 			scriptJeton, false, reparationJeton),
 		v("outils_pc", "PC software detected", "Unreal, Blender, Android SDK, Docker… found on this PC and made available to Claude.",
-			`export PROJECT="$PWD/logs/detection"; mkdir -p "$PROJECT" tools; bash system/detect-tools.sh >/dev/null 2>&1; sed -n '3,25p' "$PROJECT/.athanor/PC_TOOLS.md"`, true, Reparation{Genre: "aucune"}),
+			`export PROJECT="$PWD/logs/detection"; mkdir -p "$PROJECT" tools; `+outilKitRepli("detecter", "bash system/detect-tools.sh")+`"${X[@]}" >/dev/null 2>&1; sed -n '3,25p' "$PROJECT/.athanor/PC_TOOLS.md"`, true, Reparation{Genre: "aucune"}),
 		v("outils_kit", "Tool scripts", "The pilot scripts are consistent and keep Linux line ends (Git Bash fails on CRLF).",
 			`for f in system/pilot.sh system/parallel.sh system/safety.sh commands/*.sh system/natif/*; do bash -n "$f" || { echo "Syntax ERROR: $f"; exit 1; }; done
 python3 -m py_compile system/*.py || { echo 'Python ERROR'; exit 1; }

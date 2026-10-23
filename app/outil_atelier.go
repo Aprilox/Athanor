@@ -40,7 +40,7 @@ func cheminRelatifPur(p, racine string) string {
 
 func estDossier(p string) bool { st, err := os.Stat(p); return err == nil && st.IsDir() }
 func estFichier(p string) bool { st, err := os.Stat(p); return err == nil && st.Mode().IsRegular() }
-func existePy(p string) bool     { _, err := os.Stat(p); return err == nil }
+func existePy(p string) bool   { _, err := os.Stat(p); return err == nil }
 
 // pngsDe: dossier.glob("*.png"), sorted (case-insensitive in native Windows, as pathlib there).
 func pngsDe(dossier string) []string {
