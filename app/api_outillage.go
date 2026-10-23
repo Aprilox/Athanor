@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -191,6 +192,18 @@ func (s *Serveur) apiLibre(w http.ResponseWriter, r *http.Request) {
 func (s *Serveur) apiBarriere(w http.ResponseWriter, r *http.Request) {
 	t := TestBarriere(s.kitCourant())
 	s.ecrireJSON(w, map[string]any{"message_key": "Sandbox test started (1 to 2 minutes).", "tache": t.ID})
+}
+
+// apiRecompiler: athanor reparer --recompiler, by this very executable, its output in the task.
+func (s *Serveur) apiRecompiler(w http.ResponseWriter, r *http.Request) {
+	exe, err := os.Executable()
+	if err != nil {
+		s.erreur(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	t := NouvelleTache("recompiler", "Rebuild Athanor")
+	t.Lancer(exec.Command(exe, "reparer", "--recompiler", s.kitCourant().Racine), nil)
+	s.ecrireJSON(w, map[string]any{"message_key": "Rebuild started: the output is below; restart the app when it is done.", "tache": t.ID})
 }
 
 func (s *Serveur) apiInstaller(w http.ResponseWriter, r *http.Request) {

@@ -1878,6 +1878,7 @@ pages.sante = async () => {
     <button class="btn btn-primaire" id="st-tout">${t("Check everything")}</button>
     <button class="btn" id="st-installer" title="${h(t(!(etat.vue || {}).windows ? "Claude Code, the system sandbox (bubblewrap) and the tools, in a terminal; it asks for your password once." : (etat.vue || {}).natif ? "Native Windows: Git for Windows, jq, Python, Node.js and Claude Code for Windows, without WSL. Claude has no sandbox in this mode." : "The full installer in a window: WSL2, network, packages (password), Claude Code, administrator rights. Once."))}">${t("Install everything")}</button>
     <button class="btn" id="st-barriere" title="${h(t("A short Claude session tries to leave the project, read your files, launch cmd.exe: everything must be blocked."))}">${t("Test the sandbox (2 min)")}</button>
+    <button class="btn" id="st-recompiler" title="${h(t("After a repair of its Go code (app/): shows the change, checks it, rebuilds, runs the autotest, and only then replaces the executable, keeping the previous one."))}">${t("Rebuild Athanor")}</button>
   </div>
   <div class="bloc bloc-liste">${listeSante(verifs)}</div>
   <div class="bloc"><h2>${t("Ask Claude")}</h2>
@@ -2142,6 +2143,7 @@ $("#page").addEventListener("click", async (ev) => {
     const ligne = b.closest(".verif"); const id = ligne && ligne.dataset.id;
     if (b.id === "st-tout") { await action(api("sante/verifier", "POST", { id: "tout" })); return rendrePage(); }
     if (b.id === "st-installer") return action(api("sante/installer", "POST"));
+    if (b.id === "st-recompiler") { const r = await action(api("sante/recompiler", "POST")); if (r) { etat.tacheChoisie = r.tache; etat.verifChoisie = null; } return rendrePage(); }
     if (b.id === "st-barriere") { const r = await action(api("sante/barriere", "POST")); if (r) { etat.tacheChoisie = r.tache; etat.verifChoisie = null; } return rendrePage(); }
     if (b.id === "st-libre-btn") { const r = await action(api("sante/libre", "POST", { texte: $("#st-libre").value })); if (r) { etat.tacheChoisie = r.tache; etat.verifChoisie = null; rendrePage(); } return; }
     if (b.dataset.voir !== undefined) { etat.tacheChoisie = b.dataset.voir; etat.verifChoisie = id; return rendrePage(); }

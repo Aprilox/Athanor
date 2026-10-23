@@ -492,12 +492,14 @@ Oui. Rien n'est lié à un nom d'utilisateur ni à une lettre de disque : les ch
 Poussez un tag de version : GitHub compile les deux applications et publie la version ([`.github/workflows/release.yml`](.github/workflows/release.yml)).
 
 ```bash
-git tag v2.24.11 && git push origin v2.24.11
+git tag v2.24.13 && git push origin v2.24.13
 ```
 
-Gardez la version de [`app/winres/athanor.rc`](app/winres/athanor.rc) et `versionAthanor` dans [`app/commandes.go`](app/commandes.go) alignées sur le tag (un test vérifie qu'elles concordent), et écrivez les nouveautés dans `docs/releases/VERSION.md` (par ex. [`docs/releases/2.24.11.md`](docs/releases/2.24.11.md)) : elles ouvrent la page de la version.
+Gardez la version de [`app/winres/athanor.rc`](app/winres/athanor.rc) et `versionAthanor` dans [`app/commandes.go`](app/commandes.go) alignées sur le tag (un test vérifie qu'elles concordent), et écrivez les nouveautés dans `docs/releases/VERSION.md` (par ex. [`docs/releases/2.24.13.md`](docs/releases/2.24.13.md)) : elles ouvrent la page de la version.
 
 Chaque push est vérifié sous Windows, Linux et macOS ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) ; `./build.sh --all` compile toutes les cibles dans `dist/`.
+
+Après une modification de `app/` sur un PC (une réparation par Claude, ou la vôtre), `./athanor reparer --recompiler` (`.\Athanor.exe reparer --recompiler` sous Windows) y recompile les exécutables du kit : il montre la modification par rapport aux sources de l'exécutable en cours, installe un Go portable hors du kit s'il n'en trouve pas, lance `go vet`, compile, lance l'autotest du nouvel exécutable et seulement ensuite le met en place, en gardant l'ancien (`reparer --annuler` le remet).
 
 ## Contribuer
 

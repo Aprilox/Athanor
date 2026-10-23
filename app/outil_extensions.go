@@ -727,9 +727,9 @@ func testerServeur(kit, projet, sid string, delai time.Duration) map[string]any 
 		return map[string]any{"ok": false, "erreur": e, "details": details}
 	}
 	casse := "[Errno 32] Broken pipe"
-	if envoyer(map[string]any{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": map[string]any{"protocolVersion": "2025-06-18", "capabilities": map[string]any{}, "clientInfo": map[string]any{"name": "athanor", "version": "1"}}}) != nil {
-		return echec(casse)
-	}
+	// a server that already stopped: its end of the pipe may be closed or not yet (a race in
+	// extensions.py too); either way it gives no answer, which is what is said
+	_ = envoyer(map[string]any{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": map[string]any{"protocolVersion": "2025-06-18", "capabilities": map[string]any{}, "clientInfo": map[string]any{"name": "athanor", "version": "1"}}})
 	r := l.attendreReponse(1, fin)
 	if r == nil || r["result"] == nil {
 		return echec("no answer to initialize")
