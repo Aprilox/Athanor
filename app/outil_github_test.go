@@ -256,24 +256,36 @@ func TestPariteAtelierEtCrochet(t *testing.T) {
 	ateliers := []cas{
 		{"nouveau", func(p string) { mk(p, ".athanor") }, []string{"SECRETS_FOUND.md", "ecrire"}},
 		{"remplace", func(p string) { mk(p, ".athanor"); wr("old", p, ".athanor", "SECRETS_FOUND.md") }, []string{"SECRETS_FOUND.md", "ecrire"}},
-		{"lien fichier", func(p string) { mk(p, ".athanor"); lien(filepath.Join(dehors, "x"), filepath.Join(p, ".athanor", "SECRETS_FOUND.md")) }, []string{"SECRETS_FOUND.md", "ecrire"}},
+		{"lien fichier", func(p string) {
+			mk(p, ".athanor")
+			lien(filepath.Join(dehors, "x"), filepath.Join(p, ".athanor", "SECRETS_FOUND.md"))
+		}, []string{"SECRETS_FOUND.md", "ecrire"}},
 		{"lien dossier", func(p string) { lien(dehors, filepath.Join(p, ".athanor")) }, []string{"SECRETS_FOUND.md", "ecrire"}},
 		{"sans atelier", func(p string) {}, []string{"SECRETS_FOUND.md", "ecrire"}},
 		{"efface", func(p string) { mk(p, ".athanor"); wr("x", p, ".athanor", "SECRETS_FOUND.md") }, []string{"SECRETS_FOUND.md", "effacer"}},
 		{"efface absent", func(p string) { mk(p, ".athanor") }, []string{"SECRETS_FOUND.md", "effacer"}},
-		{"efface lien", func(p string) { mk(p, ".athanor"); lien(filepath.Join(dehors, "y"), filepath.Join(p, ".athanor", "SECRETS_FOUND.md")) }, []string{"SECRETS_FOUND.md", "effacer"}},
+		{"efface lien", func(p string) {
+			mk(p, ".athanor")
+			lien(filepath.Join(dehors, "y"), filepath.Join(p, ".athanor", "SECRETS_FOUND.md"))
+		}, []string{"SECRETS_FOUND.md", "effacer"}},
 		{"efface dossier", func(p string) { mk(p, ".athanor", "SECRETS_FOUND.md") }, []string{"SECRETS_FOUND.md", "effacer"}},
 	}
 	crochets := []cas{
 		{"pose", func(p string) { mk(p, ".git", "hooks") }, []string{"1"}},
 		{"pose sans hooks", func(p string) { mk(p, ".git") }, []string{"1"}},
 		{"retire sans hooks", func(p string) { mk(p, ".git") }, []string{"0"}},
-		{"retire", func(p string) { mk(p, ".git", "hooks"); wr("#!/bin/sh\n"+marqueCrochet+"\n", p, ".git", "hooks", "commit-msg") }, []string{"0"}},
+		{"retire", func(p string) {
+			mk(p, ".git", "hooks")
+			wr("#!/bin/sh\n"+marqueCrochet+"\n", p, ".git", "hooks", "commit-msg")
+		}, []string{"0"}},
 		{"celui de l'utilisateur", func(p string) { mk(p, ".git", "hooks"); wr("#!/bin/sh\necho mine\n", p, ".git", "hooks", "commit-msg") }, []string{"1"}},
 		{"celui de l'utilisateur, retire", func(p string) { mk(p, ".git", "hooks"); wr("#!/bin/sh\necho mine\n", p, ".git", "hooks", "commit-msg") }, []string{"0"}},
 		{"remplace le nôtre", func(p string) { mk(p, ".git", "hooks"); wr(marqueCrochet+" old\n", p, ".git", "hooks", "commit-msg") }, []string{"1"}},
 		{"lien hooks", func(p string) { mk(p, ".git"); lien(dehors, filepath.Join(p, ".git", "hooks")) }, []string{"1"}},
-		{"lien commit-msg", func(p string) { mk(p, ".git", "hooks"); lien(filepath.Join(dehors, "h"), filepath.Join(p, ".git", "hooks", "commit-msg")) }, []string{"1"}},
+		{"lien commit-msg", func(p string) {
+			mk(p, ".git", "hooks")
+			lien(filepath.Join(dehors, "h"), filepath.Join(p, ".git", "hooks", "commit-msg"))
+		}, []string{"1"}},
 		{"lien .git", func(p string) { lien(dehors, filepath.Join(p, ".git")) }, []string{"1"}},
 		{"sans .git", func(p string) {}, []string{"1"}},
 		{".git fichier", func(p string) { wr("gitdir: /elsewhere\n", p, ".git") }, []string{"1"}},
@@ -311,5 +323,70 @@ func TestPariteAtelierEtCrochet(t *testing.T) {
 	}
 	if l, _ := os.ReadDir(dehors); len(l) != 0 {
 		t.Errorf("written outside the project: %v", l)
+	}
+}
+
+// The validators and the KEY=value reader of github.sh against bash itself.
+func TestPariteValidateursGitHub(t *testing.T) {
+	if _, err := exec.LookPath("bash"); err != nil {
+		t.Skip("no bash")
+	}
+	b, err := os.ReadFile(filepath.Join("..", "system", "github.sh"))
+	if err != nil {
+		t.Skip("no github.sh")
+	}
+	var fonctions []string
+	for _, l := range strings.Split(string(b), "\n") {
+		for _, f := range []string{"nom_valide_auteur()", "email_valide()", "depot_valide()", "branche_valide()"} {
+			if strings.HasPrefix(l, f) {
+				fonctions = append(fonctions, l)
+			}
+		}
+	}
+	if len(fonctions) != 4 {
+		t.Fatalf("validators not found: %v", fonctions)
+	}
+	valeurs := []string{"", " ", "Jean", "Jean <x>", "a\\b", "a\"b", "é", "a\tb", strings.Repeat("x", 100), strings.Repeat("é", 60),
+		"a@b.c", "a@b.co", "a b@x.org", "a\"b@x.org", "a\\b@x.org", "é@x.org", "a@x.c0m", "a@@x.org", "moi/depot", "moi/.", "moi/..",
+		"-a/b", "a/b/c", "main", "dev/x", "a..b", "a//b", "a/", "x.lock", "x.lock/y", "a b", "feature/été", ".a", "a.", "@", "a@{b"}
+	for _, locale := range []string{"", "C.UTF-8"} {
+		var script strings.Builder
+		script.WriteString(strings.Join(fonctions, "\n") + "\nwhile IFS= read -r -d '' v; do\n" +
+			`  for f in nom_valide_auteur email_valide depot_valide branche_valide; do "$f" "$v" && printf 1 || printf 0; done; echo` + "\ndone\n")
+		c := exec.Command("bash", "-c", script.String())
+		c.Env = append(os.Environ(), "LC_ALL="+locale, "LANG="+locale)
+		c.Stdin = strings.NewReader(strings.Join(valeurs, "\x00") + "\x00")
+		out, err := c.Output()
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Setenv("LC_ALL", locale)
+		t.Setenv("LANG", locale)
+		for i, l := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+			v := valeurs[i]
+			g := ""
+			for _, ok := range []bool{nomAuteurValideGH(v), emailValideGH(v), depotValideGH(v), brancheValideGH(v)} {
+				if ok {
+					g += "1"
+				} else {
+					g += "0"
+				}
+			}
+			if g != l {
+				t.Errorf("locale %q, %q: bash %s, Go %s (name, email, repository, branch)", locale, v, l, g)
+			}
+		}
+	}
+	// KEY=value lines as bash reads them
+	f := filepath.Join(t.TempDir(), "reglages")
+	texte := "depot=a/b\nauto=0=\nnom=x==\n=vide\nseul\nbranche=main\r\nfin=sans retour"
+	_ = os.WriteFile(f, []byte(texte), 0o644)
+	out, _ := exec.Command("bash", "-c", `while IFS='=' read -r k v; do printf '%s|%s\n' "$k" "$v"; done < "$1"`, "x", f).Output()
+	var g strings.Builder
+	for _, kv := range lignesCleValeur(f) {
+		g.WriteString(kv[0] + "|" + kv[1] + "\n")
+	}
+	if g.String() != string(out) {
+		t.Errorf("KEY=value:\nbash:\n%s\nGo:\n%s", out, g.String())
 	}
 }

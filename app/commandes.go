@@ -15,7 +15,7 @@ import (
 )
 
 // versionAthanor: kept equal to ProductVersion of winres/athanor.rc (TestVersionAlignee).
-const versionAthanor = "2.24.17"
+const versionAthanor = "2.24.18"
 
 type sousCommande struct {
 	aide  string
@@ -39,7 +39,7 @@ func init() {
 		"pont":             {"pont KIT [PROJECT]: the bridge between Claude's sandbox and the PC tools (the pilot, WSL and Linux)", lancerPont},
 		"roblox-sync":      {"roblox-sync serve PROJECT PIDFILE | payload PROJECT: a Rojo project's scripts, live in the open Roblox Studio (the pilot)", lancerRobloxSync},
 		"reparer":          {"reparer --diff | --recompiler [--tests] [--forcer] | --annuler [KIT]: rebuilds this executable from the kit's app/ (after a repair), checked, the previous one kept", lancerReparer},
-		"github":           {"github scanner messages|diff | atelier PROJECT NAME ecrire|effacer | crochet PROJECT 0|1: the secret scan, the workshop file and the commit hook of system/github.sh", lancerGitHub},
+		"github":           {"github etat|pousser|publie|auto|branche|delier|suivre|identite|regler-identite|identite-pilote … | scanner | atelier | crochet: system/github.sh (WSL and Linux; linking stays in the script)", lancerGitHub},
 		"mcp-ouvrir":       {"mcp-ouvrir KIT PROJECT OPENINGS.json: the programs the cycle's MCP servers drive, opened before it (the pilot)", lancerMCPOuvrir},
 		"detecter":         {"detecter [KIT]: the PC tools and the toolchain, into system/pc_tools.env and PROJECT/.athanor/PC_TOOLS.md (the pilot)", lancerDetecter},
 		"hook":             {"hook fichiers ALLOWED... [--lecture=DIR...] | hook bash: the PreToolUse hooks of Claude's tools (stdin: the call)", lancerHook},

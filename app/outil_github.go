@@ -241,6 +241,9 @@ func lancerGitHub(args []string) int {
 		fmt.Fprintln(os.Stderr, "usage: athanor github scanner messages|diff | atelier PROJECT NAME ecrire|effacer | crochet PROJECT 0|1")
 		return 2
 	}
+	if code, ok := commandeGitHub(args, os.Stdout); ok {
+		return code
+	}
 	switch args[0] {
 	case "scanner":
 		if len(args) < 2 {

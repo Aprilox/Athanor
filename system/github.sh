@@ -762,6 +762,17 @@ finally:
 ' "$projet" "${2:-0}"
 }
 
+# Athanor's executable does the rest of this script too (WSL and Linux; native Windows keeps the script,
+# whose locks are Git Bash's), linking aside: the same files, messages and exit codes.
+case "${1:-}" in
+  etat|pousser|publie|auto|branche|delier|suivre|identite|regler-identite|identite-pilote)
+    if [ "${NATIF:-0}" != 1 ] && [ "${ATHANOR_OUTILS:-}" != python ]; then
+      c="$KIT/athanor"
+      if [ -f "$c" ] && [ -x "$c" ] && timeout 15 "$c" aide < /dev/null 2> /dev/null | grep -q '^  github .*pousser'; then
+        exec "$c" github "$@"
+      fi
+    fi ;;
+esac
 case "${1:-}" in
   etat)    etat "${2:-}" ;;
   identite) identite_json "$(chemin_projet "${2:-}")" ;;
