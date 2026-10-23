@@ -27,3 +27,4 @@ __pycache__/
 /athanor-linux-*
 /app/Athanor.exe
 /app/athanor
+/dist/

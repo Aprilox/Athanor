@@ -1,0 +1,47 @@
+# Checks every push and pull request on the three systems Athanor moves to (docs: "Athanor en Go"):
+# vet and tests of the Go code, every build target, and the syntax of the scripts that are still bash.
+# Windows and macOS are informative while the code is first checked there (continue-on-error); they
+# become blocking once green.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.os != 'ubuntu-latest' }}
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: app/go.mod
+      - name: Vet
+        run: go vet .
+      - name: Tests
+        run: go test ./...
+
+  targets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: app/go.mod
+      - name: Every build target
+        working-directory: app
+        run: bash build.sh --all
+      - name: Scripts syntax
+        run: for f in system/*.sh system/bin/* system/natif/* commands/*.sh; do bash -n "$f" || exit 1; done
