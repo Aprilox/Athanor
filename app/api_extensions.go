@@ -86,7 +86,7 @@ type Catalogue struct {
 
 func lireCatalogue() Catalogue {
 	var c Catalogue
-	_ = json.Unmarshal(catalogueJSON, &c)
+	_ = json.Unmarshal(jsonRemplacable("app/catalogue.json", catalogueJSON), &c) // a repair of local/ first (textes.go)
 	return c
 }
 

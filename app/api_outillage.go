@@ -284,6 +284,7 @@ func (s *Serveur) apiEcrireOptions(w http.ResponseWriter, r *http.Request) {
 		}
 		s.kitMu.Lock()
 		s.kit = nouveau
+		definirKitTextes(nouveau.Racine)
 		s.kitMu.Unlock()
 		s.bureau.DefinirKit(nouveau)
 		s.ecrireListeProjets()

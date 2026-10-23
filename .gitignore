@@ -28,3 +28,5 @@ __pycache__/
 /app/Athanor.exe
 /app/athanor
 /dist/
+# repairs made on one PC (texts replacing the kit's, see app/remplacables.go)
+/local/

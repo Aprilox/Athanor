@@ -423,6 +423,8 @@ template/              CLAUDE.md (consignes de Claude), guides/ (les parties don
 docs/images/           images du README
 docs/releases/         les nouveautés de chaque version (affichées sur la page de la version)
 .env.example           tous les réglages, documentés
+local/                 réparations faites sur ce PC : un fichier ici remplace le même de template/ ou app/catalogue.json,
+                       jamais écrasé par une mise à jour (`athanor autotest` les liste)
 logs/, tools/,         créés à l'usage, jamais commités
 extensions/
 ```
@@ -490,10 +492,10 @@ Oui. Rien n'est lié à un nom d'utilisateur ni à une lettre de disque : les ch
 Poussez un tag de version : GitHub compile les deux applications et publie la version ([`.github/workflows/release.yml`](.github/workflows/release.yml)).
 
 ```bash
-git tag v2.24.5 && git push origin v2.24.5
+git tag v2.24.6 && git push origin v2.24.6
 ```
 
-Gardez la version de [`app/winres/athanor.rc`](app/winres/athanor.rc) et `versionAthanor` dans [`app/commandes.go`](app/commandes.go) alignées sur le tag (un test vérifie qu'elles concordent), et écrivez les nouveautés dans `docs/releases/VERSION.md` (par ex. [`docs/releases/2.24.5.md`](docs/releases/2.24.5.md)) : elles ouvrent la page de la version.
+Gardez la version de [`app/winres/athanor.rc`](app/winres/athanor.rc) et `versionAthanor` dans [`app/commandes.go`](app/commandes.go) alignées sur le tag (un test vérifie qu'elles concordent), et écrivez les nouveautés dans `docs/releases/VERSION.md` (par ex. [`docs/releases/2.24.6.md`](docs/releases/2.24.6.md)) : elles ouvrent la page de la version.
 
 Chaque push est vérifié sous Windows, Linux et macOS ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) ; `./build.sh --all` compile toutes les cibles dans `dist/`.
 
