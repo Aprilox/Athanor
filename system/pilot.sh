@@ -123,7 +123,17 @@ if [ "${ATHANOR_OUTILS:-}" != python ]; then
   # an older Go pilot without its parallel workers leaves a project in parallel mode to this script
   if [ "${PILOT_ENGINE:-}" = go ] && [ -n "$ATHANOR_GO" ] && printf '%s' "$aide_go" | grep -q '^  pilote ' \
      && { printf '%s' "$aide_go" | grep -q '^  pilote .*parallel workers' || ! grep -qxE 'PARALLELE?=1\r?' "$ETAT/.env" 2>/dev/null; }; then
-    exec "$ATHANOR_GO" pilote "$PROJECT"
+    # the Go pilot runs as a child of this script, which takes over if it hits an internal error: exit 70
+    # (a Go panic, after it stopped its sessions) or 2 with a crash report (a fatal error nothing caught)
+    rm -f "$PRIVE/pilote-go.crash"
+    "$ATHANOR_GO" pilote "$PROJECT"
+    code_go=$?
+    [ -s "$PRIVE/pilote-go.crash" ] || rm -f "$PRIVE/pilote-go.crash"
+    if [ "$code_go" = 70 ] || { [ "$code_go" = 2 ] && [ -s "$PRIVE/pilote-go.crash" ]; }; then
+      REPRISE_GO=$code_go
+    else
+      exit "$code_go"
+    fi
   fi
   unset candidat aide_go
 fi
@@ -779,6 +789,15 @@ exec 9>"$PRIVE/verrou"
 flock -n 9 || { echo "The pilot is already running on this project."; exit 0; }
 echo $$ > "$PRIVE/pilot.pid"
 echo $$ | publier "$ETAT/pilot.pid"
+if [ -n "${REPRISE_GO:-}" ]; then
+  # a fatal Go error (2) left its sessions running: stopped before this pilot starts its own
+  if [ "$REPRISE_GO" = 2 ]; then
+    arreter_session KILL "$PRIVE/claude_sid" "$PRIVE/claude_winpid"
+    for f in "$PRIVE"/ouvrier_*.sid; do [ -f "$f" ] && arreter_session KILL "$f" "${f%.sid}.winpid"; done
+    parallele_nettoyer_worktrees
+  fi
+  log "The Go pilot stopped on an internal error (exit $REPRISE_GO, report: $PRIVE/pilote-go.crash): the bash pilot carries on."
+fi
 # Heartbeat: the pid is republished every 20 s in the workshop; the application considers the pilot
 # dead if the file is older than 90 s (WSL or the PC shut down before the pilot could exit).
 EVEIL="$PRIVE/eveil"

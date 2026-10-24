@@ -277,6 +277,7 @@ func (p *pilote) lancerOuvrier(ident, ligne, journal, modele string) (*ouvrier, 
 	}
 	o := &ouvrier{ident: ident, ligne: ligne, journal: journal, cmd: cmd, fini: make(chan struct{})}
 	go func() {
+		defer p.recupererPanique()
 		err := cmd.Wait()
 		code, tue := 0, false
 		if err != nil {
