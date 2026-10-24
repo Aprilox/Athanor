@@ -2,7 +2,7 @@ package main
 
 // athanor construire [--all]: builds Athanor from its Go sources (app/), for a copy of the source code
 // instead of a release: Athanor.exe and athanor (this system) into the tool folder, or with --all every
-// target into dist/ (what a release publishes). Each executable carries the kit's files (embarque.go),
+// target into dist/ (what a release publishes), Athanor.app included. Each executable carries the kit's files (embarque.go),
 // and Athanor.exe the Linux executable of the WSL mode. From the sources: cd app && go run . construire. Go 1.24 or later is needed.
 // The Windows icon and version info (winres/athanor.rc) are compiled into rsrc_windows_amd64.syso when a
 // resource compiler is present (llvm-windres or x86_64-w64-mingw32-windres); the committed one is used
@@ -133,6 +133,12 @@ func lancerConstruire(args []string) int {
 				return 1
 			}
 		}
+		// Athanor.app: both Mac executables in one, with its icon (app_mac_bundle.go)
+		if err := construireAppMac(src, dist, versionAthanor); err != nil {
+			fmt.Fprintln(os.Stderr, "Build failed (Athanor.app):", err)
+			return 1
+		}
+		fmt.Println(filepath.Join(dist, "Athanor.app") + " ready")
 		return 0
 	}
 	// Athanor.exe, and this system's executable (on Windows, the Linux one of the WSL mode)

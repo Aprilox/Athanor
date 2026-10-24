@@ -4,13 +4,7 @@ package main
 // a point is on, and where the page's three window buttons are in the window's pixels. Pure functions,
 // tested on every system.
 
-import (
-	"math"
-	"sync/atomic"
-)
-
-// barreDeWindows: the user chose Windows' own title bar (Options), read when the window opens.
-var barreDeWindows atomic.Bool
+import "math"
 
 // Windows' hit-test codes (WM_NCHITTEST) the bar answers with.
 const (

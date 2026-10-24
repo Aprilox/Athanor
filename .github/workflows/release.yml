@@ -1,7 +1,8 @@
 # Builds Athanor for Windows, Linux and macOS and publishes a GitHub Release every time a version tag is
 # pushed:
 #   git tag v2.26.0 && git push origin v2.26.0
-# Each download is a single executable that carries everything it needs (app/embarque.go).
+# Each download is a single executable that carries everything it needs (app/embarque.go); on the Mac,
+# Athanor.app around it.
 name: Release
 
 on:
@@ -12,7 +13,7 @@ permissions:
   contents: write
 
 jobs:
-  release:
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -27,19 +28,68 @@ jobs:
         run: |
           go vet .
           GOOS=windows GOARCH=amd64 go vet .
+          GOOS=darwin GOARCH=arm64 go vet .
           go test ./...
 
       - name: Build
         working-directory: app
         # every target into dist/, each one carrying the kit's files (and Athanor.exe the Linux executable of
-        # the WSL mode); the Windows icon and version come from the committed rsrc_windows_amd64.syso
+        # the WSL mode), and Athanor.app (both Mac executables in one); the Windows icon and version come from
+        # the committed rsrc_windows_amd64.syso
         run: go run . construire --all
+
+      # a tar keeps the executables' modes (the artifacts do not)
+      - run: tar czf dist.tgz dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist.tgz
+
+  mac:
+    # Athanor.app signed on a Mac (an ad-hoc signature: no Apple account; macOS asks once to allow it),
+    # checked, then zipped
+    needs: build
+    runs-on: macos-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+      - name: Sign and check Athanor.app
+        run: |
+          set -e
+          tar xzf dist.tgz
+          codesign --force --deep --sign - dist/Athanor.app
+          codesign --verify --deep --strict --verbose=2 dist/Athanor.app
+          lipo -info dist/Athanor.app/Contents/MacOS/athanor
+          # the bundle's executable installs Athanor's folder, then the copy kept there runs
+          maison="$RUNNER_TEMP/maison"; mkdir -p "$maison"
+          HOME="$maison" dist/Athanor.app/Contents/MacOS/athanor --oui autotest
+          test -x "$maison/Library/Application Support/Athanor/athanor"
+          ditto -c -k --sequesterRsrc --keepParent dist/Athanor.app Athanor-macos.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mac
+          path: Athanor-macos.zip
+
+  publish:
+    needs: [build, mac]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+      - uses: actions/download-artifact@v4
+        with:
+          name: mac
 
       - name: Package
         run: |
+          tar xzf dist.tgz
           version="${GITHUB_REF_NAME#v}"
           echo "VERSION=$version" >> "$GITHUB_ENV"
-          # one file per system, the same names at every version (a stable link to the latest one)
+          # one file per system, the same names at every version (a stable link to the latest one; the
+          # single Mac executables are what Athanor's own updates download)
           mkdir -p publie
           cp dist/Athanor-amd64.exe publie/Athanor.exe
           cp dist/Athanor-arm64.exe publie/Athanor-arm64.exe
@@ -47,6 +97,7 @@ jobs:
           install -m 755 dist/athanor-linux-arm64 publie/athanor-linux-arm64
           install -m 755 dist/athanor-darwin-arm64 publie/athanor-macos
           install -m 755 dist/athanor-darwin-amd64 publie/athanor-macos-intel
+          cp Athanor-macos.zip publie/Athanor-macos.zip
           (cd publie && sha256sum ./* | sed 's#\./##' > SHA256SUMS.txt)
           ls -l publie
           # Release text: what is new (docs/releases/VERSION.md, when present), then the downloads.
@@ -56,16 +107,15 @@ jobs:
             if [ -f "docs/releases/${version}.md" ]; then cat "docs/releases/${version}.md"; echo; fi
             echo "## Download"
             echo
-            echo "One file, nothing to unzip. Keep it wherever you like: at its first launch it asks before creating Athanor's folder, then it opens Athanor."
+            echo "Keep it wherever you like: at its first launch it asks before creating Athanor's folder, then it opens Athanor."
             echo
             echo "| Your system | Download | Then |"
             echo "|---|---|---|"
             echo "| **Windows 10 / 11** | [**Athanor.exe**](${telecharger}/Athanor.exe) | double-click it (ARM PC: [Athanor-arm64.exe](${telecharger}/Athanor-arm64.exe)) |"
+            echo "| **macOS** 11 or later (Apple Silicon and Intel) | [**Athanor-macos.zip**](${telecharger}/Athanor-macos.zip) | Safari opens the zip by itself (else a double-click): open **Athanor.app**, from *Downloads* or *Applications*; the first time, macOS asks to allow it: *System Settings → Privacy & Security → Open Anyway* (see [macOS, step by step](${depot}#macos-step-by-step)) |"
             echo "| **Linux** (x86-64) | [**athanor-linux**](${telecharger}/athanor-linux) | \`chmod +x athanor-linux && ./athanor-linux\` (ARM: [athanor-linux-arm64](${telecharger}/athanor-linux-arm64)) |"
-            echo "| **macOS** (Apple Silicon) | [**athanor-macos**](${telecharger}/athanor-macos) | in Terminal: \`cd ~/Downloads && chmod +x athanor-macos && xattr -d com.apple.quarantine athanor-macos && ./athanor-macos\` (see [macOS, step by step](${depot}#macos-step-by-step)) |"
-            echo "| **macOS** (Intel) | [**athanor-macos-intel**](${telecharger}/athanor-macos-intel) | the same, with this file |"
             echo
-            echo "**Updating:** close Athanor (right click on its icon near the clock → *Quit* if it started with the computer), then open the new file: it updates Athanor's folder, your token, settings, projects, \`logs/\` and \`tools/\` are kept."
+            echo "**Updating:** Athanor looks for a new version when it opens: *Update now* at the top of its window (or *Settings → Options → Version*). Running pilots go on."
             echo
             echo "First launch: see the [Quick start](${depot}#quick-start) ([en français](${depot}/blob/main/README.fr.md#démarrage-rapide)). Checksums: \`SHA256SUMS.txt\`."
           } > release.md
@@ -78,6 +128,7 @@ jobs:
           files: |
             publie/Athanor.exe
             publie/Athanor-arm64.exe
+            publie/Athanor-macos.zip
             publie/athanor-linux
             publie/athanor-linux-arm64
             publie/athanor-macos

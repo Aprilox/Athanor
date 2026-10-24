@@ -347,7 +347,19 @@ func lancerDepuisTelechargement(args []string) (int, bool) {
 			accepte = true
 			continue
 		}
+		if strings.HasPrefix(a, "-psn_") { // the Finder of older macOS versions adds the process's number
+			continue
+		}
 		reste = append(reste, a)
+	}
+	// opened from Athanor.app: the copy kept in Athanor's folder runs in its place, and knows its bundle
+	// (app_mac.go: the Dock icon, reopening after an update)
+	if runtime.GOOS == "darwin" {
+		if exe, err := os.Executable(); err == nil {
+			if b := bundleMac(exe); b != "" {
+				_ = os.Setenv("ATHANOR_APP_MAC", b)
+			}
+		}
 	}
 	d := dossierAthanorDefaut()
 	// the version kept there is newer: it runs, this older file changes nothing

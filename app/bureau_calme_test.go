@@ -96,3 +96,25 @@ func TestOptionEntendreBureau(t *testing.T) {
 		t.Fatal("lost without the switch")
 	}
 }
+
+func TestAnnulerArret(t *testing.T) {
+	p := Projet{Nom: "a", Dossier: t.TempDir()}
+	s := nouveauServeur(Config{Kit: t.TempDir(), Projets: []Projet{p}, ProjetActif: "a", Langue: "en"})
+	s.csrf = "jeton"
+	mux := http.NewServeMux()
+	s.routes(mux)
+	os.MkdirAll(p.Atelier(), 0o755)
+	stop := filepath.Join(p.Atelier(), "STOP")
+	os.WriteFile(stop, nil, 0o644)
+	s.relancer["a"] = true
+	r := httptest.NewRequest("POST", "/api/pilote/annuler-arret?p=a", nil)
+	r.Header.Set("X-Athanor", "jeton")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, r)
+	if w.Code != 200 || !bytes.Contains(w.Body.Bytes(), []byte("Stop cancelled")) {
+		t.Fatalf("%d %s", w.Code, w.Body.String())
+	}
+	if fichierExiste(stop) || s.relancer["a"] {
+		t.Fatal("the stop request stays")
+	}
+}

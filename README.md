@@ -11,10 +11,10 @@
 </p>
 
 <p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-3fc6a5?style=flat-square" alt="MIT license"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-5fe3c1?style=flat-square" alt="MIT license"></a>
   <img src="https://img.shields.io/badge/platform-Windows%2010%2F11%20%C2%B7%20Linux%20%C2%B7%20macOS-1b2430?style=flat-square" alt="Windows 10/11, Linux and macOS">
   <a href="https://claude.com/claude-code"><img src="https://img.shields.io/badge/runs-Claude%20Code-d97757?style=flat-square" alt="Runs Claude Code"></a>
-  <img src="https://img.shields.io/badge/app-Go%20%C2%B7%20one%20file-00add8?style=flat-square" alt="Go app, one file">
+  <img src="https://img.shields.io/badge/app-Go%20%C2%B7%20one%20file-7fd8ee?style=flat-square" alt="Go app, one file">
   <img src="https://img.shields.io/badge/UI-6%20languages-7c8da1?style=flat-square" alt="6 languages">
 </p>
 
@@ -30,7 +30,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Aprilox/Athanor/releases/latest"><img src="https://img.shields.io/badge/Download-Windows%20%C2%B7%20Linux%20%C2%B7%20macOS-3fc6a5?style=for-the-badge" alt="Download for Windows, Linux and macOS"></a>
+  <a href="https://github.com/Aprilox/Athanor/releases/latest"><img src="https://img.shields.io/badge/Download-Windows%20%C2%B7%20Linux%20%C2%B7%20macOS-5fe3c1?style=for-the-badge" alt="Download for Windows, Linux and macOS"></a>
 </p>
 
 <p align="center">
@@ -69,15 +69,15 @@ You describe what you want: a game, a website, an app, a tool. Athanor runs [Cla
 
 ### 1. Get Athanor
 
-One file, nothing to unzip. From the [**latest release**](https://github.com/Aprilox/Athanor/releases/latest):
+One file (a zip on the Mac). From the [**latest release**](https://github.com/Aprilox/Athanor/releases/latest):
 
 | Your system | Download |
 |---|---|
 | **Windows 10 / 11** | [**Athanor.exe**](https://github.com/Aprilox/Athanor/releases/latest/download/Athanor.exe) (an ARM PC: [Athanor-arm64.exe](https://github.com/Aprilox/Athanor/releases/latest/download/Athanor-arm64.exe)) |
 | **Linux** (x86-64) | [**athanor-linux**](https://github.com/Aprilox/Athanor/releases/latest/download/athanor-linux) (ARM: [athanor-linux-arm64](https://github.com/Aprilox/Athanor/releases/latest/download/athanor-linux-arm64)) |
-| **macOS** | [**athanor-macos**](https://github.com/Aprilox/Athanor/releases/latest/download/athanor-macos) (M1, M2, M3, M4…) or [athanor-macos-intel](https://github.com/Aprilox/Athanor/releases/latest/download/athanor-macos-intel): see [macOS, step by step](#macos-step-by-step) |
+| **macOS** 11 or later | [**Athanor-macos.zip**](https://github.com/Aprilox/Athanor/releases/latest/download/Athanor-macos.zip): **Athanor.app**, for Apple Silicon and Intel Macs alike; see [macOS, step by step](#macos-step-by-step) |
 
-Keep the file wherever you like (the Desktop, for example): it is how you open Athanor, and it never writes anything next to itself.
+Keep the file wherever you like (the Desktop, for example; on the Mac, Athanor.app in *Applications*): it is how you open Athanor, and it never writes anything next to itself.
 
 > [!TIP]
 > Windows SmartScreen may show *"Windows protected your PC"* the first time, because the app is not code-signed. Click *More info → Run anyway*.
@@ -114,26 +114,37 @@ Then *Setup & health* → *Install everything* (Claude Code, the sandbox and the
 
 #### macOS, step by step
 
-The Mac version is new: it was built and tested automatically, not yet on a real Mac. Tell us what does not work.
+1. Download [**Athanor-macos.zip**](https://github.com/Aprilox/Athanor/releases/latest/download/Athanor-macos.zip). Safari opens it by itself: **Athanor.app** is in *Downloads* (with another browser, double-click the zip once). An application is a folder, which is why it travels zipped. Athanor.app works from *Downloads*; in *Applications* it is at home (macOS then reopens it from there after an update and at login).
+2. Open Athanor.app (a double-click). The first time, macOS says it cannot check the app, because it is not signed by Apple: click *Done*, open *System Settings → Privacy & Security*, scroll down to *"Athanor" was blocked* and click **Open Anyway**, then your password. Once only.
+3. *Create*: Athanor's folder is made, then its window opens.
+4. *Setup & health* → *Install everything*, *Check everything*, then the *Token* line → *Repair*, and paste the token in *Settings*.
+5. Add a project and *Start*.
 
-1. Download [`athanor-macos`](https://github.com/Aprilox/Athanor/releases/latest/download/athanor-macos) (a Mac with an M1, M2, M3, M4… chip; *About This Mac* says it), or [`athanor-macos-intel`](https://github.com/Aprilox/Athanor/releases/latest/download/athanor-macos-intel) for an older Mac.
-2. Open *Terminal* (Applications → Utilities) and type, one line at a time:
-   ```bash
-   cd ~/Downloads
-   chmod +x athanor-macos                           # once: a downloaded file is not executable yet
-   xattr -d com.apple.quarantine athanor-macos      # once: the app is not signed by Apple
-   ./athanor-macos                                  # the app opens (Create, the first time)
-   ```
-3. In the app: *Setup & health* → *Install everything* (Homebrew, Claude Code and the tools, your password once), *Check everything*, then the *Token* line → *Repair*, and paste the token in *Settings*.
-4. Add a project and *Start*.
+**What *Install everything* puts on the Mac**, through the official installers only: [Homebrew](https://brew.sh) if it is missing (its own installer asks for your password and Enter); seven command-line tools through Homebrew: `git`, `jq`, `ripgrep`, `node`, `imagemagick`, `ffmpeg`, `gh`; Claude Code (Anthropic's installer, into `~/.local/bin`, with one line in `~/.zshrc`); RTK, which shortens command output to save tokens, into Athanor's folder. Nothing with a window, nothing that starts by itself. The sandbox is macOS's own (Seatbelt): only checked. Everything is written to `logs/install-mac.log` in Athanor's folder.
 
-Claude works in Seatbelt, the sandbox built into macOS (the same one Claude Code uses): it only writes in the project. The MCP servers have a Seatbelt cage of their own, and the Mac stays awake while a pilot runs (`caffeinate`). Unreal, Blender, Roblox Studio, Xcode and the Android SDK are found in their usual places and Claude runs them directly; Windows programs and Docker through `tool` are Windows and Linux only. To open Athanor later: `~/Downloads/athanor-macos` (or move the file anywhere first).
+**While it runs**, Athanor has its icon in the Dock. A click on it opens its window again; a right click shows which pilots are at work. Closing the window stops nothing. **Quit** (right click on the icon, or ⌘Q) asks, when pilots are running, whether they keep working (they do without Athanor, and are found again when it opens) or stop. The Mac stays awake while a pilot runs (`caffeinate`; a closed MacBook still sleeps, unless it is plugged in with an external screen).
+
+Claude works in Seatbelt, the sandbox built into macOS (the same one Claude Code uses): it only writes in the project. The MCP servers have a Seatbelt cage of their own. Unreal, Blender, Roblox Studio, Xcode and the Android SDK are found in their usual places and Claude runs them directly; Windows programs and Docker through `tool` are Windows and Linux only. On the Mac, the programs Claude opens show on your screen (there is no separate desktop as on Windows).
+
+<details><summary>Without Athanor.app (Terminal)</summary>
+
+[`athanor-macos`](https://github.com/Aprilox/Athanor/releases/latest/download/athanor-macos) (Apple Silicon) or [`athanor-macos-intel`](https://github.com/Aprilox/Athanor/releases/latest/download/athanor-macos-intel) is the same Athanor as a single command:
+
+```bash
+cd ~/Downloads
+chmod +x athanor-macos                           # once: a downloaded file is not executable yet
+xattr -d com.apple.quarantine athanor-macos      # once: the app is not signed by Apple
+./athanor-macos                                  # the app opens (Create, the first time)
+```
+
+Without a Dock icon; the pilots keep working when the Terminal is closed.
+</details>
 
 ### 3. Updating
 
 **From the app**: when a new version is out, an *Update to X.Y.Z* button shows at the top of the window (Athanor looks when it opens; *Settings → Options → Version* looks now, and can stop looking at opening). *Update now* downloads the file of your system, checks it against the release's checksums, then Athanor closes, puts the new version in place and opens again. Running pilots go on.
 
-**By hand**: close Athanor, download the new file and open it: it updates Athanor's folder the same way.
+**By hand**: close Athanor, download the new file and open it: it updates Athanor's folder the same way. On the Mac, Athanor.app is downloaded once: its updates then come from the app (an older Athanor.app opens the newer Athanor kept in Athanor's folder).
 
 Your token, settings, projects, `logs/` and `tools/` are never touched by an update. An installation made before 2.26 (a folder with `Athanor.exe`, `template/` and `athanor-config.json` side by side) stays where it is: put the new executable in it, or use the button.
 
@@ -148,7 +159,7 @@ cd Athanor/app
 go run . construire
 ```
 
-The same on Windows (PowerShell), Linux and macOS: it builds `Athanor.exe` and `athanor` into the `Athanor` folder, each carrying everything a release carries. Run there, a copy of the source code is its own tool folder (its `template/` is used as it is); update it with `git pull` and `go run . construire` again. `go run . construire --all` builds every system into `dist/`, the files a release publishes. The app only uses Go's standard library plus three vendored packages for the WebView2 window, so building needs no network access once the source is on your disk.
+The same on Windows (PowerShell), Linux and macOS: it builds `Athanor.exe` and `athanor` into the `Athanor` folder, each carrying everything a release carries. Run there, a copy of the source code is its own tool folder (its `template/` is used as it is); update it with `git pull` and `go run . construire` again. `go run . construire --all` builds every system into `dist/`, the files a release publishes, and `dist/Athanor.app` (both Mac executables in one). The app only uses Go's standard library plus four vendored packages (the WebView2 window on Windows, the Dock icon on the Mac), so building needs no network access once the source is on your disk.
 </details>
 
 ---
@@ -502,12 +513,12 @@ Yes. Nothing is tied to a user name or a drive letter: paths come from your prof
 Push a version tag and GitHub builds the apps (Windows, Linux, macOS) and publishes the release ([`.github/workflows/release.yml`](.github/workflows/release.yml)):
 
 ```bash
-git tag v2.27.0 && git push origin v2.27.0
+git tag v2.28.0 && git push origin v2.28.0
 ```
 
-Keep the version in [`app/winres/athanor.rc`](app/winres/athanor.rc) and `versionAthanor` in [`app/commandes.go`](app/commandes.go) in step with the tag (a test checks they match), and write what is new in `docs/releases/VERSION.md` (e.g. [`docs/releases/2.27.0.md`](docs/releases/2.27.0.md)): it opens the release page.
+Keep the version in [`app/winres/athanor.rc`](app/winres/athanor.rc) and `versionAthanor` in [`app/commandes.go`](app/commandes.go) in step with the tag (a test checks they match), and write what is new in `docs/releases/VERSION.md` (e.g. [`docs/releases/2.28.0.md`](docs/releases/2.28.0.md)): it opens the release page.
 
-Every push is checked on Windows, Linux and macOS ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)), the single executable included (nothing written before the consent, Athanor's folder installed, nothing next to the file); `cd app && go run . construire --all` builds every target into `dist/`. A release publishes one file per system and `SHA256SUMS.txt`, under the same names at every version.
+Every push is checked on Windows, Linux and macOS ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)), the single executable included (nothing written before the consent, Athanor's folder installed, nothing next to the file); `cd app && go run . construire --all` builds every target into `dist/`. A release publishes one file per system, `Athanor-macos.zip` (Athanor.app, signed ad hoc on a Mac runner) and `SHA256SUMS.txt`, under the same names at every version.
 
 After a change of `app/` on a PC (a repair by Claude, or yours: `athanor reparer --diff` first writes the sources into Athanor's folder when they are not there), `./athanor reparer --recompiler` (`.\Athanor.exe reparer --recompiler` on Windows) rebuilds the kit's executables there: it shows the change against the running executable's own sources, installs a portable Go outside the kit when none is found, runs `go vet`, builds, runs the new executable's autotest and only then puts it in place, keeping the previous one (`reparer --annuler` puts it back).
 
@@ -522,7 +533,7 @@ Issues and pull requests are welcome. Before opening one:
 
 - [Claude Code](https://claude.com/claude-code), which does the actual work.
 - [VirtualDesktop](https://github.com/MScholtes/VirtualDesktop) by Markus Scholtes (MIT), compiled on first use: fallback when the "Claude" desktop cannot be created (windows moved to a virtual desktop).
-- [go-webview2](https://github.com/jchv/go-webview2) (MIT) for the Windows window, and [bubblewrap](https://github.com/containers/bubblewrap) for the sandbox.
+- [go-webview2](https://github.com/jchv/go-webview2) (MIT) for the Windows window, [purego](https://github.com/ebitengine/purego) (Apache 2.0) for the Mac's Dock icon, and [bubblewrap](https://github.com/containers/bubblewrap) for the sandbox.
 
 ## License
 

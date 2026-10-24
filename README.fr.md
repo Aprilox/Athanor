@@ -11,10 +11,10 @@
 </p>
 
 <p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/licence-MIT-3fc6a5?style=flat-square" alt="Licence MIT"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/licence-MIT-5fe3c1?style=flat-square" alt="Licence MIT"></a>
   <img src="https://img.shields.io/badge/plateforme-Windows%2010%2F11%20%C2%B7%20Linux%20%C2%B7%20macOS-1b2430?style=flat-square" alt="Windows 10/11, Linux et macOS">
   <a href="https://claude.com/claude-code"><img src="https://img.shields.io/badge/moteur-Claude%20Code-d97757?style=flat-square" alt="Fonctionne avec Claude Code"></a>
-  <img src="https://img.shields.io/badge/app-Go%20%C2%B7%20un%20seul%20fichier-00add8?style=flat-square" alt="Application Go en un seul fichier">
+  <img src="https://img.shields.io/badge/app-Go%20%C2%B7%20un%20seul%20fichier-7fd8ee?style=flat-square" alt="Application Go en un seul fichier">
   <img src="https://img.shields.io/badge/interface-6%20langues-7c8da1?style=flat-square" alt="6 langues">
 </p>
 
@@ -30,7 +30,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Aprilox/Athanor/releases/latest"><img src="https://img.shields.io/badge/T%C3%A9l%C3%A9charger-Windows%20%C2%B7%20Linux%20%C2%B7%20macOS-3fc6a5?style=for-the-badge" alt="Télécharger pour Windows, Linux et macOS"></a>
+  <a href="https://github.com/Aprilox/Athanor/releases/latest"><img src="https://img.shields.io/badge/T%C3%A9l%C3%A9charger-Windows%20%C2%B7%20Linux%20%C2%B7%20macOS-5fe3c1?style=for-the-badge" alt="Télécharger pour Windows, Linux et macOS"></a>
 </p>
 
 <p align="center">
@@ -69,15 +69,15 @@ Vous décrivez ce que vous voulez : un jeu, un site, une application, un outil. 
 
 ### 1. Récupérer Athanor
 
-Un seul fichier, rien à dézipper. Depuis la [**dernière version**](https://github.com/Aprilox/Athanor/releases/latest) :
+Un seul fichier (un zip sur le Mac). Depuis la [**dernière version**](https://github.com/Aprilox/Athanor/releases/latest) :
 
 | Votre système | Téléchargement |
 |---|---|
 | **Windows 10 / 11** | [**Athanor.exe**](https://github.com/Aprilox/Athanor/releases/latest/download/Athanor.exe) (un PC ARM : [Athanor-arm64.exe](https://github.com/Aprilox/Athanor/releases/latest/download/Athanor-arm64.exe)) |
 | **Linux** (x86-64) | [**athanor-linux**](https://github.com/Aprilox/Athanor/releases/latest/download/athanor-linux) (ARM : [athanor-linux-arm64](https://github.com/Aprilox/Athanor/releases/latest/download/athanor-linux-arm64)) |
-| **macOS** | [**athanor-macos**](https://github.com/Aprilox/Athanor/releases/latest/download/athanor-macos) (M1, M2, M3, M4…) ou [athanor-macos-intel](https://github.com/Aprilox/Athanor/releases/latest/download/athanor-macos-intel) : voir [macOS, pas à pas](#macos-pas-à-pas) |
+| **macOS** 11 ou plus récent | [**Athanor-macos.zip**](https://github.com/Aprilox/Athanor/releases/latest/download/Athanor-macos.zip) : **Athanor.app**, pour les Mac Apple Silicon comme Intel ; voir [macOS, pas à pas](#macos-pas-à-pas) |
 
-Gardez le fichier où vous voulez (sur le Bureau, par exemple) : c'est lui qui ouvre Athanor, et il n'écrit jamais rien à côté de lui.
+Gardez le fichier où vous voulez (sur le Bureau, par exemple ; sur le Mac, Athanor.app dans *Applications*) : c'est lui qui ouvre Athanor, et il n'écrit jamais rien à côté de lui.
 
 > [!TIP]
 > Windows SmartScreen peut afficher *« Windows a protégé votre ordinateur »* au premier lancement, parce que l'application n'est pas signée. Cliquez sur *Informations complémentaires → Exécuter quand même*.
@@ -114,26 +114,37 @@ Puis *Installation & santé* → *Tout installer* (Claude Code, la barrière et 
 
 #### macOS, pas à pas
 
-La version Mac est nouvelle : elle est compilée et testée automatiquement, pas encore sur un vrai Mac. Dites-nous ce qui ne marche pas.
+1. Téléchargez [**Athanor-macos.zip**](https://github.com/Aprilox/Athanor/releases/latest/download/Athanor-macos.zip). Safari l'ouvre tout seul : **Athanor.app** est dans *Téléchargements* (avec un autre navigateur, double-cliquez une fois sur le zip). Une application est un dossier, c'est pourquoi elle voyage zippée. Athanor.app marche depuis *Téléchargements* ; dans *Applications*, il est chez lui (macOS l'y rouvre ensuite après une mise à jour et à l'ouverture de session).
+2. Ouvrez Athanor.app (double-clic). La première fois, macOS dit qu'il ne peut pas vérifier l'application, parce qu'elle n'est pas signée par Apple : cliquez sur *Terminé*, ouvrez *Réglages Système → Confidentialité et sécurité*, descendez jusqu'à *« Athanor » a été bloqué* et cliquez sur **Ouvrir quand même**, puis votre mot de passe. Une seule fois.
+3. *Créer* : le dossier d'Athanor est créé, puis sa fenêtre s'ouvre.
+4. *Installation & santé* → *Tout installer*, *Tout vérifier*, puis la ligne *Jeton* → *Réparer*, et collez le jeton dans *Réglages*.
+5. Ajoutez un projet et *Démarrer*.
 
-1. Téléchargez [`athanor-macos`](https://github.com/Aprilox/Athanor/releases/latest/download/athanor-macos) (un Mac à puce M1, M2, M3, M4… ; *À propos de ce Mac* le dit), ou [`athanor-macos-intel`](https://github.com/Aprilox/Athanor/releases/latest/download/athanor-macos-intel) pour un Mac plus ancien.
-2. Ouvrez le *Terminal* (Applications → Utilitaires) et tapez, une ligne à la fois :
-   ```bash
-   cd ~/Downloads
-   chmod +x athanor-macos                           # une fois : un fichier téléchargé n'est pas encore exécutable
-   xattr -d com.apple.quarantine athanor-macos      # une fois : l'application n'est pas signée par Apple
-   ./athanor-macos                                  # l'application s'ouvre (Créer, la première fois)
-   ```
-3. Dans l'application : *Installation & santé* → *Tout installer* (Homebrew, Claude Code et les outils, votre mot de passe une fois), *Tout vérifier*, puis la ligne *Jeton* → *Réparer*, et collez le jeton dans *Réglages*.
-4. Ajoutez un projet et *Démarrer*.
+**Ce que *Tout installer* met sur le Mac**, uniquement par les installeurs officiels : [Homebrew](https://brew.sh) s'il manque (son propre installeur demande votre mot de passe et Entrée) ; sept outils en ligne de commande via Homebrew : `git`, `jq`, `ripgrep`, `node`, `imagemagick`, `ffmpeg`, `gh` ; Claude Code (l'installeur d'Anthropic, dans `~/.local/bin`, avec une ligne dans `~/.zshrc`) ; RTK, qui raccourcit la sortie des commandes pour économiser des tokens, dans le dossier d'Athanor. Rien qui ait une fenêtre, rien qui démarre tout seul. La barrière est celle de macOS (Seatbelt) : seulement vérifiée. Tout est écrit dans `logs/install-mac.log`, dans le dossier d'Athanor.
 
-Claude travaille dans Seatbelt, la barrière intégrée à macOS (celle qu'utilise Claude Code) : il n'écrit que dans le projet. Les serveurs MCP ont leur propre cage Seatbelt, et le Mac reste éveillé tant qu'un pilote tourne (`caffeinate`). Unreal, Blender, Roblox Studio, Xcode et le SDK Android sont trouvés à leurs places habituelles et Claude les lance directement ; les programmes Windows et Docker via `tool` restent réservés à Windows et Linux. Pour rouvrir Athanor plus tard : `~/Downloads/athanor-macos` (ou déplacez d'abord le fichier où vous voulez).
+**Pendant qu'il tourne**, Athanor a son icône dans le Dock. Un clic dessus rouvre sa fenêtre ; un clic droit montre quels pilotes travaillent. Fermer la fenêtre n'arrête rien. **Quitter** (clic droit sur l'icône, ou ⌘Q) demande, quand des pilotes tournent, s'ils continuent (ils travaillent sans Athanor, et on les retrouve en le rouvrant) ou s'arrêtent. Le Mac reste éveillé tant qu'un pilote tourne (`caffeinate` ; un MacBook refermé s'endort quand même, sauf branché sur secteur avec un écran externe).
+
+Claude travaille dans Seatbelt, la barrière intégrée à macOS (celle qu'utilise Claude Code) : il n'écrit que dans le projet. Les serveurs MCP ont leur propre cage Seatbelt. Unreal, Blender, Roblox Studio, Xcode et le SDK Android sont trouvés à leurs places habituelles et Claude les lance directement ; les programmes Windows et Docker via `tool` restent réservés à Windows et Linux. Sur le Mac, les programmes que Claude ouvre s'affichent sur votre écran (pas de bureau à part comme sous Windows).
+
+<details><summary>Sans Athanor.app (Terminal)</summary>
+
+[`athanor-macos`](https://github.com/Aprilox/Athanor/releases/latest/download/athanor-macos) (Apple Silicon) ou [`athanor-macos-intel`](https://github.com/Aprilox/Athanor/releases/latest/download/athanor-macos-intel) est le même Athanor en une seule commande :
+
+```bash
+cd ~/Downloads
+chmod +x athanor-macos                           # une fois : un fichier téléchargé n'est pas encore exécutable
+xattr -d com.apple.quarantine athanor-macos      # une fois : l'application n'est pas signée par Apple
+./athanor-macos                                  # l'application s'ouvre (Créer, la première fois)
+```
+
+Sans icône dans le Dock ; les pilotes continuent quand le Terminal est fermé.
+</details>
 
 ### 3. Mettre à jour
 
 **Depuis l'application** : quand une nouvelle version sort, un bouton *Mettre à jour (X.Y.Z)* apparaît en haut de la fenêtre (Athanor regarde à son ouverture ; *Réglages → Options → Version* regarde tout de suite, et peut ne plus regarder à l'ouverture). *Mettre à jour maintenant* télécharge le fichier de votre système, le vérifie avec les empreintes de la version, puis Athanor se ferme, met la nouvelle version en place et se rouvre. Les pilotes en cours continuent.
 
-**À la main** : fermez Athanor, téléchargez le nouveau fichier et ouvrez-le : il met à jour le dossier d'Athanor de la même façon.
+**À la main** : fermez Athanor, téléchargez le nouveau fichier et ouvrez-le : il met à jour le dossier d'Athanor de la même façon. Sur le Mac, Athanor.app se télécharge une seule fois : ses mises à jour viennent ensuite de l'application (un Athanor.app plus ancien ouvre l'Athanor plus récent gardé dans son dossier).
 
 Votre jeton, vos réglages, vos projets, `logs/` et `tools/` ne sont jamais touchés par une mise à jour. Une installation faite avant la 2.26 (un dossier avec `Athanor.exe`, `template/` et `athanor-config.json` côte à côte) reste où elle est : mettez-y le nouvel exécutable, ou utilisez le bouton.
 
@@ -148,7 +159,7 @@ cd Athanor/app
 go run . construire
 ```
 
-Pareil sous Windows (PowerShell), Linux et macOS : cela construit `Athanor.exe` et `athanor` dans le dossier `Athanor`, chacun portant tout ce que porte une version publiée. Lancée là, une copie du code source est son propre dossier d'outil (son `template/` est utilisé tel quel) ; mettez-la à jour avec `git pull` puis à nouveau `go run . construire`. `go run . construire --all` compile tous les systèmes dans `dist/`, les fichiers que publie une version. L'application n'utilise que la bibliothèque standard de Go et trois paquets embarqués pour la fenêtre WebView2 : une fois les sources sur votre disque, la compilation ne demande aucun accès réseau.
+Pareil sous Windows (PowerShell), Linux et macOS : cela construit `Athanor.exe` et `athanor` dans le dossier `Athanor`, chacun portant tout ce que porte une version publiée. Lancée là, une copie du code source est son propre dossier d'outil (son `template/` est utilisé tel quel) ; mettez-la à jour avec `git pull` puis à nouveau `go run . construire`. `go run . construire --all` compile tous les systèmes dans `dist/`, les fichiers que publie une version, et `dist/Athanor.app` (les deux exécutables Mac en un). L'application n'utilise que la bibliothèque standard de Go et quatre paquets embarqués (la fenêtre WebView2 sous Windows, l'icône du Dock sur le Mac) : une fois les sources sur votre disque, la compilation ne demande aucun accès réseau.
 </details>
 
 ---
@@ -501,12 +512,12 @@ Oui. Rien n'est lié à un nom d'utilisateur ni à une lettre de disque : les ch
 Poussez un tag de version : GitHub compile les applications (Windows, Linux, macOS) et publie la version ([`.github/workflows/release.yml`](.github/workflows/release.yml)).
 
 ```bash
-git tag v2.27.0 && git push origin v2.27.0
+git tag v2.28.0 && git push origin v2.28.0
 ```
 
-Gardez la version de [`app/winres/athanor.rc`](app/winres/athanor.rc) et `versionAthanor` dans [`app/commandes.go`](app/commandes.go) alignées sur le tag (un test vérifie qu'elles concordent), et écrivez les nouveautés dans `docs/releases/VERSION.md` (par ex. [`docs/releases/2.27.0.md`](docs/releases/2.27.0.md)) : elles ouvrent la page de la version.
+Gardez la version de [`app/winres/athanor.rc`](app/winres/athanor.rc) et `versionAthanor` dans [`app/commandes.go`](app/commandes.go) alignées sur le tag (un test vérifie qu'elles concordent), et écrivez les nouveautés dans `docs/releases/VERSION.md` (par ex. [`docs/releases/2.28.0.md`](docs/releases/2.28.0.md)) : elles ouvrent la page de la version.
 
-Chaque push est vérifié sous Windows, Linux et macOS ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)), l'exécutable unique compris (rien d'écrit avant l'accord, dossier d'Athanor installé, rien à côté du fichier) ; `cd app && go run . construire --all` compile toutes les cibles dans `dist/`. Une version publie un fichier par système et `SHA256SUMS.txt`, sous les mêmes noms à chaque version.
+Chaque push est vérifié sous Windows, Linux et macOS ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)), l'exécutable unique compris (rien d'écrit avant l'accord, dossier d'Athanor installé, rien à côté du fichier) ; `cd app && go run . construire --all` compile toutes les cibles dans `dist/`. Une version publie un fichier par système, `Athanor-macos.zip` (Athanor.app, signé ad hoc sur une machine Mac de GitHub) et `SHA256SUMS.txt`, sous les mêmes noms à chaque version.
 
 Après une modification de `app/` sur un PC (une réparation par Claude, ou la vôtre : `athanor reparer --diff` écrit d'abord les sources dans le dossier d'Athanor si elles n'y sont pas), `./athanor reparer --recompiler` (`.\Athanor.exe reparer --recompiler` sous Windows) y recompile les exécutables du kit : il montre la modification par rapport aux sources de l'exécutable en cours, installe un Go portable hors du kit s'il n'en trouve pas, lance `go vet`, compile, lance l'autotest du nouvel exécutable et seulement ensuite le met en place, en gardant l'ancien (`reparer --annuler` le remet).
 
@@ -521,7 +532,7 @@ Les issues et pull requests sont les bienvenues. Avant d'en ouvrir une :
 
 - [Claude Code](https://claude.com/claude-code), qui fait le vrai travail.
 - [VirtualDesktop](https://github.com/MScholtes/VirtualDesktop) de Markus Scholtes (MIT), compilé au premier usage : solution de secours quand le bureau « Claude » ne peut pas être créé (fenêtres déplacées sur un bureau virtuel).
-- [go-webview2](https://github.com/jchv/go-webview2) (MIT) pour la fenêtre Windows, et [bubblewrap](https://github.com/containers/bubblewrap) pour la barrière.
+- [go-webview2](https://github.com/jchv/go-webview2) (MIT) pour la fenêtre Windows, [purego](https://github.com/ebitengine/purego) (Apache 2.0) pour l'icône du Dock sur le Mac, et [bubblewrap](https://github.com/containers/bubblewrap) pour la barrière.
 
 ## Licence
 

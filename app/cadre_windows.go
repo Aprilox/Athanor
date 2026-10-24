@@ -135,7 +135,7 @@ var (
 
 // preparerCadre: before the window is created, so that it opens without Windows' title bar.
 func preparerCadre() {
-	if barreDeWindows.Load() || windows.RtlGetVersion().MajorVersion < 10 {
+	if windows.RtlGetVersion().MajorVersion < 10 { // older Windows: its own title bar
 		return
 	}
 	cadreApp.voulu, cadreApp.actif = true, true

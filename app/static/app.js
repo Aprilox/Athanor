@@ -120,6 +120,7 @@ function choisir(message, boutons, options = {}) {
   const fond = $("#choix");
   $("#choix-texte").textContent = message;
   $("#choix-titre").textContent = options.titre || ""; $("#choix-titre").hidden = !options.titre;
+  fond.classList.toggle("dialogue-large", !!options.large);
   $("#choix-boutons").innerHTML = boutons.map((b) => `<button type="button" class="btn ${b.primaire ? "btn-primaire" : b.danger ? "btn-danger" : ""}" data-choix="${h(b.id)}">${h(b.texte)}</button>`).join("");
   const avant = document.activeElement;
   fond.hidden = false;
@@ -567,7 +568,9 @@ function rendreBandeau(v) {
   const boutons = [];
   if (v.kit_valide && v.projet) {
     if (v.actif) {
-      boutons.push(`<button class="btn" data-act="arreter-apres-cycle" title="${h(t("Finishes the current milestone, saves it, then stops. Nothing is lost."))}">${t("Stop after cycle")}</button>`);
+      // a stop asked for the end of the cycle: the button says it, and a click withdraws it
+      if (v.arret_demande) boutons.push(`<button class="btn btn-attente" data-arret="annuler" title="${h(t("Click to cancel: the pilot then goes on after this cycle."))}">⏳ ${v.arret_demande === "relance" ? t("Restart requested: end of cycle") : t("Stop requested: end of cycle")}</button>`);
+      else boutons.push(`<button class="btn" data-act="arreter-apres-cycle" title="${h(t("Finishes the current milestone, saves it, then stops. Nothing is lost."))}">${t("Stop after cycle")}</button>`);
       boutons.push(`<button class="btn btn-danger" data-act="arreter" title="${h(t("Cuts the current cycle: unsaved work will be redone."))}">${t("Stop now")}</button>`);
     } else {
       // right after a click, the pilot takes a few seconds to show up: no second start
@@ -621,9 +624,42 @@ function rendreSelecteur(v) {
   const r = $("#sel-recherche"); if (r) { r.focus(); r.setSelectionRange(pos, pos); }
 }
 
+// Stop now cuts the cycle: asked first, with Stop after cycle offered instead. A stop asked for the end of
+// the cycle shows on its button at once (then from the state), and can be withdrawn from it.
+async function arreterPilote(b) {
+  if ((etat.vue || {}).arret_demande) {
+    const c = await choisir(t("The current cycle is cut off: what Claude has not saved yet is lost, and will be done again at the next start.\n\nA stop at the end of this cycle is already asked: waiting for it loses nothing."), [
+      { id: "", texte: t("Wait for the end of the cycle"), primaire: true }, { id: "maintenant", texte: t("Stop now"), danger: true }],
+      { titre: t("Stop the pilot now?"), large: true });
+    if (c === "maintenant") { b.disabled = true; await action(api("pilote/arreter", "POST")); setTimeout(rafraichir, 800); }
+    return;
+  }
+  const c = await choisir(t("The current cycle is cut off: what Claude has not saved yet is lost, and will be done again at the next start.\n\nTo lose nothing, choose “Stop after cycle”: Claude finishes the current milestone, saves it, then the pilot stops by itself."), [
+    { id: "", texte: t("Cancel") }, { id: "apres", texte: t("Stop after cycle"), primaire: true }, { id: "maintenant", texte: t("Stop now"), danger: true }],
+    { titre: t("Stop the pilot now?"), large: true });
+  if (c === "maintenant") { b.disabled = true; await action(api("pilote/arreter", "POST")); setTimeout(rafraichir, 800); }
+  if (c === "apres") return arreterApresCycle(b.parentElement.querySelector('[data-act="arreter-apres-cycle"]'));
+}
+async function arreterApresCycle(b) {
+  if (b) { b.disabled = true; b.textContent = "⏳ " + t("Stop requested: end of cycle"); }
+  await action(api("pilote/arreter-apres-cycle", "POST"));
+  await rafraichir();
+}
+async function annulerArret(b) {
+  const c = await choisir(t("The pilot will stop at the end of this cycle. Cancel this stop and let it go on?"), [
+    { id: "", texte: t("Keep the stop") }, { id: "annuler", texte: t("Let it go on"), primaire: true }]);
+  if (c !== "annuler") return;
+  b.disabled = true;
+  await action(api("pilote/annuler-arret", "POST"));
+  await rafraichir();
+}
+
 $("#bandeau").addEventListener("click", async (ev) => {
   const b = ev.target.closest("button"); if (!b) return;
   if (b.dataset.act === "demarrer") return demarrerPilote(b);
+  if (b.dataset.act === "arreter") return arreterPilote(b);
+  if (b.dataset.act === "arreter-apres-cycle") return arreterApresCycle(b);
+  if (b.dataset.arret === "annuler") return annulerArret(b);
   if (b.dataset.act) { b.disabled = true; await action(api("pilote/" + b.dataset.act, "POST")); setTimeout(rafraichir, 800); }
   if (b.dataset.bureau) await action(api("bureau/" + b.dataset.bureau, "POST"));
   if (b.hasAttribute("data-ecran")) ouvrirEcran();
@@ -2295,8 +2331,6 @@ async function rendreOptions() {
       <div class="bloc"><h2>${t("Startup")}</h2>
         <label class="interrupteur"><input type="checkbox" id="op-lancer" data-option ${o.lancer_pilote_au_demarrage ? "checked" : ""}><span>${t("Restart the pilots that were running, when the app opens")}</span></label>
         <label class="interrupteur"><input type="checkbox" id="op-windows" data-option ${o.demarrage_windows ? "checked" : ""}><span>${t(o.windows ? "Open Athanor when Windows starts" : (etat.vue || {}).systeme === "darwin" ? "Open Athanor when you log in to the Mac" : "Open Athanor when your desktop session starts")}</span></label>
-        <p class="muet petit">${t(o.windows && !o.mode_natif ? "Pilots run in WSL in the background, without a window. Remember to disable the PC's sleep mode." : "Pilots run in the background, without a window. Remember to disable the computer's sleep mode.")}</p>
-        ${o.windows ? `<label class="interrupteur"><input type="checkbox" id="op-barre" data-option ${o.barre_windows ? "checked" : ""}><span>${t("Windows' own title bar instead of Athanor's (when Athanor opens again)")}</span></label>` : ""}
       </div>
       <div class="bloc"><h2>${t("Lock")}</h2>
         <p class="intro petit">${t("With a password, the padlock locks the app: Claude keeps working, but nothing can be seen, changed or read (keys included) without the password. The app starts locked.")}</p>
@@ -2392,7 +2426,7 @@ document.addEventListener("click", (ev) => {
 // the native Windows switch is sent only where it is shown (Windows)
 function o_windows() { const b = $("#op-natif"); return !!(b && !b.closest(".bloc").hidden); }
 async function enregistrerOptions() {
-  const r = await action(api("options", "POST", { kit: $("#op-kit").value, lancer_pilote_au_demarrage: $("#op-lancer").checked, bureau_virtuel: $("#op-bureau").checked, programmes_supplementaires: $("#op-programmes").value, demarrage_windows: $("#op-windows").checked, mode_natif: $("#op-natif") && o_windows() ? $("#op-natif").checked : undefined, verifier_maj: $("#op-maj") ? $("#op-maj").checked : undefined, barre_windows: $("#op-barre") ? $("#op-barre").checked : undefined, entendre_bureau: $("#op-son") ? $("#op-son").checked : undefined }));
+  const r = await action(api("options", "POST", { kit: $("#op-kit").value, lancer_pilote_au_demarrage: $("#op-lancer").checked, bureau_virtuel: $("#op-bureau").checked, programmes_supplementaires: $("#op-programmes").value, demarrage_windows: $("#op-windows").checked, mode_natif: $("#op-natif") && o_windows() ? $("#op-natif").checked : undefined, verifier_maj: $("#op-maj") ? $("#op-maj").checked : undefined, entendre_bureau: $("#op-son") ? $("#op-son").checked : undefined }));
   if (r && document.activeElement && document.activeElement.matches("input[type=checkbox]")) rendrePage();
 }
 

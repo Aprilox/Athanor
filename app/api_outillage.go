@@ -275,8 +275,7 @@ type OptionsVue struct {
 	Bureau                    EtatBureau `json:"bureau"`
 	ModeNatif                 bool       `json:"mode_natif"`
 	Windows                   bool       `json:"windows"`
-	GitBash                   string     `json:"git_bash"` // its bash.exe, "" when missing
-	BarreWindows              bool       `json:"barre_windows"`
+	GitBash                   string     `json:"git_bash"`        // its bash.exe, "" when missing
 	VerifierMaj               bool       `json:"verifier_maj"`    // look for an update when Athanor opens (maj.go)
 	EntendreBureau            bool       `json:"entendre_bureau"` // the programs on Claude's desktop are heard
 }
@@ -289,7 +288,7 @@ func (s *Serveur) apiOptions(w http.ResponseWriter, r *http.Request) {
 	if projets == nil {
 		projets = []Projet{}
 	}
-	s.ecrireJSON(w, OptionsVue{projets, c.Kit, s.kitCourant().Valide(), c.LancerPiloteAuDemarrage, c.BureauVirtuel, c.ProgrammesSupplementaires, DemarrageWindowsActif(), c.MotDePasseHash != "", s.bureau.Etat(), modeNatif.Load(), runtime.GOOS == "windows", bashNatif(), c.BarreWindows, !c.PasVerifierMaj, c.EntendreBureauClaude})
+	s.ecrireJSON(w, OptionsVue{projets, c.Kit, s.kitCourant().Valide(), c.LancerPiloteAuDemarrage, c.BureauVirtuel, c.ProgrammesSupplementaires, DemarrageWindowsActif(), c.MotDePasseHash != "", s.bureau.Etat(), modeNatif.Load(), runtime.GOOS == "windows", bashNatif(), !c.PasVerifierMaj, c.EntendreBureauClaude})
 }
 
 func (s *Serveur) apiEcrireOptions(w http.ResponseWriter, r *http.Request) {
@@ -300,7 +299,6 @@ func (s *Serveur) apiEcrireOptions(w http.ResponseWriter, r *http.Request) {
 		ProgrammesSupplementaires string `json:"programmes_supplementaires"`
 		DemarrageWindows          bool   `json:"demarrage_windows"`
 		ModeNatif                 *bool  `json:"mode_natif"`
-		BarreWindows              *bool  `json:"barre_windows"`
 		VerifierMaj               *bool  `json:"verifier_maj"`
 		EntendreBureau            *bool  `json:"entendre_bureau"`
 	}
@@ -328,9 +326,6 @@ func (s *Serveur) apiEcrireOptions(w http.ResponseWriter, r *http.Request) {
 			s.erreur(w, code, err.Error())
 			return
 		}
-	}
-	if c.BarreWindows != nil {
-		s.config.BarreWindows = *c.BarreWindows
 	}
 	if c.VerifierMaj != nil {
 		s.config.PasVerifierMaj = !*c.VerifierMaj

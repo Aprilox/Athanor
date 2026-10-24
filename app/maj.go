@@ -392,7 +392,7 @@ func lancerMiseAJour(args []string) int {
 	}
 	// Athanor opens again (the previous executable when the new one could not be put in place)
 	fenetre.etapeMaj(tx[5], 95)
-	if e := lancerDetacheExe(exeDuKit(kit)); e != nil {
+	if e := rouvrirAthanor(kit); e != nil {
 		fenetre.fermer()
 		titre, texte := texteEchecInstallation(kit, e)
 		informer(titre, texte)
@@ -408,6 +408,17 @@ func lancerMiseAJour(args []string) int {
 		return 1
 	}
 	return 0
+}
+
+// rouvrirAthanor: the application again after the update; opened from Athanor.app, through the bundle
+// (its Dock icon comes back with it), else the kit's executable.
+func rouvrirAthanor(kit string) error {
+	if b := bundleDurableMac(); b != "" && runtime.GOOS == "darwin" {
+		if commande("open", b).Run() == nil {
+			return nil
+		}
+	}
+	return lancerDetacheExe(exeDuKit(kit))
 }
 
 // langueDuKit: the application's language, from the kit's settings ("" when unknown).
