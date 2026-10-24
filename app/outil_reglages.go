@@ -293,11 +293,7 @@ func construireReglages(kitArg, sortie string) error {
 			return err
 		}
 	}
-	if err := ecrireJSONPython(sortie, r, "  "); err != nil {
-		return err
-	}
-	fmt.Println(sortie)
-	return nil
+	return ecrireJSONPython(sortie, r, "  ")
 }
 
 // abspathOS: Python's os.path.abspath.
@@ -329,6 +325,7 @@ func lancerReglages(args []string) int {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
+	fmt.Println(args[1]) // as settings.py: the file written (the Go pilot calls construireReglages without it)
 	return 0
 }
 

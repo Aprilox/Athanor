@@ -377,23 +377,44 @@ func (p *pilote) lancerClaudeSurveille(journal string, args []string, cadrage bo
 	cochesDebut := p.cochesPlan()
 	_ = os.WriteFile(journal, nil, 0o644)
 
-	pr, pw, err := os.Pipe()
-	if err != nil {
+	// Native Windows: Claude writes its stream straight into its log file, never into a pipe (a pipe can
+	// stall Claude's write of an image's long line for good); the live display reads the file as it grows.
+	direct := p.natif || os.Getenv("JOURNAL_DIRECT") == "1"
+	fFin := filepath.Join(p.prive, "claude_fin")
+	_ = os.Remove(fFin)
+	var pr, pw, jDirect *os.File
+	var err error
+	if direct {
+		if jDirect, err = os.OpenFile(journal, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o644); err != nil {
+			return 1
+		}
+	} else if pr, pw, err = os.Pipe(); err != nil {
 		return 1
 	}
 	cmd := exec.Command(prog[0], append(prog[1:], args...)...)
 	cmd.Dir = p.projet
-	cmd.Stdout = pw
-	cmd.Stderr = pw
+	if direct {
+		cmd.Stdout, cmd.Stderr = jDirect, jDirect
+	} else {
+		cmd.Stdout, cmd.Stderr = pw, pw
+	}
 	cmd.Env = p.envClaude()
 	preparerSessionClaude(cmd)
 	if err := cmd.Start(); err != nil {
-		pw.Close()
-		pr.Close()
+		if direct {
+			jDirect.Close()
+		} else {
+			pw.Close()
+			pr.Close()
+		}
 		assainirAtelier(p.etat)
 		return 127
 	}
-	pw.Close()
+	if direct {
+		jDirect.Close()
+	} else {
+		pw.Close()
+	}
 	pid := cmd.Process.Pid
 	_ = os.WriteFile(fSid, []byte(strconv.Itoa(pid)+"\n"), 0o644)
 	if p.natif {
@@ -402,7 +423,9 @@ func (p *pilote) lancerClaudeSurveille(journal string, args []string, cadrage bo
 		}
 	}
 
+	attendu := make(chan struct{})
 	go func() {
+		defer close(attendu)
 		err := cmd.Wait()
 		code := 0
 		if err != nil {
@@ -416,8 +439,27 @@ func (p *pilote) lancerClaudeSurveille(journal string, args []string, cadrage bo
 	}()
 
 	fluxDone := make(chan struct{})
+	affichageFini := make(chan struct{})
+	if direct {
+		go func() { <-attendu; close(fluxDone) }()
+		go func() {
+			defer close(affichageFini)
+			suivreJournal(journal, fFin, os.Stdout, 250*time.Millisecond, 6*time.Hour)
+		}()
+	} else {
+		close(affichageFini)
+	}
+	lu := make(chan struct{})
+	if !direct {
+		// the stream ends once Claude's output is closed AND Claude's exit code is written: the end of the
+		// output alone can come first (the code would be read missing, the cycle taken for an error)
+		go func() { <-lu; <-attendu; close(fluxDone) }()
+	}
 	go func() {
-		defer close(fluxDone)
+		if direct {
+			return
+		}
+		defer close(lu)
 		defer pr.Close()
 		jf, _ := os.OpenFile(journal, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 		if jf != nil {
@@ -476,6 +518,11 @@ boucleSurveillance:
 		if finVu != 0 && maintenant-finVu >= 30 {
 			arreterSessionClaude(true, fSid, fWin, journalArret)
 			break
+		} else if gel := min(p.idleMaxMin, 10); !p.outilsPython && maintenant-derniere >= int64(gel*p.secondsPerMinute) && imageGeleeOK(journal) {
+			// Claude Code silent right after receiving an image: it froze on it (large images, athanor images);
+			// 10 minutes are enough to tell, a session that works writes something long before
+			kb, _ := imageGelee(journal)
+			motif = fmt.Sprintf("no activity for %d min, right after an image of %d KB", gel, kb)
 		} else if maintenant-derniere >= int64(p.idleMaxMin*p.secondsPerMinute) {
 			motif = fmt.Sprintf("no activity for %d min", p.idleMaxMin)
 		} else if maintenant-debut >= int64(limiteMin*p.secondsPerMinute) {
@@ -580,6 +627,11 @@ boucleSurveillance:
 		}
 	}
 fluxTermine:
+	_ = os.WriteFile(fFin, nil, 0o644) // the live display shows the end of the log, then stops
+	select {
+	case <-affichageFini:
+	case <-time.After(3 * time.Second):
+	}
 	if attente >= 60 {
 		p.log(fmt.Sprintf("Cycle %d: Claude stopped after %d min of attempts.", p.cycle, attente/60))
 	}
@@ -1832,6 +1884,9 @@ func lancerPilote(args []string) int {
 	sep := string(os.PathListSeparator)
 	pathActuel := os.Getenv("PATH")
 	nouveauPath := filepath.Join(systeme, "bin") + sep + filepath.Join(home, ".local", "bin") + sep + pathActuel
+	if strings.HasPrefix(pathActuel, filepath.Join(systeme, "bin")+sep) {
+		nouveauPath = pathActuel // started by pilot.sh, which put them there already
+	}
 	_ = os.Setenv("PATH", nouveauPath)
 	claudeBin := trouverClaudePilote(natif)
 	cheminClaude := nouveauPath + sep + filepath.Join(tools, "bin")
@@ -2329,6 +2384,8 @@ func lancerPilote(args []string) int {
 	}
 	erreurs := 0
 	sansProgres := 0
+	arrets := 0                                         // cycles in a row stopped by the watchdog
+	_ = os.Remove(filepath.Join(p.prive, "images_gel")) // whether large images freeze Claude is seen again from this start
 
 	for {
 		p.compterFileAttente()
@@ -2540,6 +2597,12 @@ func lancerPilote(args []string) int {
 			consignesCycle = filepath.Join(p.prive, "CLAUDE.mcp.md")
 			_ = os.WriteFile(consignesCycle, append(append(b1, '\n', '\n'), b2...), 0o644)
 		}
+		// large images froze a session (athanor images): Claude keeps its images small meanwhile
+		if mode == "serie" && !p.outilsPython && tailleFichierPilote(filepath.Join(p.prive, "images_gel")) > 0 {
+			b1, _ := os.ReadFile(consignesCycle)
+			consignesCycle = filepath.Join(p.prive, "CLAUDE.images.md")
+			_ = os.WriteFile(consignesCycle, append(b1, consigneImages(entierPilote(lireTexteCourt(filepath.Join(p.prive, "images_gel")), 0))...), 0o644)
+		}
 		if mode == "serie" {
 			texteConsignes, _ := os.ReadFile(consignesCycle)
 			cArgs := []string{"-p", butCycle, "--permission-mode", "bypassPermissions", "--settings", p.reglages, "--permission-prompts", "none", "--output-format", "stream-json", "--verbose"}
@@ -2626,6 +2689,22 @@ func lancerPilote(args []string) int {
 		p.modeleCycle = modStats
 		p.enregistrerStats(p.fichierLog, etatCycle, strconv.Itoa(p.cycle), p.projet)
 		p.modeleCycle = ancMod
+		// a session that froze right after a large image: the next cycles ask Claude to keep its images
+		// small, until an image as large goes through again
+		if !p.outilsPython {
+			fGel := filepath.Join(p.prive, "images_gel")
+			if kb, ok := imageGelee(p.fichierLog); ok && motifArret != "" {
+				if avantKB := entierPilote(lireTexteCourt(fGel), 0); avantKB == 0 {
+					_ = os.WriteFile(fGel, []byte(strconv.Itoa(kb)+"\n"), 0o644)
+					p.log(fmt.Sprintf("Claude froze right after an image of %d KB: the next cycles ask it to keep its images small.", kb))
+				} else if kb < avantKB {
+					_ = os.WriteFile(fGel, []byte(strconv.Itoa(kb)+"\n"), 0o644)
+				}
+			} else if tailleFichierPilote(fGel) > 0 && plusGrandeImagePassee(p.fichierLog) >= max(1, entierPilote(lireTexteCourt(fGel), 1)) {
+				_ = os.Remove(fGel)
+				p.log("Large images go through again: the cycles no longer ask Claude to shrink them.")
+			}
+		}
 
 		cochesFin := p.cochesPlan()
 		if cochesFin > cochesCycleDebut {
@@ -2699,6 +2778,9 @@ func lancerPilote(args []string) int {
 			etatCycle = "cadre"
 		}
 
+		if etatCycle != "bloque" {
+			arrets = 0
+		}
 		switch etatCycle {
 		case "cadre":
 		case "ok":
@@ -2792,10 +2874,21 @@ func lancerPilote(args []string) int {
 			p.dormir(p.loginWaitMin * 60)
 		case "bloque":
 			erreurs++
-			p.log(fmt.Sprintf("Cycle %d stopped by the watchdog (%s). The work already done stays in the folder; resuming in %d min.", p.cycle, motifArret, p.errorWaitMin))
-			p.etatPhase = "erreur"
-			p.statut(fmt.Sprintf("Cycle stopped (%s), resuming in %d min", motifArret, p.errorWaitMin))
-			p.dormir(p.errorWaitMin * 60)
+			arrets++
+			if arrets >= p.maxCyclesWithoutProgress {
+				// the same stop again and again: said once, with a long pause, rather than a restart every few minutes
+				_ = os.WriteFile(filepath.Join(p.etat, "ALERT.md"), []byte(fmt.Sprintf("# Alert: cycles stopped by the watchdog\n%s: %d cycles in a row stopped by the watchdog (the last one: %s).\nThe last lines of each cycle log (.athanor/logs/) show where Claude stopped. You can refine your request.\n", time.Now().Format("2006-01-02 15:04"), arrets, motifArret)), 0o644)
+				p.log(fmt.Sprintf("ALERT: %d cycles in a row stopped by the watchdog (%s), 30 min pause (see .athanor/ALERT.md).", arrets, motifArret))
+				p.etatPhase = "erreur"
+				p.statut(fmt.Sprintf("Paused after %d cycles stopped by the watchdog", arrets))
+				arrets = 0
+				p.dormir(1800)
+			} else {
+				p.log(fmt.Sprintf("Cycle %d stopped by the watchdog (%s). The work already done stays in the folder; resuming in %d min.", p.cycle, motifArret, p.errorWaitMin))
+				p.etatPhase = "erreur"
+				p.statut(fmt.Sprintf("Cycle stopped (%s), resuming in %d min", motifArret, p.errorWaitMin))
+				p.dormir(p.errorWaitMin * 60)
+			}
 		case "erreur":
 			p.etatPhase = "erreur"
 			erreurs++
