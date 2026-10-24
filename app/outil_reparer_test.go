@@ -127,6 +127,10 @@ func TestReparerRecompiler(t *testing.T) {
 	if out, _ := lancer("--diff"); !strings.Contains(out, "No change") {
 		t.Fatalf("the new executable carries its own sources: %s", out)
 	}
+	// it carries the kit's files too, like a release: it can still update itself
+	if at, _ := exec.Command(exe, "autotest", kit).CombinedOutput(); !strings.Contains(string(at), "built-in kit files") {
+		t.Fatalf("the rebuilt executable lost the kit's files (no more updates): %s", at)
+	}
 	// back to the previous one
 	if out, code := lancer("--annuler"); code != 0 || !strings.Contains(out, "the previous one is back") {
 		t.Fatalf("annuler: %d %s", code, out)

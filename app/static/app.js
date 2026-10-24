@@ -2294,7 +2294,7 @@ async function rendreOptions() {
       </div>
       <div class="bloc"><h2>${t("Startup")}</h2>
         <label class="interrupteur"><input type="checkbox" id="op-lancer" data-option ${o.lancer_pilote_au_demarrage ? "checked" : ""}><span>${t("Restart the pilots that were running, when the app opens")}</span></label>
-        <label class="interrupteur"><input type="checkbox" id="op-windows" data-option ${o.demarrage_windows ? "checked" : ""}><span>${t("Open Athanor when the computer starts (Windows, or your Linux desktop session)")}</span></label>
+        <label class="interrupteur"><input type="checkbox" id="op-windows" data-option ${o.demarrage_windows ? "checked" : ""}><span>${t(o.windows ? "Open Athanor when Windows starts" : (etat.vue || {}).systeme === "darwin" ? "Open Athanor when you log in to the Mac" : "Open Athanor when your desktop session starts")}</span></label>
         <p class="muet petit">${t(o.windows && !o.mode_natif ? "Pilots run in WSL in the background, without a window. Remember to disable the PC's sleep mode." : "Pilots run in the background, without a window. Remember to disable the computer's sleep mode.")}</p>
         ${o.windows ? `<label class="interrupteur"><input type="checkbox" id="op-barre" data-option ${o.barre_windows ? "checked" : ""}><span>${t("Windows' own title bar instead of Athanor's (when Athanor opens again)")}</span></label>` : ""}
       </div>
@@ -2330,9 +2330,12 @@ async function rendreOptions() {
         <p class="petit ${o.git_bash ? "ok" : "attention"}">${o.git_bash ? h(t("Git for Windows: {0}", [o.git_bash.replace(/[\\/](usr[\\/])?bin[\\/]bash\.exe$/i, "")])) : t("Git for Windows is missing: Setup & health → Install everything.")}</p>
         <p class="muet petit">${t("Applies to the pilots started afterwards. When you close Athanor while native pilots run, it asks whether they go on in the background.")}</p>
       </div>
-      <div class="bloc"><h2>${t("Tool folder")}</h2>
-        <input type="text" id="op-kit" data-option value="${h(o.kit)}"><div class="muet petit mt-1">${o.kit_valide ? "✔ " + t(o.windows ? "tool recognized (template\\CLAUDE.md present)" : "tool recognized (template/CLAUDE.md present)") : "✖ " + t("this folder is not the tool")}</div>
+      <div class="bloc"><h2>${t("Athanor's folder")}</h2>
+        <p class="m0"><code class="chemin-kit">${h(o.kit)}</code></p><div class="muet petit mt-1">${o.kit_valide ? "✔ " + t("Athanor's own files: settings, token, logs, the tools Claude installs. Your projects are elsewhere.") : "✖ " + t("this folder is not the tool")}</div>
         <div class="ligne mt-1"><button class="btn btn-petit" data-ouvrir="kit">${t("Open the folder")}</button><button class="btn btn-petit" data-ouvrir="logs">${t("Logs folder")}</button><span class="espace"></span><button class="btn btn-petit" id="op-guide">${t("Show the first-launch guide again")}</button></div>
+        <details class="mt-1" ${o.kit_valide ? "" : "open"}><summary class="petit muet">${t("Use another tool folder (advanced)")}</summary>
+          <p class="muet petit">${t("Only for a tool folder you moved or copied yourself: Athanor then uses that one, with its settings and token.")}</p>
+          <input type="text" id="op-kit" data-option value="${h(o.kit)}"></details>
       </div>
       <div class="bloc" id="bloc-version"><h2>${t("Version")}</h2>${rendreBlocMaj(o)}</div>
     </div>

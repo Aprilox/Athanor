@@ -619,14 +619,34 @@ func recompiler(kit string, tests, forcer bool, journal func(string)) error {
 	_ = os.MkdirAll(neuf, 0o755)
 	defer os.RemoveAll(neuf)
 	cibles := ciblesKit(kit)
+	// what a release carries goes into the new executables too (embarque.go): the kit's files, and for
+	// Windows the Linux executable; without it a rebuilt Athanor could no longer update itself
+	emb := filepath.Join(app, "embarque")
+	_ = os.RemoveAll(emb)
+	if err := os.MkdirAll(emb, 0o755); err != nil {
+		return err
+	}
+	defer os.RemoveAll(emb)
+	if err := archiverKit(kit, filepath.Join(emb, "kit.tar.gz")); err != nil {
+		return fmt.Errorf("the kit's files cannot be packed (%v): nothing replaced", err)
+	}
+	// the Linux executable first: the Windows one carries it
+	sort.SliceStable(cibles, func(i, j int) bool { return cibles[i].goos == "linux" && cibles[j].goos != "linux" })
+	linuxFait := false
 	for _, c := range cibles {
 		drapeaux := "-s -w"
 		if c.goos == "windows" {
 			drapeaux += " -H windowsgui"
+			if err := preparerLinuxEmbarque(filepath.Join(neuf, "athanor"), linuxFait, filepath.Join(emb, "athanor-linux.gz")); err != nil {
+				return fmt.Errorf("the Linux executable to carry cannot be prepared (%v): nothing replaced", err)
+			}
 		}
 		journal(fmt.Sprintf("Building %s (%s/%s)…", c.nom, c.goos, c.goarch))
-		if err := executer(commandeGo(goBin, app, []string{"GOOS=" + c.goos, "GOARCH=" + c.goarch}, "build", "-trimpath", "-ldflags", drapeaux, "-o", filepath.Join(neuf, c.nom), "."), journal); err != nil {
+		if err := executer(commandeGo(goBin, app, []string{"GOOS=" + c.goos, "GOARCH=" + c.goarch}, "build", "-trimpath", "-tags", "embarque", "-ldflags", drapeaux, "-o", filepath.Join(neuf, c.nom), "."), journal); err != nil {
 			return fmt.Errorf("the build of %s failed: nothing replaced", c.nom)
+		}
+		if c.goos == "linux" {
+			linuxFait = true
 		}
 	}
 	for _, c := range cibles {
@@ -639,6 +659,10 @@ func recompiler(kit string, tests, forcer bool, journal func(string)) error {
 		cmd := commande(exe, "autotest", kit)
 		if c.goos == "windows" && runtime.GOOS == "linux" {
 			cmd = commande(exe, "autotest", cheminWindowsWSL(kit))
+		}
+		cmd.Env = append(os.Environ(), "ATHANOR_SUR_PLACE=1") // checked where it was built, never installed from there
+		if c.goos == "windows" && runtime.GOOS == "linux" {
+			cmd.Env = append(cmd.Env, "WSLENV="+strings.Trim(os.Getenv("WSLENV")+":ATHANOR_SUR_PLACE", ":"))
 		}
 		cacherFenetre(cmd)
 		if err := executer(cmd, journal); err != nil {
@@ -663,6 +687,21 @@ func recompiler(kit string, tests, forcer bool, journal func(string)) error {
 	journal("Done: " + strings.Join(remplaces, ", ") + " replaced (the previous ones: " + ancienDe(cibles[0].nom) + "…; `athanor reparer --annuler` puts them back).")
 	journal("The pilot uses the new one from its next step; restart the app to use the new interface.")
 	return nil
+}
+
+// preparerLinuxEmbarque: the Linux executable Athanor.exe carries: the one just built, else the one this
+// executable carries, else none (an empty archive: the WSL mode then keeps the kit's athanor).
+func preparerLinuxEmbarque(construit string, fait bool, dest string) error {
+	if fait {
+		return gzipFichier(construit, dest)
+	}
+	if len(athanorLinuxGz) > 0 {
+		return os.WriteFile(dest, athanorLinuxGz, 0o644)
+	}
+	var buf bytes.Buffer
+	z := gzip.NewWriter(&buf)
+	_ = z.Close()
+	return os.WriteFile(dest, buf.Bytes(), 0o644)
 }
 
 func annulerRemplacement(kit string, remplaces []string, err error) error {
