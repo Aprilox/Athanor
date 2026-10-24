@@ -27,6 +27,7 @@ func TestSuivreJournal(t *testing.T) {
 	time.Sleep(60 * time.Millisecond)
 	f.WriteString(`"}}]}]}}` + "\n")
 	f.WriteString(`{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"ls  -la"}}]}}` + "\n")
+	f.WriteString(`{"type":"assistant","message":{"content":[{"type":"tool_use","name":"mcp__s__t","input":{"studio_id":"a","code":"x"}}]}}` + "\n")
 	f.WriteString(`{"type":"result","result":"done"}`)
 	f.Close()
 	time.Sleep(60 * time.Millisecond)
@@ -36,7 +37,7 @@ func TestSuivreJournal(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("the display did not stop after FIN")
 	}
-	attendu := "  💬 one\n  ▶ ls -la\n  ■ End of cycle: done\n"
+	attendu := "  💬 one\n  ▶ ls -la\n  • mcp__s__t {\"studio_id\":\"a\",\"code\":\"x\"}\n  ■ End of cycle: done\n"
 	if sortie.String() != attendu {
 		t.Fatalf("display:\n%q\nwant\n%q", sortie.String(), attendu)
 	}
