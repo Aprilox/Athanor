@@ -277,7 +277,8 @@ type OptionsVue struct {
 	Windows                   bool       `json:"windows"`
 	GitBash                   string     `json:"git_bash"` // its bash.exe, "" when missing
 	BarreWindows              bool       `json:"barre_windows"`
-	VerifierMaj               bool       `json:"verifier_maj"` // look for an update when Athanor opens (maj.go)
+	VerifierMaj               bool       `json:"verifier_maj"`    // look for an update when Athanor opens (maj.go)
+	EntendreBureau            bool       `json:"entendre_bureau"` // the programs on Claude's desktop are heard
 }
 
 func (s *Serveur) apiOptions(w http.ResponseWriter, r *http.Request) {
@@ -288,7 +289,7 @@ func (s *Serveur) apiOptions(w http.ResponseWriter, r *http.Request) {
 	if projets == nil {
 		projets = []Projet{}
 	}
-	s.ecrireJSON(w, OptionsVue{projets, c.Kit, s.kitCourant().Valide(), c.LancerPiloteAuDemarrage, c.BureauVirtuel, c.ProgrammesSupplementaires, DemarrageWindowsActif(), c.MotDePasseHash != "", s.bureau.Etat(), modeNatif.Load(), runtime.GOOS == "windows", bashNatif(), c.BarreWindows, !c.PasVerifierMaj})
+	s.ecrireJSON(w, OptionsVue{projets, c.Kit, s.kitCourant().Valide(), c.LancerPiloteAuDemarrage, c.BureauVirtuel, c.ProgrammesSupplementaires, DemarrageWindowsActif(), c.MotDePasseHash != "", s.bureau.Etat(), modeNatif.Load(), runtime.GOOS == "windows", bashNatif(), c.BarreWindows, !c.PasVerifierMaj, c.EntendreBureauClaude})
 }
 
 func (s *Serveur) apiEcrireOptions(w http.ResponseWriter, r *http.Request) {
@@ -301,6 +302,7 @@ func (s *Serveur) apiEcrireOptions(w http.ResponseWriter, r *http.Request) {
 		ModeNatif                 *bool  `json:"mode_natif"`
 		BarreWindows              *bool  `json:"barre_windows"`
 		VerifierMaj               *bool  `json:"verifier_maj"`
+		EntendreBureau            *bool  `json:"entendre_bureau"`
 	}
 	if err := lireCorps(r, &c); err != nil {
 		s.erreur(w, http.StatusBadRequest, err.Error())
@@ -332,6 +334,9 @@ func (s *Serveur) apiEcrireOptions(w http.ResponseWriter, r *http.Request) {
 	}
 	if c.VerifierMaj != nil {
 		s.config.PasVerifierMaj = !*c.VerifierMaj
+	}
+	if c.EntendreBureau != nil {
+		s.config.EntendreBureauClaude = *c.EntendreBureau
 	}
 	s.config.Kit = nouveau.Racine
 	s.config.LancerPiloteAuDemarrage = c.LancerPiloteAuDemarrage

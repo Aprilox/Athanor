@@ -83,6 +83,7 @@ func nouveauServeur(config Config) *Serveur {
 	}
 	s.bureau.DefinirReglages(config.BureauVirtuel, strings.Split(config.ProgrammesSupplementaires, "\n"))
 	s.bureau.DefinirDossiers(s.dossiersProjets())
+	rendreSonOublie(s.kitCourant().Racine) // a program left muted on Claude's desktop by an Athanor stopped short
 	return s
 }
 

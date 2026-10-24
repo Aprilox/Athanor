@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -49,11 +50,24 @@ func GarderEveille(args []string) int {
 		return 2
 	}
 	runtime.LockOSThread() // the request belongs to the thread that makes it
-	// the mouse guard runs alongside, as long as the pilot (garde_souris_windows.go); the kit is two
-	// levels above FILE (KIT/logs/pilotes/ID/eveil)
+	// the mouse guard and Claude's quiet desktop run alongside, as long as the pilot
+	// (garde_souris_windows.go, bureau_calme_windows.go); the kit is above FILE (KIT/logs/pilotes/ID/eveil)
+	kit := filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(args[0]))))
 	fin := make(chan struct{})
-	defer close(fin)
-	go garderSouris(filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(args[0])))), fin)
+	var wg sync.WaitGroup
+	for _, f := range []func(string, <-chan struct{}){garderSouris, silencerBureau, teneurFocus} {
+		wg.Add(1)
+		go func() { defer wg.Done(); f(kit, fin) }()
+	}
+	defer func() { // the sound is given back before the process ends (at most 5 s)
+		close(fin)
+		fini := make(chan struct{})
+		go func() { wg.Wait(); close(fini) }()
+		select {
+		case <-fini:
+		case <-time.After(5 * time.Second):
+		}
+	}()
 	actuel := ""
 	for {
 		m := modeEveil(args[0])
