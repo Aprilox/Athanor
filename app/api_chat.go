@@ -251,7 +251,7 @@ func (s *Serveur) apiChatEnvoyer(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	cmd := commandeWSL(k, scriptChat(p, id, mode, c.Modele, conv.Session))
+	cmd := commandeKit(k, "chat", "session", k.Racine, p.Dossier, id, mode, c.Modele, conv.Session)
 	cacherFenetre(cmd)
 	en.cmd = cmd
 	if err := cmd.Start(); err != nil {
@@ -377,35 +377,4 @@ func (s *Serveur) apiChatNote(w http.ResponseWriter, r *http.Request) {
 	conv.Messages[c.Index].Note = true
 	ecrireConversation(k, p, conv)
 	s.msg(w, "Note sent: the pilot reads it at its next cycle.")
-}
-
-// scriptChat: one turn, in the project's folder (WSL or Git Bash). The paths and the message go through
-// files of logs/chat (no quoting issue); file tools are kept inside the project by guard.py.
-func scriptChat(p Projet, id, mode, modele, session string) string {
-	q := func(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
-	outils := `--allowedTools Read Glob Grep --disallowedTools Bash Edit Write MultiEdit NotebookEdit WebFetch WebSearch Task`
-	if mode == "modif" {
-		outils = `--permission-mode acceptEdits --allowedTools Read Glob Grep Edit Write MultiEdit --disallowedTools Bash NotebookEdit WebFetch WebSearch Task`
-	}
-	return chargerEnv + `case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) export PATH="$PWD/system/natif:$PATH" ;; esac
-export MSYS2_ARG_CONV_EXCL='*'   # native Windows: Claude's arguments as they are (the paths go through w)
-export ENABLE_CLAUDEAI_MCP_SERVERS=false   # the connectors of the user's claude.ai account (Shopify, Gmail…) stay out
-K="$PWD"; C="$K/logs/chat/` + id + `"
-w() { if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s' "$1"; fi; }
-D=` + q(p.Dossier) + `
-P=$(wslpath -u "$D" 2>/dev/null || cygpath -u "$D" 2>/dev/null || printf '%s' "$D")
-cd "$P" || { echo "Project folder not found: $D" >&2; exit 2; }
-# its settings: the kit's executable (its hook is the Go file guard)
-G="$K/athanor"; case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) G="$K/Athanor.exe" ;; esac
-[ -x "$G" ] || { echo "Athanor's executable is missing from the tool folder ($G): Setup & health → Rebuild Athanor." >&2; exit 2; }
-"$G" chat settings "$(w "$P")" "$(w "$C.settings.json")" > /dev/null || { echo "Cannot write the chat's settings" >&2; exit 2; }
-args=(-p "$(cat "$C.msg")" --output-format stream-json --verbose --max-turns 40 --strict-mcp-config --settings "$(w "$C.settings.json")" --append-system-prompt "$(cat "$C.prompt")" ` + outils + `)
-M=` + q(modele) + `; [ -n "$M" ] && args+=(--model "$M")
-S=` + q(session) + `; [ -n "$S" ] && args+=(--resume "$S")
-timeout 1200 "${CLAUDE_BIN:-claude}" "${args[@]}" < /dev/null > "$C.jsonl" 2> "$C.err"
-code=$?
-if [ ` + q(mode) + ` = modif ] && [ -d .git ] && [ -n "$(git status --porcelain 2>/dev/null)" ]; then
-  git add -A && git commit -q -F "$(w "$C.subject")" && git rev-parse --short HEAD > "$C.commit"
-fi
-exit $code`
 }

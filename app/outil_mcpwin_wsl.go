@@ -37,7 +37,7 @@ func echecMCPWindows(m string) int {
 
 // commandeWin: a Windows command of this program's own, never reading the MCP input (interop would hand it over).
 func commandeWin(prog string, args ...string) *exec.Cmd {
-	c := exec.Command(prog, args...)
+	c := commande(prog, args...)
 	c.Env = append(os.Environ(), "WSLENV=")
 	return c
 }
@@ -99,6 +99,9 @@ func lancerMCPWindows(args []string) int {
 		os.Unsetenv(v)
 	}
 	kit := os.Getenv("KIT")
+	if kit == "" {
+		kit = kitDuProgramme() // called by Claude Code from the MCP configuration: the executable's folder
+	}
 	if !existeP("/proc/sys/fs/binfmt_misc/WSLInterop") && !existeP("/proc/sys/fs/binfmt_misc/WSLInterop-late") && os.Getenv("WSL_INTEROP") == "" {
 		return echecMCPWindows("Windows programs cannot be started from here (not on Windows, or WSL interoperability is off).")
 	}
@@ -198,7 +201,7 @@ func lancerMCPWindows(args []string) int {
 		return echecMCPWindows("not a Windows program: " + prog)
 	case reCheminWin.MatchString(prog):
 		progW = prog
-		out, err := exec.Command("wslpath", "-u", prog).Output()
+		out, err := commande("wslpath", "-u", prog).Output()
 		progL = strings.TrimRight(string(out), "\n")
 		if err != nil || !fichierP(progL) {
 			return echecMCPWindows("program not found: " + prog)
@@ -251,7 +254,7 @@ func lancerMCPWindows(args []string) int {
 			}
 			a := append([]string{"--isole"}, ici...)
 			a = append(a, "--pid", wslpathW(pidF), "--", progW)
-			c := exec.Command(exe, append(a, reste...)...)
+			c := commande(exe, append(a, reste...)...)
 			c.Env, c.Stdin, c.Stdout, c.Stderr = envProg, os.Stdin, os.Stdout, os.Stderr
 			if err := c.Start(); err != nil {
 				os.Remove(pidF)
@@ -259,7 +262,7 @@ func lancerMCPWindows(args []string) int {
 			}
 			// watchdog, in a session of its own (a KILL of this process or of its group never reaches it)
 			if moi, err := os.Executable(); err == nil {
-				g := exec.Command(moi, "mcp-windows-garde", pidF, sys32, strconv.Itoa(c.Process.Pid), strconv.Itoa(os.Getpid()))
+				g := commande(moi, "mcp-windows-garde", pidF, sys32, strconv.Itoa(c.Process.Pid), strconv.Itoa(os.Getpid()))
 				g.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 				if g.Start() == nil {
 					_ = g.Process.Release()

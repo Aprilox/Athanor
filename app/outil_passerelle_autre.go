@@ -1,4 +1,4 @@
-//go:build !linux
+//go:build !linux && !windows
 
 package main
 
@@ -7,8 +7,8 @@ import (
 	"os"
 )
 
-// The gateways' PC side in Go is for WSL: native Windows (and the Mac) keep the scripts of system/bin.
+// The gateways (system/bin) exist in WSL and in native Windows: macOS runs the applications directly.
 func lancerPasserelle(args []string) int {
-	fmt.Fprintln(os.Stderr, "athanor passerelle: WSL only (native Windows keeps the scripts of system/bin)")
+	fmt.Fprintln(os.Stderr, "athanor passerelle: WSL and native Windows only")
 	return 2
 }

@@ -1,16 +1,14 @@
-//go:build !windows
-
 package main
 
 // athanor github etat | pousser | publie | auto | branche | delier | suivre | identite | regler-identite |
-// identite-pilote: system/github.sh in Go (WSL and Linux; native Windows keeps the script), the same
-// files in the same place (~/.local/share/athanor/github), the same messages and exit codes. Linking a
-// project (github.sh lier: the GitHub sign-in in a window) stays in the script.
+// identite-pilote | tester | enregistrer | lier: what system/github.sh did, in Go on every system (WSL,
+// Linux, macOS, native Windows), the same files in the same place (~/.local/share/athanor/github, the
+// user profile's in native Windows, as Git Bash named it), the same messages and exit codes.
 //
 // What Claude can reach stays the project's repository only: the key, the repository's name and the
-// settings live in the user's Linux home, which Claude's sandbox cannot read; pushes run outside the
-// sandbox from a private git folder (no setting of the project's .git is ever used), GitHub's identity
-// is checked against the keys it published, the push is never forced, and the commits are scanned for
+// settings live in the user's home, which Claude's sandbox cannot read; pushes run outside the sandbox
+// from a private git folder (no setting of the project's .git is ever used), GitHub's identity is
+// checked against the keys it published, the push is never forced, and the commits are scanned for
 // secrets first.
 
 import (
@@ -26,19 +24,24 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
-	"syscall"
 	"time"
 	"unicode/utf8"
 )
 
 func donneesGitHub() string {
 	if d := os.Getenv("ATHANOR_GITHUB_DIR"); d != "" {
-		return d
+		return cheminNatifPilote(d)
 	}
-	x := os.Getenv("XDG_DATA_HOME")
+	x := cheminNatifPilote(os.Getenv("XDG_DATA_HOME"))
 	if x == "" {
-		x = os.Getenv("HOME") + "/.local/share"
+		h := cheminNatifPilote(os.Getenv("HOME"))
+		if h == "" && runtime.GOOS == "windows" {
+			// Git Bash's HOME: the user profile
+			h, _ = os.UserHomeDir()
+		}
+		x = h + "/.local/share"
 	}
 	return x + "/athanor/github"
 }
@@ -62,8 +65,10 @@ func cheminProjetGH(p string) (string, bool) {
 	return p, true
 }
 
+// dossierGH: the project's folder of settings, named after its path as github.sh saw it (in native
+// Windows, Git Bash's form: /c/Users/…).
 func dossierGH(projet string) string {
-	h := sha1.Sum([]byte(projet))
+	h := sha1.Sum([]byte(cleProjetGH(projet)))
 	return donneesGitHub() + "/" + hex.EncodeToString(h[:])[:16]
 }
 
@@ -87,7 +92,7 @@ func brancheValideGH(b string) bool {
 		strings.HasSuffix(b, ".lock") || strings.Contains(b, ".lock/") {
 		return false
 	}
-	return exec.Command("git", "check-ref-format", "--branch", b).Run() == nil
+	return commande("git", "check-ref-format", "--branch", b).Run() == nil
 }
 
 // lignesCleValeur: KEY=value lines as bash's `while IFS='=' read -r k v` reads them (a last line without
@@ -170,23 +175,9 @@ func ecrireReglagesGH(d string, r reglagesGH) error {
 	return os.Rename(t.Name(), d+"/reglages")
 }
 
-// verrouGH: d/verrou opened and locked (flock, as github.sh takes it); nil after attente.
+// verrouGH: d/verrou opened and locked (as github.sh's flock); nil after attente.
 func verrouGH(d string, attente time.Duration) *os.File {
-	f, err := os.OpenFile(d+"/verrou", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
-	if err != nil {
-		return nil
-	}
-	fin := time.Now().Add(attente)
-	for {
-		if syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB) == nil {
-			return f
-		}
-		if time.Now().After(fin) {
-			f.Close()
-			return nil
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
+	return verrouFichierGH(d+"/verrou", attente)
 }
 
 // ---------------------------------------------------------------------------- the result of the last push
@@ -268,7 +259,7 @@ func gmGH(miroir string, extra []string, args ...string) *exec.Cmd {
 	env = append(env, "GIT_TERMINAL_PROMPT=0", "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null", "GIT_ASKPASS=/bin/false",
 		"SSH_ASKPASS=/bin/false", "SSH_ASKPASS_REQUIRE=never", "GIT_DIR="+miroir)
 	env = append(env, extra...)
-	c := exec.Command("git", append([]string{"-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-c", "credential.helper=",
+	c := commande("git", append([]string{"-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-c", "credential.helper=",
 		"-c", "core.askPass=", "-c", "core.quotePath=false", "-c", "protocol.allow=never", "-c", "push.recurseSubmodules=no",
 		"-c", "push.gpgSign=false"}, args...)...)
 	c.Env = env
@@ -282,7 +273,7 @@ func sortieGH(c *exec.Cmd) (string, error) {
 
 // gProjetGH: git on the project's .git with its automatic commands off (safety.sh's g).
 func gProjetGH(gd string, args ...string) (string, error) {
-	c := exec.Command("git", append([]string{"-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null", "-c", "diff.external=",
+	c := commande("git", append([]string{"-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null", "-c", "diff.external=",
 		"-c", "core.pager=cat", "-c", "core.editor=true", "-c", "sequence.editor=true", "-c", "commit.gpgsign=false",
 		"-c", "tag.gpgsign=false", "-c", "core.sshCommand=false", "-c", "protocol.allow=never", "-c", "credential.helper="}, args...)...)
 	c.Env = append(os.Environ(), "GIT_DIR="+gd, "GIT_TERMINAL_PROMPT=0")
@@ -412,10 +403,10 @@ func consigneSecretsGH(p, base string, secrets []string) error {
 
 func preparerMiroirGH(miroir, objets string) error {
 	if !estDossierGH(miroir) {
-		if exec.Command("git", "init", "-q", "--bare", miroir).Run() != nil {
+		if commande("git", "init", "-q", "--bare", miroir).Run() != nil {
 			return fmt.Errorf("init")
 		}
-		c := exec.Command("git", "config", "gc.auto", "0")
+		c := commande("git", "config", "gc.auto", "0")
 		c.Env = append(os.Environ(), "GIT_DIR="+miroir)
 		if c.Run() != nil {
 			return fmt.Errorf("config")
@@ -424,12 +415,17 @@ func preparerMiroirGH(miroir, objets string) error {
 	if err := os.MkdirAll(miroir+"/objects/info", 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(miroir+"/objects/info/alternates", []byte(objets+"\n"), 0o644)
+	return os.WriteFile(miroir+"/objects/info/alternates", []byte(filepath.ToSlash(objets)+"\n"), 0o644)
 }
 
 func commandeSSHGH(d, port string) string {
-	return fmt.Sprintf("ssh -F /dev/null -p %s -i '%s' -o IdentitiesOnly=yes -o IdentityAgent=none -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile='%s' -o GlobalKnownHostsFile=/dev/null -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -o LogLevel=ERROR",
-		port, d+"/cle", d+"/known_hosts")
+	nul := "/dev/null"
+	ssh := programmeGH("ssh")
+	if runtime.GOOS == "windows" && !sshDeGitGH(ssh) {
+		nul = "NUL" // Windows' own OpenSSH
+	}
+	return fmt.Sprintf("'%s' -F %s -p %s -i '%s' -o IdentitiesOnly=yes -o IdentityAgent=none -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile='%s' -o GlobalKnownHostsFile=%s -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -o LogLevel=ERROR",
+		filepath.ToSlash(ssh), nul, port, filepath.ToSlash(d+"/cle"), filepath.ToSlash(d+"/known_hosts"), nul)
 }
 
 func contientGH(s, motif string) bool { return regexp.MustCompile("(?i)" + motif).MatchString(s) }
@@ -449,7 +445,7 @@ func pousserGH(args []string, w io.Writer) int {
 	}
 	projet, ok := cheminProjetGH(projet)
 	if !ok {
-		fmt.Fprintln(w, "Usage: github.sh pousser PROJECT")
+		fmt.Fprintln(w, "Usage: athanor github pousser PROJECT")
 		return 1
 	}
 	d := dossierGH(projet)
@@ -682,7 +678,7 @@ func publieGH(args []string) int {
 		return 1
 	}
 	defer v.Close()
-	if os.WriteFile(miroir+"/objects/info/alternates", []byte(objets+"\n"), 0o644) != nil {
+	if os.WriteFile(miroir+"/objects/info/alternates", []byte(filepath.ToSlash(objets)+"\n"), 0o644) != nil {
 		return 1
 	}
 	out, _ := sortieGH(gmGH(miroir, []string{"GIT_LITERAL_PATHSPECS=1"}, append([]string{"log", "--glob=refs/athanor/pousse/*", "-1", "--format=%H", "--"}, args[1:]...)...))
@@ -788,7 +784,7 @@ func suivreGH(args []string, w io.Writer) int {
 	if os.Rename(a, n) != nil {
 		return 1
 	}
-	if os.WriteFile(n+"/projet", []byte(nouveau+"\n"), 0o644) != nil {
+	if os.WriteFile(n+"/projet", []byte(cleProjetGH(nouveau)+"\n"), 0o644) != nil {
 		return 1
 	}
 	return 0
@@ -859,7 +855,7 @@ func lireIdentiteGH(d string) identiteGH {
 }
 
 func gitGlobalGH(cle string) string {
-	out, _ := exec.Command("git", "config", "--global", cle).Output()
+	out, _ := commande("git", "config", "--global", cle).Output()
 	return strings.TrimRight(string(out), "\n")
 }
 
@@ -1045,8 +1041,7 @@ func etatGH(args []string, w io.Writer) int {
 	}
 	d := dossierGH(projet)
 	_, e1 := exec.LookPath("gh")
-	_, e2 := exec.LookPath("ssh")
-	_, e3 := exec.LookPath("ssh-keygen")
+	e2, e3 := presentGH("ssh"), presentGH("ssh-keygen")
 	var dernier any
 	if b, err := os.ReadFile(d + "/dernier.json"); err == nil {
 		var x any
@@ -1081,8 +1076,27 @@ func identiteGHCommande(args []string, w io.Writer) int {
 
 // commandeGitHub: the github.sh commands done here; ok false for the others.
 func commandeGitHub(args []string, w io.Writer) (int, bool) {
-	reste := args[1:]
+	reste := append([]string{}, args[1:]...)
+	// the project folders as this system names them (the application gives them as Windows does)
 	switch args[0] {
+	case "pousser":
+		for i, a := range reste {
+			if !strings.HasPrefix(a, "--") {
+				reste[i] = cheminNatifPilote(a)
+			}
+		}
+	case "suivre":
+		for i := 0; i < len(reste) && i < 2; i++ {
+			reste[i] = cheminNatifPilote(reste[i])
+		}
+	default:
+		if len(reste) > 0 {
+			reste[0] = cheminNatifPilote(reste[0])
+		}
+	}
+	switch args[0] {
+	case "lier":
+		return lierGH(reste, w), true
 	case "etat":
 		return etatGH(reste, w), true
 	case "pousser":
@@ -1143,8 +1157,8 @@ func testerGH(args []string, w io.Writer) int {
 	branche := firstNonEmpty(r.Branche, "main")
 	miroir := d + "/miroir.git"
 	if !estDossierGH(miroir) {
-		if exec.Command("git", "init", "-q", "--bare", miroir).Run() == nil {
-			c := exec.Command("git", "config", "gc.auto", "0")
+		if commande("git", "init", "-q", "--bare", miroir).Run() == nil {
+			c := commande("git", "config", "gc.auto", "0")
 			c.Env = append(os.Environ(), "GIT_DIR="+miroir)
 			_ = c.Run()
 		}

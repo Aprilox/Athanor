@@ -27,7 +27,7 @@ func (p *pilote) exeAthanor(env []string, args ...string) *exec.Cmd {
 	if err != nil {
 		exe = "athanor"
 	}
-	c := exec.Command(exe, args...)
+	c := commande(exe, args...)
 	c.Env = append(os.Environ(), env...)
 	cacherFenetre(c)
 	return c
@@ -251,7 +251,7 @@ func (p *pilote) lancerOuvrier(ident, ligne, journal, modele string) (*ouvrier, 
 	if err != nil {
 		return nil, false
 	}
-	cmd := exec.Command(prog[0], append(prog[1:], a...)...)
+	cmd := commande(prog[0], append(prog[1:], a...)...)
 	cmd.Dir = trav
 	env := []string{}
 	for _, e := range p.envClaude() {

@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"io/fs"
@@ -393,13 +392,16 @@ func (p *pilote) lancerClaudeSurveille(journal string, args []string, cadrage bo
 	var pr, pw, jDirect *os.File
 	var err error
 	if direct {
-		if jDirect, err = os.OpenFile(journal, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o644); err != nil {
+		// not O_APPEND: on Windows that opens the file for appending only (FILE_APPEND_DATA without
+		// FILE_WRITE_DATA), and some programs writing to such an inherited handle fail (Git Bash's do): the
+		// log stayed empty and every cycle was taken for an error. The file was just emptied: position 0.
+		if jDirect, err = os.OpenFile(journal, os.O_WRONLY|os.O_CREATE, 0o644); err != nil {
 			return 1
 		}
 	} else if pr, pw, err = os.Pipe(); err != nil {
 		return 1
 	}
-	cmd := exec.Command(prog[0], append(prog[1:], args...)...)
+	cmd := commande(prog[0], append(prog[1:], args...)...)
 	cmd.Dir = p.projet
 	if direct {
 		cmd.Stdout, cmd.Stderr = jDirect, jDirect
@@ -805,7 +807,7 @@ func (p *pilote) demarrerEveil() {
 				argEveil = w
 			}
 		}
-		cmd := exec.Command(exeAthanor, "--eveil", argEveil)
+		cmd := commande(exeAthanor, "--eveil", argEveil)
 		if !p.natif && dossierExistePilote("/mnt/c") {
 			cmd.Dir = "/mnt/c"
 		}
@@ -822,7 +824,7 @@ func (p *pilote) demarrerEveil() {
 		if p.keepAwake == "screen" {
 			opts = "-imsd"
 		}
-		cmd := exec.Command(c, opts, "-w", strconv.Itoa(os.Getpid()))
+		cmd := commande(c, opts, "-w", strconv.Itoa(os.Getpid()))
 		_ = cmd.Start()
 		if cmd.Process != nil {
 			go func() { _ = cmd.Wait() }()
@@ -830,7 +832,7 @@ func (p *pilote) demarrerEveil() {
 		return
 	}
 	if _, err := exec.LookPath("systemd-inhibit"); err == nil {
-		cmd := exec.Command("systemd-inhibit", "--what=sleep:idle", "--who=Athanor", "--why=Athanor: a pilot is running", "--mode=block", "tail", fmt.Sprintf("--pid=%d", os.Getpid()), "-f", "/dev/null")
+		cmd := commande("systemd-inhibit", "--what=sleep:idle", "--who=Athanor", "--why=Athanor: a pilot is running", "--mode=block", "tail", fmt.Sprintf("--pid=%d", os.Getpid()), "-f", "/dev/null")
 		_ = cmd.Start()
 		if cmd.Process != nil {
 			go func() { _ = cmd.Wait() }()
@@ -965,7 +967,7 @@ func (p *pilote) preparerEcran() {
 			}
 		}
 		fLog, _ := os.OpenFile(filepath.Join(p.prive, "ecran.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
-		cmd := exec.Command("bwrap", "--dev-bind", "/", "/", "--bind", dir, "/tmp/.X11-unix", "--die-with-parent", "--",
+		cmd := commande("bwrap", "--dev-bind", "/", "/", "--bind", dir, "/tmp/.X11-unix", "--die-with-parent", "--",
 			"Xvfb", fmt.Sprintf(":%d", n), "-screen", "0", "1920x1080x24", "-nolisten", "tcp", "-nolisten", "local", "-nolock")
 		if fLog != nil {
 			cmd.Stdout = fLog
@@ -999,7 +1001,7 @@ func (p *pilote) preparerEcran() {
 			p.ecranImposs = true
 			return
 		}
-		testCmd := exec.Command("bwrap", "--dev-bind", "/", "/", "--bind", dir, "/tmp/.X11-unix", "--",
+		testCmd := commande("bwrap", "--dev-bind", "/", "/", "--bind", dir, "/tmp/.X11-unix", "--",
 			"bwrap", "--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc", "--unshare-net", "--", "true")
 		if testCmd.Run() != nil {
 			p.log("Claude's screen: the system sandbox cannot run inside it on this system: Linux windows open on your screen.")
@@ -1094,7 +1096,7 @@ func (p *pilote) robloxSyncDemarrer() {
 	var cmd *exec.Cmd
 
 	if exe, err := os.Executable(); err == nil {
-		cmd = exec.Command(exe, "roblox-sync", "serve", p.projet, filepath.Join(p.prive, "pilot.pid"))
+		cmd = commande(exe, "roblox-sync", "serve", p.projet, filepath.Join(p.prive, "pilot.pid"))
 	}
 	if cmd != nil {
 		if fLog != nil {
@@ -1119,24 +1121,24 @@ func (p *pilote) robloxSyncDemarrer() {
 func (p *pilote) preparerCycle() {
 	exe, errExe := os.Executable()
 	if errExe == nil {
-		cmd := exec.Command(exe, "archive")
+		cmd := commande(exe, "archive")
 		cmd.Env = append(os.Environ(), "PROJECT="+p.projet)
 		cacherFenetre(cmd)
 		if out, err := cmd.CombinedOutput(); err == nil && bytes.Contains(out, []byte(" archived")) {
 			p.log("Archiving: " + strings.ReplaceAll(strings.TrimSpace(string(out)), "\n", " "))
 		}
-		cmdMap := exec.Command(exe, "map")
+		cmdMap := commande(exe, "map")
 		cmdMap.Env = append(os.Environ(), "PROJECT="+p.projet)
 		cacherFenetre(cmdMap)
 		_ = cmdMap.Run()
 	} else if athanorBin, err := exec.LookPath("athanor"); err == nil {
-		cmd := exec.Command(athanorBin, "archive")
+		cmd := commande(athanorBin, "archive")
 		cmd.Env = append(os.Environ(), "PROJECT="+p.projet)
 		cacherFenetre(cmd)
 		if out, err := cmd.CombinedOutput(); err == nil && bytes.Contains(out, []byte(" archived")) {
 			p.log("Archiving: " + strings.ReplaceAll(strings.TrimSpace(string(out)), "\n", " "))
 		}
-		cmdMap := exec.Command(athanorBin, "map")
+		cmdMap := commande(athanorBin, "map")
 		cmdMap.Env = append(os.Environ(), "PROJECT="+p.projet)
 		cacherFenetre(cmdMap)
 		_ = cmdMap.Run()
@@ -1147,7 +1149,7 @@ func (p *pilote) preparerCycle() {
 		if runtime.GOOS == "windows" {
 			sch = "schtasks"
 		}
-		c := exec.Command(sch, "/run", "/tn", "Athanor - installations")
+		c := commande(sch, "/run", "/tn", "Athanor - installations")
 		if runtime.GOOS != "windows" && dossierExistePilote("/mnt/c") {
 			c.Dir = "/mnt/c"
 		}
@@ -1192,7 +1194,7 @@ func (p *pilote) preparerCycle() {
 			p.robloxSyncDemarrer()
 			place = p.robloxPlaceStudio(rojoF)
 			if !processusTourne("RobloxStudioBeta.exe") {
-				c := exec.Command("bash", "-c", `. "$1/roblox.sh"; roblox_construire "$2" "$3"`, "_", p.systeme, filepath.ToSlash(rojoF), filepath.ToSlash(place))
+				c := p.commandePasserelleInterne("rojo-construire", rojoF, place)
 				fLog, _ := os.OpenFile(filepath.Join(p.prive, "pilot.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 				if fLog != nil {
 					c.Stderr = fLog
@@ -1278,18 +1280,14 @@ func (p *pilote) preparerCycle() {
 }
 
 func (p *pilote) commandePasserelle(nom string, args ...string) *exec.Cmd {
-	script := filepath.Join(p.systeme, "bin", nom)
-	var cmd *exec.Cmd
-	if runtime.GOOS == "windows" {
-		b := trouverBashNatifPilote()
-		a := append([]string{filepath.ToSlash(script)}, args...)
-		cmd = exec.Command(b, a...)
-	} else {
-		cmd = exec.Command(script, args...)
-	}
-	cmd.Env = append(os.Environ(), "PROJECT="+p.projet)
-	cacherFenetre(cmd)
-	return cmd
+	return commandePasserelleKit(p.kit, p.projet, nom, args...)
+}
+
+// commandePasserelleInterne: a PC-side step of the pilot's own (athanor passerelle rojo-construire…), never
+// one of Claude's commands.
+func (p *pilote) commandePasserelleInterne(etape string, args ...string) *exec.Cmd {
+	c := commandePasserelleKit(p.kit, p.projet, "athanor", append([]string{"passerelle", etape}, args...)...)
+	return c
 }
 
 func (p *pilote) commandeBash(script string, args ...string) *exec.Cmd {
@@ -1297,9 +1295,9 @@ func (p *pilote) commandeBash(script string, args ...string) *exec.Cmd {
 	if runtime.GOOS == "windows" {
 		b := trouverBashNatifPilote()
 		a := append([]string{filepath.ToSlash(script)}, args...)
-		cmd = exec.Command(b, a...)
+		cmd = commande(b, a...)
 	} else {
-		cmd = exec.Command("bash", append([]string{script}, args...)...)
+		cmd = commande("bash", append([]string{script}, args...)...)
 	}
 	cacherFenetre(cmd)
 	return cmd
@@ -1310,21 +1308,10 @@ func (p *pilote) ecrireReglages() bool {
 }
 
 func (p *pilote) appliquerIdentite() {
-	var l string
-	if !p.natif {
-		var buf bytes.Buffer
-		// identite-pilote writes "nom\temail\tsans\n"
-		cmd := p.commandeBash(filepath.Join(p.systeme, "github.sh"), "identite-pilote", p.projet)
-		cmd.Stdout = &buf
-		_ = cmd.Run()
-		l = strings.TrimRight(buf.String(), "\r\n")
-	} else {
-		var buf bytes.Buffer
-		cmd := p.commandeBash(filepath.Join(p.systeme, "github.sh"), "identite-pilote", filepath.ToSlash(p.projet))
-		cmd.Stdout = &buf
-		_ = cmd.Run()
-		l = strings.TrimRight(buf.String(), "\r\n")
-	}
+	// the author chosen in the GitHub block: "name\temail\t0|1" (athanor github identite-pilote, here)
+	var buf bytes.Buffer
+	identitePiloteGH([]string{p.projet}, &buf)
+	l := strings.TrimRight(buf.String(), "\r\n")
 	parts := strings.SplitN(l, "\t", 3)
 	for len(parts) < 3 {
 		parts = append(parts, "")
@@ -1377,35 +1364,13 @@ func (p *pilote) appliquerIdentite() {
 	}
 }
 
+// githubPousser: the automatic push after a milestone (athanor github pousser --auto, here); its exit
+// code: 0 pushed or up to date, 3 nothing to do, 4 blocked (a secret), 5 refused by GitHub, 1 an error.
 func (p *pilote) githubPousser() int {
-	sh := filepath.Join(p.systeme, "github.sh")
-	if !fichierRegulierPilote(sh) {
-		return 3
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 900*time.Second)
-	defer cancel()
-	var cmd *exec.Cmd
-	if runtime.GOOS == "windows" {
-		b := trouverBashNatifPilote()
-		if b == "" {
-			return 3
-		}
-		cmd = exec.CommandContext(ctx, b, filepath.ToSlash(sh), "pousser", filepath.ToSlash(p.projet), "--auto")
-	} else {
-		cmd = exec.CommandContext(ctx, "bash", sh, "pousser", p.projet, "--auto")
-	}
-	cacherFenetre(cmd)
-	out, err := cmd.CombinedOutput()
-	code := 0
-	if err != nil {
-		if ee, ok := err.(*exec.ExitError); ok {
-			code = ee.ExitCode()
-		} else {
-			code = 1
-		}
-	}
+	var out bytes.Buffer
+	code := pousserGH([]string{p.projet, "--auto"}, &out)
 	if code != 3 {
-		lignes := strings.Split(strings.TrimRight(string(out), "\r\n"), "\n")
+		lignes := strings.Split(strings.TrimRight(out.String(), "\r\n"), "\n")
 		derniere := lignes[len(lignes)-1]
 		p.log(tronquerRunes(derniere, 300))
 	}
@@ -1676,6 +1641,15 @@ func trouverBashNatifPilote() string {
 }
 
 func cheminNatifPilote(s string) string {
+	if runtime.GOOS == "linux" && len(s) >= 3 && estLettre(s[0]) && s[1] == ':' && (s[2] == '\\' || s[2] == '/') {
+		// in WSL, a folder as Windows names it (the application gives it so): its WSL path
+		if out, err := commande("wslpath", "-u", s).Output(); err == nil {
+			if u := strings.TrimSpace(string(out)); strings.HasPrefix(u, "/") {
+				return u
+			}
+		}
+		return "/mnt/" + strings.ToLower(s[:1]) + strings.ReplaceAll(s[2:], `\`, "/")
+	}
 	if runtime.GOOS != "windows" || s == "" {
 		return s
 	}
@@ -1696,7 +1670,7 @@ func cheminNatifPilote(s string) string {
 					cyg = filepath.Join(filepath.Dir(filepath.Dir(b)), "usr", "bin", "cygpath.exe")
 				}
 				if fichierRegulierPilote(cyg) {
-					if out, err := exec.Command(cyg, "-w", s).Output(); err == nil {
+					if out, err := commande(cyg, "-w", s).Output(); err == nil {
 						if w := strings.TrimSpace(string(out)); w != "" {
 							return w
 						}
@@ -1806,8 +1780,8 @@ func lancerPilote(args []string) int {
 		kit = cheminNatifPilote(kit)
 	} else if exe, err := os.Executable(); err == nil {
 		kit = filepath.Dir(exe)
-		if !fichierRegulierPilote(filepath.Join(kit, "system", "pilot.sh")) {
-			if wd, err := os.Getwd(); err == nil && fichierRegulierPilote(filepath.Join(wd, "system", "pilot.sh")) {
+		if !estDossierKit(kit) {
+			if wd, err := os.Getwd(); err == nil && estDossierKit(wd) {
 				kit = wd
 			}
 		}
@@ -1877,22 +1851,19 @@ func lancerPilote(args []string) int {
 	}
 	sep := string(os.PathListSeparator)
 	pathActuel := os.Getenv("PATH")
-	nouveauPath := filepath.Join(systeme, "bin") + sep + filepath.Join(home, ".local", "bin") + sep + pathActuel
-	if strings.HasPrefix(pathActuel, filepath.Join(systeme, "bin")+sep) {
-		nouveauPath = pathActuel // started by pilot.sh, which put them there already
+	// Claude's commands (the gateways, athanor): links to this executable, made again at each start
+	commandesClaude := dossierCommandesClaude(kit)
+	if err := preparerCommandesClaude(kit); err != nil {
+		fmt.Fprintf(os.Stderr, "Claude's commands (%s): %v\n", commandesClaude, err)
+	}
+	nouveauPath := commandesClaude + sep + filepath.Join(home, ".local", "bin") + sep + pathActuel
+	if strings.HasPrefix(pathActuel, commandesClaude+sep) {
+		nouveauPath = pathActuel // started by an older pilot.sh, which put them there already
 	}
 	_ = os.Setenv("PATH", nouveauPath)
 	claudeBin := trouverClaudePilote(natif)
 	cheminClaude := nouveauPath + sep + filepath.Join(tools, "bin")
 	if natif {
-		var parts []string
-		natifDir := filepath.Clean(filepath.Join(systeme, "natif"))
-		for _, d := range filepath.SplitList(cheminClaude) {
-			if !strings.EqualFold(filepath.Clean(d), natifDir) && filepath.ToSlash(d) != filepath.ToSlash(natifDir) {
-				parts = append(parts, d)
-			}
-		}
-		cheminClaude = strings.Join(parts, sep)
 		if os.Getenv("CLAUDE_CODE_GIT_BASH_PATH") == "" {
 			if b := trouverBashNatifPilote(); b != "" {
 				_ = os.Setenv("CLAUDE_CODE_GIT_BASH_PATH", b)
@@ -2017,7 +1988,7 @@ func lancerPilote(args []string) int {
 	// a Go error from here on: the sessions stopped, the report kept, and pilot.sh carries on in bash
 	defer p.recupererPanique()
 	if f, err := os.OpenFile(filepath.Join(p.prive, "pilote-go.crash"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644); err == nil {
-		_ = debug.SetCrashOutput(f, debug.CrashOptions{}) // the fatal errors no recover catches (pilot.sh removes it empty)
+		_ = debug.SetCrashOutput(f, debug.CrashOptions{}) // the fatal errors no recover catches (athanor demarrer removes it empty)
 		f.Close()
 	}
 
@@ -2073,7 +2044,7 @@ func lancerPilote(args []string) int {
 	p.demarrerEveil()
 
 	if p.claudeBin == "" || !fichierRegulierPilote(p.claudeBin) {
-		p.log("Claude Code not found: run install.sh first.")
+		p.log("Claude Code not found: Setup & health → Install everything first.")
 		return 1
 	}
 	for _, f := range []string{"pilot.log", "stats.tsv"} {
@@ -2087,9 +2058,6 @@ func lancerPilote(args []string) int {
 	}
 
 	p.log("=== Athanor starting ===")
-	if runtime.GOOS == "windows" && !consolePartagee {
-		p.log("Windows: no console to share with the programs the pilot starts (git, the tools): each may flash a window of its own.")
-	}
 
 	nomExe := "athanor"
 	if exe, err := os.Executable(); err == nil {
@@ -2175,7 +2143,7 @@ func lancerPilote(args []string) int {
 	p.preparerEquipe()
 
 	cibles := p.ciblesClaude()
-	cmdHelp := exec.Command(cibles[0], append(cibles[1:], "--help")...)
+	cmdHelp := commande(cibles[0], append(cibles[1:], "--help")...)
 	cacherFenetre(cmdHelp)
 	aideClaudeBytes, _ := cmdHelp.Output()
 	aideClaude := string(aideClaudeBytes)
@@ -2188,7 +2156,7 @@ func lancerPilote(args []string) int {
 	if strings.Contains(aideClaude, "--append-system-prompt-file") {
 		p.appendFichierOK = true
 	}
-	cmdVer := exec.Command(cibles[0], append(cibles[1:], "--version")...)
+	cmdVer := commande(cibles[0], append(cibles[1:], "--version")...)
 	cacherFenetre(cmdVer)
 	verBytes, _ := cmdVer.Output()
 	vClaude := reVersionClaude.FindString(string(verBytes))
@@ -2206,15 +2174,9 @@ func lancerPilote(args []string) int {
 	if strings.Contains(aideClaude, "--agents") {
 		p.agentsParJSON = true
 	} else {
+		// never written into the project (.claude/agents): nothing of Athanor's outside .athanor/
 		p.agentsParJSON = false
-		_ = os.MkdirAll(filepath.Join(p.projet, ".claude", "agents"), 0o755)
-		if as, err := filepath.Glob(filepath.Join(dossierAgents, "*.md")); err == nil {
-			for _, a := range as {
-				if b, err := os.ReadFile(a); err == nil {
-					_ = os.WriteFile(filepath.Join(p.projet, ".claude", "agents", filepath.Base(a)), b, 0o644)
-				}
-			}
-		}
+		p.log("Claude Code is too old to receive Athanor's team (--agents): update it (Setup & health → Claude Code). The cycles run without the sub-agents meanwhile.")
 	}
 	if strings.Contains(aideClaude, "--plugin-dir") {
 		p.pluginDirOK = true
@@ -2238,7 +2200,7 @@ func lancerPilote(args []string) int {
 		var cmdPont *exec.Cmd
 
 		if exe, err := os.Executable(); err == nil {
-			cmdPont = exec.Command(exe, "pont", p.kit, p.projet)
+			cmdPont = commande(exe, "pont", p.kit, p.projet)
 		}
 		if cmdPont != nil {
 			if fPont != nil {
@@ -2288,33 +2250,9 @@ func lancerPilote(args []string) int {
 		}
 	}
 
+	// nothing of Athanor's in the project itself (its .gitignore included): .git/info/exclude, above, keeps
+	// .athanor/ and the local secrets out of git; deleting .athanor/ leaves a clean project
 	gi := filepath.Join(p.projet, ".gitignore")
-	if !estLien(gi) {
-		st, err := os.Stat(gi)
-		if os.IsNotExist(err) || (err == nil && st.Mode().IsRegular()) {
-			giBytes, _ := os.ReadFile(gi)
-			if !reGitignoreEnv.Match(giBytes) {
-				var gb strings.Builder
-				if len(giBytes) > 0 {
-					if giBytes[len(giBytes)-1] != '\n' {
-						gb.WriteByte('\n')
-					}
-					gb.WriteByte('\n')
-				}
-				gb.WriteString("# Local secrets (added by Athanor)\n")
-				for _, m := range motifsSecrets {
-					gb.WriteString(m + "\n")
-				}
-				if gf, err := os.OpenFile(gi, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644); err == nil {
-					_, errW := gf.WriteString(gb.String())
-					gf.Close()
-					if errW == nil {
-						p.log("Local secrets (.env) added to the project's .gitignore.")
-					}
-				}
-			}
-		}
-	}
 
 	p.appliquerIdentite()
 
@@ -2798,7 +2736,7 @@ func lancerPilote(args []string) int {
 				sansProgres = 0
 				_ = os.Remove(filepath.Join(p.etat, "ALERT.md"))
 				if exe, err := os.Executable(); err == nil {
-					c := exec.Command(exe, "screenshots", "--accept")
+					c := commande(exe, "screenshots", "--accept")
 					c.Env = append(os.Environ(), "PROJECT="+p.projet)
 					cacherFenetre(c)
 					_ = c.Run()
@@ -2977,8 +2915,7 @@ func (p *pilote) retirerSecretsSuivis() {
 		remOut, _ := gitP(p.projet, envLit, remArgs...).Output()
 		publie := strings.TrimSpace(string(remOut)) != ""
 		if !publie {
-			cmdPub := p.commandeBash(filepath.Join(p.systeme, "github.sh"), append([]string{"publie", filepath.ToSlash(p.projet)}, suivis...)...)
-			publie = cmdPub.Run() == nil
+			publie = publieGH(append([]string{p.projet}, suivis...)) == 0
 		}
 		if publie {
 			msg := fmt.Sprintf("# Secret files that were published\n\nThese files hold local secrets and were in commits already pushed (to GitHub or another remote):\n\n%s\n\nThe pilot took them out of git (they are still on disk, and now ignored), but their values stay readable in the published history: only changing them protects the project.\n\n1. Add one task for the user (`athanor todo add`): regenerate (revoke, then replace) each key, token or password these files hold, at the service that issued it, then put the new value back in the file. Name the files and the services or variable names concerned, never a value.\n2. Note it in `.athanor/LOG.md`, then delete this file.\n", liste)

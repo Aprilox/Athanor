@@ -1,9 +1,0 @@
-#!/usr/bin/env bash
-# Native Windows mode (Git Bash): the scripts' wslpath calls, answered by cygpath (C:\x <-> /c/x).
-# -u: Unix form, -w: Windows form (C:\x), -m: mixed (C:/x); -a is implied.
-mode=-u
-while [ $# -gt 0 ]; do
-  case "$1" in -u|-w|-m) mode="$1"; shift ;; -a) shift ;; --) shift; break ;; *) break ;; esac
-done
-[ $# -gt 0 ] || { echo "usage: wslpath [-u|-w|-m] PATH" >&2; exit 2; }
-exec cygpath "$mode" -- "$1"

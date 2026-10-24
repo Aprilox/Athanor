@@ -1,6 +1,6 @@
 # Builds Athanor for Windows and Linux and publishes a GitHub Release every time a version tag is pushed:
 #   git tag v2.0.1 && git push origin v2.0.1
-# Each download is the complete tool (the app needs commands/, system/ and template/ next to it).
+# Each download is the complete tool (the app with template/ next to it).
 name: Release
 
 on:
@@ -78,8 +78,8 @@ jobs:
             echo "| Your system | Download | Then |"
             echo "|---|---|---|"
             echo "| **Windows 10 / 11** | [**Athanor-${version}-Windows.zip**](${telecharger}/Athanor-${version}-Windows.zip) | unzip anywhere, double-click **\`Athanor.exe\`** |"
-            echo "| **Linux** (x86-64) | [**Athanor-${version}-Linux.tar.gz**](${telecharger}/Athanor-${version}-Linux.tar.gz) | \`tar xzf Athanor-${version}-Linux.tar.gz && cd athanor && commands/install.sh && ./athanor\` |"
-            echo "| **macOS** (Apple Silicon) | [**Athanor-${version}-macOS-AppleSilicon.tar.gz**](${telecharger}/Athanor-${version}-macOS-AppleSilicon.tar.gz) | \`tar xzf Athanor-${version}-macOS-AppleSilicon.tar.gz && cd athanor && xattr -dr com.apple.quarantine . && commands/install.sh && ./athanor\` |"
+            echo "| **Linux** (x86-64) | [**Athanor-${version}-Linux.tar.gz**](${telecharger}/Athanor-${version}-Linux.tar.gz) | \`tar xzf Athanor-${version}-Linux.tar.gz && cd athanor && ./athanor installer && ./athanor\` |"
+            echo "| **macOS** (Apple Silicon) | [**Athanor-${version}-macOS-AppleSilicon.tar.gz**](${telecharger}/Athanor-${version}-macOS-AppleSilicon.tar.gz) | \`tar xzf Athanor-${version}-macOS-AppleSilicon.tar.gz && cd athanor && xattr -dr com.apple.quarantine . && ./athanor installer && ./athanor\` (see [macOS, step by step](${depot}#macos-step-by-step)) |"
             echo "| **macOS** (Intel) | [**Athanor-${version}-macOS-Intel.tar.gz**](${telecharger}/Athanor-${version}-macOS-Intel.tar.gz) | the same, with this archive |"
             echo
             echo "Each download is the complete tool, ready to use. **Updating:** close the app (right click on its icon → *Quit* if it started with Windows) and extract the new version in the same place: your token, settings, \`logs/\` and \`tools/\` are kept."

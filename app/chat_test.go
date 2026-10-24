@@ -2,7 +2,9 @@ package main
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -23,14 +25,53 @@ func TestLireTourChat(t *testing.T) {
 	}
 }
 
-func TestScriptChat(t *testing.T) {
-	p := Projet{Nom: "x", Dossier: `C:\Users\A'b\Jeu`}
-	q := scriptChat(p, "id1", "question", "sonnet", "")
-	if !strings.Contains(q, `--disallowedTools Bash Edit Write`) || strings.Contains(q, "acceptEdits") || !strings.Contains(q, `D='C:\Users\A'\''b\Jeu'`) {
-		t.Fatal("question mode: read-only, the folder quoted")
+// One chat turn: read-only or editing tools, the model and the session given to Claude Code, the Go settings
+// (the Go file guard as its hook), the stream into ID.jsonl, an edit committed.
+func TestSessionChat(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the fake claude is a shell script")
 	}
-	m := scriptChat(p, "id1", "modif", "", "abc")
-	if !strings.Contains(m, "acceptEdits") || !strings.Contains(m, "--disallowedTools Bash") || !strings.Contains(m, "S='abc'") {
-		t.Fatal("modif mode")
+	d, _ := filepath.EvalSymlinks(t.TempDir())
+	kit, projet := filepath.Join(d, "kit"), filepath.Join(d, "projet")
+	_ = os.MkdirAll(filepath.Join(kit, "logs", "chat"), 0o755)
+	_ = os.MkdirAll(projet, 0o755)
+	faux := filepath.Join(d, "claude")
+	_ = os.WriteFile(faux, []byte("#!/bin/sh\nfor a in \"$@\"; do printf '%s\\n' \"$a\"; done > "+filepath.Join(d, "args")+"\necho '{\"type\":\"result\"}'\necho changed > x.txt\n"), 0o755)
+	t.Setenv("CLAUDE_BIN", faux)
+	for _, f := range []string{"msg", "prompt", "subject"} {
+		_ = os.WriteFile(filepath.Join(kit, "logs", "chat", "c1."+f), []byte("x-"+f), 0o644)
+	}
+	wd, _ := os.Getwd()
+	defer os.Chdir(wd)
+	if code := sessionChat(kit, projet, "c1", "question", "sonnet", ""); code != 0 {
+		t.Fatalf("code %d", code)
+	}
+	a, _ := os.ReadFile(filepath.Join(d, "args"))
+	if s := string(a); !strings.Contains(s, "--disallowedTools\nBash\nEdit\nWrite") || strings.Contains(s, "acceptEdits") || !strings.Contains(s, "--model\nsonnet") || !strings.Contains(s, "-p\nx-msg") {
+		t.Fatalf("question mode: %s", s)
+	}
+	if b, _ := os.ReadFile(filepath.Join(kit, "logs", "chat", "c1.jsonl")); !strings.Contains(string(b), "result") {
+		t.Fatalf("stream: %s", b)
+	}
+	if s, _ := os.ReadFile(filepath.Join(kit, "logs", "chat", "c1.settings.json")); !strings.Contains(string(s), " hook fichiers ") {
+		t.Errorf("settings: %s", s)
+	}
+	// editing: the change is committed with the subject
+	g := func(args ...string) { c := exec.Command("git", args...); c.Dir = projet; _ = c.Run() }
+	g("init", "-q")
+	g("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "init")
+	t.Setenv("GIT_AUTHOR_NAME", "t")
+	t.Setenv("GIT_AUTHOR_EMAIL", "t@t")
+	t.Setenv("GIT_COMMITTER_NAME", "t")
+	t.Setenv("GIT_COMMITTER_EMAIL", "t@t")
+	if code := sessionChat(kit, projet, "c1", "modif", "", "abc"); code != 0 {
+		t.Fatalf("code %d", code)
+	}
+	a, _ = os.ReadFile(filepath.Join(d, "args"))
+	if s := string(a); !strings.Contains(s, "acceptEdits") || !strings.Contains(s, "--resume\nabc") {
+		t.Fatalf("modif mode: %s", s)
+	}
+	if h, _ := os.ReadFile(filepath.Join(kit, "logs", "chat", "c1.commit")); len(strings.TrimSpace(string(h))) < 7 {
+		t.Fatalf("no commit")
 	}
 }

@@ -22,6 +22,10 @@ var statique embed.FS
 var sourceVirtualDesktop []byte
 
 func main() {
+	// called by the name of one of Claude's commands (a link in system/bin): that command (passerelle_appel.go)
+	if code, ok := lancerParNom(); ok {
+		os.Exit(code)
+	}
 	// athanor COMMAND ARGS…: the sub-commands of the single executable (commandes.go); without one, the app
 	if code, ok := lancerSousCommande(os.Args[1:]); ok {
 		os.Exit(code)

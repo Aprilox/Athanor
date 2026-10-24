@@ -171,8 +171,8 @@ func lancerEcran(args []string) int {
 		}
 		return executerP(reste[0], reste[1:], os.Environ())
 	case "capture":
-		kit := os.Getenv("KIT")
-		projet, _ := cheminProjetGH(firstNonEmpty(argGH(args, 1), "/nulle-part"))
+		kit := firstNonEmpty(os.Getenv("KIT"), kitDuProgramme())
+		projet, _ := cheminProjetGH(firstNonEmpty(cheminOutil(argGH(args, 1)), "/nulle-part"))
 		if !dossierP(projet) {
 			projet = ""
 		}
@@ -201,6 +201,6 @@ func lancerEcran(args []string) int {
 		_ = syscall.Dup3(int(nul.Fd()), 2, 0)
 		return executerP("bwrap", []string{"--dev-bind", "/", "/", "--bind", dir, "/tmp/.X11-unix", "--", "import", "-display", ":" + n, "-window", "root", "png:-"}, os.Environ())
 	}
-	fmt.Fprintln(os.Stderr, "Usage: ecran.sh lancer PROGRAM ARGS... | ecran.sh capture PROJECT")
+	fmt.Fprintln(os.Stderr, "Usage: athanor ecran lancer PROGRAM ARGS... | athanor ecran capture PROJECT")
 	return 2
 }

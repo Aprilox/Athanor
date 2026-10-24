@@ -23,9 +23,12 @@ import (
 // Kit: the tool folder (where the executable is). It contains no project.
 type Kit struct{ Racine string }
 
-func (k Kit) Valide() bool {
-	_, err := os.Stat(filepath.Join(k.Racine, "system", "pilot.sh"))
-	return err == nil
+func (k Kit) Valide() bool { return estDossierKit(k.Racine) }
+
+// estDossierKit: d is a tool folder (its texts for Claude are there; a kit of any version has them).
+func estDossierKit(d string) bool {
+	st, err := os.Stat(filepath.Join(d, "template", "CLAUDE.md"))
+	return err == nil && st.Mode().IsRegular()
 }
 
 // Installe: the tooling of the mode in use is there. WSL: install.ps1 wrote the distribution's name.

@@ -1,14 +1,14 @@
 package main
 
-// GitHub link of a project. The work is done in WSL by system/github.sh, outside Claude's reach:
-// linking signs in to GitHub once, in a visible window, gives the repository its own key (valid for
-// that repository alone) and signs out; the pilot then pushes after each milestone with that key.
+// GitHub link of a project. The work is done on the pilot's side by the kit's executable (athanor github,
+// outil_github_cmd.go), outside Claude's reach: linking signs in to GitHub once, in a visible window,
+// gives the repository its own key (valid for that repository alone) and signs out; the pilot then pushes
+// after each milestone with that key.
 
 import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"os/exec"
 	"regexp"
 	"runtime"
 	"strings"
@@ -23,7 +23,7 @@ var (
 	reEmailAuteur   = regexp.MustCompile(`^[^\s<>@"]{1,64}@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$`)
 )
 
-// GitHubVue: what github.sh etat prints.
+// GitHubVue: what athanor github etat prints.
 type GitHubVue struct {
 	Gh      bool            `json:"gh"`
 	Ssh     bool            `json:"ssh"`
@@ -41,18 +41,15 @@ type GitHubVue struct {
 
 func citerShell(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
 
-// cheminWSL: shell code giving the Linux path of a project folder in variable v.
-func cheminWSL(v, dossier string) string {
-	d := citerShell(dossier)
-	return v + "=\"$(wslpath -u " + d + " 2>/dev/null || printf '%s' " + d + ")\"; "
+// argsGitHub: athanor github COMMAND PROJECT ARGS… (the project as Windows names it: the pilot's side
+// converts it).
+func argsGitHub(p Projet, commande string, args ...string) []string {
+	return append([]string{"github", commande, p.Dossier}, args...)
 }
 
-func ligneGitHub(p Projet, commande string, args ...string) string {
-	l := cheminWSL("P", p.Dossier) + "bash system/github.sh " + commande + " \"$P\""
-	for _, a := range args {
-		l += " " + citerShell(a)
-	}
-	return l
+// executerGitHub: athanor github COMMAND on the pilot's side, its output.
+func (s *Serveur) executerGitHub(p Projet, delai time.Duration, commande string, args ...string) (string, error) {
+	return executerKitArgs(s.kitCourant(), delai, argsGitHub(p, commande, args...)...)
 }
 
 func nomDepotPropose(nom string) string {
@@ -77,7 +74,7 @@ func nomDepotPropose(nom string) string {
 
 func (s *Serveur) etatGitHub(p Projet) (GitHubVue, error) {
 	var v GitHubVue
-	out, err := executerKitDelai(s.kitCourant(), ligneGitHub(p, "etat"), 45*time.Second)
+	out, err := s.executerGitHub(p, 45*time.Second, "etat")
 	if err != nil {
 		if strings.Contains(err.Error(), "no answer after") {
 			return v, errors.New("GitHub: no answer from WSL after 45 s (still starting?). Try Refresh in a moment.")
@@ -128,14 +125,14 @@ func (s *Serveur) lierGitHub(p Projet, mode, cible string, auto bool, branche st
 	if !auto {
 		a = "0"
 	}
-	return FenetreWSL(s.kitCourant(), "GitHub", ligneGitHub(p, "lier", mode, cible, a, branche))
+	return fenetreKit(s.kitCourant(), "GitHub", argsGitHub(p, "lier", mode, cible, a, branche)...)
 }
 
 func ouvrirLien(url string) error {
 	if runtime.GOOS == "windows" {
-		return exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
+		return commande("rundll32", "url.dll,FileProtocolHandler", url).Start()
 	}
-	return exec.Command("xdg-open", url).Start()
+	return commande("xdg-open", url).Start()
 }
 
 func (s *Serveur) apiGitHub(w http.ResponseWriter, r *http.Request) {
@@ -157,7 +154,6 @@ func (s *Serveur) apiGitHub(w http.ResponseWriter, r *http.Request) {
 		s.erreur(w, http.StatusBadRequest, "Invalid request")
 		return
 	}
-	k := s.kitCourant()
 	switch c.Action {
 	case "lier":
 		if err := s.lierGitHub(p, c.Mode, strings.TrimSpace(c.Valeur), c.Auto, strings.TrimSpace(c.Branche)); err != nil {
@@ -168,7 +164,7 @@ func (s *Serveur) apiGitHub(w http.ResponseWriter, r *http.Request) {
 	case "pousser", "malgre":
 		args := []string{}
 		if c.Action == "malgre" {
-			// exactly the commit the user reviewed (github.sh refuses any other)
+			// exactly the commit the user reviewed (athanor github refuses any other)
 			if !reShaGitHub.MatchString(c.Valeur) {
 				s.erreur(w, http.StatusBadRequest, "Invalid request")
 				return
@@ -176,7 +172,7 @@ func (s *Serveur) apiGitHub(w http.ResponseWriter, r *http.Request) {
 			args = append(args, "--malgre="+c.Valeur)
 		}
 		avant, _ := s.etatGitHub(p)
-		out, _ := executerKit(k, ligneGitHub(p, "pousser", args...))
+		out, _ := s.executerGitHub(p, 20*time.Minute, "pousser", args...)
 		v, err := s.etatGitHub(p)
 		if err != nil {
 			s.erreur(w, http.StatusInternalServerError, err.Error())
@@ -188,7 +184,7 @@ func (s *Serveur) apiGitHub(w http.ResponseWriter, r *http.Request) {
 		}
 		s.ecrireJSON(w, map[string]any{"github": v})
 	case "tester": // GitHub accepts the key, a push would go through (nothing is sent)
-		out, _ := executerKitDelai(k, ligneGitHub(p, "tester"), 2*time.Minute)
+		out, _ := s.executerGitHub(p, 2*time.Minute, "tester")
 		if i := strings.LastIndex(out, "{"); i >= 0 {
 			out = out[i:]
 		}
@@ -207,7 +203,7 @@ func (s *Serveur) apiGitHub(w http.ResponseWriter, r *http.Request) {
 			s.erreur(w, http.StatusConflict, "Claude is working on the project right now: use “Stop after cycle”, or wait for the end of the cycle, then save the work in progress.")
 			return
 		}
-		out, err := executerKitDelai(k, ligneGitHub(p, "enregistrer"), 2*time.Minute)
+		out, err := s.executerGitHub(p, 2*time.Minute, "enregistrer")
 		if err != nil {
 			s.erreur(w, http.StatusConflict, raisonPoussee(out))
 			return
@@ -219,7 +215,7 @@ func (s *Serveur) apiGitHub(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		avant, _ := s.etatGitHub(p)
-		sortie, _ := executerKit(k, ligneGitHub(p, "pousser"))
+		sortie, _ := s.executerGitHub(p, 20*time.Minute, "pousser")
 		v, err := s.etatGitHub(p)
 		if err != nil {
 			s.erreur(w, http.StatusInternalServerError, err.Error())
@@ -235,7 +231,7 @@ func (s *Serveur) apiGitHub(w http.ResponseWriter, r *http.Request) {
 		if c.Auto {
 			a = "1"
 		}
-		if _, err := executerKit(k, ligneGitHub(p, "auto", a)); err != nil {
+		if _, err := s.executerGitHub(p, 2*time.Minute, "auto", a); err != nil {
 			s.erreur(w, http.StatusInternalServerError, err.Error())
 			return
 		}
@@ -246,7 +242,7 @@ func (s *Serveur) apiGitHub(w http.ResponseWriter, r *http.Request) {
 			s.erreur(w, http.StatusBadRequest, "Invalid branch name.")
 			return
 		}
-		if _, err := executerKit(k, ligneGitHub(p, "branche", b)); err != nil {
+		if _, err := s.executerGitHub(p, 2*time.Minute, "branche", b); err != nil {
 			if strings.Contains(err.Error(), "Not linked") {
 				s.erreur(w, http.StatusBadRequest, "Not linked to GitHub.")
 			} else {
@@ -290,13 +286,13 @@ func (s *Serveur) apiGitHub(w http.ResponseWriter, r *http.Request) {
 		if c.SansCo {
 			sans = "1"
 		}
-		if _, err := executerKit(k, ligneGitHub(p, "regler-identite", nom, email, sans)); err != nil {
+		if _, err := s.executerGitHub(p, 2*time.Minute, "regler-identite", nom, email, sans); err != nil {
 			s.erreur(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		s.msg(w, "Saved: the next commits are signed this way (from the next cycle).")
 	case "delier":
-		if _, err := executerKit(k, ligneGitHub(p, "delier")); err != nil {
+		if _, err := s.executerGitHub(p, 5*time.Minute, "delier"); err != nil {
 			s.erreur(w, http.StatusInternalServerError, err.Error())
 			return
 		}
@@ -325,7 +321,7 @@ func quandDernier(v GitHubVue) string {
 	return d.Quand
 }
 
-// raisonPoussee: why github.sh pousser recorded nothing (a key translated by the interface).
+// raisonPoussee: why athanor github pousser recorded nothing (a key translated by the interface).
 func raisonPoussee(out string) string {
 	for _, c := range []string{"Another push is under way.", "Not linked to GitHub.", "This push is no longer the one that was blocked: refresh.", "Cannot prepare the push folder."} {
 		if strings.Contains(out, c) {
@@ -343,10 +339,10 @@ func raisonPoussee(out string) string {
 
 // suivreGitHub: the project's folder changed, its GitHub link follows (best effort).
 func (s *Serveur) suivreGitHub(ancien, nouveau string) {
-	_, _ = executerKit(s.kitCourant(), cheminWSL("A", ancien)+cheminWSL("B", nouveau)+`bash system/github.sh suivre "$A" "$B"`)
+	_, _ = executerKitArgs(s.kitCourant(), 2*time.Minute, "github", "suivre", ancien, nouveau)
 }
 
 // oublierGitHub: the project's folder went to the recycle bin, its key is deleted (best effort).
 func (s *Serveur) oublierGitHub(p Projet) {
-	_, _ = executerKit(s.kitCourant(), ligneGitHub(p, "delier"))
+	_, _ = s.executerGitHub(p, 5*time.Minute, "delier")
 }

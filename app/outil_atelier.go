@@ -14,7 +14,6 @@ import (
 	"image/png"
 	"math"
 	"os"
-	"os/exec"
 	"path"
 	"path/filepath"
 	"regexp"
@@ -344,7 +343,7 @@ func suffixePur(p string) string {
 }
 
 func fichiersSuivis(racine string) []string {
-	c := exec.Command("git", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null", "-c", "core.untrackedCache=false",
+	c := commande("git", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null", "-c", "core.untrackedCache=false",
 		"-C", racine, "ls-files", "-co", "--exclude-standard")
 	var sortie bytes.Buffer
 	c.Stdout = &sortie

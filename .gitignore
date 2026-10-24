@@ -2,16 +2,12 @@
 /.env
 /tools/
 /logs/
+# made at run time: what the PC has, Claude's commands (links to the executable), RTK
+/system/
 /athanor-config.json
 /athanor-config-*.json
 /_a_supprimer/
 /_old-*/
-/system/distro.txt
-/system/pc_tools.env
-/system/unreal_relay.txt
-/system/mirrored_unavailable.txt
-/system/.claude_settings.json
-/system/bin/rtk
 # Skills & MCP library of the app (and API keys of the servers)
 /extensions/
 __pycache__/

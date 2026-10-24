@@ -93,16 +93,8 @@ func (s *Serveur) apiAmeliorerDemande(w http.ResponseWriter, r *http.Request) {
 	}
 	defer os.Remove(chemin)
 
-	// One turn, no project around it: an empty temporary folder as working directory, so that the
-	// session has nothing to read or change. The request travels through a file (no quoting issue).
-	script := chargerEnv + `f="$PWD/logs/` + nom + `"
-d=$(mktemp -d) || exit 1
-cd "$d" || exit 1
-timeout 240 env ENABLE_CLAUDEAI_MCP_SERVERS=false "${CLAUDE_BIN:-claude}" -p "$(cat "$f")" --max-turns 1 --output-format text ${MODEL:+--model "$MODEL"} < /dev/null
-code=$?
-cd / && rm -rf "$d"
-exit $code`
-	cmd := commandeWSL(k, script)
+	// one turn in an empty folder (athanor ameliorer); the request travels through a file (no quoting issue)
+	cmd := commandeKit(k, "ameliorer", k.Racine, chemin)
 	cacherFenetre(cmd)
 	var erreurs strings.Builder
 	cmd.Stderr = &erreurs

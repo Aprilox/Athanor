@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -61,7 +62,7 @@ func TestPourVous(t *testing.T) {
 	if err != nil || string(sortie) != valeur {
 		t.Fatalf("secrets.env: %q %v", sortie, err)
 	}
-	if fi, _ := os.Stat(cheminSecrets(p)); fi.Mode().Perm() != 0o600 {
+	if fi, _ := os.Stat(cheminSecrets(p)); fi.Mode().Perm() != 0o600 && runtime.GOOS != "windows" { // (no such modes on Windows)
 		t.Errorf("secrets.env mode %v", fi.Mode().Perm())
 	}
 	if b, _ := os.ReadFile(cheminPourVous(p, "replies.json")); strings.Contains(string(b), "pat_") {

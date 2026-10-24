@@ -81,7 +81,7 @@ Depuis la [**dernière version**](https://github.com/Aprilox/Athanor/releases/la
 
 - **Windows** : `Athanor-X.Y.Z-Windows.zip`, à dézipper où vous voulez (sur le Bureau, par exemple).
 - **Linux** : `Athanor-X.Y.Z-Linux.tar.gz`, puis `tar xzf Athanor-X.Y.Z-Linux.tar.gz`.
-- **macOS** : `Athanor-X.Y.Z-macOS-AppleSilicon.tar.gz` (ou `-Intel`), puis `tar xzf` et, l'exécutable n'étant pas signé, `xattr -dr com.apple.quarantine athanor` une fois.
+- **macOS** : `Athanor-X.Y.Z-macOS-AppleSilicon.tar.gz` (M1, M2, M3, M4…) ou `-Intel` : voir [macOS, pas à pas](#macos-pas-à-pas).
 
 Chaque téléchargement est l'outil complet, prêt à l'emploi.
 
@@ -90,29 +90,19 @@ Chaque téléchargement est l'outil complet, prêt à l'emploi.
 
 Depuis le code source, avec [Go](https://go.dev/dl/) 1.24 ou plus.
 
-**Windows** (PowerShell) :
-
-```powershell
-git clone https://github.com/Aprilox/Athanor.git
-cd Athanor
-.\build.cmd
-```
-
-Pas de git ? *Code → Download ZIP*, dézippez, double-cliquez sur `build.cmd`. Si Go manque, `build.cmd` propose de l'installer avec winget.
-
-**Linux et macOS** :
-
 ```bash
 git clone https://github.com/Aprilox/Athanor.git
-cd Athanor
-./build.sh
+cd Athanor/app
+go run . construire
 ```
+
+Pareil sous Windows (PowerShell), Linux et macOS : cela construit `Athanor.exe` et `athanor` dans le dossier `Athanor`. Pas de git ? *Code → Download ZIP*, dézippez, puis les deux dernières lignes. Pas de Go ? `winget install GoLang.Go`, `sudo apt install golang-go` ou `brew install go`.
 
 </td>
 </tr>
 </table>
 
-Les deux options donnent le même dossier : `Athanor.exe` (ou `athanor`) à côté de `commands/`, `system/` et `template/`. L'application en a besoin : gardez toujours le dossier entier.
+Les deux options donnent le même dossier : `Athanor.exe` (ou `athanor`) à côté de `template/` (les textes pour Claude) et `app/`. Gardez le dossier entier.
 
 > [!TIP]
 > Avec une version téléchargée, Windows SmartScreen peut afficher *« Windows a protégé votre ordinateur »* au premier lancement, parce que l'application n'est pas signée. Cliquez sur *Informations complémentaires → Exécuter quand même*. Un `Athanor.exe` compilé par vous-même ne le déclenche pas.
@@ -128,25 +118,40 @@ Les deux options donnent le même dossier : `Athanor.exe` (ou `athanor`) à côt
 5. **Ajouter un projet** : un nom, son dossier (existant ou à créer, sur n'importe quel disque) et ce que vous voulez. Les technologies sont libres sauf si vous en imposez. ✨ *Améliorer avec Claude* transforme quelques mots en une demande complète ; vous pouvez revenir à la vôtre.
 6. **Démarrer.** Ajoutez d'autres projets de la même façon et faites-les tourner en même temps.
 
-**Linux et macOS** (tout tourne nativement, sans WSL)
+**Linux** (tout tourne nativement, sans WSL)
 
 ```bash
 cd athanor                   # ou Athanor, si vous l'avez compilé depuis les sources
-commands/install.sh          # Claude Code, barrière, outils (mot de passe demandé une fois ; Homebrew sur Mac)
-commands/configure.sh        # jeton, modèles, options
+./athanor installer          # Claude Code, barrière, outils (mot de passe demandé une fois)
 ./athanor                    # l'application, dans une fenêtre d'application de Chrome/Edge/Chromium, sinon votre navigateur
 ```
 
-Sur Mac, la barrière de Claude est Seatbelt, intégrée à macOS (celle qu'utilise Claude Code), les serveurs MCP tournent dans leur propre cage Seatbelt, et le Mac reste éveillé avec `caffeinate`. Unreal, Blender, Roblox Studio, Xcode et le SDK Android sont trouvés à leurs places habituelles et Claude les lance directement ; les programmes Windows et Docker via `tool` restent réservés à Windows et Linux. La prise en charge du Mac est nouvelle : dites-nous ce qui ne marche pas.
+Puis *Réglages* (le jeton), ajoutez un projet et démarrez-le, comme sous Windows (étapes 3, 5 et 6).
 
-Ajoutez ensuite un projet et démarrez-le, comme sous Windows (étapes 5 et 6).
+#### macOS, pas à pas
+
+La version Mac est nouvelle : elle est compilée et testée automatiquement, pas encore sur un vrai Mac. Dites-nous ce qui ne marche pas.
+
+1. Téléchargez `Athanor-X.Y.Z-macOS-AppleSilicon.tar.gz` depuis la [dernière version](https://github.com/Aprilox/Athanor/releases/latest) (un Mac à puce M1, M2, M3, M4… ; *À propos de ce Mac* le dit), ou `-Intel` pour un Mac plus ancien.
+2. Double-cliquez dessus dans *Téléchargements* : un dossier `athanor` apparaît.
+3. Ouvrez le *Terminal* (Applications → Utilitaires) et tapez, une ligne à la fois :
+   ```bash
+   cd ~/Downloads/athanor
+   xattr -dr com.apple.quarantine .   # une fois : l'application n'est pas signée par Apple
+   ./athanor installer                # Homebrew, Claude Code et les outils (votre mot de passe une fois)
+   ./athanor                          # l'application s'ouvre
+   ```
+4. Dans l'application : *Installation & santé* → *Tout vérifier*, puis la ligne *Jeton* → *Réparer*, et collez le jeton dans *Réglages*.
+5. Ajoutez un projet et *Démarrer*.
+
+Claude travaille dans Seatbelt, la barrière intégrée à macOS (celle qu'utilise Claude Code) : il n'écrit que dans le projet. Les serveurs MCP ont leur propre cage Seatbelt, et le Mac reste éveillé tant qu'un pilote tourne (`caffeinate`). Unreal, Blender, Roblox Studio, Xcode et le SDK Android sont trouvés à leurs places habituelles et Claude les lance directement ; les programmes Windows et Docker via `tool` restent réservés à Windows et Linux. Pour relancer Athanor plus tard : `~/Downloads/athanor/athanor` (ou déplacez d'abord le dossier où vous voulez).
 
 ### 3. Mettre à jour
 
 | Vous avez installé | Pour mettre à jour |
 |---|---|
 | une version téléchargée | fermez l'application, téléchargez la nouvelle version et extrayez-la au même endroit, pour que son dossier `athanor` se fusionne avec le vôtre |
-| depuis les sources | fermez l'application, puis `git pull` et relancez `build.cmd` (ou `./build.sh`) |
+| depuis les sources | fermez l'application, puis `git pull` et relancez `cd app && go run . construire` |
 
 Votre `.env`, vos réglages, `logs/` et `tools/` ne sont jamais touchés par une mise à jour. Les applications Windows, Linux et macOS gardent des fichiers de réglages séparés (`athanor-config.json`, `athanor-config-linux.json`, `athanor-config-darwin.json`) : un dossier de l'outil partagé entre plusieurs systèmes (double démarrage, par exemple) fonctionne avec chacun.
 
@@ -160,7 +165,7 @@ L'application n'utilise que la bibliothèque standard de Go et trois paquets emb
   <img src="docs/images/how-it-works.svg" alt="Fonctionnement d'Athanor : vous décrivez le projet, la boucle du pilote lance une session Claude Code par cycle, le chef délègue à des sous-agents ou à des ouvriers en parallèle, chaque cycle se termine par fusion, vérification, coche et commit" width="100%">
 </p>
 
-**Un cycle.** Le pilote (`system/pilot.sh`) synchronise la demande, archive les vieux jalons, refait la carte du projet (`.athanor/MAP.md`), ouvre l'éditeur Unreal si le projet en a un, puis lance une session Claude Code avec [`template/CLAUDE.md`](template/CLAUDE.md) comme consignes, dans votre langue. Claude prend le premier jalon non coché de `.athanor/PLAN.md`, le réalise, lance `check.sh`, le coche, le note dans `LOG.md` et commite. Le pilote ferme le cycle peu après le commit et lance le suivant.
+**Un cycle.** Le pilote (`athanor demarrer`) synchronise la demande, archive les vieux jalons, refait la carte du projet (`.athanor/MAP.md`), ouvre l'éditeur Unreal si le projet en a un, puis lance une session Claude Code avec [`template/CLAUDE.md`](template/CLAUDE.md) comme consignes, dans votre langue. Claude prend le premier jalon non coché de `.athanor/PLAN.md`, le réalise, lance `check.sh`, le coche, le note dans `LOG.md` et commite. Le pilote ferme le cycle peu après le commit et lance le suivant.
 
 **Ce que chaque agent sait dès le départ.** `.athanor/PC_TOOLS.md` liste les outils déjà installés et leurs versions (Node, Python, PHP, Composer, Git…), vérifiés par le pilote : personne ne dépense de tours à les sonder. Deux fichiers courts rassemblent les problèmes déjà résolus, une ligne chacun : `.athanor/SOLUTIONS.md` pour le projet et `tools/SOLUTIONS.md` pour le PC, partagé par tous les projets. Chaque agent les lit en premier et ajoute une ligne quand il résout quelque chose ; le pilote retire les doublons, garde les 60 dernières lignes et récupère ce que les ouvriers en parallèle ont appris.
 
@@ -242,7 +247,7 @@ Les captures sont en anglais ; l'interface s'affiche dans la langue choisie.
 | **Réglages → Claude** | les réglages du pilote, le `.env` de l'outil (jeton masqué, modèles, effort, surveillance…, les plus rares sous *Avancé*), *Enregistrer et redémarrer après le cycle* |
 | **Réglages → Options** | langue, palette et accent, liste des projets (retirer de la liste ne touche jamais au dossier), relance des pilotes à l'ouverture, démarrage avec l'ordinateur, bureau « Claude », mot de passe, dossier de l'outil |
 
-**Skills & MCP, en sécurité** : les skills sont chargés comme un plugin de session (`--plugin-dir`) : Claude ne lit un skill que quand il en a besoin, et peut les lire mais jamais les modifier. Les serveurs MCP s'ajoutent à la configuration MCP de la session ; un serveur local démarre dans une cage bubblewrap (`system/mcp-jail.sh`) : système en lecture seule, seuls le projet et les caches de l'outil en écriture, ni dossier personnel, ni disques Windows, ni dossier d'Athanor, ni jeton Claude. Un *programme Windows* (le serveur de Roblox Studio, un `.exe` ou un `.bat`, reconnu au collage et confirmé par l'option *Programme Windows*) ne peut pas être mis en cage depuis WSL : il démarre sous Windows via l'interopérabilité de WSL (`system/windows-mcp.sh`), avec vos droits, et ne reçoit que ses propres variables ; Claude ne voit que ses outils, et tout son arbre de processus s'arrête avec la session. Les skills demandent une version de Claude Code qui a `--plugin-dir`.
+**Skills & MCP, en sécurité** : les skills sont chargés comme un plugin de session (`--plugin-dir`) : Claude ne lit un skill que quand il en a besoin, et peut les lire mais jamais les modifier. Les serveurs MCP s'ajoutent à la configuration MCP de la session ; un serveur local démarre dans une cage bubblewrap (`athanor mcp-cage`) : système en lecture seule, seuls le projet et les caches de l'outil en écriture, ni dossier personnel, ni disques Windows, ni dossier d'Athanor, ni jeton Claude. Un *programme Windows* (le serveur de Roblox Studio, un `.exe` ou un `.bat`, reconnu au collage et confirmé par l'option *Programme Windows*) ne peut pas être mis en cage depuis WSL : il démarre sous Windows via l'interopérabilité de WSL (`athanor mcp-windows`), avec vos droits, et ne reçoit que ses propres variables ; Claude ne voit que ses outils, et tout son arbre de processus s'arrête avec la session. Les skills demandent une version de Claude Code qui a `--plugin-dir`.
 
 **Les plugins, démontés** : un plugin est téléchargé une fois dans le dossier de l'outil (depuis GitHub, figé sur le commit que donne son catalogue) et activé projet par projet. Ses skills, ses commandes et ses sous-agents sont chargés avec `--plugin-dir`, en lecture seule pour Claude ; ses serveurs MCP rejoignent la bibliothèque MCP (les locaux dans la cage, les clés rangées à part, un serveur distant connecté une fois pour tous les projets) ; ses hooks, ses serveurs LSP et ses moniteurs sont écartés, car ils tourneraient hors de la barrière. Les plugins construits par une commande ou publiés seulement sur npm sont listés mais pas installés.
 
@@ -258,7 +263,7 @@ Les captures sont en anglais ; l'interface s'affiche dans la langue choisie.
 
 **Bureau « Claude »** : les programmes que Claude lance ne s'ouvrent jamais sur votre écran. Ils n'interrompent ni votre travail ni un jeu en plein écran.
 - **Windows** : Unreal, Blender, un jeu en test et tout ce qu'ils lancent s'ouvrent sur un bureau Windows à part, comme celui de l'invite UAC (les passerelles les lancent avec `Athanor.exe --isole`). Ils ne peuvent pas prendre la main. *Voir le bureau Claude* bascule l'écran dessus ; la barre en haut, ou Ctrl + Alt + B, vous ramène.
-- **Linux**, et les programmes Linux sous WSL que WSLg afficherait sur Windows : chaque pilote fait tourner un serveur X privé (Xvfb). Claude, ses outils et ses serveurs MCP ne voient que cet écran (`system/ecran.sh`), et votre affichage, X11 ou Wayland, leur est inaccessible. *Voir l'écran de Claude* l'affiche en direct dans l'application.
+- **Linux**, et les programmes Linux sous WSL que WSLg afficherait sur Windows : chaque pilote fait tourner un serveur X privé (Xvfb). Claude, ses outils et ses serveurs MCP ne voient que cet écran (`athanor ecran`), et votre affichage, X11 ou Wayland, leur est inaccessible. *Voir l'écran de Claude* l'affiche en direct dans l'application.
 - Option désactivée, les nouveaux programmes s'ouvrent à nouveau sur votre écran. Ceux qui tournent déjà restent où ils sont jusqu'à leur fermeture : l'application vous laisse aller les fermer.
 
 L'interface est traduite en anglais, français, espagnol, allemand, italien et portugais.
@@ -283,7 +288,7 @@ Ce tableau décrit le mode WSL, celui par défaut. Dans le mode Windows natif ci
 
 ### Mode Windows natif (expérimental)
 
-*Options → Mode d'exécution → Windows natif*. Le pilote tourne dans **Git Bash** (Git pour Windows, le shell que Claude Code utilise sous Windows) et Claude Code est le programme Windows : pas de WSL, le dossier Windows du projet et les programmes Windows sont atteints directement, sans les passerelles, et l'accès aux fichiers est plus rapide.
+*Options → Mode d'exécution → Windows natif*. Le pilote est `Athanor.exe` lui-même et Claude Code est le programme Windows (ses commandes tournent dans Git Bash, le shell que Claude Code utilise sous Windows) : pas de WSL, le dossier Windows du projet et les programmes Windows sont atteints directement, et l'accès aux fichiers est plus rapide.
 
 **Il n'y a pas de barrière dans ce mode** (Claude Code n'a pas de bac à sable sous Windows natif) : Claude peut lire et modifier n'importe quel fichier de votre PC et lancer n'importe quel programme, sans demander. Le garde-fichiers limite toujours ses outils de fichiers au projet et à `tools/`, et ses consignes lui disent d'y rester, mais rien ne l'impose à ses commandes. À réserver aux projets de confiance. Cela vaut aussi pour les fichiers d'Athanor : dans ce mode, les commandes de Claude pourraient lire le `.env` de l'outil (votre jeton), les clés des serveurs MCP et la clé GitHub, et modifier le pilote lui-même.
 
@@ -348,7 +353,6 @@ Tout se modifie dans l'application (*Réglages*), ou dans `.env` ([`.env.example
 | `QUOTA_WAIT_MIN` | attente quand l'heure de réouverture du quota est illisible |
 | `IDLE_MAX_MIN`, `CYCLE_MAX_MIN`, `CLOSE_AFTER_MILESTONE` | surveillance des cycles (muet 30 min ou plus long que 3 h → coupé et repris), un jalon par cycle |
 | `KEEP_AWAKE` | le PC reste éveillé tant qu'un pilote tourne : `1` (par défaut ; l'écran aussi pour Roblox Studio et Unreal), `screen` (l'écran toujours), `0` (désactivé) |
-| `PILOT_ENGINE` | `go` (par défaut) : le pilote en Go, ouvriers parallèles compris ; `bash` : l'ancien pilote, gardé en secours (il prend aussi le relais tout seul si le pilote Go rencontre une erreur interne) |
 | `RTK`, `TZ` | compression des sorties de commandes, fuseau horaire des journaux (vide = celui du système) |
 | `UE_DIR`, `BLENDER_EXE`, `ANDROID_SDK_DIR`, `ANDROID_JDK_DIR` | chemins des outils quand la détection automatique les manque (facultatifs, absents par défaut) |
 
@@ -391,19 +395,20 @@ Vous avez trouvé une faille ? Ouvrez plutôt un [avis de sécurité privé](htt
 
 ## Les commandes à la main (sans l'application)
 
-Dans `commands/` : sous Windows, double-clic ou `commands\start.cmd D:\Dev\mon-projet` ; sous Linux, les `.sh` depuis le dossier de l'outil, avec le dossier du projet en argument.
+Tout ce que fait l'application est une commande de l'exécutable (`Athanor.exe` sous Windows, `./athanor` sous Linux et macOS ; `Athanor.exe wsl COMMANDE …` la lance dans WSL) :
 
-| Windows | Linux / WSL | Pour |
-|---|---|---|
-| `commands\install.cmd` | `commands/install.sh` | tout installer ou réparer |
-| `commands\configure.cmd` | `commands/configure.sh` | jeton, modèles, options (la langue se règle dans l'application) |
-| `commands\start.cmd DOSSIER` | `commands/start.sh --background DOSSIER` | lancer le pilote sur un projet |
-| `commands\follow.cmd DOSSIER` | `commands/follow.sh DOSSIER` | suivre en direct |
-| `commands\stop-after-cycle.cmd DOSSIER` | `commands/stop-after-cycle.sh DOSSIER` | arrêter proprement à la fin du jalon en cours |
-| `commands\stop.cmd DOSSIER` | `commands/stop.sh DOSSIER` | arrêter tout de suite |
-| `commands\test-sandbox.cmd` | `commands/test-sandbox.sh` | prouver la barrière avec une vraie session |
-| `commands\allow-admin.cmd [remove]` | | autoriser ou retirer les installations administrateur |
-| `commands\unreal-network.cmd` | | réseau WSL pour le MCP d'Unreal (une fois) |
+| Commande | Pour |
+|---|---|
+| `installer` | tout installer (Linux, macOS, le côté WSL) ; Windows : `installer-windows` (WSL) ou `installer-natif` |
+| `configurer` | jeton, modèles, options (la langue se règle dans l'application) |
+| `demarrer [--background] DOSSIER` | lancer le pilote sur un projet |
+| `suivre DOSSIER` | suivre en direct |
+| `arreter --apres-cycle DOSSIER` | arrêter proprement à la fin du jalon en cours |
+| `arreter DOSSIER` | arrêter tout de suite |
+| `tester-cage` | prouver la barrière avec une vraie session |
+| `autoriser-admin [--retirer]` | autoriser ou retirer les installations administrateur (Windows) |
+| `reseau-unreal` | réseau WSL pour le MCP d'Unreal (Windows, une fois) |
+| `aide` | toutes les commandes |
 
 Sans dossier, les commandes utilisent `<outil>\projet`. La demande se lit et s'écrit dans `DOSSIER\.athanor\REQUEST.md`, les demandes suivantes dans `DOSSIER\.athanor\queue\` (un fichier par demande, prises dans l'ordre).
 
@@ -417,21 +422,16 @@ Sans dossier, les commandes utilisent `<outil>\projet`. La demande se lit et s'�
 ## Organisation du dépôt
 
 ```
-Athanor.exe, athanor   l'application pour Windows / Linux (dans la version téléchargée, ou construite par build.cmd / build.sh)
+Athanor.exe, athanor   l'application pour Windows / Linux (dans la version téléchargée, ou construite par go run . construire) ;
+                       tout le reste en est une commande : le pilote, ses passerelles (liens de system/bin), installer, configurer…
 app/                   les sources Go de l'application, l'interface (HTML, CSS, JS sans dépendance), ressources Windows
-commands/              install, configure, start, stop, stop-after-cycle, follow, test-sandbox, repair,
-                       allow-admin, unreal-network (.cmd pour Windows, .sh pour Linux, WSL et macOS)
-system/                pilot.sh (lance le pilote Go ; l'ancien pilote bash en secours), parallel.sh (son mode parallèle),
-                       safety.sh, github.sh (liaison GitHub, Windows natif), mcp-jail.sh, windows-mcp.sh et ecran.sh
-                       (points d'entrée d'athanor mcp-cage, mcp-windows et ecran), bin/ (passerelles), natif/ (shims Git Bash),
-                       windows/ (aides PowerShell)
 template/              CLAUDE.md (consignes de Claude), guides/ (les parties dont seuls certains cycles ont besoin), PC_TOOLS_GUIDE.md, .claude/agents/ (l'équipe)
 docs/images/           images du README
 docs/releases/         les nouveautés de chaque version (affichées sur la page de la version)
 .env.example           tous les réglages, documentés
 local/                 réparations faites sur ce PC : un fichier ici remplace le même de template/ ou app/catalogue.json,
                        jamais écrasé par une mise à jour (`athanor autotest` les liste)
-logs/, tools/,         créés à l'usage, jamais commités
+logs/, tools/,         créés à l'usage, jamais commités (system/ aussi : ce qu'a le PC, les commandes de Claude)
 extensions/
 ```
 
@@ -489,21 +489,20 @@ Oui. Rien n'est lié à un nom d'utilisateur ni à une lettre de disque : les ch
 | « Quota atteint, Claude patiente » | normal ; avec `FALLBACK_MODEL`, Claude continue sur le modèle de secours, sauf si la limite atteinte est celle du compte (5 heures, la semaine), que le modèle de secours partage |
 | « Problème de connexion » | jeton absent ou faux : *Réglages*, ou *Réparer* sur la ligne *Jeton et accès au modèle* |
 | Une installation demande les droits administrateur | *Installation & santé* → *Droits administrateur pour les installations* → *Réparer* (une seule fois) |
-| Un script `.sh` échoue avec `$'\r'` | fins de ligne Windows : réenregistrez-le en « LF » (le dépôt l'impose via `.gitattributes`) |
 
 ---
 
 ## Publier une version
 
-Poussez un tag de version : GitHub compile les deux applications et publie la version ([`.github/workflows/release.yml`](.github/workflows/release.yml)).
+Poussez un tag de version : GitHub compile les applications (Windows, Linux, macOS) et publie la version ([`.github/workflows/release.yml`](.github/workflows/release.yml)).
 
 ```bash
-git tag v2.24.29 && git push origin v2.24.29
+git tag v2.25.0 && git push origin v2.25.0
 ```
 
 Gardez la version de [`app/winres/athanor.rc`](app/winres/athanor.rc) et `versionAthanor` dans [`app/commandes.go`](app/commandes.go) alignées sur le tag (un test vérifie qu'elles concordent), et écrivez les nouveautés dans `docs/releases/VERSION.md` (par ex. [`docs/releases/2.24.24.md`](docs/releases/2.24.24.md)) : elles ouvrent la page de la version.
 
-Chaque push est vérifié sous Windows, Linux et macOS ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) ; `./build.sh --all` compile toutes les cibles dans `dist/`.
+Chaque push est vérifié sous Windows, Linux et macOS ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) ; `cd app && go run . construire --all` compile toutes les cibles dans `dist/`.
 
 Après une modification de `app/` sur un PC (une réparation par Claude, ou la vôtre), `./athanor reparer --recompiler` (`.\Athanor.exe reparer --recompiler` sous Windows) y recompile les exécutables du kit : il montre la modification par rapport aux sources de l'exécutable en cours, installe un Go portable hors du kit s'il n'en trouve pas, lance `go vet`, compile, lance l'autotest du nouvel exécutable et seulement ensuite le met en place, en gardant l'ancien (`reparer --annuler` le remet).
 

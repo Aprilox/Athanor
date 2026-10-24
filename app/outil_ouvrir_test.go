@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -59,11 +60,13 @@ func TestOuvertures(t *testing.T) {
 		t.Fatalf("perso: %+v", l[1])
 	}
 
-	// opening: the gateways are bash scripts of system/bin; the project's .blend given to Blender
-	trace := filepath.Join(kit, "trace")
-	for _, g := range []string{"blender", "unreal-editor"} {
-		ecrireTest(t, filepath.Join(kit, "system", "bin", g), "#!/usr/bin/env bash\necho \"$(basename \"$0\") $* [$PROJECT]\" >> "+trace+"\necho started\n", 0o755)
+	if runtime.GOOS == "darwin" {
+		return // macOS opens its applications itself (open -a), no gateway: outil_ouvrir_mac
 	}
+	// opening: the gateways are the kit's executable called by their name; the project's .blend given to
+	// Blender (here a stand-in that writes down how it is called)
+	trace := filepath.Join(kit, "trace")
+	ecrireTest(t, filepath.Join(kit, "athanor"), "#!/bin/sh\necho \"$ATHANOR_APPEL $* [$PROJECT]\" >> "+trace+"\necho started\n", 0o755)
 	ecrireTest(t, filepath.Join(projet, ".athanor", "x.blend"), "", 0o644)
 	ecrireTest(t, filepath.Join(projet, "scenes", "b.blend"), "", 0o644)
 	ecrireTest(t, filepath.Join(projet, "scenes", "a.BLEND"), "", 0o644)

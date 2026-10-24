@@ -1,21 +1,15 @@
 package main
 
 import (
-	"os/exec"
 	"strings"
 	"testing"
 )
 
-func TestCheminWSLCite(t *testing.T) {
-	for _, d := range []string{`/srv/a b/c`, `/srv/l'apostrophe/$(touch x)`, "/srv/`x`;rm -rf /", `C:\Users\R&D\jeu`} {
-		out, err := exec.Command("bash", "-c", cheminWSL("P", d)+`printf %s "$P"`).Output()
-		if err != nil || string(out) != d && !strings.HasPrefix(string(out), "/mnt/") {
-			t.Errorf("%q -> %q (%v)", d, out, err)
-		}
-	}
-	l := ligneGitHub(Projet{Dossier: "/p"}, "lier", "creer", "x'; rm -rf ~; '")
-	if !strings.Contains(l, `'x'\''; rm -rf ~; '\'''`) {
-		t.Errorf("argument not quoted: %s", l)
+func TestArgsGitHub(t *testing.T) {
+	// no shell anywhere: each argument goes as it is, a quote or a $ included
+	a := argsGitHub(Projet{Dossier: `C:\Users\R&D\jeu`}, "lier", "creer", "x'; rm -rf ~; '")
+	if strings.Join(a, "|") != `github|lier|C:\Users\R&D\jeu|creer|x'; rm -rf ~; '` {
+		t.Errorf("%q", a)
 	}
 }
 

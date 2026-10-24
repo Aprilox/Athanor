@@ -17,82 +17,15 @@ import (
 
 func cacherFenetre(c *exec.Cmd) {}
 
-func commandeWSL(k Kit, script string) *exec.Cmd {
-	c := exec.Command("bash", "-lc", script)
-	c.Dir = k.Racine
-	return c
-}
 
-// DemarrerDetache: on Linux, the pilot simply goes to the background (setsid in start.sh --background).
-func DemarrerDetache(k Kit, script string) error {
-	if strings.Contains(script, "--attach") {
-		return nil // no WSL to keep awake outside Windows
-	}
-	c := exec.Command("bash", "-lc", strings.Replace(script, "--keep", "--background", 1))
-	c.Dir = k.Racine
-	_, err := c.Output()
-	return err
-}
 
-// FenetreWSL on Linux: the step runs in a terminal window of the desktop (the first one found); on macOS,
-// in a Terminal window.
-func FenetreWSL(k Kit, titre, script string) error {
-	if runtime.GOOS == "darwin" {
-		return fenetreTerminalMac(k, script)
-	}
-	if os.Getenv("DISPLAY") == "" && os.Getenv("WAYLAND_DISPLAY") == "" {
-		return errors.New("Interactive window: no graphical session; run in a terminal: " + script)
-	}
-	if err := os.MkdirAll(k.Journaux(), 0o755); err != nil {
-		return err
-	}
-	f, err := os.CreateTemp(k.Journaux(), "window-*.sh")
-	if err != nil {
-		return err
-	}
-	_, err = f.WriteString("cd " + citerShell(k.Racine) + " || exit 1\n" + script + "\necho\nread -p 'Press Enter to close' _\nrm -f -- \"$0\"\n")
-	f.Close()
-	if err != nil {
-		return err
-	}
-	for _, t := range [][]string{{"x-terminal-emulator", "-e"}, {"gnome-terminal", "--"}, {"konsole", "-e"}, {"xfce4-terminal", "-x"},
-		{"mate-terminal", "-x"}, {"kitty"}, {"alacritty", "-e"}, {"xterm", "-e"}} {
-		if chemin, err := exec.LookPath(t[0]); err == nil {
-			c := exec.Command(chemin, append(t[1:], "bash", "-l", f.Name())...)
-			c.Dir = k.Racine
-			return c.Start()
-		}
-	}
-	os.Remove(f.Name())
-	return errors.New("Interactive window: no terminal found; run in a terminal: " + script)
-}
 
-// fenetreTerminalMac: a .command file opens in Terminal and runs there.
-func fenetreTerminalMac(k Kit, script string) error {
-	if err := os.MkdirAll(k.Journaux(), 0o755); err != nil {
-		return err
-	}
-	f, err := os.CreateTemp(k.Journaux(), "window-*.command")
-	if err != nil {
-		return err
-	}
-	_, err = f.WriteString("#!/bin/bash -l\ncd " + citerShell(k.Racine) + " || exit 1\n" + script + "\necho\nread -p 'Press Enter to close' _\nrm -f -- \"$0\"\n")
-	f.Close()
-	if err != nil {
-		return err
-	}
-	if err := os.Chmod(f.Name(), 0o755); err != nil {
-		return err
-	}
-	return exec.Command("open", "-a", "Terminal", f.Name()).Start()
-}
 
-func FenetrePowerShell(k Kit, s string) error { return errors.New("PowerShell: Windows only") }
 func Ouvrir(chemin string) error {
 	if runtime.GOOS == "darwin" {
-		return exec.Command("open", chemin).Start()
+		return commande("open", chemin).Start()
 	}
-	return exec.Command("xdg-open", chemin).Start()
+	return commande("xdg-open", chemin).Start()
 }
 
 // OuvrirFenetreApp: an application window of a Chromium browser (no address bar, its own profile), as the
@@ -103,24 +36,24 @@ func OuvrirFenetreApp(url string) {
 	if runtime.GOOS == "darwin" {
 		for _, nom := range []string{"Google Chrome", "Microsoft Edge", "Chromium", "Brave Browser"} {
 			if _, err := os.Stat(filepath.Join("/Applications", nom+".app")); err == nil {
-				if exec.Command("open", append([]string{"-na", nom, "--args"}, options...)...).Start() == nil {
+				if commande("open", append([]string{"-na", nom, "--args"}, options...)...).Start() == nil {
 					return
 				}
 			}
 		}
-		_ = exec.Command("open", url).Start()
+		_ = commande("open", url).Start()
 		return
 	}
 	for _, nom := range []string{"google-chrome", "google-chrome-stable", "chromium", "chromium-browser", "microsoft-edge", "brave-browser"} {
 		if chemin, err := exec.LookPath(nom); err == nil {
-			c := exec.Command(chemin, options...)
+			c := commande(chemin, options...)
 			if c.Start() == nil {
 				go func() { _ = c.Wait() }()
 				return
 			}
 		}
 	}
-	_ = exec.Command("xdg-open", url).Start()
+	_ = commande("xdg-open", url).Start()
 }
 
 // dossierDonneesApp: Athanor's own data (the browser profile of its window): ~/Library/Application

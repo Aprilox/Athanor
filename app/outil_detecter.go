@@ -215,12 +215,12 @@ func versionOutil(kit, nom string, cmd ...string) string {
 	defer fin()
 	shim := cheminOutil(kit + "/system/natif/" + cmd[0])
 	if natif && estFichier(shim) { // the pilot's Git Bash finds these shims first (python3, jq…)
-		c = exec.CommandContext(ctx, "bash", append([]string{shim}, cmd[1:]...)...)
+		c = commandeContexte(ctx, "bash", append([]string{shim}, cmd[1:]...)...)
 	} else {
 		if _, err := exec.LookPath(cmd[0]); err != nil {
 			return "- " + nom + ": not installed"
 		}
-		c = exec.CommandContext(ctx, cmd[0], cmd[1:]...)
+		c = commandeContexte(ctx, cmd[0], cmd[1:]...)
 	}
 	cacherFenetre(c)
 	out, err := c.CombinedOutput()
@@ -271,7 +271,7 @@ func nomsDans(dossier string, n int, garder func(os.DirEntry) bool) string {
 func avecDelai(d time.Duration, dossier string, sortie bool, nom string, args ...string) ([]byte, error) {
 	ctx, fin := context.WithTimeout(context.Background(), d)
 	defer fin()
-	c := exec.CommandContext(ctx, nom, args...)
+	c := commandeContexte(ctx, nom, args...)
 	c.Dir = dossier
 	cacherFenetre(c)
 	if sortie {
@@ -297,7 +297,7 @@ func detecter(kitArg string) error {
 	} else if windows {
 		if out, err := avecDelai(60*time.Second, "/mnt/c", true, "cmd.exe", "/c", "echo %USERPROFILE%"); err == nil {
 			if p := strings.TrimRight(strings.ReplaceAll(string(out), "\r", ""), "\n"); p != "" {
-				if w, err := exec.Command("wslpath", "-u", p).Output(); err == nil {
+				if w, err := commande("wslpath", "-u", p).Output(); err == nil {
 					profil = strings.TrimRight(string(w), "\n")
 				}
 			}

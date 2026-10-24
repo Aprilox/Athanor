@@ -7,7 +7,6 @@ import (
 	"errors"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -202,7 +201,7 @@ func (s *Serveur) apiRecompiler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	t := NouvelleTache("recompiler", "Rebuild Athanor")
-	t.Lancer(exec.Command(exe, "reparer", "--recompiler", s.kitCourant().Racine), nil)
+	t.Lancer(commande(exe, "reparer", "--recompiler", s.kitCourant().Racine), nil)
 	s.ecrireJSON(w, map[string]any{"message_key": "Rebuild started: the output is below; restart the app when it is done.", "tache": t.ID})
 }
 
@@ -225,18 +224,18 @@ func (s *Serveur) apiInstaller(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if runtime.GOOS != "windows" { // Linux, macOS: the installer runs in a terminal (it asks for the password once)
-		if err := FenetreWSL(s.kitCourant(), "Athanor", "bash commands/install.sh"); err != nil {
+		if err := fenetreKit(s.kitCourant(), "Athanor", "installer"); err != nil {
 			s.erreur(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 		s.msg(w, "Installer opened in a window. When it is done, come back here and run “Check everything”.")
 		return
 	}
-	script := `commands\install.ps1`
+	commande := "installer-windows" // WSL2, its network, then athanor installer in WSL, administrator rights
 	if modeNatif.Load() {
-		script = `commands\install-natif.ps1` // native Windows: Git for Windows, jq, Python, Claude Code for Windows
+		commande = "installer-natif" // native Windows: Git for Windows, jq, Python, Claude Code for Windows
 	}
-	if err := FenetrePowerShell(s.kitCourant(), script); err != nil {
+	if err := fenetreWindows(s.kitCourant(), "Athanor - installation", commande); err != nil {
 		s.erreur(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -309,7 +308,7 @@ func (s *Serveur) apiEcrireOptions(w http.ResponseWriter, r *http.Request) {
 	nouveau := Kit{strings.TrimSpace(c.Kit)}
 	if nouveau.Racine != s.kitCourant().Racine {
 		if !nouveau.Valide() {
-			s.erreur(w, http.StatusBadRequest, "This folder does not contain system\\pilot.sh")
+			s.erreur(w, http.StatusBadRequest, "This folder does not contain template\\CLAUDE.md")
 			return
 		}
 		s.kitMu.Lock()
@@ -353,8 +352,7 @@ func (s *Serveur) apiEcran(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	dossier := strings.ReplaceAll(p.Dossier, "'", "'\\''")
-	c := commandeWSL(s.kitCourant(), "P=\"$(wslpath -u '"+dossier+"' 2>/dev/null || printf '%s' '"+dossier+"')\"; bash system/ecran.sh capture \"$P\"")
+	c := commandeKit(s.kitCourant(), "ecran", "capture", p.Dossier)
 	cacherFenetre(c)
 	png, err := c.Output()
 	if err != nil || len(png) < 8 || string(png[1:4]) != "PNG" {

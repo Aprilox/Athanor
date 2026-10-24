@@ -151,7 +151,8 @@ func kitExtensions(t *testing.T, d string) (kit, projet string) {
 	b, _ := json.Marshal(choix)
 	ecrireFichier(t, filepath.Join(ext, "projets.json"), string(b), 0o644)
 	ecrireFichier(t, filepath.Join(kit, "app/catalogue.json"), `{"mcp": [{"id": "godot", "sauvegarde": "first"}, {"id": "godot", "sauvegarde": "Save the scene (Ctrl+S)."}, {"id": "unreal", "sauvegarde": ""}, {"nom": "sans id"}]}`, 0o644)
-	ecrireFichier(t, filepath.Join(kit, "system/mcp-jail.sh"), "#!/bin/sh\nwhile [ \"$1\" != \"--\" ]; do shift; done\nshift\nexec \"$@\"\n", 0o755)
+	// the kit's executable as the cage (athanor mcp-cage …): here a stand-in that runs the server as is
+	ecrireFichier(t, filepath.Join(kit, "athanor"), "#!/bin/sh\nwhile [ \"$1\" != \"--\" ]; do shift; done\nshift\nexec \"$@\"\n", 0o755)
 	return kit, projet
 }
 
@@ -195,7 +196,7 @@ func TestPariteExtensions(t *testing.T) {
 			}
 		}
 	}
-	if b, _ := os.ReadFile(filepath.Join(d, "go0", "mcp.json")); !strings.Contains(string(b), `"distant"`) || !strings.Contains(string(b), "mcp-jail.sh") {
+	if b, _ := os.ReadFile(filepath.Join(d, "go0", "mcp.json")); !strings.Contains(string(b), `"distant"`) || !strings.Contains(string(b), `"mcp-cage"`) {
 		t.Errorf("the case tests too little: %s", b)
 	}
 	if st, err := os.Stat(filepath.Join(d, "go0", "mcp.json")); err != nil || st.Mode().Perm() != 0o600 {
@@ -244,14 +245,14 @@ for l in sys.stdin:
 		}
 	}
 	// without its cage, the program is not found
-	os.Remove(filepath.Join(kit, "system/mcp-jail.sh"))
+	os.Remove(filepath.Join(kit, "athanor"))
 	so, _, _ := pythonComplet(t, s, "tester", kit, projet, "bon")
 	gso, _, _ := capturer(t, func() int { return lancerExtensions([]string{"tester", kit, projet, "bon"}) })
 	var a, g any
 	_ = json.Unmarshal([]byte(so), &a)
 	_ = json.Unmarshal([]byte(gso), &g)
 	if !reflect.DeepEqual(a, g) {
-		t.Errorf("tester without mcp-jail.sh:\n go %s\n py %s", gso, so)
+		t.Errorf("tester without the kit executable:\n go %s\n py %s", gso, so)
 	}
 	// connexion: a remote server alone, in a private file
 	for _, sid := range []string{"distant", "cle", "bon", "inconnu", "../x"} {

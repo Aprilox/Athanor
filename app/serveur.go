@@ -277,7 +277,7 @@ func (s *Serveur) demarrerProjetsAuto() {
 		}
 		if p.Existe() && p.PiloteActif() {
 			pp := p
-			go func() { _ = DemarrerDetache(s.kitCourant(), ligneProjet(pp, "start.sh", "--attach")) }()
+			go func() { _ = garderWSLVivant(s.kitCourant(), pp) }()
 		}
 	}
 	if !lancer {

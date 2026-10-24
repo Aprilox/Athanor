@@ -281,15 +281,15 @@ func (s *Serveur) apiPilote(w http.ResponseWriter, r *http.Request) {
 		return
 	case "arreter":
 		marqueAuto(p, false)
-		sortie, err = s.scriptProjet(p, "stop.sh")
+		sortie, err = s.arreterPiloteProjet(p)
 	case "arreter-apres-cycle":
 		marqueAuto(p, false)
-		sortie, err = s.scriptProjet(p, "stop-after-cycle.sh")
+		sortie, err = s.arreterApresCycle(p)
 	case "redemarrer-apres-cycle":
 		s.mu.Lock()
 		s.relancer[p.Nom] = true
 		s.mu.Unlock()
-		sortie, err = s.scriptProjet(p, "stop-after-cycle.sh")
+		sortie, err = s.arreterApresCycle(p)
 	default:
 		s.erreur(w, http.StatusNotFound, "Unknown action")
 		return
@@ -524,16 +524,7 @@ func (s *Serveur) apiDossiers(w http.ResponseWriter, r *http.Request) {
 	s.ecrireJSON(w, map[string]any{"chemin": chemin, "parent": parent, "dossiers": dossiers, "racines": racines})
 }
 
-// scriptProjet runs commands/<script> in WSL for a project (Windows path converted by wslpath).
-func (s *Serveur) scriptProjet(p Projet, script string, args ...string) (string, error) {
-	return executerKit(s.kitCourant(), ligneProjet(p, script, args...))
-}
 
-// ligneProjet builds the call of a commands/ script with the project folder converted to a WSL path.
-func ligneProjet(p Projet, script string, args ...string) string {
-	dossier := strings.ReplaceAll(p.Dossier, "'", "'\\''")
-	return "P=\"$(wslpath -u '" + dossier + "' 2>/dev/null || printf '%s' '" + dossier + "')\"; bash ./commands/" + script + " " + strings.Join(args, " ") + " \"$P\""
-}
 
 // demarrerPilote starts a project's pilot. On Windows, WSL stops the distribution a few seconds after
 // the last wsl.exe ends, which would kill a backgrounded pilot: the pilot therefore runs in the
@@ -548,44 +539,24 @@ func (s *Serveur) demarrerPilote(p Projet) (string, error) {
 	if p.PiloteActif() {
 		return "The pilot is already running on this project.", nil // message key
 	}
-	if err := DemarrerDetache(s.kitCourant(), ligneProjet(p, "start.sh", "--keep")); err != nil {
+	if err := demarrerKitDetache(s.kitCourant(), "demarrer", optionFond(), p.Dossier); err != nil {
 		return "", err
 	}
 	return "Pilot started: the first cycle (framing) takes a few minutes.", nil
 }
 
-// ScriptKit runs commands/<script> in WSL without a project (short, blocking).
-func ScriptKit(k Kit, script string, args ...string) (string, error) {
-	return executerKit(k, "bash ./commands/"+script+" "+strings.Join(args, " "))
+// arreterPiloteProjet: stops the project's pilot now (the current cycle is interrupted).
+func (s *Serveur) arreterPiloteProjet(p Projet) (string, error) {
+	return executerKitArgs(s.kitCourant(), 2*time.Minute, "arreter", p.Dossier)
 }
 
-func executerKit(k Kit, ligne string) (string, error) {
-	return executerKitDelai(k, ligne, 20*time.Minute)
+// arreterApresCycle: the pilot stops at the end of its current cycle.
+func (s *Serveur) arreterApresCycle(p Projet) (string, error) {
+	return executerKitArgs(s.kitCourant(), time.Minute, "arreter", "--apres-cycle", p.Dossier)
 }
 
-// executerKitDelai: executerKit, stopped after delai (WSL that does not answer, a command that hangs):
-// the caller gets an error instead of waiting for ever.
-func executerKitDelai(k Kit, ligne string, delai time.Duration) (string, error) {
-	c := commandeWSL(k, ligne)
-	cacherFenetre(c)
-	c.WaitDelay = 5 * time.Second
-	var bout strings.Builder
-	c.Stdout, c.Stderr = &bout, &bout
-	err := c.Start()
-	if err == nil {
-		minuteur := time.AfterFunc(delai, func() { _ = c.Process.Kill() })
-		err = c.Wait()
-		if !minuteur.Stop() {
-			err = fmt.Errorf("no answer after %d s", int(delai.Seconds()))
-		}
-	}
-	out := []byte(bout.String())
-	texte := strings.TrimSpace(nettoyerANSI(string(out)))
-	if err != nil {
-		return texte, fmt.Errorf("%s (%v)", texte, err)
-	}
-	return texte, nil
-}
+
+
 
 // ----------------------------------------------------------------------------- working mode of the project
 

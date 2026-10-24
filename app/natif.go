@@ -19,29 +19,17 @@ var pilotesAvantFermeture = func() []string { return nil }
 // VerificationsNatives: the checks of the native Windows mode (Git Bash, the Windows programs the pilot
 // needs, Claude Code for Windows, the token, the kit's scripts).
 func VerificationsNatives() []*Verif {
-	v := func(id, titre, explication, script string, facultatif bool, rep Reparation) *Verif {
-		return &Verif{ID: id, Titre: titre, Explication: explication, Script: script, Facultatif: facultatif, Reparation: rep, tache: NouvelleTache("natif-"+id, titre)}
+	v := func(id, titre, explication string, facultatif bool, rep Reparation) *Verif {
+		return nouvelleVerif("natif-", id, titre, explication, facultatif, rep)
 	}
-	installer := Reparation{Genre: "powershell", Script: `commands\install-natif.ps1`, Explication: "Opens a window that installs what is missing with winget (Git for Windows, jq, Python, Node.js, GitHub CLI) and Claude Code for Windows. Windows may ask for your consent."}
+	installer := Reparation{Genre: "windows", Titre: "Installation", Args: []string{"installer-natif"}, Explication: "Opens a window that installs what is missing with winget (Git for Windows, jq, Python, Node.js, GitHub CLI) and Claude Code for Windows. Windows may ask for your consent."}
 	return []*Verif{
-		v("git_bash", "Git for Windows (Git Bash)", "In native Windows mode, the pilot and Claude's commands run in Git Bash, the shell Claude Code uses on Windows.",
-			`echo "Git Bash OK: bash $BASH_VERSION ($(uname -s))"`, false, installer),
-		v("outils", "Programs the pilot needs", "git, jq and curl for Windows; Python and Node.js for the projects that use them, GitHub CLI to link a project to GitHub, uv for the MCP servers written in Python.",
-			`export PATH="$PWD/system/natif:$PATH"; m=0; for p in git jq curl python node gh uv; do if v=$($p --version 2>&1 | head -n 1) && [ -n "$v" ]; then echo "ok  $p: $v"; else case $p in python|node|gh|uv) echo "MISSING $p (optional)" ;; *) echo "MISSING $p"; m=1 ;; esac; fi; done; exit $m`, false, installer),
-		v("claude", "Claude Code for Windows", "The claude.exe program (%USERPROFILE%\\.local\\bin).",
-			`export PATH="$HOME/.local/bin:$PATH"; v=$(claude --version 2>&1 | head -n 1); echo "$v"
-n=$(printf '%s' "$v" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n 1); [ -n "$n" ] || exit 1
-# older than what the pilot needs (instructions and team through files): an update is due
-[ "$(printf '%s\n2.1.281\n' "$n" | sort -V | head -n 1)" = 2.1.281 ] || { echo "Claude Code $n is too OLD for the native mode (2.1.281 at least, and the latest models): Install everything updates it"; exit 1; }`, false, installer),
-		v("jeton", "Token and model access", "The token of your subscription (CLAUDE_CODE_OAUTH_TOKEN in .env) is accepted: a tiny Haiku session answers.",
-			scriptJeton, false, reparationJeton),
-		v("outils_pc", "PC software detected", "Unreal, Blender, Android SDK, Docker… found on this PC and made available to Claude.",
-			`export PROJECT="$PWD/logs/detection"; mkdir -p "$PROJECT" tools; `+outilKit("detecter")+`"${X[@]}" >/dev/null 2>&1; sed -n '3,25p' "$PROJECT/.athanor/PC_TOOLS.md"`, true, Reparation{Genre: "aucune"}),
-		v("outils_kit", "Tool scripts", "The pilot scripts are consistent and keep Linux line ends (Git Bash fails on CRLF).",
-			`for f in system/pilot.sh system/parallel.sh system/safety.sh commands/*.sh system/natif/*; do bash -n "$f" || { echo "Syntax ERROR: $f"; exit 1; }; done
-./Athanor.exe autotest "$PWD" >/dev/null 2>&1 || { echo 'Athanor.exe ERROR: its autotest fails (Rebuild Athanor)'; exit 1; }
-if grep -lq $'\r' system/*.sh system/natif/* commands/*.sh 2>/dev/null; then echo 'ERROR: Windows line endings (CRLF) in a script'; exit 1; fi
-echo 'scripts OK'`, false, Reparation{Genre: "aucune"}),
+		v("git_bash", "Git for Windows (Git Bash)", "In native Windows mode, the pilot and Claude's commands run in Git Bash, the shell Claude Code uses on Windows.", false, installer),
+		v("outils", "Programs the pilot needs", "git, jq and curl for Windows; Python and Node.js for the projects that use them, GitHub CLI to link a project to GitHub, uv for the MCP servers written in Python.", false, installer),
+		v("claude", "Claude Code for Windows", "The claude.exe program (%USERPROFILE%\\.local\\bin).", false, installer),
+		v("jeton", "Token and model access", "The token of your subscription (CLAUDE_CODE_OAUTH_TOKEN in .env) is accepted: a tiny Haiku session answers.", false, reparationJeton),
+		v("outils_pc", "PC software detected", "Unreal, Blender, Android SDK, Docker… found on this PC and made available to Claude.", true, Reparation{Genre: "aucune"}),
+		v("outils_kit", "Tool scripts", "The pilot scripts are consistent and keep Linux line ends (Git Bash fails on CRLF).", false, Reparation{Genre: "aucune"}),
 	}
 }
 
@@ -57,7 +45,7 @@ func (s *Serveur) fermetureNative() {
 		return
 	case 2:
 		for _, p := range actifs {
-			_, _ = s.scriptProjet(p, "stop.sh")
+			_, _ = s.arreterPiloteProjet(p)
 		}
 		return
 	}
@@ -68,7 +56,7 @@ func (s *Serveur) fermetureNative() {
 		return
 	}
 	for _, p := range actifs {
-		_, _ = s.scriptProjet(p, "stop.sh")
+		_, _ = s.arreterPiloteProjet(p)
 	}
 }
 

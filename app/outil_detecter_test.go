@@ -39,7 +39,7 @@ func TestFilevercmp(t *testing.T) {
 }
 
 func TestPariteDetecter(t *testing.T) {
-	src, _ := filepath.Abs(filepath.Join("testdata", "oracles", "detect-tools.sh")) // the former script, as a test oracle
+	src, _ := filepath.Abs(filepath.Join(dossierOracles(), "detect-tools.sh")) // the former script, as a test oracle
 	if _, err := os.Stat(src); err != nil {
 		t.Skip("no detect-tools.sh")
 	}
