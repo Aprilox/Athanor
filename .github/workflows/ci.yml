@@ -61,6 +61,7 @@ jobs:
           exit "$code"
       - name: Single executable
         shell: bash
+        timeout-minutes: 10
         # the downloaded file alone: nothing written before the consent, then Athanor's folder installed
         # in the user's data folder (app/embarque.go), nothing next to the file
         run: |
@@ -75,8 +76,9 @@ jobs:
           cp "../$exe" "$d/"
           cd "$d"
           v="$(./$exe version | tr -d '\r')"
-          if [ "$RUNNER_OS" != Windows ]; then
-            # no one to answer: refused, nothing written (Windows would show its dialog)
+          if [ "$RUNNER_OS" = Linux ]; then
+            # no one to answer: refused, nothing written (Windows and macOS show their dialog, which would
+            # wait for a click on the runner's screen)
             if lancer "./$exe" autotest < /dev/null; then echo "::error::launched without consent"; exit 1; fi
             if [ -e "$kit" ]; then echo "::error::written before the consent"; exit 1; fi
           fi
