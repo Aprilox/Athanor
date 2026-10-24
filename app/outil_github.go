@@ -140,6 +140,12 @@ func decoderEchappementsC(s string) []byte {
 
 // scannerSecrets: the secret scanner of the pushes; the code of exit (0, 3 when the diff cannot be trusted).
 func scannerSecrets(mode string, entree io.Reader, sortie io.Writer) int {
+	return scannerSecretsAtelier(mode, entree, sortie, false)
+}
+
+// scannerSecretsAtelier: scannerSecrets; partage: the workshop is shared, its shareable files are no
+// "Athanor workshop" finding (their content is scanned as any other's).
+func scannerSecretsAtelier(mode string, entree io.Reader, sortie io.Writer, partage bool) int {
 	vus := map[string]bool{}
 	ajouter := func(cle string) {
 		if !vus[cle] {
@@ -204,6 +210,9 @@ func scannerSecrets(mode string, entree io.Reader, sortie io.Writer) int {
 				fichier, aFichier = cheminDiff(l[4:]), true
 				if fichier != "" {
 					for _, g := range genresFichier(fichier) {
+						if g == "Athanor workshop" && partage && atelierPartageable(fichier) {
+							continue
+						}
 						ajouter(fichier + "\t" + g)
 					}
 				}

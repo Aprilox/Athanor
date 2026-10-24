@@ -51,7 +51,12 @@ jobs:
               i=$((i+1)); niveau=error; [ $i -gt 10 ] && niveau=warning; [ $i -gt 20 ] && niveau=notice; [ $i -gt 30 ] && break
               echo "::$niveau title=$(head -n1 "$f" | tr -d '\r' | sed -e 's/^ *//' -e 's/%/%25/g' -e 's/:/%3A/g' -e 's/,/%2C/g' | cut -c1-120)::$(enc < "$f")"
             done
-            [ $i = 0 ] && echo "::error title=go test ${{ runner.os }}::$(tail -n 40 test.log | enc)"
+            # no failed test reported (a panic, a timeout): what was running, and where the tests stood
+            if [ $i = 0 ]; then
+              { grep -a -A4 -E '^panic:|running tests' test.log | head -n 20; grep -a -E '_test\.go:[0-9]+' test.log | sort | uniq -c | sort -rn | head -n 20; } > pile.txt
+              echo "::error title=go test ${{ runner.os }} (panic or timeout)::$(enc < pile.txt)"
+              echo "::warning title=go test ${{ runner.os }} (end of the log)::$(tail -n 40 test.log | enc)"
+            fi
           fi
           exit "$code"
 

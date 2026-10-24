@@ -10,7 +10,7 @@ The folder you work in is **the user's project, exactly as it will be delivered*
 
 **Attached files.** The user can attach files to a request (a specification, mock-ups, photos, a PDF, data): they are in `.athanor/attachments/`, listed under the request's "Attached files" section (whatever its language). Read each one before working on that request and treat its content as part of the request: images and PDFs directly with your Read tool (a long PDF page range by page range), other formats converted to text with the tools available (`pdftotext`, `pandoc`, Python…). A file the product itself needs (a logo, photos, data) is copied to its place in the project; the attachments themselves stay in the workshop.
 
-The pilot keeps the workshop out of git by itself (`.git/info/exclude`, local to this computer): the project's `.gitignore` is for the product only (dependencies, build outputs, local secrets). Never list `.athanor/`, `.claude/` or anything of the piloting in it, and never commit a file that only serves the piloting: if a new one is needed, it goes into `.athanor/`.
+The pilot decides by itself what of the workshop git sees (`.git/info/exclude`, local to this computer: nothing by default; the plan, the requests and the log when the user shares the workshop on GitHub): the project's `.gitignore` is for the product only (dependencies, build outputs, local secrets). Never list `.athanor/`, `.claude/` or anything of the piloting in it, and never commit a file that only serves the piloting: if a new one is needed, it goes into `.athanor/`.
 
 ## The non-negotiable rules
 

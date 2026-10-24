@@ -18,13 +18,13 @@ func TestLierGitHubRefuse(t *testing.T) {
 	p := Projet{Nom: "a", Dossier: t.TempDir()}
 	for _, c := range [][3]string{{"creer", "..", ""}, {"creer", "a b", ""}, {"creer", "x;y", ""}, {"existant", "seul", ""},
 		{"existant", "a/b/c", ""}, {"existant", "-a/b", ""}, {"creer", "ok", "../x"}, {"creer", "ok", "a b"}, {"autre", "ok", ""}} {
-		err := s.lierGitHub(p, c[0], c[1], true, c[2])
+		err := s.lierGitHub(p, c[0], c[1], true, c[2], false)
 		if err == nil || !strings.Contains(err.Error(), "Invalid") && err.Error() != "Unknown" {
 			t.Errorf("%v accepted (%v)", c, err)
 		}
 	}
 	// an existing repository can be pasted as its address
-	err := s.lierGitHub(p, "existant", "https://github.com/octocat/hello.git", true, "")
+	err := s.lierGitHub(p, "existant", "https://github.com/octocat/hello.git", true, "", false)
 	if err != nil && strings.Contains(err.Error(), "Invalid") {
 		t.Errorf("address refused: %v", err)
 	}

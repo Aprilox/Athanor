@@ -2232,7 +2232,7 @@ func lancerPilote(args []string) int {
 		exclLignes[strings.TrimSuffix(l, "\r")] = true
 	}
 	motifsSecrets := []string{".env", ".env.*", "!.env.example", "!.env.sample", "!.env.template", "!.env.dist"}
-	tousExcl := append([]string{".athanor/", ".claude/", "/.bashrc", "/.bash_profile", "/.profile", "/.zshrc", "/.zprofile", "/.gitconfig", "/.gitmodules", "/.ripgreprc", "/.idea", "/.vscode", "/.mcp.json"}, motifsSecrets...)
+	tousExcl := append([]string{".claude/", "/.bashrc", "/.bash_profile", "/.profile", "/.zshrc", "/.zprofile", "/.gitconfig", "/.gitmodules", "/.ripgreprc", "/.idea", "/.vscode", "/.mcp.json"}, motifsSecrets...)
 	var ajoutExcl strings.Builder
 	if len(exclBytes) > 0 && exclBytes[len(exclBytes)-1] != '\n' {
 		ajoutExcl.WriteByte('\n')
@@ -2250,6 +2250,13 @@ func lancerPilote(args []string) int {
 		}
 	}
 
+	// the workshop: out of git, or shared on GitHub without its files of this PC (the project's GitHub
+	// link says), in Athanor's block of .git/info/exclude
+	if err := ecrireExclusionAtelier(p.projet, atelierPartageGH(p.projet)); err != nil {
+		p.log("The project's .git/info/exclude cannot be written: .athanor/ may end up in the commits (" + err.Error() + ").")
+	} else if atelierPartageGH(p.projet) {
+		p.log("Workshop shared on GitHub: the plan, the requests and the log go into the commits (never secrets.env, logs/, the pilot's state).")
+	}
 	// nothing of Athanor's in the project itself (its .gitignore included): .git/info/exclude, above, keeps
 	// .athanor/ and the local secrets out of git; deleting .athanor/ leaves a clean project
 	gi := filepath.Join(p.projet, ".gitignore")
