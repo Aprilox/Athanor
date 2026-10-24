@@ -16,8 +16,9 @@ import (
 
 const masque = "••••••••"
 
-// clesEnvCachees: settings of older versions that moved elsewhere (Unreal: the MCP library).
-var clesEnvCachees = map[string]bool{"UNREAL_MCP": true, "UNREAL_MCP_URL": true}
+// clesEnvCachees: settings of older versions, still in an older .env but read by nothing any more:
+// never shown (Unreal: the MCP library; PILOT_ENGINE: there is one pilot only, in Go, since 2.25).
+var clesEnvCachees = map[string]bool{"UNREAL_MCP": true, "UNREAL_MCP_URL": true, "PILOT_ENGINE": true}
 
 func (s *Serveur) apiEnv(w http.ResponseWriter, r *http.Request) {
 	chemin := s.kitCourant().Env()

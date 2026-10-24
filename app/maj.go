@@ -365,25 +365,82 @@ func lancerMiseAJour(args []string) int {
 		fmt.Fprintln(os.Stderr, "athanor mise-a-jour: not a tool folder:", kit)
 		return 2
 	}
+	tx := textesProgresMaj(langueDuKit(kit))
+	fenetre := ouvrirProgresMaj(fmt.Sprintf(tx[0], versionAthanor))
+	defer fenetre.fermer()
+	fenetre.etapeMaj(tx[1], 5)
 	for i := 0; pid > 0 && i < 240 && processusVivantPilote(pid); i++ {
 		time.Sleep(250 * time.Millisecond)
 	}
-	time.Sleep(500 * time.Millisecond)
+	time.Sleep(300 * time.Millisecond)
+	progresDeploiement = func(etape string, pct int) {
+		switch etape {
+		case "fichiers":
+			fenetre.etapeMaj(tx[2], pct)
+		case "exe":
+			fenetre.etapeMaj(tx[3], pct)
+		case "linux":
+			fenetre.etapeMaj(tx[4], pct)
+		}
+	}
 	_, err := deployerKit(kit)
+	progresDeploiement = nil
 	if err != nil {
+		fenetre.fermer()
 		titre, texte := texteEchecInstallation(kit, err)
 		informer(titre, texte)
 	}
 	// Athanor opens again (the previous executable when the new one could not be put in place)
+	fenetre.etapeMaj(tx[5], 95)
 	if e := lancerDetacheExe(exeDuKit(kit)); e != nil {
+		fenetre.fermer()
 		titre, texte := texteEchecInstallation(kit, e)
 		informer(titre, texte)
 		return 1
 	}
+	// the small window stays until the new Athanor answers (its window is opening)
+	for i := 0; i < 60 && !instanceExistante("ping"); i++ {
+		time.Sleep(500 * time.Millisecond)
+	}
+	fenetre.etapeMaj(tx[5], 100)
+	time.Sleep(400 * time.Millisecond)
 	if err != nil {
 		return 1
 	}
 	return 0
+}
+
+// langueDuKit: the application's language, from the kit's settings ("" when unknown).
+func langueDuKit(kit string) string {
+	b, err := os.ReadFile(filepath.Join(kit, nomConfig()))
+	if err != nil {
+		return ""
+	}
+	var c struct {
+		Langue string `json:"langue"`
+	}
+	_ = json.Unmarshal(b, &c)
+	return c.Langue
+}
+
+// textesProgresMaj: the title (with the version) and the steps of the update's window.
+func textesProgresMaj(langue string) [6]string {
+	if langue == "" {
+		langue = langueSysteme()
+	}
+	switch langue {
+	case "fr":
+		return [6]string{"Mise à jour d'Athanor %s", "Fermeture d'Athanor…", "Installation des fichiers…", "Installation de l'application…", "Installation de la partie Linux…", "Ouverture d'Athanor…"}
+	case "es":
+		return [6]string{"Actualización de Athanor %s", "Cerrando Athanor…", "Instalando los archivos…", "Instalando la aplicación…", "Instalando la parte Linux…", "Abriendo Athanor…"}
+	case "de":
+		return [6]string{"Update von Athanor %s", "Athanor wird geschlossen…", "Dateien werden installiert…", "Anwendung wird installiert…", "Linux-Teil wird installiert…", "Athanor wird geöffnet…"}
+	case "it":
+		return [6]string{"Aggiornamento di Athanor %s", "Chiusura di Athanor…", "Installazione dei file…", "Installazione dell'applicazione…", "Installazione della parte Linux…", "Apertura di Athanor…"}
+	case "pt":
+		return [6]string{"Atualização do Athanor %s", "A fechar o Athanor…", "A instalar os ficheiros…", "A instalar a aplicação…", "A instalar a parte Linux…", "A abrir o Athanor…"}
+	}
+	return [6]string{"Updating Athanor %s", "Closing Athanor…", "Installing the files…", "Installing the application…", "Installing the Linux part…", "Opening Athanor…"}
 }
 
 // nettoyerMaj: what an update left in logs/maj, once the new version runs.

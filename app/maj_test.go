@@ -107,3 +107,33 @@ func TestMajImpossibleDansUneCopieDuCode(t *testing.T) {
 		t.Fatal("update offered by a plain build")
 	}
 }
+
+func TestTextesProgresMaj(t *testing.T) {
+	for _, l := range []string{"fr", "en", "es", "de", "it", "pt", "xx"} {
+		tx := textesProgresMaj(l)
+		for i, s := range tx {
+			if s == "" {
+				t.Fatalf("%s: text %d empty", l, i)
+			}
+		}
+		if !strings.Contains(tx[0], "%s") {
+			t.Fatalf("%s: title without the version", l)
+		}
+	}
+	if textesProgresMaj("fr")[5] != "Ouverture d'Athanor…" {
+		t.Fatal("French texts")
+	}
+}
+
+func TestLangueDuKit(t *testing.T) {
+	d := t.TempDir()
+	if langueDuKit(d) != "" {
+		t.Fatal("no settings: no language")
+	}
+	if err := os.WriteFile(filepath.Join(d, nomConfig()), []byte(`{"langue":"de"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if g := langueDuKit(d); g != "de" {
+		t.Fatalf("got %q", g)
+	}
+}
