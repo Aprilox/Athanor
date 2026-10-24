@@ -34,15 +34,24 @@ jobs:
         shell: bash
         # the failures also go into the run's annotations (readable without opening the whole log)
         run: |
+          set +e   # the step's shell stops at the first failure otherwise (-e, pipefail): the annotations below would never be written
           # an athanor build for the tests that run the real executable (the macOS cage, the chat's script…)
           if [ "$RUNNER_OS" != Windows ]; then go build -o "$RUNNER_TEMP/athanor-test" . && export ATHANOR_BIN_TEST="$RUNNER_TEMP/athanor-test"; fi
-          go test ./... 2>&1 | tee test.log; code=${PIPESTATUS[0]}
+          go test ./... > test.log 2>&1; code=$?
+          cat test.log
           if [ "$code" != 0 ]; then
-            enc() { sed -e 's/\r//g' -e 's/%/%25/g' | awk '{printf "%s%%0A", $0}'; }
-            lignes=$(grep -a -E -- '--- FAIL|^panic|^FAIL|_test\.go:[0-9]+:|\.go:[0-9]+:[0-9]+:' test.log | head -n 60)
-            [ -n "$lignes" ] || lignes=$(tail -n 40 test.log)
-            echo "::error title=go test ${{ runner.os }}::$(printf '%s\n' "$lignes" | enc)"
-            printf '%s\n' "$lignes" | grep -a -- '--- FAIL' | head -n 8 | while IFS= read -r l; do echo "::error title=failed::$(printf '%s\n' "$l" | enc)"; done
+            # one annotation per failed test, with its messages (readable through the API, without the log)
+            enc() { tr -d '\r' | sed -e 's/%/%25/g' | awk '{printf "%s%%0A", $0}'; }
+            awk '/^--- FAIL|^    --- FAIL/ {if (b != "") print b > ("fail-" n ".txt"); n++; b=$0; next}
+                 b != "" && /^[ \t]/ {if (length(b) < 3500) b = b "\n" $0; next}
+                 b != "" {print b > ("fail-" n ".txt"); b=""}
+                 END {if (b != "") print b > ("fail-" n ".txt")}' n=0 test.log
+            i=0
+            for f in $(ls fail-*.txt 2>/dev/null | sort -t- -k2 -n); do
+              i=$((i+1)); niveau=error; [ $i -gt 10 ] && niveau=warning; [ $i -gt 20 ] && niveau=notice; [ $i -gt 30 ] && break
+              echo "::$niveau title=$(head -n1 "$f" | tr -d '\r' | sed -e 's/^ *//' -e 's/%/%25/g' -e 's/:/%3A/g' -e 's/,/%2C/g' | cut -c1-120)::$(enc < "$f")"
+            done
+            [ $i = 0 ] && echo "::error title=go test ${{ runner.os }}::$(tail -n 40 test.log | enc)"
           fi
           exit "$code"
 
