@@ -12,7 +12,8 @@ package main
 //     the user's cursor is hidden, an area inside the user's window in front: a game of the user's);
 //   - a jump made by no hand (no input since the last look) into a window of Claude's desktop, while the
 //     user's cursor is shown (a game of the user's hides it when it locks the mouse), is undone.
-// Nothing is done while the user looks at Claude's desktop. Each correction is written to
+// Each time, the focus is taken on Claude's desktop (bureau_calme_windows.go): the program then lets the
+// mouse go by itself. Nothing is done while the user looks at Claude's desktop. Each correction is written to
 // logs/souris.log (what was in front, what runs on Claude's desktop), at most once a minute per kind, and
 // so is a jump by no hand elsewhere (only written down: what moved the mouse can then be found).
 
@@ -22,7 +23,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"syscall"
 	"time"
 	"unsafe"
 )
@@ -118,17 +118,14 @@ func journalSouris(kit, ligne string) {
 	fmt.Fprintf(o, "%s %s\n", time.Now().Format("2006-01-02 15:04:05"), ligne)
 }
 
-// garderSouris: the guard, until fin is closed; one guard at a time in the session (a named mutex).
+// garderSouris: the guard, until fin is closed; one guard at a time in the session (a named object).
 func garderSouris(kit string, fin <-chan struct{}) {
-	nom, _ := syscall.UTF16PtrFromString(`Local\AthanorGardeSouris`)
-	m, _, e := pCreateMutexGarde.Call(0, 1, uintptr(unsafe.Pointer(nom)))
-	if m == 0 || e == syscall.Errno(183) { // ERROR_ALREADY_EXISTS: another pilot's guard is at work
-		if m != 0 {
-			syscall.CloseHandle(syscall.Handle(m))
-		}
+	// another pilot's guard at work: this one waits, and takes over when that pilot ends
+	liberer, ok := unSeulDansSession("AthanorGardeSouris", fin)
+	if !ok {
 		return
 	}
-	defer syscall.CloseHandle(syscall.Handle(m))
+	defer liberer()
 	runtime.LockOSThread()
 	var (
 		avant, _     = positionCurseur()
@@ -183,6 +180,7 @@ func garderSouris(kit string, fin <-chan struct{}) {
 		if r, _, _ := pGetClipCursorGarde.Call(uintptr(unsafe.Pointer(&clip))); r != 0 && clip != ecranVirtuel() {
 			if confinementDeClaude(clip, rects, devant, devantOk, curseurAffiche()) {
 				pClipCursorGarde.Call(0)
+				demanderFocusClaude() // the program in front on Claude's desktop then lets the mouse go
 				if pos != avant && geste == gesteAvant {
 					pSetCursorPosGarde.Call(uintptr(avant.X), uintptr(avant.Y))
 					pos = avant
@@ -196,6 +194,7 @@ func garderSouris(kit string, fin <-chan struct{}) {
 			switch {
 			case sautDeClaude(avant, pos, rects):
 				pSetCursorPosGarde.Call(uintptr(avant.X), uintptr(avant.Y))
+				demanderFocusClaude()
 				noter("jump undone", fmt.Sprintf("%d,%d → %d,%d", avant.X, avant.Y, pos.X, pos.Y))
 				pos = avant
 			case dx*dx+dy*dy > 200*200:

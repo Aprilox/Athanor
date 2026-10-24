@@ -30,6 +30,8 @@ type Config struct {
 	ModeNatif bool `json:"mode_natif"`
 	// Windows' own title bar instead of Athanor's (cadre_windows.go), from the next start
 	BarreWindows bool `json:"barre_windows,omitempty"`
+	// the programs on Claude's desktop are heard while a pilot runs (bureau_calme_windows.go; muted by default)
+	EntendreBureauClaude bool `json:"entendre_bureau_claude,omitempty"`
 	// no look for a new version of Athanor when it opens (maj.go; on by default)
 	PasVerifierMaj bool `json:"pas_verifier_maj,omitempty"`
 	// end of a pilot already announced to the user (project folder → STATE.json "maj" of that end)
