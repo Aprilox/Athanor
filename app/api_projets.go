@@ -95,6 +95,7 @@ type EtatVue struct {
 	Theme       string                `json:"theme"`
 	Accent      string                `json:"accent"`
 	Bienvenue   bool                  `json:"bienvenue"`
+	Version     string                `json:"version"` // Athanor's version (the sidebar, Settings › Options)
 	Natif       bool                  `json:"natif"`   // native Windows mode: no Linux screen
 	Windows     bool                  `json:"windows"` // the app runs on Windows: WSL or native mode to choose
 	Systeme     string                `json:"systeme"` // runtime.GOOS: windows, linux, darwin (the Setup page's tabs)
@@ -115,7 +116,7 @@ func (s *Serveur) apiEtat(w http.ResponseWriter, r *http.Request) {
 	if nom := r.URL.Query().Get("p"); nom != "" {
 		courant = nom
 	}
-	vue := EtatVue{KitValide: kit.Valide(), KitInstalle: kit.Installe(), Verrouille: verrou, MotDePasse: mdp, Maintenant: time.Now().Format("15:04"), DemandeVide: true, Langue: langue, Theme: theme, Accent: accent, Bienvenue: bienvenue}
+	vue := EtatVue{KitValide: kit.Valide(), KitInstalle: kit.Installe(), Verrouille: verrou, MotDePasse: mdp, Maintenant: time.Now().Format("15:04"), DemandeVide: true, Langue: langue, Theme: theme, Accent: accent, Bienvenue: bienvenue, Version: versionAthanor}
 	p, ok := s.projet(r)
 	if ok {
 		vue.Actif = p.PiloteActif()
