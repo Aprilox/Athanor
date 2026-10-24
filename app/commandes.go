@@ -15,7 +15,7 @@ import (
 )
 
 // versionAthanor: kept equal to ProductVersion of winres/athanor.rc (TestVersionAlignee).
-const versionAthanor = "2.24.27"
+const versionAthanor = "2.24.28"
 
 type sousCommande struct {
 	aide  string
@@ -67,6 +67,9 @@ func init() {
 }
 
 // lancerSousCommande: the exit code and true when args name a sub-command ("isole" or "--isole").
+// consolePartagee: the sub-command shares the console of the program that started it (console_windows.go).
+var consolePartagee bool
+
 func lancerSousCommande(args []string) (int, bool) {
 	if len(args) == 0 {
 		return 0, false
@@ -84,6 +87,7 @@ func lancerSousCommande(args []string) (int, bool) {
 	if !ok {
 		return 0, false
 	}
+	consolePartagee = partagerConsoleParent()
 	return c.lance(args[1:]), true
 }
 
