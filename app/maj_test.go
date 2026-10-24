@@ -1,6 +1,8 @@
 package main
 
 import (
+	"archive/zip"
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -30,6 +32,9 @@ func TestSommeAttendueEtNotes(t *testing.T) {
 func serveurMaj(t *testing.T, version string, sommeFausse bool) *httptest.Server {
 	t.Helper()
 	contenu := []byte("#!/bin/sh\necho " + version + "\n")
+	if strings.HasSuffix(nomFichierMaj(), ".zip") { // the Mac: Athanor.app zipped
+		contenu = zipMacDeTest(t, contenu)
+	}
 	h := sha256.Sum256(contenu)
 	somme := hex.EncodeToString(h[:])
 	if sommeFausse {
@@ -135,5 +140,88 @@ func TestLangueDuKit(t *testing.T) {
 	}
 	if g := langueDuKit(d); g != "de" {
 		t.Fatalf("got %q", g)
+	}
+}
+
+// zipMacDeTest: a zip of Athanor.app as the release makes it, its executable being exe.
+func zipMacDeTest(t *testing.T, exe []byte) []byte {
+	t.Helper()
+	var b bytes.Buffer
+	z := zip.NewWriter(&b)
+	for _, d := range []string{"Athanor.app/", "Athanor.app/Contents/", "Athanor.app/Contents/MacOS/"} {
+		if _, err := z.Create(d); err != nil {
+			t.Fatal(err)
+		}
+	}
+	w, _ := z.Create("__MACOSX/Athanor.app/Contents/MacOS/._athanor")
+	_, _ = w.Write([]byte("resource fork"))
+	w, _ = z.Create(executableZipMac)
+	_, _ = w.Write(exe)
+	w, _ = z.Create("Athanor.app/Contents/Info.plist")
+	_, _ = w.Write([]byte("<plist/>"))
+	if err := z.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return b.Bytes()
+}
+
+func TestExtraireZipMac(t *testing.T) {
+	d := t.TempDir()
+	zf := filepath.Join(d, "a.zip")
+	if err := os.WriteFile(zf, zipMacDeTest(t, []byte("EXE")), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dest := filepath.Join(d, "athanor")
+	if err := extraireZipMac(zf, dest); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(dest); string(b) != "EXE" {
+		t.Fatalf("got %q", b)
+	}
+	os.WriteFile(zf, []byte("not a zip"), 0o644)
+	if extraireZipMac(zf, dest) == nil {
+		t.Fatal("a broken archive accepted")
+	}
+	var b bytes.Buffer
+	z := zip.NewWriter(&b)
+	w, _ := z.Create("Other.app/Contents/MacOS/other")
+	w.Write([]byte("x"))
+	z.Close()
+	os.WriteFile(zf, b.Bytes(), 0o644)
+	if err := extraireZipMac(zf, dest); err == nil || !strings.Contains(err.Error(), "no Athanor") {
+		t.Fatalf("an archive without Athanor: %v", err)
+	}
+}
+
+func TestNomFichierMaj(t *testing.T) {
+	n := nomFichierMaj()
+	if n == "" || !strings.HasPrefix(n, "Athanor-") {
+		t.Fatalf("%q", n)
+	}
+}
+
+// the Mac's update, seen from any Unix: Athanor-macOS.zip downloaded, checked, its executable taken out
+func TestPreparerMajZipMac(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the stand-in executable is a shell script")
+	}
+	avant := systemeMaj
+	systemeMaj = "darwin/arm64"
+	t.Cleanup(func() { systemeMaj = avant })
+	avecArchive(t, kitDeTest)
+	serveurMaj(t, "99.3.0", false)
+	k := Kit{t.TempDir()}
+	if e := verifierMaj(k); !e.Disponible {
+		t.Fatalf("check: %+v", e)
+	}
+	f, err := preparerMaj(k)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(f); !strings.Contains(string(b), "echo 99.3.0") {
+		t.Fatalf("not the executable of the zip: %q", b)
+	}
+	if l, _ := filepath.Glob(filepath.Join(dossierMaj(k), "*.part")); len(l) > 0 {
+		t.Fatalf("archive left: %v", l)
 	}
 }
