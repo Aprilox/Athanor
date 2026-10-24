@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -107,7 +108,7 @@ func TestConstruireAppMac(t *testing.T) {
 			t.Fatalf("slice %d differs", i)
 		}
 	}
-	if st, _ := os.Stat(filepath.Join(c, "MacOS", "athanor")); st.Mode()&0o111 == 0 {
+	if st, _ := os.Stat(filepath.Join(c, "MacOS", "athanor")); runtime.GOOS != "windows" && st.Mode()&0o111 == 0 { // Windows keeps no such mode
 		t.Fatal("not executable")
 	}
 }

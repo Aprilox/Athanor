@@ -5,6 +5,7 @@ package main
 
 import (
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 )
@@ -17,13 +18,14 @@ type actionsAppMac struct {
 	langue  func() string
 }
 
-// bundleMac: the Athanor.app an executable belongs to ("" when it is not inside one).
+// bundleMac: the Athanor.app an executable belongs to ("" when it is not inside one). A Mac path: always
+// with "/" (path, not filepath, so that it reads the same on every system).
 func bundleMac(exe string) string {
-	d := filepath.Dir(exe) // …/Athanor.app/Contents/MacOS
-	if filepath.Base(d) != "MacOS" || filepath.Base(filepath.Dir(d)) != "Contents" {
+	d := path.Dir(filepath.ToSlash(exe)) // …/Athanor.app/Contents/MacOS
+	if path.Base(d) != "MacOS" || path.Base(path.Dir(d)) != "Contents" {
 		return ""
 	}
-	b := filepath.Dir(filepath.Dir(d))
+	b := path.Dir(path.Dir(d))
 	if !strings.HasSuffix(strings.ToLower(b), ".app") {
 		return ""
 	}
@@ -48,7 +50,7 @@ func bundleAthanorMac() string {
 // reopen it later (after an update, at login).
 func bundleDurableMac() string {
 	b := bundleAthanorMac()
-	if strings.Contains(b, "/AppTranslocation/") {
+	if strings.Contains(filepath.ToSlash(b), "/AppTranslocation/") {
 		return ""
 	}
 	return b
