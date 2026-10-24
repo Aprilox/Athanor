@@ -59,6 +59,12 @@ jobs:
             fi
           fi
           exit "$code"
+      - name: Mac application
+        if: runner.os == 'macOS'
+        timeout-minutes: 5
+        # Athanor.app's Dock icon, menus and delegate built through Cocoa, then its Dock menu and a click on
+        # the icon asked for as the Dock does (app/app_mac_darwin_test.go)
+        run: ATHANOR_ESSAI_COCOA=1 go test -run TestCocoa -v .
       - name: Single executable
         shell: bash
         timeout-minutes: 10

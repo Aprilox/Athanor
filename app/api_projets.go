@@ -102,6 +102,9 @@ type EtatVue struct {
 	Quota       *EtatQuota            `json:"quota,omitempty"`
 	QuotaArret  map[string]RegleQuota `json:"quota_arret"`
 	Maj         *EtatMaj              `json:"maj,omitempty"` // updates of Athanor (maj.go)
+	// a stop asked for the end of the current cycle: "arret" (Stop after cycle), "relance" (restart to
+	// apply settings); the buttons say so
+	ArretDemande string `json:"arret_demande,omitempty"`
 }
 
 func (s *Serveur) apiEtat(w http.ResponseWriter, r *http.Request) {
@@ -125,6 +128,14 @@ func (s *Serveur) apiEtat(w http.ResponseWriter, r *http.Request) {
 			vue.Etat = &e
 		}
 		s.surveillerRelance(p, vue.Actif)
+		if vue.Actif && fichierExiste(filepath.Join(p.Atelier(), "STOP")) {
+			vue.ArretDemande = "arret"
+			s.mu.Lock()
+			if s.relancer[p.Nom] {
+				vue.ArretDemande = "relance"
+			}
+			s.mu.Unlock()
+		}
 	}
 	if verrou {
 		// locked: only "running / phase / cycle", no text from the project
@@ -293,6 +304,19 @@ func (s *Serveur) apiPilote(w http.ResponseWriter, r *http.Request) {
 		s.relancer[p.Nom] = true
 		s.mu.Unlock()
 		sortie, err = s.arreterApresCycle(p)
+	case "annuler-arret": // the stop asked for the end of the cycle is withdrawn: the pilot goes on
+		s.mu.Lock()
+		delete(s.relancer, p.Nom)
+		s.mu.Unlock()
+		for _, f := range []string{filepath.Join(p.Atelier(), "STOP"), filepath.Join(p.Dossier, ".autopilote", "STOP")} {
+			if e := os.Remove(f); e != nil && !os.IsNotExist(e) {
+				err = e
+			}
+		}
+		if err == nil && p.PiloteActif() {
+			marqueAuto(p, true)
+		}
+		sortie = "Stop cancelled: the pilot goes on after this cycle."
 	default:
 		s.erreur(w, http.StatusNotFound, "Unknown action")
 		return
@@ -301,7 +325,17 @@ func (s *Serveur) apiPilote(w http.ResponseWriter, r *http.Request) {
 		s.erreur(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	s.ecrireJSON(w, map[string]string{"message": sortie})
+	// the interface's language rather than the command's English
+	switch r.PathValue("action") {
+	case "arreter":
+		s.msg(w, "The pilot is stopped.")
+	case "arreter-apres-cycle":
+		s.msg(w, "The pilot will stop at the end of this cycle: nothing is lost.")
+	case "redemarrer-apres-cycle":
+		s.msg(w, "The pilot will restart with the new settings at the end of this cycle.")
+	default:
+		s.msg(w, sortie)
+	}
 }
 
 // ----------------------------------------------------------------------------- projects

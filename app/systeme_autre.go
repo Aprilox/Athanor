@@ -113,6 +113,9 @@ func DemarrageWindows(actif bool) error {
 		return err
 	}
 	if runtime.GOOS == "darwin" {
+		if b := bundleDurableMac(); b != "" { // Athanor.app: opened through the bundle, with its Dock icon
+			return os.WriteFile(f, []byte(agentLancementMac("/usr/bin/open", b)), 0o644)
+		}
 		return os.WriteFile(f, []byte(agentLancementMac(exe)), 0o644)
 	}
 	entree := "[Desktop Entry]\nType=Application\nName=Athanor\nComment=Claude Code building whole projects\nExec=\"" +
@@ -125,8 +128,16 @@ func DemarrageWindowsActif() bool {
 }
 func migrerSysteme() {}
 
+func argumentsPlist(args []string, x func(string) string) string {
+	r := ""
+	for _, a := range args {
+		r += "<string>" + x(a) + "</string>"
+	}
+	return r
+}
+
 // agentLancementMac: the launch agent that opens Athanor at login.
-func agentLancementMac(exe string) string {
+func agentLancementMac(exe string, args ...string) string {
 	x := func(s string) string {
 		return strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;").Replace(s)
 	}
@@ -135,7 +146,7 @@ func agentLancementMac(exe string) string {
 <plist version="1.0">
 <dict>
 	<key>Label</key><string>ai.athanor.app</string>
-	<key>ProgramArguments</key><array><string>` + x(exe) + `</string></array>
+	<key>ProgramArguments</key><array><string>` + x(exe) + `</string>` + argumentsPlist(args, x) + `</array>
 	<key>WorkingDirectory</key><string>` + x(filepath.Dir(exe)) + `</string>
 	<key>RunAtLoad</key><true/>
 </dict>

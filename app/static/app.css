@@ -511,10 +511,11 @@ textarea.en-attente { opacity: .55; }
 .dialogue { position: fixed; inset: 0; background: var(--voile); display: grid; place-items: center; z-index: 50; padding: 16px; }
 .dialogue-carte { width: min(420px, 100%); background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--ombre); padding: 20px; display: flex; flex-direction: column; gap: 18px; }
 .dialogue-carte h3 { margin: 0 0 -8px; font-size: 17px; overflow-wrap: anywhere; }
-.dialogue-carte p { margin: 0; font-size: 15px; line-height: 1.5; overflow-wrap: anywhere; }
+.dialogue-carte p { margin: 0; font-size: 15px; line-height: 1.5; overflow-wrap: anywhere; white-space: pre-line; }
 .dialogue-boutons { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
 .dialogue-fermeture { z-index: 60; }
 .dialogue-fermeture .dialogue-carte { width: min(480px, 100%); }
+.dialogue-large .dialogue-carte { width: min(560px, 100%); }
 /* Claude's screen (Linux side): a live picture, refreshed every 2 s */
 .ecran-carte { width: min(1100px, 100%); gap: 12px; }
 .ecran-tete { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -674,5 +675,7 @@ input.large { flex: 1; min-width: 200px; width: auto; }
 .marque-version.maj-dispo::after { content: ""; position: absolute; top: 0; right: -6px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
 .btn-maj { border-color: var(--accent); color: var(--accent); font-weight: 600; background: var(--accent-halo); }
 .btn-maj:hover { background: var(--accent); color: var(--sur-fort); }
+.btn-attente { border-color: var(--attention); color: var(--attention); font-weight: 600; }
+.btn-attente:hover { background: var(--attention); color: var(--sur-attention); }
 .notes-maj { max-height: 260px; overflow: auto; padding: 8px 12px; margin-top: 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel-2); font-size: 13px; }
 .chemin-kit { font-size: 13px; word-break: break-all; background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; display: inline-block; }

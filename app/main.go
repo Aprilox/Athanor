@@ -84,7 +84,8 @@ func main() {
 		}
 	}
 	url := "http://" + ecoute.Addr().String() + "/"
-	fmt.Println("Athanor:", url)
+	// the address alone opens nothing (only the windows Athanor opens can use it, acces.go)
+	fmt.Println("Athanor is running (" + url + "). To open its window again, start Athanor again: the address alone does not open it. The pilots keep working even when this terminal is closed.")
 	// Only local names are accepted in the Host header: a web page pointing its own domain to
 	// 127.0.0.1 ("DNS rebinding") is refused before reaching anything.
 	port := ecoute.Addr().(*net.TCPAddr).Port
@@ -103,11 +104,28 @@ func main() {
 	time.Sleep(150 * time.Millisecond)
 	lienApp = func() string { return s.lienOuverture(url) }
 	ecrireInstance(port)
-	barreDeWindows.Store(config.BarreWindows)
 	pilotesAvantFermeture = func() []string { _, noms := s.pilotesNatifs(); return noms }
 	if !FenetreApp(lienApp()) {
 		// Edge/Chrome window or the browser: the application keeps serving; a new launch opens another window.
 		OuvrirFenetreApp(lienApp())
+		if bundleAthanorMac() != "" { // Athanor.app: its Dock icon until it is quit (app_mac_darwin.go)
+			go func() {
+				for range demandesFenetre {
+					OuvrirFenetreApp(lienApp())
+				}
+			}()
+			boucleAppMac(actionsAppMac{
+				ouvrir:  func() { OuvrirFenetreApp(lienApp()) },
+				pilotes: s.nomsPilotesActifs,
+				quitter: func(arreter bool) {
+					if arreter {
+						s.arreterTousPilotes()
+					}
+					effacerInstance()
+				},
+				langue: func() string { s.mu.Lock(); defer s.mu.Unlock(); return s.config.Langue },
+			}) // returns only when Cocoa cannot be reached: Athanor then goes on as from a terminal
+		}
 		for range demandesFenetre {
 			OuvrirFenetreApp(lienApp())
 		}
