@@ -78,7 +78,9 @@ func lancerDetacheExe(exe string, args ...string) error {
 	lancer := func(drapeaux uint32) error {
 		c := exec.Command(exe, args...)
 		c.Dir = filepath.Dir(exe)
-		c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: drapeaux}
+		// never HideWindow: a window program takes its first show from it (Athanor reopened after an update
+		// stayed invisible, and its window came up blank when shown later)
+		c.SysProcAttr = &syscall.SysProcAttr{CreationFlags: drapeaux}
 		if err := c.Start(); err != nil {
 			return err
 		}

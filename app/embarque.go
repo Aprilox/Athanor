@@ -157,6 +157,15 @@ func pilotesEnCours(d string) []string {
 	return noms
 }
 
+// progresDeploiement: told what deployerKit does (the update's window), nil otherwise.
+var progresDeploiement func(etape string, pct int)
+
+func etapeDeploiement(etape string, pct int) {
+	if f := progresDeploiement; f != nil {
+		f(etape, pct)
+	}
+}
+
 // ResultatDeploiement: what deployerKit did.
 type ResultatDeploiement struct {
 	Fichiers bool // template/, app/, .env.example, LICENSE written
@@ -195,6 +204,7 @@ func deployerKit(d string) (ResultatDeploiement, error) {
 		}
 	}
 	if !sourceDuCode(d) && (nouvelle || !estDossierKit(d)) {
+		etapeDeploiement("fichiers", 20)
 		fichiers, modes, err := fichiersArchive(archiveKitGz)
 		if err != nil {
 			return r, err
@@ -228,6 +238,7 @@ func deployerKit(d string) (ResultatDeploiement, error) {
 		r.Fichiers = premiere == nil
 	}
 	// its own executable, when the folder's is missing or older
+	etapeDeploiement("exe", 55)
 	if exe, err := os.Executable(); err == nil {
 		cible := exeDuKit(d)
 		if !memeFichier(exe, cible) && (!fichierRegulierPilote(cible) || versionPlusRecente(versionAthanor, avant)) {
@@ -241,6 +252,7 @@ func deployerKit(d string) (ResultatDeploiement, error) {
 	}
 	// Windows: the Linux executable of the WSL mode (a WSL pilot runs it: never replaced under it)
 	if linuxVoulu {
+		etapeDeploiement("linux", 75)
 		l := filepath.Join(d, "athanor")
 		if !fichierRegulierPilote(l) || nouvelle || errAttente == nil {
 			if fichierRegulierPilote(l) && len(pilotesEnCours(d)) > 0 {
