@@ -65,7 +65,7 @@ Vous décrivez ce que vous voulez : un jeu, un site, une application, un outil. 
 
 ## Démarrage rapide
 
-**Il faut :** Windows 10/11 (WSL2 est installé pour vous) ou Linux, et un abonnement Claude (Pro, Max ou Team). Facultatif : Unreal Engine 5.8, Blender, Docker Desktop.
+**Il faut :** Windows 10/11 (WSL2 est installé pour vous), Linux ou macOS, et un abonnement Claude (Pro, Max ou Team). Facultatif : Unreal Engine 5.8, Blender, Docker Desktop.
 
 ### 1. Récupérer Athanor
 
@@ -81,6 +81,7 @@ Depuis la [**dernière version**](https://github.com/Aprilox/Athanor/releases/la
 
 - **Windows** : `Athanor-X.Y.Z-Windows.zip`, à dézipper où vous voulez (sur le Bureau, par exemple).
 - **Linux** : `Athanor-X.Y.Z-Linux.tar.gz`, puis `tar xzf Athanor-X.Y.Z-Linux.tar.gz`.
+- **macOS** : `Athanor-X.Y.Z-macOS-AppleSilicon.tar.gz` (ou `-Intel`), puis `tar xzf` et, l'exécutable n'étant pas signé, `xattr -dr com.apple.quarantine athanor` une fois.
 
 Chaque téléchargement est l'outil complet, prêt à l'emploi.
 
@@ -99,7 +100,7 @@ cd Athanor
 
 Pas de git ? *Code → Download ZIP*, dézippez, double-cliquez sur `build.cmd`. Si Go manque, `build.cmd` propose de l'installer avec winget.
 
-**Linux** :
+**Linux et macOS** :
 
 ```bash
 git clone https://github.com/Aprilox/Athanor.git
@@ -127,14 +128,16 @@ Les deux options donnent le même dossier : `Athanor.exe` (ou `athanor`) à côt
 5. **Ajouter un projet** : un nom, son dossier (existant ou à créer, sur n'importe quel disque) et ce que vous voulez. Les technologies sont libres sauf si vous en imposez. ✨ *Améliorer avec Claude* transforme quelques mots en une demande complète ; vous pouvez revenir à la vôtre.
 6. **Démarrer.** Ajoutez d'autres projets de la même façon et faites-les tourner en même temps.
 
-**Linux** (les scripts tournent nativement, sans WSL)
+**Linux et macOS** (tout tourne nativement, sans WSL)
 
 ```bash
 cd athanor                   # ou Athanor, si vous l'avez compilé depuis les sources
-commands/install.sh          # Claude Code, barrière, outils (sudo demandé une fois)
+commands/install.sh          # Claude Code, barrière, outils (mot de passe demandé une fois ; Homebrew sur Mac)
 commands/configure.sh        # jeton, modèles, options
-./athanor                    # l'application, s'ouvre dans votre navigateur
+./athanor                    # l'application, dans une fenêtre d'application de Chrome/Edge/Chromium, sinon votre navigateur
 ```
+
+Sur Mac, la barrière de Claude est Seatbelt, intégrée à macOS (celle qu'utilise Claude Code), les serveurs MCP tournent dans leur propre cage Seatbelt, et le Mac reste éveillé avec `caffeinate`. Unreal, Blender, Roblox Studio, Xcode et le SDK Android sont trouvés à leurs places habituelles et Claude les lance directement ; les programmes Windows et Docker via `tool` restent réservés à Windows et Linux. La prise en charge du Mac est nouvelle : dites-nous ce qui ne marche pas.
 
 Ajoutez ensuite un projet et démarrez-le, comme sous Windows (étapes 5 et 6).
 
@@ -145,7 +148,7 @@ Ajoutez ensuite un projet et démarrez-le, comme sous Windows (étapes 5 et 6).
 | une version téléchargée | fermez l'application, téléchargez la nouvelle version et extrayez-la au même endroit, pour que son dossier `athanor` se fusionne avec le vôtre |
 | depuis les sources | fermez l'application, puis `git pull` et relancez `build.cmd` (ou `./build.sh`) |
 
-Votre `.env`, vos réglages, `logs/` et `tools/` ne sont jamais touchés par une mise à jour. Les applications Windows et Linux gardent des fichiers de réglages séparés (`athanor-config.json`, `athanor-config-linux.json`) : un dossier de l'outil partagé entre les deux systèmes (double démarrage, par exemple) fonctionne avec les deux.
+Votre `.env`, vos réglages, `logs/` et `tools/` ne sont jamais touchés par une mise à jour. Les applications Windows, Linux et macOS gardent des fichiers de réglages séparés (`athanor-config.json`, `athanor-config-linux.json`, `athanor-config-darwin.json`) : un dossier de l'outil partagé entre plusieurs systèmes (double démarrage, par exemple) fonctionne avec chacun.
 
 L'application n'utilise que la bibliothèque standard de Go et trois paquets embarqués pour la fenêtre WebView2 : une fois les sources sur votre disque, la compilation ne demande aucun accès réseau.
 
@@ -345,7 +348,7 @@ Tout se modifie dans l'application (*Réglages*), ou dans `.env` ([`.env.example
 | `QUOTA_WAIT_MIN` | attente quand l'heure de réouverture du quota est illisible |
 | `IDLE_MAX_MIN`, `CYCLE_MAX_MIN`, `CLOSE_AFTER_MILESTONE` | surveillance des cycles (muet 30 min ou plus long que 3 h → coupé et repris), un jalon par cycle |
 | `KEEP_AWAKE` | le PC reste éveillé tant qu'un pilote tourne : `1` (par défaut ; l'écran aussi pour Roblox Studio et Unreal), `screen` (l'écran toujours), `0` (désactivé) |
-| `PILOT_ENGINE` | `bash` (par défaut) ou `go` : le pilote en Go, ouvriers parallèles compris |
+| `PILOT_ENGINE` | `go` (par défaut) : le pilote en Go, ouvriers parallèles compris ; `bash` : l'ancien pilote, gardé en secours (il prend aussi le relais tout seul si le pilote Go rencontre une erreur interne) |
 | `RTK`, `TZ` | compression des sorties de commandes, fuseau horaire des journaux (vide = celui du système) |
 | `UE_DIR`, `BLENDER_EXE`, `ANDROID_SDK_DIR`, `ANDROID_JDK_DIR` | chemins des outils quand la détection automatique les manque (facultatifs, absents par défaut) |
 
@@ -357,7 +360,7 @@ Si le quota global est épuisé (tous modèles), le pilote attend la réouvertur
 
 Ce que la barrière garantit, et ce qu'elle ne fait volontairement pas :
 
-- **Les commandes de Claude** tournent dans le bac à sable de Claude Code (bubblewrap + seccomp). Elles ne peuvent écrire que dans le dossier du projet et `tools/`. Elles ne peuvent lire ni le reste de votre dossier Linux, ni les disques Windows, ni lancer `cmd.exe` ou `powershell.exe` directement. *Installation & santé → Tester la barrière* le prouve avec une vraie session. Les outils de fichiers de Claude (Read, Edit, Write…) sont limités de la même façon par un garde-fou ([`system/guard.py`](system/guard.py)).
+- **Les commandes de Claude** tournent dans le bac à sable de Claude Code (bubblewrap + seccomp). Elles ne peuvent écrire que dans le dossier du projet et `tools/`. Elles ne peuvent lire ni le reste de votre dossier Linux, ni les disques Windows, ni lancer `cmd.exe` ou `powershell.exe` directement. *Installation & santé → Tester la barrière* le prouve avec une vraie session. Les outils de fichiers de Claude (Read, Edit, Write…) sont limités de la même façon par un garde-fou (`athanor hook fichiers`, [`app/outil_gardes.go`](app/outil_gardes.go)). Sur macOS, la barrière est Seatbelt, avec les mêmes règles.
 - **Les logiciels Windows sont une sortie voulue.** Les passerelles tournent hors de la barrière, avec vos droits, et `pc-exec` lance n'importe quel programme Windows que Claude dépose dans le projet ou dans `tools/windows`. Traitez un projet comme du code que vous lanceriez vous-même.
 - **Les droits administrateur sont sur autorisation.** *Droits administrateur pour les installations → Réparer* vous demande votre accord une fois et crée une tâche planifiée élevée (`Athanor - installations`). Son script est copié dans `C:\ProgramData\Athanor`, que seuls les administrateurs peuvent modifier. La tâche ne lance que des paquets winget et des programmes situés dans vos dossiers de projets ou dans `tools\windows`. Elle laisse aussi les programmes du projet accepter des connexions du réseau local sans la fenêtre du pare-feu. Retirez-la quand vous voulez avec `commands\allow-admin.cmd remove`.
 - **Le pilote ne fait jamais confiance au dossier du projet.** Il garde son propre état (pid, verrou, réglages de la barrière, consignes, compteurs) dans `logs/`, hors de portée de Claude, et n'écrit jamais à travers un lien symbolique posé dans `.athanor/`. Il vérifie chaque valeur relue, et appelle git sans hooks, filtres, fsmonitor ni diff externe. Il lance Claude Code avec ses seuls réglages et serveurs MCP (`--setting-sources user`, `--strict-mcp-config` quand la commande les connaît), et `tools/` n'est jamais dans son `PATH`.
@@ -417,11 +420,11 @@ Sans dossier, les commandes utilisent `<outil>\projet`. La demande se lit et s'�
 Athanor.exe, athanor   l'application pour Windows / Linux (dans la version téléchargée, ou construite par build.cmd / build.sh)
 app/                   les sources Go de l'application, l'interface (HTML, CSS, JS sans dépendance), ressources Windows
 commands/              install, configure, start, stop, stop-after-cycle, follow, test-sandbox, repair,
-                       allow-admin, unreal-network (.cmd pour Windows, .sh pour Linux/WSL)
-system/                pilot.sh (la boucle), parallel.sh (ordonnanceur, ouvriers, fusions), equipe.py (l'équipe), taches.py (tâches pour vous), safety.sh, bridge.py,
-                       extensions.py + mcp-jail.sh (Skills & MCP), ecran.sh (écran de Claude), github.sh (GitHub),
-                       settings.py (barrière), guard.py, detect-tools.sh, athanor.py (carte, archives, captures),
-                       bin/ (passerelles), windows/ (aides PowerShell)
+                       allow-admin, unreal-network (.cmd pour Windows, .sh pour Linux, WSL et macOS)
+system/                pilot.sh (lance le pilote Go ; l'ancien pilote bash en secours), parallel.sh (son mode parallèle),
+                       safety.sh, github.sh (liaison GitHub, Windows natif), mcp-jail.sh, windows-mcp.sh et ecran.sh
+                       (points d'entrée d'athanor mcp-cage, mcp-windows et ecran), bin/ (passerelles), natif/ (shims Git Bash),
+                       windows/ (aides PowerShell)
 template/              CLAUDE.md (consignes de Claude), guides/ (les parties dont seuls certains cycles ont besoin), PC_TOOLS_GUIDE.md, .claude/agents/ (l'équipe)
 docs/images/           images du README
 docs/releases/         les nouveautés de chaque version (affichées sur la page de la version)
@@ -495,7 +498,7 @@ Oui. Rien n'est lié à un nom d'utilisateur ni à une lettre de disque : les ch
 Poussez un tag de version : GitHub compile les deux applications et publie la version ([`.github/workflows/release.yml`](.github/workflows/release.yml)).
 
 ```bash
-git tag v2.24.28 && git push origin v2.24.28
+git tag v2.24.29 && git push origin v2.24.29
 ```
 
 Gardez la version de [`app/winres/athanor.rc`](app/winres/athanor.rc) et `versionAthanor` dans [`app/commandes.go`](app/commandes.go) alignées sur le tag (un test vérifie qu'elles concordent), et écrivez les nouveautés dans `docs/releases/VERSION.md` (par ex. [`docs/releases/2.24.24.md`](docs/releases/2.24.24.md)) : elles ouvrent la page de la version.

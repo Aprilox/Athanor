@@ -17,7 +17,7 @@ import (
 // pythonDuScript: the Python program written in a script, between debut and fin.
 func pythonDuScript(t *testing.T, script, apres, debut, fin string) string {
 	t.Helper()
-	b, err := os.ReadFile(filepath.Join("..", "system", script))
+	b, err := os.ReadFile(filepath.Join("testdata", "oracles", script)) // the Python the script carried, as a test oracle
 	if err != nil {
 		t.Skip("no " + script)
 	}

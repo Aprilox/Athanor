@@ -22,7 +22,7 @@ States of a task (derived, the same in the application):
   athanor todo missing ID "what is still missing"  back to the user, with this message
   athanor todo resolved ID "what you did instead"   skipped by the user, or no longer needed: closed
   athanor todo wait                  every remaining milestone waits for the user: the pilot pauses
-  taches.py etat PROJECT             (pilot) {"pour_vous": n, "a_traiter": n, "attente": 0|1}
+  athanor etat-taches PROJECT        (pilot) {"pour_vous": n, "a_traiter": n, "attente": 0|1}
 """
 import datetime, json, os, re, stat, sys, time
 

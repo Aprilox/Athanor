@@ -1,8 +1,8 @@
 package main
 
 // athanor pilote [PROJECT] (or athanor pilot [PROJECT]): the autonomous work loop in Go (step 3.1 of the
-// move of Athanor to Go), behind PILOT_ENGINE=go (system/pilot.sh stays the default and hands over when
-// PILOT_ENGINE=go). The same files in the workshop (.athanor/STATUS.txt, STATE.json, stats.tsv, pilot.log,
+// move of Athanor to Go): the default engine (PILOT_ENGINE=go); system/pilot.sh hands over to it, runs the
+// former bash pilot with PILOT_ENGINE=bash, and takes over if the Go pilot hits an internal error. The same files in the workshop (.athanor/STATUS.txt, STATE.json, stats.tsv, pilot.log,
 // pilot.pid, logs/cycle-*.jsonl) and in the pilot's private folder (logs/pilotes/<id>/), the same messages,
 // the same watchdog, relay, quota and task rules as system/pilot.sh.
 
@@ -51,7 +51,7 @@ const formatJalonPilote = `each milestone one line starting with "- [ ] M1 : " (
 
 type pilote struct {
 	kit, systeme, tools, projet, etat, prive, reglages, modeles, consignes string
-	natif, outilsPython                                                    bool
+	natif                                                                  bool
 	claudeBin, cheminClaude, configClaude                                  string
 
 	maxHours, quotaWaitMin, errorWaitMin, errorWaitMaxMin, loginWaitMin int
@@ -421,23 +421,16 @@ func (p *pilote) enregistrerStats(f, etat, etiquette, depot string) {
 	}
 	estime := 0
 	if res != nil {
-		if p.outilsPython {
-			_ = exec.Command("python3", "-I", filepath.Join(p.systeme, "cout.py"), "apprendre", tarifs, f).Run()
-		} else {
-			coutApprendre(tarifs, f)
-		}
+		coutApprendre(tarifs, f)
 	} else {
 		debutS := time.Now().Unix()
 		if t, err := time.ParseInLocation("2006-01-02T15:04:05", p.etatDebutCycle, time.Local); err == nil {
 			debutS = t.Unix()
 		}
 		var brut string
-		if p.outilsPython {
-			out, _ := exec.Command("python3", "-I", filepath.Join(p.systeme, "cout.py"), "estimer", tarifs, f, p.configClaude).Output()
-			brut = strings.TrimSpace(string(out))
-		} else {
-			brut = strings.TrimSpace(coutEstimer(tarifs, f, p.configClaude))
-		}
+
+		brut = strings.TrimSpace(coutEstimer(tarifs, f, p.configClaude))
+
 		if brut != "" {
 			dec := json.NewDecoder(strings.NewReader(brut))
 			dec.UseNumber()
@@ -551,15 +544,6 @@ func (p *pilote) connexionPresente() bool {
 }
 
 func (p *pilote) tachesEtat() (pourVous, aTraiter int) {
-	if p.outilsPython {
-		out, err := exec.Command("python3", "-B", filepath.Join(p.systeme, "taches.py"), "etat", p.projet).Output()
-		if err != nil {
-			return 0, 0
-		}
-		var m map[string]int
-		_ = json.Unmarshal(out, &m)
-		return m["pour_vous"], m["a_traiter"]
-	}
 	return etatTachesCompte(p.projet)
 }
 
@@ -727,12 +711,9 @@ func (p *pilote) seuilQuota() string {
 		noms = append(noms, x.f)
 	}
 	var s string
-	if p.outilsPython {
-		out, _ := exec.Command("python3", append([]string{"-I", filepath.Join(p.systeme, "quota.py"), "verifier", regles}, noms...)...).Output()
-		s = string(out)
-	} else {
-		s = quotaVerifier(regles, noms)
-	}
+
+	s = quotaVerifier(regles, noms)
+
 	s = strings.TrimSpace(s)
 	if i := strings.IndexByte(s, '\n'); i >= 0 {
 		s = s[:i]

@@ -15,9 +15,10 @@ if [ -f .env ]; then
     [[ "$l" =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]] && export "${BASH_REMATCH[1]}=${BASH_REMATCH[2]}"; done < .env
 fi
 command -v claude >/dev/null 2>&1 || { echo "Claude Code NOT FOUND: run install.sh."; exit 1; }
-export PROJECT="$KIT/logs/sandbox-test"; mkdir -p "$PROJECT/.athanor" tools; system/detect-tools.sh >/dev/null 2>&1; python3 system/settings.py "$KIT" "$PROJECT/.athanor/claude_settings.json" >/dev/null
+[ -x "$KIT/athanor" ] || { echo "Athanor's executable (athanor) is missing from the tool folder: Setup & health → Rebuild Athanor."; exit 1; }
+export PROJECT="$KIT/logs/sandbox-test"; mkdir -p "$PROJECT/.athanor" tools; ./athanor detecter "$KIT" >/dev/null 2>&1; ./athanor reglages "$KIT" "$PROJECT/.athanor/claude_settings.json" >/dev/null
 # Bridge to the PC tools, as during the pilot's work
-python3 system/bridge.py "$KIT" "$PROJECT" >/dev/null 2>&1 & PONT=$!; trap 'kill $PONT 2>/dev/null' EXIT; sleep 1
+./athanor pont "$KIT" "$PROJECT" >/dev/null 2>&1 & PONT=$!; trap 'kill $PONT 2>/dev/null' EXIT; sleep 1
 PASSERELLE=""; grep -q "^BLENDER_EXE='.\+'" system/pc_tools.env 2>/dev/null && PASSERELLE="timeout 120 blender --version > sonde-passerelle.txt 2>&1"
 
 DEHORS="$HOME/athanor-probe"; WIN=""; [ -d /mnt/c/Users/Public ] && WIN=/mnt/c/Users/Public/athanor-probe

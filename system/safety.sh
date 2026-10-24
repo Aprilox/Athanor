@@ -52,7 +52,7 @@ pilote_vivant() {
   p=$(pid_sur "$(cat "$(prive_de "$1")/pilot.pid" 2>/dev/null)")
   if [ -n "$p" ] && kill -0 "$p" 2>/dev/null; then printf '%s' "$p"; return 0; fi
   p=$(pid_sur "$(cat "$1/.athanor/pilot.pid" 2>/dev/null)")
-  if [ -n "$p" ] && kill -0 "$p" 2>/dev/null && tr '\0' ' ' < "/proc/$p/cmdline" 2>/dev/null | grep -qE 'system/pilot\.sh|athanor.*pilote?'; then
+  if [ -n "$p" ] && kill -0 "$p" 2>/dev/null && { tr '\0' ' ' < "/proc/$p/cmdline" 2>/dev/null || ps -p "$p" -o command= 2>/dev/null; } | grep -qE 'system/pilot\.sh|athanor.*pilote?'; then
     printf '%s' "$p"; return 0
   fi
   return 1
@@ -64,7 +64,8 @@ prive_de() {
   # native Windows: the same folder as in WSL for the same project (/c/x is /mnt/c/x there), so that its
   # history (cycles, statistics) carries over when the mode changes
   if [ "${NATIF:-0}" = 1 ] && [[ "$p" =~ ^/([a-zA-Z])(/.*)?$ ]]; then p="/mnt/${BASH_REMATCH[1],,}${BASH_REMATCH[2]}"; fi
-  printf '%s/logs/pilotes/%s' "$kit" "$(printf '%s' "$p" | sha1sum | cut -c1-16)"
+  # (macOS has shasum, not sha1sum)
+  printf '%s/logs/pilotes/%s' "$kit" "$(printf '%s' "$p" | { if command -v sha1sum >/dev/null 2>&1; then sha1sum; else shasum -a 1; fi; } | cut -c1-16)"
 }
 
 # Positive integer read from a file or a variable, else the default value. $1 = text, $2 = default.

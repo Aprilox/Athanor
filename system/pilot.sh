@@ -110,42 +110,37 @@ export BASH_MAX_OUTPUT_LENGTH="${BASH_MAX_OUTPUT_LENGTH:-20000}"
 [ -n "$EFFORT" ] && export CLAUDE_CODE_EFFORT_LEVEL="$EFFORT"
 CONFIG_CLAUDE="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 
-# The helpers that moved to Go (the move of the kit to Go, phase 1): the sub-commands of the kit's
-# executable when it runs on this system and knows them (Athanor.exe in native Windows, athanor on Linux
-# and in WSL), else the Python scripts they replace, as before. ATHANOR_OUTILS=python forces the scripts.
+# The kit's executable (Athanor.exe in native Windows, athanor on Linux, macOS and in WSL): the pilot in Go,
+# and the helpers this script uses. Without it nothing runs: it is rebuilt from Setup & health.
 ATHANOR_GO=""
-if [ "${ATHANOR_OUTILS:-}" != python ]; then
-  if [ "$NATIF" = 1 ]; then candidat="$KIT/Athanor.exe"; else candidat="$KIT/athanor"; fi
-  if [ -f "$candidat" ] && [ -x "$candidat" ] && aide_go=$(timeout 15 "$candidat" aide < /dev/null 2> /dev/null) \
-     && ( for c in relais cout quota hook reglages equipe extensions etat-taches plan solutions reglages-ouvrier pont roblox-sync detecter mcp-ouvrir reprise; do printf '%s' "$aide_go" | grep -q "^  $c " || exit 1; done ); then
-    ATHANOR_GO="$candidat"
-  fi
-  # an older Go pilot without its parallel workers leaves a project in parallel mode to this script
-  if [ "${PILOT_ENGINE:-}" = go ] && [ -n "$ATHANOR_GO" ] && printf '%s' "$aide_go" | grep -q '^  pilote ' \
-     && { printf '%s' "$aide_go" | grep -q '^  pilote .*parallel workers' || ! grep -qxE 'PARALLELE?=1\r?' "$ETAT/.env" 2>/dev/null; }; then
-    # the Go pilot runs as a child of this script, which takes over if it hits an internal error: exit 70
-    # (a Go panic, after it stopped its sessions) or 2 with a crash report (a fatal error nothing caught)
-    rm -f "$PRIVE/pilote-go.crash"
-    "$ATHANOR_GO" pilote "$PROJECT"
-    code_go=$?
-    [ -s "$PRIVE/pilote-go.crash" ] || rm -f "$PRIVE/pilote-go.crash"
-    if [ "$code_go" = 70 ] || { [ "$code_go" = 2 ] && [ -s "$PRIVE/pilote-go.crash" ]; }; then
-      REPRISE_GO=$code_go
-    else
-      exit "$code_go"
-    fi
-  fi
-  unset candidat aide_go
+if [ "$NATIF" = 1 ]; then candidat="$KIT/Athanor.exe"; else candidat="$KIT/athanor"; fi
+if [ -f "$candidat" ] && [ -x "$candidat" ] && aide_go=$(timeout 15 "$candidat" aide < /dev/null 2> /dev/null) \
+   && ( for c in relais cout quota hook reglages equipe extensions etat-taches plan solutions reglages-ouvrier pont roblox-sync detecter mcp-ouvrir reprise; do printf '%s' "$aide_go" | grep -q "^  $c " || exit 1; done ); then
+  ATHANOR_GO="$candidat"
 fi
-if [ -n "$ATHANOR_GO" ]; then
-  OUTIL_RELAIS=("$ATHANOR_GO" relais); OUTIL_COUT=("$ATHANOR_GO" cout); OUTIL_QUOTA=("$ATHANOR_GO" quota); OUTIL_REGLAGES=("$ATHANOR_GO" reglages)
-  OUTIL_EQUIPE=("$ATHANOR_GO" equipe); OUTIL_EXTENSIONS=("$ATHANOR_GO" extensions); OUTIL_ETAT_TACHES=("$ATHANOR_GO" etat-taches)
-  OUTIL_PONT=("$ATHANOR_GO" pont); OUTIL_ROBLOX_SYNC=("$ATHANOR_GO" roblox-sync)
-else
-  OUTIL_RELAIS=(python3 -I "$SYSTEME/relais.py"); OUTIL_COUT=(python3 -I "$SYSTEME/cout.py"); OUTIL_QUOTA=(python3 -I "$SYSTEME/quota.py"); OUTIL_REGLAGES=(python3 "$SYSTEME/settings.py")
-  OUTIL_EQUIPE=(python3 "$SYSTEME/equipe.py"); OUTIL_EXTENSIONS=(python3 "$SYSTEME/extensions.py"); OUTIL_ETAT_TACHES=(python3 -B "$SYSTEME/taches.py" etat)
-  OUTIL_PONT=(python3 "$SYSTEME/bridge.py"); OUTIL_ROBLOX_SYNC=(python3 "$SYSTEME/roblox-sync.py")
+if [ -z "$ATHANOR_GO" ]; then
+  echo "Athanor's executable ($candidat) is missing, does not run on this system, or is too old for this kit: Setup & health → Rebuild Athanor (or download the kit again)." >&2
+  exit 1
 fi
+# an older Go pilot without its parallel workers leaves a project in parallel mode to this script
+if [ "${PILOT_ENGINE:-go}" != bash ] && printf '%s' "$aide_go" | grep -q '^  pilote ' \
+   && { printf '%s' "$aide_go" | grep -q '^  pilote .*parallel workers' || ! grep -qxE 'PARALLELE?=1\r?' "$ETAT/.env" 2>/dev/null; }; then
+  # the Go pilot runs as a child of this script, which takes over if it hits an internal error: exit 70
+  # (a Go panic, after it stopped its sessions) or 2 with a crash report (a fatal error nothing caught)
+  rm -f "$PRIVE/pilote-go.crash"
+  "$ATHANOR_GO" pilote "$PROJECT"
+  code_go=$?
+  [ -s "$PRIVE/pilote-go.crash" ] || rm -f "$PRIVE/pilote-go.crash"
+  if [ "$code_go" = 70 ] || { [ "$code_go" = 2 ] && [ -s "$PRIVE/pilote-go.crash" ]; }; then
+    REPRISE_GO=$code_go
+  else
+    exit "$code_go"
+  fi
+fi
+unset candidat aide_go
+OUTIL_RELAIS=("$ATHANOR_GO" relais); OUTIL_COUT=("$ATHANOR_GO" cout); OUTIL_QUOTA=("$ATHANOR_GO" quota); OUTIL_REGLAGES=("$ATHANOR_GO" reglages)
+OUTIL_EQUIPE=("$ATHANOR_GO" equipe); OUTIL_EXTENSIONS=("$ATHANOR_GO" extensions); OUTIL_ETAT_TACHES=("$ATHANOR_GO" etat-taches)
+OUTIL_PONT=("$ATHANOR_GO" pont); OUTIL_ROBLOX_SYNC=("$ATHANOR_GO" roblox-sync)
 
 # The pilot's output may go to a terminal or a pipe that disappears (window closed, application
 # quit): writing to it must never kill the pilot (SIGPIPE ignored, the write simply fails).
@@ -274,7 +269,7 @@ synchroniser_demande() {  # flags a change of .athanor/REQUEST.md (Claude re-rea
   fi
 }
 
-# Tasks for the user (athanor todo, or system/taches.py; page "For you" of the application): what Claude cannot do itself.
+# Tasks for the user (athanor todo; page "For you" of the application): what Claude cannot do itself.
 taches_etat() {
   local j; j=$(timeout 20 "${OUTIL_ETAT_TACHES[@]}" "$PROJECT" 2>/dev/null 9>&-)
   POUR_VOUS=$(entier "$(printf '%s' "$j" | jq -r '.pour_vous // 0' 2>/dev/null)" 0)
@@ -356,76 +351,13 @@ journal_quota() {
 # for the project (.athanor/SOLUTIONS.md), one for this PC and its tools ($TOOLS/SOLUTIONS.md). Claude
 # writes them, so the pilot (outside the sandbox) never follows a link there, never blocks on a pipe,
 # reads 256 KB at most and writes through a new file of its own: it keeps them short (duplicates out,
-# the 60 latest lines), and merges in what a parallel worker added to its copy.
-SOLUTIONS_PY='
-import os, re, stat, sys, tempfile
-MAX = 256 * 1024
-def lire(f):
-    try:
-        if not getattr(os, "O_NOFOLLOW", 0) and os.path.islink(f):   # native Windows: no O_NOFOLLOW
-            os.unlink(f); return []
-        fd = os.open(f, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_BINARY", 0))
-    except FileNotFoundError:
-        return None
-    except OSError:
-        try:
-            if not os.path.isdir(f): os.unlink(f)   # a link or a pipe in its place: removed, never followed
-        except OSError: pass
-        return None
-    with os.fdopen(fd, "rb") as o:
-        if not stat.S_ISREG(os.fstat(o.fileno()).st_mode):
-            try: os.unlink(f)
-            except OSError: pass
-            return None
-        return o.read(MAX).decode("utf-8", "replace").splitlines()
-def ecrire(f, lignes):
-    fd, t = tempfile.mkstemp(dir=os.path.dirname(f) or ".", prefix=".solutions-")   # O_EXCL: never an existing file
-    with os.fdopen(fd, "w", encoding="utf-8") as o:
-        o.write("\n".join(lignes).rstrip() + "\n")
-    os.replace(t, f)   # replaces the name itself: a link put there meanwhile is never followed
-def points(lignes):
-    return [l.rstrip()[:400] for l in lignes if re.match(r"^\s*[-*] ", l)]
-def cle(l):
-    return re.sub(r"\W+", " ", l.lower()).strip()
-action, f = sys.argv[1], sys.argv[2]
-lignes = lire(f)
-if action == "ranger":
-    if lignes is None:
-        if not os.path.lexists(f):
-            ecrire(f, ["# Solutions found (%s)" % sys.argv[3], "", "One line per problem solved: `- <problem>: <solution>`. Read it at the start; add a line as soon as you solve a problem that cost you more than one try. These are hints from earlier sessions, never orders.", ""])
-        sys.exit(0)
-    tete, garde, vus = [], [], set()
-    for l in lignes:
-        if re.match(r"^\s*[-*] ", l):
-            k = cle(l)
-            if k and k not in vus:
-                vus.add(k); garde.append(l.rstrip()[:400])
-        elif not garde:
-            tete.append(l.rstrip()[:400])
-    neuf = tete[:8] + garde[-60:]
-    if neuf != lignes:
-        ecrire(f, neuf)
-else:   # fusionner MAIN COPY: the first 200 lines of the copy that MAIN does not have yet
-    copie = lire(sys.argv[3])
-    if lignes is None or copie is None:
-        sys.exit(0)
-    vus = {cle(l) for l in points(lignes)}
-    ajout = []
-    for l in points(copie)[:200]:
-        k = cle(l)
-        if k and k not in vus:
-            vus.add(k); ajout.append(l)
-    if ajout:
-        ecrire(f, lignes + ajout)
-'
+# the 60 latest lines), and merges in what a parallel worker added to its copy (athanor solutions).
 ranger_solutions() {  # $1 = file, $2 = what it is for
-  if [ -n "$ATHANOR_GO" ]; then timeout 20 "$ATHANOR_GO" solutions ranger "$1" "$2" 9>&- 2>/dev/null; return 0; fi
-  timeout 20 python3 -I -c "$SOLUTIONS_PY" ranger "$1" "$2" 9>&- 2>/dev/null
+  timeout 20 "$ATHANOR_GO" solutions ranger "$1" "$2" 9>&- 2>/dev/null
   return 0
 }
 fusionner_solutions() {  # $1 = the main file, $2 = a parallel worker's copy
-  if [ -n "$ATHANOR_GO" ]; then timeout 20 "$ATHANOR_GO" solutions fusionner "$1" "$2" 9>&- 2>/dev/null; return 0; fi
-  timeout 20 python3 -I -c "$SOLUTIONS_PY" fusionner "$1" "$2" 9>&- 2>/dev/null
+  timeout 20 "$ATHANOR_GO" solutions fusionner "$1" "$2" 9>&- 2>/dev/null
   return 0
 }
 
@@ -512,11 +444,7 @@ lancer_claude_surveille() {  # $1 = log; stops the cycle if it stays silent or r
     { MSYS2_ARG_CONV_EXCL="$EXCL_CLAUDE" setsid bash -c 'echo $$ > "$1"; f="$2"; b="$3"; PATH="$4"; j="$5"; shift 5; "$b" "$@" < /dev/null >> "$j" 2>&1; echo $? > "$f"' \
       _ "$f_sid" "$f_code" "$BASH" "$CHEMIN_CLAUDE" "$journal" "$SYSTEME/ecran.sh" lancer "${PROG_CLAUDE[@]}" "${args[@]}"; } 2> /dev/null 9>&- &
     pid_flux=$!
-    if [ -n "$ATHANOR_GO" ]; then
-      "$ATHANOR_GO" affichage "$journal" "$PRIVE/claude_fin" 9>&- &
-    else
-      { tail -n +1 -f --pid="$pid_flux" "$journal" 2>/dev/null | afficher_en_direct; } 9>&- &
-    fi
+    "$ATHANOR_GO" affichage "$journal" "$PRIVE/claude_fin" 9>&- &
   else
     { MSYS2_ARG_CONV_EXCL="$EXCL_CLAUDE" setsid bash -c 'echo $$ > "$1"; f="$2"; b="$3"; PATH="$4"; shift 4; "$b" "$@" < /dev/null 2>&1; echo $? > "$f"' \
       _ "$f_sid" "$f_code" "$BASH" "$CHEMIN_CLAUDE" "$SYSTEME/ecran.sh" lancer "${PROG_CLAUDE[@]}" "${args[@]}" | tee "$journal" | afficher_en_direct; } 9>&- &
@@ -532,7 +460,7 @@ lancer_claude_surveille() {  # $1 = log; stops the cycle if it stays silent or r
     if [ "$fin_vu" != 0 ] && [ $(( maintenant - fin_vu )) -ge 30 ]; then
       arreter_session KILL "$f_sid" "$f_win"
       break
-    elif [ -n "$ATHANOR_GO" ] && [ $(( maintenant - derniere )) -ge $(( (IDLE_MAX_MIN < 10 ? IDLE_MAX_MIN : 10) * SECONDS_PER_MINUTE )) ] \
+    elif [ $(( maintenant - derniere )) -ge $(( (IDLE_MAX_MIN < 10 ? IDLE_MAX_MIN : 10) * SECONDS_PER_MINUTE )) ] \
          && kb=$(timeout 20 "$ATHANOR_GO" images gel "$journal" 2>/dev/null 9>&-); then
       # Claude Code silent right after receiving an image: it froze on it (large images, athanor images);
       # 10 minutes are enough to tell, a session that works writes something long before
@@ -703,7 +631,7 @@ preparer_cycle() {  # non-AI tools: archives and project map, before Claude read
   fi
 }
 
-# The live sync of a Rojo project's scripts into the open Studio (roblox-sync.py): one server for the
+# The live sync of a Rojo project's scripts into the open Studio (athanor roblox-sync): one server for the
 # pilot's whole life, outside Claude's sandbox; it writes .athanor/studio/SYNC.luau, the code Claude runs.
 SYNC_PID=""
 roblox_sync_demarrer() {
@@ -851,7 +779,7 @@ trap '[ -n "${PONT_PID:-}" ] && kill "$PONT_PID" 2>/dev/null; [ -n "${SYNC_PID:-
 for f in pilot.log stats.tsv; do [ -f "$PRIVE/$f" ] || { [ -f "$ETAT/$f" ] && [ ! -L "$ETAT/$f" ] && cp "$ETAT/$f" "$PRIVE/$f"; }; done
 
 log "=== Athanor starting ==="
-if [ -n "$ATHANOR_GO" ]; then log "Helpers: Go ($(basename "$ATHANOR_GO") $(timeout 10 "$ATHANOR_GO" version < /dev/null 2> /dev/null | tr -d "\r"))."; else log "Helpers: Python scripts."; fi
+log "Helpers: Go ($(basename "$ATHANOR_GO") $(timeout 10 "$ATHANOR_GO" version < /dev/null 2> /dev/null | tr -d "\r"))."
 
 # Until the request is written, we wait.
 demande_remplie() {  # .athanor/REQUEST.md contains something other than headings and parenthesised lines
@@ -900,7 +828,7 @@ rm -rf "$PRIVE/agents" && mkdir -p "$PRIVE/agents" && cp "$MODELES/.claude/agent
 # Sub-agents are passed to Claude Code as JSON (--agents); failing that, copied into PROJECT/.claude/agents.
 # Model of each sub-agent: CHEAP_MODEL for "executor", SUBAGENT_MODEL for the others
 # (empty = the lead's), unless a model is set in the agent file. Also written into the .md copies.
-# The team (athanor equipe, or system/equipe.py): Athanor's sub-agents, plus the ones the user created in the app and the
+# The team (athanor equipe): Athanor's sub-agents, plus the ones the user created in the app and the
 # ones the lead proposed (.athanor/agents/, imported before each cycle). Rebuilt before every cycle.
 preparer_equipe() {
   local l
@@ -937,14 +865,14 @@ else
 fi
 synchroniser_demande
 
-# PC tools (athanor detecter, else system/detect-tools.sh), sandbox settings, Unreal MCP
-if [ -n "$ATHANOR_GO" ]; then "$ATHANOR_GO" detecter "$KIT"; else "$SYSTEME/detect-tools.sh"; fi
-# The skills of the Skills & MCP page are copied there (read-only for Claude: settings.py and the guard).
+# PC tools (athanor detecter), sandbox settings, Unreal MCP
+"$ATHANOR_GO" detecter "$KIT"
+# The skills of the Skills & MCP page are copied there (read-only for Claude: athanor reglages and the guard).
 export ATHANOR_PLUGIN="$PRIVE/plugin"
 export ATHANOR_PLUGINS="$PRIVE/plugins"   # the plugins switched on for the project (Plugins tab), read-only too
 "${OUTIL_REGLAGES[@]}" "$KIT" "$REGLAGES" > /dev/null || { log "Cannot write Claude's settings."; exit 1; }
 # Unreal MCP: the "unreal" server of the Skills & MCP page, switched on per project (its address, relay
-# included, comes from system/extensions.py; the .env keys of older versions are migrated by the app).
+# included, comes from athanor extensions; the .env keys of older versions are migrated by the app).
 UNREAL_MCP=0; export UNREAL_MCP UNREAL_MCP_URL
 unreal_depuis_mcp() {
   UNREAL_MCP=0
@@ -971,7 +899,7 @@ roblox_depuis_mcp() {
 BLENDER_MCP=0; MCP_PROGRAMMES=0; export BLENDER_MCP MCP_PROGRAMMES
 blender_depuis_mcp() {
   BLENDER_MCP=0; MCP_PROGRAMMES=0
-  if [ -n "$ATHANOR_GO" ] && [ -s "$PRIVE/ouvrir.json" ]; then MCP_PROGRAMMES=1; else rm -f "$PRIVE/ouvrir.json"; fi
+  if [ -s "$PRIVE/ouvrir.json" ]; then MCP_PROGRAMMES=1; else rm -f "$PRIVE/ouvrir.json"; fi
   [ -f "$PRIVE/mcp.json" ] && jq -e --slurpfile o <(cat "$PRIVE/ouvrir.json" 2>/dev/null || echo '[]') \
     '($o[0] // [] | map(.id)) as $g | .mcpServers | keys[] | select(test("blender"; "i")) | select(. as $k | $g | index($k) | not)' "$PRIVE/mcp.json" >/dev/null 2>&1 && BLENDER_MCP=1
   export BLENDER_MCP MCP_PROGRAMMES
@@ -1061,7 +989,7 @@ preparer_ecran() {
 preparer_ecran
 
 # Bridge to the PC tools (outside the sandbox): the gateways Claude runs go through it.
-# (native Windows: no sandbox, the gateways run directly, PONT_DIRECT in settings.py)
+# (native Windows: no sandbox, the gateways run directly, PONT_DIRECT in athanor reglages)
 PONT_PID=""
 if [ "$NATIF" != 1 ]; then
   "${OUTIL_PONT[@]}" "$KIT" "$PROJECT" >> "$PRIVE/pont.log" 2>&1 9>&- &
@@ -1181,9 +1109,7 @@ fi
 
 # A session stopped in the middle, or a project brought from another PC: the git locks it left are removed,
 # the rest is written for Claude (.athanor/RESUME.md), and a plan under way is checked against the folder.
-if [ -n "$ATHANOR_GO" ]; then
-  while IFS= read -r l; do [ -n "$l" ] && log "$l"; done < <(timeout 60 "$ATHANOR_GO" reprise "$PROJECT" "$PRIVE" 2>> "$PRIVE/pilot.log" 9>&-)
-fi
+while IFS= read -r l; do [ -n "$l" ] && log "$l"; done < <(timeout 60 "$ATHANOR_GO" reprise "$PROJECT" "$PRIVE" 2>> "$PRIVE/pilot.log" 9>&-)
 # Project start (MAX_HOURS safety stop): in the private folder, taken over from an older version
 # if valid. A non-numeric value is never evaluated.
 [ -f "$PRIVE/debut" ] || entier "$(cat "$ETAT/debut" 2>/dev/null)" "$(date +%s)" > "$PRIVE/debut"
@@ -1375,12 +1301,12 @@ while true; do
     { cat "$consignes"; printf '\n\n'; cat "$PRIVE/relais.md"; } > "$PRIVE/CLAUDE.relais.md"; consignes="$PRIVE/CLAUDE.relais.md"
     rm -f "$PRIVE/relais.md"
   fi
-  # how to save what was done in the programs driven by the MCP servers of this cycle (system/extensions.py)
+  # how to save what was done in the programs driven by the MCP servers of this cycle (athanor extensions)
   if [ "$mode" = serie ] && [ -f "$PRIVE/mcp.json" ] && [ -s "$PRIVE/mcp.json.sauvegarde.md" ]; then
     { cat "$consignes"; printf '\n\n'; cat "$PRIVE/mcp.json.sauvegarde.md"; } > "$PRIVE/CLAUDE.mcp.md"; consignes="$PRIVE/CLAUDE.mcp.md"
   fi
   # large images froze a session (athanor images): Claude keeps its images small meanwhile
-  if [ "$mode" = serie ] && [ -n "$ATHANOR_GO" ] && [ -s "$PRIVE/images_gel" ]; then
+  if [ "$mode" = serie ] && [ -s "$PRIVE/images_gel" ]; then
     { cat "$consignes"; "$ATHANOR_GO" images consigne "$(entier "$(cat "$PRIVE/images_gel")" 0)" 2>/dev/null; } > "$PRIVE/CLAUDE.images.md"; consignes="$PRIVE/CLAUDE.images.md"
   fi
   if [ "$mode" = serie ]; then
@@ -1450,19 +1376,17 @@ while true; do
   modele_cycle="${MODELE_VERIF:-$modele_cycle}" enregistrer_stats "$fichier_log" "$etat"
   # A session that froze right after a large image (Claude Code): the next cycles ask Claude to keep its images
   # small, until an image as large goes through again.
-  if [ -n "$ATHANOR_GO" ]; then
-    if [ -n "$motif_arret" ] && kb=$(timeout 20 "$ATHANOR_GO" images gel "$fichier_log" 2>/dev/null 9>&-); then
-      if [ -s "$PRIVE/images_gel" ]; then
-        [ "$kb" -lt "$(entier "$(cat "$PRIVE/images_gel")" 0)" ] && echo "$kb" > "$PRIVE/images_gel"
-      else
-        echo "$kb" > "$PRIVE/images_gel"
-        log "Claude froze right after an image of $kb KB: the next cycles ask it to keep its images small."
-      fi
-    elif [ -s "$PRIVE/images_gel" ] \
-         && [ "$(entier "$(timeout 20 "$ATHANOR_GO" images passee "$fichier_log" 2>/dev/null 9>&-)" 0)" -ge "$(entier "$(cat "$PRIVE/images_gel")" 1)" ]; then
-      rm -f "$PRIVE/images_gel"
-      log "Large images go through again: the cycles no longer ask Claude to shrink them."
+  if [ -n "$motif_arret" ] && kb=$(timeout 20 "$ATHANOR_GO" images gel "$fichier_log" 2>/dev/null 9>&-); then
+    if [ -s "$PRIVE/images_gel" ]; then
+      [ "$kb" -lt "$(entier "$(cat "$PRIVE/images_gel")" 0)" ] && echo "$kb" > "$PRIVE/images_gel"
+    else
+      echo "$kb" > "$PRIVE/images_gel"
+      log "Claude froze right after an image of $kb KB: the next cycles ask it to keep its images small."
     fi
+  elif [ -s "$PRIVE/images_gel" ] \
+       && [ "$(entier "$(timeout 20 "$ATHANOR_GO" images passee "$fichier_log" 2>/dev/null 9>&-)" 0)" -ge "$(entier "$(cat "$PRIVE/images_gel")" 1)" ]; then
+    rm -f "$PRIVE/images_gel"
+    log "Large images go through again: the cycles no longer ask Claude to shrink them."
   fi
   # Safeguard: a milestone ticked without "CHECK: PASSED" seen in the cycle log -> recheck first on the next cycle.
   coches_fin=$(coches_plan); coches_fin=${coches_fin:-0}
