@@ -484,7 +484,7 @@ prog_claude() {
 lancer_claude_surveille() {  # $1 = log; stops the cycle if it stays silent or runs too long
   local journal="$1" f_sid="$PRIVE/claude_sid" f_code="$PRIVE/claude_code"
   local pid_flux debut maintenant derniere motif="" tete coches_debut jalon_vu=0 h c fin_vu=0 ecart verifie
-  local relais_vu=0 dernier_ctx=0 ctx dernier_quota=0 lq f_win="$PRIVE/claude_winpid" attente dernier_verrou=0
+  local relais_vu=0 dernier_ctx=0 ctx dernier_quota=0 lq f_win="$PRIVE/claude_winpid" attente dernier_verrou=0 kb
   args_natifs args "$PRIVE/claude"
   prog_claude "$f_win"
   rm -f "$f_sid" "$f_code" "$PRIVE/cycle_arrete" "$PRIVE/cycle_clos" "$PRIVE/cycle_relais"
@@ -493,9 +493,24 @@ lancer_claude_surveille() {  # $1 = log; stops the cycle if it stays silent or r
   : > "$journal"
   # setsid: Claude and everything it launches (engine, browser...) form one group that can be stopped at once.
   # (9>&-: the pilot's lock must not be inherited by Claude nor by the display pipeline)
-  { MSYS2_ARG_CONV_EXCL="$EXCL_CLAUDE" setsid bash -c 'echo $$ > "$1"; f="$2"; b="$3"; PATH="$4"; shift 4; "$b" "$@" < /dev/null 2>&1; echo $? > "$f"' \
-    _ "$f_sid" "$f_code" "$BASH" "$CHEMIN_CLAUDE" "$SYSTEME/ecran.sh" lancer "${PROG_CLAUDE[@]}" "${args[@]}" | tee "$journal" | afficher_en_direct; } 9>&- &
-  pid_flux=$!
+  rm -f "$PRIVE/claude_fin"
+  if [ "$NATIF" = 1 ] || [ "${JOURNAL_DIRECT:-0}" = 1 ]; then
+    # Native Windows: Claude writes its stream straight into its log file. Through a Git Bash pipe
+    # (| tee | jq), a line longer than the pipe (an image: 170 KB and more) can stall Claude's write for
+    # good; a file never does. The live display reads the file as it grows (athanor affichage).
+    { MSYS2_ARG_CONV_EXCL="$EXCL_CLAUDE" setsid bash -c 'echo $$ > "$1"; f="$2"; b="$3"; PATH="$4"; j="$5"; shift 5; "$b" "$@" < /dev/null >> "$j" 2>&1; echo $? > "$f"' \
+      _ "$f_sid" "$f_code" "$BASH" "$CHEMIN_CLAUDE" "$journal" "$SYSTEME/ecran.sh" lancer "${PROG_CLAUDE[@]}" "${args[@]}"; } 2> /dev/null 9>&- &
+    pid_flux=$!
+    if [ -n "$ATHANOR_GO" ]; then
+      "$ATHANOR_GO" affichage "$journal" "$PRIVE/claude_fin" 9>&- &
+    else
+      { tail -n +1 -f --pid="$pid_flux" "$journal" 2>/dev/null | afficher_en_direct; } 9>&- &
+    fi
+  else
+    { MSYS2_ARG_CONV_EXCL="$EXCL_CLAUDE" setsid bash -c 'echo $$ > "$1"; f="$2"; b="$3"; PATH="$4"; shift 4; "$b" "$@" < /dev/null 2>&1; echo $? > "$f"' \
+      _ "$f_sid" "$f_code" "$BASH" "$CHEMIN_CLAUDE" "$SYSTEME/ecran.sh" lancer "${PROG_CLAUDE[@]}" "${args[@]}" | tee "$journal" | afficher_en_direct; } 9>&- &
+    pid_flux=$!
+  fi
   debut=$(date +%s)
   while kill -0 "$pid_flux" 2>/dev/null; do
     sleep "$WATCH_INTERVAL" 9>&- & wait $! 2>/dev/null   # interruptible: immediate stop
@@ -506,6 +521,11 @@ lancer_claude_surveille() {  # $1 = log; stops the cycle if it stays silent or r
     if [ "$fin_vu" != 0 ] && [ $(( maintenant - fin_vu )) -ge 30 ]; then
       arreter_session KILL "$f_sid" "$f_win"
       break
+    elif [ -n "$ATHANOR_GO" ] && [ $(( maintenant - derniere )) -ge $(( (IDLE_MAX_MIN < 10 ? IDLE_MAX_MIN : 10) * SECONDS_PER_MINUTE )) ] \
+         && kb=$(timeout 20 "$ATHANOR_GO" images gel "$journal" 2>/dev/null 9>&-); then
+      # Claude Code silent right after receiving an image: it froze on it (large images, athanor images);
+      # 10 minutes are enough to tell, a session that works writes something long before
+      motif="no activity for $(( IDLE_MAX_MIN < 10 ? IDLE_MAX_MIN : 10 )) min, right after an image of $kb KB"
     elif [ $(( maintenant - derniere )) -ge $(( IDLE_MAX_MIN * SECONDS_PER_MINUTE )) ]; then
       motif="no activity for $IDLE_MAX_MIN min"
     elif [ $(( maintenant - debut )) -ge $(( ${LIMITE_CYCLE_MIN:-$CYCLE_MAX_MIN} * SECONDS_PER_MINUTE )) ]; then
@@ -588,6 +608,7 @@ lancer_claude_surveille() {  # $1 = log; stops the cycle if it stays silent or r
     fi
   done
   wait "$pid_flux" 2>/dev/null
+  : > "$PRIVE/claude_fin"   # the live display (athanor affichage) shows the end of the log, then stops
   [ "$attente" -ge 60 ] && log "Cycle $cycle: Claude stopped after $(( attente / 60 )) min of attempts."
   # Cleanup: no program launched during this cycle may keep running.
   arreter_session KILL "$f_sid" "$f_win"
@@ -1189,6 +1210,8 @@ cycle=$(entier "$(cat "$PRIVE/cycle" 2>/dev/null)" 0)   # continues across resta
 [ "$cycle" = 0 ] && [ -s "$PRIVE/stats.tsv" ] && cycle=$(entier "$(cut -f2 "$PRIVE/stats.tsv" | sed 's/·.*//' | grep -E '^[0-9]+$' | sort -n | tail -n 1)" 0)
 erreurs=0
 sans_progres=0
+arrets=0   # cycles in a row stopped by the watchdog
+rm -f "$PRIVE/images_gel"   # whether large images freeze Claude is seen again from this start
 
 # ----------------------------------------------------------------------------- loop
 while true; do
@@ -1335,6 +1358,10 @@ while true; do
   if [ "$mode" = serie ] && [ -f "$PRIVE/mcp.json" ] && [ -s "$PRIVE/mcp.json.sauvegarde.md" ]; then
     { cat "$consignes"; printf '\n\n'; cat "$PRIVE/mcp.json.sauvegarde.md"; } > "$PRIVE/CLAUDE.mcp.md"; consignes="$PRIVE/CLAUDE.mcp.md"
   fi
+  # large images froze a session (athanor images): Claude keeps its images small meanwhile
+  if [ "$mode" = serie ] && [ -n "$ATHANOR_GO" ] && [ -s "$PRIVE/images_gel" ]; then
+    { cat "$consignes"; "$ATHANOR_GO" images consigne "$(entier "$(cat "$PRIVE/images_gel")" 0)" 2>/dev/null; } > "$PRIVE/CLAUDE.images.md"; consignes="$PRIVE/CLAUDE.images.md"
+  fi
   if [ "$mode" = serie ]; then
     args=(-p "$but_cycle" --permission-mode bypassPermissions --settings "$REGLAGES" --permission-prompts none --output-format stream-json --verbose
           "${ARGS_SURS[@]}" --append-system-prompt "$(cat "$consignes")")
@@ -1400,6 +1427,22 @@ while true; do
     fi
   fi
   modele_cycle="${MODELE_VERIF:-$modele_cycle}" enregistrer_stats "$fichier_log" "$etat"
+  # A session that froze right after a large image (Claude Code): the next cycles ask Claude to keep its images
+  # small, until an image as large goes through again.
+  if [ -n "$ATHANOR_GO" ]; then
+    if [ -n "$motif_arret" ] && kb=$(timeout 20 "$ATHANOR_GO" images gel "$fichier_log" 2>/dev/null 9>&-); then
+      if [ -s "$PRIVE/images_gel" ]; then
+        [ "$kb" -lt "$(entier "$(cat "$PRIVE/images_gel")" 0)" ] && echo "$kb" > "$PRIVE/images_gel"
+      else
+        echo "$kb" > "$PRIVE/images_gel"
+        log "Claude froze right after an image of $kb KB: the next cycles ask it to keep its images small."
+      fi
+    elif [ -s "$PRIVE/images_gel" ] \
+         && [ "$(entier "$(timeout 20 "$ATHANOR_GO" images passee "$fichier_log" 2>/dev/null 9>&-)" 0)" -ge "$(entier "$(cat "$PRIVE/images_gel")" 1)" ]; then
+      rm -f "$PRIVE/images_gel"
+      log "Large images go through again: the cycles no longer ask Claude to shrink them."
+    fi
+  fi
   # Safeguard: a milestone ticked without "CHECK: PASSED" seen in the cycle log -> recheck first on the next cycle.
   coches_fin=$(coches_plan); coches_fin=${coches_fin:-0}
   if [ "$coches_fin" -gt "${coches_cycle_debut:-0}" ]; then
@@ -1460,6 +1503,7 @@ while true; do
     fi
     etat=cadre
   fi
+  [ "$etat" = bloque ] || arrets=0
   case "$etat" in
     cadre) ;;
     ok)
@@ -1540,9 +1584,19 @@ while true; do
       ;;
     bloque)
       erreurs=$(( erreurs + 1 ))
-      log "Cycle $cycle stopped by the watchdog ($motif_arret). The work already done stays in the folder; resuming in $ERROR_WAIT_MIN min."
-      ETAT_PHASE=erreur; statut "Cycle stopped ($motif_arret), resuming in $ERROR_WAIT_MIN min"
-      dormir $(( ERROR_WAIT_MIN * 60 ))
+      arrets=$(( arrets + 1 ))
+      if [ "$arrets" -ge "$MAX_CYCLES_WITHOUT_PROGRESS" ]; then
+        # the same stop again and again: said once, with a long pause, rather than a restart every few minutes
+        { echo "# Alert: cycles stopped by the watchdog"; echo "$(date '+%Y-%m-%d %H:%M'): $arrets cycles in a row stopped by the watchdog (the last one: $motif_arret)."; echo "The last lines of each cycle log (.athanor/logs/) show where Claude stopped. You can refine your request."; } > "$ETAT/ALERT.md"
+        log "ALERT: $arrets cycles in a row stopped by the watchdog ($motif_arret), 30 min pause (see .athanor/ALERT.md)."
+        ETAT_PHASE=erreur; statut "Paused after $arrets cycles stopped by the watchdog"
+        arrets=0
+        dormir 1800
+      else
+        log "Cycle $cycle stopped by the watchdog ($motif_arret). The work already done stays in the folder; resuming in $ERROR_WAIT_MIN min."
+        ETAT_PHASE=erreur; statut "Cycle stopped ($motif_arret), resuming in $ERROR_WAIT_MIN min"
+        dormir $(( ERROR_WAIT_MIN * 60 ))
+      fi
       ;;
     erreur)
       ETAT_PHASE=erreur
