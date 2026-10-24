@@ -10,12 +10,13 @@ import (
 	"strings"
 )
 
-// actionsAppMac: what the Dock icon does.
+// actionsAppMac: what Athanor.app needs from the application.
 type actionsAppMac struct {
-	ouvrir  func()          // the Dock icon clicked, "Open Athanor": a window of the interface
-	pilotes func() []string // the projects whose pilot runs (the Dock menu, the question when quitting)
-	quitter func(arreter bool)
-	langue  func() string
+	lien       func() string   // a single-use address of the interface, for the window (acces.go)
+	navigateur func()          // the interface in a browser's window, when the Mac's own one cannot open
+	pilotes    func() []string // the projects whose pilot runs (the menus, the question when quitting)
+	quitter    func(arreter bool)
+	langue     func() string
 }
 
 // bundleMac: the Athanor.app an executable belongs to ("" when it is not inside one). A Mac path: always
@@ -56,37 +57,55 @@ func bundleDurableMac() string {
 	return b
 }
 
-// textesAppMac: the Dock menu and the question asked when quitting with pilots running.
+// texteAppMac: the menus of Athanor.app (Dock, menu bar, the icon near the clock) and the question asked
+// when quitting with pilots running.
 type texteAppMac struct {
-	ouvrir, quitter, aucun, enCours, titreQuitter, texteQuitter, continuer, arreter, annuler string
+	ouvrir, quitter, aucun, enCours, titreQuitter string
+	texteGarder, garder, arreterQuitter           string // quitting from the window: the menu bar keeps Athanor
+	texteSansFenetre, quitterSansArret            string // quitting from the menu bar
+	annuler, edition, defaire, refaire            string
+	couper, copier, coller, toutSelectionner      string
+	fenetre, fermerFenetre, reduire               string
 }
 
 func textesAppMac(langue string) texteAppMac {
 	switch langue {
 	case "fr":
-		return texteAppMac{"Ouvrir Athanor", "Quitter Athanor", "Aucun pilote en cours", "Pilotes en cours : %s",
-			"Des pilotes tournent : %s", "Ils peuvent continuer sans Athanor ouvert : rouvrez Athanor pour les retrouver. Ou arrêtez-les maintenant (le cycle en cours est coupé).",
-			"Les laisser tourner", "Les arrêter", "Annuler"}
+		return texteAppMac{"Ouvrir Athanor", "Quitter Athanor", "Aucun pilote en cours", "Pilotes en cours : %s", "Des pilotes tournent : %s",
+			"Ils continuent avec Athanor dans la barre des menus (son icône près de l'horloge), d'où vous le rouvrez. Ou arrêtez-les maintenant (le cycle en cours est coupé).",
+			"Garder dans la barre des menus", "Les arrêter et quitter",
+			"Ils peuvent continuer sans Athanor : rouvrez Athanor pour les retrouver. Ou arrêtez-les maintenant (le cycle en cours est coupé).", "Quitter, ils continuent",
+			"Annuler", "Édition", "Annuler la frappe", "Rétablir", "Couper", "Copier", "Coller", "Tout sélectionner", "Fenêtre", "Fermer la fenêtre", "Placer dans le Dock"}
 	case "es":
-		return texteAppMac{"Abrir Athanor", "Salir de Athanor", "Ningún piloto en marcha", "Pilotos en marcha: %s",
-			"Hay pilotos trabajando: %s", "Pueden seguir sin Athanor abierto: vuelva a abrir Athanor para verlos. O deténgalos ahora (el ciclo en curso se corta).",
-			"Dejarlos trabajar", "Detenerlos", "Cancelar"}
+		return texteAppMac{"Abrir Athanor", "Salir de Athanor", "Ningún piloto en marcha", "Pilotos en marcha: %s", "Hay pilotos trabajando: %s",
+			"Siguen con Athanor en la barra de menús (su icono junto al reloj), desde donde lo vuelve a abrir. O deténgalos ahora (el ciclo en curso se corta).",
+			"Mantener en la barra de menús", "Detenerlos y salir",
+			"Pueden seguir sin Athanor: vuelva a abrir Athanor para verlos. O deténgalos ahora (el ciclo en curso se corta).", "Salir, siguen trabajando",
+			"Cancelar", "Edición", "Deshacer", "Rehacer", "Cortar", "Copiar", "Pegar", "Seleccionar todo", "Ventana", "Cerrar ventana", "Minimizar"}
 	case "de":
-		return texteAppMac{"Athanor öffnen", "Athanor beenden", "Kein Pilot läuft", "Laufende Piloten: %s",
-			"Piloten laufen: %s", "Sie können ohne geöffnetes Athanor weiterarbeiten: Öffnen Sie Athanor wieder, um sie zu sehen. Oder stoppen Sie sie jetzt (der laufende Zyklus wird abgebrochen).",
-			"Weiterlaufen lassen", "Stoppen", "Abbrechen"}
+		return texteAppMac{"Athanor öffnen", "Athanor beenden", "Kein Pilot läuft", "Laufende Piloten: %s", "Piloten laufen: %s",
+			"Sie arbeiten weiter, mit Athanor in der Menüleiste (sein Symbol bei der Uhr), von wo Sie es wieder öffnen. Oder stoppen Sie sie jetzt (der laufende Zyklus wird abgebrochen).",
+			"In der Menüleiste behalten", "Stoppen und beenden",
+			"Sie können ohne Athanor weiterarbeiten: Öffnen Sie Athanor wieder, um sie zu sehen. Oder stoppen Sie sie jetzt (der laufende Zyklus wird abgebrochen).", "Beenden, sie arbeiten weiter",
+			"Abbrechen", "Bearbeiten", "Widerrufen", "Wiederholen", "Ausschneiden", "Kopieren", "Einsetzen", "Alles auswählen", "Fenster", "Fenster schließen", "Im Dock ablegen"}
 	case "it":
-		return texteAppMac{"Apri Athanor", "Esci da Athanor", "Nessun pilota in corso", "Piloti in corso: %s",
-			"Ci sono piloti al lavoro: %s", "Possono continuare senza Athanor aperto: riapri Athanor per ritrovarli. Oppure fermali ora (il ciclo in corso viene interrotto).",
-			"Lasciali lavorare", "Fermali", "Annulla"}
+		return texteAppMac{"Apri Athanor", "Esci da Athanor", "Nessun pilota in corso", "Piloti in corso: %s", "Ci sono piloti al lavoro: %s",
+			"Continuano con Athanor nella barra dei menu (la sua icona vicino all'orologio), da cui lo riapri. Oppure fermali ora (il ciclo in corso viene interrotto).",
+			"Tieni nella barra dei menu", "Fermali ed esci",
+			"Possono continuare senza Athanor: riapri Athanor per ritrovarli. Oppure fermali ora (il ciclo in corso viene interrotto).", "Esci, continuano",
+			"Annulla", "Modifica", "Annulla", "Ripeti", "Taglia", "Copia", "Incolla", "Seleziona tutto", "Finestra", "Chiudi finestra", "Contrai"}
 	case "pt":
-		return texteAppMac{"Abrir o Athanor", "Sair do Athanor", "Nenhum piloto em curso", "Pilotos em curso: %s",
-			"Há pilotos a trabalhar: %s", "Podem continuar sem o Athanor aberto: volte a abrir o Athanor para os ver. Ou pare-os agora (o ciclo em curso é interrompido).",
-			"Deixá-los trabalhar", "Pará-los", "Cancelar"}
+		return texteAppMac{"Abrir o Athanor", "Sair do Athanor", "Nenhum piloto em curso", "Pilotos em curso: %s", "Há pilotos a trabalhar: %s",
+			"Continuam com o Athanor na barra de menus (o seu ícone junto ao relógio), de onde o volta a abrir. Ou pare-os agora (o ciclo em curso é interrompido).",
+			"Manter na barra de menus", "Pará-los e sair",
+			"Podem continuar sem o Athanor: volte a abrir o Athanor para os ver. Ou pare-os agora (o ciclo em curso é interrompido).", "Sair, continuam",
+			"Cancelar", "Edição", "Desfazer", "Refazer", "Cortar", "Copiar", "Colar", "Selecionar tudo", "Janela", "Fechar janela", "Minimizar"}
 	}
-	return texteAppMac{"Open Athanor", "Quit Athanor", "No pilot running", "Pilots running: %s",
-		"Pilots are running: %s", "They can go on without Athanor open: open Athanor again to find them. Or stop them now (the current cycle is cut off).",
-		"Keep them running", "Stop them", "Cancel"}
+	return texteAppMac{"Open Athanor", "Quit Athanor", "No pilot running", "Pilots running: %s", "Pilots are running: %s",
+		"They keep working with Athanor in the menu bar (its icon near the clock), where you open it again. Or stop them now (the current cycle is cut off).",
+		"Keep in the menu bar", "Stop them and quit",
+		"They can go on without Athanor: open Athanor again to find them. Or stop them now (the current cycle is cut off).", "Quit, they keep working",
+		"Cancel", "Edit", "Undo", "Redo", "Cut", "Copy", "Paste", "Select All", "Window", "Close Window", "Minimize"}
 }
 
 // nomsPilotesActifs: the projects whose pilot runs.
