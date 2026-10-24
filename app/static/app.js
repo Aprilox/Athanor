@@ -1218,7 +1218,7 @@ async function gererProjet(act, nom, bouton) {
   rendrePage();
 }
 
-// --- GitHub: the project's repository (system/github.sh). The sign-in is never kept: the repository gets
+// --- GitHub: the project's repository (athanor github). The sign-in is never kept: the repository gets
 // its own key, valid for it alone and out of Claude's reach; the pilot pushes after each milestone.
 function nomDepot(nom) {
   const s = String(nom || "").replace(/ /g, "-").replace(/[^A-Za-z0-9._-]/g, "").replace(/^[.-]+|[.-]+$/g, "").slice(0, 100);
@@ -1231,23 +1231,30 @@ function choixGitHub(pre, nomPropose) {
     <label class="radio"><input type="radio" name="${pre}-gh" value="existant"> ${t("Use one of my repositories")}</label>
     <input type="text" class="gh-champ" id="${pre}-gh-depot" placeholder="${h(t("OWNER/NAME, e.g. octocat/my-site"))}">
     <label class="interrupteur"><input type="checkbox" id="${pre}-gh-auto" checked><span>${t("Push automatically after each milestone")}</span></label>
+    ${caseAtelier(`id="${pre}-gh-atelier"`, false)}
     <p class="muet petit">${t("A window opens once to sign in to GitHub. Athanor gives the repository its own key, valid for that repository alone, then signs out: Claude can never touch your other repositories.")}</p>`;
+}
+// the workshop shared on GitHub: for someone who takes the project over with their Athanor (off by default)
+function caseAtelier(attribut, coche) {
+  return `<label class="interrupteur"><input type="checkbox" ${attribut} ${coche ? "checked" : ""}><span>${t("Share the workshop (.athanor/) on GitHub")}</span></label>
+    <p class="muet petit">${t("For a repository shared with someone who goes on with the project in their own Athanor (git pull): the plan, the requests, the log and the documents go into the commits. Never secrets.env, the raw logs nor the pilot's state. Only one pilot at a time on the project: the other one pulls before starting. Unticked later, the workshop leaves the next push.")}</p>`;
 }
 // null: no GitHub; false: incomplete or invalid (said in a toast); else what to send to /api/github
 function lireChoixGitHub(pre, nomProjet) {
   const mode = (document.querySelector(`input[name=${pre}-gh]:checked`) || {}).value || "";
   if (!mode) return null;
   const auto = !!($("#" + pre + "-gh-auto") || {}).checked;
+  const atelier = !!($("#" + pre + "-gh-atelier") || {}).checked;
   if (mode === "creer") {
     const tape = $("#" + pre + "-gh-nom").value.trim();
     const valeur = tape ? nomDepot(tape) : nomDepot(nomProjet);
     if (tape && valeur !== tape) $("#" + pre + "-gh-nom").value = valeur; // spaces and accents become a valid name
-    return { action: "lier", mode, valeur, auto };
+    return { action: "lier", mode, valeur, auto, atelier };
   }
   // OWNER/NAME, or the repository's address as GitHub shows it
   const v = $("#" + pre + "-gh-depot").value.trim().replace(/^(https?:\/\/)?(www\.)?github\.com\//i, "").replace(/^git@github\.com:/i, "").replace(/\/+$/, "").replace(/\.git$/i, "");
   if (!/^[A-Za-z0-9][A-Za-z0-9-]{0,38}\/[A-Za-z0-9._-]{1,100}$/.test(v)) { toast(t("Write the repository as OWNER/NAME (e.g. octocat/my-site)."), "erreur"); return false; }
-  return { action: "lier", mode, valeur: v, auto };
+  return { action: "lier", mode, valeur: v, auto, atelier };
 }
 // Author of the commits (name, email proposed from the GitHub account) and Claude as co-author or not.
 function rendreAuteur(id) {
@@ -1287,6 +1294,7 @@ function rendreGitHub(r) {
       ${(d.fichiers || []).length ? `<ul class="petit">${d.fichiers.map((x) => `<li><code>${h(x.f)}</code> — ${h(t(x.genre))}</li>`).join("")}</ul>` : ""}</div>`
       : `<p class="muet petit">${t("Nothing pushed yet.")}</p>`}
     <label class="interrupteur"><input type="checkbox" data-gh-auto ${g.auto ? "checked" : ""}><span>${t("Push automatically after each milestone")}</span></label>
+    ${caseAtelier("data-gh-atelier", g.atelier)}
     ${rendreAuteur(g.identite)}
     <label class="champ mt-2"><span>${t("GitHub branch")}</span><div class="ligne"><input type="text" id="gh-branche" value="${h(g.branche)}"><button class="btn btn-petit" data-gh="branche">${t("Change")}</button></div></label>
     <p class="muet petit">${t("The key Athanor pushes with works for this repository only and stays out of Claude's reach. Athanor never overwrites what is on GitHub and checks every push for secrets (keys, tokens, .env files).")}</p>
@@ -2508,6 +2516,7 @@ $("#page").addEventListener("change", (ev) => {
   if (i.hasAttribute("data-gh-coauteur")) action(api("github", "POST", Object.assign({ action: "identite" }, lireAuteur()))).then((r) => { if (!r) i.checked = !i.checked; });
   if (i.id === "gh-auteur-email") { const a = $("#gh-auteur-autre"); a.hidden = i.value !== ""; if (!a.hidden) a.focus(); }
   if (i.hasAttribute("data-gh-auto")) action(api("github", "POST", { action: "auto", auto: i.checked })).then((r) => { if (!r) i.checked = !i.checked; });
+  if (i.hasAttribute("data-gh-atelier")) action(api("github", "POST", { action: "atelier", atelier: i.checked })).then((r) => { if (!r) i.checked = !i.checked; });
   if (i.id === "md-parallele") { const actif = $("#page .choix button.actif"); enregistrerMode(i.checked, actif ? Number(actif.dataset.max) : 3); }
 });
 // attached files: chosen with the button or dropped on a form's zone; a file dropped elsewhere is ignored

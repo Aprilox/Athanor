@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -185,7 +186,7 @@ if grep -q '^- \[ \] M1 ' "$ETAT/PLAN.md"; then
 echo "CHECK: PASSED"
 EOF
   chmod +x "$ETAT/check.sh"
-  sed -i 's/^- \[ \] M1 /- [x] M1 /' "$ETAT/PLAN.md"
+  sed -i.bak 's/^- \[ \] M1 /- [x] M1 /' "$ETAT/PLAN.md" && rm -f "$ETAT/PLAN.md.bak"
   echo "M1 completed." >> "$ETAT/LOG.md"
   git add -A && git commit -qm "M1: build greeting"
   emit_turn "Running check.sh: CHECK: PASSED"
@@ -194,7 +195,7 @@ EOF
 fi
 
 if grep -q '^- \[ \] M2 ' "$ETAT/PLAN.md"; then
-  sed -i 's/^- \[ \] M2 /- [x] M2 /' "$ETAT/PLAN.md"
+  sed -i.bak 's/^- \[ \] M2 /- [x] M2 /' "$ETAT/PLAN.md" && rm -f "$ETAT/PLAN.md.bak"
   cat > "$ETAT/FINAL_REPORT.md" <<'EOF'
 # Final Report
 
@@ -210,7 +211,7 @@ fi
 
 if grep -q '^- \[ \] Resume:' "$ETAT/PLAN.md"; then
   echo "Extra feature" >> "$PWD/hello.txt"
-  sed -i 's/^- \[ \] Resume:/- [x] Resume:/' "$ETAT/PLAN.md"
+  sed -i.bak 's/^- \[ \] Resume:/- [x] Resume:/' "$ETAT/PLAN.md" && rm -f "$ETAT/PLAN.md.bak"
   cat > "$ETAT/FINAL_REPORT.md" <<'EOF'
 # Final Report
 
@@ -279,7 +280,7 @@ fi
 
 echo "$modele" > "$ETAT/fallback_seen"
 echo "Finished on fallback" > "$PWD/app.txt"
-sed -i 's/^- \[ \] M1 /- [x] M1 /' "$ETAT/PLAN.md"
+sed -i.bak 's/^- \[ \] M1 /- [x] M1 /' "$ETAT/PLAN.md" && rm -f "$ETAT/PLAN.md.bak"
 cat > "$ETAT/FINAL_REPORT.md" <<'EOF'
 # Final Report
 STATUS: DONE
@@ -295,7 +296,11 @@ exit 0
 func executerPilote(t *testing.T, bin, kit, projet, fakeClaude string, extraEnv []string) string {
 	t.Helper()
 	_ = os.WriteFile(filepath.Join(kit, ".env"), []byte("LANGUAGE=en\n"), 0o644)
-	cmd := exec.Command(bin, "demarrer", projet)
+	// (never longer than 5 minutes: a pilot that would hang says what it did instead)
+	ctx, fin := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer fin()
+	cmd := exec.CommandContext(ctx, bin, "demarrer", projet)
+	cmd.WaitDelay = 10 * time.Second
 	cmd.Dir = kit
 	env := append(os.Environ(),
 		"KIT="+kit,

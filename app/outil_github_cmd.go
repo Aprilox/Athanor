@@ -118,6 +118,7 @@ func lignesCleValeur(f string) [][2]string {
 type reglagesGH struct {
 	Depot, Branche, Compte, LieLe, CleID string
 	Auto                                 bool
+	Atelier                              bool // the workshop shared too (outil_atelier_partage.go)
 }
 
 func existeGH(p string) bool { _, err := os.Stat(p); return err == nil }
@@ -142,6 +143,8 @@ func lireReglagesGH(d string) (reglagesGH, bool) {
 			if v == "0" {
 				r.Auto = false
 			}
+		case "atelier":
+			r.Atelier = v == "1"
 		case "compte":
 			if reCompteGH.MatchString(v) {
 				r.Compte = v
@@ -171,6 +174,9 @@ func ecrireReglagesGH(d string, r reglagesGH) error {
 		return err
 	}
 	fmt.Fprintf(t, "depot=%s\nbranche=%s\nauto=%s\ncompte=%s\nlie_le=%s\ncle_id=%s\n", r.Depot, r.Branche, auto, r.Compte, r.LieLe, r.CleID)
+	if r.Atelier {
+		fmt.Fprintln(t, "atelier=1")
+	}
 	t.Close()
 	return os.Rename(t.Name(), d+"/reglages")
 }
@@ -332,7 +338,7 @@ func coupeOctets(s string, n int) string {
 
 // analyserGH: the "place<TAB>kind" lines of the commits to push (what was already pushed is not scanned
 // again); false when the scan could not run to the end.
-func analyserGH(miroir, sha string) ([]string, bool) {
+func analyserGH(miroir, sha string, partage bool) ([]string, bool) {
 	plage := []string{sha, "--not", "--glob=refs/athanor/pousse/*"}
 	passer := func(mode string, args ...string) (string, bool) {
 		c := gmGH(miroir, nil, args...)
@@ -341,7 +347,7 @@ func analyserGH(miroir, sha string) ([]string, bool) {
 			return "", false
 		}
 		var b bytes.Buffer
-		code := scannerSecrets(mode, out, &b)
+		code := scannerSecretsAtelier(mode, out, &b, partage)
 		_, _ = io.Copy(io.Discard, out)
 		if c.Wait() != nil || code != 0 {
 			return "", false
@@ -527,7 +533,7 @@ func pousserGH(args []string, w io.Writer) int {
 		return 0
 	}
 	if malgre == "" {
-		trouves, ok := analyserGH(miroir, sha)
+		trouves, ok := analyserGH(miroir, sha, r.Atelier)
 		if !ok {
 			noterGH(d, "erreur", "The secret check could not run to the end: nothing was pushed.", resume, noteGitHub{})
 			fmt.Fprintln(w, "GitHub: not pushed, the secret check failed.")
@@ -690,6 +696,15 @@ func publieGH(args []string) int {
 
 // ---------------------------------------------------------------------------- settings, unlinking
 
+// atelierPartageGH: the project is linked to GitHub with its workshop shared.
+func atelierPartageGH(projet string) bool {
+	if p, ok := cheminProjetGH(projet); ok {
+		projet = p
+	}
+	r, lie := lireReglagesGH(dossierGH(projet))
+	return lie && r.Atelier
+}
+
 func reglageGH(cle string, args []string, w io.Writer) int {
 	projet, ok := cheminProjetGH(argGH(args, 0))
 	if !ok {
@@ -713,6 +728,18 @@ func reglageGH(cle string, args []string, w io.Writer) int {
 	switch cle {
 	case "auto":
 		r.Auto = valeur != "0"
+	case "partage":
+		// at once in .git/info/exclude (Claude's next commit already follows it); switched off, what was
+		// shared leaves the index (the files stay in the folder; the next push removes them from GitHub)
+		avant := r.Atelier
+		r.Atelier = valeur == "1"
+		if err := ecrireExclusionAtelier(projet, r.Atelier); err != nil {
+			fmt.Fprintln(w, "Cannot write the project's .git/info/exclude: "+err.Error())
+			return 1
+		}
+		if avant && !r.Atelier {
+			_ = gitP(projet, nil, "rm", "-r", "--cached", "-q", "--ignore-unmatch", "--", ".athanor").Run()
+		}
 	case "branche":
 		r.Branche = valeur
 		if valeur == "" {
@@ -1054,6 +1081,7 @@ func etatGH(args []string, w io.Writer) int {
 		b := firstNonEmpty(r.Branche, "main")
 		v["lie"], v["depot"], v["url"], v["branche"], v["branche_choisie"] = true, r.Depot, "https://github.com/"+r.Depot, b, r.Branche
 		v["auto"], v["compte"], v["lie_le"], v["dernier"] = r.Auto, r.Compte, r.LieLe, dernier
+		v["atelier"] = r.Atelier
 	} else {
 		v["lie"] = false
 	}
@@ -1103,7 +1131,7 @@ func commandeGitHub(args []string, w io.Writer) (int, bool) {
 		return pousserGH(reste, w), true
 	case "publie":
 		return publieGH(reste), true
-	case "auto", "branche":
+	case "auto", "branche", "partage":
 		return reglageGH(args[0], reste, w), true
 	case "delier":
 		return delierGH(reste, w), true

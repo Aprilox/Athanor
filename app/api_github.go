@@ -104,7 +104,7 @@ func (s *Serveur) apiGitHubVoir(w http.ResponseWriter, r *http.Request) {
 }
 
 // lierGitHub opens the window where the user signs in to GitHub once and the repository gets its key.
-func (s *Serveur) lierGitHub(p Projet, mode, cible string, auto bool, branche string) error {
+func (s *Serveur) lierGitHub(p Projet, mode, cible string, auto bool, branche string, atelier bool) error {
 	switch mode {
 	case "creer":
 		if !reNomGitHub.MatchString(cible) || cible == "." || cible == ".." {
@@ -125,7 +125,11 @@ func (s *Serveur) lierGitHub(p Projet, mode, cible string, auto bool, branche st
 	if !auto {
 		a = "0"
 	}
-	return fenetreKit(s.kitCourant(), "GitHub", argsGitHub(p, "lier", mode, cible, a, branche)...)
+	partage := "0"
+	if atelier {
+		partage = "1"
+	}
+	return fenetreKit(s.kitCourant(), "GitHub", argsGitHub(p, "lier", mode, cible, a, branche, partage)...)
 }
 
 func ouvrirLien(url string) error {
@@ -145,6 +149,7 @@ func (s *Serveur) apiGitHub(w http.ResponseWriter, r *http.Request) {
 		Mode    string `json:"mode"`
 		Valeur  string `json:"valeur"`
 		Auto    bool   `json:"auto"`
+		Atelier bool   `json:"atelier"`
 		Branche string `json:"branche"`
 		Nom     string `json:"nom"`
 		Email   string `json:"email"`
@@ -156,7 +161,7 @@ func (s *Serveur) apiGitHub(w http.ResponseWriter, r *http.Request) {
 	}
 	switch c.Action {
 	case "lier":
-		if err := s.lierGitHub(p, c.Mode, strings.TrimSpace(c.Valeur), c.Auto, strings.TrimSpace(c.Branche)); err != nil {
+		if err := s.lierGitHub(p, c.Mode, strings.TrimSpace(c.Valeur), c.Auto, strings.TrimSpace(c.Branche), c.Atelier); err != nil {
 			s.erreur(w, http.StatusBadRequest, err.Error())
 			return
 		}
@@ -232,6 +237,16 @@ func (s *Serveur) apiGitHub(w http.ResponseWriter, r *http.Request) {
 			a = "1"
 		}
 		if _, err := s.executerGitHub(p, 2*time.Minute, "auto", a); err != nil {
+			s.erreur(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		s.msg(w, "Saved.")
+	case "atelier": // the workshop shared on GitHub, or not
+		a := "0"
+		if c.Atelier {
+			a = "1"
+		}
+		if _, err := s.executerGitHub(p, 2*time.Minute, "partage", a); err != nil {
 			s.erreur(w, http.StatusInternalServerError, err.Error())
 			return
 		}

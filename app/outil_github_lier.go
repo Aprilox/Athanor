@@ -76,13 +76,13 @@ func lierGH(args []string, w io.Writer) int {
 	if w == os.Stdout {
 		errw = os.Stderr
 	}
-	usage := "Usage: athanor github lier PROJECT creer NAME | existant OWNER/REPO"
+	usage := "Usage: athanor github lier PROJECT creer NAME | existant OWNER/REPO [AUTO 0|1] [BRANCH] [SHARED WORKSHOP 0|1]"
 	projet, ok := cheminProjetGH(argGH(args, 0))
 	if !ok {
 		fmt.Fprintln(w, usage)
 		return 2
 	}
-	mode, cible, auto, branche := argGH(args, 1), argGH(args, 2), argGH(args, 3), argGH(args, 4)
+	mode, cible, auto, branche, partage := argGH(args, 1), argGH(args, 2), argGH(args, 3), argGH(args, 4), argGH(args, 5)
 	switch mode {
 	case "creer":
 		if !nomDepotValideGH(cible) {
@@ -174,11 +174,14 @@ func lierGH(args []string, w io.Writer) int {
 	defer nettoyer()
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
-	defer signal.Stop(sig)
+	fini := make(chan struct{})
+	defer func() { signal.Stop(sig); close(fini) }()
 	go func() {
-		if _, ok := <-sig; ok {
+		select {
+		case <-sig:
 			nettoyer()
 			os.Exit(130)
+		case <-fini:
 		}
 	}()
 
@@ -402,7 +405,7 @@ func lierGH(args []string, w io.Writer) int {
 		os.Remove(d + "/dernier.json")
 	}
 	if ecrireReglagesGH(d, reglagesGH{Depot: depot, Branche: branche, Auto: autoOn, Compte: compte,
-		LieLe: time.Now().Format("2006-01-02T15:04:05"), CleID: id}) != nil {
+		LieLe: time.Now().Format("2006-01-02T15:04:05"), CleID: id, Atelier: partage == "1"}) != nil {
 		if v != nil {
 			v.Close()
 		}
@@ -410,6 +413,7 @@ func lierGH(args []string, w io.Writer) int {
 		return 1
 	}
 	_ = os.WriteFile(d+"/projet", []byte(cleProjetGH(projet)+"\n"), 0o644)
+	_ = ecrireExclusionAtelier(projet, partage == "1")
 	if v != nil {
 		v.Close()
 	}

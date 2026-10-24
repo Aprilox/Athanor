@@ -79,7 +79,7 @@ func TestReparerRecompiler(t *testing.T) {
 	d := t.TempDir()
 	kit := filepath.Join(d, "kit")
 	src, _ := filepath.Abs("..")
-	for _, x := range []string{"app", "system", "template", ".env.example"} {
+	for _, x := range []string{"app", "template", ".env.example"} {
 		if out, err := exec.Command("cp", "-a", filepath.Join(src, x), filepath.Join(kit, x)).CombinedOutput(); err != nil {
 			_ = os.MkdirAll(kit, 0o755)
 			if out, err = exec.Command("cp", "-a", filepath.Join(src, x), filepath.Join(kit, x)).CombinedOutput(); err != nil {
