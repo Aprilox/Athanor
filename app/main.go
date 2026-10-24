@@ -106,17 +106,20 @@ func main() {
 	ecrireInstance(port)
 	pilotesAvantFermeture = func() []string { _, noms := s.pilotesNatifs(); return noms }
 	if !FenetreApp(lienApp()) {
-		// Edge/Chrome window or the browser: the application keeps serving; a new launch opens another window.
-		OuvrirFenetreApp(lienApp())
-		if bundleAthanorMac() != "" { // Athanor.app: its Dock icon until it is quit (app_mac_darwin.go)
+		// Athanor.app: its own window (WebKit), its Dock icon and its icon near the clock until it is quit
+		// (app_mac_darwin.go)
+		if bundleAthanorMac() != "" {
 			go func() {
 				for range demandesFenetre {
-					OuvrirFenetreApp(lienApp())
+					if !demanderFenetreMac() {
+						OuvrirFenetreApp(lienApp())
+					}
 				}
 			}()
 			boucleAppMac(actionsAppMac{
-				ouvrir:  func() { OuvrirFenetreApp(lienApp()) },
-				pilotes: s.nomsPilotesActifs,
+				lien:       func() string { return lienApp() },
+				navigateur: func() { OuvrirFenetreApp(lienApp()) },
+				pilotes:    s.nomsPilotesActifs,
 				quitter: func(arreter bool) {
 					if arreter {
 						s.arreterTousPilotes()
@@ -126,6 +129,8 @@ func main() {
 				langue: func() string { s.mu.Lock(); defer s.mu.Unlock(); return s.config.Langue },
 			}) // returns only when Cocoa cannot be reached: Athanor then goes on as from a terminal
 		}
+		// Edge/Chrome window or the browser: the application keeps serving; a new launch opens another window.
+		OuvrirFenetreApp(lienApp())
 		for range demandesFenetre {
 			OuvrirFenetreApp(lienApp())
 		}

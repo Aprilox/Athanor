@@ -6,14 +6,13 @@ import (
 	"fmt"
 	"os"
 	"testing"
-	"time"
 
 	"github.com/ebitengine/purego/objc"
 )
 
 // On a Mac (the CI's macOS run): ATHANOR_ESSAI_COCOA=1 go test -run TestCocoa . builds Athanor.app's
-// Dock icon, menus and delegate on the first thread (Cocoa wants it), then asks Cocoa for the Dock menu
-// and a click on the icon, as the Dock would.
+// menus, its icon near the clock, its delegate and its WebKit window on the first thread (Cocoa wants it),
+// then does what the Dock and the window's red button do.
 var resultatCocoa = "not run"
 
 func TestMain(m *testing.M) {
@@ -24,37 +23,55 @@ func TestMain(m *testing.M) {
 }
 
 func essaiCocoa() string {
-	ouvert := make(chan bool, 1)
 	app, delegue, ok := preparerAppMac(actionsAppMac{
-		ouvrir:  func() { ouvert <- true },
-		pilotes: func() []string { return []string{"sky-runner"} },
-		quitter: func(bool) {},
-		langue:  func() string { return "fr" },
+		lien:       func() string { return "about:blank" },
+		navigateur: func() {},
+		pilotes:    func() []string { return []string{"sky-runner"} },
+		quitter:    func(bool) {},
+		langue:     func() string { return "fr" },
 	})
 	if !ok {
 		return "Cocoa not reached"
 	}
+	if app.Send(sel("mainMenu")) == 0 || app.Send(sel("mainMenu")).Send(sel("numberOfItems")) != 3 {
+		return "menu bar: not Athanor, Edit, Window"
+	}
+	if mac.icone == 0 {
+		return "no icon near the clock"
+	}
 	menu := delegue.Send(sel("applicationDockMenu:"), app)
-	if menu == 0 {
-		return "no Dock menu"
+	if menu == 0 || int(menu.Send(sel("numberOfItems"))) != 3 {
+		return "Dock menu: not the pilots, a line, Open"
 	}
-	if n := int(menu.Send(sel("numberOfItems"))); n != 2 {
-		return fmt.Sprintf("Dock menu: %d items", n)
+	barre := classe("NSMenu").Send(sel("new"))
+	delegue.Send(sel("menuNeedsUpdate:"), barre)
+	if n := int(barre.Send(sel("numberOfItems"))); n != 5 {
+		return fmt.Sprintf("menu near the clock: %d items", n)
 	}
-	titre := menu.Send(sel("itemAtIndex:"), 0).Send(sel("title")).Send(sel("UTF8String"))
-	if titre == 0 {
-		return "no title"
+	if !mac.webkit {
+		return "WebKit not reached"
 	}
-	if r := objc.Send[bool](delegue, sel("applicationShouldHandleReopen:hasVisibleWindows:"), app, false); r {
+	// a click on the Dock icon: the window, in WebKit
+	if objc.Send[bool](delegue, sel("applicationShouldHandleReopen:hasVisibleWindows:"), app, false) {
 		return "reopen answered yes"
 	}
-	select {
-	case <-ouvert:
-	case <-time.After(3 * time.Second):
-		return "the click on the icon opened nothing"
+	if mac.fenetre == 0 || mac.vue == 0 {
+		return "no window"
 	}
-	if app.Send(sel("mainMenu")) == 0 {
-		return "no menu bar"
+	if !objc.Send[bool](mac.fenetre, sel("isVisible")) {
+		return "the window is not shown"
+	}
+	// the red button: hidden, not closed
+	if objc.Send[bool](delegue, sel("windowShouldClose:"), mac.fenetre) {
+		return "the red button closes the window"
+	}
+	if objc.Send[bool](mac.fenetre, sel("isVisible")) {
+		return "the red button left the window shown"
+	}
+	// shown again from the icon near the clock
+	delegue.Send(sel("ouvrirAthanor:"), objc.ID(0))
+	if !objc.Send[bool](mac.fenetre, sel("isVisible")) {
+		return "Open Athanor showed nothing"
 	}
 	return "ok"
 }

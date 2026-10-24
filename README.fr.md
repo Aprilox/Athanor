@@ -122,7 +122,7 @@ Puis *Installation & santé* → *Tout installer* (Claude Code, la barrière et 
 
 **Ce que *Tout installer* met sur le Mac**, uniquement par les installeurs officiels : [Homebrew](https://brew.sh) s'il manque (son propre installeur demande votre mot de passe et Entrée) ; sept outils en ligne de commande via Homebrew : `git`, `jq`, `ripgrep`, `node`, `imagemagick`, `ffmpeg`, `gh` ; Claude Code (l'installeur d'Anthropic, dans `~/.local/bin`, avec une ligne dans `~/.zshrc`) ; RTK, qui raccourcit la sortie des commandes pour économiser des tokens, dans le dossier d'Athanor. Rien qui ait une fenêtre, rien qui démarre tout seul. La barrière est celle de macOS (Seatbelt) : seulement vérifiée. Tout est écrit dans `logs/install-mac.log`, dans le dossier d'Athanor.
 
-**Pendant qu'il tourne**, Athanor a son icône dans le Dock. Un clic dessus rouvre sa fenêtre ; un clic droit montre quels pilotes travaillent. Fermer la fenêtre n'arrête rien. **Quitter** (clic droit sur l'icône, ou ⌘Q) demande, quand des pilotes tournent, s'ils continuent (ils travaillent sans Athanor, et on les retrouve en le rouvrant) ou s'arrêtent. Le Mac reste éveillé tant qu'un pilote tourne (`caffeinate` ; un MacBook refermé s'endort quand même, sauf branché sur secteur avec un écran externe).
+**Sa fenêtre est la sienne**, avec le moteur web du Mac (WebKit) dans Athanor : aucun navigateur ne s'ouvre. **Pendant qu'il tourne**, Athanor a son icône dans le Dock et une flamme près de l'horloge (la barre des menus) ; les deux montrent les pilotes au travail et rouvrent la fenêtre. Le bouton rouge cache la fenêtre : Athanor continue. **Quitter** (⌘Q, ou le menu de l'icône du Dock) avec des pilotes en cours propose de garder Athanor dans la barre des menus (l'icône du Dock part, les pilotes continuent, la flamme reste) ou de les arrêter et quitter ; *Quitter* depuis la flamme quitte, les pilotes continuant ou non, au choix. Le Mac reste éveillé tant qu'un pilote tourne (`caffeinate` ; un MacBook refermé s'endort quand même, sauf branché sur secteur avec un écran externe).
 
 Claude travaille dans Seatbelt, la barrière intégrée à macOS (celle qu'utilise Claude Code) : il n'écrit que dans le projet. Les serveurs MCP ont leur propre cage Seatbelt. Unreal, Blender, Roblox Studio, Xcode et le SDK Android sont trouvés à leurs places habituelles et Claude les lance directement ; les programmes Windows et Docker via `tool` restent réservés à Windows et Linux. Sur le Mac, les programmes que Claude ouvre s'affichent sur votre écran (pas de bureau à part comme sous Windows).
 
@@ -498,10 +498,10 @@ Oui. Rien n'est lié à un nom d'utilisateur ni à une lettre de disque : les ch
 Poussez un tag de version : GitHub compile les applications (Windows, Linux, macOS) et publie la version ([`.github/workflows/release.yml`](.github/workflows/release.yml)).
 
 ```bash
-git tag v2.29.0 && git push origin v2.29.0
+git tag v2.30.0 && git push origin v2.30.0
 ```
 
-Gardez la version de [`app/winres/athanor.rc`](app/winres/athanor.rc) et `versionAthanor` dans [`app/commandes.go`](app/commandes.go) alignées sur le tag (un test vérifie qu'elles concordent), et écrivez les nouveautés dans `docs/releases/VERSION.md` (par ex. [`docs/releases/2.29.0.md`](docs/releases/2.29.0.md)) : elles ouvrent la page de la version.
+Gardez la version de [`app/winres/athanor.rc`](app/winres/athanor.rc) et `versionAthanor` dans [`app/commandes.go`](app/commandes.go) alignées sur le tag (un test vérifie qu'elles concordent), et écrivez les nouveautés dans `docs/releases/VERSION.md` (par ex. [`docs/releases/2.30.0.md`](docs/releases/2.30.0.md)) : elles ouvrent la page de la version.
 
 Chaque push est vérifié sous Windows, Linux et macOS ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)), l'exécutable unique compris (rien d'écrit avant l'accord, dossier d'Athanor installé, rien à côté du fichier) ; `cd app && go run . construire --all` compile toutes les cibles dans `dist/`. Une version publie `Athanor-Windows-x64.exe`, `Athanor-Windows-ARM64.exe`, `Athanor-macOS.zip` (Athanor.app, signé ad hoc sur une machine Mac de GitHub), `Athanor-Linux-x64`, `Athanor-Linux-ARM64` et `SHA256SUMS.txt`, sous les mêmes noms à chaque version ; les mises à jour d'Athanor téléchargent ces mêmes fichiers.
 

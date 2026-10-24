@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
@@ -47,9 +48,10 @@ func TestBundleMac(t *testing.T) {
 func TestTextesAppMac(t *testing.T) {
 	for _, l := range []string{"fr", "en", "es", "de", "it", "pt", ""} {
 		x := textesAppMac(l)
-		for _, s := range []string{x.ouvrir, x.quitter, x.aucun, x.enCours, x.titreQuitter, x.texteQuitter, x.continuer, x.arreter, x.annuler} {
-			if s == "" {
-				t.Fatalf("%s: empty text", l)
+		v := reflect.ValueOf(x)
+		for i := 0; i < v.NumField(); i++ {
+			if v.Field(i).String() == "" {
+				t.Fatalf("%s: %s empty", l, v.Type().Field(i).Name)
 			}
 		}
 		if !strings.Contains(x.enCours, "%s") || !strings.Contains(x.titreQuitter, "%s") {
