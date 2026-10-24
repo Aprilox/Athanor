@@ -584,6 +584,7 @@ function rendreBandeau(v) {
   $("#bandeau").innerHTML = `<div class="etat-phrase">${nomProjet}<h1 title="${h(p.titre)}"><span class="point ${p.classe}"></span><span>${h(p.titre)}</span></h1><div class="sous" title="${h(p.sous)}">${h(p.sous)}</div></div><div class="actions">${boutons.join("")}</div>`;
   $("#nav-sous").textContent = nbActifs ? t("{0} project(s) running", [nbActifs]) : t("idle");
   $("#nav-kit").textContent = v.kit || "";
+  $("#nav-version").textContent = v.version ? "v" + v.version : "";
   const sel = $("#sel-projet");
   sel.setAttribute("aria-expanded", etat.selecteurOuvert ? "true" : "false");
   sel.innerHTML = v.projet ? `<span class="dot ${classePhase(v.projet)}"></span><span class="nom">${h(v.projet.nom)}</span><span class="chevron">▾</span>` : `<span class="nom muet">${t("Choose a project")}</span><span class="chevron">▾</span>`;
@@ -2290,6 +2291,10 @@ async function rendreOptions() {
       <div class="bloc"><h2>${t("Tool folder")}</h2>
         <input type="text" id="op-kit" data-option value="${h(o.kit)}"><div class="muet petit mt-1">${o.kit_valide ? "✔ " + t("tool recognized (system\\pilot.sh present)") : "✖ " + t("this folder is not the tool")}</div>
         <div class="ligne mt-1"><button class="btn btn-petit" data-ouvrir="kit">${t("Open the folder")}</button><button class="btn btn-petit" data-ouvrir="logs">${t("Logs folder")}</button><span class="espace"></span><button class="btn btn-petit" id="op-guide">${t("Show the first-launch guide again")}</button></div>
+      </div>
+      <div class="bloc"><h2>${t("Version")}</h2>
+        <p class="m0"><b>Athanor ${h((etat.vue || {}).version || "?")}</b></p>
+        <p class="muet petit mt-1">${t("The version of this application and of its executable. After an update, it shows the new number once Athanor was restarted.")}</p>
       </div>
     </div>
   </div>`;
