@@ -48,7 +48,6 @@ type VerifVue struct {
 	ClaudeID       string `json:"claude_id"`
 }
 
-
 // reparationJeton: Claude Code's sign-in in a window, which shows the subscription's token.
 var reparationJeton = Reparation{Genre: "fenetre", Titre: "Get a token", Args: []string{"jeton-claude"}, Explication: "Opens a window: sign in in the browser, then paste the token shown into Settings → CLAUDE_CODE_OAUTH_TOKEN."}
 
@@ -81,7 +80,28 @@ func Verifications() []*Verif {
 		v("docker", "Docker", "Optional: disposable images for Claude (tool IMAGE COMMAND). Docker Desktop → Settings → Resources → WSL integration.", true, Reparation{Genre: "aucune"}),
 		v("admin", "Administrator rights for installations", "Scheduled task that lets Claude install winget software and set the firewall without bothering you.", true,
 			Reparation{Genre: "windows", Titre: "Administrator rights", Args: []string{"autoriser-admin"}, Explication: "Windows will ask for your consent once (UAC) to create the installation task. Afterwards Claude installs and runs anything it needs with administrator rights, without ever prompting you."}),
-		v("outils_kit", "Tool scripts", "The gateways (pc-exec, unreal-cmd, blender, tool…) and the pilot scripts are executable and consistent.", false, reparationKit("outils_kit")),
+		v("outils_kit", "Athanor's files", "Athanor's executable passes its self-test, its texts for Claude (template/) are in place, and the commands Claude calls (pc-exec, unreal-cmd, blender, tool…) lead to it.", false, reparationKit("outils_kit")),
+	}
+}
+
+// VerificationsLinux: the checks of Linux itself (the pilot runs on this computer, no WSL, no Windows).
+func VerificationsLinux() []*Verif {
+	v := func(id, titre, explication string, facultatif bool, rep Reparation) *Verif {
+		return nouvelleVerif("verif-", id, titre, explication, facultatif, rep)
+	}
+	paquets := Reparation{Genre: "fenetre", Titre: "Package installation", Args: []string{"installer"}, Explication: "Opens a window: Linux asks for your password (sudo) to install the packages."}
+	return []*Verif{
+		v("linux", "Linux", "The pilot runs on this computer, Claude in its sandbox.", false, Reparation{Genre: "aucune"}),
+		v("internet", "Internet", "Claude must reach claude.ai.", false, Reparation{Genre: "aucune"}),
+		v("paquets", "Basic Linux packages", "git, jq, curl, node, npm, bubblewrap, socat, ripgrep, ImageMagick, ffmpeg, zip, Xvfb (Claude's screen), ssh and the GitHub CLI (GitHub push).", false, paquets),
+		v("barriere", "System sandbox", "The sandbox (bubblewrap + seccomp filter) that keeps Claude inside the project. Without it, the pilot refuses to start.", false,
+			Reparation{Genre: "fenetre", Titre: "System sandbox", Args: []string{"installer"}, Explication: "Reinstalls bubblewrap, the AppArmor profile and the seccomp filter (sudo password asked)."}),
+		v("claude", "Claude Code", "The claude program (~/.local/bin).", false, reparationKit("claude")),
+		v("jeton", "Token and model access", "The token of your subscription (CLAUDE_CODE_OAUTH_TOKEN in .env) is accepted: a tiny Haiku session answers.", false, reparationJeton),
+		v("rtk", "RTK, output compression", "Optional: reduces what Claude reads for git, ls, grep…", true, reparationKit("rtk")),
+		v("outils_pc", "Software detected", "Blender, the Android SDK, Docker, Godot… found on this computer and made available to Claude (read-only).", true, Reparation{Genre: "aucune"}),
+		v("docker", "Docker", "Optional: disposable images for Claude (tool IMAGE COMMAND), with Docker Engine or Docker Desktop.", true, Reparation{Genre: "aucune"}),
+		v("outils_kit", "Athanor's files", "Athanor's executable passes its self-test, its texts for Claude (template/) are in place, and the commands Claude calls (tool, adb, blender…) lead to it.", false, reparationKit("outils_kit")),
 	}
 }
 
@@ -190,6 +210,7 @@ func lancerClaude(k Kit, id, nom, fichier, consigne string, fin func(bool), enre
 	if err := os.WriteFile(filepath.Join(k.Journaux(), fichier), []byte(consigne), 0o644); err != nil {
 		return nil, err
 	}
+	_ = extraireSources(k.Racine) // app/: the Go sources, for a repair of the executable (embarque.go)
 	t := NouvelleTache(id, nom)
 	if enregistrer != nil {
 		enregistrer(t)

@@ -276,6 +276,7 @@ type OptionsVue struct {
 	Windows                   bool       `json:"windows"`
 	GitBash                   string     `json:"git_bash"` // its bash.exe, "" when missing
 	BarreWindows              bool       `json:"barre_windows"`
+	VerifierMaj               bool       `json:"verifier_maj"` // look for an update when Athanor opens (maj.go)
 }
 
 func (s *Serveur) apiOptions(w http.ResponseWriter, r *http.Request) {
@@ -286,7 +287,7 @@ func (s *Serveur) apiOptions(w http.ResponseWriter, r *http.Request) {
 	if projets == nil {
 		projets = []Projet{}
 	}
-	s.ecrireJSON(w, OptionsVue{projets, c.Kit, s.kitCourant().Valide(), c.LancerPiloteAuDemarrage, c.BureauVirtuel, c.ProgrammesSupplementaires, DemarrageWindowsActif(), c.MotDePasseHash != "", s.bureau.Etat(), modeNatif.Load(), runtime.GOOS == "windows", bashNatif(), c.BarreWindows})
+	s.ecrireJSON(w, OptionsVue{projets, c.Kit, s.kitCourant().Valide(), c.LancerPiloteAuDemarrage, c.BureauVirtuel, c.ProgrammesSupplementaires, DemarrageWindowsActif(), c.MotDePasseHash != "", s.bureau.Etat(), modeNatif.Load(), runtime.GOOS == "windows", bashNatif(), c.BarreWindows, !c.PasVerifierMaj})
 }
 
 func (s *Serveur) apiEcrireOptions(w http.ResponseWriter, r *http.Request) {
@@ -298,6 +299,7 @@ func (s *Serveur) apiEcrireOptions(w http.ResponseWriter, r *http.Request) {
 		DemarrageWindows          bool   `json:"demarrage_windows"`
 		ModeNatif                 *bool  `json:"mode_natif"`
 		BarreWindows              *bool  `json:"barre_windows"`
+		VerifierMaj               *bool  `json:"verifier_maj"`
 	}
 	if err := lireCorps(r, &c); err != nil {
 		s.erreur(w, http.StatusBadRequest, err.Error())
@@ -326,6 +328,9 @@ func (s *Serveur) apiEcrireOptions(w http.ResponseWriter, r *http.Request) {
 	}
 	if c.BarreWindows != nil {
 		s.config.BarreWindows = *c.BarreWindows
+	}
+	if c.VerifierMaj != nil {
+		s.config.PasVerifierMaj = !*c.VerifierMaj
 	}
 	s.config.Kit = nouveau.Racine
 	s.config.LancerPiloteAuDemarrage = c.LancerPiloteAuDemarrage

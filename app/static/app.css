@@ -651,7 +651,11 @@ input.large { flex: 1; min-width: 200px; width: auto; }
 .visite p { margin: 0; line-height: 1.5; }
 .visite-titre { font-weight: 600; font-size: 15px; }
 .visite-pied { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.visite-cible { outline: 3px solid var(--accent, #2a9d8f); outline-offset: 3px; border-radius: 6px; position: relative; z-index: 54; }
+.visite-cible { position: relative; }
+/* the guided tour's veil: the whole window dimmed, except a hole around the place explained */
+.visite-voile { position: fixed; z-index: 54; pointer-events: none; border-radius: 10px; border: 2px solid var(--accent, #2a9d8f); box-shadow: 0 0 0 200vmax rgba(5, 8, 12, .62); transition: top .25s ease, left .25s ease, width .25s ease, height .25s ease; }
+.visite-voile.sans-cible { border: 0; }
+@media (prefers-reduced-motion: reduce) { .visite-voile { transition: none; } }
 
 /* Team: what each agent did lately */
 .vivant { margin-top: 4px; }
@@ -662,3 +666,12 @@ input.large { flex: 1; min-width: 200px; width: auto; }
 .av-liste > div { padding: 2px 6px 4px; }
 .av-liste button { display: block; width: 100%; text-align: left; background: none; border: 0; border-radius: 6px; padding: 5px 8px; color: var(--ink); cursor: pointer; font: inherit; }
 .av-liste button:hover { background: var(--panel-2); }
+
+/* updates of Athanor (maj.go): the version in the sidebar is a button, the header shows a new version */
+.marque-version { background: none; border: 0; padding: 0 3px; margin: 0 0 0 2px; font-family: var(--police); font-weight: 400; font-size: 11px; color: var(--faible); cursor: pointer; border-radius: 4px; position: relative; }
+.marque-version:hover { color: var(--ink); background: var(--panel-2); }
+.marque-version.maj-dispo { color: var(--accent); }
+.marque-version.maj-dispo::after { content: ""; position: absolute; top: 0; right: -6px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+.btn-maj { border-color: var(--accent); color: var(--accent); font-weight: 600; background: var(--accent-halo); }
+.btn-maj:hover { background: var(--accent); color: var(--sur-fort); }
+.notes-maj { max-height: 260px; overflow: auto; padding: 8px 12px; margin-top: 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel-2); font-size: 13px; }

@@ -1,6 +1,6 @@
 // Athanor: local dashboard of the pilot.
 // A single executable: it serves the interface on 127.0.0.1 (random or chosen port) and opens it
-// in an application window. Options: --kit=FOLDER (--reduit, from older startup entries, is ignored).
+// in an application window; downloaded alone, it installs Athanor's folder first (embarque.go). Options: --kit=FOLDER (--reduit, from older startup entries, is ignored).
 package main
 
 import (
@@ -26,12 +26,18 @@ func main() {
 	if code, ok := lancerParNom(); ok {
 		os.Exit(code)
 	}
+	// the downloaded file, outside Athanor's folder: it installs or updates that folder (after the user's
+	// consent the first time), then the copy kept there runs (embarque.go)
+	if code, ok := lancerDepuisTelechargement(os.Args[1:]); ok {
+		os.Exit(code)
+	}
 	// athanor COMMAND ARGS…: the sub-commands of the single executable (commandes.go); without one, the app
 	if code, ok := lancerSousCommande(os.Args[1:]); ok {
 		os.Exit(code)
 	}
-	migrerConfig()  // autopilote-config.json → athanor-config.json (previous name)
-	migrerSysteme() // Windows: startup entry and local data folder of the previous name
+	mettreAJourSurPlace() // the tool folder's files follow this executable's version
+	migrerConfig()        // autopilote-config.json → athanor-config.json (previous name)
+	migrerSysteme()       // Windows: startup entry and local data folder of the previous name
 	config := lireConfig()
 	for _, a := range os.Args[1:] {
 		switch {
@@ -50,6 +56,7 @@ func main() {
 	s.cleAcces = aleatoire(24) // only the windows Athanor opens can use the interface (acces.go)
 	s.demarrerProjetsAuto()
 	go s.surveillerTaches() // system notifications for the tasks of the user (api_pourvous.go)
+	go s.verifierMajFond()  // a new version of Athanor (maj.go)
 
 	mux := http.NewServeMux()
 	s.routes(mux)

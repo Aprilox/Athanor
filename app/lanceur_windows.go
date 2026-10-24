@@ -72,6 +72,25 @@ func demarrerKitDetache(k Kit, args ...string) error {
 	return nil
 }
 
+// lancerDetacheExe: a Windows program started on its own, outside the application's job (it outlives
+// the application: the update that replaces it).
+func lancerDetacheExe(exe string, args ...string) error {
+	lancer := func(drapeaux uint32) error {
+		c := exec.Command(exe, args...)
+		c.Dir = filepath.Dir(exe)
+		c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: drapeaux}
+		if err := c.Start(); err != nil {
+			return err
+		}
+		go func() { _ = c.Wait() }()
+		return nil
+	}
+	if err := lancer(createNewProcessGroup | createBreakawayFromJob); err != nil {
+		return lancer(createNewProcessGroup)
+	}
+	return nil
+}
+
 // fenetreKit: an interactive step (sudo, a token, a GitHub sign-in, an installation) in a console window of
 // its own, which stays open until Enter.
 func fenetreKit(k Kit, titre string, args ...string) error {

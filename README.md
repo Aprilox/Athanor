@@ -56,63 +56,48 @@ You describe what you want: a game, a website, an app, a tool. Athanor runs [Cla
 | **A sandbox** | Claude's commands run under bubblewrap + seccomp. They can write only in the project, never read the rest of your machine, and Internet stays open. |
 | **Your PC's software** | Unreal Engine, Blender, the Android SDK, Docker and winget are reached through a controlled bridge, command by command. |
 | **No UAC prompts** | Opt-in. One consent, and from then on Claude installs and runs what the project needs with administrator rights, silently. |
-| **A desktop app** | One file. It shows the live team, the plan, the progress and the subscription quota (with automatic stops), the readable log and the request queue, lets you chat with Claude about the project, and runs health checks with one-click repair. It also runs several projects at once and keeps the programs Claude starts on a desktop of their own, out of your way. Themes, 6 languages. |
+| **A desktop app** | One file, that updates itself in one click. It shows the live team, the plan, the progress and the subscription quota (with automatic stops), the readable log and the request queue, lets you chat with Claude about the project, and runs health checks with one-click repair. It also runs several projects at once and keeps the programs Claude starts on a desktop of their own, out of your way. Themes, 6 languages. |
 | **GitHub, one repository at a time** | Link a project to a new private repository or one of yours, and its commits go there after each milestone. The key Athanor pushes with only works for that repository and stays out of Claude's reach; every push is checked for secrets and never forced. |
-| **Clean projects** | A project is any folder on your PC. Athanor only adds a `.athanor/` workshop, with its working documents (requirements, design, architecture), kept out of git on your computer alone, never through your `.gitignore` (unless you choose to share it on GitHub with the people you work with); delete it at the end and nothing is left behind. |
+| **Clean projects** | A project is any folder on your PC, and Athanor keeps its own files in a folder of its own. Athanor only adds a `.athanor/` workshop, with its working documents (requirements, design, architecture), kept out of git on your computer alone, never through your `.gitignore` (unless you choose to share it on GitHub with the people you work with); delete it at the end and nothing is left behind. |
 | **Frugal by design** | Targeted reading rules, a quick check during the milestone and the full check once, screenshots assembled into contact sheets, a project map regenerated before each cycle, automatic archives, command output compression. The Overview page shows live how much of each session is re-read from the prompt cache. |
 
 ---
 
 ## Quick start
 
-**You need:** Windows 10/11 (WSL2 is installed for you), Linux or macOS, and a Claude subscription (Pro, Max or Team).
+**You need:** Windows 10/11, Linux or macOS, and a Claude subscription (Pro, Max or Team).
 
 ### 1. Get Athanor
 
-<table>
-<tr>
-<th width="50%">Option A · Download a release <i>(recommended)</i></th>
-<th width="50%">Option B · Build it yourself</th>
-</tr>
-<tr>
-<td valign="top">
+One file, nothing to unzip. From the [**latest release**](https://github.com/Aprilox/Athanor/releases/latest):
 
-From the [**latest release**](https://github.com/Aprilox/Athanor/releases/latest):
+| Your system | Download |
+|---|---|
+| **Windows 10 / 11** | [**Athanor.exe**](https://github.com/Aprilox/Athanor/releases/latest/download/Athanor.exe) (an ARM PC: [Athanor-arm64.exe](https://github.com/Aprilox/Athanor/releases/latest/download/Athanor-arm64.exe)) |
+| **Linux** (x86-64) | [**athanor-linux**](https://github.com/Aprilox/Athanor/releases/latest/download/athanor-linux) (ARM: [athanor-linux-arm64](https://github.com/Aprilox/Athanor/releases/latest/download/athanor-linux-arm64)) |
+| **macOS** | [**athanor-macos**](https://github.com/Aprilox/Athanor/releases/latest/download/athanor-macos) (M1, M2, M3, M4…) or [athanor-macos-intel](https://github.com/Aprilox/Athanor/releases/latest/download/athanor-macos-intel): see [macOS, step by step](#macos-step-by-step) |
 
-- **Windows**: `Athanor-X.Y.Z-Windows.zip`, unzip it anywhere (the Desktop, for example).
-- **Linux**: `Athanor-X.Y.Z-Linux.tar.gz`, then `tar xzf Athanor-X.Y.Z-Linux.tar.gz`.
-- **macOS**: `Athanor-X.Y.Z-macOS-AppleSilicon.tar.gz` (M1, M2, M3, M4…) or `-Intel`: see [macOS, step by step](#macos-step-by-step).
-
-Each download is the complete tool, ready to use.
-
-</td>
-<td valign="top">
-
-From the source code, with [Go](https://go.dev/dl/) 1.24 or later.
-
-```bash
-git clone https://github.com/Aprilox/Athanor.git
-cd Athanor/app
-go run . construire
-```
-
-The same on Windows (PowerShell), Linux and macOS: it builds `Athanor.exe` and `athanor` into the `Athanor` folder. No git? *Code → Download ZIP*, unzip, then the last two lines. No Go? `winget install GoLang.Go`, `sudo apt install golang-go` or `brew install go`.
-
-</td>
-</tr>
-</table>
-
-Both options give the same folder: `Athanor.exe` (or `athanor`) next to `template/` (the texts for Claude) and `app/`. Keep the whole folder together.
+Keep the file wherever you like (the Desktop, for example): it is how you open Athanor, and it never writes anything next to itself.
 
 > [!TIP]
-> On a downloaded release, Windows SmartScreen may show *"Windows protected your PC"* the first time, because the app is not code-signed. Click *More info → Run anyway*. An `Athanor.exe` you built yourself does not trigger it.
+> Windows SmartScreen may show *"Windows protected your PC"* the first time, because the app is not code-signed. Click *More info → Run anyway*.
 
 ### 2. First launch
 
+The first time, Athanor says where it will keep its files and asks before writing anything (*No*: it closes, nothing was written):
+
+| System | Athanor's folder |
+|---|---|
+| Windows | `%LOCALAPPDATA%\Athanor` |
+| Linux | `~/.local/share/athanor` |
+| macOS | `~/Library/Application Support/Athanor` |
+
+Everything of its own goes there: its copy of the executable, its settings and your token, its logs, the tools it installs. In your projects it only adds a `.athanor/` folder.
+
 **Windows**
 
-1. Double-click **`Athanor.exe`**. Pick a language, a theme and an accent: the first-launch guide takes you through the rest.
-2. **Install**: a fresh install starts in **native Windows** (nothing else to install: *Install everything* puts Git for Windows, jq, Python, Node.js and Claude Code for Windows). For Claude in a sandbox, open the **WSL** tab of *Setup & health*: *Install everything* there installs WSL2, Claude Code and the sandbox (Linux asks for a password once; the very first time may need a restart, then open "Ubuntu" once to create your user and run the installation again). A short tour then shows the mode, *Setup & health*, a new project and *Start*.
+1. Double-click **`Athanor.exe`**, then *Yes*. Pick a language, a theme and an accent: the first-launch guide takes you through the rest.
+2. **Install**: a fresh install starts in **native Windows** (nothing else to install: *Install everything* puts Git for Windows, Python, Node.js, a few small tools and Claude Code for Windows). For Claude in a sandbox, open the **WSL** tab of *Setup & health*: *Install everything* there installs WSL2, Claude Code and the sandbox (Linux asks for a password once; the very first time may need a restart, then open "Ubuntu" once to create your user and run the installation again). A short tour then shows the mode, *Setup & health*, a new project and *Start*.
 3. **Connect**: *Setup & health* → *Check everything*. On the *Token and model access* line, click *Repair*: a window signs you in to your Claude account. Paste the token in *Settings*.
 4. **Optional, recommended**: *Setup & health* → *Administrator rights for installations* → *Repair*. Windows asks for your consent **once**; Claude never needs a UAC click again.
 5. **Add a project**: a name, its folder (existing or new, on any drive) and what you want. Technologies are free unless you impose some. ✨ *Improve with Claude* turns a few words into a complete request; you can go back to yours.
@@ -121,41 +106,50 @@ Both options give the same folder: `Athanor.exe` (or `athanor`) next to `templat
 **Linux** (everything runs natively, without WSL)
 
 ```bash
-cd athanor                   # or Athanor, if you built it from source
-./athanor installer          # Claude Code, sandbox, tools (asks for your password once)
-./athanor                    # the app, in an application window of Chrome/Edge/Chromium, else your browser
+chmod +x athanor-linux        # once: a downloaded file is not executable yet
+./athanor-linux               # the app, in an application window of Chrome/Edge/Chromium, else your browser
 ```
 
-Then *Settings* (the token), add a project and start it, as on Windows (steps 3, 5 and 6).
+Then *Setup & health* → *Install everything* (Claude Code, the sandbox and the tools; Linux asks for your password once), the token in *Settings*, a project and *Start*, as on Windows (steps 3, 5 and 6).
 
 #### macOS, step by step
 
 The Mac version is new: it was built and tested automatically, not yet on a real Mac. Tell us what does not work.
 
-1. Download `Athanor-X.Y.Z-macOS-AppleSilicon.tar.gz` from the [latest release](https://github.com/Aprilox/Athanor/releases/latest) (a Mac with an M1, M2, M3, M4… chip; *About This Mac* says it), or `-Intel` for an older Mac.
-2. Double-click it in *Downloads*: a folder `athanor` appears.
-3. Open *Terminal* (Applications → Utilities) and type, one line at a time:
+1. Download [`athanor-macos`](https://github.com/Aprilox/Athanor/releases/latest/download/athanor-macos) (a Mac with an M1, M2, M3, M4… chip; *About This Mac* says it), or [`athanor-macos-intel`](https://github.com/Aprilox/Athanor/releases/latest/download/athanor-macos-intel) for an older Mac.
+2. Open *Terminal* (Applications → Utilities) and type, one line at a time:
    ```bash
-   cd ~/Downloads/athanor
-   xattr -dr com.apple.quarantine .   # once: the app is not signed by Apple
-   ./athanor installer                # Homebrew, Claude Code and the tools (your password once)
-   ./athanor                          # the app opens
+   cd ~/Downloads
+   chmod +x athanor-macos                           # once: a downloaded file is not executable yet
+   xattr -d com.apple.quarantine athanor-macos      # once: the app is not signed by Apple
+   ./athanor-macos                                  # the app opens (Create, the first time)
    ```
-4. In the app: *Setup & health* → *Check everything*, then the *Token* line → *Repair*, and paste the token in *Settings*.
-5. Add a project and *Start*.
+3. In the app: *Setup & health* → *Install everything* (Homebrew, Claude Code and the tools, your password once), *Check everything*, then the *Token* line → *Repair*, and paste the token in *Settings*.
+4. Add a project and *Start*.
 
-Claude works in Seatbelt, the sandbox built into macOS (the same one Claude Code uses): it only writes in the project. The MCP servers have a Seatbelt cage of their own, and the Mac stays awake while a pilot runs (`caffeinate`). Unreal, Blender, Roblox Studio, Xcode and the Android SDK are found in their usual places and Claude runs them directly; Windows programs and Docker through `tool` are Windows and Linux only. To start Athanor later: `~/Downloads/athanor/athanor` (or move the folder anywhere first).
+Claude works in Seatbelt, the sandbox built into macOS (the same one Claude Code uses): it only writes in the project. The MCP servers have a Seatbelt cage of their own, and the Mac stays awake while a pilot runs (`caffeinate`). Unreal, Blender, Roblox Studio, Xcode and the Android SDK are found in their usual places and Claude runs them directly; Windows programs and Docker through `tool` are Windows and Linux only. To open Athanor later: `~/Downloads/athanor-macos` (or move the file anywhere first).
 
 ### 3. Updating
 
-| You installed | To update |
-|---|---|
-| a release | close the app, download the new release and extract it in the same place, so that its `athanor` folder merges into yours |
-| from source | close the app, then `git pull` and `cd app && go run . construire` again |
+**From the app**: when a new version is out, an *Update to X.Y.Z* button shows at the top of the window (Athanor looks when it opens; *Settings → Options → Version* looks now, and can stop looking at opening). *Update now* downloads the file of your system, checks it against the release's checksums, then Athanor closes, puts the new version in place and opens again. Running pilots go on.
 
-Your `.env`, settings, `logs/` and `tools/` are never touched by an update. The Windows, Linux and macOS apps keep separate settings files (`athanor-config.json`, `athanor-config-linux.json`, `athanor-config-darwin.json`), so a tool folder shared between systems (dual boot, for example) works with each.
+**By hand**: close Athanor, download the new file and open it: it updates Athanor's folder the same way.
 
-The app only uses Go's standard library plus three vendored packages for the WebView2 window, so building needs no network access once the source is on your disk.
+Your token, settings, projects, `logs/` and `tools/` are never touched by an update. An installation made before 2.26 (a folder with `Athanor.exe`, `template/` and `athanor-config.json` side by side) stays where it is: put the new executable in it, or use the button.
+
+<details>
+<summary><b>Build it yourself</b> (from the source code)</summary>
+
+With [Go](https://go.dev/dl/) 1.24 or later (no Go? `winget install GoLang.Go`, `sudo apt install golang-go` or `brew install go`):
+
+```bash
+git clone https://github.com/Aprilox/Athanor.git
+cd Athanor/app
+go run . construire
+```
+
+The same on Windows (PowerShell), Linux and macOS: it builds `Athanor.exe` and `athanor` into the `Athanor` folder, each carrying everything a release carries. Run there, a copy of the source code is its own tool folder (its `template/` is used as it is); update it with `git pull` and `go run . construire` again. `go run . construire --all` builds every system into `dist/`, the files a release publishes. The app only uses Go's standard library plus three vendored packages for the WebView2 window, so building needs no network access once the source is on your disk.
+</details>
 
 ---
 
@@ -244,7 +238,7 @@ The screenshots show the dark "Slate" and the "Light" palettes.
 | **Skills & MCP** | the library (verified catalog, search in SkillsMP and the MCP Registry, GitHub link, your own skills, pasted MCP configurations), a switch per project, the API keys of the servers (stored apart, never shown) and their settings (an address, a port, a path: detected in the configuration, shown in clear with their default), *View / edit* a server's configuration, settings and program to open as JSON (pasted ones included), *Test* starts a server in its cage and lists its tools; *Sign in* once to a remote server that asks for it (OAuth), for every project; **Plugins**: the whole catalog of Claude Code plugins (official marketplace plus yours), searchable, installed in one click and switched on per project |
 | **Setup & health** | One tab per mode (native Windows and WSL on Windows; Linux; macOS), the current one marked: *Install everything* for it, or switch to it. *Check everything*, *Test the sandbox* for real, *Repair* line by line, *Ask Claude* to repair or install something |
 | **Settings → Claude** | the pilot's settings, the kit's `.env` (token masked, models, effort, watchdog…, rarely used ones under *Advanced*), *Save and restart after cycle* |
-| **Settings → Options** | language, palette and accent, project list (removing a project never touches its folder), restart the pilots on opening, start with the computer, "Claude" desktop, password, tool folder |
+| **Settings → Options** | language, palette and accent, project list (removing a project never touches its folder), restart the pilots on opening, start with the computer, "Claude" desktop, password, tool folder, version and updates |
 
 **Skills & MCP, safely**: skills are loaded as a session plugin (`--plugin-dir`), so Claude only reads one when it needs it; it can read them but never change them. MCP servers are added to the session's own MCP configuration; a local one starts in a bubblewrap cage (`athanor mcp-cage`): system read-only, only the project and the tool caches writable, no home folder, no Windows drives, no Athanor folder, no Claude token. A *Windows program* (Roblox Studio's server, a `.exe` or a `.bat`, recognized when pasting and confirmed with the *Windows program* option) cannot be caged from WSL: it starts on Windows through WSL interop (`athanor mcp-windows`), with your rights, and only receives its own variables; Claude only sees its tools, and its whole process tree is stopped with the session. Requires Claude Code with `--plugin-dir` for skills.
 
@@ -391,7 +385,7 @@ Found a vulnerability? Please open a [private security advisory](https://github.
 
 ## Commands without the app
 
-Everything the app does is a command of the executable (`Athanor.exe` on Windows, `./athanor` on Linux and macOS; `Athanor.exe wsl COMMAND …` runs it in WSL):
+Everything the app does is a command of the executable (`Athanor.exe` on Windows, the downloaded `./athanor-linux` or `./athanor-macos`, or `athanor` in Athanor's folder; `Athanor.exe wsl COMMAND …` runs it in WSL):
 
 | Command | |
 |---|---|
@@ -406,31 +400,42 @@ Everything the app does is a command of the executable (`Athanor.exe` on Windows
 | `reseau-unreal` | WSL network for the Unreal MCP (Windows, once) |
 | `aide` | every command |
 
-Without a folder, the commands use `<tool>/projet`. The request is read and written in `DIR/.athanor/REQUEST.md`, the next ones in `DIR/.athanor/queue/` (one file per request, taken in order).
+Without a folder, the commands use `projet` in Athanor's folder. The request is read and written in `DIR/.athanor/REQUEST.md`, the next ones in `DIR/.athanor/queue/` (one file per request, taken in order).
 
 ## Where to look
 
 - `.athanor/STATE.json`: phase, cycle, model, current milestone, planned resume; `stats.tsv`: one line per cycle.
 - `.athanor/PLAN.md`, `LOG.md`; `pilot.log` (cycles, quotas, fallbacks); `logs/` (raw log of each cycle).
 - At the end: `.athanor/FINAL_REPORT.md`, `TEST_GUIDE.md`, and the deliverable in `deliverable/`.
-- On the tool side: `logs/` (repairs, sandbox test, `TODO_FOR_YOU.md`).
+- In Athanor's folder: `logs/` (repairs, sandbox test, `TODO_FOR_YOU.md`).
 
 ---
+
+## Athanor's folder
+
+```
+Athanor.exe, athanor   the app (Windows; athanor alone on Linux and macOS, and on Windows the Linux one of the WSL mode);
+                       everything else is a command of it: the pilot, its gateways (system/bin links), installer…
+template/              the texts for Claude, put back by every update
+.env, .env.example     your settings and token, and the model of every setting
+athanor-config*.json   the app's settings (projects, options)
+logs/, tools/          the pilots' logs and private folders; the tools Claude installs (tools/INSTALLS.md)
+extensions/, system/   the Skills & MCP library; what the PC has and Claude's commands
+local/                 repairs made on this PC (a file here replaces the same one of template/ or app/catalogue.json,
+                       never overwritten by an update)
+app/                   the Go sources, written only when a repair needs them (Rebuild Athanor, a repair by Claude)
+```
 
 ## Repository layout
 
 ```
-Athanor.exe, athanor   the app for Windows / Linux and macOS (in the release, or built with go run . construire); everything
-                       else is a command of it: the pilot, its gateways (system/bin links), installer, configurer…
-app/                   the app's Go sources, static UI (HTML, CSS, JS without dependencies), Windows resources
+app/                   the app's Go sources, static UI (HTML, CSS, JS without dependencies), Windows resources;
+                       go run . construire builds Athanor.exe and athanor, each carrying template/, .env.example,
+                       LICENSE and these sources (app/embarque.go)
 template/              CLAUDE.md (Claude's instructions), guides/ (the parts only some cycles need), PC_TOOLS_GUIDE.md, .claude/agents/ (the team)
 docs/images/           README images
 docs/releases/         what is new in each version (shown on the release page)
 .env.example           every setting, documented
-local/                 repairs made on this PC: a file here replaces the same one of template/ or app/catalogue.json,
-                       never overwritten by an update (`athanor autotest` lists them)
-logs/, tools/,         created at run time, never committed (system/ too: what the PC has, Claude's commands)
-extensions/
 ```
 
 Inside each project, `.athanor/` holds REQUEST.md, PLAN.md, LOG.md, queue/, done/, check.sh, STATE.json, stats.tsv and logs/. It is the only thing Athanor adds.
@@ -472,7 +477,7 @@ Yes: Athanor only adds `.athanor/`, kept out of git through `.git/info/exclude` 
 <details>
 <summary><b>Can I use it on several PCs?</b></summary>
 
-Yes. Nothing is tied to a user name or a drive letter: paths come from your profile, the tool folder can live anywhere, and software is detected on every drive. Copy the folder or clone the repository, then run the setup on each PC.
+Yes. Nothing is tied to a user name or a drive letter: paths come from your profile and software is detected on every drive. Download Athanor on each PC and run *Install everything* there. To go on with the same project from another PC, link it to GitHub with *Share the workshop (.athanor/) on GitHub*: the other PC pulls the repository, adds the project, and the pilot takes the plan up where it stopped.
 </details>
 
 ---
@@ -497,14 +502,14 @@ Yes. Nothing is tied to a user name or a drive letter: paths come from your prof
 Push a version tag and GitHub builds the apps (Windows, Linux, macOS) and publishes the release ([`.github/workflows/release.yml`](.github/workflows/release.yml)):
 
 ```bash
-git tag v2.25.2 && git push origin v2.25.2
+git tag v2.26.0 && git push origin v2.26.0
 ```
 
-Keep the version in [`app/winres/athanor.rc`](app/winres/athanor.rc) and `versionAthanor` in [`app/commandes.go`](app/commandes.go) in step with the tag (a test checks they match), and write what is new in `docs/releases/VERSION.md` (e.g. [`docs/releases/2.25.2.md`](docs/releases/2.25.2.md)): it opens the release page.
+Keep the version in [`app/winres/athanor.rc`](app/winres/athanor.rc) and `versionAthanor` in [`app/commandes.go`](app/commandes.go) in step with the tag (a test checks they match), and write what is new in `docs/releases/VERSION.md` (e.g. [`docs/releases/2.26.0.md`](docs/releases/2.26.0.md)): it opens the release page.
 
-Every push is checked on Windows, Linux and macOS ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)); `cd app && go run . construire --all` builds every target into `dist/`.
+Every push is checked on Windows, Linux and macOS ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)), the single executable included (nothing written before the consent, Athanor's folder installed, nothing next to the file); `cd app && go run . construire --all` builds every target into `dist/`. A release publishes one file per system and `SHA256SUMS.txt`, under the same names at every version.
 
-After a change of `app/` on a PC (a repair by Claude, or yours), `./athanor reparer --recompiler` (`.\Athanor.exe reparer --recompiler` on Windows) rebuilds the kit's executables there: it shows the change against the running executable's own sources, installs a portable Go outside the kit when none is found, runs `go vet`, builds, runs the new executable's autotest and only then puts it in place, keeping the previous one (`reparer --annuler` puts it back).
+After a change of `app/` on a PC (a repair by Claude, or yours: `athanor reparer --diff` first writes the sources into Athanor's folder when they are not there), `./athanor reparer --recompiler` (`.\Athanor.exe reparer --recompiler` on Windows) rebuilds the kit's executables there: it shows the change against the running executable's own sources, installs a portable Go outside the kit when none is found, runs `go vet`, builds, runs the new executable's autotest and only then puts it in place, keeping the previous one (`reparer --annuler` puts it back).
 
 ## Contributing
 

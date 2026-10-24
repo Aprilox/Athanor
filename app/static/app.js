@@ -578,13 +578,20 @@ function rendreBandeau(v) {
       ? `<button class="btn" data-ecran title="${h(t("Go and see what Claude is showing (windows on the “Claude” desktop)"))}">${t("View Claude's desktop")}</button>`
       : `<button class="btn" data-bureau="voir" title="${h(t("Go and see what Claude is showing (windows on the “Claude” desktop)"))}">${t("View Claude's desktop")}</button>`);
   }
+  const maj = v.maj || {};
+  if (maj.en_cours === "telechargement") boutons.unshift(`<button class="btn btn-maj" disabled>${t("Downloading the update… {0} %", [maj.avancement || 0])}</button>`);
+  else if (maj.en_cours === "redemarrage") boutons.unshift(`<button class="btn btn-maj" disabled>${t("Athanor restarts…")}</button>`);
+  else if (maj.disponible) boutons.unshift(`<button class="btn btn-maj" data-maj="voir" title="${h(t("Athanor {0} is available (you have {1})", [maj.derniere, v.version]))}">⬆ ${t("Update to {0}", [h(maj.derniere)])}</button>`);
   rendreBarre(v);
   const nomProjet = v.projet ? `<div class="muet petit">${h(v.projet.nom)} · ${h(v.projet.dossier)}</div>` : "";
   const nbActifs = (v.projets || []).filter((x) => x.actif).length;
   $("#bandeau").innerHTML = `<div class="etat-phrase">${nomProjet}<h1 title="${h(p.titre)}"><span class="point ${p.classe}"></span><span>${h(p.titre)}</span></h1><div class="sous" title="${h(p.sous)}">${h(p.sous)}</div></div><div class="actions">${boutons.join("")}</div>`;
   $("#nav-sous").textContent = nbActifs ? t("{0} project(s) running", [nbActifs]) : t("idle");
   $("#nav-kit").textContent = v.kit || "";
-  $("#nav-version").textContent = v.version ? "v" + v.version : "";
+  const nv = $("#nav-version");
+  nv.textContent = v.version ? "v" + v.version : "";
+  nv.classList.toggle("maj-dispo", !!maj.disponible);
+  nv.title = maj.disponible ? t("Athanor {0} is available (you have {1})", [maj.derniere, v.version]) : t("Version of Athanor: click to look for an update");
   const sel = $("#sel-projet");
   sel.setAttribute("aria-expanded", etat.selecteurOuvert ? "true" : "false");
   sel.innerHTML = v.projet ? `<span class="dot ${classePhase(v.projet)}"></span><span class="nom">${h(v.projet.nom)}</span><span class="chevron">▾</span>` : `<span class="nom muet">${t("Choose a project")}</span><span class="chevron">▾</span>`;
@@ -739,8 +746,35 @@ const VISITE = [
 function etapesVisite() { return VISITE.filter((e) => !e.windows || (etat.vue || {}).windows); }
 function demarrerVisite() { etat.visite = 0; montrerVisite(); }
 function finirVisite() {
-  etat.visite = -1; $("#visite").hidden = true;
+  etat.visite = -1; $("#visite").hidden = true; $("#visite-voile").hidden = true; etat.visiteCible = null;
   document.querySelectorAll(".visite-cible").forEach((x) => x.classList.remove("visite-cible"));
+}
+// the veil: everything dimmed but the place explained (a hole the size of the target, or none at all)
+function cibleVisite() {
+  // the page may have been rebuilt since (the header is, every refresh): the same place, found again
+  if (etat.visiteCible && etat.visiteCible.isConnected) return etat.visiteCible;
+  for (const c of etat.visiteSelecteurs || []) { const x = document.querySelector(c); if (x && x.offsetParent !== null) { etat.visiteCible = x; return x; } }
+  return null;
+}
+function placerVoile() {
+  const voile = $("#visite-voile"), c = cibleVisite();
+  if (etat.visite < 0) { voile.hidden = true; return; }
+  voile.hidden = false;
+  if (!c || !c.isConnected || c.offsetParent === null) { voile.classList.add("sans-cible"); Object.assign(voile.style, { top: "50%", left: "50%", width: "0px", height: "0px" }); return; }
+  voile.classList.remove("sans-cible");
+  const z = c.getBoundingClientRect(), m = 6;
+  Object.assign(voile.style, { top: z.top - m + "px", left: z.left - m + "px", width: z.width + 2 * m + "px", height: z.height + 2 * m + "px" });
+}
+window.addEventListener("resize", () => { if (etat.visite >= 0) { placerVoile(); placerBulle(); } });
+document.addEventListener("scroll", () => { if (etat.visite >= 0) { placerVoile(); placerBulle(); } }, true);
+function placerBulle() {
+  const bulle = $("#visite"), cible = cibleVisite();
+  if (cible && cible.isConnected && cible.offsetParent !== null) {
+    const z = cible.getBoundingClientRect(), l = bulle.offsetWidth, hb = bulle.offsetHeight;
+    let haut = z.bottom + 14; if (haut + hb > window.innerHeight - 8) haut = Math.max(8, z.top - hb - 14);
+    bulle.style.top = haut + "px";
+    bulle.style.left = Math.max(8, Math.min(z.left, window.innerWidth - l - 8)) + "px";
+  } else { bulle.style.top = Math.max(8, (window.innerHeight - bulle.offsetHeight) / 2) + "px"; bulle.style.left = Math.max(8, (window.innerWidth - bulle.offsetWidth) / 2) + "px"; }
 }
 async function montrerVisite() {
   const etapes = etapesVisite(), n = etat.visite;
@@ -762,15 +796,14 @@ async function montrerVisite() {
       ${n > 0 ? `<button class="btn btn-petit" data-visite="retour">${t("Back")}</button>` : ""}
       <button class="btn btn-petit btn-primaire" data-visite="suite">${n === etapes.length - 1 ? t("Finish") : t("Next")}</button></div>`;
   bulle.hidden = false;
+  etat.visiteCible = cible; etat.visiteSelecteurs = e.cibles;
   if (cible) {
     cible.classList.add("visite-cible");
     cible.scrollIntoView({ block: "center", behavior: "smooth" });
     await new Promise((r) => setTimeout(r, 350));
-    const z = cible.getBoundingClientRect(), l = bulle.offsetWidth, hb = bulle.offsetHeight;
-    let haut = z.bottom + 12; if (haut + hb > window.innerHeight - 8) haut = Math.max(8, z.top - hb - 12);
-    bulle.style.top = haut + "px";
-    bulle.style.left = Math.max(8, Math.min(z.left, window.innerWidth - l - 8)) + "px";
-  } else { bulle.style.top = "80px"; bulle.style.left = Math.max(8, (window.innerWidth - bulle.offsetWidth) / 2) + "px"; }
+  }
+  placerVoile();
+  placerBulle();
   bulle.querySelector('[data-visite="suite"]').focus();
 }
 $("#visite").addEventListener("click", (ev) => {
@@ -2250,6 +2283,7 @@ function lireEnvFormulaire() {
 // --- options (saved as soon as a switch or a field changes): the "Options" tab of the settings
 async function rendreOptions() {
   const o = await api("options");
+  etat.optionsVue = o;
   const b = o.bureau || {};
   return `<div class="grille grille-2">
     <div class="colonne">
@@ -2293,24 +2327,67 @@ async function rendreOptions() {
         <label class="radio"><input type="radio" name="op-mode" id="op-natif" data-option ${o.mode_natif ? "checked" : ""}> <b>${t("Native Windows")}</b> <span class="muet">${t("(recommended to begin: nothing else to install)")}</span></label>
         <p class="petit attention">${t("No sandbox in this mode: Claude can read and change any file of your PC and run any program, without asking. The file guard only covers its file tools. Use it for projects you trust.")}</p>
         <label class="radio"><input type="radio" name="op-mode" id="op-wsl" data-option ${o.mode_natif ? "" : "checked"}> <b>WSL</b> <span class="muet">${t("(Claude works in a sandbox: it only writes in the project; installs Linux once)")}</span></label>
-        <p class="petit ${o.git_bash ? "ok" : "attention"}">${o.git_bash ? h(t("Git Bash: {0}", [o.git_bash])) : t("Git for Windows is missing: Setup & health → Install everything.")}</p>
+        <p class="petit ${o.git_bash ? "ok" : "attention"}">${o.git_bash ? h(t("Git for Windows: {0}", [o.git_bash.replace(/[\\/](usr[\\/])?bin[\\/]bash\.exe$/i, "")])) : t("Git for Windows is missing: Setup & health → Install everything.")}</p>
         <p class="muet petit">${t("Applies to the pilots started afterwards. When you close Athanor while native pilots run, it asks whether they go on in the background.")}</p>
       </div>
       <div class="bloc"><h2>${t("Tool folder")}</h2>
         <input type="text" id="op-kit" data-option value="${h(o.kit)}"><div class="muet petit mt-1">${o.kit_valide ? "✔ " + t(o.windows ? "tool recognized (template\\CLAUDE.md present)" : "tool recognized (template/CLAUDE.md present)") : "✖ " + t("this folder is not the tool")}</div>
         <div class="ligne mt-1"><button class="btn btn-petit" data-ouvrir="kit">${t("Open the folder")}</button><button class="btn btn-petit" data-ouvrir="logs">${t("Logs folder")}</button><span class="espace"></span><button class="btn btn-petit" id="op-guide">${t("Show the first-launch guide again")}</button></div>
       </div>
-      <div class="bloc"><h2>${t("Version")}</h2>
-        <p class="m0"><b>Athanor ${h((etat.vue || {}).version || "?")}</b></p>
-        <p class="muet petit mt-1">${t("The version of this application and of its executable. After an update, it shows the new number once Athanor was restarted.")}</p>
-      </div>
+      <div class="bloc" id="bloc-version"><h2>${t("Version")}</h2>${rendreBlocMaj(o)}</div>
     </div>
   </div>`;
 };
+// the updates of Athanor (maj.go): the version, the latest one published, "Update now"
+function rendreBlocMaj(o) {
+  const v = etat.vue || {}, m = v.maj || {};
+  const quand = m.verifie ? new Date(m.verifie * 1000).toLocaleString(document.documentElement.lang || "en", { dateStyle: "short", timeStyle: "short" }) : "";
+  let etatTexte = "";
+  if (!m.possible) etatTexte = `<p class="muet petit">${t("This copy of Athanor was built from the source code: update it with git pull, then cd app && go run . construire.")}</p>`;
+  else if (m.en_cours === "verification") etatTexte = `<p class="muet petit">${t("Looking for an update…")}</p>`;
+  else if (m.en_cours === "telechargement") etatTexte = `<p class="petit">${t("Downloading the update… {0} %", [m.avancement || 0])}</p><div class="barre m0"><i style="width:${Math.min(100, m.avancement || 0)}%"></i></div>`;
+  else if (m.en_cours === "redemarrage") etatTexte = `<p class="ok petit">${t("Athanor restarts…")}</p>`;
+  else if (m.disponible) etatTexte = `<p class="attention m0"><b>${t("Athanor {0} is available (you have {1})", [h(m.derniere), h(v.version)])}</b></p>`;
+  else if (m.derniere) etatTexte = `<p class="ok petit">✔ ${t("Up to date (checked {0}).", [h(quand)])}</p>`;
+  if (m.erreur && !m.en_cours) etatTexte += `<p class="attention petit">${h(t(m.erreur))}</p>`;
+  const langue = document.documentElement.lang || "en", parties = String(m.notes || "").split(/\n---\n/);
+  const notes = m.disponible && m.notes ? `<details class="mt-1"><summary class="petit">${t("What's new")}</summary><div class="notes-maj">${mdChat((langue === "fr" && parties[1] ? parties[1] : parties[0]).trim())}</div></details>` : "";
+  const occupe = !!m.en_cours;
+  return `<p class="m0"><b>Athanor ${h(v.version || "?")}</b></p>${etatTexte}${notes}
+    ${m.possible ? `<div class="ligne mt-1">${m.disponible ? `<button class="btn btn-primaire btn-petit" data-maj="installer" ${occupe ? "disabled" : ""}>${t("Update now")}</button>` : ""}<button class="btn btn-petit" data-maj="verifier" ${occupe ? "disabled" : ""}>${t("Check for updates")}</button>${m.page ? `<a href="#" class="petit" data-lien="${h(m.page)}">${t("Release page")}</a>` : ""}</div>
+    <label class="interrupteur mt-1"><input type="checkbox" id="op-maj" data-option ${($("#op-maj") ? $("#op-maj").checked : o.verifier_maj) ? "checked" : ""}><span>${t("Look for an update when Athanor opens")}</span></label>
+    <p class="muet petit">${t("Only asks GitHub for the latest version: nothing about you or your projects is sent. The update keeps your token, settings, projects, logs and tools; running pilots go on.")}</p>` : ""}`;
+}
+async function actionMaj(quoi) {
+  if (quoi === "voir") { etat.ongletReglages = "options"; if (etat.page !== "reglages") { location.hash = "reglages"; } else await rendrePage(); setTimeout(() => { const b = $("#bloc-version"); if (b) b.scrollIntoView({ behavior: "smooth", block: "center" }); }, 150); return; }
+  if (quoi === "verifier") {
+    if (etat.vue && etat.vue.maj) etat.vue.maj.en_cours = "verification";
+    if (etat.page === "reglages") await rendrePage();
+    const m = await action(api("maj?verifier=1"));
+    if (m && etat.vue) etat.vue.maj = m;
+    if (m && !m.disponible && !m.erreur) toast(t("Athanor is up to date."));
+    return etat.page === "reglages" ? rendrePage() : rafraichir();
+  }
+  if (quoi === "installer") {
+    const m = (etat.vue || {}).maj || {};
+    if (!await confirmer(t("Athanor closes, puts version {0} in place and opens again by itself. Your token, settings and projects are kept; running pilots go on.", [m.derniere]), { titre: t("Update to {0}", [m.derniere]), ok: t("Update now") })) return;
+    const r = await action(api("maj/installer", "POST", {}));
+    if (r && etat.vue) etat.vue.maj = r;
+    return rendrePage();
+  }
+}
+document.addEventListener("click", (ev) => {
+  const b = ev.target.closest("[data-maj]"); if (!b) return;
+  ev.preventDefault();
+  const quoi = b.dataset.maj === "ouvrir" ? ((etat.vue || {}).maj || {}).disponible ? "voir" : "verifier" : b.dataset.maj;
+  if (b.dataset.maj === "ouvrir" && quoi === "verifier") { actionMaj("voir").then(() => actionMaj("verifier")); return; }
+  actionMaj(quoi);
+});
+
 // the native Windows switch is sent only where it is shown (Windows)
 function o_windows() { const b = $("#op-natif"); return !!(b && !b.closest(".bloc").hidden); }
 async function enregistrerOptions() {
-  const r = await action(api("options", "POST", { kit: $("#op-kit").value, lancer_pilote_au_demarrage: $("#op-lancer").checked, bureau_virtuel: $("#op-bureau").checked, programmes_supplementaires: $("#op-programmes").value, demarrage_windows: $("#op-windows").checked, mode_natif: $("#op-natif") && o_windows() ? $("#op-natif").checked : undefined, barre_windows: $("#op-barre") ? $("#op-barre").checked : undefined }));
+  const r = await action(api("options", "POST", { kit: $("#op-kit").value, lancer_pilote_au_demarrage: $("#op-lancer").checked, bureau_virtuel: $("#op-bureau").checked, programmes_supplementaires: $("#op-programmes").value, demarrage_windows: $("#op-windows").checked, mode_natif: $("#op-natif") && o_windows() ? $("#op-natif").checked : undefined, verifier_maj: $("#op-maj") ? $("#op-maj").checked : undefined, barre_windows: $("#op-barre") ? $("#op-barre").checked : undefined }));
   if (r && document.activeElement && document.activeElement.matches("input[type=checkbox]")) rendrePage();
 }
 
@@ -2588,12 +2665,19 @@ async function rafraichir() {
     if (!v.verrouille && v.bienvenue && etat.assistant < 0) { etat.assistant = 0; rendreAssistant(); }
     if (v.verrouille !== etat.verrouille) { etat.verrouille = v.verrouille; afficherVerrou(); if (!v.verrouille) rendrePage(); }
     rendreBandeau(v);
+    if (etat.visite >= 0 && !$("#visite").hidden) { placerVoile(); placerBulle(); }
     annoncerFins(v);
     if (!v.verrouille) {
       await lireJournal();
       // the Team page follows live, except while text is selected in it (a brief, a report)
       if ((etat.page === "equipe" && !String(window.getSelection() || "") && !etat.agForm) || (etat.page === "suivi" && !document.activeElement.matches("input, textarea, select"))) rendrePage();
       if (etat.page === "chat") majChat(false);
+      // the update's progress, in place (Settings › Options)
+      const blocMaj = document.getElementById("bloc-version");
+      if (blocMaj && etat.optionsVue) {
+        const sig = JSON.stringify(v.maj || {});
+        if (sig !== etat.majSig) { etat.majSig = sig; blocMaj.innerHTML = `<h2>${t("Version")}</h2>${rendreBlocMaj(etat.optionsVue)}`; }
+      }
       if (etat.page === "pourvous" && !document.activeElement.matches("input, textarea") && ++etat.pvTic % 4 === 0) {
         const r = await api("pourvous").catch(() => null);
         if (r && JSON.stringify(r.taches || []) !== etat.pvSignature) rendrePage();
@@ -2602,7 +2686,11 @@ async function rafraichir() {
       // the checks and the output update in place: the page itself is never rebuilt under the user's typing
       if (etat.page === "sante" && (document.querySelector(".verif.v-en_cours") || etat.tacheChoisie)) await majSante();
     }
-  } catch (e) { /* server briefly unreachable */ }
+    etat.majRedemarre = !!(v.maj && v.maj.en_cours === "redemarrage");
+  } catch (e) {
+    // server briefly unreachable; after an update, the new version opens its own window
+    if (etat.majRedemarre && !etat.majAnnonce) { etat.majAnnonce = true; toast(t("Athanor restarts in a new window: you can close this one.")); try { window.close(); } catch (x) { /* not ours to close */ } }
+  }
 }
 
 (async () => {

@@ -1,6 +1,7 @@
-# Builds Athanor for Windows and Linux and publishes a GitHub Release every time a version tag is pushed:
-#   git tag v2.0.1 && git push origin v2.0.1
-# Each download is the complete tool (the app with template/ next to it).
+# Builds Athanor for Windows, Linux and macOS and publishes a GitHub Release every time a version tag is
+# pushed:
+#   git tag v2.26.0 && git push origin v2.26.0
+# Each download is a single executable that carries everything it needs (app/embarque.go).
 name: Release
 
 on:
@@ -30,44 +31,24 @@ jobs:
 
       - name: Build
         working-directory: app
-        env:
-          CGO_ENABLED: "0"
-        run: |
-          mkdir -p ../build
-          # Windows: GUI app, icon and version info come from the committed rsrc_windows_amd64.syso
-          GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-s -w -H windowsgui" -o ../build/Athanor.exe .
-          # Linux: static binary, runs on any distribution
-          GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o ../build/athanor .
-          # macOS: Apple Silicon and Intel (not signed: see the Quick start)
-          GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags "-s -w" -o ../build/athanor-mac-arm64 .
-          GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o ../build/athanor-mac-amd64 .
+        # every target into dist/, each one carrying the kit's files (and Athanor.exe the Linux executable of
+        # the WSL mode); the Windows icon and version come from the committed rsrc_windows_amd64.syso
+        run: go run . construire --all
 
       - name: Package
         run: |
           version="${GITHUB_REF_NAME#v}"
           echo "VERSION=$version" >> "$GITHUB_ENV"
-          mkdir -p dist
-          # the repository as committed (modes and line endings preserved)
-          export_tree() { rm -rf "pkg-$1" && mkdir -p "pkg-$1" && git archive --format=tar --prefix=athanor/ HEAD | tar -x -C "pkg-$1"; }
-          # Windows: zip, with Athanor.exe
-          export_tree windows
-          cp build/Athanor.exe pkg-windows/athanor/Athanor.exe
-          # its Linux twin: the pilots of the WSL mode run the kit's Go helpers with it (athanor relais…)
-          cp build/athanor pkg-windows/athanor/athanor
-          (cd pkg-windows && zip -qr -X "../dist/Athanor-${version}-Windows.zip" athanor)
-          # Linux: tar.gz (keeps the executable bits), with athanor
-          export_tree linux
-          install -m 755 build/athanor pkg-linux/athanor/athanor
-          tar -C pkg-linux -czf "dist/Athanor-${version}-Linux.tar.gz" athanor
-          # macOS: tar.gz, with athanor (one per processor)
-          for arch in arm64 amd64; do
-            export_tree "mac-$arch"
-            install -m 755 "build/athanor-mac-$arch" "pkg-mac-$arch/athanor/athanor"
-            nom=AppleSilicon; [ "$arch" = amd64 ] && nom=Intel
-            tar -C "pkg-mac-$arch" -czf "dist/Athanor-${version}-macOS-${nom}.tar.gz" athanor
-          done
-          (cd dist && sha256sum ./* | sed 's#\./##' > SHA256SUMS.txt)
-          ls -l dist
+          # one file per system, the same names at every version (a stable link to the latest one)
+          mkdir -p publie
+          cp dist/Athanor-amd64.exe publie/Athanor.exe
+          cp dist/Athanor-arm64.exe publie/Athanor-arm64.exe
+          install -m 755 dist/athanor-linux-amd64 publie/athanor-linux
+          install -m 755 dist/athanor-linux-arm64 publie/athanor-linux-arm64
+          install -m 755 dist/athanor-darwin-arm64 publie/athanor-macos
+          install -m 755 dist/athanor-darwin-amd64 publie/athanor-macos-intel
+          (cd publie && sha256sum ./* | sed 's#\./##' > SHA256SUMS.txt)
+          ls -l publie
           # Release text: what is new (docs/releases/VERSION.md, when present), then the downloads.
           depot="https://github.com/${GITHUB_REPOSITORY}"
           telecharger="${depot}/releases/download/${GITHUB_REF_NAME}"
@@ -75,14 +56,16 @@ jobs:
             if [ -f "docs/releases/${version}.md" ]; then cat "docs/releases/${version}.md"; echo; fi
             echo "## Download"
             echo
+            echo "One file, nothing to unzip. Keep it wherever you like: at its first launch it asks before creating Athanor's folder, then it opens Athanor."
+            echo
             echo "| Your system | Download | Then |"
             echo "|---|---|---|"
-            echo "| **Windows 10 / 11** | [**Athanor-${version}-Windows.zip**](${telecharger}/Athanor-${version}-Windows.zip) | unzip anywhere, double-click **\`Athanor.exe\`** |"
-            echo "| **Linux** (x86-64) | [**Athanor-${version}-Linux.tar.gz**](${telecharger}/Athanor-${version}-Linux.tar.gz) | \`tar xzf Athanor-${version}-Linux.tar.gz && cd athanor && ./athanor installer && ./athanor\` |"
-            echo "| **macOS** (Apple Silicon) | [**Athanor-${version}-macOS-AppleSilicon.tar.gz**](${telecharger}/Athanor-${version}-macOS-AppleSilicon.tar.gz) | \`tar xzf Athanor-${version}-macOS-AppleSilicon.tar.gz && cd athanor && xattr -dr com.apple.quarantine . && ./athanor installer && ./athanor\` (see [macOS, step by step](${depot}#macos-step-by-step)) |"
-            echo "| **macOS** (Intel) | [**Athanor-${version}-macOS-Intel.tar.gz**](${telecharger}/Athanor-${version}-macOS-Intel.tar.gz) | the same, with this archive |"
+            echo "| **Windows 10 / 11** | [**Athanor.exe**](${telecharger}/Athanor.exe) | double-click it (ARM PC: [Athanor-arm64.exe](${telecharger}/Athanor-arm64.exe)) |"
+            echo "| **Linux** (x86-64) | [**athanor-linux**](${telecharger}/athanor-linux) | \`chmod +x athanor-linux && ./athanor-linux\` (ARM: [athanor-linux-arm64](${telecharger}/athanor-linux-arm64)) |"
+            echo "| **macOS** (Apple Silicon) | [**athanor-macos**](${telecharger}/athanor-macos) | in Terminal: \`cd ~/Downloads && chmod +x athanor-macos && xattr -d com.apple.quarantine athanor-macos && ./athanor-macos\` (see [macOS, step by step](${depot}#macos-step-by-step)) |"
+            echo "| **macOS** (Intel) | [**athanor-macos-intel**](${telecharger}/athanor-macos-intel) | the same, with this file |"
             echo
-            echo "Each download is the complete tool, ready to use. **Updating:** close the app (right click on its icon → *Quit* if it started with Windows) and extract the new version in the same place: your token, settings, \`logs/\` and \`tools/\` are kept."
+            echo "**Updating:** close Athanor (right click on its icon near the clock → *Quit* if it started with the computer), then open the new file: it updates Athanor's folder, your token, settings, projects, \`logs/\` and \`tools/\` are kept."
             echo
             echo "First launch: see the [Quick start](${depot}#quick-start) ([en français](${depot}/blob/main/README.fr.md#démarrage-rapide)). Checksums: \`SHA256SUMS.txt\`."
           } > release.md
@@ -93,8 +76,10 @@ jobs:
           generate_release_notes: true
           body_path: release.md
           files: |
-            dist/Athanor-${{ env.VERSION }}-Windows.zip
-            dist/Athanor-${{ env.VERSION }}-Linux.tar.gz
-            dist/Athanor-${{ env.VERSION }}-macOS-AppleSilicon.tar.gz
-            dist/Athanor-${{ env.VERSION }}-macOS-Intel.tar.gz
-            dist/SHA256SUMS.txt
+            publie/Athanor.exe
+            publie/Athanor-arm64.exe
+            publie/athanor-linux
+            publie/athanor-linux-arm64
+            publie/athanor-macos
+            publie/athanor-macos-intel
+            publie/SHA256SUMS.txt

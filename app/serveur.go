@@ -361,6 +361,8 @@ func (s *Serveur) routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/mode", s.garde(false, s.apiMode))
 	mux.HandleFunc("POST /api/mode", s.garde(false, s.apiEcrireMode))
 	mux.HandleFunc("GET /api/options", s.garde(false, s.apiOptions))
+	mux.HandleFunc("GET /api/maj", s.garde(false, s.apiMaj))
+	mux.HandleFunc("POST /api/maj/installer", s.garde(false, s.apiInstallerMaj))
 	mux.HandleFunc("POST /api/options", s.garde(false, s.apiEcrireOptions))
 	mux.HandleFunc("POST /api/bureau/{action}", s.garde(false, s.apiBureau))
 	mux.HandleFunc("GET /api/ecran", s.garde(false, s.apiEcran))

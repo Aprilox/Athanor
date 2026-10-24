@@ -16,20 +16,20 @@ var decisionFermeture atomic.Int32
 // pilotesAvantFermeture: the names of the native pilots running (set by main, asked when the window closes).
 var pilotesAvantFermeture = func() []string { return nil }
 
-// VerificationsNatives: the checks of the native Windows mode (Git Bash, the Windows programs the pilot
-// needs, Claude Code for Windows, the token, the kit's scripts).
+// VerificationsNatives: the checks of the native Windows mode (Git for Windows, the Windows programs the
+// pilot needs, Claude Code for Windows, the token, Athanor's own files).
 func VerificationsNatives() []*Verif {
 	v := func(id, titre, explication string, facultatif bool, rep Reparation) *Verif {
 		return nouvelleVerif("natif-", id, titre, explication, facultatif, rep)
 	}
 	installer := Reparation{Genre: "windows", Titre: "Installation", Args: []string{"installer-natif"}, Explication: "Opens a window that installs what is missing with winget (Git for Windows, jq, Python, Node.js, GitHub CLI) and Claude Code for Windows. Windows may ask for your consent."}
 	return []*Verif{
-		v("git_bash", "Git for Windows (Git Bash)", "In native Windows mode, the pilot and Claude's commands run in Git Bash, the shell Claude Code uses on Windows.", false, installer),
-		v("outils", "Programs the pilot needs", "git, jq and curl for Windows; Python and Node.js for the projects that use them, GitHub CLI to link a project to GitHub, uv for the MCP servers written in Python.", false, installer),
+		v("git_bash", "Git for Windows", "git, for the milestones' commits and the parallel workers; Claude Code also runs its commands in its Git Bash (without it, in PowerShell).", false, installer),
+		v("outils", "Programs the pilot needs", "git and curl for Windows; jq, Python and Node.js for the projects that use them, GitHub CLI to link a project to GitHub, uv for the MCP servers written in Python.", false, installer),
 		v("claude", "Claude Code for Windows", "The claude.exe program (%USERPROFILE%\\.local\\bin).", false, installer),
 		v("jeton", "Token and model access", "The token of your subscription (CLAUDE_CODE_OAUTH_TOKEN in .env) is accepted: a tiny Haiku session answers.", false, reparationJeton),
 		v("outils_pc", "PC software detected", "Unreal, Blender, Android SDK, Docker… found on this PC and made available to Claude.", true, Reparation{Genre: "aucune"}),
-		v("outils_kit", "Tool scripts", "The pilot scripts are consistent and keep Linux line ends (Git Bash fails on CRLF).", false, Reparation{Genre: "aucune"}),
+		v("outils_kit", "Athanor's files", "Athanor's executable passes its self-test and its texts for Claude (template/) are in place.", false, Reparation{Genre: "aucune"}),
 	}
 }
 

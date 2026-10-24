@@ -45,6 +45,23 @@ func demarrerKitDetache(k Kit, args ...string) error {
 	return nil
 }
 
+// lancerDetacheExe: a program started in a session of its own (it outlives the application: the update
+// that replaces it).
+func lancerDetacheExe(exe string, args ...string) error {
+	c := exec.Command(exe, args...)
+	c.Dir = filepath.Dir(exe)
+	c.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	if nul, err := os.OpenFile(os.DevNull, os.O_RDWR, 0); err == nil {
+		c.Stdin, c.Stdout, c.Stderr = nul, nul, nul
+		defer nul.Close()
+	}
+	if err := c.Start(); err != nil {
+		return err
+	}
+	go func() { _ = c.Wait() }()
+	return nil
+}
+
 // fenetreKit: an interactive step (sudo, a token, a GitHub sign-in) in a terminal window of the desktop:
 // Terminal on macOS, the first terminal emulator found on Linux.
 func fenetreKit(k Kit, titre string, args ...string) error {

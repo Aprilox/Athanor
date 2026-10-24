@@ -95,11 +95,6 @@ func cheminFrais() string {
 	return strings.Join(parties, ";")
 }
 
-
-
-
-
-
 var (
 	pMessageBoxW = user32.NewProc("MessageBoxW")
 )
