@@ -59,6 +59,23 @@ function listePlan(plan, compact) {
   return tete + (ouvert ? archives.map(ligne).join("") : "") + reste.map(ligne).join("");
 }
 
+// Auto-scroll of the log (follows the new lines) and of the plan (keeps the milestone being built in view):
+// one small switch each, remembered on this computer. Scrolling up in the log pauses it, back at the end resumes it.
+function lireDefilAuto() {
+  const d = { journal: true, plan: false };
+  try { Object.assign(d, JSON.parse(localStorage.getItem("athanor.defilAuto") || "{}")); } catch (e) { /* storage off */ }
+  return d;
+}
+function ecrireDefilAuto() { try { localStorage.setItem("athanor.defilAuto", JSON.stringify(etat.defilAuto)); } catch (e) { /* storage off */ } }
+// a mouse with its wheel: scrolling (not a download)
+const ICONE_DEFIL = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="4.25" y="1.75" width="7.5" height="12.5" rx="3.75" fill="none" stroke="currentColor" stroke-width="1.5"/><path class="molette" d="M8 4.6v2.3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
+function boutonDefil(quoi) {
+  const actif = etat.defilAuto[quoi];
+  const titre = quoi === "plan" ? (actif ? t("Auto-scroll on: the plan keeps the milestone being built in view. Click to turn it off.") : t("Auto-scroll off: the plan stays where you leave it. Click to follow the milestone being built."))
+    : (actif ? t("Auto-scroll on: the log follows the new lines. Click to turn it off (scrolling up pauses it too).") : t("Auto-scroll off: the log stays where you leave it. Click to follow the new lines."));
+  return `<button type="button" class="defil-auto ${actif ? "actif" : ""}" data-defil="${quoi}" title="${h(titre)}" aria-label="${h(titre)}" aria-pressed="${actif}">${ICONE_DEFIL}</button>`;
+}
+
 // ----------------------------------------------------------------------------- state
 const etat = {
   pieces: {}, // files waiting to be attached, per form
@@ -67,7 +84,7 @@ const etat = {
   page: "suivi", projet: "", vue: null, verrouille: false, langue: "en", theme: "", accent: "", assistant: -1, visite: -1, demarrage: {},
   dernierJournal: 0, evenements: [], ouverts: new Set(),
   filtres: { pilote: true, texte: true, outil: true, resultat: false, sous_agent: true, brut: false }, recherche: "",
-  tacheChoisie: null, verifChoisie: null, envSecrets: false, suiviAutoScroll: true, explorateur: "", selecteurOuvert: false, rechercheProjet: "",
+  tacheChoisie: null, verifChoisie: null, envSecrets: false, defilAuto: lireDefilAuto(), explorateur: "", selecteurOuvert: false, rechercheProjet: "",
 };
 
 // ----------------------------------------------------------------------------- api
@@ -1041,7 +1058,7 @@ pages.suivi = async () => {
       </div>
     </div>
     ${rendreQuota(v.quota, v.quota_arret)}</div>
-    <div class="bloc"><h2>${t("Project plan")}</h2>
+    <div class="bloc bloc-plan"><div class="bloc-tete"><h2>${t("Project plan")}</h2>${plan.length ? boutonDefil("plan") : ""}</div>
       ${plan.length ? `<div class="barre"><i style="width:${(faits / plan.length) * 100}%"></i></div><div class="muet petit">${t("{0} / {1} milestones done", [faits, plan.length])}</div>
       <ul class="plan">${listePlan(plan, false)}</ul>`
         : `<div class="vide">${t("No plan yet: Claude writes it during the first cycle (framing).")}</div>`}
@@ -2043,6 +2060,7 @@ pages.journal = async () => {
     <input type="text" id="jr-recherche" placeholder="${h(t("filter…"))}" value="${h(etat.recherche)}">
     <label><input type="checkbox" data-filtre="brut" ${f.brut ? "checked" : ""}> ${t("Raw (JSON)")}</label>
     <span class="muet petit" id="jr-fichier"></span>
+    ${boutonDefil("journal")}
   </div>
   <div class="journal" id="journal"></div>`;
 };
@@ -2056,13 +2074,25 @@ function rendreJournal() {
     const ok = { pilote: f.pilote, texte: f.texte, outil: f.outil, resultat: f.resultat, erreur: true, sous_agent: f.sous_agent, fin: true, quota: true, system: true }[e.genre];
     return ok && (!e.sous_agent || f.sous_agent);
   });
-  const bas = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+  const haut = el.scrollTop;
+  etat.rendJournal = true; setTimeout(() => { etat.rendJournal = false; }, 0);
   el.innerHTML = items.slice(-1500).map((e) => f.brut
     ? `<div class="ev g-${h(e.genre)}"><span class="h">${h(e.heure)}</span><span class="m"></span><span class="t">${h(e.brut)}</span></div>`
     : `<div class="ev g-${h(e.genre)} ${e.sous_agent ? "sous" : ""} ${e.detail ? "cliquable" : ""}" data-n="${e.n}"><span class="h">${h(e.heure)}</span><span class="m"></span><span class="t">${e.sous_agent ? "↳ " : ""}${h(t(e.titre))}</span></div>${etat.ouverts.has(e.n) && e.detail ? `<div class="ev-detail">${h(e.detail)}</div>` : ""}`
   ).join("");
-  if (bas || etat.suiviAutoScroll) el.scrollTop = el.scrollHeight;
+  if (etat.defilAuto.journal) el.scrollTop = el.scrollHeight;
+  else el.scrollTop = Math.min(haut, el.scrollHeight);
+  if (!el.dataset.suivi) {
+    // scrolling up pauses the auto-scroll, back at the end resumes it (the switch shows it)
+    el.dataset.suivi = "1";
+    el.addEventListener("scroll", () => {
+      if (etat.rendJournal) return;
+      const auBout = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+      if (auBout !== etat.defilAuto.journal) { etat.defilAuto.journal = auBout; ecrireDefilAuto(); majBoutonDefil("journal"); }
+    }, { passive: true });
+  }
 }
+function majBoutonDefil(quoi) { const b = document.querySelector(`[data-defil="${quoi}"]`); if (b) b.outerHTML = boutonDefil(quoi); }
 
 async function lireJournal() {
   const r = await api("journal?apres=" + etat.dernierJournal).catch(() => null);
@@ -2172,7 +2202,7 @@ function champReglage(l, modeles) {
   if (["MODEL", "FALLBACK_MODEL", "FRAMING_MODEL", "WORKER_MODEL", "CHEAP_MODEL"].includes(l.cle)) return choix(["", ...modeles], nomModele);
   if (l.cle === "SUBAGENT_MODEL") return choix(["", ...modeles, "auto"], nomModele);
   if (l.cle === "EFFORT") return choix(EFFORTS, (m) => m || t("normal"));
-  if (l.cle === "PILOT_ENGINE") return choix(["bash", "go"], (m) => t({ bash: "bash (default)", go: "Go (serial mode)" }[m]));
+  if (l.cle === "PILOT_ENGINE") return choix(["bash", "go"], (m) => t({ bash: "bash (default)", go: "Go" }[m]));
   if (l.cle === "KEEP_AWAKE") return choix(["1", "screen", "0"], (m) => t({ "1": "PC awake", screen: "PC and screen awake", "0": "no" }[m]));
   if (["RTK", "UNREAL_MCP", "CLOSE_AFTER_MILESTONE"].includes(l.cle) && (l.valeur === "0" || l.valeur === "1")) return `<label class="interrupteur m0"><input type="checkbox" id="${id}" data-cle="${h(l.cle)}" ${l.valeur === "1" ? "checked" : ""}> <span>${l.valeur === "1" ? t("enabled") : t("disabled")}</span></label>`;
   return `<input type="${l.secret && !etat.envSecrets ? "password" : "text"}" id="${id}" data-cle="${h(l.cle)}" value="${h(l.valeur)}" ${l.secret ? 'autocomplete="off"' : ""}>`;
@@ -2280,10 +2310,44 @@ async function rendrePage() {
   let html;
   try { html = await p(); } catch (e) { if (e.message === t("Locked")) return; html = `<div class="vide">${h(e.message)}</div>`; }
   if (n !== numeroRendu) return;
+  const defils = positionsDefil();
   $("#page").innerHTML = html;
+  remettreDefil(defils);
+  suivrePlan();
   if (etat.page === "journal") rendreJournal();
   if (etat.page === "sante") rendreSortie();
   if (etat.page === "nouveau") rendreExplorateur(etat.explorateur);
+}
+
+// the scroll of each list of the page, kept across a rebuild: same element = same classes, same rank
+function cleDefil(el) { return el.tagName + "." + [...el.classList].filter((c) => c !== "ouvert").sort().join("."); }
+function positionsDefil() {
+  const vus = {}, out = [];
+  for (const el of $("#page").querySelectorAll("*")) {
+    if (el.scrollHeight <= el.clientHeight && el.scrollWidth <= el.clientWidth) continue;
+    const k = cleDefil(el); vus[k] = (vus[k] || 0) + 1;
+    if (el.scrollTop || el.scrollLeft) out.push([k, vus[k], el.scrollTop, el.scrollLeft]);
+  }
+  return out;
+}
+function remettreDefil(defils) {
+  if (!defils.length) return;
+  const vus = {}, par = new Map(defils.map((d) => [d[0] + "#" + d[1], d]));
+  for (const el of $("#page").querySelectorAll("*")) {
+    if (el.scrollHeight <= el.clientHeight && el.scrollWidth <= el.clientWidth) continue;
+    const k = cleDefil(el); vus[k] = (vus[k] || 0) + 1;
+    const d = par.get(k + "#" + vus[k]); if (d) { el.scrollTop = d[2]; el.scrollLeft = d[3]; }
+  }
+}
+// auto-scroll of the plan: the milestone being built brought into view when it changes (or when switched on)
+function suivrePlan(force) {
+  const liste = $("#page .plan:not(.jalons-mini)"); if (!liste) return;
+  const li = liste.querySelector("li.en-cours");
+  const cle = li ? li.dataset.jalonCle : "";
+  if (!etat.defilAuto.plan || !li || (!force && cle === etat.planSuivi)) { if (!etat.defilAuto.plan) etat.planSuivi = ""; return; }
+  etat.planSuivi = cle;
+  const z = li.getBoundingClientRect(), c = liste.getBoundingClientRect();
+  liste.scrollTo({ top: liste.scrollTop + (z.top - c.top) - (liste.clientHeight - li.offsetHeight) / 2, behavior: force ? "smooth" : "auto" });
 }
 
 async function changerLangue(code) {
@@ -2299,6 +2363,14 @@ async function changerApparence(theme, accent) {
 
 // Milestones of the plan: a click on the line opens or closes its details; the buttons inside edit the plan.
 $("#page").addEventListener("click", async (ev) => {
+  const bd = ev.target.closest("[data-defil]");
+  if (bd) {
+    ev.stopImmediatePropagation();
+    const q = bd.dataset.defil; etat.defilAuto[q] = !etat.defilAuto[q]; ecrireDefilAuto(); majBoutonDefil(q);
+    if (q === "journal" && etat.defilAuto.journal) { const el = $("#journal"); if (el) el.scrollTop = el.scrollHeight; }
+    if (q === "plan") suivrePlan(true);
+    return;
+  }
   if (ev.target.closest("[data-stats-tous]")) { etat.ouverts.has("stats:tous") ? etat.ouverts.delete("stats:tous") : etat.ouverts.add("stats:tous"); rendrePage(); return; }
   if (ev.target.closest("[data-plan-archives]")) { etat.ouverts.has("plan:archives") ? etat.ouverts.delete("plan:archives") : etat.ouverts.add("plan:archives"); rendrePage(); return; }
   const li = ev.target.closest("li[data-jalon-cle]"), bJ = ev.target.closest("[data-jalon-action]");
@@ -2376,7 +2448,7 @@ $("#page").addEventListener("click", async (ev) => {
     if (carte && b.hasAttribute("data-descendre")) return reordonner(carte.dataset.fichier, 1);
     if (carte && b.hasAttribute("data-retirer")) { if (await confirmer(t("Remove this request from the queue?"), { ok: t("Remove"), danger: true })) { await action(api("demandes/" + encodeURIComponent(carte.dataset.fichier), "DELETE")); rendrePage(); } return; }
   }
-  if (page === "journal" && b.classList.contains("ev")) { const n = Number(b.dataset.n); etat.ouverts.has(n) ? etat.ouverts.delete(n) : etat.ouverts.add(n); etat.suiviAutoScroll = false; return rendreJournal(); }
+  if (page === "journal" && b.classList.contains("ev")) { const n = Number(b.dataset.n); etat.ouverts.has(n) ? etat.ouverts.delete(n) : etat.ouverts.add(n); if (etat.defilAuto.journal) { etat.defilAuto.journal = false; ecrireDefilAuto(); majBoutonDefil("journal"); } return rendreJournal(); }
   if (page === "sante") {
     if (b.dataset.ongletSante) { etat.ongletSante = b.dataset.ongletSante; return rendrePage(); }
     const ligne = b.closest(".verif"); const id = ligne && ligne.dataset.id;

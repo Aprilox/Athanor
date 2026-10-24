@@ -120,8 +120,9 @@ if [ "${ATHANOR_OUTILS:-}" != python ]; then
      && ( for c in relais cout quota hook reglages equipe extensions etat-taches plan solutions reglages-ouvrier pont roblox-sync detecter mcp-ouvrir reprise; do printf '%s' "$aide_go" | grep -q "^  $c " || exit 1; done ); then
     ATHANOR_GO="$candidat"
   fi
+  # an older Go pilot without its parallel workers leaves a project in parallel mode to this script
   if [ "${PILOT_ENGINE:-}" = go ] && [ -n "$ATHANOR_GO" ] && printf '%s' "$aide_go" | grep -q '^  pilote ' \
-     && ! grep -qxE 'PARALLELE?=1\r?' "$ETAT/.env" 2>/dev/null; then
+     && { printf '%s' "$aide_go" | grep -q '^  pilote .*parallel workers' || ! grep -qxE 'PARALLELE?=1\r?' "$ETAT/.env" 2>/dev/null; }; then
     exec "$ATHANOR_GO" pilote "$PROJECT"
   fi
   unset candidat aide_go
@@ -814,6 +815,7 @@ demarrer_eveil
 arreter_tout() {  # Ctrl+C, window closed or stop.sh: Claude is stopped too
   local f
   arreter_session TERM "$PRIVE/claude_sid" "$PRIVE/claude_winpid"
+  : > "$PRIVE/claude_fin"   # the live display reading the log (native Windows) ends too
   for f in "$PRIVE"/ouvrier_*.sid; do [ -f "$f" ] && arreter_session KILL "$f" "${f%.sid}.winpid"; done
   parallele_nettoyer_worktrees
   [ -n "${PONT_PID:-}" ] && kill "$PONT_PID" 2>/dev/null

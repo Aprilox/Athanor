@@ -342,7 +342,7 @@ Everything is editable in the app (*Settings*), or in `.env` ([`.env.example`](.
 | `QUOTA_WAIT_MIN` | wait when the quota reset time cannot be read |
 | `IDLE_MAX_MIN`, `CYCLE_MAX_MIN`, `CLOSE_AFTER_MILESTONE` | cycle watchdog, one milestone per cycle |
 | `KEEP_AWAKE` | the PC stays awake while a pilot runs: `1` (default; the screen too for Roblox Studio and Unreal), `screen` (the screen always), `0` (off) |
-| `PILOT_ENGINE` | `bash` (default) or `go`: the pilot in Go (serial mode; a project in parallel mode keeps the bash pilot) |
+| `PILOT_ENGINE` | `bash` (default) or `go`: the pilot in Go, parallel workers included |
 | `RTK`, `TZ` | command output compression, time zone of the logs (empty = the system's) |
 | `UE_DIR`, `BLENDER_EXE`, `ANDROID_SDK_DIR`, `ANDROID_JDK_DIR` | tool paths when auto-detection misses them (optional, absent by default) |
 
@@ -494,7 +494,7 @@ Yes. Nothing is tied to a user name or a drive letter: paths come from your prof
 Push a version tag and GitHub builds both apps and publishes the release ([`.github/workflows/release.yml`](.github/workflows/release.yml)):
 
 ```bash
-git tag v2.24.24 && git push origin v2.24.24
+git tag v2.24.25 && git push origin v2.24.25
 ```
 
 Keep the version in [`app/winres/athanor.rc`](app/winres/athanor.rc) and `versionAthanor` in [`app/commandes.go`](app/commandes.go) in step with the tag (a test checks they match), and write what is new in `docs/releases/VERSION.md` (e.g. [`docs/releases/2.24.24.md`](docs/releases/2.24.24.md)): it opens the release page.

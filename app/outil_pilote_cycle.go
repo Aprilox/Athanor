@@ -1654,7 +1654,6 @@ func (p *pilote) branchesPartielles() []string {
 }
 
 const consignesParallelePilote = `
-
 ## Parallel mode (active for this project)
 
 Workers build milestones **at the same time**, each in its own git worktree and branch ` + "`auto/<milestone>`" + `; the pilot merges each one as soon as it finishes and immediately starts the next milestone whose dependencies are met. Your job as the lead is therefore a **precise, fine-grained plan** with explicit dependencies: the better it is cut, the more work runs in parallel and the simpler the merges.
@@ -2584,8 +2583,10 @@ func lancerPilote(args []string) int {
 		p.modeleVerif = ""
 		code := 0
 		if mode == "parallele" {
-			// Step 3.3 migrates parallel workers to Go; until then, serial fallback runs if parallel.sh is not active.
-			mode = "serie"
+			code = p.cycleParallele(strings.TrimSuffix(p.fichierLog, ".jsonl"), p.modeleCycle)
+			if code == 3 {
+				mode = "serie"
+			}
 		}
 		if mode == "serie" && !cadrage {
 			var partiels []string
