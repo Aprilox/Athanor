@@ -23,6 +23,7 @@ __pycache__/
 /athanor-linux-*
 /app/Athanor.exe
 /app/athanor
+/app/embarque/
 /dist/
 # repairs made on one PC (texts replacing the kit's, see app/remplacables.go)
 /local/

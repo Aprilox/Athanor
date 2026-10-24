@@ -2,17 +2,26 @@ package main
 
 // athanor construire [--all]: builds Athanor from its Go sources (app/), for a copy of the source code
 // instead of a release: Athanor.exe and athanor (this system) into the tool folder, or with --all every
-// target into dist/. From the sources: cd app && go run . construire. Go 1.24 or later is needed.
+// target into dist/ (what a release publishes). Each executable carries the kit's files (embarque.go),
+// and Athanor.exe the Linux executable of the WSL mode. From the sources: cd app && go run . construire. Go 1.24 or later is needed.
 // The Windows icon and version info (winres/athanor.rc) are compiled into rsrc_windows_amd64.syso when a
 // resource compiler is present (llvm-windres or x86_64-w64-mingw32-windres); the committed one is used
 // otherwise.
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"runtime"
+	"sort"
+	"strings"
+	"time"
 )
 
 func init() {
@@ -72,12 +81,24 @@ func lancerConstruire(args []string) int {
 			break
 		}
 	}
+	racine := filepath.Dir(src)
+	// what the executables carry (embarque.go): the kit's files, then for Windows the Linux executable
+	emb := filepath.Join(src, "embarque")
+	if err := os.MkdirAll(emb, 0o755); err != nil {
+		fmt.Fprintln(os.Stderr, "Build failed:", err)
+		return 1
+	}
+	defer os.RemoveAll(emb) // nothing of it stays in the sources
+	if err := archiverKit(racine, filepath.Join(emb, "kit.tar.gz")); err != nil {
+		fmt.Fprintln(os.Stderr, "Build failed (the kit's files):", err)
+		return 1
+	}
 	construire := func(goos, goarch, sortie string) bool {
 		drapeaux := "-s -w"
 		if goos == "windows" {
 			drapeaux = "-s -w -H windowsgui"
 		}
-		c := exec.Command(goBin, "build", "-trimpath", "-ldflags", drapeaux, "-o", sortie, ".")
+		c := exec.Command(goBin, "build", "-trimpath", "-tags", "embarque", "-ldflags", drapeaux, "-o", sortie, ".")
 		c.Dir = src
 		c.Env = append(os.Environ(), "CGO_ENABLED=0", "GOOS="+goos, "GOARCH="+goarch)
 		c.Stdout, c.Stderr = os.Stdout, os.Stderr
@@ -88,31 +109,146 @@ func lancerConstruire(args []string) int {
 		fmt.Println(sortie + " ready")
 		return true
 	}
-	racine := filepath.Dir(src)
+	// Windows: its Linux twin of the same processor first, carried compressed
+	windows := func(goarch, linux, sortie string) bool {
+		if !construire("linux", goarch, linux) {
+			return false
+		}
+		if err := gzipFichier(linux, filepath.Join(emb, "athanor-linux.gz")); err != nil {
+			fmt.Fprintln(os.Stderr, "Build failed:", err)
+			return false
+		}
+		return construire("windows", goarch, sortie)
+	}
 	if len(args) > 0 && args[0] == "--all" {
 		dist := filepath.Join(racine, "dist")
 		_ = os.MkdirAll(dist, 0o755)
-		for _, c := range [][2]string{{"windows", "amd64"}, {"windows", "arm64"}, {"linux", "amd64"}, {"linux", "arm64"}, {"darwin", "amd64"}, {"darwin", "arm64"}} {
-			nom := "athanor-" + c[0] + "-" + c[1]
-			if c[0] == "windows" {
-				nom = "Athanor-" + c[1] + ".exe"
+		for _, a := range []string{"amd64", "arm64"} {
+			if !windows(a, filepath.Join(dist, "athanor-linux-"+a), filepath.Join(dist, "Athanor-"+a+".exe")) {
+				return 1
 			}
-			if !construire(c[0], c[1], filepath.Join(dist, nom)) {
+		}
+		for _, a := range []string{"amd64", "arm64"} {
+			if !construire("darwin", a, filepath.Join(dist, "athanor-darwin-"+a)) {
 				return 1
 			}
 		}
 		return 0
 	}
-	if !construire("windows", "amd64", filepath.Join(racine, "Athanor.exe")) {
+	// Athanor.exe, and this system's executable (on Windows, the Linux one of the WSL mode)
+	linux := filepath.Join(racine, "athanor")
+	if runtime.GOOS != "windows" && (runtime.GOOS != "linux" || runtime.GOARCH != "amd64") {
+		linux = filepath.Join(emb, "athanor-linux-amd64")
+	}
+	if !windows("amd64", linux, filepath.Join(racine, "Athanor.exe")) {
 		return 1
 	}
-	// its Linux twin on Windows (the pilots of the WSL mode), this system's otherwise
-	goos, goarch := runtime.GOOS, runtime.GOARCH
-	if goos == "windows" {
-		goos, goarch = "linux", "amd64"
-	}
-	if !construire(goos, goarch, filepath.Join(racine, "athanor")) {
+	if linux != filepath.Join(racine, "athanor") && !construire(runtime.GOOS, runtime.GOARCH, filepath.Join(racine, "athanor")) {
 		return 1
 	}
 	return 0
+}
+
+// archiverKit: the tar.gz of what a kit folder needs besides the executable: template/, env.example (the
+// tool's .env.example), LICENSE and the Go sources of app/ (not the executables, nor embarque/). Fixed
+// dates and order: the same sources always give the same archive.
+func archiverKit(racine, sortie string) error {
+	var noms []string
+	ajouter := func(base, prefixe string, garder func(rel string, d fs.DirEntry) bool) error {
+		return filepath.WalkDir(base, func(p string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			rel, _ := filepath.Rel(base, p)
+			rel = filepath.ToSlash(rel)
+			if rel == "." {
+				return nil
+			}
+			if !garder(rel, d) {
+				if d.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			if d.Type().IsRegular() {
+				noms = append(noms, prefixe+rel)
+			}
+			return nil
+		})
+	}
+	tout := func(string, fs.DirEntry) bool { return true }
+	if err := ajouter(filepath.Join(racine, "template"), "template/", tout); err != nil {
+		return err
+	}
+	if err := ajouter(filepath.Join(racine, "app"), "app/", func(rel string, d fs.DirEntry) bool {
+		haut := strings.SplitN(rel, "/", 2)[0]
+		if haut == "embarque" || strings.HasPrefix(path.Base(rel), ".") {
+			return false
+		}
+		if !d.IsDir() && !strings.Contains(rel, "/") && (rel == "athanor" || strings.HasSuffix(strings.ToLower(rel), ".exe")) {
+			return false
+		}
+		return true
+	}); err != nil {
+		return err
+	}
+	sort.Strings(noms)
+	source := func(nom string) string {
+		if nom == "env.example" {
+			return filepath.Join(racine, ".env.example")
+		}
+		return filepath.Join(racine, filepath.FromSlash(nom))
+	}
+	noms = append([]string{"env.example", "LICENSE"}, noms...)
+	f, err := os.Create(sortie)
+	if err != nil {
+		return err
+	}
+	z := gzip.NewWriter(f)
+	t := tar.NewWriter(z)
+	date := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	for _, nom := range noms {
+		b, err := os.ReadFile(source(nom))
+		if err != nil {
+			f.Close()
+			return err
+		}
+		mode := int64(0o644)
+		if st, err := os.Stat(source(nom)); err == nil && st.Mode()&0o111 != 0 {
+			mode = 0o755
+		}
+		if err := t.WriteHeader(&tar.Header{Name: nom, Mode: mode, Size: int64(len(b)), ModTime: date, Typeflag: tar.TypeReg, Format: tar.FormatPAX}); err != nil {
+			f.Close()
+			return err
+		}
+		if _, err := t.Write(b); err != nil {
+			f.Close()
+			return err
+		}
+	}
+	err = t.Close()
+	if e := z.Close(); err == nil {
+		err = e
+	}
+	if e := f.Close(); err == nil {
+		err = e
+	}
+	return err
+}
+
+// gzipFichier: src compressed into dest.
+func gzipFichier(src, dest string) error {
+	b, err := os.ReadFile(src)
+	if err != nil {
+		return err
+	}
+	var buf bytes.Buffer
+	z, _ := gzip.NewWriterLevel(&buf, gzip.BestCompression)
+	if _, err := z.Write(b); err != nil {
+		return err
+	}
+	if err := z.Close(); err != nil {
+		return err
+	}
+	return os.WriteFile(dest, buf.Bytes(), 0o644)
 }

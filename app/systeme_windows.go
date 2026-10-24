@@ -34,10 +34,6 @@ func cacherFenetre(c *exec.Cmd) {
 	c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: createNoWindow}
 }
 
-
-
-
-
 // demarrerFenetre opens a visible console of its own (CreateProcess, CREATE_NEW_CONSOLE), without
 // handing it any of the application's standard handles: started through "cmd /c start" from the
 // application (which has no console), the window received an empty input, so every question, and
@@ -64,7 +60,6 @@ func demarrerFenetre(titre string, args ...string) error {
 	syscall.CloseHandle(pi.Process)
 	return nil
 }
-
 
 // Ouvrir shows a folder in Explorer, or opens a file with its associated program.
 func Ouvrir(chemin string) error {

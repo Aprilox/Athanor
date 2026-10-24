@@ -25,11 +25,13 @@ type Config struct {
 	Theme                     string   `json:"theme"`  // interface palette (see themesConnus)
 	Accent                    string   `json:"accent"` // interface accent color (see accentsConnus)
 	BienvenueVue              bool     `json:"bienvenue_vue"`
-	// native Windows mode: the scripts run in Git Bash and Claude Code is the Windows program, without
+	// native Windows mode: the pilot is Athanor.exe and Claude Code the Windows program, without
 	// WSL nor sandbox (natif_windows.go)
 	ModeNatif bool `json:"mode_natif"`
 	// Windows' own title bar instead of Athanor's (cadre_windows.go), from the next start
 	BarreWindows bool `json:"barre_windows,omitempty"`
+	// no look for a new version of Athanor when it opens (maj.go; on by default)
+	PasVerifierMaj bool `json:"pas_verifier_maj,omitempty"`
 	// end of a pilot already announced to the user (project folder → STATE.json "maj" of that end)
 	FinsVues map[string]string `json:"fins_vues,omitempty"`
 }

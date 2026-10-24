@@ -12,7 +12,11 @@ import (
 // Every check of each system's list has its work in athanor sante, and every automatic repair names a
 // sub-command that exists (fork A's Windows ones excepted when they are not built yet).
 func TestSanteListesCompletes(t *testing.T) {
-	for goos, liste := range map[string][]*Verif{"linux": Verifications(), "windows": VerificationsNatives(), "darwin": VerificationsMac()} {
+	for _, x := range []struct {
+		goos  string
+		liste []*Verif
+	}{{"linux", Verifications()}, {"linux", VerificationsLinux()}, {"windows", VerificationsNatives()}, {"darwin", VerificationsMac()}} {
+		goos, liste := x.goos, x.liste
 		for _, v := range liste {
 			if len(v.Args) != 2 || v.Args[0] != "sante" || v.Args[1] != v.ID {
 				t.Fatalf("%s %s: args %q", goos, v.ID, v.Args)

@@ -101,6 +101,7 @@ type EtatVue struct {
 	Systeme     string                `json:"systeme"` // runtime.GOOS: windows, linux, darwin (the Setup page's tabs)
 	Quota       *EtatQuota            `json:"quota,omitempty"`
 	QuotaArret  map[string]RegleQuota `json:"quota_arret"`
+	Maj         *EtatMaj              `json:"maj,omitempty"` // updates of Athanor (maj.go)
 }
 
 func (s *Serveur) apiEtat(w http.ResponseWriter, r *http.Request) {
@@ -144,6 +145,8 @@ func (s *Serveur) apiEtat(w http.ResponseWriter, r *http.Request) {
 	s.mu.Unlock()
 	vue.Quota = quotaActuel(tous)
 	vue.QuotaArret = lireReglesQuota(kit)
+	m := etatMajCourant(kit)
+	vue.Maj = &m
 	if ok {
 		for i := range vue.Projets {
 			if vue.Projets[i].Nom == p.Nom {
@@ -524,8 +527,6 @@ func (s *Serveur) apiDossiers(w http.ResponseWriter, r *http.Request) {
 	s.ecrireJSON(w, map[string]any{"chemin": chemin, "parent": parent, "dossiers": dossiers, "racines": racines})
 }
 
-
-
 // demarrerPilote starts a project's pilot. On Windows, WSL stops the distribution a few seconds after
 // the last wsl.exe ends, which would kill a backgrounded pilot: the pilot therefore runs in the
 // foreground of a hidden, detached wsl.exe that survives the application being closed.
@@ -539,6 +540,7 @@ func (s *Serveur) demarrerPilote(p Projet) (string, error) {
 	if p.PiloteActif() {
 		return "The pilot is already running on this project.", nil // message key
 	}
+	finirMiseAJour(s.kitCourant().Racine) // what an update left while pilots ran (embarque.go)
 	if err := demarrerKitDetache(s.kitCourant(), "demarrer", optionFond(), p.Dossier); err != nil {
 		return "", err
 	}
@@ -554,9 +556,6 @@ func (s *Serveur) arreterPiloteProjet(p Projet) (string, error) {
 func (s *Serveur) arreterApresCycle(p Projet) (string, error) {
 	return executerKitArgs(s.kitCourant(), time.Minute, "arreter", "--apres-cycle", p.Dossier)
 }
-
-
-
 
 // ----------------------------------------------------------------------------- working mode of the project
 

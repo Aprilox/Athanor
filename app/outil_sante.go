@@ -168,7 +168,7 @@ func verifSante(goos, id string) func(kit string) int {
 	case "darwin":
 		propres = map[string]func(string) int{"macos": santeMacOS, "internet": santeInternetMac, "paquets": santePaquetsMac, "barriere": santeBarriereMac, "claude": santeClaude}
 	default:
-		propres = map[string]func(string) int{"wsl": santeWSL, "internet": santeInternet, "paquets": santePaquets, "barriere": santeBarriere,
+		propres = map[string]func(string) int{"wsl": santeWSL, "linux": santeLinux, "internet": santeInternet, "paquets": santePaquets, "barriere": santeBarriere,
 			"claude": santeClaude, "rtk": santeRTK, "docker": santeDocker, "admin": santeAdmin}
 	}
 	if f := propres[id]; f != nil {
@@ -178,6 +178,22 @@ func verifSante(goos, id string) func(kit string) int {
 }
 
 // ---------------------------------------------------------------------------- the checks
+
+// santeLinux: the distribution and its kernel (the Linux app).
+func santeLinux(string) int {
+	noyau, _ := sortieDe(10*time.Second, "uname", "-r")
+	nom := "Linux"
+	if b, err := os.ReadFile("/etc/os-release"); err == nil {
+		for _, l := range strings.Split(string(b), "\n") {
+			if v, ok := strings.CutPrefix(l, "PRETTY_NAME="); ok {
+				nom = strings.Trim(v, `"'`)
+				break
+			}
+		}
+	}
+	direSante("%s, kernel %s", nom, strings.TrimSpace(noyau))
+	return 0
+}
 
 func santeWSL(string) int {
 	noyau, _ := sortieDe(10*time.Second, "uname", "-r")
@@ -372,7 +388,7 @@ func santeOutilsKit(kit string) int {
 		return 1
 	}
 	if st, err := os.Stat(filepath.Join(kit, "template", "CLAUDE.md")); err != nil || !st.Mode().IsRegular() {
-		direSante("ERROR: template/CLAUDE.md is missing (download the kit again)")
+		direSante("ERROR: template/CLAUDE.md is missing (open Athanor again: it puts its files back)")
 		return 1
 	}
 	direSante("kit OK")
@@ -451,8 +467,8 @@ func jqWindows(kit string) string {
 	return ""
 }
 
-// santeOutilsNatifs: the Windows programs the pilot needs, with their version (python, node, gh and uv
-// are optional). A program counts when it is found and answers --version.
+// santeOutilsNatifs: the Windows programs the pilot needs, with their version (jq, python, node, gh and uv
+// are optional: Athanor itself no longer uses jq). A program counts when it is found and answers --version.
 func santeOutilsNatifs(kit string) int {
 	m := 0
 	for _, p := range []string{"git", "jq", "curl", "python", "node", "gh", "uv"} {
@@ -470,7 +486,7 @@ func santeOutilsNatifs(kit string) int {
 			continue
 		}
 		switch p {
-		case "python", "node", "gh", "uv":
+		case "jq", "python", "node", "gh", "uv":
 			direSante("MISSING %s (optional)", p)
 		default:
 			direSante("MISSING %s", p)

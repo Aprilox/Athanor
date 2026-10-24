@@ -5,10 +5,10 @@ package main
 // (extensions/), the repairs made on this PC (local/) — and the copies it runs: its own executable, the
 // Linux one of the WSL mode, the texts for Claude (template/), its sources (app/, for "Rebuild Athanor").
 //
-// Since 2.25 the executable is a single file that can be anywhere, and creates nothing next to itself: its
+// Since 2.26 the executable is a single file that can be anywhere, and creates nothing next to itself: its
 // folder is the user's data folder (%LOCALAPPDATA%\Athanor, ~/.local/share/athanor, ~/Library/Application
-// Support/Athanor), created only once the user accepted (premierLancement). Started from there, the copy
-// of that folder runs (the downloaded file only installs or updates it).
+// Support/Athanor), created only once the user accepted (premierLancement). The copy of that folder runs
+// (the downloaded file only installs or updates it: embarque.go).
 //
 // An older installation (a kit folder with its athanor-config*.json next to the executable) keeps its
 // folder as it is: nothing moves.
@@ -112,9 +112,9 @@ func versionPlusRecente(a, b string) bool {
 // texteConsentement: what the first launch says before anything is written (English or French).
 func texteConsentement(d string) (titre, texte string) {
 	if langueSysteme() == "fr" {
-		return "Athanor — premier lancement", fmt.Sprintf("Athanor range ses réglages, ses journaux et les outils qu'il installe dans un dossier à lui :\n\n    %s\n\nIl n'écrit rien ailleurs sur cet ordinateur, à part le dossier .athanor de chacun de vos projets (et les programmes que vous lui demandez d'installer).\n\nCréer ce dossier maintenant ?\n\nNon : Athanor se ferme sans rien écrire.", d)
+		return "Athanor — premier lancement", fmt.Sprintf("Athanor range tout ce qu'il garde (sa copie, ses réglages, ses journaux, les outils qu'il installe) dans un dossier à lui :\n\n    %s\n\nAilleurs, il n'écrit que le dossier .athanor de chacun de vos projets, et ce que vous lui demandez (programmes à installer, démarrage avec l'ordinateur).\n\nLe fichier téléchargé peut rester où vous voulez : il ouvre Athanor.\n\nCréer ce dossier maintenant ?\n\nNon : Athanor se ferme sans rien écrire.", d)
 	}
-	return "Athanor — first launch", fmt.Sprintf("Athanor keeps its settings, its logs and the tools it installs in a folder of its own:\n\n    %s\n\nIt writes nothing else on this computer, apart from the .athanor folder of each of your projects (and the programs you ask it to install).\n\nCreate this folder now?\n\nNo: Athanor closes without writing anything.", d)
+	return "Athanor — first launch", fmt.Sprintf("Athanor keeps everything of its own (its copy, its settings, its logs, the tools it installs) in a folder of its own:\n\n    %s\n\nElsewhere it only writes the .athanor folder of each of your projects, and what you ask for (programs to install, starting with the computer).\n\nThe downloaded file can stay wherever you like: it opens Athanor.\n\nCreate this folder now?\n\nNo: Athanor closes without writing anything.", d)
 }
 
 // langueSysteme: "fr" when the system speaks French, else "en".

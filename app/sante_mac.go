@@ -7,10 +7,13 @@ import "runtime"
 
 // verificationsSysteme: the checks of this system's mode (native Windows has its own list, natif.go).
 func verificationsSysteme() []*Verif {
-	if runtime.GOOS == "darwin" {
+	switch runtime.GOOS {
+	case "darwin":
 		return VerificationsMac()
+	case "linux":
+		return VerificationsLinux() // the Linux app: the pilot runs here, never in WSL
 	}
-	return Verifications()
+	return Verifications() // Windows: the WSL mode (native Windows has its own list, natif.go)
 }
 
 func VerificationsMac() []*Verif {
@@ -26,6 +29,6 @@ func VerificationsMac() []*Verif {
 		v("claude", "Claude Code", "The claude program (~/.local/bin).", false, reparationKit("claude")),
 		v("jeton", "Token and model access", "The token of your subscription (CLAUDE_CODE_OAUTH_TOKEN in .env) is accepted: a tiny Haiku session answers.", false, reparationJeton),
 		v("outils_pc", "PC software detected", "Unreal, Blender, Roblox Studio, Xcode, the Android SDK… found on this Mac and made available to Claude.", true, Reparation{Genre: "aucune"}),
-		v("outils_kit", "Tool scripts", "The pilot scripts are consistent and keep Linux line ends (Git Bash fails on CRLF).", false, reparationKit("outils_kit")),
+		v("outils_kit", "Athanor's files", "Athanor's executable passes its self-test and its texts for Claude (template/) are in place.", false, reparationKit("outils_kit")),
 	}
 }

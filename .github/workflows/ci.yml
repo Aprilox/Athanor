@@ -59,6 +59,35 @@ jobs:
             fi
           fi
           exit "$code"
+      - name: Single executable
+        shell: bash
+        # the downloaded file alone: nothing written before the consent, then Athanor's folder installed
+        # in the user's data folder (app/embarque.go), nothing next to the file
+        run: |
+          set -e
+          go run . construire
+          d="$RUNNER_TEMP/telecharge"; mkdir -p "$d"
+          case "$RUNNER_OS" in
+            Windows) exe=Athanor.exe; donnees="$RUNNER_TEMP/donnees"; kit="$donnees/Athanor"; lancer() { LOCALAPPDATA="$(cygpath -w "$donnees")" "$@"; } ;;
+            Linux) exe=athanor; donnees="$RUNNER_TEMP/donnees"; kit="$donnees/athanor"; lancer() { XDG_DATA_HOME="$donnees" "$@"; } ;;
+            macOS) exe=athanor; donnees="$RUNNER_TEMP/maison"; kit="$donnees/Library/Application Support/Athanor"; lancer() { HOME="$donnees" "$@"; } ;;
+          esac
+          cp "../$exe" "$d/"
+          cd "$d"
+          v="$(./$exe version | tr -d '\r')"
+          if [ "$RUNNER_OS" != Windows ]; then
+            # no one to answer: refused, nothing written (Windows would show its dialog)
+            if lancer "./$exe" autotest < /dev/null; then echo "::error::launched without consent"; exit 1; fi
+            if [ -e "$kit" ]; then echo "::error::written before the consent"; exit 1; fi
+          fi
+          lancer "./$exe" --oui autotest
+          test -f "$kit/template/CLAUDE.md" && test -f "$kit/.env.example" && test -f "$kit/LICENSE"
+          [ "$(tr -d '\r' < "$kit/system/version.txt")" = "$v" ] || { echo "::error::version.txt"; exit 1; }
+          if [ "$RUNNER_OS" = Windows ]; then test -f "$kit/Athanor.exe" && test -f "$kit/athanor"; else test -x "$kit/athanor"; fi
+          [ "$(ls -A "$d")" = "$exe" ] || { echo "::error::files written next to the downloaded executable: $(ls -A "$d")"; exit 1; }
+          # a second launch changes nothing and runs the kit's copy
+          lancer "./$exe" autotest
+          echo "single executable OK ($v): $(ls -A "$kit" | tr '\n' ' ')"
 
   targets:
     runs-on: ubuntu-latest

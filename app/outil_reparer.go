@@ -740,6 +740,10 @@ func lancerReparer(args []string) int {
 	}
 	kit = abspathOS(kit)
 	journal := func(s string) { fmt.Println(s) }
+	if err := extraireSources(kit); err != nil { // app/ written only when a repair needs it (embarque.go)
+		fmt.Println("FAILED: the sources cannot be written into " + filepath.Join(kit, "app") + ": " + err.Error())
+		return 1
+	}
 	var err error
 	switch action {
 	case "--diff":

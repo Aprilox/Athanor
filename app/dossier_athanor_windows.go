@@ -29,6 +29,14 @@ func demanderConsentement(titre, texte string) bool {
 	return r == idYes
 }
 
+// informer: a Windows message (OK), before any window of the application.
+func informer(titre, texte string) {
+	t, _ := syscall.UTF16PtrFromString(titre)
+	m, _ := syscall.UTF16PtrFromString(texte)
+	const mbOK, mbIconInformation, mbTopmost, mbSetForeground = 0x0, 0x40, 0x40000, 0x10000
+	_, _, _ = pMessageBoxW.Call(0, uintptr(unsafe.Pointer(m)), uintptr(unsafe.Pointer(t)), mbOK|mbIconInformation|mbTopmost|mbSetForeground)
+}
+
 // dossierDonneesApp: %LocalAppData%\Athanor (the window's WebView2 data is there too).
 func dossierDonneesApp() string {
 	if d := os.Getenv("LocalAppData"); d != "" {

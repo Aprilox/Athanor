@@ -95,7 +95,6 @@ func TrouverTache(id string) *Tache {
 	return taches.m[id]
 }
 
-
 // Lancer runs the command and fills the task as it goes; fin() is called at the end.
 func (t *Tache) Lancer(c *exec.Cmd, fin func(ok bool)) {
 	t.mu.Lock()

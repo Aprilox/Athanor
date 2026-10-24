@@ -17,10 +17,6 @@ import (
 
 func cacherFenetre(c *exec.Cmd) {}
 
-
-
-
-
 func Ouvrir(chemin string) error {
 	if runtime.GOOS == "darwin" {
 		return commande("open", chemin).Start()
