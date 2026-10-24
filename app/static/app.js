@@ -185,24 +185,80 @@ function bulleAvancement() {
   if (!b) { b = document.createElement("div"); b.id = "av-bulle"; b.className = "av-bulle"; document.body.appendChild(b); }
   return b;
 }
+// the milestone points under the pointer (16 px around it), nearest first: points close together on the
+// time axis stay reachable (a click on several opens a list of them)
+const RAYON_AV = 16;
+function pointsAvancement(e) {
+  const svg = e.target.closest && e.target.closest("svg.avancement");
+  const infos = etat.avInfos || [];
+  if (!svg || !infos.length || !svg.getScreenCTM) return [];
+  const m = svg.getScreenCTM();
+  if (!m) return [];
+  const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
+  const q = pt.matrixTransform(m.inverse()), k = Math.abs(m.a || 1);
+  return infos.map((p, i) => [i, Math.hypot(p.cx - q.x, p.cy - q.y) * k]).filter(([, d]) => d <= RAYON_AV).sort((a, b) => a[1] - b[1]).map(([i]) => i);
+}
+function pointAvancement(e) { const l = pointsAvancement(e); return l.length ? l[0] : -1; }
+function fermerListeAvancement() { const l = $("#av-liste"); if (l) l.remove(); }
+function listeAvancement(indices, e) {
+  fermerListeAvancement();
+  const infos = etat.avInfos || [];
+  const d = document.createElement("div");
+  d.id = "av-liste"; d.className = "av-liste";
+  d.innerHTML = `<div class="muet petit">${h(t("{0} milestones here", [indices.length]))}</div>` + indices.slice().sort((a, b) => a - b)
+    .map((i) => `<button type="button" data-av-liste="${i}"><b>${md(infos[i].titre)}</b> <span class="muet petit">${h(infos[i].quand)}</span></button>`).join("");
+  document.body.appendChild(d);
+  const l = d.offsetWidth, hl = d.offsetHeight;
+  d.style.left = Math.max(8, Math.min(window.innerWidth - l - 8, e.clientX - l / 2)) + "px";
+  d.style.top = (e.clientY + hl + 20 < window.innerHeight ? e.clientY + 14 : Math.max(8, e.clientY - hl - 14)) + "px";
+}
+function marquerSurvol(i) {
+  document.querySelectorAll("svg.avancement .av-point").forEach((c) => c.classList.toggle("survol", Number(c.dataset.av) === i));
+  const svg = $("svg.avancement"); if (svg) svg.style.cursor = i >= 0 ? "pointer" : "";
+}
 document.addEventListener("mousemove", (e) => {
-  const z = e.target.closest && e.target.closest(".av-zone");
-  const p = z && (etat.avInfos || [])[Number(z.dataset.av)];
+  const sous = pointsAvancement(e), i = sous.length ? sous[0] : -1;
+  const p = i >= 0 ? (etat.avInfos || [])[i] : null;
   const b = $("#av-bulle");
-  if (!p) { if (b) b.style.display = "none"; return; }
+  if ($("svg.avancement")) marquerSurvol(i);
+  if (!p || $("#av-liste")) { if (b) b.style.display = "none"; return; }
   const bulle = bulleAvancement();
-  bulle.innerHTML = `<b>${md(p.titre)}</b><div class="muet petit">${h(p.quand)} · ${p.cout.toFixed(2)} $</div>`;
+  bulle.innerHTML = sous.length > 1 ? `<b>${h(t("{0} milestones here", [sous.length]))}</b><div class="muet petit">${h(t("Click to choose one"))}</div>`
+    : `<b>${md(p.titre)}</b><div class="muet petit">${h(p.quand)} · ${p.cout.toFixed(2)} $</div>`;
   bulle.style.display = "block";
   const l = bulle.offsetWidth, hb = bulle.offsetHeight;
   bulle.style.left = Math.max(8, Math.min(window.innerWidth - l - 8, e.clientX - l / 2)) + "px";
   bulle.style.top = Math.max(8, e.clientY - hb - 14) + "px";
 });
 document.addEventListener("click", (e) => {
-  const z = e.target.closest(".av-zone"), f = e.target.closest("[data-av-fermer]");
-  if (!z && !f) return;
-  const p = z && (etat.avInfos || [])[Number(z.dataset.av)];
-  etat.avChoix = f || !p || etat.avChoix === p.cle ? null : p.cle;
+  const f = e.target.closest("[data-av-fermer]"), pas = e.target.closest("[data-av-pas]"), dansListe = e.target.closest("[data-av-liste]");
+  if (!dansListe && !e.target.closest("#av-liste")) fermerListeAvancement();
+  const sous = f || pas || dansListe ? [] : pointsAvancement(e);
+  if (sous.length > 1) { const b = $("#av-bulle"); if (b) b.style.display = "none"; listeAvancement(sous, e); return; }
+  const i = dansListe ? Number(dansListe.dataset.avListe) : sous.length ? sous[0] : -1;
+  if (!f && !pas && i < 0) return;
+  fermerListeAvancement();
+  const infos = etat.avInfos || [];
+  if (dansListe) etat.avChoix = infos[i] ? infos[i].cle : null;
+  else if (pas) {
+    // previous or next milestone: the way through points too close together to aim at
+    const j = infos.findIndex((p) => p.cle === etat.avChoix) + Number(pas.dataset.avPas);
+    if (j < 0 || j >= infos.length) return;
+    etat.avChoix = infos[j].cle;
+  } else if (!dansListe) {
+    const p = infos[i];
+    etat.avChoix = f || !p || etat.avChoix === p.cle ? null : p.cle;
+  }
   const b = $("#av-bulle"); if (b) b.style.display = "none";
+  rendrePage();
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && $("#av-liste")) { fermerListeAvancement(); return; }
+  if (!etat.avChoix || !["ArrowLeft", "ArrowRight", "Escape"].includes(e.key) || e.target.closest("input, textarea, select, [contenteditable]")) return;
+  const infos = etat.avInfos || [];
+  const j = e.key === "Escape" ? -2 : infos.findIndex((p) => p.cle === etat.avChoix) + (e.key === "ArrowLeft" ? -1 : 1);
+  if (j === -2) etat.avChoix = null; else if (j >= 0 && j < infos.length) etat.avChoix = infos[j].cle; else return;
+  e.preventDefault();
   rendrePage();
 });
 
@@ -925,11 +981,17 @@ function rendreAvancement(stats, plan, faits, actif) {
       cycles: tranche.map((r) => r.cycle), minutes: tranche.reduce((a, r) => a + (Number(r.minutes) || 0), 0),
       cout: tranche.reduce((a, r) => a + (Number(r.cout_usd) || 0), 0), quand: etiquette(s.fin) });
   });
+  infos.forEach((p) => { p.cx = x(p.s.fin); p.cy = y(p.s.faits); });
   etat.avInfos = infos;
   const choisi = infos.find((p) => p.cle === etat.avChoix);
-  const pts = infos.map((p, i) => `<circle class="av-point${p === choisi ? " actif" : ""}" cx="${x(p.s.fin).toFixed(1)}" cy="${y(p.s.faits).toFixed(1)}" r="${p === choisi ? 5 : 3.5}"/><circle class="av-zone" data-av="${i}" cx="${x(p.s.fin).toFixed(1)}" cy="${y(p.s.faits).toFixed(1)}" r="10"/>`).join("");
+  const rang = infos.indexOf(choisi);
+  // the chosen point drawn last: never hidden under its neighbours
+  const pts = infos.map((p, i) => [p, i]).sort((a, b) => (a[0] === choisi) - (b[0] === choisi)).map(([p, i]) => `<circle class="av-point${p === choisi ? " actif" : ""}" data-av="${i}" cx="${p.cx.toFixed(1)}" cy="${p.cy.toFixed(1)}" r="${p === choisi ? 5 : 3.5}"/>`).join("");
   const duree = (m) => m >= 90 ? t("{0} h {1} min", [Math.floor(m / 60), Math.round(m % 60)]) : t("{0} min", [Math.round(m)]);
-  const detail = choisi ? `<div class="av-detail"><div class="ligne m0"><b class="croit">${md(choisi.titre)}</b><button class="btn btn-petit" data-av-fermer title="${h(t("Close"))}">✕</button></div>
+  const detail = choisi ? `<div class="av-detail"><div class="ligne m0"><b class="croit">${md(choisi.titre)}</b>
+      <span class="muet petit">${rang + 1} / ${infos.length}</span>
+      <button class="btn btn-petit" data-av-pas="-1" ${rang <= 0 ? "disabled" : ""} title="${h(t("Previous milestone (←)"))}">‹</button><button class="btn btn-petit" data-av-pas="1" ${rang >= infos.length - 1 ? "disabled" : ""} title="${h(t("Next milestone (→)"))}">›</button>
+      <button class="btn btn-petit" data-av-fermer title="${h(t("Close"))}">✕</button></div>
       ${choisi.detail ? `<div class="muet petit mt-1">${md(choisi.detail)}</div>` : ""}
       <dl class="fiche mt-2"><dt>${t("Finished")}</dt><dd>${h(choisi.quand)} · ${h(t("{0} / {1} milestones done", [choisi.s.faits, total]))}</dd>
       <dt>${t("Cycles")}</dt><dd>${h(choisi.cycles.join(", "))}</dd>
@@ -937,7 +999,7 @@ function rendreAvancement(stats, plan, faits, actif) {
       <dt>${t("Cost")}</dt><dd>${choisi.cout.toFixed(2)} $</dd>
       ${choisi.s.commit ? `<dt>${t("Commit")}</dt><dd><code>${h(choisi.s.commit)}</code></dd>` : ""}
       ${choisi.s.template ? `<dt>${t("Model")}</dt><dd>${h(choisi.s.template)}</dd>` : ""}</dl></div>`
-    : infos.length ? `<p class="muet petit mt-1">${t("Click a point to see its milestone.")}</p>` : "";
+    : infos.length ? `<p class="muet petit mt-1">${t("Click a point to see its milestone; then ‹ › (or the arrow keys) go from one milestone to the next.")}</p>` : "";
   const resume = reste <= 0 ? t("Every milestone of the plan is done.")
     : eta ? t("At this pace, the last milestone around {0}: about {1} h of work and ≈ {2} $ more at list price.", [quandLisible(eta / 1000), heuresReste.toLocaleString(lang, { maximumFractionDigits: heuresReste < 10 ? 1 : 0 }), Math.round(coutReste)])
     : t("The estimate appears after two milestones.");

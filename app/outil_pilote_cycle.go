@@ -34,6 +34,8 @@ func courtPilote(v any, n int) string {
 		s = x
 	case nil:
 		s = "null"
+	case json.RawMessage:
+		s = string(x)
 	default:
 		b, err := json.Marshal(x)
 		if err != nil {
@@ -73,10 +75,26 @@ func lignesEnDirectPilote(ligne string) []string {
 		if msg == nil {
 			return nil
 		}
-		for _, raw := range liste(msg["content"]) {
+		// the inputs as Claude wrote them (jq's tostring keeps the keys in their order; a Go map sorts them)
+		var bruts struct {
+			Message struct {
+				Content []struct {
+					Input json.RawMessage `json:"input"`
+				} `json:"content"`
+			} `json:"message"`
+		}
+		_ = json.Unmarshal([]byte(ligne), &bruts)
+		for k, raw := range liste(msg["content"]) {
 			c := dict(raw)
 			if c == nil {
 				continue
+			}
+			var entreeBrute any = c["input"]
+			if k < len(bruts.Message.Content) && len(bruts.Message.Content[k].Input) > 0 {
+				var b bytes.Buffer
+				if json.Compact(&b, bruts.Message.Content[k].Input) == nil && b.Len() > 0 && b.Bytes()[0] == '{' {
+					entreeBrute = json.RawMessage(b.Bytes())
+				}
 			}
 			switch c["type"] {
 			case "text":
@@ -118,7 +136,7 @@ func lignesEnDirectPilote(ligne string) []string {
 					}
 					out = append(out, pref+"👥 Sub-agent "+st+": "+courtPilote(desc, 120))
 				default:
-					out = append(out, pref+"• "+nom+" "+courtPilote(c["input"], 120))
+					out = append(out, pref+"• "+nom+" "+courtPilote(entreeBrute, 120))
 				}
 			}
 		}

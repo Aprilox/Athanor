@@ -279,8 +279,7 @@ details[open] summary { margin-bottom: 10px; }
 .av-ligne { fill: none; stroke: var(--accent); stroke-width: 2.2; stroke-linejoin: round; }
 .av-point { fill: var(--accent); stroke: var(--panel); stroke-width: 1.5; }
 .av-point.actif { stroke: var(--accent); stroke-width: 3; stroke-opacity: .35; }
-.av-zone { fill: transparent; cursor: pointer; }
-.av-zone:hover { fill: var(--accent); fill-opacity: .12; }
+.av-point.survol { stroke: var(--accent); stroke-width: 6; stroke-opacity: .3; }
 .av-detail { margin-top: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
 .av-bulle { position: fixed; z-index: 50; display: none; max-width: 360px; padding: 6px 10px; border-radius: 6px; pointer-events: none;
   background: var(--panel-2); color: var(--ink); border: 1px solid var(--line); box-shadow: var(--ombre); font-size: 13px; }
@@ -608,3 +607,7 @@ input.large { flex: 1; min-width: 200px; width: auto; }
 .actions-agent { list-style: none; margin: 4px 0 0; padding: 0; font-size: 13px; display: flex; flex-direction: column; gap: 2px; }
 .actions-agent li { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .btn-primaire .muet { color: inherit; opacity: .7; }
+.av-liste { position: fixed; z-index: 60; max-width: 420px; max-height: 320px; overflow: auto; padding: 6px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); box-shadow: 0 8px 24px rgba(0,0,0,.35); }
+.av-liste > div { padding: 2px 6px 4px; }
+.av-liste button { display: block; width: 100%; text-align: left; background: none; border: 0; border-radius: 6px; padding: 5px 8px; color: var(--ink); cursor: pointer; font: inherit; }
+.av-liste button:hover { background: var(--panel-2); }
