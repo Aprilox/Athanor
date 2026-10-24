@@ -10,6 +10,7 @@ package main
 
 import (
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -33,8 +34,11 @@ func modeEveil(fichier string) string {
 	if err != nil {
 		return ""
 	}
-	if strings.TrimSpace(string(b)) == "screen" {
+	switch strings.TrimSpace(string(b)) {
+	case "screen":
 		return "screen"
+	case "aucun":
+		return "aucun"
 	}
 	return "system"
 }
@@ -45,12 +49,25 @@ func GarderEveille(args []string) int {
 		return 2
 	}
 	runtime.LockOSThread() // the request belongs to the thread that makes it
+	// the mouse guard runs alongside, as long as the pilot (garde_souris_windows.go); the kit is two
+	// levels above FILE (KIT/logs/pilotes/ID/eveil)
+	fin := make(chan struct{})
+	defer close(fin)
+	go garderSouris(filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(args[0])))), fin)
 	actuel := ""
 	for {
 		m := modeEveil(args[0])
 		if m == "" {
 			pSetThreadExecutionState.Call(esContinuous)
 			return 0
+		}
+		if m == "aucun" { // KEEP_AWAKE=0: only the guard
+			if actuel != m {
+				pSetThreadExecutionState.Call(esContinuous)
+				actuel = m
+			}
+			time.Sleep(20 * time.Second)
+			continue
 		}
 		if m != actuel {
 			drapeaux := uintptr(esContinuous | esSystemRequired)
