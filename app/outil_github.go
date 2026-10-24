@@ -1,6 +1,7 @@
 package main
 
-// athanor github …: the parts of system/github.sh that were Python (same outputs, same files):
+// athanor github …: a project's GitHub link (outil_github_cmd.go, outil_github_lier.go), and the helpers
+// below (the former system/github.sh's Python: same outputs, same files):
 //   athanor github scanner messages|diff     (stdin: git log) the secrets of the commits about to be
 //                                            pushed: "place<TAB>kind" lines, never a value, then #FIN#;
 //                                            exit 3 when the diff cannot be read to the end
@@ -137,7 +138,7 @@ func decoderEchappementsC(s string) []byte {
 	return out
 }
 
-// scannerSecrets: github.sh's scanner; the code of exit (0, 3 when the diff cannot be trusted).
+// scannerSecrets: the secret scanner of the pushes; the code of exit (0, 3 when the diff cannot be trusted).
 func scannerSecrets(mode string, entree io.Reader, sortie io.Writer) int {
 	vus := map[string]bool{}
 	ajouter := func(cle string) {
@@ -238,7 +239,7 @@ func crochetAthanor(actuel []byte) bool { return bytes.Contains(actuel, []byte(m
 func lancerGitHub(args []string) int {
 	args = cheminsOutil(args)
 	if len(args) < 1 {
-		fmt.Fprintln(os.Stderr, "usage: athanor github scanner messages|diff | atelier PROJECT NAME ecrire|effacer | crochet PROJECT 0|1")
+		fmt.Fprintln(os.Stderr, "usage: athanor github etat|pousser|publie|tester|enregistrer|auto|branche|delier|suivre|identite|regler-identite|identite-pilote|lier PROJECT … | scanner messages|diff | atelier PROJECT NAME ecrire|effacer | crochet PROJECT 0|1")
 		return 2
 	}
 	if code, ok := commandeGitHub(args, os.Stdout); ok {

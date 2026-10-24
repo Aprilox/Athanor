@@ -48,7 +48,7 @@ func wslpathW(p string) string {
 	if _, err := exec.LookPath("wslpath"); err != nil {
 		return ""
 	}
-	b, err := exec.Command("wslpath", "-w", p).Output()
+	b, err := commande("wslpath", "-w", p).Output()
 	if err != nil {
 		return ""
 	}

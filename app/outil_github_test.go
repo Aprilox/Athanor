@@ -326,25 +326,17 @@ func TestPariteAtelierEtCrochet(t *testing.T) {
 	}
 }
 
-// The validators and the KEY=value reader of github.sh against bash itself.
+// The validators and the KEY=value reader of the former github.sh against bash itself.
 func TestPariteValidateursGitHub(t *testing.T) {
 	if _, err := exec.LookPath("bash"); err != nil {
 		t.Skip("no bash")
 	}
-	b, err := os.ReadFile(filepath.Join("..", "system", "github.sh"))
-	if err != nil {
-		t.Skip("no github.sh")
-	}
-	var fonctions []string
-	for _, l := range strings.Split(string(b), "\n") {
-		for _, f := range []string{"nom_valide_auteur()", "email_valide()", "depot_valide()", "branche_valide()"} {
-			if strings.HasPrefix(l, f) {
-				fonctions = append(fonctions, l)
-			}
-		}
-	}
-	if len(fonctions) != 4 {
-		t.Fatalf("validators not found: %v", fonctions)
+	// the validators of the former system/github.sh, word for word (the reference)
+	fonctions := []string{
+		`depot_valide()   { [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100}$ ]] && [[ "$1" != */. && "$1" != */.. ]]; }`,
+		`branche_valide() { [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]{0,99}$ ]] && [[ "$1" != *..* && "$1" != *//* && "$1" != */ && "$1" != *.lock && "$1" != *.lock/* ]] && git check-ref-format --branch "$1" >/dev/null 2>&1; }`,
+		`nom_valide_auteur() { [ "${#1}" -le 100 ] && [[ "$1" =~ [^[:space:]] ]] && ! [[ "$1" =~ [\<\>[:cntrl:]] ]]; }`,
+		`email_valide() { [ "${#1}" -le 254 ] && [[ "$1" =~ ^[^[:space:]\<\>@\"]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$ ]]; }`,
 	}
 	valeurs := []string{"", " ", "Jean", "Jean <x>", "a\\b", "a\"b", "é", "a\tb", strings.Repeat("x", 100), strings.Repeat("é", 60),
 		"a@b.c", "a@b.co", "a b@x.org", "a\"b@x.org", "a\\b@x.org", "é@x.org", "a@x.c0m", "a@@x.org", "moi/depot", "moi/.", "moi/..",

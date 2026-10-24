@@ -15,7 +15,6 @@ package main
 // athanor mcp-ouvrir KIT PROJECT FILE opens them (the pilot, before each cycle).
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -221,7 +220,7 @@ func portRepond(port string) bool {
 		return true
 	}
 	if runtime.GOOS == "linux" && interopWindows() { // WSL without "mirrored" networking: ask Windows
-		c := exec.Command("netstat.exe", "-ano", "-p", "TCP")
+		c := commande("netstat.exe", "-ano", "-p", "TCP")
 		c.Dir = "/mnt/c"
 		out, err := c.Output()
 		if err != nil {
@@ -239,9 +238,9 @@ func portRepond(port string) bool {
 
 // processusTourne: a Windows process of that name runs (tasklist).
 func processusTourne(nom string) bool {
-	c := exec.Command("tasklist.exe", "/FI", "IMAGENAME eq "+nom, "/NH")
+	c := commande("tasklist.exe", "/FI", "IMAGENAME eq "+nom, "/NH")
 	if runtime.GOOS == "windows" {
-		c = exec.Command("tasklist", "/FI", "IMAGENAME eq "+nom, "/NH")
+		c = commande("tasklist", "/FI", "IMAGENAME eq "+nom, "/NH")
 	} else {
 		c.Dir = "/mnt/c"
 	}
@@ -310,19 +309,22 @@ func ouvrirServeurs(kit, projet, fichier string, attente func(time.Duration)) []
 			}
 			continue
 		}
-		script := filepath.Join(kit, "system", "ouvrir-windows.sh")
+		// a gateway by its name, else the Windows program through athanor passerelle ouvrir-windows
+		var c *exec.Cmd
 		if passerellesOuverture[o.Programme] {
-			script = filepath.Join(kit, "system", "bin", o.Programme)
+			c = commandePasserelleKit(kit, projet, o.Programme, args...)
 		} else {
-			args = append([]string{o.Programme}, args...)
+			c = commandePasserelleKit(kit, projet, "athanor", append([]string{"passerelle", "ouvrir-windows", o.Programme}, args...)...)
 		}
-		ctx, fin := context.WithTimeout(context.Background(), time.Duration(o.Delai+60)*time.Second)
-		c := exec.CommandContext(ctx, "bash", append([]string{filepath.ToSlash(script)}, args...)...)
-		c.Env = append(os.Environ(), "PROJECT="+projet, "PONT_DIRECT=1")
+		minuteur := time.AfterFunc(time.Duration(o.Delai+60)*time.Second, func() {
+			if c.Process != nil {
+				_ = c.Process.Kill()
+			}
+		})
 		c.WaitDelay = 5 * time.Second
 		cacherFenetre(c)
 		out, err := c.CombinedOutput()
-		fin()
+		minuteur.Stop()
 		dernier := strings.TrimSpace(string(out))
 		if i := strings.LastIndex(dernier, "\n"); i >= 0 {
 			dernier = dernier[i+1:]
@@ -369,7 +371,7 @@ func appMac(programme string) applicationMac {
 }
 
 func macTourne(processus string) bool {
-	return exec.Command("pgrep", "-x", processus).Run() == nil
+	return commande("pgrep", "-x", processus).Run() == nil
 }
 
 // ouvrirMac: opens the program of o on the project's file f; false with the log line when it cannot.
@@ -389,7 +391,7 @@ func ouvrirMac(o ouvertureCycle, f string) (string, bool) {
 	if f != "" {
 		a = append(a, f)
 	}
-	if out, err := exec.Command("open", a...).CombinedOutput(); err != nil {
+	if out, err := commande("open", a...).CombinedOutput(); err != nil {
 		return fmt.Sprintf("%s: %s unavailable for this cycle: %s", o.ID, o.Programme, tronquerRunes(strings.TrimSpace(string(out)), 200)), false
 	}
 	for i := 0; i < 20 && !macTourne(app.processus); i++ {

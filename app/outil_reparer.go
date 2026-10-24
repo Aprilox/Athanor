@@ -334,7 +334,7 @@ func goExe(racine string) string {
 }
 
 func versionDe(goBin string) [3]int {
-	c := exec.Command(goBin, "env", "GOVERSION")
+	c := commande(goBin, "env", "GOVERSION")
 	cacherFenetre(c)
 	out, err := c.Output()
 	if err != nil {
@@ -551,7 +551,7 @@ func ancienDe(nom string) string {
 }
 
 func commandeGo(goBin, app string, env []string, args ...string) *exec.Cmd {
-	c := exec.Command(goBin, args...)
+	c := commande(goBin, args...)
 	c.Dir = app
 	c.Env = append(append(os.Environ(), "CGO_ENABLED=0", "GOTOOLCHAIN=local"), env...)
 	cacherFenetre(c) // from the app on Windows: no console window for go
@@ -636,9 +636,9 @@ func recompiler(kit string, tests, forcer bool, journal func(string)) error {
 			continue
 		}
 		journal("Autotest of the new " + c.nom + "…")
-		cmd := exec.Command(exe, "autotest", kit)
+		cmd := commande(exe, "autotest", kit)
 		if c.goos == "windows" && runtime.GOOS == "linux" {
-			cmd = exec.Command(exe, "autotest", cheminWindowsWSL(kit))
+			cmd = commande(exe, "autotest", cheminWindowsWSL(kit))
 		}
 		cacherFenetre(cmd)
 		if err := executer(cmd, journal); err != nil {

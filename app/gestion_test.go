@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -183,6 +184,9 @@ func TestFichiersDuJalon(t *testing.T) {
 }
 
 func TestDossiersRefuses(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix folders")
+	}
 	home, _ := os.UserHomeDir()
 	for _, d := range []string{"/usr/local/x", "/etc", filepath.Dir(home), home, "/"} {
 		if dossierInterdit(d, "/opt/kit") == "" {

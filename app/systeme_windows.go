@@ -7,8 +7,6 @@ package main
 // compiled on first launch with the C# compiler shipped with Windows).
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -36,109 +34,9 @@ func cacherFenetre(c *exec.Cmd) {
 	c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: createNoWindow}
 }
 
-// fichierScript writes the script into logs/ and returns its path relative to the kit: passing the
-// script through a file avoids any escaping problem between Windows, wsl.exe and bash
-// (quotes, $, stars), and keeps a trace of what was run.
-func fichierScript(k Kit, script string) (string, error) {
-	if err := os.MkdirAll(k.Journaux(), 0o755); err != nil {
-		return "", err
-	}
-	h := sha256.Sum256([]byte(script))
-	nom := "logs/.cmd-" + hex.EncodeToString(h[:5]) + ".sh"
-	// written aside then renamed: a bash already reading the same script never sees it half written
-	dest := filepath.Join(k.Racine, filepath.FromSlash(nom))
-	// the name comes from the content: a file already there holds this very script. It may also be running
-	// (Git Bash keeps it open in native mode, and Windows refuses to replace an open file): kept as it is.
-	if st, err := os.Stat(dest); err == nil && st.Mode().IsRegular() {
-		return nom, nil
-	}
-	tmp, err := os.CreateTemp(filepath.Dir(dest), ".cmd-*.tmp")
-	if err != nil {
-		return nom, err
-	}
-	_, err = tmp.WriteString("#!/usr/bin/env bash\n" + script + "\n")
-	if e := tmp.Close(); err == nil {
-		err = e
-	}
-	if err == nil {
-		err = os.Rename(tmp.Name(), dest)
-		if err != nil {
-			if st, e := os.Stat(dest); e == nil && st.Mode().IsRegular() {
-				err = nil // written meanwhile by the same command started twice: the same content
-			}
-		}
-	}
-	os.Remove(tmp.Name()) // nothing left behind (once renamed, no file has that name any more)
-	return nom, err
-}
 
-// DemarrerDetache runs a WSL script in a hidden wsl.exe, detached from the application (it survives it);
-// the output goes into the script itself (start.sh writes the project's output.log).
-func DemarrerDetache(k Kit, script string) error {
-	if modeNatif.Load() {
-		// native Windows: no WSL to keep awake; the pilot goes to the background as on Linux
-		if strings.Contains(script, "--attach") {
-			return nil
-		}
-		nom, err := fichierScript(k, strings.Replace(script, "--keep", "--background", 1))
-		if err != nil {
-			return err
-		}
-		return demarrerNatifDetache(k, nom)
-	}
-	nom, err := fichierScript(k, script)
-	if err != nil {
-		return err
-	}
-	c := exec.Command("wsl.exe", "-d", k.Distro(), "--cd", k.Racine, "--", "bash", "-l", "./"+nom)
-	c.Env = append(os.Environ(), "WSL_UTF8=1")
-	// Outside the application's "job" if possible: closing the application must not take the pilot with it.
-	// CREATE_NO_WINDOW only, never with DETACHED_PROCESS: Windows ignores CREATE_NO_WINDOW when both are
-	// given, and wsl.exe (a console program) then opens a console window of its own.
-	c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: createNoWindow | createNewProcessGroup | createBreakawayFromJob}
-	if err := c.Start(); err != nil {
-		c = exec.Command("wsl.exe", "-d", k.Distro(), "--cd", k.Racine, "--", "bash", "-l", "./"+nom)
-		c.Env = append(os.Environ(), "WSL_UTF8=1")
-		c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: createNoWindow | createNewProcessGroup}
-		if err := c.Start(); err != nil {
-			return err
-		}
-	}
-	go func() { _ = c.Wait() }()
-	return nil
-}
 
-func commandeWSL(k Kit, script string) *exec.Cmd {
-	nom, err := fichierScript(k, script)
-	if err != nil {
-		return exec.Command("cmd.exe", "/c", "echo Cannot write the script in logs\\: "+err.Error()+" & exit 1")
-	}
-	if modeNatif.Load() {
-		return commandeNative(k, nom)
-	}
-	c := exec.Command("wsl.exe", "-d", k.Distro(), "--cd", k.Racine, "--", "bash", "-l", "./"+nom)
-	c.Env = append(os.Environ(), "WSL_UTF8=1")
-	return c
-}
 
-// Visible console window for an interactive step (sudo, token, GitHub sign-in). Each opening is noted
-// in logs/fenetres.log (date and terminal), to tell "the window did not start" from "the step failed".
-func FenetreWSL(k Kit, titre, script string) error {
-	contenu := "echo \"$(date '+%F %T') $(tty 2>&1) " + citerShell(titre) + "\" >> logs/fenetres.log 2>/dev/null\n" +
-		script + "\necho\nread -p 'Press Enter to close' _\n"
-	if modeNatif.Load() {
-		// the console does not start in the kit folder: the script goes there first
-		contenu = "cd " + citerShell(cheminPosix(k.Racine)) + " || exit 1\n" + contenu
-	}
-	nom, err := fichierScript(k, contenu)
-	if err != nil {
-		return err
-	}
-	if modeNatif.Load() {
-		return fenetreNative(k, titre, nom)
-	}
-	return demarrerFenetre(titre, "wsl.exe", "-d", k.Distro(), "--cd", k.Racine, "--", "bash", "-l", "./"+nom)
-}
 
 // demarrerFenetre opens a visible console of its own (CreateProcess, CREATE_NEW_CONSOLE), without
 // handing it any of the application's standard handles: started through "cmd /c start" from the
@@ -167,20 +65,13 @@ func demarrerFenetre(titre string, args ...string) error {
 	return nil
 }
 
-func FenetrePowerShell(k Kit, scriptRelatif string) error {
-	chemin := filepath.Join(k.Racine, scriptRelatif)
-	if strings.HasSuffix(strings.ToLower(chemin), ".cmd") {
-		return demarrerFenetre("Installation", "cmd.exe", "/k", chemin)
-	}
-	return demarrerFenetre("Installation", "powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-NoExit", "-File", chemin)
-}
 
 // Ouvrir shows a folder in Explorer, or opens a file with its associated program.
 func Ouvrir(chemin string) error {
 	if _, err := os.Stat(chemin); err != nil {
 		return fmt.Errorf("Not created yet: %s", chemin)
 	}
-	return exec.Command("explorer.exe", chemin).Start()
+	return commande("explorer.exe", chemin).Start()
 }
 
 // FenetreApp opens the interface in a real application window (WebView2, shipped with
@@ -221,7 +112,7 @@ func OuvrirFenetreApp(url string) {
 	profil := filepath.Join(os.Getenv("LocalAppData"), "Athanor", "navigateur")
 	for _, exe := range candidats {
 		if _, err := os.Stat(exe); err == nil {
-			c := exec.Command(exe, "--app="+url, "--user-data-dir="+profil, "--window-size=1240,820", "--no-first-run", "--no-default-browser-check")
+			c := commande(exe, "--app="+url, "--user-data-dir="+profil, "--window-size=1240,820", "--no-first-run", "--no-default-browser-check")
 			cacherFenetre(c)
 			if c.Start() == nil {
 				return
@@ -241,9 +132,9 @@ func DemarrageWindows(actif bool) error {
 	}
 	var c *exec.Cmd
 	if actif {
-		c = exec.Command("reg.exe", "add", cleRun, "/v", nomRun, "/t", "REG_SZ", "/d", fmt.Sprintf("\"%s\"", exe), "/f")
+		c = commande("reg.exe", "add", cleRun, "/v", nomRun, "/t", "REG_SZ", "/d", fmt.Sprintf("\"%s\"", exe), "/f")
 	} else {
-		c = exec.Command("reg.exe", "delete", cleRun, "/v", nomRun, "/f")
+		c = commande("reg.exe", "delete", cleRun, "/v", nomRun, "/f")
 	}
 	cacherFenetre(c)
 	out, err := c.CombinedOutput()
@@ -266,10 +157,10 @@ func migrerSysteme() {
 			}
 		}
 	}
-	q := exec.Command("reg.exe", "query", cleRun, "/v", "ClaudeAutopilote")
+	q := commande("reg.exe", "query", cleRun, "/v", "ClaudeAutopilote")
 	cacherFenetre(q)
 	if q.Run() == nil {
-		d := exec.Command("reg.exe", "delete", cleRun, "/v", "ClaudeAutopilote", "/f")
+		d := commande("reg.exe", "delete", cleRun, "/v", "ClaudeAutopilote", "/f")
 		cacherFenetre(d)
 		_ = d.Run()
 		_ = DemarrageWindows(true)
@@ -277,7 +168,7 @@ func migrerSysteme() {
 }
 
 func DemarrageWindowsActif() bool {
-	c := exec.Command("reg.exe", "query", cleRun, "/v", nomRun)
+	c := commande("reg.exe", "query", cleRun, "/v", nomRun)
 	cacherFenetre(c)
 	return c.Run() == nil
 }
@@ -519,7 +410,7 @@ func (b *Bureau) preparerHelper() error {
 	if _, err := os.Stat(csc); err != nil {
 		csc = filepath.Join(os.Getenv("WINDIR"), "Microsoft.NET", "Framework", "v4.0.30319", "csc.exe")
 	}
-	c := exec.Command(csc, "/nologo", "/target:exe", "/out:"+exe, src)
+	c := commande(csc, "/nologo", "/target:exe", "/out:"+exe, src)
 	cacherFenetre(c)
 	out, err := c.CombinedOutput()
 	if err != nil {
@@ -533,7 +424,7 @@ func (b *Bureau) preparerHelper() error {
 func (b *Bureau) appel(args ...string) (int, string, error) {
 	b.mh.Lock()
 	defer b.mh.Unlock()
-	c := exec.Command(b.helper, append([]string{"/Quiet"}, args...)...)
+	c := commande(b.helper, append([]string{"/Quiet"}, args...)...)
 	cacherFenetre(c)
 	out, err := c.CombinedOutput()
 	code := 0
@@ -877,7 +768,7 @@ func arreterArbre(c *exec.Cmd) {
 	if c == nil || c.Process == nil {
 		return
 	}
-	k := exec.Command("taskkill.exe", "/T", "/F", "/PID", strconv.Itoa(c.Process.Pid))
+	k := commande("taskkill.exe", "/T", "/F", "/PID", strconv.Itoa(c.Process.Pid))
 	cacherFenetre(k)
 	if k.Run() != nil {
 		_ = c.Process.Kill()

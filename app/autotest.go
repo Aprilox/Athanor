@@ -43,7 +43,7 @@ func autotest(racine string) []resultatAutotest {
 	}
 	k := Kit{racine}
 	ajouter("kit", k.Valide(), racine)
-	for _, f := range []string{"system/pilot.sh", "system/parallel.sh", "system/safety.sh", "template/CLAUDE.md", "template/PC_TOOLS_GUIDE.md", ".env.example"} {
+	for _, f := range []string{"template/CLAUDE.md", "template/PC_TOOLS_GUIDE.md", ".env.example"} {
 		st, err := os.Stat(filepath.Join(racine, filepath.FromSlash(f)))
 		ajouter(f, err == nil && st.Size() > 0, "")
 	}

@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -75,7 +76,7 @@ func TestPariteReglages(t *testing.T) {
 	kit := filepath.Join(d, "kit")
 	_ = os.MkdirAll(filepath.Join(kit, "system", "bin"), 0o755)
 	for _, f := range []string{"settings.py", "extensions.py"} {
-		b, _ := os.ReadFile(filepath.Join("testdata", "oracles", "python", f))
+		b, _ := os.ReadFile(filepath.Join(dossierOracles(), "python", f))
 		_ = os.WriteFile(filepath.Join(kit, "system", f), b, 0o755)
 	}
 	_ = os.MkdirAll(filepath.Join(kit, "extensions"), 0o755)
@@ -189,60 +190,23 @@ func TestReglagesContenu(t *testing.T) {
 	d, _ := filepath.EvalSymlinks(t.TempDir())
 	kit := filepath.Join(d, "kit")
 	_ = os.MkdirAll(filepath.Join(kit, "extensions"), 0o755)
-	_ = os.WriteFile(filepath.Join(kit, "extensions", "projets.json"), []byte(`{"`+d+`/p": {"mcp": ["unreal"]}}`), 0o644)
-	t.Setenv("PROJECT", d+"/p")
+	p := filepath.Join(d, "p")
+	pj, _ := json.Marshal(map[string]any{p: map[string]any{"mcp": []string{"unreal"}}})
+	_ = os.WriteFile(filepath.Join(kit, "extensions", "projets.json"), pj, 0o644)
+	t.Setenv("PROJECT", p)
 	t.Setenv("ATHANOR_SANS_COAUTEUR", "1")
 	out := filepath.Join(d, "s.json")
 	if err := construireReglages(kit, out); err != nil {
 		t.Fatal(err)
 	}
 	b, _ := os.ReadFile(out)
-	for _, attendu := range []string{`"enableAllProjectMcpServers": true`, `"mcp__unreal"`, `hook fichiers ` + d + `/p`, `"includeCoAuthoredBy": false`, `"failIfUnavailable": true`} {
+	attendus := []string{`"enableAllProjectMcpServers": true`, `"mcp__unreal"`, `"includeCoAuthoredBy": false`}
+	if runtime.GOOS != "windows" { // native Windows: no sandbox, and the paths written Windows' way
+		attendus = append(attendus, `hook fichiers `+p, `"failIfUnavailable": true`)
+	}
+	for _, attendu := range attendus {
 		if !strings.Contains(string(b), attendu) {
 			t.Errorf("missing %s in\n%s", attendu, b)
-		}
-	}
-}
-
-// The chat's script writes the Go settings (the Go file guard as its hook); without the kit's executable it
-// says so and stops.
-func TestScriptChatReglages(t *testing.T) {
-	if _, err := exec.LookPath("bash"); err != nil {
-		t.Skip("no bash")
-	}
-	bin := os.Getenv("ATHANOR_BIN_TEST") // a build of this package (the test binary itself is no athanor)
-	if bin == "" {
-		t.Skip("ATHANOR_BIN_TEST not set (an athanor build)")
-	}
-	for _, avecGo := range []bool{false, true} {
-		d, _ := filepath.EvalSymlinks(t.TempDir())
-		kit, projet := filepath.Join(d, "kit"), filepath.Join(d, "projet")
-		_ = os.MkdirAll(filepath.Join(kit, "system"), 0o755)
-		_ = os.MkdirAll(filepath.Join(kit, "logs", "chat"), 0o755)
-		_ = os.MkdirAll(projet, 0o755)
-		if avecGo {
-			b, _ := os.ReadFile(bin)
-			_ = os.WriteFile(filepath.Join(kit, "athanor"), b, 0o755)
-		}
-		for _, f := range []string{"msg", "prompt"} {
-			_ = os.WriteFile(filepath.Join(kit, "logs", "chat", "c1."+f), []byte("x"), 0o644)
-		}
-		c := exec.Command("bash", "-c", scriptChat(Projet{Nom: "p", Dossier: projet}, "c1", "question", "", ""))
-		c.Dir = kit
-		c.Env = append(os.Environ(), "CLAUDE_BIN=true")
-		out, err := c.CombinedOutput()
-		if !avecGo {
-			if err == nil || !strings.Contains(string(out), "Athanor's executable is missing") {
-				t.Fatalf("without the executable: %v %s", err, out)
-			}
-			continue
-		}
-		if err != nil {
-			t.Fatalf("script: %v %s", err, out)
-		}
-		s, _ := os.ReadFile(filepath.Join(kit, "logs", "chat", "c1.settings.json"))
-		if !strings.Contains(string(s), " hook fichiers ") || strings.Contains(string(s), "guard.py") {
-			t.Errorf("%s", s)
 		}
 	}
 }

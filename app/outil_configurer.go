@@ -144,13 +144,13 @@ func (a *assistantEnv) ouiNon(question, defaut string) bool {
 func (a *assistantEnv) secret() (string, bool) {
 	terminal := false
 	if st, err := os.Stdin.Stat(); err == nil && st.Mode()&os.ModeCharDevice != 0 {
-		terminal = exec.Command("stty", "-echo").Run() == nil
+		terminal = commande("stty", "-echo").Run() == nil
 	}
 	if terminal {
-		c := exec.Command("stty", "-echo")
+		c := commande("stty", "-echo")
 		c.Stdin = os.Stdin
 		_ = c.Run()
-		defer func() { c := exec.Command("stty", "echo"); c.Stdin = os.Stdin; _ = c.Run() }()
+		defer func() { c := commande("stty", "echo"); c.Stdin = os.Stdin; _ = c.Run() }()
 	}
 	return a.ligne()
 }
@@ -202,7 +202,7 @@ func lancerConfigurer(args []string) int {
 		invite = "Paste a new token, or Enter to keep the current one: "
 	} else {
 		if aCommande("claude") && estTerminal(os.Stdin) && a.ouiNon(`Run "claude setup-token" now?`, "o") {
-			c := exec.Command("claude", "setup-token")
+			c := commande("claude", "setup-token")
 			c.Stdin, c.Stdout, c.Stderr = os.Stdin, os.Stdout, os.Stderr
 			_ = c.Run()
 		}
@@ -360,7 +360,7 @@ func lancerConfigurer(args []string) int {
 	}
 	var b strings.Builder
 	w := func(s string) { b.WriteString(s + "\n") }
-	w("# Written by configure.sh on " + time.Now().Format("2006-01-02 15:04") + ". Run it again to change these settings.")
+	w("# Written by athanor configurer on " + time.Now().Format("2006-01-02 15:04") + ". Run it again to change these settings.")
 	w("# Never share this file: the token gives access to your Claude subscription.")
 	w("")
 	w("# Login token (valid for 1 year), obtained with: claude setup-token")
@@ -423,10 +423,18 @@ func lancerConfigurer(args []string) int {
 	fmt.Println("Requests are made per project, in the app (Athanor.exe): Requests tab.")
 	a.titre("Starting", "")
 	if v, _ := os.ReadFile("/proc/version"); strings.Contains(strings.ToLower(string(v)), "microsoft") {
-		fmt.Fprintf(a.err, "To start: double-click %sstart.cmd%s (a minimised window keeps the pilot running).\n", a.gras, a.fin)
-		fmt.Fprint(a.err, "To test the sandbox first (recommended the first time): test-sandbox.cmd\n")
+		fmt.Fprintf(a.err, "To start: in the app (%sAthanor.exe%s), %sStart%s on the project.\n", a.gras, a.fin, a.gras, a.fin)
+		fmt.Fprint(a.err, "To test the sandbox first (recommended the first time): Setup & health → Test the sandbox.\n")
 	} else if a.ouiNon("Start the pilot now, in the background?", "o") {
-		c := exec.Command("commands/start.sh", "--background")
+		exe, _ := os.Executable()
+		c := commande(exe, "demarrer", "--background")
+		// the tool's own project folder (KIT/projet), never the detection's one set above
+		c.Env = []string{}
+		for _, e := range os.Environ() {
+			if !strings.HasPrefix(e, "PROJECT=") {
+				c.Env = append(c.Env, e)
+			}
+		}
 		c.Stdout, c.Stderr = os.Stdout, os.Stderr
 		if err := c.Run(); err != nil {
 			if e, ok := err.(*exec.ExitError); ok {
@@ -435,14 +443,14 @@ func lancerConfigurer(args []string) int {
 			return 127
 		}
 	} else {
-		fmt.Fprint(a.err, "To start later: commands/start.sh (or commands/start.sh --background)\n")
+		fmt.Fprint(a.err, "To start later: the app (./athanor), or ./athanor demarrer [--background] PROJECT\n")
 	}
 	return 0
 }
 
 // fuseauSysteme: the system's time zone (timedatectl, /etc/timezone, macOS' /etc/localtime link).
 func fuseauSysteme() string {
-	if out, err := exec.Command("timedatectl", "show", "-p", "Timezone", "--value").Output(); err == nil {
+	if out, err := commande("timedatectl", "show", "-p", "Timezone", "--value").Output(); err == nil {
 		if s := strings.TrimSpace(strings.SplitN(string(out), "\n", 2)[0]); s != "" {
 			return s
 		}

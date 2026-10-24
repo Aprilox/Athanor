@@ -582,14 +582,14 @@ $d = New-Object Windows.Data.Xml.Dom.XmlDocument
 $d.LoadXml($env:ATHANOR_TOAST)
 $n = [Windows.UI.Notifications.ToastNotification]::new($d)
 [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\WindowsPowerShell\v1.0\powershell.exe').Show($n)`
-		c := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script)
+		c := commande("powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script)
 		c.Env = append(os.Environ(), "ATHANOR_TOAST="+xml)
 		cacherFenetre(c)
 		_ = c.Start()
 		go func() { _ = c.Wait() }()
 	default:
 		if chemin, err := exec.LookPath("notify-send"); err == nil {
-			c := exec.Command(chemin, "-a", "Athanor", titre, texte)
+			c := commande(chemin, "-a", "Athanor", titre, texte)
 			_ = c.Start()
 			go func() { _ = c.Wait() }()
 		}

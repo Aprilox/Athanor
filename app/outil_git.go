@@ -16,7 +16,7 @@ var reFiltreGit = regexp.MustCompile(`^filter\.(.*)\.[^.]+$`)
 
 func gitP(dossier string, env []string, args ...string) *exec.Cmd {
 	var filtres []string
-	if out, err := exec.Command("git", "-C", dossier, "config", "--name-only", "--get-regexp", `^filter\.`).Output(); err == nil {
+	if out, err := commande("git", "-C", dossier, "config", "--name-only", "--get-regexp", `^filter\.`).Output(); err == nil {
 		vus := map[string]bool{}
 		for _, l := range strings.Split(strings.TrimSpace(string(out)), "\n") {
 			if m := reFiltreGit.FindStringSubmatch(l); m != nil && !vus[m[1]] {
@@ -32,7 +32,7 @@ func gitP(dossier string, env []string, args ...string) *exec.Cmd {
 	for _, n := range filtres {
 		a = append(a, "-c", "filter."+n+".clean=cat", "-c", "filter."+n+".smudge=cat", "-c", "filter."+n+".process=", "-c", "filter."+n+".required=false")
 	}
-	c := exec.Command("git", append(a, args...)...)
+	c := commande("git", append(a, args...)...)
 	c.Env = append(append(os.Environ(), "GIT_TERMINAL_PROMPT=0"), env...)
 	cacherFenetre(c)
 	return c

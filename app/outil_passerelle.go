@@ -1,4 +1,4 @@
-//go:build linux
+//go:build linux || windows
 
 package main
 
@@ -6,7 +6,8 @@ package main
 // pc-exec, roblox-studio, tool, unreal-cmd, unreal-editor, unreal-uat, windows-var) in WSL, run outside
 // Claude's sandbox (by the bridge, or by the pilot). The gateway keeps its name on Claude's PATH: inside the
 // sandbox it hands the command to the bridge; outside, it runs this, with the same checks, messages and
-// exit codes. Native Windows keeps the scripts.
+// exit codes. Native Windows: the same, without a sandbox (so without the bridge), the paths as Windows
+// names them (outil_passerelle_windows.go has what differs).
 //
 // Environment: KIT, PROJECT, TOOLS, and what system/pc_tools.env gives (UE_DIR, BLENDER_EXE,
 // ANDROID_SDK_DIR, ANDROID_JDK_DIR, WIN_PROFIL), exported by system/bin/_common.sh.
@@ -14,6 +15,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -82,12 +84,12 @@ func convertirArgs(args []string) []string {
 	out := []string{}
 	for _, a := range args {
 		switch {
-		case strings.HasPrefix(a, "/") && (existeP(a) || existeP(filepath.Dir(a))):
-			out = append(out, wslpathW(a))
+		case strings.HasPrefix(a, "/") && (existeArgP(a) || existeArgP(dirArgP(a))):
+			out = append(out, versWindowsP(a))
 		case strings.HasPrefix(a, "-") && strings.Contains(a, "=/"):
 			cle, val, _ := strings.Cut(a, "=")
-			if existeP(val) || existeP(filepath.Dir(val)) {
-				out = append(out, cle+"="+wslpathW(val))
+			if existeArgP(val) || existeArgP(dirArgP(val)) {
+				out = append(out, cle+"="+versWindowsP(val))
 			} else {
 				out = append(out, a)
 			}
@@ -130,19 +132,9 @@ func errorsIs(err, cible error) bool {
 
 // lancer: a command with the gateway's standard input and outputs; its exit code.
 func (p *passerelle) lancer(prog string, args ...string) int {
-	c := exec.Command(prog, args...)
+	c := commande(prog, args...)
 	c.Stdin, c.Stdout, c.Stderr = os.Stdin, p.sortie, p.erreur
 	return codeCommande(c.Run(), c)
-}
-
-// dansC: a Windows command run from /mnt/c (a WSL folder as the current one makes Windows warn).
-func dansC(prog string, args ...string) *exec.Cmd {
-	c := exec.Command(prog, args...)
-	if dossierP("/mnt/c") {
-		c.Dir = "/mnt/c"
-	}
-	c.Env = append(os.Environ(), "MSYS2_ARG_CONV_EXCL=*")
-	return c
 }
 
 // lancerWindows: _common.sh's lancer_windows: on Claude's desktop when that option is on (through
@@ -151,17 +143,21 @@ func dansC(prog string, args ...string) *exec.Cmd {
 func (p *passerelle) lancerWindows(detache bool, prog string, args ...string) int {
 	exe := filepath.Join(p.kit, "Athanor.exe")
 	ici := !existeP(filepath.Join(p.kit, "logs", "bureau-isole"))
-	if st, err := os.Stat(exe); err == nil && st.Mode()&0o111 != 0 && !ici {
+	if st, err := os.Stat(exe); err == nil && (st.Mode()&0o111 != 0 || estWindows) && (!ici || (estWindows && detache)) {
 		if !strings.Contains(prog, "/") {
 			if l, err := exec.LookPath(prog); err == nil {
 				prog = l
 			}
 		}
-		if strings.HasPrefix(prog, "/") {
-			prog = wslpathW(prog)
+		if strings.HasPrefix(prog, "/") || estWindows {
+			prog = versWindowsP(prog)
+		}
+		isole := []string{"--isole"}
+		if ici {
+			isole = append(isole, "--ici") // native Windows: a detached program goes through Athanor.exe too, out of the cycle's job
 		}
 		if detache {
-			return p.lancer(exe, append([]string{"--isole", "--detache", "--", prog}, args...)...)
+			return p.lancer(exe, append(append(isole, "--detache", "--"), append([]string{prog}, args...)...)...)
 		}
 		// A cancelled command (the bridge stops this process group) only stops the Linux side of WSL
 		// interop: the Windows process tree is stopped explicitly, from the PID Athanor.exe writes.
@@ -172,7 +168,7 @@ func (p *passerelle) lancerWindows(detache bool, prog string, args ...string) in
 		f.Close()
 		pidF := f.Name()
 		defer os.Remove(pidF)
-		c := exec.Command(exe, append([]string{"--isole", "--pid", wslpathW(pidF), "--", prog}, args...)...)
+		c := commande(exe, append([]string{"--isole", "--pid", versWindowsP(pidF), "--", prog}, args...)...)
 		c.Stdin, c.Stdout, c.Stderr = os.Stdin, p.sortie, p.erreur
 		if err := c.Start(); err != nil {
 			return codeCommande(err, c)
@@ -195,11 +191,11 @@ func (p *passerelle) lancerWindows(detache bool, prog string, args ...string) in
 		}
 	}
 	if detache {
-		c := exec.Command(prog, args...)
+		c := commande(prog, args...)
 		if nul, err := os.OpenFile(os.DevNull, os.O_RDWR, 0); err == nil {
 			c.Stdout, c.Stderr = nul, nul
 		}
-		c.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+		detacherProcessus(c)
 		if c.Start() == nil {
 			_ = c.Process.Release()
 		}
@@ -275,12 +271,12 @@ func (p *passerelle) windowsVar(args []string) int {
 		p.refus(2, "Folder not found: %s", val)
 	}
 	reel := realpathP(val)
-	if !strings.HasPrefix(reel, p.kit+"/tools/windows/") && !strings.HasPrefix(reel, p.env("ANDROID_SDK_DIR", "/nulle-part")) &&
-		!strings.HasPrefix(reel, p.env("ANDROID_JDK_DIR", "/nulle-part")) {
+	if !prefixeP(reel, p.kit+"/tools/windows/") && !prefixeP(reel, p.env("ANDROID_SDK_DIR", "/nulle-part")) &&
+		!prefixeP(reel, p.env("ANDROID_JDK_DIR", "/nulle-part")) {
 		p.refus(2, "Refused: the path must be inside $TOOLS/windows or a detected SDK (%s).", reel)
 	}
-	win := wslpathW(reel)
-	c := exec.Command("powershell.exe", "-NoProfile", "-Command", "[Environment]::SetEnvironmentVariable('"+nom+"', '"+win+"', 'User')")
+	win := versWindowsP(reel)
+	c := commande("powershell.exe", "-NoProfile", "-Command", "[Environment]::SetEnvironmentVariable('"+nom+"', '"+win+"', 'User')")
 	c.Stdin, c.Stdout, c.Stderr = os.Stdin, p.sortie, p.erreur
 	if code := codeCommande(c.Run(), c); code != 0 {
 		return code
@@ -302,8 +298,8 @@ func (p *passerelle) pcExec(args []string) int {
 		p.refus(2, "Usage: pc-exec PATH/program.exe [arguments...]")
 	}
 	reel := realpathP(prog)
-	if !strings.HasPrefix(reel, p.kit+"/tools/windows/") && !strings.HasPrefix(reel, p.projet+"/") &&
-		!strings.HasPrefix(reel, p.env("ANDROID_SDK_DIR", "/nulle-part")+"/") && !strings.HasPrefix(reel, p.env("ANDROID_JDK_DIR", "/nulle-part")+"/") {
+	if !prefixeP(reel, p.kit+"/tools/windows/") && !prefixeP(reel, p.projet+"/") &&
+		!prefixeP(reel, p.env("ANDROID_SDK_DIR", "/nulle-part")+"/") && !prefixeP(reel, p.env("ANDROID_JDK_DIR", "/nulle-part")+"/") {
 		p.refus(2, "Refused: pc-exec only runs programs located in $TOOLS/windows or in the project (%s).", reel)
 	}
 	conv := convertirArgs(args)
@@ -316,7 +312,7 @@ func (p *passerelle) pcExec(args []string) int {
 				ligne += " " + a
 			}
 		}
-		c := p.executerAdmin("run: \""+wslpathW(reel)+"\""+ligne, 5*time.Second)
+		c := p.executerAdmin("run: \""+versWindowsP(reel)+"\""+ligne, 5*time.Second)
 		if c == 127 {
 			fmt.Fprintln(p.erreur, "Administrator rights not allowed yet: in the app, Setup & health -> Administrator rights -> Repair (one UAC prompt, once). Note it in TODO_FOR_YOU.md and continue with a portable alternative.")
 		}
@@ -340,11 +336,11 @@ func (p *passerelle) pcExec(args []string) int {
 	case ".exe":
 		code = p.lancerWindows(false, reel, conv...)
 	case ".msi":
-		code = p.lancer("msiexec.exe", append([]string{"/i", wslpathW(reel), "/qn", "/norestart"}, conv...)...)
+		code = p.lancer("msiexec.exe", append([]string{"/i", versWindowsP(reel), "/qn", "/norestart"}, conv...)...)
 	case ".ps1":
-		code = p.lancerWindows(false, "powershell.exe", append([]string{"-NoProfile", "-ExecutionPolicy", "Bypass", "-File", wslpathW(reel)}, conv...)...)
+		code = p.lancerWindows(false, "powershell.exe", append([]string{"-NoProfile", "-ExecutionPolicy", "Bypass", "-File", versWindowsP(reel)}, conv...)...)
 	default:
-		code = p.lancerWindows(false, "cmd.exe", append([]string{"/c", wslpathW(reel)}, conv...)...)
+		code = p.lancerWindows(false, "cmd.exe", append([]string{"/c", versWindowsP(reel)}, conv...)...)
 	}
 	// 740 = ERROR_ELEVATION_REQUIRED (the program's manifest asks for administrator rights); 1603 = MSI needs
 	// elevation (seen from WSL as 740 % 256 = 228)
@@ -368,10 +364,10 @@ func (p *passerelle) tool(args []string) int {
 	}
 	ici, _ := os.Getwd()
 	rel := ""
-	if strings.HasPrefix(ici+"/", p.projet+"/") {
-		rel = strings.TrimPrefix(ici, p.projet)
+	if prefixeP(ici+"/", p.projet+"/") {
+		rel = filepathToSlashP(ici[len(p.projet):])
 	}
-	return p.lancer("docker", append([]string{"run", "--rm", "-i", "-v", p.projet + ":/work", "-w", "/work" + rel, "-e", "HOME=/tmp", image}, args...)...)
+	return p.lancer("docker", append([]string{"run", "--rm", "-i", "-v", montageDockerP(p.projet) + ":/work", "-w", "/work" + rel, "-e", "HOME=/tmp", image}, args...)...)
 }
 
 func (p *passerelle) unreal(outil string, args []string) int {
@@ -388,7 +384,7 @@ func (p *passerelle) unreal(outil string, args []string) int {
 		if !fichierP(bat) {
 			p.absent("Unreal Engine")
 		}
-		return p.lancerWindows(false, "cmd.exe", append([]string{"/c", wslpathW(bat)}, convertirArgs(args)...)...)
+		return p.lancerWindows(false, "cmd.exe", append([]string{"/c", versWindowsP(bat)}, convertirArgs(args)...)...)
 	}
 	exe := ue + "/Engine/Binaries/Win64/UnrealEditor.exe"
 	if !fichierP(exe) {
@@ -448,10 +444,10 @@ func (p *passerelle) blender(args []string) int {
 			p.refus(2, "File not found: %s", fichier)
 		}
 		reel := realpathP(fichier)
-		if !strings.HasPrefix(reel, realpathP(p.projet)+"/") {
+		if !prefixeP(reel, realpathP(p.projet)+"/") {
 			p.refus(2, "Refused: the file must be inside the project (%s).", reel)
 		}
-		p.lancerWindows(true, exe, wslpathW(reel))
+		p.lancerWindows(true, exe, versWindowsP(reel))
 	} else {
 		p.lancerWindows(true, exe)
 	}
@@ -560,9 +556,9 @@ func (p *passerelle) construireRojo(f, place string) int {
 	}
 	var c *exec.Cmd
 	if strings.HasSuffix(rojo, ".exe") {
-		c = exec.Command(rojo, "build", wslpathW(f), "-o", wslpathW(place))
+		c = commande(rojo, "build", versWindowsP(f), "-o", versWindowsP(place))
 	} else {
-		c = exec.Command(rojo, "build", f, "-o", place)
+		c = commande(rojo, "build", f, "-o", place)
 	}
 	c.Stdout, c.Stderr = j, j
 	err = c.Run()
@@ -585,7 +581,7 @@ func (p *passerelle) construireRojo(f, place string) int {
 func windowsVerrouille() bool { return processusWindows("LogonUI.exe", "LogonUI") }
 
 func (p *passerelle) fermerStudiosProjet() int {
-	w := strings.ReplaceAll(wslpathW(p.projet), "'", "''")
+	w := strings.ReplaceAll(versWindowsP(p.projet), "'", "''")
 	w = strings.TrimSuffix(w, `\`) + `\`
 	script := "$d = '" + w + "'.ToLower(); $n = 0; Get-CimInstance Win32_Process -Filter \"Name='RobloxStudioBeta.exe'\" | Where-Object { $_.CommandLine -and $_.CommandLine.Replace('/', '\\').ToLower().Contains($d) } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue; $n++ }; $n"
 	out, _ := dansC("powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script).Output()
@@ -670,10 +666,10 @@ func (p *passerelle) robloxStudio(args []string) int {
 			p.refus(2, "Refused: a .rbxl or .rbxlx place only.")
 		}
 		reel := realpathP(place)
-		if !strings.HasPrefix(reel, realpathP(p.projet)+"/") {
+		if !prefixeP(reel, realpathP(p.projet)+"/") {
 			p.refus(2, "Refused: the place must be inside the project (%s).", reel)
 		}
-		p.lancerWindows(true, exe, "--task", "EditFile", "--localPlaceFile", wslpathW(reel))
+		p.lancerWindows(true, exe, "--task", "EditFile", "--localPlaceFile", versWindowsP(reel))
 	} else {
 		p.lancerWindows(true, exe)
 	}
@@ -693,6 +689,22 @@ func (p *passerelle) robloxStudio(args []string) int {
 	return 0
 }
 
+// ouvrirWindows: the Windows program an MCP server drives (the "ouvrir" of the catalog or of the library,
+// athanor mcp-ouvrir, before each cycle), opened without blocking, on Claude's desktop when that option is
+// on. PROGRAM: C:\...\name.exe; the project's files among the arguments are converted.
+func (p *passerelle) ouvrirWindows(args []string) int {
+	prog := argGH(args, 0)
+	if !regexp.MustCompile(`^[A-Za-z]:[\\/]`).MatchString(prog) {
+		p.refus(2, "Refused: a Windows program (C:\\...\\name.exe).")
+	}
+	if !fichierP(cheminOutil(prog)) {
+		p.refus(127, "Not found: %s", prog)
+	}
+	p.lancerWindows(true, cheminOutil(prog), convertirArgs(args[1:])...)
+	fmt.Fprintln(p.sortie, "started")
+	return 0
+}
+
 // ---------------------------------------------------------------------------- install-windows
 
 var reDejaInstalle = regexp.MustCompile(`(?i)already installed|d.{1,2}j.{1,2} install|No newer package|Aucune mise .{1,2} niveau`)
@@ -707,7 +719,15 @@ func (p *passerelle) installWindows(args []string) int {
 		if !regexp.MustCompile(`^[A-Za-z0-9 ._+-]+$`).MatchString(mots) {
 			p.refus(2, "Search words: letters, digits, spaces, . _ + -")
 		}
-		return p.lancer("timeout", "180", "powershell.exe", "-NoProfile", "-Command", "winget search --accept-source-agreements --disable-interactivity '"+mots+"'")
+		ctx, fin := context.WithTimeout(context.Background(), 180*time.Second)
+		defer fin()
+		c := commandeContexte(ctx, "powershell.exe", "-NoProfile", "-Command", "winget search --accept-source-agreements --disable-interactivity '"+mots+"'")
+		c.Stdin, c.Stdout, c.Stderr = os.Stdin, p.sortie, p.erreur
+		if err := c.Run(); ctx.Err() != nil {
+			return 124
+		} else {
+			return codeCommande(err, c)
+		}
 	case "--file":
 		return p.pcExec(append([]string{"--admin"}, args[1:]...))
 	}
@@ -717,7 +737,9 @@ func (p *passerelle) installWindows(args []string) int {
 	}
 	var sortie strings.Builder
 	essai := func(portee string) int {
-		c := exec.Command("timeout", "1200", "powershell.exe", "-NoProfile", "-Command",
+		ctx, fin := context.WithTimeout(context.Background(), 1200*time.Second)
+		defer fin()
+		c := commandeContexte(ctx, "powershell.exe", "-NoProfile", "-Command",
 			"winget install --id '"+id+"' --exact --silent "+portee+" --accept-package-agreements --accept-source-agreements --disable-interactivity; exit $LASTEXITCODE")
 		tuyau, _ := c.StdoutPipe()
 		c.Stderr = c.Stdout
@@ -805,7 +827,9 @@ var attenteAdmin = 5 * time.Second
 // ---------------------------------------------------------------------------- entry
 
 var passerellesGo = map[string]bool{"adb": true, "blender": true, "install-windows": true, "pc-exec": true, "roblox-studio": true,
-	"tool": true, "unreal-cmd": true, "unreal-editor": true, "unreal-uat": true, "windows-var": true}
+	"tool": true, "unreal-cmd": true, "unreal-editor": true, "unreal-uat": true, "windows-var": true,
+	// the pilot's own steps (never one of Claude's commands, never through the bridge)
+	"rojo-construire": true, "ouvrir-windows": true}
 
 func lancerPasserelle(args []string) (code int) {
 	if len(args) < 1 || !passerellesGo[args[0]] {
@@ -818,10 +842,12 @@ func lancerPasserelle(args []string) (code int) {
 			kit = filepath.Dir(e)
 		}
 	}
-	projet := os.Getenv("PROJECT")
+	kit = cheminOutil(kit)
+	projet := cheminOutil(os.Getenv("PROJECT"))
 	if projet == "" {
 		projet = kit + "/projet"
 	}
+	chargerPcTools(kit)
 	p := &passerelle{kit: kit, projet: projet, sortie: os.Stdout, erreur: os.Stderr}
 	defer func() {
 		if r := recover(); r != nil {
@@ -848,6 +874,13 @@ func lancerPasserelle(args []string) (code int) {
 		return p.tool(reste)
 	case "windows-var":
 		return p.windowsVar(reste)
+	case "rojo-construire":
+		if len(reste) != 2 {
+			return 2
+		}
+		return p.construireRojo(cheminOutil(reste[0]), cheminOutil(reste[1]))
+	case "ouvrir-windows":
+		return p.ouvrirWindows(reste)
 	}
 	return p.unreal(outil, reste)
 }

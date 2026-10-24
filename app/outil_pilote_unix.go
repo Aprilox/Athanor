@@ -39,7 +39,7 @@ func arreterSessionClaude(kill bool, fSid, _, _ string) {
 	}
 	_ = syscall.Kill(-sid, sig)
 	_ = syscall.Kill(sid, sig)
-	_ = exec.Command("pkill", nom, "-s", strconv.Itoa(sid)).Run()
+	_ = commande("pkill", nom, "-s", strconv.Itoa(sid)).Run()
 }
 
 func ignorerSIGPIPE() {

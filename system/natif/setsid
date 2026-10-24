@@ -1,5 +1,0 @@
-#!/usr/bin/env bash
-# Native Windows mode: no Unix sessions. The command runs as it is; the pilot stops it, and every program it
-# started, with pkill -s (system/natif/pkill), which ends its whole Windows process tree.
-[ "${1:-}" = "-w" ] && shift
-exec "$@"

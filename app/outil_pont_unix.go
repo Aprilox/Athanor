@@ -110,7 +110,7 @@ func (p *pont) executer(ident string, demande any) {
 					env = append(env, cle+"="+textePython(val))
 				}
 			}
-			c := exec.Command(filepath.Join(p.systeme, "bin", outil), args...)
+			c := commande(filepath.Join(p.systeme, "bin", outil), args...)
 			c.Dir, c.Env, c.Stdout, c.Stderr = cwd, env, journal, journal
 			c.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 			if err := c.Start(); err != nil {

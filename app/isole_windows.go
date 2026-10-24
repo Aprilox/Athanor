@@ -14,7 +14,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"runtime"
 	"strconv"
 	"strings"
@@ -395,10 +394,10 @@ func lancerGardien() {
 		if err != nil {
 			return
 		}
-		c := exec.Command(exe, "--retour", strconv.Itoa(os.Getpid()))
+		c := commande(exe, "--retour", strconv.Itoa(os.Getpid()))
 		c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: createNoWindow | createNewProcessGroup | createBreakawayFromJob}
 		if c.Start() != nil {
-			c = exec.Command(exe, "--retour", strconv.Itoa(os.Getpid()))
+			c = commande(exe, "--retour", strconv.Itoa(os.Getpid()))
 			c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: createNoWindow | createNewProcessGroup}
 			_ = c.Start()
 		}

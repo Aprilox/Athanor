@@ -49,7 +49,7 @@ type SecretCatalogue struct {
 }
 
 type ConfigMCP struct {
-	Type    string            `json:"type,omitempty"` // stdio (in a cage), windows (a Windows program, system/windows-mcp.sh), http, sse
+	Type    string            `json:"type,omitempty"` // stdio (in a cage), windows (a Windows program, athanor mcp-windows), http, sse
 	Command string            `json:"command,omitempty"`
 	Args    []string          `json:"args,omitempty"`
 	Env     map[string]string `json:"env,omitempty"`
@@ -1522,8 +1522,8 @@ func (s *Serveur) apiExtTester(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	dossier := strings.ReplaceAll(p.Dossier, "'", "'\\''")
-	sortie, _ := executerKit(s.kitCourant(), "P=\"$(wslpath -u '"+dossier+"' 2>/dev/null || printf '%s' '"+dossier+"')\"; "+outilKit("extensions")+"\"${X[@]}\" tester \"$PWD\" \"$P\" "+c.ID)
+	k := s.kitCourant()
+	sortie, _ := executerKitArgs(k, 20*time.Minute, "extensions", "tester", k.Racine, p.Dossier, c.ID)
 	var res map[string]any
 	for _, l := range strings.Split(sortie, "\n") {
 		if strings.HasPrefix(strings.TrimSpace(l), "{") && json.Unmarshal([]byte(strings.TrimSpace(l)), &res) == nil {

@@ -163,6 +163,9 @@ func cheminsOutil(args []string) []string {
 }
 
 func cheminOutil(p string) string {
+	if runtime.GOOS == "linux" {
+		return cheminNatifPilote(p) // in WSL, a folder as Windows names it (given by the application)
+	}
 	if runtime.GOOS == "windows" {
 		if m := reCheminGitBash.FindStringSubmatch(p); m != nil {
 			return strings.ToUpper(m[1]) + ":" + firstNonEmpty(m[2], "/")

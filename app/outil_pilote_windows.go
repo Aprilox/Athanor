@@ -32,10 +32,10 @@ func preparerSessionClaude(c *exec.Cmd) {
 func arreterSessionClaude(kill bool, fSid, fWin, journalArret string) {
 	if fWin != "" {
 		if w := pidSurPilote(lireTexteCourt(fWin)); w > 1 {
-			tl := exec.Command("tasklist", "/FI", "PID eq "+strconv.Itoa(w), "/NH")
+			tl := commande("tasklist", "/FI", "PID eq "+strconv.Itoa(w), "/NH")
 			cacherFenetre(tl)
 			if out, err := tl.Output(); err == nil && strings.Contains(strings.ToLower(string(out)), "athanor") {
-				tk := exec.Command("taskkill", "/T", "/F", "/PID", strconv.Itoa(w))
+				tk := commande("taskkill", "/T", "/F", "/PID", strconv.Itoa(w))
 				cacherFenetre(tk)
 				sortie, _ := tk.CombinedOutput()
 				if journalArret != "" {
@@ -49,7 +49,7 @@ func arreterSessionClaude(kill bool, fSid, fWin, journalArret string) {
 		}
 	}
 	if sid := pidSurPilote(lireTexteCourt(fSid)); sid > 1 {
-		tk := exec.Command("taskkill", "/T", "/F", "/PID", strconv.Itoa(sid))
+		tk := commande("taskkill", "/T", "/F", "/PID", strconv.Itoa(sid))
 		cacherFenetre(tk)
 		_ = tk.Run()
 		if p, err := os.FindProcess(sid); err == nil {

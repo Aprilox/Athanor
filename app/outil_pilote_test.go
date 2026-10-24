@@ -103,7 +103,7 @@ func preparerKitEssaiPilote(t *testing.T, binAthanor string) string {
 		t.Fatal(err)
 	}
 	kit := filepath.Join(dossierEssaiPilote(t), "kit")
-	for _, d := range []string{"system", "template", "commands"} {
+	for _, d := range []string{"template"} {
 		if err := copierDossier(filepath.Join(racineSrc, d), filepath.Join(kit, d), true); err != nil {
 			t.Fatalf("copy %s: %v", d, err)
 		}
@@ -290,22 +290,16 @@ printf '{"type":"result","subtype":"success","is_error":false,"num_turns":2,"dur
 exit 0
 `
 
-func executerPiloteMoteur(t *testing.T, kit, projet, fakeClaude, moteur string, extraEnv []string) {
+// executerPilote: the Go pilot on a throw-away kit and project, started as the application does (athanor
+// demarrer, in the foreground here); its output, shown when a check fails.
+func executerPilote(t *testing.T, bin, kit, projet, fakeClaude string, extraEnv []string) string {
 	t.Helper()
-	bash := "bash"
-	if runtime.GOOS == "windows" {
-		bash = trouverBashNatifPilote()
-		if bash == "" {
-			t.Skip("Git Bash not found on Windows")
-		}
-	}
-	pilotSh := filepath.ToSlash(filepath.Join(kit, "system", "pilot.sh"))
-	projArg := filepath.ToSlash(projet)
-	cmd := exec.Command(bash, pilotSh, projArg)
+	_ = os.WriteFile(filepath.Join(kit, ".env"), []byte("LANGUAGE=en\n"), 0o644)
+	cmd := exec.Command(bin, "demarrer", projet)
 	cmd.Dir = kit
 	env := append(os.Environ(),
-		"PILOT_ENGINE="+moteur,
-		"CLAUDE_BIN="+filepath.ToSlash(fakeClaude),
+		"KIT="+kit,
+		"CLAUDE_BIN="+fakeClaude,
 		"CLAUDE_CODE_OAUTH_TOKEN=fake-token-for-test",
 		"KEEP_AWAKE=0",
 		"CLOSE_AFTER_MILESTONE=0",
@@ -314,15 +308,18 @@ func executerPiloteMoteur(t *testing.T, kit, projet, fakeClaude, moteur string, 
 		"QUOTA_WAIT_MIN=1",
 		"ERROR_WAIT_MIN=0",
 	)
-	env = append(env, extraEnv...)
-	cmd.Env = env
+	cmd.Env = append(env, extraEnv...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		t.Fatalf("pilot (%s) failed: %v\nOutput:\n%s", moteur, err, string(out))
+		t.Fatalf("pilot failed: %v\nOutput:\n%s", err, string(out))
 	}
+	return string(out)
 }
 
-func TestBancPiloteDeuxMoteurs(t *testing.T) {
+func TestBancPilote(t *testing.T) {
+	if runtime.GOOS == "windows" && trouverBashNatifPilote() == "" {
+		t.Skip("Git Bash not found on Windows (the fake Claude Code is a bash script)")
+	}
 	binTemp := filepath.Join(t.TempDir(), "athanor-test-bin")
 	if runtime.GOOS == "windows" {
 		binTemp += ".exe"
@@ -331,150 +328,90 @@ func TestBancPiloteDeuxMoteurs(t *testing.T) {
 		if out, err := exec.Command("go", "build", "-o", binTemp, ".").CombinedOutput(); err != nil {
 			t.Fatalf("go build failed: %v\n%s", err, string(out))
 		}
-	} else if st, err := os.Stat(filepath.Join("..", "athanor")); err == nil && !st.IsDir() {
-		binTemp = filepath.Join("..", "athanor")
 	} else {
-		t.Skip("neither go nor ../athanor available")
+		t.Skip("go not available")
 	}
 
 	t.Run("parcours_complet", func(t *testing.T) {
-		type resMoteur struct {
-			plan, rapport, hello string
-			etat                 Etat
-			lignesStats          int
-			etatsStats           []string
-			commits              []string
-			aSolutions           bool
-			aGitignore           bool
+		kit := preparerKitEssaiPilote(t, binTemp)
+		fakeClaude := filepath.Join(kit, "fake-claude.sh")
+		if err := os.WriteFile(fakeClaude, []byte(strings.ReplaceAll(scriptFauxClaudeComplet, "\r\n", "\n")), 0o755); err != nil {
+			t.Fatal(err)
 		}
-		executer := func(moteur string) resMoteur {
-			kit := preparerKitEssaiPilote(t, binTemp)
-			fakeClaude := filepath.Join(kit, "fake-claude.sh")
-			if err := os.WriteFile(fakeClaude, []byte(strings.ReplaceAll(scriptFauxClaudeComplet, "\r\n", "\n")), 0o755); err != nil {
-				t.Fatal(err)
-			}
-			projet := filepath.Join(dossierEssaiPilote(t), "projet")
-			_ = os.MkdirAll(filepath.Join(projet, ".athanor", "queue"), 0o755)
-			_ = os.WriteFile(filepath.Join(projet, ".athanor", "REQUEST.md"), []byte("# My Request\n\nBuild a greeting app.\n"), 0o644)
-			_ = os.WriteFile(filepath.Join(projet, ".athanor", "queue", "01-extra.md"), []byte("# Extra\n\nAdd an extra line.\n"), 0o644)
+		projet := filepath.Join(dossierEssaiPilote(t), "projet")
+		_ = os.MkdirAll(filepath.Join(projet, ".athanor", "queue"), 0o755)
+		_ = os.WriteFile(filepath.Join(projet, ".athanor", "REQUEST.md"), []byte("# My Request\n\nBuild a greeting app.\n"), 0o644)
+		_ = os.WriteFile(filepath.Join(projet, ".athanor", "queue", "01-extra.md"), []byte("# Extra\n\nAdd an extra line.\n"), 0o644)
+		sortie := executerPilote(t, binTemp, kit, projet, fakeClaude, nil)
 
-			executerPiloteMoteur(t, kit, projet, fakeClaude, moteur, nil)
-
-			p := Projet{Nom: "test", Dossier: projet}
-			etat, ok := p.LireEtat()
+		p := Projet{Nom: "test", Dossier: projet}
+		etat, ok := p.LireEtat()
+		if !ok {
+			t.Fatalf("STATE.json missing or invalid\n%s", sortie)
+		}
+		var etatsStats []string
+		for _, s := range p.LireStats() {
+			etatsStats = append(etatsStats, s.Cycle+":"+s.Etat)
+		}
+		logOut, _ := gitP(projet, nil, "log", "--format=%s").Output()
+		commits := strings.Split(strings.TrimSpace(string(logOut)), "\n")
+		helloB, _ := os.ReadFile(filepath.Join(projet, "hello.txt"))
+		giB, _ := os.ReadFile(filepath.Join(projet, ".gitignore"))
+		rapB, _ := os.ReadFile(filepath.Join(p.Atelier(), "FINAL_REPORT.md"))
+		echec := false
+		verifier := func(ok bool, format string, a ...any) {
 			if !ok {
-				t.Fatalf("[%s] STATE.json missing or invalid", moteur)
-			}
-			stats := p.LireStats()
-			var etatsStats []string
-			for _, s := range stats {
-				etatsStats = append(etatsStats, s.Cycle+":"+s.Etat)
-			}
-			logOut, _ := gitP(projet, nil, "log", "--format=%s").Output()
-			commits := strings.Split(strings.TrimSpace(string(logOut)), "\n")
-			planB, _ := os.ReadFile(p.Plan())
-			rapB, _ := os.ReadFile(filepath.Join(p.Atelier(), "FINAL_REPORT.md"))
-			helloB, _ := os.ReadFile(filepath.Join(projet, "hello.txt"))
-			giB, _ := os.ReadFile(filepath.Join(projet, ".gitignore"))
-			return resMoteur{
-				plan:        strings.TrimSpace(string(planB)),
-				rapport:     strings.TrimSpace(string(rapB)),
-				hello:       strings.TrimSpace(string(helloB)),
-				etat:        etat,
-				lignesStats: len(stats),
-				etatsStats:  etatsStats,
-				commits:     commits,
-				aSolutions:  fichierRegulierPilote(filepath.Join(p.Atelier(), "SOLUTIONS.md")),
-				aGitignore:  strings.Contains(string(giB), ".env"),
+				echec = true
+				t.Errorf(format, a...)
 			}
 		}
-
-		rBash := executer("bash")
-		rGo := executer("go")
-
-		if rBash.plan != rGo.plan {
-			t.Errorf("PLAN.md mismatch:\nbash:\n%s\ngo:\n%s", rBash.plan, rGo.plan)
-		}
-		if rBash.rapport != rGo.rapport {
-			t.Errorf("FINAL_REPORT.md mismatch:\nbash:\n%s\ngo:\n%s", rBash.rapport, rGo.rapport)
-		}
-		if rBash.hello != rGo.hello {
-			t.Errorf("hello.txt mismatch: bash=%q go=%q", rBash.hello, rGo.hello)
-		}
-		if rBash.etat.Phase != rGo.etat.Phase || rBash.etat.Etat != rGo.etat.Etat || rBash.etat.Cycle != rGo.etat.Cycle || rBash.etat.DemandesEnAttente != rGo.etat.DemandesEnAttente {
-			t.Errorf("STATE.json mismatch:\nbash=%+v\ngo=%+v", rBash.etat, rGo.etat)
-		}
-		if strings.Join(rBash.etatsStats, ",") != strings.Join(rGo.etatsStats, ",") {
-			t.Errorf("stats.tsv cycles/states mismatch: bash=%v go=%v", rBash.etatsStats, rGo.etatsStats)
-		}
-		if strings.Join(rBash.commits, "|") != strings.Join(rGo.commits, "|") {
-			t.Errorf("git commits mismatch: bash=%v go=%v", rBash.commits, rGo.commits)
-		}
-		if !rGo.aSolutions || !rGo.aGitignore {
-			t.Errorf("expected SOLUTIONS.md (%v) and .gitignore (%v)", rGo.aSolutions, rGo.aGitignore)
+		verifier(strings.Join(etatsStats, ",") == "1:ok,2:ok,3:ok,4:ok", "stats.tsv cycles/states: %v", etatsStats)
+		verifier(etat.Phase == "entre_cycles" && strings.HasPrefix(etat.Etat, "DONE") && etat.Cycle == 4 && etat.DemandesEnAttente == 0, "STATE.json: %+v", etat)
+		verifier(len(commits) >= 3 && commits[0] == "M3: extra request delivered", "git commits: %v", commits)
+		verifier(strings.TrimSpace(string(helloB)) == "Hello Athanor\nExtra feature", "hello.txt: %q", helloB)
+		verifier(strings.Contains(string(rapB), "STATUS: DONE"), "FINAL_REPORT.md: %q", rapB)
+		exclB, _ := os.ReadFile(filepath.Join(projet, ".git", "info", "exclude"))
+		verifier(fichierRegulierPilote(filepath.Join(p.Atelier(), "SOLUTIONS.md")) && strings.Contains(string(exclB), ".env") && strings.Contains(string(exclB), ".athanor/"), "SOLUTIONS.md and .git/info/exclude expected")
+		verifier(!strings.Contains(string(giB), "Athanor"), "the project's .gitignore untouched: %q", giB)
+		if echec {
+			t.Logf("pilot output:\n%s", sortie)
 		}
 	})
 
 	t.Run("relais_et_quota", func(t *testing.T) {
-		type resRelais struct {
-			etatsStats   []string
-			modelesStats []string
-			relaySeen    bool
-			fallbackSeen string
-			etat         Etat
+		kit := preparerKitEssaiPilote(t, binTemp)
+		fakeClaude := filepath.Join(kit, "fake-claude-rq.sh")
+		if err := os.WriteFile(fakeClaude, []byte(strings.ReplaceAll(scriptFauxClaudeRelaisQuota, "\r\n", "\n")), 0o755); err != nil {
+			t.Fatal(err)
 		}
-		executer := func(moteur string) resRelais {
-			kit := preparerKitEssaiPilote(t, binTemp)
-			fakeClaude := filepath.Join(kit, "fake-claude-rq.sh")
-			if err := os.WriteFile(fakeClaude, []byte(strings.ReplaceAll(scriptFauxClaudeRelaisQuota, "\r\n", "\n")), 0o755); err != nil {
-				t.Fatal(err)
-			}
-			projet := filepath.Join(dossierEssaiPilote(t), "projet")
-			_ = os.MkdirAll(filepath.Join(projet, ".athanor"), 0o755)
-			_ = os.WriteFile(filepath.Join(projet, ".athanor", "REQUEST.md"), []byte("# Request\n\nBuild feature M1.\n"), 0o644)
-			_ = os.WriteFile(filepath.Join(projet, ".athanor", "PLAN.md"), []byte("# Plan\n\n- [ ] M1 : Core feature\n"), 0o644)
+		projet := filepath.Join(dossierEssaiPilote(t), "projet")
+		_ = os.MkdirAll(filepath.Join(projet, ".athanor"), 0o755)
+		_ = os.WriteFile(filepath.Join(projet, ".athanor", "REQUEST.md"), []byte("# Request\n\nBuild feature M1.\n"), 0o644)
+		_ = os.WriteFile(filepath.Join(projet, ".athanor", "PLAN.md"), []byte("# Plan\n\n- [ ] M1 : Core feature\n"), 0o644)
+		sortie := executerPilote(t, binTemp, kit, projet, fakeClaude, []string{"MODEL=opus-principal", "FALLBACK_MODEL=sonnet-secours", "RELAY_CONTEXT_K=150"})
 
-			executerPiloteMoteur(t, kit, projet, fakeClaude, moteur, []string{
-				"MODEL=opus-principal",
-				"FALLBACK_MODEL=sonnet-secours",
-				"RELAY_CONTEXT_K=150",
-			})
-
-			p := Projet{Nom: "test", Dossier: projet}
-			etat, _ := p.LireEtat()
-			stats := p.LireStats()
-			var etatsStats, modelesStats []string
-			for _, s := range stats {
-				etatsStats = append(etatsStats, s.Cycle+":"+s.Etat)
-				modelesStats = append(modelesStats, s.Modele)
-			}
-			fbB, _ := os.ReadFile(filepath.Join(p.Atelier(), "fallback_seen"))
-			return resRelais{
-				etatsStats:   etatsStats,
-				modelesStats: modelesStats,
-				relaySeen:    fichierRegulierPilote(filepath.Join(p.Atelier(), "relay_seen")),
-				fallbackSeen: strings.TrimSpace(string(fbB)),
-				etat:         etat,
+		p := Projet{Nom: "test", Dossier: projet}
+		etat, _ := p.LireEtat()
+		var etatsStats, modelesStats []string
+		for _, s := range p.LireStats() {
+			etatsStats = append(etatsStats, s.Cycle+":"+s.Etat)
+			modelesStats = append(modelesStats, s.Modele)
+		}
+		fbB, _ := os.ReadFile(filepath.Join(p.Atelier(), "fallback_seen"))
+		echec := false
+		verifier := func(ok bool, format string, a ...any) {
+			if !ok {
+				echec = true
+				t.Errorf(format, a...)
 			}
 		}
-
-		rBash := executer("bash")
-		rGo := executer("go")
-
-		if strings.Join(rBash.etatsStats, ",") != strings.Join(rGo.etatsStats, ",") {
-			t.Errorf("stats states mismatch: bash=%v go=%v", rBash.etatsStats, rGo.etatsStats)
-		}
-		if strings.Join(rBash.modelesStats, ",") != strings.Join(rGo.modelesStats, ",") {
-			t.Errorf("stats models mismatch: bash=%v go=%v", rBash.modelesStats, rGo.modelesStats)
-		}
-		if !rBash.relaySeen || !rGo.relaySeen {
-			t.Errorf("relay notes not passed to cycle 2: bash=%v go=%v", rBash.relaySeen, rGo.relaySeen)
-		}
-		if rBash.fallbackSeen != "sonnet-secours" || rGo.fallbackSeen != "sonnet-secours" {
-			t.Errorf("fallback model not used on cycle 3: bash=%q go=%q", rBash.fallbackSeen, rGo.fallbackSeen)
-		}
-		if rBash.etat.Phase != rGo.etat.Phase || rBash.etat.Etat != rGo.etat.Etat {
-			t.Errorf("final state mismatch: bash=%+v go=%+v", rBash.etat, rGo.etat)
+		verifier(strings.Join(etatsStats, ",") == "1:relais,2:quota,3:ok", "stats states: %v", etatsStats)
+		verifier(strings.Join(modelesStats, ",") == "opus-principal,opus-principal,sonnet-secours", "stats models: %v", modelesStats)
+		verifier(fichierRegulierPilote(filepath.Join(p.Atelier(), "relay_seen")), "relay notes not passed to cycle 2")
+		verifier(strings.TrimSpace(string(fbB)) == "sonnet-secours", "fallback model not used on cycle 3: %q", fbB)
+		verifier(etat.Phase == "entre_cycles" && strings.HasPrefix(etat.Etat, "DONE"), "final state: %+v", etat)
+		if echec {
+			t.Logf("pilot output:\n%s", sortie)
 		}
 	})
 }

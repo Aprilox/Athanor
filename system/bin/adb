@@ -1,8 +1,0 @@
-#!/usr/bin/env bash
-# adb ARGUMENTS...: the PC's Android tool (install the game on a phone plugged in over USB: adb install -r game.apk).
-. "$(dirname "$0")/_common.sh"
-passer_par_le_pont "$@"
-for exe in "$KIT/tools/windows/android-sdk/platform-tools/adb.exe" "${ANDROID_SDK_DIR:-/nulle-part}/platform-tools/adb.exe"; do
-  [ -f "$exe" ] && { convertir_args "$@"; exec "$exe" "${ARGS[@]}"; }
-done
-absent "adb (SDK Android)"

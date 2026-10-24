@@ -1,9 +1,0 @@
-#!/usr/bin/env bash
-# unreal-cmd ARGUMENTS...: UnrealEditor-Cmd.exe (commandlets, automated tests, screenshots) without a window.
-. "$(dirname "$0")/_common.sh"
-passer_par_le_pont "$@"
-exe="${UE_DIR:-}/Engine/Binaries/Win64/UnrealEditor-Cmd.exe"
-[ -f "$exe" ] || absent "Unreal Engine"
-convertir_args "$@"
-lancer_windows "$exe" "${ARGS[@]}"
-exit $?

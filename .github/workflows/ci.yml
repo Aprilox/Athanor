@@ -1,5 +1,5 @@
 # Checks every push and pull request on the three systems Athanor moves to (docs: "Athanor en Go"):
-# vet and tests of the Go code, every build target, and the syntax of the scripts that are still bash.
+# vet and tests of the Go code, and every build target.
 # Windows and macOS are informative while the code is first checked there (continue-on-error); they
 # become blocking once green.
 name: CI
@@ -64,6 +64,4 @@ jobs:
           go-version-file: app/go.mod
       - name: Every build target
         working-directory: app
-        run: bash build.sh --all
-      - name: Scripts syntax
-        run: for f in system/*.sh system/bin/* system/natif/* commands/*.sh; do bash -n "$f" || exit 1; done
+        run: go run . construire --all

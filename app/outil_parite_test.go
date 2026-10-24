@@ -10,14 +10,27 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
 )
 
+// dossierOracles: the former scripts (Python, bash) the Go code was checked against, kept out of the
+// repository (ATHANOR_ORACLES, else testdata/oracles when present): without them, the parity tests skip.
+func dossierOracles() string {
+	if d := os.Getenv("ATHANOR_ORACLES"); d != "" {
+		return d
+	}
+	return filepath.Join("testdata", "oracles")
+}
+
 func scriptPython(t *testing.T, nom string) string {
 	t.Helper()
-	s, _ := filepath.Abs(filepath.Join("testdata", "oracles", "python", nom)) // the former Python helpers, as test oracles
+	if runtime.GOOS != "linux" {
+		t.Skip("the oracles are Linux scripts")
+	}
+	s, _ := filepath.Abs(filepath.Join(dossierOracles(), "python", nom)) // the former Python helpers, as test oracles
 	if _, err := os.Stat(s); err != nil {
 		t.Skip("no " + nom)
 	}

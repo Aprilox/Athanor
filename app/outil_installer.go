@@ -1,9 +1,9 @@
 package main
 
-// athanor installer [KIT]: the installation of Linux, WSL and macOS, once (commands/install.sh hands over to
-// it): Claude Code, the system sandbox, RTK and a few basic tools. It asks for the password once (sudo on
-// Linux; Homebrew's own installer on a Mac without it). Native Windows and the WSL side of Windows keep
-// their PowerShell installers (commands/install-natif.ps1, install.ps1, which then runs this one in WSL).
+// athanor installer [KIT]: the installation of Linux, WSL and macOS, once: Claude Code, the system sandbox,
+// RTK and a few basic tools. It asks for the password once (sudo on Linux; Homebrew's own installer on a Mac
+// without it). Windows: Athanor.exe installer-windows (the WSL side, which then runs this one in WSL) and
+// installer-natif (outil_win_installer_windows.go).
 
 import (
 	"archive/tar"
@@ -42,7 +42,7 @@ func (in *installation) alerte(t string) {
 
 // lancer: a command with the terminal (sudo asks for the password there); true when it succeeded.
 func (in *installation) lancer(silencieux bool, nom string, args ...string) bool {
-	c := exec.Command(nom, args...)
+	c := commande(nom, args...)
 	c.Dir = in.kit
 	c.Stdin = os.Stdin
 	if silencieux {
@@ -61,7 +61,7 @@ func (in *installation) shell(silencieux bool, ligne string) bool {
 func aCommande(nom string) bool { _, err := exec.LookPath(nom); return err == nil }
 
 func premiereLigne(nom string, args ...string) string {
-	out, _ := exec.Command(nom, args...).CombinedOutput()
+	out, _ := commande(nom, args...).CombinedOutput()
 	l := strings.SplitN(strings.TrimSpace(string(out)), "\n", 2)
 	return strings.TrimSpace(l[0])
 }
@@ -74,7 +74,7 @@ func lancerInstaller(args []string) int {
 		kit = filepath.Dir(exe)
 	}
 	kit, _ = filepath.Abs(kit)
-	if !fichierRegulierPilote(filepath.Join(kit, "system", "pilot.sh")) {
+	if !estDossierKit(kit) {
 		fmt.Fprintln(os.Stderr, "athanor installer: not a tool folder: "+kit)
 		return 2
 	}
@@ -97,7 +97,7 @@ func lancerInstaller(args []string) int {
 	case "darwin":
 		in.mac()
 	default:
-		in.alerte("Windows: run commands\\install.cmd (WSL) or Setup & health → Install everything (native Windows).")
+		in.alerte("Windows: Setup & health → Install everything, in the app (Athanor.exe).")
 		return 1
 	}
 	return 0
@@ -153,7 +153,7 @@ func (in *installation) linux() {
 	}
 
 	in.etape("GitHub CLI (to link projects to GitHub)")
-	aide, _ := exec.Command("gh", "auth", "login", "--help").CombinedOutput()
+	aide, _ := commande("gh", "auth", "login", "--help").CombinedOutput()
 	switch {
 	case strings.Contains(string(aide), "--skip-ssh-key"):
 		in.ok("GitHub CLI already installed (" + premiereLigne("gh", "--version") + ")")
@@ -177,7 +177,7 @@ func (in *installation) linux() {
 	in.etape("System sandbox")
 	if premiereLigne("sysctl", "-n", "kernel.apparmor_restrict_unprivileged_userns") == "1" {
 		profil := "abi <abi/4.0>,\ninclude <tunables/global>\n\nprofile bwrap /usr/bin/bwrap flags=(unconfined) {\n  userns,\n  include if exists <local/bwrap>\n}\n"
-		c := exec.Command("sudo", "tee", "/etc/apparmor.d/bwrap")
+		c := commande("sudo", "tee", "/etc/apparmor.d/bwrap")
 		c.Stdin, c.Stdout = strings.NewReader(profil), io.Discard
 		_ = c.Run()
 		if !in.lancer(true, "sudo", "systemctl", "reload", "apparmor") {
@@ -208,8 +208,8 @@ func (in *installation) linux() {
 	}
 	in.outilsPC()
 	in.etape("Done")
-	in.printf("Next step: configure (token, model...). Windows: commands\\configure.cmd · Linux: commands/configure.sh\n")
-	in.printf("Then, to test the sandbox: commands/test-sandbox.sh (Windows: commands\\test-sandbox.cmd)\n")
+	in.printf("Next step: configure (token, model...): the app's Settings, or ./athanor configurer\n")
+	in.printf("Then, to test the sandbox: Setup & health → Test the sandbox, or ./athanor tester-cage\n")
 }
 
 func (in *installation) mac() {
@@ -238,7 +238,7 @@ func (in *installation) mac() {
 	}
 	in.etape("System sandbox")
 	d, _ := os.MkdirTemp("", "athanor-cage")
-	_ = exec.Command("/usr/bin/sandbox-exec", "-p", `(version 1)(allow default)(deny file-write* (subpath "`+d+`"))`, "/usr/bin/touch", filepath.Join(d, "x")).Run()
+	_ = commande("/usr/bin/sandbox-exec", "-p", `(version 1)(allow default)(deny file-write* (subpath "`+d+`"))`, "/usr/bin/touch", filepath.Join(d, "x")).Run()
 	if _, err := os.Stat("/usr/bin/sandbox-exec"); err == nil && !fichierExiste(filepath.Join(d, "x")) {
 		in.ok("Seatbelt (sandbox-exec) works")
 	} else {
@@ -250,7 +250,7 @@ func (in *installation) mac() {
 	in.outilsPC()
 	in.etape("Done")
 	in.printf("Next step, in the Athanor app: Setup & health → Check everything (and the token: Repair on the Token line).\n")
-	in.printf("Without the app: commands/configure.sh, then commands/start.sh ~/path/to/project\n")
+	in.printf("Without the app: ./athanor configurer, then ./athanor demarrer ~/path/to/project\n")
 }
 
 func maisonInstallation() string {
@@ -355,16 +355,15 @@ func extraireRTK(archive io.Reader, dest string) error {
 	}
 }
 
-// outilsPC: the scripts executable, then the PC tools detected (what Claude will be told).
+// outilsPC: the executable executable, Claude's commands linked, then the PC tools detected (what Claude
+// will be told).
 func (in *installation) outilsPC() {
 	in.etape("PC tools")
-	for _, motif := range []string{"commands/*.sh", "system/*.sh", "system/bin/*"} {
-		l, _ := filepath.Glob(filepath.Join(in.kit, motif))
-		for _, f := range l {
-			if st, err := os.Stat(f); err == nil && st.Mode().IsRegular() {
-				_ = os.Chmod(f, st.Mode()|0o111)
-			}
-		}
+	if st, err := os.Stat(filepath.Join(in.kit, "athanor")); err == nil && st.Mode().IsRegular() {
+		_ = os.Chmod(filepath.Join(in.kit, "athanor"), st.Mode()|0o111)
+	}
+	if err := preparerCommandesClaude(in.kit); err != nil {
+		in.alerte("Claude's commands (system/bin): " + err.Error())
 	}
 	projet := filepath.Join(in.kit, "logs", "sandbox-test")
 	os.Setenv("PROJECT", projet)

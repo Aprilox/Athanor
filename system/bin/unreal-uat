@@ -1,9 +1,0 @@
-#!/usr/bin/env bash
-# unreal-uat ARGUMENTS...: RunUAT (BuildCookRun to build the Windows game).
-. "$(dirname "$0")/_common.sh"
-passer_par_le_pont "$@"
-bat="${UE_DIR:-}/Engine/Build/BatchFiles/RunUAT.bat"
-[ -f "$bat" ] || absent "Unreal Engine"
-convertir_args "$@"
-lancer_windows cmd.exe /c "$(wslpath -w "$bat")" "${ARGS[@]}"
-exit $?

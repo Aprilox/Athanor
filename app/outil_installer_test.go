@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -30,7 +31,7 @@ func TestExtraireRTK(t *testing.T) {
 	}
 	b, _ := os.ReadFile(dest)
 	st, _ := os.Stat(dest)
-	if string(b) != "#!/bin/sh\necho rtk\n" || st.Mode()&0o111 == 0 {
+	if string(b) != "#!/bin/sh\necho rtk\n" || (st.Mode()&0o111 == 0 && runtime.GOOS != "windows") {
 		t.Fatalf("%q %v", b, st.Mode())
 	}
 	if err := extraireRTK(bytes.NewReader(archiveTest(t, map[string]string{"README": "x"})), filepath.Join(d, "autre")); err == nil {

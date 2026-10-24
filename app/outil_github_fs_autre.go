@@ -2,8 +2,8 @@
 
 package main
 
-// Native Windows (and the Mac for now): no *at system calls here, the links are checked by path, as the
-// Python of github.sh did on Windows.
+// Native Windows and macOS: no *at system calls here, the links are checked by path (the Linux version
+// opens every folder without following a link).
 
 import (
 	"errors"
@@ -32,6 +32,9 @@ func fichierAtelier(projet, nom string, effacer bool, r io.Reader) error {
 		_ = os.Remove(cible)
 	}
 	if effacer {
+		if st, err := os.Lstat(cible); err == nil && st.IsDir() {
+			return errors.New("a folder: not removed") // as unlink: never a folder
+		}
 		if err := os.Remove(cible); err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return err
 		}
@@ -49,8 +52,16 @@ func fichierAtelier(projet, nom string, effacer bool, r io.Reader) error {
 }
 
 func crochetCommit(projet string, actif bool) error {
-	h := filepath.Join(projet, ".git", "hooks")
-	if estLien(filepath.Join(projet, ".git")) || estLien(h) {
+	g := filepath.Join(projet, ".git")
+	h := filepath.Join(g, "hooks")
+	// as on Linux: only a real .git folder (never a link, a gitfile or nothing), a hooks folder that is
+	// one or that is missing (created then), never a link
+	if st, err := os.Lstat(g); err != nil || !st.IsDir() {
+		return nil
+	}
+	if st, err := os.Lstat(h); err == nil && !st.IsDir() {
+		return nil
+	} else if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return nil
 	}
 	f := filepath.Join(h, "commit-msg")
@@ -72,7 +83,7 @@ func crochetCommit(projet string, actif bool) error {
 		return nil
 	}
 	if actif {
-		if err := os.MkdirAll(h, 0o755); err != nil {
+		if err := os.Mkdir(h, 0o755); err != nil && !errors.Is(err, fs.ErrExist) {
 			return err
 		}
 		return remplacerFichier(f, 0o755, texteCrochet)

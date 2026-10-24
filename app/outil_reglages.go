@@ -83,7 +83,7 @@ func choixDuProjetKit(kit, projet string) map[string][]string {
 	}
 	noms := map[string]bool{normaliserExt(projet): true, normaliserExt(realpathPython(projet)): true}
 	if _, err := exec.LookPath("wslpath"); err == nil {
-		if w, err := exec.Command("wslpath", "-w", projet).Output(); err == nil {
+		if w, err := commande("wslpath", "-w", projet).Output(); err == nil {
 			if s := strings.TrimSpace(string(w)); s != "" {
 				noms[normaliserExt(s)] = true
 			}
@@ -399,8 +399,12 @@ func reglagesChat(projet, sortie string) error {
 }
 
 func lancerChatOutil(args []string) int {
+	args = cheminsOutil(args)
+	if len(args) == 7 && args[0] == "session" {
+		return sessionChat(args[1], args[2], args[3], args[4], args[5], args[6])
+	}
 	if len(args) != 3 || args[0] != "settings" {
-		fmt.Fprintln(os.Stderr, "usage: athanor chat settings PROJECT OUT")
+		fmt.Fprintln(os.Stderr, "usage: athanor chat settings PROJECT OUT | chat session KIT PROJECT ID MODE MODEL SESSION")
 		return 2
 	}
 	if err := reglagesChat(args[1], args[2]); err != nil {

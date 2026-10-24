@@ -8,8 +8,8 @@ package main
 //   mcp KIT PROJECT FILE [--dossier-mcp DIR] [--principal DIR]   only the MCP file (a parallel worker)
 //   tester KIT PROJECT ID      starts the server in its cage, lists its tools (JSON: the app's Test button)
 //   connexion KIT ID FILE      FILE: the remote server ID alone, as the pilot gives it (the sign-in window)
-// Local servers (stdio) run through system/mcp-jail.sh (their cage), Windows programs through
-// system/windows-mcp.sh (WSL interop); in native Windows, both run as they are.
+// Local servers (stdio) run through athanor mcp-cage (their cage), Windows programs through athanor
+// mcp-windows (WSL interop); in native Windows, both run as they are.
 
 import (
 	"bufio"
@@ -214,8 +214,8 @@ func serveurMCP(kit, sid string, def objetJSON, secretsServeur objetJSON, dossie
 			cage = append(cage, "--env", k, v)
 		}
 		s.mettre("type", "stdio")
-		s.mettre("command", filepath.Join(kit, "system", "mcp-jail.sh"))
-		s.mettre("args", append(append(cage, "--", remplacerExt(cmd, secrets, dossier, manquants)), args...))
+		s.mettre("command", filepath.Join(kit, "athanor"))
+		s.mettre("args", append(append(append([]string{"mcp-cage"}, cage...), "--", remplacerExt(cmd, secrets, dossier, manquants)), args...))
 	case "windows":
 		cmd, ok := c.brut("command").(string)
 		if !ok || strings.TrimSpace(cmd) == "" {
@@ -251,8 +251,8 @@ func serveurMCP(kit, sid string, def objetJSON, secretsServeur objetJSON, dossie
 			lancement = append(lancement, "--env", k, v)
 		}
 		s.mettre("type", "stdio")
-		s.mettre("command", filepath.Join(kit, "system", "windows-mcp.sh"))
-		s.mettre("args", append(append(lancement, "--", remplacerExt(cmd, secrets, dossierW, manquants)), args...))
+		s.mettre("command", filepath.Join(kit, "athanor"))
+		s.mettre("args", append(append(append([]string{"mcp-windows"}, lancement...), "--", remplacerExt(cmd, secrets, dossierW, manquants)), args...))
 	default:
 		return nil, "unknown type " + textePython(c.brut("type"))
 	}
@@ -288,7 +288,7 @@ func interopWindows() bool {
 }
 
 func cheminWindowsWSL(dossier string) string {
-	b, err := exec.Command("wslpath", "-w", dossier).Output()
+	b, err := commande("wslpath", "-w", dossier).Output()
 	if err != nil {
 		return dossier
 	}
@@ -322,7 +322,7 @@ func adresseUnreal(kit, url string) string {
 		return url
 	}
 	port := reNonChiffre.ReplaceAllString(string(b), "")
-	route, err := exec.Command("ip", "route", "show", "default").Output()
+	route, err := commande("ip", "route", "show", "default").Output()
 	if err != nil {
 		return url
 	}
@@ -651,7 +651,7 @@ func testerServeur(kit, projet, sid string, delai time.Duration) map[string]any 
 	for _, a := range liste(s.brut("args")) {
 		args = append(args, textePython(a))
 	}
-	p := exec.Command(cmd, args...)
+	p := commande(cmd, args...)
 	p.Env = os.Environ()
 	env := s.objet("env")
 	for _, k := range env.cles {
@@ -694,7 +694,7 @@ func testerServeur(kit, projet, sid string, delai time.Duration) map[string]any 
 		}
 		entree.Close()
 		if runtime.GOOS == "windows" { // the server and everything it started (node, python…)
-			_ = exec.Command("taskkill", "/T", "/F", "/PID", fmt.Sprint(p.Process.Pid)).Run()
+			_ = commande("taskkill", "/T", "/F", "/PID", fmt.Sprint(p.Process.Pid)).Run()
 		}
 		_ = signalerFin(p.Process)
 		select {

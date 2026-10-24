@@ -1,18 +1,12 @@
-# Line endings are fixed per file type, whatever the contributor's git settings:
-# Linux scripts must keep LF (bash in WSL fails on CRLF), Windows scripts keep CRLF.
+# Line endings are fixed per file type, whatever the contributor's git settings: the sources and texts
+# keep LF (the Go tests compare them byte for byte; check.sh scripts Claude writes need it too).
 * text=auto
-*.sh        text eol=lf
-*.py        text eol=lf
-system/bin/* text eol=lf
-system/natif/* text eol=lf
-*.cmd       text eol=crlf
-*.bat       text eol=crlf
-*.ps1       text eol=crlf
 *.go        text eol=lf
-# Binary files
-*.png       binary
-*.ico       binary
+*.md        text eol=lf
+*.sh        text eol=lf
 *.syso      binary
+*.ico       binary
+*.png       binary
 # GitHub language stats: vendored code is not ours
 app/third_party/** linguist-vendored
 app/tools/*.cs     linguist-vendored

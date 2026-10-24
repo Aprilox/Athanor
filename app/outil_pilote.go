@@ -1,10 +1,9 @@
 package main
 
-// athanor pilote [PROJECT] (or athanor pilot [PROJECT]): the autonomous work loop in Go (step 3.1 of the
-// move of Athanor to Go): the default engine (PILOT_ENGINE=go); system/pilot.sh hands over to it, runs the
-// former bash pilot with PILOT_ENGINE=bash, and takes over if the Go pilot hits an internal error. The same files in the workshop (.athanor/STATUS.txt, STATE.json, stats.tsv, pilot.log,
-// pilot.pid, logs/cycle-*.jsonl) and in the pilot's private folder (logs/pilotes/<id>/), the same messages,
-// the same watchdog, relay, quota and task rules as system/pilot.sh.
+// athanor pilote [PROJECT] (or athanor pilot [PROJECT]): the autonomous work loop, parallel workers
+// included, started by athanor demarrer (which starts it again after an internal error of its own). Its
+// files: the workshop (.athanor/STATUS.txt, STATE.json, stats.tsv, pilot.log, pilot.pid, logs/cycle-*.jsonl)
+// and the pilot's private folder (logs/pilotes/<id>/).
 
 import (
 	"bytes"
@@ -910,7 +909,7 @@ func (p *pilote) quitterSurSignal() {
 	}
 	journalArret := filepath.Join(p.prive, "arret.log")
 	arreterSessionClaude(false, filepath.Join(p.prive, "claude_sid"), filepath.Join(p.prive, "claude_winpid"), journalArret)
-	_ = os.WriteFile(filepath.Join(p.prive, "claude_fin"), nil, 0o644) // as pilot.sh: a live display reading the log ends
+	_ = os.WriteFile(filepath.Join(p.prive, "claude_fin"), nil, 0o644) // a live display reading the log ends
 	sids, _ := filepath.Glob(filepath.Join(p.prive, "ouvrier_*.sid"))
 	for _, f := range sids {
 		arreterSessionClaude(true, f, strings.TrimSuffix(f, ".sid")+".winpid", journalArret)

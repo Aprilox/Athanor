@@ -2,13 +2,12 @@
 
 package main
 
-// Native Windows mode: the kit's scripts run in Git for Windows' Git Bash (the shell Claude Code itself
-// uses on Windows) instead of WSL, and Claude Code is the Windows program (claude.exe). No WSL needed,
-// Windows programs and drives are reached directly, but Claude Code has no sandbox there: the user
-// chooses it in Options, which says so. The scripts adapt themselves (system/safety.sh, system/natif/).
+// Native Windows mode: the pilot is Athanor.exe itself instead of WSL's athanor, and Claude Code is the
+// Windows program (claude.exe), whose Bash tool is Git for Windows' Git Bash. No WSL needed, Windows
+// programs and drives are reached directly, but Claude Code has no sandbox there: the user chooses it in
+// Options, which says so.
 
 import (
-	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -96,67 +95,10 @@ func cheminFrais() string {
 	return strings.Join(parties, ";")
 }
 
-func envNatif(bash string) []string {
-	env := []string{}
-	for _, e := range os.Environ() {
-		if !strings.HasPrefix(strings.ToUpper(e), "PATH=") {
-			env = append(env, e)
-		}
-	}
-	return append(env, "PATH="+cheminFrais(),
-		"CHERE_INVOKING=1", // the login shell stays in the kit folder instead of going home
-		"MSYSTEM=MINGW64",
-		"ATHANOR_NATIF=1",
-		"CLAUDE_CODE_GIT_BASH_PATH="+bash, // Claude Code's own Bash tool: the same Git Bash
-	)
-}
 
-const messageSansGitBash = "Native Windows mode: Git for Windows (Git Bash) is missing. Setup & health -> Install everything, or Options -> back to the WSL mode."
 
-// commandeNative: the kit script nom (relative to the kit, written by fichierScript) in Git Bash.
-func commandeNative(k Kit, nom string) *exec.Cmd {
-	b := bashNatif()
-	if b == "" {
-		return exec.Command("cmd.exe", "/c", "echo "+messageSansGitBash+" & exit 1")
-	}
-	c := exec.Command(b, "-l", "./"+nom)
-	c.Dir = k.Racine
-	c.Env = envNatif(b)
-	return c
-}
 
-// demarrerNatifDetache: the pilot's start in a hidden Git Bash outside the application's job, so that it
-// can go on when the application closes (the user is asked then, see fermetureNative).
-func demarrerNatifDetache(k Kit, nom string) error {
-	b := bashNatif()
-	if b == "" {
-		return errors.New(messageSansGitBash)
-	}
-	lancer := func(drapeaux uint32) error {
-		c := exec.Command(b, "-l", "./"+nom)
-		c.Dir = k.Racine
-		c.Env = envNatif(b)
-		c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: drapeaux}
-		if err := c.Start(); err != nil {
-			return err
-		}
-		go func() { _ = c.Wait() }()
-		return nil
-	}
-	if err := lancer(createNoWindow | createNewProcessGroup | createBreakawayFromJob); err != nil {
-		return lancer(createNoWindow | createNewProcessGroup)
-	}
-	return nil
-}
 
-// fenetreNative: a visible Git Bash console for an interactive step.
-func fenetreNative(k Kit, titre, nom string) error {
-	b := bashNatif()
-	if b == "" {
-		return errors.New(messageSansGitBash)
-	}
-	return demarrerFenetre(titre, b, "-l", filepath.Join(k.Racine, filepath.FromSlash(nom)))
-}
 
 var (
 	pMessageBoxW = user32.NewProc("MessageBoxW")
