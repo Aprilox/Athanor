@@ -795,12 +795,19 @@ func (p *pilote) blenderDepuisMCP() {
 func (p *pilote) demarrerEveil() {
 	eveil := filepath.Join(p.prive, "eveil")
 	_ = os.Remove(eveil)
-	if p.keepAwake == "0" {
+	exeAthanor := filepath.Join(p.kit, "Athanor.exe")
+	windows := fichierRegulierPilote(exeAthanor) && (p.natif || interopWindows())
+	if p.keepAwake == "0" && !windows {
 		return
 	}
-	_ = os.WriteFile(eveil, []byte("system\n"), 0o644)
-	exeAthanor := filepath.Join(p.kit, "Athanor.exe")
-	if fichierRegulierPilote(exeAthanor) && (p.natif || interopWindows()) {
+	// Windows: Athanor.exe --eveil also guards the mouse against the programs of Claude's desktop
+	// (garde_souris_windows.go), even with KEEP_AWAKE=0 ("aucun": nothing else)
+	mode := "system"
+	if p.keepAwake == "0" {
+		mode = "aucun"
+	}
+	_ = os.WriteFile(eveil, []byte(mode+"\n"), 0o644)
+	if windows {
 		argEveil := eveil
 		if !p.natif {
 			if w := wslpathW(eveil); w != "" {
@@ -848,7 +855,9 @@ func (p *pilote) modeEveil() {
 		return
 	}
 	m := "system"
-	if p.keepAwake == "screen" || (p.keepAwake == "1" && (p.robloxMCP || p.unrealMCP || p.blenderMCP || p.mcpProgrammes)) {
+	if p.keepAwake == "0" {
+		m = "aucun"
+	} else if p.keepAwake == "screen" || (p.keepAwake == "1" && (p.robloxMCP || p.unrealMCP || p.blenderMCP || p.mcpProgrammes)) {
 		m = "screen"
 	}
 	if lireTexteCourt(eveil) != m {
