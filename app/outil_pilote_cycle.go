@@ -2115,6 +2115,9 @@ func lancerPilote(args []string) int {
 	}
 
 	p.log("=== Athanor starting ===")
+	if runtime.GOOS == "windows" && !consolePartagee {
+		p.log("Windows: no console to share with the programs the pilot starts (git, the tools): each may flash a window of its own.")
+	}
 	if p.outilsPython {
 		p.log("Helpers: Python scripts.")
 	} else {
