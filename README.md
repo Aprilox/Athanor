@@ -73,9 +73,9 @@ One file (a zip on the Mac). From the [**latest release**](https://github.com/Ap
 
 | Your system | Download |
 |---|---|
-| **Windows 10 / 11** | [**Athanor.exe**](https://github.com/Aprilox/Athanor/releases/latest/download/Athanor.exe) (an ARM PC: [Athanor-arm64.exe](https://github.com/Aprilox/Athanor/releases/latest/download/Athanor-arm64.exe)) |
-| **Linux** (x86-64) | [**athanor-linux**](https://github.com/Aprilox/Athanor/releases/latest/download/athanor-linux) (ARM: [athanor-linux-arm64](https://github.com/Aprilox/Athanor/releases/latest/download/athanor-linux-arm64)) |
-| **macOS** 11 or later | [**Athanor-macos.zip**](https://github.com/Aprilox/Athanor/releases/latest/download/Athanor-macos.zip): **Athanor.app**, for Apple Silicon and Intel Macs alike; see [macOS, step by step](#macos-step-by-step) |
+| **Windows 10 / 11** | [**Athanor-Windows-x64.exe**](https://github.com/Aprilox/Athanor/releases/latest/download/Athanor-Windows-x64.exe) (an ARM PC, Snapdragon…: [Athanor-Windows-ARM64.exe](https://github.com/Aprilox/Athanor/releases/latest/download/Athanor-Windows-ARM64.exe)) |
+| **macOS** 11 or later | [**Athanor-macOS.zip**](https://github.com/Aprilox/Athanor/releases/latest/download/Athanor-macOS.zip): **Athanor.app**, for Apple Silicon and Intel Macs alike; see [macOS, step by step](#macos-step-by-step) |
+| **Linux** | [**Athanor-Linux-x64**](https://github.com/Aprilox/Athanor/releases/latest/download/Athanor-Linux-x64) (an ARM PC: [Athanor-Linux-ARM64](https://github.com/Aprilox/Athanor/releases/latest/download/Athanor-Linux-ARM64)) |
 
 Keep the file wherever you like (the Desktop, for example; on the Mac, Athanor.app in *Applications*): it is how you open Athanor, and it never writes anything next to itself.
 
@@ -96,7 +96,7 @@ Everything of its own goes there: its copy of the executable, its settings and y
 
 **Windows**
 
-1. Double-click **`Athanor.exe`**, then *Yes*. Pick a language, a theme and an accent: the first-launch guide takes you through the rest.
+1. Double-click **`Athanor-Windows-x64.exe`**, then *Yes*. Pick a language, a theme and an accent: the first-launch guide takes you through the rest.
 2. **Install**: a fresh install starts in **native Windows** (nothing else to install: *Install everything* puts Git for Windows, Python, Node.js, a few small tools and Claude Code for Windows). For Claude in a sandbox, open the **WSL** tab of *Setup & health*: *Install everything* there installs WSL2, Claude Code and the sandbox (Linux asks for a password once; the very first time may need a restart, then open "Ubuntu" once to create your user and run the installation again). A short tour then shows the mode, *Setup & health*, a new project and *Start*.
 3. **Connect**: *Setup & health* → *Check everything*. On the *Token and model access* line, click *Repair*: a window signs you in to your Claude account. Paste the token in *Settings*.
 4. **Optional, recommended**: *Setup & health* → *Administrator rights for installations* → *Repair*. Windows asks for your consent **once**; Claude never needs a UAC click again.
@@ -106,15 +106,15 @@ Everything of its own goes there: its copy of the executable, its settings and y
 **Linux** (everything runs natively, without WSL)
 
 ```bash
-chmod +x athanor-linux        # once: a downloaded file is not executable yet
-./athanor-linux               # the app, in an application window of Chrome/Edge/Chromium, else your browser
+chmod +x Athanor-Linux-x64    # once: a downloaded file is not executable yet
+./Athanor-Linux-x64           # the app, in an application window of Chrome/Edge/Chromium, else your browser
 ```
 
 Then *Setup & health* → *Install everything* (Claude Code, the sandbox and the tools; Linux asks for your password once), the token in *Settings*, a project and *Start*, as on Windows (steps 3, 5 and 6).
 
 #### macOS, step by step
 
-1. Download [**Athanor-macos.zip**](https://github.com/Aprilox/Athanor/releases/latest/download/Athanor-macos.zip). Safari opens it by itself: **Athanor.app** is in *Downloads* (with another browser, double-click the zip once). An application is a folder, which is why it travels zipped. Athanor.app works from *Downloads*; in *Applications* it is at home (macOS then reopens it from there after an update and at login).
+1. Download [**Athanor-macOS.zip**](https://github.com/Aprilox/Athanor/releases/latest/download/Athanor-macOS.zip). Safari opens it by itself: **Athanor.app** is in *Downloads* (with another browser, double-click the zip once). An application is a folder, which is why it travels zipped. Athanor.app works from *Downloads*; in *Applications* it is at home (macOS then reopens it from there after an update and at login).
 2. Open Athanor.app (a double-click). The first time, macOS says it cannot check the app, because it is not signed by Apple: click *Done*, open *System Settings → Privacy & Security*, scroll down to *"Athanor" was blocked* and click **Open Anyway**, then your password. Once only.
 3. *Create*: Athanor's folder is made, then its window opens.
 4. *Setup & health* → *Install everything*, *Check everything*, then the *Token* line → *Repair*, and paste the token in *Settings*.
@@ -125,20 +125,6 @@ Then *Setup & health* → *Install everything* (Claude Code, the sandbox and the
 **While it runs**, Athanor has its icon in the Dock. A click on it opens its window again; a right click shows which pilots are at work. Closing the window stops nothing. **Quit** (right click on the icon, or ⌘Q) asks, when pilots are running, whether they keep working (they do without Athanor, and are found again when it opens) or stop. The Mac stays awake while a pilot runs (`caffeinate`; a closed MacBook still sleeps, unless it is plugged in with an external screen).
 
 Claude works in Seatbelt, the sandbox built into macOS (the same one Claude Code uses): it only writes in the project. The MCP servers have a Seatbelt cage of their own. Unreal, Blender, Roblox Studio, Xcode and the Android SDK are found in their usual places and Claude runs them directly; Windows programs and Docker through `tool` are Windows and Linux only. On the Mac, the programs Claude opens show on your screen (there is no separate desktop as on Windows).
-
-<details><summary>Without Athanor.app (Terminal)</summary>
-
-[`athanor-macos`](https://github.com/Aprilox/Athanor/releases/latest/download/athanor-macos) (Apple Silicon) or [`athanor-macos-intel`](https://github.com/Aprilox/Athanor/releases/latest/download/athanor-macos-intel) is the same Athanor as a single command:
-
-```bash
-cd ~/Downloads
-chmod +x athanor-macos                           # once: a downloaded file is not executable yet
-xattr -d com.apple.quarantine athanor-macos      # once: the app is not signed by Apple
-./athanor-macos                                  # the app opens (Create, the first time)
-```
-
-Without a Dock icon; the pilots keep working when the Terminal is closed.
-</details>
 
 ### 3. Updating
 
@@ -396,7 +382,7 @@ Found a vulnerability? Please open a [private security advisory](https://github.
 
 ## Commands without the app
 
-Everything the app does is a command of the executable (`Athanor.exe` on Windows, the downloaded `./athanor-linux` or `./athanor-macos`, or `athanor` in Athanor's folder; `Athanor.exe wsl COMMAND …` runs it in WSL):
+Everything the app does is a command of the executable (`Athanor.exe` on Windows, the downloaded `./Athanor-Linux-x64`, `Athanor.app/Contents/MacOS/athanor` on the Mac, or `athanor` in Athanor's folder; `Athanor.exe wsl COMMAND …` runs it in WSL):
 
 | Command | |
 |---|---|
@@ -513,12 +499,12 @@ Yes. Nothing is tied to a user name or a drive letter: paths come from your prof
 Push a version tag and GitHub builds the apps (Windows, Linux, macOS) and publishes the release ([`.github/workflows/release.yml`](.github/workflows/release.yml)):
 
 ```bash
-git tag v2.28.1 && git push origin v2.28.1
+git tag v2.29.0 && git push origin v2.29.0
 ```
 
-Keep the version in [`app/winres/athanor.rc`](app/winres/athanor.rc) and `versionAthanor` in [`app/commandes.go`](app/commandes.go) in step with the tag (a test checks they match), and write what is new in `docs/releases/VERSION.md` (e.g. [`docs/releases/2.28.1.md`](docs/releases/2.28.1.md)): it opens the release page.
+Keep the version in [`app/winres/athanor.rc`](app/winres/athanor.rc) and `versionAthanor` in [`app/commandes.go`](app/commandes.go) in step with the tag (a test checks they match), and write what is new in `docs/releases/VERSION.md` (e.g. [`docs/releases/2.29.0.md`](docs/releases/2.29.0.md)): it opens the release page.
 
-Every push is checked on Windows, Linux and macOS ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)), the single executable included (nothing written before the consent, Athanor's folder installed, nothing next to the file); `cd app && go run . construire --all` builds every target into `dist/`. A release publishes one file per system, `Athanor-macos.zip` (Athanor.app, signed ad hoc on a Mac runner) and `SHA256SUMS.txt`, under the same names at every version.
+Every push is checked on Windows, Linux and macOS ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)), the single executable included (nothing written before the consent, Athanor's folder installed, nothing next to the file); `cd app && go run . construire --all` builds every target into `dist/`. A release publishes `Athanor-Windows-x64.exe`, `Athanor-Windows-ARM64.exe`, `Athanor-macOS.zip` (Athanor.app, signed ad hoc on a Mac runner), `Athanor-Linux-x64`, `Athanor-Linux-ARM64` and `SHA256SUMS.txt`, under the same names at every version; Athanor's own updates download the same files.
 
 After a change of `app/` on a PC (a repair by Claude, or yours: `athanor reparer --diff` first writes the sources into Athanor's folder when they are not there), `./athanor reparer --recompiler` (`.\Athanor.exe reparer --recompiler` on Windows) rebuilds the kit's executables there: it shows the change against the running executable's own sources, installs a portable Go outside the kit when none is found, runs `go vet`, builds, runs the new executable's autotest and only then puts it in place, keeping the previous one (`reparer --annuler` puts it back).
 

@@ -10,6 +10,7 @@ package main
 // of the source code (git pull there).
 
 import (
+	"archive/zip"
 	"bufio"
 	"context"
 	"crypto/sha256"
@@ -42,23 +43,57 @@ func apiDerniereVersion() string {
 	return "https://api.github.com/repos/Aprilox/Athanor/releases/latest"
 }
 
-// nomFichierMaj: the release's file for this system and processor.
+// nomFichierMaj: the release's file for this system and processor (the one a user downloads; on the Mac,
+// the zip of Athanor.app, whose executable serves both processors).
 func nomFichierMaj() string {
-	switch runtime.GOOS + "/" + runtime.GOARCH {
+	switch systemeMaj {
 	case "windows/amd64":
-		return "Athanor.exe"
+		return "Athanor-Windows-x64.exe"
 	case "windows/arm64":
-		return "Athanor-arm64.exe"
+		return "Athanor-Windows-ARM64.exe"
 	case "linux/amd64":
-		return "athanor-linux"
+		return "Athanor-Linux-x64"
 	case "linux/arm64":
-		return "athanor-linux-arm64"
-	case "darwin/arm64":
-		return "athanor-macos"
-	case "darwin/amd64":
-		return "athanor-macos-intel"
+		return "Athanor-Linux-ARM64"
+	case "darwin/arm64", "darwin/amd64":
+		return "Athanor-macOS.zip"
 	}
 	return ""
+}
+
+// systemeMaj: this system and processor (a test stands in for another one).
+var systemeMaj = runtime.GOOS + "/" + runtime.GOARCH
+
+// executableZipMac: where Athanor-macOS.zip keeps the executable.
+const executableZipMac = "Athanor.app/Contents/MacOS/athanor"
+
+// extraireZipMac: the executable of Athanor.app, from the zip zf into dest.
+func extraireZipMac(zf, dest string) error {
+	z, err := zip.OpenReader(zf)
+	if err != nil {
+		return errors.New("The downloaded archive cannot be read: update refused.")
+	}
+	defer z.Close()
+	for _, e := range z.File {
+		if e.Name != executableZipMac {
+			continue
+		}
+		r, err := e.Open()
+		if err != nil {
+			return err
+		}
+		defer r.Close()
+		out, err := os.OpenFile(dest, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o755)
+		if err != nil {
+			return err
+		}
+		if _, err := io.Copy(out, io.LimitReader(r, 400<<20)); err != nil {
+			out.Close()
+			return err
+		}
+		return out.Close()
+	}
+	return errors.New("The downloaded archive holds no Athanor: update refused.")
 }
 
 // EtatMaj: what the application knows of the updates (the header's button, Options).
@@ -311,7 +346,14 @@ func preparerMaj(k Kit) (string, error) {
 		os.Remove(f + ".part")
 		return "", errors.New("The downloaded file does not match the release's checksum: update refused.")
 	}
-	if err := os.Rename(f+".part", f); err != nil {
+	if strings.HasSuffix(nomFichierMaj(), ".zip") { // the Mac: the executable of the Athanor.app it holds
+		err := extraireZipMac(f+".part", f)
+		os.Remove(f + ".part")
+		if err != nil {
+			os.Remove(f)
+			return "", err
+		}
+	} else if err := os.Rename(f+".part", f); err != nil {
 		return "", err
 	}
 	if err := os.Chmod(f, 0o755); err != nil {
