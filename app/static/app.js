@@ -1104,7 +1104,8 @@ function modesSysteme(v) {
 function rendreGuide(v) {
   const e1 = v.kit_installe, e2 = !!v.projet, e3 = e2 && !v.demande_vide;
   // the tooling of this system: on Windows, WSL (Claude in a sandbox) or native Windows, chosen here
-  const outillage = !v.windows ? "Claude Code, the system sandbox (bubblewrap) and the tools, in a terminal; it asks for your password once."
+  const outillage = v.systeme === "darwin" ? "Claude Code and Homebrew's packages, installed in a Terminal window (it asks for your password once). Claude works in macOS' own sandbox (Seatbelt): it only writes in the project."
+    : !v.windows ? "Claude Code, the system sandbox (bubblewrap) and the tools, in a terminal; it asks for your password once."
     : v.natif ? "Native Windows: Git for Windows, jq, Python, Node.js and Claude Code for Windows, without WSL. Claude has no sandbox in this mode."
     : "WSL2 (the Linux built into Windows), Claude Code, the system sandbox. A window opens; Linux asks for a password once.";
   return `<div class="bloc"><h2>${t("First steps")}</h2><p class="intro">${t("Five steps, all from this window. Then you can let it run for days, on several projects at once.")}</p>
@@ -2260,7 +2261,7 @@ async function rendreOptions() {
       <div class="bloc"><h2>${t("Startup")}</h2>
         <label class="interrupteur"><input type="checkbox" id="op-lancer" data-option ${o.lancer_pilote_au_demarrage ? "checked" : ""}><span>${t("Restart the pilots that were running, when the app opens")}</span></label>
         <label class="interrupteur"><input type="checkbox" id="op-windows" data-option ${o.demarrage_windows ? "checked" : ""}><span>${t("Open Athanor when the computer starts (Windows, or your Linux desktop session)")}</span></label>
-        <p class="muet petit">${t("Pilots run in WSL in the background, without a window. Remember to disable the PC's sleep mode.")}</p>
+        <p class="muet petit">${t(o.windows && !o.mode_natif ? "Pilots run in WSL in the background, without a window. Remember to disable the PC's sleep mode." : "Pilots run in the background, without a window. Remember to disable the computer's sleep mode.")}</p>
         ${o.windows ? `<label class="interrupteur"><input type="checkbox" id="op-barre" data-option ${o.barre_windows ? "checked" : ""}><span>${t("Windows' own title bar instead of Athanor's (when Athanor opens again)")}</span></label>` : ""}
       </div>
       <div class="bloc"><h2>${t("Lock")}</h2>
@@ -2296,7 +2297,7 @@ async function rendreOptions() {
         <p class="muet petit">${t("Applies to the pilots started afterwards. When you close Athanor while native pilots run, it asks whether they go on in the background.")}</p>
       </div>
       <div class="bloc"><h2>${t("Tool folder")}</h2>
-        <input type="text" id="op-kit" data-option value="${h(o.kit)}"><div class="muet petit mt-1">${o.kit_valide ? "✔ " + t("tool recognized (template\\CLAUDE.md present)") : "✖ " + t("this folder is not the tool")}</div>
+        <input type="text" id="op-kit" data-option value="${h(o.kit)}"><div class="muet petit mt-1">${o.kit_valide ? "✔ " + t(o.windows ? "tool recognized (template\\CLAUDE.md present)" : "tool recognized (template/CLAUDE.md present)") : "✖ " + t("this folder is not the tool")}</div>
         <div class="ligne mt-1"><button class="btn btn-petit" data-ouvrir="kit">${t("Open the folder")}</button><button class="btn btn-petit" data-ouvrir="logs">${t("Logs folder")}</button><span class="espace"></span><button class="btn btn-petit" id="op-guide">${t("Show the first-launch guide again")}</button></div>
       </div>
       <div class="bloc"><h2>${t("Version")}</h2>

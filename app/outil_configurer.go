@@ -323,7 +323,7 @@ func lancerConfigurer(args []string) int {
 	tz := a.reponse
 
 	// 8. Unreal Engine
-	a.titre("8. Driving the Unreal editor (MCP)", `Unreal Engine 5.8: enable the "Unreal MCP" and "All Toolsets" plugins, and the server's automatic start (Editor Preferences > Model Context Protocol). On Windows, run unreal-network.cmd once ("mirrored" network or local relay).`)
+	a.titre("8. Driving the Unreal editor (MCP)", `Unreal Engine 5.8: enable the "Unreal MCP" and "All Toolsets" plugins, and the server's automatic start (Editor Preferences > Model Context Protocol). On Windows in WSL mode, run Athanor.exe reseau-unreal once ("mirrored" network or local relay).`)
 	wd, _ := os.Getwd()
 	os.Setenv("PROJECT", filepath.Join(wd, "logs", "detection"))
 	_ = detecterSilencieux(wd)

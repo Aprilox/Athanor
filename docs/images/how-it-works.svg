@@ -37,7 +37,7 @@
   <!-- pilot -->
   <rect class="acc" x="330" y="70" width="250" height="120" rx="14"/>
   <text class="k" x="350" y="100">THE PILOT · LOOP</text>
-  <text class="t" x="350" y="128">system/pilot.sh</text>
+  <text class="t" x="350" y="128">athanor demarrer</text>
   <text class="s" x="350" y="152">one milestone per cycle,</text>
   <text class="s" x="350" y="172">watchdog, quota, recovery</text>
 
@@ -51,7 +51,7 @@
   <!-- sub-agents -->
   <rect class="box" x="950" y="70" width="210" height="120" rx="14"/>
   <text class="k" x="970" y="100">SUB-AGENTS</text>
-  <text class="s" x="970" y="126">architect · creator</text>
+  <text class="s" x="970" y="126">scout · architect · creator</text>
   <text class="s" x="970" y="148">developer · tester</text>
   <text class="s" x="970" y="170">critic · executor (Haiku)</text>
 
@@ -80,7 +80,7 @@
   <!-- sandbox + bridge -->
   <rect class="box" x="950" y="250" width="210" height="300" rx="14"/>
   <text class="k" x="970" y="280">SANDBOX</text>
-  <text class="s" x="970" y="304">bubblewrap + seccomp:</text>
+  <text class="s" x="970" y="304">bubblewrap (Seatbelt on Mac):</text>
   <text class="s" x="970" y="324">writes only in the project,</text>
   <text class="s" x="970" y="344">never reads your PC</text>
   <line x1="970" y1="370" x2="1140" y2="370" stroke="#2e3c4d" stroke-width="1.5"/>
