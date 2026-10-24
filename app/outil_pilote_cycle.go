@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"runtime/debug"
 	"sort"
 	"strconv"
 	"strings"
@@ -443,6 +444,7 @@ func (p *pilote) lancerClaudeSurveille(journal string, args []string, cadrage bo
 
 	attendu := make(chan struct{})
 	go func() {
+		defer p.recupererPanique()
 		defer close(attendu)
 		err := cmd.Wait()
 		code := 0
@@ -461,6 +463,7 @@ func (p *pilote) lancerClaudeSurveille(journal string, args []string, cadrage bo
 	if direct {
 		go func() { <-attendu; close(fluxDone) }()
 		go func() {
+			defer p.recupererPanique()
 			defer close(affichageFini)
 			suivreJournal(journal, fFin, os.Stdout, 250*time.Millisecond, 6*time.Hour)
 		}()
@@ -474,6 +477,7 @@ func (p *pilote) lancerClaudeSurveille(journal string, args []string, cadrage bo
 		go func() { <-lu; <-attendu; close(fluxDone) }()
 	}
 	go func() {
+		defer p.recupererPanique()
 		if direct {
 			return
 		}
@@ -2038,6 +2042,12 @@ func lancerPilote(args []string) int {
 	}
 	p.verrouFichier = vf
 	defer p.nettoyerSortie()
+	// a Go error from here on: the sessions stopped, the report kept, and pilot.sh carries on in bash
+	defer p.recupererPanique()
+	if f, err := os.OpenFile(filepath.Join(p.prive, "pilote-go.crash"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644); err == nil {
+		_ = debug.SetCrashOutput(f, debug.CrashOptions{}) // the fatal errors no recover catches (pilot.sh removes it empty)
+		f.Close()
+	}
 
 	_ = os.Remove(filepath.Join(p.prive, "arreter"))
 	pidBytes := []byte(strconv.Itoa(os.Getpid()) + "\n")
@@ -2058,6 +2068,7 @@ func lancerPilote(args []string) int {
 	}()
 
 	go func() {
+		defer p.recupererPanique()
 		tBattement := time.NewTicker(20 * time.Second)
 		tArret := time.NewTicker(200 * time.Millisecond)
 		defer tBattement.Stop()

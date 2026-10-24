@@ -19,6 +19,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime/debug"
 	"sort"
 	"strconv"
 	"strings"
@@ -878,6 +879,48 @@ func (p *pilote) nettoyerSortie() {
 		p.verrouFichier.Close()
 		p.verrouFichier = nil
 	}
+}
+
+// codeRepliPilote: the Go pilot's exit after an internal error (a panic): pilot.sh carries on in bash.
+const codeRepliPilote = 70
+
+// recupererPanique: deferred at the top of the pilot and of its goroutines.
+func (p *pilote) recupererPanique() {
+	if r := recover(); r != nil {
+		p.planter(r, debug.Stack())
+	}
+}
+
+// planter: a Go error in the pilot. Its report first (logs/pilotes/…/pilote-go.crash), then everything it
+// started is stopped (Claude, the workers, their worktrees, the bridge, the Rojo sync, the screen), the lock
+// and pilot.pid are released, and the exit code tells pilot.sh to carry on with the bash pilot.
+func (p *pilote) planter(r any, pile []byte) {
+	if !p.enArret.CompareAndSwap(false, true) {
+		select {}
+	}
+	f := filepath.Join(p.prive, "pilote-go.crash")
+	if o, err := os.OpenFile(f, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644); err == nil {
+		fmt.Fprintf(o, "%s Athanor %s, cycle %d\npanic: %v\n\n%s\n", time.Now().Format("2006-01-02 15:04:05"), versionAthanor, p.cycle, r, pile)
+		o.Close()
+	}
+	sur := func(f func()) {
+		defer func() { _ = recover() }()
+		f()
+	}
+	sur(func() {
+		p.log(fmt.Sprintf("The Go pilot hit an internal error (%v); its report: %s. The bash pilot takes over.", r, f))
+	})
+	journalArret := filepath.Join(p.prive, "arret.log")
+	sur(func() {
+		arreterSessionClaude(true, filepath.Join(p.prive, "claude_sid"), filepath.Join(p.prive, "claude_winpid"), journalArret)
+	})
+	sids, _ := filepath.Glob(filepath.Join(p.prive, "ouvrier_*.sid"))
+	for _, s := range sids {
+		sur(func() { arreterSessionClaude(true, s, strings.TrimSuffix(s, ".sid")+".winpid", journalArret) })
+	}
+	sur(p.nettoyerWorktrees)
+	sur(p.nettoyerSortie)
+	os.Exit(codeRepliPilote)
 }
 
 func (p *pilote) quitterSurSignal() {
