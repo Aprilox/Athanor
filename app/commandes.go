@@ -15,7 +15,7 @@ import (
 )
 
 // versionAthanor: kept equal to ProductVersion of winres/athanor.rc (TestVersionAlignee).
-const versionAthanor = "2.24.24"
+const versionAthanor = "2.24.25"
 
 type sousCommande struct {
 	aide  string
@@ -45,7 +45,7 @@ func init() {
 		"mcp-windows":       {"mcp-windows [--env NAME VALUE]... -- PROGRAM...: an MCP server that is a Windows program, through WSL (system/windows-mcp.sh)", lancerMCPWindows},
 		"mcp-windows-garde": {"mcp-windows-garde PIDFILE SYS32 LAUNCHER PARENT: mcp-windows' watchdog", lancerGardeMCPWindows},
 		"ecran":             {"ecran lancer PROGRAM... | capture PROJECT: Claude's screen on the Linux side (system/ecran.sh)", lancerEcran},
-		"pilote":            {"pilote [PROJECT]: the autonomous work loop in Go (PILOT_ENGINE=go; system/pilot.sh)", lancerPilote},
+		"pilote":            {"pilote [PROJECT]: the autonomous work loop in Go, parallel workers included (PILOT_ENGINE=go; system/pilot.sh)", lancerPilote},
 		"reprise":           {"reprise PROJECT PRIVATE_DIR: at the pilot's start, what a stop in the middle or another PC left (git locks repaired, the rest in .athanor/RESUME.md for Claude)", lancerReprise},
 		"mcp-ouvrir":        {"mcp-ouvrir KIT PROJECT OPENINGS.json: the programs the cycle's MCP servers drive, opened before it (the pilot)", lancerMCPOuvrir},
 		"detecter":          {"detecter [KIT]: the PC tools and the toolchain, into system/pc_tools.env and PROJECT/.athanor/PC_TOOLS.md (the pilot)", lancerDetecter},

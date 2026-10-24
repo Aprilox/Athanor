@@ -106,13 +106,22 @@ for k, (ident, fait, deps, vague, t) in enumerate(jalons):
 PY
 }
 
+# One line of parallele_plan (in l_jalon) into ident, fait, deps, ligne. Not "read" with IFS=tab: a tab is
+# white space for read, two in a row count as one, and a milestone without dependencies lost its line.
+decouper_jalon() {
+  local r
+  case "$l_jalon" in *$'\t'*$'\t'*$'\t'*) ;; *) return 1 ;; esac
+  ident=${l_jalon%%$'\t'*}; r=${l_jalon#*$'\t'}; fait=${r%%$'\t'*}; r=${r#*$'\t'}; deps=${r%%$'\t'*}; ligne=${r#*$'\t'}
+  return 0
+}
+
 # Milestones ready to start: unchecked, every dependency ticked, not already handled this cycle
 # ($1 = space-separated identifiers to exclude). Output like parallele_plan.
 parallele_prets() {
-  local exclus=" $1 " ident fait deps ligne d ok liste
+  local exclus=" $1 " ident fait deps ligne d ok liste l_jalon
   declare -A faits=()
-  while IFS=$'\t' read -r ident fait deps ligne; do [ "$fait" = 1 ] && faits[$ident]=1; done < <(parallele_plan)
-  while IFS=$'\t' read -r ident fait deps ligne; do
+  while IFS= read -r l_jalon; do decouper_jalon || continue; [ "$fait" = 1 ] && faits[$ident]=1; done < <(parallele_plan)
+  while IFS= read -r l_jalon; do decouper_jalon || continue;
     [ "$fait" = 0 ] || continue
     case "$exclus" in *" $ident "*) continue ;; esac
     ok=1; IFS=, read -ra liste <<< "$deps"
@@ -169,9 +178,9 @@ PY
 # milestones still open: one identifier per line. The branches of milestones already ticked are deleted:
 # their work is in, or was redone.
 parallele_branches_partielles() {
-  local br id ident fait deps ligne
+  local br id ident fait deps ligne l_jalon
   declare -A etat=()
-  while IFS=$'\t' read -r ident fait deps ligne; do etat[$ident]=$fait; done < <(parallele_plan 2>/dev/null)
+  while IFS= read -r l_jalon; do decouper_jalon || continue; etat[$ident]=$fait; done < <(parallele_plan 2>/dev/null)
   while read -r br; do
     [ -n "$br" ] || continue
     id=${br#auto/}
@@ -443,11 +452,11 @@ parallele_cycle() {
   echo "# Worker reports ($(date '+%Y-%m-%d %H:%M'))" > "$PRIVE/rapports_ouvriers.md"
   debut=$(date +%s)
   lancer_prets() {  # fills the free slots with ready milestones (none once the quota was met)
-    local n
+    local n l_jalon
     [ "$quota_vu" = 1 ] && return 0
     while [ "${#courants[@]}" -lt "$limite" ]; do
       n=${#courants[@]}
-      while IFS=$'\t' read -r ident fait deps ligne; do
+      while IFS= read -r l_jalon; do decouper_jalon || continue;
         [ "${#courants[@]}" -lt "$limite" ] || break
         case " ${traites[*]} " in *" $ident "*) continue ;; esac
         local occupe="" c; local -a encours=()

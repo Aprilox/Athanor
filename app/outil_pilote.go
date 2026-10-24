@@ -886,6 +886,7 @@ func (p *pilote) quitterSurSignal() {
 	}
 	journalArret := filepath.Join(p.prive, "arret.log")
 	arreterSessionClaude(false, filepath.Join(p.prive, "claude_sid"), filepath.Join(p.prive, "claude_winpid"), journalArret)
+	_ = os.WriteFile(filepath.Join(p.prive, "claude_fin"), nil, 0o644) // as pilot.sh: a live display reading the log ends
 	sids, _ := filepath.Glob(filepath.Join(p.prive, "ouvrier_*.sid"))
 	for _, f := range sids {
 		arreterSessionClaude(true, f, strings.TrimSuffix(f, ".sid")+".winpid", journalArret)
