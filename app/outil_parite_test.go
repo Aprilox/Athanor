@@ -17,7 +17,7 @@ import (
 
 func scriptPython(t *testing.T, nom string) string {
 	t.Helper()
-	s, _ := filepath.Abs(filepath.Join("..", "system", nom))
+	s, _ := filepath.Abs(filepath.Join("testdata", "oracles", "python", nom)) // the former Python helpers, as test oracles
 	if _, err := os.Stat(s); err != nil {
 		t.Skip("no " + nom)
 	}

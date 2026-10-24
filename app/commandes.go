@@ -15,7 +15,7 @@ import (
 )
 
 // versionAthanor: kept equal to ProductVersion of winres/athanor.rc (TestVersionAlignee).
-const versionAthanor = "2.24.28"
+const versionAthanor = "2.24.29"
 
 type sousCommande struct {
 	aide  string
@@ -45,7 +45,7 @@ func init() {
 		"mcp-windows":       {"mcp-windows [--env NAME VALUE]... -- PROGRAM...: an MCP server that is a Windows program, through WSL (system/windows-mcp.sh)", lancerMCPWindows},
 		"mcp-windows-garde": {"mcp-windows-garde PIDFILE SYS32 LAUNCHER PARENT: mcp-windows' watchdog", lancerGardeMCPWindows},
 		"ecran":             {"ecran lancer PROGRAM... | capture PROJECT: Claude's screen on the Linux side (system/ecran.sh)", lancerEcran},
-		"pilote":            {"pilote [PROJECT]: the autonomous work loop in Go, parallel workers included (PILOT_ENGINE=go; system/pilot.sh)", lancerPilote},
+		"pilote":            {"pilote [PROJECT]: the autonomous work loop in Go, parallel workers included (the default engine; system/pilot.sh)", lancerPilote},
 		"reprise":           {"reprise PROJECT PRIVATE_DIR: at the pilot's start, what a stop in the middle or another PC left (git locks repaired, the rest in .athanor/RESUME.md for Claude)", lancerReprise},
 		"mcp-ouvrir":        {"mcp-ouvrir KIT PROJECT OPENINGS.json: the programs the cycle's MCP servers drive, opened before it (the pilot)", lancerMCPOuvrir},
 		"detecter":          {"detecter [KIT]: the PC tools and the toolchain, into system/pc_tools.env and PROJECT/.athanor/PC_TOOLS.md (the pilot)", lancerDetecter},
@@ -57,6 +57,8 @@ func init() {
 		"quota":             {"quota verifier RULES LOG...: the automatic stops on the subscription's quota (the pilot)", lancerQuota},
 		"affichage":         {"affichage JOURNAL FIN: the live display of a session that writes its stream into its log file (pilot.sh, native Windows), until FIN exists", lancerAffichage},
 		"images":            {"images gel|passee JOURNAL: a session silent right after a large image (its size), the largest image a session got past (the pilots)", lancerImages},
+		"configurer":        {"configurer [KIT]: the configuration assistant, a few questions written into the tool's .env (commands/configure.sh)", lancerConfigurer},
+		"installer":         {"installer [KIT]: the installation of Linux, WSL and macOS, once (commands/install.sh): Claude Code, the sandbox, RTK, the basic tools", lancerInstaller},
 		"version":           {"prints the version of Athanor", func([]string) int { fmt.Println(versionAthanor); return 0 }},
 		"aide":              {"lists the sub-commands", func([]string) int { afficherAide(); return 0 }},
 		"autotest":          {"autotest [KIT]: checks this executable and the kit (built-in files, scripts, texts, local/ replacements)", lancerAutotest},

@@ -38,6 +38,9 @@ jobs:
           GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-s -w -H windowsgui" -o ../build/Athanor.exe .
           # Linux: static binary, runs on any distribution
           GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o ../build/athanor .
+          # macOS: Apple Silicon and Intel (not signed: see the Quick start)
+          GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags "-s -w" -o ../build/athanor-mac-arm64 .
+          GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o ../build/athanor-mac-amd64 .
 
       - name: Package
         run: |
@@ -56,6 +59,13 @@ jobs:
           export_tree linux
           install -m 755 build/athanor pkg-linux/athanor/athanor
           tar -C pkg-linux -czf "dist/Athanor-${version}-Linux.tar.gz" athanor
+          # macOS: tar.gz, with athanor (one per processor)
+          for arch in arm64 amd64; do
+            export_tree "mac-$arch"
+            install -m 755 "build/athanor-mac-$arch" "pkg-mac-$arch/athanor/athanor"
+            nom=AppleSilicon; [ "$arch" = amd64 ] && nom=Intel
+            tar -C "pkg-mac-$arch" -czf "dist/Athanor-${version}-macOS-${nom}.tar.gz" athanor
+          done
           (cd dist && sha256sum ./* | sed 's#\./##' > SHA256SUMS.txt)
           ls -l dist
           # Release text: what is new (docs/releases/VERSION.md, when present), then the downloads.
@@ -69,6 +79,8 @@ jobs:
             echo "|---|---|---|"
             echo "| **Windows 10 / 11** | [**Athanor-${version}-Windows.zip**](${telecharger}/Athanor-${version}-Windows.zip) | unzip anywhere, double-click **\`Athanor.exe\`** |"
             echo "| **Linux** (x86-64) | [**Athanor-${version}-Linux.tar.gz**](${telecharger}/Athanor-${version}-Linux.tar.gz) | \`tar xzf Athanor-${version}-Linux.tar.gz && cd athanor && commands/install.sh && ./athanor\` |"
+            echo "| **macOS** (Apple Silicon) | [**Athanor-${version}-macOS-AppleSilicon.tar.gz**](${telecharger}/Athanor-${version}-macOS-AppleSilicon.tar.gz) | \`tar xzf Athanor-${version}-macOS-AppleSilicon.tar.gz && cd athanor && xattr -dr com.apple.quarantine . && commands/install.sh && ./athanor\` |"
+            echo "| **macOS** (Intel) | [**Athanor-${version}-macOS-Intel.tar.gz**](${telecharger}/Athanor-${version}-macOS-Intel.tar.gz) | the same, with this archive |"
             echo
             echo "Each download is the complete tool, ready to use. **Updating:** close the app (right click on its icon → *Quit* if it started with Windows) and extract the new version in the same place: your token, settings, \`logs/\` and \`tools/\` are kept."
             echo
@@ -83,4 +95,6 @@ jobs:
           files: |
             dist/Athanor-${{ env.VERSION }}-Windows.zip
             dist/Athanor-${{ env.VERSION }}-Linux.tar.gz
+            dist/Athanor-${{ env.VERSION }}-macOS-AppleSilicon.tar.gz
+            dist/Athanor-${{ env.VERSION }}-macOS-Intel.tar.gz
             dist/SHA256SUMS.txt

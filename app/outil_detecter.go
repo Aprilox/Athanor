@@ -318,6 +318,12 @@ func detecter(kitArg string) error {
 		}
 	}
 	ue, blender, sdk, jdk := os.Getenv("UE_DIR"), os.Getenv("BLENDER_EXE"), os.Getenv("ANDROID_SDK_DIR"), os.Getenv("ANDROID_JDK_DIR")
+	mac := runtime.GOOS == "darwin" || os.Getenv("ATHANOR_TEST_MAC") != ""
+	var lm logicielsDuMac
+	if mac {
+		lm = detecterMac(racineMac(), os.Getenv("HOME"))
+		ue, blender, sdk, jdk = firstNonEmpty(ue, lm.ue), firstNonEmpty(blender, lm.blender), firstNonEmpty(sdk, lm.sdk), firstNonEmpty(jdk, lm.jdk)
+	}
 	if ue == "" {
 		var c []string
 		for _, m := range lecteurs {
@@ -365,8 +371,8 @@ func detecter(kitArg string) error {
 			}
 		}
 	}
-	roblox := ""
-	if profil != "" {
+	roblox := lm.roblox
+	if profil != "" && !mac {
 		type v struct {
 			p string
 			t time.Time
@@ -410,42 +416,46 @@ func detecter(kitArg string) error {
 	l := func(s string) { b.WriteString(s + "\n") }
 	l("# PC tools available (written by the pilot before each cycle, do not edit)")
 	l("")
-	if ue != "" {
-		l("- **Unreal Engine**: " + path.Base(ue))
-		l("  - `unreal-editor [--wait-mcp] Game.uproject`: opens the editor (window) without blocking")
-		l("  - `unreal-cmd Game.uproject -ExecCmds=\"...\" -unattended -nullrhi`: commandlets and tests without a window")
-		l("  - `unreal-uat BuildCookRun -project=Game.uproject -platform=Win64 -clientconfig=Shipping -build -cook -stage -pak -archive -archivedirectory=deliverable`: Windows game (`-platform=Android -cookflavor=ASTC` for Android)")
-		if os.Getenv("UNREAL_MCP") == "1" {
-			l("  - **Unreal MCP active**: `mcp__unreal__*` tools when the editor is open (the pilot opens it before each cycle if a .uproject exists)")
+	if mac {
+		lignesMac(l, ue, blender, sdk, jdk, roblox, lm.xcode, lm.godot)
+	} else {
+		if ue != "" {
+			l("- **Unreal Engine**: " + path.Base(ue))
+			l("  - `unreal-editor [--wait-mcp] Game.uproject`: opens the editor (window) without blocking")
+			l("  - `unreal-cmd Game.uproject -ExecCmds=\"...\" -unattended -nullrhi`: commandlets and tests without a window")
+			l("  - `unreal-uat BuildCookRun -project=Game.uproject -platform=Win64 -clientconfig=Shipping -build -cook -stage -pak -archive -archivedirectory=deliverable`: Windows game (`-platform=Android -cookflavor=ASTC` for Android)")
+			if os.Getenv("UNREAL_MCP") == "1" {
+				l("  - **Unreal MCP active**: `mcp__unreal__*` tools when the editor is open (the pilot opens it before each cycle if a .uproject exists)")
+			}
+		} else {
+			l("- Unreal Engine: not detected")
 		}
-	} else {
-		l("- Unreal Engine: not detected")
-	}
-	if roblox != "" {
-		l("- **Roblox Studio**: `roblox-studio [--wait] PLACE.rbxl` opens it on a place of the project, without blocking (nothing if a Studio is already open)")
-		if os.Getenv("ROBLOX_MCP") == "1" {
-			l("  - **Roblox Studio MCP active**: `mcp__roblox-studio__*` tools on the open Studio (the pilot opens it before each cycle; Rojo project: `.athanor/studio/SYNC.luau` updates its scripts live, `roblox-studio --rebuild` rebuilds the place; a capture that times out: `roblox-studio --screen` says whether the Windows session is locked)")
+		if roblox != "" {
+			l("- **Roblox Studio**: `roblox-studio [--wait] PLACE.rbxl` opens it on a place of the project, without blocking (nothing if a Studio is already open)")
+			if os.Getenv("ROBLOX_MCP") == "1" {
+				l("  - **Roblox Studio MCP active**: `mcp__roblox-studio__*` tools on the open Studio (the pilot opens it before each cycle; Rojo project: `.athanor/studio/SYNC.luau` updates its scripts live, `roblox-studio --rebuild` rebuilds the place; a capture that times out: `roblox-studio --screen` says whether the Windows session is locked)")
+			}
 		}
-	}
-	if blender != "" {
-		l("- **Blender**: `blender -b -P script.py` (headless), `blender --open FILE.blend` (its window, for the Blender MCP)")
-	} else {
-		l("- Blender: not detected")
-	}
-	if sdk != "" {
-		l("- **Android SDK**: `" + sdk + "`; `adb devices`, `adb install -r game.apk` (phone plugged in over USB)")
-	} else {
-		l("- Android SDK: missing (install it as a portable copy in `$TOOLS/windows/android-sdk`, see PC_TOOLS_GUIDE.md)")
-	}
-	if jdk != "" {
-		l("- **Java for Android**: `" + jdk + "`")
-	} else {
-		l("- Java (JDK) for Android: missing")
-	}
-	if winget {
-		l("- **winget**: `install-windows ID` installs a Windows program (`install-windows --search NAME` to find the ID)")
-	} else {
-		l("- winget: unavailable")
+		if blender != "" {
+			l("- **Blender**: `blender -b -P script.py` (headless), `blender --open FILE.blend` (its window, for the Blender MCP)")
+		} else {
+			l("- Blender: not detected")
+		}
+		if sdk != "" {
+			l("- **Android SDK**: `" + sdk + "`; `adb devices`, `adb install -r game.apk` (phone plugged in over USB)")
+		} else {
+			l("- Android SDK: missing (install it as a portable copy in `$TOOLS/windows/android-sdk`, see PC_TOOLS_GUIDE.md)")
+		}
+		if jdk != "" {
+			l("- **Java for Android**: `" + jdk + "`")
+		} else {
+			l("- Java (JDK) for Android: missing")
+		}
+		if winget {
+			l("- **winget**: `install-windows ID` installs a Windows program (`install-windows --search NAME` to find the ID)")
+		} else {
+			l("- winget: unavailable")
+		}
 	}
 	if natif {
 		l("- **Native Windows**: you run on Windows itself (Git Bash): Windows programs run directly from your shell (`program.exe ...`, `cmd //c ...`, `powershell -Command ...`); portable ones go in `$TOOLS/windows`")
@@ -464,7 +474,7 @@ func detecter(kitArg string) error {
 	}
 	if docker {
 		l("- **Docker**: `tool IMAGE COMMAND...` (disposable container, project mounted on /work)")
-	} else if natif {
+	} else if natif || mac {
 		l("- Docker: not available (Docker Desktop stopped)")
 	} else {
 		l("- Docker: not available (Docker Desktop stopped, or WSL integration not enabled)")

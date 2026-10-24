@@ -34,6 +34,8 @@ jobs:
         shell: bash
         # the failures also go into the run's annotations (readable without opening the whole log)
         run: |
+          # an athanor build for the tests that run the real executable (the macOS cage, the chat's script…)
+          if [ "$RUNNER_OS" != Windows ]; then go build -o "$RUNNER_TEMP/athanor-test" . && export ATHANOR_BIN_TEST="$RUNNER_TEMP/athanor-test"; fi
           go test ./... 2>&1 | tee test.log; code=${PIPESTATUS[0]}
           if [ "$code" != 0 ]; then
             enc() { sed -e 's/\r//g' -e 's/%/%25/g' | awk '{printf "%s%%0A", $0}'; }

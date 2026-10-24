@@ -69,8 +69,8 @@ func Verifications() []*Verif {
 			`echo "WSL_OK $(uname -r) $(grep PRETTY /etc/os-release | cut -d= -f2)"`, false, installer),
 		v("internet", "Internet from WSL", "Claude must reach claude.ai from Linux.",
 			`getent hosts claude.ai >/dev/null && curl -s -o /dev/null -m 10 -w 'claude.ai reachable (code %{http_code})\n' https://claude.ai/`, false, installer),
-		v("paquets", "Basic Linux packages", "git, jq, curl, python3, node, npm, bubblewrap, socat, ripgrep, ImageMagick, ffmpeg, zip, Xvfb (Claude's screen), ssh and the GitHub CLI (GitHub push).",
-			`m=0; for p in git jq curl python3 node npm bwrap socat rg convert ffmpeg zip Xvfb ssh gh; do if command -v $p >/dev/null 2>&1; then echo "ok  $p"; else echo "MISSING $p"; m=1; fi; done; exit $m`, false, paquets),
+		v("paquets", "Basic Linux packages", "git, jq, curl, node, npm, bubblewrap, socat, ripgrep, ImageMagick, ffmpeg, zip, Xvfb (Claude's screen), ssh and the GitHub CLI (GitHub push).",
+			`m=0; for p in git jq curl node npm bwrap socat rg convert ffmpeg zip Xvfb ssh gh; do if command -v $p >/dev/null 2>&1; then echo "ok  $p"; else echo "MISSING $p"; m=1; fi; done; exit $m`, false, paquets),
 		v("barriere", "System sandbox", "The sandbox (bubblewrap + seccomp filter) that keeps Claude inside the project. Without it, the pilot refuses to start.",
 			`bwrap --ro-bind / / --dev /dev --proc /proc true && echo 'bubblewrap OK' && { npm ls -g @anthropic-ai/sandbox-runtime >/dev/null 2>&1 && echo 'seccomp filter OK' || { echo 'seccomp filter MISSING'; exit 2; }; }`, false,
 			Reparation{Genre: "fenetre", Titre: "System sandbox", Script: "bash commands/install.sh", Explication: "Reinstalls bubblewrap, the AppArmor profile and the seccomp filter (sudo password asked)."}),
@@ -83,7 +83,7 @@ func Verifications() []*Verif {
 			`test -x system/bin/rtk && system/bin/rtk --version`, true,
 			Reparation{Genre: "wsl", Script: `cd system/bin && curl -fsSL https://github.com/rtk-ai/rtk/releases/download/v0.50.0/rtk-x86_64-unknown-linux-musl.tar.gz | tar -xz rtk && chmod +x rtk && ./rtk --version`}),
 		v("outils_pc", "PC software detected", "Unreal, Blender, Android SDK, Docker… found on this PC and made available to Claude (read-only).",
-			`export PROJECT="$PWD/logs/detection"; mkdir -p "$PROJECT" tools; `+outilKitRepli("detecter", "bash system/detect-tools.sh")+`"${X[@]}" >/dev/null 2>&1; sed -n '3,25p' "$PROJECT/.athanor/PC_TOOLS.md"`, true, Reparation{Genre: "aucune"}),
+			`export PROJECT="$PWD/logs/detection"; mkdir -p "$PROJECT" tools; `+outilKit("detecter")+`"${X[@]}" >/dev/null 2>&1; sed -n '3,25p' "$PROJECT/.athanor/PC_TOOLS.md"`, true, Reparation{Genre: "aucune"}),
 		v("docker", "Docker", "Optional: disposable images for Claude (tool IMAGE COMMAND). Docker Desktop → Settings → Resources → WSL integration.",
 			`docker info >/dev/null 2>&1 && echo 'Docker reachable' || { echo 'Docker UNREACHABLE (optional)'; exit 1; }`, true, Reparation{Genre: "aucune"}),
 		v("admin", "Administrator rights for installations", "Scheduled task that lets Claude install winget software and set the firewall without bothering you.",
@@ -92,7 +92,7 @@ func Verifications() []*Verif {
 		v("outils_kit", "Tool scripts", "The gateways (pc-exec, unreal-cmd, blender, tool…) and the pilot scripts are executable and consistent.",
 			`chmod +x commands/*.sh system/*.sh system/bin/* 2>/dev/null
 for f in system/pilot.sh commands/*.sh; do bash -n "$f" || { echo "Syntax ERROR: $f"; exit 1; }; done
-python3 -m py_compile system/*.py || { echo 'Python ERROR'; exit 1; }
+./athanor autotest "$PWD" >/dev/null 2>&1 || { echo 'athanor ERROR: its autotest fails (Rebuild Athanor)'; exit 1; }
 if grep -lq $'\r' system/pilot.sh commands/*.sh 2>/dev/null; then echo 'ERROR: Windows line endings (CRLF) in a script'; exit 1; fi
 echo 'scripts OK'`, false,
 			Reparation{Genre: "wsl", Script: `chmod +x commands/*.sh system/*.sh system/bin/* ; echo 'permissions restored'`}),

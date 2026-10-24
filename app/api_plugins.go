@@ -1170,7 +1170,7 @@ func (s *Serveur) apiExtConnexion(w http.ResponseWriter, r *http.Request) {
 		t = texteConnexion["en"]
 	}
 	ligne := func(f string) string { return "printf '%s\\n' " + citerShell(strings.ReplaceAll(f, "%s", c.ID)) + "; " }
-	script := chargerEnv + `f=$(mktemp) || exit 1; ` + outilKit("extensions", "system/extensions.py") + `"${X[@]}" connexion "$PWD" ` + c.ID + ` "$f" || { rm -f "$f"; sleep 8; exit 1; }; ` +
+	script := chargerEnv + `f=$(mktemp) || exit 1; ` + outilKit("extensions") + `"${X[@]}" connexion "$PWD" ` + c.ID + ` "$f" || { rm -f "$f"; sleep 8; exit 1; }; ` +
 		ligne(t[0]) + ligne(t[1]) + ligne(t[2]) + `echo; ENABLE_CLAUDEAI_MCP_SERVERS=false "${CLAUDE_BIN:-claude}" --mcp-config "$f" --strict-mcp-config; rm -f "$f"`
 	if err := FenetreWSL(k, "MCP", script); err != nil {
 		s.erreur(w, http.StatusInternalServerError, err.Error())

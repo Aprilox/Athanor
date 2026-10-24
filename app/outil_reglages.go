@@ -185,6 +185,9 @@ func construireReglages(kitArg, sortie string) error {
 		}
 	}
 	passerelles := []string{"tool", "unreal-editor", "unreal-cmd", "unreal-uat", "blender", "roblox-studio", "install-windows", "pc-exec", "windows-var", "adb"}
+	if runtime.GOOS == "darwin" {
+		passerelles = nil // macOS: the applications run directly from Claude's sandbox (PC_TOOLS.md says how)
+	}
 	allow := []string{"WebFetch", "WebFetch(domain:*)", "WebSearch"}
 	exclus := []string{}
 	for _, p := range passerelles {
@@ -218,7 +221,8 @@ func construireReglages(kitArg, sortie string) error {
 	var fs objetJSON
 	fs.mettre("allowWrite", []string{tools})
 	fs.mettre("denyRead", []string{"~/", "/mnt"})
-	fs.mettre("allowRead", append(append(append(append([]string{}, projets...), tools), lectures...), logiciels...))
+	// and the kit's executable: Claude's own commands (athanor screenshots, map, todo…) run it in the sandbox
+	fs.mettre("allowRead", append(append(append(append(append([]string{}, projets...), tools), lectures...), logiciels...), joinOS(kit, "athanor")))
 	sandbox.mettre("filesystem", fs)
 	sandbox.mettre("network", map[string]any{"allowedDomains": []string{"*"}})
 	var creds []map[string]string

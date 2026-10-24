@@ -50,7 +50,7 @@ func nouveauServeur(config Config) *Serveur {
 		config:       config,
 		kit:          kit,
 		logs:         map[string]*Journal{},
-		verifs:       Verifications(),
+		verifs:       verificationsSysteme(),
 		verifsNatif:  VerificationsNatives(),
 		csrf:         aleatoire(16),
 		dernierActif: map[string]bool{},

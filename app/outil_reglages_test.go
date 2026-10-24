@@ -75,7 +75,7 @@ func TestPariteReglages(t *testing.T) {
 	kit := filepath.Join(d, "kit")
 	_ = os.MkdirAll(filepath.Join(kit, "system", "bin"), 0o755)
 	for _, f := range []string{"settings.py", "extensions.py"} {
-		b, _ := os.ReadFile(filepath.Join("..", "system", f))
+		b, _ := os.ReadFile(filepath.Join("testdata", "oracles", "python", f))
 		_ = os.WriteFile(filepath.Join(kit, "system", f), b, 0o755)
 	}
 	_ = os.MkdirAll(filepath.Join(kit, "extensions"), 0o755)
@@ -138,6 +138,17 @@ func TestPariteReglages(t *testing.T) {
 		bg, _ := os.ReadFile(outGo)
 		_ = json.Unmarshal(bp, &p)
 		_ = json.Unmarshal(bg, &g)
+		// since 2.24.29 the sandbox also reads the kit's executable (Claude's athanor commands run it there):
+		// the last entry of allowRead, which settings.py did not have
+		if sb, ok := g.(map[string]any)["sandbox"].(map[string]any); ok {
+			fs := sb["filesystem"].(map[string]any)
+			l := fs["allowRead"].([]any)
+			if len(l) == 0 || l[len(l)-1] != filepath.Join(kit, "athanor") {
+				t.Errorf("%s: the executable is not the last allowRead entry: %v", c.nom, l)
+			} else {
+				fs["allowRead"] = l[:len(l)-1]
+			}
+		}
 		if !reflect.DeepEqual(sansProgramme(t, p), sansProgramme(t, g)) {
 			t.Errorf("%s:\n--- go\n%s\n--- python\n%s", c.nom, bg, bp)
 		}
@@ -193,7 +204,8 @@ func TestReglagesContenu(t *testing.T) {
 	}
 }
 
-// The chat's script picks the Go settings when the kit's executable knows them, chat.py otherwise.
+// The chat's script writes the Go settings (the Go file guard as its hook); without the kit's executable it
+// says so and stops.
 func TestScriptChatReglages(t *testing.T) {
 	if _, err := exec.LookPath("bash"); err != nil {
 		t.Skip("no bash")
@@ -208,8 +220,6 @@ func TestScriptChatReglages(t *testing.T) {
 		_ = os.MkdirAll(filepath.Join(kit, "system"), 0o755)
 		_ = os.MkdirAll(filepath.Join(kit, "logs", "chat"), 0o755)
 		_ = os.MkdirAll(projet, 0o755)
-		b, _ := os.ReadFile(filepath.Join("..", "system", "chat.py"))
-		_ = os.WriteFile(filepath.Join(kit, "system", "chat.py"), b, 0o755)
 		if avecGo {
 			b, _ := os.ReadFile(bin)
 			_ = os.WriteFile(filepath.Join(kit, "athanor"), b, 0o755)
@@ -220,12 +230,19 @@ func TestScriptChatReglages(t *testing.T) {
 		c := exec.Command("bash", "-c", scriptChat(Projet{Nom: "p", Dossier: projet}, "c1", "question", "", ""))
 		c.Dir = kit
 		c.Env = append(os.Environ(), "CLAUDE_BIN=true")
-		if out, err := c.CombinedOutput(); err != nil {
-			t.Fatalf("script (go=%v): %v %s", avecGo, err, out)
+		out, err := c.CombinedOutput()
+		if !avecGo {
+			if err == nil || !strings.Contains(string(out), "Athanor's executable is missing") {
+				t.Fatalf("without the executable: %v %s", err, out)
+			}
+			continue
+		}
+		if err != nil {
+			t.Fatalf("script: %v %s", err, out)
 		}
 		s, _ := os.ReadFile(filepath.Join(kit, "logs", "chat", "c1.settings.json"))
-		if avecGo != strings.Contains(string(s), " hook fichiers ") || avecGo == strings.Contains(string(s), "guard.py") {
-			t.Errorf("go=%v: %s", avecGo, s)
+		if !strings.Contains(string(s), " hook fichiers ") || strings.Contains(string(s), "guard.py") {
+			t.Errorf("%s", s)
 		}
 	}
 }

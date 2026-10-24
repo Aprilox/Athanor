@@ -360,25 +360,14 @@ func (p *pilote) gitHead(dossier string) string {
 }
 
 func (p *pilote) relaisContexte(journal string) int {
-	if p.outilsPython {
-		out, _ := exec.Command("python3", "-I", filepath.Join(p.systeme, "relais.py"), "contexte", journal).Output()
-		return entierPilote(string(out), 0)
-	}
 	return int(relaisContexte(journal))
 }
 
 func (p *pilote) relaisSur(journal string) bool {
-	if p.outilsPython {
-		return exec.Command("python3", "-I", filepath.Join(p.systeme, "relais.py"), "sur", journal).Run() == nil
-	}
 	return relaisSur(journal)
 }
 
 func (p *pilote) relaisResume(journal, handoff string) string {
-	if p.outilsPython {
-		out, _ := exec.Command("python3", "-I", filepath.Join(p.systeme, "relais.py"), "resume", journal, handoff).Output()
-		return string(out)
-	}
 	return relaisResume(journal, handoff)
 }
 
@@ -540,7 +529,7 @@ boucleSurveillance:
 		if finVu != 0 && maintenant-finVu >= 30 {
 			arreterSessionClaude(true, fSid, fWin, journalArret)
 			break
-		} else if gel := min(p.idleMaxMin, 10); !p.outilsPython && maintenant-derniere >= int64(gel*p.secondsPerMinute) && imageGeleeOK(journal) {
+		} else if gel := min(p.idleMaxMin, 10); maintenant-derniere >= int64(gel*p.secondsPerMinute) && imageGeleeOK(journal) {
 			// Claude Code silent right after receiving an image: it froze on it (large images, athanor images);
 			// 10 minutes are enough to tell, a session that works writes something long before
 			kb, _ := imageGelee(journal)
@@ -685,32 +674,12 @@ func tailleFichierPilote(chemin string) int64 {
 }
 
 func (p *pilote) rangerSolutions(fichier, quoi string) {
-	if p.outilsPython {
-		_ = exec.Command("bash", "-c", `. "$1/safety.sh"; KIT="$2"; ATHANOR_OUTILS=python; sed -n '/^SOLUTIONS_PY=/,/^fusionner_solutions/p' "$1/pilot.sh" > "$3/sol.sh"; . "$3/sol.sh"; ranger_solutions "$4" "$5"`, "_", p.systeme, p.kit, p.prive, fichier, quoi).Run()
-		return
-	}
 	_ = lancerSolutions([]string{"ranger", fichier, quoi})
 }
 
 func (p *pilote) preparerEquipe() {
 	dossierAgents := filepath.Join(p.prive, "agents")
-	if p.outilsPython {
-		out, _ := exec.Command("python3", filepath.Join(p.systeme, "equipe.py"), "importer", p.kit, p.projet).Output()
-		for _, l := range strings.Split(string(out), "\n") {
-			if l = strings.TrimSpace(l); l != "" {
-				p.log(l)
-			}
-		}
-		cmd := exec.Command("python3", filepath.Join(p.systeme, "equipe.py"), "json", p.kit, p.projet, dossierAgents)
-		cmd.Env = append(os.Environ(), "SUBAGENT_MODEL="+p.subagentModel, "CHEAP_MODEL="+p.cheapModel)
-		jb, _ := cmd.Output()
-		p.agentsJSON = strings.TrimSpace(string(jb))
-		if p.agentsJSON == "" {
-			p.agentsJSON = "{}"
-		}
-		_ = exec.Command("python3", filepath.Join(p.systeme, "equipe.py"), "fiche", p.kit, p.projet, dossierAgents).Run()
-		return
-	}
+
 	for _, l := range equipeImporter(p.kit, p.projet) {
 		if l != "" {
 			p.log(l)
@@ -782,7 +751,7 @@ func (p *pilote) blenderDepuisMCP() {
 	p.blenderMCP = false
 	p.mcpProgrammes = false
 	fOuvrir := filepath.Join(p.prive, "ouvrir.json")
-	if !p.outilsPython && tailleFichierPilote(fOuvrir) > 0 {
+	if tailleFichierPilote(fOuvrir) > 0 {
 		p.mcpProgrammes = true
 	} else {
 		_ = os.Remove(fOuvrir)
@@ -847,6 +816,19 @@ func (p *pilote) demarrerEveil() {
 		}
 		return
 	}
+	// macOS: caffeinate holds the sleep off as long as this pilot runs (-w), the screen too with KEEP_AWAKE=screen
+	if c, err := exec.LookPath("caffeinate"); err == nil && runtime.GOOS == "darwin" {
+		opts := "-ims"
+		if p.keepAwake == "screen" {
+			opts = "-imsd"
+		}
+		cmd := exec.Command(c, opts, "-w", strconv.Itoa(os.Getpid()))
+		_ = cmd.Start()
+		if cmd.Process != nil {
+			go func() { _ = cmd.Wait() }()
+		}
+		return
+	}
 	if _, err := exec.LookPath("systemd-inhibit"); err == nil {
 		cmd := exec.Command("systemd-inhibit", "--what=sleep:idle", "--who=Athanor", "--why=Athanor: a pilot is running", "--mode=block", "tail", fmt.Sprintf("--pid=%d", os.Getpid()), "-f", "/dev/null")
 		_ = cmd.Start()
@@ -874,27 +856,24 @@ func (p *pilote) modeEveil() {
 
 func (p *pilote) preparerExtensions() {
 	var r string
-	if p.outilsPython {
-		out, _ := exec.Command("python3", filepath.Join(p.systeme, "extensions.py"), "preparer", p.kit, p.projet, p.prive).Output()
-		r = strings.TrimSpace(string(out))
-	} else {
-		choix := choixDuProjetKit(p.kit, p.projet)
-		_ = os.MkdirAll(p.prive, 0o755)
-		skills := construirePlugin(p.kit, choix, p.prive)
-		plugins := construirePlugins(p.kit, choix, p.prive)
-		mcp, notes := construireMCP(p.kit, choix, filepath.Join(p.prive, "mcp.json"), p.projet, "")
-		notes = append(notes, construireOuvertures(p.kit, mcp, filepath.Join(p.prive, "ouvrir.json"), p.projet)...)
-		aucun := func(l []string) string {
-			if len(l) == 0 {
-				return "none"
-			}
-			return strings.Join(l, ", ")
+
+	choix := choixDuProjetKit(p.kit, p.projet)
+	_ = os.MkdirAll(p.prive, 0o755)
+	skills := construirePlugin(p.kit, choix, p.prive)
+	plugins := construirePlugins(p.kit, choix, p.prive)
+	mcp, notes := construireMCP(p.kit, choix, filepath.Join(p.prive, "mcp.json"), p.projet, "")
+	notes = append(notes, construireOuvertures(p.kit, mcp, filepath.Join(p.prive, "ouvrir.json"), p.projet)...)
+	aucun := func(l []string) string {
+		if len(l) == 0 {
+			return "none"
 		}
-		r = "skills: " + aucun(skills) + " · plugins: " + aucun(plugins) + " · MCP: " + aucun(mcp)
-		if len(notes) > 0 {
-			r += " · " + strings.Join(notes, "; ")
-		}
+		return strings.Join(l, ", ")
 	}
+	r = "skills: " + aucun(skills) + " · plugins: " + aucun(plugins) + " · MCP: " + aucun(mcp)
+	if len(notes) > 0 {
+		r += " · " + strings.Join(notes, "; ")
+	}
+
 	p.pluginAthanor = ""
 	p.pluginsDirs = nil
 	if fichierRegulierPilote(filepath.Join(p.prive, "plugin", ".claude-plugin", "plugin.json")) {
@@ -1113,9 +1092,8 @@ func (p *pilote) robloxSyncDemarrer() {
 	}
 	fLog, _ := os.OpenFile(filepath.Join(p.prive, "roblox-sync.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	var cmd *exec.Cmd
-	if p.outilsPython {
-		cmd = exec.Command("python3", filepath.Join(p.systeme, "roblox-sync.py"), "serve", p.projet, filepath.Join(p.prive, "pilot.pid"))
-	} else if exe, err := os.Executable(); err == nil {
+
+	if exe, err := os.Executable(); err == nil {
 		cmd = exec.Command(exe, "roblox-sync", "serve", p.projet, filepath.Join(p.prive, "pilot.pid"))
 	}
 	if cmd != nil {
@@ -1140,7 +1118,7 @@ func (p *pilote) robloxSyncDemarrer() {
 
 func (p *pilote) preparerCycle() {
 	exe, errExe := os.Executable()
-	if errExe == nil && !p.outilsPython {
+	if errExe == nil {
 		cmd := exec.Command(exe, "archive")
 		cmd.Env = append(os.Environ(), "PROJECT="+p.projet)
 		cacherFenetre(cmd)
@@ -1328,15 +1306,12 @@ func (p *pilote) commandeBash(script string, args ...string) *exec.Cmd {
 }
 
 func (p *pilote) ecrireReglages() bool {
-	if p.outilsPython {
-		return exec.Command("python3", filepath.Join(p.systeme, "settings.py"), p.kit, p.reglages).Run() == nil
-	}
 	return construireReglages(p.kit, p.reglages) == nil
 }
 
 func (p *pilote) appliquerIdentite() {
 	var l string
-	if !p.natif && !p.outilsPython {
+	if !p.natif {
 		var buf bytes.Buffer
 		// identite-pilote writes "nom\temail\tsans\n"
 		cmd := p.commandeBash(filepath.Join(p.systeme, "github.sh"), "identite-pilote", p.projet)
@@ -1384,11 +1359,9 @@ func (p *pilote) appliquerIdentite() {
 	if sansArg == "" {
 		sansArg = "0"
 	}
-	if !p.outilsPython {
-		_ = crochetCommit(p.projet, sansArg == "1")
-	} else {
-		_ = p.commandeBash(filepath.Join(p.systeme, "github.sh"), "crochet", filepath.ToSlash(p.projet), sansArg).Run()
-	}
+
+	_ = crochetCommit(p.projet, sansArg == "1")
+
 	if l != p.identitePrecedente {
 		if p.reglages != "" && fichierRegulierPilote(p.reglages) {
 			p.ecrireReglages()
@@ -1970,7 +1943,6 @@ func lancerPilote(args []string) int {
 		reglages:                 reglages,
 		modeles:                  modeles,
 		natif:                    natif,
-		outilsPython:             os.Getenv("ATHANOR_OUTILS") == "python",
 		claudeBin:                claudeBin,
 		cheminClaude:             cheminClaude,
 		maxHours:                 entierReglage("MAX_HOURS", 168),
@@ -2118,15 +2090,12 @@ func lancerPilote(args []string) int {
 	if runtime.GOOS == "windows" && !consolePartagee {
 		p.log("Windows: no console to share with the programs the pilot starts (git, the tools): each may flash a window of its own.")
 	}
-	if p.outilsPython {
-		p.log("Helpers: Python scripts.")
-	} else {
-		nomExe := "athanor"
-		if exe, err := os.Executable(); err == nil {
-			nomExe = filepath.Base(exe)
-		}
-		p.log(fmt.Sprintf("Helpers: Go (%s %s).", nomExe, versionAthanor))
+
+	nomExe := "athanor"
+	if exe, err := os.Executable(); err == nil {
+		nomExe = filepath.Base(exe)
 	}
+	p.log(fmt.Sprintf("Helpers: Go (%s %s).", nomExe, versionAthanor))
 
 	dejaSignale := false
 	for !demandeRempliePilote(p.etat) {
@@ -2252,11 +2221,8 @@ func lancerPilote(args []string) int {
 	}
 	p.synchroniserDemande()
 
-	if p.outilsPython {
-		_ = p.commandeBash(filepath.Join(p.systeme, "detect-tools.sh")).Run()
-	} else {
-		_ = lancerDetecter([]string{p.kit})
-	}
+	_ = lancerDetecter([]string{p.kit})
+
 	_ = os.Setenv("ATHANOR_PLUGIN", filepath.Join(p.prive, "plugin"))
 	_ = os.Setenv("ATHANOR_PLUGINS", filepath.Join(p.prive, "plugins"))
 	if !p.ecrireReglages() {
@@ -2270,9 +2236,8 @@ func lancerPilote(args []string) int {
 	if !p.natif {
 		fPont, _ := os.OpenFile(filepath.Join(p.prive, "pont.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 		var cmdPont *exec.Cmd
-		if p.outilsPython {
-			cmdPont = exec.Command("python3", filepath.Join(p.systeme, "bridge.py"), p.kit, p.projet)
-		} else if exe, err := os.Executable(); err == nil {
+
+		if exe, err := os.Executable(); err == nil {
 			cmdPont = exec.Command(exe, "pont", p.kit, p.projet)
 		}
 		if cmdPont != nil {
@@ -2382,12 +2347,10 @@ func lancerPilote(args []string) int {
 		}
 	}
 
-	if !p.outilsPython {
-		lignes, _ := reprendreProjet(p.projet, p.prive)
-		for _, l := range lignes {
-			if l != "" {
-				p.log(l)
-			}
+	lignes, _ := reprendreProjet(p.projet, p.prive)
+	for _, l := range lignes {
+		if l != "" {
+			p.log(l)
 		}
 	}
 
@@ -2631,7 +2594,7 @@ func lancerPilote(args []string) int {
 			_ = os.WriteFile(consignesCycle, append(append(b1, '\n', '\n'), b2...), 0o644)
 		}
 		// large images froze a session (athanor images): Claude keeps its images small meanwhile
-		if mode == "serie" && !p.outilsPython && tailleFichierPilote(filepath.Join(p.prive, "images_gel")) > 0 {
+		if mode == "serie" && tailleFichierPilote(filepath.Join(p.prive, "images_gel")) > 0 {
 			b1, _ := os.ReadFile(consignesCycle)
 			consignesCycle = filepath.Join(p.prive, "CLAUDE.images.md")
 			_ = os.WriteFile(consignesCycle, append(b1, consigneImages(entierPilote(lireTexteCourt(filepath.Join(p.prive, "images_gel")), 0))...), 0o644)
@@ -2724,19 +2687,18 @@ func lancerPilote(args []string) int {
 		p.modeleCycle = ancMod
 		// a session that froze right after a large image: the next cycles ask Claude to keep its images
 		// small, until an image as large goes through again
-		if !p.outilsPython {
-			fGel := filepath.Join(p.prive, "images_gel")
-			if kb, ok := imageGelee(p.fichierLog); ok && motifArret != "" {
-				if avantKB := entierPilote(lireTexteCourt(fGel), 0); avantKB == 0 {
-					_ = os.WriteFile(fGel, []byte(strconv.Itoa(kb)+"\n"), 0o644)
-					p.log(fmt.Sprintf("Claude froze right after an image of %d KB: the next cycles ask it to keep its images small.", kb))
-				} else if kb < avantKB {
-					_ = os.WriteFile(fGel, []byte(strconv.Itoa(kb)+"\n"), 0o644)
-				}
-			} else if tailleFichierPilote(fGel) > 0 && plusGrandeImagePassee(p.fichierLog) >= max(1, entierPilote(lireTexteCourt(fGel), 1)) {
-				_ = os.Remove(fGel)
-				p.log("Large images go through again: the cycles no longer ask Claude to shrink them.")
+
+		fGel := filepath.Join(p.prive, "images_gel")
+		if kb, ok := imageGelee(p.fichierLog); ok && motifArret != "" {
+			if avantKB := entierPilote(lireTexteCourt(fGel), 0); avantKB == 0 {
+				_ = os.WriteFile(fGel, []byte(strconv.Itoa(kb)+"\n"), 0o644)
+				p.log(fmt.Sprintf("Claude froze right after an image of %d KB: the next cycles ask it to keep its images small.", kb))
+			} else if kb < avantKB {
+				_ = os.WriteFile(fGel, []byte(strconv.Itoa(kb)+"\n"), 0o644)
 			}
+		} else if tailleFichierPilote(fGel) > 0 && plusGrandeImagePassee(p.fichierLog) >= max(1, entierPilote(lireTexteCourt(fGel), 1)) {
+			_ = os.Remove(fGel)
+			p.log("Large images go through again: the cycles no longer ask Claude to shrink them.")
 		}
 
 		cochesFin := p.cochesPlan()
@@ -2835,7 +2797,7 @@ func lancerPilote(args []string) int {
 			} else {
 				sansProgres = 0
 				_ = os.Remove(filepath.Join(p.etat, "ALERT.md"))
-				if exe, err := os.Executable(); err == nil && !p.outilsPython {
+				if exe, err := os.Executable(); err == nil {
 					c := exec.Command(exe, "screenshots", "--accept")
 					c.Env = append(os.Environ(), "PROJECT="+p.projet)
 					cacherFenetre(c)

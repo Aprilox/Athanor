@@ -1096,7 +1096,7 @@ function modesSysteme(v) {
     { id: "wsl", nom: "WSL", actuel: !v.natif,
       texte: "Claude runs in WSL2 (the Linux built into Windows), in a sandbox: it only writes in the project. Installs Linux once (a window opens, Linux asks for a password once)." }];
   if (v.systeme === "darwin") return [{ id: "mac", nom: "macOS", actuel: true,
-    texte: "Claude Code and the tools, installed in a terminal (it asks for your password once)." }];
+    texte: "Claude Code and Homebrew's packages, installed in a Terminal window (it asks for your password once). Claude works in macOS' own sandbox (Seatbelt): it only writes in the project." }];
   return [{ id: "linux", nom: "Linux", actuel: true,
     texte: "Claude Code, the system sandbox (bubblewrap) and the tools, in a terminal; it asks for your password once." }];
 }
@@ -1594,7 +1594,7 @@ pages.equipe = async () => {
 };
 
 // A sub-agent of the user's: the lead sees it in its team (.athanor/TEAM.md) and calls it when its
-// description fits or when a request names it. Saved in extensions/agents.json (system/equipe.py).
+// description fits or when a request names it. Saved in extensions/agents.json (athanor equipe).
 function formulaireAgent() {
   const f = etat.agForm;
   if (!f) return `<div class="ligne mt-2"><button class="btn" data-ag="nouveau">＋ ${t("New sub-agent")}</button>
@@ -2203,7 +2203,7 @@ function champReglage(l, modeles) {
   if (["MODEL", "FALLBACK_MODEL", "FRAMING_MODEL", "WORKER_MODEL", "CHEAP_MODEL"].includes(l.cle)) return choix(["", ...modeles], nomModele);
   if (l.cle === "SUBAGENT_MODEL") return choix(["", ...modeles, "auto"], nomModele);
   if (l.cle === "EFFORT") return choix(EFFORTS, (m) => m || t("normal"));
-  if (l.cle === "PILOT_ENGINE") return choix(["bash", "go"], (m) => t({ bash: "bash (default)", go: "Go" }[m]));
+  if (l.cle === "PILOT_ENGINE") return choix(["bash", "go"], (m) => t({ bash: "bash (backup)", go: "Go (default)" }[m]));
   if (l.cle === "KEEP_AWAKE") return choix(["1", "screen", "0"], (m) => t({ "1": "PC awake", screen: "PC and screen awake", "0": "no" }[m]));
   if (["RTK", "UNREAL_MCP", "CLOSE_AFTER_MILESTONE"].includes(l.cle) && (l.valeur === "0" || l.valeur === "1")) return `<label class="interrupteur m0"><input type="checkbox" id="${id}" data-cle="${h(l.cle)}" ${l.valeur === "1" ? "checked" : ""}> <span>${l.valeur === "1" ? t("enabled") : t("disabled")}</span></label>`;
   return `<input type="${l.secret && !etat.envSecrets ? "password" : "text"}" id="${id}" data-cle="${h(l.cle)}" value="${h(l.valeur)}" ${l.secret ? 'autocomplete="off"' : ""}>`;

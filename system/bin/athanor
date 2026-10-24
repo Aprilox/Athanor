@@ -1,16 +1,11 @@
 #!/usr/bin/env bash
-# Claude's AI-free tools (screenshots, map, archive, todo): the kit's executable when it runs here and
-# knows the command (athanor in WSL and on Linux, Athanor.exe in native Windows), else system/athanor.py.
-# ATHANOR_OUTILS=python forces the script.
+# Claude's AI-free tools (screenshots, map, archive, todo): the kit's executable (athanor in WSL, on Linux
+# and macOS, Athanor.exe in native Windows).
 K="$(dirname "$0")/../.."
-natif=0; case "$(uname -s 2>/dev/null)" in MINGW*|MSYS*|CYGWIN*) natif=1 ;; esac
+G="$K/athanor"; case "$(uname -s 2>/dev/null)" in MINGW*|MSYS*|CYGWIN*) G="$K/Athanor.exe" ;; esac
 case "${1:-}" in
-  screenshots|map|archive|todo)
-    G="$K/athanor"; [ "$natif" = 1 ] && G="$K/Athanor.exe"
-    if [ "${ATHANOR_OUTILS:-}" != python ] && [ -f "$G" ] && [ -x "$G" ] && "$G" aide 2>/dev/null </dev/null | grep -q "^  $1 "; then
-      exec "$G" "$@"
-    fi ;;
+  screenshots|map|archive|todo) ;;
+  *) echo "Usage: athanor screenshots|map|archive|todo ..." >&2; exit 2 ;;
 esac
-# native Windows mode: Windows' Python, through the shim (Claude's shell does not have the shims)
-[ "$natif" = 1 ] && exec "$(dirname "$0")/../natif/python3" "$(dirname "$0")/../athanor.py" "$@"
-exec python3 "$(dirname "$0")/../athanor.py" "$@"
+[ -x "$G" ] || { echo "athanor: the tool's executable is not reachable here ($G)." >&2; exit 127; }
+exec "$G" "$@"

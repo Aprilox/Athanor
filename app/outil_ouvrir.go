@@ -263,7 +263,12 @@ func ouvrirServeurs(kit, projet, fichier string, attente func(time.Duration)) []
 	}
 	var lignes []string
 	for _, o := range l {
-		if (o.Port != "" && portRepond(o.Port)) || (o.Processus != "" && processusTourne(o.Processus)) {
+		if runtime.GOOS == "darwin" {
+			if app := appMac(o.Programme); app.nom != "" && macTourne(app.processus) {
+				continue
+			}
+		}
+		if (o.Port != "" && portRepond(o.Port)) || (runtime.GOOS != "darwin" && o.Processus != "" && processusTourne(o.Processus)) {
 			continue // already open (the user's, or a previous cycle's)
 		}
 		f := ""
@@ -283,6 +288,27 @@ func ouvrirServeurs(kit, projet, fichier string, attente func(time.Duration)) []
 				continue
 			}
 			args = append(args, a)
+		}
+		if runtime.GOOS == "darwin" {
+			if ligne, ok := ouvrirMac(o, f); !ok {
+				lignes = append(lignes, ligne)
+				continue
+			}
+			if o.Port == "" {
+				lignes = append(lignes, fmt.Sprintf("%s: %s opened for its MCP server.", o.ID, o.Programme))
+				continue
+			}
+			pret := false
+			for i := 0; i < o.Delai && !pret; i += 2 {
+				attente(2 * time.Second)
+				pret = portRepond(o.Port)
+			}
+			if pret {
+				lignes = append(lignes, fmt.Sprintf("%s: %s opened, its MCP server answers on port %s.", o.ID, o.Programme, o.Port))
+			} else {
+				lignes = append(lignes, fmt.Sprintf("%s: %s opened, but nothing answers on port %s after %d s (is its MCP add-on started, on that port?).", o.ID, o.Programme, o.Port, o.Delai))
+			}
+			continue
 		}
 		script := filepath.Join(kit, "system", "ouvrir-windows.sh")
 		if passerellesOuverture[o.Programme] {
@@ -325,6 +351,51 @@ func ouvrirServeurs(kit, projet, fichier string, attente func(time.Duration)) []
 		}
 	}
 	return lignes
+}
+
+// macOS: the programs of the MCP servers are applications, opened with open -a (never a Windows program).
+type applicationMac struct{ nom, processus string }
+
+func appMac(programme string) applicationMac {
+	switch programme {
+	case "blender":
+		return applicationMac{"Blender", "Blender"}
+	case "roblox-studio":
+		return applicationMac{"RobloxStudio", "RobloxStudio"}
+	case "unreal-editor":
+		return applicationMac{"UnrealEditor", "UnrealEditor"}
+	}
+	return applicationMac{}
+}
+
+func macTourne(processus string) bool {
+	return exec.Command("pgrep", "-x", processus).Run() == nil
+}
+
+// ouvrirMac: opens the program of o on the project's file f; false with the log line when it cannot.
+func ouvrirMac(o ouvertureCycle, f string) (string, bool) {
+	app := appMac(o.Programme)
+	if app.nom == "" {
+		return fmt.Sprintf("%s: %s is a Windows program, not opened on macOS.", o.ID, o.Programme), false
+	}
+	a := []string{"-a", app.nom}
+	if app.nom == "UnrealEditor" {
+		ue := os.Getenv("UE_DIR")
+		if ue == "" {
+			return fmt.Sprintf("%s: Unreal Engine not detected, %s not opened.", o.ID, o.Programme), false
+		}
+		a = []string{"-a", filepath.Join(ue, "Engine", "Binaries", "Mac", "UnrealEditor.app")}
+	}
+	if f != "" {
+		a = append(a, f)
+	}
+	if out, err := exec.Command("open", a...).CombinedOutput(); err != nil {
+		return fmt.Sprintf("%s: %s unavailable for this cycle: %s", o.ID, o.Programme, tronquerRunes(strings.TrimSpace(string(out)), 200)), false
+	}
+	for i := 0; i < 20 && !macTourne(app.processus); i++ {
+		time.Sleep(time.Second)
+	}
+	return "", true
 }
 
 func lancerMCPOuvrir(args []string) int {

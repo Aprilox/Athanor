@@ -32,10 +32,13 @@ if VIVANT=$(pilote_vivant "$PROJECT"); then echo "The pilot is already running o
 rm -f "$PID"   # stale file (pilot killed before it could clean up)
 [ -f .env ] || { echo "No .env: set the token in the app (Settings)."; exit 1; }
 [ -e "$PROJECT/.athanor/STOP" ] && rm -f "$PROJECT/.athanor/STOP" && echo "(previous end-of-cycle stop cancelled: the pilot restarts)"
+# macOS: the pilot in Go directly (the bash of macOS, 3.2, is too old for pilot.sh), without setsid
+PILOTE=(bash system/pilot.sh); [ "$(uname -s)" = Darwin ] && PILOTE=("$KIT/athanor" pilote)
+SETSID=(setsid); command -v setsid >/dev/null 2>&1 || SETSID=()
 if [ "$BACKGROUND" = 1 ]; then
-  setsid nohup bash system/pilot.sh "$PROJECT" >> "$SORTIE" 2>&1 < /dev/null &
+  "${SETSID[@]}" nohup "${PILOTE[@]}" "$PROJECT" >> "$SORTIE" 2>&1 < /dev/null &
   echo "Pilot started in the background on $PROJECT"
   garder
 else
-  bash system/pilot.sh "$PROJECT" 2>&1 | tee -a "$SORTIE"
+  "${PILOTE[@]}" "$PROJECT" 2>&1 | tee -a "$SORTIE"
 fi

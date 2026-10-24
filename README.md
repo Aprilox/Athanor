@@ -65,7 +65,7 @@ You describe what you want: a game, a website, an app, a tool. Athanor runs [Cla
 
 ## Quick start
 
-**You need:** Windows 10/11 (WSL2 is installed for you) or Linux, and a Claude subscription (Pro, Max or Team).
+**You need:** Windows 10/11 (WSL2 is installed for you), Linux or macOS, and a Claude subscription (Pro, Max or Team).
 
 ### 1. Get Athanor
 
@@ -81,6 +81,7 @@ From the [**latest release**](https://github.com/Aprilox/Athanor/releases/latest
 
 - **Windows**: `Athanor-X.Y.Z-Windows.zip`, unzip it anywhere (the Desktop, for example).
 - **Linux**: `Athanor-X.Y.Z-Linux.tar.gz`, then `tar xzf Athanor-X.Y.Z-Linux.tar.gz`.
+- **macOS**: `Athanor-X.Y.Z-macOS-AppleSilicon.tar.gz` (or `-Intel`), then `tar xzf` it and, the executable not being signed, `xattr -dr com.apple.quarantine athanor` once.
 
 Each download is the complete tool, ready to use.
 
@@ -99,7 +100,7 @@ cd Athanor
 
 No git? *Code → Download ZIP*, unzip, double-click `build.cmd`. If Go is missing, `build.cmd` offers to install it with winget.
 
-**Linux**:
+**Linux and macOS**:
 
 ```bash
 git clone https://github.com/Aprilox/Athanor.git
@@ -127,16 +128,16 @@ Both options give the same folder: `Athanor.exe` (or `athanor`) next to `command
 5. **Add a project**: a name, its folder (existing or new, on any drive) and what you want. Technologies are free unless you impose some. ✨ *Improve with Claude* turns a few words into a complete request; you can go back to yours.
 6. **Start.** Add more projects the same way and run them side by side.
 
-**Linux** (the scripts run natively, without WSL)
+**Linux and macOS** (everything runs natively, without WSL)
 
 ```bash
 cd athanor                   # or Athanor, if you built it from source
-commands/install.sh          # Claude Code, sandbox, tools (asks for sudo once)
+commands/install.sh          # Claude Code, sandbox, tools (asks for your password once; Homebrew on a Mac)
 commands/configure.sh        # token, models, options
-./athanor                    # the app, opens in your browser
+./athanor                    # the app, in an application window of Chrome/Edge/Chromium, else your browser
 ```
 
-Then add a project and start it, as on Windows (steps 5 and 6).
+Then add a project and start it, as on Windows (steps 5 and 6). On a Mac, Claude's sandbox is Seatbelt, built into macOS (the same one Claude Code uses), the MCP servers run in a Seatbelt cage of their own, and the PC stays awake with `caffeinate`. Unreal, Blender, Roblox Studio, Xcode and the Android SDK are found in their usual places and Claude runs them directly; Windows programs and Docker through `tool` are Windows and Linux only. The Mac support is new: tell us what does not work.
 
 ### 3. Updating
 
@@ -145,7 +146,7 @@ Then add a project and start it, as on Windows (steps 5 and 6).
 | a release | close the app, download the new release and extract it in the same place, so that its `athanor` folder merges into yours |
 | from source | close the app, then `git pull` and run `build.cmd` (or `./build.sh`) again |
 
-Your `.env`, settings, `logs/` and `tools/` are never touched by an update. The Windows and Linux apps keep separate settings files (`athanor-config.json`, `athanor-config-linux.json`), so a tool folder shared between both systems (dual boot, for example) works with both.
+Your `.env`, settings, `logs/` and `tools/` are never touched by an update. The Windows, Linux and macOS apps keep separate settings files (`athanor-config.json`, `athanor-config-linux.json`, `athanor-config-darwin.json`), so a tool folder shared between systems (dual boot, for example) works with each.
 
 The app only uses Go's standard library plus three vendored packages for the WebView2 window, so building needs no network access once the source is on your disk.
 
@@ -342,7 +343,7 @@ Everything is editable in the app (*Settings*), or in `.env` ([`.env.example`](.
 | `QUOTA_WAIT_MIN` | wait when the quota reset time cannot be read |
 | `IDLE_MAX_MIN`, `CYCLE_MAX_MIN`, `CLOSE_AFTER_MILESTONE` | cycle watchdog, one milestone per cycle |
 | `KEEP_AWAKE` | the PC stays awake while a pilot runs: `1` (default; the screen too for Roblox Studio and Unreal), `screen` (the screen always), `0` (off) |
-| `PILOT_ENGINE` | `bash` (default) or `go`: the pilot in Go, parallel workers included |
+| `PILOT_ENGINE` | `go` (default): the pilot in Go, parallel workers included; `bash`: the former pilot, kept as a backup (it also takes over by itself if the Go pilot hits an internal error) |
 | `RTK`, `TZ` | command output compression, time zone of the logs (empty = the system's) |
 | `UE_DIR`, `BLENDER_EXE`, `ANDROID_SDK_DIR`, `ANDROID_JDK_DIR` | tool paths when auto-detection misses them (optional, absent by default) |
 
@@ -354,7 +355,7 @@ When the quota is exhausted for every model, the pilot waits for it to reopen an
 
 What the sandbox guarantees, and what it deliberately does not:
 
-- **Claude's commands** run in the Claude Code sandbox (bubblewrap + seccomp). They can write only in the project folder and `tools/`. They cannot read the rest of your Linux home or the Windows drives, and cannot launch `cmd.exe` or `powershell.exe` directly. *Setup & health → Test the sandbox* proves it with a real session. Claude's file tools (Read, Edit, Write…) are limited the same way by a hook ([`system/guard.py`](system/guard.py)).
+- **Claude's commands** run in the Claude Code sandbox (bubblewrap + seccomp). They can write only in the project folder and `tools/`. They cannot read the rest of your Linux home or the Windows drives, and cannot launch `cmd.exe` or `powershell.exe` directly. *Setup & health → Test the sandbox* proves it with a real session. Claude's file tools (Read, Edit, Write…) are limited the same way by a hook (`athanor hook fichiers`, [`app/outil_gardes.go`](app/outil_gardes.go)). On macOS the sandbox is Seatbelt, with the same rules.
 - **Windows software is an intended exit.** The gateways run outside the sandbox, with your user rights, and `pc-exec` runs any Windows program Claude places in the project or in `tools/windows`. Treat a project like code you run yourself.
 - **Administrator rights are opt-in.** *Administrator rights → Repair* asks for your consent once and registers an elevated scheduled task (`Athanor - installations`). Its script is copied to `C:\ProgramData\Athanor`, which only administrators can modify. The task only runs winget packages and programs located inside your project folders or `tools\windows`. It also lets the project's programs accept local-network connections without the firewall dialog. Remove it any time with `commands\allow-admin.cmd remove`.
 - **The pilot never trusts the project folder.** It keeps its own state (pid, lock, sandbox settings, instructions, counters) in `logs/`, out of Claude's reach, and never writes through a symbolic link placed in `.athanor/`. It validates every value it reads back, and runs git with hooks, filters, fsmonitor and external diff disabled. It starts Claude Code with only its own settings and MCP servers (`--setting-sources user`, `--strict-mcp-config` when the CLI supports them), and `tools/` is never in its `PATH`.
@@ -414,11 +415,11 @@ Without a folder, the commands use `<tool>/projet`. The request is read and writ
 Athanor.exe, athanor   the app for Windows / Linux (in the release, or built with build.cmd / build.sh)
 app/                   the app's Go sources, static UI (HTML, CSS, JS without dependencies), Windows resources
 commands/              install, configure, start, stop, stop-after-cycle, follow, test-sandbox, repair,
-                       allow-admin, unreal-network (.cmd for Windows, .sh for Linux/WSL)
-system/                pilot.sh (the loop), parallel.sh (scheduler, workers, merges), equipe.py (the team), taches.py (tasks for you), safety.sh, bridge.py,
-                       extensions.py + mcp-jail.sh (Skills & MCP), ecran.sh (Claude's screen), github.sh (GitHub),
-                       settings.py (sandbox), guard.py, detect-tools.sh, athanor.py (map, archives, screenshots),
-                       bin/ (gateways), windows/ (PowerShell helpers)
+                       allow-admin, unreal-network (.cmd for Windows, .sh for Linux, WSL and macOS)
+system/                pilot.sh (starts the Go pilot; the former bash pilot as a backup), parallel.sh (its parallel mode),
+                       safety.sh, github.sh (GitHub linking, native Windows), mcp-jail.sh, windows-mcp.sh and ecran.sh
+                       (entry points of athanor mcp-cage, mcp-windows and ecran), bin/ (gateways), natif/ (Git Bash shims),
+                       windows/ (PowerShell helpers)
 template/              CLAUDE.md (Claude's instructions), guides/ (the parts only some cycles need), PC_TOOLS_GUIDE.md, .claude/agents/ (the team)
 docs/images/           README images
 docs/releases/         what is new in each version (shown on the release page)
@@ -494,7 +495,7 @@ Yes. Nothing is tied to a user name or a drive letter: paths come from your prof
 Push a version tag and GitHub builds both apps and publishes the release ([`.github/workflows/release.yml`](.github/workflows/release.yml)):
 
 ```bash
-git tag v2.24.28 && git push origin v2.24.28
+git tag v2.24.29 && git push origin v2.24.29
 ```
 
 Keep the version in [`app/winres/athanor.rc`](app/winres/athanor.rc) and `versionAthanor` in [`app/commandes.go`](app/commandes.go) in step with the tag (a test checks they match), and write what is new in `docs/releases/VERSION.md` (e.g. [`docs/releases/2.24.24.md`](docs/releases/2.24.24.md)): it opens the release page.

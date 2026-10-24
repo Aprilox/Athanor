@@ -1,7 +1,7 @@
 # shellcheck shell=bash
 # Roblox Studio with a Rojo project (sourced by the pilot and by the roblox-studio gateway).
 # The project's files are the place: Studio works on .athanor/studio/NAME.rbxl, built from them by rojo,
-# and stays open from one cycle to the next; the scripts reach it live (roblox-sync.py, SYNC.luau).
+# and stays open from one cycle to the next; the scripts reach it live (athanor roblox-sync, SYNC.luau).
 
 # The Rojo project file: default.project.json, else the first *.project.json (2 levels at most).
 roblox_projet_rojo() {

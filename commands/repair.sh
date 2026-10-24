@@ -18,7 +18,8 @@ claude --help 2>/dev/null | grep -q -- '--strict-mcp-config' && args+=(--strict-
 [ -n "${FALLBACK_MODEL:-}" ] && [ "$MODELE_REP" != "${FALLBACK_MODEL:-}" ] && args+=(--fallback-model "$FALLBACK_MODEL")
 export CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1 ENABLE_CLAUDEAI_MCP_SERVERS=false   # no claude.ai connectors (Shopify, Gmail…)
 echo "[reparer] Claude session${MODELE_REP:+ ($MODELE_REP)}: $(basename "$1")"
-timeout 1800 claude "${args[@]}" < /dev/null 2>&1 | tee -a logs/reparations.jsonl
+LIMITE=(timeout 1800); command -v timeout >/dev/null 2>&1 || LIMITE=()   # (no timeout on macOS)
+"${LIMITE[@]}" claude "${args[@]}" < /dev/null 2>&1 | tee -a logs/reparations.jsonl
 code=${PIPESTATUS[0]}
 [ -f logs/TODO_FOR_YOU.md ] && { echo; echo "[reparer] Claude left steps for you to do: logs/TODO_FOR_YOU.md"; }
 exit "$code"

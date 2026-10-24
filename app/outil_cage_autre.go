@@ -14,7 +14,6 @@ func pasIci(nom string) int {
 	return 2
 }
 
-func lancerMCPCage(args []string) int         { return pasIci("mcp-cage") }
 func lancerEcran(args []string) int           { return pasIci("ecran") }
 func lancerMCPWindows(args []string) int      { return pasIci("mcp-windows") }
 func lancerGardeMCPWindows(args []string) int { return pasIci("mcp-windows-garde") }

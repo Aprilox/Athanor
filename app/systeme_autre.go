@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 )
@@ -33,8 +34,12 @@ func DemarrerDetache(k Kit, script string) error {
 	return err
 }
 
-// FenetreWSL on Linux: the step runs in a terminal window of the desktop (the first one found).
+// FenetreWSL on Linux: the step runs in a terminal window of the desktop (the first one found); on macOS,
+// in a Terminal window.
 func FenetreWSL(k Kit, titre, script string) error {
+	if runtime.GOOS == "darwin" {
+		return fenetreTerminalMac(k, script)
+	}
 	if os.Getenv("DISPLAY") == "" && os.Getenv("WAYLAND_DISPLAY") == "" {
 		return errors.New("Interactive window: no graphical session; run in a terminal: " + script)
 	}
@@ -61,10 +66,81 @@ func FenetreWSL(k Kit, titre, script string) error {
 	os.Remove(f.Name())
 	return errors.New("Interactive window: no terminal found; run in a terminal: " + script)
 }
+
+// fenetreTerminalMac: a .command file opens in Terminal and runs there.
+func fenetreTerminalMac(k Kit, script string) error {
+	if err := os.MkdirAll(k.Journaux(), 0o755); err != nil {
+		return err
+	}
+	f, err := os.CreateTemp(k.Journaux(), "window-*.command")
+	if err != nil {
+		return err
+	}
+	_, err = f.WriteString("#!/bin/bash -l\ncd " + citerShell(k.Racine) + " || exit 1\n" + script + "\necho\nread -p 'Press Enter to close' _\nrm -f -- \"$0\"\n")
+	f.Close()
+	if err != nil {
+		return err
+	}
+	if err := os.Chmod(f.Name(), 0o755); err != nil {
+		return err
+	}
+	return exec.Command("open", "-a", "Terminal", f.Name()).Start()
+}
+
 func FenetrePowerShell(k Kit, s string) error { return errors.New("PowerShell: Windows only") }
-func Ouvrir(chemin string) error              { return exec.Command("xdg-open", chemin).Start() }
-func OuvrirFenetreApp(url string)             { _ = exec.Command("xdg-open", url).Start() }
-func FenetreApp(url string) bool              { return false }
+func Ouvrir(chemin string) error {
+	if runtime.GOOS == "darwin" {
+		return exec.Command("open", chemin).Start()
+	}
+	return exec.Command("xdg-open", chemin).Start()
+}
+
+// OuvrirFenetreApp: an application window of a Chromium browser (no address bar, its own profile), as the
+// Windows fallback does; else the default browser.
+func OuvrirFenetreApp(url string) {
+	profil := filepath.Join(dossierDonneesApp(), "navigateur")
+	options := []string{"--app=" + url, "--user-data-dir=" + profil, "--window-size=1240,820", "--no-first-run", "--no-default-browser-check"}
+	if runtime.GOOS == "darwin" {
+		for _, nom := range []string{"Google Chrome", "Microsoft Edge", "Chromium", "Brave Browser"} {
+			if _, err := os.Stat(filepath.Join("/Applications", nom+".app")); err == nil {
+				if exec.Command("open", append([]string{"-na", nom, "--args"}, options...)...).Start() == nil {
+					return
+				}
+			}
+		}
+		_ = exec.Command("open", url).Start()
+		return
+	}
+	for _, nom := range []string{"google-chrome", "google-chrome-stable", "chromium", "chromium-browser", "microsoft-edge", "brave-browser"} {
+		if chemin, err := exec.LookPath(nom); err == nil {
+			c := exec.Command(chemin, options...)
+			if c.Start() == nil {
+				go func() { _ = c.Wait() }()
+				return
+			}
+		}
+	}
+	_ = exec.Command("xdg-open", url).Start()
+}
+
+// dossierDonneesApp: Athanor's own data (the browser profile of its window): ~/Library/Application
+// Support/Athanor on macOS, ~/.local/share/athanor on Linux.
+func dossierDonneesApp() string {
+	if runtime.GOOS == "darwin" {
+		if h, err := os.UserHomeDir(); err == nil {
+			return filepath.Join(h, "Library", "Application Support", "Athanor")
+		}
+	}
+	if d := os.Getenv("XDG_DATA_HOME"); d != "" {
+		return filepath.Join(d, "athanor")
+	}
+	if h, err := os.UserHomeDir(); err == nil {
+		return filepath.Join(h, ".local", "share", "athanor")
+	}
+	return filepath.Join(os.TempDir(), "athanor")
+}
+
+func FenetreApp(url string) bool { return false }
 
 // Linux: the window is the browser's (no notification area icon); a second launch opens another one.
 func permettrePremierPlan()                                               {}
@@ -72,8 +148,16 @@ func montrerFenetre()                                                     { Ouvr
 func IconeNotification(langue func() string, ouvrir, quitter func()) bool { return false }
 
 // Linux: "open when the computer starts" = the desktop session's autostart entry
-// (~/.config/autostart/athanor.desktop, the freedesktop standard: GNOME, KDE, Xfce, Cinnamon…).
+// (~/.config/autostart/athanor.desktop, the freedesktop standard: GNOME, KDE, Xfce, Cinnamon…); macOS: a
+// launch agent of the user (~/Library/LaunchAgents/ai.athanor.app.plist), started at login.
 func fichierAutostart() string {
+	if runtime.GOOS == "darwin" {
+		h, err := os.UserHomeDir()
+		if err != nil {
+			return ""
+		}
+		return filepath.Join(h, "Library", "LaunchAgents", "ai.athanor.app.plist")
+	}
 	dir, err := os.UserConfigDir()
 	if err != nil {
 		return ""
@@ -99,6 +183,9 @@ func DemarrageWindows(actif bool) error {
 	if err := os.MkdirAll(filepath.Dir(f), 0o755); err != nil {
 		return err
 	}
+	if runtime.GOOS == "darwin" {
+		return os.WriteFile(f, []byte(agentLancementMac(exe)), 0o644)
+	}
 	entree := "[Desktop Entry]\nType=Application\nName=Athanor\nComment=Claude Code building whole projects\nExec=\"" +
 		strings.ReplaceAll(exe, `"`, `\"`) + "\"\nPath=" + filepath.Dir(exe) + "\nTerminal=false\nX-GNOME-Autostart-enabled=true\n"
 	return os.WriteFile(f, []byte(entree), 0o644)
@@ -108,6 +195,24 @@ func DemarrageWindowsActif() bool {
 	return err == nil
 }
 func migrerSysteme() {}
+
+// agentLancementMac: the launch agent that opens Athanor at login.
+func agentLancementMac(exe string) string {
+	x := func(s string) string {
+		return strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;").Replace(s)
+	}
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key><string>ai.athanor.app</string>
+	<key>ProgramArguments</key><array><string>` + x(exe) + `</string></array>
+	<key>WorkingDirectory</key><string>` + x(filepath.Dir(exe)) + `</string>
+	<key>RunAtLoad</key><true/>
+</dict>
+</plist>
+`
+}
 
 // Bureau on Linux: Claude's desktop is the private X server each pilot runs (system/ecran.sh). The
 // option only writes or removes logs/bureau-isole, which the pilots read at every cycle; "View" opens
@@ -162,7 +267,7 @@ func (b *Bureau) marquer() {
 		return
 	}
 	f := filepath.Join(racine, "logs", "bureau-isole")
-	if !actif {
+	if !actif || runtime.GOOS != "linux" { // macOS: no private X server, the windows open on the screen
 		os.Remove(f)
 		return
 	}
@@ -173,6 +278,9 @@ func (b *Bureau) marquer() {
 func (b *Bureau) Etat() EtatBureau {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	if runtime.GOOS != "linux" {
+		return EtatBureau{Message: "Virtual desktop: Windows only."}
+	}
 	if !b.Actif {
 		return EtatBureau{Message: "Virtual desktop disabled (Options).", Ecran: true}
 	}
