@@ -199,7 +199,10 @@ func archiverKit(racine, sortie string) error {
 		}
 		return filepath.Join(racine, filepath.FromSlash(nom))
 	}
-	noms = append([]string{"env.example", "LICENSE"}, noms...)
+	noms = append([]string{"env.example"}, noms...)
+	if estFichier(filepath.Join(racine, "LICENSE")) { // a tool folder made before 2.26 may have none
+		noms = append([]string{"LICENSE"}, noms...)
+	}
 	f, err := os.Create(sortie)
 	if err != nil {
 		return err

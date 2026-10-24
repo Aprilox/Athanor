@@ -37,6 +37,10 @@ func autotest(racine string) []resultatAutotest {
 	n := 0
 	_ = fs.WalkDir(sourcesIntegrees, ".", func(string, fs.DirEntry, error) error { n++; return nil })
 	ajouter("built-in sources", n > 50, fmt.Sprintf("%d files (athanor reparer --diff)", n))
+	if kitEmbarque() { // a plain build (go build, the tests) carries none, and needs a tool folder around it
+		_, _, err := fichiersArchive(archiveKitGz)
+		ajouter("built-in kit files", err == nil, "template/, .env.example, app/ (a single executable: it updates itself)")
+	}
 	if racine == "" {
 		ajouter("kit", false, "not found (athanor autotest KIT)")
 		return r

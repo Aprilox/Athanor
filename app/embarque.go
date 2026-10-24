@@ -252,7 +252,9 @@ func deployerKit(d string) (ResultatDeploiement, error) {
 				if err == nil {
 					b, err = io.ReadAll(z)
 				}
-				if err == nil {
+				if err == nil && len(b) == 0 { // a rebuild that carried none: the kit's athanor stays
+					err = nil
+				} else if err == nil {
 					err = ecrireAtomique(l, b, 0o755)
 				}
 				noter(err)
@@ -318,7 +320,8 @@ func executerSurPlace(args []string) bool {
 // executable installs or updates Athanor's folder, then runs the copy kept there with the same arguments.
 // False: started from a kit folder, or a build that carries no kit (everything goes on as before).
 func lancerDepuisTelechargement(args []string) (int, bool) {
-	if !kitEmbarque() || executerSurPlace(args) {
+	// ATHANOR_SUR_PLACE=1: a new executable checked before it is put in place (athanor reparer)
+	if !kitEmbarque() || executerSurPlace(args) || os.Getenv("ATHANOR_SUR_PLACE") == "1" {
 		return 0, false
 	}
 	ici := dossierExecutable()
