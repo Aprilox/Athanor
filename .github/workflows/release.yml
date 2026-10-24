@@ -99,11 +99,11 @@ jobs:
           install -m 755 dist/athanor-linux-arm64 publie/Athanor-Linux-ARM64
           cp Athanor-macOS.zip publie/Athanor-macOS.zip
           # TRANSITION (2.29.0 only): the names Athanor 2.28 and older look for to update themselves; removed
-          # from the next version on
+          # from the next version on. Not athanor-linux-arm64: GitHub ignores the case of file names, so it
+          # would be Athanor-Linux-ARM64 itself (a Linux ARM Athanor of 2.28 downloads its new file once)
           cp dist/Athanor-amd64.exe publie/Athanor.exe
           cp dist/Athanor-arm64.exe publie/Athanor-arm64.exe
           install -m 755 dist/athanor-linux-amd64 publie/athanor-linux
-          install -m 755 dist/athanor-linux-arm64 publie/athanor-linux-arm64
           install -m 755 dist/athanor-darwin-arm64 publie/athanor-macos
           install -m 755 dist/athanor-darwin-amd64 publie/athanor-macos-intel
           (cd publie && sha256sum ./* | sed 's#\./##' > SHA256SUMS.txt)
@@ -143,6 +143,5 @@ jobs:
             publie/Athanor.exe
             publie/Athanor-arm64.exe
             publie/athanor-linux
-            publie/athanor-linux-arm64
             publie/athanor-macos
             publie/athanor-macos-intel
