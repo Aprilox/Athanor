@@ -367,7 +367,7 @@ func lancerDepuisTelechargement(args []string) (int, bool) {
 	d := dossierAthanorDefaut()
 	// the version kept there is newer: it runs, this older file changes nothing
 	if versionPlusRecente(versionKit(d), versionAthanor) && fichierRegulierPilote(exeDuKit(d)) {
-		return relancerKit(exeDuKit(d), reste), true
+		return relancerKit(exeDuKit(d), avecInterface(reste)), true
 	}
 	// an update while Athanor is open: it has to be closed first (its window is shown)
 	if len(reste) == 0 && versionKit(d) != versionAthanor && versionKit(d) != "" && instanceExistante("ping") {
@@ -392,7 +392,7 @@ func lancerDepuisTelechargement(args []string) (int, bool) {
 		titre, texte := texteMiseAJourReportee(pilotesEnCours(d))
 		informer(titre, texte)
 	}
-	return relancerKit(exeDuKit(d), reste), true
+	return relancerKit(exeDuKit(d), avecInterface(reste)), true
 }
 
 // relancerKit: the kit's executable with these arguments, in place of this one (Unix), or started and

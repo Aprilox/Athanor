@@ -608,6 +608,9 @@ func (s *Serveur) demarrerPilote(p Projet) (string, error) {
 	if p.PiloteActif() {
 		return "The pilot is already running on this project.", nil // message key
 	}
+	if estRoot() && os.Getenv("CLAUDE_BIN") == "" { // (a stand-in Claude for the tests and the bench may run as root)
+		return "", errors.New(texteRoot)
+	}
 	finirMiseAJour(s.kitCourant().Racine) // what an update left while pilots ran (embarque.go)
 	if err := demarrerKitDetache(s.kitCourant(), "demarrer", optionFond(), p.Dossier); err != nil {
 		return "", err

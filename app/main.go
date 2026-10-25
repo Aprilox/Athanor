@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -26,6 +27,8 @@ func main() {
 	if code, ok := lancerParNom(); ok {
 		os.Exit(code)
 	}
+	// athanor tui / athanor gui: the terminal interface or the window (interface_mode.go)
+	os.Args = append(os.Args[:1:1], lireInterface(os.Args[1:])...)
 	// the downloaded file, outside Athanor's folder: it installs or updates that folder (after the user's
 	// consent the first time), then the copy kept there runs (embarque.go)
 	if code, ok := lancerDepuisTelechargement(os.Args[1:]); ok {
@@ -45,8 +48,18 @@ func main() {
 			config.Kit = strings.TrimPrefix(a, "--kit=")
 		}
 	}
-	// Already running: it shows its window, this launch stops (never two Athanor at once).
-	if instanceExistante("montrer") {
+	terminal := interfaceTerminal()
+	// Already running: it shows its window, this launch stops (never two Athanor at once); in a terminal,
+	// the terminal interface on the Athanor that runs.
+	if terminal {
+		if lien, existe := lienInstanceTerminal(); existe {
+			if lien == "" {
+				fmt.Fprintln(os.Stderr, "Athanor is already open, in a version without the terminal interface: close it, then start Athanor again.")
+				os.Exit(1)
+			}
+			os.Exit(lancerTUI(lien, false, ""))
+		}
+	} else if instanceExistante("montrer") {
 		return
 	}
 	if config.Kit == "" {
@@ -88,7 +101,9 @@ func main() {
 	}
 	url := "http://" + ecoute.Addr().String() + "/"
 	// the address alone opens nothing (only the windows Athanor opens can use it, acces.go)
-	fmt.Println("Athanor is running (" + url + "). To open its window again, start Athanor again: the address alone does not open it. The pilots keep working even when this terminal is closed.")
+	if !terminal {
+		fmt.Println("Athanor is running (" + url + "). To open its window again, start Athanor again: the address alone does not open it. The pilots keep working even when this terminal is closed.")
+	}
 	// Only local names are accepted in the Host header: a web page pointing its own domain to
 	// 127.0.0.1 ("DNS rebinding") is refused before reaching anything.
 	port := ecoute.Addr().(*net.TCPAddr).Port
@@ -108,6 +123,19 @@ func main() {
 	lienApp = func() string { return s.lienOuverture(url) }
 	ecrireInstance(port)
 	pilotesAvantFermeture = func() []string { _, noms := s.pilotesNatifs(); return noms }
+	if terminal {
+		// the terminal interface (tui_app.go); Athanor's window asked meanwhile (w, a second launch) opens
+		go func() {
+			for range demandesFenetre {
+				OuvrirFenetreApp(lienApp())
+			}
+		}()
+		code := lancerTUI(lienApp(), true, filepath.Join(s.kitCourant().Journaux(), "terminal.log"))
+		s.fermetureNative()
+		effacerInstance()
+		remettreBureau()
+		os.Exit(code)
+	}
 	if !FenetreApp(lienApp()) {
 		// Athanor.app: its own window (WebKit), its Dock icon and its icon near the clock until it is quit
 		// (app_mac_darwin.go)

@@ -34,13 +34,15 @@ func demanderConsentement(titre, texte string) bool {
 	}
 	// the buttons here are Create / Quit (Windows' dialog says Yes / No)
 	texte = strings.Replace(strings.Replace(texte, "\n\nNo: ", "\n\n"+non+": ", 1), "\n\nNon : ", "\n\n"+non+" : ", 1)
-	if runtime.GOOS == "darwin" {
+	// the terminal interface asked for: the question in the terminal, as everything else
+	enTerminal := interfaceTerminal() && terminalInteractif()
+	if runtime.GOOS == "darwin" && !enTerminal {
 		q := func(s string) string { return `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(s) + `"` }
 		script := "display dialog " + q(texte) + " with title " + q(titre) + " buttons {" + q(non) + ", " + q(oui) + "} default button " + q(oui) + " with icon note"
 		out, err := exec.Command("osascript", "-e", script).Output()
 		return err == nil && strings.Contains(string(out), oui)
 	}
-	if os.Getenv("DISPLAY") != "" || os.Getenv("WAYLAND_DISPLAY") != "" {
+	if !enTerminal && (os.Getenv("DISPLAY") != "" || os.Getenv("WAYLAND_DISPLAY") != "") {
 		if z, err := exec.LookPath("zenity"); err == nil {
 			return exec.Command(z, "--question", "--title="+titre, "--text="+texte, "--ok-label="+oui, "--cancel-label="+non, "--width=520").Run() == nil
 		}

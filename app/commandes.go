@@ -16,7 +16,7 @@ import (
 )
 
 // versionAthanor: kept equal to ProductVersion of winres/athanor.rc (TestVersionAlignee).
-const versionAthanor = "2.39.1"
+const versionAthanor = "2.40.0"
 
 type sousCommande struct {
 	aide  string
@@ -136,7 +136,8 @@ func afficherAide() {
 		noms = append(noms, n)
 	}
 	sort.Strings(noms)
-	fmt.Fprintf(os.Stdout, "Athanor %s\nUsage: athanor [COMMAND ARGUMENTS…]   (no command: the application)\n\n", versionAthanor)
+	fmt.Fprintf(os.Stdout, "Athanor %s\nUsage: athanor [COMMAND ARGUMENTS…]   (no command: the application)\n"+
+		"       athanor tui | gui              the application in the terminal (Linux, macOS) | in its window\n\n", versionAthanor)
 	for _, n := range noms {
 		fmt.Fprintf(os.Stdout, "  %-9s %s\n", n, sousCommandes[n].aide)
 	}

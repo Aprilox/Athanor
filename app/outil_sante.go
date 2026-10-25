@@ -192,8 +192,23 @@ func santeLinux(string) int {
 		}
 	}
 	direSante("%s, kernel %s", nom, strings.TrimSpace(noyau))
+	return santeRoot()
+}
+
+// texteRoot: why Athanor cannot run as root (the check says it, and Start refuses with it).
+const texteRoot = "Athanor runs as root: Claude Code refuses to work as root. Create a normal user (adduser NAME, then usermod -aG sudo NAME), log in as that user and start Athanor again."
+
+// santeRoot: Claude Code refuses to work with full permissions as root (a fresh server's only account).
+func santeRoot() int {
+	if estRoot() {
+		direSante("%s", texteRoot)
+		return 1
+	}
 	return 0
 }
+
+// estRoot: Athanor runs as root (Linux, macOS).
+func estRoot() bool { return runtime.GOOS != "windows" && os.Geteuid() == 0 }
 
 func santeWSL(string) int {
 	noyau, _ := sortieDe(10*time.Second, "uname", "-r")
@@ -520,7 +535,7 @@ func santeMacOS(string) int {
 	v, _ := sortieDe(10*time.Second, "sw_vers", "-productVersion")
 	m, _ := sortieDe(10*time.Second, "uname", "-m")
 	direSante("macOS %s (%s)", strings.TrimSpace(v), strings.TrimSpace(m))
-	return 0
+	return santeRoot()
 }
 
 // ---------------------------------------------------------------------------- repairs

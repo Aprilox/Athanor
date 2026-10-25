@@ -59,6 +59,7 @@ Vous décrivez ce que vous voulez : un jeu, un site, une application, un outil. 
 | **Vos logiciels** | Unreal Engine, Blender, le SDK Android, Docker et winget sont joignables par un pont contrôlé, commande par commande. |
 | **Aucune fenêtre UAC** | Sur autorisation. Un seul consentement, puis Claude installe et lance ce dont le projet a besoin avec les droits administrateur, sans rien vous demander. |
 | **Une application de bureau** | Un seul fichier, qui se met à jour en un clic. Elle montre l'équipe en direct, le plan, l'avancement et le quota de l'abonnement (avec arrêts automatiques), le journal lisible et la file des demandes, permet de discuter avec Claude du projet, et lance des vérifications qui se réparent en un clic. Elle fait aussi tourner plusieurs projets à la fois et garde les programmes que Claude lance sur leur propre bureau, loin de vous. Thèmes, 6 langues. |
+| **Aussi dans un terminal** | Sous Linux et macOS, `./athanor tui` affiche toute l'application dans le terminal, comme btop : les projets, le suivi, le journal en direct, les demandes, la discussion et les vérifications, au clavier et à la souris. En SSH, ou sur un Linux sans écran, elle s'ouvre d'elle-même ; `./athanor gui` force la fenêtre. |
 | **Depuis votre téléphone** | Activez *À distance*, scannez un QR code, et Athanor est sur votre téléphone (ou un autre ordinateur), de n'importe où : les mêmes pages en direct, démarrer et arrêter, discuter, les demandes. Par un tunnel Cloudflare, rien à configurer ; seuls les appareils que vous appairez entrent, et un clic en retire un. |
 | **GitHub, connecté une fois** | Connectez chaque ordinateur à votre compte GitHub une fois (*Réglages → Options → GitHub*). Un projet se lie ensuite à un nouveau dépôt privé, ou à tout dépôt que votre compte peut modifier, sans fenêtre, et ses commits y partent après chaque jalon. La clé reste hors de portée de Claude ; chaque envoi est vérifié à la recherche de secrets et n'est jamais forcé. Deux personnes peuvent se relayer sur un même dépôt, ou plusieurs ordinateurs le construire en même temps. |
 | **Des projets propres** | Un projet est n'importe quel dossier de votre PC, et Athanor garde ses propres fichiers dans un dossier à lui. Athanor n'y ajoute qu'un atelier `.athanor/`, avec ses documents de travail (exigences, design, architecture), tenu hors de git sur votre ordinateur seulement, jamais via votre `.gitignore` (sauf si vous choisissez de le partager sur GitHub avec ceux qui travaillent avec vous) : supprimez-le à la fin et il ne reste aucune trace. |
@@ -112,6 +113,7 @@ Tout ce qui est à lui y va : sa copie de l'exécutable, ses réglages et votre 
 ```bash
 chmod +x Athanor-Linux-x64    # une fois : un fichier téléchargé n'est pas encore exécutable
 ./Athanor-Linux-x64           # l'application, dans une fenêtre d'application de Chrome/Edge/Chromium, sinon votre navigateur
+./Athanor-Linux-x64 tui       # la même application dans le terminal (en SSH ou sans écran : d'elle-même)
 ```
 
 Puis *Installation & santé* → *Tout installer* (Claude Code, la barrière et les outils ; Linux demande votre mot de passe une fois), le jeton dans *Réglages*, un projet et *Démarrer*, comme sous Windows (étapes 3, 5 et 6).
@@ -307,6 +309,19 @@ L'interface est traduite en anglais, français, espagnol, allemand, italien et p
 
 ---
 
+## Dans un terminal
+
+<img src="docs/images/terminal.png" alt="Athanor dans un terminal : les projets et les pages à gauche, l'état du pilote, le quota de l'abonnement et les cycles déjà faits au milieu, le plan en vagues à droite">
+
+Sous Linux et macOS, Athanor tourne aussi dans le terminal, comme btop ou htop : le même Athanor que sa fenêtre, sur le même serveur, donc les deux montrent toujours la même chose. Fait pour un serveur joint en SSH, un Linux sans bureau, ou simplement votre propre terminal.
+
+- **L'ouvrir** : `./athanor tui` dans le dossier d'Athanor (ou le fichier téléchargé : `./Athanor-Linux-x64 tui`). En SSH (`SSH_CONNECTION` défini), ou sur un Linux sans écran (ni `DISPLAY` ni `WAYLAND_DISPLAY`), `./athanor` seul l'ouvre. `./athanor gui` ouvre la fenêtre quoi qu'en dise la détection.
+- **Sur un serveur** : lancez Athanor avec un utilisateur normal, pas en root : Claude Code refuse de travailler en root (Installation & santé le dit, et *Démarrer* refuse). Sur un VPS neuf : `adduser NOM`, `usermod -aG sudo NOM`, connectez-vous en `NOM`, puis `./Athanor-Linux-x64`.
+- **Avec Athanor déjà ouvert** (sa fenêtre, ou un autre terminal) : `./athanor tui` montre ce même Athanor. Quand c'est le terminal qui a lancé Athanor, Athanor s'arrête avec lui (les pilotes continuent) ; *w* ouvre aussi la fenêtre, sur un ordinateur avec écran.
+- **Les pages** : *1* Suivi (l'état, le quota, les cycles et le plan), *2* Journal (en direct ; *o*, *r*, *u* filtrent outils, résultats et sous-agents, */* cherche, *f* suit), *3* Demandes (*n* une nouvelle, *e* une remarque en cours de route, *d* supprime, *Alt+↑/↓* réordonne), *4* Discuter (son champ est prêt dès l'ouverture de la page : *Entrée* envoie, *Alt+Entrée* une nouvelle ligne ; *Échap* le quitte pour *c* une nouvelle conversation et *m* le modèle, *i* y revient), *5* Installation & santé (*v* vérifie tout ; *r* répare et *I* installe tout directement dans le terminal, chaque commande affichée et sudo répondu sur place, puis Athanor revient ; *T* le jeton). *6* Pour vous (*Entrée* répond, avec les valeurs demandées dans des champs masqués ; *k* passe), *7* Équipe, *8* GitHub (*c* connecte cet ordinateur dans le terminal, *l* lie un de vos dépôts, *n* en crée un privé, *P* envoie, *A* envoi automatique, *u* délie), *9* Réglages (*Entrée* modifie un réglage, secrets masqués ; *L*, *P*, *A* la langue, la palette, l'accent). Les formulaires ont des boutons *Enregistrer* et *Annuler* (Tab, ou un clic ; *F2* enregistre aussi) ; un formulaire refusé par le serveur reste ouvert avec la raison, et en fermer un qui contient du texte demande d'abord.
+- **Partout** : *s* Démarrer (avec les mêmes questions que la fenêtre : pas encore de demande, outils non installés, GitHub en avance), *a* Arrêter après le cycle (à nouveau : le laisser continuer), *x* Arrêter maintenant, *p* ou *[ ]* le projet, *N* un nouveau projet, *M* le gère (renommer, archiver, retirer de la liste ; les archivés reviennent depuis *p*), *g* Récupérer le travail de GitHub, *?* toutes les touches, *q* quitte. La souris clique projets, pages et lignes ; la molette fait défiler.
+- **Son allure** : la palette et l'accent de l'application, sa langue, en couleurs 24 bits quand le terminal dit les avoir (sinon 256). En SSH, le terminal ne le dit pas toujours : `ATHANOR_COULEURS=24 ./athanor tui` les force. Tant que le terminal fait tourner Athanor, ce qu'Athanor affiche va dans `logs/terminal.log`.
+
 ## Ce que Claude peut et ne peut pas faire
 
 | | |
@@ -447,6 +462,7 @@ Tout ce que fait l'application est une commande de l'exécutable (`Athanor.exe` 
 | `tester-cage` | prouver la barrière avec une vraie session |
 | `autoriser-admin [--retirer]` | autoriser ou retirer les installations administrateur (Windows) |
 | `reseau-unreal` | réseau WSL pour le MCP d'Unreal (Windows, une fois) |
+| `tui` / `gui` | l'application dans le terminal / dans sa fenêtre (Linux, macOS ; voir [Dans un terminal](#dans-un-terminal)) |
 | `aide` | toutes les commandes |
 
 Sans dossier, les commandes utilisent `projet` dans le dossier d'Athanor. La demande se lit et s'écrit dans `DOSSIER\.athanor\REQUEST.md`, les demandes suivantes dans `DOSSIER\.athanor\queue\` (un fichier par demande, prises dans l'ordre).
@@ -547,7 +563,7 @@ Oui. Rien n'est lié à un nom d'utilisateur ni à une lettre de disque : les ch
 Poussez un tag de version : GitHub compile les applications (Windows, Linux, macOS) et publie la version ([`.github/workflows/release.yml`](.github/workflows/release.yml)).
 
 ```bash
-git tag v2.39.1 && git push origin v2.39.1
+git tag v2.40.0 && git push origin v2.40.0
 ```
 
 Gardez la version de [`app/winres/athanor.rc`](app/winres/athanor.rc) et `versionAthanor` dans [`app/commandes.go`](app/commandes.go) alignées sur le tag (un test vérifie qu'elles concordent), et écrivez les nouveautés dans `docs/releases/VERSION.md` (par ex. [`docs/releases/2.31.0.md`](docs/releases/2.31.0.md)) : elles ouvrent la page de la version.
