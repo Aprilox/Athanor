@@ -25,19 +25,21 @@ var (
 
 // GitHubVue: what athanor github etat prints.
 type GitHubVue struct {
-	Gh        bool            `json:"gh"`
-	Ssh       bool            `json:"ssh"`
-	Lie       bool            `json:"lie"`
-	Depot     string          `json:"depot,omitempty"`
-	URL       string          `json:"url,omitempty"`
-	Branche   string          `json:"branche,omitempty"`
-	Auto      bool            `json:"auto"`
-	Compte    string          `json:"compte,omitempty"`
-	LieLe     string          `json:"lie_le,omitempty"`
-	Dernier   json.RawMessage `json:"dernier,omitempty"`
-	Atelier   bool            `json:"atelier"`              // the workshop shared on GitHub
-	Equipe    bool            `json:"equipe"`               // several computers (pcs.go)
-	CleCompte bool            `json:"cle_compte,omitempty"` // the key is on the user's account (a collaborator)
+	Gh          bool            `json:"gh"`
+	Ssh         bool            `json:"ssh"`
+	Lie         bool            `json:"lie"`
+	Depot       string          `json:"depot,omitempty"`
+	URL         string          `json:"url,omitempty"`
+	Branche     string          `json:"branche,omitempty"`
+	Auto        bool            `json:"auto"`
+	Compte      string          `json:"compte,omitempty"`
+	LieLe       string          `json:"lie_le,omitempty"`
+	Dernier     json.RawMessage `json:"dernier,omitempty"`
+	Atelier     bool            `json:"atelier"`              // the workshop shared on GitHub
+	Equipe      bool            `json:"equipe"`               // several computers (pcs.go)
+	CleCompte   bool            `json:"cle_compte,omitempty"` // the key is on the user's account (a collaborator, 2.37)
+	Connexion   bool            `json:"connexion,omitempty"`  // the project uses this computer's connection to GitHub
+	ConnexionPC ConnexionGH     `json:"connexion_pc"`         // this computer's connection, whatever the project
 	// author of the commits: chosen name and email, Claude co-author or not, and what to propose
 	Identite json.RawMessage `json:"identite,omitempty"`
 }
@@ -91,6 +93,45 @@ func (s *Serveur) etatGitHub(p Projet) (GitHubVue, error) {
 		return v, errors.New("GitHub: unreadable answer from WSL")
 	}
 	return v, nil
+}
+
+// apiGitHubConnexion: this computer's connection to GitHub (GET: its state; POST connecter: the sign-in
+// window; POST deconnecter).
+func (s *Serveur) apiGitHubConnexion(w http.ResponseWriter, r *http.Request) {
+	k := s.kitCourant()
+	if r.Method == http.MethodPost {
+		var c struct {
+			Action string `json:"action"`
+		}
+		if err := lireCorps(r, &c); err != nil {
+			s.erreur(w, http.StatusBadRequest, "Invalid request")
+			return
+		}
+		switch c.Action {
+		case "connecter":
+			if err := fenetreKit(k, "GitHub", "github", "connecter"); err != nil {
+				s.erreur(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			s.msg(w, "A window opens: sign in to GitHub there, once. The projects of this computer are then linked without signing in.")
+			return
+		case "deconnecter":
+			if _, err := executerKitArgs(k, 2*time.Minute, "github", "deconnecter"); err != nil {
+				s.erreur(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+		default:
+			s.erreur(w, http.StatusBadRequest, "Unknown")
+			return
+		}
+	}
+	out, err := executerKitArgs(k, 45*time.Second, "github", "connexion")
+	var c ConnexionGH
+	if i := strings.LastIndex(out, "{"); err != nil || i < 0 || json.Unmarshal([]byte(out[i:]), &c) != nil {
+		s.erreur(w, http.StatusBadGateway, "GitHub: unreadable answer from WSL")
+		return
+	}
+	s.ecrireJSON(w, c)
 }
 
 func (s *Serveur) apiGitHubVoir(w http.ResponseWriter, r *http.Request) {
@@ -152,23 +193,61 @@ func (s *Serveur) apiGitHub(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var c struct {
-		Action  string `json:"action"`
-		Mode    string `json:"mode"`
-		Valeur  string `json:"valeur"`
-		Auto    bool   `json:"auto"`
-		Atelier bool   `json:"atelier"`
-		Branche string `json:"branche"`
-		Nom     string `json:"nom"`
-		Email   string `json:"email"`
-		SansCo  bool   `json:"sans_coauteur"`
-		Equipe  bool   `json:"equipe"`
+		Action      string `json:"action"`
+		Mode        string `json:"mode"`
+		Valeur      string `json:"valeur"`
+		Auto        bool   `json:"auto"`
+		Atelier     bool   `json:"atelier"`
+		Branche     string `json:"branche"`
+		Nom         string `json:"nom"`
+		Email       string `json:"email"`
+		SansCo      bool   `json:"sans_coauteur"`
+		Equipe      bool   `json:"equipe"`
+		WorkflowsOK bool   `json:"workflows_ok"` // the user said yes to a repository with GitHub Actions workflows
 	}
 	if err := lireCorps(r, &c); err != nil {
 		s.erreur(w, http.StatusBadRequest, "Invalid request")
 		return
 	}
 	switch c.Action {
-	case "lier":
+	case "lier", "connexion":
+		// this computer connected to GitHub: a repository of the account (its own, a collaborator's) is
+		// linked at once, no window (only creating one signs in)
+		v, _ := s.etatGitHub(p)
+		if c.Action == "connexion" { // a linked project moves to the connection: same repository, same settings
+			if !v.Lie || !reDepotGitHub.MatchString(v.Depot) {
+				s.erreur(w, http.StatusBadRequest, "Not linked to GitHub.")
+				return
+			}
+			c.Mode, c.Valeur, c.Branche, c.Auto, c.Atelier, c.WorkflowsOK = "existant", v.Depot, v.Branche, v.Auto, v.Atelier, true
+		}
+		if c.Mode == "existant" && v.ConnexionPC.Connecte {
+			depot := strings.TrimSuffix(strings.TrimPrefix(strings.TrimSpace(c.Valeur), "https://github.com/"), ".git")
+			b := strings.TrimSpace(c.Branche)
+			if !reDepotGitHub.MatchString(depot) || (b != "" && (!reBrancheGitHub.MatchString(b) || strings.Contains(b, ".."))) {
+				s.erreur(w, http.StatusBadRequest, "Invalid repository: write it as OWNER/NAME (e.g. octocat/my-site).")
+				return
+			}
+			un := func(x bool) string {
+				if x {
+					return "1"
+				}
+				return "0"
+			}
+			out, _ := s.executerGitHub(p, 15*time.Minute, "lier-compte", depot, un(c.Auto), b, un(c.Atelier || c.Equipe), un(c.Equipe), un(c.WorkflowsOK))
+			var res ResultatLierCompte
+			if i := strings.LastIndex(out, "{"); i < 0 || json.Unmarshal([]byte(out[i:]), &res) != nil {
+				s.erreur(w, http.StatusBadGateway, raisonPoussee(out))
+				return
+			}
+			gh, _ := s.etatGitHub(p)
+			s.ecrireJSON(w, map[string]any{"lie_compte": res, "github": gh})
+			return
+		}
+		if c.Action == "connexion" {
+			s.erreur(w, http.StatusBadRequest, "This computer is not connected to GitHub: Settings › Options › GitHub.")
+			return
+		}
 		if err := s.lierGitHub(p, c.Mode, strings.TrimSpace(c.Valeur), c.Auto, strings.TrimSpace(c.Branche), c.Atelier || c.Equipe, c.Equipe); err != nil {
 			s.erreur(w, http.StatusBadRequest, err.Error())
 			return
@@ -331,6 +410,10 @@ func (s *Serveur) apiGitHub(w http.ResponseWriter, r *http.Request) {
 		avant, _ := s.etatGitHub(p)
 		if _, err := s.executerGitHub(p, 5*time.Minute, "delier"); err != nil {
 			s.erreur(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if avant.Connexion {
+			s.msg(w, "Unlinked: this computer stays connected to GitHub, for its other projects.")
 			return
 		}
 		if avant.CleCompte {

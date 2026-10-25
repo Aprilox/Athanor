@@ -332,6 +332,8 @@ func (s *Serveur) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/projets/gestion", s.garde(false, s.apiGestion))
 	mux.HandleFunc("GET /api/github", s.garde(false, s.apiGitHubVoir))
 	mux.HandleFunc("POST /api/github", s.garde(false, s.apiGitHub))
+	mux.HandleFunc("GET /api/github/connexion", s.garde(false, s.apiGitHubConnexion))
+	mux.HandleFunc("POST /api/github/connexion", s.garde(false, s.apiGitHubConnexion))
 	mux.HandleFunc("GET /api/dossiers", s.garde(false, s.apiDossiers))
 	mux.HandleFunc("POST /api/dossiers/choisir", s.garde(false, s.apiChoisirDossier))
 

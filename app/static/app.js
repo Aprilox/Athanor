@@ -134,6 +134,53 @@ function choisir(message, boutons, options = {}) {
   });
 }
 
+// this computer's connection to GitHub (outil_github_connexion.go): one sign-in, kept, for every project
+function rendreConnexionGH(c) {
+  if (!c) return `<p class="muet petit">${t("Updating…")}</p>`;
+  if (c.connecte) return `<p class="ok m0">✔ ${t("Connected as {0}", [h(c.login)])}${c.lie_le ? ` <span class="muet petit">· ${h(t("since {0}", [dateLisible(c.lie_le)]))}</span>` : ""}</p>
+    <p class="muet petit">${t("Every project of this computer is linked to a repository your account can push to (yours, or one you are a collaborator of) without signing in again: Manage › GitHub › Use one of my repositories. Only creating a new repository opens a sign-in.")}</p>
+    <p class="muet petit">${t("Athanor keeps a key “Athanor (this computer)” on your GitHub account (Settings › SSH and GPG keys), out of Claude's reach. It opens every repository your account can push to.")}</p>
+    <div class="ligne"><button class="btn btn-petit" data-connexion-gh="connecter">${t("Connect again")}</button><button class="btn btn-petit btn-danger" data-connexion-gh="deconnecter">${t("Disconnect")}</button></div>`;
+  return `<p class="muet petit m0">${t("Connect this computer to your GitHub account once: then every project is linked to one of your repositories, or one you are a collaborator of, without signing in again.")}</p>
+    <div class="ligne mt-1"><button class="btn btn-primaire" data-connexion-gh="connecter">${t("Connect to GitHub")}</button></div>`;
+}
+async function majConnexionGH() {
+  const c = await api("github/connexion").catch(() => null);
+  if (c) etat.ghConnexion = c;
+  const b = document.getElementById("bloc-connexion-gh"); if (b) b.innerHTML = "<h2>GitHub</h2>" + rendreConnexionGH(etat.ghConnexion || { connecte: false });
+  return c;
+}
+document.addEventListener("click", async (ev) => {
+  const b = ev.target.closest("[data-connexion-gh]"); if (!b) return;
+  const act = b.dataset.connexionGh;
+  if (act === "deconnecter" && !(await confirmer(t("Disconnect this computer from GitHub? The projects that use this connection are no longer linked (link them again later). The key stays listed in GitHub's Settings › SSH and GPG keys, where you can remove it."), { ok: t("Disconnect"), danger: true }))) return;
+  b.disabled = true;
+  await action(api("github/connexion", "POST", { action: act }));
+  b.disabled = false;
+  if (act === "connecter") etat.ghConnexionSuivi = Date.now() + 5 * 60000;
+  majConnexionGH(); if (etat.page === "projet") majGitHub();
+});
+// what linking with the connection did (lier-compte); false when nothing is linked
+async function resultatLierCompte(r, corps) {
+  const l = r && r.lie_compte; if (!l) return !!r;
+  if (l.resultat === "workflows") {
+    const ok = await confirmer(t("{0} runs {1} GitHub Actions workflow(s): every push runs them on the code Claude writes, with the repository's secrets if it has any (a secret able to change other repositories could be used). Prefer a repository without secrets. Link anyway?", [l.depot, l.workflows]), { ok: t("Link anyway"), danger: true });
+    if (!ok) return false;
+    return resultatLierCompte(await action(api("github", "POST", Object.assign({}, corps, { workflows_ok: true }))), corps);
+  }
+  const textes = {
+    lie: [t("Linked to {0} (branch {1}) with your GitHub connection.", [l.depot, l.branche]), "ok"],
+    "lie-sans-equipe": [t("Linked to {0}, but not joined to the other computers: {1}", [l.depot, l.detail || ""]), "erreur"],
+    introuvable: [t("Your GitHub account ({0}) cannot see {1}: check the name, or ask its owner to add you as a collaborator.", [l.login || "?", l.depot]), "erreur"],
+    refuse: [t("Your GitHub account ({0}) can read {1} but not push to it: its owner must give you write access (Settings › Collaborators).", [l.login || "?", l.depot]), "erreur"],
+    reseau: [t("GitHub cannot be reached (network): try again in a moment."), "erreur"],
+    deconnecte: [t("This computer is not connected to GitHub: Settings › Options › GitHub."), "erreur"],
+  }[l.resultat] || [t("Not linked: {0}", [l.detail || l.resultat]), "erreur"];
+  toast(textes[0], textes[1]);
+  if (l.resultat === "lie" && l.detail === "ancienne-cle") toast(t("The repository's previous key stays listed in its Settings › Deploy keys, where you can remove it."), "ok");
+  return l.resultat === "lie" || l.resultat === "lie-sans-equipe";
+}
+
 // working on one repository in turns (outil_github_recuperer.go): GitHub's work brought in, or only counted
 async function recupererGitHub(verifier) {
   return api("github", "POST", { action: verifier ? "verifier" : "recuperer" }).catch((e) => { if (!verifier) toast(e.message, "erreur"); return null; });
@@ -1327,8 +1374,8 @@ const GUIDE = [
     etapes: [
       ["Link the project", "*Manage* (in the project picker) › *GitHub*: *Create a private repository*, or *Use one of my repositories*. A window opens once to sign in to GitHub.", "#projet", "Manage"],
       ["One key, for this repository only", "Athanor gives the repository a key of its own (a *deploy key*, listed in the repository's *Settings › Deploy keys*), then signs out of GitHub. The key works for that repository and nothing else, and Claude can never read it."],
-      ["Who can link a computer", "The repository's owner (its administrator) gets that key for the repository alone. A **collaborator** of a personal repository cannot give the repository a key: Athanor then offers to put the key on the collaborator's own GitHub account (it opens what that account can push to; removable any time in GitHub's *Settings › SSH and GPG keys*). One sign-in either way."],
-      ["Working in turns", "Two people on one repository, one after the other (without *Work with other computers*): the owner adds the other as a collaborator (the repository's *Settings › Collaborators*), and each one links the project on their own computer, with *Share the workshop (.athanor/) on GitHub* ticked so that the request, the plan and the log go along. Before working: *Get GitHub's work* brings in what the other pushed. *Start* checks it too, and offers to bring it in first. When you stop, the push after each milestone (or *Save and push the work in progress*) leaves your work on GitHub for the other.", "#projet", "Manage"],
+      ["Who can link a computer", "Simplest: *Settings › Options › GitHub › Connect to GitHub*, once per computer. A key “Athanor (this computer)” goes on your GitHub account, and every project is then linked to one of your repositories, or one you are a **collaborator** of, without signing in. Without it, each link signs in once and gives the repository a key of its own, which only its owner can do: a collaborator is then offered the connection."],
+      ["Working in turns", "Two people on one repository, one after the other (without *Work with other computers*): the owner adds the other as a collaborator (the repository's *Settings › Collaborators*), and each one connects their computer to GitHub (*Settings › Options › GitHub*, once) and links the project, with *Share the workshop (.athanor/) on GitHub* ticked so that the request, the plan and the log go along. Before working: *Get GitHub's work* brings in what the other pushed. *Start* checks it too, and offers to bring it in first. When you stop, the push after each milestone (or *Save and push the work in progress*) leaves your work on GitHub for the other.", "#projet", "Manage"],
       ["The pushes", "After each milestone and at the delivery, or with *Push now*. Never forced: if GitHub has commits the project does not, Athanor stops and says so. Each push is checked for secrets first (keys, tokens, .env files)."],
       ["The author of the commits", "Your name and your GitHub address (the private *noreply* one is proposed), and whether Claude appears as co-author. Set it on each computer: the history then shows who did what."],
       ["Share the workshop", "*Share the workshop (.athanor/) on GitHub* puts the plan, the requests and the log in the commits, for someone who goes on with the project in their own Athanor. Working with other computers switches it on by itself."],
@@ -1488,7 +1535,8 @@ function choixGitHub(pre, nomPropose) {
     <input type="text" class="gh-champ" id="${pre}-gh-depot" placeholder="${h(t("OWNER/NAME, e.g. octocat/my-site"))}">
     <label class="interrupteur"><input type="checkbox" id="${pre}-gh-auto" checked><span>${t("Push automatically after each milestone")}</span></label>
     ${caseAtelier(`id="${pre}-gh-atelier"`, false)}
-    <p class="muet petit">${t("A window opens once to sign in to GitHub. Athanor gives the repository its own key, valid for that repository alone, then signs out: Claude can never touch your other repositories.")}</p>`;
+    <p class="muet petit">${(etat.ghConnexion || {}).connecte ? t("This computer is connected to GitHub as {0}: one of your repositories is linked at once; creating a new one opens a sign-in.", [h(etat.ghConnexion.login)])
+      : t("A window opens once to sign in to GitHub. Athanor gives the repository its own key, valid for that repository alone, then signs out: Claude can never touch your other repositories.")}</p>`;
 }
 // the workshop shared on GitHub: for someone who takes the project over with their Athanor (off by default)
 function caseAtelier(attribut, coche) {
@@ -1546,7 +1594,9 @@ function rendreGitHub(r) {
     <p class="muet petit">${t("Send the project's commits to one of your GitHub repositories, by itself after each milestone.")} ${lienGuide("github")}</p>${manque}
     <div class="gh-etape"><b>1. ${t("Repository")}</b>${choixGitHub("gh", r.nom_propose || "")}</div>
     <div class="gh-etape"><b>2. ${t("Commits")}</b>${rendreAuteur(g.identite)}</div>
-    <div class="gh-etape"><b>3. ${t("Link")}</b><div class="ligne"><button class="btn btn-primaire" data-gh="lier">${t("Link to GitHub")}</button><button class="btn btn-petit" data-gh="actualiser">${t("Refresh")}</button></div></div>`;
+    <div class="gh-etape"><b>3. ${t("Link")}</b>${(g.connexion_pc || {}).connecte ? `<p class="ok petit m0">✔ ${t("This computer is connected to GitHub as {0}: one of your repositories is linked at once, without signing in.", [h(g.connexion_pc.login)])}</p>`
+      : `<p class="muet petit m0">${t("Tip: connect this computer to GitHub once (Settings › Options › GitHub), and the next projects are linked without signing in.")} <button class="btn btn-petit" data-connexion-gh="connecter">${t("Connect to GitHub")}</button></p>`}
+      <div class="ligne"><button class="btn btn-primaire" data-gh="lier">${t("Link to GitHub")}</button><button class="btn btn-petit" data-gh="actualiser">${t("Refresh")}</button></div></div>`;
   const cls = !d ? "" : d.resultat === "ok" ? "ok" : d.resultat === "attente" ? "muet" : "bloque";
   const quand = d && d.quand ? String(d.quand).replace("T", " ").slice(0, 16) : "";
   const test = etat.ghTest && etat.ghTest.projet === etat.projet ? `<p class="petit ${etat.ghTest.ok ? "ok" : "bloque"}">${etat.ghTest.ok ? "✔" : "✖"} ${h(t(etat.ghTest.message_key || "", etat.ghTest.args || []))}</p>` : "";
@@ -1565,7 +1615,8 @@ function rendreGitHub(r) {
     ${caseAtelier("data-gh-atelier", g.atelier)}
     ${rendreAuteur(g.identite)}
     <label class="champ mt-2"><span>${t("GitHub branch")}</span><div class="ligne"><input type="text" id="gh-branche" value="${h(g.branche)}"><button class="btn btn-petit" data-gh="branche">${t("Change")}</button></div></label>
-    <p class="muet petit">${g.cle_compte ? t("The key Athanor pushes with is on your GitHub account (you are a collaborator of this repository): it stays out of Claude's reach, and you can remove it in GitHub's Settings › SSH and GPG keys. Athanor never overwrites what is on GitHub and checks every push for secrets (keys, tokens, .env files).") : t("The key Athanor pushes with works for this repository only and stays out of Claude's reach. Athanor never overwrites what is on GitHub and checks every push for secrets (keys, tokens, .env files).")}</p>
+    <p class="muet petit">${g.connexion ? t("Athanor pushes with this computer's connection to GitHub ({0}), out of Claude's reach (Settings › Options › GitHub). It never overwrites what is on GitHub and checks every push for secrets (keys, tokens, .env files).", [h((g.connexion_pc || {}).login || g.compte || "")]) : g.cle_compte ? t("The key Athanor pushes with is on your GitHub account (you are a collaborator of this repository): it stays out of Claude's reach, and you can remove it in GitHub's Settings › SSH and GPG keys. Athanor never overwrites what is on GitHub and checks every push for secrets (keys, tokens, .env files).") : t("The key Athanor pushes with works for this repository only and stays out of Claude's reach. Athanor never overwrites what is on GitHub and checks every push for secrets (keys, tokens, .env files).")}</p>
+    ${!g.connexion && (g.connexion_pc || {}).connecte ? `<div class="ligne"><button class="btn btn-petit" data-gh="connexion">${t("Use my GitHub connection")}</button><span class="muet petit">${t("This project pushes with a key of its own: with this computer's connection, nothing to sign in again if the key is lost.")}</span></div>` : ""}
     <div class="ligne"><button class="btn btn-petit" data-gh="actualiser">${t("Refresh")}</button><button class="btn btn-petit btn-danger" data-gh="delier">${t("Unlink")}</button></div>`;
 }
 // the GitHub block: the last state known is shown at once (WSL can take a while to answer), then updated
@@ -1587,7 +1638,7 @@ async function majGitHub(jusqua) {
   const lent = setTimeout(() => { const m = $("#gh-bloc .gh-maj"); if (m && n === etat.ghNumero) m.textContent = t("Still waiting for WSL (it may be starting)…"); }, 12000);
   const r = await api("github").catch((e) => ({ erreur: e.message }));
   clearTimeout(lent);
-  if (!r.erreur) { etat.ghCache = etat.ghCache || {}; etat.ghCache[nom] = r; }
+  if (!r.erreur) { etat.ghCache = etat.ghCache || {}; etat.ghCache[nom] = r; if (r.github && r.github.connexion_pc) etat.ghConnexion = r.github.connexion_pc; }
   const bloc = $("#gh-bloc");
   if (n !== etat.ghNumero || !bloc || etat.projet !== nom || etat.page !== "projet") return;
   const saisis = {}; bloc.querySelectorAll("input[id]").forEach((i) => { saisis[i.id] = i.type === "checkbox" ? i.checked : i.value; });
@@ -1627,8 +1678,10 @@ async function actionGitHub(act, b) {
   if (act === "delier" && !(await confirmer(t("Unlink “{0}” from GitHub? Nothing is deleted on GitHub: Athanor deletes its key and stops pushing.", [etat.projet]), { ok: t("Unlink"), danger: true }))) return;
   b.disabled = true;
   if (act === "pousser" || act === "malgre" || act === "wip") b.textContent = t("Pushing…");
+  if (act === "lier" || act === "connexion") b.textContent = t("Linking…");
   const r = await action(api("github", "POST", corps));
   b.disabled = false;
+  if (r && r.lie_compte) { await resultatLierCompte(r, corps); return majGitHub(); }
   if (r && r.enregistre) toast(t("Saved: {0}", [r.enregistre]), "ok");
   if (r && r.github && r.github.dernier) { const d = r.github.dernier; toast(t(d.modele || d.message || "", d.args || []), d.resultat === "ok" ? "ok" : "erreur"); }
   if (act === "lier" && r) etat.ghSuivi = { projet: etat.projet, jusqua: Date.now() + 5 * 60000 };
@@ -2858,6 +2911,7 @@ function afficherNonAppaire() {
 }
 
 async function rendreOptions() {
+  setTimeout(majConnexionGH, 0); // the GitHub block fills in once the page is there (WSL may be slow)
   const o = await api("options");
   etat.optionsVue = o;
   const b = o.bureau || {};
@@ -2868,6 +2922,7 @@ async function rendreOptions() {
         <p class="muet petit mt-1">${t("Also sets the language Claude uses for its plan, log and documents in new projects.")}</p>
         <label class="champ mt-3"><span>${t("Palette and accent")}</span></label>${rendreApparence()}
       </div>
+      <div class="bloc" id="bloc-connexion-gh"><h2>GitHub</h2>${rendreConnexionGH(etat.ghConnexion)}</div>
       <div class="bloc"><h2>${t("Startup")}</h2>
         <label class="interrupteur"><input type="checkbox" id="op-lancer" data-option ${o.lancer_pilote_au_demarrage ? "checked" : ""}><span>${t("Restart the pilots that were running, when the app opens")}</span></label>
         <label class="interrupteur"><input type="checkbox" id="op-windows" data-option ${o.demarrage_windows ? "checked" : ""}><span>${t(o.windows ? "Open Athanor when Windows starts" : (etat.vue || {}).systeme === "darwin" ? "Open Athanor when you log in to the Mac" : "Open Athanor when your desktop session starts")}</span></label>
@@ -3089,8 +3144,12 @@ $("#page").addEventListener("click", async (ev) => {
       b.disabled = false;
       if (r) {
         etat.projet = r.nom; etat.evenements = []; etat.dernierJournal = 0;
-        await action(api("github", "POST", { action: "lier", mode: "existant", valeur: depot, auto: true, atelier: true, branche, equipe: true }));
-        toast(t("A window opens: sign in to GitHub there. The project then arrives from the other computers."), "ok");
+        const corps = { action: "lier", mode: "existant", valeur: depot, auto: true, atelier: true, branche, equipe: true };
+        b.disabled = true; b.textContent = t("Linking…");
+        const rl = await action(api("github", "POST", corps));
+        b.disabled = false; b.textContent = t("Join the project");
+        if (rl && rl.lie_compte) { if (!(await resultatLierCompte(rl, corps))) return; }
+        else toast(t("A window opens: sign in to GitHub there. The project then arrives from the other computers."), "ok");
         etat.npRejoindre = false;
         await rafraichir(); location.hash = "#suivi";
       }
@@ -3105,7 +3164,8 @@ $("#page").addEventListener("click", async (ev) => {
       if (r) {
         etat.projet = r.nom; etat.evenements = []; etat.dernierJournal = 0;
         if ((etat.pieces.np || []).length) await envoyerPieces("np", "demande", r.nom);
-        if (gh) await action(api("github", "POST", gh)); // the sign-in window opens; the link shows under Manage
+        // the sign-in window opens (the link shows under Manage), or, with this computer connected, linked at once
+        if (gh) { const rl = await action(api("github", "POST", gh)); if (rl && rl.lie_compte) await resultatLierCompte(rl, gh); }
         await rafraichir(); location.hash = "#suivi";
       }
       return;
@@ -3278,6 +3338,11 @@ async function rafraichir() {
       if ((etat.page === "equipe" && !String(window.getSelection() || "") && !etat.agForm) || (etat.page === "suivi" && !document.activeElement.matches("input, textarea, select"))) rendrePage();
       if (etat.page === "chat") majChat(false);
       if (etat.page === "distance") await majDistance();
+      // after "Connect to GitHub": the window is the user's; the blocks follow until the connection is there
+      if (etat.ghConnexionSuivi && Date.now() < etat.ghConnexionSuivi) {
+        const c = await majConnexionGH();
+        if (c && c.connecte) { etat.ghConnexionSuivi = 0; toast(t("Connected to GitHub as {0}.", [c.login]), "ok"); if (etat.page === "projet") majGitHub(); }
+      }
       // the update's progress, in place (Settings › Options)
       const blocMaj = document.getElementById("bloc-version");
       if (blocMaj && etat.optionsVue) {
