@@ -110,6 +110,8 @@ type EtatVue struct {
 	// remote access on, and how many trusted devices are connected now (the sidebar's badge)
 	DistanceActive bool `json:"distance_active,omitempty"`
 	Connectes      int  `json:"connectes,omitempty"`
+	// the device paired last ("id|name"): the window says so when it changes (Athanor's window only)
+	DernierAppareil string `json:"dernier_appareil,omitempty"`
 }
 
 func (s *Serveur) apiEtat(w http.ResponseWriter, r *http.Request) {
@@ -128,6 +130,9 @@ func (s *Serveur) apiEtat(w http.ResponseWriter, r *http.Request) {
 	vue := EtatVue{KitValide: kit.Valide(), KitInstalle: kit.Installe(), Verrouille: verrou, MotDePasse: mdp, Maintenant: time.Now().Format("15:04"), DemandeVide: true, Langue: langue, Theme: theme, Accent: accent, Bienvenue: bienvenue, Version: versionAthanor}
 	vue.Distant = appareilDe(r) != ""
 	vue.DistanceActive, vue.Connectes = s.connectesDistance()
+	if !vue.Distant {
+		vue.DernierAppareil = s.dernierAppareil()
+	}
 	p, ok := s.projet(r)
 	if ok {
 		vue.Actif = p.PiloteActif()

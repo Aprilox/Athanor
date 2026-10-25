@@ -6,8 +6,10 @@ package main
 // A second server listens on 127.0.0.1 only; cloudflared alone reaches it and carries it to a public
 // https address. Nothing goes through without a trusted device's key:
 //   - pairing: Athanor's window shows a link and its QR code holding a single-use code (random, 2 minutes,
-//     renewed by itself). The device that opens it gets its own key (a cookie); the configuration only keeps
-//     a hash of it.
+//     renewed by itself). The device that opens it is then asked for 6 digits the window shows under the
+//     mouse only, renewed every 20 seconds (distance_appairage.go): a photo of the QR code is not enough,
+//     one must be in front of the computer. Then the device gets its own key (a cookie); the configuration
+//     only keeps a hash of it.
 //   - every request: the key of a device still in the list (✕ in Settings removes it: its next request is
 //     refused), the address of the tunnel in Host, and the interface's secret header as in the window.
 //   - from a device: everything the window does, but the secrets, the remote access itself, the password
@@ -74,11 +76,16 @@ type distance struct {
 	srv           *http.Server
 	tunnel        etatTunnel
 	arretTunnel   chan struct{}
+	// the second step of a pairing (distance_appairage.go): the 6 digits shown on the computer, the
+	// previous ones, and the devices that scanned the QR code and still have to type them
+	chiffres, chiffresAvant       string
+	chiffresFin, chiffresAvantFin time.Time
+	demandes                      map[string]*demandeAppairage
 }
 
 func (s *Serveur) dist() *distance {
 	s.distOnce.Do(func() {
-		s.distEtat = &distance{vu: map[string]time.Time{}, lieu: map[string]string{}, deverrouilles: map[string]bool{}}
+		s.distEtat = &distance{vu: map[string]time.Time{}, lieu: map[string]string{}, deverrouilles: map[string]bool{}, demandes: map[string]*demandeAppairage{}}
 	})
 	return s.distEtat
 }
@@ -178,18 +185,14 @@ func nomAppareil(ua string) string {
 	return sys + " · " + nav
 }
 
-// appairer: a device opened the pairing link: its key, then the interface.
-func (s *Serveur) appairer(w http.ResponseWriter, r *http.Request) {
-	if !s.consommerCode(r.URL.Query().Get("c")) {
-		time.Sleep(400 * time.Millisecond)
-		s.pageDistance(w, http.StatusForbidden, "expire")
-		return
-	}
+// creerAppareil: the device typed the computer's code: its key, then the interface.
+func (s *Serveur) creerAppareil(w http.ResponseWriter, r *http.Request) {
 	cle := aleatoire(longueurCleDist)
 	a := Appareil{ID: aleatoire(6), Nom: nomAppareil(r.UserAgent()), Hash: hacherCle(cle), Ajoute: time.Now().Format(time.RFC3339), VuLe: time.Now().Format(time.RFC3339), Lieu: lieuRequete(r)}
 	s.mu.Lock()
 	s.config.Distance.Appareils = append(s.config.Distance.Appareils, a)
 	err := ecrireConfig(s.config)
+	langue := s.config.Langue
 	s.mu.Unlock()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -199,6 +202,8 @@ func (s *Serveur) appairer(w http.ResponseWriter, r *http.Request) {
 	d.mu.Lock()
 	d.vu[a.ID], d.lieu[a.ID] = time.Now(), a.Lieu
 	d.mu.Unlock()
+	titre, texte := texteNouvelAppareil(langue, a.Nom)
+	go notifier(titre, texte)
 	// Lax: the first visit comes from the camera or another app (a Strict cookie would not follow it)
 	http.SetCookie(w, &http.Cookie{Name: cookieAppareil, Value: a.ID + "." + cle, Path: "/", MaxAge: 400 * 24 * 3600, HttpOnly: true, Secure: true, SameSite: http.SameSiteLaxMode})
 	http.Redirect(w, r, "/", http.StatusSeeOther)
@@ -276,6 +281,8 @@ func (s *Serveur) gestionDistance(mux http.Handler) http.Handler {
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		w.Header().Set("Strict-Transport-Security", "max-age=31536000")
 		if r.URL.Path == routeAppairer {
+			// its form names where it comes from (with "no-referrer", browsers send "Origin: null")
+			w.Header().Set("Referrer-Policy", "same-origin")
 			s.appairer(w, r)
 			return
 		}
@@ -319,8 +326,15 @@ func (s *Serveur) pageDistance(w http.ResponseWriter, code int, quoi string) {
 		t = textes["en"]
 	}
 	texte := t[1]
-	if quoi == "expire" {
+	switch quoi {
+	case "expire":
 		texte = t[0]
+	case "essais": // three wrong codes of the computer (distance_appairage.go)
+		if c, ok := textesChiffres[langue]; ok {
+			texte = c[4]
+		} else {
+			texte = textesChiffres["en"][4]
+		}
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
@@ -418,14 +432,17 @@ type AppareilVue struct {
 }
 
 type DistanceVue struct {
-	Actif     bool          `json:"actif"`
-	Etat      string        `json:"etat"` // arret, installation, demarrage, pret, erreur
-	Message   string        `json:"message,omitempty"`
-	Adresse   string        `json:"adresse,omitempty"`
-	Lien      string        `json:"lien,omitempty"`
-	QR        string        `json:"qr,omitempty"` // an SVG image (data: address)
-	Expire    int           `json:"expire,omitempty"`
-	Appareils []AppareilVue `json:"appareils"`
+	Actif   bool   `json:"actif"`
+	Etat    string `json:"etat"` // arret, installation, demarrage, pret, erreur
+	Message string `json:"message,omitempty"`
+	Adresse string `json:"adresse,omitempty"`
+	Lien    string `json:"lien,omitempty"`
+	QR      string `json:"qr,omitempty"` // an SVG image (data: address)
+	Expire  int    `json:"expire,omitempty"`
+	// the 6 digits the device then types (distance_appairage.go), shown under the mouse, and their end in ms
+	Chiffres       string        `json:"chiffres,omitempty"`
+	ChiffresExpire int           `json:"chiffres_expire,omitempty"`
+	Appareils      []AppareilVue `json:"appareils"`
 }
 
 func (s *Serveur) vueDistance() DistanceVue {
@@ -456,6 +473,8 @@ func (s *Serveur) vueDistance() DistanceVue {
 		v.Lien = t.adresse + routeAppairer + "?c=" + code
 		v.QR = imageQR(v.Lien)
 		v.Expire = max(1, int(time.Until(fin).Seconds()))
+		ch, finCh := s.codeChiffres()
+		v.Chiffres, v.ChiffresExpire = ch, max(1, int(time.Until(finCh).Milliseconds()))
 	}
 	for _, a := range appareils {
 		av := AppareilVue{ID: a.ID, Nom: a.Nom, Ajoute: a.Ajoute, VuLe: a.VuLe, Lieu: a.Lieu}
@@ -603,4 +622,15 @@ func (s *Serveur) connectesDistance() (bool, int) {
 		}
 	}
 	return true, n
+}
+
+// dernierAppareil: the device paired last ("id|name"), for the window's message when a new one arrives.
+func (s *Serveur) dernierAppareil() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	l := s.config.Distance.Appareils
+	if len(l) == 0 {
+		return ""
+	}
+	return l[len(l)-1].ID + "|" + l[len(l)-1].Nom
 }

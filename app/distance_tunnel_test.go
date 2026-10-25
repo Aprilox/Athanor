@@ -49,7 +49,9 @@ func installerFauxCloudflared(t *testing.T, s *Serveur) {
 
 func attendreTunnel(t *testing.T, s *Serveur, pas string) etatTunnel {
 	t.Helper()
-	for i := 0; i < 100; i++ {
+	// a minute at most: on Windows the antivirus may hold a program just copied for a few seconds
+	derniere := ""
+	for i := 0; i < 600; i++ {
 		d := s.dist()
 		d.mu.Lock()
 		e := d.tunnel
@@ -58,11 +60,11 @@ func attendreTunnel(t *testing.T, s *Serveur, pas string) etatTunnel {
 			return e
 		}
 		if e.etat == "erreur" {
-			t.Fatalf("tunnel: %s", e.message)
+			derniere = e.message // the pilot tries again by itself
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	t.Fatal("tunnel not ready")
+	t.Fatalf("tunnel not ready (last error: %s)", derniere)
 	return etatTunnel{}
 }
 

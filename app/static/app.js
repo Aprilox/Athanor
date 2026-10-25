@@ -2402,6 +2402,12 @@ pages.distance = async () => {
           <div><p class="m0">${t("Scan it with the phone's camera, or open this link on the device:")}</p>
             <div class="ligne mt-1"><input type="text" class="code" id="dist-lien" readonly value="${h(d.lien)}"><button class="btn btn-petit" id="dist-copier">${t("Copy")}</button></div>
             <p class="muet petit mt-1">${t("Single-use link, renewed by itself")} (<span id="dist-expire">${h(dureeCourte(d.expire))}</span>). ${t("Never send it to anyone: whoever opens it gets in.")}</p></div></div>
+        <h3>${t("Then, the code to type on the device")}</h3>
+        <div class="code-pc" id="dist-chiffres" tabindex="0" role="button" aria-label="${h(t("Show the code"))}">
+          <span class="masque" aria-hidden="true">••• •••</span><span class="vrai">${h(chiffresLisibles(d.chiffres))}</span>
+          <span class="indice">${t("Move the mouse over it")}</span></div>
+        <div class="barre-chiffres"><i id="dist-chiffres-barre" style="width:${Math.round(100 * (d.chiffres_expire || 0) / 20000)}%"></i></div>
+        <p class="muet petit mt-1">${t("Shown only here, renewed every 20 seconds: a photo of the QR code is not enough, the device must see this screen. Three wrong codes and it must scan again.")}</p>
       </div>` : ""}
     </div>
     <div class="colonne">
@@ -2411,7 +2417,8 @@ pages.distance = async () => {
     </div>
   </div>`;
 };
-function signatureDistance(d) { return JSON.stringify({ ...d, expire: 0 }); }
+function signatureDistance(d) { return JSON.stringify({ ...d, expire: 0, chiffres: "", chiffres_expire: 0 }); }
+function chiffresLisibles(c) { return c ? c.slice(0, 3) + " " + c.slice(3) : ""; }
 function dureeCourte(s) { s = Math.max(0, Math.round(s || 0)); return s >= 60 ? `${Math.floor(s / 60)} min ${String(s % 60).padStart(2, "0")}` : `${s} s`; }
 function dateLisible(iso) {
   const d = new Date(iso); if (isNaN(d)) return "";
@@ -2424,8 +2431,12 @@ async function majDistance() {
   const d = await api("distance").catch(() => null); if (!d) return;
   if (signatureDistance(d) !== etat.distSig) return rendrePage();
   const e = document.getElementById("dist-expire"); if (e) e.textContent = dureeCourte(d.expire);
+  const c = document.querySelector("#dist-chiffres .vrai"); if (c) c.textContent = chiffresLisibles(d.chiffres);
+  const b = document.getElementById("dist-chiffres-barre"); if (b) b.style.width = Math.round(100 * (d.chiffres_expire || 0) / 20000) + "%";
 }
 $("#page").addEventListener("click", async (ev) => {
+  const cp = ev.target.closest("#dist-chiffres");
+  if (cp) { cp.classList.add("montre"); clearTimeout(etat.chiffresMontre); etat.chiffresMontre = setTimeout(() => { const x = document.getElementById("dist-chiffres"); if (x) x.classList.remove("montre"); }, 10000); return; }
   const b = ev.target.closest("#dist-copier, [data-retirer-appareil]"); if (!b) return;
   if (b.id === "dist-copier") { const l = $("#dist-lien"); if (l) navigator.clipboard.writeText(l.value).then(() => toast(t("Copied."), "ok")); return; }
   const c = await choisir(t("Remove “{0}” from the trusted devices? It must scan the code again to come back.", [b.dataset.nom || ""]), [{ id: "non", texte: t("Cancel") }, { id: "oui", texte: t("Remove"), danger: true }]);
@@ -2830,6 +2841,10 @@ async function rafraichir() {
     if (v.erreur_key === "Not paired") return afficherNonAppaire();
     etat.vue = v;
     document.body.classList.toggle("distant", !!v.distant);
+    if (!v.distant && v.dernier_appareil !== etat.dernierAppareil) {
+      if (etat.dernierAppareil !== undefined && v.dernier_appareil) toast(t("New device paired: {0}", [v.dernier_appareil.split("|").slice(1).join("|")]), "ok");
+      etat.dernierAppareil = v.dernier_appareil;
+    }
     marquerDistance(v);
     if (v.langue && v.langue !== etat.langue) { etat.langue = v.langue; appliquerLangue(v.langue); traduireNav(); }
     if ((v.theme || "") !== etat.theme || (v.accent || "") !== etat.accent) { etat.theme = v.theme || ""; etat.accent = v.accent || ""; appliquerTheme(etat.theme, etat.accent); }

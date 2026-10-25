@@ -731,3 +731,14 @@ input.large { flex: 1; min-width: 200px; width: auto; }
   .dialogue-carte { width: calc(100vw - 24px); }
   .appairage { flex-direction: column; }
 }
+/* the 6 digits of the pairing: hidden until the mouse is over them (a tap on a touch screen) */
+.code-pc { position: relative; display: inline-flex; align-items: center; gap: 14px; padding: 10px 18px; border: 1px dashed var(--line); border-radius: 10px; background: var(--panel-2); cursor: default; user-select: none; -webkit-user-select: none; }
+.code-pc .masque, .code-pc .vrai { font: 600 30px/1.2 var(--mono); letter-spacing: .12em; }
+.code-pc .masque { color: var(--faible); }
+.code-pc .vrai { display: none; color: var(--ink); }
+.code-pc .indice { color: var(--muted); font-size: 12.5px; }
+.code-pc:hover .vrai, .code-pc:focus-visible .vrai, .code-pc.montre .vrai { display: inline; }
+.code-pc:hover .masque, .code-pc:focus-visible .masque, .code-pc.montre .masque, .code-pc:hover .indice, .code-pc.montre .indice, .code-pc:focus-visible .indice { display: none; }
+.code-pc:hover, .code-pc.montre { border-style: solid; border-color: var(--accent); }
+.barre-chiffres { height: 4px; border-radius: 2px; background: var(--panel-3); margin-top: 8px; max-width: 260px; overflow: hidden; }
+.barre-chiffres i { display: block; height: 100%; background: var(--accent); transition: width 1.5s linear; }
