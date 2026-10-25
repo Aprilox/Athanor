@@ -1313,7 +1313,7 @@ const GUIDE = [
       ["Notes, and work never lost", "The computers' Claude leave each other notes (an interface that changed, a trap to avoid): the Overview shows the last ones. A computer that goes away in the middle of a milestone has sent its unfinished work to GitHub (every 10 minutes, and when its pilot stops): the computer that takes the milestone next goes on from there."],
       ["When a computer waits", "Its Overview says why: everything left depends on a milestone in progress; files of its folder that GitHub has too (move them); a project with another history (start again from an empty folder). A real merge conflict is undone, then Claude merges it at its next cycle."],
     ],
-    note: "A computer whose pilot runs without the switch works alone: its pushes are refused as soon as another computer has pushed. Parallel mode is off while several computers work on a project. Each computer leaves a branch athanor/pc/… on the repository; it goes away when that computer stops working with the others." },
+    note: "A computer whose pilot runs without the switch works alone: its pushes are refused as soon as another computer has pushed. Parallel mode is off while several computers work on a project. Each computer leaves a small ref refs/athanor/pc/… on the repository, not a branch (never in the list of branches, no workflow runs for it); it goes away when that computer stops working with the others." },
 ];
 // mdGuide: the guide's texts, with **bold**, *emphasis* and `code`
 const mdGuide = (s) => h(s).replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>").replace(/\*([^*]+)\*/g, "<em>$1</em>").replace(/`([^`]+)`/g, "<code>$1</code>");
