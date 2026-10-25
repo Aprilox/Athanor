@@ -3,16 +3,16 @@
 package main
 
 // Claude's desktop, quiet: while a pilot runs (Athanor.exe --eveil, the application open or not), the
-// programs on Claude's desktop are not heard and do not keep the mouse.
+// programs on Claude's desktop are not heard (their mouse: garde_souris_windows.go).
 //   - Sound: the audio of the programs with a window on Claude's desktop (and of what they started) is
 //     muted, unless the user chose to hear Claude's desktop (Settings › “Claude” desktop) or is looking at
 //     it. Windows keeps a program's mute for its next start: Athanor gives the sound back as soon as the
 //     mute is no longer wanted, when the program ends (its session is still held then), when the pilot
 //     ends, and, for what an Athanor stopped short could not give back, at the next guard or the next start
 //     of the application (logs/sourdine.txt). Only what Athanor muted is ever unmuted.
-//   - Focus: when a program of Claude's desktop locks the mouse (seen by the mouse guard), an invisible
-//     window of Athanor takes the focus on that desktop: the program, no longer in front, lets the mouse go.
-// One of each at a time in the session (named objects): with several pilots, the next one takes over.
+// One at a time in the session (a named object): with several pilots, the next one takes over.
+// (An invisible window taking the focus on Claude's desktop, 2.27 to 2.30, was refused by Windows every
+// time: a desktop not on the screen has no window in front. The mouse guard alone gives the mouse back.)
 
 import (
 	"fmt"
@@ -29,14 +29,6 @@ import (
 var (
 	ole32Calme             = syscall.NewLazyDLL("ole32.dll")
 	pCoCreateInstance      = ole32Calme.NewProc("CoCreateInstance")
-	pGetCurrentThreadIdC   = kernel32.NewProc("GetCurrentThreadId")
-	pAttachThreadInputC    = user32.NewProc("AttachThreadInput")
-	pGetThreadDesktopC     = user32.NewProc("GetThreadDesktop")
-	pBringWindowToTopC     = user32.NewProc("BringWindowToTop")
-	pSetFocusC             = user32.NewProc("SetFocus")
-	pPeekMessageC          = user32.NewProc("PeekMessageW")
-	pDestroyWindowC        = user32.NewProc("DestroyWindow")
-	classeCalme, _         = syscall.UTF16PtrFromString("AthanorCalme")
 	clsidEnumerateur, _    = windows.GUIDFromString("{BCDE0395-E52F-467C-8E3D-C4579291692E}") // MMDeviceEnumerator
 	iidEnumerateur, _      = windows.GUIDFromString("{A95664D2-9614-4F35-A746-DE8DB63617E6}") // IMMDeviceEnumerator
 	iidGestionSessions2, _ = windows.GUIDFromString("{77AA99A0-1BD6-484F-8BC7-2C654C9A9B6F}") // IAudioSessionManager2
@@ -358,147 +350,4 @@ func rendreSonOublie(kit string) {
 		// what runs nowhere now gets its sound back at its next start, when a guard sees it
 		ecrireSourdine(kit, oubliees)
 	}()
-}
-
-// ---------------------------------------------------------------------------------------- focus
-
-var demandeFocus = make(chan struct{}, 1)
-
-// demanderFocusClaude: a program of Claude's desktop locks the mouse (the mouse guard saw it).
-func demanderFocusClaude() {
-	select {
-	case demandeFocus <- struct{}{}:
-	default:
-	}
-}
-
-// nomDuBureau: the name of a desktop ("Default", "AthanorClaude"…).
-func nomDuBureau(h uintptr) string {
-	buf := make([]uint16, 256)
-	var n uint32
-	if r, _, _ := pGetUserObjectInfoW.Call(h, 2, uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)*2), uintptr(unsafe.Pointer(&n))); r == 0 {
-		return ""
-	}
-	return syscall.UTF16ToString(buf)
-}
-
-var procCalme = syscall.NewCallback(func(h, msg, wp, lp uintptr) uintptr {
-	r, _, _ := pDefWindowProcW.Call(h, msg, wp, lp)
-	return r
-})
-
-// creerTeneur: the invisible window, on Claude's desktop (this thread belongs to it from then on).
-func creerTeneur() uintptr {
-	d := ouvrirBureauIsoleExistant()
-	if d == 0 {
-		return 0
-	}
-	if ok, _, _ := pSetThreadDesktop.Call(d); ok == 0 {
-		pCloseDesktop.Call(d)
-		return 0
-	}
-	// d stays open: the thread uses it
-	type wndclassex struct {
-		cbSize, style                uint32
-		proc                         uintptr
-		clsExtra, wndExtra           int32
-		instance, icon, cursor, fond uintptr
-		menu, classe                 *uint16
-		iconSm                       uintptr
-	}
-	wc := wndclassex{proc: procCalme, classe: classeCalme}
-	wc.cbSize = uint32(unsafe.Sizeof(wc))
-	pRegisterClassExW.Call(uintptr(unsafe.Pointer(&wc)))
-	titre, _ := syscall.UTF16PtrFromString("Athanor")
-	// WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW: never seen, never clicked, not in Alt + Tab
-	h, _, _ := pCreateWindowExW.Call(0x80000|0x20|0x80, uintptr(unsafe.Pointer(classeCalme)), uintptr(unsafe.Pointer(titre)),
-		0x80000000|0x10000000, 0, 0, 1, 1, 0, 0, 0, 0) // WS_POPUP | WS_VISIBLE
-	if h != 0 {
-		pSetLayeredWindowAttributes.Call(h, 0, 0, 2) // fully transparent (LWA_ALPHA)
-	}
-	return h
-}
-
-// prendreFocus: the invisible window comes in front on Claude's desktop; avant is the program that was.
-func prendreFocus(h uintptr) (avant string, ok bool) {
-	fg, _, _ := pGetForegroundWindowG.Call()
-	if fg == h {
-		return "", true
-	}
-	var tid uintptr
-	if fg != 0 {
-		var pid uint32
-		tid, _, _ = pGetWindowThreadProcessId.Call(fg, uintptr(unsafe.Pointer(&pid)))
-		avant = filepath.Base(exeDuPid(pid))
-	}
-	moi, _, _ := pGetCurrentThreadIdC.Call()
-	attache := false
-	// joined to the input of the program in front, only when it is on Claude's desktop (never the user's)
-	if tid != 0 && tid != moi {
-		if d, _, _ := pGetThreadDesktopC.Call(tid); d != 0 && nomDuBureau(d) == nomBureauIsole {
-			r, _, _ := pAttachThreadInputC.Call(moi, tid, 1)
-			attache = r != 0
-		}
-	}
-	pShowWindow.Call(h, 5) // SW_SHOW
-	pBringWindowToTopC.Call(h)
-	r, _, _ := pSetForegroundWindow.Call(h)
-	pSetFocusC.Call(h)
-	if attache {
-		pAttachThreadInputC.Call(moi, tid, 0)
-	}
-	return avant, r != 0
-}
-
-// teneurFocus: takes the focus on Claude's desktop when asked (at most every 2 s), until fin is closed.
-func teneurFocus(kit string, fin <-chan struct{}) {
-	liberer, ok := unSeulDansSession("AthanorFocus", fin)
-	if !ok {
-		return
-	}
-	defer liberer()
-	runtime.LockOSThread() // for good: the window's thread belongs to Claude's desktop
-	var (
-		h       uintptr
-		dernier time.Time
-		journal time.Time
-		msg     [48]byte
-	)
-	for {
-		select {
-		case <-fin:
-			if h != 0 {
-				pDestroyWindowC.Call(h)
-			}
-			return
-		case <-demandeFocus:
-			if time.Since(dernier) < 2*time.Second || nomBureauActif() != "Default" {
-				break
-			}
-			dernier = time.Now()
-			if h == 0 {
-				if h = creerTeneur(); h == 0 {
-					break
-				}
-			}
-			avant, pris := prendreFocus(h)
-			if time.Since(journal) > time.Minute {
-				journal = time.Now()
-				if pris {
-					journalSouris(kit, "focus taken on Claude's desktop (in front there before: "+avant+")")
-				} else {
-					journalSouris(kit, "focus refused on Claude's desktop (in front there: "+avant+")")
-				}
-			}
-		case <-time.After(50 * time.Millisecond):
-		}
-		// the window answers the messages sent to it (a program waits for the answer)
-		for h != 0 {
-			if v, _, _ := pPeekMessageC.Call(uintptr(unsafe.Pointer(&msg[0])), 0, 0, 0, 1); v == 0 { // PM_REMOVE
-				break
-			}
-			pTranslateMessage.Call(uintptr(unsafe.Pointer(&msg[0])))
-			pDispatchMessageW.Call(uintptr(unsafe.Pointer(&msg[0])))
-		}
-	}
 }

@@ -55,7 +55,7 @@ func GarderEveille(args []string) int {
 	kit := filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(args[0]))))
 	fin := make(chan struct{})
 	var wg sync.WaitGroup
-	for _, f := range []func(string, <-chan struct{}){garderSouris, silencerBureau, teneurFocus} {
+	for _, f := range []func(string, <-chan struct{}){garderSouris, silencerBureau} {
 		wg.Add(1)
 		go func() { defer wg.Done(); f(kit, fin) }()
 	}

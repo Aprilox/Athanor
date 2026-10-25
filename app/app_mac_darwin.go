@@ -127,7 +127,7 @@ func creerFenetre() {
 	fen.Send(sel("setDelegate:"), mac.delegue) // the red button hides it
 	fen.Send(sel("center"))
 	fen.Send(sel("setFrameAutosaveName:"), nsChaine("Athanor")) // its place and size kept for the next time
-	fen.Send(sel("makeFirstResponder:"), vue) // the keyboard goes to the interface
+	fen.Send(sel("makeFirstResponder:"), vue)                   // the keyboard goes to the interface
 	mac.fenetre, mac.vue = fen, vue
 	charger()
 }
@@ -195,8 +195,8 @@ func element(titre string, action objc.SEL, touche string) objc.ID {
 	return classe("NSMenuItem").Send(sel("alloc")).Send(sel("initWithTitle:action:keyEquivalent:"), nsChaine(titre), action, nsChaine(touche))
 }
 
-// preparerAppMac: the application, its delegate, its menus and its icon near the clock, on the first
-// thread; false when Cocoa cannot be reached. The window opens when Cocoa's loop starts.
+// preparerAppMac: the application, its delegate and its menus, on the first thread; false when Cocoa
+// cannot be reached. The icon near the clock and the window come when Cocoa's loop starts.
 func preparerAppMac(a actionsAppMac) (objc.ID, objc.ID, bool) {
 	if _, err := purego.Dlopen("/System/Library/Frameworks/AppKit.framework/AppKit", purego.RTLD_NOW|purego.RTLD_GLOBAL); err != nil {
 		return 0, 0, false
@@ -210,9 +210,12 @@ func preparerAppMac(a actionsAppMac) (objc.ID, objc.ID, bool) {
 		return 0, 0, false
 	}
 	methodes := []objc.MethodDef{
-		{ // the loop has started: the window
+		{ // the loop has started: the icon near the clock, the window
 			Cmd: sel("applicationDidFinishLaunching:"),
-			Fn:  func(self objc.ID, _ objc.SEL, _ objc.ID) { montrerFenetreMac() },
+			Fn: func(self objc.ID, _ objc.SEL, _ objc.ID) {
+				creerIcone()
+				montrerFenetreMac()
+			},
 		},
 		{ // the Dock icon clicked
 			Cmd: sel("applicationShouldHandleReopen:hasVisibleWindows:"),
@@ -341,22 +344,34 @@ func preparerAppMac(a actionsAppMac) (objc.ID, objc.ID, bool) {
 		element(t.toutSelectionner, sel("selectAll:"), "a"))
 	sousMenu(t.fenetre, element(t.fermerFenetre, sel("performClose:"), "w"), element(t.reduire, sel("performMiniaturize:"), "m"))
 	app.Send(sel("setMainMenu:"), barre)
-	// the icon near the clock: Athanor's furnace (an SF Symbol, macOS 11), else its name
+	return app, delegue, true
+}
+
+// creerIcone: the icon near the clock (once Cocoa's loop has started, as macOS expects): Athanor's furnace
+// (an SF Symbol, macOS 11), else its name.
+func creerIcone() {
+	if mac.icone != 0 {
+		return
+	}
 	icone := classe("NSStatusBar").Send(sel("systemStatusBar")).Send(sel("statusItemWithLength:"), float64(-1)) // variable width
-	if icone != 0 {
-		bouton := icone.Send(sel("button"))
-		if img := classe("NSImage").Send(sel("imageWithSystemSymbolName:accessibilityDescription:"), nsChaine("flame"), nsChaine("Athanor")); img != 0 && bouton != 0 {
+	if icone == 0 {
+		return
+	}
+	// kept: an item no one keeps leaves the menu bar
+	icone.Send(sel("retain"))
+	icone.Send(sel("setVisible:"), true)
+	bouton := icone.Send(sel("button"))
+	if bouton != 0 {
+		if img := classe("NSImage").Send(sel("imageWithSystemSymbolName:accessibilityDescription:"), nsChaine("flame"), nsChaine("Athanor")); img != 0 {
+			img.Send(sel("setTemplate:"), true) // drawn in the menu bar's colour (light or dark)
 			bouton.Send(sel("setImage:"), img)
-		} else if bouton != 0 {
+		} else {
 			bouton.Send(sel("setTitle:"), nsChaine("Athanor"))
 		}
-		if bouton != 0 {
-			bouton.Send(sel("setToolTip:"), nsChaine("Athanor"))
-		}
-		m := classe("NSMenu").Send(sel("new"))
-		m.Send(sel("setDelegate:"), delegue)
-		icone.Send(sel("setMenu:"), m)
-		mac.icone = icone
+		bouton.Send(sel("setToolTip:"), nsChaine("Athanor"))
 	}
-	return app, delegue, true
+	m := classe("NSMenu").Send(sel("new"))
+	m.Send(sel("setDelegate:"), mac.delegue)
+	icone.Send(sel("setMenu:"), m)
+	mac.icone = icone
 }
