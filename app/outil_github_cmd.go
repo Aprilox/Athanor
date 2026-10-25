@@ -120,6 +120,9 @@ type reglagesGH struct {
 	Auto                                 bool
 	Atelier                              bool // the workshop shared too (outil_atelier_partage.go)
 	Equipe                               bool // several computers on the repository (pcs.go)
+	// the key is on the user's own GitHub account (a collaborator of a personal repository, who cannot
+	// add a key to the repository itself): CleID is then one of the account's SSH keys
+	CleCompte bool
 }
 
 func existeGH(p string) bool { _, err := os.Stat(p); return err == nil }
@@ -148,6 +151,8 @@ func lireReglagesGH(d string) (reglagesGH, bool) {
 			r.Atelier = v == "1"
 		case "equipe":
 			r.Equipe = v == "1"
+		case "cle_compte":
+			r.CleCompte = v == "1"
 		case "compte":
 			if reCompteGH.MatchString(v) {
 				r.Compte = v
@@ -182,6 +187,9 @@ func ecrireReglagesGH(d string, r reglagesGH) error {
 	}
 	if r.Equipe {
 		fmt.Fprintln(t, "equipe=1")
+	}
+	if r.CleCompte {
+		fmt.Fprintln(t, "cle_compte=1")
 	}
 	t.Close()
 	return os.Rename(t.Name(), d+"/reglages")
@@ -789,6 +797,10 @@ func delierGH(args []string, w io.Writer) int {
 	if r.Depot != "" {
 		de = " from " + r.Depot
 	}
+	if r.CleCompte {
+		fmt.Fprintf(w, "Unlinked%s: the key is deleted from this PC (GitHub keeps an unusable entry under your account's Settings > SSH and GPG keys, \"Athanor …\", which you can remove).\n", de)
+		return 0
+	}
 	fmt.Fprintf(w, "Unlinked%s: the key is deleted from this PC (GitHub keeps an unusable entry under the repository's Settings > Deploy keys, which you can remove).\n", de)
 	return 0
 }
@@ -1082,6 +1094,7 @@ func etatGH(args []string, w io.Writer) int {
 		v["auto"], v["compte"], v["lie_le"], v["dernier"] = r.Auto, r.Compte, r.LieLe, dernier
 		v["atelier"] = r.Atelier
 		v["equipe"] = r.Equipe
+		v["cle_compte"] = r.CleCompte
 	} else {
 		v["lie"] = false
 	}
@@ -1149,6 +1162,8 @@ func commandeGitHub(args []string, w io.Writer) (int, bool) {
 		return reglerIdentiteGH(reste, w), true
 	case "identite-pilote":
 		return identitePiloteGH(reste, w), true
+	case "recuperer":
+		return recupererGH(reste, w), true
 	case "tester":
 		return testerGH(reste, w), true
 	case "enregistrer":

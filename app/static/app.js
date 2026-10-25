@@ -134,6 +134,42 @@ function choisir(message, boutons, options = {}) {
   });
 }
 
+// working on one repository in turns (outil_github_recuperer.go): GitHub's work brought in, or only counted
+async function recupererGitHub(verifier) {
+  return api("github", "POST", { action: verifier ? "verifier" : "recuperer" }).catch((e) => { if (!verifier) toast(e.message, "erreur"); return null; });
+}
+// what bringing GitHub's work in did; true when the pilot can start after it
+function annoncerRecuperation(r) {
+  const n = r.resultat;
+  const textes = {
+    "a-jour": [t("Already up to date with GitHub."), "ok"],
+    "fusion": [t("{0} commit(s) of GitHub brought into the project.", [r.detail || "?"]), "ok"],
+    "rejoint": [t("The project starts from GitHub's work ({0}).", [r.detail || ""]), "ok"],
+    "aucun": [t("GitHub's branch {0} has no commit yet: nothing to bring in.", [r.branche || "main"]), "ok"],
+    "conflit": [t("GitHub's work and this folder's change the same lines: nothing was changed yet. Claude merges them at the start of the next cycle, keeping both."), "ok"],
+    "sale": [t("This folder has changes not committed: save them first (Save and push the work in progress), then get GitHub's work."), "erreur"],
+    "pilote": [t("The pilot is running: stop it first (Stop after cycle), then get GitHub's work."), "erreur"],
+  }[n] || [t("GitHub's work not brought in: {0}", [r.detail || n || "?"]), "erreur"];
+  toast(textes[0], textes[1]);
+  return ["a-jour", "fusion", "rejoint", "aucun", "conflit"].includes(n);
+}
+// before a start: a project behind its repository (someone pushed meanwhile) asks first; GitHub slow or
+// unreachable: the start goes on (at most 25 s)
+async function avantDemarrageGitHub() {
+  const v = await Promise.race([recupererGitHub(true), new Promise((r) => setTimeout(() => r(null), 25000))]);
+  if (!v || v.equipe || v.resultat !== "verifie" || !(v.derriere > 0)) return true;
+  const quand = v.quand ? dateLisible(v.quand) : "";
+  const c = await choisir(t("GitHub has {0} commit(s) this folder does not have: someone pushed since your last work (the last one: “{1}”, by {2}, {3}). Bring them in before starting?", [v.derriere, v.sujet || "?", v.auteur || "?", quand])
+    + (v.devant > 0 ? " " + t("This folder also has {0} commit(s) of its own: both are merged.", [v.devant]) : "")
+    + " " + t("Starting from here instead: the pushes are refused until GitHub's work is brought in."), [
+    { id: "recuperer", texte: t("Bring them in, then start"), primaire: true }, { id: "ici", texte: t("Start from here") }, { id: "", texte: t("Cancel") }],
+    { titre: t("Not up to date with GitHub") });
+  if (c === "ici") return true;
+  if (c !== "recuperer") return false;
+  const r = await recupererGitHub();
+  return !!r && annoncerRecuperation(r);
+}
+
 // Start: always there. When the tooling was not seen installed or the request is empty, the user is asked
 // first (install, open the check, or start anyway): nobody stays stuck on the first steps.
 async function demarrerPilote(b) {
@@ -154,6 +190,11 @@ async function demarrerPilote(b) {
     if (c !== "demarrer") return;
   }
   if (b) b.disabled = true;
+  const avant = b ? b.textContent : "";
+  if (b) b.textContent = t("Checking GitHub…");
+  const ok = await avantDemarrageGitHub();
+  if (b) { b.textContent = avant; b.disabled = ok; }
+  if (!ok) return;
   etat.demarrage[etat.projet] = Date.now() + 25000;
   await action(api("pilote/demarrer", "POST"));
   setTimeout(rafraichir, 800);
@@ -1286,7 +1327,8 @@ const GUIDE = [
     etapes: [
       ["Link the project", "*Manage* (in the project picker) › *GitHub*: *Create a private repository*, or *Use one of my repositories*. A window opens once to sign in to GitHub.", "#projet", "Manage"],
       ["One key, for this repository only", "Athanor gives the repository a key of its own (a *deploy key*, listed in the repository's *Settings › Deploy keys*), then signs out of GitHub. The key works for that repository and nothing else, and Claude can never read it."],
-      ["Who can link a computer", "Adding that key needs the repository's **administrator** rights. On a repository of a personal account, only its owner has them: a collaborator cannot link their own computer (see *Several computers*)."],
+      ["Who can link a computer", "The repository's owner (its administrator) gets that key for the repository alone. A **collaborator** of a personal repository cannot give the repository a key: Athanor then offers to put the key on the collaborator's own GitHub account (it opens what that account can push to; removable any time in GitHub's *Settings › SSH and GPG keys*). One sign-in either way."],
+      ["Working in turns", "Two people on one repository, one after the other (without *Work with other computers*): the owner adds the other as a collaborator (the repository's *Settings › Collaborators*), and each one links the project on their own computer, with *Share the workshop (.athanor/) on GitHub* ticked so that the request, the plan and the log go along. Before working: *Get GitHub's work* brings in what the other pushed. *Start* checks it too, and offers to bring it in first. When you stop, the push after each milestone (or *Save and push the work in progress*) leaves your work on GitHub for the other.", "#projet", "Manage"],
       ["The pushes", "After each milestone and at the delivery, or with *Push now*. Never forced: if GitHub has commits the project does not, Athanor stops and says so. Each push is checked for secrets first (keys, tokens, .env files)."],
       ["The author of the commits", "Your name and your GitHub address (the private *noreply* one is proposed), and whether Claude appears as co-author. Set it on each computer: the history then shows who did what."],
       ["Share the workshop", "*Share the workshop (.athanor/) on GitHub* puts the plan, the requests and the log in the commits, for someone who goes on with the project in their own Athanor. Working with other computers switches it on by itself."],
@@ -1306,7 +1348,7 @@ const GUIDE = [
     etapes: [
       ["On the first computer", "Link the project to GitHub, then *Overview* › *Other computers* › switch on *Work with other computers*. The plan, the requests and the log go to GitHub with the next push.", "#suivi", "Overview"],
       ["On each other computer", "*Join a project* (in the project picker): the repository, the same branch, a new folder. One window signs in to GitHub, then the project arrives at once, with its request and its plan."],
-      ["Who links the other computers", "Linking needs the repository's administrator rights. Either the owner links the other computer: when its GitHub window shows a one-time code, the owner types it at github.com/login/device from any device signed in to their account, even their phone (only a key for this repository stays on that computer). Or the owner moves the repository to a GitHub organization (free) and gives the others the *Admin* role on it: they link their computers themselves, but they can then also change the repository's settings, and even delete it."],
+      ["Who links the other computers", "The owner adds the others as collaborators (the repository's *Settings › Collaborators*): each one then links their computer with their own account, and Athanor puts its key on that account. For a key valid for the repository alone, the owner links the other computer instead: when its GitHub window shows a one-time code, the owner types it at github.com/login/device from their own account, even from their phone. A GitHub organization where the others have the *Admin* role works too."],
       ["What each computer is good at", "*Remote* › *This computer, for the other computers*: a name, what it has (`RTX 4090`), a few words (`gpu`, `network`). Claude marks the milestones that need one (`Needs: gpu.`), and the pilot gives them to a computer that has the word. Without words, the milestones are simply shared out. A word may carry a level from 1 to 9 (`gpu:3`): a milestone `Needs: gpu:3.` goes first to a computer at that level or more, the others take the lighter ones at the same time.", "#distance", "What this computer is good at"],
       ["Start the pilots", "Start the pilot on each computer. One writes the plan, the others wait for it; then each one takes a milestone, and the Overview shows who builds what. The final report is written once, by one of them."],
       ["When a program does not work on a computer", "Claude first looks for the cause and repairs what it can on that computer, even if it takes 5 or 10 minutes. Only when the cause is out of its reach (the hardware, a driver, a licence) or its repair did not work does it say so: you get a notification, and the other computers try the milestone in its place, those that have the program's word first. The one that succeeds keeps the word, and such milestones go to it from then on. If none can, the computer that was meant to build it takes it back and asks you on *For you*, saying which computers tried. Working alone, Claude asks you at that point."],
@@ -1512,6 +1554,8 @@ function rendreGitHub(r) {
     <p class="gh-statut"><span class="ok">✔</span> ${t("Linked to")} <b>${h(g.depot)}</b> · ${t("branch")} <code>${h(g.branche)}</code>${g.compte ? ` · ${t("account")} ${h(g.compte)}` : ""} <button class="btn btn-petit" data-gh="ouvrir">${t("Open on GitHub")}</button></p>
     <div class="ligne"><button class="btn" data-gh="tester">${t("Test the connection")}</button><button class="btn" data-gh="pousser">${t("Push now")}</button><button class="btn btn-primaire" data-gh="wip" title="${h(t("Commits what is in the folder now (“M3: … (in progress)”) and pushes it, without Claude: someone else can take over, even with no quota left."))}">${t("Save and push the work in progress")}</button>${d && d.resultat === "bloque" && d.sha ? `<button class="btn btn-danger" data-gh="malgre" data-sha="${h(d.sha)}">${t("Push anyway")}</button>` : ""}</div>
     <p class="muet petit">${t("Commits what is in the folder now (“M3: … (in progress)”) and pushes it, without Claude: someone else can take over, even with no quota left.")}</p>
+    ${g.equipe ? "" : `<div class="ligne mt-1"><button class="btn" data-gh="recuperer">${t("Get GitHub's work")}</button></div>
+    <p class="muet petit">${t("Working on this repository in turns with someone else: brings in what they pushed (as git pull would), before you start the pilot. Athanor also checks it when you press Start.")}</p>`}
     ${test}
     ${d ? `<div class="gh-dernier"><b class="${cls}">${h(t(LIBELLES_GH[d.resultat] || d.resultat))}</b> <span class="muet petit">${h(quand)}${d.commit ? " · " + h(d.commit) : ""}</span>
       <div class="petit">${h(t(d.modele || d.message || "", d.args || []))}</div>
@@ -1521,7 +1565,7 @@ function rendreGitHub(r) {
     ${caseAtelier("data-gh-atelier", g.atelier)}
     ${rendreAuteur(g.identite)}
     <label class="champ mt-2"><span>${t("GitHub branch")}</span><div class="ligne"><input type="text" id="gh-branche" value="${h(g.branche)}"><button class="btn btn-petit" data-gh="branche">${t("Change")}</button></div></label>
-    <p class="muet petit">${t("The key Athanor pushes with works for this repository only and stays out of Claude's reach. Athanor never overwrites what is on GitHub and checks every push for secrets (keys, tokens, .env files).")}</p>
+    <p class="muet petit">${g.cle_compte ? t("The key Athanor pushes with is on your GitHub account (you are a collaborator of this repository): it stays out of Claude's reach, and you can remove it in GitHub's Settings › SSH and GPG keys. Athanor never overwrites what is on GitHub and checks every push for secrets (keys, tokens, .env files).") : t("The key Athanor pushes with works for this repository only and stays out of Claude's reach. Athanor never overwrites what is on GitHub and checks every push for secrets (keys, tokens, .env files).")}</p>
     <div class="ligne"><button class="btn btn-petit" data-gh="actualiser">${t("Refresh")}</button><button class="btn btn-petit btn-danger" data-gh="delier">${t("Unlink")}</button></div>`;
 }
 // the GitHub block: the last state known is shown at once (WSL can take a while to answer), then updated
@@ -1562,6 +1606,12 @@ function lireAuteur() {
 }
 async function actionGitHub(act, b) {
   if (act === "actualiser") return majGitHub();
+  if (act === "recuperer") {
+    b.disabled = true; b.textContent = t("Getting GitHub's work…");
+    const r = await recupererGitHub();
+    if (r) annoncerRecuperation(r);
+    return majGitHub();
+  }
   if (act === "tester") {
     b.disabled = true; b.textContent = t("Testing…");
     const r = await api("github", "POST", { action: "tester" }).catch((e) => { toast(e.message, "erreur"); return null; });
@@ -1593,7 +1643,7 @@ function formulaireRejoindre() {
       <label class="champ"><span>${t("Branch")}</span><input type="text" id="rj-branche" value="main" autocomplete="off"></label>
       <label class="champ"><span>${t("Name")}</span><input type="text" id="np-nom" placeholder="${h(t("the repository's name"))}"></label>
       <label class="champ"><span>${t("Folder of the project on this computer")}</span>${champDossier("np-dossier", "", t("e.g. D:\\Dev\\watch-store"), true)}</label>
-      <p class="muet petit">${t("A new or empty folder: the team's files arrive in it. A window then opens to sign in to GitHub: it needs the repository's administrator rights; otherwise, its owner types the one-time code from their own account (see the guide).")}</p>
+      <p class="muet petit">${t("A new or empty folder: the team's files arrive in it. A window then opens to sign in to GitHub, as the repository's owner or one of its collaborators (see the guide).")}</p>
       <button class="btn btn-primaire" id="rj-rejoindre">${t("Join the project")}</button>
     </div>`;
 }

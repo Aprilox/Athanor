@@ -541,7 +541,7 @@ func recevoirPC(projet, d, miroir string, r reglagesGH) (string, string) {
 			_ = gTravailGH(projet, "reset", "--hard", "--quiet", avant).Run()
 		}
 		fichiers, _ := gTravailGH(projet, "diff", "--name-only", "HEAD..."+local).Output()
-		_ = consigneFusionPC(projet, local, strings.Fields(string(fichiers)), strings.TrimSpace(string(out)))
+		_ = consigneFusionPC(projet, local, strings.Fields(string(fichiers)), strings.TrimSpace(string(out)), r.Equipe)
 		return recuConflit, "a conflict with the other computers' work: Claude merges it at the start of the next cycle"
 	}
 	joindreNonSuivisPC(projet, ecartes, ident, local)
@@ -817,10 +817,16 @@ func ecrireAttributsPC(projet string) error {
 	return fichierAtelier(projet, ".gitattributes", false, strings.NewReader("LOG.md merge=union\nBUGS.md merge=union\nSOLUTIONS.md merge=union\nDECISIONS.md merge=union\nBLOCKERS.md merge=union\nTEAM_NOTES.md merge=union\n"))
 }
 
-func consigneFusionPC(projet, local string, fichiers []string, sortie string) error {
+func consigneFusionPC(projet, local string, fichiers []string, sortie string, equipe bool) error {
 	var b strings.Builder
-	b.WriteString("# Merge the other computers' work first\n\n")
-	b.WriteString("Other computers of the team pushed commits that touch the same lines as this computer's. The pilot did not merge them (nothing was changed). Before anything else:\n\n")
+	if equipe {
+		b.WriteString("# Merge the other computers' work first\n\n")
+		b.WriteString("Other computers of the team pushed commits that touch the same lines as this computer's. The pilot did not merge them (nothing was changed). Before anything else:\n\n")
+	} else {
+		// working in turns on one repository (outil_github_recuperer.go)
+		b.WriteString("# Merge the work pushed to GitHub first\n\n")
+		b.WriteString("Someone else working on this repository pushed commits to GitHub that touch the same lines as this folder's own commits. The user asked to bring them in; Athanor did not merge them (nothing was changed). Before anything else:\n\n")
+	}
 	fmt.Fprintf(&b, "1. `git merge %s`\n", local)
 	b.WriteString("2. Resolve each conflict keeping both computers' work (their milestones and yours), never one side thrown away; in .athanor/PLAN.md keep every milestone ticked on either side.\n")
 	b.WriteString("3. Run `bash .athanor/check.sh`, commit the merge, note it in .athanor/LOG.md, then delete this file.\n\n")

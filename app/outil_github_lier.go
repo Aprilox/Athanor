@@ -242,6 +242,7 @@ func lierGH(args []string, w io.Writer) int {
 	fmt.Fprintf(w, "\nSigned in as %s.\n", compte)
 
 	depot := ""
+	cleCompte := false
 	if mode == "creer" {
 		out, erreur, _ := gh.api("-X", "POST", "user/repos", "-f", "name="+cible, "-F", "private=true", "-F", "auto_init=false", "-f", "description=Made with Athanor")
 		var r struct {
@@ -266,6 +267,7 @@ func lierGH(args []string, w io.Writer) int {
 			Default     string `json:"default_branch"`
 			Permissions struct {
 				Admin bool `json:"admin"`
+				Push  bool `json:"push"`
 			} `json:"permissions"`
 		}
 		_ = json.Unmarshal(out, &r)
@@ -274,15 +276,37 @@ func lierGH(args []string, w io.Writer) int {
 			fmt.Fprintf(w, "Repository %s not found, or not visible from your account.\n", cible)
 			return 1
 		}
-		if !r.Permissions.Admin {
-			fmt.Fprintf(w, "You are not an administrator of %s: GitHub only lets an administrator add a key to it.\n", depot)
-			fmt.Fprintln(w, "Two ways to link this computer anyway:")
-			fmt.Fprintln(w, "  - the repository's owner signs in with their own account in this window, on this computer: the")
-			fmt.Fprintln(w, "    sign-in is deleted right after, only a key for this repository stays;")
-			fmt.Fprintln(w, "  - or the owner moves the repository to a GitHub organization and gives you the Admin role on it")
-			fmt.Fprintln(w, "    (you can then also change its settings, or delete it).")
-			fmt.Fprintln(w, "Athanor's Guide page (Several computers) explains both.")
+		if !r.Permissions.Admin && !r.Permissions.Push {
+			fmt.Fprintf(w, "You can read %s but not push to it: its owner must add you as a collaborator with write access\n", depot)
+			fmt.Fprintln(w, "(on GitHub: the repository's Settings > Collaborators), then link again.")
 			return 1
+		}
+		if !r.Permissions.Admin {
+			// a collaborator: GitHub only lets an administrator add a key to the repository; the key goes
+			// on the user's own account instead (it then opens what that account can push to)
+			fmt.Fprintf(w, "\nYou are a collaborator of %s, not its administrator: GitHub only lets an administrator give a\n", depot)
+			fmt.Fprint(w, "repository a key of its own. Athanor can put this computer's key on YOUR GitHub account instead: it then\n"+
+				"opens every repository your account can push to, not this one alone (Claude never sees it; you can\n"+
+				"remove it any time from GitHub's Settings > SSH and GPG keys, \"Athanor …\").\n"+
+				"GitHub asks you once more in the browser, for that permission (admin:public_key).\n")
+			fmt.Fprint(errw, "Type yes to put the key on your account: ")
+			rep, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+			if strings.TrimRight(rep, "\r\n") != "yes" {
+				fmt.Fprintln(w, "Not linked. Another way: the repository's owner signs in in this window instead of you (only a key")
+				fmt.Fprintln(w, "for this repository then stays), or moves it to an organization where you are Admin.")
+				return 1
+			}
+			ref := []string{"auth", "refresh", "--hostname", "github.com", "--scopes", "admin:public_key"}
+			if strings.Contains(aide, "--insecure-storage") {
+				ref = append(ref, "--insecure-storage")
+			}
+			c := commande("gh", ref...)
+			c.Env, c.Stdin, c.Stdout, c.Stderr = env, os.Stdin, w, errw
+			if c.Run() != nil {
+				fmt.Fprint(w, "\nPermission not given: nothing was changed.\n")
+				return 1
+			}
+			cleCompte = true
 		}
 		if r.Archived {
 			fmt.Fprintf(w, "%s is archived on GitHub (read-only): unarchive it first.\n", depot)
@@ -328,9 +352,9 @@ func lierGH(args []string, w io.Writer) int {
 	}
 
 	// the repository's own key; the previous key of this project (if any) is removed from GitHub
-	ancienDepot, ancienID := "", ""
+	ancienDepot, ancienID, ancienCompte := "", "", false
 	if r, lie := lireReglagesGH(d); lie {
-		ancienDepot, ancienID = r.Depot, r.CleID
+		ancienDepot, ancienID, ancienCompte = r.Depot, r.CleID, r.CleCompte
 	}
 	os.Remove(d + "/cle.neuve")
 	os.Remove(d + "/cle.neuve.pub")
@@ -343,8 +367,15 @@ func lierGH(args []string, w io.Writer) int {
 		return 1
 	}
 	pub, _ := os.ReadFile(d + "/cle.neuve.pub")
-	out, erreur, _ := gh.api("-X", "POST", "repos/"+depot+"/keys", "-f", "title=Athanor ("+coupeValide(base, 60)+")",
-		"-f", "key="+strings.TrimRight(string(pub), "\r\n"), "-F", "read_only=false")
+	var out []byte
+	var erreur string
+	if cleCompte {
+		titre := "Athanor (" + coupeValide(firstNonEmpty(lireMachinePC().Nom, "PC"), 40) + ", " + coupeValide(base, 40) + ")"
+		out, erreur, _ = gh.api("-X", "POST", "user/keys", "-f", "title="+titre, "-f", "key="+strings.TrimRight(string(pub), "\r\n"))
+	} else {
+		out, erreur, _ = gh.api("-X", "POST", "repos/"+depot+"/keys", "-f", "title=Athanor ("+coupeValide(base, 60)+")",
+			"-f", "key="+strings.TrimRight(string(pub), "\r\n"), "-F", "read_only=false")
+	}
 	var k struct {
 		ID json.Number `json:"id"`
 	}
@@ -356,7 +387,11 @@ func lierGH(args []string, w io.Writer) int {
 		fmt.Fprintf(w, "GitHub refused the key: %s\n", coupeOctets(erreur, 300))
 		return 1
 	}
-	if ancienID != "" && depotValideGH(ancienDepot) {
+	if ancienID != "" && ancienCompte {
+		if _, _, err := gh.api("-X", "DELETE", "user/keys/"+ancienID); err == nil {
+			fmt.Fprintln(w, "Previous key removed from your account.")
+		}
+	} else if ancienID != "" && depotValideGH(ancienDepot) {
 		if _, _, err := gh.api("-X", "DELETE", "repos/"+ancienDepot+"/keys/"+ancienID); err == nil {
 			fmt.Fprintf(w, "Previous key removed from %s.\n", ancienDepot)
 		}
@@ -412,7 +447,7 @@ func lierGH(args []string, w io.Writer) int {
 		os.Remove(d + "/dernier.json")
 	}
 	if ecrireReglagesGH(d, reglagesGH{Depot: depot, Branche: branche, Auto: autoOn, Compte: compte,
-		LieLe: time.Now().Format("2006-01-02T15:04:05"), CleID: id, Atelier: partage == "1"}) != nil {
+		LieLe: time.Now().Format("2006-01-02T15:04:05"), CleID: id, Atelier: partage == "1", CleCompte: cleCompte}) != nil {
 		if v != nil {
 			v.Close()
 		}

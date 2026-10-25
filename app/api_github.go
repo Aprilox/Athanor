@@ -25,16 +25,19 @@ var (
 
 // GitHubVue: what athanor github etat prints.
 type GitHubVue struct {
-	Gh      bool            `json:"gh"`
-	Ssh     bool            `json:"ssh"`
-	Lie     bool            `json:"lie"`
-	Depot   string          `json:"depot,omitempty"`
-	URL     string          `json:"url,omitempty"`
-	Branche string          `json:"branche,omitempty"`
-	Auto    bool            `json:"auto"`
-	Compte  string          `json:"compte,omitempty"`
-	LieLe   string          `json:"lie_le,omitempty"`
-	Dernier json.RawMessage `json:"dernier,omitempty"`
+	Gh        bool            `json:"gh"`
+	Ssh       bool            `json:"ssh"`
+	Lie       bool            `json:"lie"`
+	Depot     string          `json:"depot,omitempty"`
+	URL       string          `json:"url,omitempty"`
+	Branche   string          `json:"branche,omitempty"`
+	Auto      bool            `json:"auto"`
+	Compte    string          `json:"compte,omitempty"`
+	LieLe     string          `json:"lie_le,omitempty"`
+	Dernier   json.RawMessage `json:"dernier,omitempty"`
+	Atelier   bool            `json:"atelier"`              // the workshop shared on GitHub
+	Equipe    bool            `json:"equipe"`               // several computers (pcs.go)
+	CleCompte bool            `json:"cle_compte,omitempty"` // the key is on the user's account (a collaborator)
 	// author of the commits: chosen name and email, Claude co-author or not, and what to propose
 	Identite json.RawMessage `json:"identite,omitempty"`
 }
@@ -193,6 +196,19 @@ func (s *Serveur) apiGitHub(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.ecrireJSON(w, map[string]any{"github": v})
+	case "recuperer", "verifier": // working in turns: GitHub's work brought in (or only counted, before a start)
+		args := []string{}
+		delai := 10 * time.Minute
+		if c.Action == "verifier" {
+			args, delai = append(args, "--verifier"), 40*time.Second
+		}
+		out, _ := s.executerGitHub(p, delai, "recuperer", args...)
+		var e EtatRecuperer
+		if i := strings.LastIndex(out, "{"); i < 0 || json.Unmarshal([]byte(out[i:]), &e) != nil {
+			s.erreur(w, http.StatusBadGateway, raisonPoussee(out))
+			return
+		}
+		s.ecrireJSON(w, e)
 	case "tester": // GitHub accepts the key, a push would go through (nothing is sent)
 		out, _ := s.executerGitHub(p, 2*time.Minute, "tester")
 		if i := strings.LastIndex(out, "{"); i >= 0 {
@@ -312,8 +328,13 @@ func (s *Serveur) apiGitHub(w http.ResponseWriter, r *http.Request) {
 		}
 		s.msg(w, "Saved: the next commits are signed this way (from the next cycle).")
 	case "delier":
+		avant, _ := s.etatGitHub(p)
 		if _, err := s.executerGitHub(p, 5*time.Minute, "delier"); err != nil {
 			s.erreur(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if avant.CleCompte {
+			s.msg(w, "Unlinked: the key is deleted from this PC. GitHub keeps an unusable entry under your account's Settings › SSH and GPG keys (“Athanor …”), which you can remove.")
 			return
 		}
 		s.msg(w, "Unlinked: the key is deleted from this PC. GitHub keeps an unusable entry under the repository's Settings › Deploy keys, which you can remove.")
