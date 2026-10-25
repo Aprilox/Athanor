@@ -344,7 +344,7 @@ func consignePCs(moi MachinePC, autres []PresencePC, j Jalon) string {
 		if j.Reprise != "" {
 			b.WriteString("- No computer of the team could run the program this milestone needs (see your goal): one quick check, then a task for the user (`athanor todo add`) saying which computers tried and which one was meant to build it.\n")
 		} else {
-			b.WriteString("- A program of this computer your milestone needs does not work (Blender, Unreal, an SDK…)? Try **one** repair, a few minutes at most (never long test loops). Still failing: do not ask the user. Write `.athanor/CANNOT_HERE.md` with two lines, `tool: <one word, as in Needs:, e.g. blender>` and `why: <one line>`, commit what you have, and end the cycle: the pilot gives the milestone to another computer of the team, which tries in its place.\n")
+			b.WriteString("- A program of this computer your milestone needs does not work (Blender, Unreal, an SDK…)? First find out why (its error, its log, its version). If you see a fix you can make here (a setting, an add-on, a path, restarting the program, reinstalling a package), make it, even if it takes 5 or 10 minutes, then go on with the milestone: never hand over a problem you can repair. Hand the milestone over only when the cause is out of your reach (the hardware, a driver or a licence only the user can change, a crash you cannot explain) or your repair did not work; never run the same failing test again and again. Then, without asking the user: write `.athanor/CANNOT_HERE.md` with two lines, `tool: <one word, as in Needs:, e.g. blender>` and `why: <one line: the cause, and what you tried>`, commit what you have, and end the cycle: the pilot gives the milestone to another computer of the team, which tries in its place.\n")
 		}
 	}
 	b.WriteString("- Commit as you go. Between cycles the pilot merges the others' pushed work into the project and pushes yours: never push yourself, never rewrite commits already pushed. If `.athanor/MERGE_NEEDED.md` exists, do that merge first.\n")
@@ -378,7 +378,7 @@ func butJalonPC(j Jalon, autres []PresencePC, tours int, langue string) string {
 	if j.Reprise != "" {
 		autresTxt += j.Reprise
 	} else {
-		autresTxt += " If a program this milestone needs does not work on this computer after one quick repair, the goal is reached once .athanor/CANNOT_HERE.md is written as your instructions say: another computer takes the milestone."
+		autresTxt += " If a program this milestone needs does not work on this computer and you cannot repair it here (your instructions say how far to go), the goal is reached once .athanor/CANNOT_HERE.md is written as they say: another computer takes the milestone."
 	}
 	return fmt.Sprintf("/goal Milestone %s of .athanor/PLAN.md is completed and verified according to your instructions: bash .athanor/check.sh has been run and its output, showing success, is displayed in this conversation; .athanor/PLAN.md ticks this milestone; .athanor/LOG.md has a new entry; git log shows the commit.%s If .athanor/MERGE_NEEDED.md exists, that merge is done first. If .athanor/FOR_YOU_ANSWERED exists, every answered task is handled first (athanor todo ok, missing or resolved); if %s waits for a task of the user (athanor todo list), the goal is reached once athanor todo wait has run. Or stop after %d turns. %s",
 		j.ID, autresTxt, j.ID, tours, langue)
