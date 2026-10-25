@@ -264,7 +264,7 @@ func (s *Serveur) vuDistance(id string, r *http.Request) {
 func init() { _ = mime.AddExtensionType(".webmanifest", "application/manifest+json") }
 
 // fichiersPublicsDistance: what a browser fetches without its cookies (adding Athanor to the home screen)
-var fichiersPublicsDistance = map[string]bool{"/manifest.webmanifest": true, "/icone-180.png": true, "/icone-512.png": true, "/logo.svg": true}
+var fichiersPublicsDistance = map[string]bool{"/manifest.webmanifest": true, "/icone-180.png": true, "/icone-512.png": true, "/logo.svg": true, "/badge-96.png": true}
 
 // interditDistance: what a device never does (Athanor's window only). Of the Remote page, a device reads
 // the state and the trusted devices (never the pairing link, its QR code nor its digits: vueDistanceDe),
