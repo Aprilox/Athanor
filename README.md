@@ -59,6 +59,7 @@ You describe what you want: a game, a website, an app, a tool. Athanor runs [Cla
 | **Your PC's software** | Unreal Engine, Blender, the Android SDK, Docker and winget are reached through a controlled bridge, command by command. |
 | **No UAC prompts** | Opt-in. One consent, and from then on Claude installs and runs what the project needs with administrator rights, silently. |
 | **A desktop app** | One file, that updates itself in one click. It shows the live team, the plan, the progress and the subscription quota (with automatic stops), the readable log and the request queue, lets you chat with Claude about the project, and runs health checks with one-click repair. It also runs several projects at once and keeps the programs Claude starts on a desktop of their own, out of your way. Themes, 6 languages. |
+| **In a terminal too** | On Linux and macOS, `./athanor tui` shows the whole app in the terminal, like btop: the projects, the overview, the live log, the requests, the chat and the checks, with the keyboard and the mouse. Through SSH, or on a Linux without a screen, it opens by itself; `./athanor gui` forces the window. |
 | **From your phone** | Turn on *Remote*, scan a QR code, and Athanor is on your phone (or another computer), from anywhere: the same live pages, start and stop, chat, requests. Through a Cloudflare tunnel, nothing to set up; only the devices you pair get in, and one tap removes one. |
 | **GitHub, connected once** | Connect each computer to your GitHub account once (*Settings → Options → GitHub*). Then a project is linked to a new private repository, or to any one your account can push to, with no window, and its commits go there after each milestone. The key stays out of Claude's reach; every push is checked for secrets and never forced. Two people can take turns on one repository, or several computers build it at once. |
 | **Clean projects** | A project is any folder on your PC, and Athanor keeps its own files in a folder of its own. Athanor only adds a `.athanor/` workshop, with its working documents (requirements, design, architecture), kept out of git on your computer alone, never through your `.gitignore` (unless you choose to share it on GitHub with the people you work with); delete it at the end and nothing is left behind. |
@@ -112,6 +113,7 @@ Everything of its own goes there: its copy of the executable, its settings and y
 ```bash
 chmod +x Athanor-Linux-x64    # once: a downloaded file is not executable yet
 ./Athanor-Linux-x64           # the app, in an application window of Chrome/Edge/Chromium, else your browser
+./Athanor-Linux-x64 tui       # the same app in the terminal (through SSH or without a screen: by itself)
 ```
 
 Then *Setup & health* → *Install everything* (Claude Code, the sandbox and the tools; Linux asks for your password once), the token in *Settings*, a project and *Start*, as on Windows (steps 3, 5 and 6).
@@ -307,6 +309,19 @@ The interface is translated into English, French, Spanish, German, Italian and P
 
 ---
 
+## In a terminal
+
+<img src="docs/images/terminal.png" alt="Athanor in a terminal: the projects and pages on the left, the state of the pilot, the subscription quota and the cycles so far in the middle, the plan in waves on the right">
+
+On Linux and macOS, Athanor also runs in the terminal, like btop or htop: the same Athanor as its window, on the same server, so both always show the same thing. Made for a server reached through SSH, a Linux without a desktop, or simply your own terminal.
+
+- **Open it**: `./athanor tui` in Athanor's folder (or the downloaded file: `./Athanor-Linux-x64 tui`). Through SSH (`SSH_CONNECTION` set), or on a Linux without a screen (no `DISPLAY` nor `WAYLAND_DISPLAY`), `./athanor` alone opens it. `./athanor gui` opens the window whatever the guess.
+- **On a server**: run Athanor as a normal user, not as root: Claude Code refuses to work as root (Setup & health says so, and *Start* refuses). On a fresh VPS: `adduser NAME`, `usermod -aG sudo NAME`, log in as `NAME`, then `./Athanor-Linux-x64`.
+- **With Athanor already open** (its window, or another terminal): `./athanor tui` shows that same Athanor. When the terminal is the one that started Athanor, Athanor stops with it (the pilots keep running); *w* opens the window as well, on a computer with a screen.
+- **Pages**: *1* Overview (the state, the quota, the cycles and the plan), *2* Log (live; *o*, *r*, *u* filter tools, results and sub-agents, */* searches, *f* follows), *3* Requests (*n* a new one, *e* a note along the way, *d* deletes, *Alt+↑/↓* reorders), *4* Chat (its field is ready as soon as the page opens: *Enter* sends, *Alt+Enter* a new line; *Esc* leaves it for *c* a new conversation and *m* the model, *i* comes back to it), *5* Setup & health (*v* checks everything, *r* repairs and *I* installs everything right in the terminal, each command shown and sudo answered there, then Athanor comes back; *T* the token). *6* For you (*Enter* answers, with the values asked for in hidden fields; *k* skips), *7* Team, *8* GitHub (*c* connects this computer in the terminal, *l* links one of your repositories, *n* creates a private one, *P* pushes, *A* automatic push, *u* unlinks), *9* Settings (*Enter* edits a setting, secrets hidden; *L*, *P*, *A* the language, the palette, the accent). The forms have *Save* and *Cancel* buttons (Tab, or a click; *F2* saves too); a form the server refuses stays open with the reason, and closing one with text in it asks first.
+- **Everywhere**: *s* Start (with the same questions as the window: no request yet, tools not installed, GitHub ahead), *a* Stop after cycle (again: let it go on), *x* Stop now, *p* or *[ ]* the project, *N* a new project, *M* manages it (rename, archive, remove from the list; the archived ones come back from *p*), *g* Get GitHub's work, *?* every key, *q* quits. The mouse clicks projects, pages and lines; the wheel scrolls.
+- **Its look**: the app's palette and accent, its language, in 24-bit colours when the terminal says it has them (else 256). Over SSH the terminal does not always say so: `ATHANOR_COULEURS=24 ./athanor tui` forces them. While the terminal serves Athanor, what Athanor prints goes to `logs/terminal.log`.
+
 ## What Claude can and cannot do
 
 | | |
@@ -444,6 +459,7 @@ Everything the app does is a command of the executable (`Athanor.exe` on Windows
 | `tester-cage` | prove the sandbox with a real session |
 | `autoriser-admin [--retirer]` | allow or remove administrator installations (Windows) |
 | `reseau-unreal` | WSL network for the Unreal MCP (Windows, once) |
+| `tui` / `gui` | the app in the terminal / in its window (Linux, macOS; see [In a terminal](#in-a-terminal)) |
 | `aide` | every command |
 
 Without a folder, the commands use `projet` in Athanor's folder. The request is read and written in `DIR/.athanor/REQUEST.md`, the next ones in `DIR/.athanor/queue/` (one file per request, taken in order).
@@ -548,7 +564,7 @@ Yes. Nothing is tied to a user name or a drive letter: paths come from your prof
 Push a version tag and GitHub builds the apps (Windows, Linux, macOS) and publishes the release ([`.github/workflows/release.yml`](.github/workflows/release.yml)):
 
 ```bash
-git tag v2.39.1 && git push origin v2.39.1
+git tag v2.40.0 && git push origin v2.40.0
 ```
 
 Keep the version in [`app/winres/athanor.rc`](app/winres/athanor.rc) and `versionAthanor` in [`app/commandes.go`](app/commandes.go) in step with the tag (a test checks they match), and write what is new in `docs/releases/VERSION.md` (e.g. [`docs/releases/2.31.0.md`](docs/releases/2.31.0.md)): it opens the release page.

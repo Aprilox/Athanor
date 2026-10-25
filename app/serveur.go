@@ -378,6 +378,7 @@ func (s *Serveur) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/sante/barriere", s.garde(false, s.apiBarriere))
 	mux.HandleFunc("POST /api/sante/recompiler", s.garde(false, s.apiRecompiler))
 	mux.HandleFunc("POST /api/sante/installer", s.garde(false, s.apiInstaller))
+	mux.HandleFunc("GET /api/sante/terminal", s.garde(false, s.apiEtapeTerminal)) // the terminal interface runs it itself
 	mux.HandleFunc("POST /api/mode-systeme", s.garde(false, s.apiModeSysteme))
 	mux.HandleFunc("GET /api/tache/{id}", s.garde(false, s.apiTache))
 
@@ -391,6 +392,7 @@ func (s *Serveur) routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/ecran", s.garde(false, s.apiEcran))
 	mux.HandleFunc("POST /api/instance/{action}", s.apiInstance) // second launch (its own secret, see instance.go)
 	mux.HandleFunc("POST /api/ouvrir", s.garde(false, s.apiOuvrir))
+	mux.HandleFunc("POST /api/fenetre", s.garde(false, s.apiFenetre)) // the terminal: Athanor's window as well
 	mux.HandleFunc("POST /api/fin-vue", s.garde(false, s.apiFinVue))
 	mux.HandleFunc("GET /api/extensions", s.garde(false, s.apiExtensions))
 	mux.HandleFunc("GET /api/extensions/voir", s.garde(false, s.apiExtVoir))

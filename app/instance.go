@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"time"
 )
@@ -91,8 +92,55 @@ func (s *Serveur) apiInstance(w http.ResponseWriter, r *http.Request) {
 		s.erreur(w, http.StatusForbidden, "Request refused (origin)")
 		return
 	}
-	if r.PathValue("action") == "montrer" {
+	switch r.PathValue("action") {
+	case "montrer":
 		demanderFenetre()
+	case "terminal":
+		// athanor tui while Athanor runs: a single-use address for the terminal (the secret of instance.json,
+		// a file of the user's own, mode 0600, out of reach of Claude's sandbox: as for "montrer")
+		s.ecrireJSON(w, map[string]string{"lien": lienApp()})
+		return
 	}
 	s.ecrireJSON(w, map[string]bool{"ok": true})
 }
+
+// lienInstanceTerminal: the running instance's single-use address for a terminal; existe: an Athanor
+// answers (lien "": a version too old to give one).
+func lienInstanceTerminal() (lien string, existe bool) {
+	b, err := os.ReadFile(fichierInstance())
+	if err != nil {
+		return "", false
+	}
+	var i infoInstance
+	if json.Unmarshal(b, &i) != nil || i.Port <= 0 || i.Jeton == "" {
+		return "", false
+	}
+	req, _ := http.NewRequest("POST", "http://127.0.0.1:"+strconv.Itoa(i.Port)+"/api/instance/terminal", nil)
+	req.Header.Set("X-Athanor-Instance", i.Jeton)
+	r, err := (&http.Client{Timeout: 3 * time.Second}).Do(req)
+	if err != nil {
+		return "", false
+	}
+	defer r.Body.Close()
+	if r.StatusCode != http.StatusOK {
+		return "", true
+	}
+	var rep struct {
+		Lien string `json:"lien"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&rep)
+	if !strings.HasPrefix(rep.Lien, "http://127.0.0.1:") {
+		return "", true
+	}
+	return rep.Lien, true
+}
+
+// apiFenetre: the terminal interface asks for Athanor's window too (on this computer's screen).
+func (s *Serveur) apiFenetre(w http.ResponseWriter, r *http.Request) {
+	demanderFenetre()
+	s.msg(w, "Athanor's window opens (on this computer's screen).")
+}
+
+// avantSortie: what to do before Athanor stops on its own (an update): the terminal interface gives the
+// terminal back.
+var avantSortie func()

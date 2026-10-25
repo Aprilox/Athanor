@@ -42,6 +42,9 @@ func (in *installation) alerte(t string) {
 
 // lancer: a command with the terminal (sudo asks for the password there); true when it succeeded.
 func (in *installation) lancer(silencieux bool, nom string, args ...string) bool {
+	if nom == "sudo" && sansSudo() && len(args) > 0 {
+		nom, args = args[0], args[1:]
+	}
 	c := commande(nom, args...)
 	c.Dir = in.kit
 	c.Stdin = os.Stdin
@@ -55,8 +58,14 @@ func (in *installation) lancer(silencieux bool, nom string, args ...string) bool
 
 // shell: a line of sh (pipes of the official installers), with the terminal.
 func (in *installation) shell(silencieux bool, ligne string) bool {
+	if sansSudo() {
+		ligne = `sudo() { "$@"; }; ` + ligne
+	}
 	return in.lancer(silencieux, "sh", "-c", ligne)
 }
+
+// sansSudo: root on a system without sudo (a fresh server): the commands run as they are.
+func sansSudo() bool { return os.Geteuid() == 0 && !aCommande("sudo") }
 
 func aCommande(nom string) bool { _, err := exec.LookPath(nom); return err == nil }
 
@@ -178,6 +187,9 @@ func (in *installation) linux() {
 	if premiereLigne("sysctl", "-n", "kernel.apparmor_restrict_unprivileged_userns") == "1" {
 		profil := "abi <abi/4.0>,\ninclude <tunables/global>\n\nprofile bwrap /usr/bin/bwrap flags=(unconfined) {\n  userns,\n  include if exists <local/bwrap>\n}\n"
 		c := commande("sudo", "tee", "/etc/apparmor.d/bwrap")
+		if sansSudo() {
+			c = commande("tee", "/etc/apparmor.d/bwrap")
+		}
 		c.Stdin, c.Stdout = strings.NewReader(profil), io.Discard
 		_ = c.Run()
 		if !in.lancer(true, "sudo", "systemctl", "reload", "apparmor") {

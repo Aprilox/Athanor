@@ -1426,6 +1426,15 @@ const GUIDE = [
       ["When a computer waits", "Its Overview says why: everything left depends on a milestone in progress; files of its folder that GitHub has too (move them); a project with another history (start again from an empty folder). A real merge conflict is undone, then Claude merges it at its next cycle."],
     ],
     note: "A computer whose pilot runs without the switch works alone: its pushes are refused as soon as another computer has pushed. Parallel mode is off while several computers work on a project. Each computer leaves a small ref refs/athanor/pc/… on the repository, not a branch (never in the list of branches, no workflow runs for it); it goes away when that computer stops working with the others." },
+  { id: "terminal", titre: "In a terminal", intro: "On Linux and macOS, Athanor also runs in a terminal, like btop: the same projects, overview, log, requests, chat and checks, with the keyboard and the mouse. Handy on a server reached through SSH.",
+    etapes: [
+      ["Open it", "`./athanor tui` in a terminal, in Athanor's folder (or the downloaded file: `./Athanor-Linux-x64 tui`). Through SSH, or on a Linux without a screen, `./athanor` alone opens it."],
+      ["The window instead", "`./athanor gui` opens the window whatever the guess (a computer reached through SSH whose screen you use, say)."],
+      ["Alongside the window", "With Athanor already open, `./athanor tui` shows the same Athanor in the terminal: both stay in step. In the terminal, *w* opens the window as well."],
+      ["The keys", "*1*–*9* the pages, *s* Start, *a* Stop after cycle, *x* Stop now, *p* the project, *n* a request, *i* writes in the chat, *?* every key, *q* quits. The mouse works too."],
+      ["Quitting", "*q* (or Ctrl+C) asks, then quits: the pilots keep running. When the terminal started Athanor, Athanor stops with it: start it again to follow them."],
+    ],
+    note: "The colours follow the app's palette. Over SSH the terminal may not say it shows 24-bit colours: `ATHANOR_COULEURS=24 ./athanor tui` forces them. Windows: Athanor is its window." },
 ];
 // mdGuide: the guide's texts, with **bold**, *emphasis* and `code`
 const mdGuide = (s) => h(s).replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>").replace(/\*([^*]+)\*/g, "<em>$1</em>").replace(/`([^`]+)`/g, "<code>$1</code>");

@@ -456,3 +456,52 @@ func (s *Serveur) apiModeSysteme(w http.ResponseWriter, r *http.Request) {
 	}
 	s.msg(w, "Options saved.")
 }
+
+// apiEtapeTerminal: a repair (?id=) or the installation (?id=installer) as the command line the terminal
+// interface runs in its own terminal, in front of the user (on a computer without a screen there is no
+// window to open; there, the user sees each command and answers sudo). Linux and macOS.
+func (s *Serveur) apiEtapeTerminal(w http.ResponseWriter, r *http.Request) {
+	if runtime.GOOS == "windows" {
+		s.erreur(w, http.StatusBadRequest, "No automatic repair: ask Claude")
+		return
+	}
+	k := s.kitCourant()
+	id := r.URL.Query().Get("id")
+	titre, args := "Install everything", []string{"installer"}
+	switch id {
+	case "installer":
+	case "github-connecter": // gh's sign-in: a code and an address to open on any device
+		titre, args = "Connect to GitHub", []string{"github", "connecter"}
+	case "github-creer": // a new private repository: one sign-in to create it, then the computer's connection
+		p, ok := s.projetRequis(w, r)
+		if !ok {
+			return
+		}
+		nom, branche := strings.TrimSpace(r.URL.Query().Get("nom")), strings.TrimSpace(r.URL.Query().Get("branche"))
+		if !reNomGitHub.MatchString(nom) || nom == "." || nom == ".." {
+			s.erreur(w, http.StatusBadRequest, "Invalid repository name: letters, digits, dots, dashes and underscores only.")
+			return
+		}
+		if branche != "" && (!reBrancheGitHub.MatchString(branche) || strings.Contains(branche, "..")) {
+			s.erreur(w, http.StatusBadRequest, "Invalid branch name.")
+			return
+		}
+		auto := "1"
+		if r.URL.Query().Get("auto") == "0" {
+			auto = "0"
+		}
+		titre, args = "Create a private repository", argsGitHub(p, "lier", "creer", nom, auto, branche, "0")
+	default:
+		v := s.trouverVerif(id)
+		if v == nil {
+			s.erreur(w, http.StatusNotFound, "Unknown check")
+			return
+		}
+		if g := v.Reparation.Genre; g != "kit" && g != "fenetre" {
+			s.erreur(w, http.StatusBadRequest, "No automatic repair: ask Claude")
+			return
+		}
+		titre, args = firstNonEmpty(v.Reparation.Titre, v.Titre), v.Reparation.Args
+	}
+	s.ecrireJSON(w, map[string]any{"titre": titre, "ligne": append([]string{exeKit(k)}, argsKit(args)...), "dossier": k.Racine})
+}

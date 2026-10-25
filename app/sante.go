@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -46,6 +47,8 @@ type VerifVue struct {
 	TacheID        string `json:"tache_id"`
 	ReparationID   string `json:"reparation_id"`
 	ClaudeID       string `json:"claude_id"`
+	// the repair can run in the user's terminal (the terminal interface shows it there, then comes back)
+	ReparationTerminal bool `json:"reparation_terminal,omitempty"`
 }
 
 // reparationJeton: Claude Code's sign-in in a window, which shows the subscription's token.
@@ -135,7 +138,8 @@ func (v *Verif) Vue() VerifVue {
 		clID = v.claude.ID
 	}
 	v.mu.Unlock()
-	return VerifVue{v.ID, v.Titre, v.Explication, v.Facultatif, t.Statut, resume, v.Reparation.Genre != "aucune", v.Reparation.Explication, enRep, v.tache.ID, repID, clID}
+	return VerifVue{v.ID, v.Titre, v.Explication, v.Facultatif, t.Statut, resume, v.Reparation.Genre != "aucune", v.Reparation.Explication, enRep, v.tache.ID, repID, clID,
+		runtime.GOOS != "windows" && (v.Reparation.Genre == "kit" || v.Reparation.Genre == "fenetre")}
 }
 
 // Verifier starts the check in the tool folder, on the pilot's side (WSL, native Windows, Linux, macOS).
