@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/json"
+	"image/png"
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
@@ -377,6 +378,33 @@ func TestDistanceFichiersPublics(t *testing.T) {
 	}
 	if w := appelDistance(h, "GET", "/icone-180.png", "", ""); w.Code != http.StatusOK {
 		t.Fatalf("icon: %d", w.Code)
+	}
+	// the status bar's icon of the notifications: reachable, and white on transparent (Android keeps only
+	// its shape: an opaque image is a white square)
+	mux.Handle("/badge-96.png", http.FileServer(http.FS(sous)))
+	w = appelDistance(h, "GET", "/badge-96.png", "", "")
+	img, err := png.Decode(bytes.NewReader(w.Body.Bytes()))
+	if w.Code != http.StatusOK || err != nil {
+		t.Fatalf("badge: %d %v", w.Code, err)
+	}
+	transparent, plein := 0, 0
+	for y := img.Bounds().Min.Y; y < img.Bounds().Max.Y; y++ {
+		for x := img.Bounds().Min.X; x < img.Bounds().Max.X; x++ {
+			r, g, b, a := img.At(x, y).RGBA()
+			if a == 0 {
+				transparent++
+			} else if a == 0xffff && (r != 0xffff || g != 0xffff || b != 0xffff) {
+				t.Fatalf("badge not white at %d,%d", x, y)
+			} else {
+				plein++
+			}
+		}
+	}
+	if transparent < plein || plein == 0 {
+		t.Fatalf("badge: %d transparent, %d drawn", transparent, plein)
+	}
+	if sw, _ := fs.ReadFile(sous, "sw.js"); !strings.Contains(string(sw), `badge: "/badge-96.png"`) {
+		t.Fatal("the service worker does not use the badge")
 	}
 }
 
