@@ -63,6 +63,7 @@ type PresencePC struct {
 	Depuis     string    `json:"depuis,omitempty"` // when it took it (RFC 3339, UTC)
 	Pousse     string    `json:"pousse,omitempty"` // its last commit pushed ("abc1234 M3: …")
 	Refus      []RefusPC `json:"refus,omitempty"`  // programs it could not run, for which milestones (pcs_relais.go)
+	Parti      bool      `json:"parti,omitempty"`  // it stopped working with the others (its branch stays: no "delete" event on GitHub)
 	EnLigne    bool      `json:"en_ligne"`         // computed by the reader
 	Moi        bool      `json:"moi,omitempty"`
 }
@@ -339,7 +340,7 @@ func lirePCs(miroir, moi string) []PresencePC {
 			continue
 		}
 		var p PresencePC
-		if json.Unmarshal(out, &p) != nil || !reIDMachine.MatchString(p.ID) || p.ID == moi || ref != refsPCs+p.ID {
+		if json.Unmarshal(out, &p) != nil || !reIDMachine.MatchString(p.ID) || p.ID == moi || ref != refsPCs+p.ID || p.Parti {
 			continue
 		}
 		p.Nom = coupeOctets(strings.TrimSpace(p.Nom), 60)

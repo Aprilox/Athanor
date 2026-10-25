@@ -3,8 +3,10 @@ package main
 // Several computers (pcs.go): the work in progress of a milestone is never lost when its computer goes
 // away (switched off, its pilot stopped, the program it needs not working). Every 10 minutes, and when it
 // lets a milestone go, the computer sends its unfinished work to GitHub, on a branch of its own
-// athanor/encours/<computer>/<milestone>: an orphan commit with the patch from what GitHub has (never the
-// project's files themselves, so GitHub runs none of the repository's workflows for it). The computer that
+// athanor/encours/<computer>: an orphan commit with, for each milestone it left unfinished, the patch from
+// what GitHub has (never the project's files themselves, so GitHub runs none of the repository's workflows
+// for it). The branch is never deleted (GitHub would run the repository's "delete" workflows): a milestone
+// the team finished leaves it by the next push of that branch. The computer that
 // takes the milestone next starts from it. A computer that comes back after another took its milestone over
 // puts its own unfinished work aside (kept in its .git, never deleted) and starts from the team's.
 
@@ -36,6 +38,19 @@ type EnCoursPC struct {
 	Nom   string `json:"nom"`
 	Base  string `json:"base"` // the commit of GitHub the patch starts from
 	Quand string `json:"quand"`
+}
+
+// apresPC: moment a is after moment b (RFC 3339, with or without fractions of a second; "" is before all).
+func apresPC(a, b string) bool {
+	ta, ea := time.Parse(time.RFC3339Nano, a)
+	tb, eb := time.Parse(time.RFC3339Nano, b)
+	switch {
+	case ea != nil:
+		return false
+	case eb != nil:
+		return true
+	}
+	return ta.After(tb)
 }
 
 var reRefJalonPC = regexp.MustCompile(`[^A-Za-z0-9._-]+`)
@@ -141,7 +156,7 @@ func (e *equipePC) envoyerEnCoursPC(jalon string) string {
 	if trouves, ok := analyserGH(e.miroir, snap, e.r.Atelier); !ok || len(trouves) > 0 {
 		return "Several computers: the work in progress of " + jalon + " was not sent: it holds what looks like a secret (it goes with the next push's check)."
 	}
-	info, _ := json.MarshalIndent(EnCoursPC{Jalon: jalon, PC: e.moi.ID, Nom: e.moi.Nom, Base: base, Quand: time.Now().UTC().Format(time.RFC3339)}, "", "  ")
+	info, _ := json.MarshalIndent(EnCoursPC{Jalon: jalon, PC: e.moi.ID, Nom: e.moi.Nom, Base: base, Quand: time.Now().UTC().Format(time.RFC3339Nano)}, "", "  ")
 	executer := func(entree []byte, args ...string) (string, error) {
 		c := gmGH(e.miroir, nil, args...)
 		c.Stdin = bytes.NewReader(entree)
@@ -153,22 +168,81 @@ func (e *equipePC) envoyerEnCoursPC(jalon string) string {
 	if err1 != nil || err2 != nil {
 		return ""
 	}
-	arbre, err := executer([]byte("100644 blob "+bInfo+"\tinfo.json\n100644 blob "+bPatch+"\tpatch.diff\n"), "mktree")
+	dossier, err := executer([]byte("100644 blob "+bInfo+"\tinfo.json\n100644 blob "+bPatch+"\tpatch.diff\n"), "mktree")
 	if err != nil {
 		return ""
 	}
-	c := gmGH(e.miroir, []string{"GIT_AUTHOR_NAME=Athanor", "GIT_AUTHOR_EMAIL=athanor@users.noreply.github.com",
-		"GIT_COMMITTER_NAME=Athanor", "GIT_COMMITTER_EMAIL=athanor@users.noreply.github.com"}, "commit-tree", arbre, "-m", "Athanor: work in progress of "+jalon+" ("+e.moi.Nom+")")
+	entrees := e.mesEntreesEnCoursPC()
+	entrees[refJalonPC(jalon)] = dossier
+	_ = e.publierEnCoursPC(entrees, "Athanor: work in progress of "+jalon+" ("+e.moi.Nom+")")
+	return ""
+}
+
+// mesEntreesEnCoursPC: the milestones of this computer's branch (name → its tree), those the team has
+// finished left out.
+func (e *equipePC) mesEntreesEnCoursPC() map[string]string {
+	v := map[string]string{}
+	ref := refsEnCoursPC + e.moi.ID
+	out, err := gmGH(e.miroir, nil, "ls-tree", ref).Output()
+	if err != nil {
+		return v
+	}
+	faits := faitsDistantPC(e.miroir, e.r)
+	// a milestone another computer went on with (its work in progress on it newer): this one's is out of date
+	plusRecent := map[string]string{}
+	for _, y := range lireEnCoursPC(e.miroir) {
+		if y.PC != e.moi.ID && apresPC(y.Quand, plusRecent[y.Jalon]) {
+			plusRecent[y.Jalon] = y.Quand
+		}
+	}
+	for _, l := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		// "040000 tree <sha>\t<name>"
+		meta, nom, ok := strings.Cut(l, "\t")
+		f := strings.Fields(meta)
+		if !ok || len(f) != 3 || f[1] != "tree" || !reShaGH.MatchString(f[2]) {
+			continue
+		}
+		b, err := gmGH(e.miroir, nil, "cat-file", "blob", f[2]+":info.json").Output()
+		var x EnCoursPC
+		if err != nil || json.Unmarshal(b, &x) != nil || faits[x.Jalon] || apresPC(plusRecent[x.Jalon], x.Quand) {
+			continue
+		}
+		v[nom] = f[2]
+	}
+	return v
+}
+
+// publierEnCoursPC: this computer's branch with these milestones (none: an empty commit, never a deletion).
+func (e *equipePC) publierEnCoursPC(entrees map[string]string, message string) error {
+	var noms []string
+	for n := range entrees {
+		noms = append(noms, n)
+	}
+	sort.Strings(noms)
+	var b strings.Builder
+	for _, n := range noms {
+		fmt.Fprintf(&b, "040000 tree %s\t%s\n", entrees[n], n)
+	}
+	c := gmGH(e.miroir, nil, "mktree")
+	c.Stdin = strings.NewReader(b.String())
 	out, err := c.Output()
+	arbre := strings.TrimSpace(string(out))
+	if err != nil || !reShaGH.MatchString(arbre) {
+		return fmt.Errorf("mktree")
+	}
+	c = gmGH(e.miroir, []string{"GIT_AUTHOR_NAME=Athanor", "GIT_AUTHOR_EMAIL=athanor@users.noreply.github.com",
+		"GIT_COMMITTER_NAME=Athanor", "GIT_COMMITTER_EMAIL=athanor@users.noreply.github.com"}, "commit-tree", arbre, "-m", message)
+	out, err = c.Output()
 	commit := strings.TrimSpace(string(out))
 	if err != nil || !reShaGH.MatchString(commit) {
-		return ""
+		return fmt.Errorf("commit-tree")
 	}
 	if _, err := gitDistantGH(e.d, e.miroir, e.r, "push", "--porcelain", "--no-verify", "--force", "{url}",
-		commit+":refs/heads/"+brancheEnCoursPC+e.moi.ID+"/"+refJalonPC(jalon)); err != nil {
-		return ""
+		commit+":refs/heads/"+brancheEnCoursPC+e.moi.ID); err != nil {
+		return err
 	}
-	return ""
+	_ = gmGH(e.miroir, nil, "update-ref", refsEnCoursPC+e.moi.ID, commit).Run() // known here at once
+	return nil
 }
 
 // patchPC: the patch from base to snap, made in the private folder (no configuration of the user or of the
@@ -216,34 +290,47 @@ func lireEnCoursPC(miroir string) []EnCoursPC {
 	}
 	var v []EnCoursPC
 	for _, ref := range strings.Split(refs, "\n") {
-		if ref == "" {
+		id := strings.TrimPrefix(ref, refsEnCoursPC)
+		if !reIDMachine.MatchString(id) {
 			continue
 		}
-		b, err := gmGH(miroir, nil, "cat-file", "blob", ref+":info.json").Output()
-		if err != nil || len(b) > 64<<10 {
+		out, err := gmGH(miroir, nil, "ls-tree", ref).Output()
+		if err != nil {
 			continue
 		}
-		var x EnCoursPC
-		if json.Unmarshal(b, &x) != nil || !reIDMachine.MatchString(x.PC) || !reShaGH.MatchString(x.Base) ||
-			ref != refsEnCoursPC+x.PC+"/"+refJalonPC(x.Jalon) {
-			continue
+		for _, l := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+			meta, nom, ok := strings.Cut(l, "\t")
+			f := strings.Fields(meta)
+			if !ok || len(f) != 3 || f[1] != "tree" {
+				continue
+			}
+			b, err := gmGH(miroir, nil, "cat-file", "blob", ref+":"+nom+"/info.json").Output()
+			if err != nil || len(b) > 64<<10 {
+				continue
+			}
+			var x EnCoursPC
+			if json.Unmarshal(b, &x) != nil || x.PC != id || !reShaGH.MatchString(x.Base) || nom != refJalonPC(x.Jalon) {
+				continue
+			}
+			x.Nom = coupeValide(x.Nom, 60)
+			v = append(v, x)
 		}
-		x.Nom = coupeValide(x.Nom, 60)
-		v = append(v, x)
 	}
-	sort.SliceStable(v, func(a, b int) bool { return v[a].Quand > v[b].Quand })
+	sort.SliceStable(v, func(a, b int) bool { return apresPC(v[a].Quand, v[b].Quand) })
 	return v
 }
 
 // nettoyerEnCoursPC: this computer's works in progress on milestones the team has finished, removed from
 // GitHub (those it let go stay: the computer that takes them next goes on from them, then removes them).
 func (e *equipePC) nettoyerEnCoursPC() {
-	faits := faitsDistantPC(e.miroir, e.r)
+	avant := 0
 	for _, x := range lireEnCoursPC(e.miroir) {
-		if x.PC == e.moi.ID && faits[x.Jalon] {
-			_, _ = gitDistantGH(e.d, e.miroir, e.r, "push", "--porcelain", "--no-verify", "{url}",
-				":refs/heads/"+brancheEnCoursPC+x.PC+"/"+refJalonPC(x.Jalon))
+		if x.PC == e.moi.ID {
+			avant++
 		}
+	}
+	if entrees := e.mesEntreesEnCoursPC(); len(entrees) != avant {
+		_ = e.publierEnCoursPC(entrees, "Athanor: works in progress of "+e.moi.Nom)
 	}
 }
 
@@ -265,19 +352,20 @@ func faitsDistantPC(miroir string, r reglagesGH) map[string]bool {
 // reprendreEnCoursPC: the milestone just taken had unfinished work of another computer: merged into the
 // project, so that this one goes on from it. What Claude is told ("" when there was none).
 func (e *equipePC) reprendreEnCoursPC(j Jalon, ident []string) (string, string) {
+	// the newest work in progress on it (a computer that went on from another's sends its own, newer, which
+	// holds both); this computer's own the newest: nothing to bring in
 	var x *EnCoursPC
 	for _, y := range lireEnCoursPC(e.miroir) {
-		if y.Jalon == j.ID && y.PC != e.moi.ID {
+		if y.Jalon == j.ID && (x == nil || apresPC(y.Quand, x.Quand)) {
 			y := y
 			x = &y
-			break
 		}
 	}
-	if x == nil {
+	if x == nil || x.PC == e.moi.ID {
 		return "", ""
 	}
-	ref := refsEnCoursPC + x.PC + "/" + refJalonPC(x.Jalon)
-	patch, err := gmGH(e.miroir, nil, "cat-file", "blob", ref+":patch.diff").Output()
+	ref := refsEnCoursPC + x.PC
+	patch, err := gmGH(e.miroir, nil, "cat-file", "blob", ref+":"+refJalonPC(x.Jalon)+"/patch.diff").Output()
 	if err != nil {
 		return "", ""
 	}
@@ -322,8 +410,9 @@ func (e *equipePC) reprendreEnCoursPC(j Jalon, ident []string) (string, string) 
 		return fmt.Sprintf(" %s started this milestone and could not finish it; its unfinished work is in commit %s (`git show %s`), which does not merge by itself with this folder: take from it what helps.", x.Nom, commit[:12], commit[:12]),
 			fmt.Sprintf("Several computers: %s's unfinished work on %s does not merge by itself: Claude takes from it what helps.", x.Nom, j.ID)
 	}
-	// brought in: that branch is done with (this computer's pushes carry it now)
-	_, _ = gitDistantGH(e.d, e.miroir, e.r, "push", "--porcelain", "--no-verify", "{url}", ":refs/heads/"+brancheEnCoursPC+x.PC+"/"+refJalonPC(x.Jalon))
+	// brought in: this computer's own work in progress on it, sent now, is the newest from now on (it holds
+	// the other's; the other's entry leaves its branch when it sees it)
+	_ = e.envoyerEnCoursPC(j.ID)
 	return fmt.Sprintf(" %s started this milestone and could not finish it: its unfinished work is merged into this folder (the last commit). Check what is done and what is left, then finish it.", x.Nom),
 		fmt.Sprintf("Several computers: this computer goes on with %s from %s's unfinished work.", j.ID, x.Nom)
 }
@@ -352,7 +441,7 @@ func (e *equipePC) reprisParAutrePC(actuel, depuis string, laisse bool) (msg str
 	}
 	if pourquoi == "" && laisse {
 		for _, x := range lireEnCoursPC(e.miroir) {
-			if x.Jalon == actuel && x.PC != e.moi.ID && x.Quand > depuis {
+			if x.Jalon == actuel && x.PC != e.moi.ID && apresPC(x.Quand, depuis) {
 				pourquoi = fmt.Sprintf("%s went further on %s meanwhile", x.Nom, actuel)
 				break
 			}
@@ -397,8 +486,15 @@ func (e *equipePC) reprisParAutrePC(actuel, depuis string, laisse bool) (msg str
 			_ = os.Remove(chemin)
 		}
 	}
+	// files git ignores here but the team's version has: reset would overwrite them, and they are in no
+	// commit: copied aside first (Athanor's data for the project)
+	copies := e.copierIgnoresPC(local)
 	_ = gTravailGH(e.projet, "reset", "--hard", "--quiet", local).Run()
-	return msg + fmt.Sprintf(" Its own unfinished work on it is kept in %s (commit %s).", garde, snap[:12]), true
+	msg += fmt.Sprintf(" Its own unfinished work on it is kept in %s (commit %s).", garde, snap[:12])
+	if copies != "" {
+		msg += " Its files ignored by git that the team's version replaces are copied in " + copies + "."
+	}
+	return msg, true
 }
 
 // faitIciPC: milestone jalon is ticked in this folder's plan.
@@ -413,6 +509,48 @@ func faitIciPC(projet, jalon string) bool {
 		}
 	}
 	return false
+}
+
+// copierIgnoresPC: the ignored files of the folder that the team's branch has too, with another content,
+// copied into Athanor's data for the project (where, "" if none).
+func (e *equipePC) copierIgnoresPC(local string) string {
+	ign, err := gTravailGH(e.projet, "ls-files", "-z", "--others", "--ignored", "--exclude-standard").Output()
+	if err != nil || len(ign) == 0 {
+		return ""
+	}
+	leurs, err := gTravailGH(e.projet, "ls-tree", "-r", "-z", "--name-only", local).Output()
+	if err != nil {
+		return ""
+	}
+	dansLeur := map[string]bool{}
+	for _, f := range strings.Split(string(leurs), "\x00") {
+		dansLeur[f] = f != ""
+	}
+	dest := ""
+	for _, f := range strings.Split(string(ign), "\x00") {
+		if !dansLeur[f] {
+			continue
+		}
+		src := filepath.Join(e.projet, filepath.FromSlash(f))
+		st, err := os.Lstat(src)
+		if err != nil || !st.Mode().IsRegular() {
+			continue
+		}
+		leur, _ := gProjetGH(e.projet+"/.git", "rev-parse", "-q", "--verify", local+":"+f)
+		ici, _ := gTravailGH(e.projet, "hash-object", "--", f).Output()
+		if strings.TrimSpace(string(ici)) == leur {
+			continue // the same: nothing lost
+		}
+		if dest == "" {
+			dest = filepath.Join(dossierAvantEquipePC(e.d), "ignores-"+time.Now().Format("20060102-150405"))
+		}
+		b, err := os.ReadFile(src)
+		cible := filepath.Join(dest, filepath.FromSlash(f))
+		if err == nil && os.MkdirAll(filepath.Dir(cible), 0o700) == nil {
+			_ = os.WriteFile(cible, b, 0o600)
+		}
+	}
+	return dest
 }
 
 // nonSuivisPC: the files of the folder neither committed nor ignored.

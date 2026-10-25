@@ -799,6 +799,12 @@ const VISITE = [
     texte: "A name, the development folder (new or existing, anywhere on the PC), and what you want. A folder made with Athanor on another PC carries on where it was." },
   { page: "suivi", cibles: ["#bandeau .actions .btn", "#sel-projet"], titre: "Start",
     texte: "Start launches the pilot: Claude frames, plans milestones, builds and checks them, cycle after cycle. You follow everything here." },
+  { page: "distance", cibles: ["label.interrupteur:has(#dist-actif)", "#dist-actif"], titre: "From your phone",
+    texte: "Switch remote access on, scan the QR code with your phone, and follow or drive Athanor from anywhere. On the phone, Remote › This device turns notifications on." },
+  { page: "nouveau", cibles: ['[data-np-mode="rejoindre"]'], titre: "Several computers",
+    texte: "Several computers can build one project at once through its GitHub repository: on another computer, Join a project. Each one then takes the milestones it is best at, and they merge each other's work." },
+  { page: "guide", cibles: [".onglets-guide"], titre: "The Guide",
+    texte: "Every step of these tutorials stays here: starting a project, GitHub, your phone, several computers." }
 ];
 function etapesVisite() { return VISITE.filter((e) => !e.windows || (etat.vue || {}).windows); }
 function demarrerVisite() { etat.visite = 0; montrerVisite(); }
@@ -2699,7 +2705,7 @@ pages.distance = async () => {
         <label class="champ"><span>${t("Name")}</span><input type="text" id="pc-nom" maxlength="60" value="${h(m.nom || "")}"></label>
         <label class="champ"><span>${t("What it is good at")}</span><input type="text" id="pc-capacites" maxlength="300" value="${h(m.capacites || "")}" placeholder="${h(t("e.g. RTX 4090, 24 GB: 3D models and renders"))}"></label>
         <label class="champ"><span>${t("Words for the plan")}</span><input type="text" id="pc-mots" value="${h((m.mots || []).join(", "))}" placeholder="gpu:3, network, blender"></label>
-        <p class="muet petit">${t("A milestone that needs one of these words gets “Needs: gpu.” in the plan: a computer that has the word builds it. Two computers with the same word build such milestones at the same time. A level from 1 to 9 says how capable it is (gpu:3): the heaviest milestones go to the most capable computer.")}</p>
+        <p class="muet petit">${t("A milestone that needs one of these words gets “Needs: gpu.” in the plan: a computer that has the word builds it. Two computers with the same word build such milestones at the same time. A level from 1 to 9 says how capable it is (gpu:3): the heaviest milestones go to the most capable computer. Optional: with no words anywhere, Athanor shares the milestones out by itself.")}</p>
         <button class="btn" id="pc-enregistrer">${t("Save")}</button>
       </div>` : ""}
     </div>
