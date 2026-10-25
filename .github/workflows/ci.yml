@@ -1,7 +1,6 @@
 # Checks every push and pull request on the three systems Athanor moves to (docs: "Athanor en Go"):
 # vet and tests of the Go code, and every build target.
-# Windows and macOS are informative while the code is first checked there (continue-on-error); they
-# become blocking once green.
+# A failure on any of them turns the run red.
 name: CI
 
 on:
@@ -19,7 +18,6 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
-    continue-on-error: ${{ matrix.os != 'ubuntu-latest' }}
     defaults:
       run:
         working-directory: app

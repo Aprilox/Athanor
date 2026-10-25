@@ -208,7 +208,7 @@ Avec `SUBAGENT_MODEL=auto` (*Réglages*, « choisi par le chef »), le chef choi
 
 Les agents sont dans [`template/.claude/agents/`](template/.claude/agents) : modifiez-les pour changer la façon de travailler de votre équipe.
 
-**Vos propres sous-agents.** Sur la page *Équipe*, **+ Nouveau sous-agent** ajoute un spécialiste à vous (un traducteur, un chercheur dans un domaine, un level designer…) : un nom, quand le chef doit l'appeler, ses consignes (**✨ Améliorer avec Claude** transforme quelques lignes en consignes structurées), un modèle (comme les autres, économique ou le plus puissant), lecture seule ou non, ce projet ou tous vos projets. Le chef peut aussi en proposer un quand un besoin revient : il écrit `.athanor/agents/<nom>.md`, le pilote le vérifie et l'ajoute à l'équipe au cycle suivant, marqué *proposé par le chef* ; vous le gardez, le modifiez ou le retirez (une proposition retirée n'est jamais refaite). Ces sous-agents fonctionnent comme les autres : même barrière, skills, outils MCP et fichiers joints, appelables par le chef et par les ouvriers en parallèle ; le chef les trouve dans `.athanor/TEAM.md`, et une demande peut en nommer un (« fais faire les textes par `traducteur` »). Ils sont rangés dans `extensions/agents.json` (12 par projet au maximum).
+**Vos propres sous-agents.** Sur la page *Équipe*, **+ Nouveau sous-agent** ajoute un spécialiste à vous (un traducteur, un chercheur dans un domaine, un level designer…) : un nom, quand le chef doit l'appeler, ses consignes (**✨ Améliorer avec Claude** transforme quelques lignes en consignes structurées), un modèle (comme les autres, économique ou le plus puissant), lecture seule ou non, ce projet ou tous vos projets. Ou décrivez-le à Claude dans **Discuter** (« un spécialiste Blender pour les objets ») : il pose ses questions, puis montre le sous-agent sous forme de fiche encore modifiable (✨ *Améliorer avec Claude* là aussi), et **Ajouter à l'équipe** le crée (de même pour modifier l'un des vôtres). Le chef peut aussi en proposer un quand un besoin revient : il écrit `.athanor/agents/<nom>.md`, le pilote le vérifie et l'ajoute à l'équipe au cycle suivant, marqué *proposé par le chef* ; vous le gardez, le modifiez ou le retirez (une proposition retirée n'est jamais refaite). Ces sous-agents fonctionnent comme les autres : même barrière, skills, outils MCP et fichiers joints, appelables par le chef et par les ouvriers en parallèle ; le chef les trouve dans `.athanor/TEAM.md`, et une demande peut en nommer un (« fais faire les textes par `traducteur` »). Ils sont rangés dans `extensions/agents.json` (12 par projet au maximum).
 
 ---
 
@@ -498,10 +498,10 @@ Oui. Rien n'est lié à un nom d'utilisateur ni à une lettre de disque : les ch
 Poussez un tag de version : GitHub compile les applications (Windows, Linux, macOS) et publie la version ([`.github/workflows/release.yml`](.github/workflows/release.yml)).
 
 ```bash
-git tag v2.30.1 && git push origin v2.30.1
+git tag v2.31.0 && git push origin v2.31.0
 ```
 
-Gardez la version de [`app/winres/athanor.rc`](app/winres/athanor.rc) et `versionAthanor` dans [`app/commandes.go`](app/commandes.go) alignées sur le tag (un test vérifie qu'elles concordent), et écrivez les nouveautés dans `docs/releases/VERSION.md` (par ex. [`docs/releases/2.30.1.md`](docs/releases/2.30.1.md)) : elles ouvrent la page de la version.
+Gardez la version de [`app/winres/athanor.rc`](app/winres/athanor.rc) et `versionAthanor` dans [`app/commandes.go`](app/commandes.go) alignées sur le tag (un test vérifie qu'elles concordent), et écrivez les nouveautés dans `docs/releases/VERSION.md` (par ex. [`docs/releases/2.31.0.md`](docs/releases/2.31.0.md)) : elles ouvrent la page de la version.
 
 Chaque push est vérifié sous Windows, Linux et macOS ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)), l'exécutable unique compris (rien d'écrit avant l'accord, dossier d'Athanor installé, rien à côté du fichier) ; `cd app && go run . construire --all` compile toutes les cibles dans `dist/`. Une version publie `Athanor-Windows-x64.exe`, `Athanor-Windows-ARM64.exe`, `Athanor-macOS.zip` (Athanor.app, signé ad hoc sur une machine Mac de GitHub), `Athanor-Linux-x64`, `Athanor-Linux-ARM64` et `SHA256SUMS.txt`, sous les mêmes noms à chaque version ; les mises à jour d'Athanor téléchargent ces mêmes fichiers.
 

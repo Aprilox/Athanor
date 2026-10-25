@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -120,5 +121,60 @@ func TestAgentsPerso(t *testing.T) {
 	}
 	if b, _ := os.ReadFile(cheminAgents(s.kitCourant())); string(b) != "{oops" {
 		t.Error("broken file overwritten")
+	}
+}
+
+// a sub-agent proposed by Claude in the chat, checked by the user on its card, joins the team
+func TestAgentDepuisLeChat(t *testing.T) {
+	kit := t.TempDir()
+	a := Projet{Nom: "a", Dossier: t.TempDir()}
+	s := nouveauServeur(Config{Kit: kit, Projets: []Projet{a}, ProjetActif: "a", Langue: "en"})
+	s.csrf = "jeton"
+	mux := http.NewServeMux()
+	s.routes(mux)
+	k := s.kitCourant()
+	ecrireConversation(k, a, conversationChat{Messages: []MessageChat{
+		{Role: "vous", Texte: "a Blender specialist please"},
+		{Role: "claude", Texte: "Here it is.\n<agent>{\"nom\":\"blender-artist\"}</agent>"},
+		{Role: "claude", Texte: "No agent here."},
+	}})
+	appel := func(corps any) (int, map[string]any) {
+		j, _ := json.Marshal(corps)
+		r := httptest.NewRequest("POST", "/api/chat/agent?p=a", bytes.NewReader(j))
+		r.Header.Set("X-Athanor", "jeton")
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, r)
+		var v map[string]any
+		json.Unmarshal(w.Body.Bytes(), &v)
+		return w.Code, v
+	}
+	ag := AgentPerso{Nom: " Blender-Artist ", Description: "Models and textures the game's props in Blender.", Consignes: "Model in Blender, export glTF.", Modele: "fort"}
+	if c, _ := appel(map[string]any{"index": 2, "agent": ag}); c != 400 {
+		t.Fatalf("a message without a proposal accepted: %d", c)
+	}
+	if c, _ := appel(map[string]any{"index": 1, "agent": AgentPerso{Nom: "x", Description: "d", Consignes: "c"}}); c != 400 {
+		t.Fatalf("an invalid sub-agent accepted: %d", c)
+	}
+	if c, v := appel(map[string]any{"index": 1, "agent": ag}); c != 200 || v["message_key"] != "Sub-agent saved: it joins the team at the next cycle." {
+		t.Fatalf("add: %d %v", c, v)
+	}
+	l, _ := s.agentsDuProjet(a)
+	if len(l) != 1 || l[0].Nom != "blender-artist" || l[0].Origine != "utilisateur" || l[0].Modele != "fort" || l[0].Projet == "" {
+		t.Fatalf("team: %+v", l)
+	}
+	if m := lireConversation(k, a).Messages[1]; m.Agent != "blender-artist" {
+		t.Fatalf("message not marked: %+v", m)
+	}
+	// the same name again: refused; as a change of it (ancien), saved for every project
+	if c, _ := appel(map[string]any{"index": 1, "agent": ag}); c != 400 {
+		t.Fatal("a second sub-agent of the same name")
+	}
+	ag.Consignes = "Model in Blender, export glTF, keep under 5k triangles."
+	if c, v := appel(map[string]any{"index": 1, "ancien": "blender-artist", "agent": ag, "tous": true}); c != 200 {
+		t.Fatalf("change: %d %v", c, v)
+	}
+	l, _ = s.agentsDuProjet(a)
+	if len(l) != 1 || l[0].Projet != "" || !strings.Contains(l[0].Consignes, "5k") {
+		t.Fatalf("after the change: %+v", l)
 	}
 }

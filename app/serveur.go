@@ -328,6 +328,7 @@ func (s *Serveur) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/chat/arreter", s.garde(false, s.apiChatArreter))
 	mux.HandleFunc("POST /api/chat/effacer", s.garde(false, s.apiChatEffacer))
 	mux.HandleFunc("POST /api/chat/note", s.garde(false, s.apiChatNote))
+	mux.HandleFunc("POST /api/chat/agent", s.garde(false, s.apiChatAgent))
 	mux.HandleFunc("POST /api/ameliorer", s.garde(false, s.apiAmeliorerDemande))
 	mux.HandleFunc("PUT /api/demande", s.garde(false, s.apiEcrireDemande))
 	mux.HandleFunc("POST /api/pieces", s.garde(false, s.apiPiece))
