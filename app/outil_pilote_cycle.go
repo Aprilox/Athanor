@@ -2015,6 +2015,8 @@ func lancerPilote(args []string) int {
 	pidBytes := []byte(strconv.Itoa(os.Getpid()) + "\n")
 	_ = os.WriteFile(filepath.Join(p.prive, "pilot.pid"), pidBytes, 0o644)
 	_ = publierFichier(filepath.Join(p.etat, "pilot.pid"), pidBytes)
+	// the version this pilot runs: after an update, the app says it keeps it until it starts again
+	_ = publierFichier(filepath.Join(p.etat, "pilot.version"), []byte(versionAthanor+"\n"))
 	_ = os.Setenv("JOURNAL_ARRET", filepath.Join(p.prive, "arret.log"))
 
 	sigCh := make(chan os.Signal, 2)

@@ -105,6 +105,10 @@ type EtatVue struct {
 	// a stop asked for the end of the current cycle: "arret" (Stop after cycle), "relance" (restart to
 	// apply settings); the buttons say so
 	ArretDemande string `json:"arret_demande,omitempty"`
+	// the running pilot is on an older version than the app (an update while it ran): it keeps it until it
+	// starts again; VersionPilote is empty for a pilot started before 2.39.1 (which did not say)
+	PiloteAncien  bool   `json:"pilote_ancien,omitempty"`
+	VersionPilote string `json:"version_pilote,omitempty"`
 	// the page is shown on a remote device (distance.go): what only the computer does is hidden
 	Distant bool `json:"distant,omitempty"`
 	// remote access on, and how many trusted devices are connected now (the sidebar's badge)
@@ -140,6 +144,9 @@ func (s *Serveur) apiEtat(w http.ResponseWriter, r *http.Request) {
 			vue.Etat = &e
 		}
 		s.surveillerRelance(p, vue.Actif)
+		if vue.Actif {
+			vue.PiloteAncien, vue.VersionPilote = versionPiloteAncienne(p)
+		}
 		if vue.Actif && fichierExiste(filepath.Join(p.Atelier(), "STOP")) {
 			vue.ArretDemande = "arret"
 			s.mu.Lock()
