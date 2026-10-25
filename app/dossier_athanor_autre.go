@@ -55,10 +55,30 @@ func demanderConsentement(titre, texte string) bool {
 		}
 	}
 	if st, err := os.Stdin.Stat(); err == nil && st.Mode()&os.ModeCharDevice != 0 {
-		fmt.Fprintf(os.Stderr, "%s\n\n%s\n\n[y/N] ", titre, texte)
-		l, _ := bufio.NewReader(os.Stdin).ReadString('\n')
-		l = strings.ToLower(strings.TrimSpace(l))
-		return l == "y" || l == "yes" || l == "o" || l == "oui"
+		// an answer typed for this question only: what was waiting (the rest of a pasted block, an Enter
+		// pressed twice) is dropped, and an empty line asks again (it closed Athanor at once before)
+		viderEntree(int(os.Stdin.Fd()))
+		encore, ferme := "Type y to create it, or n to quit: ", "Athanor closes: nothing was written."
+		if langueSysteme() == "fr" {
+			encore, ferme = "Tapez o pour le créer, ou n pour quitter : ", "Athanor se ferme : rien n'a été écrit."
+		}
+		fmt.Fprintf(os.Stderr, "%s\n\n%s\n\n[y/n] ", titre, texte)
+		lecteur := bufio.NewReader(os.Stdin)
+		for {
+			l, err := lecteur.ReadString('\n')
+			switch strings.ToLower(strings.TrimSpace(l)) {
+			case "y", "yes", "o", "oui":
+				return true
+			case "n", "no", "non", "q":
+				fmt.Fprintln(os.Stderr, ferme)
+				return false
+			}
+			if err != nil { // the terminal closed
+				fmt.Fprintln(os.Stderr, "\n"+ferme)
+				return false
+			}
+			fmt.Fprint(os.Stderr, encore)
+		}
 	}
 	fmt.Fprintf(os.Stderr, "%s\n\n%s\n\nNo terminal to answer in: start Athanor again with --oui to accept.\n", titre, texte)
 	return false

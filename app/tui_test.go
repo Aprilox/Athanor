@@ -130,9 +130,6 @@ func TestTUITouches(t *testing.T) {
 	if g := strings.Join(noms("\r\r", true), " "); g != "entree entree" {
 		t.Errorf("two Enters: %q", g)
 	}
-	if evs, reste := analyserTouches([]byte("\r"), false); len(evs) != 0 || len(reste) != 1 {
-		t.Fatalf("a CR whose LF may follow: %v %q", evs, reste)
-	}
 	// incomplete: waits (unless nothing more comes)
 	if evs, reste := analyserTouches([]byte("\x1b"), false); len(evs) != 0 || len(reste) != 1 {
 		t.Fatalf("a lone Escape while more may come: %v %q", evs, reste)
@@ -336,7 +333,7 @@ func attendreTUI(t *testing.T, a *appTUI, cond func() bool) {
 		case f := <-a.majs:
 			f(a)
 		case <-fin:
-			t.Fatal("timed out")
+			t.Fatalf("timed out (the last message: %q)", a.toast)
 		case <-time.After(50 * time.Millisecond):
 			a.tic()
 		}

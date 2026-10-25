@@ -3,11 +3,14 @@ package main
 // Requests of a project: the current request, the queue, the notes, the full file.
 
 import (
+	"errors"
 	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
+	"time"
 )
 
 type DemandeFaite struct {
@@ -175,7 +178,7 @@ func (s *Serveur) apiSupprimerDemande(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if err := os.Remove(filepath.Join(p.FileAttente(), f)); err != nil {
+	if err := retirerFichier(filepath.Join(p.FileAttente(), f)); err != nil {
 		s.erreur(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -219,4 +222,21 @@ func (s *Serveur) apiEcrireDemande(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.msg(w, "REQUEST.md saved.")
+}
+
+// retirerFichier: a file removed; gone already counts as removed. On Windows, a file another program has
+// open for a moment (the antivirus scanning a new file, a read of the queue) cannot be removed: tried
+// again for up to two seconds.
+func retirerFichier(f string) error {
+	var err error
+	for i := 0; i < 20; i++ {
+		if err = os.Remove(f); err == nil || errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		if runtime.GOOS != "windows" {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	return err
 }
