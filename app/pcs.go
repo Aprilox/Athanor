@@ -122,6 +122,26 @@ func motsPC(s string) []string {
 	return v
 }
 
+// niveauMotPC: a word and its level ("gpu:3" → gpu, 3; "gpu" → gpu, 1): how capable a computer is at it
+// (its words), or what a milestone needs (Needs:).
+func niveauMotPC(m string) (string, int) {
+	if i := strings.LastIndex(m, ":"); i > 0 && i == len(m)-2 && m[i+1] >= '1' && m[i+1] <= '9' {
+		return m[:i], int(m[i+1] - '0')
+	}
+	return m, 1
+}
+
+// capacitePC: the level of a computer's words for that word (0: it does not have it).
+func capacitePC(mots []string, base string) int {
+	n := 0
+	for _, m := range mots {
+		if b, l := niveauMotPC(m); b == base && l > n {
+			n = l
+		}
+	}
+	return n
+}
+
 // ---------------------------------------------------------------------------- GitHub
 
 // depotEssaiGH: the tests' stand-in for GitHub (a local bare repository); empty: GitHub over SSH.
@@ -293,7 +313,7 @@ func entretenirMiroirPC(miroir string) {
 func recupererPCs(d, miroir string, r reglagesGH) error {
 	branche := firstNonEmpty(r.Branche, "main")
 	if out, err := gitDistantGH(d, miroir, r, "fetch", "--prune", "--no-tags", "--no-write-fetch-head", "{url}",
-		"+refs/heads/"+brancheePC+"*:"+refsPCs+"*"); err != nil {
+		"+refs/heads/"+brancheePC+"*:"+refsPCs+"*", "+refs/heads/"+brancheEnCoursPC+"*:"+refsEnCoursPC+"*"); err != nil {
 		return fmt.Errorf("GitHub not read: %s", derniereLigneSortie(out))
 	}
 	// the branch may not exist yet (nothing pushed): not an error
@@ -421,9 +441,7 @@ func recevoirPC(projet, d, miroir string, r reglagesGH) (string, string) {
 		return recuSale, ""
 	}
 	avant, _ := gProjetGH(gd, "rev-parse", "HEAD")
-	nom, _ := gProjetGH(gd, "config", "--get", "user.name")
-	email, _ := gProjetGH(gd, "config", "--get", "user.email")
-	ident := []string{"-c", "user.name=" + firstNonEmpty(nom, firstNonEmpty(lireMachinePC().Nom, "Athanor")), "-c", "user.email=" + firstNonEmpty(email, "athanor@users.noreply.github.com")}
+	ident := identPC(projet)
 	_ = ecrireAttributsPC(projet)
 	ecartes := ecarterNonSuivisPC(projet, d, local)
 	args := append(ident, "merge", "--no-edit", "-m", "Merge the other computers' work ("+branche+")", local)
@@ -593,7 +611,7 @@ func fusionnerCochesPC(nous, eux string) (string, bool) {
 }
 
 // fichiersUnionPC: the workshop's notes every computer adds to (merge=union): their lines are joined.
-var fichiersUnionPC = map[string]bool{"LOG.md": true, "BUGS.md": true, "SOLUTIONS.md": true, "DECISIONS.md": true, "BLOCKERS.md": true}
+var fichiersUnionPC = map[string]bool{"LOG.md": true, "BUGS.md": true, "SOLUTIONS.md": true, "DECISIONS.md": true, "BLOCKERS.md": true, "TEAM_NOTES.md": true}
 
 type ecartePC struct{ chemin, garde string }
 
@@ -692,6 +710,14 @@ func estFichierRegulierPC(f string) bool {
 	return err == nil && st.Mode().IsRegular()
 }
 
+// identPC: who the merges of the pilot are made by (the project's git author, else this computer).
+func identPC(projet string) []string {
+	gd := projet + "/.git"
+	nom, _ := gProjetGH(gd, "config", "--get", "user.name")
+	email, _ := gProjetGH(gd, "config", "--get", "user.email")
+	return []string{"-c", "user.name=" + firstNonEmpty(nom, firstNonEmpty(lireMachinePC().Nom, "Athanor")), "-c", "user.email=" + firstNonEmpty(email, "athanor@users.noreply.github.com")}
+}
+
 // propreTravailPC: no change to the project's tracked files (what a merge could touch).
 func propreTravailPC(projet string) bool {
 	out, err := gTravailGH(projet, "status", "--porcelain", "--untracked-files=no").Output()
@@ -701,7 +727,7 @@ func propreTravailPC(projet string) bool {
 // ecrireAttributsPC: .athanor/.gitattributes, so that what every computer adds at the end of the log
 // (and of the other shared notes) is joined at a merge, never a conflict (kept on this computer only).
 func ecrireAttributsPC(projet string) error {
-	return fichierAtelier(projet, ".gitattributes", false, strings.NewReader("LOG.md merge=union\nBUGS.md merge=union\nSOLUTIONS.md merge=union\nDECISIONS.md merge=union\nBLOCKERS.md merge=union\n"))
+	return fichierAtelier(projet, ".gitattributes", false, strings.NewReader("LOG.md merge=union\nBUGS.md merge=union\nSOLUTIONS.md merge=union\nDECISIONS.md merge=union\nBLOCKERS.md merge=union\nTEAM_NOTES.md merge=union\n"))
 }
 
 func consigneFusionPC(projet, local string, fichiers []string, sortie string) error {

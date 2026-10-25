@@ -14,7 +14,7 @@ import (
 )
 
 // atelierPartage: the files and folders of .athanor/ the shared workshop holds.
-var atelierPartage = []string{"REQUEST.md", "PLAN.md", "LOG.md", "check.sh", "SOLUTIONS.md", "BUGS.md", "BLOCKERS.md",
+var atelierPartage = []string{"REQUEST.md", "PLAN.md", "LOG.md", "check.sh", "SOLUTIONS.md", "BUGS.md", "BLOCKERS.md", "TEAM_NOTES.md",
 	"DECISIONS.md", "FINAL_REPORT.md", "TEST_GUIDE.md", "docs/", "queue/", "done/", "archives/", "agents/", "attachments/request/"}
 
 // atelierPartageable: a path of the repository (".athanor/PLAN.md") the shared workshop may publish.

@@ -559,6 +559,8 @@ func (s *Serveur) surveillerTaches() {
 						l = texteNotif["en"]
 					}
 					notifier(l[titre]+" · "+p.Nom, t.Titre)
+					// and on the paired devices that switched notifications on (distance_push.go)
+					s.notifierAppareils(MessagePush{Titre: l[titre] + " · " + p.Nom, Texte: t.Titre, URL: "/#pourvous", Tag: "pv-" + t.ID})
 				}
 			}
 		}

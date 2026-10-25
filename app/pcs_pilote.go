@@ -67,6 +67,43 @@ func (e *equipePC) lire() error {
 	return err
 }
 
+// scoreBesoinsPC: how much of a milestone's needs a computer's words cover (1: all of them, each at its level).
+func scoreBesoinsPC(mots, besoins []string) float64 {
+	if len(besoins) == 0 {
+		return 1
+	}
+	t := 0.0
+	for _, b := range besoins {
+		base, niveau := niveauMotPC(b)
+		n := capacitePC(mots, base)
+		if n > niveau {
+			n = niveau
+		}
+		t += float64(n) / float64(niveau)
+	}
+	return t / float64(len(besoins))
+}
+
+// lireVerrou: lire, under the lock of the private folder (its fetches never cross another's).
+func (e *equipePC) lireVerrou() error {
+	libere := e.verrou()
+	defer libere()
+	return e.lire()
+}
+
+// lireLaissePC: the milestone this computer let go when its pilot stopped ("" if none).
+func lireLaissePC(d string) (jalon, titre, quand string) {
+	b, err := os.ReadFile(d + "/pcs-laisse")
+	if err != nil {
+		return "", "", ""
+	}
+	p := strings.SplitN(strings.TrimRight(string(b), "\n"), "\t", 3)
+	if len(p) != 3 {
+		return "", "", ""
+	}
+	return p[0], p[1], p[2]
+}
+
 // recevoir: GitHub read, and what the others pushed merged into the project.
 func (e *equipePC) recevoir() (string, string, error) {
 	libere := e.verrou()
@@ -156,10 +193,6 @@ func choisirJalonRefusPC(plan []Jalon, moi MachinePC, autres []PresencePC, actue
 			tenus[p.Jalon] = p
 		}
 	}
-	mesMots := map[string]bool{}
-	for _, m := range moi.Mots {
-		mesMots[m] = true
-	}
 	if len(plan) == 0 {
 		if p, ok := tenus[jalonCadragePC]; ok {
 			return Jalon{}, true, fmt.Sprintf("%s writes the plan", p.Nom)
@@ -235,21 +268,23 @@ func choisirJalonRefusPC(plan []Jalon, moi MachinePC, autres []PresencePC, actue
 		}
 		priorite := 1
 		if len(j.Besoins) > 0 {
-			priorite = 2
-			laisse := false
-			for _, b := range j.Besoins {
-				if mesMots[b] {
-					priorite = 0
-					break
-				}
-				for _, p := range peuvent {
-					for _, m := range p.Mots {
-						laisse = laisse || m == b
-					}
+			// every need, each at its level ("gpu:3, unreal": a computer with both); nobody has them all: the
+			// computer that has the most of them takes it
+			moiS, autresS := scoreBesoinsPC(moi.Mots, j.Besoins), 0.0
+			for _, p := range peuvent {
+				if v := scoreBesoinsPC(p.Mots, j.Besoins); v > autresS {
+					autresS = v
 				}
 			}
-			if priorite != 0 && laisse {
-				continue // another running computer has what it needs
+			switch {
+			case moiS >= 1:
+				priorite = 0
+			case autresS >= 1 || autresS > moiS:
+				continue // another running computer has more of what it needs
+			case moiS > 0:
+				priorite = 1
+			default:
+				priorite = 2
 			}
 		}
 		if autreAEchoue && priorite > 0 {
@@ -286,6 +321,38 @@ func choisirJalonRefusPC(plan []Jalon, moi MachinePC, autres []PresencePC, actue
 		return Jalon{}, true, fmt.Sprintf("%s writes the final report", p.Nom)
 	}
 	return Jalon{ID: jalonLivraisonPC, Titre: "Delivery"}, false, ""
+}
+
+// notesEquipePC: the last notes the computers' Claude left each other (.athanor/TEAM_NOTES.md, shared,
+// joined line by line at a merge), the newest last.
+func notesEquipePC(etat string, n int) []string {
+	b, err := os.ReadFile(filepath.Join(etat, "TEAM_NOTES.md"))
+	if err != nil || len(b) > 1<<20 {
+		return nil
+	}
+	var v []string
+	for _, l := range strings.Split(strings.ReplaceAll(string(b), "\r\n", "\n"), "\n") {
+		if l = strings.TrimSpace(l); strings.HasPrefix(l, "- ") {
+			v = append(v, coupeValide(l, 400))
+		}
+	}
+	if len(v) > n {
+		v = v[len(v)-n:]
+	}
+	return v
+}
+
+// notesEquipeConsigne: the notes of the team and how to leave one, in Claude's instructions.
+func notesEquipeConsigne(etat string) string {
+	var b strings.Builder
+	b.WriteString("\n### Notes between the computers\n\n")
+	b.WriteString("`.athanor/TEAM_NOTES.md` is how the computers' Claude tell each other what matters: append one line `- YYYY-MM-DD HH:MM · <this computer's name>: <note>` when you change something the others depend on (an interface, a shared file, a convention, a dependency), when you find a trap they will meet, or when you need something from the one building another milestone. Never edit or remove the others' lines. Read the notes below before you start; when one is addressed to you or touches your milestone, follow it.\n")
+	if l := notesEquipePC(etat, 15); len(l) > 0 {
+		b.WriteString("\nThe last notes:\n" + strings.Join(l, "\n") + "\n")
+	} else {
+		b.WriteString("\nNo note yet.\n")
+	}
+	return b.String()
 }
 
 // consignePCs: what Claude is told about the team, each cycle.
@@ -354,7 +421,7 @@ func consignePCs(moi MachinePC, autres []PresencePC, j Jalon) string {
 	}
 	sort.Strings(ml)
 	if len(ml) > 0 {
-		fmt.Fprintf(&b, "- When you write or change the plan: a milestone that needs what only some computers have gets `Needs: <word>.` in its line, with the team's words (%s); the pilot gives it to a computer that has it. ", strings.Join(ml, ", "))
+		fmt.Fprintf(&b, "- When you write or change the plan: a milestone that needs what only some computers have gets `Needs: <word>.` in its line, with the team's words (%s); the pilot gives it to a computer that has it. A word may carry a level from 1 to 9 (`gpu:3`: the computer's capacity); a milestone that needs a lot of it asks for a level (`Needs: gpu:3.`) and goes to a computer at that level or more, the others take the lighter ones at the same time. ", strings.Join(ml, ", "))
 	} else {
 		b.WriteString("- When you write or change the plan: ")
 	}
@@ -375,6 +442,7 @@ func butJalonPC(j Jalon, autres []PresencePC, tours int, langue string) string {
 		sort.Strings(l)
 		autresTxt = " Other computers of the team build " + strings.Join(l, ", ") + " at the same time: never work on those, never tick them."
 	}
+	autresTxt += j.Suite
 	if j.Reprise != "" {
 		autresTxt += j.Reprise
 	} else {
@@ -400,6 +468,22 @@ func (p *pilote) avantCyclePC() (attendre bool, message string) {
 			p.logUneFois("pcs-erreur", "Several computers: "+err.Error()+" (this computer works alone meanwhile).")
 		}
 		return false, ""
+	}
+	// the milestone it held, or let go when its pilot stopped: the team may have gone on with it meanwhile
+	// (its own unfinished work is then put aside); otherwise this computer goes on with it
+	loc := lireEtatLocalPC(e.d)
+	laisse, laisseTitre, laisseQuand := lireLaissePC(e.d)
+	if (loc.Jalon != "" || laisse != "") && e.lireVerrou() == nil {
+		if loc.Jalon != "" {
+			if msg, _ := e.reprisParAutrePC(loc.Jalon, loc.Depuis, false); msg != "" {
+				p.log(msg)
+			}
+		} else if msg, mis := e.reprisParAutrePC(laisse, laisseQuand, true); mis {
+			p.log(msg)
+		} else {
+			_ = ecrireFichierPrive(e.d+"/pcs-jalon", laisse+"\t"+laisseTitre+"\t"+time.Now().UTC().Format(time.RFC3339)+"\n")
+		}
+		removeSiExiste(e.d + "/pcs-laisse")
 	}
 	res, detail, err := e.recevoir()
 	switch {
@@ -441,6 +525,9 @@ func (p *pilote) avantCyclePC() (attendre bool, message string) {
 	}
 	// a program of this computer did not work for its milestone (Claude said so): the others try in its place
 	if outil, pourquoi, ok := lireRefusClaude(p.etat); ok && actuel != "" && actuel != jalonCadragePC && actuel != jalonLivraisonPC {
+		if msg := e.envoyerEnCoursPC(actuel); msg != "" { // what it did, for the one that tries in its place
+			p.log(msg)
+		}
 		p.log(e.noterRefusPC(actuel, outil, pourquoi))
 		actuel = ""
 	}
@@ -466,6 +553,15 @@ func (p *pilote) avantCyclePC() (attendre bool, message string) {
 			p.logUneFois("pcs-publier", "Several computers: "+err.Error())
 		}
 		if pris {
+			if j.ID != actuel && j.ID != jalonCadragePC && j.ID != jalonLivraisonPC {
+				// another computer's unfinished work on it: this one goes on from there
+				suite, msg := e.reprendreEnCoursPC(j, identPC(p.projet))
+				j.Suite = suite
+				if msg != "" {
+					p.log(msg)
+				}
+			}
+			e.nettoyerEnCoursPC()
 			p.jalonPC, p.equipePC = &j, e
 			if j.Reprise != "" {
 				p.logUneFois("pcs-reprise:"+j.ID, fmt.Sprintf("Several computers: no other computer could build %s either: this computer takes it back, and Claude asks you what to repair (For you).", j.ID))
@@ -596,6 +692,12 @@ func (p *pilote) pousserPC() (int, bool) {
 func (p *pilote) finPC() {
 	p.finiPC.Store(true) // its beat stops: it no longer says its pilot runs
 	if e, _ := ouvrirEquipePC(p.projet); e != nil {
+		if loc := lireEtatLocalPC(e.d); loc.Jalon != "" && loc.Jalon != jalonCadragePC && loc.Jalon != jalonLivraisonPC {
+			_ = e.lireVerrou()
+			_ = e.envoyerEnCoursPC(loc.Jalon) // its unfinished work, for the computer that takes the milestone next
+			// what it let go: at its next start, it goes on with it unless the team did meanwhile
+			_ = ecrireFichierPrive(e.d+"/pcs-laisse", loc.Jalon+"\t"+loc.JalonTitre+"\t"+time.Now().UTC().Format(time.RFC3339)+"\n")
+		}
 		e.lacher()
 	}
 }
@@ -603,6 +705,7 @@ func (p *pilote) finPC() {
 // battrePC: while the pilot runs, its presence every minute, even when Athanor's window is closed (the
 // others would otherwise see it gone after 3 minutes and take its milestone).
 func (p *pilote) battrePC() {
+	n := 0
 	for !p.finiPC.Load() {
 		time.Sleep(battementPC)
 		if p.finiPC.Load() {
@@ -613,8 +716,20 @@ func (p *pilote) battrePC() {
 			continue
 		}
 		libere := e.verrou()
+		if p.finiPC.Load() { // stopped while it waited: never "running" again after the stop
+			libere()
+			return
+		}
 		_ = e.publier()
 		libere()
+		// every 10 minutes, its unfinished work on GitHub: never lost if the computer goes away
+		if n++; n%10 == 0 {
+			if jalon := lireEtatLocalPC(e.d).Jalon; jalon != "" {
+				if !p.finiPC.Load() && e.lireVerrou() == nil {
+					_ = e.envoyerEnCoursPC(jalon) // (this goroutine never writes the log: the pilot's loop does)
+				}
+			}
+		}
 	}
 }
 

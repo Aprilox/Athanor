@@ -110,7 +110,7 @@ func refusDe(r []RefusPC, j Jalon, maintenant time.Time) (RefusPC, bool) {
 			return x, true
 		}
 		for _, b := range j.Besoins {
-			if b == x.Outil {
+			if base, _ := niveauMotPC(b); base == x.Outil {
 				return x, true
 			}
 		}
@@ -181,7 +181,8 @@ func (e *equipePC) noterRefusPC(jalon, outil, pourquoi string) string {
 func (e *equipePC) apprendreOutilPC(j Jalon, maintenant time.Time) string {
 	outils := map[string]bool{}
 	for _, b := range j.Besoins {
-		outils[b] = true
+		base, _ := niveauMotPC(b)
+		outils[base] = true
 	}
 	for _, p := range e.pcs {
 		if r, ok := refusDe(p.Refus, j, maintenant); ok && r.Jalon == j.ID {
@@ -201,7 +202,8 @@ func (e *equipePC) apprendreOutilPC(j Jalon, maintenant time.Time) string {
 	m := lireMachinePC()
 	connus := map[string]bool{}
 	for _, x := range m.Mots {
-		connus[x] = true
+		base, _ := niveauMotPC(x)
+		connus[base] = true
 	}
 	var nouveaux []string
 	for o := range outils {

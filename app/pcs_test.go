@@ -729,3 +729,195 @@ func TestRelaisOutilPC(t *testing.T) {
 		t.Fatal("CANNOT_HERE read twice")
 	}
 }
+
+// TestNiveauxPC: a word with a level (gpu:3): the heavy milestone goes to the most capable computer, the
+// lighter ones to the others at the same time; nobody at that level: the most capable one takes it.
+func TestBesoinsMultiplesPC(t *testing.T) {
+	plan := analyserPlan("# Plan\n\n- [ ] M1 : Cinematic — Needs: gpu:3, unreal.\n- [ ] M2 : Menus\n")
+	gpu := MachinePC{ID: "aaaaaaaaaaaa", Nom: "GPU", Mots: []string{"gpu:3"}}
+	tout := PresencePC{ID: "bbbbbbbbbbbb", Nom: "All", Mots: []string{"gpu:3", "unreal"}, EnLigne: true, Pilote: true}
+	if j, _, _ := choisirJalonPC(plan, gpu, []PresencePC{tout}, ""); j.ID != "M2" {
+		t.Fatalf("the computer with gpu alone took the milestone that needs gpu and unreal: %s", j.ID)
+	}
+	if j, _, _ := choisirJalonPC(plan, gpu, nil, ""); j.ID != "M1" {
+		t.Fatalf("alone, the closest computer takes it: %s", j.ID)
+	}
+}
+
+func TestNiveauxPC(t *testing.T) {
+	if b, n := niveauMotPC("gpu:3"); b != "gpu" || n != 3 {
+		t.Fatalf("gpu:3 → %s %d", b, n)
+	}
+	if b, n := niveauMotPC("gpu"); b != "gpu" || n != 1 {
+		t.Fatalf("gpu → %s %d", b, n)
+	}
+	if b, n := niveauMotPC("c++:x"); b != "c++:x" || n != 1 {
+		t.Fatalf("odd word → %s %d", b, n)
+	}
+	plan := analyserPlan("# Plan\n\n- [ ] M1 : Cinematic render — Needs: gpu:3.\n- [ ] M2 : Props — Needs: gpu.\n- [ ] M3 : Menus\n")
+	gros := MachinePC{ID: "aaaaaaaaaaaa", Nom: "Big", Mots: []string{"gpu:3"}}
+	petit := MachinePC{ID: "bbbbbbbbbbbb", Nom: "Small", Mots: []string{"gpu:1"}}
+	enMarche := func(m MachinePC, jalon string) PresencePC {
+		return PresencePC{ID: m.ID, Nom: m.Nom, Mots: m.Mots, EnLigne: true, Pilote: true, Jalon: jalon}
+	}
+	if j, _, _ := choisirJalonPC(plan, gros, []PresencePC{enMarche(petit, "")}, ""); j.ID != "M1" {
+		t.Fatalf("the big computer takes the heavy one: %s", j.ID)
+	}
+	if j, _, _ := choisirJalonPC(plan, petit, []PresencePC{enMarche(gros, "M1")}, ""); j.ID != "M2" {
+		t.Fatalf("the small one takes the light gpu one: %s", j.ID)
+	}
+	if j, _, _ := choisirJalonPC(plan, petit, []PresencePC{enMarche(gros, "")}, ""); j.ID != "M2" {
+		t.Fatalf("the small one leaves the heavy one to the big one: %s", j.ID)
+	}
+	// nobody has level 3: the most capable computer takes it, the other leaves it
+	moyen := MachinePC{ID: "cccccccccccc", Nom: "Mid", Mots: []string{"gpu:2"}}
+	if j, _, _ := choisirJalonPC(plan, moyen, []PresencePC{enMarche(petit, "")}, ""); j.ID != "M1" && j.ID != "M2" {
+		t.Fatalf("mid without big: %s", j.ID)
+	}
+	if j, _, _ := choisirJalonPC(plan, petit, []PresencePC{enMarche(moyen, "")}, ""); j.ID == "M1" {
+		t.Fatal("the small one took the heavy one while a more capable one runs")
+	}
+	if j, _, _ := choisirJalonPC(plan, petit, nil, ""); j.ID != "M1" && j.ID != "M2" {
+		t.Fatalf("alone: %s", j.ID)
+	}
+}
+
+// TestEnCoursPC: a computer that goes away in the middle of a milestone: its unfinished work (a commit not
+// pushed, a file not committed) reaches the computer that takes the milestone next; when it comes back,
+// its own copy of that work is put aside, never mixed with the team's.
+func TestEnCoursPC(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git missing")
+	}
+	conf := filepath.Join(t.TempDir(), "gitconfig")
+	ecrireEssai(t, conf, "")
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+	t.Setenv("GIT_CONFIG_GLOBAL", conf)
+	depot := filepath.Join(t.TempDir(), "github.git")
+	gitEssai(t, filepath.Dir(depot), "init", "-q", "--bare", "-b", "main", depot)
+	ancien, ancienne := depotEssaiGH, attentePrisePC
+	depotEssaiGH, attentePrisePC = depot, 0
+	defer func() { depotEssaiGH, attentePrisePC = ancien, ancienne }()
+
+	a := nouveauPCEssai(t, "PC-A", "", "", depot, false)
+	ecrireEssai(t, filepath.Join(a.projet, ".athanor", "PLAN.md"), "# Plan\n\n- [ ] M1 : Level one\n- [ ] M2 : Level two\n")
+	ecrireEssai(t, filepath.Join(a.projet, "game.txt"), "game\n")
+	gitEssai(t, a.projet, "add", "-A")
+	gitEssai(t, a.projet, "commit", "-q", "-m", "start")
+	a.faire(t, func() {
+		var o bytes.Buffer
+		if code := pousserGH([]string{a.projet}, &o); code != 0 {
+			t.Fatal(o.String())
+		}
+	})
+	b := nouveauPCEssai(t, "PC-B", "", "", depot, true)
+
+	// A takes M1, works: a commit it did not push, a file it did not commit; then its pilot stops
+	a.faire(t, func() {
+		e, _ := ouvrirEquipePC(a.projet)
+		_ = e.lire()
+		if pris, _ := e.prendre(Jalon{ID: "M1", Titre: "M1 : Level one"}); !pris {
+			t.Fatal("A does not take M1")
+		}
+	})
+	ecrireEssai(t, filepath.Join(a.projet, "level1.txt"), "half of level one\n")
+	gitEssai(t, a.projet, "add", "level1.txt")
+	gitEssai(t, a.projet, "commit", "-q", "-m", "M1: half")
+	ecrireEssai(t, filepath.Join(a.projet, "level1-boss.txt"), "boss sketch\n")
+	a.faire(t, func() { piloteEssai(t, a).finPC() })
+	if !strings.Contains(gitEssai(t, depot, "for-each-ref", "--format=%(refname)", "refs/heads/athanor/encours/"), "/M1") {
+		t.Fatal("A's work in progress is not on GitHub")
+	}
+	if strings.Contains(gitEssai(t, depot, "ls-tree", "-r", "--name-only", "main"), "level1") {
+		t.Fatal("unfinished work pushed to main")
+	}
+
+	// B takes M1 and goes on from A's work
+	b.faire(t, func() {
+		p := piloteEssai(t, b)
+		ecrireEssai(t, filepath.Join(b.projet, ".athanor", "PLAN.md"), "# Plan\n\n- [ ] M1 : Level one\n- [ ] M2 : Level two\n")
+		if att, raison := p.avantCyclePC(); att || p.jalonPC == nil || p.jalonPC.ID != "M1" {
+			t.Fatalf("B: %v %s %+v", att, raison, p.jalonPC)
+		}
+		if !strings.Contains(p.jalonPC.Suite, "PC-A started this milestone") || !strings.Contains(butJalonPC(*p.jalonPC, nil, 50, ""), "unfinished work is merged") {
+			t.Fatalf("B's goal: %q", p.jalonPC.Suite)
+		}
+	})
+	for f, c := range map[string]string{"level1.txt": "half of level one\n", "level1-boss.txt": "boss sketch\n"} {
+		if got, _ := os.ReadFile(filepath.Join(b.projet, f)); string(got) != c {
+			t.Fatalf("B lacks A's %s: %q", f, got)
+		}
+	}
+	if strings.Contains(gitEssai(t, depot, "for-each-ref", "--format=%(refname)", "refs/heads/athanor/encours/"), "/M1") {
+		t.Fatal("A's work in progress still on GitHub once B goes on from it")
+	}
+
+	// A comes back: B builds M1 now; A's own copy is put aside, its folder back to the team's last push
+	b.faire(t, func() { _ = vuePCsEssai(t, b, "--pilote", "1", "--publier") })
+	a.faire(t, func() {
+		// (its pilot stopped cleanly: it let M1 go, and remembers it)
+		if j, _, _ := lireLaissePC(dossierGH(a.projet)); j != "M1" {
+			t.Fatalf("A does not remember the milestone it let go: %q", j)
+		}
+		p := piloteEssai(t, a)
+		if att, _ := p.avantCyclePC(); att || p.jalonPC == nil || p.jalonPC.ID != "M2" {
+			t.Fatalf("A after coming back: %v %+v", att, p.jalonPC)
+		}
+	})
+	for _, f := range []string{"level1.txt", "level1-boss.txt"} {
+		if _, err := os.Stat(filepath.Join(a.projet, f)); err == nil {
+			t.Fatalf("A kept its own copy of M1 in its folder: %s", f)
+		}
+	}
+	if sauve := gitEssai(t, a.projet, "for-each-ref", "--format=%(objectname)", "refs/athanor/sauve/"); !strings.Contains(gitEssai(t, a.projet, "show", sauve+":level1-boss.txt"), "boss sketch") {
+		t.Fatal("A's file never committed is not in the kept commit")
+	}
+	if !strings.Contains(gitEssai(t, a.projet, "for-each-ref", "--format=%(refname)", "refs/athanor/sauve/"), "M1") {
+		t.Fatal("A's own unfinished work not kept")
+	}
+}
+
+// TestLaissePuisRepriseSeulPC: a computer stops in the middle of a milestone and nobody takes it: at its
+// next start it goes on with it, its unfinished work untouched.
+func TestLaissePuisRepriseSeulPC(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git missing")
+	}
+	conf := filepath.Join(t.TempDir(), "gitconfig")
+	ecrireEssai(t, conf, "")
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+	t.Setenv("GIT_CONFIG_GLOBAL", conf)
+	depot := filepath.Join(t.TempDir(), "github.git")
+	gitEssai(t, filepath.Dir(depot), "init", "-q", "--bare", "-b", "main", depot)
+	ancien, ancienne := depotEssaiGH, attentePrisePC
+	depotEssaiGH, attentePrisePC = depot, 0
+	defer func() { depotEssaiGH, attentePrisePC = ancien, ancienne }()
+	a := nouveauPCEssai(t, "PC-A", "", "", depot, false)
+	ecrireEssai(t, filepath.Join(a.projet, ".athanor", "PLAN.md"), "# Plan\n\n- [ ] M1 : Level one\n- [ ] M2 : Level two\n")
+	gitEssai(t, a.projet, "add", "-A")
+	gitEssai(t, a.projet, "commit", "-q", "-m", "start")
+	a.faire(t, func() {
+		var o bytes.Buffer
+		if code := pousserGH([]string{a.projet}, &o); code != 0 {
+			t.Fatal(o.String())
+		}
+		p := piloteEssai(t, a)
+		if att, _ := p.avantCyclePC(); att || p.jalonPC == nil || p.jalonPC.ID != "M1" {
+			t.Fatalf("first take: %+v", p.jalonPC)
+		}
+	})
+	ecrireEssai(t, filepath.Join(a.projet, "level1.txt"), "half\n")
+	a.faire(t, func() { piloteEssai(t, a).finPC() })
+	a.faire(t, func() {
+		p := piloteEssai(t, a)
+		if att, _ := p.avantCyclePC(); att || p.jalonPC == nil || p.jalonPC.ID != "M1" {
+			t.Fatalf("after its restart: %+v", p.jalonPC)
+		}
+	})
+	if b, _ := os.ReadFile(filepath.Join(a.projet, "level1.txt")); string(b) != "half\n" {
+		t.Fatal("its unfinished work went")
+	}
+	if r := gitEssai(t, a.projet, "for-each-ref", "refs/athanor/sauve/"); r != "" {
+		t.Fatalf("put aside while nobody took it: %s", r)
+	}
+}

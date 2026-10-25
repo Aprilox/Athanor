@@ -52,6 +52,8 @@ type Appareil struct {
 	Ajoute string `json:"ajoute"`
 	VuLe   string `json:"vu_le,omitempty"`
 	Lieu   string `json:"lieu,omitempty"` // the address it was last seen from (Cloudflare's CF-Connecting-IP)
+	// its notifications, when it switched them on (distance_push.go)
+	Push *AbonnementPush `json:"push,omitempty"`
 }
 
 type DistanceConfig struct {
@@ -61,6 +63,8 @@ type DistanceConfig struct {
 	// your own domain (distance_domaine.go): the host name and its Cloudflare tunnel ("" = quick tunnel)
 	Domaine  string `json:"domaine,omitempty"`
 	TunnelID string `json:"tunnel_id,omitempty"`
+	// Athanor's key for the push services (distance_push.go: notifications on the devices)
+	Vapid string `json:"vapid,omitempty"`
 }
 
 type cleContexte string
@@ -441,6 +445,7 @@ type AppareilVue struct {
 	VuLe    string `json:"vu_le,omitempty"`
 	EnLigne bool   `json:"en_ligne"`
 	Lieu    string `json:"lieu,omitempty"`
+	Notifs  bool   `json:"notifs,omitempty"` // it gets the notifications (distance_push.go)
 }
 
 type DistanceVue struct {
@@ -499,7 +504,7 @@ func (s *Serveur) vueDistance() DistanceVue {
 		v.Chiffres, v.ChiffresExpire = ch, max(1, int(time.Until(finCh).Milliseconds()))
 	}
 	for _, a := range appareils {
-		av := AppareilVue{ID: a.ID, Nom: a.Nom, Ajoute: a.Ajoute, VuLe: a.VuLe, Lieu: a.Lieu}
+		av := AppareilVue{ID: a.ID, Nom: a.Nom, Ajoute: a.Ajoute, VuLe: a.VuLe, Lieu: a.Lieu, Notifs: a.Push != nil}
 		if x, ok := vu[a.ID]; ok {
 			av.VuLe = x.Format(time.RFC3339)
 			av.EnLigne = v.Actif && time.Since(x) < enLigneDist

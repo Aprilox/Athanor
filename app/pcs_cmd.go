@@ -26,6 +26,7 @@ type VuePCs struct {
 	Lu      string       `json:"lu,omitempty"` // when GitHub was read (RFC 3339)
 	Machine MachinePC    `json:"machine"`
 	Rejoint bool         `json:"rejoint,omitempty"` // (the switch) the project has just started from the others' work
+	Notes   []string     `json:"notes,omitempty"`   // the last notes between the computers (the application reads them)
 }
 
 func ecrireJSONGH(w io.Writer, v any) {

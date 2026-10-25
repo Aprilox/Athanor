@@ -333,6 +333,7 @@ func (s *Serveur) routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/github", s.garde(false, s.apiGitHubVoir))
 	mux.HandleFunc("POST /api/github", s.garde(false, s.apiGitHub))
 	mux.HandleFunc("GET /api/dossiers", s.garde(false, s.apiDossiers))
+	mux.HandleFunc("POST /api/dossiers/choisir", s.garde(false, s.apiChoisirDossier))
 
 	mux.HandleFunc("GET /api/demandes", s.garde(false, s.apiDemandes))
 	mux.HandleFunc("POST /api/demandes", s.garde(false, s.apiAjouterDemande))
@@ -415,6 +416,8 @@ func (s *Serveur) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/pcs", s.garde(false, s.apiPCsActiver))
 	mux.HandleFunc("GET /api/pcs/machine", s.garde(false, s.apiPCsMachine))
 	mux.HandleFunc("POST /api/pcs/machine", s.garde(false, s.apiPCsMachine))
+	mux.HandleFunc("GET /api/push", s.garde(false, s.apiPush))
+	mux.HandleFunc("POST /api/push", s.garde(false, s.apiPush))
 }
 
 // ----------------------------------------------------------------------------- locking

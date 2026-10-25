@@ -104,7 +104,7 @@ func (s *Serveur) apiGitHubVoir(w http.ResponseWriter, r *http.Request) {
 }
 
 // lierGitHub opens the window where the user signs in to GitHub once and the repository gets its key.
-func (s *Serveur) lierGitHub(p Projet, mode, cible string, auto bool, branche string, atelier bool) error {
+func (s *Serveur) lierGitHub(p Projet, mode, cible string, auto bool, branche string, atelier, equipe bool) error {
 	switch mode {
 	case "creer":
 		if !reNomGitHub.MatchString(cible) || cible == "." || cible == ".." {
@@ -129,7 +129,11 @@ func (s *Serveur) lierGitHub(p Projet, mode, cible string, auto bool, branche st
 	if atelier {
 		partage = "1"
 	}
-	return fenetreKit(s.kitCourant(), "GitHub", argsGitHub(p, "lier", mode, cible, a, branche, partage)...)
+	args := []string{mode, cible, a, branche, partage}
+	if equipe && mode == "existant" {
+		args = append(args, "1") // joining the computers of a project (pcs.go): linked, then the team's work comes in
+	}
+	return fenetreKit(s.kitCourant(), "GitHub", argsGitHub(p, "lier", args...)...)
 }
 
 func ouvrirLien(url string) error {
@@ -154,6 +158,7 @@ func (s *Serveur) apiGitHub(w http.ResponseWriter, r *http.Request) {
 		Nom     string `json:"nom"`
 		Email   string `json:"email"`
 		SansCo  bool   `json:"sans_coauteur"`
+		Equipe  bool   `json:"equipe"`
 	}
 	if err := lireCorps(r, &c); err != nil {
 		s.erreur(w, http.StatusBadRequest, "Invalid request")
@@ -161,7 +166,7 @@ func (s *Serveur) apiGitHub(w http.ResponseWriter, r *http.Request) {
 	}
 	switch c.Action {
 	case "lier":
-		if err := s.lierGitHub(p, c.Mode, strings.TrimSpace(c.Valeur), c.Auto, strings.TrimSpace(c.Branche), c.Atelier); err != nil {
+		if err := s.lierGitHub(p, c.Mode, strings.TrimSpace(c.Valeur), c.Auto, strings.TrimSpace(c.Branche), c.Atelier || c.Equipe, c.Equipe); err != nil {
 			s.erreur(w, http.StatusBadRequest, err.Error())
 			return
 		}

@@ -783,3 +783,11 @@ ol.guide-access li { margin: 5px 0; }
 .etape.sans-lien { grid-template-columns: 34px 1fr; }
 .titre-plus-loin { margin: 22px 0 10px; }
 .guide .etape { align-items: start; } .guide .etape > .btn { align-self: center; }
+.notes-pcs { margin: 4px 0 0; padding-left: 18px; } .notes-pcs li { margin: 2px 0; overflow-wrap: anywhere; }
+/* the folder fields (champDossier) and Athanor's own folder picker (selecteurDossier) */
+.page-etroite { max-width: 820px; }
+.champ-dossier { flex-wrap: nowrap; }
+.champ-dossier input { flex: 1; min-width: 0; }
+.champ-dossier .btn { flex: none; }
+.selecteur-dossier { width: min(620px, 100%); gap: 10px; }
+.selecteur-dossier .explorateur { max-height: min(50vh, 420px); }
