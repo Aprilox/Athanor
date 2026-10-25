@@ -92,7 +92,26 @@ type pilote struct {
 	arretOnce      sync.Once
 	enArret        atomic.Bool
 	battementStop  chan struct{}
+	// several computers on the project (pcs_pilote.go): the milestone this computer took, its team
+	jalonPC     *Jalon
+	equipePC    *equipePC
+	logsUneFois map[string]bool
+	battementPC bool
+	finiPC      atomic.Bool
 }
+
+// logUneFois: a message said once while its cause lasts (oublierLogUneFois: it may be said again).
+func (p *pilote) logUneFois(cle, msg string) {
+	if p.logsUneFois == nil {
+		p.logsUneFois = map[string]bool{}
+	}
+	if !p.logsUneFois[cle] {
+		p.logsUneFois[cle] = true
+		p.log(msg)
+	}
+}
+
+func (p *pilote) oublierLogUneFois(cle string) { delete(p.logsUneFois, cle) }
 
 func lireTexteCourt(chemin string) string {
 	b, err := os.ReadFile(chemin)
@@ -277,7 +296,9 @@ func (p *pilote) statut(etat string) {
 	}
 	attente := p.compterFileAttente()
 	jalon := ""
-	if b, err := os.ReadFile(filepath.Join(p.etat, "PLAN.md")); err == nil {
+	if p.jalonPC != nil && p.jalonPC.Complet != "" { // several computers: the one this computer took
+		jalon = couperCaracteres(p.jalonPC.Complet, 194)
+	} else if b, err := os.ReadFile(filepath.Join(p.etat, "PLAN.md")); err == nil {
 		if m := reJalonOuvertPilote.FindSubmatch(b); m != nil {
 			jalon = couperCaracteres(strings.TrimSuffix(string(m[1]), "\r"), 194)
 		}
@@ -509,6 +530,7 @@ func (p *pilote) estTermine() bool {
 }
 
 func (p *pilote) terminer(msg string) {
+	p.finPC() // its milestone is free for the other computers
 	p.log(msg)
 	if p.etatPhase == "" {
 		p.etatPhase = "termine"

@@ -1157,7 +1157,8 @@ function rendreAvancement(stats, plan, faits, actif) {
 
 pages.suivi = async () => {
   const v = etat.vue; if (!v) return "";
-  if (!v.kit_installe || !v.projet || v.demande_vide) return rendreGuide(v);
+  // a computer joining a team from a new folder: the switch is there before any request (the team's comes)
+  if (!v.kit_installe || !v.projet || v.demande_vide) return rendreGuide(v) + (v.kit_installe && v.projet ? rendreBlocPCs(pcsDuProjet(v.projet.nom)) : "");
   const e = v.etat || {};
   const plan = v.plan || [];
   const faits = plan.filter((j) => j.fait).length;
@@ -1188,6 +1189,7 @@ pages.suivi = async () => {
         : `<div class="vide">${t("No plan yet: Claude writes it during the first cycle (framing).")}</div>`}
     </div>
   </div>
+  ${rendreBlocPCs(pcsDuProjet(v.projet.nom))}
   ${rendreAvancement(stats, plan, faits, v.actif)}
   <div class="bloc"><h2>${t("Usage")}</h2>
     ${stats.length ? `<div class="chiffres">
@@ -2371,11 +2373,83 @@ function lireEnvFormulaire() {
 }
 
 // --- options (saved as soon as a switch or a field changes): the "Options" tab of the settings
+// --- several computers on a project (pcs.go, api_pcs.go): who works with this one, on what
+etat.pcsVues = {}; etat.pcsLus = {};
+// pcsDuProjet: what the page knows (read again in the background every 30 s; the page follows)
+function pcsDuProjet(nom) {
+  const lu = etat.pcsLus[nom] || 0;
+  if (Date.now() - lu > 30000) {
+    etat.pcsLus[nom] = Date.now();
+    api("pcs").then((v) => {
+      const avant = JSON.stringify(etat.pcsVues[nom] || null);
+      etat.pcsVues[nom] = v;
+      if (JSON.stringify(v) !== avant && etat.page === "suivi" && etat.projet === nom) rendrePage();
+    }).catch(() => { /* GitHub unreachable: shown at the next reading */ });
+  }
+  return etat.pcsVues[nom];
+}
+function etatPC(p) {
+  if (!p.en_ligne) return `<span class="muet">${t("Offline")}${p.maj ? " · " + h(t("last seen {0}", [dateLisible(p.maj)])) : ""}</span>`;
+  if (p.pilote && p.jalon) {
+    const nom = p.jalon === "cadrage" ? t("the plan (framing)") : p.jalon === "livraison" ? t("the final report") : p.jalon_titre || p.jalon;
+    return `<b class="ok">${h(t("Builds {0}", [nom]))}</b>${p.depuis ? ` <span class="muet">· ${h(t("since {0}", [dateLisible(p.depuis)]))}</span>` : ""}`;
+  }
+  if (p.pilote) return `<span class="ok">${t("Pilot running")}</span>`;
+  return `<span class="muet">${t("Online, pilot stopped")}</span>`;
+}
+// erreurPCs: the reasons athanor github pcs gives (in English), in the interface's language when known
+function erreurPCs(e) {
+  return String(e).split(" · ").map((x) => {
+    let m = x.match(/^The project folder already has files that GitHub's repository has too \((.*)\): Athanor does not overwrite them\./);
+    if (m) return t("The project folder already has files that GitHub's repository has too ({0}): Athanor does not overwrite them. Move them out of the folder, then it starts from the other computers' work.", [m[1]]);
+    m = x.match(/^This project's history and the one on GitHub \((.*)\) have nothing in common/);
+    if (m) return t("This project's history and the one on GitHub ({0}) have nothing in common: the other computers' work is not merged into it.", [m[1]]);
+    return x;
+  }).join(" · ");
+}
+function rendreBlocPCs(vp) {
+  if (!vp || !vp.lie) return "";
+  if (!vp.actif) {
+    return `<div class="bloc"><h2>${t("Other computers")}</h2>
+      <p class="intro petit">${t("Build this project with other computers that have it in their Athanor, from the same GitHub repository: each one takes a milestone no other one is building, the ones it is best at first, and they merge each other's work.")}</p>
+      <label class="interrupteur"><input type="checkbox" data-pcs-actif><span>${t("Work with other computers on {0}", [h(vp.depot || "")])}</span></label>
+    </div>`;
+  }
+  const lignes = [vp.moi, ...(vp.pcs || [])].filter(Boolean).map((p) => `<tr>
+      <td class="etroit"><span class="point-appareil ${p.en_ligne ? "en-ligne" : ""}"></span></td>
+      <td><b>${h(p.nom)}</b>${p.moi ? ` <span class="badge">${t("this computer")}</span>` : ""}
+        ${p.capacites || (p.mots || []).length ? `<div class="muet petit">${h(p.capacites || "")}${(p.mots || []).length ? ` <span class="mots-pc">${p.mots.map((m) => `<code>${h(m)}</code>`).join(" ")}</span>` : ""}</div>` : ""}</td>
+      <td>${etatPC(p)}${p.pousse ? `<div class="muet petit">${h(t("last push: {0}", [p.pousse]))}</div>` : ""}</td></tr>`).join("");
+  const enLigne = (vp.pcs || []).filter((p) => p.en_ligne).length;
+  return `<div class="bloc"><div class="bloc-tete"><h2>${t("Computers on this project")}</h2>${(vp.pcs || []).length ? `<span class="muet petit">${h(t("{0} other(s) online", [enLigne]))}</span>` : ""}</div>
+    <table class="tab appareils pcs">${lignes}</table>
+    ${vp.erreur ? `<p class="petit attention">✖ ${h(erreurPCs(vp.erreur))}</p>` : ""}
+    ${!(vp.pcs || []).length ? `<p class="muet petit">${t("No other computer yet. On another computer: in its Athanor, add this same GitHub repository (New project › GitHub › Use one of my repositories), then switch this on in its Overview.")}</p>` : ""}
+    <div class="ligne mt-2"><a class="btn btn-petit" href="#distance">${t("What this computer is good at")}</a><span class="espace"></span>
+      <label class="interrupteur m0"><input type="checkbox" data-pcs-actif checked><span>${t("Work with other computers")}</span></label></div>
+  </div>`;
+}
+$("#page").addEventListener("change", async (ev) => {
+  const i = ev.target; if (!i.matches("[data-pcs-actif]")) return;
+  const nom = etat.projet || ((etat.vue || {}).projet || {}).nom;
+  if (!i.checked) {
+    const c = await choisir(t("Stop working with the other computers on this project? This computer stops taking part: its pilot then builds the milestones alone again."), [{ id: "non", texte: t("Cancel") }, { id: "oui", texte: t("Stop"), danger: true }]);
+    if (c !== "oui") { i.checked = true; return; }
+  }
+  i.disabled = true;
+  const v = await action(api("pcs", "POST", { actif: i.checked }), "");
+  if (v) { etat.pcsVues[nom] = v; etat.pcsLus[nom] = Date.now(); if (v.rejoint) toast(t("This computer starts from the other computers' work: their plan, their requests and their commits."), "ok"); }
+  await rafraichir(); // joined: the team's plan and requests are the project's now
+  rendrePage();
+});
+
 // --- remote access (distance.go): the switch, the pairing link and its QR code, the trusted devices
 pages.distance = async () => {
   if ((etat.vue || {}).distant) return `<div class="vide">${t("Not available from a remote device")}</div>`;
   const d = await api("distance");
   etat.distVue = d; etat.distSig = signatureDistance(d);
+  if (!etat.pcMachine) etat.pcMachine = await api("pcs/machine").catch(() => null);
+  const m = etat.pcMachine;
   const statut = {
     arret: ["muet", t("Off: no device can reach Athanor.")],
     installation: ["muet", t("Downloading Cloudflare's tunnel program (once)…")],
@@ -2395,8 +2469,9 @@ pages.distance = async () => {
         <p class="intro petit">${t("Follow and drive Athanor from your phone or another computer, from anywhere: through a Cloudflare tunnel (https, nothing to set up). Only the devices you pair here get in.")}</p>
         <label class="interrupteur"><input type="checkbox" id="dist-actif" ${d.actif ? "checked" : ""}><span>${t("Remote access")}</span></label>
         <p class="petit ${statut[0]}" id="dist-statut">${h(statut[1])}</p>
-        <p class="muet petit">${t("The address changes when the computer restarts: scan the code again then. While remote access is on, the computer does not go to sleep (the screen can still turn off); Athanor must stay open.")}</p>
+        <p class="muet petit">${d.domaine ? t("While remote access is on, the computer does not go to sleep (the screen can still turn off); Athanor must stay open.") : t("The address changes when the computer restarts: scan the code again then. While remote access is on, the computer does not go to sleep (the screen can still turn off); Athanor must stay open.")}</p>
       </div>
+      ${blocDomaine(d)}
       ${d.etat === "pret" && d.lien ? `<div class="bloc"><h2>${t("Pair a device")}</h2>
         <div class="appairage"><img class="qr-distance" src="${h(d.qr)}" alt="${h(t("QR code of the pairing link"))}">
           <div><p class="m0">${t("Scan it with the phone's camera, or open this link on the device:")}</p>
@@ -2414,9 +2489,51 @@ pages.distance = async () => {
       <div class="bloc"><h2>${t("Trusted devices")}</h2>${appareils}
         <p class="muet petit mt-2">${t("✕ removes a device: its next click is refused, and it must scan the code again to come back.")}</p>
       </div>
+      ${m ? `<div class="bloc"><h2>${t("This computer, for the other computers")}</h2>
+        <p class="intro petit">${t("When several computers build a project (Overview › Other computers), each one says what it is good at: the pilot gives it the milestones that need it, and leaves the others to the computers that have what they need.")}</p>
+        <label class="champ"><span>${t("Name")}</span><input type="text" id="pc-nom" maxlength="60" value="${h(m.nom || "")}"></label>
+        <label class="champ"><span>${t("What it is good at")}</span><input type="text" id="pc-capacites" maxlength="300" value="${h(m.capacites || "")}" placeholder="${h(t("e.g. RTX 4090, 24 GB: 3D models and renders"))}"></label>
+        <label class="champ"><span>${t("Words for the plan")}</span><input type="text" id="pc-mots" value="${h((m.mots || []).join(", "))}" placeholder="gpu, network"></label>
+        <p class="muet petit">${t("A milestone that needs one of these words gets “Needs: gpu.” in the plan: a computer that has the word builds it. Two computers with the same word build such milestones at the same time.")}</p>
+        <button class="btn" id="pc-enregistrer">${t("Save")}</button>
+      </div>` : ""}
     </div>
   </div>`;
 };
+// your own domain (distance_domaine.go): a fixed address, and Cloudflare Access in front of it
+function blocDomaine(d) {
+  const e = d.domaine_etape || "";
+  const etape = e === "connexion" ? `<p class="petit">⏳ ${t("Sign in to Cloudflare in the browser window that opened, then choose your domain.")}${d.domaine_lien ? ` <a href="${h(d.domaine_lien)}" target="_blank" rel="noopener noreferrer">${t("Open the sign-in page")}</a>` : ""}</p><button class="btn btn-petit" data-domaine="annuler">${t("Cancel")}</button>`
+    : e === "creation" ? `<p class="petit">⏳ ${t("Creating the tunnel and the address…")}</p>`
+    : e === "erreur" ? `<p class="petit attention">✖ ${h(d.domaine_message || "")}</p>` : "";
+  if (d.domaine) {
+    return `<div class="bloc"><h2>${t("Address")}</h2>
+      <p class="ok m0">✔ ${t("Your domain: {0}", [h("https://" + d.domaine)])}</p>
+      <p class="muet petit">${t("A fixed address: the devices keep their access when the computer restarts.")}</p>
+      ${etape}
+      <details class="mt-2"><summary>${t("Let Cloudflare check who comes in (Cloudflare Access)")}</summary>
+        <p class="petit">${t("With it, Cloudflare asks for your e-mail address and sends a code before anything reaches the computer: a stranger who finds the address does not even see Athanor. Free up to 50 people. Once, in Cloudflare's dashboard:")}</p>
+        <ol class="petit guide-access">
+          <li>${t("Open {0} (Zero Trust) and choose a team name if asked, with the free plan.", ['<a href="https://one.dash.cloudflare.com/" target="_blank" rel="noopener noreferrer">one.dash.cloudflare.com</a>'])}</li>
+          <li>${t("Access › Applications › Add an application › Self-hosted.")}</li>
+          <li>${t("Application domain: {0}.", [`<code>${h(d.domaine)}</code>`])}</li>
+          <li>${t("Add a policy: action Allow, Include › Emails › your e-mail address (and those of the people you trust).")}</li>
+          <li>${t("Save. On the phone, open the address: Cloudflare asks for your e-mail and its code, then pair the device as usual.")}</li>
+        </ol>
+      </details>
+      <div class="ligne mt-2"><button class="btn btn-petit" data-domaine="oublier">${t("Back to a temporary address")}</button></div>
+    </div>`;
+  }
+  return `<div class="bloc"><h2>${t("Address")}</h2>
+    <p class="muet petit m0">${t("Now a temporary address (trycloudflare.com), which changes when the computer restarts. With a domain of yours at Cloudflare, the address never changes, and Cloudflare can check who comes in before anything reaches the computer.")}</p>
+    <details class="mt-2" ${e ? "open" : ""}><summary>${t("Use my domain")}</summary>
+      <p class="muet petit">${t("Needs a free Cloudflare account and a domain whose DNS is at Cloudflare (a domain costs about 10 € a year). Athanor opens Cloudflare's sign-in once, creates a tunnel of this computer and the address; an existing record of that name is never replaced.")}</p>
+      <label class="champ"><span>${t("Address on your domain")}</span><input type="text" id="dom-hote" placeholder="athanor.example.com" autocomplete="off" spellcheck="false" ${e === "connexion" || e === "creation" ? "disabled" : ""}></label>
+      <div class="ligne"><button class="btn" id="dom-connecter" ${e === "connexion" || e === "creation" ? "disabled" : ""}>${t("Connect to Cloudflare")}</button></div>
+      ${etape}
+    </details>
+  </div>`;
+}
 function signatureDistance(d) { return JSON.stringify({ ...d, expire: 0, chiffres: "", chiffres_expire: 0 }); }
 function chiffresLisibles(c) { return c ? c.slice(0, 3) + " " + c.slice(3) : ""; }
 function dureeCourte(s) { s = Math.max(0, Math.round(s || 0)); return s >= 60 ? `${Math.floor(s / 60)} min ${String(s % 60).padStart(2, "0")}` : `${s} s`; }
@@ -2427,7 +2544,7 @@ function dateLisible(iso) {
 }
 // live: the page is rebuilt only when something changed (a device, the tunnel, a new code); the countdown in place
 async function majDistance() {
-  if (document.activeElement && document.activeElement.matches(".nom-appareil")) return;
+  if (document.activeElement && document.activeElement.matches(".nom-appareil, #dom-hote, #pc-nom, #pc-capacites, #pc-mots")) return;
   const d = await api("distance").catch(() => null); if (!d) return;
   if (signatureDistance(d) !== etat.distSig) return rendrePage();
   const e = document.getElementById("dist-expire"); if (e) e.textContent = dureeCourte(d.expire);
@@ -2437,6 +2554,20 @@ async function majDistance() {
 $("#page").addEventListener("click", async (ev) => {
   const cp = ev.target.closest("#dist-chiffres");
   if (cp) { cp.classList.add("montre"); clearTimeout(etat.chiffresMontre); etat.chiffresMontre = setTimeout(() => { const x = document.getElementById("dist-chiffres"); if (x) x.classList.remove("montre"); }, 10000); return; }
+  if (ev.target.closest("#pc-enregistrer")) {
+    const m = await action(api("pcs/machine", "POST", { nom: $("#pc-nom").value, capacites: $("#pc-capacites").value, mots: $("#pc-mots").value }));
+    if (m) { etat.pcMachine = m; etat.pcsLus = {}; toast(t("Saved."), "ok"); rendrePage(); }
+    return;
+  }
+  const dm = ev.target.closest("#dom-connecter, [data-domaine]");
+  if (dm) {
+    if (dm.id === "dom-connecter") { const v = ($("#dom-hote") || {}).value || ""; if (!v.trim()) return $("#dom-hote").focus(); dm.disabled = true; await action(api("distance/domaine", "POST", { action: "connecter", hote: v.trim() }), ""); return rendrePage(); }
+    if (dm.dataset.domaine === "oublier") {
+      const c = await choisir(t("Back to a temporary address? The tunnel of your domain is deleted at Cloudflare, and the devices must scan the code again on the new address."), [{ id: "non", texte: t("Cancel") }, { id: "oui", texte: t("Back to a temporary address"), danger: true }]);
+      if (c !== "oui") return;
+    }
+    await action(api("distance/domaine", "POST", { action: dm.dataset.domaine }), ""); return rendrePage();
+  }
   const b = ev.target.closest("#dist-copier, [data-retirer-appareil]"); if (!b) return;
   if (b.id === "dist-copier") { const l = $("#dist-lien"); if (l) navigator.clipboard.writeText(l.value).then(() => toast(t("Copied."), "ok")); return; }
   const c = await choisir(t("Remove “{0}” from the trusted devices? It must scan the code again to come back.", [b.dataset.nom || ""]), [{ id: "non", texte: t("Cancel") }, { id: "oui", texte: t("Remove"), danger: true }]);
@@ -2836,6 +2967,7 @@ $("#btn-verrou").addEventListener("click", async () => { await action(api("verro
 
 // --- refresh loop
 async function rafraichir() {
+  if (etat.nonAppaire) return; // a device the computer removed: nothing more to ask
   try {
     const v = await fetch("/api/etat" + (etat.projet ? "?p=" + encodeURIComponent(etat.projet) : ""), { headers: { "X-Athanor": CSRF } }).then((r) => r.json());
     if (v.erreur_key === "Not paired") return afficherNonAppaire();

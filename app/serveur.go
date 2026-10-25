@@ -408,6 +408,13 @@ func (s *Serveur) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/distance", s.garde(false, s.apiDistanceActif))
 	mux.HandleFunc("POST /api/distance/appareils/{id}", s.garde(false, s.apiDistanceAppareil))
 	mux.HandleFunc("DELETE /api/distance/appareils/{id}", s.garde(false, s.apiDistanceAppareil))
+	mux.HandleFunc("POST /api/distance/domaine", s.garde(false, s.apiDistanceDomaine))
+
+	// several computers on a project (api_pcs.go)
+	mux.HandleFunc("GET /api/pcs", s.garde(false, s.apiPCs))
+	mux.HandleFunc("POST /api/pcs", s.garde(false, s.apiPCsActiver))
+	mux.HandleFunc("GET /api/pcs/machine", s.garde(false, s.apiPCsMachine))
+	mux.HandleFunc("POST /api/pcs/machine", s.garde(false, s.apiPCsMachine))
 }
 
 // ----------------------------------------------------------------------------- locking

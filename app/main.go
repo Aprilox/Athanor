@@ -57,6 +57,7 @@ func main() {
 	s.demarrerProjetsAuto()
 	go s.surveillerTaches() // system notifications for the tasks of the user (api_pourvous.go)
 	go s.verifierMajFond()  // a new version of Athanor (maj.go)
+	go s.battementsPCs()    // several computers on a project: this one says it is there (api_pcs.go)
 
 	mux := http.NewServeMux()
 	s.routes(mux)

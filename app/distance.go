@@ -58,6 +58,9 @@ type DistanceConfig struct {
 	Actif     bool       `json:"actif,omitempty"`
 	Port      int        `json:"port,omitempty"` // the local port cloudflared reaches (kept: the tunnel survives restarts)
 	Appareils []Appareil `json:"appareils,omitempty"`
+	// your own domain (distance_domaine.go): the host name and its Cloudflare tunnel ("" = quick tunnel)
+	Domaine  string `json:"domaine,omitempty"`
+	TunnelID string `json:"tunnel_id,omitempty"`
 }
 
 type cleContexte string
@@ -81,12 +84,14 @@ type distance struct {
 	chiffres, chiffresAvant       string
 	chiffresFin, chiffresAvantFin time.Time
 	demandes                      map[string]*demandeAppairage
-	essaisMdp                     map[string]int // wrong passwords per device (serveur.go)
+	essaisMdp                     map[string]int            // wrong passwords per device (serveur.go)
+	sansCle                       map[string]*compteSansCle // requests without a key per address (distance_limite.go)
+	domaine                       etatDomaine               // the setup of your own domain (distance_domaine.go)
 }
 
 func (s *Serveur) dist() *distance {
 	s.distOnce.Do(func() {
-		s.distEtat = &distance{vu: map[string]time.Time{}, lieu: map[string]string{}, deverrouilles: map[string]bool{}, demandes: map[string]*demandeAppairage{}, essaisMdp: map[string]int{}}
+		s.distEtat = &distance{vu: map[string]time.Time{}, lieu: map[string]string{}, deverrouilles: map[string]bool{}, demandes: map[string]*demandeAppairage{}, essaisMdp: map[string]int{}, sansCle: map[string]*compteSansCle{}}
 	})
 	return s.distEtat
 }
@@ -281,13 +286,19 @@ func (s *Serveur) gestionDistance(mux http.Handler) http.Handler {
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		w.Header().Set("Strict-Transport-Security", "max-age=31536000")
+		id := s.appareilValide(r)
+		if id == "" { // without a key: counted per address (distance_limite.go)
+			if ok, attente := s.autoriserSansCle(r); !ok {
+				refuserTrop(w, attente)
+				return
+			}
+		}
 		if r.URL.Path == routeAppairer {
 			// its form names where it comes from (with "no-referrer", browsers send "Origin: null")
 			w.Header().Set("Referrer-Policy", "same-origin")
 			s.appairer(w, r)
 			return
 		}
-		id := s.appareilValide(r)
 		if id == "" && fichiersPublicsDistance[r.URL.Path] {
 			mux.ServeHTTP(w, r) // the icon and the description of the app to add to the home screen: no secret
 			return
@@ -441,8 +452,13 @@ type DistanceVue struct {
 	QR      string `json:"qr,omitempty"` // an SVG image (data: address)
 	Expire  int    `json:"expire,omitempty"`
 	// the 6 digits the device then types (distance_appairage.go), shown under the mouse, and their end in ms
-	Chiffres       string        `json:"chiffres,omitempty"`
-	ChiffresExpire int           `json:"chiffres_expire,omitempty"`
+	Chiffres       string `json:"chiffres,omitempty"`
+	ChiffresExpire int    `json:"chiffres_expire,omitempty"`
+	// your own domain: in use, and its setup (connexion, creation, pret, erreur)
+	Domaine        string        `json:"domaine,omitempty"`
+	DomaineEtape   string        `json:"domaine_etape,omitempty"`
+	DomaineMessage string        `json:"domaine_message,omitempty"`
+	DomaineLien    string        `json:"domaine_lien,omitempty"`
 	Appareils      []AppareilVue `json:"appareils"`
 }
 
@@ -461,8 +477,13 @@ func (s *Serveur) vueDistance() DistanceVue {
 	for k, x := range d.lieu {
 		lieu[k] = x
 	}
+	dom := d.domaine
 	d.mu.Unlock()
 	v.Etat, v.Message = t.etat, t.message
+	v.Domaine, _ = s.tunnelNomme()
+	if dom.etape != "pret" {
+		v.DomaineEtape, v.DomaineMessage, v.DomaineLien = dom.etape, dom.message, dom.lien
+	}
 	if !v.Actif {
 		v.Etat = "arret"
 	} else if v.Etat == "" {

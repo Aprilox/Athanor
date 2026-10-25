@@ -505,6 +505,7 @@ type Jalon struct {
 	Detail      string   `json:"detail"`
 	Fichiers    string   `json:"fichiers,omitempty"` // "Files: …" of a dependency plan
 	Depend      []string `json:"depend,omitempty"`   // "Depends on: …" identifiers
+	Besoins     []string `json:"besoins,omitempty"`  // "Needs: gpu, network": what a computer of the team must have (pcs.go)
 	Acceptation string   `json:"acceptation"`
 	Notes       []string `json:"notes,omitempty"` // indented sub-bullets under the milestone
 	Complet     string   `json:"complet"`
@@ -550,6 +551,23 @@ func decouperJalon(ligne string) Jalon {
 		if i := strings.Index(j.Detail, m); i >= 0 {
 			j.Acceptation = strings.TrimSpace(j.Detail[i+len(m):])
 			j.Detail = strings.TrimRight(strings.TrimSpace(j.Detail[:i]), ".;,")
+			break
+		}
+	}
+	// several computers (pcs.go): "Needs: gpu, fast network." names what the computer that builds it must have
+	for _, m := range []string{"Needs:", "Besoin :", "Besoin:", "Besoins :", "Besoins:"} {
+		if i := strings.Index(j.Detail, m); i >= 0 {
+			reste := j.Detail[i+len(m):]
+			fin := len(reste)
+			for k := 0; k < len(reste); k++ {
+				if reste[k] == ';' || (reste[k] == '.' && (k+1 == len(reste) || reste[k+1] == ' ')) {
+					fin = k
+					break
+				}
+			}
+			j.Besoins = motsPC(reste[:fin])
+			j.Detail = strings.TrimRight(strings.TrimSpace(j.Detail[:i]+reste[fin:]), ".;,—–- ")
+			j.Detail = strings.TrimSpace(strings.TrimPrefix(j.Detail, "."))
 			break
 		}
 	}

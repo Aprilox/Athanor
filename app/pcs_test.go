@@ -1,0 +1,665 @@
+package main
+
+import (
+	"bytes"
+	"encoding/json"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"testing"
+	"time"
+)
+
+// a computer of the test: its own Athanor data (GitHub settings, machine), its own copy of the project
+type pcEssai struct {
+	nom, donnees, projet string
+}
+
+func (m pcEssai) faire(t *testing.T, f func()) {
+	t.Helper()
+	avant, avait := os.LookupEnv("ATHANOR_GITHUB_DIR")
+	os.Setenv("ATHANOR_GITHUB_DIR", m.donnees)
+	defer func() {
+		if avait {
+			os.Setenv("ATHANOR_GITHUB_DIR", avant)
+		} else {
+			os.Unsetenv("ATHANOR_GITHUB_DIR")
+		}
+	}()
+	f()
+}
+
+func gitEssai(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	c := exec.Command("git", args...)
+	c.Dir = dir
+	c.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	out, err := c.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, out)
+	}
+	return strings.TrimSpace(string(out))
+}
+
+func ecrireEssai(t *testing.T, f, contenu string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(f), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(f, []byte(contenu), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// nouveauPCEssai: a computer whose project is linked to the test's "GitHub" with several computers on
+func nouveauPCEssai(t *testing.T, nom, mots, capacites string, depot string, cloner bool) pcEssai {
+	t.Helper()
+	base := t.TempDir()
+	m := pcEssai{nom: nom, donnees: filepath.Join(base, "donnees"), projet: filepath.Join(base, "projet")}
+	if cloner {
+		gitEssai(t, base, "clone", "-q", depot, m.projet)
+	} else {
+		_ = os.MkdirAll(m.projet, 0o755)
+		gitEssai(t, m.projet, "init", "-q", "-b", "main")
+	}
+	gitEssai(t, m.projet, "config", "user.name", nom)
+	gitEssai(t, m.projet, "config", "user.email", strings.ToLower(nom)+"@example.com")
+	_ = os.MkdirAll(filepath.Join(m.projet, ".athanor"), 0o755)
+	lierPCEssai(t, m, mots, capacites)
+	m.faire(t, func() {
+		var out bytes.Buffer
+		if code := pcsActiverGH([]string{m.projet, "1"}, &out); code != 0 {
+			t.Fatal(out.String())
+		}
+	})
+	return m
+}
+
+// pcVideEssai: a computer that adds the project from a folder of its own (no git yet), linked to the
+// same repository, not yet working with the others.
+func pcVideEssai(t *testing.T, nom string, preparer func(projet string)) pcEssai {
+	t.Helper()
+	base := t.TempDir()
+	m := pcEssai{nom: nom, donnees: filepath.Join(base, "donnees"), projet: filepath.Join(base, "projet")}
+	_ = os.MkdirAll(filepath.Join(m.projet, ".athanor"), 0o755)
+	if preparer != nil {
+		preparer(m.projet)
+	}
+	lierPCEssai(t, m, "", "")
+	return m
+}
+
+func activerEssai(t *testing.T, m pcEssai) (int, string) {
+	t.Helper()
+	var out bytes.Buffer
+	code := 0
+	m.faire(t, func() { code = pcsActiverGH([]string{m.projet, "1"}, &out) })
+	return code, out.String()
+}
+
+func lierPCEssai(t *testing.T, m pcEssai, mots, capacites string) {
+	t.Helper()
+	m.faire(t, func() {
+		d := dossierGH(m.projet)
+		_ = os.MkdirAll(d, 0o700)
+		ecrireEssai(t, d+"/cle", "test key\n")
+		ecrireEssai(t, d+"/known_hosts", "github.com ssh-ed25519 AAAA\n")
+		if err := ecrireReglagesGH(d, reglagesGH{Depot: "aprilox/essai", Branche: "main", Auto: true}); err != nil {
+			t.Fatal(err)
+		}
+		var out bytes.Buffer
+		if code := pcsMachineGH([]string{"--nom", m.nom, "--capacites", capacites, "--mots", mots}, &out); code != 0 {
+			t.Fatal(out.String())
+		}
+	})
+}
+
+const planEssai = `# Plan
+
+- [ ] M1 : Armor models — the 3D armors. Needs: gpu. Files: models/. Acceptance: three armors.
+- [ ] M2 : Menus — the menus. Files: ui/.
+- [ ] M3 : Assets download — the big sound packs. Needs: network.
+- [ ] M4 : Armor colors — painted armors. Depends on: M1. Files: models/colors/.
+`
+
+func cocherEssai(t *testing.T, projet, id string) {
+	t.Helper()
+	f := filepath.Join(projet, ".athanor", "PLAN.md")
+	b, _ := os.ReadFile(f)
+	nb := strings.Replace(string(b), "- [ ] "+id+" ", "- [x] "+id+" ", 1)
+	ecrireEssai(t, f, nb)
+}
+
+func vuePCsEssai(t *testing.T, m pcEssai, args ...string) VuePCs {
+	t.Helper()
+	var v VuePCs
+	m.faire(t, func() {
+		var out bytes.Buffer
+		pcsGH(append([]string{m.projet}, args...), &out)
+		if err := json.Unmarshal(out.Bytes(), &v); err != nil {
+			t.Fatalf("pcs: %v %s", err, out.String())
+		}
+	})
+	return v
+}
+
+func piloteEssai(t *testing.T, m pcEssai) *pilote {
+	return &pilote{projet: m.projet, etat: filepath.Join(m.projet, ".athanor"), prive: t.TempDir()}
+}
+
+// TestPlusieursOrdinateurs: four computers on one project, with the user's git as on Linux or macOS (LF)
+// and as Git for Windows installs it (core.autocrlf=true: files checked out with CRLF).
+func TestPlusieursOrdinateurs(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git missing")
+	}
+	for _, crlf := range []bool{false, true} {
+		nom := "LF"
+		if crlf {
+			nom = "CRLF"
+		}
+		t.Run(nom, func(t *testing.T) {
+			conf := filepath.Join(t.TempDir(), "gitconfig")
+			contenu := ""
+			if crlf {
+				contenu = "[core]\n\tautocrlf = true\n"
+			}
+			ecrireEssai(t, conf, contenu)
+			t.Setenv("GIT_CONFIG_NOSYSTEM", "1") // the same git configuration for the test and for Athanor
+			t.Setenv("GIT_CONFIG_GLOBAL", conf)
+			essaiPlusieursOrdinateurs(t)
+		})
+	}
+}
+
+func essaiPlusieursOrdinateurs(t *testing.T) {
+	depot := filepath.Join(t.TempDir(), "github.git")
+	gitEssai(t, filepath.Dir(depot), "init", "-q", "--bare", "-b", "main", depot)
+	ancienDepot, ancienneAttente := depotEssaiGH, attentePrisePC
+	depotEssaiGH, attentePrisePC = depot, 0
+	defer func() { depotEssaiGH, attentePrisePC = ancienDepot, ancienneAttente }()
+
+	// A, with a big graphics card, starts the project and pushes it with its plan (shared workshop)
+	a := nouveauPCEssai(t, "PC-GPU", "GPU, 3D", "RTX 4090, 24 GB", depot, false)
+	ecrireEssai(t, filepath.Join(a.projet, "README.md"), "# Game\n\nfirst line\n")
+	ecrireEssai(t, filepath.Join(a.projet, ".athanor", "PLAN.md"), planEssai)
+	ecrireEssai(t, filepath.Join(a.projet, ".athanor", "LOG.md"), "# Log\n")
+	ecrireEssai(t, filepath.Join(a.projet, ".athanor", "STATE.json"), `{"phase":"travail"}`) // the pilot's, never shared
+	gitEssai(t, a.projet, "add", "-A")
+	gitEssai(t, a.projet, "commit", "-q", "-m", "M0: start")
+	var out bytes.Buffer
+	a.faire(t, func() {
+		if code := pousserGH([]string{a.projet}, &out); code != 0 {
+			t.Fatalf("first push: %d %s", code, out.String())
+		}
+	})
+	if files := gitEssai(t, depot, "ls-tree", "-r", "--name-only", "main"); !strings.Contains(files, ".athanor/PLAN.md") || strings.Contains(files, "STATE.json") {
+		t.Fatalf("shared workshop on GitHub: %s", files)
+	}
+
+	// B, on a fast network, then C, with nothing special, take the same repository
+	b := nouveauPCEssai(t, "PC-Fibre", "network", "1 Gb/s fibre", depot, true)
+	c := nouveauPCEssai(t, "PC-Bureau", "", "", depot, true)
+
+	// each one says it is there: the others see it, online
+	for _, m := range []pcEssai{a, b, c} {
+		v := vuePCsEssai(t, m, "--pilote", "1", "--publier")
+		if !v.Actif || v.Erreur != "" || v.Moi == nil || v.Moi.Nom != m.nom {
+			t.Fatalf("%s: %+v", m.nom, v)
+		}
+	}
+	v := vuePCsEssai(t, a)
+	if len(v.PCs) != 2 || !v.PCs[0].EnLigne || !v.PCs[1].EnLigne {
+		t.Fatalf("A sees: %+v", v.PCs)
+	}
+	noms := v.PCs[0].Nom + "," + v.PCs[1].Nom
+	if noms != "PC-Bureau,PC-Fibre" {
+		t.Fatalf("A sees %s", noms)
+	}
+	if v.PCs[1].Capacites != "1 Gb/s fibre" || strings.Join(v.PCs[1].Mots, ",") != "network" {
+		t.Fatalf("B's capacities: %+v", v.PCs[1])
+	}
+
+	// the work is shared out: A the GPU milestone, B the network one, C what is left
+	prendre := func(m pcEssai, attendu string) *equipePC {
+		t.Helper()
+		var e *equipePC
+		m.faire(t, func() {
+			var err error
+			e, err = ouvrirEquipePC(m.projet)
+			if err != nil || e == nil {
+				t.Fatalf("%s team: %v", m.nom, err)
+			}
+			if err := e.lire(); err != nil {
+				t.Fatal(err)
+			}
+			b, _ := os.ReadFile(filepath.Join(m.projet, ".athanor", "PLAN.md"))
+			j, att, raison := choisirJalonPC(analyserPlan(string(b)), e.moi, e.pcs, lireEtatLocalPC(e.d).Jalon)
+			if att || j.ID != attendu {
+				t.Fatalf("%s chooses %q (wait %v: %s), not %s", m.nom, j.ID, att, raison, attendu)
+			}
+			if pris, err := e.prendre(j); !pris || err != nil {
+				t.Fatalf("%s takes %s: %v %v", m.nom, j.ID, pris, err)
+			}
+		})
+		return e
+	}
+	ea := prendre(a, "M1")
+	eb := prendre(b, "M3")
+	prendre(c, "M2")
+	// everything left is held, or waits for M1: a fourth computer waits
+	d := nouveauPCEssai(t, "PC-Quatre", "", "", depot, true)
+	d.faire(t, func() {
+		e, _ := ouvrirEquipePC(d.projet)
+		_ = e.lire()
+		b, _ := os.ReadFile(filepath.Join(d.projet, ".athanor", "PLAN.md"))
+		if j, att, raison := choisirJalonPC(analyserPlan(string(b)), e.moi, e.pcs, ""); !att || !strings.Contains(raison, "PC-GPU: M1") {
+			t.Fatalf("D: %q %v %q", j.ID, att, raison)
+		}
+	})
+	// the same milestone taken twice: the earlier keeps it
+	d.faire(t, func() {
+		e, _ := ouvrirEquipePC(d.projet)
+		time.Sleep(1100 * time.Millisecond)
+		if pris, _ := e.prendre(Jalon{ID: "M2", Titre: "M2 : Menus"}); pris {
+			t.Fatal("D kept M2, taken by C before")
+		}
+		if lireEtatLocalPC(e.d).Jalon != "" {
+			t.Fatal("D still holds M2")
+		}
+	})
+	v = vuePCsEssai(t, a)
+	for _, p := range v.PCs {
+		attendu := map[string]string{"PC-Fibre": "M3", "PC-Bureau": "M2", "PC-Quatre": ""}[p.Nom]
+		if p.Jalon != attendu {
+			t.Fatalf("A sees %s on %q, not %q", p.Nom, p.Jalon, attendu)
+		}
+	}
+
+	// A and B build at the same time and push: B's push merges A's work first (the log joined)
+	travailler := func(m pcEssai, e *equipePC, id, fichier, ligne string) int {
+		t.Helper()
+		ecrireEssai(t, filepath.Join(m.projet, fichier), ligne+"\n")
+		cocherEssai(t, m.projet, id)
+		f := filepath.Join(m.projet, ".athanor", "LOG.md")
+		l, _ := os.ReadFile(f)
+		ecrireEssai(t, f, string(l)+"\n## "+id+" by "+m.nom+"\n")
+		gitEssai(t, m.projet, "add", "-A")
+		gitEssai(t, m.projet, "commit", "-q", "-m", id+": done by "+m.nom)
+		var code int
+		m.faire(t, func() {
+			p := piloteEssai(t, m)
+			p.equipePC = e
+			code, _ = p.pousserPC()
+		})
+		return code
+	}
+	if code := travailler(a, ea, "M1", "models/armor.glb", "armor"); code != 0 {
+		t.Fatalf("A's push: %d", code)
+	}
+	if code := travailler(b, eb, "M3", "sounds/pack.ogg", "sounds"); code != 0 {
+		t.Fatalf("B's push: %d", code)
+	}
+	tout := gitEssai(t, depot, "ls-tree", "-r", "--name-only", "main")
+	if !strings.Contains(tout, "models/armor.glb") || !strings.Contains(tout, "sounds/pack.ogg") {
+		t.Fatalf("GitHub has: %s", tout)
+	}
+	log := gitEssai(t, depot, "show", "main:.athanor/LOG.md")
+	plan := gitEssai(t, depot, "show", "main:.athanor/PLAN.md")
+	if !strings.Contains(log, "M1 by PC-GPU") || !strings.Contains(log, "M3 by PC-Fibre") || !strings.Contains(plan, "- [x] M1 ") || !strings.Contains(plan, "- [x] M3 ") {
+		t.Fatalf("merged log and plan:\n%s\n%s", log, plan)
+	}
+	// A, at its next cycle, gets B's work; and M4 (which waited for M1) is now free, for A (GPU)
+	a.faire(t, func() {
+		p := piloteEssai(t, a)
+		ecrireEssai(t, filepath.Join(p.prive, "x"), "")
+		if att, raison := p.avantCyclePC(); att || p.jalonPC == nil || p.jalonPC.ID != "M4" {
+			t.Fatalf("A's next cycle: wait %v %q, %+v", att, raison, p.jalonPC)
+		}
+	})
+	if _, err := os.Stat(filepath.Join(a.projet, "sounds", "pack.ogg")); err != nil {
+		t.Fatal("A did not get B's work")
+	}
+	if g, _ := os.ReadFile(filepath.Join(a.projet, ".athanor", ".gitattributes")); !strings.Contains(string(g), "LOG.md merge=union") {
+		t.Fatal("no union merge for the log")
+	}
+
+	// a real conflict: both change the same line; B's merge is undone and left to Claude
+	gitEssai(t, a.projet, "pull", "-q", "--no-rebase", depot, "main")
+	ecrireEssai(t, filepath.Join(a.projet, "README.md"), "# Game\n\nA's line\n")
+	gitEssai(t, a.projet, "commit", "-q", "-am", "A changes the readme")
+	a.faire(t, func() {
+		p := piloteEssai(t, a)
+		if code, _ := p.pousserPC(); code != 0 {
+			t.Fatalf("A's push: %d", code)
+		}
+	})
+	ecrireEssai(t, filepath.Join(b.projet, "README.md"), "# Game\n\nB's line\n")
+	gitEssai(t, b.projet, "commit", "-q", "-am", "B changes the readme")
+	teteB := gitEssai(t, b.projet, "rev-parse", "HEAD")
+	b.faire(t, func() {
+		p := piloteEssai(t, b)
+		if code, _ := p.pousserPC(); code == 0 {
+			t.Fatal("B pushed over a conflict")
+		}
+	})
+	if gitEssai(t, b.projet, "rev-parse", "HEAD") != teteB || gitEssai(t, b.projet, "status", "--porcelain", "--untracked-files=no") != "" {
+		t.Fatalf("B's project left in the middle of a merge: %v / %s", gitEssai(t, b.projet, "rev-parse", "HEAD") != teteB, gitEssai(t, b.projet, "status", "--porcelain"))
+	}
+	consigne, err := os.ReadFile(filepath.Join(b.projet, ".athanor", "MERGE_NEEDED.md"))
+	if err != nil || !strings.Contains(string(consigne), "README.md") || !strings.Contains(string(consigne), "git merge refs/remotes/athanor/main") {
+		t.Fatalf("MERGE_NEEDED.md: %v %s", err, consigne)
+	}
+	// Claude merges as told: then the push goes through, and the note goes away at the next reception
+	gitEssai(t, b.projet, "-c", "user.name=B", "merge", "-q", "refs/remotes/athanor/main", "-X", "ours", "-m", "merge")
+	b.faire(t, func() {
+		p := piloteEssai(t, b)
+		if code, _ := p.pousserPC(); code != 0 {
+			t.Fatalf("B's push after the merge: %d", code)
+		}
+	})
+
+	// B's pilot stops: its milestone is free; B leaves the team: the others no longer see it
+	b.faire(t, func() { piloteEssai(t, b).finPC() })
+	for _, p := range vuePCsEssai(t, a).PCs {
+		if p.Nom == "PC-Fibre" && (p.Pilote || p.Jalon != "" || !p.EnLigne) {
+			t.Fatalf("B after its pilot stopped: %+v", p)
+		}
+	}
+	b.faire(t, func() {
+		var o bytes.Buffer
+		if code := pcsActiverGH([]string{b.projet, "0"}, &o); code != 0 {
+			t.Fatal(o.String())
+		}
+	})
+	for _, p := range vuePCsEssai(t, a).PCs {
+		if p.Nom == "PC-Fibre" {
+			t.Fatal("B still seen after it left")
+		}
+	}
+	if v := vuePCsEssai(t, b); v.Actif {
+		t.Fatal("B still on")
+	}
+
+	// E joins from a new folder: at the switch, the project starts from the team's work; what Athanor
+	// wrote in its workshop when the project was added is put aside, never lost
+	e := pcVideEssai(t, "PC-Neuf", func(p string) { ecrireEssai(t, filepath.Join(p, ".athanor", "LOG.md"), "# my own log\n") })
+	if code, out := activerEssai(t, e); code != 0 || !strings.Contains(out, "starts from the other computers' work") {
+		t.Fatalf("E's switch: %d %s", code, out)
+	}
+	if gitEssai(t, e.projet, "rev-parse", "HEAD") != gitEssai(t, depot, "rev-parse", "main") {
+		t.Fatal("E does not start from GitHub's branch")
+	}
+	if b, _ := os.ReadFile(filepath.Join(e.projet, ".athanor", "PLAN.md")); !strings.Contains(string(b), "M4 : Armor colors") {
+		t.Fatal("E has no plan")
+	}
+	var garde string
+	e.faire(t, func() { garde = dossierAvantEquipePC(dossierGH(e.projet)) })
+	trouve := false
+	_ = filepath.Walk(garde, func(f string, i os.FileInfo, err error) error {
+		if err == nil && !i.IsDir() {
+			b, _ := os.ReadFile(f)
+			trouve = trouve || string(b) == "# my own log\n"
+		}
+		return nil
+	})
+	if !trouve {
+		t.Fatal("E's own log was not kept")
+	}
+	if v := vuePCsEssai(t, e); !v.Actif || len(v.PCs) == 0 {
+		t.Fatalf("E's view: %+v", v)
+	}
+	if st := gitEssai(t, e.projet, "status", "--porcelain"); strings.Contains(st, "STATE.json") {
+		t.Fatalf("E's pilot state not excluded: %s", st)
+	}
+
+	// two computers tick milestones on lines next to each other (a conflict for git): merged by itself
+	recevoirEssai := func(m pcEssai) string {
+		t.Helper()
+		res := ""
+		m.faire(t, func() {
+			eq, err := ouvrirEquipePC(m.projet)
+			if err != nil || eq == nil {
+				t.Fatalf("%s team: %v", m.nom, err)
+			}
+			res, _, err = eq.recevoir()
+			if err != nil {
+				t.Fatal(err)
+			}
+		})
+		return res
+	}
+	pousserEssai := func(m pcEssai) {
+		t.Helper()
+		m.faire(t, func() {
+			if code, _ := piloteEssai(t, m).pousserPC(); code != 0 {
+				t.Fatalf("%s's push: %d", m.nom, code)
+			}
+		})
+	}
+	recevoirEssai(a)
+	fp := filepath.Join(a.projet, ".athanor", "PLAN.md")
+	pl, _ := os.ReadFile(fp)
+	ecrireEssai(t, fp, string(pl)+"- [ ] M5 : Sounds\n- [ ] M6 : Music\n")
+	gitEssai(t, a.projet, "commit", "-q", "-am", "plan: M5 M6")
+	pousserEssai(a)
+	recevoirEssai(e)
+	cocherEssai(t, a.projet, "M5")
+	gitEssai(t, a.projet, "commit", "-q", "-am", "M5 done")
+	pousserEssai(a)
+	cocherEssai(t, e.projet, "M6")
+	gitEssai(t, e.projet, "-c", "user.name=E", "-c", "user.email=e@example.com", "commit", "-q", "-am", "M6 done")
+	if res := recevoirEssai(e); res != recuFusion {
+		t.Fatalf("ticks next to each other: %s", res)
+	}
+	if pl, _ := os.ReadFile(filepath.Join(e.projet, ".athanor", "PLAN.md")); !strings.Contains(string(pl), "- [x] M5 ") || !strings.Contains(string(pl), "- [x] M6 ") {
+		t.Fatalf("merged plan:\n%s", pl)
+	}
+	if _, err := os.Stat(filepath.Join(e.projet, ".athanor", "MERGE_NEEDED.md")); err == nil || !propreTravailPC(e.projet) {
+		t.Fatal("the ticks' merge left something to do")
+	}
+	pousserEssai(e)
+
+	// F has files of its own that GitHub has too: nothing overwritten; on, it waits until they are moved
+	f := pcVideEssai(t, "PC-Plein", func(p string) { ecrireEssai(t, filepath.Join(p, "README.md"), "mine\n") })
+	if code, out := activerEssai(t, f); code != 0 || !strings.Contains(out, "README.md") || !strings.Contains(out, "does not overwrite") {
+		t.Fatalf("F's switch: %d %s", code, out)
+	}
+	if b, _ := os.ReadFile(filepath.Join(f.projet, "README.md")); string(b) != "mine\n" {
+		t.Fatal("F's README overwritten")
+	}
+	if v := vuePCsEssai(t, f); !v.Actif || !strings.Contains(v.Erreur, "README.md") {
+		t.Fatalf("F's view does not say why: %+v", v)
+	}
+	f.faire(t, func() {
+		p := piloteEssai(t, f)
+		if p.rejoindrePC() {
+			t.Fatal("F's pilot would start a history of its own")
+		}
+		if att, raison := p.avantCyclePC(); !att || !strings.Contains(raison, "README.md") {
+			t.Fatalf("F's pilot: %v %s", att, raison)
+		}
+	})
+	_ = os.Remove(filepath.Join(f.projet, "README.md"))
+	f.faire(t, func() {
+		p := piloteEssai(t, f)
+		if !p.rejoindrePC() || gitEssai(t, f.projet, "rev-parse", "HEAD") == "" {
+			t.Fatal("F does not join once its file moved")
+		}
+	})
+
+	// G has a history of its own: refused, and left off
+	g := pcVideEssai(t, "PC-Autre", func(p string) {
+		gitEssai(t, p, "init", "-q", "-b", "main")
+		ecrireEssai(t, filepath.Join(p, "other.txt"), "x\n")
+		gitEssai(t, p, "add", "other.txt")
+		gitEssai(t, p, "-c", "user.name=G", "-c", "user.email=g@example.com", "commit", "-qm", "another project")
+	})
+	if code, out := activerEssai(t, g); code == 0 || !strings.Contains(out, "nothing in common") {
+		t.Fatalf("G's switch: %d %s", code, out)
+	}
+	if v := vuePCsEssai(t, g); v.Actif {
+		t.Fatal("G left on")
+	}
+}
+
+func TestFusionnerCochesPC(t *testing.T) {
+	nous := "# Plan\n- [x] M1 : a\n- [ ] M2 : b\n  - [ ] sub\n"
+	eux := "# Plan\n- [ ] M1 : a\n- [X] M2 : b\n  - [x] sub\n"
+	if f, ok := fusionnerCochesPC(nous, eux); !ok || f != "# Plan\n- [x] M1 : a\n- [X] M2 : b\n  - [x] sub\n" {
+		t.Fatalf("%v %q", ok, f)
+	}
+	if _, ok := fusionnerCochesPC(nous, "# Plan\n- [ ] M1 : a, changed\n- [x] M2 : b\n  - [ ] sub\n"); ok {
+		t.Fatal("a changed title merged as a tick")
+	}
+	if _, ok := fusionnerCochesPC(nous, nous+"- [ ] M3 : c\n"); ok {
+		t.Fatal("an added milestone merged as a tick")
+	}
+}
+
+func TestChoisirJalonPC(t *testing.T) {
+	moi := MachinePC{ID: "aaaaaaaaaaaa", Nom: "Moi", Mots: []string{"gpu"}}
+	// milestones written without an identifier: shared out by their title, never a delivery before them
+	sansID := analyserPlan("# Plan\n\n- [x] Build the skeleton\n- [ ] Build the homepage\n- [ ] Write the about page\n")
+	j, att, _ := choisirJalonPC(sansID, moi, nil, "")
+	if att || j.ID != "«Build the homepage»" {
+		t.Fatalf("id-less plan: %q %v", j.ID, att)
+	}
+	autre := PresencePC{ID: "bbbbbbbbbbbb", Nom: "B", EnLigne: true, Pilote: true, Jalon: j.ID}
+	if j2, att, _ := choisirJalonPC(sansID, moi, []PresencePC{autre}, ""); att || j2.ID != "«Write the about page»" {
+		t.Fatalf("id-less plan, the first one held: %q %v", j2.ID, att)
+	}
+	if !strings.Contains(butJalonPC(j, nil, 50, ""), "Milestone «Build the homepage» of .athanor/PLAN.md") {
+		t.Fatal("goal of an id-less milestone")
+	}
+	en := func(nom, id, jalon string, mots ...string) PresencePC {
+		return PresencePC{ID: id, Nom: nom, EnLigne: true, Pilote: true, Jalon: jalon, Mots: mots}
+	}
+	plan := analyserPlan(planEssai)
+	// no plan: one computer frames, the others wait
+	if j, att, _ := choisirJalonPC(nil, moi, nil, ""); att || j.ID != jalonCadragePC {
+		t.Fatalf("framing: %q %v", j.ID, att)
+	}
+	if _, att, raison := choisirJalonPC(nil, moi, []PresencePC{en("Autre", "bbbbbbbbbbbb", jalonCadragePC)}, ""); !att || !strings.Contains(raison, "Autre") {
+		t.Fatal("framing taken: no wait")
+	}
+	// its words first; a milestone another running computer has the words for is left to it
+	if j, _, _ := choisirJalonPC(plan, moi, nil, ""); j.ID != "M1" {
+		t.Fatalf("GPU first: %s", j.ID)
+	}
+	sans := MachinePC{ID: "cccccccccccc", Nom: "Sans"}
+	if j, _, _ := choisirJalonPC(plan, sans, []PresencePC{en("GPU", "dddddddddddd", "", "gpu"), en("Fibre", "eeeeeeeeeeee", "", "network")}, ""); j.ID != "M2" {
+		t.Fatalf("left to the others: %s", j.ID)
+	}
+	// nobody running has the words: anyone takes it (after the others)
+	if j, _, _ := choisirJalonPC(plan, sans, nil, ""); j.ID != "M2" {
+		t.Fatalf("no special first: %s", j.ID)
+	}
+	if j, _, _ := choisirJalonPC(plan, sans, []PresencePC{en("X", "ffffffffffff", "M2")}, ""); j.ID != "M1" {
+		t.Fatalf("needs nobody has: %s", j.ID)
+	}
+	// an offline computer, or one whose pilot is stopped, holds nothing
+	hors := en("GPU", "dddddddddddd", "M1", "gpu")
+	hors.EnLigne = false
+	if j, _, _ := choisirJalonPC(plan, moi, []PresencePC{hors}, ""); j.ID != "M1" {
+		t.Fatalf("offline holder: %s", j.ID)
+	}
+	// the milestone held at the previous cycle goes on (a relay)
+	if j, _, _ := choisirJalonPC(plan, moi, nil, "M2"); j.ID != "M2" {
+		t.Fatalf("relay: %s", j.ID)
+	}
+	// a dependency not ticked: not yet
+	for i := range plan {
+		if plan[i].ID != "M4" {
+			plan[i].Fait = plan[i].ID != "M1"
+		}
+	}
+	if _, att, _ := choisirJalonPC(plan, moi, []PresencePC{en("GPU", "dddddddddddd", "M1", "gpu")}, ""); !att {
+		t.Fatal("M4 taken before M1")
+	}
+	// everything ticked: the delivery, by one computer
+	for i := range plan {
+		plan[i].Fait = true
+	}
+	if j, att, _ := choisirJalonPC(plan, moi, nil, ""); att || j.ID != jalonLivraisonPC {
+		t.Fatalf("delivery: %q %v", j.ID, att)
+	}
+	if _, att, _ := choisirJalonPC(plan, moi, []PresencePC{en("X", "ffffffffffff", jalonLivraisonPC)}, ""); !att {
+		t.Fatal("delivery taken twice")
+	}
+	// Claude is told who builds what
+	c := consignePCs(moi, []PresencePC{en("Fibre", "eeeeeeeeeeee", "M3", "network")}, Jalon{ID: "M1"})
+	if !strings.Contains(c, "milestone **M1**") || !strings.Contains(c, "Fibre") || !strings.Contains(c, "building M3") || !strings.Contains(c, "Needs: <word>.") || !strings.Contains(c, "gpu, network") {
+		t.Fatal(c)
+	}
+	if g := butJalonPC(Jalon{ID: "M1"}, []PresencePC{en("Fibre", "eeeeeeeeeeee", "M3")}, 80, ""); !strings.Contains(g, "Milestone M1 of") || !strings.Contains(g, "build M3 at the same time") || !strings.Contains(g, "MERGE_NEEDED") {
+		t.Fatal(g)
+	}
+	if j := decouperJalon("M7 : Red armors — models. Needs: GPU, fast network. Files: a.glb. Depends on: M2."); strings.Join(j.Besoins, ",") != "gpu,fast-network" || strings.Join(j.Depend, ",") != "M2" || j.Fichiers != "a.glb" {
+		t.Fatalf("needs: %+v", j)
+	}
+}
+
+// TestRecevoirSansCommandesDuProjet: what the project's .git/config asks git to run (a filter, a merge
+// driver: Claude can write it) never runs while the pilot merges the others' work, outside the sandbox.
+func TestRecevoirSansCommandesDuProjet(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git missing")
+	}
+	if runtime.GOOS == "windows" {
+		t.Skip("the trap commands are POSIX shell")
+	}
+	conf := filepath.Join(t.TempDir(), "gitconfig")
+	ecrireEssai(t, conf, "")
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+	t.Setenv("GIT_CONFIG_GLOBAL", conf)
+	depot := filepath.Join(t.TempDir(), "github.git")
+	gitEssai(t, filepath.Dir(depot), "init", "-q", "--bare", "-b", "main", depot)
+	ancien, ancienne := depotEssaiGH, attentePrisePC
+	depotEssaiGH, attentePrisePC = depot, 0
+	defer func() { depotEssaiGH, attentePrisePC = ancien, ancienne }()
+
+	a := nouveauPCEssai(t, "PC-A", "", "", depot, false)
+	ecrireEssai(t, filepath.Join(a.projet, "README.md"), "# Game\n\nfirst\n")
+	ecrireEssai(t, filepath.Join(a.projet, "notes.txt"), "a\n")
+	gitEssai(t, a.projet, "add", "-A")
+	gitEssai(t, a.projet, "commit", "-q", "-m", "start")
+	a.faire(t, func() {
+		var o bytes.Buffer
+		if code := pousserGH([]string{a.projet}, &o); code != 0 {
+			t.Fatal(o.String())
+		}
+	})
+	b := nouveauPCEssai(t, "PC-B", "", "", depot, true)
+	piege := filepath.Join(t.TempDir(), "ran")
+	gitEssai(t, b.projet, "config", "filter.piege.smudge", "touch '"+piege+"-smudge'; cat")
+	gitEssai(t, b.projet, "config", "filter.piege.clean", "touch '"+piege+"-clean'; cat")
+	gitEssai(t, b.projet, "config", "merge.piege.driver", "touch '"+piege+"-driver'; true")
+	ecrireEssai(t, filepath.Join(b.projet, ".git", "info", "attributes"), "* filter=piege merge=piege\n")
+
+	ecrireEssai(t, filepath.Join(a.projet, "README.md"), "# Game\n\nA's line\n")
+	ecrireEssai(t, filepath.Join(a.projet, "notes.txt"), "a\nb\n")
+	gitEssai(t, a.projet, "commit", "-q", "-am", "A")
+	a.faire(t, func() {
+		if code, _ := piloteEssai(t, a).pousserPC(); code != 0 {
+			t.Fatalf("A's push: %d", code)
+		}
+	})
+	ecrireEssai(t, filepath.Join(b.projet, "README.md"), "# Game\n\nB's line\n")
+	gitEssai(t, b.projet, "-c", "filter.piege.clean=cat", "commit", "-q", "-am", "B")
+	var res string
+	b.faire(t, func() {
+		e, _ := ouvrirEquipePC(b.projet)
+		res, _, _ = e.recevoir()
+	})
+	if res != recuConflit {
+		t.Fatalf("a merge driver decided the conflict: %s", res)
+	}
+	for _, s := range []string{"-smudge", "-clean", "-driver"} {
+		if _, err := os.Stat(piege + s); err == nil {
+			t.Fatalf("the project's %s command ran", s[1:])
+		}
+	}
+}

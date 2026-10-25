@@ -431,3 +431,42 @@ func TestDistanceChiffres(t *testing.T) {
 		t.Fatal("no key")
 	}
 }
+
+func TestDistanceLimiteSansCle(t *testing.T) {
+	s, h, _ := serveurDistance(t)
+	cle := appairerTest(t, s, h)
+	s.dist().sansCle = map[string]*compteSansCle{} // the pairing's own two requests are not part of the count below
+	// 60 requests a minute without a key from one address go through, the 61st and the next ones not
+	for i := 0; i < requetesSansCleMax; i++ {
+		if w := appelDistance(h, "GET", "/", "", ""); w.Code != http.StatusUnauthorized {
+			t.Fatalf("request %d: %d", i+1, w.Code)
+		}
+	}
+	w := appelDistance(h, "GET", "/", "", "")
+	if w.Code != http.StatusTooManyRequests || w.Header().Get("Retry-After") == "" {
+		t.Fatalf("61st: %d", w.Code)
+	}
+	if w := appelDistance(h, "GET", "/appairer?c="+codeDuLien(t, s.vueDistance().Lien), "", ""); w.Code != http.StatusTooManyRequests {
+		t.Fatalf("pairing from a refused address: %d", w.Code)
+	}
+	// another address is not refused, a trusted device never
+	if w := appelDistance(h, "GET", "/", "", "", "Cf-Connecting-Ip", "198.51.100.9"); w.Code != http.StatusUnauthorized {
+		t.Fatalf("other address: %d", w.Code)
+	}
+	for i := 0; i < 2*requetesSansCleMax; i++ {
+		if w := appelDistance(h, "GET", "/api/etat", cle, "", "X-Athanor", "jeton"); w.Code != http.StatusOK {
+			t.Fatalf("trusted device, request %d: %d", i+1, w.Code)
+		}
+	}
+	// 10 minutes later the address is let in again
+	d := s.dist()
+	d.mu.Lock()
+	for _, c := range d.sansCle {
+		c.bloqueJusqua = time.Now().Add(-time.Second)
+		c.debut = time.Now().Add(-2 * fenetreSansCle)
+	}
+	d.mu.Unlock()
+	if w := appelDistance(h, "GET", "/", "", ""); w.Code != http.StatusUnauthorized {
+		t.Fatalf("after the pause: %d", w.Code)
+	}
+}

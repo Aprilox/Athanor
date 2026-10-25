@@ -241,7 +241,11 @@ func (s *Serveur) lancerTunnel() {
 	for {
 		t := s.lireTunnelSauve()
 		pid, adresse := t.PID, t.Adresse
-		if !(cloudflaredVivant(pid) && t.Port == port && adresse != "") {
+		attendu := reAdresseTunnel.MatchString(adresse) // a quick tunnel, unless your domain is in use
+		if hote, _ := s.tunnelNomme(); hote != "" {
+			attendu = adresse == "https://"+hote
+		}
+		if !(cloudflaredVivant(pid) && t.Port == port && attendu) {
 			if cloudflaredVivant(pid) {
 				terminerProcessus(pid)
 			}
@@ -291,13 +295,27 @@ func (s *Serveur) demarrerCloudflared(port int) (int, string, error) {
 	// out of Athanor's job first (it outlives Athanor), inside it when the job forbids leaving; and a
 	// program just written (the download) can be refused for a few seconds on Windows while the antivirus
 	// reads it ("Access is denied"): tried again for up to 30 seconds
+	// a quick tunnel (an address of its own), or your domain's tunnel (distance_domaine.go)
+	args := []string{"tunnel", "--no-autoupdate", "--url", "http://127.0.0.1:" + strconv.Itoa(port)}
+	adresse := ""
+	if hote, id := s.tunnelNomme(); id != "" {
+		cred, cfg := s.fichiersTunnelNomme(id)
+		conf := fmt.Sprintf("tunnel: %s\ncredentials-file: %s\nurl: http://127.0.0.1:%d\n", id, yamlChaine(cred), port)
+		if err := os.WriteFile(cfg, []byte(conf), 0o600); err != nil {
+			f.Close()
+			return 0, "", err
+		}
+		args = []string{"tunnel", "--no-autoupdate", "--origincert", s.certCloudflared(), "--config", cfg, "run", id}
+		adresse = "https://" + hote
+	}
 	var c *exec.Cmd
 	refuse := func(e error) bool {
 		return e != nil && (os.IsPermission(e) || strings.Contains(e.Error(), "used by another process"))
 	}
 	for essai := 0; ; essai++ {
 		for _, detacher := range []func(*exec.Cmd){detacherProcessus, detacherDansLeJob} {
-			c = commande(s.cheminCloudflared(), "tunnel", "--no-autoupdate", "--url", "http://127.0.0.1:"+strconv.Itoa(port))
+			c = commande(s.cheminCloudflared(), args...)
+			c.Env = append(os.Environ(), "HOME="+s.compteCloudflared(), "USERPROFILE="+s.compteCloudflared())
 			detacher(c)
 			c.Stdout, c.Stderr = f, f
 			c.Dir = s.dossierDistance()
@@ -316,7 +334,6 @@ func (s *Serveur) demarrerCloudflared(port int) (int, string, error) {
 	}
 	pid := c.Process.Pid
 	go func() { _ = c.Wait() }()
-	adresse := ""
 	for i := 0; i < 120; i++ { // a minute at most
 		time.Sleep(500 * time.Millisecond)
 		b, _ := os.ReadFile(journal)
@@ -377,4 +394,9 @@ func (s *Serveur) arreterTunnelSansTuer() {
 	d.mu.Lock()
 	d.tunnel.gen++
 	d.mu.Unlock()
+}
+
+// yamlChaine: a path in the tunnel's configuration file (quoted: Windows' backslashes, spaces).
+func yamlChaine(v string) string {
+	return "'" + strings.ReplaceAll(v, "'", "''") + "'"
 }
