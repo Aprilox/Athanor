@@ -369,10 +369,16 @@ func (p *pilote) avantCyclePC() (attendre bool, message string) {
 	if b, err := os.ReadFile(filepath.Join(p.etat, "PLAN.md")); err == nil && p.planPret() {
 		plan = analyserPlan(string(b))
 	}
-	if fichierRegulierPilote(filepath.Join(p.etat, "MERGE_NEEDED.md")) {
+	if res == recuSale || res == recuConflit || fichierRegulierPilote(filepath.Join(p.etat, "MERGE_NEEDED.md")) {
 		// the others' work not merged yet: the milestone chosen from their plan too, never from this one alone
 		// (it would frame again, or build a milestone they finished)
-		plan = planAvecLeurPC(plan, e)
+		leur := planAvecLeurPC(plan, e)
+		if res == recuSale && len(plan) == 0 && len(leur) > 0 {
+			// their plan is not in this folder yet, and cannot come before these changes are committed
+			_ = e.publier()
+			return true, "the project has changes not committed, and the team's plan cannot come in before they are (commit them, or put them aside)"
+		}
+		plan = leur
 	}
 	for essai := 0; essai < 3; essai++ {
 		j, att, raison := choisirJalonPC(plan, e.moi, e.pcs, actuel)
