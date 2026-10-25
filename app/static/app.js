@@ -2626,13 +2626,16 @@ function lireEnvFormulaire() {
 
 // --- options (saved as soon as a switch or a field changes): the "Options" tab of the settings
 // --- several computers on a project (pcs.go, api_pcs.go): who works with this one, on what
-etat.pcsVues = {}; etat.pcsLus = {};
+etat.pcsVues = {}; etat.pcsLus = {}; etat.pcsBascule = {}; etat.pcsGen = {};
 // pcsDuProjet: what the page knows (read again in the background every 30 s; the page follows)
 function pcsDuProjet(nom) {
   const lu = etat.pcsLus[nom] || 0;
   if (Date.now() - lu > 30000) {
     etat.pcsLus[nom] = Date.now();
+    const gen = etat.pcsGen[nom] || 0;
     api("pcs").then((v) => {
+      // the switch moved meanwhile: this reading is from before it, its answer is the switch's own
+      if (etat.pcsBascule[nom] || gen !== (etat.pcsGen[nom] || 0)) return;
       const avant = JSON.stringify(etat.pcsVues[nom] || null);
       etat.pcsVues[nom] = v;
       if (JSON.stringify(v) !== avant && etat.page === "suivi" && etat.projet === nom) rendrePage();
@@ -2661,6 +2664,15 @@ function erreurPCs(e) {
 }
 function rendreBlocPCs(vp) {
   if (!vp || !vp.lie) return "";
+  const nomP = etat.projet || ((etat.vue || {}).projet || {}).nom;
+  const bascule = etat.pcsBascule[nomP];
+  if (bascule) {
+    // the switch is being turned on or off: it stays as the user put it until GitHub answers
+    return `<div class="bloc"><h2>${t("Other computers")}</h2>
+      <label class="interrupteur"><input type="checkbox" data-pcs-actif ${bascule === "on" ? "checked" : ""} disabled><span>${t("Work with other computers on {0}", [h(vp.depot || "")])}</span></label>
+      <p class="muet petit">⏳ ${bascule === "on" ? t("Turning on: Athanor reads GitHub and brings in the other computers' work…") : t("Turning off…")}</p>
+    </div>`;
+  }
   if (!vp.actif) {
     return `<div class="bloc"><h2>${t("Other computers")}</h2>
       <p class="intro petit">${t("Build this project with other computers that have it in their Athanor, from the same GitHub repository: each one takes a milestone no other one is building, the ones it is best at first, and they merge each other's work.")} ${lienGuide("pcs")}</p>
@@ -2692,13 +2704,26 @@ function rendreBlocPCs(vp) {
 $("#page").addEventListener("change", async (ev) => {
   const i = ev.target; if (!i.matches("[data-pcs-actif]")) return;
   const nom = etat.projet || ((etat.vue || {}).projet || {}).nom;
-  if (!i.checked) {
+  const actif = i.checked, vp = etat.pcsVues[nom] || {};
+  if (!actif) {
     const c = await choisir(t("Stop working with the other computers on this project? This computer stops taking part: its pilot then builds the milestones alone again."), [{ id: "non", texte: t("Cancel") }, { id: "oui", texte: t("Stop"), danger: true }]);
     if (c !== "oui") { i.checked = true; return; }
+  } else if (!vp.atelier) {
+    // the other computers build from the plan, the requests and the log: the workshop goes to GitHub too
+    const c = await choisir(t("Working with other computers needs Share the workshop (.athanor/) on GitHub, which is off for this project: the request, the plan, the log and the documents then go into the commits, so that the other computers build from them (never secrets.env, the raw logs nor the pilot's state). Turn on both?"),
+      [{ id: "oui", texte: t("Share the workshop and turn on"), primaire: true }, { id: "", texte: t("Cancel") }], { titre: t("Work with other computers") });
+    if (c !== "oui") { i.checked = false; return; }
   }
-  i.disabled = true;
-  const v = await action(api("pcs", "POST", { actif: i.checked }), "");
-  if (v) { etat.pcsVues[nom] = v; etat.pcsLus[nom] = Date.now(); if (v.rejoint) toast(t("This computer starts from the other computers' work: their plan, their requests and their commits."), "ok"); }
+  etat.pcsBascule[nom] = actif ? "on" : "off"; etat.pcsGen[nom] = (etat.pcsGen[nom] || 0) + 1;
+  rendrePage();
+  const v = await action(api("pcs", "POST", { actif }), "");
+  delete etat.pcsBascule[nom];
+  if (v) {
+    etat.pcsVues[nom] = v; etat.pcsLus[nom] = Date.now();
+    if (v.rejoint) toast(t("This computer starts from the other computers' work: their plan, their requests and their commits."), "ok");
+    else if (actif && v.actif) toast(t("This computer now works with the other computers on {0}.", [v.depot || ""]), "ok");
+    else if (!actif) toast(t("This computer works alone on this project again."), "ok");
+  }
   await rafraichir(); // joined: the team's plan and requests are the project's now
   rendrePage();
 });
