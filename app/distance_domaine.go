@@ -287,7 +287,7 @@ func (s *Serveur) apiDistanceDomaine(w http.ResponseWriter, r *http.Request) {
 		s.erreur(w, http.StatusBadRequest, "Unknown")
 		return
 	}
-	s.ecrireJSON(w, s.vueDistance())
+	s.ecrireJSON(w, s.vueDistanceDe(appareilDe(r)))
 }
 
 // derniereLigneSortie: cloudflared's last useful line (an error first).
