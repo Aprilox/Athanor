@@ -26,6 +26,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -461,6 +462,12 @@ func rejoindrePC(projet, d, branche, local string) (string, string) {
 			}
 		}
 	}
+	if piloteNatifPC() {
+		// the native Windows pilot keeps the project's files as git has them (core.autocrlf false, as it
+		// sets it at its start): written so from the first checkout, or every file would look changed then
+		_ = gTravailGH(projet, "config", "core.autocrlf", "false").Run()
+		_ = gTravailGH(projet, "config", "core.fileMode", "false").Run()
+	}
 	if out, err := gTravailGH(projet, "checkout", "-q", "--no-track", "-B", branche, local).CombinedOutput(); err != nil {
 		return recuBloque, "GitHub's files could not be written in the project: " + derniereLigneSortie(string(out))
 	}
@@ -520,6 +527,9 @@ func obstacleEquipePC(projet, miroir string, r reglagesGH) string {
 	}
 	return ""
 }
+
+// piloteNatifPC: the pilot runs on Windows itself (not in WSL): it sets the project's line endings.
+var piloteNatifPC = func() bool { return runtime.GOOS == "windows" || os.Getenv("ATHANOR_NATIF") == "1" }
 
 // sansEnvGitPC: the environment without what would point git to another repository.
 func sansEnvGitPC() []string {

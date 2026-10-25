@@ -386,8 +386,16 @@ func essaiPlusieursOrdinateurs(t *testing.T) {
 	// E joins from a new folder: at the switch, the project starts from the team's work; what Athanor
 	// wrote in its workshop when the project was added is put aside, never lost
 	e := pcVideEssai(t, "PC-Neuf", func(p string) { ecrireEssai(t, filepath.Join(p, ".athanor", "LOG.md"), "# my own log\n") })
-	if code, out := activerEssai(t, e); code != 0 || !strings.Contains(out, "starts from the other computers' work") {
-		t.Fatalf("E's switch: %d %s", code, out)
+	ancienNatif := piloteNatifPC
+	piloteNatifPC = func() bool { return true } // E as a native Windows pilot: it sets core.autocrlf false
+	codeE, outE := activerEssai(t, e)
+	piloteNatifPC = ancienNatif
+	if codeE != 0 || !strings.Contains(outE, "starts from the other computers' work") {
+		t.Fatalf("E's switch: %d %s", codeE, outE)
+	}
+	gitEssai(t, e.projet, "config", "core.autocrlf", "false") // what its pilot does at its start
+	if st := gitEssai(t, e.projet, "status", "--porcelain", "--untracked-files=no"); st != "" {
+		t.Fatalf("E's files look changed once its pilot sets its line endings: %s", st)
 	}
 	if gitEssai(t, e.projet, "rev-parse", "HEAD") != gitEssai(t, depot, "rev-parse", "main") {
 		t.Fatal("E does not start from GitHub's branch")
