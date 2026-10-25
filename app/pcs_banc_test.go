@@ -50,7 +50,7 @@ if [ ! -f "$ETAT/PLAN.md" ]; then
 # Plan
 
 - [ ] M1 : Models — Needs: gpu.
-- [ ] M2 : Menus
+- [ ] M2 : Menus — Needs: blender.
 - [ ] M3 : Downloads — Needs: network.
 - [ ] M4 : Sounds
 - [ ] M5 : Polish — Depends on: M1, M2, M3, M4.
@@ -60,6 +60,13 @@ PLAN
   fin "Framing done by $qui"
 fi
 id=$(printf '%s' "$but" | sed -n 's/^\/goal Milestone \(M[0-9]*\) of .*/\1/p')
+if [ -n "$id" ] && [ "$qui" = "PC-GPU" ] && grep -q "^- \[ \] $id .*Needs: blender" "$ETAT/PLAN.md"; then
+  # Blender does not start on this computer: one quick try, then the others
+  printf 'tool: blender\nwhy: Blender crashes at start on %s\n' "$qui" > "$ETAT/CANNOT_HERE.md"
+  echo "- $id: blender fails on $qui" >> "$ETAT/LOG.md"
+  git add -A && git commit -qm "$id: blender does not work on $qui"
+  fin "Blender does not work here"
+fi
 if [ -n "$id" ]; then
   mkdir -p work
   echo "$id by $qui" > "work/$id.txt"
@@ -122,7 +129,7 @@ func bancEquipe(t *testing.T, bin string) {
 	defer func() { depotEssaiGH = ancien }()
 
 	// A starts the project with its request, pushed; B joins from a new folder
-	a := nouveauPCEssai(t, "PC-GPU", "gpu", "RTX 4090", depot, false)
+	a := nouveauPCEssai(t, "PC-GPU", "gpu, blender", "RTX 4090", depot, false) // it says it has Blender: it is meant to build M2
 	ecrireEssai(t, filepath.Join(a.projet, ".athanor", "REQUEST.md"), "# Request\n\nBuild the game.\n")
 	gitEssai(t, a.projet, "add", "-A")
 	gitEssai(t, a.projet, "commit", "-q", "-m", "The request")
@@ -203,7 +210,7 @@ func bancEquipe(t *testing.T, bin string) {
 		}
 		parQui[id] = strings.TrimSpace(strings.TrimPrefix(gitEssai(t, depot, "show", "main:work/"+id+".txt"), id+" by "))
 	}
-	if parQui["M1"] != "PC-GPU" || parQui["M3"] != "PC-Fibre" {
+	if parQui["M1"] != "PC-GPU" || parQui["M3"] != "PC-Fibre" || parQui["M2"] != "PC-Fibre" {
 		t.Fatalf("milestones not given by what each computer has: %v%s", parQui, journal)
 	}
 	if !strings.Contains(gitEssai(t, depot, "show", "main:.athanor/FINAL_REPORT.md"), "STATUS: DONE") {
@@ -214,6 +221,15 @@ func bancEquipe(t *testing.T, bin string) {
 			b, _ := os.ReadFile(filepath.Join(m.projet, ".athanor", "fake-unexpected.txt"))
 			t.Fatalf("%s's Claude got an unexpected goal: %s%s", m.nom, b, journal)
 		}
+	}
+	// the program that failed on PC-GPU worked on PC-Fibre: PC-Fibre has its word now, PC-GPU said it
+	var motsB []string
+	b.faire(t, func() { motsB = lireMachinePC().Mots })
+	if !strings.Contains(strings.Join(motsB, ","), "blender") {
+		t.Fatalf("PC-Fibre did not learn blender: %v%s", motsB, journal)
+	}
+	if !strings.Contains(sorties[0], "blender does not work on this computer (Blender crashes at start on PC-GPU)") || !strings.Contains(sorties[1], "blender works on this computer") {
+		t.Fatalf("the relay is not in the logs%s", journal)
 	}
 	t.Logf("milestones: %v", parQui)
 }

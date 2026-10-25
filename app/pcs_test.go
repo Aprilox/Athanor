@@ -671,3 +671,61 @@ func TestRecevoirSansCommandesDuProjet(t *testing.T) {
 		}
 	}
 }
+
+// TestRelaisOutilPC: a program that does not work on a computer: the others try in its place; when none
+// can, the computer that was meant to build the milestone takes it back and Claude asks the user.
+func TestRelaisOutilPC(t *testing.T) {
+	plan := analyserPlan("# Plan\n\n- [ ] M1 : Props — Needs: blender.\n- [ ] M2 : Menus\n")
+	maint := time.Now().UTC()
+	quand := func(min int) string { return maint.Add(time.Duration(-min) * time.Minute).Format(time.RFC3339) }
+	a := MachinePC{ID: "aaaaaaaaaaaa", Nom: "PC-A", Mots: []string{"blender"}}
+	refusA := []RefusPC{{Outil: "blender", Jalon: "M1", Pourquoi: "crashes at start", Quand: quand(10)}}
+	b := PresencePC{ID: "bbbbbbbbbbbb", Nom: "PC-B", EnLigne: true, Pilote: true, Mots: []string{"blender"}}
+	c := PresencePC{ID: "cccccccccccc", Nom: "PC-C", EnLigne: true, Pilote: true}
+
+	// A failed on M1: it takes M2, B (which has the word) tries M1 first, C too if B does not
+	if j, att, _ := choisirJalonRefusPC(plan, a, []PresencePC{b, c}, "M1", refusA); att || j.ID != "M2" {
+		t.Fatalf("A after its failure: %q %v", j.ID, att)
+	}
+	aP := PresencePC{ID: a.ID, Nom: a.Nom, EnLigne: true, Pilote: true, Mots: a.Mots, Refus: refusA}
+	if j, _, _ := choisirJalonRefusPC(plan, MachinePC{ID: c.ID, Nom: c.Nom}, []PresencePC{aP}, "", nil); j.ID != "M1" {
+		t.Fatalf("C tries in A's place first: %q", j.ID)
+	}
+	// B failed too, C is not running: A, meant to build it, takes it back and tells Claude who tried
+	bR := b
+	bR.Refus = []RefusPC{{Outil: "blender", Jalon: "M1", Pourquoi: "no GPU driver", Quand: quand(2)}}
+	plan2 := analyserPlan("# Plan\n\n- [ ] M1 : Props — Needs: blender.\n- [x] M2 : Menus\n")
+	j, att, _ := choisirJalonRefusPC(plan2, a, []PresencePC{bR}, "", refusA)
+	if att || j.ID != "M1" || !strings.Contains(j.Reprise, "PC-A (the computer meant to build it): crashes at start; PC-B: no GPU driver") || !strings.Contains(j.Reprise, "athanor todo add") {
+		t.Fatalf("A takes it back: %q %v %q", j.ID, att, j.Reprise)
+	}
+	if !strings.Contains(butJalonPC(j, nil, 50, ""), "No computer of the team could run blender") {
+		t.Fatal("the goal does not say it")
+	}
+	// B leaves it to A while A runs; with A gone, B takes it back
+	if j, att, _ := choisirJalonRefusPC(plan2, MachinePC{ID: b.ID, Nom: b.Nom}, []PresencePC{aP}, "", bR.Refus); !att {
+		t.Fatalf("B took A's milestone back: %q", j.ID)
+	}
+	if j, _, _ := choisirJalonRefusPC(plan2, MachinePC{ID: b.ID, Nom: b.Nom}, nil, "", bR.Refus); j.ID != "M1" || j.Reprise == "" {
+		t.Fatalf("B alone: %q %q", j.ID, j.Reprise)
+	}
+	// alone from the start: straight back, with the user asked
+	if j, _, _ := choisirJalonRefusPC(plan2, a, nil, "", refusA); j.ID != "M1" || j.Reprise == "" {
+		t.Fatalf("A alone: %q", j.Reprise)
+	}
+	// a refusal 12 hours old is forgotten: the computer tries again (it may have been repaired)
+	vieux := []RefusPC{{Outil: "blender", Jalon: "M1", Quand: maint.Add(-13 * time.Hour).Format(time.RFC3339)}}
+	if j, _, _ := choisirJalonRefusPC(plan, a, []PresencePC{b}, "", vieux); j.ID != "M1" || j.Reprise != "" {
+		t.Fatalf("old refusal: %q %q", j.ID, j.Reprise)
+	}
+
+	// what Claude writes, read once
+	dir := t.TempDir()
+	ecrireEssai(t, filepath.Join(dir, fichierRefusClaude), "# Cannot here\n\n- tool: Blender 4.2\n- why: it crashes at start (GPU driver)\n")
+	if o, w, ok := lireRefusClaude(dir); !ok || o != "blender" || w != "it crashes at start (GPU driver)" {
+		t.Fatalf("CANNOT_HERE: %q %q %v", o, w, ok)
+	}
+	if _, _, ok := lireRefusClaude(dir); ok {
+		t.Fatal("CANNOT_HERE read twice")
+	}
+}
