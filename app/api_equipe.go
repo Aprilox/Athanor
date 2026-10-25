@@ -161,60 +161,74 @@ func (s *Serveur) apiAgentsPerso(w http.ResponseWriter, r *http.Request) {
 		}
 		s.msg(w, "Sub-agent removed: it leaves the team at the next cycle.")
 	case "enregistrer":
-		a := c.Agent
-		a.Nom = strings.ToLower(strings.TrimSpace(a.Nom))
-		a.Description, a.Consignes = strings.TrimSpace(a.Description), strings.TrimSpace(a.Consignes)
-		if err := validerAgent(a); err != nil {
-			s.erreur(w, http.StatusBadRequest, err.Error())
+		cle, code, err := enregistrerAgentPerso(k, &f, p, c.Ancien, c.Agent, c.Tous)
+		if err != nil {
+			s.erreur(w, code, err.Error())
 			return
 		}
-		a.Projet, a.Origine, a.Cree = p.Dossier, "utilisateur", time.Now().Format("2006-01-02")
-		if c.Tous {
-			a.Projet = ""
-		}
-		i := -1
-		if c.Ancien != "" {
-			if i = trouve(c.Ancien); i < 0 {
-				s.erreur(w, http.StatusNotFound, "This sub-agent no longer exists.")
-				return
-			}
-			a.Origine, a.Cree = f.Agents[i].Origine, f.Agents[i].Cree // a proposal of the lead stays labelled as such
-		}
-		if j := trouve(a.Nom); j >= 0 && j != i {
-			s.erreur(w, http.StatusBadRequest, "A sub-agent already has this name.")
-			return
-		}
-		if i >= 0 {
-			f.Agents[i] = a
-		} else {
-			n := 0
-			for _, x := range f.Agents {
-				if x.duProjet(p) {
-					n++
-				}
-			}
-			if n >= agentsParProjetMax {
-				s.erreur(w, http.StatusBadRequest, "The team is full: 12 sub-agents of your own at most for a project.")
-				return
-			}
-			f.Agents = append(f.Agents, a)
-		}
-		// a name removed earlier and created again by the user is no longer refused
-		for cle, v := range f.Refuses {
-			garde := v[:0]
-			for _, n := range v {
-				if n != a.Nom || normaliserDossier(cle) != normaliserDossier(p.Dossier) {
-					garde = append(garde, n)
-				}
-			}
-			f.Refuses[cle] = garde
-		}
-		if err := ecrireJSONFichier(cheminAgents(k), f, 0o644); err != nil {
-			s.erreur(w, http.StatusInternalServerError, err.Error())
-			return
-		}
-		s.msg(w, "Sub-agent saved: it joins the team at the next cycle.")
+		s.msg(w, cle)
 	default:
 		s.erreur(w, http.StatusBadRequest, "Unknown")
 	}
+}
+
+// enregistrerAgentPerso: a sub-agent of the user's created or changed (ancien: its name before), written to
+// extensions/agents.json (the caller holds verrouAgents and read f); the message for the user, or the HTTP
+// code and the error.
+func enregistrerAgentPerso(k Kit, f *fichierAgents, p Projet, ancien string, a AgentPerso, tous bool) (string, int, error) {
+	trouve := func(nom string) int {
+		for i, x := range f.Agents {
+			if x.Nom == nom && x.duProjet(p) {
+				return i
+			}
+		}
+		return -1
+	}
+	a.Nom = strings.ToLower(strings.TrimSpace(a.Nom))
+	a.Description, a.Consignes = strings.TrimSpace(a.Description), strings.TrimSpace(a.Consignes)
+	if err := validerAgent(a); err != nil {
+		return "", http.StatusBadRequest, err
+	}
+	a.Projet, a.Origine, a.Cree = p.Dossier, "utilisateur", time.Now().Format("2006-01-02")
+	if tous {
+		a.Projet = ""
+	}
+	i := -1
+	if ancien != "" {
+		if i = trouve(ancien); i < 0 {
+			return "", http.StatusNotFound, errors.New("This sub-agent no longer exists.")
+		}
+		a.Origine, a.Cree = f.Agents[i].Origine, f.Agents[i].Cree // a proposal of the lead stays labelled as such
+	}
+	if j := trouve(a.Nom); j >= 0 && j != i {
+		return "", http.StatusBadRequest, errors.New("A sub-agent already has this name.")
+	}
+	if i >= 0 {
+		f.Agents[i] = a
+	} else {
+		n := 0
+		for _, x := range f.Agents {
+			if x.duProjet(p) {
+				n++
+			}
+		}
+		if n >= agentsParProjetMax {
+			return "", http.StatusBadRequest, errors.New("The team is full: 12 sub-agents of your own at most for a project.")
+		}
+		f.Agents = append(f.Agents, a)
+	}
+	// a name removed earlier and created again by the user is no longer refused
+	for cle, v := range f.Refuses {
+		garde := v[:0]
+		for _, n := range v {
+			if n != a.Nom || normaliserDossier(cle) != normaliserDossier(p.Dossier) {
+				garde = append(garde, n)
+			}
+		}
+		f.Refuses[cle] = garde
+	}
+	if err := ecrireJSONFichier(cheminAgents(k), *f, 0o644); err != nil {
+		return "", http.StatusInternalServerError, err
+	}
+	return "Sub-agent saved: it joins the team at the next cycle.", 0, nil
 }

@@ -35,6 +35,7 @@ type MessageChat struct {
 	Cout   float64  `json:"cout,omitempty"`
 	Commit string   `json:"commit,omitempty"` // the commit of the changes (modif)
 	Note   bool     `json:"note,omitempty"`   // the note was sent to the pilot
+	Agent  string   `json:"agent,omitempty"`  // the sub-agent it proposed, added to the team under this name
 }
 
 type conversationChat struct {
@@ -136,6 +137,19 @@ const consigneChat = `You are Claude, talking with the owner of this project ins
 an autonomous pilot on it (its plan, log and notes are in .athanor/: PLAN.md, LOG.md, DECISIONS.md, BUGS.md).
 Answer in the language the user writes in, briefly and concretely; read the project's files when it helps,
 and name the files you mean.
+
+Sub-agents: .athanor/TEAM.md lists the project's team (Athanor's own sub-agents and the user's). When the user
+wants a new specialist sub-agent, or to change one of theirs, shape it with them: ask what you need, a few
+questions at a time (what it does, when the lead should call it, what it must never do, a cheap or a strong
+model, whether it may change files, for this project or all of them, its name), then propose it. Once the
+user agrees, write it once, at the end of your answer, between <agent> and </agent>, as JSON:
+{"nom": "lowercase letters, digits and dashes, 2 to 31", "ancien": "its current name when changing one, else empty",
+"description": "when the lead should call it, 400 characters at most, in the user's language",
+"consignes": "its complete instructions (role, method, always and never, what it hands back), 6000 characters at most",
+"modele": "" (like the other sub-agents) or "eco" (cheap, mechanical work) or "fort" (strongest, hard reasoning),
+"lecture_seule": true when it only reads and reports, "tous": true for all the user's projects}.
+Athanor shows it as a card the user can still edit, and adds it to the team with one click: never write the
+team's files yourself. Names taken by Athanor: architect, creator, developer, tester, critic, executor, scout.
 %s`
 
 const consigneQuestion = `You can only read: no change, no command. The pilot is RUNNING on this project, so you must not change
@@ -149,7 +163,10 @@ const consigneModif = `The pilot is stopped: you may change the project's files 
 cannot run commands. Keep the change small and focused, never touch .athanor/ (the pilot's workshop) unless
 asked, and end with the list of the files you changed. Athanor commits your changes for you.`
 
-var reNote = regexp.MustCompile(`(?s)<note>(.*?)</note>`)
+var (
+	reNote  = regexp.MustCompile(`(?s)<note>(.*?)</note>`)
+	reAgent = regexp.MustCompile(`(?s)<agent>(.*?)</agent>`)
+)
 
 // apiChat: the conversation of the current project, with the turn under way.
 func (s *Serveur) apiChat(w http.ResponseWriter, r *http.Request) {
@@ -377,4 +394,48 @@ func (s *Serveur) apiChatNote(w http.ResponseWriter, r *http.Request) {
 	conv.Messages[c.Index].Note = true
 	ecrireConversation(k, p, conv)
 	s.msg(w, "Note sent: the pilot reads it at its next cycle.")
+}
+
+// apiChatAgent: the sub-agent a message of Claude proposes, as the user checked it on its card, added to
+// the team (or changing one of the user's), the message marked.
+func (s *Serveur) apiChatAgent(w http.ResponseWriter, r *http.Request) {
+	var c struct {
+		Index  int        `json:"index"`
+		Ancien string     `json:"ancien"`
+		Agent  AgentPerso `json:"agent"`
+		Tous   bool       `json:"tous"`
+	}
+	if err := lireCorps(r, &c); err != nil {
+		s.erreur(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	p, ok := s.projetRequis(w, r)
+	if !ok {
+		return
+	}
+	k := s.kitCourant()
+	conv := lireConversation(k, p)
+	if c.Index < 0 || c.Index >= len(conv.Messages) || conv.Messages[c.Index].Role != "claude" || !reAgent.MatchString(conv.Messages[c.Index].Texte) {
+		s.erreur(w, http.StatusBadRequest, "This message proposes no sub-agent")
+		return
+	}
+	verrouAgents.Lock()
+	if !agentsLisibles(k) {
+		verrouAgents.Unlock()
+		s.erreur(w, http.StatusConflict, "extensions/agents.json is unreadable: fix or remove it, nothing was changed.")
+		return
+	}
+	f := lireAgents(k)
+	cle, code, err := enregistrerAgentPerso(k, &f, p, strings.TrimSpace(c.Ancien), c.Agent, c.Tous)
+	verrouAgents.Unlock()
+	if err != nil {
+		s.erreur(w, code, err.Error())
+		return
+	}
+	conv = lireConversation(k, p)
+	if c.Index < len(conv.Messages) {
+		conv.Messages[c.Index].Agent = strings.ToLower(strings.TrimSpace(c.Agent.Nom))
+		ecrireConversation(k, p, conv)
+	}
+	s.msg(w, cle)
 }

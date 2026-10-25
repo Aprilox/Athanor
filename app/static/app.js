@@ -392,7 +392,9 @@ document.addEventListener("click", async (ev) => {
   bAm.textContent = agent ? t("Claude is rewriting the instructions…") : t("Claude is rewriting your request…");
   if (etiquette) etiquette.textContent = t("about 30 seconds");
   try {
-    const r = await api("ameliorer", "POST", agent ? { texte: mienne, genre: "agent", nom: ($("#ag-nom") || {}).value || "", description: ($("#ag-description") || {}).value || "" } : { texte: mienne });
+    // a sub-agent's name and description: its card in the chat, or the Team page's form
+    const carte = bAm.closest("[data-chat-agent-carte]"), champ = (n, id) => (carte ? carte.querySelector(`[data-ca="${n}"]`) : $(id)) || {};
+    const r = await api("ameliorer", "POST", agent ? { texte: mienne, genre: "agent", nom: champ("nom", "#ag-nom").value || "", description: champ("description", "#ag-description").value || "" } : { texte: mienne });
     versionsDemande.set(zone, { mienne, claude: r.texte, vue: "claude" });
     zone.value = r.texte;
     toast(agent ? t("Instructions improved: check them, edit them, or go back to yours.") : t("Request improved: check it, edit it, or go back to yours."), "ok");
@@ -884,13 +886,49 @@ function messageChat(m, i) {
   if (m.role === "vous") return `<div class="chat-msg chat-vous"><div class="chat-bulle">${mdChat(m.texte)}</div><div class="chat-meta">${h(quand)}${m.mode === "modif" ? " · " + t("may change the files") : ""}</div></div>`;
   if (m.role === "erreur") return `<div class="chat-msg chat-claude"><div class="chat-bulle chat-erreur">${h(t(m.texte))}</div></div>`;
   const note = (m.texte.match(/<note>([\s\S]*?)<\/note>/) || [])[1];
-  const texte = m.texte.replace(/<note>[\s\S]*?<\/note>/g, "").trim();
+  const agent = (m.texte.match(/<agent>([\s\S]*?)<\/agent>/) || [])[1];
+  const texte = m.texte.replace(/<note>[\s\S]*?<\/note>/g, "").replace(/<agent>[\s\S]*?<\/agent>/g, "").trim();
   const actions = (m.outils || []).length ? `<details class="chat-actions"><summary>${t("{0} action(s)", [m.outils.length])}</summary>${m.outils.map((o) => `<div>${h(t(o))}</div>`).join("")}</details>` : "";
   return `<div class="chat-msg chat-claude"><div class="chat-bulle">${mdChat(texte)}
     ${note ? `<div class="chat-note"><div class="muet petit">${t("Note for the pilot")}</div><div>${mdChat(note.trim())}</div>
       <div class="ligne m0 mt-1">${m.note ? `<span class="ok petit">✔ ${t("Sent to the pilot")}</span>` : `<button type="button" class="btn btn-petit btn-primaire" data-chat-note="${i}">${t("Send to the pilot")}</button>`}</div></div>` : ""}
+    ${agent !== undefined ? carteAgentChat(agent, m, i) : ""}
     ${actions}</div>
     <div class="chat-meta">${h(quand)}${m.modele ? " · " + h(m.modele) : ""}${m.cout ? " · " + Number(m.cout).toFixed(3) + " $" : ""}${m.commit ? ` · <span class="ok">${t("committed {0}", [h(m.commit)])}</span>` : ""}</div></div>`;
+}
+
+// The sub-agent Claude proposes (between <agent> and </agent>): a card the user still edits, then adds to
+// the team with one click (api_chat.go: apiChatAgent).
+function carteAgentChat(json, m, i) {
+  let a;
+  try { a = JSON.parse(json.trim().replace(/^```(json)?|```$/g, "")); } catch (e) { a = null; }
+  if (!a || typeof a !== "object") return `<div class="chat-note"><div class="muet petit">${t("Claude's proposal could not be read: ask it to write it again.")}</div><pre class="chat-code">${h(json.trim())}</pre></div>`;
+  if (m.agent) return `<div class="chat-note"><span class="ok petit">✔ ${t("Added to the team: {0}", [h(m.agent)])}</span> <a href="#equipe" class="petit">${t("Team")}</a></div>`;
+  const v = (x) => h(String(x || ""));
+  return `<div class="chat-note chat-agent" data-chat-agent-carte="${i}"><div class="muet petit">${a.ancien ? t("Changes to the sub-agent {0}", [v(a.ancien)]) : t("Sub-agent proposed")}</div>
+    <input type="hidden" data-ca="ancien" value="${v(a.ancien)}">
+    <div class="grille grille-2">
+      <label class="champ"><span>${t("Name")}</span><input type="text" data-ca="nom" value="${v(a.nom)}"></label>
+      <label class="champ"><span>${t("Model")}</span><select data-ca="modele">
+        <option value="" ${!a.modele ? "selected" : ""}>${t("Like the other sub-agents")}</option>
+        <option value="eco" ${a.modele === "eco" ? "selected" : ""}>${t("Cheap model (mechanical work)")}</option>
+        <option value="fort" ${a.modele === "fort" ? "selected" : ""}>${t("Most capable model (hard reasoning)")}</option></select></label>
+    </div>
+    <label class="champ"><span>${t("When the lead should call it")}</span><input type="text" data-ca="description" value="${v(a.description)}"></label>
+    <label class="champ"><span>${t("Its instructions")}</span><textarea data-ca="consignes" id="ca-consignes-${i}" rows="8">${v(a.consignes)}</textarea></label>
+    ${barreAmeliorer("ca-consignes-" + i, "agent")}
+    <label class="interrupteur"><input type="checkbox" data-ca="lecture_seule" ${a.lecture_seule ? "checked" : ""}><span>${t("Read only: it reads and reports, never writes a file")}</span></label>
+    <label class="interrupteur"><input type="checkbox" data-ca="tous" ${a.tous ? "checked" : ""}><span>${t("For all my projects (otherwise this project only)")}</span></label>
+    <div class="ligne m0 mt-1"><button type="button" class="btn btn-petit btn-primaire" data-chat-agent="${i}">${a.ancien ? t("Save the changes") : t("Add to the team")}</button></div></div>`;
+}
+async function ajouterAgentChat(b) {
+  const carte = b.closest("[data-chat-agent-carte]"); if (!carte) return;
+  const champ = (n) => carte.querySelector(`[data-ca="${n}"]`);
+  const agent = { nom: champ("nom").value.trim().toLowerCase(), description: champ("description").value, consignes: champ("consignes").value, modele: champ("modele").value, lecture_seule: champ("lecture_seule").checked };
+  b.disabled = true;
+  const r = await action(api("chat/agent", "POST", { index: Number(b.dataset.chatAgent), ancien: champ("ancien").value.trim(), agent, tous: champ("tous").checked }));
+  b.disabled = false;
+  if (r) majChat(true);
 }
 
 function filChat(d) {
@@ -899,7 +937,7 @@ function filChat(d) {
   if (d.en_cours) {
     const p = d.partiel || {};
     const textes = p.textes || [], outils = p.outils || [];
-    html += `<div class="chat-msg chat-claude"><div class="chat-bulle chat-attente">${textes.length ? mdChat(textes[textes.length - 1]) : ""}
+    html += `<div class="chat-msg chat-claude"><div class="chat-bulle chat-attente">${textes.length ? mdChat(textes[textes.length - 1].replace(/<(note|agent)>[\s\S]*$/, "")) : ""}
       <div class="muet petit"><span class="chat-points"><i></i><i></i><i></i></span> ${outils.length ? h(t(outils[outils.length - 1])) : t("Claude is thinking…")}</div></div></div>`;
   }
   return html;
@@ -908,7 +946,7 @@ function filChat(d) {
 async function majChat(force) {
   if (etat.page !== "chat") return;
   const d = await api("chat").catch(() => null); if (!d) return;
-  const sig = JSON.stringify([d.messages.length, d.en_cours, d.partiel, d.pilote_actif, (d.messages[d.messages.length - 1] || {}).note]);
+  const sig = JSON.stringify([d.messages.length, d.en_cours, d.partiel, d.pilote_actif, d.messages.map((m) => m.agent || "").join(","), (d.messages[d.messages.length - 1] || {}).note]);
   if (!force && sig === chat.signature) return;
   chat.signature = sig;
   const fil = $("#chat-fil"); if (!fil) return;
@@ -1676,7 +1714,7 @@ pages.equipe = async () => {
 function formulaireAgent() {
   const f = etat.agForm;
   if (!f) return `<div class="ligne mt-2"><button class="btn" data-ag="nouveau">＋ ${t("New sub-agent")}</button>
-    <span class="muet petit">${t("A specialist of your own (a translator, a researcher, a level designer…): the lead calls it when its description fits, or when your request names it. The lead can also propose some.")}</span></div>`;
+    <span class="muet petit">${t("A specialist of your own (a translator, a researcher, a level designer…): the lead calls it when its description fits, or when your request names it. The lead can also propose some.")} ${t("Or describe it to Claude in Chat: it asks what it needs and writes it for you.")}</span></div>`;
   return `<div class="bloc agent-form mt-2"><h2>${f.ancien ? t("Edit {0}", [f.ancien]) : t("New sub-agent")}</h2>
     <div class="grille grille-2">
       <label class="champ"><span>${t("Name")}</span><input type="text" id="ag-nom" value="${h(f.nom || "")}" placeholder="${h(t("e.g. translator"))}"></label>
@@ -2596,6 +2634,7 @@ $("#page").addEventListener("click", async (ev) => {
     if (b.id === "chat-stop") { await action(api("chat/arreter", "POST")); return majChat(true); }
     if (b.id === "chat-nouveau") { if (await confirmer(t("Start a new conversation? Claude forgets this one."), { ok: t("New conversation") })) { await action(api("chat/effacer", "POST")); majChat(true); } return; }
     if (b.dataset.chatModele !== undefined) { chat.modele = b.dataset.chatModele; try { localStorage.setItem("chatModele", chat.modele); } catch (e) { /* ignore */ } b.parentElement.querySelectorAll("button").forEach((x) => x.classList.toggle("actif", x === b)); return; }
+    if (b.dataset.chatAgent !== undefined) return ajouterAgentChat(b);
     if (b.dataset.chatNote !== undefined) { b.disabled = true; await action(api("chat/note", "POST", { index: Number(b.dataset.chatNote) })); return majChat(true); }
   }
   if (page === "reglages") {
