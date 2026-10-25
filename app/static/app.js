@@ -624,6 +624,7 @@ function rendreSelecteur(v) {
     <div class="menu-liste">${liste.map((x) => `<a href="#suivi" data-projet="${h(x.nom)}" class="${x.courant ? "actif" : ""}"><span class="dot ${classePhase(x)}"></span><span class="nom">${h(x.nom)}</span><span class="muet petit">${x.actif ? t(x.phase === "quota" || x.phase === "attente_vous" ? "waiting" : "running") : t("stopped")}${x.attente ? " · " + t("{0} queued", [x.attente]) : ""}${x.pour_vous ? " · " + t("{0} for you", [x.pour_vous]) : ""}</span></a>`).join("") || `<div class="vide">${t("No project.")}</div>`}</div>
     ${v.projet ? `<a href="#projet" class="menu-nouveau menu-gerer">⚙ ${t("Manage this project")}</a>` : ""}
     <a href="#nouveau" class="menu-nouveau">+ ${t("New project")}</a>
+    <a href="#rejoindre" class="menu-nouveau">⇄ ${t("Join a project")}</a>
     ${archives ? `<a href="#archives" class="menu-nouveau menu-archives">🗄 ${t("Archived projects ({0})", [archives])}</a>` : ""}`;
   const r = $("#sel-recherche"); if (r) { r.focus(); r.setSelectionRange(pos, pos); }
 }
@@ -739,6 +740,8 @@ function naviguer() {
   let page = (location.hash || "#suivi").slice(1);
   // the application's options are a tab of the settings now (older links, and the texts that say "Options")
   if (page === "options") { etat.ongletReglages = "options"; history.replaceState(null, "", "#reglages"); page = "reglages"; }
+  // joining a project: the second tab of the new project page
+  if (page === "rejoindre") { etat.npRejoindre = true; history.replaceState(null, "", "#nouveau"); page = "nouveau"; } else if (page === "nouveau" && etat.page !== "nouveau") etat.npRejoindre = false;
   // the settings always open on Options (or on the tab asked for, the guided tour)
   if (page === "reglages" && etat.page !== "reglages") { etat.ongletReglages = etat.ongletDemande || "options"; etat.ongletDemande = null; }
   etat.page = page;
@@ -1289,17 +1292,19 @@ const GUIDE = [
       ["Use it", "The phone gets the same pages, laid out for its screen: start, stop, chat, requests. *Add to Home Screen* makes it an app. The secrets, the remote settings and the computer's folders stay on the computer."],
       ["Remove a device", "*Remote* › *Trusted devices*: ✕ removes one at once. Switching remote access off closes the tunnel for every device."],
       ["A fixed address (optional)", "The temporary address changes when the computer restarts. With a domain whose DNS is at Cloudflare (a free account is enough): *Address › Use my domain*, then sign in to Cloudflare once. The page also shows how to add Cloudflare Access: an e-mail and a code are asked before anything reaches the computer."],
+      ["Notifications on the phone", "On the phone, *Remote* › *This device* › *Notifications on this device*: a notification even with Athanor closed, when Claude needs you, a milestone is done, a project is delivered or a computer of a team is stuck. On an iPhone or iPad, add Athanor to the Home Screen first and open it from there."],
       ["Stop using your domain", "*Address › Back to a temporary address* deletes the tunnel at Cloudflare. Then, in Cloudflare's dashboard: delete the name's CNAME record (*DNS › Records*), and the Access application if you made one (*Zero Trust › Access › Applications*). If the computer was off at that moment, delete the tunnel there too (*Zero Trust › Networks › Tunnels*)."],
     ],
     note: "While remote access is on, the computer does not go to sleep (the screen can still turn off), and Athanor must stay open." },
   { id: "pcs", titre: "Several computers", intro: "Several computers build one project at the same time through its GitHub repository: each one takes a milestone no other one is building, and they merge each other's work.",
     etapes: [
       ["On the first computer", "Link the project to GitHub, then *Overview* › *Other computers* › switch on *Work with other computers*. The plan, the requests and the log go to GitHub with the next push.", "#suivi", "Overview"],
-      ["On each other computer", "*New project* with an **empty folder**, *GitHub* › *Use one of my repositories*: the same repository, the same branch. Then the same switch in its Overview: the project arrives at once, with its request and its plan."],
+      ["On each other computer", "*Join a project* (in the project picker): the repository, the same branch, a new folder. One window signs in to GitHub, then the project arrives at once, with its request and its plan."],
       ["Who links the other computers", "Linking needs the repository's administrator rights. Either the owner links the other computer: when its GitHub window shows a one-time code, the owner types it at github.com/login/device from any device signed in to their account, even their phone (only a key for this repository stays on that computer). Or the owner moves the repository to a GitHub organization (free) and gives the others the *Admin* role on it: they link their computers themselves, but they can then also change the repository's settings, and even delete it."],
-      ["What each computer is good at", "*Remote* › *This computer, for the other computers*: a name, what it has (`RTX 4090`), a few words (`gpu`, `network`). Claude marks the milestones that need one (`Needs: gpu.`), and the pilot gives them to a computer that has the word. Without words, the milestones are simply shared out.", "#distance", "What this computer is good at"],
+      ["What each computer is good at", "*Remote* › *This computer, for the other computers*: a name, what it has (`RTX 4090`), a few words (`gpu`, `network`). Claude marks the milestones that need one (`Needs: gpu.`), and the pilot gives them to a computer that has the word. Without words, the milestones are simply shared out. A word may carry a level from 1 to 9 (`gpu:3`): a milestone `Needs: gpu:3.` goes first to a computer at that level or more, the others take the lighter ones at the same time.", "#distance", "What this computer is good at"],
       ["Start the pilots", "Start the pilot on each computer. One writes the plan, the others wait for it; then each one takes a milestone, and the Overview shows who builds what. The final report is written once, by one of them."],
       ["When a program does not work on a computer", "Claude first looks for the cause and repairs what it can on that computer, even if it takes 5 or 10 minutes. Only when the cause is out of its reach (the hardware, a driver, a licence) or its repair did not work does it say so: you get a notification, and the other computers try the milestone in its place, those that have the program's word first. The one that succeeds keeps the word, and such milestones go to it from then on. If none can, the computer that was meant to build it takes it back and asks you on *For you*, saying which computers tried. Working alone, Claude asks you at that point."],
+      ["Notes, and work never lost", "The computers' Claude leave each other notes (an interface that changed, a trap to avoid): the Overview shows the last ones. A computer that goes away in the middle of a milestone has sent its unfinished work to GitHub (every 10 minutes, and when its pilot stops): the computer that takes the milestone next goes on from there."],
       ["When a computer waits", "Its Overview says why: everything left depends on a milestone in progress; files of its folder that GitHub has too (move them); a project with another history (start again from an empty folder). A real merge conflict is undone, then Claude merges it at its next cycle."],
     ],
     note: "A computer whose pilot runs without the switch works alone: its pushes are refused as soon as another computer has pushed. Parallel mode is off while several computers work on a project. Each computer leaves a branch athanor/pc/… on the repository; it goes away when that computer stops working with the others." },
@@ -1354,7 +1359,7 @@ pages.projet = async () => {
     <label class="champ"><span>${t("Move or rename the folder, with everything in it (same drive)")}</span>
       <div class="ligne"><input type="text" id="gp-deplacer" value="${h(p.dossier)}"><button class="btn" data-gestion="deplacer" ${dis}>${t("Move")}</button></div></label>
     <label class="champ mt-2"><span>${t("Use another folder (created if needed): the plan and the requests come along, the milestones are checked against what it contains")}</span>
-      <div class="ligne"><input type="text" id="gp-dossier" placeholder="${h(t("e.g. D:\\Dev\\my-site"))}"><button class="btn" data-gestion="dossier" ${dis}>${t("Use this folder")}</button></div></label>
+      <div class="ligne"><input type="text" id="gp-dossier" placeholder="${h(t("e.g. D:\\Dev\\my-site"))}"><button class="btn" type="button" data-parcourir="gp-dossier">${t("Browse…")}</button><button class="btn" data-gestion="dossier" ${dis}>${t("Use this folder")}</button></div></label>
   </div>
   <div class="bloc" id="gh-bloc">${blocGitHubInitial()}</div>
   <div class="grille grille-2">
@@ -1441,6 +1446,16 @@ function choixGitHub(pre, nomPropose) {
 function caseAtelier(attribut, coche) {
   return `<label class="interrupteur"><input type="checkbox" ${attribut} ${coche ? "checked" : ""}><span>${t("Share the workshop (.athanor/) on GitHub")}</span></label>
     <p class="muet petit">${t("For a repository shared with someone who goes on with the project in their own Athanor (git pull): the plan, the requests, the log and the documents go into the commits. Never secrets.env, the raw logs nor the pilot's state. To build it with several computers at once: Overview › Other computers (it switches this on). Unticked later, the workshop leaves the next push.")} ${lienGuide("pcs")}</p>`;
+}
+// depotSaisi: OWNER/NAME from what was typed (or the repository's address as GitHub shows it), "" if invalid
+function depotSaisi(x) {
+  const v = String(x || "").trim().replace(/^(https?:\/\/)?(www\.)?github\.com\//i, "").replace(/^git@github\.com:/i, "").replace(/\/+$/, "").replace(/\.git$/i, "");
+  return /^[A-Za-z0-9][A-Za-z0-9-]{0,38}\/[A-Za-z0-9._-]{1,100}$/.test(v) ? v : "";
+}
+// nomDepuisDepot: a project name from a repository ("octo/my_site.v2" → "my-site-v2")
+function nomDepuisDepot(x) {
+  const d = depotSaisi(x); if (!d) return "";
+  return d.split("/")[1].replace(/[^A-Za-z0-9 -]+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
 }
 // null: no GitHub; false: incomplete or invalid (said in a toast); else what to send to /api/github
 function lireChoixGitHub(pre, nomProjet) {
@@ -1564,32 +1579,83 @@ async function actionGitHub(act, b) {
   majGitHub();
 }
 
-pages.nouveau = async () => `<div class="grille grille-2">
-    <div class="bloc"><h2>${t("New project")}</h2>
+// joining a project other computers already build (pcs.go): its repository, a new folder, one window
+function formulaireRejoindre() {
+  return `<div class="bloc"><h2>${t("Join a project")}</h2>
+      <p class="intro petit">${t("This computer joins a project other computers already build through its GitHub repository: it gets its request, its plan and its work, then builds milestones with them.")} ${lienGuide("pcs")}</p>
+      <label class="champ"><span>${t("GitHub repository")}</span><input type="text" id="rj-depot" placeholder="${h(t("OWNER/NAME, e.g. octocat/my-site"))}" autocomplete="off"></label>
+      <label class="champ"><span>${t("Branch")}</span><input type="text" id="rj-branche" value="main" autocomplete="off"></label>
+      <label class="champ"><span>${t("Name")}</span><input type="text" id="np-nom" placeholder="${h(t("the repository's name"))}"></label>
+      <label class="champ"><span>${t("Folder of the project on this computer")}</span>${champDossier("np-dossier", "", t("e.g. D:\\Dev\\watch-store"), true)}</label>
+      <p class="muet petit">${t("A new or empty folder: the team's files arrive in it. A window then opens to sign in to GitHub: it needs the repository's administrator rights; otherwise, its owner types the one-time code from their own account (see the guide).")}</p>
+      <button class="btn btn-primaire" id="rj-rejoindre">${t("Join the project")}</button>
+    </div>`;
+}
+const ongletsNouveau = () => `<div class="onglets"><button class="${etat.npRejoindre ? "" : "actif"}" data-np-mode="nouveau">${t("New project")}</button><button class="${etat.npRejoindre ? "actif" : ""}" data-np-mode="rejoindre">${t("Join a project")}</button></div>`;
+pages.nouveau = async () => `${ongletsNouveau()}<div class="page-etroite">
+    ${etat.npRejoindre ? formulaireRejoindre() : `<div class="bloc"><h2>${t("New project")}</h2>
       <p class="intro petit">${t("A project = a development folder, anywhere on the PC (existing or new). The tool only adds a .athanor subfolder (request, plan, log, checks): delete it at the end and the project is clean.")}</p>
       <label class="champ"><span>${t("Name")}</span><input type="text" id="np-nom" placeholder="${h(t("e.g. watch-store"))}"></label>
-      <label class="champ"><span>${t("Development folder")}</span><input type="text" id="np-dossier" placeholder="${h(t("e.g. D:\\Dev\\watch-store"))}"></label>
+      <label class="champ"><span>${t("Development folder")}</span>${champDossier("np-dossier", "", t("e.g. D:\\Dev\\watch-store"))}</label>
       <label class="champ"><span>${t("What you want (you can complete it later)")}</span><textarea id="np-demande" rows="7" placeholder="${h(t("Describe the expected result, for whom, on which platform. Technologies are free unless you impose one."))}"></textarea></label>
       ${barreAmeliorer("np-demande")}
       ${zonePieces("np")}
       <div class="champ gh-nouveau"><span>GitHub</span>${choixGitHub("np", nomDepot(""))}</div>
       <button class="btn btn-primaire" id="np-creer">${t("Create the project")}</button>
-    </div>
-    <div class="bloc"><h2>${t("Pick a folder")}</h2>
-      <div class="racines" id="np-racines"></div>
-      <div class="chemin" id="np-chemin"></div>
-      <div class="explorateur" id="np-explorateur"></div>
-      <p class="muet petit mt-2">${t("Click a folder to enter it; “Use this folder” copies the path shown. For a new folder, complete the path by hand: it will be created.")}</p>
-      <button class="btn" id="np-utiliser">${t("Use this folder")}</button>
-    </div>
+    </div>`}
   </div>`;
 
-async function rendreExplorateur(chemin) {
-  const r = await api("dossiers?chemin=" + encodeURIComponent(chemin || "")).catch(() => null); if (!r || !$("#np-chemin")) return;
-  etat.explorateur = r.chemin;
-  $("#np-chemin").textContent = r.chemin;
-  $("#np-racines").innerHTML = r.racines.map((x) => `<button class="btn btn-petit" data-chemin="${h(x.chemin)}">${x.nom === "~" ? t("Home folder") : h(x.nom)}</button>`).join("");
-  $("#np-explorateur").innerHTML = (r.parent ? `<div class="parent" data-chemin="${h(r.parent)}">↑ ${t("parent folder")}</div>` : "") + (r.dossiers.map((d) => `<div data-chemin="${h(d.chemin)}">📁 ${h(d.nom)}</div>`).join("") || `<div class="muet">${t("No subfolder.")}</div>`);
+// champDossier: a folder field with its Browse… button (the system's dialog, or Athanor's picker)
+function champDossier(id, valeur, exemple, rejoindre) {
+  return `<div class="ligne champ-dossier"><input type="text" id="${id}" value="${h(valeur || "")}" placeholder="${h(exemple || "")}"><button class="btn" type="button" data-parcourir="${id}" ${rejoindre ? "data-parcourir-rejoindre" : ""}>${t("Browse…")}</button></div>`;
+}
+// parcourir: the folder chosen goes into the field; to join a project, a folder with files gets a new
+// folder inside it, named after the project (the team's files arrive in an empty one)
+async function parcourir(b) {
+  const champ = $("#" + b.dataset.parcourir); if (!champ || b.disabled) return;
+  b.disabled = true;
+  let r = null;
+  try {
+    if (!(etat.vue || {}).distant) r = await api("dossiers/choisir", "POST", { depart: champ.value.trim(), titre: t("Choose the project's folder") }).catch((e) => { toast(e.message, "erreur"); return { annule: true }; });
+    if (!r || r.indisponible) r = await selecteurDossier(champ.value.trim());
+  } finally { b.disabled = false; }
+  if (!r || !r.chemin) return;
+  let chemin = r.chemin;
+  if (b.hasAttribute("data-parcourir-rejoindre") && !r.vide) {
+    const nom = ($("#np-nom") && $("#np-nom").value.trim()) || nomDepuisDepot(($("#rj-depot") || {}).value) || "project";
+    chemin = chemin.replace(/[\\/]+$/, "") + (chemin.includes("\\") ? "\\" : "/") + nom;
+  }
+  champ.value = chemin;
+  champ.dispatchEvent(new Event("input", { bubbles: true }));
+}
+document.addEventListener("click", (ev) => { const b = ev.target.closest("[data-parcourir]"); if (b) { ev.preventDefault(); parcourir(b); } });
+// selecteurDossier: Athanor's own folder picker, in a dialog (no system dialog, or from a phone)
+function selecteurDossier(depart) {
+  const fond = $("#selecteur-dossier");
+  $("#sd-titre").textContent = t("Choose the project's folder");
+  fond.querySelector('[data-sd="annuler"]').textContent = t("Cancel");
+  fond.querySelector('[data-sd="ok"]').textContent = t("Use this folder");
+  fond.hidden = false;
+  let courant = null;
+  const montrer = async (chemin) => {
+    const r = await api("dossiers?chemin=" + encodeURIComponent(chemin || "")).catch(() => null); if (!r) return;
+    courant = r;
+    $("#sd-chemin").textContent = r.chemin;
+    $("#sd-racines").innerHTML = r.racines.map((x) => `<button class="btn btn-petit" data-chemin="${h(x.chemin)}">${x.nom === "~" ? t("Home folder") : h(x.nom)}</button>`).join("");
+    $("#sd-explorateur").innerHTML = (r.parent ? `<div class="parent" data-chemin="${h(r.parent)}">↑ ${t("parent folder")}</div>` : "") + (r.dossiers.map((d) => `<div data-chemin="${h(d.chemin)}">📁 ${h(d.nom)}</div>`).join("") || `<div class="muet">${t("No subfolder.")}</div>`);
+  };
+  montrer(depart);
+  return new Promise((resoudre) => {
+    const fin = (v) => { fond.hidden = true; fond.onclick = null; document.removeEventListener("keydown", clavier, true); resoudre(v); };
+    const clavier = (e) => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); fin(null); } };
+    fond.onclick = (e) => {
+      const c = e.target.closest("[data-chemin]"); if (c) return montrer(c.dataset.chemin);
+      const b = e.target.closest("[data-sd]");
+      if (b) return fin(b.dataset.sd === "ok" && courant ? { chemin: courant.chemin, vide: !!courant.vide } : null);
+      if (e.target === fond) fin(null);
+    };
+    document.addEventListener("keydown", clavier, true);
+  });
 }
 
 // --- team
@@ -2508,7 +2574,8 @@ function rendreBlocPCs(vp) {
   return `<div class="bloc"><div class="bloc-tete"><h2>${t("Computers on this project")}</h2>${(vp.pcs || []).length ? `<span class="muet petit">${h(t("{0} other(s) online", [enLigne]))}</span>` : ""}</div>
     <table class="tab appareils pcs">${lignes}</table>
     ${vp.erreur ? `<p class="petit attention">✖ ${h(erreurPCs(vp.erreur))}</p>` : ""}
-    ${!(vp.pcs || []).length ? `<p class="muet petit">${t("No other computer yet. On the other computer: New project with an empty folder, GitHub › Use one of my repositories with this same repository and branch, then this same switch in its Overview.")}</p>` : ""}
+    ${(vp.notes || []).length ? `<h3 class="mt-2">${t("Notes between the computers")}</h3><ul class="notes-pcs muet petit">${vp.notes.map((n) => `<li>${md(n.replace(/^-\s*/, ""))}</li>`).join("")}</ul>` : ""}
+    ${!(vp.pcs || []).length ? `<p class="muet petit">${t("No other computer yet. On the other computer: Join a project (in the project picker), with this same repository and branch.")}</p>` : ""}
     <div class="ligne mt-2"><a class="btn btn-petit" href="#distance">${t("What this computer is good at")}</a>${lienGuide("pcs")}<span class="espace"></span>
       <label class="interrupteur m0"><input type="checkbox" data-pcs-actif checked><span>${t("Work with other computers")}</span></label></div>
   </div>`;
@@ -2527,9 +2594,63 @@ $("#page").addEventListener("change", async (ev) => {
   rendrePage();
 });
 
+// --- on a paired device, its Remote page: its own notifications (distance_push.go, static/sw.js)
+const pushPossible = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window && window.isSecureContext;
+function cleOctets(b) { const s = atob(b.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((b.length + 3) % 4)); return Uint8Array.from(s, (c) => c.charCodeAt(0)); }
+function memeClePush(sub, cle) {
+  const k = sub.options && sub.options.applicationServerKey; if (!k) return true;
+  const a = new Uint8Array(k), b = cleOctets(cle);
+  return a.length === b.length && a.every((x, i) => x === b[i]);
+}
+async function abonnementLocal() { if (!pushPossible()) return null; const r = await navigator.serviceWorker.getRegistration("/"); return r ? r.pushManager.getSubscription() : null; }
+async function rendreCetAppareil() {
+  const iOS = /iPhone|iPad|iPod/.test(navigator.userAgent), installe = matchMedia("(display-mode: standalone)").matches || navigator.standalone;
+  let corps;
+  if (!pushPossible()) {
+    corps = `<p class="attention petit">${iOS && !installe ? t("On an iPhone or iPad, notifications need Athanor on the Home Screen: Share › Add to Home Screen, then open Athanor from its icon and come back here.") : t("This browser cannot receive notifications from Athanor.")}</p>`;
+  } else {
+    const [v, sub] = await Promise.all([api("push").catch(() => null), abonnementLocal().catch(() => null)]);
+    const actif = !!(v && v.abonne && sub && memeClePush(sub, v.cle));
+    const refuse = Notification.permission === "denied";
+    corps = `<label class="interrupteur"><input type="checkbox" id="push-actif" ${actif ? "checked" : ""} ${refuse ? "disabled" : ""}><span>${t("Notifications on this device")}</span></label>
+      ${refuse ? `<p class="attention petit">${t("Notifications are blocked for this site in the browser's settings: allow them there, then come back.")}</p>` : ""}
+      ${actif ? `<button class="btn btn-petit" id="push-essai">${t("Send a test notification")}</button>` : ""}`;
+  }
+  return `<div class="bloc"><h2>${t("This device")}</h2>
+    <p class="intro petit">${t("Get a notification here, even with Athanor closed, when Claude needs you, when a milestone is done, when a project is delivered and when a computer of a team is stuck. Encrypted for this device alone: the push service of its browser only relays it.")}</p>
+    ${corps}</div>`;
+}
+$("#page").addEventListener("change", async (ev) => {
+  const i = ev.target; if (i.id !== "push-actif") return;
+  i.disabled = true;
+  try {
+    if (i.checked) {
+      const v = await api("push");
+      const reg = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+      await navigator.serviceWorker.ready;
+      if (await Notification.requestPermission() !== "granted") throw new Error(t("Notifications were not allowed."));
+      let sub = await reg.pushManager.getSubscription();
+      if (sub && !memeClePush(sub, v.cle)) { await sub.unsubscribe().catch(() => {}); sub = null; } // made with an older key of Athanor's
+      if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: cleOctets(v.cle) });
+      const j = sub.toJSON();
+      await api("push", "POST", { action: "abonner", endpoint: j.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth });
+      toast(t("Notifications are on: a test one is on its way."), "ok");
+    } else {
+      const sub = await abonnementLocal(); if (sub) await sub.unsubscribe().catch(() => {});
+      await api("push", "POST", { action: "desabonner" });
+    }
+  } catch (e) { toast(e.message || String(e), "erreur"); }
+  rendrePage();
+});
+$("#page").addEventListener("click", async (ev) => {
+  if (!ev.target.closest("#push-essai")) return;
+  const r = await action(api("push", "POST", { action: "essai" }));
+  if (r) toast(t("Sent: it shows in a few seconds."), "ok");
+});
+
 // --- remote access (distance.go): the switch, the pairing link and its QR code, the trusted devices
 pages.distance = async () => {
-  if ((etat.vue || {}).distant) return `<div class="vide">${t("Not available from a remote device")}</div>`;
+  if ((etat.vue || {}).distant) return await rendreCetAppareil();
   const d = await api("distance");
   etat.distVue = d; etat.distSig = signatureDistance(d);
   if (!etat.pcMachine) etat.pcMachine = await api("pcs/machine").catch(() => null);
@@ -2544,7 +2665,7 @@ pages.distance = async () => {
   const appareils = d.appareils.length ? `<table class="tab appareils"><tbody>${d.appareils.map((a) => `<tr>
       <td class="etroit"><span class="point-appareil ${a.en_ligne ? "en-ligne" : ""}" title="${h(a.en_ligne ? t("Connected now") : t("Not connected"))}"></span></td>
       <td><input class="nom-appareil" data-renommer="${h(a.id)}" value="${h(a.nom)}" maxlength="40" aria-label="${h(t("Name"))}">
-        <div class="muet petit">${a.en_ligne ? `<b class="ok">${t("Connected now")}</b>` : a.vu_le ? h(t("Last seen {0}", [dateLisible(a.vu_le)])) : ""}${a.lieu ? " · " + h(a.lieu) : ""} · ${h(t("paired {0}", [dateLisible(a.ajoute)]))}</div></td>
+        <div class="muet petit">${a.en_ligne ? `<b class="ok">${t("Connected now")}</b>` : a.vu_le ? h(t("Last seen {0}", [dateLisible(a.vu_le)])) : ""}${a.lieu ? " · " + h(a.lieu) : ""} · ${h(t("paired {0}", [dateLisible(a.ajoute)]))}${a.notifs ? ` · 🔔 ${t("notifications on")}` : ""}</div></td>
       <td class="droite"><button class="btn btn-petit btn-danger" data-retirer-appareil="${h(a.id)}" data-nom="${h(a.nom)}" title="${h(t("Remove from the trusted devices"))}" aria-label="${h(t("Remove from the trusted devices"))}">✕</button></td></tr>`).join("")}</tbody></table>`
     : `<div class="vide">${t("No device yet.")}</div>`;
   return `<div class="grille grille-2">
@@ -2577,8 +2698,8 @@ pages.distance = async () => {
         <p class="intro petit">${t("When several computers build a project (Overview › Other computers), each one says what it is good at: the pilot gives it the milestones that need it, and leaves the others to the computers that have what they need.")} ${lienGuide("pcs")}</p>
         <label class="champ"><span>${t("Name")}</span><input type="text" id="pc-nom" maxlength="60" value="${h(m.nom || "")}"></label>
         <label class="champ"><span>${t("What it is good at")}</span><input type="text" id="pc-capacites" maxlength="300" value="${h(m.capacites || "")}" placeholder="${h(t("e.g. RTX 4090, 24 GB: 3D models and renders"))}"></label>
-        <label class="champ"><span>${t("Words for the plan")}</span><input type="text" id="pc-mots" value="${h((m.mots || []).join(", "))}" placeholder="gpu, network"></label>
-        <p class="muet petit">${t("A milestone that needs one of these words gets “Needs: gpu.” in the plan: a computer that has the word builds it. Two computers with the same word build such milestones at the same time.")}</p>
+        <label class="champ"><span>${t("Words for the plan")}</span><input type="text" id="pc-mots" value="${h((m.mots || []).join(", "))}" placeholder="gpu:3, network, blender"></label>
+        <p class="muet petit">${t("A milestone that needs one of these words gets “Needs: gpu.” in the plan: a computer that has the word builds it. Two computers with the same word build such milestones at the same time. A level from 1 to 9 says how capable it is (gpu:3): the heaviest milestones go to the most capable computer.")}</p>
         <button class="btn" id="pc-enregistrer">${t("Save")}</button>
       </div>` : ""}
     </div>
@@ -2799,7 +2920,6 @@ async function rendrePage() {
   suivrePlan();
   if (etat.page === "journal") rendreJournal();
   if (etat.page === "sante") rendreSortie();
-  if (etat.page === "nouveau") rendreExplorateur(etat.explorateur);
 }
 
 // the scroll of each list of the page, kept across a rebuild: same element = same classes, same rank
@@ -2892,8 +3012,25 @@ $("#page").addEventListener("click", async (ev) => {
   if (b.dataset.retirerPiece) { const [id, i] = b.dataset.retirerPiece.split("|"); (etat.pieces[id] || []).splice(Number(i), 1); $("#" + id + "-liste").innerHTML = listePieces(id); return; }
   if (b.dataset.max && page === "projet") return enregistrerMode($("#md-parallele").checked, Number(b.dataset.max));
   if (page === "nouveau") {
-    if (b.dataset.chemin) return rendreExplorateur(b.dataset.chemin);
-    if (b.id === "np-utiliser") { $("#np-dossier").value = etat.explorateur; return; }
+    if (b.dataset.npMode) { etat.npRejoindre = b.dataset.npMode === "rejoindre"; return rendrePage(); }
+    if (b.id === "rj-rejoindre") {
+      if (b.disabled) return;
+      const depot = depotSaisi($("#rj-depot").value);
+      if (!depot) { toast(t("Write the repository as OWNER/NAME (e.g. octocat/my-site)."), "erreur"); return; }
+      const nom = $("#np-nom").value.trim() || nomDepuisDepot(depot);
+      const branche = $("#rj-branche").value.trim() || "main";
+      b.disabled = true;
+      const r = await action(api("projets", "POST", { nom, dossier: $("#np-dossier").value, demande: "", rejoindre: true }));
+      b.disabled = false;
+      if (r) {
+        etat.projet = r.nom; etat.evenements = []; etat.dernierJournal = 0;
+        await action(api("github", "POST", { action: "lier", mode: "existant", valeur: depot, auto: true, atelier: true, branche, equipe: true }));
+        toast(t("A window opens: sign in to GitHub there. The project then arrives from the other computers."), "ok");
+        etat.npRejoindre = false;
+        await rafraichir(); location.hash = "#suivi";
+      }
+      return;
+    }
     if (b.id === "np-creer") {
       if (b.disabled) return;
       const gh = lireChoixGitHub("np", $("#np-nom").value); if (gh === false) return;

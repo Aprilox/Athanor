@@ -2589,7 +2589,7 @@ func lancerPilote(args []string) int {
 		if j := p.jalonPC; mode == "serie" && j != nil {
 			b1, _ := os.ReadFile(consignesCycle)
 			consignesCycle = filepath.Join(p.prive, "CLAUDE.pcs.md")
-			_ = os.WriteFile(consignesCycle, append(b1, consignePCs(p.equipePC.moi, p.equipePC.pcs, *j)...), 0o644)
+			_ = os.WriteFile(consignesCycle, append(b1, consignePCs(p.equipePC.moi, p.equipePC.pcs, *j)+notesEquipeConsigne(p.etat)...), 0o644)
 		}
 		if mode == "serie" {
 			texteConsignes, _ := os.ReadFile(consignesCycle)

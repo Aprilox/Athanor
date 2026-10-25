@@ -366,6 +366,8 @@ func (s *Serveur) apiAjouterProjet(w http.ResponseWriter, r *http.Request) {
 		Nom     string `json:"nom"`
 		Dossier string `json:"dossier"`
 		Demande string `json:"demande"`
+		// joining the computers of a project (pcs.go): its files come from GitHub, into a new or empty folder
+		Rejoindre bool `json:"rejoindre"`
 	}
 	if err := lireCorps(r, &c); err != nil {
 		s.erreur(w, http.StatusBadRequest, err.Error())
@@ -384,6 +386,17 @@ func (s *Serveur) apiAjouterProjet(w http.ResponseWriter, r *http.Request) {
 	if cle := dossierInterdit(dossier, s.kitCourant().Racine); cle != "" {
 		s.erreur(w, http.StatusBadRequest, cle)
 		return
+	}
+	if c.Rejoindre {
+		if e, err := os.ReadDir(dossier); err == nil {
+			for _, x := range e {
+				if n := x.Name(); n != ".athanor" && n != ".DS_Store" && !strings.EqualFold(n, "desktop.ini") && !strings.EqualFold(n, "Thumbs.db") {
+					s.erreur(w, http.StatusBadRequest, "To join a project, choose a new or empty folder: the team's files arrive in it.")
+					return
+				}
+			}
+		}
+		c.Demande = ""
 	}
 	s.mu.Lock()
 	for _, p := range s.config.Projets {
@@ -549,8 +562,10 @@ func (s *Serveur) apiDossiers(w http.ResponseWriter, r *http.Request) {
 	}
 	chemin = filepath.Clean(chemin)
 	dossiers := []entree{}
+	vide := true // nothing in it but a workshop (joining a project needs one)
 	if entrees, err := os.ReadDir(chemin); err == nil {
 		for _, e := range entrees {
+			vide = vide && e.Name() == ".athanor"
 			if e.IsDir() && !strings.HasPrefix(e.Name(), ".") && !strings.HasPrefix(e.Name(), "$") {
 				dossiers = append(dossiers, entree{e.Name(), filepath.Join(chemin, e.Name())})
 			}
@@ -570,7 +585,7 @@ func (s *Serveur) apiDossiers(w http.ResponseWriter, r *http.Request) {
 	if home, err := os.UserHomeDir(); err == nil {
 		racines = append(racines, entree{"~", home})
 	}
-	s.ecrireJSON(w, map[string]any{"chemin": chemin, "parent": parent, "dossiers": dossiers, "racines": racines})
+	s.ecrireJSON(w, map[string]any{"chemin": chemin, "parent": parent, "dossiers": dossiers, "racines": racines, "vide": vide})
 }
 
 // demarrerPilote starts a project's pilot. On Windows, WSL stops the distribution a few seconds after

@@ -44,6 +44,9 @@ func (s *Serveur) lirePCsProjet(p Projet, publier bool) (VuePCs, error) {
 	if v.PCs == nil {
 		v.PCs = []PresencePC{}
 	}
+	if v.Actif {
+		v.Notes = notesEquipePC(p.Atelier(), 5)
+	}
 	pcsMu.Lock()
 	ancien := pcsCache[p.Nom]
 	pcsCache[p.Nom] = &cachePCs{vue: v, quand: time.Now()}
@@ -94,6 +97,7 @@ func (s *Serveur) notifierRefusPCs(projet string, premier bool, v VuePCs) {
 					outil = strings.ToUpper(outil[:1]) + outil[1:]
 				}
 				go notifier(fmt.Sprintf(l[0], outil, p.Nom)+" · "+projet, fmt.Sprintf(l[1], r.Jalon))
+				s.notifierAppareils(MessagePush{Titre: fmt.Sprintf(l[0], outil, p.Nom) + " · " + projet, Texte: fmt.Sprintf(l[1], r.Jalon), URL: "/#suivi", Tag: "refus-" + r.Jalon})
 			}
 		}
 	}

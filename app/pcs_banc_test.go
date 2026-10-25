@@ -68,6 +68,8 @@ if [ -n "$id" ] && [ "$qui" = "PC-GPU" ] && grep -q "^- \[ \] $id .*Needs: blend
   fin "Blender does not work here"
 fi
 if [ -n "$id" ]; then
+  if [ "$id" = "M1" ]; then echo "- 2026-01-01 10:00 · $qui: the armor interface is now Armor.paint(color)" >> "$ETAT/TEAM_NOTES.md"; fi
+  if [ "$id" = "M5" ] && [ -f "$ETAT/TEAM_NOTES.md" ]; then cp "$ETAT/TEAM_NOTES.md" "$PWD/work/notes-seen.txt" 2>/dev/null || { mkdir -p work; cp "$ETAT/TEAM_NOTES.md" "$PWD/work/notes-seen.txt"; }; fi
   mkdir -p work
   echo "$id by $qui" > "work/$id.txt"
   sed -i.bak "s/^- \[ \] $id /- [x] $id /" "$ETAT/PLAN.md" && rm -f "$ETAT/PLAN.md.bak"
@@ -230,6 +232,10 @@ func bancEquipe(t *testing.T, bin string) {
 	}
 	if !strings.Contains(sorties[0], "blender does not work on this computer (Blender crashes at start on PC-GPU)") || !strings.Contains(sorties[1], "blender works on this computer") {
 		t.Fatalf("the relay is not in the logs%s", journal)
+	}
+	// the note PC-GPU left with M1 reached the computer that built M5, and is on GitHub
+	if !strings.Contains(gitEssai(t, depot, "show", "main:.athanor/TEAM_NOTES.md"), "Armor.paint(color)") || !strings.Contains(gitEssai(t, depot, "show", "main:work/notes-seen.txt"), "Armor.paint(color)") {
+		t.Fatalf("team notes not shared%s", journal)
 	}
 	t.Logf("milestones: %v", parQui)
 }

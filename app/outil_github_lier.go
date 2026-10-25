@@ -76,13 +76,14 @@ func lierGH(args []string, w io.Writer) int {
 	if w == os.Stdout {
 		errw = os.Stderr
 	}
-	usage := "Usage: athanor github lier PROJECT creer NAME | existant OWNER/REPO [AUTO 0|1] [BRANCH] [SHARED WORKSHOP 0|1]"
+	usage := "Usage: athanor github lier PROJECT creer NAME | existant OWNER/REPO [AUTO 0|1] [BRANCH] [SHARED WORKSHOP 0|1] [TEAM 0|1]"
 	projet, ok := cheminProjetGH(argGH(args, 0))
 	if !ok {
 		fmt.Fprintln(w, usage)
 		return 2
 	}
 	mode, cible, auto, branche, partage := argGH(args, 1), argGH(args, 2), argGH(args, 3), argGH(args, 4), argGH(args, 5)
+	equipe := argGH(args, 6) == "1" && mode == "existant" // joining a team: its work comes in, nothing is pushed first
 	switch mode {
 	case "creer":
 		if !nomDepotValideGH(cible) {
@@ -425,6 +426,16 @@ func lierGH(args []string, w io.Writer) int {
 	}
 	fmt.Fprintf(w, "\nLinked: %s. The sign-in is now closed and deleted from this PC (GitHub still lists \"GitHub CLI\"\n", depot)
 	fmt.Fprint(w, "under Settings > Applications > Authorized OAuth Apps: you can revoke it there, the push key does not need it).\n\n")
+	if equipe {
+		fmt.Fprintln(w, "Joining the other computers of the project...")
+		time.Sleep(pauseLierGH) // GitHub takes a moment to accept a new key
+		if code := pcsActiverGH([]string{projet, "1"}, w); code != 0 {
+			fmt.Fprintln(w, "\nNot joined: the project is linked, the switch is in its Overview (Other computers).")
+			return code
+		}
+		fmt.Fprintln(w, "\nDone: start the pilot in Athanor's Overview. You can close this window.")
+		return 0
+	}
 	fmt.Fprintln(w, "First push...")
 	time.Sleep(pauseLierGH)
 	pousserGH([]string{projet}, w)
