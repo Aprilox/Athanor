@@ -1937,7 +1937,7 @@ func lancerPilote(args []string) int {
 		watchInterval:            entierReglage("WATCH_INTERVAL", 30),
 		secondsPerMinute:         entierReglage("SECONDS_PER_MINUTE", 60),
 		framingMaxMin:            entierReglage("FRAMING_MAX_MIN", 25),
-		relayContextK:            entierReglage("RELAY_CONTEXT_K", 150),
+		relayContextK:            entierReglage("RELAY_CONTEXT_K", 110),
 		closeAfterMilestone:      defEnv("CLOSE_AFTER_MILESTONE", "1"),
 		stayAliveAtEnd:           defEnv("STAY_ALIVE_AT_END", "0"),
 		keepAwake:                keepAwake,

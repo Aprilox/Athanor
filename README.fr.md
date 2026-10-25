@@ -160,7 +160,7 @@ Pareil sous Windows (PowerShell), Linux et macOS : cela construit `Athanor.exe` 
 
 **Ce que chaque agent sait dès le départ.** `.athanor/PC_TOOLS.md` liste les outils déjà installés et leurs versions (Node, Python, PHP, Composer, Git…), vérifiés par le pilote : personne ne dépense de tours à les sonder. Deux fichiers courts rassemblent les problèmes déjà résolus, une ligne chacun : `.athanor/SOLUTIONS.md` pour le projet et `tools/SOLUTIONS.md` pour le PC, partagé par tous les projets. Chaque agent les lit en premier et ajoute une ligne quand il résout quelque chose ; le pilote retire les doublons, garde les 60 dernières lignes et récupère ce que les ouvriers en parallèle ont appris.
 
-**Pas de fil perdu quand un contexte est plein.** Chaque session tient `.athanor/HANDOFF.md` à jour (où elle en est, 10 lignes). Au-delà de `RELAY_CONTEXT_K` milliers de tokens de contexte (150 par défaut), le pilote l'arrête entre deux étapes et lance une nouvelle session sur le même jalon, avec ce fichier, ses dernières actions et ses derniers messages : des tours moins chers, et pas de compaction automatique qui brouillerait le fil. Les ouvriers sont relayés de la même façon, sur leur propre branche.
+**Pas de fil perdu quand un contexte est plein.** Chaque session tient `.athanor/HANDOFF.md` à jour (où elle en est, 10 lignes). Au-delà de `RELAY_CONTEXT_K` milliers de tokens de contexte (110 par défaut), le pilote l'arrête entre deux étapes et lance une nouvelle session sur le même jalon, avec ce fichier, ses dernières actions et ses derniers messages : des tours moins chers, et pas de compaction automatique qui brouillerait le fil. Les ouvriers sont relayés de la même façon, sur leur propre branche.
 
 **Le travail fait dans un programme est enregistré.** Un éditeur ou un moteur piloté par un serveur MCP garde son travail en mémoire : avant de cocher un jalon, l'agent l'enregistre dans le projet. Si un jalon a utilisé un serveur MCP et que son commit n'a changé aucun fichier, le pilote le fait vérifier en premier au cycle suivant. Les serveurs Roblox Studio et Unreal du catalogue disent comment enregistrer chez eux.
 
@@ -336,7 +336,7 @@ Tout se modifie dans l'application (*Réglages*), ou dans `.env` ([`.env.example
 | `FRAMING_MODEL` | modèle du cycle de cadrage, qui écrit le plan ; vide = `MODEL` |
 | `WORKER_MODEL` | modèle des ouvriers en mode parallèle ; par défaut `sonnet`, vide = `MODEL` |
 | `FRAMING_MAX_MIN` | durée maximale du cadrage, en minutes (25 par défaut) |
-| `RELAY_CONTEXT_K` | contexte, en milliers de tokens, au-delà duquel une nouvelle session reprend le jalon (150 par défaut, 0 = jamais) |
+| `RELAY_CONTEXT_K` | contexte, en milliers de tokens, au-delà duquel une nouvelle session reprend le jalon (110 par défaut, 0 = jamais) |
 | `EFFORT` | effort de réflexion : vide = normal, `low` à `max` |
 | `LANGUAGE` | langue dans laquelle Claude travaille et documente (réglée par l'application) |
 | `MAX_HOURS` | arrêt de sécurité (168 par défaut, une semaine) |
@@ -498,7 +498,7 @@ Oui. Rien n'est lié à un nom d'utilisateur ni à une lettre de disque : les ch
 Poussez un tag de version : GitHub compile les applications (Windows, Linux, macOS) et publie la version ([`.github/workflows/release.yml`](.github/workflows/release.yml)).
 
 ```bash
-git tag v2.31.0 && git push origin v2.31.0
+git tag v2.31.1 && git push origin v2.31.1
 ```
 
 Gardez la version de [`app/winres/athanor.rc`](app/winres/athanor.rc) et `versionAthanor` dans [`app/commandes.go`](app/commandes.go) alignées sur le tag (un test vérifie qu'elles concordent), et écrivez les nouveautés dans `docs/releases/VERSION.md` (par ex. [`docs/releases/2.31.0.md`](docs/releases/2.31.0.md)) : elles ouvrent la page de la version.

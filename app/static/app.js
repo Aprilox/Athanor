@@ -725,6 +725,8 @@ function naviguer() {
   let page = (location.hash || "#suivi").slice(1);
   // the application's options are a tab of the settings now (older links, and the texts that say "Options")
   if (page === "options") { etat.ongletReglages = "options"; history.replaceState(null, "", "#reglages"); page = "reglages"; }
+  // the settings always open on Options (or on the tab asked for, the guided tour)
+  if (page === "reglages" && etat.page !== "reglages") { etat.ongletReglages = etat.ongletDemande || "options"; etat.ongletDemande = null; }
   etat.page = page;
   document.querySelectorAll("#nav-liens a, #nav-outil a").forEach((a) => a.classList.toggle("actif", a.dataset.page === page));
   rendrePage();
@@ -818,7 +820,7 @@ async function montrerVisite() {
   const etapes = etapesVisite(), n = etat.visite;
   if (n < 0 || n >= etapes.length) return finirVisite();
   const e = etapes[n];
-  if (e.onglet) etat.ongletReglages = e.onglet;
+  if (e.onglet) { etat.ongletReglages = e.onglet; etat.ongletDemande = e.onglet; }
   if (location.hash !== "#" + e.page) location.hash = "#" + e.page; else await rendrePage();
   let cible = null;
   for (let i = 0; i < 40 && !cible; i++) { // the page renders asynchronously
@@ -2325,8 +2327,8 @@ function champReglage(l, modeles) {
 }
 
 pages.reglages = async () => {
-  const onglet = etat.ongletReglages === "options" ? "options" : "claude";
-  const tete = `<div class="onglets"><button class="${onglet === "claude" ? "actif" : ""}" data-onglet-reglages="claude">${t("Claude")}</button><button class="${onglet === "options" ? "actif" : ""}" data-onglet-reglages="options">${t("Options")}</button></div>`;
+  const onglet = etat.ongletReglages === "claude" ? "claude" : "options";
+  const tete = `<div class="onglets"><button class="${onglet === "options" ? "actif" : ""}" data-onglet-reglages="options">${t("Options")}</button><button class="${onglet === "claude" ? "actif" : ""}" data-onglet-reglages="claude">${t("Claude")}</button></div>`;
   if (onglet === "options") return tete + await rendreOptions();
   const [lignes, mod] = await Promise.all([api("env" + (etat.envSecrets ? "?secrets=1" : "")), api("modeles").catch(() => ({ modeles: [] }))]);
   const modeles = mod.modeles || [];
