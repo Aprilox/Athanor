@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 )
 
 // a server with its remote access on, its tunnel ready (no cloudflared: the address is given)
@@ -43,13 +44,52 @@ func appelDistance(h http.Handler, methode, chemin, cookie string, corps string,
 	for i := 0; i+1 < len(entetes); i += 2 {
 		r.Header.Set(entetes[i], entetes[i+1])
 	}
-	if cookie != "" {
+	if nom, val, ok := strings.Cut(cookie, "="); ok {
+		r.AddCookie(&http.Cookie{Name: nom, Value: val})
+	} else if cookie != "" {
 		r.AddCookie(&http.Cookie{Name: cookieAppareil, Value: cookie})
+	}
+	if methode == "POST" && strings.HasPrefix(chemin, routeAppairer) {
+		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	}
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, r)
 	return w
 }
+
+func valeurCookie(w *httptest.ResponseRecorder, nom string) string {
+	for _, c := range w.Result().Cookies() {
+		if c.Name == nom && c.MaxAge >= 0 {
+			return c.Value
+		}
+	}
+	return ""
+}
+
+// ouvrirDemandeTest: the device scans the QR code: the page that asks for the computer's digits
+func ouvrirDemandeTest(t *testing.T, s *Serveur, h http.Handler) string {
+	t.Helper()
+	w := appelDistance(h, "GET", "/appairer?c="+codeDuLien(t, s.vueDistance().Lien), "", "")
+	dem := valeurCookie(w, cookieAppairage)
+	if w.Code != http.StatusOK || dem == "" || !strings.Contains(w.Body.String(), `name="chiffres"`) || valeurCookie(w, cookieAppareil) != "" {
+		t.Fatalf("scan: %d %q", w.Code, w.Header().Values("Set-Cookie"))
+	}
+	return cookieAppairage + "=" + dem
+}
+
+// appairerTest: scan, then the digits the window shows: the device's key
+func appairerTest(t *testing.T, s *Serveur, h http.Handler) string {
+	t.Helper()
+	dem := ouvrirDemandeTest(t, s, h)
+	w := appelDistance(h, "POST", routeAppairer, dem, "chiffres="+url.QueryEscape(chiffresLisiblesTest(s.vueDistance().Chiffres)), "Origin", "https://abc-def.trycloudflare.com")
+	cle := valeurCookie(w, cookieAppareil)
+	if w.Code != http.StatusSeeOther || cle == "" {
+		t.Fatalf("digits: %d %s", w.Code, w.Body.String())
+	}
+	return cle
+}
+
+func chiffresLisiblesTest(c string) string { return c[:3] + " " + c[3:] } // typed with the space the window shows
 
 func codeDuLien(t *testing.T, lien string) string {
 	u, err := url.Parse(lien)
@@ -99,17 +139,30 @@ func TestDistanceAppairage(t *testing.T) {
 	if w := appelDistance(h, "GET", "/appairer?c=mauvais", "", ""); w.Code != http.StatusForbidden {
 		t.Fatalf("wrong code: %d", w.Code)
 	}
-	w = appelDistance(h, "GET", "/appairer?c="+code, "", "")
-	ck := w.Header().Get("Set-Cookie")
-	if w.Code != http.StatusSeeOther || !strings.Contains(ck, cookieAppareil+"=") || !strings.Contains(ck, "HttpOnly") || !strings.Contains(ck, "Secure") || !strings.Contains(ck, "SameSite=Lax") {
-		t.Fatalf("pairing: %d %q", w.Code, ck)
-	}
-	cle := strings.TrimPrefix(strings.Split(ck, ";")[0], cookieAppareil+"=")
+	// the scan alone gives no key: the device is asked for the computer's 6 digits
+	dem := ouvrirDemandeTest(t, s, h)
 	if w := appelDistance(h, "GET", "/appairer?c="+code, "", ""); w.Code != http.StatusForbidden {
 		t.Fatalf("code used twice: %d", w.Code)
 	}
 	if codeDuLien(t, s.vueDistance().Lien) == code {
 		t.Fatal("no new code once used")
+	}
+	if w := appelDistance(h, "GET", "/", dem, ""); w.Code != http.StatusUnauthorized {
+		t.Fatalf("interface with a scan only: %d", w.Code)
+	}
+	v = s.vueDistance()
+	if len(v.Chiffres) != 6 || v.ChiffresExpire <= 0 || v.ChiffresExpire > 20000 || strings.Contains(v.Lien, v.Chiffres) || strings.Contains(v.QR, v.Chiffres) {
+		t.Fatalf("digits: %+v", v)
+	}
+	w = appelDistance(h, "POST", routeAppairer, dem, "chiffres="+v.Chiffres, "Origin", "https://abc-def.trycloudflare.com")
+	ck := strings.Join(w.Header().Values("Set-Cookie"), " ; ")
+	cle := valeurCookie(w, cookieAppareil)
+	if w.Code != http.StatusSeeOther || cle == "" || !strings.Contains(ck, "HttpOnly") || !strings.Contains(ck, "Secure") || !strings.Contains(ck, "SameSite=Lax") {
+		t.Fatalf("pairing: %d %q", w.Code, ck)
+	}
+	// the request is over: its cookie gives nothing more
+	if w := appelDistance(h, "POST", routeAppairer, dem, "chiffres="+s.vueDistance().Chiffres); w.Code != http.StatusForbidden {
+		t.Fatalf("request used twice: %d", w.Code)
 	}
 	// only a hash of the key is kept
 	b, _ := json.Marshal(s.config)
@@ -172,8 +225,7 @@ func TestDistanceAppairage(t *testing.T) {
 func TestDistanceMotDePasse(t *testing.T) {
 	s, h, _ := serveurDistance(t)
 	api := []string{"X-Athanor", "jeton"}
-	w := appelDistance(h, "GET", "/appairer?c="+codeDuLien(t, s.vueDistance().Lien), "", "")
-	cle := strings.TrimPrefix(strings.Split(w.Header().Get("Set-Cookie"), ";")[0], cookieAppareil+"=")
+	cle := appairerTest(t, s, h)
 	s.config.Sel = "sel"
 	s.config.MotDePasseHash = hacher("sel", "secret")
 	if w := appelDistance(h, "GET", "/api/journal", cle, "", api...); w.Code != http.StatusUnauthorized {
@@ -280,5 +332,77 @@ func TestDistanceFichiersPublics(t *testing.T) {
 	}
 	if w := appelDistance(h, "GET", "/icone-180.png", "", ""); w.Code != http.StatusOK {
 		t.Fatalf("icon: %d", w.Code)
+	}
+}
+
+func TestDistanceChiffres(t *testing.T) {
+	s, h, _ := serveurDistance(t)
+	origine := []string{"Origin", "https://abc-def.trycloudflare.com"}
+	// three wrong codes: the request ends, the scan must be done again
+	dem := ouvrirDemandeTest(t, s, h)
+	bon := s.vueDistance().Chiffres
+	faux := "000000"
+	if bon == faux {
+		faux = "111111"
+	}
+	for i, attendu := range []int{http.StatusUnauthorized, http.StatusUnauthorized, http.StatusForbidden} {
+		w := appelDistance(h, "POST", routeAppairer, dem, "chiffres="+faux, origine...)
+		if w.Code != attendu || valeurCookie(w, cookieAppareil) != "" {
+			t.Fatalf("wrong code %d: %d", i+1, w.Code)
+		}
+		if i == 0 && !strings.Contains(w.Body.String(), "2") {
+			t.Fatalf("attempts left not said: %s", w.Body.String())
+		}
+	}
+	if w := appelDistance(h, "POST", routeAppairer, dem, "chiffres="+bon, origine...); w.Code != http.StatusForbidden {
+		t.Fatalf("right code after three wrong ones: %d", w.Code)
+	}
+	// a form sent from another site: refused
+	dem = ouvrirDemandeTest(t, s, h)
+	if w := appelDistance(h, "POST", routeAppairer, dem, "chiffres="+s.vueDistance().Chiffres, "Origin", "https://ailleurs.example"); w.Code != http.StatusForbidden {
+		t.Fatalf("other origin: %d", w.Code)
+	}
+	if w := appelDistance(h, "POST", routeAppairer, dem, "chiffres="+s.vueDistance().Chiffres, "Origin", "null"); w.Code != http.StatusForbidden {
+		t.Fatalf("hidden origin: %d", w.Code)
+	}
+	if w := appelDistance(h, "GET", "/appairer?c="+codeDuLien(t, s.vueDistance().Lien), "", ""); w.Header().Get("Referrer-Policy") != "same-origin" {
+		t.Fatalf("pairing page's referrer policy: %q", w.Header().Get("Referrer-Policy"))
+	}
+	// no request (only the digits): refused
+	if w := appelDistance(h, "POST", routeAppairer, "", "chiffres="+s.vueDistance().Chiffres, origine...); w.Code != http.StatusForbidden {
+		t.Fatalf("digits without a scan: %d", w.Code)
+	}
+	// the digits that just changed are still accepted a few seconds, older ones not
+	d := s.dist()
+	d.mu.Lock()
+	ancien := d.chiffres
+	d.chiffresFin = time.Now().Add(-time.Second)
+	d.mu.Unlock()
+	if nouveau, _ := s.codeChiffres(); nouveau == ancien && ancien != "" {
+		d.mu.Lock()
+		d.chiffres = "999999"
+		d.mu.Unlock()
+	}
+	d.mu.Lock()
+	ok := d.chiffresValides(ancien)
+	d.chiffresAvantFin = time.Now().Add(-graceChiffres - time.Second)
+	perime := d.chiffresValides(ancien)
+	d.mu.Unlock()
+	if !ok || perime {
+		t.Fatalf("previous digits: just changed %v, long ago %v", ok, perime)
+	}
+	// an expired request
+	dem = ouvrirDemandeTest(t, s, h)
+	d.mu.Lock()
+	for _, x := range d.demandes {
+		x.fin = time.Now().Add(-time.Second)
+	}
+	d.mu.Unlock()
+	if w := appelDistance(h, "POST", routeAppairer, dem, "chiffres="+s.vueDistance().Chiffres, origine...); w.Code != http.StatusForbidden {
+		t.Fatalf("expired request: %d", w.Code)
+	}
+	// and the right way works
+	if cle := appairerTest(t, s, h); cle == "" {
+		t.Fatal("no key")
 	}
 }

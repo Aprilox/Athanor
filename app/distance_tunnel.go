@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -287,15 +288,24 @@ func (s *Serveur) demarrerCloudflared(port int) (int, string, error) {
 	if err != nil {
 		return 0, "", err
 	}
-	c := commande(s.cheminCloudflared(), "tunnel", "--no-autoupdate", "--url", "http://127.0.0.1:"+strconv.Itoa(port))
-	detacherProcessus(c)
-	c.Stdout, c.Stderr = f, f
-	c.Dir = s.dossierDistance()
-	if err := c.Start(); err != nil {
-		f.Close()
-		return 0, "", err
+	// a program just written (the download, an update) can be refused for a few seconds on Windows, while
+	// the antivirus reads it ("Access is denied"): tried again for up to 30 seconds
+	var c *exec.Cmd
+	for essai := 0; ; essai++ {
+		c = commande(s.cheminCloudflared(), "tunnel", "--no-autoupdate", "--url", "http://127.0.0.1:"+strconv.Itoa(port))
+		detacherProcessus(c)
+		c.Stdout, c.Stderr = f, f
+		c.Dir = s.dossierDistance()
+		err = c.Start()
+		if err == nil || essai >= 30 || !(os.IsPermission(err) || strings.Contains(err.Error(), "used by another process")) {
+			break
+		}
+		time.Sleep(time.Second)
 	}
 	f.Close()
+	if err != nil {
+		return 0, "", err
+	}
 	pid := c.Process.Pid
 	go func() { _ = c.Wait() }()
 	adresse := ""
