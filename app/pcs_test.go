@@ -56,7 +56,7 @@ func ecrireEssai(t *testing.T, f, contenu string) {
 // nouveauPCEssai: a computer whose project is linked to the test's "GitHub" with several computers on
 func nouveauPCEssai(t *testing.T, nom, mots, capacites string, depot string, cloner bool) pcEssai {
 	t.Helper()
-	base := t.TempDir()
+	base := dossierEssaiPilote(t) // on Windows, a folder whose removal tolerates a program of the pilot still closing
 	m := pcEssai{nom: nom, donnees: filepath.Join(base, "donnees"), projet: filepath.Join(base, "projet")}
 	if cloner {
 		gitEssai(t, base, "clone", "-q", depot, m.projet)
@@ -81,7 +81,7 @@ func nouveauPCEssai(t *testing.T, nom, mots, capacites string, depot string, clo
 // same repository, not yet working with the others.
 func pcVideEssai(t *testing.T, nom string, preparer func(projet string)) pcEssai {
 	t.Helper()
-	base := t.TempDir()
+	base := dossierEssaiPilote(t) // on Windows, a folder whose removal tolerates a program of the pilot still closing
 	m := pcEssai{nom: nom, donnees: filepath.Join(base, "donnees"), projet: filepath.Join(base, "projet")}
 	_ = os.MkdirAll(filepath.Join(m.projet, ".athanor"), 0o755)
 	if preparer != nil {
