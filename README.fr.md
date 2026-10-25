@@ -135,7 +135,7 @@ Claude travaille dans Seatbelt, la barrière intégrée à macOS (celle qu'utili
 
 **À la main** : fermez Athanor, téléchargez le nouveau fichier et ouvrez-le : il met à jour le dossier d'Athanor de la même façon. Sur le Mac, Athanor.app se télécharge une seule fois : ses mises à jour viennent ensuite de l'application (un Athanor.app plus ancien ouvre l'Athanor plus récent gardé dans son dossier).
 
-Votre jeton, vos réglages, vos projets, `logs/` et `tools/` ne sont jamais touchés par une mise à jour. Une installation faite avant la 2.26 (un dossier avec `Athanor.exe`, `template/` et `athanor-config.json` côte à côte) reste où elle est : mettez-y le nouvel exécutable, ou utilisez le bouton.
+Votre jeton, vos réglages, vos projets, `logs/` et `tools/` ne sont jamais touchés par une mise à jour. Une installation faite avant la 2.26 (un dossier avec `Athanor.exe`, `template/` et `athanor-config.json` côte à côte) reste où elle est : mettez-y le nouvel exécutable, ou utilisez le bouton. Une mise à jour fait aussi le ménage dans un tel dossier : les fichiers des anciennes versions qu'aucune version n'utilise plus (`commands/`, les scripts bash et Python de `system/`, `docs/`, le README…) partent s'ils sont exactement tels que livrés ; un fichier que vous avez modifié est déplacé dans `logs/ancien-kit/<date>/`, et `logs/nettoyage-<date>.txt` liste ce qui est parti. Rien d'autre du dossier n'est touché.
 
 <details>
 <summary><b>Le compiler soi-même</b> (depuis le code source)</summary>
@@ -540,7 +540,7 @@ Oui. Rien n'est lié à un nom d'utilisateur ni à une lettre de disque : les ch
 Poussez un tag de version : GitHub compile les applications (Windows, Linux, macOS) et publie la version ([`.github/workflows/release.yml`](.github/workflows/release.yml)).
 
 ```bash
-git tag v2.36.4 && git push origin v2.36.4
+git tag v2.36.5 && git push origin v2.36.5
 ```
 
 Gardez la version de [`app/winres/athanor.rc`](app/winres/athanor.rc) et `versionAthanor` dans [`app/commandes.go`](app/commandes.go) alignées sur le tag (un test vérifie qu'elles concordent), et écrivez les nouveautés dans `docs/releases/VERSION.md` (par ex. [`docs/releases/2.31.0.md`](docs/releases/2.31.0.md)) : elles ouvrent la page de la version.
