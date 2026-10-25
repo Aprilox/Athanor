@@ -561,9 +561,9 @@ func TestChoisirJalonPC(t *testing.T) {
 	if j, _, _ := choisirJalonPC(plan, sans, []PresencePC{en("GPU", "dddddddddddd", "", "gpu"), en("Fibre", "eeeeeeeeeeee", "", "network")}, ""); j.ID != "M2" {
 		t.Fatalf("left to the others: %s", j.ID)
 	}
-	// nobody running has the words: anyone takes it (after the others)
-	if j, _, _ := choisirJalonPC(plan, sans, nil, ""); j.ID != "M2" {
-		t.Fatalf("no special first: %s", j.ID)
+	// nobody running has the words (nobody declared them): the plan's order, like the others
+	if j, _, _ := choisirJalonPC(plan, sans, nil, ""); j.ID != "M1" {
+		t.Fatalf("no words anywhere: the plan's order: %s", j.ID)
 	}
 	if j, _, _ := choisirJalonPC(plan, sans, []PresencePC{en("X", "ffffffffffff", "M2")}, ""); j.ID != "M1" {
 		t.Fatalf("needs nobody has: %s", j.ID)
@@ -744,6 +744,27 @@ func TestBesoinsMultiplesPC(t *testing.T) {
 	}
 }
 
+// TestSansMotsPC: nobody declared any word: the milestones that name one are shared out in the plan's
+// order like the others, never left for last; they wait only for a computer of the team that has the word.
+func TestSansMotsPC(t *testing.T) {
+	plan := analyserPlan("# Plan\n\n- [ ] M1 : Render — Needs: gpu.\n- [ ] M2 : Menus\n")
+	a := MachinePC{ID: "aaaaaaaaaaaa", Nom: "A"}
+	b := PresencePC{ID: "bbbbbbbbbbbb", Nom: "B", EnLigne: true, Pilote: true}
+	if j, _, _ := choisirJalonPC(plan, a, []PresencePC{b}, ""); j.ID != "M1" {
+		t.Fatalf("no words anywhere: M1 first, in the plan's order: %s", j.ID)
+	}
+	if j, _, _ := choisirJalonPC(plan, a, nil, ""); j.ID != "M1" {
+		t.Fatalf("alone, no words: %s", j.ID)
+	}
+	absent := PresencePC{ID: "cccccccccccc", Nom: "C", Mots: []string{"gpu"}}
+	if j, _, _ := choisirJalonPC(plan, a, []PresencePC{b, absent}, ""); j.ID != "M2" {
+		t.Fatalf("the team's gpu computer is away: M2 first: %s", j.ID)
+	}
+	if j, _, _ := choisirJalonPC(analyserPlan("# Plan\n\n- [ ] M1 : Render — Needs: gpu.\n"), a, []PresencePC{absent}, ""); j.ID != "M1" {
+		t.Fatalf("nothing else to do: it takes M1 all the same: %s", j.ID)
+	}
+}
+
 func TestNiveauxPC(t *testing.T) {
 	if b, n := niveauMotPC("gpu:3"); b != "gpu" || n != 3 {
 		t.Fatalf("gpu:3 → %s %d", b, n)
@@ -802,6 +823,7 @@ func TestEnCoursPC(t *testing.T) {
 	a := nouveauPCEssai(t, "PC-A", "", "", depot, false)
 	ecrireEssai(t, filepath.Join(a.projet, ".athanor", "PLAN.md"), "# Plan\n\n- [ ] M1 : Level one\n- [ ] M2 : Level two\n")
 	ecrireEssai(t, filepath.Join(a.projet, "game.txt"), "game\n")
+	ecrireEssai(t, filepath.Join(a.projet, ".gitignore"), "*.local\n")
 	gitEssai(t, a.projet, "add", "-A")
 	gitEssai(t, a.projet, "commit", "-q", "-m", "start")
 	a.faire(t, func() {
@@ -811,6 +833,16 @@ func TestEnCoursPC(t *testing.T) {
 		}
 	})
 	b := nouveauPCEssai(t, "PC-B", "", "", depot, true)
+	// what the branches of work in progress hold: "<computer>/<milestone>" (one branch per computer)
+	enCours := func() string {
+		var l []string
+		for _, r := range strings.Fields(gitEssai(t, depot, "for-each-ref", "--format=%(refname)", "refs/heads/athanor/encours/")) {
+			for _, x := range strings.Fields(gitEssai(t, depot, "ls-tree", "--name-only", r)) {
+				l = append(l, strings.TrimPrefix(r, "refs/heads/athanor/encours/")+"/"+x)
+			}
+		}
+		return strings.Join(l, " ")
+	}
 
 	// A takes M1, works: a commit it did not push, a file it did not commit; then its pilot stops
 	a.faire(t, func() {
@@ -824,13 +856,28 @@ func TestEnCoursPC(t *testing.T) {
 	gitEssai(t, a.projet, "add", "level1.txt")
 	gitEssai(t, a.projet, "commit", "-q", "-m", "M1: half")
 	ecrireEssai(t, filepath.Join(a.projet, "level1-boss.txt"), "boss sketch\n")
+	ecrireEssai(t, filepath.Join(a.projet, "keys.local"), "A's own keys\n")
 	a.faire(t, func() { piloteEssai(t, a).finPC() })
-	if !strings.Contains(gitEssai(t, depot, "for-each-ref", "--format=%(refname)", "refs/heads/athanor/encours/"), "/M1") {
-		t.Fatal("A's work in progress is not on GitHub")
+	if !strings.Contains(enCours(), "/M1") {
+		t.Fatalf("A's work in progress is not on GitHub: %q", enCours())
+	}
+	if n := strings.Fields(gitEssai(t, depot, "for-each-ref", "--format=%(refname)", "refs/heads/athanor/encours/")); len(n) != 1 {
+		t.Fatalf("not one branch for A: %v", n)
 	}
 	if strings.Contains(gitEssai(t, depot, "ls-tree", "-r", "--name-only", "main"), "level1") {
 		t.Fatal("unfinished work pushed to main")
 	}
+
+	// B pushes a file that A's git ignores (added with -f): A's own, in no commit, must not be lost
+	ecrireEssai(t, filepath.Join(b.projet, "keys.local"), "the team's keys\n")
+	gitEssai(t, b.projet, "add", "-f", "keys.local")
+	gitEssai(t, b.projet, "commit", "-q", "-m", "keys")
+	b.faire(t, func() {
+		var o bytes.Buffer
+		if code := pousserGH([]string{b.projet}, &o); code != 0 {
+			t.Fatal(o.String())
+		}
+	})
 
 	// B takes M1 and goes on from A's work
 	b.faire(t, func() {
@@ -848,8 +895,22 @@ func TestEnCoursPC(t *testing.T) {
 			t.Fatalf("B lacks A's %s: %q", f, got)
 		}
 	}
-	if strings.Contains(gitEssai(t, depot, "for-each-ref", "--format=%(refname)", "refs/heads/athanor/encours/"), "/M1") {
-		t.Fatal("A's work in progress still on GitHub once B goes on from it")
+	idDe := func(m pcEssai) (id string) {
+		m.faire(t, func() {
+			e, err := ouvrirEquipePC(m.projet)
+			if err != nil {
+				t.Fatal(err)
+			}
+			id = e.moi.ID
+		})
+		return id
+	}
+	idA, idB := idDe(a), idDe(b)
+	if !strings.Contains(enCours(), idB+"/M1") {
+		t.Fatalf("B's work in progress (holding A's) not sent once it goes on from it: %q", enCours())
+	}
+	if n := gitEssai(t, depot, "for-each-ref", "--format=%(refname)", "refs/heads/athanor/encours/"); n == "" {
+		t.Fatal("a branch of work in progress deleted (GitHub's on: delete workflows): it is emptied, never deleted")
 	}
 
 	// A comes back: B builds M1 now; A's own copy is put aside, its folder back to the team's last push
@@ -864,6 +925,9 @@ func TestEnCoursPC(t *testing.T) {
 			t.Fatalf("A after coming back: %v %+v", att, p.jalonPC)
 		}
 	})
+	if strings.Contains(enCours(), idA+"/M1") {
+		t.Fatalf("A's out-of-date work in progress still on GitHub: %q", enCours())
+	}
 	for _, f := range []string{"level1.txt", "level1-boss.txt"} {
 		if _, err := os.Stat(filepath.Join(a.projet, f)); err == nil {
 			t.Fatalf("A kept its own copy of M1 in its folder: %s", f)
@@ -874,6 +938,16 @@ func TestEnCoursPC(t *testing.T) {
 	}
 	if !strings.Contains(gitEssai(t, a.projet, "for-each-ref", "--format=%(refname)", "refs/athanor/sauve/"), "M1") {
 		t.Fatal("A's own unfinished work not kept")
+	}
+	var copies []string
+	a.faire(t, func() {
+		copies, _ = filepath.Glob(filepath.Join(dossierAvantEquipePC(dossierGH(a.projet)), "ignores-*", "keys.local"))
+	})
+	if len(copies) != 1 {
+		t.Fatal("A's ignored file replaced by the team's is not copied aside")
+	}
+	if c, _ := os.ReadFile(copies[0]); string(c) != "A's own keys\n" {
+		t.Fatalf("copy of A's ignored file: %q", c)
 	}
 }
 

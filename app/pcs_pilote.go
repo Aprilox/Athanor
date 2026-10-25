@@ -284,7 +284,14 @@ func choisirJalonRefusPC(plan []Jalon, moi MachinePC, autres []PresencePC, actue
 			case moiS > 0:
 				priorite = 1
 			default:
-				priorite = 2
+				// nobody running has any of it: nobody declared it (words are optional), Athanor shares it out
+				// in the plan's order; it waits behind the others only for a computer of the team that has it
+				// and is away for now
+				for _, p := range autres {
+					if !(p.EnLigne && p.Pilote) && scoreBesoinsPC(p.Mots, j.Besoins) > 0 {
+						priorite = 2
+					}
+				}
 			}
 		}
 		if autreAEchoue && priorite > 0 {

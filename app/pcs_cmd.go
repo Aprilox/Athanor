@@ -131,9 +131,12 @@ func pcsActiverGH(args []string, w io.Writer) int {
 		}
 		_ = ecrireAttributsPC(projet)
 	} else if r.Equipe {
-		// the computer leaves at once for the others (its branch goes), rather than in 3 minutes
+		// the computer leaves at once for the others, rather than in 3 minutes: its presence says so (its
+		// branch is never deleted: GitHub would run the repository's "delete" workflows)
 		if _, miroir, _, err := contexteGH(projet); err == nil {
-			_, _ = gitDistantGH(d, miroir, r, "push", "--porcelain", "--no-verify", "{url}", ":refs/heads/"+brancheePC+lireMachinePC().ID)
+			p := presenceLocalePC(projet, d)
+			p.Parti, p.Pilote, p.Jalon, p.JalonTitre, p.Depuis, p.Refus = true, false, "", "", "", nil
+			_ = publierPresencePC(d, miroir, r, p)
 		}
 		removeSiExiste(d + "/pcs-jalon")
 	}
