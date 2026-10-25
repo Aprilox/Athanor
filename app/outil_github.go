@@ -240,8 +240,13 @@ func scannerSecretsAtelier(mode string, entree io.Reader, sortie io.Writer, part
 
 const marqueCrochet = "# athanor: commits without Claude as co-author"
 
+// texteCrochet: portable (never sed -i: macOS's sed reads its next argument as a backup suffix, the hook
+// then failed and git refused every commit); whatever happens, the hook never blocks a commit.
 var texteCrochet = []byte("#!/bin/sh\n" + marqueCrochet + " (option of the GitHub block, Manage page)\n" +
-	`sed -i -e "/^[Cc]o-[Aa]uthored-[Bb]y:.*[Cc]laude/d" -e "/Generated with \[Claude Code\]/d" -e "/^.\{0,4\}Generated with Claude/d" "$1"` + "\n")
+	`t="$1.athanor-$$"` + "\n" +
+	`if sed -e "/^[Cc]o-[Aa]uthored-[Bb]y:.*[Cc]laude/d" -e "/Generated with \[Claude Code\]/d" -e "/^.\{0,4\}Generated with Claude/d" "$1" > "$t" 2>/dev/null; then cat "$t" > "$1"; fi` + "\n" +
+	`rm -f "$t"` + "\n" +
+	"exit 0\n")
 
 func crochetAthanor(actuel []byte) bool { return bytes.Contains(actuel, []byte(marqueCrochet)) }
 
