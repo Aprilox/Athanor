@@ -44,6 +44,12 @@ type GitHubVue struct {
 	Identite json.RawMessage `json:"identite,omitempty"`
 }
 
+// lireJSONFinal: the JSON object a command printed on its last line (a "{" inside its texts, such as the
+// {0} of a message, is never mistaken for its start).
+func lireJSONFinal(out string, v any) error {
+	return json.Unmarshal([]byte(derniereLigneJSON(out)), v)
+}
+
 func citerShell(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
 
 // argsGitHub: athanor github COMMAND PROJECT ARGS… (the project as Windows names it: the pilot's side
@@ -127,7 +133,7 @@ func (s *Serveur) apiGitHubConnexion(w http.ResponseWriter, r *http.Request) {
 	}
 	out, err := executerKitArgs(k, 45*time.Second, "github", "connexion")
 	var c ConnexionGH
-	if i := strings.LastIndex(out, "{"); err != nil || i < 0 || json.Unmarshal([]byte(out[i:]), &c) != nil {
+	if err != nil || lireJSONFinal(out, &c) != nil {
 		s.erreur(w, http.StatusBadGateway, "GitHub: unreadable answer from WSL")
 		return
 	}
@@ -236,7 +242,7 @@ func (s *Serveur) apiGitHub(w http.ResponseWriter, r *http.Request) {
 			}
 			out, _ := s.executerGitHub(p, 15*time.Minute, "lier-compte", depot, un(c.Auto), b, un(c.Atelier || c.Equipe), un(c.Equipe), un(c.WorkflowsOK))
 			var res ResultatLierCompte
-			if i := strings.LastIndex(out, "{"); i < 0 || json.Unmarshal([]byte(out[i:]), &res) != nil {
+			if lireJSONFinal(out, &res) != nil {
 				s.erreur(w, http.StatusBadGateway, raisonPoussee(out))
 				return
 			}
@@ -244,7 +250,8 @@ func (s *Serveur) apiGitHub(w http.ResponseWriter, r *http.Request) {
 			s.ecrireJSON(w, map[string]any{"lie_compte": res, "github": gh})
 			return
 		}
-		if c.Action == "connexion" {
+		if !v.ConnexionPC.Connecte {
+			// every project pushes with this computer's connection (no key for one repository any more)
 			s.erreur(w, http.StatusBadRequest, "This computer is not connected to GitHub: Settings › Options › GitHub.")
 			return
 		}
@@ -252,7 +259,7 @@ func (s *Serveur) apiGitHub(w http.ResponseWriter, r *http.Request) {
 			s.erreur(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		s.msg(w, "A window opens: sign in to GitHub there. Athanor then gives the repository its own key and signs out.")
+		s.msg(w, "A window opens: sign in to GitHub there to create the repository (nothing of that sign-in is kept). The project then pushes with this computer's connection.")
 	case "pousser", "malgre":
 		args := []string{}
 		if c.Action == "malgre" {
@@ -283,22 +290,19 @@ func (s *Serveur) apiGitHub(w http.ResponseWriter, r *http.Request) {
 		}
 		out, _ := s.executerGitHub(p, delai, "recuperer", args...)
 		var e EtatRecuperer
-		if i := strings.LastIndex(out, "{"); i < 0 || json.Unmarshal([]byte(out[i:]), &e) != nil {
+		if lireJSONFinal(out, &e) != nil {
 			s.erreur(w, http.StatusBadGateway, raisonPoussee(out))
 			return
 		}
 		s.ecrireJSON(w, e)
 	case "tester": // GitHub accepts the key, a push would go through (nothing is sent)
 		out, _ := s.executerGitHub(p, 2*time.Minute, "tester")
-		if i := strings.LastIndex(out, "{"); i >= 0 {
-			out = out[i:]
-		}
 		var t struct {
 			Ok     bool     `json:"ok"`
 			Modele string   `json:"modele"`
 			Args   []string `json:"args"`
 		}
-		if json.Unmarshal([]byte(out), &t) != nil {
+		if lireJSONFinal(out, &t) != nil {
 			s.erreur(w, http.StatusBadGateway, raisonPoussee(out))
 			return
 		}

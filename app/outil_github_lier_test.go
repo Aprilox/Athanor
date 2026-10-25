@@ -65,7 +65,7 @@ func TestLierGitHub(t *testing.T) {
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("TRACE_GH", trace)
 	t.Setenv("ATHANOR_GITHUB_DIR", donnees)
-	t.Setenv("ATHANOR_GITHUB_SSH", "127.0.0.1:1") // nothing answers: the first push only fails
+	t.Setenv("ATHANOR_GITHUB_SSH", "127.0.0.1:1") // nothing answers: reaching GitHub only fails
 	t.Setenv("ATHANOR_GITHUB_SSH_SECOURS", "")
 	t.Setenv("GH_TOKEN", "jeton-de-l-utilisateur")
 	pauseLierGH = 0
@@ -84,37 +84,42 @@ func TestLierGitHub(t *testing.T) {
 		return b.String(), code
 	}
 	d := dossierGH(projet)
-
 	if out, code := lier("", projet, "creer", "a b"); code != 2 || !strings.Contains(out, "Invalid repository name") {
 		t.Fatalf("invalid name: %d %q", code, out)
 	}
 	if out, code := lier("", projet, "creer", "site", "1", "a..b"); code != 2 || !strings.Contains(out, "Invalid branch name: a..b") {
 		t.Fatalf("invalid branch: %d %q", code, out)
 	}
+	// no project is linked without this computer's connection (never a key for one repository)
+	for _, a := range [][]string{{projet, "creer", "site"}, {projet, "existant", "moi/vieux"}} {
+		if out, code := lier("", a...); code != 1 || !strings.Contains(out, "not connected to GitHub") {
+			t.Fatalf("not connected %v: %d %q", a, code, out)
+		}
+	}
+	if tr, _ := os.ReadFile(trace); len(tr) != 0 {
+		t.Fatalf("GitHub reached while not connected:\n%s", tr)
+	}
+	var b bytes.Buffer
+	if code := connecterGH(nil, &b); code != 0 {
+		t.Fatal(b.String())
+	}
+	_ = os.Truncate(trace, 0)
+	// a new repository: one sign-in for GitHub's API, then the connection pushes to it
 	out, code := lier("", projet, "creer", "site")
 	if code != 0 {
 		t.Fatalf("creer: %d\n%s", code, out)
 	}
-	for _, m := range []string{"Signed in as moi.", "Private repository created: moi/site", "Linked: moi/site.", "First push...", "No commit to push yet."} {
+	for _, m := range []string{"Signed in as moi.", "Private repository created: moi/site", "Linked: moi/site, with this computer's connection to GitHub (moi).", "First push...", "No commit to push yet."} {
 		if !strings.Contains(out, m) {
 			t.Errorf("creer: %q missing in:\n%s", m, out)
 		}
 	}
-	reg, _ := os.ReadFile(filepath.Join(d, "reglages"))
 	r, lie := lireReglagesGH(d)
-	if !lie || r.Depot != "moi/site" || r.Branche != "main" || !r.Auto || r.Compte != "moi" || r.CleID != "777" || r.LieLe == "" {
-		t.Fatalf("reglages: %+v %v\n%s", r, lie, reg)
+	if !lie || r.Depot != "moi/site" || r.Branche != "main" || !r.Auto || r.Compte != "moi" || !r.Connexion || r.CleID != "" || existeGH(filepath.Join(d, "cle")) {
+		t.Fatalf("reglages: %+v %v", r, lie)
 	}
-	if st, err := os.Stat(filepath.Join(d, "cle")); err != nil || st.Mode().Perm() != 0o600 {
-		t.Errorf("the key: %v %v", st, err)
-	}
-	kh, _ := os.ReadFile(filepath.Join(d, "known_hosts"))
-	if string(kh) != "[127.0.0.1]:1 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl\n" {
-		t.Errorf("known_hosts: %q", kh)
-	}
-	compte, _ := os.ReadFile(filepath.Join(d, "compte"))
-	if string(compte) != "login=moi\nid=42\nnom=Moi Même\nemail=m@x.org\n" {
-		t.Errorf("compte: %q", compte)
+	if c, _ := os.ReadFile(filepath.Join(d, "compte")); !strings.Contains(string(c), "login=moi") {
+		t.Errorf("compte: %q", c)
 	}
 	if p, _ := os.ReadFile(filepath.Join(d, "projet")); string(p) != projet+"\n" {
 		t.Errorf("projet: %q", p)
@@ -122,86 +127,31 @@ func TestLierGitHub(t *testing.T) {
 	tr, _ := os.ReadFile(trace)
 	ts := string(tr)
 	if !strings.Contains(ts, "token=none") || !strings.Contains(ts, "auth login --hostname github.com --git-protocol ssh --skip-ssh-key --web --scopes user:email --insecure-storage") ||
-		!strings.Contains(ts, "auth logout --hostname github.com") || !strings.Contains(ts, "title=Athanor (mon site)") || !strings.Contains(ts, "-F read_only=false") {
+		!strings.Contains(ts, "auth logout --hostname github.com") || strings.Contains(ts, "/keys") {
 		t.Errorf("gh calls:\n%s", ts)
 	}
-	// the sign-in's folder is gone
 	if l, _ := filepath.Glob(filepath.Join(donnees, ".connexion.*")); len(l) != 0 {
 		t.Errorf("sign-in kept: %v", l)
 	}
-	// the key's comment: athanor-ACCOUNT-FOLDER, other characters as dashes
-	if pub, _ := os.ReadFile(filepath.Join(d, "cle.pub")); !strings.HasSuffix(strings.TrimSpace(string(pub)), " athanor-moi-mon-site") {
-		t.Errorf("cle.pub: %q", pub)
-	}
-
-	// a name taken; not an administrator
-	if out, code := lier("", projet, "creer", "existe"); code != 1 || !strings.Contains(out, `You already have a repository named existe: choose "Use an existing repository" (moi/existe), or another name.`) {
+	// a name taken
+	if out, code := lier("", projet, "creer", "existe"); code != 1 || !strings.Contains(out, `You already have a repository named existe: choose "Use one of my repositories" (moi/existe), or another name.`) {
 		t.Errorf("existe: %d %q", code, out)
 	}
-	if out, code := lier("", projet, "existant", "moi/pasadmin"); code != 1 || !strings.Contains(out, "You can read moi/pasadmin but not push to it") {
-		t.Errorf("pasadmin: %d %q", code, out)
-	}
-	// an existing repository with workflows and secrets: the user decides
-	if out, code := lier("no\n", projet, "existant", "moi/vieux"); code != 1 || !strings.Contains(out, "WARNING: moi/vieux runs GitHub Actions workflows (1) and has Actions secrets (2 of its own, 0 from its organization).") || !strings.Contains(out, "Not linked.") {
-		t.Errorf("vieux, no: %d %q", code, out)
-	}
-	_ = os.MkdirAll(filepath.Join(d, "miroir.git"), 0o755)
-	_ = os.WriteFile(filepath.Join(d, "dernier.json"), []byte("{}"), 0o644)
+	// an existing repository: no sign-in at all (lier-compte); GitHub unreachable here, said so
 	_ = os.Truncate(trace, 0)
-	out, code = lier("yes\n", projet, "existant", "moi/vieux", "0")
-	if code != 0 || !strings.Contains(out, "Repository: moi/vieux") || !strings.Contains(out, "Previous key removed from moi/site.") {
-		t.Fatalf("vieux, yes: %d\n%s", code, out)
+	if out, code := lier("", projet, "existant", "moi/vieux"); code != 1 || !strings.Contains(out, "GitHub cannot be reached") {
+		t.Errorf("existant: %d %q", code, out)
 	}
-	r, _ = lireReglagesGH(d)
-	if r.Depot != "moi/vieux" || r.Branche != "dev" || r.Auto {
-		t.Errorf("vieux: %+v", r)
+	if tr, _ := os.ReadFile(trace); strings.Contains(string(tr), "auth login") {
+		t.Errorf("a sign-in for an existing repository:\n%s", tr)
 	}
-	if tr, _ := os.ReadFile(trace); !strings.Contains(string(tr), "-X DELETE repos/moi/site/keys/777") {
-		t.Errorf("previous key not removed:\n%s", tr)
+	if r, _ := lireReglagesGH(d); r.Depot != "moi/site" {
+		t.Errorf("the settings of before not kept: %+v", r)
 	}
-	if existeGH(filepath.Join(d, "miroir.git")) {
-		t.Errorf("another repository: the push folder of the previous one must go")
-	}
-
-	// a collaborator of a personal repository: this computer is connected to the account, once the user
-	// says yes; the project then uses that connection (no key of its own)
-	if out, code := lier("no\n", projet, "existant", "ami/projet"); code != 1 || !strings.Contains(out, "You are a collaborator of ami/projet") || !strings.Contains(out, "Not linked.") {
-		t.Errorf("collaborator, no: %d %q", code, out)
-	}
-	_ = os.Truncate(trace, 0)
-	out, code = lier("yes\n", projet, "existant", "ami/projet")
-	if code != 0 || !strings.Contains(out, "Linked: ami/projet, with this computer's connection to GitHub (moi).") || !strings.Contains(out, "Previous key removed from moi/vieux.") {
-		t.Fatalf("collaborator, yes: %d\n%s", code, out)
-	}
-	r, lie = lireReglagesGH(d)
-	if !lie || r.Depot != "ami/projet" || !r.Connexion || r.CleID != "" || existeGH(filepath.Join(d, "cle")) {
-		t.Errorf("collaborator: %+v %v", r, lie)
-	}
-	if c := lireConnexionGH(); !c.Connecte || c.Login != "moi" || c.CleID != "888" {
-		t.Errorf("connection: %+v", c)
-	}
-	tr, _ = os.ReadFile(trace)
-	if !strings.Contains(string(tr), "auth refresh --hostname github.com --scopes admin:public_key") || !strings.Contains(string(tr), "-X POST user/keys -f title=Athanor (") ||
-		strings.Contains(string(tr), "POST repos/ami/projet/keys") {
-		t.Errorf("collaborator's gh calls:\n%s", tr)
-	}
-	// linked again, already connected: nothing asked, no new key
-	_ = os.Truncate(trace, 0)
-	if out, code := lier("", projet, "existant", "ami/projet"); code != 0 || strings.Contains(out, "Type yes") {
-		t.Errorf("collaborator again: %d %q", code, out)
-	}
-	if tr, _ := os.ReadFile(trace); strings.Contains(string(tr), "POST user/keys") || strings.Contains(string(tr), "auth refresh") {
-		t.Errorf("a second key for a computer already connected:\n%s", tr)
-	}
-	var b bytes.Buffer
+	b.Reset()
 	delierGH([]string{projet}, &b)
 	if !strings.Contains(b.String(), "this computer's connection to GitHub stays") || !lireConnexionGH().Connecte {
 		t.Errorf("unlink of a project using the connection: %q", b.String())
-	}
-	b.Reset()
-	deconnecterGH(nil, &b)
-	if lireConnexionGH().Connecte || !strings.Contains(b.String(), "Disconnected from moi") {
-		t.Errorf("disconnect: %q", b.String())
 	}
 }
 
