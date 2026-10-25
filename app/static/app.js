@@ -506,6 +506,26 @@ document.addEventListener("click", async (ev) => {
 // ----------------------------------------------------------------------------- helpers
 function fmtTokens(n) { n = Number(n) || 0; return n >= 1e6 ? (n / 1e6).toFixed(1) + " M" : n >= 1000 ? Math.round(n / 1000) + " k" : String(n); }
 // "2026-10-16T19:21:07" → "19:21:07" today, or the local date and time otherwise.
+// the same commit, from its short ids ("abc1234 subject": two repositories may shorten them differently)
+function memeCommit(a, b) {
+  const x = String(a || "").split(" ")[0], y = String(b || "").split(" ")[0], n = Math.min(x.length, y.length);
+  return n >= 7 && x.slice(0, n) === y.slice(0, n);
+}
+
+// the Overview's GitHub line: the last commit GitHub has, under the local one; why a push did not go
+function ligneGitHubSuivi(g, local) {
+  if (!g) return "";
+  if (!g.lie) return `<dt>${t("Last commit on GitHub")}</dt><dd class="muet">${t("not linked to GitHub")}</dd>`;
+  const env = g.envoye, d = g.dernier;
+  let txt = env ? `${h(env.commit)} <span class="petit">· ${h(heureMaj(env.quand))}</span>` : t("nothing pushed yet");
+  const echec = d && d.resultat !== "ok" && d.resultat !== "attente" && (!env || d.quand > env.quand);
+  if (env && memeCommit(env.commit, local)) txt += ` <span class="petit">✓ ${t("up to date")}</span>`;
+  else if (local && !echec) txt += ` <span class="petit">· ${t("the local one is not pushed yet")}</span>`;
+  if (!g.auto) txt += ` <span class="petit">· ${t("automatic push off")}</span>`;
+  const msg = echec ? `<div class="quota petit">${h(t(d.modele || "", d.args || []))}</div>` : "";
+  return `<dt>${t("Last commit on GitHub")}</dt><dd class="muet">${txt}${msg}</dd>`;
+}
+
 function heureMaj(iso) {
   if (!iso) return "—";
   const d = new Date(iso);
@@ -1299,7 +1319,8 @@ pages.suivi = async () => {
         : t("Athanor {0} is installed and the app already uses it. This pilot keeps running on the version it started with until it is started again: it then moves to {0} by itself (to do it now: Stop after cycle, then Start). Nothing to do, nothing is lost.", [h(v.version)])}</p>` : ""}
       <dl class="fiche">
         <dt>${t("Milestone")}</dt><dd>${e.jalon_en_cours ? `<b>${md(titreJalon(e.jalon_en_cours))}</b>${(() => { const j = plan.find((x) => x.titre === titreJalon(e.jalon_en_cours)); return j && j.detail ? `<div class="muet petit">${md(j.detail)}</div>` : ""; })()}` : "—"}</dd>
-        <dt>${t("Last commit")}</dt><dd class="muet">${h(e.dernier_commit || "—")}</dd>
+        <dt>${t("Last commit, this computer")}</dt><dd class="muet">${h(e.dernier_commit || "—")}</dd>
+        ${ligneGitHubSuivi(v.github, e.dernier_commit)}
         ${e.reprise_prevue ? `<dt>${t("Resumes")}</dt><dd class="quota">${h(e.reprise_prevue)}</dd>` : ""}
         <dt>${t("Queued requests")}</dt><dd>${v.attente || 0}</dd>
         <dt>${t("Updated")}</dt><dd class="muet petit">${h(heureMaj(e.maj))}</dd>

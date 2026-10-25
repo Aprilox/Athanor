@@ -3,6 +3,7 @@ package main
 // General state, projects, pilot, log, team.
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -101,7 +102,8 @@ type EtatVue struct {
 	Systeme     string                `json:"systeme"` // runtime.GOOS: windows, linux, darwin (the Setup page's tabs)
 	Quota       *EtatQuota            `json:"quota,omitempty"`
 	QuotaArret  map[string]RegleQuota `json:"quota_arret"`
-	Maj         *EtatMaj              `json:"maj,omitempty"` // updates of Athanor (maj.go)
+	Maj         *EtatMaj              `json:"maj,omitempty"`    // updates of Athanor (maj.go)
+	GitHub      *SuiviGitHub          `json:"github,omitempty"` // the Overview's GitHub line (.athanor/github.json)
 	// a stop asked for the end of the current cycle: "arret" (Stop after cycle), "relance" (restart to
 	// apply settings); the buttons say so
 	ArretDemande string `json:"arret_demande,omitempty"`
@@ -189,6 +191,12 @@ func (s *Serveur) apiEtat(w http.ResponseWriter, r *http.Request) {
 		vue.Attente = len(p.LireFileAttente())
 		vue.PourVous = p.PourVous()
 		vue.Stats = p.LireStats()
+		if b, err := lireAtelier(p, "github.json", 64<<10); err == nil {
+			var g SuiviGitHub
+			if json.Unmarshal(b, &g) == nil {
+				vue.GitHub = &g
+			}
+		}
 		b, err := os.ReadFile(p.Demande())
 		vue.DemandeVide = err != nil || demandeVide(string(b))
 	}

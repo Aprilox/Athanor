@@ -83,7 +83,7 @@ func uneTouche(b []byte, fin bool) (*evenementTUI, int, bool) {
 				}
 				return nil, 0, false
 			}
-			if n, ok := map[byte]string{'A': "haut", 'B': "bas", 'C': "droite", 'D': "gauche", 'H': "debut", 'F': "fin", 'P': "f1", 'Q': "f2", 'R': "f3", 'S': "f4"}[b[2]]; ok {
+			if n, ok := map[byte]string{'A': "haut", 'B': "bas", 'C': "droite", 'D': "gauche", 'H': "debut", 'F': "fin", 'P': "f1", 'Q': "f2", 'R': "f3", 'S': "f4", 'M': "entree"}[b[2]]; ok {
 				return &evenementTUI{nom: n}, 3, true
 			}
 			return nil, 3, true
@@ -100,6 +100,14 @@ func uneTouche(b []byte, fin bool) (*evenementTUI, int, bool) {
 		}
 		return ev, n + 1, true
 	case c == '\r' || c == '\n':
+		// one Enter: some terminals (and SSH clients) send it as CR LF, or CR NUL; taken as two, the form
+		// a first Enter opens was saved at once by the second
+		if c == '\r' && len(b) > 1 && (b[1] == '\n' || b[1] == 0) {
+			return &evenementTUI{nom: "entree"}, 2, true
+		}
+		if c == '\r' && len(b) == 1 && !fin {
+			return nil, 0, false // its LF may be in the next read
+		}
 		return &evenementTUI{nom: "entree"}, 1, true
 	case c == '\t':
 		return &evenementTUI{nom: "tab"}, 1, true

@@ -71,11 +71,11 @@ func (a *appTUI) raccourcisPages2() []raccourci {
 			return []raccourci{{"c", t("Connect to GitHub")}}
 		}
 		if !a.gh.Lie {
-			return []raccourci{{"l", t("Use one of my repositories")}, {"n", t("Create a private repository")}, {"D", t("Disconnect")}}
+			return []raccourci{{"l", t("Use one of my repositories")}, {"r", t("Create a private repository")}, {"d", t("Disconnect")}}
 		}
-		return []raccourci{{"P", t("Push now")}, {"g", t("Get GitHub's work")}, {"t", t("Test the connection")}, {"A", t("Automatic push")}, {"u", t("Unlink")}}
+		return []raccourci{{"p", t("Push now")}, {"g", t("Get GitHub's work")}, {"t", t("Test the connection")}, {"a", t("Automatic push")}, {"u", t("Unlink")}}
 	case pReglages:
-		return []raccourci{{"Enter", t("Edit")}, {"L", t("Language")}, {"P", t("Palette")}, {"A", t("Accent")}}
+		return []raccourci{{"Enter", t("Edit")}, {"l", t("Language")}, {"p", t("Palette")}, {"a", t("Accent")}}
 	}
 	return nil
 }
@@ -99,11 +99,11 @@ func (a *appTUI) touchePages2(ev evenementTUI, k string, defiler func(*int, int)
 		switch k {
 		case "entree":
 			a.modifierReglage()
-		case "L":
+		case "l":
 			a.choisirPreference("langue")
-		case "P":
+		case "p":
 			a.choisirPreference("theme")
-		case "A":
+		case "a":
 			a.choisirPreference("accent")
 		default:
 			defiler(&a.selReglage, -1)
@@ -382,7 +382,7 @@ func (a *appTUI) pageGitHub(e *ecranT, x, y, l, h int) {
 			}
 		}
 		if !g.Connexion && !g.CleCompte {
-			ajouter("ℹ "+a.t("This project still pushes with a key of its own (an older version): Use my GitHub connection moves it to the connection.")+" (C)", a.st(p.attention, fond))
+			ajouter("ℹ "+a.t("This project still pushes with a key of its own (an older version): Use my GitHub connection moves it to the connection.")+" (c)", a.st(p.attention, fond))
 		}
 	}
 	for i, s := range lignes {
@@ -400,8 +400,12 @@ func (a *appTUI) toucheGitHub(k string) {
 	rafraichir := func(map[string]any) { a.derniere["github"] = time.Time{} }
 	switch k {
 	case "c":
-		a.etapeDansTerminal("github-connecter", func(int) { a.derniere["github"] = time.Time{} })
-	case "D":
+		if !g.ConnexionPC.Connecte {
+			a.etapeDansTerminal("github-connecter", func(int) { a.derniere["github"] = time.Time{} })
+		} else if g.Lie && !g.Connexion {
+			a.agir("POST", "github", map[string]any{"action": "connexion"}, rafraichir) // this project onto the computer's connection
+		}
+	case "d":
 		if g.ConnexionPC.Connecte {
 			a.demander(a.t("Disconnect"), a.t("Disconnect this computer from GitHub? The projects that use this connection are no longer linked (link them again later). The key stays listed in GitHub's Settings › SSH and GPG keys, where you can remove it."),
 				[]choixTUI{{id: "", texte: a.t("Cancel")}, {id: "oui", texte: a.t("Disconnect"), danger: true}}, func(id string) {
@@ -420,7 +424,7 @@ func (a *appTUI) toucheGitHub(k string) {
 			func(v []string) {
 				a.agirFormulaire("POST", "github", map[string]any{"action": "lier", "mode": "existant", "valeur": strings.TrimSpace(v[0]), "branche": strings.TrimSpace(v[1]), "auto": true, "workflows_ok": true}, rafraichir)
 			})
-	case "n":
+	case "r":
 		if !g.ConnexionPC.Connecte {
 			a.annoncer(a.t("Connect this computer to GitHub first (step 1)."), true)
 			return
@@ -433,11 +437,24 @@ func (a *appTUI) toucheGitHub(k string) {
 				q := "github-creer&nom=" + url.QueryEscape(strings.TrimSpace(v[0])) + "&branche=" + url.QueryEscape(strings.TrimSpace(v[1]))
 				a.etapeDansTerminal(q, func(int) { a.derniere["github"] = time.Time{} })
 			})
-	case "P":
+	case "p":
 		if g.Lie {
 			a.annoncer(a.t("Pushing…"), false)
-			a.agir("POST", "github", map[string]any{"action": "pousser"}, func(map[string]any) {
+			a.agir("POST", "github", map[string]any{"action": "pousser"}, func(rep map[string]any) {
+				// what the push recorded (refused, blocked by the secret check…), as the window says it
 				a.annoncer(a.t("Pushed to GitHub."), false)
+				if g, _ := rep["github"].(map[string]any); g != nil {
+					if d, _ := g["dernier"].(map[string]any); d != nil {
+						if m, _ := d["modele"].(string); m != "" {
+							var args []any
+							if l, ok := d["args"].([]any); ok {
+								args = l
+							}
+							r, _ := d["resultat"].(string)
+							a.annoncer(a.t(m, args...), r != "ok")
+						}
+					}
+				}
 				a.derniere["github"] = time.Time{}
 			})
 		}
@@ -445,13 +462,9 @@ func (a *appTUI) toucheGitHub(k string) {
 		if g.Lie {
 			a.agir("POST", "github", map[string]any{"action": "tester"}, rafraichir)
 		}
-	case "A": // (a is Stop after cycle everywhere)
+	case "a":
 		if g.Lie {
 			a.agir("POST", "github", map[string]any{"action": "auto", "auto": !g.Auto}, rafraichir)
-		}
-	case "C":
-		if g.Lie && !g.Connexion && g.ConnexionPC.Connecte {
-			a.agir("POST", "github", map[string]any{"action": "connexion"}, rafraichir)
 		}
 	case "u":
 		if g.Lie {

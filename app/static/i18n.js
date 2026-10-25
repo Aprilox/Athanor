@@ -47,6 +47,7 @@ const PREFIXES = ["Cannot download the marketplace: ", "Cannot download the plug
 
 const DICT = {
 fr: {
+  "Local commit": "Commit local", "On GitHub": "Sur GitHub", "Last commit, this computer": "Dernier commit, cet ordinateur", "Last commit on GitHub": "Dernier commit sur GitHub", "not linked to GitHub": "non lié à GitHub", "nothing pushed yet": "rien d'envoyé pour l'instant", "the local one is not pushed yet": "le local n'est pas encore envoyé", "automatic push off": "envoi automatique désactivé", "up to date": "à jour",
   "{0} cycle(s), {1} of work, ≈ {2} $ at list price": "{0} cycle(s), {1} de travail, ≈ {2} $ au prix public",
   "Discard what you typed?": "Abandonner ce que vous avez écrit ?",
   "The text of this form is lost if you close it now.": "Le texte de ce formulaire est perdu si vous le fermez maintenant.",
@@ -292,6 +293,7 @@ fr: {
   "{0} milestones here": "{0} jalons ici", "Click to choose one": "Cliquez pour en choisir un",
 },
 es: {
+  "Local commit": "Commit local", "On GitHub": "En GitHub", "Last commit, this computer": "Último commit, este ordenador", "Last commit on GitHub": "Último commit en GitHub", "not linked to GitHub": "no vinculado a GitHub", "nothing pushed yet": "nada subido todavía", "the local one is not pushed yet": "el local aún no se ha subido", "automatic push off": "subida automática desactivada", "up to date": "al día",
   "{0} cycle(s), {1} of work, ≈ {2} $ at list price": "{0} ciclo(s), {1} de trabajo, ≈ {2} $ a precio de lista",
   "Discard what you typed?": "¿Descartar lo que escribiste?",
   "The text of this form is lost if you close it now.": "El texto de este formulario se pierde si lo cierras ahora.",
@@ -504,6 +506,7 @@ es: {
   "{0} milestones here": "{0} hitos aquí", "Click to choose one": "Haga clic para elegir uno",
 },
 de: {
+  "Local commit": "Lokaler Commit", "On GitHub": "Auf GitHub", "Last commit, this computer": "Letzter Commit, dieser Computer", "Last commit on GitHub": "Letzter Commit auf GitHub", "not linked to GitHub": "nicht mit GitHub verknüpft", "nothing pushed yet": "noch nichts übertragen", "the local one is not pushed yet": "der lokale ist noch nicht übertragen", "automatic push off": "automatische Übertragung aus", "up to date": "aktuell",
   "{0} cycle(s), {1} of work, ≈ {2} $ at list price": "{0} Zyklus/Zyklen, {1} Arbeit, ≈ {2} $ zum Listenpreis",
   "Discard what you typed?": "Das Eingegebene verwerfen?",
   "The text of this form is lost if you close it now.": "Der Text dieses Formulars geht verloren, wenn Sie es jetzt schließen.",
@@ -710,6 +713,7 @@ de: {
   "{0} milestones here": "{0} Meilensteine hier", "Click to choose one": "Klicken, um einen zu wählen",
 },
 it: {
+  "Local commit": "Commit locale", "On GitHub": "Su GitHub", "Last commit, this computer": "Ultimo commit, questo computer", "Last commit on GitHub": "Ultimo commit su GitHub", "not linked to GitHub": "non collegato a GitHub", "nothing pushed yet": "ancora niente inviato", "the local one is not pushed yet": "quello locale non è ancora inviato", "automatic push off": "invio automatico disattivato", "up to date": "aggiornato",
   "{0} cycle(s), {1} of work, ≈ {2} $ at list price": "{0} ciclo/i, {1} di lavoro, ≈ {2} $ a prezzo di listino",
   "Discard what you typed?": "Scartare ciò che hai scritto?",
   "The text of this form is lost if you close it now.": "Il testo di questo modulo va perso se lo chiudi ora.",
@@ -916,6 +920,7 @@ it: {
   "{0} milestones here": "{0} tappe qui", "Click to choose one": "Fai clic per sceglierne una",
 },
 pt: {
+  "Local commit": "Commit local", "On GitHub": "No GitHub", "Last commit, this computer": "Último commit, este computador", "Last commit on GitHub": "Último commit no GitHub", "not linked to GitHub": "não ligado ao GitHub", "nothing pushed yet": "nada enviado ainda", "the local one is not pushed yet": "o local ainda não foi enviado", "automatic push off": "envio automático desativado", "up to date": "atualizado",
   "{0} cycle(s), {1} of work, ≈ {2} $ at list price": "{0} ciclo(s), {1} de trabalho, ≈ {2} $ a preço de tabela",
   "Discard what you typed?": "Descartar o que escreveu?",
   "The text of this form is lost if you close it now.": "O texto deste formulário perde-se se o fechar agora.",

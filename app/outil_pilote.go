@@ -96,6 +96,7 @@ type pilote struct {
 	jalonPC     *Jalon
 	equipePC    *equipePC
 	logsUneFois map[string]bool
+	envoiGH     string // the last commit the automatic push was tried with (githubPousserNouveau)
 	battementPC bool
 	finiPC      atomic.Bool
 }
