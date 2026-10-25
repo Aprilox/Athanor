@@ -19,6 +19,7 @@ import (
 type VuePCs struct {
 	Lie     bool         `json:"lie"`
 	Actif   bool         `json:"actif"`
+	Atelier bool         `json:"atelier"` // the workshop shared on GitHub (the switch turns it on: the app asks first)
 	Depot   string       `json:"depot,omitempty"`
 	Moi     *PresencePC  `json:"moi,omitempty"`
 	PCs     []PresencePC `json:"pcs"`
@@ -56,7 +57,7 @@ func pcsGH(args []string, w io.Writer) int {
 	}
 	d := dossierGH(projet)
 	r, lie := lireReglagesGH(d)
-	v.Lie, v.Actif, v.Depot = lie, lie && r.Equipe, r.Depot
+	v.Lie, v.Actif, v.Depot, v.Atelier = lie, lie && r.Equipe, r.Depot, r.Atelier
 	if !v.Actif {
 		ecrireJSONGH(w, v)
 		return 0
