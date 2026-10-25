@@ -34,6 +34,12 @@ func detacherProcessus(c *exec.Cmd) {
 	c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: createNoWindow | createNewProcessGroup | createBreakawayFromJob}
 }
 
+// detacherDansLeJob: the same, inside the caller's job: a job that forbids leaving it (GitHub's runners,
+// some launchers) refuses the first with "Access is denied".
+func detacherDansLeJob(c *exec.Cmd) {
+	c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: createNoWindow | createNewProcessGroup}
+}
+
 // signalerArret: Windows has no signal to send to a program without a console: the pilot reads the
 // "arreter" file written just before.
 func signalerArret(pid int) {}

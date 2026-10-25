@@ -288,16 +288,24 @@ func (s *Serveur) demarrerCloudflared(port int) (int, string, error) {
 	if err != nil {
 		return 0, "", err
 	}
-	// a program just written (the download, an update) can be refused for a few seconds on Windows, while
-	// the antivirus reads it ("Access is denied"): tried again for up to 30 seconds
+	// out of Athanor's job first (it outlives Athanor), inside it when the job forbids leaving; and a
+	// program just written (the download) can be refused for a few seconds on Windows while the antivirus
+	// reads it ("Access is denied"): tried again for up to 30 seconds
 	var c *exec.Cmd
+	refuse := func(e error) bool {
+		return e != nil && (os.IsPermission(e) || strings.Contains(e.Error(), "used by another process"))
+	}
 	for essai := 0; ; essai++ {
-		c = commande(s.cheminCloudflared(), "tunnel", "--no-autoupdate", "--url", "http://127.0.0.1:"+strconv.Itoa(port))
-		detacherProcessus(c)
-		c.Stdout, c.Stderr = f, f
-		c.Dir = s.dossierDistance()
-		err = c.Start()
-		if err == nil || essai >= 30 || !(os.IsPermission(err) || strings.Contains(err.Error(), "used by another process")) {
+		for _, detacher := range []func(*exec.Cmd){detacherProcessus, detacherDansLeJob} {
+			c = commande(s.cheminCloudflared(), "tunnel", "--no-autoupdate", "--url", "http://127.0.0.1:"+strconv.Itoa(port))
+			detacher(c)
+			c.Stdout, c.Stderr = f, f
+			c.Dir = s.dossierDistance()
+			if err = c.Start(); !refuse(err) {
+				break
+			}
+		}
+		if !refuse(err) || essai >= 30 {
 			break
 		}
 		time.Sleep(time.Second)

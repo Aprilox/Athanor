@@ -73,6 +73,7 @@ func TestTunnelGardeEtRelance(t *testing.T) {
 	s := nouveauServeur(Config{Kit: kit})
 	s.config.Distance = DistanceConfig{Actif: true, Port: 45555}
 	installerFauxCloudflared(t, s)
+	t.Cleanup(s.arreterTunnel) // even after a failure: nothing left holding the test's folder
 	go s.lancerTunnel()
 	e := attendreTunnel(t, s, "")
 	if !strings.HasPrefix(e.adresse, "https://essai-") || s.hoteTunnel() != strings.TrimPrefix(e.adresse, "https://") {
@@ -87,6 +88,7 @@ func TestTunnelGardeEtRelance(t *testing.T) {
 	s.arreterTunnelSansTuer()
 	s2 := nouveauServeur(Config{Kit: kit})
 	s2.config.Distance = DistanceConfig{Actif: true, Port: 45555}
+	t.Cleanup(s2.arreterTunnel)
 	go s2.lancerTunnel()
 	e2 := attendreTunnel(t, s2, "")
 	if e2.adresse != e.adresse || e2.pid != e.pid {

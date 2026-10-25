@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -249,6 +250,30 @@ func TestDistanceMotDePasse(t *testing.T) {
 	_ = appelDistance(h, "POST", "/api/verrouiller", cle, "{}", api...)
 	if w := appelDistance(h, "GET", "/api/journal", cle, "", api...); w.Code != http.StatusUnauthorized {
 		t.Fatalf("locked again: %d", w.Code)
+	}
+	// a stolen phone trying passwords: 5 wrong ones and it is no longer trusted (the count starts again
+	// after a right one: the wrong one above is forgotten)
+	for i := 1; i < essaisMdpDistance; i++ {
+		w := appelDistance(h, "POST", "/api/deverrouiller", cle, `{"mot_de_passe":"faux"}`, api...)
+		if w.Code != http.StatusUnauthorized || !strings.Contains(w.Body.String(), `"`+strconv.Itoa(essaisMdpDistance-i)+`"`) {
+			t.Fatalf("wrong password %d: %d %s", i, w.Code, w.Body.String())
+		}
+	}
+	if w := appelDistance(h, "POST", "/api/deverrouiller", cle, `{"mot_de_passe":"faux"}`, api...); w.Code != http.StatusUnauthorized || !strings.Contains(w.Body.String(), "Not paired") {
+		t.Fatalf("5th wrong password: %d %s", w.Code, w.Body.String())
+	}
+	if len(s.vueDistance().Appareils) != 0 {
+		t.Fatal("device kept after 5 wrong passwords")
+	}
+	if w := appelDistance(h, "POST", "/api/deverrouiller", cle, `{"mot_de_passe":"secret"}`, api...); w.Code != http.StatusUnauthorized {
+		t.Fatalf("right password after removal: %d", w.Code)
+	}
+	// the computer's own window is never removed: wrong passwords there only wait
+	r = httptest.NewRequest("POST", "/api/deverrouiller", strings.NewReader(`{"mot_de_passe":"faux"}`))
+	w := httptest.NewRecorder()
+	s.apiDeverrouiller(w, r)
+	if w.Code != http.StatusUnauthorized || !strings.Contains(w.Body.String(), "Wrong password") {
+		t.Fatalf("window: %d %s", w.Code, w.Body.String())
 	}
 }
 
