@@ -6,6 +6,12 @@
 <title>Athanor</title>
 <meta name="csrf" content="__CSRF__">
 <link rel="icon" href="logo.svg" type="image/svg+xml">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icone-180.png">
+<meta name="theme-color" content="#121a24">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Athanor">
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
@@ -23,7 +29,13 @@
   </div>
 </header>
 <div id="app" class="app">
-  <aside class="nav">
+  <div class="barre-mobile" id="barre-mobile">
+    <button type="button" class="btn-menu" id="btn-menu" aria-label="Menu" aria-controls="nav-tiroir" aria-expanded="false"><span></span><span></span><span></span></button>
+    <img src="logo.svg" width="24" height="24" alt="" class="marque-logo">
+    <span class="bm-titre" id="bm-titre">Athanor</span>
+  </div>
+  <div class="voile-menu" id="voile-menu"></div>
+  <aside class="nav" id="nav-tiroir">
     <div class="marque">
       <img src="logo.svg" width="30" height="30" alt="" class="marque-logo">
       <div><div class="marque-nom">Athanor <button type="button" class="marque-version" id="nav-version" data-maj="ouvrir"></button></div><div class="marque-sous" id="nav-sous">—</div></div>
@@ -45,6 +57,7 @@
     <nav id="nav-outil">
       <a href="#extensions" data-page="extensions">Skills &amp; MCP</a>
       <a href="#sante" data-page="sante">Setup &amp; health</a>
+      <a href="#distance" data-page="distance">Remote</a>
       <a href="#reglages" data-page="reglages">Settings</a>
     </nav>
     <div class="nav-pied">

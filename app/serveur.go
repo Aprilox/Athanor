@@ -36,6 +36,10 @@ type Serveur struct {
 	derniereVerif map[string]time.Time
 	occupes       map[string]bool // projects with a management action under way (no pilot start meanwhile)
 	majProjets    sync.Mutex      // one update of the folder lists at a time
+	// remote access (distance.go): its state, and the routes the tunnel's server shares with the window
+	distOnce sync.Once
+	distEtat *distance
+	mux      http.Handler
 }
 
 func nouveauServeur(config Config) *Serveur {
@@ -102,8 +106,21 @@ func hacher(sel, mdp string) string {
 
 func egal(a, b string) bool { return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1 }
 
-// verrouillePour says whether the request is locked: password set and no valid session.
+// verrouillePour says whether the request is locked: password set and no valid session (a remote
+// device: unlocked on its own, distance.go).
 func (s *Serveur) verrouillePour(r *http.Request) bool {
+	s.mu.Lock()
+	mdp := s.config.MotDePasseHash != ""
+	s.mu.Unlock()
+	if id := appareilDe(r); id != "" {
+		if !mdp {
+			return false
+		}
+		d := s.dist()
+		d.mu.Lock()
+		defer d.mu.Unlock()
+		return !d.deverrouilles[id]
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.config.MotDePasseHash == "" {
@@ -384,6 +401,12 @@ func (s *Serveur) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/extensions/tester", s.garde(false, s.apiExtTester))
 	mux.HandleFunc("POST /api/extensions/recherche", s.garde(false, s.apiExtRecherche))
 	mux.HandleFunc("POST /api/extensions/registre", s.garde(false, s.apiExtRegistre))
+
+	// remote access (distance.go): Athanor's window only (the tunnel's server refuses these routes)
+	mux.HandleFunc("GET /api/distance", s.garde(false, s.apiDistance))
+	mux.HandleFunc("POST /api/distance", s.garde(false, s.apiDistanceActif))
+	mux.HandleFunc("POST /api/distance/appareils/{id}", s.garde(false, s.apiDistanceAppareil))
+	mux.HandleFunc("DELETE /api/distance/appareils/{id}", s.garde(false, s.apiDistanceAppareil))
 }
 
 // ----------------------------------------------------------------------------- locking
@@ -404,7 +427,14 @@ func (s *Serveur) apiDeverrouiller(w http.ResponseWriter, r *http.Request) {
 		s.erreur(w, http.StatusUnauthorized, "Wrong password")
 		return
 	}
-	s.ouvrirSession(w)
+	if id := appareilDe(r); id != "" {
+		d := s.dist()
+		d.mu.Lock()
+		d.deverrouilles[id] = true
+		d.mu.Unlock()
+	} else {
+		s.ouvrirSession(w)
+	}
 	s.ecrireJSON(w, map[string]bool{"ok": true})
 }
 
@@ -415,8 +445,16 @@ func (s *Serveur) apiVerrouiller(w http.ResponseWriter, r *http.Request) {
 		s.erreur(w, http.StatusBadRequest, "Set a password in Options first")
 		return
 	}
-	s.session = ""
-	http.SetCookie(w, &http.Cookie{Name: "athanor_session", Value: "", Path: "/", MaxAge: -1})
+	d := s.dist()
+	d.mu.Lock()
+	if id := appareilDe(r); id != "" {
+		delete(d.deverrouilles, id) // a device locks itself only
+	} else {
+		d.deverrouilles = map[string]bool{} // the computer locks every device too
+		s.session = ""
+		http.SetCookie(w, &http.Cookie{Name: "athanor_session", Value: "", Path: "/", MaxAge: -1})
+	}
+	d.mu.Unlock()
 	s.ecrireJSON(w, map[string]bool{"ok": true})
 }
 

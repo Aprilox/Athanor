@@ -43,6 +43,9 @@ func (s *Serveur) consommerOuverture(j string) bool {
 
 // accesValide: the request comes from a window Athanor opened (no access key = tests, check off).
 func (s *Serveur) accesValide(r *http.Request) bool {
+	if appareilDe(r) != "" {
+		return true // a trusted device, through the tunnel's server (distance.go)
+	}
 	if s.cleAcces == "" {
 		return true
 	}

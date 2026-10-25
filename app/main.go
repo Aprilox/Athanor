@@ -76,6 +76,7 @@ func main() {
 		w.Header().Set("Content-Security-Policy", "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'")
 		_, _ = w.Write([]byte(strings.Replace(string(b), "__CSRF__", s.csrf, 1)))
 	})
+	s.demarrerDistance(mux) // remote access, as it was left (distance.go)
 
 	ecoute, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", config.Port))
 	if err != nil {

@@ -100,6 +100,7 @@ async function api(chemin, methode = "GET", corps) {
     body: corps === undefined ? undefined : JSON.stringify(corps),
   });
   const data = await r.json().catch(() => ({}));
+  if (r.status === 401 && data.erreur_key === "Not paired") { afficherNonAppaire(); throw new Error(t("Not paired")); }
   if (r.status === 401 && data.erreur_key === "Locked") { etat.verrouille = true; afficherVerrou(); throw new Error(t("Locked")); }
   if (!r.ok) throw new Error(data.erreur_key ? t(data.erreur_key, data.args || []) : (data.erreur || t("Error {0}", [r.status])));
   return data;
@@ -592,6 +593,7 @@ function rendreBandeau(v) {
   const nbActifs = (v.projets || []).filter((x) => x.actif).length;
   $("#bandeau").innerHTML = `<div class="etat-phrase">${nomProjet}<h1 title="${h(p.titre)}"><span class="point ${p.classe}"></span><span>${h(p.titre)}</span></h1><div class="sous" title="${h(p.sous)}">${h(p.sous)}</div></div><div class="actions">${boutons.join("")}</div>`;
   $("#nav-sous").textContent = nbActifs ? t("{0} project(s) running", [nbActifs]) : t("idle");
+  $("#bm-titre").textContent = v.projet ? v.projet.nom : "Athanor";
   $("#nav-kit").textContent = v.kit || "";
   const nv = $("#nav-version");
   nv.textContent = v.version ? "v" + v.version : "";
@@ -710,8 +712,20 @@ $("#menu-projets").addEventListener("click", async (ev) => {
 });
 document.addEventListener("click", (ev) => { if (etat.selecteurOuvert && !ev.target.closest("#sel-projet, #menu-projets")) fermerSelecteur(); });
 
+// the sidebar's "Remote": how many devices are connected now (hidden on a remote device)
+function marquerDistance(v) {
+  const a = document.querySelector('#nav-outil a[data-page="distance"]'); if (!a) return;
+  const n = v.distance_active ? v.connectes || 0 : 0;
+  a.dataset.connectes = n ? String(n) : ""; a.title = v.distance_active ? t("Remote access on: {0} device(s) connected", [n]) : "";
+  a.classList.toggle("distance-active", !!v.distance_active);
+}
+// phones: the sidebar is a drawer (☰), closed again by a choice or a tap beside it
+function menuMobile(ouvert) { document.body.classList.toggle("menu-ouvert", ouvert); $("#btn-menu").setAttribute("aria-expanded", String(ouvert)); }
+$("#btn-menu").addEventListener("click", () => menuMobile(!document.body.classList.contains("menu-ouvert")));
+$("#voile-menu").addEventListener("click", () => menuMobile(false));
+$("#nav-tiroir").addEventListener("click", (ev) => { if (ev.target.closest("nav a, .menu-liste a, .menu-nouveau")) menuMobile(false); });
 function traduireNav() {
-  const libelles = { suivi: t("Overview"), equipe: t("Team"), demandes: t("Requests"), pourvous: t("For you"), journal: t("Log"), projet: t("Manage"), chat: t("Chat"), extensions: t("Skills & MCP"), sante: t("Setup & health"), reglages: t("Settings"), options: t("Options") };
+  const libelles = { suivi: t("Overview"), equipe: t("Team"), demandes: t("Requests"), pourvous: t("For you"), journal: t("Log"), projet: t("Manage"), chat: t("Chat"), extensions: t("Skills & MCP"), sante: t("Setup & health"), reglages: t("Settings"), options: t("Options"), distance: t("Remote") };
   document.querySelectorAll("#nav-liens a, #nav-outil a").forEach((a) => { if (libelles[a.dataset.page]) a.textContent = libelles[a.dataset.page]; });
   $("#nav-titre-projet").textContent = t("Project");
   $("#nav-titre-outil").textContent = t("Tool");
@@ -2357,6 +2371,80 @@ function lireEnvFormulaire() {
 }
 
 // --- options (saved as soon as a switch or a field changes): the "Options" tab of the settings
+// --- remote access (distance.go): the switch, the pairing link and its QR code, the trusted devices
+pages.distance = async () => {
+  if ((etat.vue || {}).distant) return `<div class="vide">${t("Not available from a remote device")}</div>`;
+  const d = await api("distance");
+  etat.distVue = d; etat.distSig = signatureDistance(d);
+  const statut = {
+    arret: ["muet", t("Off: no device can reach Athanor.")],
+    installation: ["muet", t("Downloading Cloudflare's tunnel program (once)…")],
+    demarrage: ["muet", t("Opening the tunnel…")],
+    pret: ["ok", "✔ " + t("Reachable at {0}", [d.adresse || ""])],
+    erreur: ["attention", "✖ " + (d.message || t("The tunnel did not start."))],
+  }[d.etat] || ["muet", ""];
+  const appareils = d.appareils.length ? `<table class="tab appareils"><tbody>${d.appareils.map((a) => `<tr>
+      <td class="etroit"><span class="point-appareil ${a.en_ligne ? "en-ligne" : ""}" title="${h(a.en_ligne ? t("Connected now") : t("Not connected"))}"></span></td>
+      <td><input class="nom-appareil" data-renommer="${h(a.id)}" value="${h(a.nom)}" maxlength="40" aria-label="${h(t("Name"))}">
+        <div class="muet petit">${a.en_ligne ? `<b class="ok">${t("Connected now")}</b>` : a.vu_le ? h(t("Last seen {0}", [dateLisible(a.vu_le)])) : ""}${a.lieu ? " · " + h(a.lieu) : ""} · ${h(t("paired {0}", [dateLisible(a.ajoute)]))}</div></td>
+      <td class="droite"><button class="btn btn-petit btn-danger" data-retirer-appareil="${h(a.id)}" data-nom="${h(a.nom)}" title="${h(t("Remove from the trusted devices"))}" aria-label="${h(t("Remove from the trusted devices"))}">✕</button></td></tr>`).join("")}</tbody></table>`
+    : `<div class="vide">${t("No device yet.")}</div>`;
+  return `<div class="grille grille-2">
+    <div class="colonne">
+      <div class="bloc"><h2>${t("Remote access")}</h2>
+        <p class="intro petit">${t("Follow and drive Athanor from your phone or another computer, from anywhere: through a Cloudflare tunnel (https, nothing to set up). Only the devices you pair here get in.")}</p>
+        <label class="interrupteur"><input type="checkbox" id="dist-actif" ${d.actif ? "checked" : ""}><span>${t("Remote access")}</span></label>
+        <p class="petit ${statut[0]}" id="dist-statut">${h(statut[1])}</p>
+        <p class="muet petit">${t("The address changes when the computer restarts: scan the code again then. While remote access is on, the computer does not go to sleep (the screen can still turn off); Athanor must stay open.")}</p>
+      </div>
+      ${d.etat === "pret" && d.lien ? `<div class="bloc"><h2>${t("Pair a device")}</h2>
+        <div class="appairage"><img class="qr-distance" src="${h(d.qr)}" alt="${h(t("QR code of the pairing link"))}">
+          <div><p class="m0">${t("Scan it with the phone's camera, or open this link on the device:")}</p>
+            <div class="ligne mt-1"><input type="text" class="code" id="dist-lien" readonly value="${h(d.lien)}"><button class="btn btn-petit" id="dist-copier">${t("Copy")}</button></div>
+            <p class="muet petit mt-1">${t("Single-use link, renewed by itself")} (<span id="dist-expire">${h(dureeCourte(d.expire))}</span>). ${t("Never send it to anyone: whoever opens it gets in.")}</p></div></div>
+      </div>` : ""}
+    </div>
+    <div class="colonne">
+      <div class="bloc"><h2>${t("Trusted devices")}</h2>${appareils}
+        <p class="muet petit mt-2">${t("✕ removes a device: its next click is refused, and it must scan the code again to come back.")}</p>
+      </div>
+    </div>
+  </div>`;
+};
+function signatureDistance(d) { return JSON.stringify({ ...d, expire: 0 }); }
+function dureeCourte(s) { s = Math.max(0, Math.round(s || 0)); return s >= 60 ? `${Math.floor(s / 60)} min ${String(s % 60).padStart(2, "0")}` : `${s} s`; }
+function dateLisible(iso) {
+  const d = new Date(iso); if (isNaN(d)) return "";
+  const auj = new Date().toDateString() === d.toDateString();
+  return auj ? d.toLocaleTimeString(etat.langue, { hour: "2-digit", minute: "2-digit" }) : d.toLocaleDateString(etat.langue, { day: "numeric", month: "short" }) + " " + d.toLocaleTimeString(etat.langue, { hour: "2-digit", minute: "2-digit" });
+}
+// live: the page is rebuilt only when something changed (a device, the tunnel, a new code); the countdown in place
+async function majDistance() {
+  if (document.activeElement && document.activeElement.matches(".nom-appareil")) return;
+  const d = await api("distance").catch(() => null); if (!d) return;
+  if (signatureDistance(d) !== etat.distSig) return rendrePage();
+  const e = document.getElementById("dist-expire"); if (e) e.textContent = dureeCourte(d.expire);
+}
+$("#page").addEventListener("click", async (ev) => {
+  const b = ev.target.closest("#dist-copier, [data-retirer-appareil]"); if (!b) return;
+  if (b.id === "dist-copier") { const l = $("#dist-lien"); if (l) navigator.clipboard.writeText(l.value).then(() => toast(t("Copied."), "ok")); return; }
+  const c = await choisir(t("Remove “{0}” from the trusted devices? It must scan the code again to come back.", [b.dataset.nom || ""]), [{ id: "non", texte: t("Cancel") }, { id: "oui", texte: t("Remove"), danger: true }]);
+  if (c !== "oui") return;
+  await action(api("distance/appareils/" + encodeURIComponent(b.dataset.retirerAppareil), "DELETE"));
+  rendrePage();
+});
+$("#page").addEventListener("change", async (ev) => {
+  const i = ev.target;
+  if (i.id === "dist-actif") { i.disabled = true; await action(api("distance", "POST", { actif: i.checked })); await rafraichir(); return rendrePage(); }
+  if (i.matches(".nom-appareil") && i.value.trim()) { await action(api("distance/appareils/" + encodeURIComponent(i.dataset.renommer), "POST", { nom: i.value.trim() })); i.blur(); rendrePage(); }
+});
+$("#page").addEventListener("keydown", (ev) => { if (ev.key === "Enter" && ev.target.matches(".nom-appareil")) ev.target.blur(); });
+// on a device the computer removed: the page says so, nothing else works
+function afficherNonAppaire() {
+  if (etat.nonAppaire) return; etat.nonAppaire = true;
+  document.body.innerHTML = `<div class="non-appaire"><div style="font-size:40px">🔒</div><h1>Athanor</h1><p>${h(t("This device is no longer paired with Athanor. On your computer, open Athanor › Remote and scan the QR code again."))}</p></div>`;
+}
+
 async function rendreOptions() {
   const o = await api("options");
   etat.optionsVue = o;
@@ -2372,7 +2460,7 @@ async function rendreOptions() {
         <label class="interrupteur"><input type="checkbox" id="op-lancer" data-option ${o.lancer_pilote_au_demarrage ? "checked" : ""}><span>${t("Restart the pilots that were running, when the app opens")}</span></label>
         <label class="interrupteur"><input type="checkbox" id="op-windows" data-option ${o.demarrage_windows ? "checked" : ""}><span>${t(o.windows ? "Open Athanor when Windows starts" : (etat.vue || {}).systeme === "darwin" ? "Open Athanor when you log in to the Mac" : "Open Athanor when your desktop session starts")}</span></label>
       </div>
-      <div class="bloc"><h2>${t("Lock")}</h2>
+      <div class="bloc local-seul"><h2>${t("Lock")}</h2>
         <p class="intro petit">${t("With a password, the padlock locks the app: Claude keeps working, but nothing can be seen, changed or read (keys included) without the password. The app starts locked.")}</p>
         ${o.mot_de_passe ? `<label class="champ"><span>${t("Current password")}</span><input type="password" id="mdp-ancien" autocomplete="current-password"></label>` : ""}
         <label class="champ"><span>${o.mot_de_passe ? t("New password (empty to remove it)") : t("Password")}</span><input type="password" id="mdp-nouveau" autocomplete="new-password"></label>
@@ -2406,7 +2494,7 @@ async function rendreOptions() {
         <p class="petit ${o.git_bash ? "ok" : "attention"}">${o.git_bash ? h(t("Git for Windows: {0}", [o.git_bash.replace(/[\\/](usr[\\/])?bin[\\/]bash\.exe$/i, "")])) : t("Git for Windows is missing: Setup & health → Install everything.")}</p>
         <p class="muet petit">${t("Applies to the pilots started afterwards. When you close Athanor while native pilots run, it asks whether they go on in the background.")}</p>
       </div>
-      <div class="bloc"><h2>${t("Athanor's folder")}</h2>
+      <div class="bloc local-seul"><h2>${t("Athanor's folder")}</h2>
         <p class="m0"><code class="chemin-kit">${h(o.kit)}</code></p><div class="muet petit mt-1">${o.kit_valide ? "✔ " + t("Athanor's own files: settings, token, logs, the tools Claude installs. Your projects are elsewhere.") : "✖ " + t("this folder is not the tool")}</div>
         <div class="ligne mt-1"><button class="btn btn-petit" data-ouvrir="kit">${t("Open the folder")}</button><button class="btn btn-petit" data-ouvrir="logs">${t("Logs folder")}</button><span class="espace"></span><button class="btn btn-petit" id="op-guide">${t("Show the first-launch guide again")}</button></div>
         <details class="mt-1" ${o.kit_valide ? "" : "open"}><summary class="petit muet">${t("Use another tool folder (advanced)")}</summary>
@@ -2739,10 +2827,13 @@ $("#btn-verrou").addEventListener("click", async () => { await action(api("verro
 async function rafraichir() {
   try {
     const v = await fetch("/api/etat" + (etat.projet ? "?p=" + encodeURIComponent(etat.projet) : ""), { headers: { "X-Athanor": CSRF } }).then((r) => r.json());
+    if (v.erreur_key === "Not paired") return afficherNonAppaire();
     etat.vue = v;
+    document.body.classList.toggle("distant", !!v.distant);
+    marquerDistance(v);
     if (v.langue && v.langue !== etat.langue) { etat.langue = v.langue; appliquerLangue(v.langue); traduireNav(); }
     if ((v.theme || "") !== etat.theme || (v.accent || "") !== etat.accent) { etat.theme = v.theme || ""; etat.accent = v.accent || ""; appliquerTheme(etat.theme, etat.accent); }
-    if (!v.verrouille && v.bienvenue && etat.assistant < 0) { etat.assistant = 0; rendreAssistant(); }
+    if (!v.verrouille && v.bienvenue && !v.distant && etat.assistant < 0) { etat.assistant = 0; rendreAssistant(); }
     if (v.verrouille !== etat.verrouille) { etat.verrouille = v.verrouille; afficherVerrou(); if (!v.verrouille) rendrePage(); }
     rendreBandeau(v);
     if (etat.visite >= 0 && !$("#visite").hidden) { placerVoile(); placerBulle(); }
@@ -2752,6 +2843,7 @@ async function rafraichir() {
       // the Team page follows live, except while text is selected in it (a brief, a report)
       if ((etat.page === "equipe" && !String(window.getSelection() || "") && !etat.agForm) || (etat.page === "suivi" && !document.activeElement.matches("input, textarea, select"))) rendrePage();
       if (etat.page === "chat") majChat(false);
+      if (etat.page === "distance") await majDistance();
       // the update's progress, in place (Settings › Options)
       const blocMaj = document.getElementById("bloc-version");
       if (blocMaj && etat.optionsVue) {
