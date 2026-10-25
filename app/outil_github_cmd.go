@@ -123,6 +123,9 @@ type reglagesGH struct {
 	// the key is on the user's own GitHub account (a collaborator of a personal repository, who cannot
 	// add a key to the repository itself): CleID is then one of the account's SSH keys
 	CleCompte bool
+	// the project uses this computer's connection to the account (outil_github_connexion.go): no key of
+	// its own
+	Connexion bool
 }
 
 func existeGH(p string) bool { _, err := os.Stat(p); return err == nil }
@@ -153,6 +156,8 @@ func lireReglagesGH(d string) (reglagesGH, bool) {
 			r.Equipe = v == "1"
 		case "cle_compte":
 			r.CleCompte = v == "1"
+		case "connexion":
+			r.Connexion = v == "1"
 		case "compte":
 			if reCompteGH.MatchString(v) {
 				r.Compte = v
@@ -167,8 +172,9 @@ func lireReglagesGH(d string) (reglagesGH, bool) {
 			}
 		}
 	}
-	st, err := os.Stat(d + "/known_hosts")
-	cle, errc := os.Stat(d + "/cle")
+	fc, fkh := fichiersCleGH(d, r)
+	st, err := os.Stat(fkh)
+	cle, errc := os.Stat(fc)
 	return r, r.Depot != "" && errc == nil && cle.Mode().IsRegular() && err == nil && st.Size() > 0
 }
 
@@ -190,6 +196,9 @@ func ecrireReglagesGH(d string, r reglagesGH) error {
 	}
 	if r.CleCompte {
 		fmt.Fprintln(t, "cle_compte=1")
+	}
+	if r.Connexion {
+		fmt.Fprintln(t, "connexion=1")
 	}
 	t.Close()
 	return os.Rename(t.Name(), d+"/reglages")
@@ -441,13 +450,15 @@ func preparerMiroirGH(miroir, objets string) error {
 }
 
 func commandeSSHGH(d, port string) string {
+	r, _ := lireReglagesGH(d)
+	cle, kh := fichiersCleGH(d, r)
 	nul := "/dev/null"
 	ssh := programmeGH("ssh")
 	if runtime.GOOS == "windows" && !sshDeGitGH(ssh) {
 		nul = "NUL" // Windows' own OpenSSH
 	}
 	return fmt.Sprintf("'%s' -F %s -p %s -i '%s' -o IdentitiesOnly=yes -o IdentityAgent=none -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile='%s' -o GlobalKnownHostsFile=%s -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -o LogLevel=ERROR",
-		filepath.ToSlash(ssh), nul, port, filepath.ToSlash(d+"/cle"), filepath.ToSlash(d+"/known_hosts"), nul)
+		filepath.ToSlash(ssh), nul, port, filepath.ToSlash(cle), filepath.ToSlash(kh), nul)
 }
 
 func contientGH(s, motif string) bool { return regexp.MustCompile("(?i)" + motif).MatchString(s) }
@@ -797,6 +808,10 @@ func delierGH(args []string, w io.Writer) int {
 	if r.Depot != "" {
 		de = " from " + r.Depot
 	}
+	if r.Connexion {
+		fmt.Fprintf(w, "Unlinked%s: this computer's connection to GitHub stays, for its other projects.\n", de)
+		return 0
+	}
 	if r.CleCompte {
 		fmt.Fprintf(w, "Unlinked%s: the key is deleted from this PC (GitHub keeps an unusable entry under your account's Settings > SSH and GPG keys, \"Athanor …\", which you can remove).\n", de)
 		return 0
@@ -863,12 +878,14 @@ type identiteGH struct {
 }
 
 func lireIdentiteGH(d string) identiteGH {
-	var id identiteGH
+	// by default the commits are the user's alone (no "Co-Authored-By: Claude"): only a choice saved with
+	// sans_coauteur=0 puts Claude back as co-author
+	id := identiteGH{sansCoauteur: true}
 	for _, f := range []string{donneesGitHub() + "/identite-defaut", d + "/identite"} {
 		if !existeGH(f) {
 			continue
 		}
-		id = identiteGH{identiteDefini: id.identiteDefini} // the project's own choice replaces the default
+		id = identiteGH{identiteDefini: id.identiteDefini, sansCoauteur: true} // the project's own choice replaces the default
 		if f == d+"/identite" {
 			id.identiteDefini = true
 		}
@@ -883,9 +900,7 @@ func lireIdentiteGH(d string) identiteGH {
 					id.email = kv[1]
 				}
 			case "sans_coauteur":
-				if kv[1] == "1" {
-					id.sansCoauteur = true
-				}
+				id.sansCoauteur = kv[1] != "0"
 			}
 		}
 	}
@@ -1095,9 +1110,11 @@ func etatGH(args []string, w io.Writer) int {
 		v["atelier"] = r.Atelier
 		v["equipe"] = r.Equipe
 		v["cle_compte"] = r.CleCompte
+		v["connexion"] = r.Connexion
 	} else {
 		v["lie"] = false
 	}
+	v["connexion_pc"] = lireConnexionGH() // this computer's connection to GitHub (outil_github_connexion.go)
 	v["identite"] = identiteJSONGH(projet)
 	e := json.NewEncoder(w)
 	e.SetEscapeHTML(false)
@@ -1164,6 +1181,14 @@ func commandeGitHub(args []string, w io.Writer) (int, bool) {
 		return identitePiloteGH(reste, w), true
 	case "recuperer":
 		return recupererGH(reste, w), true
+	case "connecter":
+		return connecterGH(args[1:], w), true
+	case "deconnecter":
+		return deconnecterGH(args[1:], w), true
+	case "connexion":
+		return connexionGHCommande(args[1:], w), true
+	case "lier-compte":
+		return lierCompteGH(reste, w), true
 	case "tester":
 		return testerGH(reste, w), true
 	case "enregistrer":

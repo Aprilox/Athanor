@@ -163,35 +163,86 @@ func TestLierGitHub(t *testing.T) {
 		t.Errorf("another repository: the push folder of the previous one must go")
 	}
 
-	// a collaborator of a personal repository: the key goes on the account, once the user says yes
+	// a collaborator of a personal repository: this computer is connected to the account, once the user
+	// says yes; the project then uses that connection (no key of its own)
 	if out, code := lier("no\n", projet, "existant", "ami/projet"); code != 1 || !strings.Contains(out, "You are a collaborator of ami/projet") || !strings.Contains(out, "Not linked.") {
 		t.Errorf("collaborator, no: %d %q", code, out)
 	}
 	_ = os.Truncate(trace, 0)
 	out, code = lier("yes\n", projet, "existant", "ami/projet")
-	if code != 0 || !strings.Contains(out, "Linked: ami/projet.") || !strings.Contains(out, "Previous key removed from moi/vieux.") {
+	if code != 0 || !strings.Contains(out, "Linked: ami/projet, with this computer's connection to GitHub (moi).") || !strings.Contains(out, "Previous key removed from moi/vieux.") {
 		t.Fatalf("collaborator, yes: %d\n%s", code, out)
 	}
-	r, _ = lireReglagesGH(d)
-	if r.Depot != "ami/projet" || !r.CleCompte || r.CleID != "888" {
-		t.Errorf("collaborator: %+v", r)
+	r, lie = lireReglagesGH(d)
+	if !lie || r.Depot != "ami/projet" || !r.Connexion || r.CleID != "" || existeGH(filepath.Join(d, "cle")) {
+		t.Errorf("collaborator: %+v %v", r, lie)
+	}
+	if c := lireConnexionGH(); !c.Connecte || c.Login != "moi" || c.CleID != "888" {
+		t.Errorf("connection: %+v", c)
 	}
 	tr, _ = os.ReadFile(trace)
 	if !strings.Contains(string(tr), "auth refresh --hostname github.com --scopes admin:public_key") || !strings.Contains(string(tr), "-X POST user/keys -f title=Athanor (") ||
 		strings.Contains(string(tr), "POST repos/ami/projet/keys") {
 		t.Errorf("collaborator's gh calls:\n%s", tr)
 	}
-	// linked again: the previous key, on the account, removed from the account
+	// linked again, already connected: nothing asked, no new key
 	_ = os.Truncate(trace, 0)
-	if out, code := lier("yes\n", projet, "existant", "ami/projet"); code != 0 || !strings.Contains(out, "Previous key removed from your account.") {
+	if out, code := lier("", projet, "existant", "ami/projet"); code != 0 || strings.Contains(out, "Type yes") {
 		t.Errorf("collaborator again: %d %q", code, out)
 	}
-	if tr, _ := os.ReadFile(trace); !strings.Contains(string(tr), "-X DELETE user/keys/888") {
-		t.Errorf("the account's previous key not removed:\n%s", tr)
+	if tr, _ := os.ReadFile(trace); strings.Contains(string(tr), "POST user/keys") || strings.Contains(string(tr), "auth refresh") {
+		t.Errorf("a second key for a computer already connected:\n%s", tr)
 	}
 	var b bytes.Buffer
 	delierGH([]string{projet}, &b)
-	if !strings.Contains(b.String(), "SSH and GPG keys") {
-		t.Errorf("unlink of an account key: %q", b.String())
+	if !strings.Contains(b.String(), "this computer's connection to GitHub stays") || !lireConnexionGH().Connecte {
+		t.Errorf("unlink of a project using the connection: %q", b.String())
+	}
+	b.Reset()
+	deconnecterGH(nil, &b)
+	if lireConnexionGH().Connecte || !strings.Contains(b.String(), "Disconnected from moi") {
+		t.Errorf("disconnect: %q", b.String())
+	}
+}
+
+// TestConnecterGitHub: the computer's connection: one sign-in asking for the account's keys, a key
+// "Athanor (PC)" on the account, kept; the sign-in itself deleted.
+func TestConnecterGitHub(t *testing.T) {
+	if _, err := exec.LookPath("ssh-keygen"); err != nil {
+		t.Skip("no ssh-keygen")
+	}
+	bin := t.TempDir()
+	trace := filepath.Join(t.TempDir(), "trace")
+	if err := os.WriteFile(filepath.Join(bin, "gh"), []byte(faux_gh), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	donnees := filepath.Join(t.TempDir(), "github")
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("TRACE_GH", trace)
+	t.Setenv("ATHANOR_GITHUB_DIR", donnees)
+	t.Setenv("ATHANOR_GITHUB_SSH_SECOURS", "")
+	var b bytes.Buffer
+	if code := connecterGH(nil, &b); code != 0 || !strings.Contains(b.String(), "Connected as moi.") {
+		t.Fatalf("connecter: %d %s", code, b.String())
+	}
+	c := lireConnexionGH()
+	if !c.Connecte || c.Login != "moi" || c.Nom != "Moi Même" || c.CleID != "888" {
+		t.Fatalf("connection: %+v", c)
+	}
+	if st, err := os.Stat(filepath.Join(dossierConnexionGH(), "cle")); err != nil || st.Mode().Perm() != 0o600 {
+		t.Fatalf("the key: %v %v", st, err)
+	}
+	tr, _ := os.ReadFile(trace)
+	if !strings.Contains(string(tr), "--scopes user:email,admin:public_key") || !strings.Contains(string(tr), "-X POST user/keys -f title=Athanor (") ||
+		!strings.Contains(string(tr), "auth logout") {
+		t.Fatalf("gh calls:\n%s", tr)
+	}
+	if l, _ := filepath.Glob(filepath.Join(donnees, ".connexion.*")); len(l) != 0 {
+		t.Fatalf("sign-in kept: %v", l)
+	}
+	b.Reset()
+	connexionGHCommande(nil, &b)
+	if !strings.Contains(b.String(), `"connecte":true`) || !strings.Contains(b.String(), `"login":"moi"`) || strings.Contains(b.String(), "888") {
+		t.Fatalf("state: %s", b.String())
 	}
 }

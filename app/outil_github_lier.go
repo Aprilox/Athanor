@@ -104,34 +104,7 @@ func lierGH(args []string, w io.Writer) int {
 		fmt.Fprintf(w, "Invalid branch name: %s\n", branche)
 		return 2
 	}
-	reparer := "run Repair in the application's Options (Linux packages)"
-	switch runtime.GOOS {
-	case "windows":
-		reparer = "Setup & health -> Install everything (native Windows mode)"
-	case "darwin":
-		reparer = "Setup & health -> Basic packages (Homebrew)"
-	}
-	if _, err := exec.LookPath("gh"); err != nil {
-		fmt.Fprintf(w, "GitHub CLI (gh) is missing: %s.\n", reparer)
-		return 1
-	}
-	if presentGH("ssh-keygen") != nil || presentGH("ssh") != nil {
-		fmt.Fprintf(w, "OpenSSH is missing: %s.\n", reparer)
-		return 1
-	}
-	aideOut, _ := commande("gh", "auth", "login", "--help").CombinedOutput()
-	aide := string(aideOut)
-	if !strings.Contains(aide, "--skip-ssh-key") {
-		fmt.Fprintln(w, "GitHub CLI is too old: run Repair in the application's Options to update it.")
-		return 1
-	}
-
-	donnees := donneesGitHub()
 	d := dossierGH(projet)
-	if os.MkdirAll(donnees, 0o700) == nil {
-		_ = os.Chmod(donnees, 0o700)
-		_ = os.Chmod(filepath.Dir(donnees), 0o700)
-	}
 	if err := os.MkdirAll(d, 0o700); err != nil || os.Chmod(d, 0o700) != nil {
 		fmt.Fprintf(w, "Cannot create %s\n", d)
 		return 1
@@ -142,107 +115,25 @@ func lierGH(args []string, w io.Writer) int {
 		return 1
 	}
 	defer liaison.Close()
-	tmp, err := os.MkdirTemp(donnees, ".connexion.")
-	if err != nil {
-		return 1
-	}
-	_ = os.Chmod(tmp, 0o700)
-	env := []string{}
-	for _, e := range os.Environ() {
-		k, _, _ := strings.Cut(e, "=")
-		switch strings.ToUpper(k) {
-		case "GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN", "GH_HOST", "GH_CONFIG_DIR",
-			"XDG_STATE_HOME", "XDG_CACHE_HOME", "GH_NO_UPDATE_NOTIFIER", "BROWSER":
-			continue
-		}
-		env = append(env, e)
-	}
-	env = append(env, "GH_CONFIG_DIR="+tmp, "XDG_STATE_HOME="+filepath.Join(tmp, "etat"), "XDG_CACHE_HOME="+filepath.Join(tmp, "cache"), "GH_NO_UPDATE_NOTIFIER=1")
-	if b := navigateurGH(); b != "" {
-		env = append(env, "BROWSER="+b)
-	}
-	gh := ghLier{env}
-	// nothing of this sign-in survives: signed out and folder deleted whatever happens
-	var une sync.Once
-	nettoyer := func() {
-		une.Do(func() {
-			c := commande("gh", "auth", "logout", "--hostname", "github.com")
-			c.Env, c.Stdin = env, strings.NewReader("y\n")
-			_ = c.Run()
-			_ = os.RemoveAll(tmp)
-		})
-	}
-	defer nettoyer()
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
-	fini := make(chan struct{})
-	defer func() { signal.Stop(sig); close(fini) }()
-	go func() {
-		select {
-		case <-sig:
-			nettoyer()
-			os.Exit(130)
-		case <-fini:
-		}
-	}()
-
-	fmt.Fprint(w, "=== Link this project to GitHub ===\n\n"+
+	ses, code := ouvrirSessionGH(w, errw, "user:email", "=== Link this project to GitHub ===\n\n"+
 		"1. Below, GitHub shows a one-time code. Press Enter: your browser opens on GitHub.\n"+
 		"2. Paste the code there and authorize.\n\n"+
 		"Athanor keeps nothing of this sign-in: it only gives the repository its own key (valid for\n"+
 		"that repository alone), then signs out. Claude never sees the sign-in nor the key.\n\n")
-	opts := []string{"auth", "login", "--hostname", "github.com", "--git-protocol", "ssh", "--skip-ssh-key", "--web", "--scopes", "user:email"}
-	if strings.Contains(aide, "--insecure-storage") {
-		opts = append(opts, "--insecure-storage") // never the system keyring
+	if ses == nil {
+		return code
 	}
-	c := commande("gh", opts...)
-	c.Env, c.Stdin, c.Stdout, c.Stderr = env, os.Stdin, w, errw
-	if c.Run() != nil {
-		fmt.Fprint(w, "\nSign-in cancelled or failed: nothing was changed.\n")
-		return 1
-	}
-
-	var u struct {
-		Login string      `json:"login"`
-		ID    json.Number `json:"id"`
-		Name  string      `json:"name"`
-	}
-	if out, _, err := gh.api("user"); err == nil {
-		_ = json.Unmarshal(out, &u)
-	}
-	compte := u.Login
-	if !reCompteGH.MatchString(compte) {
-		fmt.Fprintln(w, "Cannot read your GitHub account.")
-		return 1
-	}
-	// the account, to propose the commit author (name, verified emails, the private noreply address)
-	var fc strings.Builder
-	fmt.Fprintf(&fc, "login=%s\n", compte)
-	if reCleIDGH.MatchString(u.ID.String()) {
-		fmt.Fprintf(&fc, "id=%s\n", u.ID.String())
-	}
-	if nomAuteurValideGH(u.Name) {
-		fmt.Fprintf(&fc, "nom=%s\n", u.Name)
-	}
-	if out, _, err := gh.api("user/emails"); err == nil {
-		var emails []struct {
-			Email    string `json:"email"`
-			Verified bool   `json:"verified"`
-		}
-		_ = json.Unmarshal(out, &emails)
-		for _, e := range emails {
-			if e.Verified && emailValideGH(e.Email) {
-				fmt.Fprintf(&fc, "email=%s\n", e.Email)
-			}
-		}
-	}
-	if os.WriteFile(d+"/compte.neuf", []byte(fc.String()), 0o644) == nil {
+	defer ses.fermer()
+	gh, env, aide, compte := ses.gh, ses.env, ses.aide, ses.login
+	if os.WriteFile(d+"/compte.neuf", []byte(ses.fiche), 0o644) == nil {
 		_ = os.Rename(d+"/compte.neuf", d+"/compte")
 	}
 	fmt.Fprintf(w, "\nSigned in as %s.\n", compte)
 
 	depot := ""
-	cleCompte := false
+	// the repository uses this computer's connection to the account (outil_github_connexion.go) rather
+	// than a key of its own: a collaborator, or a repository created while the computer is connected
+	viaConnexion := mode == "creer" && connexionPresenteGH()
 	if mode == "creer" {
 		out, erreur, _ := gh.api("-X", "POST", "user/repos", "-f", "name="+cible, "-F", "private=true", "-F", "auto_init=false", "-f", "description=Made with Athanor")
 		var r struct {
@@ -281,15 +172,18 @@ func lierGH(args []string, w io.Writer) int {
 			fmt.Fprintln(w, "(on GitHub: the repository's Settings > Collaborators), then link again.")
 			return 1
 		}
-		if !r.Permissions.Admin {
-			// a collaborator: GitHub only lets an administrator add a key to the repository; the key goes
-			// on the user's own account instead (it then opens what that account can push to)
+		if !r.Permissions.Admin && connexionPresenteGH() {
+			viaConnexion = true // already connected: nothing more to ask
+		} else if !r.Permissions.Admin {
+			// a collaborator: GitHub only lets an administrator add a key to the repository; this computer
+			// is connected to the user's own account instead (one key, kept, for every project)
 			fmt.Fprintf(w, "\nYou are a collaborator of %s, not its administrator: GitHub only lets an administrator give a\n", depot)
-			fmt.Fprint(w, "repository a key of its own. Athanor can put this computer's key on YOUR GitHub account instead: it then\n"+
-				"opens every repository your account can push to, not this one alone (Claude never sees it; you can\n"+
-				"remove it any time from GitHub's Settings > SSH and GPG keys, \"Athanor …\").\n"+
+			fmt.Fprint(w, "repository a key of its own. Athanor can connect this computer to YOUR GitHub account instead: a key\n"+
+				"\"Athanor (this computer)\" on your account, kept by Athanor, that every project of this computer then uses\n"+
+				"without signing in again. It opens every repository your account can push to (Claude never sees it;\n"+
+				"Settings > GitHub in Athanor disconnects, and GitHub's Settings > SSH and GPG keys removes it).\n"+
 				"GitHub asks you once more in the browser, for that permission (admin:public_key).\n")
-			fmt.Fprint(errw, "Type yes to put the key on your account: ")
+			fmt.Fprint(errw, "Type yes to connect this computer to your account: ")
 			rep, _ := bufio.NewReader(os.Stdin).ReadString('\n')
 			if strings.TrimRight(rep, "\r\n") != "yes" {
 				fmt.Fprintln(w, "Not linked. Another way: the repository's owner signs in in this window instead of you (only a key")
@@ -306,7 +200,11 @@ func lierGH(args []string, w io.Writer) int {
 				fmt.Fprint(w, "\nPermission not given: nothing was changed.\n")
 				return 1
 			}
-			cleCompte = true
+			if err := installerConnexionGH(ses, w); err != nil {
+				fmt.Fprintf(w, "This computer could not be connected: %v\n", err)
+				return 1
+			}
+			viaConnexion = true
 		}
 		if r.Archived {
 			fmt.Fprintf(w, "%s is archived on GitHub (read-only): unarchive it first.\n", depot)
@@ -356,6 +254,9 @@ func lierGH(args []string, w io.Writer) int {
 	if r, lie := lireReglagesGH(d); lie {
 		ancienDepot, ancienID, ancienCompte = r.Depot, r.CleID, r.CleCompte
 	}
+	if viaConnexion {
+		return lierAvecConnexionFinGH(projet, d, depot, branche, autoOn, partage == "1", equipe, ancienDepot, ancienID, ancienCompte, gh, w)
+	}
 	os.Remove(d + "/cle.neuve")
 	os.Remove(d + "/cle.neuve.pub")
 	base := path.Base(filepath.ToSlash(cleProjetGH(projet)))
@@ -367,15 +268,8 @@ func lierGH(args []string, w io.Writer) int {
 		return 1
 	}
 	pub, _ := os.ReadFile(d + "/cle.neuve.pub")
-	var out []byte
-	var erreur string
-	if cleCompte {
-		titre := "Athanor (" + coupeValide(firstNonEmpty(lireMachinePC().Nom, "PC"), 40) + ", " + coupeValide(base, 40) + ")"
-		out, erreur, _ = gh.api("-X", "POST", "user/keys", "-f", "title="+titre, "-f", "key="+strings.TrimRight(string(pub), "\r\n"))
-	} else {
-		out, erreur, _ = gh.api("-X", "POST", "repos/"+depot+"/keys", "-f", "title=Athanor ("+coupeValide(base, 60)+")",
-			"-f", "key="+strings.TrimRight(string(pub), "\r\n"), "-F", "read_only=false")
-	}
+	out, erreur, _ := gh.api("-X", "POST", "repos/"+depot+"/keys", "-f", "title=Athanor ("+coupeValide(base, 60)+")",
+		"-f", "key="+strings.TrimRight(string(pub), "\r\n"), "-F", "read_only=false")
 	var k struct {
 		ID json.Number `json:"id"`
 	}
@@ -387,54 +281,14 @@ func lierGH(args []string, w io.Writer) int {
 		fmt.Fprintf(w, "GitHub refused the key: %s\n", coupeOctets(erreur, 300))
 		return 1
 	}
-	if ancienID != "" && ancienCompte {
-		if _, _, err := gh.api("-X", "DELETE", "user/keys/"+ancienID); err == nil {
-			fmt.Fprintln(w, "Previous key removed from your account.")
-		}
-	} else if ancienID != "" && depotValideGH(ancienDepot) {
-		if _, _, err := gh.api("-X", "DELETE", "repos/"+ancienDepot+"/keys/"+ancienID); err == nil {
-			fmt.Fprintf(w, "Previous key removed from %s.\n", ancienDepot)
-		}
-	}
+	retirerAncienneCleGH(gh, ancienDepot, ancienID, ancienCompte, w)
 	// GitHub's SSH identity, as GitHub publishes it (the push refuses any other server)
-	var cles []string
-	if out, _, err := gh.api("meta"); err == nil {
-		var m struct {
-			SSH []string `json:"ssh_keys"`
-		}
-		_ = json.Unmarshal(out, &m)
-		for _, c := range m.SSH {
-			if reCleSSHGH.MatchString(c) {
-				cles = append(cles, c)
-			}
-		}
-	}
-	if len(cles) == 0 {
+	kh, err := knownHostsGH(gh)
+	if err != nil {
 		fmt.Fprintln(w, "Cannot read GitHub's SSH keys.")
 		return 1
 	}
-	var noms []string
-	for _, h := range []string{firstNonEmpty(os.Getenv("ATHANOR_GITHUB_SSH"), "github.com:22"), secoursSSHGH()} {
-		if h == "" {
-			continue
-		}
-		hote, port := h, h
-		if i := strings.LastIndex(h, ":"); i >= 0 {
-			hote, port = h[:i], h[i+1:]
-		}
-		if port == "22" {
-			noms = append(noms, hote)
-		} else {
-			noms = append(noms, "["+hote+"]:"+port)
-		}
-	}
-	var kh strings.Builder
-	for _, c := range cles {
-		for _, h := range noms {
-			fmt.Fprintf(&kh, "%s %s\n", h, c)
-		}
-	}
-	_ = os.WriteFile(d+"/known_hosts.neuf", []byte(kh.String()), 0o644)
+	_ = os.WriteFile(d+"/known_hosts.neuf", []byte(kh), 0o644)
 
 	v := verrouGH(d, 300*time.Second)
 	if os.Rename(d+"/cle.neuve", d+"/cle") == nil && os.Rename(d+"/cle.neuve.pub", d+"/cle.pub") == nil {
@@ -447,7 +301,7 @@ func lierGH(args []string, w io.Writer) int {
 		os.Remove(d + "/dernier.json")
 	}
 	if ecrireReglagesGH(d, reglagesGH{Depot: depot, Branche: branche, Auto: autoOn, Compte: compte,
-		LieLe: time.Now().Format("2006-01-02T15:04:05"), CleID: id, Atelier: partage == "1", CleCompte: cleCompte}) != nil {
+		LieLe: time.Now().Format("2006-01-02T15:04:05"), CleID: id, Atelier: partage == "1"}) != nil {
 		if v != nil {
 			v.Close()
 		}
@@ -479,3 +333,182 @@ func lierGH(args []string, w io.Writer) int {
 
 // pauseLierGH: the pause before the first push (GitHub takes a moment to accept a new key).
 var pauseLierGH = 2 * time.Second
+
+// sessionGH: a GitHub sign-in (gh auth login) in a temporary folder of donneesGitHub, signed out and
+// deleted by fermer (and on an interruption): nothing of it is ever kept.
+type sessionGH struct {
+	gh             ghLier
+	env            []string
+	aide           string
+	login, id, nom string
+	fiche          string // login=, id=, nom=, email= lines (the commit author proposed)
+	fermer         func()
+}
+
+func ouvrirSessionGH(w, errw io.Writer, scopes, intro string) (*sessionGH, int) {
+	reparer := "run Repair in the application's Options (Linux packages)"
+	switch runtime.GOOS {
+	case "windows":
+		reparer = "Setup & health -> Install everything (native Windows mode)"
+	case "darwin":
+		reparer = "Setup & health -> Basic packages (Homebrew)"
+	}
+	if _, err := exec.LookPath("gh"); err != nil {
+		fmt.Fprintf(w, "GitHub CLI (gh) is missing: %s.\n", reparer)
+		return nil, 1
+	}
+	if presentGH("ssh-keygen") != nil || presentGH("ssh") != nil {
+		fmt.Fprintf(w, "OpenSSH is missing: %s.\n", reparer)
+		return nil, 1
+	}
+	aideOut, _ := commande("gh", "auth", "login", "--help").CombinedOutput()
+	aide := string(aideOut)
+	if !strings.Contains(aide, "--skip-ssh-key") {
+		fmt.Fprintln(w, "GitHub CLI is too old: run Repair in the application's Options to update it.")
+		return nil, 1
+	}
+	donnees := donneesGitHub()
+	if os.MkdirAll(donnees, 0o700) == nil {
+		_ = os.Chmod(donnees, 0o700)
+		_ = os.Chmod(filepath.Dir(donnees), 0o700)
+	}
+	tmp, err := os.MkdirTemp(donnees, ".connexion.")
+	if err != nil {
+		return nil, 1
+	}
+	_ = os.Chmod(tmp, 0o700)
+	env := []string{}
+	for _, e := range os.Environ() {
+		k, _, _ := strings.Cut(e, "=")
+		switch strings.ToUpper(k) {
+		case "GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN", "GH_HOST", "GH_CONFIG_DIR",
+			"XDG_STATE_HOME", "XDG_CACHE_HOME", "GH_NO_UPDATE_NOTIFIER", "BROWSER":
+			continue
+		}
+		env = append(env, e)
+	}
+	env = append(env, "GH_CONFIG_DIR="+tmp, "XDG_STATE_HOME="+filepath.Join(tmp, "etat"), "XDG_CACHE_HOME="+filepath.Join(tmp, "cache"), "GH_NO_UPDATE_NOTIFIER=1")
+	if b := navigateurGH(); b != "" {
+		env = append(env, "BROWSER="+b)
+	}
+	ses := &sessionGH{gh: ghLier{env}, env: env, aide: aide}
+	// nothing of this sign-in survives: signed out and folder deleted whatever happens
+	var une sync.Once
+	nettoyer := func() {
+		une.Do(func() {
+			c := commande("gh", "auth", "logout", "--hostname", "github.com")
+			c.Env, c.Stdin = env, strings.NewReader("y\n")
+			_ = c.Run()
+			_ = os.RemoveAll(tmp)
+		})
+	}
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
+	fini := make(chan struct{})
+	var arret sync.Once
+	ses.fermer = func() {
+		nettoyer()
+		arret.Do(func() { signal.Stop(sig); close(fini) })
+	}
+	go func() {
+		select {
+		case <-sig:
+			nettoyer()
+			os.Exit(130)
+		case <-fini:
+		}
+	}()
+
+	fmt.Fprint(w, intro)
+	opts := []string{"auth", "login", "--hostname", "github.com", "--git-protocol", "ssh", "--skip-ssh-key", "--web", "--scopes", scopes}
+	if strings.Contains(aide, "--insecure-storage") {
+		opts = append(opts, "--insecure-storage") // never the system keyring
+	}
+	c := commande("gh", opts...)
+	c.Env, c.Stdin, c.Stdout, c.Stderr = env, os.Stdin, w, errw
+	if c.Run() != nil {
+		fmt.Fprint(w, "\nSign-in cancelled or failed: nothing was changed.\n")
+		ses.fermer()
+		return nil, 1
+	}
+	var u struct {
+		Login string      `json:"login"`
+		ID    json.Number `json:"id"`
+		Name  string      `json:"name"`
+	}
+	if out, _, err := ses.gh.api("user"); err == nil {
+		_ = json.Unmarshal(out, &u)
+	}
+	if !reCompteGH.MatchString(u.Login) {
+		fmt.Fprintln(w, "Cannot read your GitHub account.")
+		ses.fermer()
+		return nil, 1
+	}
+	ses.login = u.Login
+	// the account, to propose the commit author (name, verified emails, the private noreply address)
+	var fc strings.Builder
+	fmt.Fprintf(&fc, "login=%s\n", u.Login)
+	if reCleIDGH.MatchString(u.ID.String()) {
+		ses.id = u.ID.String()
+		fmt.Fprintf(&fc, "id=%s\n", u.ID.String())
+	}
+	if nomAuteurValideGH(u.Name) {
+		ses.nom = u.Name
+		fmt.Fprintf(&fc, "nom=%s\n", u.Name)
+	}
+	if out, _, err := ses.gh.api("user/emails"); err == nil {
+		var emails []struct {
+			Email    string `json:"email"`
+			Verified bool   `json:"verified"`
+		}
+		_ = json.Unmarshal(out, &emails)
+		for _, e := range emails {
+			if e.Verified && emailValideGH(e.Email) {
+				fmt.Fprintf(&fc, "email=%s\n", e.Email)
+			}
+		}
+	}
+	ses.fiche = fc.String()
+	return ses, 0
+}
+
+// knownHostsGH: GitHub's SSH keys as GitHub publishes them (meta), for github.com and the fallback host.
+func knownHostsGH(gh ghLier) (string, error) {
+	var cles []string
+	if out, _, err := gh.api("meta"); err == nil {
+		var m struct {
+			SSH []string `json:"ssh_keys"`
+		}
+		_ = json.Unmarshal(out, &m)
+		for _, c := range m.SSH {
+			if reCleSSHGH.MatchString(c) {
+				cles = append(cles, c)
+			}
+		}
+	}
+	if len(cles) == 0 {
+		return "", fmt.Errorf("no SSH key")
+	}
+	var noms []string
+	for _, h := range []string{firstNonEmpty(os.Getenv("ATHANOR_GITHUB_SSH"), "github.com:22"), secoursSSHGH()} {
+		if h == "" {
+			continue
+		}
+		hote, port := h, h
+		if i := strings.LastIndex(h, ":"); i >= 0 {
+			hote, port = h[:i], h[i+1:]
+		}
+		if port == "22" {
+			noms = append(noms, hote)
+		} else {
+			noms = append(noms, "["+hote+"]:"+port)
+		}
+	}
+	var kh strings.Builder
+	for _, c := range cles {
+		for _, h := range noms {
+			fmt.Fprintf(&kh, "%s %s\n", h, c)
+		}
+	}
+	return kh.String(), nil
+}
