@@ -203,3 +203,20 @@ func texteNouvelAppareil(langue, nom string) (string, string) {
 	}
 	return "Athanor: new device paired", nom + " can now drive Athanor. If it is not you, remove it in Athanor › Remote."
 }
+
+// texteAppareilRetireMdp: the computer's notification when a device typed too many wrong passwords.
+func texteAppareilRetireMdp(langue, nom string) (string, string) {
+	switch langue {
+	case "fr":
+		return "Athanor : appareil retiré", nom + " a tapé 5 mots de passe faux : il n'est plus appairé. Si c'était vous, scannez à nouveau le QR code."
+	case "es":
+		return "Athanor: dispositivo quitado", nom + " escribió 5 contraseñas incorrectas: ya no está vinculado. Si era usted, vuelva a escanear el código QR."
+	case "de":
+		return "Athanor: Gerät entfernt", nom + " hat 5 falsche Passwörter eingegeben: Es ist nicht mehr gekoppelt. Wenn Sie es waren, scannen Sie den QR-Code erneut."
+	case "it":
+		return "Athanor: dispositivo tolto", nom + " ha scritto 5 password errate: non è più associato. Se eri tu, scansiona di nuovo il codice QR."
+	case "pt":
+		return "Athanor: dispositivo retirado", nom + " escreveu 5 palavras-passe erradas: já não está associado. Se foi você, volte a ler o código QR."
+	}
+	return "Athanor: device removed", nom + " typed 5 wrong passwords: it is no longer paired. If it was you, scan the QR code again."
+}

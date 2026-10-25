@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -411,29 +412,54 @@ func (s *Serveur) routes(mux *http.ServeMux) {
 
 // ----------------------------------------------------------------------------- locking
 
+// essaisMdpDistance: wrong passwords a remote device may type before it is removed from the trusted ones
+// (a stolen phone cannot try password after password).
+const essaisMdpDistance = 5
+
 func (s *Serveur) apiDeverrouiller(w http.ResponseWriter, r *http.Request) {
 	var c struct {
 		MotDePasse string `json:"mot_de_passe"`
 	}
 	_ = lireCorps(r, &c)
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.config.MotDePasseHash == "" {
+	sel, hash := s.config.Sel, s.config.MotDePasseHash
+	s.mu.Unlock()
+	if hash == "" {
 		s.ecrireJSON(w, map[string]bool{"ok": true})
 		return
 	}
-	time.Sleep(400 * time.Millisecond) // slows down bursts of attempts
-	if !egal(hacher(s.config.Sel, c.MotDePasse), s.config.MotDePasseHash) {
-		s.erreur(w, http.StatusUnauthorized, "Wrong password")
+	time.Sleep(400 * time.Millisecond) // slows down bursts of attempts (without holding the application)
+	id := appareilDe(r)
+	if !egal(hacher(sel, c.MotDePasse), hash) {
+		if id == "" {
+			s.erreur(w, http.StatusUnauthorized, "Wrong password")
+			return
+		}
+		d := s.dist()
+		d.mu.Lock()
+		d.essaisMdp[id]++
+		reste := essaisMdpDistance - d.essaisMdp[id]
+		d.mu.Unlock()
+		if reste > 0 {
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			w.WriteHeader(http.StatusUnauthorized)
+			_ = json.NewEncoder(w).Encode(map[string]any{"erreur_key": "Wrong password: {0} attempt(s) left, then this device is removed", "args": []string{strconv.Itoa(reste)}})
+			return
+		}
+		s.retirerAppareilDistance(id, "mdp")
+		s.erreur(w, http.StatusUnauthorized, "Not paired")
 		return
 	}
-	if id := appareilDe(r); id != "" {
+	if id != "" {
 		d := s.dist()
 		d.mu.Lock()
 		d.deverrouilles[id] = true
+		delete(d.essaisMdp, id)
 		d.mu.Unlock()
 	} else {
+		s.mu.Lock()
 		s.ouvrirSession(w)
+		s.mu.Unlock()
 	}
 	s.ecrireJSON(w, map[string]bool{"ok": true})
 }

@@ -81,11 +81,12 @@ type distance struct {
 	chiffres, chiffresAvant       string
 	chiffresFin, chiffresAvantFin time.Time
 	demandes                      map[string]*demandeAppairage
+	essaisMdp                     map[string]int // wrong passwords per device (serveur.go)
 }
 
 func (s *Serveur) dist() *distance {
 	s.distOnce.Do(func() {
-		s.distEtat = &distance{vu: map[string]time.Time{}, lieu: map[string]string{}, deverrouilles: map[string]bool{}, demandes: map[string]*demandeAppairage{}}
+		s.distEtat = &distance{vu: map[string]time.Time{}, lieu: map[string]string{}, deverrouilles: map[string]bool{}, demandes: map[string]*demandeAppairage{}, essaisMdp: map[string]int{}}
 	})
 	return s.distEtat
 }
@@ -543,23 +544,21 @@ func (s *Serveur) apiDistanceAppareil(w http.ResponseWriter, r *http.Request) {
 			c.Nom = string([]rune(c.Nom)[:40])
 		}
 	}
-	s.mu.Lock()
-	l := s.config.Distance.Appareils
-	trouve := false
-	for i, a := range l {
-		if a.ID != id {
-			continue
+	var trouve bool
+	var err error
+	if r.Method == http.MethodDelete {
+		trouve, err = s.retirerAppareilDistance(id, "")
+	} else {
+		s.mu.Lock()
+		for i, a := range s.config.Distance.Appareils {
+			if a.ID == id {
+				trouve = true
+				s.config.Distance.Appareils[i].Nom = c.Nom
+			}
 		}
-		trouve = true
-		if r.Method == http.MethodDelete {
-			s.config.Distance.Appareils = append(append([]Appareil{}, l[:i]...), l[i+1:]...)
-		} else {
-			s.config.Distance.Appareils[i].Nom = c.Nom
-		}
-		break
+		err = ecrireConfig(s.config)
+		s.mu.Unlock()
 	}
-	err := ecrireConfig(s.config)
-	s.mu.Unlock()
 	if !trouve {
 		s.erreur(w, http.StatusNotFound, "Unknown")
 		return
@@ -567,14 +566,6 @@ func (s *Serveur) apiDistanceAppareil(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		s.erreur(w, http.StatusInternalServerError, err.Error())
 		return
-	}
-	if r.Method == http.MethodDelete {
-		d := s.dist()
-		d.mu.Lock()
-		delete(d.vu, id)
-		delete(d.lieu, id)
-		delete(d.deverrouilles, id)
-		d.mu.Unlock()
 	}
 	s.ecrireJSON(w, s.vueDistance())
 }
@@ -633,4 +624,37 @@ func (s *Serveur) dernierAppareil() string {
 		return ""
 	}
 	return l[len(l)-1].ID + "|" + l[len(l)-1].Nom
+}
+
+// retirerAppareilDistance: a device leaves the trusted ones (✕, or too many wrong passwords: pourquoi "mdp",
+// and the computer says so); its next request is refused.
+func (s *Serveur) retirerAppareilDistance(id, pourquoi string) (bool, error) {
+	s.mu.Lock()
+	l := s.config.Distance.Appareils
+	trouve, nom := false, ""
+	for i, a := range l {
+		if a.ID == id {
+			trouve, nom = true, a.Nom
+			s.config.Distance.Appareils = append(append([]Appareil{}, l[:i]...), l[i+1:]...)
+			break
+		}
+	}
+	var err error
+	if trouve {
+		err = ecrireConfig(s.config)
+	}
+	langue := s.config.Langue
+	s.mu.Unlock()
+	d := s.dist()
+	d.mu.Lock()
+	delete(d.vu, id)
+	delete(d.lieu, id)
+	delete(d.deverrouilles, id)
+	delete(d.essaisMdp, id)
+	d.mu.Unlock()
+	if trouve && pourquoi == "mdp" {
+		titre, texte := texteAppareilRetireMdp(langue, nom)
+		go notifier(titre, texte)
+	}
+	return trouve, err
 }
