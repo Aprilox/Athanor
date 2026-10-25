@@ -156,7 +156,7 @@ func texteRepriseJalon(j Jalon, essais []essaiPC) string {
 		}
 		l = append(l, s)
 	}
-	return fmt.Sprintf(" No computer of the team could run %s for this milestone; they tried: %s. Do not try for long again: one quick check, then ask the user with `athanor todo add` what to repair, naming the computers that tried and the one meant to build it, and go on with what does not need %s.",
+	return fmt.Sprintf(" No computer of the team could run %s for this milestone; they tried: %s. Do not repeat their attempts: one check that the cause is still there (or a repair none of them tried), then ask the user with `athanor todo add` what to repair, naming the computers that tried and the one meant to build it, and go on with what does not need %s.",
 		essais[0].Outil, strings.Join(l, "; "), essais[0].Outil)
 }
 
