@@ -119,6 +119,7 @@ type reglagesGH struct {
 	Depot, Branche, Compte, LieLe, CleID string
 	Auto                                 bool
 	Atelier                              bool // the workshop shared too (outil_atelier_partage.go)
+	Equipe                               bool // several computers on the repository (pcs.go)
 }
 
 func existeGH(p string) bool { _, err := os.Stat(p); return err == nil }
@@ -145,6 +146,8 @@ func lireReglagesGH(d string) (reglagesGH, bool) {
 			}
 		case "atelier":
 			r.Atelier = v == "1"
+		case "equipe":
+			r.Equipe = v == "1"
 		case "compte":
 			if reCompteGH.MatchString(v) {
 				r.Compte = v
@@ -176,6 +179,9 @@ func ecrireReglagesGH(d string, r reglagesGH) error {
 	fmt.Fprintf(t, "depot=%s\nbranche=%s\nauto=%s\ncompte=%s\nlie_le=%s\ncle_id=%s\n", r.Depot, r.Branche, auto, r.Compte, r.LieLe, r.CleID)
 	if r.Atelier {
 		fmt.Fprintln(t, "atelier=1")
+	}
+	if r.Equipe {
+		fmt.Fprintln(t, "equipe=1")
 	}
 	t.Close()
 	return os.Rename(t.Name(), d+"/reglages")
@@ -339,7 +345,9 @@ func coupeOctets(s string, n int) string {
 // analyserGH: the "place<TAB>kind" lines of the commits to push (what was already pushed is not scanned
 // again); false when the scan could not run to the end.
 func analyserGH(miroir, sha string, partage bool) ([]string, bool) {
-	plage := []string{sha, "--not", "--glob=refs/athanor/pousse/*"}
+	// what was pushed from here, and what GitHub already has (the other computers' commits, fetched): public
+	// already, a secret there is not this push's to stop
+	plage := []string{sha, "--not", "--glob=refs/athanor/pousse/*", "--glob=" + refsDistantPC + "*"}
 	passer := func(mode string, args ...string) (string, bool) {
 		c := gmGH(miroir, nil, args...)
 		out, err := c.StdoutPipe()
@@ -573,17 +581,8 @@ func pousserGH(args []string, w io.Writer) int {
 		}
 	}
 	sortie, code := "", 1
-	for _, essai := range []string{firstNonEmpty(os.Getenv("ATHANOR_GITHUB_SSH"), "github.com:22"), secoursSSHGH()} {
-		if essai == "" {
-			continue
-		}
-		hote, port := essai, essai // ${essai%:*}, ${essai##*:}
-		if i := strings.LastIndex(essai, ":"); i >= 0 {
-			hote, port = essai[:i], essai[i+1:]
-		}
-		url := fmt.Sprintf("ssh://git@%s:%s/%s.git", hote, port, r.Depot)
-		c := gmGH(miroir, nil, "-c", "protocol.ssh.allow=always", "-c", "core.sshCommand="+commandeSSHGH(d, port),
-			"push", "--porcelain", "--no-verify", url, sha+":refs/heads/"+branche)
+	for _, dist := range distantsGH(d, r) { // GitHub's SSH port, then its HTTPS one (pcs.go)
+		c := gmGH(miroir, nil, append(dist.extra, "push", "--porcelain", "--no-verify", dist.url, sha+":refs/heads/"+branche)...)
 		out, err := c.CombinedOutput()
 		sortie = strings.TrimRight(string(out), "\n")
 		code = 0
@@ -1082,6 +1081,7 @@ func etatGH(args []string, w io.Writer) int {
 		v["lie"], v["depot"], v["url"], v["branche"], v["branche_choisie"] = true, r.Depot, "https://github.com/"+r.Depot, b, r.Branche
 		v["auto"], v["compte"], v["lie_le"], v["dernier"] = r.Auto, r.Compte, r.LieLe, dernier
 		v["atelier"] = r.Atelier
+		v["equipe"] = r.Equipe
 	} else {
 		v["lie"] = false
 	}
@@ -1127,6 +1127,12 @@ func commandeGitHub(args []string, w io.Writer) (int, bool) {
 		return lierGH(reste, w), true
 	case "etat":
 		return etatGH(reste, w), true
+	case "pcs":
+		return pcsGH(reste, w), true
+	case "pcs-activer":
+		return pcsActiverGH(reste, w), true
+	case "pcs-machine":
+		return pcsMachineGH(args[1:], w), true
 	case "pousser":
 		return pousserGH(reste, w), true
 	case "publie":

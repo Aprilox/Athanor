@@ -1376,6 +1376,9 @@ func (p *pilote) appliquerIdentite() {
 // githubPousser: the automatic push after a milestone (athanor github pousser --auto, here); its exit
 // code: 0 pushed or up to date, 3 nothing to do, 4 blocked (a secret), 5 refused by GitHub, 1 an error.
 func (p *pilote) githubPousser() int {
+	if code, equipe := p.pousserPC(); equipe { // several computers: the others' work merged first
+		return code
+	}
 	var out bytes.Buffer
 	code := pousserGH([]string{p.projet, "--auto"}, &out)
 	if code != 3 {
@@ -1389,6 +1392,13 @@ func (p *pilote) githubPousser() int {
 func (p *pilote) lireModeParallele() {
 	p.parallel = false
 	p.parallelMax = 3
+	if p.jalonPC != nil {
+		// several computers: each one builds one milestone at a time (the others are the parallel workers)
+		if b, err := os.ReadFile(filepath.Join(p.etat, ".env")); err == nil && strings.Contains(string(b), "PARALLEL=1") {
+			p.logUneFois("pcs-parallele", "Several computers: the parallel mode is off on this project, each computer building one milestone at a time.")
+		}
+		return
+	}
 	b, err := os.ReadFile(filepath.Join(p.etat, ".env"))
 	if err != nil {
 		return
@@ -2295,7 +2305,13 @@ func lancerPilote(args []string) int {
 
 	p.retirerSecretsSuivis()
 
+	attenteEquipe := false
 	if gitP(p.projet, nil, "rev-parse", "HEAD").Run() != nil {
+		// a computer joining a team starts from the others' commits, not from its own (when the folder
+		// cannot take them, no commit of its own either: the cycles wait, saying why)
+		attenteEquipe = !p.rejoindrePC()
+	}
+	if !attenteEquipe && gitP(p.projet, nil, "rev-parse", "HEAD").Run() != nil {
 		if gitP(p.projet, nil, "add", "-A").Run() != nil || gitP(p.projet, nil, "commit", "-qm", "Initial commit").Run() != nil {
 			_ = gitP(p.projet, nil, "commit", "-q", "--allow-empty", "-m", "Initial commit").Run()
 		}
@@ -2381,6 +2397,19 @@ func lancerPilote(args []string) int {
 		p.preparerCycle()
 		p.appliquerIdentite()
 		p.preparerEquipe()
+		// several computers (pcs_pilote.go): the others' work merged, a milestone taken, or wait for one
+		if attendre, raison := p.avantCyclePC(); attendre {
+			p.etatPhase = "entre_cycles"
+			p.logUneFois("pcs-attente:"+raison, "Several computers: nothing to take for now ("+raison+"): this computer looks again every minute.")
+			p.statut("Waiting: " + raison)
+			p.dormir(60)
+			continue
+		}
+		for k := range p.logsUneFois {
+			if strings.HasPrefix(k, "pcs-attente:") {
+				p.oublierLogUneFois(k)
+			}
+		}
 
 		p.cycle++
 		_ = os.WriteFile(filepath.Join(p.prive, "cycle"), []byte(strconv.Itoa(p.cycle)+"\n"), 0o644)
@@ -2448,6 +2477,9 @@ func lancerPilote(args []string) int {
 		}
 		mode := "serie"
 		butCycle := but
+		if j := p.jalonPC; j != nil && !cadrage && j.ID != jalonCadragePC && j.ID != jalonLivraisonPC {
+			butCycle = butJalonPC(*j, p.equipePC.pcs, p.maxTurnsPerCycle, p.phraseLangue)
+		}
 		consignesCycle := p.consignes
 		planSeul := false
 
@@ -2552,6 +2584,12 @@ func lancerPilote(args []string) int {
 			b1, _ := os.ReadFile(consignesCycle)
 			consignesCycle = filepath.Join(p.prive, "CLAUDE.images.md")
 			_ = os.WriteFile(consignesCycle, append(b1, consigneImages(entierPilote(lireTexteCourt(filepath.Join(p.prive, "images_gel")), 0))...), 0o644)
+		}
+		// several computers: who builds what, and how they work together
+		if j := p.jalonPC; mode == "serie" && j != nil {
+			b1, _ := os.ReadFile(consignesCycle)
+			consignesCycle = filepath.Join(p.prive, "CLAUDE.pcs.md")
+			_ = os.WriteFile(consignesCycle, append(b1, consignePCs(p.equipePC.moi, p.equipePC.pcs, *j)...), 0o644)
 		}
 		if mode == "serie" {
 			texteConsignes, _ := os.ReadFile(consignesCycle)
@@ -2732,6 +2770,9 @@ func lancerPilote(args []string) int {
 		}
 		switch etatCycle {
 		case "cadre":
+			if p.equipePC != nil && issueCadrage == "fait" {
+				p.githubPousser() // several computers: the others wait for this plan
+			}
 		case "ok":
 			erreurs = 0
 			if avant == apres && attenteVous {

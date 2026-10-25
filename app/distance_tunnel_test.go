@@ -20,9 +20,58 @@ func init() {
 	if os.Getenv("ATHANOR_FAUX_CLOUDFLARED") != "1" {
 		return
 	}
-	fmt.Fprintln(os.Stderr, "2026-10-25T10:00:00Z INF Requesting new quick Tunnel on trycloudflare.com...")
-	fmt.Fprintf(os.Stderr, "2026-10-25T10:00:01Z INF |  https://essai-%d.trycloudflare.com  |\n", os.Getpid())
-	fmt.Fprintln(os.Stderr, "2026-10-25T10:00:02Z INF Registered tunnel connection connIndex=0 location=cdg01 protocol=quic")
+	args := os.Args[1:]
+	if f := os.Getenv("ATHANOR_FAUX_TRACE"); f != "" {
+		if o, err := os.OpenFile(f, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
+			fmt.Fprintln(o, strings.Join(args, " "))
+			o.Close()
+		}
+	}
+	valeur := func(nom string) string {
+		for i, a := range args {
+			if a == nom && i+1 < len(args) {
+				return args[i+1]
+			}
+		}
+		return ""
+	}
+	a := strings.Join(args, " ")
+	switch {
+	case strings.Contains(a, "tunnel login"):
+		fmt.Fprintln(os.Stderr, "Please open the following URL and log in with your Cloudflare account:")
+		_, _ = os.Stderr.WriteString("https://dash.cloudflare.com/argotunnel?aud=&callback=https%3A%2F%2Flogin.cloudflareaccess.org%2Fessai\n")
+		time.Sleep(time.Second)
+		if os.Getenv("ATHANOR_FAUX_LOGIN_ECHEC") == "1" {
+			fmt.Fprintln(os.Stderr, "ERR Failed to write the certificate: the login was not completed")
+			os.Exit(1)
+		}
+		cert := filepath.Join(os.Getenv("HOME"), ".cloudflared", "cert.pem")
+		_ = os.MkdirAll(filepath.Dir(cert), 0o700)
+		_ = os.WriteFile(cert, []byte("-----BEGIN ARGO TUNNEL TOKEN-----\n"), 0o600)
+		fmt.Fprintln(os.Stderr, "You have successfully logged in.")
+		os.Exit(0)
+	case strings.Contains(a, " create "):
+		id := fmt.Sprintf("%08x-2222-3333-4444-555555555555", os.Getpid()) // a new one each time, as Cloudflare's
+		_ = os.WriteFile(valeur("--credentials-file"), []byte(`{"TunnelID":"`+id+`"}`), 0o600)
+		fmt.Println("Created tunnel " + args[len(args)-1] + " with id " + id)
+		os.Exit(0)
+	case strings.Contains(a, " route dns "):
+		hote := args[len(args)-1]
+		if strings.HasPrefix(hote, "pris.") {
+			fmt.Fprintln(os.Stderr, "ERR Failed to add route: code: 1003, reason: Failed to create record "+hote+" with err An A, AAAA, or CNAME record with that host already exists.")
+			os.Exit(1)
+		}
+		fmt.Fprintln(os.Stderr, "INF Added CNAME "+hote+" which will route to this tunnel")
+		os.Exit(0)
+	case strings.Contains(a, " delete "):
+		os.Exit(0)
+	case strings.Contains(a, " run "):
+		fmt.Fprintln(os.Stderr, "2026-10-25T10:00:02Z INF Registered tunnel connection connIndex=0 location=cdg01 protocol=quic")
+	default: // a quick tunnel
+		fmt.Fprintln(os.Stderr, "2026-10-25T10:00:00Z INF Requesting new quick Tunnel on trycloudflare.com...")
+		fmt.Fprintf(os.Stderr, "2026-10-25T10:00:01Z INF |  https://essai-%d.trycloudflare.com  |\n", os.Getpid())
+		fmt.Fprintln(os.Stderr, "2026-10-25T10:00:02Z INF Registered tunnel connection connIndex=0 location=cdg01 protocol=quic")
+	}
 	for {
 		time.Sleep(time.Second)
 	}

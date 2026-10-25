@@ -742,3 +742,11 @@ input.large { flex: 1; min-width: 200px; width: auto; }
 .code-pc:hover, .code-pc.montre { border-style: solid; border-color: var(--accent); }
 .barre-chiffres { height: 4px; border-radius: 2px; background: var(--panel-3); margin-top: 8px; max-width: 260px; overflow: hidden; }
 .barre-chiffres i { display: block; height: 100%; background: var(--accent); transition: width 1.5s linear; }
+ol.guide-access { padding-left: 20px; margin: 6px 0 0; }
+ol.guide-access li { margin: 5px 0; }
+/* several computers on a project */
+.pcs td { vertical-align: top; }
+.pcs td:last-child { text-align: right; }
+.mots-pc code { font-size: 11px; padding: 0 5px; border-radius: 4px; background: var(--panel-2); }
+.interrupteur.m0 { margin: 0; }
+@media (max-width: 760px) { table.tab.pcs tr { display: grid; grid-template-columns: 18px 1fr; border-bottom: 1px solid var(--line-2); } table.tab.pcs tr:last-child { border-bottom: 0; } table.tab.pcs td { border-bottom: 0; } table.tab.pcs td:last-child { grid-column: 2; text-align: left; padding-top: 0; } }
