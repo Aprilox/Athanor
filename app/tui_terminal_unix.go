@@ -124,13 +124,40 @@ func vraiesCouleurs() bool {
 
 // attendreEntree: the line typed (cooked mode: Enter ends it).
 func attendreEntree(f *os.File) {
+	// what was typed while the command ran is not this Enter (SyscallConn: Fd would stop the deadlines)
+	if rc, err := f.SyscallConn(); err == nil {
+		_ = rc.Control(func(fd uintptr) { viderEntree(int(fd)) })
+	}
 	b := make([]byte, 256)
 	for {
 		n, err := f.Read(b)
 		if err != nil || bytes.ContainsAny(b[:n], "\r\n") {
+			if n > 0 && b[n-1] == '\r' {
+				dernierCR.Store(time.Now().UnixNano()) // its LF, if it comes apart, is not a key for Athanor
+			}
 			return
 		}
 	}
+}
+
+// dernierCR: when the last read ended with a CR. Some terminals send Enter as CR LF, and over SSH the LF
+// may come in a read of its own: an LF (or NUL) right after a CR is the same Enter, never a second one.
+var dernierCR atomic.Int64
+
+// sansLFApresCR: b without the LF that finishes the Enter of the read before.
+func sansLFApresCR(b []byte) []byte {
+	if len(b) > 0 && (b[0] == '\n' || b[0] == 0) && time.Now().UnixNano()-dernierCR.Load() < int64(time.Second) {
+		b = b[1:]
+		dernierCR.Store(0) // that Enter is whole: the next LF is a key again
+	}
+	if len(b) > 0 {
+		if b[len(b)-1] == '\r' {
+			dernierCR.Store(time.Now().UnixNano())
+		} else {
+			dernierCR.Store(0)
+		}
+	}
+	return b
 }
 
 // lancerTUI: the terminal interface on the server reached through this single-use address. proprio: this
@@ -226,7 +253,7 @@ func lancerTUI(lien string, proprio bool, journal string) int {
 					close(evs)
 					return
 				}
-				tampon = append(tampon, b...)
+				tampon = append(tampon, sansLFApresCR(b)...)
 				var l []evenementTUI
 				l, tampon = analyserTouches(tampon, false)
 				for _, e := range l {

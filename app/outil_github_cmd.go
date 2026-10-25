@@ -549,9 +549,11 @@ func pousserGH(args []string, w io.Writer) int {
 		fmt.Fprintln(w, "Not linked to GitHub.")
 		return 3
 	}
-	if _, err := os.OpenFile(d+"/verrou", os.O_WRONLY|os.O_CREATE, 0o644); err != nil {
+	if f, err := os.OpenFile(d+"/verrou", os.O_WRONLY|os.O_CREATE, 0o644); err != nil {
 		fmt.Fprintln(w, "Not linked to GitHub.")
 		return 3
+	} else {
+		f.Close() // only made to exist (verrouGH opens it): left open, Windows kept the folder in use
 	}
 	v := verrouGH(d, 300*time.Second)
 	if v == nil {
