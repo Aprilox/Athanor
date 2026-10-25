@@ -62,12 +62,35 @@ func demarrerFenetre(titre string, args ...string) error {
 }
 
 // Ouvrir shows a folder in Explorer, or opens a file with its associated program.
+// Ouvrir: a folder in the Explorer, a file in its program, an address in the browser, in front. Through the
+// Windows shell (ShellExecuteEx, shown normally): explorer.exe started by commande() inherited its
+// "hidden" flag and its window stayed invisible.
 func Ouvrir(chemin string) error {
-	if _, err := os.Stat(chemin); err != nil {
-		return fmt.Errorf("Not created yet: %s", chemin)
+	if !strings.Contains(chemin, "://") {
+		if _, err := os.Stat(chemin); err != nil {
+			return fmt.Errorf("Not created yet: %s", chemin)
+		}
+		chemin = filepath.Clean(chemin) // C:/x → C:\x, which the Explorer reads
 	}
-	return commande("explorer.exe", chemin).Start()
+	_, _, _ = pAllowSetForegroundWindow.Call(^uintptr(0)) // ASFW_ANY: the window it opens may come in front
+	verbe, _ := syscall.UTF16PtrFromString("open")
+	fichier, err := syscall.UTF16PtrFromString(chemin)
+	if err != nil {
+		return err
+	}
+	const seeMaskNoAsync, seeMaskFlagNoUI = 0x100, 0x400
+	info := shellExecuteInfo{fMask: seeMaskNoAsync | seeMaskFlagNoUI, lpVerb: verbe, lpFile: fichier, nShow: 1} // SW_SHOWNORMAL
+	info.cbSize = uint32(unsafe.Sizeof(info))
+	if r, _, _ := pShellExecuteExW.Call(uintptr(unsafe.Pointer(&info))); r != 0 {
+		return nil
+	}
+	// no program for it (a .md without one): the Explorer asks which one, visible
+	c := exec.Command("explorer.exe", chemin)
+	c.SysProcAttr = &syscall.SysProcAttr{}
+	return c.Start()
 }
+
+var pAllowSetForegroundWindow = syscall.NewLazyDLL("user32.dll").NewProc("AllowSetForegroundWindow")
 
 // FenetreApp opens the interface in a real application window (WebView2, shipped with
 // Windows 11). Blocking: call it from the main thread. Returns false when WebView2 is missing.
