@@ -791,3 +791,10 @@ ol.guide-access li { margin: 5px 0; }
 .champ-dossier .btn { flex: none; }
 .selecteur-dossier { width: min(620px, 100%); gap: 10px; }
 .selecteur-dossier .explorateur { max-height: min(50vh, 420px); }
+
+/* a block a Guide's button leads to (#page@block): lit up a moment */
+.surligne { animation: surligne 2.6s ease-out; }
+@keyframes surligne { 0%, 40% { box-shadow: 0 0 0 3px var(--accent); } 100% { box-shadow: 0 0 0 3px transparent; } }
+@media (prefers-reduced-motion: reduce) { .surligne { animation: none; box-shadow: 0 0 0 3px var(--accent); } }
+.pas-pcs { margin: 6px 0 12px; padding-left: 20px; display: grid; gap: 6px; color: var(--muted); }
+.pas-pcs li .btn, .pas-pcs li .ok { margin-left: 6px; }
