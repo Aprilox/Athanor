@@ -477,7 +477,7 @@ func texteEchecInstallation(d string, err error) (string, string) {
 func texteMiseAJourReportee(projets []string) (string, string) {
 	liste := strings.Join(projets, ", ")
 	if langueSysteme() == "fr" {
-		return "Athanor — mise à jour", fmt.Sprintf("Athanor %s est installé. Des pilotes tournent encore (%s) : leur partie Linux passe à la nouvelle version quand ils se sont tous arrêtés, au prochain démarrage d'un pilote.", versionAthanor, liste)
+		return "Athanor — mise à jour", fmt.Sprintf("Athanor %s est installé et l'application l'utilise déjà. Des pilotes tournent encore (%s) : ils continuent sans interruption sur leur version actuelle, puis passent à la %s d'eux-mêmes au prochain démarrage d'un pilote, une fois qu'ils se sont tous arrêtés. Rien à faire, rien n'est perdu.", versionAthanor, liste, versionAthanor)
 	}
-	return "Athanor — update", fmt.Sprintf("Athanor %s is installed. Pilots are still running (%s): their Linux side moves to the new version once they have all stopped, when a pilot starts next.", versionAthanor, liste)
+	return "Athanor — update", fmt.Sprintf("Athanor %s is installed and the app already uses it. Pilots are still running (%s): they go on without a break on their current version, then move to %s by themselves when a pilot starts next, once they have all stopped. Nothing to do, nothing is lost.", versionAthanor, liste, versionAthanor)
 }

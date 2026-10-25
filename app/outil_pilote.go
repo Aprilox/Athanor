@@ -874,6 +874,7 @@ func (p *pilote) nettoyerSortie() {
 	}
 	_ = os.Remove(filepath.Join(p.prive, "pilot.pid"))
 	_ = os.Remove(filepath.Join(p.etat, "pilot.pid"))
+	_ = os.Remove(filepath.Join(p.etat, "pilot.version"))
 	_ = os.Remove(filepath.Join(p.prive, "ecran"))
 	_ = os.Remove(filepath.Join(p.prive, "eveil"))
 	_ = os.Remove(filepath.Join(p.prive, "arreter"))

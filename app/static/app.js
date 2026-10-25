@@ -1294,6 +1294,9 @@ pages.suivi = async () => {
   return `${v.pour_vous ? `<a class="bloc pv-bandeau" href="#pourvous">🙋 <strong>${t("Claude needs you")}</strong> · ${t("{0} task(s) on the For you page", [v.pour_vous])} →</a>` : ""}
   <div class="grille grille-2">
     <div class="colonne"><div class="bloc"><h2>${t("Right now")}</h2>
+      ${v.actif && v.pilote_ancien ? `<p class="muet petit">ℹ ${v.version_pilote
+        ? t("Athanor {0} is installed and the app already uses it. This pilot keeps running on {1}, the version it started with, until it is started again: it then moves to {0} by itself (to do it now: Stop after cycle, then Start). Nothing to do, nothing is lost.", [h(v.version), h(v.version_pilote)])
+        : t("Athanor {0} is installed and the app already uses it. This pilot keeps running on the version it started with until it is started again: it then moves to {0} by itself (to do it now: Stop after cycle, then Start). Nothing to do, nothing is lost.", [h(v.version)])}</p>` : ""}
       <dl class="fiche">
         <dt>${t("Milestone")}</dt><dd>${e.jalon_en_cours ? `<b>${md(titreJalon(e.jalon_en_cours))}</b>${(() => { const j = plan.find((x) => x.titre === titreJalon(e.jalon_en_cours)); return j && j.detail ? `<div class="muet petit">${md(j.detail)}</div>` : ""; })()}` : "—"}</dd>
         <dt>${t("Last commit")}</dt><dd class="muet">${h(e.dernier_commit || "—")}</dd>
@@ -3065,7 +3068,10 @@ async function actionMaj(quoi) {
   }
   if (quoi === "installer") {
     const m = (etat.vue || {}).maj || {};
-    if (!await confirmer(t("Athanor closes, puts version {0} in place and opens again by itself. Your token, settings and projects are kept; running pilots go on.", [m.derniere]), { titre: t("Update to {0}", [m.derniere]), ok: t("Update now") })) return;
+    const enCours = ((etat.vue || {}).projets || []).filter((x) => x.actif).map((x) => x.nom);
+    const texte = t("Athanor closes, puts version {0} in place and opens again by itself. Your token, settings and projects are kept; running pilots go on.", [m.derniere])
+      + (enCours.length ? "\n\n" + t("{0} pilot(s) running ({1}): they go on without a break, on their current version, until they are started again (Stop after cycle, then Start). The app moves to {2} right away.", [enCours.length, enCours.join(", "), m.derniere]) : "");
+    if (!await confirmer(texte, { titre: t("Update to {0}", [m.derniere]), ok: t("Update now") })) return;
     const r = await action(api("maj/installer", "POST", {}));
     if (r && etat.vue) etat.vue.maj = r;
     return rendrePage();

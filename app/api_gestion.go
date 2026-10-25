@@ -253,7 +253,7 @@ func demanderReverification(p Projet, pourquoi string) {
 // made aside and renamed at the end: a failed copy leaves nothing behind.
 func copierAtelier(de, vers string) error {
 	sauter := map[string]bool{"logs": true, "screenshots": true, ".verif": true, "pont": true, "work": true,
-		"pilot.pid": true, "auto": true, "STOP": true, ".plan.tmp": true}
+		"pilot.pid": true, "pilot.version": true, "auto": true, "STOP": true, ".plan.tmp": true}
 	if err := os.MkdirAll(filepath.Dir(vers), 0o755); err != nil {
 		return err
 	}

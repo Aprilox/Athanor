@@ -339,11 +339,17 @@ func TestBancPilote(t *testing.T) {
 
 	t.Run("parcours_complet", func(t *testing.T) {
 		kit := preparerKitEssaiPilote(t, binTemp)
-		fakeClaude := filepath.Join(kit, "fake-claude.sh")
-		if err := os.WriteFile(fakeClaude, []byte(strings.ReplaceAll(scriptFauxClaudeComplet, "\r\n", "\n")), 0o755); err != nil {
+		vrai := filepath.Join(kit, "fake-claude-complet.sh")
+		if err := os.WriteFile(vrai, []byte(strings.ReplaceAll(scriptFauxClaudeComplet, "\r\n", "\n")), 0o755); err != nil {
 			t.Fatal(err)
 		}
 		projet := filepath.Join(dossierEssaiPilote(t), "projet")
+		// what the pilot says of its version while it runs (seen by Claude's session), then gone at the end
+		vuVersion := filepath.Join(kit, "vu-version")
+		fakeClaude := filepath.Join(kit, "fake-claude.sh")
+		if err := os.WriteFile(fakeClaude, []byte("#!/bin/bash\ncp '"+filepath.ToSlash(filepath.Join(projet, ".athanor", "pilot.version"))+"' '"+filepath.ToSlash(vuVersion)+"' 2>/dev/null\nexec bash '"+filepath.ToSlash(vrai)+"' \"$@\"\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
 		_ = os.MkdirAll(filepath.Join(projet, ".athanor", "queue"), 0o755)
 		_ = os.WriteFile(filepath.Join(projet, ".athanor", "REQUEST.md"), []byte("# My Request\n\nBuild a greeting app.\n"), 0o644)
 		_ = os.WriteFile(filepath.Join(projet, ".athanor", "queue", "01-extra.md"), []byte("# Extra\n\nAdd an extra line.\n"), 0o644)
@@ -375,6 +381,9 @@ func TestBancPilote(t *testing.T) {
 		verifier(len(commits) >= 3 && commits[0] == "M3: extra request delivered", "git commits: %v", commits)
 		verifier(strings.TrimSpace(string(helloB)) == "Hello Athanor\nExtra feature", "hello.txt: %q", helloB)
 		verifier(strings.Contains(string(rapB), "STATUS: DONE"), "FINAL_REPORT.md: %q", rapB)
+		vuB, _ := os.ReadFile(vuVersion)
+		verifier(strings.TrimSpace(string(vuB)) == versionAthanor, "pilot.version while it ran: %q", vuB)
+		verifier(!fichierExiste(filepath.Join(p.Atelier(), "pilot.version")), "pilot.version left after the pilot stopped")
 		exclB, _ := os.ReadFile(filepath.Join(projet, ".git", "info", "exclude"))
 		verifier(fichierRegulierPilote(filepath.Join(p.Atelier(), "SOLUTIONS.md")) && strings.Contains(string(exclB), ".env") && strings.Contains(string(exclB), ".athanor/"), "SOLUTIONS.md and .git/info/exclude expected")
 		verifier(!strings.Contains(string(giB), "Athanor"), "the project's .gitignore untouched: %q", giB)

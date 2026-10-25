@@ -92,6 +92,20 @@ func (p Projet) PiloteActif() bool {
 	return err == nil && time.Since(fi.ModTime()) < 90*time.Second
 }
 
+// versionPiloteAncienne: the running pilot is on another version than the app, and which one ("" for a
+// pilot started before 2.39.1, which wrote no pilot.version).
+func versionPiloteAncienne(p Projet) (bool, string) {
+	b, err := os.ReadFile(filepath.Join(p.Atelier(), "pilot.version"))
+	if err != nil {
+		return os.IsNotExist(err), ""
+	}
+	v := strings.TrimSpace(string(b))
+	if len(v) > 20 {
+		v = v[:20]
+	}
+	return v != versionAthanor, v
+}
+
 // JournauxCycle returns the logs of the current cycle: "cycle-<date>-<n>.jsonl" (lead) and, in parallel
 // mode, "cycle-<date>-<n>-<milestone>.jsonl" (one per worker). The lead first, then the workers.
 func (p Projet) JournauxCycle() []string {
