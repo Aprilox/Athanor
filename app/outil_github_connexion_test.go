@@ -85,7 +85,7 @@ func TestLierCompteGitHub(t *testing.T) {
 		if b, _ := os.ReadFile(d + "/compte"); !strings.Contains(string(b), "m@x.org") {
 			t.Fatal("the commit author not proposed from the connection")
 		}
-		if cle, _ := fichiersCleGH(d, r); cle != dossierConnexionGH()+"/cle" || !strings.Contains(commandeSSHGH(d, "22"), dossierConnexionGH()) {
+		if cle, _ := fichiersCleGH(d, r); cle != dossierConnexionGH()+"/cle" || !strings.Contains(commandeSSHGH(d, "22"), filepath.ToSlash(dossierConnexionGH())) {
 			t.Fatalf("the project does not push with the connection's key: %s", cle)
 		}
 		// disconnected: no longer linked
