@@ -22,6 +22,7 @@ case "$1 $2" in
     echo "config=$GH_CONFIG_DIR token=${GH_TOKEN:-none}" >> "$TRACE_GH"
     : > "$GH_CONFIG_DIR/hosts.yml"; exit 0 ;;
   "auth logout") cat > /dev/null; exit 0 ;;
+  "auth refresh") exit 0 ;;
 esac
 [ "$1" = api ] || exit 2
 shift
@@ -31,7 +32,13 @@ case "$*" in
   *"POST user/repos -f name=existe"*) echo '{"message":"Repository creation failed."}'; echo "name already exists on this account" >&2; exit 1 ;;
   *"POST user/repos -f name="*) n=${3#*name=}; n=$(printf '%s' "$*" | sed 's/.*name=\([^ ]*\).*/\1/'); echo "{\"full_name\":\"moi/$n\"}" ;;
   repos/moi/vieux) echo '{"full_name":"moi/vieux","permissions":{"admin":true},"archived":false,"default_branch":"dev"}' ;;
-  repos/moi/pasadmin) echo '{"full_name":"moi/pasadmin","permissions":{"admin":false},"archived":false}' ;;
+  repos/moi/pasadmin) echo '{"full_name":"moi/pasadmin","permissions":{"admin":false,"push":false},"archived":false}' ;;
+  repos/ami/projet) echo '{"full_name":"ami/projet","permissions":{"admin":false,"push":true},"archived":false,"default_branch":"main"}' ;;
+  repos/ami/projet/actions/workflows) echo '{"total_count":0}' ;;
+  repos/ami/projet/actions/secrets) echo '{"total_count":0}' ;;
+  repos/ami/projet/actions/organization-secrets) echo '{"total_count":0}' ;;
+  *"POST user/keys"*) echo '{"id":888}' ;;
+  *"DELETE user/keys/"*) exit 0 ;;
   repos/moi/vieux/actions/workflows) echo '{"total_count":1}' ;;
   repos/moi/vieux/actions/secrets) echo '{"total_count":2}' ;;
   repos/moi/vieux/actions/organization-secrets) echo '{"total_count":0}' ;;
@@ -131,7 +138,7 @@ func TestLierGitHub(t *testing.T) {
 	if out, code := lier("", projet, "creer", "existe"); code != 1 || !strings.Contains(out, `You already have a repository named existe: choose "Use an existing repository" (moi/existe), or another name.`) {
 		t.Errorf("existe: %d %q", code, out)
 	}
-	if out, code := lier("", projet, "existant", "moi/pasadmin"); code != 1 || !strings.Contains(out, "You are not an administrator of moi/pasadmin") {
+	if out, code := lier("", projet, "existant", "moi/pasadmin"); code != 1 || !strings.Contains(out, "You can read moi/pasadmin but not push to it") {
 		t.Errorf("pasadmin: %d %q", code, out)
 	}
 	// an existing repository with workflows and secrets: the user decides
@@ -154,5 +161,37 @@ func TestLierGitHub(t *testing.T) {
 	}
 	if existeGH(filepath.Join(d, "miroir.git")) {
 		t.Errorf("another repository: the push folder of the previous one must go")
+	}
+
+	// a collaborator of a personal repository: the key goes on the account, once the user says yes
+	if out, code := lier("no\n", projet, "existant", "ami/projet"); code != 1 || !strings.Contains(out, "You are a collaborator of ami/projet") || !strings.Contains(out, "Not linked.") {
+		t.Errorf("collaborator, no: %d %q", code, out)
+	}
+	_ = os.Truncate(trace, 0)
+	out, code = lier("yes\n", projet, "existant", "ami/projet")
+	if code != 0 || !strings.Contains(out, "Linked: ami/projet.") || !strings.Contains(out, "Previous key removed from moi/vieux.") {
+		t.Fatalf("collaborator, yes: %d\n%s", code, out)
+	}
+	r, _ = lireReglagesGH(d)
+	if r.Depot != "ami/projet" || !r.CleCompte || r.CleID != "888" {
+		t.Errorf("collaborator: %+v", r)
+	}
+	tr, _ = os.ReadFile(trace)
+	if !strings.Contains(string(tr), "auth refresh --hostname github.com --scopes admin:public_key") || !strings.Contains(string(tr), "-X POST user/keys -f title=Athanor (") ||
+		strings.Contains(string(tr), "POST repos/ami/projet/keys") {
+		t.Errorf("collaborator's gh calls:\n%s", tr)
+	}
+	// linked again: the previous key, on the account, removed from the account
+	_ = os.Truncate(trace, 0)
+	if out, code := lier("yes\n", projet, "existant", "ami/projet"); code != 0 || !strings.Contains(out, "Previous key removed from your account.") {
+		t.Errorf("collaborator again: %d %q", code, out)
+	}
+	if tr, _ := os.ReadFile(trace); !strings.Contains(string(tr), "-X DELETE user/keys/888") {
+		t.Errorf("the account's previous key not removed:\n%s", tr)
+	}
+	var b bytes.Buffer
+	delierGH([]string{projet}, &b)
+	if !strings.Contains(b.String(), "SSH and GPG keys") {
+		t.Errorf("unlink of an account key: %q", b.String())
 	}
 }
