@@ -1299,6 +1299,7 @@ const GUIDE = [
       ["Who links the other computers", "Linking needs the repository's administrator rights. Either the owner links the other computer: when its GitHub window shows a one-time code, the owner types it at github.com/login/device from any device signed in to their account, even their phone (only a key for this repository stays on that computer). Or the owner moves the repository to a GitHub organization (free) and gives the others the *Admin* role on it: they link their computers themselves, but they can then also change the repository's settings, and even delete it."],
       ["What each computer is good at", "*Remote* › *This computer, for the other computers*: a name, what it has (`RTX 4090`), a few words (`gpu`, `network`). Claude marks the milestones that need one (`Needs: gpu.`), and the pilot gives them to a computer that has the word. Without words, the milestones are simply shared out.", "#distance", "What this computer is good at"],
       ["Start the pilots", "Start the pilot on each computer. One writes the plan, the others wait for it; then each one takes a milestone, and the Overview shows who builds what. The final report is written once, by one of them."],
+      ["When a program does not work on a computer", "Claude tries **one** quick repair, then says so: you get a notification, and the other computers try the milestone in its place, those that have the program's word first. The one that succeeds keeps the word, and such milestones go to it from then on. If none can, the computer that was meant to build it takes it back and asks you on *For you*, saying which computers tried. Working alone, Claude asks you right after its quick repair."],
       ["When a computer waits", "Its Overview says why: everything left depends on a milestone in progress; files of its folder that GitHub has too (move them); a project with another history (start again from an empty folder). A real merge conflict is undone, then Claude merges it at its next cycle."],
     ],
     note: "A computer whose pilot runs without the switch works alone: its pushes are refused as soon as another computer has pushed. Parallel mode is off while several computers work on a project. Each computer leaves a branch athanor/pc/… on the repository; it goes away when that computer stops working with the others." },
@@ -2491,11 +2492,18 @@ function rendreBlocPCs(vp) {
       <label class="interrupteur"><input type="checkbox" data-pcs-actif><span>${t("Work with other computers on {0}", [h(vp.depot || "")])}</span></label>
     </div>`;
   }
-  const lignes = [vp.moi, ...(vp.pcs || [])].filter(Boolean).map((p) => `<tr>
+  const tous = [vp.moi, ...(vp.pcs || [])].filter(Boolean);
+  // a milestone another computer could not build (a program that did not work there): who was meant to build it
+  const principal = (jalon, p) => {
+    const r = tous.flatMap((x) => (x.refus || []).filter((y) => y.jalon === jalon).map((y) => [y.quand, x.nom])).sort();
+    return r.length && r[0][1] !== p.nom ? r[0][1] : "";
+  };
+  const refus = (p) => (p.refus || []).map((r) => `<div class="petit attention">✖ ${h(t("{0} does not work here", [r.outil ? r.outil[0].toUpperCase() + r.outil.slice(1) : ""]))} · ${h(r.jalon)}${r.pourquoi ? ` <span class="muet">— ${h(r.pourquoi)}</span>` : ""}</div>`).join("");
+  const lignes = tous.map((p) => `<tr>
       <td class="etroit"><span class="point-appareil ${p.en_ligne ? "en-ligne" : ""}"></span></td>
       <td><b>${h(p.nom)}</b>${p.moi ? ` <span class="badge">${t("this computer")}</span>` : ""}
         ${p.capacites || (p.mots || []).length ? `<div class="muet petit">${h(p.capacites || "")}${(p.mots || []).length ? ` <span class="mots-pc">${p.mots.map((m) => `<code>${h(m)}</code>`).join(" ")}</span>` : ""}</div>` : ""}</td>
-      <td>${etatPC(p)}${p.pousse ? `<div class="muet petit">${h(t("last push: {0}", [p.pousse]))}</div>` : ""}</td></tr>`).join("");
+      <td>${etatPC(p)}${p.en_ligne && p.pilote && p.jalon && principal(p.jalon, p) ? `<div class="muet petit">${h(t("in place of {0}", [principal(p.jalon, p)]))}</div>` : ""}${p.pousse ? `<div class="muet petit">${h(t("last push: {0}", [p.pousse]))}</div>` : ""}${refus(p)}</td></tr>`).join("");
   const enLigne = (vp.pcs || []).filter((p) => p.en_ligne).length;
   return `<div class="bloc"><div class="bloc-tete"><h2>${t("Computers on this project")}</h2>${(vp.pcs || []).length ? `<span class="muet petit">${h(t("{0} other(s) online", [enLigne]))}</span>` : ""}</div>
     <table class="tab appareils pcs">${lignes}</table>

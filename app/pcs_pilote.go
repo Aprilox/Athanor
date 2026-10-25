@@ -135,17 +135,25 @@ func (e *equipePC) lacher() {
 //     needs no running computer has; those whose needs another running computer has are left to it;
 //   - no plan yet: the framing; everything ticked: the delivery; each by one computer only.
 func choisirJalonPC(plan []Jalon, moi MachinePC, autres []PresencePC, actuel string) (Jalon, bool, string) {
+	return choisirJalonRefusPC(plan, moi, autres, actuel, nil)
+}
+
+// choisirJalonRefusPC: choisirJalonPC with the programs computers could not run (pcs_relais.go):
+//   - a milestone this computer could not build is left to the running computers that have not failed on
+//     it; when none is left, the computer that was meant to build it (the first that failed) takes it back,
+//     with what Claude must then do (Jalon.Reprise: ask the user);
+//   - a milestone another computer could not build comes first here, to try it in its place.
+func choisirJalonRefusPC(plan []Jalon, moi MachinePC, autres []PresencePC, actuel string, mesRefus []RefusPC) (Jalon, bool, string) {
+	maintenant := time.Now()
 	tenus := map[string]PresencePC{}
-	motsAutres := map[string]bool{}
+	var actifs []PresencePC
 	for _, p := range autres {
 		if !(p.EnLigne && p.Pilote) {
 			continue
 		}
+		actifs = append(actifs, p)
 		if p.Jalon != "" {
 			tenus[p.Jalon] = p
-		}
-		for _, m := range p.Mots {
-			motsAutres[m] = true
 		}
 	}
 	mesMots := map[string]bool{}
@@ -191,6 +199,40 @@ func choisirJalonPC(plan []Jalon, moi MachinePC, autres []PresencePC, actuel str
 		if !pret {
 			continue
 		}
+		// the running computers that have not failed on this milestone (its program)
+		var peuvent []PresencePC
+		autreAEchoue := false
+		for _, p := range actifs {
+			if _, non := refusDe(p.Refus, j, maintenant); non {
+				autreAEchoue = true
+			} else {
+				peuvent = append(peuvent, p)
+			}
+		}
+		for _, p := range autres {
+			if r, non := refusDe(p.Refus, j, maintenant); non && r.Jalon == j.ID {
+				autreAEchoue = true
+			}
+		}
+		if _, non := refusDe(mesRefus, j, maintenant); non {
+			if len(peuvent) > 0 {
+				continue // the others try in its place
+			}
+			// none of the others can: the computer meant to build it takes it back, and asks the user
+			essais := essaisJalonPC(j, moi, mesRefus, autres, maintenant)
+			if len(essais) > 0 && essais[0].ID != moi.ID {
+				principalActif := false
+				for _, p := range actifs {
+					principalActif = principalActif || p.ID == essais[0].ID
+				}
+				if principalActif {
+					continue
+				}
+			}
+			j.Reprise = texteRepriseJalon(j, essais)
+			cands = append(cands, candidat{j, 3, rang})
+			continue
+		}
 		priorite := 1
 		if len(j.Besoins) > 0 {
 			priorite = 2
@@ -200,13 +242,18 @@ func choisirJalonPC(plan []Jalon, moi MachinePC, autres []PresencePC, actuel str
 					priorite = 0
 					break
 				}
-				if motsAutres[b] {
-					laisse = true
+				for _, p := range peuvent {
+					for _, m := range p.Mots {
+						laisse = laisse || m == b
+					}
 				}
 			}
 			if priorite != 0 && laisse {
 				continue // another running computer has what it needs
 			}
+		}
+		if autreAEchoue && priorite > 0 {
+			priorite = 0 // another computer could not build it: this one tries in its place, soon
 		}
 		if j.ID == actuel {
 			priorite = -1
@@ -293,6 +340,13 @@ func consignePCs(moi MachinePC, autres []PresencePC, j Jalon) string {
 	default:
 		fmt.Fprintf(&b, "- The pilot gave you milestone **%s**; the other computers build theirs at the same time. Change only what yours needs; never tick, edit or redo a milestone another computer builds.\n", j.ID)
 	}
+	if j.ID != jalonCadragePC && j.ID != jalonLivraisonPC {
+		if j.Reprise != "" {
+			b.WriteString("- No computer of the team could run the program this milestone needs (see your goal): one quick check, then a task for the user (`athanor todo add`) saying which computers tried and which one was meant to build it.\n")
+		} else {
+			b.WriteString("- A program of this computer your milestone needs does not work (Blender, Unreal, an SDK…)? Try **one** repair, a few minutes at most (never long test loops). Still failing: do not ask the user. Write `.athanor/CANNOT_HERE.md` with two lines, `tool: <one word, as in Needs:, e.g. blender>` and `why: <one line>`, commit what you have, and end the cycle: the pilot gives the milestone to another computer of the team, which tries in its place.\n")
+		}
+	}
 	b.WriteString("- Commit as you go. Between cycles the pilot merges the others' pushed work into the project and pushes yours: never push yourself, never rewrite commits already pushed. If `.athanor/MERGE_NEEDED.md` exists, do that merge first.\n")
 	ml := make([]string, 0, len(mots))
 	for m := range mots {
@@ -320,6 +374,11 @@ func butJalonPC(j Jalon, autres []PresencePC, tours int, langue string) string {
 	if len(l) > 0 {
 		sort.Strings(l)
 		autresTxt = " Other computers of the team build " + strings.Join(l, ", ") + " at the same time: never work on those, never tick them."
+	}
+	if j.Reprise != "" {
+		autresTxt += j.Reprise
+	} else {
+		autresTxt += " If a program this milestone needs does not work on this computer after one quick repair, the goal is reached once .athanor/CANNOT_HERE.md is written as your instructions say: another computer takes the milestone."
 	}
 	return fmt.Sprintf("/goal Milestone %s of .athanor/PLAN.md is completed and verified according to your instructions: bash .athanor/check.sh has been run and its output, showing success, is displayed in this conversation; .athanor/PLAN.md ticks this milestone; .athanor/LOG.md has a new entry; git log shows the commit.%s If .athanor/MERGE_NEEDED.md exists, that merge is done first. If .athanor/FOR_YOU_ANSWERED exists, every answered task is handled first (athanor todo ok, missing or resolved); if %s waits for a task of the user (athanor todo list), the goal is reached once athanor todo wait has run. Or stop after %d turns. %s",
 		j.ID, autresTxt, j.ID, tours, langue)
@@ -380,8 +439,23 @@ func (p *pilote) avantCyclePC() (attendre bool, message string) {
 		}
 		plan = leur
 	}
+	// a program of this computer did not work for its milestone (Claude said so): the others try in its place
+	if outil, pourquoi, ok := lireRefusClaude(p.etat); ok && actuel != "" && actuel != jalonCadragePC && actuel != jalonLivraisonPC {
+		p.log(e.noterRefusPC(actuel, outil, pourquoi))
+		actuel = ""
+	}
+	// its milestone done: the programs it needed are known to work here
+	if actuel != "" {
+		for _, j := range identifierPlanPC(plan) {
+			if j.ID == actuel && j.Fait {
+				if msg := e.apprendreOutilPC(j, time.Now()); msg != "" {
+					p.log(msg)
+				}
+			}
+		}
+	}
 	for essai := 0; essai < 3; essai++ {
-		j, att, raison := choisirJalonPC(plan, e.moi, e.pcs, actuel)
+		j, att, raison := choisirJalonRefusPC(plan, e.moi, e.pcs, actuel, lireRefusPC(e.d))
 		if att {
 			removeSiExiste(e.d + "/pcs-jalon") // waiting: it builds nothing
 			_ = e.publier()
@@ -393,7 +467,9 @@ func (p *pilote) avantCyclePC() (attendre bool, message string) {
 		}
 		if pris {
 			p.jalonPC, p.equipePC = &j, e
-			if j.ID != actuel {
+			if j.Reprise != "" {
+				p.logUneFois("pcs-reprise:"+j.ID, fmt.Sprintf("Several computers: no other computer could build %s either: this computer takes it back, and Claude asks you what to repair (For you).", j.ID))
+			} else if j.ID != actuel {
 				p.log(fmt.Sprintf("Several computers: this computer takes %s.", libellePC(j)))
 			}
 			return false, ""

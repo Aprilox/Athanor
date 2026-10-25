@@ -49,21 +49,22 @@ type MachinePC struct {
 
 // PresencePC: what a computer publishes on its branch.
 type PresencePC struct {
-	ID         string   `json:"id"`
-	Nom        string   `json:"nom"`
-	Capacites  string   `json:"capacites,omitempty"`
-	Mots       []string `json:"mots,omitempty"`
-	Version    string   `json:"version"`
-	Maj        string   `json:"maj"` // RFC 3339, UTC
-	Pilote     bool     `json:"pilote"`
-	Phase      string   `json:"phase,omitempty"`
-	Cycle      int64    `json:"cycle,omitempty"`
-	Jalon      string   `json:"jalon,omitempty"` // the milestone it holds ("cadrage", "livraison" for the framing, the delivery)
-	JalonTitre string   `json:"jalon_titre,omitempty"`
-	Depuis     string   `json:"depuis,omitempty"` // when it took it (RFC 3339, UTC)
-	Pousse     string   `json:"pousse,omitempty"` // its last commit pushed ("abc1234 M3: …")
-	EnLigne    bool     `json:"en_ligne"`         // computed by the reader
-	Moi        bool     `json:"moi,omitempty"`
+	ID         string    `json:"id"`
+	Nom        string    `json:"nom"`
+	Capacites  string    `json:"capacites,omitempty"`
+	Mots       []string  `json:"mots,omitempty"`
+	Version    string    `json:"version"`
+	Maj        string    `json:"maj"` // RFC 3339, UTC
+	Pilote     bool      `json:"pilote"`
+	Phase      string    `json:"phase,omitempty"`
+	Cycle      int64     `json:"cycle,omitempty"`
+	Jalon      string    `json:"jalon,omitempty"` // the milestone it holds ("cadrage", "livraison" for the framing, the delivery)
+	JalonTitre string    `json:"jalon_titre,omitempty"`
+	Depuis     string    `json:"depuis,omitempty"` // when it took it (RFC 3339, UTC)
+	Pousse     string    `json:"pousse,omitempty"` // its last commit pushed ("abc1234 M3: …")
+	Refus      []RefusPC `json:"refus,omitempty"`  // programs it could not run, for which milestones (pcs_relais.go)
+	EnLigne    bool      `json:"en_ligne"`         // computed by the reader
+	Moi        bool      `json:"moi,omitempty"`
 }
 
 func (p PresencePC) recente(maintenant time.Time) bool {
@@ -224,7 +225,7 @@ func presenceLocalePC(projet, d string) PresencePC {
 	m := lireMachinePC()
 	e := lireEtatLocalPC(d)
 	p := PresencePC{ID: m.ID, Nom: m.Nom, Capacites: m.Capacites, Mots: m.Mots, Version: versionAthanor,
-		Maj: time.Now().UTC().Format(time.RFC3339), Pilote: e.Pilote, Moi: true}
+		Maj: time.Now().UTC().Format(time.RFC3339), Pilote: e.Pilote, Moi: true, Refus: lireRefusPC(d)}
 	if e.Pilote {
 		p.Jalon, p.JalonTitre, p.Depuis = e.Jalon, e.JalonTitre, e.Depuis
 		if st, ok := (Projet{Dossier: projet}).LireEtat(); ok {
@@ -330,6 +331,13 @@ func lirePCs(miroir, moi string) []PresencePC {
 		}
 		for i := range p.Mots {
 			p.Mots[i] = coupeValide(p.Mots[i], 30)
+		}
+		if len(p.Refus) > maxRefusPC {
+			p.Refus = p.Refus[:maxRefusPC]
+		}
+		for i := range p.Refus {
+			p.Refus[i].Outil, p.Refus[i].Jalon = coupeValide(p.Refus[i].Outil, 30), coupeValide(p.Refus[i].Jalon, 80)
+			p.Refus[i].Pourquoi = coupeValide(p.Refus[i].Pourquoi, 200)
 		}
 		p.EnLigne, p.Moi = p.recente(maintenant), false
 		if !p.EnLigne {

@@ -208,6 +208,8 @@ One project, several computers working on it at the same time: your desktop with
 
 **Merging.** After each milestone, the pilot merges the others' new commits first, then pushes (never forced). The workshop's notes (`LOG.md`, `BUGS.md`, `SOLUTIONS.md`…) are joined line by line, and two milestones ticked on lines next to each other in the plan are merged by themselves. When two computers really changed the same lines, the pilot undoes the merge (nothing is lost) and Claude makes it at the start of its next cycle, keeping both sides' work (`.athanor/MERGE_NEEDED.md`).
 
+**When a program does not work on a computer** (Blender crashes, an SDK is broken): Claude tries one quick repair, a few minutes at most, then says so instead of insisting. Every computer of the team gets a notification, and the others try the milestone in its place, those that have the program's word first. The one that succeeds keeps the word, so such milestones go to it from then on; the Overview shows who builds a milestone in place of whom, and what does not work where. If none can (or none is running), the computer that was meant to build it takes it back and Claude asks you on *For you*, saying which computers tried. A computer tries a program again 12 hours later, in case it was repaired. Working alone, Claude asks you right after its quick repair.
+
 **Good to know.** The repository needs *Share the workshop (.athanor/) on GitHub*: switching the computers on turns it on, with the push after each milestone. Each computer runs one milestone at a time, so parallel mode is off while several computers work on a project. Every computer leaves a small branch `athanor/pc/<id>` on the repository: its presence (its name, what it is good at, what it builds); it goes away when the computer stops working with the others. A project whose history has nothing in common with the repository's is refused: two projects that only share a name are never mixed. Files of the folder that the repository also has are never overwritten when a computer joins: it says which ones to move.
 
 Why GitHub and not a tunnel between the computers: every computer already pushes there, it is reachable from anywhere without opening anything, it keeps working when one computer is off, and its history is the merge. A tunnel would need every computer online at once, and one of them would have to serve the others.
@@ -530,7 +532,7 @@ Yes. Nothing is tied to a user name or a drive letter: paths come from your prof
 Push a version tag and GitHub builds the apps (Windows, Linux, macOS) and publishes the release ([`.github/workflows/release.yml`](.github/workflows/release.yml)):
 
 ```bash
-git tag v2.34.0 && git push origin v2.34.0
+git tag v2.35.0 && git push origin v2.35.0
 ```
 
 Keep the version in [`app/winres/athanor.rc`](app/winres/athanor.rc) and `versionAthanor` in [`app/commandes.go`](app/commandes.go) in step with the tag (a test checks they match), and write what is new in `docs/releases/VERSION.md` (e.g. [`docs/releases/2.31.0.md`](docs/releases/2.31.0.md)): it opens the release page.

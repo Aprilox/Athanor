@@ -6,6 +6,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"sync"
@@ -44,9 +45,58 @@ func (s *Serveur) lirePCsProjet(p Projet, publier bool) (VuePCs, error) {
 		v.PCs = []PresencePC{}
 	}
 	pcsMu.Lock()
+	ancien := pcsCache[p.Nom]
 	pcsCache[p.Nom] = &cachePCs{vue: v, quand: time.Now()}
 	pcsMu.Unlock()
+	s.notifierRefusPCs(p.Nom, ancien == nil, v)
 	return v, nil
+}
+
+var (
+	refusVusMu sync.Mutex
+	refusVus   = map[string]bool{} // project · computer · program · milestone · when: already said
+)
+
+// texteRefusNotif: "{program} does not work on {computer}" / "{milestone}: the other computers try in its place".
+var texteRefusNotif = map[string][2]string{
+	"en": {"%s does not work on %s", "%s: the other computers try in its place."},
+	"fr": {"%s ne marche pas sur %s", "%s : les autres ordinateurs essaient à sa place."},
+	"es": {"%s no funciona en %s", "%s: los otros ordenadores lo intentan en su lugar."},
+	"de": {"%s funktioniert nicht auf %s", "%s: Die anderen Computer versuchen es an seiner Stelle."},
+	"it": {"%s non funziona su %s", "%s: gli altri computer provano al suo posto."},
+	"pt": {"%s não funciona em %s", "%s: os outros computadores tentam no seu lugar."},
+}
+
+// notifierRefusPCs: a computer of the team could not run a program (pcs_relais.go): said once, on every
+// computer of the team (the first reading of a project only learns what was already there).
+func (s *Serveur) notifierRefusPCs(projet string, premier bool, v VuePCs) {
+	var tous []PresencePC
+	if v.Moi != nil {
+		tous = append(tous, *v.Moi)
+	}
+	tous = append(tous, v.PCs...)
+	l, ok := texteRefusNotif[s.langue()]
+	if !ok {
+		l = texteRefusNotif["en"]
+	}
+	refusVusMu.Lock()
+	defer refusVusMu.Unlock()
+	for _, p := range tous {
+		for _, r := range p.Refus {
+			cle := projet + "\x00" + p.ID + "\x00" + r.Outil + "\x00" + r.Jalon + "\x00" + r.Quand
+			if refusVus[cle] {
+				continue
+			}
+			refusVus[cle] = true
+			if !premier {
+				outil := r.Outil
+				if outil != "" {
+					outil = strings.ToUpper(outil[:1]) + outil[1:]
+				}
+				go notifier(fmt.Sprintf(l[0], outil, p.Nom)+" · "+projet, fmt.Sprintf(l[1], r.Jalon))
+			}
+		}
+	}
 }
 
 // derniereLigneJSON: the JSON line of a command's output (what the pilot's side may print before it).

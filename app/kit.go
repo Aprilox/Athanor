@@ -511,6 +511,7 @@ type Jalon struct {
 	Complet     string   `json:"complet"`
 	Vague       string   `json:"vague,omitempty"`   // parallel mode: title of the wave ("Wave 2") that starts at this milestone
 	Archive     bool     `json:"archive,omitempty"` // done long ago: moved by the pilot to archives/PLAN_TERMINE.md
+	Reprise     string   `json:"-"`                 // several computers: none could run its program (pcs_relais.go), what Claude is told
 }
 
 var reIdentJalon = regexp.MustCompile(`^([A-Za-z]+\d+(?:[.\-]?[A-Za-z0-9]+)?)`)
