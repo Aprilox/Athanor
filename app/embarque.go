@@ -168,10 +168,11 @@ func etapeDeploiement(etape string, pct int) {
 
 // ResultatDeploiement: what deployerKit did.
 type ResultatDeploiement struct {
-	Fichiers bool // template/, app/, .env.example, LICENSE written
-	Exe      bool // the kit's executable replaced by this one
-	Linux    bool // Windows: the Linux executable of the WSL mode written
-	Reporte  bool // Windows: the Linux executable waits for the running pilots to stop
+	Fichiers  bool           // template/, app/, .env.example, LICENSE written
+	Exe       bool           // the kit's executable replaced by this one
+	Linux     bool           // Windows: the Linux executable of the WSL mode written
+	Reporte   bool           // Windows: the Linux executable waits for the running pilots to stop
+	Nettoyage BilanNettoyage // the files of older versions no version uses any more (nettoyage_ancien.go)
 }
 
 // deployerKit: Athanor's folder d brought to this executable's version: its files when the version changes
@@ -236,6 +237,8 @@ func deployerKit(d string) (ResultatDeploiement, error) {
 			noter(remplacerDossier(filepath.Join(d, haut), f, m))
 		}
 		r.Fichiers = premiere == nil
+		etapeDeploiement("nettoyage", 40)
+		r.Nettoyage = nettoyerAncienKit(d)
 	}
 	// its own executable, when the folder's is missing or older
 	etapeDeploiement("exe", 55)
@@ -436,6 +439,9 @@ func mettreAJourSurPlace() {
 	}
 	if r.Reporte {
 		fmt.Fprintln(os.Stderr, "Athanor: the Linux executable is updated once the running pilots have stopped")
+	}
+	if n := r.Nettoyage; len(n.Retires)+len(n.Ecartes) > 0 {
+		fmt.Fprintf(os.Stderr, "Athanor: %d file(s) of older versions removed, %d changed one(s) kept in %s (logs/nettoyage-*.txt)\n", len(n.Retires), len(n.Ecartes), n.Garde)
 	}
 }
 

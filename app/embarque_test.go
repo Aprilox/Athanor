@@ -108,6 +108,13 @@ func TestDeployerKitMiseAJourGardeLesDonnees(t *testing.T) {
 	ecrireT("local/template/CLAUDE.md", "repair")
 	ecrireT("extensions/biblio.json", "{}")
 	ecrireT(filepath.Base(exeDuKit(d)), "old executable")
+	// a script of the bash versions, as shipped: the update removes it
+	ecrireT("commands/start.cmd", "@echo off\n")
+	ancienne := listeAnciens
+	listeAnciens = func() map[string]map[string]bool {
+		return lireListeAnciens(blobGit([]byte("@echo off\n")) + "\tcommands/start.cmd\n")
+	}
+	defer func() { listeAnciens = ancienne }()
 	r, err := deployerKit(d)
 	if err != nil {
 		t.Fatal(err)
@@ -134,6 +141,9 @@ func TestDeployerKitMiseAJourGardeLesDonnees(t *testing.T) {
 	}
 	if lire(t, exeDuKit(d)) == "old executable" {
 		t.Fatal("older executable not replaced")
+	}
+	if _, err := os.Stat(filepath.Join(d, "commands")); err == nil || len(r.Nettoyage.Retires) != 1 {
+		t.Fatalf("the files of older versions stayed: %+v", r.Nettoyage)
 	}
 	if strings.TrimSpace(lire(t, filepath.Join(d, "system", "version.txt"))) != versionAthanor {
 		t.Fatal("version not recorded")
