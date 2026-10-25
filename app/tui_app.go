@@ -142,7 +142,8 @@ type formulaireTUI struct {
 	champs []champTUI
 	sel    int
 	fn     func(valeurs []string)
-	erreur string // what the server answered: the form stays open with it
+	erreur string   // what the server answered: the form stays open with it
+	debut  []string // the fields as the form opened: closing it unchanged asks nothing
 }
 
 type zoneTUI struct {

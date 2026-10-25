@@ -60,6 +60,9 @@ func TestRecupererGitHub(t *testing.T) {
 		gitEssai(t, m.projet, "config", "user.name", nom)
 		gitEssai(t, m.projet, "config", "user.email", strings.ToLower(nom)+"@example.com")
 		_ = os.MkdirAll(filepath.Join(m.projet, ".athanor"), 0o755)
+		if err := ecrireExclusionAtelier(m.projet, false); err != nil { // as the pilot and linking do
+			t.Fatal(err)
+		}
 		lierPCEssai(t, m, "", "") // linked alone: no Several computers
 		return m
 	}

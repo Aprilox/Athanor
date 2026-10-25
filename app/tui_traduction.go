@@ -28,9 +28,10 @@ func dicoTUI(langue string) map[string]string {
 	b, err := statique.ReadFile("static/i18n.js")
 	var d map[string]string
 	if err == nil {
-		d = lireDicoJS(string(b), langue)
+		js := string(b)
+		d = lireDicoJS(js, langue)
 		if prefixesTUI == nil {
-			prefixesTUI = lirePrefixesJS(string(b))
+			prefixesTUI = lirePrefixesJS(js)
 		}
 	}
 	dicosTUI[langue] = d
@@ -57,6 +58,7 @@ func lirePrefixesJS(js string) []string {
 // lireDicoJS: the block "<langue>: { … }," of i18n.js's DICT (its lines of "key": "text", pairs; its
 // comment lines left out).
 func lireDicoJS(js, langue string) map[string]string {
+	js = strings.ReplaceAll(js, "\r\n", "\n") // a copy checked out on Windows (git's autocrlf)
 	debut := strings.Index(js, "\n"+langue+": {\n")
 	if debut < 0 {
 		return nil

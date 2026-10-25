@@ -79,6 +79,10 @@ func (a *appTUI) touche(ev evenementTUI) {
 		}
 		return
 	}
+	if l := a.lettrePage(k); l != "" {
+		a.touchePage(ev, l)
+		return
+	}
 	switch k {
 	case "q", "f10":
 		a.demanderQuitter()
@@ -121,6 +125,24 @@ func (a *appTUI) touche(ev evenementTUI) {
 	default:
 		a.touchePage(ev, k)
 	}
+}
+
+// lettresPages: the letters a page gives a meaning of its own; there they come before the keys of every
+// page (p is the project chooser elsewhere, the palette in Settings; a is Stop after cycle elsewhere, the
+// automatic push on GitHub), typed small or capital.
+var lettresPages = map[int]string{pReglages: "lpa", pGitHub: "cdlrptaug"}
+
+func (a *appTUI) lettrePage(k string) string {
+	if len([]rune(k)) != 1 {
+		return ""
+	}
+	if a.page == pGitHub && (a.gh == nil || a.vue == nil || a.vue.Projet == nil) {
+		return "" // nothing to act on yet: the keys of every page
+	}
+	if l := strings.ToLower(k); strings.Contains(lettresPages[a.page], l) {
+		return l
+	}
+	return ""
 }
 
 // touchePage: the keys of the page shown.
@@ -336,9 +358,12 @@ func (a *appTUI) abandonnerFormulaire() {
 	if f == nil {
 		return
 	}
-	rempli := false
-	for _, c := range f.champs {
-		if strings.TrimSpace(c.s.texte()) != "" && !c.s.masque {
+	rempli := false // something typed: a field changed since the form opened (a setting's value is there from the start)
+	for i, c := range f.champs {
+		if c.s.masque && strings.TrimSpace(c.s.texte()) == "" {
+			continue
+		}
+		if i >= len(f.debut) || strings.TrimSpace(c.s.texte()) != strings.TrimSpace(f.debut[i]) {
 			rempli = true
 		}
 	}
@@ -374,7 +399,11 @@ func (a *appTUI) formulaire(titre, aide string, champs []champTUI, fn func([]str
 		}
 		champs[i].s.multi = champs[i].h > 1
 	}
-	a.form = &formulaireTUI{titre: titre, aide: aide, champs: champs, fn: fn}
+	debut := make([]string, len(champs))
+	for i := range champs {
+		debut[i] = champs[i].s.texte()
+	}
+	a.form = &formulaireTUI{titre: titre, aide: aide, champs: champs, fn: fn, debut: debut}
 }
 
 const aideFormulaireMulti = "Tab: next field or button · Enter: new line · F2 (or Ctrl+S): save · Esc: cancel"

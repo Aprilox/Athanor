@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -120,6 +121,18 @@ func TestTUITouches(t *testing.T) {
 			t.Errorf("%q: %q, want %q", b, g, attendu)
 		}
 	}
+	// Enter sent as CR LF or CR NUL (some terminals, SSH clients), the keypad's Enter: one Enter each
+	for _, b := range []string{"\r\n", "\r\x00", "\x1bOM", "\r", "\n"} {
+		if g := strings.Join(noms(b, true), " "); g != "entree" {
+			t.Errorf("%q: %q, want one Enter", b, g)
+		}
+	}
+	if g := strings.Join(noms("\r\r", true), " "); g != "entree entree" {
+		t.Errorf("two Enters: %q", g)
+	}
+	if evs, reste := analyserTouches([]byte("\r"), false); len(evs) != 0 || len(reste) != 1 {
+		t.Fatalf("a CR whose LF may follow: %v %q", evs, reste)
+	}
 	// incomplete: waits (unless nothing more comes)
 	if evs, reste := analyserTouches([]byte("\x1b"), false); len(evs) != 0 || len(reste) != 1 {
 		t.Fatalf("a lone Escape while more may come: %v %q", evs, reste)
@@ -191,6 +204,12 @@ func TestTUITraduction(t *testing.T) {
 	fr := dicoTUI("fr")
 	if fr == nil || fr["Start"] != "Démarrer" {
 		t.Fatalf("French: %v", fr["Start"])
+	}
+	// i18n.js checked out on Windows (CRLF line ends): read all the same
+	if b, err := statique.ReadFile("static/i18n.js"); err != nil {
+		t.Fatal(err)
+	} else if d := lireDicoJS(strings.ReplaceAll(strings.ReplaceAll(string(b), "\r\n", "\n"), "\n", "\r\n"), "fr"); d["Start"] != "Démarrer" || len(d) != len(fr) {
+		t.Fatalf("CRLF: %v, %d keys of %d", d["Start"], len(d), len(fr))
 	}
 	if g := traduireTUI(fr, "{0} / {1} milestones done", 3, 10); !strings.Contains(g, "3") || !strings.Contains(g, "10") || strings.Contains(g, "milestones") {
 		t.Fatalf("arguments: %q", g)
@@ -542,7 +561,8 @@ func TestTUIFormulaireRefuse(t *testing.T) {
 	taper(a, "N")
 	taper(a, "essai2\t/usr/essai2\tune page\x1bOQ") // F2
 	attendreTUI(t, a, func() bool { return a.form != nil && a.form.erreur != "" })
-	if !strings.Contains(a.form.erreur, "système") || a.form.champs[1].s.texte() != "/usr/essai2" {
+	// the reason itself is the server's, its words depend on the system (a Windows path is asked there)
+	if a.form.champs[1].s.texte() != "/usr/essai2" || runtime.GOOS != "windows" && !strings.Contains(a.form.erreur, "système") {
 		t.Fatalf("the form: %q %q", a.form.erreur, a.form.champs[1].s.texte())
 	}
 	e := nouvelEcran(110, 34)
@@ -588,10 +608,97 @@ func TestTUIPages2(t *testing.T) {
 	if strings.Contains(e.texteEcran(), "sk-ant") {
 		t.Fatal("a secret shown")
 	}
-	// a, the pilot's key, is never GitHub's automatic push (nothing is sent here: no pilot runs)
-	a.page = pGitHub
+	// a page's own letters come first, small or capital: p is the palette in Settings, never the project
+	// chooser; a the accent, never Stop after cycle
+	for _, k := range []string{"p", "P"} {
+		a.page, a.dialogue = pReglages, nil
+		taper(a, k)
+		if a.dialogue == nil || a.dialogue.titre != "Palette" {
+			t.Fatalf("%s in Settings: %+v", k, a.dialogue)
+		}
+	}
+	a.dialogue = nil
 	taper(a, "a")
-	if a.dialogue != nil || a.form != nil {
-		t.Fatal("a on the GitHub page")
+	if a.dialogue == nil || a.dialogue.titre != "Accent" {
+		t.Fatalf("a in Settings: %+v", a.dialogue)
+	}
+	a.dialogue = nil
+	taper(a, "l")
+	if a.dialogue == nil || a.dialogue.titre != "Language" {
+		t.Fatalf("l in Settings: %+v", a.dialogue)
+	}
+	// on GitHub: d disconnects (asked first), r creates a repository (a form)
+	a.page, a.dialogue = pGitHub, nil
+	taper(a, "D")
+	if a.dialogue == nil || a.dialogue.titre != "Disconnect" {
+		t.Fatalf("D on GitHub: %+v", a.dialogue)
+	}
+	a.dialogue = nil
+	taper(a, "r")
+	if a.form == nil || a.form.titre != "Create a private repository" {
+		t.Fatalf("r on GitHub: %+v", a.form)
+	}
+	a.form = nil
+	// a setting's form, opened with its value: closed unchanged, nothing asked; changed, asked first
+	a.page, a.selReglage = pReglages, 1
+	a.env[1].Valeur = "opus"
+	taper(a, "\r\n") // one Enter (CR LF): the form opens and stays open
+	if a.form == nil || a.form.champs[0].s.texte() != "opus" {
+		t.Fatalf("Enter on a setting: %+v", a.form)
+	}
+	taper(a, "\x1b")
+	if a.form != nil || a.dialogue != nil {
+		t.Fatalf("Esc on an unchanged form: %v %v", a.form != nil, a.dialogue != nil)
+	}
+	taper(a, "\r")
+	taper(a, "x\x1b")
+	if a.dialogue == nil || a.form == nil {
+		t.Fatal("Esc on a changed form: not asked")
+	}
+	a.dialogue, a.form = nil, nil
+	// elsewhere, p is still the project chooser
+	a.page = pSuivi
+	taper(a, "p")
+	if a.dialogue == nil || a.dialogue.titre == "Palette" {
+		t.Fatalf("p on the Overview: %+v", a.dialogue)
+	}
+}
+
+// The Overview: the local commit, then the one GitHub has (✓ when the same, what is not pushed yet, the
+// automatic push off, why the last push did not go).
+func TestTUISuiviGitHub(t *testing.T) {
+	a := nouvelleAppTUI(&clientTUI{projet: "a"}, false)
+	a.vue = &EtatVue{Version: versionAthanor, KitValide: true, KitInstalle: true, Projets: []ProjetVue{{Nom: "a"}}, Projet: &ProjetVue{Nom: "a"},
+		Etat: &Etat{DernierCommit: "abc12345 M9: the shop"}}
+	ecran := func() string {
+		e := nouvelEcran(150, 40)
+		a.dessiner(e)
+		return e.texteEcran()
+	}
+	if s := ecran(); !strings.Contains(s, "Local commit") || strings.Contains(s, "On GitHub") {
+		t.Fatalf("not linked yet, nothing read: %s", s)
+	}
+	a.vue.GitHub = &SuiviGitHub{Lie: true, Depot: "moi/site", Branche: "main", Auto: true, Envoye: &envoiGH{Quand: "2026-10-25T21:00:00", Commit: "abc1234 M9: the shop"}}
+	if s := ecran(); !strings.Contains(s, "On GitHub") || !strings.Contains(s, "abc1234 M9: the shop") || !strings.Contains(s, "✓") {
+		t.Fatalf("up to date: %s", s)
+	}
+	a.vue.Etat.DernierCommit = "def5678 M10: the cart"
+	if s := ecran(); strings.Contains(s, "✓") || !strings.Contains(s, "local one is not pushed yet") {
+		t.Fatalf("M10 not pushed yet: %s", s)
+	}
+	a.vue.GitHub.Auto = false
+	a.vue.GitHub.Dernier = &struct {
+		Quand    string   `json:"quand"`
+		Resultat string   `json:"resultat"`
+		Modele   string   `json:"modele"`
+		Args     []string `json:"args"`
+		Commit   string   `json:"commit"`
+	}{"2026-10-25T22:00:00", "rejete", "GitHub's branch {0} has commits the project does not have. Athanor never overwrites them: choose another branch, or bring those commits into the project.", []string{"main"}, "def5678 M10: the cart"}
+	if s := ecran(); !strings.Contains(s, "automatic push off") || !strings.Contains(s, "GitHub's branch main has commits") {
+		t.Fatalf("off, refused: %s", s)
+	}
+	a.vue.GitHub = &SuiviGitHub{}
+	if s := ecran(); !strings.Contains(s, "not linked to GitHub") {
+		t.Fatalf("unlinked: %s", s)
 	}
 }

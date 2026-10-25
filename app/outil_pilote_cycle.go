@@ -382,6 +382,7 @@ func (p *pilote) lancerClaudeSurveille(journal string, args []string, cadrage bo
 	}
 	tete := p.gitHead(p.projet)
 	cochesDebut := p.cochesPlan()
+	cochesEnvoi, jalonEnvoi, dernierEnvoi := cochesDebut, int64(0), int64(0) // the push as soon as a milestone is committed
 	_ = os.WriteFile(journal, nil, 0o644)
 
 	// Native Windows: Claude writes its stream straight into its log file, never into a pipe (a pipe can
@@ -564,6 +565,20 @@ boucleSurveillance:
 				if ecart >= 1200 || (verifie && (ecart >= 600 || (ecart >= 120 && propre()))) {
 					motif = "milestone delivered and committed"
 					_ = os.WriteFile(filepath.Join(p.prive, "cycle_clos"), nil, 0o644)
+				}
+			}
+		}
+		// a milestone ticked and committed: pushed now (the tree clean, or 10 min later), not at the end of
+		// the cycle, which may come much later (the parallel verification merges several)
+		if motif == "" && !cadrage && maintenant-dernierEnvoi >= 30 {
+			dernierEnvoi = maintenant
+			if c := p.cochesPlan(); c > cochesEnvoi && p.gitHead(p.projet) != tete {
+				if jalonEnvoi == 0 {
+					jalonEnvoi = maintenant
+				}
+				if maintenant-jalonEnvoi >= 600 || gitP(p.projet, nil, "diff", "--quiet", "--no-ext-diff", "--no-textconv", "HEAD").Run() == nil {
+					cochesEnvoi, jalonEnvoi = c, 0
+					p.githubPousserNouveau()
 				}
 			}
 		}
@@ -1385,8 +1400,38 @@ func (p *pilote) githubPousser() int {
 		lignes := strings.Split(strings.TrimRight(out.String(), "\r\n"), "\n")
 		derniere := lignes[len(lignes)-1]
 		p.log(tronquerRunes(derniere, 300))
+	} else if strings.Contains(out.String(), "Automatic push is off.") {
+		p.logUneFois("github-auto-off", "GitHub: automatic push is off for this project, the commits stay on this computer (GitHub page: Push now, or switch automatic push on).")
 	}
 	return code
+}
+
+// plusieursPC: the project is worked on by several computers (its team maybe not opened yet).
+func (p *pilote) plusieursPC() bool {
+	if p.equipePC != nil || p.jalonPC != nil {
+		return true
+	}
+	r, lie := lireReglagesGH(dossierGH(p.projet))
+	return lie && r.Equipe
+}
+
+// githubPousserNouveau: the automatic push when the project has a commit it was not tried with yet: as
+// soon as a milestone is committed, and at the end of every cycle whatever way it ended (the context,
+// the time limit or the quota may cut the cycle that committed a milestone). Several computers: their
+// own pushes (pousserPC merges the others' work first), at the moments they have always had.
+func (p *pilote) githubPousserNouveau() {
+	if p.plusieursPC() {
+		return
+	}
+	if _, lie := lireReglagesGH(dossierGH(p.projet)); !lie {
+		return
+	}
+	h := p.gitHead(p.projet)
+	if h == "aucun" || h == p.envoiGH {
+		return
+	}
+	p.envoiGH = h
+	p.githubPousser()
 }
 
 func (p *pilote) lireModeParallele() {
@@ -2352,6 +2397,7 @@ func lancerPilote(args []string) int {
 	sansProgres := 0
 	arrets := 0                                         // cycles in a row stopped by the watchdog
 	_ = os.Remove(filepath.Join(p.prive, "images_gel")) // whether large images freeze Claude is seen again from this start
+	publierSuiviGH(p.projet)                            // the Overview's GitHub line, from this start
 
 	for {
 		p.compterFileAttente()
@@ -2770,6 +2816,11 @@ func lancerPilote(args []string) int {
 		if etatCycle != "bloque" {
 			arrets = 0
 		}
+		// what this cycle (or an earlier one) committed and GitHub does not have yet, whatever way the cycle
+		// ended (a cycle with a new commit that succeeded pushes after its line, below)
+		if etatCycle != "cadre" && (etatCycle != "ok" || avant == apres) {
+			p.githubPousserNouveau()
+		}
 		switch etatCycle {
 		case "cadre":
 			if p.equipePC != nil && issueCadrage == "fait" {
@@ -2805,7 +2856,11 @@ func lancerPilote(args []string) int {
 				if clos {
 					p.log("(cycle closed by the pilot after the milestone: the next one starts with a fresh context)")
 				}
-				p.githubPousser()
+				if p.plusieursPC() {
+					p.githubPousser() // several computers: the others' work merged, then pushed
+				} else {
+					p.githubPousserNouveau()
+				}
 			}
 		case "quota":
 			var attente int

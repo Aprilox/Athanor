@@ -550,7 +550,7 @@ func (a *appTUI) lignesMaintenant(l int) [][]segTUI {
 		e = *v.Etat
 	}
 	lw := 0
-	for _, cle := range []string{"Milestone", "Last commit", "Queued requests", "Updated"} {
+	for _, cle := range []string{"Milestone", "Local commit", "On GitHub", "Queued requests", "Updated"} {
 		lw = max(lw, largeurTexte(t(cle)))
 	}
 	lw = min(lw+1, max(8, l/2))
@@ -578,7 +578,42 @@ func (a *appTUI) lignesMaintenant(l int) [][]segTUI {
 			}
 		}
 	}
-	champ("Last commit", e.DernierCommit, a.st(p.muet, fond))
+	champ("Local commit", e.DernierCommit, a.st(p.muet, fond))
+	if g := v.GitHub; g != nil {
+		switch {
+		case !g.Lie:
+			champ("On GitHub", t("not linked to GitHub"), a.st(p.muet, fond))
+		default:
+			val, st := t("nothing pushed yet"), a.st(p.muet, fond)
+			d := g.Dernier
+			echec := d != nil && d.Resultat != "ok" && d.Resultat != "attente" && (g.Envoye == nil || d.Quand > g.Envoye.Quand)
+			if g.Envoye != nil {
+				val = g.Envoye.Commit
+				if q, ok := lireDate(g.Envoye.Quand); ok {
+					val += " · " + q.Format(a.formatHeure())
+				}
+				if memeCommitTUI(g.Envoye.Commit, e.DernierCommit) {
+					val += " ✓"
+					st = a.st(p.ok, fond)
+				} else if e.DernierCommit != "" && !echec {
+					val += " · " + t("the local one is not pushed yet")
+					st = a.st(p.attention, fond)
+				}
+			}
+			if !g.Auto {
+				val += " · " + t("automatic push off")
+				st = a.st(p.attention, fond)
+			}
+			champ("On GitHub", val, st)
+			if echec {
+				args := make([]any, len(d.Args))
+				for i, x := range d.Args {
+					args[i] = x
+				}
+				champ("", t(d.Modele, args...), a.st(p.erreur, fond))
+			}
+		}
+	}
 	champ("Queued requests", strconv.Itoa(v.Attente), a.st(p.encre, fond))
 	if d, ok := lireDate(e.Maj); ok {
 		f := "15:04:05"
@@ -588,6 +623,15 @@ func (a *appTUI) lignesMaintenant(l int) [][]segTUI {
 		champ("Updated", d.Format(f), a.st(p.muet, fond))
 	}
 	return r
+}
+
+// memeCommitTUI: the same commit, from its short ids ("abc1234 subject"; two repositories may shorten
+// them differently).
+func memeCommitTUI(a, b string) bool {
+	x, _, _ := strings.Cut(a, " ")
+	y, _, _ := strings.Cut(b, " ")
+	n := min(len(x), len(y))
+	return n >= 7 && x[:n] == y[:n]
 }
 
 // jourSemaine: the weekday in the interface's language.
@@ -1435,8 +1479,8 @@ func (a *appTUI) dessinerAide(e *ecranT) {
 		{"o r u / f", t("Log") + ": " + t("Tools") + ", " + t("Results") + ", " + t("Sub-agents") + ", " + t("filter…") + ", " + t("Follow")},
 		{"i · Enter · Esc", t("Chat") + ": " + t("Write") + " · " + t("Send") + " · " + t("Leave the field")},
 		{"v · r · I · T", t("Setup & health") + ": " + t("Check everything") + " · " + t("Repair") + " · " + t("Install everything") + " · " + t("Token")},
-		{"c · l · n · P", "GitHub: " + t("Connect to GitHub") + " · " + t("Use one of my repositories") + " · " + t("Create a private repository") + " · " + t("Push now")},
-		{"L · P · A", t("Settings") + ": " + t("Language") + " · " + t("Palette") + " · " + t("Accent")},
+		{"c · l · r · p · a", "GitHub: " + t("Connect to GitHub") + " · " + t("Use one of my repositories") + " · " + t("Create a private repository") + " · " + t("Push now") + " · " + t("Automatic push")},
+		{"l · p · a", t("Settings") + ": " + t("Language") + " · " + t("Palette") + " · " + t("Accent")},
 		{"w", t("Open Athanor's window")},
 		{"q, Ctrl+C", t("Quit")},
 	}

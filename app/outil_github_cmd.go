@@ -267,7 +267,69 @@ func noterGH(d, resultat, modele, commit string, n noteGitHub) string {
 		t.Close()
 		_ = os.Rename(t.Name(), d+"/dernier.json")
 	}
+	// the last commit GitHub has: kept apart, a failed push after it does not hide it
+	if resultat == "ok" && commit != "" {
+		e, _ := json.Marshal(envoiGH{Quand: v.Quand, Commit: commit})
+		if t, err := os.CreateTemp(d, ".envoye."); err == nil {
+			t.Write(e)
+			t.Close()
+			_ = os.Rename(t.Name(), d+"/envoye.json")
+		}
+	}
 	return message
+}
+
+type envoiGH struct {
+	Quand  string `json:"quand"`
+	Commit string `json:"commit"`
+}
+
+// SuiviGitHub: .athanor/github.json, what the Overview shows of GitHub (written on this side, where the
+// pushes happen, read by the app wherever it runs): the link, the automatic push, the last commit GitHub
+// has and the last push tried.
+type SuiviGitHub struct {
+	Lie     bool     `json:"lie"`
+	Depot   string   `json:"depot,omitempty"`
+	Branche string   `json:"branche,omitempty"`
+	Auto    bool     `json:"auto"`
+	Envoye  *envoiGH `json:"envoye,omitempty"`
+	Dernier *struct {
+		Quand    string   `json:"quand"`
+		Resultat string   `json:"resultat"`
+		Modele   string   `json:"modele"`
+		Args     []string `json:"args"`
+		Commit   string   `json:"commit"`
+	} `json:"dernier,omitempty"`
+}
+
+// publierSuiviGH: .athanor/github.json from the project's GitHub folder (after a push, a link, a setting).
+func publierSuiviGH(projet string) {
+	projet, ok := cheminProjetGH(projet)
+	if !ok {
+		return
+	}
+	d := dossierGH(projet)
+	var v SuiviGitHub
+	if r, lie := lireReglagesGH(d); lie {
+		v = SuiviGitHub{Lie: true, Depot: r.Depot, Branche: firstNonEmpty(r.Branche, "main"), Auto: r.Auto}
+		if b, err := os.ReadFile(d + "/envoye.json"); err == nil {
+			var e envoiGH
+			if json.Unmarshal(b, &e) == nil && e.Commit != "" {
+				v.Envoye = &e
+			}
+		}
+		if b, err := os.ReadFile(d + "/dernier.json"); err == nil {
+			_ = json.Unmarshal(b, &v.Dernier)
+		}
+		if v.Envoye == nil && v.Dernier != nil && v.Dernier.Resultat == "ok" && v.Dernier.Commit != "" {
+			v.Envoye = &envoiGH{v.Dernier.Quand, v.Dernier.Commit} // pushed before this file existed
+		}
+	}
+	b, err := json.Marshal(v)
+	if err != nil {
+		return
+	}
+	_ = fichierAtelier(projet, "github.json", false, bytes.NewReader(b))
 }
 
 // ---------------------------------------------------------------------------- git
@@ -481,6 +543,7 @@ func pousserGH(args []string, w io.Writer) int {
 		fmt.Fprintln(w, "Usage: athanor github pousser PROJECT")
 		return 1
 	}
+	defer publierSuiviGH(projet)
 	d := dossierGH(projet)
 	if !existeGH(d + "/reglages") {
 		fmt.Fprintln(w, "Not linked to GitHub.")
@@ -1150,6 +1213,13 @@ func commandeGitHub(args []string, w io.Writer) (int, bool) {
 	default:
 		if len(reste) > 0 {
 			reste[0] = cheminNatifPilote(reste[0])
+		}
+	}
+	// what the Overview shows of GitHub, after what changes it (pousser writes it itself)
+	switch args[0] {
+	case "lier", "etat", "auto", "branche", "delier", "recuperer", "enregistrer":
+		if len(reste) > 0 {
+			defer publierSuiviGH(reste[0])
 		}
 	}
 	switch args[0] {
