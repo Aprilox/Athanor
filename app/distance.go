@@ -266,10 +266,14 @@ func init() { _ = mime.AddExtensionType(".webmanifest", "application/manifest+js
 // fichiersPublicsDistance: what a browser fetches without its cookies (adding Athanor to the home screen)
 var fichiersPublicsDistance = map[string]bool{"/manifest.webmanifest": true, "/icone-180.png": true, "/icone-512.png": true, "/logo.svg": true}
 
-// interditDistance: what a device never does (Athanor's window only).
+// interditDistance: what a device never does (Athanor's window only). Of the Remote page, a device reads
+// the state and the trusted devices (never the pairing link, its QR code nor its digits: vueDistanceDe),
+// renames and removes devices; the switch and the domain stay the window's.
 func interditDistance(r *http.Request) bool {
 	p := r.URL.Path
 	switch {
+	case p == "/api/distance" && r.Method == http.MethodGet, strings.HasPrefix(p, "/api/distance/appareils/"):
+		return false
 	case strings.HasPrefix(p, "/api/distance"), strings.HasPrefix(p, "/api/instance"),
 		p == "/api/mot-de-passe", p == "/api/ouvrir":
 		return true
@@ -444,6 +448,7 @@ type AppareilVue struct {
 	Ajoute  string `json:"ajoute"`
 	VuLe    string `json:"vu_le,omitempty"`
 	EnLigne bool   `json:"en_ligne"`
+	Moi     bool   `json:"moi,omitempty"` // the device that asks
 	Lieu    string `json:"lieu,omitempty"`
 	Notifs  bool   `json:"notifs,omitempty"` // it gets the notifications (distance_push.go)
 }
@@ -467,7 +472,12 @@ type DistanceVue struct {
 	Appareils      []AppareilVue `json:"appareils"`
 }
 
-func (s *Serveur) vueDistance() DistanceVue {
+func (s *Serveur) vueDistance() DistanceVue { return s.vueDistanceDe("") }
+
+// vueDistanceDe: the Remote page for Athanor's window (appareil ""), or for a trusted device: never what
+// pairs a device (the link, its QR code, the digits) nor the domain's sign-in, so that a device can never
+// let another one in.
+func (s *Serveur) vueDistanceDe(appareil string) DistanceVue {
 	s.mu.Lock()
 	v := DistanceVue{Actif: s.config.Distance.Actif, Appareils: []AppareilVue{}}
 	appareils := append([]Appareil{}, s.config.Distance.Appareils...)
@@ -486,7 +496,7 @@ func (s *Serveur) vueDistance() DistanceVue {
 	d.mu.Unlock()
 	v.Etat, v.Message = t.etat, t.message
 	v.Domaine, _ = s.tunnelNomme()
-	if dom.etape != "pret" {
+	if dom.etape != "pret" && appareil == "" {
 		v.DomaineEtape, v.DomaineMessage, v.DomaineLien = dom.etape, dom.message, dom.lien
 	}
 	if !v.Actif {
@@ -496,6 +506,8 @@ func (s *Serveur) vueDistance() DistanceVue {
 	}
 	if v.Actif && v.Etat == "pret" && t.adresse != "" {
 		v.Adresse = t.adresse
+	}
+	if v.Actif && v.Etat == "pret" && t.adresse != "" && appareil == "" {
 		code, fin := s.codeAppairage()
 		v.Lien = t.adresse + routeAppairer + "?c=" + code
 		v.QR = imageQR(v.Lien)
@@ -504,7 +516,7 @@ func (s *Serveur) vueDistance() DistanceVue {
 		v.Chiffres, v.ChiffresExpire = ch, max(1, int(time.Until(finCh).Milliseconds()))
 	}
 	for _, a := range appareils {
-		av := AppareilVue{ID: a.ID, Nom: a.Nom, Ajoute: a.Ajoute, VuLe: a.VuLe, Lieu: a.Lieu, Notifs: a.Push != nil}
+		av := AppareilVue{ID: a.ID, Nom: a.Nom, Ajoute: a.Ajoute, VuLe: a.VuLe, Lieu: a.Lieu, Notifs: a.Push != nil, Moi: appareil != "" && a.ID == appareil}
 		if x, ok := vu[a.ID]; ok {
 			av.VuLe = x.Format(time.RFC3339)
 			av.EnLigne = v.Actif && time.Since(x) < enLigneDist
@@ -519,7 +531,7 @@ func (s *Serveur) vueDistance() DistanceVue {
 }
 
 func (s *Serveur) apiDistance(w http.ResponseWriter, r *http.Request) {
-	s.ecrireJSON(w, s.vueDistance())
+	s.ecrireJSON(w, s.vueDistanceDe(appareilDe(r)))
 }
 
 // apiDistanceActif: the switch (on: the local server, then the tunnel; off: both stop, every device with them).
@@ -551,7 +563,7 @@ func (s *Serveur) apiDistanceActif(w http.ResponseWriter, r *http.Request) {
 		s.fermerEcouteDistance()
 		eveilDistance(false)
 	}
-	s.ecrireJSON(w, s.vueDistance())
+	s.ecrireJSON(w, s.vueDistanceDe(appareilDe(r)))
 }
 
 // apiDistanceAppareil: rename a device (POST {nom}) or remove it from the trusted ones (DELETE).
@@ -593,7 +605,7 @@ func (s *Serveur) apiDistanceAppareil(w http.ResponseWriter, r *http.Request) {
 		s.erreur(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	s.ecrireJSON(w, s.vueDistance())
+	s.ecrireJSON(w, s.vueDistanceDe(appareilDe(r)))
 }
 
 // imageQR: the QR code of a text, as an SVG image (a data: address the page shows as is).

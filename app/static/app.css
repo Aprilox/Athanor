@@ -692,7 +692,7 @@ input.large { flex: 1; min-width: 200px; width: auto; }
 .point-appareil.en-ligne { background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 25%, transparent); }
 .nom-appareil { background: transparent; border: 1px solid transparent; padding: 3px 6px; margin-left: -7px; font-weight: 600; color: var(--ink); width: 100%; max-width: 280px; border-radius: 6px; }
 .nom-appareil:hover, .nom-appareil:focus { border-color: var(--line); background: var(--panel-2); }
-.distant #nav-outil a[data-page="distance"], .distant [data-ouvrir], .distant .local-seul, .distant .nav-kit { display: none !important; }
+.distant [data-ouvrir], .distant .local-seul, .distant .nav-kit { display: none !important; }
 .non-appaire { max-width: 440px; margin: 15vh auto; padding: 24px; text-align: center; font-size: 17px; line-height: 1.5; }
 .non-appaire h1 { font-size: 22px; margin: 8px 0 12px; }
 

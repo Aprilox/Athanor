@@ -4,8 +4,8 @@
 1 24 "athanor.manifest"
 
 1 VERSIONINFO
-FILEVERSION     2,36,2,0
-PRODUCTVERSION  2,36,2,0
+FILEVERSION     2,36,3,0
+PRODUCTVERSION  2,36,3,0
 FILEOS          0x40004
 FILETYPE        0x1
 BEGIN
@@ -14,11 +14,11 @@ BEGIN
     BLOCK "040904B0"
     BEGIN
       VALUE "FileDescription",  "Athanor"
-      VALUE "FileVersion",      "2.36.2.0"
+      VALUE "FileVersion",      "2.36.3.0"
       VALUE "InternalName",     "Athanor"
       VALUE "OriginalFilename", "Athanor.exe"
       VALUE "ProductName",      "Athanor"
-      VALUE "ProductVersion",   "2.36.2"
+      VALUE "ProductVersion",   "2.36.3"
       VALUE "LegalCopyright",   "MIT License"
     END
   END

@@ -189,9 +189,29 @@ func TestDistanceAppairage(t *testing.T) {
 		t.Fatalf("devices: %+v", v.Appareils)
 	}
 
+	// the Remote page from a device: the state and the trusted devices, never what pairs another device
+	w = appelDistance(h, "GET", "/api/distance", cle, "", api...)
+	var dv DistanceVue
+	_ = json.Unmarshal(w.Body.Bytes(), &dv)
+	if w.Code != http.StatusOK || !dv.Actif || len(dv.Appareils) != 1 || !dv.Appareils[0].Moi {
+		t.Fatalf("Remote page from a device: %d %s", w.Code, w.Body.String())
+	}
+	if dv.Lien != "" || dv.QR != "" || dv.Chiffres != "" || dv.Expire != 0 || dv.DomaineLien != "" ||
+		strings.Contains(w.Body.String(), routeAppairer) {
+		t.Fatalf("the pairing reaches a device: %s", w.Body.String())
+	}
+	if fv := s.vueDistance(); fv.Lien == "" || fv.Chiffres == "" || fv.Appareils[0].Moi {
+		t.Fatalf("the window lost its pairing: %+v", fv)
+	}
+	// a device renames: the answer has no pairing either
+	w = appelDistance(h, "POST", "/api/distance/appareils/"+v.Appareils[0].ID, cle, `{"nom":"iPhone"}`, api...)
+	if w.Code != http.StatusOK || strings.Contains(w.Body.String(), routeAppairer) || strings.Contains(w.Body.String(), `"chiffres"`) {
+		t.Fatalf("rename from a device: %d %s", w.Code, w.Body.String())
+	}
+
 	// what a device never does
 	for _, c := range []struct{ m, p string }{
-		{"GET", "/api/distance"}, {"POST", "/api/distance"}, {"DELETE", "/api/distance/appareils/" + v.Appareils[0].ID},
+		{"POST", "/api/distance"}, {"POST", "/api/distance/domaine"},
 		{"POST", "/api/mot-de-passe"}, {"POST", "/api/ouvrir"}, {"GET", "/api/env?secrets=1"}, {"POST", "/api/instance/montrer"},
 	} {
 		if w := appelDistance(h, c.m, c.p, cle, "{}", api...); w.Code != http.StatusForbidden {

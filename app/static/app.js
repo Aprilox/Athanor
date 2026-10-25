@@ -713,7 +713,7 @@ $("#menu-projets").addEventListener("click", async (ev) => {
 });
 document.addEventListener("click", (ev) => { if (etat.selecteurOuvert && !ev.target.closest("#sel-projet, #menu-projets")) fermerSelecteur(); });
 
-// the sidebar's "Remote": how many devices are connected now (hidden on a remote device)
+// the sidebar's "Remote": how many devices are connected now (a device sees its own notifications there, never the pairing)
 function marquerDistance(v) {
   const a = document.querySelector('#nav-outil a[data-page="distance"]'); if (!a) return;
   const n = v.distance_active ? v.connectes || 0 : 0;
@@ -2656,7 +2656,9 @@ $("#page").addEventListener("click", async (ev) => {
 
 // --- remote access (distance.go): the switch, the pairing link and its QR code, the trusted devices
 pages.distance = async () => {
-  if ((etat.vue || {}).distant) return await rendreCetAppareil();
+  // on a paired device: its notifications, the state, the trusted devices and this computer; never the
+  // switch, the address nor the pairing (the server gives a device none of it)
+  const distant = !!(etat.vue || {}).distant;
   const d = await api("distance");
   etat.distVue = d; etat.distSig = signatureDistance(d);
   if (!etat.pcMachine) etat.pcMachine = await api("pcs/machine").catch(() => null);
@@ -2671,11 +2673,14 @@ pages.distance = async () => {
   const appareils = d.appareils.length ? `<table class="tab appareils"><tbody>${d.appareils.map((a) => `<tr>
       <td class="etroit"><span class="point-appareil ${a.en_ligne ? "en-ligne" : ""}" title="${h(a.en_ligne ? t("Connected now") : t("Not connected"))}"></span></td>
       <td><input class="nom-appareil" data-renommer="${h(a.id)}" value="${h(a.nom)}" maxlength="40" aria-label="${h(t("Name"))}">
-        <div class="muet petit">${a.en_ligne ? `<b class="ok">${t("Connected now")}</b>` : a.vu_le ? h(t("Last seen {0}", [dateLisible(a.vu_le)])) : ""}${a.lieu ? " · " + h(a.lieu) : ""} · ${h(t("paired {0}", [dateLisible(a.ajoute)]))}${a.notifs ? ` · 🔔 ${t("notifications on")}` : ""}</div></td>
-      <td class="droite"><button class="btn btn-petit btn-danger" data-retirer-appareil="${h(a.id)}" data-nom="${h(a.nom)}" title="${h(t("Remove from the trusted devices"))}" aria-label="${h(t("Remove from the trusted devices"))}">✕</button></td></tr>`).join("")}</tbody></table>`
+        <div class="muet petit">${a.moi ? `<span class="badge">${t("this device")}</span> ` : ""}${a.en_ligne ? `<b class="ok">${t("Connected now")}</b>` : a.vu_le ? h(t("Last seen {0}", [dateLisible(a.vu_le)])) : ""}${a.lieu ? " · " + h(a.lieu) : ""} · ${h(t("paired {0}", [dateLisible(a.ajoute)]))}${a.notifs ? ` · 🔔 ${t("notifications on")}` : ""}</div></td>
+      <td class="droite"><button class="btn btn-petit btn-danger" data-retirer-appareil="${h(a.id)}" data-nom="${h(a.nom)}" ${a.moi ? "data-moi" : ""} title="${h(t("Remove from the trusted devices"))}" aria-label="${h(t("Remove from the trusted devices"))}">✕</button></td></tr>`).join("")}</tbody></table>`
     : `<div class="vide">${t("No device yet.")}</div>`;
-  return `<div class="grille grille-2">
-    <div class="colonne">
+  const gauche = distant ? `${await rendreCetAppareil()}
+      <div class="bloc"><h2>${t("Remote access")}</h2>
+        <p class="petit ${statut[0]}">${h(statut[1])}</p>
+        <p class="muet petit">${t("This device is paired: it follows and drives Athanor from anywhere. The switch, the address and the pairing of new devices are on the computer only.")} ${lienGuide("distance")}</p>
+      </div>` : `
       <div class="bloc"><h2>${t("Remote access")}</h2>
         <p class="intro petit">${t("Follow and drive Athanor from your phone or another computer, from anywhere: through a Cloudflare tunnel (https, nothing to set up). Only the devices you pair here get in.")} ${lienGuide("distance")}</p>
         <label class="interrupteur"><input type="checkbox" id="dist-actif" ${d.actif ? "checked" : ""}><span>${t("Remote access")}</span></label>
@@ -2694,7 +2699,9 @@ pages.distance = async () => {
           <span class="indice">${t("Move the mouse over it")}</span></div>
         <div class="barre-chiffres"><i id="dist-chiffres-barre" style="width:${Math.round(100 * (d.chiffres_expire || 0) / 20000)}%"></i></div>
         <p class="muet petit mt-1">${t("Shown only here, renewed every 20 seconds: a photo of the QR code is not enough, the device must see this screen. Three wrong codes and it must scan again.")}</p>
-      </div>` : ""}
+      </div>` : ""}`;
+  return `<div class="grille grille-2">
+    <div class="colonne">${gauche}
     </div>
     <div class="colonne">
       <div class="bloc"><h2>${t("Trusted devices")}</h2>${appareils}
@@ -2745,7 +2752,8 @@ function blocDomaine(d) {
     </details>
   </div>`;
 }
-function signatureDistance(d) { return JSON.stringify({ ...d, expire: 0, chiffres: "", chiffres_expire: 0 }); }
+// (a device's "last seen" moves at each of its requests: the list is rebuilt only when one comes or goes)
+function signatureDistance(d) { return JSON.stringify({ ...d, expire: 0, chiffres: "", chiffres_expire: 0, appareils: (d.appareils || []).map((a) => ({ ...a, vu_le: "" })) }); }
 function chiffresLisibles(c) { return c ? c.slice(0, 3) + " " + c.slice(3) : ""; }
 function dureeCourte(s) { s = Math.max(0, Math.round(s || 0)); return s >= 60 ? `${Math.floor(s / 60)} min ${String(s % 60).padStart(2, "0")}` : `${s} s`; }
 function dateLisible(iso) {
@@ -2781,7 +2789,8 @@ $("#page").addEventListener("click", async (ev) => {
   }
   const b = ev.target.closest("#dist-copier, [data-retirer-appareil]"); if (!b) return;
   if (b.id === "dist-copier") { const l = $("#dist-lien"); if (l) navigator.clipboard.writeText(l.value).then(() => toast(t("Copied."), "ok")); return; }
-  const c = await choisir(t("Remove “{0}” from the trusted devices? It must scan the code again to come back.", [b.dataset.nom || ""]), [{ id: "non", texte: t("Cancel") }, { id: "oui", texte: t("Remove"), danger: true }]);
+  const c = await choisir(b.hasAttribute("data-moi") ? t("Remove this device from the trusted devices? It loses access at once: to come back, it must scan the code on the computer.")
+    : t("Remove “{0}” from the trusted devices? It must scan the code again to come back.", [b.dataset.nom || ""]), [{ id: "non", texte: t("Cancel") }, { id: "oui", texte: t("Remove"), danger: true }]);
   if (c !== "oui") return;
   await action(api("distance/appareils/" + encodeURIComponent(b.dataset.retirerAppareil), "DELETE"));
   rendrePage();
