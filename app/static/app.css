@@ -269,7 +269,6 @@ label.champ > span { display: block; color: var(--muted); font-size: 13px; margi
 .grille-3 { grid-template-columns: repeat(3, 1fr); }
 .colonne { display: flex; flex-direction: column; gap: 16px; }
 @media (max-width: 1150px) { .grille-2, .grille-3 { grid-template-columns: 1fr; } .page, .bandeau { padding-left: 20px; padding-right: 20px; } }
-@media (max-width: 900px) { .reglage { grid-template-columns: 1fr; gap: 6px; } .verif { grid-template-columns: 28px 1fr; } .verif > .ligne { grid-column: 2; } .etape { grid-template-columns: 34px 1fr; } .etape > .btn { grid-column: 2; justify-self: start; } }
 .vide { color: var(--muted); padding: 24px; text-align: center; border: 1px dashed var(--line); border-radius: var(--rayon); }
 dl.fiche { display: grid; grid-template-columns: minmax(110px, max-content) 1fr; gap: 6px 18px; margin: 0; }
 dl.fiche dd { min-width: 0; overflow-wrap: anywhere; }
@@ -679,3 +678,56 @@ input.large { flex: 1; min-width: 200px; width: auto; }
 .btn-attente:hover { background: var(--attention); color: var(--sur-attention); }
 .notes-maj { max-height: 260px; overflow: auto; padding: 8px 12px; margin-top: 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel-2); font-size: 13px; }
 .chemin-kit { font-size: 13px; word-break: break-all; background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; display: inline-block; }
+
+/* remote access (distance.go): the sidebar's mark, the pairing code, the trusted devices */
+.nav nav a.distance-active::after { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); margin-left: auto; }
+.nav nav a.distance-active:not([data-connectes=""])::after { content: attr(data-connectes); width: auto; height: auto; background: var(--ok); color: var(--sur-fort); border-radius: 10px; padding: 0 7px; font-size: 12px; font-weight: 600; line-height: 18px; }
+.appairage { display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap; }
+.appairage > div { flex: 1; min-width: 220px; }
+.qr-distance { width: 196px; height: 196px; border-radius: 8px; background: #fff; image-rendering: pixelated; flex: none; }
+#dist-lien { flex: 1; min-width: 0; }
+.appareils td { vertical-align: middle; }
+.appareils .etroit { width: 18px; }
+.point-appareil { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--line); }
+.point-appareil.en-ligne { background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 25%, transparent); }
+.nom-appareil { background: transparent; border: 1px solid transparent; padding: 3px 6px; margin-left: -7px; font-weight: 600; color: var(--ink); width: 100%; max-width: 280px; border-radius: 6px; }
+.nom-appareil:hover, .nom-appareil:focus { border-color: var(--line); background: var(--panel-2); }
+.distant #nav-outil a[data-page="distance"], .distant [data-ouvrir], .distant .local-seul, .distant .nav-kit { display: none !important; }
+.non-appaire { max-width: 440px; margin: 15vh auto; padding: 24px; text-align: center; font-size: 17px; line-height: 1.5; }
+.non-appaire h1 { font-size: 22px; margin: 8px 0 12px; }
+
+/* narrow windows: after the rules they change (placed before them, they had no effect) */
+@media (max-width: 900px) { .reglage { grid-template-columns: 1fr; gap: 6px; } .verif { grid-template-columns: 28px 1fr; } .verif > .ligne { grid-column: 2; } .etape { grid-template-columns: 34px 1fr; } .etape > .btn { grid-column: 2; justify-self: start; } }
+
+/* ------------------------------------------------------------------ phones (a remote device, a small window) */
+.barre-mobile, .voile-menu { display: none; }
+.btn-menu { width: 40px; height: 40px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-2); display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; cursor: pointer; padding: 0; flex: none; }
+.btn-menu span { display: block; width: 18px; height: 2px; border-radius: 1px; background: var(--ink); }
+.distant [data-bureau] { display: none !important; }
+@media (max-width: 760px) {
+  html, body { height: auto; min-height: 100%; }
+  .app, html.cadre .app { display: block; height: auto; margin-top: 0; }
+  .barre-mobile { display: flex; position: sticky; top: 0; z-index: 30; align-items: center; gap: 10px; padding: 8px 12px; background: var(--panel); border-bottom: 1px solid var(--line); }
+  .bm-titre { font-family: var(--police-titre); font-weight: 600; font-size: 16px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .nav { position: fixed; top: 0; bottom: 0; left: 0; width: min(300px, 86vw); z-index: 60; transform: translateX(-105%); transition: transform .2s ease; box-shadow: var(--ombre); border-right: 1px solid var(--line); }
+  body.menu-ouvert .nav { transform: none; }
+  body.menu-ouvert .voile-menu { display: block; position: fixed; inset: 0; background: var(--voile); z-index: 55; }
+  body.menu-ouvert { overflow: hidden; }
+  .nav nav a { padding: 11px 12px; font-size: 15.5px; }
+  .principal { height: auto; display: block; }
+  .bandeau { padding: 14px 14px 12px; gap: 10px; }
+  .etat-phrase { flex-basis: 100%; }
+  .etat-phrase > .muet.petit { display: none; } /* the project's folder: the bar above names the project */
+  .etat-phrase .sous { white-space: normal; }
+  .bandeau .actions { display: flex; flex-wrap: wrap; gap: 8px; width: 100%; }
+  .bandeau .actions .btn { flex: 1 1 auto; justify-content: center; }
+  .page { padding: 14px 12px 48px; overflow: visible; }
+  .bloc { padding: 14px; }
+  .grille-2, .grille-3 { grid-template-columns: 1fr; }
+  table.tab { display: block; overflow-x: auto; }
+  .btn { min-height: 40px; }
+  .btn-petit { min-height: 36px; }
+  input, select, textarea { font-size: 16px; } /* no zoom on focus (iOS) */
+  .dialogue-carte { width: calc(100vw - 24px); }
+  .appairage { flex-direction: column; }
+}

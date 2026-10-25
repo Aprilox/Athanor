@@ -34,6 +34,8 @@ type Config struct {
 	PasVerifierMaj bool `json:"pas_verifier_maj,omitempty"`
 	// end of a pilot already announced to the user (project folder → STATE.json "maj" of that end)
 	FinsVues map[string]string `json:"fins_vues,omitempty"`
+	// remote access: on or off, its local port, the trusted devices (distance.go; hashes of keys only)
+	Distance DistanceConfig `json:"distance"`
 }
 
 func configDefaut() Config {
