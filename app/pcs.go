@@ -1,7 +1,7 @@
 package main
 
 // Several computers on one project (several Athanor, one GitHub repository): each one publishes what it
-// is and what it does on a branch of its own of the repository (athanor/pc/<id>, a single pc.json, replaced
+// is and what it does on a ref of its own of the repository (refs/athanor/pc/<id>, not a branch; a single pc.json, replaced
 // at each beat), and reads the others' every minute. No tunnel between the computers: GitHub already
 // carries the code, checks each computer's key (the repository's own), and works behind any network.
 //
@@ -33,9 +33,13 @@ import (
 )
 
 const (
-	enLignePC     = 3 * time.Minute // beats every minute: three missed and the computer is offline
-	brancheePC    = "athanor/pc/"
+	enLignePC = 3 * time.Minute // beats every minute: three missed and the computer is offline
+	// on GitHub, the presences and the works in progress are refs of their own, never branches: hidden
+	// from the list of branches, no workflow runs when they change or go, so they can be removed
+	refPresencePC = "refs/athanor/pc/"
+	brancheePC    = "athanor/pc/" // where 2.36 put them (branches): removed once
 	refsPCs       = "refs/athanor/pcs/"
+	oubliPC       = 30 * 24 * time.Hour // a computer not seen for so long: its refs leave GitHub
 	refsDistantPC = "refs/athanor/distant/"
 )
 
@@ -47,7 +51,7 @@ type MachinePC struct {
 	Mots      []string `json:"mots,omitempty"`      // gpu, network…: what the plan's "Needs:" name
 }
 
-// PresencePC: what a computer publishes on its branch.
+// PresencePC: what a computer publishes on its ref.
 type PresencePC struct {
 	ID         string    `json:"id"`
 	Nom        string    `json:"nom"`
@@ -63,7 +67,7 @@ type PresencePC struct {
 	Depuis     string    `json:"depuis,omitempty"` // when it took it (RFC 3339, UTC)
 	Pousse     string    `json:"pousse,omitempty"` // its last commit pushed ("abc1234 M3: …")
 	Refus      []RefusPC `json:"refus,omitempty"`  // programs it could not run, for which milestones (pcs_relais.go)
-	Parti      bool      `json:"parti,omitempty"`  // it stopped working with the others (its branch stays: no "delete" event on GitHub)
+	Parti      bool      `json:"parti,omitempty"`  // it stopped working with the others (2.36.1, which kept its branch)
 	EnLigne    bool      `json:"en_ligne"`         // computed by the reader
 	Moi        bool      `json:"moi,omitempty"`
 }
@@ -265,8 +269,8 @@ func presenceLocalePC(projet, d string) PresencePC {
 	return p
 }
 
-// publierPresencePC: this computer's presence, on its branch (a single commit, replaced each time: no
-// history grows on GitHub).
+// publierPresencePC: this computer's presence, on its ref of GitHub (a single commit, replaced each time:
+// no history grows on GitHub).
 func publierPresencePC(d, miroir string, r reglagesGH, p PresencePC) error {
 	p.Moi, p.EnLigne = false, false
 	b, _ := json.MarshalIndent(p, "", "  ")
@@ -289,11 +293,93 @@ func publierPresencePC(d, miroir string, r reglagesGH, p PresencePC) error {
 	if err != nil || !reShaGH.MatchString(commit) {
 		return errors.New("presence: cannot write it")
 	}
-	if out, err := gitDistantGH(d, miroir, r, "push", "--porcelain", "--no-verify", "--force", "{url}", commit+":refs/heads/"+brancheePC+p.ID); err != nil {
+	if out, err := gitDistantGH(d, miroir, r, "push", "--porcelain", "--no-verify", "--force", "{url}", commit+":"+refPresencePC+p.ID); err != nil {
 		return fmt.Errorf("presence not published: %s", derniereLigneSortie(out))
 	}
 	entretenirMiroirPC(miroir)
+	retirerBranchesPC(d, miroir, r, p.ID)
+	menagePCs(d, miroir, r, p.ID)
 	return nil
+}
+
+// retirerPresencePC: this computer leaves the team: its presence leaves GitHub at once (a ref, not a
+// branch: no workflow runs for it).
+func retirerPresencePC(d, miroir string, r reglagesGH, id string) {
+	if _, err := gitDistantGH(d, miroir, r, "push", "--porcelain", "--no-verify", "{url}", ":"+refPresencePC+id); err == nil {
+		_ = gmGH(miroir, nil, "update-ref", "-d", refsPCs+id).Run()
+	}
+}
+
+// retirerBranchesPC: the branches 2.36 made for this computer (athanor/pc/…, athanor/encours/…), removed
+// from GitHub once, now that its refs replace them (GitHub runs the repository's "delete" workflows that
+// one time, if it has any).
+func retirerBranchesPC(d, miroir string, r reglagesGH, id string) {
+	fait := d + "/pcs-branches-retirees"
+	if _, err := os.Stat(fait); err == nil {
+		return
+	}
+	out, err := gitDistantGH(d, miroir, r, "ls-remote", "{url}", "refs/heads/"+brancheePC+id, "refs/heads/"+brancheEnCoursPC+id)
+	if err != nil {
+		return
+	}
+	var suppr []string
+	for _, l := range strings.Split(out, "\n") {
+		if f := strings.Fields(l); len(f) == 2 && reShaGH.MatchString(f[0]) &&
+			(f[1] == "refs/heads/"+brancheePC+id || f[1] == "refs/heads/"+brancheEnCoursPC+id) {
+			suppr = append(suppr, ":"+f[1])
+		}
+	}
+	if len(suppr) > 0 {
+		if _, err := gitDistantGH(d, miroir, r, append([]string{"push", "--porcelain", "--no-verify", "{url}"}, suppr...)...); err != nil {
+			return
+		}
+	}
+	_ = os.WriteFile(fait, []byte(time.Now().UTC().Format(time.RFC3339)+"\n"), 0o600)
+}
+
+// menagePCs: once a day, the refs of the computers not seen for oubliPC (their presence and their work in
+// progress) leave GitHub; a computer that comes back publishes its presence again.
+func menagePCs(d, miroir string, r reglagesGH, moi string) {
+	marque := d + "/pcs-menage"
+	if st, err := os.Stat(marque); err == nil && time.Since(st.ModTime()) < 24*time.Hour {
+		return
+	}
+	_ = os.WriteFile(marque, nil, 0o600)
+	_ = os.Chtimes(marque, time.Now(), time.Now())
+	refs, err := sortieGH(gmGH(miroir, nil, "for-each-ref", "--format=%(refname)", refsPCs))
+	if err != nil {
+		return
+	}
+	var suppr, locales []string
+	for _, ref := range strings.Split(refs, "\n") {
+		id := strings.TrimPrefix(ref, refsPCs)
+		if ref == "" || id == moi || !reIDMachine.MatchString(id) {
+			continue
+		}
+		out, err := gmGH(miroir, nil, "cat-file", "blob", ref+":pc.json").Output()
+		var p PresencePC
+		if err != nil || len(out) > 64<<10 || json.Unmarshal(out, &p) != nil {
+			continue
+		}
+		t, err := time.Parse(time.RFC3339, p.Maj)
+		if err != nil || time.Since(t) < oubliPC {
+			continue
+		}
+		suppr = append(suppr, ":"+refPresencePC+id)
+		locales = append(locales, refsPCs+id)
+		if gmGH(miroir, nil, "rev-parse", "-q", "--verify", refsEnCoursPC+id).Run() == nil {
+			suppr = append(suppr, ":"+refDistantEnCoursPC+id)
+			locales = append(locales, refsEnCoursPC+id)
+		}
+	}
+	if len(suppr) == 0 {
+		return
+	}
+	if _, err := gitDistantGH(d, miroir, r, append([]string{"push", "--porcelain", "--no-verify", "{url}"}, suppr...)...); err == nil {
+		for _, l := range locales {
+			_ = gmGH(miroir, nil, "update-ref", "-d", l).Run()
+		}
+	}
 }
 
 // entretenirMiroirPC: each presence (every minute, of every computer) leaves objects in the private folder;
@@ -314,7 +400,7 @@ func entretenirMiroirPC(miroir string) {
 func recupererPCs(d, miroir string, r reglagesGH) error {
 	branche := firstNonEmpty(r.Branche, "main")
 	if out, err := gitDistantGH(d, miroir, r, "fetch", "--prune", "--no-tags", "--no-write-fetch-head", "{url}",
-		"+refs/heads/"+brancheePC+"*:"+refsPCs+"*", "+refs/heads/"+brancheEnCoursPC+"*:"+refsEnCoursPC+"*"); err != nil {
+		"+"+refPresencePC+"*:"+refsPCs+"*", "+"+refDistantEnCoursPC+"*:"+refsEnCoursPC+"*"); err != nil {
 		return fmt.Errorf("GitHub not read: %s", derniereLigneSortie(out))
 	}
 	// the branch may not exist yet (nothing pushed): not an error

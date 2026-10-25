@@ -2,11 +2,11 @@ package main
 
 // Several computers (pcs.go): the work in progress of a milestone is never lost when its computer goes
 // away (switched off, its pilot stopped, the program it needs not working). Every 10 minutes, and when it
-// lets a milestone go, the computer sends its unfinished work to GitHub, on a branch of its own
-// athanor/encours/<computer>: an orphan commit with, for each milestone it left unfinished, the patch from
-// what GitHub has (never the project's files themselves, so GitHub runs none of the repository's workflows
-// for it). The branch is never deleted (GitHub would run the repository's "delete" workflows): a milestone
-// the team finished leaves it by the next push of that branch. The computer that
+// lets a milestone go, the computer sends its unfinished work to GitHub, on a ref of its own
+// refs/athanor/encours/<computer> (not a branch: hidden from the list of branches, and GitHub runs none of
+// the repository's workflows when it changes or goes): an orphan commit with, for each milestone it left
+// unfinished, the patch from what GitHub has. A milestone the team finished leaves it; with none left, the
+// ref goes. The computer that
 // takes the milestone next starts from it. A computer that comes back after another took its milestone over
 // puts its own unfinished work aside (kept in its .git, never deleted) and starts from the team's.
 
@@ -26,9 +26,12 @@ import (
 )
 
 const (
-	brancheEnCoursPC = "athanor/encours/"
-	refsEnCoursPC    = "refs/athanor/encours/"
-	maxPatchPC       = 20 << 20 // beyond, the work in progress is not sent (a build output committed by mistake)
+	refDistantEnCoursPC = "refs/athanor/encours/" // on GitHub (a ref, not a branch)
+	brancheEnCoursPC    = "athanor/encours/"      // where 2.36 put it: removed once
+	refsEnCoursPC       = "refs/athanor/encours/" // in the private folder
+	gardeIgnoresPC      = 30 * 24 * time.Hour     // the copies of ignored files (copierIgnoresPC), kept so long
+	gardeMinIgnoresPC   = 5
+	maxPatchPC          = 20 << 20 // beyond, the work in progress is not sent (a build output committed by mistake)
 )
 
 // EnCoursPC: what the work in progress says about itself (info.json).
@@ -168,7 +171,11 @@ func (e *equipePC) envoyerEnCoursPC(jalon string) string {
 	if err1 != nil || err2 != nil {
 		return ""
 	}
-	dossier, err := executer([]byte("100644 blob "+bInfo+"\tinfo.json\n100644 blob "+bPatch+"\tpatch.diff\n"), "mktree")
+	lignes := "100644 blob " + bInfo + "\tinfo.json\n100644 blob " + bPatch + "\tpatch.diff\n"
+	if porte, err := sortieGH(gmGH(e.miroir, nil, "rev-parse", "-q", "--verify", refPortePC+refJalonPC(jalon))); err == nil && reShaGH.MatchString(porte) {
+		lignes += "040000 tree " + porte + "\tavant\n" // another computer's work it could not merge: passed on
+	}
+	dossier, err := executer([]byte(lignes), "mktree")
 	if err != nil {
 		return ""
 	}
@@ -212,8 +219,17 @@ func (e *equipePC) mesEntreesEnCoursPC() map[string]string {
 	return v
 }
 
-// publierEnCoursPC: this computer's branch with these milestones (none: an empty commit, never a deletion).
+// publierEnCoursPC: this computer's ref with these milestones (none: the ref leaves GitHub).
 func (e *equipePC) publierEnCoursPC(entrees map[string]string, message string) error {
+	if len(entrees) == 0 {
+		if gmGH(e.miroir, nil, "rev-parse", "-q", "--verify", refsEnCoursPC+e.moi.ID).Run() != nil {
+			return nil
+		}
+		if _, err := gitDistantGH(e.d, e.miroir, e.r, "push", "--porcelain", "--no-verify", "{url}", ":"+refDistantEnCoursPC+e.moi.ID); err != nil {
+			return err
+		}
+		return gmGH(e.miroir, nil, "update-ref", "-d", refsEnCoursPC+e.moi.ID).Run()
+	}
 	var noms []string
 	for n := range entrees {
 		noms = append(noms, n)
@@ -238,7 +254,7 @@ func (e *equipePC) publierEnCoursPC(entrees map[string]string, message string) e
 		return fmt.Errorf("commit-tree")
 	}
 	if _, err := gitDistantGH(e.d, e.miroir, e.r, "push", "--porcelain", "--no-verify", "--force", "{url}",
-		commit+":refs/heads/"+brancheEnCoursPC+e.moi.ID); err != nil {
+		commit+":"+refDistantEnCoursPC+e.moi.ID); err != nil {
 		return err
 	}
 	_ = gmGH(e.miroir, nil, "update-ref", refsEnCoursPC+e.moi.ID, commit).Run() // known here at once
@@ -323,6 +339,18 @@ func lireEnCoursPC(miroir string) []EnCoursPC {
 // nettoyerEnCoursPC: this computer's works in progress on milestones the team has finished, removed from
 // GitHub (those it let go stay: the computer that takes them next goes on from them, then removes them).
 func (e *equipePC) nettoyerEnCoursPC() {
+	menageIgnoresPC(dossierAvantEquipePC(e.d))
+	if refs, err := sortieGH(gmGH(e.miroir, nil, "for-each-ref", "--format=%(refname)", refPortePC)); err == nil && refs != "" {
+		faits := map[string]bool{}
+		for id := range faitsDistantPC(e.miroir, e.r) {
+			faits[refJalonPC(id)] = true
+		}
+		for _, r := range strings.Split(refs, "\n") {
+			if faits[strings.TrimPrefix(r, refPortePC)] {
+				_ = gmGH(e.miroir, nil, "update-ref", "-d", r).Run()
+			}
+		}
+	}
 	avant := 0
 	for _, x := range lireEnCoursPC(e.miroir) {
 		if x.PC == e.moi.ID {
@@ -350,7 +378,9 @@ func faitsDistantPC(miroir string, r reglagesGH) map[string]bool {
 }
 
 // reprendreEnCoursPC: the milestone just taken had unfinished work of another computer: merged into the
-// project, so that this one goes on from it. What Claude is told ("" when there was none).
+// project, so that this one goes on from it. What Claude is told ("" when there was none). A work in
+// progress may carry the one before it that its computer could not merge (avant/): it is merged next, or
+// carried on in this computer's own, so that no computer's work is left behind along the way.
 func (e *equipePC) reprendreEnCoursPC(j Jalon, ident []string) (string, string) {
 	// the newest work in progress on it (a computer that went on from another's sends its own, newer, which
 	// holds both); this computer's own the newest: nothing to bring in
@@ -364,42 +394,100 @@ func (e *equipePC) reprendreEnCoursPC(j Jalon, ident []string) (string, string) 
 	if x == nil || x.PC == e.moi.ID {
 		return "", ""
 	}
-	ref := refsEnCoursPC + x.PC
-	patch, err := gmGH(e.miroir, nil, "cat-file", "blob", ref+":"+refJalonPC(x.Jalon)+"/patch.diff").Output()
-	if err != nil {
+	arbre, err := sortieGH(gmGH(e.miroir, nil, "rev-parse", "-q", "--verify", refsEnCoursPC+x.PC+":"+refJalonPC(x.Jalon)))
+	if err != nil || !reShaGH.MatchString(arbre) {
 		return "", ""
 	}
+	var suites, msgs []string
+	porte, fusionne := "", false
+	for n := 0; arbre != "" && n < maxChainePC; n++ {
+		info, ok := infoEnCoursPC(e.miroir, arbre)
+		if !ok {
+			break
+		}
+		suite, msg, ok := e.fusionnerEnCoursPC(j, info, arbre, ident)
+		if suite != "" {
+			suites = append(suites, suite)
+		}
+		if msg != "" {
+			msgs = append(msgs, msg)
+		}
+		if !ok {
+			porte = arbre // carried on in this computer's own work in progress, with what is before it
+			break
+		}
+		fusionne = true
+		suivant, err := sortieGH(gmGH(e.miroir, nil, "rev-parse", "-q", "--verify", arbre+":avant"))
+		if err != nil || !reShaGH.MatchString(suivant) {
+			break
+		}
+		arbre = suivant
+	}
+	if porte != "" {
+		_ = gmGH(e.miroir, nil, "update-ref", refPortePC+refJalonPC(j.ID), porte).Run()
+	}
+	if fusionne || porte != "" {
+		// this computer's own work in progress on it, sent now, is the newest from now on (it holds the
+		// others', merged or carried on); the others' entries leave their refs when they see it
+		_ = e.envoyerEnCoursPC(j.ID)
+	}
+	return strings.Join(suites, ""), strings.Join(msgs, " ")
+}
+
+const (
+	refPortePC  = "refs/athanor/porte/" // (private folder) the work in progress of another computer not merged, carried on
+	maxChainePC = 5
+)
+
+// infoEnCoursPC: the info.json of a work in progress (its tree).
+func infoEnCoursPC(miroir, arbre string) (EnCoursPC, bool) {
+	var x EnCoursPC
+	b, err := gmGH(miroir, nil, "cat-file", "blob", arbre+":info.json").Output()
+	if err != nil || len(b) > 64<<10 || json.Unmarshal(b, &x) != nil || !reShaGH.MatchString(x.Base) || !reIDMachine.MatchString(x.PC) {
+		return x, false
+	}
+	x.Nom = coupeValide(x.Nom, 60)
+	return x, true
+}
+
+// fusionnerEnCoursPC: one work in progress (its tree) merged into the project; ok false: not merged (what
+// Claude and the log are told say why, and where it is).
+func (e *equipePC) fusionnerEnCoursPC(j Jalon, x EnCoursPC, arbre string, ident []string) (string, string, bool) {
+	patch, err := gmGH(e.miroir, nil, "cat-file", "blob", arbre+":patch.diff").Output()
+	if err != nil {
+		return "", "", false
+	}
 	if gTravailGH(e.projet, "cat-file", "-e", x.Base+"^{commit}").Run() != nil || !propreTravailPC(e.projet) {
-		return "", fmt.Sprintf("Several computers: %s's unfinished work on %s could not be brought in (this folder has changes not committed, or lacks its base): this computer starts from the team's last push.", x.Nom, j.ID)
+		return "", fmt.Sprintf("Several computers: %s's unfinished work on %s could not be brought in (this folder has changes not committed, or lacks its base): this computer starts from the team's last push, and passes that work on.", x.Nom, j.ID), false
 	}
 	// the patch applied to its base in an index of its own, then merged like the others' work
 	index, err := indexTemporairePC(e.projet)
 	if err != nil {
-		return "", ""
+		return "", "", false
 	}
 	defer os.Remove(index)
 	if _, err := gIndexPC(e.projet, index, "read-tree", x.Base); err != nil {
-		return "", ""
+		return "", "", false
 	}
 	c := gTravailGH(e.projet, "apply", "--cached", "--binary", "--whitespace=nowarn")
 	c.Env = append(c.Env, "GIT_INDEX_FILE="+index)
 	c.Stdin = bytes.NewReader(patch)
 	if out, err := c.CombinedOutput(); err != nil {
-		return "", fmt.Sprintf("Several computers: %s's unfinished work on %s does not apply (%s): this computer starts from the team's last push.", x.Nom, j.ID, derniereLigneSortie(string(out)))
+		return "", fmt.Sprintf("Several computers: %s's unfinished work on %s does not apply (%s): this computer starts from the team's last push, and passes that work on.", x.Nom, j.ID, derniereLigneSortie(string(out))), false
 	}
-	arbre, err := gIndexPC(e.projet, index, "write-tree")
+	t, err := gIndexPC(e.projet, index, "write-tree")
 	if err != nil {
-		return "", ""
+		return "", "", false
 	}
-	cc := gTravailGH(e.projet, "commit-tree", strings.TrimSpace(string(arbre)), "-p", x.Base, "-m", "Work in progress of "+j.ID+" by "+x.Nom)
+	cc := gTravailGH(e.projet, "commit-tree", strings.TrimSpace(string(t)), "-p", x.Base, "-m", "Work in progress of "+j.ID+" by "+x.Nom)
 	cc.Env = append(cc.Env, "GIT_AUTHOR_NAME="+firstNonEmpty(x.Nom, "Athanor"), "GIT_AUTHOR_EMAIL=athanor@users.noreply.github.com",
 		"GIT_COMMITTER_NAME=Athanor", "GIT_COMMITTER_EMAIL=athanor@users.noreply.github.com")
 	out, err := cc.Output()
 	commit := strings.TrimSpace(string(out))
 	if err != nil || !reShaGH.MatchString(commit) {
-		return "", ""
+		return "", "", false
 	}
-	_ = gTravailGH(e.projet, "update-ref", "refs/athanor/repris/"+refJalonPC(j.ID), commit).Run() // kept, whatever happens
+	_ = gTravailGH(e.projet, "update-ref", "refs/athanor/repris/"+refJalonPC(j.ID)+"-"+x.PC, commit).Run() // kept, whatever happens
 	avant, _ := gProjetGH(e.projet+"/.git", "rev-parse", "HEAD")
 	args := append(append([]string{}, ident...), "merge", "--no-edit", "-m", "Go on with "+j.ID+" from the work in progress of "+x.Nom, commit)
 	if err := gTravailGH(e.projet, args...).Run(); err != nil {
@@ -408,13 +496,10 @@ func (e *equipePC) reprendreEnCoursPC(j Jalon, ident []string) (string, string) 
 			_ = gTravailGH(e.projet, "reset", "--hard", "--quiet", avant).Run()
 		}
 		return fmt.Sprintf(" %s started this milestone and could not finish it; its unfinished work is in commit %s (`git show %s`), which does not merge by itself with this folder: take from it what helps.", x.Nom, commit[:12], commit[:12]),
-			fmt.Sprintf("Several computers: %s's unfinished work on %s does not merge by itself: Claude takes from it what helps.", x.Nom, j.ID)
+			fmt.Sprintf("Several computers: %s's unfinished work on %s does not merge by itself: Claude takes from it what helps, and it is passed on.", x.Nom, j.ID), false
 	}
-	// brought in: this computer's own work in progress on it, sent now, is the newest from now on (it holds
-	// the other's; the other's entry leaves its branch when it sees it)
-	_ = e.envoyerEnCoursPC(j.ID)
-	return fmt.Sprintf(" %s started this milestone and could not finish it: its unfinished work is merged into this folder (the last commit). Check what is done and what is left, then finish it.", x.Nom),
-		fmt.Sprintf("Several computers: this computer goes on with %s from %s's unfinished work.", j.ID, x.Nom)
+	return fmt.Sprintf(" %s started this milestone and could not finish it: its unfinished work is merged into this folder (`Go on with %s…` commit). Check what is done and what is left, then finish it.", x.Nom, j.ID),
+		fmt.Sprintf("Several computers: this computer goes on with %s from %s's unfinished work.", j.ID, x.Nom), true
 }
 
 // reprisParAutrePC: this computer held milestone actuel (since depuis; laisse: it let it go when its pilot
@@ -542,6 +627,7 @@ func (e *equipePC) copierIgnoresPC(local string) string {
 			continue // the same: nothing lost
 		}
 		if dest == "" {
+			menageIgnoresPC(dossierAvantEquipePC(e.d))
 			dest = filepath.Join(dossierAvantEquipePC(e.d), "ignores-"+time.Now().Format("20060102-150405"))
 		}
 		b, err := os.ReadFile(src)
@@ -551,6 +637,21 @@ func (e *equipePC) copierIgnoresPC(local string) string {
 		}
 	}
 	return dest
+}
+
+// menageIgnoresPC: the copies of ignored files older than gardeIgnoresPC leave Athanor's data (the
+// gardeMinIgnoresPC most recent always stay).
+func menageIgnoresPC(dossier string) {
+	l, _ := filepath.Glob(filepath.Join(dossier, "ignores-*"))
+	sort.Strings(l) // "ignores-<date>": the oldest first
+	for i, f := range l {
+		if len(l)-i <= gardeMinIgnoresPC {
+			break
+		}
+		if st, err := os.Stat(f); err == nil && st.IsDir() && time.Since(st.ModTime()) > gardeIgnoresPC {
+			_ = os.RemoveAll(f)
+		}
+	}
 }
 
 // nonSuivisPC: the files of the folder neither committed nor ignored.

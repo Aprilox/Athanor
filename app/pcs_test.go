@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -836,9 +837,9 @@ func TestEnCoursPC(t *testing.T) {
 	// what the branches of work in progress hold: "<computer>/<milestone>" (one branch per computer)
 	enCours := func() string {
 		var l []string
-		for _, r := range strings.Fields(gitEssai(t, depot, "for-each-ref", "--format=%(refname)", "refs/heads/athanor/encours/")) {
+		for _, r := range strings.Fields(gitEssai(t, depot, "for-each-ref", "--format=%(refname)", "refs/athanor/encours/")) {
 			for _, x := range strings.Fields(gitEssai(t, depot, "ls-tree", "--name-only", r)) {
-				l = append(l, strings.TrimPrefix(r, "refs/heads/athanor/encours/")+"/"+x)
+				l = append(l, strings.TrimPrefix(r, "refs/athanor/encours/")+"/"+x)
 			}
 		}
 		return strings.Join(l, " ")
@@ -861,7 +862,7 @@ func TestEnCoursPC(t *testing.T) {
 	if !strings.Contains(enCours(), "/M1") {
 		t.Fatalf("A's work in progress is not on GitHub: %q", enCours())
 	}
-	if n := strings.Fields(gitEssai(t, depot, "for-each-ref", "--format=%(refname)", "refs/heads/athanor/encours/")); len(n) != 1 {
+	if n := strings.Fields(gitEssai(t, depot, "for-each-ref", "--format=%(refname)", "refs/athanor/encours/")); len(n) != 1 {
 		t.Fatalf("not one branch for A: %v", n)
 	}
 	if strings.Contains(gitEssai(t, depot, "ls-tree", "-r", "--name-only", "main"), "level1") {
@@ -909,8 +910,8 @@ func TestEnCoursPC(t *testing.T) {
 	if !strings.Contains(enCours(), idB+"/M1") {
 		t.Fatalf("B's work in progress (holding A's) not sent once it goes on from it: %q", enCours())
 	}
-	if n := gitEssai(t, depot, "for-each-ref", "--format=%(refname)", "refs/heads/athanor/encours/"); n == "" {
-		t.Fatal("a branch of work in progress deleted (GitHub's on: delete workflows): it is emptied, never deleted")
+	if br := gitEssai(t, depot, "for-each-ref", "--format=%(refname)", "refs/heads/athanor/"); br != "" {
+		t.Fatalf("branches on GitHub (shown in its list, delete workflows): %s", br)
 	}
 
 	// A comes back: B builds M1 now; A's own copy is put aside, its folder back to the team's last push
@@ -927,6 +928,9 @@ func TestEnCoursPC(t *testing.T) {
 	})
 	if strings.Contains(enCours(), idA+"/M1") {
 		t.Fatalf("A's out-of-date work in progress still on GitHub: %q", enCours())
+	}
+	if r := gitEssai(t, depot, "for-each-ref", "refs/athanor/encours/"+idA); r != "" {
+		t.Fatalf("A's ref of work in progress, empty, still on GitHub: %s", r)
 	}
 	for _, f := range []string{"level1.txt", "level1-boss.txt"} {
 		if _, err := os.Stat(filepath.Join(a.projet, f)); err == nil {
@@ -993,5 +997,188 @@ func TestLaissePuisRepriseSeulPC(t *testing.T) {
 	}
 	if r := gitEssai(t, a.projet, "for-each-ref", "refs/athanor/sauve/"); r != "" {
 		t.Fatalf("put aside while nobody took it: %s", r)
+	}
+}
+
+// TestRefsPCsGitHub: on GitHub, the presences and the works in progress are refs, never branches: the
+// branches 2.36 made go once, a computer not seen for 30 days leaves GitHub, and one that leaves the team
+// removes its presence at once.
+func TestRefsPCsGitHub(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git missing")
+	}
+	conf := filepath.Join(t.TempDir(), "gitconfig")
+	ecrireEssai(t, conf, "")
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+	t.Setenv("GIT_CONFIG_GLOBAL", conf)
+	depot := filepath.Join(t.TempDir(), "github.git")
+	gitEssai(t, filepath.Dir(depot), "init", "-q", "--bare", "-b", "main", depot)
+	ancien := depotEssaiGH
+	depotEssaiGH = depot
+	defer func() { depotEssaiGH = ancien }()
+
+	a := pcVideEssai(t, "PC-A", nil)
+	var idA string
+	a.faire(t, func() { idA = lireMachinePC().ID })
+	ecrireEssai(t, filepath.Join(a.projet, "README.md"), "a\n")
+	gitEssai(t, a.projet, "init", "-q", "-b", "main")
+	gitEssai(t, a.projet, "add", "-A")
+	gitEssai(t, a.projet, "-c", "user.name=A", "-c", "user.email=a@example.com", "commit", "-q", "-m", "start")
+	// what 2.36 left: A's branches; and a computer gone for 40 days
+	gitEssai(t, a.projet, "push", "-q", depot, "HEAD:main", "HEAD:refs/heads/athanor/pc/"+idA, "HEAD:refs/heads/athanor/encours/"+idA,
+		"HEAD:refs/heads/athanor/pc/ffffffffffff")
+	fantome := filepath.Join(t.TempDir(), "fantome")
+	gitEssai(t, filepath.Dir(fantome), "init", "-q", fantome)
+	vieux, _ := json.Marshal(PresencePC{ID: "eeeeeeeeeeee", Nom: "Ghost", Maj: time.Now().Add(-40 * 24 * time.Hour).UTC().Format(time.RFC3339)})
+	ecrireEssai(t, filepath.Join(fantome, "pc.json"), string(vieux))
+	gitEssai(t, fantome, "add", "-A")
+	gitEssai(t, fantome, "-c", "user.name=G", "-c", "user.email=g@example.com", "commit", "-q", "-m", "ghost")
+	gitEssai(t, fantome, "push", "-q", depot, "HEAD:refs/athanor/pc/eeeeeeeeeeee", "HEAD:refs/athanor/encours/eeeeeeeeeeee")
+
+	if code, out := activerEssai(t, a); code != 0 {
+		t.Fatal(out)
+	}
+	_ = vuePCsEssai(t, a, "--publier")
+	refs := gitEssai(t, depot, "for-each-ref", "--format=%(refname)")
+	if !strings.Contains(refs, "refs/athanor/pc/"+idA) {
+		t.Fatalf("A's presence is not a ref of its own: %s", refs)
+	}
+	if strings.Contains(refs, "refs/heads/athanor/pc/"+idA) || strings.Contains(refs, "refs/heads/athanor/encours/"+idA) {
+		t.Fatalf("A's branches of 2.36 still on GitHub: %s", refs)
+	}
+	if !strings.Contains(refs, "refs/heads/athanor/pc/ffffffffffff") {
+		t.Fatal("another computer's branch removed: only each computer removes its own")
+	}
+	if strings.Contains(refs, "eeeeeeeeeeee") {
+		t.Fatalf("the computer gone for 40 days still on GitHub: %s", refs)
+	}
+	// once only: a branch made again later stays (it is not A's doing to remove it twice)
+	gitEssai(t, a.projet, "push", "-q", depot, "HEAD:refs/heads/athanor/pc/"+idA)
+	_ = vuePCsEssai(t, a, "--publier")
+	if !strings.Contains(gitEssai(t, depot, "for-each-ref", "--format=%(refname)"), "refs/heads/athanor/pc/"+idA) {
+		t.Fatal("the old branches looked for at each presence")
+	}
+
+	// A leaves the team: its presence leaves GitHub at once
+	a.faire(t, func() {
+		var out bytes.Buffer
+		if code := pcsActiverGH([]string{a.projet, "0"}, &out); code != 0 {
+			t.Fatal(out.String())
+		}
+	})
+	if strings.Contains(gitEssai(t, depot, "for-each-ref", "--format=%(refname)", "refs/athanor/pc/"), idA) {
+		t.Fatal("A's presence stays after it left the team")
+	}
+}
+
+// TestMenageIgnoresPC: the copies of ignored files older than 30 days go, the five most recent stay.
+func TestMenageIgnoresPC(t *testing.T) {
+	d := t.TempDir()
+	vieux := time.Now().Add(-40 * 24 * time.Hour)
+	for i := 1; i <= 8; i++ {
+		f := filepath.Join(d, fmt.Sprintf("ignores-2026010%d-120000", i))
+		ecrireEssai(t, filepath.Join(f, "keys.local"), "x\n")
+		if i <= 7 {
+			_ = os.Chtimes(f, vieux, vieux)
+		}
+	}
+	ecrireEssai(t, filepath.Join(d, "autre", "x"), "x\n")
+	_ = os.Chtimes(filepath.Join(d, "autre"), vieux, vieux)
+	menageIgnoresPC(d)
+	l, _ := filepath.Glob(filepath.Join(d, "ignores-*"))
+	if len(l) != 5 || filepath.Base(l[0]) != "ignores-20260104-120000" {
+		t.Fatalf("left: %v", l)
+	}
+	if _, err := os.Stat(filepath.Join(d, "autre")); err != nil {
+		t.Fatal("a folder that is not a copy of ignored files removed")
+	}
+}
+
+// TestChaineEnCoursPC: B goes on from A's unfinished work but cannot merge it, then goes away in its turn:
+// C, which takes the milestone next, gets B's work and A's (carried on in B's), never B's alone.
+func TestChaineEnCoursPC(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git missing")
+	}
+	conf := filepath.Join(t.TempDir(), "gitconfig")
+	ecrireEssai(t, conf, "")
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+	t.Setenv("GIT_CONFIG_GLOBAL", conf)
+	depot := filepath.Join(t.TempDir(), "github.git")
+	gitEssai(t, filepath.Dir(depot), "init", "-q", "--bare", "-b", "main", depot)
+	ancien, ancienne := depotEssaiGH, attentePrisePC
+	depotEssaiGH, attentePrisePC = depot, 0
+	defer func() { depotEssaiGH, attentePrisePC = ancien, ancienne }()
+	plan := "# Plan\n\n- [ ] M1 : Level one\n- [ ] M2 : Level two\n"
+	pousser := func(m pcEssai) {
+		m.faire(t, func() {
+			var o bytes.Buffer
+			if code := pousserGH([]string{m.projet}, &o); code != 0 {
+				t.Fatal(o.String())
+			}
+		})
+	}
+
+	a := nouveauPCEssai(t, "PC-A", "", "", depot, false)
+	ecrireEssai(t, filepath.Join(a.projet, ".athanor", "PLAN.md"), plan)
+	ecrireEssai(t, filepath.Join(a.projet, "level1.txt"), "v0\n")
+	gitEssai(t, a.projet, "add", "-A")
+	gitEssai(t, a.projet, "commit", "-q", "-m", "start")
+	pousser(a)
+	b := nouveauPCEssai(t, "PC-B", "", "", depot, true)
+	c := nouveauPCEssai(t, "PC-C", "", "", depot, true)
+
+	// A starts M1 and goes away
+	a.faire(t, func() {
+		e, _ := ouvrirEquipePC(a.projet)
+		_ = e.lire()
+		if pris, _ := e.prendre(Jalon{ID: "M1", Titre: "M1 : Level one"}); !pris {
+			t.Fatal("A does not take M1")
+		}
+	})
+	ecrireEssai(t, filepath.Join(a.projet, "level1.txt"), "A's level\n")
+	ecrireEssai(t, filepath.Join(a.projet, "a.txt"), "A's part\n")
+	a.faire(t, func() { piloteEssai(t, a).finPC() })
+
+	// B changed the same lines meanwhile: A's work does not merge by itself in B's folder
+	ecrireEssai(t, filepath.Join(b.projet, "level1.txt"), "B's level\n")
+	gitEssai(t, b.projet, "commit", "-q", "-am", "B's level")
+	pousser(b)
+	b.faire(t, func() {
+		p := piloteEssai(t, b)
+		if att, raison := p.avantCyclePC(); att || p.jalonPC == nil || p.jalonPC.ID != "M1" {
+			t.Fatalf("B: %v %s %+v", att, raison, p.jalonPC)
+		}
+		if !strings.Contains(p.jalonPC.Suite, "does not merge by itself") {
+			t.Fatalf("B's goal: %q", p.jalonPC.Suite)
+		}
+	})
+	// B works a little, then goes away too
+	ecrireEssai(t, filepath.Join(b.projet, "b.txt"), "B's part\n")
+	b.faire(t, func() { piloteEssai(t, b).finPC() })
+	var idB string
+	b.faire(t, func() { idB = lireMachinePC().ID })
+	if l := gitEssai(t, depot, "ls-tree", "--name-only", "refs/athanor/encours/"+idB+":M1"); !strings.Contains(l, "avant") {
+		t.Fatalf("B's work in progress does not carry A's: %s", l)
+	}
+
+	// C takes M1: B's work and A's, both
+	c.faire(t, func() {
+		p := piloteEssai(t, c)
+		if att, raison := p.avantCyclePC(); att || p.jalonPC == nil || p.jalonPC.ID != "M1" {
+			t.Fatalf("C: %v %s %+v", att, raison, p.jalonPC)
+		}
+		if !strings.Contains(p.jalonPC.Suite, "PC-B") || !strings.Contains(p.jalonPC.Suite, "PC-A") {
+			t.Fatalf("C is not told of both works: %q", p.jalonPC.Suite)
+		}
+	})
+	if got, _ := os.ReadFile(filepath.Join(c.projet, "b.txt")); string(got) != "B's part\n" {
+		t.Fatalf("C lacks B's work: %q", got)
+	}
+	var idA string
+	a.faire(t, func() { idA = lireMachinePC().ID })
+	if aIci, _ := os.ReadFile(filepath.Join(c.projet, "a.txt")); string(aIci) != "A's part\n" &&
+		!strings.Contains(gitEssai(t, c.projet, "show", "refs/athanor/repris/M1-"+idA+":a.txt"), "A's part") {
+		t.Fatal("C has A's work neither merged nor kept")
 	}
 }
