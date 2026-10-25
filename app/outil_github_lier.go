@@ -275,6 +275,12 @@ func lierGH(args []string, w io.Writer) int {
 		}
 		if !r.Permissions.Admin {
 			fmt.Fprintf(w, "You are not an administrator of %s: GitHub only lets an administrator add a key to it.\n", depot)
+			fmt.Fprintln(w, "Two ways to link this computer anyway:")
+			fmt.Fprintln(w, "  - the repository's owner signs in with their own account in this window, on this computer: the")
+			fmt.Fprintln(w, "    sign-in is deleted right after, only a key for this repository stays;")
+			fmt.Fprintln(w, "  - or the owner moves the repository to a GitHub organization and gives you the Admin role on it")
+			fmt.Fprintln(w, "    (you can then also change its settings, or delete it).")
+			fmt.Fprintln(w, "Athanor's Guide page (Several computers) explains both.")
 			return 1
 		}
 		if r.Archived {

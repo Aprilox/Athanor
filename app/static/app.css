@@ -730,15 +730,31 @@ input.large { flex: 1; min-width: 200px; width: auto; }
   input, select, textarea { font-size: 16px; } /* no zoom on focus (iOS) */
   .dialogue-carte { width: calc(100vw - 24px); }
   .appairage { flex-direction: column; }
+  /* Chat on a phone: the conversation takes the page (it scrolls with it, never in a small box), the field
+     to write in stays at the bottom of the screen */
+  .chat { height: auto; min-height: 0; padding-bottom: 0; }
+  .chat-tete h2 { font-size: 17px; }
+  .chat-tete .croit { min-width: 0; flex-basis: 100%; order: 3; }
+  .chat-fil { flex: none; overflow: visible; margin: 10px 0 6px; min-height: 40vh; }
+  .chat-msg { max-width: 92%; }
+  .chat-bulle { font-size: 15.5px; padding: 10px 13px; }
+  .chat-saisie { position: sticky; bottom: 0; z-index: 5; margin: 0 -14px; padding: 8px 14px calc(10px + env(safe-area-inset-bottom)); background: var(--panel); border-top: 1px solid var(--line); border-radius: 0 0 var(--rayon) var(--rayon); }
+  .chat-saisie textarea { min-height: 56px; max-height: 32vh; resize: none; }
+  .chat-saisie .ligne { flex-wrap: nowrap; gap: 8px; }
+  .chat-saisie .ligne > .petit.muet { display: none; }
+  .chat-saisie .choix { flex: 1; min-width: 0; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .chat-saisie .choix button { flex: none; }
+  .chat-saisie .espace { display: none; }
 }
 /* the 6 digits of the pairing: hidden until the mouse is over them (a tap on a touch screen) */
-.code-pc { position: relative; display: inline-flex; align-items: center; gap: 14px; padding: 10px 18px; border: 1px dashed var(--line); border-radius: 10px; background: var(--panel-2); cursor: default; user-select: none; -webkit-user-select: none; }
-.code-pc .masque, .code-pc .vrai { font: 600 30px/1.2 var(--mono); letter-spacing: .12em; }
+.code-pc { position: relative; display: inline-grid; grid-template-columns: auto auto; align-items: center; column-gap: 14px; padding: 10px 18px; border: 1px dashed var(--line); border-radius: 10px; background: var(--panel-2); cursor: default; user-select: none; -webkit-user-select: none; }
+.code-pc .masque, .code-pc .vrai { grid-area: 1 / 1; font: 600 30px/1.2 var(--mono); letter-spacing: .12em; }
 .code-pc .masque { color: var(--faible); }
-.code-pc .vrai { display: none; color: var(--ink); }
-.code-pc .indice { color: var(--muted); font-size: 12.5px; }
-.code-pc:hover .vrai, .code-pc:focus-visible .vrai, .code-pc.montre .vrai { display: inline; }
-.code-pc:hover .masque, .code-pc:focus-visible .masque, .code-pc.montre .masque, .code-pc:hover .indice, .code-pc.montre .indice, .code-pc:focus-visible .indice { display: none; }
+.code-pc .vrai { visibility: hidden; color: var(--ink); }
+.code-pc .indice { grid-area: 1 / 2; color: var(--muted); font-size: 12.5px; }
+/* shown by swapping visibility, never display: the box keeps its size, so the mouse stays over it */
+.code-pc:hover .vrai, .code-pc:focus-visible .vrai, .code-pc.montre .vrai { visibility: visible; }
+.code-pc:hover .masque, .code-pc:focus-visible .masque, .code-pc.montre .masque, .code-pc:hover .indice, .code-pc.montre .indice, .code-pc:focus-visible .indice { visibility: hidden; }
 .code-pc:hover, .code-pc.montre { border-style: solid; border-color: var(--accent); }
 .barre-chiffres { height: 4px; border-radius: 2px; background: var(--panel-3); margin-top: 8px; max-width: 260px; overflow: hidden; }
 .barre-chiffres i { display: block; height: 100%; background: var(--accent); transition: width 1.5s linear; }
@@ -750,3 +766,20 @@ ol.guide-access li { margin: 5px 0; }
 .mots-pc code { font-size: 11px; padding: 0 5px; border-radius: 4px; background: var(--panel-2); }
 .interrupteur.m0 { margin: 0; }
 @media (max-width: 760px) { table.tab.pcs tr { display: grid; grid-template-columns: 18px 1fr; border-bottom: 1px solid var(--line-2); } table.tab.pcs tr:last-child { border-bottom: 0; } table.tab.pcs td { border-bottom: 0; } table.tab.pcs td:last-child { grid-column: 2; text-align: left; padding-top: 0; } }
+
+/* the Guide (pages.guide): tutorials, their tabs, the "How it works" links and the first steps' cards */
+.onglets-guide { flex-wrap: wrap; }
+.guide .etape .d em { font-style: normal; color: var(--ink); }
+.guide .etape .d code, .cartes-guide code { font-size: 12px; padding: 0 4px; border-radius: 4px; background: var(--panel-2); }
+.lien-guide { color: var(--accent); font-size: 13px; text-decoration: none; white-space: nowrap; }
+.lien-guide:hover { text-decoration: underline; }
+.ligne .lien-guide { margin-left: 10px; }
+.cartes-guide { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.carte-guide { display: flex; flex-direction: column; gap: 6px; padding: 14px 16px; border: 1px solid var(--line); border-radius: var(--rayon); background: var(--panel); color: var(--ink); text-decoration: none; }
+.carte-guide:hover { border-color: var(--accent); }
+.carte-guide .lien-guide { margin-top: auto; }
+.carte-guide em { font-style: normal; }
+@media (max-width: 900px) { .cartes-guide { grid-template-columns: 1fr; } }
+.etape.sans-lien { grid-template-columns: 34px 1fr; }
+.titre-plus-loin { margin: 22px 0 10px; }
+.guide .etape { align-items: start; } .guide .etape > .btn { align-self: center; }

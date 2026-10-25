@@ -725,7 +725,7 @@ $("#btn-menu").addEventListener("click", () => menuMobile(!document.body.classLi
 $("#voile-menu").addEventListener("click", () => menuMobile(false));
 $("#nav-tiroir").addEventListener("click", (ev) => { if (ev.target.closest("nav a, .menu-liste a, .menu-nouveau")) menuMobile(false); });
 function traduireNav() {
-  const libelles = { suivi: t("Overview"), equipe: t("Team"), demandes: t("Requests"), pourvous: t("For you"), journal: t("Log"), projet: t("Manage"), chat: t("Chat"), extensions: t("Skills & MCP"), sante: t("Setup & health"), reglages: t("Settings"), options: t("Options"), distance: t("Remote") };
+  const libelles = { suivi: t("Overview"), equipe: t("Team"), demandes: t("Requests"), pourvous: t("For you"), journal: t("Log"), projet: t("Manage"), chat: t("Chat"), extensions: t("Skills & MCP"), sante: t("Setup & health"), reglages: t("Settings"), options: t("Options"), distance: t("Remote"), guide: t("Guide") };
   document.querySelectorAll("#nav-liens a, #nav-outil a").forEach((a) => { if (libelles[a.dataset.page]) a.textContent = libelles[a.dataset.page]; });
   $("#nav-titre-projet").textContent = t("Project");
   $("#nav-titre-outil").textContent = t("Tool");
@@ -966,9 +966,11 @@ async function majChat(force) {
   if (!force && sig === chat.signature) return;
   chat.signature = sig;
   const fil = $("#chat-fil"); if (!fil) return;
-  const enBas = fil.scrollHeight - fil.scrollTop - fil.clientHeight < 80;
+  // on a phone the conversation scrolls with the page (app.css), elsewhere in its own box
+  const page = matchMedia("(max-width: 760px)").matches, doc = document.documentElement;
+  const enBas = page ? innerHeight + scrollY >= doc.scrollHeight - 120 : fil.scrollHeight - fil.scrollTop - fil.clientHeight < 80;
   fil.innerHTML = filChat(d);
-  if (enBas || force) fil.scrollTop = fil.scrollHeight;
+  if (enBas || force) { if (page) window.scrollTo(0, doc.scrollHeight); else fil.scrollTop = fil.scrollHeight; }
   const b = $("#chat-envoyer"), s = $("#chat-stop"), m = $("#chat-mode");
   if (b) b.hidden = d.en_cours;
   if (s) s.hidden = !d.en_cours;
@@ -981,6 +983,13 @@ function modeChat(piloteActif) {
     <label class="interrupteur m0 petit"><input type="checkbox" id="chat-question" ${chat.questionSeule ? "checked" : ""}><span>${t("question only")}</span></label>`;
 }
 
+// tactile: a phone or a tablet (a finger, no mouse)
+const tactile = () => matchMedia("(pointer: coarse)").matches;
+// the field of the chat grows with what is written, up to a third of the screen (then it scrolls)
+document.addEventListener("input", (ev) => {
+  const z = ev.target; if (z.id !== "chat-texte" || !matchMedia("(max-width: 760px)").matches) return;
+  z.style.height = "auto"; z.style.height = Math.min(z.scrollHeight + 2, Math.round(innerHeight * 0.32)) + "px";
+});
 pages.chat = async () => {
   const [d, mod] = await Promise.all([api("chat"), chat.modeles ? Promise.resolve({ modeles: chat.modeles }) : api("modeles").catch(() => ({ modeles: [] }))]);
   chat.modeles = mod.modeles || [];
@@ -993,7 +1002,7 @@ pages.chat = async () => {
       <button type="button" class="btn btn-petit" id="chat-nouveau">${t("New conversation")}</button></div>
     <div class="chat-fil" id="chat-fil"></div>
     <div class="chat-saisie">
-      <textarea id="chat-texte" rows="3" placeholder="${h(t("Your question or the change you want… (Enter sends, Shift+Enter: new line)"))}"></textarea>
+      <textarea id="chat-texte" rows="${tactile() ? 2 : 3}" placeholder="${h(tactile() ? t("Your question or the change you want…") : t("Your question or the change you want… (Enter sends, Shift+Enter: new line)"))}"></textarea>
       <div class="ligne m0 mt-1"><span class="petit muet">${t("Model")}</span><div class="choix m0" id="chat-modeles">${modeles.map((m) => `<button type="button" data-chat-modele="${h(m)}" class="${chat.modele === m ? "actif" : ""}">${h(m || t("account default"))}</button>`).join("")}</div>
         <span class="espace"></span>
         <button type="button" class="btn" id="chat-stop" hidden>${t("Stop")}</button>
@@ -1014,7 +1023,7 @@ async function envoyerChat() {
   chat.envoi = true;
   const r = await action(api("chat", "POST", { message, modele: chat.modele, mode: chat.questionSeule ? "question" : "" }));
   chat.envoi = false;
-  if (r) { zone.value = ""; await majChat(true); }
+  if (r) { zone.value = ""; zone.style.height = ""; await majChat(true); }
 }
 
 // --- the subscription's quota, as Claude Code last reported it (rate_limit_event of the newest cycle log)
@@ -1245,8 +1254,75 @@ function rendreGuide(v) {
       <a class="btn ${e2 && !e3 ? "btn-primaire" : ""}" href="#demandes" ${e2 ? "" : 'aria-disabled="true"'}>${t("Write the request")}</a></div>
     <div class="etape"><div class="n">5</div><div><b>${t("Start")}</b><div class="d">${t("Claude frames, plans milestones, builds, checks and delivers, cycle after cycle. You follow everything here and can add requests along the way.")}</div></div>
       <button class="btn ${e3 ? "btn-primaire" : ""}" data-act="demarrer" ${e2 ? "" : "disabled"}>${t("Start")}</button></div>
-  </div></div>`;
+  </div>
+  <h3 class="titre-plus-loin">${t("Going further")}</h3>
+  <div class="cartes-guide">${["github", "distance", "pcs"].map((id) => { const g = GUIDE.find((x) => x.id === id); return `<a class="carte-guide" href="#guide" data-guide-sujet="${id}"><b>${t(g.titre)}</b><span class="muet petit">${mdGuide(t(g.intro))}</span><span class="lien-guide">${t("Read the guide")} →</span></a>`; }).join("")}</div>
+  <p class="muet petit mt-2">${t("The Guide stays in the menu, with every step of these tutorials.")}</p></div>`;
 }
+
+// --- the Guide: short step-by-step tutorials (starting, GitHub, the phone, several computers), always in
+// the menu; the first steps, the Overview and the Remote page link to them
+const GUIDE = [
+  { id: "debut", titre: "Start a project", intro: "Athanor builds a whole project with Claude, milestone after milestone, while you do something else.",
+    etapes: [
+      ["Install and check", "*Setup & health*: *Install everything* once, then *Check everything*. Each problem has its own *Repair* or *Ask Claude* button.", "#sante", "Open the check"],
+      ["Add the project", "In the project picker, *New project*: a name, its folder (new or existing, anywhere on the computer) and what you want.", "#nouveau", "Add a project"],
+      ["Say what you want", "*Requests*: describe the result you expect and attach what helps (mock-ups, a specification, photos). *Improve with Claude* makes it clearer. Technologies are free unless you impose some.", "#demandes", "Requests"],
+      ["Start", "*Start*, at the top of the window. Claude first writes the plan (the framing), then builds and checks one milestone per cycle."],
+      ["Follow and answer", "*Overview* shows the milestone in progress, the plan and your quota. *For you* lists what only you can do (create an account, give a key, read a code received by SMS): answer there, Claude checks it.", "#pourvous", "For you"],
+      ["Add along the way", "A new request waits in the queue and joins the plan at the next cycle. *Chat* answers your questions about the project at any time."],
+    ],
+    note: "*Stop after cycle* lets the current milestone finish, *Stop now* cuts it. Everything is kept in files: the pilot resumes where it stopped, even after the computer restarts." },
+  { id: "github", titre: "GitHub", intro: "Link a project to a GitHub repository: its commits go there after each milestone, and other computers can work on it.",
+    etapes: [
+      ["Link the project", "*Manage* (in the project picker) › *GitHub*: *Create a private repository*, or *Use one of my repositories*. A window opens once to sign in to GitHub.", "#projet", "Manage"],
+      ["One key, for this repository only", "Athanor gives the repository a key of its own (a *deploy key*, listed in the repository's *Settings › Deploy keys*), then signs out of GitHub. The key works for that repository and nothing else, and Claude can never read it."],
+      ["Who can link a computer", "Adding that key needs the repository's **administrator** rights. On a repository of a personal account, only its owner has them: a collaborator cannot link their own computer (see *Several computers*)."],
+      ["The pushes", "After each milestone and at the delivery, or with *Push now*. Never forced: if GitHub has commits the project does not, Athanor stops and says so. Each push is checked for secrets first (keys, tokens, .env files)."],
+      ["The author of the commits", "Your name and your GitHub address (the private *noreply* one is proposed), and whether Claude appears as co-author. Set it on each computer: the history then shows who did what."],
+      ["Share the workshop", "*Share the workshop (.athanor/) on GitHub* puts the plan, the requests and the log in the commits, for someone who goes on with the project in their own Athanor. Working with other computers switches it on by itself."],
+    ] },
+  { id: "distance", titre: "From your phone", intro: "Follow and drive Athanor from a phone or another computer, from anywhere, through a Cloudflare tunnel. Nothing to install on the phone.",
+    etapes: [
+      ["Switch it on", "*Remote* › *Remote access*. The first time, Athanor downloads Cloudflare's tunnel program.", "#distance", "Remote"],
+      ["Pair the phone", "Scan the QR code with the phone's camera (or open the link on the other device), then type the 6 digits the computer shows when the mouse is over them. They change every 20 seconds, so a photo of the QR code is not enough."],
+      ["Use it", "The phone gets the same pages, laid out for its screen: start, stop, chat, requests. *Add to Home Screen* makes it an app. The secrets, the remote settings and the computer's folders stay on the computer."],
+      ["Remove a device", "*Remote* › *Trusted devices*: ✕ removes one at once. Switching remote access off closes the tunnel for every device."],
+      ["A fixed address (optional)", "The temporary address changes when the computer restarts. With a domain whose DNS is at Cloudflare (a free account is enough): *Address › Use my domain*, then sign in to Cloudflare once. The page also shows how to add Cloudflare Access: an e-mail and a code are asked before anything reaches the computer."],
+      ["Stop using your domain", "*Address › Back to a temporary address* deletes the tunnel at Cloudflare. Then, in Cloudflare's dashboard: delete the name's CNAME record (*DNS › Records*), and the Access application if you made one (*Zero Trust › Access › Applications*). If the computer was off at that moment, delete the tunnel there too (*Zero Trust › Networks › Tunnels*)."],
+    ],
+    note: "While remote access is on, the computer does not go to sleep (the screen can still turn off), and Athanor must stay open." },
+  { id: "pcs", titre: "Several computers", intro: "Several computers build one project at the same time through its GitHub repository: each one takes a milestone no other one is building, and they merge each other's work.",
+    etapes: [
+      ["On the first computer", "Link the project to GitHub, then *Overview* › *Other computers* › switch on *Work with other computers*. The plan, the requests and the log go to GitHub with the next push.", "#suivi", "Overview"],
+      ["On each other computer", "*New project* with an **empty folder**, *GitHub* › *Use one of my repositories*: the same repository, the same branch. Then the same switch in its Overview: the project arrives at once, with its request and its plan."],
+      ["Who links the other computers", "Linking needs the repository's administrator rights. Either the owner links the other computer: when its GitHub window shows a one-time code, the owner types it at github.com/login/device from any device signed in to their account, even their phone (only a key for this repository stays on that computer). Or the owner moves the repository to a GitHub organization (free) and gives the others the *Admin* role on it: they link their computers themselves, but they can then also change the repository's settings, and even delete it."],
+      ["What each computer is good at", "*Remote* › *This computer, for the other computers*: a name, what it has (`RTX 4090`), a few words (`gpu`, `network`). Claude marks the milestones that need one (`Needs: gpu.`), and the pilot gives them to a computer that has the word. Without words, the milestones are simply shared out.", "#distance", "What this computer is good at"],
+      ["Start the pilots", "Start the pilot on each computer. One writes the plan, the others wait for it; then each one takes a milestone, and the Overview shows who builds what. The final report is written once, by one of them."],
+      ["When a computer waits", "Its Overview says why: everything left depends on a milestone in progress; files of its folder that GitHub has too (move them); a project with another history (start again from an empty folder). A real merge conflict is undone, then Claude merges it at its next cycle."],
+    ],
+    note: "A computer whose pilot runs without the switch works alone: its pushes are refused as soon as another computer has pushed. Parallel mode is off while several computers work on a project. Each computer leaves a branch athanor/pc/… on the repository; it goes away when that computer stops working with the others." },
+];
+// mdGuide: the guide's texts, with **bold**, *emphasis* and `code`
+const mdGuide = (s) => h(s).replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>").replace(/\*([^*]+)\*/g, "<em>$1</em>").replace(/`([^`]+)`/g, "<code>$1</code>");
+// lienGuide: a "How it works" link to one tutorial of the guide
+const lienGuide = (sujet, texte) => `<a class="lien-guide" href="#guide" data-guide-sujet="${sujet}">${h(texte || t("How it works"))}</a>`;
+pages.guide = async () => {
+  const sujet = GUIDE.find((g) => g.id === etat.guideSujet) || GUIDE[0];
+  return `<div class="onglets onglets-guide">${GUIDE.map((g) => `<button class="${g === sujet ? "actif" : ""}" data-guide-sujet="${g.id}">${t(g.titre)}</button>`).join("")}</div>
+  <div class="bloc guide"><h2>${t(sujet.titre)}</h2><p class="intro">${mdGuide(t(sujet.intro))}</p>
+    <div class="etapes">${sujet.etapes.map(([titre, texte, lien, libelle], i) => `<div class="etape ${lien ? "" : "sans-lien"}"><div class="n">${i + 1}</div>
+      <div><b>${t(titre)}</b><div class="d">${mdGuide(t(texte))}</div></div>
+      ${lien ? `<a class="btn btn-petit" href="${lien}">${t(libelle)}</a>` : ""}</div>`).join("")}</div>
+    ${sujet.note ? `<p class="muet petit mt-2">ℹ ${mdGuide(t(sujet.note))}</p>` : ""}
+  </div>`;
+};
+// a tutorial chosen from anywhere (the guide's tabs, the "How it works" links)
+document.addEventListener("click", (ev) => {
+  const a = ev.target.closest("[data-guide-sujet]"); if (!a) return;
+  etat.guideSujet = a.dataset.guideSujet;
+  if (etat.page === "guide") { ev.preventDefault(); rendrePage(); window.scrollTo(0, 0); }
+}, true);
 
 // --- new project
 // --- managing a project: name, folder, milestones check, archive, delete
@@ -1363,7 +1439,7 @@ function choixGitHub(pre, nomPropose) {
 // the workshop shared on GitHub: for someone who takes the project over with their Athanor (off by default)
 function caseAtelier(attribut, coche) {
   return `<label class="interrupteur"><input type="checkbox" ${attribut} ${coche ? "checked" : ""}><span>${t("Share the workshop (.athanor/) on GitHub")}</span></label>
-    <p class="muet petit">${t("For a repository shared with someone who goes on with the project in their own Athanor (git pull): the plan, the requests, the log and the documents go into the commits. Never secrets.env, the raw logs nor the pilot's state. Only one pilot at a time on the project: the other one pulls before starting. Unticked later, the workshop leaves the next push.")}</p>`;
+    <p class="muet petit">${t("For a repository shared with someone who goes on with the project in their own Athanor (git pull): the plan, the requests, the log and the documents go into the commits. Never secrets.env, the raw logs nor the pilot's state. To build it with several computers at once: Overview › Other computers (it switches this on). Unticked later, the workshop leaves the next push.")} ${lienGuide("pcs")}</p>`;
 }
 // null: no GitHub; false: incomplete or invalid (said in a toast); else what to send to /api/github
 function lireChoixGitHub(pre, nomProjet) {
@@ -1403,7 +1479,7 @@ function rendreGitHub(r) {
   const g = r.github || {}, d = g.dernier;
   const manque = !g.gh || !g.ssh ? `<p class="attention petit">${t("The GitHub CLI or OpenSSH is missing in Linux: open the check and repair “Basic Linux packages”.")} <a href="#sante">${t("Open the check")}</a></p>` : "";
   if (!g.lie) return `<h2>GitHub</h2>
-    <p class="muet petit">${t("Send the project's commits to one of your GitHub repositories, by itself after each milestone.")}</p>${manque}
+    <p class="muet petit">${t("Send the project's commits to one of your GitHub repositories, by itself after each milestone.")} ${lienGuide("github")}</p>${manque}
     <div class="gh-etape"><b>1. ${t("Repository")}</b>${choixGitHub("gh", r.nom_propose || "")}</div>
     <div class="gh-etape"><b>2. ${t("Commits")}</b>${rendreAuteur(g.identite)}</div>
     <div class="gh-etape"><b>3. ${t("Link")}</b><div class="ligne"><button class="btn btn-primaire" data-gh="lier">${t("Link to GitHub")}</button><button class="btn btn-petit" data-gh="actualiser">${t("Refresh")}</button></div></div>`;
@@ -2411,7 +2487,7 @@ function rendreBlocPCs(vp) {
   if (!vp || !vp.lie) return "";
   if (!vp.actif) {
     return `<div class="bloc"><h2>${t("Other computers")}</h2>
-      <p class="intro petit">${t("Build this project with other computers that have it in their Athanor, from the same GitHub repository: each one takes a milestone no other one is building, the ones it is best at first, and they merge each other's work.")}</p>
+      <p class="intro petit">${t("Build this project with other computers that have it in their Athanor, from the same GitHub repository: each one takes a milestone no other one is building, the ones it is best at first, and they merge each other's work.")} ${lienGuide("pcs")}</p>
       <label class="interrupteur"><input type="checkbox" data-pcs-actif><span>${t("Work with other computers on {0}", [h(vp.depot || "")])}</span></label>
     </div>`;
   }
@@ -2424,8 +2500,8 @@ function rendreBlocPCs(vp) {
   return `<div class="bloc"><div class="bloc-tete"><h2>${t("Computers on this project")}</h2>${(vp.pcs || []).length ? `<span class="muet petit">${h(t("{0} other(s) online", [enLigne]))}</span>` : ""}</div>
     <table class="tab appareils pcs">${lignes}</table>
     ${vp.erreur ? `<p class="petit attention">✖ ${h(erreurPCs(vp.erreur))}</p>` : ""}
-    ${!(vp.pcs || []).length ? `<p class="muet petit">${t("No other computer yet. On another computer: in its Athanor, add this same GitHub repository (New project › GitHub › Use one of my repositories), then switch this on in its Overview.")}</p>` : ""}
-    <div class="ligne mt-2"><a class="btn btn-petit" href="#distance">${t("What this computer is good at")}</a><span class="espace"></span>
+    ${!(vp.pcs || []).length ? `<p class="muet petit">${t("No other computer yet. On the other computer: New project with an empty folder, GitHub › Use one of my repositories with this same repository and branch, then this same switch in its Overview.")}</p>` : ""}
+    <div class="ligne mt-2"><a class="btn btn-petit" href="#distance">${t("What this computer is good at")}</a>${lienGuide("pcs")}<span class="espace"></span>
       <label class="interrupteur m0"><input type="checkbox" data-pcs-actif checked><span>${t("Work with other computers")}</span></label></div>
   </div>`;
 }
@@ -2466,7 +2542,7 @@ pages.distance = async () => {
   return `<div class="grille grille-2">
     <div class="colonne">
       <div class="bloc"><h2>${t("Remote access")}</h2>
-        <p class="intro petit">${t("Follow and drive Athanor from your phone or another computer, from anywhere: through a Cloudflare tunnel (https, nothing to set up). Only the devices you pair here get in.")}</p>
+        <p class="intro petit">${t("Follow and drive Athanor from your phone or another computer, from anywhere: through a Cloudflare tunnel (https, nothing to set up). Only the devices you pair here get in.")} ${lienGuide("distance")}</p>
         <label class="interrupteur"><input type="checkbox" id="dist-actif" ${d.actif ? "checked" : ""}><span>${t("Remote access")}</span></label>
         <p class="petit ${statut[0]}" id="dist-statut">${h(statut[1])}</p>
         <p class="muet petit">${d.domaine ? t("While remote access is on, the computer does not go to sleep (the screen can still turn off); Athanor must stay open.") : t("The address changes when the computer restarts: scan the code again then. While remote access is on, the computer does not go to sleep (the screen can still turn off); Athanor must stay open.")}</p>
@@ -2490,7 +2566,7 @@ pages.distance = async () => {
         <p class="muet petit mt-2">${t("✕ removes a device: its next click is refused, and it must scan the code again to come back.")}</p>
       </div>
       ${m ? `<div class="bloc"><h2>${t("This computer, for the other computers")}</h2>
-        <p class="intro petit">${t("When several computers build a project (Overview › Other computers), each one says what it is good at: the pilot gives it the milestones that need it, and leaves the others to the computers that have what they need.")}</p>
+        <p class="intro petit">${t("When several computers build a project (Overview › Other computers), each one says what it is good at: the pilot gives it the milestones that need it, and leaves the others to the computers that have what they need.")} ${lienGuide("pcs")}</p>
         <label class="champ"><span>${t("Name")}</span><input type="text" id="pc-nom" maxlength="60" value="${h(m.nom || "")}"></label>
         <label class="champ"><span>${t("What it is good at")}</span><input type="text" id="pc-capacites" maxlength="300" value="${h(m.capacites || "")}" placeholder="${h(t("e.g. RTX 4090, 24 GB: 3D models and renders"))}"></label>
         <label class="champ"><span>${t("Words for the plan")}</span><input type="text" id="pc-mots" value="${h((m.mots || []).join(", "))}" placeholder="gpu, network"></label>
@@ -2884,7 +2960,8 @@ $("#page").addEventListener("click", async (ev) => {
 });
 
 $("#page").addEventListener("keydown", (ev) => {
-  if (ev.target.id === "chat-texte" && ev.key === "Enter" && !ev.shiftKey && !ev.isComposing) { ev.preventDefault(); envoyerChat(); }
+  // on a touch screen, Enter is a new line (the keyboard has no Shift+Enter): the Send button sends
+  if (ev.target.id === "chat-texte" && ev.key === "Enter" && !ev.shiftKey && !ev.isComposing && !tactile()) { ev.preventDefault(); envoyerChat(); }
 });
 
 $("#page").addEventListener("change", (ev) => {
