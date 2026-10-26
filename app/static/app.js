@@ -228,7 +228,8 @@ async function avantDemarrageGitHub() {
 // first (install, open the check, or start anyway): nobody stays stuck on the first steps.
 async function demarrerPilote(b) {
   const v = etat.vue || {};
-  if (v.demande_vide) {
+  // Several computers: the request comes with the others' work, the pilot brings it in
+  if (v.demande_vide && !(v.github && v.github.equipe)) {
     const c = await choisir(t("The project has no request yet: Claude would wait for one. Write what you want first."), [
       { id: "demande", texte: t("Write the request"), primaire: true }, { id: "", texte: t("Cancel") }]);
     if (c === "demande") location.hash = "#demandes";

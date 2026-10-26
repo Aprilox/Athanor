@@ -425,7 +425,8 @@ func (a *appTUI) demarrer() {
 		a.annoncer(a.t("Starting…"), false)
 		return
 	}
-	if v.DemandeVide {
+	// Several computers: the request comes with the others' work, the pilot brings it in
+	if v.DemandeVide && (v.GitHub == nil || !v.GitHub.Equipe) {
 		a.demander(a.t("Start"), a.t("The project has no request yet: Claude would wait for one. Write what you want first."),
 			[]choixTUI{{id: "demande", texte: a.t("Write the request")}, {id: "", texte: a.t("Cancel")}}, func(id string) {
 				if id == "demande" {

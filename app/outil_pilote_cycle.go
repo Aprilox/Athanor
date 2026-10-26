@@ -2133,6 +2133,21 @@ func lancerPilote(args []string) int {
 
 	dejaSignale := false
 	for !demandeRempliePilote(p.etat) {
+		// several computers: the request comes with the others' work (their shared workshop), maybe
+		// pushed after this computer joined: brought in while it waits
+		if fichierRegulierPilote(filepath.Join(p.projet, ".git", "HEAD")) {
+			if e, _ := ouvrirEquipePC(p.projet); e != nil {
+				if res, detail, err := e.recevoir(); err == nil && (res == recuFusion || res == recuRejoint) {
+					p.log(fmt.Sprintf("Several computers: the other computers' work brought in (%s).", detail))
+					continue
+				}
+				if !dejaSignale {
+					p.log("Several computers: no request here yet: it comes with the other computers' work (their shared workshop), brought in every minute.")
+					p.statut("Waiting for the request from the other computers")
+					dejaSignale = true
+				}
+			}
+		}
 		if !dejaSignale {
 			p.log("No request: write it in the application (or in .athanor/REQUEST.md), Claude will start on its own.")
 			p.statut("Waiting for your request in REQUEST.md")
