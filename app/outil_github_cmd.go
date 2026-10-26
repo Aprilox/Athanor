@@ -16,6 +16,7 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -292,6 +293,7 @@ type SuiviGitHub struct {
 	Depot   string   `json:"depot,omitempty"`
 	Branche string   `json:"branche,omitempty"`
 	Auto    bool     `json:"auto"`
+	Equipe  bool     `json:"equipe,omitempty"` // Several computers: Start never waits for a request here
 	Envoye  *envoiGH `json:"envoye,omitempty"`
 	Dernier *struct {
 		Quand    string   `json:"quand"`
@@ -311,7 +313,7 @@ func publierSuiviGH(projet string) {
 	d := dossierGH(projet)
 	var v SuiviGitHub
 	if r, lie := lireReglagesGH(d); lie {
-		v = SuiviGitHub{Lie: true, Depot: r.Depot, Branche: firstNonEmpty(r.Branche, "main"), Auto: r.Auto}
+		v = SuiviGitHub{Lie: true, Depot: r.Depot, Branche: firstNonEmpty(r.Branche, "main"), Auto: r.Auto, Equipe: r.Equipe}
 		if b, err := os.ReadFile(d + "/envoye.json"); err == nil {
 			var e envoiGH
 			if json.Unmarshal(b, &e) == nil && e.Commit != "" {
@@ -569,6 +571,12 @@ func pousserGH(args []string, w io.Writer) int {
 	if auto && !r.Auto {
 		fmt.Fprintln(w, "Automatic push is off.")
 		return 3
+	}
+	// Push now, with the workshop shared: what it holds goes too (it waited for Claude's next commit)
+	if !auto && malgre == "" && r.Atelier {
+		if fait, err := partagerAtelierGH(projet); err == nil && fait {
+			fmt.Fprintln(w, "Workshop committed: "+messageAtelierGH+".")
+		}
 	}
 	sha, objets, raison := lireProjetGH(projet)
 	if raison == "absent" {
@@ -1219,7 +1227,7 @@ func commandeGitHub(args []string, w io.Writer) (int, bool) {
 	}
 	// what the Overview shows of GitHub, after what changes it (pousser writes it itself)
 	switch args[0] {
-	case "lier", "etat", "auto", "branche", "delier", "recuperer", "enregistrer":
+	case "lier", "etat", "auto", "branche", "partage", "delier", "recuperer", "enregistrer", "pcs-activer":
 		if len(reste) > 0 {
 			defer publierSuiviGH(reste[0])
 		}
@@ -1232,7 +1240,11 @@ func commandeGitHub(args []string, w io.Writer) (int, bool) {
 	case "pcs":
 		return pcsGH(reste, w), true
 	case "pcs-activer":
-		return pcsActiverGH(reste, w), true
+		code := pcsActiverGH(reste, w)
+		if code == 0 && argGH(reste, 1) == "1" {
+			partagerEtPousserGH(reste[0], w) // the others get the request and the plan at once
+		}
+		return code, true
 	case "pcs-machine":
 		return pcsMachineGH(args[1:], w), true
 	case "pousser":
@@ -1240,7 +1252,11 @@ func commandeGitHub(args []string, w io.Writer) (int, bool) {
 	case "publie":
 		return publieGH(reste), true
 	case "auto", "branche", "partage":
-		return reglageGH(args[0], reste, w), true
+		code := reglageGH(args[0], reste, w)
+		if code == 0 && args[0] == "partage" && argGH(reste, 1) == "1" {
+			partagerEtPousserGH(reste[0], w) // after reglageGH: it holds the lock the push takes
+		}
+		return code, true
 	case "delier":
 		return delierGH(reste, w), true
 	case "suivre":
@@ -1384,6 +1400,64 @@ func messageEnCours(projet string) string {
 
 // enregistrerGH: the work as it stands committed ("M3: title (in progress)"), by the app, without Claude:
 // to push it for someone else to take over, when the quota is out for instance.
+// envIdentiteGH: the author of a commit Athanor makes itself: the project's GitHub identity, else git's
+// own, else "Athanor" when git has none.
+func envIdentiteGH(projet string) []string {
+	id := lireIdentiteGH(dossierGH(projet))
+	if id.nom == "" || id.email == "" {
+		gn, ge := gitGlobalGH("user.name"), gitGlobalGH("user.email")
+		if nomAuteurValideGH(gn) && emailValideGH(ge) {
+			id.nom, id.email = gn, ge
+		}
+	}
+	if id.nom != "" && id.email != "" {
+		return []string{"GIT_AUTHOR_NAME=" + id.nom, "GIT_COMMITTER_NAME=" + id.nom, "GIT_AUTHOR_EMAIL=" + id.email, "GIT_COMMITTER_EMAIL=" + id.email}
+	}
+	if gitP(projet, nil, "config", "user.email").Run() != nil {
+		return []string{"GIT_AUTHOR_NAME=Athanor", "GIT_COMMITTER_NAME=Athanor", "GIT_AUTHOR_EMAIL=athanor@localhost", "GIT_COMMITTER_EMAIL=athanor@localhost"}
+	}
+	return nil
+}
+
+const messageAtelierGH = "Share the workshop (.athanor/): the request, the plan and the log"
+
+// partagerAtelierGH: the shared workshop (.athanor/: the request, the plan, the log… what
+// .git/info/exclude lets through) committed alone, at once, so that the other computers, or someone who
+// clones the repository, have it without waiting for Claude's next commit. The code being written is
+// never in that commit. Whether a commit was made.
+func partagerAtelierGH(projet string) (bool, error) {
+	if gitP(projet, nil, "rev-parse", "-q", "--verify", "HEAD").Run() != nil {
+		return false, nil // no commit yet: the first one (the framing's) carries the workshop
+	}
+	env := envIdentiteGH(projet)
+	if out, err := gitP(projet, env, "add", "-A", "--", ".athanor").CombinedOutput(); err != nil {
+		return false, errors.New(coupeOctets(strings.TrimSpace(string(out)), 300))
+	}
+	if gitP(projet, nil, "diff", "--cached", "--quiet", "--", ".athanor").Run() == nil {
+		return false, nil
+	}
+	if out, err := gitP(projet, env, "commit", "-q", "-m", messageAtelierGH, "--", ".athanor").CombinedOutput(); err != nil {
+		return false, errors.New(coupeOctets(strings.TrimSpace(string(out)), 300))
+	}
+	return true, nil
+}
+
+// partagerEtPousserGH: the workshop shared at once (the switch just turned on), then pushed.
+func partagerEtPousserGH(projet string, w io.Writer) {
+	projet, ok := cheminProjetGH(projet)
+	if !ok {
+		return
+	}
+	fait, err := partagerAtelierGH(projet)
+	if err != nil {
+		fmt.Fprintln(w, "The workshop goes with Claude's next commit (not committed now: "+err.Error()+").")
+		return
+	}
+	if fait {
+		pousserGH([]string{projet}, w)
+	}
+}
+
 func enregistrerGH(args []string, w io.Writer) int {
 	projet, ok := cheminProjetGH(argGH(args, 0))
 	if !ok {
@@ -1393,19 +1467,7 @@ func enregistrerGH(args []string, w io.Writer) int {
 		fmt.Fprintln(w, "GitHub: not pushed, the project's .git folder points elsewhere.")
 		return 1
 	}
-	id := lireIdentiteGH(dossierGH(projet))
-	if id.nom == "" || id.email == "" {
-		gn, ge := gitGlobalGH("user.name"), gitGlobalGH("user.email")
-		if nomAuteurValideGH(gn) && emailValideGH(ge) {
-			id.nom, id.email = gn, ge
-		}
-	}
-	var env []string
-	if id.nom != "" && id.email != "" {
-		env = []string{"GIT_AUTHOR_NAME=" + id.nom, "GIT_COMMITTER_NAME=" + id.nom, "GIT_AUTHOR_EMAIL=" + id.email, "GIT_COMMITTER_EMAIL=" + id.email}
-	} else if gitP(projet, nil, "config", "user.email").Run() != nil {
-		env = []string{"GIT_AUTHOR_NAME=Athanor", "GIT_COMMITTER_NAME=Athanor", "GIT_AUTHOR_EMAIL=athanor@localhost", "GIT_COMMITTER_EMAIL=athanor@localhost"}
-	}
+	env := envIdentiteGH(projet)
 	if out, err := gitP(projet, env, "add", "-A").CombinedOutput(); err != nil {
 		fmt.Fprintln(w, "Cannot save the work in progress: "+coupeOctets(strings.TrimSpace(string(out)), 300))
 		return 1
