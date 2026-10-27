@@ -3,6 +3,10 @@
 #   git tag v2.26.0 && git push origin v2.26.0
 # Each download is a single executable that carries everything it needs (app/embarque.go); on the Mac,
 # Athanor.app around it.
+# Nothing is published before every check of CI (ci.yml: vet and tests on Windows, Linux and macOS, the single
+# executable, every build target) has passed on the tagged commit; if any of them fails, or anything after
+# them, the tag is removed (and the release, if it was already created), so Athanor's updates never offer it:
+# fix, commit, and push the same tag again.
 name: Release
 
 on:
@@ -13,7 +17,12 @@ permissions:
   contents: write
 
 jobs:
+  checks:
+    # the whole CI on the tagged commit, on the three systems
+    uses: ./.github/workflows/ci.yml
+
   build:
+    needs: checks
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -22,14 +31,6 @@ jobs:
         with:
           go-version-file: app/go.mod
           cache: false
-
-      - name: Check
-        working-directory: app
-        run: |
-          go vet .
-          GOOS=windows GOARCH=amd64 go vet .
-          GOOS=darwin GOARCH=arm64 go vet .
-          go test ./...
 
       - name: Build
         working-directory: app
@@ -132,3 +133,21 @@ jobs:
             publie/Athanor-Linux-x64
             publie/Athanor-Linux-ARM64
             publie/SHA256SUMS.txt
+
+  cancel:
+    # a check, the build, the Mac's signature or the publishing failed (or the run was cancelled): no version
+    # stays behind, neither the release nor its tag
+    needs: [checks, build, mac, publish]
+    if: ${{ failure() || cancelled() }}
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Remove the release and the tag
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          if gh release view "$tag" -R "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release delete "$tag" -R "$GITHUB_REPOSITORY" --cleanup-tag --yes
+          fi
+          gh api -X DELETE "repos/${GITHUB_REPOSITORY}/git/refs/tags/${tag}" > /dev/null 2>&1 || true
+          echo "::error title=Release cancelled::${tag} was not published: a check failed. Fix it, commit, then push the tag again (git tag -f ${tag} && git push origin ${tag})."
