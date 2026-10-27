@@ -1,4 +1,4 @@
-//go:build linux || windows
+//go:build linux || windows || darwin
 
 package main
 
@@ -26,6 +26,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -590,6 +591,9 @@ func (p *passerelle) fermerStudiosProjet() int {
 }
 
 func (p *passerelle) robloxStudio(args []string) int {
+	if sys := systemeMCP(); sys != "windows" { // macOS, Linux through Vinegar (roblox_ailleurs.go)
+		return p.robloxStudioHorsWindows(sys, args)
+	}
 	ouvert := func() bool { return processusWindows("RobloxStudioBeta.exe", "RobloxStudioBeta") }
 	attendre, reconstruire := false, false
 	switch argGH(args, 0) {
@@ -829,9 +833,19 @@ var attenteAdmin = 5 * time.Second
 var passerellesGo = map[string]bool{"adb": true, "blender": true, "install-windows": true, "pc-exec": true, "roblox-studio": true,
 	"tool": true, "unreal-cmd": true, "unreal-editor": true, "unreal-uat": true, "windows-var": true,
 	// the pilot's own steps (never one of Claude's commands, never through the bridge)
-	"rojo-construire": true, "ouvrir-windows": true}
+	"rojo-construire": true, "ouvrir-windows": true,
+	// Roblox Studio's MCP server on macOS and Linux (roblox_ailleurs.go), started by Claude Code
+	"roblox-mcp": true}
+
+// passerellesMac: what macOS runs of them (its applications run directly; Roblox Studio is opened, and its
+// MCP server started, by the pilot and by Claude Code).
+var passerellesMac = map[string]bool{"roblox-studio": true, "roblox-mcp": true, "rojo-construire": true}
 
 func lancerPasserelle(args []string) (code int) {
+	if runtime.GOOS == "darwin" && (len(args) < 1 || !passerellesMac[args[0]]) {
+		fmt.Fprintln(os.Stderr, "athanor passerelle: WSL and native Windows only (on macOS: roblox-studio, roblox-mcp)")
+		return 2
+	}
 	if len(args) < 1 || !passerellesGo[args[0]] {
 		fmt.Fprintln(os.Stderr, "usage: athanor passerelle adb|blender|install-windows|pc-exec|roblox-studio|tool|unreal-cmd|unreal-editor|unreal-uat|windows-var ARGUMENTS...")
 		return 2
@@ -881,6 +895,8 @@ func lancerPasserelle(args []string) (code int) {
 		return p.construireRojo(cheminOutil(reste[0]), cheminOutil(reste[1]))
 	case "ouvrir-windows":
 		return p.ouvrirWindows(reste)
+	case "roblox-mcp":
+		return p.robloxMCP(reste)
 	}
 	return p.unreal(outil, reste)
 }

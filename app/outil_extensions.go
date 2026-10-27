@@ -91,6 +91,11 @@ func trier(m map[string]bool) []string {
 
 // serveurMCP: Claude Code's configuration of one server, or the reason it is left out.
 func serveurMCP(kit, sid string, def objetJSON, secretsServeur objetJSON, dossier, principal string) (*objetJSON, string) {
+	// installed with its Windows configuration, on macOS or Linux: this system's variant (mcp_systemes.go)
+	def, secretsServeur, raisonSysteme := adapterAuSysteme(kit, def, secretsServeur)
+	if raisonSysteme != "" {
+		return nil, raisonSysteme
+	}
 	c := def.objet("config")
 	if def.valeur == nil || c.valeur == nil || !strings.HasPrefix(strings.TrimSpace(string(def.valeur["config"])), "{") {
 		return nil, "no configuration"
@@ -216,6 +221,29 @@ func serveurMCP(kit, sid string, def objetJSON, secretsServeur objetJSON, dossie
 		s.mettre("type", "stdio")
 		s.mettre("command", filepath.Join(kit, "athanor"))
 		s.mettre("args", append(append(append([]string{"mcp-cage"}, cage...), "--", remplacerExt(cmd, secrets, dossier, manquants)), args...))
+	case "hote":
+		// a program of this computer, outside the cage: the verified catalog's only (mcp_systemes.go)
+		if id, _ := def.brut("catalogue").(string); id == "" || entreeCatalogueSysteme(kit, id) == nil {
+			return nil, "a program outside the cage: only from the verified catalog"
+		}
+		cmd, ok := c.brut("command").(string)
+		if !ok || strings.TrimSpace(cmd) == "" {
+			return nil, "no command"
+		}
+		athanor := filepath.Join(kit, "athanor")
+		if runtime.GOOS == "windows" {
+			athanor = filepath.Join(kit, "Athanor.exe")
+		}
+		var args []string
+		for _, a := range argsDe(dossier) {
+			args = append(args, commandeHote(a, athanor))
+		}
+		s.mettre("type", "stdio")
+		s.mettre("command", commandeHote(remplacerExt(cmd, secrets, dossier, manquants), athanor))
+		s.mettre("args", args)
+		if env := facultatif(c.objet("env")); len(env.cles) > 0 {
+			s.mettre("env", env)
+		}
 	case "windows":
 		cmd, ok := c.brut("command").(string)
 		if !ok || strings.TrimSpace(cmd) == "" {
@@ -414,6 +442,9 @@ func construireMCP(kit string, choix map[string][]string, fichier, dossier, prin
 			}
 			if ok {
 				a, _ = catalogue[cle]["sauvegarde"].(string)
+				if e := entreeCatalogueSysteme(kit, cle); e != nil { // this system's words, when they differ
+					a, _ = e["sauvegarde"].(string)
+				}
 			}
 		}
 		if strings.TrimSpace(a) != "" {

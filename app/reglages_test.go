@@ -104,6 +104,7 @@ func TestReglagesMCP(t *testing.T) {
 func mustJSON(v any) []byte { b, _ := json.Marshal(v); return b }
 
 func TestMCPWindows(t *testing.T) {
+	systemeEssai(t, "windows") // the Windows configuration (macOS and Linux: roblox_ailleurs_test.go)
 	kit := t.TempDir()
 	p := Projet{Nom: "a", Dossier: t.TempDir()}
 	s := nouveauServeur(Config{Kit: kit, Projets: []Projet{p}, ProjetActif: "a", Langue: "en"})

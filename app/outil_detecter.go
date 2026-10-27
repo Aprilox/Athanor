@@ -394,6 +394,12 @@ func detecter(kitArg string) error {
 			roblox = l[0].p
 		}
 	}
+	vinegar := false
+	if roblox == "" && !mac && !windows { // Linux: Roblox Studio through Vinegar (roblox_ailleurs.go)
+		if v, ok := trouverVinegar(); ok {
+			roblox, vinegar = v.donnees, true
+		}
+	}
 	winget := false
 	if natif {
 		_, err := exec.LookPath("winget.exe")
@@ -431,9 +437,17 @@ func detecter(kitArg string) error {
 			l("- Unreal Engine: not detected")
 		}
 		if roblox != "" {
-			l("- **Roblox Studio**: `roblox-studio [--wait] PLACE.rbxl` opens it on a place of the project, without blocking (nothing if a Studio is already open)")
+			par := ""
+			if vinegar {
+				par = " (through Vinegar, Studio for Windows in Wine)"
+			}
+			l("- **Roblox Studio**" + par + ": `roblox-studio [--wait] PLACE.rbxl` opens it on a place of the project, without blocking (nothing if a Studio is already open)")
 			if os.Getenv("ROBLOX_MCP") == "1" {
-				l("  - **Roblox Studio MCP active**: `mcp__roblox-studio__*` tools on the open Studio (the pilot opens it before each cycle; Rojo project: `.athanor/studio/SYNC.luau` updates its scripts live, `roblox-studio --rebuild` rebuilds the place; a capture that times out: `roblox-studio --screen` says whether the Windows session is locked)")
+				ecran := "says whether the Windows session is locked"
+				if vinegar {
+					ecran = "says whether Studio runs"
+				}
+				l("  - **Roblox Studio MCP active**: `mcp__roblox-studio__*` tools on the open Studio (the pilot opens it before each cycle; Rojo project: `.athanor/studio/SYNC.luau` updates its scripts live, `roblox-studio --rebuild` rebuilds the place; a capture that times out: `roblox-studio --screen` " + ecran + ")")
 			}
 		}
 		if blender != "" {
