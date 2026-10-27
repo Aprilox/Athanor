@@ -320,7 +320,9 @@ n=$(( n + 1 ))
 echo "$n" > "$ETAT/appel_test_n"
 eco=non
 printf '%s' "$prompt_txt" | grep -q "## Eco mode (active for this project)" && eco=oui
-echo "$n $eco ${BASH_MAX_OUTPUT_LENGTH:-}" >> "$ETAT/eco_vu"
+pony=non
+printf '%s' "$prompt_txt" | grep -q "## Ponytail: the smallest complete change" && pony=oui
+echo "$n $eco ${BASH_MAX_OUTPUT_LENGTH:-} $pony" >> "$ETAT/eco_vu"
 if [ "$n" = 1 ]; then
   sed -i.bak 's/^ECO=1/ECO=0/' "$ETAT/.env" && rm -f "$ETAT/.env.bak"
   echo "part 1" > "$PWD/app.txt"
@@ -393,7 +395,13 @@ func TestBancPilote(t *testing.T) {
 		// what the pilot says of its version while it runs (seen by Claude's session), then gone at the end
 		vuVersion := filepath.Join(kit, "vu-version")
 		fakeClaude := filepath.Join(kit, "fake-claude.sh")
-		if err := os.WriteFile(fakeClaude, []byte("#!/bin/bash\ncp '"+filepath.ToSlash(filepath.Join(projet, ".athanor", "pilot.version"))+"' '"+filepath.ToSlash(vuVersion)+"' 2>/dev/null\nexec bash '"+filepath.ToSlash(vrai)+"' \"$@\"\n"), 0o755); err != nil {
+		// each call's system prompt, one file per call (Ponytail: its lean work for the framing, its rules after)
+		appels := filepath.Join(kit, "appels")
+		_ = os.MkdirAll(appels, 0o755)
+		if err := os.WriteFile(fakeClaude, []byte("#!/bin/bash\ncp '"+filepath.ToSlash(filepath.Join(projet, ".athanor", "pilot.version"))+"' '"+filepath.ToSlash(vuVersion)+"' 2>/dev/null\n"+
+			"n=$(ls '"+filepath.ToSlash(appels)+"' | wc -l); f='"+filepath.ToSlash(appels)+"'/$((n+1)); : > \"$f\"\n"+
+			"prec=; for a in \"$@\"; do [ \"$prec\" = --append-system-prompt-file ] && cat \"$a\" >> \"$f\"; [ \"$prec\" = --append-system-prompt ] && printf '%s' \"$a\" >> \"$f\"; prec=$a; done\n"+
+			"exec bash '"+filepath.ToSlash(vrai)+"' \"$@\"\n"), 0o755); err != nil {
 			t.Fatal(err)
 		}
 		_ = os.MkdirAll(filepath.Join(projet, ".athanor", "queue"), 0o755)
@@ -433,6 +441,18 @@ func TestBancPilote(t *testing.T) {
 		exclB, _ := os.ReadFile(filepath.Join(projet, ".git", "info", "exclude"))
 		verifier(fichierRegulierPilote(filepath.Join(p.Atelier(), "SOLUTIONS.md")) && strings.Contains(string(exclB), ".env") && strings.Contains(string(exclB), ".athanor/"), "SOLUTIONS.md and .git/info/exclude expected")
 		verifier(!strings.Contains(string(giB), "Athanor"), "the project's .gitignore untouched: %q", giB)
+		var cadrageVu, constructionVu bool
+		ls, _ := os.ReadDir(appels)
+		for _, f := range ls {
+			b, _ := os.ReadFile(filepath.Join(appels, f.Name()))
+			if len(b) == 0 {
+				continue // --help, --version
+			}
+			lean, code := strings.Contains(string(b), "## Ponytail: lean work"), strings.Contains(string(b), "## Ponytail: the smallest complete change")
+			cadrageVu = cadrageVu || (lean && !code)
+			constructionVu = constructionVu || (code && !lean)
+		}
+		verifier(cadrageVu && constructionVu, "Ponytail: the framing with its lean work, the building cycles with its rules")
 		if echec {
 			t.Logf("pilot output:\n%s", sortie)
 		}
@@ -497,10 +517,49 @@ func TestBancPilote(t *testing.T) {
 				t.Errorf(format, a...)
 			}
 		}
-		verifier(strings.TrimSpace(string(vu)) == "1 oui 8000\n2 non 20000", "what Claude received: %q", vu)
+		verifier(strings.TrimSpace(string(vu)) == "1 oui 8000 oui\n2 non 20000 oui", "what Claude received: %q", vu)
+		var opts []string
+		for _, st := range p.LireStats() {
+			opts = append(opts, st.Options)
+		}
+		verifier(strings.Join(opts, "|") == "ponytail,eco|ponytail", "stats options: %q", opts)
+		verifier(strings.Contains(sortie, "Ponytail "+versionPonytail+" on"), "Ponytail announced")
 		verifier(strings.Contains(sortie, "Eco mode on") && strings.Contains(sortie, "the parallel mode is off") && strings.Contains(sortie, "Eco mode off"), "eco messages in the pilot's log")
 		avantFin, _, _ := strings.Cut(sortie, "Eco mode off")
 		verifier(!strings.Contains(avantFin, "Parallel mode:"), "no parallel cycle in the eco mode")
+		verifier(strings.HasPrefix(etat.Etat, "DONE"), "final state: %+v", etat)
+		if echec {
+			t.Logf("pilot output:\n%s", sortie)
+		}
+	})
+	t.Run("sans_ponytail", func(t *testing.T) {
+		kit := preparerKitEssaiPilote(t, binTemp)
+		fakeClaude := filepath.Join(kit, "fake-claude-eco.sh")
+		if err := os.WriteFile(fakeClaude, []byte(strings.ReplaceAll(scriptFauxClaudeEco, "\r\n", "\n")), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		projet := filepath.Join(dossierEssaiPilote(t), "projet")
+		_ = os.MkdirAll(filepath.Join(projet, ".athanor"), 0o755)
+		_ = os.WriteFile(filepath.Join(projet, ".athanor", "REQUEST.md"), []byte("# Request\n\nBuild feature M1.\n"), 0o644)
+		_ = os.WriteFile(filepath.Join(projet, ".athanor", "PLAN.md"), []byte("# Plan\n\n- [ ] M1 : Core feature\n"), 0o644)
+		sortie := executerPilote(t, binTemp, kit, projet, fakeClaude, []string{"PONYTAIL=0"})
+		vu, _ := os.ReadFile(filepath.Join(projet, ".athanor", "eco_vu"))
+		p := Projet{Nom: "test", Dossier: projet}
+		etat, _ := p.LireEtat()
+		echec := false
+		verifier := func(ok bool, format string, a ...any) {
+			if !ok {
+				echec = true
+				t.Errorf(format, a...)
+			}
+		}
+		verifier(strings.TrimSpace(string(vu)) == "1 non 20000 non\n2 non 20000 non", "what Claude received: %q", vu)
+		var opts []string
+		for _, st := range p.LireStats() {
+			opts = append(opts, st.Options)
+		}
+		verifier(strings.Join(opts, "|") == "|", "stats options: %q", opts)
+		verifier(!strings.Contains(sortie, "Ponytail") && !strings.Contains(sortie, "Eco mode"), "nothing announced")
 		verifier(strings.HasPrefix(etat.Etat, "DONE"), "final state: %+v", etat)
 		if echec {
 			t.Logf("pilot output:\n%s", sortie)

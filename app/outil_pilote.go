@@ -83,6 +83,8 @@ type pilote struct {
 	parallel       bool
 	parallelMax    int
 	eco            bool   // the eco mode (ECO=1 in .athanor/.env): every lever but the model and the effort set for the quota
+	optionsCycle   string // what the current cycle runs with, for stats.tsv: "ponytail,eco,rtk"
+	rtkBin         string // RTK, when Claude's commands go through it (its measures: mesureRTK)
 	ecoAnnonce     string // "1"/"0": the eco state last logged
 	bashMax        string // BASH_MAX_OUTPUT_LENGTH outside the eco mode
 	quotaOuvriers  bool
@@ -417,7 +419,7 @@ func (p *pilote) enregistrerStats(f, etat, etiquette, depot string) {
 	}
 	statsPrive := filepath.Join(p.prive, "stats.tsv")
 	if st, err := os.Stat(statsPrive); err != nil || st.Size() == 0 {
-		_ = os.WriteFile(statsPrive, []byte("horodatage\tcycle\tmodele\tetat\tminutes\tminutes_api\ttours\tcout_usd\tentree_tokens\tcache_lu\tcache_ecrit\tsortie_tokens\tcontexte_max\tcommit\testimation\n"), 0o644)
+		_ = os.WriteFile(statsPrive, []byte("horodatage\tcycle\tmodele\tetat\tminutes\tminutes_api\ttours\tcout_usd\tentree_tokens\tcache_lu\tcache_ecrit\tsortie_tokens\tcontexte_max\tcommit\testimation\toptions\trtk_entree\trtk_economise\n"), 0o644)
 	}
 	tarifs := filepath.Join(p.kit, "logs", "tarifs.json")
 	var res map[string]any
@@ -496,10 +498,12 @@ func (p *pilote) enregistrerStats(f, etat, etiquette, depot string) {
 	if modele == "" {
 		modele = "defaut"
 	}
-	ligne := fmt.Sprintf("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%d\t%s\t%d\n",
+	// what this cycle ran with (ponytail, eco, rtk) and what RTK spared since the last line (its own measures)
+	rtkEntree, rtkEconomise := p.mesureRTK()
+	ligne := fmt.Sprintf("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%d\t%s\t%d\t%s\t%d\t%d\n",
 		time.Now().Format("2006-01-02T15:04:05"), etiquette, modele, etat,
 		minutes, minutesAPI, tours, coutUSD, entree, cacheLu, cacheEcrit, sortie,
-		pic, commit, estime)
+		pic, commit, estime, p.optionsCycle, rtkEntree, rtkEconomise)
 	if sf, err := os.OpenFile(statsPrive, os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
 		_, _ = sf.WriteString(ligne)
 		sf.Close()

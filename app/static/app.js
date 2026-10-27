@@ -1311,6 +1311,17 @@ function rendreAvancement(stats, plan, faits, actif) {
   </div>`;
 }
 
+// lignesGains: Ponytail's state, then the cycles run with and without Ponytail or the eco mode, side by
+// side on this project (gains.go: a trend, the milestones differ)
+function lignesGains(g) {
+  if (!g) return "";
+  const noms = { ponytail: "Ponytail", eco: t("Eco mode") };
+  const lignes = (g.comparaisons || []).map((c) => `<li>${t("{0}: {1} $ per successful cycle with it ({2} cycles), {3} $ without ({4}): {5}", [h(noms[c.option] || c.option), c.avec_cout.toFixed(2), c.avec_n, c.sans_cout.toFixed(2), c.sans_n,
+    `<b class="${c.ecart <= 0 ? "gain" : "perte"}">${c.ecart > 0 ? "+" : ""}${c.ecart} %</b>`])}</li>`).join("");
+  const etat = g.ponytail ? t("Ponytail {0} on: Claude builds each milestone with the smallest complete change.", [h(g.version_ponytail)]) : t("Ponytail off (Settings → Simplest code).");
+  return `<div class="gains muet petit mt-1"><p class="m0">${etat}</p>${lignes ? `<ul class="m0">${lignes}</ul><p class="m0">${t("Measured on this project's own cycles: their milestones differ, so it is a trend, not a test.")}</p>` : g.ponytail ? `<p class="m0">${t("The comparison with and without appears once 3 successful cycles of each kind are done.")}</p>` : ""}</div>`;
+}
+
 pages.suivi = async () => {
   const v = etat.vue; if (!v) return "";
   // a computer joining a team from a new folder: the switch is there before any request (the team's comes)
@@ -1322,6 +1333,7 @@ pages.suivi = async () => {
   const somme = (k) => stats.reduce((a, s) => a + (Number(s[k]) || 0), 0);
   const cache = somme("cache_lu"), plein = somme("entree_tokens") + somme("cache_ecrit");
   const ratio = cache + plein ? Math.round((cache / (cache + plein)) * 100) : 0;
+  const g = v.gains;
   return `${v.pour_vous ? `<a class="bloc pv-bandeau" href="#pourvous">🙋 <strong>${t("Claude needs you")}</strong> · ${t("{0} task(s) on the For you page", [v.pour_vous])} →</a>` : ""}
   <div class="grille grille-2">
     <div class="colonne"><div class="bloc"><h2>${t("Right now")}</h2>
@@ -1357,10 +1369,12 @@ pages.suivi = async () => {
       <div class="chiffre"><b>${(() => { const m = Math.round(somme("minutes")); return `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")}`; })()}</b><span>${t("of work")}</span></div>
       <div class="chiffre"><b>${somme("tours")}</b><span>${t("turns")}</span></div>
       <div class="chiffre" title="${h(t("at list price (your subscription quota pays)"))}"><b>${stats.some((s) => s.estime) ? "≈ " : ""}${somme("cout_usd").toFixed(2)} $</b><span>${t("at list price")}</span></div>
-      <div class="chiffre"><b>${ratio} %</b><span>${t("of tokens re-read from cache")}</span></div>
+      <div class="chiffre" title="${h(t("At Anthropic's list prices a token read again from the cache costs a tenth, one written to it 1.25 times: what Claude reads cost this much less than without the cache."))}"><b>${ratio} %</b><span>${t("of tokens re-read from cache")}${g && g.cache_pct > 0 ? `<em class="gain">${t("−{0} % paid on reading", [g.cache_pct])}</em>` : ""}</span></div>
+      ${g && g.rtk_entree > 0 ? `<div class="chiffre" title="${h(t("Measured by RTK: the tokens of the command outputs (git, ls, grep, tests…) it did not pass on to Claude."))}"><b>${fmtTokens(g.rtk_economise)}</b><span>${t("tokens spared by RTK")}<em class="gain">${t("−{0} % of the command outputs", [g.rtk_pct])}</em></span></div>` : ""}
       <div class="chiffre"><b>${fmtTokens(somme("sortie_tokens"))}</b><span>${t("tokens produced")}</span></div>
       <div class="chiffre"><b>${fmtTokens(somme("contexte_max") / stats.length)}</b><span>${t("average peak context")}</span></div>
     </div>
+    ${lignesGains(g)}
     <div class="tableau mt-2"><table class="tab"><thead><tr><th>${t("Cycle")}</th><th>${t("Time")}</th><th>${t("Model")}</th><th>${t("State")}</th><th>${t("Minutes")}</th><th>${t("Turns")}</th><th>${t("Cost $")}</th><th>${t("Peak context")}</th></tr></thead><tbody>
     ${stats.slice(etat.ouverts.has("stats:tous") ? -200 : -5).reverse().map((s) => `<tr><td>${s.cycle}</td><td>${h((s.horodatage || "").slice(11, 16))}</td><td>${h(s.template)}</td><td class="${h(s.etat)}">${h(s.etat)}</td><td>${Math.round(s.minutes)}</td><td>${s.tours}</td><td${s.estime ? ` title="${h(t("≈: estimated from the turns of the lead and its sub-agents (cycle closed by the pilot); ?: price of this model not learned yet"))}"` : ""}>${s.estime && !Number(s.cout_usd) && s.tours ? "?" : (s.estime ? "≈ " : "") + Number(s.cout_usd).toFixed(2)}</td><td>${fmtTokens(s.contexte_max)}</td></tr>`).join("")}
     </tbody></table></div>
@@ -2643,7 +2657,7 @@ const REGLAGES = {
   SUBAGENT_MODEL: ["modeles", "Model of the sub-agents"], CHEAP_MODEL: ["modeles", "Cheap model"], EFFORT: ["modeles", "Thinking effort"],
   CLOSE_AFTER_MILESTONE: ["marche", "One milestone per cycle"], RELAY_CONTEXT_K: ["marche", "Fresh session beyond"],
   MAX_HOURS: ["marche", "Safety stop after"], CYCLE_MAX_MIN: ["marche", "Longest cycle"], IDLE_MAX_MIN: ["marche", "Silent cycle stopped after"],
-  FRAMING_MAX_MIN: ["marche", "Longest framing"], RTK: ["marche", "Compressed command outputs"],
+  FRAMING_MAX_MIN: ["marche", "Longest framing"], RTK: ["marche", "Compressed command outputs"], PONYTAIL: ["marche", "Simplest code (Ponytail)"],
   KEEP_AWAKE: ["marche", "Keep the PC awake"],
   LANGUAGE: ["avance", "Language of Claude's documents"], TZ: ["avance", "Time zone of the logs"],
   QUOTA_WAIT_MIN: ["avance", "Wait when the quota's end is unknown"], ERROR_WAIT_MIN: ["avance", "Wait after an error"],
@@ -2661,7 +2675,7 @@ function champReglage(l, modeles) {
   if (l.cle === "SUBAGENT_MODEL") return choix(["", ...modeles, "auto"], nomModele);
   if (l.cle === "EFFORT") return choix(EFFORTS, (m) => m || t("normal"));
   if (l.cle === "KEEP_AWAKE") return choix(["1", "screen", "0"], (m) => t({ "1": "PC awake", screen: "PC and screen awake", "0": "no" }[m]));
-  if (["RTK", "UNREAL_MCP", "CLOSE_AFTER_MILESTONE"].includes(l.cle) && (l.valeur === "0" || l.valeur === "1")) return `<label class="interrupteur m0"><input type="checkbox" id="${id}" data-cle="${h(l.cle)}" ${l.valeur === "1" ? "checked" : ""}> <span>${l.valeur === "1" ? t("enabled") : t("disabled")}</span></label>`;
+  if (["RTK", "PONYTAIL", "UNREAL_MCP", "CLOSE_AFTER_MILESTONE"].includes(l.cle) && (l.valeur === "0" || l.valeur === "1")) return `<label class="interrupteur m0"><input type="checkbox" id="${id}" data-cle="${h(l.cle)}" ${l.valeur === "1" ? "checked" : ""}> <span>${l.valeur === "1" ? t("enabled") : t("disabled")}</span></label>`;
   return `<input type="${l.secret && !etat.envSecrets ? "password" : "text"}" id="${id}" data-cle="${h(l.cle)}" value="${h(l.valeur)}" ${l.secret ? 'autocomplete="off"' : ""}>`;
 }
 

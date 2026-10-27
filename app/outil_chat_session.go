@@ -36,6 +36,13 @@ func sessionChat(kit, projet, id, mode, modele, session string) int {
 	}
 	msg, _ := os.ReadFile(c + ".msg")
 	consigne, _ := os.ReadFile(c + ".prompt")
+	if ponytailActif() { // Ponytail (ponytail.go): a change the smallest complete one, a question answered lean
+		if mode == "modif" {
+			consigne = append(consigne, consignesPonytail...)
+		} else {
+			consigne = append(consigne, consignesPonytailLecture...)
+		}
+	}
 	args := []string{"-p", string(msg), "--output-format", "stream-json", "--verbose", "--max-turns", "40", "--strict-mcp-config",
 		"--settings", c + ".settings.json", "--append-system-prompt", string(consigne)}
 	if mode == "modif" {

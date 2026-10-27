@@ -183,12 +183,15 @@ func (p *pilote) lancerOuvrier(ident, ligne, journal, modele string) (*ouvrier, 
 	if p.agentsParJSON {
 		c := p.exeAthanor([]string{"SUBAGENT_MODEL=" + p.subagentModel, "CHEAP_MODEL=" + p.cheapModel}, "equipe", "json", p.kit, p.projet, filepath.Join(p.prive, "agents"), "--ouvrier")
 		out, _ := c.Output()
-		agents = strings.TrimRight(string(out), "\r\n")
+		agents = avecPonytailAgents(strings.TrimRight(string(out), "\r\n"))
 		if agents == "{}" {
 			agents = ""
 		}
 	}
 	consignes := lireTexteBrut(p.consignesBaseParallele()) + consignesOuvrierParallele(ident, ligne, agents != "", reprise)
+	if ponytailActif() {
+		consignes += consignesPonytail
+	}
 	if fRelais := filepath.Join(p.prive, "relais-"+ident+".md"); tailleFichierPilote(fRelais) > 0 {
 		consignes += "\n" + lireTexteBrut(fRelais)
 	}
@@ -786,7 +789,11 @@ func (p *pilote) cycleParallele(prefixe, template string) int {
 		branches = "(none)"
 	}
 	but := fmt.Sprintf("/goal The parallel cycle is verified according to your verification instructions: the branches %s are merged, bash .athanor/check.sh has been run and its output is shown, .athanor/PLAN.md ticks exactly the milestones that pass, .athanor/LOG.md has a new entry, git log shows the commit. Or stop after %d turns. %s", branches, p.maxTurnsPerCycle, p.phraseLangue)
-	consignes := strings.TrimRight(lireTexteBrut(p.consignesBaseParallele())+consignesFusionParallele(joindre(fusionnes), joindre(aFusionner), joindre(echoues)), "\r\n")
+	ponytail := ""
+	if ponytailActif() {
+		ponytail = consignesPonytail
+	}
+	consignes := strings.TrimRight(lireTexteBrut(p.consignesBaseParallele())+consignesFusionParallele(joindre(fusionnes), joindre(aFusionner), joindre(echoues))+ponytail, "\r\n")
 	args := []string{"-p", but, "--permission-mode", "bypassPermissions", "--settings", p.reglages, "--permission-prompts", "none", "--output-format", "stream-json", "--verbose"}
 	args = append(args, p.argsSurs...)
 	args = append(args, "--append-system-prompt", consignes)

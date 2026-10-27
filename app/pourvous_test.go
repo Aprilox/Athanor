@@ -58,8 +58,9 @@ func TestPourVous(t *testing.T) {
 		t.Fatalf("answer: %d %v", c, v)
 	}
 	// the value is sourced by a shell: quoted, never executed
-	sortie, err := exec.Command("bash", "-c", `set -a; . "$1"; set +a; printf %s "$SHOPIFY_TOKEN"`, "x", cheminSecrets(p)).Output()
-	if err != nil || string(sortie) != valeur {
+	if _, err := exec.LookPath("bash"); err != nil {
+		t.Log("no bash here (Windows without Git Bash, Wine): secrets.env is not sourced")
+	} else if sortie, err := exec.Command("bash", "-c", `set -a; . "$1"; set +a; printf %s "$SHOPIFY_TOKEN"`, "x", cheminSecrets(p)).Output(); err != nil || string(sortie) != valeur {
 		t.Fatalf("secrets.env: %q %v", sortie, err)
 	}
 	if fi, _ := os.Stat(cheminSecrets(p)); fi.Mode().Perm() != 0o600 && runtime.GOOS != "windows" { // (no such modes on Windows)
@@ -112,15 +113,16 @@ func TestPourVous(t *testing.T) {
 	ailleurs := filepath.Join(t.TempDir(), "x.json")
 	os.WriteFile(ailleurs, []byte(`{"T2":[{"tour":1,"action":"fait"}]}`), 0o644)
 	os.Remove(cheminPourVous(p, "replies.json"))
-	os.Symlink(ailleurs, cheminPourVous(p, "replies.json"))
-	if c, _ := appel("POST", "/api/pourvous?p=a", map[string]any{"id": "T2", "action": "fait"}); c != 200 {
-		t.Errorf("link: %d", c)
-	}
-	if b, _ := os.ReadFile(ailleurs); strings.Count(string(b), "tour") != 1 {
-		t.Errorf("written through the link: %s", b)
-	}
-	if fi, _ := os.Lstat(cheminPourVous(p, "replies.json")); !fi.Mode().IsRegular() {
-		t.Error("the link stayed in place")
+	if lienEssai(t, ailleurs, cheminPourVous(p, "replies.json")) {
+		if c, _ := appel("POST", "/api/pourvous?p=a", map[string]any{"id": "T2", "action": "fait"}); c != 200 {
+			t.Errorf("link: %d", c)
+		}
+		if b, _ := os.ReadFile(ailleurs); strings.Count(string(b), "tour") != 1 {
+			t.Errorf("written through the link: %s", b)
+		}
+		if fi, _ := os.Lstat(cheminPourVous(p, "replies.json")); !fi.Mode().IsRegular() {
+			t.Error("the link stayed in place")
+		}
 	}
 	// a pipe in place of tasks.json never blocks the application
 	os.Remove(cheminPourVous(p, "tasks.json"))

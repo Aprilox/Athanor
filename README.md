@@ -23,6 +23,7 @@
   <a href="#how-it-works"><b>How it works</b></a> ·
   <a href="#parallel-mode"><b>Parallel mode</b></a> ·
   <a href="#eco-mode"><b>Eco mode</b></a> ·
+  <a href="#saving-the-quota"><b>Saving the quota</b></a> ·
   <a href="#several-computers"><b>Several computers</b></a> ·
   <a href="#the-app"><b>The app</b></a> ·
   <a href="#security"><b>Security</b></a> ·
@@ -53,6 +54,7 @@ You describe what you want: a game, a website, an app, a tool. Athanor runs [Cla
 | **An autonomous loop** | One milestone per cycle, a fresh context each time, so turns stay cheap and the project never drifts. Usage limit reached → pause until it reopens, or switch to a fallback model. Error → retry with a growing delay. Silent or over-long cycle → cut and resumed. PC restarted → resumes where it stopped. All state lives in files. |
 | **Parallel mode** | One switch per project. A fine-grained plan with dependencies; up to 10 workers build independent milestones at once, each in its own git worktree; the pilot merges each one as soon as it finishes and starts the next, and the lead verifies once at the end. |
 | **Eco mode** | One switch per project, for when the quota matters more than speed: the lead does the work itself instead of handing it to sub-agents, one review at delivery, at most 4 images per cycle, shorter command outputs. The model and the effort stay as you set them. |
+| **Ponytail, built in** | On by default: Claude builds each milestone with the smallest complete change ([Ponytail](https://github.com/dietrichgebert/ponytail)'s rules), never less than the request. The Overview shows what is measured: the cache, what RTK spared, and the cycles with and without side by side. |
 | **Several computers** | Two, three or ten computers build one project together through its GitHub repository, each with an account that can push to it (the owner's, or a collaborator's: no organization needed): each one takes a milestone no other one builds, the ones it is best at first (a big graphics card for the 3D, a fast network for the big downloads), and they merge each other's work after every milestone. The Overview shows which computers are there and what each one builds. |
 | **A real team** | A project lead plus sub-agents: `scout`, `architect`, `creator`, `developer`, `tester`, `critic`, and a cheap `executor` (Haiku by default) for mechanical work. Scouts read for the framing, independent tests and the final critique are always delegated. |
 | **Skills & MCP** | Give Claude expertise and tools: a verified catalog (Anthropic skills, superpowers, Context7, Serena, Playwright, GitHub…), a search over thousands of community skills (SkillsMP) and over the official MCP Registry, any skill from a GitHub link, skills you write yourself, any MCP server pasted from its README, and Claude Code plugins from the official marketplace (and any other you add), like Shopify's or Stripe's. Switched on per project, for the lead and the parallel workers. Local MCP servers run in a cage, away from your files and the Claude token. |
@@ -211,6 +213,18 @@ Measured on a real game project, **sub-agents use most of the quota** (80 to 87 
 - **Less reading, shorter outputs.** The end of the log, the current milestone, the needed sections only; command outputs cut at 8,000 characters (`BASH_MAX_OUTPUT_LENGTH`, 20,000 otherwise).
 
 The **model and the thinking effort are not touched**: they stay as you set them. To save even more, choose a smaller model for the lead (Sonnet) and a lower effort (`medium` or `low`) in *Settings → Models*. The Overview shows *eco mode* while a cycle runs; the switch applies from the next cycle.
+
+---
+
+## Saving the quota
+
+Three things work on every project, and the Overview's *Usage* shows what each one measurably brings.
+
+- **Ponytail** (`PONYTAIL=1`, on by default; *Settings → Simplest code*). Athanor carries the rules of [Ponytail](https://github.com/dietrichgebert/ponytail) 5.3.2 (MIT) and gives them to **every** Claude session of the project: the lead, the parallel workers, every sub-agent (Athanor's and your own) and the app's chat. Those that write code get its rules: before writing, reuse what the project, the standard library or an installed dependency already has; then the smallest change that fully works, with a small test for any non-trivial logic. Those that plan, explore or judge (the framing, `architect`, `scout`, `critic`, the read-only agents, a chat question) get its lean way of working: read only what the question needs, answer short, and, for `critic`, report the code that should be smaller. One line of Athanor's sets its reach: Ponytail decides *how* a milestone is built, never *how much* of the request is delivered. Its plugin's own hooks are not used (they write in `~/.claude` and set up a status line). *Setup & health* says whether it is on.
+- **RTK** compresses the outputs of `git`, `ls`, `grep`, the tests… before Claude reads them. Its measures are now kept per project (`.athanor/rtk/`, out of git), and the pilot reads them after every cycle.
+- **The cache**: what Claude reads again within a session costs a tenth at list price.
+
+In *Usage*: the share of reading the cache saved, the tokens RTK spared, and, once 3 successful cycles of each kind exist, the average cost of a cycle **with and without** Ponytail (and the eco mode) on this project. That last line is a trend, not a test: the milestones differ from one cycle to the next, and no one can measure the code Ponytail kept Claude from writing. In a terminal, the *Progress* box says the same in one line.
 
 ---
 
@@ -420,6 +434,7 @@ Everything is editable in the app (*Settings*), or in `.env` ([`.env.example`](.
 | `IDLE_MAX_MIN`, `CYCLE_MAX_MIN`, `CLOSE_AFTER_MILESTONE` | cycle watchdog, one milestone per cycle |
 | `KEEP_AWAKE` | the PC stays awake while a pilot runs: `1` (default; the screen too for Roblox Studio and Unreal), `screen` (the screen always), `0` (off) |
 | `RTK`, `TZ` | command output compression, time zone of the logs (empty = the system's) |
+| `PONYTAIL` | Ponytail's rules for the cycles that build: `1` (default), `0` (off) |
 | `UE_DIR`, `BLENDER_EXE`, `ANDROID_SDK_DIR`, `ANDROID_JDK_DIR` | tool paths when auto-detection misses them (optional, absent by default) |
 
 When the quota is exhausted for every model, the pilot waits for it to reopen and resumes on its own.
@@ -581,7 +596,7 @@ Yes. Nothing is tied to a user name or a drive letter: paths come from your prof
 Push a version tag: GitHub first runs every CI check on the tagged commit (tests on Windows, Linux and macOS, the single executable, every build target), then builds the apps and publishes the release ([`.github/workflows/release.yml`](.github/workflows/release.yml)). If a single check fails (or anything after it), nothing is published: the tag is removed, and the release too if it was already created, so Athanor's updates never offer it. Fix, commit, then push the same tag again (`git tag -f v2.42.0 && git push origin v2.42.0`):
 
 ```bash
-git tag v2.42.0 && git push origin v2.42.0
+git tag v2.43.0 && git push origin v2.43.0
 ```
 
 Keep the version in [`app/winres/athanor.rc`](app/winres/athanor.rc) and `versionAthanor` in [`app/commandes.go`](app/commandes.go) in step with the tag (a test checks they match), and write what is new in `docs/releases/VERSION.md` (e.g. [`docs/releases/2.31.0.md`](docs/releases/2.31.0.md)): it opens the release page.
@@ -600,6 +615,7 @@ Issues and pull requests are welcome. Before opening one:
 ## Acknowledgements
 
 - [Claude Code](https://claude.com/claude-code), which does the actual work.
+- [Ponytail](https://github.com/dietrichgebert/ponytail) by Dietrich Gebert (MIT), whose rules Athanor carries (`app/ponytail.go`), and [RTK](https://github.com/rtk-ai/rtk), downloaded at installation, which compresses the command outputs.
 - [VirtualDesktop](https://github.com/MScholtes/VirtualDesktop) by Markus Scholtes (MIT), compiled on first use: fallback when the "Claude" desktop cannot be created (windows moved to a virtual desktop).
 - [go-webview2](https://github.com/jchv/go-webview2) (MIT) for the Windows window, [purego](https://github.com/ebitengine/purego) (Apache 2.0) for the Mac's Dock icon, and [bubblewrap](https://github.com/containers/bubblewrap) for the sandbox.
 - [cloudflared](https://github.com/cloudflare/cloudflared) (Apache 2.0), downloaded on first use, for the remote-access tunnel, and [rsc.io/qr](https://github.com/rsc/qr) (BSD-3-Clause) for its QR codes.

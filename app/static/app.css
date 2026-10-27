@@ -801,3 +801,8 @@ ol.guide-access li { margin: 5px 0; }
 @media (prefers-reduced-motion: reduce) { .surligne { animation: none; box-shadow: 0 0 0 3px var(--accent); } }
 .pas-pcs { margin: 6px 0 12px; padding-left: 20px; display: grid; gap: 6px; color: var(--muted); }
 .pas-pcs li .btn, .pas-pcs li .ok { margin-left: 6px; }
+
+.chiffre .gain { display: block; font-style: normal; color: var(--ok); font-weight: 600; }
+.gains .gain { color: var(--ok); }
+.gains .perte { color: var(--attention); }
+.gains ul { padding-left: 18px; }

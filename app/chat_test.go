@@ -50,6 +50,9 @@ func TestSessionChat(t *testing.T) {
 	if s := string(a); !strings.Contains(s, "--disallowedTools\nBash\nEdit\nWrite") || strings.Contains(s, "acceptEdits") || !strings.Contains(s, "--model\nsonnet") || !strings.Contains(s, "-p\nx-msg") {
 		t.Fatalf("question mode: %s", s)
 	}
+	if s := string(a); !strings.Contains(s, "x-prompt\n\n## Ponytail: lean work") || strings.Contains(s, "smallest complete change") {
+		t.Fatalf("question mode: Ponytail's lean work: %s", s)
+	}
 	if b, _ := os.ReadFile(filepath.Join(kit, "logs", "chat", "c1.jsonl")); !strings.Contains(string(b), "result") {
 		t.Fatalf("stream: %s", b)
 	}
@@ -70,6 +73,9 @@ func TestSessionChat(t *testing.T) {
 	a, _ = os.ReadFile(filepath.Join(d, "args"))
 	if s := string(a); !strings.Contains(s, "acceptEdits") || !strings.Contains(s, "--resume\nabc") {
 		t.Fatalf("modif mode: %s", s)
+	}
+	if s := string(a); !strings.Contains(s, "## Ponytail: the smallest complete change") {
+		t.Fatalf("modif mode: Ponytail's rules: %s", s)
 	}
 	if h, _ := os.ReadFile(filepath.Join(kit, "logs", "chat", "c1.commit")); len(strings.TrimSpace(string(h))) < 7 {
 		t.Fatalf("no commit")

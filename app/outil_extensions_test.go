@@ -274,8 +274,9 @@ for l in sys.stdin:
 func TestExtensionsBoucle(t *testing.T) {
 	d, _ := filepath.EvalSymlinks(t.TempDir())
 	kit, projet := kitExtensions(t, d)
-	_ = os.Symlink("..", filepath.Join(kit, "extensions/skills/lua/scripts/boucle"))
-	_ = os.Symlink("../../web", filepath.Join(kit, "extensions/skills/lua/scripts/voisin"))
+	if !lienEssai(t, "..", filepath.Join(kit, "extensions/skills/lua/scripts/boucle")) || !lienEssai(t, "../../web", filepath.Join(kit, "extensions/skills/lua/scripts/voisin")) {
+		t.Skip("no symbolic links here")
+	}
 	prive := filepath.Join(d, "prive")
 	so, _, code := capturer(t, func() int { return lancerExtensions([]string{"preparer", kit, projet, prive}) })
 	if code != 0 || !strings.HasPrefix(so, "skills: lua, web · plugins: outils · MCP: distant") {
