@@ -160,7 +160,7 @@ func lancerSante(args []string) int {
 
 // verifSante: the check ID of this system (the lists of sante.go, natif.go and sante_mac.go).
 func verifSante(goos, id string) func(kit string) int {
-	communs := map[string]func(string) int{"jeton": santeJeton, "outils_pc": santeOutilsPC, "outils_kit": santeOutilsKit}
+	communs := map[string]func(string) int{"jeton": santeJeton, "outils_pc": santeOutilsPC, "outils_kit": santeOutilsKit, "ponytail": santePonytail}
 	var propres map[string]func(string) int
 	switch goos {
 	case "windows":
@@ -311,6 +311,16 @@ func santeBarriereMac(string) int {
 }
 
 func santeClaude(string) int { return executerSante("claude", "--version") }
+
+// santePonytail: Ponytail is built into Athanor (ponytail.go); the check says whether Settings switch it on.
+func santePonytail(kit string) int {
+	if !ponytailDansEnv(filepath.Join(kit, ".env")) {
+		direSante("Ponytail %s built in, switched OFF in Settings (PONYTAIL=0)", versionPonytail)
+		return 1
+	}
+	direSante("Ponytail %s built in and on: the lead, the workers, every sub-agent and the chat get it", versionPonytail)
+	return 0
+}
 
 func santeRTK(kit string) int {
 	r := filepath.Join(kit, "system", "bin", "rtk")
@@ -546,6 +556,13 @@ func reparerSante(id, kit string) int {
 		return reparerClaude()
 	case "rtk":
 		return reparerRTK(kit)
+	case "ponytail":
+		if err := EcrireEnv(filepath.Join(kit, ".env"), map[string]string{"PONYTAIL": "1"}); err != nil {
+			direSante("Ponytail: .env IMPOSSIBLE to write: %v", err)
+			return 1
+		}
+		direSante("Ponytail switched on (PONYTAIL=1): from the next start of a pilot")
+		return santePonytail(kit)
 	case "outils_kit":
 		return reparerOutilsKit(kit)
 	}

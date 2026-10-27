@@ -28,6 +28,7 @@ func VerificationsNatives() []*Verif {
 		v("outils", "Programs the pilot needs", "git and curl for Windows; jq, Python and Node.js for the projects that use them, GitHub CLI to link a project to GitHub, uv for the MCP servers written in Python.", false, installer),
 		v("claude", "Claude Code for Windows", "The claude.exe program (%USERPROFILE%\\.local\\bin).", false, installer),
 		v("jeton", "Token and model access", "The token of your subscription (CLAUDE_CODE_OAUTH_TOKEN in .env) is accepted: a tiny Haiku session answers.", false, reparationJeton),
+		v("ponytail", "Ponytail, the simplest code", "Built in: Claude builds each milestone with the smallest complete change, never less than the request (Settings: Simplest code).", true, reparationKit("ponytail")),
 		v("outils_pc", "PC software detected", "Unreal, Blender, Android SDK, Docker… found on this PC and made available to Claude.", true, Reparation{Genre: "aucune"}),
 		v("outils_kit", "Athanor's files", "Athanor's executable passes its self-test and its texts for Claude (template/) are in place.", false, Reparation{Genre: "aucune"}),
 	}

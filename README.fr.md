@@ -23,6 +23,7 @@
   <a href="#comment-ça-marche"><b>Comment ça marche</b></a> ·
   <a href="#mode-parallèle"><b>Mode parallèle</b></a> ·
   <a href="#mode-éco"><b>Mode éco</b></a> ·
+  <a href="#économiser-le-quota"><b>Économiser le quota</b></a> ·
   <a href="#plusieurs-ordinateurs"><b>Plusieurs ordinateurs</b></a> ·
   <a href="#lapplication"><b>L'application</b></a> ·
   <a href="#sécurité"><b>Sécurité</b></a> ·
@@ -53,6 +54,7 @@ Vous décrivez ce que vous voulez : un jeu, un site, une application, un outil. 
 | **Une boucle autonome** | Un jalon par cycle et un contexte neuf à chaque fois : les tours restent économes et le projet ne dérive pas. Quota atteint → pause jusqu'à sa réouverture, ou bascule sur un modèle de secours. Erreur → nouvel essai avec un délai croissant. Cycle muet ou trop long → coupé et repris. PC redémarré → reprise là où il s'était arrêté. Tout l'état est dans des fichiers. |
 | **Mode parallèle** | Un interrupteur par projet. Un plan fin avec dépendances ; jusqu'à 10 ouvriers réalisent des jalons indépendants en même temps, chacun dans sa copie de travail git ; le pilote fusionne chacun dès qu'il termine et lance le suivant, et le chef vérifie une fois à la fin. |
 | **Mode éco** | Un interrupteur par projet, quand le quota compte plus que la vitesse : le chef fait le travail lui-même au lieu de le confier à des sous-agents, une seule revue à la livraison, 4 images au plus par cycle, des sorties de commandes plus courtes. Le modèle et l'effort restent tels que vous les avez réglés. |
+| **Ponytail, intégré** | Activé par défaut : Claude réalise chaque jalon avec la plus petite modification complète (les règles de [Ponytail](https://github.com/dietrichgebert/ponytail)), jamais moins que la demande. Le Suivi montre ce qui est mesuré : le cache, ce que RTK a épargné, et les cycles avec et sans, côte à côte. |
 | **Plusieurs ordinateurs** | Deux, trois ou dix ordinateurs construisent un même projet ensemble par son dépôt GitHub, chacun avec un compte qui peut y envoyer (celui du propriétaire, ou celui d'un contributeur : pas besoin d'organisation) : chacun prend un jalon qu'aucun autre ne construit, d'abord ceux pour lesquels il est le meilleur (une grosse carte graphique pour la 3D, un réseau rapide pour les gros téléchargements), et ils fusionnent le travail les uns des autres après chaque jalon. Le Suivi montre quels ordinateurs sont là et ce que chacun construit. |
 | **Une vraie équipe** | Un chef de projet et des sous-agents : `scout`, `architect`, `creator`, `developer`, `tester`, `critic`, et un `executor` bon marché (Haiku par défaut) pour le travail mécanique. Les éclaireurs lisent pour le cadrage, les tests indépendants et la critique finale sont toujours délégués. |
 | **Skills & MCP** | Donnez à Claude de l'expertise et des outils : un catalogue vérifié (skills d'Anthropic, superpowers, Context7, Serena, Playwright, GitHub…), une recherche dans des milliers de skills communautaires (SkillsMP) et dans le registre officiel MCP, n'importe quel skill depuis un lien GitHub, vos propres skills, n'importe quel serveur MCP collé depuis son README, et les plugins Claude Code du catalogue officiel (et de tout autre que vous ajoutez), comme ceux de Shopify ou de Stripe. Activés projet par projet, pour le chef comme pour les ouvriers en parallèle. Les serveurs MCP locaux tournent dans une cage, loin de vos fichiers et du jeton Claude. |
@@ -211,6 +213,18 @@ Mesuré sur un vrai projet de jeu, **ce sont les sous-agents qui consomment le p
 - **Moins de lecture, des sorties courtes.** La fin du journal, le jalon en cours, les seules sections utiles ; les sorties de commandes coupées à 8 000 caractères (`BASH_MAX_OUTPUT_LENGTH`, 20 000 sinon).
 
 Le **modèle et l'effort de réflexion ne sont pas touchés** : ils restent tels que vous les avez réglés. Pour économiser encore plus, choisissez un modèle plus petit pour le chef (Sonnet) et un effort plus bas (`medium` ou `low`) dans *Réglages → Modèles*. Le Suivi affiche *mode éco* pendant un cycle ; l'interrupteur s'applique dès le prochain cycle.
+
+---
+
+## Économiser le quota
+
+Trois mécanismes agissent sur chaque projet, et la *Consommation* du Suivi montre ce que chacun apporte de façon mesurée.
+
+- **Ponytail** (`PONYTAIL=1`, activé par défaut ; *Réglages → Code le plus simple*). Athanor embarque les règles de [Ponytail](https://github.com/dietrichgebert/ponytail) 5.3.2 (MIT) et les donne à **toutes** les sessions Claude du projet : le chef, les ouvriers en parallèle, chaque sous-agent (ceux d'Athanor et les vôtres) et la discussion de l'appli. Ceux qui écrivent du code reçoivent ses règles : avant d'écrire, réutiliser ce que le projet, la bibliothèque standard ou une dépendance installée offre déjà ; puis la plus petite modification qui fonctionne entièrement, avec un petit test pour toute logique non triviale. Ceux qui planifient, explorent ou jugent (le cadrage, `architect`, `scout`, `critic`, les agents en lecture seule, une question dans la discussion) reçoivent sa façon de travailler sobre : ne lire que ce que la question demande, répondre court et, pour `critic`, signaler le code qui devrait être plus petit. Une phrase d'Athanor fixe sa portée : Ponytail décide *comment* un jalon est construit, jamais *combien* de la demande est livré. Les hooks de son plugin ne sont pas utilisés (ils écrivent dans `~/.claude` et installent une ligne de statut). *Installation & santé* indique s'il est activé.
+- **RTK** compresse les sorties de `git`, `ls`, `grep`, des tests… avant que Claude les lise. Ses mesures sont maintenant gardées par projet (`.athanor/rtk/`, hors de git), et le pilote les relève après chaque cycle.
+- **Le cache** : ce que Claude relit pendant une session coûte un dixième au tarif public.
+
+Dans *Consommation* : la part de lecture économisée par le cache, les jetons épargnés par RTK et, dès 3 cycles réussis de chaque sorte, le coût moyen d'un cycle **avec et sans** Ponytail (et le mode éco) sur ce projet. Cette dernière ligne est une tendance, pas un test : les jalons diffèrent d'un cycle à l'autre, et personne ne peut mesurer le code que Ponytail a évité d'écrire. Dans un terminal, le cadre *Avancement* dit la même chose en une ligne.
 
 ---
 
@@ -423,6 +437,7 @@ Tout se modifie dans l'application (*Réglages*), ou dans `.env` ([`.env.example
 | `IDLE_MAX_MIN`, `CYCLE_MAX_MIN`, `CLOSE_AFTER_MILESTONE` | surveillance des cycles (muet 30 min ou plus long que 3 h → coupé et repris), un jalon par cycle |
 | `KEEP_AWAKE` | le PC reste éveillé tant qu'un pilote tourne : `1` (par défaut ; l'écran aussi pour Roblox Studio et Unreal), `screen` (l'écran toujours), `0` (désactivé) |
 | `RTK`, `TZ` | compression des sorties de commandes, fuseau horaire des journaux (vide = celui du système) |
+| `PONYTAIL` | les règles de Ponytail pour les cycles qui construisent : `1` (par défaut), `0` (désactivé) |
 | `UE_DIR`, `BLENDER_EXE`, `ANDROID_SDK_DIR`, `ANDROID_JDK_DIR` | chemins des outils quand la détection automatique les manque (facultatifs, absents par défaut) |
 
 Si le quota global est épuisé (tous modèles), le pilote attend la réouverture et reprend seul.
@@ -580,7 +595,7 @@ Oui. Rien n'est lié à un nom d'utilisateur ni à une lettre de disque : les ch
 Poussez un tag de version : GitHub lance d'abord toutes les vérifications de la CI sur le commit du tag (tests sous Windows, Linux et macOS, exécutable unique, toutes les cibles), puis compile les applications et publie la version ([`.github/workflows/release.yml`](.github/workflows/release.yml)). Si une seule vérification échoue (ou la suite), rien n'est publié : le tag est supprimé, ainsi que la version si elle avait déjà été créée, et les mises à jour d'Athanor ne la proposent jamais. Corrigez, commitez, puis poussez à nouveau le même tag (`git tag -f v2.42.0 && git push origin v2.42.0`).
 
 ```bash
-git tag v2.42.0 && git push origin v2.42.0
+git tag v2.43.0 && git push origin v2.43.0
 ```
 
 Gardez la version de [`app/winres/athanor.rc`](app/winres/athanor.rc) et `versionAthanor` dans [`app/commandes.go`](app/commandes.go) alignées sur le tag (un test vérifie qu'elles concordent), et écrivez les nouveautés dans `docs/releases/VERSION.md` (par ex. [`docs/releases/2.31.0.md`](docs/releases/2.31.0.md)) : elles ouvrent la page de la version.
@@ -599,6 +614,7 @@ Les issues et pull requests sont les bienvenues. Avant d'en ouvrir une :
 ## Remerciements
 
 - [Claude Code](https://claude.com/claude-code), qui fait le vrai travail.
+- [Ponytail](https://github.com/dietrichgebert/ponytail) de Dietrich Gebert (MIT), dont Athanor embarque les règles (`app/ponytail.go`), et [RTK](https://github.com/rtk-ai/rtk), téléchargé à l'installation, qui compresse les sorties de commandes.
 - [VirtualDesktop](https://github.com/MScholtes/VirtualDesktop) de Markus Scholtes (MIT), compilé au premier usage : solution de secours quand le bureau « Claude » ne peut pas être créé (fenêtres déplacées sur un bureau virtuel).
 - [go-webview2](https://github.com/jchv/go-webview2) (MIT) pour la fenêtre Windows, [purego](https://github.com/ebitengine/purego) (Apache 2.0) pour l'icône du Dock sur le Mac, et [bubblewrap](https://github.com/containers/bubblewrap) pour la barrière.
 - [cloudflared](https://github.com/cloudflare/cloudflared) (Apache 2.0), téléchargé au premier usage, pour le tunnel de l'accès à distance, et [rsc.io/qr](https://github.com/rsc/qr) (BSD-3-Clause) pour ses QR codes.

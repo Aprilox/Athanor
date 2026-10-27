@@ -28,6 +28,7 @@ func VerificationsMac() []*Verif {
 		v("barriere", "System sandbox", "Seatbelt (sandbox-exec), which keeps Claude and the MCP servers inside the project. Without it, the pilot refuses to start.", false, Reparation{Genre: "aucune"}),
 		v("claude", "Claude Code", "The claude program (~/.local/bin).", false, reparationKit("claude")),
 		v("jeton", "Token and model access", "The token of your subscription (CLAUDE_CODE_OAUTH_TOKEN in .env) is accepted: a tiny Haiku session answers.", false, reparationJeton),
+		v("ponytail", "Ponytail, the simplest code", "Built in: Claude builds each milestone with the smallest complete change, never less than the request (Settings: Simplest code).", true, reparationKit("ponytail")),
 		v("outils_pc", "PC software detected", "Unreal, Blender, Roblox Studio, Xcode, the Android SDK… found on this Mac and made available to Claude.", true, Reparation{Genre: "aucune"}),
 		v("outils_kit", "Athanor's files", "Athanor's executable passes its self-test and its texts for Claude (template/) are in place.", false, reparationKit("outils_kit")),
 	}

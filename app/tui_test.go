@@ -909,3 +909,24 @@ func TestTUISuiviGitHub(t *testing.T) {
 		t.Fatalf("unlinked: %s", s)
 	}
 }
+
+// The Overview's progress box says the savings measured.
+func TestTUISuiviGains(t *testing.T) {
+	a := nouvelleAppTUI(&clientTUI{projet: "a"}, false)
+	stats := []LigneStat{{Cycle: "1", Etat: "ok", CoutUSD: 1.5, Commit: "a1"}, {Cycle: "2", Etat: "ok", CoutUSD: 0.8, Commit: "b2"}}
+	a.vue = &EtatVue{Version: versionAthanor, KitValide: true, KitInstalle: true, Projets: []ProjetVue{{Nom: "a"}}, Projet: &ProjetVue{Nom: "a"},
+		Etat: &Etat{DernierCommit: "b2 M2"}, Stats: stats,
+		Gains: &GainsVue{CachePct: 71, RTKEntree: 4000, RTKEconomise: 2800, RTKPct: 70, Ponytail: true, VersionPonytail: versionPonytail,
+			Comparaisons: []ComparaisonVue{{Option: "ponytail", AvecN: 3, SansN: 4, AvecCout: 1, SansCout: 2, Ecart: -50}}}}
+	e := nouvelEcran(160, 45)
+	a.dessiner(e)
+	s := e.texteEcran()
+	for _, x := range []string{"cache: −71 % paid on reading", "RTK: 3 k tokens spared (−70 %)", "Ponytail " + versionPonytail, "Ponytail: -50 % per cycle"} {
+		if !strings.Contains(s, x) {
+			t.Fatalf("no %q in\n%s", x, s)
+		}
+	}
+	for _, taille := range [][2]int{{80, 24}, {60, 16}} {
+		a.dessiner(nouvelEcran(taille[0], taille[1]))
+	}
+}

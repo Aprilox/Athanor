@@ -221,8 +221,11 @@ type LigneStat struct {
 	SortieTokens int64   `json:"sortie_tokens"`
 	ContexteMax  int64   `json:"contexte_max"`
 	Commit       string  `json:"commit"`
-	Estime       bool    `json:"estime"`          // cost worked out by the pilot from the turns of the lead and its sub-agents (no "result" line)
-	Titre        string  `json:"titre,omitempty"` // the cycle's milestone, as the pilot's log says it ("Cycle 12 succeeded: M8a: …")
+	Estime       bool    `json:"estime"`                  // cost worked out by the pilot from the turns of the lead and its sub-agents (no "result" line)
+	Titre        string  `json:"titre,omitempty"`         // the cycle's milestone, as the pilot's log says it ("Cycle 12 succeeded: M8a: …")
+	Options      string  `json:"options,omitempty"`       // what the cycle ran with: "ponytail,eco,rtk" (empty before 2.43)
+	RTKEntree    int64   `json:"rtk_entree,omitempty"`    // tokens of the command outputs RTK received during the cycle
+	RTKEconomise int64   `json:"rtk_economise,omitempty"` // the tokens of those RTK did not pass on to Claude
 }
 
 func (p Projet) LireStats() []LigneStat {
@@ -244,7 +247,7 @@ func (p Projet) LireStats() []LigneStat {
 		}
 		f := func(n int) float64 { v, _ := strconv.ParseFloat(g(n), 64); return v }
 		e := func(n int) int64 { v, _ := strconv.ParseInt(g(n), 10, 64); return v }
-		out = append(out, LigneStat{g(0), g(1), g(2), g(3), f(4), f(5), e(6), f(7), e(8), e(9), e(10), e(11), e(12), g(13), g(14) == "1", ""})
+		out = append(out, LigneStat{g(0), g(1), g(2), g(3), f(4), f(5), e(6), f(7), e(8), e(9), e(10), e(11), e(12), g(13), g(14) == "1", "", g(15), e(16), e(17)})
 	}
 	if len(out) > 0 {
 		titres := titresCycles(p.PiloteLog())

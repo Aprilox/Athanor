@@ -76,7 +76,9 @@ func TestPiecesJointes(t *testing.T) {
 	// a link in place of the attachments folder: refused
 	os.RemoveAll(filepath.Join(p.Atelier(), "attachments"))
 	ailleurs := t.TempDir()
-	os.Symlink(ailleurs, filepath.Join(p.Atelier(), "attachments"))
+	if !lienEssai(t, ailleurs, filepath.Join(p.Atelier(), "attachments")) {
+		return
+	}
 	if c, _ := envoi("demande", "y.txt", []byte("y")); c != 400 {
 		t.Errorf("link followed: %d", c)
 	}

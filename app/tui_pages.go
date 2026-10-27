@@ -791,11 +791,39 @@ func (a *appTUI) boiteProgres(e *ecranT, x, y, l, h int) {
 			e.mettre(ix+i*larg+j, iy+1, barres[min(7, max(0, k))], a.st(coul, fond))
 		}
 	}
+	// the savings measured (gains.go), between the bars and the cycles
+	haut := 3
+	if g := a.vue.Gains; g != nil && ih >= 4 {
+		var parts []string
+		if g.CachePct > 0 {
+			parts = append(parts, a.t("cache: −{0} % paid on reading", g.CachePct))
+		}
+		if g.RTKEntree > 0 {
+			parts = append(parts, a.t("RTK: {0} tokens spared (−{1} %)", fmtTokensTUI(g.RTKEconomise), g.RTKPct))
+		}
+		if g.Ponytail {
+			parts = append(parts, "Ponytail "+g.VersionPonytail)
+		}
+		for _, c := range g.Comparaisons {
+			nom := map[string]string{"ponytail": "Ponytail", "eco": a.t("Eco mode")}[c.Option]
+			parts = append(parts, a.t("{0}: {1} % per cycle", nom, fmt.Sprintf("%+d", c.Ecart)))
+		}
+		if len(parts) > 0 {
+			lignes := envelopper(strings.Join(parts, " · "), il)
+			if len(lignes) > 2 {
+				lignes = lignes[:2]
+			}
+			for i, li := range lignes {
+				e.texte(ix, iy+2+i, il, li, a.st(p.ok, fond))
+			}
+			haut = 2 + len(lignes)
+		}
+	}
 	// the newest cycles
-	for i := 0; i < ih-3 && i < len(stats); i++ {
+	for i := 0; i < ih-haut && i < len(stats); i++ {
 		st := stats[len(stats)-1-i]
 		droite := fmt.Sprintf("%s  %.2f $", a.t("{0} min", int(math.Round(st.Minutes))), st.CoutUSD)
-		e.texte(ix, iy+3+i, 6, st.Cycle, a.st(p.muet, fond))
+		e.texte(ix, iy+haut+i, 6, st.Cycle, a.st(p.muet, fond))
 		titre := st.Titre
 		if _, id, ok := strings.Cut(st.Cycle, "·"); ok && titre == "" {
 			for _, j := range a.vue.Plan {
@@ -804,8 +832,8 @@ func (a *appTUI) boiteProgres(e *ecranT, x, y, l, h int) {
 				}
 			}
 		}
-		e.texte(ix+6, iy+3+i, il-6-largeurTexte(droite)-1, firstNonEmpty(titre, st.Commit), a.st(p.encre, fond))
-		e.texte(ix+il-largeurTexte(droite), iy+3+i, 0, droite, a.st(p.muet, fond))
+		e.texte(ix+6, iy+haut+i, il-6-largeurTexte(droite)-1, firstNonEmpty(titre, st.Commit), a.st(p.encre, fond))
+		e.texte(ix+il-largeurTexte(droite), iy+haut+i, 0, droite, a.st(p.muet, fond))
 	}
 }
 

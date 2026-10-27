@@ -704,7 +704,7 @@ func (p *pilote) preparerEquipe() {
 	}
 	_ = os.Setenv("SUBAGENT_MODEL", p.subagentModel)
 	_ = os.Setenv("CHEAP_MODEL", p.cheapModel)
-	p.agentsJSON = strings.TrimSpace(equipeJSON(p.kit, p.projet, dossierAgents, false))
+	p.agentsJSON = strings.TrimSpace(avecPonytailAgents(equipeJSON(p.kit, p.projet, dossierAgents, false)))
 	if p.agentsJSON == "" {
 		p.agentsJSON = "{}"
 	}
@@ -1455,6 +1455,9 @@ func (p *pilote) lireModeParallele() {
 		}
 	}
 	p.eco = ecoStr == "1"
+	if ponytailActif() {
+		p.logUneFois("ponytail", "Ponytail "+versionPonytail+" on: Claude builds each milestone with the smallest complete change (never less than the request and the plan). Settings: PONYTAIL.")
+	}
 	if e := map[bool]string{true: "1", false: "0"}[p.eco]; e != p.ecoAnnonce {
 		if p.eco {
 			p.log("Eco mode on: the quota first. The lead does the work itself (sub-agents only when indispensable, one review at delivery), few images, short outputs. The model and the effort stay as set.")
@@ -2308,6 +2311,13 @@ func lancerPilote(args []string) int {
 		p.log("Cannot write Claude's settings.")
 		return 1
 	}
+	// RTK keeps its measures (what it spared) in the project's workshop: the sandbox keeps it out of ~/
+	if r := filepath.Join(p.kit, "system", "bin", "rtk"); !p.natif && os.Getenv("RTK") != "0" && fichierExecutablePilote(r) {
+		p.rtkBin = r
+		_ = os.MkdirAll(dossierRTK(p.projet), 0o755)
+		_ = os.Setenv("RTK_DB_PATH", filepath.Join(dossierRTK(p.projet), "history.db"))
+		_ = os.Setenv("RTK_TELEMETRY_DISABLED", "1")
+	}
 
 	p.preparerExtensions()
 	p.preparerEcran()
@@ -2574,6 +2584,21 @@ func lancerPilote(args []string) int {
 			p.absorberFileParallele()
 			p.synchroniserDemande()
 		}
+		// what the cycle runs with (stats.tsv: the Overview compares the cycles with and without)
+		var opts []string
+		if ponytailActif() {
+			opts = append(opts, "ponytail")
+		}
+		if p.eco {
+			opts = append(opts, "eco")
+		}
+		if p.rtkBin != "" {
+			opts = append(opts, "rtk")
+		}
+		if cadrage {
+			opts = append(opts, "cadrage")
+		}
+		p.optionsCycle = strings.Join(opts, ",")
 		mode := "serie"
 		butCycle := but
 		if j := p.jalonPC; j != nil && !cadrage && j.ID != jalonCadragePC && j.ID != jalonLivraisonPC {
@@ -2689,6 +2714,16 @@ func lancerPilote(args []string) int {
 			b1, _ := os.ReadFile(consignesCycle)
 			consignesCycle = filepath.Join(p.prive, "CLAUDE.pcs.md")
 			_ = os.WriteFile(consignesCycle, append(b1, consignePCs(p.equipePC.moi, p.equipePC.pcs, *j)+notesEquipeConsigne(p.etat)...), 0o644)
+		}
+		// Ponytail (ponytail.go): the smallest complete change; the framing plans, so its lean work
+		if ponytailActif() && mode == "serie" {
+			ajout := consignesPonytail
+			if cadrage {
+				ajout = consignesPonytailLecture
+			}
+			b1, _ := os.ReadFile(consignesCycle)
+			consignesCycle = filepath.Join(p.prive, "CLAUDE.ponytail.md")
+			_ = os.WriteFile(consignesCycle, append(b1, []byte(ajout)...), 0o644)
 		}
 		// the eco mode: its rules last (they come before the others), shorter command outputs
 		bashMax := p.bashMax

@@ -105,6 +105,7 @@ type EtatVue struct {
 	Maj         *EtatMaj              `json:"maj,omitempty"`    // updates of Athanor (maj.go)
 	GitHub      *SuiviGitHub          `json:"github,omitempty"` // the Overview's GitHub line (.athanor/github.json)
 	Eco         bool                  `json:"eco,omitempty"`    // the project's eco mode (.athanor/.env ECO=1)
+	Gains       *GainsVue             `json:"gains,omitempty"`  // the savings measured on the project's cycles (gains.go)
 	// a stop asked for the end of the current cycle: "arret" (Stop after cycle), "relance" (restart to
 	// apply settings); the buttons say so
 	ArretDemande string `json:"arret_demande,omitempty"`
@@ -192,6 +193,7 @@ func (s *Serveur) apiEtat(w http.ResponseWriter, r *http.Request) {
 		vue.Attente = len(p.LireFileAttente())
 		vue.PourVous = p.PourVous()
 		vue.Stats = p.LireStats()
+		vue.Gains = calculerGains(vue.Stats, ponytailDansEnv(kit.Env()))
 		vue.Eco = p.EcoActif()
 		if b, err := lireAtelier(p, "github.json", 64<<10); err == nil {
 			var g SuiviGitHub
