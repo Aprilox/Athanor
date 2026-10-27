@@ -1217,7 +1217,7 @@ func (p *pilote) preparerCycle() {
 		if rojoF := p.robloxProjetRojo(); rojoF != "" {
 			p.robloxSyncDemarrer()
 			place = p.robloxPlaceStudio(rojoF)
-			if !processusTourne("RobloxStudioBeta.exe") {
+			if !studioRobloxOuvert() {
 				c := p.commandePasserelleInterne("rojo-construire", rojoF, place)
 				fLog, _ := os.OpenFile(filepath.Join(p.prive, "pilot.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 				if fLog != nil {

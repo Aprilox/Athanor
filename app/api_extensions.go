@@ -69,25 +69,24 @@ type Catalogue struct {
 		Description texteLangues `json:"description"`
 	} `json:"skills"`
 	MCP []struct {
-		ID        string            `json:"id"`
-		Nom       string            `json:"nom"`
-		Depot     string            `json:"depot"`
-		Licence   string            `json:"licence"`
-		Prerequis string            `json:"prerequis"`
-		Config    ConfigMCP         `json:"config"`
-		Secrets   []SecretCatalogue `json:"secrets"`
-		Reglages  []struct {
-			Nom    string `json:"nom"`
-			Defaut string `json:"defaut"`
-		} `json:"reglages"`
-		Ouvrir      *OuvrirMCP   `json:"ouvrir,omitempty"` // the program the pilot opens before each cycle (outil_ouvrir.go)
-		Description texteLangues `json:"description"`
+		ID          string                 `json:"id"`
+		Nom         string                 `json:"nom"`
+		Depot       string                 `json:"depot"`
+		Licence     string                 `json:"licence"`
+		Prerequis   string                 `json:"prerequis"`
+		Config      ConfigMCP              `json:"config"`
+		Secrets     []SecretCatalogue      `json:"secrets"`
+		Reglages    []ReglageCatalogue     `json:"reglages"`
+		Ouvrir      *OuvrirMCP             `json:"ouvrir,omitempty"`   // the program the pilot opens before each cycle (outil_ouvrir.go)
+		Systemes    map[string]VarianteMCP `json:"systemes,omitempty"` // what changes on macOS or Linux (mcp_systemes.go)
+		Description texteLangues           `json:"description"`
 	} `json:"mcp"`
 }
 
 func lireCatalogue() Catalogue {
 	var c Catalogue
 	_ = json.Unmarshal(jsonRemplacable("app/catalogue.json", catalogueJSON), &c) // a repair of local/ first (textes.go)
+	appliquerSystemes(&c, systemeMCP())
 	return c
 }
 
@@ -892,6 +891,7 @@ func (s *Serveur) apiExtensions(w http.ResponseWriter, r *http.Request) {
 		skills = append(skills, v)
 	}
 	for id, x := range b.MCP {
+		x = installeDuSysteme(x, cat) // a Windows configuration on macOS or Linux: this system's (mcp_systemes.go)
 		v := ExtVue{ID: id, Nom: x.Nom, Description: x.Description, Source: x.Source, Catalogue: x.Catalogue, Actif: contient(ch.MCP, id), Type: x.Config.Type, Plugin: x.Plugin}
 		if x.Plugin != "" {
 			v.Actif = contient(ch.Plugins, x.Plugin)
@@ -917,7 +917,7 @@ func (s *Serveur) apiExtensions(w http.ResponseWriter, r *http.Request) {
 				v.Type = "http"
 			}
 		} else {
-			v.Resume = montrer(strings.TrimSpace(x.Config.Command + " " + strings.Join(x.Config.Args, " ")))
+			v.Resume = montrer(commandeHote(strings.TrimSpace(x.Config.Command+" "+strings.Join(x.Config.Args, " ")), "athanor"))
 			if v.Type != "windows" {
 				v.Type = "stdio"
 			}

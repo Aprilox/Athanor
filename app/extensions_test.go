@@ -173,6 +173,7 @@ func TestProgrammeWindows(t *testing.T) {
 }
 
 func TestCatalogueRobloxStudio(t *testing.T) {
+	systemeEssai(t, "windows") // the Windows configuration (macOS and Linux: roblox_ailleurs_test.go)
 	for _, m := range lireCatalogue().MCP {
 		if m.ID != "roblox-studio" {
 			continue
