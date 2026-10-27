@@ -82,6 +82,9 @@ type pilote struct {
 	verrouVu       bool
 	parallel       bool
 	parallelMax    int
+	eco            bool   // the eco mode (ECO=1 in .athanor/.env): every lever but the model and the effort set for the quota
+	ecoAnnonce     string // "1"/"0": the eco state last logged
+	bashMax        string // BASH_MAX_OUTPUT_LENGTH outside the eco mode
 	quotaOuvriers  bool
 	modeleVerif    string
 	verrouFichier  *os.File

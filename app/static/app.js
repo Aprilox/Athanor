@@ -553,7 +553,7 @@ function phraseEtat(v) {
   switch (e.phase) {
     // the pilot has just stopped (its last heartbeat is still recent): same wording as a stopped pilot
     case "arrete": return { classe: "", titre: t("Pilot stopped"), sous: e.dernier_commit ? t("Last saved work: {0}", [e.dernier_commit]) : t("Click Start to resume.") };
-    case "travail": return { classe: "travaille", titre: e.ouvriers ? t("{0} workers in parallel: {1}", [e.ouvriers.split(/\s+/).length, e.ouvriers.split(/\s+/).join(", ")]) : /^Merging/.test(e.etat || "") ? t("The lead merges the workers' branches") : e.jalon_en_cours ? t("Claude is working on {0}", [titreJalon(e.jalon_en_cours)]) : t("Claude is working"), sous: [e.debut_cycle && t("for {0}", [depuis(e.debut_cycle)]), t("cycle {0}", [e.cycle]), e.template, v.contexte && t("context {0} tokens", [fmtTokens(v.contexte)])].filter(Boolean).join(" · ") };
+    case "travail": return { classe: "travaille", titre: e.ouvriers ? t("{0} workers in parallel: {1}", [e.ouvriers.split(/\s+/).length, e.ouvriers.split(/\s+/).join(", ")]) : /^Merging/.test(e.etat || "") ? t("The lead merges the workers' branches") : e.jalon_en_cours ? t("Claude is working on {0}", [titreJalon(e.jalon_en_cours)]) : t("Claude is working"), sous: [e.debut_cycle && t("for {0}", [depuis(e.debut_cycle)]), t("cycle {0}", [e.cycle]), e.template, v.eco && t("eco mode"), v.contexte && t("context {0} tokens", [fmtTokens(v.contexte)])].filter(Boolean).join(" · ") };
     case "quota": return { classe: "quota", titre: t("Usage limit reached, Claude is waiting"), sous: t("Resumes {0} · cycle {1}", [e.reprise_prevue || t("as soon as possible"), e.cycle]) };
     case "attente_vous": return { classe: "quota", titre: t("Claude is waiting for you"), sous: t("{0} task(s) on the For you page: the pilot resumes as soon as you answer one.", [v.pour_vous || 0]) };
     case "entre_cycles": return { classe: "entre_cycles", titre: t("Between two cycles"), sous: t("Cycle {0} is done, the next one starts with a fresh context.", [e.cycle]) };
@@ -1008,19 +1008,29 @@ document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && etat.v
 // --- working mode of the project (serial lead, or parallel workers + merge)
 async function rendreMode() {
   const m = await api("mode").catch(() => null); if (!m) return "";
-  // one line: the long explanations are in the tooltips
+  etat.modeMax = m.parallele_max;
+  // one line per mode, under each other: the long explanations are in the tooltips
   const long = t("the lead writes a fine-grained plan with dependencies; workers build independent milestones at the same time, each in its own git working copy; the pilot merges each one as soon as it finishes and starts the next, and the lead verifies and fixes. Much faster; uses more quota (one session per worker).");
-  return `<div class="bloc mode-ligne"><div class="ligne m0">
+  const longEco = t("Every lever but the model and the effort is set for the quota: the lead does the work itself instead of handing it to sub-agents (they use most of the quota), the critic and the tester run once, at delivery, at most 4 images per cycle, shorter command outputs. Slower to polish, much lighter on the quota. Applies from the next cycle.");
+  return `<div class="bloc mode-ligne"><div class="mode-grille">
     <h2 class="m0">${t("Working mode")}</h2>
+    <div class="ligne m0">
     <label class="interrupteur m0" title="${h(long)}"><input type="checkbox" id="md-parallele" ${m.parallele ? "checked" : ""}><span><b>${t("Parallel mode")}</b></span></label>
     <span class="muet petit" title="${h(long)}">${m.parallele ? t("several workers at once: faster, uses more quota") : t("one milestone at a time; parallel: several workers at once, faster, more quota")}</span>
     ${m.parallele ? `<span class="espace"></span><span class="petit" title="${h(t("Starts with 2, adds one each time a worker delivers, and starts no more once the quota is met. Applies from the next cycle."))}">${t("Workers at most")}</span><div class="choix m0">${[2, 3, 4, 6, 8, 10].map((n) => `<button type="button" data-max="${n}" class="${m.parallele_max === n ? "actif" : ""}">${n}</button>`).join("")}</div>` : ""}
+    </div>
+    <div class="ligne m0 mode-suite">
+    <label class="interrupteur m0" title="${h(longEco)}"><input type="checkbox" id="md-eco" ${m.eco ? "checked" : ""}><span><b>${t("Eco mode")}</b></span></label>
+    <span class="muet petit" title="${h(longEco)}">${m.eco ? t("the quota first: the lead works alone, one review at delivery, few images, short outputs") : t("spends as little quota as possible; never together with the parallel mode")}</span>
+    </div>
+    ${m.eco ? `<p class="muet petit m0 mode-suite">${t("To save even more: a smaller model for the lead (Sonnet) and a lower thinking effort (medium or low), in Settings.")}</p>` : ""}
   </div></div>`;
 }
-async function enregistrerMode(parallele, max) {
-  const r = await action(api("mode", "POST", { parallele, parallele_max: max }));
+async function enregistrerMode(parallele, max, eco) {
+  const r = await action(api("mode", "POST", { parallele, parallele_max: max, eco: !!eco }));
   if (r) rendrePage();
 }
+function maxModeActif() { const actif = $("#page .mode-ligne .choix button.actif"); return actif ? Number(actif.dataset.max) : etat.modeMax || 3; }
 
 // --- chat with Claude about the project (api_chat.go): questions always; changes while the pilot is
 // stopped (Athanor commits them); while it runs, Claude writes the change as a note for the pilot
@@ -3228,7 +3238,7 @@ $("#page").addEventListener("click", async (ev) => {
   if (b.dataset.pv) return repondreTache(b);
   if (b.dataset.choisirPieces) return $("#" + b.dataset.choisirPieces + "-fichiers").click();
   if (b.dataset.retirerPiece) { const [id, i] = b.dataset.retirerPiece.split("|"); (etat.pieces[id] || []).splice(Number(i), 1); $("#" + id + "-liste").innerHTML = listePieces(id); return; }
-  if (b.dataset.max && page === "projet") return enregistrerMode($("#md-parallele").checked, Number(b.dataset.max));
+  if (b.dataset.max && page === "projet") return enregistrerMode($("#md-parallele").checked, Number(b.dataset.max), $("#md-eco") && $("#md-eco").checked);
   if (page === "nouveau") {
     if (b.dataset.npMode) { etat.npRejoindre = b.dataset.npMode === "rejoindre"; return rendrePage(); }
     if (b.id === "rj-rejoindre") {
@@ -3352,7 +3362,8 @@ $("#page").addEventListener("change", (ev) => {
   if (i.id === "gh-auteur-email") { const a = $("#gh-auteur-autre"); a.hidden = i.value !== ""; if (!a.hidden) a.focus(); }
   if (i.hasAttribute("data-gh-auto")) action(api("github", "POST", { action: "auto", auto: i.checked })).then((r) => { if (!r) i.checked = !i.checked; });
   if (i.hasAttribute("data-gh-atelier")) action(api("github", "POST", { action: "atelier", atelier: i.checked })).then((r) => { if (!r) i.checked = !i.checked; });
-  if (i.id === "md-parallele") { const actif = $("#page .choix button.actif"); enregistrerMode(i.checked, actif ? Number(actif.dataset.max) : 3); }
+  if (i.id === "md-parallele") enregistrerMode(i.checked, maxModeActif(), i.checked ? false : $("#md-eco") && $("#md-eco").checked); // one or the other
+  if (i.id === "md-eco") enregistrerMode(i.checked ? false : $("#md-parallele").checked, maxModeActif(), i.checked);
 });
 // attached files: chosen with the button or dropped on a form's zone; a file dropped elsewhere is ignored
 // (otherwise the window would open it in place of the application)

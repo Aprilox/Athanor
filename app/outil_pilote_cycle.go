@@ -1437,21 +1437,13 @@ func (p *pilote) githubPousserNouveau() {
 func (p *pilote) lireModeParallele() {
 	p.parallel = false
 	p.parallelMax = 3
-	if p.jalonPC != nil {
-		// several computers: each one builds one milestone at a time (the others are the parallel workers)
-		if b, err := os.ReadFile(filepath.Join(p.etat, ".env")); err == nil && strings.Contains(string(b), "PARALLEL=1") {
-			p.logUneFois("pcs-parallele", "Several computers: the parallel mode is off on this project, each computer building one milestone at a time.")
-		}
-		return
-	}
-	b, err := os.ReadFile(filepath.Join(p.etat, ".env"))
-	if err != nil {
-		return
-	}
-	parStr, maxStr := "0", "3"
+	b, _ := os.ReadFile(filepath.Join(p.etat, ".env"))
+	parStr, maxStr, ecoStr := "0", "3", "0"
 	for _, l := range strings.Split(string(b), "\n") {
 		l = strings.TrimSuffix(l, "\r")
 		switch {
+		case strings.HasPrefix(l, "ECO="):
+			ecoStr = l[len("ECO="):]
 		case strings.HasPrefix(l, "PARALLEL="):
 			parStr = l[len("PARALLEL="):]
 		case strings.HasPrefix(l, "PARALLELE="):
@@ -1461,6 +1453,26 @@ func (p *pilote) lireModeParallele() {
 		case strings.HasPrefix(l, "PARALLELE_MAX="):
 			maxStr = l[len("PARALLELE_MAX="):]
 		}
+	}
+	p.eco = ecoStr == "1"
+	if e := map[bool]string{true: "1", false: "0"}[p.eco]; e != p.ecoAnnonce {
+		if p.eco {
+			p.log("Eco mode on: the quota first. The lead does the work itself (sub-agents only when indispensable, one review at delivery), few images, short outputs. The model and the effort stay as set.")
+		} else if p.ecoAnnonce != "" {
+			p.log("Eco mode off: back to the usual way of working.")
+		}
+		p.ecoAnnonce = e
+	}
+	if p.jalonPC != nil {
+		// several computers: each one builds one milestone at a time (the others are the parallel workers)
+		if parStr == "1" {
+			p.logUneFois("pcs-parallele", "Several computers: the parallel mode is off on this project, each computer building one milestone at a time.")
+		}
+		return
+	}
+	if parStr == "1" && p.eco {
+		p.logUneFois("eco-parallele", "Eco mode on: the parallel mode is off (the two do not run together).")
+		parStr = "0"
 	}
 	if parStr == "1" {
 		p.parallel = true
@@ -1673,6 +1685,29 @@ Plan rules (` + "`.athanor/PLAN.md`" + `):
 - ` + "`## Wave N`" + ` headings are still accepted (a milestone without ` + "`Depends on:`" + ` depends on every milestone of the earlier waves), but explicit dependencies are preferred: they let the pilot start work earlier.
 - **Additional requests** (sections "Additional request" of REQUEST.md, flagged by ` + "`.athanor/REQUEST_CHANGED`" + `): turn each into milestones with their dependencies and append them to the plan; keep a single final delivery milestone at the very end that depends on everything.
 If the plan already exists without ` + "`Depends on:`" + ` nor waves, add the dependencies without changing the milestones' content (commit), and stop there for this cycle.
+`
+
+// bashMaxEco: the longest command output Claude receives in the eco mode (BASH_MAX_OUTPUT_LENGTH).
+const bashMaxEco = 8000
+
+// consignesEcoPilote: the eco mode's rules, added last to the instructions of every cycle. Measured on a real
+// project, sub-agents used most of the quota (80 to 87 %): each one starts from zero and pays for its whole
+// context at every turn. The model and the effort are the user's choice and are not touched.
+const consignesEcoPilote = `
+
+## Eco mode (active for this project)
+
+The user switched on the **eco mode**: in this project the quota comes before everything else, speed included. These rules come before "Working fast and frugally", "Your team (sub-agents)", the phases and the framing steps wherever they differ. Measured on a real project, sub-agents used most of the quota: each one starts from zero and pays again for its whole context (documents, code, images) at every one of its turns.
+
+- **Do the work yourself.** No sub-agent for an ordinary milestone, nor for a large chunk: split the milestone in ` + "`.athanor/PLAN.md`" + ` instead. Call one of the project's own sub-agents (` + "`.athanor/TEAM.md`" + `) only when the request or the user's notes demand that agent for this precise milestone. Do not propose new sub-agents.
+- **One review, at the end.** ` + "`critic`" + ` and ` + "`tester`" + ` run only for the delivery (phase 5), once each: not at the end of the complete slice, not in the polish, never a second review or a counter-review of the same work. Their feedback goes to ` + "`.athanor/BUGS.md`" + `; you fix the important items yourself.
+- **Framing:** no ` + "`scout`" + ` unless attachments or existing code are too large to read yourself (one at most), and no ` + "`critic`" + ` on the plan.
+- **When a sub-agent does run,** its brief names the files it may read and says to read nothing else, allows 4 image reads at most, asks for long outputs redirected to files, and for an answer of 15 lines at most. Do not refine its work through messages back and forth: finish it yourself.
+- ` + "`executor`" + ` stays allowed for mechanical work that produces a lot of text for little thinking (it spares your context), with a closed brief.
+- **Images: 4 reads at most per cycle,** captures through MCP servers included. Judge several at once on a reduced contact sheet (` + "`montage a.png b.png c.png d.png -tile 2x2 -geometry 480x270+4+4 /tmp/sheet.png`" + `) or on a crop; take a new screenshot only after a visible change; never read again an image identical to its reference (` + "`athanor screenshots`" + `).
+- **Read less:** the end of ` + "`.athanor/LOG.md`" + ` (` + "`tail -n 40`" + `), the current milestone's lines of ` + "`.athanor/PLAN.md`" + `, and only the sections of the documents it needs (` + "`grep -n word .athanor/MAP.md`" + ` first). Never reread a whole document to be sure.
+- **Short outputs:** never more than 40 lines printed at once (command outputs are also cut by the pilot in this mode); logs go to files, then ` + "`tail`" + ` or ` + "`grep`" + `.
+- **Brief writing:** a ` + "`.athanor/LOG.md`" + ` entry fits in 3 lines, your final answer in 5 lines plus the last lines of the check.
 `
 
 func trouverBashNatifPilote() string {
@@ -2015,7 +2050,8 @@ func lancerPilote(args []string) int {
 	}
 	_ = os.Setenv("CLAUDE_CODE_DISABLE_BACKGROUND_TASKS", defEnv("CLAUDE_CODE_DISABLE_BACKGROUND_TASKS", "1"))
 	_ = os.Setenv("ENABLE_CLAUDEAI_MCP_SERVERS", "false")
-	_ = os.Setenv("BASH_MAX_OUTPUT_LENGTH", defEnv("BASH_MAX_OUTPUT_LENGTH", "20000"))
+	p.bashMax = defEnv("BASH_MAX_OUTPUT_LENGTH", "20000")
+	_ = os.Setenv("BASH_MAX_OUTPUT_LENGTH", p.bashMax)
 	if p.effort != "" {
 		_ = os.Setenv("CLAUDE_CODE_EFFORT_LEVEL", p.effort)
 	}
@@ -2654,6 +2690,17 @@ func lancerPilote(args []string) int {
 			consignesCycle = filepath.Join(p.prive, "CLAUDE.pcs.md")
 			_ = os.WriteFile(consignesCycle, append(b1, consignePCs(p.equipePC.moi, p.equipePC.pcs, *j)+notesEquipeConsigne(p.etat)...), 0o644)
 		}
+		// the eco mode: its rules last (they come before the others), shorter command outputs
+		bashMax := p.bashMax
+		if p.eco && mode == "serie" {
+			b1, _ := os.ReadFile(consignesCycle)
+			consignesCycle = filepath.Join(p.prive, "CLAUDE.eco.md")
+			_ = os.WriteFile(consignesCycle, append(b1, []byte(consignesEcoPilote)...), 0o644)
+			if n, err := strconv.Atoi(bashMax); err != nil || n > bashMaxEco {
+				bashMax = strconv.Itoa(bashMaxEco)
+			}
+		}
+		_ = os.Setenv("BASH_MAX_OUTPUT_LENGTH", bashMax)
 		if mode == "serie" {
 			texteConsignes, _ := os.ReadFile(consignesCycle)
 			cArgs := []string{"-p", butCycle, "--permission-mode", "bypassPermissions", "--settings", p.reglages, "--permission-prompts", "none", "--output-format", "stream-json", "--verbose"}

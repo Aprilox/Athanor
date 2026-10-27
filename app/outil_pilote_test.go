@@ -291,6 +291,52 @@ printf '{"type":"result","subtype":"success","is_error":false,"num_turns":2,"dur
 exit 0
 `
 
+// scriptFauxClaudeEco: call 1 (eco on) notes what it received and switches the eco mode off as the app
+// would; call 2 notes it again and delivers.
+const scriptFauxClaudeEco = `#!/usr/bin/env bash
+set -u
+case "${1:-}" in
+  --help)
+    echo "--strict-mcp-config --setting-sources --append-system-prompt-file --agents --plugin-dir"
+    exit 0 ;;
+  --version)
+    echo "claude 2.1.285"
+    exit 0 ;;
+esac
+prompt_txt=""
+prompt_file=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --append-system-prompt-file) prompt_file="$2"; shift 2 ;;
+    --append-system-prompt) prompt_txt="$2"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+[ -n "$prompt_file" ] && [ -f "$prompt_file" ] && prompt_txt=$(cat "$prompt_file")
+ETAT="$PWD/.athanor"
+n=0
+[ -f "$ETAT/appel_test_n" ] && n=$(cat "$ETAT/appel_test_n")
+n=$(( n + 1 ))
+echo "$n" > "$ETAT/appel_test_n"
+eco=non
+printf '%s' "$prompt_txt" | grep -q "## Eco mode (active for this project)" && eco=oui
+echo "$n $eco ${BASH_MAX_OUTPUT_LENGTH:-}" >> "$ETAT/eco_vu"
+if [ "$n" = 1 ]; then
+  sed -i.bak 's/^ECO=1/ECO=0/' "$ETAT/.env" && rm -f "$ETAT/.env.bak"
+  echo "part 1" > "$PWD/app.txt"
+  git add -A && git commit -qm "M1: part 1"
+  printf '{"type":"result","subtype":"success","is_error":false,"num_turns":2,"duration_ms":3000,"duration_api_ms":2000,"total_cost_usd":0.02,"usage":{"input_tokens":2000,"output_tokens":200},"result":"Part 1"}\n'
+  exit 0
+fi
+echo "done" >> "$PWD/app.txt"
+sed -i.bak 's/^- \[ \] M1 /- [x] M1 /' "$ETAT/PLAN.md" && rm -f "$ETAT/PLAN.md.bak"
+printf '# Final Report\nSTATUS: DONE\n' > "$ETAT/FINAL_REPORT.md"
+git add -A && git commit -qm "M1: done"
+printf '{"type":"assistant","message":{"usage":{"input_tokens":2000,"cache_read_input_tokens":0,"cache_creation_input_tokens":0,"output_tokens":200},"content":[{"type":"text","text":"CHECK: PASSED"}]}}\n'
+printf '{"type":"result","subtype":"success","is_error":false,"num_turns":2,"duration_ms":3000,"duration_api_ms":2000,"total_cost_usd":0.02,"usage":{"input_tokens":2000,"output_tokens":200},"result":"Done"}\n'
+exit 0
+`
+
 // executerPilote: the Go pilot on a throw-away kit and project, started as the application does (athanor
 // demarrer, in the foreground here); its output, shown when a check fails.
 func executerPilote(t *testing.T, bin, kit, projet, fakeClaude string, extraEnv []string) string {
@@ -424,6 +470,38 @@ func TestBancPilote(t *testing.T) {
 		verifier(fichierRegulierPilote(filepath.Join(p.Atelier(), "relay_seen")), "relay notes not passed to cycle 2")
 		verifier(strings.TrimSpace(string(fbB)) == "sonnet-secours", "fallback model not used on cycle 3: %q", fbB)
 		verifier(etat.Phase == "entre_cycles" && strings.HasPrefix(etat.Etat, "DONE"), "final state: %+v", etat)
+		if echec {
+			t.Logf("pilot output:\n%s", sortie)
+		}
+	})
+	t.Run("mode_eco", func(t *testing.T) {
+		kit := preparerKitEssaiPilote(t, binTemp)
+		fakeClaude := filepath.Join(kit, "fake-claude-eco.sh")
+		if err := os.WriteFile(fakeClaude, []byte(strings.ReplaceAll(scriptFauxClaudeEco, "\r\n", "\n")), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		projet := filepath.Join(dossierEssaiPilote(t), "projet")
+		_ = os.MkdirAll(filepath.Join(projet, ".athanor"), 0o755)
+		_ = os.WriteFile(filepath.Join(projet, ".athanor", "REQUEST.md"), []byte("# Request\n\nBuild feature M1.\n"), 0o644)
+		_ = os.WriteFile(filepath.Join(projet, ".athanor", "PLAN.md"), []byte("# Plan\n\n- [ ] M1 : Core feature\n"), 0o644)
+		// both asked by hand: the eco mode wins, the parallel mode stays off
+		_ = os.WriteFile(filepath.Join(projet, ".athanor", ".env"), []byte("PARALLEL=1\nECO=1\n"), 0o644)
+		sortie := executerPilote(t, binTemp, kit, projet, fakeClaude, nil)
+		vu, _ := os.ReadFile(filepath.Join(projet, ".athanor", "eco_vu"))
+		p := Projet{Nom: "test", Dossier: projet}
+		etat, _ := p.LireEtat()
+		echec := false
+		verifier := func(ok bool, format string, a ...any) {
+			if !ok {
+				echec = true
+				t.Errorf(format, a...)
+			}
+		}
+		verifier(strings.TrimSpace(string(vu)) == "1 oui 8000\n2 non 20000", "what Claude received: %q", vu)
+		verifier(strings.Contains(sortie, "Eco mode on") && strings.Contains(sortie, "the parallel mode is off") && strings.Contains(sortie, "Eco mode off"), "eco messages in the pilot's log")
+		avantFin, _, _ := strings.Cut(sortie, "Eco mode off")
+		verifier(!strings.Contains(avantFin, "Parallel mode:"), "no parallel cycle in the eco mode")
+		verifier(strings.HasPrefix(etat.Etat, "DONE"), "final state: %+v", etat)
 		if echec {
 			t.Logf("pilot output:\n%s", sortie)
 		}

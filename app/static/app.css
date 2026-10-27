@@ -170,6 +170,9 @@ a[data-href] { cursor: pointer; }
 .etat-phrase .sous { color: var(--muted); margin-top: 4px; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mode-ligne .ligne { align-items: center; gap: 10px 16px; }
 .mode-ligne h2 { font-size: 15px; margin: 0; }
+.mode-grille { display: grid; grid-template-columns: auto 1fr; gap: 8px 16px; align-items: center; }
+.mode-grille .mode-suite { grid-column: 2; }
+@media (max-width: 640px) { .mode-grille { grid-template-columns: 1fr; } .mode-grille .mode-suite { grid-column: 1; } }
 .point { width: 12px; height: 12px; border-radius: 50%; background: var(--faible); flex: none; }
 .point.travaille { background: var(--ok); animation: pulse 2.2s ease-out infinite; }
 .point.quota { background: var(--attention); }
