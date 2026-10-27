@@ -426,6 +426,9 @@ func (a *appTUI) phrase() (string, string, couleurT) {
 		if e.Modele != "" {
 			sous = append(sous, e.Modele)
 		}
+		if v.Eco {
+			sous = append(sous, t("eco mode"))
+		}
 		if v.Contexte > 0 {
 			sous = append(sous, t("context {0} tokens", fmtTokensTUI(v.Contexte)))
 		}

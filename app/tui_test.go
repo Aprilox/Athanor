@@ -407,6 +407,24 @@ func TestTUIContreLeServeur(t *testing.T) {
 		}
 	}
 	a.page = pSuivi
+	// the working mode, from Manage (M): the eco mode, then seen ticked
+	taper(a, "M")
+	if a.dialogue == nil {
+		t.Fatal("no Manage dialog")
+	}
+	taper(a, "\x1b[B\x1b[B\r")
+	attendreTUI(t, a, func() bool { return a.dialogue != nil && a.dialogue.titre == "Mode de travail" })
+	taper(a, "\x1b[B\x1b[B\r")
+	attendreTUI(t, a, func() bool { return p.EcoActif() && strings.Contains(a.toast, "Mode éco activé") })
+	taper(a, "M\x1b[B\x1b[B\r")
+	attendreTUI(t, a, func() bool { return a.dialogue != nil && a.dialogue.titre == "Mode de travail" })
+	if d := a.dialogue; d.sel != 2 || !strings.HasSuffix(d.choix[2].texte, "✓") || !strings.Contains(d.texte, "Sonnet") {
+		t.Fatalf("working mode: %+v", d)
+	}
+	taper(a, "\x1b")
+	if m := p.LireMode(); m.Parallele || !m.Eco {
+		t.Fatalf("mode: %+v", m)
+	}
 	// the help, then quitting asks first
 	taper(a, "?")
 	if !a.aide {

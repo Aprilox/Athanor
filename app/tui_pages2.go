@@ -580,9 +580,11 @@ func (a *appTUI) gererProjet() {
 	}
 	nom := a.vue.Projet.Nom
 	a.demander(a.t("Manage")+": "+nom, a.vue.Projet.Dossier, []choixTUI{
-		{id: "renommer", texte: a.t("Rename")}, {id: "archiver", texte: a.t("Archive")}, {id: "liste", texte: a.t("Remove from the list"), danger: true}, {id: "", texte: a.t("Cancel")}},
+		{id: "renommer", texte: a.t("Rename")}, {id: "archiver", texte: a.t("Archive")}, {id: "mode", texte: a.t("Working mode")}, {id: "liste", texte: a.t("Remove from the list"), danger: true}, {id: "", texte: a.t("Cancel")}},
 		func(id string) {
 			switch id {
+			case "mode":
+				a.agir("GET", "mode", nil, a.choisirModeTravail)
 			case "renommer":
 				s := &saisieT{}
 				s.mettreTexte(nom)
@@ -606,6 +608,46 @@ func (a *appTUI) gererProjet() {
 					})
 			}
 		})
+}
+
+// choisirModeTravail: one milestone at a time, the parallel mode or the eco mode (never both), as the
+// app's Manage page; rep is GET /api/mode.
+func (a *appTUI) choisirModeTravail(rep map[string]any) {
+	par, _ := rep["parallele"].(bool)
+	eco, _ := rep["eco"].(bool)
+	maxi := 3
+	if f, ok := rep["parallele_max"].(float64); ok {
+		maxi = int(f)
+	}
+	actuel := "serie"
+	switch {
+	case eco:
+		actuel = "eco"
+	case par:
+		actuel = "parallele"
+	}
+	ids := [][2]string{{"serie", "One milestone at a time"}, {"parallele", "Parallel mode"}, {"eco", "Eco mode"}}
+	var choix []choixTUI
+	sel := 0
+	for i, c := range ids {
+		texte := a.t(c[1])
+		if c[0] == actuel {
+			texte += "  ✓"
+			sel = i
+		}
+		choix = append(choix, choixTUI{id: c[0], texte: texte})
+	}
+	choix = append(choix, choixTUI{id: "", texte: a.t("Cancel")})
+	texte := a.t("Parallel mode: several workers at once, faster, uses more quota.") + "\n" +
+		a.t("Eco mode: the quota first: the lead works alone, one review at delivery, few images, short outputs. The model and the effort stay as set.") + "\n\n" +
+		a.t("To save even more: a smaller model for the lead (Sonnet) and a lower thinking effort (medium or low), in Settings.")
+	a.demander(a.t("Working mode"), texte, choix, func(id string) {
+		if id == "" || id == actuel {
+			return
+		}
+		a.agir("POST", "mode", map[string]any{"parallele": id == "parallele", "parallele_max": maxi, "eco": id == "eco"}, nil)
+	})
+	a.dialogue.sel = sel
 }
 
 var _ = sort.Strings

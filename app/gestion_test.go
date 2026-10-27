@@ -208,3 +208,55 @@ func TestDossiersRefuses(t *testing.T) {
 }
 
 func jsonTexte(s string) string { b, _ := json.Marshal(s); return string(b) }
+
+// TestModeEco: the eco mode and the parallel mode never together; the Overview says so.
+func TestModeEco(t *testing.T) {
+	a := t.TempDir()
+	pa := Projet{Nom: "alpha", Dossier: a}
+	ecrire(t, pa.Plan(), planTest)
+	s := nouveauServeur(Config{Kit: t.TempDir(), Projets: []Projet{pa}, ProjetActif: "alpha"})
+	s.csrf = "jeton"
+	mux := http.NewServeMux()
+	s.routes(mux)
+	appel := func(methode, corps string) map[string]any {
+		t.Helper()
+		r := httptest.NewRequest(methode, "/api/mode?p=alpha", strings.NewReader(corps))
+		r.Header.Set("X-Athanor", "jeton")
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, r)
+		var v map[string]any
+		json.Unmarshal(w.Body.Bytes(), &v)
+		if w.Code != 200 {
+			t.Fatalf("%s %s: %d %v", methode, corps, w.Code, v)
+		}
+		return v
+	}
+	env := func() string { b, _ := os.ReadFile(pa.envProjet()); return string(b) }
+	appel("POST", `{"parallele":true,"parallele_max":6,"eco":false}`)
+	if m := appel("GET", ""); m["parallele"] != true || m["eco"] != false || pa.EcoActif() {
+		t.Fatalf("parallel: %v", m)
+	}
+	// eco asked with parallel still ticked: eco alone, the workers' maximum kept
+	if v := appel("POST", `{"parallele":true,"parallele_max":6,"eco":true}`); !strings.Contains(texteRep(v), "Eco mode on") {
+		t.Fatalf("eco message: %v", v)
+	}
+	if m := appel("GET", ""); m["parallele"] != false || m["eco"] != true || m["parallele_max"] != float64(6) || !pa.EcoActif() {
+		t.Fatalf("eco: %v\n%s", m, env())
+	}
+	if e := env(); !strings.Contains(e, "ECO=1") || !strings.Contains(e, "PARALLEL=0") {
+		t.Fatalf(".env: %s", e)
+	}
+	// hand-edited both on: still read as eco only
+	_ = os.WriteFile(pa.envProjet(), []byte("PARALLEL=1\nECO=1\n"), 0o644)
+	if m := pa.LireMode(); m.Parallele || !m.Eco {
+		t.Fatalf("both by hand: %+v", m)
+	}
+	if v := appel("POST", `{"parallele":false,"parallele_max":6,"eco":false}`); !strings.Contains(texteRep(v), "Eco mode off") || pa.EcoActif() {
+		t.Fatalf("eco off: %v", v)
+	}
+}
+
+func texteRep(v map[string]any) string {
+	b, _ := json.Marshal(v)
+	return string(b)
+}

@@ -22,6 +22,7 @@
   <a href="#démarrage-rapide"><b>Démarrage rapide</b></a> ·
   <a href="#comment-ça-marche"><b>Comment ça marche</b></a> ·
   <a href="#mode-parallèle"><b>Mode parallèle</b></a> ·
+  <a href="#mode-éco"><b>Mode éco</b></a> ·
   <a href="#plusieurs-ordinateurs"><b>Plusieurs ordinateurs</b></a> ·
   <a href="#lapplication"><b>L'application</b></a> ·
   <a href="#sécurité"><b>Sécurité</b></a> ·
@@ -51,6 +52,7 @@ Vous décrivez ce que vous voulez : un jeu, un site, une application, un outil. 
 |---|---|
 | **Une boucle autonome** | Un jalon par cycle et un contexte neuf à chaque fois : les tours restent économes et le projet ne dérive pas. Quota atteint → pause jusqu'à sa réouverture, ou bascule sur un modèle de secours. Erreur → nouvel essai avec un délai croissant. Cycle muet ou trop long → coupé et repris. PC redémarré → reprise là où il s'était arrêté. Tout l'état est dans des fichiers. |
 | **Mode parallèle** | Un interrupteur par projet. Un plan fin avec dépendances ; jusqu'à 10 ouvriers réalisent des jalons indépendants en même temps, chacun dans sa copie de travail git ; le pilote fusionne chacun dès qu'il termine et lance le suivant, et le chef vérifie une fois à la fin. |
+| **Mode éco** | Un interrupteur par projet, quand le quota compte plus que la vitesse : le chef fait le travail lui-même au lieu de le confier à des sous-agents, une seule revue à la livraison, 4 images au plus par cycle, des sorties de commandes plus courtes. Le modèle et l'effort restent tels que vous les avez réglés. |
 | **Plusieurs ordinateurs** | Deux, trois ou dix ordinateurs construisent un même projet ensemble par son dépôt GitHub, chacun avec un compte qui peut y envoyer (celui du propriétaire, ou celui d'un contributeur : pas besoin d'organisation) : chacun prend un jalon qu'aucun autre ne construit, d'abord ceux pour lesquels il est le meilleur (une grosse carte graphique pour la 3D, un réseau rapide pour les gros téléchargements), et ils fusionnent le travail les uns des autres après chaque jalon. Le Suivi montre quels ordinateurs sont là et ce que chacun construit. |
 | **Une vraie équipe** | Un chef de projet et des sous-agents : `scout`, `architect`, `creator`, `developer`, `tester`, `critic`, et un `executor` bon marché (Haiku par défaut) pour le travail mécanique. Les éclaireurs lisent pour le cadrage, les tests indépendants et la critique finale sont toujours délégués. |
 | **Skills & MCP** | Donnez à Claude de l'expertise et des outils : un catalogue vérifié (skills d'Anthropic, superpowers, Context7, Serena, Playwright, GitHub…), une recherche dans des milliers de skills communautaires (SkillsMP) et dans le registre officiel MCP, n'importe quel skill depuis un lien GitHub, vos propres skills, n'importe quel serveur MCP collé depuis son README, et les plugins Claude Code du catalogue officiel (et de tout autre que vous ajoutez), comme ceux de Shopify ou de Stripe. Activés projet par projet, pour le chef comme pour les ouvriers en parallèle. Les serveurs MCP locaux tournent dans une cage, loin de vos fichiers et du jeton Claude. |
@@ -185,7 +187,7 @@ Pareil sous Windows (PowerShell), Linux et macOS : cela construit `Athanor.exe` 
 
 ## Mode parallèle
 
-*Suivi → Mode de travail → Mode parallèle*, par projet, avec 2 à 10 ouvriers au maximum. Les ouvriers tournent sur `WORKER_MODEL` (Sonnet par défaut) : une fiche de jalon bien écrite est du travail d'exécution, le chef garde son modèle pour le plan et les fusions.
+*Gérer → Mode de travail → Mode parallèle*, par projet, avec 2 à 10 ouvriers au maximum. Les ouvriers tournent sur `WORKER_MODEL` (Sonnet par défaut) : une fiche de jalon bien écrite est du travail d'exécution, le chef garde son modèle pour le plan et les fusions.
 
 1. Le chef écrit un **plan fin avec des dépendances explicites** : beaucoup de petits jalons autonomes, chacun avec les fichiers qu'il touche, `Depends on:` les jalons dont il a besoin, et ses critères d'acceptation. M1 est toujours la fondation (squelette, `check.sh`, contrats partagés).
 2. Le pilote fait tourner un **ordonnanceur** : chaque jalon dont les dépendances sont fusionnées reçoit un **ouvrier** (sa propre session Claude, sa propre copie de travail git `.athanor/work/M5` et sa branche `auto/M5`), en commençant par 2 et en en ajoutant un chaque fois qu'un ouvrier livre, jusqu'au nombre choisi. Dès qu'un ouvrier atteint le quota, plus aucun ne démarre ; s'ils l'ont tous atteint, la vérification du chef est sautée et le pilote attend, puis fait un jalon avec le chef seul avant de relancer des ouvriers. Le pilote laisse aussi le chef travailler seul, le temps d'un cycle, quand des ouvriers ne seraient pas rentables : moins de 3 jalons prêts en même temps, uniquement des jalons de documentation (ils se citent entre eux et entrent en conflit), ou le quota des 5 heures à 75 % ou celui de la semaine à 85 %. Deux jalons dont les fiches citent les mêmes fichiers ne tournent jamais en même temps. Les ouvriers partagent un tableau, `.athanor/BOARD.md`, écrit par le pilote toutes les quelques secondes : ce que fait chacun et les fichiers qu'il tient. Un ouvrier qui a besoin d'un fichier hors de sa fiche le réserve d'abord (`.athanor/RESERVE`) ; le pilote l'accorde sauf si un autre ouvrier le tient, et aucun nouvel ouvrier ne démarre sur un fichier réservé.
@@ -194,6 +196,21 @@ Pareil sous Windows (PowerShell), Linux et macOS : cela construit `Athanor.exe` 
 5. **Les demandes en attente n'attendent pas.** Au début de chaque cycle, elles rejoignent la demande en cours : le chef ajoute leurs jalons au plan, avec leurs dépendances.
 
 Chaque ouvrier ne porte que son jalon en contexte : le travail est découpé en petites sessions économes au lieu d'une seule énorme. Un ouvrier peut confier ses longues séries de tests et ses recherches à `executor` (modèle bon marché) et ne lire que les échecs ; il n'appelle aucun autre sous-agent. La page *Équipe* montre une carte par ouvrier avec les sous-agents qu'il a appelés, et le *Journal* étiquette leurs lignes `[M5]`. Le mode parallèle consomme plus de quota par heure (une session par ouvrier) mais beaucoup moins de temps.
+
+---
+
+## Mode éco
+
+*Gérer → Mode de travail → Mode éco*, par projet (dans un terminal : **M**, puis *Mode de travail*). Pour quand le quota compte plus que la vitesse. Il ne tourne jamais avec le mode parallèle : activer l'un coupe l'autre.
+
+Mesuré sur un vrai projet de jeu, **ce sont les sous-agents qui consomment le plus** (80 à 87 % des jetons de ses cycles) : chacun repart de zéro et repaie tout son contexte à chaque tour. Le mode éco coupe donc d'abord là :
+
+- **Le chef fait le travail lui-même.** Pas de sous-agent pour un jalon ordinaire ni pour un gros morceau (il découpe le jalon à la place) ; les sous-agents du projet seulement quand la demande les exige pour ce jalon ; aucun nouveau sous-agent proposé.
+- **Une seule revue, à la fin.** `critic` et `tester` passent une fois chacun, pour la livraison : ni après la tranche complète, ni au polish, jamais de contre-revue. Le cadrage se passe des éclaireurs (un au plus pour de grosses pièces jointes) et de la relecture du plan.
+- **Peu d'images.** 4 lectures d'image au plus par cycle (captures MCP comprises), en planches réduites ; une nouvelle capture seulement après un changement visible.
+- **Moins de lecture, des sorties courtes.** La fin du journal, le jalon en cours, les seules sections utiles ; les sorties de commandes coupées à 8 000 caractères (`BASH_MAX_OUTPUT_LENGTH`, 20 000 sinon).
+
+Le **modèle et l'effort de réflexion ne sont pas touchés** : ils restent tels que vous les avez réglés. Pour économiser encore plus, choisissez un modèle plus petit pour le chef (Sonnet) et un effort plus bas (`medium` ou `low`) dans *Réglages → Modèles*. Le Suivi affiche *mode éco* pendant un cycle ; l'interrupteur s'applique dès le prochain cycle.
 
 ---
 
@@ -563,7 +580,7 @@ Oui. Rien n'est lié à un nom d'utilisateur ni à une lettre de disque : les ch
 Poussez un tag de version : GitHub compile les applications (Windows, Linux, macOS) et publie la version ([`.github/workflows/release.yml`](.github/workflows/release.yml)).
 
 ```bash
-git tag v2.40.2 && git push origin v2.40.2
+git tag v2.41.0 && git push origin v2.41.0
 ```
 
 Gardez la version de [`app/winres/athanor.rc`](app/winres/athanor.rc) et `versionAthanor` dans [`app/commandes.go`](app/commandes.go) alignées sur le tag (un test vérifie qu'elles concordent), et écrivez les nouveautés dans `docs/releases/VERSION.md` (par ex. [`docs/releases/2.31.0.md`](docs/releases/2.31.0.md)) : elles ouvrent la page de la version.

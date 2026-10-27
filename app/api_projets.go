@@ -104,6 +104,7 @@ type EtatVue struct {
 	QuotaArret  map[string]RegleQuota `json:"quota_arret"`
 	Maj         *EtatMaj              `json:"maj,omitempty"`    // updates of Athanor (maj.go)
 	GitHub      *SuiviGitHub          `json:"github,omitempty"` // the Overview's GitHub line (.athanor/github.json)
+	Eco         bool                  `json:"eco,omitempty"`    // the project's eco mode (.athanor/.env ECO=1)
 	// a stop asked for the end of the current cycle: "arret" (Stop after cycle), "relance" (restart to
 	// apply settings); the buttons say so
 	ArretDemande string `json:"arret_demande,omitempty"`
@@ -191,6 +192,7 @@ func (s *Serveur) apiEtat(w http.ResponseWriter, r *http.Request) {
 		vue.Attente = len(p.LireFileAttente())
 		vue.PourVous = p.PourVous()
 		vue.Stats = p.LireStats()
+		vue.Eco = p.EcoActif()
 		if b, err := lireAtelier(p, "github.json", 64<<10); err == nil {
 			var g SuiviGitHub
 			if json.Unmarshal(b, &g) == nil {
@@ -642,6 +644,7 @@ func (s *Serveur) arreterApresCycle(p Projet) (string, error) {
 type ModeVue struct {
 	Parallele    bool `json:"parallele"`
 	ParalleleMax int  `json:"parallele_max"`
+	Eco          bool `json:"eco"` // the eco mode: the quota first (never together with the parallel mode)
 }
 
 func (p Projet) envProjet() string { return filepath.Join(p.Atelier(), ".env") }
@@ -653,13 +656,28 @@ func (p Projet) LireMode() ModeVue {
 		switch l.Cle {
 		case "PARALLEL":
 			m.Parallele = l.Valeur == "1"
+		case "ECO":
+			m.Eco = l.Valeur == "1"
 		case "PARALLEL_MAX":
 			if n, err := strconv.Atoi(l.Valeur); err == nil && n >= 2 && n <= 10 {
 				m.ParalleleMax = n
 			}
 		}
 	}
+	if m.Eco {
+		m.Parallele = false // the pilot runs the eco mode alone
+	}
 	return m
+}
+
+// EcoActif: the project's eco mode, read without touching the file (the Overview asks every few seconds).
+func (p Projet) EcoActif() bool {
+	for _, l := range LireEnv(p.envProjet()) {
+		if l.Cle == "ECO" {
+			return l.Valeur == "1"
+		}
+	}
+	return false
 }
 
 func (s *Serveur) apiMode(w http.ResponseWriter, r *http.Request) {
@@ -683,10 +701,17 @@ func (s *Serveur) apiEcrireMode(w http.ResponseWriter, r *http.Request) {
 	if m.ParalleleMax < 2 || m.ParalleleMax > 10 {
 		m.ParalleleMax = 3
 	}
-	v := map[string]string{"PARALLEL": "0", "PARALLEL_MAX": strconv.Itoa(m.ParalleleMax)}
+	if m.Eco {
+		m.Parallele = false // one or the other
+	}
+	v := map[string]string{"PARALLEL": "0", "PARALLEL_MAX": strconv.Itoa(m.ParalleleMax), "ECO": "0"}
 	if m.Parallele {
 		v["PARALLEL"] = "1"
 	}
+	if m.Eco {
+		v["ECO"] = "1"
+	}
+	avant := p.LireMode()
 	if err := os.MkdirAll(p.Atelier(), 0o755); err != nil {
 		s.erreur(w, http.StatusInternalServerError, err.Error())
 		return
@@ -695,9 +720,16 @@ func (s *Serveur) apiEcrireMode(w http.ResponseWriter, r *http.Request) {
 		s.erreur(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	if m.Parallele {
+	switch {
+	case m.Eco && !avant.Eco:
+		s.msg(w, "Eco mode on: it applies from the next cycle (the parallel mode is off).")
+	case m.Parallele:
 		s.msg(w, "Parallel mode on: it applies from the next cycle (the plan is first organized in waves).")
-	} else {
+	case avant.Eco && !m.Eco:
+		s.msg(w, "Eco mode off: it applies from the next cycle.")
+	case m.Eco:
+		s.msg(w, "Eco mode on: it applies from the next cycle (the parallel mode is off).")
+	default:
 		s.msg(w, "Parallel mode off: from the next cycle, the lead works milestone by milestone.")
 	}
 }
