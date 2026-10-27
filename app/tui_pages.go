@@ -73,6 +73,8 @@ func (a *appTUI) dessiner(e *ecranT) {
 			a.pageGitHub(e, x, y, l, h)
 		case pReglages:
 			a.pageReglages(e, x, y, l, h)
+		case pDistance:
+			a.pageDistance(e, x, y, l, h)
 		}
 	}
 	a.barreBas(e)
@@ -207,7 +209,7 @@ func (a *appTUI) colonneGauche(e *ecranT, x, y, l, h int) {
 			e.mettre(ix-1, iy+i, '▌', a.st(p.accent, fond))
 			st = a.gras(p.encre, fond)
 		}
-		e.texte(ix, iy+i, 2, strconv.Itoa(i+1), a.st(p.accent, fond))
+		e.texte(ix, iy+i, 2, numeroPage(i), a.st(p.accent, fond))
 		lib := a.t(clesPages[i])
 		if i == pDemandes && a.vue != nil && a.vue.Attente > 0 {
 			lib += " (" + strconv.Itoa(a.vue.Attente) + ")"
@@ -229,7 +231,7 @@ func (a *appTUI) onglets(e *ecranT, y int) {
 	e.rect(0, y, e.l, 1, a.st(p.encre, p.fond))
 	x := 1
 	for i := 0; i < nbPages; i++ {
-		lib := " " + strconv.Itoa(i+1) + " " + a.t(clesPages[i]) + " "
+		lib := " " + numeroPage(i) + " " + a.t(clesPages[i]) + " "
 		st := a.st(p.muet, p.fond)
 		if i == a.page {
 			st = a.gras(p.surAccent, p.accent)
@@ -243,6 +245,9 @@ func (a *appTUI) onglets(e *ecranT, y int) {
 		x += n + 1
 	}
 }
+
+// numeroPage: the key of a page (1…9, then 0 for the tenth).
+func numeroPage(i int) string { return strconv.Itoa((i + 1) % 10) }
 
 // raccourci: one key and what it does, for the bottom bar.
 type raccourci struct{ k, lib string }
@@ -268,6 +273,8 @@ func (a *appTUI) raccourcisPage() []raccourci {
 		r = []raccourci{{"v", t("Check everything")}, {"Enter", t("Check")}, {"r", t("Repair")}, {"I", t("Install everything")}, {"T", t("Token")}}
 	case pSuivi:
 		r = []raccourci{{"M", t("Manage")}, {"g", t("Get GitHub's work")}}
+	case pDistance:
+		r = a.raccourcisDistance()
 	default:
 		r = a.raccourcisPages2()
 	}
@@ -1470,7 +1477,7 @@ func (a *appTUI) dessinerAide(e *ecranT) {
 	t := a.t
 	a.voile(e)
 	lignes := [][2]string{
-		{"1…9, Tab", t("Pages")},
+		{"1…9, 0, Tab", t("Pages")},
 		{"s", t("Start")},
 		{"a", t("Stop after cycle") + " / " + t("Let it go on")},
 		{"x", t("Stop now")},

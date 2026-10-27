@@ -20,11 +20,12 @@ const (
 	pEquipe
 	pGitHub
 	pReglages
+	pDistance
 	nbPages
 )
 
 // clesPages: the pages' names (keys of the app's translations).
-var clesPages = [nbPages]string{"Overview", "Log", "Requests", "Chat", "Setup & health", "For you", "Team", "GitHub", "Settings"}
+var clesPages = [nbPages]string{"Overview", "Log", "Requests", "Chat", "Setup & health", "For you", "Team", "GitHub", "Settings", "Remote"}
 
 type paletteTUI struct {
 	fond, panneau, ligne, bord, encre, muet, accent, surAccent, ok, attention, erreur, violet couleurT
@@ -219,6 +220,10 @@ type appTUI struct {
 	selReglage int
 	modeleChat string         // the chat's model ("": the account's default)
 	formValide *formulaireTUI // the form whose fields are being saved
+	// Remote (tui_distance.go)
+	dist           *DistanceVue
+	selApp         int
+	chiffresJusque time.Time // the 6 digits shown until then
 	// executer: a command run in this terminal, in front of the user (the screen given back meanwhile), its
 	// exit code; nil where there is no terminal to hand over (the tests)
 	executer func(titre string, ligne []string, dossier string) (int, error)
@@ -348,6 +353,9 @@ func (a *appTUI) tic() {
 		if a.vue != nil && !a.vue.Verrouille && a.page == pReglages { // Athanor's settings: no project needed
 			a.chargerPages2()
 		}
+		if a.vue != nil && !a.vue.Verrouille && a.page == pDistance {
+			a.chargerDistance()
+		}
 		return
 	}
 	apres := a.dernierN
@@ -395,6 +403,8 @@ func (a *appTUI) tic() {
 		a.chargerSante()
 	case pPourVous, pEquipe, pGitHub, pReglages:
 		a.chargerPages2()
+	case pDistance:
+		a.chargerDistance()
 	}
 }
 

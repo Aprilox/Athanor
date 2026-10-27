@@ -3,6 +3,7 @@ package main
 import (
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -226,6 +227,8 @@ func TestTUITraduction(t *testing.T) {
 	u, _ := os.ReadFile("tui_terminal_unix.go")
 	p2, _ := os.ReadFile("tui_pages2.go")
 	u = append(u, p2...)
+	p3, _ := os.ReadFile("tui_distance.go")
+	u = append(u, p3...)
 	src := string(b) + string(c) + string(d) + strings.ReplaceAll(string(u), "app.t(", "a.t(")
 	for _, l := range []string{"fr", "es", "de", "it", "pt"} {
 		dico := dicoTUI(l)
@@ -677,6 +680,195 @@ func TestTUIPages2(t *testing.T) {
 	if a.dialogue == nil || a.dialogue.titre == "Palette" {
 		t.Fatalf("p on the Overview: %+v", a.dialogue)
 	}
+}
+
+// Remote: the switch, the pairing link and its QR code drawn in the terminal, the digits hidden until v, the
+// trusted devices renamed or removed (asked first); every state draws, wide and narrow.
+func TestTUIDistance(t *testing.T) {
+	a := nouvelleAppTUI(&clientTUI{projet: "a"}, false)
+	a.vue = &EtatVue{Version: versionAthanor, KitValide: true, Projets: []ProjetVue{{Nom: "a"}}, Projet: &ProjetVue{Nom: "a"}}
+	a.page = pDistance
+	vues := []*DistanceVue{nil, {Etat: "arret", Appareils: []AppareilVue{}}, {Actif: true, Etat: "erreur", Message: "no network"},
+		{Actif: true, Etat: "pret", Adresse: "https://a-b-c-d.trycloudflare.com", Lien: "https://a-b-c-d.trycloudflare.com/appairer?c=0123456789abcdef0123456789abcdef",
+			Expire: 100, Chiffres: "123456", ChiffresExpire: 15000,
+			Appareils: []AppareilVue{{ID: "x1", Nom: "iPhone", EnLigne: true, Lieu: "1.2.3.4"}, {ID: "x2", Nom: "Pixel", VuLe: "2026-10-25T21:00:00Z", Notifs: true}}}}
+	for _, v := range vues {
+		a.dist = v
+		for _, taille := range [][2]int{{160, 45}, {90, 26}, {60, 16}, {20, 5}} {
+			a.dessiner(nouvelEcran(taille[0], taille[1]))
+		}
+	}
+	e := nouvelEcran(150, 45)
+	a.dessiner(e)
+	s := e.texteEcran()
+	if !strings.Contains(s, "▀") || !strings.Contains(s, "appairer?c=") || !strings.Contains(s, "iPhone") || !strings.Contains(s, "Connected now") {
+		t.Fatalf("pairing:\n%s", s)
+	}
+	if strings.Contains(s, "123 456") {
+		t.Fatal("the digits shown before v")
+	}
+	taper(a, "v")
+	a.dessiner(e)
+	if !strings.Contains(e.texteEcran(), "123 456") {
+		t.Fatalf("v: the digits not shown:\n%s", e.texteEcran())
+	}
+	if m := matriceQR(a.dist.Lien); len(m) == 0 || len(m) != len(m[0]) || m[0][0] || !m[2][2] {
+		t.Fatalf("QR code: %d", len(m))
+	}
+	taper(a, "\x1b[B")
+	if a.selApp != 1 {
+		t.Fatalf("down: %d", a.selApp)
+	}
+	taper(a, "d")
+	if a.dialogue == nil || a.dialogue.titre != "Remove from the trusted devices" || !strings.Contains(a.dialogue.texte, "Pixel") {
+		t.Fatalf("d: %+v", a.dialogue)
+	}
+	a.dialogue = nil
+	taper(a, "r")
+	if a.form == nil || a.form.champs[0].s.texte() != "Pixel" {
+		t.Fatalf("r: %+v", a.form)
+	}
+	a.form = nil
+	taper(a, "o")
+	if a.dialogue == nil || a.dialogue.titre != "Remote access" {
+		t.Fatalf("o (switching off is asked first): %+v", a.dialogue)
+	}
+	a.dialogue = nil
+	// 0 goes to the tenth page
+	a.page = pSuivi
+	taper(a, "0")
+	if a.page != pDistance {
+		t.Fatalf("0: page %d", a.page)
+	}
+}
+
+// Remote against the server: the link and the digits read on the terminal's screen pair a device (as a
+// phone would, through the tunnel's server), which then shows in the trusted devices; d removes it (its key
+// refused at once), o switches remote access off.
+func TestTUIDistanceContreLeServeur(t *testing.T) {
+	kit := t.TempDir()
+	_ = os.MkdirAll(filepath.Join(kit, "template"), 0o755)
+	_ = os.WriteFile(filepath.Join(kit, "template", "CLAUDE.md"), []byte("# x\n"), 0o644)
+	s := nouveauServeur(Config{Kit: kit})
+	s.cleAcces = aleatoire(24)
+	mux := http.NewServeMux()
+	s.routes(mux)
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if s.pageAcces(w, r) {
+			_, _ = w.Write([]byte(`<!doctype html><meta name="csrf" content="` + s.csrf + `">`))
+		}
+	})
+	s.mux = mux
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	c, err := nouveauClientTUI(s.lienOuverture(srv.URL + "/"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// remote access on, its tunnel ready (no cloudflared in a test)
+	s.config.Distance.Actif = true
+	s.dist().tunnel = etatTunnel{etat: "pret", adresse: "https://abc-def.trycloudflare.com"}
+	tunnel := s.gestionDistance(mux)
+
+	a := nouvelleAppTUI(c, false)
+	a.tic()
+	attendreTUI(t, a, func() bool { return a.vue != nil })
+	taper(a, "0")
+	attendreTUI(t, a, func() bool { return a.dist != nil && a.dist.Lien != "" })
+	e := nouvelEcran(160, 45)
+	a.dessiner(e)
+	ecran := e.texteEcran()
+	// the link, cut at the width of its column: its pieces on the lines under it
+	lien := ""
+	for _, li := range strings.Split(ecran, "\n") {
+		_, texte, _ := strings.Cut(li, "││ ") // the page's column
+		champs := strings.Fields(texte)
+		if lien == "" && len(champs) > 0 && strings.HasPrefix(champs[0], "https://abc-def.trycloudflare.com/appairer?c=") {
+			lien = champs[0]
+		} else if lien != "" && len(champs) > 0 && regexp.MustCompile(`^[0-9a-f]+$`).MatchString(champs[0]) {
+			lien += champs[0]
+		} else if lien != "" {
+			break
+		}
+	}
+	if lien == "" || lien != a.dist.Lien {
+		t.Fatalf("the link on the screen %q, the server's %q:\n%s", lien, a.dist.Lien, ecran)
+	}
+	// the QR code on the screen is the link's
+	m := matriceQR(lien)
+	trouve := false
+	for y := 0; y < e.h && !trouve; y++ {
+		for x := 0; x < e.l && !trouve; x++ {
+			if e.c[y*e.l+x].r != '▀' {
+				continue
+			}
+			trouve = true
+			for r := 0; r < len(m); r++ {
+				for i := range m[r] {
+					cel := e.c[(y+r/2)*e.l+x+i]
+					col := cel.s.av
+					if r%2 == 1 {
+						col = cel.s.ar
+					}
+					if cel.r != '▀' || (col == 0) != m[r][i] {
+						t.Fatalf("QR code: module (%d, %d) differs", i, r)
+					}
+				}
+			}
+		}
+	}
+	if !trouve {
+		t.Fatalf("no QR code on the screen:\n%s", ecran)
+	}
+	// the phone scans it, then types the digits the terminal shows on v
+	w := appelDistance(tunnel, "GET", strings.TrimPrefix(lien, "https://abc-def.trycloudflare.com"), "", "")
+	dem := valeurCookie(w, cookieAppairage)
+	if w.Code != http.StatusOK || dem == "" {
+		t.Fatalf("scan: %d", w.Code)
+	}
+	if strings.Contains(ecran, chiffresLisiblesTest(a.dist.Chiffres)) {
+		t.Fatal("the digits shown before v")
+	}
+	taper(a, "v")
+	a.dessiner(e)
+	chiffres := regexp.MustCompile(`\b(\d{3}) (\d{3})\b`).FindStringSubmatch(e.texteEcran())
+	if chiffres == nil {
+		t.Fatalf("v: no digits:\n%s", e.texteEcran())
+	}
+	w = appelDistance(tunnel, "POST", routeAppairer, cookieAppairage+"="+dem, "chiffres="+url.QueryEscape(chiffres[0]), "Origin", "https://abc-def.trycloudflare.com")
+	cle := valeurCookie(w, cookieAppareil)
+	if w.Code != http.StatusSeeOther || cle == "" {
+		t.Fatalf("digits: %d %s", w.Code, w.Body.String())
+	}
+	if w := appelDistance(tunnel, "GET", "/api/etat", cle, "", "X-Athanor", s.csrf); w.Code != http.StatusOK {
+		t.Fatalf("the paired device: %d", w.Code)
+	}
+	a.derniere["distance"] = time.Time{}
+	attendreTUI(t, a, func() bool { return len(a.dist.Appareils) == 1 })
+	a.dessiner(e)
+	if nom := a.dist.Appareils[0].Nom; !strings.Contains(e.texteEcran(), nom) || !strings.Contains(e.texteEcran(), "Connected now") {
+		t.Fatalf("the device not listed:\n%s", e.texteEcran())
+	}
+	// removed from the terminal: its next request is refused
+	taper(a, "d")
+	if a.dialogue == nil {
+		t.Fatal("d: not asked")
+	}
+	taper(a, "\x1b[B\r")
+	attendreTUI(t, a, func() bool { return len(s.vueDistance().Appareils) == 0 })
+	if w := appelDistance(tunnel, "GET", "/api/etat", cle, "", "X-Athanor", s.csrf); w.Code == http.StatusOK {
+		t.Fatal("the removed device still gets in")
+	}
+	// o: switched off, asked first
+	taper(a, "o")
+	taper(a, "\x1b[B\r")
+	attendreTUI(t, a, func() bool {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		return !s.config.Distance.Actif
+	})
+	a.derniere["distance"] = time.Time{}
+	attendreTUI(t, a, func() bool { return a.dist != nil && !a.dist.Actif && a.dist.Lien == "" })
 }
 
 // The Overview: the local commit, then the one GitHub has (✓ when the same, what is not pushed yet, the

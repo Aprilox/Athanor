@@ -1,12 +1,14 @@
 # Checks every push and pull request on the three systems Athanor moves to (docs: "Athanor en Go"):
 # vet and tests of the Go code, and every build target.
-# A failure on any of them turns the run red.
+# A failure on any of them turns the run red. A release runs these same checks first (release.yml): a version
+# is published only once all of them pass.
 name: CI
 
 on:
   push:
     branches: [main]
   pull_request:
+  workflow_call:
 
 permissions:
   contents: read

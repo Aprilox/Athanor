@@ -90,6 +90,8 @@ func (a *appTUI) touche(ev evenementTUI) {
 		a.aide = true
 	case "1", "2", "3", "4", "5", "6", "7", "8", "9":
 		a.allerPage(int(k[0] - '1'))
+	case "0":
+		a.allerPage(9)
 	case "tab":
 		a.allerPage(a.page + 1)
 	case "stab", "maj+tab":
@@ -130,13 +132,13 @@ func (a *appTUI) touche(ev evenementTUI) {
 // lettresPages: the letters a page gives a meaning of its own; there they come before the keys of every
 // page (p is the project chooser elsewhere, the palette in Settings; a is Stop after cycle elsewhere, the
 // automatic push on GitHub), typed small or capital.
-var lettresPages = map[int]string{pReglages: "lpa", pGitHub: "cdlrptaug"}
+var lettresPages = map[int]string{pReglages: "lpa", pGitHub: "cdlrptaug", pDistance: "ovrd"}
 
 func (a *appTUI) lettrePage(k string) string {
 	if len([]rune(k)) != 1 {
 		return ""
 	}
-	if a.page == pGitHub && (a.gh == nil || a.vue == nil || a.vue.Projet == nil) {
+	if a.page == pGitHub && (a.gh == nil || a.vue == nil || a.vue.Projet == nil) || a.page == pDistance && a.dist == nil {
 		return "" // nothing to act on yet: the keys of every page
 	}
 	if l := strings.ToLower(k); strings.Contains(lettresPages[a.page], l) {
@@ -230,6 +232,8 @@ func (a *appTUI) touchePage(ev evenementTUI, k string) {
 		}
 	case pPourVous, pEquipe, pGitHub, pReglages:
 		a.touchePages2(ev, k, defiler)
+	case pDistance:
+		a.toucheDistance(k, defiler)
 	case pSante:
 		switch k {
 		case "v":
