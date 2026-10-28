@@ -11,6 +11,7 @@ package main
 //   athanor github connexion            {connecte, login, nom, lie_le} (JSON)
 //   athanor github deconnecter          the key out of this computer (GitHub keeps an unusable entry)
 //   athanor github lier-compte PROJECT OWNER/REPO [AUTO] [BRANCH] [SHARED] [TEAM] [WORKFLOWS-OK]
+//   athanor github garder-acces / oublier-acces   creating a repository without a window, or not (outil_github_acces.go)
 
 import (
 	"encoding/json"
@@ -41,6 +42,8 @@ type ConnexionGH struct {
 	Nom      string `json:"nom,omitempty"`
 	LieLe    string `json:"lie_le,omitempty"`
 	CleID    string `json:"-"`
+	// creating a repository without a window (outil_github_acces.go)
+	AccesGarde bool `json:"acces_garde,omitempty"`
 }
 
 func lireConnexionGH() ConnexionGH {
@@ -69,6 +72,9 @@ func lireConnexionGH() ConnexionGH {
 	cle, err1 := os.Stat(d + "/cle")
 	kh, err2 := os.Stat(d + "/known_hosts")
 	c.Connecte = c.Login != "" && err1 == nil && cle.Mode().IsRegular() && err2 == nil && kh.Size() > 0
+	if a, ok := lireAccesGH(); ok && c.Connecte && strings.EqualFold(a.Login, c.Login) {
+		c.AccesGarde = true
+	}
 	return c
 }
 

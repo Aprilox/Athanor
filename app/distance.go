@@ -279,6 +279,8 @@ func interditDistance(r *http.Request) bool {
 		return true
 	case p == "/api/env" && r.URL.Query().Get("secrets") != "":
 		return true
+	case p == "/api/raccourci" && r.Method != http.MethodGet: // files of the computer: its window only
+		return true
 	}
 	return false
 }

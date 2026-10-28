@@ -75,7 +75,7 @@ func (a *appTUI) raccourcisPages2() []raccourci {
 		}
 		return []raccourci{{"p", t("Push now")}, {"g", t("Get GitHub's work")}, {"t", t("Test the connection")}, {"a", t("Automatic push")}, {"u", t("Unlink")}}
 	case pReglages:
-		return []raccourci{{"Enter", t("Edit")}, {"l", t("Language")}, {"p", t("Palette")}, {"a", t("Accent")}}
+		return []raccourci{{"Enter", t("Edit")}, {"l", t("Language")}, {"p", t("Palette")}, {"a", t("Accent")}, {"r", t("Shortcut")}}
 	}
 	return nil
 }
@@ -105,6 +105,8 @@ func (a *appTUI) touchePages2(ev evenementTUI, k string, defiler func(*int, int)
 			a.choisirPreference("theme")
 		case "a":
 			a.choisirPreference("accent")
+		case "r":
+			a.creerRaccourci()
 		default:
 			defiler(&a.selReglage, -1)
 		}
@@ -351,6 +353,11 @@ func (a *appTUI) pageGitHub(e *ecranT, x, y, l, h int) {
 	ajouter(a.t("This computer"), a.gras(p.encre, fond))
 	if g.ConnexionPC.Connecte {
 		ajouter("✔ "+a.t("Connected as {0}", g.ConnexionPC.Login), a.st(p.ok, fond))
+		if g.ConnexionPC.AccesGarde {
+			ajouter("✔ "+a.t("Create repositories without a window: on")+"   o · "+a.t("Forget this access"), a.st(p.muet, fond))
+		} else {
+			ajouter("○ "+a.t("Create repositories without a window: off")+"   k · "+a.t("Keep the access (one sign-in)"), a.st(p.muet, fond))
+		}
 	} else {
 		ajouter("○ "+a.t("Connect this computer to your GitHub account once: then every project is linked to one of your repositories, or one you are a collaborator of, without signing in again."), a.st(p.attention, fond))
 		ajouter("c · "+a.t("Connect to GitHub")+" — "+a.t("in this terminal: GitHub shows a code and an address, open it on any device."), a.st(p.accent, fond))
@@ -360,10 +367,11 @@ func (a *appTUI) pageGitHub(e *ecranT, x, y, l, h int) {
 	if !g.Lie {
 		ajouter("○ "+a.t("Not linked to GitHub yet."), a.st(p.muet, fond))
 		if g.ConnexionPC.Connecte {
-			ajouter("l · "+a.t("Use one of my repositories")+"   n · "+a.t("Create a private repository"), a.st(p.accent, fond))
+			ajouter("l · "+a.t("Use one of my repositories")+"   r · "+a.t("Create a private repository"), a.st(p.accent, fond))
 		}
 	} else {
 		ajouter("✔ "+g.Depot+"  ("+a.t("Branch")+": "+firstNonEmpty(g.Branche, "main")+")", a.st(p.ok, fond))
+		ajouter("g · "+a.t("Get GitHub's work")+"   b · "+a.t("Sort it out with GitHub's branch…"), a.st(p.accent, fond))
 		auto := a.t("off")
 		if g.Auto {
 			auto = a.t("on")
@@ -477,6 +485,23 @@ func (a *appTUI) toucheGitHub(k string) {
 		}
 	case "g":
 		a.recupererGitHub()
+	case "b":
+		if g.Lie {
+			a.resoudreBrancheGitHub()
+		}
+	case "k":
+		if g.ConnexionPC.Connecte && !g.ConnexionPC.AccesGarde {
+			a.demander(a.t("Create repositories without a window"), a.t("Creating a repository goes through GitHub's API, which the key cannot reach: by default it opens a sign-in each time, and nothing of it is kept. On: one sign-in is kept on this computer, out of Claude's reach, and used only to create your repositories. It opens your account's repositories: keeping it is keeping that power on the disk (revocable on GitHub, Settings › Applications)."),
+				[]choixTUI{{id: "oui", texte: a.t("Keep the access (one sign-in)")}, {id: "", texte: a.t("Cancel")}}, func(id string) {
+					if id == "oui" {
+						a.etapeDansTerminal("github-garder-acces", func(int) { a.derniere["github"] = time.Time{} })
+					}
+				})
+		}
+	case "o":
+		if g.ConnexionPC.AccesGarde {
+			a.agir("POST", "github/connexion", map[string]string{"action": "oublier-acces"}, rafraichir)
+		}
 	}
 }
 
@@ -784,3 +809,36 @@ func (a *appTUI) equipeDirecte(rep map[string]any) {
 }
 
 var _ = sort.Strings
+
+// creerRaccourci: a shortcut to the installed Athanor (raccourci.go), in the folder given (the usual one
+// proposed).
+func (a *appTUI) creerRaccourci() {
+	c := *a.c
+	go func() {
+		var v VueRaccourci
+		err := c.appel("GET", "raccourci", nil, &v)
+		a.majs <- func(a *appTUI) {
+			if err != nil {
+				a.annoncer(a.texteErreur(err), true)
+				return
+			}
+			d := &saisieT{}
+			d.mettreTexte(v.Defaut)
+			texte := a.t(aideFormulaireLigne)
+			if len(v.Raccourcis) > 0 {
+				texte = "✔ " + strings.Join(v.Raccourcis, ", ") + "\n" + texte
+			}
+			a.formulaire(a.t("Create the shortcut"), texte, []champTUI{{lib: a.t("Folder of the shortcut"), h: 1, s: d}}, func(val []string) {
+				a.agirFormulaire("POST", "raccourci", map[string]any{"dossier": strings.TrimSpace(val[0])}, func(rep map[string]any) {
+					var l []string
+					if x, ok := rep["crees"].([]any); ok {
+						for _, f := range x {
+							l = append(l, fmt.Sprint(f))
+						}
+					}
+					a.annoncer(a.t("Shortcut made: {0}", strings.Join(l, ", ")), false)
+				})
+			})
+		}
+	}()
+}

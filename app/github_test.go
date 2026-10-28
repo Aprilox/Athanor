@@ -1,6 +1,8 @@
 package main
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
@@ -43,6 +45,24 @@ func TestCheminWindowsPropre(t *testing.T) {
 		`C:\a\..\b`: `C:\a\..\b`, `/home/x/site.`: `/home/x/site.`, `C:\`: `C:\`, `E:/a/b `: `E:\a\b`} {
 		if got := cheminWindowsPropre(in); got != want {
 			t.Errorf("%q -> %q, want %q", in, got, want)
+		}
+	}
+}
+
+// Replacing GitHub's branch takes exactly the commit the user saw (never anything else).
+func TestRemplacerGitHubRefuse(t *testing.T) {
+	p := Projet{Nom: "a", Dossier: t.TempDir()}
+	s := nouveauServeur(Config{Kit: t.TempDir(), Projets: []Projet{p}, ProjetActif: "a"})
+	s.csrf = "jeton"
+	mux := http.NewServeMux()
+	s.routes(mux)
+	for _, v := range []string{"", "HEAD", "main", "abc", strings.Repeat("g", 40), "--force"} {
+		r := httptest.NewRequest("POST", "/api/github?p=a", strings.NewReader(`{"action":"remplacer","valeur":"`+v+`"}`))
+		r.Header.Set("X-Athanor", "jeton")
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, r)
+		if w.Code != 400 {
+			t.Errorf("%q: %d", v, w.Code)
 		}
 	}
 }

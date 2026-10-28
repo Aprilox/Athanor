@@ -161,13 +161,21 @@ func lierGH(args []string, w io.Writer) int {
 		return 1
 	}
 	defer liaison.Close()
-	ses, code := ouvrirSessionGH(w, errw, "user:email", "=== Create a GitHub repository for this project ===\n\n"+
-		"1. Below, GitHub shows a one-time code. Press Enter: your browser opens on GitHub.\n"+
-		"2. Paste the code there and authorize.\n\n"+
-		"Athanor creates the private repository, then signs out: nothing of this sign-in is kept. The project\n"+
-		"pushes with this computer's connection to GitHub, out of Claude's reach.\n\n")
-	if ses == nil {
-		return code
+	// the access kept on this computer (Settings > GitHub): no window; otherwise one sign-in, never kept
+	ses := sessionGardeeGH()
+	if ses != nil {
+		fmt.Fprintln(w, "Creating the repository with the access kept on this computer (Settings > Options > GitHub).")
+	} else {
+		var code int
+		ses, code = ouvrirSessionGH(w, errw, "user:email", "=== Create a GitHub repository for this project ===\n\n"+
+			"1. Below, GitHub shows a one-time code. Press Enter: your browser opens on GitHub.\n"+
+			"2. Paste the code there and authorize.\n\n"+
+			"Athanor creates the private repository, then signs out: nothing of this sign-in is kept. The project\n"+
+			"pushes with this computer's connection to GitHub, out of Claude's reach. (To create repositories\n"+
+			"without this window: Settings > Options > GitHub > Create repositories without a window.)\n\n")
+		if ses == nil {
+			return code
+		}
 	}
 	defer ses.fermer()
 	gh := ses.gh

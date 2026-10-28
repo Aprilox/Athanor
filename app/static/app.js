@@ -140,7 +140,10 @@ function rendreConnexionGH(c) {
   if (c.connecte) return `<p class="ok m0">✔ ${t("Connected as {0}", [h(c.login)])}${c.lie_le ? ` <span class="muet petit">· ${h(t("since {0}", [dateLisible(c.lie_le)]))}</span>` : ""}</p>
     <p class="muet petit">${t("Every project of this computer is linked to a repository your account can push to (yours, or one you are a collaborator of) without signing in again: Manage › GitHub › Use one of my repositories. Only creating a new repository opens a sign-in.")}</p>
     <p class="muet petit">${t("Athanor keeps a key “Athanor (this computer)” on your GitHub account (Settings › SSH and GPG keys), out of Claude's reach. It opens every repository your account can push to.")}</p>
-    <div class="ligne"><button class="btn btn-petit" data-connexion-gh="connecter">${t("Connect again")}</button><button class="btn btn-petit btn-danger" data-connexion-gh="deconnecter">${t("Disconnect")}</button></div>`;
+    <div class="ligne"><button class="btn btn-petit" data-connexion-gh="connecter">${t("Connect again")}</button><button class="btn btn-petit btn-danger" data-connexion-gh="deconnecter">${t("Disconnect")}</button></div>
+    <div class="mt-1"><p class="m0">${c.acces_garde ? `<span class="ok">✔</span> ${t("Create repositories without a window: on")}` : `<span class="muet">○</span> ${t("Create repositories without a window: off")}`}</p>
+      <p class="muet petit m0">${t("Creating a repository goes through GitHub's API, which the key cannot reach: by default it opens a sign-in each time, and nothing of it is kept. On: one sign-in is kept on this computer, out of Claude's reach, and used only to create your repositories. It opens your account's repositories: keeping it is keeping that power on the disk (revocable on GitHub, Settings › Applications).")}</p>
+      <div class="ligne mt-1">${c.acces_garde ? `<button class="btn btn-petit" data-connexion-gh="oublier-acces">${t("Forget this access")}</button>` : `<button class="btn btn-petit" data-connexion-gh="garder-acces">${t("Keep the access (one sign-in)")}</button>`}</div></div>`;
   return `<p class="muet petit m0">${t("Connect this computer to your GitHub account once: then every project is linked to one of your repositories, or one you are a collaborator of, without signing in again.")}</p>
     <div class="ligne mt-1"><button class="btn btn-primaire" data-connexion-gh="connecter">${t("Connect to GitHub")}</button></div>`;
 }
@@ -165,6 +168,7 @@ document.addEventListener("click", async (ev) => {
   await action(api("github/connexion", "POST", { action: act }));
   b.disabled = false;
   if (act === "connecter") etat.ghConnexionSuivi = Date.now() + 5 * 60000;
+  if (act === "garder-acces") etat.ghAccesSuivi = Date.now() + 5 * 60000;
   majConnexionGH(); if (etat.page === "projet") majGitHub();
 });
 // what linking with the connection did (lier-compte); false when nothing is linked
@@ -213,15 +217,42 @@ async function avantDemarrageGitHub() {
   const v = await Promise.race([recupererGitHub(true), new Promise((r) => setTimeout(() => r(null), 25000))]);
   if (!v || v.equipe || v.resultat !== "verifie" || !(v.derriere > 0)) return true;
   const quand = v.quand ? dateLisible(v.quand) : "";
-  const c = await choisir(t("GitHub has {0} commit(s) this folder does not have: someone pushed since your last work (the last one: “{1}”, by {2}, {3}). Bring them in before starting?", [v.derriere, v.sujet || "?", v.auteur || "?", quand])
+  const c = await choisir((v.sans_lien ? t("GitHub's branch {0} has a history of its own, nothing in common with this project's: {1} commit(s), the last one “{2}” by {3}, {4}. Usually the README, licence or .gitignore GitHub adds when it creates the repository.", [v.branche || "main", v.derriere, v.sujet || "?", v.auteur || "?", quand])
+    : t("GitHub has {0} commit(s) this folder does not have: someone pushed since your last work (the last one: “{1}”, by {2}, {3}). Bring them in before starting?", [v.derriere, v.sujet || "?", v.auteur || "?", quand]))
     + (v.devant > 0 ? " " + t("This folder also has {0} commit(s) of its own: both are merged.", [v.devant]) : "")
     + " " + t("Starting from here instead: the pushes are refused until GitHub's work is brought in."), [
     { id: "recuperer", texte: t("Bring them in, then start"), primaire: true }, { id: "ici", texte: t("Start from here") }, { id: "", texte: t("Cancel") }],
     { titre: t("Not up to date with GitHub") });
   if (c === "ici") return true;
   if (c !== "recuperer") return false;
-  const r = await recupererGitHub();
+  const r = v.sans_lien ? await api("github", "POST", { action: "integrer" }).catch((e) => { toast(e.message, "erreur"); return null; }) : await recupererGitHub();
   return !!r && annoncerRecuperation(r);
+}
+// GitHub's branch has commits the project has not (a repository made on GitHub with a README, someone's
+// push): bring them in (GitHub's files, when its history shares nothing with the project's), or replace
+// GitHub's branch with the project, as the user sees it now
+async function resoudreBrancheGitHub() {
+  const v = await recupererGitHub(true);
+  if (!v || v.resultat !== "verifie") { toast(t("GitHub cannot be read now: try again in a moment."), "erreur"); return; }
+  if (!(v.derriere > 0)) { toast(t("Already up to date with GitHub."), "ok"); return; }
+  const quand = v.quand ? dateLisible(v.quand) : "";
+  const intro = v.sans_lien
+    ? t("GitHub's branch {0} has a history of its own, nothing in common with this project's: {1} commit(s), the last one “{2}” by {3}, {4}. Usually the README, licence or .gitignore GitHub adds when it creates the repository.", [v.branche || "main", v.derriere, v.sujet || "?", v.auteur || "?", quand])
+    : t("GitHub's branch {0} has {1} commit(s) this project does not have (the last one: “{2}”, by {3}, {4}).", [v.branche || "main", v.derriere, v.sujet || "?", v.auteur || "?", quand]);
+  const options = [{ id: "integrer", texte: v.sans_lien ? t("Bring GitHub's files in") : t("Bring them in"), primaire: true }];
+  if (!v.equipe) options.push({ id: "remplacer", texte: t("Replace GitHub's branch with this project"), danger: true });
+  options.push({ id: "", texte: t("Cancel") });
+  const c = await choisir(intro + " " + (v.equipe ? t("Several computers work on this project: GitHub's branch holds their work, it is never replaced.") : t("Bring them into the project (nothing is lost on either side), or replace GitHub's branch with this project?")), options, { titre: t("GitHub's branch") });
+  if (c === "integrer") {
+    const r = await api("github", "POST", { action: v.sans_lien ? "integrer" : "recuperer" }).catch((e) => { toast(e.message, "erreur"); return null; });
+    if (r) annoncerRecuperation(r);
+    return majGitHub();
+  }
+  if (c !== "remplacer") return;
+  if (!(await confirmer(t("Replace GitHub's branch {0} with this project? Its {1} commit(s) that this project does not have leave the branch (the last one: “{2}”). Nothing of this project is lost.", [v.branche || "main", v.derriere, v.sujet || "?"]), { ok: t("Replace"), danger: true }))) return;
+  const r = await action(api("github", "POST", { action: "remplacer", valeur: v.sha }));
+  if (r && r.github && r.github.dernier) { const d = r.github.dernier; toast(t(d.modele || d.message || "", d.args || []), d.resultat === "ok" ? "ok" : "erreur"); }
+  majGitHub();
 }
 
 // Start: always there. When the tooling was not seen installed or the request is empty, the user is asked
@@ -1334,7 +1365,7 @@ pages.suivi = async () => {
   const cache = somme("cache_lu"), plein = somme("entree_tokens") + somme("cache_ecrit");
   const ratio = cache + plein ? Math.round((cache / (cache + plein)) * 100) : 0;
   const g = v.gains;
-  return `${v.pour_vous ? `<a class="bloc pv-bandeau" href="#pourvous">🙋 <strong>${t("Claude needs you")}</strong> · ${t("{0} task(s) on the For you page", [v.pour_vous])} →</a>` : ""}
+  return `${bandeauRaccourci()}${v.pour_vous ? `<a class="bloc pv-bandeau" href="#pourvous">🙋 <strong>${t("Claude needs you")}</strong> · ${t("{0} task(s) on the For you page", [v.pour_vous])} →</a>` : ""}
   <div class="grille grille-2">
     <div class="colonne"><div class="bloc"><h2>${t("Right now")}</h2>
       ${v.actif && v.pilote_ancien ? `<p class="muet petit">ℹ ${v.version_pilote
@@ -1401,6 +1432,51 @@ function modesSysteme(v) {
     texte: "Claude Code, the system sandbox (bubblewrap) and the tools, in a terminal; it asks for your password once." }];
 }
 
+// --- the shortcut to the installed Athanor (raccourci.go): the downloaded file installs it, the shortcut opens it
+etat.raccourci = null; etat.raccourciLu = false; etat.raccourciPlusTard = false;
+function raccourciConnu() {
+  if (etat.raccourci || etat.raccourciLu) return etat.raccourci;
+  etat.raccourciLu = true;
+  api("raccourci").then((r) => {
+    etat.raccourci = r;
+    const l = r.lancement;
+    if (l && l.ancien) toast(t("The file you opened is Athanor {0}, older than the installed one ({1}): nothing was replaced, the installed Athanor opened.", [l.ancien, (etat.vue || {}).version || ""]), "ok");
+    if (l && l.mis_a_jour) toast(t("Athanor updated from {0} to {1}.", [l.mis_a_jour, (etat.vue || {}).version || ""]), "ok");
+    if (l && (l.repares || []).length) toast(t("Same version opened again: {0} damaged file(s) of the installed Athanor put back.", [l.repares.length]), "ok");
+    if (["suivi", "reglages"].includes(etat.page)) rendrePage();
+  }).catch(() => {});
+  return null;
+}
+function nomRaccourci(f) { return String(f).split(/[\\/]/).pop(); }
+// blocRaccourci: the folder (proposed: the Desktop, the Mac's Applications) and the button
+function blocRaccourci(r, titre, plus) {
+  if (!r) return "";
+  const faits = r.raccourcis || [];
+  const explication = r.systeme === "darwin" ? t("An Athanor.app that opens the installed Athanor: put it in Applications or on the Dock.")
+    : r.systeme === "windows" ? t("An Athanor shortcut that opens the installed Athanor (the copy kept in Athanor's folder, which updates itself), also added to the Start menu: the downloaded file can then be deleted.")
+    : t("A launcher that opens the installed Athanor (also added to the applications menu): the downloaded file can then be deleted.");
+  return `${titre ? `<h2>${t("Shortcut")}</h2>` : ""}<p class="muet petit m0">${explication}</p>
+    ${faits.length ? `<p class="ok petit">✔ ${faits.map((f) => `<code title="${h(f)}">${h(nomRaccourci(f))}</code>`).join(" ")} <span class="muet">${h(faits[0].replace(/[\\/][^\\/]*$/, ""))}</span></p>` : ""}
+    <label class="champ mt-1"><span>${t("Folder of the shortcut")}</span>${champDossier("rc-dossier", r.defaut || "", "")}</label>
+    <div class="ligne mt-1"><button class="btn ${faits.length ? "" : "btn-primaire"}" data-raccourci="creer">${faits.length ? t("Make another shortcut") : t("Create the shortcut")}</button>${plus || ""}</div>`;
+}
+document.addEventListener("click", async (ev) => {
+  const b = ev.target.closest("[data-raccourci]"); if (!b) return;
+  if (b.dataset.raccourci === "plus-tard") { etat.raccourciPlusTard = true; rendrePage(); return; }
+  b.disabled = true;
+  const r = await action(api("raccourci", "POST", { dossier: ($("#rc-dossier") || {}).value || "" }));
+  b.disabled = false;
+  if (r) { etat.raccourci = Object.assign({}, r.raccourci, { lancement: (etat.raccourci || {}).lancement }); toast(t("Shortcut made: {0}", [(r.crees || []).join(", ")]), "ok"); rendrePage(); }
+});
+// the downloaded file opened this window: a shortcut to the installed Athanor is offered, once
+function bandeauRaccourci() {
+  const r = raccourciConnu();
+  if (!r || !r.lancement || !r.lancement.telechargement || (r.raccourcis || []).length || etat.raccourciPlusTard) return "";
+  return `<div class="bloc bandeau-raccourci"><h2>📌 ${t("Open Athanor directly next time")}</h2>
+    <p class="petit">${h(t("You opened Athanor from the file you downloaded ({0}). Athanor is installed in its own folder and updates itself there: create a shortcut to open it, and that file is no longer needed.", [nomRaccourci(r.lancement.fichier || "")]))}</p>
+    ${blocRaccourci(r, false, `<button class="btn" data-raccourci="plus-tard">${t("Not now")}</button>`)}</div>`;
+}
+
 function rendreGuide(v) {
   const e1 = v.kit_installe, e2 = !!v.projet, e3 = e2 && !v.demande_vide;
   // the tooling of this system: on Windows, WSL (Claude in a sandbox) or native Windows, chosen here
@@ -1408,7 +1484,7 @@ function rendreGuide(v) {
     : !v.windows ? "Claude Code, the system sandbox (bubblewrap) and the tools, in a terminal; it asks for your password once."
     : v.natif ? "Native Windows: Git for Windows, jq, Python, Node.js and Claude Code for Windows, without WSL. Claude has no sandbox in this mode."
     : "WSL2 (the Linux built into Windows), Claude Code, the system sandbox. A window opens; Linux asks for a password once.";
-  return `<div class="bloc"><h2>${t("First steps")}</h2><p class="intro">${t("Five steps, all from this window. Then you can let it run for days, on several projects at once.")}</p>
+  return `${bandeauRaccourci()}<div class="bloc"><h2>${t("First steps")}</h2><p class="intro">${t("Five steps, all from this window. Then you can let it run for days, on several projects at once.")}</p>
   <div class="etapes">
     <div class="etape ${e1 ? "faite" : ""}"><div class="n">1</div><div><b>${t("Install the tooling")}</b><div class="d">${t(outillage)}</div>${v.windows ? `<div class="muet petit">${t("Current mode: {0}. To choose the other one: Setup & health.", [t(v.natif ? "Native Windows" : "WSL")])}</div>` : ""}</div>
       ${boutonsInstallation(v, !e1)}</div>
@@ -1614,7 +1690,7 @@ function choixGitHub(pre, nomPropose) {
     <input type="text" class="gh-champ" id="${pre}-gh-depot" placeholder="${h(t("OWNER/NAME, e.g. octocat/my-site"))}">
     <label class="interrupteur"><input type="checkbox" id="${pre}-gh-auto" checked><span>${t("Push automatically after each milestone")}</span></label>
     ${caseAtelier(`id="${pre}-gh-atelier"`, false)}
-    ${(etat.ghConnexion || {}).connecte ? `<p class="muet petit">${t("This computer is connected to GitHub as {0}: one of your repositories is linked at once; creating a new one opens a sign-in.", [h(etat.ghConnexion.login)])}</p>`
+    ${(etat.ghConnexion || {}).connecte ? `<p class="muet petit">${etat.ghConnexion.acces_garde ? t("This computer is connected to GitHub as {0}: one of your repositories is linked at once, and a new one is created at once too (the access is kept).", [h(etat.ghConnexion.login)]) : t("This computer is connected to GitHub as {0}: one of your repositories is linked at once; creating a new one opens a sign-in.", [h(etat.ghConnexion.login)])}</p>`
       : pre === "np" ? `<p class="attention petit" data-avis-connexion>${t("To link a project, connect this computer to GitHub first, once (Settings › Options › GitHub).")} <button class="btn btn-petit" type="button" data-connexion-gh="connecter">${t("Connect to GitHub")}</button></p>` : ""}`;
 }
 // the workshop shared on GitHub: for someone who takes the project over with their Athanor (off by default)
@@ -1689,6 +1765,7 @@ function rendreGitHub(r) {
     ${g.equipe ? "" : `<div class="ligne mt-1"><button class="btn" data-gh="recuperer">${t("Get GitHub's work")}</button></div>
     <p class="muet petit">${t("Working on this repository in turns with someone else: brings in what they pushed (as git pull would), before you start the pilot. Athanor also checks it when you press Start.")}</p>`}
     ${test}
+    ${(d && d.resultat === "rejete" && /has commits the project does not have/.test(d.modele || "")) || (etat.ghTest && etat.ghTest.projet === etat.projet && /has commits the project does not have/.test(etat.ghTest.message_key || "")) ? `<div class="ligne mt-1"><button class="btn btn-primaire" data-gh="resoudre">${t("Sort it out with GitHub's branch…")}</button></div>` : ""}
     ${d ? `<div class="gh-dernier"><b class="${cls}">${h(t(LIBELLES_GH[d.resultat] || d.resultat))}</b> <span class="muet petit">${h(quand)}${d.commit ? " · " + h(d.commit) : ""}</span>
       <div class="petit">${h(t(d.modele || d.message || "", d.args || []))}</div>
       ${(d.fichiers || []).length ? `<ul class="petit">${d.fichiers.map((x) => `<li><code>${h(x.f)}</code> — ${h(t(x.genre))}</li>`).join("")}</ul>` : ""}</div>`
@@ -1743,9 +1820,11 @@ async function actionGitHub(act, b) {
   if (act === "recuperer") {
     b.disabled = true; b.textContent = t("Getting GitHub's work…");
     const r = await recupererGitHub();
+    if (r && r.resultat === "bloque" && r.sans_lien) { await majGitHub(); return resoudreBrancheGitHub(); }
     if (r) annoncerRecuperation(r);
     return majGitHub();
   }
+  if (act === "resoudre") return resoudreBrancheGitHub();
   if (act === "tester") {
     b.disabled = true; b.textContent = t("Testing…");
     const r = await api("github", "POST", { action: "tester" }).catch((e) => { toast(e.message, "erreur"); return null; });
@@ -1765,6 +1844,7 @@ async function actionGitHub(act, b) {
   const r = await action(api("github", "POST", corps));
   b.disabled = false;
   if (r && r.lie_compte) { await resultatLierCompte(r, corps); return majGitHub(); }
+  if (r && r.cree) { toast(t("Private repository created and linked: {0}", [r.cree]), "ok"); return majGitHub(); }
   if (r && r.enregistre) toast(t("Saved: {0}", [r.enregistre]), "ok");
   if (r && r.github && r.github.dernier) { const d = r.github.dernier; toast(t(d.modele || d.message || "", d.args || []), d.resultat === "ok" ? "ok" : "erreur"); }
   if (act === "lier" && r) etat.ghSuivi = { projet: etat.projet, jusqua: Date.now() + 5 * 60000 };
@@ -3140,6 +3220,7 @@ async function rendreOptions() {
         <label class="champ mt-3"><span>${t("Palette and accent")}</span></label>${rendreApparence()}
       </div>
       <div class="bloc" id="bloc-connexion-gh"><h2>GitHub</h2>${rendreConnexionGH(etat.ghConnexion)}</div>
+      <div class="bloc" id="bloc-raccourci">${blocRaccourci(raccourciConnu(), true) || `<h2>${t("Shortcut")}</h2><p class="muet petit">${t("Updating…")}</p>`}</div>
       <div class="bloc"><h2>${t("Startup")}</h2>
         <label class="interrupteur"><input type="checkbox" id="op-lancer" data-option ${o.lancer_pilote_au_demarrage ? "checked" : ""}><span>${t("Restart the pilots that were running, when the app opens")}</span></label>
         <label class="interrupteur"><input type="checkbox" id="op-windows" data-option ${o.demarrage_windows ? "checked" : ""}><span>${t(o.windows ? "Open Athanor when Windows starts" : (etat.vue || {}).systeme === "darwin" ? "Open Athanor when you log in to the Mac" : "Open Athanor when your desktop session starts")}</span></label>
@@ -3387,7 +3468,7 @@ $("#page").addEventListener("click", async (ev) => {
         etat.projet = r.nom; etat.evenements = []; etat.dernierJournal = 0;
         if ((etat.pieces.np || []).length) await envoyerPieces("np", "demande", r.nom);
         // the sign-in window opens (the link shows under Manage), or, with this computer connected, linked at once
-        if (gh) { const rl = await action(api("github", "POST", gh)); if (rl && rl.lie_compte) await resultatLierCompte(rl, gh); }
+        if (gh) { const rl = await action(api("github", "POST", gh)); if (rl && rl.lie_compte) await resultatLierCompte(rl, gh); if (rl && rl.cree) toast(t("Private repository created and linked: {0}", [rl.cree]), "ok"); }
         await rafraichir(); location.hash = "#suivi";
       }
       return;
@@ -3571,6 +3652,10 @@ async function rafraichir() {
           document.querySelectorAll("[data-avis-connexion]").forEach((x) => { x.className = "ok petit"; x.textContent = "✔ " + t("Connected as {0}", [c.login]); });
           const rj = $("#rj-rejoindre"); if (rj) rj.disabled = false;
         }
+      }
+      if (etat.ghAccesSuivi && Date.now() < etat.ghAccesSuivi) {
+        const c = await majConnexionGH();
+        if (c && c.acces_garde) { etat.ghAccesSuivi = 0; toast(t("This computer now creates your repositories without a window."), "ok"); }
       }
       // the update's progress, in place (Settings › Options)
       const blocMaj = document.getElementById("bloc-version");

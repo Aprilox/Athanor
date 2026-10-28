@@ -890,7 +890,12 @@ func ecrireAttributsPC(projet string) error {
 
 func consigneFusionPC(projet, local string, fichiers []string, sortie string, equipe bool) error {
 	var b strings.Builder
-	if equipe {
+	ref := strings.TrimPrefix(local, "--allow-unrelated-histories ")
+	if ref != local {
+		// the user brought in a GitHub branch with a history of its own (outil_github_recuperer.go)
+		b.WriteString("# Bring GitHub's files in first\n\n")
+		b.WriteString("The user chose to bring into the project the files of GitHub's branch, whose history shares nothing with this project's (typically a README, a licence, a .gitignore GitHub made when the repository was created). Some files exist on both sides with different contents; Athanor did not merge them (nothing was changed). Before anything else:\n\n")
+	} else if equipe {
 		b.WriteString("# Merge the other computers' work first\n\n")
 		b.WriteString("Other computers of the team pushed commits that touch the same lines as this computer's. The pilot did not merge them (nothing was changed). Before anything else:\n\n")
 	} else {
@@ -902,7 +907,7 @@ func consigneFusionPC(projet, local string, fichiers []string, sortie string, eq
 	b.WriteString("2. Resolve each conflict keeping both computers' work (their milestones and yours), never one side thrown away; in .athanor/PLAN.md keep every milestone ticked on either side.\n")
 	b.WriteString("3. Run `bash .athanor/check.sh`, commit the merge, note it in .athanor/LOG.md, then delete this file.\n\n")
 	if strings.Contains(sortie, "untracked working tree files would be overwritten") {
-		fmt.Fprintf(&b, "Here git stopped before merging anything: files of this folder that were never committed are in the other computers' commits (listed below). For each one, compare it with theirs (`git show %s:<file>`), keep in theirs what this computer's version has that matters, then move this computer's copy out of the way (or delete it when it is only build output) and merge.\n\n", local)
+		fmt.Fprintf(&b, "Here git stopped before merging anything: files of this folder that were never committed are in the other computers' commits (listed below). For each one, compare it with theirs (`git show %s:<file>`), keep in theirs what this computer's version has that matters, then move this computer's copy out of the way (or delete it when it is only build output) and merge.\n\n", ref)
 	}
 	if len(fichiers) > 0 {
 		b.WriteString("Files both sides changed: ")

@@ -126,6 +126,18 @@ func (s *Serveur) apiGitHubConnexion(w http.ResponseWriter, r *http.Request) {
 				s.erreur(w, http.StatusInternalServerError, err.Error())
 				return
 			}
+		case "garder-acces": // creating repositories without a window: one sign-in, kept
+			if err := fenetreKit(k, "GitHub", "github", "garder-acces"); err != nil {
+				s.erreur(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			s.msg(w, "A window opens: sign in to GitHub there, once. This computer then creates your repositories without a window.")
+			return
+		case "oublier-acces":
+			if _, err := executerKitArgs(k, time.Minute, "github", "oublier-acces"); err != nil {
+				s.erreur(w, http.StatusInternalServerError, err.Error())
+				return
+			}
 		default:
 			s.erreur(w, http.StatusBadRequest, "Unknown")
 			return
@@ -255,13 +267,43 @@ func (s *Serveur) apiGitHub(w http.ResponseWriter, r *http.Request) {
 			s.erreur(w, http.StatusBadRequest, "This computer is not connected to GitHub: Settings › Options › GitHub.")
 			return
 		}
+		if c.Mode == "creer" && v.ConnexionPC.AccesGarde {
+			// the access kept on this computer: the repository is created here, no window
+			nom := strings.TrimSpace(c.Valeur)
+			if !reNomGitHub.MatchString(nom) || nom == "." || nom == ".." {
+				s.erreur(w, http.StatusBadRequest, "Invalid repository name: letters, digits, dots, dashes and underscores only.")
+				return
+			}
+			b := strings.TrimSpace(c.Branche)
+			if b != "" && (!reBrancheGitHub.MatchString(b) || strings.Contains(b, "..")) {
+				s.erreur(w, http.StatusBadRequest, "Invalid branch name.")
+				return
+			}
+			un := map[bool]string{true: "1", false: "0"}
+			out, err := s.executerGitHub(p, 15*time.Minute, "lier", "creer", nom, un[c.Auto], b, un[c.Atelier || c.Equipe])
+			gh, _ := s.etatGitHub(p)
+			if err != nil || !gh.Lie {
+				s.erreur(w, http.StatusBadGateway, firstNonEmpty(derniereLigneTexte(out), "GitHub: unreadable answer from WSL"))
+				return
+			}
+			s.ecrireJSON(w, map[string]any{"cree": gh.Depot, "github": gh})
+			return
+		}
 		if err := s.lierGitHub(p, c.Mode, strings.TrimSpace(c.Valeur), c.Auto, strings.TrimSpace(c.Branche), c.Atelier || c.Equipe, c.Equipe); err != nil {
 			s.erreur(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		s.msg(w, "A window opens: sign in to GitHub there to create the repository (nothing of that sign-in is kept). The project then pushes with this computer's connection.")
-	case "pousser", "malgre":
+	case "pousser", "malgre", "remplacer":
 		args := []string{}
+		if c.Action == "remplacer" {
+			// GitHub's branch replaced by the project, as the user saw it (that commit: a newer one is never lost)
+			if !reShaGitHub.MatchString(c.Valeur) {
+				s.erreur(w, http.StatusBadRequest, "Invalid request")
+				return
+			}
+			args = append(args, "--remplacer="+c.Valeur)
+		}
 		if c.Action == "malgre" {
 			// exactly the commit the user reviewed (athanor github refuses any other)
 			if !reShaGitHub.MatchString(c.Valeur) {
@@ -282,11 +324,14 @@ func (s *Serveur) apiGitHub(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.ecrireJSON(w, map[string]any{"github": v})
-	case "recuperer", "verifier": // working in turns: GitHub's work brought in (or only counted, before a start)
+	case "recuperer", "verifier", "integrer": // working in turns: GitHub's work brought in (or only counted, before a start)
 		args := []string{}
 		delai := 10 * time.Minute
 		if c.Action == "verifier" {
 			args, delai = append(args, "--verifier"), 40*time.Second
+		}
+		if c.Action == "integrer" { // a GitHub branch with a history of its own: its files brought in all the same
+			args = append(args, "--integrer")
 		}
 		out, _ := s.executerGitHub(p, delai, "recuperer", args...)
 		var e EtatRecuperer

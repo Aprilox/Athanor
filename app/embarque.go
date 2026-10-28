@@ -365,8 +365,10 @@ func lancerDepuisTelechargement(args []string) (int, bool) {
 		}
 	}
 	d := dossierAthanorDefaut()
+	fichier, _ := os.Executable()
 	// the version kept there is newer: it runs, this older file changes nothing
 	if versionPlusRecente(versionKit(d), versionAthanor) && fichierRegulierPilote(exeDuKit(d)) {
+		noterLancement(fichier, versionAthanor, "", nil)
 		return relancerKit(exeDuKit(d), avecInterface(reste)), true
 	}
 	// an update while Athanor is open: it has to be closed first (its window is shown)
@@ -379,6 +381,7 @@ func lancerDepuisTelechargement(args []string) (int, bool) {
 	if !premierLancement(d, accepte) {
 		return 1, true // refused: nothing was written
 	}
+	avant := versionKit(d)
 	r, err := deployerKit(d)
 	if err != nil && !(estDossierKit(d) && fichierRegulierPilote(exeDuKit(d))) {
 		titre, texte := texteEchecInstallation(d, err)
@@ -392,6 +395,19 @@ func lancerDepuisTelechargement(args []string) (int, bool) {
 		titre, texte := texteMiseAJourReportee(pilotesEnCours(d))
 		informer(titre, texte)
 	}
+	// the same version opened again: what was damaged in the folder is put back (reparerKit)
+	var repares []string
+	if avant == versionAthanor {
+		var errR error
+		if repares, errR = reparerKit(d); errR != nil {
+			fmt.Fprintln(os.Stderr, "Athanor: repair of the tool folder incomplete:", errR)
+		}
+	}
+	majDepuis := ""
+	if avant != "" && avant != versionAthanor {
+		majDepuis = avant
+	}
+	noterLancement(fichier, "", majDepuis, repares)
 	return relancerKit(exeDuKit(d), avecInterface(reste)), true
 }
 

@@ -472,6 +472,8 @@ func (s *Serveur) apiEtapeTerminal(w http.ResponseWriter, r *http.Request) {
 	case "installer":
 	case "github-connecter": // gh's sign-in: a code and an address to open on any device
 		titre, args = "Connect to GitHub", []string{"github", "connecter"}
+	case "github-garder-acces": // one sign-in kept: repositories created without a window
+		titre, args = "Create repositories without a window", []string{"github", "garder-acces"}
 	case "github-creer": // a new private repository: one sign-in to create it, then the computer's connection
 		p, ok := s.projetRequis(w, r)
 		if !ok {
