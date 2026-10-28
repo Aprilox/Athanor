@@ -29,6 +29,10 @@ type GainsVue struct {
 	Ponytail        bool             `json:"ponytail"`
 	VersionPonytail string           `json:"version_ponytail"`
 	Comparaisons    []ComparaisonVue `json:"comparaisons,omitempty"`
+	// the successful cycles counted for Ponytail's comparison, with it and without it (told while there are
+	// fewer than minComparaison on a side: why no gain is shown yet)
+	PonytailAvec int `json:"ponytail_avec"`
+	PonytailSans int `json:"ponytail_sans"`
 }
 
 // minComparaison: cycles needed on each side before a comparison is shown.
@@ -70,6 +74,9 @@ func calculerGains(stats []LigneStat, ponytail bool) *GainsVue {
 				coutS += s.CoutUSD
 				sortS += s.SortieTokens
 			}
+		}
+		if opt == "ponytail" {
+			g.PonytailAvec, g.PonytailSans = c.AvecN, c.SansN
 		}
 		if c.AvecN < minComparaison || c.SansN < minComparaison {
 			continue

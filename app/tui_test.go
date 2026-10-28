@@ -935,6 +935,19 @@ func TestTUISuiviGains(t *testing.T) {
 	for _, taille := range [][2]int{{80, 24}, {60, 16}} {
 		a.dessiner(nouvelEcran(taille[0], taille[1]))
 	}
+	// every cycle with Ponytail: said, no gain shown
+	a.vue.Gains = &GainsVue{Ponytail: true, VersionPonytail: versionPonytail, PonytailAvec: 28}
+	e = nouvelEcran(160, 45)
+	a.dessiner(e)
+	if s := e.texteEcran(); !strings.Contains(s, "all 28 cycles with Ponytail, none without: no gain measurable") {
+		t.Fatalf("all with Ponytail not said:\n%s", s)
+	}
+	a.vue.Gains = &GainsVue{Ponytail: true, VersionPonytail: versionPonytail, PonytailAvec: 5, PonytailSans: 1}
+	e = nouvelEcran(160, 45)
+	a.dessiner(e)
+	if s := e.texteEcran(); !strings.Contains(s, "Ponytail: 5 cycles with, 1 without (3 of each needed)") {
+		t.Fatalf("counts not said:\n%s", s)
+	}
 }
 
 // Manage › Team, live: nothing yet (be the master, join), a master with its invitation and its team.
