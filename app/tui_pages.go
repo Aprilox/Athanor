@@ -801,9 +801,21 @@ func (a *appTUI) boiteProgres(e *ecranT, x, y, l, h int) {
 		if g.Ponytail {
 			parts = append(parts, "Ponytail "+g.VersionPonytail)
 		}
+		comparePT := false
 		for _, c := range g.Comparaisons {
 			nom := map[string]string{"ponytail": "Ponytail", "eco": a.t("Eco mode")}[c.Option]
 			parts = append(parts, a.t("{0}: {1} % per cycle", nom, fmt.Sprintf("%+d", c.Ecart)))
+			comparePT = comparePT || c.Option == "ponytail"
+		}
+		// no comparison yet: the cycles with and without Ponytail (no gain without both kinds)
+		switch {
+		case comparePT || g.PonytailAvec+g.PonytailSans == 0:
+		case g.PonytailSans == 0:
+			parts = append(parts, a.t("all {0} cycles with Ponytail, none without: no gain measurable", g.PonytailAvec))
+		case g.PonytailAvec == 0:
+			parts = append(parts, a.t("all {0} cycles without Ponytail", g.PonytailSans))
+		default:
+			parts = append(parts, a.t("Ponytail: {0} cycles with, {1} without (3 of each needed)", g.PonytailAvec, g.PonytailSans))
 		}
 		var lignes []string
 		for _, x := range parts { // one saving never cut in two

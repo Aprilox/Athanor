@@ -1359,7 +1359,19 @@ function lignesGains(g) {
   const lignes = (g.comparaisons || []).map((c) => `<li>${t("{0}: {1} $ per successful cycle with it ({2} cycles), {3} $ without ({4}): {5}", [h(noms[c.option] || c.option), c.avec_cout.toFixed(2), c.avec_n, c.sans_cout.toFixed(2), c.sans_n,
     `<b class="${c.ecart <= 0 ? "gain" : "perte"}">${c.ecart > 0 ? "+" : ""}${c.ecart} %</b>`])}</li>`).join("");
   const etat = g.ponytail ? t("Ponytail {0} on: Claude builds each milestone with the smallest complete change.", [h(g.version_ponytail)]) : t("Ponytail off (Settings → Simplest code).");
-  return `<div class="gains muet petit mt-1"><p class="m0">${etat}</p><p class="m0">${t("The cache is Claude's own, always on: what Ponytail, RTK and the eco mode save is measured apart, here.")}</p>${lignes ? `<ul class="m0">${lignes}</ul><p class="m0">${t("Measured on this project's own cycles: their milestones differ, so it is a trend, not a test.")}</p>` : g.ponytail ? `<p class="m0">${t("The comparison with and without appears once 3 successful cycles of each kind are done.")}</p>` : ""}</div>`;
+  return `<div class="gains muet petit mt-1"><p class="m0">${etat}</p><p class="m0">${t("The cache is Claude's own, always on: what Ponytail, RTK and the eco mode save is measured apart, here.")}</p>${lignes ? `<ul class="m0">${lignes}</ul><p class="m0">${t("Measured on this project's own cycles: their milestones differ, so it is a trend, not a test.")}</p>` : ""}${referencePonytail(g)}</div>`;
+}
+// referencePonytail: while Ponytail has no comparison, how many successful cycles ran with it and without
+// it (no gain is shown without cycles of both kinds: one is never invented)
+function referencePonytail(g) {
+  if ((g.comparaisons || []).some((c) => c.option === "ponytail")) return "";
+  const avec = g.ponytail_avec || 0, sans = g.ponytail_sans || 0;
+  let x = "";
+  if (!avec && !sans) x = g.ponytail ? t("The comparison with and without appears once 3 successful cycles of each kind are done.") : "";
+  else if (!sans) x = t("All {0} successful cycle(s) of this project ran with Ponytail: none without it to compare to, so no gain can be measured here.", [avec]);
+  else if (!avec) x = t("All {0} successful cycle(s) of this project ran without Ponytail: none with it to compare to.", [sans]);
+  else x = t("{0} successful cycle(s) with Ponytail, {1} without: the comparison appears once there are 3 of each.", [avec, sans]);
+  return x ? `<p class="m0">${x}</p>` : "";
 }
 
 pages.suivi = async () => {

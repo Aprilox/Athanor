@@ -66,8 +66,15 @@ func TestCalculerGains(t *testing.T) {
 	if c := g.Comparaisons[0]; c.Option != "ponytail" || c.AvecN != 3 || c.SansN != 3 || c.AvecCout != 1 || c.SansCout != 2 || c.Ecart != -50 || c.AvecSortie != 500 {
 		t.Fatalf("%+v", c)
 	}
-	if g := calculerGains(stats[:4], false); len(g.Comparaisons) != 0 || g.Ponytail {
-		t.Fatalf("2 cycles a side: no comparison: %+v", g)
+	if g.PonytailAvec != 3 || g.PonytailSans != 3 {
+		t.Fatalf("cycles counted: %+v", g)
+	}
+	if g := calculerGains(stats[:4], false); len(g.Comparaisons) != 0 || g.Ponytail || g.PonytailAvec != 2 || g.PonytailSans != 2 {
+		t.Fatalf("2 cycles a side: no comparison, the counts still told: %+v", g)
+	}
+	// every cycle with Ponytail: none without it, said
+	if g := calculerGains([]LigneStat{stats[1], stats[3], stats[5]}, true); len(g.Comparaisons) != 0 || g.PonytailAvec != 3 || g.PonytailSans != 0 {
+		t.Fatalf("all with Ponytail: %+v", g)
 	}
 }
 
