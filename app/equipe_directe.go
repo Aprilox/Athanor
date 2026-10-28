@@ -11,6 +11,11 @@ package main
 //                                                    accepted it on its screen | 403 refused
 //   POST /equipe/battement  {presence, stats}      → {noeuds: [...]}              (Authorization: Bearer jeton)
 //   GET  /equipe/noeuds                            → {noeuds: [...]}
+//   GET  /equipe/atelier, POST /equipe/atelier/objets, /equipe/atelier/ecrire: the team's workshop
+//                                                    (atelier_lien.go), when it goes through the link
+//
+// The master can start every computer's pilot, and stop them at the end of their cycle (orders in the
+// answer to a beat): a node follows them unless its user said no. Nothing else of a node is ever driven.
 //
 // The tunnel's address changes when it starts again: the master publishes it, encrypted with the team's
 // key (AES-GCM), in its presence on GitHub (pcs.go, Lien); a node that no longer reaches it reads it there.
@@ -81,7 +86,18 @@ type noeudConnu struct {
 	Ajoute string `json:"ajoute"`
 }
 
-// equipeDirecte: what this computer keeps of a project's direct link (logs/equipe-directe/, 0600).
+// ordreDirect: what the master asks every node (its pilot started, or stopped after its cycle).
+type ordreDirect struct {
+	Seq    int64  `json:"seq"`
+	Action string `json:"action"` // demarrer, arreter
+	Quand  int64  `json:"quand"`
+}
+
+// dureeOrdreDirect: an order older than this is not followed (a computer that comes back an hour later).
+const dureeOrdreDirect = 15 * time.Minute
+
+// equipeDirecte: what this computer keeps of a project's direct link (in its pilot's private folder, which
+// the pilot reads too: equipe-directe.json, 0600).
 type equipeDirecte struct {
 	Role    string                `json:"role"` // "maitre", "noeud", or "attente" (the right code given, the master's yes awaited)
 	Equipe  string                `json:"equipe"`
@@ -90,7 +106,14 @@ type equipeDirecte struct {
 	Jeton   string                `json:"jeton,omitempty"`   // a node: its token
 	Maitre  string                `json:"maitre,omitempty"`  // a node: the master's name
 	Noeuds  map[string]noeudConnu `json:"noeuds,omitempty"`  // the master: who paired
-	Depuis  int64                 `json:"depuis,omitempty"`  // waiting for the master's yes: since when
+	Depuis  int64                 `json:"depuis,omitempty"`  // waiting for the master's yes: since when; a node: since it joined
+	// the team's workshop goes through the link (the master decides it; .athanor/ then stays out of git)
+	AtelierLien bool `json:"atelier_lien,omitempty"`
+	// a node: the master may start and stop its pilot (on when it joins), the last order seen
+	AccepteOrdres bool  `json:"accepte_ordres,omitempty"`
+	DernierOrdre  int64 `json:"dernier_ordre,omitempty"`
+	// the master: its orders (the last ones)
+	Ordres []ordreDirect `json:"ordres,omitempty"`
 }
 
 // VueDirecte: the direct link of a project, for this computer's pages.
@@ -105,6 +128,19 @@ type VueDirecte struct {
 	Noeuds   []NoeudDirect    `json:"noeuds,omitempty"`
 	Appaires int              `json:"appaires,omitempty"`
 	Demandes []demandeDirecte `json:"demandes,omitempty"` // the master: who gave the right code, its yes awaited
+	// the team's workshop through the link: its last version (the master's, or what the node last heard)
+	AtelierLien   bool         `json:"atelier_lien,omitempty"`
+	Atelier       *VueAtelier  `json:"atelier,omitempty"`
+	AccepteOrdres bool         `json:"accepte_ordres,omitempty"`
+	Ordre         *ordreDirect `json:"ordre,omitempty"` // the last order given (the master) or followed (a node)
+}
+
+// VueAtelier: the team's workshop, as the page shows it.
+type VueAtelier struct {
+	Version  int64  `json:"version"`
+	Fichiers int    `json:"fichiers"`
+	Par      string `json:"par,omitempty"`
+	Quand    string `json:"quand,omitempty"`
 }
 
 // ---------------------------------------------------------------------------- what is kept
@@ -115,14 +151,37 @@ var (
 	clients  = map[string]*clientDirect{} // project name → this computer as node
 )
 
+// priveProjet: the project's pilot's private folder (the same the pilot computes, in WSL as well).
+func (s *Serveur) priveProjet(p Projet) string {
+	return priveDePilote(s.kitCourant().Racine, p.Dossier, estWindows)
+}
+
 func (s *Serveur) fichierDirect(p Projet) string {
+	return filepath.Join(s.priveProjet(p), "equipe-directe.json")
+}
+
+// ancienFichierDirect: where 2.44 kept it (only the application read it then).
+func (s *Serveur) ancienFichierDirect(p Projet) string {
 	h := sha256.Sum256([]byte(p.Dossier))
 	return filepath.Join(s.kitCourant().Journaux(), "equipe-directe", hex.EncodeToString(h[:8])+".json")
 }
 
+func (s *Serveur) magasinProjet(p Projet) magasinLocal {
+	return magasinLocal{filepath.Join(s.priveProjet(p), "atelier-equipe")}
+}
+
 func (s *Serveur) lireDirect(p Projet) equipeDirecte {
 	var e equipeDirecte
-	if b, err := os.ReadFile(s.fichierDirect(p)); err == nil {
+	b, err := os.ReadFile(s.fichierDirect(p))
+	if os.IsNotExist(err) {
+		if b, err = os.ReadFile(s.ancienFichierDirect(p)); err == nil {
+			_ = os.MkdirAll(filepath.Dir(s.fichierDirect(p)), 0o700)
+			if ecrireAtomique(s.fichierDirect(p), b, 0o600) == nil {
+				_ = os.Remove(s.ancienFichierDirect(p))
+			}
+		}
+	}
+	if err == nil {
 		_ = json.Unmarshal(b, &e)
 	}
 	return e
@@ -299,16 +358,23 @@ func (s *Serveur) demarrerMaitre(p Projet) error {
 	mux.HandleFunc("POST /equipe/appairer/statut", func(w http.ResponseWriter, r *http.Request) { s.hubStatutDemande(h, w, r) })
 	mux.HandleFunc("POST /equipe/battement", func(w http.ResponseWriter, r *http.Request) { s.hubBattement(h, w, r) })
 	mux.HandleFunc("GET /equipe/noeuds", func(w http.ResponseWriter, r *http.Request) { s.hubNoeuds(h, w, r) })
-	h.srv = &http.Server{Handler: limiterCorps(mux), ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 20 * time.Second, WriteTimeout: 20 * time.Second}
+	mux.HandleFunc("GET /equipe/atelier", func(w http.ResponseWriter, r *http.Request) { s.hubAtelier(h, w, r) })
+	mux.HandleFunc("POST /equipe/atelier/objets", func(w http.ResponseWriter, r *http.Request) { s.hubAtelierObjets(h, w, r) })
+	mux.HandleFunc("POST /equipe/atelier/ecrire", func(w http.ResponseWriter, r *http.Request) { s.hubAtelierEcrire(h, w, r) })
+	h.srv = &http.Server{Handler: limiterCorps(mux), ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 3 * time.Minute, WriteTimeout: 3 * time.Minute}
 	go func() { _ = h.srv.Serve(ln) }()
 	go s.tunnelMaitre(h)
 	return nil
 }
 
-// limiterCorps: the team's calls are small; nothing else is answered.
+// limiterCorps: the team's calls are small (the workshop's writes excepted); nothing else is answered.
 func limiterCorps(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
+		max := int64(64 << 10)
+		if r.URL.Path == "/equipe/atelier/ecrire" {
+			max = tailleMaxEnvoiAtelier*4/3 + 1<<20 // base64
+		}
+		r.Body = http.MaxBytesReader(w, r.Body, max)
 		w.Header().Set("Cache-Control", "no-store")
 		h.ServeHTTP(w, r)
 	})
@@ -415,7 +481,7 @@ func (s *Serveur) cloudflaredEquipe(h *hubEquipe) (*exec.Cmd, string, error) {
 }
 
 func (s *Serveur) pidTunnelDirect(p Projet) string {
-	return strings.TrimSuffix(s.fichierDirect(p), ".json") + ".tunnel.pid"
+	return strings.TrimSuffix(s.ancienFichierDirect(p), ".json") + ".tunnel.pid"
 }
 
 // arreterMaitre: the listener and the tunnel stop (the team's file stays, unless the team ends).
@@ -615,8 +681,9 @@ func (s *Serveur) hubBattement(h *hubEquipe, w http.ResponseWriter, r *http.Requ
 		return
 	}
 	var c struct {
-		Presence PresencePC `json:"presence"`
-		Stats    StatsPC    `json:"stats"`
+		Presence     PresencePC `json:"presence"`
+		Stats        StatsPC    `json:"stats"`
+		DernierOrdre int64      `json:"dernier_ordre"`
 	}
 	if json.NewDecoder(r.Body).Decode(&c) != nil {
 		repondreDirect(w, 400, map[string]string{"erreur": "bad request"})
@@ -626,7 +693,17 @@ func (s *Serveur) hubBattement(h *hubEquipe, w http.ResponseWriter, r *http.Requ
 	h.mu.Lock()
 	h.vus[id] = vuNoeud{presence: c.Presence, stats: c.Stats, quand: time.Now()}
 	h.mu.Unlock()
-	repondreDirect(w, 200, map[string]any{"noeuds": s.noeudsMaitre(h)})
+	e := s.lireDirect(h.projet)
+	rep := map[string]any{"noeuds": s.noeudsMaitre(h), "atelier_lien": e.AtelierLien}
+	if o := e.ordresApres(c.DernierOrdre, time.Now()); len(o) > 0 {
+		rep["ordres"] = o
+	}
+	if e.AtelierLien {
+		if v, err := s.magasinProjet(h.projet).dernier(); err == nil {
+			rep["atelier"] = VueAtelier{Version: v.Version, Fichiers: len(v.Fichiers), Par: v.Par, Quand: v.Quand}
+		}
+	}
+	repondreDirect(w, 200, rep)
 }
 
 func (s *Serveur) hubNoeuds(h *hubEquipe, w http.ResponseWriter, r *http.Request) {
@@ -690,10 +767,12 @@ func (s *Serveur) lienMaitre(p Projet) string {
 // ---------------------------------------------------------------------------- a node
 
 type clientDirect struct {
-	noeuds []NoeudDirect
-	quand  time.Time
-	echecs int
-	erreur string
+	noeuds  []NoeudDirect
+	quand   time.Time
+	echecs  int
+	erreur  string
+	atelier *VueAtelier
+	ordre   *ordreDirect // the last one followed
 }
 
 var clientHTTP = &http.Client{Timeout: 15 * time.Second}
@@ -801,7 +880,7 @@ func (s *Serveur) attenteAccord(p Projet) {
 			fin("The master did not answer in 10 minutes: ask it for a new invitation.")
 		}
 	case err == nil && rep.Jeton != "" && rep.Cle != "":
-		_ = s.ecrireDirect(p, equipeDirecte{Role: "noeud", Equipe: rep.Equipe, Cle: rep.Cle, Adresse: e.Adresse, Jeton: rep.Jeton, Maitre: rep.Maitre})
+		_ = s.ecrireDirect(p, equipeDirecte{Role: "noeud", Equipe: rep.Equipe, Cle: rep.Cle, Adresse: e.Adresse, Jeton: rep.Jeton, Maitre: rep.Maitre, AccepteOrdres: true, Depuis: time.Now().Unix()})
 		s.battementNoeud(p)
 	case code == 403 || code == 404:
 		fin(err.Error())
@@ -824,9 +903,12 @@ func (s *Serveur) battementNoeud(p Projet) {
 		clients[p.Nom] = c
 	}
 	directMu.Unlock()
-	corps := map[string]any{"presence": s.presenceDirecte(p), "stats": s.statsPC(p)}
+	corps := map[string]any{"presence": s.presenceDirecte(p), "stats": s.statsPC(p), "dernier_ordre": e.DernierOrdre}
 	var rep struct {
-		Noeuds []NoeudDirect `json:"noeuds"`
+		Noeuds      []NoeudDirect `json:"noeuds"`
+		AtelierLien bool          `json:"atelier_lien"`
+		Atelier     *VueAtelier   `json:"atelier"`
+		Ordres      []ordreDirect `json:"ordres"`
 	}
 	code, err := appelMaitre(e.Adresse, e.Jeton, "/equipe/battement", corps, &rep)
 	if err != nil && code != 401 {
@@ -835,6 +917,9 @@ func (s *Serveur) battementNoeud(p Projet) {
 			_ = s.ecrireDirect(p, e)
 			code, err = appelMaitre(e.Adresse, e.Jeton, "/equipe/battement", corps, &rep)
 		}
+	}
+	if err == nil {
+		s.suivreMaitre(p, rep.AtelierLien, rep.Ordres)
 	}
 	directMu.Lock()
 	defer directMu.Unlock()
@@ -846,7 +931,7 @@ func (s *Serveur) battementNoeud(p Projet) {
 		}
 		return
 	}
-	c.noeuds, c.quand, c.echecs, c.erreur = rep.Noeuds, time.Now(), 0, ""
+	c.noeuds, c.quand, c.echecs, c.erreur, c.atelier = rep.Noeuds, time.Now(), 0, "", rep.Atelier
 }
 
 // reAdresseDirecte: what a master's address published on GitHub may be (a Cloudflare quick tunnel).
@@ -911,7 +996,7 @@ func (s *Serveur) vueDirecte(p Projet) *VueDirecte {
 		}
 		return nil
 	}
-	v := &VueDirecte{Role: e.Role, Appaires: len(e.Noeuds)}
+	v := &VueDirecte{Role: e.Role, Appaires: len(e.Noeuds), AtelierLien: e.AtelierLien}
 	switch e.Role {
 	case "maitre":
 		directMu.Lock()
@@ -935,16 +1020,24 @@ func (s *Serveur) vueDirecte(p Projet) *VueDirecte {
 		h.mu.Unlock()
 		sort.Slice(v.Demandes, func(i, j int) bool { return v.Demandes[i].Quand < v.Demandes[j].Quand })
 		v.Noeuds = s.noeudsMaitre(h)
+		if e.AtelierLien {
+			if m, err := s.magasinProjet(p).dernier(); err == nil {
+				v.Atelier = &VueAtelier{Version: m.Version, Fichiers: len(m.Fichiers), Par: m.Par, Quand: m.Quand}
+			}
+		}
+		if n := len(e.Ordres); n > 0 {
+			v.Ordre = &e.Ordres[n-1]
+		}
 	case "attente":
 		v.Etat, v.Adresse = "attente", e.Adresse
 	case "noeud":
-		v.Maitre = e.Maitre
+		v.Maitre, v.AccepteOrdres = e.Maitre, e.AccepteOrdres
 		directMu.Lock()
 		c := clients[p.Nom]
 		directMu.Unlock()
 		v.Etat = "injoignable"
 		if c != nil {
-			v.Erreur = c.erreur
+			v.Erreur, v.Atelier, v.Ordre = c.erreur, c.atelier, c.ordre
 			if c.echecs == 0 && time.Since(c.quand) < enLigneDirect {
 				v.Etat = "connecte"
 			}
@@ -972,6 +1065,7 @@ func (s *Serveur) apiDirect(w http.ResponseWriter, r *http.Request) {
 	}
 	var c struct {
 		Action, Invitation, ID string
+		Valeur                 bool
 	}
 	if err := lireCorps(r, &c); err != nil {
 		s.erreur(w, http.StatusBadRequest, err.Error())
@@ -990,6 +1084,18 @@ func (s *Serveur) apiDirect(w http.ResponseWriter, r *http.Request) {
 		}
 	case "rejoindre":
 		err = s.rejoindreMaitre(p, c.Invitation)
+	case "atelier": // the master: the team's workshop through the link, or through GitHub again
+		err = s.changerAtelierLien(p, c.Valeur)
+	case "demarrer-equipe", "arreter-equipe": // the master: every pilot of the team, its own first
+		err = s.ordreEquipe(p, strings.TrimSuffix(c.Action, "-equipe"))
+	case "ordres": // a node: whether the master may start and stop its pilot
+		e := s.lireDirect(p)
+		if e.Role != "noeud" {
+			err = errors.New("Only a node of a team follows the master's orders.")
+			break
+		}
+		e.AccepteOrdres = c.Valeur
+		err = s.ecrireDirect(p, e)
 	case "accepter", "refuser": // the master's answer to a computer that gave the right code
 		err = s.deciderDemande(p, c.ID, c.Action == "accepter")
 	case "retirer": // the master forgets a node: its token no longer works

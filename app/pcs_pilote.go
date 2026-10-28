@@ -363,7 +363,7 @@ func notesEquipeConsigne(etat string) string {
 }
 
 // consignePCs: what Claude is told about the team, each cycle.
-func consignePCs(moi MachinePC, autres []PresencePC, j Jalon) string {
+func consignePCs(moi MachinePC, autres []PresencePC, j Jalon, lienAtelierPC bool) string {
 	var b strings.Builder
 	b.WriteString("\n\n## Several computers build this project\n\n")
 	fmt.Fprintf(&b, "This computer: **%s**", moi.Nom)
@@ -422,6 +422,9 @@ func consignePCs(moi MachinePC, autres []PresencePC, j Jalon) string {
 		}
 	}
 	b.WriteString("- Commit as you go. Between cycles the pilot merges the others' pushed work into the project and pushes yours: never push yourself, never rewrite commits already pushed. If `.athanor/MERGE_NEEDED.md` exists, do that merge first.\n")
+	if lienAtelierPC {
+		b.WriteString("- The team's workshop (.athanor/: the plan, the log, the notes) goes from computer to computer through the team's direct link, not through git: it is never committed, and the pilot brings the others' changes and gives yours between cycles. If `.athanor/WORKSHOP_MERGE.md` exists, fold in what it lists first.\n")
+	}
 	ml := make([]string, 0, len(mots))
 	for m := range mots {
 		ml = append(ml, m)
@@ -455,7 +458,7 @@ func butJalonPC(j Jalon, autres []PresencePC, tours int, langue string) string {
 	} else {
 		autresTxt += " If a program this milestone needs does not work on this computer and you cannot repair it here (your instructions say how far to go), the goal is reached once .athanor/CANNOT_HERE.md is written as they say: another computer takes the milestone."
 	}
-	return fmt.Sprintf("/goal Milestone %s of .athanor/PLAN.md is completed and verified according to your instructions: bash .athanor/check.sh has been run and its output, showing success, is displayed in this conversation; .athanor/PLAN.md ticks this milestone; .athanor/LOG.md has a new entry; git log shows the commit.%s If .athanor/MERGE_NEEDED.md exists, that merge is done first. If .athanor/FOR_YOU_ANSWERED exists, every answered task is handled first (athanor todo ok, missing or resolved); if %s waits for a task of the user (athanor todo list), the goal is reached once athanor todo wait has run. Or stop after %d turns. %s",
+	return fmt.Sprintf("/goal Milestone %s of .athanor/PLAN.md is completed and verified according to your instructions: bash .athanor/check.sh has been run and its output, showing success, is displayed in this conversation; .athanor/PLAN.md ticks this milestone; .athanor/LOG.md has a new entry; git log shows the commit.%s If .athanor/MERGE_NEEDED.md or .athanor/WORKSHOP_MERGE.md exists, that merge is done first. If .athanor/FOR_YOU_ANSWERED exists, every answered task is handled first (athanor todo ok, missing or resolved); if %s waits for a task of the user (athanor todo list), the goal is reached once athanor todo wait has run. Or stop after %d turns. %s",
 		j.ID, autresTxt, j.ID, tours, langue)
 }
 
@@ -510,6 +513,10 @@ func (p *pilote) avantCyclePC() (attendre bool, message string) {
 		return true, detail
 	}
 	p.oublierLogUneFois("pcs-reseau")
+	if p.atelierLien() && p.estTermine() {
+		// the team's workshop through the direct link: another computer delivered (its final report came)
+		return true, "another computer delivered the project"
+	}
 	if res == recuFusion && p.estTermine() {
 		// another computer delivered: this one ends as it would have (at the top of the loop)
 		return true, "another computer delivered the project"
@@ -674,6 +681,7 @@ func (p *pilote) pousserPC() (int, bool) {
 		}
 	}
 	e := p.equipePC
+	p.atelierLien() // the workshop of this cycle (its plan ticked, its log) for the team, through the direct link
 	if res, detail, err := e.recevoir(); err == nil && res == recuFusion {
 		p.log(fmt.Sprintf("Several computers: %s commit(s) of the other computers merged before the push.", detail))
 	} else if err == nil && (res == recuConflit || res == recuBloque) {
@@ -698,6 +706,7 @@ func (p *pilote) pousserPC() (int, bool) {
 // finPC: the pilot stops: its milestone is free for the others.
 func (p *pilote) finPC() {
 	p.finiPC.Store(true) // its beat stops: it no longer says its pilot runs
+	p.atelierLien()      // its last workshop for the team (direct link)
 	if e, _ := ouvrirEquipePC(p.projet); e != nil {
 		if loc := lireEtatLocalPC(e.d); loc.Jalon != "" && loc.Jalon != jalonCadragePC && loc.Jalon != jalonLivraisonPC {
 			_ = e.lireVerrou()

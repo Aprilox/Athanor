@@ -2171,7 +2171,23 @@ func lancerPilote(args []string) int {
 	p.log(fmt.Sprintf("Helpers: Go (%s %s).", nomExe, versionAthanor))
 
 	dejaSignale := false
+	p.atelierLien() // the team's workshop through the direct link: this computer's given, the team's brought
 	for !demandeRempliePilote(p.etat) {
+		// the team's workshop through the direct link: the request comes from the master's
+		if _, ok := equipeDirectePilote(p.prive); ok {
+			p.atelierLien()
+			if demandeRempliePilote(p.etat) {
+				p.log("Several computers: the request came with the team's workshop (direct link).")
+				break
+			}
+			if !dejaSignale {
+				p.log("Several computers: no request here yet: it comes with the team's workshop, from the master (it shares it when its pilot starts or when it starts the team); looked for every minute.")
+				p.statut("Waiting for the request from the master")
+				dejaSignale = true
+			}
+			p.dormir(60)
+			continue
+		}
 		// several computers: the request comes with the others' work (their shared workshop), maybe
 		// pushed after this computer joined: brought in while it waits
 		if fichierRegulierPilote(filepath.Join(p.projet, ".git", "HEAD")) {
@@ -2713,7 +2729,7 @@ func lancerPilote(args []string) int {
 		if j := p.jalonPC; mode == "serie" && j != nil {
 			b1, _ := os.ReadFile(consignesCycle)
 			consignesCycle = filepath.Join(p.prive, "CLAUDE.pcs.md")
-			_ = os.WriteFile(consignesCycle, append(b1, consignePCs(p.equipePC.moi, p.equipePC.pcs, *j)+notesEquipeConsigne(p.etat)...), 0o644)
+			_ = os.WriteFile(consignesCycle, append(b1, consignePCs(p.equipePC.moi, p.equipePC.pcs, *j, lienAtelierPilote(p.prive))+notesEquipeConsigne(p.etat)...), 0o644)
 		}
 		// Ponytail (ponytail.go): the smallest complete change; the framing plans, so its lean work
 		if ponytailActif() && mode == "serie" {

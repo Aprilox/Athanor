@@ -942,13 +942,21 @@ func TestTUIEquipeDirecte(t *testing.T) {
 	a.equipeDirecte(map[string]any{"direct": map[string]any{"role": "maitre", "etat": "pret", "adresse": "https://a-b.trycloudflare.com", "code": "123456",
 		"noeuds": []any{map[string]any{"presence": map[string]any{"nom": "Tour", "jalon": "M5"}, "stats": map[string]any{"session": s, "cycles": 3, "cout": 1.5}, "maitre": true, "en_direct": true}}}})
 	d := a.dialogue
-	if d == nil || !strings.Contains(d.texte, "https://a-b.trycloudflare.com#123456") || !strings.Contains(d.texte, "● Tour (master) · M5 · quota 42 %") || d.choix[0].id != "inviter" {
+	if d == nil || !strings.Contains(d.texte, "https://a-b.trycloudflare.com#123456") || !strings.Contains(d.texte, "● Tour (master) · M5 · quota 42 %") || d.choix[0].id != "demarrer-equipe" || d.choix[2].id != "atelier:1" {
 		t.Fatalf("master: %+v", d)
 	}
 	// a computer that gave the right code: the master accepts or refuses it
 	a.equipeDirecte(map[string]any{"direct": map[string]any{"role": "maitre", "etat": "pret", "demandes": []any{map[string]any{"ref": "r1", "nom": "Portable"}}}})
 	if d := a.dialogue; d == nil || !strings.Contains(d.texte, "Portable wants to join the team") || d.choix[0].id != "accepter:r1" || d.choix[1].id != "refuser:r1" {
 		t.Fatalf("a request: %+v", d)
+	}
+	a.equipeDirecte(map[string]any{"direct": map[string]any{"role": "maitre", "etat": "pret", "atelier_lien": true, "atelier": map[string]any{"version": 7, "fichiers": 12, "par": "Portable", "quand": "2026-10-28T10:00:00Z"}}})
+	if d := a.dialogue; d == nil || !strings.Contains(d.texte, "Team workshop: version 7, 12 files, last change by Portable") || d.choix[2].id != "atelier:0" {
+		t.Fatalf("the workshop through the link: %+v", d)
+	}
+	a.equipeDirecte(map[string]any{"direct": map[string]any{"role": "noeud", "etat": "connecte", "maitre": "Tour", "atelier_lien": true, "accepte_ordres": true}})
+	if d := a.dialogue; d == nil || !strings.Contains(d.texte, "✔ The master may start and stop this computer's pilot") || d.choix[0].id != "ordres:0" || !strings.Contains(d.texte, "through the master's link") {
+		t.Fatalf("a node: %+v", d)
 	}
 	a.equipeDirecte(map[string]any{"direct": map[string]any{"role": "attente", "etat": "attente"}})
 	if d := a.dialogue; d == nil || !strings.Contains(d.texte, "Waiting for the master") || d.choix[1].id != "quitter" {

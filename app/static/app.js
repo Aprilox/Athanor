@@ -2772,12 +2772,22 @@ function blocDirect(nom) {
       <div class="muet petit">${t("Paste it on the other computer (Overview › Team, live › Join), then accept it here. It works once, for 10 minutes.")} ${t("Only a computer you know: anyone with the invitation must still be accepted here.")}</div></div>` : "";
     const demandes = (d.demandes || []).map((x) => `<div class="ligne mt-1 demande-direct"><span>⚠ <b>${h(t("{0} wants to join the team", [x.nom || "?"]))}</b>${x.ip ? ` <span class="muet petit">${h(x.ip)}</span>` : ""}</span><span class="espace"></span>
       <button class="btn btn-primaire" type="button" data-direct="accepter" data-id="${h(x.ref)}">${t("Accept")}</button> <button class="btn btn-petit" type="button" data-direct="refuser" data-id="${h(x.ref)}">${t("Refuse")}</button></div>`).join("");
-    tete = `<p class="petit">${etatM}</p>${invitation}${demandes}<div class="ligne mt-1"><button class="btn" type="button" data-direct="inviter" ${d.etat !== "pret" ? "disabled" : ""}>${t("Invite a computer")}</button><span class="espace"></span><button class="btn btn-petit" type="button" data-direct="quitter">${t("End the team's link")}</button></div>`;
+    const at = d.atelier;
+    const atelier = `<div class="mt-1"><label class="interrupteur m0" title="${h(t("The plan, the request, the log and the notes go from computer to computer through this link, never through GitHub (for a public repository): .athanor/ then stays out of the commits on every computer. GitHub still carries the code."))}"><input type="checkbox" data-direct-bascule="atelier" ${d.atelier_lien ? "checked" : ""}><span><b>${t("Workshop through the direct link")}</b> <span class="muet petit">${t("not on GitHub")}</span></span></label>
+      ${d.atelier_lien && at ? `<div class="muet petit">${at.version ? h(t("Team workshop: version {0}, {1} files, last change by {2} ({3})", [at.version, at.fichiers, at.par || "?", at.quand ? dateLisible(at.quand) : "—"])) : t("Team workshop: empty for now (the request comes with it)")}</div>` : ""}</div>`;
+    const ordre = d.ordre ? `<div class="muet petit">${h(t(d.ordre.action === "demarrer" ? "Last order: start, {0}" : "Last order: stop after the cycle, {0}", [dateLisible(new Date(d.ordre.quand * 1000).toISOString())]))}</div>` : "";
+    const ordres = `<div class="ligne mt-1"><button class="btn btn-primaire" type="button" data-direct="demarrer-equipe" title="${h(t("Starts this computer's pilot, then every computer of the team (those whose user allows it)."))}">▶ ${t("Start the team")}</button><button class="btn" type="button" data-direct="arreter-equipe">${t("Stop the team after the cycle")}</button></div>${ordre}`;
+    tete = `<p class="petit">${etatM}</p>${invitation}${demandes}${atelier}${ordres}<div class="ligne mt-1"><button class="btn" type="button" data-direct="inviter" ${d.etat !== "pret" ? "disabled" : ""}>${t("Invite a computer")}</button><span class="espace"></span><button class="btn btn-petit" type="button" data-direct="quitter">${t("End the team's link")}</button></div>`;
   } else if (d.role === "attente") {
     tete = `<p class="petit"><span class="muet">⏳ ${t("Waiting for the master to accept this computer…")}</span></p><div class="ligne mt-1"><span class="espace"></span><button class="btn btn-petit" type="button" data-direct="quitter">${t("Cancel")}</button></div>`;
   } else {
     const etatN = d.etat === "connecte" ? `<span class="ok">✔ ${h(t("Connected to {0}, the master", [d.maitre || ""]))}</span>` : `<span class="attention">✖ ${h(t("The master ({0}) does not answer: the team is seen through GitHub meanwhile.", [d.maitre || ""]))}</span>${d.erreur ? ` <span class="muet petit">${h(t(d.erreur))}</span>` : ""}`;
-    tete = `<p class="petit">${etatN}</p><div class="ligne mt-1"><span class="espace"></span><button class="btn btn-petit" type="button" data-direct="quitter">${t("Leave the team's link")}</button></div>`;
+    const at = d.atelier;
+    const atelierN = d.atelier_lien ? `<div class="muet petit">${at && at.version ? h(t("Team workshop through the master's link: version {0}, {1} files.", [at.version, at.fichiers])) : t("Team workshop through the master's link.")}</div>` : "";
+    const ordre = d.ordre ? `<div class="muet petit">${h(t(d.ordre.action === "demarrer" ? "The master started the team, {0}" : "The master stopped the team after the cycle, {0}", [dateLisible(new Date(d.ordre.quand * 1000).toISOString())]))}</div>` : "";
+    tete = `<p class="petit">${etatN}</p>${atelierN}
+      <div class="mt-1"><label class="interrupteur m0"><input type="checkbox" data-direct-bascule="ordres" ${d.accepte_ordres ? "checked" : ""}><span>${t("The master may start and stop this computer's pilot")}</span></label>${ordre}</div>
+      <div class="ligne mt-1"><span class="espace"></span><button class="btn btn-petit" type="button" data-direct="quitter">${t("Leave the team's link")}</button></div>`;
   }
   return `<div class="bloc" id="bloc-direct"><h2>${t("Team, live")}</h2>${tete}${lignes ? `<table class="tab appareils pcs mt-1">${lignes}</table>` : ""}</div>`;
 }
@@ -2795,7 +2805,18 @@ $("#page").addEventListener("click", async (ev) => {
   if (a === "rejoindre") corps.invitation = ($("#direct-invitation") || {}).value || "";
   if (a === "retirer" || a === "accepter" || a === "refuser") corps.id = b.dataset.id;
   const v = await action(api("pcs-direct", "POST", corps), "");
-  if (v) { etat.directVues[nom] = v.direct || null; etat.directLus[nom] = Date.now(); rendrePage(); if (a === "rejoindre") toast(t("The code is right: the master now accepts this computer on its screen."), "ok"); }
+  if (v) { etat.directVues[nom] = v.direct || null; etat.directLus[nom] = Date.now(); rendrePage(); if (a === "rejoindre") toast(t("The code is right: the master now accepts this computer on its screen."), "ok"); if (a === "demarrer-equipe") toast(t("The team starts: every computer whose user allows it starts within a few seconds."), "ok"); }
+});
+$("#page").addEventListener("change", async (ev) => {
+  const i = ev.target.closest("[data-direct-bascule]"); if (!i) return;
+  const nom = etat.projet || ((etat.vue || {}).projet || {}).nom;
+  const valeur = i.checked;
+  if (i.dataset.directBascule === "atelier" && valeur) {
+    const c = await choisir(t("The team's workshop through the direct link? The plan, the request, the log and the notes then go through this link only: .athanor/ leaves the commits on every computer (the next push takes it out of GitHub; the files stay in each folder)."), [{ id: "", texte: t("Cancel") }, { id: "oui", texte: t("Through the link") }]);
+    if (c !== "oui") { i.checked = false; return; }
+  }
+  const v = await action(api("pcs-direct", "POST", { action: i.dataset.directBascule, valeur }), "");
+  if (v) { etat.directVues[nom] = v.direct || null; etat.directLus[nom] = Date.now(); rendrePage(); } else i.checked = !valeur;
 });
 
 function etatPC(p) {
