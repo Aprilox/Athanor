@@ -36,6 +36,8 @@ type Config struct {
 	FinsVues map[string]string `json:"fins_vues,omitempty"`
 	// remote access: on or off, its local port, the trusted devices (distance.go; hashes of keys only)
 	Distance DistanceConfig `json:"distance"`
+	// the shortcuts to the installed Athanor made from the window (raccourci.go)
+	Raccourcis []string `json:"raccourcis,omitempty"`
 }
 
 func configDefaut() Config {

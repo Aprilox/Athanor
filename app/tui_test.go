@@ -657,6 +657,12 @@ func TestTUIPages2(t *testing.T) {
 		t.Fatalf("r on GitHub: %+v", a.form)
 	}
 	a.form = nil
+	// k: the access kept to create repositories without a window (asked first)
+	taper(a, "k")
+	if a.dialogue == nil || a.dialogue.titre != "Create repositories without a window" || a.dialogue.choix[0].id != "oui" {
+		t.Fatalf("k on GitHub: %+v", a.dialogue)
+	}
+	a.dialogue = nil
 	// a setting's form, opened with its value: closed unchanged, nothing asked; changed, asked first
 	a.page, a.selReglage = pReglages, 1
 	a.env[1].Valeur = "opus"

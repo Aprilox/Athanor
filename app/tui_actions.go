@@ -132,7 +132,7 @@ func (a *appTUI) touche(ev evenementTUI) {
 // lettresPages: the letters a page gives a meaning of its own; there they come before the keys of every
 // page (p is the project chooser elsewhere, the palette in Settings; a is Stop after cycle elsewhere, the
 // automatic push on GitHub), typed small or capital.
-var lettresPages = map[int]string{pReglages: "lpa", pGitHub: "cdlrptaug", pDistance: "ovrd"}
+var lettresPages = map[int]string{pReglages: "lpar", pGitHub: "cdlrptaugbko", pDistance: "ovrd"}
 
 func (a *appTUI) lettrePage(k string) string {
 	if len([]rune(k)) != 1 {
@@ -479,6 +479,9 @@ func (a *appTUI) verifierGitHubPuisDemarrer() {
 				quand = d.Format("2006-01-02 " + a.formatHeure())
 			}
 			texte := a.t("GitHub has {0} commit(s) this folder does not have: someone pushed since your last work (the last one: “{1}”, by {2}, {3}). Bring them in before starting?", r.Derriere, firstNonEmpty(r.Sujet, "?"), firstNonEmpty(r.Auteur, "?"), quand)
+			if r.SansLien {
+				texte = a.t("GitHub's branch {0} has a history of its own, nothing in common with this project's: {1} commit(s), the last one “{2}” by {3}, {4}. Usually the README, licence or .gitignore GitHub adds when it creates the repository.", firstNonEmpty(r.Branche, "main"), r.Derriere, firstNonEmpty(r.Sujet, "?"), firstNonEmpty(r.Auteur, "?"), quand)
+			}
 			if r.Devant > 0 {
 				texte += " " + a.t("This folder also has {0} commit(s) of its own: both are merged.", r.Devant)
 			}
@@ -489,7 +492,11 @@ func (a *appTUI) verifierGitHubPuisDemarrer() {
 					case "ici":
 						a.lancerPilote()
 					case "recuperer":
-						a.recupererPuis(func() { a.lancerPilote() })
+						action := "recuperer"
+						if r.SansLien {
+							action = "integrer"
+						}
+						a.recupererAvec(action, func() { a.lancerPilote() })
 					default:
 						a.demarrage = time.Time{}
 					}
@@ -553,15 +560,22 @@ func (a *appTUI) recupererGitHub() {
 		})
 }
 
-func (a *appTUI) recupererPuis(ensuite func()) {
+func (a *appTUI) recupererPuis(ensuite func()) { a.recupererAvec("recuperer", ensuite) }
+
+// recupererAvec: recuperer, or integrer (a GitHub branch with a history of its own: its files brought in).
+func (a *appTUI) recupererAvec(action string, ensuite func()) {
 	a.annoncer(a.t("Getting GitHub's work…"), false)
 	c := *a.c
 	go func() {
 		var r EtatRecuperer
-		err := c.appel("POST", "github", map[string]string{"action": "recuperer"}, &r)
+		err := c.appel("POST", "github", map[string]string{"action": action}, &r)
 		a.majs <- func(a *appTUI) {
 			if err != nil {
 				a.annoncer(a.texteErreur(err), true)
+				return
+			}
+			if r.Resultat == "bloque" && r.SansLien {
+				a.resoudreBrancheGitHub()
 				return
 			}
 			textes := map[string]string{
@@ -583,6 +597,60 @@ func (a *appTUI) recupererPuis(ensuite func()) {
 			if bon && ensuite != nil {
 				ensuite()
 			}
+		}
+	}()
+}
+
+// resoudreBrancheGitHub: GitHub's branch has commits the project has not: brought in (its files, when its
+// history shares nothing with the project's), or GitHub's branch replaced with the project.
+func (a *appTUI) resoudreBrancheGitHub() {
+	a.annoncer(a.t("Checking GitHub…"), false)
+	c := *a.c
+	go func() {
+		var r EtatRecuperer
+		err := c.appel("POST", "github", map[string]string{"action": "verifier"}, &r)
+		a.majs <- func(a *appTUI) {
+			a.toast = ""
+			if err != nil || r.Resultat != "verifie" {
+				a.annoncer(a.t("GitHub cannot be read now: try again in a moment."), true)
+				return
+			}
+			if r.Derriere <= 0 {
+				a.annoncer(a.t("Already up to date with GitHub."), false)
+				return
+			}
+			quand := r.Quand
+			if d, ok := lireDate(r.Quand); ok {
+				quand = d.Format("2006-01-02 " + a.formatHeure())
+			}
+			b := firstNonEmpty(r.Branche, "main")
+			texte := a.t("GitHub's branch {0} has {1} commit(s) this project does not have (the last one: “{2}”, by {3}, {4}).", b, r.Derriere, firstNonEmpty(r.Sujet, "?"), firstNonEmpty(r.Auteur, "?"), quand)
+			integrer, libelle := "recuperer", a.t("Bring them in")
+			if r.SansLien {
+				texte = a.t("GitHub's branch {0} has a history of its own, nothing in common with this project's: {1} commit(s), the last one “{2}” by {3}, {4}. Usually the README, licence or .gitignore GitHub adds when it creates the repository.", b, r.Derriere, firstNonEmpty(r.Sujet, "?"), firstNonEmpty(r.Auteur, "?"), quand)
+				integrer, libelle = "integrer", a.t("Bring GitHub's files in")
+			}
+			choix := []choixTUI{{id: integrer, texte: libelle}}
+			if r.Equipe {
+				texte += " " + a.t("Several computers work on this project: GitHub's branch holds their work, it is never replaced.")
+			} else {
+				texte += " " + a.t("Bring them into the project (nothing is lost on either side), or replace GitHub's branch with this project?")
+				choix = append(choix, choixTUI{id: "remplacer", texte: a.t("Replace GitHub's branch with this project"), danger: true})
+			}
+			choix = append(choix, choixTUI{id: "", texte: a.t("Cancel")})
+			a.demander(a.t("GitHub's branch"), texte, choix, func(id string) {
+				switch id {
+				case "recuperer", "integrer":
+					a.recupererAvec(id, nil)
+				case "remplacer":
+					a.demander(a.t("Replace"), a.t("Replace GitHub's branch {0} with this project? Its {1} commit(s) that this project does not have leave the branch (the last one: “{2}”). Nothing of this project is lost.", b, r.Derriere, firstNonEmpty(r.Sujet, "?")),
+						[]choixTUI{{id: "oui", texte: a.t("Replace"), danger: true}, {id: "", texte: a.t("Cancel")}}, func(id string) {
+							if id == "oui" {
+								a.agir("POST", "github", map[string]any{"action": "remplacer", "valeur": r.Sha}, nil)
+							}
+						})
+				}
+			})
 		}
 	}()
 }

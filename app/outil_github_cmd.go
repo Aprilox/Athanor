@@ -529,13 +529,16 @@ func contientGH(s, motif string) bool { return regexp.MustCompile("(?i)" + motif
 
 // pousserGH: github.sh pousser; prints what it says, returns its exit code.
 func pousserGH(args []string, w io.Writer) int {
-	projet, auto, malgre := "", false, ""
+	projet, auto, malgre, remplacer := "", false, "", ""
 	for _, a := range args {
 		switch {
 		case a == "--auto":
 			auto = true
 		case strings.HasPrefix(a, "--malgre="):
 			malgre = strings.TrimPrefix(a, "--malgre=")
+		case strings.HasPrefix(a, "--remplacer="):
+			// the user chose to replace GitHub's branch, as it was when they saw it (that commit, no newer)
+			remplacer = strings.TrimPrefix(a, "--remplacer=")
 		default:
 			projet = a
 		}
@@ -571,6 +574,14 @@ func pousserGH(args []string, w io.Writer) int {
 	if auto && !r.Auto {
 		fmt.Fprintln(w, "Automatic push is off.")
 		return 3
+	}
+	if remplacer != "" && (auto || r.Equipe || !reShaGH.MatchString(remplacer)) {
+		if r.Equipe {
+			fmt.Fprintln(w, "Several computers work on this project: GitHub's branch is never replaced (it holds their work).")
+		} else {
+			fmt.Fprintln(w, "Invalid request.")
+		}
+		return 2
 	}
 	// Push now, with the workshop shared: what it holds goes too (it waited for Claude's next commit)
 	if !auto && malgre == "" && r.Atelier {
@@ -626,7 +637,7 @@ func pousserGH(args []string, w io.Writer) int {
 		return 1
 	}
 	base, _ := sortieGH(gmGH(miroir, nil, "rev-parse", "--verify", "-q", "refs/athanor/pousse/"+branche))
-	if base == sha {
+	if base == sha && remplacer == "" {
 		noterGH(d, "ok", "Already up to date on GitHub.", resume, noteGitHub{})
 		_ = fichierAtelier(projet, "SECRETS_FOUND.md", true, nil)
 		fmt.Fprintf(w, "GitHub: already up to date (%s, %s).\n", r.Depot, branche)
@@ -674,7 +685,11 @@ func pousserGH(args []string, w io.Writer) int {
 	}
 	sortie, code := "", 1
 	for _, dist := range distantsGH(d, r) { // GitHub's SSH port, then its HTTPS one (pcs.go)
-		c := gmGH(miroir, nil, append(dist.extra, "push", "--porcelain", "--no-verify", dist.url, sha+":refs/heads/"+branche)...)
+		pousse := []string{"push", "--porcelain", "--no-verify"}
+		if remplacer != "" {
+			pousse = append(pousse, "--force-with-lease=refs/heads/"+branche+":"+remplacer)
+		}
+		c := gmGH(miroir, nil, append(append(dist.extra, pousse...), dist.url, sha+":refs/heads/"+branche)...)
 		out, err := c.CombinedOutput()
 		sortie = strings.TrimRight(string(out), "\n")
 		code = 0
@@ -713,8 +728,11 @@ func pousserGH(args []string, w io.Writer) int {
 		n.args = []string{branche}
 	case contientGH(sortie, `GH001|large files|file size limit`):
 		modele, resultat, ret = "A file is larger than GitHub's limit (100 MB): keep it out of git (.gitignore) or use Git LFS.", "rejete", 5
+	case remplacer != "" && contientGH(sortie, `stale info|\[rejected\]`):
+		modele, resultat, ret = "GitHub's branch {0} changed since you looked at it: nothing was replaced. Look again.", "rejete", 5
+		n.args = []string{branche}
 	case contientGH(sortie, `non-fast-forward|fetch first|\[rejected\]|stale info`):
-		modele, resultat, ret = "GitHub's branch {0} has commits the project does not have. Athanor never overwrites them: choose another branch, or bring those commits into the project.", "rejete", 5
+		modele, resultat, ret = "GitHub's branch {0} has commits the project does not have. Athanor never overwrites them: bring them into the project (GitHub page › Get GitHub's work), replace GitHub's branch with this project there, or choose another branch.", "rejete", 5
 		n.args = []string{branche}
 	case contientGH(sortie, `host key verification failed|remote host identification has changed`):
 		modele = "GitHub's identity could not be verified: push refused. Link the project again to get GitHub's current keys."
@@ -1273,6 +1291,10 @@ func commandeGitHub(args []string, w io.Writer) (int, bool) {
 		return connecterGH(args[1:], w), true
 	case "deconnecter":
 		return deconnecterGH(args[1:], w), true
+	case "garder-acces":
+		return garderAccesGH(args[1:], w), true
+	case "oublier-acces":
+		return oublierAccesGH(args[1:], w), true
 	case "connexion":
 		return connexionGHCommande(args[1:], w), true
 	case "lier-compte":
@@ -1371,7 +1393,7 @@ func testerGH(args []string, w io.Writer) int {
 	case err == nil:
 		return reponseTest(w, true, "Connected: Athanor can push to {0}, branch {1}.", r.Depot, branche)
 	case contientGH(texte, `non-fast-forward|fetch first|\[rejected\]|stale info`):
-		return reponseTest(w, false, "Connected to {0}, but GitHub's branch {1} has commits the project does not have: the push would be refused. Choose another branch, or bring those commits into the project.", r.Depot, branche)
+		return reponseTest(w, false, "Connected to {0}, but GitHub's branch {1} has commits the project does not have: the push would be refused. Bring them into the project (Get GitHub's work), replace GitHub's branch with this project, or choose another branch.", r.Depot, branche)
 	case contientGH(texte, `GH006|protected branch`):
 		return reponseTest(w, false, "The branch {0} is protected on GitHub: choose another branch, or allow the push in the repository's settings.", branche)
 	case contientGH(texte, `permission denied|read only|not authorized|access denied|denied to deploy key`):

@@ -604,6 +604,7 @@ input.large { flex: 1; min-width: 200px; width: auto; }
 .pastille-alerte { background: var(--attention); color: var(--sur-attention); }
 .pv-bandeau { display: block; text-decoration: none; color: inherit; border-color: var(--attention); }
 .pv-bandeau:hover { filter: brightness(1.1); }
+.bandeau-raccourci { border-color: var(--accent); }
 .pv-carte.pv-close { opacity: .8; }
 .pv-tete { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .pv-etat { font-size: 12px; padding: 1px 8px; border-radius: 10px; border: 1px solid currentColor; white-space: nowrap; }

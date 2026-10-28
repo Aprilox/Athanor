@@ -7,7 +7,11 @@ package main
 //
 //   - --verifier: GitHub read, nothing changed: how many commits GitHub has that the project has not
 //     (derriere) and the other way round (devant), and GitHub's last one. The app asks before starting a
-//     pilot that is behind.
+//     pilot that is behind. sans_lien: GitHub's branch has a history of its own, nothing in common with the
+//     project's (typically the README or licence GitHub adds when it creates the repository).
+//   - --integrer: such a branch's files brought into the project all the same (a merge of the two
+//     histories, asked by the user; never for several computers, whose projects must share one): the
+//     same as below otherwise. To replace GitHub's branch instead: athanor github pousser --remplacer=SHA.
 //   - otherwise, with no pilot running and the files committed: GitHub's commits merged in (a fast-forward
 //     when the project has nothing of its own since). Changes on both sides that git cannot merge by itself
 //     are never left half done: the merge is undone and .athanor/MERGE_NEEDED.md tells Claude to make it at
@@ -35,12 +39,14 @@ type EtatRecuperer struct {
 	Quand    string `json:"quand,omitempty"`
 	Branche  string `json:"branche,omitempty"`
 	Depot    string `json:"depot,omitempty"`
-	Equipe   bool   `json:"equipe,omitempty"` // several computers: the pilot brings the others' work in by itself
+	Equipe   bool   `json:"equipe,omitempty"`    // several computers: the pilot brings the others' work in by itself
+	SansLien bool   `json:"sans_lien,omitempty"` // GitHub's branch shares nothing with the project's history
+	Sha      string `json:"sha,omitempty"`       // GitHub's last commit (what replacing it expects)
 }
 
 func recupererGH(args []string, w io.Writer) int {
 	projet, ok := cheminProjetGH(argGH(args, 0))
-	verifier := argGH(args, 1) == "--verifier"
+	verifier, integrer := argGH(args, 1) == "--verifier", argGH(args, 1) == "--integrer"
 	fin := func(e EtatRecuperer, code int) int {
 		b, _ := json.Marshal(e)
 		fmt.Fprintln(w, string(b))
@@ -78,6 +84,7 @@ func recupererGH(args []string, w io.Writer) int {
 		e.Resultat = recuAucun
 		return fin(e, 0)
 	}
+	e.Sha = distant
 	if verifier {
 		e.Resultat = "verifie"
 		if l, err := sortieGH(gmGH(miroir, nil, "log", "-1", "--format=%s%x00%an%x00%cI", distant)); err == nil {
@@ -100,12 +107,66 @@ func recupererGH(args []string, w io.Writer) int {
 		if n, err := sortieGH(gmGH(miroir, nil, "rev-list", "--count", distant+".."+tete)); err == nil {
 			e.Devant, _ = strconv.Atoi(n)
 		}
+		e.SansLien = gmGH(miroir, nil, "merge-base", tete, distant).Run() != nil
+		return fin(e, 0)
+	}
+	if integrer {
+		if r.Equipe {
+			e.Resultat, e.Detail = recuBloque, "several computers work on this project: their histories must be the same one, never two merged"
+			return fin(e, 1)
+		}
+		res, detail := integrerPC(projet, d, miroir, r)
+		e.Resultat, e.Detail = res, detail
+		if res == recuErreur || res == recuBloque {
+			return fin(e, 1)
+		}
 		return fin(e, 0)
 	}
 	res, detail := recevoirPC(projet, d, miroir, r)
 	e.Resultat, e.Detail = res, detail
 	if res == recuErreur || res == recuBloque {
+		if res == recuBloque && strings.Contains(detail, "nothing in common") {
+			e.SansLien = true
+		}
 		return fin(e, 1)
 	}
 	return fin(e, 0)
+}
+
+// integrerPC: GitHub's branch, with a history of its own, merged into the project (both histories kept:
+// the project's files and GitHub's). A file both have differently: nothing is changed, Claude merges them at
+// the start of its next cycle (.athanor/MERGE_NEEDED.md). A branch that does share the project's history:
+// recevoirPC, as always.
+func integrerPC(projet, d, miroir string, r reglagesGH) (string, string) {
+	branche := firstNonEmpty(r.Branche, "main")
+	gd := projet + "/.git"
+	local := "refs/remotes/athanor/" + branche
+	if _, _, raison := lireProjetGH(projet); raison != "" {
+		return recevoirPC(projet, d, miroir, r)
+	}
+	if _, err := gProjetGH(gd, "-c", "protocol.file.allow=always", "fetch", "--no-tags", "--no-write-fetch-head", "--quiet", miroir,
+		"+"+refsDistantPC+branche+":"+local); err != nil {
+		return recuErreur, "the commits of GitHub could not be brought into the project"
+	}
+	if gTravailGH(projet, "merge-base", local, "HEAD").Run() == nil {
+		return recevoirPC(projet, d, miroir, r)
+	}
+	if !propreTravailPC(projet) {
+		return recuSale, ""
+	}
+	avant, _ := gProjetGH(gd, "rev-parse", "HEAD")
+	ident := identPC(projet)
+	args := append(ident, "merge", "--allow-unrelated-histories", "--no-edit", "-m", "Bring GitHub's files in ("+branche+")", local)
+	if out, err := gTravailGH(projet, args...).CombinedOutput(); err != nil {
+		_ = gTravailGH(projet, "merge", "--abort").Run()
+		if apres, _ := gProjetGH(gd, "rev-parse", "HEAD"); apres != avant || !propreTravailPC(projet) {
+			_ = gTravailGH(projet, "reset", "--hard", "--quiet", avant).Run()
+		}
+		fichiers, _ := gTravailGH(projet, "diff", "--name-only", "HEAD", local).Output()
+		_ = consigneFusionPC(projet, "--allow-unrelated-histories "+local, strings.Fields(string(fichiers)), strings.TrimSpace(string(out)), false)
+		return recuConflit, "GitHub's files and the project's differ in the same files: Claude merges them at the start of the next cycle"
+	}
+	n, _ := gProjetGH(gd, "rev-list", "--count", avant+".."+local)
+	_ = fichierAtelier(projet, "MERGE_NEEDED.md", true, nil)
+	return recuFusion, n
 }
