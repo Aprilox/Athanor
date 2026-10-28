@@ -912,16 +912,22 @@ function montrerAncre(id, essais = 40) {
 // ----------------------------------------------------------------------------- pages
 const pages = {};
 
-// --- first launch: a three-step wizard (language, appearance, what comes next) in an overlay
-const ETAPES_ASSISTANT = 3;
+// --- first launch: a four-step wizard (language, a shortcut, appearance, what comes next) in an overlay
+const ETAPES_ASSISTANT = 4;
 function rendreAssistant() {
   const el = $("#assistant"); const n = etat.assistant;
   el.hidden = n < 0; if (n < 0) return;
   const barre = Array.from({ length: ETAPES_ASSISTANT }, (_, i) => `<i class="${i <= n ? "faite" : ""}"></i>`).join("");
   let corps = "", titre = "";
   if (n === 0) { titre = t("Welcome"); corps = `<p class="muet">${t("Athanor builds whole projects with Claude Code while you do something else. First, pick your language.")}</p>${rendreLangues()}`; }
-  if (n === 1) { titre = t("Make it yours"); corps = `<p class="muet">${t("Pick a palette and an accent color. You can change them any time in Options.")}</p>${rendreApparence()}`; }
-  if (n === 2) { titre = t("What comes next"); corps = `<p class="muet">${t("Five steps, all from this window. Then you can let it run for days, on several projects at once.")}</p>
+  if (n === 1) { // the shortcut to the installed Athanor, offered at once (skipping it: Continue)
+    const r = raccourciConnu();
+    titre = t("A shortcut to Athanor");
+    corps = `<p class="muet">${t("Athanor is installed in its own folder and updates itself there. A shortcut opens it directly: choose where to put it, or skip this step (Settings → Options → Shortcut, later).")}</p>
+      <div class="assistant-raccourci">${r ? blocRaccourci(r, false, "", "rc-dossier-assistant") : attenteRaccourci()}</div>`;
+  }
+  if (n === 2) { titre = t("Make it yours"); corps = `<p class="muet">${t("Pick a palette and an accent color. You can change them any time in Options.")}</p>${rendreApparence()}`; }
+  if (n === 3) { titre = t("What comes next"); corps = `<p class="muet">${t("Five steps, all from this window. Then you can let it run for days, on several projects at once.")}</p>
     <div class="recap">${[t("Install the tooling"), t("Check and connect"), t("Add a project"), t("Say what you want"), t("Start")].map((x, i) => `<div><b>${i + 1}</b><span>${x}</span></div>`).join("")}</div>
     <p class="muet petit">${t("The overview page keeps these steps until the first project runs.")}</p>`; }
   el.innerHTML = `<div class="assistant-carte">
@@ -938,12 +944,15 @@ function rendreApparence() {
   <div class="accents mt-3">${ACCENTS.map((a) => `<button class="accent ${(etat.accent || "sarcelle") === a.code ? "actif" : ""}" data-accent="${a.code}" style="--c:${a.c}" title="${t(a.nom)}" aria-label="${t(a.nom)}"></button>`).join("")}</div>`;
 }
 $("#assistant").addEventListener("click", async (ev) => {
-  const b = ev.target.closest("button"); if (!b) return;
+  const b = ev.target.closest("button"); if (!b || b.dataset.raccourci || b.dataset.parcourir) return; // the document's handlers
   if (b.dataset.langue) { await changerLangue(b.dataset.langue); return rendreAssistant(); }
   if (b.dataset.theme) { await changerApparence(b.dataset.theme, etat.accent); return rendreAssistant(); }
   if (b.dataset.accent) { await changerApparence(etat.theme, b.dataset.accent); return rendreAssistant(); }
   if (b.dataset.assistant === "retour") { etat.assistant--; return rendreAssistant(); }
-  if (b.dataset.assistant === "suite") { etat.assistant++; return rendreAssistant(); }
+  if (b.dataset.assistant === "suite") {
+    if (etat.assistant === 1 && !((etat.raccourci || {}).raccourcis || []).length) etat.raccourciPlusTard = true; // skipped: not offered again this time
+    etat.assistant++; return rendreAssistant();
+  }
   if (b.dataset.assistant === "fin") { await action(api("preferences", "POST", { bienvenue_vue: true })); etat.assistant = -1; rendreAssistant(); location.hash = "#suivi"; await rendrePage(); demarrerVisite(); }
 });
 
@@ -1433,40 +1442,51 @@ function modesSysteme(v) {
 }
 
 // --- the shortcut to the installed Athanor (raccourci.go): the downloaded file installs it, the shortcut opens it
-etat.raccourci = null; etat.raccourciLu = false; etat.raccourciPlusTard = false;
+etat.raccourci = null; etat.raccourciLu = false; etat.raccourciPlusTard = false; etat.raccourciErreur = "";
 function raccourciConnu() {
-  if (etat.raccourci || etat.raccourciLu) return etat.raccourci;
-  etat.raccourciLu = true;
+  if (etat.raccourci || etat.raccourciLu || etat.raccourciErreur) return etat.raccourci; // after an error: only "Try again" asks again
+  etat.raccourciLu = true; etat.raccourciErreur = "";
   api("raccourci").then((r) => {
     etat.raccourci = r;
+    if (etat.assistant >= 0) rendreAssistant();
     const l = r.lancement;
     if (l && l.ancien) toast(t("The file you opened is Athanor {0}, older than the installed one ({1}): nothing was replaced, the installed Athanor opened.", [l.ancien, (etat.vue || {}).version || ""]), "ok");
     if (l && l.mis_a_jour) toast(t("Athanor updated from {0} to {1}.", [l.mis_a_jour, (etat.vue || {}).version || ""]), "ok");
     if (l && (l.repares || []).length) toast(t("Same version opened again: {0} damaged file(s) of the installed Athanor put back.", [l.repares.length]), "ok");
     if (["suivi", "reglages"].includes(etat.page)) rendrePage();
-  }).catch(() => {});
+  }).catch((e) => { // said, with a button to ask again (never "loading" for ever)
+    etat.raccourciErreur = (e && e.message) || String(e); etat.raccourciLu = false;
+    if (etat.assistant >= 0) rendreAssistant();
+    if (etat.page === "reglages") rendrePage();
+  });
   return null;
+}
+// attenteRaccourci: while the shortcut's details are being read, or why they could not be
+function attenteRaccourci() {
+  if (!etat.raccourciErreur) return `<p class="muet petit">${t("Loading…")}</p>`;
+  return `<p class="erreur petit">${h(t("The shortcut's details could not be read: {0}", [etat.raccourciErreur]))}</p><button class="btn" data-raccourci="relire">${t("Try again")}</button>`;
 }
 function nomRaccourci(f) { return String(f).split(/[\\/]/).pop(); }
 // blocRaccourci: the folder (proposed: the Desktop, the Mac's Applications) and the button
-function blocRaccourci(r, titre, plus) {
+function blocRaccourci(r, titre, plus, champ = "rc-dossier") {
   if (!r) return "";
   const faits = r.raccourcis || [];
   const explication = r.systeme === "darwin" ? t("An Athanor.app that opens the installed Athanor: put it in Applications or on the Dock.")
     : r.systeme === "windows" ? t("An Athanor shortcut that opens the installed Athanor (the copy kept in Athanor's folder, which updates itself), also added to the Start menu: the downloaded file can then be deleted.")
     : t("A launcher that opens the installed Athanor (also added to the applications menu): the downloaded file can then be deleted.");
   return `${titre ? `<h2>${t("Shortcut")}</h2>` : ""}<p class="muet petit m0">${explication}</p>
-    ${faits.length ? `<p class="ok petit">✔ ${faits.map((f) => `<code title="${h(f)}">${h(nomRaccourci(f))}</code>`).join(" ")} <span class="muet">${h(faits[0].replace(/[\\/][^\\/]*$/, ""))}</span></p>` : ""}
-    <label class="champ mt-1"><span>${t("Folder of the shortcut")}</span>${champDossier("rc-dossier", r.defaut || "", "")}</label>
-    <div class="ligne mt-1"><button class="btn ${faits.length ? "" : "btn-primaire"}" data-raccourci="creer">${faits.length ? t("Make another shortcut") : t("Create the shortcut")}</button>${plus || ""}</div>`;
+    ${faits.map((f) => `<p class="ok petit m0">✔ <code title="${h(f)}">${h(nomRaccourci(f))}</code> <span class="muet">${h(f.replace(/[\\/][^\\/]*$/, ""))}</span></p>`).join("")}
+    <label class="champ mt-1"><span>${t("Folder of the shortcut")}</span>${champDossier(champ, r.defaut || "", "", false, t("Choose the shortcut's folder"))}</label>
+    <div class="ligne mt-1"><button class="btn ${faits.length ? "" : "btn-primaire"}" data-raccourci="creer" data-champ="${champ}">${faits.length ? t("Make another shortcut") : t("Create the shortcut")}</button>${plus || ""}</div>`;
 }
 document.addEventListener("click", async (ev) => {
   const b = ev.target.closest("[data-raccourci]"); if (!b) return;
   if (b.dataset.raccourci === "plus-tard") { etat.raccourciPlusTard = true; rendrePage(); return; }
+  if (b.dataset.raccourci === "relire") { etat.raccourciErreur = ""; raccourciConnu(); if (etat.assistant >= 0) rendreAssistant(); else rendrePage(); return; }
   b.disabled = true;
-  const r = await action(api("raccourci", "POST", { dossier: ($("#rc-dossier") || {}).value || "" }));
+  const r = await action(api("raccourci", "POST", { dossier: ($("#" + (b.dataset.champ || "rc-dossier")) || {}).value || "" }));
   b.disabled = false;
-  if (r) { etat.raccourci = Object.assign({}, r.raccourci, { lancement: (etat.raccourci || {}).lancement }); toast(t("Shortcut made: {0}", [(r.crees || []).join(", ")]), "ok"); rendrePage(); }
+  if (r) { etat.raccourci = Object.assign({}, r.raccourci, { lancement: (etat.raccourci || {}).lancement }); toast(t("Shortcut made: {0}", [(r.crees || []).join(", ")]), "ok"); if (etat.assistant >= 0) rendreAssistant(); rendrePage(); }
 });
 // the downloaded file opened this window: a shortcut to the installed Athanor is offered, once
 function bandeauRaccourci() {
@@ -1881,8 +1901,8 @@ const pageNouveau = () => `${ongletsNouveau()}<div class="page-etroite">
   </div>`;
 
 // champDossier: a folder field with its Browse… button (the system's dialog, or Athanor's picker)
-function champDossier(id, valeur, exemple, rejoindre) {
-  return `<div class="ligne champ-dossier"><input type="text" id="${id}" value="${h(valeur || "")}" placeholder="${h(exemple || "")}"><button class="btn" type="button" data-parcourir="${id}" ${rejoindre ? "data-parcourir-rejoindre" : ""}>${t("Browse…")}</button></div>`;
+function champDossier(id, valeur, exemple, rejoindre, titre) {
+  return `<div class="ligne champ-dossier"><input type="text" id="${id}" value="${h(valeur || "")}" placeholder="${h(exemple || "")}"><button class="btn" type="button" data-parcourir="${id}" ${rejoindre ? "data-parcourir-rejoindre" : ""} ${titre ? `data-titre="${h(titre)}"` : ""}>${t("Browse…")}</button></div>`;
 }
 // parcourir: the folder chosen goes into the field; to join a project, a folder with files gets a new
 // folder inside it, named after the project (the team's files arrive in an empty one)
@@ -1891,8 +1911,8 @@ async function parcourir(b) {
   b.disabled = true;
   let r = null;
   try {
-    if (!(etat.vue || {}).distant) r = await api("dossiers/choisir", "POST", { depart: champ.value.trim(), titre: t("Choose the project's folder") }).catch((e) => { toast(e.message, "erreur"); return { annule: true }; });
-    if (!r || r.indisponible) r = await selecteurDossier(champ.value.trim());
+    if (!(etat.vue || {}).distant) r = await api("dossiers/choisir", "POST", { depart: champ.value.trim(), titre: b.dataset.titre || t("Choose the project's folder") }).catch((e) => { toast(e.message, "erreur"); return { annule: true }; });
+    if (!r || r.indisponible) r = await selecteurDossier(champ.value.trim(), b.dataset.titre);
   } finally { b.disabled = false; }
   if (!r || !r.chemin) return;
   let chemin = r.chemin;
@@ -1905,9 +1925,9 @@ async function parcourir(b) {
 }
 document.addEventListener("click", (ev) => { const b = ev.target.closest("[data-parcourir]"); if (b) { ev.preventDefault(); parcourir(b); } });
 // selecteurDossier: Athanor's own folder picker, in a dialog (no system dialog, or from a phone)
-function selecteurDossier(depart) {
+function selecteurDossier(depart, titre) {
   const fond = $("#selecteur-dossier");
-  $("#sd-titre").textContent = t("Choose the project's folder");
+  $("#sd-titre").textContent = titre || t("Choose the project's folder");
   fond.querySelector('[data-sd="annuler"]').textContent = t("Cancel");
   fond.querySelector('[data-sd="ok"]').textContent = t("Use this folder");
   fond.hidden = false;
@@ -3220,7 +3240,7 @@ async function rendreOptions() {
         <label class="champ mt-3"><span>${t("Palette and accent")}</span></label>${rendreApparence()}
       </div>
       <div class="bloc" id="bloc-connexion-gh"><h2>GitHub</h2>${rendreConnexionGH(etat.ghConnexion)}</div>
-      <div class="bloc" id="bloc-raccourci">${blocRaccourci(raccourciConnu(), true) || `<h2>${t("Shortcut")}</h2><p class="muet petit">${t("Updating…")}</p>`}</div>
+      <div class="bloc" id="bloc-raccourci">${blocRaccourci(raccourciConnu(), true) || `<h2>${t("Shortcut")}</h2>${attenteRaccourci()}`}</div>
       <div class="bloc"><h2>${t("Startup")}</h2>
         <label class="interrupteur"><input type="checkbox" id="op-lancer" data-option ${o.lancer_pilote_au_demarrage ? "checked" : ""}><span>${t("Restart the pilots that were running, when the app opens")}</span></label>
         <label class="interrupteur"><input type="checkbox" id="op-windows" data-option ${o.demarrage_windows ? "checked" : ""}><span>${t(o.windows ? "Open Athanor when Windows starts" : (etat.vue || {}).systeme === "darwin" ? "Open Athanor when you log in to the Mac" : "Open Athanor when your desktop session starts")}</span></label>
