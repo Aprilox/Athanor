@@ -47,6 +47,15 @@ func TestCatalogueRobloxParSysteme(t *testing.T) {
 		if c.Type != "hote" || c.Command != "{ATHANOR}" || strings.Join(c.Args, " ") != "passerelle roblox-mcp ${ROBLOX_STUDIO_MCP}" || r["ROBLOX_STUDIO_MCP"] != "" || strings.Contains(p, "(Windows)") {
 			t.Fatalf("%s: %+v %v %q", sys, c, r, p)
 		}
+		// Blender: Blender Lab's server run by uvx on this computer; nothing of Windows said to Claude
+		for _, m := range lireCatalogue().MCP {
+			if m.ID == "blender" && (m.Config.Type != "hote" || m.Config.Command != "uvx" || strings.Contains(m.Prerequis, "Windows")) {
+				t.Fatalf("%s blender: %+v %q", sys, m.Config, m.Prerequis)
+			}
+		}
+		if e := entreeCatalogueSysteme(t.TempDir(), "blender"); e == nil || strings.Contains(e["sauvegarde"].(string), "Windows") {
+			t.Fatalf("%s blender's instructions: %v", sys, e)
+		}
 	}
 }
 
@@ -76,10 +85,17 @@ func TestAdapterAuSysteme(t *testing.T) {
 	if c := def.objet("config"); c.brut("type") != "windows" {
 		t.Fatal("the library's entry changed")
 	}
-	// Blender has no macOS variant yet: left out, with the reason
-	bl := objetEssai(t, `{"catalogue":"blender","config":{"type":"windows","command":"cmd.exe","args":["/c","x"]}}`)
-	if s, raison := serveurMCP(kit, "blender", bl, objetJSON{}, "/p/projet", ""); s != nil || !strings.Contains(raison, "a Windows program") || !strings.Contains(raison, "not on this system") {
-		t.Fatalf("blender: %v %q", s, raison)
+	// Blender: uvx on this computer, outside the cage (Blender's add-on listens on this computer)
+	bl := objetEssai(t, `{"catalogue":"blender","config":{"type":"windows","command":"uvx","args":["--from","x","blender-mcp"]}}`)
+	if s, raison := serveurMCP(kit, "blender", bl, objetJSON{}, "/p/projet", ""); s == nil {
+		t.Fatal(raison)
+	} else if b, _ := json.Marshal(s); !strings.Contains(string(b), `"command":"uvx"`) || !strings.Contains(string(b), "blender_mcp.git") || strings.Contains(string(b), "mcp-cage") {
+		t.Fatalf("blender: %s", b)
+	}
+	// a catalog server with no variant for this system: left out, with the reason
+	w := objetEssai(t, `{"catalogue":"seulement-windows","config":{"type":"windows","command":"cmd.exe","args":["/c","x"]}}`)
+	if s, raison := serveurMCP(kit, "w", w, objetJSON{}, "/p/projet", ""); s != nil || !strings.Contains(raison, "a Windows program") || !strings.Contains(raison, "not on this system") {
+		t.Fatalf("windows only: %v %q", s, raison)
 	}
 	// "hote" is the catalog's only
 	if s, raison := serveurMCP(kit, "x", objetEssai(t, `{"config":{"type":"hote","command":"/bin/sh"}}`), objetJSON{}, "/p/projet", ""); s != nil || !strings.Contains(raison, "only from the verified catalog") {

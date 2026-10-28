@@ -580,11 +580,13 @@ func (a *appTUI) gererProjet() {
 	}
 	nom := a.vue.Projet.Nom
 	a.demander(a.t("Manage")+": "+nom, a.vue.Projet.Dossier, []choixTUI{
-		{id: "renommer", texte: a.t("Rename")}, {id: "archiver", texte: a.t("Archive")}, {id: "mode", texte: a.t("Working mode")}, {id: "liste", texte: a.t("Remove from the list"), danger: true}, {id: "", texte: a.t("Cancel")}},
+		{id: "renommer", texte: a.t("Rename")}, {id: "archiver", texte: a.t("Archive")}, {id: "mode", texte: a.t("Working mode")}, {id: "direct", texte: a.t("Team, live")}, {id: "liste", texte: a.t("Remove from the list"), danger: true}, {id: "", texte: a.t("Cancel")}},
 		func(id string) {
 			switch id {
 			case "mode":
 				a.agir("GET", "mode", nil, a.choisirModeTravail)
+			case "direct":
+				a.agir("GET", "pcs-direct", nil, a.equipeDirecte)
 			case "renommer":
 				s := &saisieT{}
 				s.mettreTexte(nom)
@@ -648,6 +650,99 @@ func (a *appTUI) choisirModeTravail(rep map[string]any) {
 		a.agir("POST", "mode", map[string]any{"parallele": id == "parallele", "parallele_max": maxi, "eco": id == "eco"}, nil)
 	})
 	a.dialogue.sel = sel
+}
+
+// equipeDirecte: the direct link of the project (equipe_directe.go), as the Overview's "Team, live": the
+// computers and what they use, then what this one can do (be the master, invite, join, leave).
+func (a *appTUI) equipeDirecte(rep map[string]any) {
+	var v struct {
+		Direct *VueDirecte `json:"direct"`
+	}
+	b, _ := json.Marshal(rep)
+	_ = json.Unmarshal(b, &v)
+	d := v.Direct
+	var l []string
+	var choix []choixTUI
+	pct := func(x *float64) string {
+		if x == nil {
+			return "—"
+		}
+		return fmt.Sprintf("%d %%", int(*x*100+0.5))
+	}
+	switch {
+	case d == nil || d.Etat == "fini":
+		if d != nil && d.Erreur != "" {
+			l = append(l, "✖ "+a.t(d.Erreur), "")
+		}
+		l = append(l, a.t("Direct link: the computers of the team see each other live (what each one builds, its quota, its cost) through a link of their own, separate from the remote access: a team member can never reach this computer's panel. The code still goes through GitHub."))
+		choix = []choixTUI{{id: "maitre", texte: a.t("Be the master of the team")}, {id: "rejoindre", texte: a.t("Join with an invitation")}}
+	case d.Role == "maitre":
+		switch d.Etat {
+		case "pret":
+			l = append(l, "✔ "+a.t("This computer is the master: the others join it with an invitation."))
+		case "erreur":
+			l = append(l, "✖ "+a.t(d.Erreur))
+		default:
+			l = append(l, a.t("Opening the team's link…"))
+		}
+		if d.Code != "" && d.Adresse != "" {
+			l = append(l, "", d.Adresse+"#"+d.Code, a.t("Paste it on the other computer (Overview › Team, live › Join), then accept it here. It works once, for 10 minutes."),
+				a.t("Only a computer you know: anyone with the invitation must still be accepted here."))
+		}
+		for _, x := range d.Demandes {
+			l = append(l, "", "⚠ "+a.t("{0} wants to join the team", x.Nom))
+			choix = append(choix, choixTUI{id: "accepter:" + x.Ref, texte: a.t("Accept") + " · " + x.Nom}, choixTUI{id: "refuser:" + x.Ref, texte: a.t("Refuse") + " · " + x.Nom})
+		}
+		choix = append(choix, choixTUI{id: "inviter", texte: a.t("Invite a computer")}, choixTUI{id: "actualiser", texte: a.t("Refresh")}, choixTUI{id: "quitter", texte: a.t("End the team's link"), danger: true})
+	case d.Role == "attente":
+		l = append(l, "⏳ "+a.t("Waiting for the master to accept this computer…"))
+		choix = []choixTUI{{id: "actualiser", texte: a.t("Refresh")}, {id: "quitter", texte: a.t("Cancel")}}
+	default:
+		if d.Etat == "connecte" {
+			l = append(l, "✔ "+a.t("Connected to {0}, the master", d.Maitre))
+		} else {
+			l = append(l, "✖ "+a.t("The master ({0}) does not answer: the team is seen through GitHub meanwhile.", d.Maitre))
+		}
+		choix = []choixTUI{{id: "quitter", texte: a.t("Leave the team's link"), danger: true}}
+	}
+	if d != nil && len(d.Noeuds) > 0 {
+		l = append(l, "")
+		for _, n := range d.Noeuds {
+			marque := "○"
+			if n.EnDirect {
+				marque = "●"
+			}
+			nom := n.Presence.Nom
+			if n.Maitre {
+				nom += " (" + a.t("master") + ")"
+			}
+			quoi := ""
+			if n.Presence.Jalon != "" {
+				quoi = " · " + firstNonEmpty(n.Presence.JalonTitre, n.Presence.Jalon)
+			}
+			l = append(l, fmt.Sprintf("%s %s%s · %s · %s", marque, nom, quoi, a.t("quota {0} · week {1}", pct(n.Stats.Session), pct(n.Stats.Semaine)),
+				a.t("{0} cycles · {1} $ · {2} tokens", n.Stats.Cycles, fmt.Sprintf("%.2f", n.Stats.Cout), fmtTokensTUI(n.Stats.Sortie))))
+		}
+	}
+	choix = append(choix, choixTUI{id: "", texte: a.t("Close")})
+	rafraichir := func(map[string]any) { a.agir("GET", "pcs-direct", nil, a.equipeDirecte) }
+	a.demander(a.t("Team, live"), strings.Join(l, "\n"), choix, func(id string) {
+		if act, ref, ok := strings.Cut(id, ":"); ok && (act == "accepter" || act == "refuser") {
+			a.agir("POST", "pcs-direct", map[string]any{"action": act, "id": ref}, rafraichir)
+			return
+		}
+		switch id {
+		case "actualiser":
+			rafraichir(nil)
+		case "maitre", "inviter", "quitter":
+			a.agir("POST", "pcs-direct", map[string]any{"action": id}, rafraichir)
+		case "rejoindre":
+			s := &saisieT{}
+			a.formulaire(a.t("Join with an invitation"), a.t(aideFormulaireLigne), []champTUI{{lib: "https://….trycloudflare.com#123456", h: 1, s: s}}, func(v []string) {
+				a.agirFormulaire("POST", "pcs-direct", map[string]any{"action": "rejoindre", "invitation": strings.TrimSpace(v[0])}, rafraichir)
+			})
+		}
+	})
 }
 
 var _ = sort.Strings

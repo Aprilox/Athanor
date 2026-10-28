@@ -33,6 +33,12 @@ func (s *Serveur) lirePCsProjet(p Projet, publier bool) (VuePCs, error) {
 	if publier {
 		args = append(args, "--publier")
 	}
+	// the master's direct address, encrypted, goes with its presence (equipe_directe.go); "aucun" removes it
+	lien := "aucun"
+	if s.lireDirect(p).Role == "maitre" {
+		lien = firstNonEmpty(s.lienMaitre(p), "aucun")
+	}
+	args = append(args, "--lien", lien)
 	out, err := s.executerGitHub(p, 60*time.Second, "pcs", args...)
 	var v VuePCs
 	if err == nil {

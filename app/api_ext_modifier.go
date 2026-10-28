@@ -111,7 +111,13 @@ func lireDocMCP(texte string, avant MCPInstalle) (docMCP, map[string]string, err
 		if c.Type == "" {
 			c.Type = "stdio"
 		}
-		if c.Type != "stdio" && c.Type != "windows" {
+		// "hote" (outside the cage): the verified catalog's own, kept as it is, never one written here
+		hote := c.Type == "hote" && avant.Catalogue != "" && avant.Config.Type == "hote" && c.Command == avant.Config.Command &&
+			strings.Join(c.Args, "\x00") == strings.Join(avant.Config.Args, "\x00") && len(c.Env) == 0
+		if c.Type == "hote" && !hote {
+			return d, nil, errors.New(`A program outside the cage ("hote") comes from the verified catalog only, as it is: its command and arguments cannot change.`)
+		}
+		if c.Type != "stdio" && c.Type != "windows" && !hote {
 			return d, nil, errors.New(`A server started by a command has the type "stdio" (in a cage) or "windows" (a Windows program).`)
 		}
 		if c.Type == "stdio" && avant.Config.Type != "windows" && estProgrammeWindows(*c) {

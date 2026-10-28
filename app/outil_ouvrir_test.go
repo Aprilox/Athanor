@@ -126,6 +126,7 @@ func TestDocMCP(t *testing.T) {
 }
 
 func TestModifierMCPApp(t *testing.T) {
+	systemeEssai(t, "windows")
 	kit := t.TempDir()
 	p := Projet{Nom: "a", Dossier: t.TempDir()}
 	s := nouveauServeur(Config{Kit: kit, Projets: []Projet{p}, ProjetActif: "a", Langue: "en"})
@@ -190,5 +191,44 @@ func TestModifierMCPApp(t *testing.T) {
 	}
 	if c, _ := appel("POST", "/api/extensions/mcp/modifier", map[string]string{"id": "inconnu", "texte": `{}`}); c != 404 {
 		t.Fatalf("unknown: %d", c)
+	}
+}
+
+// Linux and macOS: the catalog's server run outside the cage ("hote") saved as it is; changed, refused.
+func TestModifierMCPHote(t *testing.T) {
+	systemeEssai(t, "linux")
+	kit := t.TempDir()
+	p := Projet{Nom: "a", Dossier: t.TempDir()}
+	s := nouveauServeur(Config{Kit: kit, Projets: []Projet{p}, ProjetActif: "a", Langue: "en"})
+	s.csrf = "jeton"
+	mux := http.NewServeMux()
+	s.routes(mux)
+	appel := func(methode, chemin string, corps any) (int, map[string]any) {
+		b, _ := json.Marshal(corps)
+		r := httptest.NewRequest(methode, chemin, bytes.NewReader(b))
+		r.Header.Set("X-Athanor", "jeton")
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, r)
+		var v map[string]any
+		json.Unmarshal(w.Body.Bytes(), &v)
+		return w.Code, v
+	}
+	if c, v := appel("POST", "/api/extensions/catalogue", map[string]string{"type": "mcp", "id": "blender"}); c != 200 {
+		t.Fatalf("install: %d %v", c, v)
+	}
+	_, v := appel("GET", "/api/extensions/voir?type=mcp&id=blender", nil)
+	texte, _ := v["texte"].(string)
+	if !strings.Contains(texte, `"type": "hote"`) {
+		t.Fatalf("view: %s", texte)
+	}
+	if c, v := appel("POST", "/api/extensions/mcp/modifier", map[string]string{"id": "blender", "texte": texte}); c != 200 || lireBiblio(s.kitCourant()).MCP["blender"].Config.Type != "hote" {
+		t.Fatalf("save as is: %d %v", c, v)
+	}
+	autre := strings.Replace(texte, `"command": "uvx"`, `"command": "/bin/sh"`, 1)
+	if c, v := appel("POST", "/api/extensions/mcp/modifier", map[string]string{"id": "blender", "texte": autre}); c != 400 || !strings.Contains(v["erreur"].(string), "verified catalog only") {
+		t.Fatalf("another command outside the cage: %d %v", c, v)
+	}
+	if lireBiblio(s.kitCourant()).MCP["blender"].Config.Command != "uvx" {
+		t.Fatal("the library changed")
 	}
 }

@@ -11,9 +11,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
+	"regexp"
 	"strings"
 	"time"
 )
+
+// reLienDirect: an encrypted address (base64url), the only thing --lien writes.
+var reLienDirect = regexp.MustCompile(`^[A-Za-z0-9_-]{16,1000}$`)
 
 // VuePCs: what athanor github pcs prints.
 type VuePCs struct {
@@ -43,7 +48,7 @@ func pcsGH(args []string, w io.Writer) int {
 		ecrireJSONGH(w, v)
 		return 2
 	}
-	pilote, publier := "", false
+	pilote, publier, lien := "", false, "-"
 	for i := 1; i < len(args); i++ {
 		switch args[i] {
 		case "--pilote":
@@ -53,6 +58,11 @@ func pcsGH(args []string, w io.Writer) int {
 			}
 		case "--publier":
 			publier = true
+		case "--lien": // the master's direct address, encrypted (the application): published with the presence
+			if i+1 < len(args) {
+				lien = args[i+1]
+				i++
+			}
 		}
 	}
 	d := dossierGH(projet)
@@ -65,6 +75,12 @@ func pcsGH(args []string, w io.Writer) int {
 	verrou := verrouGH(d, 60*time.Second) // a push or a milestone taken meanwhile: one at a time
 	if verrou != nil {
 		defer verrou.Close()
+	}
+	switch {
+	case lien == "aucun":
+		_ = os.Remove(d + "/lien-direct")
+	case lien != "-" && reLienDirect.MatchString(lien):
+		_ = ecrireFichierPrive(d+"/lien-direct", lien+"\n")
 	}
 	switch pilote {
 	case "1":

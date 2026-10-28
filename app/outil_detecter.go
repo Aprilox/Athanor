@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"sort"
@@ -345,6 +346,9 @@ func detecter(kitArg string) error {
 			}
 		}
 		blender = plusRecent(c)
+	}
+	if blender == "" && !mac && !windows { // native Linux: on the PATH, the Snap, the Flatpak (blender_trouver.go)
+		blender = trouverBlenderLinux(filepath.SplitList(os.Getenv("PATH")), os.Getenv("HOME"))
 	}
 	if sdk == "" {
 		p := profil

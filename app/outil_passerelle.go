@@ -424,6 +424,9 @@ func processusWindows(nom, motif string) bool {
 }
 
 func (p *passerelle) blender(args []string) int {
+	if runtime.GOOS == "linux" && systemeMCP() == "linux" { // native Linux (blender_natif.go)
+		return p.blenderNatif(args)
+	}
 	exe := os.Getenv("BLENDER_EXE")
 	if exe == "" || !fichierP(exe) {
 		p.absent("Blender")

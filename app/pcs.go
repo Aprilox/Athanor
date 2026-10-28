@@ -68,6 +68,7 @@ type PresencePC struct {
 	Pousse     string    `json:"pousse,omitempty"` // its last commit pushed ("abc1234 M3: …")
 	Refus      []RefusPC `json:"refus,omitempty"`  // programs it could not run, for which milestones (pcs_relais.go)
 	Parti      bool      `json:"parti,omitempty"`  // it stopped working with the others (2.36.1, which kept its branch)
+	Lien       string    `json:"lien,omitempty"`   // the master's direct address, encrypted with the team's key (equipe_directe.go)
 	EnLigne    bool      `json:"en_ligne"`         // computed by the reader
 	Moi        bool      `json:"moi,omitempty"`
 }
@@ -264,6 +265,9 @@ func presenceLocalePC(projet, d string) PresencePC {
 		if json.Unmarshal(b, &x) == nil && x.Resultat == "ok" {
 			p.Pousse = coupeOctets(x.Commit, 100)
 		}
+	}
+	if b, err := os.ReadFile(d + "/lien-direct"); err == nil { // the master's encrypted address (equipe_directe.go)
+		p.Lien = coupeOctets(strings.TrimSpace(string(b)), 2048)
 	}
 	p.EnLigne = true
 	return p
