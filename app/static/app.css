@@ -506,7 +506,7 @@ textarea.en-attente { opacity: .55; }
 .accent:hover { transform: scale(1.08); }
 
 /* --- toast, lock, first-launch wizard */
-.toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); background: var(--panel-2); border: 1px solid var(--line); border-left: 3px solid var(--attention); padding: 10px 16px; border-radius: 6px; max-width: 640px; box-shadow: var(--ombre); z-index: 30; }
+.toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); background: var(--panel-2); border: 1px solid var(--line); border-left: 3px solid var(--attention); padding: 10px 16px; border-radius: 6px; max-width: 640px; box-shadow: var(--ombre); z-index: 65; }
 .toast.erreur { border-left-color: var(--erreur); }
 .toast.ok { border-left-color: var(--ok); }
 /* the app's own confirmation dialog (never the browser's confirm/alert) */
