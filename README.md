@@ -260,7 +260,11 @@ One project, several computers working on it at the same time: your desktop with
 
 **Start the whole team from the master.** *Start the team* starts the master's pilot, then every node's within seconds; *Stop the team after the cycle* stops them all at the end of their cycle. A node follows these two orders only (nothing else of a computer is ever driven from another), and its user can refuse them: *The master may start and stop this computer's pilot*.
 
-GitHub stays where the code goes and what the team falls back on: when the master does not answer, the computers go on as before and are seen through GitHub (a node keeps its workshop and gives it to the team when the master answers again).
+**A private team on GitHub, and its fallback.** With the workshop through the direct link, the computers' presences on GitHub are encrypted with the team's key too (GitHub sees an id and a time, never a name, a milestone or the master's address), and the master keeps an encrypted copy of the team's workshop on the repository (one ref, `refs/athanor/atelier`, not a branch: GitHub sees neither the paths nor the contents). When the master cannot be reached, the nodes go on through that copy; the master merges what they wrote there as soon as it can. Every computer of such a team must have joined it (the key comes with the invitation).
+
+**Handing the master's role over.** On the master, *Make it the master* next to a live node: that computer takes the team (its computers, its workshop, its orders) and opens its own link; the old master becomes one of its nodes, and the others follow by themselves (the old master tells them for two minutes, then the new address is in the new master's encrypted presence). The old master's workshop is frozen meanwhile: nothing written is lost. A handover not finished within 5 minutes is cancelled.
+
+GitHub stays where the code goes and what the team falls back on: when the master does not answer, the computers go on as before and are seen through GitHub.
 
 ---
 
@@ -602,7 +606,7 @@ Yes. Nothing is tied to a user name or a drive letter: paths come from your prof
 Push a version tag: GitHub first runs every CI check on the tagged commit (tests on Windows, Linux and macOS, the single executable, every build target), then builds the apps and publishes the release ([`.github/workflows/release.yml`](.github/workflows/release.yml)). If a single check fails (or anything after it), nothing is published: the tag is removed, and the release too if it was already created, so Athanor's updates never offer it. Fix, commit, then push the same tag again (`git tag -f v2.42.0 && git push origin v2.42.0`):
 
 ```bash
-git tag v2.45.0 && git push origin v2.45.0
+git tag v2.46.0 && git push origin v2.46.0
 ```
 
 Keep the version in [`app/winres/athanor.rc`](app/winres/athanor.rc) and `versionAthanor` in [`app/commandes.go`](app/commandes.go) in step with the tag (a test checks they match), and write what is new in `docs/releases/VERSION.md` (e.g. [`docs/releases/2.31.0.md`](docs/releases/2.31.0.md)): it opens the release page.

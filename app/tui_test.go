@@ -958,6 +958,14 @@ func TestTUIEquipeDirecte(t *testing.T) {
 	if d := a.dialogue; d == nil || !strings.Contains(d.texte, "✔ The master may start and stop this computer's pilot") || d.choix[0].id != "ordres:0" || !strings.Contains(d.texte, "through the master's link") {
 		t.Fatalf("a node: %+v", d)
 	}
+	a.equipeDirecte(map[string]any{"direct": map[string]any{"role": "maitre", "etat": "pret", "noeuds": []any{map[string]any{"presence": map[string]any{"id": "x1", "nom": "Portable"}, "en_direct": true}}}})
+	if d := a.dialogue; d == nil || d.choix[0].id != "transmettre:x1" || d.choix[0].texte != "Make Portable the master" {
+		t.Fatalf("hand the team over: %+v", d)
+	}
+	a.equipeDirecte(map[string]any{"direct": map[string]any{"role": "maitre", "etat": "pret", "passation": map[string]any{"etat": "en_cours", "nom": "Portable"}}})
+	if d := a.dialogue; d == nil || !strings.Contains(d.texte, "Handing the team over to Portable") {
+		t.Fatalf("handing over: %+v", d)
+	}
 	a.equipeDirecte(map[string]any{"direct": map[string]any{"role": "attente", "etat": "attente"}})
 	if d := a.dialogue; d == nil || !strings.Contains(d.texte, "Waiting for the master") || d.choix[1].id != "quitter" {
 		t.Fatalf("waiting: %+v", d)

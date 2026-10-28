@@ -63,7 +63,7 @@ func (e *equipePC) actifs() []PresencePC {
 // lire: the others' presences, and the branch's last commits, from GitHub.
 func (e *equipePC) lire() error {
 	err := recupererPCs(e.d, e.miroir, e.r)
-	e.pcs = lirePCs(e.miroir, e.moi.ID)
+	e.pcs = lirePCs(e.miroir, e.moi.ID, clePresencePC(e.projet))
 	return err
 }
 
@@ -118,7 +118,7 @@ func (e *equipePC) recevoir() (string, string, error) {
 // publier: this computer's presence now (pilot running, its milestone).
 func (e *equipePC) publier() error {
 	_ = ecrireFichierPrive(e.d+"/pcs-pilote", "1\n")
-	return publierPresencePC(e.d, e.miroir, e.r, presenceLocalePC(e.projet, e.d))
+	return publierPresencePC(e.d, e.miroir, e.r, presenceLocalePC(e.projet, e.d), clePresencePC(e.projet))
 }
 
 // prendre: the milestone taken for this computer, said on GitHub, then checked: another computer that
@@ -162,7 +162,7 @@ func (e *equipePC) lacher() {
 	defer libere()
 	removeSiExiste(e.d + "/pcs-jalon")
 	_ = ecrireFichierPrive(e.d+"/pcs-pilote", "0\n")
-	_ = publierPresencePC(e.d, e.miroir, e.r, presenceLocalePC(e.projet, e.d))
+	_ = publierPresencePC(e.d, e.miroir, e.r, presenceLocalePC(e.projet, e.d), clePresencePC(e.projet))
 }
 
 // choisirJalonPC: the milestone this computer builds next, or wait (the others hold everything left):

@@ -189,8 +189,8 @@ func TestEquipeDirecte(t *testing.T) {
 	if !ok {
 		t.Fatal("the node's pilot does not see the workshop through the link")
 	}
-	mN, nomN := magasinPilote(sn.priveProjet(pn), eN)
-	baseN := filepath.Join(sn.priveProjet(pn), "atelier-base", nomN)
+	mN := magasinPilote(sn.priveProjet(pn), eN)
+	baseN := filepath.Join(sn.priveProjet(pn), "atelier-base", "equipe")
 	if r, err := synchroniserAtelier(pn.Atelier(), baseN, mN, fusionAtelierGit, "PC beta", ""); err != nil || !strings.Contains(strings.Join(r.Recus, ","), "REQUEST.md") {
 		t.Fatalf("the node's workshop through the link: %+v %v", r, err)
 	}

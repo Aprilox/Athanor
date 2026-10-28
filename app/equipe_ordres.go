@@ -284,6 +284,13 @@ func (s *Serveur) appelAtelier(h *hubEquipe, w http.ResponseWriter, r *http.Requ
 		repondreDirect(w, 401, map[string]string{"erreur": "not paired"})
 		return "", false
 	}
+	h.mu.Lock()
+	ailleurs := h.nouveau != nil
+	h.mu.Unlock()
+	if ailleurs { // the team has another master now: the node finds it at its next beat
+		repondreDirect(w, 423, map[string]string{"erreur": "The team has another master now."})
+		return "", false
+	}
 	if !s.lireDirect(h.projet).AtelierLien {
 		repondreDirect(w, 404, map[string]string{"erreur": "The team's workshop goes through GitHub, not through the link."})
 		return "", false
