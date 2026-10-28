@@ -599,7 +599,7 @@ func TestChoisirJalonPC(t *testing.T) {
 		t.Fatal("delivery taken twice")
 	}
 	// Claude is told who builds what
-	c := consignePCs(moi, []PresencePC{en("Fibre", "eeeeeeeeeeee", "M3", "network")}, Jalon{ID: "M1"})
+	c := consignePCs(moi, []PresencePC{en("Fibre", "eeeeeeeeeeee", "M3", "network")}, Jalon{ID: "M1"}, false)
 	if !strings.Contains(c, "milestone **M1**") || !strings.Contains(c, "Fibre") || !strings.Contains(c, "building M3") || !strings.Contains(c, "Needs: <word>.") || !strings.Contains(c, "gpu, network") {
 		t.Fatal(c)
 	}

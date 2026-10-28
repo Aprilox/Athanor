@@ -2,12 +2,14 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -136,6 +138,102 @@ func TestEquipeDirecte(t *testing.T) {
 	if e := sm.lireDirect(pm); len(e.Noeuds) != 1 || strings.Contains(string(jsonDirect(e)), sn.lireDirect(pn).Jeton) {
 		t.Fatalf("the master keeps the node, its token hashed: %+v", e)
 	}
+	// the team's workshop through the link, and the master's orders
+	var muEssai sync.Mutex
+	var suivis, horsGit []string
+	ancienP, ancienH := piloterOrdre, atelierHorsGitFn
+	piloterOrdre = func(_ *Serveur, p Projet, a string) error {
+		muEssai.Lock()
+		suivis = append(suivis, p.Nom+":"+a)
+		muEssai.Unlock()
+		return nil
+	}
+	atelierHorsGitFn = func(_ *Serveur, p Projet, h bool) error {
+		muEssai.Lock()
+		horsGit = append(horsGit, fmt.Sprintf("%s:%v", p.Nom, h))
+		muEssai.Unlock()
+		return nil
+	}
+	defer func() { piloterOrdre, atelierHorsGitFn = ancienP, ancienH }()
+	vu := func(l *[]string, x string) bool {
+		for i := 0; i < 100; i++ {
+			muEssai.Lock()
+			ok := strings.Contains(strings.Join(*l, ","), x)
+			muEssai.Unlock()
+			if ok {
+				return true
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+		return false
+	}
+	if r, _ := http.Get(adresse + "/equipe/atelier"); r.StatusCode != 401 {
+		t.Fatalf("the workshop without a token: %d", r.StatusCode)
+	}
+	ecrire(t, filepath.Join(pm.Dossier, ".athanor", "REQUEST.md"), "# Request\n\nBuild it.\n")
+	if c, v := appelN("POST", `{"action":"atelier","valeur":true}`); c != 400 {
+		t.Fatalf("a node deciding the workshop: %d %v", c, v)
+	}
+	c, v0 := appelM("POST", `{"action":"atelier","valeur":true}`)
+	if at, _ := vue(v0)["atelier"].(map[string]any); c != 200 || vue(v0)["atelier_lien"] != true || at == nil || at["version"] != 1.0 || at["fichiers"] != 2.0 {
+		t.Fatalf("the workshop through the link: %d %v", c, v0)
+	}
+	if !vu(&horsGit, "alpha:true") {
+		t.Fatal("the master's .athanor/ not taken out of git")
+	}
+	sn.battementNoeud(pn)
+	if e := sn.lireDirect(pn); !e.AtelierLien || !vu(&horsGit, "beta:true") {
+		t.Fatalf("the node did not follow the workshop's move: %+v", e)
+	}
+	eN, ok := equipeDirectePilote(sn.priveProjet(pn))
+	if !ok {
+		t.Fatal("the node's pilot does not see the workshop through the link")
+	}
+	mN, nomN := magasinPilote(sn.priveProjet(pn), eN)
+	baseN := filepath.Join(sn.priveProjet(pn), "atelier-base", nomN)
+	if r, err := synchroniserAtelier(pn.Atelier(), baseN, mN, fusionAtelierGit, "PC beta", ""); err != nil || !strings.Contains(strings.Join(r.Recus, ","), "REQUEST.md") {
+		t.Fatalf("the node's workshop through the link: %+v %v", r, err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(pn.Atelier(), "REQUEST.md")); !strings.Contains(string(b), "Build it.") {
+		t.Fatal("the master's request did not reach the node")
+	}
+	ecrire(t, filepath.Join(pn.Atelier(), "LOG.md"), "- M1 by beta\n")
+	if r, err := synchroniserAtelier(pn.Atelier(), baseN, mN, fusionAtelierGit, "PC beta", ""); err != nil || r.Version != 2 {
+		t.Fatalf("the node gives its log: %+v %v", r, err)
+	}
+	if v, _ := sm.magasinProjet(pm).dernier(); v.Par != "PC beta" || v.Fichiers["LOG.md"] == "" {
+		t.Fatalf("the store after the node: %+v", v)
+	}
+	// the master starts the team: its own pilot, then the node's at its beat (once)
+	if c, v := appelM("POST", `{"action":"demarrer-equipe"}`); c != 200 || vue(v)["ordre"] == nil {
+		t.Fatalf("start the team: %d %v", c, v)
+	}
+	if !vu(&suivis, "alpha:demarrer") {
+		t.Fatal("the master's own pilot not started")
+	}
+	sn.battementNoeud(pn)
+	sn.battementNoeud(pn)
+	if !vu(&suivis, "beta:demarrer") {
+		t.Fatal("the node did not follow the start")
+	}
+	time.Sleep(100 * time.Millisecond)
+	muEssai.Lock()
+	if n := strings.Count(strings.Join(suivis, ","), "beta:demarrer"); n != 1 {
+		t.Fatalf("the node started %d times", n)
+	}
+	muEssai.Unlock()
+	// the node's user says no: the master's stop is not followed there
+	if c, v := appelN("POST", `{"action":"ordres","valeur":false}`); c != 200 || vue(v)["accepte_ordres"] == true {
+		t.Fatalf("orders refused: %d %v", c, v)
+	}
+	appelM("POST", `{"action":"arreter-equipe"}`)
+	sn.battementNoeud(pn)
+	time.Sleep(100 * time.Millisecond)
+	if !vu(&suivis, "alpha:arreter") || strings.Contains(strings.Join(suivis, ","), "beta:arreter") {
+		t.Fatalf("orders: %v", suivis)
+	}
+	appelN("POST", `{"action":"ordres","valeur":true}`)
+
 	// the master's address published encrypted; a node that no longer reaches it finds the new one there
 	lien := sm.lienMaitre(pm)
 	if a, err := dechiffrerDirect(sm.lireDirect(pm).Cle, lien); err != nil || a != adresse || strings.Contains(lien, "127.0.0.1") {

@@ -549,9 +549,39 @@ func recevoirPC(projet, d, miroir string, r reglagesGH) (string, string) {
 		return recuConflit, "a conflict with the other computers' work: Claude merges it at the start of the next cycle"
 	}
 	joindreNonSuivisPC(projet, ecartes, ident, local)
+	if !r.Atelier {
+		garderAtelierPC(projet, avant)
+	}
 	n, _ := gProjetGH(gd, "rev-list", "--count", avant+".."+local)
 	_ = fichierAtelier(projet, "MERGE_NEEDED.md", true, nil)
 	return recuFusion, n
+}
+
+// garderAtelierPC: the workshop not shared on GitHub (or through the team's direct link): files of
+// .athanor/ the others' commits took out of git (a computer that stopped sharing it) were removed from the
+// folder by the merge: they are this computer's workshop, put back as they were (now out of git).
+func garderAtelierPC(projet, avant string) {
+	out, err := gTravailGH(projet, "diff", "--name-only", "-z", "--diff-filter=D", "--no-renames", avant, "HEAD", "--", ".athanor/").Output()
+	if err != nil {
+		return
+	}
+	for _, f := range strings.Split(string(out), "\x00") {
+		if f == "" || !strings.HasPrefix(f, ".athanor/") || strings.Contains(f, "..") {
+			continue
+		}
+		chemin := filepath.Join(projet, filepath.FromSlash(f))
+		if _, err := os.Lstat(chemin); err == nil {
+			continue
+		}
+		b, err := gTravailGH(projet, "cat-file", "blob", avant+":"+f).Output()
+		if err != nil {
+			continue
+		}
+		parties := strings.Split(strings.TrimPrefix(f, ".athanor/"), "/")
+		if d, err := dossierAtelierSur(projet, parties[:len(parties)-1]...); err == nil {
+			_ = ecrireAtomique(filepath.Join(d, parties[len(parties)-1]), b, 0o644)
+		}
+	}
 }
 
 // rejoindrePC: the project has no commit yet (a computer joining the team): it starts from the branch the

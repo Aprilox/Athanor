@@ -693,7 +693,16 @@ func (a *appTUI) equipeDirecte(rep map[string]any) {
 			l = append(l, "", "⚠ "+a.t("{0} wants to join the team", x.Nom))
 			choix = append(choix, choixTUI{id: "accepter:" + x.Ref, texte: a.t("Accept") + " · " + x.Nom}, choixTUI{id: "refuser:" + x.Ref, texte: a.t("Refuse") + " · " + x.Nom})
 		}
-		choix = append(choix, choixTUI{id: "inviter", texte: a.t("Invite a computer")}, choixTUI{id: "actualiser", texte: a.t("Refresh")}, choixTUI{id: "quitter", texte: a.t("End the team's link"), danger: true})
+		if d.AtelierLien {
+			l = append(l, "", "✔ "+a.t("Workshop through the direct link")+" ("+a.t("not on GitHub")+")")
+			if d.Atelier != nil && d.Atelier.Version > 0 {
+				l = append(l, a.t("Team workshop: version {0}, {1} files, last change by {2} ({3})", d.Atelier.Version, d.Atelier.Fichiers, firstNonEmpty(d.Atelier.Par, "?"), d.Atelier.Quand))
+			}
+		}
+		bascule := map[bool]string{true: a.t("Workshop through GitHub again"), false: a.t("Workshop through the direct link")}[d.AtelierLien]
+		choix = append(choix, choixTUI{id: "demarrer-equipe", texte: a.t("Start the team")}, choixTUI{id: "arreter-equipe", texte: a.t("Stop the team after the cycle")},
+			choixTUI{id: "atelier:" + map[bool]string{true: "0", false: "1"}[d.AtelierLien], texte: bascule},
+			choixTUI{id: "inviter", texte: a.t("Invite a computer")}, choixTUI{id: "actualiser", texte: a.t("Refresh")}, choixTUI{id: "quitter", texte: a.t("End the team's link"), danger: true})
 	case d.Role == "attente":
 		l = append(l, "⏳ "+a.t("Waiting for the master to accept this computer…"))
 		choix = []choixTUI{{id: "actualiser", texte: a.t("Refresh")}, {id: "quitter", texte: a.t("Cancel")}}
@@ -703,7 +712,13 @@ func (a *appTUI) equipeDirecte(rep map[string]any) {
 		} else {
 			l = append(l, "✖ "+a.t("The master ({0}) does not answer: the team is seen through GitHub meanwhile.", d.Maitre))
 		}
-		choix = []choixTUI{{id: "quitter", texte: a.t("Leave the team's link"), danger: true}}
+		if d.AtelierLien {
+			l = append(l, a.t("Team workshop through the master's link."))
+		}
+		ordres := map[bool]string{true: "✔ ", false: "✖ "}[d.AccepteOrdres] + a.t("The master may start and stop this computer's pilot")
+		l = append(l, ordres)
+		choix = []choixTUI{{id: "ordres:" + map[bool]string{true: "0", false: "1"}[d.AccepteOrdres], texte: map[bool]string{true: a.t("Refuse the master's orders"), false: a.t("Follow the master's orders")}[d.AccepteOrdres]},
+			{id: "quitter", texte: a.t("Leave the team's link"), danger: true}}
 	}
 	if d != nil && len(d.Noeuds) > 0 {
 		l = append(l, "")
@@ -731,10 +746,14 @@ func (a *appTUI) equipeDirecte(rep map[string]any) {
 			a.agir("POST", "pcs-direct", map[string]any{"action": act, "id": ref}, rafraichir)
 			return
 		}
+		if act, val, ok := strings.Cut(id, ":"); ok && (act == "atelier" || act == "ordres") {
+			a.agir("POST", "pcs-direct", map[string]any{"action": act, "valeur": val == "1"}, rafraichir)
+			return
+		}
 		switch id {
 		case "actualiser":
 			rafraichir(nil)
-		case "maitre", "inviter", "quitter":
+		case "maitre", "inviter", "quitter", "demarrer-equipe", "arreter-equipe":
 			a.agir("POST", "pcs-direct", map[string]any{"action": id}, rafraichir)
 		case "rejoindre":
 			s := &saisieT{}

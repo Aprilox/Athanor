@@ -139,10 +139,11 @@ func pcsActiverGH(args []string, w io.Writer) int {
 	}
 	actif := argGH(args, 1) == "1"
 	if actif {
-		// the plan, the requests and the log go through the commits: the others work from them
-		r.Atelier = true
+		// the plan, the requests and the log go through the commits: the others work from them (unless
+		// the team's direct link carries them: atelier_lien.go)
+		r.Atelier = !atelierParLienProjet(projet)
 		r.Auto = true // each milestone pushed at once: the others build on it
-		if err := ecrireExclusionAtelier(projet, true); err != nil {
+		if err := ecrireExclusionAtelier(projet, r.Atelier); err != nil {
 			fmt.Fprintln(w, "Cannot write the project's .git/info/exclude: "+err.Error())
 			return 1
 		}

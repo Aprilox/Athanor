@@ -349,6 +349,10 @@ func (s *Serveur) apiGitHub(w http.ResponseWriter, r *http.Request) {
 		a := "0"
 		if c.Atelier {
 			a = "1"
+			if s.lireDirect(p).AtelierLien {
+				s.erreur(w, http.StatusConflict, "The team's workshop goes through its direct link (Overview › Team, live): it stays out of GitHub.")
+				return
+			}
 		}
 		if _, err := s.executerGitHub(p, 2*time.Minute, "partage", a); err != nil {
 			s.erreur(w, http.StatusInternalServerError, err.Error())
