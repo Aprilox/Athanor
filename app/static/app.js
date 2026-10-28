@@ -2732,7 +2732,7 @@ function pcsDuProjet(nom) {
 // --- the direct link between the computers (equipe_directe.go): read every 10 s
 etat.directVues = {}; etat.directLus = {};
 function directDuProjet(nom) {
-  const vite = etat.directVues[nom] && (etat.directVues[nom].etat === "attente" || etat.directVues[nom].code || (etat.directVues[nom].demandes || []).length);
+  const vite = etat.directVues[nom] && (etat.directVues[nom].etat === "attente" || etat.directVues[nom].code || (etat.directVues[nom].demandes || []).length || etat.directVues[nom].passation);
   if (Date.now() - (etat.directLus[nom] || 0) > (vite ? 3000 : 10000)) {
     etat.directLus[nom] = Date.now();
     api("pcs-direct").then((v) => {
@@ -2762,7 +2762,7 @@ function blocDirect(nom) {
       <td><b>${h(p.nom || "")}</b> ${marques}</td>
       <td>${etatN}</td>
       <td class="petit">${n.vu < 0 ? "" : `${t("quota {0} · week {1}", [pctQuota(st.session), pctQuota(st.semaine)])}<div class="muet">${t("{0} cycles · {1} $ · {2} tokens", [st.cycles || 0, (st.cout || 0).toFixed(2), fmtTokens(st.sortie || 0)])}</div>`}</td>
-      ${d.role === "maitre" && !n.maitre ? `<td class="etroit"><button class="btn btn-petit" type="button" data-direct="retirer" data-id="${h(p.id || "")}">${t("Remove")}</button></td>` : "<td></td>"}</tr>`;
+      ${d.role === "maitre" && !n.maitre ? `<td class="etroit">${n.en_direct && !d.passation ? `<button class="btn btn-petit" type="button" data-direct="transmettre" data-id="${h(p.id || "")}" data-nom="${h(p.nom || "")}" title="${h(t("This computer hands the team over: that one becomes the master, this one one of its nodes."))}">${t("Make it the master")}</button> ` : ""}<button class="btn btn-petit" type="button" data-direct="retirer" data-id="${h(p.id || "")}">${t("Remove")}</button></td>` : "<td></td>"}</tr>`;
   }).join("");
   let tete = "";
   if (d.role === "maitre") {
@@ -2777,7 +2777,9 @@ function blocDirect(nom) {
       ${d.atelier_lien && at ? `<div class="muet petit">${at.version ? h(t("Team workshop: version {0}, {1} files, last change by {2} ({3})", [at.version, at.fichiers, at.par || "?", at.quand ? dateLisible(at.quand) : "—"])) : t("Team workshop: empty for now (the request comes with it)")}</div>` : ""}</div>`;
     const ordre = d.ordre ? `<div class="muet petit">${h(t(d.ordre.action === "demarrer" ? "Last order: start, {0}" : "Last order: stop after the cycle, {0}", [dateLisible(new Date(d.ordre.quand * 1000).toISOString())]))}</div>` : "";
     const ordres = `<div class="ligne mt-1"><button class="btn btn-primaire" type="button" data-direct="demarrer-equipe" title="${h(t("Starts this computer's pilot, then every computer of the team (those whose user allows it)."))}">▶ ${t("Start the team")}</button><button class="btn" type="button" data-direct="arreter-equipe">${t("Stop the team after the cycle")}</button></div>${ordre}`;
-    tete = `<p class="petit">${etatM}</p>${invitation}${demandes}${atelier}${ordres}<div class="ligne mt-1"><button class="btn" type="button" data-direct="inviter" ${d.etat !== "pret" ? "disabled" : ""}>${t("Invite a computer")}</button><span class="espace"></span><button class="btn btn-petit" type="button" data-direct="quitter">${t("End the team's link")}</button></div>`;
+    const pa = d.passation;
+    const passation = !pa ? "" : pa.etat === "en_cours" ? `<p class="petit"><span class="muet">⏳ ${h(t("Handing the team over to {0}: it takes it at its next beat…", [pa.nom]))}</span></p>` : `<p class="petit"><span class="attention">✖ ${h(t(pa.erreur || ""))}</span></p>`;
+    tete = `<p class="petit">${etatM}</p>${passation}${invitation}${demandes}${atelier}${ordres}<div class="ligne mt-1"><button class="btn" type="button" data-direct="inviter" ${d.etat !== "pret" ? "disabled" : ""}>${t("Invite a computer")}</button><span class="espace"></span><button class="btn btn-petit" type="button" data-direct="quitter">${t("End the team's link")}</button></div>`;
   } else if (d.role === "attente") {
     tete = `<p class="petit"><span class="muet">⏳ ${t("Waiting for the master to accept this computer…")}</span></p><div class="ligne mt-1"><span class="espace"></span><button class="btn btn-petit" type="button" data-direct="quitter">${t("Cancel")}</button></div>`;
   } else {
@@ -2785,7 +2787,8 @@ function blocDirect(nom) {
     const at = d.atelier;
     const atelierN = d.atelier_lien ? `<div class="muet petit">${at && at.version ? h(t("Team workshop through the master's link: version {0}, {1} files.", [at.version, at.fichiers])) : t("Team workshop through the master's link.")}</div>` : "";
     const ordre = d.ordre ? `<div class="muet petit">${h(t(d.ordre.action === "demarrer" ? "The master started the team, {0}" : "The master stopped the team after the cycle, {0}", [dateLisible(new Date(d.ordre.quand * 1000).toISOString())]))}</div>` : "";
-    tete = `<p class="petit">${etatN}</p>${atelierN}
+    const relais = d.passation && d.passation.etat === "relais" ? `<p class="petit"><span class="muet">⏳ ${t("This computer takes the team over: the team's workshop comes, then its own link opens…")}</span></p>` : "";
+    tete = `<p class="petit">${etatN}</p>${relais}${atelierN}
       <div class="mt-1"><label class="interrupteur m0"><input type="checkbox" data-direct-bascule="ordres" ${d.accepte_ordres ? "checked" : ""}><span>${t("The master may start and stop this computer's pilot")}</span></label>${ordre}</div>
       <div class="ligne mt-1"><span class="espace"></span><button class="btn btn-petit" type="button" data-direct="quitter">${t("Leave the team's link")}</button></div>`;
   }
@@ -2803,7 +2806,11 @@ $("#page").addEventListener("click", async (ev) => {
   }
   const corps = { action: a };
   if (a === "rejoindre") corps.invitation = ($("#direct-invitation") || {}).value || "";
-  if (a === "retirer" || a === "accepter" || a === "refuser") corps.id = b.dataset.id;
+  if (a === "transmettre") {
+    const c = await choisir(t("Make {0} the team's master? It takes the team (its computers, its workshop, its orders) and opens its own link; this computer becomes one of its nodes. The others follow by themselves.", [b.dataset.nom || ""]), [{ id: "", texte: t("Cancel") }, { id: "oui", texte: t("Make it the master") }]);
+    if (c !== "oui") return;
+  }
+  if (a === "retirer" || a === "accepter" || a === "refuser" || a === "transmettre") corps.id = b.dataset.id;
   const v = await action(api("pcs-direct", "POST", corps), "");
   if (v) { etat.directVues[nom] = v.direct || null; etat.directLus[nom] = Date.now(); rendrePage(); if (a === "rejoindre") toast(t("The code is right: the master now accepts this computer on its screen."), "ok"); if (a === "demarrer-equipe") toast(t("The team starts: every computer whose user allows it starts within a few seconds."), "ok"); }
 });

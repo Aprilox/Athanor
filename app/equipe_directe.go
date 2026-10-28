@@ -129,10 +129,11 @@ type VueDirecte struct {
 	Appaires int              `json:"appaires,omitempty"`
 	Demandes []demandeDirecte `json:"demandes,omitempty"` // the master: who gave the right code, its yes awaited
 	// the team's workshop through the link: its last version (the master's, or what the node last heard)
-	AtelierLien   bool         `json:"atelier_lien,omitempty"`
-	Atelier       *VueAtelier  `json:"atelier,omitempty"`
-	AccepteOrdres bool         `json:"accepte_ordres,omitempty"`
-	Ordre         *ordreDirect `json:"ordre,omitempty"` // the last order given (the master) or followed (a node)
+	AtelierLien   bool          `json:"atelier_lien,omitempty"`
+	Atelier       *VueAtelier   `json:"atelier,omitempty"`
+	AccepteOrdres bool          `json:"accepte_ordres,omitempty"`
+	Ordre         *ordreDirect  `json:"ordre,omitempty"` // the last order given (the master) or followed (a node)
+	Passation     *VuePassation `json:"passation,omitempty"`
 }
 
 // VueAtelier: the team's workshop, as the page shows it.
@@ -304,6 +305,10 @@ type hubEquipe struct {
 	arret    chan struct{}
 	essaisIP map[string]int
 	demandes map[string]*demandeDirecte // secret → a computer that gave the right code, waiting for the master
+	// the master's role handed over (equipe_passation.go): in progress, done (the new master's address), failed
+	passation       *passationEnCours
+	nouveau         *nouveauMaitre
+	erreurPassation string
 }
 
 // demandeDirecte: a computer that gave the right code: the master accepts or refuses it on its screen.
@@ -347,6 +352,7 @@ func (s *Serveur) demarrerMaitre(p Projet) error {
 		return err
 	}
 	h.port = ln.Addr().(*net.TCPAddr).Port
+	_ = os.Remove(filepath.Join(s.magasinProjet(p).dossier, "gele")) // a handover a previous start left unfinished
 	// a tunnel a previous start of Athanor left running points nowhere now
 	if b, err := os.ReadFile(s.pidTunnelDirect(p)); err == nil {
 		if pid, _ := strconv.Atoi(strings.TrimSpace(string(b))); cloudflaredVivant(pid) {
@@ -361,6 +367,7 @@ func (s *Serveur) demarrerMaitre(p Projet) error {
 	mux.HandleFunc("GET /equipe/atelier", func(w http.ResponseWriter, r *http.Request) { s.hubAtelier(h, w, r) })
 	mux.HandleFunc("POST /equipe/atelier/objets", func(w http.ResponseWriter, r *http.Request) { s.hubAtelierObjets(h, w, r) })
 	mux.HandleFunc("POST /equipe/atelier/ecrire", func(w http.ResponseWriter, r *http.Request) { s.hubAtelierEcrire(h, w, r) })
+	mux.HandleFunc("POST /equipe/passation", func(w http.ResponseWriter, r *http.Request) { s.hubPassation(h, w, r) })
 	h.srv = &http.Server{Handler: limiterCorps(mux), ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 3 * time.Minute, WriteTimeout: 3 * time.Minute}
 	go func() { _ = h.srv.Serve(ln) }()
 	go s.tunnelMaitre(h)
@@ -488,11 +495,21 @@ func (s *Serveur) pidTunnelDirect(p Projet) string {
 func (s *Serveur) arreterMaitre(projet string) {
 	directMu.Lock()
 	h := hubs[projet]
-	delete(hubs, projet)
 	directMu.Unlock()
-	if h == nil {
+	if h != nil {
+		s.arreterHub(h)
+	}
+}
+
+// arreterHub: that master's listener and tunnel (never a newer one of the same project).
+func (s *Serveur) arreterHub(h *hubEquipe) {
+	directMu.Lock()
+	if hubs[h.projet.Nom] != h {
+		directMu.Unlock()
 		return
 	}
+	delete(hubs, h.projet.Nom)
+	directMu.Unlock()
 	close(h.arret)
 	h.mu.Lock()
 	c := h.tunnel
@@ -666,7 +683,13 @@ func (s *Serveur) noeudAppel(h *hubEquipe, r *http.Request) string {
 		return ""
 	}
 	hj := hacherJeton(strings.TrimSpace(j))
-	for id, n := range s.lireDirect(h.projet).Noeuds {
+	noeuds := s.lireDirect(h.projet).Noeuds
+	h.mu.Lock()
+	if h.nouveau != nil { // handed over: the team's computers, as this master knew them
+		noeuds = h.nouveau.noeuds
+	}
+	h.mu.Unlock()
+	for id, n := range noeuds {
 		if subtle.ConstantTimeCompare([]byte(n.Jeton), []byte(hj)) == 1 {
 			return id
 		}
@@ -691,10 +714,23 @@ func (s *Serveur) hubBattement(h *hubEquipe, w http.ResponseWriter, r *http.Requ
 	}
 	c.Presence.ID, c.Presence.Moi, c.Presence.Lien = id, false, ""
 	h.mu.Lock()
+	if n := h.nouveau; n != nil { // the team has another master now
+		h.mu.Unlock()
+		repondreDirect(w, 409, map[string]string{"erreur": "The team has another master now.", "nouveau_maitre": n.adresse, "nom": n.nom})
+		return
+	}
 	h.vus[id] = vuNoeud{presence: c.Presence, stats: c.Stats, quand: time.Now()}
+	var paquet *passationDirecte
+	if h.passation != nil && h.passation.cible == id {
+		x := h.passation.paquet
+		paquet = &x
+	}
 	h.mu.Unlock()
 	e := s.lireDirect(h.projet)
 	rep := map[string]any{"noeuds": s.noeudsMaitre(h), "atelier_lien": e.AtelierLien}
+	if paquet != nil {
+		rep["passation"] = paquet
+	}
 	if o := e.ordresApres(c.DernierOrdre, time.Now()); len(o) > 0 {
 		rep["ordres"] = o
 	}
@@ -751,7 +787,7 @@ func (s *Serveur) lienMaitre(p Projet) string {
 	directMu.Lock()
 	h := hubs[p.Nom]
 	directMu.Unlock()
-	if h == nil {
+	if h == nil || s.lireDirect(p).Role != "maitre" { // (an old master's listener, its last minutes)
 		return ""
 	}
 	h.mu.Lock()
@@ -773,6 +809,7 @@ type clientDirect struct {
 	erreur  string
 	atelier *VueAtelier
 	ordre   *ordreDirect // the last one followed
+	relais  time.Time    // taking the team over since
 }
 
 var clientHTTP = &http.Client{Timeout: 15 * time.Second}
@@ -804,6 +841,7 @@ func appelMaitre(adresse, jeton, chemin string, corps, v any) (int, error) {
 			Erreur string `json:"erreur"`
 		}
 		_ = json.Unmarshal(contenu, &e)
+		_ = json.Unmarshal(contenu, v) // what a refusal says besides (a new master's address)
 		return rep.StatusCode, errors.New(firstNonEmpty(e.Erreur, rep.Status))
 	}
 	return rep.StatusCode, json.Unmarshal(contenu, v)
@@ -905,12 +943,22 @@ func (s *Serveur) battementNoeud(p Projet) {
 	directMu.Unlock()
 	corps := map[string]any{"presence": s.presenceDirecte(p), "stats": s.statsPC(p), "dernier_ordre": e.DernierOrdre}
 	var rep struct {
-		Noeuds      []NoeudDirect `json:"noeuds"`
-		AtelierLien bool          `json:"atelier_lien"`
-		Atelier     *VueAtelier   `json:"atelier"`
-		Ordres      []ordreDirect `json:"ordres"`
+		Noeuds      []NoeudDirect     `json:"noeuds"`
+		AtelierLien bool              `json:"atelier_lien"`
+		Atelier     *VueAtelier       `json:"atelier"`
+		Ordres      []ordreDirect     `json:"ordres"`
+		Passation   *passationDirecte `json:"passation"`
+		Nouveau     string            `json:"nouveau_maitre"`
+		Nom         string            `json:"nom"`
 	}
 	code, err := appelMaitre(e.Adresse, e.Jeton, "/equipe/battement", corps, &rep)
+	if code == 409 && reAdresseDirecte.MatchString(rep.Nouveau) && rep.Nouveau != e.Adresse {
+		// the team was handed over: its new master, at once
+		e.Adresse, e.Maitre = rep.Nouveau, firstNonEmpty(coupeOctets(rep.Nom, 80), e.Maitre)
+		_ = s.ecrireDirect(p, e)
+		rep.Nouveau = ""
+		code, err = appelMaitre(e.Adresse, e.Jeton, "/equipe/battement", corps, &rep)
+	}
 	if err != nil && code != 401 {
 		if a := s.adresseMaitreGitHub(p, e); a != "" && a != e.Adresse {
 			e.Adresse = a
@@ -920,6 +968,9 @@ func (s *Serveur) battementNoeud(p Projet) {
 	}
 	if err == nil {
 		s.suivreMaitre(p, rep.AtelierLien, rep.Ordres)
+		if rep.Passation != nil && rep.Passation.Cle == e.Cle && rep.Passation.Equipe == e.Equipe {
+			go s.prendreRelais(p, s.lireDirect(p), *rep.Passation)
+		}
 	}
 	directMu.Lock()
 	defer directMu.Unlock()
@@ -973,6 +1024,7 @@ func (s *Serveur) battementsDirects() {
 				if premier {
 					_ = s.demarrerMaitre(p)
 				}
+				s.verifierPassation(p)
 			case "noeud":
 				s.battementNoeud(p)
 			case "attente":
@@ -1028,6 +1080,13 @@ func (s *Serveur) vueDirecte(p Projet) *VueDirecte {
 		if n := len(e.Ordres); n > 0 {
 			v.Ordre = &e.Ordres[n-1]
 		}
+		h.mu.Lock()
+		if h.passation != nil {
+			v.Passation = &VuePassation{Nom: h.passation.nom, Depuis: h.passation.debut.Unix(), Etat: "en_cours"}
+		} else if h.erreurPassation != "" {
+			v.Passation = &VuePassation{Etat: "erreur", Erreur: h.erreurPassation}
+		}
+		h.mu.Unlock()
 	case "attente":
 		v.Etat, v.Adresse = "attente", e.Adresse
 	case "noeud":
@@ -1038,6 +1097,11 @@ func (s *Serveur) vueDirecte(p Projet) *VueDirecte {
 		v.Etat = "injoignable"
 		if c != nil {
 			v.Erreur, v.Atelier, v.Ordre = c.erreur, c.atelier, c.ordre
+			directMu.Lock()
+			if relaisDirects[p.Nom] {
+				v.Passation = &VuePassation{Etat: "relais", Depuis: c.relais.Unix()}
+			}
+			directMu.Unlock()
 			if c.echecs == 0 && time.Since(c.quand) < enLigneDirect {
 				v.Etat = "connecte"
 			}
@@ -1084,6 +1148,8 @@ func (s *Serveur) apiDirect(w http.ResponseWriter, r *http.Request) {
 		}
 	case "rejoindre":
 		err = s.rejoindreMaitre(p, c.Invitation)
+	case "transmettre": // the master hands the team over to one of its live nodes
+		err = s.transmettreMaitre(p, c.ID)
 	case "atelier": // the master: the team's workshop through the link, or through GitHub again
 		err = s.changerAtelierLien(p, c.Valeur)
 	case "demarrer-equipe", "arreter-equipe": // the master: every pilot of the team, its own first

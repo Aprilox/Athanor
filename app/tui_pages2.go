@@ -699,6 +699,18 @@ func (a *appTUI) equipeDirecte(rep map[string]any) {
 				l = append(l, a.t("Team workshop: version {0}, {1} files, last change by {2} ({3})", d.Atelier.Version, d.Atelier.Fichiers, firstNonEmpty(d.Atelier.Par, "?"), d.Atelier.Quand))
 			}
 		}
+		if pa := d.Passation; pa != nil {
+			if pa.Etat == "en_cours" {
+				l = append(l, "", "⏳ "+a.t("Handing the team over to {0}: it takes it at its next beat…", pa.Nom))
+			} else {
+				l = append(l, "", "✖ "+a.t(pa.Erreur))
+			}
+		}
+		for _, n := range d.Noeuds {
+			if !n.Maitre && n.EnDirect && d.Passation == nil {
+				choix = append(choix, choixTUI{id: "transmettre:" + n.Presence.ID, texte: a.t("Make {0} the master", n.Presence.Nom)})
+			}
+		}
 		bascule := map[bool]string{true: a.t("Workshop through GitHub again"), false: a.t("Workshop through the direct link")}[d.AtelierLien]
 		choix = append(choix, choixTUI{id: "demarrer-equipe", texte: a.t("Start the team")}, choixTUI{id: "arreter-equipe", texte: a.t("Stop the team after the cycle")},
 			choixTUI{id: "atelier:" + map[bool]string{true: "0", false: "1"}[d.AtelierLien], texte: bascule},
@@ -711,6 +723,9 @@ func (a *appTUI) equipeDirecte(rep map[string]any) {
 			l = append(l, "✔ "+a.t("Connected to {0}, the master", d.Maitre))
 		} else {
 			l = append(l, "✖ "+a.t("The master ({0}) does not answer: the team is seen through GitHub meanwhile.", d.Maitre))
+		}
+		if d.Passation != nil && d.Passation.Etat == "relais" {
+			l = append(l, "⏳ "+a.t("This computer takes the team over: the team's workshop comes, then its own link opens…"))
 		}
 		if d.AtelierLien {
 			l = append(l, a.t("Team workshop through the master's link."))
@@ -743,6 +758,10 @@ func (a *appTUI) equipeDirecte(rep map[string]any) {
 	rafraichir := func(map[string]any) { a.agir("GET", "pcs-direct", nil, a.equipeDirecte) }
 	a.demander(a.t("Team, live"), strings.Join(l, "\n"), choix, func(id string) {
 		if act, ref, ok := strings.Cut(id, ":"); ok && (act == "accepter" || act == "refuser") {
+			a.agir("POST", "pcs-direct", map[string]any{"action": act, "id": ref}, rafraichir)
+			return
+		}
+		if act, ref, ok := strings.Cut(id, ":"); ok && act == "transmettre" {
 			a.agir("POST", "pcs-direct", map[string]any{"action": act, "id": ref}, rafraichir)
 			return
 		}

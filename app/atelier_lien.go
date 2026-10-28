@@ -452,8 +452,9 @@ type ResultatAtelier struct {
 type fusionAtelier func(rel string, base, ici, equipe []byte) (resultat []byte, conflit bool)
 
 // synchroniserAtelier: this computer's workshop (etat: PROJECT/.athanor) and the store's made one, its
-// base for this store (dossierBase) moved to it. premiere: no base yet (a computer joining): the team's
-// version of a file both have wins, this computer's is kept in garde (never lost).
+// base for this store (dossierBase) moved to it. No base yet (a computer joining the team): the team's
+// version of a file both have wins, this computer's is kept in garde (never lost); without garde, the
+// two are merged as when both changed it.
 func synchroniserAtelier(etat, dossierBase string, m magasinAtelier, fusion fusionAtelier, par, garde string) (ResultatAtelier, error) {
 	var res ResultatAtelier
 	base := lireBaseAtelier(dossierBase)
@@ -552,7 +553,7 @@ func synchroniserAtelier(etat, dossierBase string, m magasinAtelier, fusion fusi
 					c = contenuDe(e)
 				case e == "":
 					c = locaux[rel]
-				case premiere && !fichiersUnionPC[filepath.Base(rel)]:
+				case premiere && garde != "" && !fichiersUnionPC[filepath.Base(rel)]:
 					c = contenuDe(e)
 					if garde != "" {
 						_ = ecrireAtomique(filepath.Join(garde, filepath.FromSlash(rel)), locaux[rel], 0o600)
@@ -817,38 +818,81 @@ func atelierParLienProjet(projet string) bool {
 	return ok
 }
 
-// magasinPilote: the store the pilot synchronises with (the master's own, or the master's through its link).
-func magasinPilote(prive string, e equipeDirecte) (magasinAtelier, string) {
+// magasinPilote: the store the pilot synchronises with (the master's own, or the master's through its
+// link). The base is the same for both: the team's store moves with its master (a handover), its files
+// the same.
+func magasinPilote(prive string, e equipeDirecte) magasinAtelier {
 	if e.Role == "maitre" {
-		return magasinLocal{filepath.Join(prive, "atelier-equipe")}, "maitre"
+		return magasinLocal{filepath.Join(prive, "atelier-equipe")}
 	}
-	return magasinHTTP{e.Adresse, e.Jeton}, "lien"
+	return magasinHTTP{e.Adresse, e.Jeton}
 }
 
 // atelierLien: the pilot's workshop synchronised with the team's (several computers, the workshop through
 // the direct link); false when the project does not work so. Never stops the pilot: a master out of reach,
-// and this computer goes on with its own workshop, given to the team at the next synchronisation.
+// and a node goes on through the team's copy on GitHub (encrypted); the master merges that copy each time.
 func (p *pilote) atelierLien() bool {
 	e, ok := equipeDirectePilote(p.prive)
 	if !ok {
 		return false
 	}
-	m, nom := magasinPilote(p.prive, e)
-	res, err := synchroniserAtelier(p.etat, filepath.Join(p.prive, "atelier-base", nom), m, fusionAtelierGit, lireMachinePC().Nom,
-		filepath.Join(p.prive, "atelier-avant", time.Now().Format("20060102-150405")))
+	par := lireMachinePC().Nom
+	sync := func(m magasinAtelier, base string) (ResultatAtelier, error) {
+		return synchroniserAtelier(p.etat, filepath.Join(p.prive, "atelier-base", base), m, fusionAtelierGit, par,
+			filepath.Join(p.prive, "atelier-avant", time.Now().Format("20060102-150405")))
+	}
+	dire := func(res ResultatAtelier, ou string) {
+		if len(res.Recus) > 0 || len(res.Envoyes) > 0 {
+			p.log(fmt.Sprintf("Team workshop (%s): %s received, %s given to the team (version %d).", ou, listeCourte(res.Recus), listeCourte(res.Envoyes), res.Version))
+		}
+		if len(res.Conflits) > 0 {
+			p.log("Team workshop: changed here and by another computer on the same lines: " + strings.Join(res.Conflits, ", ") + " (the team's kept; Claude folds this computer's in first, .athanor/WORKSHOP_MERGE.md).")
+		}
+		if len(res.Trop) > 0 {
+			p.logUneFois("atelier-trop:"+strings.Join(res.Trop, ","), "Team workshop: too big for the direct link, kept on this computer: "+strings.Join(res.Trop, ", ")+" (put such files in the project itself: they go through GitHub).")
+		}
+	}
+	github := func() (ResultatAtelier, error) {
+		m, err := ouvrirMagasinGitHub(p.projet, e.Cle)
+		if err != nil {
+			return ResultatAtelier{}, err
+		}
+		// (a first time: what differs is merged, or put aside for Claude, never thrown away)
+		return synchroniserAtelier(p.etat, filepath.Join(p.prive, "atelier-base", "github"), m, fusionAtelierGit, par, "")
+	}
+	res, err := sync(magasinPilote(p.prive, e), "equipe")
 	if err != nil {
-		p.logUneFois("atelier-lien", "Team workshop: "+messageAtelier(err)+": this computer goes on with its own and gives it to the team at the next try.")
+		if e.Role != "noeud" || errors.Is(err, errConflitAtelier) {
+			p.logUneFois("atelier-lien", "Team workshop: "+messageAtelier(err)+": this computer goes on with its own and gives it to the team at the next try.")
+			return true
+		}
+		// the master out of reach: through the team's copy on GitHub, encrypted
+		resG, errG := github()
+		if errG != nil {
+			p.logUneFois("atelier-lien", "Team workshop: "+messageAtelier(err)+", and GitHub cannot take it either ("+tronquerRunes(errG.Error(), 120)+"): this computer goes on with its own and gives it to the team at the next try.")
+			return true
+		}
+		p.logUneFois("atelier-lien", "Team workshop: "+messageAtelier(err)+": through the team's copy on GitHub (encrypted) meanwhile.")
+		dire(resG, "GitHub, encrypted")
 		return true
 	}
 	p.oublierLogUneFois("atelier-lien")
-	if len(res.Recus) > 0 || len(res.Envoyes) > 0 {
-		p.log(fmt.Sprintf("Team workshop (direct link): %s received, %s given to the team (version %d).", listeCourte(res.Recus), listeCourte(res.Envoyes), res.Version))
-	}
-	if len(res.Conflits) > 0 {
-		p.log("Team workshop: changed here and by another computer on the same lines: " + strings.Join(res.Conflits, ", ") + " (the team's kept; Claude folds this computer's in first, .athanor/WORKSHOP_MERGE.md).")
-	}
-	if len(res.Trop) > 0 {
-		p.logUneFois("atelier-trop:"+strings.Join(res.Trop, ","), "Team workshop: too big for the direct link, kept on this computer: "+strings.Join(res.Trop, ", ")+" (put such files in the project itself: they go through GitHub).")
+	dire(res, "direct link")
+	if e.Role == "maitre" {
+		// the copy on GitHub: what the nodes wrote there while this computer was out of reach comes in, and
+		// the team's workshop goes there for the next time
+		resG, errG := github()
+		if errG != nil {
+			p.logUneFois("atelier-github", "Team workshop: its encrypted copy on GitHub is not up to date ("+tronquerRunes(errG.Error(), 160)+").")
+		} else {
+			p.oublierLogUneFois("atelier-github")
+			if len(resG.Recus) > 0 {
+				p.log("Team workshop: what the other computers wrote on GitHub while the direct link was down: " + listeCourte(resG.Recus) + ".")
+				if res2, err := sync(magasinPilote(p.prive, e), "equipe"); err == nil {
+					dire(res2, "direct link")
+				}
+			}
+		}
 	}
 	return true
 }

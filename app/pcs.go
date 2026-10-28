@@ -64,12 +64,14 @@ type PresencePC struct {
 	Cycle      int64     `json:"cycle,omitempty"`
 	Jalon      string    `json:"jalon,omitempty"` // the milestone it holds ("cadrage", "livraison" for the framing, the delivery)
 	JalonTitre string    `json:"jalon_titre,omitempty"`
-	Depuis     string    `json:"depuis,omitempty"` // when it took it (RFC 3339, UTC)
-	Pousse     string    `json:"pousse,omitempty"` // its last commit pushed ("abc1234 M3: …")
-	Refus      []RefusPC `json:"refus,omitempty"`  // programs it could not run, for which milestones (pcs_relais.go)
-	Parti      bool      `json:"parti,omitempty"`  // it stopped working with the others (2.36.1, which kept its branch)
-	Lien       string    `json:"lien,omitempty"`   // the master's direct address, encrypted with the team's key (equipe_directe.go)
-	EnLigne    bool      `json:"en_ligne"`         // computed by the reader
+	Depuis     string    `json:"depuis,omitempty"`  // when it took it (RFC 3339, UTC)
+	Pousse     string    `json:"pousse,omitempty"`  // its last commit pushed ("abc1234 M3: …")
+	Refus      []RefusPC `json:"refus,omitempty"`   // programs it could not run, for which milestones (pcs_relais.go)
+	Parti      bool      `json:"parti,omitempty"`   // it stopped working with the others (2.36.1, which kept its branch)
+	Lien       string    `json:"lien,omitempty"`    // the master's direct address, encrypted with the team's key (equipe_directe.go)
+	Chiffre    string    `json:"chiffre,omitempty"` // a private team (its workshop through the direct link): all of it, encrypted
+	Prive      bool      `json:"prive,omitempty"`   // computed by the reader: it came encrypted
+	EnLigne    bool      `json:"en_ligne"`          // computed by the reader
 	Moi        bool      `json:"moi,omitempty"`
 }
 
@@ -275,9 +277,18 @@ func presenceLocalePC(projet, d string) PresencePC {
 
 // publierPresencePC: this computer's presence, on its ref of GitHub (a single commit, replaced each time:
 // no history grows on GitHub).
-func publierPresencePC(d, miroir string, r reglagesGH, p PresencePC) error {
-	p.Moi, p.EnLigne = false, false
+func publierPresencePC(d, miroir string, r reglagesGH, p PresencePC, cle string) error {
+	p.Moi, p.EnLigne, p.Prive = false, false, false
 	b, _ := json.MarshalIndent(p, "", "  ")
+	if cle != "" {
+		// a private team: GitHub sees an id and a time only (the computer's name, what it builds, its
+		// address: encrypted with the team's key)
+		c, err := chiffrerDirect(cle, string(b))
+		if err != nil {
+			return errors.New("presence: the team's key is unreadable")
+		}
+		b, _ = json.MarshalIndent(PresencePC{ID: p.ID, Maj: p.Maj, Version: p.Version, Chiffre: c}, "", "  ")
+	}
 	executer := func(stdin []byte, env []string, args ...string) (string, error) {
 		c := gmGH(miroir, env, args...)
 		c.Stdin = bytes.NewReader(stdin)
@@ -293,7 +304,11 @@ func publierPresencePC(d, miroir string, r reglagesGH, p PresencePC) error {
 	}
 	ident := []string{"GIT_AUTHOR_NAME=Athanor", "GIT_AUTHOR_EMAIL=athanor@users.noreply.github.com",
 		"GIT_COMMITTER_NAME=Athanor", "GIT_COMMITTER_EMAIL=athanor@users.noreply.github.com"}
-	commit, err := executer(nil, ident, "commit-tree", arbre, "-m", "Athanor: "+p.Nom+" ("+p.ID+")")
+	titre := p.Nom + " (" + p.ID + ")"
+	if cle != "" {
+		titre = p.ID
+	}
+	commit, err := executer(nil, ident, "commit-tree", arbre, "-m", "Athanor: "+titre)
 	if err != nil || !reShaGH.MatchString(commit) {
 		return errors.New("presence: cannot write it")
 	}
@@ -413,8 +428,18 @@ func recupererPCs(d, miroir string, r reglagesGH) error {
 	return nil
 }
 
-// lirePCs: the presences read last (the computer itself apart), online or not; the ones online first.
-func lirePCs(miroir, moi string) []PresencePC {
+// clePresencePC: the team's key when the project's team is private (its workshop through the direct link):
+// the presences then go encrypted; "" otherwise.
+func clePresencePC(projet string) string {
+	if e, ok := equipeDirectePilote(priveDePilote(kitDuProgramme(), projet, estWindows)); ok {
+		return e.Cle
+	}
+	return ""
+}
+
+// lirePCs: the presences read last (the computer itself apart), online or not; the ones online first. An
+// encrypted presence is read with the team's key (cle), else left out.
+func lirePCs(miroir, moi, cle string) []PresencePC {
 	refs, err := sortieGH(gmGH(miroir, nil, "for-each-ref", "--format=%(refname)", refsPCs))
 	if err != nil {
 		return nil
@@ -430,7 +455,19 @@ func lirePCs(miroir, moi string) []PresencePC {
 			continue
 		}
 		var p PresencePC
-		if json.Unmarshal(out, &p) != nil || !reIDMachine.MatchString(p.ID) || p.ID == moi || ref != refsPCs+p.ID || p.Parti {
+		if json.Unmarshal(out, &p) != nil || !reIDMachine.MatchString(p.ID) || p.ID == moi || ref != refsPCs+p.ID {
+			continue
+		}
+		if p.Chiffre != "" {
+			t, err := dechiffrerDirect(cle, p.Chiffre)
+			var x PresencePC
+			if cle == "" || err != nil || json.Unmarshal([]byte(t), &x) != nil || x.ID != p.ID {
+				continue // another team's, or a key this computer does not have
+			}
+			p = x
+			p.Chiffre, p.Prive = "", true
+		}
+		if p.Parti {
 			continue
 		}
 		p.Nom = coupeOctets(strings.TrimSpace(p.Nom), 60)

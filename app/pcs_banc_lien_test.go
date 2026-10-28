@@ -41,6 +41,13 @@ func TestBancEquipeLien(t *testing.T) {
 	ecrireEssai(t, conf, "")
 	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
 	t.Setenv("GIT_CONFIG_GLOBAL", conf)
+	t.Run("lien", func(t *testing.T) { bancEquipeLien(t, bin, false) })
+	// the master's link goes down once the plan is written: the node goes on through GitHub (encrypted),
+	// the master merges what it wrote there
+	t.Run("secours", func(t *testing.T) { bancEquipeLien(t, bin, true) })
+}
+
+func bancEquipeLien(t *testing.T, bin string, couper bool) {
 
 	depot := filepath.Join(t.TempDir(), "github.git")
 	gitEssai(t, filepath.Dir(depot), "init", "-q", "--bare", "-b", "main", depot)
@@ -120,6 +127,17 @@ func TestBancEquipeLien(t *testing.T) {
 	eb, _ := json.Marshal(equipeDirecte{Role: "noeud", Equipe: "essai", Cle: cle, Adresse: adresse, Jeton: jeton, Maitre: "PC-GPU", AtelierLien: true})
 	ecrireEssai(t, filepath.Join(priveB, "equipe-directe.json"), string(eb))
 
+	if couper {
+		go func() {
+			for i := 0; i < 3000; i++ {
+				if v, err := srv.magasinProjet(pA).dernier(); err == nil && v.Fichiers["PLAN.md"] != "" {
+					srv.arreterMaitre(pA.Nom)
+					return
+				}
+				time.Sleep(50 * time.Millisecond)
+			}
+		}()
+	}
 	sorties := make([]string, 2)
 	var wg sync.WaitGroup
 	for i, m := range []pcEssai{b, a} { // the node first: it waits for the master's request
@@ -211,6 +229,15 @@ func TestBancEquipeLien(t *testing.T) {
 	}
 	if !strings.Contains(sorties[0], "Team workshop (direct link)") {
 		t.Fatalf("no workshop exchange in the node's log%s", journal)
+	}
+	if couper && (!strings.Contains(sorties[0], "through the team's copy on GitHub") || !strings.Contains(sorties[1], "what the other computers wrote on GitHub while the direct link was down")) {
+		t.Fatalf("no fallback through GitHub%s", journal)
+	}
+	// a private team: its presences on GitHub say nothing of the computers
+	for _, ref := range strings.Fields(gitEssai(t, depot, "for-each-ref", "--format=%(refname)", refPresencePC)) {
+		if p := gitEssai(t, depot, "cat-file", "-p", ref+":pc.json"); strings.Contains(p, "PC-") || !strings.Contains(p, "chiffre") {
+			t.Fatalf("a presence in clear: %s", p)
+		}
 	}
 	for i, s := range sorties {
 		var l []string

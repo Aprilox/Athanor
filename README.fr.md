@@ -260,7 +260,11 @@ Un projet, plusieurs ordinateurs qui y travaillent en même temps : votre PC fix
 
 **Lancer toute l'équipe depuis le maître.** *Lancer l'équipe* lance le pilote du maître, puis celui de chaque nœud en quelques secondes ; *Arrêter l'équipe après le cycle* les arrête tous à la fin de leur cycle. Un nœud ne suit que ces deux ordres (rien d'autre d'un ordinateur n'est jamais piloté depuis un autre), et son utilisateur peut les refuser : *Le maître peut lancer et arrêter le pilote de cet ordinateur*.
 
-GitHub reste là où passe le code et ce sur quoi l'équipe se replie : quand le maître ne répond pas, les ordinateurs continuent comme avant et sont vus par GitHub (un nœud garde son atelier et le donne à l'équipe quand le maître répond de nouveau).
+**Une équipe privée sur GitHub, et son secours.** Avec l'atelier par le lien direct, les présences des ordinateurs sur GitHub sont aussi chiffrées avec la clé de l'équipe (GitHub voit un identifiant et une heure, jamais un nom, un jalon ou l'adresse du maître), et le maître garde une copie chiffrée de l'atelier de l'équipe sur le dépôt (une ref, `refs/athanor/atelier`, pas une branche : GitHub ne voit ni les chemins ni les contenus). Quand le maître est injoignable, les nœuds continuent par cette copie ; le maître fusionne ce qu'ils y ont écrit dès qu'il le peut. Chaque ordinateur d'une telle équipe doit l'avoir rejointe (la clé vient avec l'invitation).
+
+**Passer le rôle de maître.** Sur le maître, *En faire le maître* à côté d'un nœud en direct : cet ordinateur reprend l'équipe (ses ordinateurs, son atelier, ses ordres) et ouvre son propre lien ; l'ancien maître devient l'un de ses nœuds, et les autres suivent d'eux-mêmes (l'ancien maître le leur dit pendant deux minutes, ensuite la nouvelle adresse est dans la présence chiffrée du nouveau maître). L'atelier de l'ancien maître est figé pendant ce temps : rien de ce qui est écrit n'est perdu. Une passation qui n'aboutit pas en 5 minutes est annulée.
+
+GitHub reste là où passe le code et ce sur quoi l'équipe se replie : quand le maître ne répond pas, les ordinateurs continuent comme avant et sont vus par GitHub.
 
 ---
 
@@ -601,7 +605,7 @@ Oui. Rien n'est lié à un nom d'utilisateur ni à une lettre de disque : les ch
 Poussez un tag de version : GitHub lance d'abord toutes les vérifications de la CI sur le commit du tag (tests sous Windows, Linux et macOS, exécutable unique, toutes les cibles), puis compile les applications et publie la version ([`.github/workflows/release.yml`](.github/workflows/release.yml)). Si une seule vérification échoue (ou la suite), rien n'est publié : le tag est supprimé, ainsi que la version si elle avait déjà été créée, et les mises à jour d'Athanor ne la proposent jamais. Corrigez, commitez, puis poussez à nouveau le même tag (`git tag -f v2.42.0 && git push origin v2.42.0`).
 
 ```bash
-git tag v2.45.0 && git push origin v2.45.0
+git tag v2.46.0 && git push origin v2.46.0
 ```
 
 Gardez la version de [`app/winres/athanor.rc`](app/winres/athanor.rc) et `versionAthanor` dans [`app/commandes.go`](app/commandes.go) alignées sur le tag (un test vérifie qu'elles concordent), et écrivez les nouveautés dans `docs/releases/VERSION.md` (par ex. [`docs/releases/2.31.0.md`](docs/releases/2.31.0.md)) : elles ouvrent la page de la version.

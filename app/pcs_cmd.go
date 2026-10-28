@@ -101,7 +101,7 @@ func pcsGH(args []string, w io.Writer) int {
 	v.Moi = &moi
 	var erreurs []string
 	if publier {
-		if err := publierPresencePC(d, miroir, r, moi); err != nil {
+		if err := publierPresencePC(d, miroir, r, moi, clePresencePC(projet)); err != nil {
 			erreurs = append(erreurs, err.Error())
 		}
 	}
@@ -110,7 +110,7 @@ func pcsGH(args []string, w io.Writer) int {
 	} else {
 		v.Lu = time.Now().UTC().Format(time.RFC3339)
 	}
-	v.PCs = lirePCs(miroir, moi.ID)
+	v.PCs = lirePCs(miroir, moi.ID, clePresencePC(projet))
 	if o := obstacleEquipePC(projet, miroir, r); o != "" {
 		erreurs = append(erreurs, strings.ToUpper(o[:1])+o[1:]+".")
 	}
