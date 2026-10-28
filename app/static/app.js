@@ -1319,7 +1319,7 @@ function lignesGains(g) {
   const lignes = (g.comparaisons || []).map((c) => `<li>${t("{0}: {1} $ per successful cycle with it ({2} cycles), {3} $ without ({4}): {5}", [h(noms[c.option] || c.option), c.avec_cout.toFixed(2), c.avec_n, c.sans_cout.toFixed(2), c.sans_n,
     `<b class="${c.ecart <= 0 ? "gain" : "perte"}">${c.ecart > 0 ? "+" : ""}${c.ecart} %</b>`])}</li>`).join("");
   const etat = g.ponytail ? t("Ponytail {0} on: Claude builds each milestone with the smallest complete change.", [h(g.version_ponytail)]) : t("Ponytail off (Settings → Simplest code).");
-  return `<div class="gains muet petit mt-1"><p class="m0">${etat}</p>${lignes ? `<ul class="m0">${lignes}</ul><p class="m0">${t("Measured on this project's own cycles: their milestones differ, so it is a trend, not a test.")}</p>` : g.ponytail ? `<p class="m0">${t("The comparison with and without appears once 3 successful cycles of each kind are done.")}</p>` : ""}</div>`;
+  return `<div class="gains muet petit mt-1"><p class="m0">${etat}</p><p class="m0">${t("The cache is Claude's own, always on: what Ponytail, RTK and the eco mode save is measured apart, here.")}</p>${lignes ? `<ul class="m0">${lignes}</ul><p class="m0">${t("Measured on this project's own cycles: their milestones differ, so it is a trend, not a test.")}</p>` : g.ponytail ? `<p class="m0">${t("The comparison with and without appears once 3 successful cycles of each kind are done.")}</p>` : ""}</div>`;
 }
 
 pages.suivi = async () => {
@@ -1362,6 +1362,7 @@ pages.suivi = async () => {
     </div>
   </div>
   ${rendreBlocPCs(pcsDuProjet(v.projet.nom))}
+  ${(pcsDuProjet(v.projet.nom) || {}).actif ? blocDirect(v.projet.nom) : ""}
   ${rendreAvancement(stats, plan, faits, v.actif)}
   <div class="bloc"><h2>${t("Usage")}</h2>
     ${stats.length ? `<div class="chiffres">
@@ -1369,7 +1370,7 @@ pages.suivi = async () => {
       <div class="chiffre"><b>${(() => { const m = Math.round(somme("minutes")); return `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")}`; })()}</b><span>${t("of work")}</span></div>
       <div class="chiffre"><b>${somme("tours")}</b><span>${t("turns")}</span></div>
       <div class="chiffre" title="${h(t("at list price (your subscription quota pays)"))}"><b>${stats.some((s) => s.estime) ? "≈ " : ""}${somme("cout_usd").toFixed(2)} $</b><span>${t("at list price")}</span></div>
-      <div class="chiffre" title="${h(t("At Anthropic's list prices a token read again from the cache costs a tenth, one written to it 1.25 times: what Claude reads cost this much less than without the cache."))}"><b>${ratio} %</b><span>${t("of tokens re-read from cache")}${g && g.cache_pct > 0 ? `<em class="gain">${t("−{0} % paid on reading", [g.cache_pct])}</em>` : ""}</span></div>
+      <div class="chiffre" title="${h(t("Claude's own prompt cache (Anthropic's, always on), over all the cycles: not a saving of an Athanor option. At list prices a token read again from the cache costs a tenth, one written to it 1.25 times: what Claude reads cost this much less than without the cache."))}"><b>${ratio} %</b><span>${t("read from Claude's own cache")}${g && g.cache_pct > 0 ? `<em class="cache-claude muet">${t("reading −{0} %", [g.cache_pct])}</em>` : ""}</span></div>
       ${g && g.rtk_entree > 0 ? `<div class="chiffre" title="${h(t("Measured by RTK: the tokens of the command outputs (git, ls, grep, tests…) it did not pass on to Claude."))}"><b>${fmtTokens(g.rtk_economise)}</b><span>${t("tokens spared by RTK")}<em class="gain">${t("−{0} % of the command outputs", [g.rtk_pct])}</em></span></div>` : ""}
       <div class="chiffre"><b>${fmtTokens(somme("sortie_tokens"))}</b><span>${t("tokens produced")}</span></div>
       <div class="chiffre"><b>${fmtTokens(somme("contexte_max") / stats.length)}</b><span>${t("average peak context")}</span></div>
@@ -2728,6 +2729,75 @@ function pcsDuProjet(nom) {
   }
   return etat.pcsVues[nom];
 }
+// --- the direct link between the computers (equipe_directe.go): read every 10 s
+etat.directVues = {}; etat.directLus = {};
+function directDuProjet(nom) {
+  const vite = etat.directVues[nom] && (etat.directVues[nom].etat === "attente" || etat.directVues[nom].code || (etat.directVues[nom].demandes || []).length);
+  if (Date.now() - (etat.directLus[nom] || 0) > (vite ? 3000 : 10000)) {
+    etat.directLus[nom] = Date.now();
+    api("pcs-direct").then((v) => {
+      const avant = JSON.stringify(etat.directVues[nom] || null);
+      etat.directVues[nom] = v.direct || null;
+      if (JSON.stringify(etat.directVues[nom]) !== avant && etat.page === "suivi" && etat.projet === nom) rendrePage();
+    }).catch(() => { /* shown at the next reading */ });
+  }
+  return etat.directVues[nom];
+}
+function pctQuota(x) { return x === undefined || x === null ? "—" : Math.round(x * 100) + " %"; }
+function blocDirect(nom) {
+  const d = directDuProjet(nom);
+  const intro = `<p class="intro petit">${t("Direct link: the computers of the team see each other live (what each one builds, its quota, its cost) through a link of their own, separate from the remote access: a team member can never reach this computer's panel. The code still goes through GitHub.")}</p>`;
+  if (!d || d.etat === "fini") {
+    return `<div class="bloc" id="bloc-direct"><h2>${t("Team, live")}</h2>${intro}
+      ${d && d.erreur ? `<p class="petit"><span class="attention">✖ ${h(t(d.erreur))}</span></p>` : ""}
+      <div class="ligne"><button class="btn" type="button" data-direct="maitre">${t("Be the master of the team")}</button></div>
+      <div class="ligne mt-1"><input type="text" id="direct-invitation" placeholder="https://….trycloudflare.com#123456"><button class="btn" type="button" data-direct="rejoindre">${t("Join with an invitation")}</button></div>
+    </div>`;
+  }
+  const lignes = (d.noeuds || []).map((n) => {
+    const p = n.presence || {}, st = n.stats || {};
+    const marques = [n.maitre ? `<span class="badge">${t("master")}</span>` : "", st.ponytail ? `<span class="badge">Ponytail</span>` : "", st.eco ? `<span class="badge">${t("eco mode")}</span>` : ""].join(" ");
+    const etatN = n.vu < 0 ? `<span class="muet">${t("Paired, not seen yet")}</span>` : !n.en_direct ? `<span class="muet">${h(t("last seen {0} s ago", [n.vu]))}</span>` : etatPC({ ...p, en_ligne: true });
+    return `<tr><td class="etroit"><span class="point-appareil ${n.en_direct ? "en-ligne" : ""}"></span></td>
+      <td><b>${h(p.nom || "")}</b> ${marques}</td>
+      <td>${etatN}</td>
+      <td class="petit">${n.vu < 0 ? "" : `${t("quota {0} · week {1}", [pctQuota(st.session), pctQuota(st.semaine)])}<div class="muet">${t("{0} cycles · {1} $ · {2} tokens", [st.cycles || 0, (st.cout || 0).toFixed(2), fmtTokens(st.sortie || 0)])}</div>`}</td>
+      ${d.role === "maitre" && !n.maitre ? `<td class="etroit"><button class="btn btn-petit" type="button" data-direct="retirer" data-id="${h(p.id || "")}">${t("Remove")}</button></td>` : "<td></td>"}</tr>`;
+  }).join("");
+  let tete = "";
+  if (d.role === "maitre") {
+    const etatM = d.etat === "pret" ? `<span class="ok">✔ ${t("This computer is the master: the others join it with an invitation.")}</span>`
+      : d.etat === "erreur" ? `<span class="attention">✖ ${h(t(d.erreur || ""))}</span>` : `<span class="muet">⏳ ${t("Opening the team's link…")}</span>`;
+    const invitation = d.code && d.adresse ? `<div class="bloc-code mt-1"><code id="direct-invit">${h(d.adresse)}#${h(d.code)}</code> <button class="btn btn-petit" type="button" data-direct="copier">${t("Copy")}</button>
+      <div class="muet petit">${t("Paste it on the other computer (Overview › Team, live › Join), then accept it here. It works once, for 10 minutes.")} ${t("Only a computer you know: anyone with the invitation must still be accepted here.")}</div></div>` : "";
+    const demandes = (d.demandes || []).map((x) => `<div class="ligne mt-1 demande-direct"><span>⚠ <b>${h(t("{0} wants to join the team", [x.nom || "?"]))}</b>${x.ip ? ` <span class="muet petit">${h(x.ip)}</span>` : ""}</span><span class="espace"></span>
+      <button class="btn btn-primaire" type="button" data-direct="accepter" data-id="${h(x.ref)}">${t("Accept")}</button> <button class="btn btn-petit" type="button" data-direct="refuser" data-id="${h(x.ref)}">${t("Refuse")}</button></div>`).join("");
+    tete = `<p class="petit">${etatM}</p>${invitation}${demandes}<div class="ligne mt-1"><button class="btn" type="button" data-direct="inviter" ${d.etat !== "pret" ? "disabled" : ""}>${t("Invite a computer")}</button><span class="espace"></span><button class="btn btn-petit" type="button" data-direct="quitter">${t("End the team's link")}</button></div>`;
+  } else if (d.role === "attente") {
+    tete = `<p class="petit"><span class="muet">⏳ ${t("Waiting for the master to accept this computer…")}</span></p><div class="ligne mt-1"><span class="espace"></span><button class="btn btn-petit" type="button" data-direct="quitter">${t("Cancel")}</button></div>`;
+  } else {
+    const etatN = d.etat === "connecte" ? `<span class="ok">✔ ${h(t("Connected to {0}, the master", [d.maitre || ""]))}</span>` : `<span class="attention">✖ ${h(t("The master ({0}) does not answer: the team is seen through GitHub meanwhile.", [d.maitre || ""]))}</span>${d.erreur ? ` <span class="muet petit">${h(t(d.erreur))}</span>` : ""}`;
+    tete = `<p class="petit">${etatN}</p><div class="ligne mt-1"><span class="espace"></span><button class="btn btn-petit" type="button" data-direct="quitter">${t("Leave the team's link")}</button></div>`;
+  }
+  return `<div class="bloc" id="bloc-direct"><h2>${t("Team, live")}</h2>${tete}${lignes ? `<table class="tab appareils pcs mt-1">${lignes}</table>` : ""}</div>`;
+}
+$("#page").addEventListener("click", async (ev) => {
+  const b = ev.target.closest("[data-direct]"); if (!b) return;
+  const nom = etat.projet || ((etat.vue || {}).projet || {}).nom;
+  const a = b.dataset.direct;
+  if (a === "copier") { const c = $("#direct-invit"); if (c) navigator.clipboard.writeText(c.textContent).then(() => toast(t("Copied."), "ok")); return; }
+  if (a === "quitter" && (etat.directVues[nom] || {}).role !== "attente") {
+    const d = etat.directVues[nom] || {};
+    const c = await choisir(d.role === "maitre" ? t("End the team's link? The other computers lose it (they go on through GitHub) and will need a new invitation.") : t("Leave the team's link? This computer goes on through GitHub."), [{ id: "", texte: t("Cancel") }, { id: "oui", texte: d.role === "maitre" ? t("End") : t("Leave"), danger: true }]);
+    if (c !== "oui") return;
+  }
+  const corps = { action: a };
+  if (a === "rejoindre") corps.invitation = ($("#direct-invitation") || {}).value || "";
+  if (a === "retirer" || a === "accepter" || a === "refuser") corps.id = b.dataset.id;
+  const v = await action(api("pcs-direct", "POST", corps), "");
+  if (v) { etat.directVues[nom] = v.direct || null; etat.directLus[nom] = Date.now(); rendrePage(); if (a === "rejoindre") toast(t("The code is right: the master now accepts this computer on its screen."), "ok"); }
+});
+
 function etatPC(p) {
   if (!p.en_ligne) return `<span class="muet">${t("Offline")}${p.maj ? " · " + h(t("last seen {0}", [dateLisible(p.maj)])) : ""}</span>`;
   if (p.pilote && p.jalon) {

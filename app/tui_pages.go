@@ -795,9 +795,6 @@ func (a *appTUI) boiteProgres(e *ecranT, x, y, l, h int) {
 	haut := 3
 	if g := a.vue.Gains; g != nil && ih >= 4 {
 		var parts []string
-		if g.CachePct > 0 {
-			parts = append(parts, a.t("cache: −{0} % paid on reading", g.CachePct))
-		}
 		if g.RTKEntree > 0 {
 			parts = append(parts, a.t("RTK: {0} tokens spared (−{1} %)", fmtTokensTUI(g.RTKEconomise), g.RTKPct))
 		}
@@ -808,15 +805,31 @@ func (a *appTUI) boiteProgres(e *ecranT, x, y, l, h int) {
 			nom := map[string]string{"ponytail": "Ponytail", "eco": a.t("Eco mode")}[c.Option]
 			parts = append(parts, a.t("{0}: {1} % per cycle", nom, fmt.Sprintf("%+d", c.Ecart)))
 		}
-		if len(parts) > 0 {
-			lignes := envelopper(strings.Join(parts, " · "), il)
-			if len(lignes) > 2 {
-				lignes = lignes[:2]
+		var lignes []string
+		for _, x := range parts { // one saving never cut in two
+			if n := len(lignes); n > 0 && largeurTexte(lignes[n-1]+" · "+x) <= il {
+				lignes[n-1] += " · " + x
+			} else {
+				lignes = append(lignes, envelopper(x, il)...)
 			}
-			for i, li := range lignes {
-				e.texte(ix, iy+2+i, il, li, a.st(p.ok, fond))
-			}
-			haut = 2 + len(lignes)
+		}
+		max := 2
+		if g.CachePct > 0 && ih < 7 { // Anthropic's, always on: a line of its own, apart from what the options save
+			max = 1
+		}
+		if len(lignes) > max {
+			lignes = lignes[:max]
+		}
+		n := len(lignes)
+		for i, li := range lignes {
+			e.texte(ix, iy+2+i, il, li, a.st(p.ok, fond))
+		}
+		if g.CachePct > 0 {
+			e.texte(ix, iy+2+n, il, a.t("Claude's own cache: reading −{0} %", g.CachePct), a.st(p.muet, fond))
+			n++
+		}
+		if n > 0 {
+			haut = 2 + n
 		}
 	}
 	// the newest cycles

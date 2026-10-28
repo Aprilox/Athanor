@@ -417,6 +417,8 @@ func (s *Serveur) routes(mux *http.ServeMux) {
 
 	// several computers on a project (api_pcs.go)
 	mux.HandleFunc("GET /api/pcs", s.garde(false, s.apiPCs))
+	mux.HandleFunc("GET /api/pcs-direct", s.garde(false, s.apiDirect))  // the direct link between the computers (equipe_directe.go)
+	mux.HandleFunc("POST /api/pcs-direct", s.garde(false, s.apiDirect)) //
 	mux.HandleFunc("POST /api/pcs", s.garde(false, s.apiPCsActiver))
 	mux.HandleFunc("GET /api/pcs/machine", s.garde(false, s.apiPCsMachine))
 	mux.HandleFunc("POST /api/pcs/machine", s.garde(false, s.apiPCsMachine))

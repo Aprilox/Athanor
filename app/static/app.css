@@ -803,6 +803,7 @@ ol.guide-access li { margin: 5px 0; }
 .pas-pcs li .btn, .pas-pcs li .ok { margin-left: 6px; }
 
 .chiffre .gain { display: block; font-style: normal; color: var(--ok); font-weight: 600; }
+.chiffre .cache-claude { display: block; font-style: normal; color: var(--muted); }
 .gains .gain { color: var(--ok); }
 .gains .perte { color: var(--attention); }
 .gains ul { padding-left: 18px; }

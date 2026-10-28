@@ -72,6 +72,7 @@ func main() {
 	go s.surveillerJalonsPush() // milestones done, projects delivered: on the paired devices (distance_push.go)
 	go s.verifierMajFond()      // a new version of Athanor (maj.go)
 	go s.battementsPCs()        // several computers on a project: this one says it is there (api_pcs.go)
+	go s.battementsDirects()    // the direct link between them: the masters open, the nodes beat (equipe_directe.go)
 
 	mux := http.NewServeMux()
 	s.routes(mux)

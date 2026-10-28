@@ -921,7 +921,7 @@ func TestTUISuiviGains(t *testing.T) {
 	e := nouvelEcran(160, 45)
 	a.dessiner(e)
 	s := e.texteEcran()
-	for _, x := range []string{"cache: −71 % paid on reading", "RTK: 3 k tokens spared (−70 %)", "Ponytail " + versionPonytail, "Ponytail: -50 % per cycle"} {
+	for _, x := range []string{"Claude's own cache: reading −71 %", "RTK: 3 k tokens spared (−70 %)", "Ponytail " + versionPonytail, "Ponytail: -50 % per cycle"} {
 		if !strings.Contains(s, x) {
 			t.Fatalf("no %q in\n%s", x, s)
 		}
@@ -929,4 +929,35 @@ func TestTUISuiviGains(t *testing.T) {
 	for _, taille := range [][2]int{{80, 24}, {60, 16}} {
 		a.dessiner(nouvelEcran(taille[0], taille[1]))
 	}
+}
+
+// Manage › Team, live: nothing yet (be the master, join), a master with its invitation and its team.
+func TestTUIEquipeDirecte(t *testing.T) {
+	a := nouvelleAppTUI(&clientTUI{projet: "a"}, false)
+	a.equipeDirecte(map[string]any{"direct": nil})
+	if d := a.dialogue; d == nil || d.titre != "Team, live" || d.choix[0].id != "maitre" || d.choix[1].id != "rejoindre" {
+		t.Fatalf("nothing yet: %+v", a.dialogue)
+	}
+	s := 0.42
+	a.equipeDirecte(map[string]any{"direct": map[string]any{"role": "maitre", "etat": "pret", "adresse": "https://a-b.trycloudflare.com", "code": "123456",
+		"noeuds": []any{map[string]any{"presence": map[string]any{"nom": "Tour", "jalon": "M5"}, "stats": map[string]any{"session": s, "cycles": 3, "cout": 1.5}, "maitre": true, "en_direct": true}}}})
+	d := a.dialogue
+	if d == nil || !strings.Contains(d.texte, "https://a-b.trycloudflare.com#123456") || !strings.Contains(d.texte, "● Tour (master) · M5 · quota 42 %") || d.choix[0].id != "inviter" {
+		t.Fatalf("master: %+v", d)
+	}
+	// a computer that gave the right code: the master accepts or refuses it
+	a.equipeDirecte(map[string]any{"direct": map[string]any{"role": "maitre", "etat": "pret", "demandes": []any{map[string]any{"ref": "r1", "nom": "Portable"}}}})
+	if d := a.dialogue; d == nil || !strings.Contains(d.texte, "Portable wants to join the team") || d.choix[0].id != "accepter:r1" || d.choix[1].id != "refuser:r1" {
+		t.Fatalf("a request: %+v", d)
+	}
+	a.equipeDirecte(map[string]any{"direct": map[string]any{"role": "attente", "etat": "attente"}})
+	if d := a.dialogue; d == nil || !strings.Contains(d.texte, "Waiting for the master") || d.choix[1].id != "quitter" {
+		t.Fatalf("waiting: %+v", d)
+	}
+	a.equipeDirecte(map[string]any{"direct": map[string]any{"etat": "fini", "erreur": "The master refused this computer."}})
+	if d := a.dialogue; d == nil || !strings.Contains(d.texte, "✖ The master refused") || d.choix[0].id != "maitre" {
+		t.Fatalf("refused: %+v", d)
+	}
+	e := nouvelEcran(100, 30)
+	a.dessiner(e)
 }
