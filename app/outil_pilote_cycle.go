@@ -2496,9 +2496,10 @@ func lancerPilote(args []string) int {
 					_ = os.WriteFile(fRep, nb, 0o644)
 				}
 				p.log("Delivery reopened: a secret must leave the commits before the GitHub push (.athanor/SECRETS_FOUND.md).")
-			} else if !p.prochaineDemande() {
+			} else if !p.prochaineDemande() && !p.rouvrirApresLivraison() {
+				noterLivraison(p.projet) // what this delivery was made against: the next start compares with it
 				_ = os.Remove(filepath.Join(p.etat, "auto"))
-				p.terminer("DONE: the deliverable and FINAL_REPORT.md are in the project folder.")
+				p.terminer("DONE: the deliverable and FINAL_REPORT.md are in the project folder. To go on: add a request or a note, then start again.")
 			}
 		}
 

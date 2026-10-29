@@ -57,6 +57,7 @@ type pilote struct {
 	maxCyclesWithoutProgress, maxTurnsPerCycle, framingMaxMin           int
 	relayContextK, idleMaxMin, cycleMaxMin, watchInterval               int
 	secondsPerMinute                                                    int
+	reouvertures                                                        int // a delivered project reopened by this run (livraison.go)
 	closeAfterMilestone, stayAliveAtEnd, keepAwake                      string
 	model, fallbackModel, effort, subagentModel, framingModel           string
 	workerModel, cheapModel, language, phraseLangue                     string

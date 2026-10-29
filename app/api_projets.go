@@ -319,6 +319,9 @@ func (s *Serveur) apiPilote(w http.ResponseWriter, r *http.Request) {
 		marqueAuto(p, true)
 		cle, err := s.demarrerPilote(p)
 		if err != nil {
+			if err.Error() == texteLivreRienDeNeuf {
+				marqueAuto(p, false) // nothing to restart when the application starts
+			}
 			s.erreur(w, http.StatusInternalServerError, err.Error())
 			return
 		}
@@ -619,6 +622,10 @@ func (s *Serveur) demarrerPilote(p Projet) (string, error) {
 	}
 	if p.PiloteActif() {
 		return "The pilot is already running on this project.", nil // message key
+	}
+	// delivered, and nothing new since (livraison.go): the pilot would end at once
+	if projetLivre(p) && len(p.LireFileAttente()) == 0 && nouveauDepuisLivraison(p.Dossier).Vide() {
+		return "", errors.New(texteLivreRienDeNeuf)
 	}
 	if estRoot() && os.Getenv("CLAUDE_BIN") == "" { // (a stand-in Claude for the tests and the bench may run as root)
 		return "", errors.New(texteRoot)
