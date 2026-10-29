@@ -590,7 +590,7 @@ function phraseEtat(v) {
     case "entre_cycles": return { classe: "entre_cycles", titre: t("Between two cycles"), sous: t("Cycle {0} is done, the next one starts with a fresh context.", [e.cycle]) };
     case "erreur": return { classe: "erreur", titre: t("Error, retry scheduled"), sous: e.etat };
     case "connexion": return { classe: "connexion", titre: t("Connection problem"), sous: t("Check the token in Settings, or go through Setup & health.") };
-    case "termine": return { classe: "", titre: t("Project finished"), sous: t("The deliverable and the final report are in the project folder.") };
+    case "termine": return { classe: "", titre: t("Project finished"), sous: t("The deliverable and the final report are in the project folder. To go on, add a request or a note, then Start.") };
     default: return { classe: "", titre: e.etat ? t(e.etat) : t("Pilot started"), sous: t("cycle {0}", [e.cycle || 0]) };
   }
 }

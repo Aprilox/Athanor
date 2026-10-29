@@ -201,8 +201,15 @@ func (s *Serveur) apiRemarque(w http.ResponseWriter, r *http.Request) {
 		s.erreur(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	if projetLivre(p) && !p.PiloteActif() {
+		s.msg(w, "Note added. The project was delivered: Start reopens it with this note.")
+		return
+	}
 	s.msg(w, "Note added: Claude reads it at the start of the next cycle.")
 }
+
+// texteLivreRienDeNeuf: Start on a delivered project to which nothing was added.
+const texteLivreRienDeNeuf = "This project is delivered and nothing new came since: add a request to the queue or a note, then start it again."
 
 func (s *Serveur) apiEcrireDemande(w http.ResponseWriter, r *http.Request) {
 	var c struct {

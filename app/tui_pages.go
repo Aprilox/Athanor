@@ -451,7 +451,7 @@ func (a *appTUI) phrase() (string, string, couleurT) {
 	case "connexion":
 		return t("Connection problem"), t("Check the token in Settings, or go through Setup & health."), p.erreur
 	case "termine":
-		return t("Project finished"), t("The deliverable and the final report are in the project folder."), p.ok
+		return t("Project finished"), t("The deliverable and the final report are in the project folder. To go on, add a request or a note, then Start."), p.ok
 	}
 	if e.Etat != "" {
 		return t(e.Etat), t("cycle {0}", e.Cycle), p.ok

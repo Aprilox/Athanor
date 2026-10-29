@@ -291,6 +291,37 @@ printf '{"type":"result","subtype":"success","is_error":false,"num_turns":2,"dur
 exit 0
 `
 
+// scriptFauxClaudeLivraison: every call builds every unticked milestone of the plan and delivers; it notes
+// its call and whether the plan asked it to take up what changed in REQUEST.md.
+const scriptFauxClaudeLivraison = `#!/usr/bin/env bash
+set -u
+case "${1:-}" in
+  --help)
+    echo "--strict-mcp-config --setting-sources --append-system-prompt-file --agents --plugin-dir"
+    exit 0 ;;
+  --version)
+    echo "claude 2.1.285"
+    exit 0 ;;
+esac
+ETAT="$PWD/.athanor"
+n=0
+[ -f "$ETAT/appel_test_n" ] && n=$(cat "$ETAT/appel_test_n")
+n=$(( n + 1 ))
+echo "$n" > "$ETAT/appel_test_n"
+if grep -q "^- \\[ \\] Resume: what changed in .athanor/REQUEST.md" "$ETAT/PLAN.md" && grep -q "New in REQUEST.md: .*dark mode" "$ETAT/PLAN.md"; then
+  echo "$n reprise" >> "$ETAT/appels_vus"
+else
+  echo "$n" >> "$ETAT/appels_vus"
+fi
+echo "build $n" >> "$PWD/app.txt"
+sed -i.bak 's/^- \[ \] /- [x] /' "$ETAT/PLAN.md" && rm -f "$ETAT/PLAN.md.bak"
+printf '# Final Report\nSTATUS: DONE\n' > "$ETAT/FINAL_REPORT.md"
+git add -A && git commit -qm "build $n"
+printf '{"type":"assistant","message":{"usage":{"input_tokens":2000,"cache_read_input_tokens":0,"cache_creation_input_tokens":0,"output_tokens":200},"content":[{"type":"text","text":"CHECK: PASSED"}]}}\n'
+printf '{"type":"result","subtype":"success","is_error":false,"num_turns":2,"duration_ms":3000,"duration_api_ms":2000,"total_cost_usd":0.02,"usage":{"input_tokens":2000,"output_tokens":200},"result":"Done"}\n'
+exit 0
+`
+
 // scriptFauxClaudeEco: call 1 (eco on) notes what it received and switches the eco mode off as the app
 // would; call 2 notes it again and delivers.
 const scriptFauxClaudeEco = `#!/usr/bin/env bash
@@ -492,6 +523,58 @@ func TestBancPilote(t *testing.T) {
 		verifier(etat.Phase == "entre_cycles" && strings.HasPrefix(etat.Etat, "DONE"), "final state: %+v", etat)
 		if echec {
 			t.Logf("pilot output:\n%s", sortie)
+		}
+	})
+	t.Run("livre_puis_remarque", func(t *testing.T) {
+		kit := preparerKitEssaiPilote(t, binTemp)
+		fakeClaude := filepath.Join(kit, "fake-claude-livraison.sh")
+		if err := os.WriteFile(fakeClaude, []byte(strings.ReplaceAll(scriptFauxClaudeLivraison, "\r\n", "\n")), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		projet := filepath.Join(dossierEssaiPilote(t), "projet")
+		_ = os.MkdirAll(filepath.Join(projet, ".athanor"), 0o755)
+		_ = os.WriteFile(filepath.Join(projet, ".athanor", "REQUEST.md"), []byte("# Request\n\nBuild feature M1.\n"), 0o644)
+		_ = os.WriteFile(filepath.Join(projet, ".athanor", "PLAN.md"), []byte("# Plan\n\n- [ ] M1 : Core feature\n"), 0o644)
+		p := Projet{Nom: "test", Dossier: projet}
+		vus := func() string {
+			b, _ := os.ReadFile(filepath.Join(p.Atelier(), "appels_vus"))
+			return strings.TrimSpace(string(b))
+		}
+		echec := false
+		verifier := func(ok bool, format string, a ...any) {
+			if !ok {
+				echec = true
+				t.Errorf(format, a...)
+			}
+		}
+		var sorties []string
+		// 1. delivered
+		sorties = append(sorties, executerPilote(t, binTemp, kit, projet, fakeClaude, nil))
+		verifier(vus() == "1" && projetLivre(p) && fichierRegulierPilote(fichierLivraison(p.Atelier())), "delivery 1: %q", vus())
+		// 2. started again, nothing new: it ends at once, Claude never called
+		out := executerPilote(t, binTemp, kit, projet, fakeClaude, nil)
+		sorties = append(sorties, out)
+		verifier(vus() == "1" && strings.Contains(out, "To go on: add a request or a note"), "nothing new: %q", vus())
+		// 3. a note: the pilot reopens the project, Claude takes it up, delivers again
+		if err := p.AjouterRemarque("Add a dark mode", "## Notes", "(notes)"); err != nil {
+			t.Fatal(err)
+		}
+		out = executerPilote(t, binTemp, kit, projet, fakeClaude, nil)
+		sorties = append(sorties, out)
+		plan, _ := os.ReadFile(filepath.Join(p.Atelier(), "PLAN.md"))
+		verifier(vus() == "1\n2 reprise" && projetLivre(p) && strings.Contains(out, "Delivered project reopened: REQUEST.md changed"), "the note: %q", vus())
+		verifier(strings.Contains(string(plan), "- [x] Resume: what changed in .athanor/REQUEST.md"), "plan: %q", plan)
+		// 4. again nothing new
+		sorties = append(sorties, executerPilote(t, binTemp, kit, projet, fakeClaude, nil))
+		verifier(vus() == "1\n2 reprise", "after the second delivery: %q", vus())
+		// 5. a milestone added by hand
+		f, _ := os.OpenFile(filepath.Join(p.Atelier(), "PLAN.md"), os.O_APPEND|os.O_WRONLY, 0o644)
+		_, _ = f.WriteString("- [ ] M9 : Export to CSV\n")
+		f.Close()
+		sorties = append(sorties, executerPilote(t, binTemp, kit, projet, fakeClaude, nil))
+		verifier(vus() == "1\n2 reprise\n3" && projetLivre(p), "the milestone added: %q", vus())
+		if echec {
+			t.Logf("pilot outputs:\n%s", strings.Join(sorties, "\n=====\n"))
 		}
 	})
 	t.Run("mode_eco", func(t *testing.T) {
