@@ -235,7 +235,9 @@ func bancEquipeLien(t *testing.T, bin string, couper bool) {
 	}
 	// a private team: its presences on GitHub say nothing of the computers
 	for _, ref := range strings.Fields(gitEssai(t, depot, "for-each-ref", "--format=%(refname)", refPresencePC)) {
-		if p := gitEssai(t, depot, "cat-file", "-p", ref+":pc.json"); strings.Contains(p, "PC-") || !strings.Contains(p, "chiffre") {
+		p := gitEssai(t, depot, "cat-file", "-p", ref+":pc.json")
+		// the encrypted part left out: "PC-" may well appear in its random letters
+		if clair := regexp.MustCompile(`"chiffre": *"[A-Za-z0-9_-]*"`).ReplaceAllString(p, `"chiffre": ""`); strings.Contains(clair, "PC-") || clair == p {
 			t.Fatalf("a presence in clear: %s", p)
 		}
 	}
