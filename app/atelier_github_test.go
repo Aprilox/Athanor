@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -64,7 +65,8 @@ func TestMagasinGitHub(t *testing.T) {
 			tout += f[3] + gitEssai(t, depot, "cat-file", "-p", f[2])
 		}
 	}
-	for _, secret := range []string{"secret", "PLAN", "REQUEST", "Build", "M1"} {
+	// (whole phrases and names: a short word like "M1" may well appear by chance in encrypted bytes)
+	for _, secret := range []string{"Build the secret game", "The secret level", "REQUEST.md", "PLAN.md"} {
 		if strings.Contains(tout, secret) {
 			t.Fatalf("GitHub can read %q", secret)
 		}
@@ -136,7 +138,12 @@ func TestPresenceChiffree(t *testing.T) {
 			t.Fatal(err)
 		}
 		brut := gitEssai(t, depot, "cat-file", "-p", refPresencePC+p.ID+":pc.json") + gitEssai(t, depot, "log", "--format=%s", refPresencePC+p.ID)
-		if strings.Contains(brut, "secrète") || strings.Contains(brut, "M7") || strings.Contains(brut, "QUJD") || !strings.Contains(brut, p.ID) {
+		// the encrypted part is random letters: "M7" may well appear in it by chance; only the rest is read
+		clair := regexp.MustCompile(`"chiffre": *"[A-Za-z0-9_-]*"`).ReplaceAllString(brut, `"chiffre": ""`)
+		if clair == brut && strings.Contains(brut, `"chiffre"`) {
+			t.Fatalf("the encrypted part not found: %s", brut)
+		}
+		if strings.Contains(clair, "secrète") || strings.Contains(clair, "M7") || strings.Contains(clair, "QUJD") || !strings.Contains(clair, p.ID) {
 			t.Fatalf("GitHub reads the presence: %s", brut)
 		}
 		if err := recupererPCs(d, miroir, r); err != nil {
