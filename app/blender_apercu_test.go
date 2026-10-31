@@ -16,6 +16,10 @@ import (
 // a kit whose library has Blender's server, switched on for the project (mode: as given)
 func kitBlenderEssai(t *testing.T, mode string, actif bool) (kit, projet string) {
 	t.Helper()
+	// the preview's logic, tested on every system (a Mac runs the MCP's window instead: TestModeBlenderMac)
+	ancien := apercuBlenderPossible
+	apercuBlenderPossible = func() bool { return true }
+	t.Cleanup(func() { apercuBlenderPossible = ancien })
 	d, _ := filepath.EvalSymlinks(t.TempDir())
 	kit, projet = filepath.Join(d, "kit"), filepath.Join(d, "projet")
 	_ = os.MkdirAll(filepath.Join(projet, ".git"), 0o755)
@@ -182,13 +186,11 @@ func TestApercuBlenderReel(t *testing.T) {
 
 // On a Mac (no gateway: Claude runs Blender itself), the preview is the MCP's window, as before.
 func TestModeBlenderMac(t *testing.T) {
-	ancien := apercuBlenderPossible
-	apercuBlenderPossible = func() bool { return false }
-	t.Cleanup(func() { apercuBlenderPossible = ancien })
+	kit, projet := kitBlenderEssai(t, "", true)
+	apercuBlenderPossible = func() bool { return false } // put back by kitBlenderEssai's cleanup
 	if modeBlenderEffectif("") != modeBlenderDirect || modeBlenderEffectif("arriere-plan") != modeBlenderArrierePlan {
 		t.Fatal("mac")
 	}
-	kit, projet := kitBlenderEssai(t, "", true)
 	_, notes := construireMCP(kit, choixDuProjetKit(kit, projet), filepath.Join(t.TempDir(), "mcp.json"), projet, "")
 	if strings.Contains(strings.Join(notes, ";"), "in the background") {
 		t.Fatalf("%v", notes)
