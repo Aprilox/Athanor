@@ -27,9 +27,20 @@ func (p *passerelle) blenderNatif(args []string) int {
 		p.absent("Blender")
 	}
 	if argGH(args, 0) != "--open" {
-		c := exec.Command(exe, args...)
+		// a headless run: shown in the preview window when the project asks for it (blender_apercu.go)
+		a := p.preparerApercuBlender(args, func(c string) string { return c })
+		c := exec.Command(exe, a.args...)
 		c.Stdin, c.Stdout, c.Stderr = os.Stdin, p.sortie, p.erreur
 		err := c.Run()
+		p.montrerApercuBlender(a, func(fichier, rechargeur string) error {
+			v := exec.Command(exe, fichier, "--python", rechargeur)
+			v.Dir = filepath.Dir(fichier)
+			v.SysProcAttr = &syscall.SysProcAttr{Setsid: true} // the window outlives this command
+			if err := v.Start(); err != nil {
+				return err
+			}
+			return v.Process.Release()
+		})
 		var e *exec.ExitError
 		if errors.As(err, &e) {
 			return e.ExitCode()

@@ -412,6 +412,7 @@ func (s *Serveur) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/extensions/correction/appliquer", s.garde(false, s.apiExtCorrectionAppliquer))
 	mux.HandleFunc("POST /api/extensions/correction/annuler", s.garde(false, s.apiExtCorrectionAnnuler))
 	mux.HandleFunc("POST /api/extensions/tester-skill", s.garde(false, s.apiExtTesterSkill))
+	mux.HandleFunc("POST /api/extensions/mode-blender", s.garde(false, s.apiExtModeBlender))
 	mux.HandleFunc("GET /api/extensions/corrections", s.garde(false, s.apiExtCorrections))
 	mux.HandleFunc("POST /api/extensions/corrections/appliquer", s.garde(false, s.apiExtCorrectionsAppliquer))
 	mux.HandleFunc("POST /api/extensions/recherche", s.garde(false, s.apiExtRecherche))

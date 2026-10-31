@@ -433,7 +433,21 @@ func (p *passerelle) blender(args []string) int {
 	}
 	ouvert := func() bool { return processusWindows("blender.exe", "blender.exe") }
 	if argGH(args, 0) != "--open" {
-		return p.lancerWindows(false, exe, convertirArgs(args)...)
+		// a headless run: shown in the preview window when the project asks for it (blender_apercu.go)
+		a := p.preparerApercuBlender(args, func(c string) string {
+			if estWindows {
+				return c
+			}
+			return versWindowsP(c)
+		})
+		code := p.lancerWindows(false, exe, convertirArgs(a.args)...)
+		p.montrerApercuBlender(a, func(fichier, rechargeur string) error {
+			if c := p.lancerWindows(true, exe, versWindowsP(fichier), "--python", versWindowsP(rechargeur)); c != 0 {
+				return fmt.Errorf("code %d", c)
+			}
+			return nil
+		})
+		return code
 	}
 	fichier := argGH(args, 1)
 	if ouvert() {

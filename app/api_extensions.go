@@ -111,7 +111,8 @@ type MCPInstalle struct {
 	Plugin      string            `json:"plugin,omitempty"`     // the plugin it comes with (api_plugins.go): on and off with it
 	Ouvrir      *OuvrirMCP        `json:"ouvrir,omitempty"`     // the program to open before each cycle; nil: the catalog's
 	Ajoute      string            `json:"ajoute"`
-	Correction  *CorrectionMCP    `json:"correction,omitempty"` // fixed by Claude on this computer (ext_corriger.go)
+	Correction  *CorrectionMCP    `json:"correction,omitempty"`   // fixed by Claude on this computer (ext_corriger.go)
+	ModeBlender string            `json:"mode_blender,omitempty"` // Blender's server: apercu (default), arriere-plan, direct (blender_apercu.go)
 }
 
 // CorrectionMCP: Claude's fix of a server, and what it replaced (Undo puts it back).
@@ -861,18 +862,20 @@ type SecretVue struct {
 }
 
 type ExtVue struct {
-	ID          string         `json:"id"`
-	Nom         string         `json:"nom"`
-	Description string         `json:"description"`
-	Source      string         `json:"source"`
-	Catalogue   string         `json:"catalogue"`
-	Scripts     bool           `json:"scripts,omitempty"`
-	Actif       bool           `json:"actif"`
-	Type        string         `json:"type,omitempty"`
-	Resume      string         `json:"resume,omitempty"`
-	Secrets     []SecretVue    `json:"secrets,omitempty"`
-	Plugin      string         `json:"plugin,omitempty"`
-	Correction  *CorrectionVue `json:"correction,omitempty"` // fixed by Claude on this computer
+	ID             string         `json:"id"`
+	Nom            string         `json:"nom"`
+	Description    string         `json:"description"`
+	Source         string         `json:"source"`
+	Catalogue      string         `json:"catalogue"`
+	Scripts        bool           `json:"scripts,omitempty"`
+	Actif          bool           `json:"actif"`
+	Type           string         `json:"type,omitempty"`
+	Resume         string         `json:"resume,omitempty"`
+	Secrets        []SecretVue    `json:"secrets,omitempty"`
+	Plugin         string         `json:"plugin,omitempty"`
+	Correction     *CorrectionVue `json:"correction,omitempty"`      // fixed by Claude on this computer
+	ModeBlender    string         `json:"mode_blender,omitempty"`    // Blender's server: how Claude works with it
+	ApercuPossible bool           `json:"apercu_possible,omitempty"` // its preview window works on this computer
 }
 
 // CorrectionVue: Claude's fix, as the window shows it (Undo next to it).
@@ -916,6 +919,9 @@ func (s *Serveur) apiExtensions(w http.ResponseWriter, r *http.Request) {
 		v := ExtVue{ID: id, Nom: x.Nom, Description: x.Description, Source: x.Source, Catalogue: x.Catalogue, Actif: contient(ch.MCP, id), Type: x.Config.Type, Plugin: x.Plugin}
 		if x.Correction != nil {
 			v.Correction = &CorrectionVue{Le: x.Correction.Le, Explication: x.Correction.Explication}
+		}
+		if x.Catalogue == "blender" || (x.Catalogue == "" && id == "blender") {
+			v.ModeBlender, v.ApercuPossible = modeBlenderEffectif(x.ModeBlender), apercuBlenderPossible()
 		}
 		if x.Plugin != "" {
 			v.Actif = contient(ch.Plugins, x.Plugin)

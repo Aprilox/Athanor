@@ -240,3 +240,24 @@ func (s *Serveur) apiExtCorrectionsAppliquer(w http.ResponseWriter, r *http.Requ
 	}
 	s.ecrireJSON(w, map[string]any{"ok": true, "texte": sortie, "rapports": lireRapports(s.kitCourant().Racine)})
 }
+
+// apiExtModeBlender: how Claude works with Blender (blender_apercu.go), for every project.
+func (s *Serveur) apiExtModeBlender(w http.ResponseWriter, r *http.Request) {
+	var c struct {
+		ID   string `json:"id"`
+		Mode string `json:"mode"`
+	}
+	if err := lireCorps(r, &c); err != nil || !reIDExt.MatchString(c.ID) || (c.Mode != modeBlenderApercu && c.Mode != modeBlenderArrierePlan && c.Mode != modeBlenderDirect) {
+		s.erreur(w, http.StatusBadRequest, "Unknown")
+		return
+	}
+	k := s.kitCourant()
+	extMu.Lock()
+	err := ecrireModeBlender(k, c.ID, c.Mode)
+	extMu.Unlock()
+	if err != nil {
+		s.erreur(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	s.msg(w, "Saved: it applies from the next cycle.")
+}
