@@ -102,3 +102,25 @@ func TestCageSeatbeltMac(t *testing.T) {
 		t.Fatalf("cage: %s", s)
 	}
 }
+
+// The cage's PATH: the system's first, then the home's toolchains that exist (nvm: its default version).
+func TestCheminCage(t *testing.T) {
+	h := t.TempDir()
+	for _, d := range []string{".local/bin", ".cargo/bin", ".nvm/versions/node/v18.20.0/bin", ".nvm/versions/node/v22.3.0/bin", ".nvm/versions/node/v20.11.1/bin"} {
+		if err := os.MkdirAll(filepath.Join(h, d), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	existe := func(p string) bool { st, err := os.Stat(p); return err == nil && st.IsDir() }
+	if c := cheminCage("/usr/bin:/bin", h, existe); c != "/usr/bin:/bin:"+h+"/.local/bin:"+h+"/.cargo/bin:"+h+"/.nvm/versions/node/v22.3.0/bin" {
+		t.Fatalf("newest nvm: %s", c)
+	}
+	_ = os.MkdirAll(filepath.Join(h, ".nvm", "alias"), 0o755)
+	_ = os.WriteFile(filepath.Join(h, ".nvm", "alias", "default"), []byte("20\n"), 0o644)
+	if c := cheminCage("/usr/bin", h, existe); !strings.HasSuffix(c, ":"+h+"/.nvm/versions/node/v20.11.1/bin") {
+		t.Fatalf("nvm's default: %s", c)
+	}
+	if c := cheminCage("/usr/bin", "", existe); c != "/usr/bin" {
+		t.Fatal(c)
+	}
+}

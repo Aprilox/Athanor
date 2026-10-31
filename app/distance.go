@@ -281,6 +281,8 @@ func interditDistance(r *http.Request) bool {
 		return true
 	case p == "/api/raccourci" && r.Method != http.MethodGet: // files of the computer: its window only
 		return true
+	case p == "/api/extensions/corrections/appliquer": // writes into a folder of the computer
+		return true
 	}
 	return false
 }

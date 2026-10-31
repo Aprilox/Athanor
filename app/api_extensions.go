@@ -111,6 +111,17 @@ type MCPInstalle struct {
 	Plugin      string            `json:"plugin,omitempty"`     // the plugin it comes with (api_plugins.go): on and off with it
 	Ouvrir      *OuvrirMCP        `json:"ouvrir,omitempty"`     // the program to open before each cycle; nil: the catalog's
 	Ajoute      string            `json:"ajoute"`
+	Correction  *CorrectionMCP    `json:"correction,omitempty"` // fixed by Claude on this computer (ext_corriger.go)
+}
+
+// CorrectionMCP: Claude's fix of a server, and what it replaced (Undo puts it back).
+type CorrectionMCP struct {
+	Le               string            `json:"le"`
+	Explication      string            `json:"explication"`
+	Systeme          string            `json:"systeme"`
+	ConfigAvant      ConfigMCP         `json:"config_avant"`
+	ReglagesAvant    map[string]string `json:"reglages_avant,omitempty"`
+	ReglagesRetablis map[string]string `json:"reglages_retablis,omitempty"` // settings' values the fix left out
 }
 
 type Bibliotheque struct {
@@ -850,17 +861,24 @@ type SecretVue struct {
 }
 
 type ExtVue struct {
-	ID          string      `json:"id"`
-	Nom         string      `json:"nom"`
-	Description string      `json:"description"`
-	Source      string      `json:"source"`
-	Catalogue   string      `json:"catalogue"`
-	Scripts     bool        `json:"scripts,omitempty"`
-	Actif       bool        `json:"actif"`
-	Type        string      `json:"type,omitempty"`
-	Resume      string      `json:"resume,omitempty"`
-	Secrets     []SecretVue `json:"secrets,omitempty"`
-	Plugin      string      `json:"plugin,omitempty"`
+	ID          string         `json:"id"`
+	Nom         string         `json:"nom"`
+	Description string         `json:"description"`
+	Source      string         `json:"source"`
+	Catalogue   string         `json:"catalogue"`
+	Scripts     bool           `json:"scripts,omitempty"`
+	Actif       bool           `json:"actif"`
+	Type        string         `json:"type,omitempty"`
+	Resume      string         `json:"resume,omitempty"`
+	Secrets     []SecretVue    `json:"secrets,omitempty"`
+	Plugin      string         `json:"plugin,omitempty"`
+	Correction  *CorrectionVue `json:"correction,omitempty"` // fixed by Claude on this computer
+}
+
+// CorrectionVue: Claude's fix, as the window shows it (Undo next to it).
+type CorrectionVue struct {
+	Le          string `json:"le"`
+	Explication string `json:"explication"`
 }
 
 func (s *Serveur) apiExtensions(w http.ResponseWriter, r *http.Request) {
@@ -885,6 +903,9 @@ func (s *Serveur) apiExtensions(w http.ResponseWriter, r *http.Request) {
 	skills, mcp := []ExtVue{}, []ExtVue{}
 	for id, x := range b.Skills {
 		v := ExtVue{ID: id, Nom: x.Nom, Description: x.Description, Source: x.Source, Catalogue: x.Catalogue, Scripts: x.Scripts, Actif: contient(ch.Skills, id)}
+		if skillCorrige(k.Racine, id) {
+			v.Correction = &CorrectionVue{}
+		}
 		if d := descCat["skill:"+x.Catalogue]; d != "" {
 			v.Description = d
 		}
@@ -893,6 +914,9 @@ func (s *Serveur) apiExtensions(w http.ResponseWriter, r *http.Request) {
 	for id, x := range b.MCP {
 		x = installeDuSysteme(x, cat) // a Windows configuration on macOS or Linux: this system's (mcp_systemes.go)
 		v := ExtVue{ID: id, Nom: x.Nom, Description: x.Description, Source: x.Source, Catalogue: x.Catalogue, Actif: contient(ch.MCP, id), Type: x.Config.Type, Plugin: x.Plugin}
+		if x.Correction != nil {
+			v.Correction = &CorrectionVue{Le: x.Correction.Le, Explication: x.Correction.Explication}
+		}
 		if x.Plugin != "" {
 			v.Actif = contient(ch.Plugins, x.Plugin)
 			if pl, ok := b.Plugins[x.Plugin]; ok {

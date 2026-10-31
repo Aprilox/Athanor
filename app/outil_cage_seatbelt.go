@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -18,6 +19,41 @@ type argsCage struct {
 }
 
 var reVariableCage = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,127}$`)
+
+// cheminCage: the PATH inside the cage: the system's folders first, then the toolchains installed in the
+// home that the cage lets read (uvx and uv in ~/.local/bin, node from nvm or volta, bun, deno, cargo…).
+// Without them, a server started with uvx or npx from the home was "not found" on Linux and macOS.
+func cheminCage(systeme, maison string, existe func(string) bool) string {
+	l := strings.Split(systeme, ":")
+	if maison == "" || maison == "/" {
+		return systeme
+	}
+	for _, d := range []string{".local/bin", ".cargo/bin", ".bun/bin", ".deno/bin", ".volta/bin", ".npm-global/bin", ".pyenv/shims", ".pyenv/bin", ".local/share/pnpm"} {
+		if existe(maison + "/" + d) {
+			l = append(l, maison+"/"+d)
+		}
+	}
+	// nvm: its default version, else the newest one installed
+	if vs, _ := filepath.Glob(maison + "/.nvm/versions/node/v*/bin"); len(vs) > 0 {
+		choisi := ""
+		if b, err := os.ReadFile(maison + "/.nvm/alias/default"); err == nil {
+			v := strings.TrimPrefix(strings.TrimSpace(string(b)), "v")
+			for _, x := range vs {
+				if v != "" && strings.HasPrefix(filepath.Base(filepath.Dir(x)), "v"+v) {
+					choisi = x
+				}
+			}
+		}
+		if choisi == "" {
+			sort.Slice(vs, func(i, j int) bool {
+				return versionPlusRecente(strings.TrimPrefix(filepath.Base(filepath.Dir(vs[i])), "v"), strings.TrimPrefix(filepath.Base(filepath.Dir(vs[j])), "v"))
+			})
+			choisi = vs[0]
+		}
+		l = append(l, choisi)
+	}
+	return strings.Join(l, ":")
+}
 
 // lireArgsCage: NAME TOOLS [--rw DIR]... [--ro DIR]... [--env NAME VALUE]... -- COMMAND [ARGS...]
 func lireArgsCage(args []string) (argsCage, string) {

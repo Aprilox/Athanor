@@ -2227,9 +2227,10 @@ async function actionAgent(act, b) {
 // --- skills & MCP
 // A library kept in Athanor (verified catalog, GitHub link, written by hand, pasted configuration) and,
 // for the current project, a switch per skill or server. The pilot applies the choice at the next cycle.
-const ext = { onglet: "skills", lien: "", trouves: null, voir: null, tests: {}, occupe: "", recherche: { skills: { q: "", res: null }, mcp: { q: "", res: null } }, apercu: null };
+const ext = { onglet: "skills", lien: "", trouves: null, voir: null, tests: {}, occupe: "", recherche: { skills: { q: "", res: null }, mcp: { q: "", res: null } }, apercu: null, corr: {}, rapports: [], code: "" };
 pages.extensions = async () => {
   const d = await api("extensions");
+  ext.rapports = ((await api("extensions/corrections").catch(() => null)) || {}).rapports || [];
   const o = ext.onglet, type = o === "skills" ? "skill" : "mcp";
   const intro = `<p class="intro">${t("Skills give Claude expertise it reads only when it needs it; MCP servers give it new tools (up-to-date documentation, code navigation, a browser…). Install them once in Athanor, then switch on what each project uses: it applies from the next cycle, for the lead and for the parallel workers.")}</p>
   <div class="onglets"><button class="${o === "skills" ? "actif" : ""}" data-ext-onglet="skills">Skills <span class="muet">${d.skills.length}</span></button><button class="${o === "mcp" ? "actif" : ""}" data-ext-onglet="mcp">MCP <span class="muet">${d.mcp.length}</span></button><button class="${o === "plugins" ? "actif" : ""}" data-ext-onglet="plugins">Plugins <span class="muet">${d.plugins || 0}</span></button></div>`;
@@ -2238,9 +2239,7 @@ pages.extensions = async () => {
   const cat = (o === "skills" ? d.catalogue.skills : d.catalogue.mcp) || [];
   const occupe = (cle) => ext.occupe === cle ? "disabled" : "";
   const secrets = (x) => champsServeur(x);
-  const test = (x) => { const r = ext.tests[x.id]; if (!r) return ""; if (r === "…") return `<div class="muet petit">${x.type === "windows" ? t("Starting the Windows program…") : t("Starting the server in its cage… (the first time, it downloads it: up to two minutes)")}</div>`;
-    return r.ok ? `<div class="ext-test ok">✓ ${r.outils && r.outils.length ? t("Works: {0} tools ({1})", [r.outils.length, h(r.outils.slice(0, 8).join(", ")) + (r.outils.length > 8 ? "…" : "")]) : t(r.note || "Works.")}</div>`
-      : `<div class="ext-test echec">✕ ${h(t(r.erreur || "Failed"))}${r.details && r.details.length ? `<pre class="texte-agent">${h(r.details.join("\n"))}</pre>` : ""}</div>`; };
+  const test = (x) => type === "skill" ? testSkill(x) : testExt(x);
   const voir = (x) => ext.voir && ext.voir.id === x.id && ext.voir.type === type ? `<div class="ext-voir">
       ${type === "skill" ? `<textarea class="code" rows="14" data-ext-texte="${h(x.id)}">${h(ext.voir.texte)}</textarea>
         ${ext.voir.fichiers && ext.voir.fichiers.length > 1 ? `<div class="muet petit">${t("Files")}: ${ext.voir.fichiers.map((f) => `<code>${h(f)}</code>`).join(" ")}</div>` : ""}
@@ -2255,11 +2254,12 @@ pages.extensions = async () => {
         <div class="ext-nom">${h(x.nom)}${x.scripts ? ` <span class="etiquette" title="${h(t("Contains scripts: Claude runs them inside its sandbox."))}">${t("scripts")}</span>` : ""}${!x.source && !x.catalogue ? ` <span class="etiquette">${t("yours")}</span>` : ""}${x.type ? ` <span class="etiquette" ${x.type === "windows" ? `title="${h(t("Runs on Windows, outside the cage, with your rights: Claude only sees its tools."))}"` : ""}>${genreServeur(x.type)}</span>` : ""}${x.plugin ? ` <span class="etiquette" title="${h(t("On and off with its plugin (Plugins tab)"))}">${t("plugin {0}", [h(x.plugin)])}</span>` : ""}</div>
         ${x.description ? `<div class="ext-desc">${h(x.description)}</div>` : ""}
         <div class="muet petit ext-source">${[x.source ? h(x.source.startsWith("registry:") ? t("MCP Registry") + " · " + x.source.slice(9) : x.source.replace(/^github\.com\/https?:\/\//, "")) : x.catalogue ? "" : h(t("written in Athanor")), x.resume ? `<code>${h(x.resume)}</code>` : ""].filter(Boolean).join(" · ")}</div>
-        ${secrets(x)}${test(x)}${voir(x)}
+        ${secrets(x)}${correctionFaite(x, type)}${test(x)}${voir(x)}
       </div>
       <div class="ext-actions"><button class="btn btn-petit" data-ext-voir="${type}|${h(x.id)}">${ext.voir && ext.voir.id === x.id && ext.voir.type === type ? t("Close") : type === "skill" || !x.plugin ? t("View / edit") : t("View")}</button>
         ${type === "mcp" && (x.type === "http" || x.type === "sse") && !/^https?:\/\/(localhost|127\.|0\.0\.0\.0|\[::1\]|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(x.resume || "") ? `<button class="btn btn-petit" data-ext-connexion="${h(x.id)}" title="${h(t("For a server that asks you to sign in (OAuth): once, valid for every project."))}">${t("Sign in")}</button>` : ""}
-        ${type === "mcp" ? `<button class="btn btn-petit" data-ext-tester="${h(x.id)}" ${d.projet ? "" : "disabled"} ${ext.tests[x.id] === "…" ? "disabled" : ""}>${t("Test")}</button>` : ""}
+        ${type === "mcp" ? `<button class="btn btn-petit" data-ext-tester="${h(x.id)}" ${d.projet ? "" : "disabled"} ${ext.tests[x.id] === "…" ? "disabled" : ""}>${t("Test")}</button>`
+          : `<button class="btn btn-petit" data-ext-tester-skill="${h(x.id)}" ${ext.tests["skill|" + x.id] === "…" ? "disabled" : ""}>${t("Test")}</button>`}
         <button class="btn btn-petit btn-danger" data-ext-retirer="${type}|${h(x.id)}" title="${h(t("Remove"))}">✕</button></div>
     </div>`).join("");
   const cartes = cat.map((c) => `<div class="ext-carte">
@@ -2307,7 +2307,7 @@ pages.extensions = async () => {
   <div class="bloc"><h2>${t("In Athanor")}</h2>
     <p class="muet petit">${d.projet ? t("The switch turns it on or off for “{0}”.", [d.projet]) : t("Choose a project to switch them on or off.")}</p>
     ${lignes || `<div class="vide">${t("Nothing installed yet: pick from the catalog below or add your own.")}</div>`}</div>
-  ${blocRecherche}
+  ${blocRapports()}${blocRecherche}
   <div class="bloc"><h2>${t("Verified catalog")}</h2>
     <p class="muet petit">${t("Well-known open-source projects, checked by hand. Installing copies them into Athanor; nothing is used until you switch it on for a project.")}</p>
     <div class="ext-catalogue">${cartes}</div></div>
@@ -2349,10 +2349,86 @@ function serveurPlugin(x, d) {
       <button class="btn btn-petit" data-ext-tester="${h(x.id)}" ${d.projet && ext.tests[x.id] !== "…" ? "" : "disabled"}>${t("Test")}</button></div>${sc}${testExt(x)}</div>`;
 }
 function testExt(x) {
-  const r = ext.tests[x.id]; if (!r) return "";
+  const r = ext.tests[x.id], c = ext.corr["mcp|" + x.id];
+  if (c) return etatCorrection(c, "mcp", x);
+  if (!r) return "";
   if (r === "…") return `<div class="muet petit">${x.type === "windows" ? t("Starting the Windows program…") : t("Starting the server in its cage… (the first time, it downloads it: up to two minutes)")}</div>`;
+  const cle = /^missing key/.test(r.erreur || "");
   return r.ok ? `<div class="ext-test ok">✓ ${r.outils && r.outils.length ? t("Works: {0} tools ({1})", [r.outils.length, h(r.outils.slice(0, 8).join(", ")) + (r.outils.length > 8 ? "…" : "")]) : t(r.note || "Works.")}</div>`
-    : `<div class="ext-test echec">✕ ${h(t(r.erreur || "Failed"))}${r.details && r.details.length ? `<pre class="texte-agent">${h(r.details.join("\n"))}</pre>` : ""}</div>`;
+    : `<div class="ext-test echec">✕ ${h(t(r.erreur || "Failed"))}${r.details && r.details.length ? `<pre class="texte-agent">${h(r.details.join("\n"))}</pre>` : ""}
+      ${cle ? "" : boutonCorriger("mcp", x.id)}</div>`;
+}
+// --- "Fix with Claude" (ext_corriger.go, ext_skill.go): an extension whose test fails here
+function boutonCorriger(type, id) {
+  return `<div class="ligne mt-1"><button class="btn btn-petit btn-primaire" data-ext-corriger="${type}|${h(id)}">✨ ${t("Fix with Claude")}</button>
+    <span class="muet petit">${type === "mcp" ? t("Claude looks for a configuration that works on this system; it is tested before it is kept, and written for everyone.") : t("Claude rewrites a copy of the skill so that it runs on every system; you see the changes before they replace anything.")}</span></div>`;
+}
+function testSkill(x) {
+  const c = ext.corr["skill|" + x.id]; if (c) return etatCorrection(c, "skill", x);
+  const r = ext.tests["skill|" + x.id]; if (!r) return "";
+  if (r === "…") return `<div class="muet petit">${t("Checking the skill and its scripts…")}</div>`;
+  if (r.erreur) return `<div class="ext-test echec">✕ ${h(t(r.erreur))}</div>`;
+  const pb = r.problemes || [];
+  const liste = pb.length ? `<ul class="m0 petit">${pb.map((p) => `<li>${p.grave ? "✕" : "⚠"} <code>${h(p.fichier)}</code> ${h(t(p.cle || p.message, p.args || []))}</li>`).join("")}</ul>` : "";
+  if (r.ok && !pb.length) return `<div class="ext-test ok">✓ ${t("Runs here: {0} script(s) checked", [r.scripts || 0])}</div>`;
+  return `<div class="ext-test ${r.ok ? "ok" : "echec"}">${r.ok ? "✓ " + t("Runs here; may fail on another system:") : "✕ " + t("Will not run as it is on this computer:")}${liste}${boutonCorriger("skill", x.id)}</div>`;
+}
+function etatCorrection(c, type, x) {
+  const etapes = { test: c.essai ? t("testing Claude's fix ({0}/3)…", [c.essai]) : t("testing it as it is…"), claude: type === "mcp" ? t("Claude looks for the cause and a fix ({0}/3)…", [c.essai || 1]) : t("Claude rewrites a copy of the skill…") };
+  if (c.encours) return `<div class="ext-test"><span class="chat-points"><i></i><i></i><i></i></span> ${etapes[c.etape] || t("Working…")} <span class="muet petit">${t("It takes a few minutes: you can go on meanwhile.")}</span></div>`;
+  const r = c.resultat || {};
+  const fermer = `<button class="btn btn-petit" data-ext-corr-fermer="${type}|${h(x.id)}">${t("Close")}</button>`;
+  const athanor = r.athanor ? `<div class="petit mt-1">🛠 ${t("Athanor's own way of running it is at fault: {0}", [h(r.athanor)])} <span class="muet">${t("(written for the next version of Athanor)")}</span></div>` : "";
+  if (r.deja) return `<div class="ext-test ok">✓ ${t("It works already: nothing to fix.")} ${fermer}</div>`;
+  if (r.manque) return `<div class="ext-test echec">✕ ${t("A program is missing on this computer: {0}", [h(r.manque)])}${r.explication ? `<div class="petit">${h(r.explication)}</div>` : ""}
+    <div class="ligne mt-1"><a class="btn btn-petit" href="#sante">${t("Setup & health")}</a>${fermer}</div></div>`;
+  if (type === "mcp" && r.ok) return `<div class="ext-test ok">✓ ${t("Fixed by Claude: it works now ({0} tools).", [(r.outils || []).length])}${r.explication ? `<div class="petit">${h(r.explication)}</div>` : ""}
+    <div class="muet petit">${t("Kept in this computer's library (Undo puts back the previous one) and written for everyone in logs/corrections.")}</div>${athanor}<div class="ligne mt-1">${fermer}</div></div>`;
+  if (type === "skill" && r.fichiers && r.fichiers.length) {
+    const reste = (r.apres || []).filter((p) => p.grave);
+    return `<div class="ext-test ${r.ok ? "ok" : "echec"}">${r.ok ? "✓ " + t("Claude's fix passes the test. Look at the changes, then apply them.") : "⚠ " + t("Claude's fix still fails the test: {0}", [h(reste.map((p) => p.fichier + ": " + t(p.cle || p.message, p.args || [])).join("; "))])}
+      ${r.explication ? `<div class="petit">${h(r.explication)}</div>` : ""}
+      <div class="muet petit">${t("Files changed: {0}", [r.fichiers.map((f) => h(f)).join(", ")])}</div>
+      <pre class="texte-agent diff">${diffColore(r.diff || "")}</pre>${athanor}
+      <div class="ligne mt-1"><button class="btn btn-petit btn-primaire" data-ext-corr-appliquer="${h(x.id)}">${t("Apply the fix")}</button>${fermer}</div></div>`;
+  }
+  const essais = (r.essais || []).map((e, i) => `<li>${h(e.explication || t("Try {0}", [i + 1]))} → <span class="erreur">${h(t(e.erreur || ""))}</span></li>`).join("");
+  return `<div class="ext-test echec">✕ ${h(t(r.erreur || "No fix found"))}${r.explication ? `<div class="petit">${h(r.explication)}</div>` : ""}${essais ? `<ul class="m0 petit">${essais}</ul>` : ""}${athanor}
+    <div class="ligne mt-1"><button class="btn btn-petit" data-ext-corriger="${type}|${h(x.id)}">${t("Try again")}</button>${fermer}</div></div>`;
+}
+function diffColore(d) {
+  return h(d).split("\n").map((l) => l.replace(/\r$/, "␍")).map((l) => /^\+(?!\+\+)/.test(l) ? `<span class="ajout">${l}</span>` : /^-(?!--)/.test(l) ? `<span class="retrait">${l}</span>` : /^@@/.test(l) ? `<span class="muet">${l}</span>` : l).join("\n");
+}
+function correctionFaite(x, type) {
+  if (!x.correction) return "";
+  return `<div class="muet petit ext-corrige">✨ ${x.correction.le ? t("Fixed by Claude on {0}", [h(x.correction.le)]) : t("Fixed by Claude")}${x.correction.explication ? ": " + h(x.correction.explication) : ""}
+    <button class="btn btn-petit" data-ext-corr-annuler="${type}|${h(x.id)}">${t("Undo the fix")}</button></div>`;
+}
+// the fixes written for everyone (logs/corrections): into a copy of Athanor's code, then commit and push
+function blocRapports() {
+  const l = ext.rapports || []; if (!l.length) return "";
+  const lignes = l.slice(0, 12).map((r) => `<li><b>${h(r.nom || r.id)}</b> <span class="etiquette">${h(r.genre === "skill" ? "skill" : "MCP")}</span> <span class="muet">${h(r.systeme)} · ${h(r.le)}</span>
+      ${r.catalogue ? ` <span class="etiquette">${t("verified catalog")}</span>` : ""}${r.apres || (r.fichiers || []).length ? "" : ` <span class="muet">${t("no fix found")}</span>`}
+      ${r.explication ? `<div class="petit">${h(r.explication)}</div>` : ""}${r.athanor ? `<div class="petit">🛠 ${h(r.athanor)}</div>` : ""}</li>`).join("");
+  return `<div class="bloc"><h2>${t("Fixes for everyone")} <span class="muet">${l.length}</span></h2>
+    <p class="muet petit">${t("What Claude fixed or found on this computer, kept in logs/corrections of Athanor's folder. The verified catalog's fixes can be written into your copy of Athanor's code: commit and push it, and every Athanor gets them.")}</p>
+    <ul class="ext-rapports">${lignes}</ul>
+    <label class="champ mt-1"><span>${t("Your copy of Athanor's code")}</span>${champDossier("ext-code", ext.code || "", "", false, t("Choose the folder of Athanor's code"))}</label>
+    <div class="ligne mt-1"><button class="btn" data-ext-rapports-appliquer>${t("Write the catalog's fixes into it")}</button></div></div>`;
+}
+async function suivreCorrection(cle) {
+  const [type, id] = cle.split("|");
+  for (;;) {
+    await new Promise((ok) => setTimeout(ok, 2500));
+    const c = await api("extensions/corriger?type=" + encodeURIComponent(type) + "&id=" + encodeURIComponent(id)).catch(() => null);
+    if (!c) continue;
+    ext.corr[cle] = c;
+    if (etat.page === "extensions") rendrePage();
+    if (!c.encours) {
+      if (type === "mcp" && c.resultat && c.resultat.ok && !c.resultat.deja) { delete ext.tests[id]; toast(t("Fixed by Claude: it works now ({0} tools).", [(c.resultat.outils || []).length]), "ok"); }
+      return;
+    }
+  }
 }
 async function pagePlugins(d) {
   let p = await api("plugins");
@@ -2449,7 +2525,7 @@ $("#page").addEventListener("change", async (ev) => {
 
 $("#page").addEventListener("click", async (ev) => {
   if (etat.page !== "extensions") return;
-  const b = ev.target.closest("[data-ext-rechercher], [data-ext-apercu], [data-ext-installer-res], [data-ext-onglet], [data-ext-installer], [data-ext-chercher], [data-ext-installer-trouves], [data-ext-creer], [data-ext-mcp-ajouter], [data-ext-voir], [data-ext-enregistrer], [data-ext-mcp-enregistrer], [data-ext-tester], [data-ext-retirer], [data-ext-cle-ok]");
+  const b = ev.target.closest("[data-ext-rechercher], [data-ext-apercu], [data-ext-installer-res], [data-ext-onglet], [data-ext-installer], [data-ext-chercher], [data-ext-installer-trouves], [data-ext-creer], [data-ext-mcp-ajouter], [data-ext-voir], [data-ext-enregistrer], [data-ext-mcp-enregistrer], [data-ext-tester], [data-ext-retirer], [data-ext-cle-ok], [data-ext-corriger], [data-ext-corr-fermer], [data-ext-corr-appliquer], [data-ext-corr-annuler], [data-ext-tester-skill], [data-ext-rapports-appliquer]");
   if (!b) return;
   const d = b.dataset;
   if (d.extOnglet) { ext.onglet = d.extOnglet; ext.voir = null; ext.apercu = null; return rendrePage(); }
@@ -2513,8 +2589,43 @@ $("#page").addEventListener("click", async (ev) => {
     const r = await action(api("extensions/skill", "POST", { id: d.extEnregistrer, contenu: texte }));
     if (r) { ext.voir = null; rendrePage(); } return;
   }
+  if (d.extCorriger) {
+    const [type, id] = d.extCorriger.split("|");
+    const r = await action(api("extensions/corriger", "POST", { type, id }));
+    if (r) { ext.corr[d.extCorriger] = { encours: true, etape: "test", essai: 0 }; rendrePage(); suivreCorrection(d.extCorriger); }
+    return;
+  }
+  if (d.extCorrFermer) { delete ext.corr[d.extCorrFermer]; return rendrePage(); }
+  if (d.extCorrAppliquer) {
+    b.disabled = true;
+    const r = await action(api("extensions/correction/appliquer", "POST", { id: d.extCorrAppliquer }));
+    if (r && r.ok) { delete ext.corr["skill|" + d.extCorrAppliquer]; delete ext.tests["skill|" + d.extCorrAppliquer]; toast(t("The fix is applied."), "ok"); }
+    else if (r) toast(t(r.erreur || "Failed"), "erreur");
+    return rendrePage();
+  }
+  if (d.extCorrAnnuler) {
+    const [type, id] = d.extCorrAnnuler.split("|");
+    if (!(await confirmer(t("Undo Claude's fix of “{0}”? What it replaced comes back.", [id]), { ok: t("Undo the fix") }))) return;
+    const r = await action(api("extensions/correction/annuler", "POST", { type, id }));
+    if (r && r.ok === false) toast(t(r.erreur || "Failed"), "erreur");
+    delete ext.tests[id]; delete ext.tests["skill|" + id];
+    return rendrePage();
+  }
+  if (d.extTesterSkill) {
+    const cle = "skill|" + d.extTesterSkill; ext.tests[cle] = "…"; delete ext.corr[cle]; await rendrePage();
+    ext.tests[cle] = await api("extensions/tester-skill", "POST", { id: d.extTesterSkill }).catch((e) => ({ ok: false, erreur: e.message, problemes: [] }));
+    return rendrePage();
+  }
+  if (d.extRapportsAppliquer !== undefined) {
+    ext.code = ($("#ext-code") || {}).value || "";
+    b.disabled = true;
+    const r = await action(api("extensions/corrections/appliquer", "POST", { dossier: ext.code }));
+    b.disabled = false;
+    if (r) await confirmer(r.texte || "", { titre: t("Fixes for everyone"), ok: t("OK"), annuler: "" });
+    return rendrePage();
+  }
   if (d.extTester) {
-    const id = d.extTester; ext.tests[id] = "…"; await rendrePage();
+    const id = d.extTester; ext.tests[id] = "…"; delete ext.corr["mcp|" + id]; await rendrePage();
     ext.tests[id] = await api("extensions/tester", "POST", { id }).catch((e) => ({ ok: false, erreur: e.message }));
     return rendrePage();
   }

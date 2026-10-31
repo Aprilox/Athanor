@@ -19,7 +19,7 @@ import (
 var reNomCage = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,63}$`)
 
 func lancerMCPCage(args []string) int {
-	os.Setenv("PATH", "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin")
+	os.Setenv("PATH", cheminCage("/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin", os.Getenv("HOME"), estDossierCage))
 	for _, v := range []string{"DYLD_INSERT_LIBRARIES", "DYLD_LIBRARY_PATH", "DYLD_FRAMEWORK_PATH"} {
 		os.Unsetenv(v)
 	}
