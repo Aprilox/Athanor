@@ -412,9 +412,18 @@ func construireMCP(kit string, choix map[string][]string, fichier, dossier, prin
 	}
 	sort.Strings(duPlugin)
 	ids = append(ids, duPlugin...)
+	var aides []string
 	for _, sid := range ids {
 		if !biblio.a(sid) {
 			continue
+		}
+		// Blender in the background (blender_apercu.go): its MCP server left out of the session
+		if estEntreeBlender(sid, biblio.objet(sid)) {
+			if m := modeBlenderDe(biblio.objet(sid)); m != modeBlenderDirect {
+				aides = append(aides, "- **"+sid+"**: "+consigneModeBlender(m))
+				notes = append(notes, sid+map[bool]string{true: " in the background, shown in a preview window", false: " in the background"}[m == modeBlenderApercu])
+				continue
+			}
 		}
 		s, raison := serveurMCP(kit, sid, biblio.objet(sid), secrets.objet(sid), dossier, principal)
 		if s != nil {
@@ -431,7 +440,6 @@ func construireMCP(kit string, choix map[string][]string, fichier, dossier, prin
 			}
 		}
 	}
-	var aides []string
 	for _, sid := range serveurs.cles {
 		d := dict(biblio.brut(sid))
 		a, _ := d["sauvegarde"].(string)
@@ -810,6 +818,17 @@ func lancerExtensions(args []string) int {
 				return 2
 			}
 			return lancerSkillExt(args[0], abspathOS(args[1]), args[2], os.Stdout)
+		case "mode-blender": // blender_apercu.go: athanor extensions mode-blender KIT ID apercu|arriere-plan|direct
+			if len(args) < 4 || !reIdSur.MatchString(args[2]) || (args[3] != modeBlenderApercu && args[3] != modeBlenderArrierePlan && args[3] != modeBlenderDirect) {
+				fmt.Fprintln(os.Stderr, "usage: athanor extensions mode-blender KIT ID apercu|arriere-plan|direct")
+				return 2
+			}
+			if err := ecrireModeBlender(Kit{Racine: abspathOS(args[1])}, args[2], args[3]); err != nil {
+				fmt.Fprintln(os.Stderr, err.Error())
+				return 1
+			}
+			fmt.Println("Saved: it applies from the next cycle.")
+			return 0
 		case "annuler-correction":
 			if len(args) < 3 || !reIdSur.MatchString(args[2]) {
 				return 2

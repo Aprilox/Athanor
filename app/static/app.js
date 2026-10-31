@@ -2254,7 +2254,7 @@ pages.extensions = async () => {
         <div class="ext-nom">${h(x.nom)}${x.scripts ? ` <span class="etiquette" title="${h(t("Contains scripts: Claude runs them inside its sandbox."))}">${t("scripts")}</span>` : ""}${!x.source && !x.catalogue ? ` <span class="etiquette">${t("yours")}</span>` : ""}${x.type ? ` <span class="etiquette" ${x.type === "windows" ? `title="${h(t("Runs on Windows, outside the cage, with your rights: Claude only sees its tools."))}"` : ""}>${genreServeur(x.type)}</span>` : ""}${x.plugin ? ` <span class="etiquette" title="${h(t("On and off with its plugin (Plugins tab)"))}">${t("plugin {0}", [h(x.plugin)])}</span>` : ""}</div>
         ${x.description ? `<div class="ext-desc">${h(x.description)}</div>` : ""}
         <div class="muet petit ext-source">${[x.source ? h(x.source.startsWith("registry:") ? t("MCP Registry") + " · " + x.source.slice(9) : x.source.replace(/^github\.com\/https?:\/\//, "")) : x.catalogue ? "" : h(t("written in Athanor")), x.resume ? `<code>${h(x.resume)}</code>` : ""].filter(Boolean).join(" · ")}</div>
-        ${secrets(x)}${correctionFaite(x, type)}${test(x)}${voir(x)}
+        ${secrets(x)}${x.mode_blender ? choixModeBlender(x) : ""}${correctionFaite(x, type)}${test(x)}${voir(x)}
       </div>
       <div class="ext-actions"><button class="btn btn-petit" data-ext-voir="${type}|${h(x.id)}">${ext.voir && ext.voir.id === x.id && ext.voir.type === type ? t("Close") : type === "skill" || !x.plugin ? t("View / edit") : t("View")}</button>
         ${type === "mcp" && (x.type === "http" || x.type === "sse") && !/^https?:\/\/(localhost|127\.|0\.0\.0\.0|\[::1\]|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(x.resume || "") ? `<button class="btn btn-petit" data-ext-connexion="${h(x.id)}" title="${h(t("For a server that asks you to sign in (OAuth): once, valid for every project."))}">${t("Sign in")}</button>` : ""}
@@ -2357,6 +2357,17 @@ function testExt(x) {
   return r.ok ? `<div class="ext-test ok">✓ ${r.outils && r.outils.length ? t("Works: {0} tools ({1})", [r.outils.length, h(r.outils.slice(0, 8).join(", ")) + (r.outils.length > 8 ? "…" : "")]) : t(r.note || "Works.")}</div>`
     : `<div class="ext-test echec">✕ ${h(t(r.erreur || "Failed"))}${r.details && r.details.length ? `<pre class="texte-agent">${h(r.details.join("\n"))}</pre>` : ""}
       ${cle ? "" : boutonCorriger("mcp", x.id)}</div>`;
+}
+// Blender's server: how Claude works with it (blender_apercu.go)
+function choixModeBlender(x) {
+  const modes = [["apercu", t("Background + preview window"), t("Claude works in the background (no MCP tools: the cheapest); each run is shown in a Blender window that reloads by itself, one per folder Claude works in (on Claude's desktop when that option is on).")],
+    ["arriere-plan", t("Background only"), t("Claude works in the background, no window opens.")],
+    ["direct", t("In Blender's window (MCP)"), t("The pilot opens Blender before each cycle and Claude drives it through the MCP server: you see each step, it costs more.")]];
+  if (!x.apercu_possible) modes.shift(); // a Mac: Claude runs Blender itself, no preview window
+  const m = x.mode_blender || "apercu", choisi = modes.find((y) => y[0] === m) || modes[0];
+  return `<div class="ext-mode-blender"><span class="petit">${t("How Claude works with Blender:")}</span>
+    <div class="segments">${modes.map((y) => `<button class="btn btn-petit ${y[0] === m ? "btn-primaire" : ""}" data-ext-mode-blender="${h(x.id)}|${y[0]}">${y[1]}</button>`).join("")}</div>
+    <div class="muet petit">${choisi[2]}</div></div>`;
 }
 // --- "Fix with Claude" (ext_corriger.go, ext_skill.go): an extension whose test fails here
 function boutonCorriger(type, id) {
@@ -2525,7 +2536,7 @@ $("#page").addEventListener("change", async (ev) => {
 
 $("#page").addEventListener("click", async (ev) => {
   if (etat.page !== "extensions") return;
-  const b = ev.target.closest("[data-ext-rechercher], [data-ext-apercu], [data-ext-installer-res], [data-ext-onglet], [data-ext-installer], [data-ext-chercher], [data-ext-installer-trouves], [data-ext-creer], [data-ext-mcp-ajouter], [data-ext-voir], [data-ext-enregistrer], [data-ext-mcp-enregistrer], [data-ext-tester], [data-ext-retirer], [data-ext-cle-ok], [data-ext-corriger], [data-ext-corr-fermer], [data-ext-corr-appliquer], [data-ext-corr-annuler], [data-ext-tester-skill], [data-ext-rapports-appliquer]");
+  const b = ev.target.closest("[data-ext-rechercher], [data-ext-apercu], [data-ext-installer-res], [data-ext-onglet], [data-ext-installer], [data-ext-chercher], [data-ext-installer-trouves], [data-ext-creer], [data-ext-mcp-ajouter], [data-ext-voir], [data-ext-enregistrer], [data-ext-mcp-enregistrer], [data-ext-tester], [data-ext-retirer], [data-ext-cle-ok], [data-ext-corriger], [data-ext-corr-fermer], [data-ext-corr-appliquer], [data-ext-corr-annuler], [data-ext-tester-skill], [data-ext-rapports-appliquer], [data-ext-mode-blender]");
   if (!b) return;
   const d = b.dataset;
   if (d.extOnglet) { ext.onglet = d.extOnglet; ext.voir = null; ext.apercu = null; return rendrePage(); }
@@ -2593,6 +2604,12 @@ $("#page").addEventListener("click", async (ev) => {
     const [type, id] = d.extCorriger.split("|");
     const r = await action(api("extensions/corriger", "POST", { type, id }));
     if (r) { ext.corr[d.extCorriger] = { encours: true, etape: "test", essai: 0 }; rendrePage(); suivreCorrection(d.extCorriger); }
+    return;
+  }
+  if (d.extModeBlender) {
+    const [id, mode] = d.extModeBlender.split("|");
+    const r = await action(api("extensions/mode-blender", "POST", { id, mode }));
+    if (r) rendrePage();
     return;
   }
   if (d.extCorrFermer) { delete ext.corr[d.extCorrFermer]; return rendrePage(); }

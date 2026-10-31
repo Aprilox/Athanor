@@ -565,6 +565,8 @@ textarea.en-attente { opacity: .55; }
 .ext-test pre.diff { max-height: 360px; overflow: auto; white-space: pre; }
 .diff .ajout { color: var(--ok); } .diff .retrait { color: var(--erreur); }
 .ext-corrige { margin-top: 4px; }
+.ext-mode-blender { margin-top: 6px; }
+.ext-mode-blender .segments { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0; }
 .ext-corrige .btn { margin-left: 6px; }
 .ext-rapports { margin: 6px 0 0; padding-left: 18px; font-size: 13px; }
 .ext-rapports li { margin-bottom: 6px; }
