@@ -560,6 +560,14 @@ textarea.en-attente { opacity: .55; }
 .ext-secret.manquant > span { color: var(--attention); }
 .ext-test { font-size: 13px; overflow-wrap: anywhere; }
 .ext-test.ok { color: var(--ok); } .ext-test.echec { color: var(--erreur); }
+.ext-test .petit, .ext-test ul, .ext-test pre { color: var(--ink); }
+.ext-test .muet { color: var(--muted); }
+.ext-test pre.diff { max-height: 360px; overflow: auto; white-space: pre; }
+.diff .ajout { color: var(--ok); } .diff .retrait { color: var(--erreur); }
+.ext-corrige { margin-top: 4px; }
+.ext-corrige .btn { margin-left: 6px; }
+.ext-rapports { margin: 6px 0 0; padding-left: 18px; font-size: 13px; }
+.ext-rapports li { margin-bottom: 6px; }
 .ext-voir { margin-top: 6px; display: flex; flex-direction: column; gap: 6px; }
 .ext-catalogue { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr)); gap: 10px; }
 .ext-carte { border: 1px solid var(--line); border-radius: var(--rayon); padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }

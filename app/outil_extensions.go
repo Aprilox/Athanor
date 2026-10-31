@@ -670,7 +670,12 @@ func testerServeur(kit, projet, sid string, delai time.Duration) map[string]any 
 	if !biblio.a(sid) {
 		return map[string]any{"ok": false, "erreur": "unknown server"}
 	}
-	s, raison := serveurMCP(kit, sid, biblio.objet(sid), lireJSONOrdonne(filepath.Join(kit, "extensions", "secrets.json")).objet(sid), projet, "")
+	return testerDefinition(kit, projet, sid, biblio.objet(sid), lireJSONOrdonne(filepath.Join(kit, "extensions", "secrets.json")).objet(sid), delai)
+}
+
+// testerDefinition: a server started as this definition says (the library's, or one proposed to fix it).
+func testerDefinition(kit, projet, sid string, def, secretsServeur objetJSON, delai time.Duration) map[string]any {
+	s, raison := serveurMCP(kit, sid, def, secretsServeur, projet, "")
 	if s == nil {
 		return map[string]any{"ok": false, "erreur": raison}
 	}
@@ -795,12 +800,36 @@ func (l *limiteur) Write(p []byte) (int, error) {
 
 func lancerExtensions(args []string) int {
 	args = cheminsOutil(args)
+	if len(args) >= 2 {
+		switch args[0] {
+		case "corrections", "appliquer-corrections": // ext_corrections.go
+			return lancerCorrectionsExt(args[0], abspathOS(args[1]), args[2:], os.Stdout)
+		case "tester-skill", "corriger-skill", "appliquer-skill", "annuler-skill": // ext_skill.go
+			if len(args) < 3 || !reIdSur.MatchString(args[2]) {
+				fmt.Fprintln(os.Stderr, "usage: athanor extensions "+args[0]+" KIT ID")
+				return 2
+			}
+			return lancerSkillExt(args[0], abspathOS(args[1]), args[2], os.Stdout)
+		case "annuler-correction":
+			if len(args) < 3 || !reIdSur.MatchString(args[2]) {
+				return 2
+			}
+			if err := annulerCorrectionMCP(Kit{Racine: abspathOS(args[1])}, args[2]); err != nil {
+				fmt.Fprintln(os.Stderr, err.Error())
+				return 1
+			}
+			fmt.Println("The server's configuration before Claude's fix is back.")
+			return 0
+		}
+	}
 	if len(args) < 3 {
-		fmt.Fprintln(os.Stderr, "usage: athanor extensions preparer KIT PROJECT PRIVATE_DIR [--mcp FILE] [--dossier-mcp DIR] [--principal DIR] | mcp KIT PROJECT FILE [...] | tester KIT PROJECT ID | connexion KIT ID FILE")
+		fmt.Fprintln(os.Stderr, "usage: athanor extensions preparer KIT PROJECT PRIVATE_DIR [--mcp FILE] [--dossier-mcp DIR] [--principal DIR] | mcp KIT PROJECT FILE [...] | tester KIT PROJECT ID | corriger KIT PROJECT ID [--appliquer] | annuler-correction KIT ID | corrections KIT | appliquer-corrections KIT CODE | tester-skill KIT ID | corriger-skill KIT ID | connexion KIT ID FILE")
 		return 2
 	}
 	action, kit, projet := args[0], abspathOS(args[1]), args[2]
 	switch action {
+	case "corriger": // ext_corriger.go
+		return lancerCorrigerExt(kit, projet, args[3:], os.Stdout)
 	case "tester":
 		sid := ""
 		if len(args) > 3 {

@@ -137,7 +137,19 @@ func lancerMCPCage(args []string) int {
 	a = append(a, "--setenv", "HOME", maison, "--setenv", "XDG_CACHE_HOME", outils+"/cache", "--setenv", "npm_config_cache", outils+"/cache/npm",
 		"--setenv", "UV_CACHE_DIR", outils+"/cache/uv", "--setenv", "PLAYWRIGHT_BROWSERS_PATH", outils+"/cache/ms-playwright",
 		"--unsetenv", "CLAUDE_CODE_OAUTH_TOKEN", "--unsetenv", "ANTHROPIC_API_KEY", "--unsetenv", "WSL_INTEROP",
-		"--die-with-parent", "--chdir", repertoire, "--")
+		"--die-with-parent", "--chdir", repertoire)
+	// the server's program found in the home's toolchains too (uvx in ~/.local/bin, node from nvm…): bwrap
+	// itself stays the system's (found above, on the system's PATH only)
+	chemin := cheminCage(os.Getenv("PATH"), os.Getenv("HOME"), dossierP)
+	if !strings.Contains(reste[0], "/") {
+		ancien := os.Getenv("PATH")
+		os.Setenv("PATH", chemin)
+		if p, err := exec.LookPath(reste[0]); err == nil {
+			reste = append([]string{p}, reste[1:]...)
+		}
+		os.Setenv("PATH", ancien)
+	}
+	a = append(a, "--setenv", "PATH", chemin, "--")
 	return executerP("bwrap", append(a, reste...), os.Environ())
 }
 
