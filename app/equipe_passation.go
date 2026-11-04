@@ -93,7 +93,8 @@ func (s *Serveur) transmettreMaitre(p Projet, id string) error {
 	return nil
 }
 
-// verifierPassation: a handover not finished in time is cancelled (the store open again).
+// verifierPassation: a handover not finished in time is cancelled (the store open again). ">=": Windows' clock
+// can give 0 between two close calls, and a duration of 0 then still means "at once".
 func (s *Serveur) verifierPassation(p Projet) {
 	directMu.Lock()
 	h := hubs[p.Nom]
@@ -103,7 +104,7 @@ func (s *Serveur) verifierPassation(p Projet) {
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if h.passation != nil && time.Since(h.passation.debut) > dureePassation {
+	if h.passation != nil && time.Since(h.passation.debut) >= dureePassation {
 		h.erreurPassation = "The other computer did not take the team over: this computer stays the master (try again)."
 		h.passation = nil
 		_ = os.Remove(filepath.Join(s.magasinProjet(p).dossier, "gele"))
