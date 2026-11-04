@@ -187,14 +187,35 @@ func lierGH(args []string, w io.Writer) int {
 	_ = json.Unmarshal(out, &rp)
 	depot := rp.FullName
 	if !depotValideGH(depot) {
-		if strings.Contains(strings.ToLower(erreur), "already exists") {
-			fmt.Fprintf(w, "You already have a repository named %s: choose \"Use one of my repositories\" (%s/%s), or another name.\n", cible, ses.login, cible)
-		} else {
-			fmt.Fprintf(w, "GitHub refused to create the repository: %s\n", coupeOctets(erreur, 300))
+		// GitHub says why in its answer (gh only says "HTTP 422"): {"message": …, "errors": [{"message": …}]}
+		var e struct {
+			Message string `json:"message"`
+			Errors  []struct {
+				Message string `json:"message"`
+			} `json:"errors"`
 		}
-		return 1
+		_ = json.Unmarshal(out, &e)
+		pourquoi := e.Message
+		for _, x := range e.Errors {
+			pourquoi += " " + x.Message
+		}
+		if strings.Contains(strings.ToLower(erreur+" "+pourquoi), "already exists") {
+			// the same name tried again (an earlier try created it, then stopped): an empty repository of the
+			// account is that one, linked; one with commits is never taken without being chosen
+			if vide, ok := depotVideGH(gh, ses.login+"/"+cible); ok && vide {
+				depot = ses.login + "/" + cible
+				fmt.Fprintf(w, "The repository %s exists already and is empty (an earlier try created it): linked to it.\n", depot)
+			} else {
+				fmt.Fprintf(w, "You already have a repository named %s: choose \"Use one of my repositories\" (%s/%s), or another name.\n", cible, ses.login, cible)
+				return 1
+			}
+		} else {
+			fmt.Fprintf(w, "GitHub refused to create the repository: %s\n", coupeOctets(strings.TrimSpace(firstNonEmpty(pourquoi, erreur)), 300))
+			return 1
+		}
+	} else {
+		fmt.Fprintf(w, "Private repository created: %s\n", depot)
 	}
-	fmt.Fprintf(w, "Private repository created: %s\n", depot)
 	if branche == "" {
 		branche = "main" // fixed now: never the branch the project's HEAD (Claude's) points to
 	}
@@ -203,6 +224,25 @@ func lierGH(args []string, w io.Writer) int {
 		ancienDepot, ancienID, ancienCompte = r.Depot, r.CleID, r.CleCompte
 	}
 	return lierAvecConnexionFinGH(projet, d, depot, branche, autoOn, partage == "1", false, ancienDepot, ancienID, ancienCompte, gh, w)
+}
+
+// depotVideGH: the account's repository has no commit yet (GitHub's size is 0 and it has no branch).
+func depotVideGH(gh ghLier, depot string) (vide, ok bool) {
+	out, _, err := gh.api("repos/" + depot)
+	var r struct {
+		FullName string `json:"full_name"`
+		Size     int    `json:"size"`
+		Pushed   string `json:"pushed_at"`
+		Created  string `json:"created_at"`
+	}
+	if err != nil || json.Unmarshal(out, &r) != nil || !strings.EqualFold(r.FullName, depot) {
+		return false, false
+	}
+	if r.Size > 0 {
+		return false, true
+	}
+	b, _, err := gh.api("repos/" + depot + "/branches")
+	return err == nil && strings.TrimSpace(string(b)) == "[]", true
 }
 
 // pauseLierGH: the pause before the first push (GitHub takes a moment to accept a new key).

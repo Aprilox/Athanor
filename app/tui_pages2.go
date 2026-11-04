@@ -415,7 +415,7 @@ func (a *appTUI) toucheGitHub(k string) {
 		}
 	case "d":
 		if g.ConnexionPC.Connecte {
-			a.demander(a.t("Disconnect"), a.t("Disconnect this computer from GitHub? The projects that use this connection are no longer linked (link them again later). The key stays listed in GitHub's Settings › SSH and GPG keys, where you can remove it."),
+			a.demander(a.t("Disconnect"), a.t("Disconnect this computer from GitHub? The projects that use this connection stay linked: they push again as soon as this computer is connected again. The key stays listed in GitHub's Settings › SSH and GPG keys, where you can remove it."),
 				[]choixTUI{{id: "", texte: a.t("Cancel")}, {id: "oui", texte: a.t("Disconnect"), danger: true}}, func(id string) {
 					if id == "oui" {
 						a.agir("POST", "github/connexion", map[string]string{"action": "deconnecter"}, rafraichir)

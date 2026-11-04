@@ -346,12 +346,13 @@ func (s *Serveur) apiGitHub(w http.ResponseWriter, r *http.Request) {
 			Ok     bool     `json:"ok"`
 			Modele string   `json:"modele"`
 			Args   []string `json:"args"`
+			Detail string   `json:"detail"`
 		}
 		if lireJSONFinal(out, &t) != nil {
 			s.erreur(w, http.StatusBadGateway, raisonPoussee(out))
 			return
 		}
-		s.ecrireJSON(w, map[string]any{"ok": t.Ok, "message_key": t.Modele, "args": t.Args})
+		s.ecrireJSON(w, map[string]any{"ok": t.Ok, "message_key": t.Modele, "args": t.Args, "detail": t.Detail})
 	case "wip": // the work as it stands committed by Athanor itself, then pushed: no Claude, no quota needed
 		if e, ok := p.LireEtat(); ok && p.PiloteActif() && e.Phase == "travail" {
 			s.erreur(w, http.StatusConflict, "Claude is working on the project right now: use “Stop after cycle”, or wait for the end of the cycle, then save the work in progress.")

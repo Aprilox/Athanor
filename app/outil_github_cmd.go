@@ -173,6 +173,11 @@ func lireReglagesGH(d string) (reglagesGH, bool) {
 			}
 		}
 	}
+	if r.Connexion {
+		// this computer's connection: the project stays linked while it is disconnected (it says so when it
+		// pushes) and pushes again with the new key once connected again
+		return r, r.Depot != ""
+	}
 	fc, fkh := fichiersCleGH(d, r)
 	st, err := os.Stat(fkh)
 	cle, errc := os.Stat(fc)
@@ -575,6 +580,12 @@ func pousserGH(args []string, w io.Writer) int {
 		fmt.Fprintln(w, "Automatic push is off.")
 		return 3
 	}
+	if r.Connexion && !connexionPresenteGH() {
+		// this computer disconnected from GitHub: the project stays linked, it pushes again once connected
+		m := noterGH(d, "erreur", modeleDeconnecteGH, "", noteGitHub{args: []string{r.Depot}})
+		fmt.Fprintf(w, "GitHub: %s\n", m)
+		return 1
+	}
 	if remplacer != "" && (auto || r.Equipe || !reShaGH.MatchString(remplacer)) {
 		if r.Equipe {
 			fmt.Fprintln(w, "Several computers work on this project: GitHub's branch is never replaced (it holds their work).")
@@ -736,9 +747,9 @@ func pousserGH(args []string, w io.Writer) int {
 		n.args = []string{branche}
 	case contientGH(sortie, `host key verification failed|remote host identification has changed`):
 		modele = "GitHub's identity could not be verified: push refused. Link the project again to get GitHub's current keys."
-	case contientGH(sortie, `permission denied|repository not found|read only|not authorized|access denied|denied to deploy key`):
-		modele, resultat, ret = "GitHub refused Athanor's key for {0}: the key was removed from the repository, or the repository was deleted or renamed. Link the project again.", "rejete", 5
-		n.args = []string{r.Depot}
+	case contientGH(sortie, motifRefusGH):
+		modele, resultat, ret = "", "rejete", 5
+		modele, n.args = refusCleGH(r, sortie)
 	case reReseauGH.MatchString(sortie):
 		modele = "GitHub cannot be reached (network). The next milestone tries again."
 	default:
@@ -1311,6 +1322,11 @@ func commandeGitHub(args []string, w io.Writer) (int, bool) {
 
 // reponseTest: what github.sh tester prints (one JSON line): ok, and a sentence the app translates.
 func reponseTest(w io.Writer, ok bool, modele string, args ...string) int {
+	return reponseTestDetail(w, ok, "", modele, args...)
+}
+
+// reponseTestDetail: the same, with what git or ssh said (shown as it is under the message).
+func reponseTestDetail(w io.Writer, ok bool, detail, modele string, args ...string) int {
 	if args == nil {
 		args = []string{}
 	}
@@ -1318,7 +1334,8 @@ func reponseTest(w io.Writer, ok bool, modele string, args ...string) int {
 		Ok     bool     `json:"ok"`
 		Modele string   `json:"modele"`
 		Args   []string `json:"args"`
-	}{ok, modele, args})
+		Detail string   `json:"detail,omitempty"`
+	}{ok, modele, args, detailSortieGH(detail)})
 	fmt.Fprintln(w, string(b))
 	if ok {
 		return 0
@@ -1337,6 +1354,9 @@ func testerGH(args []string, w io.Writer) int {
 	r, lie := lireReglagesGH(d)
 	if !lie {
 		return reponseTest(w, false, "Not linked to GitHub.")
+	}
+	if r.Connexion && !connexionPresenteGH() {
+		return reponseTest(w, false, modeleDeconnecteGH, r.Depot)
 	}
 	branche := firstNonEmpty(r.Branche, "main")
 	miroir := d + "/miroir.git"
@@ -1370,8 +1390,11 @@ func testerGH(args []string, w io.Writer) int {
 		return reponseTest(w, false, "GitHub's identity could not be verified: push refused. Link the project again to get GitHub's current keys.")
 	case reReseauGH.MatchString(sortie):
 		return reponseTest(w, false, "GitHub cannot be reached (network). The next milestone tries again.")
-	default:
-		return reponseTest(w, false, "GitHub refused Athanor's key for {0}: the key was removed from the repository, or the repository was deleted or renamed. Link the project again.", r.Depot)
+	case contientGH(sortie, motifRefusGH):
+		m, a := refusCleGH(r, sortie)
+		return reponseTestDetail(w, false, sortie, m, a...)
+	default: // not GitHub's refusal: what git said
+		return reponseTestDetail(w, false, sortie, "GitHub could not be read: {0}", coupeOctets(detailSortieGH(sortie), 300))
 	}
 	sha, objets, raison := lireProjetGH(projet)
 	if raison != "" {
@@ -1396,8 +1419,9 @@ func testerGH(args []string, w io.Writer) int {
 		return reponseTest(w, false, "Connected to {0}, but GitHub's branch {1} has commits the project does not have: the push would be refused. Bring them into the project (Get GitHub's work), replace GitHub's branch with this project, or choose another branch.", r.Depot, branche)
 	case contientGH(texte, `GH006|protected branch`):
 		return reponseTest(w, false, "The branch {0} is protected on GitHub: choose another branch, or allow the push in the repository's settings.", branche)
-	case contientGH(texte, `permission denied|read only|not authorized|access denied|denied to deploy key`):
-		return reponseTest(w, false, "GitHub refused Athanor's key for {0}: the key was removed from the repository, or the repository was deleted or renamed. Link the project again.", r.Depot)
+	case contientGH(texte, motifRefusGH):
+		m, a := refusCleGH(r, texte)
+		return reponseTestDetail(w, false, texte, m, a...)
 	}
 	return reponseTest(w, false, "Push failed: {0}", coupeOctets(strings.Join(strings.Fields(texte), " "), 300))
 }
@@ -1505,4 +1529,37 @@ func enregistrerGH(args []string, w io.Writer) int {
 	}
 	fmt.Fprintln(w, "Saved: "+m)
 	return 0
+}
+
+// modeleDeconnecteGH: a project that pushes with this computer's connection, while it is disconnected.
+const modeleDeconnecteGH = "This computer is no longer connected to GitHub: connect it again (Settings › Options › GitHub). The project stays linked to {0} and pushes again by itself."
+
+// refusCleGH: why GitHub refused, as precisely as its answer says: the connection's key not accepted at all
+// (permission denied (publickey)), the repository out of the account's reach, or a key of the project's own.
+func refusCleGH(r reglagesGH, sortie string) (string, []string) {
+	switch {
+	case r.Connexion && contientGH(sortie, `publickey`):
+		return "GitHub does not accept this computer's key: Settings › Options › GitHub › Connect again (a new key goes on your account). The project stays linked to {0}.", []string{r.Depot}
+	case r.Connexion:
+		return "Your GitHub account ({1}) cannot push to {0}: the repository was deleted or renamed, or the account lost its access. Check it on GitHub, or link the project again.", []string{r.Depot, firstNonEmpty(lireConnexionGH().Login, r.Compte)}
+	}
+	return "GitHub refused Athanor's key for {0}: the key was removed from the repository, or the repository was deleted or renamed. Link the project again.", []string{r.Depot}
+}
+
+// motifRefusGH: GitHub's own refusals (never a local "Permission denied" of a file the system keeps busy):
+// the key not accepted (publickey), no right on the repository, the repository out of reach.
+const motifRefusGH = `permission denied \(publickey|permission to \S+ denied|repository not found|denied to deploy key|not authorized|access denied|marked as read only|you don't have permission|write access to repository not granted`
+
+// detailSortieGH: the last meaningful lines of what git or ssh said, at most 300 bytes.
+func detailSortieGH(s string) string {
+	var l []string
+	for _, x := range strings.Split(strings.ReplaceAll(s, "\r", ""), "\n") {
+		if x = strings.TrimSpace(x); x != "" {
+			l = append(l, x)
+		}
+	}
+	if len(l) > 3 {
+		l = l[len(l)-3:]
+	}
+	return coupeOctets(strings.Join(l, " · "), 300)
 }

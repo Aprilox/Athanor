@@ -174,8 +174,43 @@ func connecterGH(args []string, w io.Writer) int {
 		fmt.Fprintf(w, "\nNot connected: %v\n", err)
 		return 1
 	}
+	reprendreProjetsGH(w)
 	fmt.Fprintf(w, "\nConnected as %s. You can close this window: the projects of this computer are now linked without signing in.\n", ses.login)
 	return 0
+}
+
+// reprendreProjetsGH: after connecting again, the projects linked with the connection whose last push was
+// refused for want of it (disconnected, or the key no longer accepted) say they push again: their next
+// milestone does (Push now at once). Nothing to link again.
+func reprendreProjetsGH(w io.Writer) {
+	es, _ := os.ReadDir(donneesGitHub())
+	var repris []string
+	for _, e := range es {
+		d := filepath.Join(donneesGitHub(), e.Name())
+		r, lie := lireReglagesGH(d)
+		if !e.IsDir() || !lie || !r.Connexion {
+			continue
+		}
+		var n struct {
+			Resultat string `json:"resultat"`
+			Modele   string `json:"modele"`
+		}
+		b, err := os.ReadFile(d + "/dernier.json")
+		if err != nil || json.Unmarshal(b, &n) != nil || (n.Resultat != "rejete" && n.Resultat != "erreur") {
+			continue
+		}
+		if n.Modele != modeleDeconnecteGH && !strings.HasPrefix(n.Modele, "GitHub does not accept this computer's key") && !strings.HasPrefix(n.Modele, "GitHub refused Athanor's key for") {
+			continue
+		}
+		noterGH(d, "attente", "Connected to GitHub again: the project pushes at its next milestone (or Push now).", "", noteGitHub{})
+		if p, err := os.ReadFile(d + "/projet"); err == nil {
+			publierSuiviGH(cheminNatifPilote(strings.TrimSpace(string(p)))) // native Windows: Git Bash's /c/… form
+		}
+		repris = append(repris, r.Depot)
+	}
+	if len(repris) > 0 {
+		fmt.Fprintf(w, "Linked projects that push again with this connection: %s.\n", strings.Join(repris, ", "))
+	}
 }
 
 // deconnecterGH: athanor github deconnecter: the key leaves this computer (the projects that used it are
