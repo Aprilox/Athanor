@@ -112,7 +112,7 @@ func TestDormirNouvelleConnexion(t *testing.T) {
 	ecrireFichier(t, filepath.Join(p.prive, "secours_jusqua"), "9999999999\n", 0o644)
 	go func() {
 		time.Sleep(150 * time.Millisecond)
-		_ = os.WriteFile(filepath.Join(p.kit, ".env"), []byte("CLAUDE_AUTH=api\nANTHROPIC_API_KEY=sk-ant-nouvelle\n"), 0o600)
+		_ = EcrireEnv(filepath.Join(p.kit, ".env"), map[string]string{"CLAUDE_AUTH": "api", "ANTHROPIC_API_KEY": "sk-ant-nouvelle"}) // as Settings does
 	}()
 	debut := time.Now()
 	if !p.dormir(3600) || time.Since(debut) > 30*time.Second {
@@ -127,6 +127,11 @@ func TestDormirNouvelleConnexion(t *testing.T) {
 	if p.dormir(0) || p.relireConnexion() {
 		t.Fatal("nothing changed since")
 	}
+	// a .env caught empty (another program writing it at that instant): the connection as it was
+	_ = os.WriteFile(filepath.Join(p.kit, ".env"), nil, 0o600)
+	if p.relireConnexion() || p.connexionActuelle().Cle != "sk-ant-nouvelle" {
+		t.Fatal("an empty .env taken for a new connection")
+	}
 }
 
 // The budget spent: the pilot waits until it is raised (or counted again, or another key).
@@ -138,7 +143,7 @@ func TestAttendreBudget(t *testing.T) {
 	noterDepense(p.kit, modeConnexionAPI, 1.5, "projet", "cycle 1")
 	go func() {
 		time.Sleep(150 * time.Millisecond)
-		_ = os.WriteFile(filepath.Join(p.kit, ".env"), []byte("CLAUDE_AUTH=api\nANTHROPIC_API_KEY=sk-ant-a\nAPI_BUDGET_USD=5\n"), 0o600)
+		_ = EcrireEnv(filepath.Join(p.kit, ".env"), map[string]string{"API_BUDGET_USD": "5"})
 	}()
 	p.secondsPerMinute = 1 // dormir(60): one second at a time
 	debut := time.Now()

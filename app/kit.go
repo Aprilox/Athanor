@@ -372,7 +372,17 @@ func EcrireEnv(chemin string, valeurs map[string]string) error {
 			sb.WriteString(cle + "=" + v + "\n")
 		}
 	}
-	return os.WriteFile(chemin, []byte(sb.String()), 0o600)
+	// written aside, then put in place: a running pilot reads .env every few seconds (connexion_claude.go),
+	// never a file half written
+	tmp := chemin + ".tmp"
+	if err := os.WriteFile(tmp, []byte(sb.String()), 0o600); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, chemin); err != nil {
+		_ = os.Remove(tmp)
+		return os.WriteFile(chemin, []byte(sb.String()), 0o600)
+	}
+	return nil
 }
 
 // ----------------------------------------------------------------------------- requests
