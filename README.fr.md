@@ -437,6 +437,7 @@ Tout se modifie dans l'application (*Réglages*), ou dans `.env` ([`.env.example
 | `CLAUDE_CODE_OAUTH_TOKEN` | jeton de votre abonnement (`claude setup-token`), jamais partagé |
 | `ANTHROPIC_API_KEY` | clé API (mode `api`), créée sur console.anthropic.com › API keys, jamais partagée |
 | `API_BUDGET_USD` | mode `api` : le maximum à dépenser, en dollars (le crédit restant sur le compte API) ; vide = pas de limite |
+| `API_SPENT_USD` | mode `api` : ce qui est déjà dépensé au moment où vous l'enregistrez (le décompte continue à partir de là) |
 | `MODEL` | modèle du chef : `claude-fable-5-1`, `claude-opus-5-5`, `claude-sonnet-5-5` (plus économe), `claude-haiku-5-5`, ou les alias `fable`, `opus`, `sonnet` |
 | `FALLBACK_MODEL` | pris **automatiquement** quand le quota de `MODEL` est épuisé, jusqu'à sa réouverture, puis retour au principal. Vide = pause |
 | `SUBAGENT_MODEL` | modèle des sous-agents ; vide = le même que le chef, `claude-sonnet-5-5` économise le quota, `auto` = le chef le choisit à chaque appel |
@@ -457,7 +458,7 @@ Tout se modifie dans l'application (*Réglages*), ou dans `.env` ([`.env.example
 
 Si le quota global est épuisé (tous modèles), le pilote attend la réouverture et reprend seul.
 
-**Abonnement ou clé API.** *Réglages → Claude → Connexion → Se connecter avec* : votre abonnement Claude (son jeton) ou une clé API. Seule la connexion choisie parvient à Claude Code (avec les deux, Claude Code facturerait la clé). Avec une clé API, les plugins et connecteurs d'un compte claude.ai (Gmail, Drive… ajoutés dans l'appli Claude) ne fonctionnent pas ; les Skills, les serveurs MCP et toutes les extensions d'Athanor fonctionnent pareil. *Installation & santé* vérifie la clé, et *Suivi* affiche la **dépense API** à la place du quota de l'abonnement : ce que Claude Code a indiqué pour chaque passage (prix catalogue) depuis le début du décompte, face à `API_BUDGET_USD` s'il est défini (dépensé, restant). Une fois le budget dépensé, ou quand l'API dit que le compte n'a plus de crédit, le pilote attend au lieu d'échouer cycle après cycle. *Recompter à partir de maintenant* (crédit ajouté), un budget plus haut ou une autre clé, et il reprend aussitôt. Enregistrer une nouvelle clé, ou un premier budget, relance le décompte ; un budget augmenté ensuite le garde. Dans un terminal : `athanor depense [zero]`.
+**Abonnement ou clé API.** *Réglages → Claude → Connexion → Se connecter avec* : votre abonnement Claude (son jeton) ou une clé API. Seule la connexion choisie parvient à Claude Code (avec les deux, Claude Code facturerait la clé). Avec une clé API, les plugins et connecteurs d'un compte claude.ai (Gmail, Drive… ajoutés dans l'appli Claude) ne fonctionnent pas ; les Skills, les serveurs MCP et toutes les extensions d'Athanor fonctionnent pareil. *Installation & santé* vérifie la clé, et *Suivi* affiche la **dépense API** à la place du quota de l'abonnement : ce que Claude Code a indiqué pour chaque passage (prix catalogue) depuis le début du décompte, face à `API_BUDGET_USD` s'il est défini (dépensé, restant). *Déjà dépensé* (Réglages) fait partir le décompte de ce que le compte a déjà dépensé. Un **arrêt automatique** en dollars (*Suivi → Dépense API → Arrêt auto*, par exemple à 80 $) arrête le pilote après le cycle qui l'atteint : le coût d'un cycle est connu à sa fin, il s'arrête donc autour de ce montant, jamais au milieu d'un cycle. Une fois le budget dépensé, ou quand l'API dit que le compte n'a plus de crédit, le pilote attend au lieu d'échouer cycle après cycle. *Recompter à partir de maintenant* (crédit ajouté), un budget plus haut ou une autre clé, et il reprend aussitôt. Enregistrer une nouvelle clé, ou un premier budget, relance le décompte ; un budget augmenté ensuite le garde. Dans un terminal : `athanor depense [zero]`.
 
 **Une nouvelle connexion, aussitôt.** Le pilote relit la connexion à chaque cycle et toutes les quelques secondes de ses attentes : un jeton ou une clé enregistré dans *Réglages* pendant qu'il attend un quota, un problème de connexion, le budget ou le crédit (un autre compte, une clé qui a encore du crédit) sert aussitôt, l'attente écourtée. Le modèle de secours et la pause des ouvriers de l'ancien compte sont levés.
 
@@ -506,7 +507,7 @@ Tout ce que fait l'application est une commande de l'exécutable (`Athanor.exe` 
 |---|---|
 | `installer` | tout installer (Linux, macOS, le côté WSL) ; Windows : `installer-windows` (WSL) ou `installer-natif` |
 | `configurer` | connexion (jeton de l'abonnement ou clé API, budget), modèles, options (la langue se règle dans l'application) |
-| `depense [zero]` | la connexion, et avec une clé API la dépense face au budget ; `zero` la recompte à partir de maintenant |
+| `depense [zero \| arret DOLLARS \| arret off]` | la connexion, et avec une clé API la dépense face au budget ; `zero` la recompte à partir de maintenant, `arret` règle l'arrêt automatique après le cycle |
 | `demarrer [--background] DOSSIER` | lancer le pilote sur un projet |
 | `suivre DOSSIER` | suivre en direct |
 | `arreter --apres-cycle DOSSIER` | arrêter proprement à la fin du jalon en cours |
@@ -615,7 +616,7 @@ Oui. Rien n'est lié à un nom d'utilisateur ni à une lettre de disque : les ch
 Poussez un tag de version : GitHub lance d'abord toutes les vérifications de la CI sur le commit du tag (tests sous Windows, Linux et macOS, exécutable unique, toutes les cibles), puis compile les applications et publie la version ([`.github/workflows/release.yml`](.github/workflows/release.yml)). Si une seule vérification échoue (ou la suite), rien n'est publié : le tag est supprimé, ainsi que la version si elle avait déjà été créée, et les mises à jour d'Athanor ne la proposent jamais. Corrigez, commitez, puis poussez à nouveau le même tag (`git tag -f v2.42.0 && git push origin v2.42.0`).
 
 ```bash
-git tag v2.49.2 && git push origin v2.49.2
+git tag v2.49.3 && git push origin v2.49.3
 ```
 
 Gardez la version de [`app/winres/athanor.rc`](app/winres/athanor.rc) et `versionAthanor` dans [`app/commandes.go`](app/commandes.go) alignées sur le tag (un test vérifie qu'elles concordent), et écrivez les nouveautés dans `docs/releases/VERSION.md` (par ex. [`docs/releases/2.31.0.md`](docs/releases/2.31.0.md)) : elles ouvrent la page de la version.

@@ -32,7 +32,7 @@ const (
 )
 
 // the settings of the connection, in .env
-var clesConnexionClaude = []string{"CLAUDE_AUTH", "CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY", "API_BUDGET_USD", "API_BUDGET_SINCE"}
+var clesConnexionClaude = []string{"CLAUDE_AUTH", "CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY", "API_BUDGET_USD", "API_BUDGET_SINCE", "API_SPENT_USD", "API_STOP_USD"}
 
 type connexionClaude struct {
 	Mode   string  // subscription, api
@@ -40,6 +40,8 @@ type connexionClaude struct {
 	Cle    string  // the API key
 	Budget float64 // API mode: the most to spend, in dollars (0: no limit)
 	Depuis int64   // API mode: the spend counted from (Unix seconds; 0: from the first one written)
+	Deja   float64 // API mode: what was spent already when the count started (Settings: Already spent)
+	Arret  float64 // API mode: the automatic stop, in dollars spent (0: none; Overview › API spend)
 }
 
 func (c connexionClaude) api() bool { return c.Mode == modeConnexionAPI }
@@ -98,6 +100,7 @@ func lireConnexionClaude(kit string, origine map[string]string) connexionClaude 
 	}
 	c.Budget = lireMontant(v["API_BUDGET_USD"])
 	c.Depuis, _ = strconv.ParseInt(v["API_BUDGET_SINCE"], 10, 64)
+	c.Deja, c.Arret = lireMontant(v["API_SPENT_USD"]), lireMontant(v["API_STOP_USD"])
 	return c
 }
 
@@ -197,12 +200,21 @@ func depenseAPI(kit string, depuis int64) (float64, int) {
 
 // EtatDepense: Overview › API spend (in place of the subscription's quota in API mode).
 type EtatDepense struct {
-	Depense float64 `json:"depense"`          // dollars, since Depuis
-	Budget  float64 `json:"budget,omitempty"` // 0: no limit
-	Depuis  int64   `json:"depuis,omitempty"`
-	Runs    int     `json:"runs"`
-	Atteint bool    `json:"atteint,omitempty"`
-	Cle     bool    `json:"cle"` // an API key is set
+	Depense      float64 `json:"depense"`          // dollars: what was spent already, and what was counted since Depuis
+	Deja         float64 `json:"deja,omitempty"`   // of which spent before the count (Settings: Already spent)
+	Budget       float64 `json:"budget,omitempty"` // the account's credit, the most to spend (0: no limit)
+	Arret        float64 `json:"arret,omitempty"`  // the automatic stop after the cycle, in dollars spent (0: none)
+	Depuis       int64   `json:"depuis,omitempty"`
+	Runs         int     `json:"runs"`
+	Atteint      bool    `json:"atteint,omitempty"`
+	ArretAtteint bool    `json:"arret_atteint,omitempty"`
+	Cle          bool    `json:"cle"` // an API key is set
+}
+
+// depenseTotale: what was spent already, and what was counted since the count started.
+func depenseTotale(kit string, c connexionClaude) (float64, int) {
+	d, n := depenseAPI(kit, c.Depuis)
+	return math.Round((c.Deja+d)*100) / 100, n
 }
 
 func etatDepenseKit(kit string) *EtatDepense {
@@ -210,8 +222,9 @@ func etatDepenseKit(kit string) *EtatDepense {
 	if !c.api() {
 		return nil
 	}
-	d, n := depenseAPI(kit, c.Depuis)
-	return &EtatDepense{Depense: d, Budget: c.Budget, Depuis: c.Depuis, Runs: n, Atteint: c.Budget > 0 && d >= c.Budget, Cle: c.Cle != ""}
+	d, n := depenseTotale(kit, c)
+	return &EtatDepense{Depense: d, Deja: c.Deja, Budget: c.Budget, Arret: c.Arret, Depuis: c.Depuis, Runs: n,
+		Atteint: c.Budget > 0 && d >= c.Budget, ArretAtteint: c.Arret > 0 && d >= c.Arret, Cle: c.Cle != ""}
 }
 
 // budgetAtteint: API mode with a budget, and it is spent (the dollars spent, the budget).
@@ -219,8 +232,17 @@ func budgetAtteint(kit string, c connexionClaude) (bool, float64) {
 	if !c.api() || c.Budget <= 0 {
 		return false, 0
 	}
-	d, _ := depenseAPI(kit, c.Depuis)
+	d, _ := depenseTotale(kit, c)
 	return d >= c.Budget, d
+}
+
+// arretDepenseAtteint: API mode with an automatic stop, and the spend reached it (the dollars spent).
+func arretDepenseAtteint(kit string, c connexionClaude) (bool, float64) {
+	if !c.api() || c.Arret <= 0 {
+		return false, 0
+	}
+	d, _ := depenseTotale(kit, c)
+	return d >= c.Arret, d
 }
 
 // kitConnexion: the tool folder whose .env this process read (chargerEnvKit, chargerEnvSante): where the
@@ -273,9 +295,10 @@ func coutJournalClaude(chemin string) float64 {
 	return cout
 }
 
-// reglagesConnexionEnregistres: what saving Settings adds: a new API key, or a first budget, starts the
-// count again (a new key is new credit; a first budget is the credit left from now on). A budget raised
-// later keeps the count (credit added: Overview › API spend › Count again from now, when wanted).
+// reglagesConnexionEnregistres: what saving Settings adds: a new API key, a first budget, or what is spent
+// already, starts the count again (a new key is new credit; a first budget is the credit left from now on;
+// "already spent" is the spend at this moment). A budget raised later keeps the count (credit added:
+// Overview › API spend › Count again from now, when wanted).
 func reglagesConnexionEnregistres(kit string, valeurs map[string]string) {
 	avant := lireConnexionClaude(kit, nil)
 	nouvelleCle := false
@@ -286,23 +309,37 @@ func reglagesConnexionEnregistres(kit string, valeurs map[string]string) {
 	if v, ok := valeurs["API_BUDGET_USD"]; ok && lireMontant(v) > 0 && avant.Depuis == 0 {
 		premierBudget = true
 	}
-	if nouvelleCle || premierBudget {
+	nouveauDeja := false
+	if v, ok := valeurs["API_SPENT_USD"]; ok && lireMontant(v) != avant.Deja {
+		nouveauDeja = true
+	}
+	if nouvelleCle || premierBudget || nouveauDeja {
 		valeurs["API_BUDGET_SINCE"] = strconv.FormatInt(time.Now().Unix(), 10)
 	}
 }
 
 func init() {
-	enregistrerCommande("depense", "depense [KIT] [zero]: the connection to Claude (subscription or API key) and, in API mode, the spend against the budget; zero counts it again from now", lancerDepense)
+	enregistrerCommande("depense", "depense [KIT] [zero | arret DOLLARS | arret off]: the connection to Claude (subscription or API key) and, in API mode, the spend against the budget; zero counts it again from now, arret sets the automatic stop after the cycle", lancerDepense)
 }
 
-// lancerDepense: athanor depense [KIT] [zero] (the terminal's Overview › API spend).
+// lancerDepense: athanor depense [KIT] [zero | arret DOLLARS | arret off] (the terminal's Overview › API
+// spend).
 func lancerDepense(args []string) int {
 	zero := false
-	kit := ""
-	for _, a := range args {
-		if a == "zero" || a == "--zero" {
+	kit, arret := "", ""
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "zero" || a == "--zero":
 			zero = true
-		} else if kit == "" {
+		case a == "arret" || a == "--arret":
+			if i+1 >= len(args) {
+				fmt.Fprintln(os.Stderr, "usage: athanor depense [KIT] arret DOLLARS|off")
+				return 2
+			}
+			i++
+			arret = args[i]
+		case kit == "":
 			kit = a
 		}
 	}
@@ -317,11 +354,30 @@ func lancerDepense(args []string) int {
 		return 1
 	}
 	if zero {
-		if err := EcrireEnv(filepath.Join(kit, ".env"), map[string]string{"API_BUDGET_SINCE": strconv.FormatInt(time.Now().Unix(), 10)}); err != nil {
+		if err := EcrireEnv(filepath.Join(kit, ".env"), valeursCompterDepense()); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			return 1
 		}
 		fmt.Println("API spend counted again from now.")
+	}
+	if arret != "" {
+		v := ""
+		if arret != "off" && arret != "0" {
+			if lireMontant(arret) <= 0 {
+				fmt.Fprintln(os.Stderr, "athanor depense arret: an amount in dollars (80, 80.50), or off")
+				return 2
+			}
+			v = strconv.FormatFloat(lireMontant(arret), 'f', -1, 64)
+		}
+		if err := EcrireEnv(filepath.Join(kit, ".env"), map[string]string{"API_STOP_USD": v}); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		if v == "" {
+			fmt.Println("Automatic stop on the API spend: off.")
+		} else {
+			fmt.Printf("Automatic stop on the API spend: after the cycle that reaches %s $.\n", v)
+		}
 	}
 	c := lireConnexionClaude(kit, nil)
 	if !c.api() {
@@ -337,7 +393,7 @@ func lancerDepense(args []string) int {
 	} else {
 		fmt.Println("Connection: API key (paid per use).")
 	}
-	d, n := depenseAPI(kit, c.Depuis)
+	d, n := depenseTotale(kit, c)
 	depuis := "since Athanor 2.49"
 	if c.Depuis > 0 {
 		depuis = "since " + time.Unix(c.Depuis, 0).Format("2006-01-02 15:04")
@@ -350,5 +406,20 @@ func lancerDepense(args []string) int {
 	} else {
 		fmt.Printf("Spent: %.2f $, %s, %d runs of Claude (no budget: API_BUDGET_USD).\n", d, depuis, n)
 	}
+	if c.Deja > 0 {
+		fmt.Printf("Of which %.2f $ spent already when the count started (API_SPENT_USD).\n", c.Deja)
+	}
+	if c.Arret > 0 {
+		fmt.Printf("Automatic stop: after the cycle that reaches %.2f $", c.Arret)
+		if d >= c.Arret {
+			fmt.Print(" (reached: the pilot does not start another cycle)")
+		}
+		fmt.Println(".")
+	}
 	return 0
+}
+
+// valeursCompterDepense: the spend counted again from 0, now (credit added).
+func valeursCompterDepense() map[string]string {
+	return map[string]string{"API_BUDGET_SINCE": strconv.FormatInt(time.Now().Unix(), 10), "API_SPENT_USD": ""}
 }

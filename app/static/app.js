@@ -1275,20 +1275,29 @@ function rendreQuota(q, regles) {
 function rendreDepense(d) {
   const dol = (x) => (x || 0).toFixed(2) + " $";
   const depuis = d.depuis ? t("since {0}", [quandLisible(d.depuis)]) : t("since Athanor 2.49");
+  const pied = [d.deja ? t("of which {0} before the count", [dol(d.deja)]) : "", depuis, t("{0} runs of Claude", [d.runs || 0])].filter(Boolean).map(h).join(" · ");
+  // the bar: against the budget (the account's credit), else against the automatic stop
+  const plafond = d.budget || d.arret || 0;
   let corps;
-  if (d.budget) {
-    const pct = Math.min(100, Math.round((d.depense / d.budget) * 100));
-    const classe = d.atteint || pct >= 90 ? "plein" : pct >= 70 ? "haut" : "";
+  if (plafond) {
+    const pct = Math.min(100, Math.round((d.depense / plafond) * 100));
+    const classe = d.atteint || d.arret_atteint || pct >= 90 ? "plein" : pct >= 70 ? "haut" : "";
+    const marque = d.budget && d.arret ? `<b class="quota-seuil" style="left:${Math.min(100, (d.arret / d.budget) * 100)}%" title="${h(t("Auto stop"))} ${h(dol(d.arret))}"></b>` : "";
     corps = `<div class="quota-ligne ${classe}">
-      <div class="ligne m0"><b>${h(t("{0} of {1}", [dol(d.depense), dol(d.budget)]))}</b><span class="espace"></span><span>${pct} %</span></div>
-      <div class="barre m0 quota-barre"><i style="width:${pct}%"></i></div>
-      <div class="ligne m0 quota-pied"><span class="muet petit">${h(t("{0} left", [dol(Math.max(0, d.budget - d.depense))]))} · ${h(depuis)} · ${h(t("{0} runs of Claude", [d.runs || 0]))}</span></div></div>
-      ${d.atteint ? `<p class="petit"><span class="attention">${t("Budget spent: the pilot waits. Raise it in Settings, count again from now, or put another API key: it resumes at once.")}</span></p>` : ""}`;
+      <div class="ligne m0"><b>${h(d.budget ? t("{0} of {1}", [dol(d.depense), dol(d.budget)]) : dol(d.depense))}</b><span class="espace"></span><span>${pct} %</span></div>
+      <div class="barre m0 quota-barre"><i style="width:${pct}%"></i>${marque}</div>
+      <div class="ligne m0 quota-pied"><span class="muet petit">${d.budget ? h(t("{0} left", [dol(Math.max(0, d.budget - d.depense))])) + " · " : ""}${pied}</span></div></div>`;
   } else {
-    corps = `<div class="quota-ligne"><div class="ligne m0"><b>${h(dol(d.depense))}</b><span class="espace"></span><span class="muet petit">${h(depuis)} · ${h(t("{0} runs of Claude", [d.runs || 0]))}</span></div></div>
+    corps = `<div class="quota-ligne"><div class="ligne m0"><b>${h(dol(d.depense))}</b><span class="espace"></span><span class="muet petit">${pied}</span></div></div>
       <p class="muet petit">${t("No budget: the pilot never stops for the spend. Set one in Settings › Claude › API budget (the credit left on the API account).")}</p>`;
   }
-  return `<div class="bloc quota-bloc"><h2>${t("API spend")}</h2>${!d.cle ? `<p class="petit"><span class="attention">${t("API mode is chosen, but no API key is set: Settings › Claude.")}</span></p>` : ""}${corps}
+  const etat = d.arret_atteint ? `<p class="petit"><span class="attention">${t("Automatic stop reached: the pilot starts no other cycle. Raise it or switch it off (Auto stop), then Start.")}</span></p>`
+    : d.atteint ? `<p class="petit"><span class="attention">${t("Budget spent: the pilot waits. Raise it in Settings, count again from now, or put another API key: it resumes at once.")}</span></p>` : "";
+  const arret = `<div class="quota-arret petit"><span class="muet">${t("Auto stop")}</span>
+    <input type="text" inputmode="decimal" id="depense-arret" value="${d.arret || ""}" placeholder="${h(t("off"))}" title="${h(t("The dollars spent at which the pilot stops, after the cycle that reaches them (the cost of a cycle is known at its end). Empty: no automatic stop."))}"> $
+    <span class="muet">${t("after the cycle")}</span></div>`;
+  return `<div class="bloc quota-bloc"><h2>${t("API spend")}</h2>${!d.cle ? `<p class="petit"><span class="attention">${t("API mode is chosen, but no API key is set: Settings › Claude.")}</span></p>` : ""}${corps}${etat}
+    <div class="ligne m0 quota-pied"><span class="espace"></span>${arret}</div>
     <div class="ligne mt-1"><span class="muet petit croit">${t("Counted by Athanor from what Claude Code reports at the end of each run (list price): the API account's own balance is on console.anthropic.com.")}</span><button class="btn btn-petit" type="button" id="depense-zero" title="${h(t("Credit added, or a new count: the spend starts again from 0 now."))}">${t("Count again from now")}</button></div></div>`;
 }
 
@@ -2920,7 +2929,7 @@ async function rendreSortie() {
 // The labels of the settings Athanor knows: [group, name]. Unknown ones go to "Advanced".
 const REGLAGES = {
   CLAUDE_AUTH: ["connexion", "Connect with"], CLAUDE_CODE_OAUTH_TOKEN: ["connexion", "Connection token"],
-  ANTHROPIC_API_KEY: ["connexion", "API key"], API_BUDGET_USD: ["connexion", "API budget"],
+  ANTHROPIC_API_KEY: ["connexion", "API key"], API_BUDGET_USD: ["connexion", "API budget"], API_SPENT_USD: ["connexion", "Already spent"],
   MODEL: ["modeles", "Model of the lead"], FALLBACK_MODEL: ["modeles", "Fallback model"],
   FRAMING_MODEL: ["modeles", "Model of the framing"], WORKER_MODEL: ["modeles", "Model of the parallel workers"],
   SUBAGENT_MODEL: ["modeles", "Model of the sub-agents"], CHEAP_MODEL: ["modeles", "Cheap model"], EFFORT: ["modeles", "Thinking effort"],
@@ -2935,8 +2944,8 @@ const GROUPES_REGLAGES = [["connexion", "Connection"], ["modeles", "Models"], ["
 const EFFORTS = ["", "low", "medium", "high", "xhigh", "max"];
 // the connection (connexion_claude.go): the subscription's token or an API key; each one's settings shown
 // with it only
-const ORDRE_CONNEXION = ["CLAUDE_AUTH", "CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY", "API_BUDGET_USD"];
-const MODE_CONNEXION = { CLAUDE_CODE_OAUTH_TOKEN: "subscription", ANTHROPIC_API_KEY: "api", API_BUDGET_USD: "api" };
+const ORDRE_CONNEXION = ["CLAUDE_AUTH", "CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY", "API_BUDGET_USD", "API_SPENT_USD"];
+const MODE_CONNEXION = { CLAUDE_CODE_OAUTH_TOKEN: "subscription", ANTHROPIC_API_KEY: "api", API_BUDGET_USD: "api", API_SPENT_USD: "api" };
 function modeConnexion(v) { return String(v || "").toLowerCase() === "api" ? "api" : "subscription"; }
 function majModeConnexion(mode) {
   document.querySelectorAll("[data-connexion]").forEach((x) => { x.hidden = x.dataset.connexion !== mode; });
@@ -3075,6 +3084,13 @@ function blocDirect(nom) {
   }
   return `<div class="bloc" id="bloc-direct"><h2>${t("Team, live")}</h2>${tete}${lignes ? `<table class="tab appareils pcs mt-1">${lignes}</table>` : ""}</div>`;
 }
+// Overview › API spend › Auto stop: the dollars at which the pilot stops after the cycle (empty: none)
+$("#page").addEventListener("change", async (ev) => {
+  const i = ev.target; if (i.id !== "depense-arret") return;
+  const v = Number(String(i.value).replace(",", "."));
+  if (i.value !== "" && !(v >= 0)) { toast(t("An amount in dollars, or empty for no automatic stop."), "erreur"); return; }
+  if (await action(api("depense", "POST", { action: "arret", seuil: i.value === "" ? 0 : v }))) rafraichir();
+});
 // Overview › API spend › Count again from now (credit added to the API account)
 $("#page").addEventListener("click", async (ev) => {
   if (!ev.target.closest("#depense-zero")) return;

@@ -5,13 +5,13 @@ package main
 import (
 	"encoding/base64"
 	"errors"
+	"math"
 	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
-	"time"
 )
 
 // ----------------------------------------------------------------------------- .env
@@ -21,7 +21,7 @@ const masque = "••••••••"
 // clesEnvCachees: settings of older versions, still in an older .env but read by nothing any more:
 // never shown (Unreal: the MCP library; PILOT_ENGINE: there is one pilot only, in Go, since 2.25).
 var clesEnvCachees = map[string]bool{"UNREAL_MCP": true, "UNREAL_MCP_URL": true, "PILOT_ENGINE": true,
-	"API_BUDGET_SINCE": true} // (this one: set by Athanor, Overview › API spend shows it)
+	"API_BUDGET_SINCE": true, "API_STOP_USD": true} // (these: set from Overview › API spend, which shows them)
 
 func (s *Serveur) apiEnv(w http.ResponseWriter, r *http.Request) {
 	chemin := s.kitCourant().Env()
@@ -118,9 +118,10 @@ func verifJetonAPI(x VerifVue) VerifVue {
 // apiDepense: POST /api/depense {action: "zero"}: Overview › API spend counted again from now (credit added).
 func (s *Serveur) apiDepense(w http.ResponseWriter, r *http.Request) {
 	var c struct {
-		Action string `json:"action"`
+		Action string  `json:"action"` // zero, arret
+		Seuil  float64 `json:"seuil"`  // arret: the dollars spent at which the pilot stops after the cycle (0: none)
 	}
-	if err := lireCorps(r, &c); err != nil || c.Action != "zero" {
+	if err := lireCorps(r, &c); err != nil || (c.Action != "zero" && c.Action != "arret") || c.Seuil < 0 || c.Seuil > 1e7 {
 		s.erreur(w, http.StatusBadRequest, "Invalid request")
 		return
 	}
@@ -129,11 +130,18 @@ func (s *Serveur) apiDepense(w http.ResponseWriter, r *http.Request) {
 		s.erreur(w, http.StatusBadRequest, "No settings yet (Settings › Claude)")
 		return
 	}
-	if err := EcrireEnv(k.Env(), map[string]string{"API_BUDGET_SINCE": strconv.FormatInt(time.Now().Unix(), 10)}); err != nil {
+	valeurs, msg := valeursCompterDepense(), "API spend counted again from now: the running pilots apply it at once."
+	if c.Action == "arret" {
+		valeurs, msg = map[string]string{"API_STOP_USD": ""}, "Automatic stop saved: the running pilots apply it at once."
+		if c.Seuil > 0 {
+			valeurs["API_STOP_USD"] = strconv.FormatFloat(math.Round(c.Seuil*100)/100, 'f', -1, 64)
+		}
+	}
+	if err := EcrireEnv(k.Env(), valeurs); err != nil {
 		s.erreur(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	s.msg(w, "API spend counted again from now: the running pilots apply it at once.")
+	s.msg(w, msg)
 }
 
 // listeVerifs: the checks of the current mode (WSL, or native Windows).

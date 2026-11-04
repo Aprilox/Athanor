@@ -437,6 +437,7 @@ Everything is editable in the app (*Settings*), or in `.env` ([`.env.example`](.
 | `CLAUDE_CODE_OAUTH_TOKEN` | token of your subscription (`claude setup-token`), never shared |
 | `ANTHROPIC_API_KEY` | API key (`api` mode), created on console.anthropic.com › API keys, never shared |
 | `API_BUDGET_USD` | `api` mode: the most to spend, in dollars (the credit left on the API account); empty = no limit |
+| `API_SPENT_USD` | `api` mode: what is spent already when you save it (the count goes on from it) |
 | `MODEL` / `FALLBACK_MODEL` / `SUBAGENT_MODEL` | lead model, model used while the lead's quota is exhausted, sub-agents model (`auto`: chosen by the lead for each call) |
 | `CHEAP_MODEL` | model of the `executor` sub-agent (default `haiku`) |
 | `FRAMING_MODEL` / `WORKER_MODEL` | model of the framing cycle (empty = `MODEL`), model of the parallel workers (default `sonnet`, empty = `MODEL`) |
@@ -454,7 +455,7 @@ Everything is editable in the app (*Settings*), or in `.env` ([`.env.example`](.
 
 When the quota is exhausted for every model, the pilot waits for it to reopen and resumes on its own.
 
-**Subscription or API key.** *Settings → Claude → Connection → Connect with*: your Claude subscription (its token) or an API key. Only the chosen one reaches Claude Code (with both, Claude Code would bill the key). With an API key, the plugins and connectors of a claude.ai account (Gmail, Drive… added in the Claude app) do not work; the Skills, the MCP servers and every extension of Athanor work the same. *Setup & health* checks the key, and *Overview* shows the **API spend** in place of the subscription quota: what Claude Code reported for each run (list price) since the count started, against `API_BUDGET_USD` when set (spent, left). Once the budget is spent, or when the API says the account has no credit left, the pilot waits instead of failing cycle after cycle. *Count again from now* (credit added), a higher budget or another key, and it resumes at once. Saving a new key, or a first budget, starts the count again; a budget raised later keeps it. In a terminal: `athanor depense [zero]`.
+**Subscription or API key.** *Settings → Claude → Connection → Connect with*: your Claude subscription (its token) or an API key. Only the chosen one reaches Claude Code (with both, Claude Code would bill the key). With an API key, the plugins and connectors of a claude.ai account (Gmail, Drive… added in the Claude app) do not work; the Skills, the MCP servers and every extension of Athanor work the same. *Setup & health* checks the key, and *Overview* shows the **API spend** in place of the subscription quota: what Claude Code reported for each run (list price) since the count started, against `API_BUDGET_USD` when set (spent, left). *Already spent* (Settings) starts the count from what the account has spent so far. An **automatic stop** in dollars (*Overview → API spend → Auto stop*, say at 80 $) stops the pilot after the cycle that reaches it: the cost of a cycle is known at its end, so it stops around that amount, never in the middle of a cycle. Once the budget is spent, or when the API says the account has no credit left, the pilot waits instead of failing cycle after cycle. *Count again from now* (credit added), a higher budget or another key, and it resumes at once. Saving a new key, or a first budget, starts the count again; a budget raised later keeps it. In a terminal: `athanor depense [zero]`.
 
 **A new connection, at once.** The pilot reads the connection again at each cycle and every few seconds of its waits: a token or a key saved in *Settings* while it waits for a quota, a connection problem, the budget or the credit (another account, a key with credit left) is used at once, the wait cut short. The fallback model and the workers' pause of the old account are let go.
 
@@ -503,7 +504,7 @@ Everything the app does is a command of the executable (`Athanor.exe` on Windows
 |---|---|
 | `installer` | install everything (Linux, macOS, the WSL side); Windows: `installer-windows` (WSL) or `installer-natif` |
 | `configurer` | connection (subscription token or API key, budget), models, options (the language is set in the app) |
-| `depense [zero]` | the connection, and with an API key the spend against the budget; `zero` counts it again from now |
+| `depense [zero \| arret DOLLARS \| arret off]` | the connection, and with an API key the spend against the budget; `zero` counts it again from now, `arret` sets the automatic stop after the cycle |
 | `demarrer [--background] DIR` | start the pilot on a project |
 | `suivre DIR` | follow it live |
 | `arreter --apres-cycle DIR` | stop cleanly after the current milestone |
@@ -616,7 +617,7 @@ Yes. Nothing is tied to a user name or a drive letter: paths come from your prof
 Push a version tag: GitHub first runs every CI check on the tagged commit (tests on Windows, Linux and macOS, the single executable, every build target), then builds the apps and publishes the release ([`.github/workflows/release.yml`](.github/workflows/release.yml)). If a single check fails (or anything after it), nothing is published: the tag is removed, and the release too if it was already created, so Athanor's updates never offer it. Fix, commit, then push the same tag again (`git tag -f v2.42.0 && git push origin v2.42.0`):
 
 ```bash
-git tag v2.49.2 && git push origin v2.49.2
+git tag v2.49.3 && git push origin v2.49.3
 ```
 
 Keep the version in [`app/winres/athanor.rc`](app/winres/athanor.rc) and `versionAthanor` in [`app/commandes.go`](app/commandes.go) in step with the tag (a test checks they match), and write what is new in `docs/releases/VERSION.md` (e.g. [`docs/releases/2.31.0.md`](docs/releases/2.31.0.md)): it opens the release page.

@@ -278,7 +278,7 @@ func (a *appTUI) raccourcisPage() []raccourci {
 	case pSuivi:
 		r = []raccourci{{"M", t("Manage")}, {"g", t("Get GitHub's work")}}
 		if a.vue != nil && a.vue.Depense != nil {
-			r = append(r, raccourci{"$", t("Count again from now")})
+			r = append(r, raccourci{"$", t("API spend")})
 		}
 	case pDistance:
 		r = a.raccourcisDistance()
@@ -499,7 +499,7 @@ func (a *appTUI) pageSuivi(e *ecranT, x, y, l, h int) {
 		nq = len(a.vue.Quota.Fenetres)
 	}
 	if a.vue.Depense != nil {
-		nq = 1 // API mode: the spend in its place
+		nq = 2 // API mode: the spend in its place (its bar, what is left, the automatic stop)
 	}
 	hq = 3 + max(1, nq*3)
 	if large {
@@ -790,10 +790,17 @@ func (a *appTUI) boiteDepense(e *ecranT, x, y, l, h int) {
 		e.texte(ix, yy, il, a.t("API mode is chosen, but no API key is set: Settings › Claude."), a.st(p.attention, fond))
 		yy++
 	}
+	pied := depuis + " · " + a.t("{0} runs of Claude", d.Runs)
+	if d.Deja > 0 {
+		pied = a.t("of which {0} before the count", dol(d.Deja)) + " · " + pied
+	}
+	if d.Arret > 0 {
+		pied += " · " + a.t("Auto stop") + " " + dol(d.Arret) + " (" + a.t("after the cycle") + ")"
+	}
 	if d.Budget > 0 {
 		pct := int(math.Min(100, math.Round(d.Depense/d.Budget*100)))
 		coul := p.accent
-		if d.Atteint || pct >= 90 {
+		if d.Atteint || d.ArretAtteint || pct >= 90 {
 			coul = p.erreur
 		} else if pct >= 70 {
 			coul = p.attention
@@ -805,13 +812,19 @@ func (a *appTUI) boiteDepense(e *ecranT, x, y, l, h int) {
 			e.barre(ix, yy+1, il, float64(pct)/100, a.st(coul, fond), a.st(p.ligne, fond))
 		}
 		yy += 2
-		l2 = append(l2, a.t("{0} left", dol(math.Max(0, d.Budget-d.Depense)))+" · "+depuis+" · "+a.t("{0} runs of Claude", d.Runs))
-		if d.Atteint {
+		l2 = append(l2, a.t("{0} left", dol(math.Max(0, d.Budget-d.Depense)))+" · "+pied)
+		if d.ArretAtteint {
+			l2 = append(l2, a.t("Automatic stop reached: the pilot starts no other cycle. Raise it or switch it off (Auto stop), then Start."))
+		} else if d.Atteint {
 			l2 = append(l2, a.t("Budget spent: the pilot waits. Raise it in Settings, count again from now, or put another API key: it resumes at once."))
 		}
 	} else {
-		e.texte(ix, yy, il, dol(d.Depense)+"  "+depuis+" · "+a.t("{0} runs of Claude", d.Runs), a.gras(p.encre, fond))
+		e.texte(ix, yy, il, dol(d.Depense), a.gras(p.encre, fond))
 		yy++
+		l2 = append(l2, pied)
+		if d.ArretAtteint {
+			l2 = append(l2, a.t("Automatic stop reached: the pilot starts no other cycle. Raise it or switch it off (Auto stop), then Start."))
+		}
 		l2 = append(l2, a.t("No budget: the pilot never stops for the spend. Set one in Settings › Claude › API budget (the credit left on the API account)."))
 	}
 	for _, t := range l2 {

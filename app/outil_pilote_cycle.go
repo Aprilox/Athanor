@@ -2521,6 +2521,7 @@ func lancerPilote(args []string) int {
 		if p.attendreBudget() {
 			continue
 		}
+		p.arreterSurDepense() // the automatic stop on the API spend: no new cycle past it
 
 		p.appliquerSeuilQuota()
 		if fichierRegulierPilote(filepath.Join(p.etat, "STOP")) {

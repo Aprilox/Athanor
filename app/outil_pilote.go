@@ -637,6 +637,16 @@ func (p *pilote) relireConnexion() bool {
 	return true
 }
 
+// arreterSurDepense: API mode, the automatic stop of Overview › API spend reached: the pilot starts no new
+// cycle and stops (the spend is known at the end of each cycle: it stops after the cycle that reached it).
+func (p *pilote) arreterSurDepense() {
+	c := p.connexionActuelle()
+	if atteint, depense := arretDepenseAtteint(p.kit, c); atteint {
+		p.etatPhase = "arrete"
+		p.terminer(fmt.Sprintf("API spend at %.2f $, past the automatic stop at %.2f $: the pilot stops after this cycle (Overview › API spend: raise or switch off the stop, then Start).", depense, c.Arret))
+	}
+}
+
 // attendreBudget: API mode, the budget spent: the pilot waits (true) until it is raised, counted again, or
 // another connection is set; false when there is nothing to wait for.
 func (p *pilote) attendreBudget() bool {
