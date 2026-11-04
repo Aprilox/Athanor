@@ -64,14 +64,15 @@ type PresencePC struct {
 	Cycle      int64     `json:"cycle,omitempty"`
 	Jalon      string    `json:"jalon,omitempty"` // the milestone it holds ("cadrage", "livraison" for the framing, the delivery)
 	JalonTitre string    `json:"jalon_titre,omitempty"`
-	Depuis     string    `json:"depuis,omitempty"`  // when it took it (RFC 3339, UTC)
-	Pousse     string    `json:"pousse,omitempty"`  // its last commit pushed ("abc1234 M3: …")
-	Refus      []RefusPC `json:"refus,omitempty"`   // programs it could not run, for which milestones (pcs_relais.go)
-	Parti      bool      `json:"parti,omitempty"`   // it stopped working with the others (2.36.1, which kept its branch)
-	Lien       string    `json:"lien,omitempty"`    // the master's direct address, encrypted with the team's key (equipe_directe.go)
-	Chiffre    string    `json:"chiffre,omitempty"` // a private team (its workshop through the direct link): all of it, encrypted
-	Prive      bool      `json:"prive,omitempty"`   // computed by the reader: it came encrypted
-	EnLigne    bool      `json:"en_ligne"`          // computed by the reader
+	Depuis     string    `json:"depuis,omitempty"`    // when it took it (RFC 3339, UTC)
+	Pousse     string    `json:"pousse,omitempty"`    // its last commit pushed ("abc1234 M3: …")
+	APousser   []string  `json:"a_pousser,omitempty"` // milestones it built whose push did not go yet: still its own
+	Refus      []RefusPC `json:"refus,omitempty"`     // programs it could not run, for which milestones (pcs_relais.go)
+	Parti      bool      `json:"parti,omitempty"`     // it stopped working with the others (2.36.1, which kept its branch)
+	Lien       string    `json:"lien,omitempty"`      // the master's direct address, encrypted with the team's key (equipe_directe.go)
+	Chiffre    string    `json:"chiffre,omitempty"`   // a private team (its workshop through the direct link): all of it, encrypted
+	Prive      bool      `json:"prive,omitempty"`     // computed by the reader: it came encrypted
+	EnLigne    bool      `json:"en_ligne"`            // computed by the reader
 	Moi        bool      `json:"moi,omitempty"`
 }
 
@@ -260,6 +261,7 @@ func presenceLocalePC(projet, d string) PresencePC {
 			p.Phase, p.Cycle = st.Phase, st.Cycle
 		}
 	}
+	p.APousser = lireAPousserPC(d)
 	if b, err := os.ReadFile(d + "/dernier.json"); err == nil {
 		var x struct {
 			Resultat, Commit string
@@ -480,6 +482,12 @@ func lirePCs(miroir, moi, cle string) []PresencePC {
 		for i := range p.Mots {
 			p.Mots[i] = coupeValide(p.Mots[i], 30)
 		}
+		if len(p.APousser) > 8 {
+			p.APousser = p.APousser[:8]
+		}
+		for i := range p.APousser {
+			p.APousser[i] = coupeValide(p.APousser[i], 80)
+		}
 		if len(p.Refus) > maxRefusPC {
 			p.Refus = p.Refus[:maxRefusPC]
 		}
@@ -489,7 +497,7 @@ func lirePCs(miroir, moi, cle string) []PresencePC {
 		}
 		p.EnLigne, p.Moi = p.recente(maintenant), false
 		if !p.EnLigne {
-			p.Pilote, p.Jalon, p.JalonTitre = false, "", ""
+			p.Pilote, p.Jalon, p.JalonTitre, p.APousser = false, "", "", nil
 		}
 		v = append(v, p)
 	}
@@ -940,3 +948,37 @@ func ecrireFichierPrive(f, contenu string) error {
 }
 
 func removeSiExiste(f string) { _ = os.Remove(f) }
+
+// lireAPousserPC: the milestones this computer built whose push failed (the next push that goes clears
+// them): the others leave them to it meanwhile, never building them a second time.
+func lireAPousserPC(d string) []string {
+	b, err := os.ReadFile(d + "/pcs-a-pousser")
+	if err != nil {
+		return nil
+	}
+	var v []string
+	for _, l := range strings.Split(string(b), "\n") {
+		if l = strings.TrimSpace(l); l != "" && len(v) < 8 {
+			v = append(v, l)
+		}
+	}
+	return v
+}
+
+// noterAPousserPC: the push of this milestone failed (true), or a push went: nothing is left to push.
+func noterAPousserPC(d, jalon string, echec bool) {
+	if !echec {
+		removeSiExiste(d + "/pcs-a-pousser")
+		return
+	}
+	if jalon == "" {
+		return
+	}
+	v := lireAPousserPC(d)
+	for _, x := range v {
+		if x == jalon {
+			return
+		}
+	}
+	_ = ecrireFichierPrive(d+"/pcs-a-pousser", strings.Join(append(v, jalon), "\n")+"\n")
+}

@@ -742,7 +742,7 @@ func pousserGH(args []string, w io.Writer) int {
 	case remplacer != "" && contientGH(sortie, `stale info|\[rejected\]`):
 		modele, resultat, ret = "GitHub's branch {0} changed since you looked at it: nothing was replaced. Look again.", "rejete", 5
 		n.args = []string{branche}
-	case contientGH(sortie, `non-fast-forward|fetch first|\[rejected\]|stale info`):
+	case contientGH(sortie, `non-fast-forward|fetch first|\[rejected\]|stale info|incorrect old value|cannot lock ref`):
 		modele, resultat, ret = "GitHub's branch {0} has commits the project does not have. Athanor never overwrites them: bring them into the project (GitHub page › Get GitHub's work), replace GitHub's branch with this project there, or choose another branch.", "rejete", 5
 		n.args = []string{branche}
 	case contientGH(sortie, `host key verification failed|remote host identification has changed`):
