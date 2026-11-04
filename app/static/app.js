@@ -163,10 +163,11 @@ async function majConnexionGH() {
 document.addEventListener("click", async (ev) => {
   const b = ev.target.closest("[data-connexion-gh]"); if (!b) return;
   const act = b.dataset.connexionGh;
-  if (act === "deconnecter" && !(await confirmer(t("Disconnect this computer from GitHub? The projects that use this connection are no longer linked (link them again later). The key stays listed in GitHub's Settings › SSH and GPG keys, where you can remove it."), { ok: t("Disconnect"), danger: true }))) return;
+  if (act === "deconnecter" && !(await confirmer(t("Disconnect this computer from GitHub? The projects that use this connection stay linked: they push again as soon as this computer is connected again. The key stays listed in GitHub's Settings › SSH and GPG keys, where you can remove it."), { ok: t("Disconnect"), danger: true }))) return;
   b.disabled = true;
   await action(api("github/connexion", "POST", { action: act }));
   b.disabled = false;
+  etat.ghTest = null; // a former test said what the connection was then
   if (act === "connecter") etat.ghConnexionSuivi = Date.now() + 5 * 60000;
   if (act === "garder-acces") etat.ghAccesSuivi = Date.now() + 5 * 60000;
   majConnexionGH(); if (etat.page === "projet") majGitHub();
@@ -1789,7 +1790,7 @@ function rendreGitHub(r) {
       ${cx.connecte ? "" : `<p class="muet petit">${t("Connect this computer to GitHub first (step 1).")}</p>`}</div>`;
   const cls = !d ? "" : d.resultat === "ok" ? "ok" : d.resultat === "attente" ? "muet" : "bloque";
   const quand = d && d.quand ? String(d.quand).replace("T", " ").slice(0, 16) : "";
-  const test = etat.ghTest && etat.ghTest.projet === etat.projet ? `<p class="petit ${etat.ghTest.ok ? "ok" : "bloque"}">${etat.ghTest.ok ? "✔" : "✖"} ${h(t(etat.ghTest.message_key || "", etat.ghTest.args || []))}</p>` : "";
+  const test = etat.ghTest && etat.ghTest.projet === etat.projet ? `<p class="petit ${etat.ghTest.ok ? "ok" : "bloque"}">${etat.ghTest.ok ? "✔" : "✖"} ${h(t(etat.ghTest.message_key || "", etat.ghTest.args || []))}</p>${!etat.ghTest.ok && etat.ghTest.detail ? `<p class="muet petit"><code>${h(etat.ghTest.detail)}</code></p>` : ""}` : "";
   return `<h2>GitHub</h2>${manque}
     <p class="gh-statut"><span class="ok">✔</span> ${t("Linked to")} <b>${h(g.depot)}</b> · ${t("branch")} <code>${h(g.branche)}</code>${g.compte ? ` · ${t("account")} ${h(g.compte)}` : ""} <button class="btn btn-petit" data-gh="ouvrir">${t("Open on GitHub")}</button></p>
     <div class="ligne"><button class="btn" data-gh="tester">${t("Test the connection")}</button><button class="btn" data-gh="pousser">${t("Push now")}</button><button class="btn btn-primaire" data-gh="wip" title="${h(t("Commits what is in the folder now (“M3: … (in progress)”) and pushes it, without Claude: someone else can take over, even with no quota left."))}">${t("Save and push the work in progress")}</button>${d && d.resultat === "bloque" && d.sha ? `<button class="btn btn-danger" data-gh="malgre" data-sha="${h(d.sha)}">${t("Push anyway")}</button>` : ""}</div>

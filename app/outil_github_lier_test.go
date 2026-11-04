@@ -29,6 +29,11 @@ shift
 case "$*" in
   user) echo '{"login":"moi","id":42,"name":"Moi Même"}' ;;
   user/emails) echo '[{"email":"m@x.org","verified":true},{"email":"no@x.org","verified":false},{"email":"pas un email","verified":true}]' ;;
+  *"POST user/repos -f name=vide "*|*"POST user/repos -f name=plein "*) echo '{"message":"Repository creation failed.","errors":[{"resource":"Repository","code":"custom","field":"name","message":"name already exists on this account"}]}'; echo "gh: Repository creation failed. (HTTP 422)" >&2; exit 1 ;;
+  *"POST user/repos -f name=interdit "*) echo '{"message":"Repository creation failed.","errors":[{"message":"name is reserved"}]}'; echo "gh: Repository creation failed. (HTTP 422)" >&2; exit 1 ;;
+  repos/moi/vide) echo '{"full_name":"moi/vide","size":0}' ;;
+  repos/moi/vide/branches) echo '[]' ;;
+  repos/moi/plein) echo '{"full_name":"moi/plein","size":12}' ;;
   *"POST user/repos -f name=existe"*) echo '{"message":"Repository creation failed."}'; echo "name already exists on this account" >&2; exit 1 ;;
   *"POST user/repos -f name="*) n=${3#*name=}; n=$(printf '%s' "$*" | sed 's/.*name=\([^ ]*\).*/\1/'); echo "{\"full_name\":\"moi/$n\"}" ;;
   repos/moi/vieux) echo '{"full_name":"moi/vieux","permissions":{"admin":true},"archived":false,"default_branch":"dev"}' ;;
@@ -134,6 +139,25 @@ func TestLierGitHub(t *testing.T) {
 		t.Errorf("sign-in kept: %v", l)
 	}
 	// a name taken
+	// GitHub's 422 (gh says only "HTTP 422"): an empty repository of the same name (an earlier try made it)
+	// is linked; one with commits, or another reason, is said
+	for _, c := range []struct{ nom, attendu string }{
+		{"plein", `You already have a repository named plein: choose "Use one of my repositories" (moi/plein), or another name.`},
+		{"interdit", "GitHub refused to create the repository: Repository creation failed. name is reserved"}} {
+		p := filepath.Join(t.TempDir(), c.nom)
+		_ = os.MkdirAll(filepath.Join(p, ".athanor"), 0o755)
+		if out, code := lier("", p, "creer", c.nom); code != 1 || !strings.Contains(out, c.attendu) {
+			t.Errorf("%s: %d %q", c.nom, code, out)
+		}
+	}
+	pv := filepath.Join(t.TempDir(), "vide")
+	_ = os.MkdirAll(filepath.Join(pv, ".athanor"), 0o755)
+	if out, code := lier("", pv, "creer", "vide"); code != 0 || !strings.Contains(out, "The repository moi/vide exists already and is empty (an earlier try created it): linked to it.") {
+		t.Errorf("vide: %d %q", code, out)
+	}
+	if r, lie := lireReglagesGH(dossierGH(pv)); !lie || r.Depot != "moi/vide" || !r.Connexion {
+		t.Errorf("vide not linked: %+v", r)
+	}
 	if out, code := lier("", projet, "creer", "existe"); code != 1 || !strings.Contains(out, `You already have a repository named existe: choose "Use one of my repositories" (moi/existe), or another name.`) {
 		t.Errorf("existe: %d %q", code, out)
 	}

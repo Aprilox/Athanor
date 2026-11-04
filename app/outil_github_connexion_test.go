@@ -88,11 +88,15 @@ func TestLierCompteGitHub(t *testing.T) {
 		if cle, _ := fichiersCleGH(d, r); cle != dossierConnexionGH()+"/cle" || !strings.Contains(commandeSSHGH(d, "22"), filepath.ToSlash(dossierConnexionGH())) {
 			t.Fatalf("the project does not push with the connection's key: %s", cle)
 		}
-		// disconnected: no longer linked
+		// disconnected: still linked, it says why it does not push (connected again, it pushes again)
 		var o bytes.Buffer
 		deconnecterGH(nil, &o)
-		if _, lie := lireReglagesGH(d); lie {
-			t.Fatal("still linked once the computer is disconnected")
+		if _, lie := lireReglagesGH(d); !lie {
+			t.Fatal("unlinked once the computer is disconnected")
+		}
+		o.Reset()
+		if code := pousserGH([]string{m.projet}, &o); code != 1 || !strings.Contains(o.String(), "no longer connected to GitHub") {
+			t.Fatalf("pushed while disconnected: %d %s", code, o.String())
 		}
 	})
 	// a repository the account cannot reach

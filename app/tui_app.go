@@ -327,7 +327,13 @@ func (a *appTUI) agirAvec(methode, chemin string, corps any, ensuite func(rep ma
 						args = append(args, x)
 					}
 				}
-				a.annoncer(a.t(cle, args...), false)
+				texte := a.t(cle, args...)
+				if d, _ := rep["detail"].(string); d != "" { // what git or ssh said (GitHub's test)
+					texte += " (" + d + ")"
+				}
+				echoue, _ := rep["ok"].(bool)
+				_, aOk := rep["ok"]
+				a.annoncer(texte, aOk && !echoue)
 			}
 			a.derniere["etat"] = time.Time{}
 			if ensuite != nil {
