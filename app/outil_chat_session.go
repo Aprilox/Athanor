@@ -78,6 +78,8 @@ func sessionChat(kit, projet, id, mode, modele, session string) int {
 	cmd := commandeContexte(ctx, claude, args...)
 	cmd.Stdout, cmd.Stderr = sortie, erreurs
 	err = cmd.Run()
+	_ = sortie.Sync()
+	noterDepense(kit, lireConnexionClaude(kit, nil).Mode, coutJournalClaude(c+".jsonl"), filepath.Base(projet), "chat")
 	code := 0
 	if err != nil {
 		code = 1

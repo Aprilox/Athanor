@@ -478,6 +478,9 @@ textarea.en-attente { opacity: .55; }
 /* --- settings (.env) */
 .reglage { display: grid; grid-template-columns: 300px 1fr; gap: 16px; padding: 10px 0; border-bottom: 1px solid var(--line-2); align-items: start; }
 .reglage:last-child { border-bottom: 0; }
+.reglage[hidden], .avert-connexion[hidden] { display: none; }
+.avert-connexion { margin-top: 10px; padding: 10px 12px; border-left: 3px solid var(--attention); background: color-mix(in srgb, var(--attention) 10%, transparent); border-radius: 6px; line-height: 1.5; }
+.avert-connexion b { color: var(--attention); }
 .reglage .cle { font-family: var(--mono); font-size: 13px; font-weight: 600; }
 .reglage .aide { color: var(--muted); font-size: 12.5px; }
 .reglage .nom-reglage { font-weight: 600; }

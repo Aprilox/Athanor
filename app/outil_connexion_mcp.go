@@ -18,6 +18,8 @@ func init() {
 // chargerEnvKit: the tool's .env into this process (KEY=VALUE lines, never executed; what is already set
 // stays), and the PATH Claude Code and the gateways are found in.
 func chargerEnvKit(kit string) {
+	origine := origineConnexion()
+	defer appliquerConnexionProcessus(kit, origine) // only the chosen connection (connexion_claude.go)
 	if b, err := os.ReadFile(filepath.Join(kit, ".env")); err == nil {
 		for _, l := range strings.Split(string(b), "\n") {
 			if m := reCleEnvPilote.FindStringSubmatch(strings.TrimSuffix(l, "\r")); m != nil {

@@ -109,7 +109,7 @@ func (a *appTUI) couleurPhase(pv ProjetVue) couleurT {
 		return p.muet
 	}
 	switch pv.Phase {
-	case "quota", "attente_vous":
+	case "quota", "budget", "attente_vous":
 		return p.attention
 	case "erreur", "connexion":
 		return p.erreur
@@ -270,9 +270,16 @@ func (a *appTUI) raccourcisPage() []raccourci {
 		}
 		r = []raccourci{{"i", t("Write")}, {"c", t("New conversation")}, {"m", t("Model") + ": " + m}}
 	case pSante:
-		r = []raccourci{{"v", t("Check everything")}, {"Enter", t("Check")}, {"r", t("Repair")}, {"I", t("Install everything")}, {"T", t("Token")}}
+		jeton := t("Token")
+		if a.modeAPITUI() {
+			jeton = t("API key")
+		}
+		r = []raccourci{{"v", t("Check everything")}, {"Enter", t("Check")}, {"r", t("Repair")}, {"I", t("Install everything")}, {"T", jeton}}
 	case pSuivi:
 		r = []raccourci{{"M", t("Manage")}, {"g", t("Get GitHub's work")}}
+		if a.vue != nil && a.vue.Depense != nil {
+			r = append(r, raccourci{"$", t("Count again from now")})
+		}
 	case pDistance:
 		r = a.raccourcisDistance()
 	default:
@@ -442,6 +449,8 @@ func (a *appTUI) phrase() (string, string, couleurT) {
 		return titre, strings.Join(sous, " · "), p.ok
 	case "quota":
 		return t("Usage limit reached, Claude is waiting"), t("Resumes {0} · cycle {1}", firstNonEmpty(e.ReprisePrevue, t("as soon as possible")), e.Cycle), p.attention
+	case "budget":
+		return t("API budget or credit used up, Claude is waiting"), t("Raise the budget, count again (API spend, below) or put another API key in Settings: the pilot resumes at once."), p.attention
 	case "attente_vous":
 		return t("Claude is waiting for you"), t("{0} task(s) on the For you page: the pilot resumes as soon as you answer one.", v.PourVous), p.attention
 	case "entre_cycles":
@@ -449,7 +458,7 @@ func (a *appTUI) phrase() (string, string, couleurT) {
 	case "erreur":
 		return t("Error, retry scheduled"), e.Etat, p.erreur
 	case "connexion":
-		return t("Connection problem"), t("Check the token in Settings, or go through Setup & health."), p.erreur
+		return t("Connection problem"), t("Check the token or the API key in Settings, or go through Setup & health: a new one is used at once."), p.erreur
 	case "termine":
 		return t("Project finished"), t("The deliverable and the final report are in the project folder. To go on, add a request or a note, then Start."), p.ok
 	}
@@ -488,6 +497,9 @@ func (a *appTUI) pageSuivi(e *ecranT, x, y, l, h int) {
 	nq := 0
 	if a.vue.Quota != nil {
 		nq = len(a.vue.Quota.Fenetres)
+	}
+	if a.vue.Depense != nil {
+		nq = 1 // API mode: the spend in its place
 	}
 	hq = 3 + max(1, nq*3)
 	if large {
@@ -703,6 +715,10 @@ func (a *appTUI) nomFenetre(n string) string {
 }
 
 func (a *appTUI) boiteQuota(e *ecranT, x, y, l, h int) {
+	if a.vue.Depense != nil {
+		a.boiteDepense(e, x, y, l, h)
+		return
+	}
 	p := a.pal
 	fond := p.panneau
 	ix, iy, il, ih := a.boite(e, x, y, l, h, a.t("Subscription quota"), false)
@@ -754,6 +770,57 @@ func (a *appTUI) boiteQuota(e *ecranT, x, y, l, h int) {
 	}
 	if q.Statut == "rejected" && yy < iy+ih {
 		e.texte(ix, yy, il, a.t("Limit reached: the pilot waits for it to start again."), a.st(p.attention, fond))
+	}
+}
+
+// boiteDepense: API mode (connexion_claude.go): the spend since the count started, against the budget.
+func (a *appTUI) boiteDepense(e *ecranT, x, y, l, h int) {
+	p := a.pal
+	fond := p.panneau
+	ix, iy, il, ih := a.boite(e, x, y, l, h, a.t("API spend"), false)
+	d := a.vue.Depense
+	dol := func(v float64) string { return strconv.FormatFloat(v, 'f', 2, 64) + " $" }
+	depuis := a.t("since Athanor 2.49")
+	if d.Depuis > 0 {
+		depuis = a.t("since {0}", a.quandLisible(d.Depuis))
+	}
+	var l2 []string
+	yy := iy
+	if !d.Cle {
+		e.texte(ix, yy, il, a.t("API mode is chosen, but no API key is set: Settings › Claude."), a.st(p.attention, fond))
+		yy++
+	}
+	if d.Budget > 0 {
+		pct := int(math.Min(100, math.Round(d.Depense/d.Budget*100)))
+		coul := p.accent
+		if d.Atteint || pct >= 90 {
+			coul = p.erreur
+		} else if pct >= 70 {
+			coul = p.attention
+		}
+		val := strconv.Itoa(pct) + " %"
+		e.texte(ix, yy, il-8, a.t("{0} of {1}", dol(d.Depense), dol(d.Budget)), a.gras(p.encre, fond))
+		e.texte(ix+il-largeurTexte(val), yy, 0, val, a.gras(coul, fond))
+		if yy+1 < iy+ih {
+			e.barre(ix, yy+1, il, float64(pct)/100, a.st(coul, fond), a.st(p.ligne, fond))
+		}
+		yy += 2
+		l2 = append(l2, a.t("{0} left", dol(math.Max(0, d.Budget-d.Depense)))+" · "+depuis+" · "+a.t("{0} runs of Claude", d.Runs))
+		if d.Atteint {
+			l2 = append(l2, a.t("Budget spent: the pilot waits. Raise it in Settings, count again from now, or put another API key: it resumes at once."))
+		}
+	} else {
+		e.texte(ix, yy, il, dol(d.Depense)+"  "+depuis+" · "+a.t("{0} runs of Claude", d.Runs), a.gras(p.encre, fond))
+		yy++
+		l2 = append(l2, a.t("No budget: the pilot never stops for the spend. Set one in Settings › Claude › API budget (the credit left on the API account)."))
+	}
+	for _, t := range l2 {
+		for _, li := range envelopper(t, il) {
+			if yy < iy+ih {
+				e.texte(ix, yy, il, li, a.st(p.muet, fond))
+				yy++
+			}
+		}
 	}
 }
 

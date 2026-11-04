@@ -302,7 +302,7 @@ The screenshots show the dark "Slate" and the "Light" palettes.
 
 | Page | What you do there |
 |---|---|
-| **Overview** | the state in one sentence, current milestone, the last commit of this computer and the last one on GitHub (and why a push did not go), ticked plan, the computers working on the project (what each one builds), the subscription quota (5 hours, the week) with an automatic stop at the threshold you choose, the progress and its projection (when the last milestone should land, time and cost), usage per cycle (time, list-price cost, cache); *Start*, *Stop after cycle*, *Stop now*, *Working mode* |
+| **Overview** | the state in one sentence, current milestone, the last commit of this computer and the last one on GitHub (and why a push did not go), ticked plan, the computers working on the project (what each one builds), the subscription quota (5 hours, the week) with an automatic stop at the threshold you choose (with an API key: the API spend against your budget), the progress and its projection (when the last milestone should land, time and cost), usage per cycle (time, list-price cost, cache); *Start*, *Stop after cycle*, *Stop now*, *Working mode* |
 | **Team** | a tree: the lead and each worker with the sub-agents it called; click a sub-agent for the brief it was given and the report it handed back; the model each one runs on; who can be called, and your own sub-agents (create, edit, remove) |
 | **For you** | what Claude needs from you: each task with its steps and links, a protected field for each key it asks for, files; *It's done* or *Skip: find another way*; Claude's verdict (verified, or what is still missing) and the history. A badge in the menu, a banner on Overview and a system notification announce a new task |
 | **Requests** | the current request and its plan, the queued requests (time-stamped, reorderable), notes along the way; ✨ *Improve with Claude* rewrites a request clearer and more complete, and you can go back to yours; 📎 attach files to a request (specification, mock-ups, photos, PDF, data): they stay in the workshop and Claude reads them with the request |
@@ -361,7 +361,7 @@ On Linux and macOS, Athanor also runs in the terminal, like btop or htop: the sa
 - **Open it**: `./athanor tui` in Athanor's folder (or the downloaded file: `./Athanor-Linux-x64 tui`). Through SSH (`SSH_CONNECTION` set), or on a Linux without a screen (no `DISPLAY` nor `WAYLAND_DISPLAY`), `./athanor` alone opens it. `./athanor gui` opens the window whatever the guess.
 - **On a server**: run Athanor as a normal user, not as root: Claude Code refuses to work as root (Setup & health says so, and *Start* refuses). On a fresh VPS: `adduser NAME`, `usermod -aG sudo NAME`, log in as `NAME`, then `./Athanor-Linux-x64`.
 - **With Athanor already open** (its window, or another terminal): `./athanor tui` shows that same Athanor. When the terminal is the one that started Athanor, Athanor stops with it (the pilots keep running); *w* opens the window as well, on a computer with a screen.
-- **Pages**: *1* Overview (the state, the last commit here and on GitHub, the quota, the cycles and the plan), *2* Log (live; *o*, *r*, *u* filter tools, results and sub-agents, */* searches, *f* follows), *3* Requests (*n* a new one, *e* a note along the way, *d* deletes, *Alt+↑/↓* reorders), *4* Chat (its field is ready as soon as the page opens: *Enter* sends, *Alt+Enter* a new line; *Esc* leaves it for *c* a new conversation and *m* the model, *i* comes back to it), *5* Setup & health (*v* checks everything, *r* repairs and *I* installs everything right in the terminal, each command shown and sudo answered there, then Athanor comes back; *T* the token). *6* For you (*Enter* answers, with the values asked for in hidden fields; *k* skips), *7* Team, *8* GitHub (*c* connects this computer in the terminal, *l* links one of your repositories, *r* creates a private one, *p* pushes, *a* automatic push, *u* unlinks), *9* Settings (*Enter* edits a setting, secrets hidden; *l*, *p*, *a* the language, the palette, the accent), *0* Remote (*o* switches remote access on or off, the pairing QR code drawn in the terminal with its link, *v* shows the 6 digits for 10 seconds, *r* renames and *d* removes a trusted device: a server reached through SSH pairs a phone this way, with no window). On pages 8, 9 and 0 their own letters come first, small or capital. The forms have *Save* and *Cancel* buttons (Tab, or a click; *F2* saves too); a form the server refuses stays open with the reason, and closing one with text in it asks first.
+- **Pages**: *1* Overview (the state, the last commit here and on GitHub, the quota or, with an API key, the spend (*$* counts it again from now), the cycles and the plan), *2* Log (live; *o*, *r*, *u* filter tools, results and sub-agents, */* searches, *f* follows), *3* Requests (*n* a new one, *e* a note along the way, *d* deletes, *Alt+↑/↓* reorders), *4* Chat (its field is ready as soon as the page opens: *Enter* sends, *Alt+Enter* a new line; *Esc* leaves it for *c* a new conversation and *m* the model, *i* comes back to it), *5* Setup & health (*v* checks everything, *r* repairs and *I* installs everything right in the terminal, each command shown and sudo answered there, then Athanor comes back; *T* the token, or the API key in API mode). *6* For you (*Enter* answers, with the values asked for in hidden fields; *k* skips), *7* Team, *8* GitHub (*c* connects this computer in the terminal, *l* links one of your repositories, *r* creates a private one, *p* pushes, *a* automatic push, *u* unlinks), *9* Settings (*Enter* edits a setting, secrets hidden; *l*, *p*, *a* the language, the palette, the accent), *0* Remote (*o* switches remote access on or off, the pairing QR code drawn in the terminal with its link, *v* shows the 6 digits for 10 seconds, *r* renames and *d* removes a trusted device: a server reached through SSH pairs a phone this way, with no window). On pages 8, 9 and 0 their own letters come first, small or capital. The forms have *Save* and *Cancel* buttons (Tab, or a click; *F2* saves too); a form the server refuses stays open with the reason, and closing one with text in it asks first.
 - **Everywhere**: *s* Start (with the same questions as the window: no request yet, tools not installed, GitHub ahead), *a* Stop after cycle (again: let it go on), *x* Stop now, *p* or *[ ]* the project, *N* a new project, *M* manages it (rename, archive, remove from the list; the archived ones come back from *p*), *g* Get GitHub's work, *?* every key, *q* quits. The mouse clicks projects, pages and lines; the wheel scrolls.
 - **Its look**: the app's palette and accent, its language, in 24-bit colours when the terminal says it has them (else 256). Over SSH the terminal does not always say so: `ATHANOR_COULEURS=24 ./athanor tui` forces them. While the terminal serves Athanor, what Athanor prints goes to `logs/terminal.log`.
 
@@ -433,7 +433,10 @@ Everything is editable in the app (*Settings*), or in `.env` ([`.env.example`](.
 
 | Key | Role |
 |---|---|
+| `CLAUDE_AUTH` | how Athanor connects to Claude: `subscription` (default: the token below, your plan's quota) or `api` (an API key, each run billed to the API account) |
 | `CLAUDE_CODE_OAUTH_TOKEN` | token of your subscription (`claude setup-token`), never shared |
+| `ANTHROPIC_API_KEY` | API key (`api` mode), created on console.anthropic.com › API keys, never shared |
+| `API_BUDGET_USD` | `api` mode: the most to spend, in dollars (the credit left on the API account); empty = no limit |
 | `MODEL` / `FALLBACK_MODEL` / `SUBAGENT_MODEL` | lead model, model used while the lead's quota is exhausted, sub-agents model (`auto`: chosen by the lead for each call) |
 | `CHEAP_MODEL` | model of the `executor` sub-agent (default `haiku`) |
 | `FRAMING_MODEL` / `WORKER_MODEL` | model of the framing cycle (empty = `MODEL`), model of the parallel workers (default `sonnet`, empty = `MODEL`) |
@@ -450,6 +453,10 @@ Everything is editable in the app (*Settings*), or in `.env` ([`.env.example`](.
 | `UE_DIR`, `BLENDER_EXE`, `ANDROID_SDK_DIR`, `ANDROID_JDK_DIR` | tool paths when auto-detection misses them (optional, absent by default) |
 
 When the quota is exhausted for every model, the pilot waits for it to reopen and resumes on its own.
+
+**Subscription or API key.** *Settings → Claude → Connection → Connect with*: your Claude subscription (its token) or an API key. Only the chosen one reaches Claude Code (with both, Claude Code would bill the key). With an API key, the plugins and connectors of a claude.ai account (Gmail, Drive… added in the Claude app) do not work; the Skills, the MCP servers and every extension of Athanor work the same. *Setup & health* checks the key, and *Overview* shows the **API spend** in place of the subscription quota: what Claude Code reported for each run (list price) since the count started, against `API_BUDGET_USD` when set (spent, left). Once the budget is spent, or when the API says the account has no credit left, the pilot waits instead of failing cycle after cycle. *Count again from now* (credit added), a higher budget or another key, and it resumes at once. Saving a new key, or a first budget, starts the count again; a budget raised later keeps it. In a terminal: `athanor depense [zero]`.
+
+**A new connection, at once.** The pilot reads the connection again at each cycle and every few seconds of its waits: a token or a key saved in *Settings* while it waits for a quota, a connection problem, the budget or the credit (another account, a key with credit left) is used at once, the wait cut short. The fallback model and the workers' pause of the old account are let go.
 
 ---
 
@@ -495,7 +502,8 @@ Everything the app does is a command of the executable (`Athanor.exe` on Windows
 | Command | |
 |---|---|
 | `installer` | install everything (Linux, macOS, the WSL side); Windows: `installer-windows` (WSL) or `installer-natif` |
-| `configurer` | token, models, options (the language is set in the app) |
+| `configurer` | connection (subscription token or API key, budget), models, options (the language is set in the app) |
+| `depense [zero]` | the connection, and with an API key the spend against the budget; `zero` counts it again from now |
 | `demarrer [--background] DIR` | start the pilot on a project |
 | `suivre DIR` | follow it live |
 | `arreter --apres-cycle DIR` | stop cleanly after the current milestone |
@@ -553,7 +561,7 @@ Inside each project, `.athanor/` holds REQUEST.md, PLAN.md, LOG.md, queue/, done
 <details>
 <summary><b>What does it cost?</b></summary>
 
-Only your Claude subscription: Athanor chains Claude Code sessions, nothing else. The most capable models use quota fastest; Sonnet lasts longer. `FALLBACK_MODEL` keeps working while the main model's quota is exhausted, and `CHEAP_MODEL` handles the mechanical work. The Overview page shows the cost of every cycle at list price, which is what your subscription quota pays.
+Only your Claude subscription: Athanor chains Claude Code sessions, nothing else. The most capable models use quota fastest; Sonnet lasts longer. `FALLBACK_MODEL` keeps working while the main model's quota is exhausted, and `CHEAP_MODEL` handles the mechanical work. The Overview page shows the cost of every cycle at list price, which is what your subscription quota pays. With an API key instead (*Settings → Claude → Connection*), each run is billed to the API account at that price: the Overview then shows the spend against the budget you set, and the pilot waits once it is spent.
 </details>
 
 <details>
@@ -608,7 +616,7 @@ Yes. Nothing is tied to a user name or a drive letter: paths come from your prof
 Push a version tag: GitHub first runs every CI check on the tagged commit (tests on Windows, Linux and macOS, the single executable, every build target), then builds the apps and publishes the release ([`.github/workflows/release.yml`](.github/workflows/release.yml)). If a single check fails (or anything after it), nothing is published: the tag is removed, and the release too if it was already created, so Athanor's updates never offer it. Fix, commit, then push the same tag again (`git tag -f v2.42.0 && git push origin v2.42.0`):
 
 ```bash
-git tag v2.48.1 && git push origin v2.48.1
+git tag v2.49.0 && git push origin v2.49.0
 ```
 
 Keep the version in [`app/winres/athanor.rc`](app/winres/athanor.rc) and `versionAthanor` in [`app/commandes.go`](app/commandes.go) in step with the tag (a test checks they match), and write what is new in `docs/releases/VERSION.md` (e.g. [`docs/releases/2.31.0.md`](docs/releases/2.31.0.md)): it opens the release page.

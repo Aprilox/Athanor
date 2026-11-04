@@ -5,7 +5,7 @@ const CSRF = document.querySelector('meta[name="csrf"]').content;
 const $ = (s, r = document) => r.querySelector(s);
 const h = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 // pilot phase (STATE.json) -> status dot class
-const classePhase = (x) => !x || !x.actif ? "" : ({ travail: "travaille", quota: "quota", attente_vous: "quota", erreur: "erreur", connexion: "erreur", entre_cycles: "entre_cycles" }[x.phase] || "travaille");
+const classePhase = (x) => !x || !x.actif ? "" : ({ travail: "travaille", quota: "quota", budget: "quota", attente_vous: "quota", erreur: "erreur", connexion: "erreur", entre_cycles: "entre_cycles" }[x.phase] || "travaille");
 // escaped text with `code` spans rendered (the plan and requests are Markdown-ish)
 const md = (s) => h(s).replace(/`([^`]+)`/g, "<code>$1</code>");
 // a milestone as the pilot reports it is the full plan line: find its short title in the plan
@@ -587,10 +587,11 @@ function phraseEtat(v) {
     case "arrete": return { classe: "", titre: t("Pilot stopped"), sous: e.dernier_commit ? t("Last saved work: {0}", [e.dernier_commit]) : t("Click Start to resume.") };
     case "travail": return { classe: "travaille", titre: e.ouvriers ? t("{0} workers in parallel: {1}", [e.ouvriers.split(/\s+/).length, e.ouvriers.split(/\s+/).join(", ")]) : /^Merging/.test(e.etat || "") ? t("The lead merges the workers' branches") : e.jalon_en_cours ? t("Claude is working on {0}", [titreJalon(e.jalon_en_cours)]) : t("Claude is working"), sous: [e.debut_cycle && t("for {0}", [depuis(e.debut_cycle)]), t("cycle {0}", [e.cycle]), e.template, v.eco && t("eco mode"), v.contexte && t("context {0} tokens", [fmtTokens(v.contexte)])].filter(Boolean).join(" · ") };
     case "quota": return { classe: "quota", titre: t("Usage limit reached, Claude is waiting"), sous: t("Resumes {0} · cycle {1}", [e.reprise_prevue || t("as soon as possible"), e.cycle]) };
+    case "budget": return { classe: "quota", titre: t("API budget or credit used up, Claude is waiting"), sous: t("Raise the budget, count again (API spend, below) or put another API key in Settings: the pilot resumes at once.") };
     case "attente_vous": return { classe: "quota", titre: t("Claude is waiting for you"), sous: t("{0} task(s) on the For you page: the pilot resumes as soon as you answer one.", [v.pour_vous || 0]) };
     case "entre_cycles": return { classe: "entre_cycles", titre: t("Between two cycles"), sous: t("Cycle {0} is done, the next one starts with a fresh context.", [e.cycle]) };
     case "erreur": return { classe: "erreur", titre: t("Error, retry scheduled"), sous: e.etat };
-    case "connexion": return { classe: "connexion", titre: t("Connection problem"), sous: t("Check the token in Settings, or go through Setup & health.") };
+    case "connexion": return { classe: "connexion", titre: t("Connection problem"), sous: t("Check the token or the API key in Settings, or go through Setup & health: a new one is used at once.") };
     case "termine": return { classe: "", titre: t("Project finished"), sous: t("The deliverable and the final report are in the project folder. To go on, add a request or a note, then Start.") };
     default: return { classe: "", titre: e.etat ? t(e.etat) : t("Pilot started"), sous: t("cycle {0}", [e.cycle || 0]) };
   }
@@ -769,7 +770,7 @@ function rendreSelecteur(v) {
   const avaitFocus = document.activeElement && document.activeElement.id === "sel-recherche";
   const pos = avaitFocus ? document.activeElement.selectionStart : 0;
   m.innerHTML = `<input type="text" id="sel-recherche" placeholder="${h(t("Search a project…"))}" value="${h(etat.rechercheProjet || "")}">
-    <div class="menu-liste">${liste.map((x) => `<a href="#suivi" data-projet="${h(x.nom)}" class="${x.courant ? "actif" : ""}"><span class="dot ${classePhase(x)}"></span><span class="nom">${h(x.nom)}</span><span class="muet petit">${x.actif ? t(x.phase === "quota" || x.phase === "attente_vous" ? "waiting" : "running") : t("stopped")}${x.attente ? " · " + t("{0} queued", [x.attente]) : ""}${x.pour_vous ? " · " + t("{0} for you", [x.pour_vous]) : ""}</span></a>`).join("") || `<div class="vide">${t("No project.")}</div>`}</div>
+    <div class="menu-liste">${liste.map((x) => `<a href="#suivi" data-projet="${h(x.nom)}" class="${x.courant ? "actif" : ""}"><span class="dot ${classePhase(x)}"></span><span class="nom">${h(x.nom)}</span><span class="muet petit">${x.actif ? t(x.phase === "quota" || x.phase === "budget" || x.phase === "attente_vous" ? "waiting" : "running") : t("stopped")}${x.attente ? " · " + t("{0} queued", [x.attente]) : ""}${x.pour_vous ? " · " + t("{0} for you", [x.pour_vous]) : ""}</span></a>`).join("") || `<div class="vide">${t("No project.")}</div>`}</div>
     ${v.projet ? `<a href="#projet" class="menu-nouveau menu-gerer">⚙ ${t("Manage this project")}</a>` : ""}
     <a href="#nouveau" class="menu-nouveau">+ ${t("New project")}</a>
     <a href="#rejoindre" class="menu-nouveau">⇄ ${t("Join a project")}</a>
@@ -1266,6 +1267,28 @@ function rendreQuota(q, regles) {
     <div class="muet petit mt-1">${q.statut === "rejected" ? `<span class="attention">${t("Limit reached: the pilot waits for it to start again.")}</span> ` : ""}${vieux ? t("As of the last cycle, {0} ago: it may have changed since.", [age < 7200 ? t("{0} min", [Math.round(age / 60)]) : t("{0} h", [Math.round(age / 3600)])]) : t("As Claude Code reported it a moment ago.")}</div></div>`;
 }
 
+// rendreDepense: API mode (connexion_claude.go): what Claude cost since the count started, against the
+// budget when one is set, in place of the subscription's quota
+function rendreDepense(d) {
+  const dol = (x) => (x || 0).toFixed(2) + " $";
+  const depuis = d.depuis ? t("since {0}", [quandLisible(d.depuis)]) : t("since Athanor 2.49");
+  let corps;
+  if (d.budget) {
+    const pct = Math.min(100, Math.round((d.depense / d.budget) * 100));
+    const classe = d.atteint || pct >= 90 ? "plein" : pct >= 70 ? "haut" : "";
+    corps = `<div class="quota-ligne ${classe}">
+      <div class="ligne m0"><b>${h(t("{0} of {1}", [dol(d.depense), dol(d.budget)]))}</b><span class="espace"></span><span>${pct} %</span></div>
+      <div class="barre m0 quota-barre"><i style="width:${pct}%"></i></div>
+      <div class="ligne m0 quota-pied"><span class="muet petit">${h(t("{0} left", [dol(Math.max(0, d.budget - d.depense))]))} · ${h(depuis)} · ${h(t("{0} runs of Claude", [d.runs || 0]))}</span></div></div>
+      ${d.atteint ? `<p class="petit"><span class="attention">${t("Budget spent: the pilot waits. Raise it in Settings, count again from now, or put another API key: it resumes at once.")}</span></p>` : ""}`;
+  } else {
+    corps = `<div class="quota-ligne"><div class="ligne m0"><b>${h(dol(d.depense))}</b><span class="espace"></span><span class="muet petit">${h(depuis)} · ${h(t("{0} runs of Claude", [d.runs || 0]))}</span></div></div>
+      <p class="muet petit">${t("No budget: the pilot never stops for the spend. Set one in Settings › Claude › API budget (the credit left on the API account).")}</p>`;
+  }
+  return `<div class="bloc quota-bloc"><h2>${t("API spend")}</h2>${!d.cle ? `<p class="petit"><span class="attention">${t("API mode is chosen, but no API key is set: Settings › Claude.")}</span></p>` : ""}${corps}
+    <div class="ligne mt-1"><span class="muet petit croit">${t("Counted by Athanor from what Claude Code reports at the end of each run (list price): the API account's own balance is on console.anthropic.com.")}</span><button class="btn btn-petit" type="button" id="depense-zero" title="${h(t("Credit added, or a new count: the spend starts again from 0 now."))}">${t("Count again from now")}</button></div></div>`;
+}
+
 // --- progress: the milestones done over time, the projection to the last one (time and cost), the cost of
 // each cycle. A cycle that ends with a new commit is a milestone done (one milestone per cycle); the curve
 // is anchored on the true count of the plan.
@@ -1407,7 +1430,7 @@ pages.suivi = async () => {
         <button class="btn btn-petit" data-ouvrir="deliverable">${t("Deliverable")}</button>
       </div>
     </div>
-    ${rendreQuota(v.quota, v.quota_arret)}</div>
+    ${v.depense ? rendreDepense(v.depense) : rendreQuota(v.quota, v.quota_arret)}</div>
     <div class="bloc bloc-plan"><div class="bloc-tete"><h2>${t("Project plan")}</h2>${plan.length ? boutonDefil("plan") : ""}</div>
       ${plan.length ? `<div class="barre"><i style="width:${(faits / plan.length) * 100}%"></i></div><div class="muet petit">${t("{0} / {1} milestones done", [faits, plan.length])}</div>
       <ul class="plan">${listePlan(plan, false)}</ul>`
@@ -2893,7 +2916,8 @@ async function rendreSortie() {
 // names (the variable stays shown small, as in the documentation); "Options": the application's.
 // The labels of the settings Athanor knows: [group, name]. Unknown ones go to "Advanced".
 const REGLAGES = {
-  CLAUDE_CODE_OAUTH_TOKEN: ["connexion", "Connection token"],
+  CLAUDE_AUTH: ["connexion", "Connect with"], CLAUDE_CODE_OAUTH_TOKEN: ["connexion", "Connection token"],
+  ANTHROPIC_API_KEY: ["connexion", "API key"], API_BUDGET_USD: ["connexion", "API budget"],
   MODEL: ["modeles", "Model of the lead"], FALLBACK_MODEL: ["modeles", "Fallback model"],
   FRAMING_MODEL: ["modeles", "Model of the framing"], WORKER_MODEL: ["modeles", "Model of the parallel workers"],
   SUBAGENT_MODEL: ["modeles", "Model of the sub-agents"], CHEAP_MODEL: ["modeles", "Cheap model"], EFFORT: ["modeles", "Thinking effort"],
@@ -2906,6 +2930,14 @@ const REGLAGES = {
 };
 const GROUPES_REGLAGES = [["connexion", "Connection"], ["modeles", "Models"], ["marche", "How the pilot works"]];
 const EFFORTS = ["", "low", "medium", "high", "xhigh", "max"];
+// the connection (connexion_claude.go): the subscription's token or an API key; each one's settings shown
+// with it only
+const ORDRE_CONNEXION = ["CLAUDE_AUTH", "CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY", "API_BUDGET_USD"];
+const MODE_CONNEXION = { CLAUDE_CODE_OAUTH_TOKEN: "subscription", ANTHROPIC_API_KEY: "api", API_BUDGET_USD: "api" };
+function modeConnexion(v) { return String(v || "").toLowerCase() === "api" ? "api" : "subscription"; }
+function majModeConnexion(mode) {
+  document.querySelectorAll("[data-connexion]").forEach((x) => { x.hidden = x.dataset.connexion !== mode; });
+}
 
 // modeles: the proposals, from the server (the aliases, then the models this PC has used: a new model
 // appears by itself once a cycle has run on it); any other name can be typed in the field
@@ -2916,6 +2948,7 @@ function champReglage(l, modeles) {
   if (["MODEL", "FALLBACK_MODEL", "FRAMING_MODEL", "WORKER_MODEL", "CHEAP_MODEL"].includes(l.cle)) return choix(["", ...modeles], nomModele);
   if (l.cle === "SUBAGENT_MODEL") return choix(["", ...modeles, "auto"], nomModele);
   if (l.cle === "EFFORT") return choix(EFFORTS, (m) => m || t("normal"));
+  if (l.cle === "CLAUDE_AUTH") return choix(["subscription", "api"], (m) => t(m === "api" ? "API key (paid per use)" : "Claude subscription (token)"));
   if (l.cle === "KEEP_AWAKE") return choix(["1", "screen", "0"], (m) => t({ "1": "PC awake", screen: "PC and screen awake", "0": "no" }[m]));
   if (["RTK", "PONYTAIL", "UNREAL_MCP", "CLOSE_AFTER_MILESTONE"].includes(l.cle) && (l.valeur === "0" || l.valeur === "1")) return `<label class="interrupteur m0"><input type="checkbox" id="${id}" data-cle="${h(l.cle)}" ${l.valeur === "1" ? "checked" : ""}> <span>${l.valeur === "1" ? t("enabled") : t("disabled")}</span></label>`;
   return `<input type="${l.secret && !etat.envSecrets ? "password" : "text"}" id="${id}" data-cle="${h(l.cle)}" value="${h(l.valeur)}" ${l.secret ? 'autocomplete="off"' : ""}>`;
@@ -2927,21 +2960,25 @@ pages.reglages = async () => {
   if (onglet === "options") return tete + await rendreOptions();
   const [lignes, mod] = await Promise.all([api("env" + (etat.envSecrets ? "?secrets=1" : "")), api("modeles").catch(() => ({ modeles: [] }))]);
   const modeles = mod.modeles || [];
+  const mode = modeConnexion((lignes.find((l) => l.cle === "CLAUDE_AUTH") || {}).valeur);
   const ligne = (l) => {
     const nom = (REGLAGES[l.cle] || [])[1];
-    return `<div class="reglage"><div>${nom ? `<div class="nom-reglage">${h(t(nom))} <code class="cle-env">${h(l.cle)}</code></div>` : `<div class="cle">${h(l.cle)}</div>`}<div class="aide">${h(t(l.aide))}</div></div><div>${champReglage(l, modeles)}</div></div>`;
+    const m = MODE_CONNEXION[l.cle];
+    return `<div class="reglage" ${m ? `data-connexion="${m}" ${m !== mode ? "hidden" : ""}` : ""}><div>${nom ? `<div class="nom-reglage">${h(t(nom))} <code class="cle-env">${h(l.cle)}</code></div>` : `<div class="cle">${h(l.cle)}</div>`}<div class="aide">${h(t(l.aide))}</div></div><div>${champReglage(l, modeles)}</div></div>`;
   };
-  const groupe = (g) => lignes.filter((l) => (REGLAGES[l.cle] || ["avance"])[0] === g);
+  const rang = (c) => { const i = ORDRE_CONNEXION.indexOf(c); return i < 0 ? 99 : i; };
+  const groupe = (g) => lignes.filter((l) => (REGLAGES[l.cle] || ["avance"])[0] === g).sort((a, b) => g === "connexion" ? rang(a.cle) - rang(b.cle) : 0);
+  const avertAPI = `<div class="avert-connexion petit" data-connexion="api" ${mode !== "api" ? "hidden" : ""}><b>⚠ ${t("With an API key")}</b> ${t("the plugins and connectors of your claude.ai account (Gmail, Drive… added in the Claude app) do not work. The Skills, the MCP servers and every extension of Athanor work the same. Each run of Claude is billed to the API account: Overview shows the spend, and the pilot waits once the budget is spent.")}</div>`;
   const actif = etat.vue && etat.vue.actif;
   const avance = groupe("avance");
   return `${tete}
   <div class="ligne reglages-tete">
-    <p class="muet m0 croit">${t("The pilot reads these settings when it starts. The token gives access to your subscription: never share it.")}</p>
+    <p class="muet m0 croit">${t("The pilot reads these settings when it starts (a new token or API key: at once). The token and the API key give access to your Claude account: never share them.")}</p>
     <label class="interrupteur m0"><input type="checkbox" id="rg-secrets" ${etat.envSecrets ? "checked" : ""}> <span>${t("Show secrets")}</span></label>
     <button class="btn btn-primaire" id="rg-enregistrer">${t("Save")}</button>
     ${actif ? `<button class="btn" id="rg-redemarrer" title="${h(t("Saves, lets the current milestone finish, then restarts the pilot with the new settings."))}">${t("Save and restart after cycle")}</button>` : ""}
   </div>
-  ${GROUPES_REGLAGES.map(([g, titre]) => { const l = groupe(g); return l.length ? `<div class="bloc"><h2>${t(titre)}</h2>${l.map(ligne).join("")}</div>` : ""; }).join("")}
+  ${GROUPES_REGLAGES.map(([g, titre]) => { const l = groupe(g); return l.length ? `<div class="bloc"><h2>${t(titre)}</h2>${l.map(ligne).join("")}${g === "connexion" ? avertAPI : ""}</div>` : ""; }).join("")}
   ${avance.length ? `<div class="bloc"><details><summary>${t("Advanced")} <span class="muet petit">${t("{0} setting(s)", [avance.length])}</span></summary>${avance.map(ligne).join("")}</details></div>` : ""}`;
 };
 
@@ -3035,6 +3072,12 @@ function blocDirect(nom) {
   }
   return `<div class="bloc" id="bloc-direct"><h2>${t("Team, live")}</h2>${tete}${lignes ? `<table class="tab appareils pcs mt-1">${lignes}</table>` : ""}</div>`;
 }
+// Overview › API spend › Count again from now (credit added to the API account)
+$("#page").addEventListener("click", async (ev) => {
+  if (!ev.target.closest("#depense-zero")) return;
+  if (!await confirmer(t("Count the API spend again from now (0 $)? Do it when you added credit to the API account; the budget then counts from now."), { ok: t("Count again from now") })) return;
+  if (await action(api("depense", "POST", { action: "zero" }))) rafraichir();
+});
 $("#page").addEventListener("click", async (ev) => {
   const b = ev.target.closest("[data-direct]"); if (!b) return;
   const nom = etat.projet || ((etat.vue || {}).projet || {}).nom;
@@ -3681,7 +3724,7 @@ $("#page").addEventListener("click", async (ev) => {
   }
   if (page === "reglages") {
     if (b.dataset.ongletReglages) { etat.ongletReglages = b.dataset.ongletReglages; return rendrePage(); }
-    if (b.dataset.pour) { const i = $("#" + b.dataset.pour); i.value = b.dataset.val; b.parentElement.querySelectorAll("button").forEach((x) => x.classList.toggle("actif", x === b)); return; }
+    if (b.dataset.pour) { const i = $("#" + b.dataset.pour); i.value = b.dataset.val; b.parentElement.querySelectorAll("button").forEach((x) => x.classList.toggle("actif", x === b)); if (i.dataset.cle === "CLAUDE_AUTH") majModeConnexion(modeConnexion(i.value)); return; }
     if (b.id === "rg-enregistrer") return action(api("env", "POST", lireEnvFormulaire()));
     if (b.id === "rg-redemarrer") { const r = await action(api("env", "POST", lireEnvFormulaire())); if (r) await action(api("pilote/redemarrer-apres-cycle", "POST")); return; }
   }

@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -186,52 +187,66 @@ func lancerConfigurer(args []string) int {
 		fmt.Fprintf(a.err, "%sA .env file exists: its values are offered as defaults.%s\n", a.gris, a.fin)
 	}
 
-	// 1. Token
-	a.titre("1. Login token for your Claude subscription", `Obtained with "claude setup-token" (Claude Code installed on this PC), valid for 1 year.`)
-	jeton := a.valeur("CLAUDE_CODE_OAUTH_TOKEN")
-	invite := ""
-	if jeton != "" {
-		debut, fin := jeton, jeton
-		if len(debut) > 14 {
-			debut = debut[:14]
-		}
-		if len(fin) > 4 {
-			fin = fin[len(fin)-4:]
-		}
-		fmt.Fprintf(a.err, "Current token: %s...%s\n", debut, fin)
-		invite = "Paste a new token, or Enter to keep the current one: "
-	} else {
-		if aCommande("claude") && estTerminal(os.Stdin) && a.ouiNon(`Run "claude setup-token" now?`, "o") {
-			c := commande("claude", "setup-token")
-			c.Stdin, c.Stdout, c.Stderr = os.Stdin, os.Stdout, os.Stderr
-			_ = c.Run()
-		}
-		invite = "Paste the token (it is not echoed): "
+	// 1. Connection: the subscription's token, or an API key (connexion_claude.go)
+	a.titre("1. Connection to Claude", "Your Claude subscription (its token, the plan's quota), or an API key (each run billed to the API account; the plugins and connectors of a claude.ai account do not work with it, the Skills and the MCP servers do).")
+	modeActuel := "" // none yet: the recommended one is offered
+	if v := a.valeur("CLAUDE_AUTH"); strings.EqualFold(v, modeConnexionAPI) {
+		modeActuel = modeConnexionAPI
+	} else if v != "" {
+		modeActuel = modeConnexionAbonnement
 	}
-	for {
-		fmt.Fprint(a.err, invite)
-		nouveau, ok := a.secret()
-		fmt.Fprintln(a.err)
-		if !ok { // end of input: keep the current token
-			break
+	a.choisir(modeActuel, modeConnexionAbonnement+"|Claude subscription, with its token (recommended)", modeConnexionAPI+"|API key (paid per use)")
+	mode := a.reponse
+	jeton := a.valeur("CLAUDE_CODE_OAUTH_TOKEN")
+	cleAPI, budget := a.valeur("ANTHROPIC_API_KEY"), a.valeur("API_BUDGET_USD")
+	if mode == modeConnexionAPI {
+		cleAPI, budget = a.demanderCleAPI(cleAPI, budget)
+	} else {
+		a.titre("1b. Login token for your Claude subscription", `Obtained with "claude setup-token" (Claude Code installed on this PC), valid for 1 year.`)
+		invite := ""
+		if jeton != "" {
+			debut, fin := jeton, jeton
+			if len(debut) > 14 {
+				debut = debut[:14]
+			}
+			if len(fin) > 4 {
+				fin = fin[len(fin)-4:]
+			}
+			fmt.Fprintf(a.err, "Current token: %s...%s\n", debut, fin)
+			invite = "Paste a new token, or Enter to keep the current one: "
+		} else {
+			if aCommande("claude") && estTerminal(os.Stdin) && a.ouiNon(`Run "claude setup-token" now?`, "o") {
+				c := commande("claude", "setup-token")
+				c.Stdin, c.Stdout, c.Stderr = os.Stdin, os.Stdout, os.Stderr
+				_ = c.Run()
+			}
+			invite = "Paste the token (it is not echoed): "
 		}
-		nouveau = strings.Join(strings.Fields(nouveau), "")
-		if nouveau != "" {
-			jeton = nouveau
-		}
-		if jeton == "" {
-			if a.ouiNon("No token. Continue without one (to add later in .env)?", "n") {
+		for {
+			fmt.Fprint(a.err, invite)
+			nouveau, ok := a.secret()
+			fmt.Fprintln(a.err)
+			if !ok { // end of input: keep the current token
 				break
 			}
-			continue
+			nouveau = strings.Join(strings.Fields(nouveau), "")
+			if nouveau != "" {
+				jeton = nouveau
+			}
+			if jeton == "" {
+				if a.ouiNon("No token. Continue without one (to add later in .env)?", "n") {
+					break
+				}
+				continue
+			}
+			if strings.HasPrefix(jeton, "sk-ant-") {
+				break
+			}
+			if a.ouiNon(a.jaune+`This token does not start with "sk-ant-". Keep it anyway?`+a.fin, "n") {
+				break
+			}
+			jeton = ""
 		}
-		if strings.HasPrefix(jeton, "sk-ant-") {
-			break
-		}
-		if a.ouiNon(a.jaune+`This token does not start with "sk-ant-". Keep it anyway?`+a.fin, "n") {
-			break
-		}
-		jeton = ""
 	}
 
 	// 2. Main model
@@ -344,7 +359,7 @@ func lancerConfigurer(args []string) int {
 
 	// write
 	pause, inact, cmax := a.valeur("QUOTA_WAIT_MIN"), a.valeur("IDLE_MAX_MIN"), a.valeur("CYCLE_MAX_MIN")
-	geres := " CLAUDE_CODE_OAUTH_TOKEN MODEL FALLBACK_MODEL SUBAGENT_MODEL EFFORT MAX_HOURS RTK TZ UNREAL_MCP QUOTA_WAIT_MIN IDLE_MAX_MIN CYCLE_MAX_MIN "
+	geres := " CLAUDE_AUTH ANTHROPIC_API_KEY API_BUDGET_USD API_BUDGET_SINCE CLAUDE_CODE_OAUTH_TOKEN MODEL FALLBACK_MODEL SUBAGENT_MODEL EFFORT MAX_HOURS RTK TZ UNREAL_MCP QUOTA_WAIT_MIN IDLE_MAX_MIN CYCLE_MAX_MIN "
 	sauvegarde := a.env + ".sauvegarde"
 	if a.existe {
 		if b, err := os.ReadFile(a.env); err == nil {
@@ -363,8 +378,19 @@ func lancerConfigurer(args []string) int {
 	w("# Written by athanor configurer on " + time.Now().Format("2006-01-02 15:04") + ". Run it again to change these settings.")
 	w("# Never share this file: the token gives access to your Claude subscription.")
 	w("")
+	w("# How Athanor connects to Claude: subscription (the token below) or api (an API key, each run billed)")
+	w("CLAUDE_AUTH=" + mode)
 	w("# Login token (valid for 1 year), obtained with: claude setup-token")
 	w("CLAUDE_CODE_OAUTH_TOKEN=" + jeton)
+	w("# API key (api mode), created on console.anthropic.com › API keys")
+	w("ANTHROPIC_API_KEY=" + cleAPI)
+	w("# API mode: the most to spend, in dollars (empty = no limit)")
+	w("API_BUDGET_USD=" + budget)
+	depuis := a.valeur("API_BUDGET_SINCE")
+	if cleAPI != a.valeur("ANTHROPIC_API_KEY") || (depuis == "" && lireMontant(budget) > 0) {
+		depuis = strconv.FormatInt(time.Now().Unix(), 10) // a new key, a first budget: counted from now
+	}
+	w("API_BUDGET_SINCE=" + depuis)
 	w("")
 	w("# Project lead model (empty = account default)")
 	w("MODEL=" + modele)
@@ -416,7 +442,9 @@ func lancerConfigurer(args []string) int {
 	if a.existe {
 		fmt.Fprintf(a.err, "%s  Previous version kept in .env.sauvegarde%s\n", a.gris, a.fin)
 	}
-	if jeton == "" {
+	if mode == modeConnexionAPI && cleAPI == "" {
+		fmt.Fprintf(a.err, "%s  Remember to add the API key to .env before starting.%s\n", a.jaune, a.fin)
+	} else if mode != modeConnexionAPI && jeton == "" {
 		fmt.Fprintf(a.err, "%s  Remember to add the token to .env before starting.%s\n", a.jaune, a.fin)
 	}
 
@@ -476,4 +504,50 @@ func detecterSilencieux(kit string) error {
 		defer func() { os.Stdout = ancien; n.Close() }()
 	}
 	return detecter(kit)
+}
+
+// demanderCleAPI: the API key (not echoed; Enter keeps the current one) and the budget.
+func (a *assistantEnv) demanderCleAPI(cle, budget string) (string, string) {
+	a.titre("1b. API key", "Created on console.anthropic.com › API keys. Each run of Claude is billed to that account.")
+	invite := "Paste the API key (it is not echoed): "
+	if cle != "" {
+		debut, fin := cle, cle
+		if len(debut) > 14 {
+			debut = debut[:14]
+		}
+		if len(fin) > 4 {
+			fin = fin[len(fin)-4:]
+		}
+		fmt.Fprintf(a.err, "Current key: %s...%s\n", debut, fin)
+		invite = "Paste a new key, or Enter to keep the current one: "
+	}
+	for {
+		fmt.Fprint(a.err, invite)
+		nouveau, ok := a.secret()
+		fmt.Fprintln(a.err)
+		if !ok {
+			break
+		}
+		if n := strings.Join(strings.Fields(nouveau), ""); n != "" {
+			cle = n
+		}
+		if cle == "" {
+			if a.ouiNon("No key. Continue without one (to add later in .env)?", "n") {
+				break
+			}
+			continue
+		}
+		if strings.HasPrefix(cle, "sk-ant-") || a.ouiNon(a.jaune+`This key does not start with "sk-ant-". Keep it anyway?`+a.fin, "n") {
+			break
+		}
+		cle = ""
+	}
+	a.titre("1c. API budget", "The most to spend, in dollars (the credit left on the API account): the pilot waits once it is spent. Empty = no limit.")
+	a.demander("Budget in dollars", budget)
+	if b := lireMontant(a.reponse); b > 0 {
+		budget = strconv.FormatFloat(b, 'f', -1, 64)
+	} else {
+		budget = ""
+	}
+	return cle, budget
 }

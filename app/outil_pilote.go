@@ -38,6 +38,7 @@ var (
 	reVersionClaude     = regexp.MustCompile(`[0-9]+\.[0-9]+\.[0-9]+`)
 	reHitLimitPilote    = regexp.MustCompile(`(?i)hit your .*limit`)
 	reQuotaTextePilote  = regexp.MustCompile(`(?i)hit your .*limit|usage limit|limit reached|rate[ _-]?limit|spend limit`)
+	reCreditTextePilote = regexp.MustCompile(`(?i)credit balance is too low|insufficient credit|purchase credits|add (more )?credits`)
 	reConnTextePilote   = regexp.MustCompile(`(?i)not logged in|/login|invalid api key|oauth token|authentication_failed|invalid authentication|login expired`)
 	reResetsAtPilote    = regexp.MustCompile(`(?i)resets? (?:at )?([A-Za-z]{0,3}) ?([0-9]{1,2})(?::([0-9]{2}))? ?(am|pm)?`)
 	reGitignoreEnv      = regexp.MustCompile(`(?m)^[[:space:]]*!?(\*\*/|/)?\*?\.env\*?[[:space:]]*$`)
@@ -105,6 +106,12 @@ type pilote struct {
 	envoiGH     string // the last commit the automatic push was tried with (githubPousserNouveau)
 	battementPC bool
 	finiPC      atomic.Bool
+
+	// the connection to Claude (connexion_claude.go): read again at each cycle and during the waits
+	connexionMu     sync.Mutex
+	connexion       connexionClaude
+	origineConn     map[string]string
+	connexionDepuis time.Time // the last change of connection: the quota of the logs before it is another account's
 }
 
 // logUneFois: a message said once while its cause lasts (oublierLogUneFois: it may be said again).
@@ -483,6 +490,7 @@ func (p *pilote) enregistrerStats(f, etat, etiquette, depot string) {
 		minutesAPI = arrondirStat(durAPI/60000.0, 10)
 		tours = strconv.FormatInt(nt, 10)
 		coutUSD = arrondirStat(cost, 100)
+		noterDepense(p.kit, p.connexionActuelle().Mode, cost, filepath.Base(p.projet), "cycle "+etiquette)
 		entree = strconv.FormatInt(it, 10)
 		cacheLu = strconv.FormatInt(cr, 10)
 		cacheEcrit = strconv.FormatInt(cw, 10)
@@ -514,7 +522,9 @@ func (p *pilote) enregistrerStats(f, etat, etiquette, depot string) {
 	}
 }
 
-func (p *pilote) dormir(secondes int) {
+// dormir: the pilot waits; true when the wait was cut short by a new connection to Claude put in Settings
+// (read every few seconds: the quota, the key or the budget it waited for may be another account's now).
+func (p *pilote) dormir(secondes int) bool {
 	s := secondes * p.secondsPerMinute / 60
 	var d time.Duration
 	if s > 0 {
@@ -522,16 +532,32 @@ func (p *pilote) dormir(secondes int) {
 	} else if secondes > 0 && p.secondsPerMinute > 0 {
 		d = 50 * time.Millisecond
 	} else {
-		return
+		return false
 	}
-	t := time.NewTimer(d)
-	defer t.Stop()
-	select {
-	case <-t.C:
-	case <-p.arretCh:
-		p.quitterSurSignal()
+	fin := time.Now().Add(d)
+	for {
+		reste := time.Until(fin)
+		if reste <= 0 {
+			return false
+		}
+		if reste > pasConnexion {
+			reste = pasConnexion
+		}
+		t := time.NewTimer(reste)
+		select {
+		case <-t.C:
+		case <-p.arretCh:
+			t.Stop()
+			p.quitterSurSignal()
+		}
+		if p.relireConnexion() {
+			return true
+		}
 	}
 }
+
+// pasConnexion: how often a wait reads the connection again
+var pasConnexion = 10 * time.Second
 
 func (p *pilote) estTermine() bool {
 	b, err := os.ReadFile(filepath.Join(p.etat, "FINAL_REPORT.md"))
@@ -566,11 +592,72 @@ func (p *pilote) terminer(msg string) {
 }
 
 func (p *pilote) connexionPresente() bool {
-	if os.Getenv("CLAUDE_CODE_OAUTH_TOKEN") != "" || os.Getenv("ANTHROPIC_API_KEY") != "" {
+	c := p.connexionActuelle()
+	if c.presente() {
 		return true
+	}
+	if c.api() {
+		return false // API mode: the key only (Claude Code's own sign-in is the subscription's)
 	}
 	_, err := os.Stat(filepath.Join(p.configClaude, ".credentials.json"))
 	return err == nil
+}
+
+func (p *pilote) connexionActuelle() connexionClaude {
+	p.connexionMu.Lock()
+	defer p.connexionMu.Unlock()
+	return p.connexion
+}
+
+// relireConnexion: the connection of .env read again; true when it changed (another token, another key,
+// the other mode): it is used from the next run of Claude on, and what waited on the old one stops waiting.
+func (p *pilote) relireConnexion() bool {
+	c := lireConnexionClaude(p.kit, p.origineConn)
+	p.connexionMu.Lock()
+	avant := p.connexion
+	p.connexion = c
+	if c.empreinte() == avant.empreinte() {
+		p.connexionMu.Unlock()
+		return false
+	}
+	p.connexionDepuis = time.Now()
+	p.connexionMu.Unlock()
+	// the fallback model and the workers' pause were the old account's quota
+	for _, f := range []string{"secours_jusqua", "serie_jusqua", "sonde_quota"} {
+		_ = os.Remove(filepath.Join(p.prive, f))
+	}
+	quoi := "a new " + c.nom()
+	if c.Mode != avant.Mode {
+		quoi = "the " + c.nom() + " (mode " + c.Mode + ")"
+	}
+	p.log("Connection to Claude changed in Settings: the pilot goes on with " + quoi + ", at once.")
+	return true
+}
+
+// attendreBudget: API mode, the budget spent: the pilot waits (true) until it is raised, counted again, or
+// another connection is set; false when there is nothing to wait for.
+func (p *pilote) attendreBudget() bool {
+	atteint, depense := budgetAtteint(p.kit, p.connexionActuelle())
+	if !atteint {
+		return false
+	}
+	c := p.connexionActuelle()
+	p.etatPhase = "budget"
+	p.etatReprise = ""
+	p.log(fmt.Sprintf("API budget reached: %.2f $ spent of %.2f $. The pilot waits: raise the budget, count again (Overview › API spend) or put another API key in Settings, and it resumes at once.", depense, c.Budget))
+	p.statut(fmt.Sprintf("API budget reached (%.2f $ of %.2f $): waiting for Settings", depense, c.Budget))
+	for {
+		if fichierRegulierPilote(filepath.Join(p.etat, "STOP")) {
+			break
+		}
+		p.dormir(60)
+		if a, _ := budgetAtteint(p.kit, p.connexionActuelle()); !a {
+			p.log("API budget: room again, resuming.")
+			break
+		}
+	}
+	p.etatPhase = ""
+	return true
 }
 
 func (p *pilote) tachesEtat() (pourVous, aTraiter int) {
@@ -724,8 +811,11 @@ func (p *pilote) seuilQuota() string {
 		t time.Time
 	}
 	var js []j
+	p.connexionMu.Lock()
+	depuis := p.connexionDepuis
+	p.connexionMu.Unlock()
 	for _, f := range fs {
-		if st, err := os.Stat(f); err == nil {
+		if st, err := os.Stat(f); err == nil && st.ModTime().After(depuis) { // another account's quota before
 			js = append(js, j{f, st.ModTime()})
 		}
 	}
@@ -752,6 +842,9 @@ func (p *pilote) seuilQuota() string {
 }
 
 func (p *pilote) appliquerSeuilQuota() {
+	if p.connexionActuelle().api() {
+		return // the subscription's quota: an API key has none (its budget: attendreBudget)
+	}
 	l := p.seuilQuota()
 	if l == "" {
 		return
