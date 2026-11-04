@@ -561,6 +561,26 @@ func TestBancPilote(t *testing.T) {
 			t.Logf("pilot output:\n%s", sortie)
 		}
 	})
+	// API mode: 0.02 $ spent already, the automatic stop at 0.05 $: the first cycle (0.03 $) reaches it, the
+	// pilot starts no other one and stops
+	t.Run("api_arret", func(t *testing.T) {
+		kit := preparerKitEssaiPilote(t, binTemp)
+		fakeClaude := filepath.Join(kit, "fake-claude-arret.sh")
+		if err := os.WriteFile(fakeClaude, []byte(strings.ReplaceAll(scriptFauxClaudeArret, "\r\n", "\n")), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		projet := filepath.Join(dossierEssaiPilote(t), "projet")
+		_ = os.MkdirAll(filepath.Join(projet, ".athanor"), 0o755)
+		_ = os.WriteFile(filepath.Join(projet, ".athanor", "REQUEST.md"), []byte("# Request\n\nBuild M1 to M3.\n"), 0o644)
+		_ = os.WriteFile(filepath.Join(projet, ".athanor", "PLAN.md"), []byte("# Plan\n\n- [ ] M1 : One\n- [ ] M2 : Two\n- [ ] M3 : Three\n"), 0o644)
+		sortie := executerPilote(t, binTemp, kit, projet, fakeClaude, []string{"CLAUDE_AUTH=api", "ANTHROPIC_API_KEY=sk-ant-essai", "API_SPENT_USD=0.02", "API_STOP_USD=0.05"})
+		p := Projet{Nom: "test", Dossier: projet}
+		plan, _ := os.ReadFile(filepath.Join(p.Atelier(), "PLAN.md"))
+		journal, _ := os.ReadFile(filepath.Join(p.Atelier(), "pilot.log"))
+		if strings.Count(string(plan), "- [x]") != 1 || !strings.Contains(string(journal), "API spend at 0.05 $, past the automatic stop at 0.05 $") {
+			t.Errorf("plan:\n%s\npilot.log:\n%s\noutput:\n%s", plan, journal, sortie)
+		}
+	})
 	t.Run("livre_puis_remarque", func(t *testing.T) {
 		kit := preparerKitEssaiPilote(t, binTemp)
 		fakeClaude := filepath.Join(kit, "fake-claude-livraison.sh")

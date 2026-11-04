@@ -206,3 +206,53 @@ func TestReponseJSONClaude(t *testing.T) {
 		t.Fatalf("%q", b)
 	}
 }
+
+// What was spent already counts with the rest; the automatic stop and the budget compare the whole.
+func TestDejaEtArretDepense(t *testing.T) {
+	kit := t.TempDir()
+	ecrireFichier(t, filepath.Join(kit, ".env"), "CLAUDE_AUTH=api\nANTHROPIC_API_KEY=sk-ant-x\nAPI_BUDGET_USD=100\nAPI_SPENT_USD=20\nAPI_STOP_USD=80\nAPI_BUDGET_SINCE=1\n", 0o600)
+	noterDepense(kit, modeConnexionAPI, 59.5, "p", "cycle 1")
+	e := etatDepenseKit(kit)
+	if e.Depense != 79.5 || e.Deja != 20 || e.Arret != 80 || e.ArretAtteint || e.Atteint {
+		t.Fatalf("%+v", e)
+	}
+	noterDepense(kit, modeConnexionAPI, 1, "p", "cycle 2")
+	c := lireConnexionClaude(kit, nil)
+	if a, d := arretDepenseAtteint(kit, c); !a || d != 80.5 {
+		t.Fatalf("stop: %v %v", a, d)
+	}
+	if a, _ := budgetAtteint(kit, c); a {
+		t.Fatal("80.50 $ of 100 $: the budget is not spent")
+	}
+	// "already spent" saved: the count starts from it, now
+	v := map[string]string{"API_SPENT_USD": "25"}
+	reglagesConnexionEnregistres(kit, v)
+	if v["API_BUDGET_SINCE"] == "" {
+		t.Fatal("a new amount spent already: counted from now")
+	}
+	v = map[string]string{"API_SPENT_USD": "20", "API_BUDGET_USD": "150"}
+	reglagesConnexionEnregistres(kit, v)
+	if _, ok := v["API_BUDGET_SINCE"]; ok {
+		t.Fatal("the same amount, a budget raised: the count goes on")
+	}
+	if z := valeursCompterDepense(); z["API_SPENT_USD"] != "" || z["API_BUDGET_SINCE"] == "" {
+		t.Fatalf("%v", z)
+	}
+}
+
+// the bench's api_arret: one milestone per call, 0.03 $ each
+const scriptFauxClaudeArret = `#!/usr/bin/env bash
+set -u
+case "${1:-}" in
+  --help) echo "--strict-mcp-config --setting-sources --append-system-prompt-file --agents --plugin-dir"; exit 0 ;;
+  --version) echo "claude 2.1.285"; exit 0 ;;
+esac
+ETAT="$PWD/.athanor"
+n=$(grep -c '^- \[x\]' "$ETAT/PLAN.md")
+awk 'BEGIN{d=0} !d && /^- \[ \] M/ {sub(/^- \[ \] /, "- [x] "); d=1} {print}' "$ETAT/PLAN.md" > "$ETAT/PLAN.tmp" && mv "$ETAT/PLAN.tmp" "$ETAT/PLAN.md"
+echo "step $n" >> "$PWD/app.txt"
+grep -q '^- \[ \]' "$ETAT/PLAN.md" || printf '# Final Report\nSTATUS: DONE\n' > "$ETAT/FINAL_REPORT.md"
+git add -A && git commit -qm "M$((n+1)): done"
+printf '{"type":"result","subtype":"success","is_error":false,"num_turns":2,"duration_ms":3000,"duration_api_ms":2000,"total_cost_usd":0.03,"usage":{"input_tokens":2000,"output_tokens":200},"result":"Done"}\n'
+exit 0
+`

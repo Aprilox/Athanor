@@ -4,6 +4,7 @@ package main
 
 import (
 	"errors"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -919,12 +920,34 @@ func (a *appTUI) etapeDansTerminal(id string, ensuite func(code int)) {
 	}()
 }
 
-// compterDepense: Overview › API spend counted again from now (credit added to the API account).
+// compterDepense: Overview › API spend: its automatic stop, or the count again from now (credit added to
+// the API account).
 func (a *appTUI) compterDepense() {
-	a.demander(a.t("Count again from now"), a.t("Count the API spend again from now (0 $)? Do it when you added credit to the API account; the budget then counts from now."),
-		[]choixTUI{{id: "oui", texte: a.t("Count again from now")}, {id: "", texte: a.t("Cancel")}}, func(r string) {
-			if r == "oui" {
-				a.agir("POST", "depense", map[string]string{"action": "zero"}, nil)
+	a.demander(a.t("API spend"), a.t("The dollars spent at which the pilot stops, after the cycle that reaches them (the cost of a cycle is known at its end). Empty: no automatic stop."),
+		[]choixTUI{{id: "arret", texte: a.t("Auto stop")}, {id: "zero", texte: a.t("Count again from now")}, {id: "", texte: a.t("Cancel")}}, func(r string) {
+			switch r {
+			case "zero":
+				a.demander(a.t("Count again from now"), a.t("Count the API spend again from now (0 $)? Do it when you added credit to the API account; the budget then counts from now."),
+					[]choixTUI{{id: "oui", texte: a.t("Count again from now")}, {id: "", texte: a.t("Cancel")}}, func(r string) {
+						if r == "oui" {
+							a.agir("POST", "depense", map[string]string{"action": "zero"}, nil)
+						}
+					})
+			case "arret":
+				s := &saisieT{}
+				if d := a.vue.Depense; d != nil && d.Arret > 0 {
+					s.mettreTexte(strconv.FormatFloat(d.Arret, 'f', -1, 64))
+				}
+				a.formulaire(a.t("Auto stop"), a.t("The dollars spent at which the pilot stops, after the cycle that reaches them (the cost of a cycle is known at its end). Empty: no automatic stop.")+"  "+a.t(aideFormulaireLigne),
+					[]champTUI{{lib: "$", h: 1, s: s}}, func(v []string) {
+						t := strings.TrimSpace(v[0])
+						seuil := lireMontant(t)
+						if t != "" && seuil <= 0 && t != "0" {
+							a.annoncer(a.t("An amount in dollars, or empty for no automatic stop."), true)
+							return
+						}
+						a.agirFormulaire("POST", "depense", map[string]any{"action": "arret", "seuil": seuil}, nil)
+					})
 			}
 		})
 }
