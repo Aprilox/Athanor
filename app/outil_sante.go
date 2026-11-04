@@ -52,6 +52,7 @@ var reLigneEnvSante = regexp.MustCompile(`^([A-Za-z_][A-Za-z0-9_]*)=(.*)$`)
 func chargerEnvSante(kit string) {
 	origine := origineConnexion()
 	defer appliquerConnexionProcessus(kit, origine) // only the chosen connection (connexion_claude.go)
+	kitConnexion = kit
 	if b, err := os.ReadFile(filepath.Join(kit, ".env")); err == nil {
 		for _, l := range strings.Split(string(b), "\n") {
 			l = strings.TrimSuffix(l, "\r")
@@ -439,7 +440,9 @@ func santeJeton(kit string) int {
 		return 3
 	}
 	_ = os.Setenv("ENABLE_CLAUDEAI_MCP_SERVERS", "false")
-	sortie, code := sortieDe(120*time.Second, "claude", "-p", "Answer exactly: TOKEN_OK", "--model", "haiku", "--max-turns", "1")
+	brut, code := sortieDe(120*time.Second, "claude", "-p", "Answer exactly: TOKEN_OK", "--model", "haiku", "--max-turns", "1", "--output-format", "json")
+	sortie, cout, _ := reponseJSONClaude(brut)
+	noterDepenseCourte(cout, "health check") // a fraction of a cent, counted with the rest in API mode
 	if strings.Contains(sortie, "TOKEN_OK") {
 		if c.api() {
 			direSante("Connection OK (API key: each run is billed to the API account)")
@@ -448,7 +451,7 @@ func santeJeton(kit string) int {
 		}
 		return 0
 	}
-	if reCreditTextePilote.MatchString(sortie) {
+	if reCreditTextePilote.MatchString(sortie + "\n" + brut) {
 		direSante("API key accepted, but the API account has no credit left: add credit (console.anthropic.com › Billing), or put another key")
 		return 1
 	}

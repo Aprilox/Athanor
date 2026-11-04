@@ -296,7 +296,7 @@ var demanderClaudeDossier = func(d, consigne string, delai time.Duration) (strin
 	if claude == "" {
 		claude = "claude"
 	}
-	a := []string{"-p", consigne, "--output-format", "text", "--max-turns", "60", "--strict-mcp-config",
+	a := []string{"-p", consigne, "--output-format", "json", "--max-turns", "60", "--strict-mcp-config",
 		"--allowedTools", "Read,Glob,Grep,Edit(./**),Write(./**),MultiEdit(./**),WebFetch,WebSearch"}
 	if m := os.Getenv("MODEL"); m != "" {
 		a = append(a, "--model", m)
@@ -308,13 +308,16 @@ var demanderClaudeDossier = func(d, consigne string, delai time.Duration) (strin
 	c.Env = append(os.Environ(), "ENABLE_CLAUDEAI_MCP_SERVERS=false")
 	var sortie, erreurs bytes.Buffer
 	c.Stdout, c.Stderr = &sortie, &limiteur{b: &erreurs, max: 1 << 16}
-	if err := c.Run(); err != nil {
+	err := c.Run()
+	texte, cout, _ := reponseJSONClaude(sortie.String())
+	noterDepenseCourte(cout, "Fix with Claude (skill)")
+	if err != nil {
 		if ctx.Err() != nil {
 			return "", errors.New("Claude took too long")
 		}
-		return "", errors.New(court(derniereLigneTexte(firstNonEmpty(strings.TrimSpace(erreurs.String()), err.Error())), 300))
+		return "", errors.New(court(derniereLigneTexte(firstNonEmpty(strings.TrimSpace(erreurs.String()), firstNonEmpty(strings.TrimSpace(texte), err.Error()))), 300))
 	}
-	return sortie.String(), nil
+	return texte, nil
 }
 
 func consigneSkill(id string, t TestSkill) string {

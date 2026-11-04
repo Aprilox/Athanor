@@ -173,3 +173,31 @@ git add -A && git commit -qm "M1: built with the new key"
 printf '{"type":"result","subtype":"success","is_error":false,"num_turns":2,"duration_ms":3000,"duration_api_ms":2000,"total_cost_usd":0.03,"usage":{"input_tokens":2000,"output_tokens":200},"result":"Done"}\n'
 exit 0
 `
+
+// The short runs of Claude (health, Fix with Claude, Improve) read their answer from the JSON output and
+// count what they cost; a plain answer (an older Claude Code) still reads.
+func TestReponseJSONClaude(t *testing.T) {
+	brut := "warning: something\n" + `{"type":"result","subtype":"success","is_error":false,"duration_api_ms":2083,"total_cost_usd":0.00268378,"result":"TOKEN_OK","session_id":"x"}` + "\n"
+	if texte, cout, erreur := reponseJSONClaude(brut); texte != "TOKEN_OK" || cout != 0.00268378 || erreur {
+		t.Fatalf("%q %v %v", texte, cout, erreur)
+	}
+	if texte, _, erreur := reponseJSONClaude(`{"type":"result","is_error":true,"result":"Credit balance is too low","total_cost_usd":0}`); texte != "Credit balance is too low" || !erreur {
+		t.Fatalf("%q", texte)
+	}
+	if texte, cout, _ := reponseJSONClaude("TOKEN_OK\n"); texte != "TOKEN_OK\n" || cout != 0 {
+		t.Fatalf("plain: %q", texte)
+	}
+	kit := t.TempDir()
+	ecrireFichier(t, filepath.Join(kit, ".env"), "CLAUDE_AUTH=api\nANTHROPIC_API_KEY=sk-ant-x\n", 0o600)
+	ancien := kitConnexion
+	kitConnexion = kit
+	t.Cleanup(func() { kitConnexion = ancien })
+	noterDepenseCourte(0.0027, "health check")
+	if d, n := depenseAPI(kit, 0); n != 1 || d != 0 { // 0.0027 $ rounds to 0.00 $, but it is counted
+		t.Fatalf("%v %d", d, n)
+	}
+	b, _ := os.ReadFile(fichierDepenses(kit))
+	if !strings.Contains(string(b), "\tapi\t0.0027\t\thealth check\n") {
+		t.Fatalf("%q", b)
+	}
+}
