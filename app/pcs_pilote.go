@@ -189,6 +189,9 @@ func choisirJalonRefusPC(plan []Jalon, moi MachinePC, autres []PresencePC, actue
 			continue
 		}
 		actifs = append(actifs, p)
+		for _, id := range p.APousser { // built there, its push not gone yet: still that computer's
+			tenus[id] = p
+		}
 		if p.Jalon != "" {
 			tenus[p.Jalon] = p
 		}
@@ -689,16 +692,21 @@ func (p *pilote) pousserPC() (int, bool) {
 	}
 	var out strings.Builder
 	code := pousserGH([]string{p.projet, "--auto"}, &out)
-	if code == 5 && strings.Contains(out.String(), "has commits the project does not have") {
-		if res, _, err := e.recevoir(); err == nil && res == recuFusion {
-			out.Reset()
-			code = pousserGH([]string{p.projet, "--auto"}, &out)
+	// another computer pushed at the same moment: its work merged, then pushed again (a few times)
+	for essai := 0; essai < 3 && code == 5 && strings.Contains(out.String(), "has commits the project does not have"); essai++ {
+		res, _, err := e.recevoir()
+		if err != nil || res != recuFusion {
+			break
 		}
+		out.Reset()
+		code = pousserGH([]string{p.projet, "--auto"}, &out)
 	}
 	if code != 3 {
 		lignes := strings.Split(strings.TrimRight(out.String(), "\r\n"), "\n")
 		p.log(tronquerRunes(lignes[len(lignes)-1], 300))
 	}
+	// the milestone it built stays its own until its push goes (the others never build it again)
+	noterAPousserPC(e.d, lireEtatLocalPC(e.d).Jalon, code != 0 && code != 3)
 	_ = e.publier() // its last push, for the others
 	return code, true
 }
