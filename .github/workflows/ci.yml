@@ -37,7 +37,8 @@ jobs:
           set +e   # the step's shell stops at the first failure otherwise (-e, pipefail): the annotations below would never be written
           # an athanor build for the tests that run the real executable (the macOS cage, the chat's script…)
           if [ "$RUNNER_OS" != Windows ]; then go build -o "$RUNNER_TEMP/athanor-test" . && export ATHANOR_BIN_TEST="$RUNNER_TEMP/athanor-test"; fi
-          go test ./... > test.log 2>&1; code=$?
+          # the whole suite takes about 9 minutes on the Windows runners: room beyond go test's 10-minute default
+          go test -timeout 30m ./... > test.log 2>&1; code=$?
           cat test.log
           if [ "$code" != 0 ]; then
             # one annotation per failed test, with its messages (readable through the API, without the log)
