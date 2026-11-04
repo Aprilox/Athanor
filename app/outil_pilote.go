@@ -612,6 +612,9 @@ func (p *pilote) connexionActuelle() connexionClaude {
 // relireConnexion: the connection of .env read again; true when it changed (another token, another key,
 // the other mode): it is used from the next run of Claude on, and what waited on the old one stops waiting.
 func (p *pilote) relireConnexion() bool {
+	if st, err := os.Stat(filepath.Join(p.kit, ".env")); err != nil || st.Size() == 0 {
+		return false // no .env, or one being written (another program's): the connection as it was
+	}
 	c := lireConnexionClaude(p.kit, p.origineConn)
 	p.connexionMu.Lock()
 	avant := p.connexion
