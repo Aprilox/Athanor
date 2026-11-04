@@ -15,6 +15,7 @@ import (
 	"bufio"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"math"
 	"os"
@@ -220,6 +221,43 @@ func budgetAtteint(kit string, c connexionClaude) (bool, float64) {
 	}
 	d, _ := depenseAPI(kit, c.Depuis)
 	return d >= c.Budget, d
+}
+
+// kitConnexion: the tool folder whose .env this process read (chargerEnvKit, chargerEnvSante): where the
+// short runs of Claude (health, Fix with Claude, Improve) write what they cost
+var kitConnexion string
+
+// reponseJSONClaude: what "claude -p … --output-format json" printed: the answer, what it cost, whether
+// Claude Code calls it an error; the raw output as the answer when it is not that JSON.
+func reponseJSONClaude(sortie string) (texte string, cout float64, erreur bool) {
+	lignes := strings.Split(strings.TrimSpace(sortie), "\n")
+	for i := len(lignes) - 1; i >= 0; i-- {
+		l := strings.TrimSpace(lignes[i])
+		if !strings.HasPrefix(l, "{") {
+			continue
+		}
+		var v struct {
+			Type   string  `json:"type"`
+			Result *string `json:"result"`
+			Cout   float64 `json:"total_cost_usd"`
+			Erreur bool    `json:"is_error"`
+		}
+		if json.Unmarshal([]byte(l), &v) == nil && (v.Type == "result" || v.Result != nil) {
+			if v.Result != nil {
+				texte = *v.Result
+			}
+			return texte, v.Cout, v.Erreur
+		}
+	}
+	return sortie, 0, false
+}
+
+// noterDepenseCourte: what a short run of Claude cost (the health check, Fix with Claude, Improve).
+func noterDepenseCourte(cout float64, origine string) {
+	if kitConnexion == "" || cout <= 0 {
+		return
+	}
+	noterDepense(kitConnexion, lireConnexionClaude(kitConnexion, nil).Mode, cout, "", origine)
 }
 
 // coutJournalClaude: the total_cost_usd of the last result of a stream-json log (0 when none).

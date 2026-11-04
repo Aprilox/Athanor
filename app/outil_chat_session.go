@@ -5,6 +5,7 @@ package main
 // may edit it, the change is committed), its stream into logs/chat/ID.jsonl, its errors into ID.err.
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -135,7 +136,7 @@ func lancerAmeliorer(args []string) int {
 	if claude == "" {
 		claude = "claude"
 	}
-	a := []string{"-p", string(consigne), "--max-turns", "1", "--output-format", "text"}
+	a := []string{"-p", string(consigne), "--max-turns", "1", "--output-format", "json"}
 	if m := os.Getenv("MODEL"); m != "" {
 		a = append(a, "--model", m)
 	}
@@ -144,8 +145,13 @@ func lancerAmeliorer(args []string) int {
 	c := commandeContexte(ctx, claude, a...)
 	c.Dir = d
 	c.Env = append(os.Environ(), "ENABLE_CLAUDEAI_MCP_SERVERS=false")
-	c.Stdout, c.Stderr = os.Stdout, os.Stderr
-	if err := c.Run(); err != nil {
+	var sortie bytes.Buffer
+	c.Stdout, c.Stderr = &sortie, os.Stderr
+	err = c.Run()
+	texte, cout, _ := reponseJSONClaude(sortie.String()) // the answer on stdout, its cost counted (API mode)
+	noterDepenseCourte(cout, "Improve")
+	fmt.Print(texte)
+	if err != nil {
 		if ctx.Err() != nil {
 			return 124
 		}

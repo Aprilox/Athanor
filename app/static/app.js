@@ -890,6 +890,7 @@ function naviguer() {
   // "#page@block": the page, then that block of it shown (the Guide's buttons: Settings › Options › GitHub…)
   let ancre = "";
   if (page.includes("@")) { [page, ancre] = page.split("@", 2); history.replaceState(null, "", "#" + page); }
+  if (ancre === "bloc-pcs") etat.pcsOuvert = true; // a folded block the link points at: shown open
   if (ancre) montrerAncre(ancre);
   // the application's options are a tab of the settings now (older links, and the texts that say "Options")
   if (page === "options") { etat.ongletReglages = "options"; history.replaceState(null, "", "#reglages"); page = "reglages"; }
@@ -906,6 +907,8 @@ window.addEventListener("hashchange", naviguer);
 function montrerAncre(id, essais = 40) {
   const x = document.getElementById(id);
   if (!x) { if (essais > 0) setTimeout(() => montrerAncre(id, essais - 1), 150); return; }
+  const repli = x.querySelector(":scope > details"); // a folded block (Overview › Other computers): opened
+  if (repli && !repli.open) repli.open = true;
   x.scrollIntoView({ behavior: "smooth", block: "center" });
   x.classList.remove("surligne"); void x.offsetWidth; x.classList.add("surligne");
   setTimeout(() => x.classList.remove("surligne"), 2600);
@@ -3129,6 +3132,16 @@ function erreurPCs(e) {
     return x;
   }).join(" · ");
 }
+// pcsOuvert: Overview › Other computers unfolded (this device's choice; folded by default)
+function pcsOuvert() {
+  if (etat.pcsOuvert === undefined) { try { etat.pcsOuvert = localStorage.getItem("pcsOuvert") === "1"; } catch (e) { etat.pcsOuvert = false; } }
+  return etat.pcsOuvert;
+}
+document.addEventListener("toggle", (ev) => {
+  if (!ev.target || ev.target.id !== "pcs-repli") return;
+  etat.pcsOuvert = ev.target.open;
+  try { localStorage.setItem("pcsOuvert", etat.pcsOuvert ? "1" : "0"); } catch (e) { /* this device only */ }
+}, true);
 function rendreBlocPCs(vp) {
   if (!vp || !vp.lie) return "";
   const nomP = etat.projet || ((etat.vue || {}).projet || {}).nom;
@@ -3141,9 +3154,10 @@ function rendreBlocPCs(vp) {
     </div>`;
   }
   if (!vp.actif) {
-    // step by step: what working at the same time needs, and where this computer stands
+    // step by step: what working at the same time needs, and where this computer stands; folded while it is
+    // not used (opened again by a click, remembered on this device; always open once switched on)
     const cx = connexionConnueGH() || {};
-    return `<div class="bloc" id="bloc-pcs"><h2>${t("Other computers")}</h2>
+    return `<div class="bloc bloc-repliable" id="bloc-pcs"><details id="pcs-repli" ${pcsOuvert() ? "open" : ""}><summary><h2>${t("Other computers")}</h2><span class="muet petit">${t("not used on this project")}</span></summary>
       <p class="intro petit">${t("Build this project with other computers at the same time, from the same GitHub repository: each one takes a milestone no other one is building, the ones it is best at first, and they merge each other's work.")} ${lienGuide("pcs")}</p>
       <ol class="pas-pcs petit">
         <li>${t("Each person can push to {0}: its owner adds them as collaborators on GitHub (the repository's Settings › Collaborators). No organization needed.", [h(vp.depot || "")])}</li>
@@ -3153,7 +3167,7 @@ function rendreBlocPCs(vp) {
         <li>${t("On each other computer: New project › Join a project, with {0}, the same branch and an empty folder.", [h(vp.depot || "")])}</li>
       </ol>
       <label class="interrupteur"><input type="checkbox" data-pcs-actif><span>${t("Work with other computers on {0}", [h(vp.depot || "")])}</span></label>
-    </div>`;
+    </details></div>`;
   }
   const tous = [vp.moi, ...(vp.pcs || [])].filter(Boolean);
   // a milestone another computer could not build (a program that did not work there): who was meant to build it

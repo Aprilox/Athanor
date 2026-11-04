@@ -271,7 +271,7 @@ var demanderClaude = func(consigne string, delai time.Duration) (string, error) 
 	if claude == "" {
 		claude = "claude"
 	}
-	a := []string{"-p", consigne, "--output-format", "text", "--max-turns", "25", "--allowedTools", "WebFetch,WebSearch", "--strict-mcp-config"}
+	a := []string{"-p", consigne, "--output-format", "json", "--max-turns", "25", "--allowedTools", "WebFetch,WebSearch", "--strict-mcp-config"}
 	if m := os.Getenv("MODEL"); m != "" {
 		a = append(a, "--model", m)
 	}
@@ -282,17 +282,20 @@ var demanderClaude = func(consigne string, delai time.Duration) (string, error) 
 	c.Env = append(os.Environ(), "ENABLE_CLAUDEAI_MCP_SERVERS=false")
 	var sortie, erreurs bytes.Buffer
 	c.Stdout, c.Stderr = &sortie, &limiteur{b: &erreurs, max: 1 << 16}
-	if err := c.Run(); err != nil {
+	err = c.Run()
+	texte, cout, _ := reponseJSONClaude(sortie.String())
+	noterDepenseCourte(cout, "Fix with Claude")
+	if err != nil {
 		if ctx.Err() != nil {
 			return "", errors.New("Claude took too long")
 		}
 		detail := strings.TrimSpace(erreurs.String())
 		if detail == "" {
-			detail = strings.TrimSpace(sortie.String())
+			detail = strings.TrimSpace(texte)
 		}
 		return "", errors.New(court(derniereLigneTexte(firstNonEmpty(detail, err.Error())), 300))
 	}
-	return sortie.String(), nil
+	return texte, nil
 }
 
 // lirePropositionMCP: the JSON object of Claude's answer (a code fence or a sentence around it tolerated).
