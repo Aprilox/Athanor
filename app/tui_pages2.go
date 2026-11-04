@@ -541,7 +541,10 @@ func (a *appTUI) pageReglages(e *ecranT, x, y, l, h int) {
 	jx, jy, jl, jh := a.boite(e, x+lg, y, l-lg, h, r.Cle, false)
 	yy := jy + a.texteBloc(e, jx, jy, jl, jh, a.t(r.Aide), a.st(p.encre, fond))
 	if r.Secret {
-		a.texteBloc(e, jx, yy+1, jl, jh-(yy-jy)-1, a.t("A secret: never shown; Enter replaces it."), a.st(p.muet, fond))
+		yy += 1 + a.texteBloc(e, jx, yy+1, jl, jh-(yy-jy)-1, a.t("A secret: never shown; Enter replaces it."), a.st(p.muet, fond))
+	}
+	if (r.Cle == "CLAUDE_AUTH" || r.Cle == "ANTHROPIC_API_KEY" || r.Cle == "API_BUDGET_USD") && yy+1 < jy+jh {
+		a.texteBloc(e, jx, yy+1, jl, jh-(yy-jy)-1, a.t("With an API key")+" "+a.t("the plugins and connectors of your claude.ai account (Gmail, Drive… added in the Claude app) do not work. The Skills, the MCP servers and every extension of Athanor work the same. Each run of Claude is billed to the API account: Overview shows the spend, and the pilot waits once the budget is spent."), a.st(p.attention, fond))
 	}
 }
 
@@ -554,6 +557,14 @@ func (a *appTUI) modifierReglage() {
 		return
 	}
 	r := a.env[a.selReglage]
+	if r.Cle == "CLAUDE_AUTH" {
+		a.demander(a.t("Connect with"), a.t(r.Aide), []choixTUI{{id: modeConnexionAbonnement, texte: a.t("Claude subscription (token)")}, {id: modeConnexionAPI, texte: a.t("API key (paid per use)")}, {id: "", texte: a.t("Cancel")}}, func(m string) {
+			if m != "" {
+				a.agir("POST", "env", map[string]string{"CLAUDE_AUTH": m}, func(map[string]any) { a.derniere["env"] = time.Time{} })
+			}
+		})
+		return
+	}
 	s := &saisieT{masque: r.Secret}
 	if !r.Secret {
 		s.mettreTexte(r.Valeur)

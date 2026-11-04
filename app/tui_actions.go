@@ -167,6 +167,10 @@ func (a *appTUI) touchePage(ev evenementTUI, k string) {
 	}
 	switch a.page {
 	case pSuivi:
+		if k == "$" && a.vue != nil && a.vue.Depense != nil {
+			a.compterDepense()
+			return
+		}
 		defiler(&a.defilPlan, -1)
 	case pJournal:
 		switch k {
@@ -915,8 +919,47 @@ func (a *appTUI) etapeDansTerminal(id string, ensuite func(code int)) {
 	}()
 }
 
-// demanderJeton: the token Claude Code showed (claude setup-token), into Athanor's settings (.env).
+// compterDepense: Overview › API spend counted again from now (credit added to the API account).
+func (a *appTUI) compterDepense() {
+	a.demander(a.t("Count again from now"), a.t("Count the API spend again from now (0 $)? Do it when you added credit to the API account; the budget then counts from now."),
+		[]choixTUI{{id: "oui", texte: a.t("Count again from now")}, {id: "", texte: a.t("Cancel")}}, func(r string) {
+			if r == "oui" {
+				a.agir("POST", "depense", map[string]string{"action": "zero"}, nil)
+			}
+		})
+}
+
+// modeAPITUI: Settings › Claude › Connection is the API key (the state says so with its spend; else the
+// settings read last).
+func (a *appTUI) modeAPITUI() bool {
+	if a.vue != nil && a.vue.Depense != nil {
+		return true
+	}
+	for _, l := range a.env {
+		if l.Cle == "CLAUDE_AUTH" {
+			return strings.EqualFold(strings.TrimSpace(l.Valeur), modeConnexionAPI)
+		}
+	}
+	return false
+}
+
+// demanderJeton: the token Claude Code showed (claude setup-token), into Athanor's settings (.env); in API
+// mode, the API key.
 func (a *appTUI) demanderJeton() {
+	if a.modeAPITUI() {
+		a.formulaire(a.t("API key and model access"), a.t("Paste the API key (console.anthropic.com › API keys; it starts with sk-ant-). It goes into Athanor's settings, never on the screen.")+"  "+a.t(aideFormulaireLigne),
+			[]champTUI{{lib: "ANTHROPIC_API_KEY", h: 1, s: &saisieT{masque: true}}}, func(v []string) {
+				j := strings.TrimSpace(v[0])
+				if j == "" {
+					return
+				}
+				a.agir("POST", "env", map[string]string{"ANTHROPIC_API_KEY": j}, func(map[string]any) {
+					a.derniere["env"] = time.Time{}
+					a.agir("POST", "sante/verifier", map[string]string{"id": "jeton"}, func(map[string]any) { a.derniere["sante"] = time.Time{} })
+				})
+			})
+		return
+	}
 	a.formulaire(a.t("Token and model access"), a.t("Paste the token Claude Code showed (it starts with sk-ant-). It goes into Athanor's settings, never on the screen.")+"  "+a.t(aideFormulaireLigne),
 		[]champTUI{{lib: "CLAUDE_CODE_OAUTH_TOKEN", h: 1, s: &saisieT{masque: true}}}, func(v []string) {
 			j := strings.TrimSpace(v[0])

@@ -9,7 +9,9 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
+	"time"
 )
 
 // ----------------------------------------------------------------------------- .env
@@ -18,7 +20,8 @@ const masque = "••••••••"
 
 // clesEnvCachees: settings of older versions, still in an older .env but read by nothing any more:
 // never shown (Unreal: the MCP library; PILOT_ENGINE: there is one pilot only, in Go, since 2.25).
-var clesEnvCachees = map[string]bool{"UNREAL_MCP": true, "UNREAL_MCP_URL": true, "PILOT_ENGINE": true}
+var clesEnvCachees = map[string]bool{"UNREAL_MCP": true, "UNREAL_MCP_URL": true, "PILOT_ENGINE": true,
+	"API_BUDGET_SINCE": true} // (this one: set by Athanor, Overview › API spend shows it)
 
 func (s *Serveur) apiEnv(w http.ResponseWriter, r *http.Request) {
 	chemin := s.kitCourant().Env()
@@ -80,6 +83,7 @@ func (s *Serveur) apiEcrireEnv(w http.ResponseWriter, r *http.Request) {
 			_ = os.WriteFile(chemin, b, 0o600)
 		}
 	}
+	reglagesConnexionEnregistres(s.kitCourant().Racine, valeurs) // a new API key, a first budget: counted from now
 	if err := EcrireEnv(chemin, valeurs); err != nil {
 		s.erreur(w, http.StatusInternalServerError, err.Error())
 		return
@@ -91,10 +95,45 @@ func (s *Serveur) apiEcrireEnv(w http.ResponseWriter, r *http.Request) {
 
 func (s *Serveur) apiSante(w http.ResponseWriter, r *http.Request) {
 	vues := []VerifVue{}
+	api := lireConnexionClaude(s.kitCourant().Racine, nil).api()
 	for _, v := range s.listeVerifs() {
-		vues = append(vues, v.Vue())
+		x := v.Vue()
+		if x.ID == "jeton" && api {
+			x = verifJetonAPI(x)
+		}
+		vues = append(vues, x)
 	}
 	s.ecrireJSON(w, vues)
+}
+
+// verifJetonAPI: the check of the connection in API mode: the key, and no window to get a token.
+func verifJetonAPI(x VerifVue) VerifVue {
+	x.Titre = "API key and model access"
+	x.Explication = "The API key (ANTHROPIC_API_KEY, Settings › Claude › Connection) is accepted: a tiny Haiku session answers (a fraction of a cent, billed to the API account)."
+	x.ReparationAuto, x.ReparationTerminal = false, false
+	x.ReparationInfo = "Create a key on console.anthropic.com (API keys), then paste it into Settings › Claude › Connection."
+	return x
+}
+
+// apiDepense: POST /api/depense {action: "zero"}: Overview › API spend counted again from now (credit added).
+func (s *Serveur) apiDepense(w http.ResponseWriter, r *http.Request) {
+	var c struct {
+		Action string `json:"action"`
+	}
+	if err := lireCorps(r, &c); err != nil || c.Action != "zero" {
+		s.erreur(w, http.StatusBadRequest, "Invalid request")
+		return
+	}
+	k := s.kitCourant()
+	if _, err := os.Stat(k.Env()); err != nil {
+		s.erreur(w, http.StatusBadRequest, "No settings yet (Settings › Claude)")
+		return
+	}
+	if err := EcrireEnv(k.Env(), map[string]string{"API_BUDGET_SINCE": strconv.FormatInt(time.Now().Unix(), 10)}); err != nil {
+		s.erreur(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.msg(w, "API spend counted again from now: the running pilots apply it at once.")
 }
 
 // listeVerifs: the checks of the current mode (WSL, or native Windows).

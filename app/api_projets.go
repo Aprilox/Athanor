@@ -120,6 +120,8 @@ type EtatVue struct {
 	Connectes      int  `json:"connectes,omitempty"`
 	// the device paired last ("id|name"): the window says so when it changes (Athanor's window only)
 	DernierAppareil string `json:"dernier_appareil,omitempty"`
+	// API mode: the spend, in place of the quota (connexion_claude.go)
+	Depense *EtatDepense `json:"depense,omitempty"`
 }
 
 func (s *Serveur) apiEtat(w http.ResponseWriter, r *http.Request) {
@@ -179,6 +181,7 @@ func (s *Serveur) apiEtat(w http.ResponseWriter, r *http.Request) {
 	s.mu.Unlock()
 	vue.Quota = quotaActuel(tous)
 	vue.QuotaArret = lireReglesQuota(kit)
+	vue.Depense = etatDepenseKit(kit.Racine)
 	m := etatMajCourant(kit)
 	vue.Maj = &m
 	if ok {

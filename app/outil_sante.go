@@ -50,6 +50,8 @@ var reLigneEnvSante = regexp.MustCompile(`^([A-Za-z_][A-Za-z0-9_]*)=(.*)$`)
 // chargerEnvSante: the kit's .env exported (as the scripts did: each KEY=VALUE line, never evaluated, the
 // value as written), then ~/.local/bin and the kit's system/bin first in the PATH.
 func chargerEnvSante(kit string) {
+	origine := origineConnexion()
+	defer appliquerConnexionProcessus(kit, origine) // only the chosen connection (connexion_claude.go)
 	if b, err := os.ReadFile(filepath.Join(kit, ".env")); err == nil {
 		for _, l := range strings.Split(string(b), "\n") {
 			l = strings.TrimSuffix(l, "\r")
@@ -420,18 +422,35 @@ func santeOutilsKit(kit string) int {
 	return 0
 }
 
-// santeJeton: the token is in .env, and a tiny Haiku session answers with it.
+// santeJeton: the connection chosen in Settings (the subscription's token, or an API key) is in .env, and a
+// tiny Haiku session answers with it.
 func santeJeton(kit string) int {
-	b, _ := os.ReadFile(filepath.Join(kit, ".env"))
-	if !regexp.MustCompile(`(?m)^CLAUDE_CODE_OAUTH_TOKEN=.{20,}`).Match(b) {
+	c := lireConnexionClaude(kit, nil)
+	if c.api() {
+		if len(c.Cle) < 20 {
+			direSante("API key ABSENT from .env (Settings › Claude › Connection: API mode is chosen)")
+			return 3
+		}
+		if !strings.HasPrefix(c.Cle, "sk-ant-") {
+			direSante(`WARNING: the API key does not start with "sk-ant-": is it the right one?`)
+		}
+	} else if len(c.Jeton) < 20 {
 		direSante("Token ABSENT from .env (Settings)")
 		return 3
 	}
 	_ = os.Setenv("ENABLE_CLAUDEAI_MCP_SERVERS", "false")
 	sortie, code := sortieDe(120*time.Second, "claude", "-p", "Answer exactly: TOKEN_OK", "--model", "haiku", "--max-turns", "1")
 	if strings.Contains(sortie, "TOKEN_OK") {
-		direSante("Connection OK")
+		if c.api() {
+			direSante("Connection OK (API key: each run is billed to the API account)")
+		} else {
+			direSante("Connection OK")
+		}
 		return 0
+	}
+	if reCreditTextePilote.MatchString(sortie) {
+		direSante("API key accepted, but the API account has no credit left: add credit (console.anthropic.com › Billing), or put another key")
+		return 1
 	}
 	lignes := strings.Split(strings.TrimRight(strings.ReplaceAll(sortie, "\r", ""), "\n"), "\n")
 	derniere := ""

@@ -343,7 +343,7 @@ func (p *pilote) envClaude() []string {
 	if p.natif {
 		out = append(out, "MSYS2_ARG_CONV_EXCL=*")
 	}
-	return out
+	return p.connexionActuelle().environnement(out) // only the chosen connection (the subscription or the API)
 }
 
 func (p *pilote) gitHead(dossier string) string {
@@ -1922,6 +1922,7 @@ func lancerPilote(args []string) int {
 	}
 	assainirAtelier(etat)
 
+	origineConn := origineConnexion() // before .env: what the environment gave (connexion_claude.go)
 	if b, err := os.ReadFile(filepath.Join(kit, ".env")); err == nil {
 		for _, l := range strings.Split(string(b), "\n") {
 			l = strings.TrimSuffix(l, "\r")
@@ -2007,6 +2008,8 @@ func lancerPilote(args []string) int {
 	}
 
 	p := &pilote{
+		origineConn:              origineConn,
+		connexion:                lireConnexionClaude(kit, origineConn),
 		kit:                      kit,
 		systeme:                  systeme,
 		tools:                    tools,
@@ -2503,10 +2506,19 @@ func lancerPilote(args []string) int {
 			}
 		}
 
+		p.relireConnexion() // a token or a key changed in Settings: this cycle runs with it
 		if !p.connexionPresente() {
-			p.log("NO CONNECTION to Claude: put your token in .env (run configure), then restart.")
-			p.statut("Waiting for connection (token missing in .env)")
+			if p.connexionActuelle().api() {
+				p.log("NO CONNECTION to Claude: API mode, and no API key in Settings (Claude › Connection). The pilot resumes as soon as one is saved.")
+				p.statut("Waiting for connection (no API key in Settings)")
+			} else {
+				p.log("NO CONNECTION to Claude: put your token in Settings (Claude › Connection), or run configure. The pilot resumes as soon as one is saved.")
+				p.statut("Waiting for connection (token missing in .env)")
+			}
 			p.dormir(p.loginWaitMin * 60)
+			continue
+		}
+		if p.attendreBudget() {
 			continue
 		}
 
@@ -2809,6 +2821,8 @@ func lancerPilote(args []string) int {
 			etatCycle = "bloque"
 		case code == 0 && !enErreur:
 			etatCycle = "ok"
+		case reCreditTextePilote.MatchString(texteResultat + "\n" + finLog):
+			etatCycle = "credit"
 		case reQuotaTextePilote.MatchString(texteResultat + "\n" + finLog):
 			etatCycle = "quota"
 		case reConnTextePilote.MatchString(texteResultat + "\n" + finLog):
@@ -2818,7 +2832,7 @@ func lancerPilote(args []string) int {
 		}
 
 		issueCadrage := ""
-		if cadrage && etatCycle != "quota" && etatCycle != "connexion" {
+		if cadrage && etatCycle != "quota" && etatCycle != "connexion" && etatCycle != "credit" {
 			if p.planPret() {
 				issueCadrage = "fait"
 				etatCycle = "ok"
@@ -3030,8 +3044,15 @@ func lancerPilote(args []string) int {
 			p.log(fmt.Sprintf("Cycle %d: context full (%sk tokens). A fresh session takes over the milestone now, from the relay notes.", p.cycle, lireTexteCourt(filepath.Join(p.prive, "relais_k"))))
 		case "connexion":
 			p.etatPhase = "connexion"
-			p.log(fmt.Sprintf("Connection problem (token expired or invalid?). Retrying in %d min.", p.loginWaitMin))
-			p.statut("Connection problem: check the token in .env")
+			p.log(fmt.Sprintf("Connection problem (the %s expired or is invalid?). Put a new one in Settings: the pilot resumes at once (else it tries again in %d min).", p.connexionActuelle().nom(), p.loginWaitMin))
+			p.statut("Connection problem: check the token or the API key in Settings")
+			p.dormir(p.loginWaitMin * 60)
+		case "credit":
+			// the API account's credit is used up: nothing to do but add credit or change the key
+			p.etatPhase = "budget"
+			p.etatReprise = ""
+			p.log(fmt.Sprintf("The API account has no credit left (Claude Code: credit balance too low). Add credit, or put another API key in Settings: the pilot resumes at once (else it tries again in %d min).", p.loginWaitMin))
+			p.statut("API credit used up: waiting for credit or another key")
 			p.dormir(p.loginWaitMin * 60)
 		case "bloque":
 			erreurs++

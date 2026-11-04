@@ -344,6 +344,7 @@ func (s *Serveur) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/remarque", s.garde(false, s.apiRemarque))
 	mux.HandleFunc("GET /api/modeles", s.garde(false, s.apiModeles))
 	mux.HandleFunc("POST /api/quota/arret", s.garde(false, s.apiReglesQuota))
+	mux.HandleFunc("POST /api/depense", s.garde(false, s.apiDepense))
 	mux.HandleFunc("GET /api/chat", s.garde(false, s.apiChat))
 	mux.HandleFunc("POST /api/chat", s.garde(false, s.apiChatEnvoyer))
 	mux.HandleFunc("POST /api/chat/arreter", s.garde(false, s.apiChatArreter))

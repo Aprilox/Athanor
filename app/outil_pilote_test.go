@@ -525,6 +525,42 @@ func TestBancPilote(t *testing.T) {
 			t.Logf("pilot output:\n%s", sortie)
 		}
 	})
+	// API mode: the account's credit used up, a new key saved in Settings meanwhile: the pilot's long wait
+	// cut short, the next cycle on the new key only (never the subscription's token), its cost written
+	t.Run("api_credit_nouvelle_cle", func(t *testing.T) {
+		kit := preparerKitEssaiPilote(t, binTemp)
+		fakeClaude := filepath.Join(kit, "fake-claude-credit.sh")
+		if err := os.WriteFile(fakeClaude, []byte(strings.ReplaceAll(scriptFauxClaudeCredit, "\r\n", "\n")), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		projet := filepath.Join(dossierEssaiPilote(t), "projet")
+		_ = os.MkdirAll(filepath.Join(projet, ".athanor"), 0o755)
+		_ = os.WriteFile(filepath.Join(projet, ".athanor", "REQUEST.md"), []byte("# Request\n\nBuild M1.\n"), 0o644)
+		_ = os.WriteFile(filepath.Join(projet, ".athanor", "PLAN.md"), []byte("# Plan\n\n- [ ] M1 : Core feature\n"), 0o644)
+		debut := time.Now()
+		// LOGIN_WAIT_MIN=600: ten minutes of wait (one second a minute here) if the new key did not cut it short
+		sortie := executerPilote(t, binTemp, kit, projet, fakeClaude, []string{"CLAUDE_AUTH=api", "ANTHROPIC_API_KEY=sk-ant-sans-credit", "LOGIN_WAIT_MIN=600"})
+		p := Projet{Nom: "test", Dossier: projet}
+		etat, _ := p.LireEtat()
+		vues, _ := os.ReadFile(filepath.Join(p.Atelier(), "cles_vues"))
+		journal, _ := os.ReadFile(filepath.Join(p.Atelier(), "pilot.log"))
+		d, n := depenseAPI(kit, 0)
+		echec := false
+		verifier := func(ok bool, format string, a ...any) {
+			if !ok {
+				echec = true
+				t.Errorf(format, a...)
+			}
+		}
+		verifier(strings.TrimSpace(string(vues)) == "sk-ant-sans-credit|none\nsk-ant-nouvelle-cle|none", "the keys Claude Code got: %q", vues)
+		verifier(strings.Contains(string(journal), "no credit left") && strings.Contains(string(journal), "Connection to Claude changed in Settings"), "pilot.log:\n%s", journal)
+		verifier(time.Since(debut) < 3*time.Minute, "the wait was not cut short: %v", time.Since(debut))
+		verifier(d == 0.03 && n == 1, "the API spend: %v (%d)", d, n)
+		verifier(strings.HasPrefix(etat.Etat, "DONE"), "final state: %+v", etat)
+		if echec {
+			t.Logf("pilot output:\n%s", sortie)
+		}
+	})
 	t.Run("livre_puis_remarque", func(t *testing.T) {
 		kit := preparerKitEssaiPilote(t, binTemp)
 		fakeClaude := filepath.Join(kit, "fake-claude-livraison.sh")
