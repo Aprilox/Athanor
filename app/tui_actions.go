@@ -214,6 +214,13 @@ func (a *appTUI) touchePage(ev evenementTUI, k string) {
 			a.chatActif = true
 		case "c":
 			a.nouvelleConversation()
+		case "w": // Internet for the messages: only when one needs it
+			a.chatInternet = !a.chatInternet
+			if a.chatInternet {
+				a.annoncer(a.t("Internet on: Claude may search and read the web, only when a message needs it."), false)
+			} else {
+				a.annoncer(a.t("Internet off: Claude answers from the project's files only."), false)
+			}
 		case "m":
 			var choix []choixTUI
 			for _, m := range []string{"", "opus", "sonnet", "haiku", "fable"} {
@@ -800,7 +807,7 @@ func (a *appTUI) envoyerChat() {
 	c := *a.c
 	go func() {
 		var rep map[string]any
-		err := c.appel("POST", "chat", map[string]string{"message": m, "modele": a.modeleChat, "mode": ""}, &rep)
+		err := c.appel("POST", "chat", map[string]any{"message": m, "modele": a.modeleChat, "mode": "", "internet": a.chatInternet}, &rep)
 		a.majs <- func(a *appTUI) {
 			a.envoi = false
 			if err != nil {
