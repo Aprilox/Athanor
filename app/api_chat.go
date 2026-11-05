@@ -14,6 +14,7 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"encoding/json"
+	"math"
 	"net/http"
 	"os"
 	"os/exec"
@@ -32,10 +33,13 @@ type MessageChat struct {
 	Mode   string   `json:"mode,omitempty"`   // question, modif
 	Modele string   `json:"modele,omitempty"`
 	Quand  string   `json:"quand"`
-	Cout   float64  `json:"cout,omitempty"`
+	Cout   float64  `json:"cout,omitempty"`   // what this turn cost
 	Commit string   `json:"commit,omitempty"` // the commit of the changes (modif)
-	Note   bool     `json:"note,omitempty"`   // the note was sent to the pilot
-	Agent  string   `json:"agent,omitempty"`  // the sub-agent it proposed, added to the team under this name
+	// what Claude Code said the whole session cost so far: a resumed session (--resume) reports its total,
+	// this turn's cost is the difference with the turn before (coutTourChat)
+	CoutSession float64 `json:"cout_session,omitempty"`
+	Note        bool    `json:"note,omitempty"`  // the note was sent to the pilot
+	Agent       string  `json:"agent,omitempty"` // the sub-agent it proposed, added to the team under this name
 }
 
 type conversationChat struct {
@@ -298,18 +302,47 @@ func (s *Serveur) apiChatEnvoyer(w http.ResponseWriter, r *http.Request) {
 	s.ecrireJSON(w, map[string]string{"mode": mode})
 }
 
+// coutTourChat: what this turn cost. Claude Code gives the total of the session: a resumed one (--resume)
+// carries on the total of the turns before, so the turn's cost is the difference with the last total known
+// (a message written before 2.49.4 kept that total as its cost); a total lower than it is a session that
+// started its count again.
+func coutTourChat(avant []MessageChat, repris bool, total float64) float64 {
+	if !repris || total <= 0 {
+		return total
+	}
+	for i := len(avant) - 1; i >= 0; i-- {
+		m := avant[i]
+		precedent := m.CoutSession
+		if precedent == 0 {
+			precedent = m.Cout
+		}
+		if m.Role == "vous" || precedent <= 0 {
+			continue
+		}
+		if total >= precedent {
+			return math.Round((total-precedent)*1e4) / 1e4
+		}
+		return total
+	}
+	return total
+}
+
 // finChat: the turn's answer goes into the conversation.
 func (s *Serveur) finChat(k Kit, p Projet, en *chatEnCours, commit, detail string) {
 	textes, outils, final, session, cout, erreur := lireTour(en.journal)
 	conv := lireConversation(k, p)
+	repris := conv.Session != "" // this turn resumed the conversation's session (--resume)
 	if session != "" {
 		conv.Session = session
 	}
+	total := cout
+	cout = coutTourChat(conv.Messages, repris, total)
+	noterDepense(k.Racine, lireConnexionClaude(k.Racine, nil).Mode, cout, p.Nom, "chat") // API mode: counted once
 	texte := strings.TrimSpace(final)
 	if texte == "" && len(textes) > 0 {
 		texte = strings.TrimSpace(textes[len(textes)-1])
 	}
-	m := MessageChat{Role: "claude", Texte: texte, Outils: outils, Mode: en.mode, Modele: en.modele, Quand: time.Now().Format(time.RFC3339), Cout: cout, Commit: commit}
+	m := MessageChat{Role: "claude", Texte: texte, Outils: outils, Mode: en.mode, Modele: en.modele, Quand: time.Now().Format(time.RFC3339), Cout: cout, CoutSession: total, Commit: commit}
 	switch {
 	case en.arrete:
 		m.Role, m.Texte = "erreur", "Stopped."
