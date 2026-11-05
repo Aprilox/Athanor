@@ -189,7 +189,7 @@ func serveurMCP(kit, sid string, def objetJSON, secretsServeur objetJSON, dossie
 		env := facultatif(c.objet("env"))
 		if runtime.GOOS == "windows" {
 			s.mettre("type", "stdio")
-			ajouterCommandeWindows(&s, remplacerExt(cmd, secrets, dossier, manquants), args)
+			ajouterCommandeWindows(kit, &s, remplacerExt(cmd, secrets, dossier, manquants), args)
 			if len(env.cles) > 0 {
 				s.mettre("env", env)
 			}
@@ -238,8 +238,15 @@ func serveurMCP(kit, sid string, def objetJSON, secretsServeur objetJSON, dossie
 		for _, a := range argsDe(dossier) {
 			args = append(args, commandeHote(a, athanor))
 		}
+		hote := commandeHote(remplacerExt(cmd, secrets, dossier, manquants), athanor)
+		if runtime.GOOS == "windows" {
+			if args == nil {
+				args = []string{}
+			}
+			hote, args = enveloppeMCPWindows(kit, hote, args)
+		}
 		s.mettre("type", "stdio")
-		s.mettre("command", commandeHote(remplacerExt(cmd, secrets, dossier, manquants), athanor))
+		s.mettre("command", hote)
 		s.mettre("args", args)
 		if env := facultatif(c.objet("env")); len(env.cles) > 0 {
 			s.mettre("env", env)
@@ -252,7 +259,7 @@ func serveurMCP(kit, sid string, def objetJSON, secretsServeur objetJSON, dossie
 		if runtime.GOOS == "windows" {
 			args := argsDe(dossier)
 			s.mettre("type", "stdio")
-			ajouterCommandeWindows(&s, remplacerExt(cmd, secrets, dossier, manquants), args)
+			ajouterCommandeWindows(kit, &s, remplacerExt(cmd, secrets, dossier, manquants), args)
 			if env := facultatif(c.objet("env")); len(env.cles) > 0 {
 				s.mettre("env", env)
 			}
@@ -290,20 +297,33 @@ func serveurMCP(kit, sid string, def objetJSON, secretsServeur objetJSON, dossie
 	return &s, ""
 }
 
-// ajouterCommandeWindows: native Windows, a .cmd or .bat launcher (npx, uvx…) goes through cmd /c.
-func ajouterCommandeWindows(s *objetJSON, cmd string, args []string) {
+// ajouterCommandeWindows: native Windows, a .cmd or .bat launcher (npx, uvx…) goes through cmd /c, and the
+// whole through Athanor.exe (enveloppeMCPWindows).
+func ajouterCommandeWindows(kit string, s *objetJSON, cmd string, args []string) {
 	w, _ := exec.LookPath(cmd)
 	b := strings.ToLower(filepath.Base(cmd))
 	if l := strings.ToLower(w); (strings.HasSuffix(l, ".cmd") || strings.HasSuffix(l, ".bat")) && b != "cmd" && b != "cmd.exe" {
-		s.mettre("command", "cmd")
-		s.mettre("args", append([]string{"/c", cmd}, args...))
-		return
+		cmd, args = "cmd", append([]string{"/c", cmd}, args...)
 	}
 	if args == nil {
 		args = []string{}
 	}
+	cmd, args = enveloppeMCPWindows(kit, cmd, args)
 	s.mettre("command", cmd)
 	s.mettre("args", args)
+}
+
+// enveloppeMCPWindows: native Windows, an MCP server started by Athanor.exe (--isole --ici: on the desktop
+// Claude runs on, no other), its console hidden (CREATE_NO_WINDOW). Claude Code starts its servers without
+// a console of their own: each console program then opened a window of its own (cmd, node, PowerShell, a
+// Windows Terminal), on the user's screen, at every start and end of a session. Athanor.exe has no console
+// to open; whatever the server leaves running stops with it. Without Athanor.exe in the kit: as it was.
+func enveloppeMCPWindows(kit, cmd string, args []string) (string, []string) {
+	exe := filepath.Join(kit, "Athanor.exe")
+	if st, err := os.Stat(exe); err != nil || st.IsDir() || strings.EqualFold(filepath.Clean(cmd), exe) {
+		return cmd, args
+	}
+	return exe, append([]string{"--isole", "--ici", "--fin-tout", "--", cmd}, args...)
 }
 
 func interopWindows() bool {

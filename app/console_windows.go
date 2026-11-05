@@ -13,9 +13,24 @@ import (
 
 var pAttachConsole = kernel32.NewProc("AttachConsole")
 
+// partagerConsoleParent: attached to the parent's console. Standard handles that were already given (pipes:
+// an MCP server's, a gateway's output read by Claude) stay those: the console only fills in the missing ones.
 func partagerConsoleParent() bool {
+	nums := [3]int{syscall.STD_INPUT_HANDLE, syscall.STD_OUTPUT_HANDLE, syscall.STD_ERROR_HANDLE}
+	var avant [3]syscall.Handle
+	for i, n := range nums {
+		avant[i], _ = syscall.GetStdHandle(n)
+	}
 	r, _, _ := pAttachConsole.Call(uintptr(^uint32(0))) // ATTACH_PARENT_PROCESS
-	return r != 0
+	if r == 0 {
+		return false
+	}
+	for i, n := range nums {
+		if avant[i] != 0 && avant[i] != syscall.InvalidHandle {
+			pSetStdHandle.Call(uintptr(uint32(n)), uintptr(avant[i]))
+		}
+	}
+	return true
 }
 
 var (

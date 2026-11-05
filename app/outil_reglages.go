@@ -263,6 +263,9 @@ func construireReglages(kitArg, sortie string) error {
 	if natif {
 		env.mettre("PONT_DIRECT", "1")
 		env.mettre("MSYS2_ARG_CONV_EXCL", "")
+		// Claude Code's PowerShell tool: a powershell.exe window of its own on the user's screen at each
+		// command, and outside the Bash hooks (the guards, RTK). Claude runs PowerShell from Git Bash.
+		env.mettre("CLAUDE_CODE_USE_POWERSHELL_TOOL", "0")
 		for _, k := range env.cles {
 			var s string
 			if json.Unmarshal(env.valeur[k], &s) == nil {

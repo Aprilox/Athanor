@@ -70,6 +70,8 @@ func nouveauServeur(config Config) *Serveur {
 		s.ecrireListeProjets() // the admin installer and the firewall rules read it
 	}
 	s.bureau = NouveauBureau(kit)
+	// Windows: a window opened on the screen by a program the application started (a Claude run's): hidden
+	demarrerGardeFenetres(uint32(os.Getpid()), func(t string) { noterFenetreKit(s.kitCourant().Racine, t) })
 	s.bureau.PilotesActifs = func() bool {
 		s.mu.Lock()
 		projets := append([]Projet{}, s.config.Projets...)

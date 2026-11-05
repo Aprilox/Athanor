@@ -203,6 +203,8 @@ func TestReglagesContenu(t *testing.T) {
 	attendus := []string{`"enableAllProjectMcpServers": true`, `"mcp__unreal"`, `"includeCoAuthoredBy": false`}
 	if runtime.GOOS != "windows" { // native Windows: no sandbox, and the paths written Windows' way
 		attendus = append(attendus, `hook fichiers `+p, `"failIfUnavailable": true`)
+	} else { // and no PowerShell tool (a window of its own at each command, outside the Bash hooks)
+		attendus = append(attendus, `"CLAUDE_CODE_USE_POWERSHELL_TOOL": "0"`)
 	}
 	for _, attendu := range attendus {
 		if !strings.Contains(string(b), attendu) {

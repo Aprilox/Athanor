@@ -2338,6 +2338,9 @@ func lancerPilote(args []string) int {
 		_ = os.Setenv("RTK_TELEMETRY_DISABLED", "1")
 	}
 
+	if p.natif { // the windows Claude Code's programs open on the user's screen: hidden, written down here
+		demarrerGardeFenetres(uint32(os.Getpid()), p.log)
+	}
 	p.preparerExtensions()
 	p.preparerEcran()
 
