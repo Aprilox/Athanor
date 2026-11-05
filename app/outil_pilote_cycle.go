@@ -2331,7 +2331,7 @@ func lancerPilote(args []string) int {
 		return 1
 	}
 	// RTK keeps its measures (what it spared) in the project's workshop: the sandbox keeps it out of ~/
-	if r := filepath.Join(p.kit, "system", "bin", "rtk"); !p.natif && os.Getenv("RTK") != "0" && fichierExecutablePilote(r) {
+	if r := cheminRTK(p.kit); os.Getenv("RTK") != "0" && rtkUtilisable(r) {
 		p.rtkBin = r
 		_ = os.MkdirAll(dossierRTK(p.projet), 0o755)
 		_ = os.Setenv("RTK_DB_PATH", filepath.Join(dossierRTK(p.projet), "history.db"))
