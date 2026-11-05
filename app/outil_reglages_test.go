@@ -209,4 +209,29 @@ func TestReglagesContenu(t *testing.T) {
 			t.Errorf("missing %s in\n%s", attendu, b)
 		}
 	}
+	if strings.Contains(string(b), "hook claude") {
+		t.Fatal("RTK's hook without RTK")
+	}
+	// RTK in the kit: its hook rewrites Claude's commands (native Windows: rtk.exe, forward slashes for Git Bash)
+	rtk := cheminRTK(kit)
+	_ = os.MkdirAll(filepath.Dir(rtk), 0o755)
+	_ = os.WriteFile(rtk, []byte("#!/bin/sh\n"), 0o755)
+	if err := construireReglages(kit, out); err != nil {
+		t.Fatal(err)
+	}
+	b, _ = os.ReadFile(out)
+	attendu := `"exec ` + shlexQuote(rtk) + ` hook claude"`
+	if runtime.GOOS == "windows" {
+		attendu = `"` + shlexQuote(strings.ReplaceAll(rtk, "\\", "/")) + ` hook claude"`
+	}
+	if !strings.Contains(string(b), attendu) {
+		t.Errorf("missing %s in\n%s", attendu, b)
+	}
+	t.Setenv("RTK", "0")
+	if err := construireReglages(kit, out); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ = os.ReadFile(out); strings.Contains(string(b), "hook claude") {
+		t.Fatal("RTK's hook with RTK=0")
+	}
 }

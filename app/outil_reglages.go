@@ -166,11 +166,8 @@ func construireReglages(kitArg, sortie string) error {
 			lectures = append(lectures, joinOS(config, "projects", reNonAlnum.ReplaceAllString(p, "-")))
 		}
 	}
-	rtkBin := joinOS(system, "bin", "rtk")
-	rtk := os.Getenv("RTK") != "0"
-	if st, err := os.Stat(rtkBin); err != nil || st.Mode()&0o111 == 0 {
-		rtk = false
-	}
+	rtkBin := cheminRTK(kit) // native Windows: system\bin-windows\rtk.exe, beside Claude's commands
+	rtk := os.Getenv("RTK") != "0" && rtkUtilisable(rtkBin)
 	var logiciels []string
 	if b, err := os.ReadFile(joinOS(system, "pc_tools.env")); err == nil {
 		for _, l := range strings.Split(string(b), "\n") {
@@ -264,7 +261,6 @@ func construireReglages(kitArg, sortie string) error {
 		crochet("Bash", ligneShell(exe, "hook", "bash")),
 	}
 	if natif {
-		rtk = false // RTK here is a Linux program
 		env.mettre("PONT_DIRECT", "1")
 		env.mettre("MSYS2_ARG_CONV_EXCL", "")
 		for _, k := range env.cles {
@@ -275,7 +271,10 @@ func construireReglages(kitArg, sortie string) error {
 		}
 		permissions.mettre("additionalDirectories", []string{strings.ReplaceAll(tools, "\\", "/")})
 	}
-	if rtk {
+	switch {
+	case rtk && natif: // Git Bash runs the hooks: forward slashes, as for Athanor's own
+		crochets = append(crochets, crochet("Bash", ligneShell(strings.ReplaceAll(rtkBin, "\\", "/"), "hook", "claude")))
+	case rtk:
 		crochets = append(crochets, crochet("Bash", "exec "+shlexQuote(rtkBin)+" hook claude"))
 	}
 	var r objetJSON

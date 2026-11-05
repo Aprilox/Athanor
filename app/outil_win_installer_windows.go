@@ -26,7 +26,7 @@ import (
 
 func init() {
 	enregistrerCommande("installer-windows", "installer-windows [--kit DIR]: the Windows installation of the WSL mode (WSL2, its network, then athanor installer in WSL, administrator rights)", lancerInstallerWindows)
-	enregistrerCommande("installer-natif", "installer-natif [--kit DIR]: what the native Windows mode needs (winget: Git for Windows, jq, Python, Node.js, GitHub CLI, uv; Claude Code for Windows)", lancerInstallerNatif)
+	enregistrerCommande("installer-natif", "installer-natif [--kit DIR]: what the native Windows mode needs (winget: Git for Windows, jq, Python, Node.js, GitHub CLI, uv; Claude Code for Windows; RTK)", lancerInstallerNatif)
 	enregistrerCommande("wsl", "wsl COMMAND ARGS…: the kit's athanor in its WSL distribution, in this console (e.g. Athanor.exe wsl configurer)", lancerWSLKit)
 }
 
@@ -248,6 +248,17 @@ func lancerInstallerNatif(args []string) int {
 		c.Stdin, c.Stdout, c.Stderr = os.Stdin, os.Stdout, os.Stderr
 		if err := c.Run(); err != nil {
 			e.alerte("  Claude Code could not be installed: " + err.Error())
+		}
+	}
+	// RTK for Windows: compresses what Claude reads from git, ls, grep… (optional: Claude works without it)
+	if rtkUtilisable(cheminRTK(kit)) {
+		e.vert("ok  RTK (command output compression)")
+	} else {
+		e.info("Installing RTK " + versionRTK + " (command output compression)...")
+		if err := installerRTK(kit); err != nil {
+			e.alerte("  RTK could not be installed (Claude works without it): " + err.Error())
+		} else {
+			e.vert("ok  RTK " + versionRTK)
 		}
 	}
 	e.ligne("")

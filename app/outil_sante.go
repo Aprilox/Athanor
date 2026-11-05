@@ -167,9 +167,9 @@ func verifSante(goos, id string) func(kit string) int {
 	var propres map[string]func(string) int
 	switch goos {
 	case "windows":
-		propres = map[string]func(string) int{"git_bash": santeGitBash, "outils": santeOutilsNatifs, "claude": santeClaudeNatif}
+		propres = map[string]func(string) int{"git_bash": santeGitBash, "outils": santeOutilsNatifs, "claude": santeClaudeNatif, "rtk": santeRTK}
 	case "darwin":
-		propres = map[string]func(string) int{"macos": santeMacOS, "internet": santeInternetMac, "paquets": santePaquetsMac, "barriere": santeBarriereMac, "claude": santeClaude}
+		propres = map[string]func(string) int{"macos": santeMacOS, "internet": santeInternetMac, "paquets": santePaquetsMac, "barriere": santeBarriereMac, "claude": santeClaude, "rtk": santeRTK}
 	default:
 		propres = map[string]func(string) int{"wsl": santeWSL, "linux": santeLinux, "internet": santeInternet, "paquets": santePaquets, "barriere": santeBarriere,
 			"claude": santeClaude, "rtk": santeRTK, "docker": santeDocker, "admin": santeAdmin}
@@ -325,12 +325,23 @@ func santePonytail(kit string) int {
 	return 0
 }
 
+// santeRTK: RTK in the kit answers (Linux, macOS, native Windows), and whether Settings switch it on.
 func santeRTK(kit string) int {
-	r := filepath.Join(kit, "system", "bin", "rtk")
-	if st, err := os.Stat(r); err != nil || !st.Mode().IsRegular() || st.Mode()&0o111 == 0 {
+	r := cheminRTK(kit)
+	if !rtkUtilisable(r) {
+		direSante("RTK not installed (optional): Repair downloads it")
 		return 1
 	}
-	return executerSante(r, "--version")
+	if c := executerSante(r, "--version"); c != 0 {
+		return c
+	}
+	for _, l := range LireEnv(filepath.Join(kit, ".env")) {
+		if l.Cle == "RTK" && strings.TrimSpace(l.Valeur) == "0" {
+			direSante("RTK installed, switched OFF in Settings (RTK=0)")
+			return 1
+		}
+	}
+	return 0
 }
 
 func santeDocker(string) int {
@@ -644,18 +655,24 @@ func ajouterPathBashrc(f string) {
 	g.WriteString(`export PATH="$HOME/.local/bin:$PATH"` + "\n")
 }
 
+// reparerRTK: RTK downloaded when missing, then switched on in Settings when it was off.
 func reparerRTK(kit string) int {
-	cible := cibleRTK(runtime.GOOS, runtime.GOARCH)
-	if cible == "" {
-		direSante("RTK: no build for this system (%s/%s)", runtime.GOOS, runtime.GOARCH)
-		return 1
+	if !rtkUtilisable(cheminRTK(kit)) {
+		if err := installerRTK(kit); err != nil {
+			direSante("RTK download FAILED: %v", err)
+			return 1
+		}
 	}
-	dest := filepath.Join(kit, "system", "bin", "rtk")
-	if err := telechargerRTK("https://github.com/rtk-ai/rtk/releases/download/"+versionRTK+"/rtk-"+cible+".tar.gz", dest); err != nil {
-		direSante("RTK download FAILED: %v", err)
-		return 1
+	for _, l := range LireEnv(filepath.Join(kit, ".env")) {
+		if l.Cle == "RTK" && strings.TrimSpace(l.Valeur) == "0" {
+			if err := EcrireEnv(filepath.Join(kit, ".env"), map[string]string{"RTK": "1"}); err != nil {
+				direSante("RTK: .env IMPOSSIBLE to write: %v", err)
+				return 1
+			}
+			direSante("RTK switched on (RTK=1): from the next start of a pilot")
+		}
 	}
-	return executerSante(dest, "--version")
+	return santeRTK(kit)
 }
 
 // reparerOutilsKit: the kit's executable gets its execute bits back (an archive extracted without them).

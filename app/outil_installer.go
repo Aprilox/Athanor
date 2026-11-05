@@ -7,12 +7,15 @@ package main
 
 import (
 	"archive/tar"
+	"archive/zip"
+	"bytes"
 	"compress/gzip"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -293,7 +296,8 @@ func (in *installation) claudeCode(rc string) {
 	}
 }
 
-// cibleRTK: the name of RTK's archive for this machine (empty: none).
+// cibleRTK: the name of RTK's archive for this machine (empty: none). Windows: the x64 build, which
+// Windows on ARM runs too.
 func cibleRTK(goos, goarch string) string {
 	switch goos + "/" + goarch {
 	case "linux/amd64":
@@ -304,19 +308,58 @@ func cibleRTK(goos, goarch string) string {
 		return "aarch64-apple-darwin"
 	case "darwin/amd64":
 		return "x86_64-apple-darwin"
+	case "windows/amd64", "windows/arm64":
+		return "x86_64-pc-windows-msvc"
 	}
 	return ""
 }
 
+// urlRTK: RTK's release archive for this target (a .zip for Windows, a .tar.gz elsewhere).
+func urlRTK(cible string) string {
+	ext := ".tar.gz"
+	if strings.Contains(cible, "windows") {
+		ext = ".zip"
+	}
+	return "https://github.com/rtk-ai/rtk/releases/download/" + versionRTK + "/rtk-" + cible + ext
+}
+
+// cheminRTK: where the kit keeps RTK on this system, a folder on Claude's PATH (its commands' own), so the
+// commands RTK's hook rewrites ("rtk git status") find it: system/bin/rtk on Linux and macOS,
+// system\bin-windows\rtk.exe in native Windows mode (the Linux one of the WSL mode stays apart).
+func cheminRTK(kit string) string { return cheminRTKPour(kit, runtime.GOOS) }
+
+func cheminRTKPour(kit, goos string) string {
+	if goos == "windows" {
+		return filepath.Join(kit, "system", "bin-windows", "rtk.exe")
+	}
+	return filepath.Join(kit, "system", "bin", "rtk")
+}
+
+// rtkUtilisable: RTK is there (executable: Windows has no execute bit, the program is enough).
+func rtkUtilisable(chemin string) bool {
+	st, err := os.Stat(chemin)
+	if err != nil || !st.Mode().IsRegular() || st.Size() == 0 {
+		return false
+	}
+	return runtime.GOOS == "windows" || st.Mode()&0o111 != 0
+}
+
+// installerRTK: RTK's build for this machine, downloaded into the kit (an error: none, or the download).
+func installerRTK(kit string) error {
+	cible := cibleRTK(runtime.GOOS, runtime.GOARCH)
+	if cible == "" {
+		return fmt.Errorf("no build of RTK for this system (%s/%s)", runtime.GOOS, runtime.GOARCH)
+	}
+	return telechargerRTK(urlRTK(cible), cheminRTK(kit))
+}
+
 func (in *installation) rtk() {
 	in.etape("RTK (command output compression)")
-	dest := filepath.Join(in.systeme, "bin", "rtk")
-	if st, err := os.Stat(dest); err == nil && st.Mode()&0o111 != 0 {
+	if rtkUtilisable(cheminRTK(in.kit)) {
 		in.ok("RTK already present")
 		return
 	}
-	cible := cibleRTK(runtime.GOOS, runtime.GOARCH)
-	if cible != "" && telechargerRTK("https://github.com/rtk-ai/rtk/releases/download/"+versionRTK+"/rtk-"+cible+".tar.gz", dest) == nil {
+	if installerRTK(in.kit) == nil {
 		in.ok("RTK " + versionRTK + " installed")
 	} else {
 		in.alerte("RTK not installed: Claude will work without it.")
@@ -333,6 +376,9 @@ func telechargerRTK(url, dest string) error {
 	defer r.Body.Close()
 	if r.StatusCode != 200 {
 		return fmt.Errorf("HTTP %d", r.StatusCode)
+	}
+	if strings.HasSuffix(url, ".zip") {
+		return extraireRTKZip(r.Body, dest)
 	}
 	return extraireRTK(r.Body, dest)
 }
@@ -351,20 +397,53 @@ func extraireRTK(archive io.Reader, dest string) error {
 		if h.Typeflag != tar.TypeReg || filepath.Base(h.Name) != "rtk" {
 			continue
 		}
-		_ = os.MkdirAll(filepath.Dir(dest), 0o755)
-		tmp := dest + ".nouveau"
-		f, err := os.OpenFile(tmp, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
+		return ecrireRTK(t, dest)
+	}
+}
+
+// extraireRTKZip: Windows' archive (a zip), its rtk.exe.
+func extraireRTKZip(archive io.Reader, dest string) error {
+	b, err := io.ReadAll(io.LimitReader(archive, 200<<20))
+	if err != nil {
+		return err
+	}
+	z, err := zip.NewReader(bytes.NewReader(b), int64(len(b)))
+	if err != nil {
+		return err
+	}
+	for _, f := range z.File {
+		if f.FileInfo().IsDir() || !strings.EqualFold(path.Base(strings.ReplaceAll(f.Name, "\\", "/")), "rtk.exe") {
+			continue
+		}
+		r, err := f.Open()
 		if err != nil {
 			return err
 		}
-		if _, err := io.Copy(f, io.LimitReader(t, 200<<20)); err != nil {
-			f.Close()
-			os.Remove(tmp)
-			return err
-		}
-		f.Close()
-		return os.Rename(tmp, dest)
+		defer r.Close()
+		return ecrireRTK(r, dest)
 	}
+	return fmt.Errorf("no rtk.exe in the archive")
+}
+
+// ecrireRTK: the program written aside, then renamed into place (a running rtk.exe: the old one is kept).
+func ecrireRTK(r io.Reader, dest string) error {
+	_ = os.MkdirAll(filepath.Dir(dest), 0o755)
+	tmp := dest + ".nouveau"
+	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(f, io.LimitReader(r, 200<<20)); err != nil {
+		f.Close()
+		os.Remove(tmp)
+		return err
+	}
+	f.Close()
+	if err := os.Rename(tmp, dest); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	return nil
 }
 
 // outilsPC: the executable executable, Claude's commands linked, then the PC tools detected (what Claude
