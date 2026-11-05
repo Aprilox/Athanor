@@ -268,7 +268,11 @@ func (a *appTUI) raccourcisPage() []raccourci {
 		if m == "" {
 			m = t("account default")
 		}
-		r = []raccourci{{"i", t("Write")}, {"c", t("New conversation")}, {"m", t("Model") + ": " + m}}
+		web := t("off")
+		if a.chatInternet {
+			web = t("on")
+		}
+		r = []raccourci{{"i", t("Write")}, {"c", t("New conversation")}, {"m", t("Model") + ": " + m}, {"w", t("Internet") + ": " + web}}
 	case pSante:
 		jeton := t("Token")
 		if a.modeAPITUI() {

@@ -210,16 +210,17 @@ type appTUI struct {
 	verrouDemande bool
 
 	// For you, Team, GitHub, Settings (tui_pages2.go)
-	taches     []TacheUtilVue
-	selTache   int
-	agents     []Agent
-	selAgent   int
-	gh         *GitHubVue
-	nomPropose string
-	env        []LigneEnv
-	selReglage int
-	modeleChat string         // the chat's model ("": the account's default)
-	formValide *formulaireTUI // the form whose fields are being saved
+	taches       []TacheUtilVue
+	selTache     int
+	agents       []Agent
+	selAgent     int
+	gh           *GitHubVue
+	nomPropose   string
+	env          []LigneEnv
+	selReglage   int
+	modeleChat   string         // the chat's model ("": the account's default)
+	chatInternet bool           // the chat's messages may use the web (when one needs it)
+	formValide   *formulaireTUI // the form whose fields are being saved
 	// Remote (tui_distance.go)
 	dist           *DistanceVue
 	selApp         int

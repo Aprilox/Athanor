@@ -40,6 +40,8 @@ type MessageChat struct {
 	CoutSession float64 `json:"cout_session,omitempty"`
 	Note        bool    `json:"note,omitempty"`  // the note was sent to the pilot
 	Agent       string  `json:"agent,omitempty"` // the sub-agent it proposed, added to the team under this name
+	// Internet: the user let Claude search and read the web for this message (when the request needs it)
+	Internet bool `json:"internet,omitempty"`
 }
 
 type conversationChat struct {
@@ -199,6 +201,8 @@ func (s *Serveur) apiChatEnvoyer(w http.ResponseWriter, r *http.Request) {
 		Message string `json:"message"`
 		Modele  string `json:"modele"`
 		Mode    string `json:"mode"` // "question" forces a read-only turn even with the pilot stopped
+		// Internet: Claude may search and read the web for this message, only when the request needs it
+		Internet bool `json:"internet"`
 	}
 	if err := lireCorps(r, &c); err != nil || strings.TrimSpace(c.Message) == "" {
 		s.erreur(w, http.StatusBadRequest, "Write your message first")
@@ -247,7 +251,7 @@ func (s *Serveur) apiChatEnvoyer(w http.ResponseWriter, r *http.Request) {
 	chatMu.Unlock()
 
 	conv := lireConversation(k, p)
-	conv.Messages = append(conv.Messages, MessageChat{Role: "vous", Texte: strings.TrimSpace(c.Message), Mode: mode, Modele: c.Modele, Quand: time.Now().Format(time.RFC3339)})
+	conv.Messages = append(conv.Messages, MessageChat{Role: "vous", Texte: strings.TrimSpace(c.Message), Mode: mode, Modele: c.Modele, Quand: time.Now().Format(time.RFC3339), Internet: c.Internet})
 	ecrireConversation(k, p, conv)
 
 	consigne := consigneQuestion
@@ -264,6 +268,9 @@ func (s *Serveur) apiChatEnvoyer(w http.ResponseWriter, r *http.Request) {
 		id + ".msg":     strings.TrimSpace(c.Message),
 		id + ".prompt":  strings.Replace(consigneChat, "%s", consigne, 1),
 		id + ".subject": "Chat: " + sujet,
+	}
+	if c.Internet {
+		fichiers[id+".internet"] = "1" // outil_chat_session.go: WebSearch and WebFetch allowed for this turn
 	}
 	for nom, contenu := range fichiers {
 		if err := os.WriteFile(filepath.Join(d, nom), []byte(contenu), 0o600); err != nil {
@@ -295,7 +302,7 @@ func (s *Serveur) apiChatEnvoyer(w http.ResponseWriter, r *http.Request) {
 		}
 		commit, _ := os.ReadFile(filepath.Join(d, id+".commit"))
 		s.finChat(k, p, en, strings.TrimSpace(string(commit)), detail)
-		for _, ext := range []string{".msg", ".prompt", ".subject", ".commit", ".settings.json", ".err"} {
+		for _, ext := range []string{".msg", ".prompt", ".subject", ".commit", ".settings.json", ".err", ".internet"} {
 			os.Remove(filepath.Join(d, id+ext))
 		}
 	}()

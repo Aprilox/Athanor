@@ -359,7 +359,11 @@ func pluginsUtilisateur(config string) objetJSON {
 
 // reglagesChat: Claude's file tools stay inside PROJECT (the file guard), no command, no web. The chat runs
 // short sessions in the project's folder with read-only tools (and Edit/Write while the pilot is stopped).
-func reglagesChat(projet, sortie string) error {
+func reglagesChat(projet, sortie string) error { return reglagesChatInternet(projet, sortie, false) }
+
+// reglagesChatInternet: the chat's settings; internet: WebSearch and WebFetch let through (the user switched
+// Internet on for this message).
+func reglagesChatInternet(projet, sortie string, internet bool) error {
 	commande := ligneShell(exeHook(), "hook", "fichiers", projet)
 	if runtime.GOOS == "windows" {
 		commande = ligneShell(exeHook(), "hook", "fichiers", strings.ReplaceAll(projet, "\\", "/"))
@@ -372,7 +376,11 @@ func reglagesChat(projet, sortie string) error {
 	c.mettre("matcher", "Read|Edit|Write|MultiEdit|NotebookEdit|Glob|Grep")
 	c.mettre("hooks", []objetJSON{h})
 	var r objetJSON
-	r.mettre("permissions", map[string]any{"deny": []string{"Bash", "WebFetch", "WebSearch", "NotebookEdit"}})
+	interdits := []string{"Bash", "WebFetch", "WebSearch", "NotebookEdit"}
+	if internet {
+		interdits = []string{"Bash", "NotebookEdit"}
+	}
+	r.mettre("permissions", map[string]any{"deny": interdits})
 	r.mettre("hooks", map[string]any{"PreToolUse": []objetJSON{c}})
 	r.mettre("includeCoAuthoredBy", false)
 	config := os.Getenv("CLAUDE_CONFIG_DIR")

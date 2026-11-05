@@ -1079,7 +1079,9 @@ function maxModeActif() { const actif = $("#page .mode-ligne .choix button.actif
 
 // --- chat with Claude about the project (api_chat.go): questions always; changes while the pilot is
 // stopped (Athanor commits them); while it runs, Claude writes the change as a note for the pilot
-const chat = { modele: (() => { try { return localStorage.getItem("chatModele") ?? "sonnet"; } catch (e) { return "sonnet"; } })(), questionSeule: false, signature: "", modeles: null, envoi: false };
+const chat = { modele: (() => { try { return localStorage.getItem("chatModele") ?? "sonnet"; } catch (e) { return "sonnet"; } })(), questionSeule: false, signature: "", modeles: null, envoi: false,
+  // Internet: Claude may search and read the web, only when the message needs it (remembered on this device)
+  internet: (() => { try { return localStorage.getItem("chatInternet") === "1"; } catch (e) { return false; } })() };
 
 function mdChat(s) {
   return String(s || "").split(/```/).map((bloc, i) => {
@@ -1091,7 +1093,7 @@ function mdChat(s) {
 
 function messageChat(m, i) {
   const quand = m.quand ? new Date(m.quand).toLocaleTimeString(document.documentElement.lang || "en", { hour: "2-digit", minute: "2-digit" }) : "";
-  if (m.role === "vous") return `<div class="chat-msg chat-vous"><div class="chat-bulle">${mdChat(m.texte)}</div><div class="chat-meta">${h(quand)}${m.mode === "modif" ? " · " + t("may change the files") : ""}</div></div>`;
+  if (m.role === "vous") return `<div class="chat-msg chat-vous"><div class="chat-bulle">${mdChat(m.texte)}</div><div class="chat-meta">${h(quand)}${m.mode === "modif" ? " · " + t("may change the files") : ""}${m.internet ? " · 🌐 " + t("Internet") : ""}</div></div>`;
   if (m.role === "erreur") return `<div class="chat-msg chat-claude"><div class="chat-bulle chat-erreur">${h(t(m.texte))}</div></div>`;
   const note = (m.texte.match(/<note>([\s\S]*?)<\/note>/) || [])[1];
   const agent = (m.texte.match(/<agent>([\s\S]*?)<\/agent>/) || [])[1];
@@ -1196,6 +1198,7 @@ pages.chat = async () => {
     <div class="chat-saisie">
       <textarea id="chat-texte" rows="${tactile() ? 2 : 3}" placeholder="${h(tactile() ? t("Your question or the change you want…") : t("Your question or the change you want… (Enter sends, Shift+Enter: new line)"))}"></textarea>
       <div class="ligne m0 mt-1"><span class="petit muet">${t("Model")}</span><div class="choix m0" id="chat-modeles">${modeles.map((m) => `<button type="button" data-chat-modele="${h(m)}" class="${chat.modele === m ? "actif" : ""}">${h(m || t("account default"))}</button>`).join("")}</div>
+        <label class="interrupteur m0 petit" title="${h(t("Claude may search and read the web for your messages, only when one needs it (look online, compare with what exists elsewhere, a current fact). A question about the project is answered from its files."))}"><input type="checkbox" id="chat-internet" ${chat.internet ? "checked" : ""}><span>🌐 ${t("Internet")}</span></label>
         <span class="espace"></span>
         <button type="button" class="btn" id="chat-stop" hidden>${t("Stop")}</button>
         <button type="button" class="btn btn-primaire" id="chat-envoyer">${t("Send")}</button></div>
@@ -1213,7 +1216,7 @@ async function envoyerChat() {
   const zone = $("#chat-texte"); if (!zone || chat.envoi) return;
   const message = zone.value.trim(); if (!message) return;
   chat.envoi = true;
-  const r = await action(api("chat", "POST", { message, modele: chat.modele, mode: chat.questionSeule ? "question" : "" }));
+  const r = await action(api("chat", "POST", { message, modele: chat.modele, mode: chat.questionSeule ? "question" : "", internet: chat.internet }));
   chat.envoi = false;
   if (r) { zone.value = ""; zone.style.height = ""; await majChat(true); }
 }
@@ -3774,6 +3777,7 @@ $("#page").addEventListener("keydown", (ev) => {
 $("#page").addEventListener("change", (ev) => {
   const i = ev.target;
   if (i.id === "chat-question") chat.questionSeule = i.checked;
+  if (i.id === "chat-internet") { chat.internet = i.checked; try { localStorage.setItem("chatInternet", i.checked ? "1" : "0"); } catch (e) { /* this device only */ } }
   if (i.dataset.quotaSeuil || i.dataset.quotaAction) {
     const cle = i.dataset.quotaSeuil || i.dataset.quotaAction, bloc = i.closest(".quota-arret");
     const seuil = Number((bloc.querySelector("[data-quota-seuil]") || {}).value || 0);

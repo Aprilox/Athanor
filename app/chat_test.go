@@ -59,6 +59,22 @@ func TestSessionChat(t *testing.T) {
 	if s, _ := os.ReadFile(filepath.Join(kit, "logs", "chat", "c1.settings.json")); !strings.Contains(string(s), " hook fichiers ") {
 		t.Errorf("settings: %s", s)
 	}
+	if s := string(a); !strings.Contains(s, "\nWebFetch\nWebSearch\nTask\n") || strings.Contains(s, "## Internet") {
+		t.Fatalf("no Internet: %s", s)
+	}
+	// Internet switched on for a message: the web allowed, and only when the message needs it
+	_ = os.WriteFile(filepath.Join(kit, "logs", "chat", "c1.internet"), []byte("1"), 0o644)
+	if code := sessionChat(kit, projet, "c1", "question", "", ""); code != 0 {
+		t.Fatalf("code %d", code)
+	}
+	a, _ = os.ReadFile(filepath.Join(d, "args"))
+	if s := string(a); !strings.Contains(s, "--allowedTools\nRead\nGlob\nGrep\nWebSearch\nWebFetch\n--disallowedTools") || !strings.Contains(s, "## Internet (switched on by the user for this message)") || !strings.Contains(s, "NotebookEdit\nTask\n") {
+		t.Fatalf("Internet: %s", s)
+	}
+	if st, _ := os.ReadFile(filepath.Join(kit, "logs", "chat", "c1.settings.json")); strings.Contains(string(st), "WebFetch") {
+		t.Fatalf("Internet: the settings still deny the web: %s", st)
+	}
+	_ = os.Remove(filepath.Join(kit, "logs", "chat", "c1.internet"))
 	// editing: the change is committed with the subject
 	g := func(args ...string) { c := exec.Command("git", args...); c.Dir = projet; _ = c.Run() }
 	g("init", "-q")
