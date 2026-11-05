@@ -1307,6 +1307,7 @@ function rendreDepense(d) {
 // --- progress: the milestones done over time, the projection to the last one (time and cost), the cost of
 // each cycle. A cycle that ends with a new commit is a milestone done (one milestone per cycle); the curve
 // is anchored on the true count of the plan.
+const PAUSE_AV = 20 * 60000; // Progress: a gap between two cycles longer than this is a pause, not work
 function rendreAvancement(stats, plan, faits, actif) {
   const total = plan.length;
   const lignes = stats.map((s) => ({ ...s, fin: new Date(s.horodatage).getTime() })).filter((s) => !isNaN(s.fin)).sort((a, b) => a.fin - b.fin);
@@ -1315,35 +1316,64 @@ function rendreAvancement(stats, plan, faits, actif) {
   lignes.forEach((s) => { s.jalon = s.etat === "ok" && s.commit && s.commit !== precedent; if (s.commit) precedent = s.commit; });
   let n = faits;
   for (let i = lignes.length - 1; i >= 0; i--) { lignes[i].faits = Math.max(0, n); if (lignes[i].jalon) n--; }
-  const debut = lignes[0].fin - (Number(lignes[0].minutes) || 0) * 60000, dernier = lignes[lignes.length - 1];
-  // pace: over the last 8 milestones (their cycles' time, waits included), and their cost
+  const dernier = lignes[lignes.length - 1];
+  // the working time only: a gap between two cycles longer than PAUSE_AV (Athanor closed, the pilot stopped
+  // for days) is a pause: left out of the pace and drawn as a short break on the time axis (the dates under
+  // it go on from the day work resumed), never a long line across it. s.tc: the cycle's end on that axis.
+  const debutCycle = (s) => s.fin - (Number(s.minutes) || 0) * 60000;
+  const actif0 = lignes.reduce((a, s, i) => a + (s.fin - (i ? Math.max(lignes[i - 1].fin, debutCycle(s)) : debutCycle(s))), 0);
+  const blanc = Math.max(60000, Math.min(PAUSE_AV, actif0 * 0.03)); // the break's width on the axis
+  const coupures = [];
+  let decale = 0;
+  lignes.forEach((s, i) => {
+    const trou = i ? debutCycle(s) - lignes[i - 1].fin : 0;
+    if (trou > PAUSE_AV) {
+      const tcAvant = lignes[i - 1].tc;
+      decale += trou - blanc;
+      coupures.push({ tcAvant, tcApres: tcAvant + blanc, avant: lignes[i - 1].fin, apres: debutCycle(s), decale });
+    }
+    s.tc = s.fin - decale;
+  });
+  const debut = lignes[0].tc - (Number(lignes[0].minutes) || 0) * 60000;
+  const reel = (tc) => { let o = 0; coupures.forEach((c) => { if (tc >= c.tcApres) o = c.decale; }); return tc + o; };
+  // pace: over the last 8 milestones (their cycles' working time, the pauses left out), and their cost
   const jalons = lignes.filter((s) => s.jalon).slice(-8);
-  let eta = null, coutReste = null, heuresReste = null;
+  let eta = null, coutReste = null, heuresReste = null, finTc = null;
   const reste = total - faits;
   if (reste > 0 && jalons.length >= 2) {
     const i0 = lignes.indexOf(jalons[0]);
-    const t0 = i0 > 0 ? lignes[i0 - 1].fin : jalons[0].fin - (Number(jalons[0].minutes) || 0) * 60000;
-    const parJalon = (jalons[jalons.length - 1].fin - t0) / jalons.length;
+    const t0 = i0 > 0 ? lignes[i0 - 1].tc : jalons[0].tc - (Number(jalons[0].minutes) || 0) * 60000;
+    const parJalon = (jalons[jalons.length - 1].tc - t0) / jalons.length;
     const cout = lignes.slice(i0).reduce((a, s) => a + (Number(s.cout_usd) || 0), 0) / jalons.length;
-    eta = Math.max(Date.now(), dernier.fin) + parJalon * reste;
+    eta = Math.max(Date.now(), dernier.fin) + parJalon * reste; // from now: a pause since the last cycle is left out too
+    finTc = dernier.tc + parJalon * reste;
     heuresReste = (parJalon * reste) / 3600000;
     coutReste = cout * reste;
   }
   const largeur = ($("#page") || {}).clientWidth || 1000;
-  const fin = eta || dernier.fin, L = Math.round(Math.max(520, Math.min(1800, largeur - 110))), H = 210, g = 34, d = 40, hautB = 168, basB = 186;
+  const fin = finTc || dernier.tc, L = Math.round(Math.max(520, Math.min(1800, largeur - 110))), H = 210, g = 34, d = 40, hautB = 168, basB = 186;
   const x = (tm) => g + ((tm - debut) / Math.max(1, fin - debut)) * (L - g - d);
   const y = (k) => hautB - (k / total) * (hautB - 12);
   const maxCout = Math.max(...lignes.map((s) => Number(s.cout_usd) || 0), 0.01);
   const lang = document.documentElement.lang || "en";
-  const plusieursJours = new Date(debut).toDateString() !== new Date(fin).toDateString();
+  const plusieursJours = new Date(reel(debut)).toDateString() !== new Date(eta || dernier.fin).toDateString();
   const etiquette = (tm) => { const dt = new Date(tm); const hm = dt.toLocaleTimeString(lang, { hour: "2-digit", minute: "2-digit" }); return plusieursJours ? dt.toLocaleDateString(lang, { weekday: "short" }) + " " + hm : hm; };
-  const points = [[debut, 0], ...lignes.map((s) => [s.fin, s.faits])];
+  const points = [[debut, 0], ...lignes.map((s) => [s.tc, s.faits])];
   const chemin = points.map(([tm, k], i) => `${i ? "L" : "M"}${x(tm).toFixed(1)},${y(k).toFixed(1)}`).join(" ");
-  const aire = `${chemin} L${x(dernier.fin).toFixed(1)},${hautB} L${x(debut).toFixed(1)},${hautB} Z`;
-  const barres = lignes.map((s) => { const hb = ((Number(s.cout_usd) || 0) / maxCout) * 46; return `<rect class="av-cout" x="${(x(s.fin) - 3).toFixed(1)}" y="${(hautB - hb).toFixed(1)}" width="6" height="${hb.toFixed(1)}" rx="1.5"><title>${h(t("Cycle {0}", [s.cycle]))} · ${h(etiquette(s.fin))} · ${Number(s.cout_usd).toFixed(2)} $ · ${Math.round(s.minutes)} min${s.jalon ? " · " + h(t("milestone done")) : ""}</title></rect>`; }).join("");
+  const aire = `${chemin} L${x(dernier.tc).toFixed(1)},${hautB} L${x(debut).toFixed(1)},${hautB} Z`;
+  const barres = lignes.map((s) => { const hb = ((Number(s.cout_usd) || 0) / maxCout) * 46; return `<rect class="av-cout" x="${(x(s.tc) - 3).toFixed(1)}" y="${(hautB - hb).toFixed(1)}" width="6" height="${hb.toFixed(1)}" rx="1.5"><title>${h(t("Cycle {0}", [s.cycle]))} · ${h(etiquette(s.fin))} · ${Number(s.cout_usd).toFixed(2)} $ · ${Math.round(s.minutes)} min${s.jalon ? " · " + h(t("milestone done")) : ""}</title></rect>`; }).join("");
   const grilles = [0.25, 0.5, 0.75, 1].map((f) => `<line class="av-grille" x1="${g}" x2="${L - d}" y1="${y(total * f).toFixed(1)}" y2="${y(total * f).toFixed(1)}"/><text class="av-txt" x="${g - 6}" y="${(y(total * f) + 4).toFixed(1)}" text-anchor="end">${Math.round(total * f)}</text>`).join("");
-  const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => { const tm = debut + f * (fin - debut); return `<text class="av-txt" x="${x(tm).toFixed(1)}" y="${basB + 14}" text-anchor="${f === 0 ? "start" : f === 1 ? "end" : "middle"}">${h(etiquette(tm))}</text>`; }).join("");
-  const projection = eta ? `<line class="av-projection" x1="${x(dernier.fin).toFixed(1)}" y1="${y(faits).toFixed(1)}" x2="${x(eta).toFixed(1)}" y2="${y(total).toFixed(1)}"/><circle class="av-but" cx="${x(eta).toFixed(1)}" cy="${y(total).toFixed(1)}" r="4"><title>${h(t("Estimated end: {0}", [quandLisible(eta / 1000)]))}</title></circle>` : "";
+  // the dates under the axis: the start, each restart after a pause, the end (with evenly spaced ones while
+  // there is no pause); a pause is a dashed break, its dates in a bubble
+  const reperes = [[debut, reel(debut), "start"]];
+  if (coupures.length) coupures.forEach((c) => reperes.push([c.tcApres, c.apres, "middle"]));
+  else [0.25, 0.5, 0.75].forEach((f) => { const tc = debut + f * (fin - debut); reperes.push([tc, reel(tc), "middle"]); });
+  reperes.push([fin, finTc ? eta : dernier.fin, "end"]);
+  let dernierX = -1e9;
+  const gardes = reperes.filter(([tc], i) => { const px = x(tc); if (i === reperes.length - 1) return true; if (px - dernierX < 95 || x(fin) - px < 95) return false; dernierX = px; return true; });
+  const ticks = gardes.map(([tc, tm, ancre]) => `<text class="av-txt" x="${x(tc).toFixed(1)}" y="${basB + 14}" text-anchor="${ancre}">${h(etiquette(tm))}</text>`).join("");
+  const breaks = coupures.map((c) => { const cx = x((c.tcAvant + c.tcApres) / 2).toFixed(1); return `<g class="av-coupure"><line x1="${cx}" x2="${cx}" y1="8" y2="${hautB + 6}"/><line class="av-coupure-zone" x1="${cx}" x2="${cx}" y1="8" y2="${hautB + 6}"/><title>${h(t("Pause: {0} → {1}", [etiquette(c.avant), etiquette(c.apres)]))}</title></g>`; }).join("");
+  const projection = eta ? `<line class="av-projection" x1="${x(dernier.tc).toFixed(1)}" y1="${y(faits).toFixed(1)}" x2="${x(finTc).toFixed(1)}" y2="${y(total).toFixed(1)}"/><circle class="av-but" cx="${x(finTc).toFixed(1)}" cy="${y(total).toFixed(1)}" r="4"><title>${h(t("Estimated end: {0}", [quandLisible(eta / 1000)]))}</title></circle>` : "";
   // each milestone point: what it delivered, and the cycles it took since the previous one (hover: a
   // bubble; click: the details under the chart, kept across the live refreshes by its commit)
   const infos = [];
@@ -1357,7 +1387,7 @@ function rendreAvancement(stats, plan, faits, actif) {
       cycles: tranche.map((r) => r.cycle), minutes: tranche.reduce((a, r) => a + (Number(r.minutes) || 0), 0),
       cout: tranche.reduce((a, r) => a + (Number(r.cout_usd) || 0), 0), quand: etiquette(s.fin) });
   });
-  infos.forEach((p) => { p.cx = x(p.s.fin); p.cy = y(p.s.faits); });
+  infos.forEach((p) => { p.cx = x(p.s.tc); p.cy = y(p.s.faits); });
   etat.avInfos = infos;
   const choisi = infos.find((p) => p.cle === etat.avChoix);
   const rang = infos.indexOf(choisi);
@@ -1382,7 +1412,7 @@ function rendreAvancement(stats, plan, faits, actif) {
   return `<div class="bloc"><div class="ligne m0"><h2 class="m0">${t("Progress")}</h2><span class="espace"></span><span class="muet petit">${t("{0} milestone(s) left", [Math.max(0, reste)])}</span></div>
     <p class="av-resume">${h(resume)}</p>
     <svg class="avancement" viewBox="0 0 ${L} ${H}" role="img" aria-label="${h(resume)}">
-      ${grilles}<path class="av-aire" d="${aire}"/>${barres}<path class="av-ligne" d="${chemin}"/>${projection}${pts}
+      ${grilles}<path class="av-aire" d="${aire}"/>${breaks}${barres}<path class="av-ligne" d="${chemin}"/>${projection}${pts}
       <line class="av-axe" x1="${g}" x2="${L - d}" y1="${hautB}" y2="${hautB}"/>${ticks}
     </svg>
     <div class="av-legende muet petit"><span><i class="av-l-ligne"></i>${t("milestones done")}</span>${eta ? `<span><i class="av-l-proj"></i>${t("projection")}</span>` : ""}<span><i class="av-l-cout"></i>${t("cost of each cycle (max {0} $)", [maxCout.toFixed(2)])}</span></div>
@@ -1463,7 +1493,8 @@ pages.suivi = async () => {
       <div class="chiffre" title="${h(t("at list price (your subscription quota pays)"))}"><b>${stats.some((s) => s.estime) ? "≈ " : ""}${somme("cout_usd").toFixed(2)} $</b><span>${t("at list price")}</span></div>
       <div class="chiffre" title="${h(t("Claude's own prompt cache (Anthropic's, always on), over all the cycles: not a saving of an Athanor option. At list prices a token read again from the cache costs a tenth, one written to it 1.25 times: what Claude reads cost this much less than without the cache."))}"><b>${ratio} %</b><span>${t("read from Claude's own cache")}${g && g.cache_pct > 0 ? `<em class="cache-claude muet">${t("reading −{0} %", [g.cache_pct])}</em>` : ""}</span></div>
       ${g && g.rtk_entree > 0 ? `<div class="chiffre" title="${h(t("Measured by RTK: the tokens of the command outputs (git, ls, grep, tests…) it did not pass on to Claude."))}"><b>${fmtTokens(g.rtk_economise)}</b><span>${t("tokens spared by RTK")}<em class="gain">${t("−{0} % of the command outputs", [g.rtk_pct])}</em></span></div>` : ""}
-      <div class="chiffre"><b>${fmtTokens(somme("sortie_tokens"))}</b><span>${t("tokens produced")}</span></div>
+      <div class="chiffre" title="${h(t("What Claude read at each turn: the whole conversation of the cycle again (the code, the plan, the tools' results), mostly from its cache. Most of the cost is there: what Claude writes is a small part."))}"><b>${fmtTokens(somme("entree_tokens") + somme("cache_lu") + somme("cache_ecrit"))}</b><span>${t("tokens read")}</span></div>
+      <div class="chiffre" title="${h(t("What Claude wrote: its answers, the code, the tools it called. Each token written costs more than one read, but there are far fewer of them."))}"><b>${fmtTokens(somme("sortie_tokens"))}</b><span>${t("tokens produced")}</span></div>
       <div class="chiffre"><b>${fmtTokens(somme("contexte_max") / stats.length)}</b><span>${t("average peak context")}</span></div>
     </div>
     ${lignesGains(g)}
