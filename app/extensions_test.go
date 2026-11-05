@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -206,5 +207,22 @@ func TestGuillemetsCmd(t *testing.T) {
 		if got[i] != attendu[i] {
 			t.Errorf("%d: %s, expected %s", i, got[i], attendu[i])
 		}
+	}
+}
+
+// Native Windows: an MCP server goes through Athanor.exe (its console hidden, no window of its own).
+func TestEnveloppeMCPWindows(t *testing.T) {
+	kit := t.TempDir()
+	if c, a := enveloppeMCPWindows(kit, "cmd", []string{"/c", "npx", "x"}); c != "cmd" || strings.Join(a, " ") != "/c npx x" {
+		t.Fatalf("without Athanor.exe: %s %v", c, a)
+	}
+	exe := filepath.Join(kit, "Athanor.exe")
+	_ = os.WriteFile(exe, []byte("MZ"), 0o755)
+	c, a := enveloppeMCPWindows(kit, "cmd", []string{"/c", "npx", "x"})
+	if c != exe || strings.Join(a, " ") != "--isole --ici --fin-tout -- cmd /c npx x" {
+		t.Fatalf("%s %v", c, a)
+	}
+	if c, a := enveloppeMCPWindows(kit, exe, []string{"blender-mcp"}); c != exe || len(a) != 1 {
+		t.Fatalf("Athanor.exe itself: %s %v", c, a)
 	}
 }
