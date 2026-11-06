@@ -45,8 +45,6 @@ var (
 		"general-purpose": true, "explore": true, "plan": true, "statusline-setup": true, "output-style-setup": true, "claude-code-guide": true, "fork": true}
 )
 
-const agentsParProjetMax = 24
-
 func cheminAgents(k Kit) string { return filepath.Join(dossierExt(k), "agents.json") }
 
 // lireAgents: the library; a lead's proposal (its "projet") is switched on in its project. A sub-agent of
@@ -274,7 +272,7 @@ func (s *Serveur) agentsDuProjet(p Projet) ([]AgentPerso, []string) {
 	f := lireAgents(s.kitCourant())
 	l := []AgentPerso{}
 	for _, a := range f.Agents {
-		if a.duProjet(p) && validerAgent(a) == nil && len(l) < agentsParProjetMax {
+		if a.duProjet(p) && validerAgent(a) == nil {
 			l = append(l, a)
 		}
 	}
@@ -337,10 +335,6 @@ func (s *Serveur) apiAgentsPerso(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 		if !a.duProjet(p) {
-			if f.nbDuProjet(p) >= agentsParProjetMax {
-				s.erreur(w, http.StatusBadRequest, "The team is full: 24 sub-agents of your own at most for a project.")
-				return
-			}
 			a.Projets = append(a.Projets, p.Dossier)
 		}
 		f.accepterAgent(p.Dossier, a.Nom)
@@ -374,16 +368,6 @@ func (f fichierAgents) trouver(nom string) int {
 	return -1
 }
 
-func (f fichierAgents) nbDuProjet(p Projet) int {
-	n := 0
-	for _, a := range f.Agents {
-		if a.duProjet(p) {
-			n++
-		}
-	}
-	return n
-}
-
 // enregistrerAgentPerso: a sub-agent of the library created (switched on in the project p) or changed
 // (ancien: its name before; its projects stay), written to extensions/agents.json (the caller holds
 // verrouAgents and read f); the message for the user, or the HTTP code and the error.
@@ -407,9 +391,6 @@ func enregistrerAgentPerso(k Kit, f *fichierAgents, p Projet, ancien string, a A
 	if i >= 0 {
 		f.Agents[i] = a
 	} else {
-		if f.nbDuProjet(p) >= agentsParProjetMax {
-			return "", http.StatusBadRequest, errors.New("The team is full: 24 sub-agents of your own at most for a project.")
-		}
 		f.Agents = append(f.Agents, a)
 	}
 	f.accepterAgent(p.Dossier, a.Nom) // a name removed earlier and created again by the user is no longer refused

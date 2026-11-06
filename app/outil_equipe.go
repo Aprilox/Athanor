@@ -26,7 +26,6 @@ import (
 const (
 	maxDescriptionAgent = 400
 	maxConsignesAgent   = 6000
-	maxAgentsParProjet  = 24
 	maxAgentsDuChef     = 5
 )
 
@@ -187,9 +186,6 @@ func (e equipeFichier) duProjet(projet string) []map[string]any {
 			out = append(out, a)
 		}
 	}
-	if len(out) > maxAgentsParProjet {
-		out = out[:maxAgentsParProjet]
-	}
 	return out
 }
 
@@ -334,9 +330,6 @@ func equipeImporter(kit, projet string) []string {
 			}
 			if raison == "" && nChef >= maxAgentsDuChef {
 				raison = fmt.Sprintf("already %d sub-agents proposed by the lead in this project", maxAgentsDuChef)
-			}
-			if raison == "" && len(existants) >= maxAgentsParProjet {
-				raison = fmt.Sprintf("the team is full (%d sub-agents of the project)", maxAgentsParProjet)
 			}
 		}
 		if raison == "" {
