@@ -198,7 +198,8 @@ func (s *Serveur) lierGitHub(p Projet, mode, cible string, auto bool, branche st
 	return fenetreKit(s.kitCourant(), "GitHub", argsGitHub(p, "lier", args...)...)
 }
 
-func ouvrirLien(url string) error {
+// ouvrirLien: the address in the default browser (a variable: the tests replace it, they never open one).
+var ouvrirLien = func(url string) error {
 	if runtime.GOOS == "windows" {
 		return commande("rundll32", "url.dll,FileProtocolHandler", url).Start()
 	}

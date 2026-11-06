@@ -691,7 +691,7 @@ func (s *Serveur) apresChangementProjets() {
 }
 
 // changerDossier: the project now lives in another folder; what is keyed by its folder follows
-// (end already announced, Skills & MCP chosen for it).
+// (end already announced, Skills & MCP chosen for it, the sub-agents it uses).
 func (s *Serveur) changerDossier(p Projet, cible string) error {
 	if err := s.modifierProjet(p.Nom, func(cf *Config, x *Projet) error {
 		x.Dossier = cible
@@ -714,6 +714,7 @@ func (s *Serveur) changerDossier(p Projet, cible string) error {
 		choix[cible] = c
 		_ = ecrireJSONFichier(filepath.Join(dossierExt(k), "projets.json"), choix, 0o644)
 	}
+	dossierAgents(k, p.Dossier, cible)
 	return nil
 }
 
@@ -747,6 +748,7 @@ func (s *Serveur) retirerProjet(p Projet) error {
 		delete(choix, p.Dossier)
 		_ = ecrireJSONFichier(filepath.Join(dossierExt(k), "projets.json"), choix, 0o644)
 	}
+	dossierAgents(k, p.Dossier, "") // the library keeps its sub-agents
 	s.apresChangementProjets()
 	return nil
 }

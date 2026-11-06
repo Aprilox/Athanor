@@ -157,10 +157,17 @@ func TestPourVous(t *testing.T) {
 	if b, _ := os.ReadFile(cheminSecrets(p)); strings.Contains(string(b), "FAUX") || !strings.Contains(string(b), "AUTRE='ok'") || !strings.Contains(string(b), "API_KEY='k'") {
 		t.Errorf("secrets.env: %s", b)
 	}
-	// links
+	// links: only a web address is opened (in place of the browser, a list)
+	var ouverts []string
+	avant := ouvrirLien
+	ouvrirLien = func(u string) error { ouverts = append(ouverts, u); return nil }
+	t.Cleanup(func() { ouvrirLien = avant })
 	for u, ok := range map[string]bool{"https://partners.shopify.com/signup?x=1": true, "javascript:alert(1)": false, "file:///etc/passwd": false, "https://a b": false} {
-		if c, _ := appel("POST", "/api/lien", map[string]any{"url": u}); (c != 400) != ok && !(ok && c == 500) {
+		if c, _ := appel("POST", "/api/lien", map[string]any{"url": u}); (c == 200) != ok || (!ok && c != 400) {
 			t.Errorf("link %q: %d", u, c)
 		}
+	}
+	if len(ouverts) != 1 || ouverts[0] != "https://partners.shopify.com/signup?x=1" {
+		t.Errorf("opened: %v", ouverts)
 	}
 }

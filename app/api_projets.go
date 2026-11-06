@@ -307,6 +307,7 @@ func (s *Serveur) apiAgents(w http.ResponseWriter, r *http.Request) {
 		equipe = append(equipe, m)
 	}
 	reponse["agents"], reponse["equipe"], reponse["modele_chef"], reponse["refuses"] = agents, equipe, reglages["MODEL"], refus
+	reponse["bibliotheque"] = s.bibliothequeAgents(p)
 	s.ecrireJSON(w, reponse)
 }
 
