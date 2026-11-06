@@ -128,7 +128,7 @@ read_only: no             (yes: it reads and reports, never writes files)
 ---
 Its standing instructions: its role, what it must always do and never do, what it hands back.
 ```
-The pilot adds it to the team from the next cycle (never a name already taken, never one the user removed: see `.athanor/TEAM.md`); the user sees it in the app and can change or remove it. Do not propose one for a one-off task: for that, call the `general-purpose` sub-agent with a precise brief.
+The pilot adds it to the team from the next cycle (never a name already taken, in this project or in the user's library of sub-agents, never one the user removed: see `.athanor/TEAM.md`); the user sees it in the app and can change or remove it. Do not propose one for a one-off task: for that, call the `general-purpose` sub-agent with a precise brief.
 
 **Simple tasks go to `executor`.** It is not the number of turns that costs, it is what enters your context: hand to `executor` whatever produces a lot of text to read for little thinking, and keep for yourself everything that requires judgment. Examples: running a test suite or a long build and returning only the failures; searching everywhere a function or a text is used; applying the same small change to many files; copying, moving, renaming, converting or resizing assets; filling in repetitive data (product lists, translations already decided). Give it a closed brief (what, where, how to verify) and do not redo its work. A single short command (`cp`, `mkdir`, `git status`) is done directly: delegating it would cost more.
 

@@ -147,15 +147,16 @@ and name the files you mean.
 Sub-agents: .athanor/TEAM.md lists the project's team (Athanor's own sub-agents and the user's). When the user
 wants a new specialist sub-agent, or to change one of theirs, shape it with them: ask what you need, a few
 questions at a time (what it does, when the lead should call it, what it must never do, a cheap or a strong
-model, whether it may change files, for this project or all of them, its name), then propose it. Once the
+model, whether it may change files, its name), then propose it. Once the
 user agrees, write it once, at the end of your answer, between <agent> and </agent>, as JSON:
 {"nom": "lowercase letters, digits and dashes, 2 to 31", "ancien": "its current name when changing one, else empty",
 "description": "when the lead should call it, 400 characters at most, in the user's language",
 "consignes": "its complete instructions (role, method, always and never, what it hands back), 6000 characters at most",
 "modele": "" (like the other sub-agents) or "eco" (cheap, mechanical work) or "fort" (strongest, hard reasoning),
-"lecture_seule": true when it only reads and reports, "tous": true for all the user's projects}.
-Athanor shows it as a card the user can still edit, and adds it to the team with one click: never write the
-team's files yourself. Names taken by Athanor: architect, creator, developer, tester, critic, executor, scout.
+"lecture_seule": true when it only reads and reports}.
+Athanor shows it as a card the user can still edit, and adds it with one click to the user's library of
+sub-agents, switched on in this project (the user switches it on in other projects on their Team page):
+never write the team's files yourself. Names taken by Athanor: architect, creator, developer, tester, critic, executor, scout.
 %s`
 
 const consigneQuestion = `You can only read: no change, no command. The pilot is RUNNING on this project, so you must not change
@@ -443,7 +444,6 @@ func (s *Serveur) apiChatAgent(w http.ResponseWriter, r *http.Request) {
 		Index  int        `json:"index"`
 		Ancien string     `json:"ancien"`
 		Agent  AgentPerso `json:"agent"`
-		Tous   bool       `json:"tous"`
 	}
 	if err := lireCorps(r, &c); err != nil {
 		s.erreur(w, http.StatusBadRequest, err.Error())
@@ -466,7 +466,7 @@ func (s *Serveur) apiChatAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	f := lireAgents(k)
-	cle, code, err := enregistrerAgentPerso(k, &f, p, strings.TrimSpace(c.Ancien), c.Agent, c.Tous)
+	cle, code, err := enregistrerAgentPerso(k, &f, p, strings.TrimSpace(c.Ancien), c.Agent)
 	verrouAgents.Unlock()
 	if err != nil {
 		s.erreur(w, code, err.Error())

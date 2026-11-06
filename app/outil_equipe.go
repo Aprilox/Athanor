@@ -2,7 +2,8 @@ package main
 
 // athanor equipe importer KIT PROJECT | json KIT PROJECT AGENTS_DIR [--ouvrier] | fiche KIT PROJECT AGENTS_DIR:
 // the team of sub-agents (replaces system/equipe.py, same files and outputs): Athanor's own (template copies
-// in AGENTS_DIR), the ones the user creates in the app, the ones the lead proposes in .athanor/agents/.
+// in AGENTS_DIR), and those of the library (extensions/agents.json) switched on in the project: the ones
+// the user creates in the app, the ones the lead proposes in .athanor/agents/.
 //   importer  imports the lead's proposals (validated) into extensions/agents.json, one line each
 //   json      the --agents JSON (Athanor's agents + the project's own); --ouvrier: executor + the project's
 //   fiche     writes PROJECT/.athanor/TEAM.md (the team, the refused proposals)
@@ -25,7 +26,7 @@ import (
 const (
 	maxDescriptionAgent = 400
 	maxConsignesAgent   = 6000
-	maxAgentsParProjet  = 12
+	maxAgentsParProjet  = 24
 	maxAgentsDuChef     = 5
 )
 
@@ -162,12 +163,27 @@ func valideAgent(a map[string]any) string {
 	return ""
 }
 
+// agentDe: the sub-agent is switched on in the project (noms: the forms of its folder): its list "projets"
+// (the library, 2.49.9), else the former field "projet" ("" = every project; a lead's proposal: its project).
+func agentDe(a map[string]any, noms map[string]bool) bool {
+	if l, ok := a["projets"]; ok && l != nil {
+		v, _ := l.([]any)
+		for _, x := range v {
+			if s, ok := x.(string); ok && noms[normaliserDossier(s)] {
+				return true
+			}
+		}
+		return false
+	}
+	p, _ := a["projet"].(string)
+	return p == "" || noms[normaliserDossier(p)]
+}
+
 func (e equipeFichier) duProjet(projet string) []map[string]any {
 	noms := formesProjet(projet)
 	var out []map[string]any
 	for _, a := range e.agents {
-		p, _ := a["projet"].(string)
-		if p == "" || noms[normaliserDossier(p)] {
+		if agentDe(a, noms) {
 			out = append(out, a)
 		}
 	}
@@ -273,7 +289,10 @@ func equipeImporter(kit, projet string) []string {
 	}
 	e := lireEquipe(kit)
 	refuses := e.refusesDuProjet(projet)
-	existants := map[string]bool{}
+	existants, biblio := map[string]bool{}, map[string]bool{} // the project's team; the library (a name is unique in it)
+	for _, a := range e.agents {
+		biblio[a["nom"].(string)] = true
+	}
 	nChef := 0
 	for _, a := range e.duProjet(projet) {
 		existants[a["nom"].(string)] = true
@@ -307,7 +326,7 @@ func equipeImporter(kit, projet string) []string {
 			a = p
 			raison = valideAgent(a)
 			n := a["nom"].(string)
-			if raison == "" && existants[n] {
+			if raison == "" && (existants[n] || biblio[n]) {
 				raison = "a sub-agent already has this name"
 			}
 			if raison == "" && refuses[n] {
@@ -332,7 +351,7 @@ func equipeImporter(kit, projet string) []string {
 			a["projet"], a["origine"] = cle, "chef"
 			e.agents = append(e.agents, a)
 			e.bruts = append(e.bruts, b)
-			existants[a["nom"].(string)] = true
+			existants[a["nom"].(string)], biblio[a["nom"].(string)] = true, true
 			nChef++
 			change = true
 			lignes = append(lignes, fmt.Sprintf("Sub-agent proposed by the lead added to the team: %s (%s)", a["nom"], tronquerRunes(a["description"].(string), 120)))

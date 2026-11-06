@@ -1128,7 +1128,6 @@ function carteAgentChat(json, m, i) {
     <label class="champ"><span>${t("Its instructions")}</span><textarea data-ca="consignes" id="ca-consignes-${i}" rows="8">${v(a.consignes)}</textarea></label>
     ${barreAmeliorer("ca-consignes-" + i, "agent")}
     <label class="interrupteur"><input type="checkbox" data-ca="lecture_seule" ${a.lecture_seule ? "checked" : ""}><span>${t("Read only: it reads and reports, never writes a file")}</span></label>
-    <label class="interrupteur"><input type="checkbox" data-ca="tous" ${a.tous ? "checked" : ""}><span>${t("For all my projects (otherwise this project only)")}</span></label>
     <div class="ligne m0 mt-1"><button type="button" class="btn btn-petit btn-primaire" data-chat-agent="${i}">${a.ancien ? t("Save the changes") : t("Add to the team")}</button></div></div>`;
 }
 async function ajouterAgentChat(b) {
@@ -1136,7 +1135,7 @@ async function ajouterAgentChat(b) {
   const champ = (n) => carte.querySelector(`[data-ca="${n}"]`);
   const agent = { nom: champ("nom").value.trim().toLowerCase(), description: champ("description").value, consignes: champ("consignes").value, modele: champ("modele").value, lecture_seule: champ("lecture_seule").checked };
   b.disabled = true;
-  const r = await action(api("chat/agent", "POST", { index: Number(b.dataset.chatAgent), ancien: champ("ancien").value.trim(), agent, tous: champ("tous").checked }));
+  const r = await action(api("chat/agent", "POST", { index: Number(b.dataset.chatAgent), ancien: champ("ancien").value.trim(), agent }));
   b.disabled = false;
   if (r) majChat(true);
 }
@@ -2232,23 +2231,36 @@ pages.equipe = async () => {
   if (v.actif && phase && phase !== "travail" && chef.statut !== "termine") { chef.statut = "attend"; chef.activite = phraseEtat(v).titre; chef.actions = []; chef.derniere = 0; }
   const appelsCycle = {};
   for (const a of agents) if (a.genre === "sous_agent") appelsCycle[a.nom] = (appelsCycle[a.nom] || 0) + 1;
-  etat.agPerso = {};
-  const membres = equipe.map((m) => { if (m.perso) etat.agPerso[m.nom] = m.perso; return `<div class="membre ${appelsCycle[m.nom] ? "utilise" : ""} ${m.perso ? "perso" : ""}">
-      <div class="membre-nom">${h(m.nom)} <span class="muet">· ${m.modele ? h(modeleLisible(m.modele)) : t("lead's model")}</span>${m.perso ? ` <span class="badge">${m.perso.origine === "chef" ? t("proposed by the lead") : t("created by you")}${m.perso.projet ? "" : " · " + t("all projects")}${m.perso.lecture_seule ? " · " + t("read only") : ""}</span>` : ""}</div>
+  const membres = equipe.map((m) => `<div class="membre ${appelsCycle[m.nom] ? "utilise" : ""} ${m.perso ? "perso" : ""}">
+      <div class="membre-nom">${h(m.nom)} <span class="muet">· ${m.modele ? h(modeleLisible(m.modele)) : t("lead's model")}</span>${m.perso ? ` <span class="badge">${m.perso.origine === "chef" ? t("proposed by the lead") : t("created by you")}${m.perso.lecture_seule ? " · " + t("read only") : ""}</span>` : ""}</div>
       <div class="membre-role">${h(ROLES[m.nom] ? t(ROLES[m.nom]) : m.mission)}</div>
-      <div class="muet petit">${m.appele_par === "chef_ouvriers" ? t("called by the lead and the workers") : t("called by the lead")}${appelsCycle[m.nom] ? " · " + t("called {0}× this cycle", [appelsCycle[m.nom]]) : ""}</div>
-      ${m.perso ? `<div class="ligne mt-1"><button class="btn btn-petit" data-ag="modifier" data-nom="${h(m.nom)}">${t("Edit")}</button><button class="btn btn-petit btn-danger" data-ag="supprimer" data-nom="${h(m.nom)}">${t("Remove")}</button></div>` : ""}</div>`; }).join("");
+      <div class="muet petit">${m.appele_par === "chef_ouvriers" ? t("called by the lead and the workers") : t("called by the lead")}${appelsCycle[m.nom] ? " · " + t("called {0}× this cycle", [appelsCycle[m.nom]]) : ""}</div></div>`).join("");
   return `<p class="intro">${t("Who works on this cycle and who called whom. Click a sub-agent to read the brief it was given and the report it handed back.")}</p>
   ${rendreSession(chef, appelsDe("chef"), t("Project lead"), t("Leads the current milestone: reads the plan, codes, checks, commits."), ((w) => (w[0][0] + (w.length > 1 ? w[w.length - 1][0] : w[0][1] || "")).toUpperCase())(t("Project lead").split(/\s+/)))}
   ${ouvriers.length ? `<h3 class="equipe-section">${t("Workers in parallel ({0})", [ouvriers.length])}</h3>
     <div class="equipe">${ouvriers.map((o) => rendreSession(o, appelsDe(o.id), t("Worker " + o.jalon), o.mission || t("Builds milestone " + o.jalon), o.jalon.replace(/_/g, "."))).join("")}</div>` : ""}
   ${membres ? `<h3 class="equipe-section">${t("Who can be called")}</h3><div class="roster">${membres}</div>` : ""}
   ${(r.refuses || []).length ? `<p class="muet petit">${t("Removed proposals of the lead (never proposed again): {0}", [r.refuses.map(h).join(", ")])}</p>` : ""}
-  ${formulaireAgent()}`;
+  ${blocBibliothequeAgents(r.bibliotheque || [])}`;
 };
 
-// A sub-agent of the user's: the lead sees it in its team (.athanor/TEAM.md) and calls it when its
-// description fits or when a request names it. Saved in extensions/agents.json (athanor equipe).
+// The library of sub-agents (extensions/agents.json): kept in Athanor, switched on per project like the
+// skills. The lead sees its project's ones in .athanor/TEAM.md (athanor equipe).
+function blocBibliothequeAgents(biblio) {
+  etat.agPerso = {};
+  const lignes = biblio.map((a) => { etat.agPerso[a.nom] = a; return `<div class="ext-ligne ${a.actif ? "actif" : ""}">
+      <label class="interrupteur" title="${h(t("Used by this project"))}"><input type="checkbox" data-ag-actif="${h(a.nom)}" ${a.actif ? "checked" : ""}></label>
+      <div class="ext-corps"><div class="ext-nom">${h(a.nom)} <span class="etiquette">${a.origine === "chef" ? t("proposed by the lead") : t("created by you")}</span>${a.lecture_seule ? ` <span class="etiquette">${t("read only")}</span>` : ""}</div>
+        <div class="ext-desc">${h(a.description)}</div>
+        <div class="muet petit">${t("Used by {0} project(s)", [(a.projets || []).length])}</div></div>
+      <div class="ext-actions"><button class="btn btn-petit" data-ag="modifier" data-nom="${h(a.nom)}">${t("Edit")}</button><button class="btn btn-petit btn-danger" data-ag="supprimer" data-nom="${h(a.nom)}" title="${h(t("Delete"))}">✕</button></div></div>`; }).join("");
+  return `<div class="bloc mt-2"><h2>${t("Sub-agent library")}</h2>
+    <p class="muet petit">${t("Kept in Athanor for all your projects: switch on the ones this project uses (24 at most). It applies from the next cycle.")}</p>
+    ${lignes}${formulaireAgent()}</div>`;
+}
+
+// A sub-agent of the library: the lead of each project that uses it sees it in its team and calls it when
+// its description fits or when a request names it.
 function formulaireAgent() {
   const f = etat.agForm;
   if (!f) return `<div class="ligne mt-2"><button class="btn" data-ag="nouveau">＋ ${t("New sub-agent")}</button>
@@ -2265,22 +2277,20 @@ function formulaireAgent() {
     <label class="champ"><span>${t("Its instructions")}</span><textarea id="ag-consignes" rows="9" placeholder="${h(t("Its role, how it works, what it must always and never do, what it hands back. Write it as you would brief a colleague: ✨ Improve with Claude can structure it."))}">${h(f.consignes || "")}</textarea></label>
     ${barreAmeliorer("ag-consignes", "agent")}
     <label class="interrupteur"><input type="checkbox" id="ag-lecture" ${f.lecture_seule ? "checked" : ""}><span>${t("Read only: it reads and reports, never writes a file")}</span></label>
-    <label class="interrupteur"><input type="checkbox" id="ag-tous" ${f.tous ? "checked" : ""}><span>${t("For all my projects (otherwise this project only)")}</span></label>
-    <p class="muet petit">${t("Like the other sub-agents, it works inside the project's sandbox and has its skills, MCP tools and attached files.")}</p>
+    <p class="muet petit">${f.ancien ? (f.n > 1 ? t("Used by {0} projects: the change applies to all of them.", [f.n]) : "") : t("Saved in the library and switched on in this project.")} ${t("Like the other sub-agents, it works inside the project's sandbox and has its skills, MCP tools and attached files.")}</p>
     <div class="ligne"><button class="btn btn-primaire" data-ag="enregistrer">${t("Save the sub-agent")}</button><button class="btn" data-ag="annuler">${t("Cancel")}</button></div></div>`;
 }
 async function actionAgent(act, b) {
-  if (act === "nouveau") { etat.agForm = { nom: "", description: "", consignes: "", modele: "", lecture_seule: false, tous: false }; return rendrePage(); }
+  if (act === "nouveau") { etat.agForm = { nom: "", description: "", consignes: "", modele: "", lecture_seule: false }; return rendrePage(); }
   if (act === "annuler") { etat.agForm = null; return rendrePage(); }
   if (act === "modifier") {
     const a = (etat.agPerso || {})[b.dataset.nom]; if (!a) return;
-    etat.agForm = { ancien: a.nom, nom: a.nom, description: a.description, consignes: a.consignes, modele: a.modele, lecture_seule: a.lecture_seule, tous: !a.projet };
+    etat.agForm = { ancien: a.nom, nom: a.nom, description: a.description, consignes: a.consignes, modele: a.modele, lecture_seule: a.lecture_seule, n: (a.projets || []).length };
     await rendrePage(); const z = $("#ag-nom"); if (z) z.scrollIntoView({ block: "center" }); return;
   }
   if (act === "supprimer") {
     const a = (etat.agPerso || {})[b.dataset.nom]; if (!a) return;
-    const texte = a.origine === "chef" ? t("Remove “{0}” from the team? The lead proposed it: it will not propose it again in this project.", [a.nom]) : t("Remove “{0}” from the team?", [a.nom]);
-    if (!(await confirmer(texte, { ok: t("Remove"), danger: true }))) return;
+    if (!(await confirmer(t("Delete “{0}” from the library? It leaves the team of every project that uses it ({1}).", [a.nom, (a.projets || []).length]), { ok: t("Delete"), danger: true }))) return;
     if (await action(api("equipe/agents", "POST", { action: "supprimer", ancien: a.nom }))) rendrePage();
     return;
   }
@@ -2288,7 +2298,7 @@ async function actionAgent(act, b) {
     const f = etat.agForm || {};
     const agent = { nom: $("#ag-nom").value.trim().toLowerCase(), description: $("#ag-description").value, consignes: $("#ag-consignes").value, modele: $("#ag-modele").value, lecture_seule: $("#ag-lecture").checked };
     b.disabled = true;
-    const r = await action(api("equipe/agents", "POST", { action: "enregistrer", ancien: f.ancien || "", agent, tous: $("#ag-tous").checked }));
+    const r = await action(api("equipe/agents", "POST", { action: "enregistrer", ancien: f.ancien || "", agent }));
     b.disabled = false;
     if (r) { etat.agForm = null; rendrePage(); }
   }
@@ -2727,6 +2737,8 @@ $("#page").addEventListener("click", async (ev) => {
   }
 });
 $("#page").addEventListener("change", async (ev) => {
+  const ag = ev.target.closest("[data-ag-actif]");
+  if (ag) { const r = await action(api("equipe/agents", "POST", { action: "activer", ancien: ag.dataset.agActif, actif: ag.checked })); if (!r) ag.checked = !ag.checked; else rendrePage(); return; }
   const c = ev.target.closest("[data-ext-actif]"); if (!c) return;
   const [type, id] = c.dataset.extActif.split("|");
   const r = await action(api("extensions/projet", "POST", { type, id, actif: c.checked }));
@@ -3860,7 +3872,7 @@ $("#page").addEventListener("input", (ev) => {
   if (d.pvTexte) brouillonTache(d.pvTexte).texte = ev.target.value;
   if (d.pvSecret) { const [id, nom] = d.pvSecret.split("|"); brouillonTache(id).secrets[nom] = ev.target.value; }
 });
-const CHAMPS_AGENT = { "ag-nom": "nom", "ag-description": "description", "ag-consignes": "consignes", "ag-modele": "modele", "ag-lecture": "lecture_seule", "ag-tous": "tous" };
+const CHAMPS_AGENT = { "ag-nom": "nom", "ag-description": "description", "ag-consignes": "consignes", "ag-modele": "modele", "ag-lecture": "lecture_seule" };
 for (const genre of ["input", "change"]) $("#page").addEventListener(genre, (ev) => {
   const c = CHAMPS_AGENT[ev.target.id];
   if (c && etat.agForm) etat.agForm[c] = ev.target.type === "checkbox" ? ev.target.checked : ev.target.value;
