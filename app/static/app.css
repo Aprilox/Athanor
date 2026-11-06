@@ -591,6 +591,9 @@ textarea.en-attente { opacity: .55; }
 .bloc h3:first-of-type { margin-top: 4px; }
 input.large { flex: 1; min-width: 200px; width: auto; }
 .ext-resultats { margin-top: 10px; max-height: 640px; overflow: auto; border-top: 1px solid var(--line-2); }
+/* the library of sub-agents (Team page): its own scroll, the page does not move while the mouse is in it */
+.ag-biblio { max-height: min(60vh, 520px); overflow-y: auto; overscroll-behavior: contain; padding-right: 6px; border-bottom: 1px solid var(--line-2); margin: 8px 0 12px; }
+.ag-biblio .ext-ligne[hidden] { display: none; }
 .ext-apercu { max-height: 360px; overflow: auto; }
 
 /* managing a project */

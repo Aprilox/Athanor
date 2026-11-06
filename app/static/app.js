@@ -2248,15 +2248,26 @@ pages.equipe = async () => {
 // skills. The lead sees its project's ones in .athanor/TEAM.md (athanor equipe).
 function blocBibliothequeAgents(biblio) {
   etat.agPerso = {};
-  const lignes = biblio.map((a) => { etat.agPerso[a.nom] = a; return `<div class="ext-ligne ${a.actif ? "actif" : ""}">
+  const lignes = biblio.map((a) => { etat.agPerso[a.nom] = a; return `<div class="ext-ligne ${a.actif ? "actif" : ""}" data-ag-ligne="${h(a.nom)}" ${agentCorrespond(a, etat.agRecherche) ? "" : "hidden"}>
       <label class="interrupteur" title="${h(t("Used by this project"))}"><input type="checkbox" data-ag-actif="${h(a.nom)}" ${a.actif ? "checked" : ""}></label>
       <div class="ext-corps"><div class="ext-nom">${h(a.nom)} <span class="etiquette">${a.origine === "chef" ? t("proposed by the lead") : t("created by you")}</span>${a.lecture_seule ? ` <span class="etiquette">${t("read only")}</span>` : ""}</div>
         <div class="ext-desc">${h(a.description)}</div>
         <div class="muet petit">${t("Used by {0} project(s)", [(a.projets || []).length])}</div></div>
       <div class="ext-actions"><button class="btn btn-petit" data-ag="modifier" data-nom="${h(a.nom)}">${t("Edit")}</button><button class="btn btn-petit btn-danger" data-ag="supprimer" data-nom="${h(a.nom)}" title="${h(t("Delete"))}">✕</button></div></div>`; }).join("");
-  return `<div class="bloc mt-2"><h2>${t("Sub-agent library")}</h2>
+  const vus = biblio.filter((a) => agentCorrespond(a, etat.agRecherche)).length;
+  return `<div class="bloc mt-2"><h2>${t("Sub-agent library")} <span class="muet">${biblio.length}</span></h2>
     <p class="muet petit">${t("Kept in Athanor for all your projects: switch on the ones this project uses (24 at most). It applies from the next cycle.")}</p>
-    ${lignes}${formulaireAgent()}</div>`;
+    ${biblio.length ? `<input type="text" id="ag-recherche" value="${h(etat.agRecherche || "")}" placeholder="${h(t("Search a sub-agent: name or what it does"))}" autocomplete="off">
+    <div class="ag-biblio">${lignes}<div class="vide" id="ag-aucun" ${vus ? "hidden" : ""}>${t("No sub-agent matches this search.")}</div></div>` : ""}
+    ${formulaireAgent()}</div>`;
+}
+// The search of the library, as it is typed: name and description, without case or accents.
+const sansAccents = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+function agentCorrespond(a, q) { q = sansAccents(q).trim(); return !q || sansAccents(a.nom + " " + a.description).includes(q); }
+function filtrerAgents() {
+  let n = 0;
+  document.querySelectorAll("[data-ag-ligne]").forEach((l) => { const ok = agentCorrespond(etat.agPerso[l.dataset.agLigne] || {}, etat.agRecherche); l.hidden = !ok; n += ok; });
+  const v = $("#ag-aucun"); if (v) v.hidden = n > 0;
 }
 
 // A sub-agent of the library: the lead of each project that uses it sees it in its team and calls it when
@@ -3879,6 +3890,7 @@ for (const genre of ["input", "change"]) $("#page").addEventListener(genre, (ev)
 });
 $("#page").addEventListener("input", (ev) => {
   if (ev.target.id === "jr-recherche") { etat.recherche = ev.target.value; rendreJournal(); }
+  if (ev.target.id === "ag-recherche") { etat.agRecherche = ev.target.value; filtrerAgents(); }
   if (ev.target.id === "np-nom" && $("#np-gh-nom")) $("#np-gh-nom").placeholder = nomDepot(ev.target.value);
   // typing a repository picks its option
   const m = /^(np|gh)-gh-(nom|depot)$/.exec(ev.target.id);
