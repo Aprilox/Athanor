@@ -2256,7 +2256,7 @@ function blocBibliothequeAgents(biblio) {
       <div class="ext-actions"><button class="btn btn-petit" data-ag="modifier" data-nom="${h(a.nom)}">${t("Edit")}</button><button class="btn btn-petit btn-danger" data-ag="supprimer" data-nom="${h(a.nom)}" title="${h(t("Delete"))}">✕</button></div></div>`; }).join("");
   const vus = biblio.filter((a) => agentCorrespond(a, etat.agRecherche)).length;
   return `<div class="bloc mt-2"><h2>${t("Sub-agent library")} <span class="muet">${biblio.length}</span></h2>
-    <p class="muet petit">${t("Kept in Athanor for all your projects: switch on the ones this project uses (24 at most). It applies from the next cycle.")}</p>
+    <p class="muet petit">${t("Kept in Athanor for all your projects: switch on the ones this project uses. It applies from the next cycle.")}</p>
     ${biblio.length ? `<input type="text" id="ag-recherche" value="${h(etat.agRecherche || "")}" placeholder="${h(t("Search a sub-agent: name or what it does"))}" autocomplete="off">
     <div class="ag-biblio">${lignes}<div class="vide" id="ag-aucun" ${vus ? "hidden" : ""}>${t("No sub-agent matches this search.")}</div></div>` : ""}
     ${formulaireAgent()}</div>`;
@@ -3627,8 +3627,12 @@ async function rendrePage() {
   try { html = await p(); } catch (e) { if (e.message === t("Locked")) return; html = `<div class="vide">${h(e.message)}</div>`; }
   if (n !== numeroRendu) return;
   const defils = positionsDefil();
+  // the field being typed in keeps its focus and its cursor across a live refresh (e.g. the Team page's search)
+  const a = document.activeElement, saisie = a && a.id && $("#page").contains(a) && a.matches("input[type=text], textarea") ? [a.id, a.selectionStart, a.selectionEnd] : null;
   $("#page").innerHTML = html;
   remettreDefil(defils);
+  const champ = saisie && document.getElementById(saisie[0]);
+  if (champ) { champ.focus({ preventScroll: true }); champ.setSelectionRange(saisie[1], saisie[2]); }
   suivrePlan();
   if (etat.page === "journal") rendreJournal();
   if (etat.page === "sante") rendreSortie();

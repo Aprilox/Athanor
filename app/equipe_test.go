@@ -124,18 +124,20 @@ func TestAgentsPerso(t *testing.T) {
 	if lb, _ := s.agentsDuProjet(b); len(lb) != 1 || lb[0].Nom != "chercheur" {
 		t.Errorf("deleted, still in b: %+v", lb)
 	}
-	// limit: per project, the library has none
+	// no limit, in the library or in a project
 	for i := 0; i < 30; i++ {
-		appel("a", map[string]any{"action": "enregistrer", "agent": ag("agent-" + string(rune('a'+i)))})
+		if c, _ := appel("a", map[string]any{"action": "enregistrer", "agent": ag(fmt.Sprintf("agent-%02d", i))}); c != 200 {
+			t.Fatalf("agent %d: %d", i, c)
+		}
 	}
-	if l, _ := s.agentsDuProjet(a); len(l) != agentsParProjetMax {
-		t.Errorf("limit: %d", len(l))
+	if c, _ := appel("a", map[string]any{"action": "activer", "ancien": "chercheur", "actif": true}); c != 200 {
+		t.Errorf("a 31st one switched on: %d", c)
 	}
-	if c, _ := appel("a", map[string]any{"action": "activer", "ancien": "chercheur", "actif": true}); c != 400 {
-		t.Errorf("switched on in a full team: %d", c)
+	if l, _ := s.agentsDuProjet(a); len(l) != 31 {
+		t.Errorf("team of a: %d", len(l))
 	}
 	appel("b", map[string]any{"action": "enregistrer", "agent": ag("agent-z1")})
-	if l := s.bibliothequeAgents(b); len(l) != agentsParProjetMax+2 {
+	if l := s.bibliothequeAgents(b); len(l) != 32 {
 		t.Errorf("library: %d", len(l))
 	}
 	// the project moves: its sub-agents follow; it leaves Athanor: the library keeps them
@@ -145,7 +147,7 @@ func TestAgentsPerso(t *testing.T) {
 		t.Errorf("moved: %+v", l)
 	}
 	dossierAgents(k, b.Dossier+"-2", "")
-	if l := lireAgents(k).Agents; len(l) != agentsParProjetMax+2 || l[0].duDossier(b.Dossier+"-2") || l[0].Projets == nil {
+	if l := lireAgents(k).Agents; len(l) != 32 || l[0].duDossier(b.Dossier+"-2") || l[0].Projets == nil {
 		t.Errorf("removed project: %+v", l[0])
 	}
 	// roster: the project's own agents follow Athanor's, with their model
@@ -160,7 +162,7 @@ func TestAgentsPerso(t *testing.T) {
 	json.Unmarshal(w.Body.Bytes(), &v)
 	vu := false
 	for _, m := range v.Equipe {
-		if m.Nom == "agent-a" {
+		if m.Nom == "agent-00" {
 			vu = m.Perso != nil && m.Modele == "sonnet" && m.AppelePar == "chef_ouvriers"
 		}
 	}
