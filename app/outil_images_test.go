@@ -19,7 +19,7 @@ import (
 
 func pillow(t *testing.T) {
 	t.Helper()
-	if exec.Command("python3", "-c", "import PIL").Run() != nil {
+	if exec.Command("python3", "-I", "-c", "import PIL").Run() != nil { // -I as the tests run it (a Pillow of the user's site is not seen)
 		t.Skip("no Pillow")
 	}
 }

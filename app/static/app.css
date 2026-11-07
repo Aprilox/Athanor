@@ -82,6 +82,26 @@ html.cadre .dialogue, html.cadre .verrou, html.cadre .assistant { top: var(--bar
 .fb-actions { display: flex; align-items: center; gap: 6px; padding: 0 10px; flex: none; }
 .fb-action { height: 24px; padding: 0 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel-2); color: var(--ink); font-size: 12.5px; line-height: 1; cursor: pointer; }
 .fb-action:hover { background: var(--panel-3); }
+/* the bell (title bar, or the header without it) and its panel of the projects that need the user */
+.cloche { display: inline-flex; align-items: center; gap: 5px; }
+.fb-action.cloche { padding: 0 8px; }
+.cloche.sonne { border-color: var(--attention); color: var(--attention); }
+.cloche-n { background: var(--attention); color: var(--sur-attention); border-radius: 9px; padding: 0 6px; font-size: 11.5px; font-weight: 600; line-height: 17px; }
+.notifs { position: fixed; z-index: 34; width: min(360px, calc(100vw - 16px)); background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--ombre); padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+.notifs-titre { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--faible); padding: 2px 10px; }
+.notifs-vide { padding: 8px 10px; }
+/* All projects: one card per project */
+.grille-projets { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+.carte-projet { display: flex; flex-direction: column; gap: 4px; color: inherit; text-decoration: none; cursor: pointer; min-width: 0; }
+.grille-projets > .bloc + .bloc { margin-top: 0; }
+.carte-projet:hover, .carte-projet:focus-visible { border-color: var(--accent); }
+.carte-projet.courant { box-shadow: inset 3px 0 0 var(--accent); }
+.carte-projet.besoin { border-color: var(--attention); }
+.carte-projet .barre { margin: 6px 0 0; }
+.cp-tete { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.cp-nom { font-size: 15.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.cp-besoin { background: var(--attention); color: var(--sur-attention); border-radius: 10px; padding: 0 8px; font-size: 12px; font-weight: 600; line-height: 19px; white-space: nowrap; }
+.cp-jalon { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fb-boutons { display: flex; flex: none; }
 .fb-btn { width: 46px; border: 0; padding: 0; background: transparent; color: var(--ink); font: 10px/1 "Segoe Fluent Icons", "Segoe MDL2 Assets"; display: grid; place-items: center; }
 .fb-btn:hover, .fb-btn.survol { background: var(--panel-3); }

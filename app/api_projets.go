@@ -30,6 +30,9 @@ type ProjetVue struct {
 	Archive  bool    `json:"archive,omitempty"`
 	// milestones unticked by the folder check, waiting for their files
 	AVerifier bool `json:"a_verifier,omitempty"`
+	// the plan's progress (the All projects page): milestones done, out of all of them
+	Faits  int `json:"faits,omitempty"`
+	Jalons int `json:"jalons,omitempty"`
 }
 
 // FinVue: the pilot of a project stopped by itself (delivery, maximum duration…) and the user has not
@@ -68,6 +71,12 @@ func (s *Serveur) vuesProjets(courant string) []ProjetVue {
 		}
 		pv.Attente = len(p.LireFileAttente())
 		pv.PourVous = p.PourVous()
+		for _, j := range p.LirePlan() {
+			pv.Jalons++
+			if j.Fait {
+				pv.Faits++
+			}
+		}
 		s.surveillerRelance(p, pv.Actif) // "restart after the cycle" works for every project
 		v = append(v, pv)
 	}
