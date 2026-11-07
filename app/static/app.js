@@ -609,7 +609,7 @@ function rendreBarre(v) {
   if (!cadre.actif) return;
   const p = v.projet;
   const projet = p ? `<span class="dot ${classePhase(p)}"></span><span>${h(p.nom)}</span>` : "";
-  const b = v.bureau || {}, act = [];
+  const b = v.bureau || {}, act = [boutonCloche(v, "fb-action")];
   if (b.disponible && b.ecran) act.push(`<button type="button" class="fb-action" data-ecran title="${h(t("Go and see what Claude is showing (windows on the “Claude” desktop)"))}">${t("View Claude's screen")}</button>`);
   else {
     if (b.disponible) act.push(`<button type="button" class="fb-action" data-bureau="voir" title="${h(t("Go and see what Claude is showing (windows on the “Claude” desktop)"))}">${t("View Claude's desktop")}</button>`);
@@ -714,11 +714,74 @@ window.athanorFermeture = (noms) => {
   window.athanorFermer("affiche");
 };
 
+// ----------------------------------------------------------------------------- every project at once: the bell, the All projects page
+// what a project waits for from the user (null: nothing): its For you tasks, a connection to fix, the API budget
+function besoinProjet(x) {
+  if (x.archive) return null;
+  if (x.pour_vous) return { texte: t("{0} task(s) on the For you page", [x.pour_vous]), page: "pourvous" };
+  if (!x.actif) return null;
+  if (x.phase === "attente_vous") return { texte: t("Claude is waiting for you"), page: "pourvous" };
+  if (x.phase === "connexion") return { texte: t("Connection problem"), page: "suivi" };
+  if (x.phase === "budget") return { texte: t("API budget or credit used up, Claude is waiting"), page: "suivi" };
+  return null;
+}
+function phraseProjet(x) {
+  if (!x.actif) return x.phase === "termine" ? t("Project finished") : t("Pilot stopped");
+  return { travail: t("Claude is working"), quota: t("Usage limit reached, Claude is waiting"), budget: t("API budget or credit used up, Claude is waiting"), attente_vous: t("Claude is waiting for you"), entre_cycles: t("Between two cycles"), erreur: t("Error, retry scheduled"), connexion: t("Connection problem") }[x.phase] || t("Pilot started");
+}
+const projetsVisibles = (v) => (v.projets || []).filter((x) => !x.archive);
+// the bell: in Athanor's title bar (Windows), else at the end of the header; the number of projects that need the user
+function boutonCloche(v, classe) {
+  if (!projetsVisibles(v).length) return "";
+  const n = projetsVisibles(v).filter(besoinProjet).length;
+  const titre = n ? t("{0} project(s) need you", [n]) : t("No project needs you");
+  return `<button type="button" class="${classe} cloche${n ? " sonne" : ""}" data-notifs aria-haspopup="true" aria-expanded="${etat.notifsOuvert ? "true" : "false"}" aria-label="${h(titre)}" title="${h(titre)}"><svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.94 1.94 0 0 0 3.4 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>${n ? `<span class="cloche-n">${n}</span>` : ""}</button>`;
+}
+function rendreNotifs(v) {
+  const m = $("#notifs"), bouton = document.querySelector("[data-notifs]");
+  m.hidden = !etat.notifsOuvert || !bouton;
+  if (m.hidden) return;
+  const liste = projetsVisibles(v).map((x) => [x, besoinProjet(x)]).filter((c) => c[1]);
+  const html = `<div class="notifs-titre">${t("Projects that need you")}</div>
+    <div class="menu-liste">${liste.map(([x, b]) => `<a href="#${b.page}" data-projet="${h(x.nom)}" data-cible="${b.page}"><span class="dot quota"></span><span class="nom">${h(x.nom)}</span><span class="muet petit">${h(b.texte)}</span></a>`).join("") || `<div class="muet petit notifs-vide">${t("No project needs you right now.")}</div>`}</div>
+    <a href="#global" class="menu-nouveau">${t("All projects")} →</a>`;
+  if (m.dataset.html !== html) { m.dataset.html = html; m.innerHTML = html; }
+  const r = bouton.getBoundingClientRect();
+  m.style.top = r.bottom + 6 + "px";
+  m.style.right = Math.max(8, window.innerWidth - r.right) + "px";
+}
+function fermerNotifs() { etat.notifsOuvert = false; if (etat.vue) rendreBandeau(etat.vue); }
+document.addEventListener("click", (ev) => {
+  if (ev.target.closest("[data-notifs]")) { etat.notifsOuvert = !etat.notifsOuvert; if (etat.vue) rendreBandeau(etat.vue); }
+  else if (etat.notifsOuvert && !ev.target.closest("#notifs")) fermerNotifs();
+});
+document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && etat.notifsOuvert) fermerNotifs(); });
+// a project of the bell or of the All projects page: chosen, then the page it needs shown
+async function allerProjet(nom, page) {
+  etat.projet = nom; etat.evenements = []; etat.dernierJournal = 0; etat.ouverts.clear();
+  await action(api("projets/choisir", "POST", { nom }));
+  await rafraichir();
+  if (etat.page !== page) location.hash = "#" + page; else rendrePage();
+}
+function cliqueProjet(ev) {
+  const a = ev.target.closest("a[data-cible]"); if (!a) return;
+  ev.preventDefault(); fermerNotifs();
+  allerProjet(a.dataset.projet, a.dataset.cible);
+}
+$("#notifs").addEventListener("click", (ev) => { if (ev.target.closest("a") && !ev.target.closest("a[data-cible]")) fermerNotifs(); else cliqueProjet(ev); });
+$("#page").addEventListener("click", cliqueProjet);
+
+function phraseGlobale(v) {
+  const liste = projetsVisibles(v), n = liste.filter(besoinProjet).length, actifs = liste.filter((x) => x.actif).length;
+  return { classe: n ? "quota" : actifs ? "travaille" : "", titre: t("All projects"), sous: [actifs ? t("{0} project(s) running", [actifs]) : t("idle"), n && t("{0} project(s) need you", [n])].filter(Boolean).join(" · ") };
+}
+
 // ----------------------------------------------------------------------------- shell: header, sidebar, project picker
 function rendreBandeau(v) {
-  const p = phraseEtat(v);
+  const global = etat.page === "global";
+  const p = global ? phraseGlobale(v) : phraseEtat(v);
   const boutons = [];
-  if (v.kit_valide && v.projet) {
+  if (v.kit_valide && v.projet && !global) {
     if (v.actif) {
       // a stop asked for the end of the cycle: the button says it, and a click withdraws it
       if (v.arret_demande) boutons.push(`<button class="btn btn-attente" data-arret="annuler" title="${h(t("Click to cancel: the pilot then goes on after this cycle."))}">⏳ ${v.arret_demande === "relance" ? t("Restart requested: end of cycle") : t("Stop requested: end of cycle")}</button>`);
@@ -737,8 +800,9 @@ function rendreBandeau(v) {
   if (maj.en_cours === "telechargement") boutons.unshift(`<button class="btn btn-maj" disabled>${t("Downloading the update… {0} %", [maj.avancement || 0])}</button>`);
   else if (maj.en_cours === "redemarrage") boutons.unshift(`<button class="btn btn-maj" disabled>${t("Athanor restarts…")}</button>`);
   else if (maj.disponible) boutons.unshift(`<button class="btn btn-maj" data-maj="voir" title="${h(t("Athanor {0} is available (you have {1})", [maj.derniere, v.version]))}">⬆ ${t("Update to {0}", [h(maj.derniere)])}</button>`);
+  if (!cadre.actif) boutons.push(boutonCloche(v, "btn"));
   rendreBarre(v);
-  const nomProjet = v.projet ? `<div class="muet petit">${h(v.projet.nom)} · ${h(v.projet.dossier)}</div>` : "";
+  const nomProjet = v.projet && !global ? `<div class="muet petit">${h(v.projet.nom)} · ${h(v.projet.dossier)}</div>` : "";
   const nbActifs = (v.projets || []).filter((x) => x.actif).length;
   $("#bandeau").innerHTML = `<div class="etat-phrase">${nomProjet}<h1 title="${h(p.titre)}"><span class="point ${p.classe}"></span><span>${h(p.titre)}</span></h1><div class="sous" title="${h(p.sous)}">${h(p.sous)}</div></div><div class="actions">${boutons.join("")}</div>`;
   $("#nav-sous").textContent = nbActifs ? t("{0} project(s) running", [nbActifs]) : t("idle");
@@ -755,9 +819,12 @@ function rendreBandeau(v) {
   lien.innerHTML = t("Requests") + (v.attente ? ` <span class="pastille">${v.attente}</span>` : "");
   const lienPv = $('#nav-liens a[data-page="pourvous"]');
   if (lienPv) lienPv.innerHTML = t("For you") + (v.pour_vous ? ` <span class="pastille pastille-alerte">${v.pour_vous}</span>` : "");
+  const besoins = projetsVisibles(v).filter(besoinProjet).length;
+  $("#nav-global a").innerHTML = t("All projects") + (besoins ? ` <span class="pastille pastille-alerte" title="${h(t("{0} project(s) need you", [besoins]))}">${besoins}</span>` : "");
   $("#btn-verrou").hidden = !v.mot_de_passe;
   if (v.projet && etat.projet !== v.projet.nom) etat.projet = v.projet.nom;
   rendreSelecteur(v);
+  rendreNotifs(v);
 }
 
 function rendreSelecteur(v) {
@@ -856,9 +923,7 @@ $("#menu-projets").addEventListener("click", async (ev) => {
   fermerSelecteur();
   if (!a.dataset.projet) return; // "+ New project": normal navigation
   ev.preventDefault();
-  etat.projet = a.dataset.projet; etat.evenements = []; etat.dernierJournal = 0; etat.ouverts.clear();
-  await action(api("projets/choisir", "POST", { nom: etat.projet }));
-  if (["sante", "reglages", "options", "nouveau"].includes(etat.page)) location.hash = "#suivi"; else { await rafraichir(); rendrePage(); }
+  await allerProjet(a.dataset.projet, ["sante", "reglages", "options", "nouveau", "global"].includes(etat.page) ? "suivi" : etat.page);
 });
 document.addEventListener("click", (ev) => { if (etat.selecteurOuvert && !ev.target.closest("#sel-projet, #menu-projets")) fermerSelecteur(); });
 
@@ -875,8 +940,8 @@ $("#btn-menu").addEventListener("click", () => menuMobile(!document.body.classLi
 $("#voile-menu").addEventListener("click", () => menuMobile(false));
 $("#nav-tiroir").addEventListener("click", (ev) => { if (ev.target.closest("nav a, .menu-liste a, .menu-nouveau")) menuMobile(false); });
 function traduireNav() {
-  const libelles = { suivi: t("Overview"), equipe: t("Team"), demandes: t("Requests"), pourvous: t("For you"), journal: t("Log"), projet: t("Manage"), chat: t("Chat"), extensions: t("Skills & MCP"), sante: t("Setup & health"), reglages: t("Settings"), options: t("Options"), distance: t("Remote"), guide: t("Guide") };
-  document.querySelectorAll("#nav-liens a, #nav-outil a").forEach((a) => { if (libelles[a.dataset.page]) a.textContent = libelles[a.dataset.page]; });
+  const libelles = { global: t("All projects"), suivi: t("Overview"), equipe: t("Team"), demandes: t("Requests"), pourvous: t("For you"), journal: t("Log"), projet: t("Manage"), chat: t("Chat"), extensions: t("Skills & MCP"), sante: t("Setup & health"), reglages: t("Settings"), options: t("Options"), distance: t("Remote"), guide: t("Guide") };
+  document.querySelectorAll("#nav-global a, #nav-liens a, #nav-outil a").forEach((a) => { if (libelles[a.dataset.page]) a.textContent = libelles[a.dataset.page]; });
   $("#nav-titre-projet").textContent = t("Project");
   $("#nav-titre-outil").textContent = t("Tool");
   $("#btn-verrou").textContent = "🔒 " + t("Lock");
@@ -899,7 +964,8 @@ function naviguer() {
   // the settings always open on Options (or on the tab asked for, the guided tour)
   if (page === "reglages" && etat.page !== "reglages") { etat.ongletReglages = etat.ongletDemande || "options"; etat.ongletDemande = null; }
   etat.page = page;
-  document.querySelectorAll("#nav-liens a, #nav-outil a").forEach((a) => a.classList.toggle("actif", a.dataset.page === page));
+  document.querySelectorAll("#nav-global a, #nav-liens a, #nav-outil a").forEach((a) => a.classList.toggle("actif", a.dataset.page === page));
+  if (etat.vue) rendreBandeau(etat.vue); // the All projects page has its own header
   rendrePage();
 }
 window.addEventListener("hashchange", naviguer);
@@ -1441,6 +1507,22 @@ function referencePonytail(g) {
   else x = t("{0} successful cycle(s) with Ponytail, {1} without: the comparison appears once there are 3 of each.", [avec, sans]);
   return x ? `<p class="m0">${x}</p>` : "";
 }
+
+// every project at once: its state, its milestone, its plan's progress, and whether it needs the user (a click opens it)
+pages.global = async () => {
+  const v = etat.vue; if (!v) return "";
+  const liste = projetsVisibles(v);
+  if (!liste.length) return `<div class="vide">${t("No project.")} <a href="#nouveau">+ ${t("New project")}</a></div>`;
+  return `<div class="grille-projets">${liste.map((x) => {
+    const b = besoinProjet(x);
+    return `<a href="#suivi" class="bloc carte-projet${b ? " besoin" : ""}${x.courant ? " courant" : ""}" data-projet="${h(x.nom)}" data-cible="${b ? b.page : "suivi"}">
+      <div class="cp-tete"><span class="dot ${classePhase(x)}"></span><b class="cp-nom">${h(x.nom)}</b>${b ? `<span class="cp-besoin">${t("Needs you")}</span>` : ""}</div>
+      <div class="muet petit">${h(b ? b.texte : phraseProjet(x))}${x.attente ? " · " + h(t("{0} queued", [x.attente])) : ""}</div>
+      ${x.actif && x.jalon ? `<div class="cp-jalon petit">${h(titreJalon(x.jalon))}</div>` : ""}
+      ${x.jalons ? `<div class="barre"><i style="width:${((x.faits || 0) / x.jalons) * 100}%"></i></div><div class="muet petit">${t("{0} / {1} milestones done", [x.faits || 0, x.jalons])}</div>` : `<div class="muet petit">${t("No plan yet")}</div>`}
+    </a>`;
+  }).join("")}</div>`;
+};
 
 pages.suivi = async () => {
   const v = etat.vue; if (!v) return "";
@@ -3937,6 +4019,8 @@ async function rafraichir() {
       await lireJournal();
       // the Team page follows live, except while text is selected in it (a brief, a report)
       if ((etat.page === "equipe" && !String(window.getSelection() || "") && !etat.agForm) || (etat.page === "suivi" && !document.activeElement.matches("input, textarea, select"))) rendrePage();
+      // All projects: rebuilt only when a project changed (the card under the keyboard keeps its focus)
+      if (etat.page === "global" && JSON.stringify(v.projets) !== etat.globalSig) { etat.globalSig = JSON.stringify(v.projets); rendrePage(); }
       if (etat.page === "chat") majChat(false);
       if (etat.page === "distance") await majDistance();
       // after "Connect to GitHub": the window is the user's; the blocks follow until the connection is there

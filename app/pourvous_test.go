@@ -109,6 +109,13 @@ func TestPourVous(t *testing.T) {
 	if c, v := appel("GET", "/api/etat?p=a", nil); c != 200 || v["pour_vous"].(float64) != 1 {
 		t.Errorf("etat: %d %v", c, v["pour_vous"])
 	}
+	// the projects list carries each one's tasks and plan progress (the bell, the All projects page)
+	os.WriteFile(p.Plan(), []byte("- [x] M1 : A\n- [ ] M2 : B\n  - note\n- [ ] M3 : C\n"), 0o644)
+	if _, v := appel("GET", "/api/etat?p=a", nil); v["projets"] == nil {
+		t.Errorf("projets: %v", v)
+	} else if x := v["projets"].([]any)[0].(map[string]any); x["pour_vous"] != 1.0 || x["faits"] != 1.0 || x["jalons"] != 3.0 {
+		t.Errorf("projet: %v", x)
+	}
 	// a link in place of replies.json: not followed
 	ailleurs := filepath.Join(t.TempDir(), "x.json")
 	os.WriteFile(ailleurs, []byte(`{"T2":[{"tour":1,"action":"fait"}]}`), 0o644)
