@@ -123,6 +123,8 @@ func (s *Serveur) apiPiece(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case cible == "demande":
 		fichier, sous = p.Demande(), "request"
+	case cible == "chat": // a message of the chat (api_chat.go): the message lists it
+		sous = "chat"
 	case reCibleTache.MatchString(cible): // a file for an answer to a task (api_pourvous.go): listed in the answer
 		sous = "for-you-" + reCibleTache.FindStringSubmatch(cible)[1]
 	case nomFichierSur(cible):

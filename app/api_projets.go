@@ -164,8 +164,9 @@ func (s *Serveur) apiEtat(w http.ResponseWriter, r *http.Request) {
 		}
 		if vue.Actif && fichierExiste(filepath.Join(p.Atelier(), "STOP")) {
 			vue.ArretDemande = "arret"
+			pause := chatAttendCycle(p) // (chatMu before s.mu, as in api_chat.go)
 			s.mu.Lock()
-			if s.relancer[p.Nom] {
+			if s.relancer[p.Nom] || pause {
 				vue.ArretDemande = "relance"
 			}
 			s.mu.Unlock()
@@ -355,11 +356,7 @@ func (s *Serveur) apiPilote(w http.ResponseWriter, r *http.Request) {
 		s.mu.Lock()
 		delete(s.relancer, p.Nom)
 		s.mu.Unlock()
-		for _, f := range []string{filepath.Join(p.Atelier(), "STOP"), filepath.Join(p.Dossier, ".autopilote", "STOP")} {
-			if e := os.Remove(f); e != nil && !os.IsNotExist(e) {
-				err = e
-			}
-		}
+		err = retirerStop(p)
 		if err == nil && p.PiloteActif() {
 			marqueAuto(p, true)
 		}
@@ -653,6 +650,17 @@ func (s *Serveur) demarrerPilote(p Projet) (string, error) {
 // arreterPiloteProjet: stops the project's pilot now (the current cycle is interrupted).
 func (s *Serveur) arreterPiloteProjet(p Projet) (string, error) {
 	return executerKitArgs(s.kitCourant(), 2*time.Minute, "arreter", p.Dossier)
+}
+
+// retirerStop: the stop asked for the end of the cycle is withdrawn (the pilot goes on).
+func retirerStop(p Projet) error {
+	var err error
+	for _, f := range []string{filepath.Join(p.Atelier(), "STOP"), filepath.Join(p.Dossier, ".autopilote", "STOP")} {
+		if e := os.Remove(f); e != nil && !os.IsNotExist(e) {
+			err = e
+		}
+	}
+	return err
 }
 
 // arreterApresCycle: the pilot stops at the end of its current cycle.

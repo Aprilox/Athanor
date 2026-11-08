@@ -542,8 +542,9 @@ func extraireSkill(k Kit, z *zip.Reader, dossier, id string) error {
 
 var reVarSecret = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
 
-// variablesPlugin: set by the pilot for a plugin's servers (system/extensions.py), never keys to ask for
-var variablesPlugin = map[string]bool{"CLAUDE_PLUGIN_ROOT": true, "CLAUDE_PLUGIN_DATA": true, "CLAUDE_PROJECT_DIR": true}
+// variablesPlugin: set by the pilot for a plugin's servers (system/extensions.py), and ATHANOR_MCP_DIR for
+// every server (the folder of a server written in the chat, outil_extensions.go), never keys to ask for
+var variablesPlugin = map[string]bool{"CLAUDE_PLUGIN_ROOT": true, "CLAUDE_PLUGIN_DATA": true, "CLAUDE_PROJECT_DIR": true, "ATHANOR_MCP_DIR": true}
 
 // estNomSecret: the name of an API key, token or password (API_KEY, GITHUB_PAT, x-api-key…), not
 // MEMORY_FILE_PATH or NODE_ENV.
@@ -1261,40 +1262,46 @@ func (s *Serveur) apiExtMCPPerso(w http.ResponseWriter, r *http.Request) {
 		s.erreur(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	serveurs, err := lireConfigCollee(c.Texte, firstNonEmpty(c.Nom, "mcp"))
-	if err != nil {
-		s.erreur(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	k := s.kitCourant()
 	extMu.Lock()
 	defer extMu.Unlock()
+	_, ajoutes, code, err := installerMCPPerso(s.kitCourant(), c.Nom, c.Texte, c.Source, "", c.Windows)
+	if err != nil {
+		s.erreur(w, code, err.Error())
+		return
+	}
+	s.msg(w, "“{0}” installed. Switch it on for the projects that need it.", strings.Join(ajoutes, ", "))
+}
+
+// installerMCPPerso: the servers of a pasted configuration into the library (extMu held): their ids and
+// names, or the HTTP code and the error (nothing written then).
+func installerMCPPerso(k Kit, nomDonne, texte, source, description string, windows bool) ([]string, []string, int, error) {
+	serveurs, err := lireConfigCollee(texte, firstNonEmpty(nomDonne, "mcp"))
+	if err != nil {
+		return nil, nil, http.StatusBadRequest, err
+	}
 	b, secrets := lireBiblio(k), lireSecrets(k)
-	var ajoutes []string
+	var ids, ajoutes []string
 	for nom, conf := range serveurs {
-		if len(serveurs) == 1 && strings.TrimSpace(c.Nom) != "" {
-			nom = c.Nom
+		if len(serveurs) == 1 && strings.TrimSpace(nomDonne) != "" {
+			nom = nomDonne
 		}
 		id := identExt(nom)
 		if id == "" || id == "unreal-mcp" {
-			s.erreur(w, http.StatusBadRequest, "Invalid name")
-			return
+			return nil, nil, http.StatusBadRequest, errors.New("Invalid name")
 		}
 		if err := verifierConfig(conf); err != nil {
-			s.erreur(w, http.StatusBadRequest, err.Error())
-			return
+			return nil, nil, http.StatusBadRequest, err
 		}
 		if conf.URL != "" && conf.Type == "" {
 			conf.Type = "http"
 		}
 		if conf.URL == "" {
 			conf.Type = "stdio"
-			if c.Windows {
+			if windows {
 				conf.Type = "windows"
 			} else if estProgrammeWindows(conf) {
 				// never uncaged on syntax alone: the user says it is a Windows program
-				s.erreur(w, http.StatusBadRequest, "This server is a Windows program: it would run on Windows, outside the cage, with your rights. Tick “Windows program” to add it.")
-				return
+				return nil, nil, http.StatusBadRequest, errors.New("This server is a Windows program: it would run on Windows, outside the cage, with your rights. Tick “Windows program” to add it.")
 			}
 		}
 		valeurs := separerSecrets(&conf)
@@ -1307,18 +1314,16 @@ func (s *Serveur) apiExtMCPPerso(w http.ResponseWriter, r *http.Request) {
 				secrets[id][k2] = v
 			}
 		}
-		b.MCP[id] = MCPInstalle{Nom: strings.TrimSpace(nom), Source: strings.TrimSpace(c.Source), Config: conf, Reglages: reglages, Ajoute: maintenantISO()}
-		ajoutes = append(ajoutes, strings.TrimSpace(nom))
+		b.MCP[id] = MCPInstalle{Nom: strings.TrimSpace(nom), Description: strings.TrimSpace(description), Source: strings.TrimSpace(source), Config: conf, Reglages: reglages, Ajoute: maintenantISO()}
+		ids, ajoutes = append(ids, id), append(ajoutes, strings.TrimSpace(nom))
 	}
 	if err := ecrireJSONFichier(filepath.Join(dossierExt(k), "secrets.json"), secrets, 0o600); err != nil {
-		s.erreur(w, http.StatusInternalServerError, err.Error())
-		return
+		return nil, nil, http.StatusInternalServerError, err
 	}
 	if err := ecrireJSONFichier(filepath.Join(dossierExt(k), "bibliotheque.json"), b, 0o644); err != nil {
-		s.erreur(w, http.StatusInternalServerError, err.Error())
-		return
+		return nil, nil, http.StatusInternalServerError, err
 	}
-	s.msg(w, "“{0}” installed. Switch it on for the projects that need it.", strings.Join(ajoutes, ", "))
+	return ids, ajoutes, 0, nil
 }
 
 func firstNonEmpty(a, b string) string {

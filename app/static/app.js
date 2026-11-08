@@ -1144,8 +1144,9 @@ async function enregistrerMode(parallele, max, eco) {
 function maxModeActif() { const actif = $("#page .mode-ligne .choix button.actif"); return actif ? Number(actif.dataset.max) : etat.modeMax || 3; }
 
 // --- chat with Claude about the project (api_chat.go): questions always; changes while the pilot is
-// stopped (Athanor commits them); while it runs, Claude writes the change as a note for the pilot
-const chat = { modele: (() => { try { return localStorage.getItem("chatModele") ?? "sonnet"; } catch (e) { return "sonnet"; } })(), questionSeule: false, signature: "", modeles: null, envoi: false,
+// stopped (Athanor commits them); while it runs, Claude writes the change as a note for the pilot, or, with
+// "change the files" ticked, the pilot pauses after its cycle for the change and starts again
+const chat = { modele: (() => { try { return localStorage.getItem("chatModele") ?? "sonnet"; } catch (e) { return "sonnet"; } })(), questionSeule: false, modif: false, piloteActif: false, signature: "", modeles: null, envoi: false,
   // Internet: Claude may search and read the web, only when the message needs it (remembered on this device)
   internet: (() => { try { return localStorage.getItem("chatInternet") === "1"; } catch (e) { return false; } })() };
 
@@ -1159,18 +1160,51 @@ function mdChat(s) {
 
 function messageChat(m, i) {
   const quand = m.quand ? new Date(m.quand).toLocaleTimeString(document.documentElement.lang || "en", { hour: "2-digit", minute: "2-digit" }) : "";
-  if (m.role === "vous") return `<div class="chat-msg chat-vous"><div class="chat-bulle">${mdChat(m.texte)}</div><div class="chat-meta">${h(quand)}${m.mode === "modif" ? " · " + t("may change the files") : ""}${m.internet ? " · 🌐 " + t("Internet") : ""}</div></div>`;
-  if (m.role === "erreur") return `<div class="chat-msg chat-claude"><div class="chat-bulle chat-erreur">${h(t(m.texte))}</div></div>`;
+  const pieces = (m.pieces || []).length ? `<div class="petit muet">${m.pieces.map((x) => "📎 " + h(x.split("/").pop())).join("<br>")}</div>` : "";
+  if (m.role === "vous") return `<div class="chat-msg chat-vous"><div class="chat-bulle">${mdChat(m.texte)}${pieces}</div><div class="chat-meta">${h(quand)}${m.mode === "modif" ? " · " + (m.pause ? t("changes the files after the pilot's cycle") : t("may change the files")) : ""}${m.internet ? " · 🌐 " + t("Internet") : ""}</div></div>`;
+  const relance = m.pilote ? `<div class="chat-meta">${m.pilote === "relance" ? `<span class="ok">▶ ${t("The pilot started again.")}</span>` : `<span class="attention">${t("The pilot did not start again: {0}", [h(t(m.pilote))])}</span>`}</div>` : "";
+  if (m.role === "erreur") return `<div class="chat-msg chat-claude"><div class="chat-bulle chat-erreur">${h(t(m.texte))}</div>${relance}</div>`;
   const note = (m.texte.match(/<note>([\s\S]*?)<\/note>/) || [])[1];
   const agent = (m.texte.match(/<agent>([\s\S]*?)<\/agent>/) || [])[1];
-  const texte = m.texte.replace(/<note>[\s\S]*?<\/note>/g, "").replace(/<agent>[\s\S]*?<\/agent>/g, "").trim();
+  const mcp = (m.texte.match(/<mcp>([\s\S]*?)<\/mcp>/) || [])[1];
+  const texte = m.texte.replace(/<(note|agent|mcp)>[\s\S]*?<\/\1>/g, "").trim();
   const actions = (m.outils || []).length ? `<details class="chat-actions"><summary>${t("{0} action(s)", [m.outils.length])}</summary>${m.outils.map((o) => `<div>${h(t(o))}</div>`).join("")}</details>` : "";
   return `<div class="chat-msg chat-claude"><div class="chat-bulle">${mdChat(texte)}
     ${note ? `<div class="chat-note"><div class="muet petit">${t("Note for the pilot")}</div><div>${mdChat(note.trim())}</div>
       <div class="ligne m0 mt-1">${m.note ? `<span class="ok petit">✔ ${t("Sent to the pilot")}</span>` : `<button type="button" class="btn btn-petit btn-primaire" data-chat-note="${i}">${t("Send to the pilot")}</button>`}</div></div>` : ""}
     ${agent !== undefined ? carteAgentChat(agent, m, i) : ""}
+    ${mcp !== undefined ? carteMCPChat(mcp, m, i) : ""}
     ${actions}</div>
-    <div class="chat-meta">${h(quand)}${m.modele ? " · " + h(m.modele) : ""}${m.cout ? " · " + Number(m.cout).toFixed(3) + " $" : ""}${m.commit ? ` · <span class="ok">${t("committed {0}", [h(m.commit)])}</span>` : ""}</div></div>`;
+    <div class="chat-meta">${h(quand)}${m.modele ? " · " + h(m.modele) : ""}${m.cout ? " · " + Number(m.cout).toFixed(3) + " $" : ""}${m.commit ? ` · <span class="ok">${t("committed {0}", [h(m.commit)])}</span>` : ""}</div>${relance}</div>`;
+}
+
+// The MCP server Claude found or wrote (between <mcp> and </mcp>): a card the user still checks, then adds
+// to the library, switched on in this project (api_chat.go: apiChatMCP).
+function carteMCPChat(json, m, i) {
+  let a;
+  try { a = JSON.parse(json.trim().replace(/^```(json)?|```$/g, "")); } catch (e) { a = null; }
+  if (!a || typeof a !== "object" || !a.config || typeof a.config !== "object") return `<div class="chat-note"><div class="muet petit">${t("Claude's proposal could not be read: ask it to write it again.")}</div><pre class="chat-code">${h(json.trim())}</pre></div>`;
+  if (m.mcp) return `<div class="chat-note"><span class="ok petit">✔ ${t("Added to the library and switched on: {0}", [h(m.mcp)])}</span> <a href="#extensions" class="petit">${t("Skills & MCP")}</a></div>`;
+  const v = (x) => h(String(x || ""));
+  const fichiers = a.fichiers && typeof a.fichiers === "object" ? Object.entries(a.fichiers) : [];
+  return `<div class="chat-note chat-agent" data-chat-mcp-carte="${i}"><div class="muet petit">${fichiers.length ? t("MCP server written by Claude") : t("MCP server proposed")}</div>
+    <input type="hidden" data-cm="source" value="${v(a.source)}">
+    <label class="champ"><span>${t("Name")}</span><input type="text" data-cm="nom" value="${v(a.nom)}"></label>
+    <label class="champ"><span>${t("What it lets the pilot do")}</span><input type="text" data-cm="description" value="${v(a.description)}"></label>
+    <label class="champ"><span>${t("Configuration")}</span><textarea data-cm="config" rows="5" spellcheck="false">${h(JSON.stringify(a.config, null, 2))}</textarea></label>
+    ${a.source ? `<div class="petit muet">${t("Source: {0}", [h(a.source)])}</div>` : ""}
+    ${fichiers.map(([n, c]) => `<details class="chat-actions"><summary>📄 ${h(n)}</summary><pre class="chat-code">${h(String(c))}</pre></details>`).join("")}
+    <label class="interrupteur"><input type="checkbox" data-cm="windows" ${a.windows ? "checked" : ""}><span>${t("Windows program: runs on Windows, outside the cage, with your rights")}</span></label>
+    <div class="ligne m0 mt-1"><button type="button" class="btn btn-petit btn-primaire" data-chat-mcp="${i}">${t("Add to the library")}</button>
+      <span class="petit muet">${t("Its keys, if it needs any, are filled in on the Skills & MCP page.")}</span></div></div>`;
+}
+async function ajouterMCPChat(b) {
+  const carte = b.closest("[data-chat-mcp-carte]"); if (!carte) return;
+  const champ = (n) => carte.querySelector(`[data-cm="${n}"]`);
+  b.disabled = true;
+  const r = await action(api("chat/mcp", "POST", { index: Number(b.dataset.chatMcp), nom: champ("nom").value.trim(), description: champ("description").value, source: champ("source").value, config: champ("config").value, windows: champ("windows").checked }));
+  b.disabled = false;
+  if (r) majChat(true);
 }
 
 // The sub-agent Claude proposes (between <agent> and </agent>): a card the user still edits, then adds to
@@ -1209,10 +1243,12 @@ async function ajouterAgentChat(b) {
 function filChat(d) {
   const msgs = d.messages || [];
   let html = msgs.length ? msgs.map(messageChat).join("") : `<div class="vide">${t("Ask anything about the project: how a part works, where something is, what the pilot did, why a milestone failed. With the pilot stopped, Claude can also change files.")}</div>`;
-  if (d.en_cours) {
+  if (d.en_cours && (d.partiel || {}).mode === "attente") {
+    html += `<div class="chat-msg chat-claude"><div class="chat-bulle chat-attente"><div class="muet petit"><span class="chat-points"><i></i><i></i><i></i></span> ${t("Waiting for the end of the pilot's cycle: Claude then changes the files, and the pilot starts again. Stop cancels it (the pilot goes on).")}</div></div></div>`;
+  } else if (d.en_cours) {
     const p = d.partiel || {};
     const textes = p.textes || [], outils = p.outils || [];
-    html += `<div class="chat-msg chat-claude"><div class="chat-bulle chat-attente">${textes.length ? mdChat(textes[textes.length - 1].replace(/<(note|agent)>[\s\S]*$/, "")) : ""}
+    html += `<div class="chat-msg chat-claude"><div class="chat-bulle chat-attente">${textes.length ? mdChat(textes[textes.length - 1].replace(/<(note|agent|mcp)>[\s\S]*$/, "")) : ""}
       <div class="muet petit"><span class="chat-points"><i></i><i></i><i></i></span> ${outils.length ? h(t(outils[outils.length - 1])) : t("Claude is thinking…")}</div></div></div>`;
   }
   return html;
@@ -1221,7 +1257,8 @@ function filChat(d) {
 async function majChat(force) {
   if (etat.page !== "chat") return;
   const d = await api("chat").catch(() => null); if (!d) return;
-  const sig = JSON.stringify([d.messages.length, d.en_cours, d.partiel, d.pilote_actif, d.messages.map((m) => m.agent || "").join(","), (d.messages[d.messages.length - 1] || {}).note]);
+  const sig = JSON.stringify([d.messages.length, d.en_cours, d.partiel, d.pilote_actif, d.messages.map((m) => (m.agent || "") + (m.mcp || "")).join(","), (d.messages[d.messages.length - 1] || {}).note]);
+  chat.piloteActif = !!d.pilote_actif;
   if (!force && sig === chat.signature) return;
   chat.signature = sig;
   const fil = $("#chat-fil"); if (!fil) return;
@@ -1237,7 +1274,8 @@ async function majChat(force) {
 }
 
 function modeChat(piloteActif) {
-  if (piloteActif) return `<span class="attention">●</span> ${t("The pilot is running: Claude only reads and answers. A change becomes a note for the pilot, sent with one click.")}`;
+  if (piloteActif) return `<span class="attention">●</span> ${t("The pilot is running: Claude only reads and answers. A change becomes a note for the pilot, sent with one click.")}
+    <label class="interrupteur m0 petit" title="${h(t("The pilot stops at the end of its current cycle, Claude changes the files, Athanor commits them, then the pilot starts again on its own with a note of the change."))}"><input type="checkbox" id="chat-modif" ${chat.modif ? "checked" : ""}><span>${t("change the files (the pilot pauses)")}</span></label>`;
   return `<span class="ok">●</span> ${t("The pilot is stopped: Claude can change the project's files (no commands), and Athanor commits them.")}
     <label class="interrupteur m0 petit"><input type="checkbox" id="chat-question" ${chat.questionSeule ? "checked" : ""}><span>${t("question only")}</span></label>`;
 }
@@ -1252,7 +1290,7 @@ document.addEventListener("input", (ev) => {
 pages.chat = async () => {
   const [d, mod] = await Promise.all([api("chat"), chat.modeles ? Promise.resolve({ modeles: chat.modeles }) : api("modeles").catch(() => ({ modeles: [] }))]);
   chat.modeles = mod.modeles || [];
-  chat.signature = "";
+  chat.signature = ""; chat.piloteActif = !!d.pilote_actif;
   const modeles = ["", ...chat.modeles];
   if (!modeles.includes(chat.modele)) modeles.push(chat.modele);
   setTimeout(() => majChat(true), 0);
@@ -1262,6 +1300,7 @@ pages.chat = async () => {
     <div class="chat-fil" id="chat-fil"></div>
     <div class="chat-saisie">
       <textarea id="chat-texte" rows="${tactile() ? 2 : 3}" placeholder="${h(tactile() ? t("Your question or the change you want…") : t("Your question or the change you want… (Enter sends, Shift+Enter: new line)"))}"></textarea>
+      ${zonePieces("ct")}
       <div class="ligne m0 mt-1"><span class="petit muet">${t("Model")}</span><div class="choix m0" id="chat-modeles">${modeles.map((m) => `<button type="button" data-chat-modele="${h(m)}" class="${chat.modele === m ? "actif" : ""}">${h(m || t("account default"))}</button>`).join("")}</div>
         <label class="interrupteur m0 petit" title="${h(t("Claude may search and read the web for your messages, only when one needs it (look online, compare with what exists elsewhere, a current fact). A question about the project is answered from its files."))}"><input type="checkbox" id="chat-internet" ${chat.internet ? "checked" : ""}><span>🌐 ${t("Internet")}</span></label>
         <span class="espace"></span>
@@ -1279,11 +1318,26 @@ async function action_quota(fenetre, seuil, quoi) {
 
 async function envoyerChat() {
   const zone = $("#chat-texte"); if (!zone || chat.envoi) return;
-  const message = zone.value.trim(); if (!message) return;
+  const message = zone.value.trim(), fichiers = etat.pieces.ct || [];
+  if (!message && !fichiers.length) return;
+  let mode = chat.questionSeule ? "question" : "";
+  if (chat.piloteActif && chat.modif) {
+    if (!(await confirmer(t("The pilot is running. It stops at the end of its current cycle (you see it at the top), then Claude changes the files, Athanor commits them, and the pilot starts again on its own with a note of the change."), { ok: t("Change the files") }))) return;
+    mode = "modif";
+  }
   chat.envoi = true;
-  const r = await action(api("chat", "POST", { message, modele: chat.modele, mode: chat.questionSeule ? "question" : "", internet: chat.internet }));
+  // the files first (into the workshop), then the message that lists them; one that fails stops the sending
+  const pieces = [];
+  for (const f of fichiers) {
+    try { pieces.push((await envoyerPiece(f, "chat", etat.projet)).chemin); } catch (e) { toast(t("{0} could not be attached: {1}", [f.name, e.message]), "erreur"); chat.envoi = false; return; }
+  }
+  const r = await action(api("chat", "POST", { message, modele: chat.modele, mode, internet: chat.internet, pieces }));
   chat.envoi = false;
-  if (r) { zone.value = ""; zone.style.height = ""; await majChat(true); }
+  if (r) {
+    zone.value = ""; zone.style.height = ""; etat.pieces.ct = [];
+    const ul = $("#ct-liste"); if (ul) ul.innerHTML = "";
+    await majChat(true);
+  }
 }
 
 // --- the subscription's quota, as Claude Code last reported it (rate_limit_event of the newest cycle log)
@@ -2865,18 +2919,20 @@ function ajouterPieces(id, fichiers) {
   }
   const ul = $("#" + id + "-liste"); if (ul) ul.innerHTML = listePieces(id);
 }
+// one file into the workshop ({nom, chemin, taille}); cible: "demande", a queue file or "chat" (api_pieces.go)
+async function envoyerPiece(f, cible, projet) {
+  const r = await fetch("/api/pieces?p=" + encodeURIComponent(projet) + "&cible=" + encodeURIComponent(cible), {
+    method: "POST", headers: { "X-Athanor": CSRF, "X-Nom-Fichier": encodeURIComponent(f.name) }, body: f });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.erreur_key ? t(d.erreur_key, d.args || []) : t("Error {0}", [r.status]));
+  return d;
+}
 // cible: "demande" (REQUEST.md) or a queue file; projet: the project's name
 async function envoyerPieces(id, cible, projet) {
   const fichiers = etat.pieces[id] || [];
   let ok = 0;
   for (const f of fichiers) {
-    try {
-      const r = await fetch("/api/pieces?p=" + encodeURIComponent(projet) + "&cible=" + encodeURIComponent(cible), {
-        method: "POST", headers: { "X-Athanor": CSRF, "X-Nom-Fichier": encodeURIComponent(f.name) }, body: f });
-      const d = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(d.erreur_key ? t(d.erreur_key, d.args || []) : t("Error {0}", [r.status]));
-      ok++;
-    } catch (e) { toast(t("{0} could not be attached: {1}", [f.name, e.message]), "erreur"); }
+    try { await envoyerPiece(f, cible, projet); ok++; } catch (e) { toast(t("{0} could not be attached: {1}", [f.name, e.message]), "erreur"); }
   }
   etat.pieces[id] = [];
   const ul = $("#" + id + "-liste"); if (ul) ul.innerHTML = "";
@@ -3893,6 +3949,7 @@ $("#page").addEventListener("click", async (ev) => {
     if (b.id === "chat-nouveau") { if (await confirmer(t("Start a new conversation? Claude forgets this one."), { ok: t("New conversation") })) { await action(api("chat/effacer", "POST")); majChat(true); } return; }
     if (b.dataset.chatModele !== undefined) { chat.modele = b.dataset.chatModele; try { localStorage.setItem("chatModele", chat.modele); } catch (e) { /* ignore */ } b.parentElement.querySelectorAll("button").forEach((x) => x.classList.toggle("actif", x === b)); return; }
     if (b.dataset.chatAgent !== undefined) return ajouterAgentChat(b);
+    if (b.dataset.chatMcp !== undefined) return ajouterMCPChat(b);
     if (b.dataset.chatNote !== undefined) { b.disabled = true; await action(api("chat/note", "POST", { index: Number(b.dataset.chatNote) })); return majChat(true); }
   }
   if (page === "reglages") {
@@ -3909,6 +3966,12 @@ $("#page").addEventListener("click", async (ev) => {
   }
 });
 
+// an image pasted in the chat's field (a screenshot): attached to the message
+$("#page").addEventListener("paste", (ev) => {
+  if (ev.target.id !== "chat-texte" || !ev.clipboardData || !ev.clipboardData.files.length) return;
+  ev.preventDefault();
+  ajouterPieces("ct", ev.clipboardData.files);
+});
 $("#page").addEventListener("keydown", (ev) => {
   // on a touch screen, Enter is a new line (the keyboard has no Shift+Enter): the Send button sends
   if (ev.target.id === "chat-texte" && ev.key === "Enter" && !ev.shiftKey && !ev.isComposing && !tactile()) { ev.preventDefault(); envoyerChat(); }
@@ -3917,6 +3980,7 @@ $("#page").addEventListener("keydown", (ev) => {
 $("#page").addEventListener("change", (ev) => {
   const i = ev.target;
   if (i.id === "chat-question") chat.questionSeule = i.checked;
+  if (i.id === "chat-modif") chat.modif = i.checked;
   if (i.id === "chat-internet") { chat.internet = i.checked; try { localStorage.setItem("chatInternet", i.checked ? "1" : "0"); } catch (e) { /* this device only */ } }
   if (i.dataset.quotaSeuil || i.dataset.quotaAction) {
     const cle = i.dataset.quotaSeuil || i.dataset.quotaAction, bloc = i.closest(".quota-arret");

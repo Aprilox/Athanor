@@ -153,6 +153,11 @@ func serveurMCP(kit, sid string, def objetJSON, secretsServeur objetJSON, dossie
 		_ = os.MkdirAll(donnees, 0o755)
 		secrets["CLAUDE_PLUGIN_ROOT"], secrets["CLAUDE_PLUGIN_DATA"], secrets["CLAUDE_PROJECT_DIR"] = racinePlugin, donnees, dossier
 	}
+	// a server written in the app's chat (api_chat.go, apiChatMCP): its files, in tools/ (open to its cage)
+	ecrit := strings.Contains(string(def.valeur["config"]), "ATHANOR_MCP_DIR")
+	if _, ok := secrets["ATHANOR_MCP_DIR"]; !ok && ecrit && reIdSur.MatchString(sid) {
+		secrets["ATHANOR_MCP_DIR"] = dossierMCPEcrit(kit, sid)
+	}
 	t, _ := c.brut("type").(string)
 	if !vraiPython(c.brut("type")) {
 		t = "stdio"
@@ -272,6 +277,9 @@ func serveurMCP(kit, sid string, def objetJSON, secretsServeur objetJSON, dossie
 			return nil, "Windows program: Windows is not reachable from here"
 		}
 		dossierW := cheminWindowsWSL(dossier)
+		if ecrit && secrets["ATHANOR_MCP_DIR"] != "" {
+			secrets["ATHANOR_MCP_DIR"] = cheminWindowsWSL(secrets["ATHANOR_MCP_DIR"])
+		}
 		args := argsDe(dossierW)
 		env := facultatif(c.objet("env"))
 		cles := append([]string(nil), env.cles...)
@@ -296,6 +304,9 @@ func serveurMCP(kit, sid string, def objetJSON, secretsServeur objetJSON, dossie
 	}
 	return &s, ""
 }
+
+// dossierMCPEcrit: the folder of an MCP server Claude wrote in the chat (${ATHANOR_MCP_DIR} of its config).
+func dossierMCPEcrit(kit, id string) string { return filepath.Join(kit, "tools", "mcp-ecrits", id) }
 
 // ajouterCommandeWindows: native Windows, a .cmd or .bat launcher (npx, uvx…) goes through cmd /c, and the
 // whole through Athanor.exe (enveloppeMCPWindows).
