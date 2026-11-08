@@ -616,7 +616,7 @@ Oui. Rien n'est lié à un nom d'utilisateur ni à une lettre de disque : les ch
 Poussez un tag de version : GitHub lance d'abord toutes les vérifications de la CI sur le commit du tag (tests sous Windows, Linux et macOS, exécutable unique, toutes les cibles), puis compile les applications et publie la version ([`.github/workflows/release.yml`](.github/workflows/release.yml)). Si une seule vérification échoue (ou la suite), rien n'est publié : le tag est supprimé, ainsi que la version si elle avait déjà été créée, et les mises à jour d'Athanor ne la proposent jamais. Corrigez, commitez, puis poussez à nouveau le même tag (`git tag -f v2.42.0 && git push origin v2.42.0`).
 
 ```bash
-git tag v2.51.0 && git push origin v2.51.0
+git tag v2.51.1 && git push origin v2.51.1
 ```
 
 Gardez la version de [`app/winres/athanor.rc`](app/winres/athanor.rc) et `versionAthanor` dans [`app/commandes.go`](app/commandes.go) alignées sur le tag (un test vérifie qu'elles concordent), et écrivez les nouveautés dans `docs/releases/VERSION.md` (par ex. [`docs/releases/2.31.0.md`](docs/releases/2.31.0.md)) : elles ouvrent la page de la version.
@@ -642,4 +642,10 @@ Les issues et pull requests sont les bienvenues. Avant d'en ouvrir une :
 
 ## Licence
 
-[PolyForm Strict 1.0.0 with additional terms](LICENSE) © Aprilox
+© 2026 Aprilox. Tous droits réservés. Athanor est à source disponible, pas open source : toutes ses versions sont sous la [licence PolyForm Strict 1.0.0](https://polyformproject.org/licenses/strict/1.0.0) avec des conditions en plus : une autorisation supplémentaire et une mention obligatoire ([LICENSE](LICENSE), dont le texte anglais fait foi ; ce qui suit en est un résumé).
+
+- **Utilisation libre**, pour tout usage non commercial (personnel, loisir, étude, recherche, enseignement, associations…), et pour un usage commercial quand il est gratuit (personne ne paie pour le logiciel, son accès ou son utilisation) et que ce que vous créez avec n'est pas destiné à être vendu (travail pour un client payant compris).
+- **Mention obligatoire** : tout projet créé ou modifié avec Athanor porte la ligne *Made with Athanor (https://github.com/Aprilox/Athanor), created by Aprilox.* dans son README et dans un fichier `NOTICE` à la racine de son code, gardée dans toute copie partagée ou publiée. Les fichiers qu'Athanor écrit dans un projet (ses guides dans `.athanor/`) peuvent être publiés avec lui, sans modification.
+- **Sur demande** : le modifier, réutiliser une partie de son code dans une autre œuvre, le partager ou le diffuser, tout autre usage commercial. Demandez-le dans une issue ([CONTRIBUTING.md](CONTRIBUTING.md)) ; seule une autorisation écrite d'Aprilox compte.
+- **Réservé à Aprilox** : vendre ou diffuser le logiciel, ou toute œuvre qui en dérive, contre paiement, et se servir de son code pour faire un outil tiers payant.
+- Les composants tiers gardent leur propre licence (Remerciements ci-dessus). Les versions jusqu'à la 2.51.0 ont d'abord été publiées sous licence MIT ; depuis la 2.51.1, toutes les versions, celles-là comprises, ne sont plus proposées que sous cette licence, et les copies obtenues sous MIT avant cette date la gardent.

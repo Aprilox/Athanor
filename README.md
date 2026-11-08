@@ -617,7 +617,7 @@ Yes. Nothing is tied to a user name or a drive letter: paths come from your prof
 Push a version tag: GitHub first runs every CI check on the tagged commit (tests on Windows, Linux and macOS, the single executable, every build target), then builds the apps and publishes the release ([`.github/workflows/release.yml`](.github/workflows/release.yml)). If a single check fails (or anything after it), nothing is published: the tag is removed, and the release too if it was already created, so Athanor's updates never offer it. Fix, commit, then push the same tag again (`git tag -f v2.42.0 && git push origin v2.42.0`):
 
 ```bash
-git tag v2.51.0 && git push origin v2.51.0
+git tag v2.51.1 && git push origin v2.51.1
 ```
 
 Keep the version in [`app/winres/athanor.rc`](app/winres/athanor.rc) and `versionAthanor` in [`app/commandes.go`](app/commandes.go) in step with the tag (a test checks they match), and write what is new in `docs/releases/VERSION.md` (e.g. [`docs/releases/2.31.0.md`](docs/releases/2.31.0.md)): it opens the release page.
@@ -643,4 +643,10 @@ Issues and pull requests are welcome. Before opening one:
 
 ## License
 
-[PolyForm Strict 1.0.0 with additional terms](LICENSE) © Aprilox
+© 2026 Aprilox. All rights reserved. Athanor is source-available, not open source: every version of it is licensed under the [PolyForm Strict License 1.0.0](https://polyformproject.org/licenses/strict/1.0.0) with additional terms: an additional permission and an attribution condition ([LICENSE](LICENSE)).
+
+- **Free to use**, for any noncommercial purpose (personal, hobby, study, research, education, charities…), and for a commercial purpose when it is free of charge (nobody pays for the software, for access to it or for its use) and what you create with it is not intended to be sold (work for a paying client included).
+- **Attribution, always**: every project made or changed with Athanor carries the line *Made with Athanor (https://github.com/Aprilox/Athanor), created by Aprilox.* in its README and in a `NOTICE` file at the root of its code, kept in every copy shared or published. The files Athanor writes into a project (its guides in `.athanor/`) may be published with it, unchanged.
+- **On request**: changing it, reusing any part of its code in another work, sharing or distributing it, any other commercial use. Ask in an issue ([CONTRIBUTING.md](CONTRIBUTING.md)); only a written permission from Aprilox counts.
+- **Reserved to Aprilox**: selling or distributing it, or any work based on it, for a fee, and using its code to build a paid third-party tool.
+- Third-party components keep their own licenses (Acknowledgements above). Versions up to 2.51.0 were first published under the MIT License; since 2.51.1, every version, those included, is offered only under this license, and copies obtained under the MIT License before then keep it.
