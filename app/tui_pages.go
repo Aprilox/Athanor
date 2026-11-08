@@ -268,11 +268,14 @@ func (a *appTUI) raccourcisPage() []raccourci {
 		if m == "" {
 			m = t("account default")
 		}
-		web := t("off")
+		web, modif := t("off"), t("off")
 		if a.chatInternet {
 			web = t("on")
 		}
-		r = []raccourci{{"i", t("Write")}, {"c", t("New conversation")}, {"m", t("Model") + ": " + m}, {"w", t("Internet") + ": " + web}}
+		if a.chatModif {
+			modif = t("on")
+		}
+		r = []raccourci{{"i", t("Write")}, {"c", t("New conversation")}, {"m", t("Model") + ": " + m}, {"w", t("Internet") + ": " + web}, {"e", t("Change the files") + ": " + modif}}
 	case pSante:
 		jeton := t("Token")
 		if a.modeAPITUI() {
@@ -1295,7 +1298,9 @@ func (a *appTUI) pageChat(e *ecranT, x, y, l, h int) {
 		e.texte(ix, iy, il, a.t("Updating…"), a.st(p.muet, fond))
 		return
 	}
-	if a.chat.PiloteActif {
+	if a.chat.PiloteActif && a.chatModif {
+		e.texte(ix, iy, il, "● "+a.t("The pilot stops at the end of its current cycle, Claude changes the files, Athanor commits them, then the pilot starts again on its own with a note of the change."), a.st(p.attention, fond))
+	} else if a.chat.PiloteActif {
 		e.texte(ix, iy, il, "● "+a.t("The pilot is running: Claude only reads and answers. A change becomes a note for the pilot, sent with one click."), a.st(p.attention, fond))
 	}
 	haut := 0

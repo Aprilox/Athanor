@@ -68,10 +68,10 @@ func TestChatPieces(t *testing.T) {
 			t.Errorf("accepted: %q", x)
 		}
 	}
-	// a message with files only is accepted (the pilot stopped: Claude may change files, nothing is run here
-	// since the project is held by another action)
+	// a message with files only is accepted (the pilot stopped and "change the files" ticked: Claude may
+	// change files, nothing is run here since the project is held by another action)
 	s.occuper("a")
-	if c, _ := appel("POST", "/api/chat?p=a", map[string]any{"message": "", "pieces": []string{chemin}}); c != http.StatusConflict {
+	if c, _ := appel("POST", "/api/chat?p=a", map[string]any{"message": "", "pieces": []string{chemin}, "mode": "modif"}); c != http.StatusConflict {
 		t.Errorf("files only: %d", c)
 	}
 	s.liberer("a")
@@ -263,5 +263,15 @@ esac
 	conv = attendre(10)
 	if m := conv.Messages[9]; m.Commit != "abc1234" || m.Pilote != "" || conv.Messages[8].Pause || fichierExiste(pid) {
 		t.Fatalf("stopped pilot: %+v", m)
+	}
+
+	// 6. the pilot stopped, "change the files" not ticked: a read-only turn, Claude writes a note at most
+	_ = os.Remove(trace)
+	if _, v := appel("POST", "/api/chat?p=a", map[string]any{"message": "Change le titre"}); v["mode"] != "question" {
+		t.Fatalf("default: %v", v)
+	}
+	attendre(12)
+	if b, _ := os.ReadFile(trace); !strings.Contains(string(b), " question ") {
+		t.Fatalf("default, trace: %s", b)
 	}
 }

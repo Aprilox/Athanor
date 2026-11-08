@@ -2,12 +2,12 @@ package main
 
 // Talking with Claude about a project, from the application: a conversation of short Claude Code
 // sessions (claude -p, continued with --resume) run in the project's folder.
-//   - Questions: always, with read-only tools (Read, Glob, Grep).
-//   - Changes: only while the pilot is stopped (they would collide with its work): Claude may then edit
-//     the project's files (no commands), and Athanor commits what changed. While the pilot runs, Claude
-//     writes the change as a note for the pilot instead, which the page sends with one click; or, when the
-//     user asks for the change itself, the pilot stops at the end of its cycle, Claude changes the files,
-//     and the pilot starts again with a note of it (attendreFinCycle).
+//   - By default Claude only reads (Read, Glob, Grep) and answers: a change asked for becomes a note for
+//     the pilot, which the page sends with one click.
+//   - Changes: only when the user ticks "change the files" (mode modif). With the pilot stopped, Claude may
+//     then edit the project's files (no commands), and Athanor commits what changed; while it runs, the
+//     pilot stops at the end of its cycle, Claude changes the files, and the pilot starts again with a note
+//     of it (attendreFinCycle).
 //   - Files attached to a message go into the workshop (.athanor/attachments/chat/, api_pieces.go): Claude
 //     reads them, and a note sent to the pilot names them.
 //   - An MCP server Claude found or wrote (<mcp>…</mcp>) goes into the library with one click (apiChatMCP).
@@ -197,16 +197,17 @@ Athanor shows it as a card the user adds with one click to the library, switched
 write MCP configurations or servers in the project yourself.
 %s`
 
-const consigneQuestion = `You can only read: no change, no command. The pilot is RUNNING on this project, so you must not change
-anything yourself. When the user asks for a change, explain briefly what should change, then write the
-instruction for the pilot, on its own, between <note> and </note> (short, precise, self-contained, in the
-user's language, naming the attached files it needs by their path): Athanor shows it with a button that sends
-it to the pilot, which reads it at its next cycle. (The user can also tick "change the files": the pilot then
-pauses after its cycle and you make the change yourself.)`
+const consigneQuestion = `In this turn you can only read: no change, no command. Never change a file yourself, even when asked
+(the user did not tick "change the files"). When the user asks for a change, explain briefly what should
+change, then write the instruction for the pilot, on its own, between <note> and </note> (short, precise,
+self-contained, in the user's language, naming the attached files it needs by their path): Athanor shows it
+with a button that sends it to the pilot, which reads it at its next cycle (when it starts again, if it is
+stopped). A mere question gets an answer, no note. (The user can also tick "change the files" to have you
+make the change yourself.)`
 
-const consigneQuestionArrete = `You can only read in this turn (the user asked a question).`
-
-const consigneModif = `The pilot is stopped: you may change the project's files (Edit, Write) to do what the user asks; you
+const consigneModif = `The pilot is stopped and the user ticked "change the files": you may change the project's files (Edit,
+Write), but only to make a change the user explicitly asks for in this message. A question, an idea or a
+remark gets an answer, and no file changes; when unsure whether they want the change made, ask first. You
 cannot run commands. Keep the change small and focused, never touch .athanor/ (the pilot's workshop) unless
 asked, and end with the list of the files you changed. Athanor commits your changes for you.`
 
@@ -270,8 +271,8 @@ func (s *Serveur) apiChatEnvoyer(w http.ResponseWriter, r *http.Request) {
 	var c struct {
 		Message string `json:"message"`
 		Modele  string `json:"modele"`
-		// "question" forces a read-only turn even with the pilot stopped; "modif" with the pilot running: it
-		// stops at the end of its cycle, Claude changes the files, then it starts again
+		// "modif": Claude may change the files (with the pilot running, it stops at the end of its cycle first,
+		// then starts again); anything else: a read-only turn, a change becomes a note for the pilot
 		Mode string `json:"mode"`
 		// Internet: Claude may search and read the web for this message, only when the request needs it
 		Internet bool     `json:"internet"`
@@ -300,14 +301,9 @@ func (s *Serveur) apiChatEnvoyer(w http.ResponseWriter, r *http.Request) {
 	}
 	k := s.kitCourant()
 	actif := p.PiloteActif()
-	mode, pause := "modif", false
-	switch {
-	case c.Mode == "question":
-		mode = "question"
-	case actif && c.Mode == "modif":
-		pause = true
-	case actif:
-		mode = "question"
+	mode, pause := "question", false
+	if c.Mode == "modif" {
+		mode, pause = "modif", actif
 	}
 	chatMu.Lock()
 	if chatsActifs[p.Dossier] != nil {
@@ -343,8 +339,6 @@ func (s *Serveur) apiChatEnvoyer(w http.ResponseWriter, r *http.Request) {
 	consigne := consigneQuestion
 	if mode == "modif" {
 		consigne = consigneModif
-	} else if !actif {
-		consigne = consigneQuestionArrete
 	}
 	sujet := strings.Join(strings.Fields(texte), " ")
 	if utf8.RuneCountInString(sujet) > 60 {

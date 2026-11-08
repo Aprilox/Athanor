@@ -1143,10 +1143,10 @@ async function enregistrerMode(parallele, max, eco) {
 }
 function maxModeActif() { const actif = $("#page .mode-ligne .choix button.actif"); return actif ? Number(actif.dataset.max) : etat.modeMax || 3; }
 
-// --- chat with Claude about the project (api_chat.go): questions always; changes while the pilot is
-// stopped (Athanor commits them); while it runs, Claude writes the change as a note for the pilot, or, with
-// "change the files" ticked, the pilot pauses after its cycle for the change and starts again
-const chat = { modele: (() => { try { return localStorage.getItem("chatModele") ?? "sonnet"; } catch (e) { return "sonnet"; } })(), questionSeule: false, modif: false, piloteActif: false, signature: "", modeles: null, envoi: false,
+// --- chat with Claude about the project (api_chat.go): by default Claude reads and answers, a change becomes
+// a note for the pilot; with "change the files" ticked, Claude changes them (Athanor commits them), after the
+// pilot's cycle when it runs (it pauses, then starts again)
+const chat = { modele: (() => { try { return localStorage.getItem("chatModele") ?? "sonnet"; } catch (e) { return "sonnet"; } })(), modif: false, piloteActif: false, signature: "", modeles: null, envoi: false,
   // Internet: Claude may search and read the web, only when the message needs it (remembered on this device)
   internet: (() => { try { return localStorage.getItem("chatInternet") === "1"; } catch (e) { return false; } })() };
 
@@ -1242,7 +1242,7 @@ async function ajouterAgentChat(b) {
 
 function filChat(d) {
   const msgs = d.messages || [];
-  let html = msgs.length ? msgs.map(messageChat).join("") : `<div class="vide">${t("Ask anything about the project: how a part works, where something is, what the pilot did, why a milestone failed. With the pilot stopped, Claude can also change files.")}</div>`;
+  let html = msgs.length ? msgs.map(messageChat).join("") : `<div class="vide">${t("Ask anything about the project: how a part works, where something is, what the pilot did, why a milestone failed. A change you ask for becomes a note for the pilot; tick “Change the files” for Claude to make it itself. The i at the top shows everything the chat can do.")}</div>`;
   if (d.en_cours && (d.partiel || {}).mode === "attente") {
     html += `<div class="chat-msg chat-claude"><div class="chat-bulle chat-attente"><div class="muet petit"><span class="chat-points"><i></i><i></i><i></i></span> ${t("Waiting for the end of the pilot's cycle: Claude then changes the files, and the pilot starts again. Stop cancels it (the pilot goes on).")}</div></div></div>`;
   } else if (d.en_cours) {
@@ -1270,14 +1270,28 @@ async function majChat(force) {
   const b = $("#chat-envoyer"), s = $("#chat-stop"), m = $("#chat-mode");
   if (b) b.hidden = d.en_cours;
   if (s) s.hidden = !d.en_cours;
-  if (m) m.innerHTML = modeChat(d.pilote_actif);
+  if (m) m.innerHTML = modeChat();
 }
 
-function modeChat(piloteActif) {
-  if (piloteActif) return `<span class="attention">●</span> ${t("The pilot is running: Claude only reads and answers. A change becomes a note for the pilot, sent with one click.")}
-    <label class="interrupteur m0 petit" title="${h(t("The pilot stops at the end of its current cycle, Claude changes the files, Athanor commits them, then the pilot starts again on its own with a note of the change."))}"><input type="checkbox" id="chat-modif" ${chat.modif ? "checked" : ""}><span>${t("change the files (the pilot pauses)")}</span></label>`;
-  return `<span class="ok">●</span> ${t("The pilot is stopped: Claude can change the project's files (no commands), and Athanor commits them.")}
-    <label class="interrupteur m0 petit"><input type="checkbox" id="chat-question" ${chat.questionSeule ? "checked" : ""}><span>${t("question only")}</span></label>`;
+// what Claude may do with the next message: the pilot's state, and the "change the files" switch (at the bottom)
+function modeChat() {
+  const point = chat.piloteActif ? `<span class="attention">●</span>` : `<span class="ok">●</span>`;
+  if (!chat.modif) return `${point} ${t("Claude reads and answers: a change you ask for becomes a note for the pilot, sent with one click.")}`;
+  if (chat.piloteActif) return `${point} ${t("The pilot stops at the end of its current cycle, Claude changes the files, Athanor commits them, then the pilot starts again on its own with a note of the change.")}`;
+  return `${point} ${t("The pilot is stopped: Claude can change the project's files (no commands), and Athanor commits them.")}`;
+}
+
+// the ⓘ of the chat: what it can do
+function aideChat() {
+  return choisir([
+    t("• Questions: how a part works, where something is, what the pilot did, why a milestone failed. Claude reads the project's files to answer."),
+    t("• Notes for the pilot: by default Claude changes nothing. A change you ask for becomes a note with a “Send to the pilot” button; the pilot reads it at its next cycle."),
+    t("• ✏️ Change the files: switched on, Claude makes the change you ask for itself (no commands), and Athanor commits it. If the pilot runs, it pauses at the end of its cycle, then starts again."),
+    t("• 📎 Files: attach or paste images, PDF, documents; Claude reads them, and a note sent to the pilot names them."),
+    t("• 🌐 Internet: Claude may search the web, only when a message needs it."),
+    t("• Sub-agents: describe a specialist for the team; Claude shapes it with you, then a card adds it with one click."),
+    t("• MCP servers: name a program or a service the pilot should drive; Claude finds a server (or writes one), then a card adds it to the library."),
+  ].join("\n"), [{ id: "ok", texte: t("OK"), primaire: true }], { titre: t("What the chat can do"), large: true });
 }
 
 // tactile: a phone or a tablet (a finger, no mouse)
@@ -1295,14 +1309,16 @@ pages.chat = async () => {
   if (!modeles.includes(chat.modele)) modeles.push(chat.modele);
   setTimeout(() => majChat(true), 0);
   return `<div class="bloc chat">
-    <div class="ligne m0 chat-tete"><h2 class="m0">${t("Chat with Claude")}</h2><span class="muet petit croit" id="chat-mode">${modeChat(d.pilote_actif)}</span>
+    <div class="ligne m0 chat-tete"><h2 class="m0">${t("Chat with Claude")} <button type="button" class="chat-info" id="chat-info" title="${h(t("What the chat can do"))}" aria-label="${h(t("What the chat can do"))}">i</button></h2><span class="muet petit croit" id="chat-mode">${modeChat()}</span>
       <button type="button" class="btn btn-petit" id="chat-nouveau">${t("New conversation")}</button></div>
     <div class="chat-fil" id="chat-fil"></div>
     <div class="chat-saisie">
       <textarea id="chat-texte" rows="${tactile() ? 2 : 3}" placeholder="${h(tactile() ? t("Your question or the change you want…") : t("Your question or the change you want… (Enter sends, Shift+Enter: new line)"))}"></textarea>
       ${zonePieces("ct")}
+      <div class="ligne m0 mt-1 chat-options">
+        <label class="interrupteur m0 petit" title="${h(t("Off: Claude changes nothing, a change becomes a note for the pilot. On: Claude changes the files you ask it to change, and Athanor commits them (a running pilot pauses at the end of its cycle)."))}"><input type="checkbox" id="chat-modif" ${chat.modif ? "checked" : ""}><span>✏️ ${t("Change the files")}</span></label>
+        <label class="interrupteur m0 petit" title="${h(t("Claude may search and read the web for your messages, only when one needs it (look online, compare with what exists elsewhere, a current fact). A question about the project is answered from its files."))}"><input type="checkbox" id="chat-internet" ${chat.internet ? "checked" : ""}><span>🌐 ${t("Internet")}</span></label></div>
       <div class="ligne m0 mt-1"><span class="petit muet">${t("Model")}</span><div class="choix m0" id="chat-modeles">${modeles.map((m) => `<button type="button" data-chat-modele="${h(m)}" class="${chat.modele === m ? "actif" : ""}">${h(m || t("account default"))}</button>`).join("")}</div>
-        <label class="interrupteur m0 petit" title="${h(t("Claude may search and read the web for your messages, only when one needs it (look online, compare with what exists elsewhere, a current fact). A question about the project is answered from its files."))}"><input type="checkbox" id="chat-internet" ${chat.internet ? "checked" : ""}><span>🌐 ${t("Internet")}</span></label>
         <span class="espace"></span>
         <button type="button" class="btn" id="chat-stop" hidden>${t("Stop")}</button>
         <button type="button" class="btn btn-primaire" id="chat-envoyer">${t("Send")}</button></div>
@@ -1320,11 +1336,8 @@ async function envoyerChat() {
   const zone = $("#chat-texte"); if (!zone || chat.envoi) return;
   const message = zone.value.trim(), fichiers = etat.pieces.ct || [];
   if (!message && !fichiers.length) return;
-  let mode = chat.questionSeule ? "question" : "";
-  if (chat.piloteActif && chat.modif) {
-    if (!(await confirmer(t("The pilot is running. It stops at the end of its current cycle (you see it at the top), then Claude changes the files, Athanor commits them, and the pilot starts again on its own with a note of the change."), { ok: t("Change the files") }))) return;
-    mode = "modif";
-  }
+  const mode = chat.modif ? "modif" : "";
+  if (mode && chat.piloteActif && !(await confirmer(t("The pilot is running. It stops at the end of its current cycle (you see it at the top), then Claude changes the files, Athanor commits them, and the pilot starts again on its own with a note of the change."), { ok: t("Change the files") }))) return;
   chat.envoi = true;
   // the files first (into the workshop), then the message that lists them; one that fails stops the sending
   const pieces = [];
@@ -3945,6 +3958,7 @@ $("#page").addEventListener("click", async (ev) => {
   }
   if (page === "chat") {
     if (b.id === "chat-envoyer") return envoyerChat();
+    if (b.id === "chat-info") return aideChat();
     if (b.id === "chat-stop") { await action(api("chat/arreter", "POST")); return majChat(true); }
     if (b.id === "chat-nouveau") { if (await confirmer(t("Start a new conversation? Claude forgets this one."), { ok: t("New conversation") })) { await action(api("chat/effacer", "POST")); majChat(true); } return; }
     if (b.dataset.chatModele !== undefined) { chat.modele = b.dataset.chatModele; try { localStorage.setItem("chatModele", chat.modele); } catch (e) { /* ignore */ } b.parentElement.querySelectorAll("button").forEach((x) => x.classList.toggle("actif", x === b)); return; }
@@ -3979,8 +3993,7 @@ $("#page").addEventListener("keydown", (ev) => {
 
 $("#page").addEventListener("change", (ev) => {
   const i = ev.target;
-  if (i.id === "chat-question") chat.questionSeule = i.checked;
-  if (i.id === "chat-modif") chat.modif = i.checked;
+  if (i.id === "chat-modif") { chat.modif = i.checked; const m = $("#chat-mode"); if (m) m.innerHTML = modeChat(); }
   if (i.id === "chat-internet") { chat.internet = i.checked; try { localStorage.setItem("chatInternet", i.checked ? "1" : "0"); } catch (e) { /* this device only */ } }
   if (i.dataset.quotaSeuil || i.dataset.quotaAction) {
     const cle = i.dataset.quotaSeuil || i.dataset.quotaAction, bloc = i.closest(".quota-arret");

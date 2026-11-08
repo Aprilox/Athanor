@@ -220,6 +220,7 @@ type appTUI struct {
 	selReglage   int
 	modeleChat   string         // the chat's model ("": the account's default)
 	chatInternet bool           // the chat's messages may use the web (when one needs it)
+	chatModif    bool           // "change the files": Claude may change them (else a change becomes a note)
 	formValide   *formulaireTUI // the form whose fields are being saved
 	// Remote (tui_distance.go)
 	dist           *DistanceVue

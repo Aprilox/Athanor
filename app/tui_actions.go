@@ -221,6 +221,9 @@ func (a *appTUI) touchePage(ev evenementTUI, k string) {
 			} else {
 				a.annoncer(a.t("Internet off: Claude answers from the project's files only."), false)
 			}
+		case "e": // change the files (else Claude only reads, a change becomes a note for the pilot)
+			a.chatModif = !a.chatModif
+			a.annoncer(a.t("Off: Claude changes nothing, a change becomes a note for the pilot. On: Claude changes the files you ask it to change, and Athanor commits them (a running pilot pauses at the end of its cycle)."), false)
 		case "m":
 			var choix []choixTUI
 			for _, m := range []string{"", "opus", "sonnet", "haiku", "fable"} {
@@ -805,9 +808,13 @@ func (a *appTUI) envoyerChat() {
 	}
 	a.envoi = true
 	c := *a.c
+	mode := ""
+	if a.chatModif {
+		mode = "modif"
+	}
 	go func() {
 		var rep map[string]any
-		err := c.appel("POST", "chat", map[string]any{"message": m, "modele": a.modeleChat, "mode": "", "internet": a.chatInternet}, &rep)
+		err := c.appel("POST", "chat", map[string]any{"message": m, "modele": a.modeleChat, "mode": mode, "internet": a.chatInternet}, &rep)
 		a.majs <- func(a *appTUI) {
 			a.envoi = false
 			if err != nil {
