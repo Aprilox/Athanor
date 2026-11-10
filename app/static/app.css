@@ -910,6 +910,15 @@ ol.guide-access li { margin: 5px 0; }
 .cof-form h2 { margin: 0 0 4px; font-size: 16px; }
 .cof-form input, .cof-form select, .cof-form textarea { width: 100%; box-sizing: border-box; }
 .cof-choix { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+.cof-props { margin: 8px 0; border-top: 1px solid var(--line); }
+.cof-prop { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.cof-form .cof-prop input[type=text], .cof-form .cof-prop select { width: auto; }
+.cof-prop label { min-width: 88px; gap: 6px; }
+.cof-form .cof-prop .cof-garder { width: 16px; }
+.cof-form .cof-prop .cof-p-nom { flex: 1 1 200px; }
+.cof-form .cof-prop .cof-p-note { flex: 2 1 240px; }
+.cof-prop code { min-width: 60px; }
+#cof-texte { -webkit-text-security: disc; } /* the pasted secrets stay off the screen; the proposals say what was found */
 .cof-verrou { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; border-color: var(--attention); margin-bottom: 12px; }
 .cof-verrou input { min-width: 180px; }
 .cof-explication { margin-top: 16px; }

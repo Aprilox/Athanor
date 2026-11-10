@@ -3864,7 +3864,7 @@ async function enregistrerOptions() {
 // ----------------------------------------------------------------------------- rendering and events
 let numeroRendu = 0;
 // --- Vault (Coffre module): the entries of /api/coffre, one tab per family; a secret's value never comes back
-const cof = { onglet: "secret", form: null, d: { entrees: [], etat: {} } };
+const cof = { onglet: "secret", form: null, colle: null, d: { entrees: [], etat: {} } }; // colle: {texte, props} of "Paste"
 const TYPES_COFFRE = ["cloudflare", "ssh", "certificat", "github", "aws", "anthropic", "openai", "stripe", "mot_de_passe", "jeton", "autre"];
 const INFRA_COFFRE = new Set(["cloudflare", "ssh", "certificat", "github", "aws"]); // the scope proposed by type (ARCHITECTURE §Coffre)
 const typeCoffre = (x) => ({ ssh: t("SSH key"), certificat: t("Certificate"), mot_de_passe: t("Password"), jeton: t("Token"), autre: t("Other"),
@@ -3901,6 +3901,31 @@ function formulaireCoffre() {
     <div class="ligne"><button type="submit" class="btn btn-primaire">${x ? t("Save") : t("Add")}</button><button type="button" class="btn" data-cof-annuler>${t("Cancel")}</button></div>
   </form>`;
 }
+// "Paste": the text is analysed by the server, which proposes entries (never a value); saving sends the text back
+function formulaireColle() {
+  const c = cof.colle, mdp = cof.d.etat.mot_de_passe;
+  const ligne = (p, i) => `<div class="cof-prop" data-cof-prop="${i}">
+    <label class="ligne m0"><input type="checkbox" class="cof-garder" checked aria-label="${h(t("Keep"))}"><b>${h(p.famille === "secret" ? t("Secret") : t("Variable"))}</b></label>
+    <input type="text" class="cof-p-nom" maxlength="100" spellcheck="false" value="${h(p.nom)}" aria-label="${h(t("Name"))}">
+    ${p.famille === "secret" ? `<select class="cof-p-type" aria-label="${h(t("Type"))}">${TYPES_COFFRE.map((y) => `<option value="${y}"${y === p.type ? " selected" : ""}>${h(typeCoffre(y))}</option>`).join("")}</select>
+    <select class="cof-p-portee" aria-label="${h(t("Scope"))}"><option value="code">code</option><option value="infra"${p.portee === "infra" ? " selected" : ""}${mdp ? "" : " disabled"}>infra</option></select>` : ""}
+    <code class="petit">${h(p.indice)}</code>
+    <input type="text" class="cof-p-note" maxlength="2000" placeholder="${h(t("Note for the AI"))}" aria-label="${h(t("Note for the AI"))}">
+  </div>`;
+  return `<form class="bloc cof-form" id="cof-colle" autocomplete="off">
+    <h2>${t("Paste")}</h2>
+    <label class="champ"><span>${t("A .env block, an MCP configuration, a token or a key: Athanor recognises what it is.")}</span>
+      <textarea id="cof-texte" rows="4" spellcheck="false" autocomplete="off">${h(c.texte || "")}</textarea></label>
+    ${c && c.props ? c.props.length ? `<div class="cof-props">${c.props.map(ligne).join("")}</div>` : `<p class="muet">${t("Nothing to save was found in this text.")}</p>` : ""}
+    <div class="ligne">${c && c.props && c.props.length ? `<button type="submit" class="btn btn-primaire" data-cof-enregistrer>${t("Save")}</button><button type="button" class="btn" data-cof-analyser>${t("Recognise")}</button>` : `<button type="submit" class="btn btn-primaire" data-cof-analyser>${t("Recognise")}</button>`}<button type="button" class="btn" data-cof-annuler>${t("Cancel")}</button></div>
+  </form>`;
+}
+async function analyserColle() {
+  const texte = $("#cof-texte").value;
+  if (!texte.trim()) return;
+  const r = await action(api("coffre/coller", "POST", { texte }));
+  if (r) { cof.colle = { texte, analyse: texte, props: r.propositions || [] }; rendrePage(); }
+}
 pages.coffre = async () => {
   const d = await api("coffre"); cof.d = d;
   const e = d.etat || {}, entrees = d.entrees || [], n = (f) => entrees.filter((x) => x.famille === f).length;
@@ -3909,9 +3934,9 @@ pages.coffre = async () => {
   return `<div class="coffre">
     ${e.mot_de_passe && !e.infra ? `<form class="bloc cof-verrou" id="cof-verrou"><span class="croit">🔒 ${t("Vault locked: the keys of your servers open only with your password")}</span>
       <span class="ligne m0"><input type="password" id="cof-mdp" autocomplete="current-password" placeholder="${h(t("Password"))}" aria-label="${h(t("Password"))}"><button type="submit" class="btn btn-primaire">${t("Unlock")}</button></span></form>` : ""}
-    <div class="ligne cof-tete"><div class="onglets">${onglet("secret", t("Secrets"))}${onglet("variable", t("Variables"))}</div><span class="espace"></span><button type="button" class="btn btn-primaire" data-cof-ajouter>+ ${t("Add")}</button></div>
+    <div class="ligne cof-tete"><div class="onglets">${onglet("secret", t("Secrets"))}${onglet("variable", t("Variables"))}</div><span class="espace"></span><button type="button" class="btn" data-cof-coller>${t("Paste")}</button><button type="button" class="btn btn-primaire" data-cof-ajouter>+ ${t("Add")}</button></div>
     ${e.mot_de_passe ? "" : `<p class="muet petit">${t("No password for Athanor: the infra scope (the keys of your servers) stays unavailable.")} <a href="#options@bloc-verrou">${t("Settings › Options › Lock")}</a></p>`}
-    ${cof.form ? formulaireCoffre() : ""}
+    ${cof.colle ? formulaireColle() : cof.form ? formulaireCoffre() : ""}
     ${liste.length ? `<div class="grille-projets">${liste.map(carteCoffre).join("")}</div>` : `<div class="vide">${cof.onglet === "secret" ? t("No secret yet.") : t("No variable yet.")}</div>`}
     <p class="muet petit cof-explication">${t("Your project keys reopen alone on this PC; the keys of your servers open only with your password, and a copy of the disk opens nothing.")}</p>
   </div>`;
@@ -3920,19 +3945,26 @@ pages.coffre = async () => {
 const rendreCoffre = (champ) => rendrePage().then(() => { const c = champ && document.getElementById(champ); if (c) c.focus(); });
 $("#page").addEventListener("click", async (ev) => {
   if (etat.page !== "coffre") return;
-  const b = ev.target.closest("[data-cof-onglet], [data-cof-ajouter], [data-cof-annuler], [data-cof-modifier], [data-cof-remplacer], [data-cof-supprimer]");
+  const b = ev.target.closest("[data-cof-onglet], [data-cof-ajouter], [data-cof-coller], [data-cof-analyser]:not([type=submit]), [data-cof-annuler], [data-cof-modifier], [data-cof-remplacer], [data-cof-supprimer]");
   if (!b) return;
   const d = b.dataset, menu = b.closest("details"); if (menu) menu.open = false;
-  if (d.cofOnglet) { cof.onglet = d.cofOnglet; cof.form = null; return rendrePage(); }
-  if (d.cofAnnuler !== undefined) { cof.form = null; return rendrePage(); }
-  if (d.cofAjouter !== undefined) { cof.form = {}; return rendreCoffre("cof-nom"); }
-  if (d.cofModifier || d.cofRemplacer) { cof.form = { id: d.cofModifier || d.cofRemplacer }; return rendreCoffre(d.cofRemplacer ? "cof-valeur" : "cof-nom"); }
+  if (d.cofOnglet) { cof.onglet = d.cofOnglet; cof.form = cof.colle = null; return rendrePage(); }
+  if (d.cofAnnuler !== undefined) { cof.form = cof.colle = null; return rendrePage(); }
+  if (d.cofColler !== undefined) { cof.form = null; cof.colle = {}; return rendreCoffre("cof-texte"); }
+  if (d.cofAnalyser !== undefined) return analyserColle();
+  if (d.cofAjouter !== undefined) { cof.form = {}; cof.colle = null; return rendreCoffre("cof-nom"); }
+  if (d.cofModifier || d.cofRemplacer) { cof.form = { id: d.cofModifier || d.cofRemplacer }; cof.colle = null; return rendreCoffre(d.cofRemplacer ? "cof-valeur" : "cof-nom"); }
   const x = entreeCoffre(d.cofSupprimer); if (!x) return;
   if (!await confirmer(t("Delete {0} from the vault? This cannot be undone.", [x.nom]), { danger: true, ok: t("Delete") })) return;
   if (await action(api("coffre/" + encodeURIComponent(x.id), "DELETE"))) { if (cof.form && cof.form.id === x.id) cof.form = null; toast(t("{0} deleted.", [x.nom]), "ok"); rendrePage(); }
 });
 // a type proposes its scope (infra only when Athanor has a password)
+$("#page").addEventListener("input", (ev) => { if (ev.target.id === "cof-texte" && cof.colle) cof.colle.texte = ev.target.value; });
 $("#page").addEventListener("change", (ev) => {
+  if (ev.target.matches(".cof-p-type")) {
+    const p = ev.target.parentElement.querySelector(".cof-p-portee"), infra = INFRA_COFFRE.has(ev.target.value) && !p.querySelector('[value="infra"]').disabled;
+    p.value = infra ? "infra" : "code";
+  }
   if (ev.target.id !== "cof-type") return;
   const p = $("#cof-portee"), infra = INFRA_COFFRE.has(ev.target.value) && !p.querySelector('[value="infra"]').disabled;
   p.value = infra ? "infra" : "code";
@@ -3944,6 +3976,21 @@ $("#page").addEventListener("submit", async (ev) => {
     const champ = $("#cof-mdp");
     if (await action(api("deverrouiller", "POST", { mot_de_passe: champ.value }))) { champ.value = ""; rendrePage(); }
     return;
+  }
+  if (ev.target.id === "cof-colle") {
+    const c = cof.colle; // a text changed since its analysis is analysed again, never saved with the old proposals
+    if (!c.props || !c.props.length || c.texte !== c.analyse || ev.submitter && ev.submitter.dataset.cofAnalyser !== undefined) return analyserColle();
+    const enregistrer = [...document.querySelectorAll("[data-cof-prop]")].filter((l) => l.querySelector(".cof-garder").checked).map((l) => {
+      const q = (c) => l.querySelector(c), o = { i: +l.dataset.cofProp, nom: q(".cof-p-nom").value.trim(), note: q(".cof-p-note").value.trim() };
+      if (q(".cof-p-type")) { o.type = q(".cof-p-type").value; o.portee = q(".cof-p-portee").value; }
+      return o;
+    });
+    if (!enregistrer.length) return;
+    const r = await action(api("coffre/coller", "POST", { texte: c.analyse, enregistrer }));
+    if (!r) return;
+    cof.colle = null; // the pasted text leaves the page
+    toast(t("{0} entries added.", [r.entrees.length]), "ok");
+    return rendrePage();
   }
   if (ev.target.id !== "cof-form") return;
   const x = cof.form.id && entreeCoffre(cof.form.id), secret = (x ? x.famille : cof.onglet) === "secret";
