@@ -1,0 +1,7 @@
+# Fake values written in the tests of older commits, already on main (history is never rewritten).
+# Exact fingerprints (commit:file:rule:line): the same lines in any other commit are still reported.
+54bcc4687469635a34e631ef5a1c7f6f1057c98b:app/connexion_claude_test.go:generic-api-key:14
+54bcc4687469635a34e631ef5a1c7f6f1057c98b:app/connexion_claude_test.go:generic-api-key:24
+54bcc4687469635a34e631ef5a1c7f6f1057c98b:app/connexion_claude_test.go:generic-api-key:26
+54bcc4687469635a34e631ef5a1c7f6f1057c98b:app/connexion_claude_test.go:generic-api-key:111
+e0bbfc6d210371b7809194f966eefc03b83dcef4:app/ext_corriger_test.go:generic-api-key:52

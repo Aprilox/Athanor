@@ -1,0 +1,10 @@
+# Secret scan (CI job "secrets": gitleaks git --redact over the whole history).
+# The default rules, plus one exemption: the test witness value. Tests build their fake secrets at run time
+# ("TEMOIN-" + random); a literal one must start with "temoin" to be accepted.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "test witness values"
+regexTarget = "secret"
+regexes = ['''(?i)^t[eé]moin''']
