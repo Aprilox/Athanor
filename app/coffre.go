@@ -323,9 +323,15 @@ func (c *Coffre) Verrouiller() {
 
 // ChangerMotDePasse rewraps the data keys only (entries untouched). nouveau "" removes the password,
 // refused while an infra entry exists or when code secrets would be left without any envelope.
-func (c *Coffre) ChangerMotDePasse(ancien, nouveau string) error {
+func (c *Coffre) ChangerMotDePasse(ancien, nouveau string) (err error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	kdf, cles, cleCode, cleInfra := c.f.KDF, c.f.Cles, c.cleCode, c.cleInfra
+	defer func() {
+		if err != nil { // file not written: the next save must not write envelopes the config does not match
+			c.f.KDF, c.f.Cles, c.cleCode, c.cleInfra = kdf, cles, cleCode, cleInfra
+		}
+	}()
 	code, infra := c.cleCode, c.cleInfra
 	if c.aMdp() {
 		kek := c.kek(ancien)
@@ -348,12 +354,15 @@ func (c *Coffre) ChangerMotDePasse(ancien, nouveau string) error {
 			}
 		}
 		c.f.Cles.Code.Mdp, c.f.Cles.Infra.Mdp = "", ""
-		clear(c.cleInfra)
 		c.cleCode, c.cleInfra = code, nil
 		if c.f.Cles.Code.Systeme == "" {
 			c.cleCode = nil
 		}
-		return c.enregistrerSiUtile()
+		if err := c.enregistrerSiUtile(); err != nil {
+			return err
+		}
+		clear(cleInfra)
+		return nil
 	}
 	if code == nil && c.f.Cles.Code.Systeme != "" {
 		var err error
@@ -447,8 +456,24 @@ func (c *Coffre) poserValeur(e *EntreeCoffre, valeur string) error {
 		}
 		e.Valeur = sceller(k, []byte(valeur), aadEntree(*e))
 	}
-	e.Empreinte = c.empreinte(valeur)
+	e.Empreinte = ""
+	if e.Portee != "infra" { // the HMAC key comes from the code key: no offline guess at an infra value with it
+		e.Empreinte = c.empreinte(valeur)
+	}
 	return nil
+}
+
+// EmpreintesConnues: the fingerprints of the entries, for the import only (Liste never sends them).
+func (c *Coffre) EmpreintesConnues() map[string]bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	m := map[string]bool{}
+	for _, e := range c.f.Entrees {
+		if e.Empreinte != "" {
+			m[e.Empreinte] = true
+		}
+	}
+	return m
 }
 
 // Ajouter adds an entry (ID, dates and fingerprint set here) and returns it without its secret value.
@@ -556,6 +581,7 @@ func (c *Coffre) Supprimer(id string) error {
 }
 
 func masquer(e EntreeCoffre) EntreeCoffre {
+	e.Empreinte = ""
 	if e.Famille == "secret" {
 		e.Valeur = ""
 	}

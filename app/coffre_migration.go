@@ -22,6 +22,7 @@ type etatMigration struct {
 	Entrees    []string   `json:"entrees"`    // the ids it created
 	Empreintes []string   `json:"empreintes"` // the values already imported: an entry the user deleted is not brought back
 	Annulee    bool       `json:"annulee,omitempty"`
+	Faite      bool       `json:"faite,omitempty"` // the automatic import ran once: later files only come in by "Import again"
 	AnnuleeLe  *time.Time `json:"annulee_le,omitempty"`
 	Maj        time.Time  `json:"maj"`
 }
@@ -105,7 +106,7 @@ func (s *Serveur) migrerSecrets(auto bool) (int, error) {
 	defer migrationMu.Unlock()
 	chemin := cheminMigration(s.coffre)
 	etat := lireEtatMigration(chemin)
-	if auto && etat.Annulee {
+	if auto && (etat.Annulee || etat.Faite) { // an agent can write secrets.env: never import it behind the user's back
 		return 0, nil
 	}
 	anciens := s.secretsAnciens()
@@ -120,16 +121,16 @@ func (s *Serveur) migrerSecrets(auto bool) (int, error) {
 			return 0, err
 		}
 	}
-	connues := map[string]bool{}
-	for _, e := range s.coffre.Liste() {
-		connues[e.Empreinte] = true
-	}
+	connues := s.coffre.EmpreintesConnues()
 	for _, f := range etat.Empreintes {
 		connues[f] = true
 	}
 	d := dicoTUI(s.langue())
 	cree := 0
 	for _, a := range anciens {
+		if cree >= maxImportParPasse {
+			break // shortcut: a huge file comes in over several "Import again"; fine for old secret files
+		}
 		f := s.coffre.Empreinte(a.valeur)
 		if f == "" || connues[f] {
 			continue
@@ -149,8 +150,14 @@ func (s *Serveur) migrerSecrets(auto bool) (int, error) {
 		}
 		cree++
 	}
+	if auto && !etat.Faite {
+		etat.Faite = true
+		return cree, etat.enregistrer(chemin)
+	}
 	return cree, nil
 }
+
+const maxImportParPasse = 200
 
 // annulerMigration removes the entries the migration created (those the user already deleted, or
 // changed since, are kept) and marks it undone: nothing is imported again until "Import again".

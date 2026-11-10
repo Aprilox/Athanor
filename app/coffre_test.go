@@ -306,8 +306,11 @@ func TestCoffreCopieIlisible(t *testing.T) {
 	e1 := ajouter(t, c, "Code", "secret", "stripe", "", temoins[0])
 	ajouter(t, c, "Infra", "secret", "github", "", temoins[1])
 	e3 := ajouter(t, c, "Même valeur", "secret", "jeton", "", temoins[0])
-	if e1.Empreinte == "" || e1.Empreinte != e3.Empreinte {
-		t.Fatal("same value, same key: the fingerprints must match (migration)")
+	if e1.Empreinte != "" || e3.Empreinte != "" {
+		t.Fatal("a fingerprint left the vault")
+	}
+	if f := c.EmpreintesConnues(); len(f) != 1 {
+		t.Fatalf("same value, same key: one fingerprint for both code entries and none for infra (migration), got %d", len(f))
 	}
 	config, _ := json.Marshal(Config{MotDePasseHash: hacherMotDePasse("témoin-mdp-coffre")})
 	copie, _ := os.ReadFile(chemin)

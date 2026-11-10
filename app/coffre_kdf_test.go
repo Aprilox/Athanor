@@ -82,13 +82,13 @@ func TestMotDePasseAncienRemplace(t *testing.T) {
 		s.apiMotDePasse(w, httptest.NewRequest("POST", "/api/mot-de-passe", strings.NewReader(`{"ancien":"`+ancien+`","nouveau":"`+nouveau+`"}`)))
 		return w.Code
 	}
-	if c := changer("faux", "autre-mdp"); c != http.StatusUnauthorized {
+	if c := changer("faux", "autre-mdp-longue"); c != http.StatusUnauthorized {
 		t.Fatalf("change with wrong password: %d", c)
 	}
-	if c := changer("témoin-mdp", "autre-mdp"); c != http.StatusOK {
+	if c := changer("témoin-mdp", "autre-mdp-longue"); c != http.StatusOK {
 		t.Fatalf("change: %d", c)
 	}
-	if ok, _ := verifierMotDePasse(s.config.Sel, "autre-mdp", s.config.MotDePasseHash); !ok || !strings.HasPrefix(s.config.MotDePasseHash, "pbkdf2-sha256$") {
+	if ok, _ := verifierMotDePasse(s.config.Sel, "autre-mdp-longue", s.config.MotDePasseHash); !ok || !strings.HasPrefix(s.config.MotDePasseHash, "pbkdf2-sha256$") {
 		t.Fatal("new password not stored in the new format")
 	}
 }

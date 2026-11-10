@@ -7,6 +7,7 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -15,6 +16,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 )
 
 type Serveur struct {
@@ -554,8 +556,8 @@ func (s *Serveur) apiMotDePasse(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	retrait := strings.TrimSpace(c.Nouveau) == ""
-	if !retrait && len(c.Nouveau) < 4 {
-		s.erreur(w, http.StatusBadRequest, "At least 4 characters")
+	if !retrait && utf8.RuneCountInString(c.Nouveau) < 12 { // it alone guards the infra key against a copied disk (I3)
+		s.erreur(w, http.StatusBadRequest, "At least 12 characters")
 		return
 	}
 	nouveau := c.Nouveau
@@ -566,6 +568,7 @@ func (s *Serveur) apiMotDePasse(w http.ResponseWriter, r *http.Request) {
 		s.erreur(w, code, err.Error())
 		return
 	}
+	hash, sel, session := s.config.MotDePasseHash, s.config.Sel, s.session
 	if retrait {
 		s.config.MotDePasseHash, s.config.Sel, s.session = "", "", ""
 	} else {
@@ -574,6 +577,11 @@ func (s *Serveur) apiMotDePasse(w http.ResponseWriter, r *http.Request) {
 		s.ouvrirSession(w)
 	}
 	if err := ecrireConfig(s.config); err != nil {
+		// the vault must keep opening with the password the config still holds
+		s.config.MotDePasseHash, s.config.Sel, s.session = hash, sel, session
+		if _, e := s.changerMdpCoffre(nouveau, c.Ancien); e != nil {
+			fmt.Fprintln(os.Stderr, "vault: password change not undone:", e)
+		}
 		s.erreur(w, http.StatusInternalServerError, err.Error())
 		return
 	}

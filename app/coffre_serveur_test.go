@@ -64,7 +64,7 @@ func TestCoffreServeur(t *testing.T) {
 		}
 	}
 	absent("at start-up")
-	if w := appelCoffre(t, s.apiMotDePasse, "", `{"nouveau":"alpha-1"}`, nil); w.Code != 200 {
+	if w := appelCoffre(t, s.apiMotDePasse, "", `{"nouveau":"alpha-1-phrase"}`, nil); w.Code != 200 {
 		t.Fatal("set password:", w.Code, w.Body.String())
 	}
 	absent("when the password was set")
@@ -99,17 +99,17 @@ func TestCoffreServeur(t *testing.T) {
 	}
 
 	// two changes: keys rewrapped, every entry still readable
-	for _, ch := range [][2]string{{"alpha-1", "beta-2"}, {"beta-2", "gamma-3"}} {
+	for _, ch := range [][2]string{{"alpha-1-phrase", "beta-2-phrase"}, {"beta-2-phrase", "gamma-3-phrase"}} {
 		if w := appelCoffre(t, s.apiMotDePasse, "", `{"ancien":"`+ch[0]+`","nouveau":"`+ch[1]+`"}`, nil); w.Code != 200 {
 			t.Fatal("change password:", w.Code, w.Body.String())
 		}
 		tout(s.coffre, "after "+ch[1])
 	}
-	if w := appelCoffre(t, s.apiMotDePasse, "", `{"ancien":"faux","nouveau":"delta-4"}`, nil); w.Code != 401 {
+	if w := appelCoffre(t, s.apiMotDePasse, "", `{"ancien":"faux","nouveau":"delta-4-phrase"}`, nil); w.Code != 401 {
 		t.Fatal("wrong old password accepted:", w.Code)
 	}
 	hash := s.config.MotDePasseHash
-	w := appelCoffre(t, s.apiMotDePasse, "", `{"ancien":"gamma-3","nouveau":""}`, nil)
+	w := appelCoffre(t, s.apiMotDePasse, "", `{"ancien":"gamma-3-phrase","nouveau":""}`, nil)
 	if w.Code != 409 || !strings.Contains(w.Body.String(), "delete them first") || s.config.MotDePasseHash != hash {
 		t.Fatal("password removed with an infra entry:", w.Code, w.Body.String())
 	}
@@ -144,12 +144,12 @@ func TestCoffreServeur(t *testing.T) {
 		t.Fatal("wrong password from the device:", w.Code)
 	}
 	fermee("after a wrong password")
-	appelCoffre(t, s.apiDeverrouiller, "tel", `{"mot_de_passe":"gamma-3"}`, nil)
+	appelCoffre(t, s.apiDeverrouiller, "tel", `{"mot_de_passe":"gamma-3-phrase"}`, nil)
 	ouverte("after the device unlocked")
 	appelCoffre(t, s.apiVerrouiller, "tel", "", nil)
 	fermee("after the device locked itself")
 
-	w = appelCoffre(t, s.apiDeverrouiller, "", `{"mot_de_passe":"gamma-3"}`, nil)
+	w = appelCoffre(t, s.apiDeverrouiller, "", `{"mot_de_passe":"gamma-3-phrase"}`, nil)
 	var session *http.Cookie
 	for _, c := range w.Result().Cookies() {
 		if c.Name == "athanor_session" {
@@ -159,17 +159,17 @@ func TestCoffreServeur(t *testing.T) {
 	if session == nil {
 		t.Fatal("no session cookie")
 	}
-	appelCoffre(t, s.apiDeverrouiller, "tel", `{"mot_de_passe":"gamma-3"}`, nil)
+	appelCoffre(t, s.apiDeverrouiller, "tel", `{"mot_de_passe":"gamma-3-phrase"}`, nil)
 	appelCoffre(t, s.apiVerrouiller, "tel", "", nil)
 	ouverte("while the window stays unlocked")
 	appelCoffre(t, s.apiVerrouiller, "", "", session)
 	fermee("after the computer locked")
-	appelCoffre(t, s.apiDeverrouiller, "tel", `{"mot_de_passe":"gamma-3"}`, nil)
+	appelCoffre(t, s.apiDeverrouiller, "tel", `{"mot_de_passe":"gamma-3-phrase"}`, nil)
 	if _, err := s.retirerAppareilDistance("tel", ""); err != nil {
 		t.Fatal(err)
 	}
 	fermee("after the device was removed")
-	appelCoffre(t, s.apiDeverrouiller, "tel", `{"mot_de_passe":"gamma-3"}`, nil)
+	appelCoffre(t, s.apiDeverrouiller, "tel", `{"mot_de_passe":"gamma-3-phrase"}`, nil)
 	s.fermerEcouteDistance()
 	fermee("after remote access was switched off")
 
@@ -191,7 +191,7 @@ func TestCoffreServeur(t *testing.T) {
 			t.Fatal("code entry closed after a restart:", err)
 		}
 	}
-	appelCoffre(t, s2.apiDeverrouiller, "", `{"mot_de_passe":"gamma-3"}`, nil)
+	appelCoffre(t, s2.apiDeverrouiller, "", `{"mot_de_passe":"gamma-3-phrase"}`, nil)
 	tout(s2.coffre, "after unlocking the restarted server")
 
 	// without infra entries the password can go; code secrets stay readable through the keystore
@@ -199,7 +199,7 @@ func TestCoffreServeur(t *testing.T) {
 		t.Fatal(err)
 	}
 	delete(valeurs, idInfra)
-	if w := appelCoffre(t, s2.apiMotDePasse, "", `{"ancien":"gamma-3","nouveau":""}`, nil); w.Code != 200 || s2.config.MotDePasseHash != "" {
+	if w := appelCoffre(t, s2.apiMotDePasse, "", `{"ancien":"gamma-3-phrase","nouveau":""}`, nil); w.Code != 200 || s2.config.MotDePasseHash != "" {
 		t.Fatal("password not removed:", w.Code, w.Body.String())
 	}
 	tout(rouvrir(t, chemin, sys), "after removing the password")

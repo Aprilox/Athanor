@@ -45,7 +45,7 @@ var typesParNom = []struct{ mot, typ string }{
 var (
 	reLigneEnv    = regexp.MustCompile(`^(?:export\s+)?([A-Za-z_][A-Za-z0-9_.-]*)\s*=\s*(.*)$`)
 	rePEM         = regexp.MustCompile(`-----BEGIN ([A-Z0-9 ]+)-----`)
-	reURLIdentite = regexp.MustCompile(`^[a-z][a-z0-9+.-]*://[^/@\s:]+:[^/@\s]+@`) // postgres://user:pass@host
+	reURLIdentite = regexp.MustCompile(`^[a-z][a-z0-9+.-]*://(?:[^/@\s]*:[^/@\s]+@|\S*[?&](?i:password|passwd|pass|pwd|secret|token)=[^&\s])`) // postgres://user:pass@host, redis://:pass@host, …?password=
 	reMotsNom     = regexp.MustCompile(`[A-Za-z0-9]+`)
 )
 

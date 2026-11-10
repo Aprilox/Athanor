@@ -44,6 +44,8 @@ func TestColleReconnaissance(t *testing.T) {
 		{"MCP config", `{"mcpServers":{"x":{"command":"npx","args":["-y","pkg"],"env":{"OPENAI_API_KEY":"` + oai + `","LOG_LEVEL":"debug","TOKEN":"<token>"},"headers":{"Authorization":"Bearer ` + gh + `"}}}}`,
 			[]att{{"AUTHORIZATION", "secret", "github", "infra", "ghp_…" + gh[len(gh)-2:]}, {"OPENAI_API_KEY", "secret", "openai", "code", ""}}},
 		{"base64 token is not NAME=value", "dGVzdA" + alea(10) + "==", []att{{"TOKEN", "secret", "jeton", "code", ""}}},
+		{"credentials in a URL", "REDIS_URL=redis://:" + alea(8) + "@h.test:6379\nAPP_DB=postgres://h.test/db?user=u&password=" + alea(8) + "\nHOMEPAGE=https://site.test:8443/a?b=c\n",
+			[]att{{"REDIS_URL", "secret", "mot_de_passe", "code", ""}, {"APP_DB", "secret", "mot_de_passe", "code", ""}, {"HOMEPAGE", "variable", "autre", "code", ""}}},
 		{"empty", "  \n ", nil},
 	}
 	for _, c := range cas {

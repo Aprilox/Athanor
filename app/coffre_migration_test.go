@@ -117,6 +117,19 @@ func TestCoffreMigration(t *testing.T) {
 	if n := len(importees(s)); n != len(attendus) {
 		t.Fatalf("second start-up: %d imported entries, want %d", n, len(attendus))
 	}
+	// an agent adds a line to a secrets.env after the first import: never taken in by a start-up (C7)
+	alpha := filepath.Join(d, "alpha", ".athanor", "secrets.env")
+	avantAlpha, _ := os.ReadFile(alpha)
+	if err := os.WriteFile(alpha, append(slices.Clone(avantAlpha), "LATE_TOKEN='temoin-tardif-9'\n"...), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s = demarrer()
+	if n := len(importees(s)); n != len(attendus) {
+		t.Fatalf("a line written after the first import came in at start-up: %d imported entries", n)
+	}
+	if err := os.WriteFile(alpha, avantAlpha, 0o600); err != nil {
+		t.Fatal(err)
+	}
 	if err := s.coffre.Supprimer(importees(s)[0].ID); err != nil {
 		t.Fatal(err)
 	}
