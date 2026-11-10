@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -229,6 +230,8 @@ func TestTUITraduction(t *testing.T) {
 	u = append(u, p2...)
 	p3, _ := os.ReadFile("tui_distance.go")
 	u = append(u, p3...)
+	p4, _ := os.ReadFile("tui_accueil.go")
+	u = append(u, p4...)
 	src := string(b) + string(c) + string(d) + strings.ReplaceAll(string(u), "app.t(", "a.t(")
 	for _, l := range []string{"fr", "es", "de", "it", "pt"} {
 		dico := dicoTUI(l)
@@ -355,6 +358,7 @@ func TestTUIContreLeServeur(t *testing.T) {
 	a := nouvelleAppTUI(c, true)
 	a.tic()
 	attendreTUI(t, a, func() bool { return a.vue != nil && a.c.projet == "essai" })
+	taper(a, "1") // the launch shows the home (TestTUIAccueil)
 	e := nouvelEcran(120, 32)
 	a.dessiner(e)
 	ecran := e.texteEcran()
@@ -881,6 +885,7 @@ func TestTUIDistanceContreLeServeur(t *testing.T) {
 // automatic push off, why the last push did not go).
 func TestTUISuiviGitHub(t *testing.T) {
 	a := nouvelleAppTUI(&clientTUI{projet: "a"}, false)
+	a.page = pSuivi
 	a.vue = &EtatVue{Version: versionAthanor, KitValide: true, KitInstalle: true, Projets: []ProjetVue{{Nom: "a"}}, Projet: &ProjetVue{Nom: "a"},
 		Etat: &Etat{DernierCommit: "abc12345 M9: the shop"}}
 	ecran := func() string {
@@ -919,6 +924,7 @@ func TestTUISuiviGitHub(t *testing.T) {
 // The Overview's progress box says the savings measured.
 func TestTUISuiviGains(t *testing.T) {
 	a := nouvelleAppTUI(&clientTUI{projet: "a"}, false)
+	a.page = pSuivi
 	stats := []LigneStat{{Cycle: "1", Etat: "ok", CoutUSD: 1.5, Commit: "a1"}, {Cycle: "2", Etat: "ok", CoutUSD: 0.8, Commit: "b2"}}
 	a.vue = &EtatVue{Version: versionAthanor, KitValide: true, KitInstalle: true, Projets: []ProjetVue{{Nom: "a"}}, Projet: &ProjetVue{Nom: "a"},
 		Etat: &Etat{DernierCommit: "b2 M2"}, Stats: stats,
@@ -995,4 +1001,88 @@ func TestTUIEquipeDirecte(t *testing.T) {
 	}
 	e := nouvelEcran(100, 30)
 	a.dessiner(e)
+}
+
+// TestTUIAccueil: the hub's home at launch, with the tiles of GET /api/hub, its key H (free on every
+// page), Escape back to it, 1…9, 0 unchanged.
+func TestTUIAccueil(t *testing.T) {
+	s, c, _ := essaiServeurTUI(t)
+	a := nouvelleAppTUI(c, true)
+	if a.page != pAccueil {
+		t.Fatalf("launch page %d", a.page)
+	}
+	a.tic()
+	attendreTUI(t, a, func() bool { return a.vue != nil && a.hub != nil })
+	// the same data as /api/hub
+	attendu, _ := json.Marshal(moduleDev{}.Resume(s))
+	if len(a.hub.Modules) != len(modulesHub()) || a.hub.Modules[0].ID != "dev" {
+		t.Fatalf("modules %+v", a.hub.Modules)
+	}
+	if lu, _ := json.Marshal(a.hub.Modules[0].Resume); string(lu) != string(attendu) {
+		t.Fatalf("tile %s, /api/hub %s", lu, attendu)
+	}
+	for _, taille := range [][2]int{{80, 24}, {120, 40}} {
+		e := nouvelEcran(taille[0], taille[1])
+		a.dessiner(e)
+		ecran := e.texteEcran()
+		for _, x := range []string{"Athanor", "Dev", "Inactif", "Projets en cours", "Besoin de vous : 0", "Missions", "Aucune mission pour l'instant", "Pages de Dev"} {
+			if !strings.Contains(ecran, x) {
+				t.Fatalf("%v: no %q in\n%s", taille, x, ecran)
+			}
+		}
+		if taille[0] == 120 && !strings.Contains(ecran, "H Accueil") {
+			t.Fatalf("the pages' list: no home first\n%s", ecran)
+		}
+	}
+	// H is free on every page (no page letter, no page shortcut), and leads home
+	for pg := 0; pg < nbPages; pg++ {
+		a.page = pg
+		if a.lettrePage("H") != "" {
+			t.Fatalf("page %d takes H", pg)
+		}
+		for _, r := range a.raccourcisPage() {
+			if r.k == "H" || r.k == "h" {
+				t.Fatalf("page %d shows the key %q", pg, r.k)
+			}
+		}
+		taper(a, "H")
+		if a.page != pAccueil {
+			t.Fatalf("H from page %d: %d", pg, a.page)
+		}
+	}
+	// 1…9, 0 keep Dev's pages; Escape comes back; Tab goes round through the home
+	for k, pg := range map[string]int{"1": pSuivi, "3": pDemandes, "9": pReglages, "0": pDistance} {
+		taper(a, k)
+		if a.page != pg {
+			t.Fatalf("key %s: page %d", k, a.page)
+		}
+	}
+	taper(a, "\t")
+	if a.page != pAccueil {
+		t.Fatalf("Tab after Remote: %d", a.page)
+	}
+	taper(a, "2")
+	taper(a, "\x1b")
+	if a.page != pAccueil {
+		t.Fatalf("Escape: %d", a.page)
+	}
+	// Escape still clears the log's filter first
+	a.page = pJournal
+	a.recherche.mettreTexte("x")
+	taper(a, "\x1b")
+	if a.page != pJournal || a.recherche.texte() != "" {
+		t.Fatalf("Escape on a filtered log: page %d, filter %q", a.page, a.recherche.texte())
+	}
+	// Enter opens the first module's page; the help shows the home's key
+	a.page = pAccueil
+	taper(a, "\r")
+	if a.page != pSuivi {
+		t.Fatalf("Enter: %d", a.page)
+	}
+	a.aide = true
+	e := nouvelEcran(120, 40)
+	a.dessiner(e)
+	if !strings.Contains(e.texteEcran(), "H, Esc") {
+		t.Fatalf("the help:\n%s", e.texteEcran())
+	}
 }

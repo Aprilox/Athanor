@@ -21,11 +21,15 @@ const (
 	pGitHub
 	pReglages
 	pDistance
+	pAccueil // the hub's home (key H), drawn first in the lists
 	nbPages
 )
 
 // clesPages: the pages' names (keys of the app's translations).
-var clesPages = [nbPages]string{"Overview", "Log", "Requests", "Chat", "Setup & health", "For you", "Team", "GitHub", "Settings", "Remote"}
+var clesPages = [nbPages]string{"Overview", "Log", "Requests", "Chat", "Setup & health", "For you", "Team", "GitHub", "Settings", "Remote", "Home"}
+
+// ordrePages: the pages as the lists show them (the home first, then Dev's pages 1…9, 0).
+var ordrePages = [nbPages]int{pAccueil, pSuivi, pJournal, pDemandes, pChat, pSante, pPourVous, pEquipe, pGitHub, pReglages, pDistance}
 
 type paletteTUI struct {
 	fond, panneau, ligne, bord, encre, muet, accent, surAccent, ok, attention, erreur, violet couleurT
@@ -224,6 +228,7 @@ type appTUI struct {
 	formValide   *formulaireTUI // the form whose fields are being saved
 	// Remote (tui_distance.go)
 	dist           *DistanceVue
+	hub            *reponseHubTUI // the home's tiles (tui_accueil.go)
 	selApp         int
 	chiffresJusque time.Time // the 6 digits shown until then
 	// executer: a command run in this terminal, in front of the user (the screen given back meanwhile), its
@@ -233,7 +238,7 @@ type appTUI struct {
 
 func nouvelleAppTUI(c *clientTUI, proprio bool) *appTUI {
 	a := &appTUI{c: c, majs: make(chan func(*appTUI), 64), enCours: map[string]bool{}, derniere: map[string]time.Time{}, proprio: proprio,
-		outils: true, sousAgents: true, l: 80, h: 24}
+		outils: true, sousAgents: true, l: 80, h: 24, page: pAccueil}
 	a.saisie.multi = true
 	a.saisie.maxRunes = 20000
 	a.pal = paletteDe("", "")
@@ -364,6 +369,9 @@ func (a *appTUI) tic() {
 		if a.vue != nil && !a.vue.Verrouille && a.page == pDistance {
 			a.chargerDistance()
 		}
+		if a.vue != nil && !a.vue.Verrouille && a.page == pAccueil {
+			a.chargerHub()
+		}
 		return
 	}
 	apres := a.dernierN
@@ -413,6 +421,8 @@ func (a *appTUI) tic() {
 		a.chargerPages2()
 	case pDistance:
 		a.chargerDistance()
+	case pAccueil:
+		a.chargerHub()
 	}
 }
 

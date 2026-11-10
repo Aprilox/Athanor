@@ -93,6 +93,14 @@ func (a *appTUI) touche(ev evenementTUI) {
 		a.allerPage(int(k[0] - '1'))
 	case "0":
 		a.allerPage(9)
+	case "H":
+		a.allerPage(pAccueil)
+	case "echap": // back home, unless it clears the log's filter
+		if a.page == pJournal && a.recherche.texte() != "" {
+			a.touchePage(ev, k)
+		} else {
+			a.allerPage(pAccueil)
+		}
 	case "tab":
 		a.allerPage(a.page + 1)
 	case "stab", "maj+tab":
@@ -167,6 +175,10 @@ func (a *appTUI) touchePage(ev evenementTUI, k string) {
 		}
 	}
 	switch a.page {
+	case pAccueil:
+		if k == "entree" && a.hub != nil && len(a.hub.Modules) > 0 && len(a.hub.Modules[0].Pages) > 0 {
+			a.ouvrirHash(a.hub.Modules[0].Pages[0].Hash)
+		}
 	case pSuivi:
 		if k == "$" && a.vue != nil && a.vue.Depense != nil {
 			a.compterDepense()

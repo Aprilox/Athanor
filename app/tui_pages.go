@@ -75,6 +75,8 @@ func (a *appTUI) dessiner(e *ecranT) {
 			a.pageReglages(e, x, y, l, h)
 		case pDistance:
 			a.pageDistance(e, x, y, l, h)
+		case pAccueil:
+			a.pageAccueil(e, x, y, l, h)
 		}
 	}
 	a.barreBas(e)
@@ -200,23 +202,26 @@ func (a *appTUI) colonneGauche(e *ecranT, x, y, l, h int) {
 		return
 	}
 	ix, iy, il, _ = a.boite(e, x, yp, l, hpg, a.t("Pages"), false)
-	for i := 0; i < nbPages && i < hpg-2; i++ {
+	for n, i := range ordrePages {
+		if n >= hpg-2 {
+			break
+		}
 		fond := p.panneau
 		st := a.st(p.encre, fond)
 		if i == a.page {
 			fond = p.ligne
-			e.rect(ix-1, iy+i, il+2, 1, a.st(p.encre, fond))
-			e.mettre(ix-1, iy+i, '▌', a.st(p.accent, fond))
+			e.rect(ix-1, iy+n, il+2, 1, a.st(p.encre, fond))
+			e.mettre(ix-1, iy+n, '▌', a.st(p.accent, fond))
 			st = a.gras(p.encre, fond)
 		}
-		e.texte(ix, iy+i, 2, numeroPage(i), a.st(p.accent, fond))
+		e.texte(ix, iy+n, 2, numeroPage(i), a.st(p.accent, fond))
 		lib := a.t(clesPages[i])
 		if i == pDemandes && a.vue != nil && a.vue.Attente > 0 {
 			lib += " (" + strconv.Itoa(a.vue.Attente) + ")"
 		}
-		e.texte(ix+2, iy+i, il-2, lib, st)
+		e.texte(ix+2, iy+n, il-2, lib, st)
 		page := i
-		a.zone(ix-1, iy+i, il+2, 1, func() { a.allerPage(page) })
+		a.zone(ix-1, iy+n, il+2, 1, func() { a.allerPage(page) })
 	}
 	// below: Athanor's folder, and where the terminal's own messages go
 	reste := y + h - (yp + hpg)
@@ -230,7 +235,7 @@ func (a *appTUI) onglets(e *ecranT, y int) {
 	p := a.pal
 	e.rect(0, y, e.l, 1, a.st(p.encre, p.fond))
 	x := 1
-	for i := 0; i < nbPages; i++ {
+	for _, i := range ordrePages {
 		lib := " " + numeroPage(i) + " " + a.t(clesPages[i]) + " "
 		st := a.st(p.muet, p.fond)
 		if i == a.page {
@@ -247,7 +252,12 @@ func (a *appTUI) onglets(e *ecranT, y int) {
 }
 
 // numeroPage: the key of a page (1…9, then 0 for the tenth).
-func numeroPage(i int) string { return strconv.Itoa((i + 1) % 10) }
+func numeroPage(i int) string {
+	if i == pAccueil {
+		return "H"
+	}
+	return strconv.Itoa((i + 1) % 10)
+}
 
 // raccourci: one key and what it does, for the bottom bar.
 type raccourci struct{ k, lib string }
@@ -289,6 +299,8 @@ func (a *appTUI) raccourcisPage() []raccourci {
 		}
 	case pDistance:
 		r = a.raccourcisDistance()
+	case pAccueil:
+		r = []raccourci{{"Enter", t("Open")}, {"1…0", t("Dev pages")}}
 	default:
 		r = a.raccourcisPages2()
 	}
@@ -313,6 +325,9 @@ func (a *appTUI) barreBas(e *ecranT) {
 			glob = append(glob, raccourci{"s", t("Start")})
 		}
 		glob = append(glob, raccourci{"p", t("Project")})
+	}
+	if a.page != pAccueil {
+		glob = append(glob, raccourci{"H", t("Home")})
 	}
 	glob = append(glob, raccourci{"?", t("Help")}, raccourci{"q", t("Quit")})
 	x := 1
@@ -1619,6 +1634,7 @@ func (a *appTUI) dessinerAide(e *ecranT) {
 	t := a.t
 	a.voile(e)
 	lignes := [][2]string{
+		{"H, Esc", t("Home")},
 		{"1…9, 0, Tab", t("Pages")},
 		{"s", t("Start")},
 		{"a", t("Stop after cycle") + " / " + t("Let it go on")},
