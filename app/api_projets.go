@@ -33,6 +33,8 @@ type ProjetVue struct {
 	// the plan's progress (the All projects page): milestones done, out of all of them
 	Faits  int `json:"faits,omitempty"`
 	Jalons int `json:"jalons,omitempty"`
+	// why the project needs the user, "" if it does not (besoinProjet, hub_dev.go)
+	Besoin string `json:"besoin,omitempty"`
 }
 
 // FinVue: the pilot of a project stopped by itself (delivery, maximum duration…) and the user has not
@@ -77,6 +79,7 @@ func (s *Serveur) vuesProjets(courant string) []ProjetVue {
 				pv.Faits++
 			}
 		}
+		pv.Besoin = besoinProjet(pv)
 		s.surveillerRelance(p, pv.Actif) // "restart after the cycle" works for every project
 		v = append(v, pv)
 	}

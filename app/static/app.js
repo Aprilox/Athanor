@@ -717,12 +717,13 @@ window.athanorFermeture = (noms) => {
 // ----------------------------------------------------------------------------- every project at once: the bell, the All projects page
 // what a project waits for from the user (null: nothing): its For you tasks, a connection to fix, the API budget
 function besoinProjet(x) {
-  if (x.archive) return null;
-  if (x.pour_vous) return { texte: t("{0} task(s) on the For you page", [x.pour_vous]), page: "pourvous" };
-  if (!x.actif) return null;
-  if (x.phase === "attente_vous") return { texte: t("Claude is waiting for you"), page: "pourvous" };
-  if (x.phase === "connexion") return { texte: t("Connection problem"), page: "suivi" };
-  if (x.phase === "budget") return { texte: t("API budget or credit used up, Claude is waiting"), page: "suivi" };
+  // the rule lives in Go (besoinProjet, hub_dev.go): only its text and its page here
+  switch (x.besoin) {
+    case "pour_vous": return { texte: t("{0} task(s) on the For you page", [x.pour_vous]), page: "pourvous" };
+    case "attente_vous": return { texte: t("Claude is waiting for you"), page: "pourvous" };
+    case "connexion": return { texte: t("Connection problem"), page: "suivi" };
+    case "budget": return { texte: t("API budget or credit used up, Claude is waiting"), page: "suivi" };
+  }
   return null;
 }
 function phraseProjet(x) {
