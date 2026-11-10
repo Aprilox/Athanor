@@ -33,10 +33,11 @@ function titreJalon(texte) {
 // A milestone: one line with its title; a click opens the details (files, dependencies, acceptance,
 // notes) and the actions (move, remove) that edit PLAN.md. `etat.ouverts` remembers which are open.
 function rendreJalon(j, etatJalon, compact) {
-  const ico = j.fait ? "✔" : etatJalon === "en-cours" ? "▶" : "○";
+  const ico = j.fait ? "✔" : etatJalon === "en-cours" ? "▶" : j.etape ? "◆" : "○";
   const cle = "jalon:" + (j.id || j.titre), ouvert = etat.ouverts.has(cle);
   const peutEditer = !j.fait && !(etatJalon === "en-cours" && etat.vue && etat.vue.actif); // "next up" while stopped is still editable
   const details = ouvert ? `<div class="jalon-details">
+      ${j.etape && !j.fait ? `<div class="muet">${t("Next stage: planned in detail when the previous one is done.")}</div>` : ""}
       ${j.detail ? `<div>${md(j.detail)}</div>` : ""}
       ${j.fichiers ? `<div><span class="muet">${t("Files")}</span> <code>${h(j.fichiers)}</code></div>` : ""}
       ${j.depend && j.depend.length ? `<div><span class="muet">${t("Depends on")}</span> ${j.depend.map((d) => `<code>${h(d)}</code>`).join(" ")}</div>` : ""}
@@ -46,8 +47,11 @@ function rendreJalon(j, etatJalon, compact) {
         ${peutEditer ? `<button class="btn btn-petit" data-jalon="${h(j.id)}" data-jalon-action="monter" title="${h(t("Move up"))}">↑</button><button class="btn btn-petit" data-jalon="${h(j.id)}" data-jalon-action="descendre" title="${h(t("Move down"))}">↓</button><button class="btn btn-petit btn-danger" data-jalon="${h(j.id)}" data-jalon-action="retirer">${t("Remove from the plan")}</button>` : `<span class="muet petit">${j.fait ? t("Done: it stays in the plan.") : t("Being built: stop after the cycle to change it.")}</span>`}
       </div>` : ""}
     </div>` : "";
-  return `${j.vague ? `<li class="vague">${h(j.vague)}</li>` : ""}<li class="${etatJalon} ${ouvert ? "ouvert" : ""}" data-jalon-cle="${h(cle)}"><span class="jalon-ico">${ico}</span><div class="jalon-corps"><div class="jalon-titre">${md(j.titre)}<span class="jalon-chevron">${ouvert ? "▾" : "▸"}</span></div>${details}</div></li>`;
+  return `${j.vague ? `<li class="vague">${h(j.vague)}</li>` : ""}<li class="${etatJalon} ${ouvert ? "ouvert" : ""}${j.etape ? " etape" : ""}" data-jalon-cle="${h(cle)}"><span class="jalon-ico">${ico}</span><div class="jalon-corps"><div class="jalon-titre">${md(j.titre)}<span class="jalon-chevron">${ouvert ? "▾" : "▸"}</span></div>${details}</div></li>`;
 }
+
+// A plan in stages (a large request): "Stage 2/5 · " before its progress, from the project's view.
+const texteEtape = (x) => x && x.etapes ? t("Stage {0}/{1}", [x.etape, x.etapes]) + " · " : "";
 
 // The plan's list: the milestones the pilot archived (done long ago) are folded into one line that opens them.
 function listePlan(plan, compact) {
@@ -1586,7 +1590,7 @@ pages.global = async () => {
       <div class="cp-tete"><span class="dot ${classePhase(x)}"></span><b class="cp-nom">${h(x.nom)}</b>${b ? `<span class="cp-besoin">${t("Needs you")}</span>` : ""}</div>
       <div class="muet petit">${h(b ? b.texte : phraseProjet(x))}${x.attente ? " · " + h(t("{0} queued", [x.attente])) : ""}</div>
       ${x.actif && x.jalon ? `<div class="cp-jalon petit">${h(titreJalon(x.jalon))}</div>` : ""}
-      ${x.jalons ? `<div class="barre"><i style="width:${((x.faits || 0) / x.jalons) * 100}%"></i></div><div class="muet petit">${t("{0} / {1} milestones done", [x.faits || 0, x.jalons])}</div>` : `<div class="muet petit">${t("No plan yet")}</div>`}
+      ${x.jalons ? `<div class="barre"><i style="width:${((x.faits || 0) / x.jalons) * 100}%"></i></div><div class="muet petit">${texteEtape(x)}${t("{0} / {1} milestones done", [x.faits || 0, x.jalons])}</div>` : `<div class="muet petit">${t("No plan yet")}</div>`}
     </a>`;
   }).join("")}</div>`;
 };
@@ -1625,7 +1629,7 @@ pages.suivi = async () => {
     </div>
     ${v.depense ? rendreDepense(v.depense) : rendreQuota(v.quota, v.quota_arret)}</div>
     <div class="bloc bloc-plan"><div class="bloc-tete"><h2>${t("Project plan")}</h2>${plan.length ? boutonDefil("plan") : ""}</div>
-      ${plan.length ? `<div class="barre"><i style="width:${(faits / plan.length) * 100}%"></i></div><div class="muet petit">${t("{0} / {1} milestones done", [faits, plan.length])}</div>
+      ${plan.length ? `<div class="barre"><i style="width:${(faits / plan.length) * 100}%"></i></div><div class="muet petit">${texteEtape(v.projet)}${t("{0} / {1} milestones done", [faits, plan.length])}</div>
       <ul class="plan">${listePlan(plan, false)}</ul>`
         : `<div class="vide">${t("No plan yet: Claude writes it during the first cycle (framing).")}</div>`}
     </div>

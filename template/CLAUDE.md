@@ -18,7 +18,7 @@ The pilot decides by itself what of the workshop git sees (`.git/info/exclude`, 
 2. **Work around instead of stopping.** Missing tool: install it (`sudo apt-get install -y ...`, `npm`, `pip install --break-system-packages ...`, download). Repeated failure (3 attempts): note the problem in `.athanor/BLOCKERS.md` with what you tried, pick an alternative (another library, another approach, a simplified feature) and move on. Never go round in circles on the same obstacle. If only the user can remove the obstacle, hand it to them as a task and carry on with the rest.
 3. **The files are the memory.** Every cycle starts with an empty context. Everything that matters must be written into the repository.
 4. **Done means verified.** Nothing is finished until `bash .athanor/check.sh` passes and you have looked at the result (screenshots included).
-5. **Small and complete rather than big and broken.** First deliver a whole version that works end to end, then enrich it. If the request is too large, reduce the scope sensibly and say so in the final report.
+5. **Small and complete rather than big and broken.** First deliver a whole version that works end to end, then enrich it. A request too large for one plan is cut into stages (see *The phases*), not reduced: reduce the scope only for what cannot be done here at all, and say so in the final report.
 6. **Commit often, with clear messages.** `git add -A && git commit -m "..."` after every validated task. The subject line says what the commit delivers, in the imperative, in at most 72 characters, starting with the milestone: `M3: Add the contact form with validation`. For a larger commit, a blank line then a few `- ` lines with the main changes. Never a vague subject (`update`, `wip`, `fix`, `changes`), never the name of a tool or of this session. Write them in the language you document in. Never rewrite history (the one exception: what `.athanor/SECRETS_FOUND.md` asks, on commits never pushed).
 7. **Everything is original.** No protected character, brand, logo, music, text or image. Create everything yourself (programmatically if needed); a freely licensed asset (CC0) is acceptable only if its source is noted in `docs/CREDITS.md`. **Exception**: a real brand or institution that `.athanor/REQUEST.md` declares **authorized** may be named; its logos and visuals come only from the official files supplied by the user (never redrawn), and every use is noted in `docs/BRANDS.md`.
 
@@ -82,6 +82,12 @@ The subscription quota is the scarcest resource. Everything you read or print st
 
 **Phase 0: framing** (first cycle, no code, time-boxed by the pilot). Its only product is the plan: `.athanor/docs/REQUIREMENTS.md`, `DESIGN.md`, `ARCHITECTURE.md` and `.athanor/PLAN.md`, one self-contained line per milestone. The pilot gives the detailed steps in that cycle (`.athanor/guides/FRAMING.md`).
 
+**Stages (a large request).** The framing cuts a request too large for one plan into stages: `.athanor/PLAN.md` details the stage under way and holds one line per later stage, `- [ ] S3: Stage 3/6 — name. Goal: … Acceptance: …`. The phases below run across the stages: skeleton and complete slice in stage 1, production in every stage, polish and delivery in the last one only. When the first unchecked milestone is a stage line, this cycle closes the stage before and plans that one, without writing product code:
+1. the `tester`, then the `critic`, on what the stages so far deliver, measured against the acceptance of the stage that ends; their findings go to `.athanor/BUGS.md`;
+2. reread the request, the stage's line and the documents it names, and `.athanor/MAP.md` for the code as it is now; if what was built changes the picture, update `.athanor/docs/REQUIREMENTS.md` or `ARCHITECTURE.md` (one line in `.athanor/DECISIONS.md`);
+3. write, right under the stage line, its 8 to 25 milestones as self-contained sheets (`.athanor/guides/FRAMING.md`), numbered after the last milestone of the plan, the first ones fixing the important findings, the last one meeting the stage's acceptance; a stage that still does not fit in 25 milestones gets a new stage line for its remainder right after them (renumber the later stage lines);
+4. run the full `bash .athanor/check.sh`, tick the stage line, add the log entry and commit (`S3: Plan stage 3: name`).
+
 **Phase 1: executable skeleton.** A project that builds and runs, first automated tests, and the `bash .athanor/check.sh` script (build + tests + at least one screenshot in `.athanor/screenshots/`), with its quick mode `bash .athanor/check.sh quick [pattern]` (see "Working fast and frugally"); the script must accept the `quick` keyword as its first argument. It must return exit code 0 only if everything is fine and print a short summary. All following cycles use it.
 
 **Phase 2: complete slice.** A reduced but whole version, usable end to end (for a game: one area, one quest, enemies, interface, sounds, saving). At the end of this phase, have the `tester` sub-agent run (independent tests and screenshots, bugs in `.athanor/BUGS.md`) before ticking the milestone.
@@ -93,7 +99,7 @@ The subscription quota is the scarcest resource. Everything you read or print st
 **Phase 5: delivery.**
 - `deliverable/`: the ready-to-use result. For the web: a static site whose `deliverable/index.html` works when the folder is served as is (the user will see it at http://localhost:8080). For a program: the executable or the archive for the user's platform (Windows by default if `.athanor/REQUEST.md` says nothing), with its instructions.
 - `TEST_GUIDE.md`: how to launch, controls or user manual, and a list of things to test by hand.
-- `.athanor/FINAL_REPORT.md`, with the headings of `.athanor/guides/FINAL_REPORT.md`, which contains the line `STATUS: DONE`. That line stops the loop: write it only when everything is delivered and verified.
+- `.athanor/FINAL_REPORT.md`, with the headings of `.athanor/guides/FINAL_REPORT.md`, which contains the line `STATUS: DONE`. That line stops the loop: write it only when everything is delivered and verified (in a plan in stages, at the end of the last stage).
 
 ## Tasks for the user
 
@@ -133,7 +139,7 @@ The pilot adds it to the team from the next cycle (never a name already taken, i
 **Simple tasks go to `executor`.** It is not the number of turns that costs, it is what enters your context: hand to `executor` whatever produces a lot of text to read for little thinking, and keep for yourself everything that requires judgment. Examples: running a test suite or a long build and returning only the failures; searching everywhere a function or a text is used; applying the same small change to many files; copying, moving, renaming, converting or resizing assets; filling in repetitive data (product lists, translations already decided). Give it a closed brief (what, where, how to verify) and do not redo its work. A single short command (`cp`, `mkdir`, `git status`) is done directly: delegating it would cost more.
 
 A sub-agent starts from scratch: it rereads the documents and the code, which costs time and quota. **For an ordinary milestone, do the work yourself.** Delegate in these cases, and only these:
-- **always**: the framing (`scout`s, then `critic` on the plan), the end of the complete slice and the delivery (`tester`), the polish (`critic` then `tester`);
+- **always**: the framing (`scout`s, then `critic` on the plan), the end of the complete slice and the delivery (`tester`), the polish (`critic` then `tester`), the end of a stage (`tester` then `critic`);
 - a large autonomous chunk (a whole level, a complete module), with a complete and precise brief: files to create or change, acceptance criteria, documents to read and those it may skip (`developer`, or `creator` for content);
 - two truly independent tasks, on distinct files, to run in parallel (2 sub-agents at most);
 - mechanical work to `executor` (see above).

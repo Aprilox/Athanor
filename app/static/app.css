@@ -313,6 +313,8 @@ details[open] summary { margin-bottom: 10px; }
 .plan .jalon-ico { flex: none; width: 16px; text-align: center; }
 .plan li.vague { border-bottom: 0; padding: 10px 0 2px; color: var(--faible); font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; }
 .plan li.vague:first-child { padding-top: 0; }
+.plan li.etape { border-top: 2px solid var(--line-2); }
+.plan li.etape:not(.coche) .jalon-ico { color: var(--accent); }
 .plan .jalon-corps { min-width: 0; flex: 1; }
 .plan li[data-jalon-cle], .plan li[data-plan-archives] { cursor: pointer; }
 .plan li.plan-archives .jalon-titre { color: var(--muted); }

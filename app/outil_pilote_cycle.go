@@ -1547,7 +1547,7 @@ func (p *pilote) jalonsPretsParallele() [][4]string {
 	}
 	var prets [][4]string
 	for _, j := range tous {
-		if j[1] != "0" {
+		if j[1] != "0" || reEtapePlan.MatchString(j[3]) { // a stage line: planned by the lead alone
 			continue
 		}
 		ok := true
@@ -1687,6 +1687,7 @@ Plan rules (` + "`.athanor/PLAN.md`" + `):
 - Milestones that test, review or polish the work of others (cross-cutting tests, tester/critic passes, polish, documentation, delivery) depend on everything they cover; the final delivery milestone depends on all the others.
 - ` + "`## Wave N`" + ` headings are still accepted (a milestone without ` + "`Depends on:`" + ` depends on every milestone of the earlier waves), but explicit dependencies are preferred: they let the pilot start work earlier.
 - **Additional requests** (sections "Additional request" of REQUEST.md, flagged by ` + "`.athanor/REQUEST_CHANGED`" + `): turn each into milestones with their dependencies and append them to the plan; keep a single final delivery milestone at the very end that depends on everything.
+- **Stage lines** (` + "`- [ ] S3: Stage 3/6 — …`" + `, a large request cut into stages): never give them ` + "`Depends on:`" + ` nor a wave; they stay after the milestones of the stage under way, which depend on nothing of later stages. The pilot never hands a stage line to a worker: you detail it yourself when it comes up, its new milestones with their dependencies, and the final delivery milestone belongs to the last stage.
 If the plan already exists without ` + "`Depends on:`" + ` nor waves, add the dependencies without changing the milestones' content (commit), and stop there for this cycle.
 `
 
@@ -1703,7 +1704,7 @@ const consignesEcoPilote = `
 The user switched on the **eco mode**: in this project the quota comes before everything else, speed included. These rules come before "Working fast and frugally", "Your team (sub-agents)", the phases and the framing steps wherever they differ. Measured on a real project, sub-agents used most of the quota: each one starts from zero and pays again for its whole context (documents, code, images) at every one of its turns.
 
 - **Do the work yourself.** No sub-agent for an ordinary milestone, nor for a large chunk: split the milestone in ` + "`.athanor/PLAN.md`" + ` instead. Call one of the project's own sub-agents (` + "`.athanor/TEAM.md`" + `) only when the request or the user's notes demand that agent for this precise milestone. Do not propose new sub-agents.
-- **One review, at the end.** ` + "`critic`" + ` and ` + "`tester`" + ` run only for the delivery (phase 5), once each: not at the end of the complete slice, not in the polish, never a second review or a counter-review of the same work. Their feedback goes to ` + "`.athanor/BUGS.md`" + `; you fix the important items yourself.
+- **One review, at the end.** ` + "`critic`" + ` and ` + "`tester`" + ` run only for the delivery (phase 5), once each: not at the end of the complete slice, not at the end of a stage, not in the polish, never a second review or a counter-review of the same work. Their feedback goes to ` + "`.athanor/BUGS.md`" + `; you fix the important items yourself.
 - **Framing:** no ` + "`scout`" + ` unless attachments or existing code are too large to read yourself (one at most), and no ` + "`critic`" + ` on the plan.
 - **When a sub-agent does run,** its brief names the files it may read and says to read nothing else, allows 4 image reads at most, asks for long outputs redirected to files, and for an answer of 15 lines at most. Do not refine its work through messages back and forth: finish it yourself.
 - ` + "`executor`" + ` stays allowed for mechanical work that produces a lot of text for little thinking (it spares your context), with a closed brief.

@@ -185,6 +185,8 @@ Pareil sous Windows (PowerShell), Linux et macOS : cela construit `Athanor.exe` 
 | Finition | le `critic` utilise le résultat comme un utilisateur exigeant et note les bugs dans `BUGS.md` |
 | Livraison | `deliverable/`, `TEST_GUIDE.md`, puis `FINAL_REPORT.md` avec `STATUS: DONE`. Le pilote prend la demande suivante de la file, ou s'arrête |
 
+**Les gros projets, par étapes.** Une demande trop grande pour 25 jalons n'est ni tassée en jalons géants ni réduite : le cadrage la découpe en étapes, autant qu'il en faut, chacune complète et testée à sa fin. Il ne détaille que la première ; chaque étape suivante tient sur une ligne du plan (`- [ ] S2: Stage 2/5 — …`). Quand le pilote y arrive, le `tester` puis le `critic` passent sur ce qui est fait, et le chef détaille l'étape en vrais jalons, avec le code des étapes précédentes sous les yeux. La finition et la livraison viennent à la dernière étape. Le Suivi et *Tous les projets* montrent l'étape en cours (« Étape 2/5 »). En mode parallèle, une ligne d'étape n'est jamais confiée à un ouvrier : le chef la détaille lui-même ; en mode éco, la revue n'a lieu qu'à la livraison.
+
 ---
 
 ## Mode parallèle
@@ -616,7 +618,7 @@ Oui. Rien n'est lié à un nom d'utilisateur ni à une lettre de disque : les ch
 Poussez un tag de version : GitHub lance d'abord toutes les vérifications de la CI sur le commit du tag (tests sous Windows, Linux et macOS, exécutable unique, toutes les cibles), puis compile les applications et publie la version ([`.github/workflows/release.yml`](.github/workflows/release.yml)). Si une seule vérification échoue (ou la suite), rien n'est publié : le tag est supprimé, ainsi que la version si elle avait déjà été créée, et les mises à jour d'Athanor ne la proposent jamais. Corrigez, commitez, puis poussez à nouveau le même tag (`git tag -f v2.42.0 && git push origin v2.42.0`).
 
 ```bash
-git tag v2.51.3 && git push origin v2.51.3
+git tag v2.51.4 && git push origin v2.51.4
 ```
 
 Gardez la version de [`app/winres/athanor.rc`](app/winres/athanor.rc) et `versionAthanor` dans [`app/commandes.go`](app/commandes.go) alignées sur le tag (un test vérifie qu'elles concordent), et écrivez les nouveautés dans `docs/releases/VERSION.md` (par ex. [`docs/releases/2.31.0.md`](docs/releases/2.31.0.md)) : elles ouvrent la page de la version.

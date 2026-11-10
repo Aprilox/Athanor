@@ -400,7 +400,7 @@ func (p *pilote) prochaineDemande() bool {
 	plan := filepath.Join(p.etat, "PLAN.md")
 	if _, err := os.Stat(plan); err == nil {
 		if pf, err := os.OpenFile(plan, os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
-			_, _ = fmt.Fprintf(pf, "\n- [ ] Resume: new request %q (\"Next request\" section of .athanor/REQUEST.md)\n  - Re-read this request, turn it into verifiable milestones appended to this plan, the last one being a new delivery (.athanor/FINAL_REPORT.md with STATUS: DONE).\n", nom)
+			_, _ = fmt.Fprintf(pf, "\n- [ ] Resume: new request %q (\"Next request\" section of .athanor/REQUEST.md)\n  - Re-read this request, turn it into verifiable milestones appended to this plan (cut into stages if it is too large for 25 milestones, as .athanor/guides/FRAMING.md says), the last one being a new delivery (.athanor/FINAL_REPORT.md with STATUS: DONE).\n", nom)
 			pf.Close()
 		}
 	}
