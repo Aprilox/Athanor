@@ -53,7 +53,7 @@ func TestCaptureHub(t *testing.T) {
 	s := nouveauServeur(Config{Kit: kit, Projets: projets, ProjetActif: "projet-00", Langue: "fr", Theme: "clair", BienvenueVue: true})
 	s.cleAcces = aleatoire(24)
 	s.coffre, s.coffreErr = coffreCapture(t), nil // never this PC's own vault
-	accesCapture(t, s, projets[0])
+	accesCapture(t, s, projets[0], projets[1])
 	// P2 (p2-*): "Test" of a pasted GitHub token reaches this fake GitHub, never the real one
 	gh := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/user" || !strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ghp_") {
@@ -85,7 +85,9 @@ func TestCaptureHub(t *testing.T) {
 	}
 	ctx, fin := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer fin()
-	sorties, err := exec.CommandContext(ctx, "node", script, fichierURL, sortie).CombinedOutput()
+	cmd := exec.CommandContext(ctx, "node", script, fichierURL, sortie)
+	cmd.Env = append(os.Environ(), "CAPTURE_P3_SECRETS="+cheminSecrets(projets[1])) // P3: the infra value never lands there
+	sorties, err := cmd.CombinedOutput()
 	t.Logf("%s", sorties)
 	if err != nil {
 		t.Fatalf("capture script: %v", err)
@@ -139,7 +141,7 @@ func coffreCapture(t *testing.T) *Coffre {
 
 // accesCapture: the Access page of projet-00 (acces-*): grants on dev and prod, an automatic one, an infra
 // entry kept by Athanor, and a line of the old secrets.env that is not in the vault (the fallback).
-func accesCapture(t *testing.T, s *Serveur, p Projet) {
+func accesCapture(t *testing.T, s *Serveur, p, p3 Projet) {
 	_ = os.Remove(cheminAcces()) // a file left next to the test binary by an interrupted run
 	s.chargerAcces()
 	t.Cleanup(func() { _ = os.Remove(cheminAcces()) })
@@ -153,6 +155,12 @@ func accesCapture(t *testing.T, s *Serveur, p Projet) {
 	} {
 		if _, err := s.acces.Ajouter(p.Nom, ids[g.nom], g.env, "", g.auto); err != nil {
 			t.Fatal(g.nom, err)
+		}
+	}
+	// P3 (p3-*): projet-01 starts with 2 accesses on dev; "Cloudflare – martin.fr" is added by the script itself
+	for _, nom := range []string{"STRIPE_SECRET_KEY", "NODE_ENV"} {
+		if _, err := s.acces.Ajouter(p3.Nom, ids[nom], "dev", "", ""); err != nil {
+			t.Fatal(nom, err)
 		}
 	}
 	if err := os.MkdirAll(p.Atelier(), 0o755); err != nil {
