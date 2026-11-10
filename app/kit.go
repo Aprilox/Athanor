@@ -629,6 +629,46 @@ func decouperJalon(ligne string) Jalon {
 // LirePlan: the plan's milestones, the archived ones first (the pilot moves the oldest done milestones to
 // archives/PLAN_TERMINE.md to keep PLAN.md short: they are still part of the project's plan).
 func (p Projet) LirePlan() []Jalon {
+	// cached by path, size and mtime of both files: the pages ask every 1.5 s for every project
+	archive := filepath.Join(p.Atelier(), "archives", "PLAN_TERMINE.md")
+	cle := [2]etatFichierPlan{lireEtatFichierPlan(p.Plan()), lireEtatFichierPlan(archive)}
+	planCacheMu.Lock()
+	c, ok := planCache[p.Plan()]
+	planCacheMu.Unlock()
+	if ok && c.cle == cle {
+		return append([]Jalon(nil), c.jalons...)
+	}
+	v := p.lirePlanSansCache()
+	planCacheMu.Lock()
+	planCache[p.Plan()] = planEnCache{cle, v}
+	planCacheMu.Unlock()
+	return append([]Jalon(nil), v...)
+}
+
+type etatFichierPlan struct {
+	taille int64
+	mtime  time.Time
+}
+
+type planEnCache struct {
+	cle    [2]etatFichierPlan
+	jalons []Jalon
+}
+
+var (
+	planCacheMu sync.Mutex
+	planCache   = map[string]planEnCache{}
+)
+
+func lireEtatFichierPlan(f string) etatFichierPlan {
+	st, err := os.Stat(f)
+	if err != nil {
+		return etatFichierPlan{taille: -1}
+	}
+	return etatFichierPlan{st.Size(), st.ModTime()}
+}
+
+func (p Projet) lirePlanSansCache() []Jalon {
 	b, err := os.ReadFile(p.Plan())
 	if err != nil {
 		return nil

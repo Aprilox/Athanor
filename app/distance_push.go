@@ -397,21 +397,12 @@ func (s *Serveur) surveillerJalonsPush() {
 			if p.Archive || !p.Existe() {
 				continue
 			}
-			b, err := os.ReadFile(filepath.Join(p.Atelier(), "PLAN.md"))
-			if err != nil {
-				continue
-			}
-			avant, connu := faits[p.Dossier]
-			maintenant := map[string]bool{}
-			for _, j := range analyserPlan(string(b)) {
-				if j.Fait {
-					maintenant[j.Titre] = true
-					if connu && !avant[j.Titre] && avecPush {
-						s.notifierAppareils(MessagePush{Titre: s.textePush("jalon") + " · " + p.Nom, Texte: j.Titre, URL: "/#suivi", Tag: "jalon-" + p.Nom})
-					}
+			// also dates them for the hub's "milestones done today" (hub_stats.go)
+			for _, j := range observerPlan(p, faits, fichierJalonsFaits(), time.Now()) {
+				if avecPush {
+					s.notifierAppareils(MessagePush{Titre: s.textePush("jalon") + " · " + p.Nom, Texte: j.Titre, URL: "/#suivi", Tag: "jalon-" + p.Nom})
 				}
 			}
-			faits[p.Dossier] = maintenant
 			r, _ := os.ReadFile(filepath.Join(p.Atelier(), "FINAL_REPORT.md"))
 			livre := reStatusDonePilote.Match(r)
 			if v, vu := livres[p.Dossier]; vu && livre && !v && avecPush {
