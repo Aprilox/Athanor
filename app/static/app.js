@@ -964,6 +964,8 @@ function rendreMenu(modules) {
   }
   zone.querySelectorAll(".nav-groupe").forEach((g) => { if (!vus.has(g)) g.hidden = true; });
 }
+// the menu keeps the HTML's groups if it fails (locked: loaded again once unlocked)
+const chargerMenu = () => api("hub").then((d) => rendreMenu(d.modules || [])).catch(() => {});
 function traduireNav() {
   if (etat.hubModules) rendreMenu(etat.hubModules);
   const libelles = { accueil: t("Home"), global: t("All projects"), suivi: t("Overview"), equipe: t("Team"), demandes: t("Requests"), pourvous: t("For you"), journal: t("Log"), projet: t("Manage"), chat: t("Chat"), extensions: t("Skills & MCP"), sante: t("Setup & health"), reglages: t("Settings"), options: t("Options"), distance: t("Remote"), guide: t("Guide") };
@@ -1853,7 +1855,7 @@ const GUIDE = [
       ["“What do you want to do?”", "Write it in one sentence in the bar of the home page, then *Send*: the chat of the current project opens with your text (with no project yet, a new project with your text as its request). Nothing is sent before you press *Send* there.", "#accueil", "Home"],
       ["Where Dev's pages are", "In the menu, the *Dev* group holds every page you knew, unchanged, from *All projects* to *Settings* and this *Guide*. On a phone, a tap on a group's name folds it. Old links and notifications still open the same pages.", "#global", "All projects"],
       ["Missions", "The *Missions* block is empty for now. Later, one sentence will start a mission in which several modules work together."],
-      ["In a terminal", "`./athanor tui` opens on the same home page: one block per module, what needs you and the missions. *H* comes back to it from any page, *Enter* opens the module, *1*–*9* and *0* still open Dev's pages."],
+      ["In a terminal", "`./athanor tui` opens on the same home page: one block per module, what needs you and the missions. *H* or *Esc* comes back to it from any page, *Enter* opens the module, *1*–*9* and *0* still open Dev's pages."],
     ],
     note: "The update moved none of your projects, settings or keys: the hub only adds a page and groups the menu." },
   { id: "github", titre: "GitHub", intro: "Link a project to a GitHub repository: its commits go there after each milestone. Each computer connects to GitHub once, in the settings.",
@@ -4166,7 +4168,7 @@ function afficherVerrou() {
 }
 $("#verrou-form").addEventListener("submit", async (ev) => {
   ev.preventDefault();
-  try { await api("deverrouiller", "POST", { mot_de_passe: $("#verrou-mdp").value }); etat.verrouille = false; $("#verrou-mdp").value = ""; $("#verrou-erreur").textContent = ""; afficherVerrou(); rafraichir(); rendrePage(); }
+  try { await api("deverrouiller", "POST", { mot_de_passe: $("#verrou-mdp").value }); etat.verrouille = false; $("#verrou-mdp").value = ""; $("#verrou-erreur").textContent = ""; afficherVerrou(); rafraichir(); rendrePage(); chargerMenu(); }
   catch (e) { $("#verrou-erreur").textContent = e.message; }
 });
 $("#btn-verrou").addEventListener("click", async () => { await action(api("verrouiller", "POST")); etat.verrouille = true; afficherVerrou(); });
@@ -4244,7 +4246,7 @@ async function rafraichir() {
   await rafraichir();
   const v = etat.vue || {};
   etat.langue = v.langue || "en"; appliquerLangue(etat.langue); traduireNav();
-  await api("hub").then((d) => rendreMenu(d.modules || [])).catch(() => {}); // the menu keeps the HTML's groups if it fails
+  await chargerMenu();
   if (location.hash === "#bienvenue") location.hash = "#suivi";
   naviguer();
   setInterval(rafraichir, 1500);

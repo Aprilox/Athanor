@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -104,6 +105,9 @@ func TestHubLirePlanCache(t *testing.T) {
 	p := fauxProjet(t, d, "a", 5, 2)
 	_ = os.MkdirAll(filepath.Join(p.Atelier(), "archives"), 0o755)
 	_ = os.WriteFile(filepath.Join(p.Atelier(), "archives", "PLAN_TERMINE.md"), []byte("- [x] M0 : Ancien jalon\n"), 0o644)
+	vieux := time.Now().Add(-time.Hour) // older than the mtime granularity: cached
+	_ = os.Chtimes(p.Plan(), vieux, vieux)
+	_ = os.Chtimes(filepath.Join(p.Atelier(), "archives", "PLAN_TERMINE.md"), vieux, vieux)
 	for i := 0; i < 2; i++ {
 		if g, w := p.LirePlan(), p.lirePlanSansCache(); !reflect.DeepEqual(g, w) || len(g) != 6 {
 			t.Fatalf("cached plan differs (%d milestones): %+v", len(g), g)
@@ -114,6 +118,16 @@ func TestHubLirePlanCache(t *testing.T) {
 	g[0].Titre = "changed"
 	if p.LirePlan()[0].Titre == "changed" {
 		t.Fatal("a caller changed the cached plan")
+	}
+	// a same-size change with the same mtime (2 s granularity on FAT): a recent file is not cached
+	b, _ := os.ReadFile(p.Plan())
+	recent := time.Now().Truncate(time.Second)
+	_ = os.Chtimes(p.Plan(), recent, recent)
+	_ = p.LirePlan()
+	_ = os.WriteFile(p.Plan(), bytes.Replace(b, []byte("- [ ]"), []byte("- [x]"), 1), 0o644)
+	_ = os.Chtimes(p.Plan(), recent, recent)
+	if g := p.LirePlan(); !reflect.DeepEqual(g, p.lirePlanSansCache()) {
+		t.Fatal("a milestone ticked within the mtime granularity is not seen")
 	}
 	// PLAN.md changes: read again
 	fauxProjet(t, d, "a", 7, 3)

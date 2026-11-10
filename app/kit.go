@@ -643,6 +643,10 @@ func (p Projet) LirePlan() []Jalon {
 		return append([]Jalon(nil), c.jalons...)
 	}
 	v := p.lirePlanSansCache()
+	// a file changed within its mtime granularity (2 s on FAT) could change again with the same key: not cached yet
+	if time.Since(cle[0].mtime) < 3*time.Second || time.Since(cle[1].mtime) < 3*time.Second {
+		return v
+	}
 	planCacheMu.Lock()
 	planCache[p.Plan()] = planEnCache{cle, v}
 	planCacheMu.Unlock()
