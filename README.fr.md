@@ -431,7 +431,7 @@ Les logiciels installés sont détectés sur **tous les disques** (`C:`, `D:`…
 
 ## Réglages
 
-Tout se modifie dans l'application (*Réglages*), ou dans `.env` ([`.env.example`](.env.example) documente chaque clé).
+Tout se modifie dans l'application (*Réglages*), ou dans `.env` ([`.env.example`](.env.example) documente chaque clé). Dans *Réglages → Claude*, un « i » à côté d'un réglage explique ce que change une valeur plus basse ou plus haute. La durée du cadrage (`FRAMING_MAX_MIN`) peut aussi se régler projet par projet : *Gérer → Mode de travail → Cadrage le plus long* (de 10 à 240 minutes ; « Comme les Réglages » reprend la valeur commune).
 
 | Clé | Rôle |
 |---|---|
@@ -618,7 +618,7 @@ Oui. Rien n'est lié à un nom d'utilisateur ni à une lettre de disque : les ch
 Poussez un tag de version : GitHub lance d'abord toutes les vérifications de la CI sur le commit du tag (tests sous Windows, Linux et macOS, exécutable unique, toutes les cibles), puis compile les applications et publie la version ([`.github/workflows/release.yml`](.github/workflows/release.yml)). Si une seule vérification échoue (ou la suite), rien n'est publié : le tag est supprimé, ainsi que la version si elle avait déjà été créée, et les mises à jour d'Athanor ne la proposent jamais. Corrigez, commitez, puis poussez à nouveau le même tag (`git tag -f v2.42.0 && git push origin v2.42.0`).
 
 ```bash
-git tag v2.51.4 && git push origin v2.51.4
+git tag v2.51.5 && git push origin v2.51.5
 ```
 
 Gardez la version de [`app/winres/athanor.rc`](app/winres/athanor.rc) et `versionAthanor` dans [`app/commandes.go`](app/commandes.go) alignées sur le tag (un test vérifie qu'elles concordent), et écrivez les nouveautés dans `docs/releases/VERSION.md` (par ex. [`docs/releases/2.31.0.md`](docs/releases/2.31.0.md)) : elles ouvrent la page de la version.

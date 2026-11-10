@@ -2585,11 +2585,15 @@ func lancerPilote(args []string) int {
 			if p.framingModel != "" && p.modeleCycle == p.model {
 				p.modeleCycle = p.framingModel
 			}
-			if p.framingMaxMin > 0 && entierPilote(lireTexteCourt(filepath.Join(p.prive, "cadrage_depasse")), 0) < 2 {
-				if cadrageFin && p.framingMaxMin > 15 {
+			maxCadrage := p.framingMaxMin
+			if n := cadrageProjet(filepath.Join(p.etat, ".env")); n > 0 {
+				maxCadrage = n // the project's own (Manage › Working mode)
+			}
+			if maxCadrage > 0 && entierPilote(lireTexteCourt(filepath.Join(p.prive, "cadrage_depasse")), 0) < 2 {
+				if cadrageFin && maxCadrage > 15 {
 					limiteCycleMin = 15
 				} else {
-					limiteCycleMin = p.framingMaxMin
+					limiteCycleMin = maxCadrage
 				}
 				limiteStr = strconv.Itoa(limiteCycleMin)
 			}

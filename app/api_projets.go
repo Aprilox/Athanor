@@ -680,9 +680,26 @@ type ModeVue struct {
 	Parallele    bool `json:"parallele"`
 	ParalleleMax int  `json:"parallele_max"`
 	Eco          bool `json:"eco"` // the eco mode: the quota first (never together with the parallel mode)
+	// the project's own framing time box in minutes (nil, or 0 when written: the global FRAMING_MAX_MIN);
+	// absent from a POST, it is left as it is (the terminal interface does not send it)
+	CadrageMax    *int `json:"cadrage_max,omitempty"`
+	CadrageGlobal int  `json:"cadrage_global"` // the global FRAMING_MAX_MIN, for the page (0: no limit)
 }
 
 func (p Projet) envProjet() string { return filepath.Join(p.Atelier(), ".env") }
+
+// cadrageProjet: the framing time box a project set for itself (Manage › Working mode), 0 when it follows
+// the global FRAMING_MAX_MIN. Bounded: the file is in the workshop, which Claude can write.
+func cadrageProjet(env string) int {
+	for _, l := range LireEnv(env) {
+		if l.Cle == "FRAMING_MAX_MIN" {
+			if n, err := strconv.Atoi(strings.TrimSpace(l.Valeur)); err == nil && n >= 10 && n <= 240 {
+				return n
+			}
+		}
+	}
+	return 0
+}
 
 func (p Projet) LireMode() ModeVue {
 	m := ModeVue{ParalleleMax: 3}
@@ -702,6 +719,9 @@ func (p Projet) LireMode() ModeVue {
 	if m.Eco {
 		m.Parallele = false // the pilot runs the eco mode alone
 	}
+	if n := cadrageProjet(p.envProjet()); n > 0 {
+		m.CadrageMax = &n
+	}
 	return m
 }
 
@@ -720,7 +740,14 @@ func (s *Serveur) apiMode(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	s.ecrireJSON(w, p.LireMode())
+	m := p.LireMode()
+	m.CadrageGlobal = 25
+	for _, l := range LireEnv(s.kitCourant().Env()) {
+		if n, err := strconv.Atoi(strings.TrimSpace(l.Valeur)); l.Cle == "FRAMING_MAX_MIN" && err == nil && n >= 0 {
+			m.CadrageGlobal = n
+		}
+	}
+	s.ecrireJSON(w, m)
 }
 
 func (s *Serveur) apiEcrireMode(w http.ResponseWriter, r *http.Request) {
@@ -746,6 +773,16 @@ func (s *Serveur) apiEcrireMode(w http.ResponseWriter, r *http.Request) {
 	if m.Eco {
 		v["ECO"] = "1"
 	}
+	if m.CadrageMax != nil {
+		v["FRAMING_MAX_MIN"] = "" // 0: back to the global value
+		if *m.CadrageMax != 0 {
+			if *m.CadrageMax < 10 || *m.CadrageMax > 240 {
+				s.erreur(w, http.StatusBadRequest, "The framing time box is between 10 and 240 minutes.")
+				return
+			}
+			v["FRAMING_MAX_MIN"] = strconv.Itoa(*m.CadrageMax)
+		}
+	}
 	avant := p.LireMode()
 	if err := os.MkdirAll(p.Atelier(), 0o755); err != nil {
 		s.erreur(w, http.StatusInternalServerError, err.Error())
@@ -756,6 +793,8 @@ func (s *Serveur) apiEcrireMode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch {
+	case m.CadrageMax != nil && m.Parallele == avant.Parallele && m.Eco == avant.Eco:
+		s.msg(w, "Framing time box saved: it applies to this project's next framing.")
 	case m.Eco && !avant.Eco:
 		s.msg(w, "Eco mode on: it applies from the next cycle (the parallel mode is off).")
 	case m.Parallele:

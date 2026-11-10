@@ -1139,13 +1139,19 @@ async function rendreMode() {
     <span class="muet petit" title="${h(longEco)}">${m.eco ? t("the quota first: the lead works alone, one review at delivery, few images, short outputs") : t("spends as little quota as possible; never together with the parallel mode")}</span>
     </div>
     ${m.eco ? `<p class="muet petit m0 mode-suite">${t("To save even more: a smaller model for the lead (Sonnet) and a lower thinking effort (medium or low), in Settings.")}</p>` : ""}
+    <div class="ligne m0 mode-suite">
+    <span class="petit"><b>${t("Longest framing")}</b>${boutonDetail("FRAMING_MAX_MIN")}</span>
+    <span class="muet petit">${t("the first cycle, which writes the plan")}</span>
+    <span class="espace"></span><div class="choix m0">${[0, 25, 45, 60, 90].map((n) => `<button type="button" data-cadrage="${n}" class="${(m.cadrage_max || 0) === n ? "actif" : ""}">${n ? t("{0} min", [n]) : m.cadrage_global ? t("Like Settings ({0} min)", [m.cadrage_global]) : t("Like Settings (no limit)")}</button>`).join("")}</div>
+    </div>
   </div></div>`;
 }
-async function enregistrerMode(parallele, max, eco) {
-  const r = await action(api("mode", "POST", { parallele, parallele_max: max, eco: !!eco }));
+// cadrage: the project's framing time box (0: back to Settings); left out, it stays as it is
+async function enregistrerMode(parallele, max, eco, cadrage) {
+  const r = await action(api("mode", "POST", { parallele, parallele_max: max, eco: !!eco, ...(cadrage === undefined ? {} : { cadrage_max: cadrage }) }));
   if (r) rendrePage();
 }
-function maxModeActif() { const actif = $("#page .mode-ligne .choix button.actif"); return actif ? Number(actif.dataset.max) : etat.modeMax || 3; }
+function maxModeActif() { const actif = $("#page .mode-ligne .choix button.actif[data-max]"); return actif ? Number(actif.dataset.max) : etat.modeMax || 3; }
 
 // --- chat with Claude about the project (api_chat.go): by default Claude reads and answers, a change becomes
 // a note for the pilot; with "change the files" ticked, Claude changes them (Athanor commits them), after the
@@ -3153,6 +3159,31 @@ const REGLAGES = {
   QUOTA_WAIT_MIN: ["avance", "Wait when the quota's end is unknown"], ERROR_WAIT_MIN: ["avance", "Wait after an error"],
 };
 const GROUPES_REGLAGES = [["connexion", "Connection"], ["modeles", "Models"], ["marche", "How the pilot works"]];
+// the "i" of a setting: what a lower or a higher value changes (the line under its name stays short)
+const DETAILS_REGLAGES = {
+  MODEL: ["Stronger (opus): better plans, decisions and fixes; each turn uses more quota.", "Lighter (sonnet): more cycles for the same quota, enough for simpler or well-planned projects."],
+  FALLBACK_MODEL: ["Set: when the main model's quota runs out, the pilot carries on with this model until the quota reopens.", "Empty: the pilot pauses until the quota reopens."],
+  FRAMING_MODEL: ["The framing writes the plan that every milestone follows: a strong model here pays off for the whole project, for the quota of a single cycle.", "Empty: the lead's model."],
+  WORKER_MODEL: ["Each parallel worker carries out one well-written milestone sheet: execution work, where sonnet is usually enough.", "Stronger: fewer mistakes on hard milestones, but every worker uses more quota, and several run at once."],
+  SUBAGENT_MODEL: ["Empty: the lead's model. auto: the lead picks one for each call (a light model to read, a strong one to review).", "A lighter model here saves a lot: a sub-agent starts from zero and rereads the project every time."],
+  CHEAP_MODEL: ["Used by the executor sub-agent for mechanical work (long outputs, searches, edits repeated over many files): the cheapest model is enough.", "Empty: the same model as the other sub-agents, which uses more quota for the same work."],
+  EFFORT: ["Higher (high, xhigh, max): Claude thinks longer before acting; better on hard problems, slower, and it uses more quota.", "Lower (low, medium): faster and cheaper, enough for simple or well-planned work. Empty: the model's normal effort."],
+  CLOSE_AFTER_MILESTONE: ["On: the pilot closes the cycle a few minutes after a milestone's commit, and the next milestone starts with a fresh, light context (cheaper turns).", "Off: the session ends when Claude stops on its own, which costs more if it lingers."],
+  RELAY_CONTEXT_K: ["Lower: a fresh session takes over more often; cheaper turns, but each new session rereads its notes.", "Higher: longer sessions that keep more in mind, but every turn costs more as the context grows. 0: never; Claude Code may then compact the context by itself and blur the thread."],
+  MAX_HOURS: ["Counted from the project's first start: past it, the pilot stops, whatever the project's state (raise it to go on).", "Higher for long projects (720 = 30 days); lower to cap what a project can use."],
+  CYCLE_MAX_MIN: ["Lower: a cycle that drags is cut sooner (the work done stays, the milestone resumes), but a long milestone (a big build, a game engine) may be cut before its end.", "Higher: more patience for long milestones; a stuck cycle wastes more time."],
+  IDLE_MAX_MIN: ["A cycle with no activity for this long is stopped, then resumed.", "Lower: a frozen session is caught sooner, but a long silent command (a build, tests) may be cut. Higher: the opposite."],
+  FRAMING_MAX_MIN: ["Lower: the plan is ready sooner, but less precise on a large project (code skimmed, vaguer milestone sheets, a quick review).", "Higher: a more precise plan. It is a ceiling, not a duration: a framing that ends sooner stops sooner. Past it, one short cycle (15 min at most) finishes the plan.", "Advice: 25 for a small project, 45 to 60 for a large code base or large attached files. A project can have its own: Manage › Working mode."],
+  RTK: ["On: command outputs are compressed before Claude reads them; fewer tokens, the signal is kept.", "Off: full outputs, only to investigate a problem; it uses more quota."],
+  PONYTAIL: ["On: each milestone is built with the smallest complete change, never less than the request; less code, fewer bugs, less quota.", "Off: Claude may add structure and options nobody asked for."],
+  QUOTA_WAIT_MIN: ["Only when Claude does not say when the quota reopens: the pilot waits this long, then tries again.", "Lower: resumes sooner, but may try several times for nothing. Higher: fewer tries, maybe a longer idle time."],
+  ERROR_WAIT_MIN: ["After an error or a stopped cycle, the pilot waits this long, then twice as long at each new error in a row, up to a ceiling.", "Lower: retries sooner. Higher: lets a passing outage (network, service) end before the next try."],
+};
+function detailReglage(cle) {
+  const nom = (REGLAGES[cle] || [])[1];
+  return choisir((DETAILS_REGLAGES[cle] || []).map((l) => "• " + t(l)).join("\n"), [{ id: "ok", texte: t("OK"), primaire: true }], { titre: nom ? t(nom) : cle });
+}
+const boutonDetail = (cle) => DETAILS_REGLAGES[cle] ? `<button type="button" class="chat-info" data-detail-reglage="${h(cle)}" title="${h(t("What a lower or a higher value changes"))}" aria-label="${h(t("What a lower or a higher value changes"))}">i</button>` : "";
 const EFFORTS = ["", "low", "medium", "high", "xhigh", "max"];
 // the connection (connexion_claude.go): the subscription's token or an API key; each one's settings shown
 // with it only
@@ -3188,7 +3219,7 @@ pages.reglages = async () => {
   const ligne = (l) => {
     const nom = (REGLAGES[l.cle] || [])[1];
     const m = MODE_CONNEXION[l.cle];
-    return `<div class="reglage" ${m ? `data-connexion="${m}" ${m !== mode ? "hidden" : ""}` : ""}><div>${nom ? `<div class="nom-reglage">${h(t(nom))} <code class="cle-env">${h(l.cle)}</code></div>` : `<div class="cle">${h(l.cle)}</div>`}<div class="aide">${h(t(l.aide))}</div></div><div>${champReglage(l, modeles)}</div></div>`;
+    return `<div class="reglage" ${m ? `data-connexion="${m}" ${m !== mode ? "hidden" : ""}` : ""}><div>${nom ? `<div class="nom-reglage">${h(t(nom))} <code class="cle-env">${h(l.cle)}</code>${boutonDetail(l.cle)}</div>` : `<div class="cle">${h(l.cle)}</div>`}<div class="aide">${h(t(l.aide))}</div></div><div>${champReglage(l, modeles)}</div></div>`;
   };
   const rang = (c) => { const i = ORDRE_CONNEXION.indexOf(c); return i < 0 ? 99 : i; };
   const groupe = (g) => lignes.filter((l) => (REGLAGES[l.cle] || ["avance"])[0] === g).sort((a, b) => g === "connexion" ? rang(a.cle) - rang(b.cle) : 0);
@@ -3882,6 +3913,8 @@ $("#page").addEventListener("click", async (ev) => {
   if (b.dataset.choisirPieces) return $("#" + b.dataset.choisirPieces + "-fichiers").click();
   if (b.dataset.retirerPiece) { const [id, i] = b.dataset.retirerPiece.split("|"); (etat.pieces[id] || []).splice(Number(i), 1); $("#" + id + "-liste").innerHTML = listePieces(id); return; }
   if (b.dataset.max && page === "projet") return enregistrerMode($("#md-parallele").checked, Number(b.dataset.max), $("#md-eco") && $("#md-eco").checked);
+  if (b.dataset.cadrage !== undefined && page === "projet") return enregistrerMode($("#md-parallele").checked, maxModeActif(), $("#md-eco") && $("#md-eco").checked, Number(b.dataset.cadrage));
+  if (b.dataset.detailReglage) return detailReglage(b.dataset.detailReglage);
   if (page === "nouveau") {
     if (b.dataset.npMode) { etat.npRejoindre = b.dataset.npMode === "rejoindre"; return rendrePage(); }
     if (b.id === "rj-rejoindre") {
