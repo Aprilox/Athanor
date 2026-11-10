@@ -34,6 +34,32 @@ func TestAccesVariablesProposees(t *testing.T) {
 	}
 }
 
+// TestResumeAcces: the badge counts every grant of the current environment, the sentence only what the
+// pilot receives (code scope), split into test keys and variables; other environments and gone entries
+// count for nothing.
+func TestResumeAcces(t *testing.T) {
+	entrees := []EntreeCoffre{
+		{ID: "s1", Famille: "secret", Portee: "code"}, {ID: "s2", Famille: "secret", Portee: "code"},
+		{ID: "v1", Famille: "variable", Portee: "code"}, {ID: "i1", Famille: "secret", Portee: "infra"},
+	}
+	p := ProjetAcces{Env: "dev", Acces: []AccesProjet{
+		{Entree: "s1", Env: "dev"}, {Entree: "s2", Env: "dev"}, {Entree: "v1", Env: "dev"}, {Entree: "i1", Env: "dev"},
+		{Entree: "s1", Env: "prod"}, {Entree: "disparue", Env: "dev"},
+	}}
+	r := resumerAcces(p, entrees)
+	if r.Env != "dev" || r.Total != 4 || r.Secrets != 2 || r.Variables != 1 || r.Infra != 1 || len(r.Envs) != 3 {
+		t.Fatalf("dev: %+v", r)
+	}
+	p.Env = "prod"
+	if r := resumerAcces(p, entrees); r.Total != 1 || r.Secrets != 1 || r.Variables+r.Infra != 0 {
+		t.Fatalf("prod: %+v", r)
+	}
+	p.Env = "staging"
+	if r := resumerAcces(p, entrees); r.Total != 0 {
+		t.Fatalf("staging: %+v", r)
+	}
+}
+
 // TestAccesProjets walks GET/POST /api/acces: environments, proposed and edited names, duplicates,
 // the vault and the projects followed, automatic grants made once, and no value anywhere.
 func TestAccesProjets(t *testing.T) {

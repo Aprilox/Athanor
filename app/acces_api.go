@@ -80,8 +80,21 @@ func (s *Serveur) etatAcces(projet string) map[string]any {
 		}
 	}
 	pr, _ := s.projetNomme(projet)
+	inj := s.etatInjection(pr)
+	r := resumerAcces(p, s.coffre.Liste())
+	r.Etat = inj.Etat
 	return map[string]any{"projet": projet, "env": p.Env, "envs": envsProjet, "forcer_infra_natif": p.ForcerInfraNatif, "acces": vus,
-		"injection": s.etatInjection(pr)}
+		"injection": inj, "resume": r}
+}
+
+// resumeAccesProjet: the badge of GET /api/etat, nil without a readable vault and access file.
+func (s *Serveur) resumeAccesProjet(p Projet) *ResumeAcces {
+	if s.coffre == nil || s.coffreErr != nil || s.acces == nil || s.accesErr != nil {
+		return nil
+	}
+	r := resumerAcces(s.acces.Projet(p.Nom), s.coffre.Liste())
+	r.Etat = s.etatInjection(p).Etat
+	return &r
 }
 
 // apiAcces: GET /api/acces?projet=NAME.

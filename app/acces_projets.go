@@ -101,6 +101,42 @@ func (a *Acces) modifier(f func(*fichierAcces) error) error {
 	return nil
 }
 
+// ResumeAcces: the badge next to Start, for the project's current environment. Total counts every grant
+// (infra ones included); Secrets and Variables only what the pilot receives (code scope).
+type ResumeAcces struct {
+	Env       string   `json:"env"`
+	Envs      []string `json:"envs"`
+	Total     int      `json:"total"`
+	Secrets   int      `json:"secrets"`
+	Variables int      `json:"variables"`
+	Infra     int      `json:"infra"`
+	Etat      string   `json:"etat"` // the injection's state (EtatInjection.Etat)
+}
+
+func resumerAcces(p ProjetAcces, entrees []EntreeCoffre) ResumeAcces {
+	r := ResumeAcces{Env: p.Env, Envs: envsProjet}
+	par := map[string]EntreeCoffre{}
+	for _, e := range entrees {
+		par[e.ID] = e
+	}
+	for _, a := range p.Acces {
+		e, ok := par[a.Entree]
+		if !ok || a.Env != p.Env {
+			continue
+		}
+		r.Total++
+		switch {
+		case e.Portee != "code":
+			r.Infra++
+		case e.Famille == "variable":
+			r.Variables++
+		default:
+			r.Secrets++
+		}
+	}
+	return r
+}
+
 // Projet: a copy of a project's grants (environment dev when it has none).
 func (a *Acces) Projet(nom string) ProjetAcces {
 	a.mu.Lock()

@@ -121,6 +121,13 @@ func TestInjectionAcces(t *testing.T) {
 	if inj, _ := v["injection"].(map[string]any); inj["etat"] != "ok" {
 		t.Fatalf("GET injection: %v", v)
 	}
+	// the badge next to Start: the current environment and its state, in GET /api/etat too
+	if r, _ := v["resume"].(map[string]any); r["env"] != "prod" || r["etat"] != "ok" {
+		t.Fatalf("resume: %v", v["resume"])
+	}
+	if _, e := appel("GET", "/api/etat?p=demo", ""); e["projet"] == nil || e["projet"].(map[string]any)["acces"].(map[string]any)["env"] != "prod" {
+		t.Fatalf("GET /api/etat badge: %v", e["projet"])
+	}
 	appel("POST", "/api/acces", `{"projet":"demo","action":"env","env":"dev"}`)
 	// a granted value changed in the vault: the file follows
 	tDev2 := "temoin-dev2-" + sfx
@@ -161,6 +168,9 @@ func TestInjectionAcces(t *testing.T) {
 	_, v = appel("GET", "/api/acces?projet=demo", "")
 	if inj, _ := v["injection"].(map[string]any); inj["etat"] != "verrouille" || lire() != avant {
 		t.Fatalf("locked: %v\n%s", v, lire())
+	}
+	if _, e := appel("GET", "/api/etat?p=demo", ""); e["projet"].(map[string]any)["acces"].(map[string]any)["etat"] != "verrouille" {
+		t.Fatalf("GET /api/etat locked: %v", e["projet"])
 	}
 	s.coffre.mu.Lock()
 	s.coffre.systeme = sys

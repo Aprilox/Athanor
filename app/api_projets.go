@@ -35,6 +35,8 @@ type ProjetVue struct {
 	Jalons int `json:"jalons,omitempty"`
 	// why the project needs the user, "" if it does not (besoinProjet, hub_dev.go)
 	Besoin string `json:"besoin,omitempty"`
+	// the grants of its current environment (the badge next to Start), current project only
+	Acces *ResumeAcces `json:"acces,omitempty"`
 }
 
 // FinVue: the pilot of a project stopped by itself (delivery, maximum duration…) and the user has not
@@ -202,6 +204,7 @@ func (s *Serveur) apiEtat(w http.ResponseWriter, r *http.Request) {
 		for i := range vue.Projets {
 			if vue.Projets[i].Nom == p.Nom {
 				pv := vue.Projets[i]
+				pv.Acces = s.resumeAccesProjet(p)
 				vue.Projet = &pv
 			}
 		}

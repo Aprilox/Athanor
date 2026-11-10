@@ -779,11 +779,27 @@ function phraseGlobale(v) {
 }
 
 // ----------------------------------------------------------------------------- shell: header, sidebar, project picker
+// the environment given to the pilot and what it receives, next to Start (summary computed by the server)
+function blocAccesDemarrer(ac, distant) {
+  const pl = (n) => new Intl.PluralRules(document.documentElement.lang || "en").select(n) !== "one";
+  const recu = [ac.secrets && (pl(ac.secrets) ? t("{0} test keys", [ac.secrets]) : t("{0} test key", [ac.secrets])),
+    ac.variables && (pl(ac.variables) ? t("{0} variables", [ac.variables]) : t("{0} variable", [ac.variables]))].filter(Boolean);
+  const phrase = recu.length ? t("The pilot will have access to: {0}.", [recu.join(", ")]) : t("The pilot receives nothing from the vault.");
+  const verrou = ac.etat === "verrouille" ? `<span class="badge badge-infra" title="${h(t("The vault is locked: the pilot's file is not updated until you unlock it."))}">🔒 ${t("vault locked")}</span>` : "";
+  const envs = (ac.envs || []).map((e) => `<option value="${h(e)}" ${e === ac.env ? "selected" : ""}>${h(e)}</option>`).join("");
+  const choix = distant ? `<span class="badge" title="${h(t("Environment"))}">${h(ac.env)}</span>` // a paired device only reads the grants
+    : `<select data-env-acces aria-label="${h(t("Environment"))}" title="${h(t("Environment given to the pilot: changing it rewrites its values at once."))}">${envs}</select>`;
+  return `<span class="acces-demarrer">${choix}`
+    + `<a class="badge" href="#acces" title="${h(t("Open the Access panel"))}">🔑 ${pl(ac.total) ? t("{0} accesses", [ac.total]) : t("{0} access", [ac.total])}</a>${verrou}<span class="muet petit">${h(phrase)}</span></span>`;
+}
+
 function rendreBandeau(v) {
+  if (document.activeElement && document.activeElement.matches("[data-env-acces]")) return; // an open list is not redrawn under the mouse
   const global = ["global", "accueil", "coffre"].includes(etat.page); // pages of every project: no project buttons
   const p = etat.page === "coffre" ? { classe: "", titre: t("Vault"), sous: t("Secrets and variables") } : global ? phraseGlobale(v) : phraseEtat(v);
   if (etat.page === "accueil") p.titre = t("Home");
   const boutons = [];
+  if (v.projet && !global && v.projet.acces) boutons.push(blocAccesDemarrer(v.projet.acces, v.distant));
   if (v.kit_valide && v.projet && !global) {
     if (v.actif) {
       // a stop asked for the end of the cycle: the button says it, and a click withdraws it
@@ -878,6 +894,13 @@ async function annulerArret(b) {
   await rafraichir();
 }
 
+$("#bandeau").addEventListener("change", async (ev) => {
+  const sel = ev.target.closest("[data-env-acces]"); if (!sel || !etat.vue || !etat.vue.projet) return;
+  sel.blur();
+  await action(api("acces", "POST", { projet: etat.vue.projet.nom, action: "env", env: sel.value })); // the server rewrites secrets.env
+  await rafraichir();
+  if (etat.page === "acces") rendrePage();
+});
 $("#bandeau").addEventListener("click", async (ev) => {
   const b = ev.target.closest("button"); if (!b) return;
   if (b.dataset.act === "demarrer") return demarrerPilote(b);
