@@ -76,6 +76,45 @@ func TestTUIAccueilServeur(t *testing.T) {
 			}
 		}
 	}
+	// "In progress" and the bell's alerts with their reason; a click on a line opens its project's page
+	txt := voir("accueil-120x40", 120, 40)
+	for _, x := range []string{"En cours", "Tout voir (20)", "! Dev, projet-03 : 1 tâche(s) sur la page Pour vous",
+		"! Dev, projet-07 : 1 tâche(s)", "projet-07  Dev  1 tâche(s) sur la page Pour vous"} {
+		if !strings.Contains(txt, x) {
+			t.Errorf("no %q in\n%s", x, txt)
+		}
+	}
+	cliquer := func(motif string) {
+		e := nouvelEcran(120, 40)
+		a.dessiner(e)
+		for y := 0; y < 40; y++ {
+			if i := strings.Index(e.ligneTexte(y), motif); i >= 0 {
+				a.souris(evenementTUI{genre: evSouris, x: largeurTexte(e.ligneTexte(y)[:i]) + 1, y: y, appui: true})
+				return
+			}
+		}
+		t.Fatalf("no %q on screen", motif)
+	}
+	cliquer("projet-07  Dev")
+	if a.page != pPourVous || a.c.projet != "projet-07" {
+		t.Errorf("click on projet-07: page %d, project %q", a.page, a.c.projet)
+	}
+	taper(a, "H")
+	cliquer("! Dev, projet-03")
+	if a.page != pPourVous || a.c.projet != "projet-03" {
+		t.Errorf("click on the alert of projet-03: page %d, project %q", a.page, a.c.projet)
+	}
+	taper(a, "H")
+	cliquer("Tout voir (20)")
+	if a.page != pSuivi {
+		t.Errorf("See all: page %d", a.page)
+	}
+	taper(a, "H")
+	// an ignored alert leaves the home's alerts (the bell's list), its project stays in "In progress"
+	a.hub.Alertes = a.hub.Alertes[1:]
+	if txt := voir("accueil-ignoree-120x40", 120, 40); strings.Contains(txt, "! Dev, projet-03") || !strings.Contains(txt, "projet-03  Dev") {
+		t.Errorf("ignored alert:\n%s", txt)
+	}
 	// the keys of Dev's pages, as before the hub
 	attendus := map[string]int{"1": pSuivi, "2": pJournal, "3": pDemandes, "4": pChat, "5": pSante, "6": pPourVous, "7": pEquipe, "8": pGitHub, "9": pReglages, "0": pDistance}
 	for k, pg := range attendus {
