@@ -249,7 +249,7 @@ func TestDistanceMotDePasse(t *testing.T) {
 	api := []string{"X-Athanor", "jeton"}
 	cle := appairerTest(t, s, h)
 	s.config.Sel = "sel"
-	s.config.MotDePasseHash = hacher("sel", "secret")
+	s.config.MotDePasseHash = hacherMotDePasse("secret")
 	if w := appelDistance(h, "GET", "/api/journal", cle, "", api...); w.Code != http.StatusUnauthorized {
 		t.Fatalf("locked device: %d", w.Code)
 	}

@@ -4,7 +4,6 @@ package main
 
 import (
 	"crypto/rand"
-	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
@@ -101,11 +100,6 @@ func aleatoire(n int) string {
 	b := make([]byte, n)
 	_, _ = rand.Read(b)
 	return hex.EncodeToString(b)
-}
-
-func hacher(sel, mdp string) string {
-	h := sha256.Sum256([]byte(sel + ":" + mdp))
-	return hex.EncodeToString(h[:])
 }
 
 func egal(a, b string) bool { return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1 }
@@ -462,7 +456,11 @@ func (s *Serveur) apiDeverrouiller(w http.ResponseWriter, r *http.Request) {
 	}
 	time.Sleep(400 * time.Millisecond) // slows down bursts of attempts (without holding the application)
 	id := appareilDe(r)
-	if !egal(hacher(sel, c.MotDePasse), hash) {
+	ok, aRemplacer := verifierMotDePasse(sel, c.MotDePasse, hash)
+	if aRemplacer {
+		s.remplacerHashMdp(hash, c.MotDePasse)
+	}
+	if !ok {
 		if id == "" {
 			s.erreur(w, http.StatusUnauthorized, "Wrong password")
 			return
@@ -496,6 +494,19 @@ func (s *Serveur) apiDeverrouiller(w http.ResponseWriter, r *http.Request) {
 	s.ecrireJSON(w, map[string]bool{"ok": true})
 }
 
+// remplacerHashMdp rewrites a hash of the old format (or weaker parameters) once the right password
+// is typed, unless the password changed meanwhile.
+func (s *Serveur) remplacerHashMdp(ancien, mdp string) {
+	nouveau := hacherMotDePasse(mdp)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.config.MotDePasseHash != ancien {
+		return
+	}
+	s.config.MotDePasseHash, s.config.Sel = nouveau, ""
+	_ = ecrireConfig(s.config) // on failure, the next save of the config writes it
+}
+
 func (s *Serveur) apiVerrouiller(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -524,7 +535,7 @@ func (s *Serveur) apiMotDePasse(w http.ResponseWriter, r *http.Request) {
 	_ = lireCorps(r, &c)
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.config.MotDePasseHash != "" && !egal(hacher(s.config.Sel, c.Ancien), s.config.MotDePasseHash) {
+	if ok, _ := verifierMotDePasse(s.config.Sel, c.Ancien, s.config.MotDePasseHash); s.config.MotDePasseHash != "" && !ok {
 		s.erreur(w, http.StatusUnauthorized, "Wrong current password")
 		return
 	}
@@ -535,8 +546,8 @@ func (s *Serveur) apiMotDePasse(w http.ResponseWriter, r *http.Request) {
 			s.erreur(w, http.StatusBadRequest, "At least 4 characters")
 			return
 		}
-		s.config.Sel = aleatoire(8)
-		s.config.MotDePasseHash = hacher(s.config.Sel, c.Nouveau)
+		s.config.Sel = "" // only the old format used it
+		s.config.MotDePasseHash = hacherMotDePasse(c.Nouveau)
 		s.ouvrirSession(w)
 	}
 	if err := ecrireConfig(s.config); err != nil {

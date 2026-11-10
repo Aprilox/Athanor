@@ -452,7 +452,7 @@ func TestTUIVerrou(t *testing.T) {
 	s, c, _ := essaiServeurTUI(t)
 	s.mu.Lock()
 	s.config.Sel = "sel"
-	s.config.MotDePasseHash = hacher("sel", "secret")
+	s.config.MotDePasseHash = hacherMotDePasse("secret")
 	s.mu.Unlock()
 	a := nouvelleAppTUI(c, false)
 	a.tic()

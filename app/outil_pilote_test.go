@@ -117,6 +117,7 @@ func preparerKitEssaiPilote(t *testing.T, binAthanor string) string {
 	}
 	b, err := os.ReadFile(binAthanor)
 	if err != nil {
+		sautSiDefender(t, err.Error())
 		t.Fatalf("read binary: %v", err)
 	}
 	dstBin := filepath.Join(kit, nomBin)
@@ -400,6 +401,15 @@ func executerPilote(t *testing.T, bin, kit, projet, fakeClaude string, extraEnv 
 	return string(out)
 }
 
+// sautSiDefender skips when Windows Defender quarantined the bench's executable (an intermittent false
+// positive on this PC, out of the test's reach); the Linux and macOS CI still run the bench.
+// shortcut: a quarantine in the middle of a run still fails (code 127), sign the exe if it gets frequent.
+func sautSiDefender(t *testing.T, msg string) {
+	if runtime.GOOS == "windows" && strings.Contains(msg, "virus") {
+		t.Skip("Windows Defender quarantined the test executable (false positive): " + strings.TrimSpace(msg))
+	}
+}
+
 func TestBancPilote(t *testing.T) {
 	if runtime.GOOS == "windows" && trouverBashNatifPilote() == "" {
 		t.Skip("Git Bash not found on Windows (the fake Claude Code is a bash script)")
@@ -411,6 +421,7 @@ func TestBancPilote(t *testing.T) {
 	if _, err := exec.LookPath("go"); err == nil {
 		// stripped like the release builds: Windows Defender quarantines some unstripped builds (false positive)
 		if out, err := exec.Command("go", "build", "-ldflags=-s -w", "-o", binTemp, ".").CombinedOutput(); err != nil {
+			sautSiDefender(t, string(out))
 			t.Fatalf("go build failed: %v\n%s", err, string(out))
 		}
 	} else {
