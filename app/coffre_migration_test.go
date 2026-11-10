@@ -205,8 +205,24 @@ func TestCoffreMigration(t *testing.T) {
 			t.Error("value of", nom, "in GET /api/coffre")
 		}
 	}
+	trier := func(b []byte) []ligneSecret {
+		l := lireLignesSecrets(b)
+		slices.SortFunc(l, func(x, y ligneSecret) int { return strings.Compare(x.nom, y.nom) })
+		return l
+	}
 	for f, e := range empreintes {
-		if b, err := os.ReadFile(f); err != nil || sha256.Sum256(b) != e {
+		b, err := os.ReadFile(f)
+		if filepath.Base(f) == "secrets.env" { // stage 3: the injection rewrites it, every NAME=value kept
+			attendu := trier([]byte(fichiers[f]))
+			for i := range attendu {
+				if attendu[i].nom == nomModifiee { // changed in the vault by the user: the vault's value wins
+					attendu[i].valeur = "temoin-nouvelle-valeur"
+				}
+			}
+			if err != nil || !slices.Equal(trier(b), attendu) {
+				t.Error("old file lost a value:", f, err)
+			}
+		} else if err != nil || sha256.Sum256(b) != e {
 			t.Error("old file changed:", f, err)
 		}
 	}

@@ -110,6 +110,7 @@ func (s *Serveur) apiCoffreAjouter(w http.ResponseWriter, r *http.Request) {
 		s.erreurCoffre(w, err)
 		return
 	}
+	s.injecterTous(nil) // a value now in the vault and granted nowhere leaves the old files
 	s.ecrireJSON(w, e)
 }
 
@@ -139,6 +140,7 @@ func (s *Serveur) apiCoffreModifier(w http.ResponseWriter, r *http.Request) {
 			s.erreurCoffre(w, err)
 			return
 		}
+		s.injecterTous(nil)
 	}
 	s.ecrireJSON(w, e)
 }
@@ -153,5 +155,6 @@ func (s *Serveur) apiCoffreSupprimer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = s.synchroniserAcces() // its grants go
+	s.injecterTous(nil)
 	s.ecrireJSON(w, map[string]bool{"ok": true})
 }

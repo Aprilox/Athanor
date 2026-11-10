@@ -79,7 +79,9 @@ func (s *Serveur) etatAcces(projet string) map[string]any {
 			vus = append(vus, AccesVu{AccesProjet: a, Nom: e.Nom, Famille: e.Famille, Type: e.Type, Portee: e.Portee})
 		}
 	}
-	return map[string]any{"projet": projet, "env": p.Env, "envs": envsProjet, "forcer_infra_natif": p.ForcerInfraNatif, "acces": vus}
+	pr, _ := s.projetNomme(projet)
+	return map[string]any{"projet": projet, "env": p.Env, "envs": envsProjet, "forcer_infra_natif": p.ForcerInfraNatif, "acces": vus,
+		"injection": s.etatInjection(pr)}
 }
 
 // apiAcces: GET /api/acces?projet=NAME.
@@ -134,6 +136,11 @@ func (s *Serveur) apiAccesModifier(w http.ResponseWriter, r *http.Request) {
 	case err != nil:
 		s.erreurCoffre(w, err)
 	default:
+		if p, ok := s.projetNomme(c.Projet); ok {
+			if _, err := s.injecterAcces(p, nil); err != nil {
+				fmt.Fprintln(os.Stderr, "access injection:", p.Nom+":", err)
+			}
+		}
 		s.ecrireJSON(w, s.etatAcces(c.Projet))
 	}
 }

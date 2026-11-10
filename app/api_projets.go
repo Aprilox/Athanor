@@ -649,6 +649,10 @@ func (s *Serveur) demarrerPilote(p Projet) (string, error) {
 		return "", errors.New(texteRoot)
 	}
 	finirMiseAJour(s.kitCourant().Racine) // what an update left while pilots ran (embarque.go)
+	// the grants of its environment, in .athanor/secrets.env
+	if _, err := s.injecterAcces(p, nil); err != nil {
+		fmt.Fprintln(os.Stderr, "access injection:", p.Nom+":", err)
+	}
 	if err := demarrerKitDetache(s.kitCourant(), "demarrer", optionFond(), p.Dossier); err != nil {
 		return "", err
 	}

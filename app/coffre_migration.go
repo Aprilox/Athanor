@@ -122,8 +122,10 @@ func (s *Serveur) migrerSecrets(auto bool) (int, error) {
 		}
 	}
 	connues := map[string]bool{}
-	for _, f := range s.coffre.EmpreintesConnues() {
+	parEmpreinte := map[string]string{} // fingerprint → entry id
+	for id, f := range s.coffre.EmpreintesConnues() {
 		connues[f] = true
+		parEmpreinte[f] = id
 	}
 	for _, f := range etat.Empreintes {
 		connues[f] = true
@@ -141,7 +143,11 @@ func (s *Serveur) migrerSecrets(auto bool) (int, error) {
 			break // shortcut: a huge file comes in over several "Import again"; fine for old secret files
 		}
 		f := s.coffre.Empreinte(a.valeur)
-		if f == "" || connues[f] {
+		if f == "" {
+			continue
+		}
+		if connues[f] {
+			s.accorderPartagee(a, parEmpreinte[f])
 			continue
 		}
 		if id := importees[a.nom+"|"+a.source]; id != "" {
@@ -158,6 +164,7 @@ func (s *Serveur) migrerSecrets(auto bool) (int, error) {
 				return cree, err
 			}
 			importees[a.nom+"|"+a.source] = e.ID
+			parEmpreinte[f] = e.ID
 			etat.Entrees = append(etat.Entrees, e.ID)
 		}
 		connues[f] = true
@@ -176,11 +183,33 @@ func (s *Serveur) migrerSecrets(auto bool) (int, error) {
 
 const maxImportParPasse = 200
 
+// accorderPartagee: a value already in the vault found in another project's old file (the same key in
+// two projects) is granted to that project on dev too, or the injection would take it from its file.
+func (s *Serveur) accorderPartagee(a secretAncien, id string) {
+	nom, ok := strings.CutPrefix(a.source, "projet:")
+	if !ok || id == "" || s.acces == nil || s.accesErr != nil {
+		return
+	}
+	for _, e := range s.coffre.Liste() {
+		if e.ID == id && e.Source != a.source {
+			variable := a.nom
+			if !nomSecretValide(variable) {
+				variable = ""
+			}
+			if _, err := s.acces.Ajouter(nom, e, "dev", variable, "migration"); errors.Is(err, errAccesDoublon) {
+				_, _ = s.acces.Ajouter(nom, e, "dev", "", "migration")
+			}
+		}
+	}
+}
+
 // annulerMigration removes the entries the migration created (those the user already deleted, or
-// changed since, are kept) and marks it undone: nothing is imported again until "Import again".
-func (s *Serveur) annulerMigration() (int, error) {
+// changed since, are kept) and marks it undone: nothing is imported again until "Import again". garder:
+// project → variable → value of the removed entries, for the files that had them (the project it came
+// from and those granted it), so the injection puts them back.
+func (s *Serveur) annulerMigration() (n int, garder map[string]map[string]string, err error) {
 	if s.coffre == nil || s.coffreErr != nil {
-		return 0, errors.New("The vault file cannot be read")
+		return 0, nil, errors.New("The vault file cannot be read")
 	}
 	migrationMu.Lock()
 	defer migrationMu.Unlock()
@@ -189,18 +218,39 @@ func (s *Serveur) annulerMigration() (int, error) {
 	modifiees := map[string]bool{} // B9: an entry the user edited after the import is theirs now
 	empreintes := s.coffre.EmpreintesConnues()
 	retirees := map[string]bool{} // C13: only the values removed here may come back by "Import again"
+	entrees := map[string]EntreeCoffre{}
 	for _, e := range s.coffre.Liste() {
 		modifiees[e.ID] = e.Modifie.After(e.Cree)
+		entrees[e.ID] = e
 	}
-	n := 0
+	garder = map[string]map[string]string{}
+	garde := func(projet, variable, valeur string) {
+		if garder[projet] == nil {
+			garder[projet] = map[string]string{}
+		}
+		garder[projet][variable] = valeur
+	}
 	for len(etat.Entrees) > 0 {
-		if modifiees[etat.Entrees[0]] {
+		id := etat.Entrees[0]
+		if modifiees[id] {
 			etat.Entrees = etat.Entrees[1:]
 			continue
 		}
-		if err := s.coffre.Supprimer(etat.Entrees[0]); err != nil && !errors.Is(err, errCoffreInconnu) {
+		if v, err := s.coffre.Valeur(id); err == nil && s.acces != nil {
+			if nom, ok := strings.CutPrefix(entrees[id].Source, "projet:"); ok && nomSecretValide(entrees[id].Nom) {
+				garde(nom, entrees[id].Nom, v)
+			}
+			for _, projet := range s.nomsProjets() {
+				for _, a := range s.acces.Projet(projet).Acces {
+					if a.Entree == id {
+						garde(projet, a.Variable, v)
+					}
+				}
+			}
+		}
+		if err := s.coffre.Supprimer(id); err != nil && !errors.Is(err, errCoffreInconnu) {
 			_ = etat.enregistrer(chemin)
-			return n, err
+			return n, garder, err
 		} else if err == nil {
 			retirees[empreintes[etat.Entrees[0]]] = true
 			n++
@@ -210,7 +260,7 @@ func (s *Serveur) annulerMigration() (int, error) {
 	maintenant := time.Now().UTC()
 	gardees := slices.DeleteFunc(etat.Empreintes, func(f string) bool { return retirees[f] })
 	etat = etatMigration{Annulee: true, AnnuleeLe: &maintenant, Empreintes: gardees}
-	return n, etat.enregistrer(chemin)
+	return n, garder, etat.enregistrer(chemin)
 }
 
 // resumeMigration: for the Vault page, the imported entries still in the vault and whether it was undone.
@@ -235,6 +285,7 @@ func (s *Serveur) apiCoffreMigration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	n, err := s.migrerSecrets(false)
+	s.injecterTous(nil)
 	if err != nil {
 		s.erreurCoffre(w, err)
 		return
@@ -247,8 +298,9 @@ func (s *Serveur) apiCoffreMigrationAnnuler(w http.ResponseWriter, r *http.Reque
 	if !s.coffrePret(w) {
 		return
 	}
-	n, err := s.annulerMigration()
+	n, garder, err := s.annulerMigration()
 	_ = s.synchroniserAcces() // grants of the removed entries go, even after a partial undo
+	s.injecterTous(garder)    // their values stay in the files that had them: nothing is lost
 	if err != nil {
 		s.erreurCoffre(w, err)
 		return
