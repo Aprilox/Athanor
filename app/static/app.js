@@ -1353,11 +1353,11 @@ async function majChat(force) {
   if (!force && sig === chat.signature) return;
   chat.signature = sig;
   const fil = $("#chat-fil"); if (!fil) return;
-  // on a phone the conversation scrolls with the page (app.css), elsewhere in its own box
-  const page = matchMedia("(max-width: 760px)").matches, doc = document.documentElement;
-  const enBas = page ? innerHeight + scrollY >= doc.scrollHeight - 120 : fil.scrollHeight - fil.scrollTop - fil.clientHeight < 80;
+  // on a phone the conversation scrolls with the content area (app.css), elsewhere in its own box
+  const boite = matchMedia("(max-width: 760px)").matches ? $("#page") : fil;
+  const enBas = boite.scrollHeight - boite.scrollTop - boite.clientHeight < (boite === fil ? 80 : 120);
   fil.innerHTML = filChat(d);
-  if (enBas || force) { if (page) window.scrollTo(0, doc.scrollHeight); else fil.scrollTop = fil.scrollHeight; }
+  if (enBas || force) boite.scrollTop = boite.scrollHeight;
   const b = $("#chat-envoyer"), s = $("#chat-stop"), m = $("#chat-mode");
   if (b) b.hidden = d.en_cours;
   if (s) s.hidden = !d.en_cours;
@@ -2007,7 +2007,7 @@ pages.guide = async () => {
 document.addEventListener("click", (ev) => {
   const a = ev.target.closest("[data-guide-sujet]"); if (!a) return;
   etat.guideSujet = a.dataset.guideSujet;
-  if (etat.page === "guide") { ev.preventDefault(); rendrePage(); window.scrollTo(0, 0); }
+  if (etat.page === "guide") { ev.preventDefault(); rendrePage(); $("#page").scrollTop = 0; }
 }, true);
 
 // --- new project

@@ -166,11 +166,15 @@ p:last-child { margin-bottom: 0; }
 .ok { color: var(--ok); } .quota, .attention { color: var(--attention); } .echec, .bloque { color: var(--erreur); }
 
 /* ------------------------------------------------------------------ layout */
-.app { display: grid; grid-template-columns: 240px 1fr; height: 100%; }
+/* the window never scrolls: the menu stays put, only the content area (#page) and the menu's list scroll */
+body { overflow: hidden; }
+.app { display: grid; grid-template-columns: 240px 1fr; grid-template-rows: minmax(0, 1fr); height: 100%; overflow: hidden; }
 @media (max-width: 1000px) { .app { grid-template-columns: 200px 1fr; } .marque-nom { font-size: 14px; } }
 
 /* --- sidebar */
-.nav { background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; padding: 18px 12px; gap: 10px; overflow: auto; }
+.nav { background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; padding: 18px 12px; gap: 10px; overflow: hidden; min-height: 0; }
+.nav > .marque, .nav-pied { flex: none; }
+#nav-menu { flex: 0 1 auto; min-height: 0; overflow-y: auto; scrollbar-width: thin; padding: 2px; margin: -2px; }
 .marque-logo { border-radius: 8px; flex: none; }
 .marque { display: flex; align-items: center; gap: 10px; color: var(--accent); padding: 0 6px; }
 .marque-nom { color: var(--ink); font-family: var(--police-titre); font-weight: 600; font-size: 15px; line-height: 1.2; }
@@ -334,7 +338,7 @@ label.champ > span { display: block; color: var(--muted); font-size: 13px; margi
 .choix button.actif { color: var(--ink); border-color: var(--accent); }
 
 /* --- pages and cards */
-.page { padding: 22px 32px 40px; overflow: auto; flex: 1; }
+.page { padding: 22px 32px 40px; overflow: auto; scrollbar-gutter: stable; flex: 1; min-height: 0; }
 .bloc { background: var(--panel); border: 1px solid var(--line); border-radius: var(--rayon); padding: 18px 20px; }
 .bloc + .bloc, .grille + .bloc, .grille + .ligne, .bloc + .grille { margin-top: 16px; }
 .grille > .bloc + .bloc, .colonne > .bloc + .bloc { margin-top: 0; }
@@ -811,25 +815,23 @@ input.large { flex: 1; min-width: 200px; width: auto; }
 .btn-menu span { display: block; width: 18px; height: 2px; border-radius: 1px; background: var(--ink); }
 .distant [data-bureau] { display: none !important; }
 @media (max-width: 760px) {
-  html, body { height: auto; min-height: 100%; }
-  .app, html.cadre .app { display: block; height: auto; margin-top: 0; }
-  .barre-mobile { display: flex; position: sticky; top: 0; z-index: 30; align-items: center; gap: 10px; padding: 8px 12px; background: var(--panel); border-bottom: 1px solid var(--line); }
+  .app, html.cadre .app { display: flex; flex-direction: column; height: 100vh; height: 100dvh; margin-top: 0; }
+  .barre-mobile { display: flex; flex: none; z-index: 30; align-items: center; gap: 10px; padding: 8px 12px; background: var(--panel); border-bottom: 1px solid var(--line); }
   .bm-titre { font-family: var(--police-titre); font-weight: 600; font-size: 16px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .nav { position: fixed; top: 0; bottom: 0; left: 0; width: min(300px, 86vw); z-index: 60; transform: translateX(-105%); transition: transform .2s ease; box-shadow: var(--ombre); border-right: 1px solid var(--line); }
   body.menu-ouvert .nav { transform: none; }
   body.menu-ouvert .voile-menu { display: block; position: fixed; inset: 0; background: var(--voile); z-index: 55; }
-  body.menu-ouvert { overflow: hidden; }
   .nav nav a { padding: 11px 12px; font-size: 15.5px; }
   .barre-onglets { padding: 8px 12px 0; gap: 8px; }
   .barre-onglets .selecteur { width: auto; max-width: 42%; }
-  .principal { height: auto; display: block; }
+  .principal { flex: 1; min-height: 0; height: auto; }
   .bandeau { padding: 14px 14px 12px; gap: 10px; }
   .etat-phrase { flex-basis: 100%; }
   .etat-phrase > .muet.petit { display: none; } /* the project's folder: the bar above names the project */
   .etat-phrase .sous { white-space: normal; }
   .bandeau .actions { display: flex; flex-wrap: wrap; gap: 8px; width: 100%; }
   .bandeau .actions .btn { flex: 1 1 auto; justify-content: center; }
-  .page { padding: 14px 12px 48px; overflow: visible; }
+  .page { padding: 14px 12px 48px; }
   .bloc { padding: 14px; }
   .grille-2, .grille-3 { grid-template-columns: 1fr; }
   table.tab { display: block; overflow-x: auto; }
@@ -838,7 +840,7 @@ input.large { flex: 1; min-width: 200px; width: auto; }
   input, select, textarea { font-size: 16px; } /* no zoom on focus (iOS) */
   .dialogue-carte { width: calc(100vw - 24px); }
   .appairage { flex-direction: column; }
-  /* Chat on a phone: the conversation takes the page (it scrolls with it, never in a small box), the field
+  /* Chat on a phone: the conversation takes the content area (it scrolls with it, never in a small box), the field
      to write in stays at the bottom of the screen */
   .chat { height: auto; min-height: 0; padding-bottom: 0; }
   .chat-tete h2 { font-size: 17px; }
