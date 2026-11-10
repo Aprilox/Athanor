@@ -307,3 +307,66 @@ func TestAccesModeNatif(t *testing.T) {
 		t.Fatalf("log mode %v", fi.Mode().Perm())
 	}
 }
+
+// TestAccesClePartagee: the same key in two projects' old files reaches both after the import at start-up
+// (the grants are loaded before the vault, M42 B16), and deleting its entry takes it out of both (B17).
+func TestAccesClePartagee(t *testing.T) {
+	d := t.TempDir()
+	for _, v := range []string{"LOCALAPPDATA", "LocalAppData", "HOME", "XDG_DATA_HOME", "XDG_CONFIG_HOME"} {
+		t.Setenv(v, filepath.Join(d, "home"))
+	}
+	sys := nouveauFauxSysteme()
+	ancien := systemeCoffre
+	systemeCoffre = func() enveloppeSysteme { return sys }
+	t.Cleanup(func() { systemeCoffre = ancien })
+	if _, err := os.Stat(cheminConfig()); err == nil {
+		t.Skip("a config exists next to the test binary")
+	}
+	migrationAuto = true
+	t.Cleanup(func() { migrationAuto = !testing.Testing() })
+	partage := "temoin-partage-" + aleatoire(8)
+	var projets []Projet
+	for _, n := range []string{"a", "b"} {
+		p := Projet{Nom: n, Dossier: filepath.Join(d, n)}
+		if err := os.MkdirAll(p.Atelier(), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(p.Atelier(), "secrets.env"), []byte("SHARED_API_TOKEN='"+partage+"'\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		projets = append(projets, p)
+	}
+	s := nouveauServeur(Config{Kit: filepath.Join(d, "kit"), Projets: projets, ProjetActif: "a"})
+	if s.coffre == nil || s.coffreErr != nil || s.acces == nil {
+		t.Fatalf("vault %v access %v", s.coffreErr, s.acces)
+	}
+	t.Cleanup(func() { _ = os.Remove(s.coffre.chemin); _ = os.Remove(s.acces.chemin) })
+	contient := func(p Projet) bool {
+		b, _ := os.ReadFile(filepath.Join(p.Atelier(), "secrets.env"))
+		return strings.Contains(string(b), partage)
+	}
+	for _, p := range projets {
+		if _, err := s.injecterAcces(p, nil); err != nil {
+			t.Fatal(err)
+		}
+		if !contient(p) {
+			t.Fatalf("project %s: shared key gone from secrets.env after the import (grants %+v)", p.Nom, s.acces.Projet(p.Nom).Acces)
+		}
+	}
+	liste := s.coffre.Liste()
+	if len(liste) != 1 {
+		t.Fatalf("entries %d, want 1", len(liste))
+	}
+	r := httptest.NewRequest("DELETE", "/api/coffre/"+liste[0].ID, nil)
+	r.SetPathValue("id", liste[0].ID)
+	w := httptest.NewRecorder()
+	s.apiCoffreSupprimer(w, r)
+	if w.Code != 200 {
+		t.Fatal("delete:", w.Code, w.Body.String())
+	}
+	for _, p := range projets {
+		if contient(p) {
+			t.Errorf("project %s: the deleted entry's value stays in secrets.env", p.Nom)
+		}
+	}
+}

@@ -77,8 +77,8 @@ func nouveauServeur(config Config) *Serveur {
 	if len(s.config.Projets) > 0 {
 		s.ecrireListeProjets() // the admin installer and the firewall rules read it
 	}
+	s.chargerAcces() // before the vault: its import grants a key shared by two projects (accorderPartagee)
 	s.chargerCoffre()
-	s.chargerAcces()
 	s.bureau = NouveauBureau(kit)
 	// Windows: a window opened on the screen by a program the application started (a Claude run's): hidden
 	demarrerGardeFenetres(uint32(os.Getpid()), func(t string) { noterFenetreKit(s.kitCourant().Racine, t) })

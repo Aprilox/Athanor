@@ -6,6 +6,7 @@ package main
 import (
 	"errors"
 	"net/http"
+	"slices"
 	"unicode/utf8"
 )
 
@@ -150,11 +151,21 @@ func (s *Serveur) apiCoffreSupprimer(w http.ResponseWriter, r *http.Request) {
 	if !s.coffrePret(w) {
 		return
 	}
-	if err := s.coffre.Supprimer(r.PathValue("id")); err != nil {
+	id := r.PathValue("id")
+	if s.acces != nil && s.accesErr == nil {
+		// its grants go and the files are rewritten while it is still in the vault: its value is then
+		// recognised and leaves every secrets.env instead of staying there as an old-file line
+		reste := slices.DeleteFunc(s.coffre.Liste(), func(e EntreeCoffre) bool { return e.ID == id })
+		if err := s.acces.Synchroniser(reste, s.nomsProjets()); err != nil {
+			s.erreur(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		s.injecterTous(nil)
+	}
+	if err := s.coffre.Supprimer(id); err != nil {
 		s.erreurCoffre(w, err)
 		return
 	}
-	_ = s.synchroniserAcces() // its grants go
-	s.injecterTous(nil)
+	_ = s.synchroniserAcces()
 	s.ecrireJSON(w, map[string]bool{"ok": true})
 }
