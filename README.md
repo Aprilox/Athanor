@@ -431,7 +431,7 @@ Installed software is detected on **every drive** (`C:`, `D:`…), and the newes
 
 ## Configuration
 
-Everything is editable in the app (*Settings*), or in `.env` ([`.env.example`](.env.example) documents every key). In *Settings → Claude*, an "i" next to a setting explains what a lower or a higher value changes. The framing time box (`FRAMING_MAX_MIN`) can also be set project by project: *Manage → Working mode → Longest framing* (10 to 240 minutes; "Like Settings" takes the shared value).
+Everything is editable in the app (*Settings*), or in `.env` ([`.env.example`](.env.example) documents every key). In *Settings → Claude*, an "i" next to a setting explains what a lower or a higher value changes. The framing time box (`FRAMING_MAX_MIN`) can also be set project by project: *Manage → Working mode → Longest framing* (25, 45, 60 or 90 minutes, or a time of your own from 10 to 240 minutes in the "Other" box; "Like Settings" takes the shared value).
 
 | Key | Role |
 |---|---|
@@ -619,7 +619,7 @@ Yes. Nothing is tied to a user name or a drive letter: paths come from your prof
 Push a version tag: GitHub first runs every CI check on the tagged commit (tests on Windows, Linux and macOS, the single executable, every build target), then builds the apps and publishes the release ([`.github/workflows/release.yml`](.github/workflows/release.yml)). If a single check fails (or anything after it), nothing is published: the tag is removed, and the release too if it was already created, so Athanor's updates never offer it. Fix, commit, then push the same tag again (`git tag -f v2.42.0 && git push origin v2.42.0`):
 
 ```bash
-git tag v2.51.5 && git push origin v2.51.5
+git tag v2.51.6 && git push origin v2.51.6
 ```
 
 Keep the version in [`app/winres/athanor.rc`](app/winres/athanor.rc) and `versionAthanor` in [`app/commandes.go`](app/commandes.go) in step with the tag (a test checks they match), and write what is new in `docs/releases/VERSION.md` (e.g. [`docs/releases/2.31.0.md`](docs/releases/2.31.0.md)): it opens the release page.

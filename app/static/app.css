@@ -213,7 +213,7 @@ a[data-href] { cursor: pointer; }
 .btn-fantome:hover { color: var(--ink); background: var(--panel-2); }
 textarea { width: 100%; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; resize: vertical; min-height: 80px; }
 textarea.code, .code { font-family: var(--mono); font-size: 13px; }
-input[type=text], input[type=password] { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; width: 100%; }
+input[type=text], input[type=password], input[type=number] { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; width: 100%; }
 select { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
 /* our own check boxes and radio buttons (the toggles below keep their switch) */
 input[type=checkbox]:not(.interrupteur input), input[type=radio] {
@@ -314,6 +314,7 @@ details[open] summary { margin-bottom: 10px; }
 .plan li.vague { border-bottom: 0; padding: 10px 0 2px; color: var(--faible); font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; }
 .plan li.vague:first-child { padding-top: 0; }
 .plan li.etape { border-top: 2px solid var(--line-2); }
+.mode-ligne input.cadrage-autre { width: 8.5em; padding: 4px 8px; }
 .plan li.etape:not(.coche) .jalon-ico { color: var(--accent); }
 .plan .jalon-corps { min-width: 0; flex: 1; }
 .plan li[data-jalon-cle], .plan li[data-plan-archives] { cursor: pointer; }

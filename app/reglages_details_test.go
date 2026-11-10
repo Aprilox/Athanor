@@ -34,7 +34,7 @@ func TestDetailsReglagesTraduits(t *testing.T) {
 	}
 	textes = append(textes, "What a lower or a higher value changes", "the first cycle, which writes the plan",
 		"Like Settings ({0} min)", "Like Settings (no limit)", "Framing time box saved: it applies to this project's next framing.",
-		"The framing time box is between 10 and 240 minutes.")
+		"The framing time box is between 10 and 240 minutes.", "Other (min)")
 	for _, x := range textes {
 		cle, _ := json.Marshal(x)
 		if n := strings.Count(i18n, string(cle)+": "); n < 5 {

@@ -1143,6 +1143,7 @@ async function rendreMode() {
     <span class="petit"><b>${t("Longest framing")}</b>${boutonDetail("FRAMING_MAX_MIN")}</span>
     <span class="muet petit">${t("the first cycle, which writes the plan")}</span>
     <span class="espace"></span><div class="choix m0">${[0, 25, 45, 60, 90].map((n) => `<button type="button" data-cadrage="${n}" class="${(m.cadrage_max || 0) === n ? "actif" : ""}">${n ? t("{0} min", [n]) : m.cadrage_global ? t("Like Settings ({0} min)", [m.cadrage_global]) : t("Like Settings (no limit)")}</button>`).join("")}</div>
+    <input type="number" id="md-cadrage" class="cadrage-autre" min="10" max="240" inputmode="numeric" value="${m.cadrage_max && ![25, 45, 60, 90].includes(m.cadrage_max) ? m.cadrage_max : ""}" placeholder="${h(t("Other (min)"))}" aria-label="${h(t("Other (min)"))}" title="${h(t("Other (min)"))}">
     </div>
   </div></div>`;
 }
@@ -4049,6 +4050,8 @@ $("#page").addEventListener("change", (ev) => {
   if (i.hasAttribute("data-gh-atelier")) action(api("github", "POST", { action: "atelier", atelier: i.checked })).then((r) => { if (!r) i.checked = !i.checked; });
   if (i.id === "md-parallele") enregistrerMode(i.checked, maxModeActif(), i.checked ? false : $("#md-eco") && $("#md-eco").checked); // one or the other
   if (i.id === "md-eco") enregistrerMode(i.checked ? false : $("#md-parallele").checked, maxModeActif(), i.checked);
+  // the framing time box typed by hand (10 to 240 min, checked by the server), saved when the field is left
+  if (i.id === "md-cadrage" && i.value !== "" && Number.isFinite(Number(i.value))) enregistrerMode($("#md-parallele").checked, maxModeActif(), $("#md-eco") && $("#md-eco").checked, Math.round(Number(i.value)));
 });
 // attached files: chosen with the button or dropped on a form's zone; a file dropped elsewhere is ignored
 // (otherwise the window would open it in place of the application)
