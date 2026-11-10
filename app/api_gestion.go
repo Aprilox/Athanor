@@ -486,6 +486,9 @@ func (s *Serveur) apiGestion(w http.ResponseWriter, r *http.Request) {
 		delete(s.dernierActif, p.Nom)
 		delete(s.relancer, p.Nom)
 		s.mu.Unlock()
+		if s.acces != nil {
+			_ = s.acces.RenommerProjet(p.Nom, nouveau)
+		}
 		s.ecrireJSON(w, map[string]any{"message_key": "Project renamed.", "args": []string{}, "nom": nouveau})
 
 	case "deplacer": // move or rename the folder itself, with everything in it
@@ -742,6 +745,9 @@ func (s *Serveur) retirerProjet(p Projet) error {
 	delete(s.dernierActif, p.Nom)
 	delete(s.relancer, p.Nom)
 	s.mu.Unlock()
+	if s.acces != nil {
+		_ = s.acces.SupprimerProjet(p.Nom)
+	}
 	k := s.kitCourant()
 	choix := lireChoix(k)
 	if _, ok := choix[p.Dossier]; ok {

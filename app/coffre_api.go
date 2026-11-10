@@ -152,5 +152,6 @@ func (s *Serveur) apiCoffreSupprimer(w http.ResponseWriter, r *http.Request) {
 		s.erreurCoffre(w, err)
 		return
 	}
+	_ = s.synchroniserAcces() // its grants go
 	s.ecrireJSON(w, map[string]bool{"ok": true})
 }

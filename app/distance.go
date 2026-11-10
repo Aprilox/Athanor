@@ -289,10 +289,10 @@ func interditDistance(r *http.Request) bool {
 
 // prefixesHub: the hub's routes, closed to devices by default (an allowlist, unlike interditDistance):
 // a new route under these prefixes stays refused from a device until it is added to autorisesDistance.
-var prefixesHub = []string{"/api/hub", "/api/coffre"}
+var prefixesHub = []string{"/api/hub", "/api/coffre", "/api/acces"}
 
 // autorisesDistance: "METHOD path" of the hub a device may call (reading only, never a secret value).
-var autorisesDistance = map[string]bool{"GET /api/hub": true, "GET /api/coffre": true}
+var autorisesDistance = map[string]bool{"GET /api/hub": true, "GET /api/coffre": true, "GET /api/acces": true}
 
 // refuseHubDistance: a hub route that is not in autorisesDistance (plain prefix: "/api/hubx" is refused too).
 func refuseHubDistance(r *http.Request) bool {

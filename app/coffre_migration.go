@@ -248,6 +248,7 @@ func (s *Serveur) apiCoffreMigrationAnnuler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	n, err := s.annulerMigration()
+	_ = s.synchroniserAcces() // grants of the removed entries go, even after a partial undo
 	if err != nil {
 		s.erreurCoffre(w, err)
 		return

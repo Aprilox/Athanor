@@ -45,6 +45,9 @@ type Serveur struct {
 	// the vault (coffre_serveur.go); coffreErr: its file exists but could not be read
 	coffre    *Coffre
 	coffreErr error
+	// project grants (acces_projets.go); accesErr: hub/acces.json exists but could not be read
+	acces    *Acces
+	accesErr error
 }
 
 func nouveauServeur(config Config) *Serveur {
@@ -75,6 +78,7 @@ func nouveauServeur(config Config) *Serveur {
 		s.ecrireListeProjets() // the admin installer and the firewall rules read it
 	}
 	s.chargerCoffre()
+	s.chargerAcces()
 	s.bureau = NouveauBureau(kit)
 	// Windows: a window opened on the screen by a program the application started (a Claude run's): hidden
 	demarrerGardeFenetres(uint32(os.Getpid()), func(t string) { noterFenetreKit(s.kitCourant().Racine, t) })
@@ -327,6 +331,8 @@ func (s *Serveur) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/coffre/tester", s.garde(false, s.apiCoffreTester))
 	mux.HandleFunc("POST /api/coffre/migration", s.garde(false, s.apiCoffreMigration))
 	mux.HandleFunc("POST /api/coffre/migration/annuler", s.garde(false, s.apiCoffreMigrationAnnuler))
+	mux.HandleFunc("GET /api/acces", s.garde(false, s.apiAcces))
+	mux.HandleFunc("POST /api/acces", s.garde(false, s.apiAccesModifier))
 	mux.HandleFunc("POST /api/deverrouiller", s.garde(true, s.apiDeverrouiller))
 	mux.HandleFunc("POST /api/verrouiller", s.garde(true, s.apiVerrouiller))
 
