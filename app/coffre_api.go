@@ -137,6 +137,16 @@ func (s *Serveur) apiCoffreModifier(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if c.Nom != nil || c.Type != nil || c.Note != nil || c.Portee != nil || c.Valeur != nil {
+		if e.Portee == "code" && val(c.Portee, e.Portee) == "infra" && s.acces != nil && s.accesErr == nil {
+			// code to infra: its grants go and the files are rewritten while it is still code (its fingerprint
+			// then recognises the value); an infra entry has none and would stay as an old-file line (M43 A1)
+			reste := slices.DeleteFunc(s.coffre.Liste(), func(x EntreeCoffre) bool { return x.ID == id })
+			if err := s.acces.Synchroniser(reste, s.nomsProjets()); err != nil {
+				s.erreur(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			s.injecterTous(nil)
+		}
 		if e, err = s.coffre.ModifierMeta(id, val(c.Nom, e.Nom), val(c.Type, e.Type), val(c.Note, e.Note), val(c.Portee, e.Portee), c.Valeur); err != nil {
 			s.erreurCoffre(w, err)
 			return

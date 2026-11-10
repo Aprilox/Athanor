@@ -174,11 +174,19 @@ func (s *Serveur) apiAccesModifier(w http.ResponseWriter, r *http.Request) {
 	case err != nil:
 		s.erreurCoffre(w, err)
 	default:
+		var inj EtatInjection
+		var errInj error
 		if p, ok := s.projetNomme(c.Projet); ok {
-			if _, err := s.injecterAcces(p, nil); err != nil {
-				fmt.Fprintln(os.Stderr, "access injection:", p.Nom+":", err)
+			if inj, errInj = s.injecterAcces(p, nil); errInj != nil {
+				fmt.Fprintln(os.Stderr, "access injection:", p.Nom+":", errInj)
 			}
 		}
-		s.ecrireJSON(w, s.etatAcces(c.Projet))
+		etat := s.etatAcces(c.Projet)
+		if errInj != nil { // the plan says ok, the file was not written: a revoked value may still be in it (M43 A5)
+			r := etat["resume"].(ResumeAcces)
+			r.Etat = inj.Etat
+			etat["injection"], etat["resume"] = inj, r
+		}
+		s.ecrireJSON(w, etat)
 	}
 }

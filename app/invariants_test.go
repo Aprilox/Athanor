@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"io/fs"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -405,5 +406,36 @@ func TestInvariantI8(t *testing.T) {
 		if string(f[1]) != "GITHUB_TOKEN" {
 			t.Errorf("ci.yml uses the secret %s: the CI runs without real accounts", f[1])
 		}
+	}
+}
+
+// TestInvariantI1PorteeInfra: a granted code entry turned infra leaves the pilot's file at once and loses
+// its grants (critic M43 A1: it stayed as an old-file line, its fingerprint gone with the infra scope).
+func TestInvariantI1PorteeInfra(t *testing.T) {
+	m := montage(t)
+	if _, err := m.s.injecterAcces(m.demo, nil); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(slices.Collect(maps.Values(lignesSecrets(t, m.demo))), m.tDev) {
+		t.Fatal("the dev value is not injected before the change")
+	}
+	if code, v := m.appel(t, "POST", "/api/coffre/"+m.dev.ID, `{"portee":"infra"}`); code != 200 {
+		t.Fatal("scope change:", code, v)
+	}
+	for n, v := range lignesSecrets(t, m.demo) {
+		if v == m.tDev {
+			t.Errorf("%s: the value of an entry now infra is still given to the pilot", n)
+		}
+	}
+	for _, a := range m.s.acces.Projet("demo").Acces {
+		if a.Entree == m.dev.ID {
+			t.Errorf("the entry now infra keeps its grant %+v", a)
+		}
+	}
+	if _, err := m.s.injecterAcces(m.demo, nil); err != nil {
+		t.Fatal(err)
+	}
+	if slices.Contains(slices.Collect(maps.Values(lignesSecrets(t, m.demo))), m.tDev) {
+		t.Error("the value came back at the next injection")
 	}
 }
