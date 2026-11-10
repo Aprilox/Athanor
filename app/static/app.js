@@ -3226,6 +3226,7 @@ pages.sante = async () => {
     <button class="btn btn-primaire" id="st-tout">${t("Check everything")}</button>
     ${installer}
     ${v.windows && v.natif ? "" : `<button class="btn" id="st-barriere" title="${h(t("A short Claude session tries to leave the project, read your files, launch cmd.exe: everything must be blocked."))}">${t("Test the sandbox (2 min)")}</button>`}
+    <button class="btn" id="st-coffre" title="${h(t(v.windows && v.natif ? "Native Windows mode, no sandbox: the granted test value must be seen, the code key can be opened by DPAPI, the infra value must stay unreadable." : "A short Claude session tries to read three test values of the vault: only the one granted to its project may reach it."))}">${t("Test the vault (2 min)")}</button>
     <button class="btn" id="st-recompiler" title="${h(t("After a repair of its Go code (app/): shows the change, checks it, rebuilds, runs the autotest, and only then replaces the executable, keeping the previous one."))}">${t("Rebuild Athanor")}</button>
   </div>
   <div class="bloc bloc-liste">${listeSante(verifs)}</div>
@@ -4350,6 +4351,7 @@ $("#page").addEventListener("click", async (ev) => {
     if (b.id === "st-tout") { await action(api("sante/verifier", "POST", { id: "tout" })); return rendrePage(); }
     if (b.id === "st-installer") return action(api("sante/installer", "POST"));
     if (b.id === "st-recompiler") { const r = await action(api("sante/recompiler", "POST")); if (r) { etat.tacheChoisie = r.tache; etat.verifChoisie = null; } return rendrePage(); }
+    if (b.id === "st-coffre") { const r = await action(api("sante/coffre", "POST")); if (r) { etat.tacheChoisie = r.tache; etat.verifChoisie = null; } return rendrePage(); }
     if (b.id === "st-barriere") { const r = await action(api("sante/barriere", "POST")); if (r) { etat.tacheChoisie = r.tache; etat.verifChoisie = null; } return rendrePage(); }
     if (b.id === "st-libre-btn") { const r = await action(api("sante/libre", "POST", { texte: $("#st-libre").value })); if (r) { etat.tacheChoisie = r.tache; etat.verifChoisie = null; rendrePage(); } return; }
     if (b.dataset.voir !== undefined) { etat.tacheChoisie = b.dataset.voir; etat.verifChoisie = id; return rendrePage(); }

@@ -17,6 +17,7 @@ func (s *Serveur) chargerCoffre() {
 		fmt.Fprintln(os.Stderr, "vault:", s.coffreErr)
 		return
 	}
+	purgerTemoinsCoffre(s.coffre) // a Test the vault cut short (the app closed during it)
 	s.coffre.mu.Lock()
 	aEnveloppe := s.coffre.f.Cles.Code.Systeme != ""
 	s.coffre.mu.Unlock()

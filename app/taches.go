@@ -95,6 +95,22 @@ func TrouverTache(id string) *Tache {
 	return taches.m[id]
 }
 
+// Executer runs f in the background as the task: its lines are the output, its result the status.
+func (t *Tache) Executer(f func(dire func(string)) bool) {
+	t.mu.Lock()
+	t.Statut, t.Sortie, t.Debut, t.Fin = "en_cours", nil, time.Now(), time.Time{}
+	t.mu.Unlock()
+	go func() {
+		ok := f(t.ajouter)
+		t.mu.Lock()
+		defer t.mu.Unlock()
+		t.Fin, t.Statut, t.Code = time.Now(), "ok", 0
+		if !ok {
+			t.Statut, t.Code = "echec", 1
+		}
+	}()
+}
+
 // Lancer runs the command and fills the task as it goes; fin() is called at the end.
 func (t *Tache) Lancer(c *exec.Cmd, fin func(ok bool)) {
 	t.mu.Lock()
