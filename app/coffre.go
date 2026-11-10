@@ -6,6 +6,7 @@ package main
 // open it through the keystore. Format: ARCHITECTURE.md §Coffre.
 
 import (
+	"context"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/hkdf"
@@ -18,7 +19,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -42,6 +45,37 @@ var typesCoffre = map[string]string{
 type enveloppeSysteme interface {
 	Proteger(donnees []byte) ([]byte, error)
 	Ouvrir(protege []byte) ([]byte, error)
+}
+
+// serviceCoffre names the Keychain / Secret Service items; each code key gets its own account.
+const serviceCoffre = "athanor-coffre"
+
+var reCompteCoffre = regexp.MustCompile(`^code-[0-9a-f]{16}$`)
+
+// nouveauCompteCoffre is the keystore reference stored in coffre.json instead of a blob.
+func nouveauCompteCoffre() string { return "code-" + hex.EncodeToString(octetsAleatoires(8)) }
+
+// outilCoffre runs a keystore command (security, secret-tool) with the data on stdin, never in argv,
+// and a time limit so a keyring that asks to be unlocked cannot freeze Athanor.
+func outilCoffre(entree string, nom string, args ...string) (string, error) {
+	ctx, fin := context.WithTimeout(context.Background(), 10*time.Second)
+	defer fin()
+	cmd := exec.CommandContext(ctx, nom, args...)
+	cmd.Stdin = strings.NewReader(entree)
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("%s: %w", nom, err)
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+// cleDuCompte reads back a hex key printed by the keystore.
+func cleDuCompte(sortie string) ([]byte, error) {
+	k, err := hex.DecodeString(sortie)
+	if err != nil || len(k) != 32 {
+		return nil, errors.New("keystore returned no key")
+	}
+	return k, nil
 }
 
 type EntreeCoffre struct {
