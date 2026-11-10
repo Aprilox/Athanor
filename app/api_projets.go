@@ -684,6 +684,23 @@ type ModeVue struct {
 	// absent from a POST, it is left as it is (the terminal interface does not send it)
 	CadrageMax    *int `json:"cadrage_max,omitempty"`
 	CadrageGlobal int  `json:"cadrage_global"` // the global FRAMING_MAX_MIN, for the page (0: no limit)
+	// the project's own safety stop in hours (0: unlimited; nil: the global MAX_HOURS); in a POST, -1 goes
+	// back to the global value and nil leaves it as it is
+	DureeMax       *int `json:"duree_max,omitempty"`
+	DureeMaxGlobal int  `json:"duree_max_global"` // the global MAX_HOURS, for the page (0: unlimited)
+}
+
+// dureeMaxProjet: the safety stop a project set for itself, in hours (0: unlimited), and whether it set one.
+// The file is in the workshop, which Claude can write, like the eco and parallel modes beside it.
+func dureeMaxProjet(env string) (int, bool) {
+	for _, l := range LireEnv(env) {
+		if l.Cle == "MAX_HOURS" {
+			if n, err := strconv.Atoi(strings.TrimSpace(l.Valeur)); err == nil && n >= 0 && n <= 87600 {
+				return n, true
+			}
+		}
+	}
+	return 0, false
 }
 
 func (p Projet) envProjet() string { return filepath.Join(p.Atelier(), ".env") }
@@ -722,6 +739,9 @@ func (p Projet) LireMode() ModeVue {
 	if n := cadrageProjet(p.envProjet()); n > 0 {
 		m.CadrageMax = &n
 	}
+	if n, ok := dureeMaxProjet(p.envProjet()); ok {
+		m.DureeMax = &n
+	}
 	return m
 }
 
@@ -741,10 +761,12 @@ func (s *Serveur) apiMode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	m := p.LireMode()
-	m.CadrageGlobal = 25
+	m.CadrageGlobal, m.DureeMaxGlobal = 25, 168
 	for _, l := range LireEnv(s.kitCourant().Env()) {
 		if n, err := strconv.Atoi(strings.TrimSpace(l.Valeur)); l.Cle == "FRAMING_MAX_MIN" && err == nil && n >= 0 {
 			m.CadrageGlobal = n
+		} else if l.Cle == "MAX_HOURS" && err == nil && n >= 0 {
+			m.DureeMaxGlobal = n
 		}
 	}
 	s.ecrireJSON(w, m)
@@ -783,6 +805,17 @@ func (s *Serveur) apiEcrireMode(w http.ResponseWriter, r *http.Request) {
 			v["FRAMING_MAX_MIN"] = strconv.Itoa(*m.CadrageMax)
 		}
 	}
+	if m.DureeMax != nil {
+		switch n := *m.DureeMax; {
+		case n == -1:
+			v["MAX_HOURS"] = "" // back to the global value
+		case n >= 0 && n <= 87600:
+			v["MAX_HOURS"] = strconv.Itoa(n)
+		default:
+			s.erreur(w, http.StatusBadRequest, "The safety stop is between 1 and 87600 hours, or unlimited.")
+			return
+		}
+	}
 	avant := p.LireMode()
 	if err := os.MkdirAll(p.Atelier(), 0o755); err != nil {
 		s.erreur(w, http.StatusInternalServerError, err.Error())
@@ -793,6 +826,8 @@ func (s *Serveur) apiEcrireMode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch {
+	case m.DureeMax != nil && m.Parallele == avant.Parallele && m.Eco == avant.Eco:
+		s.msg(w, "Safety stop saved for this project: a running pilot applies it before its next cycle.")
 	case m.CadrageMax != nil && m.Parallele == avant.Parallele && m.Eco == avant.Eco:
 		s.msg(w, "Framing time box saved: it applies to this project's next framing.")
 	case m.Eco && !avant.Eco:

@@ -447,7 +447,7 @@ Everything is editable in the app (*Settings*), or in `.env` ([`.env.example`](.
 | `RELAY_CONTEXT_K` | context, in thousands of tokens, past which a fresh session takes over the milestone (default 110, 0 = never) |
 | `EFFORT` | reasoning effort, `low` to `max` |
 | `LANGUAGE` | language Claude works and documents in (set by the app) |
-| `MAX_HOURS` | safety stop (default 168, one week) |
+| `MAX_HOURS` | safety stop, in hours from the project's first start (default 168, one week; 0 = unlimited); a project can have its own: *Manage → Working mode* |
 | `QUOTA_WAIT_MIN` | wait when the quota reset time cannot be read |
 | `IDLE_MAX_MIN`, `CYCLE_MAX_MIN`, `CLOSE_AFTER_MILESTONE` | cycle watchdog, one milestone per cycle |
 | `KEEP_AWAKE` | the PC stays awake while a pilot runs: `1` (default; the screen too for Roblox Studio and Unreal), `screen` (the screen always), `0` (off) |
@@ -487,7 +487,7 @@ Found a vulnerability? Please open a [private security advisory](https://github.
 - The pilots run in the background, without a window (in WSL on Windows, unless you chose the native mode): you can close the app.
 - The PC stays awake while a pilot runs (`KEEP_AWAKE`), even with the app closed; for Roblox Studio and Unreal the screen stays on too, because a locked Windows session draws nothing (no captures, no play tests). Do not lock the session yourself (Win + L) before a night of Roblox or Unreal, and check that the screen saver does not ask for a sign-in on resume.
 - *Settings → Options*: "Open Athanor when the computer starts" and "Restart the pilots that were running, when the app opens".
-- Safety stop after `MAX_HOURS` (counted from the project's first start); raise it in *Settings* to go on.
+- Safety stop after `MAX_HOURS` (counted from the project's first start); to go on, raise it in *Settings*, or choose *Unlimited*, there or for this project alone (*Manage → Working mode → Safety stop after*): the pilot then runs until the delivery.
 
 ## Finished project, follow-ups, new project
 
@@ -619,7 +619,7 @@ Yes. Nothing is tied to a user name or a drive letter: paths come from your prof
 Push a version tag: GitHub first runs every CI check on the tagged commit (tests on Windows, Linux and macOS, the single executable, every build target), then builds the apps and publishes the release ([`.github/workflows/release.yml`](.github/workflows/release.yml)). If a single check fails (or anything after it), nothing is published: the tag is removed, and the release too if it was already created, so Athanor's updates never offer it. Fix, commit, then push the same tag again (`git tag -f v2.42.0 && git push origin v2.42.0`):
 
 ```bash
-git tag v2.51.6 && git push origin v2.51.6
+git tag v2.51.7 && git push origin v2.51.7
 ```
 
 Keep the version in [`app/winres/athanor.rc`](app/winres/athanor.rc) and `versionAthanor` in [`app/commandes.go`](app/commandes.go) in step with the tag (a test checks they match), and write what is new in `docs/releases/VERSION.md` (e.g. [`docs/releases/2.31.0.md`](docs/releases/2.31.0.md)): it opens the release page.

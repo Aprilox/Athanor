@@ -1523,6 +1523,16 @@ func (p *pilote) absorberFileParallele() {
 	}
 }
 
+// dureeMaxAtteinte: the safety stop in hours (the project's own, else the global MAX_HOURS; 0: unlimited)
+// and whether the time since the project's first start reached it.
+func (p *pilote) dureeMaxAtteinte(maintenant int64) (int, bool) {
+	maxH := p.maxHours
+	if n, ok := dureeMaxProjet(filepath.Join(p.etat, ".env")); ok {
+		maxH = n
+	}
+	return maxH, maxH > 0 && (maintenant-p.debut)/3600 >= int64(maxH)
+}
+
 func (p *pilote) planADesVagues() bool {
 	b, err := os.ReadFile(filepath.Join(p.etat, "PLAN.md"))
 	return err == nil && reVaguePlanPilote.Match(b)
@@ -2489,9 +2499,8 @@ func lancerPilote(args []string) int {
 			p.etatPhase = "arrete"
 			p.terminer("Stop requested (STOP file). Delete it, then restart with start.")
 		}
-		ecouleH := (time.Now().Unix() - p.debut) / 3600
-		if ecouleH >= int64(p.maxHours) {
-			p.terminer(fmt.Sprintf("Maximum duration reached (%d h). The work in progress is in the project folder.", p.maxHours))
+		if maxH, atteinte := p.dureeMaxAtteinte(time.Now().Unix()); atteinte {
+			p.terminer(fmt.Sprintf("Maximum duration reached (%d h). The work in progress is in the project folder.", maxH))
 		}
 		if p.estTermine() {
 			_ = os.WriteFile(filepath.Join(p.etat, "done", ".last-delivery"), []byte(time.Now().Format("20060102-150405")+"\n"), 0o644)

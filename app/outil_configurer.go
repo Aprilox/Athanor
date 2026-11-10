@@ -308,7 +308,7 @@ func lancerConfigurer(args []string) int {
 
 	// 5. Duration
 	a.titre("5. Maximum working time", "Safety stop, counted from the project's first start (quota pauses included).")
-	a.choisir(a.valeur("MAX_HOURS"), "24|1 day", "72|3 days", "168|1 week (recommended)", "336|2 weeks", "__autre__|Other (in hours)")
+	a.choisir(a.valeur("MAX_HOURS"), "24|1 day", "72|3 days", "168|1 week (recommended)", "336|2 weeks", "0|Unlimited (until the project is delivered)", "__autre__|Other (in hours)")
 	duree := a.reponse
 	if !regexp.MustCompile(`^[0-9]+$`).MatchString(duree) {
 		duree = "168"
