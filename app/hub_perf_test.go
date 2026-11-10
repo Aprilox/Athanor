@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -187,6 +188,22 @@ func TestHubPerf20Projets(t *testing.T) {
 	}
 	if duree > time.Second {
 		t.Fatalf("20 projects: %v, want < 1 s", duree)
+	}
+	// the Projects page lists /api/hub's elements: one per project, with its progress
+	var v struct {
+		Elements []ElementHub `json:"elements"`
+	}
+	dev := 0
+	if err := json.Unmarshal(w.Body.Bytes(), &v); err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range v.Elements {
+		if e.Module == "dev" && e.Avancement != nil && e.Avancement.Total == 40 {
+			dev++
+		}
+	}
+	if dev != 20 {
+		t.Fatalf("%d Dev elements with their progress, want 20", dev)
 	}
 	t.Logf("20 projects: vuesProjets + /api/hub in %v", duree)
 }

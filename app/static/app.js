@@ -1666,23 +1666,47 @@ function referencePonytail(g) {
   return x ? `<p class="m0">${x}</p>` : "";
 }
 
-// every project at once: its state, its milestone, its plan's progress, and whether it needs the user (a click opens it)
+// Projects: every module's elements from /api/hub (the hub knows no module's details), those that need the owner first
+const ETATS_ELEMENT = { actif: ["travaille", "In progress"], termine: ["entre_cycles", "Finished"], inactif: ["", "Idle"] };
+function activiteElement(e) {
+  const a = e.avancement, j = e.etat === "actif" && a && a.total ? t("Milestone {0}/{1}", [Math.min(a.fait + 1, a.total), a.total]) : "";
+  const quoi = [e.activite ? titreJalon(e.activite) : "", e.action ? t(e.action) : ""].filter(Boolean).join(", ");
+  return j && quoi ? `${j} : ${quoi}` : j || quoi;
+}
+function ligneElement(e, modules) {
+  const m = modules.find((x) => x.id === e.module) || { id: e.module, nom: e.module };
+  const [classe, libelle] = ETATS_ELEMENT[e.etat] || ETATS_ELEMENT.inactif, a = e.avancement, act = activiteElement(e);
+  const cible = e.attente ? e.attente.page : e.lien;
+  // a Dev project: the project is selected before its page opens (cliqueProjet), any other module: a plain link
+  const lien = e.projet ? `href="${h(cible)}" data-projet="${h(e.projet)}" data-cible="${h(cible.replace(/^#/, ""))}"` : `href="${h(cible)}"`;
+  return `<a ${lien} class="bloc carte-projet ligne-element${e.attente ? " besoin" : ""}${e.projet && etat.vue && etat.vue.projet && etat.vue.projet.nom === e.projet ? " courant" : ""}">
+    <div class="cp-tete"><span class="dot ${classe}" aria-hidden="true"></span><b class="cp-nom">${h(e.titre)}</b><span class="pastille-module"><span class="ico ico-${h(m.id)}" aria-hidden="true"></span>${h(t(m.nom))}</span></div>
+    <div class="el-etat petit">${e.attente ? `<span class="cp-besoin">${t("Needs you")}</span> <span>${h(t(e.attente.raison, e.attente.args || []))}</span>` : `<span class="muet">${t(libelle)}</span>`}</div>
+    ${act ? `<div class="cp-jalon petit" title="${h(act)}">${h(act)}</div>` : ""}
+    ${a && a.total ? `<div class="barre"><i style="width:${(a.fait / a.total) * 100}%"></i></div><div class="muet petit">${t("{0} / {1} milestones done", [a.fait, a.total])}</div>` : `<div class="muet petit">${t("No plan yet")}</div>`}
+  </a>`;
+}
 pages.global = async () => {
   const v = etat.vue; if (!v) return "";
-  const liste = projetsVisibles(v);
+  const d = await api("hub"), modules = d.modules || [], tous = d.elements || [];
+  etat.globalSig = JSON.stringify([modules, tous]);
   const archives = (v.projets || []).filter((x) => x.archive).length;
   const actions = `<div class="ligne projets-actions"><a class="btn btn-petit" href="#nouveau">+ ${t("New project")}</a><a class="btn btn-petit" href="#rejoindre">⇄ ${t("Join a project")}</a>${archives ? `<a class="btn btn-petit btn-fantome" href="#archives">🗄 ${t("Archived projects ({0})", [archives])}</a>` : ""}</div>`;
-  if (!liste.length) return `${actions}<div class="vide">${t("No project.")}</div>`;
-  return `${actions}<div class="grille-projets">${liste.map((x) => {
-    const b = besoinProjet(x);
-    return `<a href="#suivi" class="bloc carte-projet${b ? " besoin" : ""}${x.courant ? " courant" : ""}" data-projet="${h(x.nom)}" data-cible="${b ? b.page : "suivi"}">
-      <div class="cp-tete"><span class="dot ${classePhase(x)}"></span><b class="cp-nom">${h(x.nom)}</b>${b ? `<span class="cp-besoin">${t("Needs you")}</span>` : ""}</div>
-      <div class="muet petit">${h(b ? b.texte : phraseProjet(x))}${x.attente ? " · " + h(t("{0} queued", [x.attente])) : ""}</div>
-      ${x.actif && x.jalon ? `<div class="cp-jalon petit">${h(titreJalon(x.jalon))}</div>` : ""}
-      ${x.jalons ? `<div class="barre"><i style="width:${((x.faits || 0) / x.jalons) * 100}%"></i></div><div class="muet petit">${t("{0} / {1} milestones done", [x.faits || 0, x.jalons])}</div>` : `<div class="muet petit">${t("No plan yet")}</div>`}
-    </a>`;
-  }).join("")}</div>`;
+  // filters: all, needs me, in progress, then one per module that has elements
+  const avec = modules.filter((m) => tous.some((e) => e.module === m.id));
+  const filtres = [["tous", t("All")], ["besoin", t("Needs me")], ["actif", t("In progress")], ...(avec.length > 1 ? avec.map((m) => ["m:" + m.id, t(m.nom)]) : [])];
+  const f = filtres.some(([k]) => k === etat.filtreProjets) ? etat.filtreProjets : "tous";
+  const garde = (e) => f === "tous" || (f === "besoin" ? !!e.attente : f === "actif" ? e.etat === "actif" : e.module === f.slice(2));
+  const nb = (k) => tous.filter((e) => k === "tous" || (k === "besoin" ? !!e.attente : k === "actif" ? e.etat === "actif" : e.module === k.slice(2))).length;
+  const barre = `<div class="filtres-projets" role="group" aria-label="${h(t("Filter"))}">${filtres.map(([k, lib]) => `<button type="button" class="filtre${k === f ? " actif" : ""}" data-filtre-projets="${h(k)}" aria-pressed="${k === f}">${h(lib)} <span class="muet">${nb(k)}</span></button>`).join("")}</div>`;
+  const liste = tous.filter(garde);
+  if (!tous.length) return `${actions}<div class="vide">${t("No project.")}</div>`;
+  return `${actions}${barre}${liste.length ? `<div class="grille-projets">${liste.map((e) => ligneElement(e, modules)).join("")}</div>` : `<div class="vide">${t("Nothing here right now.")}</div>`}`;
 };
+document.addEventListener("click", (ev) => {
+  const b = ev.target.closest("[data-filtre-projets]"); if (!b) return;
+  etat.filtreProjets = b.dataset.filtreProjets; rendrePage();
+});
 
 // --- Home of the hub: the "What do you want to do?" bar, one tile per module of /api/hub, the missions
 const ETATS_MODULE = { ok: ["travaille", "Working"], attention: ["quota", "Needs attention"], inactif: ["", "Idle"] };
@@ -4558,8 +4582,11 @@ async function rafraichir() {
       await lireJournal();
       // the Team page follows live, except while text is selected in it (a brief, a report)
       if ((etat.page === "equipe" && !String(window.getSelection() || "") && !etat.agForm) || (etat.page === "suivi" && !document.activeElement.matches("input, textarea, select"))) rendrePage();
-      // All projects: rebuilt only when a project changed (the card under the keyboard keeps its focus)
-      if (etat.page === "global" && JSON.stringify(v.projets) !== etat.globalSig) { etat.globalSig = JSON.stringify(v.projets); rendrePage(); }
+      // Projects: rebuilt only when an element changed (the card under the keyboard keeps its focus)
+      if (etat.page === "global") {
+        const d = await api("hub").catch(() => null);
+        if (d && JSON.stringify([d.modules || [], d.elements || []]) !== etat.globalSig) rendrePage();
+      }
       // Home: rebuilt only when a module's tile changed (the bar keeps its text and its focus)
       if (etat.page === "accueil" && ++etat.hubTic % 2 === 0) {
         const d = await api("hub").catch(() => null);
