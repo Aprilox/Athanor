@@ -19,7 +19,7 @@ func (moduleDev) Pages() []PageModule {
 		{Hash: "#suivi", Ordre: 20, Icone: "suivi", Libelle: "Overview"}, {Hash: "#equipe", Ordre: 21, Icone: "equipe", Libelle: "Team"},
 		{Hash: "#demandes", Ordre: 22, Icone: "demandes", Libelle: "Requests"}, {Hash: "#chat", Ordre: 23, Icone: "chat", Libelle: "Chat"},
 		{Hash: "#pourvous", Ordre: 24, Icone: "pourvous", Libelle: "For you"}, {Hash: "#acces", Ordre: 25, Icone: "acces", Libelle: "Access"},
-		{Hash: "#journal", Ordre: 26, Icone: "journal", Libelle: "Log"},
+		{Hash: "#journal", Ordre: 26, Icone: "journal", Libelle: "Log"}, {Hash: "#projet", Ordre: 27, Icone: "projet", Libelle: "Manage"},
 	}
 }
 

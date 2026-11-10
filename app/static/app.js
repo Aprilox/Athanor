@@ -610,7 +610,7 @@ function rendreBarre(v) {
   if (!cadre.actif) return;
   const p = v.projet;
   const projet = p ? `<span class="dot ${classePhase(p)}"></span><span>${h(p.nom)}</span>` : "";
-  const b = v.bureau || {}, act = [boutonCloche(v, "fb-action")];
+  const b = v.bureau || {}, act = [boutonCloche(v, "fb-action"), boutonGuide("fb-action")];
   if (b.disponible && b.ecran) act.push(`<button type="button" class="fb-action" data-ecran title="${h(t("Go and see what Claude is showing (windows on the “Claude” desktop)"))}">${t("View Claude's screen")}</button>`);
   else {
     if (b.disponible) act.push(`<button type="button" class="fb-action" data-bureau="voir" title="${h(t("Go and see what Claude is showing (windows on the “Claude” desktop)"))}">${t("View Claude's desktop")}</button>`);
@@ -739,6 +739,8 @@ function boutonCloche(v, classe) {
   const titre = n ? t("{0} project(s) need you", [n]) : t("No project needs you");
   return `<button type="button" class="${classe} cloche${n ? " sonne" : ""}" data-notifs aria-haspopup="true" aria-expanded="${etat.notifsOuvert ? "true" : "false"}" aria-label="${h(titre)}" title="${h(titre)}"><svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.94 1.94 0 0 0 3.4 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>${n ? `<span class="cloche-n">${n}</span>` : ""}</button>`;
 }
+// the Guide: a "?" beside the bell (it is no menu entry any more)
+const boutonGuide = (classe) => `<a href="#guide" class="${classe} btn-guide" aria-label="${h(t("Guide"))}" title="${h(t("Guide"))}">?</a>`;
 function rendreNotifs(v) {
   const m = $("#notifs"), bouton = document.querySelector("[data-notifs]");
   m.hidden = !etat.notifsOuvert || !bouton;
@@ -819,7 +821,7 @@ function rendreBandeau(v) {
   if (maj.en_cours === "telechargement") boutons.unshift(`<button class="btn btn-maj" disabled>${t("Downloading the update… {0} %", [maj.avancement || 0])}</button>`);
   else if (maj.en_cours === "redemarrage") boutons.unshift(`<button class="btn btn-maj" disabled>${t("Athanor restarts…")}</button>`);
   else if (maj.disponible) boutons.unshift(`<button class="btn btn-maj" data-maj="voir" title="${h(t("Athanor {0} is available (you have {1})", [maj.derniere, v.version]))}">⬆ ${t("Update to {0}", [h(maj.derniere)])}</button>`);
-  if (!cadre.actif) boutons.push(boutonCloche(v, "btn"));
+  if (!cadre.actif) boutons.push(boutonCloche(v, "btn"), boutonGuide("btn"));
   rendreBarre(v);
   const nomProjet = v.projet && !global ? `<div class="muet petit">${h(v.projet.nom)} · ${h(v.projet.dossier)}</div>` : "";
   const nbActifs = (v.projets || []).filter((x) => x.actif).length;
@@ -834,12 +836,7 @@ function rendreBandeau(v) {
   const sel = $("#sel-projet");
   sel.setAttribute("aria-expanded", etat.selecteurOuvert ? "true" : "false");
   sel.innerHTML = v.projet ? `<span class="dot ${classePhase(v.projet)}"></span><span class="nom">${h(v.projet.nom)}</span><span class="chevron">▾</span>` : `<span class="nom muet">${t("Choose a project")}</span><span class="chevron">▾</span>`;
-  const lien = $('#nav-liens a[data-page="demandes"]');
-  lien.innerHTML = t("Requests") + (v.attente ? ` <span class="pastille">${v.attente}</span>` : "");
-  const lienPv = $('#nav-liens a[data-page="pourvous"]');
-  if (lienPv) lienPv.innerHTML = t("For you") + (v.pour_vous ? ` <span class="pastille pastille-alerte">${v.pour_vous}</span>` : "");
-  const besoins = projetsVisibles(v).filter(besoinProjet).length;
-  $("#nav-global a").innerHTML = t("All projects") + (besoins ? ` <span class="pastille pastille-alerte" title="${h(t("{0} project(s) need you", [besoins]))}">${besoins}</span>` : "");
+  marquerNav(v);
   $("#btn-verrou").hidden = !v.mot_de_passe;
   if (v.projet && etat.projet !== v.projet.nom) etat.projet = v.projet.nom;
   rendreSelecteur(v);
@@ -955,7 +952,7 @@ document.addEventListener("click", (ev) => { if (etat.selecteurOuvert && !ev.tar
 
 // the sidebar's "Remote": how many devices are connected now (a device sees its own notifications there, never the pairing)
 function marquerDistance(v) {
-  const a = document.querySelector('#nav-outil a[data-page="distance"]'); if (!a) return;
+  const a = document.querySelector('#onglets-module a[data-page="distance"]'); if (!a) return;
   const n = v.distance_active ? v.connectes || 0 : 0;
   a.dataset.connectes = n ? String(n) : ""; a.title = v.distance_active ? t("Remote access on: {0} device(s) connected", [n]) : "";
   a.classList.toggle("distance-active", !!v.distance_active);
@@ -964,39 +961,73 @@ function marquerDistance(v) {
 function menuMobile(ouvert) { document.body.classList.toggle("menu-ouvert", ouvert); $("#btn-menu").setAttribute("aria-expanded", String(ouvert)); }
 $("#btn-menu").addEventListener("click", () => menuMobile(!document.body.classList.contains("menu-ouvert")));
 $("#voile-menu").addEventListener("click", () => menuMobile(false));
-$("#nav-tiroir").addEventListener("click", (ev) => {
-  if (ev.target.closest("nav a, .menu-liste a, .menu-nouveau")) menuMobile(false);
-  // a module's group folds on phones (its title is a plain heading on a wide screen)
-  const titre = ev.target.closest(".nav-groupe-titre");
-  if (titre) titre.setAttribute("aria-expanded", String(!titre.parentElement.classList.toggle("replie")));
-});
-// the main menu: Home, then one group per module of /api/hub that has pages, titled with its name;
-// a group already in index.html (Dev) keeps its links, another one gets a link per page
+$("#nav-tiroir").addEventListener("click", (ev) => { if (ev.target.closest("nav a")) menuMobile(false); });
+
+// The one-level menu (Home, Projects, one entry per module with pages, Settings at the bottom) and the
+// tabs of the module shown: both from /api/hub, never a list of pages here.
+// New project and the archives open from the Projects page: its entry stays lit there
+const PAGE_PARENTE = { nouveau: "global", archives: "global" };
+etat.pagesModules = (() => { try { return JSON.parse(localStorage.getItem("athanor.pagesModules") || "{}"); } catch (e) { return {}; } })();
+function moduleDePage(page) {
+  const ms = etat.hubModules || [];
+  return ms.find((m) => (m.pages || []).some((p) => p.hash === "#" + page)) || null;
+}
+// a module's entry opens the page last seen in it, else its first page
+const entreeModule = (m) => (m.pages.some((p) => p.hash === etat.pagesModules[m.id]) ? etat.pagesModules[m.id] : m.pages[0].hash);
 function rendreMenu(modules) {
   etat.hubModules = modules;
-  const zone = $("#nav-modules"), vus = new Set();
+  const lien = (cible, attrs, icone, libelle) => `<a data-href="${h(cible)}" tabindex="0" ${attrs}><span class="ico ico-${h(icone)}" aria-hidden="true"></span><span class="nav-lib">${h(t(libelle))}</span><span class="nb"></span></a>`;
+  let haut = "", bas = "";
   for (const m of modules) {
     if (!(m.pages || []).length) continue;
-    let g = zone.querySelector(`.nav-groupe[data-module="${CSS.escape(m.id)}"]`);
-    // shortcut: a module whose pages index.html already links (Home, Settings) gets no group, until the one-level menu
-    if (!g && m.pages.every((p) => document.querySelector(`#nav-tiroir a[href="${CSS.escape(p.hash)}"], #nav-tiroir a[data-href="${CSS.escape(p.hash)}"]`))) continue;
-    if (!g) { g = document.createElement("div"); g.className = "nav-groupe"; g.dataset.module = m.id; g.dataset.cree = "1"; }
-    if (g.dataset.cree) { // rebuilt each time: its links follow the language
-      g.innerHTML = `<button type="button" class="nav-groupe-titre" aria-expanded="true"></button><div class="nav-groupe-corps"><nav>${m.pages.map((p) => `<a href="${h(p.hash)}" data-page="${h(p.hash.slice(1))}">${h(t(p.libelle))}</a>`).join("")}</nav></div>`;
-    }
-    g.querySelector(".nav-groupe-titre").textContent = t(m.nom);
-    g.hidden = false; zone.appendChild(g); vus.add(g);
+    if (m.id === "hub") haut += m.pages.map((p) => lien(p.hash, `data-module="hub" data-page="${h(p.hash.slice(1))}"`, p.icone, p.libelle)).join("");
+    else if (m.id === "reglages") bas += lien(entreeModule(m), `data-module="${h(m.id)}"`, m.id, m.nom);
+    else haut += lien(entreeModule(m), `data-module="${h(m.id)}"`, m.id, m.nom);
   }
-  zone.querySelectorAll(".nav-groupe").forEach((g) => { if (!vus.has(g)) g.hidden = true; });
+  $("#nav-menu").innerHTML = haut; $("#nav-bas").innerHTML = bas;
+  marquerMenu();
 }
-// the menu keeps the HTML's groups if it fails (locked: loaded again once unlocked)
+// the entry of the page shown lit (aria-current), and its module's tabs
+function marquerMenu() {
+  const page = PAGE_PARENTE[etat.page] || etat.page, m = moduleDePage(page);
+  document.querySelectorAll("#nav-tiroir nav a").forEach((a) => {
+    const actif = a.dataset.page ? a.dataset.page === page : !!m && a.dataset.module === m.id;
+    a.classList.toggle("actif", actif);
+    if (actif) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
+  });
+  rendreOnglets(m);
+  if (etat.vue) marquerNav(etat.vue);
+}
+// one line of tabs at the top of the module's area (Dev: with its project selector); none for one page
+function rendreOnglets(m) {
+  const dev = !!m && m.id === "dev", pages = m && m.id !== "hub" ? m.pages : [];
+  const html = pages.length > 1 || dev ? pages.map((p) => `<a data-href="${h(p.hash)}" tabindex="0" data-page="${h(p.hash.slice(1))}"${p.hash === "#" + etat.page ? ' class="actif" aria-current="page"' : ""}>${h(t(p.libelle))}<span class="nb"></span></a>`).join("") : "";
+  $("#selecteur").hidden = !dev;
+  $("#barre-onglets").hidden = !html;
+  const nav = $("#onglets-module");
+  if (nav.dataset.html === html + etat.langue) return;
+  nav.dataset.html = html + etat.langue; nav.innerHTML = html;
+  if (m) nav.setAttribute("aria-label", t(m.nom));
+  // the active tab centred in the line (phones scroll it sideways), once laid out
+  requestAnimationFrame(() => { const a = nav.querySelector(".actif"); if (!a) return; const x = a.getBoundingClientRect(), n = nav.getBoundingClientRect(); nav.scrollLeft += x.left - n.left - (n.width - x.width) / 2; });
+}
+// the counters on the menu and the tabs: Requests queued, For you, the projects that need the user, Remote
+function marquerNav(v) {
+  const nb = (sel, n, alerte, titre) => {
+    const b = document.querySelector(sel + " .nb"); if (!b) return;
+    b.className = "nb" + (n ? " pastille" + (alerte ? " pastille-alerte" : "") : ""); b.textContent = n || ""; b.title = (n && titre) || "";
+  };
+  const besoins = projetsVisibles(v).filter(besoinProjet).length;
+  nb('#nav-menu a[data-page="global"]', besoins, true, t("{0} project(s) need you", [besoins]));
+  nb('#onglets-module a[data-page="demandes"]', v.attente);
+  nb('#onglets-module a[data-page="pourvous"]', v.pour_vous, true);
+  marquerDistance(v);
+}
+// the menu keeps the HTML's entries if it fails (locked: loaded again once unlocked)
 const chargerMenu = () => api("hub").then((d) => rendreMenu(d.modules || [])).catch(() => {});
 function traduireNav() {
   if (etat.hubModules) rendreMenu(etat.hubModules);
-  const libelles = { accueil: t("Home"), global: t("All projects"), suivi: t("Overview"), equipe: t("Team"), demandes: t("Requests"), pourvous: t("For you"), acces: t("Access"), journal: t("Log"), projet: t("Manage"), chat: t("Chat"), extensions: t("Skills & MCP"), sante: t("Setup & health"), reglages: t("Settings"), options: t("Options"), distance: t("Remote"), guide: t("Guide") };
-  document.querySelectorAll("#nav-tiroir nav a").forEach((a) => { if (libelles[a.dataset.page]) a.textContent = libelles[a.dataset.page]; });
-  $("#nav-titre-projet").textContent = t("Project");
-  $("#nav-titre-outil").textContent = t("Tool");
+  else document.querySelectorAll("#nav-tiroir [data-libelle]").forEach((x) => { x.textContent = t(x.dataset.libelle); });
   $("#btn-verrou").textContent = "🔒 " + t("Lock");
   $("#verrou-titre").textContent = t("Application locked");
   $("#verrou-mdp").placeholder = t("Password");
@@ -1017,7 +1048,14 @@ function naviguer() {
   // the settings always open on Options (or on the tab asked for, the guided tour)
   if (page === "reglages" && etat.page !== "reglages") { etat.ongletReglages = etat.ongletDemande || "options"; etat.ongletDemande = null; }
   etat.page = page;
-  document.querySelectorAll("#nav-tiroir nav a").forEach((a) => a.classList.toggle("actif", a.dataset.page === page));
+  // the page remembered for its module's entry
+  const m = moduleDePage(page);
+  if (m && m.id !== "hub" && etat.pagesModules[m.id] !== "#" + page) {
+    etat.pagesModules[m.id] = "#" + page;
+    try { localStorage.setItem("athanor.pagesModules", JSON.stringify(etat.pagesModules)); } catch (e) { /* this device only */ }
+    const e = document.querySelector(`#nav-tiroir nav a[data-module="${CSS.escape(m.id)}"]`); if (e) e.dataset.href = "#" + page;
+  }
+  marquerMenu();
   if (etat.vue) rendreBandeau(etat.vue); // the All projects page has its own header
   rendrePage();
 }
@@ -1632,8 +1670,10 @@ function referencePonytail(g) {
 pages.global = async () => {
   const v = etat.vue; if (!v) return "";
   const liste = projetsVisibles(v);
-  if (!liste.length) return `<div class="vide">${t("No project.")} <a href="#nouveau">+ ${t("New project")}</a></div>`;
-  return `<div class="grille-projets">${liste.map((x) => {
+  const archives = (v.projets || []).filter((x) => x.archive).length;
+  const actions = `<div class="ligne projets-actions"><a class="btn btn-petit" href="#nouveau">+ ${t("New project")}</a><a class="btn btn-petit" href="#rejoindre">⇄ ${t("Join a project")}</a>${archives ? `<a class="btn btn-petit btn-fantome" href="#archives">🗄 ${t("Archived projects ({0})", [archives])}</a>` : ""}</div>`;
+  if (!liste.length) return `${actions}<div class="vide">${t("No project.")}</div>`;
+  return `${actions}<div class="grille-projets">${liste.map((x) => {
     const b = besoinProjet(x);
     return `<a href="#suivi" class="bloc carte-projet${b ? " besoin" : ""}${x.courant ? " courant" : ""}" data-projet="${h(x.nom)}" data-cible="${b ? b.page : "suivi"}">
       <div class="cp-tete"><span class="dot ${classePhase(x)}"></span><b class="cp-nom">${h(x.nom)}</b>${b ? `<span class="cp-besoin">${t("Needs you")}</span>` : ""}</div>

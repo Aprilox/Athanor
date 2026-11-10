@@ -40,48 +40,27 @@
       <img src="logo.svg" width="30" height="30" alt="" class="marque-logo">
       <div><div class="marque-nom">Athanor <button type="button" class="marque-version" id="nav-version" data-maj="ouvrir"></button></div><div class="marque-sous" id="nav-sous">—</div></div>
     </div>
-    <nav id="nav-accueil">
-      <a href="#accueil" data-page="accueil">Home</a>
+    <!-- the one-level menu, rendered from /api/hub (Home, Projects and Settings only until it answers) -->
+    <nav id="nav-menu" aria-label="Menu">
+      <a href="#accueil" data-page="accueil" data-module="hub"><span class="ico ico-accueil" aria-hidden="true"></span><span class="nav-lib" data-libelle="Home">Home</span></a>
+      <a href="#global" data-page="global" data-module="hub"><span class="ico ico-projets" aria-hidden="true"></span><span class="nav-lib" data-libelle="Projects">Projects</span><span class="nb"></span></a>
     </nav>
-    <div id="nav-modules">
-    <div class="nav-groupe" data-module="dev">
-    <button type="button" class="nav-groupe-titre" aria-expanded="true"></button>
-    <div class="nav-groupe-corps">
-    <nav id="nav-global">
-      <a href="#global" data-page="global">All projects</a>
-    </nav>
-    <div class="selecteur">
-      <button id="sel-projet" class="sel-projet" type="button" aria-haspopup="listbox"></button>
-      <div id="menu-projets" class="menu-projets" hidden></div>
-    </div>
-    <div class="nav-titre" id="nav-titre-projet">Project</div>
-    <nav id="nav-liens">
-      <a href="#suivi" data-page="suivi">Overview</a>
-      <a href="#equipe" data-page="equipe">Team</a>
-      <a href="#demandes" data-page="demandes">Requests</a>
-      <a href="#chat" data-page="chat">Chat</a>
-      <a href="#pourvous" data-page="pourvous">For you</a>
-      <a href="#acces" data-page="acces">Access</a>
-      <a href="#journal" data-page="journal">Log</a>
-    </nav>
-    <div class="nav-titre" id="nav-titre-outil">Tool</div>
-    <nav id="nav-outil">
-      <a href="#extensions" data-page="extensions">Skills &amp; MCP</a>
-      <a href="#sante" data-page="sante">Setup &amp; health</a>
-      <a href="#distance" data-page="distance">Remote</a>
-      <a href="#reglages" data-page="reglages">Settings</a>
-      <a href="#guide" data-page="guide">Guide</a>
-    </nav>
-    </div>
-    </div>
-    </div>
     <div class="nav-pied">
+      <nav id="nav-bas" aria-label="Settings"><a href="#reglages" data-module="reglages"><span class="ico ico-reglages" aria-hidden="true"></span><span class="nav-lib" data-libelle="Settings">Settings</span></a></nav>
       <button id="btn-verrou" class="btn-fantome" type="button">🔒 Lock</button>
       <div class="nav-kit" id="nav-kit"></div>
     </div>
   </aside>
 
   <main class="principal">
+    <!-- the module's pages: one line of tabs (Dev: with its project selector) -->
+    <div class="barre-onglets" id="barre-onglets" hidden>
+      <div class="selecteur" id="selecteur" hidden>
+        <button id="sel-projet" class="sel-projet" type="button" aria-haspopup="listbox"></button>
+        <div id="menu-projets" class="menu-projets" hidden></div>
+      </div>
+      <nav class="onglets-module" id="onglets-module"></nav>
+    </div>
     <header class="bandeau" id="bandeau"></header>
     <section class="page" id="page"></section>
     <div class="toast" id="toast" hidden></div>
