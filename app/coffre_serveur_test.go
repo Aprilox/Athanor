@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -130,6 +131,14 @@ func TestCoffreServeur(t *testing.T) {
 	}
 	appelCoffre(t, s.apiVerrouiller, "", "", nil)
 	fermee("after the window locked")
+	// C16: a new name and a value the closed infra key cannot take: 423 and nothing changed
+	r := httptest.NewRequest("POST", "/", strings.NewReader(`{"nom":"SSH_RENOMMEE","valeur":"temoin-infra-9999"}`))
+	r.SetPathValue("id", idInfra)
+	rec := httptest.NewRecorder()
+	s.apiCoffreModifier(rec, r)
+	if rec.Code != 423 || slices.ContainsFunc(s.coffre.Liste(), func(e EntreeCoffre) bool { return e.Nom == "SSH_RENOMMEE" }) {
+		t.Fatal("half-done change:", rec.Code, rec.Body.String())
+	}
 	tout2 := func() {
 		for id, v := range valeurs {
 			if id != idInfra {

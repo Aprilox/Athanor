@@ -121,9 +121,18 @@ func (s *Serveur) migrerSecrets(auto bool) (int, error) {
 			return 0, err
 		}
 	}
-	connues := s.coffre.EmpreintesConnues()
+	connues := map[string]bool{}
+	for _, f := range s.coffre.EmpreintesConnues() {
+		connues[f] = true
+	}
 	for _, f := range etat.Empreintes {
 		connues[f] = true
+	}
+	importees := map[string]string{} // B10: name|source → id, a key changed in its old file updates its entry
+	for _, e := range s.coffre.Liste() {
+		if e.Source != "" && e.Portee == "code" {
+			importees[e.Nom+"|"+e.Source] = e.ID
+		}
 	}
 	d := dicoTUI(s.langue())
 	cree := 0
@@ -135,16 +144,24 @@ func (s *Serveur) migrerSecrets(auto bool) (int, error) {
 		if f == "" || connues[f] {
 			continue
 		}
-		e, err := s.coffre.Ajouter(EntreeCoffre{Nom: a.nom, Famille: "secret", Type: a.typ, Portee: "code",
-			Source: a.source, Note: traduireTUI(d, "Imported from {0}", a.fichier)}, a.valeur)
-		if errors.As(err, new(erreurEntree)) {
-			continue
-		}
-		if err != nil {
-			return cree, err
+		if id := importees[a.nom+"|"+a.source]; id != "" {
+			if err := s.coffre.RemplacerValeur(id, a.valeur); err != nil {
+				return cree, err
+			}
+		} else {
+			e, err := s.coffre.Ajouter(EntreeCoffre{Nom: a.nom, Famille: "secret", Type: a.typ, Portee: "code",
+				Source: a.source, Note: traduireTUI(d, "Imported from {0}", a.fichier)}, a.valeur)
+			if errors.As(err, new(erreurEntree)) {
+				continue
+			}
+			if err != nil {
+				return cree, err
+			}
+			importees[a.nom+"|"+a.source] = e.ID
+			etat.Entrees = append(etat.Entrees, e.ID)
 		}
 		connues[f] = true
-		etat.Entrees, etat.Empreintes = append(etat.Entrees, e.ID), append(etat.Empreintes, f)
+		etat.Empreintes = append(etat.Empreintes, f)
 		if err := etat.enregistrer(chemin); err != nil { // after each one: an interrupted run still undoes what it made
 			return cree, err
 		}
@@ -170,6 +187,8 @@ func (s *Serveur) annulerMigration() (int, error) {
 	chemin := cheminMigration(s.coffre)
 	etat := lireEtatMigration(chemin)
 	modifiees := map[string]bool{} // B9: an entry the user edited after the import is theirs now
+	empreintes := s.coffre.EmpreintesConnues()
+	retirees := map[string]bool{} // C13: only the values removed here may come back by "Import again"
 	for _, e := range s.coffre.Liste() {
 		modifiees[e.ID] = e.Modifie.After(e.Cree)
 	}
@@ -183,12 +202,14 @@ func (s *Serveur) annulerMigration() (int, error) {
 			_ = etat.enregistrer(chemin)
 			return n, err
 		} else if err == nil {
+			retirees[empreintes[etat.Entrees[0]]] = true
 			n++
 		}
 		etat.Entrees = etat.Entrees[1:]
 	}
 	maintenant := time.Now().UTC()
-	etat = etatMigration{Annulee: true, AnnuleeLe: &maintenant}
+	gardees := slices.DeleteFunc(etat.Empreintes, func(f string) bool { return retirees[f] })
+	etat = etatMigration{Annulee: true, AnnuleeLe: &maintenant, Empreintes: gardees}
 	return n, etat.enregistrer(chemin)
 }
 

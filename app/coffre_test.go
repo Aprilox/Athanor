@@ -126,13 +126,13 @@ func TestCoffreAllerRetour(t *testing.T) {
 	if err := c.RemplacerValeur(code.ID, "temoin-code-6000"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := c.ModifierMeta(code.ID, "Stripe", "stripe", "clé de test", "infra"); !errors.Is(err, errCoffreVerrouille) {
+	if _, err := c.ModifierMeta(code.ID, "Stripe", "stripe", "clé de test", "infra", nil); !errors.Is(err, errCoffreVerrouille) {
 		t.Fatalf("scope change to a closed key: %v", err)
 	}
 	if err := c.Deverrouiller("témoin-mdp"); err != nil {
 		t.Fatal(err)
 	}
-	if e, err := c.ModifierMeta(code.ID, "Stripe", "stripe", "clé de test", "infra"); err != nil || e.Portee != "infra" || e.Valeur != "" {
+	if e, err := c.ModifierMeta(code.ID, "Stripe", "stripe", "clé de test", "infra", nil); err != nil || e.Portee != "infra" || e.Valeur != "" {
 		t.Fatalf("ModifierMeta: %+v %v", e, err)
 	}
 	c = rouvrir(t, chemin, sys)
@@ -309,7 +309,7 @@ func TestCoffreCopieIlisible(t *testing.T) {
 	if e1.Empreinte != "" || e3.Empreinte != "" {
 		t.Fatal("a fingerprint left the vault")
 	}
-	if f := c.EmpreintesConnues(); len(f) != 1 {
+	if f := c.EmpreintesConnues(); len(f) != 2 || f[e1.ID] == "" || f[e1.ID] != f[e3.ID] {
 		t.Fatalf("same value, same key: one fingerprint for both code entries and none for infra (migration), got %d", len(f))
 	}
 	config, _ := json.Marshal(Config{MotDePasseHash: hacherMotDePasse("témoin-mdp-coffre")})

@@ -130,7 +130,8 @@ func TestCoffreMigration(t *testing.T) {
 	if err := os.WriteFile(alpha, avantAlpha, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.coffre.Supprimer(importees(s)[0].ID); err != nil {
+	supprimee := importees(s)[0]
+	if err := s.coffre.Supprimer(supprimee.ID); err != nil {
 		t.Fatal(err)
 	}
 	s = demarrer()
@@ -143,7 +144,7 @@ func TestCoffreMigration(t *testing.T) {
 
 	// undo: exactly the untouched imported entries leave; the manual one and one whose value the user
 	// replaced since (B9) stay; no import at the next start-up
-	modifiee := importees(s)[0].ID
+	modifiee, nomModifiee := importees(s)[0].ID, importees(s)[0].Nom
 	time.Sleep(2 * time.Millisecond)
 	if err := s.coffre.RemplacerValeur(modifiee, "temoin-nouvelle-valeur"); err != nil {
 		t.Fatal(err)
@@ -160,12 +161,43 @@ func TestCoffreMigration(t *testing.T) {
 		t.Fatalf("summary after undo %v", m)
 	}
 
-	// "Import again": everything back, the undo cleared
-	if w := appelCoffre(t, s.apiCoffreMigration, "", "", nil); w.Code != 200 || !strings.Contains(w.Body.String(), `"importees":8`) {
+	// "Import again": the undone entries come back, neither the one the user deleted nor the old value of
+	// the one they changed (C13); the undo cleared
+	if w := appelCoffre(t, s.apiCoffreMigration, "", "", nil); w.Code != 200 || !strings.Contains(w.Body.String(), `"importees":6`) {
 		t.Fatal("import again:", w.Code, w.Body.String())
 	}
-	if m := s.resumeMigration(); m["importees"] != len(attendus) || m["annulee"] != false {
+	if m := s.resumeMigration(); m["importees"] != len(attendus)-2 || m["annulee"] != false {
 		t.Fatalf("summary after import again %v", m)
+	}
+	noms := map[string]int{}
+	for _, e := range importees(s) {
+		noms[e.Nom]++
+	}
+	if noms[supprimee.Nom] != 0 || noms[nomModifiee] != 1 || len(noms) != len(attendus)-1 {
+		t.Fatalf("after import again: %v (deleted %s, changed %s)", noms, supprimee.Nom, nomModifiee)
+	}
+
+	// B10: a key changed in its old file updates the entry of the same name and source, no 2nd entry
+	beta := filepath.Join(d, "beta", ".athanor", "secrets.env")
+	avantBeta, _ := os.ReadFile(beta)
+	nouvelle := "cf-temoin-" + strings.Repeat("y8", 10)
+	if err := os.WriteFile(beta, []byte(strings.Replace(string(avantBeta), valeurs["CF_API_TOKEN"], nouvelle, 1)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if w := appelCoffre(t, s.apiCoffreMigration, "", "", nil); w.Code != 200 || !strings.Contains(w.Body.String(), `"importees":1`) {
+		t.Fatal("import of a changed key:", w.Code, w.Body.String())
+	}
+	var cf []EntreeCoffre
+	for _, e := range importees(s) {
+		if e.Nom == "CF_API_TOKEN" {
+			cf = append(cf, e)
+		}
+	}
+	if len(cf) != 1 || cf[0].Source != "projet:beta" || lisible(s.coffre, cf[0].ID, nouvelle) != nil {
+		t.Fatalf("changed key: %+v", cf)
+	}
+	if err := os.WriteFile(beta, avantBeta, 0o600); err != nil {
+		t.Fatal(err)
 	}
 	w := appelCoffre(t, s.apiCoffre, "", "", nil)
 	for nom, v := range valeurs {

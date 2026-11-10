@@ -134,21 +134,10 @@ func (s *Serveur) apiCoffreModifier(w http.ResponseWriter, r *http.Request) {
 		s.erreurCoffre(w, errCoffreInconnu)
 		return
 	}
-	if c.Nom != nil || c.Type != nil || c.Note != nil || c.Portee != nil {
-		if e, err = s.coffre.ModifierMeta(id, val(c.Nom, e.Nom), val(c.Type, e.Type), val(c.Note, e.Note), val(c.Portee, e.Portee)); err != nil {
+	if c.Nom != nil || c.Type != nil || c.Note != nil || c.Portee != nil || c.Valeur != nil {
+		if e, err = s.coffre.ModifierMeta(id, val(c.Nom, e.Nom), val(c.Type, e.Type), val(c.Note, e.Note), val(c.Portee, e.Portee), c.Valeur); err != nil {
 			s.erreurCoffre(w, err)
 			return
-		}
-	}
-	if c.Valeur != nil {
-		if err := s.coffre.RemplacerValeur(id, *c.Valeur); err != nil {
-			s.erreurCoffre(w, err)
-			return
-		}
-	}
-	for _, x := range s.coffre.Liste() {
-		if x.ID == id {
-			e = x
 		}
 	}
 	s.ecrireJSON(w, e)

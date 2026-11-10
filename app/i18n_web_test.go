@@ -56,6 +56,10 @@ func cleJS(s string) string {
 
 func TestWebTraduction(t *testing.T) {
 	cles := clesWeb(t)
+	for _, e := range []error{errCoffreVerrouille, errCoffreSansMdp, errCoffreMdp, errCoffreInconnu, errCoffreRetraitMdp,
+		errCoffreTrousseau, errCoffreFormat, errCoffreAbime, errCoffreIllisible} { // the vault's errors reach the toast (B14)
+		cles = append(cles, e.Error())
+	}
 	for _, l := range []string{"fr", "es", "de", "it", "pt"} {
 		dico := dicoTUI(l)
 		if len(dico) < 1000 {

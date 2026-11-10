@@ -34,6 +34,10 @@ var (
 	errCoffreMdp        = errors.New("Wrong password")
 	errCoffreInconnu    = errors.New("Unknown vault entry")
 	errCoffreRetraitMdp = errors.New("The vault holds secrets that only open with this password: delete them first")
+	errCoffreTrousseau  = errors.New("The system keystore returned no key")
+	errCoffreFormat     = errors.New("The vault file has an unknown format")
+	errCoffreAbime      = errors.New("A vault value is damaged")
+	errCoffreIllisible  = errors.New("This vault value is damaged and cannot be read")
 )
 
 // typesCoffre: the closed list of entry types, with the scope proposed for each.
@@ -74,7 +78,7 @@ func outilCoffre(entree string, nom string, args ...string) (string, error) {
 func cleDuCompte(sortie string) ([]byte, error) {
 	k, err := hex.DecodeString(sortie)
 	if err != nil || len(k) != 32 {
-		return nil, errors.New("keystore returned no key")
+		return nil, errCoffreTrousseau
 	}
 	return k, nil
 }
@@ -141,7 +145,7 @@ func ouvrirCoffre(chemin string, systeme enveloppeSysteme) (*Coffre, error) {
 		return nil, fmt.Errorf("vault file unreadable: %w", err)
 	}
 	if c.f.Version != 1 || c.f.KDF.Algo != prefixeMdp || c.f.KDF.Iter < 1 || c.f.KDF.Iter > 10_000_000 {
-		return nil, errors.New("vault file: unknown format")
+		return nil, errCoffreFormat
 	}
 	return c, nil
 }
@@ -169,7 +173,7 @@ func desceller(cle []byte, s string, aad []byte) ([]byte, error) {
 	}
 	b, err := base64.StdEncoding.DecodeString(s)
 	if err != nil || len(b) < g.NonceSize() {
-		return nil, errors.New("vault: damaged value")
+		return nil, errCoffreAbime
 	}
 	return g.Open(nil, b[:g.NonceSize()], b[g.NonceSize():], aad)
 }
@@ -463,14 +467,14 @@ func (c *Coffre) poserValeur(e *EntreeCoffre, valeur string) error {
 	return nil
 }
 
-// EmpreintesConnues: the fingerprints of the entries, for the import only (Liste never sends them).
-func (c *Coffre) EmpreintesConnues() map[string]bool {
+// EmpreintesConnues: id → fingerprint of the entries, for the import only (Liste never sends them).
+func (c *Coffre) EmpreintesConnues() map[string]string {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	m := map[string]bool{}
+	m := map[string]string{}
 	for _, e := range c.f.Entrees {
 		if e.Empreinte != "" {
-			m[e.Empreinte] = true
+			m[e.ID] = e.Empreinte
 		}
 	}
 	return m
@@ -506,9 +510,9 @@ func (c *Coffre) indice(id string) int {
 	return slices.IndexFunc(c.f.Entrees, func(e EntreeCoffre) bool { return e.ID == id })
 }
 
-// ModifierMeta changes the name, type, note and scope; a secret changing scope is re-encrypted
-// under the other key (both must be open).
-func (c *Coffre) ModifierMeta(id, nom, typ, note, portee string) (EntreeCoffre, error) {
+// ModifierMeta changes the name, type, note and scope, and the value when valeur is not nil, all or
+// nothing (C16); a secret changing scope is re-encrypted under the other key (both must be open).
+func (c *Coffre) ModifierMeta(id, nom, typ, note, portee string, valeur *string) (EntreeCoffre, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	i := c.indice(id)
@@ -524,7 +528,11 @@ func (c *Coffre) ModifierMeta(id, nom, typ, note, portee string) (EntreeCoffre, 
 	if err := verifierEntree(e); err != nil {
 		return EntreeCoffre{}, err
 	}
-	if e.Famille == "secret" && e.Portee != ancienne.Portee {
+	if valeur != nil {
+		if err := c.poserValeur(&e, *valeur); err != nil {
+			return EntreeCoffre{}, err
+		}
+	} else if e.Famille == "secret" && e.Portee != ancienne.Portee {
 		clair, err := c.dechiffrer(ancienne)
 		if err != nil {
 			return EntreeCoffre{}, err
@@ -620,7 +628,7 @@ func (c *Coffre) dechiffrer(e EntreeCoffre) (string, error) {
 	}
 	b, err := desceller(k, e.Valeur, aadEntree(e))
 	if err != nil {
-		return "", errors.New("vault: this value is damaged and cannot be read")
+		return "", errCoffreIllisible
 	}
 	return string(b), nil
 }
