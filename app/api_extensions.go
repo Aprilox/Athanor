@@ -551,10 +551,11 @@ var variablesPlugin = map[string]bool{"CLAUDE_PLUGIN_ROOT": true, "CLAUDE_PLUGIN
 func estNomSecret(nom string) bool {
 	for _, m := range regexp.MustCompile(`[A-Za-z0-9]+`).FindAllString(strings.ToUpper(nom), -1) {
 		switch m {
-		case "KEY", "APIKEY", "TOKEN", "SECRET", "PASSWORD", "PASSWD", "PWD", "AUTH", "AUTHORIZATION", "PAT", "BEARER", "CREDENTIAL", "CREDENTIALS":
+		case "KEY", "APIKEY", "TOKEN", "SECRET", "PASSWORD", "PASSWD", "PWD", "AUTH", "AUTHORIZATION", "PAT", "BEARER", "CREDENTIAL", "CREDENTIALS",
+			"PASS", "PASSPHRASE", "PIN", "COOKIE", "DSN", "SALT", "JWT":
 			return true
 		}
-		if strings.HasSuffix(m, "KEY") || strings.HasSuffix(m, "TOKEN") || strings.HasSuffix(m, "SECRET") {
+		if strings.HasSuffix(m, "KEY") || strings.HasSuffix(m, "TOKEN") || strings.HasSuffix(m, "SECRET") || strings.HasSuffix(m, "PASSWORD") {
 			return true
 		}
 	}

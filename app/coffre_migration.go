@@ -152,8 +152,8 @@ func (s *Serveur) migrerSecrets(auto bool) (int, error) {
 	return cree, nil
 }
 
-// annulerMigration removes the entries the migration created (those the user already deleted are
-// skipped) and marks it undone: nothing is imported again until "Import again".
+// annulerMigration removes the entries the migration created (those the user already deleted, or
+// changed since, are kept) and marks it undone: nothing is imported again until "Import again".
 func (s *Serveur) annulerMigration() (int, error) {
 	if s.coffre == nil || s.coffreErr != nil {
 		return 0, errors.New("The vault file cannot be read")
@@ -162,8 +162,16 @@ func (s *Serveur) annulerMigration() (int, error) {
 	defer migrationMu.Unlock()
 	chemin := cheminMigration(s.coffre)
 	etat := lireEtatMigration(chemin)
+	modifiees := map[string]bool{} // B9: an entry the user edited after the import is theirs now
+	for _, e := range s.coffre.Liste() {
+		modifiees[e.ID] = e.Modifie.After(e.Cree)
+	}
 	n := 0
 	for len(etat.Entrees) > 0 {
+		if modifiees[etat.Entrees[0]] {
+			etat.Entrees = etat.Entrees[1:]
+			continue
+		}
 		if err := s.coffre.Supprimer(etat.Entrees[0]); err != nil && !errors.Is(err, errCoffreInconnu) {
 			_ = etat.enregistrer(chemin)
 			return n, err

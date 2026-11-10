@@ -4,8 +4,10 @@ import (
 	"crypto/sha256"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestCoffreMigration: an old config (3 projects, 2 MCP servers, a kit .env) is imported once over two
@@ -126,12 +128,19 @@ func TestCoffreMigration(t *testing.T) {
 		t.Fatalf("summary %v", m)
 	}
 
-	// undo: exactly the imported entries leave, the manual one stays; no import at the next start-up
-	if w := appelCoffre(t, s.apiCoffreMigrationAnnuler, "", "", nil); w.Code != 200 || !strings.Contains(w.Body.String(), `"retirees":7`) {
+	// undo: exactly the untouched imported entries leave; the manual one and one whose value the user
+	// replaced since (B9) stay; no import at the next start-up
+	modifiee := importees(s)[0].ID
+	time.Sleep(2 * time.Millisecond)
+	if err := s.coffre.RemplacerValeur(modifiee, "temoin-nouvelle-valeur"); err != nil {
+		t.Fatal(err)
+	}
+	if w := appelCoffre(t, s.apiCoffreMigrationAnnuler, "", "", nil); w.Code != 200 || !strings.Contains(w.Body.String(), `"retirees":6`) {
 		t.Fatal("undo:", w.Code, w.Body.String())
 	}
 	s = demarrer()
-	if l := s.coffre.Liste(); len(l) != 1 || l[0].ID != manuelle.ID {
+	if l := s.coffre.Liste(); len(l) != 2 || !slices.ContainsFunc(l, func(e EntreeCoffre) bool { return e.ID == manuelle.ID }) ||
+		!slices.ContainsFunc(l, func(e EntreeCoffre) bool { return e.ID == modifiee }) {
 		t.Fatalf("after undo and restart: %+v", l)
 	}
 	if m := s.resumeMigration(); m["importees"] != 0 || m["annulee"] != true {

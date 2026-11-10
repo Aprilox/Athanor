@@ -145,6 +145,10 @@ func TestIdentExt(t *testing.T) {
 
 func TestNomSecret(t *testing.T) {
 	for nom, attendu := range map[string]bool{"API_KEY": true, "TAVILY_API_KEY": true, "x-api-key": true, "Authorization": true, "GITHUB_PAT": true, "GITHUB_PERSONAL_ACCESS_TOKEN": true,
+		// B8 (M28): usual secret names pasted into the vault must not stay readable as variables
+		"DB_PASS": true, "SMTP_PASS": true, "REDIS_PASSPHRASE": true, "ADMIN_PIN": true, "SESSION_COOKIE": true, "DATABASE_DSN": true,
+		"ENCRYPTION_SALT": true, "JWT": true, "DBPASSWORD": true,
+		"PIPELINE": false, "SPINNER": false, "COMPASS_URL": false, "SESSION_TIMEOUT": false, "PRIVATE_REPO": false,
 		"MEMORY_FILE_PATH": false, "NODE_ENV": false, "PATH": false, "KEYBOARD_LAYOUT": false, "DEBUG": false} {
 		if estNomSecret(nom) != attendu {
 			t.Fatalf("%s: %v", nom, !attendu)
