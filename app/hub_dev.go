@@ -13,11 +13,63 @@ type moduleDev struct{}
 func (moduleDev) ID() string  { return "dev" }
 func (moduleDev) Nom() string { return "Dev" }
 
+// Pages: the pages of the selected project (Projects, every project at once, is the hub's).
 func (moduleDev) Pages() []PageModule {
 	return []PageModule{
-		{"#global", "All projects"}, {"#suivi", "Overview"}, {"#equipe", "Team"}, {"#demandes", "Requests"},
-		{"#chat", "Chat"}, {"#pourvous", "For you"}, {"#journal", "Log"},
+		{Hash: "#suivi", Ordre: 20, Icone: "suivi", Libelle: "Overview"}, {Hash: "#equipe", Ordre: 21, Icone: "equipe", Libelle: "Team"},
+		{Hash: "#demandes", Ordre: 22, Icone: "demandes", Libelle: "Requests"}, {Hash: "#chat", Ordre: 23, Icone: "chat", Libelle: "Chat"},
+		{Hash: "#pourvous", Ordre: 24, Icone: "pourvous", Libelle: "For you"}, {Hash: "#acces", Ordre: 25, Icone: "acces", Libelle: "Access"},
+		{Hash: "#journal", Ordre: 26, Icone: "journal", Libelle: "Log"},
 	}
+}
+
+// Elements: one per project not archived, its progress, its milestone in progress, what its pilot
+// does now (the team view of a log already open, never a file read for it) and why it needs the owner.
+func (moduleDev) Elements(s *Serveur) []ElementHub {
+	var out []ElementHub
+	for _, pv := range s.vuesProjets("") {
+		if pv.Archive {
+			continue
+		}
+		e := ElementHub{ID: pv.Nom, Titre: pv.Nom, Etat: "inactif", Lien: "#suivi", Projet: pv.Nom}
+		if pv.Jalons > 0 {
+			e.Avancement = &Avancement{Fait: pv.Faits, Total: pv.Jalons}
+		}
+		switch {
+		case pv.Actif:
+			e.Etat, e.Activite = "actif", firstNonEmpty(pv.JalonTitre, pv.Jalon)
+			s.mu.Lock()
+			j := s.logs[pv.Nom]
+			s.mu.Unlock()
+			if j != nil {
+				for _, a := range j.Agents() {
+					if a.Genre == "chef" && a.Statut != "termine" {
+						e.Action = a.Activite
+					}
+				}
+			}
+		case pv.Phase == "termine" || pv.Jalons > 0 && pv.Faits == pv.Jalons:
+			e.Etat = "termine"
+		}
+		e.Attente = attenteDev(pv)
+		out = append(out, e)
+	}
+	return out
+}
+
+// attenteDev: what a project waits for from the owner (besoinProjet), with the bell's texts.
+func attenteDev(pv ProjetVue) *AttenteElement {
+	switch pv.Besoin {
+	case "pour_vous":
+		return &AttenteElement{Raison: "{0} task(s) on the For you page", Args: []any{pv.PourVous}, Page: "#pourvous"}
+	case "attente_vous":
+		return &AttenteElement{Raison: "Claude is waiting for you", Page: "#pourvous"}
+	case "connexion":
+		return &AttenteElement{Raison: "Connection problem", Page: "#suivi"}
+	case "budget":
+		return &AttenteElement{Raison: "API budget or credit used up, Claude is waiting", Page: "#suivi"}
+	}
+	return nil
 }
 
 func (moduleDev) Resume(s *Serveur) ResumeModule {

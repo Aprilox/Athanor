@@ -978,6 +978,8 @@ function rendreMenu(modules) {
   for (const m of modules) {
     if (!(m.pages || []).length) continue;
     let g = zone.querySelector(`.nav-groupe[data-module="${CSS.escape(m.id)}"]`);
+    // shortcut: a module whose pages index.html already links (Home, Settings) gets no group, until the one-level menu
+    if (!g && m.pages.every((p) => document.querySelector(`#nav-tiroir a[href="${CSS.escape(p.hash)}"], #nav-tiroir a[data-href="${CSS.escape(p.hash)}"]`))) continue;
     if (!g) { g = document.createElement("div"); g.className = "nav-groupe"; g.dataset.module = m.id; g.dataset.cree = "1"; }
     if (g.dataset.cree) { // rebuilt each time: its links follow the language
       g.innerHTML = `<button type="button" class="nav-groupe-titre" aria-expanded="true"></button><div class="nav-groupe-corps"><nav>${m.pages.map((p) => `<a href="${h(p.hash)}" data-page="${h(p.hash.slice(1))}">${h(t(p.libelle))}</a>`).join("")}</nav></div>`;
@@ -1672,7 +1674,7 @@ pages.accueil = async () => {
       <div class="muet petit">${projet ? h(t("Opens the chat of {0} with your text: nothing is sent before you press Send there.", [projet.nom])) : t("No project yet: opens a new project with your text as its request.")}</div>
     </form>
     ${visiteHub() ? `<div class="bloc hub-visite" role="status"><span class="hub-visite-fleche" aria-hidden="true">←</span><span class="croit">${t("Your projects are still here:")} <a href="#global">Dev → ${t("All projects")}</a></span><button type="button" class="btn btn-petit" data-hub-vu>${t("Got it")}</button></div>` : ""}
-    <div class="grille-hub">${(d.modules || []).map(tuileModule).join("")}</div>
+    <div class="grille-hub">${(d.modules || []).filter((m) => ((m.resume || {}).stats || []).length).map(tuileModule).join("")}</div>
     <section class="bloc missions"><h2>${t("Missions")}</h2>
       <div class="missions-vide"><span class="missions-icone" aria-hidden="true"></span><div><b>${t("No mission yet")}</b><div class="muet petit">${t("Coming soon: one sentence, and Dev and Servers work together.")}</div></div></div>
     </section>

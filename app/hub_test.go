@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -82,7 +83,10 @@ func TestHubAPI(t *testing.T) {
 			dev = &v.Modules[i]
 		}
 	}
-	if dev == nil || dev.Nom != (moduleDev{}).Nom() || len(dev.Pages) == 0 || dev.Pages[0].Hash != "#global" {
+	if len(v.Modules) < 4 || v.Modules[0].ID != "hub" || v.Modules[len(v.Modules)-1].ID != "reglages" {
+		t.Fatalf("modules not in the menu's order (hub first, Settings last): %s", w.Body.String())
+	}
+	if dev == nil || dev.Nom != (moduleDev{}).Nom() || len(dev.Pages) == 0 || dev.Pages[0].Hash != "#suivi" || dev.Pages[0].Module != "dev" {
 		t.Fatalf("Dev in /api/hub: %s", w.Body.String())
 	}
 	if dev.Resume.Etat != "inactif" || dev.Resume.Besoin != 0 || len(dev.Resume.Stats) == 0 {
@@ -282,5 +286,155 @@ func TestHubAncienneConfig(t *testing.T) {
 	}
 	if e := appel(demarrer(), "GET", "/api/etat", ""); e["hub_vu"] != true {
 		t.Fatalf("hub_vu not kept after a restart: %v", e["hub_vu"])
+	}
+}
+
+// TestHubPagesSansOrphelin: every page belongs to one module only (one tab bar), is a page of app.js,
+// and the hub, Dev and Settings declare the pages of the one-level menu.
+func TestHubPagesSansOrphelin(t *testing.T) {
+	js, err := os.ReadFile("static/app.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pagesJS := map[string]bool{}
+	for _, m := range regexp.MustCompile(`(?m)^pages\.([a-z]+) =`).FindAllStringSubmatch(string(js), -1) {
+		pagesJS["#"+m[1]] = true
+	}
+	de, par := map[string]string{}, map[string][]string{}
+	precedent := -1
+	for _, m := range modulesHub() {
+		p := pagesModule(m)
+		for i, x := range p {
+			if x.Module != m.ID() || x.Icone == "" || x.Libelle == "" || (i > 0 && x.Ordre < p[i-1].Ordre) {
+				t.Errorf("%s: page %+v (module, icon, label, order)", m.ID(), x)
+			}
+			if autre, ok := de[x.Hash]; ok {
+				t.Errorf("%s is declared by %s and %s", x.Hash, autre, m.ID())
+			}
+			if !pagesJS[x.Hash] {
+				t.Errorf("%s (%s) is no page of app.js", x.Hash, m.ID())
+			}
+			de[x.Hash] = m.ID()
+			par[m.ID()] = append(par[m.ID()], x.Hash)
+		}
+		if len(p) > 0 {
+			if p[0].Ordre < precedent {
+				t.Errorf("module %s out of the menu's order", m.ID())
+			}
+			precedent = p[0].Ordre
+		}
+	}
+	for id, veut := range map[string]string{
+		"hub":      "#accueil #global",
+		"dev":      "#suivi #equipe #demandes #chat #pourvous #acces #journal",
+		"reglages": "#reglages #extensions #sante #distance",
+		"coffre":   "#coffre",
+	} {
+		if g := strings.Join(par[id], " "); g != veut {
+			t.Errorf("pages of %s: %q, want %q", id, g, veut)
+		}
+	}
+}
+
+type moduleFactice struct {
+	id    string
+	ordre int
+	el    []ElementHub
+}
+
+func (m moduleFactice) ID() string  { return m.id }
+func (m moduleFactice) Nom() string { return m.id }
+func (m moduleFactice) Pages() []PageModule {
+	return []PageModule{{Hash: "#" + m.id, Ordre: m.ordre, Icone: m.id, Libelle: m.id}}
+}
+func (m moduleFactice) Resume(*Serveur) ResumeModule   { return ResumeModule{Etat: "inactif"} }
+func (m moduleFactice) Elements(*Serveur) []ElementHub { return m.el }
+
+// TestHubElements: GET /api/hub aggregates the elements of two dummy modules registered from outside
+// (no other module's code touched), marks their module, puts what waits for the owner first; a Dev
+// project gives its progress and link; no secret value of a project or of the vault is in the answer.
+func TestHubElements(t *testing.T) {
+	s := serveurCoffreTest(t)
+	modulesMu.Lock()
+	avant := append([]Module{}, modules...)
+	modulesMu.Unlock()
+	t.Cleanup(func() { modulesMu.Lock(); modules = avant; modulesMu.Unlock() })
+	enregistrerModule(moduleFactice{id: "serveurs", ordre: 30, el: []ElementHub{{ID: "vps-1", Titre: "vps-1", Etat: "actif", Lien: "#serveurs"}}})
+	enregistrerModule(moduleFactice{id: "missions", ordre: 10, el: []ElementHub{
+		{ID: "m1", Titre: "Site en ligne", Etat: "actif", Lien: "#missions"},
+		{ID: "m2", Titre: "Domaine", Etat: "actif", Lien: "#missions", Attente: &AttenteElement{Raison: "Choose a domain", Page: "#missions"}},
+	}})
+	temoin := "temoin-hub-" + aleatoire(6)
+	if _, err := s.coffre.Ajouter(EntreeCoffre{Nom: "Stripe test", Famille: "secret", Type: "stripe"}, temoin); err != nil {
+		t.Fatal(err)
+	}
+	p := Projet{Nom: "ma-boutique", Dossier: filepath.Join(t.TempDir(), "ma-boutique")}
+	for f, c := range map[string]string{
+		p.Plan(): "# Plan\n\n- [x] M1 : squelette\n- [ ] M2 : page d'accueil\n- [ ] M3 : paiement\n",
+		filepath.Join(p.Atelier(), "secrets.env"): "STRIPE_KEY=" + temoin + "\n",
+	} {
+		if err := os.MkdirAll(filepath.Dir(f), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(f, []byte(c), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s.mu.Lock()
+	s.config.Projets = append(s.config.Projets, p, Projet{Nom: "ancien", Dossier: t.TempDir(), Archive: true})
+	s.mu.Unlock()
+	mux := http.NewServeMux()
+	s.routes(mux)
+	r := httptest.NewRequest("GET", "/api/hub", nil)
+	r.Header.Set("X-Athanor", "jeton")
+	r.AddCookie(&http.Cookie{Name: cookieAcces, Value: "cle"})
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, r)
+	if w.Code != http.StatusOK || strings.Contains(w.Body.String(), temoin) {
+		t.Fatalf("/api/hub: %d, witness in the answer: %v", w.Code, strings.Contains(w.Body.String(), temoin))
+	}
+	var v struct {
+		Modules  []ModuleVue  `json:"modules"`
+		Elements []ElementHub `json:"elements"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &v); err != nil {
+		t.Fatal(err)
+	}
+	var ordre, el []string
+	for _, m := range v.Modules {
+		ordre = append(ordre, m.ID)
+	}
+	for _, e := range v.Elements {
+		el = append(el, e.Module+"/"+e.ID)
+	}
+	if g := strings.Join(ordre, " "); g != "hub missions dev serveurs coffre reglages" {
+		t.Errorf("modules: %s", g)
+	}
+	if g := strings.Join(el, " "); g != "missions/m2 missions/m1 dev/ma-boutique serveurs/vps-1" {
+		t.Errorf("elements (waiting first, then the menu's order): %s", g)
+	}
+	for _, e := range v.Elements {
+		if e.ID == "ma-boutique" && (e.Avancement == nil || *e.Avancement != (Avancement{1, 3}) || e.Etat != "inactif" || e.Lien != "#suivi" || e.Projet != "ma-boutique" || e.Attente != nil) {
+			t.Errorf("Dev element: %+v", e)
+		}
+	}
+}
+
+// TestHubAttenteDev: each reason a project needs the owner has the bell's text and page.
+func TestHubAttenteDev(t *testing.T) {
+	for besoin, veut := range map[string]string{
+		"":             "<nil>",
+		"pour_vous":    "{0} task(s) on the For you page [2] #pourvous",
+		"attente_vous": "Claude is waiting for you [] #pourvous",
+		"connexion":    "Connection problem [] #suivi",
+		"budget":       "API budget or credit used up, Claude is waiting [] #suivi",
+	} {
+		g := "<nil>"
+		if a := attenteDev(ProjetVue{Besoin: besoin, PourVous: 2}); a != nil {
+			g = fmt.Sprintf("%s %v %s", a.Raison, a.Args, a.Page)
+		}
+		if g != veut {
+			t.Errorf("attenteDev(%q) = %q, want %q", besoin, g, veut)
+		}
 	}
 }

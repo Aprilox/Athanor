@@ -60,7 +60,12 @@ func (a *appTUI) pageAccueil(e *ecranT, x, y, l, h int) {
 		e.texte(x+2, y+1, l-4, t("Updating…"), a.st(p.muet, p.fond))
 		return
 	}
-	mods := a.hub.Modules
+	var mods []ModuleVue // a tile per module that has figures (the hub's and Settings' have none)
+	for _, m := range a.hub.Modules {
+		if len(m.Resume.Stats) > 0 {
+			mods = append(mods, m)
+		}
+	}
 	cols := 1
 	if l >= 84 {
 		cols = min(2, len(mods))

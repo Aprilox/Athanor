@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 )
 
@@ -16,15 +17,49 @@ import (
 type Module interface {
 	ID() string          // stable, lowercase: "dev", "servers"
 	Nom() string         // i18n key (English text): the only place the display name lives
-	Pages() []PageModule // menu entries; empty = module hidden from the menu
-	// Resume: the home tile's data; must be cheap (cached data, < 50 ms)
+	Pages() []PageModule // its pages (menu entry, tab bar); empty = module hidden from the menu
+	// Resume: the home tile's data (no figure = no tile); must be cheap (cached data, < 50 ms)
 	Resume(s *Serveur) ResumeModule
+	// Elements: what it has at work (the Projects page, the home's "In progress"); cheap like Resume
+	Elements(s *Serveur) []ElementHub
 }
 
-// PageModule: one menu entry, a page of the web interface (its hash) and its i18n key.
+// PageModule: one page of the web interface (its hash), its i18n key and its CSS icon name. Ordre is
+// its rank in the whole menu (Home 0, Projects 1, Missions 10, Dev 20, Servers 30, Vault 40, Settings
+// 90): it sorts the tabs of a module and the modules of the menu. Module is set by pagesModule.
 type PageModule struct {
+	Module  string `json:"module"`
 	Hash    string `json:"hash"`
+	Ordre   int    `json:"ordre"`
+	Icone   string `json:"icone"`
 	Libelle string `json:"libelle"`
+}
+
+// ElementHub: one thing a module has at work (a Dev project, later a server, a mission), as the hub
+// lists it without knowing the module: its progress, what it does now, what waits for the owner.
+type ElementHub struct {
+	Module     string          `json:"module"` // set by the hub
+	ID         string          `json:"id"`
+	Titre      string          `json:"titre"`
+	Etat       string          `json:"etat"` // "actif" | "inactif" | "termine"
+	Avancement *Avancement     `json:"avancement,omitempty"`
+	Activite   string          `json:"activite,omitempty"` // what it is on (a milestone's title)
+	Action     string          `json:"action,omitempty"`   // what its worker does now (i18n key or text)
+	Attente    *AttenteElement `json:"attente,omitempty"`  // nil: nothing waits for the owner
+	Lien       string          `json:"lien"`               // the page that opens it
+	Projet     string          `json:"projet,omitempty"`   // the Dev project to select before opening Lien
+}
+
+type Avancement struct {
+	Fait  int `json:"fait"`
+	Total int `json:"total"`
+}
+
+// AttenteElement: why the owner is needed (an i18n key and its arguments) and the page to answer it.
+type AttenteElement struct {
+	Raison string `json:"raison"`
+	Args   []any  `json:"args,omitempty"`
+	Page   string `json:"page"`
 }
 
 // StatModule: one figure of a home tile (Valeur: an int or a string), Page = the hash it opens.
@@ -42,7 +77,7 @@ type ResumeModule struct {
 
 var (
 	modulesMu sync.Mutex
-	modules   = []Module{moduleDev{}} // Dev first, before any init(): the home and the menu start with it
+	modules   = []Module{moduleHub{}, moduleDev{}} // built in, before any init(); the menu order is PageModule.Ordre
 )
 
 // enregistrerModule: called from init(); an id given twice is a programming error.
@@ -57,11 +92,29 @@ func enregistrerModule(m Module) {
 	modules = append(modules, m)
 }
 
-// modulesHub: the registered modules, in registration order.
+// modulesHub: the registered modules in the menu's order (their first page's Ordre; no page = last).
 func modulesHub() []Module {
 	modulesMu.Lock()
-	defer modulesMu.Unlock()
-	return append([]Module{}, modules...)
+	m := append([]Module{}, modules...)
+	modulesMu.Unlock()
+	rang := func(x Module) int {
+		if p := pagesModule(x); len(p) > 0 {
+			return p[0].Ordre
+		}
+		return 1 << 30
+	}
+	sort.SliceStable(m, func(i, j int) bool { return rang(m[i]) < rang(m[j]) })
+	return m
+}
+
+// pagesModule: a module's pages sorted by Ordre, each marked with its module.
+func pagesModule(m Module) []PageModule {
+	p := append([]PageModule{}, m.Pages()...)
+	for i := range p {
+		p[i].Module = m.ID()
+	}
+	sort.SliceStable(p, func(i, j int) bool { return p[i].Ordre < p[j].Ordre })
+	return p
 }
 
 // dossierModule: the data folder of a module, dossierAthanor()/modules/<id>, created on first use.
@@ -78,15 +131,30 @@ type ModuleVue struct {
 	Resume ResumeModule `json:"resume"`
 }
 
-// apiHub: GET /api/hub, every module with its menu entries and its home tile.
+// apiHub: GET /api/hub, every module with its pages and its home tile, and every module's elements,
+// those waiting for the owner first.
 func (s *Serveur) apiHub(w http.ResponseWriter, r *http.Request) {
-	v := []ModuleVue{}
+	v, el := []ModuleVue{}, []ElementHub{}
 	for _, m := range modulesHub() {
-		p := m.Pages()
-		if p == nil {
-			p = []PageModule{}
+		v = append(v, ModuleVue{ID: m.ID(), Nom: m.Nom(), Pages: pagesModule(m), Resume: m.Resume(s)})
+		for _, e := range m.Elements(s) {
+			e.Module = m.ID()
+			el = append(el, e)
 		}
-		v = append(v, ModuleVue{ID: m.ID(), Nom: m.Nom(), Pages: p, Resume: m.Resume(s)})
 	}
-	s.ecrireJSON(w, map[string]any{"modules": v})
+	sort.SliceStable(el, func(i, j int) bool { return el[i].Attente != nil && el[j].Attente == nil })
+	s.ecrireJSON(w, map[string]any{"modules": v, "elements": el})
 }
+
+// The hub's own pages, declared like a module's: Home and Projects (every module's elements).
+type moduleHub struct{}
+
+func (moduleHub) ID() string  { return "hub" }
+func (moduleHub) Nom() string { return "Home" }
+func (moduleHub) Pages() []PageModule {
+	return []PageModule{{Hash: "#accueil", Ordre: 0, Icone: "accueil", Libelle: "Home"}, {Hash: "#global", Ordre: 1, Icone: "projets", Libelle: "Projects"}}
+}
+func (moduleHub) Resume(*Serveur) ResumeModule {
+	return ResumeModule{Stats: []StatModule{}, Etat: "inactif"}
+}
+func (moduleHub) Elements(*Serveur) []ElementHub { return nil }

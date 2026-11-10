@@ -6,9 +6,12 @@ func init() { enregistrerModule(moduleCoffre{}) }
 
 type moduleCoffre struct{}
 
-func (moduleCoffre) ID() string          { return "coffre" }
-func (moduleCoffre) Nom() string         { return "Vault" }
-func (moduleCoffre) Pages() []PageModule { return []PageModule{{"#coffre", "Secrets and variables"}} }
+func (moduleCoffre) ID() string  { return "coffre" }
+func (moduleCoffre) Nom() string { return "Vault" }
+func (moduleCoffre) Pages() []PageModule {
+	return []PageModule{{Hash: "#coffre", Ordre: 40, Icone: "coffre", Libelle: "Secrets and variables"}}
+}
+func (moduleCoffre) Elements(*Serveur) []ElementHub { return nil } // nothing at work: entries only
 func (moduleCoffre) Resume(s *Serveur) ResumeModule {
 	e := s.etatCoffre()
 	secrets, variables := 0, 0

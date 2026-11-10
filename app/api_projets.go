@@ -17,17 +17,19 @@ import (
 )
 
 type ProjetVue struct {
-	Nom      string  `json:"nom"`
-	Dossier  string  `json:"dossier"`
-	Existe   bool    `json:"existe"`
-	Actif    bool    `json:"actif"`
-	Phase    string  `json:"phase"`
-	Jalon    string  `json:"jalon"`
-	Attente  int     `json:"attente"`
-	PourVous int     `json:"pour_vous,omitempty"` // tasks waiting for the user (api_pourvous.go)
-	Courant  bool    `json:"courant"`
-	Fin      *FinVue `json:"fin,omitempty"`
-	Archive  bool    `json:"archive,omitempty"`
+	Nom     string `json:"nom"`
+	Dossier string `json:"dossier"`
+	Existe  bool   `json:"existe"`
+	Actif   bool   `json:"actif"`
+	Phase   string `json:"phase"`
+	Jalon   string `json:"jalon"`
+	// the title of the milestone in progress, when the plan has it (Jalon is what the pilot wrote)
+	JalonTitre string  `json:"jalon_titre,omitempty"`
+	Attente    int     `json:"attente"`
+	PourVous   int     `json:"pour_vous,omitempty"` // tasks waiting for the user (api_pourvous.go)
+	Courant    bool    `json:"courant"`
+	Fin        *FinVue `json:"fin,omitempty"`
+	Archive    bool    `json:"archive,omitempty"`
 	// milestones unticked by the folder check, waiting for their files
 	AVerifier bool `json:"a_verifier,omitempty"`
 	// the plan's progress (the All projects page): milestones done, out of all of them
@@ -79,6 +81,9 @@ func (s *Serveur) vuesProjets(courant string) []ProjetVue {
 			pv.Jalons++
 			if j.Fait {
 				pv.Faits++
+			}
+			if pv.Jalon != "" && pv.JalonTitre == "" && (pv.Jalon == j.ID || strings.HasPrefix(pv.Jalon, j.ID+" ")) {
+				pv.JalonTitre = j.Titre
 			}
 		}
 		pv.Besoin = besoinProjet(pv)

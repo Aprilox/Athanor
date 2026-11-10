@@ -176,8 +176,8 @@ func (a *appTUI) touchePage(ev evenementTUI, k string) {
 	}
 	switch a.page {
 	case pAccueil:
-		if k == "entree" && a.hub != nil && len(a.hub.Modules) > 0 && len(a.hub.Modules[0].Pages) > 0 {
-			a.ouvrirHash(a.hub.Modules[0].Pages[0].Hash)
+		if k == "entree" {
+			a.ouvrirHash("#global") // the Projects page, every module's elements
 		}
 	case pSuivi:
 		if k == "$" && a.vue != nil && a.vue.Depense != nil {
