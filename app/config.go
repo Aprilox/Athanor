@@ -26,6 +26,8 @@ type Config struct {
 	Accent                    string   `json:"accent"` // interface accent color (see accentsConnus)
 	BienvenueVue              bool     `json:"bienvenue_vue"`
 	HubVu                     bool     `json:"hub_vu,omitempty"` // the one-line hub tour was dismissed
+	// the modules whose tour was shown (Module.Tutoriel: once, then from the Guide)
+	Tours map[string]bool `json:"tours,omitempty"`
 	// native Windows mode: the pilot is Athanor.exe and Claude Code the Windows program, without
 	// WSL nor sandbox (natif_windows.go)
 	ModeNatif bool `json:"mode_natif"`

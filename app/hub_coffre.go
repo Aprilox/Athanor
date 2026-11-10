@@ -61,3 +61,4 @@ func (s *Serveur) etatCoffre() EtatCoffre {
 	}
 	return e
 }
+func (moduleCoffre) Tutoriel() []EtapeTutoriel { return nil }

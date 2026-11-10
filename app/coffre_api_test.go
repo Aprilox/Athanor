@@ -209,6 +209,9 @@ func TestHubTraductionModules(t *testing.T) {
 		for _, p := range m.Pages() {
 			cles = append(cles, p.Libelle)
 		}
+		for _, e := range m.Tutoriel() { // the tours, in the 5 languages (TestTutoriels)
+			cles = append(cles, e.Titre, e.Texte)
+		}
 		for _, st := range m.Resume(s).Stats {
 			cles = append(cles, st.Cle)
 			if v, ok := st.Valeur.(string); ok && m.ID() != "dev" { // Dev's quota status has its own labels

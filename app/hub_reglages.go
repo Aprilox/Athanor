@@ -19,3 +19,4 @@ func (moduleReglages) Resume(*Serveur) ResumeModule {
 	return ResumeModule{Stats: []StatModule{}, Etat: "inactif"}
 }
 func (moduleReglages) Elements(*Serveur) []ElementHub { return nil }
+func (moduleReglages) Tutoriel() []EtapeTutoriel      { return nil }

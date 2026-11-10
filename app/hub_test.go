@@ -349,6 +349,7 @@ func (m moduleFactice) Pages() []PageModule {
 }
 func (m moduleFactice) Resume(*Serveur) ResumeModule   { return ResumeModule{Etat: "inactif"} }
 func (m moduleFactice) Elements(*Serveur) []ElementHub { return m.el }
+func (m moduleFactice) Tutoriel() []EtapeTutoriel      { return nil }
 
 // TestHubElements: GET /api/hub aggregates the elements of two dummy modules registered from outside
 // (no other module's code touched), marks their module, puts what waits for the owner first; a Dev
@@ -436,5 +437,70 @@ func TestHubAttenteDev(t *testing.T) {
 		if g != veut {
 			t.Errorf("attenteDev(%q) = %q, want %q", besoin, g, veut)
 		}
+	}
+}
+
+// TestTutoriels: the Home declares a short tour (4 to 6 steps, each with a title and a text) in /api/hub,
+// a module without one sends none; a tour marked seen through /api/preferences stays seen in /api/etat
+// and in the config (shown once), can be reset (reopened as new), and an unknown tour id is refused.
+func TestTutoriels(t *testing.T) {
+	s := serveurCoffreTest(t)
+	modulesMu.Lock()
+	avant := append([]Module{}, modules...)
+	modulesMu.Unlock()
+	t.Cleanup(func() { modulesMu.Lock(); modules = avant; modulesMu.Unlock() })
+	enregistrerModule(moduleFactice{id: "serveurs", ordre: 30})
+	mux := http.NewServeMux()
+	s.routes(mux)
+	appel := func(methode, route, corps string) (int, map[string]any) {
+		r := httptest.NewRequest(methode, route, strings.NewReader(corps))
+		r.Header.Set("X-Athanor", "jeton")
+		r.AddCookie(&http.Cookie{Name: cookieAcces, Value: "cle"})
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, r)
+		var v map[string]any
+		_ = json.Unmarshal(w.Body.Bytes(), &v)
+		return w.Code, v
+	}
+	_, hub := appel("GET", "/api/hub", "")
+	tours := map[string]int{}
+	for _, x := range hub["modules"].([]any) {
+		m := x.(map[string]any)
+		if e, ok := m["tutoriel"].([]any); ok {
+			tours[m["id"].(string)] = len(e)
+			for _, y := range e {
+				if et := y.(map[string]any); et["titre"] == "" || et["texte"] == "" {
+					t.Fatalf("%s: step without title or text: %v", m["id"], et)
+				}
+			}
+		}
+	}
+	if n := tours["hub"]; n < 4 || n > 6 {
+		t.Fatalf("Home tour: %d steps, want 4 to 6 (%v)", n, tours)
+	}
+	if _, ok := tours["serveurs"]; ok {
+		t.Fatal("a module without a tour sent one")
+	}
+	if _, e := appel("GET", "/api/etat", ""); len(e["tours"].(map[string]any)) != 0 {
+		t.Fatalf("new config: tours %v", e["tours"])
+	}
+	if c, _ := appel("POST", "/api/preferences", `{"tours":{"hub":true}}`); c != http.StatusOK {
+		t.Fatalf("mark the Home tour seen: %d", c)
+	}
+	if _, e := appel("GET", "/api/etat", ""); e["tours"].(map[string]any)["hub"] != true {
+		t.Fatalf("Home tour not seen after the POST: %v", e["tours"])
+	}
+	if c, _ := appel("POST", "/api/preferences", `{"tours":{"serveurs":true}}`); c != http.StatusBadRequest {
+		t.Fatalf("tour of a module without one: %d, want 400", c)
+	}
+	if c, _ := appel("POST", "/api/preferences", `{"tours":{"../x":true}}`); c != http.StatusBadRequest {
+		t.Fatalf("unknown tour id: %d, want 400", c)
+	}
+	if cfg := lireConfig(); !cfg.Tours["hub"] {
+		t.Fatalf("seen state not written in the config: %v", cfg.Tours)
+	}
+	appel("POST", "/api/preferences", `{"tours":{"hub":false}}`)
+	if _, e := appel("GET", "/api/etat", ""); e["tours"].(map[string]any)["hub"] != false {
+		t.Fatalf("Home tour not reset: %v", e["tours"])
 	}
 }

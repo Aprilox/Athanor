@@ -116,6 +116,7 @@ type EtatVue struct {
 	Accent      string                `json:"accent"`
 	Bienvenue   bool                  `json:"bienvenue"`
 	HubVu       bool                  `json:"hub_vu"`
+	Tours       map[string]bool       `json:"tours"`   // the modules whose tour was shown (config)
 	Version     string                `json:"version"` // Athanor's version (the sidebar, Settings › Options)
 	Natif       bool                  `json:"natif"`   // native Windows mode: no Linux screen
 	Windows     bool                  `json:"windows"` // the app runs on Windows: WSL or native mode to choose
@@ -150,6 +151,10 @@ func (s *Serveur) apiEtat(w http.ResponseWriter, r *http.Request) {
 	kit, mdp, courant := s.kitCourant(), s.config.MotDePasseHash != "", s.config.ProjetActif
 	langue, bienvenue, hubVu := s.config.Langue, !s.config.BienvenueVue, s.config.HubVu
 	theme, accent := s.config.Theme, s.config.Accent
+	tours := map[string]bool{}
+	for id, vu := range s.config.Tours {
+		tours[id] = vu
+	}
 	if !languesConnues[langue] {
 		langue = "en"
 	}
@@ -157,7 +162,7 @@ func (s *Serveur) apiEtat(w http.ResponseWriter, r *http.Request) {
 	if nom := r.URL.Query().Get("p"); nom != "" {
 		courant = nom
 	}
-	vue := EtatVue{KitValide: kit.Valide(), KitInstalle: kit.Installe(), Verrouille: verrou, MotDePasse: mdp, Maintenant: time.Now().Format("15:04"), DemandeVide: true, Langue: langue, Theme: theme, Accent: accent, Bienvenue: bienvenue, HubVu: hubVu, Version: versionAthanor}
+	vue := EtatVue{KitValide: kit.Valide(), KitInstalle: kit.Installe(), Verrouille: verrou, MotDePasse: mdp, Maintenant: time.Now().Format("15:04"), DemandeVide: true, Langue: langue, Theme: theme, Accent: accent, Bienvenue: bienvenue, HubVu: hubVu, Tours: tours, Version: versionAthanor}
 	vue.Distant = appareilDe(r) != ""
 	vue.DistanceActive, vue.Connectes = s.connectesDistance()
 	if !vue.Distant {
@@ -499,11 +504,12 @@ func (s *Serveur) langue() string {
 // The language is also written into the tool's .env (LANGUAGE) so that Claude works in that language.
 func (s *Serveur) apiPreferences(w http.ResponseWriter, r *http.Request) {
 	var c struct {
-		Langue       *string `json:"langue"`
-		Theme        *string `json:"theme"`
-		Accent       *string `json:"accent"`
-		BienvenueVue *bool   `json:"bienvenue_vue"`
-		HubVu        *bool   `json:"hub_vu"`
+		Langue       *string         `json:"langue"`
+		Theme        *string         `json:"theme"`
+		Accent       *string         `json:"accent"`
+		BienvenueVue *bool           `json:"bienvenue_vue"`
+		HubVu        *bool           `json:"hub_vu"`
+		Tours        map[string]bool `json:"tours"` // {"hub": true}: that module's tour was shown
 	}
 	if err := lireCorps(r, &c); err != nil {
 		s.erreur(w, http.StatusBadRequest, err.Error())
@@ -516,6 +522,12 @@ func (s *Serveur) apiPreferences(w http.ResponseWriter, r *http.Request) {
 	if c.Theme != nil && !themesConnus[*c.Theme] || c.Accent != nil && !accentsConnus[*c.Accent] {
 		s.erreur(w, http.StatusBadRequest, "Unknown theme")
 		return
+	}
+	for id := range c.Tours {
+		if !tutorielConnu(id) {
+			s.erreur(w, http.StatusBadRequest, "Unknown tour")
+			return
+		}
 	}
 	s.mu.Lock()
 	if c.Langue != nil {
@@ -532,6 +544,12 @@ func (s *Serveur) apiPreferences(w http.ResponseWriter, r *http.Request) {
 	}
 	if c.HubVu != nil {
 		s.config.HubVu = *c.HubVu
+	}
+	for id, vu := range c.Tours {
+		if s.config.Tours == nil {
+			s.config.Tours = map[string]bool{}
+		}
+		s.config.Tours[id] = vu
 	}
 	langue := s.config.Langue
 	err := ecrireConfig(s.config)

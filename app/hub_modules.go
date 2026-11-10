@@ -22,6 +22,27 @@ type Module interface {
 	Resume(s *Serveur) ResumeModule
 	// Elements: what it has at work (the Projects page, the home's "In progress"); cheap like Resume
 	Elements(s *Serveur) []ElementHub
+	// Tutoriel: its tour, shown once at the first visit of one of its pages (4 to 6 steps); nil = none
+	Tutoriel() []EtapeTutoriel
+}
+
+// EtapeTutoriel: one step of a module's tour: its title and text (i18n keys, English), the element it
+// shows (a CSS selector, "" = none, the bubble in the middle) and its page ("" = the module's first page).
+type EtapeTutoriel struct {
+	Titre string `json:"titre"`
+	Texte string `json:"texte"`
+	Cible string `json:"cible,omitempty"`
+	Page  string `json:"page,omitempty"`
+}
+
+// tutorielConnu: a module with that id declares a tour (the only ids /api/preferences keeps as seen).
+func tutorielConnu(id string) bool {
+	for _, m := range modulesHub() {
+		if m.ID() == id {
+			return len(m.Tutoriel()) > 0
+		}
+	}
+	return false
 }
 
 // PageModule: one page of the web interface (its hash), its i18n key and its CSS icon name. Ordre is
@@ -125,10 +146,11 @@ func dossierModule(id string) string {
 }
 
 type ModuleVue struct {
-	ID     string       `json:"id"`
-	Nom    string       `json:"nom"`
-	Pages  []PageModule `json:"pages"`
-	Resume ResumeModule `json:"resume"`
+	ID       string          `json:"id"`
+	Nom      string          `json:"nom"`
+	Pages    []PageModule    `json:"pages"`
+	Resume   ResumeModule    `json:"resume"`
+	Tutoriel []EtapeTutoriel `json:"tutoriel,omitempty"`
 }
 
 // apiHub: GET /api/hub, every module with its pages and its home tile, every module's elements (those
@@ -142,7 +164,7 @@ func (s *Serveur) apiHub(w http.ResponseWriter, r *http.Request) {
 func (s *Serveur) vueHub() ([]ModuleVue, []ElementHub) {
 	v, el := []ModuleVue{}, []ElementHub{}
 	for _, m := range modulesHub() {
-		v = append(v, ModuleVue{ID: m.ID(), Nom: m.Nom(), Pages: pagesModule(m), Resume: m.Resume(s)})
+		v = append(v, ModuleVue{ID: m.ID(), Nom: m.Nom(), Pages: pagesModule(m), Resume: m.Resume(s), Tutoriel: m.Tutoriel()})
 		for _, e := range m.Elements(s) {
 			e.Module = m.ID()
 			el = append(el, e)
@@ -164,3 +186,12 @@ func (moduleHub) Resume(*Serveur) ResumeModule {
 	return ResumeModule{Stats: []StatModule{}, Etat: "inactif"}
 }
 func (moduleHub) Elements(*Serveur) []ElementHub { return nil }
+func (moduleHub) Tutoriel() []EtapeTutoriel {
+	return []EtapeTutoriel{
+		{Titre: "What do you want to do?", Texte: "Say it here in one sentence: it goes to the chat of the current project, or starts a new project. Nothing is sent before you press Send there.", Cible: "#accueil-form"},
+		{Titre: "One tile per part", Texte: "Each part of Athanor has its tile with what matters now. Click a figure to open its page.", Cible: ".grille-hub"},
+		{Titre: "In progress", Texte: "What is working right now, and first what waits for you, with the reason. “See all” opens the Projects page.", Cible: ".en-cours"},
+		{Titre: "The bell", Texte: "Everything that needs you, with why. “View” opens the right page, “Ignore” hides an alert until something changes.", Cible: "[data-notifs]"},
+		{Titre: "Projects", Texte: "Every project of every part on one page, with filters. This tour and the others stay in the “?”, at the top of the Guide.", Cible: `nav a[href="#global"]`},
+	}
+}

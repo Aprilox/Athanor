@@ -138,3 +138,4 @@ func besoinProjet(pv ProjetVue) string {
 	}
 	return ""
 }
+func (moduleDev) Tutoriel() []EtapeTutoriel { return nil }

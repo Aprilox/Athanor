@@ -113,8 +113,7 @@ html.cadre .dialogue, html.cadre .verrou, html.cadre .assistant { top: var(--bar
 .accueil-titre { font-size: 18px; font-weight: 600; }
 .accueil-barre .ligne { flex-wrap: nowrap; }
 .accueil-barre input { font-size: 16px; padding: 11px 14px; min-width: 0; }
-.bloc.hub-visite { display: flex; align-items: center; gap: 10px; border-color: var(--accent); background: var(--accent-halo); }
-.hub-visite-fleche { font-size: 18px; color: var(--accent); }
+.tutoriels { flex-wrap: wrap; gap: 8px; }
 .grille-hub { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
 .grille-hub > .bloc + .bloc { margin-top: 0; }
 .tuile-module.besoin { border-color: var(--attention); }
@@ -781,6 +780,7 @@ input.large { flex: 1; min-width: 200px; width: auto; }
 /* the guided tour's veil: the whole window dimmed, except a hole around the place explained */
 .visite-voile { position: fixed; z-index: 54; pointer-events: none; border-radius: 10px; border: 2px solid var(--accent, #2a9d8f); box-shadow: 0 0 0 200vmax rgba(5, 8, 12, .62); transition: top .25s ease, left .25s ease, width .25s ease, height .25s ease; }
 .visite-voile.sans-cible { border: 0; }
+@media (max-width: 700px) { .visite-voile { box-shadow: 0 0 0 200vmax rgba(5, 8, 12, .35); } } /* phone: a lighter veil */
 @media (prefers-reduced-motion: reduce) { .visite-voile { transition: none; } }
 
 /* Team: what each agent did lately */

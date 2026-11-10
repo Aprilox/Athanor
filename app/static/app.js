@@ -1147,28 +1147,31 @@ $("#assistant").addEventListener("click", async (ev) => {
     if (etat.assistant === 1 && !((etat.raccourci || {}).raccourcis || []).length) etat.raccourciPlusTard = true; // skipped: not offered again this time
     etat.assistant++; return rendreAssistant();
   }
-  if (b.dataset.assistant === "fin") { await action(api("preferences", "POST", { bienvenue_vue: true, hub_vu: true })); etat.assistant = -1; rendreAssistant(); location.hash = "#suivi"; await rendrePage(); demarrerVisite(); }
+  if (b.dataset.assistant === "fin") { // then the Home, with its tour (proposerTutoriel): never a third help on top
+    await action(api("preferences", "POST", { bienvenue_vue: true })); etat.assistant = -1; if (etat.vue) etat.vue.bienvenue = false; rendreAssistant();
+    if (location.hash !== "#accueil") location.hash = "#accueil"; else await rendrePage();
+  }
 });
 
-// --- the guided tour, right after the first-launch wizard (and from Options): a bubble shows each place
-// where things happen, on its own page: the mode, the installation and the check, a new project, Start.
-const VISITE = [
-  { page: "reglages", onglet: "options", cibles: ["#op-natif"], windows: true, titre: "How Claude works on this PC",
-    texte: "Native Windows is selected: nothing else to install, Claude runs directly on Windows. Choose WSL here if you want Claude in a sandbox (it installs Linux once)." },
-  { page: "sante", cibles: ["[data-onglet-sante]", "[data-installer-mode]", "[data-installer]"], titre: "Install, then check",
-    texte: "One tab per way Claude can run on this computer, the current one marked: “Install everything” installs what it needs. Then “Check everything”: each problem has its own Repair or Ask Claude button." },
-  { page: "nouveau", cibles: ["#np-nom"], titre: "Your project",
-    texte: "A name, the development folder (new or existing, anywhere on the PC), and what you want. A folder made with Athanor on another PC carries on where it was." },
-  { page: "suivi", cibles: ["#bandeau .actions .btn", "#sel-projet"], titre: "Start",
-    texte: "Start launches the pilot: Claude frames, plans milestones, builds and checks them, cycle after cycle. You follow everything here." },
-  { page: "distance", cibles: ["label.interrupteur:has(#dist-actif)", "#dist-actif"], titre: "From your phone",
-    texte: "Switch remote access on, scan the QR code with your phone, and follow or drive Athanor from anywhere. On the phone, Remote › This device turns notifications on." },
-  { page: "nouveau", cibles: ['[data-np-mode="rejoindre"]'], titre: "Several computers",
-    texte: "Several computers can build one project at once through its GitHub repository: on another computer, Join a project. Each one then takes the milestones it is best at, and they merge each other's work." },
-  { page: "guide", cibles: [".onglets-guide"], titre: "The Guide",
-    texte: "Every step of these tutorials stays here: starting a project, GitHub, your phone, several computers." }
-];
-function etapesVisite() { return VISITE.filter((e) => !e.windows || (etat.vue || {}).windows); }
+// --- the tours: each module declares its own (Module.Tutoriel in /api/hub), shown once at the first visit of
+// one of its pages (its "seen" state: config tours, /api/preferences), replayed from the Guide (the "?").
+// A bubble over the place explained; the veil dims without blocking anything; Skip or Escape at any time.
+function lancerTutoriel(m) {
+  const premiere = ((m.pages || [])[0] || {}).hash || "#accueil";
+  etat.etapesVisite = (m.tutoriel || []).map((e) => ({ page: (e.page || premiere).slice(1), cibles: e.cible ? [e.cible] : [], titre: e.titre, texte: e.texte }));
+  demarrerVisite();
+}
+// after each render: the tour of the page's module, if never shown here and nothing else is open
+function proposerTutoriel() {
+  const v = etat.vue, m = moduleDePage(etat.page);
+  if (!v || v.verrouille || v.bienvenue || etat.assistant >= 0 || etat.visite >= 0 || !m || !(m.tutoriel || []).length) return;
+  etat.toursVus ||= new Set(); // a paired device may not write the preference: shown once per session there
+  if ((v.tours || {})[m.id] || etat.toursVus.has(m.id)) return;
+  etat.toursVus.add(m.id); (v.tours ||= {})[m.id] = true;
+  api("preferences", "POST", { tours: { [m.id]: true } }).catch(() => {});
+  lancerTutoriel(m);
+}
+function etapesVisite() { return etat.etapesVisite || []; }
 function demarrerVisite() { etat.visite = 0; montrerVisite(); }
 function finirVisite() {
   etat.visite = -1; $("#visite").hidden = true; $("#visite-voile").hidden = true; etat.visiteCible = null;
@@ -1205,7 +1208,6 @@ async function montrerVisite() {
   const etapes = etapesVisite(), n = etat.visite;
   if (n < 0 || n >= etapes.length) return finirVisite();
   const e = etapes[n];
-  if (e.onglet) { etat.ongletReglages = e.onglet; etat.ongletDemande = e.onglet; }
   if (location.hash !== "#" + e.page) location.hash = "#" + e.page; else await rendrePage();
   let cible = null;
   for (let i = 0; i < 40 && !cible; i++) { // the page renders asynchronously
@@ -1215,11 +1217,12 @@ async function montrerVisite() {
   if (n !== etat.visite) return;
   document.querySelectorAll(".visite-cible").forEach((x) => x.classList.remove("visite-cible"));
   const bulle = $("#visite");
-  bulle.innerHTML = `<div class="visite-titre">${h(t(e.titre))}</div><p>${h(t(e.texte))}</p>
+  bulle.innerHTML = `<div class="visite-titre"></div><p></p>
     <div class="visite-pied"><span class="muet petit">${t("Step {0} of {1}", [n + 1, etapes.length])}</span><span class="espace"></span>
       <button class="btn btn-petit" data-visite="passer">${t("Skip the tour")}</button>
       ${n > 0 ? `<button class="btn btn-petit" data-visite="retour">${t("Back")}</button>` : ""}
       <button class="btn btn-petit btn-primaire" data-visite="suite">${n === etapes.length - 1 ? t("Finish") : t("Next")}</button></div>`;
+  bulle.querySelector(".visite-titre").textContent = t(e.titre); bulle.querySelector("p").textContent = t(e.texte); // module texts: never HTML
   bulle.hidden = false;
   etat.visiteCible = cible; etat.visiteSelecteurs = e.cibles;
   if (cible) {
@@ -1777,7 +1780,6 @@ pages.accueil = async () => {
       <div class="ligne m0"><input type="text" id="accueil-texte" class="croit" autocomplete="off" placeholder="${h(t("Say it in one sentence…"))}"><button type="submit" class="btn btn-primaire">${t("Send")}</button></div>
       <div class="muet petit">${projet ? h(t("Opens the chat of {0} with your text: nothing is sent before you press Send there.", [projet.nom])) : t("No project yet: opens a new project with your text as its request.")}</div>
     </form>
-    ${visiteHub() ? `<div class="bloc hub-visite" role="status"><span class="hub-visite-fleche" aria-hidden="true">←</span><span class="croit">${t("Your projects are still here:")} <a href="#global">${t("Projects")}</a></span><button type="button" class="btn btn-petit" data-hub-vu>${t("Got it")}</button></div>` : ""}
     <div class="grille-hub">${modules.filter((m) => ((m.resume || {}).stats || []).length).map(tuileModule).join("")}</div>
     ${blocEnCours(d.elements || [], modules)}
     <section class="bloc missions"><h2>${t("Missions")}</h2>
@@ -1785,14 +1787,6 @@ pages.accueil = async () => {
     </section>
   </div>`;
 };
-// the one-line tour, for a config that had projects before the hub: after the welcome wizard, once only
-// (the wizard's end marks it seen: a new install already gets the wizard then the full tour)
-function visiteHub() { const v = etat.vue || {}; return !v.hub_vu && !v.bienvenue && etat.assistant < 0 && (v.projets || []).length > 0; }
-document.addEventListener("click", async (ev) => {
-  const b = ev.target.closest("[data-hub-vu]"); if (!b) return;
-  b.closest(".hub-visite").remove(); if (etat.vue) etat.vue.hub_vu = true;
-  await action(api("preferences", "POST", { hub_vu: true }));
-});
 // the bar's text goes to the chat of the current project (or to a new project's request) through memory,
 // never through the hash, and is only put in the field: the user sends it there
 function envoyerAccueil() {
@@ -2060,7 +2054,10 @@ const mdGuide = (s) => h(s).replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>").replace(/\*
 const lienGuide = (sujet, texte) => `<a class="lien-guide" href="#guide" data-guide-sujet="${sujet}">${h(texte || t("How it works"))}</a>`;
 pages.guide = async () => {
   const sujet = GUIDE.find((g) => g.id === etat.guideSujet) || GUIDE[0];
-  return `<div class="onglets onglets-guide">${GUIDE.map((g) => `<button class="${g === sujet ? "actif" : ""}" data-guide-sujet="${g.id}">${t(g.titre)}</button>`).join("")}</div>
+  const tours = (etat.hubModules || []).filter((m) => (m.tutoriel || []).length);
+  return `${tours.length ? `<div class="bloc ligne tutoriels"><b>${t("Tutorials")}</b><span class="muet petit croit">${t("A short tour of each part, shown at your first visit. Replay one:")}</span>
+    ${tours.map((m) => `<button type="button" class="btn btn-petit" data-tutoriel="${h(m.id)}">${h(t(m.nom))}</button>`).join("")}</div>` : ""}
+  <div class="onglets onglets-guide">${GUIDE.map((g) => `<button class="${g === sujet ? "actif" : ""}" data-guide-sujet="${g.id}">${t(g.titre)}</button>`).join("")}</div>
   <div class="bloc guide"><h2>${t(sujet.titre)}</h2><p class="intro">${mdGuide(t(sujet.intro))}</p>
     <div class="etapes">${sujet.etapes.map(([titre, texte, lien, libelle], i) => `<div class="etape ${lien ? "" : "sans-lien"}"><div class="n">${i + 1}</div>
       <div><b>${t(titre)}</b><div class="d">${mdGuide(t(texte))}</div></div>
@@ -2068,6 +2065,10 @@ pages.guide = async () => {
     ${sujet.note ? `<p class="muet petit mt-2">ℹ ${mdGuide(t(sujet.note))}</p>` : ""}
   </div>`;
 };
+document.addEventListener("click", (ev) => {
+  const b = ev.target.closest("[data-tutoriel]"); if (!b) return;
+  const m = (etat.hubModules || []).find((x) => x.id === b.dataset.tutoriel); if (m) lancerTutoriel(m);
+});
 // a tutorial chosen from anywhere (the guide's tabs, the "How it works" links)
 document.addEventListener("click", (ev) => {
   const a = ev.target.closest("[data-guide-sujet]"); if (!a) return;
@@ -4311,6 +4312,7 @@ async function rendrePage() {
   const champ = saisie && document.getElementById(saisie[0]);
   if (champ) { champ.focus({ preventScroll: true }); champ.setSelectionRange(saisie[1], saisie[2]); }
   suivrePlan();
+  proposerTutoriel();
   if (etat.page === "journal") rendreJournal();
   if (etat.page === "sante") rendreSortie();
 }
@@ -4629,7 +4631,7 @@ async function rafraichir() {
         const d = await api("hub").catch(() => null);
         if (d) {
           const cloche = (x) => JSON.stringify([(x || {}).alertes, (x || {}).ignorees]), change = cloche(d) !== cloche(etat.hub);
-          etat.hub = d;
+          etat.hub = d; proposerTutoriel(); // the first /api/hub of a visit: the page's tour may wait for it
           const sig = JSON.stringify([d.modules || [], d.elements || []]);
           if (etat.page === "global" ? sig !== etat.globalSig : etat.page === "accueil" && sig !== etat.hubSig) rendrePage();
           if (change) rendreBandeau(v);
