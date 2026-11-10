@@ -13,8 +13,8 @@
   --line: #2d3a49;
   --line-2: #222c38;      /* faint separators */
   --ink: #e9eef3;
-  --muted: #8e9dad;
-  --faible: #5f6f80;
+  --muted: #98a6b4;
+  --faible: #8a96a2;   /* still WCAG AA (4.5:1) on every panel */
   --voile: rgba(12, 17, 23, .96);
   --ombre: 0 14px 36px rgba(0, 0, 0, .45);
   --ok: #3fc6a5;
@@ -35,36 +35,36 @@
 }
 :root[data-theme="minuit"] {
   --bg: #0b0d11; --panel: #12151b; --panel-2: #1a1e26; --panel-3: #222731; --sombre: #07090c; --sombre-2: #040507;
-  --line: #242933; --line-2: #1b1f27; --ink: #eceff4; --muted: #8a92a0; --faible: #5a6170; --voile: rgba(5, 6, 8, .96);
+  --line: #242933; --line-2: #1b1f27; --ink: #eceff4; --muted: #8f96a4; --faible: #828792; --voile: rgba(5, 6, 8, .96);
 }
 :root[data-theme="ocean"] {
   --bg: #0e1a2b; --panel: #132238; --panel-2: #1a2d47; --panel-3: #223856; --sombre: #0a1420; --sombre-2: #070e17;
-  --line: #27405f; --line-2: #1e324b; --ink: #e6eef8; --muted: #8fa6c2; --faible: #5f7592; --voile: rgba(8, 16, 28, .96);
+  --line: #27405f; --line-2: #1e324b; --ink: #e6eef8; --muted: #90a7c3; --faible: #8596ac; --voile: rgba(8, 16, 28, .96);
 }
 :root[data-theme="clair"] {
   --bg: #f3f5f8; --panel: #ffffff; --panel-2: #eef1f5; --panel-3: #e3e8ee; --sombre: #f7f9fb; --sombre-2: #eef1f5;
-  --line: #d9dfe7; --line-2: #e6eaf0; --ink: #1b2430; --muted: #5d6b7b; --faible: #8a97a6; --voile: rgba(243, 245, 248, .96);
+  --line: #d9dfe7; --line-2: #e6eaf0; --ink: #1b2430; --muted: #525e6c; --faible: #636d78; --voile: rgba(243, 245, 248, .96);
   --ombre: 0 14px 36px rgba(20, 30, 45, .18);
-  --ok: #178f72; --attention: #b7791f; --erreur: #c53d35; --info: #2f6fd6; --violet: #7a4fd6; --sur-attention: #ffffff;
+  --ok: #137a62; --attention: #946219; --erreur: #c53d35; --info: #2c69cb; --violet: #7a4fd6; --sur-attention: #ffffff;
   --j-pilote: #7a5d12; --j-outil: #0f7f7f; --j-outil-m: #178f8f; --j-texte-m: #1b2430; --j-erreur: #b4322b; --j-sous: #6a3fd0; --j-fin: #178f72;
 }
 :root[data-theme="sable"] {
   --bg: #f6f1e8; --panel: #fffdf8; --panel-2: #f0e9dc; --panel-3: #e7dece; --sombre: #faf6ee; --sombre-2: #f0e9dc;
-  --line: #e0d6c5; --line-2: #ebe3d5; --ink: #2b2620; --muted: #6f655a; --faible: #9c9185; --voile: rgba(246, 241, 232, .96);
+  --line: #e0d6c5; --line-2: #ebe3d5; --ink: #2b2620; --muted: #5f574d; --faible: #6f675e; --voile: rgba(246, 241, 232, .96);
   --ombre: 0 14px 36px rgba(60, 45, 20, .18);
-  --ok: #2d8a5e; --attention: #b06a12; --erreur: #bf3b2e; --info: #2b63b8; --violet: #7048c0; --sur-attention: #ffffff;
+  --ok: #26754f; --attention: #955a0f; --erreur: #bf3b2e; --info: #2b63b8; --violet: #7048c0; --sur-attention: #ffffff;
   --j-pilote: #7a5212; --j-outil: #0f7a6f; --j-outil-m: #178f82; --j-texte-m: #2b2620; --j-erreur: #a8302a; --j-sous: #6239b8; --j-fin: #2d8a5e;
 }
 :root[data-accent="bleu"]    { --accent: #5b9dff; --accent-2: #78b0ff; --accent-halo: rgba(91, 157, 255, .2); }
 :root[data-accent="violet"]  { --accent: #a98bff; --accent-2: #bba3ff; --accent-halo: rgba(169, 139, 255, .22); }
 :root[data-accent="ambre"]   { --accent: #f2b441; --accent-2: #f7c566; --accent-halo: rgba(242, 180, 65, .22); }
 :root[data-accent="rose"]    { --accent: #ef7aa6; --accent-2: #f598ba; --accent-halo: rgba(239, 122, 166, .22); }
-:root[data-theme="clair"][data-accent="bleu"],   :root[data-theme="sable"][data-accent="bleu"]   { --accent: #2f6fd6; --accent-2: #4a84e3; --sur-fort: #ffffff; }
-:root[data-theme="clair"][data-accent="violet"], :root[data-theme="sable"][data-accent="violet"] { --accent: #7a4fd6; --accent-2: #8f68e0; --sur-fort: #ffffff; }
-:root[data-theme="clair"][data-accent="ambre"],  :root[data-theme="sable"][data-accent="ambre"]  { --accent: #c47d10; --accent-2: #d58f24; --sur-fort: #ffffff; }
-:root[data-theme="clair"][data-accent="rose"],   :root[data-theme="sable"][data-accent="rose"]   { --accent: #d2487c; --accent-2: #dc6391; --sur-fort: #ffffff; }
+:root[data-theme="clair"][data-accent="bleu"],   :root[data-theme="sable"][data-accent="bleu"]   { --accent: #2c69cb; --accent-2: #275cb3; --sur-fort: #ffffff; }
+:root[data-theme="clair"][data-accent="violet"], :root[data-theme="sable"][data-accent="violet"] { --accent: #7a4fd6; --accent-2: #6a43c0; --sur-fort: #ffffff; }
+:root[data-theme="clair"][data-accent="ambre"],  :root[data-theme="sable"][data-accent="ambre"]  { --accent: #96600c; --accent-2: #84540b; --sur-fort: #ffffff; }
+:root[data-theme="clair"][data-accent="rose"],   :root[data-theme="sable"][data-accent="rose"]   { --accent: #b83f6d; --accent-2: #a23760; --sur-fort: #ffffff; }
 :root[data-theme="clair"]:not([data-accent]), :root[data-theme="clair"][data-accent=""], :root[data-theme="clair"][data-accent="sarcelle"],
-:root[data-theme="sable"]:not([data-accent]), :root[data-theme="sable"][data-accent=""], :root[data-theme="sable"][data-accent="sarcelle"] { --accent: #178f72; --accent-2: #27a285; --accent-halo: rgba(23, 143, 114, .18); --sur-fort: #ffffff; }
+:root[data-theme="sable"]:not([data-accent]), :root[data-theme="sable"][data-accent=""], :root[data-theme="sable"][data-accent="sarcelle"] { --accent: #137a62; --accent-2: #116b56; --accent-halo: rgba(19, 122, 98, .18); --sur-fort: #ffffff; }
 
 /* ------------------------------------------------------------------ the window's own title bar (Windows application only) */
 :root { --barre-h: 0px; }
@@ -341,6 +341,7 @@ input[type=checkbox]:disabled, input[type=radio]:disabled { opacity: .45; cursor
 .grille > .bloc-plan { align-self: stretch; display: flex; flex-direction: column; }
 .bloc-plan > .plan { flex: 1 1 0; min-height: 300px; max-height: none; }
 input:focus, textarea:focus { border-color: var(--accent); outline: none; }
+input:focus-visible, textarea:focus-visible { box-shadow: 0 0 0 1px var(--accent); }
 label.champ { display: block; margin: 8px 0; }
 label.champ > span { display: block; color: var(--muted); font-size: 13px; margin-bottom: 4px; }
 /* toggle: the switch never shrinks, the label wraps beside it */
@@ -570,7 +571,6 @@ textarea.en-attente { opacity: .55; }
 .etape { display: grid; grid-template-columns: 34px 1fr auto; gap: 14px; align-items: center; background: var(--panel); border: 1px solid var(--line); border-radius: var(--rayon); padding: 14px 16px; }
 .etape .n { width: 30px; height: 30px; border-radius: 50%; background: var(--panel-2); display: grid; place-items: center; font-weight: 600; }
 .etape.faite .n { background: var(--accent); color: var(--sur-fort); }
-.etape.faite { opacity: .75; }
 .etape .d { color: var(--muted); font-size: 13.5px; }
 
 /* --- settings (.env) */

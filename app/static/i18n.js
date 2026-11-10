@@ -12,11 +12,11 @@ function appliquerTheme(theme, accent) {
 }
 // ap: [page, panel, line, ink, muted] for the preview card
 const THEMES = [
-  { code: "ardoise", nom: "Slate", ap: ["#141b24", "#1b2430", "#2d3a49", "#e9eef3", "#8e9dad"] },
-  { code: "minuit", nom: "Midnight", ap: ["#0b0d11", "#12151b", "#242933", "#eceff4", "#8a92a0"] },
-  { code: "ocean", nom: "Ocean", ap: ["#0e1a2b", "#132238", "#27405f", "#e6eef8", "#8fa6c2"] },
-  { code: "clair", nom: "Light", ap: ["#f3f5f8", "#ffffff", "#d9dfe7", "#1b2430", "#5d6b7b"] },
-  { code: "sable", nom: "Sand", ap: ["#f6f1e8", "#fffdf8", "#e0d6c5", "#2b2620", "#6f655a"] },
+  { code: "ardoise", nom: "Slate", ap: ["#141b24", "#1b2430", "#2d3a49", "#e9eef3", "#98a6b4"] },
+  { code: "minuit", nom: "Midnight", ap: ["#0b0d11", "#12151b", "#242933", "#eceff4", "#8f96a4"] },
+  { code: "ocean", nom: "Ocean", ap: ["#0e1a2b", "#132238", "#27405f", "#e6eef8", "#90a7c3"] },
+  { code: "clair", nom: "Light", ap: ["#f3f5f8", "#ffffff", "#d9dfe7", "#1b2430", "#525e6c"] },
+  { code: "sable", nom: "Sand", ap: ["#f6f1e8", "#fffdf8", "#e0d6c5", "#2b2620", "#5f574d"] },
 ];
 const ACCENTS = [
   { code: "sarcelle", nom: "Teal", c: "#3fc6a5" }, { code: "bleu", nom: "Blue", c: "#5b9dff" }, { code: "violet", nom: "Violet", c: "#a98bff" },

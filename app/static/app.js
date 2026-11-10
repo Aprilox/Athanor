@@ -767,12 +767,16 @@ function rendreNotifs(v) {
   m.style.top = r.bottom + 6 + "px";
   m.style.right = Math.max(8, Math.min(window.innerWidth - r.right, window.innerWidth - m.offsetWidth - 8)) + "px"; // never past the left edge (phone)
 }
-function fermerNotifs() { etat.notifsOuvert = false; if (etat.vue) rendreBandeau(etat.vue); }
+function fermerNotifs(clavier) { etat.notifsOuvert = false; if (etat.vue) rendreBandeau(etat.vue); if (clavier) document.querySelector("[data-notifs]")?.focus(); }
 document.addEventListener("click", (ev) => {
-  if (ev.target.closest("[data-notifs]")) { etat.notifsOuvert = !etat.notifsOuvert; if (etat.vue) rendreBandeau(etat.vue); }
+  if (ev.target.closest("[data-notifs]")) {
+    etat.notifsOuvert = !etat.notifsOuvert; if (etat.vue) rendreBandeau(etat.vue);
+    // opened from the keyboard (no pointer: detail 0): the list sits at the end of the page, so the focus goes into it
+    if (etat.notifsOuvert && ev.detail === 0) $("#notifs").querySelector("a, button, summary")?.focus();
+  }
   else if (etat.notifsOuvert && !ev.target.closest("#notifs")) fermerNotifs();
 });
-document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && etat.notifsOuvert) fermerNotifs(); });
+document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && etat.notifsOuvert) fermerNotifs(true); });
 // a project of the bell or of the All projects page: chosen, then the page it needs shown
 async function allerProjet(nom, page) {
   etat.projet = nom; etat.evenements = []; etat.dernierJournal = 0; etat.ouverts.clear();
@@ -983,7 +987,10 @@ function marquerDistance(v) {
   a.classList.toggle("distance-active", !!v.distance_active);
 }
 // phones: the sidebar is a drawer (☰), closed again by a choice or a tap beside it
-function menuMobile(ouvert) { document.body.classList.toggle("menu-ouvert", ouvert); $("#btn-menu").setAttribute("aria-expanded", String(ouvert)); }
+// open: the page under the veil is inert (the keyboard stays in the drawer), Escape closes it back to ☰
+function menuMobile(ouvert) { document.body.classList.toggle("menu-ouvert", ouvert); $("#btn-menu").setAttribute("aria-expanded", String(ouvert)); $("main.principal").inert = ouvert; }
+document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && document.body.classList.contains("menu-ouvert")) { menuMobile(false); $("#btn-menu").focus(); } });
+matchMedia("(max-width: 760px)").addEventListener("change", (ev) => { if (!ev.matches) menuMobile(false); }); // a drawer left open never freezes the desktop page
 $("#btn-menu").addEventListener("click", () => menuMobile(!document.body.classList.contains("menu-ouvert")));
 $("#voile-menu").addEventListener("click", () => menuMobile(false));
 $("#nav-tiroir").addEventListener("click", (ev) => { if (ev.target.closest("nav a")) menuMobile(false); });
