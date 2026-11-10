@@ -275,3 +275,65 @@ func TestPourVousCoffre(t *testing.T) {
 		})
 	}
 }
+
+// TestPourVousInfraConfirmee (A3): an answer recognised as an infra key is given to the pilot only once
+// the user confirms it, and never in native mode unless the project is forced.
+func TestPourVousInfraConfirmee(t *testing.T) {
+	s := serveurCoffreTest(t)
+	_ = os.Remove(s.acces.chemin)
+	s.chargerAcces()
+	t.Cleanup(func() { _ = os.Remove(s.acces.chemin) })
+	avant := modeNatif.Load()
+	t.Cleanup(func() { modeNatif.Store(avant) })
+	demo := Projet{Nom: "demo", Dossier: filepath.Join(t.TempDir(), "demo")}
+	for _, d := range []string{"logs", "for-you"} {
+		if err := os.MkdirAll(filepath.Join(demo.Atelier(), d), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s.mu.Lock()
+	s.config.Projets = []Projet{demo}
+	s.mu.Unlock()
+	mux := http.NewServeMux()
+	s.routes(mux)
+	temoin := "ghp_" + "temoin" + aleatoire(16) // built here: no real-looking token in the sources
+	appel := func(confirme bool) (int, map[string]any, string) {
+		t.Helper()
+		b, _ := json.Marshal(map[string]any{"id": "T1", "action": "fait", "confirme": confirme, "secrets": map[string]string{"GITHUB_TOKEN": temoin}})
+		r := httptest.NewRequest("POST", "/api/pourvous?p=demo", bytes.NewReader(b))
+		r.Header.Set("X-Athanor", "jeton")
+		r.AddCookie(&http.Cookie{Name: cookieAcces, Value: "cle"})
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, r)
+		var v map[string]any
+		_ = json.Unmarshal(w.Body.Bytes(), &v)
+		return w.Code, v, w.Body.String()
+	}
+	ecrireFichier(t, cheminPourVous(demo, "tasks.json"), `{"suivant":2,"taches":[{"id":"T1","titre":"Jeton GitHub","secrets":["GITHUB_TOKEN"],"statut":"ouverte","tour":0}]}`, 0o644)
+	rien := func(quand string) {
+		t.Helper()
+		if b, _ := os.ReadFile(cheminSecrets(demo)); strings.Contains(string(b), temoin) || len(s.coffre.Liste()) != 0 {
+			t.Fatalf("%s: the value was given", quand)
+		}
+	}
+	modeNatif.Store(false)
+	if c, v, corps := appel(false); c != http.StatusConflict || v["confirmer_infra"] != true || strings.Contains(corps, temoin) {
+		t.Fatalf("not confirmed: %d %v", c, v)
+	}
+	rien("not confirmed")
+	modeNatif.Store(true)
+	if c, v, _ := appel(true); c != http.StatusConflict || v["confirmer_infra"] != false {
+		t.Fatalf("native: %d %v", c, v)
+	}
+	rien("native")
+	modeNatif.Store(false)
+	if c, v, _ := appel(true); c != 200 {
+		t.Fatalf("confirmed: %d %v", c, v)
+	}
+	if l := s.coffre.Liste(); len(l) != 1 || l[0].Portee != "code" || l[0].Type != "github" {
+		t.Fatalf("entry: %+v", l)
+	}
+	if b, _ := os.ReadFile(cheminSecrets(demo)); !strings.Contains(string(b), temoin) {
+		t.Fatal("confirmed, yet not in secrets.env")
+	}
+}

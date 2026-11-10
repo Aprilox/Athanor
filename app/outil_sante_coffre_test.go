@@ -12,7 +12,7 @@ import (
 
 func TestVerdictCoffre(t *testing.T) {
 	tm := temoinsCoffre{Accordee: "temoin-code-a1", NonAccordee: "temoin-code-b2", Infra: "temoin-infra-c3", CleCode: []string{"ab12cd"}}
-	sonde := "SONDE secrets.env\nATHANOR_TEST_GRANTED='temoin-code-a1'\nSONDE dpapi code=126\nSONDE security code=127\n"
+	sonde := "SONDE secrets.env\nVAULT_TEST_GRANTED='temoin-code-a1'\nSONDE dpapi code=126\nSONDE security code=127\n"
 	etats := func(l []ligneVerdict) string {
 		var b strings.Builder
 		for _, x := range l {
@@ -35,7 +35,8 @@ func TestVerdictCoffre(t *testing.T) {
 		{"clé code ouverte (WSL)", sonde + "ab12cd", tm, false, false, "echec:THE CODE KEY WAS OPENED"},
 		{"clé code ouverte (natif)", sonde + "ab12cd", tm, true, true, "info:code key: opened through DPAPI"},
 		{"secret-tool non rapporté", sonde, tm, false, true, "info:secret-tool attempt: not reported"},
-		{"sans infra", sonde, temoinsCoffre{Accordee: "temoin-code-a1", NonAccordee: "temoin-code-b2"}, false, true, "info:infra value: not tested"},
+		{"sans infra", sonde, temoinsCoffre{Accordee: "temoin-code-a1", NonAccordee: "temoin-code-b2"}, false, false, "echec:INFRA VALUE NOT TESTED"},
+		{"voisin lu", sonde + "SONDE voisin\nVAULT_TEST_NOT_GRANTED='temoin-code-b2'\nSONDE voisin code=0\n", tm, false, false, "echec:A VALUE NOT GRANTED WAS READ"},
 	} {
 		l, ok := verdictCoffre(c.journal, c.t, c.natif)
 		if ok != c.ok || !strings.Contains(etats(l), c.contient) {
@@ -69,8 +70,16 @@ func TestTesterCoffre(t *testing.T) {
 				t.Errorf("%d entrées pendant le test, 4 attendues", n)
 			}
 			b, err := os.ReadFile(filepath.Join(projet, ".athanor", "secrets.env"))
-			if err != nil || strings.Count(string(b), "temoin-") != 1 || !strings.Contains(string(b), "ATHANOR_TEST_GRANTED='temoin-code-") {
+			if err != nil || strings.Count(string(b), "temoin-") != 1 || !strings.Contains(string(b), "VAULT_TEST_GRANTED='temoin-code-") {
 				t.Errorf("fichier injecté inattendu: %q %v", b, err)
+			}
+			// granted through the access file (the infra one too, never injected), the neighbour's own value
+			if a := s.acces.Projet(projetTestCoffre).Acces; len(a) != 2 {
+				t.Errorf("accès du projet de test: %+v", a)
+			}
+			v, err := os.ReadFile(filepath.Join(filepath.Dir(projet), dossierVoisinCoffre, ".athanor", "secrets.env"))
+			if err != nil || strings.Count(string(v), "temoin-") != 1 || !strings.Contains(string(v), "VAULT_TEST_NOT_GRANTED='temoin-code-") {
+				t.Errorf("fichier du voisin inattendu: %q %v", v, err)
 			}
 			return os.WriteFile(filepath.Join(projet, journalTestCoffre), append([]byte("SONDE secrets.env\n"), b...), 0o600)
 		}, true},
@@ -84,15 +93,20 @@ func TestTesterCoffre(t *testing.T) {
 		if l := s.coffre.Liste(); len(l) != 1 || l[0].ID != vraie.ID {
 			t.Errorf("%s: témoins restés dans le coffre: %v", cas.nom, l)
 		}
-		if _, err := os.Stat(filepath.Join(k.Journaux(), dossierTestCoffre)); !os.IsNotExist(err) {
-			t.Errorf("%s: projet temporaire resté", cas.nom)
+		for _, d := range []string{dossierTestCoffre, dossierVoisinCoffre} {
+			if _, err := os.Stat(filepath.Join(k.Journaux(), d)); !os.IsNotExist(err) {
+				t.Errorf("%s: projet temporaire %s resté", cas.nom, d)
+			}
+		}
+		if len(s.acces.Projet(projetTestCoffre).Acces)+len(s.acces.Projet(voisinTestCoffre).Acces) != 0 {
+			t.Errorf("%s: accès de test restés", cas.nom)
 		}
 		if strings.Contains(strings.Join(sortie, "\n"), "temoin-") {
 			t.Errorf("%s: une valeur témoin dans la sortie", cas.nom)
 		}
 	}
 	// a test cut short: its values are purged when the vault is loaded again
-	if _, err := s.coffre.Ajouter(EntreeCoffre{Nom: "ATHANOR_TEST_GRANTED", Famille: "secret", Type: "jeton", Source: sourceTestCoffre}, "temoin-x"); err != nil {
+	if _, err := s.coffre.Ajouter(EntreeCoffre{Nom: "VAULT_TEST_GRANTED", Famille: "secret", Type: "jeton", Source: sourceTestCoffre}, "temoin-x"); err != nil {
 		t.Fatal(err)
 	}
 	s.chargerCoffre()
@@ -134,5 +148,16 @@ func TestTesterCoffreReel(t *testing.T) {
 	})
 	if !ok {
 		t.Error("the real vault test failed")
+	}
+}
+
+// The session runs with the pilot's environment: a user's variable named like a secret is not in it.
+func TestEnvTesterCoffre(t *testing.T) {
+	temoin := "temoin-env-" + aleatoire(8)
+	t.Setenv("MY_DEPLOY_TOKEN", temoin)
+	t.Setenv("ATHANOR_ESSAI_ANODIN", "garde")
+	env := strings.Join(envTesterCoffre(t.TempDir()), "\n")
+	if strings.Contains(env, temoin) || !strings.Contains(env, "ATHANOR_ESSAI_ANODIN=garde") {
+		t.Fatal("the vault test's session does not get the pilot's environment")
 	}
 }

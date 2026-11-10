@@ -271,3 +271,22 @@ func TestEcrireEnvStable(t *testing.T) {
 		t.Fatalf("rewritten .env: %q", b)
 	}
 }
+
+// TestEnvPiloteSansSecretUtilisateur: a user's variable named like a secret never reaches the pilot's
+// Claude (I1, A2); its harmless variables and the chosen Claude connection do.
+func TestEnvPiloteSansSecretUtilisateur(t *testing.T) {
+	p := essaiPiloteConnexion(t, "CLAUDE_CODE_OAUTH_TOKEN=jeton-hub-0123456789\n")
+	temoin := "temoin-" + strconv.FormatInt(time.Now().UnixNano(), 36)
+	for _, k := range []string{"MY_SERVICE_TOKEN", "DB_PASSWORD", "stripe_secret", "OPENAI_API_KEY", "AWS_SHARED_CREDENTIALS", "SMTP_PASSWD"} {
+		t.Setenv(k, temoin)
+	}
+	t.Setenv("ANTHROPIC_API_KEY", temoin) // the user's own key: replaced by the hub's connection
+	t.Setenv("ATHANOR_ESSAI_ANODIN", "garde")
+	env := strings.Join(p.envClaude(), "\n")
+	if strings.Contains(env, temoin) {
+		t.Fatal("a secret variable of the user reached the pilot")
+	}
+	if !strings.Contains(env, "ATHANOR_ESSAI_ANODIN=garde") || !strings.Contains(env, "CLAUDE_CODE_OAUTH_TOKEN=jeton-hub-0123456789") {
+		t.Fatal("harmless variable or Claude's connection lost")
+	}
+}

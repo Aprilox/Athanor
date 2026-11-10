@@ -34,7 +34,8 @@ func (s *Serveur) synchroniserAcces() error {
 	if s.acces == nil || s.coffre == nil {
 		return nil
 	}
-	return s.acces.Synchroniser(s.coffre.Liste(), s.nomsProjets())
+	// Test the vault's temporary projects keep their grants while it runs (outil_sante_coffre.go)
+	return s.acces.Synchroniser(s.coffre.Liste(), append(s.nomsProjets(), projetTestCoffre, voisinTestCoffre))
 }
 
 // accesPret: the grants and the vault are loaded and the project exists, or false once refused.

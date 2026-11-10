@@ -490,6 +490,7 @@ func (s *Serveur) apiPourVous(w http.ResponseWriter, r *http.Request) {
 		Texte    string            `json:"texte"`
 		Fichiers []string          `json:"fichiers"`
 		Secrets  map[string]string `json:"secrets"`
+		Confirme bool              `json:"confirme"` // the user agreed to give an infra key to the pilot
 	}
 	if err := lireCorps(r, &c); err != nil || !reIDTache.MatchString(c.ID) || (c.Action != "fait" && c.Action != "passer") {
 		s.erreur(w, http.StatusBadRequest, "Invalid request")
@@ -533,6 +534,30 @@ func (s *Serveur) apiPourVous(w http.ResponseWriter, r *http.Request) {
 	}
 	if c.Action == "passer" {
 		valeurs = map[string]string{}
+	}
+	// a recognised infra key answered here becomes a code entry the pilot reads: refused in native mode
+	// unless forced for this project, otherwise given only once the user confirms it
+	infra := []string{}
+	for _, n := range slices.Sorted(maps.Keys(valeurs)) {
+		if pr := proposerNomValeur(n, valeurs[n]); pr != nil && pr.Famille == "secret" && typesCoffre[pr.Type] == "infra" {
+			infra = append(infra, n)
+		}
+	}
+	if len(infra) > 0 {
+		cle, demander := "", false
+		switch {
+		case modeNatif.Load() && (s.acces == nil || !s.acces.Projet(p.Nom).ForcerInfraNatif):
+			cle = "Native Windows mode has no barrier: an infrastructure key ({0}) is not given to the pilot here. Give it in the Vault, switch to WSL in Settings › Options, or tick Force on the Access page, knowing the risk."
+		case !c.Confirme:
+			demander = true
+			cle = "{0} looks like an infrastructure key (GitHub, AWS, Cloudflare, SSH…). Answered here, it will be given to the pilot, which can then use it on its own. Give it anyway?"
+		}
+		if cle != "" {
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			w.WriteHeader(http.StatusConflict)
+			_ = json.NewEncoder(w).Encode(map[string]any{"erreur_key": cle, "args": []string{strings.Join(infra, ", ")}, "confirmer_infra": demander})
+			return
+		}
 	}
 	// files: only those uploaded for this task (api_pieces.go, target todo-ID)
 	prefixe := ".athanor/attachments/for-you-" + c.ID + "/"

@@ -267,7 +267,26 @@ func (a *appTUI) repondreTache(passer bool) {
 			}
 			corps["secrets"] = sec
 		}
-		a.agirFormulaire("POST", "pourvous", corps, func(map[string]any) { a.derniere["pourvous"] = time.Time{} })
+		fini := func(map[string]any) { a.derniere["pourvous"] = time.Time{} }
+		f := a.formValide
+		a.agirAvec("POST", "pourvous", corps, fini, func(err error) {
+			// an infrastructure key answered here goes to the pilot: only once the user confirms it
+			if e, ok := err.(*erreurAPI); ok && e.Confirmer {
+				a.demander(a.t("Infrastructure key"), a.texteErreur(err), []choixTUI{{id: "oui", texte: a.t("Give it to the pilot")}, {id: "", texte: a.t("Cancel")}}, func(id string) {
+					if id == "oui" {
+						corps["confirme"] = true
+						a.agirFormulaire("POST", "pourvous", corps, fini)
+					}
+				})
+				return
+			}
+			if f == nil {
+				a.annoncer(a.texteErreur(err), true)
+				return
+			}
+			f.erreur = a.texteErreur(err)
+			a.form = f
+		})
 	})
 }
 

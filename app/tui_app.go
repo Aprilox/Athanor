@@ -258,7 +258,11 @@ func (a *appTUI) annoncer(texte string, erreur bool) {
 // texteErreur: an error of the API in the user's language.
 func (a *appTUI) texteErreur(err error) string {
 	if e, ok := err.(*erreurAPI); ok {
-		return a.t(e.Cle)
+		args := make([]any, len(e.Args))
+		for i, x := range e.Args {
+			args[i] = x
+		}
+		return a.t(e.Cle, args...)
 	}
 	return err.Error()
 }

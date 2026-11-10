@@ -103,7 +103,7 @@ async function api(chemin, methode = "GET", corps) {
   const data = await r.json().catch(() => ({}));
   if (r.status === 401 && data.erreur_key === "Not paired") { afficherNonAppaire(); throw new Error(t("Not paired")); }
   if (r.status === 401 && data.erreur_key === "Locked") { etat.verrouille = true; afficherVerrou(); throw new Error(t("Locked")); }
-  if (!r.ok) throw new Error(data.erreur_key ? t(data.erreur_key, data.args || []) : (data.erreur || t("Error {0}", [r.status])));
+  if (!r.ok) throw Object.assign(new Error(data.erreur_key ? t(data.erreur_key, data.args || []) : (data.erreur || t("Error {0}", [r.status]))), { data });
   return data;
 }
 let toastTimer;
@@ -2495,7 +2495,13 @@ async function repondreTache(b) {
       if (!r.ok) throw new Error(t("{0} could not be attached: {1}", [f.name, d.erreur_key ? t(d.erreur_key, d.args || []) : t("Error {0}", [r.status])]));
       fichiers.push(d.chemin);
     }
-    const r = await action(api("pourvous", "POST", { id, action: act, texte: br.texte, fichiers, secrets: act === "fait" ? br.secrets : {} }));
+    const corps = { id, action: act, texte: br.texte, fichiers, secrets: act === "fait" ? br.secrets : {} };
+    // an infrastructure key answered here goes to the pilot: only once the user confirms it
+    const r = await action(api("pourvous", "POST", corps).catch(async (e) => {
+      if (!e.data || !e.data.confirmer_infra) throw e;
+      if (!(await confirmer(e.message, { titre: t("Infrastructure key"), ok: t("Give it to the pilot"), annuler: t("Cancel") }))) return null;
+      return api("pourvous", "POST", { ...corps, confirme: true });
+    }));
     if (r) { delete etat.pvForm[id]; etat.pieces["pv-" + id] = []; await rafraichir(); rendrePage(); }
   } catch (e) { toast(e.message, "erreur"); }
   finally { b.disabled = false; }

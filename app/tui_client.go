@@ -51,9 +51,11 @@ func nouveauClientTUI(lien string) (*clientTUI, error) {
 
 // erreurAPI: what the server answered with an error (a message key, translated by the interface).
 type erreurAPI struct {
-	Cle    string
-	Code   int
-	Verrou bool // 401: the application is locked
+	Cle       string
+	Args      []string
+	Code      int
+	Verrou    bool // 401: the application is locked
+	Confirmer bool // the server asks the user to confirm giving an infra key to the pilot (api_pourvous.go)
 }
 
 func (e *erreurAPI) Error() string { return e.Cle }
@@ -99,11 +101,13 @@ func (c *clientTUI) appel(methode, chemin string, corps, v any) error {
 	}
 	if r.StatusCode != http.StatusOK {
 		var e struct {
-			Cle    string `json:"erreur_key"`
-			Erreur string `json:"erreur"`
+			Cle       string   `json:"erreur_key"`
+			Args      []string `json:"args"`
+			Erreur    string   `json:"erreur"`
+			Confirmer bool     `json:"confirmer_infra"`
 		}
 		_ = json.Unmarshal(b, &e)
-		return &erreurAPI{Cle: firstNonEmpty(firstNonEmpty(e.Cle, e.Erreur), http.StatusText(r.StatusCode)), Code: r.StatusCode, Verrou: r.StatusCode == http.StatusUnauthorized}
+		return &erreurAPI{Cle: firstNonEmpty(firstNonEmpty(e.Cle, e.Erreur), http.StatusText(r.StatusCode)), Args: e.Args, Code: r.StatusCode, Verrou: r.StatusCode == http.StatusUnauthorized, Confirmer: e.Confirmer}
 	}
 	if v == nil {
 		return nil

@@ -334,7 +334,8 @@ func (p *pilote) envClaude() []string {
 	var out []string
 	for _, e := range os.Environ() {
 		k, _, _ := strings.Cut(e, "=")
-		if strings.EqualFold(k, "PATH") || strings.EqualFold(k, "MSYS2_ARG_CONV_EXCL") {
+		// a user's variable named like a secret never reaches the pilot (I1); Claude's own connection is set below
+		if strings.EqualFold(k, "PATH") || strings.EqualFold(k, "MSYS2_ARG_CONV_EXCL") || EstSecret(k) {
 			continue
 		}
 		out = append(out, e)

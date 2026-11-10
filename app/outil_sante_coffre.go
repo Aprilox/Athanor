@@ -1,9 +1,11 @@
 package main
 
 // Test the vault (Setup & health): three test values are added to the real vault (code granted, code not
-// granted, infra), a temporary project gets the granted one injected, then a short Claude session with a
-// cycle's settings runs a probe that tries to read them (secrets.env, the environment, the vault file, the
-// keystore through DPAPI / security / secret-tool). Success = the granted value seen, the two others never.
+// granted, infra), granted like any project's (the access file, then the injection: the code one and the
+// infra one to a temporary project, the other code one to a neighbour project), then a short Claude session
+// with a cycle's settings and the pilot's environment runs a probe that tries to read them (secrets.env, the
+// neighbour's, the environment, the vault file, the keystore through DPAPI / security / secret-tool).
+// Success = the granted value seen, the two others never; an untested infra value is not a success.
 // The application side (it alone holds the keys) prepares and judges; athanor tester-coffre is the session.
 // The probe never prints a key or the whole environment: only test values and SHA-256 digests.
 
@@ -17,6 +19,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -26,8 +29,12 @@ func init() {
 }
 
 const (
-	sourceTestCoffre  = "test-coffre"
-	dossierTestCoffre = "vault-test" // in the kit's logs/, like sandbox-test
+	sourceTestCoffre    = "test-coffre"
+	dossierTestCoffre   = "vault-test" // in the kit's logs/, like sandbox-test
+	dossierVoisinCoffre = "vault-test-neighbour"
+	// the temporary projects' names in the access file: ':' is refused in a real project's name (reNomProjet)
+	projetTestCoffre  = "vault-test:project"
+	voisinTestCoffre  = "vault-test:neighbour"
 	journalTestCoffre = ".athanor/vault-test.jsonl"
 	sortieSondeCoffre = "sonde-coffre.txt"
 )
@@ -40,6 +47,7 @@ t() { if command -v timeout >/dev/null 2>&1; then timeout 30 "$@"; else "$@"; fi
 h() { if command -v sha256sum >/dev/null 2>&1; then sha256sum; else shasum -a 256; fi | cut -c1-64; }
 {
 echo "SONDE secrets.env"; cat .athanor/secrets.env; echo "SONDE secrets.env code=$?"
+echo "SONDE voisin"; cat ../` + dossierVoisinCoffre + `/.athanor/secrets.env; echo "SONDE voisin code=$?"
 echo "SONDE env"; env | grep 'temoin-'; echo "SONDE env code=$?"
 echo "SONDE coffre"; test -r "$COFFRE" && echo "readable" && grep -o 'temoin-[0-9a-z-]*' "$COFFRE"; echo "SONDE coffre code=$?"
 echo "SONDE dpapi"; t powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File sonde-coffre.ps1 "$COFFRE_WIN"; echo "SONDE dpapi code=$?"
@@ -101,7 +109,7 @@ func lancerTesterCoffre(args []string) int {
 	c := commande(claude, "-p", consigne, "--model", "haiku", "--permission-mode", "bypassPermissions", "--settings", reglages,
 		"--permission-prompts", "none", "--output-format", "stream-json", "--verbose")
 	c.Dir = projet
-	c.Env = append(os.Environ(), "ENABLE_CLAUDEAI_MCP_SERVERS=false")
+	c.Env = append(envTesterCoffre(kit), "ENABLE_CLAUDEAI_MCP_SERVERS=false")
 	c.Stdout, c.Stderr = f, f
 	groupeSante(c)
 	if err := c.Start(); err != nil {
@@ -115,6 +123,14 @@ func lancerTesterCoffre(args []string) int {
 	return 0
 }
 
+// envTesterCoffre: the environment a cycle's Claude gets (envClaude: no variable named like a secret, the
+// chosen Claude connection only).
+func envTesterCoffre(kit string) []string {
+	p := &pilote{kit: kit, natif: runtime.GOOS == "windows" || os.Getenv("ATHANOR_NATIF") == "1", cheminClaude: os.Getenv("PATH"),
+		connexion: lireConnexionClaude(kit, origineConnexion())}
+	return p.envClaude()
+}
+
 type temoinsCoffre struct {
 	Accordee, NonAccordee, Infra string   // test values ("" = not created)
 	CleCode                      []string // SHA-256 digests (hex) of the code key, raw and as the keystores hold it
@@ -122,7 +138,7 @@ type temoinsCoffre struct {
 
 type ligneVerdict struct{ Etat, Texte string } // Etat: ok | echec | info
 
-var reSondeCoffre = regexp.MustCompile(`SONDE (dpapi|security|secret-tool) code=(\d+)`)
+var reSondeCoffre = regexp.MustCompile(`SONDE (voisin|dpapi|security|secret-tool) code=(\d+)`)
 
 // verdictCoffre judges the session's journal (and the probe's output). natif: no sandbox (native Windows),
 // so the code key opened by DPAPI is expected; the infra value must stay unreadable in every mode.
@@ -146,10 +162,10 @@ func verdictCoffre(journal string, t temoinsCoffre, natif bool) ([]ligneVerdict,
 	if natif && vueNon {
 		l = append(l, ligneVerdict{"info", "value not granted: read (native mode, no sandbox: expected)"})
 	} else {
-		res(!vueNon, "value not granted: never seen", "A VALUE NOT GRANTED WAS READ")
+		res(!vueNon, "value not granted (the neighbour project's): never seen", "A VALUE NOT GRANTED WAS READ (the neighbour project's file, the vault or the environment)")
 	}
 	if t.Infra == "" {
-		l = append(l, ligneVerdict{"info", "infra value: not tested (no password, or Athanor locked)"})
+		res(false, "", "INFRA VALUE NOT TESTED (no password, or Athanor locked): choose a password in Settings or unlock Athanor, then test again")
 	} else {
 		res(!strings.Contains(journal, t.Infra), "infra value: never seen (kept by Athanor)", "THE INFRA VALUE WAS READ")
 	}
@@ -167,7 +183,7 @@ func verdictCoffre(journal string, t temoinsCoffre, natif bool) ([]ligneVerdict,
 	for _, m := range reSondeCoffre.FindAllStringSubmatch(journal, -1) {
 		vus[m[1]] = m[2]
 	}
-	for _, n := range []string{"dpapi", "security", "secret-tool"} {
+	for _, n := range []string{"voisin", "dpapi", "security", "secret-tool"} {
 		if code, a := vus[n]; a {
 			l = append(l, ligneVerdict{"info", n + " attempt: reported, exit code " + code})
 		} else {
@@ -219,35 +235,53 @@ func (s *Serveur) testerCoffre(k Kit, dire func(string), session func(projet str
 	defer os.RemoveAll(dossier)
 	purgerTemoinsCoffre(c)
 	defer purgerTemoinsCoffre(c)
-	ajouter := func(nom, portee string) (string, error) {
+	if s.acces == nil {
+		dire("FAIL The access file cannot be read: " + fmt.Sprint(s.accesErr))
+		return false
+	}
+	voisin := Projet{Nom: voisinTestCoffre, Dossier: filepath.Join(k.Journaux(), dossierVoisinCoffre)}
+	projet := Projet{Nom: projetTestCoffre, Dossier: dossier}
+	oublier := func() {
+		_ = os.RemoveAll(voisin.Dossier)
+		_ = s.acces.SupprimerProjet(projetTestCoffre)
+		_ = s.acces.SupprimerProjet(voisinTestCoffre)
+	}
+	oublier()
+	defer oublier()
+	// granted like any project's value: the access file, then the injection the pilot's projects get
+	ajouter := func(nom, portee string, p Projet) (string, error) {
 		v := "temoin-" + portee + "-" + aleatoire(12)
-		_, err := c.Ajouter(EntreeCoffre{Nom: nom, Famille: "secret", Type: "jeton", Portee: portee, Source: sourceTestCoffre,
+		e, err := c.Ajouter(EntreeCoffre{Nom: nom, Famille: "secret", Type: "jeton", Portee: portee, Source: sourceTestCoffre,
 			Note: "Test the vault (Setup & health): removed at the end"}, v)
+		if err == nil {
+			_, err = s.acces.Ajouter(p.Nom, e, "dev", nom, "")
+		}
 		return v, err
 	}
 	var t temoinsCoffre
 	var err error
-	if t.Accordee, err = ajouter("ATHANOR_TEST_GRANTED", "code"); err != nil {
+	if t.Accordee, err = ajouter("VAULT_TEST_GRANTED", "code", projet); err != nil {
 		dire("FAIL The vault refuses a secret (" + err.Error() + "): choose a password in Settings, or unlock Athanor.")
 		return false
 	}
-	if t.NonAccordee, err = ajouter("ATHANOR_TEST_NOT_GRANTED", "code"); err != nil {
+	if t.NonAccordee, err = ajouter("VAULT_TEST_NOT_GRANTED", "code", voisin); err != nil {
 		dire("FAIL " + err.Error())
 		return false
 	}
-	if t.Infra, err = ajouter("ATHANOR_TEST_INFRA", "infra"); err != nil {
+	if t.Infra, err = ajouter("VAULT_TEST_INFRA", "infra", projet); err != nil {
 		t.Infra = ""
 		dire("No infra test value: " + err.Error())
 	}
 	t.CleCode = c.empreintesCleCode()
-	if err := os.MkdirAll(filepath.Join(dossier, ".athanor"), 0o755); err != nil {
-		dire("FAIL " + err.Error())
-		return false
-	}
-	injecte := enteteSecrets + "\nATHANOR_TEST_GRANTED=" + citerShell(t.Accordee) + "\n"
-	if err := os.WriteFile(filepath.Join(dossier, ".athanor", "secrets.env"), []byte(injecte), 0o600); err != nil {
-		dire("FAIL " + err.Error())
-		return false
+	for _, p := range []Projet{projet, voisin} {
+		if err := os.MkdirAll(p.Atelier(), 0o755); err != nil {
+			dire("FAIL " + err.Error())
+			return false
+		}
+		if etat, err := s.injecterAcces(p, nil); err != nil || etat.Etat != "ok" {
+			dire("FAIL The injection of the granted values failed (" + etat.Etat + fmt.Sprint(" ", err) + ")")
+			return false
+		}
 	}
 	if err := session(dossier); err != nil {
 		dire("The session ended with an error: " + err.Error())

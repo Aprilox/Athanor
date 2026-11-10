@@ -323,7 +323,7 @@ var reCle = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 func EstSecret(cle string) bool {
 	c := strings.ToUpper(cle)
-	return strings.Contains(c, "TOKEN") || strings.Contains(c, "KEY") || strings.Contains(c, "SECRET") || strings.Contains(c, "PASSWORD") || strings.Contains(c, "MOT_DE_PASSE")
+	return strings.Contains(c, "TOKEN") || strings.Contains(c, "KEY") || strings.Contains(c, "SECRET") || strings.Contains(c, "PASSWORD") || strings.Contains(c, "PASSWD") || strings.Contains(c, "CREDENTIAL") || strings.Contains(c, "MOT_DE_PASSE")
 }
 
 func LireEnv(chemin string) []LigneEnv {
