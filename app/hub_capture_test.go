@@ -50,6 +50,7 @@ func TestCaptureHub(t *testing.T) {
 	}()
 	s := nouveauServeur(Config{Kit: kit, Projets: projets, ProjetActif: "projet-00", Langue: "fr", Theme: "clair", BienvenueVue: true})
 	s.cleAcces = aleatoire(24)
+	s.coffre, s.coffreErr = coffreCapture(t), nil // never this PC's own vault
 	mux := http.NewServeMux()
 	s.routes(mux)
 	s.routesInterface(mux)
@@ -73,4 +74,38 @@ func TestCaptureHub(t *testing.T) {
 	if err != nil {
 		t.Fatalf("capture script: %v", err)
 	}
+}
+
+// coffreCapture: a vault with a fake keystore in t.TempDir(), its infra key opened by a password of its
+// own (Athanor itself has none: the page shows the infra scope unavailable), values made at run time.
+func coffreCapture(t *testing.T) *Coffre {
+	c, _ := coffreTest(t, nouveauFauxSysteme())
+	mdp := aleatoire(12)
+	if err := c.ChangerMotDePasse("", mdp); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Deverrouiller(mdp); err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range []EntreeCoffre{
+		{Nom: "CLOUDFLARE_API_TOKEN", Famille: "secret", Type: "cloudflare", Portee: "infra", Note: "DNS et tunnels de example.org"},
+		{Nom: "SSH_VPS_PROD", Famille: "secret", Type: "ssh", Portee: "infra", Note: "Serveur de production, utilisateur deploy"},
+		{Nom: "GITHUB_TOKEN", Famille: "secret", Type: "github", Portee: "code", Note: "Lecture des dépôts privés", Source: "projet:boutique"},
+		{Nom: "ANTHROPIC_API_KEY", Famille: "secret", Type: "anthropic", Portee: "code", Source: "mcp:assistant"},
+		{Nom: "STRIPE_SECRET_KEY", Famille: "secret", Type: "stripe", Portee: "code", Note: "Mode test de la boutique"},
+		{Nom: "NODE_ENV", Famille: "variable", Note: "Mode des builds"},
+		{Nom: "SITE_URL", Famille: "variable"},
+	} {
+		v := aleatoire(24)
+		if e.Famille == "variable" {
+			v = map[string]string{"NODE_ENV": "production", "SITE_URL": "https://example.org"}[e.Nom]
+		}
+		if e.Famille == "variable" {
+			e.Type = "autre"
+		}
+		if _, err := c.Ajouter(e, v); err != nil {
+			t.Fatal(e.Nom, err)
+		}
+	}
+	return c
 }

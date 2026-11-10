@@ -890,3 +890,29 @@ ol.guide-access li { margin: 5px 0; }
 .gains .gain { color: var(--ok); }
 .gains .perte { color: var(--attention); }
 .gains ul { padding-left: 18px; }
+
+/* Coffre (vault) page: entry cards, their ⋯ menu, the form and the locked banner */
+.carte-coffre { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.carte-coffre .cp-nom { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono, monospace); font-size: 13.5px; }
+.badge-infra { color: var(--attention); border-color: var(--attention); }
+.cof-valeur code { word-break: break-all; }
+.cof-note { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.menu-coffre { position: relative; flex: none; }
+.menu-coffre > summary { list-style: none; cursor: pointer; }
+.menu-coffre > summary::-webkit-details-marker { display: none; }
+.menu-coffre-liste { position: absolute; right: 0; top: calc(100% + 4px); z-index: 5; min-width: 190px; display: flex; flex-direction: column; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--ombre); padding: 4px; }
+.menu-coffre-liste button { background: none; border: 0; color: var(--ink); text-align: left; padding: 7px 10px; border-radius: 6px; cursor: pointer; font-size: 13.5px; }
+.menu-coffre-liste button:hover, .menu-coffre-liste button:focus-visible { background: var(--panel-3); }
+.menu-coffre-liste button.danger { color: var(--erreur); }
+.cof-tete { align-items: flex-end; }
+.cof-tete .onglets { margin-bottom: 0; border-bottom: 0; }
+.cof-form { margin: 12px 0 16px; max-width: 720px; }
+.cof-form h2 { margin: 0 0 4px; font-size: 16px; }
+.cof-form input, .cof-form select, .cof-form textarea { width: 100%; box-sizing: border-box; }
+.cof-choix { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+.cof-verrou { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; border-color: var(--attention); margin-bottom: 12px; }
+.cof-verrou input { min-width: 180px; }
+.cof-explication { margin-top: 16px; }
+@media (max-width: 640px) { .cof-choix { grid-template-columns: 1fr; } .cof-verrou .ligne { width: 100%; } .cof-verrou input { flex: 1; min-width: 0; } }
+.cof-verrou input[type=password] { width: auto; }
+.cof-tete + p { margin-top: 8px; }

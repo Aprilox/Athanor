@@ -780,8 +780,8 @@ function phraseGlobale(v) {
 
 // ----------------------------------------------------------------------------- shell: header, sidebar, project picker
 function rendreBandeau(v) {
-  const global = etat.page === "global" || etat.page === "accueil"; // pages of every project: no project buttons
-  const p = global ? phraseGlobale(v) : phraseEtat(v);
+  const global = ["global", "accueil", "coffre"].includes(etat.page); // pages of every project: no project buttons
+  const p = etat.page === "coffre" ? { classe: "", titre: t("Vault"), sous: t("Secrets and variables") } : global ? phraseGlobale(v) : phraseEtat(v);
   if (etat.page === "accueil") p.titre = t("Home");
   const boutons = [];
   if (v.kit_valide && v.projet && !global) {
@@ -3760,7 +3760,7 @@ async function rendreOptions() {
         <label class="interrupteur"><input type="checkbox" id="op-lancer" data-option ${o.lancer_pilote_au_demarrage ? "checked" : ""}><span>${t("Restart the pilots that were running, when the app opens")}</span></label>
         <label class="interrupteur"><input type="checkbox" id="op-windows" data-option ${o.demarrage_windows ? "checked" : ""}><span>${t(o.windows ? "Open Athanor when Windows starts" : (etat.vue || {}).systeme === "darwin" ? "Open Athanor when you log in to the Mac" : "Open Athanor when your desktop session starts")}</span></label>
       </div>
-      <div class="bloc local-seul"><h2>${t("Lock")}</h2>
+      <div class="bloc local-seul" id="bloc-verrou"><h2>${t("Lock")}</h2>
         <p class="intro petit">${t("With a password, the padlock locks the app: Claude keeps working, but nothing can be seen, changed or read (keys included) without the password. The app starts locked.")}</p>
         ${o.mot_de_passe ? `<label class="champ"><span>${t("Current password")}</span><input type="password" id="mdp-ancien" autocomplete="current-password"></label>` : ""}
         <label class="champ"><span>${o.mot_de_passe ? t("New password (empty to remove it)") : t("Password")}</span><input type="password" id="mdp-nouveau" autocomplete="new-password"></label>
@@ -3863,6 +3863,100 @@ async function enregistrerOptions() {
 
 // ----------------------------------------------------------------------------- rendering and events
 let numeroRendu = 0;
+// --- Vault (Coffre module): the entries of /api/coffre, one tab per family; a secret's value never comes back
+const cof = { onglet: "secret", form: null, d: { entrees: [], etat: {} } };
+const TYPES_COFFRE = ["cloudflare", "ssh", "certificat", "github", "aws", "anthropic", "openai", "stripe", "mot_de_passe", "jeton", "autre"];
+const INFRA_COFFRE = new Set(["cloudflare", "ssh", "certificat", "github", "aws"]); // the scope proposed by type (ARCHITECTURE §Coffre)
+const typeCoffre = (x) => ({ ssh: t("SSH key"), certificat: t("Certificate"), mot_de_passe: t("Password"), jeton: t("Token"), autre: t("Other"),
+  cloudflare: "Cloudflare", github: "GitHub", aws: "AWS", anthropic: "Anthropic", openai: "OpenAI", stripe: "Stripe" })[x] || x;
+const entreeCoffre = (id) => (cof.d.entrees || []).find((x) => x.id === id);
+function carteCoffre(x) {
+  const secret = x.famille === "secret", infra = x.portee === "infra";
+  return `<div class="bloc carte-coffre" data-coffre-id="${h(x.id)}">
+    <div class="cp-tete"><b class="cp-nom">${h(x.nom)}</b>${secret ? `<span class="badge">${h(typeCoffre(x.type))}</span><span class="badge${infra ? " badge-infra" : ""}" title="${h(infra ? t("Server key: opens only with your password") : t("Project key: reopens alone on this PC"))}">${infra ? "infra" : "code"}</span>` : ""}
+      <details class="menu-coffre"><summary class="btn btn-petit" aria-label="${h(t("Actions"))}">⋯</summary><div class="menu-coffre-liste">
+        <button type="button" data-cof-modifier="${h(x.id)}">${t("Edit")}</button><button type="button" data-cof-remplacer="${h(x.id)}">${t("Replace the value")}</button><button type="button" class="danger" data-cof-supprimer="${h(x.id)}">${t("Delete")}</button>
+      </div></details></div>
+    <div class="petit cof-valeur">${secret ? `<span class="muet">•••• ${t("saved")}</span>` : `<code>${h(x.valeur)}</code>`}</div>
+    <div class="petit cof-note${x.note ? "" : " muet"}" title="${h(x.note)}">${x.note ? h(x.note) : t("No note for the AI")}</div>
+    <div class="muet petit">${x.source ? h(t("Imported from {0}", [x.source])) + " · " : ""}${h(dateLisible(x.modifie))}</div>
+  </div>`;
+}
+// the add/edit form: a secret's field stays empty ("•••• saved"), typing in it replaces the value
+function formulaireCoffre() {
+  const x = cof.form.id && entreeCoffre(cof.form.id);
+  if (cof.form.id && !x) { cof.form = null; return ""; }
+  const secret = (x ? x.famille : cof.onglet) === "secret", mdp = cof.d.etat.mot_de_passe;
+  const type = x ? x.type : secret ? "jeton" : "autre", portee = x ? x.portee : "code";
+  return `<form class="bloc cof-form" id="cof-form" autocomplete="off">
+    <h2>${x ? h(x.nom) : secret ? t("New secret") : t("New variable")}</h2>
+    <label class="champ"><span>${t("Name")}</span><input type="text" id="cof-nom" maxlength="100" spellcheck="false" value="${h(x ? x.nom : "")}" placeholder="${secret ? "CLOUDFLARE_API_TOKEN" : "NODE_ENV"}"></label>
+    ${secret ? `<div class="cof-choix">
+      <label class="champ"><span>${t("Type")}</span><select id="cof-type">${TYPES_COFFRE.map((y) => `<option value="${y}"${y === type ? " selected" : ""}>${h(typeCoffre(y))}</option>`).join("")}</select></label>
+      <label class="champ"><span>${t("Scope")}</span><select id="cof-portee"><option value="code">${t("code — reopens alone on this PC")}</option><option value="infra"${portee === "infra" ? " selected" : ""}${mdp ? "" : " disabled"}>${t("infra — only with your password")}</option></select></label>
+    </div>${mdp ? "" : `<p class="muet petit">${t("The infra scope needs a password for Athanor.")} <a href="#options@bloc-verrou">${t("Settings › Options › Lock")}</a></p>`}` : ""}
+    <label class="champ"><span>${t("Note for the AI")}</span><textarea id="cof-note" rows="2" maxlength="2000" placeholder="${h(t("What it is for, e.g. DNS of example.org"))}">${h(x ? x.note : "")}</textarea></label>
+    <label class="champ"><span>${t("Value")}</span><input type="${secret ? "password" : "text"}" id="cof-valeur" autocomplete="new-password" spellcheck="false" value="${h(x && !secret ? x.valeur : "")}" placeholder="${x && secret ? "•••• " + h(t("saved")) : ""}"></label>
+    ${x && secret ? `<p class="muet petit">${t("The value is never shown again: type a new one to replace it, or leave the field empty.")}</p>` : ""}
+    <div class="ligne"><button type="submit" class="btn btn-primaire">${x ? t("Save") : t("Add")}</button><button type="button" class="btn" data-cof-annuler>${t("Cancel")}</button></div>
+  </form>`;
+}
+pages.coffre = async () => {
+  const d = await api("coffre"); cof.d = d;
+  const e = d.etat || {}, entrees = d.entrees || [], n = (f) => entrees.filter((x) => x.famille === f).length;
+  const liste = entrees.filter((x) => x.famille === cof.onglet).sort((a, b) => a.nom.localeCompare(b.nom));
+  const onglet = (f, nom) => `<button type="button" class="${cof.onglet === f ? "actif" : ""}" data-cof-onglet="${f}">${nom} <span class="muet">${n(f)}</span></button>`;
+  return `<div class="coffre">
+    ${e.mot_de_passe && !e.infra ? `<form class="bloc cof-verrou" id="cof-verrou"><span class="croit">🔒 ${t("Vault locked: the keys of your servers open only with your password")}</span>
+      <span class="ligne m0"><input type="password" id="cof-mdp" autocomplete="current-password" placeholder="${h(t("Password"))}" aria-label="${h(t("Password"))}"><button type="submit" class="btn btn-primaire">${t("Unlock")}</button></span></form>` : ""}
+    <div class="ligne cof-tete"><div class="onglets">${onglet("secret", t("Secrets"))}${onglet("variable", t("Variables"))}</div><span class="espace"></span><button type="button" class="btn btn-primaire" data-cof-ajouter>+ ${t("Add")}</button></div>
+    ${e.mot_de_passe ? "" : `<p class="muet petit">${t("No password for Athanor: the infra scope (the keys of your servers) stays unavailable.")} <a href="#options@bloc-verrou">${t("Settings › Options › Lock")}</a></p>`}
+    ${cof.form ? formulaireCoffre() : ""}
+    ${liste.length ? `<div class="grille-projets">${liste.map(carteCoffre).join("")}</div>` : `<div class="vide">${cof.onglet === "secret" ? t("No secret yet.") : t("No variable yet.")}</div>`}
+    <p class="muet petit cof-explication">${t("Your project keys reopen alone on this PC; the keys of your servers open only with your password, and a copy of the disk opens nothing.")}</p>
+  </div>`;
+};
+// rendrePage, then the field asked for gets the focus
+const rendreCoffre = (champ) => rendrePage().then(() => { const c = champ && document.getElementById(champ); if (c) c.focus(); });
+$("#page").addEventListener("click", async (ev) => {
+  if (etat.page !== "coffre") return;
+  const b = ev.target.closest("[data-cof-onglet], [data-cof-ajouter], [data-cof-annuler], [data-cof-modifier], [data-cof-remplacer], [data-cof-supprimer]");
+  if (!b) return;
+  const d = b.dataset, menu = b.closest("details"); if (menu) menu.open = false;
+  if (d.cofOnglet) { cof.onglet = d.cofOnglet; cof.form = null; return rendrePage(); }
+  if (d.cofAnnuler !== undefined) { cof.form = null; return rendrePage(); }
+  if (d.cofAjouter !== undefined) { cof.form = {}; return rendreCoffre("cof-nom"); }
+  if (d.cofModifier || d.cofRemplacer) { cof.form = { id: d.cofModifier || d.cofRemplacer }; return rendreCoffre(d.cofRemplacer ? "cof-valeur" : "cof-nom"); }
+  const x = entreeCoffre(d.cofSupprimer); if (!x) return;
+  if (!await confirmer(t("Delete {0} from the vault? This cannot be undone.", [x.nom]), { danger: true, ok: t("Delete") })) return;
+  if (await action(api("coffre/" + encodeURIComponent(x.id), "DELETE"))) { if (cof.form && cof.form.id === x.id) cof.form = null; toast(t("{0} deleted.", [x.nom]), "ok"); rendrePage(); }
+});
+// a type proposes its scope (infra only when Athanor has a password)
+$("#page").addEventListener("change", (ev) => {
+  if (ev.target.id !== "cof-type") return;
+  const p = $("#cof-portee"), infra = INFRA_COFFRE.has(ev.target.value) && !p.querySelector('[value="infra"]').disabled;
+  p.value = infra ? "infra" : "code";
+});
+$("#page").addEventListener("submit", async (ev) => {
+  if (etat.page !== "coffre") return;
+  ev.preventDefault();
+  if (ev.target.id === "cof-verrou") {
+    const champ = $("#cof-mdp");
+    if (await action(api("deverrouiller", "POST", { mot_de_passe: champ.value }))) { champ.value = ""; rendrePage(); }
+    return;
+  }
+  if (ev.target.id !== "cof-form") return;
+  const x = cof.form.id && entreeCoffre(cof.form.id), secret = (x ? x.famille : cof.onglet) === "secret";
+  const corps = { nom: $("#cof-nom").value.trim(), note: $("#cof-note").value.trim() }, valeur = $("#cof-valeur").value;
+  if (secret) { corps.type = $("#cof-type").value; corps.portee = $("#cof-portee").value; }
+  if (!x) { corps.famille = cof.onglet; if (!secret) corps.type = "autre"; }
+  if (!x || (secret ? valeur !== "" : valeur !== x.valeur)) corps.valeur = valeur; // an empty secret field keeps the value
+  const r = await action(api(x ? "coffre/" + encodeURIComponent(x.id) : "coffre", "POST", corps));
+  if (!r) return;
+  $("#cof-valeur").value = ""; cof.form = null;
+  toast(x ? t("{0} saved.", [r.nom]) : t("{0} added.", [r.nom]), "ok"); rendrePage();
+});
+
 async function rendrePage() {
   // renders overlap (a live refresh of one page, a click to another): only the last one asked is shown
   if (!etat.page) return;
