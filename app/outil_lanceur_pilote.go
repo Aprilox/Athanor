@@ -99,6 +99,9 @@ func lancerDemarrer(args []string) int {
 	kit := kitDuProgramme()
 	projet := projetArgument(kit, arg)
 	if surveiller {
+		if consoleMontree != nil {
+			return surveillerPilote(kit, projet, io.MultiWriter(os.Stdout, consoleMontree))
+		}
 		return surveillerPilote(kit, projet, os.Stdout)
 	}
 	if st, err := os.Stat(projet); err == nil && st.IsDir() {

@@ -3804,6 +3804,8 @@ async function rendreOptions() {
         <label class="radio"><input type="radio" name="op-mode" id="op-wsl" data-option ${o.mode_natif ? "" : "checked"}> <b>WSL</b> <span class="muet">${t("(Claude works in a sandbox: it only writes in the project; installs Linux once)")}</span></label>
         <p class="petit ${o.git_bash ? "ok" : "attention"}">${o.git_bash ? h(t("Git for Windows: {0}", [o.git_bash.replace(/[\\/](usr[\\/])?bin[\\/]bash\.exe$/i, "")])) : t("Git for Windows is missing: Setup & health → Install everything.")}</p>
         <p class="muet petit">${t("Applies to the pilots started afterwards. When you close Athanor while native pilots run, it asks whether they go on in the background.")}</p>
+        <label class="interrupteur mt-1"><input type="checkbox" id="op-terminal" data-option ${o.terminal_pilote ? "checked" : ""}><span>${t("Show the pilot's terminal")}</span></label>
+        <p class="muet petit">${t("Off: the programs a native pilot starts (bash, git, go, the checks) run in a hidden console, and no window opens. On: one minimised window in the taskbar shows the pilot live, without ever taking the focus. For the pilots started afterwards.")}</p>
       </div>
       <div class="bloc local-seul"><h2>${t("Athanor's folder")}</h2>
         <p class="m0"><code class="chemin-kit">${h(o.kit)}</code></p><div class="muet petit mt-1">${o.kit_valide ? "✔ " + t("Athanor's own files: settings, token, logs, the tools Claude installs. Your projects are elsewhere.") : "✖ " + t("this folder is not the tool")}</div>
@@ -3868,7 +3870,7 @@ document.addEventListener("click", (ev) => {
 // the native Windows switch is sent only where it is shown (Windows)
 function o_windows() { const b = $("#op-natif"); return !!(b && !b.closest(".bloc").hidden); }
 async function enregistrerOptions() {
-  const r = await action(api("options", "POST", { kit: $("#op-kit").value, lancer_pilote_au_demarrage: $("#op-lancer").checked, bureau_virtuel: $("#op-bureau").checked, programmes_supplementaires: $("#op-programmes").value, demarrage_windows: $("#op-windows").checked, mode_natif: $("#op-natif") && o_windows() ? $("#op-natif").checked : undefined, verifier_maj: $("#op-maj") ? $("#op-maj").checked : undefined, entendre_bureau: $("#op-son") ? $("#op-son").checked : undefined }));
+  const r = await action(api("options", "POST", { kit: $("#op-kit").value, lancer_pilote_au_demarrage: $("#op-lancer").checked, bureau_virtuel: $("#op-bureau").checked, programmes_supplementaires: $("#op-programmes").value, demarrage_windows: $("#op-windows").checked, mode_natif: $("#op-natif") && o_windows() ? $("#op-natif").checked : undefined, verifier_maj: $("#op-maj") ? $("#op-maj").checked : undefined, entendre_bureau: $("#op-son") ? $("#op-son").checked : undefined, terminal_pilote: $("#op-terminal") ? $("#op-terminal").checked : undefined }));
   if (r && document.activeElement && document.activeElement.matches("input[type=checkbox]")) rendrePage();
 }
 

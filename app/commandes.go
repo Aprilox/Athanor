@@ -11,6 +11,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -83,6 +84,10 @@ func init() {
 // consolePartagee: the sub-command shares the console of the program that started it (console_windows.go).
 var consolePartagee bool
 
+// consoleMontree: the pilot's console when "Show the pilot's terminal" is on (Windows), where the pilot's
+// output is copied; nil otherwise.
+var consoleMontree *os.File
+
 func lancerSousCommande(args []string) (int, bool) {
 	if len(args) == 0 {
 		return 0, false
@@ -120,6 +125,9 @@ func lancerSousCommande(args []string) (int, bool) {
 	}
 	if fenetre == "" {
 		consolePartagee = partagerConsoleParent()
+		if !consolePartagee && (nom == "pilote" || (nom == "demarrer" && slices.Contains(args, "--surveiller"))) {
+			consolePartagee = consoleCachee(lireConfig().TerminalPilote)
+		}
 		return c.lance(args[1:]), true
 	}
 	ouvrirConsole(fenetre)

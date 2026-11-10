@@ -325,6 +325,7 @@ type OptionsVue struct {
 	GitBash                   string     `json:"git_bash"`        // its bash.exe, "" when missing
 	VerifierMaj               bool       `json:"verifier_maj"`    // look for an update when Athanor opens (maj.go)
 	EntendreBureau            bool       `json:"entendre_bureau"` // the programs on Claude's desktop are heard
+	TerminalPilote            bool       `json:"terminal_pilote"` // the pilot's console is shown, minimised (Windows)
 }
 
 func (s *Serveur) apiOptions(w http.ResponseWriter, r *http.Request) {
@@ -335,7 +336,7 @@ func (s *Serveur) apiOptions(w http.ResponseWriter, r *http.Request) {
 	if projets == nil {
 		projets = []Projet{}
 	}
-	s.ecrireJSON(w, OptionsVue{projets, c.Kit, s.kitCourant().Valide(), c.LancerPiloteAuDemarrage, c.BureauVirtuel, c.ProgrammesSupplementaires, DemarrageWindowsActif(), c.MotDePasseHash != "", s.bureau.Etat(), modeNatif.Load(), runtime.GOOS == "windows", bashNatif(), !c.PasVerifierMaj, c.EntendreBureauClaude})
+	s.ecrireJSON(w, OptionsVue{projets, c.Kit, s.kitCourant().Valide(), c.LancerPiloteAuDemarrage, c.BureauVirtuel, c.ProgrammesSupplementaires, DemarrageWindowsActif(), c.MotDePasseHash != "", s.bureau.Etat(), modeNatif.Load(), runtime.GOOS == "windows", bashNatif(), !c.PasVerifierMaj, c.EntendreBureauClaude, c.TerminalPilote})
 }
 
 func (s *Serveur) apiEcrireOptions(w http.ResponseWriter, r *http.Request) {
@@ -348,6 +349,7 @@ func (s *Serveur) apiEcrireOptions(w http.ResponseWriter, r *http.Request) {
 		ModeNatif                 *bool  `json:"mode_natif"`
 		VerifierMaj               *bool  `json:"verifier_maj"`
 		EntendreBureau            *bool  `json:"entendre_bureau"`
+		TerminalPilote            *bool  `json:"terminal_pilote"`
 	}
 	if err := lireCorps(r, &c); err != nil {
 		s.erreur(w, http.StatusBadRequest, err.Error())
@@ -379,6 +381,9 @@ func (s *Serveur) apiEcrireOptions(w http.ResponseWriter, r *http.Request) {
 	}
 	if c.EntendreBureau != nil {
 		s.config.EntendreBureauClaude = *c.EntendreBureau
+	}
+	if c.TerminalPilote != nil {
+		s.config.TerminalPilote = *c.TerminalPilote
 	}
 	s.config.Kit = nouveau.Racine
 	s.config.LancerPiloteAuDemarrage = c.LancerPiloteAuDemarrage
