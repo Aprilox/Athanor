@@ -156,7 +156,7 @@ func (a *appTUI) pageAccueil(e *ecranT, x, y, l, h int) {
 		ix, iy, il, _ := a.boite(e, x, yc, l, hm, t("Missions"), false)
 		e.texte(ix, iy, il, "◇ "+t("No mission yet"), a.gras(p.encre, p.panneau))
 		if hm >= 4 {
-			e.texte(ix+2, iy+1, il-2, t("Coming soon: one sentence, and Dev and Servers work together."), a.st(p.muet, p.panneau))
+			e.texte(ix+2, iy+1, il-2, t("Coming soon: one sentence, and Studio and Servers work together."), a.st(p.muet, p.panneau))
 		}
 	}
 }

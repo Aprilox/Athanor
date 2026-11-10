@@ -124,19 +124,19 @@ func TestHubNomUnSeulEndroit(t *testing.T) {
 			continue
 		}
 		b, _ := os.ReadFile(f)
-		if c := strings.Count(string(b), `"Dev"`); c > 0 {
+		if c := strings.Count(string(b), `"Studio"`); c > 0 {
 			if f != "hub_dev.go" {
-				t.Errorf(`%s holds the literal "Dev"`, f)
+				t.Errorf(`%s holds the literal "Studio"`, f)
 			}
 			n += c
 		}
 	}
 	if n != 1 {
-		t.Errorf(`the literal "Dev" appears %d times in the Go code, want 1 (hub_dev.go)`, n)
+		t.Errorf(`the literal "Studio" appears %d times in the Go code, want 1 (hub_dev.go)`, n)
 	}
 	for _, f := range []string{"static/app.js", "static/index.html"} {
 		b, _ := os.ReadFile(f)
-		if strings.Contains(string(b), `"Dev"`) || strings.Contains(string(b), ">Dev<") {
+		if strings.Contains(string(b), `"Studio"`) || strings.Contains(string(b), ">Studio<") {
 			t.Errorf(`%s names the Dev module itself (render the nom of /api/hub)`, f)
 		}
 	}

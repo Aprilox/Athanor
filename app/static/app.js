@@ -1781,7 +1781,7 @@ pages.accueil = async () => {
     <div class="grille-hub">${modules.filter((m) => ((m.resume || {}).stats || []).length).map(tuileModule).join("")}</div>
     ${blocEnCours(d.elements || [], modules)}
     <section class="bloc missions"><h2>${t("Missions")}</h2>
-      <div class="missions-vide"><span class="missions-icone" aria-hidden="true"></span><div><b>${t("No mission yet")}</b><div class="muet petit">${t("Coming soon: one sentence, and Dev and Servers work together.")}</div></div></div>
+      <div class="missions-vide"><span class="missions-icone" aria-hidden="true"></span><div><b>${t("No mission yet")}</b><div class="muet petit">${t("Coming soon: one sentence, and Studio and Servers work together.")}</div></div></div>
     </section>
   </div>`;
 };
@@ -1978,14 +1978,14 @@ const GUIDE = [
       ["Add along the way", "A new request waits in the queue and joins the plan at the next cycle. *Chat* answers your questions about the project at any time."],
     ],
     note: "*Stop after cycle* lets the current milestone finish, *Stop now* cuts it. Everything is kept in files: the pilot resumes where it stopped, even after the computer restarts." },
-  { id: "hub", titre: "The hub", intro: "Athanor opens on its home page: what is going on and what needs you, at a glance. Each part of Athanor is a module; for now the one module is *Dev*, the projects Claude builds.",
+  { id: "hub", titre: "The hub", intro: "Athanor opens on its home page: what is going on and what needs you, at a glance. Each part of Athanor is a module; for now the one module is *Studio*, the projects Claude builds.",
     etapes: [
       ["The home page", "*Home*, at the top of the menu: one tile per module, with its state (working, needs attention, idle) and its figures. A click on a figure opens its page; *Open* opens the module.", "#accueil", "Home"],
-      ["What needs you", "Dev's tile counts the projects that need you and shows the quota used. The bell, at the top of the window, still lists each thing waiting for you, with a link to it."],
+      ["What needs you", "Studio's tile counts the projects that need you and shows the quota used. The bell, at the top of the window, still lists each thing waiting for you, with a link to it."],
       ["“What do you want to do?”", "Write it in one sentence in the bar of the home page, then *Send*: the chat of the current project opens with your text (with no project yet, a new project with your text as its request). Nothing is sent before you press *Send* there.", "#accueil", "Home"],
-      ["Where Dev's pages are", "In the menu, the *Dev* group holds every page you knew, unchanged, from *All projects* to *Settings* and this *Guide*. On a phone, a tap on a group's name folds it. Old links and notifications still open the same pages.", "#global", "All projects"],
+      ["Where Studio's pages are", "In the menu, the *Studio* group holds every page you knew, unchanged, from *All projects* to *Settings* and this *Guide*. On a phone, a tap on a group's name folds it. Old links and notifications still open the same pages.", "#global", "All projects"],
       ["Missions", "The *Missions* block is empty for now. Later, one sentence will start a mission in which several modules work together."],
-      ["In a terminal", "`./athanor tui` opens on the same home page: one block per module, what needs you and the missions. *H* or *Esc* comes back to it from any page, *Enter* opens the module, *1*–*9* and *0* still open Dev's pages."],
+      ["In a terminal", "`./athanor tui` opens on the same home page: one block per module, what needs you and the missions. *H* or *Esc* comes back to it from any page, *Enter* opens the module, *1*–*9* and *0* still open Studio's pages."],
     ],
     note: "The update moved none of your projects, settings or keys: the hub only adds a page and groups the menu." },
   { id: "coffre", titre: "The vault", intro: "The vault keeps your keys, tokens and settings in one place, encrypted on the disk. A secret's value is shown only while you type it, never again, and no page or answer of Athanor contains it.",
@@ -2001,7 +2001,7 @@ const GUIDE = [
     note: "Your project keys reopen alone on this PC; the keys of your servers open only with your password, and a copy of the disk opens nothing." },
   { id: "acces", titre: "Project access", intro: "Choose which keys and settings of the vault each project gets, and for which environment. Athanor writes them for the pilot itself before each start: Claude never holds the vault.",
     etapes: [
-      ["The Access panel", "*Access*, in the *Dev* menu: the vault's entries on the left, the project's environments (*dev*, *staging*, *prod*) on the right. Drag an entry onto an environment, or tick its box: the pilot gets it under the variable name shown, which you can change.", "#acces", "Access"],
+      ["The Access panel", "*Access*, in the *Studio* menu: the vault's entries on the left, the project's environments (*dev*, *staging*, *prod*) on the right. Drag an entry onto an environment, or tick its box: the pilot gets it under the variable name shown, which you can change.", "#acces", "Access"],
       ["The environment", "Next to *Start*, a list chooses the environment given to the pilot (*dev* at first). Changing it rewrites the pilot's values at once, and the panel follows. On a paired phone, the environment and the accesses are shown, never changed."],
       ["The badge", "The 🔑 badge next to *Start* counts the project's accesses and opens the panel. The sentence beside it says what the pilot will get (“2 test keys, 1 variable”). *vault locked*: the pilot's file waits until you unlock Athanor."],
       ["Code or infra", "A *code* entry (a test key, a setting) goes to the pilot: only the entries of the current environment are written into the project's `.athanor/secrets.env`. An *infra* entry (Cloudflare, SSH…) can be linked to the project, but Athanor keeps it for its own actions and never gives it to the pilot. Removing an access takes its value out of the file at once."],

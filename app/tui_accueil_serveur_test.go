@@ -69,7 +69,7 @@ func TestTUIAccueilServeur(t *testing.T) {
 			}
 		}
 		if taille[0] >= 80 {
-			for _, x := range []string{"Dev", "Coffre", "Besoin de vous : 2", "Missions"} {
+			for _, x := range []string{"Studio", "Coffre", "Besoin de vous : 2", "Missions"} {
 				if !strings.Contains(txt, x) {
 					t.Errorf("%v: no %q in\n%s", taille, x, txt)
 				}
@@ -78,8 +78,8 @@ func TestTUIAccueilServeur(t *testing.T) {
 	}
 	// "In progress" and the bell's alerts with their reason; a click on a line opens its project's page
 	txt := voir("accueil-120x40", 120, 40)
-	for _, x := range []string{"En cours", "Tout voir (20)", "! Dev, projet-03 : 1 tâche(s) sur la page Pour vous",
-		"! Dev, projet-07 : 1 tâche(s)", "projet-07  Dev  1 tâche(s) sur la page Pour vous"} {
+	for _, x := range []string{"En cours", "Tout voir (20)", "! Studio, projet-03 : 1 tâche(s) sur la page Pour vous",
+		"! Studio, projet-07 : 1 tâche(s)", "projet-07  Studio  1 tâche(s) sur la page Pour vous"} {
 		if !strings.Contains(txt, x) {
 			t.Errorf("no %q in\n%s", x, txt)
 		}
@@ -95,12 +95,12 @@ func TestTUIAccueilServeur(t *testing.T) {
 		}
 		t.Fatalf("no %q on screen", motif)
 	}
-	cliquer("projet-07  Dev")
+	cliquer("projet-07  Studio")
 	if a.page != pPourVous || a.c.projet != "projet-07" {
 		t.Errorf("click on projet-07: page %d, project %q", a.page, a.c.projet)
 	}
 	taper(a, "H")
-	cliquer("! Dev, projet-03")
+	cliquer("! Studio, projet-03")
 	if a.page != pPourVous || a.c.projet != "projet-03" {
 		t.Errorf("click on the alert of projet-03: page %d, project %q", a.page, a.c.projet)
 	}
@@ -112,7 +112,7 @@ func TestTUIAccueilServeur(t *testing.T) {
 	taper(a, "H")
 	// an ignored alert leaves the home's alerts (the bell's list), its project stays in "In progress"
 	a.hub.Alertes = a.hub.Alertes[1:]
-	if txt := voir("accueil-ignoree-120x40", 120, 40); strings.Contains(txt, "! Dev, projet-03") || !strings.Contains(txt, "projet-03  Dev") {
+	if txt := voir("accueil-ignoree-120x40", 120, 40); strings.Contains(txt, "! Studio, projet-03") || !strings.Contains(txt, "projet-03  Studio") {
 		t.Errorf("ignored alert:\n%s", txt)
 	}
 	// the keys of Dev's pages, as before the hub

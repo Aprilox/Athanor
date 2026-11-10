@@ -1025,7 +1025,7 @@ func TestTUIAccueil(t *testing.T) {
 		e := nouvelEcran(taille[0], taille[1])
 		a.dessiner(e)
 		ecran := e.texteEcran()
-		for _, x := range []string{"Athanor", "Dev", "Inactif", "Projets en cours", "Besoin de vous : 0", "Missions", "Aucune mission pour l'instant", "Pages de Dev"} {
+		for _, x := range []string{"Athanor", "Studio", "Inactif", "Projets en cours", "Besoin de vous : 0", "Missions", "Aucune mission pour l'instant", "Pages de Studio"} {
 			if !strings.Contains(ecran, x) {
 				t.Fatalf("%v: no %q in\n%s", taille, x, ecran)
 			}
@@ -1095,7 +1095,7 @@ func TestTUIAccueil(t *testing.T) {
 		{Module: "dev", ID: "c", Titre: "c", Etat: "actif", Activite: "Seul"}}
 	e = nouvelEcran(120, 40)
 	a.dessiner(e)
-	for _, x := range []string{"b  Dev  Jalon 4/10 : Écrire la page, Tests", "c  Dev  Seul", "Tout voir (2)"} {
+	for _, x := range []string{"b  Studio  Jalon 4/10 : Écrire la page, Tests", "c  Studio  Seul", "Tout voir (2)"} {
 		if !strings.Contains(e.texteEcran(), x) {
 			t.Fatalf("no %q in\n%s", x, e.texteEcran())
 		}

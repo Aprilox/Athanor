@@ -300,7 +300,7 @@ func (a *appTUI) raccourcisPage() []raccourci {
 	case pDistance:
 		r = a.raccourcisDistance()
 	case pAccueil:
-		r = []raccourci{{"Enter", t("Open")}, {"1…0", t("Dev pages")}}
+		r = []raccourci{{"Enter", t("Open")}, {"1…0", t("Studio pages")}}
 	default:
 		r = a.raccourcisPages2()
 	}

@@ -219,7 +219,7 @@ func TestHubTraductionModules(t *testing.T) {
 	for _, l := range []string{"fr", "es", "de", "it", "pt"} {
 		dico := dicoTUI(l)
 		for _, c := range cles {
-			if _, ok := dico[c]; !ok && c != "Dev" {
+			if _, ok := dico[c]; !ok {
 				t.Errorf("%s: no translation of %q", l, c)
 			}
 		}

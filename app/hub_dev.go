@@ -11,7 +11,7 @@ import (
 type moduleDev struct{}
 
 func (moduleDev) ID() string  { return "dev" }
-func (moduleDev) Nom() string { return "Dev" }
+func (moduleDev) Nom() string { return "Studio" }
 
 // Pages: the pages of the selected project (Projects, every project at once, is the hub's).
 func (moduleDev) Pages() []PageModule {
