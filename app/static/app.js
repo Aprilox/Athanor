@@ -3870,12 +3870,24 @@ const INFRA_COFFRE = new Set(["cloudflare", "ssh", "certificat", "github", "aws"
 const typeCoffre = (x) => ({ ssh: t("SSH key"), certificat: t("Certificate"), mot_de_passe: t("Password"), jeton: t("Token"), autre: t("Other"),
   cloudflare: "Cloudflare", github: "GitHub", aws: "AWS", anthropic: "Anthropic", openai: "OpenAI", stripe: "Stripe" })[x] || x;
 const entreeCoffre = (id) => (cof.d.entrees || []).find((x) => x.id === id);
+const TESTABLES_COFFRE = new Set(["cloudflare", "github", "ssh"]); // the types POST /api/coffre/tester checks
+// "Test": the server checks the key and answers {ok, resultat, note} as translation keys, never the value;
+// the proposed note fills an empty note field, otherwise a button offers it (the field stays editable)
+async function testerCoffre(corps, sortie, champNote) {
+  sortie.hidden = false; sortie.innerHTML = `<span class="muet">${t("Testing…")}</span>`;
+  const r = await action(api("coffre/tester", "POST", corps));
+  if (!r) { sortie.hidden = true; return; }
+  const n = r.note ? t(r.note.cle, r.note.args) : "";
+  if (n && !champNote.value.trim()) champNote.value = n;
+  sortie.innerHTML = `<span class="${r.ok ? "ok" : "echec"}">${r.ok ? "✓" : "✗"}</span> ${r.resultat.map((m) => h(t(m.cle, m.args))).join("<br>")}`
+    + (n && champNote.value.trim() !== n ? ` <button type="button" class="btn btn-petit" data-cof-note="${h(n)}">${t("Use as note")}</button>` : "");
+}
 function carteCoffre(x) {
   const secret = x.famille === "secret", infra = x.portee === "infra";
   return `<div class="bloc carte-coffre" data-coffre-id="${h(x.id)}">
     <div class="cp-tete"><b class="cp-nom">${h(x.nom)}</b>${secret ? `<span class="badge">${h(typeCoffre(x.type))}</span><span class="badge${infra ? " badge-infra" : ""}" title="${h(infra ? t("Server key: opens only with your password") : t("Project key: reopens alone on this PC"))}">${infra ? "infra" : "code"}</span>` : ""}
       <details class="menu-coffre"><summary class="btn btn-petit" aria-label="${h(t("Actions"))}">⋯</summary><div class="menu-coffre-liste">
-        <button type="button" data-cof-modifier="${h(x.id)}">${t("Edit")}</button><button type="button" data-cof-remplacer="${h(x.id)}">${t("Replace the value")}</button><button type="button" class="danger" data-cof-supprimer="${h(x.id)}">${t("Delete")}</button>
+        ${secret && TESTABLES_COFFRE.has(x.type) ? `<button type="button" data-cof-tester="${h(x.id)}">${t("Test")}</button>` : ""}<button type="button" data-cof-modifier="${h(x.id)}">${t("Edit")}</button><button type="button" data-cof-remplacer="${h(x.id)}">${t("Replace the value")}</button><button type="button" class="danger" data-cof-supprimer="${h(x.id)}">${t("Delete")}</button>
       </div></details></div>
     <div class="petit cof-valeur">${secret ? `<span class="muet">•••• ${t("saved")}</span>` : `<code>${h(x.valeur)}</code>`}</div>
     <div class="petit cof-note${x.note ? "" : " muet"}" title="${h(x.note)}">${x.note ? h(x.note) : t("No note for the AI")}</div>
@@ -3898,6 +3910,10 @@ function formulaireCoffre() {
     <label class="champ"><span>${t("Note for the AI")}</span><textarea id="cof-note" rows="2" maxlength="2000" placeholder="${h(t("What it is for, e.g. DNS of example.org"))}">${h(x ? x.note : "")}</textarea></label>
     <label class="champ"><span>${t("Value")}</span><input type="${secret ? "password" : "text"}" id="cof-valeur" autocomplete="new-password" spellcheck="false" value="${h(x && !secret ? x.valeur : "")}" placeholder="${x && secret ? "•••• " + h(t("saved")) : ""}"></label>
     ${x && secret ? `<p class="muet petit">${t("The value is never shown again: type a new one to replace it, or leave the field empty.")}</p>` : ""}
+    ${x && secret && TESTABLES_COFFRE.has(x.type) ? `<div class="cof-test-bloc">
+      ${x.type === "ssh" ? `<label class="champ"><span>${t("Server to try (optional)")}</span><input type="text" id="cof-hote" maxlength="255" spellcheck="false" placeholder="example.org:22"></label>` : ""}
+      <div class="ligne m0"><button type="button" class="btn" data-cof-test>${t("Test")}</button><span class="muet petit">${t("Athanor checks the key with its provider and proposes a note for the AI.")}</span></div>
+      <div class="petit cof-resultat" id="cof-test" aria-live="polite" hidden></div></div>` : ""}
     <div class="ligne"><button type="submit" class="btn btn-primaire">${x ? t("Save") : t("Add")}</button><button type="button" class="btn" data-cof-annuler>${t("Cancel")}</button></div>
   </form>`;
 }
@@ -3911,6 +3927,7 @@ function formulaireColle() {
     <select class="cof-p-portee" aria-label="${h(t("Scope"))}"><option value="code">code</option><option value="infra"${p.portee === "infra" ? " selected" : ""}${mdp ? "" : " disabled"}>infra</option></select>` : ""}
     <code class="petit">${h(p.indice)}</code>
     <input type="text" class="cof-p-note" maxlength="2000" placeholder="${h(t("Note for the AI"))}" aria-label="${h(t("Note for the AI"))}">
+    ${p.famille === "secret" ? `<button type="button" class="btn btn-petit" data-cof-p-tester>${t("Test")}</button><div class="petit cof-resultat" aria-live="polite" hidden></div>` : ""}
   </div>`;
   return `<form class="bloc cof-form" id="cof-colle" autocomplete="off">
     <h2>${t("Paste")}</h2>
@@ -3945,7 +3962,7 @@ pages.coffre = async () => {
 const rendreCoffre = (champ) => rendrePage().then(() => { const c = champ && document.getElementById(champ); if (c) c.focus(); });
 $("#page").addEventListener("click", async (ev) => {
   if (etat.page !== "coffre") return;
-  const b = ev.target.closest("[data-cof-onglet], [data-cof-ajouter], [data-cof-coller], [data-cof-analyser]:not([type=submit]), [data-cof-annuler], [data-cof-modifier], [data-cof-remplacer], [data-cof-supprimer]");
+  const b = ev.target.closest("[data-cof-onglet], [data-cof-ajouter], [data-cof-coller], [data-cof-analyser]:not([type=submit]), [data-cof-annuler], [data-cof-modifier], [data-cof-remplacer], [data-cof-supprimer], [data-cof-tester], [data-cof-test], [data-cof-p-tester], [data-cof-note]");
   if (!b) return;
   const d = b.dataset, menu = b.closest("details"); if (menu) menu.open = false;
   if (d.cofOnglet) { cof.onglet = d.cofOnglet; cof.form = cof.colle = null; return rendrePage(); }
@@ -3953,6 +3970,16 @@ $("#page").addEventListener("click", async (ev) => {
   if (d.cofColler !== undefined) { cof.form = null; cof.colle = {}; return rendreCoffre("cof-texte"); }
   if (d.cofAnalyser !== undefined) return analyserColle();
   if (d.cofAjouter !== undefined) { cof.form = {}; cof.colle = null; return rendreCoffre("cof-nom"); }
+  if (d.cofNote !== undefined) { (b.closest("[data-cof-prop]")?.querySelector(".cof-p-note") || $("#cof-note")).value = d.cofNote; return b.remove(); }
+  if (d.cofPTester !== undefined) {
+    const l = b.closest("[data-cof-prop]"), type = l.querySelector(".cof-p-type");
+    return testerCoffre({ texte: cof.colle.analyse, i: +l.dataset.cofProp, type: type && type.value }, l.querySelector(".cof-resultat"), l.querySelector(".cof-p-note"));
+  }
+  if (d.cofTester) { cof.form = { id: d.cofTester }; cof.colle = null; await rendreCoffre("cof-note"); }
+  if (d.cofTester || d.cofTest !== undefined) {
+    const hote = $("#cof-hote");
+    return testerCoffre({ id: cof.form.id, type: $("#cof-type").value, hote: hote ? hote.value.trim() : "" }, $("#cof-test"), $("#cof-note"));
+  }
   if (d.cofModifier || d.cofRemplacer) { cof.form = { id: d.cofModifier || d.cofRemplacer }; cof.colle = null; return rendreCoffre(d.cofRemplacer ? "cof-valeur" : "cof-nom"); }
   const x = entreeCoffre(d.cofSupprimer); if (!x) return;
   if (!await confirmer(t("Delete {0} from the vault? This cannot be undone.", [x.nom]), { danger: true, ok: t("Delete") })) return;

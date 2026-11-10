@@ -918,6 +918,9 @@ ol.guide-access li { margin: 5px 0; }
 .cof-form .cof-prop .cof-p-nom { flex: 1 1 200px; }
 .cof-form .cof-prop .cof-p-note { flex: 2 1 240px; }
 .cof-prop code { min-width: 60px; }
+.cof-prop .cof-resultat { flex-basis: 100%; }
+.cof-test-bloc { margin: 4px 0 12px; }
+.cof-resultat { margin-top: 6px; padding: 6px 10px; border-left: 3px solid var(--line); overflow-wrap: anywhere; }
 #cof-texte { -webkit-text-security: disc; } /* the pasted secrets stay off the screen; the proposals say what was found */
 .cof-verrou { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; border-color: var(--attention); margin-bottom: 12px; }
 .cof-verrou input { min-width: 180px; }

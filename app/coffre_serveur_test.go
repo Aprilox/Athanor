@@ -56,6 +56,8 @@ func TestCoffreServeur(t *testing.T) {
 		t.Fatal("vault not loaded:", s.coffreErr)
 	}
 	chemin := s.coffre.chemin
+	// a config left by an earlier test makes the test binary's folder Athanor's: drop the vault written there
+	t.Cleanup(func() { _ = os.Remove(chemin) })
 	absent := func(quand string) {
 		if _, err := os.Stat(chemin); !errors.Is(err, os.ErrNotExist) {
 			t.Fatal("vault file written", quand)

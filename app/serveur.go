@@ -322,6 +322,7 @@ func (s *Serveur) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/coffre/{id}", s.garde(false, s.apiCoffreModifier))
 	mux.HandleFunc("DELETE /api/coffre/{id}", s.garde(false, s.apiCoffreSupprimer))
 	mux.HandleFunc("POST /api/coffre/coller", s.garde(false, s.apiCoffreColler))
+	mux.HandleFunc("POST /api/coffre/tester", s.garde(false, s.apiCoffreTester))
 	mux.HandleFunc("POST /api/deverrouiller", s.garde(true, s.apiDeverrouiller))
 	mux.HandleFunc("POST /api/verrouiller", s.garde(true, s.apiVerrouiller))
 

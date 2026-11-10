@@ -103,6 +103,9 @@ func coffreCapture(t *testing.T) *Coffre {
 		if e.Famille == "variable" {
 			e.Type = "autre"
 		}
+		if e.Type == "ssh" { // a real key: "Test" reads its type without the network
+			v = clePEMTest()
+		}
 		if _, err := c.Ajouter(e, v); err != nil {
 			t.Fatal(e.Nom, err)
 		}
