@@ -940,10 +940,33 @@ function marquerDistance(v) {
 function menuMobile(ouvert) { document.body.classList.toggle("menu-ouvert", ouvert); $("#btn-menu").setAttribute("aria-expanded", String(ouvert)); }
 $("#btn-menu").addEventListener("click", () => menuMobile(!document.body.classList.contains("menu-ouvert")));
 $("#voile-menu").addEventListener("click", () => menuMobile(false));
-$("#nav-tiroir").addEventListener("click", (ev) => { if (ev.target.closest("nav a, .menu-liste a, .menu-nouveau")) menuMobile(false); });
+$("#nav-tiroir").addEventListener("click", (ev) => {
+  if (ev.target.closest("nav a, .menu-liste a, .menu-nouveau")) menuMobile(false);
+  // a module's group folds on phones (its title is a plain heading on a wide screen)
+  const titre = ev.target.closest(".nav-groupe-titre");
+  if (titre) titre.setAttribute("aria-expanded", String(!titre.parentElement.classList.toggle("replie")));
+});
+// the main menu: Home, then one group per module of /api/hub that has pages, titled with its name;
+// a group already in index.html (Dev) keeps its links, another one gets a link per page
+function rendreMenu(modules) {
+  etat.hubModules = modules;
+  const zone = $("#nav-modules"), vus = new Set();
+  for (const m of modules) {
+    if (!(m.pages || []).length) continue;
+    let g = zone.querySelector(`.nav-groupe[data-module="${CSS.escape(m.id)}"]`);
+    if (!g) { g = document.createElement("div"); g.className = "nav-groupe"; g.dataset.module = m.id; g.dataset.cree = "1"; }
+    if (g.dataset.cree) { // rebuilt each time: its links follow the language
+      g.innerHTML = `<button type="button" class="nav-groupe-titre" aria-expanded="true"></button><div class="nav-groupe-corps"><nav>${m.pages.map((p) => `<a href="${h(p.hash)}" data-page="${h(p.hash.slice(1))}">${h(t(p.libelle))}</a>`).join("")}</nav></div>`;
+    }
+    g.querySelector(".nav-groupe-titre").textContent = t(m.nom);
+    g.hidden = false; zone.appendChild(g); vus.add(g);
+  }
+  zone.querySelectorAll(".nav-groupe").forEach((g) => { if (!vus.has(g)) g.hidden = true; });
+}
 function traduireNav() {
-  const libelles = { global: t("All projects"), suivi: t("Overview"), equipe: t("Team"), demandes: t("Requests"), pourvous: t("For you"), journal: t("Log"), projet: t("Manage"), chat: t("Chat"), extensions: t("Skills & MCP"), sante: t("Setup & health"), reglages: t("Settings"), options: t("Options"), distance: t("Remote"), guide: t("Guide") };
-  document.querySelectorAll("#nav-global a, #nav-liens a, #nav-outil a").forEach((a) => { if (libelles[a.dataset.page]) a.textContent = libelles[a.dataset.page]; });
+  if (etat.hubModules) rendreMenu(etat.hubModules);
+  const libelles = { accueil: t("Home"), global: t("All projects"), suivi: t("Overview"), equipe: t("Team"), demandes: t("Requests"), pourvous: t("For you"), journal: t("Log"), projet: t("Manage"), chat: t("Chat"), extensions: t("Skills & MCP"), sante: t("Setup & health"), reglages: t("Settings"), options: t("Options"), distance: t("Remote"), guide: t("Guide") };
+  document.querySelectorAll("#nav-tiroir nav a").forEach((a) => { if (libelles[a.dataset.page]) a.textContent = libelles[a.dataset.page]; });
   $("#nav-titre-projet").textContent = t("Project");
   $("#nav-titre-outil").textContent = t("Tool");
   $("#btn-verrou").textContent = "🔒 " + t("Lock");
@@ -953,7 +976,7 @@ function traduireNav() {
 }
 
 function naviguer() {
-  let page = (location.hash || "#suivi").slice(1);
+  let page = (location.hash || "#accueil").slice(1);
   // "#page@block": the page, then that block of it shown (the Guide's buttons: Settings › Options › GitHub…)
   let ancre = "";
   if (page.includes("@")) { [page, ancre] = page.split("@", 2); history.replaceState(null, "", "#" + page); }
@@ -966,7 +989,7 @@ function naviguer() {
   // the settings always open on Options (or on the tab asked for, the guided tour)
   if (page === "reglages" && etat.page !== "reglages") { etat.ongletReglages = etat.ongletDemande || "options"; etat.ongletDemande = null; }
   etat.page = page;
-  document.querySelectorAll("#nav-global a, #nav-liens a, #nav-outil a").forEach((a) => a.classList.toggle("actif", a.dataset.page === page));
+  document.querySelectorAll("#nav-tiroir nav a").forEach((a) => a.classList.toggle("actif", a.dataset.page === page));
   if (etat.vue) rendreBandeau(etat.vue); // the All projects page has its own header
   rendrePage();
 }
@@ -1614,7 +1637,7 @@ function tuileModule(m) {
 }
 pages.accueil = async () => {
   const d = await api("hub");
-  etat.hubSig = JSON.stringify(d.modules);
+  etat.hubSig = JSON.stringify(d.modules); rendreMenu(d.modules || []);
   const projet = etat.vue && etat.vue.projet;
   return `<div class="accueil">
     <form class="bloc accueil-barre" id="accueil-form">
@@ -4200,6 +4223,7 @@ async function rafraichir() {
   await rafraichir();
   const v = etat.vue || {};
   etat.langue = v.langue || "en"; appliquerLangue(etat.langue); traduireNav();
+  await api("hub").then((d) => rendreMenu(d.modules || [])).catch(() => {}); // the menu keeps the HTML's groups if it fails
   if (location.hash === "#bienvenue") location.hash = "#suivi";
   naviguer();
   setInterval(rafraichir, 1500);
