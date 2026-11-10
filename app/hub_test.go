@@ -183,3 +183,104 @@ func TestHubLiensNotifications(t *testing.T) {
 		}
 	}
 }
+
+// TestHubAncienneConfig: a config from before the hub (projects, settings, request queue, secrets) goes
+// through two starts of the server and the "Got it" of the tour; none of its files is changed or lost.
+func TestHubAncienneConfig(t *testing.T) {
+	d := t.TempDir()
+	for _, v := range []string{"LOCALAPPDATA", "LocalAppData", "HOME", "XDG_DATA_HOME", "XDG_CONFIG_HOME"} {
+		t.Setenv(v, filepath.Join(d, "home"))
+	}
+	kit := filepath.Join(d, "kit")
+	fichiers := map[string]string{
+		filepath.Join(kit, ".env"):                            "LANGUAGE=fr\nGITHUB_TOKEN=temoin-env-7731\n",
+		filepath.Join(kit, "extensions", "secrets.json"):      `{"essai":{"API_KEY":"temoin-ext-4402"}}`,
+		filepath.Join(kit, "extensions", "bibliotheque.json"): `{"essai":{"command":"npx","args":["essai-mcp"]}}`,
+	}
+	var projets []Projet
+	for _, nom := range []string{"site-vitrine", "jeu-2d", "outil cli"} {
+		p := Projet{Nom: nom, Dossier: filepath.Join(d, "projets", nom)}
+		projets = append(projets, p)
+		fichiers[p.Demande()] = "# Demande\n\nUn " + nom + ".\n"
+		fichiers[p.Plan()] = "# Plan\n\n- [x] M1 : squelette\n- [ ] M2 : tranche\n"
+		fichiers[filepath.Join(p.FileAttente(), "01-suite.md")] = "Ajouter un mode sombre.\n"
+		fichiers[filepath.Join(p.Atelier(), "secrets.env")] = "API_TOKEN=temoin-projet-9150\n"
+		fichiers[filepath.Join(p.Dossier, ".env")] = "DB_PASSWORD=temoin-db-2286\n"
+		fichiers[filepath.Join(p.Dossier, "index.html")] = "<h1>" + nom + "</h1>\n"
+	}
+	projets = append(projets, Projet{Nom: "ancien", Dossier: filepath.Join(d, "projets", "ancien"), Archive: true})
+	ancienne := Config{Kit: kit, Projets: projets, ProjetActif: "jeu-2d", Port: 8765, Langue: "fr", Theme: "sombre", Accent: "vert", BienvenueVue: true, ProgrammesSupplementaires: "blender.exe"}
+	b, err := json.MarshalIndent(ancienne, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := cheminConfig()
+	if avant, err := os.ReadFile(cfg); err == nil {
+		t.Cleanup(func() { _ = os.WriteFile(cfg, avant, 0o600) })
+	} else {
+		t.Cleanup(func() { _ = os.Remove(cfg) })
+	}
+	fichiers[cfg] = string(b)
+	for f, contenu := range fichiers {
+		if err := os.MkdirAll(filepath.Dir(f), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(f, []byte(contenu), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	verifier := func(quand string, sauf string) {
+		t.Helper()
+		for f, contenu := range fichiers {
+			if f == sauf {
+				continue
+			}
+			if lu, err := os.ReadFile(f); err != nil || string(lu) != contenu {
+				t.Fatalf("%s: %s changed or lost (%v)", quand, f, err)
+			}
+		}
+	}
+	demarrer := func() http.Handler {
+		s := nouveauServeur(lireConfig())
+		s.csrf, s.cleAcces = "jeton", "cle"
+		mux := http.NewServeMux()
+		s.routes(mux)
+		return mux
+	}
+	appel := func(mux http.Handler, methode, url, corps string) map[string]any {
+		t.Helper()
+		r := httptest.NewRequest(methode, url, strings.NewReader(corps))
+		r.Header.Set("X-Athanor", "jeton")
+		r.Header.Set("Content-Type", "application/json")
+		r.AddCookie(&http.Cookie{Name: cookieAcces, Value: "cle"})
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, r)
+		var v any
+		if w.Code != http.StatusOK || json.Unmarshal(w.Body.Bytes(), &v) != nil {
+			t.Fatalf("%s %s: %d %s", methode, url, w.Code, w.Body.String())
+		}
+		m, _ := v.(map[string]any)
+		return m
+	}
+	for i := 1; i <= 2; i++ {
+		mux := demarrer()
+		e := appel(mux, "GET", "/api/etat", "")
+		if e["hub_vu"] != false || e["bienvenue"] != false || len(e["projets"].([]any)) < 3 {
+			t.Fatalf("start %d, /api/etat of the old config: hub_vu %v bienvenue %v projets %v", i, e["hub_vu"], e["bienvenue"], e["projets"])
+		}
+		appel(mux, "GET", "/api/hub", "")
+		appel(mux, "GET", "/api/projets", "")
+		verifier("start "+string(rune('0'+i)), "")
+	}
+	// "Got it": only hub_vu is added to the config, everything else of it is kept
+	appel(demarrer(), "POST", "/api/preferences", `{"hub_vu":true}`)
+	verifier("after Got it", cfg)
+	c := lireConfig()
+	ancienne.HubVu = true
+	if gb, _ := json.Marshal(c); string(gb) != func() string { a, _ := json.Marshal(ancienne); return string(a) }() {
+		t.Fatalf("config after Got it:\n%s\nwanted:\n%+v", gb, ancienne)
+	}
+	if e := appel(demarrer(), "GET", "/api/etat", ""); e["hub_vu"] != true {
+		t.Fatalf("hub_vu not kept after a restart: %v", e["hub_vu"])
+	}
+}

@@ -105,6 +105,8 @@ html.cadre .dialogue, html.cadre .verrou, html.cadre .assistant { top: var(--bar
 .accueil-titre { font-size: 18px; font-weight: 600; }
 .accueil-barre .ligne { flex-wrap: nowrap; }
 .accueil-barre input { font-size: 16px; padding: 11px 14px; min-width: 0; }
+.bloc.hub-visite { display: flex; align-items: center; gap: 10px; border-color: var(--accent); background: var(--accent-halo); }
+.hub-visite-fleche { font-size: 18px; color: var(--accent); }
 .grille-hub { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
 .grille-hub > .bloc + .bloc { margin-top: 0; }
 .tuile-module.besoin { border-color: var(--attention); }

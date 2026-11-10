@@ -1049,7 +1049,7 @@ $("#assistant").addEventListener("click", async (ev) => {
     if (etat.assistant === 1 && !((etat.raccourci || {}).raccourcis || []).length) etat.raccourciPlusTard = true; // skipped: not offered again this time
     etat.assistant++; return rendreAssistant();
   }
-  if (b.dataset.assistant === "fin") { await action(api("preferences", "POST", { bienvenue_vue: true })); etat.assistant = -1; rendreAssistant(); location.hash = "#suivi"; await rendrePage(); demarrerVisite(); }
+  if (b.dataset.assistant === "fin") { await action(api("preferences", "POST", { bienvenue_vue: true, hub_vu: true })); etat.assistant = -1; rendreAssistant(); location.hash = "#suivi"; await rendrePage(); demarrerVisite(); }
 });
 
 // --- the guided tour, right after the first-launch wizard (and from Options): a bubble shows each place
@@ -1645,12 +1645,21 @@ pages.accueil = async () => {
       <div class="ligne m0"><input type="text" id="accueil-texte" class="croit" autocomplete="off" placeholder="${h(t("Say it in one sentence…"))}"><button type="submit" class="btn btn-primaire">${t("Send")}</button></div>
       <div class="muet petit">${projet ? h(t("Opens the chat of {0} with your text: nothing is sent before you press Send there.", [projet.nom])) : t("No project yet: opens a new project with your text as its request.")}</div>
     </form>
+    ${visiteHub() ? `<div class="bloc hub-visite" role="status"><span class="hub-visite-fleche" aria-hidden="true">←</span><span class="croit">${t("Your projects are still here:")} <a href="#global">Dev → ${t("All projects")}</a></span><button type="button" class="btn btn-petit" data-hub-vu>${t("Got it")}</button></div>` : ""}
     <div class="grille-hub">${(d.modules || []).map(tuileModule).join("")}</div>
     <section class="bloc missions"><h2>${t("Missions")}</h2>
       <div class="missions-vide"><span class="missions-icone" aria-hidden="true"></span><div><b>${t("No mission yet")}</b><div class="muet petit">${t("Coming soon: one sentence, and Dev and Servers work together.")}</div></div></div>
     </section>
   </div>`;
 };
+// the one-line tour, for a config that had projects before the hub: after the welcome wizard, once only
+// (the wizard's end marks it seen: a new install already gets the wizard then the full tour)
+function visiteHub() { const v = etat.vue || {}; return !v.hub_vu && !v.bienvenue && etat.assistant < 0 && (v.projets || []).length > 0; }
+document.addEventListener("click", async (ev) => {
+  const b = ev.target.closest("[data-hub-vu]"); if (!b) return;
+  b.closest(".hub-visite").remove(); if (etat.vue) etat.vue.hub_vu = true;
+  await action(api("preferences", "POST", { hub_vu: true }));
+});
 // the bar's text goes to the chat of the current project (or to a new project's request) through memory,
 // never through the hash, and is only put in the field: the user sends it there
 function envoyerAccueil() {

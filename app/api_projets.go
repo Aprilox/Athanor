@@ -108,6 +108,7 @@ type EtatVue struct {
 	Theme       string                `json:"theme"`
 	Accent      string                `json:"accent"`
 	Bienvenue   bool                  `json:"bienvenue"`
+	HubVu       bool                  `json:"hub_vu"`
 	Version     string                `json:"version"` // Athanor's version (the sidebar, Settings › Options)
 	Natif       bool                  `json:"natif"`   // native Windows mode: no Linux screen
 	Windows     bool                  `json:"windows"` // the app runs on Windows: WSL or native mode to choose
@@ -140,7 +141,7 @@ func (s *Serveur) apiEtat(w http.ResponseWriter, r *http.Request) {
 	verrou := s.verrouillePour(r)
 	s.mu.Lock()
 	kit, mdp, courant := s.kitCourant(), s.config.MotDePasseHash != "", s.config.ProjetActif
-	langue, bienvenue := s.config.Langue, !s.config.BienvenueVue
+	langue, bienvenue, hubVu := s.config.Langue, !s.config.BienvenueVue, s.config.HubVu
 	theme, accent := s.config.Theme, s.config.Accent
 	if !languesConnues[langue] {
 		langue = "en"
@@ -149,7 +150,7 @@ func (s *Serveur) apiEtat(w http.ResponseWriter, r *http.Request) {
 	if nom := r.URL.Query().Get("p"); nom != "" {
 		courant = nom
 	}
-	vue := EtatVue{KitValide: kit.Valide(), KitInstalle: kit.Installe(), Verrouille: verrou, MotDePasse: mdp, Maintenant: time.Now().Format("15:04"), DemandeVide: true, Langue: langue, Theme: theme, Accent: accent, Bienvenue: bienvenue, Version: versionAthanor}
+	vue := EtatVue{KitValide: kit.Valide(), KitInstalle: kit.Installe(), Verrouille: verrou, MotDePasse: mdp, Maintenant: time.Now().Format("15:04"), DemandeVide: true, Langue: langue, Theme: theme, Accent: accent, Bienvenue: bienvenue, HubVu: hubVu, Version: versionAthanor}
 	vue.Distant = appareilDe(r) != ""
 	vue.DistanceActive, vue.Connectes = s.connectesDistance()
 	if !vue.Distant {
@@ -486,7 +487,7 @@ func (s *Serveur) langue() string {
 	return "en"
 }
 
-// apiPreferences saves the language, the theme, the accent and the state of the welcome wizard.
+// apiPreferences saves the language, the theme, the accent, the state of the welcome wizard and of the hub tour.
 // The language is also written into the tool's .env (LANGUAGE) so that Claude works in that language.
 func (s *Serveur) apiPreferences(w http.ResponseWriter, r *http.Request) {
 	var c struct {
@@ -494,6 +495,7 @@ func (s *Serveur) apiPreferences(w http.ResponseWriter, r *http.Request) {
 		Theme        *string `json:"theme"`
 		Accent       *string `json:"accent"`
 		BienvenueVue *bool   `json:"bienvenue_vue"`
+		HubVu        *bool   `json:"hub_vu"`
 	}
 	if err := lireCorps(r, &c); err != nil {
 		s.erreur(w, http.StatusBadRequest, err.Error())
@@ -519,6 +521,9 @@ func (s *Serveur) apiPreferences(w http.ResponseWriter, r *http.Request) {
 	}
 	if c.BienvenueVue != nil {
 		s.config.BienvenueVue = *c.BienvenueVue
+	}
+	if c.HubVu != nil {
+		s.config.HubVu = *c.HubVu
 	}
 	langue := s.config.Langue
 	err := ecrireConfig(s.config)

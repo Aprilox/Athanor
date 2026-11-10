@@ -25,6 +25,7 @@ type Config struct {
 	Theme                     string   `json:"theme"`  // interface palette (see themesConnus)
 	Accent                    string   `json:"accent"` // interface accent color (see accentsConnus)
 	BienvenueVue              bool     `json:"bienvenue_vue"`
+	HubVu                     bool     `json:"hub_vu,omitempty"` // the one-line hub tour was dismissed
 	// native Windows mode: the pilot is Athanor.exe and Claude Code the Windows program, without
 	// WSL nor sandbox (natif_windows.go)
 	ModeNatif bool `json:"mode_natif"`
