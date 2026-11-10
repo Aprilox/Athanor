@@ -287,6 +287,23 @@ func interditDistance(r *http.Request) bool {
 	return false
 }
 
+// prefixesHub: the hub's routes, closed to devices by default (an allowlist, unlike interditDistance):
+// a new route under these prefixes stays refused from a device until it is added to autorisesDistance.
+var prefixesHub = []string{"/api/hub", "/api/coffre"}
+
+// autorisesDistance: "METHOD path" of the hub a device may call (reading only, never a secret value).
+var autorisesDistance = map[string]bool{"GET /api/hub": true, "GET /api/coffre": true}
+
+// refuseHubDistance: a hub route that is not in autorisesDistance (plain prefix: "/api/hubx" is refused too).
+func refuseHubDistance(r *http.Request) bool {
+	for _, p := range prefixesHub {
+		if strings.HasPrefix(r.URL.Path, p) {
+			return !autorisesDistance[r.Method+" "+r.URL.Path]
+		}
+	}
+	return false
+}
+
 // gestionDistance: the server the tunnel reaches (the same interface and API, for trusted devices only).
 func (s *Serveur) gestionDistance(mux http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -323,7 +340,7 @@ func (s *Serveur) gestionDistance(mux http.Handler) http.Handler {
 			s.pageDistance(w, http.StatusUnauthorized, "inconnu")
 			return
 		}
-		if interditDistance(r) {
+		if interditDistance(r) || refuseHubDistance(r) {
 			s.erreur(w, http.StatusForbidden, "Not available from a remote device")
 			return
 		}
