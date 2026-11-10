@@ -4038,7 +4038,7 @@ $("#page").addEventListener("submit", async (ev) => {
     const r = await action(api("coffre/coller", "POST", { texte: c.analyse, enregistrer }));
     if (!r) return;
     cof.colle = null; // the pasted text leaves the page
-    toast(t("{0} entries added.", [r.entrees.length]), "ok");
+    toast(r.entrees.length === 1 ? t("{0} added.", [r.entrees[0].nom]) : t("{0} entries added.", [r.entrees.length]), "ok");
     return rendrePage();
   }
   if (ev.target.id !== "cof-form") return;

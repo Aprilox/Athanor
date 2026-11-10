@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -51,6 +53,19 @@ func TestCaptureHub(t *testing.T) {
 	s := nouveauServeur(Config{Kit: kit, Projets: projets, ProjetActif: "projet-00", Langue: "fr", Theme: "clair", BienvenueVue: true})
 	s.cleAcces = aleatoire(24)
 	s.coffre, s.coffreErr = coffreCapture(t), nil // never this PC's own vault
+	// P2 (p2-*): "Test" of a pasted GitHub token reaches this fake GitHub, never the real one
+	gh := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/user" || !strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ghp_") {
+			w.WriteHeader(401)
+			return
+		}
+		w.Header().Set("X-OAuth-Scopes", "repo, workflow")
+		_, _ = w.Write([]byte(`{"login":"martin-dev"}`))
+	}))
+	defer gh.Close()
+	ancienGH := urlGitHub
+	urlGitHub = gh.URL
+	defer func() { urlGitHub = ancienGH }()
 	mux := http.NewServeMux()
 	s.routes(mux)
 	s.routesInterface(mux)
