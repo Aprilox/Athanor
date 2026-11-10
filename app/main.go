@@ -6,7 +6,6 @@ package main
 import (
 	"embed"
 	"fmt"
-	"io/fs"
 	"log"
 	"net"
 	"net/http"
@@ -76,22 +75,7 @@ func main() {
 
 	mux := http.NewServeMux()
 	s.routes(mux)
-	sous, _ := fs.Sub(statique, "static")
-	fichiers := servirStatique(sous, http.FileServer(http.FS(sous))) // never the files of a former version (statique.go)
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/" {
-			fichiers.ServeHTTP(w, r)
-			return
-		}
-		if !s.pageAcces(w, r) {
-			return
-		}
-		b, _ := fs.ReadFile(sous, "index.html")
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Header().Set("Cache-Control", "no-store")
-		w.Header().Set("Content-Security-Policy", "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'")
-		_, _ = w.Write([]byte(strings.Replace(pageVersionnee(sous, string(b)), "__CSRF__", s.csrf, 1)))
-	})
+	s.routesInterface(mux)
 	s.demarrerDistance(mux) // remote access, as it was left (distance.go)
 
 	ecoute, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", config.Port))
