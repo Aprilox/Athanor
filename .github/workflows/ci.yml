@@ -28,6 +28,12 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: app/go.mod
+      - name: Format
+        if: runner.os == 'Linux'
+        # the vendored third_party code keeps its upstream formatting
+        run: |
+          f="$(gofmt -l . | grep -v third_party || true)"
+          if [ -n "$f" ]; then echo "::error::not formatted by gofmt: $f"; exit 1; fi
       - name: Vet
         run: go vet .
       - name: Tests
@@ -108,3 +114,20 @@ jobs:
       - name: Every build target
         working-directory: app
         run: go run . construire --all
+
+  vuln:
+    # known vulnerabilities of the Go standard library and of the modules, in the code Athanor really calls
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: app/go.mod
+      - name: govulncheck
+        # pinned: a new release of the tool never changes the result of an old commit
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
+          "$(go env GOPATH)/bin/govulncheck" ./...

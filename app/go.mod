@@ -1,6 +1,6 @@
 module athanor
 
-go 1.24.7
+go 1.27.3
 
 require (
 	github.com/ebitengine/purego v0.8.4
