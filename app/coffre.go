@@ -33,6 +33,7 @@ var (
 	errCoffreSansMdp    = errors.New("Choose a password for Athanor first (Settings › Password)")
 	errCoffreMdp        = errors.New("Wrong password")
 	errCoffreInconnu    = errors.New("Unknown vault entry")
+	errCoffreRetraitMdp = errors.New("The vault holds secrets that only open with this password: delete them first")
 )
 
 // typesCoffre: the closed list of entry types, with the scope proposed for each.
@@ -343,7 +344,7 @@ func (c *Coffre) ChangerMotDePasse(ancien, nouveau string) error {
 	if nouveau == "" {
 		for _, e := range c.f.Entrees {
 			if e.Portee == "infra" || (e.Famille == "secret" && c.f.Cles.Code.Systeme == "") {
-				return errors.New("Remove the vault entries that need the password first")
+				return errCoffreRetraitMdp
 			}
 		}
 		c.f.Cles.Code.Mdp, c.f.Cles.Infra.Mdp = "", ""
@@ -352,7 +353,7 @@ func (c *Coffre) ChangerMotDePasse(ancien, nouveau string) error {
 		if c.f.Cles.Code.Systeme == "" {
 			c.cleCode = nil
 		}
-		return c.enregistrer()
+		return c.enregistrerSiUtile()
 	}
 	if code == nil && c.f.Cles.Code.Systeme != "" {
 		var err error
@@ -372,7 +373,7 @@ func (c *Coffre) ChangerMotDePasse(ancien, nouveau string) error {
 	c.f.Cles.Infra.Mdp = sceller(kek, infra, aadCle("infra"))
 	c.envelopperSysteme(code)
 	c.cleCode, c.cleInfra = code, infra
-	return c.enregistrer()
+	return c.enregistrerSiUtile()
 }
 
 // cle: the open data key of a scope, or why it is not available.
@@ -585,6 +586,14 @@ func (c *Coffre) dechiffrer(e EntreeCoffre) (string, error) {
 		return "", errors.New("vault: this value is damaged and cannot be read")
 	}
 	return string(b), nil
+}
+
+// enregistrerSiUtile writes the file only once it exists or holds an entry (no empty vault on disk).
+func (c *Coffre) enregistrerSiUtile() error {
+	if _, err := os.Stat(c.chemin); len(c.f.Entrees) == 0 && errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	return c.enregistrer()
 }
 
 func (c *Coffre) enregistrer() error {

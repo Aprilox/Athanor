@@ -40,6 +40,9 @@ type Serveur struct {
 	distOnce sync.Once
 	distEtat *distance
 	mux      http.Handler
+	// the vault (coffre_serveur.go); coffreErr: its file exists but could not be read
+	coffre    *Coffre
+	coffreErr error
 }
 
 func nouveauServeur(config Config) *Serveur {
@@ -69,6 +72,7 @@ func nouveauServeur(config Config) *Serveur {
 	if len(s.config.Projets) > 0 {
 		s.ecrireListeProjets() // the admin installer and the firewall rules read it
 	}
+	s.chargerCoffre()
 	s.bureau = NouveauBureau(kit)
 	// Windows: a window opened on the screen by a program the application started (a Claude run's): hidden
 	demarrerGardeFenetres(uint32(os.Getpid()), func(t string) { noterFenetreKit(s.kitCourant().Racine, t) })
@@ -480,6 +484,7 @@ func (s *Serveur) apiDeverrouiller(w http.ResponseWriter, r *http.Request) {
 		s.erreur(w, http.StatusUnauthorized, "Not paired")
 		return
 	}
+	s.deverrouillerCoffre(c.MotDePasse)
 	if id != "" {
 		d := s.dist()
 		d.mu.Lock()
@@ -523,6 +528,7 @@ func (s *Serveur) apiVerrouiller(w http.ResponseWriter, r *http.Request) {
 		s.session = ""
 		http.SetCookie(w, &http.Cookie{Name: "athanor_session", Value: "", Path: "/", MaxAge: -1})
 	}
+	s.fermerCoffreSiPersonne(d)
 	d.mu.Unlock()
 	s.ecrireJSON(w, map[string]bool{"ok": true})
 }
@@ -539,13 +545,22 @@ func (s *Serveur) apiMotDePasse(w http.ResponseWriter, r *http.Request) {
 		s.erreur(w, http.StatusUnauthorized, "Wrong current password")
 		return
 	}
-	if strings.TrimSpace(c.Nouveau) == "" {
+	retrait := strings.TrimSpace(c.Nouveau) == ""
+	if !retrait && len(c.Nouveau) < 4 {
+		s.erreur(w, http.StatusBadRequest, "At least 4 characters")
+		return
+	}
+	nouveau := c.Nouveau
+	if retrait {
+		nouveau = ""
+	}
+	if code, err := s.changerMdpCoffre(c.Ancien, nouveau); err != nil {
+		s.erreur(w, code, err.Error())
+		return
+	}
+	if retrait {
 		s.config.MotDePasseHash, s.config.Sel, s.session = "", "", ""
 	} else {
-		if len(c.Nouveau) < 4 {
-			s.erreur(w, http.StatusBadRequest, "At least 4 characters")
-			return
-		}
 		s.config.Sel = "" // only the old format used it
 		s.config.MotDePasseHash = hacherMotDePasse(c.Nouveau)
 		s.ouvrirSession(w)

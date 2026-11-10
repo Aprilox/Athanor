@@ -438,6 +438,7 @@ func (s *Serveur) fermerEcouteDistance() {
 	d.deverrouilles = map[string]bool{}
 	d.code = ""
 	d.mu.Unlock()
+	s.finSessionsCoffre()
 	if srv != nil {
 		_ = srv.Close()
 	}
@@ -711,6 +712,7 @@ func (s *Serveur) retirerAppareilDistance(id, pourquoi string) (bool, error) {
 	delete(d.deverrouilles, id)
 	delete(d.essaisMdp, id)
 	d.mu.Unlock()
+	s.finSessionsCoffre()
 	if trouve && pourquoi == "mdp" {
 		titre, texte := texteAppareilRetireMdp(langue, nom)
 		go notifier(titre, texte)
