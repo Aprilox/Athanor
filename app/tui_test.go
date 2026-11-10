@@ -245,7 +245,7 @@ func clesTUI(src string) []string {
 	var l []string
 	vu := map[string]bool{}
 	for _, m := range regexp.MustCompile(`(?:a\.|[^A-Za-z0-9_.])t\("((?:[^"\\]|\\.)*)"`).FindAllStringSubmatch(src, -1) {
-		cle := strings.NewReplacer(`\"`, `"`, `\n`, "\n").Replace(m[1])
+		cle := cleJS(m[1])
 		if !vu[cle] {
 			vu[cle] = true
 			l = append(l, cle)
