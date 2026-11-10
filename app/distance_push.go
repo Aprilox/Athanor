@@ -195,7 +195,7 @@ func (s *Serveur) envoyerPush(a AbonnementPush, m MessagePush) error {
 	// one record of 4096 bytes holds it all (RFC 8291): the texts cut well below
 	m.Titre, m.Texte, m.Tag = coupeValide(m.Titre, 200), coupeValide(m.Texte, 1500), coupeValide(m.Tag, 100)
 	if len(m.URL) > 200 || !strings.HasPrefix(m.URL, "/") || strings.HasPrefix(m.URL, "//") {
-		m.URL = "/"
+		m.URL = "/#suivi" // the page a bare "/" opened before the hub (it opens Home now)
 	}
 	texte, _ := json.Marshal(m)
 	corps, err := chiffrerPush(ua, auth, texte, eph, sel)
@@ -376,7 +376,7 @@ func (s *Serveur) textePush(cle string) string {
 }
 
 func (s *Serveur) envoyerPushEssai(a AbonnementPush) error {
-	return s.envoyerPush(a, MessagePush{Titre: s.textePush("essai"), Texte: s.textePush("essai_t"), URL: "/", Tag: "essai"})
+	return s.envoyerPush(a, MessagePush{Titre: s.textePush("essai"), Texte: s.textePush("essai_t"), URL: "/#suivi", Tag: "essai"})
 }
 
 // surveillerJalonsPush: a milestone ticked, a project delivered: said on the devices with notifications on

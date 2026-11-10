@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -133,6 +134,52 @@ func TestHubNomUnSeulEndroit(t *testing.T) {
 		b, _ := os.ReadFile(f)
 		if strings.Contains(string(b), `"Dev"`) || strings.Contains(string(b), ">Dev<") {
 			t.Errorf(`%s names the Dev module itself (render the nom of /api/hub)`, f)
+		}
+	}
+}
+
+// TestHubLiensNotifications: every page a Web Push notification opens (the Go messages, their fallback and
+// sw.js's) is an old page of app.js, never a bare "/" (it opened the Overview before the hub, Home now).
+func TestHubLiensNotifications(t *testing.T) {
+	js, err := os.ReadFile("static/app.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pages := map[string]bool{"options": true, "rejoindre": true} // the aliases naviguer() turns into a page
+	for _, m := range regexp.MustCompile(`(?m)^pages\.([a-z]+) =`).FindAllStringSubmatch(string(js), -1) {
+		pages[m[1]] = true
+	}
+	if !pages["suivi"] || !pages["pourvous"] {
+		t.Fatalf("pages of app.js not found: %v", pages)
+	}
+	var urls []string
+	goURL := regexp.MustCompile(`MessagePush\{[^}]*URL:\s*"([^"]*)"|m\.URL = "([^"]*)"`)
+	fichiers, _ := filepath.Glob("*.go")
+	for _, f := range fichiers {
+		if strings.HasSuffix(f, "_test.go") {
+			continue
+		}
+		b, _ := os.ReadFile(f)
+		for _, m := range goURL.FindAllStringSubmatch(string(b), -1) {
+			urls = append(urls, f+" "+m[1]+m[2])
+		}
+	}
+	sw, err := os.ReadFile("static/sw.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// the fallback addresses (`: "/…"`, `|| "/…"`), not the startsWith("/") checks
+	for _, m := range regexp.MustCompile(`(?:: |\|\| )"(/(?:#[a-z@-]*)?)"`).FindAllStringSubmatch(string(sw), -1) {
+		urls = append(urls, "sw.js "+m[1])
+	}
+	if len(urls) < 7 {
+		t.Fatalf("only %d notification addresses found: %v", len(urls), urls)
+	}
+	for _, u := range urls {
+		_, adresse, _ := strings.Cut(u, " ")
+		page, _, _ := strings.Cut(strings.TrimPrefix(adresse, "/#"), "@")
+		if !strings.HasPrefix(adresse, "/#") || !pages[page] || page == "accueil" {
+			t.Errorf("%s: a notification must open an old page (/#suivi…)", u)
 		}
 	}
 }

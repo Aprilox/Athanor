@@ -9,12 +9,12 @@ self.addEventListener("push", (e) => {
   try { m = e.data ? e.data.json() : {}; } catch (_) { m = { texte: e.data ? e.data.text() : "" }; }
   e.waitUntil(self.registration.showNotification(m.titre || "Athanor", {
     body: m.texte || "", icon: "/icone-180.png", badge: "/badge-96.png", tag: m.tag || undefined,
-    renotify: !!m.tag, data: { url: typeof m.url === "string" && m.url.startsWith("/") && !m.url.startsWith("//") ? m.url : "/" },
+    renotify: !!m.tag, data: { url: typeof m.url === "string" && m.url.startsWith("/") && !m.url.startsWith("//") ? m.url : "/#suivi" },
   }));
 });
 self.addEventListener("notificationclick", (e) => {
   e.notification.close();
-  const url = (e.notification.data && e.notification.data.url) || "/";
+  const url = (e.notification.data && e.notification.data.url) || "/#suivi"; // a bare "/" opens Home now, the Overview before
   e.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((liste) => {
     for (const c of liste) {
       if (new URL(c.url).origin === self.location.origin && "focus" in c) return c.focus().then((f) => (f && "navigate" in f ? f.navigate(url) : f)).catch(() => {});

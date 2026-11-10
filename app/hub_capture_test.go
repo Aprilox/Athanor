@@ -28,12 +28,27 @@ func TestCaptureHub(t *testing.T) {
 	for i := 0; i < 20; i++ {
 		projets = append(projets, fauxProjet(t, d, fmt.Sprintf("projet-%02d", i), 12, i%13))
 	}
+	// an archived one: the selector shows its "Archived projects" link
+	archive := fauxProjet(t, d, "projet-archive", 12, 12)
+	archive.Archive = true
+	projets = append(projets, archive)
 	// a cycle log that reports the quota: the Home tile draws its bar
 	quota := `{"type":"rate_limit_event","rate_limit_info":{"status":"allowed","unifiedWindows":{"five_hour":{"utilization":0.41,"resetsAt":` + fmt.Sprint(time.Now().Unix()+3600) + `}}}}` + "\n"
 	if err := os.WriteFile(filepath.Join(projets[0].LogsDir(), "cycle-001.jsonl"), []byte(quota), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	s := nouveauServeur(Config{Kit: t.TempDir(), Projets: projets, ProjetActif: "projet-00", Langue: "fr", Theme: "clair", BienvenueVue: true})
+	// the kit folder: a page's background check (Setup & health…) may still hold a file of it for a moment
+	// on Windows, so it is removed with retries instead of t.TempDir()'s single try
+	kit, err := os.MkdirTemp("", "capture-kit")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		for i := 0; i < 20 && os.RemoveAll(kit) != nil; i++ {
+			time.Sleep(500 * time.Millisecond)
+		}
+	}()
+	s := nouveauServeur(Config{Kit: kit, Projets: projets, ProjetActif: "projet-00", Langue: "fr", Theme: "clair", BienvenueVue: true})
 	s.cleAcces = aleatoire(24)
 	mux := http.NewServeMux()
 	s.routes(mux)
