@@ -1051,10 +1051,14 @@ func TestTUIAccueil(t *testing.T) {
 		}
 	}
 	// 1…9, 0 keep Dev's pages; Escape comes back; Tab goes round through the home
-	for k, pg := range map[string]int{"1": pSuivi, "3": pDemandes, "9": pReglages, "0": pDistance} {
-		taper(a, k)
-		if a.page != pg {
-			t.Fatalf("key %s: page %d", k, a.page)
+	// a slice, not a map: the Tab below expects "0" to be the last key
+	for _, c := range []struct {
+		k  string
+		pg int
+	}{{"1", pSuivi}, {"3", pDemandes}, {"9", pReglages}, {"0", pDistance}} {
+		taper(a, c.k)
+		if a.page != c.pg {
+			t.Fatalf("key %s: page %d", c.k, a.page)
 		}
 	}
 	taper(a, "\t")

@@ -409,7 +409,8 @@ func TestBancPilote(t *testing.T) {
 		binTemp += ".exe"
 	}
 	if _, err := exec.LookPath("go"); err == nil {
-		if out, err := exec.Command("go", "build", "-o", binTemp, ".").CombinedOutput(); err != nil {
+		// stripped like the release builds: Windows Defender quarantines some unstripped builds (false positive)
+		if out, err := exec.Command("go", "build", "-ldflags=-s -w", "-o", binTemp, ".").CombinedOutput(); err != nil {
 			t.Fatalf("go build failed: %v\n%s", err, string(out))
 		}
 	} else {

@@ -326,10 +326,12 @@ func (a *appTUI) barreBas(e *ecranT) {
 		}
 		glob = append(glob, raccourci{"p", t("Project")})
 	}
+	// Help before Home: on 80 columns the bar is cut at its end, and the help lists H too
+	glob = append(glob, raccourci{"?", t("Help")})
 	if a.page != pAccueil {
 		glob = append(glob, raccourci{"H", t("Home")})
 	}
-	glob = append(glob, raccourci{"?", t("Help")}, raccourci{"q", t("Quit")})
+	glob = append(glob, raccourci{"q", t("Quit")})
 	x := 1
 	ecrire := func(r raccourci, fin bool) bool {
 		lt := largeurTexte(r.k) + 1 + largeurTexte(r.lib) + 2

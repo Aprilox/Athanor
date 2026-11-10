@@ -330,7 +330,11 @@ func LireEnv(chemin string) []LigneEnv {
 	b, _ := os.ReadFile(chemin)
 	var lignes []LigneEnv
 	var aide []string
-	for _, l := range strings.Split(string(b), "\n") {
+	if len(b) == 0 {
+		return nil
+	}
+	// the final newline ends the last line: kept as an empty line, every rewrite would add one more
+	for _, l := range strings.Split(strings.TrimSuffix(string(b), "\n"), "\n") {
 		l = strings.TrimRight(l, "\r")
 		if i := strings.Index(l, "="); i > 0 {
 			cle := strings.TrimSpace(l[:i])

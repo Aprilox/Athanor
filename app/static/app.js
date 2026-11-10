@@ -81,7 +81,8 @@ const etat = {
   pieces: {}, // files waiting to be attached, per form
   pvTic: 0, hubTic: 0, hubSig: "", accueilTexte: "", preRempli: null, pvAnnonces: {}, pvSignature: "",
   pvForm: {}, // answers being written on the For you page (text and secret values, per task; memory only)
-  page: "suivi", projet: "", vue: null, verrouille: false, langue: "en", theme: document.documentElement.dataset.theme || "", accent: document.documentElement.dataset.accent || "", assistant: -1, visite: -1, demarrage: {},
+  // page: none until naviguer() reads the address (no flash of another page at load)
+  page: "", projet: "", vue: null, verrouille: false, langue: "en", theme: document.documentElement.dataset.theme || "", accent: document.documentElement.dataset.accent || "", assistant: -1, visite: -1, demarrage: {},
   dernierJournal: 0, evenements: [], ouverts: new Set(),
   filtres: { pilote: true, texte: true, outil: true, resultat: false, sous_agent: true, brut: false }, recherche: "",
   tacheChoisie: null, verifChoisie: null, envSecrets: false, defilAuto: lireDefilAuto(), explorateur: "", selecteurOuvert: false, rechercheProjet: "",
@@ -3862,6 +3863,7 @@ async function enregistrerOptions() {
 let numeroRendu = 0;
 async function rendrePage() {
   // renders overlap (a live refresh of one page, a click to another): only the last one asked is shown
+  if (!etat.page) return;
   const n = ++numeroRendu;
   const p = pages[etat.page] || pages.suivi;
   let html;

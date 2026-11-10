@@ -256,3 +256,18 @@ git add -A && git commit -qm "M$((n+1)): done"
 printf '{"type":"result","subtype":"success","is_error":false,"num_turns":2,"duration_ms":3000,"duration_api_ms":2000,"total_cost_usd":0.03,"usage":{"input_tokens":2000,"output_tokens":200},"result":"Done"}\n'
 exit 0
 `
+
+// TestEcrireEnvStable: rewriting a .env keeps it as is (no empty line added at each language change).
+func TestEcrireEnvStable(t *testing.T) {
+	f := filepath.Join(t.TempDir(), ".env")
+	avant := "# Language\nLANGUAGE=fr\r\n\nGITHUB_TOKEN=temoin\n"
+	ecrireFichier(t, f, avant, 0o600)
+	for i := 0; i < 3; i++ {
+		if err := EcrireEnv(f, map[string]string{"LANGUAGE": "fr"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if b, _ := os.ReadFile(f); string(b) != strings.ReplaceAll(avant, "\r", "") {
+		t.Fatalf("rewritten .env: %q", b)
+	}
+}
