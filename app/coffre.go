@@ -408,6 +408,13 @@ func (c *Coffre) empreinte(valeur string) string {
 	return hex.EncodeToString(m.Sum(nil))
 }
 
+// Empreinte: the fingerprint of a value under the code key ("" while it is closed).
+func (c *Coffre) Empreinte(valeur string) string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.empreinte(valeur)
+}
+
 // erreurEntree: a refusal of the input (a fixed i18n key, never the input itself).
 type erreurEntree string
 

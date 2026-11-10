@@ -23,6 +23,9 @@ func (s *Serveur) chargerCoffre() {
 	if aEnveloppe {
 		_ = s.coffre.OuvrirCode() // closed keystore: the password reopens it
 	}
+	if _, err := s.migrerSecrets(true); err != nil && !errors.Is(err, errCoffreVerrouille) && !errors.Is(err, errCoffreSansMdp) {
+		fmt.Fprintln(os.Stderr, "vault import:", err)
+	}
 }
 
 // deverrouillerCoffre opens the infra key once Athanor's password has been checked.
@@ -32,6 +35,10 @@ func (s *Serveur) deverrouillerCoffre(mdp string) {
 	}
 	if err := s.coffre.Deverrouiller(mdp); err != nil {
 		fmt.Fprintln(os.Stderr, "vault:", err)
+		return
+	}
+	if _, err := s.migrerSecrets(true); err != nil {
+		fmt.Fprintln(os.Stderr, "vault import:", err)
 	}
 }
 

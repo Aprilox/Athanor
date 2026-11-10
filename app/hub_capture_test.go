@@ -87,6 +87,7 @@ func coffreCapture(t *testing.T) *Coffre {
 	if err := c.Deverrouiller(mdp); err != nil {
 		t.Fatal(err)
 	}
+	var migration etatMigration
 	for _, e := range []EntreeCoffre{
 		{Nom: "CLOUDFLARE_API_TOKEN", Famille: "secret", Type: "cloudflare", Portee: "infra", Note: "DNS et tunnels de example.org"},
 		{Nom: "SSH_VPS_PROD", Famille: "secret", Type: "ssh", Portee: "infra", Note: "Serveur de production, utilisateur deploy"},
@@ -106,9 +107,16 @@ func coffreCapture(t *testing.T) *Coffre {
 		if e.Type == "ssh" { // a real key: "Test" reads its type without the network
 			v = clePEMTest()
 		}
-		if _, err := c.Ajouter(e, v); err != nil {
+		x, err := c.Ajouter(e, v)
+		if err != nil {
 			t.Fatal(e.Nom, err)
 		}
+		if e.Source != "" { // the entries with a source come from the import of the old files
+			migration.Entrees = append(migration.Entrees, x.ID)
+		}
+	}
+	if err := migration.enregistrer(cheminMigration(c)); err != nil {
+		t.Fatal(err)
 	}
 	return c
 }

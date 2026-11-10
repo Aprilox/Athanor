@@ -88,7 +88,7 @@ func (s *Serveur) apiCoffre(w http.ResponseWriter, r *http.Request) {
 	if !s.coffrePret(w) {
 		return
 	}
-	s.ecrireJSON(w, map[string]any{"entrees": s.coffre.Liste(), "etat": s.etatCoffre()})
+	s.ecrireJSON(w, map[string]any{"entrees": s.coffre.Liste(), "etat": s.etatCoffre(), "migration": s.resumeMigration()})
 }
 
 // apiCoffreAjouter: POST /api/coffre, a new entry.

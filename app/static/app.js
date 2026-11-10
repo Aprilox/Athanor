@@ -3945,7 +3945,7 @@ async function analyserColle() {
 }
 pages.coffre = async () => {
   const d = await api("coffre"); cof.d = d;
-  const e = d.etat || {}, entrees = d.entrees || [], n = (f) => entrees.filter((x) => x.famille === f).length;
+  const e = d.etat || {}, m = d.migration || {}, entrees = d.entrees || [], n = (f) => entrees.filter((x) => x.famille === f).length;
   const liste = entrees.filter((x) => x.famille === cof.onglet).sort((a, b) => a.nom.localeCompare(b.nom));
   const onglet = (f, nom) => `<button type="button" class="${cof.onglet === f ? "actif" : ""}" data-cof-onglet="${f}">${nom} <span class="muet">${n(f)}</span></button>`;
   return `<div class="coffre">
@@ -3953,6 +3953,8 @@ pages.coffre = async () => {
       <span class="ligne m0"><input type="password" id="cof-mdp" autocomplete="current-password" placeholder="${h(t("Password"))}" aria-label="${h(t("Password"))}"><button type="submit" class="btn btn-primaire">${t("Unlock")}</button></span></form>` : ""}
     <div class="ligne cof-tete"><div class="onglets">${onglet("secret", t("Secrets"))}${onglet("variable", t("Variables"))}</div><span class="espace"></span><button type="button" class="btn" data-cof-coller>${t("Paste")}</button><button type="button" class="btn btn-primaire" data-cof-ajouter>+ ${t("Add")}</button></div>
     ${e.mot_de_passe ? "" : `<p class="muet petit">${t("No password for Athanor: the infra scope (the keys of your servers) stays unavailable.")} <a href="#options@bloc-verrou">${t("Settings › Options › Lock")}</a></p>`}
+    ${m.importees ? `<p class="muet petit cof-migration">${t("{0} keys imported from your old files.", [m.importees])} <button type="button" class="btn btn-petit" data-cof-mig-annuler>${t("Undo the import")}</button></p>`
+      : m.annulee ? `<p class="muet petit cof-migration">${t("Import from your old files undone (the files themselves are unchanged).")} <button type="button" class="btn btn-petit" data-cof-mig-importer>${t("Import again")}</button></p>` : ""}
     ${cof.colle ? formulaireColle() : cof.form ? formulaireCoffre() : ""}
     ${liste.length ? `<div class="grille-projets">${liste.map(carteCoffre).join("")}</div>` : `<div class="vide">${cof.onglet === "secret" ? t("No secret yet.") : t("No variable yet.")}</div>`}
     <p class="muet petit cof-explication">${t("Your project keys reopen alone on this PC; the keys of your servers open only with your password, and a copy of the disk opens nothing.")}</p>
@@ -3962,10 +3964,19 @@ pages.coffre = async () => {
 const rendreCoffre = (champ) => rendrePage().then(() => { const c = champ && document.getElementById(champ); if (c) c.focus(); });
 $("#page").addEventListener("click", async (ev) => {
   if (etat.page !== "coffre") return;
-  const b = ev.target.closest("[data-cof-onglet], [data-cof-ajouter], [data-cof-coller], [data-cof-analyser]:not([type=submit]), [data-cof-annuler], [data-cof-modifier], [data-cof-remplacer], [data-cof-supprimer], [data-cof-tester], [data-cof-test], [data-cof-p-tester], [data-cof-note]");
+  const b = ev.target.closest("[data-cof-onglet], [data-cof-ajouter], [data-cof-coller], [data-cof-analyser]:not([type=submit]), [data-cof-annuler], [data-cof-modifier], [data-cof-remplacer], [data-cof-supprimer], [data-cof-tester], [data-cof-test], [data-cof-p-tester], [data-cof-note], [data-cof-mig-annuler], [data-cof-mig-importer]");
   if (!b) return;
   const d = b.dataset, menu = b.closest("details"); if (menu) menu.open = false;
   if (d.cofOnglet) { cof.onglet = d.cofOnglet; cof.form = cof.colle = null; return rendrePage(); }
+  if (d.cofMigAnnuler !== undefined) {
+    if (!await confirmer(t("Remove the {0} keys imported from your old files? The old files stay as they are.", [cof.d.migration.importees]), { danger: true, ok: t("Undo the import") })) return;
+    const r = await action(api("coffre/migration/annuler", "POST")); if (r) { toast(t("{0} keys removed from the vault.", [r.retirees]), "ok"); rendrePage(); }
+    return;
+  }
+  if (d.cofMigImporter !== undefined) {
+    const r = await action(api("coffre/migration", "POST")); if (r) { toast(t("{0} keys imported.", [r.importees]), "ok"); rendrePage(); }
+    return;
+  }
   if (d.cofAnnuler !== undefined) { cof.form = cof.colle = null; return rendrePage(); }
   if (d.cofColler !== undefined) { cof.form = null; cof.colle = {}; return rendreCoffre("cof-texte"); }
   if (d.cofAnalyser !== undefined) return analyserColle();
