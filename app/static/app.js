@@ -1845,6 +1845,16 @@ const GUIDE = [
       ["Add along the way", "A new request waits in the queue and joins the plan at the next cycle. *Chat* answers your questions about the project at any time."],
     ],
     note: "*Stop after cycle* lets the current milestone finish, *Stop now* cuts it. Everything is kept in files: the pilot resumes where it stopped, even after the computer restarts." },
+  { id: "hub", titre: "The hub", intro: "Athanor opens on its home page: what is going on and what needs you, at a glance. Each part of Athanor is a module; for now the one module is *Dev*, the projects Claude builds.",
+    etapes: [
+      ["The home page", "*Home*, at the top of the menu: one tile per module, with its state (working, needs attention, idle) and its figures. A click on a figure opens its page; *Open* opens the module.", "#accueil", "Home"],
+      ["What needs you", "Dev's tile counts the projects that need you and shows the quota used. The bell, at the top of the window, still lists each thing waiting for you, with a link to it."],
+      ["“What do you want to do?”", "Write it in one sentence in the bar of the home page, then *Send*: the chat of the current project opens with your text (with no project yet, a new project with your text as its request). Nothing is sent before you press *Send* there.", "#accueil", "Home"],
+      ["Where Dev's pages are", "In the menu, the *Dev* group holds every page you knew, unchanged, from *All projects* to *Settings* and this *Guide*. On a phone, a tap on a group's name folds it. Old links and notifications still open the same pages.", "#global", "All projects"],
+      ["Missions", "The *Missions* block is empty for now. Later, one sentence will start a mission in which several modules work together."],
+      ["In a terminal", "`./athanor tui` opens on the same home page: one block per module, what needs you and the missions. *H* comes back to it from any page, *Enter* opens the module, *1*–*9* and *0* still open Dev's pages."],
+    ],
+    note: "The update moved none of your projects, settings or keys: the hub only adds a page and groups the menu." },
   { id: "github", titre: "GitHub", intro: "Link a project to a GitHub repository: its commits go there after each milestone. Each computer connects to GitHub once, in the settings.",
     etapes: [
       ["Connect this computer to GitHub", "Once per computer: *Settings › Options › GitHub › Connect to GitHub*. A window opens: sign in to GitHub and authorize. Athanor puts a key “Athanor (this computer)” on your GitHub account and keeps it, out of Claude's reach; it then links any repository your account can push to, yours or one you are a collaborator of.", "#options@bloc-connexion-gh", "Connect to GitHub"],
