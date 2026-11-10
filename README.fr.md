@@ -450,7 +450,7 @@ Tout se modifie dans l'application (*Réglages*), ou dans `.env` ([`.env.example
 | `RELAY_CONTEXT_K` | contexte, en milliers de tokens, au-delà duquel une nouvelle session reprend le jalon (110 par défaut, 0 = jamais) |
 | `EFFORT` | effort de réflexion : vide = normal, `low` à `max` |
 | `LANGUAGE` | langue dans laquelle Claude travaille et documente (réglée par l'application) |
-| `MAX_HOURS` | arrêt de sécurité, en heures depuis le premier démarrage du projet (168 par défaut, une semaine ; 0 = illimité) ; un projet peut avoir le sien : *Gérer → Mode de travail* |
+| `MAX_HOURS` | limite de temps de travail, en heures : seul compte le temps où le pilote travaille (ni ses attentes, ni le temps où il est arrêté) ; 0 = illimité, par défaut, le pilote s'arrêtant de lui-même à la livraison ; un projet peut avoir la sienne : *Gérer → Mode de travail* |
 | `QUOTA_WAIT_MIN` | attente quand l'heure de réouverture du quota est illisible |
 | `IDLE_MAX_MIN`, `CYCLE_MAX_MIN`, `CLOSE_AFTER_MILESTONE` | surveillance des cycles (muet 30 min ou plus long que 3 h → coupé et repris), un jalon par cycle |
 | `KEEP_AWAKE` | le PC reste éveillé tant qu'un pilote tourne : `1` (par défaut ; l'écran aussi pour Roblox Studio et Unreal), `screen` (l'écran toujours), `0` (désactivé) |
@@ -490,7 +490,7 @@ Vous avez trouvé une faille ? Ouvrez plutôt un [avis de sécurité privé](htt
 - Les pilotes tournent en arrière-plan, sans fenêtre (dans WSL sous Windows, sauf en mode natif) : vous pouvez fermer l'application.
 - Le PC reste éveillé tant qu'un pilote tourne (`KEEP_AWAKE`), même application fermée ; pour Roblox Studio et Unreal, l'écran reste allumé aussi, car une session Windows verrouillée n'affiche rien (ni captures, ni tests en jeu). Ne verrouillez pas vous-même la session (Win + L) avant une nuit de Roblox ou d'Unreal, et vérifiez que l'écran de veille ne demande pas de reconnexion à la reprise.
 - *Réglages → Options* : « Ouvrir Athanor au démarrage de l'ordinateur » et « Relancer les pilotes qui tournaient, à l'ouverture de l'application ».
-- Arrêt de sécurité au bout de `MAX_HOURS` (depuis le premier démarrage du projet) ; pour continuer, augmentez la valeur dans *Réglages*, ou choisissez *Illimité*, là ou pour ce projet seul (*Gérer → Mode de travail → Arrêt de sécurité après*) : le pilote tourne alors jusqu'à la livraison.
+- Pas de limite de temps par défaut : le pilote travaille jusqu'à la livraison, qui l'arrête de lui-même. Pour en fixer une : *Limite de temps de travail* (`MAX_HOURS`) dans *Réglages*, ou pour ce projet seul dans *Gérer → Mode de travail*. Seul compte le temps où le pilote travaille : ses attentes (quota, erreurs, « Pour vous »), une pause ou Athanor fermé ne comptent pas.
 
 ## Projet terminé, suite, nouveau projet
 
@@ -618,7 +618,7 @@ Oui. Rien n'est lié à un nom d'utilisateur ni à une lettre de disque : les ch
 Poussez un tag de version : GitHub lance d'abord toutes les vérifications de la CI sur le commit du tag (tests sous Windows, Linux et macOS, exécutable unique, toutes les cibles), puis compile les applications et publie la version ([`.github/workflows/release.yml`](.github/workflows/release.yml)). Si une seule vérification échoue (ou la suite), rien n'est publié : le tag est supprimé, ainsi que la version si elle avait déjà été créée, et les mises à jour d'Athanor ne la proposent jamais. Corrigez, commitez, puis poussez à nouveau le même tag (`git tag -f v2.42.0 && git push origin v2.42.0`).
 
 ```bash
-git tag v2.51.7 && git push origin v2.51.7
+git tag v2.51.8 && git push origin v2.51.8
 ```
 
 Gardez la version de [`app/winres/athanor.rc`](app/winres/athanor.rc) et `versionAthanor` dans [`app/commandes.go`](app/commandes.go) alignées sur le tag (un test vérifie qu'elles concordent), et écrivez les nouveautés dans `docs/releases/VERSION.md` (par ex. [`docs/releases/2.31.0.md`](docs/releases/2.31.0.md)) : elles ouvrent la page de la version.

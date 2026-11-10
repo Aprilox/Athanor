@@ -1523,14 +1523,28 @@ func (p *pilote) absorberFileParallele() {
 	}
 }
 
-// dureeMaxAtteinte: the safety stop in hours (the project's own, else the global MAX_HOURS; 0: unlimited)
-// and whether the time since the project's first start reached it.
-func (p *pilote) dureeMaxAtteinte(maintenant int64) (int, bool) {
+// dureeMaxAtteinte: the work time limit in hours (the project's own, else the global MAX_HOURS; 0:
+// unlimited) and whether the time the pilot worked on the project reached it.
+func (p *pilote) dureeMaxAtteinte() (int, bool) {
 	maxH := p.maxHours
 	if n, ok := dureeMaxProjet(filepath.Join(p.etat, ".env")); ok {
 		maxH = n
 	}
-	return maxH, maxH > 0 && (maintenant-p.debut)/3600 >= int64(maxH)
+	return maxH, maxH > 0 && p.travail >= time.Duration(maxH)*time.Hour
+}
+
+// compterTravail adds the time since the last count, minus the pilot's waits, to its work time, and keeps
+// it in prive/travail (out of Claude's reach). shortcut: a cycle cut by a stop of the pilot itself is not
+// counted (the count happens between cycles), which only ever undercounts.
+func (p *pilote) compterTravail() {
+	maintenant := time.Now()
+	if !p.ticTravail.IsZero() {
+		if d := maintenant.Sub(p.ticTravail) - p.sommeil; d > 0 {
+			p.travail += d
+		}
+	}
+	p.ticTravail, p.sommeil = maintenant, 0
+	_ = os.WriteFile(filepath.Join(p.prive, "temps_travail"), []byte(strconv.FormatInt(int64(p.travail/time.Second), 10)+"\n"), 0o644)
 }
 
 func (p *pilote) planADesVagues() bool {
@@ -2032,7 +2046,7 @@ func lancerPilote(args []string) int {
 		natif:                    natif,
 		claudeBin:                claudeBin,
 		cheminClaude:             cheminClaude,
-		maxHours:                 entierReglage("MAX_HOURS", 168),
+		maxHours:                 entierReglage("MAX_HOURS", 0), // 0: unlimited (the pilot stops by itself at the delivery)
 		quotaWaitMin:             entierReglage("QUOTA_WAIT_MIN", 20),
 		errorWaitMin:             entierReglage("ERROR_WAIT_MIN", 2),
 		errorWaitMaxMin:          entierReglage("ERROR_WAIT_MAX_MIN", 60),
@@ -2465,11 +2479,9 @@ func lancerPilote(args []string) int {
 		}
 	}
 
-	if !fichierRegulierPilote(filepath.Join(p.prive, "debut")) {
-		d := entier64Pilote(lireTexteCourt(filepath.Join(p.etat, "debut")), time.Now().Unix())
-		_ = os.WriteFile(filepath.Join(p.prive, "debut"), []byte(strconv.FormatInt(d, 10)+"\n"), 0o644)
-	}
-	p.debut = entier64Pilote(lireTexteCourt(filepath.Join(p.prive, "debut")), time.Now().Unix())
+	// the work time so far: from this start, only the time the pilot works counts (compterTravail)
+	p.travail = time.Duration(entier64Pilote(lireTexteCourt(filepath.Join(p.prive, "temps_travail")), 0)) * time.Second
+	p.ticTravail, p.sommeil = time.Now(), 0
 
 	but := fmt.Sprintf("/goal The next unticked milestone of .athanor/PLAN.md is completed and verified according to your instructions: bash .athanor/check.sh has been run and its output, showing success, is displayed in this conversation; .athanor/PLAN.md ticks this milestone; .athanor/LOG.md has a new entry; git log shows the commit. If .athanor/PLAN.md does not exist yet, this milestone is the framing phase described in your instructions, with no check.sh required. If all milestones are already ticked, the goal is reached when .athanor/FINAL_REPORT.md exists and contains the line STATUS: DONE. A milestone that waits for a task of the user (athanor todo list) is passed over for the next one; if .athanor/FOR_YOU_ANSWERED exists, every answered task is handled first (athanor todo ok, missing or resolved); if every unticked milestone waits for the user, the goal is reached once athanor todo wait has run. Or stop after %d turns. %s", p.maxTurnsPerCycle, p.phraseLangue)
 
@@ -2499,8 +2511,9 @@ func lancerPilote(args []string) int {
 			p.etatPhase = "arrete"
 			p.terminer("Stop requested (STOP file). Delete it, then restart with start.")
 		}
-		if maxH, atteinte := p.dureeMaxAtteinte(time.Now().Unix()); atteinte {
-			p.terminer(fmt.Sprintf("Maximum duration reached (%d h). The work in progress is in the project folder.", maxH))
+		p.compterTravail()
+		if maxH, atteinte := p.dureeMaxAtteinte(); atteinte {
+			p.terminer(fmt.Sprintf("Maximum duration reached (%d h of work). The work in progress is in the project folder.", maxH))
 		}
 		if p.estTermine() {
 			_ = os.WriteFile(filepath.Join(p.etat, "done", ".last-delivery"), []byte(time.Now().Format("20060102-150405")+"\n"), 0o644)

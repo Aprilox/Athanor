@@ -470,7 +470,7 @@ async function annoncerFins(v) {
   finsAnnoncees.add(p.nom + "|" + p.fin.cle);
   const livre = p.fin.livre || /^DONE/.test(p.fin.message || "");
   const texte = livre ? t("The deliverable and the final report are in the project folder.")
-    : /^Maximum duration reached/.test(p.fin.message || "") ? t("It reached its safety stop (in Settings, or in Manage › Working mode for this project). The work in progress is in the project folder: raise the limit or choose Unlimited, then start it again.")
+    : /^Maximum duration reached/.test(p.fin.message || "") ? t("It reached its work time limit (in Settings, or in Manage › Working mode for this project). The work in progress is in the project folder: raise the limit or choose Unlimited, then start it again.")
     : t(p.fin.message || "");
   const ouvrir = await confirmer(texte, { titre: livre ? t("“{0}” is finished", [p.nom]) : t("The pilot of “{0}” has stopped", [p.nom]), ok: t("Open the folder"), annuler: t("Close") });
   await api("fin-vue?p=" + encodeURIComponent(p.nom), "POST", { cle: p.fin.cle }).catch(() => {});
@@ -1146,14 +1146,14 @@ async function rendreMode() {
     <input type="number" id="md-cadrage" class="cadrage-autre" min="10" max="240" inputmode="numeric" value="${m.cadrage_max && ![25, 45, 60, 90].includes(m.cadrage_max) ? m.cadrage_max : ""}" placeholder="${h(t("Other (min)"))}" aria-label="${h(t("Other (min)"))}" title="${h(t("Other (min)"))}">
     </div>
     <div class="ligne m0 mode-suite">
-    <span class="petit"><b>${t("Safety stop after")}</b>${boutonDetail("MAX_HOURS")}</span>
-    <span class="muet petit">${t("counted from the project's first start")}</span>
+    <span class="petit"><b>${t("Work time limit")}</b>${boutonDetail("MAX_HOURS")}</span>
+    <span class="muet petit">${t("only the time the pilot works counts")}</span>
     <span class="espace"></span><div class="choix m0">${[-1, 72, 168, 336, 720, 0].map((n) => `<button type="button" data-duree-max="${n}" class="${(m.duree_max ?? -1) === n ? "actif" : ""}">${n >= 0 ? libelleDuree(n) : m.duree_max_global ? t("Like Settings ({0} h)", [m.duree_max_global]) : t("Like Settings (unlimited)")}</button>`).join("")}</div>
     <input type="number" id="md-duree-max" class="cadrage-autre" min="1" max="87600" inputmode="numeric" value="${m.duree_max && ![72, 168, 336, 720].includes(m.duree_max) ? m.duree_max : ""}" placeholder="${h(t("Other (h)"))}" aria-label="${h(t("Other (h)"))}" title="${h(t("Other (h)"))}">
     </div>
   </div></div>`;
 }
-// cadrage: the project's framing time box (0: back to Settings); dureeMax: its safety stop in hours (0:
+// cadrage: the project's framing time box (0: back to Settings); dureeMax: its work time limit in hours (0:
 // unlimited, -1: back to Settings); left out, each stays as it is
 async function enregistrerMode(parallele, max, eco, cadrage, dureeMax) {
   const r = await action(api("mode", "POST", { parallele, parallele_max: max, eco: !!eco, ...(cadrage === undefined ? {} : { cadrage_max: cadrage }), ...(dureeMax === undefined ? {} : { duree_max: dureeMax }) }));
@@ -3160,7 +3160,7 @@ const REGLAGES = {
   FRAMING_MODEL: ["modeles", "Model of the framing"], WORKER_MODEL: ["modeles", "Model of the parallel workers"],
   SUBAGENT_MODEL: ["modeles", "Model of the sub-agents"], CHEAP_MODEL: ["modeles", "Cheap model"], EFFORT: ["modeles", "Thinking effort"],
   CLOSE_AFTER_MILESTONE: ["marche", "One milestone per cycle"], RELAY_CONTEXT_K: ["marche", "Fresh session beyond"],
-  MAX_HOURS: ["marche", "Safety stop after"], CYCLE_MAX_MIN: ["marche", "Longest cycle"], IDLE_MAX_MIN: ["marche", "Silent cycle stopped after"],
+  MAX_HOURS: ["marche", "Work time limit"], CYCLE_MAX_MIN: ["marche", "Longest cycle"], IDLE_MAX_MIN: ["marche", "Silent cycle stopped after"],
   FRAMING_MAX_MIN: ["marche", "Longest framing"], RTK: ["marche", "Compressed command outputs"], PONYTAIL: ["marche", "Simplest code (Ponytail)"],
   KEEP_AWAKE: ["marche", "Keep the PC awake"],
   LANGUAGE: ["avance", "Language of Claude's documents"], TZ: ["avance", "Time zone of the logs"],
@@ -3178,7 +3178,7 @@ const DETAILS_REGLAGES = {
   EFFORT: ["Higher (high, xhigh, max): Claude thinks longer before acting; better on hard problems, slower, and it uses more quota.", "Lower (low, medium): faster and cheaper, enough for simple or well-planned work. Empty: the model's normal effort."],
   CLOSE_AFTER_MILESTONE: ["On: the pilot closes the cycle a few minutes after a milestone's commit, and the next milestone starts with a fresh, light context (cheaper turns).", "Off: the session ends when Claude stops on its own, which costs more if it lingers."],
   RELAY_CONTEXT_K: ["Lower: a fresh session takes over more often; cheaper turns, but each new session rereads its notes.", "Higher: longer sessions that keep more in mind, but every turn costs more as the context grows. 0: never; Claude Code may then compact the context by itself and blur the thread."],
-  MAX_HOURS: ["Counted from the project's first start: past it, the pilot stops, whatever the project's state (raise it to go on).", "Higher for long projects (720 = 30 days); lower to cap what a project can use.", "Unlimited (0): no safety stop; the pilot goes on until the project is delivered, or until you stop it. A project can have its own: Manage › Working mode."],
+  MAX_HOURS: ["Only the time the pilot works counts: a pause, a quota wait, a stopped pilot or Athanor closed do not count. Past the limit, the pilot stops, whatever the project's state.", "Unlimited (0, the default): the pilot works until the project is delivered, which stops it by itself, or until you stop it.", "A limit only caps what a project can use (720 = 30 days of work). A project can have its own: Manage › Working mode."],
   CYCLE_MAX_MIN: ["Lower: a cycle that drags is cut sooner (the work done stays, the milestone resumes), but a long milestone (a big build, a game engine) may be cut before its end.", "Higher: more patience for long milestones; a stuck cycle wastes more time."],
   IDLE_MAX_MIN: ["A cycle with no activity for this long is stopped, then resumed.", "Lower: a frozen session is caught sooner, but a long silent command (a build, tests) may be cut. Higher: the opposite."],
   FRAMING_MAX_MIN: ["Lower: the plan is ready sooner, but less precise on a large project (code skimmed, vaguer milestone sheets, a quick review).", "Higher: a more precise plan. It is a ceiling, not a duration: a framing that ends sooner stops sooner. Past it, one short cycle (15 min at most) finishes the plan.", "Advice: 25 for a small project, 45 to 60 for a large code base or large attached files. A project can have its own: Manage › Working mode."],
@@ -3191,7 +3191,7 @@ function detailReglage(cle) {
   const nom = (REGLAGES[cle] || [])[1];
   return choisir((DETAILS_REGLAGES[cle] || []).map((l) => "• " + t(l)).join("\n"), [{ id: "ok", texte: t("OK"), primaire: true }], { titre: nom ? t(nom) : cle });
 }
-// a safety stop (MAX_HOURS, in hours) for its button: 0 is unlimited
+// a work time limit (MAX_HOURS, in hours of work) for its button: 0 is unlimited
 const libelleDuree = (n) => n === 0 ? t("Unlimited") : { 72: t("3 days"), 168: t("1 week"), 336: t("2 weeks"), 720: t("30 days") }[n] || t("{0} h", [n]);
 const boutonDetail = (cle) => DETAILS_REGLAGES[cle] ? `<button type="button" class="chat-info" data-detail-reglage="${h(cle)}" title="${h(t("What a lower or a higher value changes"))}" aria-label="${h(t("What a lower or a higher value changes"))}">i</button>` : "";
 const EFFORTS = ["", "low", "medium", "high", "xhigh", "max"];

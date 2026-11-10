@@ -16,7 +16,7 @@ import (
 )
 
 // versionAthanor: kept equal to ProductVersion of winres/athanor.rc (TestVersionAlignee).
-const versionAthanor = "2.51.7"
+const versionAthanor = "2.51.8"
 
 type sousCommande struct {
 	aide  string

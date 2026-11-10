@@ -73,8 +73,12 @@ type pilote struct {
 	ecranImposs, ecranSignale                                    bool
 	ecranAvant                                                   map[string]string
 
-	cycle          int
-	debut          int64
+	cycle int
+	// the work time limit (MAX_HOURS): the time the pilot worked, kept in prive/travail; its waits (dormir)
+	// and the time it is stopped never count
+	travail        time.Duration
+	ticTravail     time.Time
+	sommeil        time.Duration
 	etatPhase      string
 	etatReprise    string
 	etatDebutCycle string
@@ -525,6 +529,8 @@ func (p *pilote) enregistrerStats(f, etat, etiquette, depot string) {
 // dormir: the pilot waits; true when the wait was cut short by a new connection to Claude put in Settings
 // (read every few seconds: the quota, the key or the budget it waited for may be another account's now).
 func (p *pilote) dormir(secondes int) bool {
+	debutSommeil := time.Now()
+	defer func() { p.sommeil += time.Since(debutSommeil) }() // a wait is never work (compterTravail)
 	s := secondes * p.secondsPerMinute / 60
 	var d time.Duration
 	if s > 0 {
@@ -722,7 +728,6 @@ func (p *pilote) attendreUtilisateur() {
 	p.log(fmt.Sprintf("Waiting for you: %d task(s) on the For you page. The pilot resumes as soon as you answer one.", pv))
 	p.etatPhase = "attente_vous"
 	p.statut(fmt.Sprintf("Waiting for you (%d task(s))", pv))
-	debutAttente := time.Now().Unix()
 	shaDemande := func() string {
 		b, err := os.ReadFile(filepath.Join(p.etat, "REQUEST.md"))
 		if err != nil {
@@ -753,9 +758,7 @@ func (p *pilote) attendreUtilisateur() {
 			p.statut(fmt.Sprintf("Waiting for you (%d task(s))", pv))
 		}
 	}
-	_ = os.Remove(fWait)
-	p.debut += time.Now().Unix() - debutAttente
-	_ = os.WriteFile(filepath.Join(p.prive, "debut"), []byte(strconv.FormatInt(p.debut, 10)+"\n"), 0o644)
+	_ = os.Remove(fWait) // the wait went through dormir: it is not counted as work
 	if _, err := os.Stat(fStop); err != nil {
 		p.log("Resuming: an answer arrived (or the request changed).")
 	}

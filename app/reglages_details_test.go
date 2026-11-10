@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 )
 
 // Every text of the settings' "i" (DETAILS_REGLAGES in app.js) and of the project's framing time box is
@@ -36,9 +37,25 @@ func TestDetailsReglagesTraduits(t *testing.T) {
 		"Like Settings ({0} min)", "Like Settings (no limit)", "Framing time box saved: it applies to this project's next framing.",
 		"The framing time box is between 10 and 240 minutes.", "Other (min)",
 		"Unlimited", "3 days", "1 week", "2 weeks", "30 days", "Like Settings ({0} h)", "Like Settings (unlimited)", "Other (h)",
-		"counted from the project's first start", "Safety stop saved for this project: a running pilot applies it before its next cycle.",
-		"The safety stop is between 1 and 87600 hours, or unlimited.",
-		"It reached its safety stop (in Settings, or in Manage › Working mode for this project). The work in progress is in the project folder: raise the limit or choose Unlimited, then start it again.")
+		"Work time limit", "only the time the pilot works counts", "Work time limit saved for this project: a running pilot applies it before its next cycle.",
+		"The work time limit is between 1 and 87600 hours, or unlimited.",
+		"It reached its work time limit (in Settings, or in Manage › Working mode for this project). The work in progress is in the project folder: raise the limit or choose Unlimited, then start it again.")
+	// the help line under each setting comes from .env.example: every one is translated too
+	exemple, err := os.ReadFile(filepath.Join("..", ".env.example"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, l := range LireEnv(filepath.Join("..", ".env.example")) {
+		if l.Cle == "MAX_HOURS" && l.Valeur != "0" {
+			t.Errorf("MAX_HOURS=%s in .env.example: unlimited (0) is the default", l.Valeur)
+		}
+		if l.Cle == "MAX_HOURS" || l.Cle == "FRAMING_MAX_MIN" {
+			textes = append(textes, l.Aide)
+		}
+	}
+	if len(exemple) == 0 {
+		t.Fatal("empty .env.example")
+	}
 	for _, x := range textes {
 		cle, _ := json.Marshal(x)
 		if n := strings.Count(i18n, string(cle)+": "); n < 5 {
@@ -133,26 +150,56 @@ func TestDureeMaxParProjet(t *testing.T) {
 		t.Fatalf("left out of a request, the safety stop changed: %d %v", n, ok)
 	}
 
-	// the pilot: started 100 h ago
-	pl := &pilote{etat: p.Atelier(), maxHours: 72, debut: 1000}
-	maintenant := int64(1000 + 100*3600)
-	if _, fin := pl.dureeMaxAtteinte(maintenant); fin {
+	// the pilot: 100 h of work
+	pl := &pilote{etat: p.Atelier(), maxHours: 72, travail: 100 * time.Hour}
+	if _, fin := pl.dureeMaxAtteinte(); fin {
 		t.Fatal("unlimited for the project, yet stopped")
 	}
 	if c, _ := appel("POST", `{"parallele_max":3,"duree_max":200}`); c != 200 {
 		t.Fatal(c)
 	}
-	if h, fin := pl.dureeMaxAtteinte(maintenant); fin || h != 200 {
+	if h, fin := pl.dureeMaxAtteinte(); fin || h != 200 {
 		t.Fatalf("200 h for the project: %d %v", h, fin)
 	}
 	if c, _ := appel("POST", `{"parallele_max":3,"duree_max":-1}`); c != 200 {
 		t.Fatal(c)
 	}
-	if h, fin := pl.dureeMaxAtteinte(maintenant); !fin || h != 72 {
+	if h, fin := pl.dureeMaxAtteinte(); !fin || h != 72 {
 		t.Fatalf("back to the global 72 h: %d %v", h, fin)
 	}
 	pl.maxHours = 0
-	if _, fin := pl.dureeMaxAtteinte(maintenant); fin {
+	if _, fin := pl.dureeMaxAtteinte(); fin {
 		t.Fatal("global 0 (unlimited) stopped the pilot")
+	}
+}
+
+// The work time: the time the pilot runs minus its waits, kept in its private state; the time it is
+// stopped never counts, since a new start begins counting from its own start.
+func TestTempsDeTravail(t *testing.T) {
+	prive := t.TempDir()
+	p := &pilote{prive: prive, etat: t.TempDir(), maxHours: 3}
+	p.ticTravail = time.Now().Add(-2 * time.Hour)
+	p.sommeil = 30 * time.Minute // a quota wait in between
+	p.compterTravail()
+	if d := p.travail - 90*time.Minute; d < 0 || d > time.Minute {
+		t.Fatalf("2 h running, 30 min of waits: %v of work", p.travail)
+	}
+	if strings.TrimSpace(lire(t, filepath.Join(prive, "temps_travail"))) != "5400" {
+		t.Fatalf("kept: %q", lire(t, filepath.Join(prive, "temps_travail")))
+	}
+	// stopped, then started again a week later: the count goes on from 1 h 30, not from a week
+	p2 := &pilote{prive: prive, etat: p.etat, maxHours: 3}
+	p2.travail = time.Duration(entier64Pilote(lireTexteCourt(filepath.Join(prive, "temps_travail")), 0)) * time.Second
+	p2.ticTravail = time.Now()
+	p2.compterTravail()
+	if _, fin := p2.dureeMaxAtteinte(); fin || p2.travail < 90*time.Minute || p2.travail > 91*time.Minute {
+		t.Fatalf("after the restart: %v of work, stopped %v", p2.travail, fin)
+	}
+	// the waits of dormir are counted as such
+	p2.secondsPerMinute = 60
+	avant := p2.sommeil
+	p2.dormir(1)
+	if p2.sommeil-avant < 900*time.Millisecond {
+		t.Fatalf("a 1 s wait not counted as a wait: %v", p2.sommeil-avant)
 	}
 }
