@@ -12,12 +12,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -395,6 +397,88 @@ func ecrireSecrets(p Projet, valeurs map[string]string) ([]byte, error) {
 	return avant, ecrireAtelier(p, "", "secrets.env", []byte(strings.Join(lignes, "\n")+"\n"))
 }
 
+// pourVousAuCoffre puts the values of a For you answer in the vault (scope code, recognised type, source
+// pourvous:<project>) and grants each to the project for its current environment under the asked name;
+// a value already in the vault is granted as it is. ok false (nothing left behind): no vault, code key
+// closed or an error, the caller writes the file as before. annuler removes the entries it created.
+func (s *Serveur) pourVousAuCoffre(p Projet, tache string, valeurs map[string]string) (annuler func(), ok bool) {
+	if len(valeurs) == 0 || s.coffre == nil || s.coffreErr != nil || s.acces == nil || s.accesErr != nil || s.coffre.OuvrirCode() != nil {
+		return nil, false
+	}
+	source := "pourvous:" + p.Nom
+	parEmpreinte := map[string]string{} // fingerprint → id
+	for id, f := range s.coffre.EmpreintesConnues() {
+		parEmpreinte[f] = id
+	}
+	parNom := map[string]EntreeCoffre{}
+	entrees := map[string]EntreeCoffre{}
+	for _, e := range s.coffre.Liste() {
+		entrees[e.ID] = e
+		if e.Source == source && e.Portee == "code" {
+			parNom[e.Nom] = e
+		}
+	}
+	creees := []string{}
+	annuler = func() {
+		for _, id := range creees {
+			_ = s.coffre.Supprimer(id)
+		}
+		_ = s.synchroniserAcces() // their grants go with them
+	}
+	env := s.acces.Projet(p.Nom).Env
+	d := dicoTUI(s.langue())
+	for _, n := range slices.Sorted(maps.Keys(valeurs)) {
+		v := valeurs[n]
+		e, connue := entrees[parEmpreinte[s.coffre.Empreinte(v)]]
+		if !connue || e.Portee != "code" { // an infra entry is never given to the pilot: the answer makes a code one
+			if x, ok := parNom[n]; ok { // the same task answered again: its entry takes the new value
+				if s.coffre.RemplacerValeur(x.ID, v) != nil {
+					annuler()
+					return nil, false
+				}
+				e = x
+			} else {
+				typ := "jeton"
+				if pr := proposerNomValeur(n, v); pr != nil && pr.Famille == "secret" {
+					typ = pr.Type
+				}
+				x, err := s.coffre.Ajouter(EntreeCoffre{Nom: n, Famille: "secret", Type: typ, Portee: "code", Source: source,
+					Note: traduireTUI(d, "Given on the For you page ({0})", tache)}, v)
+				if err != nil {
+					annuler()
+					return nil, false
+				}
+				creees = append(creees, x.ID)
+				e = x
+			}
+		}
+		// the asked name now means this value: another entry granted under it on this environment gives way
+		deja := false
+		for _, a := range s.acces.Projet(p.Nom).Acces {
+			if a.Env == env && a.Entree == e.ID {
+				deja = true
+				if a.Variable != n && s.acces.RenommerVariable(p.Nom, e.ID, env, n) != nil {
+					deja = false // n is taken: freed below, then renamed
+				}
+			}
+			if a.Env == env && a.Variable == n && a.Entree != e.ID {
+				_ = s.acces.Retirer(p.Nom, a.Entree, env)
+			}
+		}
+		var err error
+		if !deja {
+			if _, err = s.acces.Ajouter(p.Nom, e, env, n, "pourvous"); errors.Is(err, errAccesDeja) {
+				err = s.acces.RenommerVariable(p.Nom, e.ID, env, n)
+			}
+		}
+		if err != nil {
+			annuler()
+			return nil, false
+		}
+	}
+	return annuler, true
+}
+
 func (s *Serveur) apiPourVous(w http.ResponseWriter, r *http.Request) {
 	p, ok := s.projetRequis(w, r)
 	if !ok {
@@ -465,10 +549,15 @@ func (s *Serveur) apiPourVous(w http.ResponseWriter, r *http.Request) {
 		}
 		fichiers = append(fichiers, f)
 	}
-	secretsAvant, err := ecrireSecrets(p, valeurs)
-	if err != nil {
-		s.erreur(w, http.StatusInternalServerError, err.Error())
-		return
+	// the vault first (V§6.1); without it, the project file as before
+	annulerCoffre, auCoffre := s.pourVousAuCoffre(p, c.ID, valeurs)
+	var secretsAvant []byte
+	var err error
+	if !auCoffre {
+		if secretsAvant, err = ecrireSecrets(p, valeurs); err != nil {
+			s.erreur(w, http.StatusInternalServerError, err.Error())
+			return
+		}
 	}
 	noms := []string{}
 	for n := range valeurs {
@@ -478,7 +567,10 @@ func (s *Serveur) apiPourVous(w http.ResponseWriter, r *http.Request) {
 	rep[c.ID] = append(rep[c.ID], ReponseTache{Tour: len(rep[c.ID]) + 1, Action: c.Action, Texte: c.Texte, Fichiers: fichiers, Secrets: noms, Le: time.Now().Format("2006-01-02T15:04:05")})
 	b, _ := json.MarshalIndent(rep, "", "  ")
 	if err := ecrireAtelier(p, "for-you", "replies.json", b); err != nil {
-		if len(valeurs) > 0 { // the answer is not saved: the values it brought go too
+		if auCoffre {
+			// shortcut: a value granted that was already in the vault stays granted; the user answers again
+			annulerCoffre()
+		} else if len(valeurs) > 0 { // the answer is not saved: the values it brought go too
 			if len(secretsAvant) > 0 {
 				_ = ecrireAtelier(p, "", "secrets.env", secretsAvant)
 			} else if r, e := ouvrirAtelier(p); e == nil {
@@ -489,9 +581,17 @@ func (s *Serveur) apiPourVous(w http.ResponseWriter, r *http.Request) {
 		s.erreur(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	if c.Action == "passer" {
+	switch {
+	case c.Action == "passer":
 		s.msg(w, "Skipped: Claude looks for another way at the start of its next cycle.")
-	} else {
+	case auCoffre:
+		if _, err := s.injecterSansVerrou(p, nil); err != nil {
+			fmt.Fprintln(os.Stderr, "access injection:", p.Nom+":", err) // a file write error, no value
+		}
+		s.msg(w, "Sent: the value is in the vault, given to this project for {0}. Claude checks it at the start of its next cycle.", s.acces.Projet(p.Nom).Env)
+	case len(valeurs) > 0:
+		s.msg(w, "Sent. The vault is not available (no password and no system keystore, or locked): the value went to the project's file as before. Claude checks it at the start of its next cycle.")
+	default:
 		s.msg(w, "Sent: Claude checks it at the start of its next cycle and tells you here.")
 	}
 }

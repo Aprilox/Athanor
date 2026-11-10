@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -20,6 +22,7 @@ func TestPourVous(t *testing.T) {
 	p := Projet{Nom: "a", Dossier: d}
 	s := nouveauServeur(Config{Kit: t.TempDir(), Projets: []Projet{p}, ProjetActif: "a", Langue: "fr"})
 	s.csrf = "jeton"
+	s.coffre = nil // no vault: the answer goes to the project's file as before (the vault path: TestPourVousCoffre)
 	mux := http.NewServeMux()
 	s.routes(mux)
 	appel := func(methode, chemin string, corps any) (int, map[string]any) {
@@ -54,7 +57,7 @@ func TestPourVous(t *testing.T) {
 		t.Fatalf("file: %d %s", w.Code, w.Body.String())
 	}
 	valeur := `sh'pat_$(rm -rf ~)"x`
-	if c, v := appel("POST", "/api/pourvous?p=a", map[string]any{"id": "T1", "action": "fait", "texte": "C'est fait : ma-boutique.myshopify.com", "fichiers": []string{pj["chemin"].(string)}, "secrets": map[string]string{"SHOPIFY_TOKEN": valeur}}); c != 200 {
+	if c, v := appel("POST", "/api/pourvous?p=a", map[string]any{"id": "T1", "action": "fait", "texte": "C'est fait : ma-boutique.myshopify.com", "fichiers": []string{pj["chemin"].(string)}, "secrets": map[string]string{"SHOPIFY_TOKEN": valeur}}); c != 200 || v["message_key"] == nil || !strings.Contains(v["message_key"].(string), "vault is not available") {
 		t.Fatalf("answer: %d %v", c, v)
 	}
 	// the value is sourced by a shell: quoted, never executed
@@ -176,5 +179,99 @@ func TestPourVous(t *testing.T) {
 	}
 	if len(ouverts) != 1 || ouverts[0] != "https://partners.shopify.com/signup?x=1" {
 		t.Errorf("opened: %v", ouverts)
+	}
+}
+
+// M37: a secret For you answer goes to the vault (scope code, recognised type, source pourvous:<project>)
+// with an automatic grant for the current environment, injected at once; Remove takes it out of the file.
+// The witness value is in no API answer, no logs/ file and no for-you/ file.
+func TestPourVousCoffre(t *testing.T) {
+	s := serveurCoffreTest(t)
+	_ = os.Remove(s.acces.chemin)
+	s.chargerAcces()
+	t.Cleanup(func() { _ = os.Remove(s.acces.chemin) })
+	demo := Projet{Nom: "demo", Dossier: filepath.Join(t.TempDir(), "demo")}
+	for _, d := range []string{"logs", "for-you"} {
+		if err := os.MkdirAll(filepath.Join(demo.Atelier(), d), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s.mu.Lock()
+	s.config.Projets = []Projet{demo}
+	s.mu.Unlock()
+	mux := http.NewServeMux()
+	s.routes(mux)
+	var reponses strings.Builder
+	appel := func(methode, chemin string, corps any) (int, map[string]any) {
+		t.Helper()
+		b, _ := json.Marshal(corps)
+		r := httptest.NewRequest(methode, chemin, bytes.NewReader(b))
+		r.Header.Set("X-Athanor", "jeton")
+		r.AddCookie(&http.Cookie{Name: cookieAcces, Value: "cle"})
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, r)
+		reponses.WriteString(w.Body.String())
+		var v map[string]any
+		_ = json.Unmarshal(w.Body.Bytes(), &v)
+		return w.Code, v
+	}
+	if err := s.acces.ChangerEnv("demo", "staging"); err != nil {
+		t.Fatal(err)
+	}
+	// an older entry granted under the asked name gives way to the new value
+	ancienne, err := s.coffre.Ajouter(EntreeCoffre{Nom: "Ancienne", Famille: "secret", Type: "jeton"}, "temoin-ancien-"+aleatoire(6))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.acces.Ajouter("demo", ancienne, "staging", "STRIPE_KEY", ""); err != nil {
+		t.Fatal(err)
+	}
+	ecrireFichier(t, cheminPourVous(demo, "tasks.json"), `{"suivant":2,"taches":[{"id":"T1","titre":"Clé Stripe de test","secrets":["STRIPE_KEY"],"statut":"ouverte","tour":0}]}`, 0o644)
+	temoin := "sk_test_" + "temoin" + aleatoire(12) // built here: no real-looking token in the sources
+	if c, v := appel("POST", "/api/pourvous?p=demo", map[string]any{"id": "T1", "action": "fait", "secrets": map[string]string{"STRIPE_KEY": temoin}}); c != 200 || !strings.Contains(fmt.Sprint(v["message_key"]), "in the vault") {
+		t.Fatalf("answer: %d %v", c, v)
+	}
+	var e EntreeCoffre
+	for _, x := range s.coffre.Liste() {
+		if x.Source == "pourvous:demo" {
+			e = x
+		}
+	}
+	if e.ID == "" || e.Nom != "STRIPE_KEY" || e.Portee != "code" || e.Type != "stripe" || e.Famille != "secret" || strings.Contains(e.Note, temoin) || !strings.Contains(e.Note, "T1") {
+		t.Fatalf("entry: %+v", e)
+	}
+	pa := s.acces.Projet("demo")
+	if len(pa.Acces) != 1 || pa.Acces[0].Entree != e.ID || pa.Acces[0].Env != "staging" || pa.Acces[0].Variable != "STRIPE_KEY" || pa.Acces[0].Auto != "pourvous" {
+		t.Fatalf("grants: %+v", pa.Acces)
+	}
+	lire := func() string { b, _ := os.ReadFile(cheminSecrets(demo)); return string(b) }
+	if f := lire(); !strings.Contains(f, "STRIPE_KEY='"+temoin+"'") || strings.Contains(f, "temoin-ancien") {
+		t.Fatalf("secrets.env:\n%s", f)
+	}
+	if v := demo.TachesVues(); len(v) != 1 || !v[0].Donnes["STRIPE_KEY"] {
+		t.Fatalf("task: %+v", v)
+	}
+	if _, v := appel("GET", "/api/acces?projet=demo", nil); !strings.Contains(fmt.Sprint(v["acces"]), "pourvous") {
+		t.Fatalf("panel: %v", v)
+	}
+	appel("GET", "/api/pourvous?p=demo", nil)
+	appel("GET", "/api/coffre", nil)
+	// Remove on the panel: the value leaves the file
+	if c, v := appel("POST", "/api/acces", map[string]any{"projet": "demo", "action": "retirer", "entree": e.ID, "env": "staging"}); c != 200 {
+		t.Fatalf("remove: %d %v", c, v)
+	}
+	if f := lire(); strings.Contains(f, temoin) {
+		t.Fatalf("still in secrets.env:\n%s", f)
+	}
+	if strings.Contains(reponses.String(), temoin) {
+		t.Error("the witness value in an API answer")
+	}
+	for _, d := range []string{"logs", "for-you"} {
+		_ = filepath.WalkDir(filepath.Join(demo.Atelier(), d), func(chemin string, x fs.DirEntry, _ error) error {
+			if b, err := os.ReadFile(chemin); err == nil && x != nil && !x.IsDir() && strings.Contains(string(b), temoin) {
+				t.Errorf("the witness value in %s", chemin)
+			}
+			return nil
+		})
 	}
 }

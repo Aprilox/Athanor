@@ -3902,7 +3902,7 @@ let numeroRendu = 0;
 // --- Access (project page): the vault on the left, this project's grants by environment on the right
 // (ARCHITECTURE §Accès); drag an entry onto a column, or tick its box (keyboard, touch). Names only, no value.
 const acc = { projet: "" };
-const AUTO_ACCES = { migration: "imported", pourvous: "For you answer" };
+const AUTO_ACCES = { migration: "imported", pourvous: "added automatically (For you)" };
 function ligneAcces(a) {
   const k = h(a.entree + "|" + a.env), auto = AUTO_ACCES[a.auto];
   return `<li class="acc-acces">

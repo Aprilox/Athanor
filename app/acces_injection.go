@@ -135,6 +135,11 @@ func (s *Serveur) injecterAcces(p Projet, garder map[string]string) (EtatInjecti
 	_ = s.synchroniserAcces() // automatic grants of freshly imported entries first
 	verrouReponses.Lock()
 	defer verrouReponses.Unlock()
+	return s.injecterSansVerrou(p, garder)
+}
+
+// injecterSansVerrou: injecterAcces for a caller that already holds verrouReponses (For you answers).
+func (s *Serveur) injecterSansVerrou(p Projet, garder map[string]string) (EtatInjection, error) {
 	lignes, etat, ecrire := s.planInjection(p, garder)
 	if !ecrire {
 		return etat, nil
