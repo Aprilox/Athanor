@@ -24,6 +24,9 @@ const (
 	errAccesDoublon  = erreurEntree("This variable name is already used in this environment")
 	errAccesDeja     = erreurEntree("This entry is already given to this environment")
 	errAccesInconnu  = erreurEntree("Unknown access")
+	// native Windows mode has no barrier: an infra entry linked there could be read by any agent
+	errAccesInfraNatif = erreurEntree("Native Windows mode has no barrier: any agent can read every file of this PC, so infra entries are refused here. Switch to WSL in Settings › Options, or tick Force, knowing the risk for this project.")
+	errAccesConfirmer  = erreurEntree("Confirm forcing first")
 )
 
 type AccesProjet struct {
@@ -269,6 +272,26 @@ func (a *Acces) ChangerEnv(projet, env string) error {
 		projetDe(f, projet).Env = env
 		return nil
 	})
+}
+
+// ForcerInfra sets the per-project "force, knowing the risk" of native Windows mode.
+func (a *Acces) ForcerInfra(projet string, oui bool) error {
+	return a.modifier(func(f *fichierAcces) error {
+		projetDe(f, projet).ForcerInfraNatif = oui
+		return nil
+	})
+}
+
+// journalNatif appends a line without any value (date, project, what) to hub/acces-natif.log; the
+// audit log of stage 4 takes it over.
+func journalNatif(chemin, projet, quoi string) {
+	f, err := os.OpenFile(chemin, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "access log:", err)
+		return
+	}
+	defer f.Close()
+	fmt.Fprintf(f, "%s\t%s\t%s\n", time.Now().UTC().Format(time.RFC3339), projet, quoi)
 }
 
 // Synchroniser follows the vault and the project list: grants of entries no longer in the vault and

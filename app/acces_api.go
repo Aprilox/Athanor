@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 )
 
 // chargerAcces loads hub/acces.json at start-up (an unreadable file is reported and left untouched).
@@ -58,6 +59,11 @@ func (s *Serveur) accesPret(w http.ResponseWriter, projet string) bool {
 	return false
 }
 
+// journalAccesNatif: next to hub/acces.json.
+func (s *Serveur) journalAccesNatif() string {
+	return filepath.Join(filepath.Dir(s.acces.chemin), "acces-natif.log")
+}
+
 // AccesVu: a grant as the page sees it, with its entry's metadata.
 type AccesVu struct {
 	AccesProjet
@@ -83,7 +89,7 @@ func (s *Serveur) etatAcces(projet string) map[string]any {
 	inj := s.etatInjection(pr)
 	r := resumerAcces(p, s.coffre.Liste())
 	r.Etat = inj.Etat
-	return map[string]any{"projet": projet, "env": p.Env, "envs": envsProjet, "forcer_infra_natif": p.ForcerInfraNatif, "acces": vus,
+	return map[string]any{"projet": projet, "env": p.Env, "envs": envsProjet, "forcer_infra_natif": p.ForcerInfraNatif, "natif": modeNatif.Load(), "acces": vus,
 		"injection": inj, "resume": r}
 }
 
@@ -106,10 +112,12 @@ func (s *Serveur) apiAcces(w http.ResponseWriter, r *http.Request) {
 	s.ecrireJSON(w, s.etatAcces(projet))
 }
 
-// apiAccesModifier: POST /api/acces {projet, action: ajouter|retirer|renommer|env, entree, env, variable}.
+// apiAccesModifier: POST /api/acces {projet, action: ajouter|retirer|renommer|env|forcer, entree, env,
+// variable, forcer, confirme}.
 func (s *Serveur) apiAccesModifier(w http.ResponseWriter, r *http.Request) {
 	var c struct {
 		Projet, Action, Entree, Env, Variable string
+		Forcer, Confirme                      bool
 	}
 	if err := lireCorps(r, &c); err != nil {
 		s.erreur(w, http.StatusBadRequest, string(errCoffreRequete))
@@ -131,7 +139,22 @@ func (s *Serveur) apiAccesModifier(w http.ResponseWriter, r *http.Request) {
 			err = errCoffreInconnu
 			break
 		}
-		_, err = s.acces.Ajouter(c.Projet, e, c.Env, c.Variable, "")
+		forcer := s.acces.Projet(c.Projet).ForcerInfraNatif
+		if e.Portee == "infra" && modeNatif.Load() && !forcer {
+			err = errAccesInfraNatif
+			break
+		}
+		if _, err = s.acces.Ajouter(c.Projet, e, c.Env, c.Variable, ""); err == nil && e.Portee == "infra" && modeNatif.Load() {
+			journalNatif(s.journalAccesNatif(), c.Projet, "infra linked while forced: "+e.ID+" ("+e.Nom+") "+c.Env)
+		}
+	case "forcer":
+		if c.Forcer && !c.Confirme {
+			err = errAccesConfirmer
+			break
+		}
+		if err = s.acces.ForcerInfra(c.Projet, c.Forcer); err == nil {
+			journalNatif(s.journalAccesNatif(), c.Projet, fmt.Sprintf("force infra in native mode: %v", c.Forcer))
+		}
 	case "retirer":
 		err = s.acces.Retirer(c.Projet, c.Entree, c.Env)
 	case "renommer":
@@ -142,8 +165,10 @@ func (s *Serveur) apiAccesModifier(w http.ResponseWriter, r *http.Request) {
 		err = errCoffreRequete
 	}
 	switch {
-	case errors.Is(err, errAccesDoublon), errors.Is(err, errAccesDeja):
+	case errors.Is(err, errAccesDoublon), errors.Is(err, errAccesDeja), errors.Is(err, errAccesInfraNatif):
 		s.erreur(w, http.StatusConflict, err.Error())
+	case errors.Is(err, errAccesConfirmer):
+		s.erreur(w, http.StatusBadRequest, err.Error())
 	case errors.Is(err, errAccesInconnu):
 		s.erreur(w, http.StatusNotFound, err.Error())
 	case err != nil:

@@ -3934,7 +3934,9 @@ pages.acces = async () => {
   };
   return `<div class="acces">
     <div class="bloc"><h2>${t("Access")}</h2><p class="intro petit">${t("Drag an entry of the vault onto an environment, or tick it: the pilot receives the project keys and variables of the current environment, under the variable name shown.")}</p>
-      ${inj.etat === "verrouille" ? `<p class="petit attention">🔒 ${t("The vault is locked: the pilot's file is not updated until you unlock it.")}</p>` : ""}</div>
+      ${inj.etat === "verrouille" ? `<p class="petit attention">🔒 ${t("The vault is locked: the pilot's file is not updated until you unlock it.")}</p>` : ""}
+      ${d.natif ? `<div class="acc-natif"><p class="petit attention">⚠ ${t(d.forcer_infra_natif ? "Forced: infra entries can be linked to this project. This choice is logged." : "Native Windows mode: this PC has no barrier, any agent can read every file. Infra entries (your servers' keys) are refused for this project; switch to WSL in Settings › Options to keep them out of reach.")}</p>
+        <label class="petit"><input type="checkbox" data-acc-forcer${d.forcer_infra_natif ? " checked" : ""}> ${t("Force, knowing the risk")}</label> <a class="petit" href="#options">${t("Options")}</a></div>` : ""}</div>
     <div class="acc-grille">
       <div class="bloc acc-coffre"><h2>${t("Vault")}</h2>
         ${entrees.length ? `<ul class="acc-liste">${entrees.map(carte).join("")}</ul>` : `<p class="muet">${t("The vault is empty.")} <a href="#coffre">${t("Vault")}</a></p>`}</div>
@@ -3962,8 +3964,14 @@ $("#page").addEventListener("change", (ev) => {
   if (etat.page !== "acces") return;
   const x = ev.target;
   if (x.dataset.accCase) { const [entree, env] = x.dataset.accCase.split("|"); return changerAcces({ action: x.checked ? "ajouter" : "retirer", entree, env }); }
+  if (x.matches("[data-acc-forcer]")) return forcerInfraNatif(x.checked);
   if (x.dataset.accVar) { const [entree, env] = x.dataset.accVar.split("|"); return changerAcces({ action: "renommer", entree, env, variable: x.value.trim() }); }
 });
+// native Windows mode: infra entries need a confirmed, logged "force" per project
+async function forcerInfraNatif(oui) {
+  if (oui && !(await confirmer(t("Once forced, an agent working on this PC could read this project's infra entries. Force anyway? This choice is logged."), { ok: t("Force"), danger: true }))) return rendrePage();
+  return changerAcces({ action: "forcer", forcer: oui, confirme: oui });
+}
 $("#page").addEventListener("dragstart", (ev) => {
   const e = ev.target.closest && ev.target.closest("[data-acc-entree]"); if (!e) return;
   ev.dataTransfer.setData("text/plain", e.dataset.accEntree); ev.dataTransfer.effectAllowed = "copy";

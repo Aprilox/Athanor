@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -217,5 +218,92 @@ func TestAccesProjets(t *testing.T) {
 	}
 	if fi, err := os.Stat(s.acces.chemin); err != nil || (os.PathSeparator == '/' && fi.Mode().Perm() != 0o600) {
 		t.Fatalf("acces.json: %v %v", err, fi)
+	}
+}
+
+// TestAccesModeNatif: native Windows mode refuses infra entries (409) unless the project is forced,
+// with a confirmation and a log line without any value; code entries and the other mode are unchanged.
+func TestAccesModeNatif(t *testing.T) {
+	s := serveurCoffreTest(t)
+	_ = os.Remove(s.acces.chemin)
+	s.chargerAcces()
+	journal := s.journalAccesNatif()
+	t.Cleanup(func() { _ = os.Remove(s.acces.chemin); _ = os.Remove(journal) })
+	_ = os.Remove(journal)
+	avant := modeNatif.Load()
+	t.Cleanup(func() { modeNatif.Store(avant) })
+	s.mu.Lock()
+	s.config.Projets = []Projet{{Nom: "demo", Dossier: filepath.Join(t.TempDir(), "demo")}}
+	s.mu.Unlock()
+	mux := http.NewServeMux()
+	s.routes(mux)
+	poster := func(m map[string]any) (int, string) {
+		t.Helper()
+		b, _ := json.Marshal(m)
+		r := httptest.NewRequest("POST", "/api/acces", strings.NewReader(string(b)))
+		r.Header.Set("X-Athanor", "jeton")
+		r.AddCookie(&http.Cookie{Name: cookieAcces, Value: "cle"})
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, r)
+		return w.Code, w.Body.String()
+	}
+	temoin := "TEMOIN-" + aleatoire(12)
+	if err := s.coffre.ChangerMotDePasse("", "mdp-test"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.coffre.Deverrouiller("mdp-test"); err != nil {
+		t.Fatal(err)
+	}
+	infra, err := s.coffre.Ajouter(EntreeCoffre{Nom: "Cloudflare", Famille: "secret", Type: "cloudflare", Portee: "infra"}, temoin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	code, err := s.coffre.Ajouter(EntreeCoffre{Nom: "Stripe test", Famille: "secret", Type: "stripe", Portee: "code"}, temoin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lier := func(e EntreeCoffre, env string) (int, string) {
+		return poster(map[string]any{"projet": "demo", "action": "ajouter", "entree": e.ID, "env": env})
+	}
+
+	// outside native mode: infra and code entries are linked as before
+	modeNatif.Store(false)
+	if c, b := lier(infra, "staging"); c != 200 {
+		t.Fatalf("infra outside native mode: %d %s", c, b)
+	}
+	// native mode: infra refused with the explanation, code accepted
+	modeNatif.Store(true)
+	if c, b := lier(infra, "dev"); c != 409 || !strings.Contains(b, "WSL") {
+		t.Fatalf("infra in native mode: %d %s", c, b)
+	}
+	if c, b := lier(code, "dev"); c != 200 || !strings.Contains(b, `"natif":true`) {
+		t.Fatalf("code in native mode: %d %s", c, b)
+	}
+	// forcing needs a confirmation, then infra goes through and every step is logged without a value
+	if c, _ := poster(map[string]any{"projet": "demo", "action": "forcer", "forcer": true}); c != 400 || s.acces.Projet("demo").ForcerInfraNatif {
+		t.Fatalf("forcing without confirmation: %d", c)
+	}
+	if c, b := poster(map[string]any{"projet": "demo", "action": "forcer", "forcer": true, "confirme": true}); c != 200 || !strings.Contains(b, `"forcer_infra_natif":true`) {
+		t.Fatalf("forcing: %d %s", c, b)
+	}
+	if c, b := lier(infra, "dev"); c != 200 {
+		t.Fatalf("infra once forced: %d %s", c, b)
+	}
+	if c, _ := poster(map[string]any{"projet": "demo", "action": "forcer", "forcer": false}); c != 200 || s.acces.Projet("demo").ForcerInfraNatif {
+		t.Fatalf("unforcing: %d", c)
+	}
+	if c, _ := lier(infra, "prod"); c != 409 {
+		t.Fatalf("infra after unforcing: %d", c)
+	}
+	b, err := os.ReadFile(journal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	l := string(b)
+	if strings.Count(l, "\n") != 3 || !strings.Contains(l, "\tdemo\t") || !strings.Contains(l, infra.ID) || strings.Contains(l, temoin) {
+		t.Fatalf("native mode log: %q", l)
+	}
+	if fi, err := os.Stat(journal); err == nil && runtime.GOOS != "windows" && fi.Mode().Perm() != 0o600 {
+		t.Fatalf("log mode %v", fi.Mode().Perm())
 	}
 }
