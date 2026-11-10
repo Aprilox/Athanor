@@ -47,7 +47,7 @@ func TestDistanceToutesRoutes(t *testing.T) {
 			t.Errorf("%s %s: %d (reached %v), want the route reached", methode, chemin, code, ok)
 		}
 	}
-	for _, r := range []string{"GET /api/hub", "POST /api/mot-de-passe", "POST /api/ouvrir", "POST /api/instance/{action}", "POST /api/distance", "GET /api/projets"} {
+	for _, r := range []string{"GET /api/hub", "POST /api/hub/alertes", "POST /api/mot-de-passe", "POST /api/ouvrir", "POST /api/instance/{action}", "POST /api/distance", "GET /api/projets"} {
 		if !vus[r] {
 			t.Errorf("route %q no longer in serveur.go: update this test", r)
 		}
@@ -57,10 +57,11 @@ func TestDistanceToutesRoutes(t *testing.T) {
 		methode, chemin string
 		refus           bool
 	}{
-		{"GET", "/api/hub", false},     // allowed
-		{"GET", "/api/coffre", false},  // allowed (the vault's list, no secret value)
-		{"POST", "/api/hub", true},     // hub route not in the allowlist
-		{"GET", "/api/coffre/x", true}, // invented, no allowlist entry: refused by default
+		{"GET", "/api/hub", false},         // allowed
+		{"GET", "/api/coffre", false},      // allowed (the vault's list, no secret value)
+		{"POST", "/api/hub", true},         // hub route not in the allowlist
+		{"POST", "/api/hub/alertes", true}, // Ignore / Reopen: written on this computer only
+		{"GET", "/api/coffre/x", true},     // invented, no allowlist entry: refused by default
 		{"POST", "/api/coffre/x", true},
 		{"DELETE", "/api/coffre/x", true},
 		{"POST", "/api/coffre", true},

@@ -131,9 +131,15 @@ type ModuleVue struct {
 	Resume ResumeModule `json:"resume"`
 }
 
-// apiHub: GET /api/hub, every module with its pages and its home tile, and every module's elements,
-// those waiting for the owner first.
+// apiHub: GET /api/hub, every module with its pages and its home tile, every module's elements (those
+// waiting for the owner first), the bell's alerts and the history of the ignored ones.
 func (s *Serveur) apiHub(w http.ResponseWriter, r *http.Request) {
+	v, el := s.vueHub()
+	actives, cachees := trierAlertes(alertesDe(el), lireIgnorees())
+	s.ecrireJSON(w, map[string]any{"modules": v, "elements": el, "alertes": actives, "ignorees": cachees})
+}
+
+func (s *Serveur) vueHub() ([]ModuleVue, []ElementHub) {
 	v, el := []ModuleVue{}, []ElementHub{}
 	for _, m := range modulesHub() {
 		v = append(v, ModuleVue{ID: m.ID(), Nom: m.Nom(), Pages: pagesModule(m), Resume: m.Resume(s)})
@@ -143,7 +149,7 @@ func (s *Serveur) apiHub(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	sort.SliceStable(el, func(i, j int) bool { return el[i].Attente != nil && el[j].Attente == nil })
-	s.ecrireJSON(w, map[string]any{"modules": v, "elements": el})
+	return v, el
 }
 
 // The hub's own pages, declared like a module's: Home and Projects (every module's elements).

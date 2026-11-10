@@ -732,27 +732,40 @@ function phraseProjet(x) {
   return { travail: t("Claude is working"), quota: t("Usage limit reached, Claude is waiting"), budget: t("API budget or credit used up, Claude is waiting"), attente_vous: t("Claude is waiting for you"), entre_cycles: t("Between two cycles"), erreur: t("Error, retry scheduled"), connexion: t("Connection problem") }[x.phase] || t("Pilot started");
 }
 const projetsVisibles = (v) => (v.projets || []).filter((x) => !x.archive);
-// the bell: in Athanor's title bar (Windows), else at the end of the header; the number of projects that need the user
+// the bell: in Athanor's title bar (Windows), else at the end of the header; the alerts of every module (/api/hub)
+const alertesHub = () => (etat.hub && etat.hub.alertes) || [];
 function boutonCloche(v, classe) {
-  if (!projetsVisibles(v).length) return "";
-  const n = projetsVisibles(v).filter(besoinProjet).length;
-  const titre = n ? t("{0} project(s) need you", [n]) : t("No project needs you");
+  const n = alertesHub().length;
+  if (!n && !projetsVisibles(v).length && !((etat.hub || {}).ignorees || []).length) return "";
+  const titre = n ? t("{0} alert(s) need you", [n]) : t("Nothing needs you right now.");
   return `<button type="button" class="${classe} cloche${n ? " sonne" : ""}" data-notifs aria-haspopup="true" aria-expanded="${etat.notifsOuvert ? "true" : "false"}" aria-label="${h(titre)}" title="${h(titre)}"><svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.94 1.94 0 0 0 3.4 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>${n ? `<span class="cloche-n">${n}</span>` : ""}</button>`;
 }
 // the Guide: a "?" beside the bell (it is no menu entry any more)
 const boutonGuide = (classe) => `<a href="#guide" class="${classe} btn-guide" aria-label="${h(t("Guide"))}" title="${h(t("Guide"))}">?</a>`;
+// one alert on one line, "Dev, ma-boutique: why", and its actions (View opens its page, through allerProjet for a
+// Dev project); an ignored one (history) only offers Reopen. Writing is refused from a paired device (403).
+function ligneAlerte(a, ignoree) {
+  const m = ((etat.hub || {}).modules || []).find((x) => x.id === a.module) || { nom: a.module };
+  const texte = t("{0}, {1}: {2}", [t(m.nom), a.titre, t(a.raison, (a.args || []).map(String))]);
+  const bloque = (etat.vue || {}).distant ? ` disabled title="${h(t("On the computer only"))}"` : "";
+  const bouton = (id, libelle) => `<button type="button" class="btn btn-petit" data-alerte="${id}" data-empreinte="${h(a.empreinte)}"${bloque}>${t(libelle)}</button>`;
+  const actions = ignoree ? bouton("rouvrir", "Reopen") : (a.actions || []).map((x) => x.id !== "voir" ? bouton(x.id, x.libelle)
+    : `<a class="btn btn-petit" href="${h(x.page)}"${x.projet ? ` data-projet="${h(x.projet)}" data-cible="${h(x.page.slice(1))}"` : ""}>${t(x.libelle)}</a>`).join("");
+  return `<div class="alerte${ignoree ? " ignoree" : ""}" data-module="${h(a.module)}"><span class="dot${ignoree ? "" : " quota"}" aria-hidden="true"></span><span class="alerte-texte">${h(texte)}</span><span class="alerte-actions">${actions}</span></div>`;
+}
 function rendreNotifs(v) {
   const m = $("#notifs"), bouton = document.querySelector("[data-notifs]");
   m.hidden = !etat.notifsOuvert || !bouton;
   if (m.hidden) return;
-  const liste = projetsVisibles(v).map((x) => [x, besoinProjet(x)]).filter((c) => c[1]);
-  const html = `<div class="notifs-titre">${t("Projects that need you")}</div>
-    <div class="menu-liste">${liste.map(([x, b]) => `<a href="#${b.page}" data-projet="${h(x.nom)}" data-cible="${b.page}"><span class="dot quota"></span><span class="nom">${h(x.nom)}</span><span class="muet petit">${h(b.texte)}</span></a>`).join("") || `<div class="muet petit notifs-vide">${t("No project needs you right now.")}</div>`}</div>
-    <a href="#global" class="menu-nouveau">${t("All projects")} →</a>`;
+  const liste = alertesHub(), cachees = (etat.hub || {}).ignorees || [];
+  const html = `<div class="notifs-titre">${t("Alerts")}</div>
+    <div class="alertes">${liste.map((a) => ligneAlerte(a, false)).join("") || `<div class="muet petit notifs-vide">${t("Nothing needs you right now.")}</div>`}</div>
+    ${cachees.length ? `<details class="alertes-ignorees"${etat.ignoreesOuvert ? " open" : ""}><summary>${t("Ignored alerts ({0})", [cachees.length])}</summary><div class="alertes">${cachees.map((a) => ligneAlerte(a, true)).join("")}</div></details>` : ""}
+    <a href="#global" class="menu-nouveau">${t("Projects")} →</a>`;
   if (m.dataset.html !== html) { m.dataset.html = html; m.innerHTML = html; }
   const r = bouton.getBoundingClientRect();
   m.style.top = r.bottom + 6 + "px";
-  m.style.right = Math.max(8, window.innerWidth - r.right) + "px";
+  m.style.right = Math.max(8, Math.min(window.innerWidth - r.right, window.innerWidth - m.offsetWidth - 8)) + "px"; // never past the left edge (phone)
 }
 function fermerNotifs() { etat.notifsOuvert = false; if (etat.vue) rendreBandeau(etat.vue); }
 document.addEventListener("click", (ev) => {
@@ -772,7 +785,19 @@ function cliqueProjet(ev) {
   ev.preventDefault(); fermerNotifs();
   allerProjet(a.dataset.projet, a.dataset.cible);
 }
-$("#notifs").addEventListener("click", (ev) => { if (ev.target.closest("a") && !ev.target.closest("a[data-cible]")) fermerNotifs(); else cliqueProjet(ev); });
+$("#notifs").addEventListener("click", async (ev) => {
+  if (ev.target.closest("summary")) { etat.ignoreesOuvert = !ev.target.closest("details").open; return; }
+  const b = ev.target.closest("button[data-alerte]");
+  if (b) { // Ignore (hidden, nothing deleted) or Reopen; the focus goes to the bell's first action left
+    b.disabled = true;
+    await action(api("hub/alertes", "POST", { empreinte: b.dataset.empreinte, ignorer: b.dataset.alerte === "ignorer" }));
+    etat.hub = await api("hub").catch(() => etat.hub);
+    if (etat.vue) rendreBandeau(etat.vue);
+    const suite = $("#notifs .alerte-actions .btn") || document.querySelector("[data-notifs]"); if (suite) suite.focus();
+    return;
+  }
+  if (ev.target.closest("a") && !ev.target.closest("a[data-cible]")) fermerNotifs(); else cliqueProjet(ev);
+});
 $("#page").addEventListener("click", cliqueProjet);
 
 function phraseGlobale(v) {
@@ -4591,15 +4616,17 @@ async function rafraichir() {
       await lireJournal();
       // the Team page follows live, except while text is selected in it (a brief, a report)
       if ((etat.page === "equipe" && !String(window.getSelection() || "") && !etat.agForm) || (etat.page === "suivi" && !document.activeElement.matches("input, textarea, select"))) rendrePage();
-      // Projects: rebuilt only when an element changed (the card under the keyboard keeps its focus)
-      if (etat.page === "global") {
+      // /api/hub every other tick (every tick on Projects): the bell's alerts; Projects and Home are rebuilt only
+      // when a module's tile or an element changed (the card or the bar under the keyboard keeps its focus)
+      if (etat.page === "global" || ++etat.hubTic % 2 === 0 || !etat.hub) {
         const d = await api("hub").catch(() => null);
-        if (d && JSON.stringify([d.modules || [], d.elements || []]) !== etat.globalSig) rendrePage();
-      }
-      // Home: rebuilt only when a module's tile or an element changed (the bar keeps its text and its focus)
-      if (etat.page === "accueil" && ++etat.hubTic % 2 === 0) {
-        const d = await api("hub").catch(() => null);
-        if (d && JSON.stringify([d.modules || [], d.elements || []]) !== etat.hubSig) rendrePage();
+        if (d) {
+          const cloche = (x) => JSON.stringify([(x || {}).alertes, (x || {}).ignorees]), change = cloche(d) !== cloche(etat.hub);
+          etat.hub = d;
+          const sig = JSON.stringify([d.modules || [], d.elements || []]);
+          if (etat.page === "global" ? sig !== etat.globalSig : etat.page === "accueil" && sig !== etat.hubSig) rendrePage();
+          if (change) rendreBandeau(v);
+        }
       }
       if (etat.page === "chat") majChat(false);
       if (etat.page === "distance") await majDistance();

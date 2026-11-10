@@ -90,6 +90,13 @@ html.cadre .dialogue, html.cadre .verrou, html.cadre .assistant { top: var(--bar
 .notifs { position: fixed; z-index: 34; width: min(360px, calc(100vw - 16px)); background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--ombre); padding: 8px; display: flex; flex-direction: column; gap: 6px; }
 .notifs-titre { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--faible); padding: 2px 10px; }
 .notifs-vide { padding: 8px 10px; }
+.notifs .alertes { max-height: 340px; overflow: auto; display: flex; flex-direction: column; gap: 2px; }
+.alerte { display: grid; grid-template-columns: auto 1fr; column-gap: 8px; row-gap: 6px; align-items: center; padding: 8px 10px; border-radius: 6px; font-size: 14px; }
+.alerte:hover { background: var(--panel); }
+.alerte .alerte-actions { grid-column: 2; display: flex; gap: 6px; flex-wrap: wrap; }
+.alerte.ignoree .alerte-texte { color: var(--faible); }
+.alertes-ignorees summary { cursor: pointer; font-size: 13px; color: var(--faible); padding: 4px 10px; border-radius: 6px; }
+.alertes-ignorees summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 /* All projects: one card per project */
 .projets-actions { gap: 8px; margin-bottom: 16px; }
 .grille-projets { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
