@@ -79,9 +79,9 @@ function boutonDefil(quoi) {
 // ----------------------------------------------------------------------------- state
 const etat = {
   pieces: {}, // files waiting to be attached, per form
-  pvTic: 0, pvAnnonces: {}, pvSignature: "",
+  pvTic: 0, hubTic: 0, hubSig: "", accueilTexte: "", preRempli: null, pvAnnonces: {}, pvSignature: "",
   pvForm: {}, // answers being written on the For you page (text and secret values, per task; memory only)
-  page: "suivi", projet: "", vue: null, verrouille: false, langue: "en", theme: "", accent: "", assistant: -1, visite: -1, demarrage: {},
+  page: "suivi", projet: "", vue: null, verrouille: false, langue: "en", theme: document.documentElement.dataset.theme || "", accent: document.documentElement.dataset.accent || "", assistant: -1, visite: -1, demarrage: {},
   dernierJournal: 0, evenements: [], ouverts: new Set(),
   filtres: { pilote: true, texte: true, outil: true, resultat: false, sous_agent: true, brut: false }, recherche: "",
   tacheChoisie: null, verifChoisie: null, envSecrets: false, defilAuto: lireDefilAuto(), explorateur: "", selecteurOuvert: false, rechercheProjet: "",
@@ -779,8 +779,9 @@ function phraseGlobale(v) {
 
 // ----------------------------------------------------------------------------- shell: header, sidebar, project picker
 function rendreBandeau(v) {
-  const global = etat.page === "global";
+  const global = etat.page === "global" || etat.page === "accueil"; // pages of every project: no project buttons
   const p = global ? phraseGlobale(v) : phraseEtat(v);
+  if (etat.page === "accueil") p.titre = t("Home");
   const boutons = [];
   if (v.kit_valide && v.projet && !global) {
     if (v.actif) {
@@ -1591,6 +1592,52 @@ pages.global = async () => {
     </a>`;
   }).join("")}</div>`;
 };
+
+// --- Home of the hub: the "What do you want to do?" bar, one tile per module of /api/hub, the missions
+const ETATS_MODULE = { ok: ["travaille", "Working"], attention: ["quota", "Needs attention"], inactif: ["", "Idle"] };
+const STATUTS_QUOTA = { allowed: "OK", allowed_warning: "Near the limit", rejected: "Limit reached" };
+function statModule(s) {
+  let valeur = `<b class="hub-valeur">${h(String(s.valeur))}</b>`;
+  // the quota: a percentage drawn as the Overview's bar, else the status the last cycle reported
+  if (s.cle === "Quota used" && typeof s.valeur === "number") valeur = `<b class="hub-valeur">${s.valeur} %</b><span class="quota-ligne ${s.valeur >= 90 ? "plein" : s.valeur >= 70 ? "haut" : ""}"><span class="barre m0"><i style="width:${Math.min(100, s.valeur)}%"></i></span></span>`;
+  else if (s.cle === "Quota used") valeur = `<b class="hub-valeur hub-statut">${h(t(STATUTS_QUOTA[s.valeur] || String(s.valeur)))}</b>`;
+  return `<a class="hub-stat" href="${h(s.page || "#accueil")}">${valeur}<span class="muet petit">${h(t(s.cle))}</span></a>`;
+}
+function tuileModule(m) {
+  const r = m.resume || {}, [classe, libelle] = ETATS_MODULE[r.etat] || ETATS_MODULE.inactif;
+  const ouvrir = (m.pages || [])[0];
+  return `<section class="bloc tuile-module${r.etat === "attention" ? " besoin" : ""}" data-module="${h(m.id)}">
+    <div class="ligne m0 tuile-tete"><span class="dot ${classe}" aria-hidden="true"></span><h2 class="m0">${h(t(m.nom))}</h2><span class="muet petit">${h(t(libelle))}</span><span class="espace"></span>
+      ${ouvrir ? `<a class="btn btn-petit" href="${h(ouvrir.hash)}">${t("Open")} →</a>` : ""}</div>
+    <div class="hub-stats">${(r.stats || []).map(statModule).join("")}</div>
+  </section>`;
+}
+pages.accueil = async () => {
+  const d = await api("hub");
+  etat.hubSig = JSON.stringify(d.modules);
+  const projet = etat.vue && etat.vue.projet;
+  return `<div class="accueil">
+    <form class="bloc accueil-barre" id="accueil-form">
+      <label for="accueil-texte" class="accueil-titre">${t("What do you want to do?")}</label>
+      <div class="ligne m0"><input type="text" id="accueil-texte" class="croit" autocomplete="off" placeholder="${h(t("Say it in one sentence…"))}"><button type="submit" class="btn btn-primaire">${t("Send")}</button></div>
+      <div class="muet petit">${projet ? h(t("Opens the chat of {0} with your text: nothing is sent before you press Send there.", [projet.nom])) : t("No project yet: opens a new project with your text as its request.")}</div>
+    </form>
+    <div class="grille-hub">${(d.modules || []).map(tuileModule).join("")}</div>
+    <section class="bloc missions"><h2>${t("Missions")}</h2>
+      <div class="missions-vide"><span class="missions-icone" aria-hidden="true"></span><div><b>${t("No mission yet")}</b><div class="muet petit">${t("Coming soon: one sentence, and Dev and Servers work together.")}</div></div></div>
+    </section>
+  </div>`;
+};
+// the bar's text goes to the chat of the current project (or to a new project's request) through memory,
+// never through the hash, and is only put in the field: the user sends it there
+function envoyerAccueil() {
+  const texte = ($("#accueil-texte").value || "").trim(); if (!texte) return;
+  const page = etat.vue && etat.vue.projet ? "chat" : "nouveau";
+  etat.preRempli = { page, texte }; etat.accueilTexte = "";
+  location.hash = "#" + page;
+}
+document.addEventListener("submit", (ev) => { if (ev.target.id === "accueil-form") { ev.preventDefault(); envoyerAccueil(); } });
+document.addEventListener("input", (ev) => { if (ev.target.id === "accueil-texte") etat.accueilTexte = ev.target.value; });
 
 pages.suivi = async () => {
   const v = etat.vue; if (!v) return "";
@@ -3782,6 +3829,13 @@ async function rendrePage() {
   // the field being typed in keeps its focus and its cursor across a live refresh (e.g. the Team page's search)
   const a = document.activeElement, saisie = a && a.id && $("#page").contains(a) && a.matches("input[type=text], textarea") ? [a.id, a.selectionStart, a.selectionEnd] : null;
   $("#page").innerHTML = html;
+  // text of the Home bar: kept across a live refresh, then handed to the chat or the new project's request
+  const barre = $("#accueil-texte"); if (barre) barre.value = etat.accueilTexte || "";
+  const pre = etat.preRempli;
+  if (pre && pre.page === etat.page) {
+    const z = $(pre.page === "chat" ? "#chat-texte" : "#np-demande");
+    if (z) { etat.preRempli = null; z.value = pre.texte; z.focus(); }
+  } else if (pre && etat.page !== "accueil") etat.preRempli = null; // went elsewhere: the text is not carried to a later visit
   remettreDefil(defils);
   const champ = saisie && document.getElementById(saisie[0]);
   if (champ) { champ.focus({ preventScroll: true }); champ.setSelectionRange(saisie[1], saisie[2]); }
@@ -4099,6 +4153,11 @@ async function rafraichir() {
       if ((etat.page === "equipe" && !String(window.getSelection() || "") && !etat.agForm) || (etat.page === "suivi" && !document.activeElement.matches("input, textarea, select"))) rendrePage();
       // All projects: rebuilt only when a project changed (the card under the keyboard keeps its focus)
       if (etat.page === "global" && JSON.stringify(v.projets) !== etat.globalSig) { etat.globalSig = JSON.stringify(v.projets); rendrePage(); }
+      // Home: rebuilt only when a module's tile changed (the bar keeps its text and its focus)
+      if (etat.page === "accueil" && ++etat.hubTic % 2 === 0) {
+        const d = await api("hub").catch(() => null);
+        if (d && JSON.stringify(d.modules) !== etat.hubSig) rendrePage();
+      }
       if (etat.page === "chat") majChat(false);
       if (etat.page === "distance") await majDistance();
       // after "Connect to GitHub": the window is the user's; the blocks follow until the connection is there

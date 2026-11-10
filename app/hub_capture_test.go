@@ -28,6 +28,11 @@ func TestCaptureHub(t *testing.T) {
 	for i := 0; i < 20; i++ {
 		projets = append(projets, fauxProjet(t, d, fmt.Sprintf("projet-%02d", i), 12, i%13))
 	}
+	// a cycle log that reports the quota: the Home tile draws its bar
+	quota := `{"type":"rate_limit_event","rate_limit_info":{"status":"allowed","unifiedWindows":{"five_hour":{"utilization":0.41,"resetsAt":` + fmt.Sprint(time.Now().Unix()+3600) + `}}}}` + "\n"
+	if err := os.WriteFile(filepath.Join(projets[0].LogsDir(), "cycle-001.jsonl"), []byte(quota), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	s := nouveauServeur(Config{Kit: t.TempDir(), Projets: projets, ProjetActif: "projet-00", Langue: "fr", Theme: "clair", BienvenueVue: true})
 	s.cleAcces = aleatoire(24)
 	mux := http.NewServeMux()
