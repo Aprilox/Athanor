@@ -41,7 +41,7 @@ func (a *appTUI) texteStat(s StatModule) string {
 		if st, ok := statuts[v]; ok {
 			return a.t(st)
 		}
-		return v
+		return a.t(v) // a status figure is an i18n key
 	}
 	return ""
 }

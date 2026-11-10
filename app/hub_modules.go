@@ -1,8 +1,8 @@
 package main
 
-// The hub: Athanor is a set of modules (Dev today; Servers, the vault… later). Each module declares
-// itself from init() with enregistrerModule, like the commands with enregistrerCommande; the home
-// page, the menu and GET /api/hub are built from this registry only.
+// The hub: Athanor is a set of modules (Dev, the vault; Servers… later). Each module declares itself
+// from init() with enregistrerModule, like the commands with enregistrerCommande (Dev excepted: it is
+// first by construction); the home page, the menu and GET /api/hub are built from this registry only.
 
 import (
 	"net/http"
@@ -42,7 +42,7 @@ type ResumeModule struct {
 
 var (
 	modulesMu sync.Mutex
-	modules   []Module
+	modules   = []Module{moduleDev{}} // Dev first, before any init(): the home and the menu start with it
 )
 
 // enregistrerModule: called from init(); an id given twice is a programming error.

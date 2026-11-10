@@ -1624,9 +1624,9 @@ const ETATS_MODULE = { ok: ["travaille", "Working"], attention: ["quota", "Needs
 const STATUTS_QUOTA = { allowed: "OK", allowed_warning: "Near the limit", rejected: "Limit reached" };
 function statModule(s) {
   let valeur = `<b class="hub-valeur">${h(String(s.valeur))}</b>`;
-  // the quota: a percentage drawn as the Overview's bar, else the status the last cycle reported
+  // the quota: a percentage drawn as the Overview's bar; a text figure (a status) is an i18n key
   if (s.cle === "Quota used" && typeof s.valeur === "number") valeur = `<b class="hub-valeur">${s.valeur} %</b><span class="quota-ligne ${s.valeur >= 90 ? "plein" : s.valeur >= 70 ? "haut" : ""}"><span class="barre m0"><i style="width:${Math.min(100, s.valeur)}%"></i></span></span>`;
-  else if (s.cle === "Quota used") valeur = `<b class="hub-valeur hub-statut">${h(t(STATUTS_QUOTA[s.valeur] || String(s.valeur)))}</b>`;
+  else if (typeof s.valeur === "string") valeur = `<b class="hub-valeur hub-statut">${h(t(STATUTS_QUOTA[s.valeur] || String(s.valeur)))}</b>`;
   return `<a class="hub-stat" href="${h(s.page || "#accueil")}">${valeur}<span class="muet petit">${h(t(s.cle))}</span></a>`;
 }
 function tuileModule(m) {

@@ -408,18 +408,23 @@ func (c *Coffre) empreinte(valeur string) string {
 	return hex.EncodeToString(m.Sum(nil))
 }
 
+// erreurEntree: a refusal of the input (a fixed i18n key, never the input itself).
+type erreurEntree string
+
+func (e erreurEntree) Error() string { return string(e) }
+
 func verifierEntree(e EntreeCoffre) error {
 	switch {
 	case strings.TrimSpace(e.Nom) == "":
-		return errors.New("Give the entry a name")
+		return erreurEntree("Give the entry a name")
 	case e.Famille != "secret" && e.Famille != "variable":
-		return errors.New("Unknown entry family")
+		return erreurEntree("Unknown entry family")
 	case e.Portee != "code" && e.Portee != "infra":
-		return errors.New("Unknown scope")
+		return erreurEntree("Unknown scope")
 	case e.Famille == "variable" && e.Portee == "infra":
-		return errors.New("A variable cannot have the infra scope")
+		return erreurEntree("A variable cannot have the infra scope")
 	case typesCoffre[e.Type] == "":
-		return errors.New("Unknown entry type")
+		return erreurEntree("Unknown entry type")
 	}
 	return nil
 }
@@ -443,11 +448,10 @@ func (c *Coffre) poserValeur(e *EntreeCoffre, valeur string) error {
 func (c *Coffre) Ajouter(e EntreeCoffre, valeur string) (EntreeCoffre, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if e.Portee == "" {
-		e.Portee = typesCoffre[e.Type]
-	}
-	if e.Famille == "variable" {
+	if e.Portee == "" && e.Famille == "variable" {
 		e.Portee = "code"
+	} else if e.Portee == "" {
+		e.Portee = typesCoffre[e.Type]
 	}
 	if err := verifierEntree(e); err != nil {
 		return EntreeCoffre{}, err

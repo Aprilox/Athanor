@@ -8,8 +8,6 @@ import (
 	"time"
 )
 
-func init() { enregistrerModule(moduleDev{}) }
-
 type moduleDev struct{}
 
 func (moduleDev) ID() string  { return "dev" }
