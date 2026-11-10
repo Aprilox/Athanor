@@ -148,7 +148,7 @@ Votre jeton, vos réglages, vos projets, `logs/` et `tools/` ne sont jamais touc
 <details>
 <summary><b>Le compiler soi-même</b> (depuis le code source)</summary>
 
-Avec [Go](https://go.dev/dl/) 1.24 ou plus (pas de Go ? `winget install GoLang.Go`, `sudo apt install golang-go` ou `brew install go`) :
+Avec [Go](https://go.dev/dl/) 1.27.3 ou plus (Go 1.21 ou plus télécharge seul la 1.27.3 ; pas de Go ? `winget install GoLang.Go`, `sudo apt install golang-go` ou `brew install go`) :
 
 ```bash
 git clone https://github.com/Aprilox/Athanor.git

@@ -148,7 +148,7 @@ Your token, settings, projects, `logs/` and `tools/` are never touched by an upd
 <details>
 <summary><b>Build it yourself</b> (from the source code)</summary>
 
-With [Go](https://go.dev/dl/) 1.24 or later (no Go? `winget install GoLang.Go`, `sudo apt install golang-go` or `brew install go`):
+With [Go](https://go.dev/dl/) 1.27.3 or later (Go 1.21 or later downloads 1.27.3 by itself; no Go? `winget install GoLang.Go`, `sudo apt install golang-go` or `brew install go`):
 
 ```bash
 git clone https://github.com/Aprilox/Athanor.git
