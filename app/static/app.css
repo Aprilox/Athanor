@@ -928,3 +928,24 @@ ol.guide-access li { margin: 5px 0; }
 @media (max-width: 640px) { .cof-choix { grid-template-columns: 1fr; } .cof-verrou .ligne { width: 100%; } .cof-verrou input { flex: 1; min-width: 0; } }
 .cof-verrou input[type=password] { width: auto; }
 .cof-tete + p { margin-top: 8px; }
+/* Access (project page): the vault on the left, the three environments on the right */
+.acc-grille { display: grid; grid-template-columns: minmax(260px, 1fr) 2fr; gap: 16px; align-items: start; }
+.acc-grille > .bloc + .bloc { margin-top: 0; }
+.acc-liste { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.acc-entree, .acc-acces { border: 1px solid var(--line); border-radius: var(--rayon); padding: 8px 10px; background: var(--bg); display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.acc-entree { cursor: grab; }
+.acc-entree .cp-nom, .acc-acces .cp-nom { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono, monospace); font-size: 13px; }
+.acc-cases { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; }
+.acc-cases label { display: inline-flex; align-items: center; gap: 4px; min-height: 28px; cursor: pointer; }
+.acc-envs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.acc-env { border: 1px dashed var(--line); border-radius: var(--rayon); padding: 10px; min-height: 140px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.acc-env h3 { margin: 0; font-size: 14px; }
+.acc-courant { border-style: solid; border-color: var(--accent); }
+.acc-survol { background: var(--accent-halo); border-color: var(--accent); }
+.acc-var { width: 100%; box-sizing: border-box; font-family: var(--mono, monospace); font-size: 12.5px; }
+.acc-garde { border-top: 1px solid var(--line); padding-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+.acc-garde p { margin: 0; }
+.acc-garde > b { color: var(--attention); }
+.acc-acces .cp-nom { white-space: normal; overflow-wrap: anywhere; }
+.acc-repli { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; }
+@media (max-width: 900px) { .acc-grille, .acc-envs { grid-template-columns: 1fr; } .acc-env { min-height: 0; } }

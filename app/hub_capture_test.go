@@ -53,6 +53,7 @@ func TestCaptureHub(t *testing.T) {
 	s := nouveauServeur(Config{Kit: kit, Projets: projets, ProjetActif: "projet-00", Langue: "fr", Theme: "clair", BienvenueVue: true})
 	s.cleAcces = aleatoire(24)
 	s.coffre, s.coffreErr = coffreCapture(t), nil // never this PC's own vault
+	accesCapture(t, s, projets[0])
 	// P2 (p2-*): "Test" of a pasted GitHub token reaches this fake GitHub, never the real one
 	gh := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/user" || !strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ghp_") {
@@ -134,4 +135,30 @@ func coffreCapture(t *testing.T) *Coffre {
 		t.Fatal(err)
 	}
 	return c
+}
+
+// accesCapture: the Access page of projet-00 (acces-*): grants on dev and prod, an automatic one, an infra
+// entry kept by Athanor, and a line of the old secrets.env that is not in the vault (the fallback).
+func accesCapture(t *testing.T, s *Serveur, p Projet) {
+	_ = os.Remove(cheminAcces()) // a file left next to the test binary by an interrupted run
+	s.chargerAcces()
+	t.Cleanup(func() { _ = os.Remove(cheminAcces()) })
+	ids := map[string]EntreeCoffre{}
+	for _, e := range s.coffre.Liste() {
+		ids[e.Nom] = e
+	}
+	for _, g := range []struct{ nom, env, auto string }{
+		{"STRIPE_SECRET_KEY", "dev", ""}, {"GITHUB_TOKEN", "dev", "migration"}, {"NODE_ENV", "dev", ""},
+		{"CLOUDFLARE_API_TOKEN", "dev", ""}, {"STRIPE_SECRET_KEY", "prod", ""}, {"SITE_URL", "prod", ""},
+	} {
+		if _, err := s.acces.Ajouter(p.Nom, ids[g.nom], g.env, "", g.auto); err != nil {
+			t.Fatal(g.nom, err)
+		}
+	}
+	if err := os.MkdirAll(p.Atelier(), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(cheminSecrets(p), []byte("MAILJET_API_KEY='"+aleatoire(16)+"'\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 }

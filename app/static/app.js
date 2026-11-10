@@ -968,7 +968,7 @@ function rendreMenu(modules) {
 const chargerMenu = () => api("hub").then((d) => rendreMenu(d.modules || [])).catch(() => {});
 function traduireNav() {
   if (etat.hubModules) rendreMenu(etat.hubModules);
-  const libelles = { accueil: t("Home"), global: t("All projects"), suivi: t("Overview"), equipe: t("Team"), demandes: t("Requests"), pourvous: t("For you"), journal: t("Log"), projet: t("Manage"), chat: t("Chat"), extensions: t("Skills & MCP"), sante: t("Setup & health"), reglages: t("Settings"), options: t("Options"), distance: t("Remote"), guide: t("Guide") };
+  const libelles = { accueil: t("Home"), global: t("All projects"), suivi: t("Overview"), equipe: t("Team"), demandes: t("Requests"), pourvous: t("For you"), acces: t("Access"), journal: t("Log"), projet: t("Manage"), chat: t("Chat"), extensions: t("Skills & MCP"), sante: t("Setup & health"), reglages: t("Settings"), options: t("Options"), distance: t("Remote"), guide: t("Guide") };
   document.querySelectorAll("#nav-tiroir nav a").forEach((a) => { if (libelles[a.dataset.page]) a.textContent = libelles[a.dataset.page]; });
   $("#nav-titre-projet").textContent = t("Project");
   $("#nav-titre-outil").textContent = t("Tool");
@@ -3876,6 +3876,83 @@ async function enregistrerOptions() {
 
 // ----------------------------------------------------------------------------- rendering and events
 let numeroRendu = 0;
+// --- Access (project page): the vault on the left, this project's grants by environment on the right
+// (ARCHITECTURE §Accès); drag an entry onto a column, or tick its box (keyboard, touch). Names only, no value.
+const acc = { projet: "" };
+const AUTO_ACCES = { migration: "imported", pourvous: "For you answer" };
+function ligneAcces(a) {
+  const k = h(a.entree + "|" + a.env), auto = AUTO_ACCES[a.auto];
+  return `<li class="acc-acces">
+    <div class="ligne m0"><b class="cp-nom" title="${h(a.nom)}">${h(a.nom)}</b>${auto ? `<span class="badge">${t(auto)}</span>` : ""}<button type="button" class="btn btn-petit" data-acc-retirer="${k}">${t("Remove")}</button></div>
+    ${a.portee === "infra" ? "" : `<input type="text" class="acc-var" data-acc-var="${k}" value="${h(a.variable)}" maxlength="100" spellcheck="false" aria-label="${h(t("Variable name") + " — " + a.nom + " (" + a.env + ")")}">`}
+  </li>`;
+}
+pages.acces = async () => {
+  const projet = (etat.vue && etat.vue.projet && etat.vue.projet.nom) || etat.projet;
+  if (!projet) return `<div class="vide">${t("Choose a project")}</div>`;
+  const [d, c] = await Promise.all([api("acces?projet=" + encodeURIComponent(projet)), api("coffre")]);
+  acc.projet = projet; cof.d = c;
+  const entrees = (c.entrees || []).slice().sort((a, b) => a.famille.localeCompare(b.famille) || a.nom.localeCompare(b.nom));
+  const inj = d.injection || {}, envs = d.envs || ["dev", "staging", "prod"];
+  const donne = (id, env) => d.acces.some((a) => a.entree === id && a.env === env);
+  const carte = (x) => `<li class="acc-entree" draggable="true" data-acc-entree="${h(x.id)}">
+    <div class="ligne m0"><b class="cp-nom" title="${h(x.note || x.nom)}">${h(x.nom)}</b><span class="badge">${h(x.famille === "secret" ? typeCoffre(x.type) : t("Variable"))}</span>${x.famille === "secret" ? `<span class="badge${x.portee === "infra" ? " badge-infra" : ""}">${x.portee === "infra" ? "infra" : "code"}</span>` : ""}</div>
+    <div class="acc-cases" role="group" aria-label="${h(x.nom)}">${envs.map((e) => `<label><input type="checkbox" data-acc-case="${h(x.id + "|" + e)}"${donne(x.id, e) ? " checked" : ""}> ${e}</label>`).join("")}</div>
+  </li>`;
+  const colonne = (env) => {
+    const l = d.acces.filter((a) => a.env === env), code = l.filter((a) => a.portee !== "infra"), infra = l.filter((a) => a.portee === "infra");
+    return `<section class="acc-env${env === d.env ? " acc-courant" : ""}" data-acc-env="${env}" aria-label="${env}">
+      <h3>${env}${env === d.env ? ` <span class="muet petit">· ${t("current")}</span>` : ""}</h3>
+      ${code.length ? `<ul class="acc-liste">${code.map(ligneAcces).join("")}</ul>` : infra.length ? "" : `<p class="muet petit acc-depot">${t("Drop an entry here, or tick it on the left.")}</p>`}
+      ${infra.length ? `<div class="acc-garde"><b class="petit">🔒 ${t("Kept by Athanor, never given to the pilot")}</b>
+        <p class="muet petit">${t("The keys of your servers stay with Athanor for its own actions (deployments): the pilot never receives them.")}</p>
+        <ul class="acc-liste">${infra.map(ligneAcces).join("")}</ul></div>` : ""}
+    </section>`;
+  };
+  return `<div class="acces">
+    <div class="bloc"><h2>${t("Access")}</h2><p class="intro petit">${t("Drag an entry of the vault onto an environment, or tick it: the pilot receives the project keys and variables of the current environment, under the variable name shown.")}</p>
+      ${inj.etat === "verrouille" ? `<p class="petit attention">🔒 ${t("The vault is locked: the pilot's file is not updated until you unlock it.")}</p>` : ""}</div>
+    <div class="acc-grille">
+      <div class="bloc acc-coffre"><h2>${t("Vault")}</h2>
+        ${entrees.length ? `<ul class="acc-liste">${entrees.map(carte).join("")}</ul>` : `<p class="muet">${t("The vault is empty.")} <a href="#coffre">${t("Vault")}</a></p>`}</div>
+      <div class="bloc acc-projet"><h2>${t("This project")}</h2>
+        <div class="acc-envs">${envs.map(colonne).join("")}</div>
+        ${(inj.repli || []).length ? `<div class="acc-repli">${inj.repli.map((n) => `<p class="ligne m0 petit"><code>${h(n)}</code><span class="muet croit">${t("in the old file, not in the vault")}</span><button type="button" class="btn btn-petit" data-acc-importer>${t("Import")}</button></p>`).join("")}</div>` : ""}
+      </div>
+    </div>
+  </div>`;
+};
+async function changerAcces(corps) {
+  const r = await action(api("acces", "POST", { projet: acc.projet, ...corps }));
+  rendrePage(); // an error re-renders too: the box goes back to what the server holds
+  return r;
+}
+$("#page").addEventListener("click", async (ev) => {
+  if (etat.page !== "acces") return;
+  const b = ev.target.closest("[data-acc-retirer], [data-acc-importer]"); if (!b) return;
+  if (b.dataset.accRetirer) { const [entree, env] = b.dataset.accRetirer.split("|"); return changerAcces({ action: "retirer", entree, env }); }
+  b.disabled = true;
+  const r = await action(api("coffre/migration", "POST")); if (r) toast(t("{0} keys imported.", [r.importees]), "ok");
+  rendrePage();
+});
+$("#page").addEventListener("change", (ev) => {
+  if (etat.page !== "acces") return;
+  const x = ev.target;
+  if (x.dataset.accCase) { const [entree, env] = x.dataset.accCase.split("|"); return changerAcces({ action: x.checked ? "ajouter" : "retirer", entree, env }); }
+  if (x.dataset.accVar) { const [entree, env] = x.dataset.accVar.split("|"); return changerAcces({ action: "renommer", entree, env, variable: x.value.trim() }); }
+});
+$("#page").addEventListener("dragstart", (ev) => {
+  const e = ev.target.closest && ev.target.closest("[data-acc-entree]"); if (!e) return;
+  ev.dataTransfer.setData("text/plain", e.dataset.accEntree); ev.dataTransfer.effectAllowed = "copy";
+});
+for (const type of ["dragover", "dragleave", "drop"]) $("#page").addEventListener(type, (ev) => {
+  const c = ev.target.closest && ev.target.closest("[data-acc-env]"); if (!c) return;
+  if (type !== "dragleave") ev.preventDefault();
+  c.classList.toggle("acc-survol", type === "dragover");
+  if (type !== "drop") return;
+  const entree = ev.dataTransfer.getData("text/plain"), env = c.dataset.accEnv;
+  if (entree && !c.querySelector(`[data-acc-retirer="${CSS.escape(entree + "|" + env)}"]`)) changerAcces({ action: "ajouter", entree, env });
+});
 // --- Vault (Coffre module): the entries of /api/coffre, one tab per family; a secret's value never comes back
 const cof = { onglet: "secret", form: null, colle: null, d: { entrees: [], etat: {} } }; // colle: {texte, props} of "Paste"
 const TYPES_COFFRE = ["cloudflare", "ssh", "certificat", "github", "aws", "anthropic", "openai", "stripe", "mot_de_passe", "jeton", "autre"];
