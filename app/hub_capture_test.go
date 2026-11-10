@@ -34,6 +34,20 @@ func TestCaptureHub(t *testing.T) {
 	archive := fauxProjet(t, d, "projet-archive", 12, 12)
 	archive.Archive = true
 	projets = append(projets, archive)
+	// Home's "In progress" (accueil-*): two projects wait for the owner, three have a running pilot
+	// (its pilot.pid dated ahead, so it stays fresh for the whole run)
+	for _, p := range projets[3:5] {
+		if err := os.WriteFile(filepath.Join(p.Atelier(), "for-you", "tasks.json"), []byte(`{"taches":[{"id":"T1","titre":"Créer un compte"}]}`), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, p := range projets[5:8] {
+		f := filepath.Join(p.Atelier(), "pilot.pid")
+		if err := os.WriteFile(f, []byte("999999\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		_ = os.Chtimes(f, time.Now().Add(time.Hour), time.Now().Add(time.Hour))
+	}
 	// a cycle log that reports the quota: the Home tile draws its bar
 	quota := `{"type":"rate_limit_event","rate_limit_info":{"status":"allowed","unifiedWindows":{"five_hour":{"utilization":0.41,"resetsAt":` + fmt.Sprint(time.Now().Unix()+3600) + `}}}}` + "\n"
 	if err := os.WriteFile(filepath.Join(projets[0].LogsDir(), "cycle-001.jsonl"), []byte(quota), 0o644); err != nil {

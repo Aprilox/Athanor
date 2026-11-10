@@ -111,6 +111,7 @@ html.cadre .dialogue, html.cadre .verrou, html.cadre .assistant { top: var(--bar
 .grille-hub { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
 .grille-hub > .bloc + .bloc { margin-top: 0; }
 .tuile-module.besoin { border-color: var(--attention); }
+.en-cours { display: flex; flex-direction: column; gap: 12px; }
 .tuile-tete { gap: 8px; flex-wrap: nowrap; }
 .tuile-tete h2 { font-size: 16px; }
 .hub-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 14px; }
@@ -123,7 +124,7 @@ html.cadre .dialogue, html.cadre .verrou, html.cadre .assistant { top: var(--bar
 .missions-vide { display: flex; align-items: center; gap: 14px; padding: 6px 0 2px; }
 .missions-icone { width: 34px; height: 34px; flex: none; border-radius: 50%; border: 2px dashed var(--line); position: relative; }
 .missions-icone::after { content: ""; position: absolute; inset: 9px; border-radius: 50%; background: var(--accent-halo); }
-@media (max-width: 700px) { .grille-hub { grid-template-columns: 1fr; } .accueil-barre .ligne { flex-wrap: wrap; } .accueil-barre .btn { width: 100%; justify-content: center; text-align: center; } }
+@media (max-width: 700px) { .grille-hub, .en-cours .grille-projets { grid-template-columns: 1fr; } .accueil-barre .ligne { flex-wrap: wrap; } .accueil-barre .btn { width: 100%; justify-content: center; text-align: center; } }
 .cp-tete { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .cp-nom { font-size: 15.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
 .cp-besoin { background: var(--attention); color: var(--sur-attention); border-radius: 10px; padding: 0 8px; font-size: 12px; font-weight: 600; line-height: 19px; white-space: nowrap; }

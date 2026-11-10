@@ -1727,9 +1727,17 @@ function tuileModule(m) {
     <div class="hub-stats">${(r.stats || []).map(statModule).join("")}</div>
   </section>`;
 }
+// Home's "In progress": the same elements as Projects, those that need the owner first (the API's order), then the working ones
+function blocEnCours(tous, modules) {
+  const liste = tous.filter((e) => e.attente || e.etat === "actif").slice(0, 6);
+  return `<section class="bloc en-cours" aria-labelledby="en-cours-titre">
+    <div class="ligne m0 tuile-tete"><h2 class="m0" id="en-cours-titre">${t("In progress")}</h2><span class="espace"></span><a class="btn btn-petit" href="#global">${t("See all ({0})", [tous.length])} →</a></div>
+    ${liste.length ? `<div class="grille-projets">${liste.map((e) => ligneElement(e, modules)).join("")}</div>` : `<div class="vide">${t("Nothing in progress right now.")}</div>`}
+  </section>`;
+}
 pages.accueil = async () => {
-  const d = await api("hub");
-  etat.hubSig = JSON.stringify(d.modules); rendreMenu(d.modules || []);
+  const d = await api("hub"), modules = d.modules || [];
+  etat.hubSig = JSON.stringify([modules, d.elements || []]); rendreMenu(modules);
   const projet = etat.vue && etat.vue.projet;
   return `<div class="accueil">
     <form class="bloc accueil-barre" id="accueil-form">
@@ -1737,8 +1745,9 @@ pages.accueil = async () => {
       <div class="ligne m0"><input type="text" id="accueil-texte" class="croit" autocomplete="off" placeholder="${h(t("Say it in one sentence…"))}"><button type="submit" class="btn btn-primaire">${t("Send")}</button></div>
       <div class="muet petit">${projet ? h(t("Opens the chat of {0} with your text: nothing is sent before you press Send there.", [projet.nom])) : t("No project yet: opens a new project with your text as its request.")}</div>
     </form>
-    ${visiteHub() ? `<div class="bloc hub-visite" role="status"><span class="hub-visite-fleche" aria-hidden="true">←</span><span class="croit">${t("Your projects are still here:")} <a href="#global">Dev → ${t("All projects")}</a></span><button type="button" class="btn btn-petit" data-hub-vu>${t("Got it")}</button></div>` : ""}
-    <div class="grille-hub">${(d.modules || []).filter((m) => ((m.resume || {}).stats || []).length).map(tuileModule).join("")}</div>
+    ${visiteHub() ? `<div class="bloc hub-visite" role="status"><span class="hub-visite-fleche" aria-hidden="true">←</span><span class="croit">${t("Your projects are still here:")} <a href="#global">${t("Projects")}</a></span><button type="button" class="btn btn-petit" data-hub-vu>${t("Got it")}</button></div>` : ""}
+    <div class="grille-hub">${modules.filter((m) => ((m.resume || {}).stats || []).length).map(tuileModule).join("")}</div>
+    ${blocEnCours(d.elements || [], modules)}
     <section class="bloc missions"><h2>${t("Missions")}</h2>
       <div class="missions-vide"><span class="missions-icone" aria-hidden="true"></span><div><b>${t("No mission yet")}</b><div class="muet petit">${t("Coming soon: one sentence, and Dev and Servers work together.")}</div></div></div>
     </section>
@@ -4587,10 +4596,10 @@ async function rafraichir() {
         const d = await api("hub").catch(() => null);
         if (d && JSON.stringify([d.modules || [], d.elements || []]) !== etat.globalSig) rendrePage();
       }
-      // Home: rebuilt only when a module's tile changed (the bar keeps its text and its focus)
+      // Home: rebuilt only when a module's tile or an element changed (the bar keeps its text and its focus)
       if (etat.page === "accueil" && ++etat.hubTic % 2 === 0) {
         const d = await api("hub").catch(() => null);
-        if (d && JSON.stringify(d.modules) !== etat.hubSig) rendrePage();
+        if (d && JSON.stringify([d.modules || [], d.elements || []]) !== etat.hubSig) rendrePage();
       }
       if (etat.page === "chat") majChat(false);
       if (etat.page === "distance") await majDistance();
