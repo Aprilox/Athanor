@@ -52,6 +52,7 @@ You describe what you want: a game, a website, an app, a tool. Athanor runs [Cla
 | | |
 |---|---|
 | **One home page** | Athanor opens on its hub: a “What do you want to do?” bar, one tile per module with its live figures, and what needs you. For now the one module is **Dev**, the projects Claude builds, with every page it had. |
+| **The vault** | Your keys, tokens and settings in one encrypted place. *Paste* a `.env` block or an MCP configuration and Athanor recognises each key; *Test* checks it with its provider and drafts a note for the AI. Project keys reopen alone on this PC, server keys only with your password, and a copy of the disk opens nothing. |
 | **An autonomous loop** | One milestone per cycle, a fresh context each time, so turns stay cheap and the project never drifts. Usage limit reached → pause until it reopens, or switch to a fallback model. Error → retry with a growing delay. Silent or over-long cycle → cut and resumed. PC restarted → resumes where it stopped. All state lives in files. |
 | **Parallel mode** | One switch per project. A fine-grained plan with dependencies; up to 10 workers build independent milestones at once, each in its own git worktree; the pilot merges each one as soon as it finishes and starts the next, and the lead verifies once at the end. |
 | **Eco mode** | One switch per project, for when the quota matters more than speed: the lead does the work itself instead of handing it to sub-agents, one review at delivery, at most 4 images per cycle, shorter command outputs. The model and the effort stay as you set them. |
@@ -353,6 +354,19 @@ The screenshots show the dark "Slate" and the "Light" palettes.
 - With the option off, new programs open on your screen again. Those already running stay where they are until they close: the app still lets you go and close them.
 
 The interface is translated into English, French, Spanish, German, Italian and Portuguese. The language you choose is also the one Claude writes the plan, log and documents in.
+
+### The vault
+
+*Vault*, in the menu, keeps the keys, tokens and settings of your projects and servers in one place, encrypted in Athanor's folder (`hub/coffre.json`). *Guide › The vault* walks through it.
+
+- **Secrets and variables.** A secret's value is shown only while you type it: afterwards no page, API answer or log contains it. Variables (a region, a user name) are plain settings, readable even while the vault is locked.
+- **Paste.** A whole `.env` block, an MCP configuration, a token or a private key: Athanor recognises each value (Cloudflare, GitHub, Anthropic, OpenAI, Stripe, AWS, SSH, certificates, URLs with credentials) and proposes a name, a type and a scope. Only the names come back to the page.
+- **Test.** Checks a key with its own provider and nowhere else (Cloudflare and GitHub: whether it works and what it may do; SSH: the key's type and the server's answer), then proposes a note for the AI that you can edit: it tells Claude what the key is for without showing the value.
+- **Two scopes.** *code*: what a project's code uses (an API key, a test token). *infra*: the keys of your servers and accounts; they never leave Athanor's process, and need a password for Athanor (*Settings → Options → Lock*).
+- **Locking.** Your project keys reopen alone on this PC; the keys of your servers open only with your password, and a copy of the disk opens nothing. In detail: each scope has its own random AES-256-GCM key. The *code* key is wrapped by your password (PBKDF2-SHA256, 600,000 iterations) and by the system's keystore (DPAPI on Windows, the Keychain on macOS, the Secret Service on Linux); the *infra* key only by your password. It opens when you unlock Athanor, in the window or from a paired phone, and is wiped from memory when you lock it, when the session ends or when Athanor stops. A paired phone sees the list, never a value, and cannot change it.
+- **Your old keys.** On start-up, Athanor copies into the vault each project's `.athanor/secrets.env`, the keys of *Skills & MCP* and those of its own `.env`, without changing those files. Starting again imports nothing twice; *Undo the import* removes exactly what was added. For now, projects still get their keys from those files: giving a project the vault entries it needs comes next.
+
+**What the vault protects against, and what it does not.** Athanor guards against an agent that is tricked (a prompt injection in a web page, a README or a command's output), an agent that makes a mistake (`rm -rf`, the wrong server), someone on your local network or on the Internet (the app listens on `127.0.0.1` only, and a remote device must be paired), and a copied disk or backup (the vault file alone opens nothing). Each guard is in Athanor's Go code, never in an instruction to Claude, so it holds even if an agent obeys an attacker. It does **not** guard against malicious software running with all your user rights: such a program can read what you can read, watch what you type and wait for you to unlock.
 
 ---
 
