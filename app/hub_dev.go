@@ -138,4 +138,13 @@ func besoinProjet(pv ProjetVue) string {
 	}
 	return ""
 }
-func (moduleDev) Tutoriel() []EtapeTutoriel { return nil }
+func (moduleDev) Tutoriel() []EtapeTutoriel {
+	return []EtapeTutoriel{
+		{Titre: "Your projects", Texte: "Each project has its folder, its plan and its pilot. Choose one here, or create a new one from this list.", Cible: "#sel-projet"},
+		{Titre: "The plan", Texte: "Claude splits the work into milestones. Each one is built, checked, then ticked here: you see what is done and what is left.", Cible: ".bloc-plan", Page: "#suivi"},
+		{Titre: "The pilot", Texte: "Start launches the pilot: Claude works cycle after cycle, one milestone each time. Stop halts it; Start carries on where it was.", Cible: `[data-act="demarrer"], [data-act="arreter"]`, Page: "#suivi"},
+		{Titre: "Requests", Texte: "Ask for a change or a new feature at any time: it waits in the queue and joins the plan at the next cycle.", Cible: `#onglets-module a[data-page="demandes"]`},
+		{Titre: "For you", Texte: "What only you can do (create an account, give a key, check something by hand) waits here, step by step. Claude goes on with the rest meanwhile.", Cible: `#onglets-module a[data-page="pourvous"]`},
+		{Titre: "Chat", Texte: "Talk with Claude about the project: ask a question, explain an idea. This tour stays in the “?”, at the top of the Guide.", Cible: `#onglets-module a[data-page="chat"]`},
+	}
+}

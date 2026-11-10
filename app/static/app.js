@@ -1167,8 +1167,11 @@ function proposerTutoriel() {
   if (!v || v.verrouille || v.bienvenue || etat.assistant >= 0 || etat.visite >= 0 || !m || !(m.tutoriel || []).length) return;
   etat.toursVus ||= new Set(); // a paired device may not write the preference: shown once per session there
   if ((v.tours || {})[m.id] || etat.toursVus.has(m.id)) return;
+  const connu = m.id === "dev" && !(m.id in (v.tours || {})) && (v.projets || []).some((p) => p.faits > 0);
   etat.toursVus.add(m.id); (v.tours ||= {})[m.id] = true;
   api("preferences", "POST", { tours: { [m.id]: true } }).catch(() => {});
+  // someone who already ran Studio (a milestone done, never this tour, never reset): a reminder, not the tour
+  if (connu) return toast(t("New: the tutorial is in the “?”."));
   lancerTutoriel(m);
 }
 function etapesVisite() { return etat.etapesVisite || []; }
@@ -3958,7 +3961,7 @@ async function rendreOptions() {
       </div>
       <div class="bloc local-seul"><h2>${t("Athanor's folder")}</h2>
         <p class="m0"><code class="chemin-kit">${h(o.kit)}</code></p><div class="muet petit mt-1">${o.kit_valide ? "✔ " + t("Athanor's own files: settings, token, logs, the tools Claude installs. Your projects are elsewhere.") : "✖ " + t("this folder is not the tool")}</div>
-        <div class="ligne mt-1"><button class="btn btn-petit" data-ouvrir="kit">${t("Open the folder")}</button><button class="btn btn-petit" data-ouvrir="logs">${t("Logs folder")}</button><span class="espace"></span><button class="btn btn-petit" id="op-guide">${t("Show the first-launch guide again")}</button></div>
+        <div class="ligne mt-1"><button class="btn btn-petit" data-ouvrir="kit">${t("Open the folder")}</button><button class="btn btn-petit" data-ouvrir="logs">${t("Logs folder")}</button><span class="espace"></span><button class="btn btn-petit" id="op-guide">${t("Show the first-launch guide and the tutorials again")}</button></div>
         <details class="mt-1" ${o.kit_valide ? "" : "open"}><summary class="petit muet">${t("Use another tool folder (advanced)")}</summary>
           <p class="muet petit">${t("Only for a tool folder you moved or copied yourself: Athanor then uses that one, with its settings and token.")}</p>
           <input type="text" id="op-kit" data-option value="${h(o.kit)}"></details>
@@ -4504,7 +4507,11 @@ $("#page").addEventListener("click", async (ev) => {
   if (page === "reglages") {
     if (b.dataset.gerer) { if (b.dataset.archive) { location.hash = "#archives"; return; } etat.projet = b.dataset.gerer; etat.evenements = []; etat.dernierJournal = 0; await rafraichir(); location.hash = "#projet"; return; }
     if (b.dataset.retirerProjet) { if (await confirmer(t("Remove “{0}” from the list? Its folder stays intact.", [b.dataset.retirerProjet]), { ok: t("Remove from list"), danger: true })) { await action(api("projets/" + encodeURIComponent(b.dataset.retirerProjet), "DELETE")); if (etat.projet === b.dataset.retirerProjet) etat.projet = ""; await rafraichir(); rendrePage(); } return; }
-    if (b.id === "op-guide") { await action(api("preferences", "POST", { bienvenue_vue: false })); etat.assistant = 0; return rendreAssistant(); }
+    if (b.id === "op-guide") { // the wizard, then every tutorial again at the next visit of its part (false: reset, never a reminder)
+      const tours = Object.fromEntries((etat.hubModules || []).filter((m) => (m.tutoriel || []).length).map((m) => [m.id, false]));
+      await action(api("preferences", "POST", { bienvenue_vue: false, tours })); etat.toursVus = new Set(); if (etat.vue) etat.vue.tours = { ...etat.vue.tours, ...tours };
+      etat.assistant = 0; return rendreAssistant();
+    }
     if (b.id === "mdp-enregistrer") { const r = await action(api("mot-de-passe", "POST", { ancien: ($("#mdp-ancien") || {}).value || "", nouveau: $("#mdp-nouveau").value })); if (r) { toast(r.defini ? t("Lock enabled: the padlock is at the bottom left.") : t("Lock removed."), "ok"); rendrePage(); rafraichir(); } return; }
   }
 });

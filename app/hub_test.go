@@ -475,8 +475,10 @@ func TestTutoriels(t *testing.T) {
 			}
 		}
 	}
-	if n := tours["hub"]; n < 4 || n > 6 {
-		t.Fatalf("Home tour: %d steps, want 4 to 6 (%v)", n, tours)
+	for _, id := range []string{"hub", "dev"} {
+		if n := tours[id]; n < 4 || n > 6 {
+			t.Fatalf("%s tour: %d steps, want 4 to 6 (%v)", id, n, tours)
+		}
 	}
 	if _, ok := tours["serveurs"]; ok {
 		t.Fatal("a module without a tour sent one")
@@ -496,6 +498,14 @@ func TestTutoriels(t *testing.T) {
 	if c, _ := appel("POST", "/api/preferences", `{"tours":{"../x":true}}`); c != http.StatusBadRequest {
 		t.Fatalf("unknown tour id: %d, want 400", c)
 	}
+	// the Options button resets every tour at once (false: shown again, never only the reminder)
+	if c, _ := appel("POST", "/api/preferences", `{"bienvenue_vue":false,"tours":{"hub":false,"dev":false}}`); c != http.StatusOK {
+		t.Fatalf("reset every tour: %d", c)
+	}
+	if _, e := appel("GET", "/api/etat", ""); e["tours"].(map[string]any)["dev"] != false || e["bienvenue"] != true {
+		t.Fatalf("tours not reset: %v", e)
+	}
+	appel("POST", "/api/preferences", `{"tours":{"hub":true}}`)
 	if cfg := lireConfig(); !cfg.Tours["hub"] {
 		t.Fatalf("seen state not written in the config: %v", cfg.Tours)
 	}
