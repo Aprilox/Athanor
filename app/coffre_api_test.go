@@ -38,6 +38,11 @@ func serveurCoffreTest(t *testing.T) *Serveur {
 	t.Cleanup(func() { _ = os.Remove(s.coffre.chemin) })
 	_ = os.RemoveAll(dossierJournalAudit()) // the audit log is written there too: each test starts with an empty one
 	t.Cleanup(func() { _ = os.RemoveAll(dossierJournalAudit()) })
+	for _, f := range []string{"approbations.json", "regles.json"} { // the approvals too
+		_ = os.Remove(filepath.Join(dossierApprobations(), f))
+		t.Cleanup(func() { _ = os.Remove(filepath.Join(dossierApprobations(), f)) })
+	}
+	s.chargerApprobations()
 	s.csrf, s.cleAcces = "jeton", "cle"
 	return s
 }

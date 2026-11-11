@@ -50,6 +50,8 @@ type Serveur struct {
 	accesErr error
 	// the hub's session tokens of the pilots (hub_jetons.go)
 	jetons *Sessions
+	// the approvals of the agents and the owner's rules (hub_approbations.go)
+	approbations *Approbations
 }
 
 func nouveauServeur(config Config) *Serveur {
@@ -82,6 +84,7 @@ func nouveauServeur(config Config) *Serveur {
 	s.chargerAcces() // before the vault: its import grants a key shared by two projects (accorderPartagee)
 	s.chargerCoffre()
 	s.chargerSessions()
+	s.chargerApprobations()
 	s.bureau = NouveauBureau(kit)
 	// Windows: a window opened on the screen by a program the application started (a Claude run's): hidden
 	demarrerGardeFenetres(uint32(os.Getpid()), func(t string) { noterFenetreKit(s.kitCourant().Racine, t) })
@@ -333,6 +336,8 @@ func (s *Serveur) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/hub/alertes", s.garde(false, s.apiAlertes))
 	mux.HandleFunc("GET /api/hub/audit", s.garde(false, s.apiAudit))
 	mux.HandleFunc("POST /api/hub/audit/verifier", s.garde(false, s.apiAuditVerifier))
+	mux.HandleFunc("GET /api/hub/approbations", s.garde(false, s.apiApprobations))
+	mux.HandleFunc("POST /api/hub/approbations", s.garde(false, s.apiApprobationDecider))
 	mux.HandleFunc("GET /api/coffre", s.garde(false, s.apiCoffre))
 	mux.HandleFunc("POST /api/coffre", s.garde(false, s.apiCoffreAjouter))
 	mux.HandleFunc("POST /api/coffre/{id}", s.garde(false, s.apiCoffreModifier))
