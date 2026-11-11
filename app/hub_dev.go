@@ -151,3 +151,16 @@ func (moduleDev) Tutoriel() []EtapeTutoriel {
 		{Titre: "Chat", Texte: "Talk with Claude about the project: ask a question, explain an idea. This tutorial stays in the “?”, at the top of the Guide.", Cible: `#onglets-module a[data-page="chat"]`},
 	}
 }
+
+// The Dev module on the bus: etat_projet gives a project's progress (no path, no value).
+func (moduleDev) Actions() []string { return []string{"etat_projet"} }
+
+func (moduleDev) Recevoir(s *Serveur, m MessageHub) (MessageHub, error) {
+	for _, pv := range s.vuesProjets("") {
+		if pv.Nom == m.Projet {
+			return MessageHub{Donnees: map[string]any{"nom": pv.Nom, "actif": pv.Actif, "phase": pv.Phase,
+				"jalon": firstNonEmpty(pv.JalonTitre, pv.Jalon), "faits": pv.Faits, "jalons": pv.Jalons, "besoin": pv.Besoin}}, nil
+		}
+	}
+	return refusBus("unknown project"), nil
+}

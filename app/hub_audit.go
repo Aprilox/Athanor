@@ -37,6 +37,7 @@ type LigneAudit struct {
 	Vers     string `json:"vers,omitempty"`
 	Mission  string `json:"mission,omitempty"`
 	Projet   string `json:"projet,omitempty"`
+	Env      string `json:"env,omitempty"`
 	Agent    string `json:"agent,omitempty"`
 	Action   string `json:"action,omitempty"`
 	Resultat string `json:"resultat,omitempty"`
@@ -193,7 +194,7 @@ func (a Audit) Ecrire(l LigneAudit) error {
 		secrets = a.Secrets()
 		slices.SortFunc(secrets, func(x, y string) int { return len(y) - len(x) })
 	}
-	for _, p := range []*string{&l.Type, &l.De, &l.Vers, &l.Mission, &l.Projet, &l.Agent, &l.Action, &l.Resultat} {
+	for _, p := range []*string{&l.Type, &l.De, &l.Vers, &l.Mission, &l.Projet, &l.Env, &l.Agent, &l.Action, &l.Resultat} {
 		*p = masquerTexte(*p, secrets)
 	}
 	b, err := json.Marshal(l)
