@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -23,30 +24,39 @@ import (
 // dureeApprobation: an approval not decided within this delay expires (refused, for the agent).
 const dureeApprobation = 24 * time.Hour
 
+// C29: bounds against a flood of requests (phone, approbations.json).
+const (
+	maxAttenteProjet  = 20                  // pending approvals per project
+	delaiNotification = 5 * time.Minute     // one phone notification per project within this delay
+	gardeApprobations = 30 * 24 * time.Hour // a decided or expired approval is purged after this delay
+)
+
 var (
 	errApprobationInconnue = erreurEntree("Unknown approval")
 	errApprobationDecidee  = erreurEntree("This approval was already decided or has expired")
 	errApprobationDecision = erreurEntree("Unknown decision (accepter, refuser or toujours)")
 	errApprobationEntree   = erreurEntree("Choose a project key (code) of the vault for this access")
 	errRegleInconnue       = erreurEntree("Unknown rule")
+	errTropDemandes        = errors.New("too many requests are waiting for the owner on this project: wait for their decisions")
 )
 
 // Approbation: one request of an agent. Etat: attente | acceptee | refusee | expiree; Par: fenetre |
 // appareil:<id>; T: the time of the decision (or of the expiry).
 type Approbation struct {
-	ID      string            `json:"id"`
-	Projet  string            `json:"projet"`
-	Env     string            `json:"env"`
-	Mission string            `json:"mission,omitempty"`
-	Agent   string            `json:"agent"`
-	Action  string            `json:"action"`
-	Details map[string]string `json:"details,omitempty"`
-	Raison  string            `json:"raison"`
-	Cree    string            `json:"cree"`
-	Expire  string            `json:"expire"`
-	Etat    string            `json:"etat"`
-	Par     string            `json:"par,omitempty"`
-	T       string            `json:"t,omitempty"`
+	ID       string            `json:"id"`
+	Projet   string            `json:"projet"`
+	Env      string            `json:"env"`
+	Mission  string            `json:"mission,omitempty"`
+	Agent    string            `json:"agent"`
+	Action   string            `json:"action"`
+	Details  map[string]string `json:"details,omitempty"`
+	Raison   string            `json:"raison"`
+	Cree     string            `json:"cree"`
+	Expire   string            `json:"expire"`
+	Etat     string            `json:"etat"`
+	Par      string            `json:"par,omitempty"`
+	T        string            `json:"t,omitempty"`
+	Utilisee string            `json:"utilisee,omitempty"` // an accepted action done (I6: one accord, one action)
 }
 
 // RegleAccord: "do not ask again" for this action of this project in this environment; for an access,
@@ -65,6 +75,7 @@ type Approbations struct {
 	dossier    string
 	liste      []Approbation
 	regles     []RegleAccord
+	notifie    map[string]time.Time // project -> last phone notification
 	Maintenant func() time.Time
 }
 
@@ -108,30 +119,54 @@ func (a *Approbations) enregistrer() error {
 	return ecrireAtomique(filepath.Join(a.dossier, "regles.json"), b, 0o600)
 }
 
-// expirer marks the pending approvals past their delay (lock held); says whether one changed.
+// expirer marks the pending approvals past their delay and purges the ones decided long ago (lock
+// held); says whether one changed.
 func (a *Approbations) expirer() bool {
 	t, change := a.maintenant(), false
-	for i := range a.liste {
-		x := &a.liste[i]
+	garde := a.liste[:0]
+	for _, x := range a.liste {
 		if exp, err := time.Parse(time.RFC3339, x.Expire); x.Etat == "attente" && (err != nil || !t.Before(exp)) {
 			x.Etat, x.T, change = "expiree", t.Format(time.RFC3339), true
 		}
+		if d, err := time.Parse(time.RFC3339, x.T); x.Etat != "attente" && err == nil && t.Sub(d) > gardeApprobations {
+			change = true
+			continue
+		}
+		garde = append(garde, x)
 	}
+	a.liste = garde
 	return change
 }
 
-// Demander records a new pending approval (an agent's text is cut to a sane length).
+// bornerApprobation cuts an agent's text to a sane length.
+func bornerApprobation(x *Approbation) {
+	x.Raison = couper(x.Raison, 500)
+	d := map[string]string{}
+	for k, v := range x.Details {
+		d[k] = couper(v, 200)
+	}
+	x.Details = d
+}
+
+// Demander records a new pending approval (at most maxAttenteProjet pending per project).
 func (a *Approbations) Demander(x Approbation) (Approbation, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	t := a.maintenant()
-	x.ID, x.Etat, x.Par, x.T = aleatoire(8), "attente", "", ""
+	x.ID, x.Etat, x.Par, x.T, x.Utilisee = aleatoire(8), "attente", "", "", ""
 	x.Cree, x.Expire = t.Format(time.RFC3339), t.Add(dureeApprobation).Format(time.RFC3339)
-	x.Raison = couper(x.Raison, 500)
-	for k, v := range x.Details {
-		x.Details[k] = couper(v, 200)
-	}
+	bornerApprobation(&x)
 	a.expirer()
+	n := 0
+	for _, y := range a.liste {
+		if y.Projet == x.Projet && y.Etat == "attente" {
+			n++
+		}
+	}
+	if n >= maxAttenteProjet {
+		_ = a.enregistrer()
+		return Approbation{}, errTropDemandes
+	}
 	a.liste = append(a.liste, x)
 	if err := a.enregistrer(); err != nil {
 		a.liste = a.liste[:len(a.liste)-1]
@@ -174,6 +209,55 @@ func (a *Approbations) Lire(id string) (Approbation, bool) {
 	return Approbation{}, false
 }
 
+// Reprendre (I6) looks for the same request (project, environment, action, details): an accepted one not
+// used yet is used now ("utilisee"), else a pending one is returned ("attente"); "" when none.
+func (a *Approbations) Reprendre(x Approbation) (Approbation, string, error) {
+	bornerApprobation(&x)
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	change := a.expirer()
+	var attente *Approbation
+	for i := range a.liste {
+		y := &a.liste[i]
+		if y.Projet != x.Projet || y.Env != x.Env || y.Action != x.Action || !maps.Equal(y.Details, x.Details) {
+			continue
+		}
+		if y.Etat == "acceptee" && y.Utilisee == "" {
+			y.Utilisee = a.maintenant().Format(time.RFC3339)
+			if err := a.enregistrer(); err != nil {
+				y.Utilisee = ""
+				return Approbation{}, "", err
+			}
+			return *y, "utilisee", nil
+		}
+		if y.Etat == "attente" {
+			attente = y
+		}
+	}
+	if change {
+		_ = a.enregistrer()
+	}
+	if attente != nil {
+		return *attente, "attente", nil
+	}
+	return Approbation{}, "", nil
+}
+
+// ANotifier (C29): at most one phone notification per project within delaiNotification.
+func (a *Approbations) ANotifier(projet string) bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	t := a.maintenant()
+	if d, ok := a.notifie[projet]; ok && t.Sub(d) < delaiNotification {
+		return false
+	}
+	if a.notifie == nil {
+		a.notifie = map[string]time.Time{}
+	}
+	a.notifie[projet] = t
+	return true
+}
+
 // PourAgent: the state an agent sees: attente, acceptee or refusee (an expired approval is refused).
 func (a *Approbations) PourAgent(id string) string {
 	x, ok := a.Lire(id)
@@ -211,6 +295,9 @@ func (a *Approbations) DeciderAvec(id, decision, par, entree string) (Approbatio
 	x.Etat, x.Par, x.T = "acceptee", par, a.maintenant().Format(time.RFC3339)
 	if decision == "refuser" {
 		x.Etat = "refusee"
+	}
+	if decision == "toujours" { // the rule lets the action through: this accord is not kept for one more
+		x.Utilisee = x.T
 	}
 	r := RegleAccord{x.Projet, x.Env, x.Action, "", ""}
 	if entree != "" {
@@ -299,6 +386,9 @@ func (s *Serveur) demanderApprobation(x Approbation) (Approbation, error) {
 // notifierApprobation (P7): the paired devices are told once, at the creation (the tag replaces nothing
 // else); a tap opens For you, where the approval is decided.
 func (s *Serveur) notifierApprobation(x Approbation) {
+	if !s.approbations.ANotifier(x.Projet) { // C29: the next ones are in For you, without a ping each
+		return
+	}
 	quoi := s.textePush("appr")
 	if x.Action == "demander_acces" {
 		quoi = s.textePush("appr_acces")
@@ -312,13 +402,25 @@ func (s *Serveur) notifierApprobation(x Approbation) {
 }
 
 // exigerAccord (I6): an action on prod or that destroys data waits for the owner's accord, unless the
-// owner set a rule for it; when it must wait, the pending approval is created and returned with true.
-// shortcut: no "autonomous" mission yet (stage 6 adds it), so only a rule lifts the wait.
+// owner set a rule for it or accepted this very request (used once); when it must wait, the pending
+// approval (the same one when it is asked again) is returned with true.
+// shortcut: no "autonomous" mission yet (stage 6 adds it), so only a rule or an accord lifts the wait.
 func (s *Serveur) exigerAccord(x Approbation, destructif bool) (Approbation, bool, error) {
 	if x.Env != "prod" && !destructif || s.approbations.Regle(RegleAccord{Projet: x.Projet, Env: x.Env, Action: x.Action}) {
 		return x, false, nil
 	}
-	x, err := s.demanderApprobation(x)
+	y, etat, err := s.approbations.Reprendre(x)
+	switch {
+	case err != nil:
+		return x, false, err
+	case etat == "utilisee":
+		s.ecrireAudit(LigneAudit{Type: "evenement", De: x.Agent, Vers: "hub", Mission: x.Mission, Projet: x.Projet, Env: x.Env,
+			Agent: x.Agent, Action: "approbation utilisée: " + x.Action, Resultat: y.ID})
+		return y, false, nil
+	case etat == "attente":
+		return y, true, nil
+	}
+	x, err = s.demanderApprobation(x)
 	return x, true, err
 }
 

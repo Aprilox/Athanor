@@ -150,6 +150,9 @@ func outilDemanderAcces(s *Serveur, x SessionHub, args json.RawMessage) (string,
 	if err != nil {
 		return "", err
 	}
+	if !nomSecretValide(nom) { // C31: the name goes to the phone and approbations.json, never a value
+		return "", errors.New("nom must be a variable name such as STRIPE_KEY (letters, digits, _; not a name the shell uses)")
+	}
 	raison, err := texteRequis("raison", a.Raison, 500)
 	if err != nil {
 		return "", err
@@ -223,6 +226,8 @@ func outilDemanderDeploiement(s *Serveur, x SessionHub, args json.RawMessage) (s
 	switch {
 	case rep.Etat == "ok":
 		return enJSON(rep.Donnees), nil
+	case rep.Etat == "attente":
+		return rep.Raison + ": once accepted, call demander_deploiement again with the same environment and commit; go on with work that does not need it", nil
 	case rep.Raison == "module absent":
 		return "", errors.New("the Servers module does not exist yet: no deployment from Athanor for now")
 	}

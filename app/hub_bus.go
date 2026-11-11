@@ -3,9 +3,12 @@ package main
 // The bus between modules (I5): every action a module asks of another goes through s.envoyerBus, which
 // checks the recipient exists and declares the action, checks the access (the project is linked for that
 // environment), keeps any path into the hub's or another module's data out of the answer (I4), and writes
-// the request and its answer to the audit log under the same ID.
+// the request and its answer to the audit log under the same ID. I6 is checked before the recipient acts:
+// on prod, or for an action the recipient says is destructive, the answer is "attente" until the owner
+// accepts that very request (accordBus).
 
 import (
+	"fmt"
 	"path/filepath"
 	"runtime"
 	"slices"
@@ -24,7 +27,7 @@ type MessageHub struct {
 	Mission string         `json:"mission,omitempty"`
 	Agent   string         `json:"agent,omitempty"`
 	Donnees map[string]any `json:"donnees,omitempty"`
-	Etat    string         `json:"etat,omitempty"` // ok | refuse | erreur
+	Etat    string         `json:"etat,omitempty"` // ok | refuse | erreur | attente
 	Raison  string         `json:"raison,omitempty"`
 }
 
@@ -34,7 +37,12 @@ type recepteurBus interface {
 	Recevoir(s *Serveur, m MessageHub) (MessageHub, error)
 }
 
-// envoyerBus: sends a request to its module and returns the answer (Etat "ok", "refuse" or "erreur").
+// risqueBus (optional): "lecture" for an action that changes nothing (no accord, even on prod),
+// "destructif" for one that destroys data (an accord in every environment), "" otherwise.
+type risqueBus interface{ Risque(action string) string }
+
+// envoyerBus: sends a request to its module and returns the answer (Etat "ok", "refuse", "erreur" or
+// "attente": Raison then names the pending approval).
 func (s *Serveur) envoyerBus(m MessageHub) MessageHub {
 	m.Type, m.Etat, m.Raison = "demande", "", ""
 	if m.ID == "" {
@@ -82,11 +90,39 @@ func (s *Serveur) traiterBus(m MessageHub) MessageHub {
 	if raison := s.accesBus(m); raison != "" {
 		return refusBus(raison)
 	}
+	if rep, attend := s.accordBus(m, vers); attend {
+		return rep
+	}
 	rep, err := r.Recevoir(s, m)
 	if err != nil {
 		return MessageHub{Etat: "erreur", Raison: err.Error()}
 	}
 	return rep
+}
+
+// accordBus (I6): whether the request must wait for the owner (and the answer to give then). Asked again
+// with the same data, it is the same approval; once accepted, it lets that request through once.
+func (s *Serveur) accordBus(m MessageHub, vers Module) (MessageHub, bool) {
+	risque := ""
+	if r, ok := vers.(risqueBus); ok {
+		risque = r.Risque(m.Action)
+	}
+	if risque == "lecture" {
+		return MessageHub{}, false
+	}
+	details := map[string]string{}
+	for k, v := range m.Donnees {
+		details[k] = s.masquerSecrets(fmt.Sprint(v))
+	}
+	x, attend, err := s.exigerAccord(Approbation{Projet: m.Projet, Env: m.Env, Mission: m.Mission, Agent: firstNonEmpty(m.Agent, m.De),
+		Action: m.Action, Details: details, Raison: m.De + " → " + m.Vers + ": " + m.Action}, risque == "destructif")
+	switch {
+	case err != nil:
+		return MessageHub{Etat: "erreur", Raison: err.Error()}, true
+	case attend:
+		return MessageHub{Etat: "attente", Raison: "waiting for the owner, id " + x.ID}, true
+	}
+	return MessageHub{}, false
 }
 
 // accesBus: why the project may not be asked about in that environment ("" = it may). A project is

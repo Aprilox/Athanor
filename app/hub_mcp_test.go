@@ -17,6 +17,9 @@ import (
 func serveurMCPTest(t *testing.T) (*Serveur, *http.ServeMux, *horlogeJeton) {
 	t.Helper()
 	s := serveurCoffreTest(t)
+	refusMCP.Lock()
+	refusMCP.derniere, refusMCP.n = time.Time{}, 0 // C30: each test sees its first refusal logged
+	refusMCP.Unlock()
 	h := &horlogeJeton{time.Now()}
 	s.jetons.Maintenant = h.maintenant
 	d := t.TempDir()

@@ -6,8 +6,11 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
+	"sync"
+	"time"
 )
 
 // OutilHub: a tool of the hub. Faire answers the text the agent reads; an error is a tool error (isError).
@@ -42,7 +45,7 @@ func (s *Serveur) apiMCP(w http.ResponseWriter, r *http.Request) {
 		x, ok = s.verifierJeton(strings.TrimSpace(jeton))
 	}
 	if !ok {
-		s.ecrireAudit(LigneAudit{Type: "evenement", De: "inconnu", Vers: "hub", Action: "mcp", Resultat: "jeton refusé"})
+		s.auditRefusMCP()
 		w.Header().Set("WWW-Authenticate", "Bearer")
 		repondreMCP(w, http.StatusUnauthorized, nil, nil, &erreurMCP{-32001, "invalid, expired or revoked session token"})
 		return
@@ -93,6 +96,31 @@ func (s *Serveur) apiMCP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// refusMCP (C30): any local process can call /api/mcp; its refusals are counted and logged at most once a
+// minute, so that a loop cannot fill the audit log.
+var refusMCP struct {
+	sync.Mutex
+	derniere time.Time
+	n        int
+}
+
+func (s *Serveur) auditRefusMCP() {
+	refusMCP.Lock()
+	refusMCP.n++
+	if time.Since(refusMCP.derniere) < time.Minute {
+		refusMCP.Unlock()
+		return
+	}
+	n := refusMCP.n
+	refusMCP.derniere, refusMCP.n = time.Now(), 0
+	refusMCP.Unlock()
+	r := "jeton refusé"
+	if n > 1 {
+		r = fmt.Sprintf("jeton refusé (%d fois depuis la ligne précédente)", n)
+	}
+	s.ecrireAudit(LigneAudit{Type: "evenement", De: "inconnu", Vers: "hub", Action: "mcp", Resultat: r})
+}
+
 // appelOutilMCP: a tool outside the token's list is answered as unknown (it does not exist for this session).
 func (s *Serveur) appelOutilMCP(w http.ResponseWriter, x SessionHub, q requeteMCP) {
 	var p struct {
@@ -103,6 +131,7 @@ func (s *Serveur) appelOutilMCP(w http.ResponseWriter, x SessionHub, q requeteMC
 		repondreMCP(w, http.StatusOK, q.ID, nil, &erreurMCP{-32602, "invalid params"})
 		return
 	}
+	p.Name = couper(p.Name, 64) // C30: an agent's tool name goes to the audit log and back
 	ligne := LigneAudit{Type: "demande", De: x.Agent, Vers: "hub", Projet: x.Projet, Mission: x.Mission, Agent: x.Agent, Action: "mcp " + p.Name}
 	o, connu := outilsHub[p.Name]
 	permis := false

@@ -158,6 +158,9 @@ func (moduleDev) Tutoriel() []EtapeTutoriel {
 // The Dev module on the bus: etat_projet gives a project's progress (no path, no value).
 func (moduleDev) Actions() []string { return []string{"etat_projet"} }
 
+// Risque: etat_projet only reads (risqueBus).
+func (moduleDev) Risque(string) string { return "lecture" }
+
 func (moduleDev) Recevoir(s *Serveur, m MessageHub) (MessageHub, error) {
 	for _, pv := range s.vuesProjets("") {
 		if pv.Nom == m.Projet {
