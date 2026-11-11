@@ -4,9 +4,11 @@ package main
 // answer ever holds a secret's value: entries go out through Liste/masquer, errors are fixed messages.
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"slices"
+	"strings"
 	"unicode/utf8"
 )
 
@@ -162,6 +164,17 @@ func (s *Serveur) apiCoffreSupprimer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := r.PathValue("id")
+	if noms, err := serveursUtilisantCle(id); err != nil || len(noms) > 0 {
+		// a server reaches its host with it: removed, the server would be cut off (or the file is unreadable)
+		if err != nil {
+			s.erreurServeurs(w, err)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.WriteHeader(http.StatusConflict)
+		_ = json.NewEncoder(w).Encode(map[string]any{"erreur_key": "This key opens the server {0}: remove that server first", "args": []string{strings.Join(noms, ", ")}, "erreur": "This key opens the server " + strings.Join(noms, ", ") + ": remove that server first"})
+		return
+	}
 	if s.acces != nil && s.accesErr == nil {
 		// its grants go and the files are rewritten while it is still in the vault: its value is then
 		// recognised and leaves every secrets.env instead of staying there as an old-file line

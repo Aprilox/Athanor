@@ -78,6 +78,12 @@ func TestDistanceToutesRoutes(t *testing.T) {
 		{"GET", "/api/hub/urgence", true},
 		{"POST", "/api/acces", true},
 		{"GET", "/api/acces/x", true},
+		{"GET", "/api/serveurs", false},   // the inventory, read from a device
+		{"GET", "/api/serveurs/x", false}, // and a server's sheet
+		{"POST", "/api/serveurs/x", true}, // renamed, roles changed, removed: on this computer only
+		{"DELETE", "/api/serveurs/x", true},
+		{"POST", "/api/serveurs/ajouter", true},
+		{"GET", "/api/serveurs/x/y", true},
 		{"GET", "/api/hubx", true}, // plain prefix
 		{"POST", "/api/mot-de-passe", true},
 		{"POST", "/api/ouvrir", true},

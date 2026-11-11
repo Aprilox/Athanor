@@ -4458,6 +4458,13 @@ function ligneAudit(l, lang) {
     <span class="aud-texte"><b>${h(quiAudit(l.de))}</b> → ${h(quiAudit(l.vers))}${l.projet ? ", " + h(l.projet) : ""} : <code>${h(l.action || l.type)}</code>${l.resultat ? " — " + h(l.resultat) : ""}${qui ? ` <span class="muet">(${h(qui)})</span>` : ""}</span>
     <span class="muet petit aud-n" title="${h(l.id)}">#${l.n}</span></li>`;
 }
+// shortcut: the inventory as a plain list; M76 brings the cards and the add wizard
+pages.serveurs = async () => {
+  const d = await api("serveurs");
+  if (!d.serveurs.length) return `<div class="vide">${t("No server yet")}</div>`;
+  return `<ul class="aud-liste">${d.serveurs.map((x) => `<li class="aud-ligne"><b>${h(x.nom)}</b> <span class="muet">${h(x.utilisateur)}@${h(x.hote)}:${x.port}</span>${x.roles.map((r) => ` <span class="badge">${h(r)}</span>`).join("")}${x.etat === "injoignable" ? ` <span class="badge">${t("Unreachable")}</span>` : ""}</li>`).join("")}</ul>`;
+};
+
 pages.audit = async () => {
   const f = aud.f, qs = new URLSearchParams(Object.entries(f).filter(([, v]) => v)), lignes = [];
   let d, avant = 0;

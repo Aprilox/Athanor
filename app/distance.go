@@ -289,19 +289,24 @@ func interditDistance(r *http.Request) bool {
 
 // prefixesHub: the hub's routes, closed to devices by default (an allowlist, unlike interditDistance):
 // a new route under these prefixes stays refused from a device until it is added to autorisesDistance.
-var prefixesHub = []string{"/api/hub", "/api/coffre", "/api/acces"}
+var prefixesHub = []string{"/api/hub", "/api/coffre", "/api/acces", "/api/serveurs"}
 
 // autorisesDistance: "METHOD path" of the hub a device may call (reading only, never a secret value).
 var autorisesDistance = map[string]bool{"GET /api/hub": true, "GET /api/coffre": true, "GET /api/acces": true,
 	"GET /api/hub/audit": true, "POST /api/hub/audit/verifier": true, // the audit log: read and checked, never written
 	"GET /api/hub/approbations": true, "POST /api/hub/approbations": true, // P7: the owner decides from the phone
-	"POST /api/hub/urgence": true} // the emergency stop, from the phone too
+	"POST /api/hub/urgence": true,                                 // the emergency stop, from the phone too
+	"GET /api/serveurs":     true, "GET /api/serveurs/{id}": true} // the inventory and a server's sheet, read only
 
 // refuseHubDistance: a hub route that is not in autorisesDistance (plain prefix: "/api/hubx" is refused too).
 func refuseHubDistance(r *http.Request) bool {
 	for _, p := range prefixesHub {
 		if strings.HasPrefix(r.URL.Path, p) {
-			return !autorisesDistance[r.Method+" "+r.URL.Path]
+			chemin := r.URL.Path
+			if id, ok := strings.CutPrefix(chemin, "/api/serveurs/"); ok && id != "" && !strings.Contains(id, "/") {
+				chemin = "/api/serveurs/{id}"
+			}
+			return !autorisesDistance[r.Method+" "+chemin]
 		}
 	}
 	return false

@@ -147,8 +147,8 @@ func TestOutilsDev(t *testing.T) {
 	}
 	l = l[:1]
 
-	// demander_deploiement: through the bus to servers, which does not exist yet
-	if txt, er = appel("demander_deploiement", `{"environnement":"prod","commit":"abc123"}`); !er || !strings.Contains(txt, "Servers module does not exist yet") {
+	// demander_deploiement: through the bus to servers, which declares no deploy action yet
+	if txt, er = appel("demander_deploiement", `{"environnement":"prod","commit":"abc123"}`); !er || !strings.Contains(txt, "Athanor cannot deploy yet") {
 		t.Errorf("demander_deploiement: %v %s", er, txt)
 	}
 	if _, er = appel("demander_deploiement", `{"environnement":"ailleurs","commit":"abc123"}`); !er {
@@ -184,7 +184,7 @@ func TestOutilsDev(t *testing.T) {
 	}
 
 	journal := auditTexte(t)
-	for _, m := range []string{"approbation demandée: demander_acces", "blocage signalé", "La base de test refuse la connexion", "module absent", "mcp signaler"} {
+	for _, m := range []string{"approbation demandée: demander_acces", "blocage signalé", "La base de test refuse la connexion", "action not declared", "mcp signaler"} {
 		if !strings.Contains(journal, m) {
 			t.Errorf("%q not in the audit log", m)
 		}

@@ -396,6 +396,7 @@ func executerPilote(t *testing.T, bin, kit, projet, fakeClaude string, extraEnv 
 	cmd.Env = append(env, extraEnv...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
+		sautSiDefender(t, err.Error()) // the quarantine can also strike at a later launch, not only at the build
 		t.Fatalf("pilot failed: %v\nOutput:\n%s", err, string(out))
 	}
 	return string(out)

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -360,6 +361,9 @@ func TestHubElements(t *testing.T) {
 	avant := append([]Module{}, modules...)
 	modulesMu.Unlock()
 	t.Cleanup(func() { modulesMu.Lock(); modules = avant; modulesMu.Unlock() })
+	modulesMu.Lock() // the fake "serveurs" stands for the real Servers module, which has no element yet
+	modules = slices.DeleteFunc(modules, func(m Module) bool { return m.ID() == "servers" })
+	modulesMu.Unlock()
 	enregistrerModule(moduleFactice{id: "serveurs", ordre: 30, el: []ElementHub{{ID: "vps-1", Titre: "vps-1", Etat: "actif", Lien: "#serveurs"}}})
 	enregistrerModule(moduleFactice{id: "missions", ordre: 10, el: []ElementHub{
 		{ID: "m1", Titre: "Site en ligne", Etat: "actif", Lien: "#missions"},

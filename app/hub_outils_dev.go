@@ -208,7 +208,7 @@ func (s *Serveur) cleCodeNommee(nom string) string {
 	return id
 }
 
-// outilDemanderDeploiement goes on the bus to the Servers module (absent until stage 5: a clean refusal).
+// outilDemanderDeploiement goes on the bus to the Servers module (no deploy action until stage 6: a clean refusal).
 func outilDemanderDeploiement(s *Serveur, x SessionHub, args json.RawMessage) (string, error) {
 	var a struct{ Environnement, Commit string }
 	if err := lireArguments(args, &a); err != nil {
@@ -228,8 +228,8 @@ func outilDemanderDeploiement(s *Serveur, x SessionHub, args json.RawMessage) (s
 		return enJSON(rep.Donnees), nil
 	case rep.Etat == "attente":
 		return rep.Raison + ": once accepted, call demander_deploiement again with the same environment and commit; go on with work that does not need it", nil
-	case rep.Raison == "module absent":
-		return "", errors.New("the Servers module does not exist yet: no deployment from Athanor for now")
+	case rep.Raison == "module absent" || rep.Raison == "action not declared":
+		return "", errors.New("Athanor cannot deploy yet (the Servers module only keeps the inventory for now): no deployment from Athanor, go on with work that does not need it")
 	}
 	return "", errors.New("deployment refused: " + rep.Raison)
 }

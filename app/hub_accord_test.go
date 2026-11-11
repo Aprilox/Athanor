@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -32,6 +33,9 @@ func (m moduleServeursTest) Recevoir(_ *Serveur, x MessageHub) (MessageHub, erro
 func TestBusAccordI6(t *testing.T) {
 	s := serveurBusTest(t)
 	faits := 0
+	modulesMu.Lock() // the real Servers module gives way to the fake one (serveurBusTest restores the list)
+	modules = slices.DeleteFunc(modules, func(m Module) bool { return m.ID() == "servers" })
+	modulesMu.Unlock()
 	enregistrerModule(moduleServeursTest{moduleFactice{id: "servers", ordre: 60}, &faits})
 	if _, err := s.acces.Ajouter("demo", EntreeCoffre{ID: "e1", Nom: "Stripe"}, "prod", "STRIPE_KEY", ""); err != nil {
 		t.Fatal(err)
