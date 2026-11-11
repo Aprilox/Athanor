@@ -408,6 +408,7 @@ func (s *Serveur) couperMotDePasse(w http.ResponseWriter, r *http.Request, id st
 	if !s.coffrePret(w) {
 		return
 	}
+	ctx := context.WithoutCancel(r.Context()) // C42: a closed browser must not stop the check or the undo
 	liste, err := lireServeurs()
 	if err != nil {
 		s.erreurServeurs(w, err)
@@ -427,13 +428,13 @@ func (s *Serveur) couperMotDePasse(w http.ResponseWriter, r *http.Request, id st
 		echec(errCoupureAvantCle)
 		return
 	}
-	client, err := s.connecterServeur(r.Context(), srv)
+	client, err := s.connecterServeur(ctx, srv)
 	if err != nil {
 		echec(err)
 		return
 	}
 	defer client.Close()
-	res, err := executerSSH(r.Context(), client, scriptCoupure, nil, time.Minute)
+	res, err := executerSSH(ctx, client, scriptCoupure, nil, time.Minute)
 	if err != nil {
 		echec(errServeurInjoignable)
 		return
@@ -447,13 +448,13 @@ func (s *Serveur) couperMotDePasse(w http.ResponseWriter, r *http.Request, id st
 	}
 	var nouveau *ssh.Client
 	for essai := 0; essai < 5; essai++ { // sshd may be restarting
-		if nouveau, err = s.connecterServeur(r.Context(), srv); err == nil {
+		if nouveau, err = s.connecterServeur(ctx, srv); err == nil {
 			break
 		}
 		time.Sleep(attenteRechargeSSH)
 	}
 	if err != nil {
-		if res, err := executerSSH(r.Context(), client, scriptRetourCoupure, nil, time.Minute); err != nil || res.Code != 0 {
+		if res, err := executerSSH(ctx, client, scriptRetourCoupure, nil, time.Minute); err != nil || res.Code != 0 {
 			echec(errCoupureBloquee)
 		} else {
 			echec(errCoupureAnnulee)

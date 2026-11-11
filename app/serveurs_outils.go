@@ -155,6 +155,20 @@ func cheminDistant(nom, p string) (string, error) {
 
 var errNomInvisible = erreurEntree("The name holds control or invisible characters")
 
+// portsSSHD: the ports sshd listens on, as `sshd -T` says (root or sudo); none when it cannot be read.
+func portsSSHD(ctx context.Context, c *ssh.Client) []int {
+	r, err := executerSSH(ctx, c, scriptShell(false, preludeRoot+`$S sshd -T 2>/dev/null | awk '$1 == "port" { print $2 }'`), nil, delaiCommande)
+	var l []int
+	if err == nil {
+		for _, x := range strings.Fields(string(r.Sortie)) {
+			if p, e := strconv.Atoi(x); e == nil {
+				l = append(l, p)
+			}
+		}
+	}
+	return l
+}
+
 // caractereInvisible: control, format (U+202E, zero widths) and line/paragraph separators: what is shown would not be what runs.
 func caractereInvisible(r rune) bool {
 	return unicode.IsControl(r) || unicode.In(r, unicode.Cf, unicode.Zl, unicode.Zp)
@@ -188,12 +202,14 @@ func outilFichierLire(ctx context.Context, c *ssh.Client, _ ServeurInventaire, a
 	return resultatSSH(r), nil
 }
 
-// scriptEcrire: the content goes to a temporary file next to the target, which keeps the target's mode
-// (and owner under sudo), then replaces it in one rename; a failure leaves the target as it was.
-const scriptEcrire = `[ -d "$1" ] && { echo "$1 is a directory" >&2; exit 1; }
-t=$(mktemp "$1.athanor.XXXXXX") || exit 1
+// scriptEcrire: a link is followed to its real target (C32: the link stays); the content goes to a temporary
+// file next to that target, which keeps its mode (and owner under sudo), then replaces it in one rename;
+// a failure leaves the target as it was.
+const scriptEcrire = `p=$(readlink -f -- "$1") && [ -n "$p" ] || p=$1
+[ -d "$p" ] && { echo "$1 is a directory" >&2; exit 1; }
+t=$(mktemp "$p.athanor.XXXXXX") || exit 1
 if cat > "$t"; then
-  if [ -e "$1" ]; then chmod "$(stat -c %a -- "$1")" "$t" && { [ "$(id -u)" != 0 ] || chown "$(stat -c %u:%g -- "$1")" "$t"; }; else chmod 644 "$t"; fi && mv -f -- "$t" "$1" && echo "$2 bytes written to $1" && exit 0
+  if [ -e "$p" ]; then chmod "$(stat -L -c %a -- "$p")" "$t" && { [ "$(id -u)" != 0 ] || chown "$(stat -L -c %u:%g -- "$p")" "$t"; }; else chmod 644 "$t"; fi && mv -f -- "$t" "$p" && echo "$2 bytes written to $1" && exit 0
 fi
 rm -f -- "$t"; exit 1`
 
@@ -287,7 +303,13 @@ func outilSFTPEnvoyer(ctx context.Context, c *ssh.Client, srv ServeurInventaire,
 		return ResultatOutil{Code: -1}, err
 	}
 	defer fermer()
-	part := distant + ".athanor-part"
+	cible := distant // C40: a link is followed (it stays a link), the target keeps its mode
+	if st, e := cs.Lstat(distant); e == nil && st.Mode()&fs.ModeSymlink != 0 {
+		if cible, err = cs.RealPath(distant); err != nil {
+			return ResultatOutil{Code: -1}, fmt.Errorf("%s: %w", distant, err)
+		}
+	}
+	part := cible + ".athanor-part"
 	df, err := cs.Create(part)
 	if err != nil {
 		return ResultatOutil{Code: -1}, fmt.Errorf("%s: %w", part, err)
@@ -296,8 +318,11 @@ func outilSFTPEnvoyer(ctx context.Context, c *ssh.Client, srv ServeurInventaire,
 	if errF := df.Close(); err == nil {
 		err = errF
 	}
+	if st, e := cs.Stat(cible); err == nil && e == nil {
+		err = cs.Chmod(part, st.Mode().Perm())
+	}
 	if err == nil {
-		err = cs.PosixRename(part, distant) // replaces the target in one step
+		err = cs.PosixRename(part, cible) // replaces the target in one step
 	}
 	if err != nil {
 		_ = cs.Remove(part)
@@ -504,7 +529,7 @@ func outilPareFeu(ctx context.Context, c *ssh.Client, srv ServeurInventaire, a a
 			}
 		}
 		// Athanor's own way in stays open: a rule that could cut it is refused
-		if a.Port == srv.Port && a.Proto != "udp" && (a.Action == "deny" || a.Regle == "allow") {
+		if a.Proto != "udp" && (a.Action == "deny" || a.Regle == "allow") && (a.Port == srv.Port || slices.Contains(portsSSHD(ctx, c), a.Port)) {
 			return ResultatOutil{Code: -1}, fmt.Errorf("port %d is the SSH port Athanor reaches this server by: this rule could cut its access", a.Port)
 		}
 		spec = strconv.Itoa(a.Port)

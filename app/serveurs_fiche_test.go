@@ -231,6 +231,27 @@ func TestFicheServeur(t *testing.T) {
 		t.Errorf("last sheet lost: %v", err)
 	}
 
+	// a changed host fingerprint (C43): its own state, one audit line however many refreshes, an alert in the bell
+	_ = modifierServeurs(func(x []ServeurInventaire) ([]ServeurInventaire, error) {
+		x[0].Port, x[0].EmpreinteHote = l[0].Port, "SHA256:"+strings.Repeat("A", 43)
+		return x, nil
+	})
+	for range 2 {
+		appel("/api/serveurs/"+id, map[string]any{"rafraichir": true})
+	}
+	if l2, _ := lireServeurs(); l2[0].Etat != "empreinte_changee" {
+		t.Errorf("state when the fingerprint changed: %+v", l2[0])
+	}
+	if n := strings.Count(journalAuditTexte(t), `"action":"empreinte_changee"`); n != 1 {
+		t.Errorf("%d audit lines for the changed fingerprint", n)
+	}
+	if el := (moduleServeurs{}).Elements(s); len(el) != 1 || el[0].Attente == nil || el[0].Attente.Page != "#serveur/"+id || len(alertesDe(el)) != 1 {
+		t.Errorf("bell: %+v", el)
+	}
+	if r := (moduleServeurs{}).Resume(s); r.Besoin != 1 {
+		t.Errorf("tile with a changed fingerprint: %+v", r)
+	}
+
 	// removed: its sheet goes, and a refresh finishing late writes none
 	req := httptest.NewRequest("DELETE", "/api/serveurs/"+id, nil)
 	req.SetPathValue("id", id)

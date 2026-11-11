@@ -385,6 +385,20 @@ func TestServeursOutilsConteneur(t *testing.T) {
 	if r := appel("fichier_ecrire", map[string]any{"chemin": "/etc/refuse.conf", "contenu": "x"}); r.Code == 0 {
 		t.Errorf("write without sudo in /etc: %+v", r)
 	}
+	// C32: a link to a root file 0640 is written through: the link stays, the target keeps its mode and owner
+	appel("ssh_commande", map[string]any{"commande": "printf 'v1\\n' | sudo -n tee /etc/athanor-cible.conf >/dev/null; sudo -n chmod 640 /etc/athanor-cible.conf; sudo -n ln -sf /etc/athanor-cible.conf /etc/athanor-lien.conf"})
+	if r := appel("fichier_ecrire", map[string]any{"chemin": "/etc/athanor-lien.conf", "contenu": "v2\n", "sudo": true}); r.Code != 0 {
+		t.Errorf("write through a link: %+v", r)
+	}
+	if r := appel("ssh_commande", map[string]any{"commande": "stat -c '%F %U' /etc/athanor-lien.conf; stat -c '%F %a %U' /etc/athanor-cible.conf; sudo -n cat /etc/athanor-cible.conf; ls /etc | grep -c athanor-cible.conf.athanor; sudo -n rm -f /etc/athanor-lien.conf /etc/athanor-cible.conf"}); r.Sortie != "symbolic link root\nregular file 640 root\nv2\n0\n" {
+		t.Errorf("link written through: %q", r.Sortie)
+	}
+	// C41: behind a published port, the port sshd itself listens on is guarded too
+	if port != 22 {
+		if _, err := s.appelerOutilServeur(ctx, "test", id, "pare_feu", json.RawMessage(`{"action":"deny","port":22,"proto":"tcp"}`)); err == nil || !strings.Contains(err.Error(), "SSH port") {
+			t.Errorf("deny on sshd's own port: %v", err)
+		}
+	}
 	// SFTP there and back
 	local := dossierFichiersServeur(id)
 	_ = os.MkdirAll(local, 0o700)
@@ -397,6 +411,12 @@ func TestServeursOutilsConteneur(t *testing.T) {
 		t.Errorf("SFTP round trip: %q", b)
 	}
 	appel("ssh_commande", map[string]any{"commande": "rm -f /tmp/recu.txt " + citerShell(piege)})
+	// C40: sending onto a link to a 0600 file keeps the link and the mode
+	appel("ssh_commande", map[string]any{"commande": "printf 'S=1\\n' > /tmp/vrai.env; chmod 600 /tmp/vrai.env; ln -sf /tmp/vrai.env /tmp/lien.env"})
+	appel("sftp_envoyer", map[string]any{"local": "envoi.txt", "distant": "/tmp/lien.env"})
+	if r := appel("ssh_commande", map[string]any{"commande": "stat -c '%F' /tmp/lien.env; stat -c '%F %a' /tmp/vrai.env; cat /tmp/vrai.env; rm -f /tmp/lien.env /tmp/vrai.env"}); r.Sortie != "symbolic link\nregular file 600\ncontenu sftp\n" {
+		t.Errorf("SFTP onto a link: %q", r.Sortie)
+	}
 
 	// service (SysV here), docker (the image's fake one logs its calls), ufw for real; a change makes the sheet again
 	if r := appel("service", map[string]any{"action": "status", "nom": "ssh"}); r.Code != 0 || !strings.Contains(r.Sortie, "sshd is running") {

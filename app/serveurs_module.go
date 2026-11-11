@@ -12,15 +12,27 @@ func (moduleServeurs) Nom() string { return "Servers" }
 func (moduleServeurs) Pages() []PageModule {
 	return []PageModule{{Hash: "#serveurs", Ordre: 30, Icone: "serveurs", Libelle: "Servers", Fils: []string{"#serveur"}}}
 }
-func (moduleServeurs) Elements(*Serveur) []ElementHub { return nil }
-func (moduleServeurs) Tutoriel() []EtapeTutoriel      { return nil }
+
+// Elements: a server whose host fingerprint changed waits for the owner (the bell); the others need nothing.
+func (moduleServeurs) Elements(*Serveur) []ElementHub {
+	liste, _ := lireServeurs()
+	var out []ElementHub
+	for _, x := range liste {
+		if x.Etat == "empreinte_changee" {
+			out = append(out, ElementHub{ID: x.ID, Titre: x.Nom, Etat: "inactif", Lien: "#serveur/" + x.ID,
+				Attente: &AttenteElement{Raison: "The host fingerprint of {0} changed: check the server before trusting it again", Args: []any{x.Nom}, Page: "#serveur/" + x.ID, Cle: x.EmpreinteHote}})
+		}
+	}
+	return out
+}
+func (moduleServeurs) Tutoriel() []EtapeTutoriel { return nil }
 
 // Resume: how many servers, how many unreachable (each one needs the owner); a small file read.
 func (moduleServeurs) Resume(*Serveur) ResumeModule {
 	liste, _ := lireServeurs()
 	injoignables := 0
 	for _, x := range liste {
-		if x.Etat == "injoignable" {
+		if x.Etat == "injoignable" || x.Etat == "empreinte_changee" {
 			injoignables++
 		}
 	}

@@ -29,7 +29,7 @@ type ServeurInventaire struct {
 	Roles           []string  `json:"roles"`          // "dev" | "prod"
 	Cree            time.Time `json:"cree"`
 	Vu              time.Time `json:"vu,omitzero"`
-	Etat            string    `json:"etat"` // "ok" | "injoignable" | "inconnu"
+	Etat            string    `json:"etat"` // "ok" | "injoignable" | "empreinte_changee" | "inconnu"
 	MotDePasseCoupe bool      `json:"mot_de_passe_coupe"`
 }
 

@@ -464,6 +464,14 @@ func (s *Serveur) rafraichirFiche(ctx context.Context, srv ServeurInventaire) (F
 		if i < 0 || !idServeurValide.MatchString(srv.ID) {
 			return nil, errServeurInconnu // removed meanwhile: no sheet for it
 		}
+		if errors.Is(err, errEmpreinteChangee) { // C43: a possible interception, not a mere outage
+			if l[i].Etat != "empreinte_changee" {
+				s.ecrireAudit(LigneAudit{Type: "evenement", De: "hub", Vers: "serveur:" + srv.ID, Action: "empreinte_changee",
+					Resultat: srv.Nom + " " + adresseSSH(srv.Hote, srv.Port) + ": host fingerprint differs from " + srv.EmpreinteHote})
+			}
+			l[i].Etat = "empreinte_changee"
+			return l, nil
+		}
 		if err != nil {
 			l[i].Etat = "injoignable"
 			return l, nil

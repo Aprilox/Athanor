@@ -4473,7 +4473,7 @@ function ligneAudit(l, lang) {
 // --- Servers (#serveurs): inventory cards and the add wizard (address → fingerprint to confirm → one of three ways)
 const srv = { aj: null }; // aj: the wizard ({etape: "adresse" | "empreinte" | "cle" | "coupure", …}), kept across renders
 function carteServeur(x, fiche) {
-  const sante = { ok: t("Reachable"), injoignable: t("Unreachable") }[x.etat] || t("Waiting for its key"), cls = x.etat === "ok" ? "travaille" : "attend", f = fiche || {};
+  const sante = { ok: t("Reachable"), injoignable: t("Unreachable"), empreinte_changee: t("Host fingerprint changed") }[x.etat] || t("Waiting for its key"), cls = x.etat === "ok" ? "travaille" : "attend", f = fiche || {};
   const tourne = [...(f.conteneurs || []).filter((c) => /^(up|running)/i.test(c.etat)).map((c) => c.nom), ...(f.services || [])];
   const resume = !fiche ? t("Its sheet is not made yet.")
     : tourne.length ? t("Running: {0}", [tourne.slice(0, 6).join(", ") + (tourne.length > 6 ? " +" + (tourne.length - 6) : "")]) : t("Nothing seen running.");
@@ -4642,7 +4642,7 @@ pages.serveur = async () => {
   const [d, c] = await Promise.all([api("serveurs/" + encodeURIComponent(srv.id || "")), distant ? null : api("coffre").catch(() => null)]);
   const x = d.serveur, f = d.fiche, attente = x.etat === "inconnu";
   srv.fiche = x; // the actions below act on the server shown
-  const sante = { ok: t("Reachable"), injoignable: t("Unreachable") }[x.etat] || t("Waiting for its key");
+  const sante = { ok: t("Reachable"), injoignable: t("Unreachable"), empreinte_changee: t("Host fingerprint changed") }[x.etat] || t("Waiting for its key");
   const role = (r) => distant ? ((x.roles || []).includes(r) ? `<span class="badge${r === "prod" ? " badge-infra" : ""}">${r}</span>` : "")
     : `<label class="radio"><input type="checkbox" class="srv-fiche-role" value="${r}"${(x.roles || []).includes(r) ? " checked" : ""}> ${r === "dev" ? t("dev (tests, previews)") : t("prod (your live site)")}</label>`;
   return `<div class="serveurs srv-fiche">
