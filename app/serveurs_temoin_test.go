@@ -320,20 +320,36 @@ func TestServeursScenarioConteneur(t *testing.T) {
 	if r := outil("fichier_lire", `,"chemin":"/etc/os-release"`); r.Code != 0 || !strings.Contains(r.Sortie, "ID=debian") {
 		t.Errorf("read: %+v", r)
 	}
+	// M89: an agent's change is refused "plan required" before any connection (plans come in M90), so the
+	// real change below runs on the code's path, after the hook
+	if txt, e := appel("fichier_ecrire", `{"serveur":"`+id+`","chemin":"/tmp/athanor-scenario.txt","contenu":"x"}`); !e || !strings.HasPrefix(txt, "plan required") {
+		t.Errorf("a change without a plan: %v %q", e, txt)
+	}
+	if r := outil("ssh_commande", `,"commande":"test -e /tmp/athanor-scenario.txt && echo present"`); r.Sortie != "" {
+		t.Errorf("written without a plan: %q", r.Sortie)
+	}
+	change := func(nom, args string) ResultatOutil {
+		t.Helper()
+		r, err := s.appelerOutilServeur(ctx, agentServeurs, id, nom, json.RawMessage(args))
+		if err != nil {
+			t.Fatalf("%s %s: %v", nom, args, err)
+		}
+		return r
+	}
 	// a real change: a file written and read back, a firewall rule added then deleted
 	contenu := fmt.Sprintf("scenario %d\n", debut.UnixNano())
-	outil("fichier_ecrire", `,"chemin":"/tmp/athanor-scenario.txt","contenu":"`+strings.TrimSpace(contenu)+`\n"`)
+	change("fichier_ecrire", `{"chemin":"/tmp/athanor-scenario.txt","contenu":"`+strings.TrimSpace(contenu)+`\n"}`)
 	if r := outil("fichier_lire", `,"chemin":"/tmp/athanor-scenario.txt"`); r.Sortie != contenu {
 		t.Errorf("file written: %q", r.Sortie)
 	}
-	if r := outil("pare_feu", `,"action":"allow","port":8081,"proto":"tcp"`); r.Code != 0 {
+	if r := change("pare_feu", `{"action":"allow","port":8081,"proto":"tcp"}`); r.Code != 0 {
 		t.Errorf("ufw allow: %+v", r)
 	}
 	if r := outil("pare_feu", `,"action":"status"`); !strings.Contains(r.Sortie, "8081/tcp") {
 		t.Errorf("ufw rule missing: %+v", r)
 	}
-	outil("pare_feu", `,"action":"delete","port":8081,"proto":"tcp","regle":"allow"`)
-	outil("ssh_commande", `,"commande":"rm -f /tmp/athanor-scenario.txt"`)
+	change("pare_feu", `{"action":"delete","port":8081,"proto":"tcp","regle":"allow"}`)
+	change("ssh_commande", `{"commande":"rm -f /tmp/athanor-scenario.txt"}`)
 
 	// password logins cut: the password refused, the agent's tools still working with the key
 	if code, v := appelAPI("/api/serveurs/"+id, map[string]any{"couper_mot_de_passe": true}); code != 200 || v["serveur"].(map[string]any)["mot_de_passe_coupe"] != true {

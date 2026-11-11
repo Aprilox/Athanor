@@ -1,6 +1,9 @@
 package main
 
 import (
+	"cmp"
+	"encoding/json"
+	"fmt"
 	"path"
 	"regexp"
 	"slices"
@@ -1133,4 +1136,63 @@ func cheminCritique(t string) bool {
 func disque(t string) bool {
 	return slices.ContainsFunc([]string{"/dev/sd", "/dev/hd", "/dev/vd", "/dev/xvd", "/dev/nvme", "/dev/mmcblk", "/dev/mapper/", "/dev/disk/", "/dev/md", "/dev/dm-", "/dev/mem", "/dev/kmem", "/dev/port"},
 		func(d string) bool { return strings.HasPrefix(t, d) })
+}
+
+// Etape: a Servers tool call as the code classed it (M90's plans are made of these).
+type Etape struct {
+	Outil     string
+	Arguments json.RawMessage
+	Classe    Classe
+	Raison    string
+}
+
+// classerOutil classes a typed tool's call by the tool and its arguments (ARCHITECTURE.md §Garde-fous).
+func classerOutil(outil string, a argsOutilServeur) (Classe, string) {
+	switch outil {
+	case "ssh_commande":
+		return classerCommande(a.Commande)
+	case "fichier_lire", "sftp_recuperer":
+		return ClasseLecture, "reads a file"
+	case "fichier_ecrire", "sftp_envoyer":
+		p := cmp.Or(a.Chemin, a.Distant)
+		if cheminCritique(p) {
+			return ClasseDestructrice, "writing " + p + " can lock the owner out or break the boot"
+		}
+		return ClasseChangement, "writes " + p
+	case "service":
+		if a.Action == "status" {
+			return ClasseLecture, "reads a service's state"
+		}
+		// the same rules as the free command (stopping SSH or the network is destructive)
+		c, r := classerCommande("systemctl " + citerShell(a.Action) + " " + citerShell(a.Nom))
+		if c < ClasseChangement {
+			c, r = ClasseChangement, a.Action+" changes a service"
+		}
+		return c, r
+	case "docker":
+		switch a.Action {
+		case "ps", "logs", "compose_ps":
+			return ClasseLecture, "reads Docker's state"
+		case "compose_down":
+			return ClasseDestructrice, "compose_down stops and removes a Compose project's containers"
+		}
+		return ClasseChangement, a.Action + " changes containers or images"
+	case "pare_feu":
+		if a.Action == "status" {
+			return ClasseLecture, "reads the firewall's state"
+		}
+		return ClasseChangement, a.Action + " changes a firewall rule"
+	}
+	return ClasseDestructrice, "unknown tool"
+}
+
+// cheminRefuse (C36): a path no Servers tool reads or writes: /etc/shadow, /etc/gshadow, ~/.ssh/ (except
+// reading authorized_keys), *.env, private keys. Checked as given, then by the tools once resolved on the server.
+func cheminRefuse(p string, lecture bool) error {
+	c := nettoyer(p)
+	base := c[len(c)-1]
+	if nomSecret(base) || slices.Contains(c, ".ssh") && !(lecture && base == "authorized_keys") {
+		return fmt.Errorf("%s is refused to every Servers tool: secrets (/etc/shadow, ~/.ssh, *.env, private keys) are never read nor overwritten by an agent", p)
+	}
+	return nil
 }

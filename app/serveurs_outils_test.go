@@ -155,7 +155,7 @@ func TestServeursOutils(t *testing.T) {
 	if c := derniere(); !strings.HasPrefix(c, "sudo -n sh -c ") || !strings.Contains(c, "mv -f") {
 		t.Errorf("write command: %s", c)
 	}
-	if r, err := appel("fichier_ecrire", map[string]any{"chemin": "/tmp/b.env", "contenu": "SPECIAL=" + temoinEchappe + "\n"}); err != nil || strings.Contains(r.Sortie, "4343") {
+	if r, err := appel("fichier_ecrire", map[string]any{"chemin": "/tmp/b.conf", "contenu": "SPECIAL=" + temoinEchappe + "\n"}); err != nil || strings.Contains(r.Sortie, "4343") {
 		t.Errorf("write with an escaped witness: %v %+v", err, r)
 	}
 	derniere()
@@ -412,10 +412,33 @@ func TestServeursOutilsConteneur(t *testing.T) {
 	}
 	appel("ssh_commande", map[string]any{"commande": "rm -f /tmp/recu.txt " + citerShell(piege)})
 	// C40: sending onto a link to a 0600 file keeps the link and the mode
-	appel("ssh_commande", map[string]any{"commande": "printf 'S=1\\n' > /tmp/vrai.env; chmod 600 /tmp/vrai.env; ln -sf /tmp/vrai.env /tmp/lien.env"})
-	appel("sftp_envoyer", map[string]any{"local": "envoi.txt", "distant": "/tmp/lien.env"})
-	if r := appel("ssh_commande", map[string]any{"commande": "stat -c '%F' /tmp/lien.env; stat -c '%F %a' /tmp/vrai.env; cat /tmp/vrai.env; rm -f /tmp/lien.env /tmp/vrai.env"}); r.Sortie != "symbolic link\nregular file 600\ncontenu sftp\n" {
+	appel("ssh_commande", map[string]any{"commande": "printf 'S=1\\n' > /tmp/vrai.conf; chmod 600 /tmp/vrai.conf; ln -sf /tmp/vrai.conf /tmp/lien.conf"})
+	appel("sftp_envoyer", map[string]any{"local": "envoi.txt", "distant": "/tmp/lien.conf"})
+	if r := appel("ssh_commande", map[string]any{"commande": "stat -c '%F' /tmp/lien.conf; stat -c '%F %a' /tmp/vrai.conf; cat /tmp/vrai.conf; rm -f /tmp/lien.conf /tmp/vrai.conf"}); r.Sortie != "symbolic link\nregular file 600\ncontenu sftp\n" {
 		t.Errorf("SFTP onto a link: %q", r.Sortie)
+	}
+	// C36: a link to /etc/shadow (or to the folder /root/.ssh) is refused once resolved on the server, as root too
+	appel("ssh_commande", map[string]any{"commande": "ln -sf /etc/shadow /tmp/ombre; ln -sf /etc/gshadow /tmp/g2; sudo -n mkdir -p /root/.ssh; ln -sfn /root/.ssh /tmp/rs"})
+	for _, c := range []struct {
+		outil string
+		args  map[string]any
+	}{
+		{"fichier_lire", map[string]any{"chemin": "/tmp/ombre", "sudo": true}},
+		{"fichier_lire", map[string]any{"chemin": "/tmp/g2", "sudo": true}},
+		{"fichier_ecrire", map[string]any{"chemin": "/tmp/rs/authorized_keys", "contenu": "ssh-ed25519 AAAA x\n", "sudo": true}},
+		{"sftp_recuperer", map[string]any{"distant": "/tmp/ombre", "local": "ombre.txt"}},
+		{"sftp_envoyer", map[string]any{"local": "envoi.txt", "distant": "/tmp/ombre"}},
+	} {
+		b, _ := json.Marshal(c.args)
+		if r, err := s.appelerOutilServeur(ctx, "test", id, c.outil, b); err == nil || !strings.Contains(err.Error(), "leads to") || strings.Contains(r.Sortie, "root:") {
+			t.Errorf("C36 %s %s: %v %q", c.outil, b, err, r.Sortie)
+		}
+	}
+	if r := appel("ssh_commande", map[string]any{"commande": "sudo -n test -e /root/.ssh/authorized_keys && echo present; rm -f /tmp/ombre /tmp/g2 /tmp/rs"}); strings.Contains(r.Sortie, "present") {
+		t.Errorf("authorized_keys written through a link: %q", r.Sortie)
+	}
+	if _, err := os.Stat(filepath.Join(local, "ombre.txt")); err == nil {
+		t.Error("/etc/shadow fetched through a link")
 	}
 
 	// service (SysV here), docker (the image's fake one logs its calls), ufw for real; a change makes the sheet again

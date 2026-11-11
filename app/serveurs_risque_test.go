@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // TestClasserCommande: the table of M88. L = read, C = change, D = destructive.
 func TestClasserCommande(t *testing.T) {
@@ -183,5 +186,75 @@ func TestClasserCommande(t *testing.T) {
 		if raison == "" {
 			t.Errorf("classerCommande(%q) : raison vide", c.cmd)
 		}
+	}
+}
+
+// TestClasserOutil (M89): the class of a typed tool's call, by tool and argument.
+func TestClasserOutil(t *testing.T) {
+	for _, c := range []struct {
+		outil string
+		a     argsOutilServeur
+		want  Classe
+	}{
+		{"ssh_commande", argsOutilServeur{Commande: "uptime"}, ClasseLecture},
+		{"ssh_commande", argsOutilServeur{Commande: "rm -rf /var/www"}, ClasseDestructrice},
+		{"fichier_lire", argsOutilServeur{Chemin: "/etc/nginx/nginx.conf", Sudo: true}, ClasseLecture},
+		{"sftp_recuperer", argsOutilServeur{Distant: "/var/log/syslog"}, ClasseLecture},
+		{"fichier_ecrire", argsOutilServeur{Chemin: "/etc/nginx/nginx.conf"}, ClasseChangement},
+		{"fichier_ecrire", argsOutilServeur{Chemin: "/etc/ssh/sshd_config"}, ClasseDestructrice},
+		{"sftp_envoyer", argsOutilServeur{Distant: "/srv/app/index.html"}, ClasseChangement},
+		{"sftp_envoyer", argsOutilServeur{Distant: "/etc/sudoers"}, ClasseDestructrice},
+		{"service", argsOutilServeur{Action: "status", Nom: "ssh"}, ClasseLecture},
+		{"service", argsOutilServeur{Action: "restart", Nom: "nginx"}, ClasseChangement},
+		{"service", argsOutilServeur{Action: "enable", Nom: "nginx"}, ClasseChangement},
+		{"service", argsOutilServeur{Action: "stop", Nom: "nginx"}, ClasseChangement},
+		{"service", argsOutilServeur{Action: "stop", Nom: "ssh"}, ClasseDestructrice},
+		{"service", argsOutilServeur{Action: "disable", Nom: "sshd.service"}, ClasseDestructrice},
+		{"service", argsOutilServeur{Action: "stop", Nom: "networking"}, ClasseDestructrice},
+		{"docker", argsOutilServeur{Action: "ps"}, ClasseLecture},
+		{"docker", argsOutilServeur{Action: "logs", Nom: "web"}, ClasseLecture},
+		{"docker", argsOutilServeur{Action: "compose_ps", Dossier: "/srv/app"}, ClasseLecture},
+		{"docker", argsOutilServeur{Action: "pull", Nom: "nginx"}, ClasseChangement},
+		{"docker", argsOutilServeur{Action: "compose_up", Dossier: "/srv/app"}, ClasseChangement},
+		{"docker", argsOutilServeur{Action: "compose_down", Dossier: "/srv/app"}, ClasseDestructrice},
+		{"pare_feu", argsOutilServeur{Action: "status"}, ClasseLecture},
+		{"pare_feu", argsOutilServeur{Action: "allow", Port: 443}, ClasseChangement},
+		{"pare_feu", argsOutilServeur{Action: "delete", Port: 443, Regle: "allow"}, ClasseChangement},
+		{"inconnu", argsOutilServeur{}, ClasseDestructrice},
+	} {
+		if got, r := classerOutil(c.outil, c.a); got != c.want || r == "" {
+			t.Errorf("%s %+v: %s (%s), want %s", c.outil, c.a, got, r, c.want)
+		}
+	}
+}
+
+// TestCheminRefuse (C36): the paths no Servers tool reads or writes.
+func TestCheminRefuse(t *testing.T) {
+	for _, c := range []struct {
+		p       string
+		lecture bool
+		refuse  bool
+	}{
+		{"/etc/shadow", true, true}, {"/etc/gshadow", true, true}, {"/etc/./shadow", true, true}, {"/tmp/../etc/shadow", true, true},
+		{"/root/.ssh/id_ed25519", true, true}, {"/home/a/.ssh/config", true, true}, {"/home/a/.ssh", true, true},
+		{"/home/a/.ssh/authorized_keys", true, false}, {"/home/a/.ssh/authorized_keys", false, true},
+		{"/srv/app/.env", true, true}, {"/srv/app/prod.env", false, true}, {"/etc/ssl/private/site.key", true, true},
+		{"/etc/letsencrypt/live/a/privkey.pem", true, true}, {"/etc/ssh/ssh_host_ed25519_key", true, true},
+		{"/etc/ssh/ssh_host_ed25519_key.pub", true, false}, {"/proc/self/environ", true, true},
+		{"/etc/passwd", true, false}, {"/etc/nginx/nginx.conf", false, false}, {"/var/www/index.html", false, false},
+		{"/etc/environment", true, false},
+	} {
+		if err := cheminRefuse(c.p, c.lecture); (err != nil) != c.refuse {
+			t.Errorf("%s (lecture %v): %v, want refused %v", c.p, c.lecture, err, c.refuse)
+		}
+	}
+	if _, err := cheminResolu("/tmp/lien", "/etc/shadow", true); err == nil || !strings.Contains(err.Error(), "/tmp/lien leads to /etc/shadow") {
+		t.Errorf("a link to /etc/shadow: %v", err)
+	}
+	if p, err := cheminResolu("/tmp/lien", "/srv/vrai.conf", true); err != nil || p != "/srv/vrai.conf" {
+		t.Errorf("a link to an ordinary file: %q %v", p, err)
+	}
+	if p, err := cheminResolu("/tmp/x", "ok:sh -c …", true); err != nil || p != "/tmp/x" {
+		t.Errorf("unresolved: %q %v", p, err)
 	}
 }

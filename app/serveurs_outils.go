@@ -153,6 +153,46 @@ func cheminDistant(nom, p string) (string, error) {
 	return p, nil
 }
 
+// distantPermis: cheminDistant, and not a refused path (C36) as given.
+func distantPermis(nom, p string, lecture bool) (string, error) {
+	p, err := cheminDistant(nom, p)
+	if err == nil {
+		err = cheminRefuse(p, lecture)
+	}
+	return p, err
+}
+
+// cheminResolu (C36): p as the server resolved it (links, ".."), checked again; unresolved ("" or not absolute) = p.
+func cheminResolu(p, reel string, lecture bool) (string, error) {
+	if !strings.HasPrefix(reel, "/") {
+		return p, nil
+	}
+	if _, err := cheminDistant("the resolved path", reel); err != nil {
+		return "", err
+	}
+	if err := cheminRefuse(reel, lecture); err != nil {
+		return "", fmt.Errorf("%s leads to %w", p, err)
+	}
+	return reel, nil
+}
+
+// resoudreDistant: p checked, resolved on the server by readlink -f (as root with sudo) and checked again;
+// the tool then works on the resolved path, so swapping a link afterwards changes nothing.
+func resoudreDistant(ctx context.Context, c *ssh.Client, sudo bool, nom, p string, lecture bool) (string, error) {
+	p, err := distantPermis(nom, p, lecture)
+	if err != nil {
+		return "", err
+	}
+	r, err := executerSSH(ctx, c, scriptShell(sudo, `readlink -f -- "$1"`, p), nil, delaiFichier)
+	if err != nil {
+		return "", err
+	}
+	if r.Code != 0 { // a missing folder on the way: the tool fails on p as well
+		return p, nil
+	}
+	return cheminResolu(p, strings.TrimSuffix(string(r.Sortie), "\n"), lecture)
+}
+
 var errNomInvisible = erreurEntree("The name holds control or invisible characters")
 
 // portsSSHD: the ports sshd listens on, as `sshd -T` says (root or sudo); none when it cannot be read.
@@ -187,7 +227,7 @@ func scriptShell(sudo bool, script string, args ...string) string {
 }
 
 func outilFichierLire(ctx context.Context, c *ssh.Client, _ ServeurInventaire, a argsOutilServeur) (ResultatOutil, error) {
-	p, err := cheminDistant("chemin", a.Chemin)
+	p, err := resoudreDistant(ctx, c, a.Sudo, "chemin", a.Chemin, true)
 	if err != nil {
 		return ResultatOutil{Code: -1}, err
 	}
@@ -214,16 +254,17 @@ fi
 rm -f -- "$t"; exit 1`
 
 func outilFichierEcrire(ctx context.Context, c *ssh.Client, _ ServeurInventaire, a argsOutilServeur) (ResultatOutil, error) {
-	p, err := cheminDistant("chemin", a.Chemin)
-	if err != nil {
-		return ResultatOutil{Code: -1}, err
-	}
 	if a.Contenu == nil {
 		return ResultatOutil{Code: -1}, errors.New("contenu is required")
 	}
 	if len(*a.Contenu) > tailleMaxFichier {
 		return ResultatOutil{Code: -1}, fmt.Errorf("contenu is larger than %d bytes: send it with sftp_envoyer", tailleMaxFichier)
 	}
+	// the script follows the link itself (C32); here the target is only checked
+	if _, err := resoudreDistant(ctx, c, a.Sudo, "chemin", a.Chemin, false); err != nil {
+		return ResultatOutil{Code: -1}, err
+	}
+	p := a.Chemin
 	r, err := executerSSH(ctx, c, scriptShell(a.Sudo, scriptEcrire, p, fmt.Sprint(len(*a.Contenu))), strings.NewReader(*a.Contenu), delaiFichier)
 	return resultatSSH(r), err
 }
@@ -280,7 +321,7 @@ func clientSFTP(ctx context.Context, c *ssh.Client) (*sftp.Client, func(), error
 }
 
 func outilSFTPEnvoyer(ctx context.Context, c *ssh.Client, srv ServeurInventaire, a argsOutilServeur) (ResultatOutil, error) {
-	distant, err := cheminDistant("distant", a.Distant)
+	distant, err := distantPermis("distant", a.Distant, false)
 	if err != nil {
 		return ResultatOutil{Code: -1}, err
 	}
@@ -303,11 +344,16 @@ func outilSFTPEnvoyer(ctx context.Context, c *ssh.Client, srv ServeurInventaire,
 		return ResultatOutil{Code: -1}, err
 	}
 	defer fermer()
-	cible := distant // C40: a link is followed (it stays a link), the target keeps its mode
+	cible := distant // C40: a link is followed (it stays a link), the target keeps its mode; C36: and checked
 	if st, e := cs.Lstat(distant); e == nil && st.Mode()&fs.ModeSymlink != 0 {
 		if cible, err = cs.RealPath(distant); err != nil {
 			return ResultatOutil{Code: -1}, fmt.Errorf("%s: %w", distant, err)
 		}
+	} else if r, e := cs.RealPath(distant); e == nil {
+		cible = r // a link on the way (a folder)
+	}
+	if cible, err = cheminResolu(distant, cible, false); err != nil {
+		return ResultatOutil{Code: -1}, err
 	}
 	part := cible + ".athanor-part"
 	df, err := cs.Create(part)
@@ -332,7 +378,7 @@ func outilSFTPEnvoyer(ctx context.Context, c *ssh.Client, srv ServeurInventaire,
 }
 
 func outilSFTPRecuperer(ctx context.Context, c *ssh.Client, srv ServeurInventaire, a argsOutilServeur) (ResultatOutil, error) {
-	distant, err := cheminDistant("distant", a.Distant)
+	distant, err := distantPermis("distant", a.Distant, true)
 	if err != nil {
 		return ResultatOutil{Code: -1}, err
 	}
@@ -346,7 +392,13 @@ func outilSFTPRecuperer(ctx context.Context, c *ssh.Client, srv ServeurInventair
 		return ResultatOutil{Code: -1}, err
 	}
 	defer fermer()
-	sf, err := cs.Open(distant)
+	reel := distant // C36: opened as the server resolved it, once checked
+	if r, e := cs.RealPath(distant); e == nil {
+		if reel, err = cheminResolu(distant, r, true); err != nil {
+			return ResultatOutil{Code: -1}, err
+		}
+	}
+	sf, err := cs.Open(reel)
 	if err != nil {
 		return ResultatOutil{Code: -1}, fmt.Errorf("%s: %w", distant, err)
 	}

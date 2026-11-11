@@ -35,6 +35,7 @@ func init() {
 		return map[string]any{"type": "string", "description": d, "enum": append([]string{}, l...)}
 	}
 	srv := schemaTexte("The server's id, from serveurs_liste")
+	classe := parmi("Your own class of this action; the code's class is kept when higher", "lecture", "changement", "destructrice")
 	// a Servers tool: its own arguments plus the server's id, which is always required
 	type def struct {
 		nom, description string
@@ -61,7 +62,7 @@ func init() {
 			map[string]any{"action": parmi("What to do", "status", "allow", "deny", "delete"), "port": entier("Port, 1 to 65535"),
 				"proto": parmi("Protocol (both when empty)", "", "tcp", "udp"), "regle": parmi("Kind of the rule to delete (delete)", "allow", "deny")}, []string{"action"}},
 	} {
-		d.props["serveur"] = srv
+		d.props["serveur"], d.props["classe"] = srv, classe
 		outilsHub[d.nom] = OutilHub{Description: d.description, Schema: schemaObjet(d.props, append([]string{"serveur"}, d.requis...)...), Faire: faireOutilServeur(d.nom)}
 	}
 	outilsHub["serveurs_liste"] = OutilHub{Description: "The servers you may work on: id, name, roles, state, last seen.",
@@ -112,17 +113,64 @@ func faireOutilServeur(nom string) func(*Serveur, SessionHub, json.RawMessage) (
 		if err := json.Unmarshal(a["serveur"], &id); err != nil || id == "" {
 			return "", errors.New("serveur is required: a server's id from serveurs_liste")
 		}
-		if err := s.serveurPerimetre(x, nom, id); err != nil {
-			return "", err
-		}
 		delete(a, "serveur")
-		reste, _ := json.Marshal(a)
-		r, err := s.appelerOutilServeur(context.Background(), x.Agent, id, nom, reste)
+		e, err := s.avantOutil(x, id, nom, a)
+		if err != nil {
+			return "", errors.New(s.masquerSecrets(err.Error()))
+		}
+		r, err := s.appelerOutilServeur(context.Background(), x.Agent, id, nom, e.Arguments)
 		if err != nil {
 			return "", errors.New(s.masquerSecrets(err.Error()))
 		}
 		return enJSON(r), nil
 	}
+}
+
+// avantOutil: the single hook before a Servers tool runs for an agent (C39), before any connection: the
+// perimeter, the refused paths (C36), then the class, the highest of the code's and the agent's own (classe).
+// Until plans exist (M90), only a read runs.
+func (s *Serveur) avantOutil(x SessionHub, id, outil string, a map[string]json.RawMessage) (Etape, error) {
+	if err := s.serveurPerimetre(x, outil, id); err != nil {
+		return Etape{}, err
+	}
+	declaree := ClasseLecture
+	if v, ok := a["classe"]; ok {
+		var c string
+		_ = json.Unmarshal(v, &c)
+		i := slices.Index([]string{"lecture", "changement", "destructrice"}, c)
+		if i < 0 {
+			return Etape{}, errors.New("classe must be lecture, changement or destructrice")
+		}
+		declaree = Classe(i)
+		delete(a, "classe")
+	}
+	brut, _ := json.Marshal(a)
+	var args argsOutilServeur
+	if err := lireArguments(brut, &args); err != nil {
+		return Etape{}, err
+	}
+	refus := func(err error) (Etape, error) {
+		s.ecrireAudit(LigneAudit{Type: "evenement", De: x.Agent, Vers: "serveur:" + id, Projet: x.Projet, Mission: x.Mission,
+			Agent: x.Agent, Action: "serveurs." + outil, Resultat: "refusé : " + couper(s.masquerSecrets(err.Error()), auditMaxOutil)})
+		return Etape{}, err
+	}
+	lecture := outil == "fichier_lire" || outil == "sftp_recuperer"
+	for _, p := range []string{args.Chemin, args.Distant} {
+		if p == "" {
+			continue
+		}
+		if _, err := distantPermis("chemin", p, lecture); err != nil {
+			return refus(err)
+		}
+	}
+	c, raison := classerOutil(outil, args)
+	if declaree > c {
+		c, raison = declaree, "declared "+declaree.String()+" by the agent"
+	}
+	if c > ClasseLecture {
+		return refus(fmt.Errorf("plan required: this is a %s action (%s); a change runs only as a step of a plan the owner accepted (proposer_plan)", c, raison))
+	}
+	return Etape{Outil: outil, Arguments: brut, Classe: c, Raison: raison}, nil
 }
 
 func outilServeursListe(s *Serveur, x SessionHub, args json.RawMessage) (string, error) {

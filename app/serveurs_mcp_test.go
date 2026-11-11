@@ -76,9 +76,9 @@ func TestServeursMCP(t *testing.T) {
 		t.Errorf("another agent: %v %q", e, txt)
 	}
 
-	// fichier_ecrire's limit is reached over MCP (its message, not a parse error); a body beyond the route's limit says its size
+	// a 2 MB body is read over MCP (the plan's refusal, not a parse error); a body beyond the route's limit says its size
 	trop := strings.Repeat(`\"`, tailleMaxFichier+1) // 1 MB + 1 byte of content, twice that once escaped
-	if txt, e := appel(jeton, "fichier_ecrire", `{"serveur":"ab12","chemin":"/tmp/x","contenu":"`+trop+`"}`); !e || !strings.Contains(txt, "send it with sftp_envoyer") {
+	if txt, e := appel(jeton, "fichier_ecrire", `{"serveur":"ab12","chemin":"/tmp/x","contenu":"`+trop+`"}`); !e || !strings.HasPrefix(txt, "plan required") {
 		t.Errorf("content over the limit: %v %.200q", e, txt)
 	}
 	if rep := appelMCP(t, mux, "Bearer "+jeton, `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"x":"`+strings.Repeat("a", corpsMaxMCP)+`"}}`); rep.Error == nil || !strings.Contains(rep.Error.Message, "request larger than") {
@@ -97,6 +97,44 @@ func TestServeursMCP(t *testing.T) {
 	}
 	if txt, e := appel(jeton, "ssh_commande", `{"serveur":"ab12","commande":"echo temoin"}`); e || strings.Contains(txt, temoinOutils) || !strings.Contains(txt, "la valeur") {
 		t.Errorf("witness: %v %q", e, txt)
+	}
+
+	// M89, avantOutil: a read runs; a change or a destructive action (the code's class, or a higher one the
+	// agent declares) is refused "plan required" before any connection; refused paths (C36) too, logged
+	for len(mem.commandes) > 0 {
+		<-mem.commandes
+	}
+	for _, c := range []struct{ outil, args, attendu string }{
+		{"ssh_commande", `{"serveur":"ab12","commande":"systemctl restart nginx"}`, "plan required: this is a changement action"},
+		{"ssh_commande", `{"serveur":"ab12","commande":"rm -rf /srv"}`, "plan required: this is a destructrice action"},
+		{"ssh_commande", `{"serveur":"ab12","commande":"id","classe":"destructrice"}`, "plan required: this is a destructrice action (declared"},
+		{"ssh_commande", `{"serveur":"ab12","commande":"id","classe":"rien"}`, "classe must be"},
+		{"service", `{"serveur":"ab12","action":"stop","nom":"ssh"}`, "plan required: this is a destructrice action"},
+		{"docker", `{"serveur":"ab12","action":"compose_down","dossier":"/srv/app"}`, "plan required: this is a destructrice action"},
+		{"pare_feu", `{"serveur":"ab12","action":"allow","port":443}`, "plan required: this is a changement action"},
+		{"sftp_envoyer", `{"serveur":"ab12","local":"a.txt","distant":"/srv/a.txt"}`, "plan required: this is a changement action"},
+		{"fichier_lire", `{"serveur":"ab12","chemin":"/etc/shadow","sudo":true}`, "/etc/shadow is refused"},
+		{"fichier_lire", `{"serveur":"ab12","chemin":"/home/a/.ssh/id_ed25519"}`, "is refused"},
+		{"sftp_recuperer", `{"serveur":"ab12","distant":"/srv/app/.env","local":"x"}`, "is refused"},
+		{"fichier_ecrire", `{"serveur":"ab12","chemin":"/root/.ssh/authorized_keys","contenu":"x"}`, "is refused"},
+	} {
+		if txt, e := appel(jeton, c.outil, c.args); !e || !strings.Contains(txt, c.attendu) {
+			t.Errorf("%s %s: %v %q", c.outil, c.args, e, txt)
+		}
+	}
+	if n := len(mem.commandes); n != 0 {
+		t.Errorf("%d refused calls reached the server", n)
+	}
+	for _, args := range []string{`{"serveur":"ab12","commande":"df -h","classe":"lecture"}`} {
+		if txt, e := appel(jeton, "ssh_commande", args); e || !strings.Contains(txt, "ok:df -h") {
+			t.Errorf("a read: %v %q", e, txt)
+		}
+	}
+	if txt, e := appel(jeton, "fichier_lire", `{"serveur":"ab12","chemin":"/home/a/.ssh/authorized_keys"}`); e {
+		t.Errorf("reading authorized_keys: %q", txt)
+	}
+	if j := journalAuditTexte(t); strings.Count(j, "refusé : plan required") != 8 || strings.Count(j, `"resultat":"refusé : /`) != 4 {
+		t.Errorf("avantOutil's refusals not logged:\n%s", j)
 	}
 
 	// outside the perimeter and unknown: the same refusal, logged, nothing sent
