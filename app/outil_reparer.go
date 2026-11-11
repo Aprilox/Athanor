@@ -305,13 +305,13 @@ func versionAuMoins(a, b [3]int) bool {
 	return true
 }
 
-// versionGoVoulue: the "go 1.27.3" line of go.mod.
+// versionGoVoulue: the "go 1.27.4" line of go.mod.
 func versionGoVoulue(app string) string {
 	b, _ := os.ReadFile(filepath.Join(app, "go.mod"))
 	if m := regexp.MustCompile(`(?m)^go (\d+\.\d+(?:\.\d+)?)\s*$`).FindSubmatch(b); m != nil {
 		return string(m[1])
 	}
-	return "1.27.3"
+	return "1.27.4"
 }
 
 // dossierGoPortable: where the portable Go goes, outside the kit and out of Claude's sandbox.

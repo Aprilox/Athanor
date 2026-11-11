@@ -325,7 +325,7 @@ func TestHubPagesSansOrphelin(t *testing.T) {
 		}
 	}
 	for id, veut := range map[string]string{
-		"hub":      "#accueil #global",
+		"hub":      "#accueil #global #audit",
 		"dev":      "#suivi #equipe #demandes #chat #pourvous #acces #journal #projet",
 		"reglages": "#reglages #extensions #sante #distance",
 		"coffre":   "#coffre",

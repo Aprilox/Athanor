@@ -1034,7 +1034,8 @@ function rendreMenu(modules) {
   let haut = "", bas = "";
   for (const m of modules) {
     if (!(m.pages || []).length) continue;
-    if (m.id === "hub") haut += m.pages.map((p) => lien(p.hash, `data-module="hub" data-page="${h(p.hash.slice(1))}"`, p.icone, p.libelle)).join("");
+    // the hub's pages of order 90 and up (the audit log) sit at the bottom, above Settings
+    if (m.id === "hub") for (const p of m.pages) { const l = lien(p.hash, `data-module="hub" data-page="${h(p.hash.slice(1))}"`, p.icone, p.libelle); if (p.ordre >= 90) bas += l; else haut += l; }
     else if (m.id === "reglages") bas += lien(entreeModule(m), `data-module="${h(m.id)}"`, m.id, m.nom);
     else haut += lien(entreeModule(m), `data-module="${h(m.id)}"`, m.id, m.nom);
   }
@@ -4327,6 +4328,62 @@ $("#page").addEventListener("submit", async (ev) => {
   if (!r) return;
   $("#cof-valeur").value = ""; cof.form = null;
   toast(x ? t("{0} saved.", [r.nom]) : t("{0} added.", [r.nom]), "ok"); rendrePage();
+});
+
+// --- Audit log (#audit): what the modules asked, answered and did, newest first; read only (also from a paired device)
+const aud = { f: { mois: "", projet: "", type: "", q: "" }, pages: 1, verif: null };
+const TYPES_AUDIT = { demande: "Requests", reponse: "Answers", evenement: "Events" };
+const RAISONS_AUDIT = { modifiee: "changed", retiree: "removed", inseree: "inserted", illisible: "unreadable" };
+const quiAudit = (x) => x === "fenetre" ? t("window") : x === "hub" ? "hub" : x && x.startsWith("appareil:") ? t("device {0}", [x.slice(9)])
+  : t((etat.hubModules || []).find((m) => m.id === x)?.nom || x || "?"); // a module by its name (dev: Studio); the hub itself stays "hub", not its home page
+function ligneAudit(l, lang) {
+  const d = new Date(l.t), heure = isNaN(d) ? l.t : d.toLocaleTimeString(lang, { hour: "2-digit", minute: "2-digit" });
+  const qui = [l.mission, l.agent].filter(Boolean).join(" · ");
+  return `<li class="aud-ligne aud-${h(l.type)}"><span class="muet aud-heure">${h(heure)}</span>
+    <span class="aud-texte"><b>${h(quiAudit(l.de))}</b> → ${h(quiAudit(l.vers))}${l.projet ? ", " + h(l.projet) : ""} : <code>${h(l.action || l.type)}</code>${l.resultat ? " — " + h(l.resultat) : ""}${qui ? ` <span class="muet">(${h(qui)})</span>` : ""}</span>
+    <span class="muet petit aud-n" title="${h(l.id)}">#${l.n}</span></li>`;
+}
+pages.audit = async () => {
+  const f = aud.f, qs = new URLSearchParams(Object.entries(f).filter(([, v]) => v)), lignes = [];
+  let d, avant = 0;
+  for (let i = 0; i < aud.pages; i++) { // the pages already opened with Older stay open across a live refresh
+    if (avant) qs.set("avant", avant);
+    d = await api("hub/audit?" + qs); if (i === 0) aud.d = d;
+    lignes.push(...d.lignes); avant = d.suite; if (!avant) break;
+  }
+  const lang = document.documentElement.lang || "en", v = aud.verif;
+  const choix = (id, val, opts) => `<select id="${id}">${opts.map(([k, lib]) => `<option value="${h(k)}" ${k === val ? "selected" : ""}>${h(lib)}</option>`).join("")}</select>`;
+  let jour = "", liste = "";
+  for (const l of lignes) {
+    const j = new Date(l.t).toLocaleDateString(lang, { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+    if (j !== jour) { liste += `${jour ? "</ul>" : ""}<h3 class="aud-jour">${h(j)}</h3><ul class="aud-liste">`; jour = j; }
+    liste += ligneAudit(l, lang);
+  }
+  return `<div class="audit">
+    <div class="journal-tools">
+      ${choix("aud-mois", f.mois, [["", t("All months")], ...aud.d.mois.map((m) => [m, m])])}
+      ${choix("aud-projet", f.projet, [["", t("All projects")], ...aud.d.projets.map((p) => [p, p])])}
+      ${choix("aud-type", f.type, [["", t("All types")], ...Object.entries(TYPES_AUDIT).map(([k, lib]) => [k, t(lib)])])}
+      <input type="text" id="aud-q" placeholder="${h(t("filter…"))}" value="${h(f.q)}" aria-label="${h(t("filter…"))}">
+      <span class="espace"></span>
+      <button type="button" class="btn" data-aud-verifier>${t("Check the log")}</button>
+    </div>
+    ${v ? v.ok ? `<p class="bloc aud-verif ok">✓ ${t("The log is intact: {0} lines checked, none changed, removed or inserted.", [v.lignes])}</p>`
+      : `<p class="bloc aud-verif echec">✗ ${t("Line {0} of {1} is {2}: the log was touched from that line on.", [v.ligne, v.fichier, t(RAISONS_AUDIT[v.raison] || v.raison)])}</p>` : ""}
+    ${liste ? liste + "</ul>" : `<div class="vide">${Object.values(f).some(Boolean) ? t("No line matches these filters.") : t("Nothing in the audit log yet: the modules' requests, the access given or taken and the approvals will be written here.")}</div>`}
+    ${avant ? `<p><button type="button" class="btn" data-aud-plus>${t("Older lines")}</button></p>` : ""}
+    <p class="muet petit">${t("Each line carries the fingerprint of the one before: a line changed or removed shows at the check. This log is only written by Athanor, never by a page; the pilot's own log is in Log.")}</p>
+  </div>`;
+};
+$("#page").addEventListener("click", async (ev) => {
+  if (etat.page !== "audit") return;
+  const b = ev.target.closest("[data-aud-verifier], [data-aud-plus]"); if (!b) return;
+  if (b.dataset.audPlus !== undefined) { aud.pages++; return rendrePage(); }
+  const r = await action(api("hub/audit/verifier", "POST")); if (r) { aud.verif = r; rendrePage(); }
+});
+$("#page").addEventListener("change", (ev) => {
+  const k = etat.page === "audit" && { "aud-mois": "mois", "aud-projet": "projet", "aud-type": "type", "aud-q": "q" }[ev.target.id];
+  if (k) { aud.f[k] = ev.target.value.trim(); aud.pages = 1; rendrePage(); }
 });
 
 async function rendrePage() {

@@ -21,6 +21,7 @@ import (
 	"regexp"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -340,4 +341,97 @@ func (s *Serveur) entreeCoffre(id string) EntreeCoffre {
 		}
 	}
 	return EntreeCoffre{ID: id}
+}
+
+// FiltreAudit: what the #audit page asks for (empty: everything); Avant (a rank) pages back.
+type FiltreAudit struct {
+	Mois, Projet, Type, Q string
+	Avant                 int
+}
+
+// PageAudit: one page of the log, newest first; Suite is the rank to pass as avant for the next page (0: none).
+type PageAudit struct {
+	Lignes  []LigneAudit `json:"lignes"`
+	Mois    []string     `json:"mois"`    // the months there are, newest first ("2026-11")
+	Projets []string     `json:"projets"` // the projects named in the months read
+	Suite   int          `json:"suite,omitempty"`
+}
+
+const parPageAudit = 100
+
+var typesAudit = []string{"demande", "reponse", "evenement"}
+
+// Lire: the lines matching f, newest first, parPageAudit at most. An unreadable line is left out (the check
+// points at it). shortcut: reads whole month files at each call, upgrade to reading backwards past a few MB.
+func (a Audit) Lire(f FiltreAudit) (PageAudit, error) {
+	auditMu.Lock()
+	defer auditMu.Unlock()
+	m, err := a.mois()
+	if err != nil {
+		return PageAudit{}, err
+	}
+	p := PageAudit{Lignes: []LigneAudit{}, Mois: []string{}, Projets: []string{}}
+	vus, q := map[string]bool{}, strings.ToLower(f.Q)
+	for i := len(m) - 1; i >= 0; i-- {
+		mois := strings.TrimSuffix(m[i], ".jsonl")
+		p.Mois = append(p.Mois, mois)
+		if f.Mois != "" && f.Mois != mois {
+			continue
+		}
+		b, err := os.ReadFile(filepath.Join(a.Dossier, m[i]))
+		if err != nil {
+			return PageAudit{}, err
+		}
+		lignes := bytes.Split(bytes.TrimRight(b, "\n"), []byte("\n"))
+		for j := len(lignes) - 1; j >= 0; j-- {
+			var l LigneAudit
+			if json.Unmarshal(lignes[j], &l) != nil {
+				continue
+			}
+			if l.Projet != "" && !vus[l.Projet] {
+				vus[l.Projet] = true
+				p.Projets = append(p.Projets, l.Projet)
+			}
+			texte := strings.ToLower(strings.Join([]string{l.De, l.Vers, l.Projet, l.Mission, l.Agent, l.Action, l.Resultat}, " "))
+			switch {
+			case f.Avant > 0 && l.N >= f.Avant, f.Projet != "" && l.Projet != f.Projet, f.Type != "" && l.Type != f.Type,
+				q != "" && !strings.Contains(texte, q):
+			case len(p.Lignes) == parPageAudit:
+				p.Suite = p.Lignes[parPageAudit-1].N
+			default:
+				p.Lignes = append(p.Lignes, l)
+			}
+		}
+	}
+	sort.Strings(p.Projets)
+	return p, nil
+}
+
+// apiAudit: GET /api/hub/audit?mois=&projet=&type=&q=&avant= (reading, also from a paired device).
+func (s *Serveur) apiAudit(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	f := FiltreAudit{Mois: q.Get("mois"), Projet: q.Get("projet"), Type: q.Get("type"), Q: q.Get("q")}
+	avant, err := strconv.Atoi(q.Get("avant"))
+	if q.Get("avant") != "" && (err != nil || avant < 1) || f.Mois != "" && !reMoisAudit.MatchString(f.Mois+".jsonl") ||
+		f.Type != "" && !slices.Contains(typesAudit, f.Type) || len(f.Q) > 200 || len(f.Projet) > 200 {
+		s.erreur(w, http.StatusBadRequest, "Invalid audit log filter")
+		return
+	}
+	f.Avant = avant
+	p, err := Audit{Dossier: dossierJournalAudit()}.Lire(f)
+	if err != nil {
+		s.erreur(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.ecrireJSON(w, p)
+}
+
+// apiAuditVerifier: POST /api/hub/audit/verifier, the whole chain recomputed (also from a paired device).
+func (s *Serveur) apiAuditVerifier(w http.ResponseWriter, r *http.Request) {
+	v, err := s.verifierAudit()
+	if err != nil {
+		s.erreur(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.ecrireJSON(w, v)
 }

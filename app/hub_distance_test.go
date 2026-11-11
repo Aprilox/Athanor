@@ -65,7 +65,11 @@ func TestDistanceToutesRoutes(t *testing.T) {
 		{"POST", "/api/coffre/x", true},
 		{"DELETE", "/api/coffre/x", true},
 		{"POST", "/api/coffre", true},
-		{"GET", "/api/acces", false}, // a project's grants, no value
+		{"GET", "/api/acces", false},               // a project's grants, no value
+		{"GET", "/api/hub/audit", false},           // the audit log, read from a device
+		{"POST", "/api/hub/audit/verifier", false}, // and checked
+		{"POST", "/api/hub/audit", true},
+		{"GET", "/api/hub/audit/verifier", true},
 		{"POST", "/api/acces", true},
 		{"GET", "/api/acces/x", true},
 		{"GET", "/api/hubx", true}, // plain prefix

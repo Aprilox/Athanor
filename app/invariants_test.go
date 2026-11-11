@@ -390,8 +390,8 @@ func TestInvariantI8(t *testing.T) {
 			n++
 		}
 	}
-	if n != 5 {
-		t.Fatalf(".gitleaksignore: %d fingerprints, want the 5 already on main (a new fake value starts with \"temoin\")", n)
+	if n != 7 { // the 5 already on main and the 2 of commit d91e71c (M54), never rewritten
+		t.Fatalf(".gitleaksignore: %d fingerprints, want the 7 of older commits (a new fake value starts with \"temoin\")", n)
 	}
 
 	// the CI: the gitleaks job runs, and no secret of the repository is used (no real account)

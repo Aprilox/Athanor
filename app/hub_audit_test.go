@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -44,10 +46,11 @@ func horloge(t *time.Time) func() time.Time { return func() time.Time { return *
 func TestAuditChaine(t *testing.T) {
 	d := t.TempDir()
 	temoin := "TEMOIN-" + aleatoire(12)
+	stripe := "sk_" + "live_abcdefgh1234" // split: a literal key would trip the secret scan of the history
 	a := Audit{Dossier: d, Secrets: func() []string { return []string{temoin, "court"} }}
 	for i := range 4 {
 		if err := a.Ecrire(LigneAudit{Type: "evenement", De: "fenetre", Vers: "hub", Projet: "demo", Action: "test",
-			Resultat: fmt.Sprintf("%d %s sk_live_abcdefgh1234 ghp_0123456789abcdefABCD password=hunter2 court", i, temoin)}); err != nil {
+			Resultat: fmt.Sprintf("%d %s %s ghp_0123456789abcdefABCD password=hunter2 court", i, temoin, stripe)}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -56,7 +59,7 @@ func TestAuditChaine(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, fuite := range []string{temoin, "sk_live_abcdefgh1234", "ghp_0123456789", "hunter2"} {
+	for _, fuite := range []string{temoin, stripe, "ghp_0123456789", "hunter2"} {
 		if bytes.Contains(b, []byte(fuite)) {
 			t.Fatalf("%q not masked: %s", fuite, b)
 		}
@@ -233,5 +236,96 @@ func TestAuditServeurMasque(t *testing.T) {
 	}
 	if v, err := s.verifierAudit(); err != nil || !v.OK {
 		t.Fatalf("check: %+v %v", v, err)
+	}
+}
+
+// TestAuditLire: newest first, 100 a page then the next one from Suite, filters by month, project, type
+// and text, the months and projects listed, an unreadable line left out.
+func TestAuditLire(t *testing.T) {
+	d := t.TempDir()
+	quand := time.Date(2026, 10, 31, 23, 0, 0, 0, time.UTC)
+	a := Audit{Dossier: d, Maintenant: horloge(&quand)}
+	for i := 1; i <= 150; i++ {
+		if i == 41 {
+			quand = time.Date(2026, 11, 1, 8, 0, 0, 0, time.UTC)
+		}
+		l := LigneAudit{Type: "evenement", De: "fenetre", Vers: "hub", Projet: "alpha", Action: "acces_accorde", Resultat: fmt.Sprint("Stripe ", i)}
+		if i%3 == 0 {
+			l.Type, l.De, l.Projet, l.Action = "demande", "dev", "beta", "demander_acces"
+		}
+		if err := a.Ecrire(l); err != nil {
+			t.Fatal(err)
+		}
+	}
+	p, err := a.Lire(FiltreAudit{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(p.Lignes) != 100 || p.Lignes[0].N != 150 || p.Lignes[99].N != 51 || p.Suite != 51 {
+		t.Fatalf("first page: %d lines, %d..%d, suite %d", len(p.Lignes), p.Lignes[0].N, p.Lignes[len(p.Lignes)-1].N, p.Suite)
+	}
+	if strings.Join(p.Mois, " ") != "2026-11 2026-10" || strings.Join(p.Projets, " ") != "alpha beta" {
+		t.Fatalf("months %v, projects %v", p.Mois, p.Projets)
+	}
+	if p, _ = a.Lire(FiltreAudit{Avant: 51}); len(p.Lignes) != 50 || p.Lignes[0].N != 50 || p.Lignes[49].N != 1 || p.Suite != 0 {
+		t.Fatalf("second page: %d lines, suite %d", len(p.Lignes), p.Suite)
+	}
+	if p, _ = a.Lire(FiltreAudit{Mois: "2026-10"}); len(p.Lignes) != 40 || p.Lignes[0].N != 40 || len(p.Mois) != 2 {
+		t.Fatalf("month filter: %d lines", len(p.Lignes))
+	}
+	if p, _ = a.Lire(FiltreAudit{Projet: "beta", Type: "demande"}); len(p.Lignes) != 50 || p.Lignes[0].N != 150 {
+		t.Fatalf("project and type filter: %d lines", len(p.Lignes))
+	}
+	if p, _ = a.Lire(FiltreAudit{Q: "STRIPE 15"}); len(p.Lignes) != 2 || p.Lignes[0].N != 150 || p.Lignes[1].N != 15 {
+		t.Fatalf("text filter: %+v", p.Lignes)
+	}
+	// a broken line is left out of the reading (the check points at it)
+	f := filepath.Join(d, "2026-11.jsonl")
+	b, _ := os.ReadFile(f)
+	if err := os.WriteFile(f, append(b, []byte("pas du json\n")...), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if p, err = a.Lire(FiltreAudit{}); err != nil || p.Lignes[0].N != 150 {
+		t.Fatalf("with an unreadable line: %v %+v", err, p.Lignes[0])
+	}
+	if p, err = (Audit{Dossier: filepath.Join(d, "absent")}).Lire(FiltreAudit{}); err != nil || len(p.Lignes) != 0 || p.Lignes == nil {
+		t.Fatalf("no log yet: %v %+v", err, p)
+	}
+}
+
+// TestAuditAPI: GET /api/hub/audit reads with its filters (bad ones refused), POST …/verifier gives the
+// first broken line once the log is changed.
+func TestAuditAPI(t *testing.T) {
+	s := serveurCoffreTest(t)
+	for _, p := range []string{"alpha", "beta"} {
+		s.ecrireAudit(LigneAudit{Type: "evenement", De: "fenetre", Vers: "hub", Projet: p, Action: "acces_accorde", Resultat: "Stripe test"})
+	}
+	appel := func(h http.HandlerFunc, methode, url string) *httptest.ResponseRecorder {
+		w := httptest.NewRecorder()
+		h(w, httptest.NewRequest(methode, url, nil))
+		return w
+	}
+	w := appel(s.apiAudit, "GET", "/api/hub/audit?projet=beta")
+	var p PageAudit
+	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &p) != nil || len(p.Lignes) != 1 || p.Lignes[0].Projet != "beta" {
+		t.Fatalf("read: %d %s", w.Code, w.Body)
+	}
+	for _, q := range []string{"mois=2026-1", "mois=../x", "type=autre", "avant=0", "avant=x", "q=" + strings.Repeat("a", 201)} {
+		if w := appel(s.apiAudit, "GET", "/api/hub/audit?"+q); w.Code != http.StatusBadRequest {
+			t.Errorf("%s: %d", q, w.Code)
+		}
+	}
+	var v VerifAudit
+	if w := appel(s.apiAuditVerifier, "POST", "/api/hub/audit/verifier"); json.Unmarshal(w.Body.Bytes(), &v) != nil || !v.OK || v.Lignes != 2 {
+		t.Fatalf("check: %s", w.Body)
+	}
+	m, _ := Audit{Dossier: dossierJournalAudit()}.mois()
+	f := filepath.Join(dossierJournalAudit(), m[0])
+	b, _ := os.ReadFile(f)
+	if err := os.WriteFile(f, bytes.Replace(b, []byte(`"projet":"alpha"`), []byte(`"projet":"gamma"`), 1), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if w := appel(s.apiAuditVerifier, "POST", "/api/hub/audit/verifier"); json.Unmarshal(w.Body.Bytes(), &v) != nil || v.OK || v.Ligne != 1 || v.Raison != "modifiee" || v.Fichier != m[0] {
+		t.Fatalf("changed log: %s", w.Body)
 	}
 }

@@ -193,7 +193,8 @@ type moduleHub struct{}
 func (moduleHub) ID() string  { return "hub" }
 func (moduleHub) Nom() string { return "Home" }
 func (moduleHub) Pages() []PageModule {
-	return []PageModule{{Hash: "#accueil", Ordre: 0, Icone: "accueil", Libelle: "Home"}, {Hash: "#global", Ordre: 1, Icone: "projets", Libelle: "Projects", Fils: []string{"#nouveau", "#archives"}}}
+	return []PageModule{{Hash: "#accueil", Ordre: 0, Icone: "accueil", Libelle: "Home"}, {Hash: "#global", Ordre: 1, Icone: "projets", Libelle: "Projects", Fils: []string{"#nouveau", "#archives"}},
+		{Hash: "#audit", Ordre: 90, Icone: "audit", Libelle: "Audit log"}} // 90 and up: at the bottom of the menu
 }
 func (moduleHub) Resume(*Serveur) ResumeModule {
 	return ResumeModule{Stats: []StatModule{}, Etat: "inactif"}

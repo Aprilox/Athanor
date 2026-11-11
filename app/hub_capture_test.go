@@ -26,6 +26,11 @@ func TestCaptureHub(t *testing.T) {
 		t.Fatal("CAPTURE_SCRIPT not set")
 	}
 	d := t.TempDir()
+	// the Athanor folder (the audit log in hub/journal…) in the test's folder, never this PC's; the browser keeps the real environment
+	envNavigateur := os.Environ()
+	for _, v := range []string{"LOCALAPPDATA", "LocalAppData", "HOME", "XDG_DATA_HOME", "XDG_CONFIG_HOME"} {
+		t.Setenv(v, filepath.Join(d, "athanor"))
+	}
 	var projets []Projet
 	for i := 0; i < 20; i++ {
 		projets = append(projets, fauxProjet(t, d, fmt.Sprintf("projet-%02d", i), 12, i%13))
@@ -68,6 +73,21 @@ func TestCaptureHub(t *testing.T) {
 	s.cleAcces = aleatoire(24)
 	s.coffre, s.coffreErr = coffreCapture(t), nil // never this PC's own vault
 	accesCapture(t, s, projets[0], projets[1])
+	// the server writes its config beside the test binary, which then becomes Athanor's folder (dossierAthanor):
+	// written now, so the audit lines below land where the pages read them
+	if err := ecrireConfig(s.config); err != nil {
+		t.Fatal(err)
+	}
+	// the audit log (audit-*): an access given, a module's request and its answer (same ID), a "Force", an emergency stop
+	for _, l := range []LigneAudit{
+		{Type: "evenement", De: "fenetre", Vers: "hub", Projet: "projet-00", Action: "accorder", Resultat: "Stripe test [sec-1, code] → STRIPE_KEY, test"},
+		{ID: "bus-7", Type: "demande", De: "dev", Vers: "hub", Projet: "projet-01", Mission: "M4", Agent: "pilote", Action: "demander_acces", Resultat: "Stripe test"},
+		{ID: "bus-7", Type: "reponse", De: "hub", Vers: "dev", Projet: "projet-01", Action: "demander_acces", Resultat: "en attente"},
+		{Type: "evenement", De: "appareil:telephone", Vers: "hub", Projet: "projet-00", Action: "forcer_infra_natif", Resultat: "true"},
+		{Type: "evenement", De: "fenetre", Vers: "hub", Action: "arret_urgence", Resultat: "3 pilotes arrêtés"},
+	} {
+		s.ecrireAudit(l)
+	}
 	// P2 (p2-*): "Test" of a pasted GitHub token reaches this fake GitHub, never the real one
 	gh := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/user" || !strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ghp_") {
@@ -100,7 +120,7 @@ func TestCaptureHub(t *testing.T) {
 	ctx, fin := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer fin()
 	cmd := exec.CommandContext(ctx, "node", script, fichierURL, sortie)
-	cmd.Env = append(os.Environ(), "CAPTURE_P3_SECRETS="+cheminSecrets(projets[1])) // P3: the infra value never lands there
+	cmd.Env = append(envNavigateur, "CAPTURE_P3_SECRETS="+cheminSecrets(projets[1])) // P3: the infra value never lands there
 	sorties, err := cmd.CombinedOutput()
 	t.Logf("%s", sorties)
 	if err != nil {
