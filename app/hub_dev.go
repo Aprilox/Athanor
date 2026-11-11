@@ -5,13 +5,15 @@ package main
 
 import (
 	"math"
+	"strings"
 	"time"
 )
 
 type moduleDev struct{}
 
-func (moduleDev) ID() string  { return "dev" }
-func (moduleDev) Nom() string { return "Studio" }
+func (moduleDev) ID() string          { return "dev" }
+func (moduleDev) Nom() string         { return "Studio" }
+func (moduleDev) ProjetCourant() bool { return true }
 
 // Pages: the pages of the selected project (Projects, every project at once, is the hub's).
 func (moduleDev) Pages() []PageModule {
@@ -32,8 +34,9 @@ func (moduleDev) Elements(s *Serveur) []ElementHub {
 			continue
 		}
 		e := ElementHub{ID: pv.Nom, Titre: pv.Nom, Etat: "inactif", Lien: "#suivi", Projet: pv.Nom}
+		e.Avancement = &Avancement{Texte: "No plan yet"}
 		if pv.Jalons > 0 {
-			e.Avancement = &Avancement{Fait: pv.Faits, Total: pv.Jalons}
+			e.Avancement = &Avancement{Fait: pv.Faits, Total: pv.Jalons, Texte: "{0} / {1} milestones done", Etape: "Milestone {0}/{1}"}
 		}
 		switch {
 		case pv.Actif:
@@ -61,7 +64,7 @@ func (moduleDev) Elements(s *Serveur) []ElementHub {
 func attenteDev(pv ProjetVue) *AttenteElement {
 	switch pv.Besoin {
 	case "pour_vous":
-		return &AttenteElement{Raison: "{0} task(s) on the For you page", Args: []any{pv.PourVous}, Page: "#pourvous"}
+		return &AttenteElement{Raison: "{0} task(s) on the For you page", Args: []any{pv.PourVous}, Page: "#pourvous", Cle: strings.Join(pv.idsPourVous, ",")}
 	case "attente_vous":
 		return &AttenteElement{Raison: "Claude is waiting for you", Page: "#pourvous"}
 	case "connexion":

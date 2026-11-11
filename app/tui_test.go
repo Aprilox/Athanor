@@ -1091,7 +1091,7 @@ func TestTUIAccueil(t *testing.T) {
 	}
 	// "In progress": a working element says its milestone and what its pilot does, as the web does
 	a.aide, a.page = false, pAccueil
-	a.hub.Elements = []ElementHub{{Module: "dev", ID: "b", Titre: "b", Etat: "actif", Avancement: &Avancement{Fait: 3, Total: 10}, Activite: "Écrire la page", Action: "Tests"},
+	a.hub.Elements = []ElementHub{{Module: "dev", ID: "b", Titre: "b", Etat: "actif", Avancement: &Avancement{Fait: 3, Total: 10, Etape: "Milestone {0}/{1}"}, Activite: "Écrire la page", Action: "Tests"},
 		{Module: "dev", ID: "c", Titre: "c", Etat: "actif", Activite: "Seul"}}
 	e = nouvelEcran(120, 40)
 	a.dessiner(e)

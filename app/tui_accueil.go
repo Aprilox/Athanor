@@ -181,8 +181,8 @@ func (a *appTUI) ligneElementTUI(e *ecranT, x, y, l, lt, lm int, el ElementHub, 
 		coul, texte = p.ok, t("In progress")
 		// "Milestone 3/40 : its title, what the pilot does", as the web's activiteElement says it
 		j, quoi := "", strings.Join(slices.DeleteFunc([]string{el.Activite, t(el.Action)}, func(s string) bool { return s == "" }), ", ")
-		if av := el.Avancement; av != nil && av.Total > 0 {
-			j = t("Milestone {0}/{1}", min(av.Fait+1, av.Total), av.Total)
+		if av := el.Avancement; av != nil && av.Total > 0 && av.Etape != "" {
+			j = t(av.Etape, min(av.Fait+1, av.Total), av.Total)
 		}
 		switch {
 		case j != "" && quoi != "":

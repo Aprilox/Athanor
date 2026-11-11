@@ -349,15 +349,18 @@ func (p Projet) TachesVues() []TacheUtilVue {
 }
 
 // PourVous: the number of tasks waiting for the user (badge of the menu).
-func (p Projet) PourVous() int {
+func (p Projet) PourVous() int { return len(p.IDsPourVous()) }
+
+// IDsPourVous: the ids of the tasks waiting for the user (what a bell alert is about).
+func (p Projet) IDsPourVous() []string {
 	rep := lireReponses(p)
-	n := 0
+	var ids []string
 	for _, t := range lireTaches(p) {
 		if etatTache(t, rep[t.ID]) == "pour_vous" {
-			n++
+			ids = append(ids, t.ID)
 		}
 	}
-	return n
+	return ids
 }
 
 func (s *Serveur) apiPourVousVoir(w http.ResponseWriter, r *http.Request) {

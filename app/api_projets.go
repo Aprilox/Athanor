@@ -24,12 +24,13 @@ type ProjetVue struct {
 	Phase   string `json:"phase"`
 	Jalon   string `json:"jalon"`
 	// the title of the milestone in progress, when the plan has it (Jalon is what the pilot wrote)
-	JalonTitre string  `json:"jalon_titre,omitempty"`
-	Attente    int     `json:"attente"`
-	PourVous   int     `json:"pour_vous,omitempty"` // tasks waiting for the user (api_pourvous.go)
-	Courant    bool    `json:"courant"`
-	Fin        *FinVue `json:"fin,omitempty"`
-	Archive    bool    `json:"archive,omitempty"`
+	JalonTitre  string   `json:"jalon_titre,omitempty"`
+	Attente     int      `json:"attente"`
+	PourVous    int      `json:"pour_vous,omitempty"` // tasks waiting for the user (api_pourvous.go)
+	idsPourVous []string // their ids, for the bell (hub_dev.go)
+	Courant     bool     `json:"courant"`
+	Fin         *FinVue  `json:"fin,omitempty"`
+	Archive     bool     `json:"archive,omitempty"`
 	// milestones unticked by the folder check, waiting for their files
 	AVerifier bool `json:"a_verifier,omitempty"`
 	// the plan's progress (the All projects page): milestones done, out of all of them
@@ -76,7 +77,8 @@ func (s *Serveur) vuesProjets(courant string) []ProjetVue {
 			}
 		}
 		pv.Attente = len(p.LireFileAttente())
-		pv.PourVous = p.PourVous()
+		pv.idsPourVous = p.IDsPourVous()
+		pv.PourVous = len(pv.idsPourVous)
 		for _, j := range p.LirePlan() {
 			pv.Jalons++
 			if j.Fait {

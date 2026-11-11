@@ -415,7 +415,7 @@ func TestHubElements(t *testing.T) {
 		t.Errorf("elements (waiting first, then the menu's order): %s", g)
 	}
 	for _, e := range v.Elements {
-		if e.ID == "ma-boutique" && (e.Avancement == nil || *e.Avancement != (Avancement{1, 3}) || e.Etat != "inactif" || e.Lien != "#suivi" || e.Projet != "ma-boutique" || e.Attente != nil) {
+		if e.ID == "ma-boutique" && (e.Avancement == nil || *e.Avancement != (Avancement{Fait: 1, Total: 3, Texte: "{0} / {1} milestones done", Etape: "Milestone {0}/{1}"}) || e.Etat != "inactif" || e.Lien != "#suivi" || e.Projet != "ma-boutique" || e.Attente != nil) {
 			t.Errorf("Dev element: %+v", e)
 		}
 	}

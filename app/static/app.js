@@ -804,9 +804,24 @@ $("#notifs").addEventListener("click", async (ev) => {
 });
 $("#page").addEventListener("click", cliqueProjet);
 
-function phraseGlobale(v) {
-  const liste = projetsVisibles(v), n = liste.filter(besoinProjet).length, actifs = liste.filter((x) => x.actif).length;
-  return { classe: n ? "quota" : actifs ? "travaille" : "", titre: t("All projects"), sous: [actifs ? t("{0} project(s) running", [actifs]) : t("idle"), n && t("{0} project(s) need you", [n])].filter(Boolean).join(" · ") };
+// the header of a page outside a project: the module's name, and what runs and waits in every module (as the bell counts)
+function phraseGlobale(m) {
+  const n = alertesHub().length, actifs = ((etat.hub || {}).elements || []).filter((e) => e.etat === "actif").length;
+  const page = m && m.id === "hub" ? m.pages.find((x) => x.hash === "#" + (PAGE_PARENTE[etat.page] || etat.page)) : null; // Home, Projects
+  return { classe: n ? "quota" : actifs ? "travaille" : "", titre: page ? t(page.libelle) : m ? t(m.nom) : "Athanor", sous: [actifs ? t("{0} in progress", [actifs]) : t("idle"), n && t("{0} alert(s) need you", [n])].filter(Boolean).join(" · ") };
+}
+// the pages of a module that works on the selector's project (Studio): Start, access, the project's line
+const avecProjet = (m) => !!m && !!m.projet;
+// a rebuild keeps the keyboard focus on the same element (same identifying attributes), else the focus fell to the page
+function cleFocus(x) {
+  const s = ["id", "data-href", "data-page", "data-filtre", "data-act", "data-notifs", "data-guide", "data-projet", "data-cible", "href"].filter((a) => x.hasAttribute(a)).map((a) => `[${a}="${CSS.escape(x.getAttribute(a))}"]`).join("");
+  return s && x.tagName.toLowerCase() + s;
+}
+function garderFocus(zone, rendre) {
+  const a = document.activeElement, cle = a && a !== zone && zone.contains(a) ? cleFocus(a) : "";
+  rendre();
+  const b = cle && zone.querySelector(cle);
+  if (b && b !== document.activeElement) b.focus({ preventScroll: true });
 }
 
 // ----------------------------------------------------------------------------- shell: header, sidebar, project picker
@@ -826,9 +841,8 @@ function blocAccesDemarrer(ac, distant) {
 
 function rendreBandeau(v) {
   if (document.activeElement && document.activeElement.matches("[data-env-acces]")) return; // an open list is not redrawn under the mouse
-  const global = ["global", "accueil", "coffre"].includes(etat.page); // pages of every project: no project buttons
-  const p = etat.page === "coffre" ? { classe: "", titre: t("Vault"), sous: t("Secrets and variables") } : global ? phraseGlobale(v) : phraseEtat(v);
-  if (etat.page === "accueil") p.titre = t("Home");
+  const mp = moduleDePage(PAGE_PARENTE[etat.page] || etat.page), global = !avecProjet(mp);
+  const p = global ? phraseGlobale(mp) : phraseEtat(v);
   const boutons = [];
   if (v.projet && !global && v.projet.acces) boutons.push(blocAccesDemarrer(v.projet.acces, v.distant));
   if (v.kit_valide && v.projet && !global) {
@@ -854,19 +868,23 @@ function rendreBandeau(v) {
   rendreBarre(v);
   const nomProjet = v.projet && !global ? `<div class="muet petit">${h(v.projet.nom)} · ${h(v.projet.dossier)}</div>` : "";
   const nbActifs = (v.projets || []).filter((x) => x.actif).length;
-  $("#bandeau").innerHTML = `<div class="etat-phrase">${nomProjet}<h1 title="${h(p.titre)}"><span class="point ${p.classe}"></span><span>${h(p.titre)}</span></h1><div class="sous" title="${h(p.sous)}">${h(p.sous)}</div></div><div class="actions">${boutons.join("")}</div>`;
-  $("#nav-sous").textContent = nbActifs ? t("{0} project(s) running", [nbActifs]) : t("idle");
-  $("#bm-titre").textContent = v.projet ? v.projet.nom : "Athanor";
-  $("#nav-kit").textContent = v.kit || "";
+  const html = `<div class="etat-phrase">${nomProjet}<h1 title="${h(p.titre)}"><span class="point ${p.classe}"></span><span>${h(p.titre)}</span></h1><div class="sous" title="${h(p.sous)}">${h(p.sous)}</div></div><div class="actions">${boutons.join("")}</div>`;
+  // rebuilt only when it changed, keeping the focus (the bell, the "?" under the keyboard)
+  if ($("#bandeau").dataset.html !== html) garderFocus($("#bandeau"), () => { $("#bandeau").innerHTML = html; $("#bandeau").dataset.html = html; });
+  // only what changed: a refresh with the same data sends no mutation to the menu
+  const ecrire = (el, x, attr = "textContent") => { if (el[attr] !== x) el[attr] = x; };
+  ecrire($("#nav-sous"), nbActifs ? t("{0} project(s) running", [nbActifs]) : t("idle"));
+  ecrire($("#bm-titre"), v.projet && !global ? v.projet.nom : p.titre);
+  ecrire($("#nav-kit"), v.kit || "");
   const nv = $("#nav-version");
-  nv.textContent = v.version ? "v" + v.version : "";
+  ecrire(nv, v.version ? "v" + v.version : "");
   nv.classList.toggle("maj-dispo", !!maj.disponible);
-  nv.title = maj.disponible ? t("Athanor {0} is available (you have {1})", [maj.derniere, v.version]) : t("Version of Athanor: click to look for an update");
+  ecrire(nv, maj.disponible ? t("Athanor {0} is available (you have {1})", [maj.derniere, v.version]) : t("Version of Athanor: click to look for an update"), "title");
   const sel = $("#sel-projet");
   sel.setAttribute("aria-expanded", etat.selecteurOuvert ? "true" : "false");
   sel.innerHTML = v.projet ? `<span class="dot ${classePhase(v.projet)}"></span><span class="nom">${h(v.projet.nom)}</span><span class="chevron">▾</span>` : `<span class="nom muet">${t("Choose a project")}</span><span class="chevron">▾</span>`;
   marquerNav(v);
-  $("#btn-verrou").hidden = !v.mot_de_passe;
+  ecrire($("#btn-verrou"), !v.mot_de_passe, "hidden");
   if (v.projet && etat.projet !== v.projet.nom) etat.projet = v.projet.nom;
   rendreSelecteur(v);
   rendreNotifs(v);
@@ -1016,8 +1034,9 @@ function rendreMenu(modules) {
     else if (m.id === "reglages") bas += lien(entreeModule(m), `data-module="${h(m.id)}"`, m.id, m.nom);
     else haut += lien(entreeModule(m), `data-module="${h(m.id)}"`, m.id, m.nom);
   }
-  $("#nav-menu").innerHTML = haut; $("#nav-bas").innerHTML = bas;
+  if (haut + bas !== etat.menuHtml) { etat.menuHtml = haut + bas; garderFocus($("#nav-tiroir"), () => { $("#nav-menu").innerHTML = haut; $("#nav-bas").innerHTML = bas; }); }
   marquerMenu();
+  if (etat.vue) rendreBandeau(etat.vue); // the header knows the page's module now
 }
 // the entry of the page shown lit (aria-current), and its module's tabs
 function marquerMenu() {
@@ -1025,14 +1044,14 @@ function marquerMenu() {
   document.querySelectorAll("#nav-tiroir nav a").forEach((a) => {
     const actif = a.dataset.page ? a.dataset.page === page : !!m && a.dataset.module === m.id;
     a.classList.toggle("actif", actif);
-    if (actif) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
+    if (actif !== a.hasAttribute("aria-current")) { if (actif) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current"); }
   });
   rendreOnglets(m);
   if (etat.vue) marquerNav(etat.vue);
 }
 // one line of tabs at the top of the module's area (Dev: with its project selector); none for one page
 function rendreOnglets(m) {
-  const dev = !!m && m.id === "dev", pages = m && m.id !== "hub" ? m.pages : [];
+  const dev = avecProjet(m), pages = m && m.id !== "hub" ? m.pages : [];
   const html = pages.length > 1 || dev ? pages.map((p) => `<a data-href="${h(p.hash)}" tabindex="0" data-page="${h(p.hash.slice(1))}"${p.hash === "#" + etat.page ? ' class="actif" aria-current="page"' : ""}>${h(t(p.libelle))}<span class="nb"></span></a>`).join("") : "";
   $("#selecteur").hidden = !dev;
   $("#barre-onglets").hidden = !html;
@@ -1047,10 +1066,13 @@ function rendreOnglets(m) {
 function marquerNav(v) {
   const nb = (sel, n, alerte, titre) => {
     const b = document.querySelector(sel + " .nb"); if (!b) return;
-    b.className = "nb" + (n ? " pastille" + (alerte ? " pastille-alerte" : "") : ""); b.textContent = n || ""; b.title = (n && titre) || "";
+    const c = "nb" + (n ? " pastille" + (alerte ? " pastille-alerte" : "") : ""), txt = String(n || ""), ti = (n && titre) || "";
+    if (b.className !== c) b.className = c; // only what changed: an unchanged menu sends no mutation
+    if (b.textContent !== txt) b.textContent = txt;
+    if (b.title !== ti) b.title = ti;
   };
-  const besoins = projetsVisibles(v).filter(besoinProjet).length;
-  nb('#nav-menu a[data-page="global"]', besoins, true, t("{0} project(s) need you", [besoins]));
+  const besoins = etat.hub ? alertesHub().length : projetsVisibles(v).filter(besoinProjet).length; // every module, as the bell counts
+  nb('#nav-menu a[data-page="global"]', besoins, true, t("{0} alert(s) need you", [besoins]));
   nb('#onglets-module a[data-page="demandes"]', v.attente);
   nb('#onglets-module a[data-page="pourvous"]', v.pour_vous, true);
   marquerDistance(v);
@@ -1214,9 +1236,10 @@ async function montrerVisite() {
   const e = etapes[n];
   if (location.hash !== "#" + e.page) location.hash = "#" + e.page; else await rendrePage();
   let cible = null;
-  for (let i = 0; i < 40 && !cible; i++) { // the page renders asynchronously
+  for (let i = 0; i < 40 && !cible; i++) { // the page renders asynchronously; once rendered without the target, the bubble is centred
     await new Promise((r) => setTimeout(r, 100));
     for (const c of e.cibles) { const x = document.querySelector(c); if (x && x.offsetParent !== null) { cible = x; break; } }
+    if (!cible && i > 0 && etat.pageRendue === e.page) break;
   }
   if (n !== etat.visite) return;
   document.querySelectorAll(".visite-cible").forEach((x) => x.classList.remove("visite-cible"));
@@ -1708,9 +1731,9 @@ function referencePonytail(g) {
 // Projects: every module's elements from /api/hub (the hub knows no module's details), those that need the owner first
 const ETATS_ELEMENT = { actif: ["travaille", "In progress"], termine: ["entre_cycles", "Finished"], inactif: ["", "Idle"] };
 function activiteElement(e) {
-  const a = e.avancement, j = e.etat === "actif" && a && a.total ? t("Milestone {0}/{1}", [Math.min(a.fait + 1, a.total), a.total]) : "";
+  const a = e.avancement, j = e.etat === "actif" && a && a.total && a.etape ? t(a.etape, [Math.min(a.fait + 1, a.total), a.total]) : "";
   const quoi = [e.activite ? titreJalon(e.activite) : "", e.action ? t(e.action) : ""].filter(Boolean).join(", ");
-  return j && quoi ? `${j} : ${quoi}` : j || quoi;
+  return j && quoi ? t("{0}: {1}", [j, quoi]) : j || quoi;
 }
 function ligneElement(e, modules) {
   const m = modules.find((x) => x.id === e.module) || { id: e.module, nom: e.module };
@@ -1722,7 +1745,7 @@ function ligneElement(e, modules) {
     <div class="cp-tete"><span class="dot ${classe}" aria-hidden="true"></span><b class="cp-nom">${h(e.titre)}</b><span class="pastille-module"><span class="ico ico-${h(m.id)}" aria-hidden="true"></span>${h(t(m.nom))}</span></div>
     <div class="el-etat petit">${e.attente ? `<span class="cp-besoin">${t("Needs you")}</span> <span>${h(t(e.attente.raison, e.attente.args || []))}</span>` : `<span class="muet">${t(libelle)}</span>`}</div>
     ${act ? `<div class="cp-jalon petit" title="${h(act)}">${h(act)}</div>` : ""}
-    ${a && a.total ? `<div class="barre"><i style="width:${(a.fait / a.total) * 100}%"></i></div><div class="muet petit">${t("{0} / {1} milestones done", [a.fait, a.total])}</div>` : `<div class="muet petit">${t("No plan yet")}</div>`}
+    ${a && a.total ? `<div class="barre"><i style="width:${(a.fait / a.total) * 100}%"></i></div>` : ""}${a && a.texte ? `<div class="muet petit">${h(t(a.texte, [a.fait, a.total]))}</div>` : ""}
   </a>`;
 }
 pages.global = async () => {
@@ -1786,9 +1809,9 @@ pages.accueil = async () => {
     </form>
     <div class="grille-hub">${modules.filter((m) => ((m.resume || {}).stats || []).length).map(tuileModule).join("")}</div>
     ${blocEnCours(d.elements || [], modules)}
-    <section class="bloc missions"><h2>${t("Missions")}</h2>
+    ${modules.some((m) => m.id === "missions") ? "" : `<section class="bloc missions"><h2>${t("Missions")}</h2>
       <div class="missions-vide"><span class="missions-icone" aria-hidden="true"></span><div><b>${t("No mission yet")}</b><div class="muet petit">${t("Coming soon: one sentence, and Studio and Servers work together.")}</div></div></div>
-    </section>
+    </section>`}
   </div>`;
 };
 // the bar's text goes to the chat of the current project (or to a new project's request) through memory,
@@ -4307,7 +4330,8 @@ async function rendrePage() {
   const defils = positionsDefil();
   // the field being typed in keeps its focus and its cursor across a live refresh (e.g. the Team page's search)
   const a = document.activeElement, saisie = a && a.id && $("#page").contains(a) && a.matches("input[type=text], textarea") ? [a.id, a.selectionStart, a.selectionEnd] : null;
-  $("#page").innerHTML = html;
+  garderFocus($("#page"), () => { $("#page").innerHTML = html; });
+  etat.pageRendue = etat.page;
   // text of the Home bar: kept across a live refresh, then handed to the chat or the new project's request
   const barre = $("#accueil-texte"); if (barre) barre.value = etat.accueilTexte || "";
   const pre = etat.preRempli;

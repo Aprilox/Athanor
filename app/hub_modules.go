@@ -71,9 +71,12 @@ type ElementHub struct {
 	Projet     string          `json:"projet,omitempty"`   // the Dev project to select before opening Lien
 }
 
+// Avancement: the module's own words for it (i18n keys), so that a server is not told in milestones.
 type Avancement struct {
-	Fait  int `json:"fait"`
-	Total int `json:"total"`
+	Fait  int    `json:"fait"`
+	Total int    `json:"total"`
+	Texte string `json:"texte"`           // under the bar, {0} done of {1}; alone when Total is 0 ("No plan yet")
+	Etape string `json:"etape,omitempty"` // the step in progress, {0} of {1} ("Milestone {0}/{1}")
 }
 
 // AttenteElement: why the owner is needed (an i18n key and its arguments) and the page to answer it.
@@ -81,6 +84,7 @@ type AttenteElement struct {
 	Raison string `json:"raison"`
 	Args   []any  `json:"args,omitempty"`
 	Page   string `json:"page"`
+	Cle    string `json:"-"` // what the situation is about (ids of the waiting tasks): a new one is a new alert
 }
 
 // StatModule: one figure of a home tile (Valeur: an int or a string), Page = the hash it opens.
@@ -151,20 +155,27 @@ type ModuleVue struct {
 	Pages    []PageModule    `json:"pages"`
 	Resume   ResumeModule    `json:"resume"`
 	Tutoriel []EtapeTutoriel `json:"tutoriel,omitempty"`
+	Projet   bool            `json:"projet,omitempty"` // its pages work on the project of the selector (moduleAProjet)
 }
+
+// moduleAProjet: a module whose pages work on one project picked in the selector, with the header's
+// project buttons (Start, access); the hub's and the other modules' pages show neither.
+type moduleAProjet interface{ ProjetCourant() bool }
 
 // apiHub: GET /api/hub, every module with its pages and its home tile, every module's elements (those
 // waiting for the owner first), the bell's alerts and the history of the ignored ones.
 func (s *Serveur) apiHub(w http.ResponseWriter, r *http.Request) {
 	v, el := s.vueHub()
-	actives, cachees := trierAlertes(alertesDe(el), lireIgnorees())
+	toutes := alertesDe(el)
+	actives, cachees := trierAlertes(toutes, ignoreesCourantes(toutes))
 	s.ecrireJSON(w, map[string]any{"modules": v, "elements": el, "alertes": actives, "ignorees": cachees})
 }
 
 func (s *Serveur) vueHub() ([]ModuleVue, []ElementHub) {
 	v, el := []ModuleVue{}, []ElementHub{}
 	for _, m := range modulesHub() {
-		v = append(v, ModuleVue{ID: m.ID(), Nom: m.Nom(), Pages: pagesModule(m), Resume: m.Resume(s), Tutoriel: m.Tutoriel()})
+		_, projet := m.(moduleAProjet)
+		v = append(v, ModuleVue{ID: m.ID(), Nom: m.Nom(), Pages: pagesModule(m), Resume: m.Resume(s), Tutoriel: m.Tutoriel(), Projet: projet})
 		for _, e := range m.Elements(s) {
 			e.Module = m.ID()
 			el = append(el, e)
@@ -192,6 +203,6 @@ func (moduleHub) Tutoriel() []EtapeTutoriel {
 		{Titre: "One tile per part", Texte: "Each part of Athanor has its tile with what matters now. Click a figure to open its page.", Cible: ".grille-hub"},
 		{Titre: "In progress", Texte: "What is working right now, and first what waits for you, with the reason. “See all” opens the Projects page.", Cible: ".en-cours"},
 		{Titre: "The bell", Texte: "Everything that needs you, with why. “View” opens the right page, “Ignore” hides an alert until something changes.", Cible: "[data-notifs]"},
-		{Titre: "Projects", Texte: "Every project of every part on one page, with filters. This tour and the others stay in the “?”, at the top of the Guide.", Cible: `nav a[href="#global"]`},
+		{Titre: "Projects", Texte: "Every project of every part on one page, with filters. This tour and the others stay in the “?”, at the top of the Guide.", Cible: `nav a[data-href="#global"]`},
 	}
 }

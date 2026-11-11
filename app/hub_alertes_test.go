@@ -111,6 +111,22 @@ func TestHubAlertes(t *testing.T) {
 		t.Errorf("changed argument: %q", g)
 	}
 
+	// B32: a new waiting task (Cle) rings even with the same count; an ignored situation which ended
+	// and comes back later rings again (its fingerprint was dropped while it was gone)
+	domaine.Cle = "t1"
+	ignorer(lire().Alertes[0].Empreinte, true)
+	domaine.Cle = "t2"
+	if g := cles(lire().Alertes); g != "missions/m2 serveurs/vps-1" {
+		t.Errorf("new task, same count: %q", g)
+	}
+	ignorer(lire().Alertes[0].Empreinte, true)
+	domaine.Cle = "t3"
+	lire()
+	domaine.Cle = "t2"
+	if g := cles(lire().Alertes); g != "missions/m2 serveurs/vps-1" {
+		t.Errorf("situation back after it ended: %q", g)
+	}
+
 	if c := ignorer("inconnue", true); c != http.StatusNotFound {
 		t.Errorf("unknown alert: %d, want 404", c)
 	}

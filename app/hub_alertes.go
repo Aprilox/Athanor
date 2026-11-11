@@ -38,7 +38,7 @@ type AlerteHub struct {
 // empreinteAlerte: the element and its reason; the same alert ignored once stays hidden, any change
 // of the reason or of its arguments (2 tasks instead of 1) makes it come back.
 func empreinteAlerte(e ElementHub) string {
-	b, _ := json.Marshal([]any{e.Module, e.ID, e.Attente.Raison, e.Attente.Args})
+	b, _ := json.Marshal([]any{e.Module, e.ID, e.Attente.Raison, e.Attente.Args, e.Attente.Cle})
 	s := sha256.Sum256(b)
 	return hex.EncodeToString(s[:12])
 }
@@ -70,6 +70,23 @@ func lireIgnorees() map[string]string {
 	m := map[string]string{}
 	lireJSONFichier(fichierAlertesIgnorees(), &m)
 	return m
+}
+
+// ignoreesCourantes: the ignored fingerprints of the current alerts; those of alerts gone are dropped
+// from the file, so that a situation which ends and comes back later rings again.
+func ignoreesCourantes(toutes []AlerteHub) map[string]string {
+	alertesMu.Lock()
+	defer alertesMu.Unlock()
+	m, garde := lireIgnorees(), map[string]string{}
+	for _, a := range toutes {
+		if le, ok := m[a.Empreinte]; ok {
+			garde[a.Empreinte] = le
+		}
+	}
+	if len(garde) < len(m) {
+		_ = ecrireJSONFichier(fichierAlertesIgnorees(), garde, 0o600)
+	}
+	return garde
 }
 
 // trierAlertes: the bell's alerts and the history of the ignored ones still current.
