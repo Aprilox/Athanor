@@ -209,9 +209,87 @@ func TestServeursOutils(t *testing.T) {
 		t.Logf("link not testable here: %v", err)
 	}
 
+	// service, docker, pare_feu: a trapped argument is refused before any command reaches the server
+	derniere()
+	for _, c := range []struct {
+		outil string
+		args  map[string]any
+	}{
+		{"service", map[string]any{"action": "restart", "nom": "nginx; reboot"}},
+		{"service", map[string]any{"action": "restart", "nom": "$(reboot)"}},
+		{"service", map[string]any{"action": "restart", "nom": "nginx\nreboot"}},
+		{"service", map[string]any{"action": "rm -rf", "nom": "nginx"}},
+		{"docker", map[string]any{"action": "logs", "nom": "web;id"}},
+		{"docker", map[string]any{"action": "pull", "nom": "nginx$(id)"}},
+		{"docker", map[string]any{"action": "restart", "nom": "-v"}},
+		{"docker", map[string]any{"action": "compose_up", "dossier": "/srv/app;id"}},
+		{"docker", map[string]any{"action": "compose_up", "dossier": "/srv/$(id)"}},
+		{"docker", map[string]any{"action": "compose_up", "dossier": "/srv/app\nid"}},
+		{"docker", map[string]any{"action": "compose_up", "dossier": "srv/app"}},
+		{"docker", map[string]any{"action": "logs", "nom": "web", "lignes": 100000}},
+		{"pare_feu", map[string]any{"action": "allow", "port": 0}},
+		{"pare_feu", map[string]any{"action": "allow", "port": 65536}},
+		{"pare_feu", map[string]any{"action": "allow", "port": "80;id"}},
+		{"pare_feu", map[string]any{"action": "allow", "port": 80, "proto": "tcp;id"}},
+		{"pare_feu", map[string]any{"action": "delete", "port": 80}},
+		{"pare_feu", map[string]any{"action": "deny", "port": srv.Port}},
+		{"pare_feu", map[string]any{"action": "delete", "port": srv.Port, "proto": "tcp", "regle": "allow"}},
+	} {
+		if _, err := appel(c.outil, c.args); err == nil {
+			t.Errorf("%s %v accepted", c.outil, c.args)
+		}
+	}
+	if c := derniere(); c != "" {
+		t.Errorf("a refused call reached the server: %q", c)
+	}
+	// valid ones: fixed script, every argument quoted; a change tries to make the sheet again
+	for _, c := range []struct {
+		outil, attendu string
+		args           map[string]any
+		modifie        bool
+	}{
+		{"service", ` sh 'restart' 'nginx'`, map[string]any{"action": "restart", "nom": "nginx"}, true},
+		{"service", ` sh 'status' 'postgresql@15-main'`, map[string]any{"action": "status", "nom": "postgresql@15-main"}, false},
+		{"docker", ` sh 'logs' 'web' '50'`, map[string]any{"action": "logs", "nom": "web", "lignes": 50}, false},
+		{"docker", ` sh 'pull' 'ghcr.io/org/app:1.2' '200'`, map[string]any{"action": "pull", "nom": "ghcr.io/org/app:1.2"}, true},
+		{"docker", ` sh 'compose_up' '/srv/mon app' '200'`, map[string]any{"action": "compose_up", "dossier": "/srv/mon app"}, true},
+		{"pare_feu", ` sh 'allow' '' '8080/tcp'`, map[string]any{"action": "allow", "port": 8080, "proto": "tcp"}, true},
+		{"pare_feu", ` sh 'deny' '' '` + strconv.Itoa(srv.Port) + `/udp'`, map[string]any{"action": "deny", "port": srv.Port, "proto": "udp"}, true},
+		{"pare_feu", ` sh 'delete' 'deny' '25'`, map[string]any{"action": "delete", "port": 25, "regle": "deny"}, true},
+	} {
+		r, err := appel(c.outil, c.args)
+		if err != nil || !strings.Contains(r.Sortie, c.attendu+"\n") && !strings.HasSuffix(r.Sortie, c.attendu) {
+			t.Errorf("%s %v: %v %q", c.outil, c.args, err, r.Sortie)
+		}
+		if strings.Contains(r.Sortie, "sheet could not be refreshed") != c.modifie {
+			t.Errorf("%s %v: sheet refresh %v expected: %q", c.outil, c.args, c.modifie, r.Sortie)
+		}
+	}
+	// a program the sheet says is missing: a clear message, nothing run
+	d := filepath.Join(dossierModule("servers"), srv.ID)
+	_ = os.MkdirAll(d, 0o700)
+	b, _ := json.Marshal(FicheServeur{Logiciels: []LogicielFiche{{Nom: "docker", Present: true}, {Nom: "compose"}, {Nom: "ufw"}}})
+	if err := os.WriteFile(filepath.Join(d, "fiche.json"), b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	derniere()
+	if _, err := appel("pare_feu", map[string]any{"action": "status"}); err == nil || !strings.Contains(err.Error(), "ufw is not installed on VPS") {
+		t.Errorf("ufw missing: %v", err)
+	}
+	if _, err := appel("docker", map[string]any{"action": "compose_ps", "dossier": "/srv/app"}); err == nil || !strings.Contains(err.Error(), "compose is not installed") {
+		t.Errorf("compose missing: %v", err)
+	}
+	if c := derniere(); c != "" {
+		t.Errorf("a command ran for a missing program: %q", c)
+	}
+	if _, err := appel("docker", map[string]any{"action": "ps"}); err != nil {
+		t.Errorf("docker ps with docker present: %v", err)
+	}
+
 	// the audit log: one line per call, the vault's values (witness and private key) never in it
 	journal := journalAuditTexte(t)
-	for _, o := range []string{"serveurs.ssh_commande", "serveurs.fichier_lire", "serveurs.fichier_ecrire", "serveurs.sftp_envoyer", "serveurs.sftp_recuperer"} {
+	for _, o := range []string{"serveurs.ssh_commande", "serveurs.fichier_lire", "serveurs.fichier_ecrire", "serveurs.sftp_envoyer", "serveurs.sftp_recuperer",
+		"serveurs.service", "serveurs.docker", "serveurs.pare_feu"} {
 		if !strings.Contains(journal, `"action":"`+o+`"`) {
 			t.Errorf("no audit line for %s", o)
 		}
@@ -303,6 +381,38 @@ func TestServeursOutilsConteneur(t *testing.T) {
 		t.Errorf("SFTP round trip: %q", b)
 	}
 	appel("ssh_commande", map[string]any{"commande": "rm -f /tmp/recu.txt " + citerShell(piege)})
+
+	// service (SysV here), docker (the image's fake one logs its calls), ufw for real; a change makes the sheet again
+	if r := appel("service", map[string]any{"action": "status", "nom": "ssh"}); r.Code != 0 || !strings.Contains(r.Sortie, "sshd is running") {
+		t.Errorf("service status: %+v", r)
+	}
+	appel("ssh_commande", map[string]any{"commande": "mkdir -p '/tmp/app 1'"})
+	fiche := filepath.Join(dossierModule("servers"), id, "fiche.json")
+	_ = os.Remove(fiche)
+	for _, a := range []map[string]any{{"action": "logs", "nom": "web", "lignes": 50}, {"action": "pull", "nom": "nginx:1.27"}, {"action": "compose_up", "dossier": "/tmp/app 1"}} {
+		if r := appel("docker", a); r.Code != 0 {
+			t.Errorf("docker %v: %+v", a, r)
+		}
+	}
+	if _, err := os.Stat(fiche); err != nil {
+		t.Errorf("sheet not made again after a change: %v", err)
+	}
+	r := appel("ssh_commande", map[string]any{"commande": "cat /var/log/faux-docker.log"})
+	for _, l := range []string{"docker logs --tail 50 web\n", "docker pull nginx:1.27\n", "docker compose up -d\n"} {
+		if !strings.Contains(r.Sortie, l) {
+			t.Errorf("docker did not run %q: %q", l, r.Sortie)
+		}
+	}
+	if r := appel("pare_feu", map[string]any{"action": "allow", "port": 8080, "proto": "tcp"}); r.Code != 0 {
+		t.Errorf("ufw allow: %+v", r)
+	}
+	if r := appel("pare_feu", map[string]any{"action": "status"}); !strings.Contains(r.Sortie, "Status: inactive") || !strings.Contains(r.Sortie, "ufw allow 8080/tcp") {
+		t.Errorf("ufw status: %+v", r)
+	}
+	appel("pare_feu", map[string]any{"action": "delete", "port": 8080, "proto": "tcp", "regle": "allow"})
+	if r := appel("pare_feu", map[string]any{"action": "status"}); strings.Contains(r.Sortie, "8080") {
+		t.Errorf("ufw rule not deleted: %+v", r)
+	}
 
 	journal := journalAuditTexte(t)
 	if strings.Contains(journal, temoinOutils) || strings.Contains(journal, motDePasseConteneurSSH) || strings.Contains(journal, "PRIVATE KEY") {

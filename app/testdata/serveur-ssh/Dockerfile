@@ -7,7 +7,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends openssh-server 
  && echo 'athanor ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/athanor && chmod 440 /etc/sudoers.d/athanor \
  && mkdir -p /run/sshd /etc/ssh/sshd_config.d \
  && printf 'PasswordAuthentication yes\nKbdInteractiveAuthentication no\n' > /etc/ssh/sshd_config.d/10-essai.conf \
- && printf '#!/bin/sh\necho "docker $*" >> /var/log/faux-docker.log\n' > /usr/local/bin/docker && chmod 755 /usr/local/bin/docker \
  && touch /var/log/faux-docker.log && chmod 666 /var/log/faux-docker.log
+COPY faux-docker.sh /usr/local/bin/docker
+RUN chmod 755 /usr/local/bin/docker
 EXPOSE 22
 CMD ["/usr/sbin/sshd", "-D", "-e"]

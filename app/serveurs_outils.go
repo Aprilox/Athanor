@@ -9,7 +9,9 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -38,6 +40,8 @@ type ResultatOutil struct {
 	Sortie string `json:"sortie"`
 	Code   int    `json:"code"`
 	Coupee bool   `json:"coupee,omitempty"`
+	// the call changed the server (a service, a container, a firewall rule): its sheet is made again
+	modifie bool
 }
 
 // argsOutilServeur: the arguments of every Servers tool (each one reads its own, unknown ones are refused).
@@ -49,6 +53,13 @@ type argsOutilServeur struct {
 	Sudo     bool    `json:"sudo,omitempty"`
 	Local    string  `json:"local,omitempty"`
 	Distant  string  `json:"distant,omitempty"`
+	Action   string  `json:"action,omitempty"`
+	Nom      string  `json:"nom,omitempty"`
+	Lignes   int     `json:"lignes,omitempty"`
+	Dossier  string  `json:"dossier,omitempty"`
+	Port     int     `json:"port,omitempty"`
+	Proto    string  `json:"proto,omitempty"`
+	Regle    string  `json:"regle,omitempty"`
 }
 
 type outilServeur func(ctx context.Context, c *ssh.Client, srv ServeurInventaire, a argsOutilServeur) (ResultatOutil, error)
@@ -59,6 +70,9 @@ var outilsServeurs = map[string]outilServeur{
 	"fichier_ecrire": outilFichierEcrire,
 	"sftp_envoyer":   outilSFTPEnvoyer,
 	"sftp_recuperer": outilSFTPRecuperer,
+	"service":        outilService,
+	"docker":         outilDocker,
+	"pare_feu":       outilPareFeu,
 }
 
 // appelerOutilServeur runs tool outil on server id for de (who asks, for the log) and writes the audit line.
@@ -102,7 +116,13 @@ func (s *Serveur) executerOutilServeur(ctx context.Context, id, outil string, ar
 		return ResultatOutil{Code: -1}, err
 	}
 	defer c.Close()
-	return f(ctx, c, l[i], a)
+	r, err := f(ctx, c, l[i], a)
+	if err == nil && r.Code == 0 && r.modifie {
+		if _, e := s.rafraichirFiche(ctx, l[i]); e != nil {
+			r.Sortie += "\n(the server sheet could not be refreshed: " + e.Error() + ")"
+		}
+	}
+	return r, err
 }
 
 // resultatSSH: a command's result as a tool answers it.
@@ -323,4 +343,169 @@ func outilSFTPRecuperer(ctx context.Context, c *ssh.Client, srv ServeurInventair
 		return ResultatOutil{Code: -1}, fmt.Errorf("fetching %s: %w", distant, err)
 	}
 	return ResultatOutil{Sortie: fmt.Sprintf("%d bytes fetched to fichiers/%s", n, filepath.ToSlash(rel))}, nil
+}
+
+// The service, docker and pare_feu tools: each argument is checked against a strict form (a trapped one,
+// with ;, $( or a new line, is refused) then given to a fixed script as a quoted positional parameter.
+var (
+	reNomService     = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9@._:-]{0,127}$`)
+	reNomConteneur   = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$`)
+	reImage          = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/:@-]{0,254}$`)
+	reDossierCompose = regexp.MustCompile(`^/[A-Za-z0-9._/@+,= -]{0,999}$`)
+)
+
+// preludeRoot: root's commands go through sudo -n when the user is not root and may use it.
+const preludeRoot = `export LC_ALL=C PATH="$PATH:/usr/sbin:/sbin:/usr/local/sbin"
+S=""; [ "$(id -u)" = 0 ] || { sudo -n true >/dev/null 2>&1 && S="sudo -n"; }
+`
+
+// choix: v must be one of permis.
+func choix(nom, v string, permis ...string) error {
+	if !slices.Contains(permis, v) {
+		return fmt.Errorf("%s must be one of: %s", nom, strings.Join(permis, ", "))
+	}
+	return nil
+}
+
+// logicielAbsent: an error when the server's sheet says the program is missing (no sheet: the script says it).
+func logicielAbsent(srv ServeurInventaire, nom string) error {
+	var f FicheServeur
+	b, err := os.ReadFile(filepath.Join(dossierModule("servers"), srv.ID, "fiche.json"))
+	if err != nil || json.Unmarshal(b, &f) != nil {
+		return nil
+	}
+	if i := slices.IndexFunc(f.Logiciels, func(l LogicielFiche) bool { return l.Nom == nom }); i >= 0 && !f.Logiciels[i].Present {
+		return fmt.Errorf("%s is not installed on %s (server sheet of %s): install it, or refresh the sheet if it was installed since",
+			nom, srv.Nom, f.Date.Format("2006-01-02 15:04"))
+	}
+	return nil
+}
+
+// scriptService ($1 action, $2 service): systemd, then OpenRC, then the SysV service command.
+const scriptService = `if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then exec $S systemctl --no-pager "$1" "$2"
+elif command -v rc-service >/dev/null 2>&1; then
+  case $1 in enable) exec $S rc-update add "$2" default;; disable) exec $S rc-update del "$2" default;; *) exec $S rc-service "$2" "$1";; esac
+elif command -v service >/dev/null 2>&1; then
+  case $1 in enable|disable) command -v update-rc.d >/dev/null 2>&1 && exec $S update-rc.d "$2" "$1"
+    echo "$1 needs systemd, OpenRC or update-rc.d on this server"; exit 127;; *) exec $S service "$2" "$1";; esac
+fi
+echo "No service manager on this server (systemctl, rc-service or service)"; exit 127`
+
+func outilService(ctx context.Context, c *ssh.Client, _ ServeurInventaire, a argsOutilServeur) (ResultatOutil, error) {
+	if err := choix("action", a.Action, "status", "start", "stop", "restart", "reload", "enable", "disable"); err != nil {
+		return ResultatOutil{Code: -1}, err
+	}
+	if !reNomService.MatchString(a.Nom) {
+		return ResultatOutil{Code: -1}, errors.New("nom must be a service name (letters, digits, @ . _ : -)")
+	}
+	r, err := executerSSH(ctx, c, scriptShell(false, preludeRoot+scriptService, a.Action, a.Nom), nil, delaiCommande)
+	res := resultatSSH(r)
+	res.modifie = a.Action != "status"
+	return res, err
+}
+
+// scriptDocker ($1 action, $2 container, image or compose folder, $3 log lines): docker through sudo when the
+// user may not reach the daemon; compose as the docker plugin, else docker-compose.
+const scriptDocker = `command -v docker >/dev/null 2>&1 || { echo "docker is not installed on this server"; exit 127; }
+D=docker; docker version >/dev/null 2>&1 || { [ -n "$S" ] && D="$S docker"; }
+case $1 in
+  ps) exec $D ps -a;;
+  logs) exec $D logs --tail "$3" "$2";;
+  pull) exec $D pull "$2";;
+  restart) exec $D restart "$2";;
+esac
+cd "$2" || exit 1
+case $1 in compose_up) set -- up -d;; compose_down) set -- down;; *) set -- ps;; esac
+$D compose version >/dev/null 2>&1 && exec $D compose "$@"
+command -v docker-compose >/dev/null 2>&1 && exec ${D%docker}docker-compose "$@"
+echo "docker compose is not installed on this server"; exit 127`
+
+func outilDocker(ctx context.Context, c *ssh.Client, srv ServeurInventaire, a argsOutilServeur) (ResultatOutil, error) {
+	if err := choix("action", a.Action, "ps", "logs", "pull", "restart", "compose_up", "compose_down", "compose_ps"); err != nil {
+		return ResultatOutil{Code: -1}, err
+	}
+	cible, lignes := "", a.Lignes
+	switch a.Action {
+	case "pull":
+		if !reImage.MatchString(a.Nom) {
+			return ResultatOutil{Code: -1}, errors.New("nom must be an image (letters, digits, . _ / : @ -)")
+		}
+		cible = a.Nom
+	case "logs", "restart":
+		if !reNomConteneur.MatchString(a.Nom) {
+			return ResultatOutil{Code: -1}, errors.New("nom must be a container name (letters, digits, . _ -)")
+		}
+		cible = a.Nom
+	case "compose_up", "compose_down", "compose_ps":
+		if !reDossierCompose.MatchString(a.Dossier) {
+			return ResultatOutil{Code: -1}, errors.New("dossier must be the absolute path of the compose project's folder (letters, digits, spaces, . _ / @ + , = -)")
+		}
+		cible = a.Dossier
+	}
+	if lignes == 0 {
+		lignes = 200
+	}
+	if lignes < 1 || lignes > 10000 {
+		return ResultatOutil{Code: -1}, errors.New("lignes must be between 1 and 10000")
+	}
+	if err := logicielAbsent(srv, "docker"); err != nil {
+		return ResultatOutil{Code: -1}, err
+	}
+	if strings.HasPrefix(a.Action, "compose_") {
+		if err := logicielAbsent(srv, "compose"); err != nil {
+			return ResultatOutil{Code: -1}, err
+		}
+	}
+	delai := delaiCommande
+	if a.Action == "pull" || a.Action == "compose_up" {
+		delai = delaiCommandeMax
+	}
+	r, err := executerSSH(ctx, c, scriptShell(false, preludeRoot+scriptDocker, a.Action, cible, strconv.Itoa(lignes)), nil, delai)
+	res := resultatSSH(r)
+	res.modifie = !slices.Contains([]string{"ps", "logs", "compose_ps"}, a.Action)
+	return res, err
+}
+
+// scriptPareFeu ($1 action, $2 rule kind for delete, $3 port[/proto]): ufw; the status lists the added
+// rules too, which an inactive ufw does not show.
+const scriptPareFeu = `command -v ufw >/dev/null 2>&1 || { echo "ufw is not installed on this server"; exit 127; }
+case $1 in
+  status) $S ufw status verbose && exec $S ufw show added;;
+  delete) exec $S ufw --force delete "$2" "$3";;
+  *) exec $S ufw "$1" "$3";;
+esac`
+
+func outilPareFeu(ctx context.Context, c *ssh.Client, srv ServeurInventaire, a argsOutilServeur) (ResultatOutil, error) {
+	if err := choix("action", a.Action, "status", "allow", "deny", "delete"); err != nil {
+		return ResultatOutil{Code: -1}, err
+	}
+	spec := ""
+	if a.Action != "status" {
+		if a.Port < 1 || a.Port > 65535 {
+			return ResultatOutil{Code: -1}, errors.New("port must be between 1 and 65535")
+		}
+		if err := choix("proto", a.Proto, "", "tcp", "udp"); err != nil {
+			return ResultatOutil{Code: -1}, err
+		}
+		if a.Action == "delete" {
+			if err := choix("regle", a.Regle, "allow", "deny"); err != nil {
+				return ResultatOutil{Code: -1}, err
+			}
+		}
+		// Athanor's own way in stays open: a rule that could cut it is refused
+		if a.Port == srv.Port && a.Proto != "udp" && (a.Action == "deny" || a.Regle == "allow") {
+			return ResultatOutil{Code: -1}, fmt.Errorf("port %d is the SSH port Athanor reaches this server by: this rule could cut its access", a.Port)
+		}
+		spec = strconv.Itoa(a.Port)
+		if a.Proto != "" {
+			spec += "/" + a.Proto
+		}
+	}
+	if err := logicielAbsent(srv, "ufw"); err != nil {
+		return ResultatOutil{Code: -1}, err
+	}
+	r, err := executerSSH(ctx, c, scriptShell(false, preludeRoot+scriptPareFeu, a.Action, a.Regle, spec), nil, delaiCommande)
+	res := resultatSSH(r)
+	res.modifie = a.Action != "status"
+	return res, err
 }
