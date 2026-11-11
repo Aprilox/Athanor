@@ -800,8 +800,8 @@ func (p *pilote) cycleParallele(prefixe, template string) int {
 	if p.agentsParJSON {
 		args = append(args, "--agents", p.agentsJSON)
 	}
-	if fichierRegulierPilote(filepath.Join(p.prive, "mcp.json")) {
-		args = append(args, "--mcp-config", filepath.Join(p.prive, "mcp.json"))
+	if f := mcpSansHub(filepath.Join(p.prive, "mcp.json")); f != "" && fichierRegulierPilote(f) {
+		args = append(args, "--mcp-config", f)
 	}
 	if p.pluginAthanor != "" {
 		args = append(args, "--plugin-dir", p.pluginAthanor)

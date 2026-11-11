@@ -3220,7 +3220,7 @@ func analyserJournalCycle(chemin string) (texteResultat string, enErreur bool, r
 					if c != nil && c["type"] == "tool_use" {
 						if nom, ok := c["name"].(string); ok && strings.HasPrefix(nom, "mcp__") {
 							parts := strings.Split(nom, "__")
-							if len(parts) >= 2 && parts[1] != "" {
+							if len(parts) >= 2 && parts[1] != "" && parts[1] != nomMCPHub { // the hub keeps nothing to save
 								mcpSet[parts[1]] = true
 							}
 						}
