@@ -55,6 +55,9 @@ func (moduleDev) Elements(s *Serveur) []ElementHub {
 			e.Etat = "termine"
 		}
 		e.Attente = attenteDev(pv)
+		if g, ok := s.signalProjet(pv.Nom); ok && e.Attente == nil {
+			e.Attente = &AttenteElement{Raison: "The pilot reports a blocker: {0}", Args: []any{g.Texte}, Page: "#suivi", Cle: g.ID}
+		}
 		out = append(out, e)
 	}
 	return out

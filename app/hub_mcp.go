@@ -17,7 +17,7 @@ type OutilHub struct {
 	Faire       func(s *Serveur, x SessionHub, args json.RawMessage) (string, error)
 }
 
-// outilsHub: every tool by name (filled by the modules, M61); a session sees only those of its token.
+// outilsHub: every tool by name (filled by the modules' init, hub_outils_dev.go); a session sees only those of its token.
 var outilsHub = map[string]OutilHub{}
 
 // versionsMCP: the protocol versions understood, newest first.

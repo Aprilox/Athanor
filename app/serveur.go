@@ -52,6 +52,8 @@ type Serveur struct {
 	jetons *Sessions
 	// the approvals of the agents and the owner's rules (hub_approbations.go)
 	approbations *Approbations
+	// the last blocker each pilot reported (hub_outils_dev.go), guarded by mu
+	signaux map[string]SignalPilote
 }
 
 func nouveauServeur(config Config) *Serveur {
