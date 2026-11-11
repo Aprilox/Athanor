@@ -424,6 +424,7 @@ func (s *Serveur) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/bureau/{action}", s.garde(false, s.apiBureau))
 	mux.HandleFunc("GET /api/ecran", s.garde(false, s.apiEcran))
 	mux.HandleFunc("POST /api/instance/{action}", s.apiInstance) // second launch (its own secret, see instance.go)
+	mux.HandleFunc("POST /api/mcp", s.apiMCP)                    // the hub's MCP: its session token only, outside garde (hub_mcp.go)
 	mux.HandleFunc("POST /api/ouvrir", s.garde(false, s.apiOuvrir))
 	mux.HandleFunc("POST /api/fenetre", s.garde(false, s.apiFenetre)) // the terminal: Athanor's window as well
 	mux.HandleFunc("POST /api/fin-vue", s.garde(false, s.apiFinVue))

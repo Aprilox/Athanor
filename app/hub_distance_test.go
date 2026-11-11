@@ -75,6 +75,7 @@ func TestDistanceToutesRoutes(t *testing.T) {
 		{"GET", "/api/hubx", true}, // plain prefix
 		{"POST", "/api/mot-de-passe", true},
 		{"POST", "/api/ouvrir", true},
+		{"POST", "/api/mcp", true}, // the hub's MCP: never through the tunnel
 		{"POST", "/api/instance/x", true},
 		{"POST", "/api/distance", true},
 		{"GET", "/api/distance", false},     // unchanged: a device reads the Remote page
