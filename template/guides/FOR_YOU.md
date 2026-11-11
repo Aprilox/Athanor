@@ -11,6 +11,7 @@ athanor todo add "Create a test account on Example Mail" --need "the sender addr
 EOF
 ```
 
+- A key or token the owner may already hold goes through `demander_acces` when the `athanor-hub` tools are there (instructions, *Athanor's hub tools*), never through a task; a key they refused is never asked again, as a task neither.
 - One task = one thing the user can do in a few minutes. Title in the imperative; numbered steps with the exact links, menus and settings to choose; `--need` says what to give back; one `--secret NAME` per key, password or token (the user types it in a protected field and it lands in `.athanor/secrets.env`, never in the text); `--milestone` the milestones it blocks. Group what goes together, check `athanor todo list` first so as never to ask twice, and refine a task with `athanor todo edit ID`.
 - The user sees it at once in the application (page *For you*). Do not wait: note `(waits for T1)` at the end of the blocked milestones in `.athanor/PLAN.md` and go on with the others, preparing everything around the missing piece (code, scripts, configuration read from environment variables).
 - If every unticked milestone waits for the user, run `athanor todo wait`, note it in `.athanor/LOG.md`, commit and end the cycle: the pilot pauses and starts the next cycle as soon as the user answers.

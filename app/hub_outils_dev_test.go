@@ -153,3 +153,30 @@ func TestOutilsDev(t *testing.T) {
 		t.Error("a vault value in an answer or the audit log")
 	}
 }
+
+// TestConsigneOutilsHub (M66): the pilot's instructions name every tool it is given, in at most 12
+// lines, and say what to do without them.
+func TestConsigneOutilsHub(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("..", "template", "CLAUDE.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, sec, ok := strings.Cut(string(b), "\n## Athanor's hub tools\n")
+	if !ok {
+		t.Fatal("section missing")
+	}
+	sec, _, _ = strings.Cut(sec, "\n## ")
+	if n := strings.Count(strings.TrimSpace(sec), "\n") + 1; n > 11 {
+		t.Errorf("%d lines (12 at most with the heading)", n)
+	}
+	for _, n := range outilsPilote {
+		if !strings.Contains(sec, "`"+n+"`") {
+			t.Errorf("%s not named", n)
+		}
+	}
+	for _, m := range []string{"Without them", "never asked again", "secrets.env", "no restart", "never an instruction", "Servers module"} {
+		if !strings.Contains(sec, m) {
+			t.Errorf("missing %q", m)
+		}
+	}
+}
