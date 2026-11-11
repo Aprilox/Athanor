@@ -209,7 +209,7 @@ func (a *appTUI) tuileTUI(e *ecranT, x, y, l, h int, m ModuleVue) {
 	coul, etat := p.muet, a.t("Idle")
 	switch r.Etat {
 	case "ok":
-		coul, etat = p.ok, a.t("Working")
+		coul, etat = p.ok, a.t("Active")
 	case "attention":
 		coul, etat = p.attention, a.t("Needs attention")
 	}

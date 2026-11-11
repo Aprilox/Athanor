@@ -49,11 +49,13 @@ func tutorielConnu(id string) bool {
 // its rank in the whole menu (Home 0, Projects 1, Missions 10, Dev 20, Servers 30, Vault 40, Settings
 // 90): it sorts the tabs of a module and the modules of the menu. Module is set by pagesModule.
 type PageModule struct {
-	Module  string `json:"module"`
-	Hash    string `json:"hash"`
-	Ordre   int    `json:"ordre"`
-	Icone   string `json:"icone"`
-	Libelle string `json:"libelle"`
+	Module  string   `json:"module"`
+	Hash    string   `json:"hash"`
+	Ordre   int      `json:"ordre"`
+	Icone   string   `json:"icone"`
+	Libelle string   `json:"libelle"`
+	Fils    []string `json:"fils,omitempty"` // pages opened from this one that keep its menu entry lit (#nouveau under #global)
+	Tour    string   `json:"tour,omitempty"` // id of the module whose tour explains this page, if not its own
 }
 
 // ElementHub: one thing a module has at work (a Dev project, later a server, a mission), as the hub
@@ -191,7 +193,7 @@ type moduleHub struct{}
 func (moduleHub) ID() string  { return "hub" }
 func (moduleHub) Nom() string { return "Home" }
 func (moduleHub) Pages() []PageModule {
-	return []PageModule{{Hash: "#accueil", Ordre: 0, Icone: "accueil", Libelle: "Home"}, {Hash: "#global", Ordre: 1, Icone: "projets", Libelle: "Projects"}}
+	return []PageModule{{Hash: "#accueil", Ordre: 0, Icone: "accueil", Libelle: "Home"}, {Hash: "#global", Ordre: 1, Icone: "projets", Libelle: "Projects", Fils: []string{"#nouveau", "#archives"}}}
 }
 func (moduleHub) Resume(*Serveur) ResumeModule {
 	return ResumeModule{Stats: []StatModule{}, Etat: "inactif"}
@@ -203,6 +205,6 @@ func (moduleHub) Tutoriel() []EtapeTutoriel {
 		{Titre: "One tile per part", Texte: "Each part of Athanor has its tile with what matters now. Click a figure to open its page.", Cible: ".grille-hub"},
 		{Titre: "In progress", Texte: "What is working right now, and first what waits for you, with the reason. “See all” opens the Projects page.", Cible: ".en-cours"},
 		{Titre: "The bell", Texte: "Everything that needs you, with why. “View” opens the right page, “Ignore” hides an alert until something changes.", Cible: "[data-notifs]"},
-		{Titre: "Projects", Texte: "Every project of every part on one page, with filters. This tour and the others stay in the “?”, at the top of the Guide.", Cible: `nav a[data-href="#global"]`},
+		{Titre: "Projects", Texte: "Every project of every part on one page, with filters. This tutorial and the others stay in the “?”, at the top of the Guide.", Cible: `nav a[data-href="#global"]`},
 	}
 }

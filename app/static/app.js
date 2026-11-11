@@ -758,7 +758,7 @@ function rendreNotifs(v) {
   m.hidden = !etat.notifsOuvert || !bouton;
   if (m.hidden) return;
   const liste = alertesHub(), cachees = (etat.hub || {}).ignorees || [];
-  const html = `<div class="notifs-titre">${t("Alerts")}</div>
+  const html = `<div class="notifs-titre" id="notifs-titre">${t("Alerts")}</div>
     <div class="alertes">${liste.map((a) => ligneAlerte(a, false)).join("") || `<div class="muet petit notifs-vide">${t("Nothing needs you right now.")}</div>`}</div>
     ${cachees.length ? `<details class="alertes-ignorees"${etat.ignoreesOuvert ? " open" : ""}><summary>${t("Ignored alerts ({0})", [cachees.length])}</summary><div class="alertes">${cachees.map((a) => ligneAlerte(a, true)).join("")}</div></details>` : ""}
     <a href="#global" class="menu-nouveau">${t("Projects")} →</a>`;
@@ -807,7 +807,7 @@ $("#page").addEventListener("click", cliqueProjet);
 // the header of a page outside a project: the module's name, and what runs and waits in every module (as the bell counts)
 function phraseGlobale(m) {
   const n = alertesHub().length, actifs = ((etat.hub || {}).elements || []).filter((e) => e.etat === "actif").length;
-  const page = m && m.id === "hub" ? m.pages.find((x) => x.hash === "#" + (PAGE_PARENTE[etat.page] || etat.page)) : null; // Home, Projects
+  const page = m && m.id === "hub" ? m.pages.find((x) => x.hash === "#" + pageParente(etat.page)) : null; // Home, Projects
   return { classe: n ? "quota" : actifs ? "travaille" : "", titre: page ? t(page.libelle) : m ? t(m.nom) : "Athanor", sous: [actifs ? t("{0} in progress", [actifs]) : t("idle"), n && t("{0} alert(s) need you", [n])].filter(Boolean).join(" · ") };
 }
 // the pages of a module that works on the selector's project (Studio): Start, access, the project's line
@@ -841,7 +841,7 @@ function blocAccesDemarrer(ac, distant) {
 
 function rendreBandeau(v) {
   if (document.activeElement && document.activeElement.matches("[data-env-acces]")) return; // an open list is not redrawn under the mouse
-  const mp = moduleDePage(PAGE_PARENTE[etat.page] || etat.page), global = !avecProjet(mp);
+  const mp = moduleDePage(pageParente(etat.page)), global = !avecProjet(mp);
   const p = global ? phraseGlobale(mp) : phraseEtat(v);
   const boutons = [];
   if (v.projet && !global && v.projet.acces) boutons.push(blocAccesDemarrer(v.projet.acces, v.distant));
@@ -875,7 +875,7 @@ function rendreBandeau(v) {
   const ecrire = (el, x, attr = "textContent") => { if (el[attr] !== x) el[attr] = x; };
   ecrire($("#nav-sous"), nbActifs ? t("{0} project(s) running", [nbActifs]) : t("idle"));
   ecrire($("#bm-titre"), v.projet && !global ? v.projet.nom : p.titre);
-  ecrire($("#nav-kit"), v.kit || "");
+  ecrire($("#nav-kit"), v.kit || ""); ecrire($("#nav-kit"), v.kit || "", "title");
   const nv = $("#nav-version");
   ecrire(nv, v.version ? "v" + v.version : "");
   nv.classList.toggle("maj-dispo", !!maj.disponible);
@@ -993,7 +993,7 @@ $("#menu-projets").addEventListener("click", async (ev) => {
   fermerSelecteur();
   if (!a.dataset.projet) return; // "+ New project": normal navigation
   ev.preventDefault();
-  await allerProjet(a.dataset.projet, ["sante", "reglages", "options", "nouveau", "global"].includes(etat.page) ? "suivi" : etat.page);
+  await allerProjet(a.dataset.projet, avecProjet(moduleDePage(etat.page)) ? etat.page : "suivi"); // outside a project module: its first page
 });
 document.addEventListener("click", (ev) => { if (etat.selecteurOuvert && !ev.target.closest("#sel-projet, #menu-projets")) fermerSelecteur(); });
 
@@ -1006,9 +1006,12 @@ function marquerDistance(v) {
 }
 // phones: the sidebar is a drawer (☰), closed again by a choice or a tap beside it
 // open: the page under the veil is inert (the keyboard stays in the drawer), Escape closes it back to ☰
-function menuMobile(ouvert) { document.body.classList.toggle("menu-ouvert", ouvert); $("#btn-menu").setAttribute("aria-expanded", String(ouvert)); $("main.principal").inert = ouvert; }
+// closed on a phone, the drawer is inert too: the keyboard never enters it off-screen
+const TEL = matchMedia("(max-width: 700px)"); // the one phone threshold (the CSS has the same)
+function menuMobile(ouvert) { document.body.classList.toggle("menu-ouvert", ouvert); $("#btn-menu").setAttribute("aria-expanded", String(ouvert)); $("main.principal").inert = ouvert; $("#nav-tiroir").inert = TEL.matches && !ouvert; }
+menuMobile(false);
 document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && document.body.classList.contains("menu-ouvert")) { menuMobile(false); $("#btn-menu").focus(); } });
-matchMedia("(max-width: 760px)").addEventListener("change", (ev) => { if (!ev.matches) menuMobile(false); }); // a drawer left open never freezes the desktop page
+TEL.addEventListener("change", () => menuMobile(false)); // a drawer left open never freezes the desktop page
 $("#btn-menu").addEventListener("click", () => menuMobile(!document.body.classList.contains("menu-ouvert")));
 $("#voile-menu").addEventListener("click", () => menuMobile(false));
 $("#nav-tiroir").addEventListener("click", (ev) => { if (ev.target.closest("nav a")) menuMobile(false); });
@@ -1016,7 +1019,8 @@ $("#nav-tiroir").addEventListener("click", (ev) => { if (ev.target.closest("nav 
 // The one-level menu (Home, Projects, one entry per module with pages, Settings at the bottom) and the
 // tabs of the module shown: both from /api/hub, never a list of pages here.
 // New project and the archives open from the Projects page: its entry stays lit there
-const PAGE_PARENTE = { nouveau: "global", archives: "global" };
+// pageParente: the page whose menu entry stays lit for this one (PageModule.Fils), else itself
+const pageParente = (page) => { for (const m of etat.hubModules || []) for (const p of m.pages || []) if ((p.fils || []).includes("#" + page)) return p.hash.slice(1); return page; };
 etat.pagesModules = (() => { try { return JSON.parse(localStorage.getItem("athanor.pagesModules") || "{}"); } catch (e) { return {}; } })();
 function moduleDePage(page) {
   const ms = etat.hubModules || [];
@@ -1040,7 +1044,7 @@ function rendreMenu(modules) {
 }
 // the entry of the page shown lit (aria-current), and its module's tabs
 function marquerMenu() {
-  const page = PAGE_PARENTE[etat.page] || etat.page, m = moduleDePage(page);
+  const page = pageParente(etat.page), m = moduleDePage(page);
   document.querySelectorAll("#nav-tiroir nav a").forEach((a) => {
     const actif = a.dataset.page ? a.dataset.page === page : !!m && a.dataset.module === m.id;
     a.classList.toggle("actif", actif);
@@ -1101,6 +1105,7 @@ function naviguer() {
   if (page === "rejoindre") { etat.npRejoindre = true; history.replaceState(null, "", "#nouveau"); page = "nouveau"; } else if (page === "nouveau" && etat.page !== "nouveau") etat.npRejoindre = false;
   // the settings always open on Options (or on the tab asked for, the guided tour)
   if (page === "reglages" && etat.page !== "reglages") { etat.ongletReglages = etat.ongletDemande || "options"; etat.ongletDemande = null; }
+  if (!pages[page]) { page = "accueil"; history.replaceState(null, "", "#accueil"); } // an unknown hash: Home
   etat.page = page;
   // the page remembered for its module's entry
   const m = moduleDePage(page);
@@ -1186,22 +1191,27 @@ function lancerTutoriel(m) {
 // after each render: the tour of the page's module, if never shown here and nothing else is open
 function proposerTutoriel() {
   // a project's Access panel is explained by the vault's tour (keys, scopes, grants, badge)
-  const v = etat.vue, m = etat.page === "acces" ? (etat.hubModules || []).find((x) => x.id === "coffre") : moduleDePage(etat.page);
+  const v = etat.vue, pg = ((moduleDePage(etat.page) || {}).pages || []).find((p) => p.hash === "#" + etat.page); // a page may borrow another module's tour
+  const m = pg && pg.tour ? (etat.hubModules || []).find((x) => x.id === pg.tour) : moduleDePage(etat.page);
   if (!v || v.verrouille || v.bienvenue || etat.assistant >= 0 || etat.visite >= 0 || !m || !(m.tutoriel || []).length) return;
   etat.toursVus ||= new Set(); // a paired device may not write the preference: shown once per session there
   if ((v.tours || {})[m.id] || etat.toursVus.has(m.id)) return;
-  const connu = m.id === "dev" && !(m.id in (v.tours || {})) && (v.projets || []).some((p) => p.faits > 0);
+  const connu = !(m.id in (v.tours || {})) && (m.id === "dev" ? (v.projets || []).some((p) => p.faits > 0) : (m.resume || {}).etat === "ok"); // a module in use (Dev: a milestone done; the vault: a key stored)
   etat.toursVus.add(m.id); (v.tours ||= {})[m.id] = true;
   api("preferences", "POST", { tours: { [m.id]: true } }).catch(() => {});
-  // someone who already ran Studio (a milestone done, never this tour, never reset): a reminder, not the tour
+  // someone who already uses the module (never this tour, never reset): a reminder, not the tour
   if (connu) return toast(t("New: the tutorial is in the “?”."));
   lancerTutoriel(m);
 }
 function etapesVisite() { return etat.etapesVisite || []; }
-function demarrerVisite() { etat.visite = 0; montrerVisite(); }
+function demarrerVisite() { const a = document.activeElement; etat.focusVisite = a && a !== document.body ? cleFocus(a) : ""; etat.visite = 0; montrerVisite(); }
 function finirVisite() {
+  // the focus goes back to what had it before the tour, else to the “?”, never to the top of the page
+  const perdu = $("#visite").contains(document.activeElement) || document.activeElement === document.body;
   etat.visite = -1; $("#visite").hidden = true; $("#visite-voile").hidden = true; etat.visiteCible = null;
   document.querySelectorAll(".visite-cible").forEach((x) => x.classList.remove("visite-cible"));
+  const retour = perdu && ((etat.focusVisite && document.querySelector(etat.focusVisite)) || document.querySelector(".btn-guide"));
+  if (retour) retour.focus({ preventScroll: true });
 }
 // the veil: everything dimmed but the place explained (a hole the size of the target, or none at all)
 function cibleVisite() {
@@ -1244,9 +1254,9 @@ async function montrerVisite() {
   if (n !== etat.visite) return;
   document.querySelectorAll(".visite-cible").forEach((x) => x.classList.remove("visite-cible"));
   const bulle = $("#visite");
-  bulle.innerHTML = `<div class="visite-titre"></div><p></p>
+  bulle.innerHTML = `<div class="visite-titre" id="visite-titre"></div><p></p>
     <div class="visite-pied"><span class="muet petit">${t("Step {0} of {1}", [n + 1, etapes.length])}</span><span class="espace"></span>
-      <button class="btn btn-petit" data-visite="passer">${t("Skip the tour")}</button>
+      <button class="btn btn-petit" data-visite="passer">${t("Skip the tutorial")}</button>
       ${n > 0 ? `<button class="btn btn-petit" data-visite="retour">${t("Back")}</button>` : ""}
       <button class="btn btn-petit btn-primaire" data-visite="suite">${n === etapes.length - 1 ? t("Finish") : t("Next")}</button></div>`;
   bulle.querySelector(".visite-titre").textContent = t(e.titre); bulle.querySelector("p").textContent = t(e.texte); // module texts: never HTML
@@ -1416,7 +1426,7 @@ async function majChat(force) {
   chat.signature = sig;
   const fil = $("#chat-fil"); if (!fil) return;
   // on a phone the conversation scrolls with the content area (app.css), elsewhere in its own box
-  const boite = matchMedia("(max-width: 760px)").matches ? $("#page") : fil;
+  const boite = TEL.matches ? $("#page") : fil;
   const enBas = boite.scrollHeight - boite.scrollTop - boite.clientHeight < (boite === fil ? 80 : 120);
   fil.innerHTML = filChat(d);
   if (enBas || force) boite.scrollTop = boite.scrollHeight;
@@ -1451,7 +1461,7 @@ function aideChat() {
 const tactile = () => matchMedia("(pointer: coarse)").matches;
 // the field of the chat grows with what is written, up to a third of the screen (then it scrolls)
 document.addEventListener("input", (ev) => {
-  const z = ev.target; if (z.id !== "chat-texte" || !matchMedia("(max-width: 760px)").matches) return;
+  const z = ev.target; if (z.id !== "chat-texte" || !TEL.matches) return;
   z.style.height = "auto"; z.style.height = Math.min(z.scrollHeight + 2, Math.round(innerHeight * 0.32)) + "px";
 });
 pages.chat = async () => {
@@ -1771,7 +1781,7 @@ document.addEventListener("click", (ev) => {
 });
 
 // --- Home of the hub: the "What do you want to do?" bar, one tile per module of /api/hub, the missions
-const ETATS_MODULE = { ok: ["travaille", "Working"], attention: ["quota", "Needs attention"], inactif: ["", "Idle"] };
+const ETATS_MODULE = { ok: ["travaille", "Active"], attention: ["quota", "Needs attention"], inactif: ["", "Idle"] };
 const STATUTS_QUOTA = { allowed: "OK", allowed_warning: "Near the limit", rejected: "Limit reached" };
 function statModule(s) {
   let valeur = `<b class="hub-valeur">${h(String(s.valeur))}</b>`;
@@ -1793,7 +1803,7 @@ function tuileModule(m) {
 function blocEnCours(tous, modules) {
   const liste = tous.filter((e) => e.attente || e.etat === "actif").slice(0, 6);
   return `<section class="bloc en-cours" aria-labelledby="en-cours-titre">
-    <div class="ligne m0 tuile-tete"><h2 class="m0" id="en-cours-titre">${t("In progress")}</h2><span class="espace"></span><a class="btn btn-petit" href="#global">${t("See all ({0})", [tous.length])} →</a></div>
+    <div class="ligne m0 tuile-tete"><h2 class="m0" id="en-cours-titre">${t("In progress")}</h2><span class="espace"></span><a class="btn btn-petit" href="#global">${t("See all")} →</a></div>
     ${liste.length ? `<div class="grille-projets">${liste.map((e) => ligneElement(e, modules)).join("")}</div>` : `<div class="vide">${t("Nothing in progress right now.")}</div>`}
   </section>`;
 }
@@ -2085,7 +2095,7 @@ const lienGuide = (sujet, texte) => `<a class="lien-guide" href="#guide" data-gu
 pages.guide = async () => {
   const sujet = GUIDE.find((g) => g.id === etat.guideSujet) || GUIDE[0];
   const tours = (etat.hubModules || []).filter((m) => (m.tutoriel || []).length);
-  return `${tours.length ? `<div class="bloc ligne tutoriels"><b>${t("Tutorials")}</b><span class="muet petit croit">${t("A short tour of each part, shown at your first visit. Replay one:")}</span>
+  return `${tours.length ? `<div class="bloc ligne tutoriels"><b>${t("Tutorials")}</b><span class="muet petit croit">${t("A short tutorial of each part, shown at your first visit. Replay one:")}</span>
     ${tours.map((m) => `<button type="button" class="btn btn-petit" data-tutoriel="${h(m.id)}">${h(t(m.nom))}</button>`).join("")}</div>` : ""}
   <div class="onglets onglets-guide">${GUIDE.map((g) => `<button class="${g === sujet ? "actif" : ""}" data-guide-sujet="${g.id}">${t(g.titre)}</button>`).join("")}</div>
   <div class="bloc guide"><h2>${t(sujet.titre)}</h2><p class="intro">${mdGuide(t(sujet.intro))}</p>
