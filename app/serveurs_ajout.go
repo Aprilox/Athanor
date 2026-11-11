@@ -31,6 +31,7 @@ var (
 	errServeurEmpreinte   = erreurEntree("Confirm the server's host fingerprint first")
 	errServeurMode        = erreurEntree("Unknown way to add a server")
 	errServeurPasCle      = erreurEntree("This vault entry is not a usable SSH private key")
+	errServeurCleCode     = erreurEntree("A server's key must be in the infra scope: change its scope in the Vault first")
 	errServeurPhrase      = erreurEntree("This SSH key is protected by a passphrase: Athanor needs a key without one")
 	errServeurInjoignable = errors.New("The server did not answer")
 	errServeurCleRefusee  = errors.New("The server refused the key: check that its public part is in ~/.ssh/authorized_keys")
@@ -288,7 +289,11 @@ func (s *Serveur) apiServeursAjouter(w http.ResponseWriter, r *http.Request) {
 		echec(errServeurPasCle)
 		return
 	}
-	if e.Portee == "infra" && modeNatif.Load() && e.Source != "serveurs:"+srv.ID {
+	if e.Portee != "infra" { // C35: a code entry reopens alone on this PC and can be granted to a project
+		echec(errServeurCleCode)
+		return
+	}
+	if modeNatif.Load() && e.Source != "serveurs:"+srv.ID {
 		if code, err := s.preuvePresence(r, c.MotDePasse); err != nil {
 			s.ecrireAudit(LigneAudit{Type: "evenement", De: deQui(r), Vers: "servers", Action: "ajout de serveur refusé", Resultat: err.Error()})
 			s.erreur(w, code, err.Error())

@@ -153,6 +153,26 @@ func TestCoffreTemoinNullePart(t *testing.T) {
 		t.Fatalf("infra entry: %d %v", code, v)
 	}
 	infra := v["id"].(string)
+	// C35: infra to code reopens it alone on this PC: the owner's password, WSL mode too; logged
+	natif := modeNatif.Load()
+	t.Cleanup(func() { modeNatif.Store(natif) })
+	for _, m := range []bool{true, false} {
+		modeNatif.Store(m)
+		for _, corps := range []string{`{"portee":"code"}`, `{"portee":"code","mot_de_passe":"faux"}`} {
+			if code, v = appel("POST", "/api/coffre/"+infra, corps); code != http.StatusUnauthorized || v["portee"] != nil {
+				t.Errorf("infra to code without proof (native %v): %d %v", m, code, v)
+			}
+		}
+	}
+	if code, v = appel("POST", "/api/coffre/"+infra, `{"portee":"code","mot_de_passe":"mdp-test"}`); code != 200 || v["portee"] != "code" {
+		t.Errorf("infra to code with the password: %d %v", code, v)
+	}
+	if code, v = appel("POST", "/api/coffre/"+infra, `{"portee":"infra"}`); code != 200 || v["portee"] != "infra" {
+		t.Errorf("code to infra: %d %v", code, v)
+	}
+	if j := journalAuditTexte(t); strings.Count(j, "portée infra → code refusée") != 4 || strings.Count(j, `"portée infra → code"`) != 1 {
+		t.Errorf("infra to code not logged: %s", j)
+	}
 	s.coffre.Verrouiller()
 	code, v = appel("GET", "/api/coffre", "")
 	etat, _ := v["etat"].(map[string]any)
@@ -162,7 +182,7 @@ func TestCoffreTemoinNullePart(t *testing.T) {
 	if code, v = appel("POST", "/api/coffre/"+infra, `{"valeur":"`+temoin+`"}`); code != http.StatusLocked || v["erreur"] != errCoffreVerrouille.Error() {
 		t.Errorf("infra value while locked: %d %v", code, v)
 	}
-	if code, _ = appel("POST", "/api/coffre/"+infra, `{"portee":"code"}`); code != http.StatusLocked {
+	if code, _ = appel("POST", "/api/coffre/"+infra, `{"portee":"code","mot_de_passe":"mdp-test"}`); code != http.StatusLocked {
 		t.Errorf("infra scope change while locked: %d", code)
 	}
 	if code, _ = appel("DELETE", "/api/coffre/"+infra, ""); code != 200 {

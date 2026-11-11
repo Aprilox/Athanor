@@ -2087,7 +2087,7 @@ const GUIDE = [
       ["The audit log", "*Audit log*, in the menu: every call of an agent to the hub, every decision, every access granted or forced and the emergency stop, one line each, newest first. Filter by month, project or type, or search. A key's value never appears: the vault's values and the known key formats are masked before writing.", "#audit", "Audit log"],
       ["Check the log", "Each line carries the fingerprint (SHA-256) of the line before it. *Check the log* recomputes the whole chain: green, or the first line that was changed, removed or inserted. A paired phone can read the log and check it too."],
       ["Emergency stop", "The red *Emergency stop* button at the foot of the menu (also on a paired phone, or `athanor arret-urgence` in a terminal), after a confirmation: every pilot stops, every agent loses its access to the hub, the pending requests are refused and the vault closes. To resume, unlock Athanor with its password (without a password: *Resume* in the bell), then *Start* the projects."],
-      ["An agent of this PC", "An agent runs programs as you do and can reach Athanor's window. So, in WSL mode as in native mode, deciding an approval, giving a key to a project or forcing infra entries asks for Athanor's password (a paired phone unlocked with it does not ask again). Choosing the first password and *Resume* after an emergency stop wait until no pilot, chat or test runs. A line of the log changed by hand still breaks the chain."],
+      ["An agent of this PC", "An agent runs programs as you do and can reach Athanor's window. So, in WSL mode as in native mode, deciding an approval, giving a key to a project, forcing infra entries, moving a key from infra to code, taking the prod role away from a server or removing a server asks for Athanor's password (a paired phone unlocked with it does not ask again). Choosing the first password and *Resume* after an emergency stop wait until no pilot, chat or test runs. A line of the log changed by hand still breaks the chain."],
     ],
     note: "An agent never decides for you: every request waits for your answer in the bell, on *For you* or on your phone, and leaves a line in the audit log." },
   { id: "serveurs", titre: "Add a server", intro: "Add your VPS or your home server: Athanor checks its fingerprint, connects with its own key kept in the vault, and reads what runs on it, in about a minute. A server's password is never kept.",
@@ -4232,15 +4232,19 @@ pages.acces = async () => {
     </div>
   </div>`;
 };
+// C25 C35 C37: what an agent of this PC must not decide is retyped with Athanor's password in this window (a paired
+// phone, unlocked with it, passes): {} or {mot_de_passe} for the request, false when cancelled; sinon: asked anyway without the field
+async function preuveMdp(texte, options, sinon) {
+  const ap = await api("hub/approbations").catch(() => ({}));
+  if (!ap.mot_de_passe_requis) return sinon && !(await confirmer(sinon, options)) ? false : {};
+  const mdp = await confirmer(texte, { ...options, mdp: true });
+  return mdp === false ? false : { mot_de_passe: mdp };
+}
 async function changerAcces(corps) {
-  // C25: giving a key is retyped with Athanor's password in this window (a paired phone, unlocked with it, passes)
   if (corps.action === "ajouter" || (corps.action === "forcer" && corps.forcer)) {
-    const ap = await api("hub/approbations").catch(() => ({}));
-    if (ap.mot_de_passe_requis) {
-      const mdp = await confirmer(t("Giving a key to a project: retype Athanor's password."), { mdp: true, ok: t("Give the key") });
-      if (mdp === false) return rendrePage();
-      corps = { ...corps, mot_de_passe: mdp };
-    }
+    const p = await preuveMdp(t("Giving a key to a project: retype Athanor's password."), { ok: t("Give the key") });
+    if (!p) return rendrePage();
+    corps = { ...corps, ...p };
   }
   const r = await action(api("acces", "POST", { projet: acc.projet, ...corps }));
   rendrePage(); // an error re-renders too: the box goes back to what the server holds
@@ -4451,6 +4455,11 @@ $("#page").addEventListener("submit", async (ev) => {
   if (secret) { corps.type = $("#cof-type").value; corps.portee = $("#cof-portee").value; }
   if (!x) { corps.famille = cof.onglet; if (!secret) corps.type = "autre"; }
   if (!x || (secret ? valeur !== "" : valeur !== x.valeur)) corps.valeur = valeur; // an empty secret field keeps the value
+  if (x && x.portee === "infra" && corps.portee === "code") { // C35: code reopens alone on this PC
+    const p = await preuveMdp(t("Moving a key from infra to code: retype Athanor's password."), { ok: t("Move to code") });
+    if (!p) return;
+    Object.assign(corps, p);
+  }
   const r = await action(api(x ? "coffre/" + encodeURIComponent(x.id) : "coffre", "POST", corps));
   if (!r) return;
   $("#cof-valeur").value = ""; cof.form = null;
@@ -4668,7 +4677,9 @@ pages.serveur = async () => {
 $("#page").addEventListener("change", async (ev) => {
   if (etat.page !== "serveur" || !ev.target.matches(".srv-fiche-role")) return;
   const roles = [...document.querySelectorAll(".srv-fiche-role:checked")].map((e) => e.value);
-  if (await action(api("serveurs/" + encodeURIComponent(srv.fiche.id), "POST", { roles }))) toast(t("Roles saved."), "ok");
+  let p = {}; // C37: without prod, an agent may act on it as on a test server
+  if ((srv.fiche.roles || []).includes("prod") && !roles.includes("prod")) p = await preuveMdp(t("Taking the prod role away: retype Athanor's password."), { ok: t("Take prod away"), danger: true });
+  if (p && await action(api("serveurs/" + encodeURIComponent(srv.fiche.id), "POST", { roles, ...p }))) toast(t("Roles saved."), "ok");
   rendrePage();
 });
 $("#page").addEventListener("click", async (ev) => {
@@ -4678,8 +4689,9 @@ $("#page").addEventListener("click", async (ev) => {
   const x = srv.fiche, url = "serveurs/" + encodeURIComponent(x.id), d = b.dataset;
   if (d.srvRetirer !== undefined) {
     const cle = $("#srv-retirer-cle").checked;
-    if (!(await confirmer(cle ? t("Remove {0} and its key from the vault? Nothing is changed on the server.", [x.nom]) : t("Remove {0}? Its key stays in the vault; nothing is changed on the server.", [x.nom]), { ok: t("Remove"), danger: true }))) return;
-    if (!(await action(api(url, "DELETE")))) return;
+    const texte = cle ? t("Remove {0} and its key from the vault? Nothing is changed on the server.", [x.nom]) : t("Remove {0}? Its key stays in the vault; nothing is changed on the server.", [x.nom]);
+    const p = await preuveMdp(texte + " " + t("Retype Athanor's password."), { ok: t("Remove"), danger: true }, texte); // C37
+    if (!p || !(await action(api(url, "DELETE", p)))) return;
     if (cle) await action(api("coffre/" + encodeURIComponent(x.cle), "DELETE"));
     toast(t("{0} removed.", [x.nom]), "ok");
     location.hash = "#serveurs"; return;

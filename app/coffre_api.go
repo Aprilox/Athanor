@@ -57,6 +57,8 @@ type corpsCoffre struct {
 	Note    *string `json:"note"`
 	Portee  *string `json:"portee"`
 	Valeur  *string `json:"valeur"`
+	// Athanor's password, retyped to move an infra entry to code (hub_preuve.go)
+	MotDePasse string `json:"mot_de_passe"`
 }
 
 // lireCorpsCoffre decodes and bounds the body; a decoding error never echoes the input.
@@ -138,6 +140,17 @@ func (s *Serveur) apiCoffreModifier(w http.ResponseWriter, r *http.Request) {
 		s.erreurCoffre(w, errCoffreInconnu)
 		return
 	}
+	versCode := e.Portee == "infra" && val(c.Portee, e.Portee) == "code"
+	if versCode { // C35: code reopens alone on this PC (DPAPI) and can be granted: never a server's key, always the owner
+		if s.cleDeServeur(w, id, "This key opens the server {0}: it stays in the infra scope") {
+			return
+		}
+		if code, err := s.preuvePresence(r, c.MotDePasse); err != nil {
+			s.ecrireAudit(LigneAudit{Type: "evenement", De: deQui(r), Vers: "hub", Action: "portée infra → code refusée", Resultat: e.Nom + ": " + err.Error()})
+			s.erreur(w, code, err.Error())
+			return
+		}
+	}
 	if c.Nom != nil || c.Type != nil || c.Note != nil || c.Portee != nil || c.Valeur != nil {
 		if e.Portee == "code" && val(c.Portee, e.Portee) == "infra" && s.acces != nil && s.accesErr == nil {
 			// code to infra: its grants go and the files are rewritten while it is still code (its fingerprint
@@ -155,6 +168,9 @@ func (s *Serveur) apiCoffreModifier(w http.ResponseWriter, r *http.Request) {
 		}
 		s.injecterTous(nil)
 	}
+	if versCode {
+		s.ecrireAudit(LigneAudit{Type: "evenement", De: deQui(r), Vers: "hub", Action: "portée infra → code", Resultat: e.Nom})
+	}
 	s.ecrireJSON(w, e)
 }
 
@@ -164,15 +180,7 @@ func (s *Serveur) apiCoffreSupprimer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := r.PathValue("id")
-	if noms, err := serveursUtilisantCle(id); err != nil || len(noms) > 0 {
-		// a server reaches its host with it: removed, the server would be cut off (or the file is unreadable)
-		if err != nil {
-			s.erreurServeurs(w, err)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		w.WriteHeader(http.StatusConflict)
-		_ = json.NewEncoder(w).Encode(map[string]any{"erreur_key": "This key opens the server {0}: remove that server first", "args": []string{strings.Join(noms, ", ")}, "erreur": "This key opens the server " + strings.Join(noms, ", ") + ": remove that server first"})
+	if s.cleDeServeur(w, id, "This key opens the server {0}: remove that server first") { // removed, it would cut it off
 		return
 	}
 	if s.acces != nil && s.accesErr == nil {
@@ -191,4 +199,22 @@ func (s *Serveur) apiCoffreSupprimer(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = s.synchroniserAcces()
 	s.ecrireJSON(w, map[string]bool{"ok": true})
+}
+
+// cleDeServeur: true, the refusal written (409 with the servers' names), when a server reaches its host with
+// this vault entry or the inventory cannot be read.
+func (s *Serveur) cleDeServeur(w http.ResponseWriter, id, message string) bool {
+	noms, err := serveursUtilisantCle(id)
+	if err != nil {
+		s.erreurServeurs(w, err)
+		return true
+	}
+	if len(noms) == 0 {
+		return false
+	}
+	n := strings.Join(noms, ", ")
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusConflict)
+	_ = json.NewEncoder(w).Encode(map[string]any{"erreur_key": message, "args": []string{n}, "erreur": strings.Replace(message, "{0}", n, 1)})
+	return true
 }

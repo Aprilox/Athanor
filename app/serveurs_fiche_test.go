@@ -253,7 +253,8 @@ func TestFicheServeur(t *testing.T) {
 	}
 
 	// removed: its sheet goes, and a refresh finishing late writes none
-	req := httptest.NewRequest("DELETE", "/api/serveurs/"+id, nil)
+	s.config.MotDePasseHash = hacherMotDePasse("mdp-test")
+	req := httptest.NewRequest("DELETE", "/api/serveurs/"+id, strings.NewReader(`{"mot_de_passe":"mdp-test"}`))
 	req.SetPathValue("id", id)
 	s.apiServeurSupprimer(httptest.NewRecorder(), req)
 	if _, err := os.Stat(dossier); !os.IsNotExist(err) {

@@ -59,9 +59,10 @@ func TestWebTraduction(t *testing.T) {
 	for _, e := range []error{errCoffreVerrouille, errCoffreSansMdp, errCoffreMdp, errCoffreInconnu, errCoffreRetraitMdp,
 		errCoffreTrousseau, errCoffreFormat, errCoffreAbime, errCoffreIllisible, errServeurAdresse, errServeurPort,
 		errServeurUtilisateur, errServeurEmpreinte, errServeurMode, errServeurPasCle, errServeurPhrase, errServeurInjoignable,
-		errServeurCleRefusee, errEmpreinteChangee} { // the vault's errors reach the toast (B14)
+		errServeurCleRefusee, errEmpreinteChangee, errServeurCleCode} { // the vault's errors reach the toast (B14)
 		cles = append(cles, e.Error())
 	}
+	cles = append(cles, "This key opens the server {0}: it stays in the infra scope", "This key opens the server {0}: remove that server first")
 	for _, l := range []string{"fr", "es", "de", "it", "pt"} {
 		dico := dicoTUI(l)
 		if len(dico) < 1000 {

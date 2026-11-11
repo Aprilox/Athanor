@@ -259,6 +259,7 @@ func TestServeursAjout(t *testing.T) {
 		t.Fatal(err)
 	}
 	pasSSH, _ := s.coffre.Ajouter(EntreeCoffre{Nom: "Jeton", Famille: "secret", Type: "jeton", Portee: "code"}, "x")
+	cleCode, _ := s.coffre.Ajouter(EntreeCoffre{Nom: "Clé code", Famille: "secret", Type: "ssh", Portee: "code"}, string(prive))
 
 	// 3) mode coffre: refusals, then added
 	refus := []struct {
@@ -273,6 +274,7 @@ func TestServeursAjout(t *testing.T) {
 		{"bad user", base(map[string]any{"mode": "coffre", "cle": cle.ID, "utilisateur": "a;b"}), 400, errServeurUtilisateur.Error()},
 		{"bad role", base(map[string]any{"mode": "coffre", "cle": cle.ID, "roles": []string{"test"}}), 400, "Unknown server role"},
 		{"not an SSH key", base(map[string]any{"mode": "coffre", "cle": pasSSH.ID}), 400, errServeurPasCle.Error()},
+		{"code-scope key (C35)", base(map[string]any{"mode": "coffre", "cle": cleCode.ID}), 400, errServeurCleCode.Error()},
 		{"unknown entry", base(map[string]any{"mode": "coffre", "cle": "inconnue"}), 404, errCoffreInconnu.Error()},
 	}
 	for _, r := range refus {
@@ -294,6 +296,9 @@ func TestServeursAjout(t *testing.T) {
 	code, v := appel("/api/serveurs/ajouter", base(map[string]any{"mode": "coffre", "cle": cle.ID, "roles": []string{"prod", "dev", "prod"}}))
 	if code != 200 {
 		t.Fatalf("vault key: %d %v", code, v)
+	}
+	if code, v := appel("/api/coffre/"+cle.ID, map[string]any{"portee": "code", "mot_de_passe": "mdp-test"}); code != http.StatusConflict || v["args"] == nil {
+		t.Errorf("a server's key moved to code (C35): %d %v", code, v)
 	}
 	if x := v["serveur"].(map[string]any); x["etat"] != "ok" || x["cle"] != cle.ID || x["empreinte_hote"] != srv.empreinte || len(x["roles"].([]any)) != 2 {
 		t.Errorf("added server: %v", x)

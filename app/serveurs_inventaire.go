@@ -7,6 +7,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -164,6 +165,7 @@ func (s *Serveur) apiServeurModifier(w http.ResponseWriter, r *http.Request) {
 		Roles            *[]string `json:"roles"`
 		CouperMotDePasse bool      `json:"couper_mot_de_passe"`
 		Rafraichir       bool      `json:"rafraichir"`
+		MotDePasse       string    `json:"mot_de_passe"` // Athanor's password: taking the prod role away (C37)
 	}
 	if lireCorps(r, &c) != nil {
 		s.erreur(w, http.StatusBadRequest, "Invalid request")
@@ -199,13 +201,23 @@ func (s *Serveur) apiServeurModifier(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		c.Roles = &roles
+		liste, err := lireServeurs()
+		if err != nil {
+			s.erreurServeurs(w, err)
+			return
+		}
+		i := slices.IndexFunc(liste, func(x ServeurInventaire) bool { return x.ID == r.PathValue("id") })
+		if i >= 0 && slices.Contains(liste[i].Roles, "prod") && !slices.Contains(roles, "prod") && !s.preuveServeur(w, r, c.MotDePasse, "retrait du rôle prod refusé", liste[i].Nom) {
+			return // C37: without prod an agent may act on it as on a test server
+		}
 	}
-	var rendu ServeurInventaire
+	var rendu, avant ServeurInventaire
 	err := modifierServeurs(func(l []ServeurInventaire) ([]ServeurInventaire, error) {
 		i := slices.IndexFunc(l, func(x ServeurInventaire) bool { return x.ID == r.PathValue("id") })
 		if i < 0 {
 			return nil, errServeurInconnu
 		}
+		avant = l[i]
 		if c.Nom != nil {
 			l[i].Nom = *c.Nom
 		}
@@ -219,6 +231,9 @@ func (s *Serveur) apiServeurModifier(w http.ResponseWriter, r *http.Request) {
 		s.erreurServeurs(w, err)
 		return
 	}
+	if !slices.Equal(avant.Roles, rendu.Roles) {
+		s.ecrireAudit(LigneAudit{Type: "evenement", De: deQui(r), Vers: "servers", Action: "rôles du serveur", Resultat: fmt.Sprintf("%s: %v → %v", rendu.Nom, avant.Roles, rendu.Roles)})
+	}
 	s.ecrireJSON(w, map[string]any{"serveur": rendu})
 }
 
@@ -226,9 +241,27 @@ func (s *Serveur) apiServeurModifier(w http.ResponseWriter, r *http.Request) {
 // vault key stays (the owner removes it from the vault, now that no server uses it).
 func (s *Serveur) apiServeurSupprimer(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	err := modifierServeurs(func(l []ServeurInventaire) ([]ServeurInventaire, error) {
+	var c struct {
+		MotDePasse string `json:"mot_de_passe"`
+	}
+	_ = lireCorps(r, &c) // no body: no password
+	liste, err := lireServeurs()
+	if err != nil {
+		s.erreurServeurs(w, err)
+		return
+	}
+	i := slices.IndexFunc(liste, func(x ServeurInventaire) bool { return x.ID == id })
+	if i < 0 || !idServeurValide.MatchString(id) {
+		s.erreurServeurs(w, errServeurInconnu)
+		return
+	}
+	nom := liste[i].Nom
+	if !s.preuveServeur(w, r, c.MotDePasse, "suppression du serveur refusée", nom) {
+		return // C37: its sheet would go with no trace, prod servers included
+	}
+	err = modifierServeurs(func(l []ServeurInventaire) ([]ServeurInventaire, error) {
 		n := len(l)
-		if l = slices.DeleteFunc(l, func(x ServeurInventaire) bool { return x.ID == id }); len(l) == n || !idServeurValide.MatchString(id) {
+		if l = slices.DeleteFunc(l, func(x ServeurInventaire) bool { return x.ID == id }); len(l) == n {
 			return nil, errServeurInconnu
 		}
 		return l, nil
@@ -237,6 +270,17 @@ func (s *Serveur) apiServeurSupprimer(w http.ResponseWriter, r *http.Request) {
 		s.erreurServeurs(w, err)
 		return
 	}
+	s.ecrireAudit(LigneAudit{Type: "evenement", De: deQui(r), Vers: "servers", Action: "serveur supprimé", Resultat: nom})
 	_ = os.RemoveAll(filepath.Join(dossierModule("servers"), id))
 	s.ecrireJSON(w, map[string]bool{"ok": true})
+}
+
+// preuveServeur: the owner is there (hub_preuve.go, WSL mode too); otherwise the refusal is logged and written.
+func (s *Serveur) preuveServeur(w http.ResponseWriter, r *http.Request, mdp, action, nom string) bool {
+	code, err := s.preuvePresence(r, mdp)
+	if err != nil {
+		s.ecrireAudit(LigneAudit{Type: "evenement", De: deQui(r), Vers: "servers", Action: action, Resultat: nom + ": " + err.Error()})
+		s.erreur(w, code, err.Error())
+	}
+	return err == nil
 }

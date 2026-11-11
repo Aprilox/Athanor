@@ -26,6 +26,9 @@ func TestServeursInventaire(t *testing.T) {
 		r := httptest.NewRequest(methode, chemin, strings.NewReader(corps))
 		r.Header.Set("X-Athanor", "jeton")
 		r.AddCookie(&http.Cookie{Name: cookieAcces, Value: "cle"})
+		if s.session != "" {
+			r.AddCookie(&http.Cookie{Name: "athanor_session", Value: s.session})
+		}
 		w := httptest.NewRecorder()
 		mux.ServeHTTP(w, r)
 		var v map[string]any
@@ -77,7 +80,21 @@ func TestServeursInventaire(t *testing.T) {
 		t.Errorf("unknown server: %d", code)
 	}
 
-	// rename and roles, with their checks
+	// rename and roles, with their checks; taking prod away and removing a server ask for the owner (C37)
+	s.config.MotDePasseHash, s.session = hacherMotDePasse("mdp-test"), "session"
+	natif := modeNatif.Load()
+	t.Cleanup(func() { modeNatif.Store(natif) })
+	sansPreuve := func(methode, id string, corps ...string) {
+		t.Helper()
+		for _, m := range []bool{true, false} { // WSL mode too: an agent there reaches the window as well
+			modeNatif.Store(m)
+			for _, c := range corps {
+				if code, v := appel(methode, "/api/serveurs/"+id, c); code != http.StatusUnauthorized || v["erreur_key"] != "Wrong password" {
+					t.Errorf("%s %s without proof (native %v): %d %v", methode, c, m, code, v)
+				}
+			}
+		}
+	}
 	if code, v := appel("POST", "/api/serveurs/"+ids[1], `{"nom":"  staging  ","roles":["prod","dev","prod"]}`); code != 200 ||
 		v["serveur"].(map[string]any)["nom"] != "staging" || len(v["serveur"].(map[string]any)["roles"].([]any)) != 2 {
 		t.Errorf("rename: %d %v", code, v)
@@ -89,8 +106,12 @@ func TestServeursInventaire(t *testing.T) {
 			t.Errorf("%s: %d %v", c.corps, code, v)
 		}
 	}
-	// no role: [] for the pages, never null (B53)
-	if code, v := appel("POST", "/api/serveurs/"+ids[1], `{"roles":[]}`); code != 200 || v["serveur"].(map[string]any)["roles"] == nil {
+	// no role: [] for the pages, never null (B53); prod taken away with the password only
+	sansPreuve("POST", ids[1], `{"roles":["dev"]}`, `{"roles":["dev"],"mot_de_passe":"faux"}`)
+	if l, _ := lireServeurs(); len(l) < 2 || len(l[1].Roles) != 2 {
+		t.Errorf("prod taken away without proof: %+v", l)
+	}
+	if code, v := appel("POST", "/api/serveurs/"+ids[1], `{"roles":[],"mot_de_passe":"mdp-test"}`); code != 200 || v["serveur"].(map[string]any)["roles"] == nil {
 		t.Errorf("empty roles: %d %v", code, v)
 	}
 	if l, _ := lireServeurs(); len(l) < 2 || l[1].Roles == nil {
@@ -105,8 +126,18 @@ func TestServeursInventaire(t *testing.T) {
 	if code != http.StatusConflict || !strings.Contains(v["erreur"].(string), "vps-1") || v["args"].([]any)[0] != "vps-1" {
 		t.Fatalf("used key removed: %d %v", code, v)
 	}
-	if code, _ := appel("DELETE", "/api/serveurs/"+ids[0], ""); code != 200 {
+	sansPreuve("DELETE", ids[0], "", `{"mot_de_passe":"faux"}`)
+	if code, _ := appel("DELETE", "/api/serveurs/"+ids[0], `{"mot_de_passe":"mdp-test"}`); code != 200 {
 		t.Fatalf("remove server: %d", code)
+	}
+	j := journalAuditTexte(t)
+	for _, x := range []string{"rôles du serveur", "retrait du rôle prod refusé", "suppression du serveur refusée", `"serveur supprimé"`} {
+		if !strings.Contains(j, x) {
+			t.Errorf("not logged: %s", x)
+		}
+	}
+	if strings.Count(j, "retrait du rôle prod refusé") != 4 || strings.Count(j, "suppression du serveur refusée") != 4 {
+		t.Errorf("refusals logged: %s", j)
 	}
 	if _, err := os.Stat(filepath.Join(dossierModule("servers"), ids[0])); !os.IsNotExist(err) {
 		t.Errorf("the server's folder stays: %v", err)
