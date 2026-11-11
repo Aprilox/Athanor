@@ -26,10 +26,7 @@ type SignalPilote struct {
 }
 
 func init() {
-	objet := func(props map[string]any, requis ...string) map[string]any {
-		return map[string]any{"type": "object", "properties": props, "required": append([]string{}, requis...), "additionalProperties": false} // never null: Claude Code drops a server whose schema is invalid
-	}
-	texte := func(d string) map[string]any { return map[string]any{"type": "string", "description": d} }
+	objet, texte := schemaObjet, schemaTexte
 	outilsHub["etat"] = OutilHub{Description: "Your project's state in Athanor: plan progress, phase, what waits for the owner, the names of the variables you receive, your access requests.",
 		Schema: objet(map[string]any{}), Faire: outilEtat}
 	outilsHub["environnements"] = OutilHub{Description: "Your project's environments: the current one and, for each, the names of the variables you receive (never their values).",
@@ -41,6 +38,13 @@ func init() {
 	outilsHub["signaler"] = OutilHub{Description: "Report a blocker to the owner: it shows in Athanor's bell. One short sentence.",
 		Schema: objet(map[string]any{"blocage": texte("What blocks you, in one sentence")}, "blocage"), Faire: outilSignaler}
 }
+
+// schemaObjet: a tool's arguments schema; required is never null (Claude Code drops a server whose schema is invalid).
+func schemaObjet(props map[string]any, requis ...string) map[string]any {
+	return map[string]any{"type": "object", "properties": props, "required": append([]string{}, requis...), "additionalProperties": false}
+}
+
+func schemaTexte(d string) map[string]any { return map[string]any{"type": "string", "description": d} }
 
 // lireArguments decodes a tool's arguments; an unknown one (another project…) is refused.
 func lireArguments(args json.RawMessage, v any) error {

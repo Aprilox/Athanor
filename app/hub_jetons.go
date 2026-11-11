@@ -31,9 +31,11 @@ type SessionHub struct {
 	Mission string   `json:"mission,omitempty"`
 	Agent   string   `json:"agent"`
 	Outils  []string `json:"outils"`
-	Cree    string   `json:"cree"`
-	Vu      string   `json:"vu"`
-	Expire  string   `json:"expire"`
+	// Serveurs: the perimeter of a Servers agent's token (inventory ids only), empty for a pilot
+	Serveurs []string `json:"serveurs,omitempty"`
+	Cree     string   `json:"cree"`
+	Vu       string   `json:"vu"`
+	Expire   string   `json:"expire"`
 }
 
 // Sessions: the token store. Maintenant (nil: time.Now) is for the tests.
@@ -78,16 +80,22 @@ func (j *Sessions) enregistrer() error {
 	return ecrireAtomique(j.chemin, b, 0o600)
 }
 
-// Creer: a new token for a pilot launch of projet; any previous session of that project is revoked.
+// Creer: a new token for a pilot launch of projet; the previous pilot session of that project is revoked.
 func (j *Sessions) Creer(projet string, outils []string) (string, error) {
+	return j.CreerSession(SessionHub{Projet: projet, Agent: "pilote", Outils: outils})
+}
+
+// CreerSession: a new token for x (project, agent, tools, perimeter); the previous session of the same
+// project and agent is revoked.
+func (j *Sessions) CreerSession(x SessionHub) (string, error) {
 	jeton := aleatoire(32)
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	t := j.maintenant().UTC()
-	j.retirer(func(x SessionHub) bool { return x.Projet == projet })
-	j.liste = append(j.liste, SessionHub{Hache: hacherJeton(jeton), Projet: projet, Agent: "pilote",
-		Outils: append([]string{}, outils...), Cree: t.Format(time.RFC3339), Vu: t.Format(time.RFC3339),
-		Expire: t.Add(dureeJeton).Format(time.RFC3339)})
+	j.retirer(func(y SessionHub) bool { return y.Projet == x.Projet && y.Agent == x.Agent })
+	x.Hache, x.Outils, x.Serveurs = hacherJeton(jeton), append([]string{}, x.Outils...), slices.Clone(x.Serveurs)
+	x.Cree, x.Vu, x.Expire = t.Format(time.RFC3339), t.Format(time.RFC3339), t.Add(dureeJeton).Format(time.RFC3339)
+	j.liste = append(j.liste, x)
 	if err := j.enregistrer(); err != nil {
 		j.liste = j.liste[:len(j.liste)-1]
 		return "", err
