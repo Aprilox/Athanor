@@ -149,3 +149,25 @@ func premierLancement(d string, accepte bool) bool {
 	}
 	return os.MkdirAll(d, 0o755) == nil
 }
+
+// donneesAthanor: Athanor's own data a pilot must neither change nor read (I4): the settings, hub/ (the
+// vault, the approvals, the audit journal) and modules/, in the kit's folder and in dossierAthanor() (one
+// and the same in a recent installation; in WSL the kit is the Windows folder seen from Linux).
+// avecAbsents: the folders that do not exist yet too (Seatbelt accepts them; Claude's bubblewrap does not).
+func donneesAthanor(kit string, avecAbsents bool) []string {
+	var l []string
+	vus := map[string]bool{}
+	for _, base := range []string{kit, dossierAthanor()} {
+		if base == "" || vus[base] {
+			continue
+		}
+		vus[base] = true
+		for _, n := range []string{"hub", "modules", "athanor-config.json", "athanor-config-linux.json", "athanor-config-darwin.json"} {
+			p := filepath.Join(base, n)
+			if _, err := os.Stat(p); err == nil || avecAbsents {
+				l = append(l, p)
+			}
+		}
+	}
+	return l
+}

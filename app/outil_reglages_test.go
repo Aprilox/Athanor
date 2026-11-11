@@ -149,6 +149,11 @@ func TestPariteReglages(t *testing.T) {
 			} else {
 				fs["allowRead"] = l[:len(l)-1]
 			}
+			// since M65 (I4) Athanor's own data is denied too, which settings.py did not do
+			delete(fs, "denyWrite")
+			if l, ok := fs["denyRead"].([]any); ok && len(l) > 2 {
+				fs["denyRead"] = l[:2]
+			}
 		}
 		if !reflect.DeepEqual(sansProgramme(t, p), sansProgramme(t, g)) {
 			t.Errorf("%s:\n--- go\n%s\n--- python\n%s", c.nom, bg, bp)

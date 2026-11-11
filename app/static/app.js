@@ -3473,6 +3473,7 @@ pages.sante = async () => {
     <button class="btn" id="st-coffre" title="${h(t(v.windows && v.natif ? "Native Windows mode, no sandbox: the granted test value must be seen, the code key can be opened by DPAPI, the infra value must stay unreadable." : "A short Claude session tries to read three test values of the vault: only the one granted to its project may reach it."))}">${t("Test the vault (2 min)")}</button>
     <button class="btn" id="st-recompiler" title="${h(t("After a repair of its Go code (app/): shows the change, checks it, rebuilds, runs the autotest, and only then replaces the executable, keeping the previous one."))}">${t("Rebuild Athanor")}</button>
   </div>
+  ${v.windows && v.natif ? `<p class="petit attention mt-1" id="st-exception-natif">${t("Native Windows mode: no sandbox keeps Claude away from Athanor's data (settings, vault, modules). The chained audit journal shows any change (Verify), and approvals ask for your password.")}</p>` : ""}
   <div class="bloc bloc-liste">${listeSante(verifs)}</div>
   <div class="bloc"><h2>${t("Ask Claude")}</h2>
     <p class="intro petit">${t("A Claude session in the tool folder, outside the sandbox and without sudo: it installs, fixes, then summarizes. Whatever needs sudo or Windows is written to logs\\TODO_FOR_YOU.md.")}</p>
