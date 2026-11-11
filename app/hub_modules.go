@@ -168,8 +168,7 @@ type moduleAProjet interface{ ProjetCourant() bool }
 // waiting for the owner first), the bell's alerts and the history of the ignored ones.
 func (s *Serveur) apiHub(w http.ResponseWriter, r *http.Request) {
 	v, el := s.vueHub()
-	toutes := alertesDe(el)
-	actives, cachees := trierAlertes(toutes, ignoreesCourantes(toutes))
+	actives, cachees := s.alertesHub(el)
 	s.ecrireJSON(w, map[string]any{"modules": v, "elements": el, "alertes": actives, "ignorees": cachees})
 }
 

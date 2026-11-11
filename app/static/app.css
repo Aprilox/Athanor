@@ -91,9 +91,10 @@ html.cadre .dialogue, html.cadre .verrou, html.cadre .assistant { top: var(--bar
 .notifs-titre { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--faible); padding: 2px 10px; }
 .notifs-vide { padding: 8px 10px; }
 .notifs .alertes { max-height: 340px; overflow: auto; display: flex; flex-direction: column; gap: 2px; }
-.alerte { display: grid; grid-template-columns: auto 1fr; column-gap: 8px; row-gap: 6px; align-items: center; padding: 8px 10px; border-radius: 6px; font-size: 14px; }
+.alerte { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 8px; row-gap: 6px; align-items: center; padding: 8px 10px; border-radius: 6px; font-size: 14px; }
 .alerte:hover { background: var(--panel); }
 .alerte .alerte-actions { grid-column: 2; display: flex; gap: 6px; flex-wrap: wrap; }
+.alerte .alerte-actions .btn { white-space: normal; text-align: left; }
 .alerte.ignoree .alerte-texte { color: var(--faible); }
 .alertes-ignorees summary { cursor: pointer; font-size: 13px; color: var(--faible); padding: 4px 10px; border-radius: 6px; }
 .alertes-ignorees summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
@@ -743,6 +744,12 @@ input.large { flex: 1; min-width: 200px; width: auto; }
 .pv-note { border-left: 3px solid var(--attention); padding: 6px 10px; margin: 10px 0; white-space: pre-wrap; }
 .pv-note-ok { border-left-color: var(--ok); }
 .pv-donne { color: var(--ok); font-size: 12px; }
+/* For you: the agents' approvals, first (M62) */
+.appr-carte { border-left: 3px solid var(--attention); }
+.appr-champs { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0 14px; }
+.appr-champs select { width: 100%; }
+.appr-champs label.champ > a { display: inline-block; margin-top: 4px; }
+.alerte.alerte-appr { border-left: 3px solid var(--attention); }
 .pv-form { margin-top: 10px; }
 .pv-form textarea, .pv-form input[type=password] { width: 100%; }
 .pv-histo { margin: 6px 0 0 0; padding-left: 18px; }

@@ -78,6 +78,17 @@ func TestCaptureHub(t *testing.T) {
 	if err := ecrireConfig(s.config); err != nil {
 		t.Fatal(err)
 	}
+	// the agents' pending approvals (cloche-*, appr-*): an access, a staging deploy, a prod one refused by the script
+	for _, a := range []Approbation{
+		{Projet: "projet-01", Env: "dev", Mission: "M4", Agent: "pilote", Action: "demander_acces", Details: map[string]string{"nom": "STRIPE_SECRET_KEY"},
+			Raison: "Le paiement de test du jalon M4 a besoin de la clé Stripe de test."},
+		{Projet: "projet-02", Env: "staging", Mission: "M9", Agent: "pilote", Action: "demander_deploiement", Raison: "La version 1.2 est prête : la déployer sur staging pour la recette."},
+		{Projet: "projet-02", Env: "prod", Mission: "M9", Agent: "pilote", Action: "demander_deploiement", Raison: "Mettre la version 1.2 en production."},
+	} {
+		if _, err := s.approbations.Demander(a); err != nil {
+			t.Fatal(err)
+		}
+	}
 	// the audit log (audit-*): an access given, a module's request and its answer (same ID), a "Force", an emergency stop
 	for _, l := range []LigneAudit{
 		{Type: "evenement", De: "fenetre", Vers: "hub", Projet: "projet-00", Action: "accorder", Resultat: "Stripe test [sec-1, code] → STRIPE_KEY, test"},

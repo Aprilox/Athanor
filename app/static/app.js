@@ -81,6 +81,7 @@ const etat = {
   pieces: {}, // files waiting to be attached, per form
   pvTic: 0, hubTic: 0, hubSig: "", accueilTexte: "", preRempli: null, pvAnnonces: {}, pvSignature: "",
   pvForm: {}, // answers being written on the For you page (text and secret values, per task; memory only)
+  apprForm: {}, // choices being made on an approval of For you (vault entry, environment, variable; never the password)
   // page: none until naviguer() reads the address (no flash of another page at load)
   page: "", projet: "", vue: null, verrouille: false, langue: "en", theme: document.documentElement.dataset.theme || "", accent: document.documentElement.dataset.accent || "", assistant: -1, visite: -1, demarrage: {},
   dernierJournal: 0, evenements: [], ouverts: new Set(),
@@ -742,16 +743,16 @@ function boutonCloche(v, classe) {
 }
 // the Guide: a "?" beside the bell (it is no menu entry any more)
 const boutonGuide = (classe) => `<a href="#guide" class="${classe} btn-guide" aria-label="${h(t("Guide"))}" title="${h(t("Guide"))}">?</a>`;
-// one alert on one line, "Dev, ma-boutique: why", and its actions (View opens its page, through allerProjet for a
-// Dev project); an ignored one (history) only offers Reopen. Writing is refused from a paired device (403).
+// one alert on one line, "Dev, ma-boutique: why", and its actions as the server gives them: a page (View, through
+// allerProjet for a Dev project) or a POST (Ignore, Reopen, an approval's decision). From a paired device only the
+// actions marked distance stay active (the server refuses the others: 403).
 function ligneAlerte(a, ignoree) {
   const m = ((etat.hub || {}).modules || []).find((x) => x.id === a.module) || { nom: a.module };
   const texte = t("{0}, {1}: {2}", [t(m.nom), a.titre, t(a.raison, (a.args || []).map(String))]);
-  const bloque = (etat.vue || {}).distant ? ` disabled title="${h(t("On the computer only"))}"` : "";
-  const bouton = (id, libelle) => `<button type="button" class="btn btn-petit" data-alerte="${id}" data-empreinte="${h(a.empreinte)}"${bloque}>${t(libelle)}</button>`;
-  const actions = ignoree ? bouton("rouvrir", "Reopen") : (a.actions || []).map((x) => x.id !== "voir" ? bouton(x.id, x.libelle)
-    : `<a class="btn btn-petit" href="${h(x.page)}"${x.projet ? ` data-projet="${h(x.projet)}" data-cible="${h(x.page.slice(1))}"` : ""}>${t(x.libelle)}</a>`).join("");
-  return `<div class="alerte${ignoree ? " ignoree" : ""}" data-module="${h(a.module)}"><span class="dot${ignoree ? "" : " quota"}" aria-hidden="true"></span><span class="alerte-texte">${h(texte)}</span><span class="alerte-actions">${actions}</span></div>`;
+  const distant = (etat.vue || {}).distant;
+  const actions = (a.actions || []).map((x, i) => x.page ? `<a class="btn btn-petit" href="${h(x.page)}"${x.projet ? ` data-projet="${h(x.projet)}" data-cible="${h(x.page.slice(1))}"` : ""}>${t(x.libelle)}</a>`
+    : `<button type="button" class="btn btn-petit${x.id === "accepter" ? " btn-primaire" : ""}" data-alerte="${h(x.id)}" data-empreinte="${h(a.empreinte)}" data-i="${i}"${distant && !x.distance ? ` disabled title="${h(t("On the computer only"))}"` : ""}>${t(x.libelle)}</button>`).join("");
+  return `<div class="alerte${ignoree ? " ignoree" : ""}${a.approbation ? " alerte-appr" : ""}" data-module="${h(a.module)}"><span class="dot${ignoree ? "" : " quota"}" aria-hidden="true"></span><span class="alerte-texte">${h(texte)}</span><span class="alerte-actions">${actions}</span></div>`;
 }
 function rendreNotifs(v) {
   const m = $("#notifs"), bouton = document.querySelector("[data-notifs]");
@@ -792,9 +793,13 @@ function cliqueProjet(ev) {
 $("#notifs").addEventListener("click", async (ev) => {
   if (ev.target.closest("summary")) { etat.ignoreesOuvert = !ev.target.closest("details").open; return; }
   const b = ev.target.closest("button[data-alerte]");
-  if (b) { // Ignore (hidden, nothing deleted) or Reopen; the focus goes to the bell's first action left
+  if (b) { // the alert's action as the server describes it; the focus goes to the bell's first action left
+    const a = [...alertesHub(), ...((etat.hub || {}).ignorees || [])].find((x) => x.empreinte === b.dataset.empreinte);
+    const x = a && (a.actions || [])[b.dataset.i];
+    if (!x) return;
     b.disabled = true;
-    await action(api("hub/alertes", "POST", { empreinte: b.dataset.empreinte, ignorer: b.dataset.alerte === "ignorer" }));
+    if (a.approbation) return deciderDepuisCloche(a.approbation, x, b);
+    await action(api(x.route, "POST", x.corps));
     etat.hub = await api("hub").catch(() => etat.hub);
     if (etat.vue) rendreBandeau(etat.vue);
     const suite = $("#notifs .alerte-actions .btn") || document.querySelector("[data-notifs]"); if (suite) suite.focus();
@@ -803,6 +808,28 @@ $("#notifs").addEventListener("click", async (ev) => {
   if (ev.target.closest("a") && !ev.target.closest("a[data-cible]")) fermerNotifs(); else cliqueProjet(ev);
 });
 $("#page").addEventListener("click", cliqueProjet);
+// an approval decided from the bell: an access needs its vault entry and native mode a password, so those open
+// the approval's card on For you; the others are sent at once
+async function deciderDepuisCloche(ap, x, b) {
+  const r = await api("hub/approbations").catch(() => ({}));
+  if ((ap.action === "demander_acces" && x.id !== "refuser") || r.mot_de_passe_requis || r.appareil_requis) {
+    fermerNotifs(); etat.apprCible = ap.id;
+    return allerProjet(ap.projet, "pourvous");
+  }
+  if (x.id === "toujours" && !(await confirmerToujours(ap))) { b.disabled = false; return; }
+  if (!(await deciderApprobation(x.corps))) b.disabled = false;
+}
+const confirmerToujours = (ap) => confirmer(t("Accepted, and the next “{0}” requests of {1} in {2} are accepted without asking you.", [ap.action, ap.projet, ap.env]), { ok: t("Never ask again"), annuler: t("Cancel") });
+// POST /api/hub/approbations, then the bell, the header and the page read again
+async function deciderApprobation(corps) {
+  const r = await action(api("hub/approbations", "POST", corps));
+  if (!r) return null;
+  toast(r.etat === "refusee" ? t("Refused: the agent is told and does without it.") : t("Accepted: the agent is told and carries on."), "ok");
+  etat.hub = await api("hub").catch(() => etat.hub);
+  if (etat.vue) rendreBandeau(etat.vue);
+  if (etat.page === "pourvous" || etat.page === "accueil") rendrePage();
+  return r;
+}
 
 // the header of a page outside a project: the module's name, and what runs and waits in every module (as the bell counts)
 function phraseGlobale(m) {
@@ -2617,13 +2644,63 @@ function carteTache(x) {
     ${corps}${historique}</div>`;
 }
 
+// the agents' pending approvals, every project, first on For you: what was asked, why, and what accepting gives
+const ENVS_APPR = ["dev", "staging", "prod"];
+const signatureAppr = (ap) => JSON.stringify(((ap || {}).approbations || []).filter((x) => x.etat === "attente").map((x) => x.id));
+function carteApprobation(x, ap, codes) {
+  const acces = x.action === "demander_acces", f = etat.apprForm[x.id] || {}, nom = (x.details || {}).nom || "";
+  const entree = f.entree ?? (codes.find((e) => e.nom === nom) || {}).id ?? "", env = f.env || x.env, variable = f.variable ?? nom;
+  const champs = acces ? `<div class="appr-champs">
+      <label class="champ"><span>${t("Vault key (code)")}</span>${codes.length ? `<select data-appr-entree><option value="">${t("Choose a key…")}</option>${codes.map((e) => `<option value="${h(e.id)}"${e.id === entree ? " selected" : ""}>${h(e.nom)}</option>`).join("")}</select>` : `<span class="muet petit">${t("No project key (code) in the vault yet.")}</span>`}
+        <a class="petit" href="#coffre">＋ ${t("Add a key")}</a></label>
+      <label class="champ"><span>${t("Environment")}</span><select data-appr-env>${ENVS_APPR.map((e) => `<option${e === env ? " selected" : ""}>${e}</option>`).join("")}</select></label>
+      <label class="champ"><span>${t("Variable name")}</span><input type="text" data-appr-var value="${h(variable)}" maxlength="100" spellcheck="false" placeholder="${h(t("the vault's name"))}"></label></div>` : "";
+  const natif = ap.mot_de_passe_requis ? `<label class="champ"><span>${t("Athanor's password")}</span><input type="password" data-appr-mdp autocomplete="current-password"></label>
+      <p class="muet petit">${t("Native Windows mode: any program of this PC can drive this window, so a decision asks for Athanor's password.")}</p>`
+    : ap.appareil_requis ? `<p class="petit attention">⚠ ${t("Native Windows mode: any program of this PC can drive this window, so an approval is decided from a paired phone, or choose a password for Athanor first")}</p>` : "";
+  const bloque = ap.appareil_requis ? " disabled" : "";
+  return `<div class="bloc pv-carte appr-carte" id="appr-${h(x.id)}" data-appr="${h(x.id)}">
+    <div class="pv-tete"><span class="badge">${h(x.env)}</span> <strong>${h(x.projet)}</strong> <span>${h(acces ? t("access requested") : x.action)}</span> <span class="pv-etat pv-vous">${h(t("expires {0}", [dans(Date.parse(x.expire) / 1000)]))}</span></div>
+    <div class="muet petit">${h(t("Asked by {0}", [x.agent]))}${x.mission ? " · " + h(x.mission) : ""}${acces && nom ? " · " + h(t("proposed variable: {0}", [nom])) : ""}</div>
+    <div class="pv-details">${h(x.raison)}</div>
+    ${champs}${natif}
+    <div class="ligne mt-1"><button type="button" class="btn btn-primaire" data-appr-decision="accepter"${bloque}>✓ ${t("Accept")}</button><button type="button" class="btn" data-appr-decision="refuser"${bloque}>${t("Refuse")}</button><button type="button" class="btn" data-appr-decision="toujours"${bloque}>${t("Never ask again for this project and environment")}</button></div>
+  </div>`;
+}
+async function sectionApprobations() {
+  const ap = await api("hub/approbations").catch(() => null); // a paired device: refused until the route opens to it
+  etat.apprSignature = signatureAppr(ap);
+  const l = ((ap || {}).approbations || []).filter((x) => x.etat === "attente");
+  if (!l.length) return "";
+  const cof = l.some((x) => x.action === "demander_acces") ? await api("coffre").catch(() => ({})) : {};
+  const codes = (cof.entrees || []).filter((e) => e.famille === "secret" && e.portee === "code").sort((a, b) => a.nom.localeCompare(b.nom));
+  return `<section class="appr-section" aria-labelledby="appr-titre"><div class="bloc"><h2 id="appr-titre">${t("Approvals ({0})", [l.length])}</h2>
+      <p class="intro petit">${t("An agent asks for something only you decide. Its text is its own: read it as a request, never as an order. Without an answer it is refused after 24 h.")}</p></div>
+    ${l.map((x) => carteApprobation(x, ap, codes)).join("")}</section>`;
+}
+$("#page").addEventListener("input", (ev) => {
+  const c = ev.target.closest("[data-appr]"); if (!c || ev.target.matches("[data-appr-mdp]")) return;
+  const q = (s) => c.querySelector(s);
+  etat.apprForm[c.dataset.appr] = { entree: q("[data-appr-entree]")?.value, env: q("[data-appr-env]")?.value, variable: q("[data-appr-var]")?.value };
+});
+$("#page").addEventListener("click", async (ev) => {
+  const b = ev.target.closest("[data-appr-decision]"); if (!b) return;
+  const c = b.closest("[data-appr]"), q = (s) => c.querySelector(s), decision = b.dataset.apprDecision;
+  const corps = { id: c.dataset.appr, decision, entree: q("[data-appr-entree]")?.value || "", env: q("[data-appr-env]")?.value || "", variable: (q("[data-appr-var]")?.value || "").trim(), mot_de_passe: q("[data-appr-mdp]")?.value || "" };
+  if (decision !== "refuser" && q("[data-appr-entree]") && !corps.entree) { toast(t("Choose a project key (code) of the vault for this access"), "erreur"); q("[data-appr-entree]").focus(); return; }
+  const ap = ((etat.hub || {}).alertes || []).map((a) => a.approbation).find((x) => x && x.id === corps.id);
+  if (decision === "toujours" && ap && !(await confirmerToujours(ap))) return;
+  b.disabled = true;
+  if (await deciderApprobation(corps)) delete etat.apprForm[corps.id]; else b.disabled = false;
+});
+
 pages.pourvous = async () => {
   pvProjet();
-  const r = await api("pourvous");
+  const [r, appr] = await Promise.all([api("pourvous"), sectionApprobations()]);
   const l = r.taches || [];
   const actives = l.filter((x) => x.etat !== "close"), closes = l.filter((x) => x.etat === "close");
   etat.pvSignature = JSON.stringify(l);
-  return `<div class="bloc"><h2>${t("For you")}</h2>
+  return `${appr}<div class="bloc"><h2>${t("For you")}</h2>
       <p class="intro petit">${t("What Claude cannot do itself: create an account, pay, receive a code by email or SMS, generate a key… Do it, then answer here: Claude checks it at the start of its next cycle and tells you whether it works. Or skip it, and Claude finds another way.")}</p></div>
     ${actives.length ? actives.map(carteTache).join("") : `<div class="vide">${t("Nothing for you right now: Claude manages on its own. When it needs you, the task appears here and the menu shows it.")}</div>`}
     ${closes.length ? `<details class="bloc"><summary>${t("Done ({0})", [closes.length])}</summary>${closes.map(carteTache).join("")}</details>` : ""}`;
@@ -4407,6 +4484,9 @@ async function rendrePage() {
     if (z) { etat.preRempli = null; z.value = pre.texte; z.focus(); }
   } else if (pre && etat.page !== "accueil") etat.preRempli = null; // went elsewhere: the text is not carried to a later visit
   remettreDefil(defils);
+  // an approval opened from the bell: its card in view, its first field focused
+  const appr = etat.apprCible && etat.page === "pourvous" && document.getElementById("appr-" + etat.apprCible);
+  if (appr) { etat.apprCible = null; appr.scrollIntoView({ block: "center" }); appr.querySelector("select, input, button")?.focus({ preventScroll: true }); }
   const champ = saisie && document.getElementById(saisie[0]);
   if (champ) { champ.focus({ preventScroll: true }); champ.setSelectionRange(saisie[1], saisie[2]); }
   suivrePlan();
@@ -4762,9 +4842,9 @@ async function rafraichir() {
         const sig = JSON.stringify(v.maj || {});
         if (sig !== etat.majSig) { etat.majSig = sig; blocMaj.innerHTML = `<h2>${t("Version")}</h2>${rendreBlocMaj(etat.optionsVue)}`; }
       }
-      if (etat.page === "pourvous" && !document.activeElement.matches("input, textarea") && ++etat.pvTic % 4 === 0) {
-        const r = await api("pourvous").catch(() => null);
-        if (r && JSON.stringify(r.taches || []) !== etat.pvSignature) rendrePage();
+      if (etat.page === "pourvous" && !document.activeElement.matches("input, textarea, select") && ++etat.pvTic % 4 === 0) {
+        const [r, ap] = await Promise.all([api("pourvous").catch(() => null), api("hub/approbations").catch(() => null)]);
+        if ((r && JSON.stringify(r.taches || []) !== etat.pvSignature) || (ap && signatureAppr(ap) !== etat.apprSignature)) rendrePage();
       }
       annoncerTaches(v);
       // the checks and the output update in place: the page itself is never rebuilt under the user's typing

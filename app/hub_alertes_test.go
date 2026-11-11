@@ -134,3 +134,29 @@ func TestHubAlertes(t *testing.T) {
 		t.Errorf("bad body: %d, want 400", c)
 	}
 }
+
+// TestAlertesApprobations: a pending approval is an alert keyed by its id, first in the bell, with no
+// Ignore and its three decisions sent as is (allowed from a paired device); a decided one is gone.
+func TestAlertesApprobations(t *testing.T) {
+	l := []Approbation{
+		{ID: "a1", Projet: "boutique", Env: "dev", Action: "demander_acces", Raison: "Stripe", Etat: "attente"},
+		{ID: "a2", Projet: "boutique", Env: "prod", Action: "demander_deploiement", Raison: "v1", Etat: "refusee"},
+	}
+	al := alertesApprobations(l)
+	if len(al) != 1 || al[0].Empreinte != "appr-a1" || al[0].Approbation == nil || al[0].Raison != "Access requested ({0}): {1}" {
+		t.Fatalf("alertes: %+v", al)
+	}
+	ids := []string{}
+	for _, x := range al[0].Actions {
+		ids = append(ids, x.ID)
+		if x.Route != "hub/approbations" || x.Corps["id"] != "a1" || x.Corps["decision"] != x.ID || !x.Distance {
+			t.Fatalf("action: %+v", x)
+		}
+	}
+	if strings.Join(ids, ",") != "accepter,refuser,toujours" {
+		t.Fatalf("actions: %v", ids)
+	}
+	if a := ignorerOuRouvrir("e", false); a.ID != "rouvrir" || a.Corps["ignorer"] != false || a.Distance {
+		t.Fatalf("rouvrir: %+v", a)
+	}
+}

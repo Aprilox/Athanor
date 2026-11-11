@@ -16,12 +16,16 @@ import (
 	"time"
 )
 
-// ActionAlerte: one button of an alert; Page (and Projet, the Dev project to select first) for "voir".
+// ActionAlerte: one button of an alert; Page (and Projet, the Dev project to select first) for "voir",
+// else the POST the client sends as is (Route under /api/, Corps); Distance: allowed from a paired device.
 type ActionAlerte struct {
-	ID      string `json:"id"`      // "voir" | "ignorer" (later "accepter", "refuser", "jamais")
-	Libelle string `json:"libelle"` // i18n key
-	Page    string `json:"page,omitempty"`
-	Projet  string `json:"projet,omitempty"`
+	ID       string         `json:"id"`      // "voir" | "ignorer" | "rouvrir" | "accepter" | "refuser" | "toujours"
+	Libelle  string         `json:"libelle"` // i18n key
+	Page     string         `json:"page,omitempty"`
+	Projet   string         `json:"projet,omitempty"`
+	Route    string         `json:"route,omitempty"`
+	Corps    map[string]any `json:"corps,omitempty"`
+	Distance bool           `json:"distance,omitempty"`
 }
 
 type AlerteHub struct {
@@ -33,6 +37,8 @@ type AlerteHub struct {
 	Args      []any          `json:"args,omitempty"`
 	Actions   []ActionAlerte `json:"actions"`
 	Ignoree   string         `json:"ignoree,omitempty"` // when it was ignored (RFC 3339), history only
+	// an agent's pending approval (alertesApprobations): what the decision needs (env, details, expiry)
+	Approbation *Approbation `json:"approbation,omitempty"`
 }
 
 // empreinteAlerte: the element and its reason; the same alert ignored once stays hidden, any change
@@ -53,10 +59,56 @@ func alertesDe(el []ElementHub) []AlerteHub {
 		out = append(out, AlerteHub{Empreinte: empreinteAlerte(e), Module: e.Module, Element: e.ID, Titre: e.Titre,
 			Raison: e.Attente.Raison, Args: e.Attente.Args, Actions: []ActionAlerte{
 				{ID: "voir", Libelle: "View", Page: e.Attente.Page, Projet: e.Projet},
-				{ID: "ignorer", Libelle: "Ignore"},
+				ignorerOuRouvrir(empreinteAlerte(e), true),
 			}})
 	}
 	return out
+}
+
+func ignorerOuRouvrir(empreinte string, ignorer bool) ActionAlerte {
+	a := ActionAlerte{ID: "ignorer", Libelle: "Ignore", Route: "hub/alertes", Corps: map[string]any{"empreinte": empreinte, "ignorer": ignorer}}
+	if !ignorer {
+		a.ID, a.Libelle = "rouvrir", "Reopen"
+	}
+	return a
+}
+
+// alertesApprobations: one alert per pending approval, its key the approval's id (stable), with no
+// Ignore (apiAlertes does not know it): only a decision, or its expiry, makes it go. The decisions are
+// allowed from a paired device (the route itself is opened to devices by M63).
+// shortcut: only the Dev pilot asks for approvals today, so Module is "dev"; a module field comes with Servers.
+func alertesApprobations(l []Approbation) []AlerteHub {
+	out := []AlerteHub{}
+	for _, x := range l {
+		if x.Etat != "attente" {
+			continue
+		}
+		raison, args := "Approval requested ({0}, {1}): {2}", []any{x.Action, x.Env, x.Raison}
+		if x.Action == "demander_acces" {
+			raison, args = "Access requested ({0}): {1}", []any{x.Env, x.Raison}
+		}
+		decision := func(id, libelle string) ActionAlerte {
+			return ActionAlerte{ID: id, Libelle: libelle, Route: "hub/approbations", Corps: map[string]any{"id": x.ID, "decision": id}, Distance: true}
+		}
+		out = append(out, AlerteHub{Empreinte: "appr-" + x.ID, Module: "dev", Element: x.Projet, Titre: x.Projet, Raison: raison, Args: args, Approbation: &x,
+			Actions: []ActionAlerte{decision("accepter", "Accept"), decision("refuser", "Refuse"), decision("toujours", "Never ask again for this project and environment")}})
+	}
+	return out
+}
+
+// alertesHub: the bell (the pending approvals first, then the modules' alerts not ignored) and the
+// history of the ignored ones, each with its Reopen.
+func (s *Serveur) alertesHub(el []ElementHub) (actives, cachees []AlerteHub) {
+	toutes := alertesDe(el)
+	actives, cachees = trierAlertes(toutes, ignoreesCourantes(toutes))
+	for i := range cachees {
+		cachees[i].Actions = []ActionAlerte{ignorerOuRouvrir(cachees[i].Empreinte, false)}
+	}
+	if s.approbations != nil {
+		l, _ := s.approbations.Liste()
+		actives = append(alertesApprobations(l), actives...)
+	}
+	return actives, cachees
 }
 
 var alertesMu sync.Mutex
