@@ -306,6 +306,13 @@ func (s *Serveur) secretsOuverts() []string {
 	return v
 }
 
+// masquerSecrets: an agent's free text with the vault's readable values masked, as in the audit log.
+func (s *Serveur) masquerSecrets(t string) string {
+	v := s.secretsOuverts()
+	slices.SortFunc(v, func(x, y string) int { return len(y) - len(x) })
+	return masquerTexte(t, v)
+}
+
 // ecrireAudit: a line in the hub's audit log (a write failure is reported, never blocks the action).
 func (s *Serveur) ecrireAudit(l LigneAudit) {
 	if err := (Audit{Dossier: dossierJournalAudit(), Secrets: s.secretsOuverts}).Ecrire(l); err != nil {

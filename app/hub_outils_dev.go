@@ -154,9 +154,12 @@ func outilDemanderAcces(s *Serveur, x SessionHub, args json.RawMessage) (string,
 	if err != nil {
 		return "", err
 	}
-	env, _, _, err := s.recusParEnv(x.Projet)
+	env, recus, _, err := s.recusParEnv(x.Projet)
 	if err != nil {
 		return "", err
+	}
+	if slices.Contains(recus[env], nom) {
+		return nom + " is already in .athanor/secrets.env (" + env + "): read it there, no request needed", nil
 	}
 	l, _ := s.approbations.Liste()
 	for _, d := range l {
@@ -164,12 +167,42 @@ func outilDemanderAcces(s *Serveur, x SessionHub, args json.RawMessage) (string,
 			return "waiting for the owner, id " + d.ID + " (already asked)", nil
 		}
 	}
-	d, err := s.demanderApprobation(Approbation{Projet: x.Projet, Env: env, Mission: x.Mission, Agent: x.Agent,
-		Action: "demander_acces", Details: map[string]string{"nom": nom}, Raison: raison})
+	attente := func(id string) string {
+		return "waiting for the owner, id " + id + ": once accepted, " + nom + " is in .athanor/secrets.env (read it again, no restart needed); go on with work that does not need it"
+	}
+	ap := Approbation{Projet: x.Projet, Env: env, Mission: x.Mission, Agent: x.Agent,
+		Action: "demander_acces", Details: map[string]string{"nom": nom}, Raison: s.masquerSecrets(raison)}
+	// the owner's "never ask again" for this project and environment: the vault's code key of that name, granted at once
+	if id := s.cleCodeNommee(nom); id != "" && s.approbations.Regle(x.Projet, env, ap.Action) {
+		if d, err := s.approbations.Demander(ap); err == nil {
+			if _, _, err := s.deciderApprobation("regle", d.ID, "accepter", id, "", ""); err == nil {
+				return nom + " granted by the owner's rule for this project and environment: it is in .athanor/secrets.env (read it again, no restart needed)", nil
+			}
+			s.ecrireAudit(LigneAudit{Type: "evenement", De: x.Agent, Vers: "hub", Mission: x.Mission, Projet: x.Projet, Env: env,
+				Agent: x.Agent, Action: "approbation demandée: " + ap.Action, Resultat: "attente " + d.ID + " (the rule could not grant it)"})
+			s.notifierApprobation(d)
+			return attente(d.ID), nil
+		}
+	}
+	d, err := s.demanderApprobation(ap)
 	if err != nil {
 		return "", errors.New("the request could not be recorded, try again later")
 	}
-	return "waiting for the owner, id " + d.ID + ": once accepted, " + nom + " is in .athanor/secrets.env (read it again, no restart needed); go on with work that does not need it", nil
+	return attente(d.ID), nil
+}
+
+// cleCodeNommee: the id of the vault's only code secret named nom ("" when none or several: the owner chooses).
+func (s *Serveur) cleCodeNommee(nom string) string {
+	id := ""
+	for _, e := range s.coffre.Liste() {
+		if e.Nom == nom && e.Portee == "code" && e.Famille == "secret" {
+			if id != "" {
+				return ""
+			}
+			id = e.ID
+		}
+	}
+	return id
 }
 
 // outilDemanderDeploiement goes on the bus to the Servers module (absent until stage 5: a clean refusal).
@@ -206,6 +239,7 @@ func outilSignaler(s *Serveur, x SessionHub, args json.RawMessage) (string, erro
 	if err != nil {
 		return "", err
 	}
+	texte = s.masquerSecrets(texte)
 	s.mu.Lock()
 	if s.signaux == nil {
 		s.signaux = map[string]SignalPilote{}

@@ -110,6 +110,36 @@ func TestOutilsDev(t *testing.T) {
 		t.Errorf("etat without the request: %s", txt)
 	}
 
+	// B46: a variable already received needs no request; B45: a vault value in the agent's reason is masked
+	if txt, _ = appel("demander_acces", `{"nom":"STRIPE_KEY","raison":"x"}`); !strings.Contains(txt, "already in .athanor/secrets.env") {
+		t.Errorf("already received: %s", txt)
+	}
+	txt, _ = appel("demander_acces", `{"nom":"ABSENT_KEY","raison":"copie `+temoin+` ici"}`)
+	if l, _ = s.approbations.Liste(); len(l) != 2 || strings.Contains(l[1].Raison, temoin) || !strings.Contains(txt, l[1].ID) {
+		t.Fatalf("masked reason: %s %+v", txt, l)
+	}
+
+	// B44: "never ask again" grants the vault's code key of the asked name at once, without a pending approval
+	e2, err := s.coffre.Ajouter(EntreeCoffre{Nom: "OPENAI_API_KEY", Famille: "secret", Type: "autre", Portee: "code"}, "témoin-openai-"+aleatoire(6))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err = s.deciderApprobation("fenetre", l[0].ID, "toujours", e2.ID, "", ""); err != nil || !s.approbations.Regle("demo", "dev", "demander_acces") {
+		t.Fatalf("toujours: %v", err)
+	}
+	if _, err = s.coffre.Ajouter(EntreeCoffre{Nom: "MISTRAL_KEY", Famille: "secret", Type: "autre", Portee: "code"}, "témoin-mistral-"+aleatoire(6)); err != nil {
+		t.Fatal(err)
+	}
+	txt, _ = appel("demander_acces", `{"nom":"MISTRAL_KEY","raison":"tests"}`)
+	l, _ = s.approbations.Liste()
+	if !strings.Contains(txt, "granted by the owner's rule") || len(l) != 3 || l[2].Etat != "acceptee" || l[2].Par != "regle" {
+		t.Errorf("rule: %s %+v", txt, l)
+	}
+	if txt, _ = appel("etat", "{}"); !strings.Contains(txt, `"MISTRAL_KEY"`) {
+		t.Errorf("granted key not received: %s", txt)
+	}
+	l = l[:1]
+
 	// demander_deploiement: through the bus to servers, which does not exist yet
 	if txt, er = appel("demander_deploiement", `{"environnement":"prod","commit":"abc123"}`); !er || !strings.Contains(txt, "Servers module does not exist yet") {
 		t.Errorf("demander_deploiement: %v %s", er, txt)
@@ -134,6 +164,9 @@ func TestOutilsDev(t *testing.T) {
 	}
 	if !vu {
 		t.Error("blocker not in the bell")
+	}
+	if appel("signaler", `{"blocage":"la clé `+temoin+` échoue"}`); strings.Contains(s.signaux["demo"].Texte, temoin) {
+		t.Error("a vault value in a blocker")
 	}
 
 	// the other project's token sees its own project only
