@@ -80,6 +80,7 @@ func TestAccesProjets(t *testing.T) {
 		r := httptest.NewRequest(methode, chemin, strings.NewReader(corps))
 		r.Header.Set("X-Athanor", "jeton")
 		r.AddCookie(&http.Cookie{Name: cookieAcces, Value: "cle"})
+		r.AddCookie(cookieSessionTest)
 		w := httptest.NewRecorder()
 		mux.ServeHTTP(w, r)
 		reponses.WriteString(w.Body.String())
@@ -88,6 +89,9 @@ func TestAccesProjets(t *testing.T) {
 		return w.Code, v
 	}
 	poster := func(m map[string]string) (int, map[string]any) {
+		if _, ok := m["mot_de_passe"]; !ok {
+			m["mot_de_passe"] = mdpPreuveTest
+		}
 		b, _ := json.Marshal(m)
 		return appel("POST", "/api/acces", string(b))
 	}
@@ -130,6 +134,17 @@ func TestAccesProjets(t *testing.T) {
 		t.Errorf("another project got the import: %v", v)
 	}
 
+	// C25: granting needs the password retyped (none yet, then a wrong one); taking back does not
+	if c, v := poster(map[string]string{"projet": "demo", "action": "ajouter", "entree": stripe, "env": "dev"}); c != http.StatusForbidden {
+		t.Fatalf("add without a password set: %d %v", c, v)
+	}
+	avecMdpPreuve(s)
+	if c, _ := poster(map[string]string{"projet": "demo", "action": "ajouter", "entree": stripe, "env": "dev", "mot_de_passe": "faux"}); c != http.StatusUnauthorized {
+		t.Fatalf("add with a wrong password: %d", c)
+	}
+	if !strings.Contains(reponses.String(), "Wrong password") {
+		t.Error("wrong password not said")
+	}
 	// proposed name, then a second one of the same type gets a free name
 	_, v = poster(map[string]string{"projet": "demo", "action": "ajouter", "entree": stripe, "env": "dev"})
 	if a := acces(v)[stripe+"|dev"]; a == nil || a["variable"] != "STRIPE_KEY" || a["type"] != "stripe" || a["famille"] != "secret" {
@@ -234,12 +249,17 @@ func TestAccesModeNatif(t *testing.T) {
 	s.mu.Unlock()
 	mux := http.NewServeMux()
 	s.routes(mux)
+	avecMdpPreuve(s)
 	poster := func(m map[string]any) (int, string) {
 		t.Helper()
+		if _, ok := m["mot_de_passe"]; !ok {
+			m["mot_de_passe"] = mdpPreuveTest
+		}
 		b, _ := json.Marshal(m)
 		r := httptest.NewRequest("POST", "/api/acces", strings.NewReader(string(b)))
 		r.Header.Set("X-Athanor", "jeton")
 		r.AddCookie(&http.Cookie{Name: cookieAcces, Value: "cle"})
+		r.AddCookie(cookieSessionTest)
 		w := httptest.NewRecorder()
 		mux.ServeHTTP(w, r)
 		return w.Code, w.Body.String()

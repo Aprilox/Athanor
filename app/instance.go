@@ -92,6 +92,10 @@ func (s *Serveur) apiInstance(w http.ResponseWriter, r *http.Request) {
 		s.erreur(w, http.StatusForbidden, "Request refused (origin)")
 		return
 	}
+	// C24 C27: any program of the user can read instance.json, so who called is logged (it can do no more
+	// than the window, whose sensitive actions need hub_preuve.go's proofs)
+	s.ecrireAudit(LigneAudit{Type: "evenement", De: "instance.json", Vers: "hub", Action: "instance " + couper(r.PathValue("action"), 32),
+		Resultat: r.RemoteAddr + ", " + couper(r.UserAgent(), 120)})
 	switch r.PathValue("action") {
 	case "montrer":
 		demanderFenetre()

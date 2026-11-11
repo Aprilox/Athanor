@@ -19,6 +19,10 @@ import (
 // the resume paths (password; Resume without one), and athanor arret-urgence through instance.json.
 func TestArretUrgence(t *testing.T) {
 	s := serveurCoffreTest(t)
+	// the password first: no pilot runs yet (preuveAbsence)
+	if w := appelCoffre(t, s.apiMotDePasse, "", `{"nouveau":"alpha-1-phrase"}`, nil); w.Code != 200 {
+		t.Fatal("set password:", w.Code, w.Body.String())
+	}
 	d := t.TempDir()
 	var projets []Projet
 	for _, n := range []string{"demo", "autre", "dormant"} {
@@ -48,9 +52,6 @@ func TestArretUrgence(t *testing.T) {
 	t.Cleanup(func() { arreterPiloteUrgence = ancien })
 
 	// a password, a code and an infra entry, two tokens, two pending approvals and one decided
-	if w := appelCoffre(t, s.apiMotDePasse, "", `{"nouveau":"alpha-1-phrase"}`, nil); w.Code != 200 {
-		t.Fatal("set password:", w.Code, w.Body.String())
-	}
 	code, err := s.coffre.Ajouter(EntreeCoffre{Nom: "ANTHROPIC_API_KEY", Famille: "secret", Type: "anthropic"}, "temoin-urg-code")
 	if err != nil {
 		t.Fatal(err)
@@ -174,6 +175,13 @@ func TestArretUrgence(t *testing.T) {
 	if len(a) != 1 || len(a[0].Actions) != 1 || a[0].Actions[0].Route != "hub/urgence" {
 		t.Fatalf("alert without a password: %+v", a)
 	}
+	// C27: "autre" was not stopped, its agent could undo the stop: Resume waits for it
+	if w := appelCoffre(t, s.apiUrgence, "", `{"reprendre":true}`, nil); w.Code != http.StatusConflict || s.alerteUrgence() == nil {
+		t.Fatal("resume while a pilot runs:", w.Code, w.Body.String())
+	}
+	for _, p := range projets {
+		_ = os.Remove(filepath.Join(p.Atelier(), "pilot.pid"))
+	}
 	if w := appelCoffre(t, s.apiUrgence, "", `{"reprendre":true}`, nil); w.Code != 200 {
 		t.Fatal("resume:", w.Code, w.Body.String())
 	}
@@ -212,5 +220,16 @@ func TestArretUrgence(t *testing.T) {
 	}
 	if strings.Count(auditTexte(t), "coffre verrouillé") != 3 {
 		t.Error("CLI stop not in the audit log")
+	}
+	if !strings.Contains(auditTexte(t), "instance urgence") {
+		t.Error("the instance call's source not in the audit log")
+	}
+	// C27: instance.json's secret stops, never resumes
+	req, _ := http.NewRequest("POST", srv.URL+"/api/instance/urgence", strings.NewReader(`{"reprendre":true}`))
+	req.Header.Set("X-Athanor-Instance", jetonInstance)
+	if rep, err := http.DefaultClient.Do(req); err != nil || rep.StatusCode != 200 || s.coffre.Urgence() == "" {
+		t.Errorf("instance urgence with reprendre: %v, vault %q", err, s.coffre.Urgence())
+	} else {
+		rep.Body.Close()
 	}
 }

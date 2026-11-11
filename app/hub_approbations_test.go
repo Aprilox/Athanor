@@ -165,6 +165,9 @@ func TestExigerAccordI6(t *testing.T) {
 // appelApprobation: POST to the decision handler (garde skipped) from the window or a paired device.
 func appelApprobation(t *testing.T, s *Serveur, appareil string, c map[string]string) *httptest.ResponseRecorder {
 	t.Helper()
+	if _, ok := c["mot_de_passe"]; !ok && appareil == "" {
+		c["mot_de_passe"] = mdpPreuveTest // avecMdpPreuve
+	}
 	b, _ := json.Marshal(c)
 	return appelCoffre(t, s.apiApprobationDecider, appareil, string(b), nil)
 }
@@ -202,6 +205,11 @@ func TestApprobationAcces(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// C24: WSL mode too, nothing is accepted before a password exists
+	if w := appelApprobation(t, s, "", map[string]string{"id": x.ID, "decision": "accepter", "entree": e.ID}); w.Code != http.StatusForbidden {
+		t.Fatalf("accepted without a password set: %d %s", w.Code, w.Body)
+	}
+	avecMdpPreuve(s)
 	for _, c := range []map[string]string{{"id": x.ID, "decision": "accepter"}, {"id": x.ID, "decision": "accepter", "entree": v.ID},
 		{"id": x.ID, "decision": "accepter", "entree": "inconnue"}, {"id": x.ID, "decision": "oui", "entree": e.ID}} {
 		if w := appelApprobation(t, s, "", c); w.Code < 400 {
@@ -274,8 +282,12 @@ func TestApprobationNatif(t *testing.T) {
 	if w := appelApprobation(t, s, "", map[string]string{"id": a, "decision": "accepter"}); w.Code != http.StatusForbidden {
 		t.Errorf("window without a password: %d", w.Code)
 	}
+	if w := appelApprobation(t, s, "tel", map[string]string{"id": a, "decision": "accepter"}); w.Code != http.StatusForbidden {
+		t.Errorf("paired device without a password (it may be the agent's own): %d %s", w.Code, w.Body)
+	}
+	s.config.MotDePasseHash = hacherMotDePasse("le-bon")
 	if w := appelApprobation(t, s, "tel", map[string]string{"id": a, "decision": "accepter"}); w.Code != 200 {
-		t.Errorf("paired device: %d %s", w.Code, w.Body)
+		t.Errorf("paired device, unlocked with the password: %d %s", w.Code, w.Body)
 	}
 	x, _ := s.approbations.Lire(a)
 	if x.Par != "appareil:tel" {

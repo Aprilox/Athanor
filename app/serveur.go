@@ -579,6 +579,15 @@ func (s *Serveur) apiMotDePasse(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = lireCorps(r, &c)
 	s.mu.Lock()
+	premier := s.config.MotDePasseHash == ""
+	s.mu.Unlock()
+	if premier { // C25: an agent must not choose the password it would then retype
+		if code, err := s.preuveAbsence(); err != nil {
+			s.erreur(w, code, err.Error())
+			return
+		}
+	}
+	s.mu.Lock()
 	defer s.mu.Unlock()
 	if ok, _ := verifierMotDePasse(s.config.Sel, c.Ancien, s.config.MotDePasseHash); s.config.MotDePasseHash != "" && !ok {
 		s.erreur(w, http.StatusUnauthorized, "Wrong current password")
@@ -614,6 +623,7 @@ func (s *Serveur) apiMotDePasse(w http.ResponseWriter, r *http.Request) {
 		s.erreur(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	go s.ecrireAudit(LigneAudit{Type: "evenement", De: deQui(r), Vers: "hub", Action: "mot de passe", Resultat: map[bool]string{true: "créé", false: "changé"}[premier] + map[bool]string{true: " (retiré)", false: ""}[retrait]})
 	s.ecrireJSON(w, map[string]bool{"ok": true, "defini": s.config.MotDePasseHash != ""})
 }
 

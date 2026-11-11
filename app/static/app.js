@@ -291,10 +291,11 @@ async function demarrerPilote(b) {
 
 // ----------------------------------------------------------------------------- confirmation dialog
 // The app's own dialog: the browser's confirm()/alert() would show the page address and look like a web page.
-// confirmer(message, { ok, annuler, danger }) → Promise<boolean>
+// confirmer(message, { ok, annuler, danger, mdp }) → Promise<boolean> (mdp: a password field, the password or false)
 function confirmer(message, options = {}) {
-  const fond = $("#dialogue"), ok = $("#dialogue-ok"), annuler = $("#dialogue-annuler");
+  const fond = $("#dialogue"), ok = $("#dialogue-ok"), annuler = $("#dialogue-annuler"), champ = $("#dialogue-mdp");
   $("#dialogue-texte").textContent = message;
+  champ.hidden = !options.mdp; champ.value = ""; champ.setAttribute("aria-label", t("Athanor's password"));
   $("#dialogue-titre").textContent = options.titre || "";
   $("#dialogue-titre").hidden = !options.titre;
   ok.textContent = options.ok || t("OK");
@@ -302,9 +303,11 @@ function confirmer(message, options = {}) {
   ok.className = "btn " + (options.danger ? "btn-danger" : "btn-primaire");
   const avant = document.activeElement;
   fond.hidden = false;
-  ok.focus();
+  (options.mdp ? champ : ok).focus();
   return new Promise((resoudre) => {
     const fin = (valeur) => {
+      if (options.mdp && valeur) valeur = champ.value; // mdp: the password typed, or false
+      champ.value = "";
       fond.hidden = true;
       ok.onclick = annuler.onclick = fond.onclick = null;
       document.removeEventListener("keydown", clavier, true);
@@ -314,7 +317,7 @@ function confirmer(message, options = {}) {
     const clavier = (e) => {
       if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); fin(false); }
       else if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); fin(document.activeElement !== annuler); }
-      else if (e.key === "Tab") { e.preventDefault(); (document.activeElement === ok ? annuler : ok).focus(); }
+      else if (e.key === "Tab") { e.preventDefault(); const l = options.mdp ? [champ, annuler, ok] : [annuler, ok]; l[(l.indexOf(document.activeElement) + (e.shiftKey ? l.length - 1 : 1)) % l.length].focus(); }
     };
     ok.onclick = () => fin(true);
     annuler.onclick = () => fin(false);
@@ -808,7 +811,7 @@ $("#notifs").addEventListener("click", async (ev) => {
   if (ev.target.closest("a") && !ev.target.closest("a[data-cible]")) fermerNotifs(); else cliqueProjet(ev);
 });
 $("#page").addEventListener("click", cliqueProjet);
-// an approval decided from the bell: an access needs its vault entry and native mode a password, so those open
+// an approval decided from the bell: an access needs its vault entry and the window a password, so those open
 // the approval's card on For you; the others are sent at once
 async function deciderDepuisCloche(ap, x, b) {
   const r = await api("hub/approbations").catch(() => ({}));
@@ -2083,7 +2086,7 @@ const GUIDE = [
       ["The audit log", "*Audit log*, in the menu: every call of an agent to the hub, every decision, every access granted or forced and the emergency stop, one line each, newest first. Filter by month, project or type, or search. A key's value never appears: the vault's values and the known key formats are masked before writing.", "#audit", "Audit log"],
       ["Check the log", "Each line carries the fingerprint (SHA-256) of the line before it. *Check the log* recomputes the whole chain: green, or the first line that was changed, removed or inserted. A paired phone can read the log and check it too."],
       ["Emergency stop", "The red *Emergency stop* button at the foot of the menu (also on a paired phone, or `athanor arret-urgence` in a terminal), after a confirmation: every pilot stops, every agent loses its access to the hub, the pending requests are refused and the vault closes. To resume, unlock Athanor with its password (without a password: *Resume* in the bell), then *Start* the projects."],
-      ["Native Windows mode", "Without WSL, an agent could reach Athanor's window as you do. With a password for Athanor, deciding from the window asks for it; without one, only a paired phone can decide. A line of the log changed by hand still breaks the chain."],
+      ["An agent of this PC", "An agent runs programs as you do and can reach Athanor's window. So, in WSL mode as in native mode, deciding an approval, giving a key to a project or forcing infra entries asks for Athanor's password (a paired phone unlocked with it does not ask again). Choosing the first password and *Resume* after an emergency stop wait until no pilot, chat or test runs. A line of the log changed by hand still breaks the chain."],
     ],
     note: "An agent never decides for you: every request waits for your answer in the bell, on *For you* or on your phone, and leaves a line in the audit log." },
   { id: "github", titre: "GitHub", intro: "Link a project to a GitHub repository: its commits go there after each milestone. Each computer connects to GitHub once, in the settings.",
@@ -2670,8 +2673,8 @@ function carteApprobation(x, ap, codes) {
       <label class="champ"><span>${t("Environment")}</span><select data-appr-env>${ENVS_APPR.map((e) => `<option${e === env ? " selected" : ""}>${e}</option>`).join("")}</select></label>
       <label class="champ"><span>${t("Variable name")}</span><input type="text" data-appr-var value="${h(variable)}" maxlength="100" spellcheck="false" placeholder="${h(t("the vault's name"))}"></label></div>` : "";
   const natif = ap.mot_de_passe_requis ? `<label class="champ"><span>${t("Athanor's password")}</span><input type="password" data-appr-mdp autocomplete="current-password"></label>
-      <p class="muet petit">${t("Native Windows mode: any program of this PC can drive this window, so a decision asks for Athanor's password.")}</p>`
-    : ap.appareil_requis ? `<p class="petit attention">⚠ ${t("Native Windows mode: any program of this PC can drive this window, so an approval is decided from a paired phone, or choose a password for Athanor first")}</p>` : "";
+      <p class="muet petit">${t("Any program of this PC can drive this window, so a decision asks for Athanor's password.")}</p>`
+    : ap.appareil_requis ? `<p class="petit attention">⚠ ${t("An agent of this PC could decide in your place: choose a password for Athanor in Options first, then retype it here (or decide from a paired phone)")}</p>` : "";
   const bloque = ap.appareil_requis ? " disabled" : "";
   return `<div class="bloc pv-carte appr-carte" id="appr-${h(x.id)}" data-appr="${h(x.id)}">
     <div class="pv-tete"><span class="badge">${h(x.env)}</span> <strong>${h(x.projet)}</strong> <span>${h(acces ? t("access requested") : x.action)}</span> <span class="pv-etat pv-vous">${h(t("expires {0}", [dans(Date.parse(x.expire) / 1000)]))}</span></div>
@@ -4218,6 +4221,15 @@ pages.acces = async () => {
   </div>`;
 };
 async function changerAcces(corps) {
+  // C25: giving a key is retyped with Athanor's password in this window (a paired phone, unlocked with it, passes)
+  if (corps.action === "ajouter" || (corps.action === "forcer" && corps.forcer)) {
+    const ap = await api("hub/approbations").catch(() => ({}));
+    if (ap.mot_de_passe_requis) {
+      const mdp = await confirmer(t("Giving a key to a project: retype Athanor's password."), { mdp: true, ok: t("Give the key") });
+      if (mdp === false) return rendrePage();
+      corps = { ...corps, mot_de_passe: mdp };
+    }
+  }
   const r = await action(api("acces", "POST", { projet: acc.projet, ...corps }));
   rendrePage(); // an error re-renders too: the box goes back to what the server holds
   return r;

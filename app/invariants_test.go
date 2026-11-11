@@ -96,6 +96,7 @@ func (m *montageInvariants) appel(t *testing.T, methode, chemin, corps string) (
 	r := httptest.NewRequest(methode, chemin, strings.NewReader(corps))
 	r.Header.Set("X-Athanor", "jeton")
 	r.AddCookie(&http.Cookie{Name: cookieAcces, Value: "cle"})
+	r.AddCookie(cookieSessionTest)
 	w := httptest.NewRecorder()
 	m.mux.ServeHTTP(w, r)
 	m.reponses.WriteString(w.Body.String())
@@ -194,14 +195,15 @@ func TestInvariantI1(t *testing.T) {
 // file, the project's logs/, pilot.log, STATE.json, Athanor's hub/ files, nor any answer of GET /api/*.
 func TestInvariantI2(t *testing.T) {
 	m := montage(t)
+	avecMdpPreuve(m.s) // forcer and ajouter need the password retyped (C25)
 	// the forced native mode writes its own log line: still without the value
 	avant := modeNatif.Load()
 	t.Cleanup(func() { modeNatif.Store(avant) })
 	modeNatif.Store(true)
-	if code, v := m.appel(t, "POST", "/api/acces", `{"projet":"autre","action":"forcer","forcer":true,"confirme":true}`); code != 200 {
+	if code, v := m.appel(t, "POST", "/api/acces", `{"projet":"autre","action":"forcer","forcer":true,"confirme":true,"mot_de_passe":"`+mdpPreuveTest+`"}`); code != 200 {
 		t.Fatalf("force: %d %v", code, v)
 	}
-	if code, v := m.appel(t, "POST", "/api/acces", `{"projet":"autre","action":"ajouter","entree":"`+m.infra.ID+`","env":"dev"}`); code != 200 {
+	if code, v := m.appel(t, "POST", "/api/acces", `{"projet":"autre","action":"ajouter","entree":"`+m.infra.ID+`","env":"dev","mot_de_passe":"`+mdpPreuveTest+`"}`); code != 200 {
 		t.Fatalf("infra forced: %d %v", code, v)
 	}
 	modeNatif.Store(avant)

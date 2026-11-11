@@ -115,6 +115,17 @@ func TestCaptureHub(t *testing.T) {
 	mux := http.NewServeMux()
 	s.routes(mux)
 	s.routesInterface(mux)
+	// verifierAcces: a password only while it gives keys (hub_preuve.go), never for the other pages
+	mux.HandleFunc("POST /test/mdp-preuve", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("on") == "" {
+			s.mu.Lock()
+			s.config.MotDePasseHash, s.session = "", ""
+			s.mu.Unlock()
+			return
+		}
+		avecMdpPreuve(s)
+		http.SetCookie(w, &http.Cookie{Name: cookieSessionTest.Name, Value: cookieSessionTest.Value, Path: "/"})
+	})
 	ecoute, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)

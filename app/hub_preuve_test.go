@@ -1,0 +1,60 @@
+package main
+
+import (
+	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+const mdpPreuveTest = "preuve-test-123"
+
+// avecMdpPreuve: a password and an open window session, for the routes behind hub_preuve.go's proofs.
+func avecMdpPreuve(s *Serveur) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.config.MotDePasseHash, s.config.Sel, s.session = hacherMotDePasse(mdpPreuveTest), "", "session-test"
+}
+
+var cookieSessionTest = &http.Cookie{Name: "athanor_session", Value: "session-test"}
+
+// TestPreuveAbsence (C25): the first password is refused while an agent Athanor started runs, then created
+// and logged; changing it later only needs the old one.
+func TestPreuveAbsence(t *testing.T) {
+	s := serveurCoffreTest(t)
+	p := Projet{Nom: "demo", Dossier: filepath.Join(t.TempDir(), "demo")}
+	if err := os.MkdirAll(p.Atelier(), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	pid := filepath.Join(p.Atelier(), "pilot.pid")
+	_ = os.WriteFile(pid, []byte("1"), 0o644)
+	s.mu.Lock()
+	s.config.Projets = []Projet{p}
+	s.mu.Unlock()
+	if w := appelCoffre(t, s.apiMotDePasse, "", `{"nouveau":"alpha-1-phrase"}`, nil); w.Code != http.StatusConflict || s.config.MotDePasseHash != "" {
+		t.Fatalf("first password while a pilot runs: %d %s", w.Code, w.Body)
+	}
+	chatMu.Lock()
+	chatsActifs["x"] = &chatEnCours{}
+	chatMu.Unlock()
+	_ = os.Remove(pid)
+	if w := appelCoffre(t, s.apiMotDePasse, "", `{"nouveau":"alpha-1-phrase"}`, nil); w.Code != http.StatusConflict {
+		t.Errorf("first password while a chat runs: %d", w.Code)
+	}
+	chatMu.Lock()
+	delete(chatsActifs, "x")
+	chatMu.Unlock()
+	if w := appelCoffre(t, s.apiMotDePasse, "", `{"nouveau":"alpha-1-phrase"}`, nil); w.Code != 200 {
+		t.Fatalf("first password: %d %s", w.Code, w.Body)
+	}
+	_ = os.WriteFile(pid, []byte("1"), 0o644)
+	if w := appelCoffre(t, s.apiMotDePasse, "", `{"ancien":"alpha-1-phrase","nouveau":"beta-2-phrase-x"}`, nil); w.Code != 200 {
+		t.Errorf("change with the old one while a pilot runs: %d %s", w.Code, w.Body)
+	}
+	for _, attendu := range []string{"mot de passe créé", "mot de passe changé"} {
+		if !strings.Contains(auditTexte(t), attendu) {
+			t.Errorf("%q not in the audit log", attendu)
+		}
+	}
+}

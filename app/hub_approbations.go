@@ -29,7 +29,6 @@ var (
 	errApprobationDecision = erreurEntree("Unknown decision (accepter, refuser or toujours)")
 	errApprobationEntree   = erreurEntree("Choose a project key (code) of the vault for this access")
 	errRegleInconnue       = erreurEntree("Unknown rule")
-	errApprobationNatif    = erreurEntree("Native Windows mode: any program of this PC can drive this window, so an approval is decided from a paired phone, or choose a password for Athanor first")
 )
 
 // Approbation: one request of an agent. Etat: attente | acceptee | refusee | expiree; Par: fenetre |
@@ -332,9 +331,9 @@ func (s *Serveur) apiApprobations(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	mdp := s.config.MotDePasseHash != ""
 	s.mu.Unlock()
-	fenetreNatif := appareilDe(r) == "" && modeNatif.Load()
+	// appareil_requis: no password yet, nothing can decide (preuvePresence)
 	s.ecrireJSON(w, map[string]any{"approbations": l, "regles": regles,
-		"mot_de_passe_requis": fenetreNatif && mdp, "appareil_requis": fenetreNatif && !mdp})
+		"mot_de_passe_requis": appareilDe(r) == "" && mdp, "appareil_requis": !mdp})
 }
 
 // apiApprobationDecider: POST /api/hub/approbations {id, decision: accepter|refuser|toujours, entree, env,
@@ -367,19 +366,9 @@ func (s *Serveur) apiApprobationDecider(w http.ResponseWriter, r *http.Request) 
 		}
 		return
 	}
-	if appareilDe(r) == "" && modeNatif.Load() {
-		s.mu.Lock()
-		sel, hash := s.config.Sel, s.config.MotDePasseHash
-		s.mu.Unlock()
-		if hash == "" {
-			refus(http.StatusForbidden, errApprobationNatif)
-			return
-		}
-		time.Sleep(400 * time.Millisecond) // slows down bursts of attempts, as apiDeverrouiller
-		if ok, _ := verifierMotDePasse(sel, c.MotDePasse, hash); !ok {
-			refus(http.StatusUnauthorized, errors.New("Wrong password"))
-			return
-		}
+	if code, err := s.preuvePresence(r, c.MotDePasse); err != nil { // C24 C25: WSL mode too
+		refus(code, err)
+		return
 	}
 	x, code, err := s.deciderApprobation(qui, c.ID, c.Decision, c.Entree, c.Env, c.Variable)
 	if err != nil {

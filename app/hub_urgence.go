@@ -133,6 +133,10 @@ func (s *Serveur) apiUrgence(w http.ResponseWriter, r *http.Request) {
 			s.erreur(w, http.StatusConflict, "Unlock Athanor with its password to resume")
 			return
 		}
+		if code, err := s.preuveAbsence(); err != nil { // C27: an agent still running must not undo the stop
+			s.erreur(w, code, err.Error())
+			return
+		}
 		s.reprendreApresUrgence(deQui(r))
 		s.ecrireJSON(w, map[string]any{"ok": true, "message_key": "Vault reopened: start the projects again with Start."})
 		return

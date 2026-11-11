@@ -121,7 +121,11 @@ func TestApprobationTelephone(t *testing.T) {
 			t.Errorf("%s %s from the phone: %d", r[0], r[1], w.Code)
 		}
 	}
-	// the paired phone reads, then accepts (native mode: a device needs no password)
+	// the paired phone, unlocked with the password, reads then accepts (a device needs no retyping)
+	avecMdpPreuve(s)
+	if w := appelDistance(h, "POST", "/api/deverrouiller", cle, `{"mot_de_passe":"`+mdpPreuveTest+`"}`, api...); w.Code != 200 {
+		t.Fatalf("phone unlocks: %d %s", w.Code, w.Body)
+	}
 	w := appelDistance(h, "GET", "/api/hub/approbations", cle, "", api...)
 	if w.Code != 200 || !strings.Contains(w.Body.String(), id) {
 		t.Fatalf("phone reads: %d %s", w.Code, w.Body)
