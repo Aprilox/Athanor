@@ -465,13 +465,17 @@ func (s *Serveur) pourVousAuCoffre(p Projet, tache string, valeurs map[string]st
 				}
 			}
 			if a.Env == env && a.Variable == n && a.Entree != e.ID {
-				_ = s.acces.Retirer(p.Nom, a.Entree, env)
+				if s.acces.Retirer(p.Nom, a.Entree, env) == nil {
+					s.auditAcces("pourvous", p.Nom, "acces_retire", s.entreeCoffre(a.Entree), a.Variable, env)
+				}
 			}
 		}
 		var err error
 		if !deja {
 			if _, err = s.acces.Ajouter(p.Nom, e, env, n, "pourvous"); errors.Is(err, errAccesDeja) {
 				err = s.acces.RenommerVariable(p.Nom, e.ID, env, n)
+			} else if err == nil {
+				s.auditAcces("pourvous", p.Nom, "acces_accorde", e, n, env)
 			}
 		}
 		if err != nil {

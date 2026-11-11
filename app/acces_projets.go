@@ -282,18 +282,6 @@ func (a *Acces) ForcerInfra(projet string, oui bool) error {
 	})
 }
 
-// journalNatif appends a line without any value (date, project, what) to hub/acces-natif.log; the
-// audit log of stage 4 takes it over.
-func journalNatif(chemin, projet, quoi string) {
-	f, err := os.OpenFile(chemin, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "access log:", err)
-		return
-	}
-	defer f.Close()
-	fmt.Fprintf(f, "%s\t%s\t%s\n", time.Now().UTC().Format(time.RFC3339), projet, quoi)
-}
-
 // Synchroniser follows the vault and the project list: grants of entries no longer in the vault and
 // projects no longer in the list go; entries imported from a project (source projet:<name>) are granted
 // to it on dev once (removing that grant does not bring it back). Nothing is written when nothing changes.

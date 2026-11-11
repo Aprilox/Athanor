@@ -196,8 +196,12 @@ func (s *Serveur) accorderPartagee(a secretAncien, id string) {
 			if !nomSecretValide(variable) {
 				variable = ""
 			}
-			if _, err := s.acces.Ajouter(nom, e, "dev", variable, "migration"); errors.Is(err, errAccesDoublon) {
-				_, _ = s.acces.Ajouter(nom, e, "dev", "", "migration")
+			a, err := s.acces.Ajouter(nom, e, "dev", variable, "migration")
+			if errors.Is(err, errAccesDoublon) {
+				a, err = s.acces.Ajouter(nom, e, "dev", "", "migration")
+			}
+			if err == nil {
+				s.auditAcces("migration", nom, "acces_accorde", e, a.Variable, a.Env)
 			}
 		}
 	}

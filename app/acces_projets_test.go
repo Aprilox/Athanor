@@ -6,7 +6,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 )
@@ -227,9 +226,7 @@ func TestAccesModeNatif(t *testing.T) {
 	s := serveurCoffreTest(t)
 	_ = os.Remove(s.acces.chemin)
 	s.chargerAcces()
-	journal := s.journalAccesNatif()
-	t.Cleanup(func() { _ = os.Remove(s.acces.chemin); _ = os.Remove(journal) })
-	_ = os.Remove(journal)
+	t.Cleanup(func() { _ = os.Remove(s.acces.chemin) })
 	avant := modeNatif.Load()
 	t.Cleanup(func() { modeNatif.Store(avant) })
 	s.mu.Lock()
@@ -295,16 +292,17 @@ func TestAccesModeNatif(t *testing.T) {
 	if c, _ := lier(infra, "prod"); c != 409 {
 		t.Fatalf("infra after unforcing: %d", c)
 	}
-	b, err := os.ReadFile(journal)
-	if err != nil {
-		t.Fatal(err)
+	// the audit log: 3 grants (the forced one marked), the two "force" changes, never the value
+	var actions []string
+	for _, l := range lignesAudit(t, dossierJournalAudit()) {
+		if l.Projet != "demo" || l.De != "fenetre" || strings.Contains(l.Resultat, temoin) {
+			t.Fatalf("audit line: %+v", l)
+		}
+		actions = append(actions, l.Action+" "+l.Resultat)
 	}
-	l := string(b)
-	if strings.Count(l, "\n") != 3 || !strings.Contains(l, "\tdemo\t") || !strings.Contains(l, infra.ID) || strings.Contains(l, temoin) {
-		t.Fatalf("native mode log: %q", l)
-	}
-	if fi, err := os.Stat(journal); err == nil && runtime.GOOS != "windows" && fi.Mode().Perm() != 0o600 {
-		t.Fatalf("log mode %v", fi.Mode().Perm())
+	j := strings.Join(actions, "\n")
+	if len(actions) != 5 || strings.Count(j, "forcer_infra_natif") != 2 || !strings.Contains(j, "acces_accorde_force Cloudflare ["+infra.ID) {
+		t.Fatalf("audit log: %s", j)
 	}
 }
 

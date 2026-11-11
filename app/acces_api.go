@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"path/filepath"
 )
 
 // chargerAcces loads hub/acces.json at start-up (an unreadable file is reported and left untouched).
@@ -58,11 +57,6 @@ func (s *Serveur) accesPret(w http.ResponseWriter, projet string) bool {
 	}
 	s.erreur(w, http.StatusNotFound, "Unknown project")
 	return false
-}
-
-// journalAccesNatif: next to hub/acces.json.
-func (s *Serveur) journalAccesNatif() string {
-	return filepath.Join(filepath.Dir(s.acces.chemin), "acces-natif.log")
 }
 
 // AccesVu: a grant as the page sees it, with its entry's metadata.
@@ -145,8 +139,13 @@ func (s *Serveur) apiAccesModifier(w http.ResponseWriter, r *http.Request) {
 			err = errAccesInfraNatif
 			break
 		}
-		if _, err = s.acces.Ajouter(c.Projet, e, c.Env, c.Variable, ""); err == nil && e.Portee == "infra" && modeNatif.Load() {
-			journalNatif(s.journalAccesNatif(), c.Projet, "infra linked while forced: "+e.ID+" ("+e.Nom+") "+c.Env)
+		var a AccesProjet
+		if a, err = s.acces.Ajouter(c.Projet, e, c.Env, c.Variable, ""); err == nil {
+			action := "acces_accorde"
+			if e.Portee == "infra" && modeNatif.Load() {
+				action = "acces_accorde_force" // an infra entry linked in native mode, the project forced
+			}
+			s.auditAcces(deQui(r), c.Projet, action, e, a.Variable, a.Env)
 		}
 	case "forcer":
 		if c.Forcer && !c.Confirme {
@@ -154,10 +153,13 @@ func (s *Serveur) apiAccesModifier(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 		if err = s.acces.ForcerInfra(c.Projet, c.Forcer); err == nil {
-			journalNatif(s.journalAccesNatif(), c.Projet, fmt.Sprintf("force infra in native mode: %v", c.Forcer))
+			s.ecrireAudit(LigneAudit{Type: "evenement", De: deQui(r), Vers: "hub", Projet: c.Projet, Action: "forcer_infra_natif",
+				Resultat: fmt.Sprint(c.Forcer)})
 		}
 	case "retirer":
-		err = s.acces.Retirer(c.Projet, c.Entree, c.Env)
+		if err = s.acces.Retirer(c.Projet, c.Entree, c.Env); err == nil {
+			s.auditAcces(deQui(r), c.Projet, "acces_retire", s.entreeCoffre(c.Entree), "", c.Env)
+		}
 	case "renommer":
 		err = s.acces.RenommerVariable(c.Projet, c.Entree, c.Env, c.Variable)
 	case "env":

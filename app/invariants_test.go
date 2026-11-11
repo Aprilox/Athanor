@@ -41,7 +41,7 @@ func montage(t *testing.T) *montageInvariants {
 	s := m.s
 	_ = os.Remove(s.acces.chemin)
 	s.chargerAcces()
-	t.Cleanup(func() { _ = os.Remove(s.acces.chemin); _ = os.Remove(s.journalAccesNatif()) })
+	t.Cleanup(func() { _ = os.Remove(s.acces.chemin) })
 	m.demo = Projet{Nom: "demo", Dossier: filepath.Join(m.racine, "demo")}
 	m.autre = Projet{Nom: "autre", Dossier: filepath.Join(m.racine, "autre")}
 	for _, p := range []Projet{m.demo, m.autre} {
@@ -248,7 +248,7 @@ func TestInvariantI2(t *testing.T) {
 			t.Fatalf("infra value on disk: %v", f)
 		}
 	}
-	if b, _ := os.ReadFile(m.s.journalAccesNatif()); !bytes.Contains(b, []byte("autre")) {
+	if b, _ := os.ReadFile(filepath.Join(dossierJournalAudit(), time.Now().UTC().Format("2006-01")+".jsonl")); !bytes.Contains(b, []byte(`"projet":"autre","action":"acces_accorde_force"`)) {
 		t.Fatalf("the forced link is not logged: %q", b)
 	}
 }

@@ -36,6 +36,8 @@ func serveurCoffreTest(t *testing.T) *Serveur {
 	}
 	// a config left by an earlier test makes the test binary's folder Athanor's: drop the vault written there
 	t.Cleanup(func() { _ = os.Remove(s.coffre.chemin) })
+	_ = os.RemoveAll(dossierJournalAudit()) // the audit log is written there too: each test starts with an empty one
+	t.Cleanup(func() { _ = os.RemoveAll(dossierJournalAudit()) })
 	s.csrf, s.cleAcces = "jeton", "cle"
 	return s
 }
