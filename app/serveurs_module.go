@@ -10,7 +10,7 @@ type moduleServeurs struct{}
 func (moduleServeurs) ID() string  { return "servers" }
 func (moduleServeurs) Nom() string { return "Servers" }
 func (moduleServeurs) Pages() []PageModule {
-	return []PageModule{{Hash: "#serveurs", Ordre: 30, Icone: "serveurs", Libelle: "Servers"}}
+	return []PageModule{{Hash: "#serveurs", Ordre: 30, Icone: "serveurs", Libelle: "Servers", Fils: []string{"#serveur"}}}
 }
 func (moduleServeurs) Elements(*Serveur) []ElementHub { return nil }
 func (moduleServeurs) Tutoriel() []EtapeTutoriel      { return nil }

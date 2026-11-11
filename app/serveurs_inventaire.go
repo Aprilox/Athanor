@@ -39,7 +39,7 @@ type fichierServeurs struct {
 }
 
 var (
-	serveursMu         sync.Mutex // one writer of serveurs.json at a time (read, change, write)
+	serveursMu         sync.Mutex // serveurs.json: one reader or writer at a time (read, change, write)
 	errServeursFichier = errors.New("The servers file cannot be read")
 	errServeurInconnu  = errors.New("Unknown server")
 	idServeurValide    = regexp.MustCompile(`^[0-9a-f]{1,32}$`) // ids are aleatoire()'s hex: never a path
@@ -50,6 +50,12 @@ func fichierInventaire() string { return filepath.Join(dossierModule("servers"),
 
 // lireServeurs: the inventory (empty when there is no file yet).
 func lireServeurs() ([]ServeurInventaire, error) {
+	serveursMu.Lock() // on Windows, a write moves the file away for an instant: never read it then
+	defer serveursMu.Unlock()
+	return lireInventaire()
+}
+
+func lireInventaire() ([]ServeurInventaire, error) {
 	b, err := os.ReadFile(fichierInventaire())
 	if errors.Is(err, os.ErrNotExist) {
 		return []ServeurInventaire{}, nil
@@ -68,7 +74,7 @@ func lireServeurs() ([]ServeurInventaire, error) {
 func modifierServeurs(f func([]ServeurInventaire) ([]ServeurInventaire, error)) error {
 	serveursMu.Lock()
 	defer serveursMu.Unlock()
-	liste, err := lireServeurs()
+	liste, err := lireInventaire()
 	if err != nil {
 		return err
 	}

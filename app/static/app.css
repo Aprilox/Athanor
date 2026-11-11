@@ -1030,4 +1030,25 @@ ol.guide-access li { margin: 5px 0; }
 .srv-form input[type=checkbox], .srv-form input[type=radio] { width: 16px; } /* .cof-form input sets 100% */
 .srv-sous { margin: 0 0 4px 26px; display: flex; flex-direction: column; gap: 6px; }
 .srv-form textarea.code { font-family: var(--mono, monospace); font-size: 12.5px; resize: vertical; }
+.carte-serveur a.cp-nom { color: inherit; text-decoration: none; }
+.carte-serveur a.cp-nom:hover b, .carte-serveur a.cp-nom:focus-visible b { text-decoration: underline; }
+.srv-fiche { display: flex; flex-direction: column; gap: 12px; }
+.srv-tete { display: flex; flex-direction: column; gap: 8px; }
+.srv-tete .cp-tete { display: flex; align-items: center; gap: 10px; }
+.srv-tete .cp-nom { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.srv-tete code, .srv-section code { overflow-wrap: anywhere; }
+.srv-fiche input[type=checkbox] { width: 16px; }
+.srv-sections { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+.srv-section { min-width: 0; }
+.srv-fiche > .bloc, .srv-sections > .bloc { margin: 0; } /* the gaps space them; .bloc + .bloc would shift all but the first */
+.srv-section h3, .srv-retirer h3 { margin: 0 0 8px; font-size: 15px; }
+.srv-kv { display: grid; grid-template-columns: minmax(110px, 40%) 1fr; gap: 8px; padding: 3px 0; border-bottom: 1px solid var(--line); font-size: 13.5px; }
+.srv-kv:last-child { border-bottom: 0; }
+.srv-table { overflow-x: auto; }
+.srv-table table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.srv-table th { text-align: left; font-weight: 600; color: var(--muted); padding: 3px 8px 3px 0; }
+.srv-table td { padding: 3px 8px 3px 0; border-top: 1px solid var(--line); vertical-align: top; }
+.srv-section .badge { margin: 0 4px 4px 0; }
+.srv-remarques ul { margin: 0; padding-left: 18px; }
+.srv-retirer { border-color: color-mix(in srgb, var(--erreur) 45%, var(--line)); }
 @media (max-width: 700px) { .srv-form .cof-choix { grid-template-columns: 1fr; } .srv-sous { margin-left: 0; } }

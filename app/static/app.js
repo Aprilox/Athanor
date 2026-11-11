@@ -1137,6 +1137,7 @@ function naviguer() {
   if (page === "rejoindre") { etat.npRejoindre = true; history.replaceState(null, "", "#nouveau"); page = "nouveau"; } else if (page === "nouveau" && etat.page !== "nouveau") etat.npRejoindre = false;
   // the settings always open on Options (or on the tab asked for, the guided tour)
   if (page === "reglages" && etat.page !== "reglages") { etat.ongletReglages = etat.ongletDemande || "options"; etat.ongletDemande = null; }
+  if (page.startsWith("serveur/")) { srv.id = decodeURIComponent(page.slice(8)); page = "serveur"; } // one server's sheet, its id in the hash
   if (!pages[page]) { page = "accueil"; history.replaceState(null, "", "#accueil"); } // an unknown hash: Home
   etat.page = page;
   // the page remembered for its module's entry
@@ -4466,7 +4467,7 @@ function carteServeur(x, fiche) {
   const resume = !fiche ? t("Its sheet is not made yet.")
     : tourne.length ? t("Running: {0}", [tourne.slice(0, 6).join(", ") + (tourne.length > 6 ? " +" + (tourne.length - 6) : "")]) : t("Nothing seen running.");
   return `<div class="bloc carte-serveur" data-srv-id="${h(x.id)}">
-    <div class="cp-tete"><b class="cp-nom">${h(x.nom)}</b><span class="pastille ${cls}">${sante}</span></div>
+    <div class="cp-tete"><a class="cp-nom" href="#serveur/${encodeURIComponent(x.id)}"><b>${h(x.nom)}</b></a><span class="pastille ${cls}">${sante}</span></div>
     <div class="muet petit"><code>${h(x.utilisateur)}@${h(x.hote)}${x.port === 22 ? "" : ":" + x.port}</code>${f.systeme && f.systeme.nom ? " · " + h(f.systeme.nom) : ""}</div>
     <div class="ligne m0">${x.roles.length ? x.roles.map((r) => `<span class="badge${r === "prod" ? " badge-infra" : ""}">${h(r)}</span>`).join("") : `<span class="muet petit">${t("No role yet")}</span>`}</div>
     <div class="petit srv-tourne" title="${h(tourne.join(", "))}">${h(resume)}</div>
@@ -4600,6 +4601,88 @@ $("#page").addEventListener("submit", async (ev) => {
     if (a.mode === "generee") { srv.aj = { etape: "cle", serveur: r.serveur, public: r.cle_publique, commande: r.commande }; return rendrePage(); }
     return serveurAjoute(r, a.mode);
   } finally { bouton.disabled = false; }
+});
+// --- One server (#serveur/<id>): its sheet as read on it, its roles, Refresh, cut password logins, Remove (read only from a paired device)
+const goLisible = (mo) => t("{0} GB", [(mo / 1024).toFixed(mo >= 10240 ? 0 : 1)]);
+function ficheServeur(f) {
+  const s = f.systeme || {}, r = f.ressources || {}, j = Math.floor((s.allume_s || 0) / 86400);
+  const lignes = (l) => l.filter(([, v]) => v !== "" && v != null).map(([k, v]) => `<div class="srv-kv"><span class="muet">${t(k)}</span><span>${v}</span></div>`).join("");
+  const bloc = (titre, corps, n) => `<div class="bloc srv-section"><h3>${t(titre)}${n == null ? "" : ` <span class="muet">${n}</span>`}</h3>${corps}</div>`;
+  const vide = (x) => `<p class="muet petit">${t(x)}</p>`;
+  const table = (tetes, rangs) => `<div class="srv-table"><table><thead><tr>${tetes.map((x) => `<th>${t(x)}</th>`).join("")}</tr></thead><tbody>${rangs.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+  const ports = f.ports || [], logiciels = f.logiciels || [], services = f.services || [], conteneurs = f.conteneurs || [];
+  const presents = logiciels.filter((l) => l.present), absents = logiciels.filter((l) => !l.present);
+  const pareFeu = { actif: t("on"), inactif: t("off"), absent: t("not installed") }[f.pare_feu] || t("unknown");
+  return `<div class="srv-sections">
+    ${bloc("System", lignes([["Name", h(s.nom || "?")], ["Host name", s.nom_hote && `<code>${h(s.nom_hote)}</code>`], ["Kernel", s.noyau && h(s.noyau + (s.architecture ? " · " + s.architecture : ""))],
+      ["Up for", s.allume_s ? h(j >= 2 ? t("{0} days", [j]) : t("{0} h", [Math.floor(s.allume_s / 3600)])) : ""], ["Sudo without a password", f.sudo ? t("yes") : t("no")], ["Firewall", h(pareFeu)]]))}
+    ${bloc("Resources", lignes([["Processors", r.processeurs || ""], ["Memory", r.memoire_mo ? h(t("{0} free of {1}", [goLisible(r.memoire_libre_mo), goLisible(r.memoire_mo)])) : ""],
+      ["Disk (/)", r.disque_mo ? h(t("{0} free of {1}", [goLisible(r.disque_libre_mo), goLisible(r.disque_mo)])) : ""]]))}
+    ${bloc("Listening ports", ports.length ? table(["Port", "Protocol", "Address", "Program"], ports.map((p) => [`<b>${p.port}</b>`, h(p.proto), `<code>${h(p.adresse)}</code>`, h(p.processus || "—")])) : vide("None seen."), ports.length)}
+    ${bloc("Software", (presents.length ? `<div class="ligne m0">${presents.map((l) => `<span class="badge">${h(l.nom)}${l.version ? ` <span class="muet">${h(l.version)}</span>` : ""}</span>`).join("")}</div>` : vide("None of the usual software."))
+      + (absents.length ? `<p class="muet petit">${h(t("Not installed: {0}", [absents.map((l) => l.nom).join(", ")]))}</p>` : ""), presents.length)}
+    ${bloc("Services", services.length ? `<div class="ligne m0">${services.map((x) => `<span class="badge">${h(x)}</span>`).join("")}</div>` : vide("None seen."), services.length)}
+    ${bloc("Containers", conteneurs.length ? table(["Name", "Image", "State"], conteneurs.map((c) => [`<b>${h(c.nom)}</b>`, `<code>${h(c.image)}</code>`, h(c.etat)])) : vide("None seen."), conteneurs.length)}
+    ${(f.remarques || []).length ? `<div class="bloc srv-section srv-remarques"><h3>${t("Not read")}</h3><ul>${f.remarques.map((x) => `<li class="petit">${h(t(x))}</li>`).join("")}</ul></div>` : ""}
+  </div>`;
+}
+pages.serveur = async () => {
+  const distant = !!(etat.vue || {}).distant;
+  const [d, c] = await Promise.all([api("serveurs/" + encodeURIComponent(srv.id || "")), distant ? null : api("coffre").catch(() => null)]);
+  const x = d.serveur, f = d.fiche, attente = x.etat === "inconnu";
+  srv.fiche = x; // the actions below act on the server shown
+  const sante = { ok: t("Reachable"), injoignable: t("Unreachable") }[x.etat] || t("Waiting for its key");
+  const role = (r) => distant ? (x.roles.includes(r) ? `<span class="badge${r === "prod" ? " badge-infra" : ""}">${r}</span>` : "")
+    : `<label class="radio"><input type="checkbox" class="srv-fiche-role" value="${r}"${x.roles.includes(r) ? " checked" : ""}> ${r === "dev" ? t("dev (tests, previews)") : t("prod (your live site)")}</label>`;
+  return `<div class="serveurs srv-fiche">
+    <p class="m0"><a href="#serveurs" class="petit">← ${t("Servers")}</a></p>
+    ${distant ? "" : messagesCoffreServeurs(c)}
+    <div class="bloc srv-tete">
+      <div class="cp-tete"><h2 class="m0 cp-nom">${h(x.nom)}</h2><span class="pastille ${x.etat === "ok" ? "travaille" : "attend"}">${sante}</span></div>
+      <div class="muet petit"><code>${h(x.utilisateur)}@${h(x.hote)}${x.port === 22 ? "" : ":" + x.port}</code>${x.empreinte_hote ? ` · ${t("Fingerprint")} <code class="srv-empreinte-courte">${h(x.empreinte_hote)}</code>` : ""}</div>
+      <div class="ligne m0"><span class="muet petit">${t("Roles")}</span>${role("dev")}${role("prod")}${distant && !x.roles.length ? `<span class="muet petit">${t("No role yet")}</span>` : ""}</div>
+      <div class="muet petit">${x.mot_de_passe_coupe ? "🔒 " + t("Password logins are cut: Athanor and you connect with keys only.") : t("Password logins are still open on this server.")}</div>
+      <div class="muet petit">${f && f.date ? h(t("Sheet read {0}", [dateLisible(f.date)])) : ""}${x.vu ? (f && f.date ? " · " : "") + h(t("Seen {0}", [dateLisible(x.vu)])) : ""}</div>
+      ${distant ? `<p class="muet petit m0">${t("Read only from this device: the server is changed on the computer.")}</p>` : `<div class="ligne m0">
+        ${attente ? `<button type="button" class="btn btn-primaire" data-srv-verifier="${h(x.id)}">${t("Verify")}</button>` : `<button type="button" class="btn" data-srv-rafraichir>↻ ${t("Refresh")}</button>`}
+        ${!attente && !x.mot_de_passe_coupe ? `<button type="button" class="btn" data-srv-couper="${h(x.id)}">${t("Cut password logins")}</button>` : ""}</div>`}
+    </div>
+    ${f ? ficheServeur(f) : `<div class="vide">${attente ? t("Its sheet is made once Athanor reaches the server with its key.") : t("Its sheet is not made yet.")}</div>`}
+    ${distant ? "" : `<div class="bloc srv-retirer"><h3>${t("Remove this server")}</h3>
+      <p class="muet petit">${t("Athanor forgets it and its sheet; nothing is changed on the server. Its key stays in the vault unless you tick the box.")}</p>
+      <label class="radio"><input type="checkbox" id="srv-retirer-cle"${x.cle ? "" : " disabled"}> ${t("Also remove its key from the vault")}</label>
+      <div class="ligne m0"><button type="button" class="btn btn-danger" data-srv-retirer>${t("Remove")}</button></div></div>`}
+  </div>`;
+};
+$("#page").addEventListener("change", async (ev) => {
+  if (etat.page !== "serveur" || !ev.target.matches(".srv-fiche-role")) return;
+  const roles = [...document.querySelectorAll(".srv-fiche-role:checked")].map((e) => e.value);
+  if (await action(api("serveurs/" + encodeURIComponent(srv.fiche.id), "POST", { roles }))) toast(t("Roles saved."), "ok");
+  rendrePage();
+});
+$("#page").addEventListener("click", async (ev) => {
+  if (etat.page !== "serveur") return;
+  const b = ev.target.closest("[data-srv-rafraichir], [data-srv-couper], [data-srv-verifier], [data-srv-retirer]");
+  if (!b) return;
+  const x = srv.fiche, url = "serveurs/" + encodeURIComponent(x.id), d = b.dataset;
+  if (d.srvRetirer !== undefined) {
+    const cle = $("#srv-retirer-cle").checked;
+    if (!(await confirmer(cle ? t("Remove {0} and its key from the vault? Nothing is changed on the server.", [x.nom]) : t("Remove {0}? Its key stays in the vault; nothing is changed on the server.", [x.nom]), { ok: t("Remove"), danger: true }))) return;
+    if (!(await action(api(url, "DELETE")))) return;
+    if (cle) await action(api("coffre/" + encodeURIComponent(x.cle), "DELETE"));
+    toast(t("{0} removed.", [x.nom]), "ok");
+    location.hash = "#serveurs"; return;
+  }
+  const texte = b.textContent;
+  b.disabled = true;
+  if (d.srvRafraichir !== undefined) b.textContent = t("Reading the server…");
+  try {
+    const r = await action(api(d.srvVerifier ? "serveurs/ajouter" : url, "POST", d.srvVerifier ? { id: x.id } : d.srvCouper ? { couper_mot_de_passe: true } : { rafraichir: true }));
+    if (!r) return;
+    if (r.fiche_erreur) toast(t(r.fiche_erreur), "erreur");
+    toast(d.srvCouper ? t("Password logins are cut on {0}.", [x.nom]) : d.srvVerifier ? t("{0} added", [x.nom]) : t("Sheet of {0} read again.", [x.nom]), "ok");
+  } finally { b.disabled = false; b.textContent = texte; }
+  rendrePage();
 });
 
 pages.audit = async () => {
