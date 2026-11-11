@@ -20,7 +20,7 @@ const sortieMaxSSH = 1 << 20 // sortie d'une commande coupée à 1 Mo
 
 var delaiSSH = 10 * time.Second // connexion et poignée de main ; les tests le raccourcissent
 
-var errEmpreinteChangee = errors.New("the server's host fingerprint changed: connection refused (check the server, then remove and add it again)")
+var errEmpreinteChangee = errors.New("The server's host fingerprint changed: connection refused (check the server, then remove and add it again)")
 
 // AccesSSH : de quoi joindre un serveur. Cle (PEM OpenSSH) ou MotDePasse (ajout seulement, jamais gardé).
 type AccesSSH struct {

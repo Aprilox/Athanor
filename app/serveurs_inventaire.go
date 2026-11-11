@@ -94,6 +94,16 @@ func serveursUtilisantCle(id string) ([]string, error) {
 	return noms, err
 }
 
+// rolesValides: the roles sorted without duplicates, or the refusal of an unknown one.
+func rolesValides(l []string) ([]string, error) {
+	for _, x := range l {
+		if !slices.Contains(rolesServeur, x) {
+			return nil, erreurEntree("Unknown server role")
+		}
+	}
+	return slices.Compact(slices.Sorted(slices.Values(l))), nil
+}
+
 func (s *Serveur) erreurServeurs(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, errServeurInconnu):
@@ -157,13 +167,11 @@ func (s *Serveur) apiServeurModifier(w http.ResponseWriter, r *http.Request) {
 		c.Nom = &n
 	}
 	if c.Roles != nil {
-		for _, x := range *c.Roles {
-			if !slices.Contains(rolesServeur, x) {
-				s.erreur(w, http.StatusBadRequest, "Unknown server role")
-				return
-			}
+		roles, err := rolesValides(*c.Roles)
+		if err != nil {
+			s.erreur(w, http.StatusBadRequest, err.Error())
+			return
 		}
-		roles := slices.Compact(slices.Sorted(slices.Values(*c.Roles)))
 		c.Roles = &roles
 	}
 	var rendu ServeurInventaire

@@ -11,6 +11,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -23,6 +24,15 @@ type serveurSSHMemoire struct {
 	hote, empreinte string
 	port            int
 	commandes       chan string
+	mu              sync.Mutex
+	autorisees      []ssh.PublicKey // keys let in besides the one given at launch (autoriser)
+}
+
+// autoriser: the key is now in the server's authorized_keys.
+func (s *serveurSSHMemoire) autoriser(k ssh.PublicKey) {
+	s.mu.Lock()
+	s.autorisees = append(s.autorisees, k)
+	s.mu.Unlock()
 }
 
 func nouvelleCleSSH(t *testing.T) (ssh.Signer, []byte) {
@@ -45,10 +55,18 @@ func nouvelleCleSSH(t *testing.T) (ssh.Signer, []byte) {
 func lancerSSHMemoire(t *testing.T, autorisee ssh.PublicKey, motDePasse string, repondre func(cmd string, entree []byte) (string, int)) *serveurSSHMemoire {
 	t.Helper()
 	hote, _ := nouvelleCleSSH(t)
+	s := &serveurSSHMemoire{hote: "127.0.0.1", empreinte: ssh.FingerprintSHA256(hote.PublicKey()), commandes: make(chan string, 100)}
+	if autorisee != nil {
+		s.autoriser(autorisee)
+	}
 	conf := &ssh.ServerConfig{
 		PublicKeyCallback: func(_ ssh.ConnMetadata, k ssh.PublicKey) (*ssh.Permissions, error) {
-			if autorisee != nil && bytes.Equal(k.Marshal(), autorisee.Marshal()) {
-				return nil, nil
+			s.mu.Lock()
+			defer s.mu.Unlock()
+			for _, a := range s.autorisees {
+				if bytes.Equal(k.Marshal(), a.Marshal()) {
+					return nil, nil
+				}
 			}
 			return nil, os.ErrPermission
 		},
@@ -65,7 +83,7 @@ func lancerSSHMemoire(t *testing.T, autorisee ssh.PublicKey, motDePasse string, 
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { l.Close() })
-	s := &serveurSSHMemoire{hote: "127.0.0.1", port: l.Addr().(*net.TCPAddr).Port, empreinte: ssh.FingerprintSHA256(hote.PublicKey()), commandes: make(chan string, 100)}
+	s.port = l.Addr().(*net.TCPAddr).Port
 	go func() {
 		for {
 			c, err := l.Accept()
