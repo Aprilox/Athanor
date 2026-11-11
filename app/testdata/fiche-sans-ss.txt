@@ -1,0 +1,49 @@
+@@sudo
+oui
+@@os
+PRETTY_NAME="Rocky Linux 9.4 (Blue Onyx)"
+ID="rocky"
+VERSION_ID="9.4"
+@@uname
+boite
+5.14.0-427.13.1.el9_4.x86_64
+x86_64
+@@cpu
+2
+@@memoire
+MemTotal:        1863172 kB
+MemAvailable:    1024000 kB
+@@disque
+/dev/mapper/rl-root     17811456  3047404  14764052      18% /
+@@allume
+1200.5 2300.1
+@@ports-proc
+tcp   sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode
+tcp   0: 00000000:0016 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 18342 1 0000000000000000 100 0 0 10 0
+tcp   1: 0100007F:1F90 00000000:0000 0A 00000000:00000000 00:00000000 00000000  1000        0 22001 1 0000000000000000 100 0 0 10 0
+tcp   2: 0100007F:A1B2 0100007F:0016 01 00000000:00000000 00:00000000 00000000  1000        0 22002 1 0000000000000000 100 0 0 10 0
+tcp6   0: 00000000000000000000000000000000:0016 00000000000000000000000000000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 18344 1 0000000000000000 100 0 0 10 0
+udp   sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode ref pointer drops
+udp   12: 00000000:0044 00000000:0000 07 00000000:00000000 00:00000000 00000000     0        0 17001 2 0000000000000000 0
+@@logiciels
+docker|/usr/bin/docker|
+k3s|/usr/local/bin/k3s|k3s version v1.30.4+k3s1 (98262b5d)
+kubectl|/usr/local/bin/kubectl|Client Version: v1.30.4+k3s1
+nginx|
+caddy|
+ufw|
+compose|
+@@pare-feu
+@@processus
+systemd
+kthreadd
+[kworker/0:1]
+sshd
+k3s-server
+containerd
+sh
+ps
+sshd
+@@conteneurs
+!refuse
+@@fin

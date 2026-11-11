@@ -1,0 +1,38 @@
+Bienvenue sur ce serveur (message du profil)
+@@sudo
+@@os
+PRETTY_NAME="Ubuntu 24.04.1 LTS"
+ID=ubuntu
+VERSION_ID="24.04"
+@@uname
+web-2
+6.8.0-45-generic
+x86_64
+@@cpu
+2
+@@memoire
+MemTotal:        4005020 kB
+MemAvailable:    2869624 kB
+@@disque
+/dev/sda1           40470732 9221860  31232488      23% /
+@@allume
+3600.00 7000.00
+@@ports-ss
+Netid State  Recv-Q Send-Q Local Address:Port  Peer Address:Port Process
+tcp   LISTEN 0      128          0.0.0.0:22         0.0.0.0:*
+tcp   LISTEN 0      511                *:443              *:*
+@@logiciels
+docker|/usr/bin/docker|Docker version 26.1.3, build b72abbb
+k3s|
+kubectl|
+nginx|
+caddy|/usr/bin/caddy|v2.7.6 h1:w0NymbG2m9PcvKWsrXO6EEkY9Ru4FJK8uQbYcev1p3A=
+ufw|/usr/sbin/ufw|ufw 0.36.2
+compose|
+@@pare-feu
+@@services-systemd
+caddy.service loaded active running Caddy
+ssh.service   loaded active running OpenBSD Secure Shell server
+@@conteneurs
+!refuse
+@@fin

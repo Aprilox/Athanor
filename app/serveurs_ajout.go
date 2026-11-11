@@ -78,7 +78,7 @@ func statutAjout(err error) int {
 		return http.StatusLocked
 	case errors.Is(err, errCoffreInconnu), errors.Is(err, errServeurInconnu):
 		return http.StatusNotFound
-	case errors.Is(err, errServeurInjoignable), errors.Is(err, errServeurClePosee):
+	case errors.Is(err, errServeurInjoignable), errors.Is(err, errServeurClePosee), errors.Is(err, errFicheIllisible):
 		return http.StatusBadGateway
 	case errors.As(err, new(erreurEntree)):
 		return http.StatusBadRequest
@@ -349,7 +349,18 @@ func (s *Serveur) serveurPret(w http.ResponseWriter, r *http.Request, srv Serveu
 		return
 	}
 	s.ecrireAudit(LigneAudit{Type: "evenement", De: deQui(r), Vers: "servers", Action: "serveur_ajoute", Resultat: srv.Nom + " " + srv.Utilisateur + "@" + adresseSSH(srv.Hote, srv.Port) + " (" + mode + ")"})
-	s.ecrireJSON(w, map[string]any{"serveur": srv})
+	// its sheet at once (serveurs_fiche.go); a sheet that fails leaves the server added, told by fiche_erreur
+	rep := map[string]any{"serveur": srv, "fiche": nil}
+	if f, err := s.rafraichirFiche(r.Context(), srv); err != nil {
+		rep["fiche_erreur"] = err.Error()
+	} else {
+		rep["fiche"] = f
+	}
+	l, _ := lireServeurs() // its state and last sight as the sheet left them
+	if i := slices.IndexFunc(l, func(x ServeurInventaire) bool { return x.ID == srv.ID }); i >= 0 {
+		rep["serveur"] = l[i]
+	}
+	s.ecrireJSON(w, rep)
 }
 
 // erreurCoupure: why password logins were not cut (409: the server stays as it was).

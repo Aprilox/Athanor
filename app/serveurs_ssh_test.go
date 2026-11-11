@@ -126,7 +126,10 @@ func (s *serveurSSHMemoire) servir(c net.Conn, conf *ssh.ServerConfig, repondre 
 				if strings.Contains(cmd, "cat") { // lit l'entrée jusqu'à sa fin
 					entree.ReadFrom(canal)
 				}
-				sortie, code := repondre(cmd, entree.Bytes())
+				sortie, code := "", 0
+				if repondre != nil {
+					sortie, code = repondre(cmd, entree.Bytes())
+				}
 				canal.Write([]byte(sortie))
 				canal.SendRequest("exit-status", false, binary.BigEndian.AppendUint32(nil, uint32(code)))
 				return

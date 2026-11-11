@@ -137,7 +137,9 @@ func TestServeursAjoutMotDePasse(t *testing.T) {
 	}
 	var vues []string
 	for len(srv.commandes) > 0 {
-		vues = append(vues, <-srv.commandes)
+		if c := <-srv.commandes; c != commandeFiche { // the sheet that follows the addition
+			vues = append(vues, c)
+		}
 	}
 	if len(vues) != 1 || !strings.Contains(vues[0], "chmod 700 ~/.ssh") || !strings.Contains(vues[0], "grep -qxF 'ssh-ed25519 ") {
 		t.Errorf("authorized_keys command: %q", vues)
@@ -389,6 +391,7 @@ func TestServeursMotDePasseConteneur(t *testing.T) {
 	s, appel, _ := serveursAjoutTest(t)
 	motDePasseCoffreTest(t, s)
 	ctx := context.Background()
+	debut := time.Now() // P4: from the address to the complete sheet in less than a minute
 	code, v := appel("/api/serveurs/empreinte", map[string]any{"hote": hote, "port": port})
 	if code != 200 {
 		t.Fatalf("fingerprint: %d %v", code, v)
@@ -398,6 +401,22 @@ func TestServeursMotDePasseConteneur(t *testing.T) {
 		"empreinte": empreinte, "mode": "mot_de_passe", "mot_de_passe_serveur": motDePasseConteneurSSH})
 	if code != 200 {
 		t.Fatalf("addition with the password: %d %v", code, v)
+	}
+	if d := time.Since(debut); d > time.Minute {
+		t.Errorf("addition and sheet in %s (P4: less than a minute)", d)
+	}
+	// the sheet of the real server: Debian, sshd on 22 with its program (sudo), ufw and the fake docker
+	if v["fiche"] == nil {
+		t.Fatalf("no sheet after the addition: %v", v["fiche_erreur"])
+	}
+	fiche := v["fiche"].(map[string]any)
+	j, _ := json.Marshal(fiche)
+	var f FicheServeur
+	_ = json.Unmarshal(j, &f)
+	if f.Systeme.ID != "debian" || !f.Sudo || f.Ressources.Processeurs < 1 || f.Ressources.MemoireMo < 1 || f.Ressources.DisqueMo < 1 ||
+		!slices.ContainsFunc(f.Ports, func(p PortFiche) bool { return p.Port == 22 && p.Proto == "tcp" && p.Processus == "sshd" }) ||
+		!strings.Contains(logicielsTexte(f), "ufw:") || !strings.Contains(logicielsTexte(f), "docker:") || !slices.Contains(f.Services, "sshd") {
+		t.Errorf("sheet of the container: %s", j)
 	}
 	x := v["serveur"].(map[string]any)
 	l, _ := lireServeurs()

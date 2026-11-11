@@ -145,12 +145,14 @@ func (s *Serveur) apiServeur(w http.ResponseWriter, r *http.Request) {
 }
 
 // apiServeurModifier: POST /api/serveurs/{id} {nom?, roles?}: renames it or sets its roles;
-// {couper_mot_de_passe:true}: cuts password logins (serveurs_ajout.go).
+// {couper_mot_de_passe:true}: cuts password logins (serveurs_ajout.go); {rafraichir:true}: its sheet made
+// again (serveurs_fiche.go).
 func (s *Serveur) apiServeurModifier(w http.ResponseWriter, r *http.Request) {
 	var c struct {
 		Nom              *string   `json:"nom"`
 		Roles            *[]string `json:"roles"`
 		CouperMotDePasse bool      `json:"couper_mot_de_passe"`
+		Rafraichir       bool      `json:"rafraichir"`
 	}
 	if lireCorps(r, &c) != nil {
 		s.erreur(w, http.StatusBadRequest, "Invalid request")
@@ -158,6 +160,10 @@ func (s *Serveur) apiServeurModifier(w http.ResponseWriter, r *http.Request) {
 	}
 	if c.CouperMotDePasse {
 		s.couperMotDePasse(w, r, r.PathValue("id"))
+		return
+	}
+	if c.Rafraichir {
+		s.apiServeurRafraichir(w, r, r.PathValue("id"))
 		return
 	}
 	if c.Nom != nil {
