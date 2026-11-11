@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -78,6 +79,7 @@ func TestCaptureHub(t *testing.T) {
 	if err := ecrireConfig(s.config); err != nil {
 		t.Fatal(err)
 	}
+	portSSH := serveursCapture(t)
 	// the agents' pending approvals (cloche-*, appr-*): an access, a staging deploy, a prod one refused by the script
 	for _, a := range []Approbation{
 		{Projet: "projet-01", Env: "dev", Mission: "M4", Agent: "pilote", Action: "demander_acces", Details: map[string]string{"nom": "STRIPE_SECRET_KEY"},
@@ -142,7 +144,7 @@ func TestCaptureHub(t *testing.T) {
 	ctx, fin := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer fin()
 	cmd := exec.CommandContext(ctx, "node", script, fichierURL, sortie)
-	cmd.Env = append(envNavigateur, "CAPTURE_P3_SECRETS="+cheminSecrets(projets[1])) // P3: the infra value never lands there
+	cmd.Env = append(envNavigateur, "CAPTURE_P3_SECRETS="+cheminSecrets(projets[1]), fmt.Sprint("CAPTURE_SSH_PORT=", portSSH)) // P3: the infra value never lands there
 	sorties, err := cmd.CombinedOutput()
 	t.Logf("%s", sorties)
 	if err != nil {
@@ -225,4 +227,34 @@ func accesCapture(t *testing.T, s *Serveur, p, p3 Projet) {
 	if err := os.WriteFile(cheminSecrets(p), []byte("MAILJET_API_KEY='"+aleatoire(16)+"'\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// serveursCapture: the Servers page (serveurs-*): four servers (two with a sheet read from testdata, one
+// waiting for its key, one unreachable) and an in-memory SSH server whose port the wizard capture types,
+// so "Continue" reads a real fingerprint. Returns that port.
+func serveursCapture(t *testing.T) int {
+	ssh := lancerSSHMemoire(t, nil, "", func(string, []byte) (string, int) { return "", 1 })
+	maintenant := time.Now()
+	liste := []ServeurInventaire{
+		{ID: "c0ffee01", Nom: "VPS production", Hote: "vps.example.org", Port: 22, Utilisateur: "deploy", Roles: []string{"prod"}, Etat: "ok", Cree: maintenant.Add(-72 * time.Hour), Vu: maintenant.Add(-20 * time.Minute), MotDePasseCoupe: true},
+		{ID: "c0ffee02", Nom: "Serveur maison", Hote: "192.168.1.40", Port: 2222, Utilisateur: "pi", Roles: []string{"dev"}, Etat: "ok", Cree: maintenant.Add(-48 * time.Hour), Vu: maintenant.Add(-3 * time.Hour)},
+		{ID: "c0ffee03", Nom: "Préproduction", Hote: "staging.example.org", Port: 22, Utilisateur: "root", Roles: []string{"dev", "prod"}, Etat: "inconnu", Cree: maintenant.Add(-10 * time.Minute)},
+		{ID: "c0ffee04", Nom: "Ancien VPS", Hote: "old.example.net", Port: 22, Utilisateur: "admin", Roles: []string{}, Etat: "injoignable", Cree: maintenant.Add(-900 * time.Hour), Vu: maintenant.Add(-200 * time.Hour)},
+	}
+	if err := modifierServeurs(func([]ServeurInventaire) ([]ServeurInventaire, error) { return liste, nil }); err != nil {
+		t.Fatal(err)
+	}
+	for id, f := range map[string]string{"c0ffee01": "fiche-debian.txt", "c0ffee02": "fiche-alpine.txt"} {
+		fiche := analyserFiche(lireTestdata(t, f))
+		fiche.Date = maintenant
+		b, _ := json.Marshal(fiche)
+		d := filepath.Join(dossierModule("servers"), id)
+		if err := os.MkdirAll(d, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(d, "fiche.json"), b, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return ssh.port
 }

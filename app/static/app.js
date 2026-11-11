@@ -4458,12 +4458,149 @@ function ligneAudit(l, lang) {
     <span class="aud-texte"><b>${h(quiAudit(l.de))}</b> → ${h(quiAudit(l.vers))}${l.projet ? ", " + h(l.projet) : ""} : <code>${h(l.action || l.type)}</code>${l.resultat ? " — " + h(l.resultat) : ""}${qui ? ` <span class="muet">(${h(qui)})</span>` : ""}</span>
     <span class="muet petit aud-n" title="${h(l.id)}">#${l.n}</span></li>`;
 }
-// shortcut: the inventory as a plain list; M76 brings the cards and the add wizard
+// --- Servers (#serveurs): inventory cards and the add wizard (address → fingerprint to confirm → one of three ways)
+const srv = { aj: null }; // aj: the wizard ({etape: "adresse" | "empreinte" | "cle" | "coupure", …}), kept across renders
+function carteServeur(x, fiche) {
+  const sante = { ok: t("Reachable"), injoignable: t("Unreachable") }[x.etat] || t("Waiting for its key"), cls = x.etat === "ok" ? "travaille" : "attend", f = fiche || {};
+  const tourne = [...(f.conteneurs || []).filter((c) => /^(up|running)/i.test(c.etat)).map((c) => c.nom), ...(f.services || [])];
+  const resume = !fiche ? t("Its sheet is not made yet.")
+    : tourne.length ? t("Running: {0}", [tourne.slice(0, 6).join(", ") + (tourne.length > 6 ? " +" + (tourne.length - 6) : "")]) : t("Nothing seen running.");
+  return `<div class="bloc carte-serveur" data-srv-id="${h(x.id)}">
+    <div class="cp-tete"><b class="cp-nom">${h(x.nom)}</b><span class="pastille ${cls}">${sante}</span></div>
+    <div class="muet petit"><code>${h(x.utilisateur)}@${h(x.hote)}${x.port === 22 ? "" : ":" + x.port}</code>${f.systeme && f.systeme.nom ? " · " + h(f.systeme.nom) : ""}</div>
+    <div class="ligne m0">${x.roles.length ? x.roles.map((r) => `<span class="badge${r === "prod" ? " badge-infra" : ""}">${h(r)}</span>`).join("") : `<span class="muet petit">${t("No role yet")}</span>`}</div>
+    <div class="petit srv-tourne" title="${h(tourne.join(", "))}">${h(resume)}</div>
+    <div class="muet petit">${t("Last deployments: none yet (deployments come in a later version of Athanor).")}</div>
+    <div class="muet petit">${x.vu ? h(t("Seen {0}", [dateLisible(x.vu)])) : h(t("Added {0}", [dateLisible(x.cree)]))}</div>
+    ${x.etat === "inconnu" && !(etat.vue || {}).distant ? `<div class="ligne m0"><button type="button" class="btn btn-petit btn-primaire" data-srv-verifier="${h(x.id)}">${t("Verify")}</button><span class="muet petit">${t("once its public key is on the server")}</span></div>` : ""}
+  </div>`;
+}
+// what the vault lets the wizard do: no password for Athanor, or locked (null from a paired device)
+function messagesCoffreServeurs(c) {
+  const e = (c || {}).etat || {};
+  if (!c) return "";
+  if (!e.mot_de_passe) return `<p class="bloc petit attention srv-msg">⚠ ${t("No password for Athanor: the keys of your servers need one (they open only with it).")} <a href="#options@bloc-verrou">${t("Settings › Options › Lock")}</a></p>`;
+  if (!e.infra) return `<form class="bloc cof-verrou" id="srv-verrou"><span class="croit">🔒 ${t("Vault locked: the keys of your servers open only with your password")}</span>
+      <span class="ligne m0"><input type="password" id="srv-deverrou" autocomplete="current-password" placeholder="${h(t("Password"))}" aria-label="${h(t("Password"))}"><button type="submit" class="btn btn-primaire">${t("Unlock")}</button></span></form>`;
+  return "";
+}
+function assistantServeur(c) {
+  const a = srv.aj, cles = ((c || {}).entrees || []).filter((e) => e.famille === "secret" && e.type === "ssh"), v = etat.vue || {};
+  const role = (r) => `<label class="radio"><input type="checkbox" class="srv-role" value="${r}"${(a.roles || []).includes(r) ? " checked" : ""}> ${r === "dev" ? t("dev (tests, previews)") : t("prod (your live site)")}</label>`;
+  if (a.etape === "cle") return `<div class="bloc cof-form srv-form" id="srv-cle">
+    <h2>${h(t("Put this key on {0}", [a.serveur.nom]))}</h2>
+    <p class="petit">${t("Athanor made a key for this server and keeps its private part in the vault. Add its public part to the server, then press Verify.")}</p>
+    <label class="champ"><span>${t("Public key")}</span><textarea readonly rows="2" class="code" id="srv-public">${h(a.public)}</textarea></label>
+    <div class="ligne m0"><button type="button" class="btn btn-petit" data-srv-copier="srv-public">${t("Copy")}</button></div>
+    <label class="champ"><span>${h(t("Or run this command on the server (as {0})", [a.serveur.utilisateur]))}</span><textarea readonly rows="3" class="code" id="srv-commande">${h(a.commande)}</textarea></label>
+    <div class="ligne m0"><button type="button" class="btn btn-petit" data-srv-copier="srv-commande">${t("Copy")}</button></div>
+    <div class="ligne"><button type="button" class="btn btn-primaire" data-srv-verifier="${h(a.serveur.id)}">${t("Verify")}</button><button type="button" class="btn" data-srv-fermer>${t("Later")}</button></div>
+  </div>`;
+  if (a.etape === "coupure") return `<div class="bloc cof-form srv-form" id="srv-coupure">
+    <h2>${h(t("{0} added", [a.serveur.nom]))}</h2>
+    <p class="petit">${t("Athanor now connects with its own key; your password was not kept. Cut password logins on this server? Nobody could then try passwords on it (recommended).")}</p>
+    <div class="ligne"><button type="button" class="btn btn-primaire" data-srv-couper="${h(a.serveur.id)}">${t("Cut password logins")}</button><button type="button" class="btn" data-srv-fermer>${t("Later")}</button></div>
+  </div>`;
+  const empreinte = a.etape === "empreinte", fige = empreinte ? " readonly" : "";
+  return `<form class="bloc cof-form srv-form" id="srv-form" autocomplete="off">
+    <h2>${t("Add a server")}</h2>
+    <div class="cof-choix">
+      <label class="champ"><span>${t("Address")}</span><input type="text" id="srv-hote" maxlength="253" spellcheck="false" placeholder="vps.example.org" value="${h(a.hote || "")}"${fige} required></label>
+      <label class="champ"><span>${t("Port")}</span><input type="number" id="srv-port" min="1" max="65535" value="${a.port || 22}"${fige}></label>
+      <label class="champ"><span>${t("User")}</span><input type="text" id="srv-utilisateur" maxlength="32" spellcheck="false" placeholder="root" value="${h(a.utilisateur || "")}"${fige} required></label>
+      <label class="champ"><span>${t("Name (optional)")}</span><input type="text" id="srv-nom" maxlength="100" placeholder="${h(t("e.g. Production VPS"))}" value="${h(a.nom || "")}"></label>
+    </div>
+    <div class="champ"><span>${t("Roles")}</span><div class="ligne m0">${role("dev")}${role("prod")}</div></div>
+    ${empreinte ? `<div class="srv-empreinte">
+      <p class="petit">${t("The server presents this fingerprint. Check that it is your server's (on the server: {0}), then confirm it: Athanor will refuse any other.", ["<code>ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub</code>"])}</p>
+      <p><code class="srv-empreinte-valeur">${h(a.empreinte)}</code></p>
+      <label class="radio"><input type="checkbox" id="srv-confirme"${a.confirme ? " checked" : ""} required> ${t("It is my server's fingerprint")}</label>
+      <fieldset class="srv-facons"><legend>${t("How should Athanor connect?")}</legend>
+        <label class="radio srv-facon"><input type="radio" name="srv-mode" value="coffre"${a.mode === "coffre" ? " checked" : ""}${cles.length ? "" : " disabled"}> <span><b>${t("A key of the vault")}</b><br><span class="muet petit">${cles.length ? t("An SSH key you already use for this server.") : t("No SSH key in the vault yet.")}</span></span></label>
+        ${a.mode === "coffre" && cles.length ? `<div class="srv-sous"><select id="srv-cle-coffre" aria-label="${h(t("A key of the vault"))}">${cles.map((e) => `<option value="${h(e.id)}"${e.id === a.cle ? " selected" : ""}>${h(e.nom)}</option>`).join("")}</select>
+          ${v.natif ? `<label class="champ"><span>${t("Athanor's password")}</span><input type="password" id="srv-mdp-athanor" autocomplete="current-password"></label><p class="muet petit">${t("Native Windows mode: any program of this PC can drive this window, so giving an existing server key asks for Athanor's password.")}</p>` : ""}</div>` : ""}
+        <label class="radio srv-facon"><input type="radio" name="srv-mode" value="generee"${a.mode === "generee" ? " checked" : ""}> <span><b>${t("A new key made by Athanor")}</b><br><span class="muet petit">${t("You copy its public part onto the server, then press Verify.")}</span></span></label>
+        <label class="radio srv-facon"><input type="radio" name="srv-mode" value="mot_de_passe"${a.mode === "mot_de_passe" ? " checked" : ""}> <span><b>${t("The server's password, once")}</b><br><span class="muet petit">${t("Athanor uses it once to put its own key, and never keeps it.")}</span></span></label>
+        ${a.mode === "mot_de_passe" ? `<div class="srv-sous"><input type="password" id="srv-mdp-serveur" autocomplete="off" aria-label="${h(t("The server's password"))}" placeholder="${h(t("The server's password"))}"></div>` : ""}
+      </fieldset></div>` : `<p class="muet petit">${t("Athanor first reads the server's fingerprint, for you to confirm.")}</p>`}
+    <div class="ligne"><button type="submit" class="btn btn-primaire">${empreinte ? t("Add the server") : t("Continue")}</button><button type="button" class="btn" data-srv-fermer>${t("Cancel")}</button></div>
+  </form>`;
+}
 pages.serveurs = async () => {
-  const d = await api("serveurs");
-  if (!d.serveurs.length) return `<div class="vide">${t("No server yet")}</div>`;
-  return `<ul class="aud-liste">${d.serveurs.map((x) => `<li class="aud-ligne"><b>${h(x.nom)}</b> <span class="muet">${h(x.utilisateur)}@${h(x.hote)}:${x.port}</span>${x.roles.map((r) => ` <span class="badge">${h(r)}</span>`).join("")}${x.etat === "injoignable" ? ` <span class="badge">${t("Unreachable")}</span>` : ""}</li>`).join("")}</ul>`;
+  const distant = !!(etat.vue || {}).distant;
+  const [d, c] = await Promise.all([api("serveurs"), distant ? null : api("coffre").catch(() => null)]);
+  // shortcut: one request per server for its sheet; fine up to the tens of servers aimed at (E12: 10)
+  const fiches = await Promise.all(d.serveurs.map((x) => api("serveurs/" + encodeURIComponent(x.id)).then((r) => r.fiche).catch(() => null)));
+  const liste = d.serveurs.map((x, i) => carteServeur(x, fiches[i])).join("");
+  return `<div class="serveurs">
+    ${srv.aj ? messagesCoffreServeurs(c) : ""}
+    <div class="ligne cof-tete"><h2 class="m0">${t("Servers")} <span class="muet">${d.serveurs.length}</span></h2><span class="espace"></span>${distant ? `<span class="muet petit">${t("Adding a server is done on the computer.")}</span>` : srv.aj ? "" : `<button type="button" class="btn btn-primaire" data-srv-ajouter>+ ${t("Add a server")}</button>`}</div>
+    ${srv.aj ? assistantServeur(c) : ""}
+    ${liste ? `<div class="grille-projets">${liste}</div>` : srv.aj ? "" : `<div class="vide srv-vide"><p><b>${t("No server yet")}</b></p>
+      <p class="muet">${t("Add your VPS or your home server: Athanor checks its fingerprint, connects with a key kept in the vault, then reads what runs on it.")}</p>
+      ${distant ? "" : `<button type="button" class="btn btn-primaire" data-srv-ajouter>+ ${t("Add a server")}</button>`}</div>`}
+  </div>`;
 };
+// the wizard's fields as typed, kept before each render (the address step, then the chosen way)
+function lireAssistantServeur() {
+  const a = srv.aj, val = (id) => { const e = document.getElementById(id); return e ? e.value : undefined; };
+  if (!a || !$("#srv-form")) return a;
+  Object.assign(a, { hote: val("srv-hote").trim(), port: +val("srv-port") || 22, utilisateur: val("srv-utilisateur").trim(), nom: val("srv-nom").trim(),
+    roles: [...document.querySelectorAll(".srv-role:checked")].map((e) => e.value) });
+  const m = document.querySelector('[name="srv-mode"]:checked'), cle = val("srv-cle-coffre"), conf = $("#srv-confirme");
+  if (m) a.mode = m.value;
+  if (cle !== undefined) a.cle = cle;
+  if (conf) a.confirme = conf.checked;
+  return a;
+}
+// a server reached: its sheet's error told, then the next step (by password: propose to cut password logins)
+function serveurAjoute(r, mode) {
+  if (r.fiche_erreur) toast(t(r.fiche_erreur), "erreur");
+  toast(t("{0} added", [r.serveur.nom]), "ok");
+  srv.aj = mode === "mot_de_passe" && !r.serveur.mot_de_passe_coupe ? { etape: "coupure", serveur: r.serveur } : null;
+  return rendrePage();
+}
+$("#page").addEventListener("click", async (ev) => {
+  if (etat.page !== "serveurs") return;
+  const b = ev.target.closest("[data-srv-ajouter], [data-srv-fermer], [data-srv-verifier], [data-srv-couper], [data-srv-copier], [name=srv-mode]");
+  if (!b) return;
+  const d = b.dataset;
+  if (b.name === "srv-mode") { lireAssistantServeur(); return rendrePage().then(() => { const c = $("#srv-mdp-serveur") || $("#srv-cle-coffre"); if (c) c.focus(); }); }
+  if (d.srvAjouter !== undefined) { srv.aj = { etape: "adresse", roles: [] }; return rendrePage().then(() => $("#srv-hote").focus()); }
+  if (d.srvFermer !== undefined) { srv.aj = null; return rendrePage(); }
+  if (d.srvCopier) { const c = document.getElementById(d.srvCopier); return navigator.clipboard.writeText(c.value).then(() => toast(t("Copied."), "ok"), () => c.select()); }
+  b.disabled = true;
+  if (d.srvVerifier) { const r = await action(api("serveurs/ajouter", "POST", { id: d.srvVerifier })); b.disabled = false; return r ? serveurAjoute(r, "generee") : null; }
+  const r = await action(api("serveurs/" + encodeURIComponent(d.srvCouper), "POST", { couper_mot_de_passe: true }));
+  b.disabled = false;
+  if (r) { toast(t("Password logins are cut on {0}.", [srv.aj.serveur.nom]), "ok"); srv.aj = null; rendrePage(); }
+});
+$("#page").addEventListener("submit", async (ev) => {
+  if (etat.page !== "serveurs") return;
+  ev.preventDefault();
+  if (ev.target.id === "srv-verrou") {
+    const champ = $("#srv-deverrou");
+    if (await action(api("deverrouiller", "POST", { mot_de_passe: champ.value }))) { champ.value = ""; rendrePage(); }
+    return;
+  }
+  if (ev.target.id !== "srv-form") return;
+  const a = lireAssistantServeur(), bouton = ev.submitter || ev.target.querySelector("[type=submit]");
+  bouton.disabled = true;
+  try {
+    if (a.etape === "adresse") { // the fingerprint first, never accepted silently
+      const r = await action(api("serveurs/empreinte", "POST", { hote: a.hote, port: a.port }));
+      if (r) { Object.assign(a, { etape: "empreinte", empreinte: r.empreinte, confirme: false, mode: a.mode || "generee" }); await rendrePage(); $("#srv-confirme").focus(); }
+      return;
+    }
+    const corps = { nom: a.nom, hote: a.hote, port: a.port, utilisateur: a.utilisateur, roles: a.roles, empreinte: a.empreinte, mode: a.mode };
+    if (a.mode === "coffre") { corps.cle = a.cle; const m = $("#srv-mdp-athanor"); if (m) corps.mot_de_passe = m.value; }
+    if (a.mode === "mot_de_passe") corps.mot_de_passe_serveur = $("#srv-mdp-serveur").value; // read here, never kept in srv.aj
+    const r = await action(api("serveurs/ajouter", "POST", corps));
+    if (!r) return;
+    if (a.mode === "generee") { srv.aj = { etape: "cle", serveur: r.serveur, public: r.cle_publique, commande: r.commande }; return rendrePage(); }
+    return serveurAjoute(r, a.mode);
+  } finally { bouton.disabled = false; }
+});
 
 pages.audit = async () => {
   const f = aud.f, qs = new URLSearchParams(Object.entries(f).filter(([, v]) => v)), lignes = [];

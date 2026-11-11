@@ -300,7 +300,7 @@ a[data-href] { cursor: pointer; }
 .btn-urgence, .btn-urgence:hover { color: var(--erreur-vif); border-color: var(--erreur-vif); }
 textarea { width: 100%; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; resize: vertical; min-height: 80px; }
 textarea.code, .code { font-family: var(--mono); font-size: 13px; }
-input[type=text], input[type=password] { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; width: 100%; }
+input[type=text], input[type=password], input[type=number] { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; width: 100%; }
 select { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
 /* our own check boxes and radio buttons (the toggles below keep their switch) */
 input[type=checkbox]:not(.interrupteur input), input[type=radio] {
@@ -1012,3 +1012,22 @@ ol.guide-access li { margin: 5px 0; }
 .acc-acces .cp-nom { white-space: normal; overflow-wrap: anywhere; }
 .acc-repli { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; }
 @media (max-width: 900px) { .acc-grille, .acc-envs { grid-template-columns: 1fr; } .acc-env { min-height: 0; } }
+
+/* Servers page (#serveurs): inventory cards and the add wizard */
+.carte-serveur { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.carte-serveur .cp-tete { display: flex; align-items: center; gap: 8px; }
+.carte-serveur .cp-nom { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.carte-serveur code { overflow-wrap: anywhere; }
+.srv-tourne { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.srv-vide { text-align: center; }
+.srv-vide p { max-width: 520px; margin-left: auto; margin-right: auto; }
+.srv-msg { margin-bottom: 12px; border-color: var(--attention); }
+.srv-empreinte-valeur { display: inline-block; padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel-2); overflow-wrap: anywhere; }
+.srv-facons { border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px 10px; margin: 12px 0 0; display: flex; flex-direction: column; gap: 8px; }
+.srv-facons legend { padding: 0 6px; font-weight: 600; }
+.srv-facon { display: flex; align-items: flex-start; gap: 8px; }
+.srv-facon input { margin-top: 3px; }
+.srv-form input[type=checkbox], .srv-form input[type=radio] { width: 16px; } /* .cof-form input sets 100% */
+.srv-sous { margin: 0 0 4px 26px; display: flex; flex-direction: column; gap: 6px; }
+.srv-form textarea.code { font-family: var(--mono, monospace); font-size: 12.5px; resize: vertical; }
+@media (max-width: 700px) { .srv-form .cof-choix { grid-template-columns: 1fr; } .srv-sous { margin-left: 0; } }
