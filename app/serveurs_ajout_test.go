@@ -1,23 +1,27 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"golang.org/x/crypto/ssh"
 )
 
-// TestServeursAjout: the host fingerprint to confirm, an addition with a vault key (missing or changed
-// fingerprint refused, closed infra key 423, no password 409 with where to choose one, native mode asks for
-// Athanor's password), an addition with a generated key (public part and command, then Verify), and the
-// private keys found in no response, audit line or file of modules/servers.
-func TestServeursAjout(t *testing.T) {
+// serveursAjoutTest: a server with its vault, an empty Servers module, local mode, and a POST caller
+// (path, body → status, JSON) whose answers are all kept.
+func serveursAjoutTest(t *testing.T) (*Serveur, func(string, map[string]any) (int, map[string]any), *strings.Builder) {
+	t.Helper()
 	s := serveurCoffreTest(t)
 	mux := http.NewServeMux()
 	s.routes(mux)
@@ -26,7 +30,7 @@ func TestServeursAjout(t *testing.T) {
 	natif := modeNatif.Load()
 	t.Cleanup(func() { modeNatif.Store(natif) })
 	modeNatif.Store(false)
-	var reponses strings.Builder
+	reponses := &strings.Builder{}
 	appel := func(chemin string, corps map[string]any) (int, map[string]any) {
 		t.Helper()
 		b, _ := json.Marshal(corps)
@@ -43,6 +47,173 @@ func TestServeursAjout(t *testing.T) {
 		_ = json.Unmarshal(w.Body.Bytes(), &v)
 		return w.Code, v
 	}
+	return s, appel, reponses
+}
+
+// motDePasseCoffreTest: Athanor gets a password and its vault is open (infra keys can be kept).
+func motDePasseCoffreTest(t *testing.T, s *Serveur) {
+	t.Helper()
+	if err := s.coffre.ChangerMotDePasse("", "mdp-test"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.coffre.Deverrouiller("mdp-test"); err != nil {
+		t.Fatal(err)
+	}
+	s.config.MotDePasseHash, s.session = hacherMotDePasse("mdp-test"), "session"
+}
+
+// TestServeursAjoutMotDePasse: the server's password given once (refused, then a generated key put in
+// authorized_keys and the server reached again with it), the password found nowhere afterwards, then
+// cutting password logins: refused before a key login, the script's failures, undone when the key no
+// longer opens the server, then done.
+func TestServeursAjoutMotDePasse(t *testing.T) {
+	s, appel, reponses := serveursAjoutTest(t)
+	motDePasseCoffreTest(t, s)
+	attente := attenteRechargeSSH
+	attenteRechargeSSH = 10 * time.Millisecond
+	t.Cleanup(func() { attenteRechargeSSH = attente })
+	temoin := "temoin-" + aleatoire(8) // built at run time: the test binary itself does not hold it
+
+	var srv *serveurSSHMemoire
+	var mu sync.Mutex
+	codeCoupure, refuserApres, retours := 0, false, 0
+	srv = lancerSSHMemoire(t, nil, temoin, func(cmd string, _ []byte) (string, int) {
+		mu.Lock()
+		defer mu.Unlock()
+		switch {
+		case strings.Contains(cmd, "PasswordAuthentication no"):
+			if codeCoupure == 0 && refuserApres {
+				srv.mu.Lock()
+				srv.autorisees = nil
+				srv.mu.Unlock()
+			}
+			return "", codeCoupure
+		case strings.Contains(cmd, `rm -f "$F" && recharger`):
+			retours++
+		case strings.Contains(cmd, "authorized_keys"):
+			if debut := strings.Index(cmd, "'ssh-ed25519 "); debut >= 0 {
+				ligne := cmd[debut+1:]
+				k, _, _, _, err := ssh.ParseAuthorizedKey([]byte(ligne[:strings.Index(ligne, "'")]))
+				if err != nil {
+					return err.Error(), 1
+				}
+				srv.autoriser(k)
+			}
+		}
+		return "", 0
+	})
+	corps := func(m map[string]any) map[string]any {
+		c := map[string]any{"nom": "VPS", "hote": srv.hote, "port": srv.port, "utilisateur": "athanor", "empreinte": srv.empreinte, "mode": "mot_de_passe"}
+		for k, v := range m {
+			c[k] = v
+		}
+		return c
+	}
+	entrees := len(s.coffre.Liste())
+
+	// 1) no password, a wrong one: refused, nothing kept
+	if code, v := appel("/api/serveurs/ajouter", corps(nil)); code != http.StatusBadRequest || v["erreur"] != errServeurMdpVide.Error() {
+		t.Errorf("no password: %d %v", code, v)
+	}
+	if code, v := appel("/api/serveurs/ajouter", corps(map[string]any{"mot_de_passe_serveur": "mauvais"})); code != http.StatusConflict || v["erreur"] != errServeurMdpRefuse.Error() {
+		t.Errorf("wrong password: %d %v", code, v)
+	}
+	if l, _ := lireServeurs(); len(l) != 0 || len(s.coffre.Liste()) != entrees {
+		t.Fatalf("a refused addition left something: %d servers, %d vault entries", len(l), len(s.coffre.Liste()))
+	}
+
+	// 2) the right password: key generated, put once in authorized_keys, the server reached with it
+	code, v := appel("/api/serveurs/ajouter", corps(map[string]any{"mot_de_passe_serveur": temoin}))
+	if code != 200 {
+		t.Fatalf("password: %d %v", code, v)
+	}
+	x := v["serveur"].(map[string]any)
+	id := x["id"].(string)
+	if x["etat"] != "ok" || x["mot_de_passe_coupe"] != false {
+		t.Errorf("added server: %v", x)
+	}
+	if i := slices.IndexFunc(s.coffre.Liste(), func(e EntreeCoffre) bool { return e.ID == x["cle"] }); i < 0 || s.coffre.Liste()[i].Source != "serveurs:"+id || s.coffre.Liste()[i].Portee != "infra" {
+		t.Errorf("its vault key: %v", x["cle"])
+	}
+	var vues []string
+	for len(srv.commandes) > 0 {
+		vues = append(vues, <-srv.commandes)
+	}
+	if len(vues) != 1 || !strings.Contains(vues[0], "chmod 700 ~/.ssh") || !strings.Contains(vues[0], "grep -qxF 'ssh-ed25519 ") {
+		t.Errorf("authorized_keys command: %q", vues)
+	}
+
+	// 3) cutting password logins: not before a key login (generated key not verified yet)
+	code, v = appel("/api/serveurs/ajouter", map[string]any{"nom": "VPS 2", "hote": srv.hote, "port": srv.port, "utilisateur": "athanor", "empreinte": srv.empreinte, "mode": "generee"})
+	if code != 200 {
+		t.Fatalf("generated key: %d %v", code, v)
+	}
+	if code, v := appel("/api/serveurs/"+v["serveur"].(map[string]any)["id"].(string), map[string]any{"couper_mot_de_passe": true}); code != http.StatusConflict || v["erreur"] != errCoupureAvantCle.Error() {
+		t.Errorf("cut before a key login: %d %v", code, v)
+	}
+	for c, e := range map[int]error{3: errCoupureSudo, 4: errCoupureConfig, 5: errCoupureIgnoree, 6: errCoupureRecharge} {
+		mu.Lock()
+		codeCoupure = c
+		mu.Unlock()
+		if code, v := appel("/api/serveurs/"+id, map[string]any{"couper_mot_de_passe": true}); code != http.StatusConflict || v["erreur"] != e.Error() {
+			t.Errorf("script code %d: %d %v", c, code, v)
+		}
+	}
+	// the key no longer opens the server after the change: undone through the session still open
+	srv.mu.Lock()
+	gardees := slices.Clone(srv.autorisees)
+	srv.mu.Unlock()
+	mu.Lock()
+	codeCoupure, refuserApres = 0, true
+	mu.Unlock()
+	if code, v := appel("/api/serveurs/"+id, map[string]any{"couper_mot_de_passe": true}); code != http.StatusConflict || v["erreur"] != errCoupureAnnulee.Error() || retours != 1 {
+		t.Errorf("undone cut: %d %v (%d undo)", code, v, retours)
+	}
+	srv.mu.Lock()
+	srv.autorisees = gardees
+	srv.mu.Unlock()
+	mu.Lock()
+	refuserApres = false
+	mu.Unlock()
+	if code, v := appel("/api/serveurs/"+id, map[string]any{"couper_mot_de_passe": true}); code != 200 || v["serveur"].(map[string]any)["mot_de_passe_coupe"] != true {
+		t.Errorf("cut: %d %v", code, v)
+	}
+	if l, _ := lireServeurs(); len(l) != 2 || !l[slices.IndexFunc(l, func(x ServeurInventaire) bool { return x.ID == id })].MotDePasseCoupe {
+		t.Errorf("inventory after the cut: %+v", l)
+	}
+
+	// 4) the password: in no response, nor any file of Athanor's folder (inventory, audit log, vault…)
+	if strings.Contains(reponses.String(), temoin) {
+		t.Error("the server's password is in a response")
+	}
+	var audit strings.Builder
+	for _, d := range []string{dossierAthanor(), dossierJournalAudit(), dossierModule("servers")} {
+		_ = filepath.WalkDir(d, func(p string, e os.DirEntry, err error) error {
+			if err == nil && !e.IsDir() {
+				b, _ := os.ReadFile(p)
+				if strings.Contains(string(b), temoin) {
+					t.Errorf("the server's password is in %s", p)
+				}
+				if strings.HasPrefix(p, dossierJournalAudit()) {
+					audit.Write(b)
+				}
+			}
+			return nil
+		})
+	}
+	for _, a := range []string{"serveur_ajoute", "(mot_de_passe)", "mot_de_passe_coupe", "coupure du mot de passe refusée"} {
+		if !strings.Contains(audit.String(), a) {
+			t.Errorf("audit log without %q", a)
+		}
+	}
+}
+
+// TestServeursAjout: the host fingerprint to confirm, an addition with a vault key (missing or changed
+// fingerprint refused, closed infra key 423, no password 409 with where to choose one, native mode asks for
+// Athanor's password), an addition with a generated key (public part and command, then Verify), and the
+// private keys found in no response, audit line or file of modules/servers.
+func TestServeursAjout(t *testing.T) {
+	s, appel, reponses := serveursAjoutTest(t)
 
 	signer, prive := nouvelleCleSSH(t)
 	srv := lancerSSHMemoire(t, signer.PublicKey(), "", nil)
@@ -199,5 +370,77 @@ func TestServeursAjout(t *testing.T) {
 				t.Fatalf("a private key line leaked (%d chars)", len(ligne))
 			}
 		}
+	}
+}
+
+// TestServeursMotDePasseConteneur: on the test server's real sshd (ATHANOR_SSH_TEST): addition with the
+// password, the key put once (.ssh 700), then password logins cut (password refused, key accepted), and
+// restored at the end for the other container tests.
+func TestServeursMotDePasseConteneur(t *testing.T) {
+	cible := os.Getenv("ATHANOR_SSH_TEST")
+	if cible == "" {
+		t.Skip("ATHANOR_SSH_TEST absent (bash .athanor/tools/serveur_ssh.sh start)")
+	}
+	hote, portTxt, err := net.SplitHostPort(cible)
+	if err != nil {
+		t.Fatal(err)
+	}
+	port, _ := strconv.Atoi(portTxt)
+	s, appel, _ := serveursAjoutTest(t)
+	motDePasseCoffreTest(t, s)
+	ctx := context.Background()
+	code, v := appel("/api/serveurs/empreinte", map[string]any{"hote": hote, "port": port})
+	if code != 200 {
+		t.Fatalf("fingerprint: %d %v", code, v)
+	}
+	empreinte := v["empreinte"].(string)
+	code, v = appel("/api/serveurs/ajouter", map[string]any{"nom": "Conteneur", "hote": hote, "port": port, "utilisateur": "athanor",
+		"empreinte": empreinte, "mode": "mot_de_passe", "mot_de_passe_serveur": motDePasseConteneurSSH})
+	if code != 200 {
+		t.Fatalf("addition with the password: %d %v", code, v)
+	}
+	x := v["serveur"].(map[string]any)
+	l, _ := lireServeurs()
+	srv := l[0]
+	client, err := s.connecterServeur(ctx, srv)
+	if err != nil {
+		t.Fatalf("key login: %v", err)
+	}
+	t.Cleanup(func() { // password logins back for TestConnexionSSHConteneur
+		defer client.Close()
+		if r, err := executerSSH(ctx, client, scriptRetourCoupure, nil, time.Minute); err != nil || r.Code != 0 {
+			t.Errorf("password logins not restored: %v %d %s", err, r.Code, r.Sortie)
+		}
+	})
+
+	// the key once in authorized_keys, even put again
+	prive, _ := s.coffre.Valeur(srv.Cle)
+	signer, err := ssh.ParsePrivateKey([]byte(prive))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := poserCle(ctx, client, strings.TrimSpace(string(ssh.MarshalAuthorizedKey(signer.PublicKey())))+" athanor-"+srv.ID); err != nil {
+		t.Fatal(err)
+	}
+	r, err := executerSSH(ctx, client, "grep -c athanor-"+srv.ID+" ~/.ssh/authorized_keys; stat -c %a ~/.ssh ~/.ssh/authorized_keys", nil, 10*time.Second)
+	if err != nil || strings.Fields(string(r.Sortie)) == nil || strings.Join(strings.Fields(string(r.Sortie)), " ") != "1 700 600" {
+		t.Errorf("authorized_keys: %v %q", err, r.Sortie)
+	}
+
+	// cut: password refused, key accepted
+	if code, v := appel("/api/serveurs/"+x["id"].(string), map[string]any{"couper_mot_de_passe": true}); code != 200 || v["serveur"].(map[string]any)["mot_de_passe_coupe"] != true {
+		t.Fatalf("cut: %d %v", code, v)
+	}
+	acces := AccesSSH{Hote: hote, Port: port, Utilisateur: "athanor", MotDePasse: motDePasseConteneurSSH, Empreinte: empreinte}
+	if c, err := connecterSSH(ctx, acces); err == nil {
+		c.Close()
+		t.Error("the password still opens the server after the cut")
+	}
+	if err := s.essayerCle(httptest.NewRequest("GET", "/", nil), srv); err != nil {
+		t.Errorf("the key after the cut: %v", err)
+	}
+	r, _ = executerSSH(ctx, client, "cat /etc/ssh/sshd_config.d/00-athanor.conf", nil, 10*time.Second)
+	if !strings.Contains(string(r.Sortie), "PasswordAuthentication no") {
+		t.Errorf("drop-in file: %q", r.Sortie)
 	}
 }

@@ -144,14 +144,20 @@ func (s *Serveur) apiServeur(w http.ResponseWriter, r *http.Request) {
 	s.ecrireJSON(w, map[string]any{"serveur": liste[i], "fiche": fiche})
 }
 
-// apiServeurModifier: POST /api/serveurs/{id} {nom?, roles?}: renames it or sets its roles.
+// apiServeurModifier: POST /api/serveurs/{id} {nom?, roles?}: renames it or sets its roles;
+// {couper_mot_de_passe:true}: cuts password logins (serveurs_ajout.go).
 func (s *Serveur) apiServeurModifier(w http.ResponseWriter, r *http.Request) {
 	var c struct {
-		Nom   *string   `json:"nom"`
-		Roles *[]string `json:"roles"`
+		Nom              *string   `json:"nom"`
+		Roles            *[]string `json:"roles"`
+		CouperMotDePasse bool      `json:"couper_mot_de_passe"`
 	}
 	if lireCorps(r, &c) != nil {
 		s.erreur(w, http.StatusBadRequest, "Invalid request")
+		return
+	}
+	if c.CouperMotDePasse {
+		s.couperMotDePasse(w, r, r.PathValue("id"))
 		return
 	}
 	if c.Nom != nil {

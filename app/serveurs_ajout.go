@@ -2,11 +2,14 @@ package main
 
 // Adding a server (P4): the address gives the host fingerprint the owner confirms (never accepted
 // silently), then the server is reached with an SSH key of the vault, or with an ed25519 key generated
-// here (infra entry of the vault, its public part and an authorized_keys command to copy, then Verify).
+// here (infra entry of the vault, its public part and an authorized_keys command to copy, then Verify), or
+// with the server's password given once (a generated key is put in authorized_keys, then the server is
+// reached again with it; the password is never kept nor logged). Cutting password logins comes after.
 // The private key never leaves the vault and this process: no response, audit line or file of
 // modules/servers holds it.
 
 import (
+	"context"
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/pem"
@@ -31,6 +34,9 @@ var (
 	errServeurPhrase      = erreurEntree("This SSH key is protected by a passphrase: Athanor needs a key without one")
 	errServeurInjoignable = errors.New("The server did not answer")
 	errServeurCleRefusee  = errors.New("The server refused the key: check that its public part is in ~/.ssh/authorized_keys")
+	errServeurMdpVide     = erreurEntree("Give the server's password")
+	errServeurMdpRefuse   = errors.New("The server refused the password")
+	errServeurClePosee    = errors.New("The key could not be put in ~/.ssh/authorized_keys on the server")
 
 	reHoteServeur        = regexp.MustCompile(`^[A-Za-z0-9._:%-]{1,253}$`)
 	reUtilisateurServeur = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.-]{0,31}$`)
@@ -44,10 +50,12 @@ type corpsAjoutServeur struct {
 	Port        int      `json:"port"`
 	Utilisateur string   `json:"utilisateur"`
 	Empreinte   string   `json:"empreinte"` // the fingerprint the owner confirmed
-	Mode        string   `json:"mode"`      // coffre | generee
+	Mode        string   `json:"mode"`      // coffre | generee | mot_de_passe
 	Cle         string   `json:"cle"`       // mode coffre: the vault entry
 	Roles       []string `json:"roles"`
 	MotDePasse  string   `json:"mot_de_passe"` // Athanor's password: native mode + an existing infra key (hub_preuve.go)
+	// mode mot_de_passe: the server's password, used for this request only
+	MotDePasseServeur string `json:"mot_de_passe_serveur"`
 }
 
 func verifierAdresseServeur(hote string, port int) error {
@@ -63,13 +71,14 @@ func verifierAdresseServeur(hote string, port int) error {
 // statutAjout: the HTTP status of an addition error.
 func statutAjout(err error) int {
 	switch {
-	case errors.Is(err, errCoffreSansMdp), errors.Is(err, errEmpreinteChangee), errors.Is(err, errServeurCleRefusee):
+	case errors.Is(err, errCoffreSansMdp), errors.Is(err, errEmpreinteChangee), errors.Is(err, errServeurCleRefusee),
+		errors.Is(err, errServeurMdpRefuse), errors.As(err, new(erreurCoupure)):
 		return http.StatusConflict // no password: the message names where to choose one
 	case errors.Is(err, errCoffreVerrouille):
 		return http.StatusLocked
 	case errors.Is(err, errCoffreInconnu), errors.Is(err, errServeurInconnu):
 		return http.StatusNotFound
-	case errors.Is(err, errServeurInjoignable):
+	case errors.Is(err, errServeurInjoignable), errors.Is(err, errServeurClePosee):
 		return http.StatusBadGateway
 	case errors.As(err, new(erreurEntree)):
 		return http.StatusBadRequest
@@ -102,17 +111,23 @@ func (s *Serveur) apiServeursEmpreinte(w http.ResponseWriter, r *http.Request) {
 	s.ecrireJSON(w, map[string]string{"empreinte": e})
 }
 
-// essayerCle: connects with the vault entry's key and the confirmed fingerprint, then hangs up.
-func (s *Serveur) essayerCle(r *http.Request, srv ServeurInventaire) error {
+// connecterServeur: a client reached with the vault entry's key and the confirmed fingerprint, its error
+// told in the owner's words.
+func (s *Serveur) connecterServeur(ctx context.Context, srv ServeurInventaire) (*ssh.Client, error) {
 	cle, err := s.coffre.Valeur(srv.Cle)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	c, err := connecterSSH(r.Context(), AccesSSH{Hote: srv.Hote, Port: srv.Port, Utilisateur: srv.Utilisateur, Cle: []byte(cle), Empreinte: srv.EmpreinteHote})
+	c, err := connecterSSH(ctx, AccesSSH{Hote: srv.Hote, Port: srv.Port, Utilisateur: srv.Utilisateur, Cle: []byte(cle), Empreinte: srv.EmpreinteHote})
+	return c, erreurConnexion(err, errServeurCleRefusee)
+}
+
+// erreurConnexion: a connection error as the owner reads it (refuse: what an authentication refusal means).
+func erreurConnexion(err, refuse error) error {
 	var phrase *ssh.PassphraseMissingError
 	switch {
 	case err == nil:
-		return c.Close()
+		return nil
 	case errors.Is(err, errEmpreinteChangee):
 		return errEmpreinteChangee
 	case errors.As(err, &phrase):
@@ -120,9 +135,40 @@ func (s *Serveur) essayerCle(r *http.Request, srv ServeurInventaire) error {
 	case strings.HasPrefix(err.Error(), "unreadable SSH key"):
 		return errServeurPasCle
 	case strings.Contains(err.Error(), "unable to authenticate"):
-		return errServeurCleRefusee
+		return refuse
 	}
 	return errServeurInjoignable
+}
+
+// essayerCle: connects with the vault entry's key and the confirmed fingerprint, then hangs up.
+func (s *Serveur) essayerCle(r *http.Request, srv ServeurInventaire) error {
+	c, err := s.connecterServeur(r.Context(), srv)
+	if err != nil {
+		return err
+	}
+	return c.Close()
+}
+
+// ajouterCleGeneree: a new ed25519 key for srv, kept as an infra entry of the vault; its public line.
+func (s *Serveur) ajouterCleGeneree(srv ServeurInventaire) (EntreeCoffre, string, error) {
+	prive, public, err := cleGeneree("athanor-" + srv.ID)
+	if err != nil {
+		return EntreeCoffre{}, "", err
+	}
+	e, err := s.coffre.Ajouter(EntreeCoffre{Nom: "SSH " + srv.Nom, Famille: "secret", Type: "ssh", Portee: "infra",
+		Source: "serveurs:" + srv.ID, Note: srv.Utilisateur + "@" + adresseSSH(srv.Hote, srv.Port)}, prive)
+	return e, public, err
+}
+
+// poserCle: puts the public line in ~/.ssh/authorized_keys once (.ssh 700, the file 600), whatever was there.
+func poserCle(ctx context.Context, c *ssh.Client, public string) error {
+	// public is "ssh-ed25519 <base64> athanor-<hex>": nothing in it can leave the single quotes
+	r, err := executerSSH(ctx, c, "umask 077; mkdir -p ~/.ssh && chmod 700 ~/.ssh && touch ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys && "+
+		"{ grep -qxF '"+public+"' ~/.ssh/authorized_keys || echo '"+public+"' >> ~/.ssh/authorized_keys; }", nil, 20*time.Second)
+	if err != nil || r.Code != 0 {
+		return errServeurClePosee
+	}
+	return nil
 }
 
 // cleGeneree: a new ed25519 key, as the vault keeps it (OpenSSH PEM) and as authorized_keys wants it.
@@ -195,8 +241,10 @@ func (s *Serveur) apiServeursAjouter(w http.ResponseWriter, r *http.Request) {
 			err = erreurEntree("The name is too long (100 characters at most)")
 		case !strings.HasPrefix(c.Empreinte, "SHA256:"):
 			err = errServeurEmpreinte
-		case c.Mode != "coffre" && c.Mode != "generee":
+		case c.Mode != "coffre" && c.Mode != "generee" && c.Mode != "mot_de_passe":
 			err = errServeurMode
+		case c.Mode == "mot_de_passe" && c.MotDePasseServeur == "":
+			err = errServeurMdpVide
 		}
 		if err != nil {
 			s.erreur(w, statutAjout(err), err.Error())
@@ -206,14 +254,12 @@ func (s *Serveur) apiServeursAjouter(w http.ResponseWriter, r *http.Request) {
 			Cle: c.Cle, EmpreinteHote: c.Empreinte, Roles: roles, Cree: time.Now().UTC(), Etat: "inconnu"}
 	}
 
+	if c.ID == "" && c.Mode == "mot_de_passe" {
+		s.ajouterParMotDePasse(w, r, srv, c.MotDePasseServeur, echec)
+		return
+	}
 	if c.ID == "" && c.Mode == "generee" {
-		prive, public, err := cleGeneree("athanor-" + srv.ID)
-		if err != nil {
-			echec(err)
-			return
-		}
-		e, err := s.coffre.Ajouter(EntreeCoffre{Nom: "SSH " + srv.Nom, Famille: "secret", Type: "ssh", Portee: "infra",
-			Source: "serveurs:" + srv.ID, Note: srv.Utilisateur + "@" + adresseSSH(srv.Hote, srv.Port)}, prive)
+		e, public, err := s.ajouterCleGeneree(srv)
 		if err != nil {
 			echec(err)
 			return
@@ -251,10 +297,41 @@ func (s *Serveur) apiServeursAjouter(w http.ResponseWriter, r *http.Request) {
 		echec(err)
 		return
 	}
+	s.serveurPret(w, r, srv, c.ID == "", "coffre")
+}
+
+// ajouterParMotDePasse: password login, a generated key put in authorized_keys, then the server reached
+// again with that key; on any failure the generated key leaves the vault. The password ends its life here.
+func (s *Serveur) ajouterParMotDePasse(w http.ResponseWriter, r *http.Request, srv ServeurInventaire, mdp string, echec func(error)) {
+	client, err := connecterSSH(r.Context(), AccesSSH{Hote: srv.Hote, Port: srv.Port, Utilisateur: srv.Utilisateur, MotDePasse: mdp, Empreinte: srv.EmpreinteHote})
+	if err != nil {
+		echec(erreurConnexion(err, errServeurMdpRefuse))
+		return
+	}
+	defer client.Close()
+	e, public, err := s.ajouterCleGeneree(srv)
+	if err != nil {
+		echec(err)
+		return
+	}
+	srv.Cle = e.ID
+	if err = poserCle(r.Context(), client, public); err == nil {
+		err = s.essayerCle(r, srv)
+	}
+	if err != nil {
+		_ = s.coffre.Supprimer(e.ID)
+		echec(err)
+		return
+	}
+	s.serveurPret(w, r, srv, true, "mot_de_passe")
+}
+
+// serveurPret: srv answered with its key: saved as ok (nouveau: appended; else Verify updates it).
+func (s *Serveur) serveurPret(w http.ResponseWriter, r *http.Request, srv ServeurInventaire, nouveau bool, mode string) {
 	srv.Etat, srv.Vu = "ok", time.Now().UTC()
 	err := modifierServeurs(func(l []ServeurInventaire) ([]ServeurInventaire, error) {
 		j := slices.IndexFunc(l, func(x ServeurInventaire) bool { return x.ID == srv.ID })
-		if c.ID == "" {
+		if nouveau {
 			return append(l, srv), nil
 		}
 		if j < 0 {
@@ -265,9 +342,125 @@ func (s *Serveur) apiServeursAjouter(w http.ResponseWriter, r *http.Request) {
 		return l, nil
 	})
 	if err != nil {
+		if mode == "mot_de_passe" {
+			_ = s.coffre.Supprimer(srv.Cle)
+		}
 		s.erreurServeurs(w, err)
 		return
 	}
-	s.ecrireAudit(LigneAudit{Type: "evenement", De: deQui(r), Vers: "servers", Action: "serveur_ajoute", Resultat: srv.Nom + " " + srv.Utilisateur + "@" + adresseSSH(srv.Hote, srv.Port)})
+	s.ecrireAudit(LigneAudit{Type: "evenement", De: deQui(r), Vers: "servers", Action: "serveur_ajoute", Resultat: srv.Nom + " " + srv.Utilisateur + "@" + adresseSSH(srv.Hote, srv.Port) + " (" + mode + ")"})
+	s.ecrireJSON(w, map[string]any{"serveur": srv})
+}
+
+// erreurCoupure: why password logins were not cut (409: the server stays as it was).
+type erreurCoupure string
+
+func (e erreurCoupure) Error() string { return string(e) }
+
+const (
+	errCoupureAvantCle = erreurCoupure("Connect to this server with its key first: password logins can only be cut after that")
+	errCoupureSudo     = erreurCoupure("Cutting password logins needs root or sudo without a password on the server")
+	errCoupureConfig   = erreurCoupure("The server's SSH configuration did not accept the change: nothing was changed")
+	errCoupureIgnoree  = erreurCoupure("Another setting of the server's SSH configuration still allows passwords: nothing was changed")
+	errCoupureRecharge = erreurCoupure("The server's SSH service could not be reloaded: nothing was changed")
+	errCoupureAnnulee  = erreurCoupure("The key no longer opened the server after the change: it was undone, password logins are still allowed")
+	errCoupureBloquee  = erreurCoupure("The key no longer opened the server and the change could not be undone: remove /etc/ssh/sshd_config.d/00-athanor.conf on the server, then reload its SSH service")
+)
+
+// shellCoupure: root or sudo -n, the drop-in file, and how to reload sshd (systemd, OpenRC, else its pid file).
+const shellCoupure = `S=; [ "$(id -u)" = 0 ] || S="sudo -n"
+[ -z "$S" ] || sudo -n true 2>/dev/null || exit 3
+F=/etc/ssh/sshd_config.d/00-athanor.conf; SSHD=$(command -v sshd || echo /usr/sbin/sshd)
+recharger() { $S systemctl reload ssh 2>/dev/null || $S systemctl reload sshd 2>/dev/null || $S rc-service sshd reload 2>/dev/null ||
+  $S kill -HUP "$(cat /run/sshd.pid 2>/dev/null || cat /var/run/sshd.pid 2>/dev/null)" 2>/dev/null; }
+`
+
+// scriptCoupure: the drop-in sorts first (sshd keeps the first value it reads), sshd -t then sshd -T check
+// it really applies, then reload; every failure removes the file again. Exit codes: see couperMotDePasse.
+const scriptCoupure = shellCoupure + `$S mkdir -p /etc/ssh/sshd_config.d &&
+printf '# Athanor: password logins cut. To allow them again, remove this file, then reload the SSH service.\nPasswordAuthentication no\nKbdInteractiveAuthentication no\n' | $S tee "$F" >/dev/null || exit 4
+$S "$SSHD" -t >/dev/null 2>&1 || { $S rm -f "$F"; exit 4; }
+$S "$SSHD" -T 2>/dev/null | grep -qix 'passwordauthentication no' || { $S rm -f "$F"; exit 5; }
+recharger || { $S rm -f "$F"; exit 6; }
+`
+
+const scriptRetourCoupure = shellCoupure + `$S rm -f "$F" && recharger`
+
+var attenteRechargeSSH = time.Second // between reconnection tries while sshd reloads; tests shorten it
+
+// couperMotDePasse: POST /api/serveurs/{id} {couper_mot_de_passe:true}: only for a server already reached
+// with its key. The first session stays open through the change, so that it can be undone if the key no
+// longer opens the server once sshd is reloaded.
+func (s *Serveur) couperMotDePasse(w http.ResponseWriter, r *http.Request, id string) {
+	if !s.coffrePret(w) {
+		return
+	}
+	liste, err := lireServeurs()
+	if err != nil {
+		s.erreurServeurs(w, err)
+		return
+	}
+	i := slices.IndexFunc(liste, func(x ServeurInventaire) bool { return x.ID == id })
+	if i < 0 {
+		s.erreurServeurs(w, errServeurInconnu)
+		return
+	}
+	srv := liste[i]
+	echec := func(err error) {
+		s.ecrireAudit(LigneAudit{Type: "evenement", De: deQui(r), Vers: "servers", Action: "coupure du mot de passe refusée", Resultat: srv.Nom + ": " + err.Error()})
+		s.erreur(w, statutAjout(err), err.Error())
+	}
+	if srv.Vu.IsZero() {
+		echec(errCoupureAvantCle)
+		return
+	}
+	client, err := s.connecterServeur(r.Context(), srv)
+	if err != nil {
+		echec(err)
+		return
+	}
+	defer client.Close()
+	res, err := executerSSH(r.Context(), client, scriptCoupure, nil, time.Minute)
+	if err != nil {
+		echec(errServeurInjoignable)
+		return
+	}
+	if e, ok := map[int]error{3: errCoupureSudo, 4: errCoupureConfig, 5: errCoupureIgnoree, 6: errCoupureRecharge}[res.Code]; ok {
+		echec(e)
+		return
+	} else if res.Code != 0 {
+		echec(errCoupureConfig)
+		return
+	}
+	var nouveau *ssh.Client
+	for essai := 0; essai < 5; essai++ { // sshd may be restarting
+		if nouveau, err = s.connecterServeur(r.Context(), srv); err == nil {
+			break
+		}
+		time.Sleep(attenteRechargeSSH)
+	}
+	if err != nil {
+		if res, err := executerSSH(r.Context(), client, scriptRetourCoupure, nil, time.Minute); err != nil || res.Code != 0 {
+			echec(errCoupureBloquee)
+		} else {
+			echec(errCoupureAnnulee)
+		}
+		return
+	}
+	nouveau.Close()
+	err = modifierServeurs(func(l []ServeurInventaire) ([]ServeurInventaire, error) {
+		j := slices.IndexFunc(l, func(x ServeurInventaire) bool { return x.ID == id })
+		if j < 0 {
+			return nil, errServeurInconnu
+		}
+		l[j].MotDePasseCoupe, l[j].Etat, l[j].Vu = true, "ok", time.Now().UTC()
+		srv = l[j]
+		return l, nil
+	})
+	if err != nil {
+		s.erreurServeurs(w, err)
+		return
+	}
+	s.ecrireAudit(LigneAudit{Type: "evenement", De: deQui(r), Vers: "servers", Action: "mot_de_passe_coupe", Resultat: srv.Nom + " " + srv.Utilisateur + "@" + adresseSSH(srv.Hote, srv.Port)})
 	s.ecrireJSON(w, map[string]any{"serveur": srv})
 }
