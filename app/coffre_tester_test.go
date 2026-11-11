@@ -114,7 +114,7 @@ func clePEMTest() string {
 // chaine: an SSH wire-format string.
 func chaine(b []byte) []byte { return binary.BigEndian.AppendUint32(nil, uint32(len(b))) }
 
-func ssh(parts ...[]byte) []byte {
+func blobSSH(parts ...[]byte) []byte {
 	var out []byte
 	for _, p := range parts {
 		out = append(append(out, chaine(p)...), p...)
@@ -124,15 +124,15 @@ func ssh(parts ...[]byte) []byte {
 
 // cleOpenSSH: an OpenSSH private key file whose public part is pub (the private part is not read).
 func cleOpenSSH(chiffre string, pub []byte) string {
-	b := append([]byte("openssh-key-v1\x00"), ssh([]byte(chiffre), []byte("none"), nil)...)
+	b := append([]byte("openssh-key-v1\x00"), blobSSH([]byte(chiffre), []byte("none"), nil)...)
 	b = append(b, 0, 0, 0, 1)
-	b = append(b, ssh(pub, []byte(aleatoire(40)))...)
+	b = append(b, blobSSH(pub, []byte(aleatoire(40)))...)
 	return string(pem.EncodeToMemory(&pem.Block{Type: "OPENSSH PRIVATE KEY", Bytes: b}))
 }
 
 func TestCoffreTesterSSH(t *testing.T) {
 	pubEd, privEd, _ := ed25519.GenerateKey(rand.Reader)
-	blobEd := ssh([]byte("ssh-ed25519"), pubEd)
+	blobEd := blobSSH([]byte("ssh-ed25519"), pubEd)
 	rsaK, _ := rsa.GenerateKey(rand.Reader, 2048)
 	pkcs8, _ := x509.MarshalPKCS8PrivateKey(privEd)
 	cas := []struct{ valeur, type_ string }{
