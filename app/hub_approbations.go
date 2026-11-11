@@ -240,7 +240,25 @@ func (s *Serveur) demanderApprobation(x Approbation) (Approbation, error) {
 	}
 	s.ecrireAudit(LigneAudit{Type: "evenement", De: x.Agent, Vers: "hub", Mission: x.Mission, Projet: x.Projet, Env: x.Env,
 		Agent: x.Agent, Action: "approbation demandée: " + x.Action, Resultat: res})
+	if err == nil {
+		s.notifierApprobation(x)
+	}
 	return x, err
+}
+
+// notifierApprobation (P7): the paired devices are told once, at the creation (the tag replaces nothing
+// else); a tap opens For you, where the approval is decided.
+func (s *Serveur) notifierApprobation(x Approbation) {
+	quoi := s.textePush("appr")
+	if x.Action == "demander_acces" {
+		quoi = s.textePush("appr_acces")
+	}
+	texte := x.Raison
+	if n := x.Details["nom"]; n != "" {
+		texte = n + " (" + x.Env + ") · " + texte
+	}
+	s.notifierAppareils(MessagePush{Titre: fmt.Sprintf(s.textePush("appr_titre"), moduleDev{}.Nom(), x.Projet, quoi),
+		Texte: texte, URL: "/#pourvous", Tag: "appr-" + x.ID})
 }
 
 // exigerAccord (I6): an action on prod or that destroys data waits for the owner's accord, unless the

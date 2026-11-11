@@ -70,6 +70,10 @@ func TestDistanceToutesRoutes(t *testing.T) {
 		{"POST", "/api/hub/audit/verifier", false}, // and checked
 		{"POST", "/api/hub/audit", true},
 		{"GET", "/api/hub/audit/verifier", true},
+		{"GET", "/api/hub/approbations", false},  // P7: the owner reads the approvals from the phone
+		{"POST", "/api/hub/approbations", false}, // and decides them
+		{"DELETE", "/api/hub/approbations", true},
+		{"POST", "/api/hub/approbations/x", true},
 		{"POST", "/api/acces", true},
 		{"GET", "/api/acces/x", true},
 		{"GET", "/api/hubx", true}, // plain prefix

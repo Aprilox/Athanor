@@ -293,7 +293,8 @@ var prefixesHub = []string{"/api/hub", "/api/coffre", "/api/acces"}
 
 // autorisesDistance: "METHOD path" of the hub a device may call (reading only, never a secret value).
 var autorisesDistance = map[string]bool{"GET /api/hub": true, "GET /api/coffre": true, "GET /api/acces": true,
-	"GET /api/hub/audit": true, "POST /api/hub/audit/verifier": true} // the audit log: read and checked, never written
+	"GET /api/hub/audit": true, "POST /api/hub/audit/verifier": true, // the audit log: read and checked, never written
+	"GET /api/hub/approbations": true, "POST /api/hub/approbations": true} // P7: the owner decides from the phone
 
 // refuseHubDistance: a hub route that is not in autorisesDistance (plain prefix: "/api/hubx" is refused too).
 func refuseHubDistance(r *http.Request) bool {
