@@ -61,4 +61,15 @@ func (s *Serveur) etatCoffre() EtatCoffre {
 	}
 	return e
 }
-func (moduleCoffre) Tutoriel() []EtapeTutoriel { return nil }
+
+// Tutoriel: the vault and a project's Access panel (its first visit opens it too, see proposerTutoriel);
+// exact about who sees what: infra values never reach the AI, granted code values do (as variables).
+func (moduleCoffre) Tutoriel() []EtapeTutoriel {
+	return []EtapeTutoriel{
+		{Titre: "Your keys", Texte: "Add your keys and settings here. Secrets are stored encrypted: once saved, a secret's value is never shown again, you can only replace or delete it.", Cible: ".cof-tete"},
+		{Titre: "Infra keys", Texte: "Infra keys (Cloudflare, SSH, your servers) open only with your password. Athanor keeps them and uses them itself when an action needs them: the AI never receives their value.", Cible: ".carte-coffre .badge-infra"},
+		{Titre: "Code keys", Texte: "Code keys (a service's test key, for instance) reopen alone on this PC. A project's pilot gets one only if you grant it to that project and to an environment (dev, staging, prod): it then reads its value, as a variable.", Cible: ".acc-grille", Page: "#acces"},
+		{Titre: "Before the start", Texte: "Next to Start, this badge says exactly what the pilot will receive, for the chosen environment.", Cible: ".acces-demarrer", Page: "#suivi"},
+		{Titre: "Remove at any time", Texte: "Untick a box or press Remove: the value is taken out of the pilot's file at once. This tour stays in the “?”, at the top of the Guide.", Cible: ".acc-projet", Page: "#acces"},
+	}
+}

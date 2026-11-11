@@ -1163,7 +1163,8 @@ function lancerTutoriel(m) {
 }
 // after each render: the tour of the page's module, if never shown here and nothing else is open
 function proposerTutoriel() {
-  const v = etat.vue, m = moduleDePage(etat.page);
+  // a project's Access panel is explained by the vault's tour (keys, scopes, grants, badge)
+  const v = etat.vue, m = etat.page === "acces" ? (etat.hubModules || []).find((x) => x.id === "coffre") : moduleDePage(etat.page);
   if (!v || v.verrouille || v.bienvenue || etat.assistant >= 0 || etat.visite >= 0 || !m || !(m.tutoriel || []).length) return;
   etat.toursVus ||= new Set(); // a paired device may not write the preference: shown once per session there
   if ((v.tours || {})[m.id] || etat.toursVus.has(m.id)) return;
@@ -1184,7 +1185,7 @@ function finirVisite() {
 function cibleVisite() {
   // the page may have been rebuilt since (the header is, every refresh): the same place, found again
   if (etat.visiteCible && etat.visiteCible.isConnected) return etat.visiteCible;
-  for (const c of etat.visiteSelecteurs || []) { const x = document.querySelector(c); if (x && x.offsetParent !== null) { etat.visiteCible = x; return x; } }
+  for (const c of etat.visiteSelecteurs || []) { const x = document.querySelector(c); if (x && x.offsetParent !== null) { etat.visiteCible = x; x.classList.add("visite-cible"); return x; } }
   return null;
 }
 function placerVoile() {

@@ -475,10 +475,24 @@ func TestTutoriels(t *testing.T) {
 			}
 		}
 	}
-	for _, id := range []string{"hub", "dev"} {
+	for _, id := range []string{"hub", "dev", "coffre"} {
 		if n := tours[id]; n < 4 || n > 6 {
 			t.Fatalf("%s tour: %d steps, want 4 to 6 (%v)", id, n, tours)
 		}
+	}
+	// the access tour says what is true: infra values never reach the AI, granted code values do, the
+	// badge, removal; never a blanket "the AI never reads any key"
+	var acces strings.Builder
+	for _, e := range (moduleCoffre{}).Tutoriel() {
+		acces.WriteString(e.Titre + " " + e.Texte + " " + e.Page + " ")
+	}
+	for _, v := range []string{"encrypted", "never shown again", "password", "the AI never receives their value", "only if you grant it", "environment", "as a variable", "badge", "#acces", "#suivi", "Remove"} {
+		if !strings.Contains(acces.String(), v) {
+			t.Fatalf("access tour without %q: %s", v, acces.String())
+		}
+	}
+	if a := strings.ToLower(acces.String()); strings.Contains(a, "never read") || strings.Contains(a, "never see") || strings.Contains(a, "no key") {
+		t.Fatalf("access tour with a blanket promise: %s", acces.String())
 	}
 	if _, ok := tours["serveurs"]; ok {
 		t.Fatal("a module without a tour sent one")
