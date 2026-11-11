@@ -48,6 +48,8 @@ type Serveur struct {
 	// project grants (acces_projets.go); accesErr: hub/acces.json exists but could not be read
 	acces    *Acces
 	accesErr error
+	// the hub's session tokens of the pilots (hub_jetons.go)
+	jetons *Sessions
 }
 
 func nouveauServeur(config Config) *Serveur {
@@ -79,6 +81,7 @@ func nouveauServeur(config Config) *Serveur {
 	}
 	s.chargerAcces() // before the vault: its import grants a key shared by two projects (accorderPartagee)
 	s.chargerCoffre()
+	s.chargerSessions()
 	s.bureau = NouveauBureau(kit)
 	// Windows: a window opened on the screen by a program the application started (a Claude run's): hidden
 	demarrerGardeFenetres(uint32(os.Getpid()), func(t string) { noterFenetreKit(s.kitCourant().Racine, t) })
@@ -277,6 +280,9 @@ func lancerAuDemarrage(p Projet) bool {
 
 // restarts: after "restart after the cycle", restarts the pilot as soon as it has stopped.
 func (s *Serveur) surveillerRelance(p Projet, actif bool) {
+	if !actif { // its hub token, once the start-up grace is over
+		s.revoquerJetons("pilote arrêté", func(x SessionHub) bool { return x.Projet == p.Nom && !s.piloteVu(p, x) })
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.dernierActif[p.Nom] && !actif && s.relancer[p.Nom] {
@@ -287,6 +293,7 @@ func (s *Serveur) surveillerRelance(p Projet, actif bool) {
 }
 
 func (s *Serveur) demarrerProjetsAuto() {
+	s.revoquerJetonsArretes() // the tokens of the pilots stopped while Athanor was closed
 	s.mu.Lock()
 	projets := append([]Projet{}, s.config.Projets...)
 	lancer := s.config.LancerPiloteAuDemarrage

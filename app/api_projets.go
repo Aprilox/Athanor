@@ -681,7 +681,12 @@ func (s *Serveur) demarrerPilote(p Projet) (string, error) {
 	if _, err := s.injecterAcces(p, nil); err != nil {
 		fmt.Fprintln(os.Stderr, "access injection:", p.Nom+":", err)
 	}
+	// its hub token for this launch (without it the pilot still runs, its hub tools answer an error)
+	if err := s.creerJetonPilote(p); err != nil {
+		fmt.Fprintln(os.Stderr, "hub token:", p.Nom+":", err)
+	}
 	if err := demarrerKitDetache(s.kitCourant(), "demarrer", optionFond(), p.Dossier); err != nil {
+		s.revoquerJetonProjet(p, "démarrage échoué")
 		return "", err
 	}
 	return "Pilot started: the first cycle (framing) takes a few minutes.", nil
@@ -689,7 +694,9 @@ func (s *Serveur) demarrerPilote(p Projet) (string, error) {
 
 // arreterPiloteProjet: stops the project's pilot now (the current cycle is interrupted).
 func (s *Serveur) arreterPiloteProjet(p Projet) (string, error) {
-	return executerKitArgs(s.kitCourant(), 2*time.Minute, "arreter", p.Dossier)
+	m, err := executerKitArgs(s.kitCourant(), 2*time.Minute, "arreter", p.Dossier)
+	s.revoquerJetonProjet(p, "pilote arrêté")
+	return m, err
 }
 
 // retirerStop: the stop asked for the end of the cycle is withdrawn (the pilot goes on).
