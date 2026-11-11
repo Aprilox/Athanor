@@ -67,6 +67,11 @@ func lireInventaire() ([]ServeurInventaire, error) {
 	if f.Serveurs == nil {
 		f.Serveurs = []ServeurInventaire{}
 	}
+	for i := range f.Serveurs {
+		if f.Serveurs[i].Roles == nil { // written null by an older version: always a list for the page
+			f.Serveurs[i].Roles = []string{}
+		}
+	}
 	return f.Serveurs, nil
 }
 
@@ -107,7 +112,7 @@ func rolesValides(l []string) ([]string, error) {
 			return nil, erreurEntree("Unknown server role")
 		}
 	}
-	return slices.Compact(slices.Sorted(slices.Values(l))), nil
+	return append([]string{}, slices.Compact(slices.Sorted(slices.Values(l)))...), nil // never nil: [] for the page
 }
 
 func (s *Serveur) erreurServeurs(w http.ResponseWriter, err error) {
@@ -180,6 +185,9 @@ func (s *Serveur) apiServeurModifier(w http.ResponseWriter, r *http.Request) {
 			return
 		case utf8.RuneCountInString(n) > 100:
 			s.erreur(w, http.StatusBadRequest, "The name is too long (100 characters at most)")
+			return
+		case strings.IndexFunc(n, caractereInvisible) >= 0:
+			s.erreur(w, http.StatusBadRequest, errNomInvisible.Error())
 			return
 		}
 		c.Nom = &n

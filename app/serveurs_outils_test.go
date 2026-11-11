@@ -17,6 +17,9 @@ import (
 
 const temoinOutils = "témoin-valeur-du-coffre-4242"
 
+// temoinEchappe: a vault value JSON escapes (B54): it must not reach the audit log in its escaped form either.
+const temoinEchappe = `témoin-échappé-4343&<x>"q\z`
+
 // journalAuditTexte: every line of the hub's audit log, as written.
 func journalAuditTexte(t *testing.T) string {
 	t.Helper()
@@ -39,6 +42,9 @@ func outilsServeursTest(t *testing.T, hote string, port int, empreinte string, p
 		t.Fatal(err)
 	}
 	if _, err := s.coffre.Ajouter(EntreeCoffre{Nom: "Témoin", Famille: "secret", Type: "jeton", Portee: "code"}, temoinOutils); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.coffre.Ajouter(EntreeCoffre{Nom: "Témoin échappé", Famille: "secret", Type: "jeton", Portee: "code"}, temoinEchappe); err != nil {
 		t.Fatal(err)
 	}
 	srv := ServeurInventaire{ID: "ab12", Nom: "VPS", Hote: hote, Port: port, Utilisateur: "athanor", Cle: cle.ID, EmpreinteHote: empreinte, Etat: "ok"}
@@ -135,7 +141,7 @@ func TestServeursOutils(t *testing.T) {
 	if c := derniere(); !strings.Contains(c, citerShell(piege)) || strings.HasPrefix(c, "sudo") {
 		t.Errorf("path not quoted: %s", c)
 	}
-	for _, p := range []string{"etc/passwd", "", "/tmp/a\nb", "/tmp/\x00"} {
+	for _, p := range []string{"etc/passwd", "", "/tmp/a\nb", "/tmp/\x00", "/tmp/a‮b", "/tmp/a​b", "/tmp/a b", "/tmp/a b"} {
 		if _, err := appel("fichier_lire", map[string]any{"chemin": p}); err == nil {
 			t.Errorf("path %q accepted", p)
 		}
@@ -149,6 +155,10 @@ func TestServeursOutils(t *testing.T) {
 	if c := derniere(); !strings.HasPrefix(c, "sudo -n sh -c ") || !strings.Contains(c, "mv -f") {
 		t.Errorf("write command: %s", c)
 	}
+	if r, err := appel("fichier_ecrire", map[string]any{"chemin": "/tmp/b.env", "contenu": "SPECIAL=" + temoinEchappe + "\n"}); err != nil || strings.Contains(r.Sortie, "4343") {
+		t.Errorf("write with an escaped witness: %v %+v", err, r)
+	}
+	derniere()
 	if _, err := appel("fichier_ecrire", map[string]any{"chemin": "/etc/app.conf"}); err == nil {
 		t.Error("write without contenu accepted")
 	}
@@ -297,7 +307,7 @@ func TestServeursOutils(t *testing.T) {
 	if !strings.Contains(journal, `"vers":"serveur:`+srv.ID+`"`) || !strings.Contains(journal, "code 5") {
 		t.Errorf("audit lines without server or code: %s", journal)
 	}
-	for _, x := range []string{temoinOutils, "PRIVATE KEY", strings.Repeat("y", auditMaxOutil+1)} {
+	for _, x := range []string{temoinOutils, "4343", "PRIVATE KEY", strings.Repeat("y", auditMaxOutil+1)} {
 		if strings.Contains(journal, x) {
 			t.Errorf("audit log holds %.40q", x)
 		}
@@ -365,6 +375,12 @@ func TestServeursOutilsConteneur(t *testing.T) {
 	}
 	if r := appel("ssh_commande", map[string]any{"commande": "stat -c '%a %U' /etc/athanor-test.conf; sudo -n cat /etc/athanor-test.conf; sudo -n rm -f /etc/athanor-test.conf"}); r.Sortie != "640 root\nnouveau\n" {
 		t.Errorf("root file: %q", r.Sortie)
+	}
+	if r := appel("fichier_ecrire", map[string]any{"chemin": "/tmp", "contenu": "x"}); r.Code == 0 || !strings.Contains(r.Sortie, "is a directory") {
+		t.Errorf("write on a folder: %+v", r)
+	}
+	if r := appel("ssh_commande", map[string]any{"commande": "ls /tmp | grep -c athanor || true"}); strings.TrimSpace(r.Sortie) != "0" {
+		t.Errorf("write on a folder left a file: %q", r.Sortie)
 	}
 	if r := appel("fichier_ecrire", map[string]any{"chemin": "/etc/refuse.conf", "contenu": "x"}); r.Code == 0 {
 		t.Errorf("write without sudo in /etc: %+v", r)

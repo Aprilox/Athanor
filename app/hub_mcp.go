@@ -6,6 +6,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -19,6 +20,9 @@ type OutilHub struct {
 	Schema      map[string]any // JSON Schema of the arguments
 	Faire       func(s *Serveur, x SessionHub, args json.RawMessage) (string, error)
 }
+
+// corpsMaxMCP: a request's body; room for fichier_ecrire's 1 MB once JSON has escaped it.
+const corpsMaxMCP = 4 * tailleMaxFichier
 
 // outilsHub: every tool by name (filled by the modules' init, hub_outils_dev.go); a session sees only those of its token.
 var outilsHub = map[string]OutilHub{}
@@ -51,7 +55,11 @@ func (s *Serveur) apiMCP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var q requeteMCP
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&q); err != nil {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, corpsMaxMCP)).Decode(&q); err != nil {
+		if _, trop := errors.AsType[*http.MaxBytesError](err); trop {
+			repondreMCP(w, http.StatusOK, nil, nil, &erreurMCP{-32700, fmt.Sprintf("request larger than %d bytes: send large files with sftp_envoyer", corpsMaxMCP)})
+			return
+		}
 		repondreMCP(w, http.StatusOK, nil, nil, &erreurMCP{-32700, "parse error"})
 		return
 	}

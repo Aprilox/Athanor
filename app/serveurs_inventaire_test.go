@@ -83,10 +83,18 @@ func TestServeursInventaire(t *testing.T) {
 		t.Errorf("rename: %d %v", code, v)
 	}
 	for _, c := range []struct{ corps, cle string }{{`{"nom":" "}`, "Give the server a name"}, {`{"roles":["root"]}`, "Unknown server role"},
-		{`{"nom":"` + strings.Repeat("x", 101) + `"}`, "The name is too long (100 characters at most)"}} {
+		{`{"nom":"` + strings.Repeat("x", 101) + `"}`, "The name is too long (100 characters at most)"},
+		{`{"nom":"vps‮gnp"}`, "The name holds control or invisible characters"}, {`{"nom":"a​b"}`, "The name holds control or invisible characters"}} {
 		if code, v := appel("POST", "/api/serveurs/"+ids[1], c.corps); code != 400 || v["erreur_key"] != c.cle {
 			t.Errorf("%s: %d %v", c.corps, code, v)
 		}
+	}
+	// no role: [] for the pages, never null (B53)
+	if code, v := appel("POST", "/api/serveurs/"+ids[1], `{"roles":[]}`); code != 200 || v["serveur"].(map[string]any)["roles"] == nil {
+		t.Errorf("empty roles: %d %v", code, v)
+	}
+	if l, _ := lireServeurs(); len(l) < 2 || l[1].Roles == nil {
+		t.Errorf("empty roles read back as nil: %+v", l)
 	}
 	if code, _ := appel("POST", "/api/serveurs/inconnu", `{"nom":"x"}`); code != 404 {
 		t.Errorf("rename unknown: %d", code)

@@ -4480,7 +4480,7 @@ function carteServeur(x, fiche) {
   return `<div class="bloc carte-serveur" data-srv-id="${h(x.id)}">
     <div class="cp-tete"><a class="cp-nom" href="#serveur/${encodeURIComponent(x.id)}"><b>${h(x.nom)}</b></a><span class="pastille ${cls}">${sante}</span></div>
     <div class="muet petit"><code>${h(x.utilisateur)}@${h(x.hote)}${x.port === 22 ? "" : ":" + x.port}</code>${f.systeme && f.systeme.nom ? " · " + h(f.systeme.nom) : ""}</div>
-    <div class="ligne m0">${x.roles.length ? x.roles.map((r) => `<span class="badge${r === "prod" ? " badge-infra" : ""}">${h(r)}</span>`).join("") : `<span class="muet petit">${t("No role yet")}</span>`}</div>
+    <div class="ligne m0">${(x.roles || []).length ? x.roles.map((r) => `<span class="badge${r === "prod" ? " badge-infra" : ""}">${h(r)}</span>`).join("") : `<span class="muet petit">${t("No role yet")}</span>`}</div>
     <div class="petit srv-tourne" title="${h(tourne.join(", "))}">${h(resume)}</div>
     <div class="muet petit">${t("Last deployments: none yet (deployments come in a later version of Athanor).")}</div>
     <div class="muet petit">${x.vu ? h(t("Seen {0}", [dateLisible(x.vu)])) : h(t("Added {0}", [dateLisible(x.cree)]))}</div>
@@ -4643,8 +4643,8 @@ pages.serveur = async () => {
   const x = d.serveur, f = d.fiche, attente = x.etat === "inconnu";
   srv.fiche = x; // the actions below act on the server shown
   const sante = { ok: t("Reachable"), injoignable: t("Unreachable") }[x.etat] || t("Waiting for its key");
-  const role = (r) => distant ? (x.roles.includes(r) ? `<span class="badge${r === "prod" ? " badge-infra" : ""}">${r}</span>` : "")
-    : `<label class="radio"><input type="checkbox" class="srv-fiche-role" value="${r}"${x.roles.includes(r) ? " checked" : ""}> ${r === "dev" ? t("dev (tests, previews)") : t("prod (your live site)")}</label>`;
+  const role = (r) => distant ? ((x.roles || []).includes(r) ? `<span class="badge${r === "prod" ? " badge-infra" : ""}">${r}</span>` : "")
+    : `<label class="radio"><input type="checkbox" class="srv-fiche-role" value="${r}"${(x.roles || []).includes(r) ? " checked" : ""}> ${r === "dev" ? t("dev (tests, previews)") : t("prod (your live site)")}</label>`;
   return `<div class="serveurs srv-fiche">
     <p class="m0"><a href="#serveurs" class="petit">← ${t("Servers")}</a></p>
     ${distant ? "" : messagesCoffreServeurs(c)}

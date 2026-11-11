@@ -83,6 +83,9 @@ func (s *Serveur) appelerOutilServeur(ctx context.Context, de, id, outil string,
 		r.Sortie, r.Coupee = r.Sortie[:sortieMaxOutil], true
 	}
 	// masked before being cut: a cut value would no longer be recognised
+	if v := any(nil); json.Unmarshal(args, &v) == nil { // one escaping form (Go's), the one masquerSecrets also knows
+		args, _ = json.Marshal(v)
+	}
 	res := fmt.Sprintf("%s · code %d · %s", couper(s.masquerSecrets(string(args)), auditMaxOutil), r.Code, couper(r.Sortie, auditMaxOutil))
 	if err != nil {
 		res += " · error: " + couper(s.masquerSecrets(err.Error()), auditMaxOutil)
@@ -144,10 +147,17 @@ func outilSSHCommande(ctx context.Context, c *ssh.Client, _ ServeurInventaire, a
 
 // cheminDistant: an absolute path on the server, without control characters (it is always passed quoted).
 func cheminDistant(nom, p string) (string, error) {
-	if !strings.HasPrefix(p, "/") || len(p) > 4096 || strings.IndexFunc(p, unicode.IsControl) >= 0 {
-		return "", fmt.Errorf("%s must be an absolute path on the server (/…), without control characters", nom)
+	if !strings.HasPrefix(p, "/") || len(p) > 4096 || strings.IndexFunc(p, caractereInvisible) >= 0 {
+		return "", fmt.Errorf("%s must be an absolute path on the server (/…), without control or invisible characters", nom)
 	}
 	return p, nil
+}
+
+var errNomInvisible = erreurEntree("The name holds control or invisible characters")
+
+// caractereInvisible: control, format (U+202E, zero widths) and line/paragraph separators: what is shown would not be what runs.
+func caractereInvisible(r rune) bool {
+	return unicode.IsControl(r) || unicode.In(r, unicode.Cf, unicode.Zl, unicode.Zp)
 }
 
 // scriptShell: sh -c script with its arguments, every one quoted, run through sudo -n when asked.
@@ -180,7 +190,8 @@ func outilFichierLire(ctx context.Context, c *ssh.Client, _ ServeurInventaire, a
 
 // scriptEcrire: the content goes to a temporary file next to the target, which keeps the target's mode
 // (and owner under sudo), then replaces it in one rename; a failure leaves the target as it was.
-const scriptEcrire = `t=$(mktemp "$1.athanor.XXXXXX") || exit 1
+const scriptEcrire = `[ -d "$1" ] && { echo "$1 is a directory" >&2; exit 1; }
+t=$(mktemp "$1.athanor.XXXXXX") || exit 1
 if cat > "$t"; then
   if [ -e "$1" ]; then chmod "$(stat -c %a -- "$1")" "$t" && { [ "$(id -u)" != 0 ] || chown "$(stat -c %u:%g -- "$1")" "$t"; }; else chmod 644 "$t"; fi && mv -f -- "$t" "$1" && echo "$2 bytes written to $1" && exit 0
 fi

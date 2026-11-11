@@ -309,6 +309,11 @@ func (s *Serveur) secretsOuverts() []string {
 // masquerSecrets: an agent's free text with the vault's readable values masked, as in the audit log.
 func (s *Serveur) masquerSecrets(t string) string {
 	v := s.secretsOuverts()
+	for _, x := range v { // inside JSON text (tool arguments) a value appears escaped: mask that form too
+		if b, _ := json.Marshal(x); string(b[1:len(b)-1]) != x {
+			v = append(v, string(b[1:len(b)-1]))
+		}
+	}
 	slices.SortFunc(v, func(x, y string) int { return len(y) - len(x) })
 	return masquerTexte(t, v)
 }

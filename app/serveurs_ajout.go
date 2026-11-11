@@ -239,6 +239,8 @@ func (s *Serveur) apiServeursAjouter(w http.ResponseWriter, r *http.Request) {
 			err = errServeurUtilisateur
 		case utf8.RuneCountInString(c.Nom) > 100:
 			err = erreurEntree("The name is too long (100 characters at most)")
+		case strings.IndexFunc(c.Nom, caractereInvisible) >= 0:
+			err = errNomInvisible
 		case !strings.HasPrefix(c.Empreinte, "SHA256:"):
 			err = errServeurEmpreinte
 		case c.Mode != "coffre" && c.Mode != "generee" && c.Mode != "mot_de_passe":

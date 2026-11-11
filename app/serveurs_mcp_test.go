@@ -76,6 +76,15 @@ func TestServeursMCP(t *testing.T) {
 		t.Errorf("another agent: %v %q", e, txt)
 	}
 
+	// fichier_ecrire's limit is reached over MCP (its message, not a parse error); a body beyond the route's limit says its size
+	trop := strings.Repeat(`\"`, tailleMaxFichier+1) // 1 MB + 1 byte of content, twice that once escaped
+	if txt, e := appel(jeton, "fichier_ecrire", `{"serveur":"ab12","chemin":"/tmp/x","contenu":"`+trop+`"}`); !e || !strings.Contains(txt, "send it with sftp_envoyer") {
+		t.Errorf("content over the limit: %v %.200q", e, txt)
+	}
+	if rep := appelMCP(t, mux, "Bearer "+jeton, `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"x":"`+strings.Repeat("a", corpsMaxMCP)+`"}}`); rep.Error == nil || !strings.Contains(rep.Error.Message, "request larger than") {
+		t.Errorf("body over the route's limit: %+v", rep.Error)
+	}
+
 	// the list: the perimeter only, no address
 	txt, e := appel(jeton, "serveurs_liste", `{}`)
 	if e || !strings.Contains(txt, `"ab12"`) || strings.Contains(txt, "cd34") || strings.Contains(txt, mem.hote) {
