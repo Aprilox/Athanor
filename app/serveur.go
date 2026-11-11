@@ -623,7 +623,7 @@ func (s *Serveur) apiMotDePasse(w http.ResponseWriter, r *http.Request) {
 		s.erreur(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	go s.ecrireAudit(LigneAudit{Type: "evenement", De: deQui(r), Vers: "hub", Action: "mot de passe", Resultat: map[bool]string{true: "créé", false: "changé"}[premier] + map[bool]string{true: " (retiré)", false: ""}[retrait]})
+	s.ecrireAudit(LigneAudit{Type: "evenement", De: deQui(r), Vers: "hub", Action: "mot de passe", Resultat: map[bool]string{true: "créé", false: "changé"}[premier] + map[bool]string{true: " (retiré)", false: ""}[retrait]})
 	s.ecrireJSON(w, map[string]bool{"ok": true, "defini": s.config.MotDePasseHash != ""})
 }
 
