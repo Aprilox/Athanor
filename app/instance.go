@@ -95,6 +95,9 @@ func (s *Serveur) apiInstance(w http.ResponseWriter, r *http.Request) {
 	switch r.PathValue("action") {
 	case "montrer":
 		demanderFenetre()
+	case "urgence": // athanor arret-urgence
+		s.ecrireJSON(w, s.arretUrgence("terminal"))
+		return
 	case "terminal":
 		// athanor tui while Athanor runs: a single-use address for the terminal (the secret of instance.json,
 		// a file of the user's own, mode 0600, out of reach of Claude's sandbox: as for "montrer")

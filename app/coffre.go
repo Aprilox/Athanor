@@ -124,6 +124,7 @@ type Coffre struct {
 	f        fichierCoffre
 	cleCode  []byte // nil: closed
 	cleInfra []byte
+	urgence  string // emergency stop (RFC 3339): the keystore no longer reopens the code key
 }
 
 func cheminCoffre() string { return filepath.Join(dossierAthanor(), "hub", "coffre.json") }
@@ -238,7 +239,7 @@ func (c *Coffre) Deverrouiller(mdp string) error {
 		infra = octetsAleatoires(32)
 		c.f.Cles.Infra.Mdp = sceller(kek, infra, aadCle("infra"))
 	}
-	c.cleCode, c.cleInfra = code, infra
+	c.cleCode, c.cleInfra, c.urgence = code, infra, ""
 	if nouvelles && len(c.f.Entrees) > 0 {
 		return c.enregistrer()
 	}
@@ -256,6 +257,9 @@ func (c *Coffre) OuvrirCode() error {
 func (c *Coffre) ouvrirCode() error {
 	if c.cleCode != nil {
 		return nil
+	}
+	if c.urgence != "" {
+		return errCoffreVerrouille
 	}
 	if c.systeme == nil {
 		if c.f.Cles.Code.Mdp == "" {
@@ -323,6 +327,30 @@ func (c *Coffre) Verrouiller() {
 		clear(c.cleCode)
 		c.cleCode = nil
 	}
+}
+
+// Fermer (emergency stop) forgets both keys; only the password (Deverrouiller) or Rouvrir opens them again.
+func (c *Coffre) Fermer() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	clear(c.cleInfra)
+	clear(c.cleCode)
+	c.cleInfra, c.cleCode = nil, nil
+	c.urgence = time.Now().UTC().Format(time.RFC3339)
+}
+
+// Rouvrir lets the keystore open the code key again after an emergency stop (Resume, no password set).
+func (c *Coffre) Rouvrir() {
+	c.mu.Lock()
+	c.urgence = ""
+	c.mu.Unlock()
+}
+
+// Urgence: when the emergency stop closed the vault, "" once reopened.
+func (c *Coffre) Urgence() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.urgence
 }
 
 // ChangerMotDePasse rewraps the data keys only (entries untouched). nouveau "" removes the password,

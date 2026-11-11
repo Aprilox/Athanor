@@ -19,7 +19,7 @@
   --ombre: 0 14px 36px rgba(0, 0, 0, .45);
   --ok: #3fc6a5;
   --attention: #f2b441;
-  --erreur: #e5584f;
+  --erreur: #e5584f; --erreur-vif: #f07068; /* a red text on the dark menu (AA) */
   --info: #6fa8ff;
   --violet: #b48cff;
   --sur-fort: #10171a;    /* text on a filled accent / ok button */
@@ -45,14 +45,14 @@
   --bg: #f3f5f8; --panel: #ffffff; --panel-2: #eef1f5; --panel-3: #e3e8ee; --sombre: #f7f9fb; --sombre-2: #eef1f5;
   --line: #d9dfe7; --line-2: #e6eaf0; --ink: #1b2430; --muted: #525e6c; --faible: #636d78; --voile: rgba(243, 245, 248, .96);
   --ombre: 0 14px 36px rgba(20, 30, 45, .18);
-  --ok: #137a62; --attention: #946219; --erreur: #c53d35; --info: #2c69cb; --violet: #7a4fd6; --sur-attention: #ffffff;
+  --ok: #137a62; --attention: #946219; --erreur: #c53d35; --erreur-vif: var(--erreur); --info: #2c69cb; --violet: #7a4fd6; --sur-attention: #ffffff;
   --j-pilote: #7a5d12; --j-outil: #0f7f7f; --j-outil-m: #178f8f; --j-texte-m: #1b2430; --j-erreur: #b4322b; --j-sous: #6a3fd0; --j-fin: #178f72;
 }
 :root[data-theme="sable"] {
   --bg: #f6f1e8; --panel: #fffdf8; --panel-2: #f0e9dc; --panel-3: #e7dece; --sombre: #faf6ee; --sombre-2: #f0e9dc;
   --line: #e0d6c5; --line-2: #ebe3d5; --ink: #2b2620; --muted: #5f574d; --faible: #6f675e; --voile: rgba(246, 241, 232, .96);
   --ombre: 0 14px 36px rgba(60, 45, 20, .18);
-  --ok: #26754f; --attention: #955a0f; --erreur: #bf3b2e; --info: #2b63b8; --violet: #7048c0; --sur-attention: #ffffff;
+  --ok: #26754f; --attention: #955a0f; --erreur: #bf3b2e; --erreur-vif: var(--erreur); --info: #2b63b8; --violet: #7048c0; --sur-attention: #ffffff;
   --j-pilote: #7a5212; --j-outil: #0f7a6f; --j-outil-m: #178f82; --j-texte-m: #2b2620; --j-erreur: #a8302a; --j-sous: #6239b8; --j-fin: #2d8a5e;
 }
 :root[data-accent="bleu"]    { --accent: #5b9dff; --accent-2: #78b0ff; --accent-halo: rgba(91, 157, 255, .2); }
@@ -296,6 +296,7 @@ a[data-href] { cursor: pointer; }
 .btn-petit { padding: 4px 10px; font-size: 13px; }
 .btn-fantome { background: none; border: 1px solid var(--line); border-radius: 6px; padding: 8px 12px; cursor: pointer; color: var(--muted); text-align: left; }
 .btn-fantome:hover { color: var(--ink); background: var(--panel-2); }
+.btn-urgence, .btn-urgence:hover { color: var(--erreur-vif); border-color: var(--erreur-vif); }
 textarea { width: 100%; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; resize: vertical; min-height: 80px; }
 textarea.code, .code { font-family: var(--mono); font-size: 13px; }
 input[type=text], input[type=password] { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; width: 100%; }

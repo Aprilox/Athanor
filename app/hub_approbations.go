@@ -215,6 +215,22 @@ func (a *Approbations) Decider(id, decision, par string) (Approbation, error) {
 	return *x, nil
 }
 
+// RefuserTout (emergency stop): every pending approval refused by par; the refused ones.
+func (a *Approbations) RefuserTout(par string) ([]Approbation, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.expirer()
+	var out []Approbation
+	t := a.maintenant().Format(time.RFC3339)
+	for i := range a.liste {
+		if x := &a.liste[i]; x.Etat == "attente" {
+			x.Etat, x.Par, x.T = "refusee", par, t
+			out = append(out, *x)
+		}
+	}
+	return out, a.enregistrer()
+}
+
 // Regle: the owner said "do not ask again" for this action of this project in this environment.
 func (a *Approbations) Regle(projet, env, action string) bool {
 	a.mu.Lock()

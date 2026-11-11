@@ -1115,6 +1115,7 @@ function traduireNav() {
   if (etat.hubModules) rendreMenu(etat.hubModules);
   else document.querySelectorAll("#nav-tiroir [data-libelle]").forEach((x) => { x.textContent = t(x.dataset.libelle); });
   $("#btn-verrou").textContent = "🔒 " + t("Lock");
+  $("#btn-urgence").textContent = "⛔ " + t("Emergency stop");
   $("#verrou-titre").textContent = t("Application locked");
   $("#verrou-mdp").placeholder = t("Password");
   $("#verrou-bouton").textContent = t("Unlock");
@@ -4782,6 +4783,12 @@ $("#verrou-form").addEventListener("submit", async (ev) => {
   catch (e) { $("#verrou-erreur").textContent = e.message; }
 });
 $("#btn-verrou").addEventListener("click", async () => { await action(api("verrouiller", "POST")); etat.verrouille = true; afficherVerrou(); });
+$("#btn-urgence").addEventListener("click", async () => {
+  if (!(await confirmer(t("Emergency stop? Every pilot stops now (the current cycle is cut), every hub session is revoked, the pending approvals are refused and the vault is locked. To resume: unlock Athanor, then Start each project."), { ok: t("Emergency stop"), danger: true }))) return;
+  const r = await action(api("hub/urgence", "POST", {}));
+  if (r && r.resultat && r.resultat.verrouille) { etat.verrouille = true; afficherVerrou(); }
+  rafraichir();
+});
 
 // --- refresh loop
 async function rafraichir() {

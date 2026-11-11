@@ -74,6 +74,8 @@ func TestDistanceToutesRoutes(t *testing.T) {
 		{"POST", "/api/hub/approbations", false}, // and decides them
 		{"DELETE", "/api/hub/approbations", true},
 		{"POST", "/api/hub/approbations/x", true},
+		{"POST", "/api/hub/urgence", false}, // the emergency stop from the phone
+		{"GET", "/api/hub/urgence", true},
 		{"POST", "/api/acces", true},
 		{"GET", "/api/acces/x", true},
 		{"GET", "/api/hubx", true}, // plain prefix
