@@ -9,6 +9,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"time"
 )
@@ -253,7 +254,7 @@ func (s *Serveur) revoquerJetonsArretes() {
 	}
 	s.mu.Lock() // a copy: s.mu is never taken under the store's lock
 	projets := map[string]Projet{}
-	for _, p := range s.config.Projets {
+	for _, p := range s.projetsHub() {
 		projets[p.Nom] = p
 	}
 	s.mu.Unlock()
@@ -266,10 +267,18 @@ func (s *Serveur) revoquerJetonsArretes() {
 func (s *Serveur) projetParNom(nom string) (Projet, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for _, p := range s.config.Projets {
+	for _, p := range s.projetsHub() {
 		if p.Nom == nom {
 			return p, true
 		}
 	}
 	return Projet{}, false
+}
+
+// projetsHub (under s.mu): the projects, plus the temporary one of Test the hub's MCP while it runs.
+func (s *Serveur) projetsHub() []Projet {
+	if s.projetTestMCP.Nom == "" {
+		return s.config.Projets
+	}
+	return append(slices.Clip(s.config.Projets), s.projetTestMCP)
 }

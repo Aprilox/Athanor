@@ -256,7 +256,7 @@ func (s *Serveur) demanderApprobation(x Approbation) (Approbation, error) {
 	}
 	s.ecrireAudit(LigneAudit{Type: "evenement", De: x.Agent, Vers: "hub", Mission: x.Mission, Projet: x.Projet, Env: x.Env,
 		Agent: x.Agent, Action: "approbation demandée: " + x.Action, Resultat: res})
-	if err == nil {
+	if err == nil && x.Projet != projetTestMCP { // Test the hub's MCP decides by itself: no phone ping
 		s.notifierApprobation(x)
 	}
 	return x, err
@@ -333,38 +333,44 @@ func (s *Serveur) apiApprobationDecider(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 	}
-	verrouDecision.Lock()
-	defer verrouDecision.Unlock()
-	x, ok := s.approbations.Lire(c.ID)
-	switch {
-	case !ok:
-		refus(http.StatusNotFound, errApprobationInconnue)
-		return
-	case x.Etat != "attente":
-		refus(http.StatusConflict, errApprobationDecidee)
-		return
-	case !slices.Contains([]string{"accepter", "refuser", "toujours"}, c.Decision):
-		refus(http.StatusBadRequest, errApprobationDecision)
+	x, code, err := s.deciderApprobation(qui, c.ID, c.Decision, c.Entree, c.Env, c.Variable)
+	if err != nil {
+		refus(code, err)
 		return
 	}
+	s.ecrireJSON(w, x)
+}
+
+// deciderApprobation: the decision once the decider is known (the window, a paired device, or Test the
+// hub's MCP); an error comes with its HTTP status.
+func (s *Serveur) deciderApprobation(qui, id, decision, entree, envChoisi, variable string) (Approbation, int, error) {
+	verrouDecision.Lock()
+	defer verrouDecision.Unlock()
+	x, ok := s.approbations.Lire(id)
+	switch {
+	case !ok:
+		return x, http.StatusNotFound, errApprobationInconnue
+	case x.Etat != "attente":
+		return x, http.StatusConflict, errApprobationDecidee
+	case !slices.Contains([]string{"accepter", "refuser", "toujours"}, decision):
+		return x, http.StatusBadRequest, errApprobationDecision
+	}
 	accorde := ""
-	if x.Action == "demander_acces" && c.Decision != "refuser" {
-		if !s.accesPret(w, x.Projet) {
-			return
+	if x.Action == "demander_acces" && decision != "refuser" {
+		if code, err := s.accesPretErr(x.Projet); err != nil {
+			return x, code, err
 		}
-		e := s.entreeCoffre(c.Entree)
+		e := s.entreeCoffre(entree)
 		if e.Portee != "code" || e.Famille != "secret" {
-			refus(http.StatusConflict, errApprobationEntree)
-			return
+			return x, http.StatusConflict, errApprobationEntree
 		}
-		env, variable := firstNonEmpty(c.Env, x.Env), c.Variable
+		env := firstNonEmpty(envChoisi, x.Env)
 		if variable == "" && nomSecretValide(x.Details["nom"]) {
 			variable = x.Details["nom"]
 		}
 		a, err := s.acces.Ajouter(x.Projet, e, env, variable, "")
 		if err != nil {
-			refus(http.StatusConflict, err)
-			return
+			return x, http.StatusConflict, err
 		}
 		s.auditAcces(qui, x.Projet, "acces_accorde", e, a.Variable, a.Env)
 		accorde = ", " + a.Variable + " (" + a.Env + ")"
@@ -374,12 +380,11 @@ func (s *Serveur) apiApprobationDecider(w http.ResponseWriter, r *http.Request) 
 			}
 		}
 	}
-	x, err := s.approbations.Decider(c.ID, c.Decision, qui)
+	x, err := s.approbations.Decider(id, decision, qui)
 	if err != nil {
-		refus(http.StatusInternalServerError, err)
-		return
+		return x, http.StatusInternalServerError, err
 	}
 	s.ecrireAudit(LigneAudit{Type: "evenement", De: qui, Vers: "hub", Mission: x.Mission, Projet: x.Projet, Env: x.Env, Agent: x.Agent,
-		Action: "approbation " + c.Decision, Resultat: x.Action + " " + x.ID + " → " + x.Etat + accorde})
-	s.ecrireJSON(w, x)
+		Action: "approbation " + decision, Resultat: x.Action + " " + x.ID + " → " + x.Etat + accorde})
+	return x, 0, nil
 }

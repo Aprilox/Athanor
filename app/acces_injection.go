@@ -37,14 +37,7 @@ func lireLignesSecrets(b []byte) []ligneSecret {
 }
 
 func (s *Serveur) projetNomme(nom string) (Projet, bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for _, p := range s.config.Projets {
-		if p.Nom == nom {
-			return p, true
-		}
-	}
-	return Projet{}, false
+	return s.projetParNom(nom)
 }
 
 // planInjection computes the new secrets.env lines; ecrire is false when nothing must be written (same

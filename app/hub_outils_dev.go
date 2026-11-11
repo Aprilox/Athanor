@@ -27,7 +27,7 @@ type SignalPilote struct {
 
 func init() {
 	objet := func(props map[string]any, requis ...string) map[string]any {
-		return map[string]any{"type": "object", "properties": props, "required": requis, "additionalProperties": false}
+		return map[string]any{"type": "object", "properties": props, "required": append([]string{}, requis...), "additionalProperties": false} // never null: Claude Code drops a server whose schema is invalid
 	}
 	texte := func(d string) map[string]any { return map[string]any{"type": "string", "description": d} }
 	outilsHub["etat"] = OutilHub{Description: "Your project's state in Athanor: plan progress, phase, what waits for the owner, the names of the variables you receive, your access requests.",

@@ -54,6 +54,8 @@ type Serveur struct {
 	approbations *Approbations
 	// the last blocker each pilot reported (hub_outils_dev.go), guarded by mu
 	signaux map[string]SignalPilote
+	// the temporary project of Test the hub's MCP while it runs (hub_test_mcp.go), guarded by mu
+	projetTestMCP Projet
 }
 
 func nouveauServeur(config Config) *Serveur {
@@ -415,6 +417,7 @@ func (s *Serveur) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/sante/libre", s.garde(false, s.apiLibre))
 	mux.HandleFunc("POST /api/sante/barriere", s.garde(false, s.apiBarriere))
 	mux.HandleFunc("POST /api/sante/coffre", s.garde(false, s.apiTesterCoffre))
+	mux.HandleFunc("POST /api/sante/mcp-hub", s.garde(false, s.apiTesterMCP))
 	mux.HandleFunc("POST /api/sante/recompiler", s.garde(false, s.apiRecompiler))
 	mux.HandleFunc("POST /api/sante/installer", s.garde(false, s.apiInstaller))
 	mux.HandleFunc("GET /api/sante/terminal", s.garde(false, s.apiEtapeTerminal)) // the terminal interface runs it itself

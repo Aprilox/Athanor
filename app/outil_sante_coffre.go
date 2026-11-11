@@ -193,13 +193,14 @@ func verdictCoffre(journal string, t temoinsCoffre, natif bool) ([]ligneVerdict,
 	return l, ok
 }
 
-// purgerTemoinsCoffre removes every test value (also those of a session that was cut short).
+// purgerTemoinsCoffre removes every test value of Test the vault and Test the hub's MCP (also those of a
+// session that was cut short).
 func purgerTemoinsCoffre(c *Coffre) {
 	if c == nil {
 		return
 	}
 	for _, e := range c.Liste() {
-		if e.Source == sourceTestCoffre {
+		if e.Source == sourceTestCoffre || e.Source == sourceTestMCP {
 			_ = c.Supprimer(e.ID)
 		}
 	}

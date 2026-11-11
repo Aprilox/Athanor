@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"slices"
 )
 
 // chargerAcces loads hub/acces.json at start-up (an unreadable file is reported and left untouched).
@@ -21,8 +22,8 @@ func (s *Serveur) chargerAcces() {
 func (s *Serveur) nomsProjets() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	n := make([]string, 0, len(s.config.Projets))
-	for _, p := range s.config.Projets {
+	n := make([]string, 0, len(s.config.Projets)+1)
+	for _, p := range s.projetsHub() {
 		n = append(n, p.Nom)
 	}
 	return n
@@ -39,24 +40,26 @@ func (s *Serveur) synchroniserAcces() error {
 
 // accesPret: the grants and the vault are loaded and the project exists, or false once refused.
 func (s *Serveur) accesPret(w http.ResponseWriter, projet string) bool {
-	if !s.coffrePret(w) {
+	if code, err := s.accesPretErr(projet); err != nil {
+		s.erreur(w, code, err.Error())
 		return false
 	}
-	if s.acces == nil || s.accesErr != nil {
-		s.erreur(w, http.StatusInternalServerError, "The access file cannot be read")
-		return false
+	return true
+}
+
+func (s *Serveur) accesPretErr(projet string) (int, error) {
+	switch {
+	case s.coffreErr != nil || s.coffre == nil:
+		return http.StatusInternalServerError, errors.New("The vault file cannot be read")
+	case s.acces == nil || s.accesErr != nil:
+		return http.StatusInternalServerError, errors.New("The access file cannot be read")
+	case !slices.Contains(s.nomsProjets(), projet):
+		return http.StatusNotFound, errors.New("Unknown project")
 	}
-	for _, n := range s.nomsProjets() {
-		if n == projet {
-			if err := s.synchroniserAcces(); err != nil {
-				s.erreur(w, http.StatusInternalServerError, err.Error())
-				return false
-			}
-			return true
-		}
+	if err := s.synchroniserAcces(); err != nil {
+		return http.StatusInternalServerError, err
 	}
-	s.erreur(w, http.StatusNotFound, "Unknown project")
-	return false
+	return 0, nil
 }
 
 // AccesVu: a grant as the page sees it, with its entry's metadata.

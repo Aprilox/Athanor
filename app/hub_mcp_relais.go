@@ -23,12 +23,16 @@ import (
 const nomMCPHub = "athanor-hub"
 
 func init() {
-	enregistrerCommande("mcp-hub", "mcp-hub TOKEN_FILE: the hub's tools for the pilot's session, MCP stdio relayed to the running Athanor", func(args []string) int {
-		if len(args) != 1 {
-			fmt.Fprintln(os.Stderr, "usage: athanor mcp-hub TOKEN_FILE")
+	enregistrerCommande("mcp-hub", "mcp-hub TOKEN_FILE [INSTANCE_FILE]: the hub's tools for the pilot's session, MCP stdio relayed to the running Athanor", func(args []string) int {
+		if len(args) < 1 || len(args) > 2 {
+			fmt.Fprintln(os.Stderr, "usage: athanor mcp-hub TOKEN_FILE [INSTANCE_FILE]")
 			return 2
 		}
-		relaisMCPHub(os.Stdin, os.Stdout, args[0], fichierInstance(), 60*time.Second)
+		inst := fichierInstance()
+		if len(args) == 2 { // Test the hub's MCP names the Athanor that runs the test
+			inst = args[1]
+		}
+		relaisMCPHub(os.Stdin, os.Stdout, args[0], inst, 60*time.Second)
 		return 0
 	})
 }
