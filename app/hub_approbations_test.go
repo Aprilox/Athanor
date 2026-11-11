@@ -68,7 +68,7 @@ func TestApprobationsMagasin(t *testing.T) {
 	if z, _ = a.Decider(z.ID, "refuser", "fenetre"); z.Etat != "refusee" || a.PourAgent(z.ID) != "refusee" {
 		t.Errorf("refused: %+v", z)
 	}
-	if !a.Regle("demo", "prod", "deployer") || a.Regle("demo", "staging", "deployer") || a.Regle("autre", "prod", "deployer") || a.Regle("demo", "dev", "vider_base") {
+	if !a.Regle(RegleAccord{Projet: "demo", Env: "prod", Action: "deployer"}) || a.Regle(RegleAccord{Projet: "demo", Env: "staging", Action: "deployer"}) || a.Regle(RegleAccord{Projet: "autre", Env: "prod", Action: "deployer"}) || a.Regle(RegleAccord{Projet: "demo", Env: "dev", Action: "vider_base"}) {
 		t.Error("rules wrong")
 	}
 
@@ -90,7 +90,7 @@ func TestApprobationsMagasin(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(d, "regles.json"), []byte("{"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if c, err := ouvrirApprobations(d); err == nil || c.Regle("demo", "prod", "deployer") {
+	if c, err := ouvrirApprobations(d); err == nil || c.Regle(RegleAccord{Projet: "demo", Env: "prod", Action: "deployer"}) {
 		t.Error("unreadable rules file accepted")
 	}
 }
@@ -132,6 +132,20 @@ func TestExigerAccordI6(t *testing.T) {
 			t.Errorf("rule applied beyond its project and action: %+v", x)
 		}
 	}
+	// B52: Ask again removes only that rule (from a paired device too), then the wait is back
+	regle := map[string]string{"decision": "redemander", "projet": "demo", "env": "prod", "action": "deployer"}
+	if w := appelApprobation(t, s, "tel", regle); w.Code != 200 {
+		t.Fatalf("ask again: %d %s", w.Code, w.Body)
+	}
+	if w := appelApprobation(t, s, "", regle); w.Code != http.StatusNotFound {
+		t.Errorf("rule removed twice: %d", w.Code)
+	}
+	if _, attend, _ := s.exigerAccord(Approbation{Projet: "demo", Env: "prod", Agent: "pilote", Action: "deployer"}, false); !attend {
+		t.Error("the rule still applies after Ask again")
+	}
+	if !strings.Contains(auditTexte(t), "règle retirée: deployer") {
+		t.Error("rule removal not in the audit log")
+	}
 	if !strings.Contains(auditTexte(t), "approbation demandée: deployer") {
 		t.Error("request not in the audit log")
 	}
@@ -142,7 +156,7 @@ func TestExigerAccordI6(t *testing.T) {
 			continue
 		}
 		b, _ := os.ReadFile(f)
-		if regexp.MustCompile(`\.Decider\(|RegleAccord\{|\bregles\.json`).Match(b) {
+		if regexp.MustCompile(`\.Decider(Avec)?\(|approbations\.regles\b|\bregles\.json`).Match(b) {
 			t.Errorf("%s decides an approval or touches the rules", f)
 		}
 	}
@@ -348,7 +362,7 @@ func TestApprobationDisqueEntier(t *testing.T) {
 			t.Errorf("password %q: the agent's decision got %d", m, code)
 		}
 	}
-	if s.approbations.PourAgent(x.ID) != "attente" || s.approbations.Regle("demo", "prod", "deployer") {
+	if s.approbations.PourAgent(x.ID) != "attente" || s.approbations.Regle(RegleAccord{Projet: "demo", Env: "prod", Action: "deployer"}) {
 		t.Error("the agent accepted its own request")
 	}
 }

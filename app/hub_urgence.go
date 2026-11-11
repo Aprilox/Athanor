@@ -22,6 +22,7 @@ func init() {
 type ResultatUrgence struct {
 	Jetons       int      `json:"jetons"`
 	Approbations int      `json:"approbations"`
+	Regles       int      `json:"regles"` // "never ask again" rules removed
 	Pilotes      int      `json:"pilotes"`
 	Echecs       []string `json:"echecs,omitempty"` // projects whose pilot did not stop
 	Verrouille   bool     `json:"verrouille"`       // window and devices locked (a password exists)
@@ -41,6 +42,14 @@ func (s *Serveur) arretUrgence(qui string) ResultatUrgence {
 		l, err := s.approbations.RefuserTout(qui)
 		verrouDecision.Unlock()
 		r.Approbations = len(l)
+		regles, errR := s.approbations.RetirerRegles(func(RegleAccord) bool { return true })
+		r.Regles = len(regles)
+		for _, x := range regles {
+			s.ecrireAudit(LigneAudit{Type: "evenement", De: qui, Vers: "hub", Projet: x.Projet, Env: x.Env, Action: "règle retirée: " + x.Action, Resultat: "arrêt d'urgence"})
+		}
+		if errR != nil {
+			fmt.Fprintln(os.Stderr, "emergency stop: rules:", errR)
+		}
 		for _, x := range l {
 			s.ecrireAudit(LigneAudit{Type: "evenement", De: qui, Vers: "hub", Mission: x.Mission, Projet: x.Projet, Env: x.Env, Agent: x.Agent,
 				Action: "approbation refuser", Resultat: x.Action + " " + x.ID + " → refusee (arrêt d'urgence)"})
@@ -83,7 +92,7 @@ func (s *Serveur) arretUrgence(qui string) ResultatUrgence {
 		}()
 	}
 	wg.Wait()
-	res := fmt.Sprintf("%d jeton(s) révoqué(s), %d approbation(s) refusée(s), %d pilote(s) arrêté(s), coffre verrouillé", r.Jetons, r.Approbations, r.Pilotes)
+	res := fmt.Sprintf("%d jeton(s) révoqué(s), %d approbation(s) refusée(s), %d règle(s) retirée(s), %d pilote(s) arrêté(s), coffre verrouillé", r.Jetons, r.Approbations, r.Regles, r.Pilotes)
 	if len(r.Echecs) > 0 {
 		res += fmt.Sprintf(", %d pilote(s) non arrêté(s)", len(r.Echecs))
 	}
@@ -103,10 +112,10 @@ func (s *Serveur) reprendreApresUrgence(qui string) {
 	s.ecrireAudit(LigneAudit{Type: "evenement", De: qui, Vers: "hub", Action: "reprise après arrêt d'urgence", Resultat: "coffre rouvert"})
 }
 
-const texteUrgence = "Emergency stop: {0} pilot(s) stopped, {1} session(s) revoked, {2} approval(s) refused, vault locked. To resume: unlock Athanor, then Start each project."
+const texteUrgence = "Emergency stop: {0} pilot(s) stopped, {1} session(s) revoked, {2} approval(s) refused, {3} “never ask again” rule(s) removed, vault locked. To resume: unlock Athanor, then Start each project."
 
 func argsUrgence(r ResultatUrgence) []string {
-	return []string{strconv.Itoa(r.Pilotes), strconv.Itoa(r.Jetons), strconv.Itoa(r.Approbations)}
+	return []string{strconv.Itoa(r.Pilotes), strconv.Itoa(r.Jetons), strconv.Itoa(r.Approbations), strconv.Itoa(r.Regles)}
 }
 
 // apiUrgence: POST /api/hub/urgence {} the emergency stop (window or paired device, confirmed by the
@@ -173,7 +182,7 @@ func lancerArretUrgence([]string) int {
 		fmt.Fprintln(os.Stderr, "Athanor refused the emergency stop:", rep.Status)
 		return 1
 	}
-	fmt.Printf("Emergency stop: %d pilot(s) stopped, %d session(s) revoked, %d approval(s) refused, vault locked.\n", r.Pilotes, r.Jetons, r.Approbations)
+	fmt.Printf("Emergency stop: %d pilot(s) stopped, %d session(s) revoked, %d approval(s) refused, %d \"never ask again\" rule(s) removed, vault locked.\n", r.Pilotes, r.Jetons, r.Approbations, r.Regles)
 	if len(r.Echecs) > 0 {
 		fmt.Printf("Not stopped: %v (stop them with Stop in their project).\n", r.Echecs)
 	}

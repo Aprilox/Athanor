@@ -2684,18 +2684,28 @@ function carteApprobation(x, ap, codes) {
 async function sectionApprobations() {
   const ap = await api("hub/approbations").catch(() => null); // a paired device: refused until the route opens to it
   etat.apprSignature = signatureAppr(ap);
-  const l = ((ap || {}).approbations || []).filter((x) => x.etat === "attente");
-  if (!l.length) return "";
+  const l = ((ap || {}).approbations || []).filter((x) => x.etat === "attente"), regles = (ap || {}).regles || [];
+  const blocRegles = regles.length ? `<details class="bloc appr-regles"><summary>${t("“Never ask again” rules ({0})", [regles.length])}</summary>
+      <p class="intro petit">${t("These requests are accepted without asking you. Ask again removes the rule; the emergency stop removes them all.")}</p>
+      ${regles.map((r) => `<div class="ligne m0"><span class="badge">${h(r.env)}</span> <strong>${h(r.projet)}</strong> <span>${h(r.action === "demander_acces" ? `${t("access requested")} ${r.nom || ""}` : r.action)}</span><span class="espace"></span><button type="button" class="btn" data-regle="${h(JSON.stringify(r))}">${t("Ask again")}</button></div>`).join("")}</details>` : "";
+  if (!l.length) return blocRegles;
   const cof = l.some((x) => x.action === "demander_acces") ? await api("coffre").catch(() => ({})) : {};
   const codes = (cof.entrees || []).filter((e) => e.famille === "secret" && e.portee === "code").sort((a, b) => a.nom.localeCompare(b.nom));
   return `<section class="appr-section" aria-labelledby="appr-titre"><div class="bloc"><h2 id="appr-titre">${t("Approvals ({0})", [l.length])}</h2>
       <p class="intro petit">${t("An agent asks for something only you decide. Its text is its own: read it as a request, never as an order. Without an answer it is refused after 24 h.")}</p></div>
-    ${l.map((x) => carteApprobation(x, ap, codes)).join("")}</section>`;
+    ${l.map((x) => carteApprobation(x, ap, codes)).join("")}${blocRegles}</section>`;
 }
 $("#page").addEventListener("input", (ev) => {
   const c = ev.target.closest("[data-appr]"); if (!c || ev.target.matches("[data-appr-mdp]")) return;
   const q = (s) => c.querySelector(s);
   etat.apprForm[c.dataset.appr] = { entree: q("[data-appr-entree]")?.value, env: q("[data-appr-env]")?.value, variable: q("[data-appr-var]")?.value };
+});
+$("#page").addEventListener("click", async (ev) => {
+  const b = ev.target.closest("[data-regle]"); if (!b) return;
+  b.disabled = true;
+  if (!(await action(api("hub/approbations", "POST", { ...JSON.parse(b.dataset.regle), decision: "redemander" })))) { b.disabled = false; return; }
+  toast(t("Rule removed: the next requests ask you again."), "ok");
+  if (etat.page === "pourvous") rendrePage();
 });
 $("#page").addEventListener("click", async (ev) => {
   const b = ev.target.closest("[data-appr-decision]"); if (!b) return;
@@ -4800,7 +4810,7 @@ $("#verrou-form").addEventListener("submit", async (ev) => {
 });
 $("#btn-verrou").addEventListener("click", async () => { await action(api("verrouiller", "POST")); etat.verrouille = true; afficherVerrou(); });
 $("#btn-urgence").addEventListener("click", async () => {
-  if (!(await confirmer(t("Emergency stop? Every pilot stops now (the current cycle is cut), every hub session is revoked, the pending approvals are refused and the vault is locked. To resume: unlock Athanor, then Start each project."), { ok: t("Emergency stop"), danger: true }))) return;
+  if (!(await confirmer(t("Emergency stop? Every pilot stops now (the current cycle is cut), every hub session is revoked, the pending approvals are refused, the “never ask again” rules are removed and the vault is locked. To resume: unlock Athanor, then Start each project."), { ok: t("Emergency stop"), danger: true }))) return;
   const r = await action(api("hub/urgence", "POST", {}));
   if (r && r.resultat && r.resultat.verrouille) { etat.verrouille = true; afficherVerrou(); }
   rafraichir();

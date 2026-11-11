@@ -28,6 +28,7 @@ var (
 	errApprobationDecidee  = erreurEntree("This approval was already decided or has expired")
 	errApprobationDecision = erreurEntree("Unknown decision (accepter, refuser or toujours)")
 	errApprobationEntree   = erreurEntree("Choose a project key (code) of the vault for this access")
+	errRegleInconnue       = erreurEntree("Unknown rule")
 	errApprobationNatif    = erreurEntree("Native Windows mode: any program of this PC can drive this window, so an approval is decided from a paired phone, or choose a password for Athanor first")
 )
 
@@ -49,11 +50,14 @@ type Approbation struct {
 	T       string            `json:"t,omitempty"`
 }
 
-// RegleAccord: "do not ask again" for this action of this project in this environment.
+// RegleAccord: "do not ask again" for this action of this project in this environment; for an access,
+// only the vault entry the owner granted (Entree), under the variable name (Nom).
 type RegleAccord struct {
 	Projet string `json:"projet"`
 	Env    string `json:"env"`
 	Action string `json:"action"`
+	Entree string `json:"entree,omitempty"`
+	Nom    string `json:"nom,omitempty"`
 }
 
 // Approbations: the store. Maintenant (nil: time.Now) is for the tests.
@@ -183,6 +187,11 @@ func (a *Approbations) PourAgent(id string) string {
 
 // Decider: accepter | refuser | toujours (accepted, and a rule for its project, environment and action).
 func (a *Approbations) Decider(id, decision, par string) (Approbation, error) {
+	return a.DeciderAvec(id, decision, par, "")
+}
+
+// DeciderAvec: Decider, with the vault entry an accepted access granted (the rule is bound to it).
+func (a *Approbations) DeciderAvec(id, decision, par, entree string) (Approbation, error) {
 	if !slices.Contains([]string{"accepter", "refuser", "toujours"}, decision) {
 		return Approbation{}, errApprobationDecision
 	}
@@ -204,7 +213,10 @@ func (a *Approbations) Decider(id, decision, par string) (Approbation, error) {
 	if decision == "refuser" {
 		x.Etat = "refusee"
 	}
-	r := RegleAccord{x.Projet, x.Env, x.Action}
+	r := RegleAccord{x.Projet, x.Env, x.Action, "", ""}
+	if entree != "" {
+		r.Entree, r.Nom = entree, x.Details["nom"]
+	}
 	if decision == "toujours" && !slices.Contains(a.regles, r) {
 		a.regles = append(a.regles, r)
 	}
@@ -231,11 +243,34 @@ func (a *Approbations) RefuserTout(par string) ([]Approbation, error) {
 	return out, a.enregistrer()
 }
 
-// Regle: the owner said "do not ask again" for this action of this project in this environment.
-func (a *Approbations) Regle(projet, env, action string) bool {
+// RetirerRegles removes the rules f selects (Ask again, emergency stop); the removed ones.
+func (a *Approbations) RetirerRegles(f func(RegleAccord) bool) ([]RegleAccord, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	return slices.Contains(a.regles, RegleAccord{projet, env, action})
+	var out, garde []RegleAccord
+	for _, r := range a.regles {
+		if f(r) {
+			out = append(out, r)
+		} else {
+			garde = append(garde, r)
+		}
+	}
+	if len(out) == 0 {
+		return nil, nil
+	}
+	avant := a.regles
+	if a.regles = garde; a.enregistrer() != nil {
+		a.regles = avant
+		return nil, errors.New("hub/regles.json: not written")
+	}
+	return out, nil
+}
+
+// Regle: the owner said "do not ask again" for this action of this project in this environment.
+func (a *Approbations) Regle(r RegleAccord) bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return slices.Contains(a.regles, r)
 }
 
 // ----------------------------------------------------------------------------- server side
@@ -281,7 +316,7 @@ func (s *Serveur) notifierApprobation(x Approbation) {
 // owner set a rule for it; when it must wait, the pending approval is created and returned with true.
 // shortcut: no "autonomous" mission yet (stage 6 adds it), so only a rule lifts the wait.
 func (s *Serveur) exigerAccord(x Approbation, destructif bool) (Approbation, bool, error) {
-	if x.Env != "prod" && !destructif || s.approbations.Regle(x.Projet, x.Env, x.Action) {
+	if x.Env != "prod" && !destructif || s.approbations.Regle(RegleAccord{Projet: x.Projet, Env: x.Env, Action: x.Action}) {
 		return x, false, nil
 	}
 	x, err := s.demanderApprobation(x)
@@ -307,8 +342,8 @@ func (s *Serveur) apiApprobations(w http.ResponseWriter, r *http.Request) {
 // project's secrets.env: the pilot reads it at its next command, without a restart.
 func (s *Serveur) apiApprobationDecider(w http.ResponseWriter, r *http.Request) {
 	var c struct {
-		ID, Decision, Entree, Env, Variable string
-		MotDePasse                          string `json:"mot_de_passe"`
+		ID, Decision, Entree, Env, Variable, Projet, Action, Nom string
+		MotDePasse                                               string `json:"mot_de_passe"`
 	}
 	if err := lireCorps(r, &c); err != nil {
 		s.erreur(w, http.StatusBadRequest, string(errCoffreRequete))
@@ -318,6 +353,19 @@ func (s *Serveur) apiApprobationDecider(w http.ResponseWriter, r *http.Request) 
 	refus := func(code int, err error) {
 		s.ecrireAudit(LigneAudit{Type: "evenement", De: qui, Vers: "hub", Action: "décision refusée: " + c.Decision, Resultat: c.ID + ", " + err.Error()})
 		s.erreur(w, code, err.Error())
+	}
+	if c.Decision == "redemander" { // B52: Ask again only lowers what agents get, so no password for it
+		l, err := s.approbations.RetirerRegles(func(x RegleAccord) bool { return x == RegleAccord{c.Projet, c.Env, c.Action, c.Entree, c.Nom} })
+		switch {
+		case err != nil:
+			refus(http.StatusInternalServerError, err)
+		case len(l) == 0:
+			refus(http.StatusNotFound, errRegleInconnue)
+		default:
+			s.ecrireAudit(LigneAudit{Type: "evenement", De: qui, Vers: "hub", Projet: c.Projet, Env: c.Env, Action: "règle retirée: " + c.Action, Resultat: "redemander"})
+			s.ecrireJSON(w, map[string]any{"ok": true})
+		}
+		return
 	}
 	if appareilDe(r) == "" && modeNatif.Load() {
 		s.mu.Lock()
@@ -355,7 +403,7 @@ func (s *Serveur) deciderApprobation(qui, id, decision, entree, envChoisi, varia
 	case !slices.Contains([]string{"accepter", "refuser", "toujours"}, decision):
 		return x, http.StatusBadRequest, errApprobationDecision
 	}
-	accorde := ""
+	accorde, idEntree := "", ""
 	if x.Action == "demander_acces" && decision != "refuser" {
 		if code, err := s.accesPretErr(x.Projet); err != nil {
 			return x, code, err
@@ -368,6 +416,7 @@ func (s *Serveur) deciderApprobation(qui, id, decision, entree, envChoisi, varia
 		if variable == "" && nomSecretValide(x.Details["nom"]) {
 			variable = x.Details["nom"]
 		}
+		idEntree = e.ID
 		a, err := s.acces.Ajouter(x.Projet, e, env, variable, "")
 		if err != nil {
 			return x, http.StatusConflict, err
@@ -380,7 +429,7 @@ func (s *Serveur) deciderApprobation(qui, id, decision, entree, envChoisi, varia
 			}
 		}
 	}
-	x, err := s.approbations.Decider(id, decision, qui)
+	x, err := s.approbations.DeciderAvec(id, decision, qui, idEntree)
 	if err != nil {
 		return x, http.StatusInternalServerError, err
 	}

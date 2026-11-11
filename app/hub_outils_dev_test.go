@@ -84,7 +84,7 @@ func TestOutilsDev(t *testing.T) {
 			t.Errorf("%s with another project: %v %s", n, er, txt)
 		}
 	}
-	if l, _ := s.approbations.Liste(); len(l) != 0 {
+	if l := listeCroissante(s); len(l) != 0 {
 		t.Fatalf("an approval from a refused call: %+v", l)
 	}
 
@@ -93,7 +93,7 @@ func TestOutilsDev(t *testing.T) {
 		t.Error("demander_acces without raison accepted")
 	}
 	txt, er = appel("demander_acces", `{"nom":"OPENAI_API_KEY","raison":"résumés de test"}`)
-	l, _ := s.approbations.Liste()
+	l := listeCroissante(s)
 	if er || len(l) != 1 || !strings.HasPrefix(txt, "waiting for the owner, id "+l[0].ID) {
 		t.Fatalf("demander_acces: %v %s %+v", er, txt, l)
 	}
@@ -103,7 +103,7 @@ func TestOutilsDev(t *testing.T) {
 	if txt, _ = appel("demander_acces", `{"nom":"OPENAI_API_KEY","raison":"encore"}`); !strings.Contains(txt, l[0].ID) {
 		t.Errorf("asked again: %s", txt)
 	}
-	if l, _ = s.approbations.Liste(); len(l) != 1 {
+	if l = listeCroissante(s); len(l) != 1 {
 		t.Errorf("asked again: %d approvals", len(l))
 	}
 	if txt, _ = appel("etat", "{}"); !strings.Contains(txt, l[0].ID) || !strings.Contains(txt, `"etat": "attente"`) {
@@ -115,27 +115,34 @@ func TestOutilsDev(t *testing.T) {
 		t.Errorf("already received: %s", txt)
 	}
 	txt, _ = appel("demander_acces", `{"nom":"ABSENT_KEY","raison":"copie `+temoin+` ici"}`)
-	if l, _ = s.approbations.Liste(); len(l) != 2 || strings.Contains(l[1].Raison, temoin) || !strings.Contains(txt, l[1].ID) {
+	if l = listeCroissante(s); len(l) != 2 || strings.Contains(l[1].Raison, temoin) || !strings.Contains(txt, l[1].ID) {
 		t.Fatalf("masked reason: %s %+v", txt, l)
 	}
 
-	// B44: "never ask again" grants the vault's code key of the asked name at once, without a pending approval
+	// B44: "never ask again" grants at once, without a pending approval, only the vault entry the owner chose (critic M70)
 	e2, err := s.coffre.Ajouter(EntreeCoffre{Nom: "OPENAI_API_KEY", Famille: "secret", Type: "autre", Portee: "code"}, "témoin-openai-"+aleatoire(6))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err = s.deciderApprobation("fenetre", l[0].ID, "toujours", e2.ID, "", ""); err != nil || !s.approbations.Regle("demo", "dev", "demander_acces") {
+	regle := RegleAccord{"demo", "dev", "demander_acces", e2.ID, "OPENAI_API_KEY"}
+	if _, _, err = s.deciderApprobation("fenetre", l[0].ID, "toujours", e2.ID, "", ""); err != nil || !s.approbations.Regle(regle) {
 		t.Fatalf("toujours: %v", err)
 	}
 	if _, err = s.coffre.Ajouter(EntreeCoffre{Nom: "MISTRAL_KEY", Famille: "secret", Type: "autre", Portee: "code"}, "témoin-mistral-"+aleatoire(6)); err != nil {
 		t.Fatal(err)
 	}
-	txt, _ = appel("demander_acces", `{"nom":"MISTRAL_KEY","raison":"tests"}`)
-	l, _ = s.approbations.Liste()
-	if !strings.Contains(txt, "granted by the owner's rule") || len(l) != 3 || l[2].Etat != "acceptee" || l[2].Par != "regle" {
+	if txt, _ = appel("demander_acces", `{"nom":"MISTRAL_KEY","raison":"tests"}`); !strings.HasPrefix(txt, "waiting for the owner") {
+		t.Errorf("another key granted by the rule: %s", txt)
+	}
+	if err = s.acces.Retirer("demo", e2.ID, "dev"); err != nil {
+		t.Fatal(err)
+	}
+	txt, _ = appel("demander_acces", `{"nom":"OPENAI_API_KEY","raison":"tests"}`)
+	l = listeCroissante(s)
+	if !strings.Contains(txt, "granted by the owner's rule") || len(l) != 4 || l[3].Etat != "acceptee" || l[3].Par != "regle" {
 		t.Errorf("rule: %s %+v", txt, l)
 	}
-	if txt, _ = appel("etat", "{}"); !strings.Contains(txt, `"MISTRAL_KEY"`) {
+	if txt, _ = appel("etat", "{}"); !strings.Contains(txt, `"OPENAI_API_KEY"`) {
 		t.Errorf("granted key not received: %s", txt)
 	}
 	l = l[:1]
@@ -212,4 +219,11 @@ func TestConsigneOutilsHub(t *testing.T) {
 			t.Errorf("missing %q", m)
 		}
 	}
+}
+
+// listeCroissante: the approvals oldest first (Liste is newest first at a one-second resolution, so ties kept their order).
+func listeCroissante(s *Serveur) []Approbation {
+	l, _ := s.approbations.Liste()
+	slices.SortStableFunc(l, func(a, b Approbation) int { return strings.Compare(a.Cree, b.Cree) })
+	return l
 }

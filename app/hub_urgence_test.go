@@ -76,6 +76,10 @@ func TestArretUrgence(t *testing.T) {
 	if _, err := s.approbations.Decider(decidee.ID, "accepter", "fenetre"); err != nil {
 		t.Fatal(err)
 	}
+	regle, _ := s.demanderApprobation(Approbation{Projet: "demo", Env: "prod", Agent: "pilote", Action: "deployer"})
+	if _, err := s.approbations.Decider(regle.ID, "toujours", "fenetre"); err != nil {
+		t.Fatal(err)
+	}
 	s.session = "ouverte"
 	s.dist().deverrouilles = map[string]bool{"tel": true}
 
@@ -90,9 +94,12 @@ func TestArretUrgence(t *testing.T) {
 	}
 	_ = json.Unmarshal(w.Body.Bytes(), &rep)
 	r := rep.Resultat
-	if r.Jetons != 2 || r.Approbations != 2 || r.Pilotes != 1 || !slices.Equal(r.Echecs, []string{"autre"}) || !r.Verrouille ||
-		rep.Cle != texteUrgence || !slices.Equal(rep.Args, []string{"1", "2", "2"}) {
+	if r.Jetons != 2 || r.Approbations != 2 || r.Regles != 1 || r.Pilotes != 1 || !slices.Equal(r.Echecs, []string{"autre"}) || !r.Verrouille ||
+		rep.Cle != texteUrgence || !slices.Equal(rep.Args, []string{"1", "2", "2", "1"}) {
 		t.Fatalf("result: %s", w.Body)
+	}
+	if _, regles := s.approbations.Liste(); len(regles) != 0 {
+		t.Errorf("rules left: %+v", regles)
 	}
 	// tokens: none left, their files removed
 	if l := s.jetons.Liste(); len(l) != 0 {
@@ -142,7 +149,7 @@ func TestArretUrgence(t *testing.T) {
 		t.Errorf("alert: %+v", a)
 	}
 	j := auditTexte(t)
-	if !strings.Contains(j, "arrêt d'urgence 2 jeton(s) révoqué(s), 2 approbation(s) refusée(s), 1 pilote(s) arrêté(s), coffre verrouillé, 1 pilote(s) non arrêté(s)") ||
+	if !strings.Contains(j, "arrêt d'urgence 2 jeton(s) révoqué(s), 2 approbation(s) refusée(s), 1 règle(s) retirée(s), 1 pilote(s) arrêté(s), coffre verrouillé, 1 pilote(s) non arrêté(s)") ||
 		strings.Count(j, "→ refusee (arrêt d'urgence)") != 2 || !strings.Contains(j, "jeton révoqué arrêt d'urgence") {
 		t.Errorf("audit log:\n%s", j)
 	}

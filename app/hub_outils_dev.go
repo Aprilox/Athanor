@@ -172,8 +172,8 @@ func outilDemanderAcces(s *Serveur, x SessionHub, args json.RawMessage) (string,
 	}
 	ap := Approbation{Projet: x.Projet, Env: env, Mission: x.Mission, Agent: x.Agent,
 		Action: "demander_acces", Details: map[string]string{"nom": nom}, Raison: s.masquerSecrets(raison)}
-	// the owner's "never ask again" for this project and environment: the vault's code key of that name, granted at once
-	if id := s.cleCodeNommee(nom); id != "" && s.approbations.Regle(x.Projet, env, ap.Action) {
+	// the owner's "never ask again" for this project and environment: only the vault entry it granted, under that name
+	if id := s.cleCodeNommee(nom); id != "" && s.approbations.Regle(RegleAccord{x.Projet, env, ap.Action, id, nom}) {
 		if d, err := s.approbations.Demander(ap); err == nil {
 			if _, _, err := s.deciderApprobation("regle", d.ID, "accepter", id, "", ""); err == nil {
 				return nom + " granted by the owner's rule for this project and environment: it is in .athanor/secrets.env (read it again, no restart needed)", nil
