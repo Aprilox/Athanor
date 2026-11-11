@@ -21,7 +21,7 @@ const agentServeurs = "servers"
 
 // outilsServeursMCP: the tools of a Servers agent's token.
 var outilsServeursMCP = []string{"serveurs_liste", "serveur_fiche", "ssh_commande", "fichier_lire", "fichier_ecrire",
-	"sftp_envoyer", "sftp_recuperer", "service", "docker", "pare_feu"}
+	"sftp_envoyer", "sftp_recuperer", "service", "docker", "pare_feu", "proposer_plan"}
 
 var (
 	errServeursAgent = errors.New("the Servers tools answer only a Servers agent's session")
@@ -103,17 +103,14 @@ func faireOutilServeur(nom string) func(*Serveur, SessionHub, json.RawMessage) (
 		if err := json.Unmarshal(args, &a); err != nil {
 			return "", fmt.Errorf("invalid arguments: %v", err)
 		}
-		props := outilsHub[nom].Schema["properties"].(map[string]any)
-		for k := range a {
-			if _, ok := props[k]; !ok {
-				return "", fmt.Errorf("invalid arguments: unknown %q (a server is named by its id only, a tool takes only its own arguments)", couper(k, 40))
-			}
-		}
 		var id string
 		if err := json.Unmarshal(a["serveur"], &id); err != nil || id == "" {
 			return "", errors.New("serveur is required: a server's id from serveurs_liste")
 		}
 		delete(a, "serveur")
+		if err := argumentsDe(nom, a); err != nil {
+			return "", err
+		}
 		e, err := s.avantOutil(x, id, nom, a)
 		if err != nil {
 			return "", errors.New(s.masquerSecrets(err.Error()))
@@ -127,12 +124,27 @@ func faireOutilServeur(nom string) func(*Serveur, SessionHub, json.RawMessage) (
 }
 
 // avantOutil: the single hook before a Servers tool runs for an agent (C39), before any connection: the
-// perimeter, the refused paths (C36), then the class, the highest of the code's and the agent's own (classe).
-// Until plans exist (M90), only a read runs.
+// perimeter, the refused paths (C36), the class (classerEtape), then a change or a destructive call runs only
+// as a step of a plan the owner accepted, or a change under their rule for this server (planOuRegle, M90).
 func (s *Serveur) avantOutil(x SessionHub, id, outil string, a map[string]json.RawMessage) (Etape, error) {
 	if err := s.serveurPerimetre(x, outil, id); err != nil {
 		return Etape{}, err
 	}
+	e, err := classerEtape(outil, a)
+	if err == nil && e.Classe > ClasseLecture {
+		err = s.planOuRegle(x, id, e)
+	}
+	if err != nil {
+		s.ecrireAudit(LigneAudit{Type: "evenement", De: x.Agent, Vers: "serveur:" + id, Projet: x.Projet, Mission: x.Mission,
+			Agent: x.Agent, Action: "serveurs." + outil, Resultat: "refusé : " + couper(s.masquerSecrets(err.Error()), auditMaxOutil)})
+		return Etape{}, err
+	}
+	return e, nil
+}
+
+// classerEtape: a call's arguments read, its paths checked (C36) and its class, the highest of the code's and
+// the agent's own (classe); the arguments come back canonical (a plan's step is matched on them).
+func classerEtape(outil string, a map[string]json.RawMessage) (Etape, error) {
 	declaree := ClasseLecture
 	if v, ok := a["classe"]; ok {
 		var c string
@@ -149,28 +161,21 @@ func (s *Serveur) avantOutil(x SessionHub, id, outil string, a map[string]json.R
 	if err := lireArguments(brut, &args); err != nil {
 		return Etape{}, err
 	}
-	refus := func(err error) (Etape, error) {
-		s.ecrireAudit(LigneAudit{Type: "evenement", De: x.Agent, Vers: "serveur:" + id, Projet: x.Projet, Mission: x.Mission,
-			Agent: x.Agent, Action: "serveurs." + outil, Resultat: "refusé : " + couper(s.masquerSecrets(err.Error()), auditMaxOutil)})
-		return Etape{}, err
-	}
 	lecture := outil == "fichier_lire" || outil == "sftp_recuperer"
 	for _, p := range []string{args.Chemin, args.Distant} {
 		if p == "" {
 			continue
 		}
 		if _, err := distantPermis("chemin", p, lecture); err != nil {
-			return refus(err)
+			return Etape{}, err
 		}
 	}
 	c, raison := classerOutil(outil, args)
 	if declaree > c {
 		c, raison = declaree, "declared "+declaree.String()+" by the agent"
 	}
-	if c > ClasseLecture {
-		return refus(fmt.Errorf("plan required: this is a %s action (%s); a change runs only as a step of a plan the owner accepted (proposer_plan)", c, raison))
-	}
-	return Etape{Outil: outil, Arguments: brut, Classe: c, Raison: raison}, nil
+	canon, _ := json.Marshal(args)
+	return Etape{Outil: outil, Arguments: canon, Classe: c, Raison: raison}, nil
 }
 
 func outilServeursListe(s *Serveur, x SessionHub, args json.RawMessage) (string, error) {

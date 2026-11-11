@@ -154,7 +154,11 @@ func (a *Approbations) Demander(x Approbation) (Approbation, error) {
 	defer a.mu.Unlock()
 	t := a.maintenant()
 	x.ID, x.Etat, x.Par, x.T, x.Utilisee = aleatoire(8), "attente", "", "", ""
-	x.Cree, x.Expire = t.Format(time.RFC3339), t.Add(dureeApprobation).Format(time.RFC3339)
+	d := dureeApprobation
+	if x.Action == actionPlanServeur {
+		d = dureePlan
+	}
+	x.Cree, x.Expire = t.Format(time.RFC3339), t.Add(d).Format(time.RFC3339)
 	bornerApprobation(&x)
 	a.expirer()
 	n := 0
@@ -300,6 +304,9 @@ func (a *Approbations) DeciderAvec(id, decision, par, entree string) (Approbatio
 		x.Utilisee = x.T
 	}
 	r := RegleAccord{x.Projet, x.Env, x.Action, "", ""}
+	if x.Action == actionPlanServeur { // "do not ask again for this server"
+		r = reglePlan(x.Projet, x.Details["serveur"])
+	}
 	if entree != "" {
 		r.Entree, r.Nom = entree, x.Details["nom"]
 	}
@@ -313,7 +320,8 @@ func (a *Approbations) DeciderAvec(id, decision, par, entree string) (Approbatio
 	return *x, nil
 }
 
-// RefuserTout (emergency stop): every pending approval refused by par; the refused ones.
+// RefuserTout (emergency stop): every pending approval, and every accepted server plan not over yet, refused
+// by par (no step of it runs any more); the refused ones.
 func (a *Approbations) RefuserTout(par string) ([]Approbation, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -321,7 +329,8 @@ func (a *Approbations) RefuserTout(par string) ([]Approbation, error) {
 	var out []Approbation
 	t := a.maintenant().Format(time.RFC3339)
 	for i := range a.liste {
-		if x := &a.liste[i]; x.Etat == "attente" {
+		x := &a.liste[i]
+		if x.Etat == "attente" || x.Etat == "acceptee" && x.Action == actionPlanServeur && t < x.Expire { // same RFC 3339 UTC form
 			x.Etat, x.Par, x.T = "refusee", par, t
 			out = append(out, *x)
 		}
@@ -434,7 +443,7 @@ func (s *Serveur) apiApprobations(w http.ResponseWriter, r *http.Request) {
 	mdp := s.config.MotDePasseHash != ""
 	s.mu.Unlock()
 	// appareil_requis: no password yet, nothing can decide (preuvePresence)
-	s.ecrireJSON(w, map[string]any{"approbations": l, "regles": regles,
+	s.ecrireJSON(w, map[string]any{"approbations": l, "regles": regles, "plans": s.plansAffiches(l),
 		"mot_de_passe_requis": appareilDe(r) == "" && mdp, "appareil_requis": !mdp})
 }
 
@@ -493,6 +502,8 @@ func (s *Serveur) deciderApprobation(qui, id, decision, entree, envChoisi, varia
 		return x, http.StatusConflict, errApprobationDecidee
 	case !slices.Contains([]string{"accepter", "refuser", "toujours"}, decision):
 		return x, http.StatusBadRequest, errApprobationDecision
+	case decision == "toujours" && x.Action == actionPlanServeur && x.Details["regle"] != "oui":
+		return x, http.StatusConflict, errPlanSansRegle
 	}
 	accorde, idEntree := "", ""
 	if x.Action == "demander_acces" && decision != "refuser" {
