@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -26,6 +27,7 @@ type serveurSSHMemoire struct {
 	commandes       chan string
 	mu              sync.Mutex
 	autorisees      []ssh.PublicKey // keys let in besides the one given at launch (autoriser)
+	fichiers        sftp.Handlers   // its in-memory SFTP files, kept across connections
 }
 
 // autoriser: the key is now in the server's authorized_keys.
@@ -55,7 +57,7 @@ func nouvelleCleSSH(t *testing.T) (ssh.Signer, []byte) {
 func lancerSSHMemoire(t *testing.T, autorisee ssh.PublicKey, motDePasse string, repondre func(cmd string, entree []byte) (string, int)) *serveurSSHMemoire {
 	t.Helper()
 	hote, _ := nouvelleCleSSH(t)
-	s := &serveurSSHMemoire{hote: "127.0.0.1", empreinte: ssh.FingerprintSHA256(hote.PublicKey()), commandes: make(chan string, 100)}
+	s := &serveurSSHMemoire{hote: "127.0.0.1", empreinte: ssh.FingerprintSHA256(hote.PublicKey()), commandes: make(chan string, 100), fichiers: sftp.InMemHandler()}
 	if autorisee != nil {
 		s.autoriser(autorisee)
 	}
@@ -115,6 +117,13 @@ func (s *serveurSSHMemoire) servir(c net.Conn, conf *ssh.ServerConfig, repondre 
 		go func() {
 			defer canal.Close()
 			for r := range reqs {
+				if r.Type == "subsystem" && len(r.Payload) > 4 && string(r.Payload[4:]) == "sftp" {
+					r.Reply(true, nil)
+					fs := sftp.NewRequestServer(canal, s.fichiers)
+					fs.Serve()
+					fs.Close()
+					return
+				}
 				if r.Type != "exec" || len(r.Payload) < 4 {
 					r.Reply(false, nil)
 					continue
@@ -123,9 +132,7 @@ func (s *serveurSSHMemoire) servir(c net.Conn, conf *ssh.ServerConfig, repondre 
 				r.Reply(true, nil)
 				s.commandes <- cmd
 				var entree bytes.Buffer
-				if strings.Contains(cmd, "cat") { // lit l'entrée jusqu'à sa fin
-					entree.ReadFrom(canal)
-				}
+				entree.ReadFrom(canal) // the whole input first (EOF at once without one): closing earlier breaks the client's copy
 				sortie, code := "", 0
 				if repondre != nil {
 					sortie, code = repondre(cmd, entree.Bytes())

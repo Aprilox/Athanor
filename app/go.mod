@@ -5,12 +5,16 @@ go 1.27.4
 require (
 	github.com/ebitengine/purego v0.8.4
 	github.com/jchv/go-webview2 v0.0.0
+	github.com/pkg/sftp v1.13.12
 	golang.org/x/crypto v0.58.0
 	golang.org/x/sys v0.50.0
 	rsc.io/qr v0.2.0
 )
 
-require github.com/jchv/go-winloader v0.0.0 // indirect
+require (
+	github.com/jchv/go-winloader v0.0.0 // indirect
+	github.com/kr/fs v0.1.0 // indirect
+)
 
 replace github.com/jchv/go-webview2 => ./third_party/go-webview2
 

@@ -1,0 +1,314 @@
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"net"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"strconv"
+	"strings"
+	"testing"
+	"time"
+)
+
+const temoinOutils = "témoin-valeur-du-coffre-4242"
+
+// journalAuditTexte: every line of the hub's audit log, as written.
+func journalAuditTexte(t *testing.T) string {
+	t.Helper()
+	m, _ := filepath.Glob(filepath.Join(dossierJournalAudit(), "*.jsonl"))
+	var b strings.Builder
+	for _, f := range m {
+		x, _ := os.ReadFile(f)
+		b.Write(x)
+	}
+	return b.String()
+}
+
+// outilsServeursTest: an open vault holding the server's key and a witness value, the server in the inventory.
+func outilsServeursTest(t *testing.T, hote string, port int, empreinte string, prive []byte) (*Serveur, ServeurInventaire) {
+	t.Helper()
+	s, _, _ := serveursAjoutTest(t)
+	motDePasseCoffreTest(t, s)
+	cle, err := s.coffre.Ajouter(EntreeCoffre{Nom: "Clé VPS", Famille: "secret", Type: "ssh", Portee: "infra"}, string(prive))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.coffre.Ajouter(EntreeCoffre{Nom: "Témoin", Famille: "secret", Type: "jeton", Portee: "code"}, temoinOutils); err != nil {
+		t.Fatal(err)
+	}
+	srv := ServeurInventaire{ID: "ab12", Nom: "VPS", Hote: hote, Port: port, Utilisateur: "athanor", Cle: cle.ID, EmpreinteHote: empreinte, Etat: "ok"}
+	if err := modifierServeurs(func(l []ServeurInventaire) ([]ServeurInventaire, error) { return append(l, srv), nil }); err != nil {
+		t.Fatal(err)
+	}
+	_ = os.RemoveAll(dossierJournalAudit())
+	t.Cleanup(func() { _ = os.RemoveAll(dossierJournalAudit()) })
+	return s, srv
+}
+
+// TestServeursOutils: the tools against the in-memory server (exec and SFTP): arguments checked, paths
+// quoted, sizes and the local folder enforced, every call in the audit log with the vault's values masked.
+func TestServeursOutils(t *testing.T) {
+	signer, prive := nouvelleCleSSH(t)
+	fichier := strings.Repeat("ligne\n", 10)
+	mem := lancerSSHMemoire(t, signer.PublicKey(), "", func(cmd string, entree []byte) (string, int) {
+		switch {
+		case strings.Contains(cmd, "dort"):
+			time.Sleep(3 * time.Second)
+		case strings.Contains(cmd, "gros-fichier"):
+			return strings.Repeat("x", tailleMaxFichier+1), 0
+		case strings.Contains(cmd, "head -c"):
+			return fichier, 0
+		case strings.Contains(cmd, "mktemp"):
+			return string(entree), 0
+		case strings.Contains(cmd, "beaucoup"):
+			return strings.Repeat("y", sortieMaxOutil+10), 0
+		case strings.Contains(cmd, "temoin"):
+			return "la valeur " + temoinOutils + " sort", 0
+		case strings.Contains(cmd, "echoue"):
+			return "raté", 5
+		}
+		return "ok:" + cmd, 0
+	})
+	s, srv := outilsServeursTest(t, mem.hote, mem.port, mem.empreinte, prive)
+	var err error
+	ctx := context.Background()
+	appel := func(outil string, args any) (ResultatOutil, error) {
+		t.Helper()
+		b, _ := json.Marshal(args)
+		return s.appelerOutilServeur(ctx, "test", srv.ID, outil, b)
+	}
+	derniere := func() string { // the last command the server ran
+		t.Helper()
+		var c string
+		for {
+			select {
+			case c = <-mem.commandes:
+			default:
+				return c
+			}
+		}
+	}
+
+	// unknown server, unknown tool, unknown argument
+	if _, err := s.appelerOutilServeur(ctx, "test", "ffff", "ssh_commande", json.RawMessage(`{"commande":"id"}`)); !errors.Is(err, errServeurInconnu) {
+		t.Errorf("unknown server: %v", err)
+	}
+	if _, err := appel("formater", map[string]any{}); err == nil {
+		t.Error("unknown tool accepted")
+	}
+	if _, err := appel("ssh_commande", map[string]any{"commande": "id", "hote": "ailleurs"}); err == nil {
+		t.Error("unknown argument accepted")
+	}
+
+	// ssh_commande: output and code, time limit, output cut
+	if r, err := appel("ssh_commande", map[string]any{"commande": "uname -a"}); err != nil || r.Sortie != "ok:uname -a" || r.Code != 0 {
+		t.Errorf("command: %v %+v", err, r)
+	}
+	if r, err := appel("ssh_commande", map[string]any{"commande": "echoue"}); err != nil || r.Code != 5 {
+		t.Errorf("failing command: %v %+v", err, r)
+	}
+	if _, err := appel("ssh_commande", map[string]any{"commande": "dort", "delai_s": 1}); err == nil || !strings.Contains(err.Error(), "stopped") {
+		t.Errorf("time limit: %v", err)
+	}
+	if r, _ := appel("ssh_commande", map[string]any{"commande": "beaucoup"}); len(r.Sortie) != sortieMaxOutil || !r.Coupee {
+		t.Errorf("output not cut: %d %v", len(r.Sortie), r.Coupee)
+	}
+	if _, err := appel("ssh_commande", map[string]any{"commande": "  "}); err == nil {
+		t.Error("empty command accepted")
+	}
+	// a value of the vault coming back from the server is masked, for the caller and in the log
+	if r, _ := appel("ssh_commande", map[string]any{"commande": "temoin"}); strings.Contains(r.Sortie, temoinOutils) || !strings.Contains(r.Sortie, masqueAudit) {
+		t.Errorf("witness value not masked: %q", r.Sortie)
+	}
+	derniere()
+
+	// fichier_lire / fichier_ecrire: absolute path, passed quoted; sizes; sudo
+	piege := "/tmp/a'; touch pwned; '$(touch pwned2)`touch pwned3`"
+	if r, err := appel("fichier_lire", map[string]any{"chemin": piege}); err != nil || r.Sortie != fichier {
+		t.Errorf("read: %v %+v", err, r)
+	}
+	if c := derniere(); !strings.Contains(c, citerShell(piege)) || strings.HasPrefix(c, "sudo") {
+		t.Errorf("path not quoted: %s", c)
+	}
+	for _, p := range []string{"etc/passwd", "", "/tmp/a\nb", "/tmp/\x00"} {
+		if _, err := appel("fichier_lire", map[string]any{"chemin": p}); err == nil {
+			t.Errorf("path %q accepted", p)
+		}
+	}
+	if _, err := appel("fichier_lire", map[string]any{"chemin": "/gros-fichier"}); err == nil || !strings.Contains(err.Error(), "sftp_recuperer") {
+		t.Errorf("file too large: %v", err)
+	}
+	if r, err := appel("fichier_ecrire", map[string]any{"chemin": "/etc/app.conf", "contenu": "cle=" + temoinOutils, "sudo": true}); err != nil || r.Code != 0 {
+		t.Errorf("write: %v %+v", err, r)
+	}
+	if c := derniere(); !strings.HasPrefix(c, "sudo -n sh -c ") || !strings.Contains(c, "mv -f") {
+		t.Errorf("write command: %s", c)
+	}
+	if _, err := appel("fichier_ecrire", map[string]any{"chemin": "/etc/app.conf"}); err == nil {
+		t.Error("write without contenu accepted")
+	}
+	if _, err := appel("fichier_ecrire", map[string]any{"chemin": "/x", "contenu": strings.Repeat("z", tailleMaxFichier+1)}); err == nil {
+		t.Error("content too large accepted")
+	}
+
+	// SFTP: only modules/servers/<id>/fichiers/, no "..", no absolute path, no link
+	local := dossierFichiersServeur(srv.ID)
+	if err := os.MkdirAll(filepath.Join(local, "conf"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(local, "conf", "site.conf"), []byte("server {}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if r, err := appel("sftp_envoyer", map[string]any{"local": "conf/site.conf", "distant": "/site.conf"}); err != nil || !strings.Contains(r.Sortie, "10 bytes") {
+		t.Fatalf("send: %v %+v", err, r)
+	}
+	if r, err := appel("sftp_recuperer", map[string]any{"distant": "/site.conf", "local": "retour/site.conf"}); err != nil || r.Code != 0 {
+		t.Fatalf("fetch: %v %+v", err, r)
+	}
+	if b, err := os.ReadFile(filepath.Join(local, "retour", "site.conf")); err != nil || string(b) != "server {}\n" {
+		t.Errorf("fetched file: %v %q", err, b)
+	}
+	if _, err := os.Stat(filepath.Join(local, "retour", "site.conf.athanor-part")); err == nil {
+		t.Error("partial file left")
+	}
+	dehors := filepath.Join(filepath.Dir(local), "dehors.txt")
+	for _, l := range []string{"../dehors.txt", "conf/../../dehors.txt", dehors, "/etc/passwd", ""} {
+		if _, err := appel("sftp_recuperer", map[string]any{"distant": "/site.conf", "local": l}); err == nil {
+			t.Errorf("local %q accepted", l)
+		}
+		if _, err := appel("sftp_envoyer", map[string]any{"local": l, "distant": "/x"}); err == nil {
+			t.Errorf("local %q sent", l)
+		}
+	}
+	if _, err := os.Stat(dehors); err == nil {
+		t.Error("a file was written outside fichiers/")
+	}
+	if _, err := appel("sftp_envoyer", map[string]any{"local": "conf/site.conf", "distant": "relatif"}); err == nil {
+		t.Error("relative remote path accepted")
+	}
+	if _, err := appel("sftp_recuperer", map[string]any{"distant": "/absent", "local": "a"}); err == nil {
+		t.Error("missing remote file fetched")
+	}
+	cible := filepath.Join(filepath.Dir(local), "cible")
+	_ = os.MkdirAll(cible, 0o700)
+	lien := filepath.Join(local, "lien")
+	err = os.Symlink(cible, lien)
+	if err != nil && runtime.GOOS == "windows" { // no symlink privilege: a junction is a link too
+		err = exec.Command("cmd", "/c", "mklink", "/J", lien, cible).Run()
+	}
+	if err == nil {
+		if _, err := appel("sftp_recuperer", map[string]any{"distant": "/site.conf", "local": "lien/x"}); err == nil || !strings.Contains(err.Error(), "links") {
+			t.Errorf("link followed: %v", err)
+		}
+	} else {
+		t.Logf("link not testable here: %v", err)
+	}
+
+	// the audit log: one line per call, the vault's values (witness and private key) never in it
+	journal := journalAuditTexte(t)
+	for _, o := range []string{"serveurs.ssh_commande", "serveurs.fichier_lire", "serveurs.fichier_ecrire", "serveurs.sftp_envoyer", "serveurs.sftp_recuperer"} {
+		if !strings.Contains(journal, `"action":"`+o+`"`) {
+			t.Errorf("no audit line for %s", o)
+		}
+	}
+	if !strings.Contains(journal, `"vers":"serveur:`+srv.ID+`"`) || !strings.Contains(journal, "code 5") {
+		t.Errorf("audit lines without server or code: %s", journal)
+	}
+	for _, x := range []string{temoinOutils, "PRIVATE KEY", strings.Repeat("y", auditMaxOutil+1)} {
+		if strings.Contains(journal, x) {
+			t.Errorf("audit log holds %.40q", x)
+		}
+	}
+	if v, _ := s.verifierAudit(); !v.OK {
+		t.Errorf("audit chain: %+v", v)
+	}
+}
+
+// TestServeursOutilsConteneur: the same tools against the real sshd of the test container (the server is
+// added with its password, as the owner would).
+func TestServeursOutilsConteneur(t *testing.T) {
+	cible := os.Getenv("ATHANOR_SSH_TEST")
+	if cible == "" {
+		t.Skip("ATHANOR_SSH_TEST absent (bash .athanor/tools/serveur_ssh.sh start)")
+	}
+	hote, portTxt, err := net.SplitHostPort(cible)
+	if err != nil {
+		t.Fatal(err)
+	}
+	port, _ := strconv.Atoi(portTxt)
+	s, appelAPI, _ := serveursAjoutTest(t)
+	motDePasseCoffreTest(t, s)
+	if _, err := s.coffre.Ajouter(EntreeCoffre{Nom: "Témoin", Famille: "secret", Type: "jeton", Portee: "code"}, temoinOutils); err != nil {
+		t.Fatal(err)
+	}
+	_, v := appelAPI("/api/serveurs/empreinte", map[string]any{"hote": hote, "port": port})
+	code, v := appelAPI("/api/serveurs/ajouter", map[string]any{"nom": "Conteneur", "hote": hote, "port": port, "utilisateur": "athanor",
+		"empreinte": v["empreinte"], "mode": "mot_de_passe", "mot_de_passe_serveur": motDePasseConteneurSSH})
+	if code != 200 {
+		t.Fatalf("addition: %d %v", code, v)
+	}
+	id := v["serveur"].(map[string]any)["id"].(string)
+	_ = os.RemoveAll(dossierJournalAudit())
+	t.Cleanup(func() { _ = os.RemoveAll(dossierJournalAudit()) })
+	ctx := context.Background()
+	appel := func(outil string, args any) ResultatOutil {
+		t.Helper()
+		b, _ := json.Marshal(args)
+		r, err := s.appelerOutilServeur(ctx, "test", id, outil, b)
+		if err != nil {
+			t.Fatalf("%s %s: %v", outil, b, err)
+		}
+		return r
+	}
+
+	if r := appel("ssh_commande", map[string]any{"commande": "id -un; exit 3"}); strings.TrimSpace(r.Sortie) != "athanor" || r.Code != 3 {
+		t.Errorf("command: %+v", r)
+	}
+	// a trapped path is a file name, never a command
+	piege := "/tmp/a'; touch pwned; '$(touch pwned2)`touch pwned3`"
+	if r := appel("fichier_ecrire", map[string]any{"chemin": piege, "contenu": "x=" + temoinOutils + "\n"}); r.Code != 0 {
+		t.Fatalf("write: %+v", r)
+	}
+	if r := appel("fichier_lire", map[string]any{"chemin": piege}); r.Sortie != "x="+masqueAudit+"\n" {
+		t.Errorf("read back: %q", r.Sortie)
+	}
+	if r := appel("ssh_commande", map[string]any{"commande": "ls -a ~ /tmp | grep -c -x -e 'pwned[23]*' -e '.*[.]athanor[.].*'"}); strings.TrimSpace(r.Sortie) != "0" {
+		t.Errorf("injection or temporary file left: %q", r.Sortie)
+	}
+	// sudo: a root file replaced in place, its mode and owner kept
+	appel("ssh_commande", map[string]any{"commande": "echo ancien | sudo -n tee /etc/athanor-test.conf >/dev/null && sudo -n chmod 640 /etc/athanor-test.conf"})
+	if r := appel("fichier_ecrire", map[string]any{"chemin": "/etc/athanor-test.conf", "contenu": "nouveau\n", "sudo": true}); r.Code != 0 {
+		t.Errorf("write with sudo: %+v", r)
+	}
+	if r := appel("ssh_commande", map[string]any{"commande": "stat -c '%a %U' /etc/athanor-test.conf; sudo -n cat /etc/athanor-test.conf; sudo -n rm -f /etc/athanor-test.conf"}); r.Sortie != "640 root\nnouveau\n" {
+		t.Errorf("root file: %q", r.Sortie)
+	}
+	if r := appel("fichier_ecrire", map[string]any{"chemin": "/etc/refuse.conf", "contenu": "x"}); r.Code == 0 {
+		t.Errorf("write without sudo in /etc: %+v", r)
+	}
+	// SFTP there and back
+	local := dossierFichiersServeur(id)
+	_ = os.MkdirAll(local, 0o700)
+	if err := os.WriteFile(filepath.Join(local, "envoi.txt"), []byte("contenu sftp\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	appel("sftp_envoyer", map[string]any{"local": "envoi.txt", "distant": "/tmp/recu.txt"})
+	appel("sftp_recuperer", map[string]any{"distant": "/tmp/recu.txt", "local": "retour.txt"})
+	if b, _ := os.ReadFile(filepath.Join(local, "retour.txt")); string(b) != "contenu sftp\n" {
+		t.Errorf("SFTP round trip: %q", b)
+	}
+	appel("ssh_commande", map[string]any{"commande": "rm -f /tmp/recu.txt " + citerShell(piege)})
+
+	journal := journalAuditTexte(t)
+	if strings.Contains(journal, temoinOutils) || strings.Contains(journal, motDePasseConteneurSSH) || strings.Contains(journal, "PRIVATE KEY") {
+		t.Error("a secret is in the audit log")
+	}
+	if strings.Count(journal, `"action":"serveurs.`) < 9 {
+		t.Errorf("audit lines missing: %s", journal)
+	}
+}
