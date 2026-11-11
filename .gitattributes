@@ -12,3 +12,4 @@ app/third_party/** linguist-vendored
 app/tools/*.cs     linguist-vendored
 # Not needed in the release zip
 .github/           export-ignore
+app/testdata/*.txt text eol=lf
