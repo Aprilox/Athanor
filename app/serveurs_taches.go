@@ -9,6 +9,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -68,15 +69,22 @@ var tachesEnCours = struct {
 	m map[string]*tacheEnCours // by task id
 }{m: map[string]*tacheEnCours{}}
 
+// instanceSessionsServeurs: the Athanor the sessions' relay reaches, when not this one (the real test's hub, M102).
+var instanceSessionsServeurs string
+
 var (
-	errTacheArretee  = errors.New("stopped by the owner")
-	errTacheRevoquee = errors.New("session token revoked")
+	errClaudeNonConnecte = errors.New("Claude Code is not logged in where the pilot runs (/login, or Settings › Claude connection)")
+	errTacheArretee      = errors.New("stopped by the owner")
+	errTacheRevoquee     = errors.New("session token revoked")
 )
 
 // sessionTacheServeurs runs one Claude session of a task in dossier (consigne.txt, reprise, hub-jeton and mcp.json
 // are there; the session works in dossier/travail and writes its stream to session.jsonl). Tests replace it.
 var sessionTacheServeurs = func(s *Serveur, ctx context.Context, dossier string) error {
 	c := commandeKit(s.kitCourant(), "session-serveurs", dossier)
+	if instanceSessionsServeurs != "" {
+		c.Args = append(c.Args, instanceSessionsServeurs)
+	}
 	c.Env = envSansSecrets(s, c.Env)
 	cacherFenetre(c)
 	if err := c.Start(); err != nil {
@@ -332,6 +340,9 @@ func (s *Serveur) sessionTache(ctx context.Context, e *tacheEnCours, dossier str
 	_ = os.Remove(journal)
 	err := sessionTacheServeurs(s, ctx, dossier)
 	id, resultat, enErreur := lireSessionClaude(journal)
+	if b, _ := os.ReadFile(journal); bytes.Contains(b, []byte(`"error":"authentication_failed"`)) {
+		return errClaudeNonConnecte
+	}
 	e.mu.Lock()
 	if id != "" {
 		e.reprise = id
@@ -540,7 +551,7 @@ func (s *Serveur) apiArreterTacheServeur(w http.ResponseWriter, r *http.Request)
 // ----------------------------------------------------------------------------- the kit's side
 
 func init() {
-	enregistrerCommande("session-serveurs", "session-serveurs FOLDER: one Claude session of a Servers task (launched by the application)", lancerSessionServeurs)
+	enregistrerCommande("session-serveurs", "session-serveurs FOLDER [INSTANCE_FILE]: one Claude session of a Servers task (launched by the application)", lancerSessionServeurs)
 }
 
 // argsSessionServeurs: the ops lead's Claude: the hub's tools only (no built-in tool, no other MCP server).
@@ -555,7 +566,7 @@ func argsSessionServeurs(consigne, mcp, reprise string) []string {
 
 // lancerSessionServeurs: run where the pilot runs (Windows, WSL, macOS, Linux), in FOLDER/travail, an empty folder.
 func lancerSessionServeurs(args []string) int {
-	if len(args) != 1 {
+	if len(args) < 1 || len(args) > 2 {
 		fmt.Fprintln(os.Stderr, "Launched by the application: a server's page › Tasks.")
 		return 2
 	}
@@ -568,6 +579,11 @@ func lancerSessionServeurs(args []string) int {
 	if err != nil || h == nil {
 		fmt.Fprintln(os.Stderr, "The task's folder is incomplete (instructions or token missing).")
 		return 1
+	}
+	if len(args) == 2 { // the real test names the Athanor that runs it (INSTANCE_FILE, like tester-mcp)
+		var a []string
+		_ = json.Unmarshal(h.valeur["args"], &a)
+		h.mettre("args", append(a, args[1]))
 	}
 	var serveurs objetJSON
 	serveurs.mettre(nomMCPHub, *h)

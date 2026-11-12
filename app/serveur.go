@@ -437,6 +437,7 @@ func (s *Serveur) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/sante/barriere", s.garde(false, s.apiBarriere))
 	mux.HandleFunc("POST /api/sante/coffre", s.garde(false, s.apiTesterCoffre))
 	mux.HandleFunc("POST /api/sante/mcp-hub", s.garde(false, s.apiTesterMCP))
+	mux.HandleFunc("POST /api/sante/agent-serveurs", s.garde(false, s.apiTesterAgentServeurs))
 	mux.HandleFunc("POST /api/sante/recompiler", s.garde(false, s.apiRecompiler))
 	mux.HandleFunc("POST /api/sante/installer", s.garde(false, s.apiInstaller))
 	mux.HandleFunc("GET /api/sante/terminal", s.garde(false, s.apiEtapeTerminal)) // the terminal interface runs it itself

@@ -3542,6 +3542,7 @@ pages.sante = async () => {
     ${v.windows && v.natif ? "" : `<button class="btn" id="st-barriere" title="${h(t("A short Claude session tries to leave the project, read your files, launch cmd.exe: everything must be blocked."))}">${t("Test the sandbox (2 min)")}</button>`}
     <button class="btn" id="st-coffre" title="${h(t(v.windows && v.natif ? "Native Windows mode, no sandbox: the granted test value must be seen, the code key can be opened by DPAPI, the infra value must stay unreadable." : "A short Claude session tries to read three test values of the vault: only the one granted to its project may reach it."))}">${t("Test the vault (2 min)")}</button>
     <button class="btn" id="st-mcp-hub" title="${h(t("A short Claude session uses the hub's tools like a pilot: it asks for a test key, Athanor accepts it as you would, and the session must read it without restarting."))}">${t("Test the hub's MCP (2 min)")}</button>
+    <button class="btn" id="st-agent-serveurs" title="${h(t("On Athanor's test container (Docker), a real Claude session gets a Servers task: it reads the sheet, its forbidden attempts must be refused, its plan is accepted for you, the change is made and the RUNBOOK completed."))}">${t("Test the Servers agent (5 min)")}</button>
     <button class="btn" id="st-recompiler" title="${h(t("After a repair of its Go code (app/): shows the change, checks it, rebuilds, runs the autotest, and only then replaces the executable, keeping the previous one."))}">${t("Rebuild Athanor")}</button>
   </div>
   ${v.windows && v.natif ? `<p class="petit attention mt-1" id="st-exception-natif">${t("Native Windows mode: no sandbox keeps Claude away from Athanor's data (settings, vault, modules). The chained audit journal shows any change (Verify), and approvals ask for your password.")}</p>` : ""}
@@ -5077,6 +5078,7 @@ $("#page").addEventListener("click", async (ev) => {
     if (b.id === "st-installer") return action(api("sante/installer", "POST"));
     if (b.id === "st-recompiler") { const r = await action(api("sante/recompiler", "POST")); if (r) { etat.tacheChoisie = r.tache; etat.verifChoisie = null; } return rendrePage(); }
     if (b.id === "st-mcp-hub") { const r = await action(api("sante/mcp-hub", "POST")); if (r) { etat.tacheChoisie = r.tache; etat.verifChoisie = null; } return rendrePage(); }
+    if (b.id === "st-agent-serveurs") { const r = await action(api("sante/agent-serveurs", "POST")); if (r) { etat.tacheChoisie = r.tache; etat.verifChoisie = null; } return rendrePage(); }
     if (b.id === "st-coffre") { const r = await action(api("sante/coffre", "POST")); if (r) { etat.tacheChoisie = r.tache; etat.verifChoisie = null; } return rendrePage(); }
     if (b.id === "st-barriere") { const r = await action(api("sante/barriere", "POST")); if (r) { etat.tacheChoisie = r.tache; etat.verifChoisie = null; } return rendrePage(); }
     if (b.id === "st-libre-btn") { const r = await action(api("sante/libre", "POST", { texte: $("#st-libre").value })); if (r) { etat.tacheChoisie = r.tache; etat.verifChoisie = null; rendrePage(); } return; }

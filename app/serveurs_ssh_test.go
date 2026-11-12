@@ -277,6 +277,3 @@ func TestConnexionSSHConteneur(t *testing.T) {
 		t.Fatalf("commande dans le conteneur : %q code %d %v", r.Sortie, r.Code, err)
 	}
 }
-
-// mot de passe de l'utilisateur du conteneur de test (testdata/serveur-ssh/Dockerfile), jamais un vrai serveur
-const motDePasseConteneurSSH = "essai-athanor"
