@@ -22,7 +22,10 @@ const (
 	varEmailACME     = "ACME_EMAIL"
 )
 
-var reAmontCaddy = regexp.MustCompile(`^[A-Za-z0-9.\-]+:[0-9]{1,5}$`)
+var (
+	reAmontCaddy  = regexp.MustCompile(`^[A-Za-z0-9.\-]+:[0-9]{1,5}$`)
+	reRacineCaddy = regexp.MustCompile(`^(/[A-Za-z0-9_\-][A-Za-z0-9._\-]*)+$`) // a static site's folder: absolute, no "..", no space
+)
 
 // plagesCloudflare: the addresses Cloudflare's proxy reaches origins from, as https://www.cloudflare.com/ips-v4
 // and https://www.cloudflare.com/ips-v6 list them (read 2026-11-12). An access site answers only them (C58).
@@ -34,15 +37,17 @@ var plagesCloudflare = []string{
 	"2400:cb00::/32", "2606:4700::/32", "2803:f800::/32", "2405:b500::/32", "2405:8100::/32", "2a06:98c0::/29", "2c0f:f248::/32",
 }
 
-// blocCaddy (pure): the site block of e on server serveur (inventory id), proxied to amont (host:port); email: ACME's account e-mail (may be
+// blocCaddy (pure): the site block of e on server serveur (inventory id), proxied to amont (host:port), or
+// serving the folder amont when it is an absolute path (a static deployment, M131); email: ACME's account e-mail (may be
 // empty); hachage: the bcrypt hash of auth_proxy's password (required by auth_proxy, ignored otherwise).
 func blocCaddy(e Environnement, serveur, amont, email, hachage string) (string, error) {
 	u, err := url.Parse(e.URL)
 	if e.URL == "" || err != nil || u.Hostname() == "" {
 		return "", errors.New("the environment has no URL")
 	}
-	if !reAmontCaddy.MatchString(amont) {
-		return "", errors.New("upstream: host:port")
+	statique := strings.HasPrefix(amont, "/")
+	if statique && !reRacineCaddy.MatchString(amont) || !statique && !reAmontCaddy.MatchString(amont) {
+		return "", errors.New("upstream: host:port, or the absolute folder of a static site")
 	}
 	if e.Protection == "auth_proxy" && u.Scheme == "http" {
 		return "", errors.New("auth_proxy needs an https:// URL: the password would travel in clear")
@@ -77,7 +82,11 @@ func blocCaddy(e Environnement, serveur, amont, email, hachage string) (string, 
 		}
 		fmt.Fprintf(&b, "\tbasic_auth {\n\t\t%s %s\n\t}\n", utilisateurProxy, hachage)
 	}
-	fmt.Fprintf(&b, "\treverse_proxy %s\n}\n", amont)
+	if statique {
+		fmt.Fprintf(&b, "\troot * %s\n\tfile_server\n}\n", amont)
+	} else {
+		fmt.Fprintf(&b, "\treverse_proxy %s\n}\n", amont)
+	}
 	return b.String(), nil
 }
 

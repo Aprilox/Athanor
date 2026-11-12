@@ -29,6 +29,8 @@ type Environnement struct {
 	CertificatExpire string `json:"certificat_expire,omitempty"`
 	// the servers where Caddy can read it (C60): only they get its tls line
 	CertificatServeurs []string `json:"certificat_serveurs,omitempty"`
+	// how it is deployed (M131), recorded by Athanor after a first deployment, never by a request
+	Deploiement *ConfigDeploiement `json:"deploiement,omitempty"`
 }
 
 var (
@@ -163,6 +165,10 @@ func (a *Acces) Environnements(projet string) map[string]Environnement {
 		if p := a.f.Projets[projet]; p != nil && p.Environnements[nom] != nil {
 			e = *p.Environnements[nom]
 			e.Serveurs = append([]string{}, e.Serveurs...)
+			if e.Deploiement != nil {
+				c := *e.Deploiement
+				e.Deploiement = &c
+			}
 		}
 		if p := a.f.Projets[projet]; p != nil {
 			e.CleDeploiement = p.CleDeploiement // one key per project
@@ -193,9 +199,10 @@ func (a *Acces) DefinirEnvironnement(projet, nom string, e Environnement) error 
 				}
 			}
 		}
-		e.CleDeploiement, e.Certificat, e.CertificatExpire, e.CertificatServeurs = "", "", "", nil
+		e.CleDeploiement, e.Certificat, e.CertificatExpire, e.CertificatServeurs, e.Deploiement = "", "", "", nil, nil
 		if avant := p.Environnements[nom]; avant != nil {
 			e.Certificat, e.CertificatExpire, e.CertificatServeurs = avant.Certificat, avant.CertificatExpire, avant.CertificatServeurs
+			e.Deploiement = avant.Deploiement
 		}
 		p.Environnements[nom] = &e
 		return nil
@@ -242,6 +249,18 @@ func (a *Acces) NoterCertificat(projet, nom, id, expire string) error {
 			p.Environnements[nom] = &e
 		}
 		p.Environnements[nom].Certificat, p.Environnements[nom].CertificatExpire = id, expire
+		return nil
+	})
+}
+
+// NoterDeploiement records how environment nom is deployed (M131), after a deployment that went through.
+func (a *Acces) NoterDeploiement(projet, nom string, c ConfigDeploiement) error {
+	return a.modifier(func(f *fichierAcces) error {
+		e := projetDe(f, projet).Environnements[nom]
+		if e == nil {
+			return errors.New("unknown environment")
+		}
+		e.Deploiement = &c
 		return nil
 	})
 }
