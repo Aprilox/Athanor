@@ -481,7 +481,18 @@ func (s *Serveur) apiTachesServeur(w http.ResponseWriter, r *http.Request) {
 		s.erreurServeurs(w, errServeurInconnu)
 		return
 	}
-	s.ecrireJSON(w, map[string]any{"taches": tachesServeur(id), "natif": modeNatif.Load()})
+	taches, plans := tachesServeur(id), map[string]PlanServeur{} // the plans as the page shows them (masked)
+	for _, t := range taches {
+		for _, p := range t.Plans {
+			if s.approbations == nil {
+				break
+			}
+			if x, err := s.planAffiche(p); err == nil {
+				plans[p] = x
+			}
+		}
+	}
+	s.ecrireJSON(w, map[string]any{"taches": taches, "plans": plans, "natif": modeNatif.Load()})
 }
 
 // apiLancerTacheServeur: POST /api/serveurs/{id}/taches {texte, forcer, mot_de_passe}. Native Windows mode: refused

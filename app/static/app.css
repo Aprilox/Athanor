@@ -1057,4 +1057,16 @@ ol.guide-access li { margin: 5px 0; }
 .srv-section .badge { margin: 0 4px 4px 0; }
 .srv-remarques ul { margin: 0; padding-left: 18px; }
 .srv-retirer { border-color: color-mix(in srgb, var(--erreur) 45%, var(--line)); }
+/* a server's tasks (M99): the request, then one folded card per task; its plans reuse the approval card's look */
+.srv-taches h3 { margin: 0 0 8px; font-size: 15px; }
+.srv-tache-form { display: grid; gap: 8px; margin-bottom: 12px; }
+.srv-tache-form textarea { min-height: 70px; }
+.srv-annulations { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; display: grid; gap: 6px; }
+.srv-tache { border-top: 1px solid var(--line); padding: 8px 0; }
+.srv-tache summary { cursor: pointer; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px; }
+.srv-tache-texte { flex: 1 1 200px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.srv-tache-corps { display: grid; gap: 10px; padding: 10px 0 4px; min-width: 0; }
+.srv-tache-corps .pv-details, .srv-tache-resultat { white-space: pre-wrap; overflow-wrap: anywhere; }
+.srv-tache-etapes { margin: 0; padding-left: 18px; }
+.srv-tache-plan { display: grid; gap: 6px; border-left: 3px solid var(--line); padding-left: 10px; min-width: 0; }
 @media (max-width: 700px) { .srv-form .cof-choix { grid-template-columns: 1fr; } .srv-sous { margin-left: 0; } }

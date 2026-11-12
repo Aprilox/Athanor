@@ -349,16 +349,23 @@ func (s *Serveur) plansAffiches(l []Approbation) map[string]PlanServeur {
 		if x.Action != actionPlanServeur {
 			continue
 		}
-		p, err := s.lirePlan(x.ID)
-		if err != nil {
-			continue
+		if p, err := s.planAffiche(x.ID); err == nil {
+			out[x.ID] = p
 		}
-		for i := range p.Etapes {
-			p.Etapes[i].Lisible = couper(s.masquerSecrets(string(p.Etapes[i].Arguments)), 4000)
-			p.Etapes[i].Arguments = nil
-		}
-		p.Resume = s.masquerSecrets(p.Resume)
-		out[x.ID] = p
 	}
 	return out
+}
+
+// planAffiche: the plan id as a page shows it (arguments masked and cut, never raw).
+func (s *Serveur) planAffiche(id string) (PlanServeur, error) {
+	p, err := s.lirePlan(id)
+	if err != nil {
+		return p, err
+	}
+	for i := range p.Etapes {
+		p.Etapes[i].Lisible = couper(s.masquerSecrets(string(p.Etapes[i].Arguments)), 4000)
+		p.Etapes[i].Arguments = nil
+	}
+	p.Resume = s.masquerSecrets(p.Resume)
+	return p, nil
 }

@@ -171,6 +171,20 @@ func TestServeursTaches(t *testing.T) {
 	if p, err := s.lirePlan(fin.Plans[0]); err != nil || p.Etapes[0].Executee == "" {
 		t.Errorf("the plan's step was not run: %v %+v", err, p)
 	}
+	// the page's view (M99): the task's plan, its step run, its arguments only as masked text
+	w0 := httptest.NewRecorder()
+	r0 := httptest.NewRequest("GET", "/api/serveurs/ab12/taches", nil)
+	r0.SetPathValue("id", srv.ID)
+	s.apiTachesServeur(w0, r0)
+	var vue struct {
+		Plans map[string]PlanServeur `json:"plans"`
+	}
+	if json.Unmarshal(w0.Body.Bytes(), &vue) != nil || len(vue.Plans[fin.Plans[0]].Etapes) != 1 {
+		t.Fatalf("tasks' view: %d %s", w0.Code, w0.Body)
+	}
+	if e := vue.Plans[fin.Plans[0]].Etapes[0]; e.Executee == "" || e.Arguments != nil || !strings.Contains(e.Lisible, "restart nginx") {
+		t.Errorf("plan step in the view: %+v", e)
+	}
 
 	// 3. a stop: the session is cut, its token revoked at once, the task "arretee"
 	arrive := make(chan string, 1)

@@ -2687,7 +2687,7 @@ function blocPlan(x, p) {
   if (!p) return `<div class="pv-details">${h(x.raison)}</div>`;
   const etapes = (p.etapes || []).map((e) => {
     const [lib, cl] = CLASSES_ETAPE()[e.classe] || [e.classe, ""];
-    return `<li><div class="plan-etape-tete"><code>${h(e.outil)}</code> <span class="pv-etat ${cl}">${h(lib)}</span></div>
+    return `<li><div class="plan-etape-tete"><code>${h(e.outil)}</code> <span class="pv-etat ${cl}">${h(lib)}</span>${e.executee ? ` <span class="pv-etat pv-ok">✓ ${t("applied")}</span>` : ""}</div>
       <div class="plan-args">${argumentsLisibles(e.lisible)}</div><div class="pv-details m0">${h(e.pourquoi)}</div>
       ${(e.sauvegarde || []).length ? `<div class="petit plan-args">${h(t("Backed up first: {0}", [e.sauvegarde.join(", ")]))}</div>` : ""}${e.sans_sauvegarde ? `<div class="petit plan-args">${h(t("No backup: {0}", [e.sans_sauvegarde]))}</div>` : ""}</li>`;
   }).join("");
@@ -4512,7 +4512,7 @@ function ligneAudit(l, lang) {
     <span class="muet petit aud-n" title="${h(l.id)}">#${l.n}</span></li>`;
 }
 // --- Servers (#serveurs): inventory cards and the add wizard (address → fingerprint to confirm → one of three ways)
-const srv = { aj: null }; // aj: the wizard ({etape: "adresse" | "empreinte" | "cle" | "coupure", …}), kept across renders
+const srv = { aj: null, texte: "", ouvertes: new Set() }; // aj: the wizard ({etape: "adresse" | "empreinte" | "cle" | "coupure", …}), kept across renders
 function carteServeur(x, fiche) {
   const sante = { ok: t("Reachable"), injoignable: t("Unreachable"), empreinte_changee: t("Host fingerprint changed") }[x.etat] || t("Waiting for its key"), cls = x.etat === "ok" ? "travaille" : "attend", f = fiche || {};
   const tourne = [...(f.conteneurs || []).filter((c) => /^(up|running)/i.test(c.etat)).map((c) => c.nom), ...(f.services || [])];
@@ -4680,7 +4680,9 @@ function ficheServeur(f) {
 }
 pages.serveur = async () => {
   const distant = !!(etat.vue || {}).distant;
-  const [d, c] = await Promise.all([api("serveurs/" + encodeURIComponent(srv.id || "")), distant ? null : api("coffre").catch(() => null)]);
+  const [d, c, ta] = await Promise.all([api("serveurs/" + encodeURIComponent(srv.id || "")), distant ? null : api("coffre").catch(() => null),
+    api("serveurs/" + encodeURIComponent(srv.id || "") + "/taches").catch(() => null)]);
+  srv.tachesSig = JSON.stringify(ta);
   const x = d.serveur, f = d.fiche, attente = x.etat === "inconnu";
   srv.fiche = x; // the actions below act on the server shown
   const sante = { ok: t("Reachable"), injoignable: t("Unreachable"), empreinte_changee: t("Host fingerprint changed") }[x.etat] || t("Waiting for its key");
@@ -4699,9 +4701,9 @@ pages.serveur = async () => {
         ${attente ? `<button type="button" class="btn btn-primaire" data-srv-verifier="${h(x.id)}">${t("Verify")}</button>` : `<button type="button" class="btn" data-srv-rafraichir>↻ ${t("Refresh")}</button>`}
         ${!attente && !x.mot_de_passe_coupe ? `<button type="button" class="btn" data-srv-couper="${h(x.id)}">${t("Cut password logins")}</button>` : ""}</div>`}
     </div>
-    ${(d.annulations || []).length ? `<div class="bloc srv-annulations"><h3>${t("Changes waiting for confirmation")}</h3>
+    ${blocTaches(ta, distant, (d.annulations || []).length ? `<div class="srv-annulations"><h4 class="m0">${t("Changes waiting for confirmation")}</h4>
       <p class="muet petit">${t("Athanor put a safety net on these firewall or SSH changes: unless you keep them, the server undoes them by itself when the countdown ends.")}</p>
-      ${d.annulations.map((a) => `<div class="ligne m0"><code>${h(a.quoi)}</code><span class="muet petit" data-srv-echeance="${h(a.echeance)}"></span>${distant ? "" : `<button type="button" class="btn btn-primaire" data-srv-garder="${h(a.id)}">${t("Keep this change")}</button>`}</div>`).join("")}</div>` : ""}
+      ${d.annulations.map((a) => `<div class="ligne m0"><code>${h(a.quoi)}</code><span class="muet petit" data-srv-echeance="${h(a.echeance)}"></span>${distant ? "" : `<button type="button" class="btn btn-primaire" data-srv-garder="${h(a.id)}">${t("Keep this change")}</button>`}</div>`).join("")}</div>` : "")}
     ${f ? ficheServeur(f) : `<div class="vide">${attente ? t("Its sheet is made once Athanor reaches the server with its key.") : t("Its sheet is not made yet.")}</div>`}
     ${d.runbook ? `<details class="bloc srv-runbook"><summary><b>${t("Runbook")}</b> <span class="muet petit">${t("What was done on this server, its backups and how to go back, kept by Athanor and its agents.")}</span></summary><pre class="chat-code srv-runbook-texte">${h(d.runbook)}</pre></details>` : ""}
     ${distant ? "" : `<div class="bloc srv-retirer"><h3>${t("Remove this server")}</h3>
@@ -4710,6 +4712,79 @@ pages.serveur = async () => {
       <div class="ligne m0"><button type="button" class="btn btn-danger" data-srv-retirer>${t("Remove")}</button></div></div>`}
   </div>`;
 };
+// --- A server's tasks (M99): asked here, run by the ops lead agent; its plans are decided on their approval cards
+const ETATS_TACHE_SRV = () => ({ preparation: [t("Reading the server"), "pv-claude"], critique: [t("Security critic reading the plan"), "pv-claude"],
+  attente_accord: [t("Waiting for your decision"), "pv-vous"], application: [t("Applying the plan"), "pv-claude"], verification: [t("External check"), "pv-claude"],
+  finie: [t("Done"), "pv-ok"], echec: [t("Failed"), "pv-vous"], arretee: [t("Stopped"), "pv-vous"] });
+const tacheFinie = (x) => ["finie", "echec", "arretee"].includes(x.etat);
+function dureeTache(x) {
+  const s = Math.max(0, Math.round(((x.fin ? Date.parse(x.fin) : Date.now()) - Date.parse(x.cree)) / 1000));
+  return s < 60 ? t("{0} s", [s]) : s < 3600 ? t("{0} min", [Math.round(s / 60)]) : t("{0} h", [(s / 3600).toFixed(1)]);
+}
+function carteTacheServeur(x, plans, distant) {
+  const [lib, cl] = ETATS_TACHE_SRV()[x.etat] || [x.etat, ""], heure = (d) => new Date(d).toLocaleTimeString(document.documentElement.lang || "en", { hour: "2-digit", minute: "2-digit" });
+  const etapes = (x.historique || []).map((e) => `<li><span class="muet">${h(heure(e.t))}</span> ${h((ETATS_TACHE_SRV()[e.etat] || [e.etat])[0])}${["echec", "arretee"].includes(e.etat) && e.detail ? ` <span class="muet">— ${h(e.detail)}</span>` : ""}</li>`).join("");
+  const blocsPlans = (x.plans || []).map((id, i) => {
+    const p = plans[id], attend = x.etat === "attente_accord" && i === x.plans.length - 1;
+    if (!p) return `<p class="muet petit">${h(t("Plan {0}: no longer kept.", [i + 1]))}</p>`;
+    const faites = (p.etapes || []).filter((e) => e.executee).length;
+    return `<div class="srv-tache-plan"><h4 class="m0">${h(t("Plan {0}", [i + 1]))} <span class="muet petit">${h(t("{0} of {1} step(s) applied", [faites, (p.etapes || []).length]))}</span></h4>${blocPlan({}, p)}
+      ${attend ? `<p class="m0"><a href="#pourvous" class="btn btn-primaire" data-srv-tache-carte="${h(id)}">${t("Decide on its card")}</a></p>` : ""}</div>`;
+  }).join("");
+  const v = x.verification;
+  return `<details class="srv-tache" data-tache="${h(x.id)}"${srv.ouvertes.has(x.id) ? " open" : ""}><summary><span class="pv-etat ${cl}">${h(lib)}</span> <span class="srv-tache-texte">${h(x.texte)}</span>
+      <span class="muet petit">${h(dateLisible(x.cree))} · ${h(dureeTache(x))}</span></summary>
+    <div class="srv-tache-corps"><p class="pv-details">${h(x.texte)}</p>
+      ${x.forcee ? `<p class="petit pv-vous">${t("Forced in native Windows mode, without the barrier.")}</p>` : ""}
+      <ol class="srv-tache-etapes petit">${etapes}</ol>
+      ${blocsPlans || (tacheFinie(x) ? `<p class="muet petit">${t("No plan: nothing was changed on the server.")}</p>` : "")}
+      ${v ? `<div class="pv-note"><strong>${t("External check")}</strong> <span class="pv-etat ${v.verdict === "ok" ? "pv-ok" : "pv-vous"}">${v.verdict === "ok" ? t("Passed") : t("Failed")}</span>
+        ${(v.lignes || []).length ? `<ul class="petit m0">${v.lignes.map((l) => `<li>${h(l)}</li>`).join("")}</ul>` : ""}</div>` : ""}
+      ${x.resultat ? `<div class="pv-note"><strong>${t("The agent's answer")}</strong><p class="m0 srv-tache-resultat">${h(x.resultat)}</p></div>` : ""}
+      ${!tacheFinie(x) && !distant ? `<div class="ligne m0"><button type="button" class="btn btn-danger" data-srv-tache-arreter="${h(x.id)}">${t("Stop")}</button></div>` : ""}
+    </div></details>`;
+}
+function blocTaches(ta, distant, annulations) {
+  const l = (ta || {}).taches || [];
+  return `<div class="bloc srv-taches"><h3>${t("Tasks")}${l.length ? ` <span class="muet">${l.length}</span>` : ""}</h3>
+    ${distant ? `<p class="muet petit">${t("Tasks are launched from the computer; their plans are decided on their cards, on the For you page.")}</p>` : `<form id="srv-tache-form" class="srv-tache-form">
+      <label for="srv-tache-texte"><b>${t("What should be done on this server?")}</b></label>
+      <textarea id="srv-tache-texte" rows="3" maxlength="4000" placeholder="${h(t("e.g. Install nginx and serve my site over HTTPS"))}">${h(srv.texte)}</textarea>
+      <p class="muet petit m0">${t("The Servers agent reads the server, then proposes a plan. Nothing changes before you accept it on its card; a security critic reads it first, files are backed up before a change, and an external check follows.")}</p>
+      ${(ta || {}).natif ? `<p class="petit pv-vous m0">${t("Native Windows mode has no barrier: a task runs only if you force it, with Athanor's password.")}</p>` : ""}
+      <div class="ligne m0"><button type="submit" class="btn btn-primaire">${t("Launch")}</button></div></form>`}
+    ${annulations}
+    ${ta ? l.length ? l.map((x) => carteTacheServeur(x, ta.plans || {}, distant)).join("") : `<p class="muet petit">${t("No task yet on this server.")}</p>` : `<p class="muet petit">${t("The tasks cannot be read right now.")}</p>`}
+  </div>`;
+}
+$("#page").addEventListener("toggle", (ev) => { // a task opened stays open across a live refresh
+  const d = ev.target; if (etat.page !== "serveur" || !d.matches || !d.matches(".srv-tache")) return;
+  if (d.open) srv.ouvertes.add(d.dataset.tache); else srv.ouvertes.delete(d.dataset.tache);
+}, true);
+$("#page").addEventListener("input", (ev) => { if (etat.page === "serveur" && ev.target.id === "srv-tache-texte") srv.texte = ev.target.value; });
+$("#page").addEventListener("submit", async (ev) => {
+  if (etat.page !== "serveur" || ev.target.id !== "srv-tache-form") return;
+  ev.preventDefault();
+  const champ = $("#srv-tache-texte"), texte = champ.value.trim(), b = ev.submitter || ev.target.querySelector("[type=submit]");
+  if (!texte) return champ.focus();
+  const url = "serveurs/" + encodeURIComponent(srv.fiche.id) + "/taches";
+  b.disabled = true;
+  try {
+    const r = await api(url, "POST", { texte }).catch(async (e) => {
+      if (!e.data || !e.data.proposer_wsl) throw e;
+      const c = await choisir(t("Native Windows mode has no barrier: an agent working on your servers would run with all your rights on this PC. Switch to WSL, or force this task knowing the risk."),
+        [{ id: "wsl", texte: t("Switch to WSL"), primaire: true }, { id: "forcer", texte: t("Force this task"), danger: true }, { id: "", texte: t("Cancel") }], { titre: t("Native Windows mode") });
+      if (c === "wsl") { location.hash = "#options@bloc-direct"; return null; }
+      if (c !== "forcer") return null;
+      const p = await preuveMdp(t("Forcing a Servers task without the barrier: retype Athanor's password."), { ok: t("Force this task"), danger: true }, t("Force this task without the barrier?"));
+      return p ? api(url, "POST", { texte, forcer: true, ...p }) : null;
+    }).catch((e) => { if (e.message !== t("Locked")) toast(e.message, "erreur"); return null; });
+    if (!r) return;
+    srv.texte = ""; srv.ouvertes.add(r.tache.id);
+    toast(t("Task launched: the agent reads the server first."), "ok");
+    rendrePage();
+  } finally { b.disabled = false; }
+});
 // the countdown of the changes waiting for confirmation; at its end the server has undone the change: read it again
 setInterval(() => {
   let fini = false;
@@ -4730,9 +4805,16 @@ $("#page").addEventListener("change", async (ev) => {
 });
 $("#page").addEventListener("click", async (ev) => {
   if (etat.page !== "serveur") return;
-  const b = ev.target.closest("[data-srv-rafraichir], [data-srv-couper], [data-srv-verifier], [data-srv-retirer], [data-srv-garder]");
+  const b = ev.target.closest("[data-srv-rafraichir], [data-srv-couper], [data-srv-verifier], [data-srv-retirer], [data-srv-garder], [data-srv-tache-arreter], [data-srv-tache-carte]");
   if (!b) return;
   const x = srv.fiche, url = "serveurs/" + encodeURIComponent(x.id), d = b.dataset;
+  if (d.srvTacheCarte) { etat.apprCible = d.srvTacheCarte; return; } // the link opens For you, where the card is scrolled to
+  if (d.srvTacheArreter) {
+    if (!(await confirmer(t("Stop this task? Its agent is cut at once and its access revoked; a change already made stays (see the Runbook)."), { ok: t("Stop"), danger: true }))) return;
+    b.disabled = true;
+    if (await action(api(url + "/taches/" + encodeURIComponent(d.srvTacheArreter) + "/arreter", "POST"))) toast(t("Task stopped."), "ok");
+    return rendrePage();
+  }
   if (d.srvGarder) {
     b.disabled = true;
     if (await action(api(url, "POST", { garder: d.srvGarder }))) toast(t("Change kept: its automatic rollback is cancelled."), "ok");
@@ -5187,6 +5269,10 @@ async function rafraichir() {
       if (blocMaj && etat.optionsVue) {
         const sig = JSON.stringify(v.maj || {});
         if (sig !== etat.majSig) { etat.majSig = sig; blocMaj.innerHTML = `<h2>${t("Version")}</h2>${rendreBlocMaj(etat.optionsVue)}`; }
+      }
+      if (etat.page === "serveur" && srv.tachesSig && !document.activeElement.matches("input, textarea, select") && ++etat.srvTic % 2 === 0) { // a task's states, live
+        const r = await api("serveurs/" + encodeURIComponent(srv.id || "") + "/taches").catch(() => null);
+        if (r && JSON.stringify(r) !== srv.tachesSig) rendrePage();
       }
       if (etat.page === "pourvous" && !document.activeElement.matches("input, textarea, select") && ++etat.pvTic % 4 === 0) {
         const [r, ap] = await Promise.all([api("pourvous").catch(() => null), api("hub/approbations").catch(() => null)]);
