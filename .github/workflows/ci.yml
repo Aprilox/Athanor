@@ -115,6 +115,39 @@ jobs:
         working-directory: app
         run: go run . construire --all
 
+  servers-ssh:
+    # the Servers module against a real sshd (app/testdata/serveur-ssh, never a real server): an agent's MCP
+    # route adds it, reads its sheet, changes it only by an accepted plan, is refused destructive or masked
+    # commands, and an unconfirmed firewall rule is undone by the server itself (app/serveurs_ci_test.go)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: app/go.mod
+      - name: Test SSH server
+        # a free port chosen by Docker, on 127.0.0.1 only; NET_ADMIN for ufw
+        run: |
+          docker build -q -t athanor-serveur-ssh testdata/serveur-ssh
+          docker run -d --name athanor-serveur-ssh --cap-add NET_ADMIN -p 127.0.0.1::22 athanor-serveur-ssh
+          port="$(docker port athanor-serveur-ssh 22/tcp | head -n1 | sed 's/.*://')"
+          for _ in $(seq 1 50); do  # ready once sshd shows its banner
+            if timeout 2 bash -c "exec 3<>/dev/tcp/127.0.0.1/$port && head -c 4 <&3" 2>/dev/null | grep -q SSH; then
+              echo "ATHANOR_SSH_TEST=127.0.0.1:$port" >> "$GITHUB_ENV"; exit 0
+            fi
+            sleep 0.2
+          done
+          echo "::error::test SSH server unreachable"; docker logs athanor-serveur-ssh | tail -n 20; exit 1
+      - name: Servers tests on the container
+        # a skip (ATHANOR_SSH_TEST lost) would pass silently: the PASS line is required
+        run: |
+          go test -count=1 -timeout 10m -run '^TestServeursCIConteneur$' -v . | tee ci.log
+          grep -q -- '--- PASS: TestServeursCIConteneur' ci.log
+
   vuln:
     # known vulnerabilities of the Go standard library and of the modules, in the code Athanor really calls
     runs-on: ubuntu-latest
