@@ -93,7 +93,11 @@ func (s *Serveur) avancerRelais(p Projet, maintenant time.Time) <-chan struct{} 
 	go func() {
 		defer close(fini)
 		d, _ := suite(context.Background()) // its result is in the history
-		s.notifierRelais(p.Nom, d.Etat == "ok", r.Jalon)
+		if d.Etat == "ok" {
+			s.notifierRelais(p.Nom, true, r.Jalon)
+		} else {
+			s.notifierIncidents() // the incident tells it, with its three actions
+		}
 	}()
 	return fini
 }
@@ -138,7 +142,7 @@ func (s *Serveur) alertesRelais() []AlerteHub {
 			continue
 		}
 		v := s.etatRelais(p.Nom)
-		if v == nil || v.Etat != "echec" {
+		if v == nil || v.Etat != "echec" || v.ID != "" && s.incidentEnv(lireSante(), p.Nom, "dev") != nil { // a failed deployment: the incident rings
 			continue
 		}
 		h := sha256.Sum256([]byte("relais\x00" + p.Nom + "\x00" + v.Jalon + "\x00" + v.Commit))

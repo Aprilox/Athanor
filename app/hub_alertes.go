@@ -27,6 +27,7 @@ type ActionAlerte struct {
 	Route    string         `json:"route,omitempty"`
 	Corps    map[string]any `json:"corps,omitempty"`
 	Distance bool           `json:"distance,omitempty"`
+	Accord   bool           `json:"accord,omitempty"` // the page asks for the owner's password first (M137: prod incidents)
 }
 
 type AlerteHub struct {
@@ -114,7 +115,7 @@ func alertesApprobations(l []Approbation) []AlerteHub {
 // alertesHub: the bell (the pending approvals first, then the modules' alerts not ignored) and the
 // history of the ignored ones, each with its Reopen.
 func (s *Serveur) alertesHub(el []ElementHub) (actives, cachees []AlerteHub) {
-	toutes := append(alertesDe(el), s.alertesRelais()...)
+	toutes := append(append(alertesDe(el), s.alertesRelais()...), s.alertesIncidents()...)
 	actives, cachees = trierAlertes(toutes, ignoreesCourantes(toutes))
 	for i := range cachees {
 		cachees[i].Actions = []ActionAlerte{ignorerOuRouvrir(cachees[i].Empreinte, false)}
@@ -206,7 +207,7 @@ func (s *Serveur) apiAlertes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_, el := s.vueHub()
-	if !ignorerAlerte(append(alertesDe(el), s.alertesRelais()...), c.Empreinte, c.Ignorer) {
+	if !ignorerAlerte(append(append(alertesDe(el), s.alertesRelais()...), s.alertesIncidents()...), c.Empreinte, c.Ignorer) {
 		s.erreur(w, http.StatusNotFound, "This alert no longer exists.")
 		return
 	}

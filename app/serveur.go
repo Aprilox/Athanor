@@ -387,6 +387,8 @@ func (s *Serveur) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/projets/{nom}/environnements", s.garde(false, s.apiEnvironnementModifier))
 	mux.HandleFunc("POST /api/projets/{nom}/cle-deploiement", s.garde(false, s.apiCleDeploiement))
 	mux.HandleFunc("POST /api/projets/{nom}/revenir", s.garde(false, s.apiRevenir))
+	mux.HandleFunc("POST /api/projets/{nom}/incident", s.garde(false, s.apiIncident))
+	mux.HandleFunc("POST /api/serveurs/sante", s.garde(false, s.apiSanteReglage))
 	mux.HandleFunc("POST /api/deverrouiller", s.garde(true, s.apiDeverrouiller))
 	mux.HandleFunc("POST /api/verrouiller", s.garde(true, s.apiVerrouiller))
 

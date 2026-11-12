@@ -133,6 +133,22 @@ func TestCaptureHub(t *testing.T) {
 		avecMdpPreuve(s)
 		http.SetCookie(w, &http.Cookie{Name: cookieSessionTest.Name, Value: cookieSessionTest.Value, Path: "/"})
 	})
+	// incident-* (M137): projet-00's staging red twice in a row (an incident), prod healthy, dev's certificate soon; off afterwards
+	t.Cleanup(func() { _ = os.Remove(fichierSanteEnvs()) })
+	mux.HandleFunc("POST /test/incident", func(w http.ResponseWriter, r *http.Request) {
+		_ = os.Remove(fichierSanteEnvs())
+		if r.URL.Query().Get("on") == "" {
+			return
+		}
+		echec := &VerifDeploiement{OK: false, Problemes: []string{"statut"}, HTTP: ResultatHTTP{URL: "https://preprod.example.org", Statut: 502}, T: "2026-11-12T09:15:00Z"}
+		modifierSante(func(f *fichierSante) {
+			f.Dernier = "2026-11-12T09:15:00Z"
+			f.Envs["projet-00/staging"] = SanteEnv{Etat: "incident", Rouges: 2, RougeDepuis: "2026-11-12T09:00:00Z", T: "2026-11-12T09:15:00Z", Verification: echec,
+				Problemes: []ProblemeSante{{Code: "verif", Rouge: true}}}
+			f.Envs["projet-00/prod"] = SanteEnv{Etat: "ok", T: "2026-11-12T09:15:00Z"}
+			f.Envs["projet-00/dev"] = SanteEnv{Etat: "alerte", T: "2026-11-12T09:15:00Z", Problemes: []ProblemeSante{{Code: "certificat", Args: []any{10}}}}
+		})
+	})
 	// plan-serveur-* (M91): two Servers plans to decide, created after the appr-* screenshots so their counts stay
 	mux.HandleFunc("POST /test/plans", func(w http.ResponseWriter, r *http.Request) {
 		if l, _ := s.approbations.Liste(); slices.ContainsFunc(l, func(x Approbation) bool { return x.Action == actionPlanServeur }) {

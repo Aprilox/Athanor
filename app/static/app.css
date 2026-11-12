@@ -1036,6 +1036,14 @@ ol.guide-access li { margin: 5px 0; }
 .env-carte .btn { align-self: flex-start; }
 .env-deploi { border-top: 1px solid var(--line); padding-top: 8px; display: flex; flex-direction: column; gap: 6px; }
 .env-deploi h4 { margin: 0; font-size: 13px; }
+.env-sante { border-top: 1px solid var(--line); padding-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+.env-sante h4 { margin: 0; font-size: 13px; }
+.env-sante p { margin: 0; }
+.env-sante-incident .badge, .srv-sante-incident { border-color: var(--erreur); color: var(--erreur); }
+.env-sante-alerte .badge, .srv-sante-alerte { border-color: var(--attention); color: var(--attention); }
+.srv-sante { flex-wrap: wrap; gap: 4px; }
+.srv-reglage-sante { flex-wrap: wrap; gap: 8px; margin: 4px 0 10px; }
+.srv-reglage-sante select { width: auto; }
 .env-deploi-liste { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .env-deploi-liste li { display: flex; flex-direction: column; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
 .env-deploi-echec .badge { color: var(--attention); }

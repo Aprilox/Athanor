@@ -73,6 +73,7 @@ func main() {
 	go s.battementsPCs()        // several computers on a project: this one says it is there (api_pcs.go)
 	go s.battementsDirects()    // the direct link between them: the masters open, the nodes beat (equipe_directe.go)
 	go s.fichesServeursFond()   // the servers' sheets, every 6 hours while their keys can be opened (serveurs_fiche.go)
+	go s.santeEnvsFond()        // the deployed sites' health and their incidents (sante_envs.go)
 
 	mux := http.NewServeMux()
 	s.routes(mux)

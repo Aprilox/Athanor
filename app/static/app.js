@@ -802,7 +802,14 @@ $("#notifs").addEventListener("click", async (ev) => {
     if (!x) return;
     b.disabled = true;
     if (a.approbation) return deciderDepuisCloche(a.approbation, x, b);
-    await action(api(x.route, "POST", x.corps));
+    // M137: a prod incident's Retry and Go back ask for the owner's accord first
+    const preuve = x.accord ? await preuveMdp(t("{0} in production: retype Athanor's password.", [t(x.libelle)]), { ok: t(x.libelle) }, t("{0} in production?", [t(x.libelle)])) : {};
+    if (preuve === false) { b.disabled = false; return; }
+    if (x.route.endsWith("/incident") && x.corps.action !== "main") { b.textContent = t("Working…"); toast(t("Working… the site is checked from this PC right after.")); }
+    const r = await action(api(x.route, "POST", { ...x.corps, ...preuve }));
+    if (r && r.deploiement) toast(r.deploiement.etat === "ok" ? t("Done: the site answers again.") : t(r.deploiement.erreur || "Failed"), r.deploiement.etat === "ok" ? "ok" : "erreur");
+    if (r && r.page) { fermerNotifs(); return allerProjet(r.projet, r.page.slice(1)); } // I take over: the server's sheet
+    if (!r) { b.disabled = false; b.textContent = t(x.libelle); }
     etat.hub = await api("hub").catch(() => etat.hub);
     if (etat.vue) rendreBandeau(etat.vue);
     const suite = $("#notifs .alerte-actions .btn") || document.querySelector("[data-notifs]"); if (suite) suite.focus();
@@ -4340,6 +4347,7 @@ function blocEnvironnements(en, inventaire, fournisseurs, distant) {
         : `<div class="env-champ"><span>${t("DNS provider")}</span><p class="muet petit">${t("None: providers (Cloudflare) are added in Servers.")}</p></div>`}
       <p class="petit attention env-erreur" role="alert" hidden></p>
       ${distant ? "" : `<button type="button" class="btn btn-petit" data-env-enregistrer>${t("Save")}</button>`}
+      ${blocSante((en.sante || {})[nom], e)}
       ${blocDeploiements(nom, e, (en.deploiements || {})[nom] || [], distant)}
     </section>`;
   };
@@ -4371,6 +4379,32 @@ function blocDeploiements(nom, e, liste, distant) {
     ${liste.length ? `<ul class="env-deploi-liste">${liste.map(ligne).join("")}</ul>` : `<p class="muet petit">${t("Nothing deployed yet.")}</p>`}
     ${!distant && e.deploiement && liste.length > 1 ? `<button type="button" class="btn btn-petit" data-env-revenir>${t("Go back to the previous version")}</button>` : ""}</div>`;
 }
+// M137: an environment's health (checked every 15 minutes by default) and its incident, if any
+const ETATS_SANTE = { ok: ["✔", "Healthy"], alerte: ["⚠", "Warning"], incident: ["✖", "Incident"] };
+const PROBLEMES_SANTE = { certificat: "The certificate expires in {0} days", disque: "Disk {1}% full on {0}", memoire: "Memory {1}% used on {0}" };
+function blocSante(s, e) {
+  if (!s) return "";
+  const [icone, etiquette] = ETATS_SANTE[s.etat] || ["", s.etat], i = s.incident;
+  const probleme = (p) => p.code === "verif" && s.verification ? texteVerif(s.verification, e.protection) : t(PROBLEMES_SANTE[p.code] || p.code, (p.args || []).map(String));
+  return `<div class="env-sante env-sante-${h(s.etat)}" data-env-sante><h4>${t("Health")}</h4>
+    <p class="ligne m0 petit"><span class="badge">${icone} ${h(t(etiquette))}</span>${s.t ? `<span class="muet">${h(t("Checked {0}", [dateLisible(s.t)]))}</span>` : ""}</p>
+    ${(s.problemes || []).map((p) => `<p class="petit${p.rouge ? " attention" : ""}">${h(probleme(p))}</p>`).join("")}
+    ${i ? `<p class="petit attention">${h(t("What failed: {0}.", [i.echec]))} ${h(t("What was tried: {0}.", [i.tente]))}</p>
+      <p class="petit muet">${i.pris_en_main ? h(t("You took over {0}.", [dateLisible(i.pris_en_main)])) : t("The bell offers: Retry, Go back to the previous version, I take over.")}</p>` : ""}</div>`;
+}
+// the Servers page: how often the deployed sites are checked (or not at all)
+function reglageSante(sa, distant) {
+  const choix = (sa.intervalles || [5, 15, 30, 60]).map((m) => [String(m), t("Every {0} minutes", [m])]).concat([["0", t("Off")]]);
+  const val = sa.arret ? "0" : String(sa.minutes || 15);
+  return `<div class="ligne m0 petit srv-reglage-sante"><label for="srv-sante">${t("Health of the deployed sites")}</label>
+    <select id="srv-sante" data-srv-sante${distant ? " disabled" : ""}>${choix.map(([v, l]) => `<option value="${v}"${v === val ? " selected" : ""}>${h(l)}</option>`).join("")}</select>
+    <span class="muet">${sa.dernier && !sa.arret ? h(t("Last check {0}", [dateLisible(sa.dernier)])) : t("Checked from this PC: the site, its certificate, the disk and memory of its servers.")}</span></div>`;
+}
+$("#page").addEventListener("change", async (ev) => {
+  const sel = ev.target.closest("[data-srv-sante]"); if (!sel) return;
+  const m = +sel.value;
+  if (await action(api("serveurs/sante", "POST", m ? { minutes: m } : { arret: true }))) toast(m ? t("The sites are checked every {0} minutes.", [m]) : t("The sites' health checks are off."), "ok");
+});
 const AUTEURS_DEPLOI = { agent: "by the agent", relais: "after a milestone", proprietaire: "by you" };
 $("#page").addEventListener("click", async (ev) => {
   const b = ev.target.closest("[data-env-revenir]"); if (!b) return;
@@ -4666,7 +4700,7 @@ function ligneAudit(l, lang) {
 }
 // --- Servers (#serveurs): inventory cards and the add wizard (address → fingerprint to confirm → one of three ways)
 const srv = { aj: null, texte: "", ouvertes: new Set() }; // aj: the wizard ({etape: "adresse" | "empreinte" | "cle" | "coupure", …}), kept across renders
-function carteServeur(x, fiche, envs) {
+function carteServeur(x, fiche, envs, santeSites) {
   const sante = { ok: t("Reachable"), injoignable: t("Unreachable"), empreinte_changee: t("Host fingerprint changed") }[x.etat] || t("Waiting for its key"), cls = x.etat === "ok" ? "travaille" : "attend", f = fiche || {};
   const tourne = [...(f.conteneurs || []).filter((c) => /^(up|running)/i.test(c.etat)).map((c) => c.nom), ...(f.services || [])];
   const resume = !fiche ? t("Its sheet is not made yet.")
@@ -4676,7 +4710,8 @@ function carteServeur(x, fiche, envs) {
     <div class="muet petit"><code>${h(x.utilisateur)}@${h(x.hote)}${x.port === 22 ? "" : ":" + x.port}</code>${f.systeme && f.systeme.nom ? " · " + h(f.systeme.nom) : ""}</div>
     <div class="ligne m0">${(x.roles || []).length ? x.roles.map((r) => `<span class="badge${r === "prod" ? " badge-infra" : ""}">${h(r)}</span>`).join("") : `<span class="muet petit">${t("No role yet")}</span>`}${(envs || []).length ? `<span class="badge badge-env" title="${h(t("Used by") + " " + envs.join(", "))}">${h(t("Environments: {0}", [envs.length]))}</span>` : ""}</div>
     <div class="petit srv-tourne" title="${h(tourne.join(", "))}">${h(resume)}</div>
-    <div class="muet petit">${t("Last deployments: none yet (deployments come in a later version of Athanor).")}</div>
+    ${(envs || []).length ? `<div class="ligne m0 petit srv-sante">${envs.map((pe) => { const st = ((santeSites || {}).envs || {})[pe], [ic, et] = ETATS_SANTE[st] || ["·", "Not checked yet"];
+      return `<span class="badge srv-sante-${h(st || "aucun")}" title="${h(t(et))}">${ic} ${h(pe)}</span>`; }).join("")}</div>` : ""}
     <div class="muet petit">${x.vu ? h(t("Seen {0}", [dateLisible(x.vu)])) : h(t("Added {0}", [dateLisible(x.cree)]))}</div>
     ${x.etat === "inconnu" && !(etat.vue || {}).distant ? `<div class="ligne m0"><button type="button" class="btn btn-petit btn-primaire" data-srv-verifier="${h(x.id)}">${t("Verify")}</button><span class="muet petit">${t("once its public key is on the server")}</span></div>` : ""}
   </div>`;
@@ -4737,11 +4772,12 @@ pages.serveurs = async () => {
   const [d, c] = await Promise.all([api("serveurs"), distant ? null : api("coffre").catch(() => null)]);
   // shortcut: one request per server for its sheet; fine up to the tens of servers aimed at (E12: 10)
   const fiches = await Promise.all(d.serveurs.map((x) => api("serveurs/" + encodeURIComponent(x.id)).then((r) => r.fiche).catch(() => null)));
-  const liste = d.serveurs.map((x, i) => carteServeur(x, fiches[i], (d.environnements || {})[x.id])).join("");
+  const liste = d.serveurs.map((x, i) => carteServeur(x, fiches[i], (d.environnements || {})[x.id], d.sante)).join("");
   return `<div class="serveurs">
     ${srv.aj ? messagesCoffreServeurs(c) : ""}
     <div class="ligne cof-tete"><h2 class="m0">${t("Servers")} <span class="muet">${d.serveurs.length}</span></h2><span class="espace"></span>${distant ? `<span class="muet petit">${t("Adding a server is done on the computer.")}</span>` : srv.aj ? "" : `<button type="button" class="btn btn-primaire" data-srv-ajouter>+ ${t("Add a server")}</button>`}</div>
     ${srv.aj ? assistantServeur(c) : ""}
+    ${d.serveurs.length && !srv.aj ? reglageSante(d.sante || {}, distant) : ""}
     ${liste ? `<div class="grille-projets">${liste}</div>` : srv.aj ? "" : `<div class="vide srv-vide"><p><b>${t("No server yet")}</b></p>
       <p class="muet">${t("Add your VPS or your home server: Athanor checks its fingerprint, connects with a key kept in the vault, then reads what runs on it.")}</p>
       ${distant ? "" : `<button type="button" class="btn btn-primaire" data-srv-ajouter>+ ${t("Add a server")}</button>`}</div>`}

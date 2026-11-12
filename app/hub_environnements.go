@@ -335,7 +335,7 @@ func (s *Serveur) apiEnvironnements(w http.ResponseWriter, r *http.Request) {
 	if !s.accesPret(w, projet) {
 		return
 	}
-	s.ecrireJSON(w, map[string]any{"projet": projet, "envs": envsProjet, "environnements": s.acces.Environnements(projet), "deploiements": deploiementsAffiches(projet)})
+	s.ecrireJSON(w, map[string]any{"projet": projet, "envs": envsProjet, "environnements": s.acces.Environnements(projet), "deploiements": deploiementsAffiches(projet), "sante": s.vueSante(projet)})
 }
 
 // apiEnvironnementModifier: POST /api/projets/{nom}/environnements {env, url, serveurs, protection,

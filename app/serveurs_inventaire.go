@@ -134,7 +134,7 @@ func (s *Serveur) apiServeurs(w http.ResponseWriter, _ *http.Request) {
 		s.erreurServeurs(w, err)
 		return
 	}
-	s.ecrireJSON(w, map[string]any{"serveurs": liste, "environnements": s.acces.UtilisationsServeurs()})
+	s.ecrireJSON(w, map[string]any{"serveurs": liste, "environnements": s.acces.UtilisationsServeurs(), "sante": s.santeServeurs()})
 }
 
 // apiServeur: GET /api/serveurs/{id}, one server and its sheet (null until the sheet is made).
