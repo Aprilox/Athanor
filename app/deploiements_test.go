@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -101,7 +102,10 @@ func TestBaseDeploiement(t *testing.T) {
 	if a == b || !strings.HasPrefix(a, "/srv/athanor/mon-jeu-") || !reRacineCaddy.MatchString(a+"/current") {
 		t.Errorf("names with spaces or capitals: %s %s", a, b)
 	}
-	for _, c := range []ConfigDeploiement{{Methode: "compose", Source: "artefact"}, {Methode: "statique", Source: "git"},
+	if validerConfigDeploiement(ConfigDeploiement{Methode: "statique", Source: "git", Dossier: "site"}) != nil {
+		t.Error("git source refused")
+	}
+	for _, c := range []ConfigDeploiement{{Methode: "compose", Source: "artefact"}, {Methode: "statique", Source: "ftp"},
 		{Methode: "statique", Source: "artefact", Dossier: "../x"}, {Methode: "statique", Source: "artefact", Dossier: "/x"},
 		{Methode: "statique", Source: "artefact", Dossier: ".git"}, {Methode: "statique", Source: "artefact", Construire: "npm run build"}} {
 		if validerConfigDeploiement(c) == nil {
@@ -155,6 +159,9 @@ func TestDeployerRefus(t *testing.T) {
 	}
 	if _, err := s.deployer(ctx, "m131", "dev", "0123456789abcdef0123456789abcdef01234567", OptionsDeploiement{Config: cfg}); err == nil || !strings.Contains(err.Error(), "not in the project's repository") {
 		t.Errorf("unknown commit: %v", err)
+	}
+	if _, err := s.deployer(ctx, "m131", "dev", c1, OptionsDeploiement{Config: &ConfigDeploiement{Methode: "statique", Source: "git"}}); err == nil || !strings.Contains(err.Error(), "deployment key") {
+		t.Errorf("git without the deployment key: %v", err)
 	}
 	v, _ := verrousDeploiement.LoadOrStore("m131/dev", &sync.Mutex{})
 	v.(*sync.Mutex).Lock()
@@ -257,7 +264,10 @@ func TestDeploiementStatiqueConteneur(t *testing.T) {
 	if err != nil || !strings.Contains(page(), "site-exemple v1") {
 		t.Fatalf("v1 again: %v %+v", err, d4)
 	}
-	if got, want := sur("ls "+base+"/releases | sort -r | tr '\\n' ' '"), d4.Version+" "+d2.Version+" "+d1.Version+" 20200101-000006-aaaaaaa 20200101-000005-aaaaaaa "; got != want {
+	recentes := []string{d4.Version, d2.Version, d1.Version}
+	slices.Sort(recentes) // two deployments in the same second sort by their SHA
+	slices.Reverse(recentes)
+	if got, want := sur("ls "+base+"/releases | sort -r | tr '\\n' ' '"), strings.Join(recentes, " ")+" 20200101-000006-aaaaaaa 20200101-000005-aaaaaaa "; got != want {
 		t.Errorf("versions kept:\n got  %q\n want %q", got, want)
 	}
 	h := historiqueDeploiements("m131", "dev")

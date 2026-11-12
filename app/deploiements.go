@@ -39,7 +39,7 @@ const (
 // (relay, Retry) need no agent.
 type ConfigDeploiement struct {
 	Methode    string `json:"methode"`              // statique (compose: M134)
-	Source     string `json:"source"`               // artefact (git: M132)
+	Source     string `json:"source"`               // artefact (sent by SFTP) | git (fetched by the server, M132)
 	Dossier    string `json:"dossier,omitempty"`    // the published folder, relative to the repository ("" = its root)
 	Construire string `json:"construire,omitempty"` // a build command (M135)
 }
@@ -77,8 +77,8 @@ func validerConfigDeploiement(c ConfigDeploiement) error {
 	switch {
 	case c.Methode != "statique":
 		return errors.New("deployment method: statique")
-	case c.Source != "artefact":
-		return errors.New("deployment source: artefact")
+	case c.Source != "artefact" && c.Source != "git":
+		return errors.New("deployment source: artefact or git")
 	case c.Dossier != "" && !reDossierPublie.MatchString(c.Dossier):
 		return errors.New("dossier: a folder of the repository, relative, without \"..\", spaces or hidden parts")
 	case c.Construire != "":
@@ -87,9 +87,14 @@ func validerConfigDeploiement(c ConfigDeploiement) error {
 	return nil
 }
 
-// baseDeploiement: the environment's folder on its servers; a project name outside [a-z0-9_-] gets a short
-// hash of the name, so two projects never share a folder.
+// baseDeploiement: the environment's folder on its servers.
 func baseDeploiement(projet, env string) string {
+	return racineDeploiements + "/" + nomProjetServeur(projet) + "-" + env
+}
+
+// nomProjetServeur: the project's name in the servers' paths; a name outside [a-z0-9_-] gets a short hash of
+// the name, so two projects never share a folder nor a key file.
+func nomProjetServeur(projet string) string {
 	n := strings.Map(func(r rune) rune {
 		if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '_' || r == '-' {
 			return r
@@ -100,7 +105,7 @@ func baseDeploiement(projet, env string) string {
 		h := sha256.Sum256([]byte(projet))
 		n += "-" + hex.EncodeToString(h[:3])
 	}
-	return racineDeploiements + "/" + n + "-" + env
+	return n
 }
 
 // verifierArchive: every entry of the tar.gz stays inside the release (relative, no "..", a link only to a
@@ -163,11 +168,11 @@ const caddyfileServeur = "/etc/caddy/Caddyfile"
 const fonctionAnnulerVersion = `annuler() { rm -rf -- "$r"; if [ -f "$b/.site-avant" ]; then mv -f -- "$b/.site-avant" "$site"; else rm -f -- "$site"; fi; }
 `
 
-// scriptPreparer ($1 the archive sent, $2 its SHA-256, $3 the environment's folder, $4 the version, $5 the
+// scriptPreparer ($1 the archive sent, $2 its SHA-256 ("" for an archive git made on the server), $3 the environment's folder, $4 the version, $5 the
 // published folder, $6 the host name; the site block on standard input): nothing served changes.
 const scriptPreparer = `a=$1 b=$3 r=$3/releases/$4 site=/etc/caddy/sites/$6.caddy
 command -v caddy >/dev/null 2>&1 && [ -f ` + caddyfileServeur + ` ] || { rm -f -- "$a"; echo "Caddy is not installed on this server (` + caddyfileServeur + ` missing): install it first"; exit 5; }
-if [ "$(sha256sum < "$a" | cut -d' ' -f1)" != "$2" ]; then rm -f -- "$a"; echo "the archive changed on the way: its SHA-256 differs on the server"; exit 3; fi
+if [ -n "$2" ] && [ "$(sha256sum < "$a" | cut -d' ' -f1)" != "$2" ]; then rm -f -- "$a"; echo "the archive changed on the way: its SHA-256 differs on the server"; exit 3; fi
 umask 022
 mkdir -p -- "$b/releases" /etc/caddy/sites && mkdir -- "$r" || { rm -f -- "$a"; echo "the release $4 cannot be made"; exit 1; }
 ` + fonctionAnnulerVersion + `tar -xzf "$a" -C "$r" --no-same-owner --no-same-permissions || { rm -f -- "$a"; rm -rf -- "$r"; echo "the archive could not be extracted"; exit 1; }
@@ -220,6 +225,9 @@ func (s *Serveur) deployer(ctx context.Context, projet, env, commit string, o Op
 	if len(e.Serveurs) == 0 || hoteEnv(&e) == "" {
 		return Deploiement{}, errors.New("the environment needs a URL and at least one server")
 	}
+	if cfg.Source == "git" && e.CleDeploiement == "" {
+		return Deploiement{}, errors.New("the git source needs the project's deployment key: create it in its Environments panel (or use the artefact source)")
+	}
 	v, _ := verrousDeploiement.LoadOrStore(projet+"/"+env, &sync.Mutex{})
 	verrou := v.(*sync.Mutex)
 	if !verrou.TryLock() {
@@ -266,6 +274,18 @@ func (s *Serveur) deployerStatique(ctx context.Context, p Projet, e Environnemen
 	if err != nil {
 		return err
 	}
+	var g *sourceGit
+	if cfg.Source == "git" { // the commit's archive above is only checked: each server fetches the same tree
+		url, hotes, err := depotGitServeur(p)
+		if err != nil {
+			return err
+		}
+		cle, err := s.coffre.Valeur(e.CleDeploiement)
+		if err != nil {
+			return fmt.Errorf("the deployment key cannot be read from the vault: %w", err)
+		}
+		g, somme = &sourceGit{url, hotes, cle, "/etc/athanor/deploy/" + nomProjetServeur(d.Projet)}, ""
+	}
 	l, err := lireServeurs()
 	if err != nil {
 		return err
@@ -296,7 +316,7 @@ func (s *Serveur) deployerStatique(ctx context.Context, p Projet, e Environnemen
 			annulerTout()
 			return err
 		}
-		c, err := s.preparerVersion(ctx, l, id, archive, somme, base, d.Version, cfg.Dossier, hote, bloc, d.ID)
+		c, err := s.preparerVersion(ctx, l, id, archive, somme, base, d.Version, cfg.Dossier, hote, bloc, d.ID, g, d.Commit)
 		if err != nil {
 			annulerTout()
 			return fmt.Errorf("%s: %w; nothing was switched", id, err)
@@ -317,9 +337,9 @@ func (s *Serveur) deployerStatique(ctx context.Context, p Projet, e Environnemen
 	return nil
 }
 
-// preparerVersion: on server id, the archive sent, checked and extracted, the site file written and validated;
-// the connection stays open for the switch (closed on failure).
-func (s *Serveur) preparerVersion(ctx context.Context, l []ServeurInventaire, id, archive, somme, base, version, dossier, hote, bloc, nom string) (*ssh.Client, error) {
+// preparerVersion: on server id, the archive sent (or with g, the commit fetched there by git), checked and
+// extracted, the site file written and validated; the connection stays open for the switch (closed on failure).
+func (s *Serveur) preparerVersion(ctx context.Context, l []ServeurInventaire, id, archive, somme, base, version, dossier, hote, bloc, nom string, g *sourceGit, commit string) (*ssh.Client, error) {
 	i := slices.IndexFunc(l, func(x ServeurInventaire) bool { return x.ID == id })
 	if i < 0 {
 		return nil, errServeurInconnu
@@ -328,7 +348,12 @@ func (s *Serveur) preparerVersion(ctx context.Context, l []ServeurInventaire, id
 	if err != nil {
 		return nil, err
 	}
-	distant, err := envoyerArchive(ctx, c, archive, nom)
+	var distant string
+	if g != nil {
+		distant, err = recupererGit(ctx, c, g, base, commit, version)
+	} else {
+		distant, err = envoyerArchive(ctx, c, archive, nom)
+	}
 	if err == nil {
 		err = echecSSH(executerSSH(ctx, c, commeRoot(scriptPreparer, distant, somme, base, version, dossier, hote), strings.NewReader(bloc), delaiDeploiement))
 	}
