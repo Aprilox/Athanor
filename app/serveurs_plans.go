@@ -42,6 +42,10 @@ type EtapePlan struct {
 	// a destructive step without backup says why nothing needs keeping (M92)
 	SansSauvegarde string `json:"sans_sauvegarde,omitempty"`
 	Executee       string `json:"executee,omitempty"`
+	// after the call (C52): ok or echec, the error's message; a failed step runs once more (Essais 2 at most)
+	Etat    string `json:"etat,omitempty"`
+	Message string `json:"message,omitempty"`
+	Essais  int    `json:"essais,omitempty"`
 }
 
 // PlanServeur: hub/plans/<id>.json, id = its approval's.
@@ -140,7 +144,12 @@ func serveurProd(id string) (ServeurInventaire, bool) {
 	return ServeurInventaire{ID: id}, true
 }
 
+// reglePlan: the owner's "do not ask again for this server"; a task's plan gives it to the server, not to the
+// task (C54: a task's project dies with it).
 func reglePlan(projet, id string) RegleAccord {
+	if strings.HasPrefix(projet, prefixeTache) {
+		projet = prefixeServeur + id
+	}
 	return RegleAccord{Projet: projet, Env: "dev", Action: actionPlanServeur + ":" + id}
 }
 
@@ -267,7 +276,7 @@ func outilProposerPlan(s *Serveur, x SessionHub, args json.RawMessage) (string, 
 		etapes = append(etapes, map[string]any{"n": i + 1, "outil": e.Outil, "classe": e.Classe, "raison": e.Raison})
 	}
 	return enJSON(map[string]any{"plan": p.ID, "etat": etat, "expire": p.Expire, "etapes": etapes,
-		"consigne": "Once the owner accepts, call each step's tool with exactly its arguments, once, before the plan expires. Until then a step is refused with the plan's state."}), nil
+		"consigne": "Once the owner accepts, call each step's tool with exactly its arguments, once (a failed step once more), before the plan expires. Until then a step is refused with the plan's state."}), nil
 }
 
 // etapeAccordee: e is a step not run yet of a plan of x on server id that the owner accepted and that has not
@@ -288,15 +297,19 @@ func (s *Serveur) etapeAccordee(x SessionHub, id string, e Etape) (PlanServeur, 
 			continue
 		}
 		pareille := func(et EtapePlan) bool { return et.Outil == e.Outil && bytes.Equal(et.Arguments, e.Arguments) }
-		i := slices.IndexFunc(p.Etapes, func(et EtapePlan) bool { return pareille(et) && et.Executee == "" })
+		i := slices.IndexFunc(p.Etapes, func(et EtapePlan) bool {
+			return pareille(et) && (et.Executee == "" || et.Etat == "echec" && et.Essais < 2)
+		})
 		exp, err := time.Parse(time.RFC3339, p.Expire)
 		pourquoi := ""
 		switch {
 		case i < 0 && slices.ContainsFunc(p.Etapes, pareille):
-			pourquoi = "plan " + p.ID + " already ran this step: a step runs once"
+			pourquoi = "plan " + p.ID + " already ran this step: a step runs once (a failed one twice)"
 		case i < 0:
 		case ap.Etat == "acceptee" && err == nil && t.Before(exp):
-			p.Etapes[i].Executee = t.Format(time.RFC3339)
+			et := &p.Etapes[i]
+			et.Executee, et.Etat, et.Message = t.Format(time.RFC3339), "", ""
+			et.Essais++
 			if err := s.enregistrerPlan(p); err != nil {
 				return PlanServeur{}, 0, "", err
 			}
@@ -313,6 +326,22 @@ func (s *Serveur) etapeAccordee(x SessionHub, id string, e Etape) (PlanServeur, 
 		}
 	}
 	return PlanServeur{}, 0, info, nil
+}
+
+// noterEtape: step n of plan id ran; its result (ok, or echec and why) is kept on the plan, shown on its card.
+func (s *Serveur) noterEtape(id string, n int, err error) {
+	verrouPlans.Lock()
+	defer verrouPlans.Unlock()
+	p, e := s.lirePlan(id)
+	if e != nil || n < 1 || n > len(p.Etapes) {
+		return
+	}
+	et := &p.Etapes[n-1]
+	et.Etat, et.Message = "ok", ""
+	if err != nil {
+		et.Etat, et.Message = "echec", couper(s.masquerSecrets(err.Error()), 300)
+	}
+	_ = s.enregistrerPlan(p)
 }
 
 // planOuRegle (called by avantOutil for a change or a destructive call): the call runs as a step of an

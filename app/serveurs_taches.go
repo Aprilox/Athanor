@@ -25,9 +25,11 @@ import (
 )
 
 const (
-	prefixeTache      = "servers:tache:" // the project of a task's session: never a real project
-	delaiSessionTache = 20 * time.Minute // one Claude session of a task
-	maxPlansTache     = 5                // plans proposed, decided and applied in turn by one task
+	prefixeTache      = "servers:tache:"   // the project of a task's session: never a real project
+	prefixeServeur    = "servers:serveur:" // the project of a "do not ask again" rule a task's plan gives (C54)
+	maxCommande       = 2000               // characters of a command (C51)
+	delaiSessionTache = 20 * time.Minute   // one Claude session of a task
+	maxPlansTache     = 5                  // plans proposed, decided and applied in turn by one task
 	maxTexteTache     = 4000
 )
 

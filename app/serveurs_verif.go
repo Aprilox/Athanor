@@ -51,11 +51,11 @@ func (s *Serveur) critiqueEnCours(id string) bool {
 	return err == nil && p.Critique != nil && p.Critique.Verdict == ""
 }
 
-// planEnDonnees: a plan as the critic and the verifier read it: its steps with their arguments masked, as data.
+// planEnDonnees: a plan as the critic and the verifier read it: its steps with their arguments masked, never cut, as data.
 func (s *Serveur) planEnDonnees(p PlanServeur) string {
 	etapes := []map[string]any{}
 	for i, e := range p.Etapes {
-		etapes = append(etapes, map[string]any{"n": i + 1, "outil": e.Outil, "arguments": couper(s.masquerSecrets(string(e.Arguments)), 4000),
+		etapes = append(etapes, map[string]any{"n": i + 1, "outil": e.Outil, "arguments": s.masquerSecrets(string(e.Arguments)), // whole (C51): nothing hidden past a cut
 			"classe": e.Classe, "pourquoi": e.Pourquoi, "sauvegarde": e.Sauvegarde, "sans_sauvegarde": e.SansSauvegarde})
 	}
 	return enDonnees("plan", fmt.Sprintf(` id="%s" server="%s" env="%s"`, p.ID, p.Serveur, p.Env),

@@ -2700,7 +2700,10 @@ function blocPlan(x, p) {
   if (!p) return `<div class="pv-details">${h(x.raison)}</div>`;
   const etapes = (p.etapes || []).map((e) => {
     const [lib, cl] = CLASSES_ETAPE()[e.classe] || [e.classe, ""];
-    return `<li><div class="plan-etape-tete"><code>${h(e.outil)}</code> <span class="pv-etat ${cl}">${h(lib)}</span>${e.executee ? ` <span class="pv-etat pv-ok">✓ ${t("applied")}</span>` : ""}</div>
+    // C52: a step marked run waits for its result, then says ✓ or ✗ (and why)
+    const fait = !e.executee ? "" : e.etat === "ok" ? ` <span class="pv-etat pv-ok">✓ ${t("applied")}</span>` : e.etat === "echec" ? ` <span class="pv-etat pv-vous">✗ ${t("failed")}</span>` : ` <span class="pv-etat pv-claude">${t("running…")}</span>`;
+    return `<li><div class="plan-etape-tete"><code>${h(e.outil)}</code> <span class="pv-etat ${cl}">${h(lib)}</span>${fait}</div>
+      ${e.raison ? `<div class="petit muet">${t("Why this class:")} <span lang="en">${h(e.raison)}</span></div>` : ""}${e.etat === "echec" && e.message ? `<div class="petit echec">${h(e.message)}</div>` : ""}
       <div class="plan-args">${argumentsLisibles(e.lisible)}</div><div class="pv-details m0">${h(e.pourquoi)}</div>
       ${(e.sauvegarde || []).length ? `<div class="petit plan-args">${h(t("Backed up first: {0}", [e.sauvegarde.join(", ")]))}</div>` : ""}${e.sans_sauvegarde ? `<div class="petit plan-args">${h(t("No backup: {0}", [e.sans_sauvegarde]))}</div>` : ""}</li>`;
   }).join("");
@@ -4741,7 +4744,7 @@ function carteTacheServeur(x, plans, distant) {
   const blocsPlans = (x.plans || []).map((id, i) => {
     const p = plans[id], attend = x.etat === "attente_accord" && i === x.plans.length - 1;
     if (!p) return `<p class="muet petit">${h(t("Plan {0}: no longer kept.", [i + 1]))}</p>`;
-    const faites = (p.etapes || []).filter((e) => e.executee).length;
+    const faites = (p.etapes || []).filter((e) => e.etat === "ok").length;
     return `<div class="srv-tache-plan"><h4 class="m0">${h(t("Plan {0}", [i + 1]))} <span class="muet petit">${h(t("{0} of {1} step(s) applied", [faites, (p.etapes || []).length]))}</span></h4>${blocPlan({}, p)}
       ${attend ? `<p class="m0"><a href="#pourvous" class="btn btn-primaire" data-srv-tache-carte="${h(id)}">${t("Decide on its card")}</a></p>` : ""}</div>`;
   }).join("");
@@ -4764,7 +4767,7 @@ function blocTaches(ta, distant, annulations) {
     ${distant ? `<p class="muet petit">${t("Tasks are launched from the computer; their plans are decided on their cards, on the For you page.")}</p>` : `<form id="srv-tache-form" class="srv-tache-form">
       <label for="srv-tache-texte"><b>${t("What should be done on this server?")}</b></label>
       <textarea id="srv-tache-texte" rows="3" maxlength="4000" placeholder="${h(t("e.g. Install nginx and serve my site over HTTPS"))}">${h(srv.texte)}</textarea>
-      <p class="muet petit m0">${t("The Servers agent reads the server, then proposes a plan. Nothing changes before you accept it on its card; a security critic reads it first, files are backed up before a change, and an external check follows.")}</p>
+      <p class="muet petit m0">${t("The Servers agent reads the server, then proposes a plan. Nothing changes before you accept it on its card; a security critic reads it first, the paths a step names are archived before it runs, a file the agent rewrites keeps its previous copy, and an external check follows.")}</p>
       ${(ta || {}).natif ? `<p class="petit pv-vous m0">${t("Native Windows mode has no barrier: a task runs only if you force it, with Athanor's password.")}</p>` : ""}
       <div class="ligne m0"><button type="submit" class="btn btn-primaire">${t("Launch")}</button></div></form>`}
     ${annulations}

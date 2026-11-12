@@ -109,7 +109,7 @@ func archiver(ctx context.Context, c *ssh.Client, sv Sauvegarde) (string, error)
 		err = errors.New(couper(strings.TrimSpace(string(r.Sortie)), 500))
 	}
 	if err != nil {
-		return "", fmt.Errorf("the backup of %s failed, the step did not run (propose a new plan): %w", strings.Join(sv.Chemins, ", "), err)
+		return "", fmt.Errorf("the backup of %s failed, the step did not run (call it once more, or propose a new plan): %w", strings.Join(sv.Chemins, ", "), err)
 	}
 	return fmt.Sprintf("backup: %s (%s)", strings.TrimSpace(string(r.Sortie)), strings.Join(sv.Chemins, ", ")), nil
 }

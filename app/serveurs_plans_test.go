@@ -105,6 +105,9 @@ func TestServeursPlans(t *testing.T) {
 	if n := vider(); n != 1 {
 		t.Errorf("the accepted step ran %d times", n)
 	}
+	if p, _ := s.lirePlan(plan); p.Etapes[0].Executee == "" || p.Etapes[0].Etat != "ok" || p.Etapes[0].Essais != 1 {
+		t.Errorf("step state after the call (C52): %+v", p.Etapes[0])
+	}
 
 	// destructive: no rule possible; refused → nothing runs
 	rm := `{"outil":"ssh_commande","arguments":{"commande":"rm -rf /srv/vieux"},"pourquoi":"place","sauvegarde":["/srv/vieux"]}`
@@ -165,6 +168,19 @@ func TestServeursPlans(t *testing.T) {
 	tarEchoue.Store(false)
 	if n := vider(); n != 1 {
 		t.Errorf("a failed backup let %d commands run", n)
+	}
+	// C52: the failed step says so on its plan and runs once more, not a third time
+	if p, _ := s.lirePlan(plan9); p.Etapes[0].Etat != "echec" || !strings.Contains(p.Etapes[0].Message, "backup of /srv/vieux failed") {
+		t.Errorf("failed step state: %+v", p.Etapes[0])
+	}
+	if txt, e := appel("ssh_commande", `{"serveur":"ab12","commande":"rm -rf /srv/vieux"}`); e || vider() != 2 {
+		t.Errorf("a failed step replayed: %v %q", e, txt)
+	}
+	if p, _ := s.lirePlan(plan9); p.Etapes[0].Etat != "ok" || p.Etapes[0].Message != "" || p.Etapes[0].Essais != 2 {
+		t.Errorf("replayed step state: %+v", p.Etapes[0])
+	}
+	if txt, e := appel("ssh_commande", `{"serveur":"ab12","commande":"rm -rf /srv/vieux"}`); !e || !strings.Contains(txt, "already ran this step") || vider() != 0 {
+		t.Errorf("a third run: %v %q", e, txt)
 	}
 	plan10, _ := proposer(`{"outil":"ssh_commande","arguments":{"commande":"rm -rf /tmp/cache"},"pourquoi":"p","sans_sauvegarde":"le cache se refait au démarrage"}`)
 	_ = decider(plan10, "accepter")
@@ -232,6 +248,15 @@ func TestServeursPlans(t *testing.T) {
 			t.Errorf("%s: %v %q", c.etapes, e, txt)
 		}
 	}
+	// C51: a command longer than 2000 characters is refused, in a plan and as a call
+	long := "apt-get update" + strings.Repeat(" ", 2000) + "; rm -rf /var/www"
+	vider()
+	if txt, e := appel("proposer_plan", `{"serveur":"ab12","resume":"r","etapes":[{"outil":"ssh_commande","arguments":{"commande":"`+long+`"},"pourquoi":"p"}]}`); !e || !strings.Contains(txt, "2000 characters at most") {
+		t.Errorf("long command in a plan: %v %q", e, txt)
+	}
+	if txt, e := appel("ssh_commande", `{"serveur":"ab12","commande":"`+long+`"}`); !e || !strings.Contains(txt, "2000 characters at most") || vider() != 0 {
+		t.Errorf("long command: %v %q", e, txt)
+	}
 	if txt, e := appel("proposer_plan", `{"serveur":"cd34","resume":"r","etapes":[`+restart+`]}`); !e || txt != errServeurInconnu.Error() {
 		t.Errorf("plan outside the perimeter: %v %q", e, txt)
 	}
@@ -251,5 +276,14 @@ func TestServeursPlans(t *testing.T) {
 	}
 	if strings.Contains(j, temoinOutils) {
 		t.Error("the witness value reached the audit log")
+	}
+	// C51: the critic reads the whole arguments, never cut
+	contenu := strings.Repeat("x", 5000) + "FIN"
+	if d := s.planEnDonnees(PlanServeur{Etapes: []EtapePlan{{Outil: "fichier_ecrire", Arguments: json.RawMessage(`{"contenu":"` + contenu + `"}`)}}}); !strings.Contains(d, contenu) {
+		t.Error("the critic's plan is cut")
+	}
+	// C54: "do not ask again" on a task's plan is the server's rule, not the task's
+	if r := reglePlan(prefixeTache+"t1", "ab12"); r.Projet != prefixeServeur+"ab12" || r != reglePlan(prefixeTache+"t2", "ab12") {
+		t.Errorf("a task's rule: %+v", r)
 	}
 }

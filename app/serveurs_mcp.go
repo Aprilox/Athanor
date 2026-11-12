@@ -120,6 +120,9 @@ func faireOutilServeur(nom string) func(*Serveur, SessionHub, json.RawMessage) (
 		if e.Classe > ClasseLecture {
 			s.noterRunbook(id, e, r, err)
 		}
+		if e.Plan != "" {
+			s.noterEtape(e.Plan, e.Num, err)
+		}
 		if err != nil { // an error may quote the server (stderr, a path)
 			return "", errors.New(strings.ReplaceAll(s.masquerSecrets(err.Error()), "<", "&lt;"))
 		}
@@ -213,6 +216,9 @@ func classerEtape(outil string, a map[string]json.RawMessage) (Etape, error) {
 	var args argsOutilServeur
 	if err := lireArguments(brut, &args); err != nil {
 		return Etape{}, err
+	}
+	if len([]rune(args.Commande)) > maxCommande { // C51: a long command hides its end past what a card shows
+		return Etape{}, fmt.Errorf("commande: %d characters at most", maxCommande)
 	}
 	lecture := outil == "fichier_lire" || outil == "sftp_recuperer"
 	for _, p := range []string{args.Chemin, args.Distant} {
