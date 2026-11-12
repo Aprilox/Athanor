@@ -103,12 +103,13 @@ func TestBaseDeploiement(t *testing.T) {
 		t.Errorf("names with spaces or capitals: %s %s", a, b)
 	}
 	if validerConfigDeploiement(ConfigDeploiement{Methode: "statique", Source: "git", Dossier: "site"}) != nil ||
-		validerConfigDeploiement(ConfigDeploiement{Methode: "compose", Source: "artefact", Dossier: "app"}) != nil {
+		validerConfigDeploiement(ConfigDeploiement{Methode: "compose", Source: "artefact", Dossier: "app"}) != nil ||
+		validerConfigDeploiement(ConfigDeploiement{Methode: "statique", Source: "artefact", Dossier: "dist", Construire: "npm ci && npm run build"}) != nil {
 		t.Error("git source or compose method refused")
 	}
 	for _, c := range []ConfigDeploiement{{Methode: "k3s", Source: "artefact"}, {Methode: "statique", Source: "ftp"},
 		{Methode: "statique", Source: "artefact", Dossier: "../x"}, {Methode: "statique", Source: "artefact", Dossier: "/x"},
-		{Methode: "statique", Source: "artefact", Dossier: ".git"}, {Methode: "statique", Source: "artefact", Construire: "npm run build"}} {
+		{Methode: "statique", Source: "artefact", Dossier: ".git"}, {Methode: "statique", Source: "git", Construire: "npm run build"}, {Methode: "statique", Source: "artefact", Construire: "npm ci\nnpm run build"}} {
 		if validerConfigDeploiement(c) == nil {
 			t.Errorf("configuration accepted: %+v", c)
 		}

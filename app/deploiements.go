@@ -20,6 +20,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -32,7 +33,8 @@ const (
 	racineDeploiements = "/srv/athanor"
 	versionsGardees    = 5
 	historiqueMax      = 50
-	delaiDeploiement   = 5 * time.Minute // one step on one server (extraction, validation, reload)
+	delaiDeploiement   = 5 * time.Minute  // one step on one server (extraction, validation, reload)
+	delaiConstruction  = 10 * time.Minute // the build command (M135)
 )
 
 // ConfigDeploiement: how an environment is deployed, recorded after a first deployment so that the next ones
@@ -41,7 +43,7 @@ type ConfigDeploiement struct {
 	Methode    string `json:"methode"`              // statique | compose (M134)
 	Source     string `json:"source"`               // artefact (sent by SFTP) | git (fetched by the server, M132)
 	Dossier    string `json:"dossier,omitempty"`    // the published folder, relative to the repository ("" = its root)
-	Construire string `json:"construire,omitempty"` // a build command (M135)
+	Construire string `json:"construire,omitempty"` // a build command run on this PC before the archive (M135)
 }
 
 // Deploiement: one entry of an environment's history.
@@ -82,8 +84,10 @@ func validerConfigDeploiement(c ConfigDeploiement) error {
 		return errors.New("deployment source: artefact or git")
 	case c.Dossier != "" && !reDossierPublie.MatchString(c.Dossier):
 		return errors.New("dossier: a folder of the repository, relative, without \"..\", spaces or hidden parts")
-	case c.Construire != "":
-		return errors.New("a build command is not run by deployments yet: publish a folder of the commit")
+	case c.Construire != "" && c.Source != "artefact":
+		return errors.New("construire needs the artefact source: the build runs on this PC and its output is sent")
+	case len([]rune(c.Construire)) > maxCommande || strings.ContainsFunc(c.Construire, func(r rune) bool { return r < ' ' }):
+		return fmt.Errorf("construire: one line of %d characters at most", maxCommande)
 	}
 	return nil
 }
@@ -213,52 +217,71 @@ ls -1 | sort -r | tail -n +$(($2 + 1)) | while IFS= read -r v; do [ "releases/$v
 // deployer: commit of projet deployed to environment env (ARCHITECTURE.md §Déploiements, Moteur); the history
 // keeps the attempt whatever happens; the method is recorded in the environment once it went through.
 func (s *Serveur) deployer(ctx context.Context, projet, env, commit string, o OptionsDeploiement) (Deploiement, error) {
+	d, suite, err := s.commencerDeploiement(projet, env, commit, o)
+	if err != nil {
+		return d, err
+	}
+	return suite(ctx)
+}
+
+// commencerDeploiement (M135): the checks, the environment's lock and the history's "en_cours" entry; suite runs
+// the deployment and frees the lock, it must be called once (a hub request runs it in the background).
+func (s *Serveur) commencerDeploiement(projet, env, commit string, o OptionsDeploiement) (Deploiement, func(context.Context) (Deploiement, error), error) {
 	e, ok := s.acces.Environnements(projet)[env]
 	if !ok {
-		return Deploiement{}, errors.New("unknown environment")
+		return Deploiement{}, nil, errors.New("unknown environment")
 	}
 	cfg := e.Deploiement
 	if o.Config != nil {
 		cfg = o.Config
 	}
 	if cfg == nil {
-		return Deploiement{}, errors.New("this environment has no deployment method yet: a first deployment is made by a Servers task")
+		return Deploiement{}, nil, errors.New("this environment has no deployment method yet: a first deployment is made by a Servers task")
 	}
 	if err := validerConfigDeploiement(*cfg); err != nil {
-		return Deploiement{}, err
+		return Deploiement{}, nil, err
 	}
 	p, ok := s.projetNomme(projet)
 	if !ok {
-		return Deploiement{}, errors.New("unknown project")
+		return Deploiement{}, nil, errors.New("unknown project")
 	}
 	if len(e.Serveurs) == 0 || hoteEnv(&e) == "" {
-		return Deploiement{}, errors.New("the environment needs a URL and at least one server")
+		return Deploiement{}, nil, errors.New("the environment needs a URL and at least one server")
 	}
 	if cfg.Source == "git" && e.CleDeploiement == "" {
-		return Deploiement{}, errors.New("the git source needs the project's deployment key: create it in its Environments panel (or use the artefact source)")
+		return Deploiement{}, nil, errors.New("the git source needs the project's deployment key: create it in its Environments panel (or use the artefact source)")
 	}
 	v, _ := verrousDeploiement.LoadOrStore(projet+"/"+env, &sync.Mutex{})
 	verrou := v.(*sync.Mutex)
 	if !verrou.TryLock() {
-		return Deploiement{}, errors.New("a deployment of this environment is already running")
+		return Deploiement{}, nil, errors.New("a deployment of this environment is already running")
 	}
-	defer verrou.Unlock()
 	sha, err := gitSortie(p.Dossier, "rev-parse", "--verify", "--quiet", "--end-of-options", commit+"^{commit}")
 	if err != nil || !reCommitComplet.MatchString(sha) {
-		return Deploiement{}, fmt.Errorf("commit %q is not in the project's repository", commit)
+		verrou.Unlock()
+		return Deploiement{}, nil, fmt.Errorf("commit %q is not in the project's repository", commit)
 	}
 	debut := time.Now().UTC()
 	d := Deploiement{ID: aleatoire(8), Projet: projet, Env: env, Commit: sha, Methode: cfg.Methode, Version: debut.Format("20060102-150405") + "-" + sha[:7],
 		Etat: "en_cours", Auteur: o.Auteur, Serveurs: e.Serveurs, Debut: debut.Format(time.RFC3339)}
 	if err := noterHistorique(d); err != nil {
-		return d, fmt.Errorf("the deployment history cannot be written: %w", err)
+		verrou.Unlock()
+		return d, nil, fmt.Errorf("the deployment history cannot be written: %w", err)
 	}
-	err = s.deployerVersion(ctx, p, e, *cfg, &d)
+	return d, func(ctx context.Context) (Deploiement, error) {
+		defer verrou.Unlock()
+		return s.finirDeploiement(ctx, p, e, *cfg, d)
+	}, nil
+}
+
+// finirDeploiement: the release deployed, the method recorded once it went through, the external check.
+func (s *Serveur) finirDeploiement(ctx context.Context, p Projet, e Environnement, cfg ConfigDeploiement, d Deploiement) (Deploiement, error) {
+	err := s.deployerVersion(ctx, p, e, cfg, &d)
 	d.Etat, d.Fin = "ok", time.Now().UTC().Format(time.RFC3339)
 	if err != nil {
 		d.Etat, d.Erreur = "echec", err.Error()
 	} else {
-		if e2 := s.acces.NoterDeploiement(projet, env, *cfg); e2 != nil {
+		if e2 := s.acces.NoterDeploiement(d.Projet, d.Env, cfg); e2 != nil {
 			d.Erreur = "deployed, but the method could not be recorded: " + e2.Error()
 		}
 		err = s.verifierApres(ctx, e, &d)
@@ -278,7 +301,11 @@ func (s *Serveur) deployerVersion(ctx context.Context, p Projet, e Environnement
 	}
 	archive := filepath.Join(dossier, d.ID+".tar.gz")
 	defer os.Remove(archive)
-	if out, err := gitP(p.Dossier, nil, "archive", "--format=tar.gz", "-o", archive, d.Commit).CombinedOutput(); err != nil {
+	if cfg.Construire != "" {
+		if err := s.construireArchive(ctx, p.Dossier, d.Commit, cfg, archive); err != nil {
+			return err
+		}
+	} else if out, err := gitP(p.Dossier, nil, "archive", "--format=tar.gz", "-o", archive, d.Commit).CombinedOutput(); err != nil {
 		return fmt.Errorf("git archive: %v %s", err, couper(strings.TrimSpace(string(out)), 300))
 	}
 	if err := verifierArchive(archive, cfg.Dossier); err != nil {
@@ -370,6 +397,57 @@ func (s *Serveur) deployerVersion(ctx context.Context, p Projet, e Environnement
 		}
 	}
 	return nil
+}
+
+// construireArchive (M135): the commit checked out in a clone of its own, the build command run there on this PC
+// (sh, Git Bash on Windows; time-limited; without Athanor's secrets in its environment), then that tree archived:
+// what git tracks plus the published folder even when ignored (a dist/ usually is).
+func (s *Serveur) construireArchive(ctx context.Context, depot, commit string, cfg ConfigDeploiement, archive string) error {
+	src := strings.TrimSuffix(archive, ".tar.gz") + "-src"
+	defer os.RemoveAll(src)
+	git := func(dossier string, args ...string) (string, error) {
+		out, err := gitP(dossier, nil, args...).CombinedOutput()
+		if err != nil {
+			return "", fmt.Errorf("git %s: %v %s", args[0], err, couper(strings.TrimSpace(string(out)), 300))
+		}
+		return strings.TrimSpace(string(out)), nil
+	}
+	// the project's own repository only (protocol.allow=never stays for everything else)
+	if _, err := git(filepath.Dir(src), "-c", "protocol.file.allow=always", "clone", "--quiet", "--shared", "--no-checkout", "--", depot, src); err != nil {
+		return err
+	}
+	if _, err := git(src, "-c", "advice.detachedHead=false", "checkout", "--quiet", "--detach", commit); err != nil {
+		return err
+	}
+	sh := "sh"
+	if runtime.GOOS == "windows" {
+		if sh = bashNatif(); sh == "" {
+			return errors.New("the build command needs Git for Windows' bash on this PC")
+		}
+	}
+	cctx, fin := context.WithTimeout(ctx, delaiConstruction)
+	defer fin()
+	c := commandeContexte(cctx, sh, "-c", cfg.Construire)
+	c.Dir, c.Env, c.WaitDelay = src, envSansSecrets(s, nil), 10*time.Second
+	cacherFenetre(c)
+	if out, err := c.CombinedOutput(); err != nil {
+		l := strings.Split(strings.TrimSpace(string(out)), "\n")
+		return fmt.Errorf("the build failed (%v): %s; nothing was switched", err, couper(s.masquerSecrets(strings.Join(l[max(0, len(l)-6):], "\n")), 600))
+	}
+	if _, err := git(src, "add", "-A"); err != nil {
+		return err
+	}
+	if cfg.Dossier != "" {
+		if _, err := git(src, "add", "-f", "--", cfg.Dossier); err != nil {
+			return fmt.Errorf("the published folder %s is missing after the build: %w", cfg.Dossier, err)
+		}
+	}
+	arbre, err := git(src, "write-tree")
+	if err != nil {
+		return err
+	}
+	_, err = git(src, "archive", "--format=tar.gz", "-o", archive, arbre)
+	return err
 }
 
 // preparerVersion: on server id, the archive sent (or with g, the commit fetched there by git), then script run

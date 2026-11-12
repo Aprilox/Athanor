@@ -12,10 +12,19 @@ import (
 // a clear refusal; prod: an approval every time (never automatic, no "never ask again" rule, even one
 // written by hand); dev in auto: accepted and recorded "exécution à l'étape 8"; staging in accord: an
 // approval that a rule may lift. M126: only a full hash (C61); the accord is bound to the sorted servers,
-// the agent and the mission (C63); a destructive deployment always asks (C64).
+// the agent and the mission (C63); a destructive deployment always asks (C64). M135: without a recorded method
+// nothing is asked (a Servers task deploys first); an accepted one starts the engine (here it stops at once: no
+// such project); a staging accord never serves prod.
 func TestDemanderDeploiement(t *testing.T) {
 	s := serveurBusTest(t)
 	s.config.Langue = "fr"
+	if err := s.acces.DefinirEnvironnement("demo", "dev", Environnement{URL: "https://dev.martin.fr", Serveurs: []string{"s1"}, Protection: "aucune", Politique: "auto"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := outilDemanderDeploiement(s, SessionHub{Projet: "demo", Agent: "pilote"}, json.RawMessage(`{"environnement":"dev","commit":"`+strings.Repeat("ab12", 10)+`"}`)); err == nil || !strings.Contains(err.Error(), "must be made by a Servers task") {
+		t.Errorf("without a method: %v", err)
+	}
+	methode := &ConfigDeploiement{Methode: "statique", Source: "artefact"}
 	for env, e := range map[string]Environnement{
 		"dev":     {URL: "https://dev.martin.fr", Serveurs: []string{"s1"}, Protection: "aucune", Politique: "auto"},
 		"staging": {Serveurs: []string{"s1"}, Protection: "aucune", Politique: "accord"},
@@ -24,12 +33,22 @@ func TestDemanderDeploiement(t *testing.T) {
 		if err := s.acces.DefinirEnvironnement("demo", env, e); err != nil {
 			t.Fatal(err)
 		}
+		if err := s.acces.NoterDeploiement("demo", env, *methode); err != nil {
+			t.Fatal(err)
+		}
 	}
 	x := SessionHub{Projet: "demo", Agent: "pilote", Mission: "M5"}
 	deployerPar := func(x SessionHub, env, commit string) (string, error) {
 		return outilDemanderDeploiement(s, x, json.RawMessage(`{"environnement":"`+env+`","commit":"`+commit+`"}`))
 	}
 	deployer := func(env, commit string) (string, error) { return deployerPar(x, env, commit) }
+	// accepted: started, or (no such project here) refused by the engine; both say why it was accepted
+	reponse := func(txt string, err error) string {
+		if err != nil {
+			return err.Error()
+		}
+		return txt
+	}
 	shaA, shaB, shaC, shaD := strings.Repeat("ab12", 10), strings.Repeat("cd34", 10), strings.Repeat("ef56", 16), strings.Repeat("0a9b", 10)
 	idDe := func(txt string, err error) string {
 		t.Helper()
@@ -54,8 +73,8 @@ func TestDemanderDeploiement(t *testing.T) {
 	if _, err := outilDemanderDeploiement(s, SessionHub{Projet: "vide", Agent: "pilote"}, json.RawMessage(`{"environnement":"dev","commit":"`+shaA+`"}`)); err == nil || !strings.Contains(err.Error(), "no server") {
 		t.Errorf("serverless environment: %v", err)
 	}
-	if txt, err := deployer("dev", strings.ToUpper(shaA)); err != nil || !strings.Contains(txt, "accepted (policy auto)") || !strings.Contains(txt, "nothing was deployed") {
-		t.Fatalf("dev auto: %q %v", txt, err)
+	if txt := reponse(deployer("dev", strings.ToUpper(shaA))); !strings.Contains(txt, "accepted (policy auto) but not started: ") {
+		t.Fatalf("dev auto: %q", txt)
 	}
 	if l, _ := s.approbations.Liste(); len(l) != 0 {
 		t.Fatalf("dev auto asked the owner: %+v", l)
@@ -90,8 +109,8 @@ func TestDemanderDeploiement(t *testing.T) {
 	if _, _, err := s.deciderApprobation("fenetre", id, "accepter", "", "", ""); err != nil {
 		t.Fatal(err)
 	}
-	if txt, err := deployer("prod", shaA); err != nil || !strings.Contains(txt, "accepted (the owner's accord "+id+")") {
-		t.Fatalf("accepted prod: %q %v", txt, err)
+	if txt := reponse(deployer("prod", shaA)); !strings.Contains(txt, "accepted (the owner's accord "+id+")") {
+		t.Fatalf("accepted prod: %q", txt)
 	}
 	if idDe(deployer("prod", shaA)) == id {
 		t.Error("one accord let two deployments through")
@@ -121,8 +140,8 @@ func TestDemanderDeploiement(t *testing.T) {
 			t.Errorf("%+v used the accord given to pilote/M5", autre)
 		}
 	}
-	if txt, err := deployer("prod", shaC); err != nil || !strings.Contains(txt, "accepted (the owner's accord "+idC+")") {
-		t.Errorf("pilote/M5 after the others: %q %v", txt, err)
+	if txt := reponse(deployer("prod", shaC)); !strings.Contains(txt, "accepted (the owner's accord "+idC+")") {
+		t.Errorf("pilote/M5 after the others: %q", txt)
 	}
 	if ap, _ := s.approbations.Lire(idC); ap.Utilisee == "" {
 		t.Error("accord not marked used")
@@ -136,11 +155,18 @@ func TestDemanderDeploiement(t *testing.T) {
 	if _, _, err := s.deciderApprobation("fenetre", sid, "toujours", "", "", ""); err != nil {
 		t.Fatal(err)
 	}
-	if txt, err := deployer("staging", shaD); err != nil || !strings.Contains(txt, "accepted (the owner's rule") {
-		t.Errorf("staging after the rule: %q %v", txt, err)
+	if txt := reponse(deployer("staging", shaD)); !strings.Contains(txt, "accepted (the owner's rule") {
+		t.Errorf("staging after the rule: %q", txt)
+	}
+	// M135: neither the staging rule nor a staging accord for this very commit lets prod through
+	if got := idDe(deployer("prod", shaB)); got == sid {
+		t.Error("staging's accord used for prod")
+	}
+	if txt := reponse(deployer("prod", shaD)); !strings.Contains(txt, "waiting for the owner") {
+		t.Errorf("prod after staging's rule: %q", txt)
 	}
 	a := auditTexte(t)
-	for _, attendu := range []string{"déploiement accepté", "exécution à l'étape 8", "approbation demandée: deploiement", "approbation utilisée: deploiement"} {
+	for _, attendu := range []string{"déploiement accepté", "approbation demandée: deploiement", "approbation utilisée: deploiement"} {
 		if !strings.Contains(a, attendu) {
 			t.Errorf("audit log without %q", attendu)
 		}

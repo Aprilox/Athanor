@@ -490,7 +490,8 @@ func TestServeursPerimetre(t *testing.T) {
 		"proposer_plan": `,"resume":"r","etapes":[{"outil":"service","arguments":{"action":"status","nom":"ssh"},"pourquoi":"p"}]`}
 	// serveurs_liste above; environnement_lire and the Cloudflare tools take no server (their perimeter:
 	// TestServeursMCP, TestOutilsCloudflare)
-	if len(outils) != len(outilsServeursMCP)-2-len(outilsCloudflare) {
+	// the deployment tools take an environment, the task's own (TestDeploiementAgentConteneur)
+	if len(outils) != len(outilsServeursMCP)-2-len(outilsCloudflare)-len(outilsDeploiement) {
 		t.Fatalf("a Servers tool is not covered: %v", outilsServeursMCP)
 	}
 	for o, args := range outils {

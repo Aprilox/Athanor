@@ -41,5 +41,7 @@ func consigneEnv(env string, hotes []string) string {
 	}
 	return "\nThis task is for environment " + env + " (host names: " + strings.Join(hotes, ", ") + "). The Cloudflare tools " +
 		"(fournisseurs, dns_lister, ssl_lire to read; dns_ecrire, dns_supprimer, ssl_regler to change) act only on these names. " +
-		"Their changes are plan steps like any other (proposer_plan, serveur = any of your servers).\n"
+		"Their changes are plan steps like any other (proposer_plan, serveur = any of your servers). " +
+		"To publish the project, use deployer (method statique or compose, source artefact or git, the full commit hash) and, to undo it, " +
+		"revenir_version: Athanor's engine does it and records the method for later deployments; they are plan steps too.\n"
 }

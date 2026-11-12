@@ -80,7 +80,7 @@ func init() {
 			}
 		}
 	})
-	outils = append(outils, outilsCloudflare...)
+	outils = append(append(outils, outilsCloudflare...), outilsDeploiement...)
 	etape := schemaObjet(map[string]any{
 		"outil":           parmi("The Servers tool of this step", outils...),
 		"arguments":       map[string]any{"type": "object", "description": "The tool's own arguments, exactly as you will call it (without serveur)"},
@@ -198,8 +198,8 @@ func outilProposerPlan(s *Serveur, x SessionHub, args json.RawMessage) (string, 
 				Agent: x.Agent, Action: "serveurs.proposer_plan", Resultat: "refusé : " + couper(s.masquerSecrets(err.Error()), auditMaxOutil)})
 			return "", err
 		}
-		cloudflare := slices.Contains(outilsCloudflare, e.Outil)
-		if _, ok := outilsServeurs[e.Outil]; !ok && !cloudflare {
+		cloudflare, deploi := slices.Contains(outilsCloudflare, e.Outil), slices.Contains(outilsDeploiement, e.Outil)
+		if _, ok := outilsServeurs[e.Outil]; !ok && !cloudflare && !deploi {
 			return echec(fmt.Errorf("step %d: unknown tool %q", i+1, couper(e.Outil, 40)))
 		}
 		if e.Arguments == nil {
@@ -233,6 +233,19 @@ func outilProposerPlan(s *Serveur, x SessionHub, args json.RawMessage) (string, 
 			}
 			if len(e.Sauvegarde) > 0 {
 				return echec(fmt.Errorf("step %d: a Cloudflare step backs up no file: say in sans_sauvegarde what it removes (its result lists it)", i+1))
+			}
+		}
+		if deploi { // M135: the task's own environment; prod's is a prod step (approval always)
+			var d argsDeploiementOutil
+			_ = json.Unmarshal(et.Arguments, &d)
+			if _, err := s.envTache(x, "proposer_plan", d.Env); err != nil {
+				return "", fmt.Errorf("step %d: %w", i+1, err)
+			}
+			if d.Env == "prod" {
+				prod, p.Env = true, "prod"
+			}
+			if len(e.Sauvegarde) > 0 {
+				return echec(fmt.Errorf("step %d: a deployment backs up no file: the previous version stays on the server (revenir_version)", i+1))
 			}
 		}
 		pourquoi, err := texteRequis("pourquoi", e.Pourquoi, 300)

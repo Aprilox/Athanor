@@ -22,7 +22,7 @@ const agentServeurs = "servers"
 
 // outilsServeursMCP: the tools of a Servers agent's token.
 var outilsServeursMCP = append([]string{"serveurs_liste", "serveur_fiche", "ssh_commande", "fichier_lire", "fichier_ecrire",
-	"sftp_envoyer", "sftp_recuperer", "service", "docker", "pare_feu", "proposer_plan", "confirmer_changement", "runbook_lire", "runbook_ajouter", "environnement_lire"}, outilsCloudflare...)
+	"sftp_envoyer", "sftp_recuperer", "service", "docker", "pare_feu", "proposer_plan", "confirmer_changement", "runbook_lire", "runbook_ajouter", "environnement_lire", "deployer", "revenir_version"}, outilsCloudflare...)
 
 var (
 	errServeursAgent = errors.New("the Servers tools answer only a Servers agent's session")
@@ -224,6 +224,17 @@ func classerEtape(outil string, a map[string]json.RawMessage) (Etape, error) {
 			c, raison = declaree, "declared "+declaree.String()+" by the agent"
 		}
 		canon, _ := json.Marshal(cf)
+		return Etape{Outil: outil, Arguments: canon, Classe: c, Raison: raison}, nil
+	}
+	if slices.Contains(outilsDeploiement, outil) { // M135: an environment, not a path
+		c, raison, d, err := classerDeploiement(outil, brut)
+		if err != nil {
+			return Etape{}, err
+		}
+		if declaree > c {
+			c, raison = declaree, "declared "+declaree.String()+" by the agent"
+		}
+		canon, _ := json.Marshal(d)
 		return Etape{Outil: outil, Arguments: canon, Classe: c, Raison: raison}, nil
 	}
 	var args argsOutilServeur

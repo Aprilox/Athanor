@@ -7,6 +7,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
@@ -36,8 +37,10 @@ func init() {
 		Schema: objet(map[string]any{}), Faire: outilEnvironnements}
 	outilsHub["demander_acces"] = OutilHub{Description: "Ask the owner for a key or secret you need (e.g. STRIPE_SECRET_KEY). Once accepted, it appears in .athanor/secrets.env, no restart needed.",
 		Schema: objet(map[string]any{"nom": texte("Variable name, e.g. STRIPE_SECRET_KEY"), "raison": texte("Why you need it, in one sentence")}, "nom", "raison"), Faire: outilDemanderAcces}
-	outilsHub["demander_deploiement"] = OutilHub{Description: "Ask for a deployment of a commit to dev, staging or prod. Prod always waits for the owner's approval; Athanor only records accepted deployments for now.",
+	outilsHub["demander_deploiement"] = OutilHub{Description: "Ask for a deployment of a commit to dev, staging or prod. Prod always waits for the owner. Once accepted it runs with the recorded method: follow it with deploiement_etat.",
 		Schema: objet(map[string]any{"environnement": texte("dev, staging or prod"), "commit": texte("Full commit hash to deploy (git rev-parse HEAD)")}, "environnement", "commit"), Faire: outilDemanderDeploiement}
+	outilsHub["deploiement_etat"] = OutilHub{Description: "The state of a deployment of your project started by demander_deploiement: en_cours, ok, echec or revenu, with its external check.",
+		Schema: objet(map[string]any{"id": texte("The deployment's id, from demander_deploiement")}, "id"), Faire: outilDeploiementEtat}
 	outilsHub["signaler"] = OutilHub{Description: "Report a blocker to the owner: it shows in Athanor's bell. One short sentence.",
 		Schema: objet(map[string]any{"blocage": texte("What blocks you, in one sentence")}, "blocage"), Faire: outilSignaler}
 }
@@ -234,8 +237,8 @@ func (s *Serveur) cleCodeNommee(nom string) string {
 var commitValide = regexp.MustCompile(`^([0-9a-f]{40}|[0-9a-f]{64})$`)
 
 // outilDemanderDeploiement (M120): the environment's policy decides (politiqueDeploiement); prod and the
-// "accord" policy wait for the owner (one accord, one deployment). Athanor runs deployments at stage 8: an
-// accepted one is only recorded in the audit log for now.
+// "accord" policy wait for the owner (one accord, one deployment). An accepted one runs in the background with
+// the environment's recorded method (M135); without one, nothing is asked: a Servers task deploys first.
 func outilDemanderDeploiement(s *Serveur, x SessionHub, args json.RawMessage) (string, error) {
 	var a struct{ Environnement, Commit string }
 	if err := lireArguments(args, &a); err != nil {
@@ -252,6 +255,9 @@ func outilDemanderDeploiement(s *Serveur, x SessionHub, args json.RawMessage) (s
 	if len(e.Serveurs) == 0 {
 		return "", errors.New(env + " has no server yet: the owner adds one in the project's Environments panel; go on with work that does not need it")
 	}
+	if e.Deploiement == nil {
+		return "", errors.New(env + " has no deployment method yet: a first deployment must be made by a Servers task (the owner launches it from the environment's card); go on with work that does not need it")
+	}
 	hote := x.Projet
 	if u, err := url.Parse(e.URL); err == nil && u.Hostname() != "" {
 		hote = u.Hostname()
@@ -261,8 +267,13 @@ func outilDemanderDeploiement(s *Serveur, x SessionHub, args json.RawMessage) (s
 		Details: map[string]string{"commit": commit, "hote": hote, "serveurs": listeServeursAccord(e.Serveurs)}, Raison: "commit " + commit + " → " + hote}
 	accepte := func(par string) (string, error) {
 		s.ecrireAudit(LigneAudit{Type: "evenement", De: x.Agent, Vers: "hub", Mission: x.Mission, Projet: x.Projet, Env: env, Agent: x.Agent,
-			Action: "déploiement accepté", Resultat: "commit " + commit + " → " + hote + " (" + par + "), exécution à l'étape 8"})
-		return "deployment of " + commit + " to " + env + " accepted (" + par + "): Athanor does not run deployments yet, nothing was deployed; go on with your work", nil
+			Action: "déploiement accepté", Resultat: "commit " + commit + " → " + hote + " (" + par + ")"})
+		d, suite, err := s.commencerDeploiement(x.Projet, env, commit, OptionsDeploiement{Auteur: "agent"})
+		if err != nil {
+			return "", fmt.Errorf("deployment accepted (%s) but not started: %s", par, s.masquerSecrets(err.Error()))
+		}
+		go func() { _, _ = suite(context.Background()) }() // its result goes to the history (deploiement_etat)
+		return "deployment " + d.ID + " of " + commit + " to " + env + " accepted (" + par + ") and started: follow it with deploiement_etat; go on with your work", nil
 	}
 	attente := func(id string) (string, error) {
 		return "waiting for the owner, id " + id + ": once accepted, call demander_deploiement again with the same environment and commit; go on with work that does not need it", nil
@@ -288,6 +299,25 @@ func outilDemanderDeploiement(s *Serveur, x SessionHub, args json.RawMessage) (s
 		return "", err
 	}
 	return "", errors.New("the request could not be recorded, try again later")
+}
+
+// outilDeploiementEtat (M135): a deployment of the session's project, found by its id in the histories.
+func outilDeploiementEtat(s *Serveur, x SessionHub, args json.RawMessage) (string, error) {
+	var a struct{ ID string }
+	if err := lireArguments(args, &a); err != nil {
+		return "", err
+	}
+	for _, env := range envsProjet {
+		for _, d := range historiqueDeploiements(x.Projet, env) {
+			if a.ID == "" || d.ID != a.ID {
+				continue
+			}
+			r := map[string]any{"id": d.ID, "environnement": d.Env, "commit": d.Commit, "etat": d.Etat, "debut": d.Debut, "fin": d.Fin, "erreur": d.Erreur, "verification": d.Verification}
+			// the error may quote a server or the build's output: data, never instructions
+			return enDonnees("deployment", "", s.masquerSecrets(enJSON(r))), nil
+		}
+	}
+	return "", errors.New("no deployment of your project has this id")
 }
 
 // listeServeursAccord: the sorted server ids an accord is bound to; a list longer than an approval detail
