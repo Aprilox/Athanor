@@ -28,8 +28,10 @@ func TestValiderEnvironnement(t *testing.T) {
 	if r.URL != "https://dev.exemple.fr/app" || !slices.Equal(r.Serveurs, []string{"b2", "c3"}) || r.Protection != "aucune" || r.Politique != "accord" {
 		t.Errorf("defaults: %+v", r)
 	}
-	ok("staging", Environnement{URL: "http://10.0.0.5:8080", Politique: "auto"})
-	ok("staging", Environnement{URL: "https://10.0.0.5:8443", Politique: "auto", Protection: "auth_proxy"})
+	if r := ok("staging", Environnement{URL: "HTTPS://Staging.Exemple.FR:8443/x?a=B", Politique: "auto"}); r.URL != "https://staging.exemple.fr:8443/x?a=B" {
+		t.Errorf("case: %q", r.URL) // B73: scheme and host in lower case, the path as typed
+	}
+	ok("staging", Environnement{URL: "https://xn--bcher-kva.fr:65535", Politique: "auto", Protection: "auth_proxy"})
 	ok("prod", Environnement{URL: "https://Exemple.fr", Serveurs: []string{"a1", "d4"}, Protection: "access"})
 	if r := ok("dev", Environnement{}); r.URL != "" || r.Serveurs == nil {
 		t.Errorf("empty environment: %+v", r)
@@ -46,6 +48,17 @@ func TestValiderEnvironnement(t *testing.T) {
 		{"dev", Environnement{URL: "exemple.fr"}, "Invalid URL"},
 		{"dev", Environnement{URL: "https://ex_emple.fr"}, "Invalid URL"},
 		{"dev", Environnement{URL: "javascript:alert(1)"}, "Invalid URL"},
+		{"dev", Environnement{URL: "https://x.fr:"}, "Invalid port"},
+		{"dev", Environnement{URL: "https://x.fr:0"}, "Invalid port"},
+		{"dev", Environnement{URL: "https://x.fr:65536"}, "Invalid port"},
+		{"dev", Environnement{URL: "https://x.fr:99999"}, "Invalid port"},
+		{"dev", Environnement{URL: "https://x.fr/" + strings.Repeat("a", 2048)}, "Invalid URL"},
+		{"dev", Environnement{URL: "https://" + strings.Repeat("a.", 127) + "fr"}, "Invalid URL"},
+		{"dev", Environnement{URL: "http://10.0.0.5:8080"}, "not an IP address"},
+		{"dev", Environnement{URL: "https://[::1]/"}, "not an IP address"},
+		{"dev", Environnement{URL: "http://LocalHost:3000"}, "not an IP address"},
+		{"dev", Environnement{URL: "http://app.localhost"}, "not an IP address"},
+		{"dev", Environnement{URL: "https://bücher.fr"}, "punycode"},
 		{"dev", Environnement{Protection: "mur"}, "Unknown protection"},
 		{"dev", Environnement{URL: "HTTP://dev.exemple.fr", Protection: "auth_proxy"}, "needs an https:// address"},
 		{"dev", Environnement{Politique: "jamais"}, "Unknown policy"},

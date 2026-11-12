@@ -287,6 +287,8 @@ func interditDistance(r *http.Request) bool {
 		return true
 	case strings.HasPrefix(p, "/api/projets/") && strings.HasSuffix(p, "/environnements") && r.Method != http.MethodGet:
 		return true // a project's environments: read from a device, changed at the computer only
+	case strings.HasPrefix(p, "/api/projets/") && strings.HasSuffix(p, "/cle-deploiement") && r.Method != http.MethodGet:
+		return true // B68: a vault key registered on GitHub with this PC's connection
 	}
 	return false
 }

@@ -4272,7 +4272,7 @@ pages.acces = async () => {
   if (!projet) return `<div class="vide">${t("Choose a project")}</div>`;
   const [d, c, en, sv, fo] = await Promise.all([api("acces?projet=" + encodeURIComponent(projet)), api("coffre"),
     api("projets/" + encodeURIComponent(projet) + "/environnements"), api("serveurs").catch(() => ({})), api("fournisseurs").catch(() => ({}))]);
-  acc.projet = projet; cof.d = c;
+  acc.projet = projet; cof.d = c; acc.inv = sv.serveurs || []; acc.fourn = fo.fournisseurs || [];
   const entrees = (c.entrees || []).slice().sort((a, b) => a.famille.localeCompare(b.famille) || a.nom.localeCompare(b.nom));
   const inj = d.injection || {}, envs = d.envs || ["dev", "staging", "prod"];
   const donne = (id, env) => d.acces.some((a) => a.entree === id && a.env === env);
@@ -4365,8 +4365,9 @@ $("#page").addEventListener("click", async (ev) => {
     protection: champ("protection").value, politique: champ("politique") ? champ("politique").value : "accord", fournisseur: champ("fournisseur") ? champ("fournisseur").value : "" };
   b.disabled = true; err.hidden = true;
   try {
-    await api("projets/" + encodeURIComponent(acc.projet) + "/environnements", "POST", corps);
-    toast(t("Environment {0} saved.", [corps.env]), "ok"); rendrePage();
+    const en = await api("projets/" + encodeURIComponent(acc.projet) + "/environnements", "POST", corps), tpl = document.createElement("template");
+    tpl.innerHTML = blocEnvironnements(en, acc.inv, acc.fourn, false); // B74: only this card is redrawn, the others keep what is typed
+    c.replaceWith(tpl.content.querySelector(`[data-env="${corps.env}"]`)); toast(t("Environment {0} saved.", [corps.env]), "ok");
   } catch (e) { err.textContent = e.message; err.hidden = false; b.disabled = false; } // the server's reason in the card, the fields kept
 });
 // C25 C35 C37: what an agent of this PC must not decide is retyped with Athanor's password in this window (a paired

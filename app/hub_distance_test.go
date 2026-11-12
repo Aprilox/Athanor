@@ -57,7 +57,9 @@ func TestDistanceToutesRoutes(t *testing.T) {
 		methode, chemin string
 		refus           bool
 	}{
-		{"GET", "/api/hub", false},         // allowed
+		{"GET", "/api/hub", false},                          // allowed
+		{"POST", "/api/projets/demo/cle-deploiement", true}, // B68: a key registered on GitHub, at the computer only
+		{"GET", "/api/projets/demo/environnements", false},
 		{"GET", "/api/coffre", false},      // allowed (the vault's list, no secret value)
 		{"POST", "/api/hub", true},         // hub route not in the allowlist
 		{"POST", "/api/hub/alertes", true}, // Ignore / Reopen: written on this computer only

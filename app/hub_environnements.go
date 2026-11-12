@@ -8,10 +8,12 @@ package main
 import (
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -32,6 +34,9 @@ var (
 	politiquesEnv   = []string{"accord", "auto"}
 	nomHoteValide   = regexp.MustCompile(`^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 	errEnvURL       = erreurEntree("Invalid URL: https:// or http://, a host name, and no user name or password in it")
+	errEnvURLIP     = erreurEntree("Use the site's host name, not an IP address or localhost")
+	errEnvURLIDN    = erreurEntree("Type an international domain name in its punycode form (xn--…)")
+	errEnvURLPort   = erreurEntree("Invalid port in the URL: a number from 1 to 65535")
 	errEnvProtect   = erreurEntree("Unknown protection (aucune, access or auth_proxy)")
 	errEnvPolitique = erreurEntree("Unknown policy (accord or auto)")
 	errEnvProdAuto  = erreurEntree("Production always asks for your approval: its policy cannot be automatic")
@@ -64,18 +69,34 @@ func envDefaut() Environnement {
 	return Environnement{Serveurs: []string{}, Protection: "aucune", Politique: "accord"}
 }
 
-// validerURLEnv: "" (not deployed yet) or http(s)://host[:port][/path], no credentials.
+// validerURLEnv: "" (not deployed yet) or http(s)://host[:port][/path], no credentials, no IP nor localhost (the
+// Caddy site and the DNS record are made for a name); scheme and host come back in lower case (B73).
 func validerURLEnv(brut string) (string, error) {
 	brut = strings.TrimSpace(brut)
 	if brut == "" {
 		return "", nil
 	}
 	u, err := url.Parse(brut)
-	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.User != nil || u.Opaque != "" ||
-		!nomHoteValide.MatchString(strings.ToLower(u.Hostname())) || len(u.Hostname()) > 253 {
+	if err != nil || len(brut) > 2048 || (u.Scheme != "https" && u.Scheme != "http") || u.User != nil || u.Opaque != "" {
 		return "", errEnvURL
 	}
-	return brut, nil
+	hote := strings.ToLower(u.Hostname())
+	switch {
+	case strings.ContainsFunc(hote, func(r rune) bool { return r > 127 }):
+		return "", errEnvURLIDN
+	case net.ParseIP(hote) != nil || hote == "localhost" || strings.HasSuffix(hote, ".localhost"):
+		return "", errEnvURLIP
+	case !nomHoteValide.MatchString(hote) || len(hote) > 253:
+		return "", errEnvURL
+	}
+	if port := u.Port(); port != "" || strings.HasSuffix(u.Host, ":") {
+		if n, err := strconv.Atoi(port); err != nil || n < 1 || n > 65535 {
+			return "", errEnvURLPort
+		}
+		hote += ":" + port
+	}
+	u.Host = hote
+	return u.String(), nil
 }
 
 // validerEnvironnement checks e for environment nom against the inventory (pure: tested without HTTP).

@@ -9,7 +9,9 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"golang.org/x/crypto/ssh"
@@ -181,6 +183,27 @@ func TestCleDeploiement(t *testing.T) {
 	// linked again, created again, then the project deleted: out of the vault, the access entry gone
 	if ecrireReglagesGH(dGH, reglagesGH{Depot: "moi/demo", Branche: "main", Auto: true}) != nil {
 		t.Fatal("link again")
+	}
+	// B72: six clicks at once: one key in the vault, one registration on GitHub
+	_ = os.Remove(trace)
+	var wg sync.WaitGroup
+	codes := make([]int, 6)
+	for i := range codes {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			r := httptest.NewRequest("POST", "/api/projets/demo/cle-deploiement", strings.NewReader("{}"))
+			r.Header.Set("X-Athanor", "jeton")
+			r.AddCookie(&http.Cookie{Name: cookieAcces, Value: "cle"})
+			r.AddCookie(&http.Cookie{Name: "athanor_session", Value: s.session})
+			w := httptest.NewRecorder()
+			mux.ServeHTTP(w, r)
+			codes[i] = w.Code
+		}()
+	}
+	wg.Wait()
+	if n := strings.Count(lireTrace(), "-X POST repos/moi/demo/keys"); len(cles()) != 1 || n != 1 || slices.ContainsFunc(codes, func(c int) bool { return c != 200 }) {
+		t.Fatalf("six clicks at once: %d keys, %d registrations, %v", len(cles()), n, codes)
 	}
 	if code, _ := creer("demo"); code != 200 || len(cles()) != 1 {
 		t.Fatal("create again:", code)

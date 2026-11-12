@@ -15,10 +15,14 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 )
 
 const titreCleDeploiementGH = "Athanor deploy key (read-only)"
+
+// verrousCleDeploiement: project → *sync.Mutex; "already made?" then vault, GitHub and note run as one (B72).
+var verrousCleDeploiement sync.Map
 
 var (
 	errCleDeploiementNonLie = erreurEntree("This project is not linked to GitHub: link it in its GitHub panel first, then create its deployment key.")
@@ -119,6 +123,9 @@ func (s *Serveur) apiCleDeploiement(w http.ResponseWriter, r *http.Request) {
 		s.erreur(w, http.StatusNotFound, "Unknown project")
 		return
 	}
+	m, _ := verrousCleDeploiement.LoadOrStore(projet, &sync.Mutex{})
+	m.(*sync.Mutex).Lock()
+	defer m.(*sync.Mutex).Unlock()
 	if id := s.acces.CleDeploiementProjet(projet); id != "" && slices.ContainsFunc(s.coffre.Liste(), func(e EntreeCoffre) bool { return e.ID == id }) {
 		s.ecrireJSON(w, map[string]any{"ok": true, "deja": true})
 		return
