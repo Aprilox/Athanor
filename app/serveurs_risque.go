@@ -1097,6 +1097,9 @@ var candidatsSecrets = []string{"shadow", "gshadow", "environ", ".env", "prod.en
 func lectureInterdite(t string) Classe {
 	pire := ClasseLecture
 	for _, v := range variantesMot(t) {
+		if dansSauvegardes(v) { // M92: Athanor's archives may hold secrets; restoring one is the owner's accord
+			return ClasseDestructrice
+		}
 		c := nettoyer(v)
 		base := c[len(c)-1]
 		joker := strings.ContainsAny(v, "*?[")
@@ -1144,6 +1147,10 @@ type Etape struct {
 	Arguments json.RawMessage
 	Classe    Classe
 	Raison    string
+	// set by planOuRegle for a step of an accepted plan: archived before it runs (M92)
+	Plan       string
+	Num        int
+	Sauvegarde []string
 }
 
 // classerOutil classes a typed tool's call by the tool and its arguments (ARCHITECTURE.md §Garde-fous).
@@ -1194,5 +1201,15 @@ func cheminRefuse(p string, lecture bool) error {
 	if nomSecret(base) || slices.Contains(c, ".ssh") && !(lecture && base == "authorized_keys") {
 		return fmt.Errorf("%s is refused to every Servers tool: secrets (/etc/shadow, ~/.ssh, *.env, private keys) are never read nor overwritten by an agent", p)
 	}
+	if dansSauvegardes(p) {
+		return fmt.Errorf("%s is refused to every Servers tool: the backups Athanor makes (%s) may hold secrets and belong to the owner", p, dossierSauvegardes)
+	}
 	return nil
+}
+
+// dossierSauvegardes: where Athanor archives a plan's step before it runs (M92); no agent reads it.
+const dossierSauvegardes = "/var/backups/athanor"
+
+func dansSauvegardes(p string) bool {
+	return strings.HasPrefix(path.Clean(p)+"/", dossierSauvegardes+"/")
 }

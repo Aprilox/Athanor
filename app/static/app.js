@@ -2689,7 +2689,7 @@ function blocPlan(x, p) {
     const [lib, cl] = CLASSES_ETAPE()[e.classe] || [e.classe, ""];
     return `<li><div class="plan-etape-tete"><code>${h(e.outil)}</code> <span class="pv-etat ${cl}">${h(lib)}</span></div>
       <div class="plan-args">${argumentsLisibles(e.lisible)}</div><div class="pv-details m0">${h(e.pourquoi)}</div>
-      ${(e.sauvegarde || []).length ? `<div class="petit plan-args">${h(t("Backed up first: {0}", [e.sauvegarde.join(", ")]))}</div>` : ""}</li>`;
+      ${(e.sauvegarde || []).length ? `<div class="petit plan-args">${h(t("Backed up first: {0}", [e.sauvegarde.join(", ")]))}</div>` : ""}${e.sans_sauvegarde ? `<div class="petit plan-args">${h(t("No backup: {0}", [e.sans_sauvegarde]))}</div>` : ""}</li>`;
   }).join("");
   return `<div class="pv-details">${h(p.resume)}</div><ol class="plan-etapes">${etapes}</ol>
     ${p.critique ? `<div class="pv-note"><strong>${t("Security critic")}</strong><div class="pv-details m0">${h(p.critique)}</div></div>` : ""}`;

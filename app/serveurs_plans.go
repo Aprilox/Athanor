@@ -9,8 +9,10 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -23,6 +25,7 @@ const (
 	actionPlanServeur = "plan_serveur"
 	dureePlan         = 2 * time.Hour // a plan not decided, or not run, within this delay is over
 	maxEtapesPlan     = 30
+	maxSauvegardes    = 20
 )
 
 var errPlanSansRegle = erreurEntree("This plan has a destructive step or targets a prod server: it is accepted once, never with a rule")
@@ -36,7 +39,9 @@ type EtapePlan struct {
 	Raison     string          `json:"raison"`
 	Pourquoi   string          `json:"pourquoi"`
 	Sauvegarde []string        `json:"sauvegarde,omitempty"`
-	Executee   string          `json:"executee,omitempty"`
+	// a destructive step without backup says why nothing needs keeping (M92)
+	SansSauvegarde string `json:"sans_sauvegarde,omitempty"`
+	Executee       string `json:"executee,omitempty"`
 }
 
 // PlanServeur: hub/plans/<id>.json, id = its approval's.
@@ -70,11 +75,12 @@ func init() {
 		}
 	})
 	etape := schemaObjet(map[string]any{
-		"outil":      parmi("The Servers tool of this step", outils...),
-		"arguments":  map[string]any{"type": "object", "description": "The tool's own arguments, exactly as you will call it (without serveur)"},
-		"classe":     parmi("Your own class of this step; the code's class is kept when higher", "lecture", "changement", "destructrice"),
-		"pourquoi":   schemaTexte("Why this step, in one sentence"),
-		"sauvegarde": map[string]any{"type": "array", "items": schemaTexte("Absolute path on the server"), "description": "Paths to back up before a destructive step"},
+		"outil":           parmi("The Servers tool of this step", outils...),
+		"arguments":       map[string]any{"type": "object", "description": "The tool's own arguments, exactly as you will call it (without serveur)"},
+		"classe":          parmi("Your own class of this step; the code's class is kept when higher", "lecture", "changement", "destructrice"),
+		"pourquoi":        schemaTexte("Why this step, in one sentence"),
+		"sauvegarde":      map[string]any{"type": "array", "items": schemaTexte("Absolute path on the server"), "description": "Paths Athanor archives in " + dossierSauvegardes + "/<plan>-<step>.tar.gz before the step runs; required for a destructive step unless sans_sauvegarde says why nothing needs keeping"},
+		"sans_sauvegarde": schemaTexte("A destructive step without sauvegarde: why nothing needs keeping, in one sentence"),
 	}, "outil", "arguments", "pourquoi")
 	outilsHub["proposer_plan"] = OutilHub{Description: "Propose the changes you want to make on a server as a plan for the owner. " +
 		"Once accepted, call each step's tool with exactly its arguments, each step once, within 2 hours. A change outside an accepted plan is refused.",
@@ -143,11 +149,12 @@ func outilProposerPlan(s *Serveur, x SessionHub, args json.RawMessage) (string, 
 		Serveur string `json:"serveur"`
 		Resume  string `json:"resume"`
 		Etapes  []struct {
-			Outil      string                     `json:"outil"`
-			Arguments  map[string]json.RawMessage `json:"arguments"`
-			Classe     string                     `json:"classe"`
-			Pourquoi   string                     `json:"pourquoi"`
-			Sauvegarde []string                   `json:"sauvegarde"`
+			Outil          string                     `json:"outil"`
+			Arguments      map[string]json.RawMessage `json:"arguments"`
+			Classe         string                     `json:"classe"`
+			Pourquoi       string                     `json:"pourquoi"`
+			Sauvegarde     []string                   `json:"sauvegarde"`
+			SansSauvegarde string                     `json:"sans_sauvegarde"`
 		} `json:"etapes"`
 	}
 	if err := lireArguments(args, &a); err != nil {
@@ -195,12 +202,32 @@ func outilProposerPlan(s *Serveur, x SessionHub, args json.RawMessage) (string, 
 		if err != nil {
 			return echec(fmt.Errorf("step %d: %w", i+1, err))
 		}
+		if len(e.Sauvegarde) > maxSauvegardes {
+			return echec(fmt.Errorf("step %d: %d paths to back up at most", i+1, maxSauvegardes))
+		}
 		var sauvegarde []string
-		for _, c := range e.Sauvegarde[:min(len(e.Sauvegarde), 20)] {
-			sauvegarde = append(sauvegarde, couper(c, 300)) // shortcut: checked and archived by M92
+		for _, c := range e.Sauvegarde {
+			c, err := distantPermis("sauvegarde", c, true)
+			if err == nil && path.Clean(c) == "/" {
+				err = errors.New("sauvegarde: name what the step changes, not the whole disk")
+			}
+			if err != nil {
+				return echec(fmt.Errorf("step %d: %w", i+1, err))
+			}
+			sauvegarde = append(sauvegarde, path.Clean(c))
+		}
+		sans := strings.TrimSpace(e.SansSauvegarde)
+		if et.Classe == ClasseDestructrice && len(sauvegarde) == 0 {
+			if sans, err = texteRequis("sans_sauvegarde", sans, 300); err != nil {
+				return echec(fmt.Errorf("step %d is destructive: list in sauvegarde the paths Athanor archives before it runs, or say in sans_sauvegarde why nothing needs keeping", i+1))
+			}
+		}
+		if len(sauvegarde) > 0 {
+			sans = ""
 		}
 		haut = max(haut, et.Classe)
-		p.Etapes = append(p.Etapes, EtapePlan{Outil: et.Outil, Arguments: et.Arguments, Classe: et.Classe.String(), Raison: et.Raison, Pourquoi: pourquoi, Sauvegarde: sauvegarde})
+		p.Etapes = append(p.Etapes, EtapePlan{Outil: et.Outil, Arguments: et.Arguments, Classe: et.Classe.String(), Raison: et.Raison, Pourquoi: pourquoi,
+			Sauvegarde: sauvegarde, SansSauvegarde: couper(sans, 300)})
 		resumeEtapes = append(resumeEtapes, et.Outil+" "+et.Classe.String())
 	}
 	regle := !prod && haut < ClasseDestructrice
@@ -241,9 +268,9 @@ func outilProposerPlan(s *Serveur, x SessionHub, args json.RawMessage) (string, 
 }
 
 // etapeAccordee: e is a step not run yet of a plan of x on server id that the owner accepted and that has not
-// expired: it is marked run (once) and its plan's id and number returned. Otherwise "" and, when a plan holds
+// expired: it is marked run (once) and its plan and number returned. Otherwise no plan and, when a plan holds
 // e, why it cannot run (pending, refused, expired, already run).
-func (s *Serveur) etapeAccordee(x SessionHub, id string, e Etape) (string, int, string, error) {
+func (s *Serveur) etapeAccordee(x SessionHub, id string, e Etape) (PlanServeur, int, string, error) {
 	l, _ := s.approbations.Liste()
 	t := s.approbations.maintenant()
 	verrouPlans.Lock()
@@ -268,9 +295,9 @@ func (s *Serveur) etapeAccordee(x SessionHub, id string, e Etape) (string, int, 
 		case ap.Etat == "acceptee" && err == nil && t.Before(exp):
 			p.Etapes[i].Executee = t.Format(time.RFC3339)
 			if err := s.enregistrerPlan(p); err != nil {
-				return "", 0, "", err
+				return PlanServeur{}, 0, "", err
 			}
-			return p.ID, i + 1, "", nil
+			return p, i + 1, "", nil
 		case ap.Etat == "attente":
 			pourquoi = "plan " + p.ID + " waits for the owner's decision"
 		case ap.Etat == "acceptee":
@@ -282,13 +309,14 @@ func (s *Serveur) etapeAccordee(x SessionHub, id string, e Etape) (string, int, 
 			info = pourquoi
 		}
 	}
-	return "", 0, info, nil
+	return PlanServeur{}, 0, info, nil
 }
 
 // planOuRegle (called by avantOutil for a change or a destructive call): the call runs as a step of an
-// accepted plan, or as a change under the owner's rule for this non-prod server; otherwise refused.
-func (s *Serveur) planOuRegle(x SessionHub, id string, e Etape) error {
-	plan, n, info, err := s.etapeAccordee(x, id, e)
+// accepted plan (e then names it and the paths to archive first), or as a change under the owner's rule for
+// this non-prod server; otherwise refused.
+func (s *Serveur) planOuRegle(x SessionHub, id string, e *Etape) error {
+	p, n, info, err := s.etapeAccordee(x, id, *e)
 	if err != nil {
 		return err
 	}
@@ -296,8 +324,9 @@ func (s *Serveur) planOuRegle(x SessionHub, id string, e Etape) error {
 		s.ecrireAudit(LigneAudit{Type: "evenement", De: x.Agent, Vers: "serveur:" + id, Projet: x.Projet, Mission: x.Mission,
 			Agent: x.Agent, Action: "serveurs." + e.Outil, Resultat: res})
 	}
-	if plan != "" {
-		audit(fmt.Sprintf("accordé : plan %s, étape %d (%s)", plan, n, e.Classe))
+	if p.ID != "" {
+		e.Plan, e.Num, e.Sauvegarde = p.ID, n, p.Etapes[n-1].Sauvegarde
+		audit(fmt.Sprintf("accordé : plan %s, étape %d (%s)", p.ID, n, e.Classe))
 		return nil
 	}
 	if _, prod := serveurProd(id); e.Classe == ClasseChangement && !prod && s.approbations.Regle(reglePlan(x.Projet, id)) {

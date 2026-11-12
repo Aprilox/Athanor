@@ -86,7 +86,7 @@ func TestServeursOutils(t *testing.T) {
 	appel := func(outil string, args any) (ResultatOutil, error) {
 		t.Helper()
 		b, _ := json.Marshal(args)
-		return s.appelerOutilServeur(ctx, "test", srv.ID, outil, b)
+		return s.appelerOutilServeur(ctx, "test", srv.ID, outil, b, Sauvegarde{})
 	}
 	derniere := func() string { // the last command the server ran
 		t.Helper()
@@ -101,7 +101,7 @@ func TestServeursOutils(t *testing.T) {
 	}
 
 	// unknown server, unknown tool, unknown argument
-	if _, err := s.appelerOutilServeur(ctx, "test", "ffff", "ssh_commande", json.RawMessage(`{"commande":"id"}`)); !errors.Is(err, errServeurInconnu) {
+	if _, err := s.appelerOutilServeur(ctx, "test", "ffff", "ssh_commande", json.RawMessage(`{"commande":"id"}`), Sauvegarde{}); !errors.Is(err, errServeurInconnu) {
 		t.Errorf("unknown server: %v", err)
 	}
 	if _, err := appel("formater", map[string]any{}); err == nil {
@@ -307,7 +307,7 @@ func TestServeursOutils(t *testing.T) {
 	if !strings.Contains(journal, `"vers":"serveur:`+srv.ID+`"`) || !strings.Contains(journal, "code 5") {
 		t.Errorf("audit lines without server or code: %s", journal)
 	}
-	for _, x := range []string{temoinOutils, "4343", "PRIVATE KEY", strings.Repeat("y", auditMaxOutil+1)} {
+	for _, x := range []string{temoinOutils, "-4343", "PRIVATE KEY", strings.Repeat("y", auditMaxOutil+1)} {
 		if strings.Contains(journal, x) {
 			t.Errorf("audit log holds %.40q", x)
 		}
@@ -347,7 +347,7 @@ func TestServeursOutilsConteneur(t *testing.T) {
 	appel := func(outil string, args any) ResultatOutil {
 		t.Helper()
 		b, _ := json.Marshal(args)
-		r, err := s.appelerOutilServeur(ctx, "test", id, outil, b)
+		r, err := s.appelerOutilServeur(ctx, "test", id, outil, b, Sauvegarde{})
 		if err != nil {
 			t.Fatalf("%s %s: %v", outil, b, err)
 		}
@@ -370,11 +370,29 @@ func TestServeursOutilsConteneur(t *testing.T) {
 	}
 	// sudo: a root file replaced in place, its mode and owner kept
 	appel("ssh_commande", map[string]any{"commande": "echo ancien | sudo -n tee /etc/athanor-test.conf >/dev/null && sudo -n chmod 640 /etc/athanor-test.conf"})
-	if r := appel("fichier_ecrire", map[string]any{"chemin": "/etc/athanor-test.conf", "contenu": "nouveau\n", "sudo": true}); r.Code != 0 {
+	if r := appel("fichier_ecrire", map[string]any{"chemin": "/etc/athanor-test.conf", "contenu": "nouveau\n", "sudo": true}); r.Code != 0 || !strings.Contains(r.Sortie, "previous version kept in /etc/athanor-test.conf.athanor-prev") {
 		t.Errorf("write with sudo: %+v", r)
 	}
-	if r := appel("ssh_commande", map[string]any{"commande": "stat -c '%a %U' /etc/athanor-test.conf; sudo -n cat /etc/athanor-test.conf; sudo -n rm -f /etc/athanor-test.conf"}); r.Sortie != "640 root\nnouveau\n" {
+	// M92: the previous version kept, its mode and owner too
+	if r := appel("ssh_commande", map[string]any{"commande": "stat -c '%a %U' /etc/athanor-test.conf /etc/athanor-test.conf.athanor-prev; sudo -n cat /etc/athanor-test.conf /etc/athanor-test.conf.athanor-prev; sudo -n rm -f /etc/athanor-test.conf /etc/athanor-test.conf.athanor-prev"}); r.Sortie != "640 root\n640 root\nnouveau\nancien\n" {
 		t.Errorf("root file: %q", r.Sortie)
+	}
+	// M92: a step's paths archived first (folder 0700, archive 0600), then restored with their mode and owner;
+	// a failed archive runs nothing and leaves no archive
+	appel("ssh_commande", map[string]any{"commande": "rm -rf /tmp/m92 && mkdir -p /tmp/m92/sous && echo garde > /tmp/m92/sous/f && chmod 750 /tmp/m92/sous"})
+	b, _ := json.Marshal(map[string]any{"commande": "rm -rf /tmp/m92"})
+	if r, err := s.appelerOutilServeur(ctx, "test", id, "ssh_commande", b, Sauvegarde{Archive: "essai-1", Chemins: []string{"/tmp/m92"}}); err != nil || !strings.HasPrefix(r.Sortie, "backup: /var/backups/athanor/essai-1.tar.gz (/tmp/m92)") {
+		t.Errorf("step with a backup: %v %+v", err, r)
+	}
+	if r := appel("ssh_commande", map[string]any{"commande": "test -e /tmp/m92 && echo present; sudo -n stat -c %a /var/backups/athanor /var/backups/athanor/essai-1.tar.gz; sudo -n tar -xzf /var/backups/athanor/essai-1.tar.gz -C / && stat -c '%a %U' /tmp/m92/sous && cat /tmp/m92/sous/f"}); r.Sortie != "700\n600\n750 athanor\ngarde\n" {
+		t.Errorf("archive restored: %q", r.Sortie)
+	}
+	b, _ = json.Marshal(map[string]any{"commande": "touch /tmp/m92/jamais"})
+	if _, err := s.appelerOutilServeur(ctx, "test", id, "ssh_commande", b, Sauvegarde{Archive: "essai-2", Chemins: []string{"/tmp/absent-m92"}}); err == nil || !strings.Contains(err.Error(), "the step did not run") {
+		t.Errorf("failed backup: %v", err)
+	}
+	if r := appel("ssh_commande", map[string]any{"commande": "test -e /tmp/m92/jamais && echo ran; sudo -n test -e /var/backups/athanor/essai-2.tar.gz && echo left; sudo -n rm -rf /tmp/m92 /var/backups/athanor/essai-1.tar.gz"}); r.Sortie != "" {
+		t.Errorf("after a failed backup: %q", r.Sortie)
 	}
 	if r := appel("fichier_ecrire", map[string]any{"chemin": "/tmp", "contenu": "x"}); r.Code == 0 || !strings.Contains(r.Sortie, "is a directory") {
 		t.Errorf("write on a folder: %+v", r)
@@ -390,12 +408,12 @@ func TestServeursOutilsConteneur(t *testing.T) {
 	if r := appel("fichier_ecrire", map[string]any{"chemin": "/etc/athanor-lien.conf", "contenu": "v2\n", "sudo": true}); r.Code != 0 {
 		t.Errorf("write through a link: %+v", r)
 	}
-	if r := appel("ssh_commande", map[string]any{"commande": "stat -c '%F %U' /etc/athanor-lien.conf; stat -c '%F %a %U' /etc/athanor-cible.conf; sudo -n cat /etc/athanor-cible.conf; ls /etc | grep -c athanor-cible.conf.athanor; sudo -n rm -f /etc/athanor-lien.conf /etc/athanor-cible.conf"}); r.Sortie != "symbolic link root\nregular file 640 root\nv2\n0\n" {
+	if r := appel("ssh_commande", map[string]any{"commande": "stat -c '%F %U' /etc/athanor-lien.conf; stat -c '%F %a %U' /etc/athanor-cible.conf; sudo -n cat /etc/athanor-cible.conf; ls /etc | grep -c 'athanor-cible.conf.athanor[.]'; sudo -n rm -f /etc/athanor-lien.conf /etc/athanor-cible.conf /etc/athanor-cible.conf.athanor-prev"}); r.Sortie != "symbolic link root\nregular file 640 root\nv2\n0\n" {
 		t.Errorf("link written through: %q", r.Sortie)
 	}
 	// C41: behind a published port, the port sshd itself listens on is guarded too
 	if port != 22 {
-		if _, err := s.appelerOutilServeur(ctx, "test", id, "pare_feu", json.RawMessage(`{"action":"deny","port":22,"proto":"tcp"}`)); err == nil || !strings.Contains(err.Error(), "SSH port") {
+		if _, err := s.appelerOutilServeur(ctx, "test", id, "pare_feu", json.RawMessage(`{"action":"deny","port":22,"proto":"tcp"}`), Sauvegarde{}); err == nil || !strings.Contains(err.Error(), "SSH port") {
 			t.Errorf("deny on sshd's own port: %v", err)
 		}
 	}
@@ -413,8 +431,11 @@ func TestServeursOutilsConteneur(t *testing.T) {
 	appel("ssh_commande", map[string]any{"commande": "rm -f /tmp/recu.txt " + citerShell(piege)})
 	// C40: sending onto a link to a 0600 file keeps the link and the mode
 	appel("ssh_commande", map[string]any{"commande": "printf 'S=1\\n' > /tmp/vrai.conf; chmod 600 /tmp/vrai.conf; ln -sf /tmp/vrai.conf /tmp/lien.conf"})
-	appel("sftp_envoyer", map[string]any{"local": "envoi.txt", "distant": "/tmp/lien.conf"})
-	if r := appel("ssh_commande", map[string]any{"commande": "stat -c '%F' /tmp/lien.conf; stat -c '%F %a' /tmp/vrai.conf; cat /tmp/vrai.conf; rm -f /tmp/lien.conf /tmp/vrai.conf"}); r.Sortie != "symbolic link\nregular file 600\ncontenu sftp\n" {
+	// M92: and the previous version is kept next to the real target, its mode too
+	if r := appel("sftp_envoyer", map[string]any{"local": "envoi.txt", "distant": "/tmp/lien.conf"}); !strings.HasSuffix(r.Sortie, "previous version kept in /tmp/vrai.conf.athanor-prev") {
+		t.Errorf("SFTP previous version: %q", r.Sortie)
+	}
+	if r := appel("ssh_commande", map[string]any{"commande": "stat -c '%F' /tmp/lien.conf; stat -c '%F %a' /tmp/vrai.conf /tmp/vrai.conf.athanor-prev; cat /tmp/vrai.conf /tmp/vrai.conf.athanor-prev; rm -f /tmp/lien.conf /tmp/vrai.conf*"}); r.Sortie != "symbolic link\nregular file 600\nregular file 600\ncontenu sftp\nS=1\n" {
 		t.Errorf("SFTP onto a link: %q", r.Sortie)
 	}
 	// C36: a link to /etc/shadow (or to the folder /root/.ssh) is refused once resolved on the server, as root too
@@ -430,7 +451,7 @@ func TestServeursOutilsConteneur(t *testing.T) {
 		{"sftp_envoyer", map[string]any{"local": "envoi.txt", "distant": "/tmp/ombre"}},
 	} {
 		b, _ := json.Marshal(c.args)
-		if r, err := s.appelerOutilServeur(ctx, "test", id, c.outil, b); err == nil || !strings.Contains(err.Error(), "leads to") || strings.Contains(r.Sortie, "root:") {
+		if r, err := s.appelerOutilServeur(ctx, "test", id, c.outil, b, Sauvegarde{}); err == nil || !strings.Contains(err.Error(), "leads to") || strings.Contains(r.Sortie, "root:") {
 			t.Errorf("C36 %s %s: %v %q", c.outil, b, err, r.Sortie)
 		}
 	}

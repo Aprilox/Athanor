@@ -75,9 +75,43 @@ var outilsServeurs = map[string]outilServeur{
 	"pare_feu":       outilPareFeu,
 }
 
-// appelerOutilServeur runs tool outil on server id for de (who asks, for the log) and writes the audit line.
-func (s *Serveur) appelerOutilServeur(ctx context.Context, de, id, outil string, args json.RawMessage) (ResultatOutil, error) {
-	r, err := s.executerOutilServeur(ctx, id, outil, args)
+// Sauvegarde: what a plan's step archives on the server before it runs (M92); none when Chemins is empty.
+type Sauvegarde struct {
+	Archive string // <plan>-<step>, the archive's name in dossierSauvegardes
+	Chemins []string
+}
+
+func sauvegardeDe(e Etape) Sauvegarde {
+	return Sauvegarde{Archive: fmt.Sprintf("%s-%d", e.Plan, e.Num), Chemins: e.Sauvegarde}
+}
+
+// scriptArchiver: $1 the archive's name, then the paths (relative to /, "./…"); as root, else through sudo -n
+// when it is allowed; the folder 0700, the archive 0600; prints the archive's path; a failed archive is removed.
+const scriptArchiver = `d=` + dossierSauvegardes + `; a="$d/$1.tar.gz"; shift
+S=; [ "$(id -u)" = 0 ] || { sudo -n true 2>/dev/null && S="sudo -n"; }
+$S mkdir -p -m 700 "$d" && $S sh -c 'umask 077; tar -czf "$0" -C / "$@"' "$a" "$@" && $S chmod 600 "$a" && echo "$a" && exit 0
+$S rm -f "$a"; exit 1`
+
+// archiver makes the step's archive; any failure stops the step.
+func archiver(ctx context.Context, c *ssh.Client, sv Sauvegarde) (string, error) {
+	args := []string{sv.Archive}
+	for _, p := range sv.Chemins {
+		args = append(args, "."+p)
+	}
+	r, err := executerSSH(ctx, c, scriptShell(false, scriptArchiver, args...), nil, delaiCommandeMax)
+	if err == nil && r.Code != 0 {
+		err = errors.New(couper(strings.TrimSpace(string(r.Sortie)), 500))
+	}
+	if err != nil {
+		return "", fmt.Errorf("the backup of %s failed, the step did not run (propose a new plan): %w", strings.Join(sv.Chemins, ", "), err)
+	}
+	return fmt.Sprintf("backup: %s (%s)", strings.TrimSpace(string(r.Sortie)), strings.Join(sv.Chemins, ", ")), nil
+}
+
+// appelerOutilServeur runs tool outil on server id for de (who asks, for the log), after archiving sv, and
+// writes the audit line.
+func (s *Serveur) appelerOutilServeur(ctx context.Context, de, id, outil string, args json.RawMessage, sv Sauvegarde) (ResultatOutil, error) {
+	r, err := s.executerOutilServeur(ctx, id, outil, args, sv)
 	r.Sortie = s.masquerSecrets(r.Sortie)
 	if len(r.Sortie) > sortieMaxOutil {
 		r.Sortie, r.Coupee = r.Sortie[:sortieMaxOutil], true
@@ -94,7 +128,7 @@ func (s *Serveur) appelerOutilServeur(ctx context.Context, de, id, outil string,
 	return r, err
 }
 
-func (s *Serveur) executerOutilServeur(ctx context.Context, id, outil string, args json.RawMessage) (ResultatOutil, error) {
+func (s *Serveur) executerOutilServeur(ctx context.Context, id, outil string, args json.RawMessage, sv Sauvegarde) (ResultatOutil, error) {
 	f, ok := outilsServeurs[outil]
 	if !ok {
 		return ResultatOutil{Code: -1}, fmt.Errorf("unknown tool %q", outil)
@@ -119,7 +153,16 @@ func (s *Serveur) executerOutilServeur(ctx context.Context, id, outil string, ar
 		return ResultatOutil{Code: -1}, err
 	}
 	defer c.Close()
+	note := ""
+	if len(sv.Chemins) > 0 {
+		if note, err = archiver(ctx, c, sv); err != nil {
+			return ResultatOutil{Code: -1}, err
+		}
+	}
 	r, err := f(ctx, c, l[i], a)
+	if note != "" {
+		r.Sortie = note + "\n" + r.Sortie // first: the audit line keeps only the start of the output
+	}
 	if err == nil && r.Code == 0 && r.modifie {
 		if _, e := s.rafraichirFiche(ctx, l[i]); e != nil {
 			r.Sortie += "\n(the server sheet could not be refreshed: " + e.Error() + ")"
@@ -244,12 +287,13 @@ func outilFichierLire(ctx context.Context, c *ssh.Client, _ ServeurInventaire, a
 
 // scriptEcrire: a link is followed to its real target (C32: the link stays); the content goes to a temporary
 // file next to that target, which keeps its mode (and owner under sudo), then replaces it in one rename;
-// a failure leaves the target as it was.
+// a failure leaves the target as it was. An existing file is copied first to <target>.athanor-prev (M92).
 const scriptEcrire = `p=$(readlink -f -- "$1") && [ -n "$p" ] || p=$1
 [ -d "$p" ] && { echo "$1 is a directory" >&2; exit 1; }
 t=$(mktemp "$p.athanor.XXXXXX") || exit 1
 if cat > "$t"; then
-  if [ -e "$p" ]; then chmod "$(stat -L -c %a -- "$p")" "$t" && { [ "$(id -u)" != 0 ] || chown "$(stat -L -c %u:%g -- "$p")" "$t"; }; else chmod 644 "$t"; fi && mv -f -- "$t" "$p" && echo "$2 bytes written to $1" && exit 0
+  k=
+  if [ -e "$p" ]; then chmod "$(stat -L -c %a -- "$p")" "$t" && { [ "$(id -u)" != 0 ] || chown "$(stat -L -c %u:%g -- "$p")" "$t"; } && cp -p -- "$p" "$p.athanor-prev" && k="; previous version kept in $p.athanor-prev"; else chmod 644 "$t"; fi && mv -f -- "$t" "$p" && echo "$2 bytes written to $1$k" && exit 0
 fi
 rm -f -- "$t"; exit 1`
 
@@ -364,8 +408,16 @@ func outilSFTPEnvoyer(ctx context.Context, c *ssh.Client, srv ServeurInventaire,
 	if errF := df.Close(); err == nil {
 		err = errF
 	}
+	prev := ""
 	if st, e := cs.Stat(cible); err == nil && e == nil {
 		err = cs.Chmod(part, st.Mode().Perm())
+		if err == nil && st.Mode().IsRegular() { // M92: the previous version kept, mode and owner too
+			prev = cible + ".athanor-prev"
+			r, e := executerSSH(ctx, c, scriptShell(false, `cp -p -- "$1" "$2"`, cible, prev), nil, delaiFichier)
+			if err = e; err == nil && r.Code != 0 {
+				err = fmt.Errorf("keeping the previous version: %s", couper(strings.TrimSpace(string(r.Sortie)), 300))
+			}
+		}
 	}
 	if err == nil {
 		err = cs.PosixRename(part, cible) // replaces the target in one step
@@ -374,7 +426,11 @@ func outilSFTPEnvoyer(ctx context.Context, c *ssh.Client, srv ServeurInventaire,
 		_ = cs.Remove(part)
 		return ResultatOutil{Code: -1}, fmt.Errorf("sending to %s: %w", distant, err)
 	}
-	return ResultatOutil{Sortie: fmt.Sprintf("%d bytes sent to %s", n, distant)}, nil
+	sortie := fmt.Sprintf("%d bytes sent to %s", n, distant)
+	if prev != "" {
+		sortie += "; previous version kept in " + prev
+	}
+	return ResultatOutil{Sortie: sortie}, nil
 }
 
 func outilSFTPRecuperer(ctx context.Context, c *ssh.Client, srv ServeurInventaire, a argsOutilServeur) (ResultatOutil, error) {

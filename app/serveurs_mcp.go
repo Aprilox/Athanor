@@ -115,7 +115,7 @@ func faireOutilServeur(nom string) func(*Serveur, SessionHub, json.RawMessage) (
 		if err != nil {
 			return "", errors.New(s.masquerSecrets(err.Error()))
 		}
-		r, err := s.appelerOutilServeur(context.Background(), x.Agent, id, nom, e.Arguments)
+		r, err := s.appelerOutilServeur(context.Background(), x.Agent, id, nom, e.Arguments, sauvegardeDe(e))
 		if err != nil {
 			return "", errors.New(s.masquerSecrets(err.Error()))
 		}
@@ -132,7 +132,7 @@ func (s *Serveur) avantOutil(x SessionHub, id, outil string, a map[string]json.R
 	}
 	e, err := classerEtape(outil, a)
 	if err == nil && e.Classe > ClasseLecture {
-		err = s.planOuRegle(x, id, e)
+		err = s.planOuRegle(x, id, &e)
 	}
 	if err != nil {
 		s.ecrireAudit(LigneAudit{Type: "evenement", De: x.Agent, Vers: "serveur:" + id, Projet: x.Projet, Mission: x.Mission,

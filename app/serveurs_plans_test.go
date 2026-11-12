@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -14,7 +15,13 @@ import (
 // change on a dev server: "do not ask again for this server"; a refused, expired or stopped plan runs nothing.
 func TestServeursPlans(t *testing.T) {
 	signer, prive := nouvelleCleSSH(t)
-	mem := lancerSSHMemoire(t, signer.PublicKey(), "", func(cmd string, _ []byte) (string, int) { return "ok:" + cmd, 0 })
+	var tarEchoue atomic.Bool
+	mem := lancerSSHMemoire(t, signer.PublicKey(), "", func(cmd string, _ []byte) (string, int) {
+		if tarEchoue.Load() && strings.Contains(cmd, "tar -czf") {
+			return "tar: srv/vieux: Cannot stat", 2
+		}
+		return "ok:" + cmd, 0
+	})
 	s, srv := outilsServeursTest(t, mem.hote, mem.port, mem.empreinte, prive)
 	s.config.Projets = []Projet{{Nom: "demo", Dossier: filepath.Join(t.TempDir(), "demo")}}
 	var err error
@@ -138,6 +145,36 @@ func TestServeursPlans(t *testing.T) {
 		t.Errorf("%d refused calls reached the server", n)
 	}
 
+	// M92: an accepted step archives its paths first, its output (and the audit log) says where; a failed
+	// archive runs nothing; a destructive step without backup says why
+	rmSauve := `{"outil":"ssh_commande","arguments":{"commande":"rm -rf /srv/vieux"},"pourquoi":"place","sauvegarde":["/srv/vieux/"]}`
+	plan8, _ := proposer(rmSauve)
+	_ = decider(plan8, "accepter")
+	if txt, e := appel("ssh_commande", `{"serveur":"ab12","commande":"rm -rf /srv/vieux"}`); e || !strings.Contains(txt, "backup: ") || !strings.Contains(txt, "(/srv/vieux)") {
+		t.Errorf("step with a backup: %v %q", e, txt)
+	}
+	if c1, c2 := <-mem.commandes, <-mem.commandes; !strings.Contains(c1, "tar -czf") || !strings.Contains(c1, plan8+"-1") || !strings.Contains(c1, "./srv/vieux") || c2 != "rm -rf /srv/vieux" {
+		t.Errorf("archive then step: %q, %q", c1, c2)
+	}
+	plan9, _ := proposer(rmSauve)
+	_ = decider(plan9, "accepter")
+	tarEchoue.Store(true)
+	if txt, e := appel("ssh_commande", `{"serveur":"ab12","commande":"rm -rf /srv/vieux"}`); !e || !strings.Contains(txt, "backup of /srv/vieux failed, the step did not run") {
+		t.Errorf("failed backup: %v %q", e, txt)
+	}
+	tarEchoue.Store(false)
+	if n := vider(); n != 1 {
+		t.Errorf("a failed backup let %d commands run", n)
+	}
+	plan10, _ := proposer(`{"outil":"ssh_commande","arguments":{"commande":"rm -rf /tmp/cache"},"pourquoi":"p","sans_sauvegarde":"le cache se refait au démarrage"}`)
+	_ = decider(plan10, "accepter")
+	if p, _ := s.lirePlan(plan10); p.Etapes[0].SansSauvegarde == "" {
+		t.Errorf("no reason kept: %+v", p.Etapes[0])
+	}
+	if txt, e := appel("ssh_commande", `{"serveur":"ab12","commande":"rm -rf /tmp/cache"}`); e || strings.Contains(txt, "backup") || vider() != 1 {
+		t.Errorf("step without backup: %v %q", e, txt)
+	}
+
 	// dev server: "do not ask again" → later changes run, and plans of changes are accepted at once;
 	// a destructive call still needs its own plan
 	plan5, _ := proposer(`{"outil":"pare_feu","arguments":{"action":"allow","port":8080},"pourquoi":"p"}`)
@@ -185,6 +222,11 @@ func TestServeursPlans(t *testing.T) {
 		{`{"outil":"ssh_commande","arguments":{"commande":"id","serveur":"cd34"},"pourquoi":"p"}`, "invalid arguments"},
 		{`{"outil":"fichier_ecrire","arguments":{"chemin":"/etc/shadow","contenu":"x"},"pourquoi":"p"}`, "is refused"},
 		{`{"outil":"ssh_commande","arguments":{"commande":"id"},"pourquoi":" "}`, "pourquoi is required"},
+		{`{"outil":"ssh_commande","arguments":{"commande":"rm -rf /srv/a"},"pourquoi":"p"}`, "step 1 is destructive: list in sauvegarde"},
+		{`{"outil":"ssh_commande","arguments":{"commande":"rm -rf /srv/a"},"pourquoi":"p","sauvegarde":["/etc/shadow"]}`, "is refused"},
+		{`{"outil":"ssh_commande","arguments":{"commande":"rm -rf /srv/a"},"pourquoi":"p","sauvegarde":["/var/backups/athanor/x"]}`, "is refused"},
+		{`{"outil":"ssh_commande","arguments":{"commande":"rm -rf /srv/a"},"pourquoi":"p","sauvegarde":["/srv/.."]}`, "not the whole disk"},
+		{`{"outil":"ssh_commande","arguments":{"commande":"rm -rf /srv/a"},"pourquoi":"p","sauvegarde":["srv/a"]}`, "absolute path"},
 	} {
 		if txt, e := appel("proposer_plan", `{"serveur":"ab12","resume":"r","etapes":[`+c.etapes+`]}`); !e || !strings.Contains(txt, c.attendu) {
 			t.Errorf("%s: %v %q", c.etapes, e, txt)
@@ -202,7 +244,7 @@ func TestServeursPlans(t *testing.T) {
 		t.Errorf("page plan: %+v", p)
 	}
 	j := journalAuditTexte(t)
-	for _, attendu := range []string{"serveurs.proposer_plan", "accordé : plan " + plan, "accordé : règle", "approbation demandée: plan_serveur", "already ran this step"} {
+	for _, attendu := range []string{"serveurs.proposer_plan", "accordé : plan " + plan, "accordé : règle", "approbation demandée: plan_serveur", "already ran this step", "backup: ", "the step did not run"} {
 		if !strings.Contains(j, attendu) {
 			t.Errorf("audit log lacks %q", attendu)
 		}

@@ -331,7 +331,7 @@ func TestServeursScenarioConteneur(t *testing.T) {
 	}
 	change := func(nom, args string) ResultatOutil {
 		t.Helper()
-		r, err := s.appelerOutilServeur(ctx, agentServeurs, id, nom, json.RawMessage(args))
+		r, err := s.appelerOutilServeur(ctx, agentServeurs, id, nom, json.RawMessage(args), Sauvegarde{})
 		if err != nil {
 			t.Fatalf("%s %s: %v", nom, args, err)
 		}
