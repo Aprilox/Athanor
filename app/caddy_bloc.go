@@ -1,0 +1,116 @@
+package main
+
+// The Caddy site block of an environment (M118, ARCHITECTURE.md §Protection, §ACME): blocCaddy is pure and
+// is what stage 8's deployments write on the server. HTTPS by Cloudflare's origin certificate when Athanor
+// installed one, otherwise Caddy's own (ACME, with the owner's technical e-mail when the vault holds one);
+// auth_proxy adds basic_auth, whose bcrypt hash Athanor computes from an infra mot_de_passe entry of the vault:
+// the password itself never leaves this process.
+
+import (
+	"errors"
+	"fmt"
+	"net/url"
+	"regexp"
+	"slices"
+	"strings"
+
+	"golang.org/x/crypto/bcrypt"
+)
+
+const (
+	utilisateurProxy = "athanor" // the user name of auth_proxy's basic_auth
+	varEmailACME     = "ACME_EMAIL"
+)
+
+var reAmontCaddy = regexp.MustCompile(`^[A-Za-z0-9.\-]+:[0-9]{1,5}$`)
+
+// blocCaddy (pure): the site block of e, proxied to amont (host:port); email: ACME's account e-mail (may be
+// empty); hachage: the bcrypt hash of auth_proxy's password (required by auth_proxy, ignored otherwise).
+func blocCaddy(e Environnement, amont, email, hachage string) (string, error) {
+	u, err := url.Parse(e.URL)
+	if e.URL == "" || err != nil || u.Hostname() == "" {
+		return "", errors.New("the environment has no URL")
+	}
+	if !reAmontCaddy.MatchString(amont) {
+		return "", errors.New("upstream: host:port")
+	}
+	hote, adresse := strings.ToLower(u.Hostname()), strings.ToLower(u.Host)
+	var b strings.Builder
+	if u.Scheme == "http" {
+		adresse = "http://" + adresse
+	}
+	fmt.Fprintf(&b, "%s {\n", adresse)
+	switch {
+	case u.Scheme == "http":
+	case e.Certificat != "":
+		fmt.Fprintf(&b, "\ttls %s/%s.crt %s/%s.key\n", dossierTLS, hote, dossierTLS, hote)
+	case email != "":
+		if !reEmailAuteur.MatchString(email) {
+			return "", errors.New("the ACME e-mail is not an e-mail address")
+		}
+		fmt.Fprintf(&b, "\ttls %s\n", email)
+	}
+	b.WriteString("\tencode zstd gzip\n\theader {\n")
+	if u.Scheme != "http" {
+		b.WriteString("\t\tStrict-Transport-Security \"max-age=31536000; includeSubDomains\"\n")
+	}
+	b.WriteString("\t\tX-Content-Type-Options nosniff\n\t\tX-Frame-Options DENY\n\t\tReferrer-Policy strict-origin-when-cross-origin\n\t\t-Server\n\t}\n")
+	if e.Protection == "auth_proxy" {
+		if !strings.HasPrefix(hachage, "$2") || strings.ContainsAny(hachage, " \t\n{}") {
+			return "", errors.New("auth_proxy needs the password's bcrypt hash")
+		}
+		fmt.Fprintf(&b, "\tbasic_auth {\n\t\t%s %s\n\t}\n", utilisateurProxy, hachage)
+	}
+	fmt.Fprintf(&b, "\treverse_proxy %s\n}\n", amont)
+	return b.String(), nil
+}
+
+// hachageProxy: the bcrypt hash of environment projet/env's auth_proxy password, the infra mot_de_passe entry
+// of the vault with source proxy:<projet>/<env>, made (random) the first time; the owner reads it in the vault.
+// shortcut: found by its source, so renaming the project makes a new password; record its id in the environment if that matters.
+func (s *Serveur) hachageProxy(projet, env string) (string, error) {
+	source := "proxy:" + projet + "/" + env
+	l := s.coffre.Liste()
+	i := slices.IndexFunc(l, func(e EntreeCoffre) bool {
+		return e.Source == source && e.Type == "mot_de_passe" && e.Portee == "infra"
+	})
+	id := ""
+	if i >= 0 {
+		id = l[i].ID
+	} else {
+		n, err := s.coffre.Ajouter(EntreeCoffre{Nom: "PROXY_PASSWORD " + projet + "/" + env, Famille: "secret", Type: "mot_de_passe", Portee: "infra",
+			Note: "Password of the site's protection (user " + utilisateurProxy + "), made by Athanor", Source: source}, aleatoire(16))
+		if err != nil {
+			return "", fmt.Errorf("the proxy password could not be made in the vault (%v): the owner opens the vault", err)
+		}
+		id = n.ID
+	}
+	mdp, err := s.coffre.Valeur(id)
+	if err != nil {
+		return "", fmt.Errorf("the proxy password cannot be read (%v): the owner opens the vault", err)
+	}
+	h, err := bcrypt.GenerateFromPassword([]byte(mdp), bcrypt.DefaultCost)
+	return string(h), err
+}
+
+// blocCaddyEnv: blocCaddy for environment projet/env, its e-mail and password hash read from the vault.
+func (s *Serveur) blocCaddyEnv(projet, env, amont string) (string, error) {
+	e, ok := s.acces.Environnements(projet)[env]
+	if !ok {
+		return "", errors.New("unknown environment")
+	}
+	email, hachage := "", ""
+	for _, v := range s.coffre.Liste() {
+		if v.Famille == "variable" && v.Nom == varEmailACME {
+			email, _ = s.coffre.Valeur(v.ID)
+			email = strings.TrimSpace(email)
+		}
+	}
+	if e.Protection == "auth_proxy" {
+		var err error
+		if hachage, err = s.hachageProxy(projet, env); err != nil {
+			return "", err
+		}
+	}
+	return blocCaddy(e, amont, email, hachage)
+}

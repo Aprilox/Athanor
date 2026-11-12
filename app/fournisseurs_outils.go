@@ -20,7 +20,7 @@ import (
 )
 
 // outilsCloudflare: the Cloudflare tools, in the order the agent's list shows them.
-var outilsCloudflare = []string{"fournisseurs", "dns_lister", "dns_ecrire", "dns_supprimer", "ssl_lire", "ssl_regler", "certificat_origine"}
+var outilsCloudflare = []string{"fournisseurs", "dns_lister", "dns_ecrire", "dns_supprimer", "ssl_lire", "ssl_regler", "certificat_origine", "access_proteger", "access_retirer"}
 
 var (
 	errNomInconnu  = errors.New("unknown name: only your environment's host names, in a zone of its Cloudflare provider")
@@ -32,12 +32,13 @@ var (
 // argsCloudflare: the arguments of every Cloudflare tool (each one reads its own: argumentsDe), canonical
 // once read (a plan's step is matched on them).
 type argsCloudflare struct {
-	Nom     string `json:"nom,omitempty"`
-	Type    string `json:"type,omitempty"`
-	Contenu string `json:"contenu,omitempty"`
-	Proxied *bool  `json:"proxied,omitempty"`
-	TTL     int    `json:"ttl,omitempty"`
-	Mode    string `json:"mode,omitempty"`
+	Nom     string   `json:"nom,omitempty"`
+	Type    string   `json:"type,omitempty"`
+	Contenu string   `json:"contenu,omitempty"`
+	Proxied *bool    `json:"proxied,omitempty"`
+	TTL     int      `json:"ttl,omitempty"`
+	Mode    string   `json:"mode,omitempty"`
+	Emails  []string `json:"emails,omitempty"`
 
 	serveur string // certificat_origine: the accepted plan's server
 }
@@ -70,6 +71,10 @@ func init() {
 			map[string]any{"nom": nom, "mode": parmi("The mode (strict: the origin's certificate is checked)", modesSSL...)}, []string{"nom", "mode"}},
 		{"certificat_origine", "Have a Cloudflare origin certificate made for a host name of your environment and installed by Athanor on the plan's server, in " + dossierTLS + "/<name>.crt and .key (the key 0600 root, never shown to you). A change: only as a step of an accepted plan on that server.",
 			map[string]any{"nom": nom}, []string{"nom"}},
+		{"access_proteger", "Protect a host name of your environment with Cloudflare Access: a self-hosted application whose only policy allows the given e-mail addresses (the owner's choice). A change: only as a step of an accepted plan.",
+			map[string]any{"nom": nom, "emails": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "The e-mail addresses allowed in (1 to 50)"}}, []string{"nom", "emails"}},
+		{"access_retirer", "Remove the Cloudflare Access application of a host name of your environment: the site is open to everyone again. Destructive: only as a step of an accepted plan.",
+			map[string]any{"nom": nom}, []string{"nom"}},
 	} {
 		d.props["classe"] = classe
 		outilsHub[d.nom] = OutilHub{Description: d.description, Schema: schemaObjet(d.props, append([]string{}, d.requis...)...), Faire: faireOutilCloudflare(d.nom)}
@@ -91,6 +96,10 @@ func classerCloudflare(outil string, brut []byte) (Classe, string, argsCloudflar
 		return ClasseLecture, "reads Cloudflare", a, nil
 	case "certificat_origine":
 		return ClasseChangement, "has an origin certificate made for " + a.Nom + " and installed on the plan's server", argsCloudflare{Nom: a.Nom}, nil
+	case "access_proteger":
+		return classerAccess(a)
+	case "access_retirer":
+		return ClasseDestructrice, "removes the Cloudflare Access protection of " + a.Nom + ": the site opens to everyone", argsCloudflare{Nom: a.Nom}, nil
 	case "ssl_regler":
 		if !slices.Contains(modesSSL, a.Mode) {
 			return 0, "", a, errors.New("mode: off, flexible, full or strict")
@@ -347,6 +356,8 @@ func (s *Serveur) executerCloudflare(x SessionHub, outil string, a argsCloudflar
 	switch outil {
 	case "certificat_origine":
 		return s.certificatOrigine(x, jeton, a.Nom, a.serveur)
+	case "access_proteger", "access_retirer":
+		return s.access(f, jeton, a)
 	case "dns_lister":
 		tous := []enregistrementDNS{}
 		for _, n := range noms {
