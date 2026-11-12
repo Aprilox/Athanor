@@ -73,8 +73,25 @@ func TestOutilsDev(t *testing.T) {
 	if er || !strings.Contains(txt, `"STRIPE_KEY"`) || strings.Contains(txt, "STRIPE_STAGING") || strings.Contains(txt, "AUTRE_KEY") || !strings.Contains(txt, `"projet": "demo"`) {
 		t.Errorf("etat: %s", txt)
 	}
+	// M113: url, protection, policy and server names; never the provider's, the key's or an entry's id
+	_ = os.RemoveAll(dossierModule("servers"))
+	t.Cleanup(func() { _ = os.RemoveAll(dossierModule("servers")) })
+	if err := modifierServeurs(func(l []ServeurInventaire) ([]ServeurInventaire, error) {
+		return append(l, ServeurInventaire{ID: "ab12cd34", Nom: "vps-staging", Hote: "203.0.113.7", Port: 22, Roles: []string{"dev"}}), nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.acces.modifier(func(f *fichierAcces) error {
+		projetDe(f, "demo").Environnements = map[string]*Environnement{"staging": {URL: "https://staging.exemple.fr", Serveurs: []string{"ab12cd34"},
+			Protection: "access", Politique: "auto", Fournisseur: "fournisseur-temoin", CleDeploiement: "cle-temoin-" + e.ID}}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
 	txt, er = appel("environnements", "{}")
-	if er || !strings.Contains(txt, `"environnement": "dev"`) || !strings.Contains(txt, "STRIPE_STAGING") || strings.Contains(txt, "AUTRE_KEY") {
+	if er || !strings.Contains(txt, `"environnement": "dev"`) || !strings.Contains(txt, "STRIPE_STAGING") || strings.Contains(txt, "AUTRE_KEY") ||
+		!strings.Contains(txt, "https://staging.exemple.fr") || !strings.Contains(txt, `"vps-staging"`) || !strings.Contains(txt, `"politique": "auto"`) ||
+		!strings.Contains(txt, `"protection": "access"`) || strings.Contains(txt, "temoin") || strings.Contains(txt, e.ID) || strings.Contains(txt, "ab12cd34") || strings.Contains(txt, "203.0.113.7") {
 		t.Errorf("environnements: %s", txt)
 	}
 

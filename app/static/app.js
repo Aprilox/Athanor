@@ -4578,7 +4578,7 @@ function ligneAudit(l, lang) {
 }
 // --- Servers (#serveurs): inventory cards and the add wizard (address → fingerprint to confirm → one of three ways)
 const srv = { aj: null, texte: "", ouvertes: new Set() }; // aj: the wizard ({etape: "adresse" | "empreinte" | "cle" | "coupure", …}), kept across renders
-function carteServeur(x, fiche) {
+function carteServeur(x, fiche, envs) {
   const sante = { ok: t("Reachable"), injoignable: t("Unreachable"), empreinte_changee: t("Host fingerprint changed") }[x.etat] || t("Waiting for its key"), cls = x.etat === "ok" ? "travaille" : "attend", f = fiche || {};
   const tourne = [...(f.conteneurs || []).filter((c) => /^(up|running)/i.test(c.etat)).map((c) => c.nom), ...(f.services || [])];
   const resume = !fiche ? t("Its sheet is not made yet.")
@@ -4586,7 +4586,7 @@ function carteServeur(x, fiche) {
   return `<div class="bloc carte-serveur" data-srv-id="${h(x.id)}">
     <div class="cp-tete"><a class="cp-nom" href="#serveur/${encodeURIComponent(x.id)}"><b>${h(x.nom)}</b></a><span class="pastille ${cls}">${sante}</span></div>
     <div class="muet petit"><code>${h(x.utilisateur)}@${h(x.hote)}${x.port === 22 ? "" : ":" + x.port}</code>${f.systeme && f.systeme.nom ? " · " + h(f.systeme.nom) : ""}</div>
-    <div class="ligne m0">${(x.roles || []).length ? x.roles.map((r) => `<span class="badge${r === "prod" ? " badge-infra" : ""}">${h(r)}</span>`).join("") : `<span class="muet petit">${t("No role yet")}</span>`}</div>
+    <div class="ligne m0">${(x.roles || []).length ? x.roles.map((r) => `<span class="badge${r === "prod" ? " badge-infra" : ""}">${h(r)}</span>`).join("") : `<span class="muet petit">${t("No role yet")}</span>`}${(envs || []).length ? `<span class="badge badge-env" title="${h(t("Used by") + " " + envs.join(", "))}">${h(t("Environments: {0}", [envs.length]))}</span>` : ""}</div>
     <div class="petit srv-tourne" title="${h(tourne.join(", "))}">${h(resume)}</div>
     <div class="muet petit">${t("Last deployments: none yet (deployments come in a later version of Athanor).")}</div>
     <div class="muet petit">${x.vu ? h(t("Seen {0}", [dateLisible(x.vu)])) : h(t("Added {0}", [dateLisible(x.cree)]))}</div>
@@ -4649,7 +4649,7 @@ pages.serveurs = async () => {
   const [d, c] = await Promise.all([api("serveurs"), distant ? null : api("coffre").catch(() => null)]);
   // shortcut: one request per server for its sheet; fine up to the tens of servers aimed at (E12: 10)
   const fiches = await Promise.all(d.serveurs.map((x) => api("serveurs/" + encodeURIComponent(x.id)).then((r) => r.fiche).catch(() => null)));
-  const liste = d.serveurs.map((x, i) => carteServeur(x, fiches[i])).join("");
+  const liste = d.serveurs.map((x, i) => carteServeur(x, fiches[i], (d.environnements || {})[x.id])).join("");
   return `<div class="serveurs">
     ${srv.aj ? messagesCoffreServeurs(c) : ""}
     <div class="ligne cof-tete"><h2 class="m0">${t("Servers")} <span class="muet">${d.serveurs.length}</span></h2><span class="espace"></span>${distant ? `<span class="muet petit">${t("Adding a server is done on the computer.")}</span>` : srv.aj ? "" : `<button type="button" class="btn btn-primaire" data-srv-ajouter>+ ${t("Add a server")}</button>`}</div>
@@ -4760,6 +4760,7 @@ pages.serveur = async () => {
       <div class="cp-tete"><h2 class="m0 cp-nom">${h(x.nom)}</h2><span class="pastille ${x.etat === "ok" ? "travaille" : "attend"}">${sante}</span></div>
       <div class="muet petit"><code>${h(x.utilisateur)}@${h(x.hote)}${x.port === 22 ? "" : ":" + x.port}</code>${x.empreinte_hote ? ` · ${t("Fingerprint")} <code class="srv-empreinte-courte">${h(x.empreinte_hote)}</code>` : ""}</div>
       <div class="ligne m0"><span class="muet petit">${t("Roles")}</span>${role("dev")}${role("prod")}${distant && !x.roles.length ? `<span class="muet petit">${t("No role yet")}</span>` : ""}</div>
+      <div class="ligne m0 srv-utilise"><span class="muet petit">${t("Used by")}</span>${(d.environnements || []).length ? d.environnements.map((pe) => `<a class="badge" href="#acces" data-projet="${h(pe.slice(0, pe.lastIndexOf("/")))}" data-cible="acces">${h(pe)}</a>`).join("") : `<span class="muet petit">${t("No project environment uses this server yet.")}</span>`}</div>
       <div class="muet petit">${x.mot_de_passe_coupe ? "🔒 " + t("Password logins are cut: Athanor and you connect with keys only.") : t("Password logins are still open on this server.")}</div>
       <div class="muet petit">${f && f.date ? h(t("Sheet read {0}", [dateLisible(f.date)])) : ""}${x.vu ? (f && f.date ? " · " : "") + h(t("Seen {0}", [dateLisible(x.vu)])) : ""}</div>
       ${distant ? `<p class="muet petit m0">${t("Read only from this device: the server is changed on the computer.")}</p>` : `<div class="ligne m0">

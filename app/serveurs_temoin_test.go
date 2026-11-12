@@ -488,7 +488,8 @@ func TestServeursPerimetre(t *testing.T) {
 		"docker": `,"action":"ps"`, "pare_feu": `,"action":"status"`, "confirmer_changement": `,"id":"0a1b2c3d"`,
 		"runbook_lire": ``, "runbook_ajouter": `,"section":"historique","texte":"t"`,
 		"proposer_plan": `,"resume":"r","etapes":[{"outil":"service","arguments":{"action":"status","nom":"ssh"},"pourquoi":"p"}]`}
-	if len(outils) != len(outilsServeursMCP)-1 {
+	// serveurs_liste above; environnement_lire takes no server (its perimeter: TestServeursMCP)
+	if len(outils) != len(outilsServeursMCP)-2 {
 		t.Fatalf("a Servers tool is not covered: %v", outilsServeursMCP)
 	}
 	for o, args := range outils {

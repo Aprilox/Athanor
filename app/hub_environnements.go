@@ -248,3 +248,30 @@ func (s *Serveur) apiEnvironnementModifier(w http.ResponseWriter, r *http.Reques
 		Resultat: fmt.Sprintf("%s: %s, %d serveur(s), %s, %s", c.Env, e.URL, len(e.Serveurs), e.Protection, e.Politique)})
 	s.apiEnvironnements(w, r)
 }
+
+// UtilisationsServeurs: server id → the "project/env" that use it, sorted (the Servers page).
+func (a *Acces) UtilisationsServeurs() map[string][]string {
+	m := map[string][]string{}
+	if a == nil {
+		return m
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for nomP, p := range a.f.Projets {
+		for nomE, e := range p.Environnements {
+			for _, id := range e.Serveurs {
+				m[id] = append(m[id], nomP+"/"+nomE)
+			}
+		}
+	}
+	for _, l := range m {
+		slices.Sort(l)
+	}
+	return m
+}
+
+// vueEnvironnement: what an agent may read of an environment: never the provider's or the key's id.
+func vueEnvironnement(e Environnement, serveurs []map[string]any) map[string]any {
+	return map[string]any{"url": e.URL, "protection": e.Protection, "politique": e.Politique, "serveurs": serveurs,
+		"dns_cloudflare": e.Fournisseur != "", "cle_deploiement_prete": e.CleDeploiement != ""}
+}

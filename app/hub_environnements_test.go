@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -155,6 +156,14 @@ func TestEnvironnementsAPI(t *testing.T) {
 	if code, v := appel("POST", "/api/projets/demo/environnements", `{"env":"dev","url":"https://dev.exemple.fr","serveurs":["`+dev+`"],"politique":"auto"}`); code != 200 ||
 		env(v, "dev")["politique"] != "auto" || env(v, "prod")["protection"] != "access" {
 		t.Errorf("dev: %d %v", code, v)
+	}
+	// M113: the inventory and a server's sheet say which environments use it
+	if code, v := appel("GET", "/api/serveurs", ""); code != 200 || fmt.Sprint(v["environnements"].(map[string]any)[prod]) != "[demo/prod]" ||
+		fmt.Sprint(v["environnements"].(map[string]any)[dev]) != "[demo/dev]" {
+		t.Errorf("inventory: %d %v", code, v["environnements"])
+	}
+	if code, v := appel("GET", "/api/serveurs/"+dev, ""); code != 200 || fmt.Sprint(v["environnements"]) != "[demo/dev]" {
+		t.Errorf("sheet: %d %v", code, v["environnements"])
 	}
 	if code, _ := appel("POST", "/api/projets/inconnu/environnements", `{"env":"dev"}`); code != 404 {
 		t.Errorf("unknown project: %d", code)

@@ -29,7 +29,7 @@ func init() {
 	objet, texte := schemaObjet, schemaTexte
 	outilsHub["etat"] = OutilHub{Description: "Your project's state in Athanor: plan progress, phase, what waits for the owner, the names of the variables you receive, your access requests.",
 		Schema: objet(map[string]any{}), Faire: outilEtat}
-	outilsHub["environnements"] = OutilHub{Description: "Your project's environments: the current one and, for each, the names of the variables you receive (never their values).",
+	outilsHub["environnements"] = OutilHub{Description: "Your project's environments: the current one and, for each, its URL, protection, deployment policy, the names of its servers and of the variables you receive (never their values).",
 		Schema: objet(map[string]any{}), Faire: outilEnvironnements}
 	outilsHub["demander_acces"] = OutilHub{Description: "Ask the owner for a key or secret you need (e.g. STRIPE_SECRET_KEY). Once accepted, it appears in .athanor/secrets.env, no restart needed.",
 		Schema: objet(map[string]any{"nom": texte("Variable name, e.g. STRIPE_SECRET_KEY"), "raison": texte("Why you need it, in one sentence")}, "nom", "raison"), Faire: outilDemanderAcces}
@@ -136,9 +136,24 @@ func outilEnvironnements(s *Serveur, x SessionHub, args json.RawMessage) (string
 	if err != nil {
 		return "", err
 	}
+	noms := map[string]string{}
+	if inv, err := lireServeurs(); err == nil {
+		for _, v := range inv {
+			noms[v.ID] = v.Nom
+		}
+	}
+	envs := s.acces.Environnements(x.Projet)
 	l := []map[string]any{}
 	for _, e := range envsProjet {
-		l = append(l, map[string]any{"nom": e, "en_cours": e == env, "variables_recues": append([]string{}, recus[e]...), "infra_gardee_par_athanor": infra[e]})
+		srv := []map[string]any{}
+		for _, id := range envs[e].Serveurs {
+			if noms[id] != "" {
+				srv = append(srv, map[string]any{"nom": noms[id]})
+			}
+		}
+		v := vueEnvironnement(envs[e], srv)
+		v["nom"], v["en_cours"], v["variables_recues"], v["infra_gardee_par_athanor"] = e, e == env, append([]string{}, recus[e]...), infra[e]
+		l = append(l, v)
 	}
 	return enJSON(map[string]any{"environnement": env, "environnements": l}), nil
 }

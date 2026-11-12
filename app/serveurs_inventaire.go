@@ -134,7 +134,7 @@ func (s *Serveur) apiServeurs(w http.ResponseWriter, _ *http.Request) {
 		s.erreurServeurs(w, err)
 		return
 	}
-	s.ecrireJSON(w, map[string]any{"serveurs": liste})
+	s.ecrireJSON(w, map[string]any{"serveurs": liste, "environnements": s.acces.UtilisationsServeurs()})
 }
 
 // apiServeur: GET /api/serveurs/{id}, one server and its sheet (null until the sheet is made).
@@ -154,7 +154,8 @@ func (s *Serveur) apiServeur(w http.ResponseWriter, r *http.Request) {
 		fiche = b
 	}
 	runbook, _ := os.ReadFile(fichierRunbook(liste[i].ID)) // M96: read only here
-	s.ecrireJSON(w, map[string]any{"serveur": liste[i], "fiche": fiche, "annulations": annulationsDe(liste[i].ID), "runbook": s.masquerSecrets(string(runbook))})
+	s.ecrireJSON(w, map[string]any{"serveur": liste[i], "fiche": fiche, "annulations": annulationsDe(liste[i].ID), "runbook": s.masquerSecrets(string(runbook)),
+		"environnements": append([]string{}, s.acces.UtilisationsServeurs()[liste[i].ID]...)})
 }
 
 // apiServeurModifier: POST /api/serveurs/{id} {nom?, roles?}: renames it or sets its roles;

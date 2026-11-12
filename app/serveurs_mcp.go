@@ -22,7 +22,7 @@ const agentServeurs = "servers"
 
 // outilsServeursMCP: the tools of a Servers agent's token.
 var outilsServeursMCP = []string{"serveurs_liste", "serveur_fiche", "ssh_commande", "fichier_lire", "fichier_ecrire",
-	"sftp_envoyer", "sftp_recuperer", "service", "docker", "pare_feu", "proposer_plan", "confirmer_changement", "runbook_lire", "runbook_ajouter"}
+	"sftp_envoyer", "sftp_recuperer", "service", "docker", "pare_feu", "proposer_plan", "confirmer_changement", "runbook_lire", "runbook_ajouter", "environnement_lire"}
 
 var (
 	errServeursAgent = errors.New("the Servers tools answer only a Servers agent's session")
@@ -68,6 +68,8 @@ func init() {
 	}
 	outilsHub["serveurs_liste"] = OutilHub{Description: "The servers you may work on: id, name, roles, state, last seen.",
 		Schema: schemaObjet(map[string]any{}), Faire: outilServeursListe}
+	outilsHub["environnement_lire"] = OutilHub{Description: "A project's environment that runs on your servers: URL, protection, deployment policy and its servers you may work on.",
+		Schema: schemaObjet(map[string]any{"projet": schemaTexte("The project's name"), "env": parmi("The environment", envsProjet...)}, "projet", "env"), Faire: outilEnvironnementLire}
 	outilsHub["serveur_fiche"] = OutilHub{Description: "A server's sheet (system, resources, ports, software, services, containers), as Athanor last read it.",
 		Schema: schemaObjet(map[string]any{"serveur": srv}, "serveur"), Faire: outilServeurFiche}
 }
@@ -284,4 +286,38 @@ func outilServeurFiche(s *Serveur, x SessionHub, args json.RawMessage) (string, 
 		return "", err
 	}
 	return enDonnees("server-sheet", "", strings.TrimSuffix(s.masquerSecrets(string(b)), "\n")), nil
+}
+
+var errEnvInconnu = errors.New("unknown environment, or none of its servers is yours")
+
+// outilEnvironnementLire: an environment is in a task's perimeter when one of its servers is; any other one
+// (or an unknown project) gets the same answer, and the owner reads the refusal in the audit log.
+func outilEnvironnementLire(s *Serveur, x SessionHub, args json.RawMessage) (string, error) {
+	var a struct{ Projet, Env string }
+	if err := lireArguments(args, &a); err != nil {
+		return "", err
+	}
+	if err := s.accesServeursAgent(x); err != nil {
+		return "", err
+	}
+	inv, err := lireServeurs()
+	if err != nil {
+		return "", err
+	}
+	var e Environnement
+	if s.acces != nil && slices.Contains(envsProjet, a.Env) && slices.Contains(s.nomsProjets(), a.Projet) {
+		e = s.acces.Environnements(a.Projet)[a.Env]
+	}
+	srv := []map[string]any{}
+	for _, v := range inv {
+		if slices.Contains(e.Serveurs, v.ID) && slices.Contains(x.Serveurs, v.ID) {
+			srv = append(srv, map[string]any{"id": v.ID, "nom": v.Nom, "roles": append([]string{}, v.Roles...)})
+		}
+	}
+	if len(srv) == 0 {
+		s.ecrireAudit(LigneAudit{Type: "evenement", De: x.Agent, Vers: "hub", Projet: x.Projet, Mission: x.Mission, Agent: x.Agent,
+			Action: "serveurs.environnement_lire", Resultat: "refusé : environnement hors de portée de la tâche (" + couper(a.Projet, 60) + "/" + couper(a.Env, 10) + ")"})
+		return "", errEnvInconnu
+	}
+	return enJSON(vueEnvironnement(e, srv)), nil
 }

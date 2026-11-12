@@ -964,6 +964,8 @@ ol.guide-access li { margin: 5px 0; }
 .badge-infra { color: var(--attention); border-color: var(--attention); }
 .acces-demarrer { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .acces-demarrer a.badge { text-decoration: none; }
+.srv-utilise a.badge { text-decoration: none; cursor: pointer; }
+.badge-env { white-space: nowrap; }
 .cof-valeur code { word-break: break-all; }
 .cof-note { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .menu-coffre { position: relative; flex: none; }

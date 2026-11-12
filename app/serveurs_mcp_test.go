@@ -95,6 +95,33 @@ func TestServeursMCP(t *testing.T) {
 		t.Errorf("list: %v %s", e, txt)
 	}
 
+	// M113, environnement_lire: an environment one of whose servers is the task's; any other one, an unknown
+	// project or environment get the same answer; never the provider's or the key's id, never an address
+	if err := s.acces.modifier(func(f *fichierAcces) error {
+		projetDe(f, "demo").Environnements = map[string]*Environnement{
+			"dev":  {URL: "https://dev.exemple.fr", Serveurs: []string{srv.ID}, Protection: "auth_proxy", Politique: "auto", Fournisseur: "fourn-temoin", CleDeploiement: "cle-temoin"},
+			"prod": {URL: "https://exemple.fr", Serveurs: []string{"cd34"}, Protection: "aucune", Politique: "accord"}}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	txt, e = appel(jeton, "environnement_lire", `{"projet":"demo","env":"dev"}`)
+	if e || !strings.Contains(txt, "https://dev.exemple.fr") || !strings.Contains(txt, `"ab12"`) || !strings.Contains(txt, `"auth_proxy"`) ||
+		strings.Contains(txt, "temoin") || strings.Contains(txt, mem.hote) {
+		t.Errorf("environnement_lire: %v %s", e, txt)
+	}
+	for _, a := range []string{`{"projet":"demo","env":"prod"}`, `{"projet":"demo","env":"staging"}`, `{"projet":"inconnu","env":"dev"}`, `{"projet":"demo","env":"qa"}`} {
+		if txt, e := appel(jeton, "environnement_lire", a); !e || txt != errEnvInconnu.Error() {
+			t.Errorf("environnement_lire %s: %v %q", a, e, txt)
+		}
+	}
+	if txt, e := appel(faux, "environnement_lire", `{"projet":"demo","env":"dev"}`); !e || txt != errServeursAgent.Error() {
+		t.Errorf("environnement_lire by another agent: %v %q", e, txt)
+	}
+	if j := journalAuditTexte(t); strings.Count(j, "environnement hors de portée de la tâche") != 4 || !strings.Contains(j, "(inconnu/dev)") {
+		t.Errorf("environnement_lire refusals not logged:\n%s", j)
+	}
+
 	// a call on the perimeter, the vault's value masked in the answer
 	if txt, e := appel(jeton, "ssh_commande", `{"serveur":"ab12","commande":"uname -a"}`); e || !strings.Contains(txt, citerShell("uname -a")) {
 		t.Errorf("command: %v %q", e, txt)
