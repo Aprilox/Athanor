@@ -273,7 +273,9 @@ func accesCapture(t *testing.T, s *Serveur, p, p3 Projet) {
 	// M112 (projet-environnements-*): prod configured on c0ffee01 with its deployment key; staging set by the script
 	if err := s.acces.modifier(func(f *fichierAcces) error {
 		projetDe(f, p.Nom).Environnements = map[string]*Environnement{"prod": {URL: "https://boutique.example.org", Serveurs: []string{"c0ffee01"},
-			Protection: "access", Politique: "accord", Deploiement: &ConfigDeploiement{Methode: "statique", Source: "git"}}}
+			Protection: "access", Politique: "accord", Deploiement: &ConfigDeploiement{Methode: "statique", Source: "git"}},
+			// M136: dev deployed after each milestone (its box ticked, its last relay in suivi-relais-clair)
+			"dev": {Serveurs: []string{}, Protection: "aucune", Politique: "accord", DeployerAuJalon: true}}
 		projetDe(f, p.Nom).CleDeploiement = "cle-deploiement-capture"
 		return nil
 	}); err != nil {
@@ -380,4 +382,12 @@ func historiqueCapture(t *testing.T, p Projet) {
 		}
 	}
 	t.Cleanup(func() { _ = os.Remove(cheminHistorique(p.Nom, "prod")) })
+	// M136: the dev relay after the last milestone, deployed and checked
+	d := Deploiement{ID: "cap4", Projet: p.Nom, Env: "dev", Commit: "7e6d5c4b3a29180f7e6d5c4b3a29180f7e6d5c4b", Methode: "statique", Etat: "ok", Auteur: "relais",
+		Serveurs: []string{"c0ffee02"}, Debut: "2026-11-12T08:30:00Z", Verification: &v1}
+	if err := noterHistorique(d); err != nil {
+		t.Fatal(err)
+	}
+	ecrireRelais(p.Nom, RelaisJalon{Jalon: "M4 : Le panier et le paiement", Commit: d.Commit, Date: d.Debut, Etat: "lance", ID: d.ID})
+	t.Cleanup(func() { _ = os.Remove(cheminHistorique(p.Nom, "dev")); oublierRelais(p.Nom) })
 }

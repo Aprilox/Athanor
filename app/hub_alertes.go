@@ -114,7 +114,7 @@ func alertesApprobations(l []Approbation) []AlerteHub {
 // alertesHub: the bell (the pending approvals first, then the modules' alerts not ignored) and the
 // history of the ignored ones, each with its Reopen.
 func (s *Serveur) alertesHub(el []ElementHub) (actives, cachees []AlerteHub) {
-	toutes := alertesDe(el)
+	toutes := append(alertesDe(el), s.alertesRelais()...)
 	actives, cachees = trierAlertes(toutes, ignoreesCourantes(toutes))
 	for i := range cachees {
 		cachees[i].Actions = []ActionAlerte{ignorerOuRouvrir(cachees[i].Empreinte, false)}
@@ -206,7 +206,7 @@ func (s *Serveur) apiAlertes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_, el := s.vueHub()
-	if !ignorerAlerte(alertesDe(el), c.Empreinte, c.Ignorer) {
+	if !ignorerAlerte(append(alertesDe(el), s.alertesRelais()...), c.Empreinte, c.Ignorer) {
 		s.erreur(w, http.StatusNotFound, "This alert no longer exists.")
 		return
 	}

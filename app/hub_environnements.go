@@ -31,6 +31,8 @@ type Environnement struct {
 	CertificatServeurs []string `json:"certificat_serveurs,omitempty"`
 	// how it is deployed (M131), recorded by Athanor after a first deployment, never by a request
 	Deploiement *ConfigDeploiement `json:"deploiement,omitempty"`
+	// dev only (M136): the project's HEAD deployed to dev after each milestone delivered (relais_jalon.go)
+	DeployerAuJalon bool `json:"deployer_au_jalon,omitempty"`
 }
 
 var (
@@ -44,6 +46,7 @@ var (
 	errEnvProtect   = erreurEntree("Unknown protection (aucune, access or auth_proxy)")
 	errEnvPolitique = erreurEntree("Unknown policy (accord or auto)")
 	errEnvProdAuto  = erreurEntree("Production always asks for your approval: its policy cannot be automatic")
+	errEnvRelais    = erreurEntree("Only dev can be deployed after each milestone: staging and production wait for a request")
 	errEnvFourn     = erreurEntree("Unknown provider")
 	errEnvAuthHTTP  = erreurEntree("The password protection needs an https:// address: over http:// the password would travel in clear")
 )
@@ -130,6 +133,9 @@ func validerEnvironnement(nom string, e Environnement, inventaire []ServeurInven
 	}
 	if nom == "prod" && e.Politique != "accord" {
 		return e, errEnvProdAuto
+	}
+	if e.DeployerAuJalon && nom != "dev" {
+		return e, errEnvRelais
 	}
 	if e.Fournisseur != "" && !idServeurValide.MatchString(e.Fournisseur) {
 		return e, errEnvFourn // the id's form here; apiEnvironnementModifier checks it exists in fournisseurs.json

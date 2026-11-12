@@ -1892,6 +1892,7 @@ pages.suivi = async () => {
         <dt>${t("Milestone")}</dt><dd>${e.jalon_en_cours ? `<b>${md(titreJalon(e.jalon_en_cours))}</b>${(() => { const j = plan.find((x) => x.titre === titreJalon(e.jalon_en_cours)); return j && j.detail ? `<div class="muet petit">${md(j.detail)}</div>` : ""; })()}` : "—"}</dd>
         <dt>${t("Last commit, this computer")}</dt><dd class="muet">${h(e.dernier_commit || "—")}</dd>
         ${ligneGitHubSuivi(v.github, e.dernier_commit)}
+        ${v.relais ? `<dt>${t("Dev after milestones")}</dt><dd class="relais-suivi">${ligneRelais(v.relais)}</dd>` : ""}
         ${e.reprise_prevue ? `<dt>${t("Resumes")}</dt><dd class="quota">${h(e.reprise_prevue)}</dd>` : ""}
         <dt>${t("Queued requests")}</dt><dd>${v.attente || 0}</dd>
         <dt>${t("Updated")}</dt><dd class="muet petit">${h(heureMaj(e.maj))}</dd>
@@ -1931,6 +1932,12 @@ pages.suivi = async () => {
     ${stats.length > 5 ? `<button type="button" class="btn btn-petit mt-1" data-stats-tous>${etat.ouverts.has("stats:tous") ? t("Last 5 cycles only") : t("All {0} cycles", [stats.length])}</button>` : ""}` : `<div class="vide">${t("Numbers appear at the end of the first cycle.")}</div>`}
   </div>`;
 };
+
+// M136: the dev deployment after the last milestone (relais_jalon.go)
+function ligneRelais(r) {
+  const [icone, etiquette] = r.etat === "attente" ? ["⏳", "Waiting for the milestone's commit on GitHub"] : r.etat === "lance" ? ETATS_DEPLOI.en_cours : ETATS_DEPLOI[r.etat] || ["", r.etat];
+  return `<span class="badge">${icone} ${h(t(etiquette))}</span> <code>${h((r.commit || "").slice(0, 7))}</code> <span class="muet petit">${md(r.jalon)} · ${h(dateLisible(r.date))}</span>${r.erreur ? `<div class="petit attention">${h(t(r.erreur))}</div>` : ""} <a class="petit" href="#acces">${t("Environments")}</a>`;
+}
 
 // the installers of this system: on Windows, one per mode (choosing it also selects that mode)
 function boutonsInstallation(v, primaire) {
@@ -4327,6 +4334,8 @@ function blocEnvironnements(en, inventaire, fournisseurs, distant) {
       <label class="env-champ">${t("Protection")}<select data-env-champ="protection"${ro}>${options(Object.entries(PROTECTIONS_ENV).map(([v, l]) => [v, t(l)]), e.protection)}</select></label>
       ${prod ? `<div class="env-champ"><span>${t("Deployment policy")}</span><p class="petit">🔒 ${t("Production always asks for your approval before a deployment: this cannot be turned off.")}</p></div>`
         : `<label class="env-champ">${t("Deployment policy")}<select data-env-champ="politique"${ro}>${options([["accord", t("Ask for my approval")], ["auto", t("Automatic when nothing is destroyed")]], e.politique)}</select></label>`}
+      ${nom === "dev" ? `<label class="env-champ env-relais"><span><input type="checkbox" data-env-champ="relais"${e.deployer_au_jalon ? " checked" : ""}${ro}> ${t("Deploy to dev after each milestone delivered")}</span>
+        <span class="muet petit">${t("Each time a milestone is ticked, the project's last commit is deployed to dev with its recorded method, then checked. Never production.")}</span></label>` : ""}
       ${fourn.length ? `<label class="env-champ">${t("DNS provider")}<select data-env-champ="fournisseur"${ro}>${options([["", t("None")], ...fourn], e.fournisseur || "")}</select></label>`
         : `<div class="env-champ"><span>${t("DNS provider")}</span><p class="muet petit">${t("None: providers (Cloudflare) are added in Servers.")}</p></div>`}
       <p class="petit attention env-erreur" role="alert" hidden></p>
@@ -4400,7 +4409,7 @@ $("#page").addEventListener("click", async (ev) => {
   const b = ev.target.closest("[data-env-enregistrer]"); if (!b) return;
   const c = b.closest("[data-env]"), err = c.querySelector(".env-erreur"), champ = (k) => c.querySelector(`[data-env-champ="${k}"]`);
   const corps = { env: c.dataset.env, url: champ("url").value.trim(), serveurs: [...c.querySelectorAll("[data-env-serveur]:checked")].map((x) => x.dataset.envServeur),
-    protection: champ("protection").value, politique: champ("politique") ? champ("politique").value : "accord", fournisseur: champ("fournisseur") ? champ("fournisseur").value : "" };
+    protection: champ("protection").value, politique: champ("politique") ? champ("politique").value : "accord", fournisseur: champ("fournisseur") ? champ("fournisseur").value : "", deployer_au_jalon: !!(champ("relais") && champ("relais").checked) };
   b.disabled = true; err.hidden = true;
   try {
     const en = await api("projets/" + encodeURIComponent(acc.projet) + "/environnements", "POST", corps), tpl = document.createElement("template");
