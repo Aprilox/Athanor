@@ -469,6 +469,12 @@ func classerSegment(sg segmentShell, texte string) (Classe, string) {
 	}
 	var a verdict
 	a.monter(c, raison)
+	// bash evaluates array subscripts in these words (a[$(cmd)]) even when quoted: the command runs
+	if evalueIndices[nom] && slices.ContainsFunc(args, func(m motShell) bool {
+		return strings.Contains(m.texte, "$(") || strings.Contains(m.texte, "`") || strings.Contains(m.texte, "${")
+	}) {
+		a.monter(ClasseDestructrice, nom+" evaluates an expansion that can run a command")
+	}
 	a.monter(classerArguments(args, c))
 	if c == ClasseLecture && nom != "echo" && nom != "printf" {
 		for _, m := range args {
@@ -577,6 +583,7 @@ func sauterEnveloppe(nom string, mots []motShell) (reste []motShell, recherche b
 var lecturesSimples = ensemble("cat tac head tail grep egrep fgrep zgrep zcat bzcat xzcat wc cut nl od hexdump strings file stat du df ls pwd whoami id groups uname uptime free top ps pgrep pidof w who last lastlog lsblk lsof findmnt lscpu lsmem lspci lsusb lsmod blkid printenv echo printf true false test [ [[ which type whereis basename dirname realpath readlink md5sum sha1sum sha256sum sha512sum cksum diff cmp ss netstat ping dig nslookup host getent jq column tr nproc arch vmstat iostat sleep seq comm join paste fold rev read set cd pushd popd exit return : iptables-save ip6tables-save apt-cache locale tty")
 var destructricesSimples = ensemble("rm unlink shred truncate dd wipefs fdisk sfdisk cfdisk parted gdisk sgdisk mkswap mke2fs blkdiscard shutdown reboot halt poweroff userdel deluser groupdel delgroup killall5 srm wipe dropdb dropuser iptables-restore ip6tables-restore")
 var interpretes = ensemble("sh bash dash zsh ksh mksh fish csh tcsh busybox eval source . xargs parallel watch su runuser flock nsenter unshare systemd-run at batch screen tmux ssh sshpass script expect strace ltrace gdb trap shopt enable osascript deno bun julia Rscript java")
+var evalueIndices = ensemble("[[ [ test printf read let declare typeset local export unset mapfile readarray")
 var prefixesInterpretes = []string{"python", "pypy", "perl", "ruby", "php", "node", "lua", "tclsh", "pwsh", "mkfs"}
 
 func ensemble(s string) map[string]bool {
@@ -800,7 +807,7 @@ var reglesCommandes = map[string]regle{
 		return ClasseLecture, ""
 	},
 	"curl": func(a []string, _ string) (Classe, string) {
-		if optionShell(a, "oOdXTFKcD", "--output", "--remote-name", "--remote-name-all", "--output-dir", "--data", "--data-raw", "--data-binary", "--data-urlencode", "--data-ascii", "--json", "--request", "--upload-file", "--form", "--form-string", "--config", "--cookie-jar", "--dump-header") {
+		if optionShell(a, "oOdXTFKcD", "--output", "--remote-name", "--remote-name-all", "--output-dir", "--data", "--data-raw", "--data-binary", "--data-urlencode", "--data-ascii", "--json", "--request", "--upload-file", "--form", "--form-string", "--config", "--cookie-jar", "--dump-header", "--trace", "--trace-ascii", "--stderr", "--libcurl", "--etag-save", "--hsts", "--alt-svc") {
 			return ClasseChangement, "curl writes a file or sends data"
 		}
 		return ClasseLecture, ""
@@ -811,7 +818,7 @@ var reglesCommandes = map[string]regle{
 			suivant := i+1 < len(a) && a[i+1] == "-"
 			sortie = sortie || x == "-O-" || x == "-qO-" || x == "--output-document=-" || (x == "-O" || x == "-qO" || x == "--output-document") && suivant
 		}
-		if !sortie || optionShell(a, "", "--post-data", "--post-file", "--method", "--body-data", "--body-file") {
+		if !sortie || optionShell(a, "oa", "--output-file", "--append-output", "--post-data", "--post-file", "--method", "--body-data", "--body-file") {
 			return ClasseChangement, "wget writes a file or sends data"
 		}
 		return ClasseLecture, ""
@@ -867,6 +874,10 @@ var reglesCommandes = map[string]regle{
 	"ip": func(a []string, _ string) (Classe, string) {
 		p := positionnels(a)
 		switch {
+		case slices.ContainsFunc(a, func(x string) bool {
+			return x == "-b" || strings.HasPrefix(x, "-batch") || strings.HasPrefix(x, "--batch")
+		}):
+			return ClasseDestructrice, "ip -batch runs commands read from a file"
 		case unParmi(p, "flush del delete down exec"):
 			return ClasseDestructrice, "ip removes addresses or routes, takes a link down or runs a command"
 		case unParmi(p, "set add change replace append prepend up save restore"):
@@ -887,10 +898,20 @@ var reglesCommandes = map[string]regle{
 	"kubectl": func(a []string, _ string) (Classe, string) {
 		return classerSous("kubectl", positionnels(a), "get describe logs top version cluster-info api-resources api-versions explain", "delete drain exec run debug")
 	},
+	"iptables-save": regleSave, "ip6tables-save": regleSave,
+	"ss": func(a []string, _ string) (Classe, string) {
+		if optionShell(a, "K", "--kill") {
+			return ClasseDestructrice, "ss -K closes connections"
+		}
+		return ClasseLecture, ""
+	},
 	"git": func(a []string, _ string) (Classe, string) {
 		// shortcut: a pager or external diff set in the repository's own config still runs on read commands; refuse such repos when agents may write them.
 		if optionShell(a, "c", "--config-env", "--exec-path") {
 			return ClasseDestructrice, "git -c can run a command"
+		}
+		if optionShell(a, "", "--output") {
+			return ClasseChangement, "git --output writes a file"
 		}
 		p := positionnels(a)
 		switch {
@@ -975,6 +996,13 @@ func init() {
 	}
 }
 
+func regleSave(a []string, _ string) (Classe, string) {
+	if optionShell(a, "f", "--file") {
+		return ClasseChangement, "iptables-save -f writes a file"
+	}
+	return ClasseLecture, ""
+}
+
 func regleAwk(a []string, _ string) (Classe, string) {
 	programme := ""
 	for i := 0; i < len(a); i++ {
@@ -984,9 +1012,14 @@ func regleAwk(a []string, _ string) (Classe, string) {
 			return ClasseDestructrice, "awk runs a program file"
 		case x == "-F" || x == "-v" || x == "--field-separator" || x == "--assign":
 			i++
+		case (x == "-e" || x == "--source") && i+1 < len(a):
+			i++
+			programme += " " + a[i]
+		case strings.HasPrefix(x, "--source="):
+			programme += " " + strings.TrimPrefix(x, "--source=")
 		case strings.HasPrefix(x, "-"):
 		default:
-			programme = x
+			programme += " " + x
 			i = len(a)
 		}
 	}
