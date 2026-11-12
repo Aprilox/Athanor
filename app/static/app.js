@@ -4248,7 +4248,8 @@ function ligneAcces(a) {
 pages.acces = async () => {
   const projet = (etat.vue && etat.vue.projet && etat.vue.projet.nom) || etat.projet;
   if (!projet) return `<div class="vide">${t("Choose a project")}</div>`;
-  const [d, c] = await Promise.all([api("acces?projet=" + encodeURIComponent(projet)), api("coffre")]);
+  const [d, c, en, sv, fo] = await Promise.all([api("acces?projet=" + encodeURIComponent(projet)), api("coffre"),
+    api("projets/" + encodeURIComponent(projet) + "/environnements"), api("serveurs").catch(() => ({})), api("fournisseurs").catch(() => ({}))]);
   acc.projet = projet; cof.d = c;
   const entrees = (c.entrees || []).slice().sort((a, b) => a.famille.localeCompare(b.famille) || a.nom.localeCompare(b.nom));
   const inj = d.injection || {}, envs = d.envs || ["dev", "staging", "prod"];
@@ -4280,8 +4281,54 @@ pages.acces = async () => {
         ${(inj.repli || []).length ? `<div class="acc-repli">${inj.repli.map((n) => `<p class="ligne m0 petit"><code>${h(n)}</code><span class="muet croit">${t("in the old file, not in the vault")}</span><button type="button" class="btn btn-petit" data-acc-importer>${t("Import")}</button></p>`).join("")}</div>` : ""}
       </div>
     </div>
+    ${blocEnvironnements(en, sv.serveurs || [], fo.fournisseurs || [], !!(etat.vue || {}).distant)}
   </div>`;
 };
+// --- Environments (ARCHITECTURE §Environnements): one card per environment, saved whole by POST; prod's policy is locked
+const PROTECTIONS_ENV = { aucune: "None (public)", access: "Cloudflare Access (e-mail sign-in)", auth_proxy: "Password in front of the site" };
+function blocEnvironnements(en, inventaire, fournisseurs, distant) {
+  const ro = distant ? " disabled" : "";
+  const options = (liste, val) => liste.map(([v, l]) => `<option value="${h(v)}"${v === val ? " selected" : ""}>${h(l)}</option>`).join("");
+  const carte = (nom) => {
+    const e = en.environnements[nom], prod = nom === "prod";
+    const srv = inventaire.filter((x) => e.serveurs.includes(x.id) || (x.roles || []).includes("prod") === prod);
+    const fourn = fournisseurs.map((f) => [f.id, f.nom]);
+    if (e.fournisseur && !fourn.some(([id]) => id === e.fournisseur)) fourn.push([e.fournisseur, e.fournisseur]);
+    return `<section class="env-carte${prod ? " env-prod" : ""}" data-env="${nom}" aria-label="${nom}">
+      <h3>${nom}${prod ? ` <span class="badge">🔒 ${t("approval always")}</span>` : ""}</h3>
+      <label class="env-champ">${t("Address (URL)")}<input type="url" data-env-champ="url" value="${h(e.url)}" placeholder="https://app.example.com" maxlength="300" spellcheck="false"${ro}></label>
+      <fieldset class="env-serveurs"><legend>${t("Servers")}</legend>
+        ${srv.length ? srv.map((x) => `<label><input type="checkbox" data-env-serveur="${h(x.id)}"${e.serveurs.includes(x.id) ? " checked" : ""}${ro}> <span class="croit">${h(x.nom)}</span>${(x.roles || []).map((r) => `<span class="badge">${h(r)}</span>`).join("")}</label>`).join("")
+          : `<p class="muet petit">${t("No server for this environment yet.")}${distant ? "" : ` <a href="#serveurs">${t("Servers")}</a>`}</p>`}
+        <p class="muet petit">${t(prod ? "Production only runs on servers with the prod role." : "Servers with the prod role are kept for production.")}</p>
+      </fieldset>
+      <label class="env-champ">${t("Protection")}<select data-env-champ="protection"${ro}>${options(Object.entries(PROTECTIONS_ENV).map(([v, l]) => [v, t(l)]), e.protection)}</select></label>
+      ${prod ? `<div class="env-champ"><span>${t("Deployment policy")}</span><p class="petit">🔒 ${t("Production always asks for your approval before a deployment: this cannot be turned off.")}</p></div>`
+        : `<label class="env-champ">${t("Deployment policy")}<select data-env-champ="politique"${ro}>${options([["accord", t("Ask for my approval")], ["auto", t("Automatic when nothing is destroyed")]], e.politique)}</select></label>`}
+      ${fourn.length ? `<label class="env-champ">${t("DNS provider")}<select data-env-champ="fournisseur"${ro}>${options([["", t("None")], ...fourn], e.fournisseur || "")}</select></label>`
+        : `<div class="env-champ"><span>${t("DNS provider")}</span><p class="muet petit">${t("None: providers (Cloudflare) are added in Servers.")}</p></div>`}
+      <div class="env-champ"><span>${t("Deployment key")}</span><p class="petit${e.cle_deploiement ? "" : " muet"}">${e.cle_deploiement ? `✔ ${t("Created by Athanor, read-only on the repository")}` : t("Not created yet: Athanor makes it when the project is linked to GitHub.")}</p></div>
+      <p class="petit attention env-erreur" role="alert" hidden></p>
+      ${distant ? "" : `<button type="button" class="btn btn-petit" data-env-enregistrer>${t("Save")}</button>`}
+    </section>`;
+  };
+  return `<div class="bloc environnements"><h2>${t("Environments")}</h2>
+    <p class="intro petit">${t("Where each environment of the project runs: its address, its servers, its protection and whether a deployment waits for your approval.")}</p>
+    ${distant ? `<p class="petit muet">${t("Shown only: change the environments on the PC.")}</p>` : ""}
+    <div class="env-cartes">${en.envs.map(carte).join("")}</div></div>`;
+}
+$("#page").addEventListener("click", async (ev) => {
+  if (etat.page !== "acces") return;
+  const b = ev.target.closest("[data-env-enregistrer]"); if (!b) return;
+  const c = b.closest("[data-env]"), err = c.querySelector(".env-erreur"), champ = (k) => c.querySelector(`[data-env-champ="${k}"]`);
+  const corps = { env: c.dataset.env, url: champ("url").value.trim(), serveurs: [...c.querySelectorAll("[data-env-serveur]:checked")].map((x) => x.dataset.envServeur),
+    protection: champ("protection").value, politique: champ("politique") ? champ("politique").value : "accord", fournisseur: champ("fournisseur") ? champ("fournisseur").value : "" };
+  b.disabled = true; err.hidden = true;
+  try {
+    await api("projets/" + encodeURIComponent(acc.projet) + "/environnements", "POST", corps);
+    toast(t("Environment {0} saved.", [corps.env]), "ok"); rendrePage();
+  } catch (e) { err.textContent = e.message; err.hidden = false; b.disabled = false; } // the server's reason in the card, the fields kept
+});
 // C25 C35 C37: what an agent of this PC must not decide is retyped with Athanor's password in this window (a paired
 // phone, unlocked with it, passes): {} or {mot_de_passe} for the request, false when cancelled; sinon: asked anyway without the field
 async function preuveMdp(texte, options, sinon) {

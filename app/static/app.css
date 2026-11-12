@@ -1018,6 +1018,19 @@ ol.guide-access li { margin: 5px 0; }
 .acc-acces .cp-nom { white-space: normal; overflow-wrap: anywhere; }
 .acc-repli { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; }
 @media (max-width: 900px) { .acc-grille, .acc-envs { grid-template-columns: 1fr; } .acc-env { min-height: 0; } }
+.env-cartes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.env-carte { border: 1px solid var(--line); border-radius: var(--rayon); padding: 10px; background: var(--bg); display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.env-carte.env-prod { border-color: var(--attention); }
+.env-carte h3 { margin: 0; font-size: 14px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.env-carte p { margin: 0; }
+.env-champ { display: flex; flex-direction: column; gap: 4px; font-size: 13px; min-width: 0; }
+.env-champ input, .env-champ select { width: 100%; box-sizing: border-box; min-width: 0; }
+.env-serveurs { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; min-width: 0; font-size: 13px; }
+.env-serveurs legend { padding: 0; margin-bottom: 2px; }
+.env-serveurs label { display: flex; align-items: center; gap: 6px; min-height: 28px; flex-wrap: wrap; overflow-wrap: anywhere; cursor: pointer; }
+.env-carte .btn { align-self: flex-start; }
+.env-champ input:disabled, .env-champ select:disabled { background: transparent; color: inherit; opacity: 1; cursor: default; } /* read-only on a paired device: legible in every theme */
+@media (max-width: 900px) { .env-cartes { grid-template-columns: 1fr; } }
 
 /* Servers page (#serveurs): inventory cards and the add wizard */
 .carte-serveur { display: flex; flex-direction: column; gap: 6px; min-width: 0; }

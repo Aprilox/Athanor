@@ -223,7 +223,7 @@ func (s *Serveur) apiServeurModifier(w http.ResponseWriter, r *http.Request) {
 		}
 		if i >= 0 && s.acces != nil {
 			if l := s.acces.envsIncompatibles(liste[i].ID, roles); len(l) > 0 {
-				s.erreur(w, http.StatusConflict, "Take this server out of these environments first: "+strings.Join(l, ", "))
+				s.erreurArgs(w, http.StatusConflict, "Take this server out of these environments first: {0}", strings.Join(l, ", "))
 				return // a prod server in a dev environment would be deployed to without approval
 			}
 		}

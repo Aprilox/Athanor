@@ -55,7 +55,9 @@ func TestValiderEnvironnement(t *testing.T) {
 		{"dev", Environnement{Fournisseur: "../x"}, "Unknown provider"},
 	} {
 		_, err := validerEnvironnement(c.nom, c.e, inv)
-		if _, entree := err.(erreurEntree); err == nil || !entree || !strings.Contains(err.Error(), c.mot) {
+		_, entree := err.(erreurEntree)
+		_, avecArgs := err.(erreurEntreeArgs)
+		if err == nil || !(entree || avecArgs) || !strings.Contains(err.Error(), c.mot) {
 			t.Errorf("%s %+v: %v, want %q", c.nom, c.e, err, c.mot)
 		}
 	}

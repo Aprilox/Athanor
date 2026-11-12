@@ -198,6 +198,13 @@ func (s *Serveur) erreur(w http.ResponseWriter, code int, msg string) {
 	_ = json.NewEncoder(w).Encode(map[string]any{"erreur_key": msg, "erreur": msg})
 }
 
+// erreurArgs: an error whose message key takes arguments ({0}…), translated by the interface.
+func (s *Serveur) erreurArgs(w http.ResponseWriter, code int, cle string, args ...string) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(code)
+	_ = json.NewEncoder(w).Encode(map[string]any{"erreur_key": cle, "args": args, "erreur": erreurEntreeArgs{cle, args}.Error()})
+}
+
 // msg answers with a message key and its arguments ({0}, {1}…), translated by the interface.
 func (s *Serveur) msg(w http.ResponseWriter, cle string, args ...string) {
 	if args == nil {

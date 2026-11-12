@@ -64,6 +64,8 @@ func TestWebTraduction(t *testing.T) {
 	}
 	cles = append(cles, errTacheArretee.Error(), errTacheRevoquee.Error(), prefixeVerifEchouee) // a task's end (B64)
 	cles = append(cles, "This key opens the server {0}: it stays in the infra scope", "This key opens the server {0}: remove that server first")
+	cles = append(cles, errEnvURL.Error(), errEnvProtect.Error(), errEnvPolitique.Error(), errEnvProdAuto.Error(), errEnvFourn.Error(),
+		errEnvPasProd, errEnvProd, "Take this server out of these environments first: {0}") // the Environments panel (M112)
 	for _, l := range []string{"fr", "es", "de", "it", "pt"} {
 		dico := dicoTUI(l)
 		if len(dico) < 1000 {

@@ -35,6 +35,25 @@ var (
 	errEnvFourn     = erreurEntree("Unknown provider")
 )
 
+// erreurEntreeArgs: an input error whose message key takes arguments ({0}…), translated by the page.
+type erreurEntreeArgs struct {
+	cle  string
+	args []string
+}
+
+func (e erreurEntreeArgs) Error() string {
+	m := e.cle
+	for i, a := range e.args {
+		m = strings.ReplaceAll(m, fmt.Sprintf("{%d}", i), a)
+	}
+	return m
+}
+
+const (
+	errEnvPasProd = "{0} is not a production server: production only runs on servers with the prod role"
+	errEnvProd    = "{0} is a production server: it can only be used by production"
+)
+
 // envDefaut: an environment not configured yet.
 func envDefaut() Environnement {
 	return Environnement{Serveurs: []string{}, Protection: "aucune", Politique: "accord"}
@@ -91,9 +110,9 @@ func validerEnvironnement(nom string, e Environnement, inventaire []ServeurInven
 		prod := slices.Contains(inventaire[i].Roles, "prod")
 		switch {
 		case nom == "prod" && !prod:
-			return e, erreurEntree(fmt.Sprintf("%s is not a production server: production only runs on servers with the prod role", inventaire[i].Nom))
+			return e, erreurEntreeArgs{errEnvPasProd, []string{inventaire[i].Nom}}
 		case nom != "prod" && prod:
-			return e, erreurEntree(fmt.Sprintf("%s is a production server: it can only be used by production", inventaire[i].Nom))
+			return e, erreurEntreeArgs{errEnvProd, []string{inventaire[i].Nom}}
 		}
 		if !slices.Contains(ids, id) {
 			ids = append(ids, id)
@@ -213,7 +232,11 @@ func (s *Serveur) apiEnvironnementModifier(w http.ResponseWriter, r *http.Reques
 		err = s.acces.DefinirEnvironnement(projet, c.Env, e)
 	}
 	var entree erreurEntree
+	var avecArgs erreurEntreeArgs
 	switch {
+	case errors.As(err, &avecArgs):
+		s.erreurArgs(w, http.StatusBadRequest, avecArgs.cle, avecArgs.args...)
+		return
 	case errors.As(err, &entree):
 		s.erreur(w, http.StatusBadRequest, err.Error())
 		return
