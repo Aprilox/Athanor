@@ -46,19 +46,20 @@ type ConfigDeploiement struct {
 
 // Deploiement: one entry of an environment's history.
 type Deploiement struct {
-	ID           string   `json:"id"`
-	Projet       string   `json:"projet"`
-	Env          string   `json:"env"`
-	Commit       string   `json:"commit"`
-	Methode      string   `json:"methode"`
-	Version      string   `json:"version"`
-	Etat         string   `json:"etat"` // en_cours | ok | echec | revenu
-	Erreur       string   `json:"erreur,omitempty"`
-	Verification string   `json:"verification,omitempty"` // the external check (M133)
-	Auteur       string   `json:"auteur"`                 // agent | relais | proprietaire
-	Serveurs     []string `json:"serveurs"`
-	Debut        string   `json:"debut"`
-	Fin          string   `json:"fin,omitempty"`
+	ID           string            `json:"id"`
+	Projet       string            `json:"projet"`
+	Env          string            `json:"env"`
+	Commit       string            `json:"commit"`
+	Methode      string            `json:"methode"`
+	Version      string            `json:"version"`
+	Etat         string            `json:"etat"` // en_cours | ok | echec | revenu
+	Erreur       string            `json:"erreur,omitempty"`
+	Verification *VerifDeploiement `json:"verification,omitempty"` // the external check once served (M133)
+	Auteur       string            `json:"auteur"`                 // agent | relais | proprietaire
+	Retour       bool              `json:"retour,omitempty"`       // a way back to the previous version (M133)
+	Serveurs     []string          `json:"serveurs"`
+	Debut        string            `json:"debut"`
+	Fin          string            `json:"fin,omitempty"`
 }
 
 type OptionsDeploiement struct {
@@ -248,8 +249,11 @@ func (s *Serveur) deployer(ctx context.Context, projet, env, commit string, o Op
 	d.Etat, d.Fin = "ok", time.Now().UTC().Format(time.RFC3339)
 	if err != nil {
 		d.Etat, d.Erreur = "echec", err.Error()
-	} else if e2 := s.acces.NoterDeploiement(projet, env, *cfg); e2 != nil {
-		d.Erreur = "deployed, but the method could not be recorded: " + e2.Error()
+	} else {
+		if e2 := s.acces.NoterDeploiement(projet, env, *cfg); e2 != nil {
+			d.Erreur = "deployed, but the method could not be recorded: " + e2.Error()
+		}
+		err = s.verifierApres(ctx, e, &d)
 	}
 	if e2 := noterHistorique(d); err == nil && e2 != nil {
 		err = fmt.Errorf("deployed, but the history cannot be written: %w", e2)

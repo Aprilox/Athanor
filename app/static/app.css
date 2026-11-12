@@ -1033,6 +1033,11 @@ ol.guide-access li { margin: 5px 0; }
 .env-serveurs legend { padding: 0; margin-bottom: 2px; }
 .env-serveurs label { display: flex; align-items: center; gap: 6px; min-height: 28px; flex-wrap: wrap; overflow-wrap: anywhere; cursor: pointer; }
 .env-carte .btn { align-self: flex-start; }
+.env-deploi { border-top: 1px solid var(--line); padding-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+.env-deploi h4 { margin: 0; font-size: 13px; }
+.env-deploi-liste { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.env-deploi-liste li { display: flex; flex-direction: column; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
+.env-deploi-echec .badge { color: var(--attention); }
 .env-champ input:disabled, .env-champ select:disabled { background: transparent; color: inherit; opacity: 1; cursor: default; } /* read-only on a paired device: legible in every theme */
 @media (max-width: 900px) { .env-cartes { grid-template-columns: 1fr; } }
 

@@ -287,6 +287,9 @@ func verifierHTTP(ctx context.Context, u *url.URL, hotes []string) ResultatHTTP 
 	transport := &http.Transport{
 		Proxy: nil,
 		DialContext: func(ctx context.Context, reseau, adresse string) (net.Conn, error) {
+			if a, ok := resolutionsTest[adresse]; ok {
+				adresse = a
+			}
 			hote, port, err := net.SplitHostPort(adresse)
 			if err != nil {
 				return nil, err

@@ -84,6 +84,7 @@ func TestDeploiementGitConteneur(t *testing.T) {
 		t.Fatal(err)
 	}
 	const hote, base = "m132.test", "/srv/athanor/m132-dev"
+	resoudreTest(t, hote+":80", web)
 	if err := s.acces.DefinirEnvironnement("m132", "dev", Environnement{URL: "http://" + hote, Serveurs: []string{id}, Protection: "aucune", Politique: "auto"}); err != nil {
 		t.Fatal(err)
 	}

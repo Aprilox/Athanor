@@ -4331,6 +4331,7 @@ function blocEnvironnements(en, inventaire, fournisseurs, distant) {
         : `<div class="env-champ"><span>${t("DNS provider")}</span><p class="muet petit">${t("None: providers (Cloudflare) are added in Servers.")}</p></div>`}
       <p class="petit attention env-erreur" role="alert" hidden></p>
       ${distant ? "" : `<button type="button" class="btn btn-petit" data-env-enregistrer>${t("Save")}</button>`}
+      ${blocDeploiements(nom, e, (en.deploiements || {})[nom] || [], distant)}
     </section>`;
   };
   return `<div class="bloc environnements"><h2>${t("Environments")}</h2>
@@ -4339,6 +4340,43 @@ function blocEnvironnements(en, inventaire, fournisseurs, distant) {
     <div class="env-cartes">${en.envs.map(carte).join("")}</div>
     ${blocCleDeploiement(en, distant)}</div>`;
 }
+// M133: an environment's last deployments, their external check, and the way back to the previous version
+const ETATS_DEPLOI = { ok: ["✔", "Deployed"], echec: ["✖", "Failed"], revenu: ["↩", "Replaced by going back"], en_cours: ["…", "Running"] };
+const PROBLEMES_VERIF = { injoignable: "The site does not answer: {1}", tls: "The certificate is not valid: {2}", statut: "Unexpected status {0}", ouvert: "The site opens without identification (status {0})" };
+function texteVerif(v, protection) {
+  const x = v.http || {}, tls = x.tls || {}, l = [];
+  if (v.ok) l.push("✔ " + t("Checked from this PC: status {0}", [x.statut]) + (protection !== "aucune" ? ", " + t("closed without identification") : ""));
+  else l.push("⚠ " + (v.problemes || []).map((p) => t(PROBLEMES_VERIF[p] || p, [x.statut, x.erreur || "", tls.erreur_certificat || ""])).join(" · "));
+  if (x.tls && tls.certificat_valide) l.push(t("certificate valid, {0} days left", [tls.jours_restants]));
+  if ((x.en_tetes_manquants || []).length) l.push(t("missing security headers: {0}", [x.en_tetes_manquants.join(", ")]));
+  return l.join(" · ");
+}
+function blocDeploiements(nom, e, liste, distant) {
+  const ligne = (d) => {
+    const [icone, etiquette] = d.retour && d.etat === "ok" ? ["↩", "Back to the previous version"] : ETATS_DEPLOI[d.etat] || ["", d.etat];
+    return `<li class="env-deploi-${h(d.etat)}"><div class="ligne m0 petit"><span class="badge">${icone} ${h(t(etiquette))}</span><code>${h((d.commit || "").slice(0, 7))}</code>
+      <span class="muet">${h(dateLisible(d.debut))} · ${h(t(AUTEURS_DEPLOI[d.auteur] || d.auteur))}</span></div>
+      ${d.verification ? `<p class="petit${d.verification.ok ? "" : " attention"}">${h(texteVerif(d.verification, e.protection))}</p>` : d.erreur ? `<p class="petit attention">${h(t(d.erreur))}</p>` : ""}</li>`;
+  };
+  return `<div class="env-deploi" data-env-deploi><h4>${t("Deployments")}</h4>
+    ${liste.length ? `<ul class="env-deploi-liste">${liste.map(ligne).join("")}</ul>` : `<p class="muet petit">${t("Nothing deployed yet.")}</p>`}
+    ${!distant && e.deploiement && liste.length > 1 ? `<button type="button" class="btn btn-petit" data-env-revenir>${t("Go back to the previous version")}</button>` : ""}</div>`;
+}
+const AUTEURS_DEPLOI = { agent: "by the agent", relais: "after a milestone", proprietaire: "by you" };
+$("#page").addEventListener("click", async (ev) => {
+  const b = ev.target.closest("[data-env-revenir]"); if (!b) return;
+  const c = b.closest("[data-env]"), env = c.dataset.env, err = c.querySelector(".env-erreur"), question = t("Serve the previous version of {0} again? It is checked from this PC right after.", [env]);
+  const preuve = env === "prod" ? await preuveMdp(question, { ok: t("Go back") }, question) : (await confirmer(question, { ok: t("Go back") })) ? {} : false;
+  if (preuve === false) return;
+  b.disabled = true; err.hidden = true; b.textContent = t("Going back…");
+  try {
+    const r = await api("projets/" + encodeURIComponent(acc.projet) + "/revenir", "POST", { env, ...preuve }), tpl = document.createElement("template");
+    tpl.innerHTML = blocDeploiements(env, { ...(r.deploiement ? { deploiement: true } : {}), protection: c.querySelector('[data-env-champ="protection"]').value }, r.deploiements || []);
+    c.querySelector("[data-env-deploi]").replaceWith(tpl.content.firstElementChild);
+    const d = r.deploiement || {};
+    toast(d.etat === "ok" ? t("{0} serves its previous version again.", [env]) : t(d.erreur || "Failed"), d.etat === "ok" ? "ok" : "erreur");
+  } catch (e) { err.textContent = e.message; err.hidden = false; b.disabled = false; b.textContent = t("Go back to the previous version"); }
+});
 // the project's GitHub deployment key (one for every environment), made on demand (M119)
 function blocCleDeploiement(en, distant) {
   const cle = en.envs.some((n) => en.environnements[n].cle_deploiement);

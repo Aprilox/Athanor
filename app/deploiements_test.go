@@ -208,6 +208,7 @@ func TestDeploiementStatiqueConteneur(t *testing.T) {
 	s.config.Projets = append(s.config.Projets, Projet{Nom: "m131", Dossier: depot})
 	s.mu.Unlock()
 	const hote, base = "m131.test", "/srv/athanor/m131-dev"
+	resoudreTest(t, hote+":80", web)
 	if err := s.acces.DefinirEnvironnement("m131", "dev", Environnement{URL: "http://" + hote, Serveurs: []string{id}, Protection: "aucune", Politique: "auto"}); err != nil {
 		t.Fatal(err)
 	}
@@ -232,6 +233,9 @@ func TestDeploiementStatiqueConteneur(t *testing.T) {
 	d1, err := s.deployer(ctx, "m131", "dev", c1, OptionsDeploiement{Config: &ConfigDeploiement{Methode: "statique", Source: "artefact", Dossier: "site"}, Auteur: "proprietaire"})
 	if err != nil || d1.Etat != "ok" || !strings.Contains(page(), "site-exemple v1") {
 		t.Fatalf("v1: %v %+v %.200q", err, d1, page())
+	}
+	if v := d1.Verification; v == nil || !v.OK || v.HTTP.Statut != 200 || v.HTTP.TLS != nil {
+		t.Errorf("external check of v1: %+v", v)
 	}
 	if e := s.acces.Environnements("m131")["dev"]; e.Deploiement == nil || e.Deploiement.Dossier != "site" {
 		t.Fatalf("method not recorded: %+v", e.Deploiement)
@@ -277,5 +281,62 @@ func TestDeploiementStatiqueConteneur(t *testing.T) {
 	}
 	if strings.Join(etats, " ") != "ok:proprietaire ok:relais echec:proprietaire ok:proprietaire" || h[1].Commit != c2 {
 		t.Errorf("history: %v", etats)
+	}
+
+	// M133: v2 served, then back to the previous version (v1), checked; going back again serves v2
+	d5, err := s.deployer(ctx, "m131", "dev", c2, OptionsDeploiement{Auteur: "proprietaire"})
+	if err != nil || !strings.Contains(page(), "site-exemple v2") {
+		t.Fatalf("v2 again: %v %+v", err, d5)
+	}
+	r1, err := s.revenir(ctx, "m131", "dev", "proprietaire")
+	if err != nil || r1.Etat != "ok" || !r1.Retour || r1.Version != d4.Version || r1.Commit != c1 || r1.Verification == nil || !r1.Verification.OK || !strings.Contains(page(), "site-exemple v1") {
+		t.Fatalf("back to v1: %v %+v %.200q", err, r1, page())
+	}
+	if got, want := sur("cd "+base+" && readlink current previous"), "releases/"+d4.Version+"\nreleases/"+d5.Version+"\n"; got != want {
+		t.Errorf("links after going back: %q, want %q", got, want)
+	}
+	if h := historiqueDeploiements("m131", "dev"); h[len(h)-2].ID != d5.ID || h[len(h)-2].Etat != "revenu" || h[len(h)-1].ID != r1.ID {
+		t.Errorf("history after going back: %+v", h[len(h)-2:])
+	}
+	if r2, err := s.revenir(ctx, "m131", "dev", "proprietaire"); err != nil || r2.Version != d5.Version || r2.Commit != c2 || !strings.Contains(page(), "site-exemple v2") {
+		t.Errorf("going back twice: %v %+v", err, r2)
+	}
+	// a failed external check: the version stays served, the deployment is a failure
+	resoudreTest(t, hote+":80", "127.0.0.1:1")
+	if d6, err := s.deployer(ctx, "m131", "dev", c1, OptionsDeploiement{Auteur: "proprietaire"}); err == nil || d6.Etat != "echec" ||
+		d6.Verification == nil || d6.Verification.OK || !strings.Contains(d6.Erreur, "the external verification failed: injoignable") {
+		t.Errorf("failed check: %v %+v", err, d6)
+	}
+}
+
+// resoudreTest: verifierHTTP connects to adresse ("ip:port") for cible ("host:port") during the test.
+func resoudreTest(t *testing.T, cible, adresse string) {
+	resolutionsTest[cible] = adresse
+	t.Cleanup(func() { delete(resolutionsTest, cible) })
+}
+
+// TestJugerVerification (M133): answers, certificate over https, and a protected environment closed without identification.
+func TestJugerVerification(t *testing.T) {
+	tlsOK, tlsKO := &InfoTLS{Valide: true, JoursRestants: 80}, &InfoTLS{Erreur: "x509: unknown authority"}
+	for _, c := range []struct {
+		protection string
+		r          ResultatHTTP
+		want       string
+	}{
+		{"aucune", ResultatHTTP{URL: "https://a.fr", Statut: 200, TLS: tlsOK}, ""},
+		{"aucune", ResultatHTTP{URL: "http://a.fr", Statut: 301}, ""},
+		{"aucune", ResultatHTTP{URL: "http://a.fr", Statut: 502}, "statut"},
+		{"aucune", ResultatHTTP{URL: "https://a.fr", Statut: 200, TLS: tlsKO}, "tls"},
+		{"aucune", ResultatHTTP{URL: "https://a.fr", Erreur: "connection refused"}, "injoignable"},
+		{"auth_proxy", ResultatHTTP{URL: "https://a.fr", Statut: 401, TLS: tlsOK}, ""},
+		{"auth_proxy", ResultatHTTP{URL: "https://a.fr", Statut: 200, TLS: tlsOK}, "ouvert"},
+		{"access", ResultatHTTP{URL: "https://a.fr", Statut: 302, Redirection: "https://equipe.cloudflareaccess.com/cdn-cgi/access/login/a.fr", TLS: tlsOK}, ""},
+		{"access", ResultatHTTP{URL: "https://a.fr", Statut: 302, Redirection: "https://cloudflareaccess.com.piege.fr/", TLS: tlsOK}, "ouvert"},
+		{"access", ResultatHTTP{URL: "https://a.fr", Statut: 200, TLS: tlsOK}, "ouvert"},
+	} {
+		v := jugerVerification(Environnement{Protection: c.protection}, c.r)
+		if got := strings.Join(v.Problemes, ","); got != c.want || v.OK != (c.want == "") {
+			t.Errorf("%s %+v: %q ok=%v, want %q", c.protection, c.r, got, v.OK, c.want)
+		}
 	}
 }

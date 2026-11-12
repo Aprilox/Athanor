@@ -81,6 +81,7 @@ func TestCaptureHub(t *testing.T) {
 		t.Fatal(err)
 	}
 	portSSH := serveursCapture(t)
+	historiqueCapture(t, projets[0])
 	fournisseursCapture(t, s)
 	// the agents' pending approvals (cloche-*, appr-*): an access, a staging deploy, a prod one refused by the script
 	for _, a := range []Approbation{
@@ -272,7 +273,7 @@ func accesCapture(t *testing.T, s *Serveur, p, p3 Projet) {
 	// M112 (projet-environnements-*): prod configured on c0ffee01 with its deployment key; staging set by the script
 	if err := s.acces.modifier(func(f *fichierAcces) error {
 		projetDe(f, p.Nom).Environnements = map[string]*Environnement{"prod": {URL: "https://boutique.example.org", Serveurs: []string{"c0ffee01"},
-			Protection: "access", Politique: "accord"}}
+			Protection: "access", Politique: "accord", Deploiement: &ConfigDeploiement{Methode: "statique", Source: "git"}}}
 		projetDe(f, p.Nom).CleDeploiement = "cle-deploiement-capture"
 		return nil
 	}); err != nil {
@@ -358,4 +359,25 @@ func serveursCapture(t *testing.T) int {
 		}
 	}
 	return ssh.port
+}
+
+// historiqueCapture (M133, projet-environnements-*): prod's history for its Deployments block, written once
+// dossierAthanor is the test binary's folder: v1 checked, v2 failed its check, then back to v1.
+func historiqueCapture(t *testing.T, p Projet) {
+	acc := ResultatHTTP{URL: "https://boutique.example.org", Statut: 302, Redirection: "https://equipe.cloudflareaccess.com/cdn-cgi/access/login",
+		TLS: &InfoTLS{Valide: true, JoursRestants: 74}, Manquants: []string{"Permissions-Policy"}}
+	ouvert := acc
+	ouvert.Statut, ouvert.Redirection = 200, ""
+	v1, v2 := jugerVerification(Environnement{Protection: "access"}, acc), jugerVerification(Environnement{Protection: "access"}, ouvert)
+	for _, d := range []Deploiement{
+		{ID: "cap1", Commit: "4f1c2a9e8b7d6c5b4a39281706f5e4d3c2b1a090", Etat: "ok", Auteur: "agent", Debut: "2026-11-10T09:12:00Z", Verification: &v1},
+		{ID: "cap2", Commit: "9a8b7c6d5e4f30211203f4e5d6c7b8a9f0e1d2c3", Etat: "revenu", Auteur: "proprietaire", Debut: "2026-11-11T16:40:00Z", Verification: &v2, Erreur: "the external verification failed: ouvert"},
+		{ID: "cap3", Commit: "4f1c2a9e8b7d6c5b4a39281706f5e4d3c2b1a090", Etat: "ok", Auteur: "proprietaire", Retour: true, Debut: "2026-11-11T16:45:00Z", Verification: &v1},
+	} {
+		d.Projet, d.Env, d.Methode, d.Serveurs = p.Nom, "prod", "statique", []string{"c0ffee01"}
+		if err := noterHistorique(d); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Cleanup(func() { _ = os.Remove(cheminHistorique(p.Nom, "prod")) })
 }

@@ -201,6 +201,26 @@ func TestEnvironnementsAPI(t *testing.T) {
 		t.Errorf("unknown project: %d", code)
 	}
 
+	// M133: going back; prod only with the owner's password, an environment never deployed says so
+	for _, c := range []struct {
+		corps string
+		code  int
+		texte string
+	}{
+		{`{"env":"prod"}`, 401, "Wrong password"},
+		{`{"env":"prod","mot_de_passe":"faux"}`, 401, "Wrong password"},
+		{`{"env":"prod","mot_de_passe":"` + mdpPreuveTest + `"}`, 409, "nothing was deployed"},
+		{`{"env":"dev"}`, 409, "nothing was deployed"},
+		{`{"env":"qa"}`, 400, "Invalid request"},
+	} {
+		if code, v := appel("POST", "/api/projets/demo/revenir", c.corps); code != c.code || !strings.Contains(fmt.Sprint(v["erreur"]), c.texte) {
+			t.Errorf("going back %s: %d %v", c.corps, code, v)
+		}
+	}
+	if _, v := appel("GET", "/api/projets/demo/environnements", ""); len(v["deploiements"].(map[string]any)) != 3 {
+		t.Errorf("deployments shown: %v", v["deploiements"])
+	}
+
 	// a role change that would break an environment is refused, naming it
 	if code, v := appel("POST", "/api/serveurs/"+dev, `{"roles":["prod"]}`); code != 409 || !strings.Contains(v["erreur"].(string), "demo/dev") {
 		t.Errorf("dev server made prod: %d %v", code, v)
