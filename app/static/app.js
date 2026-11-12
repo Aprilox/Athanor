@@ -2124,6 +2124,17 @@ const GUIDE = [
       ["Follow, stop, try", "Each task has its card on the sheet: state, dated steps, plans, check, the agent's answer. *Stop* ends it at once: the running command is cut and the agent loses its tools. To see it all on a server of no importance, *Test the Servers agent* plays a real task on Athanor's test container (Docker).", "#sante", "Setup & health"],
     ],
     note: "The agent never holds a server's key: it calls Athanor's tools, which check every step against your agreement and leave a line in the audit log." },
+  { id: "environnements", titre: "Environments and Cloudflare", intro: "An environment is where a project runs: *dev* for tests, *staging* to check before going live, *prod* for your live site. Each has its address, its servers, its protection and its deployment policy.",
+    etapes: [
+      ["Describe an environment", "On the project's *Access* page, the *Environments* block has one card per environment: its address (URL), its servers, its protection, its deployment policy and its DNS provider, then *Save*. A server with the *prod* role goes only into *prod*, and *prod* takes only those. A paired phone sees the cards, read only.", "#acces", "Access"],
+      ["The deployment policy", "*dev* and *staging* either *Ask for my approval* or deploy *Automatic when nothing is destroyed*. *prod* always asks: the card “Deploy example.com to production?”, with its commit and its server, comes in the bell, on *For you* and on your phone, and never offers *Never ask again*.", "#pourvous", "For you"],
+      ["A token with minimum rights", "Cloudflare is reached with a token you create with only the rights Athanor uses (*Zone › Zone › Read*, *DNS › Edit*, *SSL and Certificates › Edit*, and *Access: Apps and Policies › Edit* only for Access), on your domain's zone only. Add it in *Servers › Providers*, *Test* it, then choose it as the environment's DNS provider. *Guide › Connect Cloudflare* gives every click.", "#fournisseurs", "Providers"],
+      ["A task for an environment", "On the sheet of one of its servers, *Tasks*: choose it under *For the environment*, then say what should be done (“Point app.example.com at this server over HTTPS”). The agent may then read and change the DNS records, the HTTPS mode and the protection of the environment's address, and of that name only: another name or another zone is refused. Each change goes through a plan you accept; *prod* always waits for you.", "#serveurs", "Servers"],
+      ["Protection", "*None (public)*; *Cloudflare Access (e-mail sign-in)*: only the e-mail addresses you give can open the site, with a code Cloudflare sends them; or *Password in front of the site*: a password of the vault (*infra*), of which the web server (Caddy) receives only a hash. The password itself is never written on the server nor shown to the agent."],
+      ["The origin certificate", "With Cloudflare in front, Athanor makes the HTTPS certificate between Cloudflare and your server: its private key is made by Athanor, kept in the vault and placed on the server (`/etc/athanor/tls/`, readable by root only), never handed to the agent; its expiry is kept with the environment. Without Cloudflare, Caddy gets its own certificate (Let's Encrypt), with the technical e-mail `ACME_EMAIL` of the vault."],
+      ["The deployment key", "For a project linked to GitHub, *Create the deployment key*, under the cards, makes a key kept in the vault and adds it read-only to the repository: the servers will fetch the code with it and can never push. Unlinking or removing the project takes it off the repository and out of the vault."],
+    ],
+    note: "The token, the certificate's key, the proxy password and the deployment key stay in the vault: Athanor uses them itself, and the agent only sees zones, rights and results. Running a deployment on the servers is not available yet: an accepted deployment is written in the audit log." },
   { id: "github", titre: "GitHub", intro: "Link a project to a GitHub repository: its commits go there after each milestone. Each computer connects to GitHub once, in the settings.",
     etapes: [
       ["Connect this computer to GitHub", "Once per computer: *Settings › Options › GitHub › Connect to GitHub*. A window opens: sign in to GitHub and authorize. Athanor puts a key “Athanor (this computer)” on your GitHub account and keeps it, out of Claude's reach; it then links any repository your account can push to, yours or one you are a collaborator of.", "#options@bloc-connexion-gh", "Connect to GitHub"],
@@ -4891,7 +4902,7 @@ pages.serveur = async () => {
     </div>
     ${blocTaches(ta, distant, (d.annulations || []).length ? `<div class="srv-annulations"><h4 class="m0">${t("Changes waiting for confirmation")}</h4>
       <p class="muet petit">${t("Athanor put a safety net on these firewall or SSH changes: unless you keep them, the server undoes them by itself when the countdown ends.")}</p>
-      ${d.annulations.map((a) => `<div class="ligne m0"><code>${h(a.quoi)}</code><span class="muet petit" data-srv-echeance="${h(a.echeance)}"></span>${distant ? "" : `<button type="button" class="btn btn-primaire" data-srv-garder="${h(a.id)}">${t("Keep this change")}</button>`}</div>`).join("")}</div>` : "")}
+      ${d.annulations.map((a) => `<div class="ligne m0"><code>${h(a.quoi)}</code><span class="muet petit" data-srv-echeance="${h(a.echeance)}"></span>${distant ? "" : `<button type="button" class="btn btn-primaire" data-srv-garder="${h(a.id)}">${t("Keep this change")}</button>`}</div>`).join("")}</div>` : "", d.environnements || [])}
     ${f ? ficheServeur(f) : `<div class="vide">${attente ? t("Its sheet is made once Athanor reaches the server with its key.") : t("Its sheet is not made yet.")}</div>`}
     ${d.runbook ? `<details class="bloc srv-runbook"><summary><b>${t("Runbook")}</b> <span class="muet petit">${t("What was done on this server, its backups and how to go back, kept by Athanor and its agents.")}</span></summary><pre class="chat-code srv-runbook-texte">${h(d.runbook)}</pre></details>` : ""}
     ${distant ? "" : `<div class="bloc srv-retirer"><h3>${t("Remove this server")}</h3>
@@ -4932,7 +4943,7 @@ function carteTacheServeur(x, plans, distant) {
       ${!tacheFinie(x) && !distant ? `<div class="ligne m0"><button type="button" class="btn btn-danger" data-srv-tache-arreter="${h(x.id)}">${t("Stop")}</button></div>` : ""}
     </div></details>`;
 }
-function blocTaches(ta, distant, annulations) {
+function blocTaches(ta, distant, annulations, envs) {
   const l = (ta || {}).taches || [];
   return `<div class="bloc srv-taches"><h3>${t("Tasks")}${l.length ? ` <span class="muet">${l.length}</span>` : ""}</h3>
     ${distant ? `<p class="muet petit">${t("Tasks are launched from the computer; their plans are decided on their cards, on the For you page.")}</p>` : `<form id="srv-tache-form" class="srv-tache-form">
@@ -4940,6 +4951,8 @@ function blocTaches(ta, distant, annulations) {
       <textarea id="srv-tache-texte" rows="3" maxlength="4000" placeholder="${h(t("e.g. Install nginx and serve my site over HTTPS"))}">${h(srv.texte)}</textarea>
       <p class="muet petit m0">${t("The Servers agent reads the server, then proposes a plan. Nothing changes before you accept it on its card; a security critic reads it first, the paths a step names are archived before it runs, a file the agent rewrites keeps its previous copy, and an external check follows.")}</p>
       ${(ta || {}).natif ? `<p class="petit pv-vous m0">${t("Native Windows mode has no barrier: a task runs only if you force it, with Athanor's password.")}</p>` : ""}
+      ${envs.length ? `<label class="petit" for="srv-tache-env">${t("For the environment")} <select id="srv-tache-env"><option value="">${t("None (this server only)")}</option>${envs.map((pe) => `<option value="${h(pe)}">${h(pe)}</option>`).join("")}</select></label>
+      <p class="muet petit m0">${t("With an environment, the agent can also change the DNS, HTTPS and protection of its address, on that name only.")}</p>` : ""}
       <div class="ligne m0"><button type="submit" class="btn btn-primaire">${t("Launch")}</button></div></form>`}
     ${annulations}
     ${ta ? l.length ? l.map((x) => carteTacheServeur(x, ta.plans || {}, distant)).join("") : `<p class="muet petit">${t("No task yet on this server.")}</p>` : `<p class="muet petit">${t("The tasks cannot be read right now.")}</p>`}
@@ -4957,15 +4970,16 @@ $("#page").addEventListener("submit", async (ev) => {
   if (!texte) return champ.focus();
   const url = "serveurs/" + encodeURIComponent(srv.fiche.id) + "/taches";
   b.disabled = true;
+  const env = ($("#srv-tache-env") || {}).value || "";
   try {
-    const r = await api(url, "POST", { texte }).catch(async (e) => {
+    const r = await api(url, "POST", { texte, env }).catch(async (e) => {
       if (!e.data || !e.data.proposer_wsl) throw e;
       const c = await choisir(t("Native Windows mode has no barrier: an agent working on your servers would run with all your rights on this PC. Switch to WSL, or force this task knowing the risk."),
         [{ id: "wsl", texte: t("Switch to WSL"), primaire: true }, { id: "forcer", texte: t("Force this task"), danger: true }, { id: "", texte: t("Cancel") }], { titre: t("Native Windows mode") });
       if (c === "wsl") { location.hash = "#options@bloc-direct"; return null; }
       if (c !== "forcer") return null;
       const p = await preuveMdp(t("Forcing a Servers task without the barrier: retype Athanor's password."), { ok: t("Force this task"), danger: true }, t("Force this task without the barrier?"));
-      return p ? api(url, "POST", { texte, forcer: true, ...p }) : null;
+      return p ? api(url, "POST", { texte, env, forcer: true, ...p }) : null;
     }).catch((e) => { if (e.message !== t("Locked")) toast(e.message, "erreur"); return null; });
     if (!r) return;
     srv.texte = ""; srv.ouvertes.add(r.tache.id);
