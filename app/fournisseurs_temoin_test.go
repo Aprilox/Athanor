@@ -141,7 +141,7 @@ func TestEnvironnementsTemoinConteneur(t *testing.T) {
 		}
 	}
 	// the proxy password (made by the prod site block) and the deployment key (a fake gh) join the vault
-	if _, err := s.blocCaddyEnv("demo", "prod", "127.0.0.1:8080"); err != nil {
+	if _, err := s.blocCaddyEnv("demo", "prod", id, "127.0.0.1:8080"); err != nil {
 		t.Fatal(err)
 	}
 	ancienGH := executerCleDeploiement

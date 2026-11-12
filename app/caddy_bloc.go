@@ -2,7 +2,7 @@ package main
 
 // The Caddy site block of an environment (M118, ARCHITECTURE.md §Protection, §ACME): blocCaddy is pure and
 // is what stage 8's deployments write on the server. HTTPS by Cloudflare's origin certificate when Athanor
-// installed one, otherwise Caddy's own (ACME, with the owner's technical e-mail when the vault holds one);
+// installed one on that server, otherwise Caddy's own (ACME, with the owner's technical e-mail when the vault holds one);
 // auth_proxy adds basic_auth, whose bcrypt hash Athanor computes from an infra mot_de_passe entry of the vault:
 // the password itself never leaves this process.
 
@@ -34,9 +34,9 @@ var plagesCloudflare = []string{
 	"2400:cb00::/32", "2606:4700::/32", "2803:f800::/32", "2405:b500::/32", "2405:8100::/32", "2a06:98c0::/29", "2c0f:f248::/32",
 }
 
-// blocCaddy (pure): the site block of e, proxied to amont (host:port); email: ACME's account e-mail (may be
+// blocCaddy (pure): the site block of e on server serveur (inventory id), proxied to amont (host:port); email: ACME's account e-mail (may be
 // empty); hachage: the bcrypt hash of auth_proxy's password (required by auth_proxy, ignored otherwise).
-func blocCaddy(e Environnement, amont, email, hachage string) (string, error) {
+func blocCaddy(e Environnement, serveur, amont, email, hachage string) (string, error) {
 	u, err := url.Parse(e.URL)
 	if e.URL == "" || err != nil || u.Hostname() == "" {
 		return "", errors.New("the environment has no URL")
@@ -55,7 +55,7 @@ func blocCaddy(e Environnement, amont, email, hachage string) (string, error) {
 	fmt.Fprintf(&b, "%s {\n", adresse)
 	switch {
 	case u.Scheme == "http":
-	case e.Certificat != "":
+	case e.Certificat != "" && slices.Contains(e.CertificatServeurs, serveur): // only where Caddy can read it (C60)
 		fmt.Fprintf(&b, "\ttls %s/%s.crt %s/%s.key\n", dossierTLS, hote, dossierTLS, hote)
 	case email != "":
 		if !reEmailAuteur.MatchString(email) {
@@ -109,8 +109,8 @@ func (s *Serveur) hachageProxy(projet, env string) (string, error) {
 	return string(h), err
 }
 
-// blocCaddyEnv: blocCaddy for environment projet/env, its e-mail and password hash read from the vault.
-func (s *Serveur) blocCaddyEnv(projet, env, amont string) (string, error) {
+// blocCaddyEnv: blocCaddy for environment projet/env on server serveur, its e-mail and password hash read from the vault.
+func (s *Serveur) blocCaddyEnv(projet, env, serveur, amont string) (string, error) {
 	e, ok := s.acces.Environnements(projet)[env]
 	if !ok {
 		return "", errors.New("unknown environment")
@@ -128,5 +128,5 @@ func (s *Serveur) blocCaddyEnv(projet, env, amont string) (string, error) {
 			return "", err
 		}
 	}
-	return blocCaddy(e, amont, email, hachage)
+	return blocCaddy(e, serveur, amont, email, hachage)
 }

@@ -161,8 +161,8 @@ func TestCertificatOrigine(t *testing.T) {
 		t.Errorf("a step ran twice: %v %s", e, txt)
 	}
 	mu.Lock()
-	if len(cmds) != 2 || !strings.HasPrefix(cmds[0], "sudo -n sh -c ") || !strings.HasSuffix(cmds[0], " 'app.exemple.fr.key' '600'") ||
-		!strings.HasSuffix(cmds[1], " 'app.exemple.fr.crt' '644'") || !strings.Contains(cmds[0], "chown 0:0") {
+	if len(cmds) != 2 || !strings.HasPrefix(cmds[0], "sudo -n sh -c ") || !strings.HasSuffix(cmds[0], " 'app.exemple.fr.key' '640'") ||
+		!strings.HasSuffix(cmds[1], " 'app.exemple.fr.crt' '644'") || !strings.Contains(cmds[0], `g=caddy`) {
 		t.Fatalf("commands on the server: %q", cmds)
 	}
 	crt, clePrivee := entrees[1], entrees[0]
@@ -172,7 +172,8 @@ func TestCertificatOrigine(t *testing.T) {
 	}
 	env := s.acces.Environnements("demo")["dev"]
 	exp, err := time.Parse(time.RFC3339, env.CertificatExpire)
-	if err != nil || exp.Before(time.Now().AddDate(14, 0, 0)) || env.Fournisseur != "f1" {
+	if err != nil || exp.Before(time.Now().AddDate(14, 0, 0)) || env.Fournisseur != "f1" || !slices.Equal(env.CertificatServeurs, []string{srv.ID}) ||
+		!strings.Contains(txt, `"`+srv.ID+`": "installed, key root:caddy 0640"`) {
 		t.Errorf("environment: %+v", env)
 	}
 	if v, err := s.coffre.Valeur(env.Certificat); err != nil || v != crt+clePrivee {
@@ -184,7 +185,8 @@ func TestCertificatOrigine(t *testing.T) {
 	}
 	// a request saved from the panel keeps what Athanor recorded
 	if err := s.acces.DefinirEnvironnement("demo", "dev", Environnement{URL: "https://app.exemple.fr", Serveurs: []string{srv.ID}, Protection: "aucune",
-		Politique: "auto", Fournisseur: "f1", Certificat: "pirate"}); err != nil || s.acces.Environnements("demo")["dev"].Certificat != env.Certificat {
+		Politique: "auto", Fournisseur: "f1", Certificat: "pirate", CertificatServeurs: []string{"pirate"}}); err != nil || s.acces.Environnements("demo")["dev"].Certificat != env.Certificat ||
+		!slices.Equal(s.acces.Environnements("demo")["dev"].CertificatServeurs, env.CertificatServeurs) {
 		t.Errorf("certificate after a panel save: %v %+v", err, s.acces.Environnements("demo")["dev"])
 	}
 
@@ -239,24 +241,38 @@ func TestCertificatOrigine(t *testing.T) {
 }
 
 // TestCertificatOrigineConteneur (M117): on the test container's real sshd, the pair written as root:
-// /etc/athanor/tls 0755, the key 0600 root unreadable by the login user, the certificate 0644, no temporary file.
+// /etc/athanor/tls 0755, the key unreadable by the login user, the certificate 0644, no temporary file; the key
+// 0600 root:root without a caddy group, root:caddy 0640 and readable by user caddy with it (M129, C59).
 func TestCertificatOrigineConteneur(t *testing.T) {
 	s, _, id, _, appel := serveurConteneurTest(t)
 	const nom = "app.exemple.fr"
 	crt, cle := "-----BEGIN CERTIFICATE-----\nfaux\n-----END CERTIFICATE-----\n", "-----BEGIN EC PRIVATE KEY-----\n"+temoinOutils+"\n-----END EC PRIVATE KEY-----\n"
-	if err := s.poserCertificat(id, nom, crt, cle); err != nil {
-		t.Fatal(err)
-	}
-	// twice: replaced in place
-	if err := s.poserCertificat(id, nom, crt, cle); err != nil {
-		t.Fatal(err)
-	}
 	d := dossierTLS + "/" + nom
-	r := appel("ssh_commande", map[string]any{"commande": "stat -c '%a %U' " + dossierTLS + "; sudo -n stat -c '%a %U %G' " + d + ".key " + d + ".crt; cat " + d + ".key >/dev/null 2>&1 || echo refused; cat " + d + ".crt; sudo -n ls -A " + dossierTLS})
-	if want := "755 root\n600 root root\n644 root root\nrefused\n" + crt + nom + ".crt\n" + nom + ".key\n"; r.Sortie != want {
-		t.Errorf("on the server:\n got  %q\n want %q", r.Sortie, want)
+	verifier := func(cas, cleVoulue string, lisibleVoulu bool) {
+		t.Helper()
+		// twice: replaced in place
+		for range 2 {
+			if lisible, err := s.poserCertificat(id, nom, crt, cle); err != nil || lisible != lisibleVoulu {
+				t.Fatalf("%s: %v, readable by Caddy %v", cas, err, lisible)
+			}
+		}
+		r := appel("ssh_commande", map[string]any{"commande": "stat -c '%a %U' " + dossierTLS + "; sudo -n stat -c '%a %U %G' " + d + ".key " + d + ".crt; cat " + d + ".key >/dev/null 2>&1 || echo refused; cat " + d + ".crt; sudo -n ls -A " + dossierTLS})
+		if want := "755 root\n" + cleVoulue + "\n644 root root\nrefused\n" + crt + nom + ".crt\n" + nom + ".key\n"; r.Sortie != want {
+			t.Errorf("%s, on the server:\n got  %q\n want %q", cas, r.Sortie, want)
+		}
 	}
-	if r := appel("ssh_commande", map[string]any{"commande": "sudo -n cat " + d + ".key | grep -c " + temoinOutils[:12] + "; sudo -n rm -rf /etc/athanor/tls"}); strings.TrimSpace(r.Sortie) != "1" {
-		t.Errorf("key content: %q", r.Sortie)
+	creeCaddy := strings.TrimSpace(appel("ssh_commande", map[string]any{"commande": "getent group caddy >/dev/null || echo absent"}).Sortie) == "absent"
+	if creeCaddy {
+		verifier("no caddy group", "600 root root", false)
+		r := appel("ssh_commande", map[string]any{"commande": "sudo -n useradd --system --user-group --no-create-home --shell /usr/sbin/nologin caddy && echo ok"})
+		if strings.TrimSpace(r.Sortie) != "ok" {
+			t.Fatalf("user caddy: %q", r.Sortie)
+		}
+		t.Cleanup(func() { appel("ssh_commande", map[string]any{"commande": "sudo -n userdel caddy"}) })
+	}
+	verifier("caddy group", "640 root caddy", true)
+	r := appel("ssh_commande", map[string]any{"commande": "sudo -n -u caddy test -r " + d + ".key && echo readable; sudo -n cat " + d + ".key | grep -c " + temoinOutils[:12] + "; sudo -n rm -rf /etc/athanor/tls"})
+	if r.Sortie != "readable\n1\n" {
+		t.Errorf("key for Caddy, content: %q", r.Sortie)
 	}
 }

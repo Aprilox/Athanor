@@ -27,6 +27,8 @@ type Environnement struct {
 	// the origin certificate (M117): its vault entry id and expiry (RFC 3339), set by Athanor, never by a request
 	Certificat       string `json:"certificat,omitempty"`
 	CertificatExpire string `json:"certificat_expire,omitempty"`
+	// the servers where Caddy can read it (C60): only they get its tls line
+	CertificatServeurs []string `json:"certificat_serveurs,omitempty"`
 }
 
 var (
@@ -191,9 +193,9 @@ func (a *Acces) DefinirEnvironnement(projet, nom string, e Environnement) error 
 				}
 			}
 		}
-		e.CleDeploiement, e.Certificat, e.CertificatExpire = "", "", ""
+		e.CleDeploiement, e.Certificat, e.CertificatExpire, e.CertificatServeurs = "", "", "", nil
 		if avant := p.Environnements[nom]; avant != nil {
-			e.Certificat, e.CertificatExpire = avant.Certificat, avant.CertificatExpire
+			e.Certificat, e.CertificatExpire, e.CertificatServeurs = avant.Certificat, avant.CertificatExpire, avant.CertificatServeurs
 		}
 		p.Environnements[nom] = &e
 		return nil
@@ -240,6 +242,22 @@ func (a *Acces) NoterCertificat(projet, nom, id, expire string) error {
 			p.Environnements[nom] = &e
 		}
 		p.Environnements[nom].Certificat, p.Environnements[nom].CertificatExpire = id, expire
+		return nil
+	})
+}
+
+// NoterServeursCertificat adds ids to environment nom's servers equipped with its origin certificate.
+func (a *Acces) NoterServeursCertificat(projet, nom string, ids []string) error {
+	return a.modifier(func(f *fichierAcces) error {
+		e := projetDe(f, projet).Environnements[nom]
+		if e == nil {
+			return errors.New("unknown environment")
+		}
+		for _, id := range ids {
+			if !slices.Contains(e.CertificatServeurs, id) {
+				e.CertificatServeurs = append(e.CertificatServeurs, id)
+			}
+		}
 		return nil
 	})
 }

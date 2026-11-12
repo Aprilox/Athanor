@@ -259,8 +259,11 @@ func TestBlocCaddy(t *testing.T) {
 		e                     Environnement
 		email, hachage, voulu string
 	}{
-		{Environnement{URL: "https://app.exemple.fr", Certificat: "id", Protection: "access"}, "ops@exemple.fr", "",
+		{Environnement{URL: "https://app.exemple.fr", Certificat: "id", CertificatServeurs: []string{"s0", "s1"}, Protection: "access"}, "ops@exemple.fr", "",
 			"app.exemple.fr {\n\ttls /etc/athanor/tls/app.exemple.fr.crt /etc/athanor/tls/app.exemple.fr.key\n" + entetes + cfSeul + "\treverse_proxy 127.0.0.1:8080\n}\n"},
+		// a certificate, but not on this server (C60): Caddy's own
+		{Environnement{URL: "https://app.exemple.fr", Certificat: "id", CertificatServeurs: []string{"s2"}}, "ops@exemple.fr", "",
+			"app.exemple.fr {\n\ttls ops@exemple.fr\n" + entetes + "\treverse_proxy 127.0.0.1:8080\n}\n"},
 		{Environnement{URL: "https://App.Exemple.fr/", Protection: "aucune"}, "ops@exemple.fr", h,
 			"app.exemple.fr {\n\ttls ops@exemple.fr\n" + entetes + "\treverse_proxy 127.0.0.1:8080\n}\n"},
 		{Environnement{URL: "https://dev.exemple.fr:8443", Protection: "auth_proxy"}, "", h,
@@ -268,7 +271,7 @@ func TestBlocCaddy(t *testing.T) {
 		{Environnement{URL: "http://local.exemple.fr", Certificat: "id"}, "ops@exemple.fr", "",
 			"http://local.exemple.fr {\n" + strings.Replace(entetes, "\t\tStrict-Transport-Security \"max-age=31536000; includeSubDomains\"\n", "", 1) + "\treverse_proxy 127.0.0.1:8080\n}\n"},
 	} {
-		if b, err := blocCaddy(c.e, "127.0.0.1:8080", c.email, c.hachage); err != nil || b != c.voulu {
+		if b, err := blocCaddy(c.e, "s1", "127.0.0.1:8080", c.email, c.hachage); err != nil || b != c.voulu {
 			t.Errorf("%s: %v\n got  %q\n want %q", c.e.URL, err, b, c.voulu)
 		}
 	}
@@ -283,7 +286,7 @@ func TestBlocCaddy(t *testing.T) {
 		"bad upstream":         {Environnement{URL: "https://a.exemple.fr"}, "127.0.0.1:8080 {\n}", "", ""},
 		"bad e-mail":           {Environnement{URL: "https://a.exemple.fr"}, "127.0.0.1:8080", "ops@exemple.fr\nroot * /", ""},
 	} {
-		if b, err := blocCaddy(c.e, c.amont, c.email, c.hachage); err == nil {
+		if b, err := blocCaddy(c.e, "s1", c.amont, c.email, c.hachage); err == nil {
 			t.Errorf("%s accepted: %q", nom, b)
 		}
 	}
@@ -303,11 +306,11 @@ func TestBlocCaddy(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	dev, err := s.blocCaddyEnv("demo", "dev", "127.0.0.1:3000")
+	dev, err := s.blocCaddyEnv("demo", "dev", "s1", "127.0.0.1:3000")
 	if err != nil {
 		t.Fatal(err)
 	}
-	dev2, _ := s.blocCaddyEnv("demo", "dev", "127.0.0.1:3000")
+	dev2, _ := s.blocCaddyEnv("demo", "dev", "s1", "127.0.0.1:3000")
 	mdps := slices.DeleteFunc(s.coffre.Liste(), func(e EntreeCoffre) bool { return e.Type != "mot_de_passe" })
 	if len(mdps) != 1 || mdps[0].Portee != "infra" || mdps[0].Famille != "secret" || mdps[0].Source != "proxy:demo/dev" {
 		t.Fatalf("vault entries: %+v", mdps)
@@ -324,11 +327,11 @@ func TestBlocCaddy(t *testing.T) {
 		bcrypt.CompareHashAndPassword([]byte(hache(dev2)), []byte(mdp)) != nil || !strings.Contains(dev, "\ttls ops@exemple.fr\n") {
 		t.Errorf("auth_proxy block:\n%s", dev)
 	}
-	prod, err := s.blocCaddyEnv("demo", "prod", "127.0.0.1:3000")
+	prod, err := s.blocCaddyEnv("demo", "prod", "s1", "127.0.0.1:3000")
 	if err != nil || strings.Contains(prod, "basic_auth") || !strings.Contains(prod, cfSeul) {
 		t.Errorf("prod block: %v\n%s", err, prod)
 	}
-	if _, err := s.blocCaddyEnv("demo", "staging", "127.0.0.1:3000"); err == nil {
+	if _, err := s.blocCaddyEnv("demo", "staging", "s1", "127.0.0.1:3000"); err == nil {
 		t.Error("an unknown environment gave a block")
 	}
 
@@ -347,7 +350,7 @@ func TestBlocCaddy(t *testing.T) {
 	kb, _ := x509.MarshalECPrivateKey(k)
 	_ = os.WriteFile(filepath.Join(tls, "app.exemple.fr.crt"), pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0o644)
 	_ = os.WriteFile(filepath.Join(tls, "app.exemple.fr.key"), pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: kb}), 0o644)
-	avecCert, _ := blocCaddy(Environnement{URL: "https://app.exemple.fr", Certificat: "id", Protection: "access"}, "127.0.0.1:8080", "", "")
+	avecCert, _ := blocCaddy(Environnement{URL: "https://app.exemple.fr", Certificat: "id", CertificatServeurs: []string{"s1"}, Protection: "access"}, "s1", "127.0.0.1:8080", "", "")
 	_ = os.WriteFile(filepath.Join(d, "Caddyfile"), []byte(avecCert+"\n"+dev+"\n"+prod), 0o644)
 	ctx2, fin2 := context.WithTimeout(context.Background(), 4*time.Minute)
 	defer fin2()

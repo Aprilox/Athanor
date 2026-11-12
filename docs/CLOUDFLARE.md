@@ -36,7 +36,7 @@ Reading runs at once. Any change is a step of a plan you accept first (*For you*
 ### What never reaches the AI
 
 - **The token.** It is an *infra* entry of the vault (it opens only with Athanor's password), decrypted in memory for each call. The Servers agent gets tools that use it, never the token: not in its prompt, its environment, its files, a tool's answer, the audit log, the RUNBOOK or a notification.
-- **The origin certificate's private key.** Made by Athanor, kept in the vault and copied by Athanor to the server (`/etc/athanor/tls/<host>.key`, mode 0600, owner root).
+- **The origin certificate's private key.** Made by Athanor, kept in the vault and copied by Athanor to every server of the environment (`/etc/athanor/tls/<host>.key`, owner root, group `caddy`, mode 0640: Caddy reads it, no one else; mode 0600 root where Caddy is not installed, and that server keeps Caddy's own certificate until `certificat_origine` runs again).
 - **The password in front of a site.** A *mot_de_passe* entry of the vault: the web server (Caddy) receives only its bcrypt hash.
 - **What Cloudflare returns** is handed to the agent as data, with any value of the vault masked: a DNS record that hides an instruction cannot make it act.
 
@@ -76,7 +76,7 @@ La lecture s'exécute aussitôt. Tout changement est une étape d'un plan que vo
 ### Ce qui n'atteint jamais l'IA
 
 - **Le jeton.** C'est une entrée *infra* du coffre (elle ne s'ouvre qu'avec le mot de passe d'Athanor), déchiffrée en mémoire à chaque appel. L'agent Serveurs reçoit des outils qui s'en servent, jamais le jeton : ni dans sa consigne, ni dans son environnement, ses fichiers, la réponse d'un outil, le journal d'audit, le RUNBOOK ou une notification.
-- **La clé privée du certificat d'origine.** Faite par Athanor, gardée dans le coffre et copiée par Athanor sur le serveur (`/etc/athanor/tls/<hôte>.key`, mode 0600, propriétaire root).
+- **La clé privée du certificat d'origine.** Faite par Athanor, gardée dans le coffre et copiée par Athanor sur chaque serveur de l'environnement (`/etc/athanor/tls/<hôte>.key`, propriétaire root, groupe `caddy`, mode 0640 : Caddy la lit, personne d'autre ; mode 0600 root là où Caddy n'est pas installé, et ce serveur garde le certificat de Caddy tant que `certificat_origine` n'est pas relancé).
 - **Le mot de passe devant un site.** Une entrée *mot_de_passe* du coffre : le serveur web (Caddy) n'en reçoit que l'empreinte bcrypt.
 - **Ce que renvoie Cloudflare** est remis à l'agent comme des données, toute valeur du coffre masquée : un enregistrement DNS qui cache une consigne ne peut pas le faire agir.
 
