@@ -308,7 +308,7 @@ func TestServeursScenarioConteneur(t *testing.T) {
 		t.Helper()
 		txt, e := appel(nom, `{"serveur":"`+id+`"`+args+`}`)
 		var r ResultatOutil
-		if e || json.Unmarshal([]byte(txt), &r) != nil {
+		if e || json.Unmarshal([]byte(jsonDeDonnees(txt)), &r) != nil {
 			t.Fatalf("%s %s: %v %q", nom, args, e, txt)
 		}
 		return r
