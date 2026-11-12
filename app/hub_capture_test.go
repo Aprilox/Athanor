@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -127,6 +128,50 @@ func TestCaptureHub(t *testing.T) {
 		}
 		avecMdpPreuve(s)
 		http.SetCookie(w, &http.Cookie{Name: cookieSessionTest.Name, Value: cookieSessionTest.Value, Path: "/"})
+	})
+	// plan-serveur-* (M91): two Servers plans to decide, created after the appr-* screenshots so their counts stay
+	mux.HandleFunc("POST /test/plans", func(w http.ResponseWriter, r *http.Request) {
+		if l, _ := s.approbations.Liste(); slices.ContainsFunc(l, func(x Approbation) bool { return x.Action == actionPlanServeur }) {
+			return // already there: each plan-serveur-* screenshot may run alone (quick mode)
+		}
+		long := strings.Repeat("/var/www/boutique/releases/2026-11-12T10-00-00Z", 7) // B48: an agent's text without a space
+		for _, p := range []struct {
+			id, nom, env, resume string
+			etapes               []EtapePlan
+		}{
+			{"c0ffee02", "Serveur maison", "dev", "Mettre nginx à jour et recharger sa configuration pour l'aperçu de la boutique.", []EtapePlan{
+				{Outil: "ssh_commande", Arguments: json.RawMessage(`{"commande":"apt-get install -y nginx"}`), Pourquoi: "La version installée a une faille corrigée en 1.26."},
+				{Outil: "fichier_ecrire", Arguments: json.RawMessage(`{"chemin":"/etc/nginx/sites-available/boutique","contenu":"server { listen 80; root /var/www/boutique; }"}`), Pourquoi: "Servir l'aperçu depuis " + long},
+				{Outil: "service", Arguments: json.RawMessage(`{"action":"reload","nom":"nginx"}`), Pourquoi: "Prendre la nouvelle configuration sans couper le site <b>maintenant</b>."}}},
+			{"c0ffee01", "VPS production", "prod", "Supprimer les anciennes versions de la boutique pour libérer 4 Go.", []EtapePlan{
+				{Outil: "ssh_commande", Arguments: json.RawMessage(`{"commande":"rm -rf /var/www/boutique/releases/2025-*"}`), Pourquoi: "Le disque est plein à 94 %.", Sauvegarde: []string{"/var/www/boutique/releases"}}}},
+		} {
+			pl := PlanServeur{Serveur: p.id, Nom: p.nom, Env: p.env, Projet: "projet-03", Mission: "M12", Agent: agentServeurs, Resume: p.resume}
+			haut := ClasseLecture
+			for _, e := range p.etapes {
+				var a map[string]json.RawMessage
+				_ = json.Unmarshal(e.Arguments, &a)
+				et, err := classerEtape(e.Outil, a)
+				if err != nil {
+					http.Error(w, err.Error(), 500)
+					return
+				}
+				e.Arguments, e.Classe, e.Raison, haut = et.Arguments, et.Classe.String(), et.Raison, max(haut, et.Classe)
+				pl.Etapes = append(pl.Etapes, e)
+			}
+			regle := map[bool]string{true: "oui", false: "non"}[p.env == "dev" && haut < ClasseDestructrice]
+			ap, err := s.approbations.Demander(Approbation{Projet: pl.Projet, Env: p.env, Mission: pl.Mission, Agent: pl.Agent, Action: actionPlanServeur, Raison: p.resume,
+				Details: map[string]string{"serveur": p.id, "nom": p.nom, "classe": haut.String(), "etapes": fmt.Sprint(len(pl.Etapes)), "regle": regle}})
+			if err != nil {
+				http.Error(w, err.Error(), 500)
+				return
+			}
+			pl.ID, pl.Cree, pl.Expire = ap.ID, ap.Cree, ap.Expire
+			if err := s.enregistrerPlan(pl); err != nil {
+				http.Error(w, err.Error(), 500)
+				return
+			}
+		}
 	})
 	ecoute, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

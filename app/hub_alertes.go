@@ -6,6 +6,7 @@ package main
 // fingerprint (element + reason) is kept in dossierModule("hub"); a changed reason is a new alert.
 
 import (
+	"cmp"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -87,10 +88,14 @@ func alertesApprobations(l []Approbation) []AlerteHub {
 		if x.Action == "demander_acces" {
 			raison, args = "Access requested ({0}): {1}", []any{x.Env, x.Raison}
 		}
+		toujours := "Never ask again for this project and environment"
+		if x.Action == actionPlanServeur {
+			raison, args, toujours = "Plan for {0} ({1}): {2}", []any{cmp.Or(x.Details["nom"], x.Details["serveur"]), x.Env, x.Raison}, "Never ask again for this server"
+		}
 		decision := func(id, libelle string) ActionAlerte {
 			return ActionAlerte{ID: id, Libelle: libelle, Route: "hub/approbations", Corps: map[string]any{"id": x.ID, "decision": id}, Distance: true}
 		}
-		actions := []ActionAlerte{decision("accepter", "Accept"), decision("refuser", "Refuse"), decision("toujours", "Never ask again for this project and environment")}
+		actions := []ActionAlerte{decision("accepter", "Accept"), decision("refuser", "Refuse"), decision("toujours", toujours)}
 		if x.Action == actionPlanServeur && x.Details["regle"] != "oui" { // destructive or prod: an accord every time
 			actions = actions[:2]
 		}

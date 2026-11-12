@@ -8,6 +8,7 @@ package main
 // Athanor's password there (no password: a paired device only).
 
 import (
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -406,8 +407,11 @@ func (s *Serveur) notifierApprobation(x Approbation) {
 	if n := x.Details["nom"]; n != "" {
 		texte = n + " (" + x.Env + ") · " + texte
 	}
-	s.notifierAppareils(MessagePush{Titre: fmt.Sprintf(s.textePush("appr_titre"), moduleDev{}.Nom(), x.Projet, quoi),
-		Texte: texte, URL: "/#pourvous", Tag: "appr-" + x.ID})
+	titre := fmt.Sprintf(s.textePush("appr_titre"), moduleDev{}.Nom(), x.Projet, quoi)
+	if x.Action == actionPlanServeur { // "Plan for web-1", the plan's summary below
+		titre, texte = fmt.Sprintf(s.textePush("appr_plan"), cmp.Or(x.Details["nom"], x.Details["serveur"])), x.Projet+" · "+x.Raison
+	}
+	s.notifierAppareils(MessagePush{Titre: titre, Texte: texte, URL: "/#pourvous", Tag: "appr-" + x.ID})
 }
 
 // exigerAccord (I6): an action on prod or that destroys data waits for the owner's accord, unless the

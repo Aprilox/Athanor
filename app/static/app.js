@@ -822,7 +822,8 @@ async function deciderDepuisCloche(ap, x, b) {
   if (x.id === "toujours" && !(await confirmerToujours(ap))) { b.disabled = false; return; }
   if (!(await deciderApprobation(x.corps))) b.disabled = false;
 }
-const confirmerToujours = (ap) => confirmer(t("Accepted, and the next “{0}” requests of {1} in {2} are accepted without asking you.", [ap.action, ap.projet, ap.env]), { ok: t("Never ask again"), annuler: t("Cancel") });
+const confirmerToujours = (ap) => confirmer(ap.action === "plan_serveur" ? t("Accepted, and the next plans of {0} on {1} that only change things (nothing destructive) are accepted without asking you.", [ap.projet, (ap.details || {}).nom || (ap.details || {}).serveur])
+  : t("Accepted, and the next “{0}” requests of {1} in {2} are accepted without asking you.", [ap.action, ap.projet, ap.env]), { ok: t("Never ask again"), annuler: t("Cancel") });
 // POST /api/hub/approbations, then the bell, the header and the page read again
 async function deciderApprobation(corps) {
   const r = await action(api("hub/approbations", "POST", corps));
@@ -2676,7 +2677,27 @@ function carteTache(x) {
 // the agents' pending approvals, every project, first on For you: what was asked, why, and what accepting gives
 const ENVS_APPR = ["dev", "staging", "prod"];
 const signatureAppr = (ap) => JSON.stringify(((ap || {}).approbations || []).filter((x) => x.etat === "attente").map((x) => x.id));
+// a Servers plan (M91): its steps as the code classed them; every text comes from the agent or the server, shown as text
+const CLASSES_ETAPE = () => ({ lecture: [t("read"), "pv-ok"], changement: [t("change"), "pv-claude"], destructrice: [t("destructive"), "pv-vous"] });
+function argumentsLisibles(l) {
+  let o; try { o = JSON.parse(l); } catch { return h(l || ""); } // cut at 4000 characters: shown as it came
+  return Object.entries(o || {}).map(([k, v]) => `<span class="muet">${h(k)}</span> ${h(typeof v === "string" ? v : JSON.stringify(v))}`).join("<br>");
+}
+function blocPlan(x, p) {
+  if (!p) return `<div class="pv-details">${h(x.raison)}</div>`;
+  const etapes = (p.etapes || []).map((e) => {
+    const [lib, cl] = CLASSES_ETAPE()[e.classe] || [e.classe, ""];
+    return `<li><div class="plan-etape-tete"><code>${h(e.outil)}</code> <span class="pv-etat ${cl}">${h(lib)}</span></div>
+      <div class="plan-args">${argumentsLisibles(e.lisible)}</div><div class="pv-details m0">${h(e.pourquoi)}</div>
+      ${(e.sauvegarde || []).length ? `<div class="petit plan-args">${h(t("Backed up first: {0}", [e.sauvegarde.join(", ")]))}</div>` : ""}</li>`;
+  }).join("");
+  return `<div class="pv-details">${h(p.resume)}</div><ol class="plan-etapes">${etapes}</ol>
+    ${p.critique ? `<div class="pv-note"><strong>${t("Security critic")}</strong><div class="pv-details m0">${h(p.critique)}</div></div>` : ""}`;
+}
 function carteApprobation(x, ap, codes) {
+  const d = x.details || {};
+  if (x.action === "plan_serveur") return carteDecision(x, ap, `<span class="badge">${h(x.env)}</span> <strong>${h(t("Plan for {0}", [d.nom || d.serveur]))}</strong> <span>${h(x.projet)}</span>`,
+    [t("Server role: {0}", [x.env]), t("{0} step(s)", [d.etapes || "?"])], blocPlan(x, (ap.plans || {})[x.id]), d.regle === "oui" && t("Never ask again for this server"));
   const acces = x.action === "demander_acces", f = etat.apprForm[x.id] || {}, nom = (x.details || {}).nom || "";
   const entree = f.entree ?? (codes.find((e) => e.nom === nom) || {}).id ?? "", env = f.env || x.env, variable = f.variable ?? nom;
   const champs = acces ? `<div class="appr-champs">
@@ -2684,16 +2705,20 @@ function carteApprobation(x, ap, codes) {
         <a class="petit" href="#coffre">＋ ${t("Add a key")}</a></label>
       <label class="champ"><span>${t("Environment")}</span><select data-appr-env>${ENVS_APPR.map((e) => `<option${e === env ? " selected" : ""}>${e}</option>`).join("")}</select></label>
       <label class="champ"><span>${t("Variable name")}</span><input type="text" data-appr-var value="${h(variable)}" maxlength="100" spellcheck="false" placeholder="${h(t("the vault's name"))}"></label></div>` : "";
+  return carteDecision(x, ap, `<span class="badge">${h(x.env)}</span> <strong>${h(x.projet)}</strong> <span>${h(acces ? t("access requested") : x.action)}</span>`,
+    [acces && nom && t("proposed variable: {0}", [nom])], `<div class="pv-details">${h(x.raison)}</div>${champs}`, t("Never ask again for this project and environment"));
+}
+// an approval's card: its head, what it asks, the password when the window decides, and its decisions ("never ask again" only when allowed)
+function carteDecision(x, ap, tete, meta, corps, toujours) {
   const natif = ap.mot_de_passe_requis ? `<label class="champ"><span>${t("Athanor's password")}</span><input type="password" data-appr-mdp autocomplete="current-password"></label>
       <p class="muet petit">${t("Any program of this PC can drive this window, so a decision asks for Athanor's password.")}</p>`
     : ap.appareil_requis ? `<p class="petit attention">⚠ ${t("An agent of this PC could decide in your place: choose a password for Athanor in Options first, then retype it here (or decide from a paired phone)")}</p>` : "";
   const bloque = ap.appareil_requis ? " disabled" : "";
   return `<div class="bloc pv-carte appr-carte" id="appr-${h(x.id)}" data-appr="${h(x.id)}">
-    <div class="pv-tete"><span class="badge">${h(x.env)}</span> <strong>${h(x.projet)}</strong> <span>${h(acces ? t("access requested") : x.action)}</span> <span class="pv-etat pv-vous">${h(t("expires {0}", [dans(Date.parse(x.expire) / 1000)]))}</span></div>
-    <div class="muet petit">${h(t("Asked by {0}", [x.agent]))}${x.mission ? " · " + h(x.mission) : ""}${acces && nom ? " · " + h(t("proposed variable: {0}", [nom])) : ""}</div>
-    <div class="pv-details">${h(x.raison)}</div>
-    ${champs}${natif}
-    <div class="ligne mt-1"><button type="button" class="btn btn-primaire" data-appr-decision="accepter"${bloque}>✓ ${t("Accept")}</button><button type="button" class="btn" data-appr-decision="refuser"${bloque}>${t("Refuse")}</button><button type="button" class="btn" data-appr-decision="toujours"${bloque}>${t("Never ask again for this project and environment")}</button></div>
+    <div class="pv-tete">${tete} <span class="pv-etat pv-vous">${h(t("expires {0}", [dans(Date.parse(x.expire) / 1000)]))}</span></div>
+    <div class="muet petit">${[t("Asked by {0}", [x.agent]), x.mission, ...meta].filter(Boolean).map(h).join(" · ")}</div>
+    ${corps}${natif}
+    <div class="ligne mt-1 appr-boutons"><button type="button" class="btn btn-primaire" data-appr-decision="accepter"${bloque}>✓ ${t("Accept")}</button><button type="button" class="btn" data-appr-decision="refuser"${bloque}>${t("Refuse")}</button>${toujours ? `<button type="button" class="btn" data-appr-decision="toujours"${bloque}>${h(toujours)}</button>` : ""}</div>
   </div>`;
 }
 async function sectionApprobations() {

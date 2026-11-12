@@ -4,6 +4,7 @@ import (
 	"crypto/ecdh"
 	"crypto/rand"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -101,6 +102,23 @@ func TestApprobationTelephone(t *testing.T) {
 		!strings.Contains(m[0].Texte, "STRIPE_SECRET_KEY") || strings.Contains(m[0].Texte, temoin) {
 		t.Fatalf("notification: %+v", m[0])
 	}
+	// M91: a Servers plan is told as "Plan pour web-1" (another project: not held by the 5 min of demo)
+	if _, err := s.demanderApprobation(Approbation{Projet: "demo2", Env: "dev", Agent: agentServeurs, Action: actionPlanServeur, Raison: "Mettre nginx à jour",
+		Details: map[string]string{"serveur": "ab12", "nom": "web-1", "regle": "oui"}}); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 100 && len(nRecus()) < 2; i++ {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if m := nRecus(); len(m) != 2 || m[1].Titre != "Plan pour web-1" || m[1].Texte != "demo2 · Mettre nginx à jour" || m[1].URL != "/#pourvous" {
+		t.Fatalf("plan notification: %+v", m)
+	}
+	l, _ = s.approbations.Liste()
+	for _, a := range alertesApprobations(l) {
+		if a.Approbation.Action == actionPlanServeur && (a.Raison != "Plan for {0} ({1}): {2}" || fmt.Sprint(a.Args) != "[web-1 dev Mettre nginx à jour]" || len(a.Actions) != 3 || a.Actions[2].Libelle != "Never ask again for this server") {
+			t.Fatalf("plan alert: %+v", a)
+		}
+	}
 
 	corps, _ := json.Marshal(map[string]string{"id": id, "decision": "accepter", "entree": e.ID})
 	// not paired (no key, or an unknown one): refused, nothing decided
@@ -144,7 +162,7 @@ func TestApprobationTelephone(t *testing.T) {
 	if strings.Contains(w.Body.String(), temoin) || strings.Contains(auditTexte(t), temoin) {
 		t.Error("value in the answer or the audit log")
 	}
-	if len(nRecus()) != 1 {
+	if len(nRecus()) != 2 { // the access request and the plan (M91)
 		t.Error("a decision sent a notification")
 	}
 }
