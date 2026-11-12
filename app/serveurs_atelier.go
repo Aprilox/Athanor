@@ -68,8 +68,8 @@ func markdownRunbook(srv ServeurInventaire, f *FicheServeur, quand time.Time) st
 		fmt.Fprintf(&b, "- **Listening ports**: %s\n", premierNonVide(strings.Join(slices.Compact(l), ", "), "none found"))
 	}
 	b.WriteString("\n## History\n\n## Backups\n\n## Going back\n\n" +
-		"- A file Athanor writes keeps its previous version next to it, in `<file>.athanor-prev`.\n" +
-		"- The paths a destructive step names are archived first in `" + dossierSauvegardes + "/<plan>-<step>.tar.gz` (see Backups); restoring one is a step of a plan the owner accepts.\n" +
+		"- A file Athanor writes keeps its previous version in `" + dossierSauvegardes + "/prev/<path>` (root only; the result gives its former mode and owner).\n" +
+		"- The paths a destructive step names are archived first in `" + dossierSauvegardes + "/<plan>-<step>.tar.gz` (see Backups; the 10 newest are kept); restoring one is a step of a plan the owner accepts.\n" +
 		"- A firewall or SSH change that is not confirmed is undone by the server itself when its delay ends.\n")
 	return b.String()
 }

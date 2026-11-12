@@ -24,8 +24,8 @@ What an accepted plan can leave on the server, besides the change itself:
 
 | Where | What | When |
 |---|---|---|
-| `<file>.athanor-prev` | the previous version of a replaced file (same mode and owner) | a file is written or sent over SFTP |
-| `/var/backups/athanor/<plan>-<step>.tar.gz` | an archive of what a destructive step deletes (mode 0600) | before a destructive step; the step is refused if the archive fails |
+| `/var/backups/athanor/prev/<path>` | the previous version of a replaced file (mode 0600, root; the result gives its former mode and owner; `~/.athanor-backups/prev/<path>` when the account has neither root nor sudo) | a file is written or sent over SFTP |
+| `/var/backups/athanor/<plan>-<step>.tar.gz` | an archive of what a destructive step deletes (mode 0600; the 10 newest are kept) | before a destructive step; the step is refused if the archive fails or would take more than half the free space |
 | `/var/backups/athanor/annul-<id>/` | the state before a firewall or SSH change, and its scheduled undo (a `systemd-run` timer `athanor-annul-<id>`, or a detached `sh`) | before a `ufw` rule or a write under `/etc/ssh/`; removed once confirmed or undone (after 5 minutes without *Keep this change*; an undo leaves a short `.log` beside it) |
 
 ### What Athanor never does
@@ -60,8 +60,8 @@ Ce qu'un plan accepté peut laisser sur le serveur, en plus du changement lui-m�
 
 | Où | Quoi | Quand |
 |---|---|---|
-| `<fichier>.athanor-prev` | la version d'avant d'un fichier remplacé (mêmes droits et propriétaire) | un fichier est écrit ou envoyé par SFTP |
-| `/var/backups/athanor/<plan>-<étape>.tar.gz` | une archive de ce qu'une étape destructrice supprime (droits 0600) | avant une étape destructrice ; l'étape est refusée si l'archive échoue |
+| `/var/backups/athanor/prev/<chemin>` | la version d'avant d'un fichier remplacé (droits 0600, root ; le résultat donne ses anciens droits et propriétaire ; `~/.athanor-backups/prev/<chemin>` si le compte n'a ni root ni sudo) | un fichier est écrit ou envoyé par SFTP |
+| `/var/backups/athanor/<plan>-<étape>.tar.gz` | une archive de ce qu'une étape destructrice supprime (droits 0600 ; les 10 plus récentes sont gardées) | avant une étape destructrice ; l'étape est refusée si l'archive échoue ou prendrait plus de la moitié de la place libre |
 | `/var/backups/athanor/annul-<id>/` | l'état d'avant un changement de pare-feu ou de SSH, et son annulation programmée (minuteur `systemd-run` `athanor-annul-<id>`, ou un `sh` détaché) | avant une règle `ufw` ou une écriture sous `/etc/ssh/` ; retiré une fois confirmé ou annulé (au bout de 5 minutes sans *Garder ce changement* ; une annulation laisse à côté un court journal `.log`) |
 
 ### Ce qu'Athanor ne fait jamais

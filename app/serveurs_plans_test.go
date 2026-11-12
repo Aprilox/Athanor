@@ -126,6 +126,11 @@ func TestServeursPlans(t *testing.T) {
 	if p, _ := s.lirePlan(plan); p.Etapes[0].Executee == "" || p.Etapes[0].Etat != "ok" || p.Etapes[0].Essais != 1 {
 		t.Errorf("step state after the call (C52): %+v", p.Etapes[0])
 	}
+	// C53: the archive made before the step is kept on its card, its size too
+	s.noterEtape(plan, 1, nil, []string{"backup: /var/backups/athanor/p-1.tar.gz (12 KB; /srv/a)", "previous version: /x"})
+	if p, _ := s.lirePlan(plan); p.Etapes[0].Archive != "/var/backups/athanor/p-1.tar.gz (12 KB; /srv/a)" || p.Etapes[0].Etat != "ok" {
+		t.Errorf("archive on the step: %+v", p.Etapes[0])
+	}
 
 	// destructive: no rule possible; refused → nothing runs
 	rm := `{"outil":"ssh_commande","arguments":{"commande":"rm -rf /srv/vieux"},"pourquoi":"place","sauvegarde":["/srv/vieux"]}`
@@ -171,7 +176,7 @@ func TestServeursPlans(t *testing.T) {
 	rmSauve := `{"outil":"ssh_commande","arguments":{"commande":"rm -rf /srv/vieux"},"pourquoi":"place","sauvegarde":["/srv/vieux/"]}`
 	plan8, _ := proposer(rmSauve)
 	_ = decider(plan8, "accepter")
-	if txt, e := appel("ssh_commande", `{"serveur":"ab12","commande":"rm -rf /srv/vieux"}`); e || !strings.Contains(txt, "backup: ") || !strings.Contains(txt, "(/srv/vieux)") {
+	if txt, e := appel("ssh_commande", `{"serveur":"ab12","commande":"rm -rf /srv/vieux"}`); e || !strings.Contains(txt, "backup: ") || !strings.Contains(txt, "; /srv/vieux)") {
 		t.Errorf("step with a backup: %v %q", e, txt)
 	}
 	if c1, c2 := <-mem.commandes, <-mem.commandes; !strings.Contains(c1, "tar -czf") || !strings.Contains(c1, plan8+"-1") || !strings.Contains(c1, "./srv/vieux") || c2 != commandeBornee("rm -rf /srv/vieux", delaiCommande) {

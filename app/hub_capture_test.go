@@ -352,7 +352,7 @@ func serveursCapture(t *testing.T) int {
 	_ = os.Remove(fichierRunbook("c0ffee01"))
 	for _, e := range [][3]string{{"historique", "agent", "nginx 1.26 vérifié, certificat valable jusqu'en mars."},
 		{"historique", "Athanor", `ssh_commande (destructrice, plan 4f2a, step 1) {"commande":"rm -rf /srv/boutique/v1"} → code 0`},
-		{"sauvegardes", "Athanor", "backup: /var/backups/athanor/4f2a-1.tar.gz (/srv/boutique/v1) (plan 4f2a, step 1)"}} {
+		{"sauvegardes", "Athanor", "backup: /var/backups/athanor/4f2a-1.tar.gz (12 KB; /srv/boutique/v1) (plan 4f2a, step 1)"}} {
 		if err := ajouterRunbook("c0ffee01", e[0], e[1], e[2], 0); err != nil {
 			t.Fatal(err)
 		}

@@ -123,7 +123,7 @@ func faireOutilServeur(nom string) func(*Serveur, SessionHub, json.RawMessage) (
 			s.noterRunbook(id, e, r, err)
 		}
 		if e.Plan != "" {
-			s.noterEtape(e.Plan, e.Num, err)
+			s.noterEtape(e.Plan, e.Num, err, r.sauvegardes)
 		}
 		if err != nil { // an error may quote the server (stderr, a path)
 			return "", errors.New(strings.ReplaceAll(s.masquerSecrets(err.Error()), "<", "&lt;"))

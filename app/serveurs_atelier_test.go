@@ -116,7 +116,7 @@ func TestServeursRunbook(t *testing.T) {
 	if !strings.Contains(hist, "Athanor: ssh_commande (destructrice, plan "+p.Plan+", step 1)") || !strings.Contains(hist, "code 0") || strings.Contains(hist, "uptime") {
 		t.Errorf("History:\n%s", hist)
 	}
-	if !strings.Contains(sauv, "backup: ") || !strings.Contains(sauv, "(/srv/vieux) (plan "+p.Plan+", step 1)") {
+	if !strings.Contains(sauv, "backup: ") || !strings.Contains(sauv, "; /srv/vieux) (plan "+p.Plan+", step 1)") {
 		t.Errorf("Backups:\n%s", sauv)
 	}
 	// the audit log has the agent's entry, masked

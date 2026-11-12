@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -379,22 +380,42 @@ func TestServeursOutilsConteneur(t *testing.T) {
 	}
 	// sudo: a root file replaced in place, its mode and owner kept
 	appel("ssh_commande", map[string]any{"commande": "echo ancien | sudo -n tee /etc/athanor-test.conf >/dev/null && sudo -n chmod 640 /etc/athanor-test.conf"})
-	if r := appel("fichier_ecrire", map[string]any{"chemin": "/etc/athanor-test.conf", "contenu": "nouveau\n", "sudo": true}); r.Code != 0 || !strings.Contains(r.Sortie, "previous version kept in /etc/athanor-test.conf.athanor-prev") {
+	if r := appel("fichier_ecrire", map[string]any{"chemin": "/etc/athanor-test.conf", "contenu": "nouveau\n", "sudo": true}); r.Code != 0 || !strings.Contains(r.Sortie, "previous version kept in /var/backups/athanor/prev/etc/athanor-test.conf (was 640 root:root)") {
 		t.Errorf("write with sudo: %+v", r)
 	}
-	// M92: the previous version kept, its mode and owner too
-	if r := appel("ssh_commande", map[string]any{"commande": "stat -c '%a %U' /etc/athanor-test.conf /etc/athanor-test.conf.athanor-prev; sudo -n cat /etc/athanor-test.conf /etc/athanor-test.conf.athanor-prev; sudo -n rm -f /etc/athanor-test.conf /etc/athanor-test.conf.athanor-prev"}); r.Sortie != "640 root\n640 root\nnouveau\nancien\n" {
+	// M92, C50: the previous version kept out of /etc, root only; nothing left beside the target
+	if r := appel("ssh_commande", map[string]any{"commande": "stat -c '%a %U' /etc/athanor-test.conf; sudo -n stat -c '%a %U' /var/backups/athanor/prev /var/backups/athanor/prev/etc/athanor-test.conf; sudo -n cat /etc/athanor-test.conf /var/backups/athanor/prev/etc/athanor-test.conf; ls /etc | grep -c athanor-test; sudo -n rm -f /etc/athanor-test.conf"}); r.Sortie != "640 root\n700 root\n600 root\nnouveau\nancien\n1\n" {
 		t.Errorf("root file: %q", r.Sortie)
 	}
 	// M92: a step's paths archived first (folder 0700, archive 0600), then restored with their mode and owner;
 	// a failed archive runs nothing and leaves no archive
 	appel("ssh_commande", map[string]any{"commande": "rm -rf /tmp/m92 && mkdir -p /tmp/m92/sous && echo garde > /tmp/m92/sous/f && chmod 750 /tmp/m92/sous"})
 	b, _ := json.Marshal(map[string]any{"commande": "rm -rf /tmp/m92"})
-	if r, err := s.appelerOutilServeur(ctx, "test", id, "ssh_commande", b, Sauvegarde{Archive: "essai-1", Chemins: []string{"/tmp/m92"}}); err != nil || !strings.HasPrefix(r.Sortie, "backup: /var/backups/athanor/essai-1.tar.gz (/tmp/m92)") {
+	if r, err := s.appelerOutilServeur(ctx, "test", id, "ssh_commande", b, Sauvegarde{Archive: "essai-1", Chemins: []string{"/tmp/m92"}}); err != nil || !regexp.MustCompile(`^backup: /var/backups/athanor/essai-1\.tar\.gz \(\d+ KB; /tmp/m92\)`).MatchString(r.Sortie) {
 		t.Errorf("step with a backup: %v %+v", err, r)
 	}
 	if r := appel("ssh_commande", map[string]any{"commande": "test -e /tmp/m92 && echo present; sudo -n stat -c %a /var/backups/athanor /var/backups/athanor/essai-1.tar.gz; sudo -n tar -xzf /var/backups/athanor/essai-1.tar.gz -C / && stat -c '%a %U' /tmp/m92/sous && cat /tmp/m92/sous/f"}); r.Sortie != "700\n600\n750 athanor\ngarde\n" {
 		t.Errorf("archive restored: %q", r.Sortie)
+	}
+	// C53: /var/backups archived without Athanor's own backups; the 10 newest archives kept
+	appel("ssh_commande", map[string]any{"commande": "sudo -n sh -c 'for i in $(seq 10 21); do touch -d \"2020-01-01 00:00:$i\" /var/backups/athanor/vieux-$i.tar.gz; done'"})
+	b, _ = json.Marshal(map[string]any{"commande": "true"})
+	if _, err := s.appelerOutilServeur(ctx, "test", id, "ssh_commande", b, Sauvegarde{Archive: "essai-3", Chemins: []string{"/var/backups"}}); err != nil {
+		t.Errorf("backup of /var/backups: %v", err)
+	}
+	if r := appel("ssh_commande", map[string]any{"commande": "sudo -n tar -tzf /var/backups/athanor/essai-3.tar.gz | grep -c athanor; sudo -n sh -c 'ls /var/backups/athanor/*.tar.gz | wc -l; ls /var/backups/athanor | grep -c -x -e vieux-10.tar.gz -e vieux-20.tar.gz -e vieux-21.tar.gz'"}); r.Sortie != "0\n10\n2\n" {
+		t.Errorf("exclusion and rotation: %q", r.Sortie)
+	}
+	// C53: an archive larger than its share of the free space is refused, the step does not run
+	partPlaceSauvegarde = 0
+	b, _ = json.Marshal(map[string]any{"commande": "touch /tmp/m92-place"})
+	_, err := s.appelerOutilServeur(ctx, "test", id, "ssh_commande", b, Sauvegarde{Archive: "essai-4", Chemins: []string{"/etc/hostname"}})
+	partPlaceSauvegarde = 50
+	if err == nil || !strings.Contains(err.Error(), "KB free on the server") || !strings.Contains(err.Error(), "the step did not run") {
+		t.Errorf("backup without the space: %v", err)
+	}
+	if r := appel("ssh_commande", map[string]any{"commande": "test -e /tmp/m92-place && echo ran; sudo -n test -e /var/backups/athanor/essai-4.tar.gz && echo left; sudo -n sh -c 'rm -f /var/backups/athanor/*.tar.gz'"}); r.Sortie != "" {
+		t.Errorf("after a backup without the space: %q", r.Sortie)
 	}
 	b, _ = json.Marshal(map[string]any{"commande": "touch /tmp/m92/jamais"})
 	if _, err := s.appelerOutilServeur(ctx, "test", id, "ssh_commande", b, Sauvegarde{Archive: "essai-2", Chemins: []string{"/tmp/absent-m92"}}); err == nil || !strings.Contains(err.Error(), "the step did not run") {
@@ -417,7 +438,7 @@ func TestServeursOutilsConteneur(t *testing.T) {
 	if r := appel("fichier_ecrire", map[string]any{"chemin": "/etc/athanor-lien.conf", "contenu": "v2\n", "sudo": true}); r.Code != 0 {
 		t.Errorf("write through a link: %+v", r)
 	}
-	if r := appel("ssh_commande", map[string]any{"commande": "stat -c '%F %U' /etc/athanor-lien.conf; stat -c '%F %a %U' /etc/athanor-cible.conf; sudo -n cat /etc/athanor-cible.conf; ls /etc | grep -c 'athanor-cible.conf.athanor[.]'; sudo -n rm -f /etc/athanor-lien.conf /etc/athanor-cible.conf /etc/athanor-cible.conf.athanor-prev"}); r.Sortie != "symbolic link root\nregular file 640 root\nv2\n0\n" {
+	if r := appel("ssh_commande", map[string]any{"commande": "stat -c '%F %U' /etc/athanor-lien.conf; stat -c '%F %a %U' /etc/athanor-cible.conf; sudo -n cat /etc/athanor-cible.conf; ls /etc | grep -c 'athanor-cible.conf.athanor[.]'; sudo -n rm -f /etc/athanor-lien.conf /etc/athanor-cible.conf"}); r.Sortie != "symbolic link root\nregular file 640 root\nv2\n0\n" {
 		t.Errorf("link written through: %q", r.Sortie)
 	}
 	// C41: behind a published port, the port sshd itself listens on is guarded too
@@ -458,11 +479,11 @@ func TestServeursOutilsConteneur(t *testing.T) {
 	_ = os.Remove(filepath.Join(local, "gros.bin"))
 	// C40: sending onto a link to a 0600 file keeps the link and the mode
 	appel("ssh_commande", map[string]any{"commande": "printf 'S=1\\n' > /tmp/vrai.conf; chmod 600 /tmp/vrai.conf; ln -sf /tmp/vrai.conf /tmp/lien.conf"})
-	// M92: and the previous version is kept next to the real target, its mode too
-	if r := appel("sftp_envoyer", map[string]any{"local": "envoi.txt", "distant": "/tmp/lien.conf"}); !strings.HasSuffix(r.Sortie, "previous version kept in /tmp/vrai.conf.athanor-prev") {
+	// M92, C50: and the previous version of the real target is kept out of its folder, root only
+	if r := appel("sftp_envoyer", map[string]any{"local": "envoi.txt", "distant": "/tmp/lien.conf"}); !strings.HasSuffix(r.Sortie, "previous version kept in /var/backups/athanor/prev/tmp/vrai.conf (was 600 athanor:athanor)") {
 		t.Errorf("SFTP previous version: %q", r.Sortie)
 	}
-	if r := appel("ssh_commande", map[string]any{"commande": "stat -c '%F' /tmp/lien.conf; stat -c '%F %a' /tmp/vrai.conf /tmp/vrai.conf.athanor-prev; cat /tmp/vrai.conf /tmp/vrai.conf.athanor-prev; rm -f /tmp/lien.conf /tmp/vrai.conf*"}); r.Sortie != "symbolic link\nregular file 600\nregular file 600\ncontenu sftp\nS=1\n" {
+	if r := appel("ssh_commande", map[string]any{"commande": "stat -c '%F' /tmp/lien.conf; stat -c '%F %a' /tmp/vrai.conf; sudo -n stat -c '%F %a %U' /var/backups/athanor/prev/tmp/vrai.conf; cat /tmp/vrai.conf; sudo -n cat /var/backups/athanor/prev/tmp/vrai.conf; ls /tmp | grep -c vrai; rm -f /tmp/lien.conf /tmp/vrai.conf*"}); r.Sortie != "symbolic link\nregular file 600\nregular file 600 root\ncontenu sftp\nS=1\n1\n" {
 		t.Errorf("SFTP onto a link: %q", r.Sortie)
 	}
 	// C36: a link to /etc/shadow (or to the folder /root/.ssh) is refused once resolved on the server, as root too

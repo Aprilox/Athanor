@@ -197,7 +197,7 @@ func faireOutilCloudflare(nom string) func(*Serveur, SessionHub, json.RawMessage
 		}
 		r, err := s.executerCloudflare(x, nom, c)
 		if e.Plan != "" {
-			s.noterEtape(e.Plan, e.Num, err)
+			s.noterEtape(e.Plan, e.Num, err, nil)
 		}
 		if c.serveur != "" {
 			s.noterRunbook(c.serveur, e, ResultatOutil{}, err)

@@ -91,16 +91,26 @@ func sauvegardeDe(e Etape) Sauvegarde {
 	return Sauvegarde{Archive: fmt.Sprintf("%s-%d", e.Plan, e.Num), Chemins: e.Sauvegarde}
 }
 
-// scriptArchiver: $1 the archive's name, then the paths (relative to /, "./…"); as root, else through sudo -n
-// when it is allowed; the folder 0700, the archive 0600; prints the archive's path; a failed archive is removed.
-const scriptArchiver = `d=` + dossierSauvegardes + `; a="$d/$1.tar.gz"; shift
+// partPlaceSauvegarde: an archive is refused when its paths take more than this share (%) of the free space (C53).
+var partPlaceSauvegarde = 50
+
+// scriptArchiver: $1 the archive's name, $2 the share of the free space it may take, then the paths (relative
+// to /, "./…"); as root, else through sudo -n when it is allowed; refused when the paths (Athanor's own backups
+// left out) take more than $2 % of the free space; the folder 0700, the archive 0600; prints its path and size
+// in KB; only the 10 newest archives are kept (C53); a failed archive is removed.
+const scriptArchiver = `d=` + dossierSauvegardes + `; a="$d/$1.tar.gz"; p=$2; shift 2
 S=; [ "$(id -u)" = 0 ] || { sudo -n true 2>/dev/null && S="sudo -n"; }
-$S mkdir -p -m 700 "$d" && $S sh -c 'umask 077; tar -czf "$0" -C / "$@"' "$a" "$@" && $S chmod 600 "$a" && echo "$a" && exit 0
+$S mkdir -p -m 700 "$d" || exit 1
+t=$(cd / && $S du -sck --exclude=.` + dossierSauvegardes + ` "$@" | tail -n 1 | cut -f1); l=$(df -Pk "$d" | awk 'NR==2{print $4}')
+case "$t$l" in ""|*[!0-9]*) echo "the space the paths take could not be measured"; exit 1;; esac
+[ $((t * 100)) -le $((l * p)) ] || { echo "the paths take $t KB, more than $p % of the $l KB free on the server: free some space or archive fewer paths"; exit 1; }
+$S sh -c 'umask 077; tar -czf "$0" --exclude=.` + dossierSauvegardes + ` -C / "$@"' "$a" "$@" && $S chmod 600 "$a" && echo "$a $($S du -k "$a" | cut -f1)" &&
+$S sh -c 'ls -1t "$0"/*.tar.gz | tail -n +$1 | while IFS= read -r f; do rm -f -- "$f"; done' "$d" 11 && exit 0
 $S rm -f "$a"; exit 1`
 
 // archiver makes the step's archive; any failure stops the step.
 func archiver(ctx context.Context, c *ssh.Client, sv Sauvegarde) (string, error) {
-	args := []string{sv.Archive}
+	args := []string{sv.Archive, fmt.Sprint(partPlaceSauvegarde)}
 	for _, p := range sv.Chemins {
 		args = append(args, "."+p)
 	}
@@ -111,8 +121,17 @@ func archiver(ctx context.Context, c *ssh.Client, sv Sauvegarde) (string, error)
 	if err != nil {
 		return "", fmt.Errorf("the backup of %s failed, the step did not run (call it once more, or propose a new plan): %w", strings.Join(sv.Chemins, ", "), err)
 	}
-	return fmt.Sprintf("backup: %s (%s)", strings.TrimSpace(string(r.Sortie)), strings.Join(sv.Chemins, ", ")), nil
+	a, ko, _ := strings.Cut(strings.TrimSpace(string(r.Sortie)), " ")
+	return fmt.Sprintf("backup: %s (%s KB; %s)", a, ko, strings.Join(sv.Chemins, ", ")), nil
 }
+
+// scriptGarder: garder <file> copies the file's current version out of its folder (C50: nothing beside it is
+// served or loaded), to dossierSauvegardes/prev/<path> 0600 as root (directly or through sudo -n), else to
+// ~/.athanor-backups/prev/<path> 0600; prints the copy's path and the file's mode and owner.
+const scriptGarder = `garder() { S=; [ "$(id -u)" = 0 ] || { sudo -n true 2>/dev/null && S="sudo -n"; }
+if [ -n "$S" ] || [ "$(id -u)" = 0 ]; then b="` + dossierSauvegardes + `/prev$1"; else b="$HOME/.athanor-backups/prev$1"; fi
+$S sh -c 'umask 077; mkdir -p -- "${1%/*}" && cp -- "$0" "$1" && chmod 600 -- "$1"' "$1" "$b" && echo "$b (was $($S stat -L -c '%a %U:%G' -- "$1"))"; }
+`
 
 // appelerOutilServeur runs tool outil on server id for de (who asks, for the log), after archiving sv, and
 // writes the audit line.
@@ -332,13 +351,13 @@ func outilFichierLire(ctx context.Context, c *ssh.Client, _ ServeurInventaire, a
 
 // scriptEcrire: a link is followed to its real target (C32: the link stays); the content goes to a temporary
 // file next to that target, which keeps its mode (and owner under sudo), then replaces it in one rename;
-// a failure leaves the target as it was. An existing file is copied first to <target>.athanor-prev (M92).
-const scriptEcrire = `p=$(readlink -f -- "$1") && [ -n "$p" ] || p=$1
+// a failure leaves the target as it was. An existing file's version is kept first by garder (M92, C50).
+const scriptEcrire = scriptGarder + `p=$(readlink -f -- "$1") && [ -n "$p" ] || p=$1
 [ -d "$p" ] && { echo "$1 is a directory" >&2; exit 1; }
 t=$(mktemp "$p.athanor.XXXXXX") || exit 1
 if cat > "$t"; then
   k=
-  if [ -e "$p" ]; then chmod "$(stat -L -c %a -- "$p")" "$t" && { [ "$(id -u)" != 0 ] || chown "$(stat -L -c %u:%g -- "$p")" "$t"; } && cp -p -- "$p" "$p.athanor-prev" && k="; previous version kept in $p.athanor-prev"; else chmod 644 "$t"; fi && mv -f -- "$t" "$p" && echo "$2 bytes written to $1$k" && exit 0
+  if [ -e "$p" ]; then chmod "$(stat -L -c %a -- "$p")" "$t" && { [ "$(id -u)" != 0 ] || chown "$(stat -L -c %u:%g -- "$p")" "$t"; } && b=$(garder "$p") && k="; previous version kept in $b"; else chmod 644 "$t"; fi && mv -f -- "$t" "$p" && echo "$2 bytes written to $1$k" && exit 0
 fi
 rm -f -- "$t"; exit 1`
 
@@ -461,11 +480,11 @@ func outilSFTPEnvoyer(ctx context.Context, c *ssh.Client, srv ServeurInventaire,
 	if st, e := cs.Stat(cible); err == nil && e == nil {
 		err = cs.Chmod(part, st.Mode().Perm())
 		if err == nil && st.Mode().IsRegular() { // M92: the previous version kept, mode and owner too
-			prev = cible + ".athanor-prev"
-			r, e := executerSSH(ctx, c, scriptShell(false, `cp -p -- "$1" "$2"`, cible, prev), nil, delaiFichier)
+			r, e := executerSSH(ctx, c, scriptShell(false, scriptGarder+`garder "$1"`, cible), nil, delaiFichier)
 			if err = e; err == nil && r.Code != 0 {
 				err = fmt.Errorf("keeping the previous version: %s", couper(strings.TrimSpace(string(r.Sortie)), 300))
 			}
+			prev = strings.TrimSpace(string(r.Sortie))
 		}
 	}
 	if err == nil {

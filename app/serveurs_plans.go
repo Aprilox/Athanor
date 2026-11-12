@@ -46,6 +46,8 @@ type EtapePlan struct {
 	Etat    string `json:"etat,omitempty"`
 	Message string `json:"message,omitempty"`
 	Essais  int    `json:"essais,omitempty"`
+	// the archive made before the step ran: its path, size and paths (C53)
+	Archive string `json:"archive,omitempty"`
 }
 
 // PlanServeur: hub/plans/<id>.json, id = its approval's.
@@ -355,8 +357,9 @@ func (s *Serveur) etapeAccordee(x SessionHub, id string, e Etape) (PlanServeur, 
 	return PlanServeur{}, 0, info, nil
 }
 
-// noterEtape: step n of plan id ran; its result (ok, or echec and why) is kept on the plan, shown on its card.
-func (s *Serveur) noterEtape(id string, n int, err error) {
+// noterEtape: step n of plan id ran; its result (ok, or echec and why) and the archive made first (from the
+// call's backups) are kept on the plan, shown on its card.
+func (s *Serveur) noterEtape(id string, n int, err error, sauvegardes []string) {
 	verrouPlans.Lock()
 	defer verrouPlans.Unlock()
 	p, e := s.lirePlan(id)
@@ -365,6 +368,11 @@ func (s *Serveur) noterEtape(id string, n int, err error) {
 	}
 	et := &p.Etapes[n-1]
 	et.Etat, et.Message = "ok", ""
+	for _, b := range sauvegardes {
+		if a, ok := strings.CutPrefix(b, "backup: "); ok {
+			et.Archive = a
+		}
+	}
 	if err != nil {
 		et.Etat, et.Message = "echec", couper(s.masquerSecrets(err.Error()), 300)
 	}
