@@ -2743,7 +2743,7 @@ function carteApprobation(x, ap, codes) {
     [t("Server role: {0}", [x.env]), t("{0} step(s)", [d.etapes || "?"])], blocPlan(x, p), d.regle === "oui" && t("Never ask again for this server"), p && p.critique && !p.critique.verdict);
   // a deployment (M120): prod is never decided by a rule
   if (x.action === "deploiement") return carteDecision(x, ap, `<span class="badge">${h(x.env)}</span> <strong>${h(x.env === "prod" ? t("Deploy {0} to production?", [d.hote]) : t("Deploy {0} to {1}?", [d.hote, x.env]))}</strong> <span>${h(x.projet)}</span>`,
-    [t("Commit {0}", [d.commit])], x.env === "prod" ? `<div class="pv-details">${h(t("Production always asks you: one accord, one deployment."))}</div>` : "", x.env !== "prod" && t("Never ask again for this project and environment"));
+    [t("Commit {0}", [d.commit]), d.serveurs && t("Servers: {0}", [d.serveurs])], x.env === "prod" ? `<div class="pv-details">${h(t("Production always asks you: one accord, one deployment."))}</div>` : "", x.env !== "prod" && t("Never ask again for this project and environment"));
   const acces = x.action === "demander_acces", f = etat.apprForm[x.id] || {}, nom = (x.details || {}).nom || "";
   const entree = f.entree ?? (codes.find((e) => e.nom === nom) || {}).id ?? "", env = f.env || x.env, variable = f.variable ?? nom;
   const champs = acces ? `<div class="appr-champs">

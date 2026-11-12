@@ -7,6 +7,7 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -36,7 +37,7 @@ func init() {
 	outilsHub["demander_acces"] = OutilHub{Description: "Ask the owner for a key or secret you need (e.g. STRIPE_SECRET_KEY). Once accepted, it appears in .athanor/secrets.env, no restart needed.",
 		Schema: objet(map[string]any{"nom": texte("Variable name, e.g. STRIPE_SECRET_KEY"), "raison": texte("Why you need it, in one sentence")}, "nom", "raison"), Faire: outilDemanderAcces}
 	outilsHub["demander_deploiement"] = OutilHub{Description: "Ask for a deployment of a commit to dev, staging or prod. Prod always waits for the owner's approval; Athanor only records accepted deployments for now.",
-		Schema: objet(map[string]any{"environnement": texte("dev, staging or prod"), "commit": texte("Commit hash to deploy")}, "environnement", "commit"), Faire: outilDemanderDeploiement}
+		Schema: objet(map[string]any{"environnement": texte("dev, staging or prod"), "commit": texte("Full commit hash to deploy (git rev-parse HEAD)")}, "environnement", "commit"), Faire: outilDemanderDeploiement}
 	outilsHub["signaler"] = OutilHub{Description: "Report a blocker to the owner: it shows in Athanor's bell. One short sentence.",
 		Schema: objet(map[string]any{"blocage": texte("What blocks you, in one sentence")}, "blocage"), Faire: outilSignaler}
 }
@@ -229,8 +230,8 @@ func (s *Serveur) cleCodeNommee(nom string) string {
 	return id
 }
 
-// commitValide: a commit hash (it goes to the phone and approbations.json, so nothing else).
-var commitValide = regexp.MustCompile(`^[0-9a-f]{4,64}$`)
+// commitValide (C61): a full commit hash, SHA-1 or SHA-256 (a prefix could name another commit made later).
+var commitValide = regexp.MustCompile(`^([0-9a-f]{40}|[0-9a-f]{64})$`)
 
 // outilDemanderDeploiement (M120): the environment's policy decides (politiqueDeploiement); prod and the
 // "accord" policy wait for the owner (one accord, one deployment). Athanor runs deployments at stage 8: an
@@ -245,7 +246,7 @@ func outilDemanderDeploiement(s *Serveur, x SessionHub, args json.RawMessage) (s
 		return "", errors.New("unknown environment: dev, staging or prod")
 	}
 	if !commitValide.MatchString(commit) {
-		return "", errors.New("commit must be a commit hash (4 to 64 hexadecimal characters)")
+		return "", errors.New("commit must be the full commit hash (40 or 64 hexadecimal characters, git rev-parse HEAD)")
 	}
 	e := s.acces.Environnements(x.Projet)[env]
 	if len(e.Serveurs) == 0 {
@@ -255,8 +256,9 @@ func outilDemanderDeploiement(s *Serveur, x SessionHub, args json.RawMessage) (s
 	if u, err := url.Parse(e.URL); err == nil && u.Hostname() != "" {
 		hote = u.Hostname()
 	}
+	// C63: the accord is for these servers, this agent and this mission (Reprendre compares them)
 	ap := Approbation{Projet: x.Projet, Env: env, Mission: x.Mission, Agent: x.Agent, Action: actionDeploiement,
-		Details: map[string]string{"commit": commit, "hote": hote}, Raison: "commit " + commit + " → " + hote}
+		Details: map[string]string{"commit": commit, "hote": hote, "serveurs": listeServeursAccord(e.Serveurs)}, Raison: "commit " + commit + " → " + hote}
 	accepte := func(par string) (string, error) {
 		s.ecrireAudit(LigneAudit{Type: "evenement", De: x.Agent, Vers: "hub", Mission: x.Mission, Projet: x.Projet, Env: env, Agent: x.Agent,
 			Action: "déploiement accepté", Resultat: "commit " + commit + " → " + hote + " (" + par + "), exécution à l'étape 8"})
@@ -265,7 +267,7 @@ func outilDemanderDeploiement(s *Serveur, x SessionHub, args json.RawMessage) (s
 	attente := func(id string) (string, error) {
 		return "waiting for the owner, id " + id + ": once accepted, call demander_deploiement again with the same environment and commit; go on with work that does not need it", nil
 	}
-	if accord, raison := s.politiqueDeploiement(x.Projet, env); !accord {
+	if accord, raison := s.politiqueDeploiement(x.Projet, env, false); !accord {
 		return accepte(raison)
 	}
 	y, etat, err := s.approbations.Reprendre(ap)
@@ -286,6 +288,16 @@ func outilDemanderDeploiement(s *Serveur, x SessionHub, args json.RawMessage) (s
 		return "", err
 	}
 	return "", errors.New("the request could not be recorded, try again later")
+}
+
+// listeServeursAccord: the sorted server ids an accord is bound to; a list longer than an approval detail
+// (200 characters) becomes its hash, so two lists cut alike never share an accord.
+func listeServeursAccord(ids []string) string {
+	l := slices.Sorted(slices.Values(ids))
+	if v := strings.Join(l, ","); len(v) <= 200 {
+		return v
+	}
+	return fmt.Sprintf("sha256:%x", sha256.Sum256([]byte(strings.Join(l, ","))))
 }
 
 // outilSignaler: the blocker goes to the bell (the Dev element of the project) and to the audit log.

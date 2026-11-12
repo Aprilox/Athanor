@@ -215,7 +215,7 @@ func (a *Approbations) Lire(id string) (Approbation, bool) {
 	return Approbation{}, false
 }
 
-// Reprendre (I6) looks for the same request (project, environment, action, details): an accepted one not
+// Reprendre (I6, C63) looks for the same request (project, environment, mission, agent, action, details): an accepted one not
 // used yet is used now ("utilisee"), else a pending one is returned ("attente"); "" when none.
 func (a *Approbations) Reprendre(x Approbation) (Approbation, string, error) {
 	bornerApprobation(&x)
@@ -225,7 +225,7 @@ func (a *Approbations) Reprendre(x Approbation) (Approbation, string, error) {
 	var attente *Approbation
 	for i := range a.liste {
 		y := &a.liste[i]
-		if y.Projet != x.Projet || y.Env != x.Env || y.Action != x.Action || !maps.Equal(y.Details, x.Details) {
+		if y.Projet != x.Projet || y.Env != x.Env || y.Mission != x.Mission || y.Agent != x.Agent || y.Action != x.Action || !maps.Equal(y.Details, x.Details) {
 			continue
 		}
 		if y.Etat == "acceptee" && y.Utilisee == "" {

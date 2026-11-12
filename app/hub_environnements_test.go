@@ -159,6 +159,23 @@ func TestEnvironnementsAPI(t *testing.T) {
 		env(v, "dev")["politique"] != "auto" || env(v, "prod")["protection"] != "access" {
 		t.Errorf("dev: %d %v", code, v)
 	}
+	// B71: saving an environment with "Ask for my accord" ends its "never ask again" deployment rule, only that one
+	s.approbations.mu.Lock()
+	s.approbations.regles = append(s.approbations.regles, RegleAccord{Projet: "demo", Env: "staging", Action: actionDeploiement},
+		RegleAccord{Projet: "demo", Env: "dev", Action: actionDeploiement}, RegleAccord{Projet: "demo", Env: "staging", Action: "demander_acces", Nom: "CLE"})
+	s.approbations.mu.Unlock()
+	if accord, _ := s.politiqueDeploiement("demo", "staging", false); accord {
+		t.Error("the staging rule is not applied")
+	}
+	if code, v := appel("POST", "/api/projets/demo/environnements", `{"env":"staging","politique":"accord"}`); code != 200 {
+		t.Fatalf("staging: %d %v", code, v)
+	}
+	if accord, raison := s.politiqueDeploiement("demo", "staging", false); !accord {
+		t.Errorf("the rule survived the accord policy: %s", raison)
+	}
+	if _, regles := s.approbations.Liste(); len(regles) != 2 || slices.Contains(regles, RegleAccord{Projet: "demo", Env: "staging", Action: actionDeploiement}) {
+		t.Errorf("rules after staging: %+v", regles)
+	}
 	// M113: the inventory and a server's sheet say which environments use it
 	if code, v := appel("GET", "/api/serveurs", ""); code != 200 || fmt.Sprint(v["environnements"].(map[string]any)[prod]) != "[demo/prod]" ||
 		fmt.Sprint(v["environnements"].(map[string]any)[dev]) != "[demo/dev]" {

@@ -306,6 +306,11 @@ func (s *Serveur) apiEnvironnementModifier(w http.ResponseWriter, r *http.Reques
 	if err == nil {
 		err = s.acces.DefinirEnvironnement(projet, c.Env, e)
 	}
+	if err == nil && e.Politique == "accord" { // B71: "Ask for my accord" ends the "never ask again" rule
+		_, err = s.approbations.RetirerRegles(func(r RegleAccord) bool {
+			return r.Projet == projet && r.Env == c.Env && r.Action == actionDeploiement
+		})
+	}
 	var entree erreurEntree
 	var avecArgs erreurEntreeArgs
 	switch {
@@ -366,11 +371,13 @@ func vueEnvironnement(e Environnement, serveurs []map[string]any) map[string]any
 const actionDeploiement = "deploiement"
 
 // politiqueDeploiement (I6): whether a deployment of the project to env waits for the owner's accord,
-// and why. Prod always does: neither a policy nor a "never ask again" rule lifts it.
-func (s *Serveur) politiqueDeploiement(projet, env string) (accordRequis bool, raison string) {
+// and why. Prod always does, and so does a destructive one (C64): neither a policy nor a rule lifts it.
+func (s *Serveur) politiqueDeploiement(projet, env string, destructif bool) (accordRequis bool, raison string) {
 	switch {
 	case env == "prod":
 		return true, "production always asks the owner"
+	case destructif:
+		return true, "a destructive deployment always asks the owner"
 	case s.acces.Environnements(projet)[env].Politique == "auto":
 		return false, "policy auto"
 	case s.approbations.Regle(RegleAccord{Projet: projet, Env: env, Action: actionDeploiement}):
