@@ -438,6 +438,24 @@ func TestServeursOutilsConteneur(t *testing.T) {
 		t.Errorf("SFTP round trip: %q", b)
 	}
 	appel("ssh_commande", map[string]any{"commande": "rm -f /tmp/recu.txt " + citerShell(piege)})
+	// B66: an upload cut in the middle (revoked, timed out) leaves no partial file on the server
+	if f, err := os.Create(filepath.Join(local, "gros.bin")); err == nil {
+		_ = f.Truncate(250 << 20)
+		f.Close()
+	}
+	var errCoupe error
+	for _, d := range []time.Duration{300 * time.Millisecond, time.Second, 3 * time.Second} {
+		ctxCoupe, couperEnvoi := context.WithTimeout(ctx, d)
+		_, errCoupe = s.appelerOutilServeur(ctxCoupe, "test", id, "sftp_envoyer", json.RawMessage(`{"local":"gros.bin","distant":"/tmp/gros.bin"}`), Sauvegarde{})
+		couperEnvoi()
+		if errCoupe != nil && strings.Contains(errCoupe.Error(), "sending to") {
+			break
+		}
+	}
+	if r := appel("ssh_commande", map[string]any{"commande": "ls /tmp | grep -c gros; rm -f /tmp/gros.bin*"}); errCoupe == nil || !strings.Contains(errCoupe.Error(), "sending to") || strings.TrimSpace(r.Sortie) != "0" {
+		t.Errorf("upload cut: %v; left on the server: %q", errCoupe, r.Sortie)
+	}
+	_ = os.Remove(filepath.Join(local, "gros.bin"))
 	// C40: sending onto a link to a 0600 file keeps the link and the mode
 	appel("ssh_commande", map[string]any{"commande": "printf 'S=1\\n' > /tmp/vrai.conf; chmod 600 /tmp/vrai.conf; ln -sf /tmp/vrai.conf /tmp/lien.conf"})
 	// M92: and the previous version is kept next to the real target, its mode too

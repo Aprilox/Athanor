@@ -26,6 +26,9 @@ import (
 // delaiAnnulation: how long a change waits for its confirmation (tests shorten it).
 var delaiAnnulation = 5 * time.Minute
 
+// margeVerifRetour (C49): how long after the deadline Athanor reads what the server's rollback did (tests shorten it).
+var margeVerifRetour = 30 * time.Second
+
 var reIDAnnulation = regexp.MustCompile(`^[0-9a-f]{8}$`)
 
 // AnnulationServeur: a change that waits for its confirmation (shown on the server page with its countdown).
@@ -36,6 +39,16 @@ type AnnulationServeur struct {
 	Echeance time.Time `json:"echeance"`
 	genre    string    // ufw or ssh
 }
+
+// RetourNonVerifie (C49): a rollback Athanor could not see done; the bell, with the command to check it by hand.
+type RetourNonVerifie struct{ ID, Serveur, Quoi, Pourquoi, Verifier string }
+
+// retoursNonVerifies: the bell's rollbacks to check, by id.
+// shortcut: in memory, like the pending changes; after a restart of Athanor only the audit log keeps them.
+var retoursNonVerifies = struct {
+	sync.Mutex
+	m map[string]RetourNonVerifie
+}{m: map[string]RetourNonVerifie{}}
 
 // annulations: the pending ones, in memory (after a restart of Athanor the server still undoes them by itself).
 var annulations = struct {
@@ -66,15 +79,21 @@ const preludeAnnulation = `export LC_ALL=C PATH="$PATH:/usr/sbin:/sbin:/usr/loca
 `
 
 // scriptRetour ($1 the saved state's folder): takes the folder (a confirmation that took it first wins), puts the
-// state back, logs to <folder>.log.
-const scriptRetour = preludeAnnulation + `D=$1; mv -- "$D" "$D.run" 2>/dev/null || exit 0; D=$D.run
+// state back, logs to <folder>.log; a step that fails is logged as ROLLBACK FAILED and exits 6 with the log (C49).
+const scriptRetour = preludeAnnulation + `D=$1; mv -- "$D" "$D.run" 2>/dev/null || exit 0; D=$D.run; e=0
 { case $(cat "$D/type") in
-  ufw) for f in user.rules user6.rules; do [ ! -e "$D/$f" ] || cp -p "$D/$f" /etc/ufw/; done
-    ufw status | grep -q '^Status: active' && ufw reload ;;
-  ssh) p=$(cat "$D/chemin"); if [ -e "$D/prev" ]; then cp -p -- "$D/prev" "$p"; else rm -f -- "$p"; fi
-    ` + rechargerSSHD + ` && echo "sshd reloaded" ;;
-esac; echo "rolled back $(date)"; } > "${D%.run}.log" 2>&1
-rm -rf -- "$D"`
+  ufw) for f in user.rules user6.rules; do [ ! -e "$D/$f" ] || cp -p "$D/$f" /etc/ufw/ || e=1; done
+    if ufw status | grep -q '^Status: active'; then ufw reload || e=1; fi ;;
+  ssh) p=$(cat "$D/chemin"); if [ -e "$D/prev" ]; then cp -p -- "$D/prev" "$p"; else rm -f -- "$p"; fi || e=1
+    if ` + rechargerSSHD + `; then echo "sshd reloaded"; else e=1; fi ;;
+esac; if [ $e = 0 ]; then echo "rolled back $(date)"; else echo "ROLLBACK FAILED $(date)"; fi; } > "${D%.run}.log" 2>&1
+rm -rf -- "$D"; [ $e = 0 ] || { cat -- "${D%.run}.log"; exit 6; }`
+
+// scriptLireRetour ($1 id): what the server's rollback logged (exit 7: it has not run, or left no trace).
+const scriptLireRetour = preludeAnnulation + `d=` + dossierSauvegardes + `
+if [ -f "$d/annul-$1.log" ]; then cat -- "$d/annul-$1.log"
+elif [ -e "$d/annul-$1" ] || [ -e "$d/annul-$1.run" ]; then echo "the rollback has not run (the server restarted?)"; exit 7
+else echo "the server kept no trace of the rollback"; exit 7; fi`
 
 const rechargerSSHD = `{ systemctl reload ssh || systemctl reload sshd || rc-service sshd reload || kill -HUP "$(cat /run/sshd.pid || cat /var/run/sshd.pid)"; }`
 
@@ -186,14 +205,7 @@ func (s *Serveur) apresChangement(ctx context.Context, c *ssh.Client, srv Serveu
 		s.ecrireAudit(LigneAudit{Type: "evenement", De: de, Vers: "serveur:" + srv.ID, Action: "serveurs.annulation", Resultat: an.ID + " · " + an.Quoi + " · " + res})
 	}
 	if err != nil || r.Code != 0 {
-		x, e := executerSSH(ctx, c, commeRoot(scriptFinir, an.ID, "annuler", scriptRetour), nil, delaiCommande)
-		if e == nil && x.Code == 0 {
-			r.Sortie += "\n(the change failed: the state before was put back)"
-			audit("échec du changement : état d'avant remis")
-		} else {
-			r.Sortie += "\n(the change failed; the state before will be put back by the server at " + an.Echeance.Format("15:04:05") + ")"
-			audit("échec du changement : retour arrière à l'échéance")
-		}
+		r.Sortie += "\n(the change failed; " + s.defaireMaintenant(ctx, c, srv, an, audit, "échec du changement") + ")"
 		return r
 	}
 	if an.genre == "ssh" {
@@ -207,13 +219,7 @@ func (s *Serveur) apresChangement(ctx context.Context, c *ssh.Client, srv Serveu
 				pourquoi += ": " + couper(strings.TrimSpace(string(x.Sortie)), 500)
 			}
 			r.Code = cmp.Or(r.Code, 1)
-			if y, e := executerSSH(ctx, c, commeRoot(scriptFinir, an.ID, "annuler", scriptRetour), nil, delaiCommande); e == nil && y.Code == 0 {
-				r.Sortie += "\n(" + pourquoi + ". The state before was put back and sshd reloaded.)"
-				audit(pourquoi + " : état d'avant remis")
-			} else {
-				r.Sortie += "\n(" + pourquoi + ". The state before will be put back by the server at " + an.Echeance.Format("15:04:05") + ".)"
-				audit(pourquoi + " : retour arrière à l'échéance")
-			}
+			r.Sortie += "\n(" + pourquoi + "; " + s.defaireMaintenant(ctx, c, srv, an, audit, pourquoi) + ")"
 			return r
 		}
 		r.Sortie += "\n" + strings.TrimSpace(string(x.Sortie))
@@ -243,13 +249,87 @@ func (s *Serveur) apresChangement(ctx context.Context, c *ssh.Client, srv Serveu
 		delete(annulations.m, an.ID)
 		annulations.Unlock()
 		if encore {
-			audit("non confirmé : remis par le serveur à l'échéance")
+			time.AfterFunc(margeVerifRetour, func() { s.verifierRetour(srv, an, audit, "non confirmé") })
 		}
 	})
 	audit(fmt.Sprintf("retour arrière programmé, échéance %s (nouvelle connexion : %v)", an.Echeance.Format("15:04:05"), e == nil))
 	r.Annulation = an.ID
 	r.Sortie += nouvelle
 	return r
+}
+
+// defaireMaintenant puts the state before back at once and says how it went (audit, and the bell if it failed); when
+// the server cannot do it now, its own rollback at the deadline is checked afterwards.
+func (s *Serveur) defaireMaintenant(ctx context.Context, c *ssh.Client, srv ServeurInventaire, an AnnulationServeur, audit func(string), cause string) string {
+	x, e := executerSSH(ctx, c, commeRoot(scriptFinir, an.ID, "annuler", scriptRetour), nil, delaiCommande)
+	switch {
+	case e == nil && x.Code == 0:
+		audit(cause + " : état d'avant remis")
+		if an.genre == "ssh" {
+			return "the state before was put back and sshd reloaded"
+		}
+		return "the state before was put back"
+	case e == nil && x.Code == 6:
+		pourquoi := "the rollback failed: " + couper(s.masquerSecrets(strings.TrimSpace(string(x.Sortie))), 300)
+		audit(cause + " : " + pourquoi)
+		s.noterRetourNonVerifie(srv, an, pourquoi)
+		return pourquoi + "; check the server"
+	}
+	audit(cause + " : retour arrière à l'échéance")
+	time.AfterFunc(time.Until(an.Echeance)+margeVerifRetour, func() { s.verifierRetour(srv, an, audit, cause) })
+	return "the state before will be put back by the server at " + an.Echeance.Format("15:04:05")
+}
+
+// verifierRetour (C49): after the deadline, a new connection reads the server's annul-<id>.log; the audit log says
+// what really happened, and a failed, missing or unreadable rollback rings the bell.
+func (s *Serveur) verifierRetour(srv ServeurInventaire, an AnnulationServeur, audit func(string), cause string) {
+	ctx, fin := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer fin()
+	pourquoi := ""
+	if c, err := s.connecterServeur(ctx, srv); err != nil {
+		pourquoi = "server unreachable: " + s.masquerSecrets(err.Error())
+	} else {
+		x, e := executerSSH(ctx, c, commeRoot(scriptLireRetour, an.ID), nil, delaiCommande)
+		c.Close()
+		log := couper(s.masquerSecrets(strings.TrimSpace(string(x.Sortie))), 300)
+		switch {
+		case e != nil:
+			pourquoi = "the server's log could not be read: " + s.masquerSecrets(e.Error())
+		case x.Code != 0 || strings.Contains(log, "ROLLBACK FAILED") || !strings.Contains(log, "rolled back "):
+			pourquoi = "the rollback failed: " + log
+		}
+	}
+	if pourquoi == "" {
+		audit(cause + " : remis par le serveur (vérifié)")
+		return
+	}
+	audit(cause + " : retour arrière non vérifié : " + pourquoi)
+	s.noterRetourNonVerifie(srv, an, pourquoi)
+}
+
+// noterRetourNonVerifie: the bell for a rollback to check, with the command that shows what the server did.
+func (s *Serveur) noterRetourNonVerifie(srv ServeurInventaire, an AnnulationServeur, pourquoi string) {
+	v := "sudo cat " + dossierSauvegardes + "/annul-" + an.ID + ".log; sudo ufw status verbose"
+	if an.genre == "ssh" {
+		v = "sudo cat " + dossierSauvegardes + "/annul-" + an.ID + ".log; sudo sshd -t"
+	}
+	retoursNonVerifies.Lock()
+	retoursNonVerifies.m[an.ID] = RetourNonVerifie{ID: an.ID, Serveur: srv.ID, Quoi: an.Quoi, Pourquoi: pourquoi, Verifier: v}
+	retoursNonVerifies.Unlock()
+}
+
+// retoursNonVerifiesDe: the rollbacks to check on server id.
+func retoursNonVerifiesDe(id string) []RetourNonVerifie {
+	retoursNonVerifies.Lock()
+	defer retoursNonVerifies.Unlock()
+	l := []RetourNonVerifie{}
+	for _, r := range retoursNonVerifies.m {
+		if r.Serveur == id {
+			l = append(l, r)
+		}
+	}
+	slices.SortFunc(l, func(a, b RetourNonVerifie) int { return strings.Compare(a.ID, b.ID) })
+	return l
 }
 
 // confirmerChangement keeps change idAn of server id: its rollback is cancelled on the server, by a new connection.

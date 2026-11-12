@@ -15,6 +15,9 @@ func TestServeursAnnulationConteneur(t *testing.T) {
 	avant := delaiAnnulation
 	delaiAnnulation = 10 * time.Second
 	t.Cleanup(func() { delaiAnnulation = avant })
+	margeAvant := margeVerifRetour
+	margeVerifRetour = 2 * time.Second
+	t.Cleanup(func() { margeVerifRetour = margeAvant })
 	const fichier = "/etc/ssh/athanor-m93.conf"
 	appel("ssh_commande", map[string]any{"commande": "printf 'v1\\n' | sudo -n tee " + fichier + " >/dev/null"})
 	t.Cleanup(func() {
@@ -64,8 +67,8 @@ func TestServeursAnnulationConteneur(t *testing.T) {
 	if l := annulationsDe(id); len(l) != 0 {
 		t.Errorf("still pending: %+v", l)
 	}
-	journal := journalAuditTexte(t)
-	for _, m := range []string{"retour arrière programmé", "gardé", "non confirmé : remis par le serveur"} {
+	journal := attendreAudit(t, "non confirmé : remis par le serveur (vérifié)", 2)
+	for _, m := range []string{"retour arrière programmé", "gardé"} {
 		if !strings.Contains(journal, m) {
 			t.Errorf("audit log without %q", m)
 		}
@@ -103,6 +106,46 @@ func TestServeursAnnulationConteneur(t *testing.T) {
 	if err != nil || strings.Contains(got, "DenyUsers") || !strings.Contains(got, "Include") {
 		t.Errorf("after the delay, connection %v, sshd_config %q", err, got)
 	}
+	attendreAudit(t, "non confirmé : remis par le serveur (vérifié)", 3)
+
+	// C49: a rollback whose ufw reload fails is not announced as done: the audit log says so and the bell rings
+	appel("ssh_commande", map[string]any{"commande": `sudo -n mv /usr/sbin/ufw /usr/sbin/ufw.vrai && printf '#!/bin/sh
+case "$1" in status) echo "Status: active";; reload) echo "faux ufw: reload refused"; exit 1;; *) exec /usr/sbin/ufw.vrai "$@";; esac
+' | sudo -n tee /usr/sbin/ufw >/dev/null && sudo -n chmod 755 /usr/sbin/ufw`})
+	t.Cleanup(func() {
+		appel("ssh_commande", map[string]any{"commande": "sudo -n mv -f /usr/sbin/ufw.vrai /usr/sbin/ufw"})
+	})
+	r = appel("pare_feu", map[string]any{"action": "allow", "port": 8484, "proto": "tcp"})
+	if r.Annulation == "" {
+		t.Fatalf("allow 8484: %+v", r)
+	}
+	journal = attendreAudit(t, "non confirmé : retour arrière non vérifié : the rollback failed: faux ufw: reload refused", 1)
+	if !strings.Contains(journal, "ROLLBACK FAILED") {
+		t.Errorf("audit log without the server's log: %s", journal)
+	}
+	var alerte *ElementHub
+	for _, e := range (moduleServeurs{}).Elements(s) {
+		if e.ID == id+":retour:"+r.Annulation {
+			alerte = &e
+		}
+	}
+	if alerte == nil || alerte.Attente == nil || len(alerte.Attente.Args) != 4 || alerte.Attente.Args[0] != "pare_feu allow 8484 tcp" ||
+		!strings.Contains(alerte.Attente.Args[3].(string), "annul-"+r.Annulation+".log") {
+		t.Errorf("the bell for the failed rollback: %+v", alerte)
+	}
+}
+
+// attendreAudit: the audit log once it holds texte n times (the rollbacks are checked in the background).
+func attendreAudit(t *testing.T, texte string, n int) string {
+	t.Helper()
+	j := ""
+	for fin := time.Now().Add(30 * time.Second); time.Now().Before(fin); time.Sleep(500 * time.Millisecond) {
+		if j = journalAuditTexte(t); strings.Count(j, texte) >= n {
+			return j
+		}
+	}
+	t.Errorf("audit log without %d × %q: %s", n, texte, couper(j, 3000))
+	return j
 }
 
 // TestGenreAnnulationRecharge (C48): a reload or restart of sshd, by a command or the service tool, gets the SSH rollback.

@@ -46,6 +46,8 @@ type ResultatOutil struct {
 	modifie bool
 	// what the call kept before changing (an archive, a previous version): the runbook's Backups (M96)
 	sauvegardes []string
+	// B66: a partial upload the cut connection could not remove: removed by a new connection
+	reste string
 }
 
 // argsOutilServeur: the arguments of every Servers tool (each one reads its own, unknown ones are refused).
@@ -171,6 +173,9 @@ func (s *Serveur) executerOutilServeur(ctx context.Context, de, id, outil string
 		}
 	}
 	r, err := f(ctx, c, l[i], a)
+	if r.reste != "" {
+		s.retirerReste(ctx, l[i], &r)
+	}
 	if genre != "" {
 		r = s.apresChangement(ctx, c, l[i], de, an, r, err)
 	}
@@ -184,6 +189,24 @@ func (s *Serveur) executerOutilServeur(ctx context.Context, de, id, outil string
 		}
 	}
 	return r, err
+}
+
+// retirerReste (B66): a call cut (revoked, timed out) closed its connection; its partial file is removed by a new one.
+func (s *Serveur) retirerReste(ctx context.Context, srv ServeurInventaire, r *ResultatOutil) {
+	ctx, fin := context.WithTimeout(context.WithoutCancel(ctx), delaiCommande)
+	defer fin()
+	c, err := s.connecterServeur(ctx, srv)
+	if err == nil {
+		var x ResultatSSH
+		x, err = executerSSH(ctx, c, scriptShell(false, `rm -f -- "$1"`, r.reste), nil, delaiCommande)
+		c.Close()
+		if err == nil && x.Code != 0 {
+			err = errors.New(strings.TrimSpace(string(x.Sortie)))
+		}
+	}
+	if err != nil {
+		r.Sortie += "\n(the partial file " + r.reste + " could not be removed: " + err.Error() + ")"
+	}
 }
 
 // resultatSSH: a command's result as a tool answers it.
@@ -449,8 +472,11 @@ func outilSFTPEnvoyer(ctx context.Context, c *ssh.Client, srv ServeurInventaire,
 		err = cs.PosixRename(part, cible) // replaces the target in one step
 	}
 	if err != nil {
-		_ = cs.Remove(part)
-		return ResultatOutil{Code: -1}, fmt.Errorf("sending to %s: %w", distant, err)
+		r := ResultatOutil{Code: -1}
+		if cs.Remove(part) != nil {
+			r.reste = part
+		}
+		return r, fmt.Errorf("sending to %s: %w", distant, err)
 	}
 	sortie := fmt.Sprintf("%d bytes sent to %s", n, distant)
 	r := ResultatOutil{Sortie: sortie}

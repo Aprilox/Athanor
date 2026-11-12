@@ -19,6 +19,9 @@ func TestServeursCIConteneur(t *testing.T) {
 	avant := delaiAnnulation
 	delaiAnnulation = 10 * time.Second
 	t.Cleanup(func() { delaiAnnulation = avant })
+	margeAvant := margeVerifRetour
+	margeVerifRetour = 2 * time.Second
+	t.Cleanup(func() { margeVerifRetour = margeAvant })
 	const fichier = "/tmp/athanor-ci.txt"
 	t.Cleanup(func() {
 		direct("ssh_commande", map[string]any{"commande": "rm -f " + fichier + "*; sudo -n ufw --force delete allow 8383/tcp; sudo -n rm -rf /var/backups/athanor"})
@@ -108,7 +111,5 @@ func TestServeursCIConteneur(t *testing.T) {
 	if l := annulationsDe(id); len(l) != 0 {
 		t.Errorf("still pending: %+v", l)
 	}
-	if j := journalAuditTexte(t); !strings.Contains(j, "non confirmé : remis par le serveur") {
-		t.Error("the rollback is not in the audit log")
-	}
+	attendreAudit(t, "non confirmé : remis par le serveur (vérifié)", 1)
 }

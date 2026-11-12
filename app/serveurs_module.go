@@ -29,6 +29,10 @@ func (moduleServeurs) Elements(*Serveur) []ElementHub {
 			out = append(out, ElementHub{ID: x.ID + ":verification", Titre: x.Nom, Etat: "erreur", Lien: "#serveur/" + x.ID,
 				Attente: &AttenteElement{Raison: "The external check of a task on {0} failed: {1}", Args: []any{x.Nom, strings.Join(t[0].Verification.Lignes, " · ")}, Page: "#serveur/" + x.ID, Cle: t[0].ID}})
 		}
+		for _, r := range retoursNonVerifiesDe(x.ID) { // C49: a rollback the server could not be seen doing
+			out = append(out, ElementHub{ID: x.ID + ":retour:" + r.ID, Titre: x.Nom, Etat: "erreur", Lien: "#serveur/" + x.ID,
+				Attente: &AttenteElement{Raison: "The automatic rollback of {0} on {1} is not verified ({2}): check it with {3}", Args: []any{r.Quoi, x.Nom, r.Pourquoi, r.Verifier}, Page: "#serveur/" + x.ID, Cle: r.ID}})
+		}
 	}
 	return out
 }
