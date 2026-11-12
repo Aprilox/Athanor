@@ -689,13 +689,21 @@ const scriptPareFeu = `command -v ufw >/dev/null 2>&1 || { echo "ufw is not inst
 case $1 in
   status) $S ufw status verbose && exec $S ufw show added;;
   delete) exec $S ufw --force delete "$2" "$3";;
+  tout_refuser) shift 3; $S ufw default deny incoming && $S ufw default allow outgoing || exit 1
+    for p in "$@"; do $S ufw allow "$p/tcp" || exit 1; done; $S ufw --force enable && exec $S ufw status verbose;;
   *) exec $S ufw "$1" "$3";;
 esac`
 
 // specPareFeu: pare_feu's arguments checked without the server; the rule as ufw takes it ("" for status).
 func specPareFeu(srv ServeurInventaire, a argsOutilServeur) (string, error) {
-	if err := choix("action", a.Action, "status", "allow", "deny", "delete"); err != nil || a.Action == "status" {
+	if err := choix("action", a.Action, "status", "allow", "deny", "delete", "tout_refuser"); err != nil || a.Action == "status" {
 		return "", err
+	}
+	if a.Action == "tout_refuser" { // M138: the ports kept open are Athanor's (portsDurci), never the caller's
+		if a.Port != 0 || a.Proto != "" || a.Regle != "" {
+			return "", errors.New("tout_refuser takes no port, proto nor regle: SSH, 80 and 443 stay open")
+		}
+		return "tout", nil
 	}
 	if a.Port < 1 || a.Port > 65535 {
 		return "", errors.New("port must be between 1 and 65535")
@@ -739,7 +747,13 @@ func outilPareFeu(ctx context.Context, c *ssh.Client, srv ServeurInventaire, a a
 	if err := logicielAbsent(srv, "ufw"); err != nil {
 		return ResultatOutil{Code: -1}, err
 	}
-	r, err := executerSSH(ctx, c, scriptShell(false, preludeRoot+scriptPareFeu, a.Action, a.Regle, spec), nil, delaiCommande)
+	args := []string{a.Action, a.Regle, spec}
+	if a.Action == "tout_refuser" {
+		for _, p := range portsDurci(ctx, c, srv) {
+			args = append(args, strconv.Itoa(p))
+		}
+	}
+	r, err := executerSSH(ctx, c, scriptShell(false, preludeRoot+scriptPareFeu, args...), nil, delaiCommande)
 	res := resultatSSH(r)
 	res.modifie = a.Action != "status"
 	return res, err

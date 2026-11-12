@@ -59,8 +59,8 @@ func init() {
 		{"docker", "Docker containers and Compose projects of the server.",
 			map[string]any{"action": parmi("What to do", "ps", "logs", "pull", "restart", "compose_up", "compose_down", "compose_ps"),
 				"nom": schemaTexte("Container (logs, restart) or image (pull)"), "lignes": entier("Lines of logs (logs)"), "dossier": schemaTexte("Absolute folder of the compose file (compose_*)")}, []string{"action"}},
-		{"pare_feu", "The server's ufw firewall: status, allow, deny or delete a rule. A rule that could cut Athanor's SSH port is refused.",
-			map[string]any{"action": parmi("What to do", "status", "allow", "deny", "delete"), "port": entier("Port, 1 to 65535"),
+		{"pare_feu", "The server's ufw firewall: status, allow, deny or delete a rule, or tout_refuser (refuse every incoming connection except SSH, 80 and 443, then enable ufw). A rule that could cut Athanor's SSH port is refused.",
+			map[string]any{"action": parmi("What to do", "status", "allow", "deny", "delete", "tout_refuser"), "port": entier("Port, 1 to 65535"),
 				"proto": parmi("Protocol (both when empty)", "", "tcp", "udp"), "regle": parmi("Kind of the rule to delete (delete)", "allow", "deny")}, []string{"action"}},
 	} {
 		d.props["serveur"], d.props["classe"] = srv, classe

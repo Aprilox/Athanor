@@ -558,5 +558,8 @@ func (s *Serveur) deciderApprobation(qui, id, decision, entree, envChoisi, varia
 	}
 	s.ecrireAudit(LigneAudit{Type: "evenement", De: qui, Vers: "hub", Mission: x.Mission, Projet: x.Projet, Env: x.Env, Agent: x.Agent,
 		Action: "approbation " + decision, Resultat: x.Action + " " + x.ID + " → " + x.Etat + accorde})
+	if s.planDurcissementAccepte(x) { // M138: Athanor's own plan, run by Athanor
+		go s.appliquerDurcissement(x.ID)
+	}
 	return x, 0, nil
 }

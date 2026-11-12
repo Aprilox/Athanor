@@ -169,6 +169,7 @@ func (s *Serveur) apiServeurModifier(w http.ResponseWriter, r *http.Request) {
 		Rafraichir       bool      `json:"rafraichir"`
 		MotDePasse       string    `json:"mot_de_passe"` // Athanor's password: taking the prod role away (C37)
 		Garder           string    `json:"garder"`       // a firewall or SSH change kept (serveurs_annulation.go)
+		Durcir           bool      `json:"durcir"`       // the hardening plan proposed (serveurs_durcir.go)
 	}
 	if lireCorps(r, &c) != nil {
 		s.erreur(w, http.StatusBadRequest, "Invalid request")
@@ -176,6 +177,10 @@ func (s *Serveur) apiServeurModifier(w http.ResponseWriter, r *http.Request) {
 	}
 	if c.CouperMotDePasse {
 		s.couperMotDePasse(w, r, r.PathValue("id"))
+		return
+	}
+	if c.Durcir {
+		s.apiServeurDurcir(w, r, r.PathValue("id"))
 		return
 	}
 	if c.Rafraichir {

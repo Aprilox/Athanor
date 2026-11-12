@@ -48,6 +48,8 @@ type EtapePlan struct {
 	Essais  int    `json:"essais,omitempty"`
 	// the archive made before the step ran: its path, size and paths (C53)
 	Archive string `json:"archive,omitempty"`
+	// a hardening step (M138): its key in etapesDurcir, set by Athanor only, never by an agent
+	Durcir string `json:"durcir,omitempty"`
 }
 
 // PlanServeur: hub/plans/<id>.json, id = its approval's.

@@ -147,7 +147,7 @@ jobs:
       - name: Servers tests on the container
         # a skip (ATHANOR_SSH_TEST lost) would pass silently: the PASS line is required
         run: |
-          go test -count=1 -timeout 10m -run '^(TestServeursCIConteneur|TestCaddyConteneur|TestDeploiementStatiqueConteneur|TestDeploiementGitConteneur|TestDeploiementComposeConteneur|TestDeploiementAgentConteneur|TestRelaisJalonConteneur)$' -v . | tee ci.log
+          go test -count=1 -timeout 10m -run '^(TestServeursCIConteneur|TestCaddyConteneur|TestDeploiementStatiqueConteneur|TestDeploiementGitConteneur|TestDeploiementComposeConteneur|TestDeploiementAgentConteneur|TestRelaisJalonConteneur|TestDurcirConteneur)$' -v . | tee ci.log
           grep -q -- '--- PASS: TestServeursCIConteneur' ci.log
           grep -q -- '--- PASS: TestCaddyConteneur' ci.log
           grep -q -- '--- PASS: TestDeploiementStatiqueConteneur' ci.log
@@ -155,6 +155,7 @@ jobs:
           grep -q -- '--- PASS: TestDeploiementComposeConteneur' ci.log
           grep -q -- '--- PASS: TestDeploiementAgentConteneur' ci.log
           grep -q -- '--- PASS: TestRelaisJalonConteneur' ci.log
+          grep -q -- '--- PASS: TestDurcirConteneur' ci.log
 
   vuln:
     # known vulnerabilities of the Go standard library and of the modules, in the code Athanor really calls

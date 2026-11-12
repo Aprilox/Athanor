@@ -83,7 +83,8 @@ const preludeAnnulation = `export LC_ALL=C PATH="$PATH:/usr/sbin:/sbin:/usr/loca
 const scriptRetour = preludeAnnulation + `D=$1; mv -- "$D" "$D.run" 2>/dev/null || exit 0; D=$D.run; e=0
 { case $(cat "$D/type") in
   ufw) for f in user.rules user6.rules; do [ ! -e "$D/$f" ] || cp -p "$D/$f" /etc/ufw/ || e=1; done
-    if ufw status | grep -q '^Status: active'; then ufw reload || e=1; fi ;;
+    [ ! -e "$D/defaut" ] || cp -p "$D/defaut" /etc/default/ufw || e=1
+    if [ -e "$D/inactif" ]; then ufw --force disable || e=1; elif ufw status | grep -q '^Status: active'; then ufw reload || e=1; fi ;;
   ssh) p=$(cat "$D/chemin"); if [ -e "$D/prev" ]; then cp -p -- "$D/prev" "$p"; else rm -f -- "$p"; fi || e=1
     if ` + rechargerSSHD + `; then echo "sshd reloaded"; else e=1; fi ;;
 esac; if [ $e = 0 ]; then echo "rolled back $(date)"; else echo "ROLLBACK FAILED $(date)"; fi; } > "${D%.run}.log" 2>&1
@@ -114,7 +115,9 @@ const scriptProgrammer = preludeAnnulation + `d=` + dossierSauvegardes + `; D="$
 for x in "$d"/annul-*/type; do [ -f "$x" ] && [ "$(cat "$x")" = "$2" ] && { echo "a change of the same kind still waits for its confirmation (${x%/type}): confirm it or let it be undone first"; exit 3; }; done
 mkdir -p -m 700 "$d" && mkdir -m 700 "$D" || exit 1
 { echo "$2" > "$D/type" && case $2 in
-  ufw) for f in user.rules user6.rules; do [ ! -e "/etc/ufw/$f" ] || cp -p "/etc/ufw/$f" "$D/" || { rm -rf -- "$D"; exit 1; }; done ;;
+  ufw) for f in user.rules user6.rules; do [ ! -e "/etc/ufw/$f" ] || cp -p "/etc/ufw/$f" "$D/" || { rm -rf -- "$D"; exit 1; }; done
+    [ ! -e /etc/default/ufw ] || cp -p /etc/default/ufw "$D/defaut" || { rm -rf -- "$D"; exit 1; }
+    ufw status 2>/dev/null | grep -q '^Status: active' || touch "$D/inactif" ;;
   ssh) p=$(readlink -f -- "$4") && [ -n "$p" ] || p=$4; printf '%s\n' "$p" > "$D/chemin" && { [ ! -e "$p" ] || cp -p -- "$p" "$D/prev"; } ;;
 esac && if command -v systemd-run >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
   systemd-run --quiet --unit="athanor-annul-$1" --on-active="$3" /bin/sh -c "$5" sh "$D"
@@ -178,6 +181,8 @@ func genreAnnulation(ctx context.Context, c *ssh.Client, srv ServeurInventaire, 
 func programmerAnnulation(ctx context.Context, c *ssh.Client, srv ServeurInventaire, outil, genre, chemin string, a argsOutilServeur) (AnnulationServeur, error) {
 	an := AnnulationServeur{ID: aleatoire(4), Serveur: srv.ID, Echeance: time.Now().Add(delaiAnnulation), genre: genre}
 	switch {
+	case genre == "ufw" && a.Action == "tout_refuser":
+		an.Quoi = "pare_feu tout_refuser"
 	case genre == "ufw":
 		an.Quoi = strings.Join(strings.Fields(fmt.Sprintf("pare_feu %s %s %d %s", a.Action, a.Regle, a.Port, a.Proto)), " ")
 	case outil == "ssh_commande":

@@ -1315,6 +1315,9 @@ func classerOutil(outil string, a argsOutilServeur) (Classe, string) {
 		if a.Action == "status" {
 			return ClasseLecture, "reads the firewall's state"
 		}
+		if a.Action == "tout_refuser" {
+			return ClasseDestructrice, "tout_refuser closes every incoming port except SSH, 80 and 443"
+		}
 		return ClasseChangement, a.Action + " changes a firewall rule"
 	}
 	return ClasseDestructrice, "unknown tool"

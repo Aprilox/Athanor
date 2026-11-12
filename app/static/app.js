@@ -2738,10 +2738,10 @@ function blocPlan(x, p) {
     const fait = !e.executee ? "" : e.etat === "ok" ? ` <span class="pv-etat pv-ok">✓ ${t("applied")}</span>` : e.etat === "echec" ? ` <span class="pv-etat pv-vous">✗ ${t("failed")}</span>` : ` <span class="pv-etat pv-claude">${t("running…")}</span>`;
     return `<li><div class="plan-etape-tete"><code>${h(e.outil)}</code> <span class="pv-etat ${cl}">${h(lib)}</span>${fait}</div>
       ${e.raison ? `<div class="petit muet">${t("Why this class:")} <span lang="en">${h(e.raison)}</span></div>` : ""}${e.etat === "echec" && e.message ? `<div class="petit echec">${h(e.message)}</div>` : ""}
-      <div class="plan-args">${argumentsLisibles(e.lisible)}</div><div class="pv-details m0">${h(e.pourquoi)}</div>
-      ${(e.sauvegarde || []).length ? `<div class="petit plan-args">${h(t("Backed up first: {0}", [e.sauvegarde.join(", ")]))}</div>` : ""}${e.sans_sauvegarde ? `<div class="petit plan-args">${h(t("No backup: {0}", [e.sans_sauvegarde]))}</div>` : ""}${e.archive ? `<div class="petit plan-args">${h(t("Archive made: {0}", [e.archive]))}</div>` : ""}</li>`;
+      <div class="plan-args">${argumentsLisibles(e.lisible)}</div><div class="pv-details m0">${h(e.durcir ? t(e.pourquoi) : e.pourquoi)}</div>
+      ${(e.sauvegarde || []).length ? `<div class="petit plan-args">${h(t("Backed up first: {0}", [e.sauvegarde.join(", ")]))}</div>` : ""}${e.sans_sauvegarde ? `<div class="petit plan-args">${h(t("No backup: {0}", [e.durcir ? t(e.sans_sauvegarde) : e.sans_sauvegarde]))}</div>` : ""}${e.archive ? `<div class="petit plan-args">${h(t("Archive made: {0}", [e.archive]))}</div>` : ""}</li>`;
   }).join("");
-  return `<div class="pv-details">${h(p.resume)}</div><ol class="plan-etapes">${etapes}</ol>
+  return `<div class="pv-details">${h(p.agent === "durcissement" ? t(p.resume) : p.resume)}</div><ol class="plan-etapes">${etapes}</ol>
     ${p.critique ? blocCritique(p.critique) : ""}`;
 }
 // the security critic's verdict (M98): reading, no risk found, or its risks one per line
@@ -4982,7 +4982,8 @@ pages.serveur = async () => {
       <div class="muet petit">${f && f.date ? h(t("Sheet read {0}", [dateLisible(f.date)])) : ""}${x.vu ? (f && f.date ? " · " : "") + h(t("Seen {0}", [dateLisible(x.vu)])) : ""}</div>
       ${distant ? `<p class="muet petit m0">${t("Read only from this device: the server is changed on the computer.")}</p>` : `<div class="ligne m0">
         ${attente ? `<button type="button" class="btn btn-primaire" data-srv-verifier="${h(x.id)}">${t("Verify")}</button>` : `<button type="button" class="btn" data-srv-rafraichir>↻ ${t("Refresh")}</button>`}
-        ${!attente && !x.mot_de_passe_coupe ? `<button type="button" class="btn" data-srv-couper="${h(x.id)}">${t("Cut password logins")}</button>` : ""}</div>`}
+        ${!attente && !x.mot_de_passe_coupe ? `<button type="button" class="btn" data-srv-couper="${h(x.id)}">${t("Cut password logins")}</button>` : ""}
+        ${attente ? "" : `<button type="button" class="btn" data-srv-durcir="${h(x.id)}" title="${h(t("A fixed plan: a user with sudo instead of root, SSH keys only, no root login, a firewall that refuses all but SSH, 80 and 443, security updates, the clock synchronised, Caddy. Each step already in place is skipped; you accept the plan first."))}">🛡 ${t("Harden this server")}</button>`}</div>`}
     </div>
     ${blocTaches(ta, distant, (d.annulations || []).length ? `<div class="srv-annulations"><h4 class="m0">${t("Changes waiting for confirmation")}</h4>
       <p class="muet petit">${t("Athanor put a safety net on these firewall or SSH changes: unless you keep them, the server undoes them by itself when the countdown ends.")}</p>
@@ -5091,7 +5092,7 @@ $("#page").addEventListener("change", async (ev) => {
 });
 $("#page").addEventListener("click", async (ev) => {
   if (etat.page !== "serveur") return;
-  const b = ev.target.closest("[data-srv-rafraichir], [data-srv-couper], [data-srv-verifier], [data-srv-retirer], [data-srv-garder], [data-srv-tache-arreter], [data-srv-tache-carte]");
+  const b = ev.target.closest("[data-srv-rafraichir], [data-srv-couper], [data-srv-durcir], [data-srv-verifier], [data-srv-retirer], [data-srv-garder], [data-srv-tache-arreter], [data-srv-tache-carte]");
   if (!b) return;
   const x = srv.fiche, url = "serveurs/" + encodeURIComponent(x.id), d = b.dataset;
   if (d.srvTacheCarte) { etat.apprCible = d.srvTacheCarte; return; } // the link opens For you, where the card is scrolled to
@@ -5117,10 +5118,11 @@ $("#page").addEventListener("click", async (ev) => {
   }
   const texte = b.textContent;
   b.disabled = true;
-  if (d.srvRafraichir !== undefined) b.textContent = t("Reading the server…");
+  if (d.srvRafraichir !== undefined || d.srvDurcir) b.textContent = t("Reading the server…");
   try {
-    const r = await action(api(d.srvVerifier ? "serveurs/ajouter" : url, "POST", d.srvVerifier ? { id: x.id } : d.srvCouper ? { couper_mot_de_passe: true } : { rafraichir: true }));
+    const r = await action(api(d.srvVerifier ? "serveurs/ajouter" : url, "POST", d.srvVerifier ? { id: x.id } : d.srvCouper ? { couper_mot_de_passe: true } : d.srvDurcir ? { durcir: true } : { rafraichir: true }));
     if (!r) return;
+    if (d.srvDurcir) { toast(r.deja ? t("{0} is already hardened: every step is in place.", [x.nom]) : t("Hardening plan ready ({0} steps): read it and accept it in Approvals.", [String(r.etapes.length)]), "ok"); return; }
     if (r.fiche_erreur) toast(t(r.fiche_erreur), "erreur");
     toast(d.srvCouper ? t("Password logins are cut on {0}.", [x.nom]) : d.srvVerifier ? t("{0} added", [x.nom]) : t("Sheet of {0} read again.", [x.nom]), "ok");
   } finally { b.disabled = false; b.textContent = texte; }
