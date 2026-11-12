@@ -136,13 +136,16 @@ func (a *Acces) Environnements(projet string) map[string]Environnement {
 			e = *p.Environnements[nom]
 			e.Serveurs = append([]string{}, e.Serveurs...)
 		}
+		if p := a.f.Projets[projet]; p != nil {
+			e.CleDeploiement = p.CleDeploiement // one key per project
+		}
 		r[nom] = e
 	}
 	return r
 }
 
-// DefinirEnvironnement replaces environment nom of the project (already validated); its deployment key
-// stays, it is Athanor's.
+// DefinirEnvironnement replaces environment nom of the project (already validated); its certificate stays,
+// it is Athanor's (the deployment key is the project's: ProjetAcces.CleDeploiement).
 func (a *Acces) DefinirEnvironnement(projet, nom string, e Environnement) error {
 	return a.modifier(func(f *fichierAcces) error {
 		p := projetDe(f, projet)
@@ -151,7 +154,7 @@ func (a *Acces) DefinirEnvironnement(projet, nom string, e Environnement) error 
 		}
 		e.CleDeploiement, e.Certificat, e.CertificatExpire = "", "", ""
 		if avant := p.Environnements[nom]; avant != nil {
-			e.CleDeploiement, e.Certificat, e.CertificatExpire = avant.CleDeploiement, avant.Certificat, avant.CertificatExpire
+			e.Certificat, e.CertificatExpire = avant.Certificat, avant.CertificatExpire
 		}
 		p.Environnements[nom] = &e
 		return nil

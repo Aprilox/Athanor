@@ -467,6 +467,7 @@ func (s *Serveur) apiGitHub(w http.ResponseWriter, r *http.Request) {
 			s.erreur(w, http.StatusInternalServerError, err.Error())
 			return
 		}
+		s.oublierCleDeploiement(p.Nom) // off the repository: delierGH
 		if avant.Connexion {
 			s.msg(w, "Unlinked: this computer stays connected to GitHub, for its other projects.")
 			return

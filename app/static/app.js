@@ -4315,7 +4315,6 @@ function blocEnvironnements(en, inventaire, fournisseurs, distant) {
         : `<label class="env-champ">${t("Deployment policy")}<select data-env-champ="politique"${ro}>${options([["accord", t("Ask for my approval")], ["auto", t("Automatic when nothing is destroyed")]], e.politique)}</select></label>`}
       ${fourn.length ? `<label class="env-champ">${t("DNS provider")}<select data-env-champ="fournisseur"${ro}>${options([["", t("None")], ...fourn], e.fournisseur || "")}</select></label>`
         : `<div class="env-champ"><span>${t("DNS provider")}</span><p class="muet petit">${t("None: providers (Cloudflare) are added in Servers.")}</p></div>`}
-      <div class="env-champ"><span>${t("Deployment key")}</span><p class="petit${e.cle_deploiement ? "" : " muet"}">${e.cle_deploiement ? `✔ ${t("Created by Athanor, read-only on the repository")}` : t("Not created yet: Athanor makes it when the project is linked to GitHub.")}</p></div>
       <p class="petit attention env-erreur" role="alert" hidden></p>
       ${distant ? "" : `<button type="button" class="btn btn-petit" data-env-enregistrer>${t("Save")}</button>`}
     </section>`;
@@ -4323,8 +4322,27 @@ function blocEnvironnements(en, inventaire, fournisseurs, distant) {
   return `<div class="bloc environnements"><h2>${t("Environments")}</h2>
     <p class="intro petit">${t("Where each environment of the project runs: its address, its servers, its protection and whether a deployment waits for your approval.")}</p>
     ${distant ? `<p class="petit muet">${t("Shown only: change the environments on the PC.")}</p>` : ""}
-    <div class="env-cartes">${en.envs.map(carte).join("")}</div></div>`;
+    <div class="env-cartes">${en.envs.map(carte).join("")}</div>
+    ${blocCleDeploiement(en, distant)}</div>`;
 }
+// the project's GitHub deployment key (one for every environment), made on demand (M119)
+function blocCleDeploiement(en, distant) {
+  const cle = en.envs.some((n) => en.environnements[n].cle_deploiement);
+  return `<div class="env-cle" data-env-cle-bloc><h3>${t("Deployment key")}</h3>
+    <p class="petit">${cle ? `✔ ${t("Created by Athanor, read-only on the repository")}` : t("A read-only key on the project's GitHub repository, kept in the vault: the servers use it to fetch the code.")}</p>
+    ${cle || distant ? "" : `<button type="button" class="btn btn-petit" data-env-cle>${t("Create the deployment key")}</button>`}
+    <p class="petit attention env-erreur" role="alert" hidden></p></div>`;
+}
+$("#page").addEventListener("click", async (ev) => {
+  if (etat.page !== "acces") return;
+  const b = ev.target.closest("[data-env-cle]"); if (!b) return;
+  const err = b.closest("[data-env-cle-bloc]").querySelector(".env-erreur");
+  b.disabled = true; err.hidden = true;
+  try {
+    const r = await api("projets/" + encodeURIComponent(acc.projet) + "/cle-deploiement", "POST", {});
+    toast(r.deja ? t("The deployment key already exists.") : t("Deployment key created, read-only on {0}.", [r.depot]), "ok"); rendrePage();
+  } catch (e) { err.textContent = e.message; err.hidden = false; b.disabled = false; }
+});
 $("#page").addEventListener("click", async (ev) => {
   if (etat.page !== "acces") return;
   const b = ev.target.closest("[data-env-enregistrer]"); if (!b) return;

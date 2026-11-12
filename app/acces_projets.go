@@ -43,6 +43,8 @@ type ProjetAcces struct {
 	Acces            []AccesProjet `json:"acces"`
 	// stage 7: where each environment lives (hub_environnements.go); absent in older files
 	Environnements map[string]*Environnement `json:"environnements,omitempty"`
+	// the GitHub deployment key's vault entry (hub_cle_deploiement.go), set by Athanor only
+	CleDeploiement string `json:"cle_deploiement,omitempty"`
 }
 
 type fichierAcces struct {

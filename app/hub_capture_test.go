@@ -270,7 +270,8 @@ func accesCapture(t *testing.T, s *Serveur, p, p3 Projet) {
 	// M112 (projet-environnements-*): prod configured on c0ffee01 with its deployment key; staging set by the script
 	if err := s.acces.modifier(func(f *fichierAcces) error {
 		projetDe(f, p.Nom).Environnements = map[string]*Environnement{"prod": {URL: "https://boutique.example.org", Serveurs: []string{"c0ffee01"},
-			Protection: "access", Politique: "accord", CleDeploiement: "cle-deploiement-capture"}}
+			Protection: "access", Politique: "accord"}}
+		projetDe(f, p.Nom).CleDeploiement = "cle-deploiement-capture"
 		return nil
 	}); err != nil {
 		t.Fatal(err)

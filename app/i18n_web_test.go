@@ -70,6 +70,7 @@ func TestWebTraduction(t *testing.T) {
 		errFournisseurUtilise, "This Cloudflare token has expired: create a new one and replace it in the Vault.",
 		"This Cloudflare token is disabled: enable it again on Cloudflare or replace it.",
 		"This Cloudflare token sees no zone: give it access to your domain's zone.") // the providers (M114)
+	cles = append(cles, errCleDeploiementNonLie.Error(), errCleDeploiementGH) // the deployment key (M119)
 	for _, l := range []string{"fr", "es", "de", "it", "pt"} {
 		dico := dicoTUI(l)
 		if len(dico) < 1000 {

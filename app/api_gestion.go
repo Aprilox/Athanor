@@ -746,6 +746,7 @@ func (s *Serveur) retirerProjet(p Projet) error {
 	delete(s.relancer, p.Nom)
 	s.mu.Unlock()
 	if s.acces != nil {
+		s.oublierCleDeploiement(p.Nom) // the vault entry goes with the grants (the repository: oublierGitHub)
 		_ = s.acces.SupprimerProjet(p.Nom)
 	}
 	k := s.kitCourant()

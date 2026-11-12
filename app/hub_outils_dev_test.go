@@ -83,7 +83,8 @@ func TestOutilsDev(t *testing.T) {
 	}
 	if err := s.acces.modifier(func(f *fichierAcces) error {
 		projetDe(f, "demo").Environnements = map[string]*Environnement{"staging": {URL: "https://staging.exemple.fr", Serveurs: []string{"ab12cd34"},
-			Protection: "access", Politique: "auto", Fournisseur: "fournisseur-temoin", CleDeploiement: "cle-temoin-" + e.ID}}
+			Protection: "access", Politique: "auto", Fournisseur: "fournisseur-temoin"}}
+		projetDe(f, "demo").CleDeploiement = "cle-temoin-" + e.ID
 		return nil
 	}); err != nil {
 		t.Fatal(err)

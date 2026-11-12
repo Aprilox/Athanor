@@ -1021,6 +1021,8 @@ ol.guide-access li { margin: 5px 0; }
 .acc-repli { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; }
 @media (max-width: 900px) { .acc-grille, .acc-envs { grid-template-columns: 1fr; } .acc-env { min-height: 0; } }
 .env-cartes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.env-cle { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.env-cle h3 { margin: 0; font-size: 14px; }
 .env-carte { border: 1px solid var(--line); border-radius: var(--rayon); padding: 10px; background: var(--bg); display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .env-carte.env-prod { border-color: var(--attention); }
 .env-carte h3 { margin: 0; font-size: 14px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }

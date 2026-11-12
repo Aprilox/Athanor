@@ -900,6 +900,7 @@ func delierGH(args []string, w io.Writer) int {
 	if v != nil {
 		defer v.Close()
 	}
+	retirerCleDeploiementGH(d, r.Depot, w) // before its id goes with the folder
 	l, _ := os.ReadDir(d)
 	for _, e := range l {
 		if e.Name() != "identite" && e.Name() != "compte" { // the commit author stays
@@ -1288,6 +1289,8 @@ func commandeGitHub(args []string, w io.Writer) (int, bool) {
 		return code, true
 	case "delier":
 		return delierGH(reste, w), true
+	case "cle-deploiement":
+		return cleDeploiementGH(reste, w), true
 	case "suivre":
 		return suivreGH(reste, w), true
 	case "identite":
