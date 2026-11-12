@@ -176,6 +176,7 @@ func outilProposerPlan(s *Serveur, x SessionHub, args json.RawMessage) (string, 
 	if err != nil {
 		return "", err
 	}
+	resume = s.masquerSecrets(resume) // the summary reaches the approval, Web Push and approbations.json
 	if len(a.Etapes) == 0 || len(a.Etapes) > maxEtapesPlan {
 		return "", fmt.Errorf("a plan has 1 to %d steps", maxEtapesPlan)
 	}
@@ -211,6 +212,7 @@ func outilProposerPlan(s *Serveur, x SessionHub, args json.RawMessage) (string, 
 		if err != nil {
 			return echec(fmt.Errorf("step %d: %w", i+1, err))
 		}
+		pourquoi = s.masquerSecrets(pourquoi)
 		if len(e.Sauvegarde) > maxSauvegardes {
 			return echec(fmt.Errorf("step %d: %d paths to back up at most", i+1, maxSauvegardes))
 		}

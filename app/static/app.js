@@ -1118,6 +1118,7 @@ const chargerMenu = () => api("hub").then((d) => rendreMenu(d.modules || [])).ca
 function traduireNav() {
   if (etat.hubModules) rendreMenu(etat.hubModules);
   else document.querySelectorAll("#nav-tiroir [data-libelle]").forEach((x) => { x.textContent = t(x.dataset.libelle); });
+  $("#nav-bas").setAttribute("aria-label", t("Settings"));
   $("#btn-verrou").textContent = "🔒 " + t("Lock");
   $("#btn-urgence").textContent = "⛔ " + t("Emergency stop");
   $("#verrou-titre").textContent = t("Application locked");
@@ -4740,7 +4741,7 @@ function dureeTache(x) {
 }
 function carteTacheServeur(x, plans, distant) {
   const [lib, cl] = ETATS_TACHE_SRV()[x.etat] || [x.etat, ""], heure = (d) => new Date(d).toLocaleTimeString(document.documentElement.lang || "en", { hour: "2-digit", minute: "2-digit" });
-  const etapes = (x.historique || []).map((e) => `<li><span class="muet">${h(heure(e.t))}</span> ${h((ETATS_TACHE_SRV()[e.etat] || [e.etat])[0])}${["echec", "arretee"].includes(e.etat) && e.detail ? ` <span class="muet">— ${h(e.detail)}</span>` : ""}</li>`).join("");
+  const etapes = (x.historique || []).map((e) => `<li><span class="muet">${h(heure(e.t))}</span> ${h((ETATS_TACHE_SRV()[e.etat] || [e.etat])[0])}${["echec", "arretee"].includes(e.etat) && e.detail ? ` <span class="muet">— ${h(t(e.detail))}</span>` : ""}</li>`).join("");
   const blocsPlans = (x.plans || []).map((id, i) => {
     const p = plans[id], attend = x.etat === "attente_accord" && i === x.plans.length - 1;
     if (!p) return `<p class="muet petit">${h(t("Plan {0}: no longer kept.", [i + 1]))}</p>`;

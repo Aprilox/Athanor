@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -25,7 +26,8 @@ func TestServeursPlans(t *testing.T) {
 	s, srv := outilsServeursTest(t, mem.hote, mem.port, mem.empreinte, prive)
 	s.config.Projets = []Projet{{Nom: "demo", Dossier: filepath.Join(t.TempDir(), "demo")}}
 	var err error
-	if s.approbations, err = ouvrirApprobations(t.TempDir()); err != nil {
+	dossierAppr := t.TempDir()
+	if s.approbations, err = ouvrirApprobations(dossierAppr); err != nil {
 		t.Fatal(err)
 	}
 	maintenant := time.Now().UTC()
@@ -77,6 +79,22 @@ func TestServeursPlans(t *testing.T) {
 	if ap.Action != actionPlanServeur || ap.Env != "dev" || ap.Details["regle"] != "oui" || ap.Details["classe"] != "changement" || ap.Details["nom"] != "VPS" {
 		t.Errorf("approval: %+v", ap)
 	}
+	// B62: a vault value the agent writes in the summary or a step's why never leaves masked text
+	txt, e := appel("proposer_plan", `{"serveur":"ab12","resume":"Base `+temoinOutils+`","etapes":[{"outil":"ssh_commande","arguments":{"commande":"uptime"},"pourquoi":"clé `+temoinOutils+`"}]}`)
+	var rt struct{ Plan string }
+	if e || json.Unmarshal([]byte(txt), &rt) != nil {
+		t.Fatalf("proposer_plan témoin: %s", txt)
+	}
+	apT, _ := s.approbations.Lire(rt.Plan)
+	pT, _ := s.lirePlan(rt.Plan)
+	brut, _ := os.ReadFile(filepath.Join(dossierAppr, "approbations.json"))
+	for nom, v := range map[string]string{"raison": apT.Raison, "push": s.messageApprobation(apT).Texte, "resume": pT.Resume, "pourquoi": pT.Etapes[0].Pourquoi, "approbations.json": string(brut)} {
+		if strings.Contains(v, temoinOutils) || !strings.Contains(v, masqueAudit) {
+			t.Errorf("B62 %s: %q", nom, couper(v, 200))
+		}
+	}
+	_ = decider(rt.Plan, "refuser")
+	vider()
 	if exp, _ := time.Parse(time.RFC3339, ap.Expire); exp.Sub(maintenant) > dureePlan+time.Second {
 		t.Errorf("a plan expires in 2 h, not at %s", ap.Expire)
 	}

@@ -62,6 +62,7 @@ func TestWebTraduction(t *testing.T) {
 		errServeurCleRefusee, errEmpreinteChangee, errServeurCleCode} { // the vault's errors reach the toast (B14)
 		cles = append(cles, e.Error())
 	}
+	cles = append(cles, errTacheArretee.Error(), errTacheRevoquee.Error(), prefixeVerifEchouee) // a task's end (B64)
 	cles = append(cles, "This key opens the server {0}: it stays in the infra scope", "This key opens the server {0}: remove that server first")
 	for _, l := range []string{"fr", "es", "de", "it", "pt"} {
 		dico := dicoTUI(l)

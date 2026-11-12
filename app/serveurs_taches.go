@@ -80,6 +80,9 @@ var (
 	errTacheRevoquee     = errors.New("session token revoked")
 )
 
+// prefixeVerifEchouee: translated by the page (a PREFIXES key of i18n.js), the verifier's lines kept as they are.
+const prefixeVerifEchouee = "the external verification failed: "
+
 // sessionTacheServeurs runs one Claude session of a task in dossier (consigne.txt, reprise, hub-jeton and mcp.json
 // are there; the session works in dossier/travail and writes its stream to session.jsonl). Tests replace it.
 var sessionTacheServeurs = func(s *Serveur, ctx context.Context, dossier string) error {
@@ -290,7 +293,7 @@ func (s *Serveur) executerTache(ctx context.Context, e *tacheEnCours, dossier st
 	if err == nil && ctx.Err() == nil && len(appliques) > 0 {
 		e.etat("verification", appliques[len(appliques)-1])
 		if v := s.verifierTache(ctx, e, dossier, appliques); v.Verdict != "ok" && ctx.Err() == nil {
-			err = errors.New("the external verification failed: " + strings.Join(v.Lignes, " · "))
+			err = errors.New(prefixeVerifEchouee + strings.Join(v.Lignes, " · "))
 		}
 	}
 	close(surveillance)
