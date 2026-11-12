@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 )
@@ -239,6 +240,13 @@ func (s *Serveur) verifierJeton(jeton string) (SessionHub, bool) {
 	if !ok {
 		return SessionHub{}, false
 	}
+	if strings.HasPrefix(x.Projet, prefixeTache) { // a Servers task's session: valid while the task runs
+		if !tacheActive(x.Hache) {
+			s.revoquerJetons("tâche terminée", func(y SessionHub) bool { return y.Hache == x.Hache })
+			return SessionHub{}, false
+		}
+		return x, true
+	}
 	if p, connu := s.projetParNom(x.Projet); !connu || !s.piloteVu(p, x) {
 		s.revoquerJetons("pilote arrêté", func(y SessionHub) bool { return y.Hache == x.Hache })
 		return SessionHub{}, false
@@ -268,6 +276,9 @@ func (s *Serveur) revoquerJetonsArretes() {
 	}
 	s.mu.Unlock()
 	s.revoquerJetons("pilote arrêté", func(x SessionHub) bool {
+		if strings.HasPrefix(x.Projet, prefixeTache) {
+			return !tacheActive(x.Hache)
+		}
 		p, ok := projets[x.Projet]
 		return !ok || !s.piloteVu(p, x)
 	})

@@ -77,7 +77,7 @@ func (s *Serveur) accesServeursAgent(x SessionHub) error {
 	if x.Agent != agentServeurs {
 		return errServeursAgent
 	}
-	if modeNatif.Load() && (s.acces == nil || !s.acces.Projet(x.Projet).ForcerInfraNatif) {
+	if modeNatif.Load() && !tacheForcee(x.Hache) && (s.acces == nil || !s.acces.Projet(x.Projet).ForcerInfraNatif) {
 		return errServeursNatif
 	}
 	return nil

@@ -84,6 +84,10 @@ func TestDistanceToutesRoutes(t *testing.T) {
 		{"DELETE", "/api/serveurs/x", true},
 		{"POST", "/api/serveurs/ajouter", true},
 		{"GET", "/api/serveurs/x/y", true},
+		{"GET", "/api/serveurs/x/taches", false}, // a server's tasks, read from a device (M97)
+		{"POST", "/api/serveurs/x/taches", true}, // launched and stopped on this computer only
+		{"POST", "/api/serveurs/x/taches/t/arreter", true},
+		{"GET", "/api/serveurs/x/y/taches", true},
 		{"GET", "/api/hubx", true}, // plain prefix
 		{"POST", "/api/mot-de-passe", true},
 		{"POST", "/api/ouvrir", true},

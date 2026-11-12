@@ -296,7 +296,8 @@ var autorisesDistance = map[string]bool{"GET /api/hub": true, "GET /api/coffre":
 	"GET /api/hub/audit": true, "POST /api/hub/audit/verifier": true, // the audit log: read and checked, never written
 	"GET /api/hub/approbations": true, "POST /api/hub/approbations": true, // P7: the owner decides from the phone
 	"POST /api/hub/urgence": true,                                 // the emergency stop, from the phone too
-	"GET /api/serveurs":     true, "GET /api/serveurs/{id}": true} // the inventory and a server's sheet, read only
+	"GET /api/serveurs":     true, "GET /api/serveurs/{id}": true, // the inventory and a server's sheet, read only
+	"GET /api/serveurs/{id}/taches": true} // a server's tasks, read only (plans are decided by the approval card)
 
 // refuseHubDistance: a hub route that is not in autorisesDistance (plain prefix: "/api/hubx" is refused too).
 func refuseHubDistance(r *http.Request) bool {
@@ -305,6 +306,8 @@ func refuseHubDistance(r *http.Request) bool {
 			chemin := r.URL.Path
 			if id, ok := strings.CutPrefix(chemin, "/api/serveurs/"); ok && id != "" && !strings.Contains(id, "/") {
 				chemin = "/api/serveurs/{id}"
+			} else if id, ok := strings.CutSuffix(id, "/taches"); ok && id != "" && !strings.Contains(id, "/") {
+				chemin = "/api/serveurs/{id}/taches"
 			}
 			return !autorisesDistance[r.Method+" "+chemin]
 		}
