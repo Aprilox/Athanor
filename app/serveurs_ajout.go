@@ -363,6 +363,12 @@ func (s *Serveur) serveurPret(w http.ResponseWriter, r *http.Request, srv Serveu
 	} else {
 		rep["fiche"] = f
 	}
+	// its runbook (serveurs_atelier.go), with what the sheet saw when there is one
+	verrouRunbook.Lock()
+	if _, err := assurerRunbook(srv.ID); err != nil {
+		rep["runbook_erreur"] = err.Error()
+	}
+	verrouRunbook.Unlock()
 	l, _ := lireServeurs() // its state and last sight as the sheet left them
 	if i := slices.IndexFunc(l, func(x ServeurInventaire) bool { return x.ID == srv.ID }); i >= 0 {
 		rep["serveur"] = l[i]

@@ -154,6 +154,11 @@ func TestFicheServeur(t *testing.T) {
 	if st, err := os.Stat(filepath.Join(dossier, "fiche.json")); err != nil || st.Size() == 0 {
 		t.Errorf("fiche.json: %v", err)
 	}
+	// M96: its runbook made at the addition, with what the sheet saw, and no secret of the vault
+	if rb, err := os.ReadFile(filepath.Join(dossier, "RUNBOOK.md")); err != nil || !strings.Contains(string(rb), "Debian GNU/Linux 12") ||
+		!strings.Contains(string(rb), "## Backups") || strings.Contains(string(rb), strings.Split(string(prive), "\n")[1]) {
+		t.Errorf("RUNBOOK.md: %v %s", err, rb)
+	}
 	l, _ := lireServeurs()
 	premierVu := l[0].Vu
 	if l[0].Etat != "ok" || premierVu.IsZero() {

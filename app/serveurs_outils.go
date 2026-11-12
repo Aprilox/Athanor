@@ -44,6 +44,8 @@ type ResultatOutil struct {
 	Annulation string `json:"annulation,omitempty"`
 	// the call changed the server (a service, a container, a firewall rule): its sheet is made again
 	modifie bool
+	// what the call kept before changing (an archive, a previous version): the runbook's Backups (M96)
+	sauvegardes []string
 }
 
 // argsOutilServeur: the arguments of every Servers tool (each one reads its own, unknown ones are refused).
@@ -165,7 +167,7 @@ func (s *Serveur) executerOutilServeur(ctx context.Context, de, id, outil string
 	genre, chemin := genreAnnulation(ctx, c, l[i], outil, a)
 	if genre != "" {
 		if an, err = programmerAnnulation(ctx, c, l[i], outil, genre, chemin, a); err != nil {
-			return ResultatOutil{Code: -1, Sortie: note}, err
+			return ResultatOutil{Code: -1, Sortie: note, sauvegardes: []string{note}}, err
 		}
 	}
 	r, err := f(ctx, c, l[i], a)
@@ -173,6 +175,7 @@ func (s *Serveur) executerOutilServeur(ctx context.Context, de, id, outil string
 		r = s.apresChangement(ctx, c, l[i], de, an, r, err)
 	}
 	if note != "" {
+		r.sauvegardes = append([]string{note}, r.sauvegardes...)
 		r.Sortie = note + "\n" + r.Sortie // first: the audit line keeps only the start of the output
 	}
 	if err == nil && r.Code == 0 && r.modifie {
@@ -329,7 +332,11 @@ func outilFichierEcrire(ctx context.Context, c *ssh.Client, _ ServeurInventaire,
 	}
 	p := a.Chemin
 	r, err := executerSSH(ctx, c, scriptShell(a.Sudo, scriptEcrire, p, fmt.Sprint(len(*a.Contenu))), strings.NewReader(*a.Contenu), delaiFichier)
-	return resultatSSH(r), err
+	res := resultatSSH(r)
+	if _, prev, ok := strings.Cut(res.Sortie, "previous version kept in "); ok && err == nil && res.Code == 0 {
+		res.sauvegardes = []string{"previous version: " + strings.TrimSpace(strings.SplitN(prev, "\n", 2)[0])}
+	}
+	return res, err
 }
 
 // dossierFichiersServeur: the only local folder the SFTP tools read or write for server id.
@@ -446,10 +453,12 @@ func outilSFTPEnvoyer(ctx context.Context, c *ssh.Client, srv ServeurInventaire,
 		return ResultatOutil{Code: -1}, fmt.Errorf("sending to %s: %w", distant, err)
 	}
 	sortie := fmt.Sprintf("%d bytes sent to %s", n, distant)
+	r := ResultatOutil{Sortie: sortie}
 	if prev != "" {
-		sortie += "; previous version kept in " + prev
+		r.Sortie += "; previous version kept in " + prev
+		r.sauvegardes = []string{"previous version: " + prev}
 	}
-	return ResultatOutil{Sortie: sortie}, nil
+	return r, nil
 }
 
 func outilSFTPRecuperer(ctx context.Context, c *ssh.Client, srv ServeurInventaire, a argsOutilServeur) (ResultatOutil, error) {

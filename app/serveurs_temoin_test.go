@@ -226,6 +226,7 @@ func TestServeursPerimetre(t *testing.T) {
 		"fichier_ecrire": `,"chemin":"/tmp/a.txt","contenu":"x"`, "sftp_envoyer": `,"local":"envoi.txt","distant":"/envoi.txt"`,
 		"sftp_recuperer": `,"distant":"/envoi.txt","local":"retour.txt"`, "service": `,"action":"status","nom":"ssh"`,
 		"docker": `,"action":"ps"`, "pare_feu": `,"action":"status"`, "confirmer_changement": `,"id":"0a1b2c3d"`,
+		"runbook_lire": ``, "runbook_ajouter": `,"section":"historique","texte":"t"`,
 		"proposer_plan": `,"resume":"r","etapes":[{"outil":"service","arguments":{"action":"status","nom":"ssh"},"pourquoi":"p"}]`}
 	if len(outils) != len(outilsServeursMCP)-1 {
 		t.Fatalf("a Servers tool is not covered: %v", outilsServeursMCP)

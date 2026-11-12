@@ -153,7 +153,8 @@ func (s *Serveur) apiServeur(w http.ResponseWriter, r *http.Request) {
 	if b, err := os.ReadFile(filepath.Join(dossierModule("servers"), liste[i].ID, "fiche.json")); err == nil && json.Valid(b) {
 		fiche = b
 	}
-	s.ecrireJSON(w, map[string]any{"serveur": liste[i], "fiche": fiche, "annulations": annulationsDe(liste[i].ID)})
+	runbook, _ := os.ReadFile(fichierRunbook(liste[i].ID)) // M96: read only here
+	s.ecrireJSON(w, map[string]any{"serveur": liste[i], "fiche": fiche, "annulations": annulationsDe(liste[i].ID), "runbook": s.masquerSecrets(string(runbook))})
 }
 
 // apiServeurModifier: POST /api/serveurs/{id} {nom?, roles?}: renames it or sets its roles;

@@ -22,7 +22,7 @@ const agentServeurs = "servers"
 
 // outilsServeursMCP: the tools of a Servers agent's token.
 var outilsServeursMCP = []string{"serveurs_liste", "serveur_fiche", "ssh_commande", "fichier_lire", "fichier_ecrire",
-	"sftp_envoyer", "sftp_recuperer", "service", "docker", "pare_feu", "proposer_plan", "confirmer_changement"}
+	"sftp_envoyer", "sftp_recuperer", "service", "docker", "pare_feu", "proposer_plan", "confirmer_changement", "runbook_lire", "runbook_ajouter"}
 
 var (
 	errServeursAgent = errors.New("the Servers tools answer only a Servers agent's session")
@@ -117,6 +117,9 @@ func faireOutilServeur(nom string) func(*Serveur, SessionHub, json.RawMessage) (
 			return "", errors.New(s.masquerSecrets(err.Error()))
 		}
 		r, err := s.appelerOutilServeur(s.contexteSession(x.Hache), x.Agent, id, nom, e.Arguments, sauvegardeDe(e))
+		if e.Classe > ClasseLecture {
+			s.noterRunbook(id, e, r, err)
+		}
 		if err != nil { // an error may quote the server (stderr, a path)
 			return "", errors.New(strings.ReplaceAll(s.masquerSecrets(err.Error()), "<", "&lt;"))
 		}
