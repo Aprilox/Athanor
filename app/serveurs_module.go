@@ -12,7 +12,8 @@ type moduleServeurs struct{}
 func (moduleServeurs) ID() string  { return "servers" }
 func (moduleServeurs) Nom() string { return "Servers" }
 func (moduleServeurs) Pages() []PageModule {
-	return []PageModule{{Hash: "#serveurs", Ordre: 30, Icone: "serveurs", Libelle: "Servers", Fils: []string{"#serveur"}}}
+	return []PageModule{{Hash: "#serveurs", Ordre: 30, Icone: "serveurs", Libelle: "Servers", Fils: []string{"#serveur"}},
+		{Hash: "#fournisseurs", Ordre: 31, Icone: "serveurs", Libelle: "Providers"}}
 }
 
 // Elements: a server whose host fingerprint changed waits for the owner (the bell); the others need nothing.

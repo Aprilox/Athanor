@@ -2103,6 +2103,14 @@ const GUIDE = [
       ["The server's sheet", "Click the server's card: system, processors, memory, disk, listening ports, software (Docker, Compose, k3s, nginx, Caddy, ufw…), firewall, running services and containers, read by one read-only script. *Refresh* reads it again; Athanor also does every 6 hours while the vault is open. The roles change there too; *Remove this server* forgets it without touching the server, and its key stays in the vault unless you tick the box. A paired phone sees the sheets, read only."],
     ],
     note: "To act on a server, give it a task: see *Give a task to the Servers agent*. The key never leaves Athanor: the agents get tools that use it, never the key itself." },
+  { id: "fournisseurs", titre: "Connect Cloudflare (DNS and HTTPS)", intro: "A provider lets the Servers agent point your domains at your servers and set up HTTPS. Give it a Cloudflare token with only the rights Athanor uses, on your domain's zone only.",
+    etapes: [
+      ["Create the token", "On Cloudflare's dashboard: *My Profile › API Tokens › Create Token › Create Custom Token*. Permissions: *Zone › Zone › Read*, *Zone › DNS › Edit* (records) and *Zone › SSL and Certificates › Edit* (HTTPS mode and origin certificates). Add *Account › Access: Apps and Policies › Edit* only to protect an environment with Cloudflare Access. *Zone Resources*: *Include › Specific zone ›* your domain. Then *Continue to summary › Create Token*, and copy it."],
+      ["Add it", "*Servers › Providers › + Add a provider*: paste the token (it goes straight to the vault, in the *infra* scope, which opens only with Athanor's password) or choose a Cloudflare entry already in the vault.", "#fournisseurs", "Providers"],
+      ["Test", "*Test* reads, with the token, the zones it sees and what it may do on each: read or change DNS records, HTTPS settings, Cloudflare Access, origin certificates. Nothing is changed on Cloudflare. A refused, expired or disabled token is said plainly: create a new one and replace it in the Vault."],
+      ["Use it", "On a project's *Access* page, an environment chooses its DNS provider. A provider used by an environment cannot be removed: take it out of those environments first. *Remove* forgets the provider; its token stays in the vault."],
+    ],
+    note: "The token never leaves Athanor: the Servers agent gets tools that use it on the zones of its environment, never the token itself. A paired phone sees the providers, read only." },
   { id: "taches-serveurs", titre: "Give a task to the Servers agent", intro: "Say in one sentence what should be done on a server. The Servers agent reads it, proposes a plan, waits for your agreement, backs up before changing, applies, then has the result checked from outside.",
     etapes: [
       ["Ask", "On the server's sheet, the *Tasks* block: type what should be done (“Install nginx and serve my site over HTTPS”), then *Launch*. The Servers agent gets tools for this server only, never its key nor its password, and loses them when the task ends. Tasks are launched from the computer; a paired phone follows them, read only.", "#serveurs", "Servers"],
@@ -4717,6 +4725,99 @@ $("#page").addEventListener("submit", async (ev) => {
     if (!r) return;
     if (a.mode === "generee") { srv.aj = { etape: "cle", serveur: r.serveur, public: r.cle_publique, commande: r.commande }; return rendrePage(); }
     return serveurAjoute(r, a.mode);
+  } finally { bouton.disabled = false; }
+});
+// --- Providers (#fournisseurs): the Cloudflare tokens (infra vault entries) the Servers agent uses for DNS and HTTPS (fournisseurs.go)
+const fou = { aj: null }; // aj: the add form ({mode: "coller" | "coffre", nom, cle}), kept across renders
+const DROITS_CF = { "dns:lire": "Read DNS records", "dns:écrire": "Change DNS records", ssl: "HTTPS settings", access: "Cloudflare Access (sign-in in front of a site)", certificats: "Origin certificates" };
+const ETATS_FOU = { ok: "Works", refuse: "Refused", expire: "Expired", desactive: "Disabled", sans_zone: "No zone", injoignable: "Unreachable" };
+function carteFournisseur(f, envs, distant) {
+  const droits = (l) => l.length ? l.map((d) => `<span class="badge">${h(t(DROITS_CF[d] || d))}</span>`).join("") : `<span class="muet petit">${t("No right seen")}</span>`;
+  return `<div class="bloc carte-serveur fou-carte" data-fou-id="${h(f.id)}">
+    <div class="cp-tete"><b class="cp-nom">${h(f.nom)}</b><span class="pastille ${f.etat === "ok" ? "travaille" : "attend"}">${t(ETATS_FOU[f.etat] || "Not tested yet")}</span></div>
+    <div class="muet petit">Cloudflare · ${f.teste ? h(t("Tested {0}", [dateLisible(f.teste)])) : t("Press Test to see its zones and rights.")}</div>
+    ${f.bilan ? `<p class="petit m0 fou-bilan">${h(t(f.bilan.cle, f.bilan.args))}</p>` : ""}
+    ${(f.zones || []).length ? `<ul class="fou-zones">${f.zones.map((z) => `<li><b>${h(z.nom)}</b><span class="ligne m0">${droits(z.droits || [])}</span></li>`).join("")}</ul>` : ""}
+    <div class="ligne m0 srv-utilise"><span class="muet petit">${t("Used by")}</span>${envs.length ? envs.map((pe) => `<a class="badge" href="#acces" data-projet="${h(pe.slice(0, pe.lastIndexOf("/")))}" data-cible="acces">${h(pe)}</a>`).join("") : `<span class="muet petit">${t("No environment uses it yet.")}</span>`}</div>
+    ${distant ? "" : `<div class="ligne m0"><button type="button" class="btn btn-petit" data-fou-tester="${h(f.id)}">${t("Test")}</button><button type="button" class="btn btn-petit btn-danger" data-fou-retirer="${h(f.id)}">${t("Remove")}</button></div>`}
+  </div>`;
+}
+function formulaireFournisseur(c) {
+  const a = fou.aj, cles = ((c || {}).entrees || []).filter((e) => e.famille === "secret" && e.type === "cloudflare");
+  return `<form class="bloc cof-form srv-form" id="fou-form" autocomplete="off">
+    <h2>${t("Add a provider")}</h2>
+    <label class="champ"><span>${t("Name (optional)")}</span><input type="text" id="fou-nom" maxlength="100" placeholder="${h(t("e.g. Cloudflare – my domains"))}" value="${h(a.nom || "")}"></label>
+    <fieldset class="srv-facons"><legend>${t("Its Cloudflare token")}</legend>
+      <label class="radio srv-facon"><input type="radio" name="fou-mode" value="coller"${a.mode === "coller" ? " checked" : ""}> <span><b>${t("Paste a new token")}</b><br><span class="muet petit">${t("It goes straight to the vault, in the infra scope: no agent ever sees it.")}</span></span></label>
+      ${a.mode === "coller" ? `<div class="srv-sous"><input type="password" id="fou-jeton" autocomplete="off" spellcheck="false" aria-label="${h(t("Cloudflare token"))}" placeholder="${h(t("Cloudflare token"))}" required></div>` : ""}
+      <label class="radio srv-facon"><input type="radio" name="fou-mode" value="coffre"${a.mode === "coffre" ? " checked" : ""}${cles.length ? "" : " disabled"}> <span><b>${t("A Cloudflare entry of the vault")}</b><br><span class="muet petit">${cles.length ? t("Entries in the code scope must move to infra first, in the Vault.") : t("No Cloudflare entry in the vault yet.")}</span></span></label>
+      ${a.mode === "coffre" && cles.length ? `<div class="srv-sous"><select id="fou-cle" aria-label="${h(t("A Cloudflare entry of the vault"))}">${cles.map((e) => `<option value="${h(e.id)}"${e.id === a.cle ? " selected" : ""}${e.portee === "infra" ? "" : " disabled"}>${h(e.nom)}${e.portee === "infra" ? "" : " (code)"}</option>`).join("")}</select></div>` : ""}
+    </fieldset>
+    <p class="muet petit">${lienGuide("fournisseurs", t("Create a token with the minimum rights"))}</p>
+    <div class="ligne"><button type="submit" class="btn btn-primaire">${t("Add")}</button><button type="button" class="btn" data-fou-fermer>${t("Cancel")}</button></div>
+  </form>`;
+}
+pages.fournisseurs = async () => {
+  const distant = !!(etat.vue || {}).distant;
+  const [d, c] = await Promise.all([api("fournisseurs"), distant ? null : api("coffre").catch(() => null)]);
+  const envs = d.environnements || {};
+  return `<div class="serveurs fournisseurs">
+    ${fou.aj && !distant ? messagesCoffreServeurs(c) : ""}
+    <div class="ligne cof-tete"><h2 class="m0">${t("Providers")} <span class="muet">${d.fournisseurs.length}</span></h2><span class="espace"></span>${distant ? `<span class="muet petit">${t("Providers are added on the computer.")}</span>` : fou.aj ? "" : `<button type="button" class="btn btn-primaire" data-fou-ajouter>+ ${t("Add a provider")}</button>`}</div>
+    <p class="muet petit">${t("A provider lets the Servers agent manage your domains' DNS records and HTTPS for your environments. Its token stays in the vault: agents get tools that use it, never the token.")} ${lienGuide("fournisseurs", t("Create a token with the minimum rights"))}</p>
+    ${fou.aj && !distant ? formulaireFournisseur(c) : ""}
+    ${d.fournisseurs.length ? `<div class="grille-projets">${d.fournisseurs.map((f) => carteFournisseur(f, envs[f.id] || [], distant)).join("")}</div>`
+      : fou.aj ? "" : `<div class="vide srv-vide"><p><b>${t("No provider yet")}</b></p><p class="muet">${t("Add a Cloudflare token to let Athanor point your domains at your servers and set up HTTPS.")}</p></div>`}
+  </div>`;
+};
+function lireFormFournisseur() {
+  const a = fou.aj, m = document.querySelector('[name="fou-mode"]:checked'), cle = $("#fou-cle");
+  if (!a || !$("#fou-form")) return a;
+  a.nom = $("#fou-nom").value.trim();
+  if (m) a.mode = m.value;
+  if (cle) a.cle = cle.value;
+  return a;
+}
+$("#page").addEventListener("click", async (ev) => {
+  if (etat.page !== "fournisseurs") return;
+  const b = ev.target.closest("[data-fou-ajouter], [data-fou-fermer], [data-fou-tester], [data-fou-retirer], [name=fou-mode]");
+  if (!b) return;
+  const d = b.dataset;
+  if (b.name === "fou-mode") { lireFormFournisseur(); return rendrePage().then(() => { const c = $("#fou-jeton") || $("#fou-cle"); if (c) c.focus(); }); }
+  if (d.fouAjouter !== undefined) { fou.aj = { mode: "coller" }; return rendrePage().then(() => $("#fou-nom").focus()); }
+  if (d.fouFermer !== undefined) { fou.aj = null; return rendrePage(); }
+  if (d.fouRetirer) {
+    const nom = b.closest(".fou-carte").querySelector(".cp-nom").textContent;
+    if (await choisir(t("Remove the provider {0}? Its token stays in the vault.", [nom]), [{ id: "non", texte: t("Cancel") }, { id: "oui", texte: t("Remove"), danger: true }]) !== "oui") return;
+    if (await action(api("fournisseurs/" + encodeURIComponent(d.fouRetirer), "DELETE"))) { toast(t("{0} removed.", [nom]), "ok"); rendrePage(); }
+    return;
+  }
+  b.disabled = true; b.textContent = t("Testing…");
+  const r = await action(api("fournisseurs/" + encodeURIComponent(d.fouTester) + "/tester", "POST"));
+  if (r) toast(t(r.bilan.cle, r.bilan.args), r.etat === "ok" ? "ok" : "erreur");
+  rendrePage();
+});
+$("#page").addEventListener("submit", async (ev) => {
+  if (etat.page !== "fournisseurs") return;
+  ev.preventDefault();
+  if (ev.target.id === "srv-verrou") {
+    const champ = $("#srv-deverrou");
+    if (await action(api("deverrouiller", "POST", { mot_de_passe: champ.value }))) { champ.value = ""; rendrePage(); }
+    return;
+  }
+  if (ev.target.id !== "fou-form") return;
+  const a = lireFormFournisseur(), bouton = ev.submitter || ev.target.querySelector("[type=submit]");
+  bouton.disabled = true;
+  try {
+    let cle = a.cle;
+    if (a.mode === "coller") { // the token goes to the vault first (infra), read here and never kept in fou.aj
+      const e = await action(api("coffre", "POST", { nom: a.nom || "Cloudflare", famille: "secret", type: "cloudflare", portee: "infra", valeur: $("#fou-jeton").value.trim() }));
+      if (!e) return;
+      cle = e.id; a.mode = "coffre"; a.cle = cle; // a failure below keeps the entry, chosen from the vault next time
+    }
+    const f = await action(api("fournisseurs", "POST", { nom: a.nom, cle }));
+    if (!f) return rendrePage();
+    fou.aj = null; toast(t("{0} added", [f.nom]), "ok"); return rendrePage();
   } finally { bouton.disabled = false; }
 });
 // --- One server (#serveur/<id>): its sheet as read on it, its roles, Refresh, cut password logins, Remove (read only from a paired device)

@@ -1085,3 +1085,8 @@ ol.guide-access li { margin: 5px 0; }
 .srv-tache-etapes { margin: 0; padding-left: 18px; }
 .srv-tache-plan { display: grid; gap: 6px; border-left: 3px solid var(--line); padding-left: 10px; min-width: 0; }
 @media (max-width: 700px) { .srv-form .cof-choix { grid-template-columns: 1fr; } .srv-sous { margin-left: 0; } }
+/* Providers page (#fournisseurs): one card per Cloudflare token, its zones and their rights */
+.fou-zones { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.fou-zones li { display: grid; gap: 3px; min-width: 0; overflow-wrap: anywhere; }
+.fou-bilan { overflow-wrap: anywhere; }
+.fournisseurs .srv-form { margin-bottom: 12px; }
