@@ -2730,6 +2730,9 @@ function carteApprobation(x, ap, codes) {
   const p = (ap.plans || {})[x.id];
   if (x.action === "plan_serveur") return carteDecision(x, ap, `<span class="badge">${h(x.env)}</span> <strong>${h(t("Plan for {0}", [d.nom || d.serveur]))}</strong> <span>${h(x.projet)}</span>`,
     [t("Server role: {0}", [x.env]), t("{0} step(s)", [d.etapes || "?"])], blocPlan(x, p), d.regle === "oui" && t("Never ask again for this server"), p && p.critique && !p.critique.verdict);
+  // a deployment (M120): prod is never decided by a rule
+  if (x.action === "deploiement") return carteDecision(x, ap, `<span class="badge">${h(x.env)}</span> <strong>${h(x.env === "prod" ? t("Deploy {0} to production?", [d.hote]) : t("Deploy {0} to {1}?", [d.hote, x.env]))}</strong> <span>${h(x.projet)}</span>`,
+    [t("Commit {0}", [d.commit])], x.env === "prod" ? `<div class="pv-details">${h(t("Production always asks you: one accord, one deployment."))}</div>` : "", x.env !== "prod" && t("Never ask again for this project and environment"));
   const acces = x.action === "demander_acces", f = etat.apprForm[x.id] || {}, nom = (x.details || {}).nom || "";
   const entree = f.entree ?? (codes.find((e) => e.nom === nom) || {}).id ?? "", env = f.env || x.env, variable = f.variable ?? nom;
   const champs = acces ? `<div class="appr-champs">
@@ -2759,7 +2762,7 @@ async function sectionApprobations() {
   const l = ((ap || {}).approbations || []).filter((x) => x.etat === "attente"), regles = (ap || {}).regles || [];
   const blocRegles = regles.length ? `<details class="bloc appr-regles"><summary>${t("“Never ask again” rules ({0})", [regles.length])}</summary>
       <p class="intro petit">${t("These requests are accepted without asking you. Ask again removes the rule; the emergency stop removes them all.")}</p>
-      ${regles.map((r) => `<div class="ligne m0"><span class="badge">${h(r.env)}</span> <strong>${h(r.projet)}</strong> <span>${h(r.action === "demander_acces" ? `${t("access requested")} ${r.nom || ""}` : r.action)}</span><span class="espace"></span><button type="button" class="btn" data-regle="${h(JSON.stringify(r))}">${t("Ask again")}</button></div>`).join("")}</details>` : "";
+      ${regles.map((r) => `<div class="ligne m0"><span class="badge">${h(r.env)}</span> <strong>${h(r.projet)}</strong> <span>${h(r.action === "demander_acces" ? `${t("access requested")} ${r.nom || ""}` : r.action === "deploiement" ? t("deployment") : r.action)}</span><span class="espace"></span><button type="button" class="btn" data-regle="${h(JSON.stringify(r))}">${t("Ask again")}</button></div>`).join("")}</details>` : "";
   if (!l.length) return blocRegles;
   const cof = l.some((x) => x.action === "demander_acces") ? await api("coffre").catch(() => ({})) : {};
   const codes = (cof.entrees || []).filter((e) => e.famille === "secret" && e.portee === "code").sort((a, b) => a.nom.localeCompare(b.nom));
@@ -5401,8 +5404,10 @@ $("#btn-urgence").addEventListener("click", async () => {
 async function rafraichir() {
   if (etat.nonAppaire) return; // a device the computer removed: nothing more to ask
   try {
-    const v = await fetch("/api/etat" + (etat.projet ? "?p=" + encodeURIComponent(etat.projet) : ""), { headers: { "X-Athanor": CSRF } }).then((r) => r.json());
+    const demande = etat.projet;
+    const v = await fetch("/api/etat" + (demande ? "?p=" + encodeURIComponent(demande) : ""), { headers: { "X-Athanor": CSRF } }).then((r) => r.json());
     if (v.erreur_key === "Not paired") return afficherNonAppaire();
+    if (etat.projet !== demande) return; // another project chosen meanwhile: this answer is stale, the choice refreshes again
     etat.vue = v;
     document.body.classList.toggle("distant", !!v.distant);
     if (!v.distant && v.dernier_appareil !== etat.dernierAppareil) {

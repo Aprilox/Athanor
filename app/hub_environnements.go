@@ -315,3 +315,20 @@ func vueEnvironnement(e Environnement, serveurs []map[string]any) map[string]any
 	return map[string]any{"url": e.URL, "protection": e.Protection, "politique": e.Politique, "serveurs": serveurs,
 		"dns_cloudflare": e.Fournisseur != "", "cle_deploiement_prete": e.CleDeploiement != "", "certificat_expire": e.CertificatExpire}
 }
+
+// actionDeploiement: the approval a deployment waits for (demander_deploiement).
+const actionDeploiement = "deploiement"
+
+// politiqueDeploiement (I6): whether a deployment of the project to env waits for the owner's accord,
+// and why. Prod always does: neither a policy nor a "never ask again" rule lifts it.
+func (s *Serveur) politiqueDeploiement(projet, env string) (accordRequis bool, raison string) {
+	switch {
+	case env == "prod":
+		return true, "production always asks the owner"
+	case s.acces.Environnements(projet)[env].Politique == "auto":
+		return false, "policy auto"
+	case s.approbations.Regle(RegleAccord{Projet: projet, Env: env, Action: actionDeploiement}):
+		return false, "the owner's rule for this environment"
+	}
+	return true, "policy accord"
+}

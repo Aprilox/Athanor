@@ -10,7 +10,7 @@ import (
 )
 
 // TestOutilsDev: the five tools of the Dev pilot through the real MCP route: names only (never a
-// value), an approval for demander_acces (once), the bus refusal of demander_deploiement, a blocker in
+// value), an approval for demander_acces (once), the refusal of demander_deploiement without a server, a blocker in
 // the bell, and every tool held to the token's project.
 func TestOutilsDev(t *testing.T) {
 	s := serveurCoffreTest(t)
@@ -165,8 +165,8 @@ func TestOutilsDev(t *testing.T) {
 	}
 	l = l[:1]
 
-	// demander_deploiement: through the bus to servers, which declares no deploy action yet
-	if txt, er = appel("demander_deploiement", `{"environnement":"prod","commit":"abc123"}`); !er || !strings.Contains(txt, "Athanor cannot deploy yet") {
+	// demander_deploiement: refused while the environment has no server (TestDemanderDeploiement for the policy)
+	if txt, er = appel("demander_deploiement", `{"environnement":"prod","commit":"abc123"}`); !er || !strings.Contains(txt, "prod has no server yet") {
 		t.Errorf("demander_deploiement: %v %s", er, txt)
 	}
 	if _, er = appel("demander_deploiement", `{"environnement":"ailleurs","commit":"abc123"}`); !er {
@@ -202,7 +202,7 @@ func TestOutilsDev(t *testing.T) {
 	}
 
 	journal := auditTexte(t)
-	for _, m := range []string{"approbation demandée: demander_acces", "blocage signalé", "La base de test refuse la connexion", "action not declared", "mcp signaler"} {
+	for _, m := range []string{"approbation demandée: demander_acces", "blocage signalé", "La base de test refuse la connexion", "mcp signaler"} {
 		if !strings.Contains(journal, m) {
 			t.Errorf("%q not in the audit log", m)
 		}

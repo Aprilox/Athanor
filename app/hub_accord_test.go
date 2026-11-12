@@ -28,8 +28,8 @@ func (m moduleServeursTest) Recevoir(_ *Serveur, x MessageHub) (MessageHub, erro
 	return MessageHub{Donnees: map[string]any{"deploye": x.Donnees["commit"]}}, nil
 }
 
-// TestBusAccordI6 (C28): demander_deploiement in prod waits for the owner on the bus, before the module
-// acts; asked again, the same approval; accepted, that very request goes through once.
+// TestBusAccordI6 (C28): a deployment in prod waits for the owner on the bus, before the module acts;
+// asked again, the same approval; accepted, that very request goes through once.
 func TestBusAccordI6(t *testing.T) {
 	s := serveurBusTest(t)
 	faits := 0
@@ -43,11 +43,16 @@ func TestBusAccordI6(t *testing.T) {
 	x := SessionHub{Projet: "demo", Agent: "pilote"}
 	deployer := func(env, commit string) string {
 		t.Helper()
-		txt, err := outilDemanderDeploiement(s, x, json.RawMessage(`{"environnement":"`+env+`","commit":"`+commit+`"}`))
-		if err != nil {
-			t.Fatalf("%s %s: %v", env, commit, err)
+		rep := s.envoyerBus(MessageHub{De: "dev", Vers: "servers", Action: "deployer", Projet: x.Projet, Env: env, Agent: x.Agent,
+			Donnees: map[string]any{"commit": commit}})
+		switch rep.Etat {
+		case "ok":
+			return enJSON(rep.Donnees)
+		case "attente":
+			return rep.Raison + ":"
 		}
-		return txt
+		t.Fatalf("%s %s: %+v", env, commit, rep)
+		return ""
 	}
 	idDe := func(txt string) string {
 		t.Helper()

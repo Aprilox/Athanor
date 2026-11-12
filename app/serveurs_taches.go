@@ -243,7 +243,7 @@ func (s *Serveur) lancerTache(texte string, serveurs []string, forcee bool, env 
 			return TacheServeurs{}, errServeurInconnu
 		}
 	}
-	t := TacheServeurs{ID: aleatoire(6), Texte: texte, Serveurs: slices.Clone(serveurs), Forcee: forcee, Env: env, Cree: time.Now().UTC().Format(time.RFC3339)}
+	t := TacheServeurs{ID: aleatoire(6), Texte: texte, Serveurs: slices.Clone(serveurs), Forcee: forcee, Env: env, Cree: time.Now().UTC().Format(formatCree)}
 	dossier := dossierSessionTache(t.ID)
 	if err := os.MkdirAll(filepath.Join(dossier, "travail"), 0o700); err != nil {
 		return TacheServeurs{}, err
@@ -647,3 +647,7 @@ func lancerSessionServeurs(args []string) int {
 	}
 	return 0
 }
+
+// formatCree: RFC 3339 with a fixed-width fraction, so that two tasks created within a second still sort
+// as strings (the newest first).
+const formatCree = "2006-01-02T15:04:05.000Z07:00"

@@ -86,8 +86,10 @@ func TestCaptureHub(t *testing.T) {
 	for _, a := range []Approbation{
 		{Projet: "projet-01", Env: "dev", Mission: "M4", Agent: "pilote", Action: "demander_acces", Details: map[string]string{"nom": "STRIPE_SECRET_KEY"},
 			Raison: "Le paiement de test du jalon M4 a besoin de la clé Stripe de test."},
-		{Projet: "projet-02", Env: "staging", Mission: "M9", Agent: "pilote", Action: "demander_deploiement", Raison: "La version 1.2 est prête : la déployer sur staging pour la recette."},
-		{Projet: "projet-02", Env: "prod", Mission: "M9", Agent: "pilote", Action: "demander_deploiement", Raison: "Mettre la version 1.2 en production."},
+		{Projet: "projet-02", Env: "staging", Mission: "M9", Agent: "pilote", Action: actionDeploiement, Details: map[string]string{"commit": "4f2a9c1", "hote": "recette.boutique.fr"},
+			Raison: "commit 4f2a9c1 → recette.boutique.fr"},
+		{Projet: "projet-02", Env: "prod", Mission: "M9", Agent: "pilote", Action: actionDeploiement, Details: map[string]string{"commit": "4f2a9c1", "hote": "boutique.fr"},
+			Raison: "commit 4f2a9c1 → boutique.fr"},
 	} {
 		if _, err := s.approbations.Demander(a); err != nil {
 			t.Fatal(err)

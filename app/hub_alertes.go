@@ -92,11 +92,17 @@ func alertesApprobations(l []Approbation) []AlerteHub {
 		if x.Action == actionPlanServeur {
 			raison, args, toujours = "Plan for {0} ({1}): {2}", []any{cmp.Or(x.Details["nom"], x.Details["serveur"]), x.Env, x.Raison}, "Never ask again for this server"
 		}
+		if x.Action == actionDeploiement {
+			raison, args = "Deploy {0} to {1}? Commit {2}", []any{x.Details["hote"], x.Env, x.Details["commit"]}
+			if x.Env == "prod" {
+				raison, args = "Deploy {0} to production? Commit {1}", []any{x.Details["hote"], x.Details["commit"]}
+			}
+		}
 		decision := func(id, libelle string) ActionAlerte {
 			return ActionAlerte{ID: id, Libelle: libelle, Route: "hub/approbations", Corps: map[string]any{"id": x.ID, "decision": id}, Distance: true}
 		}
 		actions := []ActionAlerte{decision("accepter", "Accept"), decision("refuser", "Refuse"), decision("toujours", toujours)}
-		if x.Action == actionPlanServeur && x.Details["regle"] != "oui" { // destructive or prod: an accord every time
+		if x.Action == actionPlanServeur && x.Details["regle"] != "oui" || x.Action == actionDeploiement && x.Env == "prod" { // destructive or prod: an accord every time
 			actions = actions[:2]
 		}
 		out = append(out, AlerteHub{Empreinte: "appr-" + x.ID, Module: "dev", Element: x.Projet, Titre: x.Projet, Raison: raison, Args: args, Approbation: &x,

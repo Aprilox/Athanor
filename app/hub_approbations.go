@@ -415,6 +415,12 @@ func (s *Serveur) messageApprobation(x Approbation) MessagePush {
 		texte = n + " (" + x.Env + ") · " + texte
 	}
 	titre := fmt.Sprintf(s.textePush("appr_titre"), moduleDev{}.Nom(), x.Projet, quoi)
+	if x.Action == actionDeploiement { // "Deploy martin.fr to production?", the project and commit below
+		titre, texte = fmt.Sprintf(s.textePush("appr_deploi"), x.Details["hote"], x.Env), x.Projet+" · commit "+x.Details["commit"]
+		if x.Env == "prod" {
+			titre = fmt.Sprintf(s.textePush("appr_prod"), x.Details["hote"])
+		}
+	}
 	if x.Action == actionPlanServeur { // "Plan for web-1", the plan's summary below
 		titre, texte = fmt.Sprintf(s.textePush("appr_plan"), cmp.Or(x.Details["nom"], x.Details["serveur"])), x.Projet+" · "+x.Raison
 	}
@@ -515,6 +521,8 @@ func (s *Serveur) deciderApprobation(qui, id, decision, entree, envChoisi, varia
 		return x, http.StatusBadRequest, errApprobationDecision
 	case decision == "toujours" && x.Action == actionPlanServeur && x.Details["regle"] != "oui":
 		return x, http.StatusConflict, errPlanSansRegle
+	case decision == "toujours" && x.Action == actionDeploiement && x.Env == "prod": // I6: no rule ever lets prod through
+		return x, http.StatusConflict, errEnvProdAuto
 	case decision != "refuser" && x.Action == actionPlanServeur && s.critiqueEnCours(x.ID):
 		return x, http.StatusConflict, errCritiqueEnCours
 	}
