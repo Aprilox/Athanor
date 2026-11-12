@@ -237,32 +237,75 @@ func (s *Serveur) etapeCloudflare(x SessionHub, e *Etape) error {
 	return fmt.Errorf("plan required: this is a %s action (%s); a change runs only as a step of a plan the owner accepted, with exactly its arguments: propose a plan (proposer_plan, serveur = one of your servers)%s", e.Classe, e.Raison, info)
 }
 
-// fournisseurEnv: the provider of x's environment and its token (read from the vault, kept in memory only).
-func (s *Serveur) fournisseurEnv(x SessionHub) (Fournisseur, string, error) {
+// fournisseurDe: the provider of x's environment, without its token.
+func (s *Serveur) fournisseurDe(x SessionHub) (Fournisseur, error) {
 	projet, env, _ := strings.Cut(x.Env, "/")
 	var e Environnement
 	if s.acces != nil && projet != "" {
 		e = s.acces.Environnements(projet)[env]
 	}
 	if e.Fournisseur == "" {
-		return Fournisseur{}, "", errSansFournis
+		return Fournisseur{}, errSansFournis
 	}
 	l, err := lireFournisseurs()
 	if err != nil {
-		return Fournisseur{}, "", err
+		return Fournisseur{}, err
 	}
 	i := slices.IndexFunc(l, func(f Fournisseur) bool { return f.ID == e.Fournisseur })
 	if i < 0 {
-		return Fournisseur{}, "", errSansFournis
+		return Fournisseur{}, errSansFournis
+	}
+	return l[i], nil
+}
+
+// fournisseurEnv: the provider of x's environment and its token (read from the vault, kept in memory only).
+func (s *Serveur) fournisseurEnv(x SessionHub) (Fournisseur, string, error) {
+	f, err := s.fournisseurDe(x)
+	if err != nil {
+		return Fournisseur{}, "", err
 	}
 	var jeton string
-	if _, err = s.cleFournisseur(l[i].Cle); err == nil {
-		jeton, err = s.coffre.Valeur(l[i].Cle)
+	if _, err = s.cleFournisseur(f.Cle); err == nil {
+		jeton, err = s.coffre.Valeur(f.Cle)
 	}
 	if err != nil {
 		return Fournisseur{}, "", fmt.Errorf("the provider's token cannot be read (%v): the owner opens the vault or checks the provider", err)
 	}
-	return l[i], jeton, nil
+	return f, jeton, nil
+}
+
+// prodTouchee: the prod environments ("project/prod (host)", every project) a Cloudflare step on nom reaches:
+// the one whose host is nom, and for a zone-wide setting (ssl_regler) every prod host of the zone (C56).
+func (s *Serveur) prodTouchee(x SessionHub, outil, nom string) (zone string, envs []string) {
+	if s.acces == nil {
+		return "", nil
+	}
+	if nom == "" && len(x.Hotes) > 0 {
+		nom = x.Hotes[0] // the name the tool falls back to
+	}
+	prods := s.acces.HotesProd()
+	if outil != "ssl_regler" {
+		if e, ok := prods[nom]; ok {
+			envs = []string{e + " (" + nom + ")"}
+		}
+		return "", envs
+	}
+	zone = nom
+	if l := strings.Split(nom, "."); len(l) > 2 {
+		zone = strings.Join(l[len(l)-2:], ".") // no provider zone known: its last two labels, the widest guess
+	}
+	if f, err := s.fournisseurDe(x); err == nil {
+		if z, ok := zoneDe(f, nom); ok {
+			zone = z.Nom
+		}
+	}
+	for h, e := range prods {
+		if h == zone || strings.HasSuffix(h, "."+zone) {
+			envs = append(envs, e+" ("+h+")")
+		}
+	}
+	slices.Sort(envs)
+	return zone, envs
 }
 
 // zoneDe: the zone of f holding nom (the longest zone name that is nom or a parent of it).

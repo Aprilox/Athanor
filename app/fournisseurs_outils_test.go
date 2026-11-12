@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -313,6 +314,78 @@ func TestOutilsCloudflare(t *testing.T) {
 	l, _ := s.approbations.Liste()
 	if i := slices.IndexFunc(l, func(a Approbation) bool { return a.Projet == "demo" && a.Action == actionPlanServeur }); i < 0 || l[i].Env != "prod" || l[i].Details["regle"] != "non" || l[i].Etat != "attente" {
 		t.Errorf("prod plan's approval: %+v", l)
+	}
+
+	// C56: another project's prod lives in the same zone; a dev task holding "do not ask again" for its server
+	// still cannot set the zone's SSL without the owner, and the card names the zone and that prod
+	if err := s.acces.DefinirEnvironnement("boutique", "prod", Environnement{URL: "https://www.exemple.fr", Protection: "aucune", Politique: "accord"}); err != nil {
+		t.Fatal(err)
+	}
+	jd, err := s.jetons.CreerSession(SessionHub{Projet: "demo", Agent: agentServeurs, Outils: outilsServeursMCP, Serveurs: []string{srv.ID}, Env: "demo/dev", Hotes: []string{"app.exemple.fr"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	planDev := func(etape string) Approbation {
+		t.Helper()
+		txt, e := appel(jd, "proposer_plan", `{"serveur":"ab12","resume":"r","etapes":[`+etape+`]}`)
+		var r struct{ Plan string }
+		if e || json.Unmarshal([]byte(txt), &r) != nil {
+			t.Fatalf("dev plan: %s", txt)
+		}
+		a, _ := s.approbations.Lire(r.Plan)
+		return a
+	}
+	premier := planDev(`{"outil":"dns_ecrire","arguments":` + ecrire + `,"pourquoi":"p"}`)
+	if premier.Env != "dev" || premier.Details["regle"] != "oui" {
+		t.Fatalf("dev plan: %+v", premier)
+	}
+	if premier.Etat == "attente" {
+		if _, err := s.approbations.Decider(premier.ID, "toujours", "owner"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cf.relever()
+	zone := planDev(`{"outil":"ssl_regler","arguments":{"nom":"app.exemple.fr","mode":"strict"},"pourquoi":"p"}`)
+	if zone.Env != "prod" || zone.Details["regle"] != "non" || zone.Etat != "attente" {
+		t.Errorf("zone-wide SSL from a dev task: %+v", zone)
+	}
+	if p, err := s.lirePlan(zone.ID); err == nil && (len(p.Etapes) != 1 || !strings.Contains(p.Etapes[0].Raison, "the whole zone exemple.fr") ||
+		!strings.Contains(p.Etapes[0].Raison, "boutique/prod (www.exemple.fr)")) {
+		t.Errorf("the card does not name the zone and the prod: %+v", p.Etapes)
+	}
+	if l := cf.relever(); len(l) != 0 {
+		t.Errorf("Cloudflare called before the owner's approval: %q", l)
+	}
+	// a record of the dev name stays a dev step, let through by the rule
+	if d := planDev(`{"outil":"dns_ecrire","arguments":` + ecrire + `,"pourquoi":"p"}`); d.Env != "dev" || d.Etat == "attente" {
+		t.Errorf("dev record after the rule: %+v", d)
+	}
+	// a dev task still holding prod's name (recorded before C57): its step on that name is a prod step
+	jv, err := s.jetons.CreerSession(SessionHub{Projet: "demo", Agent: agentServeurs, Outils: outilsServeursMCP, Serveurs: []string{srv.ID}, Env: "demo/dev", Hotes: []string{"www.exemple.fr"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	txt, e := appel(jv, "proposer_plan", `{"serveur":"ab12","resume":"r","etapes":[{"outil":"dns_ecrire","arguments":{"nom":"www.exemple.fr","type":"A","contenu":"198.51.100.7","proxied":true},"pourquoi":"p"}]}`)
+	var rv struct{ Plan string }
+	if e || json.Unmarshal([]byte(txt), &rv) != nil {
+		t.Fatalf("plan on prod's name: %s", txt)
+	}
+	if a, _ := s.approbations.Lire(rv.Plan); a.Env != "prod" || a.Details["regle"] != "non" || a.Etat != "attente" {
+		t.Errorf("a step on prod's name from a dev task: %+v", a)
+	}
+	if l := cf.relever(); len(l) != 0 {
+		t.Errorf("Cloudflare called before the owner's approval: %q", l)
+	}
+	// C57: no environment, in this project or another, takes a host name another one has
+	for _, c := range [][2]string{{"demo", "staging"}, {"autre", "dev"}} {
+		err := s.acces.DefinirEnvironnement(c[0], c[1], Environnement{URL: "https://WWW.exemple.fr/x", Protection: "aucune", Politique: "accord"})
+		var ea erreurEntreeArgs
+		if !errors.As(err, &ea) || ea.cle != errEnvHotePris || ea.args[1] != "boutique/prod" {
+			t.Errorf("%s/%s with prod's host: %v", c[0], c[1], err)
+		}
+	}
+	if err := s.acces.DefinirEnvironnement("boutique", "prod", Environnement{URL: "https://www.exemple.fr/v2", Protection: "aucune", Politique: "accord"}); err != nil {
+		t.Errorf("an environment keeps its own host: %v", err)
 	}
 
 	// the Cloudflare token: in nothing the agent saw, nor in the audit log (where every call is)

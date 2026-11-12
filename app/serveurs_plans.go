@@ -219,6 +219,16 @@ func outilProposerPlan(s *Serveur, x SessionHub, args json.RawMessage) (string, 
 			if err := s.nomPerimetre(x, "proposer_plan", c.Nom); err != nil {
 				return "", fmt.Errorf("step %d: %w", i+1, err)
 			}
+			// a step reaching a prod environment's name, or its whole zone, is a prod step: approval always (C56, C57)
+			if zone, envs := s.prodTouchee(x, e.Outil, c.Nom); len(envs) > 0 {
+				prod, p.Env = true, "prod"
+				if zone != "" {
+					et.Raison += " (the whole zone " + zone + ")"
+				}
+				et.Raison += "; it reaches production: " + strings.Join(envs, ", ")
+			} else if zone != "" {
+				et.Raison += " (the whole zone " + zone + ")"
+			}
 			if len(e.Sauvegarde) > 0 {
 				return echec(fmt.Errorf("step %d: a Cloudflare step backs up no file: say in sans_sauvegarde what it removes (its result lists it)", i+1))
 			}

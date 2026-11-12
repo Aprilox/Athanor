@@ -53,8 +53,9 @@ func (e erreurEntreeArgs) Error() string {
 }
 
 const (
-	errEnvPasProd = "{0} is not a production server: production only runs on servers with the prod role"
-	errEnvProd    = "{0} is a production server: it can only be used by production"
+	errEnvPasProd  = "{0} is not a production server: production only runs on servers with the prod role"
+	errEnvProd     = "{0} is a production server: it can only be used by production"
+	errEnvHotePris = "{0} is already the address of {1}: one host name per environment"
 )
 
 // envDefaut: an environment not configured yet.
@@ -152,6 +153,19 @@ func (a *Acces) DefinirEnvironnement(projet, nom string, e Environnement) error 
 		if p.Environnements == nil {
 			p.Environnements = map[string]*Environnement{}
 		}
+		// one environment per host name, across projects: a dev task must never hold prod's name (C57)
+		if h := hoteEnv(&e); h != "" {
+			for nomP, autre := range f.Projets {
+				if autre == nil {
+					continue
+				}
+				for nomE, x := range autre.Environnements {
+					if (nomP != projet || nomE != nom) && hoteEnv(x) == h {
+						return erreurEntreeArgs{errEnvHotePris, []string{h, nomP + "/" + nomE}}
+					}
+				}
+			}
+		}
 		e.CleDeploiement, e.Certificat, e.CertificatExpire = "", "", ""
 		if avant := p.Environnements[nom]; avant != nil {
 			e.Certificat, e.CertificatExpire = avant.Certificat, avant.CertificatExpire
@@ -159,6 +173,34 @@ func (a *Acces) DefinirEnvironnement(projet, nom string, e Environnement) error 
 		p.Environnements[nom] = &e
 		return nil
 	})
+}
+
+// hoteEnv: the lower-case host name of e's URL ("" without URL).
+func hoteEnv(e *Environnement) string {
+	if e == nil {
+		return ""
+	}
+	u, err := url.Parse(e.URL)
+	if err != nil {
+		return ""
+	}
+	return strings.ToLower(u.Hostname())
+}
+
+// HotesProd: host name → "project/prod" for every prod environment with a URL, all projects.
+func (a *Acces) HotesProd() map[string]string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	r := map[string]string{}
+	for nomP, p := range a.f.Projets {
+		if p == nil {
+			continue
+		}
+		if h := hoteEnv(p.Environnements["prod"]); h != "" {
+			r[h] = nomP + "/prod"
+		}
+	}
+	return r
 }
 
 // NoterCertificat records environment nom's origin certificate (its vault entry and expiry).
