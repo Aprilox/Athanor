@@ -3,6 +3,7 @@ package main
 // Local HTTP server: shared state, request protection (same origin, locking), routes.
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/hex"
@@ -56,6 +57,15 @@ type Serveur struct {
 	signaux map[string]SignalPilote
 	// the temporary project of Test the hub's MCP while it runs (hub_test_mcp.go), guarded by mu
 	projetTestMCP Projet
+	// the Servers operations of each session token, by its hash, cut when it is revoked (C33)
+	opsMu sync.Mutex
+	ops   map[string]opsSession
+}
+
+// opsSession: the context of a session's operations and what cancels it.
+type opsSession struct {
+	ctx     context.Context
+	annuler context.CancelFunc
 }
 
 func nouveauServeur(config Config) *Serveur {

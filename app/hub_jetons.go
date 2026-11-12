@@ -213,6 +213,7 @@ func (s *Serveur) revoquerJetons(raison string, f func(SessionHub) bool) {
 		return
 	}
 	projets, err := s.jetons.Revoquer(f)
+	s.annulerSessions() // C33: what a revoked session runs on a server stops now
 	for _, nom := range projets {
 		if p, ok := s.projetParNom(nom); ok {
 			_ = os.Remove(s.fichierJeton(p))

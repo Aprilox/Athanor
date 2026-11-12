@@ -131,7 +131,13 @@ func executerSSH(ctx context.Context, c *ssh.Client, commande string, entree io.
 	select {
 	case err = <-fini:
 	case <-ctx.Done():
+		// C34 : le processus distant est arrêté, pas seulement le canal ; SIGTERM et non SIGKILL : `timeout`
+		// (commandeBornee) le relaie à tout son groupe puis tue 5 s plus tard, un SIGKILL ne tuerait que lui
+		_ = s.Signal(ssh.SIGTERM)
 		s.Close() // la sortie partielle est encore écrite par la session : on ne la lit pas
+		if errors.Is(ctx.Err(), context.Canceled) {
+			return ResultatSSH{Code: -1}, errors.New("command stopped: the operation was cancelled (session revoked or emergency stop)")
+		}
 		return ResultatSSH{Code: -1}, fmt.Errorf("command stopped after %s", delai)
 	}
 	r := ResultatSSH{Sortie: tampon.Bytes()}

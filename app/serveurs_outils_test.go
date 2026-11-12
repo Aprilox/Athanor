@@ -114,7 +114,7 @@ func TestServeursOutils(t *testing.T) {
 	}
 
 	// ssh_commande: output and code, time limit, output cut
-	if r, err := appel("ssh_commande", map[string]any{"commande": "uname -a"}); err != nil || r.Sortie != "ok:uname -a" || r.Code != 0 {
+	if r, err := appel("ssh_commande", map[string]any{"commande": "uname -a"}); err != nil || r.Sortie != "ok:"+commandeBornee("uname -a", delaiCommande) || r.Code != 0 {
 		t.Errorf("command: %v %+v", err, r)
 	}
 	if r, err := appel("ssh_commande", map[string]any{"commande": "echoue"}); err != nil || r.Code != 5 {
@@ -515,6 +515,22 @@ func TestServeursOutilsConteneur(t *testing.T) {
 	}
 	if r := appel("pare_feu", map[string]any{"action": "status"}); strings.Contains(r.Sortie, "8080") {
 		t.Errorf("ufw rule not deleted: %+v", r)
+	}
+
+	// C34: a long command stopped by its delay, or cancelled (C33), is killed on the server: its touch never runs
+	b, _ = json.Marshal(map[string]any{"commande": "sleep 6; touch /tmp/m94-delai", "delai_s": 2})
+	if _, err := s.appelerOutilServeur(ctx, "test", id, "ssh_commande", b, Sauvegarde{}); err == nil || !strings.Contains(err.Error(), "stopped after 2s") {
+		t.Errorf("delay: %v", err)
+	}
+	annule, annuler := context.WithCancel(ctx)
+	time.AfterFunc(time.Second, annuler)
+	b, _ = json.Marshal(map[string]any{"commande": "sleep 6; touch /tmp/m94-annule", "delai_s": 30})
+	if _, err := s.appelerOutilServeur(annule, "test", id, "ssh_commande", b, Sauvegarde{}); err == nil || !strings.Contains(err.Error(), "cancelled") {
+		t.Errorf("cancel: %v", err)
+	}
+	time.Sleep(7 * time.Second)
+	if r := appel("ssh_commande", map[string]any{"commande": "ls /tmp | grep -c m94 || true; pgrep -fc '^sleep 6$' || true"}); r.Sortie != "0\n0\n" {
+		t.Errorf("a stopped command kept running on the server: %q", r.Sortie)
 	}
 
 	journal := journalAuditTexte(t)

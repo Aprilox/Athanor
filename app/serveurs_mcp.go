@@ -115,11 +115,52 @@ func faireOutilServeur(nom string) func(*Serveur, SessionHub, json.RawMessage) (
 		if err != nil {
 			return "", errors.New(s.masquerSecrets(err.Error()))
 		}
-		r, err := s.appelerOutilServeur(context.Background(), x.Agent, id, nom, e.Arguments, sauvegardeDe(e))
+		r, err := s.appelerOutilServeur(s.contexteSession(x.Hache), x.Agent, id, nom, e.Arguments, sauvegardeDe(e))
 		if err != nil {
 			return "", errors.New(s.masquerSecrets(err.Error()))
 		}
 		return enJSON(r), nil
+	}
+}
+
+// contexteSession: the context of a session's Servers operations, cancelled as soon as its token is revoked
+// (the end of its task, the owner, the emergency stop: C33); already cancelled when the token is gone.
+func (s *Serveur) contexteSession(h string) context.Context {
+	s.opsMu.Lock()
+	defer s.opsMu.Unlock()
+	if o, ok := s.ops[h]; ok {
+		return o.ctx
+	}
+	ctx, annuler := context.WithCancel(context.Background())
+	if s.jetons == nil || !slices.ContainsFunc(s.jetons.Liste(), func(x SessionHub) bool { return x.Hache == h }) {
+		annuler() // revoked between its check and now
+		return ctx
+	}
+	if s.ops == nil {
+		s.ops = map[string]opsSession{}
+	}
+	s.ops[h] = opsSession{ctx, annuler}
+	return ctx
+}
+
+// annulerSessions: the operations of every session no longer in the store are cut.
+func (s *Serveur) annulerSessions() {
+	s.opsMu.Lock()
+	defer s.opsMu.Unlock()
+	if len(s.ops) == 0 {
+		return
+	}
+	valides := map[string]bool{}
+	if s.jetons != nil {
+		for _, x := range s.jetons.Liste() {
+			valides[x.Hache] = true
+		}
+	}
+	for h, o := range s.ops {
+		if !valides[h] {
+			o.annuler()
+			delete(s.ops, h)
+		}
 	}
 }
 

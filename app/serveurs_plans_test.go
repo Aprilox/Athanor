@@ -153,7 +153,7 @@ func TestServeursPlans(t *testing.T) {
 	if txt, e := appel("ssh_commande", `{"serveur":"ab12","commande":"rm -rf /srv/vieux"}`); e || !strings.Contains(txt, "backup: ") || !strings.Contains(txt, "(/srv/vieux)") {
 		t.Errorf("step with a backup: %v %q", e, txt)
 	}
-	if c1, c2 := <-mem.commandes, <-mem.commandes; !strings.Contains(c1, "tar -czf") || !strings.Contains(c1, plan8+"-1") || !strings.Contains(c1, "./srv/vieux") || c2 != "rm -rf /srv/vieux" {
+	if c1, c2 := <-mem.commandes, <-mem.commandes; !strings.Contains(c1, "tar -czf") || !strings.Contains(c1, plan8+"-1") || !strings.Contains(c1, "./srv/vieux") || c2 != commandeBornee("rm -rf /srv/vieux", delaiCommande) {
 		t.Errorf("archive then step: %q, %q", c1, c2)
 	}
 	plan9, _ := proposer(rmSauve)

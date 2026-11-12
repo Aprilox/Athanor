@@ -196,8 +196,15 @@ func outilSSHCommande(ctx context.Context, c *ssh.Client, _ ServeurInventaire, a
 	if a.DelaiS > 0 {
 		delai = min(time.Duration(a.DelaiS)*time.Second, delaiCommandeMax)
 	}
-	r, err := executerSSH(ctx, c, a.Commande, nil, delai)
+	r, err := executerSSH(ctx, c, commandeBornee(a.Commande, delai), nil, delai)
 	return resultatSSH(r), err
+}
+
+// commandeBornee: an agent's command run by the login shell under `timeout -k 5 <delay>` (C34): killed on the
+// server too when its delay ends, its whole process group; without a usable timeout, run as is.
+func commandeBornee(commande string, delai time.Duration) string {
+	return scriptShell(false, `if timeout -k 1 5 true 2>/dev/null; then exec timeout -k 5 "$2" "${SHELL:-/bin/sh}" -c "$1"; fi; exec "${SHELL:-/bin/sh}" -c "$1"`,
+		commande, strconv.Itoa(int((delai+time.Second-1)/time.Second)))
 }
 
 // cheminDistant: an absolute path on the server, without control characters (it is always passed quoted).

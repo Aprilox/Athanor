@@ -92,7 +92,7 @@ func TestServeursMCP(t *testing.T) {
 	}
 
 	// a call on the perimeter, the vault's value masked in the answer
-	if txt, e := appel(jeton, "ssh_commande", `{"serveur":"ab12","commande":"uname -a"}`); e || !strings.Contains(txt, "ok:uname -a") {
+	if txt, e := appel(jeton, "ssh_commande", `{"serveur":"ab12","commande":"uname -a"}`); e || !strings.Contains(txt, citerShell("uname -a")) {
 		t.Errorf("command: %v %q", e, txt)
 	}
 	if txt, e := appel(jeton, "ssh_commande", `{"serveur":"ab12","commande":"echo temoin"}`); e || strings.Contains(txt, temoinOutils) || !strings.Contains(txt, "la valeur") {
@@ -126,7 +126,7 @@ func TestServeursMCP(t *testing.T) {
 		t.Errorf("%d refused calls reached the server", n)
 	}
 	for _, args := range []string{`{"serveur":"ab12","commande":"df -h","classe":"lecture"}`} {
-		if txt, e := appel(jeton, "ssh_commande", args); e || !strings.Contains(txt, "ok:df -h") {
+		if txt, e := appel(jeton, "ssh_commande", args); e || !strings.Contains(txt, citerShell("df -h")) {
 			t.Errorf("a read: %v %q", e, txt)
 		}
 	}
@@ -190,7 +190,7 @@ func TestServeursMCP(t *testing.T) {
 	if err := s.acces.ForcerInfra("demo", true); err != nil {
 		t.Fatal(err)
 	}
-	if txt, e := appel(jeton, "ssh_commande", `{"serveur":"ab12","commande":"id"}`); e || !strings.Contains(txt, "ok:id") {
+	if txt, e := appel(jeton, "ssh_commande", `{"serveur":"ab12","commande":"id"}`); e || !strings.Contains(txt, citerShell("id")) {
 		t.Errorf("native forced: %v %q", e, txt)
 	}
 	modeNatif.Store(false)
