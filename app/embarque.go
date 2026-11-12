@@ -25,6 +25,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 )
 
 // kitEmbarque: this executable carries the kit's files (a build of "athanor construire" or a release).
@@ -56,7 +57,13 @@ func ecrireAtomique(dest string, contenu []byte, mode os.FileMode) error {
 		err = os.Chmod(t.Name(), mode)
 	}
 	if err == nil {
-		if err = os.Rename(t.Name(), dest); err != nil && runtime.GOOS == "windows" {
+		err = os.Rename(t.Name(), dest)
+		// Windows refuses the rename while a reader holds dest open (a page polling it): retry briefly
+		for i := 0; err != nil && runtime.GOOS == "windows" && i < 20; i++ {
+			time.Sleep(25 * time.Millisecond)
+			err = os.Rename(t.Name(), dest)
+		}
+		if err != nil && runtime.GOOS == "windows" {
 			ancien := dest + ".ancien"
 			_ = os.Remove(ancien)
 			if os.Rename(dest, ancien) == nil {

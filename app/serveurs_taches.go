@@ -15,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -40,6 +41,7 @@ type TacheServeurs struct {
 	Serveurs     []string           `json:"serveurs"`
 	Etat         string             `json:"etat"`
 	Forcee       bool               `json:"forcee,omitempty"` // native Windows mode, forced by the owner with the password
+	Env          string             `json:"env,omitempty"`    // "projet/env": a task for an environment (M116)
 	Cree         string             `json:"cree"`
 	Fin          string             `json:"fin,omitempty"`
 	Plans        []string           `json:"plans,omitempty"`
@@ -199,6 +201,12 @@ func enregistrerTache(t TacheServeurs) error {
 // lancerTacheServeurs: a new task on serveurs (inventory ids, the first one holds the task's file), run in the
 // background; forcee: the owner forced it in native Windows mode (the API asks the password first).
 func (s *Serveur) lancerTacheServeurs(texte string, serveurs []string, forcee bool) (TacheServeurs, error) {
+	return s.lancerTache(texte, serveurs, forcee, "")
+}
+
+// lancerTache: env "projet/env" (M116) gives the task that environment's servers and the host name of its URL, the
+// only name its Cloudflare tools act on; serveurs must then be among the environment's.
+func (s *Serveur) lancerTache(texte string, serveurs []string, forcee bool, env string) (TacheServeurs, error) {
 	texte = strings.TrimSpace(s.masquerSecrets(texte))
 	switch {
 	case texte == "" || len([]rune(texte)) > maxTexteTache:
@@ -210,6 +218,22 @@ func (s *Serveur) lancerTacheServeurs(texte string, serveurs []string, forcee bo
 	case s.jetons == nil || s.approbations == nil:
 		return TacheServeurs{}, errors.New("the hub's sessions or approvals cannot be read")
 	}
+	var hotes []string
+	if env != "" {
+		projet, nom, _ := strings.Cut(env, "/")
+		var e Environnement
+		if s.acces != nil && slices.Contains(s.nomsProjets(), projet) {
+			e = s.acces.Environnements(projet)[nom]
+		}
+		if len(e.Serveurs) == 0 || slices.ContainsFunc(serveurs, func(id string) bool { return !slices.Contains(e.Serveurs, id) }) {
+			return TacheServeurs{}, erreurEntree("Unknown environment, or this server is not one of its servers")
+		}
+		// all its servers, the given one first (it holds the task's file)
+		serveurs = append(serveurs[:1:1], slices.DeleteFunc(slices.Clone(e.Serveurs), func(id string) bool { return id == serveurs[0] })...)
+		if u, err := url.Parse(e.URL); err == nil && u.Hostname() != "" {
+			hotes = []string{strings.ToLower(u.Hostname())}
+		}
+	}
 	liste, err := lireServeurs()
 	if err != nil {
 		return TacheServeurs{}, err
@@ -219,17 +243,17 @@ func (s *Serveur) lancerTacheServeurs(texte string, serveurs []string, forcee bo
 			return TacheServeurs{}, errServeurInconnu
 		}
 	}
-	t := TacheServeurs{ID: aleatoire(6), Texte: texte, Serveurs: slices.Clone(serveurs), Forcee: forcee, Cree: time.Now().UTC().Format(time.RFC3339)}
+	t := TacheServeurs{ID: aleatoire(6), Texte: texte, Serveurs: slices.Clone(serveurs), Forcee: forcee, Env: env, Cree: time.Now().UTC().Format(time.RFC3339)}
 	dossier := dossierSessionTache(t.ID)
 	if err := os.MkdirAll(filepath.Join(dossier, "travail"), 0o700); err != nil {
 		return TacheServeurs{}, err
 	}
-	jeton, err := s.jetons.CreerSession(SessionHub{Projet: prefixeTache + t.ID, Mission: t.ID, Agent: agentServeurs, Outils: outilsServeursMCP, Serveurs: t.Serveurs})
+	jeton, err := s.jetons.CreerSession(SessionHub{Projet: prefixeTache + t.ID, Mission: t.ID, Agent: agentServeurs, Outils: outilsServeursMCP, Serveurs: t.Serveurs, Env: env, Hotes: hotes})
 	if err == nil {
 		err = ecrireAtomique(filepath.Join(dossier, "hub-jeton"), []byte(jeton+"\n"), 0o600)
 	}
 	if err == nil {
-		err = os.WriteFile(filepath.Join(dossier, "consigne.txt"), []byte(consigneChefOps(texte, t.Serveurs)), 0o600)
+		err = os.WriteFile(filepath.Join(dossier, "consigne.txt"), []byte(consigneChefOps(texte, t.Serveurs)+consigneEnv(env, hotes)), 0o600)
 	}
 	if err != nil {
 		_, _ = s.jetons.Revoquer(func(x SessionHub) bool { return x.Projet == prefixeTache+t.ID })
@@ -517,6 +541,7 @@ func (s *Serveur) apiLancerTacheServeur(w http.ResponseWriter, r *http.Request) 
 	var c struct {
 		Texte      string `json:"texte"`
 		Forcer     bool   `json:"forcer"`
+		Env        string `json:"env"` // "projet/env", optional (M116)
 		MotDePasse string `json:"mot_de_passe"`
 	}
 	if lireCorps(r, &c) != nil {
@@ -534,7 +559,7 @@ func (s *Serveur) apiLancerTacheServeur(w http.ResponseWriter, r *http.Request) 
 	if forcee && !s.preuveServeur(w, r, c.MotDePasse, "tâche serveurs forcée refusée", id) {
 		return
 	}
-	t, err := s.lancerTacheServeurs(c.Texte, []string{id}, forcee)
+	t, err := s.lancerTache(c.Texte, []string{id}, forcee, c.Env)
 	if err != nil {
 		s.erreurServeurs(w, err)
 		return

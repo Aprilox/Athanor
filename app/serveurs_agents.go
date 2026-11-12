@@ -33,3 +33,13 @@ func consigneApplication(plan string) string {
 		"4. Call runbook_ajouter once: what changed, the backups Athanor reported, how to go back.\n" +
 		"5. Answer the owner in a few plain sentences: done or not, and what was checked.\n"
 }
+
+// consigneEnv: what a task launched for an environment adds (M116): its host names and its Cloudflare tools.
+func consigneEnv(env string, hotes []string) string {
+	if env == "" {
+		return ""
+	}
+	return "\nThis task is for environment " + env + " (host names: " + strings.Join(hotes, ", ") + "). The Cloudflare tools " +
+		"(fournisseurs, dns_lister, ssl_lire to read; dns_ecrire, dns_supprimer, ssl_regler to change) act only on these names. " +
+		"Their changes are plan steps like any other (proposer_plan, serveur = any of your servers).\n"
+}

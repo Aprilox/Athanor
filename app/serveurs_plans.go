@@ -78,6 +78,7 @@ func init() {
 			}
 		}
 	})
+	outils = append(outils, outilsCloudflare...)
 	etape := schemaObjet(map[string]any{
 		"outil":           parmi("The Servers tool of this step", outils...),
 		"arguments":       map[string]any{"type": "object", "description": "The tool's own arguments, exactly as you will call it (without serveur)"},
@@ -88,7 +89,7 @@ func init() {
 	}, "outil", "arguments", "pourquoi")
 	outilsHub["proposer_plan"] = OutilHub{Description: "Propose the changes you want to make on a server as a plan for the owner. " +
 		"Once accepted, call each step's tool with exactly its arguments, each step once, within 2 hours. A change outside an accepted plan is refused.",
-		Schema: schemaObjet(map[string]any{"serveur": schemaTexte("The server's id, from serveurs_liste"),
+		Schema: schemaObjet(map[string]any{"serveur": schemaTexte("The server's id, from serveurs_liste (a plan of Cloudflare steps: any of your servers)"),
 			"resume": schemaTexte("What the plan does, in one or two sentences"),
 			"etapes": map[string]any{"type": "array", "items": etape, "description": "The steps, in order"}}, "serveur", "resume", "etapes"),
 		Faire: outilProposerPlan}
@@ -182,6 +183,9 @@ func outilProposerPlan(s *Serveur, x SessionHub, args json.RawMessage) (string, 
 	}
 	srv, prod := serveurProd(a.Serveur)
 	p := PlanServeur{Serveur: a.Serveur, Nom: srv.Nom, Env: "dev", Projet: x.Projet, Mission: x.Mission, Agent: x.Agent, Resume: resume}
+	if strings.HasSuffix(x.Env, "/prod") { // a task for a prod environment: its Cloudflare steps too (M116)
+		prod = true
+	}
 	if prod {
 		p.Env = "prod"
 	}
@@ -192,7 +196,8 @@ func outilProposerPlan(s *Serveur, x SessionHub, args json.RawMessage) (string, 
 				Agent: x.Agent, Action: "serveurs.proposer_plan", Resultat: "refusé : " + couper(s.masquerSecrets(err.Error()), auditMaxOutil)})
 			return "", err
 		}
-		if _, ok := outilsServeurs[e.Outil]; !ok {
+		cloudflare := slices.Contains(outilsCloudflare, e.Outil)
+		if _, ok := outilsServeurs[e.Outil]; !ok && !cloudflare {
 			return echec(fmt.Errorf("step %d: unknown tool %q", i+1, couper(e.Outil, 40)))
 		}
 		if e.Arguments == nil {
@@ -207,6 +212,16 @@ func outilProposerPlan(s *Serveur, x SessionHub, args json.RawMessage) (string, 
 		et, err := classerEtape(e.Outil, e.Arguments)
 		if err != nil {
 			return echec(fmt.Errorf("step %d: %w", i+1, err))
+		}
+		if cloudflare {
+			var c argsCloudflare
+			_ = json.Unmarshal(et.Arguments, &c)
+			if err := s.nomPerimetre(x, "proposer_plan", c.Nom); err != nil {
+				return "", fmt.Errorf("step %d: %w", i+1, err)
+			}
+			if len(e.Sauvegarde) > 0 {
+				return echec(fmt.Errorf("step %d: a Cloudflare step backs up no file: say in sans_sauvegarde what it removes (its result lists it)", i+1))
+			}
 		}
 		pourquoi, err := texteRequis("pourquoi", e.Pourquoi, 300)
 		if err != nil {
