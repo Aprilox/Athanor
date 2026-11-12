@@ -405,3 +405,62 @@ func TestOutilsCloudflare(t *testing.T) {
 		t.Errorf("audit log: token present, or a call or a refusal missing")
 	}
 }
+
+// TestCloudflareGardes (M125): on an Access environment dns_ecrire always writes through the proxy (C58); it
+// never picks one of several A records (C67); dns_lister of an environment without URL says so (C66).
+func TestCloudflareGardes(t *testing.T) {
+	s := serveurCoffreTest(t)
+	motDePasseCoffreTest(t, s)
+	_ = os.Remove(s.acces.chemin)
+	s.chargerAcces()
+	t.Cleanup(func() { _ = os.Remove(s.acces.chemin) })
+	const jetonCF = "cf-jeton-gardes"
+	cle, err := s.coffre.Ajouter(EntreeCoffre{Nom: "Cloudflare", Famille: "secret", Type: "cloudflare", Portee: "infra"}, jetonCF)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := Fournisseur{ID: "f1", Type: "cloudflare", Nom: "CF", Cle: cle.ID, Etat: "ok", Zones: []ZoneFournisseur{{ID: "z1", Nom: "exemple.fr"}}}
+	if err := modifierFournisseurs(func(l []Fournisseur) ([]Fournisseur, error) { return append(l, f), nil }); err != nil {
+		t.Fatal(err)
+	}
+	for env, e := range map[string]Environnement{"dev": {URL: "https://app.exemple.fr", Protection: "access", Politique: "auto", Fournisseur: "f1"},
+		"staging": {Protection: "aucune", Politique: "auto", Fournisseur: "f1"}} {
+		if err := s.acces.DefinirEnvironnement("demo", env, e); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cf := lancerFauxCFDNS(t, jetonCF)
+	dev := SessionHub{Projet: "demo", Env: "demo/dev", Hotes: []string{"app.exemple.fr"}}
+	ecrire := func(x SessionHub, args string) (any, error) {
+		t.Helper()
+		_, _, a, err := classerCloudflare("dns_ecrire", []byte(args))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return s.executerCloudflare(x, "dns_ecrire", a)
+	}
+	r, err := ecrire(dev, `{"nom":"app.exemple.fr","type":"A","contenu":"198.51.100.7","proxied":false}`)
+	if err != nil || !strings.Contains(enJSON(r), "forced to true") {
+		t.Errorf("forced proxy: %v %v", err, r)
+	}
+	attendu := []string{"GET /zones/z1/dns_records?name=app.exemple.fr&per_page=100&type=A",
+		`PUT /zones/z1/dns_records/r1 {"content":"198.51.100.7","name":"app.exemple.fr","proxied":true,"ttl":1,"type":"A"}`}
+	if got := cf.relever(); !slices.Equal(got, attendu) {
+		t.Errorf("calls:\n got  %q\n want %q", got, attendu)
+	}
+	// two A records: which one to replace is not guessed, nothing written
+	cf.mu.Lock()
+	cf.recs = append(cf.recs, enregistrementDNS{ID: "r4", Type: "A", Name: "app.exemple.fr", Content: "198.51.100.7", Proxied: true, TTL: 1})
+	cf.mu.Unlock()
+	if _, err := ecrire(dev, `{"nom":"app.exemple.fr","type":"A","contenu":"198.51.100.7","proxied":true}`); err == nil || !strings.Contains(err.Error(), "2 A records hold app.exemple.fr") {
+		t.Errorf("several A records: %v", err)
+	}
+	if got := cf.relever(); len(got) != 1 || !strings.HasPrefix(got[0], "GET ") {
+		t.Errorf("a write despite several records: %q", got)
+	}
+	// an environment without URL: no host name, no panic
+	sansURL := SessionHub{Projet: "demo", Env: "demo/staging"}
+	if _, err := s.executerCloudflare(sansURL, "dns_lister", argsCloudflare{}); err == nil || !strings.Contains(err.Error(), "has no URL") {
+		t.Errorf("dns_lister without URL: %v", err)
+	}
+}

@@ -29,7 +29,7 @@ Every call goes to `https://api.cloudflare.com/client/v4`, from Athanor's own pr
 | DNS (agent tools `dns_lister`, `dns_ecrire`, `dns_supprimer`) | `GET`, `POST`, `PUT`, `DELETE /zones/{zone}/dns_records…`: A, AAAA, CNAME and TXT records of the environment's host name only |
 | HTTPS mode (`ssl_lire`, `ssl_regler`) | `GET`, `PATCH /zones/{zone}/settings/ssl` |
 | Origin certificate (`certificat_origine`) | `POST /certificates` with a signing request made by Athanor (ECDSA key generated in memory) |
-| Cloudflare Access (`access_proteger`, `access_retirer`) | `GET`, `POST`, `PUT`, `DELETE /accounts/{account}/access/apps…` and `…/policies`: a self-hosted application on the host name, allowing only the e-mail addresses you give |
+| Cloudflare Access (`access_proteger`, `access_retirer`) | `GET`, `POST`, `PUT`, `DELETE /accounts/{account}/access/apps…` and `…/policies`: a self-hosted application on the host name, allowing only the e-mail addresses you give; first a `GET …/dns_records` of the name, refused unless its A, AAAA or CNAME records all go through Cloudflare's proxy. On such an environment `dns_ecrire` always writes `proxied: true`, and the site's Caddy block answers 403 to any address outside Cloudflare's published ranges, so nobody goes around Access by the server's address |
 
 Reading runs at once. Any change is a step of a plan you accept first (*For you*, the bell or your phone); deleting a record, turning HTTPS off or removing Access is *destructive*, and a *prod* environment always waits for you. The agent only acts on the host name of the environment its task was launched for: another name or another zone gets the same answer as an unknown one.
 
@@ -69,7 +69,7 @@ Chaque appel part vers `https://api.cloudflare.com/client/v4`, depuis le process
 | DNS (outils de l'agent `dns_lister`, `dns_ecrire`, `dns_supprimer`) | `GET`, `POST`, `PUT`, `DELETE /zones/{zone}/dns_records…` : enregistrements A, AAAA, CNAME et TXT du nom d'hôte de l'environnement seulement |
 | Mode HTTPS (`ssl_lire`, `ssl_regler`) | `GET`, `PATCH /zones/{zone}/settings/ssl` |
 | Certificat d'origine (`certificat_origine`) | `POST /certificates` avec une demande de signature faite par Athanor (clé ECDSA générée en mémoire) |
-| Cloudflare Access (`access_proteger`, `access_retirer`) | `GET`, `POST`, `PUT`, `DELETE /accounts/{compte}/access/apps…` et `…/policies` : une application *self-hosted* sur le nom d'hôte, ouverte aux seules adresses e-mail que vous donnez |
+| Cloudflare Access (`access_proteger`, `access_retirer`) | `GET`, `POST`, `PUT`, `DELETE /accounts/{compte}/access/apps…` et `…/policies` : une application *self-hosted* sur le nom d'hôte, ouverte aux seules adresses e-mail que vous donnez ; d'abord un `GET …/dns_records` du nom, refusé si ses enregistrements A, AAAA ou CNAME ne passent pas tous par le proxy de Cloudflare. Sur un tel environnement `dns_ecrire` écrit toujours `proxied: true`, et le bloc Caddy du site répond 403 à toute adresse hors des plages publiées par Cloudflare : personne ne contourne Access par l'adresse du serveur |
 
 La lecture s'exécute aussitôt. Tout changement est une étape d'un plan que vous acceptez d'abord (*Pour vous*, la cloche ou votre téléphone) ; supprimer un enregistrement, couper le HTTPS ou retirer Access est *destructeur*, et un environnement *prod* vous attend toujours. L'agent n'agit que sur le nom d'hôte de l'environnement pour lequel sa tâche a été lancée : un autre nom ou une autre zone reçoit la même réponse qu'un nom inconnu.
 

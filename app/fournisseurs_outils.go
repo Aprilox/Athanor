@@ -61,7 +61,7 @@ func init() {
 			map[string]any{"nom": schemaTexte("A host name of your environment; all of them when empty")}, nil},
 		{"dns_ecrire", "Create or update a DNS record of a host name of your environment (A, AAAA and CNAME: the record of that type is replaced; TXT: added). A change: only as a step of an accepted plan.",
 			map[string]any{"nom": nom, "type": parmi("Record type", typesDNS...), "contenu": schemaTexte("IPv4 (A), IPv6 (AAAA), target host (CNAME) or text (TXT)"),
-				"proxied": map[string]any{"type": "boolean", "description": "Through Cloudflare's proxy (A, AAAA, CNAME; false by default)"},
+				"proxied": map[string]any{"type": "boolean", "description": "Through Cloudflare's proxy (A, AAAA, CNAME; false by default, always true when the environment is protected by Access)"},
 				"ttl":     map[string]any{"type": "integer", "description": "Seconds, 60 to 86400; automatic when empty"}}, []string{"nom", "type", "contenu"}},
 		{"dns_supprimer", "Delete the DNS records of a host name of your environment of one type (only the one holding contenu when given). Destructive: only as a step of an accepted plan.",
 			map[string]any{"nom": nom, "type": parmi("Record type", typesDNS...), "contenu": schemaTexte("Only the record holding exactly this content")}, []string{"nom", "type"}},
@@ -237,13 +237,18 @@ func (s *Serveur) etapeCloudflare(x SessionHub, e *Etape) error {
 	return fmt.Errorf("plan required: this is a %s action (%s); a change runs only as a step of a plan the owner accepted, with exactly its arguments: propose a plan (proposer_plan, serveur = one of your servers)%s", e.Classe, e.Raison, info)
 }
 
+// envSession: the environment x's task was launched for (zero when none).
+func (s *Serveur) envSession(x SessionHub) Environnement {
+	projet, env, _ := strings.Cut(x.Env, "/")
+	if s.acces == nil || projet == "" {
+		return Environnement{}
+	}
+	return s.acces.Environnements(projet)[env]
+}
+
 // fournisseurDe: the provider of x's environment, without its token.
 func (s *Serveur) fournisseurDe(x SessionHub) (Fournisseur, error) {
-	projet, env, _ := strings.Cut(x.Env, "/")
-	var e Environnement
-	if s.acces != nil && projet != "" {
-		e = s.acces.Environnements(projet)[env]
-	}
+	e := s.envSession(x)
 	if e.Fournisseur == "" {
 		return Fournisseur{}, errSansFournis
 	}
@@ -382,6 +387,9 @@ func (s *Serveur) executerCloudflare(x SessionHub, outil string, a argsCloudflar
 	if a.Nom == "" {
 		noms = x.Hotes
 	}
+	if len(noms) == 0 { // C66
+		return nil, errors.New("the environment has no URL: the owner sets it in the project's Environments panel")
+	}
 	lister := func(z ZoneFournisseur, nom, typ string) ([]enregistrementDNS, error) {
 		var l []enregistrementDNS
 		q := url.Values{"name": {nom}, "per_page": {"100"}}
@@ -400,6 +408,16 @@ func (s *Serveur) executerCloudflare(x SessionHub, outil string, a argsCloudflar
 	case "certificat_origine":
 		return s.certificatOrigine(x, jeton, a.Nom, a.serveur)
 	case "access_proteger", "access_retirer":
+		if outil == "access_proteger" { // Access only sees what goes through Cloudflare's proxy (C58)
+			l, err := lister(z, a.Nom, "")
+			if err != nil {
+				return nil, err
+			}
+			l = slices.DeleteFunc(l, func(r enregistrementDNS) bool { return r.Type == "TXT" })
+			if len(l) == 0 || slices.ContainsFunc(l, func(r enregistrementDNS) bool { return !r.Proxied }) {
+				return nil, errors.New(a.Nom + " does not go through Cloudflare's proxy, so Access would not protect it: write its A, AAAA or CNAME record with proxied=true first (dns_ecrire in a plan)")
+			}
+		}
 		return s.access(f, jeton, a)
 	case "dns_lister":
 		tous := []enregistrementDNS{}
@@ -414,9 +432,16 @@ func (s *Serveur) executerCloudflare(x SessionHub, outil string, a argsCloudflar
 		}
 		return map[string]any{"enregistrements": vueDNS(tous)}, nil
 	case "dns_ecrire":
+		force := a.Type != "TXT" && !*a.Proxied && s.envSession(x).Protection == "access"
+		if force { // an Access site is never reached around the proxy (C58)
+			a.Proxied = &force
+		}
 		l, err := lister(z, a.Nom, a.Type)
 		if err != nil {
 			return nil, err
+		}
+		if len(l) > 1 && a.Type != "TXT" { // which one to replace is not ours to guess (C67)
+			return nil, fmt.Errorf("%d %s records hold %s: delete them first (dns_supprimer), then write the one you want", len(l), a.Type, a.Nom)
 		}
 		corps := map[string]any{"type": a.Type, "name": a.Nom, "content": a.Contenu, "ttl": a.TTL}
 		if a.Proxied != nil {
@@ -426,9 +451,14 @@ func (s *Serveur) executerCloudflare(x SessionHub, outil string, a argsCloudflar
 			return r.Content == a.Contenu && (a.Type == "TXT" || r.Proxied == *a.Proxied && r.TTL == a.TTL)
 		}
 		var r enregistrementDNS
+		res := map[string]any{"resultat": "written"}
+		if force {
+			res["proxied"] = "forced to true: the environment is protected by Cloudflare Access"
+		}
 		switch {
 		case slices.ContainsFunc(l, pareil):
-			return map[string]any{"resultat": "unchanged: the record already holds this"}, nil
+			res["resultat"] = "unchanged: the record already holds this"
+			return res, nil
 		case len(l) > 0 && a.Type != "TXT":
 			err = s.cloudflare(jeton, "PUT", dns+"/"+url.PathEscape(l[0].ID), corps, &r)
 		default:
@@ -437,7 +467,8 @@ func (s *Serveur) executerCloudflare(x SessionHub, outil string, a argsCloudflar
 		if err != nil {
 			return nil, err
 		}
-		return map[string]any{"resultat": "written", "enregistrement": vueDNS([]enregistrementDNS{r})[0]}, nil
+		res["enregistrement"] = vueDNS([]enregistrementDNS{r})[0]
+		return res, nil
 	case "dns_supprimer":
 		l, err := lister(z, a.Nom, a.Type)
 		if err != nil {

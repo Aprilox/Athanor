@@ -36,6 +36,7 @@ var (
 	errEnvPolitique = erreurEntree("Unknown policy (accord or auto)")
 	errEnvProdAuto  = erreurEntree("Production always asks for your approval: its policy cannot be automatic")
 	errEnvFourn     = erreurEntree("Unknown provider")
+	errEnvAuthHTTP  = erreurEntree("The password protection needs an https:// address: over http:// the password would travel in clear")
 )
 
 // erreurEntreeArgs: an input error whose message key takes arguments ({0}…), translated by the page.
@@ -92,6 +93,9 @@ func validerEnvironnement(nom string, e Environnement, inventaire []ServeurInven
 	}
 	if !slices.Contains(protectionsEnv, e.Protection) {
 		return e, errEnvProtect
+	}
+	if e.Protection == "auth_proxy" && strings.HasPrefix(strings.ToLower(e.URL), "http:") {
+		return e, errEnvAuthHTTP // basic_auth in clear (C62)
 	}
 	if e.Politique == "" {
 		e.Politique = "accord"

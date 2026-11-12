@@ -24,6 +24,16 @@ const (
 
 var reAmontCaddy = regexp.MustCompile(`^[A-Za-z0-9.\-]+:[0-9]{1,5}$`)
 
+// plagesCloudflare: the addresses Cloudflare's proxy reaches origins from, as https://www.cloudflare.com/ips-v4
+// and https://www.cloudflare.com/ips-v6 list them (read 2026-11-12). An access site answers only them (C58).
+// shortcut: frozen here, Cloudflare changes them rarely; read those two lists when deploying if they ever move.
+var plagesCloudflare = []string{
+	"173.245.48.0/20", "103.21.244.0/22", "103.22.200.0/22", "103.31.4.0/22", "141.101.64.0/18", "108.162.192.0/18",
+	"190.93.240.0/20", "188.114.96.0/20", "197.234.240.0/22", "198.41.128.0/17", "162.158.0.0/15", "104.16.0.0/13",
+	"104.24.0.0/14", "172.64.0.0/13", "131.0.72.0/22",
+	"2400:cb00::/32", "2606:4700::/32", "2803:f800::/32", "2405:b500::/32", "2405:8100::/32", "2a06:98c0::/29", "2c0f:f248::/32",
+}
+
 // blocCaddy (pure): the site block of e, proxied to amont (host:port); email: ACME's account e-mail (may be
 // empty); hachage: the bcrypt hash of auth_proxy's password (required by auth_proxy, ignored otherwise).
 func blocCaddy(e Environnement, amont, email, hachage string) (string, error) {
@@ -33,6 +43,9 @@ func blocCaddy(e Environnement, amont, email, hachage string) (string, error) {
 	}
 	if !reAmontCaddy.MatchString(amont) {
 		return "", errors.New("upstream: host:port")
+	}
+	if e.Protection == "auth_proxy" && u.Scheme == "http" {
+		return "", errors.New("auth_proxy needs an https:// URL: the password would travel in clear")
 	}
 	hote, adresse := strings.ToLower(u.Hostname()), strings.ToLower(u.Host)
 	var b strings.Builder
@@ -55,6 +68,9 @@ func blocCaddy(e Environnement, amont, email, hachage string) (string, error) {
 		b.WriteString("\t\tStrict-Transport-Security \"max-age=31536000; includeSubDomains\"\n")
 	}
 	b.WriteString("\t\tX-Content-Type-Options nosniff\n\t\tX-Frame-Options DENY\n\t\tReferrer-Policy strict-origin-when-cross-origin\n\t\t-Server\n\t}\n")
+	if e.Protection == "access" { // only Cloudflare's proxy, so Access, reaches the site: never by the origin's address
+		fmt.Fprintf(&b, "\t@horsCloudflare not remote_ip %s\n\trespond @horsCloudflare 403\n", strings.Join(plagesCloudflare, " "))
+	}
 	if e.Protection == "auth_proxy" {
 		if !strings.HasPrefix(hachage, "$2") || strings.ContainsAny(hachage, " \t\n{}") {
 			return "", errors.New("auth_proxy needs the password's bcrypt hash")

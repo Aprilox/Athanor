@@ -55,6 +55,7 @@ type fauxAccess struct {
 	apps   map[string]string   // id → domain
 	pols   map[string][]string // application id → policy ids
 	n      int
+	dns    []enregistrementDNS // zone z1's records, a read kept as "GET dns"
 }
 
 func lancerFauxAccess(t *testing.T, jeton string) *fauxAccess {
@@ -71,6 +72,9 @@ func lancerFauxAccess(t *testing.T, jeton string) *fauxAccess {
 		}
 		parts := strings.Split(strings.Trim(chemin, "/"), "/")
 		switch {
+		case r.Method == "GET" && r.URL.Path == "/client/v4/zones/z1/dns_records" && r.Header.Get("Authorization") == "Bearer "+jeton:
+			f.appels[len(f.appels)-1] = "GET dns"
+			repondre(slices.DeleteFunc(slices.Clone(f.dns), func(x enregistrementDNS) bool { return x.Name != r.URL.Query().Get("name") }))
 		case r.Header.Get("Authorization") != "Bearer "+jeton || !strings.HasPrefix(r.URL.Path, "/client/v4/accounts/acc1/access/apps"):
 			w.WriteHeader(403)
 			_, _ = w.Write([]byte(`{"success":false,"errors":[{"message":"Authentication error"}]}`))
@@ -177,10 +181,29 @@ func TestAccessProteger(t *testing.T) {
 			}
 		}
 	}
-	// the step's addresses in another order and case: the same step
+	// C58: a name that does not go through Cloudflare's proxy is not protected (no record, then an AAAA around it)
+	cf.mu.Lock()
+	cf.dns = []enregistrementDNS{{ID: "t", Type: "TXT", Name: "app.exemple.fr", Content: "v=1"}}
+	cf.mu.Unlock()
+	if txt, e := appel("access_proteger", proteger); !e || !strings.Contains(txt, "does not go through Cloudflare's proxy") {
+		t.Errorf("no proxied record: %v %s", e, txt)
+	}
+	cf.mu.Lock()
+	cf.dns = append(cf.dns, enregistrementDNS{ID: "a", Type: "A", Name: "app.exemple.fr", Content: "203.0.113.5", Proxied: true})
+	cf.mu.Unlock()
+	// the step's addresses in another order and case: the same step (a failed step runs a second time)
 	if txt, e := appel("access_proteger", `{"nom":"app.exemple.fr","emails":["alice@exemple.fr","bob@exemple.fr"]}`); e || !strings.Contains(txt, `"resultat": "protected"`) {
 		t.Fatalf("access_proteger: %v %s", e, txt)
 	}
+	cf.mu.Lock()
+	cf.dns = append(cf.dns, enregistrementDNS{ID: "b", Type: "AAAA", Name: "app.exemple.fr", Content: "2001:db8::5"})
+	cf.mu.Unlock()
+	if txt, e := appel("access_proteger", `{"nom":"app.exemple.fr","emails":["carol@exemple.fr"]}`); !e || !strings.Contains(txt, "proxied=true first") {
+		t.Errorf("an AAAA record around the proxy: %v %s", e, txt)
+	}
+	cf.mu.Lock()
+	cf.dns[2].Proxied = true
+	cf.mu.Unlock()
 	if txt, e := appel("access_proteger", `{"nom":"app.exemple.fr","emails":["carol@exemple.fr"]}`); e || !strings.Contains(txt, `"resultat": "protected"`) {
 		t.Fatalf("access_proteger again: %v %s", e, txt)
 	}
@@ -198,9 +221,9 @@ func TestAccessProteger(t *testing.T) {
 		return `{"decision":"allow","include":[` + strings.Join(inc, ",") + `],"name":"Athanor: allowed e-mails","precedence":1}`
 	}
 	attendus := []string{
-		"GET", `POST  {"domain":"app.exemple.fr","name":"Athanor app.exemple.fr","session_duration":"24h","type":"self_hosted"}`,
+		"GET dns", "GET dns", "GET", `POST  {"domain":"app.exemple.fr","name":"Athanor app.exemple.fr","session_duration":"24h","type":"self_hosted"}`,
 		"GET /app1/policies", "POST /app1/policies " + politique("alice@exemple.fr", "bob@exemple.fr"),
-		"GET", "GET /app1/policies", "PUT /app1/policies/pol-app1 " + politique("carol@exemple.fr"),
+		"GET dns", "GET dns", "GET", "GET /app1/policies", "PUT /app1/policies/pol-app1 " + politique("carol@exemple.fr"),
 		"GET", "DELETE /app1",
 	}
 	if !slices.Equal(cf.appels, attendus) {
@@ -228,13 +251,16 @@ func TestAccessProteger(t *testing.T) {
 func TestBlocCaddy(t *testing.T) {
 	entetes := "\tencode zstd gzip\n\theader {\n\t\tStrict-Transport-Security \"max-age=31536000; includeSubDomains\"\n" +
 		"\t\tX-Content-Type-Options nosniff\n\t\tX-Frame-Options DENY\n\t\tReferrer-Policy strict-origin-when-cross-origin\n\t\t-Server\n\t}\n"
+	cfSeul := "\t@horsCloudflare not remote_ip 173.245.48.0/20 103.21.244.0/22 103.22.200.0/22 103.31.4.0/22 141.101.64.0/18 108.162.192.0/18 " +
+		"190.93.240.0/20 188.114.96.0/20 197.234.240.0/22 198.41.128.0/17 162.158.0.0/15 104.16.0.0/13 104.24.0.0/14 172.64.0.0/13 131.0.72.0/22 " +
+		"2400:cb00::/32 2606:4700::/32 2803:f800::/32 2405:b500::/32 2405:8100::/32 2a06:98c0::/29 2c0f:f248::/32\n\trespond @horsCloudflare 403\n"
 	const h = "$2a$10$abcdefghijklmnopqrstuuJ1cVnS2q2y3w0wqQ2C8b8Lh8m1e0N1a"
 	for _, c := range []struct {
 		e                     Environnement
 		email, hachage, voulu string
 	}{
 		{Environnement{URL: "https://app.exemple.fr", Certificat: "id", Protection: "access"}, "ops@exemple.fr", "",
-			"app.exemple.fr {\n\ttls /etc/athanor/tls/app.exemple.fr.crt /etc/athanor/tls/app.exemple.fr.key\n" + entetes + "\treverse_proxy 127.0.0.1:8080\n}\n"},
+			"app.exemple.fr {\n\ttls /etc/athanor/tls/app.exemple.fr.crt /etc/athanor/tls/app.exemple.fr.key\n" + entetes + cfSeul + "\treverse_proxy 127.0.0.1:8080\n}\n"},
 		{Environnement{URL: "https://App.Exemple.fr/", Protection: "aucune"}, "ops@exemple.fr", h,
 			"app.exemple.fr {\n\ttls ops@exemple.fr\n" + entetes + "\treverse_proxy 127.0.0.1:8080\n}\n"},
 		{Environnement{URL: "https://dev.exemple.fr:8443", Protection: "auth_proxy"}, "", h,
@@ -250,11 +276,12 @@ func TestBlocCaddy(t *testing.T) {
 		e                     Environnement
 		amont, email, hachage string
 	}{
-		"no URL":              {Environnement{}, "127.0.0.1:8080", "", ""},
-		"auth_proxy, no hash": {Environnement{URL: "https://a.exemple.fr", Protection: "auth_proxy"}, "127.0.0.1:8080", "", ""},
-		"hash with a brace":   {Environnement{URL: "https://a.exemple.fr", Protection: "auth_proxy"}, "127.0.0.1:8080", "", "$2a$10$x}\n"},
-		"bad upstream":        {Environnement{URL: "https://a.exemple.fr"}, "127.0.0.1:8080 {\n}", "", ""},
-		"bad e-mail":          {Environnement{URL: "https://a.exemple.fr"}, "127.0.0.1:8080", "ops@exemple.fr\nroot * /", ""},
+		"no URL":               {Environnement{}, "127.0.0.1:8080", "", ""},
+		"auth_proxy, no hash":  {Environnement{URL: "https://a.exemple.fr", Protection: "auth_proxy"}, "127.0.0.1:8080", "", ""},
+		"hash with a brace":    {Environnement{URL: "https://a.exemple.fr", Protection: "auth_proxy"}, "127.0.0.1:8080", "", "$2a$10$x}\n"},
+		"auth_proxy over http": {Environnement{URL: "http://a.exemple.fr", Protection: "auth_proxy"}, "127.0.0.1:8080", "", h},
+		"bad upstream":         {Environnement{URL: "https://a.exemple.fr"}, "127.0.0.1:8080 {\n}", "", ""},
+		"bad e-mail":           {Environnement{URL: "https://a.exemple.fr"}, "127.0.0.1:8080", "ops@exemple.fr\nroot * /", ""},
 	} {
 		if b, err := blocCaddy(c.e, c.amont, c.email, c.hachage); err == nil {
 			t.Errorf("%s accepted: %q", nom, b)
@@ -298,7 +325,7 @@ func TestBlocCaddy(t *testing.T) {
 		t.Errorf("auth_proxy block:\n%s", dev)
 	}
 	prod, err := s.blocCaddyEnv("demo", "prod", "127.0.0.1:3000")
-	if err != nil || strings.Contains(prod, "basic_auth") {
+	if err != nil || strings.Contains(prod, "basic_auth") || !strings.Contains(prod, cfSeul) {
 		t.Errorf("prod block: %v\n%s", err, prod)
 	}
 	if _, err := s.blocCaddyEnv("demo", "staging", "127.0.0.1:3000"); err == nil {

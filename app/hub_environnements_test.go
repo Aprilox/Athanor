@@ -28,7 +28,8 @@ func TestValiderEnvironnement(t *testing.T) {
 	if r.URL != "https://dev.exemple.fr/app" || !slices.Equal(r.Serveurs, []string{"b2", "c3"}) || r.Protection != "aucune" || r.Politique != "accord" {
 		t.Errorf("defaults: %+v", r)
 	}
-	ok("staging", Environnement{URL: "http://10.0.0.5:8080", Politique: "auto", Protection: "auth_proxy"})
+	ok("staging", Environnement{URL: "http://10.0.0.5:8080", Politique: "auto"})
+	ok("staging", Environnement{URL: "https://10.0.0.5:8443", Politique: "auto", Protection: "auth_proxy"})
 	ok("prod", Environnement{URL: "https://Exemple.fr", Serveurs: []string{"a1", "d4"}, Protection: "access"})
 	if r := ok("dev", Environnement{}); r.URL != "" || r.Serveurs == nil {
 		t.Errorf("empty environment: %+v", r)
@@ -46,6 +47,7 @@ func TestValiderEnvironnement(t *testing.T) {
 		{"dev", Environnement{URL: "https://ex_emple.fr"}, "Invalid URL"},
 		{"dev", Environnement{URL: "javascript:alert(1)"}, "Invalid URL"},
 		{"dev", Environnement{Protection: "mur"}, "Unknown protection"},
+		{"dev", Environnement{URL: "HTTP://dev.exemple.fr", Protection: "auth_proxy"}, "needs an https:// address"},
 		{"dev", Environnement{Politique: "jamais"}, "Unknown policy"},
 		{"prod", Environnement{Politique: "auto"}, "always asks for your approval"},
 		{"dev", Environnement{Serveurs: []string{"zz"}}, "Unknown server"},

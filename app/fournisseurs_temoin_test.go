@@ -301,6 +301,7 @@ func TestEnvironnementsTemoinConteneur(t *testing.T) {
 		`PUT /zones/z1/dns_records/r1 {"content":"198.51.100.7","name":"app.exemple.fr","proxied":true,"ttl":1,"type":"A"}`,
 		`PATCH /zones/z1/settings/ssl {"value":"strict"}`,
 		"POST /certificates",
+		"GET /zones/z1/dns_records?name=app.exemple.fr&per_page=100",
 		"GET /accounts/acc1/access/apps",
 		`POST /accounts/acc1/access/apps {"domain":"app.exemple.fr","name":"Athanor app.exemple.fr","session_duration":"24h","type":"self_hosted"}`,
 		"GET /accounts/acc1/access/apps/app1/policies",
