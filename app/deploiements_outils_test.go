@@ -24,7 +24,8 @@ func TestClasserDeploiement(t *testing.T) {
 		{"deployer", `{"env":"prod","methode":"statique","source":"artefact","dossier":"dist","construire":"npm ci && npm run build","commit":"` + sha + `"}`, ClasseChangement, ""},
 		{"deployer", `{"env":"dev","methode":"statique","source":"artefact","construire":"rm -rf / ; npm run build","commit":"` + sha + `"}`, ClasseDestructrice, ""},
 		{"deployer", `{"env":"dev","methode":"statique","source":"git","construire":"npm run build","commit":"` + sha + `"}`, 0, "artefact source"},
-		{"deployer", `{"env":"dev","methode":"k3s","source":"artefact","commit":"` + sha + `"}`, 0, "statique or compose"},
+		{"deployer", `{"env":"dev","methode":"k3s","source":"artefact","dossier":"k8s","commit":"` + sha + `"}`, ClasseChangement, ""}, // M139
+		{"deployer", `{"env":"dev","methode":"helm","source":"artefact","commit":"` + sha + `"}`, 0, "statique, compose or k3s"},
 		{"deployer", `{"env":"dev","methode":"statique","source":"artefact","commit":"` + sha[:12] + `"}`, 0, "full commit hash"},
 		{"deployer", `{"env":"qa","methode":"statique","source":"artefact","commit":"` + sha + `"}`, 0, "env:"},
 		{"deployer", `{"env":"dev","methode":"statique","source":"artefact","commit":"` + sha + `","serveur":"x"}`, 0, "invalid arguments"},

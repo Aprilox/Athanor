@@ -1186,13 +1186,14 @@ func nomSecret(b string) bool {
 	return slices.Contains([]string{".key", ".pem", ".p12", ".pfx", ".ppk"}, path.Ext(b))
 }
 
-// cheminSecret: nomSecret, or a file that is only a secret in its folder (~/.docker/config.json, ~/.kube/config).
+// cheminSecret: nomSecret, or a file that is only a secret in its folder (~/.docker/config.json, ~/.kube/config,
+// k3s's kubeconfig /etc/rancher/k3s/k3s.yaml, M139).
 func cheminSecret(c []string) bool {
 	n := len(c)
-	return nomSecret(c[n-1]) || n > 1 && slices.Contains([]string{".docker/config.json", ".kube/config"}, c[n-2]+"/"+c[n-1])
+	return nomSecret(c[n-1]) || n > 1 && slices.Contains([]string{".docker/config.json", ".kube/config", "k3s/k3s.yaml"}, c[n-2]+"/"+c[n-1])
 }
 
-var candidatsSecrets = []string{"shadow", "gshadow", "environ", ".env", "prod.env", ".env.local", "id_rsa", "id_ed25519", "ssh_host_ed25519_key", "server.key", "privkey.pem", "cert.p12", ".my.cnf", "debian.cnf", ".pgpass", "credentials", ".netrc", "wg0.conf"}
+var candidatsSecrets = []string{"shadow", "gshadow", "environ", ".env", "prod.env", ".env.local", "id_rsa", "id_ed25519", "ssh_host_ed25519_key", "server.key", "privkey.pem", "cert.p12", ".my.cnf", "debian.cnf", ".pgpass", "credentials", ".netrc", "wg0.conf", "k3s.yaml"}
 
 // sauvegardes: a word that may reach Athanor's backups (M92), also through a glob (/var/back*/athanor) or a relative
 // path (backups/athanor). shortcut: `cd /var/backups && cat athanor/x` is only caught by the cd (a change), not refused.

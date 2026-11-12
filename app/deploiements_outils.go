@@ -33,9 +33,9 @@ func init() {
 	classe := parmi("Your own class of this action; the code's class is kept when higher", "lecture", "changement", "destructrice")
 	outilsHub["deployer"] = OutilHub{Description: "Deploy a commit of the project to your task's environment with Athanor's engine (release, atomic switch, external check). " +
 		"The method is then recorded so that later deployments need no agent. A step of an accepted plan only.",
-		Schema: schemaObjet(map[string]any{"env": env, "methode": parmi("statique: Caddy serves a folder; compose: docker compose up of the release", "statique", "compose"),
+		Schema: schemaObjet(map[string]any{"env": env, "methode": parmi("statique: Caddy serves a folder; compose: docker compose up of the release; k3s: kubectl apply of a manifests folder on a k3s server, only when the owner asked for Kubernetes", "statique", "compose", "k3s"),
 			"source":     parmi("artefact: the commit archived on this PC and sent; git: each server fetches it with the deployment key", "artefact", "git"),
-			"dossier":    schemaTexte("The published folder (statique) or the compose file's folder, relative to the repository; empty: its root"),
+			"dossier":    schemaTexte("The published folder (statique), the compose file's folder or the manifests' folder (k3s), relative to the repository; empty: its root"),
 			"construire": schemaTexte("A build command run on this PC in a checkout of the commit before the archive (artefact source only)"),
 			"commit":     schemaTexte("The full commit hash"), "classe": classe}, "env", "methode", "source", "commit"),
 		Faire: faireOutilDeploiement("deployer")}

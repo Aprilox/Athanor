@@ -115,6 +115,8 @@ func (s *Serveur) revenir(ctx context.Context, projet, env, auteur string) (Depl
 		return Deploiement{}, errors.New("unknown environment")
 	case e.Deploiement == nil || len(e.Serveurs) == 0:
 		return Deploiement{}, errors.New("nothing was deployed to this environment yet")
+	case e.Deploiement.Methode == "k3s" && len(e.Serveurs) != 1:
+		return Deploiement{}, errK3sUnServeur
 	}
 	v, _ := verrousDeploiement.LoadOrStore(projet+"/"+env, &sync.Mutex{})
 	verrou := v.(*sync.Mutex)
@@ -187,8 +189,11 @@ func (s *Serveur) revenir(ctx context.Context, projet, env, auteur string) (Depl
 			break
 		}
 		recharger := commeRoot(scriptRecharger, base, fmt.Sprint(versionsGardees))
-		if e.Deploiement.Methode == "compose" {
+		switch e.Deploiement.Methode {
+		case "compose":
 			recharger = commeRoot(scriptRelancerCompose, base, e.Deploiement.Dossier, nomCompose(projet, env))
+		case "k3s":
+			recharger = commeRoot(scriptRevenirK3s, base, e.Deploiement.Dossier)
 		}
 		if err = echecSSH(executerSSH(ctx, c, recharger, nil, delaiDeploiement)); err != nil {
 			err = fmt.Errorf("%s: %w", e.Serveurs[i], err)

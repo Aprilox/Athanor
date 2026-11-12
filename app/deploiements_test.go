@@ -107,7 +107,7 @@ func TestBaseDeploiement(t *testing.T) {
 		validerConfigDeploiement(ConfigDeploiement{Methode: "statique", Source: "artefact", Dossier: "dist", Construire: "npm ci && npm run build"}) != nil {
 		t.Error("git source or compose method refused")
 	}
-	for _, c := range []ConfigDeploiement{{Methode: "k3s", Source: "artefact"}, {Methode: "statique", Source: "ftp"},
+	for _, c := range []ConfigDeploiement{{Methode: "helm", Source: "artefact"}, {Methode: "statique", Source: "ftp"},
 		{Methode: "statique", Source: "artefact", Dossier: "../x"}, {Methode: "statique", Source: "artefact", Dossier: "/x"},
 		{Methode: "statique", Source: "artefact", Dossier: ".git"}, {Methode: "statique", Source: "git", Construire: "npm run build"}, {Methode: "statique", Source: "artefact", Construire: "npm ci\nnpm run build"}} {
 		if validerConfigDeploiement(c) == nil {

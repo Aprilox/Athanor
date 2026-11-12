@@ -107,6 +107,8 @@ func TestClasserCommande(t *testing.T) {
 		{"sudo cat /etc/wireguard/wg0.conf", D},
 		{"cat ~/.docker/config.json", D},
 		{"cat ~/.kube/config", D},
+		{"sudo cat /etc/rancher/k3s/k3s.yaml", D}, // M139
+		{"sudo cat /etc/rancher/k3s/*.yaml", D},
 		{"cat ~/.netrc", D},
 		{"cat /srv/app/config.json", L},
 		// C48 and B61: the firewall only through pare_feu; accounts and privileges
@@ -351,7 +353,7 @@ func TestCheminRefuse(t *testing.T) {
 		{"/etc/environment", true, false},
 		{"/etc/mysql/debian.cnf", true, true}, {"/root/.my.cnf", true, true}, {"/home/a/.pgpass", true, true},
 		{"/root/.aws/credentials", true, true}, {"/etc/wireguard/wg0.conf", true, true}, {"/root/.docker/config.json", true, true},
-		{"/home/a/.kube/config", true, true}, {"/root/.netrc", true, true}, {"/srv/app/config.json", true, false},
+		{"/home/a/.kube/config", true, true}, {"/etc/rancher/k3s/k3s.yaml", true, true}, {"/root/.netrc", true, true}, {"/srv/app/config.json", true, false},
 		{"/etc/nginx/conf.d/site.conf", true, false},
 	} {
 		if err := cheminRefuse(c.p, c.lecture); (err != nil) != c.refuse {

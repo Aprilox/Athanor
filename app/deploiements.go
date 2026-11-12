@@ -40,7 +40,7 @@ const (
 // ConfigDeploiement: how an environment is deployed, recorded after a first deployment so that the next ones
 // (relay, Retry) need no agent.
 type ConfigDeploiement struct {
-	Methode    string `json:"methode"`              // statique | compose (M134)
+	Methode    string `json:"methode"`              // statique | compose (M134) | k3s (M139, only when asked)
 	Source     string `json:"source"`               // artefact (sent by SFTP) | git (fetched by the server, M132)
 	Dossier    string `json:"dossier,omitempty"`    // the published folder, relative to the repository ("" = its root)
 	Construire string `json:"construire,omitempty"` // a build command run on this PC before the archive (M135)
@@ -78,8 +78,8 @@ var (
 
 func validerConfigDeploiement(c ConfigDeploiement) error {
 	switch {
-	case c.Methode != "statique" && c.Methode != "compose":
-		return errors.New("deployment method: statique or compose")
+	case c.Methode != "statique" && c.Methode != "compose" && c.Methode != "k3s":
+		return errors.New("deployment method: statique, compose or k3s")
 	case c.Source != "artefact" && c.Source != "git":
 		return errors.New("deployment source: artefact or git")
 	case c.Dossier != "" && !reDossierPublie.MatchString(c.Dossier):
@@ -248,6 +248,9 @@ func (s *Serveur) commencerDeploiement(projet, env, commit string, o OptionsDepl
 	if len(e.Serveurs) == 0 || hoteEnv(&e) == "" {
 		return Deploiement{}, nil, errors.New("the environment needs a URL and at least one server")
 	}
+	if cfg.Methode == "k3s" && len(e.Serveurs) != 1 {
+		return Deploiement{}, nil, errK3sUnServeur
+	}
 	if cfg.Source == "git" && e.CleDeploiement == "" {
 		return Deploiement{}, nil, errors.New("the git source needs the project's deployment key: create it in its Environments panel (or use the artefact source)")
 	}
@@ -291,6 +294,8 @@ func (s *Serveur) finirDeploiement(ctx context.Context, p Projet, e Environnemen
 	}
 	return d, err
 }
+
+var errK3sUnServeur = errors.New("the k3s method needs exactly one server in the environment: its cluster spreads the pods itself")
 
 // deployerVersion: the commit prepared on every server (statique: the Caddy site validated; compose: the
 // containers started from the release), then current/previous switched everywhere.
@@ -358,8 +363,11 @@ func (s *Serveur) deployerVersion(ctx context.Context, p Projet, e Environnement
 	annulerTout := func() {
 		for _, x := range prets {
 			annuler := commeRoot(scriptAnnulerVersion, base, d.Version, hote)
-			if cfg.Methode == "compose" {
+			switch cfg.Methode {
+			case "compose":
 				annuler = commeRoot(scriptAnnulerCompose, base, d.Version, cfg.Dossier, nomCompose(d.Projet, d.Env))
+			case "k3s":
+				annuler = commeRoot(scriptAnnulerK3s, base, d.Version, cfg.Dossier)
 			}
 			_, _ = executerSSH(context.WithoutCancel(ctx), x.c, annuler, nil, delaiDeploiement)
 		}
@@ -373,6 +381,8 @@ func (s *Serveur) deployerVersion(ctx context.Context, p Projet, e Environnement
 				return err
 			}
 			script, args, entree = scriptPreparer, []string{somme, base, d.Version, cfg.Dossier, hote}, bloc
+		} else if cfg.Methode == "k3s" {
+			script, args, entree = scriptPreparerK3s, []string{somme, base, d.Version, cfg.Dossier}, ""
 		}
 		c, err := s.preparerVersion(ctx, l, id, archive, d.ID, g, d.Commit, base, d.Version, script, args, entree)
 		if err != nil {
@@ -388,7 +398,7 @@ func (s *Serveur) deployerVersion(ctx context.Context, p Projet, e Environnement
 		}
 	}
 	recharger := scriptRecharger
-	if cfg.Methode == "compose" { // the containers already run the release
+	if cfg.Methode != "statique" { // the containers or pods already run the release
 		recharger = scriptNettoyer
 	}
 	for _, x := range prets {
