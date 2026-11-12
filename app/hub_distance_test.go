@@ -85,6 +85,11 @@ func TestDistanceToutesRoutes(t *testing.T) {
 		{"POST", "/api/serveurs/ajouter", true},
 		{"GET", "/api/serveurs/x/y", true},
 		{"GET", "/api/serveurs/x/taches", false}, // a server's tasks, read from a device (M97)
+		{"GET", "/api/fournisseurs", false},      // the providers, zones and rights, read from a device (M114)
+		{"POST", "/api/fournisseurs", true},      // added, tested, removed on this computer only
+		{"POST", "/api/fournisseurs/x/tester", true},
+		{"DELETE", "/api/fournisseurs/x", true},
+		{"GET", "/api/fournisseursx", true},
 		{"POST", "/api/serveurs/x/taches", true}, // launched and stopped on this computer only
 		{"POST", "/api/serveurs/x/taches/t/arreter", true},
 		{"GET", "/api/serveurs/x/y/taches", true},

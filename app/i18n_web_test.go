@@ -66,6 +66,10 @@ func TestWebTraduction(t *testing.T) {
 	cles = append(cles, "This key opens the server {0}: it stays in the infra scope", "This key opens the server {0}: remove that server first")
 	cles = append(cles, errEnvURL.Error(), errEnvProtect.Error(), errEnvPolitique.Error(), errEnvProdAuto.Error(), errEnvFourn.Error(),
 		errEnvPasProd, errEnvProd, "Take this server out of these environments first: {0}") // the Environments panel (M112)
+	cles = append(cles, errFournisseursFichier.Error(), errFournisseurCle.Error(), errFournisseurPortee.Error(), errFournisseurNom.Error(),
+		errFournisseurUtilise, "This Cloudflare token has expired: create a new one and replace it in the Vault.",
+		"This Cloudflare token is disabled: enable it again on Cloudflare or replace it.",
+		"This Cloudflare token sees no zone: give it access to your domain's zone.") // the providers (M114)
 	for _, l := range []string{"fr", "es", "de", "it", "pt"} {
 		dico := dicoTUI(l)
 		if len(dico) < 1000 {

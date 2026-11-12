@@ -99,7 +99,7 @@ func validerEnvironnement(nom string, e Environnement, inventaire []ServeurInven
 		return e, errEnvProdAuto
 	}
 	if e.Fournisseur != "" && !idServeurValide.MatchString(e.Fournisseur) {
-		return e, errEnvFourn // shortcut: format only until the providers exist (M114), then checked against fournisseurs.json
+		return e, errEnvFourn // the id's form here; apiEnvironnementModifier checks it exists in fournisseurs.json
 	}
 	ids := []string{}
 	for _, id := range e.Serveurs {
@@ -228,6 +228,14 @@ func (s *Serveur) apiEnvironnementModifier(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	e, err := validerEnvironnement(c.Env, c.Environnement, inventaire)
+	if err == nil && e.Fournisseur != "" {
+		err = errEnvFourn
+		if l, errF := lireFournisseurs(); errF != nil {
+			err = errF
+		} else if slices.ContainsFunc(l, func(f Fournisseur) bool { return f.ID == e.Fournisseur }) {
+			err = nil
+		}
+	}
 	if err == nil {
 		err = s.acces.DefinirEnvironnement(projet, c.Env, e)
 	}
@@ -251,6 +259,15 @@ func (s *Serveur) apiEnvironnementModifier(w http.ResponseWriter, r *http.Reques
 
 // UtilisationsServeurs: server id → the "project/env" that use it, sorted (the Servers page).
 func (a *Acces) UtilisationsServeurs() map[string][]string {
+	return a.utilisations(func(e *Environnement) []string { return e.Serveurs })
+}
+
+// UtilisationsFournisseurs: provider id → the "project/env" that use it, sorted.
+func (a *Acces) UtilisationsFournisseurs() map[string][]string {
+	return a.utilisations(func(e *Environnement) []string { return []string{e.Fournisseur} })
+}
+
+func (a *Acces) utilisations(ids func(*Environnement) []string) map[string][]string {
 	m := map[string][]string{}
 	if a == nil {
 		return m
@@ -259,8 +276,10 @@ func (a *Acces) UtilisationsServeurs() map[string][]string {
 	defer a.mu.Unlock()
 	for nomP, p := range a.f.Projets {
 		for nomE, e := range p.Environnements {
-			for _, id := range e.Serveurs {
-				m[id] = append(m[id], nomP+"/"+nomE)
+			for _, id := range ids(e) {
+				if id != "" {
+					m[id] = append(m[id], nomP+"/"+nomE)
+				}
 			}
 		}
 	}
