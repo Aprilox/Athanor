@@ -22,6 +22,9 @@ type Environnement struct {
 	Politique      string   `json:"politique"`                 // accord | auto (prod: accord, locked)
 	Fournisseur    string   `json:"fournisseur,omitempty"`     // provider id (fournisseurs.json)
 	CleDeploiement string   `json:"cle_deploiement,omitempty"` // vault entry id, set by Athanor, never by a request
+	// the origin certificate (M117): its vault entry id and expiry (RFC 3339), set by Athanor, never by a request
+	Certificat       string `json:"certificat,omitempty"`
+	CertificatExpire string `json:"certificat_expire,omitempty"`
 }
 
 var (
@@ -146,12 +149,27 @@ func (a *Acces) DefinirEnvironnement(projet, nom string, e Environnement) error 
 		if p.Environnements == nil {
 			p.Environnements = map[string]*Environnement{}
 		}
+		e.CleDeploiement, e.Certificat, e.CertificatExpire = "", "", ""
 		if avant := p.Environnements[nom]; avant != nil {
-			e.CleDeploiement = avant.CleDeploiement
-		} else {
-			e.CleDeploiement = ""
+			e.CleDeploiement, e.Certificat, e.CertificatExpire = avant.CleDeploiement, avant.Certificat, avant.CertificatExpire
 		}
 		p.Environnements[nom] = &e
+		return nil
+	})
+}
+
+// NoterCertificat records environment nom's origin certificate (its vault entry and expiry).
+func (a *Acces) NoterCertificat(projet, nom, id, expire string) error {
+	return a.modifier(func(f *fichierAcces) error {
+		p := projetDe(f, projet)
+		if p.Environnements == nil {
+			p.Environnements = map[string]*Environnement{}
+		}
+		if p.Environnements[nom] == nil {
+			e := envDefaut()
+			p.Environnements[nom] = &e
+		}
+		p.Environnements[nom].Certificat, p.Environnements[nom].CertificatExpire = id, expire
 		return nil
 	})
 }
@@ -292,5 +310,5 @@ func (a *Acces) utilisations(ids func(*Environnement) []string) map[string][]str
 // vueEnvironnement: what an agent may read of an environment: never the provider's or the key's id.
 func vueEnvironnement(e Environnement, serveurs []map[string]any) map[string]any {
 	return map[string]any{"url": e.URL, "protection": e.Protection, "politique": e.Politique, "serveurs": serveurs,
-		"dns_cloudflare": e.Fournisseur != "", "cle_deploiement_prete": e.CleDeploiement != ""}
+		"dns_cloudflare": e.Fournisseur != "", "cle_deploiement_prete": e.CleDeploiement != "", "certificat_expire": e.CertificatExpire}
 }

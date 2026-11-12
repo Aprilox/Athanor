@@ -20,7 +20,7 @@ import (
 )
 
 // outilsCloudflare: the Cloudflare tools, in the order the agent's list shows them.
-var outilsCloudflare = []string{"fournisseurs", "dns_lister", "dns_ecrire", "dns_supprimer", "ssl_lire", "ssl_regler"}
+var outilsCloudflare = []string{"fournisseurs", "dns_lister", "dns_ecrire", "dns_supprimer", "ssl_lire", "ssl_regler", "certificat_origine"}
 
 var (
 	errNomInconnu  = errors.New("unknown name: only your environment's host names, in a zone of its Cloudflare provider")
@@ -38,6 +38,8 @@ type argsCloudflare struct {
 	Proxied *bool  `json:"proxied,omitempty"`
 	TTL     int    `json:"ttl,omitempty"`
 	Mode    string `json:"mode,omitempty"`
+
+	serveur string // certificat_origine: the accepted plan's server
 }
 
 func init() {
@@ -66,6 +68,8 @@ func init() {
 			map[string]any{"nom": nom}, []string{"nom"}},
 		{"ssl_regler", "Set the SSL/TLS encryption mode of the zone holding a host name of your environment (off is destructive). Only as a step of an accepted plan.",
 			map[string]any{"nom": nom, "mode": parmi("The mode (strict: the origin's certificate is checked)", modesSSL...)}, []string{"nom", "mode"}},
+		{"certificat_origine", "Have a Cloudflare origin certificate made for a host name of your environment and installed by Athanor on the plan's server, in " + dossierTLS + "/<name>.crt and .key (the key 0600 root, never shown to you). A change: only as a step of an accepted plan on that server.",
+			map[string]any{"nom": nom}, []string{"nom"}},
 	} {
 		d.props["classe"] = classe
 		outilsHub[d.nom] = OutilHub{Description: d.description, Schema: schemaObjet(d.props, append([]string{}, d.requis...)...), Faire: faireOutilCloudflare(d.nom)}
@@ -85,6 +89,8 @@ func classerCloudflare(outil string, brut []byte) (Classe, string, argsCloudflar
 	switch outil {
 	case "fournisseurs", "dns_lister", "ssl_lire":
 		return ClasseLecture, "reads Cloudflare", a, nil
+	case "certificat_origine":
+		return ClasseChangement, "has an origin certificate made for " + a.Nom + " and installed on the plan's server", argsCloudflare{Nom: a.Nom}, nil
 	case "ssl_regler":
 		if !slices.Contains(modesSSL, a.Mode) {
 			return 0, "", a, errors.New("mode: off, flexible, full or strict")
@@ -168,6 +174,11 @@ func faireOutilCloudflare(nom string) func(*Serveur, SessionHub, json.RawMessage
 		if err == nil && e.Classe > ClasseLecture {
 			err = s.etapeCloudflare(x, &e)
 		}
+		if err == nil && nom == "certificat_origine" {
+			var p PlanServeur
+			p, err = s.lirePlan(e.Plan)
+			c.serveur = p.Serveur
+		}
 		if err != nil {
 			if !errors.Is(err, errNomInconnu) {
 				s.ecrireAudit(LigneAudit{Type: "evenement", De: x.Agent, Vers: "cloudflare", Projet: x.Projet, Mission: x.Mission, Agent: x.Agent,
@@ -178,6 +189,9 @@ func faireOutilCloudflare(nom string) func(*Serveur, SessionHub, json.RawMessage
 		r, err := s.executerCloudflare(x, nom, c)
 		if e.Plan != "" {
 			s.noterEtape(e.Plan, e.Num, err)
+		}
+		if c.serveur != "" {
+			s.noterRunbook(c.serveur, e, ResultatOutil{}, err)
 		}
 		res := "ok"
 		if err != nil {
@@ -331,6 +345,8 @@ func (s *Serveur) executerCloudflare(x SessionHub, outil string, a argsCloudflar
 	}
 	dns := "/zones/" + url.PathEscape(z.ID) + "/dns_records"
 	switch outil {
+	case "certificat_origine":
+		return s.certificatOrigine(x, jeton, a.Nom, a.serveur)
 	case "dns_lister":
 		tous := []enregistrementDNS{}
 		for _, n := range noms {
