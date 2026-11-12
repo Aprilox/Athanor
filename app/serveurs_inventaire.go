@@ -153,7 +153,7 @@ func (s *Serveur) apiServeur(w http.ResponseWriter, r *http.Request) {
 	if b, err := os.ReadFile(filepath.Join(dossierModule("servers"), liste[i].ID, "fiche.json")); err == nil && json.Valid(b) {
 		fiche = b
 	}
-	s.ecrireJSON(w, map[string]any{"serveur": liste[i], "fiche": fiche})
+	s.ecrireJSON(w, map[string]any{"serveur": liste[i], "fiche": fiche, "annulations": annulationsDe(liste[i].ID)})
 }
 
 // apiServeurModifier: POST /api/serveurs/{id} {nom?, roles?}: renames it or sets its roles;
@@ -166,6 +166,7 @@ func (s *Serveur) apiServeurModifier(w http.ResponseWriter, r *http.Request) {
 		CouperMotDePasse bool      `json:"couper_mot_de_passe"`
 		Rafraichir       bool      `json:"rafraichir"`
 		MotDePasse       string    `json:"mot_de_passe"` // Athanor's password: taking the prod role away (C37)
+		Garder           string    `json:"garder"`       // a firewall or SSH change kept (serveurs_annulation.go)
 	}
 	if lireCorps(r, &c) != nil {
 		s.erreur(w, http.StatusBadRequest, "Invalid request")
@@ -177,6 +178,15 @@ func (s *Serveur) apiServeurModifier(w http.ResponseWriter, r *http.Request) {
 	}
 	if c.Rafraichir {
 		s.apiServeurRafraichir(w, r, r.PathValue("id"))
+		return
+	}
+	if c.Garder != "" {
+		txt, err := s.confirmerChangement(r.Context(), "propriétaire", r.PathValue("id"), c.Garder)
+		if err != nil {
+			s.erreurServeurs(w, err)
+			return
+		}
+		s.ecrireJSON(w, map[string]any{"ok": true, "message": txt})
 		return
 	}
 	if c.Nom != nil {

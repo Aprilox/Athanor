@@ -4692,6 +4692,9 @@ pages.serveur = async () => {
         ${attente ? `<button type="button" class="btn btn-primaire" data-srv-verifier="${h(x.id)}">${t("Verify")}</button>` : `<button type="button" class="btn" data-srv-rafraichir>↻ ${t("Refresh")}</button>`}
         ${!attente && !x.mot_de_passe_coupe ? `<button type="button" class="btn" data-srv-couper="${h(x.id)}">${t("Cut password logins")}</button>` : ""}</div>`}
     </div>
+    ${(d.annulations || []).length ? `<div class="bloc srv-annulations"><h3>${t("Changes waiting for confirmation")}</h3>
+      <p class="muet petit">${t("Athanor put a safety net on these firewall or SSH changes: unless you keep them, the server undoes them by itself when the countdown ends.")}</p>
+      ${d.annulations.map((a) => `<div class="ligne m0"><code>${h(a.quoi)}</code><span class="muet petit" data-srv-echeance="${h(a.echeance)}"></span>${distant ? "" : `<button type="button" class="btn btn-primaire" data-srv-garder="${h(a.id)}">${t("Keep this change")}</button>`}</div>`).join("")}</div>` : ""}
     ${f ? ficheServeur(f) : `<div class="vide">${attente ? t("Its sheet is made once Athanor reaches the server with its key.") : t("Its sheet is not made yet.")}</div>`}
     ${distant ? "" : `<div class="bloc srv-retirer"><h3>${t("Remove this server")}</h3>
       <p class="muet petit">${t("Athanor forgets it and its sheet; nothing is changed on the server. Its key stays in the vault unless you tick the box.")}</p>
@@ -4699,6 +4702,16 @@ pages.serveur = async () => {
       <div class="ligne m0"><button type="button" class="btn btn-danger" data-srv-retirer>${t("Remove")}</button></div></div>`}
   </div>`;
 };
+// the countdown of the changes waiting for confirmation; at its end the server has undone the change: read it again
+setInterval(() => {
+  let fini = false;
+  for (const e of document.querySelectorAll("[data-srv-echeance]")) {
+    const s = Math.max(0, Math.round((Date.parse(e.dataset.srvEcheance) - Date.now()) / 1000));
+    e.textContent = t("Undone automatically in {0}", [`${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`]);
+    if (s === 0 && !e.dataset.fini) { e.dataset.fini = "1"; fini = true; }
+  }
+  if (fini && etat.page === "serveur") setTimeout(rendrePage, 3000);
+}, 1000);
 $("#page").addEventListener("change", async (ev) => {
   if (etat.page !== "serveur" || !ev.target.matches(".srv-fiche-role")) return;
   const roles = [...document.querySelectorAll(".srv-fiche-role:checked")].map((e) => e.value);
@@ -4709,9 +4722,14 @@ $("#page").addEventListener("change", async (ev) => {
 });
 $("#page").addEventListener("click", async (ev) => {
   if (etat.page !== "serveur") return;
-  const b = ev.target.closest("[data-srv-rafraichir], [data-srv-couper], [data-srv-verifier], [data-srv-retirer]");
+  const b = ev.target.closest("[data-srv-rafraichir], [data-srv-couper], [data-srv-verifier], [data-srv-retirer], [data-srv-garder]");
   if (!b) return;
   const x = srv.fiche, url = "serveurs/" + encodeURIComponent(x.id), d = b.dataset;
+  if (d.srvGarder) {
+    b.disabled = true;
+    if (await action(api(url, "POST", { garder: d.srvGarder }))) toast(t("Change kept: its automatic rollback is cancelled."), "ok");
+    return rendrePage();
+  }
   if (d.srvRetirer !== undefined) {
     const cle = $("#srv-retirer-cle").checked;
     const texte = cle ? t("Remove {0} and its key from the vault? Nothing is changed on the server.", [x.nom]) : t("Remove {0}? Its key stays in the vault; nothing is changed on the server.", [x.nom]);

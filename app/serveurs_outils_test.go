@@ -77,6 +77,8 @@ func TestServeursOutils(t *testing.T) {
 			return "la valeur " + temoinOutils + " sort", 0
 		case strings.Contains(cmd, "echoue"):
 			return "raté", 5
+		case strings.Contains(cmd, "annul-"): // M93: the rollback scheduled, then kept or undone
+			return "ok", 0
 		}
 		return "ok:" + cmd, 0
 	})
@@ -317,9 +319,10 @@ func TestServeursOutils(t *testing.T) {
 	}
 }
 
-// TestServeursOutilsConteneur: the same tools against the real sshd of the test container (the server is
-// added with its password, as the owner would).
-func TestServeursOutilsConteneur(t *testing.T) {
+// serveurConteneurTest: the test container's sshd added as a server with its password, as the owner would (the
+// test is skipped without it), with the vault's witness value, an empty audit log and a tool caller.
+func serveurConteneurTest(t *testing.T) (*Serveur, func(string, map[string]any) (int, map[string]any), string, int, func(string, any) ResultatOutil) {
+	t.Helper()
 	cible := os.Getenv("ATHANOR_SSH_TEST")
 	if cible == "" {
 		t.Skip("ATHANOR_SSH_TEST absent (bash .athanor/tools/serveur_ssh.sh start)")
@@ -343,16 +346,22 @@ func TestServeursOutilsConteneur(t *testing.T) {
 	id := v["serveur"].(map[string]any)["id"].(string)
 	_ = os.RemoveAll(dossierJournalAudit())
 	t.Cleanup(func() { _ = os.RemoveAll(dossierJournalAudit()) })
-	ctx := context.Background()
 	appel := func(outil string, args any) ResultatOutil {
 		t.Helper()
 		b, _ := json.Marshal(args)
-		r, err := s.appelerOutilServeur(ctx, "test", id, outil, b, Sauvegarde{})
+		r, err := s.appelerOutilServeur(context.Background(), "test", id, outil, b, Sauvegarde{})
 		if err != nil {
 			t.Fatalf("%s %s: %v", outil, b, err)
 		}
 		return r
 	}
+	return s, appelAPI, id, port, appel
+}
+
+// TestServeursOutilsConteneur: the same tools against the real sshd of the test container.
+func TestServeursOutilsConteneur(t *testing.T) {
+	s, _, id, port, appel := serveurConteneurTest(t)
+	ctx := context.Background()
 
 	if r := appel("ssh_commande", map[string]any{"commande": "id -un; exit 3"}); strings.TrimSpace(r.Sortie) != "athanor" || r.Code != 3 {
 		t.Errorf("command: %+v", r)
@@ -489,7 +498,21 @@ func TestServeursOutilsConteneur(t *testing.T) {
 	if r := appel("pare_feu", map[string]any{"action": "status"}); !strings.Contains(r.Sortie, "Status: inactive") || !strings.Contains(r.Sortie, "ufw allow 8080/tcp") {
 		t.Errorf("ufw status: %+v", r)
 	}
-	appel("pare_feu", map[string]any{"action": "delete", "port": 8080, "proto": "tcp", "regle": "allow"})
+	if r := appel("ssh_commande", map[string]any{"commande": "true"}); r.Annulation != "" {
+		t.Errorf("a command scheduled a rollback: %+v", r)
+	}
+	// M93: one firewall change waits at a time; kept, the next one can run
+	if _, err := s.appelerOutilServeur(ctx, "test", id, "pare_feu", json.RawMessage(`{"action":"allow","port":8081}`), Sauvegarde{}); err == nil || !strings.Contains(err.Error(), "still waits for its confirmation") {
+		t.Errorf("second pending firewall change: %v", err)
+	}
+	if _, err := s.confirmerChangement(ctx, "test", id, annulationsDe(id)[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	if r := appel("pare_feu", map[string]any{"action": "delete", "port": 8080, "proto": "tcp", "regle": "allow"}); r.Annulation == "" {
+		t.Errorf("delete without a rollback: %+v", r)
+	} else if _, err := s.confirmerChangement(ctx, "test", id, r.Annulation); err != nil {
+		t.Fatal(err)
+	}
 	if r := appel("pare_feu", map[string]any{"action": "status"}); strings.Contains(r.Sortie, "8080") {
 		t.Errorf("ufw rule not deleted: %+v", r)
 	}

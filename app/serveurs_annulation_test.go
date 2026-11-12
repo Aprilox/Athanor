@@ -1,0 +1,73 @@
+package main
+
+import (
+	"context"
+	"strings"
+	"testing"
+	"time"
+)
+
+// TestServeursAnnulationConteneur (M93): against the test container's sshd, a firewall rule kept by the owner
+// stays; a firewall rule and an sshd file left unconfirmed are put back by the server itself, sshd reloaded.
+func TestServeursAnnulationConteneur(t *testing.T) {
+	s, appelAPI, id, _, appel := serveurConteneurTest(t)
+	ctx := context.Background()
+	avant := delaiAnnulation
+	delaiAnnulation = 10 * time.Second
+	t.Cleanup(func() { delaiAnnulation = avant })
+	const fichier = "/etc/ssh/athanor-m93.conf"
+	appel("ssh_commande", map[string]any{"commande": "printf 'v1\\n' | sudo -n tee " + fichier + " >/dev/null"})
+	t.Cleanup(func() {
+		appel("ssh_commande", map[string]any{"commande": "sudo -n ufw --force delete allow 8282/tcp; sudo -n rm -f " + fichier + "*; sudo -n rm -rf /var/backups/athanor"})
+	})
+
+	// kept from the server page (Keep this change)
+	r := appel("pare_feu", map[string]any{"action": "allow", "port": 8282, "proto": "tcp"})
+	if r.Annulation == "" || !strings.Contains(r.Sortie, "A new connection to the server works") {
+		t.Fatalf("allow without its rollback: %+v", r)
+	}
+	if l := annulationsDe(id); len(l) != 1 || l[0].ID != r.Annulation || l[0].Quoi != "pare_feu allow 8282 tcp" {
+		t.Errorf("pending changes: %+v", l)
+	}
+	if code, v := appelAPI("/api/serveurs/"+id, map[string]any{"garder": r.Annulation}); code != 200 {
+		t.Fatalf("keep: %d %v", code, v)
+	}
+	if _, err := s.confirmerChangement(ctx, "test", id, r.Annulation); err == nil || !strings.Contains(err.Error(), "already undone") {
+		t.Errorf("kept twice: %v", err)
+	}
+
+	// left unconfirmed: a firewall rule and an sshd file
+	if r := appel("pare_feu", map[string]any{"action": "allow", "port": 8181, "proto": "tcp"}); r.Annulation == "" {
+		t.Fatalf("allow 8181: %+v", r)
+	}
+	r = appel("fichier_ecrire", map[string]any{"chemin": fichier, "contenu": "v2\n", "sudo": true})
+	if r.Annulation == "" {
+		t.Fatalf("sshd file written without its rollback: %+v", r)
+	}
+	if len(annulationsDe(id)) != 2 {
+		t.Errorf("pending changes: %+v", annulationsDe(id))
+	}
+	etat := ""
+	for fin := time.Now().Add(30 * time.Second); time.Now().Before(fin); time.Sleep(time.Second) {
+		etat = appel("ssh_commande", map[string]any{"commande": "sudo -n ufw show added; sudo -n cat " + fichier + " /var/backups/athanor/annul-" + r.Annulation + ".log"}).Sortie
+		if !strings.Contains(etat, "8181") && strings.Contains(etat, "rolled back") {
+			break
+		}
+	}
+	if strings.Contains(etat, "8181") || !strings.Contains(etat, "ufw allow 8282/tcp") || !strings.Contains(etat, "v1\n") || !strings.Contains(etat, "sshd reloaded") {
+		t.Errorf("after the delay: %q", etat)
+	}
+	if r := appel("service", map[string]any{"action": "status", "nom": "ssh"}); !strings.Contains(r.Sortie, "sshd is running") {
+		t.Errorf("sshd after its reload: %+v", r)
+	}
+	time.Sleep(500 * time.Millisecond) // Athanor's own timer, a little after the server's
+	if l := annulationsDe(id); len(l) != 0 {
+		t.Errorf("still pending: %+v", l)
+	}
+	journal := journalAuditTexte(t)
+	for _, m := range []string{"retour arrière programmé", "gardé", "non confirmé : remis par le serveur"} {
+		if !strings.Contains(journal, m) {
+			t.Errorf("audit log without %q", m)
+		}
+	}
+}

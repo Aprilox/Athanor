@@ -225,7 +225,7 @@ func TestServeursPerimetre(t *testing.T) {
 	outils := map[string]string{"serveur_fiche": ``, "ssh_commande": `,"commande":"id"`, "fichier_lire": `,"chemin":"/etc/hostname"`,
 		"fichier_ecrire": `,"chemin":"/tmp/a.txt","contenu":"x"`, "sftp_envoyer": `,"local":"envoi.txt","distant":"/envoi.txt"`,
 		"sftp_recuperer": `,"distant":"/envoi.txt","local":"retour.txt"`, "service": `,"action":"status","nom":"ssh"`,
-		"docker": `,"action":"ps"`, "pare_feu": `,"action":"status"`,
+		"docker": `,"action":"ps"`, "pare_feu": `,"action":"status"`, "confirmer_changement": `,"id":"0a1b2c3d"`,
 		"proposer_plan": `,"resume":"r","etapes":[{"outil":"service","arguments":{"action":"status","nom":"ssh"},"pourquoi":"p"}]`}
 	if len(outils) != len(outilsServeursMCP)-1 {
 		t.Fatalf("a Servers tool is not covered: %v", outilsServeursMCP)
@@ -343,13 +343,21 @@ func TestServeursScenarioConteneur(t *testing.T) {
 	if r := outil("fichier_lire", `,"chemin":"/tmp/athanor-scenario.txt"`); r.Sortie != contenu {
 		t.Errorf("file written: %q", r.Sortie)
 	}
-	if r := change("pare_feu", `{"action":"allow","port":8081,"proto":"tcp"}`); r.Code != 0 {
+	r := change("pare_feu", `{"action":"allow","port":8081,"proto":"tcp"}`)
+	if r.Code != 0 {
 		t.Errorf("ufw allow: %+v", r)
 	}
 	if r := outil("pare_feu", `,"action":"status"`); !strings.Contains(r.Sortie, "8081/tcp") {
 		t.Errorf("ufw rule missing: %+v", r)
 	}
-	change("pare_feu", `{"action":"delete","port":8081,"proto":"tcp","regle":"allow"}`)
+	// M93: the agent keeps the change, so the next one of the same kind can run
+	if txt, e := appel("confirmer_changement", `{"serveur":"`+id+`","id":"`+r.Annulation+`"}`); e || !strings.Contains(txt, "kept") {
+		t.Errorf("confirmer_changement: %v %q", e, txt)
+	}
+	r = change("pare_feu", `{"action":"delete","port":8081,"proto":"tcp","regle":"allow"}`)
+	if _, err := s.confirmerChangement(ctx, "test", id, r.Annulation); err != nil {
+		t.Errorf("delete kept: %v", err)
+	}
 	change("ssh_commande", `{"commande":"rm -f /tmp/athanor-scenario.txt"}`)
 
 	// password logins cut: the password refused, the agent's tools still working with the key

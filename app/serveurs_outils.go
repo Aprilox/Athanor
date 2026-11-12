@@ -40,6 +40,8 @@ type ResultatOutil struct {
 	Sortie string `json:"sortie"`
 	Code   int    `json:"code"`
 	Coupee bool   `json:"coupee,omitempty"`
+	// the change waits for confirmer_changement with this id, else the server undoes it (M93)
+	Annulation string `json:"annulation,omitempty"`
 	// the call changed the server (a service, a container, a firewall rule): its sheet is made again
 	modifie bool
 }
@@ -111,7 +113,7 @@ func archiver(ctx context.Context, c *ssh.Client, sv Sauvegarde) (string, error)
 // appelerOutilServeur runs tool outil on server id for de (who asks, for the log), after archiving sv, and
 // writes the audit line.
 func (s *Serveur) appelerOutilServeur(ctx context.Context, de, id, outil string, args json.RawMessage, sv Sauvegarde) (ResultatOutil, error) {
-	r, err := s.executerOutilServeur(ctx, id, outil, args, sv)
+	r, err := s.executerOutilServeur(ctx, de, id, outil, args, sv)
 	r.Sortie = s.masquerSecrets(r.Sortie)
 	if len(r.Sortie) > sortieMaxOutil {
 		r.Sortie, r.Coupee = r.Sortie[:sortieMaxOutil], true
@@ -128,7 +130,7 @@ func (s *Serveur) appelerOutilServeur(ctx context.Context, de, id, outil string,
 	return r, err
 }
 
-func (s *Serveur) executerOutilServeur(ctx context.Context, id, outil string, args json.RawMessage, sv Sauvegarde) (ResultatOutil, error) {
+func (s *Serveur) executerOutilServeur(ctx context.Context, de, id, outil string, args json.RawMessage, sv Sauvegarde) (ResultatOutil, error) {
 	f, ok := outilsServeurs[outil]
 	if !ok {
 		return ResultatOutil{Code: -1}, fmt.Errorf("unknown tool %q", outil)
@@ -159,7 +161,17 @@ func (s *Serveur) executerOutilServeur(ctx context.Context, id, outil string, ar
 			return ResultatOutil{Code: -1}, err
 		}
 	}
+	var an AnnulationServeur
+	genre, chemin := genreAnnulation(ctx, c, l[i], outil, a)
+	if genre != "" {
+		if an, err = programmerAnnulation(ctx, c, l[i], outil, genre, chemin, a); err != nil {
+			return ResultatOutil{Code: -1, Sortie: note}, err
+		}
+	}
 	r, err := f(ctx, c, l[i], a)
+	if genre != "" {
+		r = s.apresChangement(ctx, c, l[i], de, an, r, err)
+	}
 	if note != "" {
 		r.Sortie = note + "\n" + r.Sortie // first: the audit line keeps only the start of the output
 	}
@@ -619,31 +631,49 @@ case $1 in
   *) exec $S ufw "$1" "$3";;
 esac`
 
+// specPareFeu: pare_feu's arguments checked without the server; the rule as ufw takes it ("" for status).
+func specPareFeu(srv ServeurInventaire, a argsOutilServeur) (string, error) {
+	if err := choix("action", a.Action, "status", "allow", "deny", "delete"); err != nil || a.Action == "status" {
+		return "", err
+	}
+	if a.Port < 1 || a.Port > 65535 {
+		return "", errors.New("port must be between 1 and 65535")
+	}
+	if err := choix("proto", a.Proto, "", "tcp", "udp"); err != nil {
+		return "", err
+	}
+	if a.Action == "delete" {
+		if err := choix("regle", a.Regle, "allow", "deny"); err != nil {
+			return "", err
+		}
+	}
+	if coupeSSH(a) && a.Port == srv.Port {
+		return "", errPortSSH(a.Port)
+	}
+	spec := strconv.Itoa(a.Port)
+	if a.Proto != "" {
+		spec += "/" + a.Proto
+	}
+	return spec, nil
+}
+
+// coupeSSH: the rule could close its port to Athanor (deny, or delete an allow, on TCP).
+func coupeSSH(a argsOutilServeur) bool {
+	return a.Proto != "udp" && (a.Action == "deny" || a.Regle == "allow")
+}
+
+func errPortSSH(p int) error {
+	return fmt.Errorf("port %d is the SSH port Athanor reaches this server by: this rule could cut its access", p)
+}
+
 func outilPareFeu(ctx context.Context, c *ssh.Client, srv ServeurInventaire, a argsOutilServeur) (ResultatOutil, error) {
-	if err := choix("action", a.Action, "status", "allow", "deny", "delete"); err != nil {
+	spec, err := specPareFeu(srv, a)
+	if err != nil {
 		return ResultatOutil{Code: -1}, err
 	}
-	spec := ""
-	if a.Action != "status" {
-		if a.Port < 1 || a.Port > 65535 {
-			return ResultatOutil{Code: -1}, errors.New("port must be between 1 and 65535")
-		}
-		if err := choix("proto", a.Proto, "", "tcp", "udp"); err != nil {
-			return ResultatOutil{Code: -1}, err
-		}
-		if a.Action == "delete" {
-			if err := choix("regle", a.Regle, "allow", "deny"); err != nil {
-				return ResultatOutil{Code: -1}, err
-			}
-		}
-		// Athanor's own way in stays open: a rule that could cut it is refused
-		if a.Proto != "udp" && (a.Action == "deny" || a.Regle == "allow") && (a.Port == srv.Port || slices.Contains(portsSSHD(ctx, c), a.Port)) {
-			return ResultatOutil{Code: -1}, fmt.Errorf("port %d is the SSH port Athanor reaches this server by: this rule could cut its access", a.Port)
-		}
-		spec = strconv.Itoa(a.Port)
-		if a.Proto != "" {
-			spec += "/" + a.Proto
-		}
+	// Athanor's own way in stays open, whatever port sshd itself listens on
+	if spec != "" && coupeSSH(a) && slices.Contains(portsSSHD(ctx, c), a.Port) {
+		return ResultatOutil{Code: -1}, errPortSSH(a.Port)
 	}
 	if err := logicielAbsent(srv, "ufw"); err != nil {
 		return ResultatOutil{Code: -1}, err

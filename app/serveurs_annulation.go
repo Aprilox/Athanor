@@ -1,0 +1,271 @@
+package main
+
+// Automatic rollback (M93): before a pare_feu allow/deny/delete or a write under /etc/ssh/, the state before is
+// kept on the server and a rollback is scheduled there (systemd-run --on-active, else a detached nohup sh -c);
+// Athanor then opens a new connection to see the server still answers. confirmer_changement (agent) or Keep this
+// change (server page) cancels the rollback; without it, the server puts the state back by itself when the delay
+// ends, even if Athanor is gone.
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"path"
+	"regexp"
+	"slices"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+
+	"golang.org/x/crypto/ssh"
+)
+
+// delaiAnnulation: how long a change waits for its confirmation (tests shorten it).
+var delaiAnnulation = 5 * time.Minute
+
+var reIDAnnulation = regexp.MustCompile(`^[0-9a-f]{8}$`)
+
+// AnnulationServeur: a change that waits for its confirmation (shown on the server page with its countdown).
+type AnnulationServeur struct {
+	ID       string    `json:"id"`
+	Serveur  string    `json:"serveur"`
+	Quoi     string    `json:"quoi"`
+	Echeance time.Time `json:"echeance"`
+}
+
+// annulations: the pending ones, in memory (after a restart of Athanor the server still undoes them by itself).
+var annulations = struct {
+	sync.Mutex
+	m map[string]AnnulationServeur
+}{m: map[string]AnnulationServeur{}}
+
+// annulationsDe: the pending changes of server id, soonest first.
+func annulationsDe(id string) []AnnulationServeur {
+	annulations.Lock()
+	defer annulations.Unlock()
+	l := []AnnulationServeur{}
+	for _, a := range annulations.m {
+		if a.Serveur == id {
+			l = append(l, a)
+		}
+	}
+	slices.SortFunc(l, func(a, b AnnulationServeur) int { return a.Echeance.Compare(b.Echeance) })
+	return l
+}
+
+// comme root: script run by sh as root (directly, or through sudo -n), with its arguments quoted.
+func commeRoot(script string, args ...string) string {
+	return scriptShell(false, preludeRoot+`R=$1; shift; exec $S sh -c "$R" sh "$@"`, append([]string{script}, args...)...)
+}
+
+const preludeAnnulation = `export LC_ALL=C PATH="$PATH:/usr/sbin:/sbin:/usr/local/sbin"; umask 077
+`
+
+// scriptRetour ($1 the saved state's folder): takes the folder (a confirmation that took it first wins), puts the
+// state back, logs to <folder>.log.
+const scriptRetour = preludeAnnulation + `D=$1; mv -- "$D" "$D.run" 2>/dev/null || exit 0; D=$D.run
+{ case $(cat "$D/type") in
+  ufw) for f in user.rules user6.rules; do [ ! -e "$D/$f" ] || cp -p "$D/$f" /etc/ufw/; done
+    ufw status | grep -q '^Status: active' && ufw reload ;;
+  ssh) p=$(cat "$D/chemin"); if [ -e "$D/prev" ]; then cp -p -- "$D/prev" "$p"; else rm -f -- "$p"; fi
+    { systemctl reload ssh || systemctl reload sshd || rc-service sshd reload || kill -HUP "$(cat /run/sshd.pid || cat /var/run/sshd.pid)"; } && echo "sshd reloaded" ;;
+esac; echo "rolled back $(date)"; } > "${D%.run}.log" 2>&1
+rm -rf -- "$D"`
+
+// scriptProgrammer ($1 id, $2 ufw|ssh, $3 delay in s, $4 the ssh path, $5 scriptRetour): one pending change of
+// a kind at a time; the state saved, then the rollback scheduled; any failure leaves nothing and exits non-zero.
+const scriptProgrammer = preludeAnnulation + `d=` + dossierSauvegardes + `; D="$d/annul-$1"
+for x in "$d"/annul-*/type; do [ -f "$x" ] && [ "$(cat "$x")" = "$2" ] && { echo "a change of the same kind still waits for its confirmation (${x%/type}): confirm it or let it be undone first"; exit 3; }; done
+mkdir -p -m 700 "$d" && mkdir -m 700 "$D" || exit 1
+{ echo "$2" > "$D/type" && case $2 in
+  ufw) for f in user.rules user6.rules; do [ ! -e "/etc/ufw/$f" ] || cp -p "/etc/ufw/$f" "$D/" || { rm -rf -- "$D"; exit 1; }; done ;;
+  ssh) p=$(readlink -f -- "$4") && [ -n "$p" ] || p=$4; printf '%s\n' "$p" > "$D/chemin" && { [ ! -e "$p" ] || cp -p -- "$p" "$D/prev"; } ;;
+esac && if command -v systemd-run >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
+  systemd-run --quiet --unit="athanor-annul-$1" --on-active="$3" /bin/sh -c "$5" sh "$D"
+else
+  N=; command -v setsid >/dev/null 2>&1 && N=setsid
+  $N nohup sh -c 'sleep "$1"; sh -c "$2" sh "$3"' sh "$3" "$5" "$D" </dev/null >/dev/null 2>&1 &
+  echo $! > "$D/pid"
+fi; } || { rm -rf -- "$D"; exit 1; }
+echo ok`
+
+// scriptFinir ($1 id, $2 garder|annuler, $3 scriptRetour): the timer stopped, then the change kept (exit 3: already
+// undone) or undone now.
+const scriptFinir = preludeAnnulation + `D=` + dossierSauvegardes + `/annul-$1
+systemctl stop "athanor-annul-$1.timer" 2>/dev/null; [ -f "$D/pid" ] && kill "$(cat "$D/pid")" 2>/dev/null
+case $2 in
+  garder) mv -- "$D" "$D.ok" 2>/dev/null || exit 3; rm -rf -- "$D.ok" ;;
+  *) [ -d "$D" ] || exit 3; sh -c "$3" sh "$D" ;;
+esac`
+
+// sousSSH: p is /etc/ssh or under it.
+func sousSSH(p string) bool {
+	p = path.Clean(p)
+	return p == "/etc/ssh" || strings.HasPrefix(p, "/etc/ssh/")
+}
+
+// genreAnnulation: the rollback a call needs ("ufw", or "ssh" with the path written), "" for none; a write is
+// checked as given and as the server resolves it (a link into /etc/ssh/).
+func genreAnnulation(ctx context.Context, c *ssh.Client, srv ServeurInventaire, outil string, a argsOutilServeur) (string, string) {
+	p := a.Chemin
+	switch outil {
+	case "pare_feu": // refused arguments schedule nothing: the tool refuses them before reaching the server
+		if spec, err := specPareFeu(srv, a); err == nil && spec != "" {
+			return "ufw", ""
+		}
+		return "", ""
+	case "sftp_envoyer":
+		p = a.Distant
+	case "fichier_ecrire":
+	default:
+		return "", ""
+	}
+	if sousSSH(p) {
+		return "ssh", p
+	}
+	if r, err := resoudreDistant(ctx, c, a.Sudo, "chemin", p, false); err == nil && sousSSH(r) {
+		return "ssh", r
+	}
+	return "", ""
+}
+
+// programmerAnnulation keeps the state on the server and schedules its rollback; an error: the change must not run.
+func programmerAnnulation(ctx context.Context, c *ssh.Client, srv ServeurInventaire, outil, genre, chemin string, a argsOutilServeur) (AnnulationServeur, error) {
+	an := AnnulationServeur{ID: aleatoire(4), Serveur: srv.ID, Echeance: time.Now().Add(delaiAnnulation)}
+	if genre == "ufw" {
+		an.Quoi = strings.TrimSpace(fmt.Sprintf("pare_feu %s %s %d %s", a.Action, a.Regle, a.Port, a.Proto))
+		an.Quoi = strings.Join(strings.Fields(an.Quoi), " ")
+	} else {
+		an.Quoi = outil + " " + chemin
+	}
+	s := strconv.Itoa(max(1, int(delaiAnnulation.Seconds()))) + "s"
+	r, err := executerSSH(ctx, c, commeRoot(scriptProgrammer, an.ID, genre, s, chemin, scriptRetour), nil, delaiCommande)
+	if err == nil && (r.Code != 0 || strings.TrimSpace(string(r.Sortie)) != "ok") {
+		err = errors.New(couper(strings.TrimSpace(string(r.Sortie)), 500))
+	}
+	if err != nil {
+		return an, fmt.Errorf("the automatic rollback could not be scheduled, the change did not run: %w", err)
+	}
+	return an, nil
+}
+
+// apresChangement: a failed change is undone at once; else Athanor checks the server by a new connection, and the
+// change waits for its confirmation.
+func (s *Serveur) apresChangement(ctx context.Context, c *ssh.Client, srv ServeurInventaire, de string, an AnnulationServeur, r ResultatOutil, err error) ResultatOutil {
+	audit := func(res string) {
+		s.ecrireAudit(LigneAudit{Type: "evenement", De: de, Vers: "serveur:" + srv.ID, Action: "serveurs.annulation", Resultat: an.ID + " · " + an.Quoi + " · " + res})
+	}
+	if err != nil || r.Code != 0 {
+		x, e := executerSSH(ctx, c, commeRoot(scriptFinir, an.ID, "annuler", scriptRetour), nil, delaiCommande)
+		if e == nil && x.Code == 0 {
+			r.Sortie += "\n(the change failed: the state before was put back)"
+			audit("échec du changement : état d'avant remis")
+		} else {
+			r.Sortie += "\n(the change failed; the state before will be put back by the server at " + an.Echeance.Format("15:04:05") + ")"
+			audit("échec du changement : retour arrière à l'échéance")
+		}
+		return r
+	}
+	nouvelle := ""
+	c2, e := s.connecterServeur(ctx, srv)
+	if e == nil {
+		var x ResultatSSH
+		x, e = executerSSH(ctx, c2, "true", nil, delaiCommande)
+		if e == nil && x.Code != 0 {
+			e = fmt.Errorf("code %d", x.Code)
+		}
+		c2.Close()
+	}
+	if e != nil {
+		nouvelle = fmt.Sprintf("\nAthanor could not open a new connection to the server after this change (%s): do not confirm it; the server undoes it by itself at %s.", s.masquerSecrets(e.Error()), an.Echeance.Format("15:04:05"))
+	} else {
+		nouvelle = fmt.Sprintf("\nA new connection to the server works. This change is undone automatically at %s (in %s) unless it is confirmed: check what it should do, then call confirmer_changement with serveur %q and id %q.",
+			an.Echeance.Format("15:04:05"), delaiAnnulation, srv.ID, an.ID)
+	}
+	annulations.Lock()
+	annulations.m[an.ID] = an
+	annulations.Unlock()
+	time.AfterFunc(time.Until(an.Echeance), func() {
+		annulations.Lock()
+		_, encore := annulations.m[an.ID]
+		delete(annulations.m, an.ID)
+		annulations.Unlock()
+		if encore {
+			audit("non confirmé : remis par le serveur à l'échéance")
+		}
+	})
+	audit(fmt.Sprintf("retour arrière programmé, échéance %s (nouvelle connexion : %v)", an.Echeance.Format("15:04:05"), e == nil))
+	r.Annulation = an.ID
+	r.Sortie += nouvelle
+	return r
+}
+
+// confirmerChangement keeps change idAn of server id: its rollback is cancelled on the server, by a new connection.
+func (s *Serveur) confirmerChangement(ctx context.Context, de, id, idAn string) (string, error) {
+	if !reIDAnnulation.MatchString(idAn) {
+		return "", errors.New("id must be the change's id given by the tool that made it (8 hexadecimal characters)")
+	}
+	l, err := lireServeurs()
+	if err != nil {
+		return "", err
+	}
+	i := slices.IndexFunc(l, func(x ServeurInventaire) bool { return x.ID == id })
+	if i < 0 {
+		return "", errServeurInconnu
+	}
+	c, err := s.connecterServeur(ctx, l[i])
+	if err != nil {
+		return "", fmt.Errorf("Athanor cannot reach the server: the change will be undone at its deadline (%w)", err)
+	}
+	defer c.Close()
+	r, err := executerSSH(ctx, c, commeRoot(scriptFinir, idAn, "garder", scriptRetour), nil, delaiCommande)
+	annulations.Lock()
+	an, connu := annulations.m[idAn]
+	if err == nil && (r.Code == 0 || r.Code == 3) {
+		delete(annulations.m, idAn)
+	}
+	annulations.Unlock()
+	if !connu {
+		an = AnnulationServeur{ID: idAn}
+	}
+	audit := func(res string) {
+		s.ecrireAudit(LigneAudit{Type: "evenement", De: de, Vers: "serveur:" + id, Action: "serveurs.confirmer_changement", Resultat: idAn + " · " + an.Quoi + " · " + res})
+	}
+	switch {
+	case err != nil:
+		audit("erreur : " + couper(s.masquerSecrets(err.Error()), auditMaxOutil))
+		return "", err
+	case r.Code == 3:
+		audit("déjà remis (aucun changement en attente sous cet id)")
+		return "", errors.New("no change waits under this id on the server: it was already undone (or confirmed)")
+	case r.Code != 0:
+		audit(fmt.Sprintf("code %d", r.Code))
+		return "", fmt.Errorf("the confirmation failed (code %d): %s", r.Code, couper(s.masquerSecrets(strings.TrimSpace(string(r.Sortie))), 500))
+	}
+	audit("gardé")
+	return "Change " + idAn + " kept: its automatic rollback is cancelled.", nil
+}
+
+func init() {
+	outilsHub["confirmer_changement"] = OutilHub{Description: "Keep a firewall or SSH change: until then, the server undoes it by itself when its delay ends. Confirm only once a new connection works and the change does what it should.",
+		Schema: schemaObjet(map[string]any{"serveur": schemaTexte("The server's id, from serveurs_liste"), "id": schemaTexte("The change's id, given by the tool that made it")}, "serveur", "id"),
+		Faire: func(s *Serveur, x SessionHub, args json.RawMessage) (string, error) {
+			var a struct {
+				Serveur string `json:"serveur"`
+				ID      string `json:"id"`
+			}
+			if err := lireArguments(args, &a); err != nil {
+				return "", err
+			}
+			if err := s.serveurPerimetre(x, "confirmer_changement", a.Serveur); err != nil {
+				return "", err
+			}
+			txt, err := s.confirmerChangement(context.Background(), x.Agent, a.Serveur, a.ID)
+			if err != nil {
+				return "", errors.New(s.masquerSecrets(err.Error()))
+			}
+			return txt, nil
+		}}
+}

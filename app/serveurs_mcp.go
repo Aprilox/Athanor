@@ -21,7 +21,7 @@ const agentServeurs = "servers"
 
 // outilsServeursMCP: the tools of a Servers agent's token.
 var outilsServeursMCP = []string{"serveurs_liste", "serveur_fiche", "ssh_commande", "fichier_lire", "fichier_ecrire",
-	"sftp_envoyer", "sftp_recuperer", "service", "docker", "pare_feu", "proposer_plan"}
+	"sftp_envoyer", "sftp_recuperer", "service", "docker", "pare_feu", "proposer_plan", "confirmer_changement"}
 
 var (
 	errServeursAgent = errors.New("the Servers tools answer only a Servers agent's session")
