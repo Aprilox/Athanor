@@ -265,10 +265,18 @@ func outilDemanderDeploiement(s *Serveur, x SessionHub, args json.RawMessage) (s
 	// C63: the accord is for these servers, this agent and this mission (Reprendre compares them)
 	ap := Approbation{Projet: x.Projet, Env: env, Mission: x.Mission, Agent: x.Agent, Action: actionDeploiement,
 		Details: map[string]string{"commit": commit, "hote": hote, "serveurs": listeServeursAccord(e.Serveurs)}, Raison: "commit " + commit + " → " + hote}
-	accepte := func(par string) (string, error) {
+	var fichiers []string
+	if p, ok := s.projetNomme(x.Projet); ok {
+		fichiers = fichiersBuildChanges(p, env, commit, e.Deploiement)
+	}
+	if len(fichiers) > 0 { // C68: the build would run changed code of the repository: the owner reads it
+		ap.Details["fichiers_build"] = couper(strings.Join(fichiers, ", "), 300)
+		ap.Raison += "; build files changed: " + ap.Details["fichiers_build"]
+	}
+	accepte := func(par string, accorde bool) (string, error) {
 		s.ecrireAudit(LigneAudit{Type: "evenement", De: x.Agent, Vers: "hub", Mission: x.Mission, Projet: x.Projet, Env: env, Agent: x.Agent,
 			Action: "déploiement accepté", Resultat: "commit " + commit + " → " + hote + " (" + par + ")"})
-		d, suite, err := s.commencerDeploiement(x.Projet, env, commit, OptionsDeploiement{Auteur: "agent"})
+		d, suite, err := s.commencerDeploiement(x.Projet, env, commit, OptionsDeploiement{Auteur: "agent", Accorde: accorde})
 		if err != nil {
 			return "", fmt.Errorf("deployment accepted (%s) but not started: %s", par, s.masquerSecrets(err.Error()))
 		}
@@ -278,8 +286,8 @@ func outilDemanderDeploiement(s *Serveur, x SessionHub, args json.RawMessage) (s
 	attente := func(id string) (string, error) {
 		return "waiting for the owner, id " + id + ": once accepted, call demander_deploiement again with the same environment and commit; go on with work that does not need it", nil
 	}
-	if accord, raison := s.politiqueDeploiement(x.Projet, env, false); !accord {
-		return accepte(raison)
+	if accord, raison := s.politiqueDeploiement(x.Projet, env, false); !accord && len(fichiers) == 0 {
+		return accepte(raison, false)
 	}
 	y, etat, err := s.approbations.Reprendre(ap)
 	switch {
@@ -287,7 +295,7 @@ func outilDemanderDeploiement(s *Serveur, x SessionHub, args json.RawMessage) (s
 	case etat == "utilisee":
 		s.ecrireAudit(LigneAudit{Type: "evenement", De: x.Agent, Vers: "hub", Mission: x.Mission, Projet: x.Projet, Env: env,
 			Agent: x.Agent, Action: "approbation utilisée: " + actionDeploiement, Resultat: y.ID})
-		return accepte("the owner's accord " + y.ID)
+		return accepte("the owner's accord "+y.ID, true)
 	case etat == "attente":
 		return attente(y.ID)
 	default:

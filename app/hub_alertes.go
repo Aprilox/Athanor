@@ -103,7 +103,7 @@ func alertesApprobations(l []Approbation) []AlerteHub {
 			return ActionAlerte{ID: id, Libelle: libelle, Route: "hub/approbations", Corps: map[string]any{"id": x.ID, "decision": id}, Distance: true}
 		}
 		actions := []ActionAlerte{decision("accepter", "Accept"), decision("refuser", "Refuse"), decision("toujours", toujours)}
-		if x.Action == actionPlanServeur && x.Details["regle"] != "oui" || x.Action == actionDeploiement && x.Env == "prod" { // destructive or prod: an accord every time
+		if x.Action == actionPlanServeur && x.Details["regle"] != "oui" || x.Action == actionDeploiement && (x.Env == "prod" || x.Details["fichiers_build"] != "") { // destructive, prod or changed build files: an accord every time
 			actions = actions[:2]
 		}
 		out = append(out, AlerteHub{Empreinte: "appr-" + x.ID, Module: "dev", Element: x.Projet, Titre: x.Projet, Raison: raison, Args: args, Approbation: &x,

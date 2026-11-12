@@ -56,6 +56,7 @@ func TestDeploiementAgentConteneur(t *testing.T) {
 		t.Skip("ATHANOR_SSH_HTTP absent (bash .athanor/tools/serveur_ssh.sh start, puis http)")
 	}
 	s, _, id, _, sur := serveurConteneurTest(t)
+	construireEssai(t, nil)
 	var err error
 	if s.approbations, err = ouvrirApprobations(t.TempDir()); err != nil {
 		t.Fatal(err)
@@ -141,6 +142,15 @@ func TestDeploiementAgentConteneur(t *testing.T) {
 	txt, e := appel(ops, "proposer_plan", `{"serveur":"`+id+`","resume":"Publier le site","etapes":[{"outil":"deployer","arguments":`+dep+`,"pourquoi":"p"}]}`)
 	if e {
 		t.Fatalf("plan: %s", txt)
+	}
+	// C68: a plan whose deployment builds is read by the owner every time
+	var pl struct{ Plan string }
+	_ = json.Unmarshal([]byte(txt), &pl)
+	if ap, _ := s.approbations.Lire(pl.Plan); ap.Details["regle"] != "non" {
+		t.Errorf("a plan with a build may become a rule: %+v", ap)
+	}
+	if _, _, err := s.deciderApprobation("fenetre", pl.Plan, "toujours", "", "", ""); err == nil || err.Error() != errPlanSansRegle.Error() {
+		t.Errorf("a rule for a plan with a build: %v", err)
 	}
 	accepter(txt)
 	if txt, e := appel(ops, "deployer", dep); e || !strings.Contains(txt, `"etat": "ok"`) || !strings.Contains(txt, `"auteur": "agent"`) {

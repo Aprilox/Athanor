@@ -445,7 +445,7 @@ func (s *Serveur) agirIncident(ctx context.Context, projet, env, action, cle, au
 	case i.Commit == "":
 		err = errors.New("nothing to deploy again: no version of this environment is known")
 	default:
-		d, err = s.deployer(ctx, projet, env, i.Commit, OptionsDeploiement{Auteur: auteur})
+		d, err = s.deployer(ctx, projet, env, i.Commit, OptionsDeploiement{Auteur: auteur, Accorde: auteur == "proprietaire"})
 	}
 	audit(cmp.Or(d.Etat, "refus") + " " + couper(s.masquerSecrets(fmt.Sprint(err)), 160))
 	if d.ID == "" {

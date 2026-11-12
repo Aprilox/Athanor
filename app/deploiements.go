@@ -20,7 +20,6 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -59,14 +58,16 @@ type Deploiement struct {
 	Verification *VerifDeploiement `json:"verification,omitempty"` // the external check once served (M133)
 	Auteur       string            `json:"auteur"`                 // agent | relais | proprietaire
 	Retour       bool              `json:"retour,omitempty"`       // a way back to the previous version (M133)
+	Accorde      bool              `json:"accorde,omitempty"`      // the owner accepted this very deployment (C68)
 	Serveurs     []string          `json:"serveurs"`
 	Debut        string            `json:"debut"`
 	Fin          string            `json:"fin,omitempty"`
 }
 
 type OptionsDeploiement struct {
-	Config *ConfigDeploiement // nil: the environment's recorded one
-	Auteur string
+	Config  *ConfigDeploiement // nil: the environment's recorded one
+	Auteur  string
+	Accorde bool // the owner accepted it (an accord, a plan, Retry): its build files are the new reference (C68)
 }
 
 var (
@@ -266,7 +267,7 @@ func (s *Serveur) commencerDeploiement(projet, env, commit string, o OptionsDepl
 	}
 	debut := time.Now().UTC()
 	d := Deploiement{ID: aleatoire(8), Projet: projet, Env: env, Commit: sha, Methode: cfg.Methode, Version: debut.Format("20060102-150405") + "-" + sha[:7],
-		Etat: "en_cours", Auteur: o.Auteur, Serveurs: e.Serveurs, Debut: debut.Format(time.RFC3339)}
+		Etat: "en_cours", Auteur: o.Auteur, Accorde: o.Accorde, Serveurs: e.Serveurs, Debut: debut.Format(time.RFC3339)}
 	if err := noterHistorique(d); err != nil {
 		verrou.Unlock()
 		return d, nil, fmt.Errorf("the deployment history cannot be written: %w", err)
@@ -307,7 +308,7 @@ func (s *Serveur) deployerVersion(ctx context.Context, p Projet, e Environnement
 	archive := filepath.Join(dossier, d.ID+".tar.gz")
 	defer os.Remove(archive)
 	if cfg.Construire != "" {
-		if err := s.construireArchive(ctx, p.Dossier, d.Commit, cfg, archive); err != nil {
+		if err := s.construireArchive(ctx, p, d.Commit, cfg, archive); err != nil {
 			return err
 		}
 	} else if out, err := gitP(p.Dossier, nil, "archive", "--format=tar.gz", "-o", archive, d.Commit).CombinedOutput(); err != nil {
@@ -409,56 +410,42 @@ func (s *Serveur) deployerVersion(ctx context.Context, p Projet, e Environnement
 	return nil
 }
 
-// construireArchive (M135): the commit checked out in a clone of its own, the build command run there on this PC
-// (sh, Git Bash on Windows; time-limited; without Athanor's secrets in its environment), then that tree archived:
-// what git tracks plus the published folder even when ignored (a dist/ usually is).
-func (s *Serveur) construireArchive(ctx context.Context, depot, commit string, cfg ConfigDeploiement, archive string) error {
-	src := strings.TrimSuffix(archive, ".tar.gz") + "-src"
-	defer os.RemoveAll(src)
-	git := func(dossier string, args ...string) (string, error) {
-		out, err := gitP(dossier, nil, args...).CombinedOutput()
-		if err != nil {
-			return "", fmt.Errorf("git %s: %v %s", args[0], err, couper(strings.TrimSpace(string(out)), 300))
+// construireArchive (M135, C68): the build command run by the kit's construire-deploiement (on the pilot's
+// side, in its barrier, in a temporary folder outside Athanor's; without Athanor's secrets in its
+// environment); in native Windows mode, only for a project forced on its Access page (logged).
+func (s *Serveur) construireArchive(ctx context.Context, p Projet, commit string, cfg ConfigDeploiement, archive string) error {
+	k := s.kitCourant()
+	args := []string{"construire-deploiement", k.Racine, p.Dossier, commit, cfg.Dossier, archive}
+	if modeNatif.Load() {
+		if s.acces == nil || !s.acces.Projet(p.Nom).ForcerInfraNatif {
+			return errConstruireSansBarriere
 		}
-		return strings.TrimSpace(string(out)), nil
+		args = append(args, "--sans-barriere")
+		s.ecrireAudit(LigneAudit{Type: "evenement", De: "hub", Vers: "hub", Projet: p.Nom, Action: "construction sans barrière",
+			Resultat: "commit " + commit + " (projet forcé en mode Windows natif)"})
 	}
-	// the project's own repository only (protocol.allow=never stays for everything else)
-	if _, err := git(filepath.Dir(src), "-c", "protocol.file.allow=always", "clone", "--quiet", "--shared", "--no-checkout", "--", depot, src); err != nil {
-		return err
-	}
-	if _, err := git(src, "-c", "advice.detachedHead=false", "checkout", "--quiet", "--detach", commit); err != nil {
-		return err
-	}
-	sh := "sh"
-	if runtime.GOOS == "windows" {
-		if sh = bashNatif(); sh == "" {
-			return errors.New("the build command needs Git for Windows' bash on this PC")
-		}
-	}
-	cctx, fin := context.WithTimeout(ctx, delaiConstruction)
-	defer fin()
-	c := commandeContexte(cctx, sh, "-c", cfg.Construire)
-	c.Dir, c.Env, c.WaitDelay = src, envSansSecrets(s, nil), 10*time.Second
+	c := commandeConstruction(k, append(args, "--", cfg.Construire)...)
+	c.Env = envSansSecrets(s, c.Env)
+	var journal strings.Builder
+	c.Stdout, c.Stderr, c.WaitDelay = &journal, &journal, 10*time.Second
 	cacherFenetre(c)
-	if out, err := c.CombinedOutput(); err != nil {
-		l := strings.Split(strings.TrimSpace(string(out)), "\n")
+	if err := c.Start(); err != nil {
+		return err
+	}
+	cctx, fin := context.WithTimeout(ctx, delaiConstruction+time.Minute)
+	defer fin()
+	stop := context.AfterFunc(cctx, func() { _ = c.Process.Kill() })
+	err := c.Wait()
+	stop()
+	if err != nil {
+		l := strings.Split(strings.TrimSpace(nettoyerANSI(journal.String())), "\n")
 		return fmt.Errorf("the build failed (%v): %s; nothing was switched", err, couper(s.masquerSecrets(strings.Join(l[max(0, len(l)-6):], "\n")), 600))
 	}
-	if _, err := git(src, "add", "-A"); err != nil {
-		return err
-	}
-	if cfg.Dossier != "" {
-		if _, err := git(src, "add", "-f", "--", cfg.Dossier); err != nil {
-			return fmt.Errorf("the published folder %s is missing after the build: %w", cfg.Dossier, err)
-		}
-	}
-	arbre, err := git(src, "write-tree")
-	if err != nil {
-		return err
-	}
-	_, err = git(src, "archive", "--format=tar.gz", "-o", archive, arbre)
-	return err
+	return nil
 }
+
+// commandeConstruction: the kit's command (replaced in the tests, whose binary is not the kit's).
+var commandeConstruction = commandeKit
 
 // preparerVersion: on server id, the archive sent (or with g, the commit fetched there by git), then script run
 // as root with the archive's remote path and args, entree on its standard input; the connection stays open for

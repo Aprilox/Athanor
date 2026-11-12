@@ -28,7 +28,10 @@ const (
 	maxSauvegardes    = 20
 )
 
-var errPlanSansRegle = erreurEntree("This plan has a destructive step or targets a prod server: it is accepted once, never with a rule")
+var (
+	errPlanSansRegle  = erreurEntree("This plan has a destructive step or targets a prod server: it is accepted once, never with a rule")
+	errBuildSansRegle = erreurEntree("This deployment runs a build whose files changed: it is accepted once, never with a rule")
+)
 
 // EtapePlan: one step as the code classed it; Arguments are canonical (argsOutilServeur marshalled).
 type EtapePlan struct {
@@ -193,7 +196,7 @@ func outilProposerPlan(s *Serveur, x SessionHub, args json.RawMessage) (string, 
 	if prod {
 		p.Env = "prod"
 	}
-	haut, resumeEtapes := ClasseLecture, []string{}
+	haut, resumeEtapes, construit := ClasseLecture, []string{}, false
 	for i, e := range a.Etapes {
 		echec := func(err error) (string, error) {
 			s.ecrireAudit(LigneAudit{Type: "evenement", De: x.Agent, Vers: "serveur:" + a.Serveur, Projet: x.Projet, Mission: x.Mission,
@@ -246,6 +249,7 @@ func outilProposerPlan(s *Serveur, x SessionHub, args json.RawMessage) (string, 
 			if d.Env == "prod" {
 				prod, p.Env = true, "prod"
 			}
+			construit = construit || strings.TrimSpace(d.Construire) != ""
 			if len(e.Sauvegarde) > 0 {
 				return echec(fmt.Errorf("step %d: a deployment backs up no file: the previous version stays on the server (revenir_version)", i+1))
 			}
@@ -283,7 +287,8 @@ func outilProposerPlan(s *Serveur, x SessionHub, args json.RawMessage) (string, 
 			Sauvegarde: sauvegarde, SansSauvegarde: couper(sans, 300)})
 		resumeEtapes = append(resumeEtapes, et.Outil+" "+et.Classe.String())
 	}
-	regle := !prod && haut < ClasseDestructrice
+	// C68: a build command runs code of the repository on this PC: the owner reads the plan every time
+	regle := !prod && haut < ClasseDestructrice && !construit
 	demande := Approbation{Projet: x.Projet, Env: p.Env, Mission: x.Mission, Agent: x.Agent, Action: actionPlanServeur, Raison: resume,
 		Details: map[string]string{"serveur": p.Serveur, "nom": p.Nom, "classe": haut.String(), "etapes": strconv.Itoa(len(p.Etapes)), "regle": map[bool]string{true: "oui", false: "non"}[regle]}}
 	// the owner's "do not ask again for this server": the plan is accepted at once, without a ping

@@ -118,7 +118,7 @@ func faireOutilDeploiement(nom string) func(*Serveur, SessionHub, json.RawMessag
 		ctx := s.contexteSession(x.Hache)
 		var d Deploiement
 		if nom == "deployer" {
-			d, err = s.deployer(ctx, projet, c.Env, c.Commit, OptionsDeploiement{Config: &ConfigDeploiement{c.Methode, c.Source, c.Dossier, c.Construire}, Auteur: "agent"})
+			d, err = s.deployer(ctx, projet, c.Env, c.Commit, OptionsDeploiement{Config: &ConfigDeploiement{c.Methode, c.Source, c.Dossier, c.Construire}, Auteur: "agent", Accorde: true})
 		} else {
 			d, err = s.revenir(ctx, projet, c.Env, "agent")
 		}

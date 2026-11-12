@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 )
@@ -20,6 +21,7 @@ type RelaisJalon struct {
 	Etat   string `json:"etat"`             // attente (not pushed yet) | lance | echec (not started)
 	ID     string `json:"id,omitempty"`     // the deployment, once started
 	Erreur string `json:"erreur,omitempty"` // why it did not start
+	Accord string `json:"accord,omitempty"` // the owner's accord asked for its changed build files (C68)
 }
 
 // attentePushRelais: how long a milestone's commit may wait to be on GitHub (git source) before the relay tries anyway.
@@ -80,7 +82,11 @@ func (s *Serveur) avancerRelais(p Projet, maintenant time.Time) <-chan struct{} 
 			return nil // the pilot pushes after the milestone's commit
 		}
 	}
-	d, suite, err := s.commencerDeploiement(p.Nom, "dev", r.Commit, OptionsDeploiement{Auteur: "relais"})
+	accorde, attendre := s.accordBuildRelais(p, e, &r)
+	if attendre {
+		return nil
+	}
+	d, suite, err := s.commencerDeploiement(p.Nom, "dev", r.Commit, OptionsDeploiement{Auteur: "relais", Accorde: accorde})
 	if err != nil {
 		r.Etat, r.Erreur = "echec", s.masquerSecrets(err.Error())
 		ecrireRelais(p.Nom, r)
@@ -152,4 +158,37 @@ func (s *Serveur) alertesRelais() []AlerteHub {
 				{ID: "voir", Libelle: "View", Page: "acces", Projet: p.Nom}, ignorerOuRouvrir(empreinte, true)}})
 	}
 	return out
+}
+
+// accordBuildRelais (C68): ticking "Deploy to dev at each milestone" accepts the deployments, not a build whose
+// files changed since the last deployment the owner accepted: for those, the relay asks the owner once and
+// waits (attendre); accorde says the owner accepted this one. Refused or expired: the relay fails, said.
+func (s *Serveur) accordBuildRelais(p Projet, e Environnement, r *RelaisJalon) (accorde, attendre bool) {
+	f := fichiersBuildChanges(p, "dev", r.Commit, e.Deploiement)
+	if len(f) == 0 {
+		return false, false
+	}
+	liste := couper(strings.Join(f, ", "), 300)
+	ap := Approbation{Projet: p.Nom, Env: "dev", Agent: "relais", Action: actionDeploiement, Raison: "commit " + r.Commit + " → " + hoteEnv(&e) + "; build files changed: " + liste,
+		Details: map[string]string{"commit": r.Commit, "hote": hoteEnv(&e), "serveurs": listeServeursAccord(e.Serveurs), "fichiers_build": liste}}
+	y, etat, err := s.approbations.Reprendre(ap)
+	switch {
+	case err != nil || etat == "attente":
+		return false, true
+	case etat == "utilisee":
+		return true, false
+	case r.Accord != "": // asked already, and no longer waiting
+		if y, ok := s.approbations.Lire(r.Accord); ok && y.Etat == "acceptee" {
+			return true, false
+		}
+		r.Etat, r.Erreur = "echec", "the owner did not accept the changed build files ("+liste+")"
+		ecrireRelais(p.Nom, *r)
+		s.notifierRelais(p.Nom, false, r.Jalon)
+		return false, true
+	}
+	if y, err = s.demanderApprobation(ap); err == nil {
+		r.Accord = y.ID
+		ecrireRelais(p.Nom, *r)
+	}
+	return false, true
 }

@@ -125,6 +125,7 @@ func lancerMCPCage(args []string) int {
 		}
 	}
 	a = append(a, "--bind", outils, outils)
+	a = append(a, masquesCage(filepath.Dir(outils), dossierP)...)
 	// Claude's screen: a server's windows (Godot, a browser) open there, never on the user's screen
 	if x := os.Getenv("ATHANOR_X11_DIR"); x != "" && dossierP(x) {
 		a = append(a, "--bind", x, "/tmp/.X11-unix")
@@ -215,4 +216,18 @@ func lancerEcran(args []string) int {
 	}
 	fmt.Fprintln(os.Stderr, "Usage: athanor ecran lancer PROGRAM ARGS... | athanor ecran capture PROJECT")
 	return 2
+}
+
+// masquesCage (I4, C68): Athanor's settings, hub/ and modules/ hidden from the cage even under a writable or
+// readable folder (bound after them): an empty folder over each folder, an empty file over each file.
+func masquesCage(kit string, estDossier func(string) bool) []string {
+	var a []string
+	for _, p := range donneesAthanor(kit, false) {
+		if estDossier(p) {
+			a = append(a, "--tmpfs", p)
+		} else {
+			a = append(a, "--ro-bind", "/dev/null", p)
+		}
+	}
+	return a
 }

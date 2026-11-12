@@ -523,6 +523,8 @@ func (s *Serveur) deciderApprobation(qui, id, decision, entree, envChoisi, varia
 		return x, http.StatusConflict, errPlanSansRegle
 	case decision == "toujours" && x.Action == actionDeploiement && x.Env == "prod": // I6: no rule ever lets prod through
 		return x, http.StatusConflict, errEnvProdAuto
+	case decision == "toujours" && x.Action == actionDeploiement && x.Details["fichiers_build"] != "": // C68
+		return x, http.StatusConflict, errBuildSansRegle
 	case decision != "refuser" && x.Action == actionPlanServeur && s.critiqueEnCours(x.ID):
 		return x, http.StatusConflict, errCritiqueEnCours
 	}

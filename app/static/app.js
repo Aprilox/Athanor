@@ -2768,7 +2768,9 @@ function carteApprobation(x, ap, codes) {
     [t("Server role: {0}", [x.env]), t("{0} step(s)", [d.etapes || "?"])], blocPlan(x, p), d.regle === "oui" && t("Never ask again for this server"), p && p.critique && !p.critique.verdict);
   // a deployment (M120): prod is never decided by a rule
   if (x.action === "deploiement") return carteDecision(x, ap, `<span class="badge">${h(x.env)}</span> <strong>${h(x.env === "prod" ? t("Deploy {0} to production?", [d.hote]) : t("Deploy {0} to {1}?", [d.hote, x.env]))}</strong> <span>${h(x.projet)}</span>`,
-    [t("Commit {0}", [d.commit]), d.serveurs && t("Servers: {0}", [d.serveurs])], x.env === "prod" ? `<div class="pv-details">${h(t("Production always asks you: one accord, one deployment."))}</div>` : "", x.env !== "prod" && t("Never ask again for this project and environment"));
+    [t("Commit {0}", [d.commit]), d.serveurs && t("Servers: {0}", [d.serveurs]), d.fichiers_build && t("Build files changed: {0}", [d.fichiers_build])],
+    x.env === "prod" ? `<div class="pv-details">${h(t("Production always asks you: one accord, one deployment."))}</div>` : d.fichiers_build ? `<div class="pv-details">${h(t("Its build command will run these changed files on this PC, inside the pilot's barrier: one accord, one deployment."))}</div>` : "",
+    x.env !== "prod" && !d.fichiers_build && t("Never ask again for this project and environment"));
   const acces = x.action === "demander_acces", f = etat.apprForm[x.id] || {}, nom = (x.details || {}).nom || "";
   const entree = f.entree ?? (codes.find((e) => e.nom === nom) || {}).id ?? "", env = f.env || x.env, variable = f.variable ?? nom;
   const champs = acces ? `<div class="appr-champs">
@@ -4318,7 +4320,7 @@ pages.acces = async () => {
   return `<div class="acces">
     <div class="bloc"><h2>${t("Access")}</h2><p class="intro petit">${t("Drag an entry of the vault onto an environment, or tick it: the pilot receives the project keys and variables of the current environment, under the variable name shown.")}</p>
       ${inj.etat === "verrouille" ? `<p class="petit attention">🔒 ${t("The vault is locked: the pilot's file is not updated until you unlock it.")}</p>` : ""}
-      ${d.natif ? `<div class="acc-natif"><p class="petit attention">⚠ ${t(d.forcer_infra_natif ? "Forced: infra entries can be linked to this project. This choice is logged." : "Native Windows mode: this PC has no barrier, any agent can read every file. Infra entries (your servers' keys) are refused for this project; switch to WSL in Settings › Options to keep them out of reach.")}</p>
+      ${d.natif ? `<div class="acc-natif"><p class="petit attention">⚠ ${t(d.forcer_infra_natif ? "Forced: infra entries can be linked to this project, and its deployments' build command runs without a barrier. This choice is logged." : "Native Windows mode: this PC has no barrier, any agent can read every file. Infra entries (your servers' keys) are refused for this project; switch to WSL in Settings › Options to keep them out of reach.")}</p>
         <label class="petit"><input type="checkbox" data-acc-forcer${d.forcer_infra_natif ? " checked" : ""}> ${t("Force, knowing the risk")}</label> <a class="petit" href="#options">${t("Options")}</a></div>` : ""}</div>
     <div class="acc-grille">
       <div class="bloc acc-coffre"><h2>${t("Vault")}</h2>
@@ -4497,7 +4499,7 @@ $("#page").addEventListener("change", (ev) => {
 });
 // native Windows mode: infra entries need a confirmed, logged "force" per project
 async function forcerInfraNatif(oui) {
-  if (oui && !(await confirmer(t("Once forced, an agent working on this PC could read this project's infra entries. Force anyway? This choice is logged."), { ok: t("Force"), danger: true }))) return rendrePage();
+  if (oui && !(await confirmer(t("Once forced, an agent working on this PC could read this project's infra entries, and its deployments' build command would run without a barrier. Force anyway? This choice is logged."), { ok: t("Force"), danger: true }))) return rendrePage();
   return changerAcces({ action: "forcer", forcer: oui, confirme: oui });
 }
 $("#page").addEventListener("dragstart", (ev) => {
