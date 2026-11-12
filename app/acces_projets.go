@@ -41,6 +41,8 @@ type ProjetAcces struct {
 	Env              string        `json:"env"`
 	ForcerInfraNatif bool          `json:"forcer_infra_natif"`
 	Acces            []AccesProjet `json:"acces"`
+	// stage 7: where each environment lives (hub_environnements.go); absent in older files
+	Environnements map[string]*Environnement `json:"environnements,omitempty"`
 }
 
 type fichierAcces struct {

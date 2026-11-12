@@ -221,6 +221,12 @@ func (s *Serveur) apiServeurModifier(w http.ResponseWriter, r *http.Request) {
 		if i >= 0 && slices.Contains(liste[i].Roles, "prod") && !slices.Contains(roles, "prod") && !s.preuveServeur(w, r, c.MotDePasse, "retrait du rôle prod refusé", liste[i].Nom) {
 			return // C37: without prod an agent may act on it as on a test server
 		}
+		if i >= 0 && s.acces != nil {
+			if l := s.acces.envsIncompatibles(liste[i].ID, roles); len(l) > 0 {
+				s.erreur(w, http.StatusConflict, "Take this server out of these environments first: "+strings.Join(l, ", "))
+				return // a prod server in a dev environment would be deployed to without approval
+			}
+		}
 	}
 	var rendu, avant ServeurInventaire
 	err := modifierServeurs(func(l []ServeurInventaire) ([]ServeurInventaire, error) {
@@ -283,7 +289,18 @@ func (s *Serveur) apiServeurSupprimer(w http.ResponseWriter, r *http.Request) {
 	}
 	s.ecrireAudit(LigneAudit{Type: "evenement", De: deQui(r), Vers: "servers", Action: "serveur supprimé", Resultat: nom})
 	_ = os.RemoveAll(filepath.Join(dossierModule("servers"), id))
-	s.ecrireJSON(w, map[string]bool{"ok": true})
+	envs := []string{}
+	if s.acces != nil {
+		l, err := s.acces.RetirerServeur(id)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "environments:", err)
+		}
+		if len(l) > 0 {
+			envs = l
+			s.ecrireAudit(LigneAudit{Type: "evenement", De: deQui(r), Vers: "hub", Action: "serveur retiré des environnements", Resultat: nom + ": " + strings.Join(l, ", ")})
+		}
+	}
+	s.ecrireJSON(w, map[string]any{"ok": true, "environnements": envs})
 }
 
 // preuveServeur: the owner is there (hub_preuve.go, WSL mode too); otherwise the refusal is logged and written.

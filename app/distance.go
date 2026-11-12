@@ -285,6 +285,8 @@ func interditDistance(r *http.Request) bool {
 		return true
 	case p == "/api/sante/agent-serveurs": // B63: Docker, the vault and a real session, forced without the password
 		return true
+	case strings.HasPrefix(p, "/api/projets/") && strings.HasSuffix(p, "/environnements") && r.Method != http.MethodGet:
+		return true // a project's environments: read from a device, changed at the computer only
 	}
 	return false
 }
