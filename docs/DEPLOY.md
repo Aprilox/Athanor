@@ -23,6 +23,8 @@ A deployment to *prod*, or a going back in *prod*, needs your agreement each tim
 
 **Where the code comes from.** Either **git**: the server fetches the exact commit from GitHub with the project's deployment key (read-only on the repository, created in the *Environments* panel), using a pinned github.com host key; or an **archive**: Athanor makes a `tar.gz` of the commit on this PC (`git archive`, or the output of the environment's build command run in a clean copy of that commit, in a temporary folder and inside the pilot's barrier; in native Windows mode, refused unless the project is forced on its *Access* page, and logged), sends it by SFTP and checks its SHA-256. An archive with an absolute path, a `..`, or a link leaving the version is refused before anything is written.
 
+**What only the owner can let through.** A changed build file, compose file, Dockerfile or file of the k3s manifests' folder (compared with the last deployment the owner accepted) makes the deployment destructive: it waits for the owner even in dev or staging with the *auto* policy, a rule or *Deploy to dev at each milestone*. Without the owner's accord for that very deployment, a Compose configuration (read with `docker compose config --format json` on the server) that asks for `privileged`, `cap_add`, `devices`, `security_opt`, the host's network, PID, IPC, user or cgroup namespace, or a host path outside the version is refused before anything starts; so are k3s manifests with a `hostPath`, `hostNetwork`/`hostPID`/`hostIPC`, a privileged container or a remote base.
+
 ## What Athanor writes on a server
 
 ```
@@ -31,7 +33,7 @@ A deployment to *prod*, or a going back in *prod*, needs your agreement each tim
   current  -> releases/…               the version served, switched atomically
   previous -> releases/…               the version before, for going back
 /etc/caddy/sites/<host>.caddy          the site's Caddy file (Caddyfile: import sites/*)
-/etc/athanor/deploy/<project>          the deployment key (git source), 0600 root
+/etc/athanor/deploy/<project>          the deployment key (git source), 0600 root, removed right after the fetch
 /etc/athanor/tls/                      the origin certificate (Cloudflare), root and Caddy only
 ```
 

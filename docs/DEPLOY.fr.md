@@ -23,6 +23,8 @@ Un déploiement en *prod*, ou un retour arrière en *prod*, demande votre accord
 
 **D'où vient le code.** Soit **git** : le serveur va chercher le commit exact sur GitHub avec la clé de déploiement du projet (en lecture seule sur le dépôt, créée dans le panneau *Environnements*), avec la clé d'hôte de github.com épinglée ; soit une **archive** : Athanor fait un `tar.gz` du commit sur ce PC (`git archive`, ou le résultat de la commande de construction de l'environnement lancée dans une copie propre de ce commit, dans un dossier temporaire et dans la même barrière que le pilote ; en mode Windows natif, refusée sauf si le projet est forcé sur sa page *Accès*, et journalisée), l'envoie en SFTP et contrôle son SHA-256. Une archive avec un chemin absolu, un `..` ou un lien qui sort de la version est refusée avant que rien ne soit écrit.
 
+**Ce que seul le propriétaire peut laisser passer.** Un fichier de construction, un fichier compose, un Dockerfile ou un fichier du dossier des manifestes k3s modifié (par rapport au dernier déploiement accepté par le propriétaire) rend le déploiement destructif : il attend le propriétaire même en dev ou en staging avec la politique *auto*, une règle ou *Déployer en dev à chaque jalon*. Sans l'accord du propriétaire pour ce déploiement-là, une configuration Compose (lue par `docker compose config --format json` sur le serveur) qui demande `privileged`, `cap_add`, `devices`, `security_opt`, l'espace réseau, PID, IPC, utilisateurs ou cgroup de l'hôte, ou un chemin de l'hôte hors de la version est refusée avant tout démarrage ; de même pour des manifestes k3s avec un `hostPath`, `hostNetwork`/`hostPID`/`hostIPC`, un conteneur privilégié ou une base distante.
+
 ## Ce qu'Athanor écrit sur un serveur
 
 ```
@@ -31,7 +33,7 @@ Un déploiement en *prod*, ou un retour arrière en *prod*, demande votre accord
   current  -> releases/…               la version servie, basculée d'un coup
   previous -> releases/…               la version d'avant, pour revenir en arrière
 /etc/caddy/sites/<hôte>.caddy          le fichier Caddy du site (Caddyfile : import sites/*)
-/etc/athanor/deploy/<projet>           la clé de déploiement (source git), 0600 root
+/etc/athanor/deploy/<projet>           la clé de déploiement (source git), 0600 root, effacée juste après le fetch
 /etc/athanor/tls/                      le certificat d'origine (Cloudflare), root et Caddy seulement
 ```
 

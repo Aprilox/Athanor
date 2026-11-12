@@ -5,6 +5,14 @@ package main
 // `-f` of its folder with the server's own kubeconfig, which never leaves the server; its workloads are waited for
 // before the switch. Going back = `kubectl rollout undo` of the workloads of the version left. One server per
 // environment: the cluster spreads the pods itself, and applying or undoing twice on one cluster would be wrong.
+// C69: without the owner's accord for this deployment, refusK3s refuses the manifests that give root.
+
+import (
+	"errors"
+	"os/exec"
+	"path"
+	"strings"
+)
 
 const kubeconfigK3s = "/etc/rancher/k3s/k3s.yaml"
 
@@ -39,3 +47,39 @@ const scriptRevenirK3s = `b=$1 dd=$2
 ` + fonctionsK3s + `cible "$b/previous" || exit 1
 l=$(charges); [ -n "$l" ] || { echo "no Deployment, StatefulSet or DaemonSet to roll back in the version left"; exit 1; }
 o=$(printf '%s\n' "$l" | while read -r c ns; do k rollout undo "$c" -n "$ns" 2>&1 && k rollout status "$c" -n "$ns" --timeout=180s 2>&1 || exit 1; done) || { echo "kubectl rollout undo failed:"; printf '%s\n' "$o" | tail -n 8; exit 4; }`
+
+// Manifest lines that give root on the server (C69): a host path, the host's namespaces, a privileged
+// container; in a kustomization, a remote base (its content is not in the commit the owner can read).
+const (
+	motifsHoteK3s    = `["']?(hostPath["']?[[:space:]]*:|(hostNetwork|hostPID|hostIPC|privileged)["']?[[:space:]]*:[[:space:]]*["']?true)`
+	motifsDistantK3s = `://|[?&]ref=|^[[:space:]]*-?[[:space:]]*["']?(github\.com|gitlab\.com|bitbucket\.org)/`
+)
+
+// refusK3s (C69): the manifests of commit's folder dossier that would give root on the server; refused unless
+// the owner accepted this very deployment. A folder git cannot read is refused too.
+func refusK3s(depot, commit, dossier string) []string {
+	racine := "."
+	if dossier != "" {
+		racine = dossier
+	}
+	var r []string
+	for _, x := range []struct{ motif, glob, quoi string }{
+		{motifsHoteK3s, "**", "host access"},
+		{motifsDistantK3s, "**/[Kk]ustomization*", "remote base"},
+	} {
+		o, err := gitSortie(depot, "grep", "-I", "-E", "-e", x.motif, commit, "--", ":(glob)"+path.Join(racine, x.glob))
+		var e *exec.ExitError
+		if errors.As(err, &e) && e.ExitCode() == 1 { // no line found
+			continue
+		} else if err != nil {
+			return []string{"the manifests of the commit cannot be read"}
+		}
+		for _, l := range strings.Split(o, "\n") {
+			if _, l, ok := strings.Cut(l, ":"); ok { // commit:file:line
+				f, ligne, _ := strings.Cut(l, ":")
+				r = append(r, f+": "+x.quoi+" ("+couper(strings.TrimSpace(ligne), 80)+")")
+			}
+		}
+	}
+	return r
+}

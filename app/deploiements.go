@@ -347,6 +347,17 @@ func (s *Serveur) deployerVersion(ctx context.Context, p Projet, e Environnement
 			return err
 		}
 	}
+	// C69: without the owner's accord for this very deployment (auto policy, a rule, the relay), nothing that
+	// gives root on the server: the k3s manifests read here, the Compose configuration on each server below
+	garde := !d.Accorde && d.Auteur != "proprietaire"
+	refus := func(r []string) error {
+		return fmt.Errorf("refused without the owner's accord, this would give root on the server: %s; the owner deploys it from the environment's card, or sets its policy to accord; nothing was switched", couper(strings.Join(r, "; "), 400))
+	}
+	if garde && cfg.Methode == "k3s" {
+		if r := refusK3s(p.Dossier, d.Commit, cfg.Dossier); len(r) > 0 {
+			return refus(r)
+		}
+	}
 	racine := base + "/current"
 	if cfg.Dossier != "" {
 		racine += "/" + cfg.Dossier
@@ -385,12 +396,25 @@ func (s *Serveur) deployerVersion(ctx context.Context, p Projet, e Environnement
 		} else if cfg.Methode == "k3s" {
 			script, args, entree = scriptPreparerK3s, []string{somme, base, d.Version, cfg.Dossier}, ""
 		}
-		c, err := s.preparerVersion(ctx, l, id, archive, d.ID, g, d.Commit, base, d.Version, script, args, entree)
+		c, sortie, err := s.preparerVersion(ctx, l, id, archive, d.ID, g, d.Commit, base, d.Version, script, args, entree)
 		if err != nil {
 			annulerTout()
 			return fmt.Errorf("%s: %w; nothing was switched", id, err)
 		}
 		prets = append(prets, pret{id, c})
+		if cfg.Methode != "compose" {
+			continue
+		}
+		if r := refusCompose(sortie, base+"/releases/"+d.Version); garde && len(r) > 0 {
+			annulerTout()
+			return fmt.Errorf("%s: %w", id, refus(r))
+		}
+		if err := echecSSH(executerSSH(ctx, c, commeRoot(scriptLancerCompose, base, d.Version, cfg.Dossier, nomCompose(d.Projet, d.Env)), nil, delaiDeploiement)); err != nil {
+			prets = prets[:len(prets)-1] // the release is already removed and the version served before started again
+			c.Close()
+			annulerTout()
+			return fmt.Errorf("%s: %w; nothing was switched", id, err)
+		}
 	}
 	// every server ready: the switch, then the reload, server by server
 	for _, x := range prets {
@@ -450,14 +474,14 @@ var commandeConstruction = commandeKit
 // preparerVersion: on server id, the archive sent (or with g, the commit fetched there by git), then script run
 // as root with the archive's remote path and args, entree on its standard input; the connection stays open for
 // the switch (closed on failure).
-func (s *Serveur) preparerVersion(ctx context.Context, l []ServeurInventaire, id, archive, nom string, g *sourceGit, commit, base, version, script string, args []string, entree string) (*ssh.Client, error) {
+func (s *Serveur) preparerVersion(ctx context.Context, l []ServeurInventaire, id, archive, nom string, g *sourceGit, commit, base, version, script string, args []string, entree string) (*ssh.Client, string, error) {
 	i := slices.IndexFunc(l, func(x ServeurInventaire) bool { return x.ID == id })
 	if i < 0 {
-		return nil, errServeurInconnu
+		return nil, "", errServeurInconnu
 	}
 	c, err := s.connecterServeur(ctx, l[i])
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	var distant string
 	if g != nil {
@@ -465,14 +489,16 @@ func (s *Serveur) preparerVersion(ctx context.Context, l []ServeurInventaire, id
 	} else {
 		distant, err = envoyerArchive(ctx, c, archive, nom)
 	}
+	var r ResultatSSH
 	if err == nil {
-		err = echecSSH(executerSSH(ctx, c, commeRoot(script, append([]string{distant}, args...)...), strings.NewReader(entree), delaiDeploiement))
+		r, err = executerSSH(ctx, c, commeRoot(script, append([]string{distant}, args...)...), strings.NewReader(entree), delaiDeploiement)
+		err = echecSSH(r, err)
 	}
 	if err != nil {
 		c.Close()
-		return nil, err
+		return nil, "", err
 	}
-	return c, nil
+	return c, string(r.Sortie), nil
 }
 
 // envoyerArchive: local sent by SFTP into ~/.athanor-deploy (0700) of the login user; the answer: its remote path.

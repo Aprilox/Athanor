@@ -132,7 +132,9 @@ func TestDeploiementComposeConteneur(t *testing.T) {
 		}
 		return a
 	}
-	depot, c := depotCompose(t, app("v1"), app("v2"), app("v3", "ECHEC"))
+	racine := app("v4")
+	racine["app/config.json"] = `{"services":{"web":{"privileged":true,"volumes":[{"type":"bind","source":"/","target":"/host"}]}}}`
+	depot, c := depotCompose(t, app("v1"), app("v2"), app("v3", "ECHEC"), racine)
 	s.mu.Lock()
 	s.config.Projets = append(s.config.Projets, Projet{Nom: "m134", Dossier: depot})
 	s.mu.Unlock()
@@ -154,7 +156,7 @@ func TestDeploiementComposeConteneur(t *testing.T) {
 	t.Cleanup(func() { sur(nettoyer) })
 	ctx := context.Background()
 	journal := func() string {
-		return sur("grep -A1 'compose -p' /var/log/faux-docker.log; : | sudo -n tee /var/log/faux-docker.log >/dev/null")
+		return sur("grep -A1 'compose -p.* up' /var/log/faux-docker.log; : | sudo -n tee /var/log/faux-docker.log >/dev/null")
 	}
 
 	d1, err := s.deployer(ctx, "m134", "dev", c[0], OptionsDeploiement{Config: &ConfigDeploiement{Methode: "compose", Source: "artefact", Dossier: "app"}, Auteur: "proprietaire"})
@@ -184,6 +186,15 @@ func TestDeploiementComposeConteneur(t *testing.T) {
 	}
 	if got, want := sur("cd "+base+" && readlink current previous && ls releases | wc -l"), "releases/"+d2.Version+"\nreleases/"+d1.Version+"\n2\n"; got != want {
 		t.Errorf("after the failed up: %q, want %q", got, want)
+	}
+	// C69: a configuration that gives root, without the owner's accord (the relay): refused before any up
+	d4, err := s.deployer(ctx, "m134", "dev", c[3], OptionsDeploiement{Auteur: "relais"})
+	if err == nil || d4.Etat != "echec" || !strings.Contains(err.Error(), "refused without the owner's accord") || !strings.Contains(err.Error(), "service web: mounts the host's /; service web: privileged") {
+		t.Fatalf("root by compose: %v %+v", err, d4)
+	}
+	// annulled: the version served (v2) started again, the refused release removed, nothing switched
+	if got, want := journal()+sur("cd "+base+" && readlink current && ls releases | wc -l"), "docker compose -p m134-dev up -d --build\n  dans "+r2+"\nreleases/"+d2.Version+"\n2\n"; got != want {
+		t.Errorf("after the refused configuration: %q, want %q", got, want)
 	}
 	// going back: up in the previous release (v1)
 	rr, err := s.revenir(ctx, "m134", "dev", "proprietaire")

@@ -3,11 +3,13 @@ package main
 // The compose deployment method (M134, ARCHITECTURE.md §Déploiements): the release extracted like a static one,
 // its .env (0600 root) written from the code entries granted to the environment, passed on standard input and
 // never in an argument nor in an answer, then `docker compose -p <projet>-<env> up -d --build` in the release
-// before the switch; going back = the same command in the previous release. Caddy is not touched: the
+// before the switch (C69: its configuration checked by refusCompose first when the owner did not accept this
+// deployment); going back = the same command in the previous release. Caddy is not touched: the
 // project's compose file publishes its own ports.
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
@@ -129,14 +131,97 @@ const fonctionRelancer = `relancer() { c=$(readlink -f -- "$b/current") && [ -d 
 
 // scriptPreparerCompose ($1 the archive, $2 its SHA-256 or "", $3 the environment's folder, $4 the version, $5
 // the compose folder, $6 the Compose project, $7 a generated compose.yaml in base64 or ""; the .env on standard
-// input): the release started; on failure it is removed and the version served before started again.
+// input): the release extracted with its .env, its configuration printed (docker compose config --format json;
+// C69: it may hold the .env's values, so refusCompose reads it and nothing quotes it); nothing started.
 const scriptPreparerCompose = `a=$1 b=$3 r=$3/releases/$4 dd=$5 p=$6
 docker compose version >/dev/null 2>&1 || { rm -f -- "$a"; echo "Docker Compose is not installed on this server: install it first"; exit 5; }
-` + extraireVersion + fonctionRelancer + `cd -- "$r${dd:+/$dd}" || { rm -rf -- "$r"; echo "the release has no folder $dd"; exit 1; }
+` + extraireVersion + `cd -- "$r${dd:+/$dd}" || { rm -rf -- "$r"; echo "the release has no folder $dd"; exit 1; }
 if [ -n "$7" ]; then printf '%s' "$7" | base64 -d > compose.yaml || { rm -rf -- "$r"; exit 1; }; fi
 rm -f .env && (umask 077; cat > .env) || { rm -rf -- "$r"; echo "the .env cannot be written"; exit 1; }
+o=$(docker compose -p "$p" config --format json 2>/dev/null) || { rm -rf -- "$r"; echo "docker compose config failed: check the compose file with docker compose config"; exit 4; }
+printf '%s\n' "$o"`
+
+// scriptLancerCompose ($1 the environment's folder, $2 the version, $3 the compose folder, $4 the Compose
+// project), after scriptPreparerCompose: the release started; on failure it is removed and the version served
+// before started again.
+const scriptLancerCompose = `b=$1 r=$1/releases/$2 dd=$3 p=$4
+` + fonctionRelancer + `cd -- "$r${dd:+/$dd}" || exit 1
 o=$(docker compose -p "$p" up -d --build 2>&1) || { cd /; relancer >/dev/null || echo "(the version served before could not be started again)"; rm -rf -- "$r"; echo "docker compose up failed:"; printf '%s\n' "$o" | tail -n 8; exit 4; }
 echo ready`
+
+// refusCompose (C69): what the project's Compose configuration (docker compose config --format json, every
+// file and variable resolved) asks that would give root on the server: privileged, added capabilities,
+// devices, security options, the host's or another container's namespaces, a host path outside the release.
+// Refused unless the owner accepted this very deployment; an unreadable configuration is refused too.
+func refusCompose(sortie, release string) []string {
+	type fichier struct{ File string }
+	var c struct {
+		Services map[string]struct {
+			Privileged  bool     `json:"privileged"`
+			CapAdd      []string `json:"cap_add"`
+			Devices     []any    `json:"devices"`
+			SecurityOpt []string `json:"security_opt"`
+			NetworkMode string   `json:"network_mode"`
+			Pid, Ipc    string
+			UsernsMode  string `json:"userns_mode"`
+			Cgroup      string
+			Volumes     []struct{ Type, Source string }
+		}
+		Volumes map[string]struct {
+			DriverOpts map[string]string `json:"driver_opts"`
+		}
+		Secrets, Configs map[string]fichier
+	}
+	i := strings.IndexByte(sortie, '{')
+	if i < 0 || json.Unmarshal([]byte(sortie[i:]), &c) != nil {
+		return []string{"its configuration (docker compose config) cannot be read"}
+	}
+	partage := func(v string) bool { return v == "host" || strings.HasPrefix(v, "container:") }
+	dehors := func(src string) bool {
+		src = path.Clean(src)
+		return src != release && !strings.HasPrefix(src, release+"/")
+	}
+	var r []string
+	for n, v := range c.Services {
+		q := "service " + n + ": "
+		if v.Privileged {
+			r = append(r, q+"privileged")
+		}
+		if len(v.CapAdd) > 0 {
+			r = append(r, q+"cap_add "+strings.Join(v.CapAdd, " "))
+		}
+		if len(v.Devices) > 0 {
+			r = append(r, q+"devices")
+		}
+		if len(v.SecurityOpt) > 0 {
+			r = append(r, q+"security_opt "+strings.Join(v.SecurityOpt, " "))
+		}
+		for k, m := range map[string]string{"network_mode": v.NetworkMode, "pid": v.Pid, "ipc": v.Ipc, "userns_mode": v.UsernsMode, "cgroup": v.Cgroup} {
+			if partage(m) {
+				r = append(r, q+k+" "+m)
+			}
+		}
+		for _, m := range v.Volumes {
+			if m.Type == "bind" && dehors(m.Source) {
+				r = append(r, q+"mounts the host's "+m.Source)
+			}
+		}
+	}
+	for n, v := range c.Volumes {
+		if v.DriverOpts["device"] != "" {
+			r = append(r, "volume "+n+": a host device or path")
+		}
+	}
+	for genre, l := range map[string]map[string]fichier{"secret": c.Secrets, "config": c.Configs} {
+		for n, v := range l {
+			if v.File != "" && dehors(v.File) {
+				r = append(r, genre+" "+n+": the host's "+v.File)
+			}
+		}
+	}
+	slices.Sort(r)
+	return r
+}
 
 // scriptAnnulerCompose ($1 folder, $2 version, $3 compose folder, $4 Compose project): a release started on this
 // server while another server failed: the version served before started again, the release removed.

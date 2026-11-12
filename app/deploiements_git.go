@@ -2,8 +2,8 @@ package main
 
 // The git source of a deployment (M132, ARCHITECTURE.md §Déploiements): the server fetches the commit itself
 // from the project's repository with the project's deployment key (stage 7). The key goes from the vault to
-// /etc/athanor/deploy/<projet> (0600 root) through the script's standard input, never through an agent nor
-// an argument; ssh uses only it (IdentitiesOnly) and only the pinned host keys (no trust on first use).
+// /etc/athanor/deploy/<projet> (0600 root, only during the fetch) through the script's standard input, never
+// through an agent nor an argument; ssh uses only it (IdentitiesOnly) and only the pinned host keys (no trust on first use).
 
 import (
 	"context"
@@ -39,7 +39,8 @@ var depotGitServeur = func(p Projet) (url, hotes string, err error) {
 
 // scriptRecupererGit ($1 the environment's folder, $2 the key's file, $3 the repository, $4 the commit, $5 the
 // pinned host keys, $6 the version; the private key on standard input): the key installed, the commit fetched
-// into $1/depot.git and checked, archived for scriptPreparer; the archive's path on the last line.
+// into $1/depot.git and checked, archived for scriptPreparer; the archive's path on the last line. The key is
+// removed right after the fetch (C69): a container of another project cannot read it later.
 const scriptRecupererGit = `b=$1 k=$2 a=$1/.git-$6.tar.gz
 umask 077
 { [ -d /etc/athanor ] || install -d -m 755 /etc/athanor; } && install -d -m 700 /etc/athanor/deploy || exit 1
@@ -49,7 +50,9 @@ command -v git >/dev/null 2>&1 || { echo "git is not installed on this server: i
 umask 022
 mkdir -p -- "$b" && { [ -d "$b/depot.git" ] || git init -q --bare "$b/depot.git"; } || { echo "the repository cache cannot be made"; exit 1; }
 export GIT_SSH_COMMAND="ssh -i $k -o IdentitiesOnly=yes -o IdentityAgent=none -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$k.known_hosts -o BatchMode=yes -o ConnectTimeout=30"
-o=$(git -C "$b/depot.git" fetch -q --depth 1 --no-tags "$3" "$4" 2>&1) || { echo "git fetch of $4 failed (is the commit pushed to the repository?):"; { printf '%s\n' "$o" | grep -Ei 'error|fatal|denied|host key|refused|not found|could not' || printf '%s\n' "$o" | tail -n 4; } | head -n 4; exit 6; }
+o=$(git -C "$b/depot.git" fetch -q --depth 1 --no-tags "$3" "$4" 2>&1); f=$?
+rm -f -- "$k"
+[ $f = 0 ] || { echo "git fetch of $4 failed (is the commit pushed to the repository?):"; { printf '%s\n' "$o" | grep -Ei 'error|fatal|denied|host key|refused|not found|could not' || printf '%s\n' "$o" | tail -n 4; } | head -n 4; exit 6; }
 git -C "$b/depot.git" rev-parse -q --verify "$4^{commit}" >/dev/null || { echo "the commit $4 is not in the fetched repository"; exit 6; }
 git -C "$b/depot.git" archive --format=tar.gz -o "$a" "$4" || { rm -f -- "$a"; echo "git archive failed on the server"; exit 1; }
 echo "$a"`

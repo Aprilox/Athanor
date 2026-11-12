@@ -269,7 +269,7 @@ func outilDemanderDeploiement(s *Serveur, x SessionHub, args json.RawMessage) (s
 	if p, ok := s.projetNomme(x.Projet); ok {
 		fichiers = fichiersBuildChanges(p, env, commit, e.Deploiement)
 	}
-	if len(fichiers) > 0 { // C68: the build would run changed code of the repository: the owner reads it
+	if len(fichiers) > 0 { // C68, C69: the build or the containers would run changed files of the repository: the owner reads them
 		ap.Details["fichiers_build"] = couper(strings.Join(fichiers, ", "), 300)
 		ap.Raison += "; build files changed: " + ap.Details["fichiers_build"]
 	}
@@ -286,7 +286,7 @@ func outilDemanderDeploiement(s *Serveur, x SessionHub, args json.RawMessage) (s
 	attente := func(id string) (string, error) {
 		return "waiting for the owner, id " + id + ": once accepted, call demander_deploiement again with the same environment and commit; go on with work that does not need it", nil
 	}
-	if accord, raison := s.politiqueDeploiement(x.Projet, env, false); !accord && len(fichiers) == 0 {
+	if accord, raison := s.politiqueDeploiement(x.Projet, env, len(fichiers) > 0); !accord { // C69: changed build or container files are destructive
 		return accepte(raison, false)
 	}
 	y, etat, err := s.approbations.Reprendre(ap)

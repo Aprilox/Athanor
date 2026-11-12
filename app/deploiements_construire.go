@@ -177,16 +177,33 @@ var nomsBuild = map[string]bool{"package.json": true, "package-lock.json": true,
 
 var reMotCommande = regexp.MustCompile("[^\\s;&|()<>'\"`]+")
 
-// fichiersBuildChanges (C68): the build files of commit changed since the environment's last deployment the
-// owner accepted (every one of them when there is none); nil without a build command. A non-empty answer
-// means the owner's accord for this commit: never the auto policy, a rule nor the relay's standing accord.
+// reFichierConteneur (C69): what docker compose reads to start the containers: its files and overrides, and the
+// Dockerfiles.
+var reFichierConteneur = regexp.MustCompile(`(?i)^((docker-)?compose([.-][^/]*)?\.ya?ml|dockerfile([.-][^/]*)?|[^/]*\.dockerfile)$`)
+
+// fichiersBuildChanges (C68, C69): the build files of commit changed since the environment's last deployment the
+// owner accepted (every one of them when there is none), and the files that say how the containers or pods run:
+// the compose files and Dockerfiles (compose), the manifests' folder (k3s); nil for a static site without a
+// build command. A non-empty answer means the owner's accord for this commit (destructive): never the auto
+// policy, a rule nor the relay's standing accord.
 func fichiersBuildChanges(p Projet, env, commit string, cfg *ConfigDeploiement) []string {
-	if cfg == nil || strings.TrimSpace(cfg.Construire) == "" {
+	if cfg == nil || cfg.Methode == "statique" && strings.TrimSpace(cfg.Construire) == "" {
 		return nil
 	}
 	nommes := map[string]bool{}
 	for _, m := range reMotCommande.FindAllString(cfg.Construire, -1) {
 		nommes[path.Clean(strings.TrimPrefix(m, "./"))] = true
+	}
+	sensible := func(c string) bool {
+		switch {
+		case nommes[c] || cfg.Construire != "" && nomsBuild[path.Base(c)]:
+			return true
+		case cfg.Methode == "compose":
+			return reFichierConteneur.MatchString(path.Base(c))
+		case cfg.Methode == "k3s":
+			return cfg.Dossier == "" || strings.HasPrefix(c, cfg.Dossier+"/")
+		}
+		return false
 	}
 	base, l := "", historiqueDeploiements(p.Nom, env)
 	for i := len(l) - 1; i >= 0 && base == ""; i-- {
@@ -203,7 +220,7 @@ func fichiersBuildChanges(p Projet, env, commit string, cfg *ConfigDeploiement) 
 	}
 	var f []string
 	for _, c := range strings.Split(sortie, "\n") {
-		if c != "" && (nomsBuild[path.Base(c)] || nommes[c]) {
+		if c != "" && sensible(c) {
 			f = append(f, c)
 		}
 	}

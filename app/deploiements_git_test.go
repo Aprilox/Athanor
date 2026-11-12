@@ -132,8 +132,9 @@ func TestDeploiementGitConteneur(t *testing.T) {
 	if err != nil || !strings.Contains(page(), "site-exemple v2") {
 		t.Fatalf("v2 by git: %v %+v", err, d2)
 	}
-	etat := "sudo -n stat -c '%U %a' /etc/athanor /etc/athanor/deploy /etc/athanor/deploy/m132; cd " + base + " && readlink current && ls -A | grep -c '^[.]git-'; sudo -n git -C depot.git rev-parse --is-shallow-repository"
-	if got, want := sur(etat), "root 755\nroot 700\nroot 600\nreleases/"+d2.Version+"\n0\ntrue\n"; got != want {
+	// C69: the key is gone once fetched (a container of another project cannot read it)
+	etat := "sudo -n stat -c '%U %a' /etc/athanor /etc/athanor/deploy; sudo -n test -e /etc/athanor/deploy/m132 && echo key left || echo no key; cd " + base + " && readlink current && ls -A | grep -c '^[.]git-'; sudo -n git -C depot.git rev-parse --is-shallow-repository"
+	if got, want := sur(etat), "root 755\nroot 700\nno key\nreleases/"+d2.Version+"\n0\ntrue\n"; got != want {
 		t.Errorf("key, links, archive left, shallow:\n got  %q\n want %q", got, want)
 	}
 
