@@ -7,6 +7,7 @@ package main
 // ends, even if Athanor is gone.
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -33,6 +34,7 @@ type AnnulationServeur struct {
 	Serveur  string    `json:"serveur"`
 	Quoi     string    `json:"quoi"`
 	Echeance time.Time `json:"echeance"`
+	genre    string    // ufw or ssh
 }
 
 // annulations: the pending ones, in memory (after a restart of Athanor the server still undoes them by itself).
@@ -70,9 +72,22 @@ const scriptRetour = preludeAnnulation + `D=$1; mv -- "$D" "$D.run" 2>/dev/null 
   ufw) for f in user.rules user6.rules; do [ ! -e "$D/$f" ] || cp -p "$D/$f" /etc/ufw/; done
     ufw status | grep -q '^Status: active' && ufw reload ;;
   ssh) p=$(cat "$D/chemin"); if [ -e "$D/prev" ]; then cp -p -- "$D/prev" "$p"; else rm -f -- "$p"; fi
-    { systemctl reload ssh || systemctl reload sshd || rc-service sshd reload || kill -HUP "$(cat /run/sshd.pid || cat /var/run/sshd.pid)"; } && echo "sshd reloaded" ;;
+    ` + rechargerSSHD + ` && echo "sshd reloaded" ;;
 esac; echo "rolled back $(date)"; } > "${D%.run}.log" 2>&1
 rm -rf -- "$D"`
+
+const rechargerSSHD = `{ systemctl reload ssh || systemctl reload sshd || rc-service sshd reload || kill -HUP "$(cat /run/sshd.pid || cat /var/run/sshd.pid)"; }`
+
+// scriptVerifierSSHD (C48): after a change under /etc/ssh/, sshd -t then a reload, inside the rollback's window, so
+// the new connection tests the new configuration (exit 4: refused by sshd -t, 5: not reloaded).
+const scriptVerifierSSHD = preludeAnnulation + `command -v sshd >/dev/null 2>&1 || { echo "no sshd here: nothing tested nor reloaded"; exit 0; }
+sshd -t 2>&1 || exit 4
+` + rechargerSSHD + ` >/dev/null 2>&1 || { echo "sshd could not be reloaded"; exit 5; }
+echo "sshd -t ok, sshd reloaded"`
+
+// reRechargeSSH: a command that reloads or restarts sshd (it applies whatever /etc/ssh/ holds).
+// shortcut: the usual systemctl and service forms only; rc-service or kill -HUP stay without a rollback.
+var reRechargeSSH = regexp.MustCompile(`(^|[\s;&|(])(systemctl\s+(-\S+\s+)*(reload|restart|reload-or-restart|try-restart|try-reload-or-restart)\s+(\S+\s+)*sshd?(\.service)?|service\s+sshd?\s+(reload|restart|force-reload))($|[\s;&|)])`)
 
 // scriptProgrammer ($1 id, $2 ufw|ssh, $3 delay in s, $4 the ssh path, $5 scriptRetour): one pending change of
 // a kind at a time; the state saved, then the rollback scheduled; any failure leaves nothing and exits non-zero.
@@ -116,6 +131,15 @@ func genreAnnulation(ctx context.Context, c *ssh.Client, srv ServeurInventaire, 
 			return "ufw", ""
 		}
 		return "", ""
+	case "ssh_commande", "service": // a reload applies /etc/ssh/: sshd_config is kept, put back and sshd reloaded
+		cmd := a.Commande
+		if outil == "service" {
+			cmd = "systemctl " + a.Action + " " + a.Nom
+		}
+		if reRechargeSSH.MatchString(cmd) {
+			return "ssh", "/etc/ssh/sshd_config"
+		}
+		return "", ""
 	case "sftp_envoyer":
 		p = a.Distant
 	case "fichier_ecrire":
@@ -133,11 +157,15 @@ func genreAnnulation(ctx context.Context, c *ssh.Client, srv ServeurInventaire, 
 
 // programmerAnnulation keeps the state on the server and schedules its rollback; an error: the change must not run.
 func programmerAnnulation(ctx context.Context, c *ssh.Client, srv ServeurInventaire, outil, genre, chemin string, a argsOutilServeur) (AnnulationServeur, error) {
-	an := AnnulationServeur{ID: aleatoire(4), Serveur: srv.ID, Echeance: time.Now().Add(delaiAnnulation)}
-	if genre == "ufw" {
-		an.Quoi = strings.TrimSpace(fmt.Sprintf("pare_feu %s %s %d %s", a.Action, a.Regle, a.Port, a.Proto))
-		an.Quoi = strings.Join(strings.Fields(an.Quoi), " ")
-	} else {
+	an := AnnulationServeur{ID: aleatoire(4), Serveur: srv.ID, Echeance: time.Now().Add(delaiAnnulation), genre: genre}
+	switch {
+	case genre == "ufw":
+		an.Quoi = strings.Join(strings.Fields(fmt.Sprintf("pare_feu %s %s %d %s", a.Action, a.Regle, a.Port, a.Proto)), " ")
+	case outil == "ssh_commande":
+		an.Quoi = "ssh_commande " + couper(a.Commande, 120)
+	case outil == "service":
+		an.Quoi = "service " + a.Action + " " + a.Nom
+	default:
 		an.Quoi = outil + " " + chemin
 	}
 	s := strconv.Itoa(max(1, int(delaiAnnulation.Seconds()))) + "s"
@@ -167,6 +195,28 @@ func (s *Serveur) apresChangement(ctx context.Context, c *ssh.Client, srv Serveu
 			audit("échec du changement : retour arrière à l'échéance")
 		}
 		return r
+	}
+	if an.genre == "ssh" {
+		x, e := executerSSH(ctx, c, commeRoot(scriptVerifierSSHD), nil, delaiCommande)
+		if e != nil || x.Code != 0 {
+			pourquoi := "sshd could not be tested or reloaded"
+			if e == nil && x.Code == 4 {
+				pourquoi = "sshd -t refused the new configuration"
+			}
+			if e == nil {
+				pourquoi += ": " + couper(strings.TrimSpace(string(x.Sortie)), 500)
+			}
+			r.Code = cmp.Or(r.Code, 1)
+			if y, e := executerSSH(ctx, c, commeRoot(scriptFinir, an.ID, "annuler", scriptRetour), nil, delaiCommande); e == nil && y.Code == 0 {
+				r.Sortie += "\n(" + pourquoi + ". The state before was put back and sshd reloaded.)"
+				audit(pourquoi + " : état d'avant remis")
+			} else {
+				r.Sortie += "\n(" + pourquoi + ". The state before will be put back by the server at " + an.Echeance.Format("15:04:05") + ".)"
+				audit(pourquoi + " : retour arrière à l'échéance")
+			}
+			return r
+		}
+		r.Sortie += "\n" + strings.TrimSpace(string(x.Sortie))
 	}
 	nouvelle := ""
 	c2, e := s.connecterServeur(ctx, srv)

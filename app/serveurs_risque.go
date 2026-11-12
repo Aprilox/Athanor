@@ -600,6 +600,8 @@ func sauterEnveloppe(nom string, mots []motShell) (reste []motShell, recherche b
 var lecturesSimples = ensemble("cat tac head tail zcat bzcat xzcat wc cut nl od hexdump file stat du df ls pwd whoami id groups uname uptime free top pgrep pidof w who last lastlog lsblk lsof findmnt lscpu lsmem lspci lsusb lsmod blkid printenv echo printf true false test [ [[ which type whereis basename dirname realpath readlink md5sum sha1sum sha256sum sha512sum cksum diff cmp ss netstat ping dig nslookup host getent jq column tr nproc arch vmstat iostat sleep seq comm join paste fold rev read set cd pushd popd exit return : iptables-save ip6tables-save apt-cache locale tty")
 var destructricesSimples = ensemble("rm unlink shred truncate dd wipefs fdisk sfdisk cfdisk parted gdisk sgdisk mkswap mke2fs blkdiscard shutdown reboot halt poweroff userdel deluser groupdel delgroup killall5 srm wipe dropdb dropuser iptables-restore ip6tables-restore")
 var interpretes = ensemble("sh bash dash zsh ksh mksh fish csh tcsh busybox eval source . xargs parallel watch su runuser flock nsenter unshare systemd-run at batch screen tmux ssh sshpass script expect strace ltrace gdb trap shopt enable osascript deno bun julia Rscript java pkexec run0 sg setpriv ssh-agent fakeroot")
+var privileges = ensemble("passwd chpasswd usermod useradd adduser gpasswd visudo setcap chage")
+var reSUID = regexp.MustCompile(`^0*[2-7][0-7]{3}$|(^|,)[ugoa]*[+=][rwxXt]*s`)
 var metadonneesDisque = ensemble("ls stat lsblk blkid df du findmnt lsof realpath readlink basename dirname test [ [[ echo printf file") // read a disk's name, not its content
 var evalueIndices = ensemble("[[ [ test printf read let declare typeset local export unset mapfile readarray")
 var prefixesInterpretes = []string{"python", "pypy", "perl", "ruby", "php", "node", "lua", "tclsh", "pwsh", "mkfs"}
@@ -619,6 +621,8 @@ func classerNom(nom string, a []string, texte string) (Classe, string) {
 	switch {
 	case destructricesSimples[nom]:
 		return ClasseDestructrice, nom + " deletes or overwrites data"
+	case privileges[nom]:
+		return ClasseDestructrice, nom + " changes accounts, passwords or privileges"
 	case interpretes[nom] || slices.ContainsFunc(prefixesInterpretes, func(p string) bool { return strings.HasPrefix(nom, p) }):
 		if strings.HasPrefix(nom, "mkfs") {
 			return ClasseDestructrice, nom + " formats a disk"
@@ -737,7 +741,13 @@ func regleIptables(a []string, _ string) (Classe, string) {
 	if lit && !change {
 		return ClasseLecture, ""
 	}
-	return ClasseChangement, "iptables changes the firewall"
+	return ClasseDestructrice, pareFeuSeul("iptables")
+}
+
+// pareFeuSeul (C48, B61): the firewall changes only through the pare_feu tool, whose change is undone by the server
+// unless confirmed; a free command can cut Athanor off with nothing to put it back.
+func pareFeuSeul(quoi string) string {
+	return quoi + " changes the firewall with no automatic rollback: use the pare_feu tool"
 }
 
 var reglesCommandes = map[string]regle{
@@ -880,20 +890,18 @@ var reglesCommandes = map[string]regle{
 	},
 	"ufw": func(a []string, _ string) (Classe, string) {
 		p := positionnels(a)
-		switch {
-		case unParmi(p, "reset disable"):
-			return ClasseDestructrice, "ufw " + p[0] + " removes the firewall rules"
-		case unParmi(p, "deny reject delete") && unParmi(p, "22 22/tcp ssh OpenSSH"):
-			return ClasseDestructrice, "ufw cuts SSH access"
-		case premier(p) == "app" && unParmi(p[1:], "list info"):
+		if premier(p) == "" || unParmi(p[:1], "status show version") || premier(p) == "app" && unParmi(p[1:], "list info") {
 			return ClasseLecture, ""
 		}
-		return classerSous("ufw", p, "status show version", "")
+		return ClasseDestructrice, pareFeuSeul("ufw " + p[0])
 	},
 	"iptables": regleIptables, "ip6tables": regleIptables, "iptables-legacy": regleIptables, "ip6tables-legacy": regleIptables,
 	"iptables-nft": regleIptables, "ip6tables-nft": regleIptables, "ebtables": regleIptables, "arptables": regleIptables,
 	"nft": func(a []string, _ string) (Classe, string) {
-		return classerSous("nft", positionnels(a), "list", "flush delete destroy")
+		if premier(positionnels(a)) == "list" {
+			return ClasseLecture, ""
+		}
+		return ClasseDestructrice, pareFeuSeul("nft")
 	},
 	"ip": func(a []string, _ string) (Classe, string) {
 		p := positionnels(a)
@@ -952,7 +960,7 @@ var reglesCommandes = map[string]regle{
 		case optionShell(a, "l"):
 			return ClasseLecture, ""
 		}
-		return ClasseChangement, "crontab changes scheduled tasks"
+		return ClasseDestructrice, "crontab replaces every scheduled task of the account"
 	},
 	"dpkg": func(a []string, _ string) (Classe, string) {
 		switch {
@@ -1006,6 +1014,9 @@ func init() {
 		reglesCommandes[n] = func(a []string, _ string) (Classe, string) {
 			if optionShell(a, "R", "--recursive") {
 				return ClasseDestructrice, n + " -R changes a whole tree"
+			}
+			if n == "chmod" && slices.ContainsFunc(a, reSUID.MatchString) {
+				return ClasseDestructrice, "chmod sets the setuid or setgid bit: a program then runs with its owner's rights"
 			}
 			return ClasseChangement, n + " changes permissions"
 		}
