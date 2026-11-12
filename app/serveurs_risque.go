@@ -393,6 +393,9 @@ func classerSegment(sg segmentShell, texte string) (Classe, string) {
 			if c := lectureInterdite(t); c > ClasseLecture {
 				v.monter(c, "reads a protected secret path: "+t)
 			}
+			if disque(t) {
+				v.monter(ClasseChangement, "reads a raw disk or memory, where any file's secrets can be read: "+t)
+			}
 		case r.cible.dynamique:
 			v.monter(ClasseChangement, "writes to a path computed at run time")
 		case t == "/dev/null" || t == "/dev/stdout" || t == "/dev/stderr" || strings.HasPrefix(t, "/dev/fd/"):
@@ -403,7 +406,7 @@ func classerSegment(sg segmentShell, texte string) (Classe, string) {
 		}
 	}
 	mots := sg.mots
-	masque, affecte := "", false
+	masque, affecte, sudo := "", false, false
 	for len(mots) > 0 {
 		m := mots[0]
 		nom := m.texte
@@ -423,8 +426,12 @@ func classerSegment(sg segmentShell, texte string) (Classe, string) {
 		case constructionsShell[nom] && !m.dynamique:
 			return ClasseDestructrice, "shell construct not analysed: " + nom
 		}
+		nom = path.Base(nom) // /usr/bin/sudo is sudo
 		if _, ok := enveloppes[nom]; !ok || m.dynamique {
 			break
+		}
+		if nom == "sudo" || nom == "doas" {
+			sudo = true
 		}
 		reste, recherche, raison := sauterEnveloppe(nom, mots[1:])
 		if raison != "" {
@@ -438,6 +445,8 @@ func classerSegment(sg segmentShell, texte string) (Classe, string) {
 	}
 	if len(mots) == 0 {
 		switch {
+		case masque == "env" && sudo:
+			v.monter(ClasseChangement, "env under sudo shows root's environment, which may hold secrets")
 		case masque == "env" || masque == "command" || masque == "" && !affecte:
 		case masque == "":
 			v.monter(ClasseChangement, "sets a shell variable")
@@ -452,12 +461,17 @@ func classerSegment(sg segmentShell, texte string) (Classe, string) {
 		return ClasseDestructrice, "the command name is computed at run time: cannot be analysed"
 	}
 	nom := mots[0].texte
+	if nom != "[" && nom != "[[" && strings.ContainsAny(nom, "{*?[") {
+		return ClasseDestructrice, "the command name is computed at run time (braces or wildcard): cannot be analysed"
+	}
 	if strings.Contains(nom, "/") {
 		nom = path.Base(nom)
 	}
 	args := mots[1:]
 	c, raison := classerNom(nom, textes(args), texte)
 	switch {
+	case c == ClasseLecture && sudo && nom == "printenv":
+		c, raison = ClasseChangement, "printenv under sudo shows root's environment, which may hold secrets"
 	case c == ClasseLecture && affecte:
 		c, raison = ClasseChangement, "environment variables imposed on "+nom
 	case c > ClasseLecture && (masque != "" || affecte):
@@ -476,6 +490,9 @@ func classerSegment(sg segmentShell, texte string) (Classe, string) {
 		a.monter(ClasseDestructrice, nom+" evaluates an expansion that can run a command")
 	}
 	a.monter(classerArguments(args, c))
+	if c == ClasseLecture && !metadonneesDisque[nom] && slices.ContainsFunc(args, func(m motShell) bool { return slices.ContainsFunc(variantesMot(m.texte), disque) }) {
+		a.monter(ClasseChangement, nom+" reads a raw disk or memory, where any file's secrets can be read")
+	}
 	if c == ClasseLecture && nom != "echo" && nom != "printf" {
 		for _, m := range args {
 			if m.dynamique {
@@ -495,7 +512,7 @@ func classerArguments(args []motShell, c Classe) (Classe, string) {
 		case ClasseDestructrice:
 			v.monter(ClasseDestructrice, "touches a protected secret path: "+m.texte)
 		case ClasseChangement:
-			v.monter(ClasseChangement, "a wildcard may match a protected secret path: "+m.texte)
+			v.monter(ClasseChangement, "may reach a protected secret path: "+m.texte)
 		}
 		if c > ClasseLecture && slices.ContainsFunc(variantesMot(m.texte), func(p string) bool { return cheminCritique(p) || disque(p) }) {
 			v.monter(ClasseDestructrice, "changes a protected system path: "+m.texte)
@@ -580,9 +597,10 @@ func sauterEnveloppe(nom string, mots []motShell) (reste []motShell, recherche b
 
 // --- Commands ---
 
-var lecturesSimples = ensemble("cat tac head tail grep egrep fgrep zgrep zcat bzcat xzcat wc cut nl od hexdump strings file stat du df ls pwd whoami id groups uname uptime free top ps pgrep pidof w who last lastlog lsblk lsof findmnt lscpu lsmem lspci lsusb lsmod blkid printenv echo printf true false test [ [[ which type whereis basename dirname realpath readlink md5sum sha1sum sha256sum sha512sum cksum diff cmp ss netstat ping dig nslookup host getent jq column tr nproc arch vmstat iostat sleep seq comm join paste fold rev read set cd pushd popd exit return : iptables-save ip6tables-save apt-cache locale tty")
+var lecturesSimples = ensemble("cat tac head tail zcat bzcat xzcat wc cut nl od hexdump file stat du df ls pwd whoami id groups uname uptime free top pgrep pidof w who last lastlog lsblk lsof findmnt lscpu lsmem lspci lsusb lsmod blkid printenv echo printf true false test [ [[ which type whereis basename dirname realpath readlink md5sum sha1sum sha256sum sha512sum cksum diff cmp ss netstat ping dig nslookup host getent jq column tr nproc arch vmstat iostat sleep seq comm join paste fold rev read set cd pushd popd exit return : iptables-save ip6tables-save apt-cache locale tty")
 var destructricesSimples = ensemble("rm unlink shred truncate dd wipefs fdisk sfdisk cfdisk parted gdisk sgdisk mkswap mke2fs blkdiscard shutdown reboot halt poweroff userdel deluser groupdel delgroup killall5 srm wipe dropdb dropuser iptables-restore ip6tables-restore")
-var interpretes = ensemble("sh bash dash zsh ksh mksh fish csh tcsh busybox eval source . xargs parallel watch su runuser flock nsenter unshare systemd-run at batch screen tmux ssh sshpass script expect strace ltrace gdb trap shopt enable osascript deno bun julia Rscript java")
+var interpretes = ensemble("sh bash dash zsh ksh mksh fish csh tcsh busybox eval source . xargs parallel watch su runuser flock nsenter unshare systemd-run at batch screen tmux ssh sshpass script expect strace ltrace gdb trap shopt enable osascript deno bun julia Rscript java pkexec run0 sg setpriv ssh-agent fakeroot")
+var metadonneesDisque = ensemble("ls stat lsblk blkid df du findmnt lsof realpath readlink basename dirname test [ [[ echo printf file") // read a disk's name, not its content
 var evalueIndices = ensemble("[[ [ test printf read let declare typeset local export unset mapfile readarray")
 var prefixesInterpretes = []string{"python", "pypy", "perl", "ruby", "php", "node", "lua", "tclsh", "pwsh", "mkfs"}
 
@@ -684,13 +702,17 @@ func regleDocker(nom string) regle {
 		if nom == "docker-compose" {
 			p = append([]string{"compose"}, p...)
 		}
+		if len(p) > 1 && !unParmi(p, "rm rmi kill exec run prune down remove leave delete") &&
+			(p[1] == "inspect" || p[0] == "inspect" || p[0] == "compose" && p[1] == "config") {
+			return ClasseChangement, nom + " " + strings.Join(p[:2], " ") + " shows the configuration and environment, which may hold secrets"
+		}
 		switch premier(p) {
 		case "compose":
-			return classerSous(nom, p[1:], "ps logs config ls images top version port events", "down rm kill exec run")
+			return classerSous(nom, p[1:], "ps logs ls images top version port events", "down rm kill exec run")
 		case "volume", "network", "image", "container", "system", "builder", "buildx", "context", "plugin", "secret", "config", "node", "service", "stack", "swarm":
-			return classerSous(nom, p[1:], "ls list inspect df history", "rm remove prune kill exec run leave delete")
+			return classerSous(nom, p[1:], "ls list df history", "rm remove prune kill exec run leave delete")
 		}
-		return classerSous(nom, p, "ps images logs inspect version info stats top port history diff search events", "rm rmi kill exec run prune")
+		return classerSous(nom, p, "ps images logs version info stats top port history diff search events", "rm rmi kill exec run prune")
 	}
 }
 
@@ -719,6 +741,8 @@ func regleIptables(a []string, _ string) (Classe, string) {
 }
 
 var reglesCommandes = map[string]regle{
+	"grep": regleGrep, "egrep": regleGrep, "fgrep": regleGrep, "zgrep": regleGrep,
+	"ps": reglePs,
 	"find": func(a []string, _ string) (Classe, string) {
 		switch {
 		case slices.Contains(a, "-delete"):
@@ -1003,6 +1027,32 @@ func regleSave(a []string, _ string) (Classe, string) {
 	return ClasseLecture, ""
 }
 
+// regleGrep (B60): a recursive grep reads every file of a tree, so the .env, keys and /etc/shadow it holds,
+// whatever the account (root needs no sudo): the owner sees it in a plan.
+func regleGrep(a []string, _ string) (Classe, string) {
+	if optionShell(a, "rR", "--recursive", "--dereference-recursive") || slices.ContainsFunc(a, func(x string) bool { return strings.HasSuffix(x, "recurse") }) {
+		return ClasseChangement, "a recursive grep reads every file of a folder, secrets included"
+	}
+	return ClasseLecture, ""
+}
+
+// reglePs (C47): the BSD option e shows each process's environment (passwords, tokens).
+// shortcut: a value after a value option (-o, -p, axo…) is skipped, a BSD group with e elsewhere errs on the safe side.
+func reglePs(a []string, _ string) (Classe, string) {
+	for i, x := range a {
+		prev := ""
+		if i > 0 {
+			prev = a[i-1]
+		}
+		valeur := ensemble("--format --sort --pid --ppid --user --User --group --Group --tty --sid --quick-pid --cols --columns --rows --lines --width")[prev] ||
+			!strings.HasPrefix(prev, "--") && prev != "" && strings.ContainsAny(prev[len(prev)-1:], "oOpqUutgGCk")
+		if x != "" && x[0] != '-' && strings.Contains(x, "e") && !valeur {
+			return ClasseChangement, "ps " + x + " shows each process's environment, which may hold secrets"
+		}
+	}
+	return ClasseLecture, ""
+}
+
 func regleAwk(a []string, _ string) (Classe, string) {
 	programme := ""
 	for i := 0; i < len(a); i++ {
@@ -1117,23 +1167,52 @@ func nomSecret(b string) bool {
 	switch {
 	case b == "shadow", b == "gshadow", b == "shadow-", b == "gshadow-", b == "environ", b == ".env",
 		strings.HasSuffix(b, ".env"), strings.HasPrefix(b, ".env."),
-		(strings.HasPrefix(b, "id_") || strings.HasSuffix(b, "_key")) && !strings.HasSuffix(b, ".pub"):
+		(strings.HasPrefix(b, "id_") || strings.HasSuffix(b, "_key")) && !strings.HasSuffix(b, ".pub"),
+		b == ".my.cnf", b == "debian.cnf", b == ".pgpass", b == "credentials", b == ".netrc",
+		strings.HasPrefix(b, "wg") && strings.HasSuffix(b, ".conf"):
 		return true
 	}
 	return slices.Contains([]string{".key", ".pem", ".p12", ".pfx", ".ppk"}, path.Ext(b))
 }
 
-var candidatsSecrets = []string{"shadow", "gshadow", "environ", ".env", "prod.env", ".env.local", "id_rsa", "id_ed25519", "ssh_host_ed25519_key", "server.key", "privkey.pem", "cert.p12"}
+// cheminSecret: nomSecret, or a file that is only a secret in its folder (~/.docker/config.json, ~/.kube/config).
+func cheminSecret(c []string) bool {
+	n := len(c)
+	return nomSecret(c[n-1]) || n > 1 && slices.Contains([]string{".docker/config.json", ".kube/config"}, c[n-2]+"/"+c[n-1])
+}
+
+var candidatsSecrets = []string{"shadow", "gshadow", "environ", ".env", "prod.env", ".env.local", "id_rsa", "id_ed25519", "ssh_host_ed25519_key", "server.key", "privkey.pem", "cert.p12", ".my.cnf", "debian.cnf", ".pgpass", "credentials", ".netrc", "wg0.conf"}
+
+// sauvegardes: a word that may reach Athanor's backups (M92), also through a glob (/var/back*/athanor) or a relative
+// path (backups/athanor). shortcut: `cd /var/backups && cat athanor/x` is only caught by the cd (a change), not refused.
+func sauvegardes(v string, c []string) bool {
+	if dansSauvegardes(v) || strings.Contains(v, "backups/athanor") {
+		return true
+	}
+	d := strings.Split(dossierSauvegardes, "/")
+	if len(c) < len(d) {
+		return false
+	}
+	for i := range d {
+		if ok, _ := path.Match(c[i], d[i]); !ok {
+			return false
+		}
+	}
+	return true
+}
 
 // lectureInterdite: whether a word may name a file whose content is a secret (C36: /etc/shadow, ~/.ssh except
 // authorized_keys, *.env, private keys). Destructive for a direct hit, a change for a bare '*' that could match one.
 func lectureInterdite(t string) Classe {
 	pire := ClasseLecture
 	for _, v := range variantesMot(t) {
-		if dansSauvegardes(v) { // M92: Athanor's archives may hold secrets; restoring one is the owner's accord
+		c := nettoyer(v)
+		if sauvegardes(v, c) { // M92: Athanor's archives may hold secrets; restoring one is the owner's accord
 			return ClasseDestructrice
 		}
-		c := nettoyer(v)
+		if p := strings.Join(c, "/"); p == "/var/backups" || p == "/var/backups/" {
+			pire = ClasseChangement // the folder that holds Athanor's backups: cd there then a relative path reaches them
+		}
 		base := c[len(c)-1]
 		joker := strings.ContainsAny(v, "*?[")
 		correspond := func(motif, nom string) bool {
@@ -1141,7 +1220,7 @@ func lectureInterdite(t string) Classe {
 			return motif == nom || joker && ok
 		}
 		touche := base != "authorized_keys" && slices.ContainsFunc(c, func(x string) bool { return correspond(x, ".ssh") })
-		if touche || nomSecret(base) {
+		if touche || cheminSecret(c) {
 			return ClasseDestructrice
 		}
 		if joker && slices.ContainsFunc(candidatsSecrets, func(n string) bool { return correspond(base, n) }) {
@@ -1154,10 +1233,14 @@ func lectureInterdite(t string) Classe {
 	return pire
 }
 
-// cheminCritique: paths whose change can lock the owner out or break the boot (writes there are destructive).
+// cheminCritique: paths whose change can lock the owner out, break the boot or drive the kernel (/proc/sys*,
+// /proc/sysrq-trigger, /sys): writes there are destructive.
 func cheminCritique(t string) bool {
 	c := nettoyer(t)
 	p := strings.Join(c, "/")
+	if strings.HasPrefix(p, "/proc/sys") || p == "/sys" || strings.HasPrefix(p, "/sys/") {
+		return true
+	}
 	for _, d := range []string{"/etc/ssh", "/boot", "/etc/pam.d", "/etc/sudoers.d"} {
 		if p == d || strings.HasPrefix(p, d+"/") {
 			return true
@@ -1231,7 +1314,7 @@ func classerOutil(outil string, a argsOutilServeur) (Classe, string) {
 func cheminRefuse(p string, lecture bool) error {
 	c := nettoyer(p)
 	base := c[len(c)-1]
-	if nomSecret(base) || slices.Contains(c, ".ssh") && !(lecture && base == "authorized_keys") {
+	if cheminSecret(c) || slices.Contains(c, ".ssh") && !(lecture && base == "authorized_keys") {
 		return fmt.Errorf("%s is refused to every Servers tool: secrets (/etc/shadow, ~/.ssh, *.env, private keys) are never read nor overwritten by an agent", p)
 	}
 	if dansSauvegardes(p) {
