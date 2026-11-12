@@ -4,7 +4,7 @@ package main
 // "servers" token whose perimeter is its servers (revoked at its end), an empty session folder outside every project
 // with the MCP config of the hub's relay, and a Claude session (the ops lead) that reads, then proposes a plan. The
 // session ends there: Athanor waits for the owner's decision, then resumes the same session to apply the accepted
-// plan. States: preparation → attente_accord → application → verification → finie | echec | arretee, in
+// plan. States: preparation → critique (the security critic reads the plan) → attente_accord → application → verification → finie | echec | arretee, in
 // modules/servers/<server>/taches/<id>.json. Stop (the owner, a revocation, the emergency stop) cuts everything.
 
 import (
@@ -32,16 +32,17 @@ const (
 
 // TacheServeurs: one task, as stored and shown.
 type TacheServeurs struct {
-	ID         string           `json:"id"`
-	Texte      string           `json:"texte"`
-	Serveurs   []string         `json:"serveurs"`
-	Etat       string           `json:"etat"`
-	Forcee     bool             `json:"forcee,omitempty"` // native Windows mode, forced by the owner with the password
-	Cree       string           `json:"cree"`
-	Fin        string           `json:"fin,omitempty"`
-	Plans      []string         `json:"plans,omitempty"`
-	Resultat   string           `json:"resultat,omitempty"`
-	Historique []EvenementTache `json:"historique"`
+	ID           string             `json:"id"`
+	Texte        string             `json:"texte"`
+	Serveurs     []string           `json:"serveurs"`
+	Etat         string             `json:"etat"`
+	Forcee       bool               `json:"forcee,omitempty"` // native Windows mode, forced by the owner with the password
+	Cree         string             `json:"cree"`
+	Fin          string             `json:"fin,omitempty"`
+	Plans        []string           `json:"plans,omitempty"`
+	Resultat     string             `json:"resultat,omitempty"`
+	Verification *VerificationTache `json:"verification,omitempty"` // the external verifier's report (M98)
+	Historique   []EvenementTache   `json:"historique"`
 }
 
 // EvenementTache: a state reached, and what brought it (a plan's id, an error).
@@ -59,6 +60,7 @@ type tacheEnCours struct {
 	annuler  context.CancelCauseFunc
 	reprise  string // the Claude session to resume
 	applique string // the plan being applied
+	annexe   string // the token's hash of the critic's or the verifier's session while it runs
 }
 
 var tachesEnCours = struct {
@@ -124,7 +126,10 @@ func tacheActive(hache string) bool {
 	tachesEnCours.Lock()
 	defer tachesEnCours.Unlock()
 	for _, e := range tachesEnCours.m {
-		if e.hache == hache {
+		e.mu.Lock()
+		a := e.annexe
+		e.mu.Unlock()
+		if e.hache == hache || a == hache {
 			return true
 		}
 	}
@@ -136,17 +141,24 @@ func tacheForcee(hache string) bool {
 	tachesEnCours.Lock()
 	defer tachesEnCours.Unlock()
 	for _, e := range tachesEnCours.m {
-		if e.hache == hache {
-			e.mu.Lock()
+		e.mu.Lock()
+		if e.hache == hache || e.annexe == hache {
 			defer e.mu.Unlock()
 			return e.t.Forcee
 		}
+		e.mu.Unlock()
 	}
 	return false
 }
 
+// etat: a new state; the same state for the same reason again (the watch and the task's end both reach
+// verification) is written once.
 func (e *tacheEnCours) etat(etat, detail string) {
 	e.mu.Lock()
+	if h := e.t.Historique; len(h) > 0 && h[len(h)-1].Etat == etat && h[len(h)-1].Detail == couper(detail, 300) {
+		e.mu.Unlock()
+		return
+	}
 	e.t.Etat = etat
 	e.t.Historique = append(e.t.Historique, EvenementTache{T: time.Now().UTC().Format(time.RFC3339), Etat: etat, Detail: couper(detail, 300)})
 	t := e.t
@@ -230,10 +242,18 @@ func (s *Serveur) executerTache(ctx context.Context, e *tacheEnCours, dossier st
 	go s.surveillerTache(ctx, e, surveillance)
 	err := s.sessionTache(ctx, e, dossier)
 	fin, detail := "finie", ""
+	var appliques []string
 	for n := 0; err == nil && n < maxPlansTache; n++ {
 		plan := s.planNeufTache(projet, e)
 		if plan == "" {
 			break
+		}
+		if s.critiqueEnCours(plan) { // a plan accepted by the owner's rule is not presented: no critique
+			e.etat("critique", plan)
+			s.critiquerPlan(ctx, e, dossier, plan)
+			if ctx.Err() != nil {
+				break
+			}
 		}
 		e.etat("attente_accord", plan)
 		ap, errA := s.attendreDecision(ctx, plan)
@@ -252,8 +272,15 @@ func (s *Serveur) executerTache(ctx context.Context, e *tacheEnCours, dossier st
 		e.applique = plan
 		e.mu.Unlock()
 		e.etat("application", plan)
+		appliques = append(appliques, plan)
 		if err = os.WriteFile(filepath.Join(dossier, "consigne.txt"), []byte(consigneApplication(plan)), 0o600); err == nil {
 			err = s.sessionTache(ctx, e, dossier)
+		}
+	}
+	if err == nil && ctx.Err() == nil && len(appliques) > 0 {
+		e.etat("verification", appliques[len(appliques)-1])
+		if v := s.verifierTache(ctx, e, dossier, appliques); v.Verdict != "ok" && ctx.Err() == nil {
+			err = errors.New("the external verification failed: " + strings.Join(v.Lignes, " · "))
 		}
 	}
 	close(surveillance)
@@ -393,7 +420,7 @@ func (s *Serveur) finirTache(e *tacheEnCours, etat, detail string) {
 	tachesEnCours.Lock()
 	delete(tachesEnCours.m, e.t.ID)
 	tachesEnCours.Unlock()
-	s.revoquerJetons("tâche "+etat, func(x SessionHub) bool { return x.Projet == projet })
+	s.revoquerJetons("tâche "+etat, func(x SessionHub) bool { return x.Projet == projet || strings.HasPrefix(x.Projet, projet+":") })
 	l, _ := s.approbations.Liste()
 	for _, ap := range l {
 		if ap.Projet == projet && ap.Etat == "attente" {
@@ -416,7 +443,10 @@ func (s *Serveur) arreterTache(id string) bool {
 	tachesEnCours.Unlock()
 	if e != nil {
 		e.annuler(errTacheArretee)
-		s.revoquerJetons("tâche arrêtée", func(x SessionHub) bool { return x.Hache == e.hache })
+		e.mu.Lock()
+		a := e.annexe
+		e.mu.Unlock()
+		s.revoquerJetons("tâche arrêtée", func(x SessionHub) bool { return x.Hache == e.hache || x.Hache == a && a != "" })
 	}
 	return e != nil
 }

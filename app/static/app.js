@@ -2692,12 +2692,19 @@ function blocPlan(x, p) {
       ${(e.sauvegarde || []).length ? `<div class="petit plan-args">${h(t("Backed up first: {0}", [e.sauvegarde.join(", ")]))}</div>` : ""}${e.sans_sauvegarde ? `<div class="petit plan-args">${h(t("No backup: {0}", [e.sans_sauvegarde]))}</div>` : ""}</li>`;
   }).join("");
   return `<div class="pv-details">${h(p.resume)}</div><ol class="plan-etapes">${etapes}</ol>
-    ${p.critique ? `<div class="pv-note"><strong>${t("Security critic")}</strong><div class="pv-details m0">${h(p.critique)}</div></div>` : ""}`;
+    ${p.critique ? blocCritique(p.critique) : ""}`;
+}
+// the security critic's verdict (M98): reading, no risk found, or its risks one per line
+function blocCritique(c) {
+  const [lib, cl] = !c.verdict ? [t("Reading the plan…"), "pv-claude"] : c.verdict === "ok" ? [t("No risk found"), "pv-ok"] : [t("Risks found"), "pv-vous"];
+  return `<div class="pv-note plan-critique"><strong>${t("Security critic")}</strong> <span class="pv-etat ${cl}">${h(lib)}</span>
+    ${(c.lignes || []).length ? `<ul class="petit m0">${c.lignes.map((l) => `<li>${h(l)}</li>`).join("")}</ul>` : ""}</div>`;
 }
 function carteApprobation(x, ap, codes) {
   const d = x.details || {};
+  const p = (ap.plans || {})[x.id];
   if (x.action === "plan_serveur") return carteDecision(x, ap, `<span class="badge">${h(x.env)}</span> <strong>${h(t("Plan for {0}", [d.nom || d.serveur]))}</strong> <span>${h(x.projet)}</span>`,
-    [t("Server role: {0}", [x.env]), t("{0} step(s)", [d.etapes || "?"])], blocPlan(x, (ap.plans || {})[x.id]), d.regle === "oui" && t("Never ask again for this server"));
+    [t("Server role: {0}", [x.env]), t("{0} step(s)", [d.etapes || "?"])], blocPlan(x, p), d.regle === "oui" && t("Never ask again for this server"), p && p.critique && !p.critique.verdict);
   const acces = x.action === "demander_acces", f = etat.apprForm[x.id] || {}, nom = (x.details || {}).nom || "";
   const entree = f.entree ?? (codes.find((e) => e.nom === nom) || {}).id ?? "", env = f.env || x.env, variable = f.variable ?? nom;
   const champs = acces ? `<div class="appr-champs">
@@ -2709,7 +2716,7 @@ function carteApprobation(x, ap, codes) {
     [acces && nom && t("proposed variable: {0}", [nom])], `<div class="pv-details">${h(x.raison)}</div>${champs}`, t("Never ask again for this project and environment"));
 }
 // an approval's card: its head, what it asks, the password when the window decides, and its decisions ("never ask again" only when allowed)
-function carteDecision(x, ap, tete, meta, corps, toujours) {
+function carteDecision(x, ap, tete, meta, corps, toujours, sansAccord) {
   const natif = ap.mot_de_passe_requis ? `<label class="champ"><span>${t("Athanor's password")}</span><input type="password" data-appr-mdp autocomplete="current-password"></label>
       <p class="muet petit">${t("Any program of this PC can drive this window, so a decision asks for Athanor's password.")}</p>`
     : ap.appareil_requis ? `<p class="petit attention">⚠ ${t("An agent of this PC could decide in your place: choose a password for Athanor in Options first, then retype it here (or decide from a paired phone)")}</p>` : "";
@@ -2718,7 +2725,7 @@ function carteDecision(x, ap, tete, meta, corps, toujours) {
     <div class="pv-tete">${tete} <span class="pv-etat pv-vous">${h(t("expires {0}", [dans(Date.parse(x.expire) / 1000)]))}</span></div>
     <div class="muet petit">${[t("Asked by {0}", [x.agent]), x.mission, ...meta].filter(Boolean).map(h).join(" · ")}</div>
     ${corps}${natif}
-    <div class="ligne mt-1 appr-boutons"><button type="button" class="btn btn-primaire" data-appr-decision="accepter"${bloque}>✓ ${t("Accept")}</button><button type="button" class="btn" data-appr-decision="refuser"${bloque}>${t("Refuse")}</button>${toujours ? `<button type="button" class="btn" data-appr-decision="toujours"${bloque}>${h(toujours)}</button>` : ""}</div>
+    <div class="ligne mt-1 appr-boutons"><button type="button" class="btn btn-primaire" data-appr-decision="accepter"${bloque || (sansAccord ? " disabled" : "")}>✓ ${t("Accept")}</button><button type="button" class="btn" data-appr-decision="refuser"${bloque}>${t("Refuse")}</button>${toujours ? `<button type="button" class="btn" data-appr-decision="toujours"${bloque || (sansAccord ? " disabled" : "")}>${h(toujours)}</button>` : ""}</div>
   </div>`;
 }
 async function sectionApprobations() {

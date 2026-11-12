@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -387,7 +388,8 @@ func (s *Serveur) demanderApprobation(x Approbation) (Approbation, error) {
 	}
 	s.ecrireAudit(LigneAudit{Type: "evenement", De: x.Agent, Vers: "hub", Mission: x.Mission, Projet: x.Projet, Env: x.Env,
 		Agent: x.Agent, Action: "approbation demandée: " + x.Action, Resultat: res})
-	if err == nil && x.Projet != projetTestMCP { // Test the hub's MCP decides by itself: no phone ping
+	// Test the hub's MCP decides by itself: no phone ping; a task's plan is told once its critique is on it (critiquerPlan)
+	if err == nil && x.Projet != projetTestMCP && !(x.Action == actionPlanServeur && strings.HasPrefix(x.Projet, prefixeTache)) {
 		s.notifierApprobation(x)
 	}
 	return x, err
@@ -508,6 +510,8 @@ func (s *Serveur) deciderApprobation(qui, id, decision, entree, envChoisi, varia
 		return x, http.StatusBadRequest, errApprobationDecision
 	case decision == "toujours" && x.Action == actionPlanServeur && x.Details["regle"] != "oui":
 		return x, http.StatusConflict, errPlanSansRegle
+	case decision != "refuser" && x.Action == actionPlanServeur && s.critiqueEnCours(x.ID):
+		return x, http.StatusConflict, errCritiqueEnCours
 	}
 	accorde, idEntree := "", ""
 	if x.Action == "demander_acces" && decision != "refuser" {

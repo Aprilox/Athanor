@@ -3,6 +3,8 @@ package main
 // The Servers module: its menu page and home tile (the inventory and its API are in serveurs_inventaire.go).
 // It declares no bus action yet: a deployment asked by a pilot gets a clear refusal until stage 6.
 
+import "strings"
+
 func init() { enregistrerModule(moduleServeurs{}) }
 
 type moduleServeurs struct{}
@@ -21,6 +23,11 @@ func (moduleServeurs) Elements(*Serveur) []ElementHub {
 		if x.Etat == "empreinte_changee" {
 			out = append(out, ElementHub{ID: x.ID, Titre: x.Nom, Etat: "inactif", Lien: "#serveur/" + x.ID,
 				Attente: &AttenteElement{Raison: "The host fingerprint of {0} changed: check the server before trusting it again", Args: []any{x.Nom}, Page: "#serveur/" + x.ID, Cle: x.EmpreinteHote}})
+		}
+		// the last task's external verification failed (M98): the bell until the owner ignores it or a task passes
+		if t := tachesServeur(x.ID); len(t) > 0 && t[0].Etat == "echec" && t[0].Verification != nil && t[0].Verification.Verdict != "ok" {
+			out = append(out, ElementHub{ID: x.ID + ":verification", Titre: x.Nom, Etat: "erreur", Lien: "#serveur/" + x.ID,
+				Attente: &AttenteElement{Raison: "The external check of a task on {0} failed: {1}", Args: []any{x.Nom, strings.Join(t[0].Verification.Lignes, " · ")}, Page: "#serveur/" + x.ID, Cle: t[0].ID}})
 		}
 	}
 	return out

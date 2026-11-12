@@ -47,8 +47,16 @@ func TestServeursTaches(t *testing.T) {
 		if e, _ := os.ReadDir(filepath.Join(dossier, "travail")); len(e) != 0 {
 			t.Errorf("the session's working folder is not empty: %v", e)
 		}
-		id, res := jouer(ctx, n, sessionFausse{dossier, lire("hub-jeton"), lire("consigne.txt"), lire("reprise")})
-		n++
+		var id, res string
+		switch c := lire("consigne.txt"); { // the critic's and the verifier's sessions (M98) pass
+		case strings.Contains(c, "security critic"):
+			id, res = "sess-critique", "VERDICT: ok"
+		case strings.Contains(c, "external verifier"):
+			id, res = "sess-verif", "VERIFICATION: ok"
+		default:
+			id, res = jouer(ctx, n, sessionFausse{dossier, lire("hub-jeton"), c, lire("reprise")})
+			n++
+		}
 		j := `{"type":"system","subtype":"init","session_id":"` + id + `"}` + "\n" + `{"type":"result","is_error":false,"result":"` + res + `"}` + "\n"
 		return os.WriteFile(filepath.Join(dossier, "session.jsonl"), []byte(j), 0o600)
 	}
@@ -157,7 +165,7 @@ func TestServeursTaches(t *testing.T) {
 	for _, h := range fin.Historique {
 		etats = append(etats, h.Etat)
 	}
-	if fin.Etat != "finie" || strings.Join(etats, ",") != "preparation,attente_accord,application,verification,finie" {
+	if fin.Etat != "finie" || strings.Join(etats, ",") != "preparation,critique,attente_accord,application,verification,finie" {
 		t.Fatalf("change task: %s %v %s", fin.Etat, etats, fin.Resultat)
 	}
 	if p, err := s.lirePlan(fin.Plans[0]); err != nil || p.Etapes[0].Executee == "" {

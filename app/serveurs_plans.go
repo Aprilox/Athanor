@@ -46,18 +46,18 @@ type EtapePlan struct {
 
 // PlanServeur: hub/plans/<id>.json, id = its approval's.
 type PlanServeur struct {
-	ID       string      `json:"id"`
-	Serveur  string      `json:"serveur"`
-	Nom      string      `json:"nom"`
-	Env      string      `json:"env"`
-	Projet   string      `json:"projet"`
-	Mission  string      `json:"mission,omitempty"`
-	Agent    string      `json:"agent"`
-	Resume   string      `json:"resume"`
-	Cree     string      `json:"cree"`
-	Expire   string      `json:"expire"`
-	Critique string      `json:"critique,omitempty"` // the security critic's verdict (M98)
-	Etapes   []EtapePlan `json:"etapes"`
+	ID       string        `json:"id"`
+	Serveur  string        `json:"serveur"`
+	Nom      string        `json:"nom"`
+	Env      string        `json:"env"`
+	Projet   string        `json:"projet"`
+	Mission  string        `json:"mission,omitempty"`
+	Agent    string        `json:"agent"`
+	Resume   string        `json:"resume"`
+	Cree     string        `json:"cree"`
+	Expire   string        `json:"expire"`
+	Critique *CritiquePlan `json:"critique,omitempty"` // the security critic's verdict (M98), a task's plan only
+	Etapes   []EtapePlan   `json:"etapes"`
 }
 
 // verrouPlans: a step is marked run under it, so it runs once.
@@ -245,6 +245,9 @@ func outilProposerPlan(s *Serveur, x SessionHub, args json.RawMessage) (string, 
 		return "", err
 	}
 	p.ID, p.Cree, p.Expire = ap.ID, ap.Cree, ap.Expire
+	if !parRegle && strings.HasPrefix(x.Projet, prefixeTache) { // read by the security critic before the owner (critiquerPlan)
+		p.Critique = &CritiquePlan{}
+	}
 	s.purgerPlans()
 	if err := s.enregistrerPlan(p); err != nil {
 		_, _, _ = s.deciderApprobation("hub", ap.ID, "refuser", "", "", "")
