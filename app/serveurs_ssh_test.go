@@ -7,7 +7,9 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"encoding/pem"
+	"io"
 	"net"
+	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -275,5 +277,57 @@ func TestConnexionSSHConteneur(t *testing.T) {
 	r, err := executerSSH(ctx, c, "id -un && sudo -n true && echo sudo-ok", nil, 10*time.Second)
 	if err != nil || r.Code != 0 || string(r.Sortie) != "athanor\nsudo-ok\n" {
 		t.Fatalf("commande dans le conteneur : %q code %d %v", r.Sortie, r.Code, err)
+	}
+}
+
+// TestCaddyConteneur (M130) : le conteneur de test a git et Caddy démarré sans systemd ; le port HTTP publié
+// (ATHANOR_SSH_HTTP) rend la page par défaut, avant et après un `caddy reload` lancé par SSH comme le fera le déploiement.
+func TestCaddyConteneur(t *testing.T) {
+	cible, web := os.Getenv("ATHANOR_SSH_TEST"), os.Getenv("ATHANOR_SSH_HTTP")
+	if cible == "" || web == "" {
+		t.Skip("ATHANOR_SSH_TEST ou ATHANOR_SSH_HTTP absent (bash .athanor/tools/serveur_ssh.sh start, puis http)")
+	}
+	pageParDefaut := func(quand string) {
+		t.Helper()
+		r, err := http.Get("http://" + web + "/")
+		if err != nil {
+			t.Fatalf("%s : %v", quand, err)
+		}
+		defer r.Body.Close()
+		corps, _ := io.ReadAll(r.Body)
+		if r.StatusCode != 200 || !strings.Contains(string(corps), "Caddy works!") {
+			t.Fatalf("%s : statut %d, page %.200q", quand, r.StatusCode, corps)
+		}
+	}
+	pageParDefaut("avant le rechargement")
+	hote, portTxt, err := net.SplitHostPort(cible)
+	if err != nil {
+		t.Fatal(err)
+	}
+	port, _ := strconv.Atoi(portTxt)
+	ctx := context.Background()
+	empreinte, err := empreinteHoteSSH(ctx, hote, port)
+	if err != nil {
+		t.Fatalf("empreinte du conteneur : %v", err)
+	}
+	c, err := connecterSSH(ctx, AccesSSH{Hote: hote, Port: port, Utilisateur: "athanor", MotDePasse: motDePasseConteneurSSH, Empreinte: empreinte})
+	if err != nil {
+		t.Fatalf("connexion au conteneur : %v", err)
+	}
+	defer c.Close()
+	r, err := executerSSH(ctx, c, "git --version >/dev/null && sudo -n caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile 2>&1 && ps -o user= -C caddy", nil, 30*time.Second)
+	if err != nil || r.Code != 0 || !strings.HasSuffix("\n"+strings.TrimSpace(string(r.Sortie)), "\ncaddy") {
+		t.Fatalf("git, caddy reload et utilisateur de Caddy : %q code %d %v", r.Sortie, r.Code, err)
+	}
+	pageParDefaut("après le rechargement")
+}
+
+// TestSiteExemple (M130) : les deux versions du site d'exemple que les déploiements de test servent, distinctes.
+func TestSiteExemple(t *testing.T) {
+	for _, v := range []string{"v1", "v2"} {
+		b, err := os.ReadFile("testdata/site-exemple/" + v + "/index.html")
+		if err != nil || !strings.Contains(string(b), "site-exemple "+v) {
+			t.Fatalf("site d'exemple %s : %v %.100q", v, err, b)
+		}
 	}
 }

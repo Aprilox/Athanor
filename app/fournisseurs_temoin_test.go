@@ -313,8 +313,9 @@ func TestEnvironnementsTemoinConteneur(t *testing.T) {
 	if e := s.acces.Environnements("demo")["dev"]; e.Certificat == "" || e.CertificatExpire == "" {
 		t.Errorf("the certificate not noted in the environment: %+v", e)
 	}
+	// the test image has Caddy (M130): its group exists, so the key is root:caddy 0640 and still unreadable by the login user
 	cible := dossierTLS + "/app.exemple.fr"
-	if r := outil("ssh_commande", map[string]any{"commande": "sudo -n stat -c '%a %U' " + cible + ".key " + cible + ".crt; cat " + cible + ".key >/dev/null 2>&1 || echo refused"}); r.Sortie != "600 root\n644 root\nrefused\n" {
+	if r := outil("ssh_commande", map[string]any{"commande": "sudo -n stat -c '%a %U' " + cible + ".key " + cible + ".crt; cat " + cible + ".key >/dev/null 2>&1 || echo refused"}); r.Sortie != "640 root\n644 root\nrefused\n" {
 		t.Errorf("the certificate on the container: %q", r.Sortie)
 	}
 	for _, j := range jetons {

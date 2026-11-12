@@ -118,7 +118,8 @@ jobs:
   servers-ssh:
     # the Servers module against a real sshd (app/testdata/serveur-ssh, never a real server): an agent's MCP
     # route adds it, reads its sheet, changes it only by an accepted plan, is refused destructive or masked
-    # commands, and an unconfirmed firewall rule is undone by the server itself (app/serveurs_ci_test.go)
+    # commands, and an unconfirmed firewall rule is undone by the server itself (app/serveurs_ci_test.go);
+    # Caddy serves its default page on the published HTTP port, before and after a reload over SSH
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
@@ -130,11 +131,12 @@ jobs:
         with:
           go-version-file: app/go.mod
       - name: Test SSH server
-        # a free port chosen by Docker, on 127.0.0.1 only; NET_ADMIN for ufw
+        # free ports chosen by Docker, on 127.0.0.1 only (SSH and Caddy's HTTP); NET_ADMIN for ufw
         run: |
           docker build -q -t athanor-serveur-ssh testdata/serveur-ssh
-          docker run -d --name athanor-serveur-ssh --cap-add NET_ADMIN -p 127.0.0.1::22 athanor-serveur-ssh
+          docker run -d --name athanor-serveur-ssh --cap-add NET_ADMIN -p 127.0.0.1::22 -p 127.0.0.1::80 athanor-serveur-ssh
           port="$(docker port athanor-serveur-ssh 22/tcp | head -n1 | sed 's/.*://')"
+          echo "ATHANOR_SSH_HTTP=127.0.0.1:$(docker port athanor-serveur-ssh 80/tcp | head -n1 | sed 's/.*://')" >> "$GITHUB_ENV"
           for _ in $(seq 1 50); do  # ready once sshd shows its banner
             if timeout 2 bash -c "exec 3<>/dev/tcp/127.0.0.1/$port && head -c 4 <&3" 2>/dev/null | grep -q SSH; then
               echo "ATHANOR_SSH_TEST=127.0.0.1:$port" >> "$GITHUB_ENV"; exit 0
@@ -145,8 +147,9 @@ jobs:
       - name: Servers tests on the container
         # a skip (ATHANOR_SSH_TEST lost) would pass silently: the PASS line is required
         run: |
-          go test -count=1 -timeout 10m -run '^TestServeursCIConteneur$' -v . | tee ci.log
+          go test -count=1 -timeout 10m -run '^(TestServeursCIConteneur|TestCaddyConteneur)$' -v . | tee ci.log
           grep -q -- '--- PASS: TestServeursCIConteneur' ci.log
+          grep -q -- '--- PASS: TestCaddyConteneur' ci.log
 
   vuln:
     # known vulnerabilities of the Go standard library and of the modules, in the code Athanor really calls
