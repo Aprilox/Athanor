@@ -105,7 +105,8 @@ const scriptRevenir = `cd -- "$1" || exit 1
 c=$(readlink current) && p=$(readlink previous) || exit 6
 ln -sfn "$p" .current.new && mv -fT .current.new current && ln -sfn "$c" .previous.new && mv -fT .previous.new previous`
 
-// revenir: the environment's previous version served again on all its servers, Caddy reloaded, checked; noted in
+// revenir: the environment's previous version served again on all its servers, Caddy reloaded (compose: its
+// containers started again), checked; noted in
 // the history (Retour), the version left marked revenu. The API asks prod's accord before calling it.
 func (s *Serveur) revenir(ctx context.Context, projet, env, auteur string) (Deploiement, error) {
 	e, ok := s.acces.Environnements(projet)[env]
@@ -185,7 +186,11 @@ func (s *Serveur) revenir(ctx context.Context, projet, env, auteur string) (Depl
 		if err != nil {
 			break
 		}
-		if err = echecSSH(executerSSH(ctx, c, commeRoot(scriptRecharger, base, fmt.Sprint(versionsGardees)), nil, delaiDeploiement)); err != nil {
+		recharger := commeRoot(scriptRecharger, base, fmt.Sprint(versionsGardees))
+		if e.Deploiement.Methode == "compose" {
+			recharger = commeRoot(scriptRelancerCompose, base, e.Deploiement.Dossier, nomCompose(projet, env))
+		}
+		if err = echecSSH(executerSSH(ctx, c, recharger, nil, delaiDeploiement)); err != nil {
 			err = fmt.Errorf("%s: %w", e.Serveurs[i], err)
 		}
 	}

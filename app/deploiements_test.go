@@ -102,10 +102,11 @@ func TestBaseDeploiement(t *testing.T) {
 	if a == b || !strings.HasPrefix(a, "/srv/athanor/mon-jeu-") || !reRacineCaddy.MatchString(a+"/current") {
 		t.Errorf("names with spaces or capitals: %s %s", a, b)
 	}
-	if validerConfigDeploiement(ConfigDeploiement{Methode: "statique", Source: "git", Dossier: "site"}) != nil {
-		t.Error("git source refused")
+	if validerConfigDeploiement(ConfigDeploiement{Methode: "statique", Source: "git", Dossier: "site"}) != nil ||
+		validerConfigDeploiement(ConfigDeploiement{Methode: "compose", Source: "artefact", Dossier: "app"}) != nil {
+		t.Error("git source or compose method refused")
 	}
-	for _, c := range []ConfigDeploiement{{Methode: "compose", Source: "artefact"}, {Methode: "statique", Source: "ftp"},
+	for _, c := range []ConfigDeploiement{{Methode: "k3s", Source: "artefact"}, {Methode: "statique", Source: "ftp"},
 		{Methode: "statique", Source: "artefact", Dossier: "../x"}, {Methode: "statique", Source: "artefact", Dossier: "/x"},
 		{Methode: "statique", Source: "artefact", Dossier: ".git"}, {Methode: "statique", Source: "artefact", Construire: "npm run build"}} {
 		if validerConfigDeploiement(c) == nil {

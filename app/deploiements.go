@@ -38,7 +38,7 @@ const (
 // ConfigDeploiement: how an environment is deployed, recorded after a first deployment so that the next ones
 // (relay, Retry) need no agent.
 type ConfigDeploiement struct {
-	Methode    string `json:"methode"`              // statique (compose: M134)
+	Methode    string `json:"methode"`              // statique | compose (M134)
 	Source     string `json:"source"`               // artefact (sent by SFTP) | git (fetched by the server, M132)
 	Dossier    string `json:"dossier,omitempty"`    // the published folder, relative to the repository ("" = its root)
 	Construire string `json:"construire,omitempty"` // a build command (M135)
@@ -76,8 +76,8 @@ var (
 
 func validerConfigDeploiement(c ConfigDeploiement) error {
 	switch {
-	case c.Methode != "statique":
-		return errors.New("deployment method: statique")
+	case c.Methode != "statique" && c.Methode != "compose":
+		return errors.New("deployment method: statique or compose")
 	case c.Source != "artefact" && c.Source != "git":
 		return errors.New("deployment source: artefact or git")
 	case c.Dossier != "" && !reDossierPublie.MatchString(c.Dossier):
@@ -169,15 +169,20 @@ const caddyfileServeur = "/etc/caddy/Caddyfile"
 const fonctionAnnulerVersion = `annuler() { rm -rf -- "$r"; if [ -f "$b/.site-avant" ]; then mv -f -- "$b/.site-avant" "$site"; else rm -f -- "$site"; fi; }
 `
 
+// extraireVersion ($a the archive, $2 its SHA-256 ("" for an archive git made on the server), $b the
+// environment's folder, $r the release, $4 the version): the archive checked and extracted into the release.
+const extraireVersion = `if [ -n "$2" ] && [ "$(sha256sum < "$a" | cut -d' ' -f1)" != "$2" ]; then rm -f -- "$a"; echo "the archive changed on the way: its SHA-256 differs on the server"; exit 3; fi
+umask 022
+mkdir -p -- "$b/releases" && mkdir -- "$r" || { rm -f -- "$a"; echo "the release $4 cannot be made"; exit 1; }
+tar -xzf "$a" -C "$r" --no-same-owner --no-same-permissions || { rm -f -- "$a"; rm -rf -- "$r"; echo "the archive could not be extracted"; exit 1; }
+rm -f -- "$a"
+`
+
 // scriptPreparer ($1 the archive sent, $2 its SHA-256 ("" for an archive git made on the server), $3 the environment's folder, $4 the version, $5 the
 // published folder, $6 the host name; the site block on standard input): nothing served changes.
 const scriptPreparer = `a=$1 b=$3 r=$3/releases/$4 site=/etc/caddy/sites/$6.caddy
 command -v caddy >/dev/null 2>&1 && [ -f ` + caddyfileServeur + ` ] || { rm -f -- "$a"; echo "Caddy is not installed on this server (` + caddyfileServeur + ` missing): install it first"; exit 5; }
-if [ -n "$2" ] && [ "$(sha256sum < "$a" | cut -d' ' -f1)" != "$2" ]; then rm -f -- "$a"; echo "the archive changed on the way: its SHA-256 differs on the server"; exit 3; fi
-umask 022
-mkdir -p -- "$b/releases" /etc/caddy/sites && mkdir -- "$r" || { rm -f -- "$a"; echo "the release $4 cannot be made"; exit 1; }
-` + fonctionAnnulerVersion + `tar -xzf "$a" -C "$r" --no-same-owner --no-same-permissions || { rm -f -- "$a"; rm -rf -- "$r"; echo "the archive could not be extracted"; exit 1; }
-rm -f -- "$a"
+` + extraireVersion + fonctionAnnulerVersion + `mkdir -p /etc/caddy/sites || { rm -rf -- "$r"; exit 1; }
 rm -f -- "$b/.site-avant"
 if [ -f "$site" ]; then cp -p -- "$site" "$b/.site-avant" || { rm -rf -- "$r"; exit 1; }; fi
 t=$(mktemp "$b/.site.XXXXXX") && cat > "$t" && chmod 644 "$t" && mv -f -- "$t" "$site" || { rm -f -- "$t"; annuler; echo "the site file cannot be written"; exit 1; }
@@ -196,9 +201,12 @@ ln -sfn "$v" .current.new && mv -fT .current.new current || exit 1
 if [ -n "$old" ] && [ "$old" != "$v" ]; then ln -sfn "$old" .previous.new && mv -fT .previous.new previous; fi`
 
 // scriptRecharger ($1 folder, $2 versions kept): Caddy reloaded (systemd, else its own command), then the
-// oldest releases removed, never current nor previous.
+// oldest releases removed (scriptNettoyer).
 const scriptRecharger = `if [ -d /run/systemd/system ] && systemctl is-active --quiet caddy 2>/dev/null; then o=$(systemctl reload caddy 2>&1); else o=$(caddy reload --config ` + caddyfileServeur + ` --adapter caddyfile 2>&1); fi || { echo "Caddy did not reload:"; printf '%s\n' "$o" | tail -n 4; exit 1; }
-cd -- "$1/releases" || exit 0
+` + scriptNettoyer
+
+// scriptNettoyer ($1 folder, $2 versions kept): the oldest releases removed, never current nor previous.
+const scriptNettoyer = `cd -- "$1/releases" || exit 0
 c=$(readlink ../current) p=$(readlink ../previous 2>/dev/null)
 ls -1 | sort -r | tail -n +$(($2 + 1)) | while IFS= read -r v; do [ "releases/$v" = "$c" ] || [ "releases/$v" = "$p" ] || rm -rf -- "$v"; done`
 
@@ -245,7 +253,7 @@ func (s *Serveur) deployer(ctx context.Context, projet, env, commit string, o Op
 	if err := noterHistorique(d); err != nil {
 		return d, fmt.Errorf("the deployment history cannot be written: %w", err)
 	}
-	err = s.deployerStatique(ctx, p, e, *cfg, &d)
+	err = s.deployerVersion(ctx, p, e, *cfg, &d)
 	d.Etat, d.Fin = "ok", time.Now().UTC().Format(time.RFC3339)
 	if err != nil {
 		d.Etat, d.Erreur = "echec", err.Error()
@@ -261,7 +269,9 @@ func (s *Serveur) deployer(ctx context.Context, projet, env, commit string, o Op
 	return d, err
 }
 
-func (s *Serveur) deployerStatique(ctx context.Context, p Projet, e Environnement, cfg ConfigDeploiement, d *Deploiement) error {
+// deployerVersion: the commit prepared on every server (statique: the Caddy site validated; compose: the
+// containers started from the release), then current/previous switched everywhere.
+func (s *Serveur) deployerVersion(ctx context.Context, p Projet, e Environnement, cfg ConfigDeploiement, d *Deploiement) error {
 	dossier := filepath.Join(dossierModule("servers"), "deploiements")
 	if err := os.MkdirAll(dossier, 0o700); err != nil {
 		return err
@@ -295,6 +305,15 @@ func (s *Serveur) deployerStatique(ctx context.Context, p Projet, e Environnemen
 		return err
 	}
 	base, hote := baseDeploiement(d.Projet, d.Env), hoteEnv(&e)
+	var envCompose, genere string
+	if cfg.Methode == "compose" {
+		if envCompose, err = s.fichierEnvCompose(d.Projet, d.Env); err != nil {
+			return err
+		}
+		if genere, err = composeGenere(p.Dossier, d.Commit, cfg.Dossier); err != nil {
+			return err
+		}
+	}
 	racine := base + "/current"
 	if cfg.Dossier != "" {
 		racine += "/" + cfg.Dossier
@@ -311,16 +330,24 @@ func (s *Serveur) deployerStatique(ctx context.Context, p Projet, e Environnemen
 	}()
 	annulerTout := func() {
 		for _, x := range prets {
-			_, _ = executerSSH(context.WithoutCancel(ctx), x.c, commeRoot(scriptAnnulerVersion, base, d.Version, hote), nil, delaiCommande)
+			annuler := commeRoot(scriptAnnulerVersion, base, d.Version, hote)
+			if cfg.Methode == "compose" {
+				annuler = commeRoot(scriptAnnulerCompose, base, d.Version, cfg.Dossier, nomCompose(d.Projet, d.Env))
+			}
+			_, _ = executerSSH(context.WithoutCancel(ctx), x.c, annuler, nil, delaiDeploiement)
 		}
 	}
 	for _, id := range d.Serveurs {
-		bloc, err := s.blocCaddyEnv(d.Projet, d.Env, id, racine)
-		if err != nil {
-			annulerTout()
-			return err
+		script, args, entree := scriptPreparerCompose, []string{somme, base, d.Version, cfg.Dossier, nomCompose(d.Projet, d.Env), genere}, envCompose
+		if cfg.Methode == "statique" {
+			bloc, err := s.blocCaddyEnv(d.Projet, d.Env, id, racine)
+			if err != nil {
+				annulerTout()
+				return err
+			}
+			script, args, entree = scriptPreparer, []string{somme, base, d.Version, cfg.Dossier, hote}, bloc
 		}
-		c, err := s.preparerVersion(ctx, l, id, archive, somme, base, d.Version, cfg.Dossier, hote, bloc, d.ID, g, d.Commit)
+		c, err := s.preparerVersion(ctx, l, id, archive, d.ID, g, d.Commit, base, d.Version, script, args, entree)
 		if err != nil {
 			annulerTout()
 			return fmt.Errorf("%s: %w; nothing was switched", id, err)
@@ -333,17 +360,22 @@ func (s *Serveur) deployerStatique(ctx context.Context, p Projet, e Environnemen
 			return fmt.Errorf("%s: switch: %w", x.id, err)
 		}
 	}
+	recharger := scriptRecharger
+	if cfg.Methode == "compose" { // the containers already run the release
+		recharger = scriptNettoyer
+	}
 	for _, x := range prets {
-		if err := echecSSH(executerSSH(ctx, x.c, commeRoot(scriptRecharger, base, fmt.Sprint(versionsGardees)), nil, delaiDeploiement)); err != nil {
+		if err := echecSSH(executerSSH(ctx, x.c, commeRoot(recharger, base, fmt.Sprint(versionsGardees)), nil, delaiDeploiement)); err != nil {
 			return fmt.Errorf("%s: %w", x.id, err)
 		}
 	}
 	return nil
 }
 
-// preparerVersion: on server id, the archive sent (or with g, the commit fetched there by git), checked and
-// extracted, the site file written and validated; the connection stays open for the switch (closed on failure).
-func (s *Serveur) preparerVersion(ctx context.Context, l []ServeurInventaire, id, archive, somme, base, version, dossier, hote, bloc, nom string, g *sourceGit, commit string) (*ssh.Client, error) {
+// preparerVersion: on server id, the archive sent (or with g, the commit fetched there by git), then script run
+// as root with the archive's remote path and args, entree on its standard input; the connection stays open for
+// the switch (closed on failure).
+func (s *Serveur) preparerVersion(ctx context.Context, l []ServeurInventaire, id, archive, nom string, g *sourceGit, commit, base, version, script string, args []string, entree string) (*ssh.Client, error) {
 	i := slices.IndexFunc(l, func(x ServeurInventaire) bool { return x.ID == id })
 	if i < 0 {
 		return nil, errServeurInconnu
@@ -359,7 +391,7 @@ func (s *Serveur) preparerVersion(ctx context.Context, l []ServeurInventaire, id
 		distant, err = envoyerArchive(ctx, c, archive, nom)
 	}
 	if err == nil {
-		err = echecSSH(executerSSH(ctx, c, commeRoot(scriptPreparer, distant, somme, base, version, dossier, hote), strings.NewReader(bloc), delaiDeploiement))
+		err = echecSSH(executerSSH(ctx, c, commeRoot(script, append([]string{distant}, args...)...), strings.NewReader(entree), delaiDeploiement))
 	}
 	if err != nil {
 		c.Close()
