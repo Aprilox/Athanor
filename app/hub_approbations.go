@@ -401,6 +401,11 @@ func (s *Serveur) notifierApprobation(x Approbation) {
 	if !s.approbations.ANotifier(x.Projet) { // C29: the next ones are in For you, without a ping each
 		return
 	}
+	s.notifierAppareils(s.messageApprobation(x))
+}
+
+// messageApprobation: the notification of an approval, as the paired devices receive it.
+func (s *Serveur) messageApprobation(x Approbation) MessagePush {
 	quoi := s.textePush("appr")
 	if x.Action == "demander_acces" {
 		quoi = s.textePush("appr_acces")
@@ -413,7 +418,7 @@ func (s *Serveur) notifierApprobation(x Approbation) {
 	if x.Action == actionPlanServeur { // "Plan for web-1", the plan's summary below
 		titre, texte = fmt.Sprintf(s.textePush("appr_plan"), cmp.Or(x.Details["nom"], x.Details["serveur"])), x.Projet+" · "+x.Raison
 	}
-	s.notifierAppareils(MessagePush{Titre: titre, Texte: texte, URL: "/#pourvous", Tag: "appr-" + x.ID})
+	return MessagePush{Titre: titre, Texte: texte, URL: "/#pourvous", Tag: "appr-" + x.ID}
 }
 
 // exigerAccord (I6): an action on prod or that destroys data waits for the owner's accord, unless the
