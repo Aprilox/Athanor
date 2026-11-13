@@ -1930,18 +1930,23 @@ document.addEventListener("click", (ev) => {
 // Tab leaves the field: the list goes too
 document.addEventListener("focusout", (ev) => { if (ev.target.id === "accueil-texte" && etat.mentionListe) fermerListeMentions(); });
 pages.accueil = async () => {
-  const [d, sugg] = await Promise.all([api("hub"), api("mentions").catch(() => ({}))]), modules = d.modules || [];
+  const [d, sugg, mis] = await Promise.all([api("hub"), api("mentions").catch(() => ({})), api("missions").catch(() => ({}))]), modules = d.modules || [];
+  // the card shown: the one followed in this window, else the newest still being prepared or proposed
+  const lm = mis.missions || [], vue = etat.missionVue, courante = (vue && lm.find((x) => x.id === vue.mission.id)) || lm.find((x) => ACTIVE_MISSION.includes(x.etat));
+  etat.missionVue = courante ? await api("missions/" + encodeURIComponent(courante.id)).catch(() => null) : null;
+  clearTimeout(minuterieMission);
+  if (etat.missionVue && travailleMission(etat.missionVue)) minuterieMission = setTimeout(lireMissionVue, 2000);
   etat.hubSig = JSON.stringify([modules, d.elements || []]); rendreMenu(modules);
   etat.mentionsSugg = sugg.mentions || []; etat.mentionListe = null;
-  const projet = etat.vue && etat.vue.projet;
   return `<div class="accueil">
     <form class="bloc accueil-barre" id="accueil-form">
       <label for="accueil-texte" class="accueil-titre">${t("What do you want to do?")}</label>
       <div class="ligne m0"><div class="champ-mentions croit" id="accueil-champ"><span id="accueil-puces" class="puces-mentions">${pucesMentions()}</span><input type="text" id="accueil-texte" class="croit" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="accueil-liste" aria-describedby="accueil-aide" placeholder="${h(t("Say it in one sentence…"))}"></div><button type="submit" class="btn btn-primaire">${t("Send")}</button></div>
       <ul id="accueil-liste" class="liste-mentions" role="listbox" aria-label="${h(t("Mentions"))}" hidden></ul>
       <div class="ligne m0 puces-suggestions" id="accueil-sugg" role="group" aria-label="${h(t("Add to your request"))}">${suggestionsMentions()}</div>
-      <div class="muet petit" id="accueil-aide">${t("Type @ to name a project, a server or a vault key.")} ${projet ? h(t("Opens the chat of {0} with your text: nothing is sent before you press Send there.", [projet.nom])) : t("No project yet: opens a new project with your text as its request.")}</div>
+      <div class="muet petit" id="accueil-aide">${t("Type @ to name a project, a server or a vault key.")} ${t("The orchestrator prepares a mission card first: nothing starts before you press Launch.")}</div>
     </form>
+    <div id="mission-zone" aria-live="polite">${zoneMission()}</div>
     <div class="grille-hub">${modules.filter((m) => ((m.resume || {}).stats || []).length).map(tuileModule).join("")}</div>
     ${blocEnCours(d.elements || [], modules)}
     ${modules.some((m) => m.id === "missions") ? "" : `<section class="bloc missions"><h2>${t("Missions")}</h2>
@@ -1949,13 +1954,105 @@ pages.accueil = async () => {
     </section>`}
   </div>`;
 };
-// the bar's text goes to the chat of the current project (or to a new project's request) through memory,
-// never through the hash, and is only put in the field: the user sends it there
-function envoyerAccueil() {
+// M156: Send creates a mission; its card shows under the bar (DESIGN §Missions). etat.missionVue = GET /api/missions/{id}.
+const ACTIVE_MISSION = ["preparation", "proposee"];
+const APPROBATIONS_PREVUES = { mise_en_prod: "Putting {0} in production", plan_serveurs: "The Servers plan of {0}", deploiement: "Each deployment to {0}", durcissement: "Hardening the server {0}", deverrouiller_coffre: "Unlocking the infra vault" };
+const POLITIQUES_MISSION = [["prod", "Ask me for production", "Production and its servers' plans wait for your approval."],
+  ["tout", "Ask me for everything", "Every Servers plan and every deployment waits for your approval."], ["autonome", "Autonomous", "Only putting in production waits for your approval."]];
+const travailleMission = (d) => d.orchestrateur || d.mission.etat === "preparation";
+const heuresMission = (m) => m < 90 ? `${m} min` : `${Math.round(m / 60)} h`;
+function carteMission(d) {
+  const m = d.mission, c = m.carte, ed = etat.missionEdition && etat.missionEdition.id === m.id ? etat.missionEdition : null;
+  const nomServeur = (r) => ((etat.mentionsSugg || []).find((x) => x.type === "serveur" && x.ref === r) || {}).nom || r;
+  const liste = (l) => l && l.length ? `<ul class="mis-puces">${l.map((x) => `<li>${h(x)}</li>`).join("")}</ul>` : `<span class="muet">—</span>`;
+  const e = c.estimation || {}, actif = !travailleMission(d) && m.etat === "proposee", dis = ed ? "" : " disabled";
+  return `<div class="mis-voies">
+      <div class="mis-voie"><h3>${t((etat.hubModules || []).find((m) => m.id === "dev")?.nom || "dev")}</h3><p class="m0"><b>${h(c.projet.nom)}</b> <span class="etiquette">${t(c.projet.nouveau ? "New project" : "Existing project")}</span></p><p class="mis-brief">${h(c.dev.brief || "")}</p></div>
+      <div class="mis-voie"><h3>${t("Servers")}</h3>${c.avertissement_serveurs ? `<p class="mis-avert" role="note">⚠ ${t("Native Windows mode: the Servers lane needs WSL, or Force on the project's Access page.")}</p>` : ""}<p class="mis-brief">${h(c.serveurs.brief || t("Nothing to prepare on the servers."))}</p></div>
+    </div>
+    <div class="mis-grille">
+      <div><h3>${t("Environments")}</h3>${(c.envs || []).length ? `<ul class="mis-envs">${c.envs.map((x) => `<li><b>${h(x.nom)}</b> <span class="mis-url">${h(x.url || "—")}</span> <span class="muet petit">${h(t(PROTECTIONS_ENV[x.protection] || x.protection))}</span></li>`).join("")}</ul>` : `<span class="muet">—</span>`}
+        <h3>${t("Access used")}</h3>${(c.acces || []).length ? `<ul class="mis-acces">${c.acces.map((a, i) => `<li><label class="case"><input type="checkbox" data-mis-acces="${i}"${(ed ? !ed.decoches.includes(i) : !a.decoche) ? " checked" : ""}${dis}> <b>${h(a.entree)}</b></label> ${a.type ? `<span class="etiquette">${h(a.type)}</span>` : ""}${a.a_remplir ? ` <span class="badge mis-remplir">${t("to fill")}</span>` : ""} <span class="muet petit">${t("used for {0}", [h(nomServeur(a.pour))])}</span></li>`).join("")}</ul>` : `<span class="muet">${t("No vault entry.")}</span>`}</div>
+      <div><h3>${t("I will ask for your approval for")}</h3>${liste((c.approbations || []).map((a) => t(APPROBATIONS_PREVUES[a.type] || a.type, [a.cible || ""])))}
+        <h3>${t("What will be touched")}</h3><dl class="fiche mis-touche">
+          <dt>${t("Servers")}</dt><dd>${liste(c.touche.serveurs)}</dd><dt>${t("DNS names")}</dt><dd>${liste(c.touche.dns)}</dd>
+          <dt>${t("Files")}</dt><dd>${liste(c.touche.fichiers)}</dd><dt>${t("Folder")}</dt><dd>${c.touche.dossier ? h(c.touche.dossier) : t("A new folder for the project")}</dd></dl>
+        <h3>${t("Estimate")}</h3><p class="m0">${t("{0} to {1} of work, about {2} milestones", [heuresMission(e.minutes_min), heuresMission(e.minutes_max), e.jalons])}</p>
+        <p class="muet petit m0">${e.cout_max ? t("About {0} $ to {1} $ of quota (list price)", [e.cout_min, e.cout_max]) : t("Quota unknown until a first cycle is measured on this PC.")}</p></div>
+    </div>
+    <fieldset class="mis-politique"><legend>${t("Policy")}</legend>${POLITIQUES_MISSION.map(([v, l, aide]) => `<label class="radio"><input type="radio" name="mis-politique" value="${v}"${(ed ? ed.politique : m.politique) === v ? " checked" : ""}${dis}> <span><b>${t(l)}</b><br><span class="muet petit">${t(aide)}</span></span></label>`).join("")}</fieldset>
+    ${ed ? `<label for="mis-consigne" class="petit">${t("Ask for a change (optional)")}</label><textarea id="mis-consigne" rows="2" maxlength="2000" placeholder="${h(t("For example: put the dev on the home server"))}">${h(ed.consigne)}</textarea>
+      <div class="ligne"><button type="button" class="btn btn-primaire" data-mis="appliquer">${t("Apply")}</button><button type="button" class="btn" data-mis="fermer">${t("Cancel")}</button></div>`
+    : actif ? `<div class="ligne"><button type="button" class="btn" data-mis="modifier">${t("Edit")}</button><button type="button" class="btn btn-primaire" data-mis="lancer">${t("Launch")}</button><span class="espace"></span><button type="button" class="btn" data-mis="annuler">${t("Cancel the mission")}</button></div>` : ""}`;
+}
+function zoneMission() {
+  const d = etat.missionVue; if (!d) return "";
+  const m = d.mission, q = (m.questions || []).find((x) => !x.reponse), fin = (m.historique || []).slice(-1)[0] || {};
+  if (m.etat === "echec") return `<section class="bloc mis-carte mis-echec" role="alert"><b>${t("The orchestrator could not prepare the card.")}</b> <span class="muet">${h(fin.detail || "")}</span>
+    <div class="ligne"><button type="button" class="btn btn-petit" data-mis="oublier">${t("Close")}</button></div></section>`;
+  if (!ACTIVE_MISSION.includes(m.etat)) return m.etat === "annulee" ? "" : `<section class="bloc mis-carte"><b>${h(t(ETATS_MISSION[m.etat] || m.etat))}</b> · ${h((m.carte || {}).titre || "")} <a href="#missions">${t("See the missions")} →</a></section>`;
+  const prep = travailleMission(d) && !q ? `<div class="mis-prep" role="status"><span class="mis-anim" aria-hidden="true"></span>${t("The orchestrator is preparing the card…")}<span class="espace"></span>${m.carte ? "" : `<button type="button" class="btn btn-petit" data-mis="annuler">${t("Cancel")}</button>`}</div>` : "";
+  const question = q ? `<div class="mis-question" role="group" aria-labelledby="mis-q-texte"><b>${t("The orchestrator asks")}</b><p id="mis-q-texte" class="m0">${h(q.texte)}</p>
+    ${(q.choix || []).length ? `<div class="ligne m0">${q.choix.map((c, i) => `<button type="button" class="btn btn-petit" data-mis-choix="${i}">${h(c)}</button>`).join("")}</div>` : ""}
+    <form class="ligne m0" id="mis-q-form" data-question="${h(q.id)}"><input type="text" id="mis-q-libre" class="croit" maxlength="1000" aria-label="${h(t("Your answer"))}" placeholder="${h(t("Or write your answer…"))}" value="${h(etat.missionReponse || "")}"><button type="submit" class="btn">${t("Answer")}</button></form>
+    ${m.carte ? "" : `<div class="ligne m0"><span class="espace"></span><button type="button" class="btn btn-petit" data-mis="annuler">${t("Cancel the mission")}</button></div>`}</div>` : "";
+  return `<section class="bloc mis-carte${prep && m.carte ? " mis-attente" : ""}" aria-labelledby="mis-titre">
+    <div class="ligne m0 tuile-tete"><h2 class="m0" id="mis-titre">${h((m.carte || {}).titre || t("New mission"))}</h2><span class="badge mis-etat-${h(m.etat)}">${h(t(ETATS_MISSION[m.etat] || m.etat))}</span></div>
+    <p class="muet petit mis-phrase">${h(m.phrase)}</p>${prep}${question}${m.carte ? carteMission(d) : ""}</section>`;
+}
+let minuterieMission;
+function majZoneMission() {
+  const z = $("#mission-zone"); if (!z) return;
+  garderFocus(z, () => { z.innerHTML = zoneMission(); });
+  clearTimeout(minuterieMission);
+  const d = etat.missionVue;
+  if (d && travailleMission(d) && ACTIVE_MISSION.includes(d.mission.etat)) minuterieMission = setTimeout(lireMissionVue, 2000); // the state is read every 2 s
+}
+async function lireMissionVue() {
+  const d = etat.missionVue;
+  if (!d || etat.page !== "accueil" || !$("#mission-zone")) return;
+  try { etat.missionVue = await api("missions/" + encodeURIComponent(d.mission.id)); } catch { /* next try in 2 s */ }
+  majZoneMission();
+}
+async function actionMission(chemin, corps) {
+  const d = etat.missionVue; if (!d) return null;
+  const r = await action(api("missions/" + encodeURIComponent(d.mission.id) + "/" + chemin, "POST", corps || {}), "");
+  if (r && r.mission) { etat.missionVue = { mission: r.mission, orchestrateur: chemin === "repondre" || !!(corps && corps.consigne) }; majZoneMission(); }
+  return r;
+}
+document.addEventListener("click", async (ev) => {
+  const b = ev.target.closest("[data-mis], [data-mis-choix]"), d = etat.missionVue; if (!b || !d) return;
+  const m = d.mission, a = b.dataset.mis;
+  if (b.dataset.misChoix !== undefined) { const q = m.questions.find((x) => !x.reponse); etat.missionReponse = ""; await actionMission("repondre", { question: q.id, choix: q.choix[+b.dataset.misChoix] }); return; }
+  if (a === "modifier") { etat.missionEdition = { id: m.id, decoches: m.carte.acces.map((x, i) => x.decoche ? i : -1).filter((i) => i >= 0), politique: m.politique, consigne: "" }; majZoneMission(); $("#mission-zone input[type=checkbox], #mission-zone input[type=radio]")?.focus(); }
+  else if (a === "fermer") { etat.missionEdition = null; majZoneMission(); }
+  else if (a === "appliquer") {
+    const ed = etat.missionEdition, consigne = ed.consigne.trim();
+    const r = await actionMission("modifier", { acces_decoches: ed.decoches.map((i) => ({ entree: m.carte.acces[i].entree, pour: m.carte.acces[i].pour })), politique: ed.politique, ...(consigne ? { consigne } : {}) });
+    if (r) { etat.missionEdition = null; majZoneMission(); }
+  } else if (a === "lancer") await actionMission("lancer");
+  else if (a === "annuler") { if (await choisir(t("Cancel this mission? Nothing has been built or deployed yet."), [{ id: "non", texte: t("Keep it") }, { id: "oui", texte: t("Cancel the mission"), danger: true }]) === "oui") await actionMission("annuler"); }
+  else if (a === "oublier") { etat.missionVue = null; majZoneMission(); }
+});
+document.addEventListener("change", (ev) => {
+  const ed = etat.missionEdition; if (!ed) return;
+  if (ev.target.dataset.misAcces !== undefined) { const i = +ev.target.dataset.misAcces; ed.decoches = ev.target.checked ? ed.decoches.filter((x) => x !== i) : [...ed.decoches, i]; }
+  else if (ev.target.name === "mis-politique") ed.politique = ev.target.value;
+});
+document.addEventListener("input", (ev) => { if (ev.target.id === "mis-consigne" && etat.missionEdition) etat.missionEdition.consigne = ev.target.value; else if (ev.target.id === "mis-q-libre") etat.missionReponse = ev.target.value; });
+document.addEventListener("submit", async (ev) => {
+  if (ev.target.id !== "mis-q-form") return;
+  ev.preventDefault();
+  const texte = ($("#mis-q-libre").value || "").trim(); if (!texte) return;
+  if (await actionMission("repondre", { question: ev.target.dataset.question, texte })) etat.missionReponse = "";
+});
+async function envoyerAccueil() {
   const texte = ($("#accueil-texte").value || "").trim(); if (!texte) return;
-  const page = etat.vue && etat.vue.projet ? "chat" : "nouveau";
-  etat.preRempli = { page, texte }; etat.accueilTexte = "";
-  location.hash = "#" + page;
+  const r = await action(api("missions", "POST", { phrase: texte, mentions: (etat.accueilMentions || []).map((m) => ({ type: m.type, ref: m.ref })) }), "");
+  if (!r) return;
+  etat.accueilTexte = ""; etat.accueilMentions = []; $("#accueil-texte").value = ""; majMentions();
+  etat.missionVue = { mission: r.mission, orchestrateur: r.mission.etat === "preparation" }; etat.missionEdition = null;
+  majZoneMission();
 }
 document.addEventListener("submit", (ev) => { if (ev.target.id === "accueil-form") { ev.preventDefault(); envoyerAccueil(); } });
 document.addEventListener("input", (ev) => { if (ev.target.id === "accueil-texte") { etat.accueilTexte = ev.target.value; chercherMentions(ev.target); } });

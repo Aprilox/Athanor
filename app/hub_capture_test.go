@@ -149,6 +149,38 @@ func TestCaptureHub(t *testing.T) {
 			f.Envs["projet-00/dev"] = SanteEnv{Etat: "alerte", T: "2026-11-12T09:15:00Z", Problemes: []ProblemeSante{{Code: "certificat", Args: []any{10}}}}
 		})
 	})
+	// mission-carte-* (M156): the bakery's card, proposed (?on=1), with an open question (?question=1); removed otherwise
+	t.Cleanup(func() { _ = os.RemoveAll(dossierMissions()) })
+	mux.HandleFunc("POST /test/mission", func(w http.ResponseWriter, r *http.Request) {
+		_ = os.RemoveAll(dossierMissions())
+		if r.URL.Query().Get("on") == "" {
+			return
+		}
+		ctx := s.contexteCarte()
+		c := CarteMission{Titre: "Site vitrine de la boulangerie Martin", Projet: ProjetCarte{Nom: "boulangerie-martin", Nouveau: true},
+			Dev: BriefCarte{"Un site vitrine : la boutique, les horaires, les pains du jour et un formulaire de commande pour le retrait."},
+			Envs: []EnvCarte{{Nom: "dev", URL: "https://dev.boulangerie-martin.fr", Protection: "auth_proxy", Serveurs: []string{"c0ffee02"}},
+				{Nom: "prod", URL: "https://boulangerie-martin.fr", Protection: "aucune", Serveurs: []string{"c0ffee01"}}},
+			Serveurs: BriefCarte{"Noms DNS chez Cloudflare, certificats, proxy Caddy, mot de passe devant dev, pare-feu."},
+			Acces: []AccesCarte{{Entree: "CLOUDFLARE_API_TOKEN", Pour: "boulangerie-martin/prod"}, {Entree: "SSH_VPS_PROD", Pour: "c0ffee01"},
+				{Entree: "STRIPE_SECRET_KEY", Pour: "boulangerie-martin"}, {Entree: "SMTP_PASSWORD", Pour: "boulangerie-martin"}},
+			JalonsEstimes: 8}
+		if err := validerCarte(&c, ctx); err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		b, _ := json.Marshal(calculerCarte(c, "prod", ctx))
+		cree := time.Now().UTC().Format(formatCree)
+		m := Mission{ID: "capture01", Phrase: "Un site vitrine pour la boulangerie Martin sur @VPS production, dev protégée, prod sur boulangerie-martin.fr",
+			Mentions: MentionsMission{Serveurs: []string{"c0ffee01"}, Nouveau: true}, Etat: "proposee", Carte: b, Politique: "prod",
+			Voies: []VoieMission{}, Questions: []QuestionMission{}, Historique: []EvenementMission{{T: cree, Etat: "proposee"}}, Cree: cree}
+		if r.URL.Query().Get("question") != "" {
+			m.Questions = append(m.Questions, QuestionMission{ID: "q1", Texte: "Quel serveur pour l'environnement de dev ?", Choix: []string{"Serveur maison", "VPS production"}, Cree: cree})
+		}
+		if err := enregistrerMission(m); err != nil {
+			http.Error(w, err.Error(), 500)
+		}
+	})
 	// plan-serveur-* (M91): two Servers plans to decide, created after the appr-* screenshots so their counts stay
 	mux.HandleFunc("POST /test/plans", func(w http.ResponseWriter, r *http.Request) {
 		if l, _ := s.approbations.Liste(); slices.ContainsFunc(l, func(x Approbation) bool { return x.Action == actionPlanServeur }) {
