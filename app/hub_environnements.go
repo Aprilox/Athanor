@@ -243,6 +243,24 @@ func (a *Acces) HotesProd() map[string]string {
 	return r
 }
 
+// Hotes: host name → "project/env" for every environment with a URL, all projects.
+func (a *Acces) Hotes() map[string]string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	r := map[string]string{}
+	for nomP, p := range a.f.Projets {
+		if p == nil {
+			continue
+		}
+		for nomE, e := range p.Environnements {
+			if h := hoteEnv(e); h != "" {
+				r[h] = nomP + "/" + nomE
+			}
+		}
+	}
+	return r
+}
+
 // NoterCertificat records environment nom's origin certificate (its vault entry and expiry).
 func (a *Acces) NoterCertificat(projet, nom, id, expire string) error {
 	return a.modifier(func(f *fichierAcces) error {
