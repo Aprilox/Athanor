@@ -822,7 +822,7 @@ $("#page").addEventListener("click", cliqueProjet);
 // the approval's card on For you; the others are sent at once
 async function deciderDepuisCloche(ap, x, b) {
   const r = await api("hub/approbations").catch(() => ({}));
-  if ((ap.action === "demander_acces" && x.id !== "refuser") || r.mot_de_passe_requis || r.appareil_requis) {
+  if (((ap.action === "demander_acces" || (ap.details || {}).seule_cle === "oui") && x.id !== "refuser") || r.mot_de_passe_requis || r.appareil_requis) {
     fermerNotifs(); etat.apprCible = ap.id;
     return allerProjet(ap.projet, "pourvous");
   }
@@ -2752,8 +2752,14 @@ function blocPlan(x, p) {
       <div class="plan-args">${argumentsLisibles(e.lisible)}</div><div class="pv-details m0">${h(e.durcir ? t(e.pourquoi) : e.pourquoi)}</div>
       ${(e.sauvegarde || []).length ? `<div class="petit plan-args">${h(t("Backed up first: {0}", [e.sauvegarde.join(", ")]))}</div>` : ""}${e.sans_sauvegarde ? `<div class="petit plan-args">${h(t("No backup: {0}", [e.durcir ? t(e.sans_sauvegarde) : e.sans_sauvegarde]))}</div>` : ""}${e.archive ? `<div class="petit plan-args">${h(t("Archive made: {0}", [e.archive]))}</div>` : ""}</li>`;
   }).join("");
+  // C73: only Athanor's key gets in after this hardening: said, its public key exported, a box to tick
+  const pub = p.seule_cle ? p.seule_cle + " athanor" : "";
+  const seule = pub && x.id ? `<p class="petit attention">⚠ ${h(t("Only Athanor's key will get into this server: passwords are cut and no other key lets root in. Put your own public key in root's ~/.ssh/authorized_keys first (hardening copies it to athanor), then refuse this plan and ask for it again; or keep a copy of Athanor's public key below."))}</p>
+    <label class="champ"><span>${t("Public key")}</span><textarea readonly rows="2" class="code" data-seule-pub>${h(pub)}</textarea></label>
+    <div class="ligne m0"><button type="button" class="btn btn-petit" data-seule-copier>${t("Copy")}</button><a class="btn btn-petit" download="athanor-${h(p.serveur)}.pub" href="data:text/plain;charset=utf-8,${encodeURIComponent(pub + "\n")}">${t("Download")}</a></div>
+    <label class="ligne m0 mt-1"><input type="checkbox" data-appr-seule> <span>${h(t("I know that only Athanor's key will get in after this plan"))}</span></label>` : "";
   return `<div class="pv-details">${h(p.agent === "durcissement" ? t(p.resume) : p.resume)}</div><ol class="plan-etapes">${etapes}</ol>
-    ${p.critique ? blocCritique(p.critique) : ""}`;
+    ${p.critique ? blocCritique(p.critique) : ""}${seule}`;
 }
 // the security critic's verdict (M98): reading, no risk found, or its risks one per line
 function blocCritique(c) {
@@ -2820,11 +2826,17 @@ $("#page").addEventListener("click", async (ev) => {
   toast(t("Rule removed: the next requests ask you again."), "ok");
   if (etat.page === "pourvous") rendrePage();
 });
+$("#page").addEventListener("click", (ev) => {
+  const b = ev.target.closest("[data-seule-copier]"), z = b && b.closest("[data-appr]")?.querySelector("[data-seule-pub]");
+  if (z) navigator.clipboard.writeText(z.value).then(() => toast(t("Copied."), "ok"));
+});
 $("#page").addEventListener("click", async (ev) => {
   const b = ev.target.closest("[data-appr-decision]"); if (!b) return;
   const c = b.closest("[data-appr]"), q = (s) => c.querySelector(s), decision = b.dataset.apprDecision;
   const corps = { id: c.dataset.appr, decision, entree: q("[data-appr-entree]")?.value || "", env: q("[data-appr-env]")?.value || "", variable: (q("[data-appr-var]")?.value || "").trim(), mot_de_passe: q("[data-appr-mdp]")?.value || "" };
   if (decision !== "refuser" && q("[data-appr-entree]") && !corps.entree) { toast(t("Choose a project key (code) of the vault for this access"), "erreur"); q("[data-appr-entree]").focus(); return; }
+  if (q("[data-appr-seule]")) corps.seule_cle_comprise = q("[data-appr-seule]").checked;
+  if (decision !== "refuser" && corps.seule_cle_comprise === false) { toast(t("After this plan only Athanor's key gets into the server: tick the box that says you know it first"), "erreur"); q("[data-appr-seule]").focus(); return; }
   const ap = ((etat.hub || {}).alertes || []).map((a) => a.approbation).find((x) => x && x.id === corps.id);
   if (decision === "toujours" && ap && !(await confirmerToujours(ap))) return;
   b.disabled = true;

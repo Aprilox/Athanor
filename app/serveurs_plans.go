@@ -31,6 +31,7 @@ const (
 var (
 	errPlanSansRegle  = erreurEntree("This plan has a destructive step or targets a prod server: it is accepted once, never with a rule")
 	errBuildSansRegle = erreurEntree("This deployment runs a build whose files changed: it is accepted once, never with a rule")
+	errSeuleCle       = erreurEntree("After this plan only Athanor's key gets into the server: tick the box that says you know it first")
 )
 
 // EtapePlan: one step as the code classed it; Arguments are canonical (argsOutilServeur marshalled).
@@ -67,7 +68,8 @@ type PlanServeur struct {
 	Resume   string        `json:"resume"`
 	Cree     string        `json:"cree"`
 	Expire   string        `json:"expire"`
-	Critique *CritiquePlan `json:"critique,omitempty"` // the security critic's verdict (M98), a task's plan only
+	Critique *CritiquePlan `json:"critique,omitempty"`  // the security critic's verdict (M98), a task's plan only
+	SeuleCle string        `json:"seule_cle,omitempty"` // C73: hardening that leaves only this key (Athanor's public one) to get in
 	Etapes   []EtapePlan   `json:"etapes"`
 }
 

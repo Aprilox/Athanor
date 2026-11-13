@@ -471,6 +471,7 @@ func (s *Serveur) apiApprobationDecider(w http.ResponseWriter, r *http.Request) 
 	var c struct {
 		ID, Decision, Entree, Env, Variable, Projet, Action, Nom string
 		MotDePasse                                               string `json:"mot_de_passe"`
+		SeuleCleComprise                                         bool   `json:"seule_cle_comprise"`
 	}
 	if err := lireCorps(r, &c); err != nil {
 		s.erreur(w, http.StatusBadRequest, string(errCoffreRequete))
@@ -492,6 +493,10 @@ func (s *Serveur) apiApprobationDecider(w http.ResponseWriter, r *http.Request) 
 			s.ecrireAudit(LigneAudit{Type: "evenement", De: qui, Vers: "hub", Projet: c.Projet, Env: c.Env, Action: "règle retirée: " + c.Action, Resultat: "redemander"})
 			s.ecrireJSON(w, map[string]any{"ok": true})
 		}
+		return
+	}
+	if x, ok := s.approbations.Lire(c.ID); ok && c.Decision != "refuser" && x.Details["seule_cle"] == "oui" && !c.SeuleCleComprise { // C73
+		refus(http.StatusConflict, errSeuleCle)
 		return
 	}
 	if code, err := s.preuvePresence(r, c.MotDePasse); err != nil { // C24 C25: WSL mode too

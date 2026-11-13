@@ -16,6 +16,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/crypto/ssh"
@@ -30,9 +31,11 @@ const (
 // etapesDurcir: the steps' keys, in the order they run (the user first: PermitRootLogin no needs it).
 var etapesDurcir = []string{"utilisateur", "cles", "root", "maj", "heure", "pare_feu", "docker", "caddy"}
 
-// scriptEtatDurci: read only; prints sudo=non (no root, no sudo -n), apt=non, include=non when hardening
-// cannot run, then key=oui|non for each step.
-const scriptEtatDurci = preludeRoot + `[ "$(id -u)" = 0 ] || [ -n "$S" ] || { echo sudo=non; exit 0; }
+// scriptEtatDurci: read only; $1 Athanor's public key, then the ports to keep open. Prints sudo=non (no root,
+// no sudo -n), apt=non, include=non when hardening cannot run, then key=oui|non for each step, and proprio=oui
+// when a key other than Athanor's lets someone in after the plan (C73: root's keys are copied when it is root).
+const scriptEtatDurci = preludeRoot + `K=$1; shift
+[ "$(id -u)" = 0 ] || [ -n "$S" ] || { echo sudo=non; exit 0; }
 command -v apt-get >/dev/null 2>&1 || echo apt=non
 grep -Eqi '^[[:space:]]*Include[[:space:]]+/etc/ssh/sshd_config\.d' /etc/ssh/sshd_config 2>/dev/null || echo include=non
 T=$($S sshd -T 2>/dev/null | tr 'A-Z' 'a-z'); U=$($S ufw status verbose 2>/dev/null)
@@ -47,8 +50,9 @@ c_heure() { for u in systemd-timesyncd chrony chronyd ntp ntpsec openntpd; do sy
 c_pare_feu() { printf '%s\n' "$U" | grep -q '^Status: active' && printf '%s\n' "$U" | grep -q 'deny (incoming)' || return 1
   for p in "$@"; do printf '%s\n' "$U" | grep -Eq "^$p(/tcp)? +ALLOW IN" || return 1; done; }
 c_ufw() { command -v ufw; }
+c_proprio() { { [ "$(id -u)" = 0 ] && cat /root/.ssh/authorized_keys; cat "$HOME/.ssh/authorized_keys"; } 2>/dev/null | grep -v '^[[:space:]]*#' | grep -vF "$K" | grep -q '[[:alnum:]]'; }
 c_docker() { $S grep -q '^# BEGIN ATHANOR DOCKER-USER' /etc/ufw/after.rules; }
-for k in utilisateur cles root maj heure pare_feu docker ufw caddy; do
+for k in utilisateur cles root maj heure pare_feu docker ufw caddy proprio; do
   if [ $k = caddy ]; then f() { command -v caddy; }; else f() { c_$k "$@"; }; fi
   if ( f "$@" ) >/dev/null 2>&1; then echo "$k=oui"; else echo "$k=non"; fi
 done`
@@ -58,16 +62,23 @@ const (
 	preludeApt = `export DEBIAN_FRONTEND=noninteractive
 apt() { o=$(apt-get -q -y -o DPkg::Lock::Timeout=120 "$@" 2>&1) || { printf '%s\n' "$o" | tail -n 20; exit 1; }; }
 `
-	// $1 the user, $2 Athanor's public key (type and base64)
+	// $1 the user, $2 Athanor's public key (type and base64), $3 the user Athanor connects as. C73: the keys of
+	// root and of $3 are copied too, so the owner who came in with them still does once root is refused.
 	scriptUtilisateurDurci = preludeApt + `command -v sudo >/dev/null 2>&1 || { apt update; apt install sudo; }
 id -u "$1" >/dev/null 2>&1 || useradd -m -s /bin/bash "$1" || exit 1
 H=$(getent passwd "$1" | cut -d: -f6); G=$(id -gn "$1")
 install -d -m 700 -o "$1" -g "$G" "$H/.ssh" && touch "$H/.ssh/authorized_keys" &&
-{ grep -qF "$2" "$H/.ssh/authorized_keys" || printf '%s athanor\n' "$2" >> "$H/.ssh/authorized_keys"; } &&
+{ grep -qF "$2" "$H/.ssh/authorized_keys" || printf '%s athanor\n' "$2" >> "$H/.ssh/authorized_keys"; } || exit 1
+for f in /root/.ssh/authorized_keys "$(getent passwd "$3" | cut -d: -f6)/.ssh/authorized_keys"; do
+  [ -f "$f" ] && [ "$f" != "$H/.ssh/authorized_keys" ] || continue
+  grep -v '^[[:space:]]*#' "$f" | grep -vF "$2" | while IFS= read -r l; do
+    [ -z "$l" ] || grep -qxF "$l" "$H/.ssh/authorized_keys" || printf '%s\n' "$l" >> "$H/.ssh/authorized_keys" || exit 1
+  done || exit 1
+done
 chown "$1:$G" "$H/.ssh/authorized_keys" && chmod 600 "$H/.ssh/authorized_keys" || exit 1
 F=/etc/sudoers.d/90-athanor-$1; printf '%s ALL=(ALL) NOPASSWD:ALL\n' "$1" > "$F.tmp" && chmod 440 "$F.tmp" &&
 visudo -cf "$F.tmp" >/dev/null && mv -f "$F.tmp" "$F" || { rm -f "$F.tmp"; exit 1; }
-echo "user $1 ready: sudo without a password, Athanor's key"`
+echo "user $1 ready: sudo without a password, Athanor's key and the owner's keys of root and $3"`
 	scriptMajDurci = preludeApt + `apt update; apt install unattended-upgrades
 printf 'APT::Periodic::Update-Package-Lists "1";\nAPT::Periodic::Unattended-Upgrade "1";\n' > /etc/apt/apt.conf.d/20auto-upgrades || exit 1
 echo "security updates are installed automatically"`
@@ -106,7 +117,11 @@ func (s *Serveur) lireEtatDurci(ctx context.Context, srv ServeurInventaire) (map
 		return nil, err
 	}
 	defer c.Close()
-	args := []string{}
+	pub, err := s.clePubliqueServeur(srv)
+	if err != nil {
+		return nil, err
+	}
+	args := []string{pub}
 	for _, p := range portsDurci(ctx, c, srv) {
 		args = append(args, strconv.Itoa(p))
 	}
@@ -166,16 +181,11 @@ func (s *Serveur) planDurcissement(srv ServeurInventaire, etat map[string]bool) 
 		return argsOutilServeur{Commande: commeRoot(script, args...), DelaiS: int(delaiCommandeMax / time.Second)}
 	}
 	if !etat["utilisateur"] {
-		cle, err := s.coffre.Valeur(srv.Cle)
+		pub, err := s.clePubliqueServeur(srv)
 		if err != nil {
 			return nil, err
 		}
-		signer, err := ssh.ParsePrivateKey([]byte(cle))
-		if err != nil {
-			return nil, fmt.Errorf("unreadable SSH key: %w", err)
-		}
-		pub := strings.Join(strings.Fields(string(ssh.MarshalAuthorizedKey(signer.PublicKey())))[:2], " ")
-		ajouter("utilisateur", "ssh_commande", "Create the user athanor with sudo and Athanor's key: Athanor stops connecting as root.", root(scriptUtilisateurDurci, utilisateurDurci, pub))
+		ajouter("utilisateur", "ssh_commande", "Create the user athanor with sudo, Athanor's key and the keys that let root in: Athanor stops connecting as root.", root(scriptUtilisateurDurci, utilisateurDurci, pub, srv.Utilisateur))
 	}
 	if !etat["cles"] {
 		ajouter("cles", "fichier_ecrire", "Allow SSH keys only: password logins are cut.", argsOutilServeur{Chemin: fichierClesDurci, Contenu: &[]string{contenuClesDurci}[0], Sudo: true})
@@ -204,10 +214,49 @@ func (s *Serveur) planDurcissement(srv ServeurInventaire, etat map[string]bool) 
 	return l, nil
 }
 
+// clePubliqueServeur: the public key (type and base64) of the vault key Athanor uses for srv.
+func (s *Serveur) clePubliqueServeur(srv ServeurInventaire) (string, error) {
+	cle, err := s.coffre.Valeur(srv.Cle)
+	if err != nil {
+		return "", err
+	}
+	signer, err := ssh.ParsePrivateKey([]byte(cle))
+	if err != nil {
+		return "", fmt.Errorf("unreadable SSH key: %w", err)
+	}
+	return strings.Join(strings.Fields(string(ssh.MarshalAuthorizedKey(signer.PublicKey())))[:2], " "), nil
+}
+
+// verrouDurcir (B78): one hardening request at a time, so two clicks make one plan.
+var verrouDurcir sync.Mutex
+
+// planDurcirEnAttente: the hardening plan of server id still waiting for the owner, if any.
+func (s *Serveur) planDurcirEnAttente(id string) (PlanServeur, bool) {
+	l, _ := s.approbations.Liste()
+	for _, x := range l {
+		if x.Etat == "attente" && x.Action == actionPlanServeur && x.Agent == agentDurcir && x.Details["serveur"] == id {
+			if p, err := s.lirePlan(x.ID); err == nil {
+				return p, true
+			}
+		}
+	}
+	return PlanServeur{}, false
+}
+
 // apiServeurDurcir: POST /api/serveurs/{id} {durcir:true}: {deja:true} when every step is in place, else the
-// plan waiting for the owner's approval.
+// plan waiting for the owner's approval (the one already waiting, if any: B78).
 func (s *Serveur) apiServeurDurcir(w http.ResponseWriter, r *http.Request, id string) {
 	if !s.coffrePret(w) {
+		return
+	}
+	verrouDurcir.Lock()
+	defer verrouDurcir.Unlock()
+	if p, ok := s.planDurcirEnAttente(id); ok {
+		cles := []string{}
+		for _, e := range p.Etapes {
+			cles = append(cles, e.Durcir)
+		}
+		s.ecrireJSON(w, map[string]any{"plan": p.ID, "etapes": cles, "deja_propose": true})
 		return
 	}
 	ctx, fin := context.WithTimeout(context.WithoutCancel(r.Context()), delaiCommande)
@@ -238,8 +287,16 @@ func (s *Serveur) apiServeurDurcir(w http.ResponseWriter, r *http.Request, id st
 	if prod {
 		p.Env = "prod"
 	}
-	ap, err := s.demanderApprobation(Approbation{Projet: p.Projet, Env: p.Env, Agent: agentDurcir, Action: actionPlanServeur, Raison: resumeDurcissement,
-		Details: map[string]string{"serveur": id, "nom": srv.Nom, "classe": classeHaute(etapes), "etapes": strconv.Itoa(len(etapes)), "regle": "non"}})
+	details := map[string]string{"serveur": id, "nom": srv.Nom, "classe": classeHaute(etapes), "etapes": strconv.Itoa(len(etapes)), "regle": "non"}
+	// C73: passwords cut while only Athanor's key gets in: the card says so and asks for a ticked box
+	if !etat["proprio"] && slices.ContainsFunc(etapes, func(e EtapePlan) bool { return e.Durcir == "cles" }) {
+		if p.SeuleCle, err = s.clePubliqueServeur(srv); err != nil {
+			s.erreurServeurs(w, err)
+			return
+		}
+		details["seule_cle"] = "oui"
+	}
+	ap, err := s.demanderApprobation(Approbation{Projet: p.Projet, Env: p.Env, Agent: agentDurcir, Action: actionPlanServeur, Raison: resumeDurcissement, Details: details})
 	if err != nil {
 		s.erreurServeurs(w, err)
 		return

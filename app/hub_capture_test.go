@@ -181,10 +181,13 @@ func TestCaptureHub(t *testing.T) {
 			}
 			regle := map[bool]string{true: "oui", false: "non"}[p.env == "dev" && haut < ClasseDestructrice]
 			ap, err := s.approbations.Demander(Approbation{Projet: pl.Projet, Env: p.env, Mission: pl.Mission, Agent: pl.Agent, Action: actionPlanServeur, Raison: p.resume,
-				Details: map[string]string{"serveur": p.id, "nom": p.nom, "classe": haut.String(), "etapes": fmt.Sprint(len(pl.Etapes)), "regle": regle}})
+				Details: map[string]string{"serveur": p.id, "nom": p.nom, "classe": haut.String(), "etapes": fmt.Sprint(len(pl.Etapes)), "regle": regle, "seule_cle": map[bool]string{true: "oui"}[p.env == "prod"]}})
 			if err != nil {
 				http.Error(w, err.Error(), 500)
 				return
+			}
+			if p.env == "prod" { // C73: the card that says only Athanor's key gets in after it
+				pl.SeuleCle = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEcleDeCaptureAthanorPasUneVraieCle0000000000"
 			}
 			pl.ID, pl.Cree, pl.Expire = ap.ID, ap.Cree, ap.Expire
 			if err := s.enregistrerPlan(pl); err != nil {
