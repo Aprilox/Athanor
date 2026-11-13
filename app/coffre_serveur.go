@@ -42,6 +42,7 @@ func (s *Serveur) deverrouillerCoffre(mdp string) {
 		fmt.Fprintln(os.Stderr, "vault import:", err)
 	}
 	s.injecterTous(nil) // files left as they were while the code key was closed
+	s.missionsDeverrouillees()
 }
 
 // fermerCoffreSiPersonne closes the infra key when neither the computer's window nor any remote

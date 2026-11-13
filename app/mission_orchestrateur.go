@@ -205,3 +205,32 @@ func (s *Serveur) executerOrchestrateur(ctx context.Context, e *orchestrateurEnC
 	s.ecrireAudit(LigneAudit{Type: "evenement", De: "hub", Vers: "missions", Projet: prefixeMission + id, Mission: id, Agent: agentOrchestrateur,
 		Action: "orchestrateur terminé", Resultat: issue})
 }
+
+// errPreparationCoupee: an orchestrator's session cut by Athanor's stop, before any card.
+var errPreparationCoupee = errors.New("Athanor stopped while the orchestrator was preparing this mission: nothing was prepared, send the mission again")
+
+// reprendrePreparation (at Athanor's start): mission id's session was cut by the stop (its token is already revoked
+// by revoquerJetonsArretes): its card proposed again, or the mission failed with the reason to send it again.
+func (s *Serveur) reprendrePreparation(id string) {
+	echec := false
+	_, err := modifierMission(id, func(m *Mission) error {
+		if m.Etat != "preparation" {
+			return errMissionInconnue
+		}
+		if len(m.Carte) > 0 {
+			m.Etat = "proposee"
+			m.Historique = append(m.Historique, evenementMission("proposee", "Athanor restarted: the card is kept"))
+			return nil
+		}
+		echec = s.echouerMission(m, errPreparationCoupee)
+		return nil
+	})
+	if echec {
+		s.fermerLancementMission(id, "hub", "refuser", "mission en échec")
+	}
+	if err == nil {
+		_ = os.RemoveAll(dossierSessionMission(id))
+		s.ecrireAudit(LigneAudit{Type: "evenement", De: "hub", Vers: "missions", Projet: prefixeMission + id, Mission: id,
+			Action: "préparation coupée par le redémarrage", Resultat: map[bool]string{true: "échec", false: "carte gardée"}[echec]})
+	}
+}

@@ -67,6 +67,7 @@ func main() {
 	s := nouveauServeur(config)
 	s.cleAcces = aleatoire(24) // only the windows Athanor opens can use the interface (acces.go)
 	s.demarrerProjetsAuto()
+	s.reprendreMissions()       // after the vault and the tokens: the launched missions followed again (mission_suivi.go)
 	go s.surveillerTaches()     // system notifications for the tasks of the user (api_pourvous.go)
 	go s.surveillerJalonsPush() // milestones done, projects delivered: on the paired devices (distance_push.go)
 	go s.verifierMajFond()      // a new version of Athanor (maj.go)
@@ -110,6 +111,9 @@ func main() {
 	lienApp = func() string { return s.lienOuverture(url) }
 	ecrireInstance(port)
 	pilotesAvantFermeture = func() []string { _, noms := s.pilotesNatifs(); return noms }
+	if os.Getenv("ATHANOR_SANS_FENETRE") == "1" { // the real executable under test (TestMissionRedemarrage): it serves, no window
+		select {}
+	}
 	if terminal {
 		// the terminal interface (tui_app.go); Athanor's window asked meanwhile (w, a second launch) opens
 		go func() {

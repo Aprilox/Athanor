@@ -71,6 +71,7 @@ func TestWebTraduction(t *testing.T) {
 		"This Cloudflare token is disabled: enable it again on Cloudflare or replace it.",
 		"This Cloudflare token sees no zone: give it access to your domain's zone.") // the providers (M114)
 	cles = append(cles, errCleDeploiementNonLie.Error(), errCleDeploiementGH) // the deployment key (M119)
+	cles = append(cles, "The mission waits for the vault to be unlocked")     // the bell after a restart (M170)
 	cles = append(cles, clesMoteur(t)...)                                     // the engine's messages (B79)
 	for _, l := range []string{"fr", "es", "de", "it", "pt"} {
 		dico := dicoTUI(l)

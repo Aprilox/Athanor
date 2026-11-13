@@ -12,9 +12,9 @@ func (moduleMissions) Pages() []PageModule {
 	return []PageModule{{Hash: "#missions", Ordre: 10, Icone: "missions", Libelle: "Missions", Fils: []string{"#mission"}}}
 }
 
-// Elements: a mission whose orchestrator asks the owner a question is in the bell until it is answered, as is a
-// launch that stopped.
-func (moduleMissions) Elements(*Serveur) []ElementHub {
+// Elements: a mission whose orchestrator asks the owner a question is in the bell until it is answered, as are a
+// mission that waits for the vault's infra key and a launch that stopped.
+func (moduleMissions) Elements(s *Serveur) []ElementHub {
 	var out []ElementHub
 	for _, m := range lireMissions() {
 		if q, ok := questionOuverte(m); ok && preparable(Mission{Etat: m.Etat}) == nil {
@@ -25,6 +25,10 @@ func (moduleMissions) Elements(*Serveur) []ElementHub {
 			}
 			out = append(out, ElementHub{ID: m.ID, Titre: titreMission(m), Etat: "actif", Lien: "#missions",
 				Attente: &AttenteElement{Raison: "The orchestrator asks: {0}", Args: []any{q.Texte}, Page: "#missions", Cle: q.ID, Actions: choix}})
+		}
+		if missionSuivie(m.Etat) && s.attendCoffre(m) { // I3: after a restart, until the infra key opens
+			out = append(out, ElementHub{ID: m.ID, Titre: titreMission(m), Etat: "actif", Lien: "#missions",
+				Attente: &AttenteElement{Raison: "The mission waits for the vault to be unlocked", Page: "#missions"}})
 		}
 		// a launch stopped by a failed step (mission_lancer.go): its reason, until the owner dismisses it
 		if h := m.Historique; m.Etat == "echec" && len(h) > 1 && h[len(h)-2].Etat == "lancee" {

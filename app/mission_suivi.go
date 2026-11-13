@@ -229,3 +229,61 @@ func cmpDate(t string, d time.Time) time.Time {
 	}
 	return d
 }
+
+// reprendreMissions (ARCHITECTURE §étape 10 Reprise), at Athanor's start after the vault and the tokens: the
+// launched missions followed again (never lancerMission, never an access made again), a pending accord whose card
+// changed refused, a mission that needs the closed infra key waiting for the unlock (journal, bell), a preparation
+// cut by the stop back to its card or failed.
+func (s *Serveur) reprendreMissions() {
+	t := time.Now()
+	id := "redemarrage:" + t.UTC().Format(formatCree)
+	for _, m := range lireMissions() {
+		s.refuserAccordsPerimes(m)
+		switch {
+		case m.Etat == "preparation" && !orchestrateurTravaille(m.ID):
+			s.reprendrePreparation(m.ID)
+		case !missionSuivie(m.Etat):
+		case s.attendCoffre(m):
+			s.noterJournalMission(m.ID, s.entreeJournal(id, t, "attention", "Athanor restarted: the mission waits for the vault to be unlocked"))
+		default:
+			s.noterJournalMission(m.ID, s.entreeJournal(id, t, "info", "Athanor restarted: the mission resumes"))
+			s.suivreMission(m.ID)
+		}
+	}
+}
+
+// missionsDeverrouillees: the infra key just opened: the missions that waited for it followed again.
+func (s *Serveur) missionsDeverrouillees() {
+	t := time.Now()
+	for _, m := range lireMissions() {
+		if _, suivie := suivisMission.Load(m.ID); missionSuivie(m.Etat) && !suivie {
+			s.noterJournalMission(m.ID, s.entreeJournal("deverrouille:"+t.UTC().Format(formatCree), t, "info", "The vault is unlocked: the mission resumes"))
+			s.suivreMission(m.ID)
+		}
+	}
+}
+
+// attendCoffre: m needs the infra key (an infra entry ticked, a Servers lane, an environment on servers) and it is
+// closed (I3: no infrastructure action while locked).
+func (s *Serveur) attendCoffre(m Mission) bool {
+	var c CarteMission
+	_ = json.Unmarshal(m.Carte, &c)
+	infra := slices.ContainsFunc(c.Acces, func(a AccesCarte) bool { return a.Portee == "infra" && !a.Decoche }) ||
+		slices.ContainsFunc(m.Voies, func(v VoieMission) bool { return v.Module == "servers" && v.Etat != "refusee" }) ||
+		slices.ContainsFunc(c.Envs, func(e EnvCarte) bool { return len(e.Serveurs) > 0 })
+	return infra && !s.etatCoffre().Infra
+}
+
+// refuserAccordsPerimes: m's pending accords (launch, prod) asked for a card or a policy that is no longer m's.
+func (s *Serveur) refuserAccordsPerimes(m Mission) {
+	if s.approbations == nil {
+		return
+	}
+	l, _ := s.approbations.Liste()
+	e := empreinteCarte(m)
+	for _, x := range l {
+		if x.Etat == "attente" && (x.Mission == m.ID || x.Details["mission"] == m.ID) && x.Details["empreinte"] != "" && x.Details["empreinte"] != e {
+			s.refuserAccordMission(x.ID, "hub", "la mission a changé pendant l'arrêt d'Athanor")
+		}
+	}
+}
