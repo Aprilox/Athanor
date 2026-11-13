@@ -134,10 +134,10 @@ func TestSanteIncidents(t *testing.T) {
 	}
 
 	// a failed deployment is an incident too
-	if err := noterHistorique(Deploiement{ID: "dv1", Projet: projet, Env: "dev", Commit: "abc1234def", Methode: "statique", Etat: "echec", Erreur: "the site does not answer."}); err != nil {
+	if err := noterHistorique(Deploiement{ID: "dv1", Projet: projet, Env: "dev", Commit: "abc1234def", Methode: "statique", Etat: "echec", Bascule: true, Erreur: "the site does not answer."}); err != nil {
 		t.Fatal(err)
 	}
-	if err := noterHistorique(Deploiement{ID: "pr1", Projet: projet, Env: "prod", Commit: "abc1234def", Methode: "statique", Etat: "echec", Erreur: "upload refused"}); err != nil {
+	if err := noterHistorique(Deploiement{ID: "pr1", Projet: projet, Env: "prod", Commit: "abc1234def", Methode: "statique", Etat: "echec", Bascule: true, Erreur: "upload refused"}); err != nil {
 		t.Fatal(err)
 	}
 	dev := s.incidentEnv(lireSante(), projet, "dev")

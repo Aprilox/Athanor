@@ -103,7 +103,7 @@ func TestComposeCaddyConteneur(t *testing.T) {
 		t.Errorf("after the refusal: %q %q", b, g)
 	}
 	// going back to the static version: its own method and site file
-	rr, err := s.revenir(ctx, "m145", "dev", "proprietaire")
+	rr, err := s.revenir(ctx, "m145", "dev", "proprietaire", "")
 	if err != nil || rr.Etat != "ok" || rr.Version != d0.Version || rr.Methode != "statique" {
 		t.Fatalf("back to static: %v %+v", err, rr)
 	}

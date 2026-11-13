@@ -9,12 +9,11 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
 	"time"
-
-	"golang.org/x/crypto/ssh"
 )
 
 // VerifDeploiement: what a visitor gets from the environment's URL, judged. Problemes: codes the page words
@@ -95,20 +94,66 @@ func (s *Serveur) verifierApres(ctx context.Context, e Environnement, d *Deploie
 	return errors.New(d.Erreur)
 }
 
-// scriptLirePrecedente ($1 the environment's folder): the current release then the previous one, if it is still there.
-const scriptLirePrecedente = `cd -- "$1" 2>/dev/null && c=$(readlink current) || { echo "nothing is deployed on this server"; exit 6; }
-p=$(readlink previous) && [ -d "$p" ] || { echo "no previous version on this server"; exit 6; }
-echo "$c"; echo "$p"`
+// scriptLireCible ($1 the environment's folder, $2 the version aimed at, "" for the previous one): the release
+// served now, then the one aimed at, checked to be on this server.
+const scriptLireCible = `cd -- "$1" 2>/dev/null && c=$(readlink current) || { echo "nothing is deployed on this server"; exit 6; }
+if [ -n "$2" ]; then t=releases/$2; else t=$(readlink previous) || { echo "no previous version on this server"; exit 6; }; fi
+[ -d "$t" ] || { echo "the version to go back to ($t) is no longer on this server"; exit 6; }
+echo "$c"; echo "$t"`
 
-// scriptRevenir ($1 folder): previous served again, the version left becomes previous (going back twice undoes it).
-const scriptRevenir = `cd -- "$1" || exit 1
-c=$(readlink current) && p=$(readlink previous) || exit 6
-ln -sfn "$p" .current.new && mv -fT .current.new current && ln -sfn "$c" .previous.new && mv -fT .previous.new previous`
+var reVersionDeploiement = regexp.MustCompile(`^[0-9]{8}-[0-9]{6}-[0-9a-f]{7,64}$`)
 
-// revenir: the environment's previous version served again on all its servers, Caddy reloaded (compose: its
-// containers started again), checked; noted in
-// the history (Retour), the version left marked revenu. The API asks prod's accord before calling it.
-func (s *Serveur) revenir(ctx context.Context, projet, env, auteur string) (Deploiement, error) {
+// versionConnue: what the history knows of a version (C74: the version goes back with its own method, folder
+// and upstream; before M145: the environment's); i: its newest entry, -1 if none.
+type versionConnue struct {
+	methode, dossier, amont, commit string
+	i                               int
+}
+
+func connaitreVersion(h []Deploiement, cfg *ConfigDeploiement, version string) versionConnue {
+	v := versionConnue{methode: cfg.Methode, dossier: cfg.Dossier, commit: version[strings.LastIndex(version, "-")+1:], i: -1}
+	for i := len(h) - 1; i >= 0; i-- {
+		if h[i].Version != version {
+			continue
+		}
+		if v.i < 0 {
+			v.i = i
+		}
+		if len(v.commit) < 40 {
+			v.commit = h[i].Commit
+			if h[i].Methode != "" {
+				v.methode, v.amont = h[i].Methode, h[i].Amont
+			}
+			if h[i].Dossier != nil {
+				v.dossier = *h[i].Dossier
+			}
+		}
+	}
+	return v
+}
+
+// scriptRevenirK3s ($1 folder, $2 manifests' folder), after the switch: the release now current applied again
+// and waited for (C72: never rollout undo, whose revision is not the version the links name).
+const scriptRevenirK3s = `b=$1 dd=$2
+` + fonctionsK3s + `appliquer "$b/current"`
+
+// revenir: the environment served again at version cible ("" = the previous one) on all its servers (M133, C71).
+// The API asks prod's accord before calling it.
+func (s *Serveur) revenir(ctx context.Context, projet, env, auteur, cible string) (Deploiement, error) {
+	v, _ := verrousDeploiement.LoadOrStore(projet+"/"+env, &sync.Mutex{})
+	verrou := v.(*sync.Mutex)
+	if !verrou.TryLock() {
+		return Deploiement{}, errors.New("a deployment of this environment is already running")
+	}
+	defer verrou.Unlock()
+	return s.revenirVerrouille(ctx, projet, env, auteur, cible)
+}
+
+// revenirVerrouille (the environment's lock held): the version aimed at, read before anything changes, served
+// on every server (Caddy reloaded, compose containers started again, k3s applied again), checked; on any
+// failure, the links of every server put back and the version left served again. Noted in the history
+// (Retour), the version left marked revenu once it went through. Going back to the version served is harmless.
+func (s *Serveur) revenirVerrouille(ctx context.Context, projet, env, auteur, cible string) (Deploiement, error) {
 	e, ok := s.acces.Environnements(projet)[env]
 	switch {
 	case !ok:
@@ -117,25 +162,21 @@ func (s *Serveur) revenir(ctx context.Context, projet, env, auteur string) (Depl
 		return Deploiement{}, errors.New("nothing was deployed to this environment yet")
 	case e.Deploiement.Methode == "k3s" && len(e.Serveurs) != 1:
 		return Deploiement{}, errK3sUnServeur
+	case cible != "" && !reVersionDeploiement.MatchString(cible):
+		return Deploiement{}, errors.New("invalid version")
 	}
-	v, _ := verrousDeploiement.LoadOrStore(projet+"/"+env, &sync.Mutex{})
-	verrou := v.(*sync.Mutex)
-	if !verrou.TryLock() {
-		return Deploiement{}, errors.New("a deployment of this environment is already running")
-	}
-	defer verrou.Unlock()
 	l, err := lireServeurs()
 	if err != nil {
 		return Deploiement{}, err
 	}
 	base := baseDeploiement(projet, env)
-	var clients []*ssh.Client
+	var serveurs []serveurPret
 	defer func() {
-		for _, c := range clients {
-			c.Close()
+		for _, x := range serveurs {
+			x.c.Close()
 		}
 	}()
-	precedente, actuelle := "", ""
+	version, actuelle := cible, ""
 	for _, id := range e.Serveurs {
 		i := slices.IndexFunc(l, func(x ServeurInventaire) bool { return x.ID == id })
 		if i < 0 {
@@ -145,92 +186,86 @@ func (s *Serveur) revenir(ctx context.Context, projet, env, auteur string) (Depl
 		if err != nil {
 			return Deploiement{}, fmt.Errorf("%s: %w", id, err)
 		}
-		clients = append(clients, c)
-		r, err := executerSSH(ctx, c, commeRoot(scriptLirePrecedente, base), nil, delaiCommande)
+		serveurs = append(serveurs, serveurPret{id, c})
+		r, err := executerSSH(ctx, c, commeRoot(scriptLireCible, base, cible), nil, delaiCommande)
 		if err := echecSSH(r, err); err != nil {
 			return Deploiement{}, fmt.Errorf("%s: %w; nothing was switched", id, err)
 		}
-		cp := strings.SplitN(strings.TrimSpace(string(r.Sortie)), "\n", 2)
-		if len(cp) != 2 {
+		ct := strings.SplitN(strings.TrimSpace(string(r.Sortie)), "\n", 2)
+		if len(ct) != 2 || !strings.HasPrefix(ct[1], "releases/") {
 			return Deploiement{}, fmt.Errorf("%s: unexpected answer %q", id, couper(string(r.Sortie), 200))
 		}
-		p := cp[1]
-		if precedente != "" && p != precedente {
+		t := strings.TrimPrefix(ct[1], "releases/")
+		if version != "" && t != version {
 			return Deploiement{}, errors.New("the servers do not have the same previous version; nothing was switched")
 		}
-		precedente, actuelle = p, strings.TrimPrefix(cp[0], "releases/")
+		version, actuelle = t, strings.TrimPrefix(ct[0], "releases/")
 	}
-	version := strings.TrimPrefix(precedente, "releases/")
 	h := historiqueDeploiements(projet, env)
-	commit, quitte := version[strings.LastIndex(version, "-")+1:], -1 // quitte: the newest entry of the version left
-	// C74: the version goes back with its own method, folder and upstream (before M145: the environment's)
-	methode, dossier, amont := e.Deploiement.Methode, e.Deploiement.Dossier, ""
-	for i := len(h) - 1; i >= 0; i-- {
-		if h[i].Version == version && len(commit) < 40 {
-			commit = h[i].Commit
-			if h[i].Methode != "" {
-				methode, amont = h[i].Methode, h[i].Amont
-			}
-			if h[i].Dossier != nil {
-				dossier = *h[i].Dossier
-			}
-		}
-		if h[i].Version == actuelle && quitte < 0 {
-			quitte = i
-		}
-	}
+	vise, quitte := connaitreVersion(h, e.Deploiement, version), connaitreVersion(h, e.Deploiement, actuelle)
 	debut := time.Now().UTC()
-	d := Deploiement{ID: aleatoire(8), Projet: projet, Env: env, Commit: commit, Methode: methode, Version: version, Dossier: &dossier, Amont: amont,
-		Etat: "en_cours", Auteur: auteur, Retour: true, Serveurs: e.Serveurs, Debut: debut.Format(time.RFC3339)}
-	if methode == "statique" {
-		amont = base + "/current"
-		if dossier != "" {
-			amont += "/" + dossier
-		}
-	}
+	d := Deploiement{ID: aleatoire(8), Projet: projet, Env: env, Commit: vise.commit, Methode: vise.methode, Version: version, Dossier: &vise.dossier,
+		Amont: vise.amont, Etat: "en_cours", Auteur: auteur, Retour: true, Serveurs: e.Serveurs, Debut: debut.Format(time.RFC3339)}
 	if err := noterHistorique(d); err != nil {
 		return d, fmt.Errorf("the deployment history cannot be written: %w", err)
 	}
-	err = nil
-	for i, c := range clients {
-		if err = echecSSH(executerSSH(ctx, c, commeRoot(scriptRevenir, base), nil, delaiCommande)); err != nil {
-			err = fmt.Errorf("%s: switch back: %w", e.Serveurs[i], err)
-			break
+	// servir: what serves the current release of one server, with the method of version v
+	servir := func(ctx context.Context, x serveurPret, v versionConnue) error {
+		if v.methode == "k3s" {
+			return echecSSH(executerSSH(ctx, x.c, commeRoot(scriptRevenirK3s, base, v.dossier), nil, delaiDeploiement))
 		}
+		amont := v.amont
+		if v.methode == "statique" {
+			amont = base + "/current"
+			if v.dossier != "" {
+				amont += "/" + v.dossier
+			}
+		}
+		if v.methode == "compose" {
+			if err := echecSSH(executerSSH(ctx, x.c, commeRoot(scriptRelancerCompose, base, v.dossier, nomCompose(projet, env)), nil, delaiDeploiement)); err != nil {
+				return err
+			}
+		}
+		bloc := ""
+		if amont != "" {
+			var err error
+			if bloc, err = s.blocCaddyEnv(projet, env, x.id, amont); err != nil {
+				return err
+			}
+		}
+		if err := echecSSH(executerSSH(ctx, x.c, commeRoot(scriptSite, base, hoteEnv(&e)), strings.NewReader(bloc), delaiCommande)); err != nil {
+			return err
+		}
+		return echecSSH(executerSSH(ctx, x.c, commeRoot(scriptRecharger, base, fmt.Sprint(versionsGardees)), nil, delaiDeploiement))
 	}
-	for i, c := range clients {
+	touches, err := basculerTous(ctx, serveurs, base, version)
+	for _, x := range touches {
 		if err != nil {
 			break
 		}
-		if methode == "k3s" {
-			err = echecSSH(executerSSH(ctx, c, commeRoot(scriptRevenirK3s, base, dossier), nil, delaiDeploiement))
-		} else { // its containers started again (compose), its site file written again (C74), Caddy reloaded
-			bloc := ""
-			if methode == "compose" {
-				err = echecSSH(executerSSH(ctx, c, commeRoot(scriptRelancerCompose, base, dossier, nomCompose(projet, env)), nil, delaiDeploiement))
-			}
-			if err == nil && amont != "" {
-				bloc, err = s.blocCaddyEnv(projet, env, e.Serveurs[i], amont)
-			}
-			if err == nil {
-				err = echecSSH(executerSSH(ctx, c, commeRoot(scriptSite, base, hoteEnv(&e)), strings.NewReader(bloc), delaiCommande))
-			}
-			if err == nil {
-				err = echecSSH(executerSSH(ctx, c, commeRoot(scriptRecharger, base, fmt.Sprint(versionsGardees)), nil, delaiDeploiement))
-			}
-		}
-		if err != nil {
-			err = fmt.Errorf("%s: %w", e.Serveurs[i], err)
+		if err = servir(ctx, x.serveurPret, vise); err != nil {
+			err = fmt.Errorf("%s: %w", x.id, err)
 		}
 	}
 	d.Etat = "ok"
-	if err != nil {
-		d.Etat, d.Erreur = "echec", err.Error()
-	} else {
+	if err == nil {
 		err = s.verifierApres(ctx, e, &d)
-		if quitte >= 0 {
-			h[quitte].Etat = "revenu"
-			_ = noterHistorique(h[quitte])
+	} else {
+		d.Etat, d.Erreur = "echec", err.Error()
+	}
+	if err != nil && len(touches) > 0 { // the version left served again everywhere
+		remettreLiens(ctx, touches, base)
+		for _, x := range touches {
+			if e2 := servir(context.WithoutCancel(ctx), x.serveurPret, quitte); e2 != nil {
+				d.Erreur += "; " + x.id + ": the version left could not be served again: " + couper(e2.Error(), 200)
+			}
+		}
+		d.Erreur += "; the links were put back on " + actuelle
+	} else if err == nil {
+		d.Bascule = true
+		if quitte.i >= 0 && actuelle != version {
+			h[quitte.i].Etat = "revenu"
+			_ = noterHistorique(h[quitte.i])
 		}
 	}
 	d.Fin = time.Now().UTC().Format(time.RFC3339)
@@ -275,7 +310,7 @@ func (s *Serveur) apiRevenir(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, fin := context.WithTimeout(context.Background(), 10*time.Minute) // not cut halfway when the page goes away
 	defer fin()
-	d, err := s.revenir(ctx, projet, c.Env, "proprietaire")
+	d, err := s.revenir(ctx, projet, c.Env, "proprietaire", "")
 	if err != nil && d.ID == "" {
 		s.erreur(w, http.StatusConflict, err.Error())
 		return

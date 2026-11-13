@@ -4381,6 +4381,8 @@ function texteVerif(v, protection) {
   if ((x.en_tetes_manquants || []).length) l.push(t("missing security headers: {0}", [x.en_tetes_manquants.join(", ")]));
   return l.join(" · ");
 }
+// C71: a deployment that failed before its switch left the version served as it was: nothing to go back from
+const avantBascule = (d) => d.etat === "echec" && !d.retour && !d.bascule && !d.verification;
 function blocDeploiements(nom, e, liste, distant) {
   const ligne = (d) => {
     const [icone, etiquette] = d.retour && d.etat === "ok" ? ["↩", "Back to the previous version"] : ETATS_DEPLOI[d.etat] || ["", d.etat];
@@ -4390,7 +4392,7 @@ function blocDeploiements(nom, e, liste, distant) {
   };
   return `<div class="env-deploi" data-env-deploi><h4>${t("Deployments")}</h4>
     ${liste.length ? `<ul class="env-deploi-liste">${liste.map(ligne).join("")}</ul>` : `<p class="muet petit">${t("Nothing deployed yet.")}</p>`}
-    ${!distant && e.deploiement && liste.length > 1 ? `<button type="button" class="btn btn-petit" data-env-revenir>${t("Go back to the previous version")}</button>` : ""}</div>`;
+    ${!distant && e.deploiement && liste.length > 1 && !avantBascule(liste[0]) ? `<button type="button" class="btn btn-petit" data-env-revenir>${t("Go back to the previous version")}</button>` : ""}</div>`;
 }
 // M137: an environment's health (checked every 15 minutes by default) and its incident, if any
 const ETATS_SANTE = { ok: ["✔", "Healthy"], alerte: ["⚠", "Warning"], incident: ["✖", "Incident"] };
@@ -4403,7 +4405,7 @@ function blocSante(s, e) {
     <p class="ligne m0 petit"><span class="badge">${icone} ${h(t(etiquette))}</span>${s.t ? `<span class="muet">${h(t("Checked {0}", [dateLisible(s.t)]))}</span>` : ""}</p>
     ${(s.problemes || []).map((p) => `<p class="petit${p.rouge ? " attention" : ""}">${h(probleme(p))}</p>`).join("")}
     ${i ? `<p class="petit attention">${h(t("What failed: {0}.", [i.echec]))} ${h(t("What was tried: {0}.", [i.tente]))}</p>
-      <p class="petit muet">${i.pris_en_main ? h(t("You took over {0}.", [dateLisible(i.pris_en_main)])) : t("The bell offers: Retry, Go back to the previous version, I take over.")}</p>` : ""}</div>`;
+      <p class="petit muet">${i.pris_en_main ? h(t("You took over {0}.", [dateLisible(i.pris_en_main)])) : t(i.sans_retour ? "The bell offers: Retry, I take over." : "The bell offers: Retry, Go back to the previous version, I take over.")}</p>` : ""}</div>`;
 }
 // the Servers page: how often the deployed sites are checked (or not at all)
 function reglageSante(sa, distant) {
@@ -4418,7 +4420,7 @@ $("#page").addEventListener("change", async (ev) => {
   const m = +sel.value;
   if (await action(api("serveurs/sante", "POST", m ? { minutes: m } : { arret: true }))) toast(m ? t("The sites are checked every {0} minutes.", [m]) : t("The sites' health checks are off."), "ok");
 });
-const AUTEURS_DEPLOI = { agent: "by the agent", relais: "after a milestone", proprietaire: "by you" };
+const AUTEURS_DEPLOI = { agent: "by the agent", relais: "after a milestone", proprietaire: "by you", auto: "automatically, after a failed check" };
 $("#page").addEventListener("click", async (ev) => {
   const b = ev.target.closest("[data-env-revenir]"); if (!b) return;
   const c = b.closest("[data-env]"), env = c.dataset.env, err = c.querySelector(".env-erreur"), question = t("Serve the previous version of {0} again? It is checked from this PC right after.", [env]);

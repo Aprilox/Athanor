@@ -19,7 +19,7 @@ Un déploiement en *prod*, ou un retour arrière en *prod*, demande votre accord
 |---|---|---|---|
 | `statique` | un site de fichiers (HTML, un front construit) | Caddy sert `current/<dossier publié>` | `current` pointe sur la version d'avant |
 | `compose` | le projet a un `compose.yaml` / `docker-compose.yml`, ou un `Dockerfile` (Athanor écrit alors un petit fichier compose) | `docker compose -p <projet>-<env> up -d` dans le dossier de la version | `compose up` de la version d'avant |
-| `k3s` | seulement si vous le demandez, un serveur par environnement | `kubectl apply -k` (ou `-f`) d'un dossier du dépôt, puis attente de ses Deployments, StatefulSets et DaemonSets | `kubectl rollout undo` de ce que la version a changé |
+| `k3s` | seulement si vous le demandez, un serveur par environnement | `kubectl apply -k` (ou `-f`) d'un dossier du dépôt, puis attente de ses Deployments, StatefulSets et DaemonSets | `kubectl apply` de la version d'avant, de nouveau |
 
 **D'où vient le code.** Soit **git** : le serveur va chercher le commit exact sur GitHub avec la clé de déploiement du projet (en lecture seule sur le dépôt, créée dans le panneau *Environnements*), avec la clé d'hôte de github.com épinglée ; soit une **archive** : Athanor fait un `tar.gz` du commit sur ce PC (`git archive`, ou le résultat de la commande de construction de l'environnement lancée dans une copie propre de ce commit, dans un dossier temporaire et dans la même barrière que le pilote ; en mode Windows natif, refusée sauf si le projet est forcé sur sa page *Accès*, et journalisée), l'envoie en SFTP et contrôle son SHA-256. Une archive avec un chemin absolu, un `..` ou un lien qui sort de la version est refusée avant que rien ne soit écrit.
 
@@ -43,7 +43,7 @@ Les étapes, en code Go, jamais un script shell écrit par un agent : préparer 
 
 ## Retour arrière et historique
 
-L'historique de chaque environnement (commit, méthode, version, état, vérification, qui l'a lancé, dates) est gardé dans le dossier d'Athanor (`modules/servers/deploiements/<projet>-<env>.json`) et montré dans *Déploiements* sur sa carte. *Revenir à la version d'avant* remet `previous` en `current` (ou `compose up` / `rollout undo`), recharge et revérifie.
+L'historique de chaque environnement (commit, méthode, version, état, vérification, qui l'a lancé, dates) est gardé dans le dossier d'Athanor (`modules/servers/deploiements/<projet>-<env>.json`) et montré dans *Déploiements* sur sa carte. *Revenir à la version d'avant* sert sur chaque serveur la version notée avant de commencer (`current` pointe sur elle ; `compose up` / `kubectl apply` de celle-ci), recharge et revérifie ; si un serveur ou la vérification échoue, chaque serveur est remis sur la version qu'il quittait. *Réessayer* un retour raté vise la même version. En dev et staging avec la politique *auto*, une version qui rate sa vérification après la bascule revient d'elle-même (jamais en production) ; la cloche le dit quand même. Un déploiement raté avant sa bascule n'a rien changé : *Revenir* n'est pas proposé.
 
 ## Santé et incidents
 

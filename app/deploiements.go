@@ -56,9 +56,10 @@ type Deploiement struct {
 	Etat         string            `json:"etat"` // en_cours | ok | echec | revenu
 	Erreur       string            `json:"erreur,omitempty"`
 	Verification *VerifDeploiement `json:"verification,omitempty"` // the external check once served (M133)
-	Auteur       string            `json:"auteur"`                 // agent | relais | proprietaire
+	Auteur       string            `json:"auteur"`                 // agent | relais | proprietaire | auto (C76: the automatic way back)
 	Retour       bool              `json:"retour,omitempty"`       // a way back to the previous version (M133)
 	Accorde      bool              `json:"accorde,omitempty"`      // the owner accepted this very deployment (C68)
+	Bascule      bool              `json:"bascule,omitempty"`      // C71: its version was served on every server (a failure before it changed nothing)
 	Dossier      *string           `json:"dossier,omitempty"`      // the published folder of this version (C74: going back uses its own; nil before M145)
 	Amont        string            `json:"amont,omitempty"`        // compose: the 127.0.0.1:n Caddy proxies to, "" without a site (C70)
 	Serveurs     []string          `json:"serveurs"`
@@ -201,11 +202,71 @@ echo ready`
 const scriptAnnulerVersion = `b=$1 r=$1/releases/$2 site=/etc/caddy/sites/$3.caddy
 ` + fonctionAnnulerVersion + `annuler`
 
-// scriptBascule ($1 folder, $2 version): current then previous replaced in one rename each.
+// scriptBascule ($1 folder, $2 version): current then previous replaced in one rename each; prints first the
+// links as they were (current, previous; empty when missing) so that scriptRemettre can put them back (C71).
+// Idempotent: the version already served stays current, previous unchanged.
 const scriptBascule = `cd -- "$1" || exit 1
-v=releases/$2 old=$(readlink current 2>/dev/null)
+v=releases/$2 old=$(readlink current 2>/dev/null) p=$(readlink previous 2>/dev/null)
+printf '%s\n%s\n' "$old" "$p"
 ln -sfn "$v" .current.new && mv -fT .current.new current || exit 1
 if [ -n "$old" ] && [ "$old" != "$v" ]; then ln -sfn "$old" .previous.new && mv -fT .previous.new previous; fi`
+
+// scriptRemettre ($1 folder, $2 current, $3 previous, as scriptBascule printed them): the links put back.
+const scriptRemettre = `cd -- "$1" || exit 1
+if [ -n "$2" ]; then ln -sfn "$2" .current.new && mv -fT .current.new current || exit 1; else rm -f current; fi
+if [ -n "$3" ]; then ln -sfn "$3" .previous.new && mv -fT .previous.new previous; else rm -f previous; fi`
+
+// serveurPret: a server connected for a deployment or a way back.
+type serveurPret struct {
+	id string
+	c  *ssh.Client
+}
+
+// liensAvant: a server's links before scriptBascule, to put back.
+type liensAvant struct {
+	serveurPret
+	current, previous string
+}
+
+// echecBasculeTest (tests only): the switch of the n-th server reported failed once done.
+var echecBasculeTest func(n int) bool
+
+// basculerTous (C71): version served on every server, one after the other; on a failure, the links of every
+// server touched (the failing one included) are put back, newest first, and touches is empty.
+func basculerTous(ctx context.Context, serveurs []serveurPret, base, version string) (touches []liensAvant, err error) {
+	for n, x := range serveurs {
+		r, e := executerSSH(ctx, x.c, commeRoot(scriptBascule, base, version), nil, delaiCommande)
+		if l := strings.SplitN(string(r.Sortie), "\n", 3); len(l) == 3 {
+			touches = append(touches, liensAvant{x, l[0], l[1]})
+		}
+		if e = echecSSH(r, e); e == nil && echecBasculeTest != nil && echecBasculeTest(n) {
+			e = errors.New("test failure")
+		}
+		if e != nil {
+			remettreLiens(ctx, touches, base)
+			return nil, fmt.Errorf("%s: switch: %w", x.id, e)
+		}
+	}
+	return touches, nil
+}
+
+// remettreLiens: the links of touches put back, newest first (best effort: the history says what failed).
+func remettreLiens(ctx context.Context, touches []liensAvant, base string) {
+	for _, x := range slices.Backward(touches) {
+		_, _ = executerSSH(context.WithoutCancel(ctx), x.c, commeRoot(scriptRemettre, base, x.current, x.previous), nil, delaiCommande)
+	}
+}
+
+// avantBascule (C71): a failure that changed nothing served (nothing to go back from).
+func avantBascule(d Deploiement) bool {
+	return d.Etat == "echec" && !d.Retour && !d.Bascule && d.Verification == nil
+}
+
+// retourAutomatique (C76, ARCHITECTURE §Moteur): a version served then found failing goes back by itself in
+// dev and staging under the auto policy; never in prod.
+func retourAutomatique(e Environnement, d Deploiement) bool {
+	return d.Etat == "echec" && d.Bascule && d.Verification != nil && !d.Verification.OK && d.Env != "prod" && e.Politique == "auto"
+}
 
 // scriptRecharger ($1 folder, $2 versions kept): Caddy reloaded when it is there (systemd, else its own command), then the
 // oldest releases removed (scriptNettoyer).
@@ -295,6 +356,14 @@ func (s *Serveur) finirDeploiement(ctx context.Context, p Projet, e Environnemen
 	if e2 := noterHistorique(d); err == nil && e2 != nil {
 		err = fmt.Errorf("deployed, but the history cannot be written: %w", e2)
 	}
+	if retourAutomatique(e, d) { // after the failure is noted: the way back marks it revenu
+		if r, e2 := s.revenirVerrouille(ctx, d.Projet, d.Env, "auto", ""); e2 != nil {
+			d.Erreur += "; the automatic way back failed: " + couper(e2.Error(), 300)
+		} else {
+			d.Etat, d.Erreur = "revenu", d.Erreur+"; went back automatically to "+r.Version
+		}
+		_ = noterHistorique(d)
+	}
 	return d, err
 }
 
@@ -364,11 +433,7 @@ func (s *Serveur) deployerVersion(ctx context.Context, p Projet, e Environnement
 	if cfg.Dossier != "" {
 		racine += "/" + cfg.Dossier
 	}
-	type pret struct {
-		id string
-		c  *ssh.Client
-	}
-	var prets []pret
+	var prets []serveurPret
 	defer func() {
 		for _, x := range prets {
 			x.c.Close()
@@ -403,7 +468,7 @@ func (s *Serveur) deployerVersion(ctx context.Context, p Projet, e Environnement
 			annulerTout()
 			return fmt.Errorf("%s: %w; nothing was switched", id, err)
 		}
-		prets = append(prets, pret{id, c})
+		prets = append(prets, serveurPret{id, c})
 		if cfg.Methode != "compose" {
 			continue
 		}
@@ -425,12 +490,13 @@ func (s *Serveur) deployerVersion(ctx context.Context, p Projet, e Environnement
 			return fmt.Errorf("%s: %w; nothing was switched", id, err)
 		}
 	}
-	// every server ready: the switch, then the reload, server by server
-	for _, x := range prets {
-		if err := echecSSH(executerSSH(ctx, x.c, commeRoot(scriptBascule, base, d.Version), nil, delaiCommande)); err != nil {
-			return fmt.Errorf("%s: switch: %w", x.id, err)
-		}
+	// every server ready: the switch everywhere (C71: on a failure, the links put back and the releases removed),
+	// then the reload, server by server
+	if _, err := basculerTous(ctx, prets, base, d.Version); err != nil {
+		annulerTout()
+		return fmt.Errorf("%w; nothing was switched", err)
 	}
+	d.Bascule = true
 	recharger := scriptRecharger
 	if cfg.Methode == "k3s" { // the pods already run the release
 		recharger = scriptNettoyer

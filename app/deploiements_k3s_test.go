@@ -100,14 +100,12 @@ func TestDeploiementK3sConteneur(t *testing.T) {
 	if got, want := sur("cd "+base+" && readlink current previous && ls releases | wc -l"), "releases/"+d2.Version+"\nreleases/"+d1.Version+"\n2\n"; got != want {
 		t.Errorf("after the failed apply: %q, want %q", got, want)
 	}
-	// going back: rollout undo of the workloads of the version left (v2)
-	rr, err := s.revenir(ctx, "m139", "dev", "proprietaire")
+	// going back (C72): the release now current (v1) applied again, never rollout undo
+	rr, err := s.revenir(ctx, "m139", "dev", "proprietaire", "")
 	if err != nil || rr.Etat != "ok" || rr.Version != d1.Version || rr.Methode != "k3s" {
 		t.Fatalf("back to v1: %v %+v", err, rr)
 	}
-	left := base + "/previous/k8s"
-	if got, want := journal(), k+"get -k "+left+" -o custom-columns=K:.kind,N:.metadata.name,NS:.metadata.namespace --no-headers\n"+
-		k+"rollout undo Deployment/site -n web\n"+k+"rollout status Deployment/site -n web --timeout=180s\n"; got != want {
+	if got, want := journal(), appliquer("-f", base+"/current/k8s"); got != want || strings.Contains(got, "undo") {
 		t.Errorf("kubectl when going back:\n got  %q\n want %q", got, want)
 	}
 	if got := sur("cd " + base + " && readlink current"); got != "releases/"+d1.Version+"\n" {
@@ -188,7 +186,7 @@ func TestK3sReel(t *testing.T) {
 			t.Fatalf("after %s: the Deployment runs %q", v, got)
 		}
 	}
-	root(scriptRevenir, base)
+	root(scriptBascule, base, "v1")
 	root(scriptRevenirK3s, base, "k8s")
 	if got := version(); got != "v1" {
 		t.Errorf("after going back: the Deployment runs %q, want v1", got)

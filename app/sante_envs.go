@@ -44,7 +44,9 @@ type Incident struct {
 	Echec      string `json:"echec"`  // what failed
 	Tente      string `json:"tente"`  // what was tried
 	Commit     string `json:"commit,omitempty"`
-	Retour     bool   `json:"retour,omitempty"` // the failure was a way back: Retry goes back again
+	Retour     bool   `json:"retour,omitempty"`      // the failure was a way back: Retry goes back again
+	Cible      string `json:"cible,omitempty"`       // C71: the version that way back aimed at (Retry aims at it again)
+	SansRetour bool   `json:"sans_retour,omitempty"` // C71: Go back not offered (failed before its switch, or already back)
 	PrisEnMain string `json:"pris_en_main,omitempty"`
 }
 
@@ -252,9 +254,17 @@ func (s *Serveur) recontroler(ctx context.Context, projet, env string) {
 func (s *Serveur) incidentEnv(f fichierSante, projet, env string) *Incident {
 	h := historiqueDeploiements(projet, env)
 	var i *Incident
-	if n := len(h); n > 0 && h[n-1].Etat == "echec" {
+	n := len(h)
+	if n > 1 && h[n-1].Retour && h[n-1].Auteur == "auto" && h[n-1].Etat == "ok" && h[n-2].Etat == "revenu" {
+		n-- // C76: the failure the automatic way back followed is still told
+	}
+	if n > 0 && (h[n-1].Etat == "echec" || n < len(h)) {
 		d := h[n-1]
-		i = &Incident{Cle: "deploi-" + d.ID, Source: "deploiement", Echec: d.Erreur, Commit: d.Commit, Retour: d.Retour}
+		i = &Incident{Cle: "deploi-" + d.ID, Source: "deploiement", Echec: d.Erreur, Commit: d.Commit, Retour: d.Retour,
+			SansRetour: n < len(h) || avantBascule(d)}
+		if d.Retour {
+			i.Cible = d.Version
+		}
 		switch {
 		case d.Retour:
 			i.Tente = s.textePush("t_retour")
@@ -315,10 +325,14 @@ func (s *Serveur) alertesIncidents() []AlerteHub {
 			return ActionAlerte{ID: id, Libelle: libelle, Route: "projets/" + url.PathEscape(x.Projet) + "/incident",
 				Corps: map[string]any{"env": x.Env, "action": id, "cle": x.Cle}, Distance: true, Accord: x.Env == "prod" && id != "main"}
 		}
+		actions := []ActionAlerte{action("reessayer", "Retry"), action("revenir", "Go back to the previous version"), action("main", "I take over")}
+		if x.SansRetour {
+			actions = slices.Delete(actions, 1, 2)
+		}
 		h := sha256.Sum256([]byte("incident\x00" + x.Projet + "\x00" + x.Cle))
 		out = append(out, AlerteHub{Empreinte: hex.EncodeToString(h[:12]), Module: "servers", Element: x.Projet + "/" + x.Env, Titre: x.Projet,
 			Raison: "{0} is in trouble. What failed: {1}. What was tried: {2}.", Args: []any{x.Env, s.masquerSecrets(couper(x.Echec, 300)), x.Tente},
-			Actions: []ActionAlerte{action("reessayer", "Retry"), action("revenir", "Go back to the previous version"), action("main", "I take over")}})
+			Actions: actions})
 	}
 	return out
 }
@@ -440,8 +454,12 @@ func (s *Serveur) agirIncident(ctx context.Context, projet, env, action, cle, au
 	var d Deploiement
 	var err error
 	switch {
-	case action == "revenir" || i.Retour:
-		d, err = s.revenir(ctx, projet, env, auteur)
+	case action == "revenir" && i.SansRetour:
+		err = errors.New("nothing to go back from: the version served did not change")
+	case action == "reessayer" && i.Retour: // C71: the same version again, never one more step back
+		d, err = s.revenir(ctx, projet, env, auteur, i.Cible)
+	case action == "revenir":
+		d, err = s.revenir(ctx, projet, env, auteur, "")
 	case i.Commit == "":
 		err = errors.New("nothing to deploy again: no version of this environment is known")
 	default:

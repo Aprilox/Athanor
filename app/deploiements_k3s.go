@@ -3,7 +3,7 @@ package main
 // The k3s deployment method (M139, ARCHITECTURE.md §Déploiements), only when the owner asks for it (never
 // detected): the release extracted like a static one, then `kubectl apply -k` (a kustomization in the folder) or
 // `-f` of its folder with the server's own kubeconfig, which never leaves the server; its workloads are waited for
-// before the switch. Going back = `kubectl rollout undo` of the workloads of the version left. One server per
+// before the switch. Going back = the release then current applied again (C72). One server per
 // environment: the cluster spreads the pods itself, and applying or undoing twice on one cluster would be wrong.
 // C69: without the owner's accord for this deployment, refusK3s refuses the manifests that give root.
 
@@ -38,15 +38,6 @@ echo ready`
 // release removed.
 const scriptAnnulerK3s = `b=$1 dd=$3
 ` + fonctionsK3s + `relancer; rm -rf -- "$1/releases/$2"`
-
-// scriptRevenirK3s ($1 folder, $2 manifests' folder), after scriptRevenir: previous is the version left; its
-// workloads rolled back to their previous revision and waited for.
-// shortcut: rollout undo goes back one revision of each workload, so a version that left the pod templates
-// unchanged (a ConfigMap only) is undone one step too far; re-apply the previous release if that matters.
-const scriptRevenirK3s = `b=$1 dd=$2
-` + fonctionsK3s + `cible "$b/previous" || exit 1
-l=$(charges); [ -n "$l" ] || { echo "no Deployment, StatefulSet or DaemonSet to roll back in the version left"; exit 1; }
-o=$(printf '%s\n' "$l" | while read -r c ns; do k rollout undo "$c" -n "$ns" 2>&1 && k rollout status "$c" -n "$ns" --timeout=180s 2>&1 || exit 1; done) || { echo "kubectl rollout undo failed:"; printf '%s\n' "$o" | tail -n 8; exit 4; }`
 
 // Manifest lines that give root on the server (C69): a host path, the host's namespaces, a privileged
 // container; in a kustomization, a remote base (its content is not in the commit the owner can read).

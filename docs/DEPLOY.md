@@ -19,7 +19,7 @@ A deployment to *prod*, or a going back in *prod*, needs your agreement each tim
 |---|---|---|---|
 | `statique` | a site of files (HTML, a built front end) | Caddy serves `current/<published folder>` | `current` points to the version before |
 | `compose` | the project has a `compose.yaml` / `docker-compose.yml`, or a `Dockerfile` (Athanor then writes a small compose file) | `docker compose -p <project>-<env> up -d` in the version's folder | `compose up` of the version before |
-| `k3s` | only when you ask for it, one server per environment | `kubectl apply -k` (or `-f`) of a folder of the repository, then waits for its Deployments, StatefulSets and DaemonSets | `kubectl rollout undo` of what the version changed |
+| `k3s` | only when you ask for it, one server per environment | `kubectl apply -k` (or `-f`) of a folder of the repository, then waits for its Deployments, StatefulSets and DaemonSets | `kubectl apply` of the previous version again |
 
 **Where the code comes from.** Either **git**: the server fetches the exact commit from GitHub with the project's deployment key (read-only on the repository, created in the *Environments* panel), using a pinned github.com host key; or an **archive**: Athanor makes a `tar.gz` of the commit on this PC (`git archive`, or the output of the environment's build command run in a clean copy of that commit, in a temporary folder and inside the pilot's barrier; in native Windows mode, refused unless the project is forced on its *Access* page, and logged), sends it by SFTP and checks its SHA-256. An archive with an absolute path, a `..`, or a link leaving the version is refused before anything is written.
 
@@ -43,7 +43,7 @@ The steps, in Go code, never a shell script written by an agent: prepare the ver
 
 ## Going back and history
 
-Each environment's history (commit, method, version, state, check, who started it, dates) is kept in Athanor's folder (`modules/servers/deploiements/<project>-<env>.json`) and shown as *Deployments* on its card. *Go back to the previous version* puts `previous` back as `current` (or `compose up` / `rollout undo`), reloads and checks again.
+Each environment's history (commit, method, version, state, check, who started it, dates) is kept in Athanor's folder (`modules/servers/deploiements/<project>-<env>.json`) and shown as *Deployments* on its card. *Go back to the previous version* serves the version noted before it starts on every server (`current` points at it; `compose up` / `kubectl apply` of it), reloads and checks again; if a server or the check fails, every server is put back on the version it left. *Retry* of a failed way back aims at the same version. In dev and staging under the *auto* policy, a version that fails its check after the switch goes back by itself (never in production); the bell still tells it. A deployment that failed before its switch changed nothing: *Go back* is not offered.
 
 ## Health and incidents
 

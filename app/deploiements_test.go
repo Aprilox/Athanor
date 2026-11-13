@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 // archiveDeploiementTest: a tar.gz with the given entries (name → link target for a link, "" for a file, "/" for a folder, "!" for a hard link).
@@ -290,7 +291,7 @@ func TestDeploiementStatiqueConteneur(t *testing.T) {
 	if err != nil || !strings.Contains(page(), "site-exemple v2") {
 		t.Fatalf("v2 again: %v %+v", err, d5)
 	}
-	r1, err := s.revenir(ctx, "m131", "dev", "proprietaire")
+	r1, err := s.revenir(ctx, "m131", "dev", "proprietaire", "")
 	if err != nil || r1.Etat != "ok" || !r1.Retour || r1.Version != d4.Version || r1.Commit != c1 || r1.Verification == nil || !r1.Verification.OK || !strings.Contains(page(), "site-exemple v1") {
 		t.Fatalf("back to v1: %v %+v %.200q", err, r1, page())
 	}
@@ -300,14 +301,77 @@ func TestDeploiementStatiqueConteneur(t *testing.T) {
 	if h := historiqueDeploiements("m131", "dev"); h[len(h)-2].ID != d5.ID || h[len(h)-2].Etat != "revenu" || h[len(h)-1].ID != r1.ID {
 		t.Errorf("history after going back: %+v", h[len(h)-2:])
 	}
-	if r2, err := s.revenir(ctx, "m131", "dev", "proprietaire"); err != nil || r2.Version != d5.Version || r2.Commit != c2 || !strings.Contains(page(), "site-exemple v2") {
+	if r2, err := s.revenir(ctx, "m131", "dev", "proprietaire", ""); err != nil || r2.Version != d5.Version || r2.Commit != c2 || !strings.Contains(page(), "site-exemple v2") {
 		t.Errorf("going back twice: %v %+v", err, r2)
+	}
+	liensServeur := func() string { return sur("cd " + base + " && readlink current previous") }
+	// C76: a version served then found failing goes back by itself in dev under the auto policy
+	vide := &ConfigDeploiement{Methode: "statique", Source: "artefact"} // the repository's root has no index.html: 404
+	da, err := s.deployer(ctx, "m131", "dev", c1, OptionsDeploiement{Config: vide, Auteur: "proprietaire"})
+	if err == nil || da.Etat != "revenu" || !da.Bascule || !strings.Contains(da.Erreur, "went back automatically to "+d5.Version) || !strings.Contains(page(), "site-exemple v2") {
+		t.Fatalf("automatic way back: %v %+v %.200q", err, da, page())
+	}
+	if h := historiqueDeploiements("m131", "dev"); h[len(h)-1].Auteur != "auto" || !h[len(h)-1].Retour || h[len(h)-1].Etat != "ok" || h[len(h)-2].Etat != "revenu" {
+		t.Errorf("history after the automatic way back: %+v", h[len(h)-2:])
+	}
+	if i := s.incidentEnv(fichierSante{}, "m131", "dev"); i == nil || i.Cle != "deploi-"+da.ID || !i.SansRetour {
+		t.Errorf("incident after the automatic way back: %+v", i)
+	}
+	servis := liensServeur()
+	if servis != "releases/"+d5.Version+"\nreleases/"+da.Version+"\n" {
+		t.Errorf("links after the automatic way back: %q", servis)
+	}
+	// C71: a switch that fails once done is put back, the release removed; Go back is not offered
+	site := &ConfigDeploiement{Methode: "statique", Source: "artefact", Dossier: "site"}
+	echecBasculeTest = func(n int) bool { return n == 0 }
+	t.Cleanup(func() { echecBasculeTest = nil })
+	time.Sleep(time.Second) // another version name than da (same commit, the version is per second)
+	db, err := s.deployer(ctx, "m131", "dev", c1, OptionsDeploiement{Config: site, Auteur: "proprietaire"})
+	if err == nil || db.Etat != "echec" || db.Bascule || !avantBascule(db) || !strings.Contains(err.Error(), "nothing was switched") ||
+		liensServeur() != servis || sur("ls "+base+"/releases | grep -c "+db.Version) != "0\n" || !strings.Contains(page(), "site-exemple v2") {
+		t.Errorf("failed switch: %v %+v %q", err, db, liensServeur())
+	}
+	if i := s.incidentEnv(fichierSante{}, "m131", "dev"); i == nil || !i.SansRetour || slices.ContainsFunc(s.alertesIncidents(), func(a AlerteHub) bool {
+		return a.Element == "m131/dev" && slices.ContainsFunc(a.Actions, func(x ActionAlerte) bool { return x.ID == "revenir" })
+	}) {
+		t.Errorf("Go back offered after a failure before the switch: %+v", i)
+	}
+	// two servers, the second one's switch fails: both put back, newest first
+	if err := modifierServeurs(func(l []ServeurInventaire) ([]ServeurInventaire, error) {
+		x := l[slices.IndexFunc(l, func(x ServeurInventaire) bool { return x.ID == id })]
+		x.ID += "-2"
+		return append(l, x), nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	e := s.acces.Environnements("m131")["dev"]
+	e.Serveurs = []string{id, id + "-2"}
+	if err := s.acces.DefinirEnvironnement("m131", "dev", e); err != nil {
+		t.Fatal(err)
+	}
+	echecBasculeTest = func(n int) bool { return n == 1 }
+	if rb, err := s.revenir(ctx, "m131", "dev", "proprietaire", d4.Version); err == nil || rb.Etat != "echec" || rb.Bascule || liensServeur() != servis || !strings.Contains(page(), "site-exemple v2") {
+		t.Errorf("way back failing on the second server: %v %+v %q", err, rb, liensServeur())
+	}
+	echecBasculeTest = nil
+	// Retry of a way back aims at the same version: twice is harmless
+	for n := range 2 {
+		if r, err := s.revenir(ctx, "m131", "dev", "proprietaire", d4.Version); err != nil || r.Version != d4.Version || !r.Bascule ||
+			liensServeur() != "releases/"+d4.Version+"\nreleases/"+d5.Version+"\n" || !strings.Contains(page(), "site-exemple v1") {
+			t.Errorf("way back to %s, try %d: %v %+v %q", d4.Version, n+1, err, r, liensServeur())
+		}
+	}
+	e.Serveurs = []string{id}
+	if err := s.acces.DefinirEnvironnement("m131", "dev", e); err != nil {
+		t.Fatal(err)
 	}
 	// a failed external check: the version stays served, the deployment is a failure
 	resoudreTest(t, hote+":80", "127.0.0.1:1")
-	if d6, err := s.deployer(ctx, "m131", "dev", c1, OptionsDeploiement{Auteur: "proprietaire"}); err == nil || d6.Etat != "echec" ||
-		d6.Verification == nil || d6.Verification.OK || !strings.Contains(d6.Erreur, "the external verification failed: injoignable") {
-		t.Errorf("failed check: %v %+v", err, d6)
+	// C71: its automatic way back fails its check too: the links put back on it
+	if d6, err := s.deployer(ctx, "m131", "dev", c1, OptionsDeploiement{Config: site, Auteur: "proprietaire"}); err == nil || d6.Etat != "echec" ||
+		d6.Verification == nil || d6.Verification.OK || !strings.Contains(d6.Erreur, "the external verification failed: injoignable") ||
+		!strings.Contains(d6.Erreur, "the automatic way back failed") || liensServeur() != "releases/"+d6.Version+"\nreleases/"+d4.Version+"\n" {
+		t.Errorf("failed check: %v %+v %q", err, d6, liensServeur())
 	}
 }
 

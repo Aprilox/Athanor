@@ -197,7 +197,7 @@ func TestDeploiementComposeConteneur(t *testing.T) {
 		t.Errorf("after the refused configuration: %q, want %q", got, want)
 	}
 	// going back: up in the previous release (v1)
-	rr, err := s.revenir(ctx, "m134", "dev", "proprietaire")
+	rr, err := s.revenir(ctx, "m134", "dev", "proprietaire", "")
 	if err != nil || rr.Etat != "ok" || rr.Version != d1.Version || rr.Methode != "compose" {
 		t.Fatalf("back to v1: %v %+v", err, rr)
 	}
