@@ -141,7 +141,7 @@ func (s *Serveur) lancerOrchestrateur(id, enTete string) error {
 }
 
 // executerOrchestrateur: the session, then its end: token revoked, folder removed, the mission in echec if the
-// session failed, overran or ended without a card nor a question.
+// session failed, overran or ended without a card nor a question (a card already proposed stays, B85).
 func (s *Serveur) executerOrchestrateur(ctx context.Context, e *orchestrateurEnCours, id, dossier string) {
 	ctx, fin := context.WithTimeoutCause(ctx, delaiOrchestrateur, errOrchestrateurDelai)
 	go func() { // a revoked token (emergency stop, the owner's revocation, expiry) stops the session
@@ -176,6 +176,7 @@ func (s *Serveur) executerOrchestrateur(ctx context.Context, e *orchestrateurEnC
 
 	s.revoquerJetons("orchestrateur terminé", func(x SessionHub) bool { return x.Hache == e.hache })
 	_ = os.RemoveAll(dossier)
+	echec := false
 	_, _ = modifierMission(id, func(m *Mission) error {
 		if sid != "" {
 			m.Session = sid
@@ -186,13 +187,14 @@ func (s *Serveur) executerOrchestrateur(ctx context.Context, e *orchestrateurEnC
 				err = errors.New(err.Error() + ": " + couper(resultat, 200))
 			}
 		}
-		if err != nil && (m.Etat == "preparation" || m.Etat == "proposee") { // a cancelled or launched mission keeps its state
-			m.Etat = "echec"
-			m.Historique = append(m.Historique, EvenementMission{T: time.Now().UTC().Format(formatCree), Etat: "echec",
-				Detail: couper(s.masquerSecrets(err.Error()), 300)})
+		if err != nil { // a cancelled or launched mission keeps its state, a proposed card too (B85)
+			echec = s.echouerMission(m, err)
 		}
 		return nil
 	})
+	if echec { // C85: its pending launch request would wait forever
+		s.fermerLancementMission(id, "hub", "refuser", "mission en échec")
+	}
 	orchestrateursEnCours.Lock() // last: whoever sees the session ended reads the mission as it left it
 	delete(orchestrateursEnCours.m, id)
 	orchestrateursEnCours.Unlock()

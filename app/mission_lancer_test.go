@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -181,6 +182,23 @@ func TestMissionLancer(t *testing.T) {
 	if len(donne) != 2 || !donne[stripe.ID+"/dev"] || !donne[cf.ID+"/prod"] {
 		t.Fatalf("grants: %v", donne)
 	}
+	// C86: one history line per entry given and environment set; the grants in secrets.env after step 2 (the
+	// fake pilot injects nothing, as a pilot already running)
+	faits := []string{}
+	for _, h := range m.Historique {
+		if strings.HasPrefix(h.Detail, "access given: ") || strings.HasPrefix(h.Detail, "environment set: ") {
+			faits = append(faits, strings.SplitN(h.Detail, " → ", 2)[0])
+		}
+	}
+	if !slices.Equal(faits, []string{"access given: Clé Stripe", "access given: Jeton Cloudflare", "environment set: dev https://dev.martin.fr, auth_proxy, auto", "environment set: prod https://martin.fr, aucune, accord"}) {
+		t.Fatalf("history of the launch: %q", faits)
+	}
+	if b, err := os.ReadFile(filepath.Join(dossier, ".athanor", "secrets.env")); err != nil || !strings.Contains(string(b), temoin+"-code") {
+		t.Fatalf("grants not injected at the launch: %v", err)
+	}
+	if strings.Contains(fmt.Sprint(m.Historique), temoin) {
+		t.Fatal("a value in the mission's history")
+	}
 	envs := s.acces.Environnements(p.Nom)
 	if d := envs["dev"]; d.URL != "https://dev.martin.fr" || d.Protection != "auth_proxy" || d.Politique != "auto" || !d.DeployerAuJalon || !slices.Equal(d.Serveurs, []string{"a2"}) {
 		t.Fatalf("dev: %+v", d)
@@ -218,7 +236,30 @@ func TestMissionLancer(t *testing.T) {
 	t.Cleanup(func() { modeNatif.Store(false) })
 	existant := proposer(CarteMission{Titre: "Page de paiement", Projet: ProjetCarte{Nom: "boutique"}, Dev: BriefCarte{Brief: "Ajouter le paiement"},
 		Serveurs: BriefCarte{Brief: "Ouvrir le port"}, JalonsEstimes: 2, Envs: []EnvCarte{{Nom: "dev", URL: "https://dev.boutique.fr", Serveurs: []string{"a2"}}}}, "tout", "proposee")
+	// C82: the owner's "never ask again" for dev's deployments and for dev-1's plans, set before the tout mission
+	for _, a := range []Approbation{{Projet: "boutique", Env: "dev", Agent: "pilote", Action: actionDeploiement},
+		{Projet: prefixeTache + "t0", Env: "dev", Agent: agentServeurs, Action: actionPlanServeur, Details: map[string]string{"serveur": "a2"}}} {
+		d, _ := s.demanderApprobation(a)
+		if _, err := s.approbations.Decider(d.ID, "toujours", "fenetre"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	regleDeploi := RegleAccord{Projet: "boutique", Env: "dev", Action: actionDeploiement}
+	if !s.approbations.Regle(regleDeploi) || !s.approbations.Regle(reglePlan(prefixeTache, "a2")) || missionTout("boutique/dev") {
+		t.Fatal("rules not set, or a tout mission before the launch")
+	}
 	code, m := lancer(existant, `{"dossier":"C:\\ailleurs"}`)
+	// C82: the launch ends the deployment rule; the plan rule stays for other tasks but the mission's ignore it
+	if s.approbations.Regle(regleDeploi) || !missionTout("boutique/dev") || missionTout("boutique/prod") || missionTout("autre/dev") {
+		t.Fatal("tout mission: the deployment rule survives, or missionTout is wrong")
+	}
+	e := Etape{Outil: "service", Arguments: json.RawMessage(`{"nom":"caddy"}`), Classe: ClasseChangement, Raison: "restart"}
+	if err := s.planOuRegle(SessionHub{Projet: prefixeTache + "t1", Mission: "t1", Agent: agentServeurs, Env: "boutique/dev"}, "a2", &e); err == nil || !strings.Contains(err.Error(), "plan required") {
+		t.Fatalf("a change of a tout mission's task under the server's rule: %v", err)
+	}
+	if err := s.planOuRegle(SessionHub{Projet: prefixeTache + "t2", Mission: "t2", Agent: agentServeurs, Env: "autre/dev"}, "a2", &e); err != nil {
+		t.Fatalf("a change of another task under the server's rule: %v", err)
+	}
 	if code != 200 || m.Etat != "lancee" || len(m.Voies) != 2 || m.Voies[0] != (VoieMission{Module: "dev", Ref: "boutique", Etat: "lancee"}) || m.Voies[1] != (VoieMission{Module: "servers", Ref: "boutique/dev", Etat: "refusee"}) ||
 		!strings.Contains(m.Historique[len(m.Historique)-1].Detail, errServeursNatif.Error()) {
 		t.Fatalf("native mode: %d %+v", code, m)

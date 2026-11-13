@@ -99,6 +99,7 @@ type contexteCarte struct {
 	minutesCycle float64                             // measured average, 0 = unknown
 	coutCycle    float64
 	masquer      func(string) string
+	regle        func(RegleAccord) bool // the owner's "never ask again" rules in place (nil: none)
 }
 
 const (
@@ -251,6 +252,9 @@ func calculerCarte(c CarteMission, politique string, x contexteCarte) CarteMissi
 	for _, sv := range x.inventaire {
 		nomServeur[sv.ID] = sv
 	}
+	// C84: the accords asked as at the run: a rule in place lets through what it covers, except in a tout
+	// mission (C82: its launch ends the deployment rules, its plans ignore the servers' rules) and for prod
+	regle := func(r RegleAccord) bool { return politique != "tout" && x.regle != nil && x.regle(r) }
 	var durcir []string
 	for _, e := range c.Envs {
 		if e.Nom == "prod" {
@@ -259,10 +263,13 @@ func calculerCarte(c CarteMission, politique string, x contexteCarte) CarteMissi
 		if len(e.Serveurs) == 0 {
 			continue
 		}
-		if c.Serveurs.Brief != "" && (politique == "tout" || politique == "prod" && e.Nom == "prod") {
+		// shortcut: a plan under the servers' rules still asks when it is destructive or builds; its steps are not known yet
+		if c.Serveurs.Brief != "" && (e.Nom == "prod" || slices.ContainsFunc(e.Serveurs, func(id string) bool {
+			return slices.Contains(nomServeur[id].Roles, "prod") || !regle(reglePlan(prefixeTache, id))
+		})) {
 			c.Approbations = append(c.Approbations, ApprobationPrevue{"plan_serveurs", e.Nom})
 		}
-		if politique == "tout" && e.Nom != "prod" {
+		if e.Nom != "prod" && e.Politique == "accord" && !regle(RegleAccord{Projet: c.Projet.Nom, Env: e.Nom, Action: actionDeploiement}) {
 			c.Approbations = append(c.Approbations, ApprobationPrevue{"deploiement", e.Nom})
 		}
 		for _, id := range e.Serveurs {
@@ -404,6 +411,9 @@ func (s *Serveur) contexteCarte() contexteCarte {
 				x.zones = append(x.zones, z.Nom)
 			}
 		}
+	}
+	if s.approbations != nil {
+		x.regle = s.approbations.Regle
 	}
 	x.minutesCycle, x.coutCycle = moyennesCycles(projets)
 	return x

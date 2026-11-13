@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -260,5 +262,70 @@ func TestMissionAPI(t *testing.T) {
 	b, _ := os.ReadFile(filepath.Join(dossierMissions(), id+".json"))
 	if strings.Contains(string(b), temoin) {
 		t.Fatal("a vault value in the mission's file")
+	}
+}
+
+// TestMissionCreationBornee (B86): the same sentence sent twice at once (a double click) gives one mission and one
+// session; beyond maxOrchestrateurs sessions preparing at once, a new mission is refused (429) and none is created.
+func TestMissionCreationBornee(t *testing.T) {
+	s := serveurCoffreTest(t)
+	s.session = aleatoire(8)
+	mux := http.NewServeMux()
+	s.routes(mux)
+	_ = os.RemoveAll(dossierMissions())
+	t.Cleanup(func() { _ = os.RemoveAll(dossierMissions()) })
+	liberer := make(chan struct{})
+	var sessions atomic.Int32
+	ancien := sessionOrchestrateur
+	t.Cleanup(func() { sessionOrchestrateur = ancien })
+	sessionOrchestrateur = func(_ *Serveur, ctx context.Context, dossier string) error { // works until released
+		sessions.Add(1)
+		select {
+		case <-liberer:
+		case <-ctx.Done():
+		}
+		return os.WriteFile(filepath.Join(dossier, "session.jsonl"), []byte(`{"type":"system","subtype":"init","session_id":"s"}`+"\n"), 0o600)
+	}
+	creer := func(phrase string) (int, string) {
+		r := httptest.NewRequest("POST", "/api/missions", strings.NewReader(`{"phrase":"`+phrase+`"}`))
+		r.Header.Set("X-Athanor", "jeton")
+		r.AddCookie(&http.Cookie{Name: cookieAcces, Value: "cle"})
+		r.AddCookie(&http.Cookie{Name: "athanor_session", Value: s.session})
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, r)
+		var v struct{ Mission Mission }
+		_ = json.Unmarshal(w.Body.Bytes(), &v)
+		return w.Code, v.Mission.ID
+	}
+	var wg sync.WaitGroup
+	ids := make([]string, 2)
+	for i := range ids {
+		wg.Add(1)
+		go func() { defer wg.Done(); _, ids[i] = creer("Un site pour la boulangerie") }()
+	}
+	wg.Wait()
+	if ids[0] == "" || ids[0] != ids[1] || len(lireMissions()) != 1 {
+		t.Fatalf("double click: missions %v, %d stored", ids, len(lireMissions()))
+	}
+	for _, p := range []string{"Un blog", "Une boutique"} {
+		if code, _ := creer(p); code != 200 {
+			t.Fatalf("%s: %d", p, code)
+		}
+	}
+	if code, id := creer("Un quatrième site"); code != http.StatusTooManyRequests || id != "" || len(lireMissions()) != 3 {
+		t.Fatalf("a fourth orchestrator: %d %q, %d missions", code, id, len(lireMissions()))
+	}
+	close(liberer)
+	for range 200 {
+		orchestrateursEnCours.Lock()
+		n := len(orchestrateursEnCours.m)
+		orchestrateursEnCours.Unlock()
+		if n == 0 {
+			break
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	if n := sessions.Load(); n != 3 {
+		t.Fatalf("%d orchestrator sessions, want 3", n)
 	}
 }

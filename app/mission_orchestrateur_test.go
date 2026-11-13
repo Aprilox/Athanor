@@ -150,6 +150,32 @@ func TestOrchestrateurSession(t *testing.T) {
 	}
 	delaiOrchestrateur = ancienDelai
 
+	// 3b. B85, C85: a session in error after a valid card: the card stays proposee and launchable, the error in its
+	// history, its launch request still pending; before any card: echec, and its pending launch request refused
+	for _, cas := range []struct {
+		id, etat string
+		carte    json.RawMessage
+	}{{"mis005", "proposee", json.RawMessage(`{"titre":"Boutique"}`)}, {"mis006", "preparation", nil}} {
+		nouvelle(cas.id)
+		_, _ = modifierMission(cas.id, func(m *Mission) error { m.Etat, m.Carte = cas.etat, cas.carte; return nil })
+		if _, err := s.demanderApprobation(Approbation{Projet: prefixeMission + cas.id, Mission: cas.id, Agent: agentOrchestrateur, Action: actionMission}); err != nil {
+			t.Fatal(err)
+		}
+		jouer = func(context.Context, string) (string, string, bool) { return "sess-9", "exit status 1", true }
+		if err := s.lancerOrchestrateur(cas.id, "A change."); err != nil {
+			t.Fatal(err)
+		}
+		m := finie(cas.id)
+		h := m.Historique[len(m.Historique)-1]
+		_, attente := s.accordMissionAttente(cas.id)
+		if cas.carte != nil && (m.Etat != "proposee" || h.Etat != "proposee" || !strings.HasPrefix(h.Detail, "error: ") || !attente) {
+			t.Errorf("error after a card: %s %+v, request pending %v", m.Etat, h, attente)
+		}
+		if cas.carte == nil && (m.Etat != "echec" || attente) {
+			t.Errorf("error before a card: %s, request pending %v", m.Etat, attente)
+		}
+	}
+
 	// 4. a session in error, one that never started, one that ends without a card: echec, each with its reason
 	for i, cas := range []struct {
 		id, res  string

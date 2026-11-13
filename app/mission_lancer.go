@@ -137,9 +137,10 @@ func (s *Serveur) lancerMission(id, qui, dossier, empreinte string) (Mission, er
 		return m, err
 	}
 	s.ecrireAudit(LigneAudit{Type: "evenement", De: qui, Vers: "missions", Projet: prefixeMission + id, Mission: id, Action: "mission lancée", Resultat: c.Titre})
-	voies, err := s.etapesMission(c, m.Politique, qui, dossier)
+	voies, faits, err := s.etapesMission(c, m.Politique, qui, dossier)
 	return modifierMission(id, func(m *Mission) error {
 		m.Voies = voies
+		m.Historique = append(m.Historique, faits...) // C86: what was given and set, even when a later step failed
 		if err != nil {
 			m.Etat = "echec"
 			m.Historique = append(m.Historique, evenementMission("echec", couper(s.masquerSecrets(err.Error()), 300)))
@@ -183,9 +184,10 @@ func (s *Serveur) controlerDossierMission(nom, dossier string) error {
 	return nil
 }
 
-// etapesMission: the launch's steps in order; the lanes started so far, and the first step's error.
-func (s *Serveur) etapesMission(c CarteMission, politique, qui, dossier string) ([]VoieMission, error) {
-	voies := []VoieMission{}
+// etapesMission: the launch's steps in order; the lanes started so far, one history line per entry given and
+// environment set (C86), and the first step's error.
+func (s *Serveur) etapesMission(c CarteMission, politique, qui, dossier string) ([]VoieMission, []EvenementMission, error) {
+	voies, faits := []VoieMission{}, []EvenementMission{}
 	audit := func(v VoieMission) {
 		voies = append(voies, v)
 		s.ecrireAudit(LigneAudit{Type: "evenement", De: qui, Vers: v.Module, Projet: c.Projet.Nom, Action: "voie de mission lancée", Resultat: v.Ref + " → " + v.Etat})
@@ -195,22 +197,22 @@ func (s *Serveur) etapesMission(c CarteMission, politique, qui, dossier string) 
 	if c.Projet.Nouveau {
 		var err error
 		if p, _, err = s.ajouterProjet(c.Projet.Nom, dossier, c.Dev.Brief, false); err != nil {
-			return voies, errors.New("creating the project: " + err.Error())
+			return voies, faits, errors.New("creating the project: " + err.Error())
 		}
 	} else {
 		var ok bool
 		if p, ok = s.projetNomme(c.Projet.Nom); !ok {
-			return voies, errors.New("the project " + c.Projet.Nom + " no longer exists")
+			return voies, faits, errors.New("the project " + c.Projet.Nom + " no longer exists")
 		}
 		if c.Dev.Brief != "" {
 			if _, _, err := s.ajouterDemande(p, c.Titre, c.Dev.Brief); err != nil {
-				return voies, errors.New("adding the request: " + err.Error())
+				return voies, faits, errors.New("adding the request: " + err.Error())
 			}
 		}
 	}
 	// 2. the ticked vault entries (an entry already given stays as it is; one to fill is the owner's)
 	if s.acces == nil {
-		return voies, errors.New("the access file cannot be read")
+		return voies, faits, errors.New("the access file cannot be read")
 	}
 	for _, a := range c.Acces {
 		if a.Decoche || a.ARemplir {
@@ -222,9 +224,16 @@ func (s *Serveur) etapesMission(c CarteMission, politique, qui, dossier string) 
 			continue
 		}
 		if err != nil {
-			return voies, errors.New("giving " + a.Entree + ": " + err.Error())
+			return voies, faits, errors.New("giving " + a.Entree + ": " + err.Error())
 		}
 		s.auditAcces(qui, p.Nom, "acces_accorde", e, g.Variable, g.Env)
+		faits = append(faits, evenementMission("lancee", "access given: "+a.Entree+" → "+g.Variable+" ("+g.Env+")"))
+	}
+	// C86: in the project's secrets.env now, a pilot already running included (demarrerPilote stops before it)
+	if len(faits) > 0 {
+		if _, err := s.injecterAcces(p, nil); err != nil {
+			return voies, faits, errors.New("writing the access given: " + err.Error())
+		}
 	}
 	// 3. the environments: the card's URL, protection and servers, the mission's policy (prod: always accord)
 	inventaire, _ := lireServeurs()
@@ -238,19 +247,28 @@ func (s *Serveur) etapesMission(c CarteMission, politique, qui, dossier string) 
 			err = s.acces.DefinirEnvironnement(p.Nom, ec.Nom, v)
 		}
 		if err != nil {
-			return voies, errors.New("the environment " + ec.Nom + ": " + err.Error())
+			return voies, faits, errors.New("the environment " + ec.Nom + ": " + err.Error())
+		}
+		faits = append(faits, evenementMission("lancee", "environment set: "+ec.Nom+" "+ec.URL+", "+ec.Protection+", "+ec.Politique))
+		// C82: a tout mission asks every deployment of its environments: the owner's "never ask again" ends (as B71)
+		if politique == "tout" && s.approbations != nil {
+			if _, err := s.approbations.RetirerRegles(func(r RegleAccord) bool {
+				return r.Projet == p.Nom && r.Env == ec.Nom && r.Action == actionDeploiement
+			}); err != nil {
+				return voies, faits, errors.New("the environment " + ec.Nom + ": " + err.Error())
+			}
 		}
 	}
 	// 4. the pilot (it injects the grants given above)
 	if c.Dev.Brief != "" {
 		if _, err := demarrerPiloteMission(s, p); err != nil {
-			return voies, errors.New("starting the pilot: " + err.Error())
+			return voies, faits, errors.New("starting the pilot: " + err.Error())
 		}
 		audit(VoieMission{Module: "dev", Ref: p.Nom, Etat: "lancee"})
 	}
 	// 5. one Servers task per environment with servers; native Windows mode: the lane is refused, Dev goes on
 	if c.Serveurs.Brief == "" {
-		return voies, nil
+		return voies, faits, nil
 	}
 	for _, ec := range c.Envs {
 		if len(ec.Serveurs) == 0 {
@@ -264,11 +282,25 @@ func (s *Serveur) etapesMission(c CarteMission, politique, qui, dossier string) 
 		texte := c.Serveurs.Brief + "\n\nMission \"" + c.Titre + "\", environment " + ec.Nom + ": " + ec.URL + ", protection " + ec.Protection + "."
 		t, err := s.lancerTache(couper(texte, maxTexteTache-1), ec.Serveurs, false, env)
 		if err != nil {
-			return voies, errors.New("the Servers task for " + env + ": " + err.Error())
+			return voies, faits, errors.New("the Servers task for " + env + ": " + err.Error())
 		}
 		audit(VoieMission{Module: "servers", Ref: t.ID, Etat: t.Etat})
 	}
-	return voies, nil
+	return voies, faits, nil
+}
+
+// missionTout (C82): a launched mission of policy tout covers env ("project/env"): its Servers plans and changes
+// always ask the owner, whatever rule ("do not ask again for this server") is in place.
+func missionTout(env string) bool {
+	projet, nom, ok := strings.Cut(env, "/")
+	if !ok {
+		return false
+	}
+	return slices.ContainsFunc(lireMissions(), func(m Mission) bool {
+		var c CarteMission
+		return m.Etat == "lancee" && m.Politique == "tout" && json.Unmarshal(m.Carte, &c) == nil && c.Projet.Nom == projet &&
+			slices.ContainsFunc(c.Envs, func(e EnvCarte) bool { return e.Nom == nom })
+	})
 }
 
 // apiLancerMission: POST /api/missions/{id}/lancer {dossier?, mot_de_passe}: the mission launched (its state and lanes in the

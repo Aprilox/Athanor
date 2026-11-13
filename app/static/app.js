@@ -2055,8 +2055,9 @@ document.addEventListener("submit", async (ev) => {
   if (await actionMission("repondre", { question: ev.target.dataset.question, texte })) etat.missionReponse = "";
 });
 async function envoyerAccueil() {
-  const texte = ($("#accueil-texte").value || "").trim(); if (!texte) return;
-  const r = await action(api("missions", "POST", { phrase: texte, mentions: (etat.accueilMentions || []).map((m) => ({ type: m.type, ref: m.ref })) }), "");
+  const texte = ($("#accueil-texte").value || "").trim(); if (!texte || etat.envoiMission) return;
+  etat.envoiMission = true; // B86: a double click sends once
+  const r = await action(api("missions", "POST", { phrase: texte, mentions: (etat.accueilMentions || []).map((m) => ({ type: m.type, ref: m.ref })) }), "").finally(() => { etat.envoiMission = false; });
   if (!r) return;
   etat.accueilTexte = ""; etat.accueilMentions = []; $("#accueil-texte").value = ""; majMentions();
   etat.missionVue = { mission: r.mission, orchestrateur: r.mission.etat === "preparation" }; etat.missionEdition = null;

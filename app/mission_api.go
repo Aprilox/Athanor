@@ -11,7 +11,9 @@ import (
 	"net/http"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -65,18 +67,43 @@ func evenementMission(etat, detail string) EvenementMission {
 	return EvenementMission{T: time.Now().UTC().Format(formatCree), Etat: etat, Detail: detail}
 }
 
-// relancerOuEchec: the orchestrator resumed with enTete; if it cannot start, the mission is in echec with the reason.
+// echouerMission (B85, C85): the orchestrator's err ends a mission in preparation (echec); a card already
+// proposed stays launchable, the error in its history. Whether m went to echec.
+func (s *Serveur) echouerMission(m *Mission, err error) bool {
+	detail := couper(s.masquerSecrets(err.Error()), 300)
+	switch {
+	case m.Etat == "proposee" && len(m.Carte) > 0:
+		m.Historique = append(m.Historique, evenementMission("proposee", "error: "+detail))
+	case m.Etat == "preparation" || m.Etat == "proposee":
+		m.Etat = "echec"
+		m.Historique = append(m.Historique, evenementMission("echec", detail))
+		return true
+	}
+	return false
+}
+
+// relancerOuEchec: the orchestrator resumed with enTete; if it cannot start, the mission is in echec with the
+// reason (a proposed card stays) and its pending launch request is refused.
 func (s *Serveur) relancerOuEchec(id, enTete string) Mission {
 	err := s.lancerOrchestrateur(id, enTete)
+	echec := false
 	m, _ := modifierMission(id, func(m *Mission) error {
-		if err != nil && (m.Etat == "preparation" || m.Etat == "proposee") {
-			m.Etat = "echec"
-			m.Historique = append(m.Historique, evenementMission("echec", couper(s.masquerSecrets(err.Error()), 300)))
+		if err != nil {
+			echec = s.echouerMission(m, err)
 		}
 		return nil
 	})
+	if echec {
+		s.fermerLancementMission(id, "hub", "refuser", "mission en échec")
+	}
 	return m
 }
+
+// maxOrchestrateurs (B86): orchestrators' sessions at once; a new mission beyond is refused (each uses quota).
+const maxOrchestrateurs = 3
+
+// verrouCreationMission (B86): two sends of the same sentence (a double click) give one mission.
+var verrouCreationMission sync.Mutex
 
 // tacheMission: the Servers task id wherever its server is (a running one as it is now).
 func tacheMission(id string) (TacheServeurs, bool) {
@@ -162,8 +189,23 @@ func (s *Serveur) apiCreerMission(w http.ResponseWriter, r *http.Request) {
 		s.erreurMissionHTTP(w, err)
 		return
 	}
+	verrouCreationMission.Lock()
+	defer verrouCreationMission.Unlock()
+	phrase = s.masquerSecrets(phrase)
+	l := lireMissions()
+	if i := slices.IndexFunc(l, func(m Mission) bool { return m.Etat == "preparation" && m.Phrase == phrase }); i >= 0 {
+		s.ecrireJSON(w, map[string]any{"mission": l[i]}) // the same sentence being prepared: that mission
+		return
+	}
+	orchestrateursEnCours.Lock()
+	occupes := len(orchestrateursEnCours.m)
+	orchestrateursEnCours.Unlock()
+	if occupes >= maxOrchestrateurs {
+		s.erreurArgs(w, http.StatusTooManyRequests, "{0} missions are already being prepared: wait for one of their cards", strconv.Itoa(occupes))
+		return
+	}
 	cree := time.Now().UTC().Format(formatCree)
-	m := Mission{ID: aleatoire(8), Phrase: s.masquerSecrets(phrase), Mentions: mentions, Etat: "preparation", Politique: "prod",
+	m := Mission{ID: aleatoire(8), Phrase: phrase, Mentions: mentions, Etat: "preparation", Politique: "prod",
 		Voies: []VoieMission{}, Questions: []QuestionMission{}, Historique: []EvenementMission{{T: cree, Etat: "preparation"}}, Cree: cree}
 	if err := enregistrerMission(m); err != nil {
 		s.erreur(w, http.StatusInternalServerError, err.Error())

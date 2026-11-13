@@ -293,8 +293,8 @@ func outilProposerPlan(s *Serveur, x SessionHub, args json.RawMessage) (string, 
 	regle := !prod && haut < ClasseDestructrice && !construit
 	demande := Approbation{Projet: x.Projet, Env: p.Env, Mission: x.Mission, Agent: x.Agent, Action: actionPlanServeur, Raison: resume,
 		Details: map[string]string{"serveur": p.Serveur, "nom": p.Nom, "classe": haut.String(), "etapes": strconv.Itoa(len(p.Etapes)), "regle": map[bool]string{true: "oui", false: "non"}[regle]}}
-	// the owner's "do not ask again for this server": the plan is accepted at once, without a ping
-	parRegle := regle && s.approbations.Regle(reglePlan(x.Projet, p.Serveur))
+	// the owner's "do not ask again for this server": the plan is accepted at once, without a ping (not in a tout mission, C82)
+	parRegle := regle && s.approbations.Regle(reglePlan(x.Projet, p.Serveur)) && !missionTout(x.Env)
 	var ap Approbation
 	if parRegle {
 		ap, err = s.approbations.Demander(demande)
@@ -418,7 +418,7 @@ func (s *Serveur) planOuRegle(x SessionHub, id string, e *Etape) error {
 		audit(fmt.Sprintf("accordé : plan %s, étape %d (%s)", p.ID, n, e.Classe))
 		return nil
 	}
-	if _, prod := serveurProd(id); e.Classe == ClasseChangement && !prod && s.approbations.Regle(reglePlan(x.Projet, id)) {
+	if _, prod := serveurProd(id); e.Classe == ClasseChangement && !prod && s.approbations.Regle(reglePlan(x.Projet, id)) && !missionTout(x.Env) {
 		audit("accordé : règle « ne plus demander » pour ce serveur (changement)")
 		return nil
 	}

@@ -22,11 +22,13 @@ What the card shows next is **worked out by Athanor, not by the orchestrator**:
 
 | Choice | *dev* and *staging* deployments | Servers plans | *prod* |
 |---|---|---|---|
-| *Ask me for production* (default) | automatic when nothing is destroyed | those of *prod* wait for you | waits for you |
-| *Ask me for everything* | wait for you | every plan waits for you | waits for you |
-| *Autonomous* | automatic when nothing is destroyed | as usual for each server | waits for you |
+| *Ask me for production* (default) | automatic when nothing is destroyed | wait for you, unless your *Never ask again* for that server | waits for you |
+| *Ask me for everything* | wait for you (the launch ends your *Never ask again* for them) | every plan waits for you, even under *Never ask again* | waits for you |
+| *Autonomous* | automatic when nothing is destroyed | wait for you, unless your *Never ask again* for that server | waits for you |
 
-A deployment to *prod* waits for your agreement whatever the choice, and so do destructive steps on a server and anything on a *prod* server (see the Servers agent's guardrails in the README).
+A deployment to *prod* waits for your agreement whatever the choice, and so do destructive steps on a server and anything on a *prod* server (see the Servers agent's guardrails in the README). The card's *I will ask for your approval for* list is worked out with these same rules, your *Never ask again* included: what it lists is what you will be asked.
+
+If the orchestrator's session fails after showing you a card, the card stays and can still be launched; the error goes to the mission's history. While three missions are being prepared, a fourth waits: send it again once a card is ready. Sending the same sentence twice while it is being prepared gives the same mission.
 
 ## Edit, launch, cancel
 

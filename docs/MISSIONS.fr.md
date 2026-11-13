@@ -22,11 +22,13 @@ Ce que la carte montre ensuite est **calculé par Athanor, pas par l'orchestrate
 
 | Choix | Déploiements *dev* et *staging* | Plans Serveurs | *prod* |
 |---|---|---|---|
-| *Me demander pour la prod* (par défaut) | automatiques quand rien n'est détruit | ceux de la *prod* vous attendent | vous attend |
-| *Me demander pour tout* | vous attendent | chaque plan vous attend | vous attend |
-| *Autonome* | automatiques quand rien n'est détruit | comme d'habitude pour chaque serveur | vous attend |
+| *Me demander pour la prod* (par défaut) | automatiques quand rien n'est détruit | vous attendent, sauf votre *Ne plus demander* pour ce serveur | vous attend |
+| *Me demander pour tout* | vous attendent (le lancement retire vos *Ne plus demander* pour eux) | chaque plan vous attend, même sous *Ne plus demander* | vous attend |
+| *Autonome* | automatiques quand rien n'est détruit | vous attendent, sauf votre *Ne plus demander* pour ce serveur | vous attend |
 
-Un déploiement en *prod* attend votre accord quel que soit le choix, de même que les étapes destructrices sur un serveur et tout ce qui touche un serveur *prod* (voir les garde-fous de l'agent Serveurs dans le README).
+Un déploiement en *prod* attend votre accord quel que soit le choix, de même que les étapes destructrices sur un serveur et tout ce qui touche un serveur *prod* (voir les garde-fous de l'agent Serveurs dans le README). La liste *Je vous demanderai votre accord pour* de la carte est calculée avec ces mêmes règles, vos *Ne plus demander* compris : ce qu'elle annonce est ce qui vous sera demandé.
+
+Si la session de l'orchestrateur échoue après vous avoir montré une carte, la carte reste et peut toujours être lancée ; l'erreur va à l'historique de la mission. Tant que trois missions sont en préparation, une quatrième attend : renvoyez-la quand une carte est prête. Envoyer deux fois la même phrase pendant sa préparation donne la même mission.
 
 ## Modifier, lancer, annuler
 

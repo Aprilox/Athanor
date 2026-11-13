@@ -129,14 +129,21 @@ func TestCalculerCarte(t *testing.T) {
 		carte     func(*CarteMission)
 		veut      []string
 	}{
-		{"prod", "prod", nil, nil, []string{"mise_en_prod:https://martin.fr", "plan_serveurs:prod", "durcissement:vps-prod", "deverrouiller_coffre:"}},
-		{"politique inconnue = prod", "n'importe", nil, nil, []string{"mise_en_prod:https://martin.fr", "plan_serveurs:prod", "durcissement:vps-prod", "deverrouiller_coffre:"}},
+		// C84: the same rule as at the run: no rule in place, the dev plan asks too; prod's always does
+		{"prod", "prod", nil, nil, []string{"plan_serveurs:dev", "mise_en_prod:https://martin.fr", "plan_serveurs:prod", "durcissement:vps-prod", "deverrouiller_coffre:"}},
+		{"politique inconnue = prod", "n'importe", nil, nil, []string{"plan_serveurs:dev", "mise_en_prod:https://martin.fr", "plan_serveurs:prod", "durcissement:vps-prod", "deverrouiller_coffre:"}},
 		{"tout", "tout", nil, nil, []string{"plan_serveurs:dev", "deploiement:dev", "mise_en_prod:https://martin.fr", "plan_serveurs:prod", "durcissement:vps-prod", "deverrouiller_coffre:"}},
-		{"autonome", "autonome", nil, nil, []string{"mise_en_prod:https://martin.fr", "durcissement:vps-prod", "deverrouiller_coffre:"}},
-		{"coffre infra ouvert", "autonome", func(x *contexteCarte) { x.infraOuvert = true }, nil, []string{"mise_en_prod:https://martin.fr", "durcissement:vps-prod"}},
-		{"entrée infra décochée", "autonome", nil, func(c *CarteMission) { c.Acces[0].Decoche = true }, []string{"mise_en_prod:https://martin.fr", "durcissement:vps-prod"}},
-		{"serveurs déjà durcis", "autonome", func(x *contexteCarte) { x.inventaire[1].MotDePasseCoupe = true }, nil, []string{"mise_en_prod:https://martin.fr", "deverrouiller_coffre:"}},
+		{"autonome", "autonome", nil, nil, []string{"plan_serveurs:dev", "mise_en_prod:https://martin.fr", "plan_serveurs:prod", "durcissement:vps-prod", "deverrouiller_coffre:"}},
+		{"coffre infra ouvert", "autonome", func(x *contexteCarte) { x.infraOuvert = true }, nil, []string{"plan_serveurs:dev", "mise_en_prod:https://martin.fr", "plan_serveurs:prod", "durcissement:vps-prod"}},
+		{"entrée infra décochée", "autonome", nil, func(c *CarteMission) { c.Acces[0].Decoche = true }, []string{"plan_serveurs:dev", "mise_en_prod:https://martin.fr", "plan_serveurs:prod", "durcissement:vps-prod"}},
+		{"serveurs déjà durcis", "autonome", func(x *contexteCarte) { x.inventaire[1].MotDePasseCoupe = true }, nil, []string{"plan_serveurs:dev", "mise_en_prod:https://martin.fr", "plan_serveurs:prod", "deverrouiller_coffre:"}},
 		{"sans prod", "tout", nil, func(c *CarteMission) { c.Envs = c.Envs[:1]; c.Acces = nil }, []string{"plan_serveurs:dev", "deploiement:dev"}},
+		// rules in place: the dev server's lets its plan through, never a prod server's; tout ignores them all (C82)
+		{"règles en place", "prod", func(x *contexteCarte) { x.regle = func(RegleAccord) bool { return true } }, nil, []string{"mise_en_prod:https://martin.fr", "plan_serveurs:prod", "durcissement:vps-prod", "deverrouiller_coffre:"}},
+		{"règle d'un autre serveur", "prod", func(x *contexteCarte) {
+			x.regle = func(r RegleAccord) bool { return r == reglePlan(prefixeTache, "s2prod") }
+		}, nil, []string{"plan_serveurs:dev", "mise_en_prod:https://martin.fr", "plan_serveurs:prod", "durcissement:vps-prod", "deverrouiller_coffre:"}},
+		{"tout et règles en place", "tout", func(x *contexteCarte) { x.regle = func(RegleAccord) bool { return true } }, nil, []string{"plan_serveurs:dev", "deploiement:dev", "mise_en_prod:https://martin.fr", "plan_serveurs:prod", "durcissement:vps-prod", "deverrouiller_coffre:"}},
 	}
 	for _, tc := range cas {
 		xx, c := x, carte
@@ -192,6 +199,27 @@ func TestCalculerCarte(t *testing.T) {
 	}
 	if c := calculerCarte(e, "prod", x); c.Touche.Dossier != `C:\Dev\site` || !slices.Equal(c.Touche.Zones, []string{"site.fr"}) {
 		t.Errorf("existing project: %+v", c.Touche)
+	}
+	// C84: an existing dev environment that asks keeps asking (C81): its deployment is on the card, unless the
+	// owner's rule lets it through (prod policy) or the tout launch ends that rule (C82)
+	e.Envs = []EnvCarte{{Nom: "dev", URL: "https://dev.site.fr", Serveurs: []string{"s1dev"}}}
+	e.Serveurs = BriefCarte{}
+	if err := validerCarte(&e, x); err != nil {
+		t.Fatal(err)
+	}
+	xx = x
+	xx.envs = map[string]map[string]Environnement{"site-existant": {"dev": {URL: "https://dev.site.fr", Serveurs: []string{"s1dev"}, Politique: "accord"}}}
+	if got := types(calculerCarte(e, "prod", xx)); !slices.Equal(got, []string{"deploiement:dev"}) {
+		t.Errorf("existing dev that asks: %v", got)
+	}
+	xx.regle = func(r RegleAccord) bool {
+		return r == RegleAccord{Projet: "site-existant", Env: "dev", Action: actionDeploiement}
+	}
+	if got := types(calculerCarte(e, "prod", xx)); len(got) != 0 {
+		t.Errorf("deployment under the owner's rule still on the card: %v", got)
+	}
+	if got := types(calculerCarte(e, "tout", xx)); !slices.Equal(got, []string{"deploiement:dev"}) {
+		t.Errorf("tout: the rule ends at the launch, the deployment asks: %v", got)
 	}
 }
 
