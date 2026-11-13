@@ -187,10 +187,10 @@ func TestCaptureHub(t *testing.T) {
 		}
 		ctx := s.contexteCarte()
 		c := CarteMission{Titre: "Site vitrine de la boulangerie Martin", Projet: ProjetCarte{Nom: "boulangerie-martin", Nouveau: true},
-			Dev: BriefCarte{"Un site vitrine : la boutique, les horaires, les pains du jour et un formulaire de commande pour le retrait."},
+			Dev: BriefCarte{Brief: "Un site vitrine : la boutique, les horaires, les pains du jour et un formulaire de commande pour le retrait."},
 			Envs: []EnvCarte{{Nom: "dev", URL: "https://dev.boulangerie-martin.fr", Protection: "auth_proxy", Serveurs: []string{"c0ffee02"}},
 				{Nom: "prod", URL: "https://boulangerie-martin.fr", Protection: "aucune", Serveurs: []string{"c0ffee01"}}},
-			Serveurs: BriefCarte{"Noms DNS chez Cloudflare, certificats, proxy Caddy, mot de passe devant dev, pare-feu."},
+			Serveurs: BriefCarte{Brief: "Noms DNS chez Cloudflare, certificats, proxy Caddy, mot de passe devant dev, pare-feu."},
 			Acces: []AccesCarte{{Entree: "CLOUDFLARE_API_TOKEN", Pour: "boulangerie-martin/prod"}, {Entree: "SSH_VPS_PROD", Pour: "c0ffee01"},
 				{Entree: "STRIPE_SECRET_KEY", Pour: "boulangerie-martin"}, {Entree: "SMTP_PASSWORD", Pour: "boulangerie-martin"}},
 			JalonsEstimes: 8}
@@ -232,9 +232,9 @@ func TestCaptureHub(t *testing.T) {
 				http.Error(w, err.Error(), 500)
 				return
 			}
-			c := CarteMission{Titre: "Paiement en ligne de la boutique", Projet: ProjetCarte{Nom: "projet-02"}, Dev: BriefCarte{"Ajouter le paiement par carte au panier."},
+			c := CarteMission{Titre: "Paiement en ligne de la boutique", Projet: ProjetCarte{Nom: "projet-02"}, Dev: BriefCarte{Brief: "Ajouter le paiement par carte au panier."},
 				Envs:     []EnvCarte{{Nom: "staging", URL: "https://recette.boutique.fr", Protection: "auth_proxy", Serveurs: []string{"c0ffee02"}}},
-				Serveurs: BriefCarte{"Nom DNS de recette, certificat et proxy."}, JalonsEstimes: 3}
+				Serveurs: BriefCarte{Brief: "Nom DNS de recette, certificat et proxy."}, JalonsEstimes: 3}
 			if err := validerCarte(&c, ctx); err != nil {
 				http.Error(w, err.Error(), 500)
 				return
@@ -248,10 +248,10 @@ func TestCaptureHub(t *testing.T) {
 				http.Error(w, err.Error(), 500)
 				return
 			}
-			c6 := CarteMission{Titre: "Formulaire de contact de projet-01", Projet: ProjetCarte{Nom: "projet-01"}, Dev: BriefCarte{"Un formulaire de contact avec envoi d'e-mail."},
+			c6 := CarteMission{Titre: "Formulaire de contact de projet-01", Projet: ProjetCarte{Nom: "projet-01"}, Dev: BriefCarte{Brief: "Un formulaire de contact avec envoi d'e-mail."},
 				Envs: []EnvCarte{{Nom: "dev", URL: "https://dev.projet-01.fr", Protection: "auth_proxy", Serveurs: []string{"c0ffee02"}},
 					{Nom: "prod", URL: "https://projet-01.fr", Protection: "aucune", Serveurs: []string{"c0ffee01"}}},
-				Serveurs: BriefCarte{"Noms DNS, certificats et proxy de dev et de prod."}, JalonsEstimes: 4}
+				Serveurs: BriefCarte{Brief: "Noms DNS, certificats et proxy de dev et de prod."}, JalonsEstimes: 4}
 			if err := validerCarte(&c6, ctx); err != nil {
 				http.Error(w, err.Error(), 500)
 				return

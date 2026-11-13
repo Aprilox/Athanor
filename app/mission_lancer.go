@@ -204,6 +204,12 @@ func (s *Serveur) etapesMission(c CarteMission, politique, qui, dossier string) 
 		if p, _, err = s.ajouterProjet(c.Projet.Nom, dossier, c.Dev.Brief, false); err != nil {
 			return voies, faits, errMoteur("creating the project: {0}", err)
 		}
+		if md := c.Dev.Modes; md != nil { // before its pilot starts: its first cycle reads them
+			if err := p.ecrireMode(ModeVue{Parallele: md.Parallele, Eco: md.Eco, Rapide: md.Rapide}); err != nil {
+				return voies, faits, errMoteur("the working modes: {0}", err)
+			}
+			faits = append(faits, evenementMission("lancee", "working modes set: "+nomsModes(*md)))
+		}
 	} else {
 		var ok bool
 		if p, ok = s.projetNomme(c.Projet.Nom); !ok {

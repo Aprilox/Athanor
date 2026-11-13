@@ -18,7 +18,32 @@ type ProjetCarte struct {
 }
 
 type BriefCarte struct {
-	Brief string `json:"brief"`
+	Brief string      `json:"brief"`
+	Modes *ModesCarte `json:"modes,omitempty"` // Dev, a new project only: its working modes (as Manage › Working mode)
+}
+
+// ModesCarte: the three independent switches of a new project, written at the launch by Projet.ecrireMode.
+type ModesCarte struct {
+	Parallele bool `json:"parallele"`
+	Eco       bool `json:"eco"`
+	Rapide    bool `json:"rapide"`
+}
+
+// nomsModes: "parallel, eco, fast" (the switched-on ones), "usual" when none, for the mission's history.
+func nomsModes(m ModesCarte) string {
+	var l []string
+	for _, x := range []struct {
+		on  bool
+		nom string
+	}{{m.Parallele, "parallel"}, {m.Eco, "eco"}, {m.Rapide, "fast"}} {
+		if x.on {
+			l = append(l, x.nom)
+		}
+	}
+	if len(l) == 0 {
+		return "usual"
+	}
+	return strings.Join(l, ", ")
 }
 
 type EnvCarte struct {
@@ -145,6 +170,10 @@ func validerCarte(c *CarteMission, x contexteCarte) error {
 		return erreurEntreeArgs{"A project named {0} already exists: set nouveau to false to work on it", []string{x.projets[i].Nom}}
 	case c.Projet.Nouveau && c.Dev.Brief == "":
 		return erreurEntree("A new project needs a Dev brief")
+	case !c.Projet.Nouveau && c.Dev.Modes != nil: // an existing project's modes are the owner's, in Manage
+		return erreurEntree("Working modes are chosen for a new project only")
+	case c.Serveurs.Modes != nil:
+		return erreurEntree("Working modes belong to the Dev lane")
 	case !c.Projet.Nouveau && (i < 0 || x.projets[i].Archive):
 		return erreurEntreeArgs{"There is no project named {0}: give an existing one, or set nouveau to true", []string{c.Projet.Nom}}
 	case !c.Projet.Nouveau:

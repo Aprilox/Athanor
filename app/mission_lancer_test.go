@@ -133,7 +133,7 @@ func TestMissionLancer(t *testing.T) {
 
 	// 1. a new project: dev behind auth_proxy on dev-1, prod on web-1, Stripe for the project, Cloudflare for web-1
 	neuf := proposer(CarteMission{Titre: "Site de la boulangerie", Projet: ProjetCarte{Nom: "boulangerie-martin", Nouveau: true},
-		Dev: BriefCarte{Brief: "Un site vitrine avec les horaires"}, Serveurs: BriefCarte{Brief: "DNS, certificats et Caddy"}, JalonsEstimes: 5,
+		Dev: BriefCarte{Brief: "Un site vitrine avec les horaires", Modes: &ModesCarte{Eco: true, Rapide: true}}, Serveurs: BriefCarte{Brief: "DNS, certificats et Caddy"}, JalonsEstimes: 5,
 		Envs: []EnvCarte{{Nom: "dev", URL: "https://dev.martin.fr", Protection: "auth_proxy", Serveurs: []string{"a2"}},
 			{Nom: "prod", URL: "https://martin.fr", Protection: "aucune", Serveurs: []string{"a1"}}},
 		Acces: []AccesCarte{{Entree: "Clé Stripe", Pour: "boulangerie-martin"}, {Entree: "Jeton Cloudflare", Pour: "a1"},
@@ -174,6 +174,13 @@ func TestMissionLancer(t *testing.T) {
 	p, ok := s.projetNomme("boulangerie-martin")
 	if b, _ := os.ReadFile(p.Demande()); !ok || p.Dossier != dossier || !strings.Contains(string(b), "Un site vitrine avec les horaires") || !slices.Equal(pilotes, []string{"boulangerie-martin"}) {
 		t.Fatalf("project %+v, request %q, pilots %v", p, b, pilotes)
+	}
+	// M174b: the card's working modes written by the same function as Manage, before the pilot starts
+	if e, _ := os.ReadFile(p.envProjet()); !strings.Contains(string(e), "FAST=1") || !strings.Contains(string(e), "ECO=1") || !strings.Contains(string(e), "PARALLEL=0") {
+		t.Fatalf("the new project's modes: %s", e)
+	}
+	if !slices.ContainsFunc(m.Historique, func(h EvenementMission) bool { return h.Detail == "working modes set: eco, fast" }) {
+		t.Fatalf("no history line for the modes: %+v", m.Historique)
 	}
 	donne := map[string]bool{}
 	for _, a := range s.acces.Projet(p.Nom).Acces {

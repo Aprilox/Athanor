@@ -116,6 +116,12 @@ func TestDistanceToutesRoutes(t *testing.T) {
 		{"GET", "/api/distance", false},     // unchanged: a device reads the Remote page
 		{"GET", "/api/projets", false},      // unchanged
 		{"POST", "/api/preferences", false}, // unchanged
+		// M174b (2.52.0): the working modes, field rapide included, as before from an unlocked device; ?defaut=1
+		// as the project's creation (POST /api/projets)
+		{"GET", "/api/mode?p=demo", false},
+		{"POST", "/api/mode?p=demo", false},
+		{"GET", "/api/mode?defaut=1", false},
+		{"POST", "/api/projets", false},
 	}
 	for _, c := range cas {
 		code, ok := appel(c.methode, c.chemin)

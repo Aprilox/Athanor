@@ -2023,7 +2023,7 @@ function carteMission(d) {
   const liste = (l) => l && l.length ? `<ul class="mis-puces">${l.map((x) => `<li>${h(x)}</li>`).join("")}</ul>` : `<span class="muet">—</span>`;
   const e = c.estimation || {}, actif = !travailleMission(d) && m.etat === "proposee", dis = ed ? "" : " disabled";
   return `<div class="mis-voies">
-      <div class="mis-voie"><h3>${t((etat.hubModules || []).find((m) => m.id === "dev")?.nom || "dev")}</h3><p class="m0"><b>${h(c.projet.nom)}</b> <span class="etiquette">${t(c.projet.nouveau ? "New project" : "Existing project")}</span></p><p class="mis-brief">${h(c.dev.brief || "")}</p></div>
+      <div class="mis-voie"><h3>${t((etat.hubModules || []).find((m) => m.id === "dev")?.nom || "dev")}</h3><p class="m0"><b>${h(c.projet.nom)}</b> <span class="etiquette">${t(c.projet.nouveau ? "New project" : "Existing project")}</span></p><p class="mis-brief">${h(c.dev.brief || "")}</p>${c.dev.modes ? `<p class="m0">${[["parallele", "Parallel mode"], ["eco", "Eco mode"], ["rapide", "Fast mode"]].filter(([k]) => c.dev.modes[k]).map(([, n]) => `<span class="etiquette">${t(n)}</span>`).join(" ")}</p>` : ""}</div>
       <div class="mis-voie"><h3>${t("Servers")}</h3>${c.avertissement_serveurs ? `<p class="mis-avert" role="note">⚠ ${t("Native Windows mode: the Servers lane needs WSL, or Force on the project's Access page.")}</p>` : ""}<p class="mis-brief">${h(c.serveurs.brief || t("Nothing to prepare on the servers."))}</p></div>
     </div>
     <div class="mis-grille">

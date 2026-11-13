@@ -854,6 +854,48 @@ func (s *Serveur) apiMode(w http.ResponseWriter, r *http.Request) {
 	s.ecrireJSON(w, m)
 }
 
+// ecrireMode: the project's working modes and time settings into its .athanor/.env, the one way they are written
+// (POST /api/mode and a mission's new project); a value out of bounds is an erreurEntree. A running pilot reads
+// the modes at its next cycle (changementsEnAttente says so meanwhile).
+func (p Projet) ecrireMode(m ModeVue) error {
+	if m.ParalleleMax < 2 || m.ParalleleMax > 10 {
+		m.ParalleleMax = 3
+	}
+	v := map[string]string{"PARALLEL": "0", "PARALLEL_MAX": strconv.Itoa(m.ParalleleMax), "ECO": "0", "FAST": "0"}
+	if m.Parallele {
+		v["PARALLEL"] = "1"
+	}
+	if m.Eco {
+		v["ECO"] = "1"
+	}
+	if m.Rapide {
+		v["FAST"] = "1"
+	}
+	if m.CadrageMax != nil {
+		v["FRAMING_MAX_MIN"] = "" // 0: back to the global value
+		if *m.CadrageMax != 0 {
+			if *m.CadrageMax < 10 || *m.CadrageMax > 240 {
+				return erreurEntree("The framing time box is between 10 and 240 minutes.")
+			}
+			v["FRAMING_MAX_MIN"] = strconv.Itoa(*m.CadrageMax)
+		}
+	}
+	if m.DureeMax != nil {
+		switch n := *m.DureeMax; {
+		case n == -1:
+			v["MAX_HOURS"] = "" // back to the global value
+		case n >= 0 && n <= 87600:
+			v["MAX_HOURS"] = strconv.Itoa(n)
+		default:
+			return erreurEntree("The work time limit is between 1 and 87600 hours, or unlimited.")
+		}
+	}
+	if err := os.MkdirAll(p.Atelier(), 0o755); err != nil {
+		return err
+	}
+	return EcrireEnv(p.envProjet(), v)
+}
+
 func (s *Serveur) apiEcrireMode(w http.ResponseWriter, r *http.Request) {
 	p, ok := s.projetRequis(w, r)
 	if !ok {
@@ -874,46 +916,12 @@ func (s *Serveur) apiEcrireMode(w http.ResponseWriter, r *http.Request) {
 	if c.Rapide != nil {
 		m.Rapide = *c.Rapide
 	}
-	if m.ParalleleMax < 2 || m.ParalleleMax > 10 {
-		m.ParalleleMax = 3
-	}
-	v := map[string]string{"PARALLEL": "0", "PARALLEL_MAX": strconv.Itoa(m.ParalleleMax), "ECO": "0", "FAST": "0"}
-	if m.Parallele {
-		v["PARALLEL"] = "1"
-	}
-	if m.Eco {
-		v["ECO"] = "1"
-	}
-	if m.Rapide {
-		v["FAST"] = "1"
-	}
-	if m.CadrageMax != nil {
-		v["FRAMING_MAX_MIN"] = "" // 0: back to the global value
-		if *m.CadrageMax != 0 {
-			if *m.CadrageMax < 10 || *m.CadrageMax > 240 {
-				s.erreur(w, http.StatusBadRequest, "The framing time box is between 10 and 240 minutes.")
-				return
-			}
-			v["FRAMING_MAX_MIN"] = strconv.Itoa(*m.CadrageMax)
+	if err := p.ecrireMode(m); err != nil {
+		code := http.StatusInternalServerError
+		if _, ok := err.(erreurEntree); ok {
+			code = http.StatusBadRequest
 		}
-	}
-	if m.DureeMax != nil {
-		switch n := *m.DureeMax; {
-		case n == -1:
-			v["MAX_HOURS"] = "" // back to the global value
-		case n >= 0 && n <= 87600:
-			v["MAX_HOURS"] = strconv.Itoa(n)
-		default:
-			s.erreur(w, http.StatusBadRequest, "The work time limit is between 1 and 87600 hours, or unlimited.")
-			return
-		}
-	}
-	if err := os.MkdirAll(p.Atelier(), 0o755); err != nil {
-		s.erreur(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	if err := EcrireEnv(p.envProjet(), v); err != nil {
-		s.erreur(w, http.StatusInternalServerError, err.Error())
+		s.erreur(w, code, err.Error())
 		return
 	}
 	// the message tells what this call changed (the modes are independent switches)

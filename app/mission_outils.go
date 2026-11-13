@@ -32,7 +32,7 @@ func init() {
 	outilsHub["modules_etat"] = OutilHub{Description: "Athanor's state: its modules, the projects (state, plan, environments with URL and protection), the servers (id, name, state, hardened) and the names and types of the vault entries (never a value).",
 		Schema: objet(map[string]any{}), Faire: outilModulesEtat}
 	outilsHub["proposer_mission"] = OutilHub{Description: "Record the mission card the owner will read. Athanor checks it and computes the approvals, what will be touched and the estimate; an error says what to fix.",
-		Schema: objet(map[string]any{"carte": map[string]any{"type": "object", "description": "titre, projet{nom, nouveau}, dev{brief}, envs[]{nom, url, protection, serveurs[]}, serveurs{brief}, acces[]{entree, pour}, jalons_estimes"}}, "carte"),
+		Schema: objet(map[string]any{"carte": map[string]any{"type": "object", "description": "titre, projet{nom, nouveau}, dev{brief, modes{parallele, eco, rapide} for a new project only}, envs[]{nom, url, protection, serveurs[]}, serveurs{brief}, acces[]{entree, pour}, jalons_estimes"}}, "carte"),
 		Faire:  outilProposerMission}
 	outilsHub["demander_module"] = OutilHub{Description: "Ask a module a reading action on the bus. Allowed today: module dev, action etat_projet, donnees {\"projet\": name}.",
 		Schema: objet(map[string]any{"module": texte("The module, e.g. dev"), "action": texte("The action, e.g. etat_projet"), "donnees": map[string]any{"type": "object", "description": "e.g. {\"projet\": \"name\"}"}}, "module", "action"),

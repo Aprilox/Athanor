@@ -28,12 +28,12 @@ func carteMartin() CarteMission {
 	return CarteMission{
 		Titre:  "Boulangerie Martin showcase site",
 		Projet: ProjetCarte{Nom: "boulangerie-martin", Nouveau: true},
-		Dev:    BriefCarte{"A showcase site for the Martin bakery"},
+		Dev:    BriefCarte{Brief: "A showcase site for the Martin bakery"},
 		Envs: []EnvCarte{
 			{Nom: "dev", URL: "https://Dev.Martin.fr", Protection: "auth_proxy", Serveurs: []string{"s1dev"}},
 			{Nom: "prod", URL: "https://martin.fr", Protection: "aucune", Serveurs: []string{"s2prod"}},
 		},
-		Serveurs:      BriefCarte{"DNS, certificates, proxy, protection, firewall"},
+		Serveurs:      BriefCarte{Brief: "DNS, certificates, proxy, protection, firewall"},
 		Acces:         []AccesCarte{{Entree: "cf token", Pour: "boulangerie-martin/prod"}, {Entree: "SMTP", Pour: "boulangerie-martin"}},
 		JalonsEstimes: 6,
 	}

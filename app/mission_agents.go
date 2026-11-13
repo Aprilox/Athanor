@@ -21,7 +21,9 @@ func consigneOrchestrateur(phrase string, mentions []string) string {
 		"3. If something essential cannot be reasonably guessed, call question_proprietaire once (one short question, at most " +
 		"4 choices), then stop at once: Athanor resumes this session with the owner's answer.\n" +
 		"4. Otherwise call proposer_mission with the card: titre; projet (an existing project's name, or a new valid name with " +
-		"nouveau true); dev.brief (everything the Studio must build, complete, in plain words); envs (nom dev, staging or prod, " +
+		"nouveau true); dev.brief (everything the Studio must build, complete, in plain words); dev.modes only for a new project " +
+		"whose sentence asks for it (parallele: faster, more quota; eco: the quota first; rapide: built fast, everything " +
+		"verified at the end), each true or false; envs (nom dev, staging or prod, " +
 		"url, protection aucune, auth_proxy or access, serveurs by id); serveurs.brief (DNS, certificates, proxy, protection, " +
 		"firewall); acces (vault entries by name, pour = project/env or server id); jalons_estimes (1 to 60). If it returns an " +
 		"error, fix the card and call it again. Athanor computes the approvals, what will be touched and the estimate itself.\n" +
