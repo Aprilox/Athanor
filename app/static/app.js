@@ -1849,15 +1849,98 @@ function blocEnCours(tous, modules) {
     ${liste.length ? `<div class="grille-projets">${liste.map((e) => ligneElement(e, modules)).join("")}</div>` : `<div class="vide">${t("Nothing in progress right now.")}</div>`}
   </section>`;
 }
+// M151: mentions of the bar. A chip = { type: projet|serveur|cle|nouveau, ref, nom }; the Go checks the refs again.
+const TYPES_MENTION = { projet: "Project", serveur: "Server", cle: "Vault key", nouveau: "New project" };
+const pucesMentions = () => (etat.accueilMentions || []).map((m, i) => `<span class="puce-mention puce-${m.type}" title="${h(t(TYPES_MENTION[m.type]))}">${m.type === "nouveau" ? "" : "@"}${h(m.nom)}<button type="button" class="puce-x" data-retirer-mention="${i}" aria-label="${h(t("Remove {0}", [m.nom]))}">×</button></span>`).join("");
+function suggestionsMentions() {
+  const pris = new Set((etat.accueilMentions || []).map((m) => m.type + "\0" + m.ref)), l = etat.mentionsSugg || [];
+  const choix = [...l.filter((m) => m.type === "projet").slice(0, 3), ...l.filter((m) => m.type === "serveur").slice(0, 3), { type: "nouveau", ref: "", nom: t("New project") }];
+  return choix.filter((m) => !pris.has(m.type + "\0" + m.ref)).map((m) => `<button type="button" class="btn btn-petit puce-sugg" data-mention="${h(JSON.stringify(m))}">${m.type === "nouveau" ? "+ " : "@"}${h(m.nom)}</button>`).join("");
+}
+function majMentions() {
+  const z = $("#accueil-puces"), s = $("#accueil-sugg");
+  if (z) z.innerHTML = pucesMentions();
+  if (s) s.innerHTML = suggestionsMentions();
+}
+function ajouterMention(m) {
+  const l = etat.accueilMentions = etat.accueilMentions || [];
+  if (!l.some((x) => x.type === m.type && x.ref === m.ref)) l.push({ type: m.type, ref: m.ref, nom: m.nom });
+  majMentions();
+}
+// the @word right before the cursor, or null
+function motMention(champ) {
+  const r = /(^|\s)@([^\s@]*)$/.exec(champ.value.slice(0, champ.selectionStart));
+  return r ? { q: r[2], debut: champ.selectionStart - r[2].length - 1 } : null;
+}
+function fermerListeMentions() {
+  const liste = $("#accueil-liste"), champ = $("#accueil-texte");
+  etat.mentionListe = null;
+  if (liste) { liste.hidden = true; liste.innerHTML = ""; }
+  if (champ) { champ.setAttribute("aria-expanded", "false"); champ.removeAttribute("aria-activedescendant"); }
+}
+function rendreListeMentions() {
+  const liste = $("#accueil-liste"), champ = $("#accueil-texte"), ml = etat.mentionListe;
+  if (!liste || !champ || !ml) return;
+  liste.innerHTML = ml.items.length ? ml.items.map((m, i) => `<li role="option" id="mention-opt-${i}" class="mention-opt${i === ml.actif ? " actif" : ""}" aria-selected="${i === ml.actif}" data-opt="${i}">
+    <span class="etiquette">${h(t(TYPES_MENTION[m.type]))}</span><b>${h(m.nom)}</b>${m.detail ? `<span class="muet petit">${h(m.detail)}</span>` : ""}</li>`).join("")
+    : `<li class="mention-vide muet petit" role="option" aria-disabled="true">${t("Nothing matches.")}</li>`;
+  liste.hidden = false; champ.setAttribute("aria-expanded", "true");
+  if (ml.items.length) { champ.setAttribute("aria-activedescendant", "mention-opt-" + ml.actif); $("#mention-opt-" + ml.actif).scrollIntoView({ block: "nearest" }); } else champ.removeAttribute("aria-activedescendant");
+}
+let numeroMentions = 0;
+async function chercherMentions(champ) {
+  const mot = motMention(champ);
+  if (!mot) { fermerListeMentions(); return; }
+  const n = ++numeroMentions;
+  let items = [];
+  try { // the chips already chosen are not offered again
+    const pris = new Set((etat.accueilMentions || []).map((m) => m.type + "\0" + m.ref));
+    items = ((await api("mentions?q=" + encodeURIComponent(mot.q))).mentions || []).filter((m) => !pris.has(m.type + "\0" + m.ref));
+  } catch { /* no list: the text stays as typed */ }
+  if (n !== numeroMentions || !motMention(champ)) return; // a later keystroke won
+  etat.mentionListe = { items, actif: 0, debut: mot.debut };
+  rendreListeMentions();
+}
+function choisirMention(i) {
+  const champ = $("#accueil-texte"), ml = etat.mentionListe, m = ml && ml.items[i];
+  if (!champ || !m) return;
+  const v = champ.value, fin = champ.selectionStart;
+  champ.value = v.slice(0, ml.debut) + v.slice(fin).replace(/^\s*/, ""); // the @word goes, the text before keeps its space
+  etat.accueilTexte = champ.value; champ.setSelectionRange(ml.debut, ml.debut);
+  fermerListeMentions(); ajouterMention(m); champ.focus();
+}
+document.addEventListener("keydown", (ev) => {
+  if (ev.target.id !== "accueil-texte") return;
+  const ml = etat.mentionListe;
+  if (ml && ev.key === "Escape") { ev.preventDefault(); ev.stopPropagation(); fermerListeMentions(); return; }
+  if (ml && ml.items.length && (ev.key === "ArrowDown" || ev.key === "ArrowUp")) {
+    ev.preventDefault(); ml.actif = (ml.actif + (ev.key === "ArrowDown" ? 1 : ml.items.length - 1)) % ml.items.length; rendreListeMentions(); return;
+  }
+  if (ml && ml.items.length && ev.key === "Enter") { ev.preventDefault(); choisirMention(ml.actif); return; }
+  // Backspace at the very start removes the last chip
+  if (ev.key === "Backspace" && ev.target.selectionStart === 0 && ev.target.selectionEnd === 0 && (etat.accueilMentions || []).length) { etat.accueilMentions.pop(); majMentions(); }
+});
+document.addEventListener("mousedown", (ev) => { const o = ev.target.closest("#accueil-liste [data-opt]"); if (o) { ev.preventDefault(); choisirMention(+o.dataset.opt); } });
+document.addEventListener("click", (ev) => {
+  const x = ev.target.closest("[data-retirer-mention]"), s = ev.target.closest("[data-mention]");
+  if (x) { (etat.accueilMentions || []).splice(+x.dataset.retirerMention, 1); majMentions(); $("#accueil-texte")?.focus(); }
+  else if (s) { ajouterMention(JSON.parse(s.dataset.mention)); $("#accueil-texte")?.focus(); }
+  else if (etat.mentionListe && !ev.target.closest("#accueil-champ, #accueil-liste")) fermerListeMentions();
+});
+// Tab leaves the field: the list goes too
+document.addEventListener("focusout", (ev) => { if (ev.target.id === "accueil-texte" && etat.mentionListe) fermerListeMentions(); });
 pages.accueil = async () => {
-  const d = await api("hub"), modules = d.modules || [];
+  const [d, sugg] = await Promise.all([api("hub"), api("mentions").catch(() => ({}))]), modules = d.modules || [];
   etat.hubSig = JSON.stringify([modules, d.elements || []]); rendreMenu(modules);
+  etat.mentionsSugg = sugg.mentions || []; etat.mentionListe = null;
   const projet = etat.vue && etat.vue.projet;
   return `<div class="accueil">
     <form class="bloc accueil-barre" id="accueil-form">
       <label for="accueil-texte" class="accueil-titre">${t("What do you want to do?")}</label>
-      <div class="ligne m0"><input type="text" id="accueil-texte" class="croit" autocomplete="off" placeholder="${h(t("Say it in one sentence…"))}"><button type="submit" class="btn btn-primaire">${t("Send")}</button></div>
-      <div class="muet petit">${projet ? h(t("Opens the chat of {0} with your text: nothing is sent before you press Send there.", [projet.nom])) : t("No project yet: opens a new project with your text as its request.")}</div>
+      <div class="ligne m0"><div class="champ-mentions croit" id="accueil-champ"><span id="accueil-puces" class="puces-mentions">${pucesMentions()}</span><input type="text" id="accueil-texte" class="croit" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="accueil-liste" aria-describedby="accueil-aide" placeholder="${h(t("Say it in one sentence…"))}"></div><button type="submit" class="btn btn-primaire">${t("Send")}</button></div>
+      <ul id="accueil-liste" class="liste-mentions" role="listbox" aria-label="${h(t("Mentions"))}" hidden></ul>
+      <div class="ligne m0 puces-suggestions" id="accueil-sugg" role="group" aria-label="${h(t("Add to your request"))}">${suggestionsMentions()}</div>
+      <div class="muet petit" id="accueil-aide">${t("Type @ to name a project, a server or a vault key.")} ${projet ? h(t("Opens the chat of {0} with your text: nothing is sent before you press Send there.", [projet.nom])) : t("No project yet: opens a new project with your text as its request.")}</div>
     </form>
     <div class="grille-hub">${modules.filter((m) => ((m.resume || {}).stats || []).length).map(tuileModule).join("")}</div>
     ${blocEnCours(d.elements || [], modules)}
@@ -1875,7 +1958,7 @@ function envoyerAccueil() {
   location.hash = "#" + page;
 }
 document.addEventListener("submit", (ev) => { if (ev.target.id === "accueil-form") { ev.preventDefault(); envoyerAccueil(); } });
-document.addEventListener("input", (ev) => { if (ev.target.id === "accueil-texte") etat.accueilTexte = ev.target.value; });
+document.addEventListener("input", (ev) => { if (ev.target.id === "accueil-texte") { etat.accueilTexte = ev.target.value; chercherMentions(ev.target); } });
 
 pages.suivi = async () => {
   const v = etat.vue; if (!v) return "";

@@ -16,11 +16,13 @@ import (
 // The states of a mission, in their usual order.
 var etatsMission = []string{"preparation", "proposee", "acceptee", "lancee", "terminee", "annulee", "echec"}
 
-// MentionsMission: the names the owner mentioned (@project, @server, @key), resolved by the Go.
+// MentionsMission: what the owner mentioned (@project, @server, @key), resolved by the Go (resoudreMentions):
+// project names, server ids and vault entry ids (names are not unique); Nouveau: the "New project" chip.
 type MentionsMission struct {
 	Projets  []string `json:"projets"`
 	Serveurs []string `json:"serveurs"`
 	Cles     []string `json:"cles"`
+	Nouveau  bool     `json:"nouveau,omitempty"`
 }
 
 // VoieMission: one lane of a launched mission (module dev or servers, ref = project or Servers task id).

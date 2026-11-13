@@ -114,6 +114,19 @@ html.cadre .dialogue, html.cadre .verrou, html.cadre .assistant { top: var(--bar
 .accueil-titre { font-size: 18px; font-weight: 600; }
 .accueil-barre .ligne { flex-wrap: nowrap; }
 .accueil-barre input { font-size: 16px; padding: 11px 14px; min-width: 0; }
+/* M151: the bar holds the mention chips; the field inside has no border of its own */
+.champ-mentions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 0 0 0 6px; min-width: 0; }
+.champ-mentions input[type=text] { border: 0; background: transparent; flex: 1 1 12em; outline: none; }
+.puces-mentions { display: contents; }
+.puce-mention { display: inline-flex; align-items: center; gap: 2px; font-size: 13.5px; font-weight: 500; border: 1px solid var(--accent); border-radius: 12px; padding: 1px 2px 1px 9px; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.puce-x { border: 0; background: none; color: inherit; font-size: 16px; line-height: 1; cursor: pointer; padding: 2px 6px; border-radius: 10px; }
+.puce-x:hover, .puce-x:focus-visible { background: var(--line); }
+.liste-mentions { list-style: none; margin: -6px 0 0; padding: 4px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); max-height: 260px; overflow-y: auto; }
+.mention-opt { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 4px; cursor: pointer; }
+.mention-opt.actif, .mention-opt:hover { background: var(--line); }
+.mention-vide { padding: 6px 8px; }
+.puces-suggestions { flex-wrap: wrap; gap: 6px; }
+.puce-sugg { border-radius: 12px; }
 .tutoriels { flex-wrap: wrap; gap: 8px; }
 .grille-hub { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
 .grille-hub > .bloc + .bloc { margin-top: 0; }
@@ -131,7 +144,7 @@ html.cadre .dialogue, html.cadre .verrou, html.cadre .assistant { top: var(--bar
 .missions-vide { display: flex; align-items: center; gap: 14px; padding: 6px 0 2px; }
 .missions-icone { width: 34px; height: 34px; flex: none; border-radius: 50%; border: 2px dashed var(--line); position: relative; }
 .missions-icone::after { content: ""; position: absolute; inset: 9px; border-radius: 50%; background: var(--accent-halo); }
-@media (max-width: 700px) { .grille-hub, .en-cours .grille-projets { grid-template-columns: 1fr; } .accueil-barre .ligne { flex-wrap: wrap; } .accueil-barre .btn { width: 100%; justify-content: center; text-align: center; } }
+@media (max-width: 700px) { .grille-hub, .en-cours .grille-projets { grid-template-columns: 1fr; } .accueil-barre .ligne { flex-wrap: wrap; } .accueil-barre .btn-primaire { width: 100%; justify-content: center; text-align: center; } }
 .cp-tete { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .cp-nom { font-size: 15.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
 .cp-besoin { background: var(--attention); color: var(--sur-attention); border-radius: 10px; padding: 0 8px; font-size: 12px; font-weight: 600; line-height: 19px; white-space: nowrap; }

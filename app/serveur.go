@@ -368,6 +368,7 @@ func (s *Serveur) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/coffre/tester", s.garde(false, s.apiCoffreTester))
 	mux.HandleFunc("POST /api/coffre/migration", s.garde(false, s.apiCoffreMigration))
 	mux.HandleFunc("POST /api/coffre/migration/annuler", s.garde(false, s.apiCoffreMigrationAnnuler))
+	mux.HandleFunc("GET /api/mentions", s.garde(false, s.apiMentions))
 	mux.HandleFunc("GET /api/missions", s.garde(false, s.apiMissions))
 	mux.HandleFunc("GET /api/missions/{id}", s.garde(false, s.apiMission))
 	mux.HandleFunc("GET /api/serveurs", s.garde(false, s.apiServeurs))
