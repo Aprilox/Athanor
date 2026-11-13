@@ -138,6 +138,7 @@ func (s *Serveur) lancerMission(id, qui, dossier, empreinte string) (Mission, er
 	}
 	s.ecrireAudit(LigneAudit{Type: "evenement", De: qui, Vers: "missions", Projet: prefixeMission + id, Mission: id, Action: "mission lancée", Resultat: c.Titre})
 	voies, faits, err := s.etapesMission(c, m.Politique, qui, dossier)
+	defer s.suivreMission(id) // stops by itself at once if the launch ended in echec
 	return modifierMission(id, func(m *Mission) error {
 		m.Voies = voies
 		m.Historique = append(m.Historique, faits...) // C86: what was given and set, even when a later step failed

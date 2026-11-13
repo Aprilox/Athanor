@@ -15,7 +15,7 @@ import (
 )
 
 // The states of a mission, in their usual order.
-var etatsMission = []string{"preparation", "proposee", "acceptee", "lancee", "terminee", "annulee", "echec"}
+var etatsMission = []string{"preparation", "proposee", "acceptee", "lancee", "en_pause", "terminee", "arretee", "annulee", "echec"}
 
 // MentionsMission: what the owner mentioned (@project, @server, @key), resolved by the Go (resoudreMentions):
 // project names, server ids and vault entry ids (names are not unique); Nouveau: the "New project" chip.
@@ -66,6 +66,8 @@ type Mission struct {
 	Historique []EvenementMission `json:"historique"`
 	Cree       string             `json:"cree"`
 	Session    string             `json:"session,omitempty"` // the orchestrator's Claude session, resumed with --resume
+	Relais     *RelaisMission     `json:"relais,omitempty"`  // once launched (mission_suivi.go)
+	Journal    []EntreeJournal    `json:"journal,omitempty"` // at most maxJournalMission, the oldest first
 }
 
 var (
