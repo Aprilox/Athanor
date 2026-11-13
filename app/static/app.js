@@ -2974,8 +2974,9 @@ function carteApprobation(x, ap, codes) {
     x.env === "prod" ? `<div class="pv-details">${h(t("Production always asks you: one accord, one deployment."))}</div>` : d.fichiers_build ? `<div class="pv-details">${h(t("Its build command will run these changed files on this PC, inside the pilot's barrier: one accord, one deployment."))}</div>` : "",
     x.env !== "prod" && !d.fichiers_build && t("Never ask again for this project and environment"));
   // M158: the orchestrator asks to launch its card; accepting launches it as Launch does (never a rule)
-  if (x.action === "mission") return carteDecision(x, ap, `<strong>${h(t("Launch the mission {0}?", [d.titre]))}</strong>`,
-    [], `<div class="pv-details">${h(t("Accepting launches the mission as its Launch button does."))} <a href="#missions">${h(t("See the card"))}</a></div>`, false);
+  // C77: the environments, prod and the ticked access of the very card it launches
+  if (x.action === "mission") return carteDecision(x, ap, `${d.prod === "oui" ? `<span class="badge">prod</span> ` : ""}<strong>${h(t("Launch the mission {0}?", [d.titre]))}</strong>`,
+    [t("Environments: {0}", [d.envs || "—"]), t("Access: {0}", [d.acces || "—"])], `<div class="pv-details">${h(t("Accepting launches the mission as its Launch button does."))} <a href="#missions/${encodeURIComponent(x.mission || "")}">${h(t("See the card"))}</a></div>`, false);
   const acces = x.action === "demander_acces", f = etat.apprForm[x.id] || {}, nom = (x.details || {}).nom || "";
   const entree = f.entree ?? (codes.find((e) => e.nom === nom) || {}).id ?? "", env = f.env || x.env, variable = f.variable ?? nom;
   const champs = acces ? `<div class="appr-champs">

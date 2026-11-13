@@ -78,6 +78,9 @@ func TestMissionAPI(t *testing.T) {
 	carte := `{"titre":"Boutique en ligne","projet":{"nom":"boutique"},"dev":{"brief":"Finir la boutique"},` +
 		`"envs":[{"nom":"prod","url":"https://boutique.example.org","protection":"aucune","serveurs":["a1"]}],` +
 		`"serveurs":{"brief":"DNS, certificat, proxy"},"acces":[{"entree":"Jeton Cloudflare","pour":"a1"}],"jalons_estimes":4}`
+	// the same entry twice, the agent unticking the copy (C83, B83), and the dev environment the owner added
+	double := strings.Replace(strings.Replace(carte, `"pour":"a1"}]`, `"pour":"a1"},{"entree":"jeton cloudflare","pour":"a1","decoche":true}]`, 1),
+		`"serveurs":["a1"]}]`, `"serveurs":["a1"]},{"nom":"dev","url":"https://dev.boutique.example.org","protection":"auth_proxy","serveurs":["a2"]}]`, 1)
 	var consignes []string
 	scenario := "question"
 	ancien := sessionOrchestrateur
@@ -100,6 +103,8 @@ func TestMissionAPI(t *testing.T) {
 			outil("question_proprietaire", `{"texte":"Quel domaine ?","choix":["boutique.example.org","autre"]}`)
 		case "carte":
 			outil("proposer_mission", `{"carte":`+carte+`}`)
+		case "double":
+			outil("proposer_mission", `{"carte":`+double+`}`)
 		case "bloque": // asks to launch, then works until it is stopped
 			outil("lancer_mission", `{"id":"`+filepath.Base(strings.TrimSuffix(dossier, "-session"))+`"}`)
 			<-ctx.Done()
@@ -170,6 +175,40 @@ func TestMissionAPI(t *testing.T) {
 		t.Fatal("the box was not ticked again")
 	}
 
+	// C83: a box the owner unticked stays so when the orchestrator proposes again; the agent's decoche is ignored;
+	// B83: an entry given twice is one line, and unticking it unticks every copy of an older card
+	acces := func() []AccesCarte {
+		t.Helper()
+		var c CarteMission
+		_ = json.Unmarshal(finie(id).Carte, &c)
+		return c.Acces
+	}
+	attendu(base+"/modifier", `{"acces_decoches":[{"entree":"Jeton Cloudflare","pour":"a1"}]}`, http.StatusOK)
+	scenario = "double"
+	attendu(base+"/modifier", `{"consigne":"Reformule le titre"}`, http.StatusOK)
+	if a := acces(); len(a) != 1 || !a[0].Decoche {
+		t.Fatalf("the owner's unticked box after a new card: %+v", a)
+	}
+	attendu(base+"/modifier", `{"acces_decoches":[]}`, http.StatusOK)
+	attendu(base+"/modifier", `{"consigne":"Encore"}`, http.StatusOK)
+	if a := acces(); len(a) != 1 || a[0].Decoche {
+		t.Fatalf("the agent unticked a box: %+v", a)
+	}
+	if _, err := modifierMission(id, func(m *Mission) error {
+		var c CarteMission
+		_ = json.Unmarshal(m.Carte, &c)
+		c.Acces = append(c.Acces, c.Acces[0])
+		m.Carte, _ = json.Marshal(c)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	attendu(base+"/modifier", `{"acces_decoches":[{"entree":"jeton cloudflare","pour":"a1"}]}`, http.StatusOK)
+	if a := acces(); len(a) != 1 || !a[0].Decoche {
+		t.Fatalf("an older card's copies: %+v", a)
+	}
+	attendu(base+"/modifier", `{"acces_decoches":[]}`, http.StatusOK)
+
 	// a change asked in words: the orchestrator resumed with the card; while it works, nothing else changes it
 	scenario = "bloque"
 	attendu(base+"/modifier", `{"consigne":"Ajoute un environnement staging"}`, http.StatusOK)
@@ -191,6 +230,10 @@ func TestMissionAPI(t *testing.T) {
 	}
 	if approbation == "" {
 		t.Fatal("no launch request from lancer_mission")
+	}
+	if d, _ := s.approbations.Lire(approbation); d.Details["prod"] != "oui" || d.Details["acces"] != "Jeton Cloudflare → a1" ||
+		d.Details["envs"] != "prod boutique.example.org, dev dev.boutique.example.org" || d.Details["empreinte"] == "" {
+		t.Fatalf("what the launch request shows: %v", d.Details)
 	}
 
 	// cancelling: the session stopped, its token revoked, the launch request refused; then everything is 409

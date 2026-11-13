@@ -102,7 +102,7 @@ func alertesApprobations(l []Approbation) []AlerteHub {
 		}
 		titre, module := x.Projet, "dev"
 		if x.Action == actionMission { // M158: the orchestrator asks to launch its card, titled by it
-			titre, module, raison, args = x.Details["titre"], "missions", "Launch this mission?", nil
+			titre, module, raison, args = x.Details["titre"], "missions", "Launch this mission? Environments: {0}. Access: {1}", []any{cmp.Or(x.Details["envs"], "—"), cmp.Or(x.Details["acces"], "—")}
 		}
 		if x.Agent == agentDurcir { // B80: Athanor's own plan, titled by the server, its fixed summary translated
 			titre, raison, args = cmp.Or(x.Details["nom"], x.Details["serveur"]), x.Raison, nil

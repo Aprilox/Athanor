@@ -6,6 +6,10 @@ package main
 // Dev, Servers, Cloudflare or the deployments is unknown to it. No answer carries a vault value nor a file path.
 
 import (
+	"bytes"
+	"cmp"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -119,6 +123,12 @@ func outilProposerMission(s *Serveur, x SessionHub, args json.RawMessage) (strin
 	if err := json.Unmarshal(a.Carte, &c); err != nil {
 		return "", fmt.Errorf("the card does not have the expected shape (%v): fix it and call proposer_mission again", err)
 	}
+	if _, ok := s.accordMissionAttente(x.Mission); ok { // C77: the card the owner is asked to launch stays as it is
+		return "", errors.New("the owner has your launch request to decide: the card can no longer be changed, stop now")
+	}
+	for i := range c.Acces { // C83: unticking is the owner's, never the agent's
+		c.Acces[i].Decoche = false
+	}
 	ctx := s.contexteCarte()
 	if err := validerCarte(&c, ctx); err != nil {
 		return "", errors.New("the card was refused, fix it and call proposer_mission again: " + err.Error())
@@ -126,6 +136,11 @@ func outilProposerMission(s *Serveur, x SessionHub, args json.RawMessage) (strin
 	m, err := modifierMission(x.Mission, func(m *Mission) error {
 		if err := preparable(*m); err != nil {
 			return err
+		}
+		var avant CarteMission // C83: the boxes the owner unticked stay unticked, by (entry, pour)
+		_ = json.Unmarshal(m.Carte, &avant)
+		for i := range c.Acces {
+			c.Acces[i].Decoche = slices.ContainsFunc(avant.Acces, func(a AccesCarte) bool { return a.Decoche && memeAcces(a, c.Acces[i]) })
 		}
 		c = calculerCarte(c, m.Politique, ctx)
 		b, err := json.Marshal(c)
@@ -231,15 +246,14 @@ func outilLancerMission(s *Serveur, x SessionHub, args json.RawMessage) (string,
 	attente := func(id string) string {
 		return "waiting for the owner, id " + id + ": once accepted, Athanor launches the mission as if the owner pressed Launch. Stop now."
 	}
-	l, _ := s.approbations.Liste()
-	for _, d := range l {
-		if d.Mission == m.ID && d.Action == actionMission && d.Etat == "attente" {
-			return attente(d.ID), nil
-		}
+	if d, ok := s.accordMissionAttente(m.ID); ok {
+		return attente(d.ID), nil
 	}
 	titre := titreMission(m)
+	details := resumeCarteAccord(m)
+	details["mission"], details["titre"], details["empreinte"] = m.ID, titre, empreinteCarte(m)
 	d, err := s.demanderApprobation(Approbation{Projet: prefixeMission + m.ID, Mission: m.ID, Agent: x.Agent, Action: actionMission,
-		Details: map[string]string{"mission": m.ID, "titre": titre}, Raison: "Launch the mission: " + titre})
+		Details: details, Raison: "Launch the mission: " + titre})
 	if err != nil {
 		return "", errors.New("the request could not be recorded, try again later")
 	}
@@ -253,4 +267,51 @@ func titreMission(m Mission) string {
 		return c.Titre
 	}
 	return couper(m.Phrase, 80)
+}
+
+// memeAcces: the same vault entry (its name in any case) for the same target.
+func memeAcces(a, b AccesCarte) bool {
+	return strings.EqualFold(a.Entree, b.Entree) && a.Pour == b.Pour
+}
+
+// empreinteCarte (C77): the stored card (compacted) and the policy, hashed; the launch accord carries it, and
+// accepting it launches only that very card.
+func empreinteCarte(m Mission) string {
+	var b bytes.Buffer
+	_ = json.Compact(&b, m.Carte)
+	h := sha256.Sum256(append([]byte(m.Politique+"\n"), b.Bytes()...))
+	return hex.EncodeToString(h[:])
+}
+
+// resumeCarteAccord: what the launch accord shows (bell, For you, push): the environments with their host, prod
+// when the card has it, and the ticked access, "—" for none.
+func resumeCarteAccord(m Mission) map[string]string {
+	var c CarteMission
+	_ = json.Unmarshal(m.Carte, &c)
+	envs, acces, prod := []string{}, []string{}, ""
+	for _, e := range c.Envs {
+		envs = append(envs, strings.TrimSpace(e.Nom+" "+hoteURL(e.URL)))
+		if e.Nom == "prod" {
+			prod = "oui"
+		}
+	}
+	for _, a := range c.Acces {
+		if !a.Decoche {
+			acces = append(acces, a.Entree+" → "+a.Pour)
+		}
+	}
+	return map[string]string{"envs": cmp.Or(strings.Join(envs, ", "), "—"), "acces": cmp.Or(strings.Join(acces, ", "), "—"), "prod": prod}
+}
+
+// accordMissionAttente: mission id's pending launch request (lancer_mission), if any.
+func (s *Serveur) accordMissionAttente(id string) (Approbation, bool) {
+	if s.approbations == nil {
+		return Approbation{}, false
+	}
+	l, _ := s.approbations.Liste()
+	i := slices.IndexFunc(l, func(d Approbation) bool { return d.Mission == id && d.Action == actionMission && d.Etat == "attente" })
+	if i < 0 {
+		return Approbation{}, false
+	}
+	return l[i], true
 }

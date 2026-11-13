@@ -198,6 +198,10 @@ func (s *Serveur) apiModifierMission(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := r.PathValue("id")
+	if _, ok := s.accordMissionAttente(id); ok { // C77: the card asked to launch stays as it is (its print is checked too)
+		s.erreur(w, http.StatusConflict, "A launch request for this card waits for your decision: refuse it first to change the card")
+		return
+	}
 	ctx := s.contexteCarte()
 	var carte CarteMission
 	m, err := modifierMission(id, func(m *Mission) error {
@@ -215,13 +219,16 @@ func (s *Serveur) apiModifierMission(w http.ResponseWriter, r *http.Request) {
 		if c.AccesDecoches != nil {
 			decoche := make([]bool, len(carte.Acces))
 			for _, d := range *c.AccesDecoches {
-				i := slices.IndexFunc(carte.Acces, func(a AccesCarte) bool {
-					return strings.EqualFold(a.Entree, strings.TrimSpace(d.Entree)) && a.Pour == strings.TrimSpace(d.Pour)
-				})
-				if i < 0 {
+				d.Entree, d.Pour = strings.TrimSpace(d.Entree), strings.TrimSpace(d.Pour)
+				trouve := false
+				for i, a := range carte.Acces { // B83: every copy of the same entry for the same target
+					if memeAcces(a, d) {
+						decoche[i], trouve = true, true
+					}
+				}
+				if !trouve {
 					return erreurEntreeArgs{"The card has no access {0} for {1}", []string{couper(d.Entree, 100), couper(d.Pour, 100)}}
 				}
-				decoche[i] = true
 			}
 			for i := range carte.Acces {
 				carte.Acces[i].Decoche = decoche[i]

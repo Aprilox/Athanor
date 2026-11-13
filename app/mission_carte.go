@@ -190,6 +190,15 @@ func validerCarte(c *CarteMission, x contexteCarte) error {
 			a.Entree, a.ID, a.Type, a.Portee, a.ARemplir = x.entrees[j].Nom, x.entrees[j].ID, x.entrees[j].Type, x.entrees[j].Portee, false
 		}
 	}
+	acces := c.Acces[:0] // B83: one line per (entry, target), unticked when any copy was
+	for _, a := range c.Acces {
+		if k := slices.IndexFunc(acces, func(b AccesCarte) bool { return memeAcces(a, b) }); k >= 0 {
+			acces[k].Decoche = acces[k].Decoche || a.Decoche
+			continue
+		}
+		acces = append(acces, a)
+	}
+	c.Acces = acces
 	return nil
 }
 

@@ -434,7 +434,8 @@ func (s *Serveur) messageApprobation(x Approbation) MessagePush {
 		}
 	}
 	if x.Action == actionMission { // "Launch the mission …?", what accepting does below
-		titre, texte = fmt.Sprintf(s.textePush("appr_mission"), x.Details["titre"]), s.textePush("appr_mission_t")
+		titre, texte = fmt.Sprintf(s.textePush("appr_mission"), x.Details["titre"]), fmt.Sprintf(s.textePush("appr_mission_t"), x.Details["envs"], x.Details["acces"])
+		return MessagePush{Titre: titre, Texte: texte, URL: "/#missions/" + x.Mission, Tag: "appr-" + x.ID}
 	}
 	if x.Action == actionPlanServeur { // "Plan for web-1", the plan's summary below
 		titre, texte = fmt.Sprintf(s.textePush("appr_plan"), cmp.Or(x.Details["nom"], x.Details["serveur"])), x.Projet+" · "+x.Raison
@@ -558,7 +559,15 @@ func (s *Serveur) deciderApprobation(qui, id, decision, entree, envChoisi, varia
 		return x, http.StatusConflict, errMissionSansRegle
 	}
 	if x.Action == actionMission && decision == "accepter" { // M158: launched as by Launch; refused by it, it stays pending
-		if _, err := s.lancerMission(x.Mission, qui, ""); err != nil {
+		// C77: only the card it was asked for (an older request without a print never matches)
+		_, err := s.lancerMission(x.Mission, qui, "", cmp.Or(x.Details["empreinte"], "absente"))
+		if err == errCarteChangee { // that card is gone: the request is refused, the orchestrator asks again
+			if y, e := s.approbations.Decider(id, "refuser", qui); e == nil {
+				s.ecrireAudit(LigneAudit{Type: "evenement", De: qui, Vers: "hub", Mission: y.Mission, Projet: y.Projet, Agent: y.Agent,
+					Action: "approbation refuser", Resultat: y.Action + " " + y.ID + " → " + y.Etat + " (carte changée)"})
+			}
+		}
+		if err != nil {
 			return x, 0, err
 		}
 	}

@@ -183,6 +183,7 @@ func TestHubLiensNotifications(t *testing.T) {
 	for _, u := range urls {
 		_, adresse, _ := strings.Cut(u, " ")
 		page, _, _ := strings.Cut(strings.TrimPrefix(adresse, "/#"), "@")
+		page, _, _ = strings.Cut(page, "/") // #missions/<id>: the page, then its element
 		if !strings.HasPrefix(adresse, "/#") || !pages[page] || page == "accueil" {
 			t.Errorf("%s: a notification must open an old page (/#suivi…)", u)
 		}

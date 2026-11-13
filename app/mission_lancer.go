@@ -19,6 +19,12 @@ import (
 // demarrerPiloteMission: replaced by the tests (a fake pilot).
 var demarrerPiloteMission = (*Serveur).demarrerPilote
 
+// errCarteChangee (C77, C79): the card or the policy changed since the launch was asked or read.
+var errCarteChangee = erreurMission{http.StatusConflict, "The card has changed: look at it again before launching it"}
+
+// apresControleLancement: called between the checks and the launch (a test changes the card just then).
+var apresControleLancement = func(string) {}
+
 var errMissionInfraVerrouille = erreurMission{http.StatusConflict, "This mission uses an infra key: unlock the vault's infra keys first"}
 
 // dossierProjetNeuf: where a mission's new project goes, next to the most recent project of this PC (in the
@@ -67,9 +73,11 @@ func politiqueEnvMission(env, politique string) string {
 }
 
 // lancerMission: mission id launched by qui; dossier: the new project's folder chosen on the PC ("" = next to
-// the other projects). Refused (nothing done) while the orchestrator works, without a card, when an infra entry
-// is ticked and the infra keys are locked, or when the new project's folder already holds files.
-func (s *Serveur) lancerMission(id, qui, dossier string) (Mission, error) {
+// the other projects); empreinte: the card the accord was asked for ("" = the card as it is, the owner's Launch).
+// Refused (nothing done) while the orchestrator works, without a card, when the card is not that of empreinte or
+// changed while it was checked, when an infra entry is ticked and the infra keys are locked, or when the new
+// project's folder already holds files.
+func (s *Serveur) lancerMission(id, qui, dossier, empreinte string) (Mission, error) {
 	m, err := lireMission(id)
 	pasLancable := func(m *Mission) error {
 		if m.Etat != "proposee" && m.Etat != "acceptee" {
@@ -86,7 +94,10 @@ func (s *Serveur) lancerMission(id, qui, dossier string) (Mission, error) {
 		return m, erreurMission{http.StatusConflict, "The orchestrator is still working on this card: wait for it"}
 	case len(m.Carte) == 0:
 		return m, erreurMission{http.StatusConflict, "This mission has no card yet"}
+	case empreinte != "" && empreinte != empreinteCarte(m):
+		return m, errCarteChangee
 	}
+	lue := empreinteCarte(m)
 	var c CarteMission
 	if err := json.Unmarshal(m.Carte, &c); err != nil {
 		return m, err
@@ -107,9 +118,13 @@ func (s *Serveur) lancerMission(id, qui, dossier string) (Mission, error) {
 			return m, erreurEntreeArgs{"The folder {0} already holds files: choose another folder for the new project", []string{dossier}}
 		}
 	}
+	apresControleLancement(id)
 	m, err = modifierMission(id, func(m *Mission) error {
 		if err := pasLancable(m); err != nil { // checked again under the lock: two clicks, one launch
 			return err
+		}
+		if empreinteCarte(*m) != lue { // C79: changed (Modify on another device) since it was checked above
+			return errCarteChangee
 		}
 		m.Etat, m.Voies = "lancee", []VoieMission{}
 		m.Historique = append(m.Historique, evenementMission("lancee", qui))
@@ -237,7 +252,7 @@ func (s *Serveur) apiLancerMission(w http.ResponseWriter, r *http.Request) {
 	if appareilDe(r) != "" {
 		c.Dossier = ""
 	}
-	m, err := s.lancerMission(r.PathValue("id"), deQui(r), strings.TrimSpace(c.Dossier))
+	m, err := s.lancerMission(r.PathValue("id"), deQui(r), strings.TrimSpace(c.Dossier), "")
 	if err != nil {
 		s.erreurMissionHTTP(w, err)
 		return

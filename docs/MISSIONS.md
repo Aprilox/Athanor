@@ -38,7 +38,7 @@ The *Missions* page lists every mission with its state and its lanes (read live 
 
 ## From your phone
 
-A paired, unlocked phone can read a mission, answer the orchestrator, edit, launch and cancel. When the orchestrator asks you to launch, “Launch the mission …?” comes in the bell, on *For you* and as a notification: accepting launches it exactly as *Launch* does; on the computer, accepting asks for Athanor's password. Such an agreement is never “always”. The orchestrator's questions come in the bell too, with their choices as buttons; your answer restarts it where it stopped.
+A paired, unlocked phone can read a mission, answer the orchestrator, edit, launch and cancel. When the orchestrator asks you to launch, “Launch the mission …?” comes in the bell, on *For you* and as a notification: it shows the card's environments (prod included) and the ticked access, and its link opens the mission. Accepting launches it exactly as *Launch* does, and only the card it was asked for: while it waits, neither the orchestrator nor *Edit* can change the card, and a card changed anyway refuses the request (launch it again from the card). On the computer, accepting asks for Athanor's password. Such an agreement is never “always”. The boxes you untick stay unticked when the orchestrator proposes a new card. The orchestrator's questions come in the bell too, with their choices as buttons; your answer restarts it where it stopped.
 
 ## What the orchestrator can and cannot do
 

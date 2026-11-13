@@ -136,11 +136,16 @@ func TestMissionTelephone(t *testing.T) {
 	paiement := proposer("Page de paiement")
 	d := demander(paiement)
 	a, ok := alerte("appr-" + d.ID)
-	if !ok || a.Module != "missions" || a.Titre != "Page de paiement" || a.Raison != "Launch this mission?" || len(a.Actions) != 2 ||
+	if !ok || a.Module != "missions" || a.Titre != "Page de paiement" || a.Raison != "Launch this mission? Environments: {0}. Access: {1}" ||
+		len(a.Args) != 2 || a.Args[0] != "—" || a.Args[1] != "—" || len(a.Actions) != 2 ||
 		a.Actions[0].ID != "accepter" || a.Actions[1].ID != "refuser" || !a.Actions[0].Distance {
 		t.Fatalf("bell: %+v", a)
 	}
-	if m, ok := recu("appr-" + d.ID); !ok || m.Titre != "Lancer la mission Page de paiement ?" || m.URL != "/#pourvous" {
+	if p, _ := lireMission(paiement); d.Details["empreinte"] != empreinteCarte(p) || d.Details["envs"] != "—" || d.Details["acces"] != "—" || d.Details["prod"] != "" {
+		t.Fatalf("the request's details: %v", d.Details)
+	}
+	if m, ok := recu("appr-" + d.ID); !ok || m.Titre != "Lancer la mission Page de paiement ?" || m.URL != "/#missions/"+paiement ||
+		!strings.HasPrefix(m.Texte, "Environnements : —. Accès : —.") {
 		t.Fatalf("push: %+v", m)
 	}
 	// locked phone: nothing decided; unlocked: never with a rule, accepted → launched as by Launch
@@ -177,9 +182,48 @@ func TestMissionTelephone(t *testing.T) {
 		t.Fatalf("refused, yet launched: %s %v", m.Etat, pilotes)
 	}
 
+	// C77: while a request waits, neither the agent nor the owner changes the card; changed anyway (an older
+	// request, a change racing the request) → accepting refuses the request, nothing is launched
+	d = demander(livraison)
+	if _, err := outilProposerMission(s, SessionHub{Mission: livraison, Agent: agentOrchestrateur}, json.RawMessage(`{"carte":{"titre":"Autre"}}`)); err == nil ||
+		!strings.Contains(err.Error(), "launch request") {
+		t.Fatalf("proposer_mission while the request waits: %v", err)
+	}
+	if w := appelDistance(h, "POST", "/api/missions/"+livraison+"/modifier", cle, `{"politique":"tout"}`, api...); w.Code != http.StatusConflict {
+		t.Fatalf("modifier while the request waits: %d %s", w.Code, w.Body)
+	}
+	politique := func(p string) {
+		t.Helper()
+		if _, err := modifierMission(livraison, func(m *Mission) error { m.Politique = p; return nil }); err != nil {
+			t.Fatal(err)
+		}
+	}
+	politique("tout")
+	if c := decider(d.ID, "accepter"); c != http.StatusConflict {
+		t.Fatalf("a changed card accepted: %d", c)
+	}
+	if x, _ := s.approbations.Lire(d.ID); x.Etat != "refusee" {
+		t.Fatalf("the request of a changed card: %+v", x)
+	}
+	if m, _ := lireMission(livraison); m.Etat != "proposee" || len(pilotes) != 1 {
+		t.Fatalf("changed card, yet launched: %s %v", m.Etat, pilotes)
+	}
+	politique("prod")
+	// C79: a change between Launch's checks and the launch (Modify on another device) → 409, nothing launched
+	apresControleLancement = func(string) { politique("tout") }
+	_, err := s.lancerMission(livraison, "fenetre", "", "")
+	apresControleLancement = func(string) {}
+	if err != errCarteChangee {
+		t.Fatalf("launch racing a change: %v", err)
+	}
+	if m, _ := lireMission(livraison); m.Etat != "proposee" || len(pilotes) != 1 {
+		t.Fatalf("raced, yet launched: %s %v", m.Etat, pilotes)
+	}
+	politique("prod")
+
 	// 3. Launch on the PC closes the pending request (accepted by the window); 4. expired: accepting launches nothing
 	d = demander(livraison)
-	if _, err := s.lancerMission(livraison, "fenetre", ""); err != nil {
+	if _, err := s.lancerMission(livraison, "fenetre", "", ""); err != nil {
 		t.Fatal(err)
 	}
 	s.fermerLancementMission(livraison, "fenetre", "accepter", "mission lancée") // what apiLancerMission does after it

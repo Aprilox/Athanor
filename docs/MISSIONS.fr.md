@@ -38,7 +38,7 @@ La page *Missions* liste chaque mission avec son état et ses voies (lues en dir
 
 ## Depuis votre téléphone
 
-Un téléphone appairé et déverrouillé peut lire une mission, répondre à l'orchestrateur, modifier, lancer et annuler. Quand l'orchestrateur vous demande de lancer, « Lancer la mission … ? » arrive dans la cloche, sur *Pour vous* et en notification : accepter la lance exactement comme *Lancer* ; sur l'ordinateur, accepter demande le mot de passe d'Athanor. Un tel accord n'est jamais « toujours ». Les questions de l'orchestrateur arrivent aussi dans la cloche, avec leurs choix en boutons ; votre réponse le relance là où il s'était arrêté.
+Un téléphone appairé et déverrouillé peut lire une mission, répondre à l'orchestrateur, modifier, lancer et annuler. Quand l'orchestrateur vous demande de lancer, « Lancer la mission … ? » arrive dans la cloche, sur *Pour vous* et en notification : elle montre les environnements de la carte (prod comprise) et les accès cochés, et son lien ouvre la mission. Accepter la lance exactement comme *Lancer*, et seulement la carte pour laquelle elle a été demandée : tant qu'elle attend, ni l'orchestrateur ni *Modifier* ne changent la carte, et une carte changée malgré tout refuse la demande (relancez depuis la carte). Sur l'ordinateur, accepter demande le mot de passe d'Athanor. Un tel accord n'est jamais « toujours ». Les cases que vous décochez le restent quand l'orchestrateur propose une nouvelle carte. Les questions de l'orchestrateur arrivent aussi dans la cloche, avec leurs choix en boutons ; votre réponse le relance là où il s'était arrêté.
 
 ## Ce que l'orchestrateur peut et ne peut pas faire
 
