@@ -11,8 +11,19 @@ func (moduleMissions) Nom() string { return "Missions" }
 func (moduleMissions) Pages() []PageModule {
 	return []PageModule{{Hash: "#missions", Ordre: 10, Icone: "missions", Libelle: "Missions"}}
 }
-func (moduleMissions) Elements(*Serveur) []ElementHub { return nil } // the cards and questions join the bell later (M154, M155)
-func (moduleMissions) Tutoriel() []EtapeTutoriel      { return nil }
+
+// Elements: a mission whose orchestrator asks the owner a question is in the bell until it is answered.
+func (moduleMissions) Elements(*Serveur) []ElementHub {
+	var out []ElementHub
+	for _, m := range lireMissions() {
+		if q, ok := questionOuverte(m); ok && preparable(Mission{Etat: m.Etat}) == nil {
+			out = append(out, ElementHub{ID: m.ID, Titre: titreMission(m), Etat: "actif", Lien: "#missions",
+				Attente: &AttenteElement{Raison: "The orchestrator asks: {0}", Args: []any{q.Texte}, Page: "#missions", Cle: q.ID}})
+		}
+	}
+	return out
+}
+func (moduleMissions) Tutoriel() []EtapeTutoriel { return nil }
 
 // Resume: missions in progress (being prepared or launched), to launch (proposed or accepted), done.
 func (moduleMissions) Resume(*Serveur) ResumeModule {

@@ -174,9 +174,6 @@ func (s *Serveur) executerOrchestrateur(ctx context.Context, e *orchestrateurEnC
 	}
 	fin()
 
-	orchestrateursEnCours.Lock()
-	delete(orchestrateursEnCours.m, id)
-	orchestrateursEnCours.Unlock()
 	s.revoquerJetons("orchestrateur terminé", func(x SessionHub) bool { return x.Hache == e.hache })
 	_ = os.RemoveAll(dossier)
 	_, _ = modifierMission(id, func(m *Mission) error {
@@ -196,6 +193,9 @@ func (s *Serveur) executerOrchestrateur(ctx context.Context, e *orchestrateurEnC
 		}
 		return nil
 	})
+	orchestrateursEnCours.Lock() // last: whoever sees the session ended reads the mission as it left it
+	delete(orchestrateursEnCours.m, id)
+	orchestrateursEnCours.Unlock()
 	issue := "ok"
 	if err != nil {
 		issue = couper(s.masquerSecrets(err.Error()), 300)
