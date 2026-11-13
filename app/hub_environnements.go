@@ -150,7 +150,7 @@ func validerEnvironnement(nom string, e Environnement, inventaire []ServeurInven
 		switch {
 		case nom == "prod" && !prod:
 			return e, erreurEntreeArgs{errEnvPasProd, []string{inventaire[i].Nom}}
-		case nom != "prod" && prod:
+		case nom != "prod" && prod && !slices.Contains(inventaire[i].Roles, "dev"): // dev+prod: the owner shares one VPS (V§1)
 			return e, erreurEntreeArgs{errEnvProd, []string{inventaire[i].Nom}}
 		}
 		if !slices.Contains(ids, id) {

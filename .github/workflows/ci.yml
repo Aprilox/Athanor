@@ -122,6 +122,8 @@ jobs:
     # Caddy serves its default page on the published HTTP port, before and after a reload over SSH;
     # the sample site end to end: dev behind the fake Cloudflare, v1, v2, back to v1, prod only with the accord,
     # an incident in the bell, no witness value anywhere an agent reads (app/deploiements_temoin_test.go)
+    # the mission of V§1 (boulangerie Martin): sentence → card → Modifier → Lancer, and the orchestrator's scope
+    # (app/mission_martin_test.go, app/mission_outils_test.go)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
@@ -149,7 +151,7 @@ jobs:
       - name: Servers tests on the container
         # a skip (ATHANOR_SSH_TEST lost) would pass silently: the PASS line is required
         run: |
-          go test -count=1 -timeout 10m -run '^(TestServeursCIConteneur|TestCaddyConteneur|TestDeploiementStatiqueConteneur|TestDeploiementGitConteneur|TestDeploiementComposeConteneur|TestDeploiementK3sConteneur|TestDeploiementAgentConteneur|TestRelaisJalonConteneur|TestDurcirConteneur|TestSiteExempleTemoinConteneur)$' -v . | tee ci.log
+          go test -count=1 -timeout 10m -run '^(TestServeursCIConteneur|TestCaddyConteneur|TestDeploiementStatiqueConteneur|TestDeploiementGitConteneur|TestDeploiementComposeConteneur|TestDeploiementK3sConteneur|TestDeploiementAgentConteneur|TestRelaisJalonConteneur|TestDurcirConteneur|TestSiteExempleTemoinConteneur|TestMissionCarteMartin|TestOrchestrateurPerimetre)$' -v . | tee ci.log
           grep -q -- '--- PASS: TestServeursCIConteneur' ci.log
           grep -q -- '--- PASS: TestCaddyConteneur' ci.log
           grep -q -- '--- PASS: TestDeploiementStatiqueConteneur' ci.log
@@ -160,6 +162,8 @@ jobs:
           grep -q -- '--- PASS: TestRelaisJalonConteneur' ci.log
           grep -q -- '--- PASS: TestDurcirConteneur' ci.log
           grep -q -- '--- PASS: TestSiteExempleTemoinConteneur' ci.log
+          grep -q -- '--- PASS: TestMissionCarteMartin' ci.log
+          grep -q -- '--- PASS: TestOrchestrateurPerimetre' ci.log
 
   vuln:
     # known vulnerabilities of the Go standard library and of the modules, in the code Athanor really calls

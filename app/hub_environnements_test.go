@@ -33,6 +33,7 @@ func TestValiderEnvironnement(t *testing.T) {
 	}
 	ok("staging", Environnement{URL: "https://xn--bcher-kva.fr:65535", Politique: "auto", Protection: "auth_proxy"})
 	ok("prod", Environnement{URL: "https://Exemple.fr", Serveurs: []string{"a1", "d4"}, Protection: "access"})
+	ok("staging", Environnement{Serveurs: []string{"d4"}}) // a VPS given both roles serves dev and prod
 	if r := ok("dev", Environnement{}); r.URL != "" || r.Serveurs == nil {
 		t.Errorf("empty environment: %+v", r)
 	}
@@ -67,7 +68,6 @@ func TestValiderEnvironnement(t *testing.T) {
 		{"prod", Environnement{Serveurs: []string{"b2"}}, "vps-dev is not a production server"},
 		{"prod", Environnement{Serveurs: []string{"c3"}}, "nu is not a production server"},
 		{"dev", Environnement{Serveurs: []string{"a1"}}, "vps-prod is a production server"},
-		{"staging", Environnement{Serveurs: []string{"d4"}}, "mixte is a production server"},
 		{"dev", Environnement{Fournisseur: "../x"}, "Unknown provider"},
 	} {
 		_, err := validerEnvironnement(c.nom, c.e, inv)

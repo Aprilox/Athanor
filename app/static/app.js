@@ -4539,7 +4539,7 @@ function blocEnvironnements(en, inventaire, fournisseurs, distant) {
   const options = (liste, val) => liste.map(([v, l]) => `<option value="${h(v)}"${v === val ? " selected" : ""}>${h(l)}</option>`).join("");
   const carte = (nom) => {
     const e = en.environnements[nom], prod = nom === "prod";
-    const srv = inventaire.filter((x) => e.serveurs.includes(x.id) || (x.roles || []).includes("prod") === prod);
+    const srv = inventaire.filter((x) => e.serveurs.includes(x.id) || (prod ? (x.roles || []).includes("prod") : !(x.roles || []).includes("prod") || x.roles.includes("dev")));
     const fourn = fournisseurs.map((f) => [f.id, f.nom]);
     if (e.fournisseur && !fourn.some(([id]) => id === e.fournisseur)) fourn.push([e.fournisseur, e.fournisseur]);
     return `<section class="env-carte${prod ? " env-prod" : ""}" data-env="${nom}" aria-label="${nom}">
@@ -4548,7 +4548,7 @@ function blocEnvironnements(en, inventaire, fournisseurs, distant) {
       <fieldset class="env-serveurs"><legend>${t("Servers")}</legend>
         ${srv.length ? srv.map((x) => `<label><input type="checkbox" data-env-serveur="${h(x.id)}"${e.serveurs.includes(x.id) ? " checked" : ""}${ro}> <span class="croit">${h(x.nom)}</span>${(x.roles || []).map((r) => `<span class="badge">${h(r)}</span>`).join("")}</label>`).join("")
           : `<p class="muet petit">${t("No server for this environment yet.")}${distant ? "" : ` <a href="#serveurs">${t("Servers")}</a>`}</p>`}
-        <p class="muet petit">${t(prod ? "Production only runs on servers with the prod role." : "Servers with the prod role are kept for production.")}</p>
+        <p class="muet petit">${t(prod ? "Production only runs on servers with the prod role." : "Servers with the prod role alone are kept for production.")}</p>
       </fieldset>
       <label class="env-champ">${t("Protection")}<select data-env-champ="protection"${ro}>${options(Object.entries(PROTECTIONS_ENV).map(([v, l]) => [v, t(l)]), e.protection)}</select></label>
       ${prod ? `<div class="env-champ"><span>${t("Deployment policy")}</span><p class="petit">🔒 ${t("Production always asks for your approval before a deployment: this cannot be turned off.")}</p></div>`
