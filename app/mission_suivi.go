@@ -120,7 +120,7 @@ func shaCourt(sha string) string { return sha[:min(len(sha), 7)] }
 func (s *Serveur) evenementsMission(m Mission) ([]EntreeJournal, RelaisMission) {
 	lance := time.Time{}
 	if i := slices.IndexFunc(m.Historique, func(e EvenementMission) bool { return e.Etat == "lancee" }); i >= 0 {
-		lance = dateSource(m.Historique[i].T)
+		lance = dateSource(m.Historique[i].T).Truncate(time.Second) // deployments are dated to the second
 	}
 	var evts []EntreeJournal
 	noter := func(id string, t time.Time, niveau, cle string, params ...string) {

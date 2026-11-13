@@ -23,6 +23,10 @@ import (
 	"time"
 )
 
+// constructionSansCage: the build runs without bubblewrap (Native Windows); set only by the test binary on a Linux
+// without bwrap (deploiements_construire_test.go), never by the product.
+var constructionSansCage = runtime.GOOS == "windows"
+
 var errConstruireSansBarriere = errors.New("Native Windows mode has no barrier: a deployment's build command could reach every file of this PC, so it is refused. Switch to WSL in Settings › Options, or tick Force, knowing the risk on this project's Access page.")
 
 func lancerConstruireDeploiement(args []string) int {
@@ -41,13 +45,16 @@ func lancerConstruireDeploiement(args []string) int {
 	}
 	kit, commandeBuild := cheminOutil(pos[0]), args[i+1]
 	var cage func(src string) (*exec.Cmd, error)
-	if runtime.GOOS == "windows" {
+	if constructionSansCage {
 		if !sans {
 			fmt.Fprintln(os.Stderr, errConstruireSansBarriere)
 			return 1
 		}
 		cage = func(src string) (*exec.Cmd, error) {
 			sh := bashNatif()
+			if runtime.GOOS != "windows" {
+				sh = "sh" // only the tests without bubblewrap come here off Windows
+			}
 			if sh == "" {
 				return nil, errors.New("the build command needs Git for Windows' bash on this PC")
 			}

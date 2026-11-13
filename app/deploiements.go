@@ -375,7 +375,12 @@ func (s *Serveur) commencerDeploiement(projet, env, commit string, o OptionsDepl
 		return Deploiement{}, nil, fmt.Errorf("commit %q is not in the project's repository", commit)
 	}
 	debut, dossier := time.Now().UTC(), cfg.Dossier
-	d := Deploiement{ID: aleatoire(8), Projet: projet, Env: env, Commit: sha, Methode: cfg.Methode, Version: debut.Format("20060102-150405") + "-" + sha[:7],
+	version := func(t time.Time) string { return t.Format("20060102-150405") + "-" + sha[:7] }
+	h, tv := historiqueDeploiements(projet, env), debut
+	for slices.ContainsFunc(h, func(x Deploiement) bool { return x.Version == version(tv) }) {
+		tv = tv.Add(time.Second) // the same commit again within a second: its release folder is taken
+	}
+	d := Deploiement{ID: aleatoire(8), Projet: projet, Env: env, Commit: sha, Methode: cfg.Methode, Version: version(tv),
 		Etat: "en_cours", Auteur: o.Auteur, Accorde: o.Accorde, Dossier: &dossier, Serveurs: e.Serveurs, Debut: debut.Format(time.RFC3339)}
 	if err := noterHistorique(d); err != nil {
 		verrou.Unlock()

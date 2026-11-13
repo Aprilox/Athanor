@@ -18,6 +18,7 @@ import (
 // this test binary as the kit's executable: a sub-command (construire-deploiement, mcp-cage) when asked
 func init() {
 	if os.Getenv("ATHANOR_ESSAI_SOUS_COMMANDE") == "1" {
+		constructionSansCage = constructionSansCage || os.Getenv("ATHANOR_ESSAI_SANS_CAGE") == "1"
 		code, ok := lancerSousCommande(os.Args[1:])
 		if !ok {
 			code = 2
@@ -27,8 +28,8 @@ func init() {
 }
 
 // construireEssai: commandeConstruction replaced by this test binary (args gets each call's arguments).
-// shortcut: on Windows the build runs with --sans-barriere (the WSL barrier is not reachable from go test);
-// the barrier itself is tested on Linux (deploiements_construire_linux_test.go).
+// shortcut: on Windows, and on a Linux without bwrap (the CI runner, a golang container), the build runs with
+// --sans-barriere; the barrier itself is tested on Linux with bwrap (deploiements_construire_linux_test.go).
 func construireEssai(t *testing.T, args *[]string) {
 	t.Helper()
 	ancien := commandeConstruction
@@ -37,11 +38,16 @@ func construireEssai(t *testing.T, args *[]string) {
 		if args != nil {
 			*args = slices.Clone(a)
 		}
-		if i := slices.Index(a, "--"); runtime.GOOS == "windows" && i > 0 && !slices.Contains(a, "--sans-barriere") {
+		_, err := exec.LookPath("bwrap")
+		sansCage := runtime.GOOS == "windows" || err != nil
+		if i := slices.Index(a, "--"); sansCage && i > 0 && !slices.Contains(a, "--sans-barriere") {
 			a = slices.Insert(slices.Clone(a), i, "--sans-barriere")
 		}
 		c := exec.Command(os.Args[0], a...)
 		c.Env = append(os.Environ(), "ATHANOR_ESSAI_SOUS_COMMANDE=1")
+		if sansCage {
+			c.Env = append(c.Env, "ATHANOR_ESSAI_SANS_CAGE=1")
+		}
 		return c
 	}
 }

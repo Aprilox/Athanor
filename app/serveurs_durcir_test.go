@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -69,6 +72,19 @@ func TestDurcirConteneur(t *testing.T) {
 		_ = s.changerUtilisateurServeur(id, "athanor", nil)
 		appel("ssh_commande", map[string]any{"commande": "sudo -n rm -f " + fichierClesDurci + " " + fichierRootDurci + " /etc/sudoers.d/90-athanor-athanor /root/.ssh/authorized_keys; sudo -n sed -i '/temoin-proprio/d' ~athanor/.ssh/authorized_keys; sudo -n sed -i '/^# BEGIN ATHANOR DOCKER-USER/,/^# END ATHANOR DOCKER-USER/d' /etc/ufw/after.rules; " +
 			"sudo -n ufw --force disable >/dev/null; for p in 22 80 443; do sudo -n ufw --force delete allow $p/tcp >/dev/null; done; sudo -n kill -HUP \"$(cat /run/sshd.pid)\""})
+		// sshd re-executes on SIGHUP and refuses connections meanwhile: the next test waits for its banner
+		for fin := time.Now().Add(15 * time.Second); time.Now().Before(fin); time.Sleep(200 * time.Millisecond) {
+			if c, err := net.DialTimeout("tcp", os.Getenv("ATHANOR_SSH_TEST"), 2*time.Second); err == nil {
+				b := make([]byte, 4)
+				_ = c.SetReadDeadline(time.Now().Add(2 * time.Second))
+				_, err = io.ReadFull(c, b)
+				_ = c.Close()
+				if err == nil && string(b) == "SSH-" {
+					return
+				}
+			}
+		}
+		t.Error("sshd does not answer after the cleanup's SIGHUP")
 	})
 	if r := appel("ssh_commande", map[string]any{"commande": "id -un"}); strings.TrimSpace(r.Sortie) != "root" {
 		t.Fatalf("not root: %+v", r)

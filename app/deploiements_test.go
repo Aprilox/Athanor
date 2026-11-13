@@ -260,6 +260,9 @@ func TestDeploiementStatiqueConteneur(t *testing.T) {
 	if err == nil || d3.Etat != "echec" || !strings.Contains(err.Error(), "caddy validate") {
 		t.Fatalf("refused configuration: %v %+v", err, d3)
 	}
+	if d3.Version == d1.Version {
+		t.Errorf("c1 deployed again under v1's release folder: %s", d3.Version)
+	}
 	sur("sudo -n rm -f /etc/caddy/sites/zz-casse.caddy")
 	if got := sur("cd " + base + " && readlink current && ls releases | wc -l && ls -A | grep -c site-avant; cat /etc/caddy/sites/" + hote + ".caddy"); got != "releases/"+d2.Version+"\n2\n0\n"+avant || !strings.Contains(page(), "site-exemple v2") {
 		t.Errorf("after the refusal: %q (site file before: %q)", got, avant)

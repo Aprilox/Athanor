@@ -495,7 +495,7 @@ func TestMissionP5(t *testing.T) {
 		return m
 	}
 	if m = observer(); m.Relais == nil || m.Relais.Etape != "dev_verifie" || m.Relais.Accord != "" {
-		t.Fatalf("after M1 (the pilot still works): %+v", m.Relais)
+		t.Fatalf("after M1 (the pilot still works): %+v\nlanes: %s\nhistory: %s\nevents: %s", m.Relais, enJSON(cur.voiesEnDirect(m)), enJSON(historiqueDeploiements(projet, "dev")), enJSON(m.Historique))
 	}
 
 	// 5. M2 (site v2) committed and ticked, the request done → the milestone's relay deploys v2 to dev, checked
