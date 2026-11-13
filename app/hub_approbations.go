@@ -585,3 +585,21 @@ func (s *Serveur) deciderApprobation(qui, id, decision, entree, envChoisi, varia
 	}
 	return x, 0, nil
 }
+
+// refuserLancementMission: the pending launch request (lancer_mission) of a mission the owner cancelled is
+// refused by them (par), so that accepting it later launches nothing.
+func (s *Serveur) refuserLancementMission(id, par string) {
+	if s.approbations == nil {
+		return
+	}
+	l, _ := s.approbations.Liste()
+	for _, d := range l {
+		if d.Mission != id || d.Action != actionMission || d.Etat != "attente" {
+			continue
+		}
+		if x, err := s.approbations.Decider(d.ID, "refuser", par); err == nil {
+			s.ecrireAudit(LigneAudit{Type: "evenement", De: par, Vers: "hub", Mission: x.Mission, Projet: x.Projet, Agent: x.Agent,
+				Action: "approbation refuser", Resultat: x.Action + " " + x.ID + " → " + x.Etat + " (mission annulée)"})
+		}
+	}
+}

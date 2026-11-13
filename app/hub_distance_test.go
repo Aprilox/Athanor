@@ -91,6 +91,13 @@ func TestDistanceToutesRoutes(t *testing.T) {
 		{"GET", "/api/missions/x", false},
 		{"POST", "/api/missions/x", true},
 		{"GET", "/api/missions/x/y", true},
+		{"POST", "/api/missions", true},             // a mission is created on the PC (M155)
+		{"POST", "/api/missions/x/modifier", false}, // changed, answered and cancelled from an unlocked device
+		{"POST", "/api/missions/x/repondre", false},
+		{"POST", "/api/missions/x/annuler", false},
+		{"GET", "/api/missions/x/annuler", true},
+		{"POST", "/api/missions/x/supprimer", true}, // invented: refused by default
+		{"POST", "/api/missions/x/y/annuler", true},
 		{"GET", "/api/fournisseurs", false}, // the providers, zones and rights, read from a device (M114)
 		{"POST", "/api/fournisseurs", true}, // added, tested, removed on this computer only
 		{"POST", "/api/fournisseurs/x/tester", true},

@@ -304,7 +304,8 @@ var autorisesDistance = map[string]bool{"GET /api/hub": true, "GET /api/coffre":
 	"POST /api/hub/urgence": true,                                 // the emergency stop, from the phone too
 	"GET /api/serveurs":     true, "GET /api/serveurs/{id}": true, // the inventory and a server's sheet, read only
 	"GET /api/serveurs/{id}/taches": true,                                 // a server's tasks, read only (plans are decided by the approval card)
-	"GET /api/missions":             true, "GET /api/missions/{id}": true, // the missions, read only (written on the PC)
+	"GET /api/missions":             true, "GET /api/missions/{id}": true, // the missions (created on the PC only)
+	"POST /api/missions/{id}/modifier": true, "POST /api/missions/{id}/repondre": true, "POST /api/missions/{id}/annuler": true, // as the approvals: an unlocked device
 	"GET /api/mentions":     true, // the @ list of the home bar: names and types, never a value
 	"GET /api/fournisseurs": true} // the providers, zones and rights (never a token); added, tested, removed on the PC
 
@@ -315,6 +316,8 @@ func refuseHubDistance(r *http.Request) bool {
 			chemin := r.URL.Path
 			if id, ok := strings.CutPrefix(chemin, "/api/missions/"); ok && id != "" && !strings.Contains(id, "/") {
 				chemin = "/api/missions/{id}"
+			} else if id, action, ok := strings.Cut(strings.TrimPrefix(chemin, "/api/missions/"), "/"); ok && strings.HasPrefix(chemin, "/api/missions/") && id != "" && !strings.Contains(action, "/") {
+				chemin = "/api/missions/{id}/" + action
 			} else if id, ok := strings.CutPrefix(chemin, "/api/serveurs/"); ok && id != "" && !strings.Contains(id, "/") {
 				chemin = "/api/serveurs/{id}"
 			} else if id, ok := strings.CutSuffix(id, "/taches"); ok && id != "" && !strings.Contains(id, "/") {
