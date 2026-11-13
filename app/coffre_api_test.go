@@ -43,6 +43,14 @@ func serveurCoffreTest(t *testing.T) *Serveur {
 		t.Cleanup(func() { _ = os.Remove(filepath.Join(dossierApprobations(), f)) })
 	}
 	s.chargerApprobations()
+	// the hub's session tokens, project accesses and missions too: a test must not depend on which tests ran
+	// before it in this process (check.sh splits the tests over several processes)
+	for _, f := range []string{cheminSessions(), cheminAcces(), dossierMissions()} {
+		_ = os.RemoveAll(f)
+		t.Cleanup(func() { _ = os.RemoveAll(f) })
+	}
+	s.chargerSessions()
+	s.chargerAcces()
 	s.csrf, s.cleAcces = "jeton", "cle"
 	return s
 }
