@@ -167,7 +167,11 @@ func (s *Serveur) accordOuDeployer(m Mission, projet, sha string) {
 // deployerProdMission: the engine started on prod with the owner's accord; not started → the accord given back
 // (the next step tries again) and said in the journal.
 func (s *Serveur) deployerProdMission(id, projet, sha, accord string) {
-	d, suite, err := commencerDeploiementMission(s, projet, "prod", sha, OptionsDeploiement{Auteur: "relais", Accorde: true})
+	o := OptionsDeploiement{Auteur: "relais", Accorde: true}
+	if envs := s.acces.Environnements(projet); envs["prod"].Deploiement == nil {
+		o.Config = envs["dev"].Deploiement // prod's first deployment: the method dev was checked with (recorded on prod once it went through)
+	}
+	d, suite, err := commencerDeploiementMission(s, projet, "prod", sha, o)
 	if err != nil {
 		s.approbations.Rendre(accord)
 		s.noterJournalMission(id, s.entreeJournal("prod:"+accord+":non_lance", time.Now(), "erreur",
@@ -208,6 +212,8 @@ func (s *Serveur) finirMission(id, depuis, detail string) {
 		if m.Relais == nil || m.Etat != "lancee" || m.Relais.Etape != depuis {
 			return errMissionInconnue
 		}
+		evts, _ := s.evenementsMission(*m) // what ended it (the last deployment, its check): an ended mission is no longer read
+		ajouterJournal(m, evts)
 		m.Relais.Etape, m.Etat = "termine", "terminee"
 		m.Historique = append(m.Historique, evenementMission("terminee", detail))
 		ajouterJournal(m, []EntreeJournal{s.entreeJournal("mission:terminee", time.Now(), "info", "Mission done: {0}", detail)})

@@ -63,6 +63,18 @@ func envAcces(pour string, c CarteMission) string {
 	return "dev"
 }
 
+// fournisseurCoche: the provider whose zone holds host h and whose vault token is ticked among acces ("" without one).
+func fournisseurCoche(h string, acces []AccesCarte) string {
+	l, _ := lireFournisseurs()
+	for _, f := range l {
+		coche := slices.ContainsFunc(acces, func(a AccesCarte) bool { return a.ID == f.Cle && !a.Decoche && !a.ARemplir })
+		if h != "" && coche && slices.ContainsFunc(f.Zones, func(z ZoneFournisseur) bool { return h == z.Nom || strings.HasSuffix(h, "."+z.Nom) }) {
+			return f.ID
+		}
+	}
+	return ""
+}
+
 // politiqueEnvMission: prod always waits for the owner; dev and staging deploy alone unless the mission's
 // policy is tout.
 func politiqueEnvMission(env, politique string) string {
@@ -253,6 +265,9 @@ func (s *Serveur) etapesMission(c CarteMission, politique, qui, dossier string) 
 		e := actuels[ec.Nom]
 		e.URL, e.Protection, e.Serveurs = ec.URL, ec.Protection, ec.Serveurs // C81: never weakened (envSansAffaiblir)
 		e.Politique, e.DeployerAuJalon = ec.Politique, ec.Nom == "dev"
+		if e.Fournisseur == "" { // the Servers lane's DNS: the provider holding the host's zone, its token ticked on the card
+			e.Fournisseur = fournisseurCoche(hoteURL(ec.URL), c.Acces)
+		}
 		v, err := validerEnvironnement(ec.Nom, e, inventaire)
 		if err == nil {
 			err = s.acces.DefinirEnvironnement(p.Nom, ec.Nom, v)

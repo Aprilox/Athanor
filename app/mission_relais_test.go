@@ -202,7 +202,9 @@ func TestMissionRelaisProd(t *testing.T) {
 	d = Deploiement{ID: "retry1", Projet: "site", Env: "prod", Commit: head, Etat: "ok", Auteur: "proprietaire", Debut: time.Now().UTC().Format(time.RFC3339),
 		Serveurs: []string{"a1"}, Verification: &VerifDeploiement{OK: true, T: time.Now().UTC().Format(time.RFC3339)}}
 	_ = noterHistorique(d)
-	if m = observer(m.ID); m.Etat != "terminee" || m.Relais.Etape != "termine" || entree(m, "mission:terminee").Cle == "" {
+	s.relaisProd(m.ID) // checked between two readings of the follower: its events still written as the mission ends
+	if m, _ = lireMission(m.ID); m.Etat != "terminee" || m.Relais.Etape != "termine" || entree(m, "mission:terminee").Cle == "" ||
+		entree(m, "deploi:retry1:ok").Cle == "" || entree(m, "verif:retry1:ok").Cle == "" {
 		t.Fatalf("retry checked: %s %+v", m.Etat, m.Relais)
 	}
 
