@@ -753,8 +753,8 @@ function ligneAlerte(a, ignoree) {
   const m = ((etat.hub || {}).modules || []).find((x) => x.id === a.module) || { nom: a.module };
   const texte = t("{0}, {1}: {2}", [t(m.nom), a.titre, t(a.raison, (a.args || []).map(texteMessage))]);
   const distant = (etat.vue || {}).distant;
-  const actions = (a.actions || []).map((x, i) => x.page ? `<a class="btn btn-petit" href="${h(x.page)}"${x.projet ? ` data-projet="${h(x.projet)}" data-cible="${h(x.page.slice(1))}"` : ""}>${t(x.libelle)}</a>`
-    : `<button type="button" class="btn btn-petit${x.id === "accepter" ? " btn-primaire" : ""}" data-alerte="${h(x.id)}" data-empreinte="${h(a.empreinte)}" data-i="${i}"${distant && !x.distance ? ` disabled title="${h(t("On the computer only"))}"` : ""}>${t(x.libelle)}</button>`).join("");
+  const actions = (a.actions || []).map((x, i) => x.page ? `<a class="btn btn-petit" href="${h(x.page)}"${x.projet ? ` data-projet="${h(x.projet)}" data-cible="${h(x.page.slice(1))}"` : ""}>${h(t(x.libelle))}</a>`
+    : `<button type="button" class="btn btn-petit${x.id === "accepter" ? " btn-primaire" : ""}" data-alerte="${h(x.id)}" data-empreinte="${h(a.empreinte)}" data-i="${i}"${distant && !x.distance ? ` disabled title="${h(t("On the computer only"))}"` : ""}>${h(t(x.libelle))}</button>`).join("");
   return `<div class="alerte${ignoree ? " ignoree" : ""}${a.approbation ? " alerte-appr" : ""}" data-module="${h(a.module)}"><span class="dot${ignoree ? "" : " quota"}" aria-hidden="true"></span><span class="alerte-texte">${h(texte)}</span><span class="alerte-actions">${actions}</span></div>`;
 }
 function rendreNotifs(v) {
@@ -824,6 +824,7 @@ async function deciderDepuisCloche(ap, x, b) {
   const r = await api("hub/approbations").catch(() => ({}));
   if (((ap.action === "demander_acces" || (ap.details || {}).seule_cle === "oui") && x.id !== "refuser") || r.mot_de_passe_requis || r.appareil_requis) {
     fermerNotifs(); etat.apprCible = ap.id;
+    if (ap.action === "mission") { location.hash = "#pourvous"; return; } // its project is no Dev project
     return allerProjet(ap.projet, "pourvous");
   }
   if (x.id === "toujours" && !(await confirmerToujours(ap))) { b.disabled = false; return; }
@@ -2959,6 +2960,9 @@ function carteApprobation(x, ap, codes) {
     [t("Commit {0}", [d.commit]), d.serveurs && t("Servers: {0}", [d.serveurs]), d.fichiers_build && t("Build files changed: {0}", [d.fichiers_build])],
     x.env === "prod" ? `<div class="pv-details">${h(t("Production always asks you: one accord, one deployment."))}</div>` : d.fichiers_build ? `<div class="pv-details">${h(t("Its build command will run these changed files on this PC, inside the pilot's barrier: one accord, one deployment."))}</div>` : "",
     x.env !== "prod" && !d.fichiers_build && t("Never ask again for this project and environment"));
+  // M158: the orchestrator asks to launch its card; accepting launches it as Launch does (never a rule)
+  if (x.action === "mission") return carteDecision(x, ap, `<strong>${h(t("Launch the mission {0}?", [d.titre]))}</strong>`,
+    [], `<div class="pv-details">${h(t("Accepting launches the mission as its Launch button does."))} <a href="#missions">${h(t("See the card"))}</a></div>`, false);
   const acces = x.action === "demander_acces", f = etat.apprForm[x.id] || {}, nom = (x.details || {}).nom || "";
   const entree = f.entree ?? (codes.find((e) => e.nom === nom) || {}).id ?? "", env = f.env || x.env, variable = f.variable ?? nom;
   const champs = acces ? `<div class="appr-champs">

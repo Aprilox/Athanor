@@ -433,6 +433,9 @@ func (s *Serveur) messageApprobation(x Approbation) MessagePush {
 			titre = fmt.Sprintf(s.textePush("appr_prod"), x.Details["hote"])
 		}
 	}
+	if x.Action == actionMission { // "Launch the mission …?", what accepting does below
+		titre, texte = fmt.Sprintf(s.textePush("appr_mission"), x.Details["titre"]), s.textePush("appr_mission_t")
+	}
 	if x.Action == actionPlanServeur { // "Plan for web-1", the plan's summary below
 		titre, texte = fmt.Sprintf(s.textePush("appr_plan"), cmp.Or(x.Details["nom"], x.Details["serveur"])), x.Projet+" · "+x.Raison
 		if x.Agent == agentDurcir { // B80: no internal project, the fixed summary in Athanor's language
@@ -495,6 +498,10 @@ func (s *Serveur) apiApprobationDecider(w http.ResponseWriter, r *http.Request) 
 	qui := deQui(r)
 	refus := func(code int, err error) {
 		s.ecrireAudit(LigneAudit{Type: "evenement", De: qui, Vers: "hub", Action: "décision refusée: " + c.Decision, Resultat: c.ID + ", " + err.Error()})
+		if code == 0 { // the mission's launch refused (deciderApprobation)
+			s.erreurMissionHTTP(w, err)
+			return
+		}
 		s.erreur(w, code, err.Error())
 	}
 	if c.Decision == "redemander" { // B52: Ask again only lowers what agents get, so no password for it
@@ -547,6 +554,13 @@ func (s *Serveur) deciderApprobation(qui, id, decision, entree, envChoisi, varia
 		return x, http.StatusConflict, errBuildSansRegle
 	case decision != "refuser" && x.Action == actionPlanServeur && s.critiqueEnCours(x.ID):
 		return x, http.StatusConflict, errCritiqueEnCours
+	case decision == "toujours" && x.Action == actionMission:
+		return x, http.StatusConflict, errMissionSansRegle
+	}
+	if x.Action == actionMission && decision == "accepter" { // M158: launched as by Launch; refused by it, it stays pending
+		if _, err := s.lancerMission(x.Mission, qui, ""); err != nil {
+			return x, 0, err
+		}
 	}
 	accorde, idEntree := "", ""
 	if x.Action == "demander_acces" && decision != "refuser" {
@@ -586,9 +600,12 @@ func (s *Serveur) deciderApprobation(qui, id, decision, entree, envChoisi, varia
 	return x, 0, nil
 }
 
-// refuserLancementMission: the pending launch request (lancer_mission) of a mission the owner cancelled is
-// refused by them (par), so that accepting it later launches nothing.
-func (s *Serveur) refuserLancementMission(id, par string) {
+// errMissionSansRegle: a mission is launched by one accord, never by a rule.
+var errMissionSansRegle = erreurEntree("A mission is launched once: accept or refuse it")
+
+// fermerLancementMission: the pending launch request (lancer_mission) of mission id, decided by par: refused when
+// the owner cancelled the mission (accepting it later launches nothing), accepted when Launch launched it.
+func (s *Serveur) fermerLancementMission(id, par, decision, motif string) {
 	if s.approbations == nil {
 		return
 	}
@@ -597,9 +614,9 @@ func (s *Serveur) refuserLancementMission(id, par string) {
 		if d.Mission != id || d.Action != actionMission || d.Etat != "attente" {
 			continue
 		}
-		if x, err := s.approbations.Decider(d.ID, "refuser", par); err == nil {
+		if x, err := s.approbations.Decider(d.ID, decision, par); err == nil {
 			s.ecrireAudit(LigneAudit{Type: "evenement", De: par, Vers: "hub", Mission: x.Mission, Projet: x.Projet, Agent: x.Agent,
-				Action: "approbation refuser", Resultat: x.Action + " " + x.ID + " → " + x.Etat + " (mission annulée)"})
+				Action: "approbation " + decision, Resultat: x.Action + " " + x.ID + " → " + x.Etat + " (" + motif + ")"})
 		}
 	}
 }

@@ -18,8 +18,13 @@ func (moduleMissions) Elements(*Serveur) []ElementHub {
 	var out []ElementHub
 	for _, m := range lireMissions() {
 		if q, ok := questionOuverte(m); ok && preparable(Mission{Etat: m.Etat}) == nil {
+			choix := []ActionAlerte{} // M158: answered from the bell (a paired device too), the session resumed with it
+			for _, c := range q.Choix {
+				choix = append(choix, ActionAlerte{ID: "repondre", Libelle: c, Route: "missions/" + m.ID + "/repondre",
+					Corps: map[string]any{"question": q.ID, "choix": c}, Distance: true})
+			}
 			out = append(out, ElementHub{ID: m.ID, Titre: titreMission(m), Etat: "actif", Lien: "#missions",
-				Attente: &AttenteElement{Raison: "The orchestrator asks: {0}", Args: []any{q.Texte}, Page: "#missions", Cle: q.ID}})
+				Attente: &AttenteElement{Raison: "The orchestrator asks: {0}", Args: []any{q.Texte}, Page: "#missions", Cle: q.ID, Actions: choix}})
 		}
 		// a launch stopped by a failed step (mission_lancer.go): its reason, until the owner dismisses it
 		if h := m.Historique; m.Etat == "echec" && len(h) > 1 && h[len(h)-2].Etat == "lancee" {

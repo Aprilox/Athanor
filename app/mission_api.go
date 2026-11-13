@@ -287,7 +287,7 @@ func (s *Serveur) apiAnnulerMission(w http.ResponseWriter, r *http.Request) {
 	}
 	orchestrateursEnCours.Unlock()
 	s.revoquerJetons("mission annulée", func(x SessionHub) bool { return x.Projet == prefixeMission+id })
-	s.refuserLancementMission(id, deQui(r))
+	s.fermerLancementMission(id, deQui(r), "refuser", "mission annulée")
 	s.ecrireAudit(LigneAudit{Type: "evenement", De: deQui(r), Vers: "missions", Projet: prefixeMission + id, Mission: id, Action: "mission annulée"})
 	s.ecrireJSON(w, map[string]any{"mission": m})
 }

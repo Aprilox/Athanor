@@ -151,7 +151,9 @@ func TestCaptureHub(t *testing.T) {
 	})
 	// mission-carte-* (M156): the bakery's card, proposed (?on=1), with an open question (?question=1); removed otherwise
 	t.Cleanup(func() { _ = os.RemoveAll(dossierMissions()) })
+	// mission-cloche-tel (M158): ?lancer=1 adds capture03, the same card whose orchestrator asks to launch it
 	mux.HandleFunc("POST /test/mission", func(w http.ResponseWriter, r *http.Request) {
+		s.fermerLancementMission("capture03", "hub", "refuser", "capture") // never left pending for the next screenshots
 		_ = os.RemoveAll(dossierMissions())
 		if r.URL.Query().Get("on") == "" {
 			return
@@ -179,6 +181,16 @@ func TestCaptureHub(t *testing.T) {
 		}
 		if err := enregistrerMission(m); err != nil {
 			http.Error(w, err.Error(), 500)
+		}
+		if r.URL.Query().Get("lancer") != "" {
+			m.ID, m.Questions = "capture03", []QuestionMission{}
+			if err := enregistrerMission(m); err != nil {
+				http.Error(w, err.Error(), 500)
+				return
+			}
+			if _, err := outilLancerMission(s, SessionHub{Mission: m.ID, Agent: agentOrchestrateur}, json.RawMessage(`{"id":"capture03"}`)); err != nil {
+				http.Error(w, err.Error(), 500)
+			}
 		}
 	})
 	// plan-serveur-* (M91): two Servers plans to decide, created after the appr-* screenshots so their counts stay

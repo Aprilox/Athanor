@@ -242,5 +242,6 @@ func (s *Serveur) apiLancerMission(w http.ResponseWriter, r *http.Request) {
 		s.erreurMissionHTTP(w, err)
 		return
 	}
+	s.fermerLancementMission(m.ID, deQui(r), "accepter", "mission lancée")
 	s.ecrireJSON(w, map[string]any{"mission": m})
 }

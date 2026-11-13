@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"path/filepath"
+	"slices"
 	"sort"
 	"sync"
 	"time"
@@ -59,10 +60,10 @@ func alertesDe(el []ElementHub) []AlerteHub {
 			continue
 		}
 		out = append(out, AlerteHub{Empreinte: empreinteAlerte(e), Module: e.Module, Element: e.ID, Titre: e.Titre,
-			Raison: e.Attente.Raison, Args: e.Attente.Args, Actions: []ActionAlerte{
-				{ID: "voir", Libelle: "View", Page: e.Attente.Page, Projet: e.Projet},
+			Raison: e.Attente.Raison, Args: e.Attente.Args, Actions: append(slices.Clone(e.Attente.Actions),
+				ActionAlerte{ID: "voir", Libelle: "View", Page: e.Attente.Page, Projet: e.Projet},
 				ignorerOuRouvrir(empreinteAlerte(e), true),
-			}})
+			)})
 	}
 	return out
 }
@@ -99,7 +100,10 @@ func alertesApprobations(l []Approbation) []AlerteHub {
 				raison, args = "Deploy {0} to production? Commit {1}", []any{x.Details["hote"], x.Details["commit"]}
 			}
 		}
-		titre := x.Projet
+		titre, module := x.Projet, "dev"
+		if x.Action == actionMission { // M158: the orchestrator asks to launch its card, titled by it
+			titre, module, raison, args = x.Details["titre"], "missions", "Launch this mission?", nil
+		}
 		if x.Agent == agentDurcir { // B80: Athanor's own plan, titled by the server, its fixed summary translated
 			titre, raison, args = cmp.Or(x.Details["nom"], x.Details["serveur"]), x.Raison, nil
 		}
@@ -107,10 +111,10 @@ func alertesApprobations(l []Approbation) []AlerteHub {
 			return ActionAlerte{ID: id, Libelle: libelle, Route: "hub/approbations", Corps: map[string]any{"id": x.ID, "decision": id}, Distance: true}
 		}
 		actions := []ActionAlerte{decision("accepter", "Accept"), decision("refuser", "Refuse"), decision("toujours", toujours)}
-		if x.Action == actionPlanServeur && x.Details["regle"] != "oui" || x.Action == actionDeploiement && (x.Env == "prod" || x.Details["fichiers_build"] != "") { // destructive, prod or changed build files: an accord every time
+		if x.Action == actionPlanServeur && x.Details["regle"] != "oui" || x.Action == actionDeploiement && (x.Env == "prod" || x.Details["fichiers_build"] != "") || x.Action == actionMission { // destructive, prod, changed build files or a mission: an accord every time
 			actions = actions[:2]
 		}
-		out = append(out, AlerteHub{Empreinte: "appr-" + x.ID, Module: "dev", Element: x.Projet, Titre: titre, Raison: raison, Args: args, Approbation: &x,
+		out = append(out, AlerteHub{Empreinte: "appr-" + x.ID, Module: module, Element: x.Projet, Titre: titre, Raison: raison, Args: args, Approbation: &x,
 			Actions: actions})
 	}
 	return out

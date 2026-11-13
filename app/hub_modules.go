@@ -87,6 +87,8 @@ type AttenteElement struct {
 	Args   []any  `json:"args,omitempty"`
 	Page   string `json:"page"`
 	Cle    string `json:"-"` // what the situation is about (ids of the waiting tasks): a new one is a new alert
+	// Actions: the alert's own buttons, before View and Ignore (a question's choices, M158)
+	Actions []ActionAlerte `json:"-"`
 }
 
 // StatModule: one figure of a home tile (Valeur: an int or a string), Page = the hash it opens.
