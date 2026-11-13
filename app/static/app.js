@@ -5002,7 +5002,7 @@ function assistantServeur(c) {
   </form>`;
 }
 // --- Missions (M159): one line per mission (state, sentence, lanes as they are now, date), its detail at #missions/<id>
-const ETATS_MISSION = { preparation: "Being prepared", proposee: "Proposed", acceptee: "Accepted", lancee: "Launched", terminee: "Finished", annulee: "Cancelled", echec: "Failed" };
+const ETATS_MISSION = { preparation: "Being prepared", proposee: "Proposed", acceptee: "Accepted", lancee: "Launched", terminee: "Finished", annulee: "Cancelled", echec: "Failed", en_pause: "Paused", arretee: "Stopped" };
 const ETATS_VOIE_DEV = { travaille: ["Working", "pv-claude"], termine: ["Finished", "pv-ok"], arrete: ["Stopped", ""] };
 // a lane's state read now by the API (voiesEnDirect): Studio = the project's pilot, Servers = its task
 function etatVoie(v) {
@@ -5052,19 +5052,102 @@ pages.mission = async () => {
   const m = d.mission, aLancer = ACTIVE_MISSION.includes(m.etat), fin = (m.historique || []).slice(-1)[0] || {};
   clearTimeout(minuterieMission);
   if (aLancer && travailleMission(d)) minuterieMission = setTimeout(lireMissionVue, 2000);
-  const lancee = (m.historique || []).find((x) => x.etat === "lancee"), retour = `<div class="ligne m0"><a class="btn btn-petit" href="#missions">← ${t("Missions")}</a></div>`;
+  const retour = `<div class="ligne m0"><a class="btn btn-petit" href="#missions">← ${t("Missions")}</a></div>`;
   // still being prepared or to launch: the home's card, its question and its buttons (the lanes come at the launch)
   if (aLancer) return `<div class="missions mis-detail">${retour}<div id="mission-zone" aria-live="polite">${zoneMission()}</div></div>`;
+  if (etat.missionJournalDe !== m.id) { etat.missionJournalDe = m.id; etat.missionJournalN = 50; }
+  suivreMissionDirect();
   return `<div class="missions mis-detail">${retour}
-    <div><div class="ligne m0 tuile-tete"><h2 class="m0" id="mis-titre">${h((m.carte || {}).titre || t("New mission"))}</h2><span class="badge mis-etat-${h(m.etat)}">${h(t(ETATS_MISSION[m.etat] || m.etat))}</span></div>
+    <div><div class="ligne m0 tuile-tete"><h2 class="m0" id="mis-titre">${h((m.carte || {}).titre || t("New mission"))}</h2><span class="badge mis-etat-${h(m.etat)}" id="mis-badge">${h(t(ETATS_MISSION[m.etat] || m.etat))}</span></div>
       <p class="muet petit mis-phrase">${h(m.phrase)}</p>${m.etat === "echec" && fin.detail ? `<p class="mis-avert" role="note">${h(fin.message ? texteMessage(fin.message) : fin.detail)}</p>` : ""}</div>
-    <section class="bloc" aria-labelledby="mis-voies-titre"><h2 id="mis-voies-titre">${t("Lanes")}</h2>
-      ${(m.voies || []).length ? `<ul class="mis-voies-liste">${m.voies.map((v) => `<li>${voieMission(v, true)}</li>`).join("")}</ul>${lancee ? `<p class="muet petit m0">${t("Launched on {0}", [h(new Date(lancee.t).toLocaleString(document.documentElement.lang || "en"))])}</p>` : ""}`
-        : `<p class="muet m0">${t("The lanes start when the mission is launched.")}</p>`}
-    </section>
+    <div id="mission-direct" class="mis-detail">${missionDirect(m)}</div>
     ${m.carte ? `<section class="bloc mis-carte" aria-labelledby="mis-titre">${carteMission(d)}</section>` : ""}
   </div>`;
 };
+// M171: a launched mission, live (DESIGN §Mission en direct): its lanes side by side, the relay's steps and URLs, the
+// journal in plain words; read again every 2 s while the page is shown, the tab visible and the mission followed
+const RELAIS_MISSION = ["Milestone delivered", "Dev deployment", "Verification", "Your accord", "Production"];
+const RANG_RELAIS = { construction: 0, dev_deploye: 2, dev_verifie: 3, accord_prod: 3, prod_deploye: 4, termine: 5 };
+const ETATS_ETAPE = { fait: "done", cours: "in progress", attente: "in progress", echec: "failed", "": "to come" };
+// the relay step of the newest journal entry when it is an error (a deployment, a check, the prod): red until it moves on
+function etapeEchec(j) {
+  const e = j[j.length - 1], env = ((e || {}).params || [])[0];
+  if (!e || e.niveau !== "erreur") return -1;
+  if (/^(incident|prod):/.test(e.id)) return 4;
+  if (/^(deploi|verif):.*:echec$/.test(e.id)) return env === "prod" ? 4 : env === "dev" ? (e.id.startsWith("deploi") ? 1 : 2) : -1;
+  return -1;
+}
+function friseRelais(m) {
+  const envs = (m.carte || {}).envs || [], dev = envs.find((x) => x.nom === "dev"), prod = envs.find((x) => x.nom === "prod");
+  const rang = RANG_RELAIS[m.relais.etape] ?? 0, echec = etapeEchec(m.journal || []);
+  const etapes = (prod ? RELAIS_MISSION : RELAIS_MISSION.slice(0, 3)).map((l, i) => {
+    const c = echec >= 0 ? (i < echec ? "fait" : i === echec ? "echec" : "") : i < rang ? "fait" : i === rang ? (m.etat === "lancee" ? "cours" : "attente") : "";
+    return `<li class="r-${c || "avenir"}"${c === "cours" ? ' aria-current="step"' : ""}><span class="mis-pastille" aria-hidden="true"></span><span>${t(l)}</span><span class="cache-visuel"> (${t(ETATS_ETAPE[c])})</span></li>`;
+  }).join("");
+  const url = (e, l) => e && e.url ? `<span>${t(l)} <a href="${h(e.url)}" target="_blank" rel="noopener noreferrer" class="mis-url">${h(e.url)}</a></span>` : "";
+  const urls = [rang >= 2 ? url(dev, "Dev:") : "", prod && rang >= 4 ? url(prod, "Prod:") : ""].filter(Boolean);
+  return `<ol class="mis-relais">${etapes}</ol>${urls.length ? `<p class="ligne m0 petit mis-relais-url">${urls.join("")}</p>` : ""}`;
+}
+// a journal parameter said in the page's language: who acted, a state, a policy, an action; names and URLs as they are
+// shortcut: a parameter equal to one of these words is translated wherever it stands (an environment named "auto"), fine for the names a card uses
+const MOTS_JOURNAL = { fenetre: "from this computer", "emergency stop": "emergency stop", refusee: "refused", expiree: "expired", echec: "failed",
+  arretee: "stopped", accord: "after your accord", auto: "automatically", deploiement: "deployment", mission: "launch", plan_serveurs: "Servers plan" };
+function motJournal(cle, x) {
+  if (cle.startsWith("Policy changed")) return t((POLITIQUES_MISSION.find((p) => p[0] === x) || [, x])[1]);
+  if (x.startsWith("appareil:")) return t("from a paired phone");
+  if (MOTS_JOURNAL[x]) return t(MOTS_JOURNAL[x]);
+  return PREFIXES.some((p) => x.startsWith(p)) ? t(x) : x;
+}
+const texteJournal = (e) => t(e.cle, (e.params || []).map((x) => motJournal(e.cle, x)));
+function ligneJournal(e) {
+  const d = new Date(e.t), lang = document.documentElement.lang || "en";
+  const quand = d.toDateString() === new Date().toDateString() ? d.toLocaleTimeString(lang, { hour: "2-digit", minute: "2-digit" }) : d.toLocaleString(lang, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  return `<li class="mis-j-${h(e.niveau)}"><time datetime="${h(e.t)}">${h(quand)}</time><span>${h(texteJournal(e))}</span></li>`;
+}
+// a lane, live: the module's line (state, link) then Studio's milestone n/N and what the project lead does
+function voieDirect(v) {
+  const n = v.fait || 0, avance = v.module !== "dev" || !v.total ? "" : v.titre ? t("Milestone {0}/{1}: {2}", [Math.min(n + 1, v.total), v.total, v.titre]) : t("{0} / {1} milestones done", [n, v.total]);
+  const decider = v.actuel === "attente_accord" ? `<a class="btn btn-petit" href="#pourvous">${t("See the plan")}</a>` : "";
+  return `<li class="mis-voie">${voieMission(v, true)}${avance ? `<p class="m0">${h(avance)}</p>` : ""}${v.activite ? `<p class="m0 muet petit">${h(t(v.activite))}</p>` : ""}${decider}</li>`;
+}
+function missionDirect(m) {
+  const lancee = (m.historique || []).find((x) => x.etat === "lancee"), j = [...(m.journal || [])].reverse(), n = etat.missionJournalN || 50;
+  const pol = POLITIQUES_MISSION.find((p) => p[0] === m.politique);
+  return `<section class="bloc" aria-labelledby="mis-voies-titre"><div class="ligne m0 tuile-tete"><h2 class="m0" id="mis-voies-titre">${t("Lanes")}</h2><span class="espace"></span>${pol ? `<span class="muet petit">${h(t("Policy: {0}", [t(pol[1])]))}</span>` : ""}</div>
+      ${(m.voies || []).length ? `<ul class="mis-voies-liste mis-voies-direct">${m.voies.map(voieDirect).join("")}</ul>${lancee ? `<p class="muet petit m0">${t("Launched on {0}", [h(new Date(lancee.t).toLocaleString(document.documentElement.lang || "en"))])}</p>` : ""}`
+        : `<p class="muet m0">${t("The lanes start when the mission is launched.")}</p>`}
+    </section>
+    ${m.relais ? `<section class="bloc" aria-labelledby="mis-relais-titre"><h2 id="mis-relais-titre">${t("Relay")}</h2>${friseRelais(m)}</section>` : ""}
+    <section class="bloc" aria-labelledby="mis-journal-titre"><h2 id="mis-journal-titre">${t("Journal")} <span class="muet">${j.length}</span></h2>
+      ${j.length ? `<ol class="mis-journal">${j.slice(0, n).map(ligneJournal).join("")}</ol>${j.length > n ? `<button type="button" class="btn btn-petit" id="mis-plus" data-mis-plus>${t("See more")} (${j.length - n})</button>` : ""}`
+        : `<p class="muet m0">${t("No event yet: the journal fills in as the lanes move on.")}</p>`}
+    </section>`;
+}
+let minuterieDirect;
+function suivreMissionDirect() {
+  clearTimeout(minuterieDirect);
+  const m = (etat.missionVue || {}).mission;
+  if (!m || !["lancee", "en_pause"].includes(m.etat)) return;
+  minuterieDirect = setTimeout(async () => {
+    const ici = () => etat.page === "mission" && $("#mission-direct") && (etat.missionVue || {}).mission?.id === m.id;
+    if (!ici()) return;
+    if (document.visibilityState === "visible") {
+      try {
+        const d = await api("missions/" + encodeURIComponent(m.id));
+        if (!ici()) return;
+        etat.missionVue = d;
+        if (d.mission.etat !== m.etat) { await rendrePage(); return; } // a new state: header and card again
+        const z = $("#mission-direct"); garderFocus(z, () => { z.innerHTML = missionDirect(d.mission); });
+      } catch { /* next try in 2 s */ }
+    }
+    suivreMissionDirect();
+  }, 2000);
+}
+document.addEventListener("click", (ev) => {
+  if (!ev.target.closest("[data-mis-plus]") || !etat.missionVue) return;
+  etat.missionJournalN = (etat.missionJournalN || 50) + 50;
+  const z = $("#mission-direct"); if (z) garderFocus(z, () => { z.innerHTML = missionDirect(etat.missionVue.mission); });
+});
 
 pages.serveurs = async () => {
   const distant = !!(etat.vue || {}).distant;

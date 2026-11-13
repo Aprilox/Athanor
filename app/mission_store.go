@@ -35,6 +35,11 @@ type VoieMission struct {
 	Actuel  string `json:"actuel,omitempty"`
 	Detail  string `json:"detail,omitempty"`
 	Serveur string `json:"serveur,omitempty"`
+	// Studio lane: the milestones done of the plan, the title of the one in progress, what the project lead does
+	Fait     int    `json:"fait,omitempty"`
+	Total    int    `json:"total,omitempty"`
+	Titre    string `json:"titre,omitempty"`
+	Activite string `json:"activite,omitempty"`
 }
 
 // QuestionMission: a question of the orchestrator to the owner (at most 4 choices), with the answer.

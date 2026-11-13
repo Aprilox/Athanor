@@ -156,6 +156,7 @@ func TestCaptureHub(t *testing.T) {
 		s.fermerLancementMission("capture03", "hub", "refuser", "capture") // never left pending for the next screenshots
 		_ = os.RemoveAll(dossierMissions())
 		_ = os.Remove(filepath.Join(dossierTaches("c0ffee02"), "7a5c0e11d2b4.json")) // ?liste=1's task
+		_ = os.Remove(filepath.Join(dossierTaches("c0ffee01"), "9b1d3e5f7a20.json")) // and capture06's
 		if r.URL.Query().Get("on") == "" {
 			return
 		}
@@ -198,7 +199,8 @@ func TestCaptureHub(t *testing.T) {
 		}
 		// missions-* (M159): ?liste=1 adds missions launched (a project's pilot and a Servers task waiting for the
 		// owner), finished, failed and cancelled, older than the bakery's
-		if r.URL.Query().Get("liste") != "" {
+		// ?direct=1 (M171): capture06 alone, so the list's counts stay
+		if liste, direct := r.URL.Query().Get("liste") != "", r.URL.Query().Get("direct") != ""; liste || direct {
 			tache := TacheServeurs{ID: "7a5c0e11d2b4", Texte: "Noms DNS et proxy", Serveurs: []string{"c0ffee02"}, Etat: "attente_accord", Env: "projet-02/staging",
 				Cree: "2026-11-12T08:00:00Z", Historique: []EvenementTache{}}
 			if err := enregistrerTache(tache); err != nil {
@@ -213,7 +215,46 @@ func TestCaptureHub(t *testing.T) {
 				return
 			}
 			bc, _ := json.Marshal(calculerCarte(c, "tout", ctx))
+			// mission-direct-* (M171): capture06 launched, its dev checked (relay at the prod accord), a Servers task
+			// applying its plan, 52 journal entries (50 shown, See more), an attention and an error among them
+			tache6 := TacheServeurs{ID: "9b1d3e5f7a20", Texte: "Prod de projet-01", Serveurs: []string{"c0ffee01"}, Etat: "application", Env: "projet-01/prod",
+				Cree: "2026-11-12T08:00:00Z", Historique: []EvenementTache{}}
+			if err := enregistrerTache(tache6); err != nil {
+				http.Error(w, err.Error(), 500)
+				return
+			}
+			c6 := CarteMission{Titre: "Formulaire de contact de projet-01", Projet: ProjetCarte{Nom: "projet-01"}, Dev: BriefCarte{"Un formulaire de contact avec envoi d'e-mail."},
+				Envs: []EnvCarte{{Nom: "dev", URL: "https://dev.projet-01.fr", Protection: "auth_proxy", Serveurs: []string{"c0ffee02"}},
+					{Nom: "prod", URL: "https://projet-01.fr", Protection: "aucune", Serveurs: []string{"c0ffee01"}}},
+				Serveurs: BriefCarte{"Noms DNS, certificats et proxy de dev et de prod."}, JalonsEstimes: 4}
+			if err := validerCarte(&c6, ctx); err != nil {
+				http.Error(w, err.Error(), 500)
+				return
+			}
+			b6, _ := json.Marshal(calculerCarte(c6, "prod", ctx))
+			var j6 []EntreeJournal
+			heure := time.Date(2026, 11, 12, 8, 0, 0, 0, time.UTC)
+			noter := func(id, niveau, cle string, p ...string) {
+				heure = heure.Add(4 * time.Minute)
+				j6 = append(j6, EntreeJournal{ID: id, T: heure.Format(formatCree), Cle: cle, Params: p, Niveau: niveau})
+			}
+			noter("verif:d0:ok", "info", "{0} checked: {1} answers", "dev", "https://dev.projet-01.fr")
+			for i := 1; i <= 16; i++ {
+				sha := fmt.Sprintf("%07x", 0x4f2a9c1+i*7919)
+				noter(fmt.Sprintf("jalon:M%d", i), "info", "Milestone delivered: {0}", fmt.Sprintf("M%d", i))
+				if i == 9 {
+					noter("deploi:d9:echec", "erreur", "Deployment to {0} failed: version {1}", "dev", sha)
+				}
+				noter(fmt.Sprintf("deploi:d%d:ok", i), "info", "Deployment to {0} done: version {1}", "dev", sha)
+				noter(fmt.Sprintf("verif:d%d:ok", i), "info", "{0} checked: {1} answers", "dev", "https://dev.projet-01.fr")
+			}
+			noter("accord:a1", "attention", "Your accord is asked: {0} ({1})", "plan_serveurs", "prod")
+			noter("redemarrage:1", "info", "Athanor restarted: the mission resumes")
 			for _, x := range []Mission{
+				{ID: "capture06", Phrase: "Ajouter un formulaire de contact à @projet-01, en dev puis en prod sur projet-01.fr", Etat: "lancee", Carte: b6, Politique: "prod",
+					Voies:  []VoieMission{{Module: "dev", Ref: "projet-01", Etat: "lancee"}, {Module: "servers", Ref: tache6.ID, Etat: "preparation"}},
+					Relais: &RelaisMission{Etape: "dev_verifie", Commit: "4f2a9c1e8b7d60a3f5c2e9d14b8a7f60c3e2d1b9", DeploiementDev: "d16"}, Journal: j6,
+					Historique: []EvenementMission{{T: "2026-11-12T07:58:00Z", Etat: "proposee"}, {T: "2026-11-12T08:00:00Z", Etat: "lancee", Detail: "hub"}}, Cree: "2026-11-12T07:55:00Z"},
 				{ID: "capture02", Phrase: "Ajouter le paiement par carte à @projet-02 et le mettre en recette sur recette.boutique.fr", Etat: "lancee", Carte: bc, Politique: "tout",
 					Voies:      []VoieMission{{Module: "dev", Ref: "projet-02", Etat: "lancee"}, {Module: "servers", Ref: tache.ID, Etat: "preparation"}},
 					Historique: []EvenementMission{{T: "2026-11-12T07:55:00Z", Etat: "proposee"}, {T: "2026-11-12T08:00:00Z", Etat: "lancee", Detail: "hub"}}, Cree: "2026-11-12T07:50:00Z"},
@@ -224,6 +265,9 @@ func TestCaptureHub(t *testing.T) {
 					Historique: []EvenementMission{{T: "2026-11-09T09:59:00Z", Etat: "lancee", Detail: "hub"}, {T: "2026-11-09T10:00:00Z", Etat: "echec", Detail: "the project projet-03 no longer exists",
 						Message: &MessageMoteur{Cle: "the project {0} no longer exists", Args: []any{"projet-03"}}}}, Cree: "2026-11-09T09:58:00Z"},
 			} {
+				if x.ID == "capture06" && !direct || x.ID != "capture06" && !liste {
+					continue
+				}
 				x.Mentions, x.Questions = MentionsMission{Projets: []string{}, Serveurs: []string{}, Cles: []string{}}, []QuestionMission{}
 				if err := enregistrerMission(x); err != nil {
 					http.Error(w, err.Error(), 500)
@@ -231,6 +275,11 @@ func TestCaptureHub(t *testing.T) {
 				}
 			}
 		}
+	})
+	// mission-direct-clair (M171): a new journal entry of capture06, shown by the live page within 2 s
+	mux.HandleFunc("POST /test/mission-journal", func(w http.ResponseWriter, r *http.Request) {
+		now := time.Now()
+		s.noterJournalMission("capture06", s.entreeJournal("test:"+now.UTC().Format(formatCree), now, "attention", "A Servers plan on {0} waits for your accord", "VPS production"))
 	})
 	// plan-serveur-* (M91): two Servers plans to decide, created after the appr-* screenshots so their counts stay
 	mux.HandleFunc("POST /test/plans", func(w http.ResponseWriter, r *http.Request) {

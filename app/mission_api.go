@@ -139,6 +139,9 @@ func (s *Serveur) voiesEnDirect(m Mission) Mission {
 			default:
 				v.Actuel = "arrete"
 			}
+			if ok {
+				s.avancementVoie(v, p, e.JalonEnCours)
+			}
 		case "servers":
 			if t, ok := tacheMission(v.Ref); ok && len(t.Serveurs) > 0 {
 				v.Actuel, v.Serveur = t.Etat, t.Serveurs[0]
@@ -148,6 +151,33 @@ func (s *Serveur) voiesEnDirect(m Mission) Mission {
 		}
 	}
 	return m
+}
+
+// avancementVoie: v's milestones done of p's plan, the title of milestone jalon in progress and, while its pilot
+// works, what the project lead does (the team view of a log already open, as the home's Studio block).
+func (s *Serveur) avancementVoie(v *VoieMission, p Projet, jalon string) {
+	for _, j := range p.LirePlan() {
+		v.Total++
+		if j.Fait {
+			v.Fait++
+		}
+		if v.Actuel == "travaille" && jalon != "" && v.Titre == "" && (jalon == j.ID || strings.HasPrefix(jalon, j.ID+" ")) {
+			v.Titre = strings.TrimLeft(strings.TrimPrefix(j.Titre, j.ID), " :")
+		}
+	}
+	if v.Actuel != "travaille" {
+		return
+	}
+	s.mu.Lock()
+	l := s.logs[p.Nom]
+	s.mu.Unlock()
+	if l != nil {
+		for _, a := range l.Agents() {
+			if a.Genre == "chef" && a.Statut != "termine" {
+				v.Activite = a.Activite
+			}
+		}
+	}
 }
 
 // apiMissions: GET /api/missions, every mission, the newest first, its lanes as they are now.

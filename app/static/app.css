@@ -1162,3 +1162,34 @@ a.mis-ligne:hover, a.mis-ligne:focus-visible { border-color: var(--accent); }
 .fou-zones li { display: grid; gap: 3px; min-width: 0; overflow-wrap: anywhere; }
 .fou-bilan { overflow-wrap: anywhere; }
 .fournisseurs .srv-form { margin-bottom: 12px; }
+/* M171: a launched mission, live: lanes side by side, the relay's steps, the journal */
+.mis-etat-en_pause { color: var(--attention); border-color: currentColor; }
+.mis-etat-arretee { color: var(--muted); border-color: currentColor; }
+.mis-voies-direct { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.mis-voies-direct .mis-voie { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+@media (max-width: 600px) { .mis-voies-direct { grid-template-columns: minmax(0, 1fr); } }
+.cache-visuel { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.mis-relais { list-style: none; margin: 4px 0 8px; padding: 0; display: flex; }
+.mis-relais li { flex: 1; min-width: 0; position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; font-size: 12.5px; overflow-wrap: break-word; hyphens: auto; color: var(--muted); }
+.mis-relais li + li::before { content: ""; position: absolute; top: 8px; right: calc(50% + 11px); left: calc(-50% + 11px); height: 2px; background: var(--line); }
+.mis-relais li.r-fait + li::before, .mis-relais li.r-fait + li.r-fait::before { background: var(--ok); }
+.mis-pastille { width: 18px; height: 18px; box-sizing: border-box; border-radius: 50%; border: 2px solid var(--line); background: var(--panel); display: grid; place-items: center; font-size: 11px; line-height: 1; font-weight: 700; }
+.mis-relais .r-fait, .mis-relais .r-cours, .mis-relais .r-attente, .mis-relais .r-echec { color: var(--ink); }
+.r-fait .mis-pastille { border-color: var(--ok); background: var(--ok); color: var(--panel); }
+.r-fait .mis-pastille::after { content: "✓"; }
+.r-cours .mis-pastille, .r-attente .mis-pastille { border-color: var(--accent); }
+.r-cours .mis-pastille { animation: pulse 2s infinite; }
+.r-echec .mis-pastille { border-color: var(--erreur); background: var(--erreur); color: #fff; }
+.r-echec .mis-pastille::after { content: "✕"; }
+.mis-relais li.r-echec { color: var(--erreur-vif); }
+@media (prefers-reduced-motion: reduce) { .r-cours .mis-pastille { animation: none; } }
+@media (max-width: 480px) { .mis-relais li { font-size: 11.5px; } }
+.mis-relais-url { gap: 6px 18px; flex-wrap: wrap; }
+.mis-journal { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; }
+.mis-journal li { display: flex; gap: 10px; padding: 5px 0 5px 8px; border-left: 3px solid transparent; border-bottom: 1px solid var(--line); min-width: 0; overflow-wrap: anywhere; }
+.mis-journal li:last-child { border-bottom: 0; }
+.mis-journal time { flex: none; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 4.5em; }
+.mis-j-attention { border-left-color: var(--attention) !important; }
+.mis-j-attention span { color: var(--attention); }
+.mis-j-erreur { border-left-color: var(--erreur) !important; }
+.mis-j-erreur span { color: var(--erreur-vif); }

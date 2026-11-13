@@ -2,11 +2,54 @@ package main
 
 import (
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 	"testing"
 )
+
+// clesJournalMission: the keys of a mission's journal (entreeJournal(id, t, niveau, "key", …) in mission_*.go) and
+// the words the live page gives t() through its tables (relay steps, journal parameters).
+func clesJournalMission(t *testing.T) []string {
+	fichiers, _ := filepath.Glob("mission_*.go")
+	re := regexp.MustCompile(`"(?:info|attention|erreur)",\s*("(?:[^"\\]|\\.)*")`)
+	var cles []string
+	for _, f := range fichiers {
+		if strings.HasSuffix(f, "_test.go") {
+			continue
+		}
+		b, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, m := range re.FindAllStringSubmatch(string(b), -1) {
+			if c, err := strconv.Unquote(m[1]); err == nil {
+				cles = append(cles, c)
+			}
+		}
+	}
+	if len(cles) < 25 {
+		t.Fatalf("%d journal keys in mission_*.go", len(cles))
+	}
+	b, err := os.ReadFile("static/app.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, table := range []string{"RELAIS_MISSION", "ETATS_ETAPE", "MOTS_JOURNAL"} {
+		i := strings.Index(string(b), "\nconst "+table+" = ")
+		j := strings.Index(string(b)[i+1:], ";\n")
+		if i < 0 || j < 0 {
+			t.Fatalf("no %s in app.js", table)
+		}
+		for _, m := range regexp.MustCompile(`"((?:[^"\\]|\\.)*)"(?:\s*[,\]}])`).FindAllStringSubmatch(string(b)[i:i+1+j], -1) {
+			if m[1] != "" {
+				cles = append(cles, cleJS(m[1]))
+			}
+		}
+	}
+	return append(cles, "prod checked: ", "no prod on the card: dev checked on ")
+}
 
 // clesWeb: the keys the web interface translates: every t("…") of app.js (traduireNav's labels for
 // index.html included) and every text of the GUIDE (ids and "#page" links left out).
@@ -73,6 +116,7 @@ func TestWebTraduction(t *testing.T) {
 	cles = append(cles, errCleDeploiementNonLie.Error(), errCleDeploiementGH) // the deployment key (M119)
 	cles = append(cles, "The mission waits for the vault to be unlocked")     // the bell after a restart (M170)
 	cles = append(cles, clesMoteur(t)...)                                     // the engine's messages (B79)
+	cles = append(cles, clesJournalMission(t)...)                             // a mission's journal (M171)
 	for _, l := range []string{"fr", "es", "de", "it", "pt"} {
 		dico := dicoTUI(l)
 		if len(dico) < 1000 {

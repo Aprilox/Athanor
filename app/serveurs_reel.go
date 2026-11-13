@@ -137,11 +137,12 @@ func auditTache(projet string) []LigneAudit {
 }
 
 func tacheParID(serveur, id string) TacheServeurs {
-	i := slices.IndexFunc(tachesServeur(serveur), func(x TacheServeurs) bool { return x.ID == id })
+	l := tachesServeur(serveur) // read once: a task written between two reads would shift the index
+	i := slices.IndexFunc(l, func(x TacheServeurs) bool { return x.ID == id })
 	if i < 0 {
 		return TacheServeurs{}
 	}
-	return tachesServeur(serveur)[i]
+	return l[i]
 }
 
 // testerAgentServeurs: the whole test on the test sshd at cible (host:port); the server is removed whatever happens.
