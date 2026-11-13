@@ -2,7 +2,7 @@
 
 *Français : [MISSIONS.fr.md](MISSIONS.fr.md)*
 
-A mission is one sentence that several modules carry out together: **Studio** builds the project, **Servers** prepares where it runs. This page says what happens between your sentence and the lanes at work, what the orchestrator may and may not do, and what you approve. In the app, *Guide › Launch a mission* walks through it; deployments themselves are in [DEPLOY.md](DEPLOY.md).
+A mission is one sentence that several modules carry out together: **Studio** builds the project, **Servers** prepares where it runs. This page says what happens between your sentence and the lanes at work, what the orchestrator may and may not do, and what you approve. In the app, *Guide › Launch a mission* and *Guide › Follow a mission* walk through it; deployments themselves are in [DEPLOY.md](DEPLOY.md).
 
 ## From a sentence to a card
 
@@ -40,6 +40,20 @@ The *Missions* page lists every mission with its state and its lanes (read live 
 - **After the launch.** Each delivered milestone is deployed to *dev*, then checked from this PC. Once the Studio lane finished the request, the latest checked *dev* deployment carries the project's latest version and the *prod* Servers tasks are done, Athanor asks you "Deploy <host> to production?" (bell, *For you*, a notification that opens the mission). That accord is for this mission, this exact version and these servers, once, whatever the policy, even *autonomous*; if the card or the version changed meanwhile, it is refused and asked again. Accepted: *prod* is deployed then checked, and the mission ends. Refused: the mission waits for your *Ask again*. A failure opens the usual incident (*Retry*, *Go back to the previous version*, *I take over*), written in the mission's journal. Without *prod* on the card, the mission ends as soon as *dev* is checked.
 - **Pause, resume, stop, policy.** *Pause* stops the project's pilot and holds the mission: no pilot start, no deployment after a milestone, no Servers plan step and no production accord until you *Resume* (Athanor's password asked; the pilot starts again). *Stop* ends the mission for good: its pilot stops, its Servers tasks are cancelled, its agents' sessions are revoked, its pending accords are refused and *dev* is no longer deployed after each milestone. Nothing is undone: the mission's journal lists what stays (environments, access given, files on the servers). A stricter policy applies at once; a looser one asks for the password; the environments follow it (*prod* always waits for you). The emergency stop pauses every launched mission.
 - **When Athanor restarts.** Launched and paused missions carry on where they were: nothing is launched again and no access is given twice; the journal says “Athanor restarted”. An accord still pending for a card or a policy the mission no longer has is refused. A mission that needs your servers' keys waits for the vault to be unlocked (bell, journal), then goes on by itself. A mission whose card was being prepared gets its card back if it had one; otherwise it fails with the reason: send it again.
+
+## Following a mission
+
+A launched mission has its own page, `#missions/<id>` (from the *Missions* page or a notification). It reads the mission again every 2 seconds while it is shown.
+
+- **Header.** The sentence, the state, the policy (three choices; a looser one asks for Athanor's password), *Pause* or *Resume*, and *Stop* (“Stop the mission? Nothing will be undone: the environments and the accesses stay.”).
+- **Lanes.** Studio and Servers side by side (one column on a phone): the project with “Milestone 3/8: contact form” and what its pilot is doing; the Servers task with its plan step, or *See the plan* when it waits for you. Each name opens its page.
+- **Relay.** Five steps — *Milestone delivered*, *Dev deployment*, *Verification*, *Your accord*, *Production* (three without *prod*): the done ones ticked, the current one animated, a failed one red; the *dev* then *prod* addresses below once they exist. When the production accord was refused or expired, *Ask again* asks once more.
+- **Journal.** One line per event in plain words, newest first, with its time (a milestone delivered, a deployment checked from outside, the accord asked, given or refused, a pause, a restart); warnings in amber, errors in red; 50 lines, then *See more*. No secret value is ever written there.
+- **Incident.** When the mission's site is found unwell, its incident comes first on the page with the bell's actions: *Retry*, *Go back to the previous version*, *I take over*.
+- **The production accord.** “Deploy <host> to production?” shows the address, the short commit, the version online now and what changes (the number of new commits and the subjects of the last three, any vault value masked). On a paired, unlocked phone, *Accept* is enough; a phone not paired or locked is refused; on the computer, Athanor's password is asked. Accepting twice has no effect: *prod* is deployed once.
+- **In a terminal.** *E* lists the missions with their state and relay step; *Enter* opens one: its lanes, its relay as text (✓ done, ● in progress, ✗ failed, ○ to come) and the 10 newest journal lines; *p* pauses, *r* resumes with the password, *a* stops after a confirmation. The production accord is decided on page *6* (*For you*).
+
+**Tested end to end.** `TestMissionP5`, in the `servers-ssh` CI job on a test SSH container, runs a whole mission: the sentence, the card, *Launch*, a milestone deployed and checked on a protected *dev* (401 without the password, 200 with it), Athanor restarted in the middle, the production accord from a paired phone, *prod* deployed and checked, then *Go back* on *dev*; the journal has no duplicate and no secret value. `TestMissionRedemarrage` covers the restart, `TestMissionP7` the phone accord and `TestRedTeamMissions` hostile agents.
 
 ## From your phone
 
