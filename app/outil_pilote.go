@@ -95,17 +95,21 @@ type pilote struct {
 	rapide         bool   // the fast mode (FAST=1 in .athanor/.env): quick checks only, the whole verification at the end
 	rapideAnnonce  string // "1"/"0": the fast state last logged
 	refusRapide    int    // deliveries reopened by this run because the fast mode's verification was owed
-	bashMax        string // BASH_MAX_OUTPUT_LENGTH outside the eco mode
-	quotaOuvriers  bool
-	modeleVerif    string
-	verrouFichier  *os.File
-	pontCmd        *exec.Cmd
-	syncCmd        *exec.Cmd
-	ecranCmd       *exec.Cmd
-	arretCh        chan struct{}
-	arretOnce      sync.Once
-	enArret        atomic.Bool
-	battementStop  chan struct{}
+	// what this pilot read, told to the app in STATE.json (reglages_pris.go): the tool's settings at its start,
+	// the project's working modes at the start of its cycle
+	empreinteReglages string
+	modesLus          string
+	bashMax           string // BASH_MAX_OUTPUT_LENGTH outside the eco mode
+	quotaOuvriers     bool
+	modeleVerif       string
+	verrouFichier     *os.File
+	pontCmd           *exec.Cmd
+	syncCmd           *exec.Cmd
+	ecranCmd          *exec.Cmd
+	arretCh           chan struct{}
+	arretOnce         sync.Once
+	enArret           atomic.Bool
+	battementStop     chan struct{}
 	// several computers on the project (pcs_pilote.go): the milestone this computer took, its team
 	jalonPC     *Jalon
 	equipePC    *equipePC
@@ -346,6 +350,8 @@ func (p *pilote) statut(etat string) {
 	o.mettre("debut_cycle", p.etatDebutCycle)
 	o.mettre("ouvriers", p.etatOuvriers)
 	o.mettre("demandes_en_attente", attente)
+	o.mettre("reglages", p.empreinteReglages)
+	o.mettre("modes", p.modesLus)
 	var b bytes.Buffer
 	enc := json.NewEncoder(&b)
 	enc.SetEscapeHTML(false)

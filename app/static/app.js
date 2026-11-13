@@ -787,8 +787,14 @@ function rendreBandeau(v) {
   const boutons = [];
   if (v.kit_valide && v.projet && !global) {
     if (v.actif) {
+      // what was changed while this pilot runs and that it has not taken yet (en_attente, from what the pilot
+      // itself says it read): the working mode at its next cycle, the settings when it restarts (asked by
+      // the app for the end of the cycle; cancelled, a button asks it again)
+      const attente = v.en_attente || [];
+      if (attente.includes("modes")) boutons.push(`<span class="btn btn-attente inerte" title="${h(t("The pilot reads the working mode when a cycle starts: the cycle under way keeps the one it started with."))}">⏳ ${t("New working mode: taken at the end of this cycle")}</span>`);
+      if (attente.includes("reglages") && !v.arret_demande) boutons.push(`<button class="btn btn-attente" data-act="redemarrer-apres-cycle" title="${h(t("The pilot runs with the settings it started with. Click to restart it at the end of this cycle."))}">↻ ${t("New settings: restart after cycle")}</button>`);
       // a stop asked for the end of the cycle: the button says it, and a click withdraws it
-      if (v.arret_demande) boutons.push(`<button class="btn btn-attente" data-arret="annuler" title="${h(t("Click to cancel: the pilot then goes on after this cycle."))}">⏳ ${v.arret_demande === "relance" ? t("Restart requested: end of cycle") : t("Stop requested: end of cycle")}</button>`);
+      if (v.arret_demande) boutons.push(`<button class="btn btn-attente" data-arret="annuler" title="${h(t("Click to cancel: the pilot then goes on after this cycle."))}">⏳ ${v.arret_demande === "relance" ? t(attente.includes("reglages") ? "Restart at the end of the cycle: new settings" : "Restart requested: end of cycle") : t("Stop requested: end of cycle")}</button>`);
       else boutons.push(`<button class="btn" data-act="arreter-apres-cycle" title="${h(t("Finishes the current milestone, saves it, then stops. Nothing is lost."))}">${t("Stop after cycle")}</button>`);
       boutons.push(`<button class="btn btn-danger" data-act="arreter" title="${h(t("Cuts the current cycle: unsaved work will be redone."))}">${t("Stop now")}</button>`);
     } else {

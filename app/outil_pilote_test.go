@@ -823,6 +823,9 @@ func TestBancPilote(t *testing.T) {
 		verifier(strings.Count(sortie, "Delivery reopened: what was built in the fast mode") == 1, "the delivery without the verification is reopened once")
 		verifier(strings.HasPrefix(etat.Etat, "DONE") && projetLivre(p), "final state: %+v", etat)
 		verifier(!fichierRegulierPilote(filepath.Join(p.Atelier(), detteRapide)), "the debt file is gone")
+		// the pilot tells the app what it read (reglages_pris.go): the modes of its last cycle (the fast mode
+		// switched off since the first one), the tool's settings of its start
+		verifier(etat.Modes == "parallel=0 max=- eco=1 fast=0" && etat.Reglages == empreinteReglagesKit(kit), "what the pilot says it read: modes %q, settings %q (the kit's: %q)", etat.Modes, etat.Reglages, empreinteReglagesKit(kit))
 		if echec {
 			t.Logf("pilot output:\n%s", sortie)
 		}

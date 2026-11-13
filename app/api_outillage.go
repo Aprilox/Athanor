@@ -88,7 +88,8 @@ func (s *Serveur) apiEcrireEnv(w http.ResponseWriter, r *http.Request) {
 		s.erreur(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	s.msg(w, "Settings saved. They apply to pilots started afterwards (“Restart after cycle” on a running project).")
+	s.verifierReglagesPilotes() // a running pilot restarts with them at the end of its cycle
+	s.msg(w, "Settings saved. A running pilot restarts with them at the end of its cycle.")
 }
 
 // ----------------------------------------------------------------------------- health

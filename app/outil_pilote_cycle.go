@@ -1438,6 +1438,7 @@ func (p *pilote) lireModeParallele() {
 	p.parallel = false
 	p.parallelMax = 3
 	b, _ := os.ReadFile(filepath.Join(p.etat, ".env"))
+	p.modesLus = modesDemandes(string(b)) // what this cycle runs with, from the very bytes parsed below
 	parStr, maxStr, ecoStr, rapideStr := "0", "3", "0", "0"
 	for _, l := range strings.Split(string(b), "\n") {
 		l = strings.TrimSuffix(l, "\r")
@@ -2001,8 +2002,10 @@ func lancerPilote(args []string) int {
 	}
 	assainirAtelier(etat)
 
-	origineConn := origineConnexion() // before .env: what the environment gave (connexion_claude.go)
+	origineConn := origineConnexion()     // before .env: what the environment gave (connexion_claude.go)
+	empreinteLue := empreinteReglages("") // the settings this pilot takes, from the very bytes read below
 	if b, err := os.ReadFile(filepath.Join(kit, ".env")); err == nil {
+		empreinteLue = empreinteReglages(string(b))
 		for _, l := range strings.Split(string(b), "\n") {
 			l = strings.TrimSuffix(l, "\r")
 			if m := reCleEnvPilote.FindStringSubmatch(l); m != nil {
@@ -2087,6 +2090,7 @@ func lancerPilote(args []string) int {
 	}
 
 	p := &pilote{
+		empreinteReglages:        empreinteLue,
 		origineConn:              origineConn,
 		connexion:                lireConnexionClaude(kit, origineConn),
 		kit:                      kit,
@@ -2703,9 +2707,10 @@ func lancerPilote(args []string) int {
 		p.etatReprise = ""
 		debutCycleTime := time.Now()
 		p.etatDebutCycle = debutCycleTime.Format("2006-01-02T15:04:05")
+		// the modes first: the state then tells the app which ones this cycle took (reglages_pris.go)
+		p.lireModeParallele()
 		p.statut(fmt.Sprintf("Claude is working (cycle %d)", p.cycle))
 
-		p.lireModeParallele()
 		if p.parallel {
 			p.absorberFileParallele()
 			p.synchroniserDemande()

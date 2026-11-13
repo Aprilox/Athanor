@@ -190,6 +190,10 @@ type Etat struct {
 	DebutCycle        string `json:"debut_cycle"`
 	DemandesEnAttente int64  `json:"demandes_en_attente"`
 	Ouvriers          string `json:"ouvriers"` // parallel mode: milestones being built by workers, separated by spaces
+	// what this pilot read (reglages_pris.go): the tool's settings when it started, the project's working modes
+	// when its cycle started; empty for a pilot older than 2.52.1
+	Reglages string `json:"reglages"`
+	Modes    string `json:"modes"`
 }
 
 func (p Projet) LireEtat() (Etat, bool) {

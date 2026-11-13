@@ -83,6 +83,7 @@ func (s *Serveur) vuesProjets(courant string) []ProjetVue {
 		}
 		pv.Etape, pv.Etapes = etapesPlan(plan)
 		s.surveillerRelance(p, pv.Actif) // "restart after the cycle" works for every project
+		s.changementsEnAttente(p, pv.Actif)
 		v = append(v, pv)
 	}
 	return v
@@ -124,6 +125,9 @@ type EtatVue struct {
 	// a stop asked for the end of the current cycle: "arret" (Stop after cycle), "relance" (restart to
 	// apply settings); the buttons say so
 	ArretDemande string `json:"arret_demande,omitempty"`
+	// what the user changed that the running pilot has not taken yet (reglages_pris.go): "modes" (taken at
+	// its next cycle), "reglages" (taken when it restarts, asked by itself for the end of its cycle)
+	EnAttente []string `json:"en_attente,omitempty"`
 	// the running pilot is on an older version than the app (an update while it ran): it keeps it until it
 	// starts again; VersionPilote is empty for a pilot started before 2.39.1 (which did not say)
 	PiloteAncien  bool   `json:"pilote_ancien,omitempty"`
@@ -165,6 +169,7 @@ func (s *Serveur) apiEtat(w http.ResponseWriter, r *http.Request) {
 			vue.Etat = &e
 		}
 		s.surveillerRelance(p, vue.Actif)
+		vue.EnAttente = s.changementsEnAttente(p, vue.Actif)
 		if vue.Actif {
 			vue.PiloteAncien, vue.VersionPilote = versionPiloteAncienne(p)
 		}
@@ -668,6 +673,14 @@ func retirerStop(p Projet) error {
 		}
 	}
 	return err
+}
+
+// demanderArretApresCycle: arreterApresCycle, or what a test puts in its place.
+func (s *Serveur) demanderArretApresCycle(p Projet) (string, error) {
+	if s.arretTest != nil {
+		return s.arretTest(p)
+	}
+	return s.arreterApresCycle(p)
 }
 
 // arreterApresCycle: the pilot stops at the end of its current cycle.

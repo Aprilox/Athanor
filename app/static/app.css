@@ -730,6 +730,7 @@ input.large { flex: 1; min-width: 200px; width: auto; }
 .btn-maj:hover { background: var(--accent); color: var(--sur-fort); }
 .btn-attente { border-color: var(--attention); color: var(--attention); font-weight: 600; }
 .btn-attente:hover { background: var(--attention); color: var(--sur-attention); }
+.btn-attente.inerte, .btn-attente.inerte:hover { cursor: default; background: none; color: var(--attention); }
 .notes-maj { max-height: 260px; overflow: auto; padding: 8px 12px; margin-top: 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel-2); font-size: 13px; }
 .chemin-kit { font-size: 13px; word-break: break-all; background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; display: inline-block; }
 

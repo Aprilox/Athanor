@@ -33,6 +33,10 @@ type Serveur struct {
 	ouvertures   map[string]time.Time // single-use window addresses
 	relancer     map[string]bool      // projects to restart as soon as their pilot has stopped (settings change)
 	dernierActif map[string]bool
+	// the restart asked by itself for new settings (reglages_pris.go): project → "pilot's pid|settings" it was
+	// asked for; arretTest replaces the command that asks the stop (tests)
+	relanceReglages map[string]string
+	arretTest       func(Projet) (string, error)
 	// last quick check of the milestones of a project waiting for its files (folder → time)
 	derniereVerif map[string]time.Time
 	occupes       map[string]bool // projects with a management action under way (no pilot start meanwhile)
@@ -52,14 +56,15 @@ func nouveauServeur(config Config) *Serveur {
 	}
 	modeNatif.Store(config.ModeNatif && runtime.GOOS == "windows")
 	s := &Serveur{
-		config:       config,
-		kit:          kit,
-		logs:         map[string]*Journal{},
-		verifs:       verificationsSysteme(),
-		verifsNatif:  VerificationsNatives(),
-		csrf:         aleatoire(16),
-		dernierActif: map[string]bool{},
-		relancer:     map[string]bool{},
+		config:          config,
+		kit:             kit,
+		logs:            map[string]*Journal{},
+		verifs:          verificationsSysteme(),
+		verifsNatif:     VerificationsNatives(),
+		csrf:            aleatoire(16),
+		dernierActif:    map[string]bool{},
+		relancer:        map[string]bool{},
+		relanceReglages: map[string]string{},
 	}
 	MigrerEnv(kit.Env()) // old French keys of the .env → English names
 	s.MigrerUnreal()     // UNREAL_MCP of the .env → the "unreal" server of the MCP library (2.13.0)
