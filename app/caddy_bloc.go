@@ -3,7 +3,7 @@ package main
 // The Caddy site block of an environment (M118, ARCHITECTURE.md §Protection, §ACME): blocCaddy is pure and
 // is what stage 8's deployments write on the server. HTTPS by Cloudflare's origin certificate when Athanor
 // installed one on that server, otherwise Caddy's own (ACME, with the owner's technical e-mail when the vault holds one);
-// auth_proxy adds basic_auth, whose bcrypt hash Athanor computes from an infra mot_de_passe entry of the vault:
+// auth_proxy adds basicauth (the name Caddy 2.6 of Debian's packages knows too; 2.8+ still accepts it), whose bcrypt hash Athanor computes from an infra mot_de_passe entry of the vault:
 // the password itself never leaves this process.
 
 import (
@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	utilisateurProxy = "athanor" // the user name of auth_proxy's basic_auth
+	utilisateurProxy = "athanor" // the user name of auth_proxy's basicauth
 	varEmailACME     = "ACME_EMAIL"
 )
 
@@ -80,7 +80,7 @@ func blocCaddy(e Environnement, serveur, amont, email, hachage string) (string, 
 		if !strings.HasPrefix(hachage, "$2") || strings.ContainsAny(hachage, " \t\n{}") {
 			return "", errors.New("auth_proxy needs the password's bcrypt hash")
 		}
-		fmt.Fprintf(&b, "\tbasic_auth {\n\t\t%s %s\n\t}\n", utilisateurProxy, hachage)
+		fmt.Fprintf(&b, "\tbasicauth {\n\t\t%s %s\n\t}\n", utilisateurProxy, hachage)
 	}
 	if statique {
 		fmt.Fprintf(&b, "\troot * %s\n\tfile_server\n}\n", amont)

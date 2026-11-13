@@ -28,7 +28,7 @@ const (
 )
 
 // etapesDurcir: the steps' keys, in the order they run (the user first: PermitRootLogin no needs it).
-var etapesDurcir = []string{"utilisateur", "cles", "root", "maj", "heure", "pare_feu", "caddy"}
+var etapesDurcir = []string{"utilisateur", "cles", "root", "maj", "heure", "pare_feu", "docker", "caddy"}
 
 // scriptEtatDurci: read only; prints sudo=non (no root, no sudo -n), apt=non, include=non when hardening
 // cannot run, then key=oui|non for each step.
@@ -47,7 +47,8 @@ c_heure() { for u in systemd-timesyncd chrony chronyd ntp ntpsec openntpd; do sy
 c_pare_feu() { printf '%s\n' "$U" | grep -q '^Status: active' && printf '%s\n' "$U" | grep -q 'deny (incoming)' || return 1
   for p in "$@"; do printf '%s\n' "$U" | grep -Eq "^$p(/tcp)? +ALLOW IN" || return 1; done; }
 c_ufw() { command -v ufw; }
-for k in utilisateur cles root maj heure pare_feu ufw caddy; do
+c_docker() { $S grep -q '^# BEGIN ATHANOR DOCKER-USER' /etc/ufw/after.rules; }
+for k in utilisateur cles root maj heure pare_feu docker ufw caddy; do
   if [ $k = caddy ]; then f() { command -v caddy; }; else f() { c_$k "$@"; }; fi
   if ( f "$@" ) >/dev/null 2>&1; then echo "$k=oui"; else echo "$k=non"; fi
 done`
@@ -73,7 +74,17 @@ echo "security updates are installed automatically"`
 	scriptHeureDurci = preludeApt + `dpkg-query -W -f='${Status}' systemd-timesyncd 2>/dev/null | grep -q 'ok installed' || { apt update; apt install systemd-timesyncd; }
 if [ -d /run/systemd/system ]; then systemctl enable --now systemd-timesyncd && timedatectl set-ntp true || exit 1; fi
 echo "the clock is synchronised by systemd-timesyncd"`
-	scriptUfwDurci   = preludeApt + `apt update; apt install ufw; echo "ufw installed"`
+	scriptUfwDurci = preludeApt + `apt update; apt install ufw; echo "ufw installed"`
+	// C70: Docker publishes its ports past ufw; ufw's after.rules fills DOCKER-USER at each start or reload,
+	// refusing new connections from outside into Docker's bridges (Caddy reaches them on 127.0.0.1).
+	// shortcut: IPv4 only (after6.rules untouched), Docker's IPv6 is off by default.
+	scriptDockerDurci = `f=/etc/ufw/after.rules
+[ -f "$f" ] || { echo "ufw is not installed: $f is missing"; exit 1; }
+grep -q '^# BEGIN ATHANOR DOCKER-USER' "$f" || printf '%s\n' '# BEGIN ATHANOR DOCKER-USER: containers reached from outside only through Caddy' '*filter' ':DOCKER-USER - [0:0]' \
+  '-A DOCKER-USER -m conntrack --ctstate RELATED,ESTABLISHED -j RETURN' '-A DOCKER-USER -i docker+ -j RETURN' '-A DOCKER-USER -i br-+ -j RETURN' \
+  '-A DOCKER-USER -o docker+ -j DROP' '-A DOCKER-USER -o br-+ -j DROP' '-A DOCKER-USER -j RETURN' 'COMMIT' '# END ATHANOR DOCKER-USER' >> "$f" || exit 1
+if ufw status 2>/dev/null | grep -q '^Status: active'; then o=$(ufw reload 2>&1) || { printf '%s\n' "$o" | tail -n 4; exit 1; }; fi
+echo "Docker's published ports are refused from outside (DOCKER-USER)"`
 	scriptCaddyDurci = preludeApt + `apt update; apt install debian-keyring debian-archive-keyring apt-transport-https curl gnupg
 curl -1sLf https://dl.cloudsmith.io/public/caddy/stable/gpg.key | gpg --batch --yes --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg &&
 curl -1sLf https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt > /etc/apt/sources.list.d/caddy-stable.list &&
@@ -183,6 +194,9 @@ func (s *Serveur) planDurcissement(srv ServeurInventaire, etat map[string]bool) 
 			ajouter("ufw", "ssh_commande", "Install the ufw firewall.", root(scriptUfwDurci))
 		}
 		ajouter("pare_feu", "pare_feu", "Firewall: refuse every incoming connection except SSH, 80 and 443.", argsOutilServeur{Action: "tout_refuser"})
+	}
+	if !etat["docker"] {
+		ajouter("docker", "ssh_commande", "Firewall: refuse outside connections to Docker's published ports (DOCKER-USER rule); Caddy reaches them on 127.0.0.1.", root(scriptDockerDurci))
 	}
 	if !etat["caddy"] {
 		ajouter("caddy", "ssh_commande", "Install Caddy from its official repository: it serves the sites over HTTPS.", root(scriptCaddyDurci))

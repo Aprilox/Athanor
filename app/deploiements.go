@@ -59,6 +59,8 @@ type Deploiement struct {
 	Auteur       string            `json:"auteur"`                 // agent | relais | proprietaire
 	Retour       bool              `json:"retour,omitempty"`       // a way back to the previous version (M133)
 	Accorde      bool              `json:"accorde,omitempty"`      // the owner accepted this very deployment (C68)
+	Dossier      *string           `json:"dossier,omitempty"`      // the published folder of this version (C74: going back uses its own; nil before M145)
+	Amont        string            `json:"amont,omitempty"`        // compose: the 127.0.0.1:n Caddy proxies to, "" without a site (C70)
 	Serveurs     []string          `json:"serveurs"`
 	Debut        string            `json:"debut"`
 	Fin          string            `json:"fin,omitempty"`
@@ -205,9 +207,9 @@ v=releases/$2 old=$(readlink current 2>/dev/null)
 ln -sfn "$v" .current.new && mv -fT .current.new current || exit 1
 if [ -n "$old" ] && [ "$old" != "$v" ]; then ln -sfn "$old" .previous.new && mv -fT .previous.new previous; fi`
 
-// scriptRecharger ($1 folder, $2 versions kept): Caddy reloaded (systemd, else its own command), then the
+// scriptRecharger ($1 folder, $2 versions kept): Caddy reloaded when it is there (systemd, else its own command), then the
 // oldest releases removed (scriptNettoyer).
-const scriptRecharger = `if [ -d /run/systemd/system ] && systemctl is-active --quiet caddy 2>/dev/null; then o=$(systemctl reload caddy 2>&1); else o=$(caddy reload --config ` + caddyfileServeur + ` --adapter caddyfile 2>&1); fi || { echo "Caddy did not reload:"; printf '%s\n' "$o" | tail -n 4; exit 1; }
+const scriptRecharger = `if ! command -v caddy >/dev/null 2>&1; then o=; elif [ -d /run/systemd/system ] && systemctl is-active --quiet caddy 2>/dev/null; then o=$(systemctl reload caddy 2>&1); else o=$(caddy reload --config ` + caddyfileServeur + ` --adapter caddyfile 2>&1); fi || { echo "Caddy did not reload:"; printf '%s\n' "$o" | tail -n 4; exit 1; }
 ` + scriptNettoyer
 
 // scriptNettoyer ($1 folder, $2 versions kept): the oldest releases removed, never current nor previous.
@@ -265,9 +267,9 @@ func (s *Serveur) commencerDeploiement(projet, env, commit string, o OptionsDepl
 		verrou.Unlock()
 		return Deploiement{}, nil, fmt.Errorf("commit %q is not in the project's repository", commit)
 	}
-	debut := time.Now().UTC()
+	debut, dossier := time.Now().UTC(), cfg.Dossier
 	d := Deploiement{ID: aleatoire(8), Projet: projet, Env: env, Commit: sha, Methode: cfg.Methode, Version: debut.Format("20060102-150405") + "-" + sha[:7],
-		Etat: "en_cours", Auteur: o.Auteur, Accorde: o.Accorde, Serveurs: e.Serveurs, Debut: debut.Format(time.RFC3339)}
+		Etat: "en_cours", Auteur: o.Auteur, Accorde: o.Accorde, Dossier: &dossier, Serveurs: e.Serveurs, Debut: debut.Format(time.RFC3339)}
 	if err := noterHistorique(d); err != nil {
 		verrou.Unlock()
 		return d, nil, fmt.Errorf("the deployment history cannot be written: %w", err)
@@ -377,7 +379,7 @@ func (s *Serveur) deployerVersion(ctx context.Context, p Projet, e Environnement
 			annuler := commeRoot(scriptAnnulerVersion, base, d.Version, hote)
 			switch cfg.Methode {
 			case "compose":
-				annuler = commeRoot(scriptAnnulerCompose, base, d.Version, cfg.Dossier, nomCompose(d.Projet, d.Env))
+				annuler = commeRoot(scriptAnnulerCompose, base, d.Version, cfg.Dossier, nomCompose(d.Projet, d.Env), hote)
 			case "k3s":
 				annuler = commeRoot(scriptAnnulerK3s, base, d.Version, cfg.Dossier)
 			}
@@ -385,7 +387,7 @@ func (s *Serveur) deployerVersion(ctx context.Context, p Projet, e Environnement
 		}
 	}
 	for _, id := range d.Serveurs {
-		script, args, entree := scriptPreparerCompose, []string{somme, base, d.Version, cfg.Dossier, nomCompose(d.Projet, d.Env), genere}, envCompose
+		script, args, entree := scriptPreparerCompose, []string{somme, base, d.Version, cfg.Dossier, nomCompose(d.Projet, d.Env), genere, hote}, envCompose
 		if cfg.Methode == "statique" {
 			bloc, err := s.blocCaddyEnv(d.Projet, d.Env, id, racine)
 			if err != nil {
@@ -409,7 +411,14 @@ func (s *Serveur) deployerVersion(ctx context.Context, p Projet, e Environnement
 			annulerTout()
 			return fmt.Errorf("%s: %w", id, refus(r))
 		}
-		if err := echecSSH(executerSSH(ctx, c, commeRoot(scriptLancerCompose, base, d.Version, cfg.Dossier, nomCompose(d.Projet, d.Env)), nil, delaiDeploiement)); err != nil {
+		bloc := "" // C70: Caddy in front of the first port published on 127.0.0.1, with the protection; none: no site
+		if d.Amont = amontCompose(sortie); d.Amont != "" {
+			if bloc, err = s.blocCaddyEnv(d.Projet, d.Env, id, d.Amont); err != nil {
+				annulerTout()
+				return fmt.Errorf("%s: %w; nothing was switched", id, err)
+			}
+		}
+		if err := echecSSH(executerSSH(ctx, c, commeRoot(scriptLancerCompose, base, d.Version, cfg.Dossier, nomCompose(d.Projet, d.Env), hote), strings.NewReader(bloc), delaiDeploiement)); err != nil {
 			prets = prets[:len(prets)-1] // the release is already removed and the version served before started again
 			c.Close()
 			annulerTout()
@@ -423,7 +432,7 @@ func (s *Serveur) deployerVersion(ctx context.Context, p Projet, e Environnement
 		}
 	}
 	recharger := scriptRecharger
-	if cfg.Methode != "statique" { // the containers or pods already run the release
+	if cfg.Methode == "k3s" { // the pods already run the release
 		recharger = scriptNettoyer
 	}
 	for _, x := range prets {

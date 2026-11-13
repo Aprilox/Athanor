@@ -40,16 +40,16 @@ func TestFichiersConteneurChanges(t *testing.T) {
 // TestRefusCompose (C69): what gives root on the server is listed, the rest passes; unreadable is refused.
 func TestRefusCompose(t *testing.T) {
 	const r = "/srv/athanor/p-dev/releases/20261113-1"
-	sain := `{"name":"p-dev","services":{"web":{"image":"nginx","ports":[{"target":80,"published":"8080"}],"volumes":[{"type":"bind","source":"` + r + `/app/data","target":"/data"},{"type":"volume","source":"db","target":"/var/lib/db"}],"network_mode":"bridge","ipc":"private"}},"volumes":{"db":{}}}`
+	sain := `{"name":"p-dev","services":{"web":{"image":"nginx","ports":[{"target":80,"published":"8080","host_ip":"127.0.0.1"}],"volumes":[{"type":"bind","source":"` + r + `/app/data","target":"/data"},{"type":"volume","source":"db","target":"/var/lib/db"}],"network_mode":"bridge","ipc":"private"}},"volumes":{"db":{}}}`
 	if l := refusCompose("ready\n"+sain, r); len(l) != 0 {
 		t.Errorf("a plain configuration refused: %v", l)
 	}
-	dur := `{"services":{"a":{"privileged":true,"cap_add":["SYS_ADMIN"],"devices":[{"source":"/dev/sda","target":"/dev/sda"}],"security_opt":["apparmor=unconfined"],"pid":"host"},
+	dur := `{"services":{"a":{"privileged":true,"cap_add":["SYS_ADMIN"],"devices":[{"source":"/dev/sda","target":"/dev/sda"}],"security_opt":["apparmor=unconfined"],"pid":"host","ports":[{"target":3000,"published":"3000"},{"target":53,"published":"53","host_ip":"0.0.0.0","protocol":"udp"},{"target":81,"host_ip":"::1"}]},
 "b":{"network_mode":"host","ipc":"container:autre","userns_mode":"host","volumes":[{"type":"bind","source":"/","target":"/host"},{"type":"bind","source":"` + r + `/../../../../etc","target":"/e"},{"type":"bind","source":"/srv/athanor/p-dev/releases/20261113-10","target":"/x"}]}},
 "volumes":{"v":{"driver_opts":{"type":"none","o":"bind","device":"/etc/athanor"}}},"secrets":{"s":{"file":"/etc/shadow"}},"configs":{"c":{"file":"` + r + `/app/c.conf"}}}`
 	attendu := []string{
 		"secret s: the host's /etc/shadow",
-		"service a: cap_add SYS_ADMIN", "service a: devices", "service a: pid host", "service a: privileged", "service a: security_opt apparmor=unconfined",
+		"service a: cap_add SYS_ADMIN", "service a: devices", "service a: pid host", "service a: port 3000 published beyond 127.0.0.1", "service a: port 53 published beyond 127.0.0.1", "service a: privileged", "service a: security_opt apparmor=unconfined",
 		"service b: ipc container:autre", "service b: mounts the host's /", "service b: mounts the host's " + r + "/../../../../etc", "service b: mounts the host's /srv/athanor/p-dev/releases/20261113-10",
 		"service b: network_mode host", "service b: userns_mode host",
 		"volume v: a host device or path",
@@ -60,6 +60,20 @@ func TestRefusCompose(t *testing.T) {
 	for _, x := range []string{"", "docker compose config failed", `{"services":{"a":{"privileged":"yes"}}}`} {
 		if l := refusCompose(x, r); len(l) != 1 || !strings.Contains(l[0], "cannot be read") {
 			t.Errorf("%q: %v", x, l)
+		}
+	}
+}
+
+// TestAmontCompose (C70): Caddy proxies to the first TCP port published (services in name order), on 127.0.0.1.
+func TestAmontCompose(t *testing.T) {
+	for sortie, want := range map[string]string{
+		`{"services":{"b":{"ports":[{"target":80,"published":"8081","host_ip":"127.0.0.1"}]},"a":{"ports":[{"target":53,"published":"53","protocol":"udp"},{"target":3000,"published":3000,"host_ip":"127.0.0.1","protocol":"tcp"}]}}}`: "127.0.0.1:3000",
+		`ready` + "\n" + `{"services":{"w":{"ports":[{"target":80,"published":"8000-8001"}]},"x":{"ports":[{"target":80,"published":"8080"}]}}}`:                                                                                        "127.0.0.1:8080",
+		`{"services":{"worker":{"image":"x"}}}`: "",
+		`not json`:                              "",
+	} {
+		if g := amontCompose(sortie); g != want {
+			t.Errorf("%s: %q, want %q", sortie, g, want)
 		}
 	}
 }

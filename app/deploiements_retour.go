@@ -163,17 +163,31 @@ func (s *Serveur) revenir(ctx context.Context, projet, env, auteur string) (Depl
 	version := strings.TrimPrefix(precedente, "releases/")
 	h := historiqueDeploiements(projet, env)
 	commit, quitte := version[strings.LastIndex(version, "-")+1:], -1 // quitte: the newest entry of the version left
+	// C74: the version goes back with its own method, folder and upstream (before M145: the environment's)
+	methode, dossier, amont := e.Deploiement.Methode, e.Deploiement.Dossier, ""
 	for i := len(h) - 1; i >= 0; i-- {
 		if h[i].Version == version && len(commit) < 40 {
 			commit = h[i].Commit
+			if h[i].Methode != "" {
+				methode, amont = h[i].Methode, h[i].Amont
+			}
+			if h[i].Dossier != nil {
+				dossier = *h[i].Dossier
+			}
 		}
 		if h[i].Version == actuelle && quitte < 0 {
 			quitte = i
 		}
 	}
 	debut := time.Now().UTC()
-	d := Deploiement{ID: aleatoire(8), Projet: projet, Env: env, Commit: commit, Methode: e.Deploiement.Methode, Version: version,
+	d := Deploiement{ID: aleatoire(8), Projet: projet, Env: env, Commit: commit, Methode: methode, Version: version, Dossier: &dossier, Amont: amont,
 		Etat: "en_cours", Auteur: auteur, Retour: true, Serveurs: e.Serveurs, Debut: debut.Format(time.RFC3339)}
+	if methode == "statique" {
+		amont = base + "/current"
+		if dossier != "" {
+			amont += "/" + dossier
+		}
+	}
 	if err := noterHistorique(d); err != nil {
 		return d, fmt.Errorf("the deployment history cannot be written: %w", err)
 	}
@@ -188,14 +202,24 @@ func (s *Serveur) revenir(ctx context.Context, projet, env, auteur string) (Depl
 		if err != nil {
 			break
 		}
-		recharger := commeRoot(scriptRecharger, base, fmt.Sprint(versionsGardees))
-		switch e.Deploiement.Methode {
-		case "compose":
-			recharger = commeRoot(scriptRelancerCompose, base, e.Deploiement.Dossier, nomCompose(projet, env))
-		case "k3s":
-			recharger = commeRoot(scriptRevenirK3s, base, e.Deploiement.Dossier)
+		if methode == "k3s" {
+			err = echecSSH(executerSSH(ctx, c, commeRoot(scriptRevenirK3s, base, dossier), nil, delaiDeploiement))
+		} else { // its containers started again (compose), its site file written again (C74), Caddy reloaded
+			bloc := ""
+			if methode == "compose" {
+				err = echecSSH(executerSSH(ctx, c, commeRoot(scriptRelancerCompose, base, dossier, nomCompose(projet, env)), nil, delaiDeploiement))
+			}
+			if err == nil && amont != "" {
+				bloc, err = s.blocCaddyEnv(projet, env, e.Serveurs[i], amont)
+			}
+			if err == nil {
+				err = echecSSH(executerSSH(ctx, c, commeRoot(scriptSite, base, hoteEnv(&e)), strings.NewReader(bloc), delaiCommande))
+			}
+			if err == nil {
+				err = echecSSH(executerSSH(ctx, c, commeRoot(scriptRecharger, base, fmt.Sprint(versionsGardees)), nil, delaiDeploiement))
+			}
 		}
-		if err = echecSSH(executerSSH(ctx, c, recharger, nil, delaiDeploiement)); err != nil {
+		if err != nil {
 			err = fmt.Errorf("%s: %w", e.Serveurs[i], err)
 		}
 	}

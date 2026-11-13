@@ -12,7 +12,7 @@ import (
 // (closes every other port) and comes after ufw's installation when ufw is missing; tout_refuser takes no port.
 func TestPlanDurcissement(t *testing.T) {
 	s := &Serveur{}
-	etat := map[string]bool{"utilisateur": true, "cles": false, "root": true, "maj": false, "heure": true, "pare_feu": false, "ufw": false, "caddy": false}
+	etat := map[string]bool{"utilisateur": true, "cles": false, "root": true, "maj": false, "heure": true, "pare_feu": false, "docker": true, "ufw": false, "caddy": false}
 	l, err := s.planDurcissement(ServeurInventaire{ID: "srv"}, etat)
 	if err != nil {
 		t.Fatal(err)
@@ -56,7 +56,7 @@ func TestDurcirConteneur(t *testing.T) {
 	}
 	t.Cleanup(func() { // the container as the next tests expect it: passwords, root's key gone, ufw off
 		_ = s.changerUtilisateurServeur(id, "athanor", nil)
-		appel("ssh_commande", map[string]any{"commande": "sudo -n rm -f " + fichierClesDurci + " " + fichierRootDurci + " /etc/sudoers.d/90-athanor-athanor /root/.ssh/authorized_keys; " +
+		appel("ssh_commande", map[string]any{"commande": "sudo -n rm -f " + fichierClesDurci + " " + fichierRootDurci + " /etc/sudoers.d/90-athanor-athanor /root/.ssh/authorized_keys; sudo -n sed -i '/^# BEGIN ATHANOR DOCKER-USER/,/^# END ATHANOR DOCKER-USER/d' /etc/ufw/after.rules; " +
 			"sudo -n ufw --force disable >/dev/null; for p in 22 80 443; do sudo -n ufw --force delete allow $p/tcp >/dev/null; done; sudo -n kill -HUP \"$(cat /run/sshd.pid)\""})
 	})
 	if r := appel("ssh_commande", map[string]any{"commande": "id -un"}); strings.TrimSpace(r.Sortie) != "root" {
@@ -69,7 +69,7 @@ func TestDurcirConteneur(t *testing.T) {
 	}
 	plan := v["plan"].(string)
 	b, _ := json.Marshal(v["etapes"])
-	if string(b) != `["utilisateur","cles","root","maj","heure","pare_feu"]` { // ufw and Caddy are already in the image
+	if string(b) != `["utilisateur","cles","root","maj","heure","pare_feu","docker"]` { // ufw and Caddy are already in the image
 		t.Errorf("steps: %s", b)
 	}
 	if ap, ok := s.approbations.Lire(plan); !ok || ap.Etat != "attente" || ap.Agent != agentDurcir || ap.Details["classe"] != "destructrice" {
@@ -106,6 +106,11 @@ func TestDurcirConteneur(t *testing.T) {
 		!strings.Contains(r.Sortie, "Status: active") || !strings.Contains(r.Sortie, "deny (incoming)") ||
 		!strings.Contains(r.Sortie, "22/tcp") || !strings.Contains(r.Sortie, "80/tcp") || !strings.Contains(r.Sortie, "443/tcp") {
 		t.Errorf("after hardening: %q", r.Sortie)
+	}
+	// C70: ufw fills DOCKER-USER, new connections from outside into Docker's bridges refused
+	if r := appel("ssh_commande", map[string]any{"commande": "sudo -n iptables -S DOCKER-USER"}); !strings.Contains(r.Sortie, "-A DOCKER-USER -o docker+ -j DROP") ||
+		!strings.Contains(r.Sortie, "-A DOCKER-USER -i docker+ -j RETURN") {
+		t.Errorf("DOCKER-USER: %q", r.Sortie)
 	}
 	// root and passwords are refused now
 	cle, _ := s.coffre.Valeur(srv.Cle)

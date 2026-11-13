@@ -4,8 +4,9 @@ package main
 // its .env (0600 root) written from the code entries granted to the environment, passed on standard input and
 // never in an argument nor in an answer, then `docker compose -p <projet>-<env> up -d --build` in the release
 // before the switch (C69: its configuration checked by refusCompose first when the owner did not accept this
-// deployment); going back = the same command in the previous release. Caddy is not touched: the
-// project's compose file publishes its own ports.
+// deployment); going back = the same command in the previous release. C70: Caddy stands in front, its site
+// block proxying to the first port published on 127.0.0.1 (none: no site file), the protection included; a
+// port published beyond 127.0.0.1 needs the owner's accord, since Docker's rules bypass ufw.
 
 import (
 	"encoding/base64"
@@ -86,7 +87,7 @@ func composeGenere(depot, commit, dossier string) (string, error) {
 			if proto != "" {
 				proto = "/" + proto
 			}
-			y += "      - \"" + n + ":" + n + proto + "\"\n"
+			y += "      - \"127.0.0.1:" + n + ":" + n + proto + "\"\n"
 		}
 	}
 	return base64.StdEncoding.EncodeToString([]byte(y)), nil
@@ -130,23 +131,27 @@ const fonctionRelancer = `relancer() { c=$(readlink -f -- "$b/current") && [ -d 
 `
 
 // scriptPreparerCompose ($1 the archive, $2 its SHA-256 or "", $3 the environment's folder, $4 the version, $5
-// the compose folder, $6 the Compose project, $7 a generated compose.yaml in base64 or ""; the .env on standard
-// input): the release extracted with its .env, its configuration printed (docker compose config --format json;
-// C69: it may hold the .env's values, so refusCompose reads it and nothing quotes it); nothing started.
-const scriptPreparerCompose = `a=$1 b=$3 r=$3/releases/$4 dd=$5 p=$6
+// the compose folder, $6 the Compose project, $7 a generated compose.yaml in base64 or "", $8 the host name; the
+// .env on standard input): the release extracted with its .env, the site file kept as it is (sauverSite), its
+// configuration printed (docker compose config --format json; C69: it may hold the .env's values, so
+// refusCompose reads it and nothing quotes it); nothing started.
+const scriptPreparerCompose = `a=$1 b=$3 r=$3/releases/$4 dd=$5 p=$6 site=/etc/caddy/sites/$8.caddy
 docker compose version >/dev/null 2>&1 || { rm -f -- "$a"; echo "Docker Compose is not installed on this server: install it first"; exit 5; }
-` + extraireVersion + `cd -- "$r${dd:+/$dd}" || { rm -rf -- "$r"; echo "the release has no folder $dd"; exit 1; }
+` + extraireVersion + fonctionSite + `sauverSite || { rm -rf -- "$r"; exit 1; }
+cd -- "$r${dd:+/$dd}" || { rm -rf -- "$r"; echo "the release has no folder $dd"; exit 1; }
 if [ -n "$7" ]; then printf '%s' "$7" | base64 -d > compose.yaml || { rm -rf -- "$r"; exit 1; }; fi
 rm -f .env && (umask 077; cat > .env) || { rm -rf -- "$r"; echo "the .env cannot be written"; exit 1; }
 o=$(docker compose -p "$p" config --format json 2>/dev/null) || { rm -rf -- "$r"; echo "docker compose config failed: check the compose file with docker compose config"; exit 4; }
 printf '%s\n' "$o"`
 
 // scriptLancerCompose ($1 the environment's folder, $2 the version, $3 the compose folder, $4 the Compose
-// project), after scriptPreparerCompose: the release started; on failure it is removed and the version served
-// before started again.
-const scriptLancerCompose = `b=$1 r=$1/releases/$2 dd=$3 p=$4
-` + fonctionRelancer + `cd -- "$r${dd:+/$dd}" || exit 1
-o=$(docker compose -p "$p" up -d --build 2>&1) || { cd /; relancer >/dev/null || echo "(the version served before could not be started again)"; rm -rf -- "$r"; echo "docker compose up failed:"; printf '%s\n' "$o" | tail -n 8; exit 4; }
+// project, $5 the host name; the site block on standard input, empty = no site), after scriptPreparerCompose:
+// the site file written and validated (Caddy reloads after the switch), then the release started; on failure
+// the site file is put back, the release removed and the version served before started again.
+const scriptLancerCompose = `b=$1 r=$1/releases/$2 dd=$3 p=$4 site=/etc/caddy/sites/$5.caddy
+` + fonctionRelancer + fonctionSite + `ecrireSite || { e=$?; remettreSite; rm -rf -- "$r"; exit $e; }
+cd -- "$r${dd:+/$dd}" || { remettreSite; exit 1; }
+o=$(docker compose -p "$p" up -d --build 2>&1) || { cd /; remettreSite; relancer >/dev/null || echo "(the version served before could not be started again)"; rm -rf -- "$r"; echo "docker compose up failed:"; printf '%s\n' "$o" | tail -n 8; exit 4; }
 echo ready`
 
 // refusCompose (C69): what the project's Compose configuration (docker compose config --format json, every
@@ -166,6 +171,7 @@ func refusCompose(sortie, release string) []string {
 			UsernsMode  string `json:"userns_mode"`
 			Cgroup      string
 			Volumes     []struct{ Type, Source string }
+			Ports       []portCompose
 		}
 		Volumes map[string]struct {
 			DriverOpts map[string]string `json:"driver_opts"`
@@ -206,6 +212,11 @@ func refusCompose(sortie, release string) []string {
 				r = append(r, q+"mounts the host's "+m.Source)
 			}
 		}
+		for _, p := range v.Ports { // C70: Docker publishes past ufw; Caddy reaches 127.0.0.1
+			if p.HostIP != "127.0.0.1" && p.HostIP != "::1" {
+				r = append(r, q+"port "+fmt.Sprint(p.Target)+" published beyond 127.0.0.1")
+			}
+		}
 	}
 	for n, v := range c.Volumes {
 		if v.DriverOpts["device"] != "" {
@@ -223,10 +234,61 @@ func refusCompose(sortie, release string) []string {
 	return r
 }
 
-// scriptAnnulerCompose ($1 folder, $2 version, $3 compose folder, $4 Compose project): a release started on this
-// server while another server failed: the version served before started again, the release removed.
-const scriptAnnulerCompose = `b=$1 dd=$3 p=$4
-` + fonctionRelancer + `relancer; rm -rf -- "$1/releases/$2"`
+// portCompose: a published port as docker compose config --format json writes it (published: a string or a number).
+type portCompose struct {
+	HostIP    string `json:"host_ip"`
+	Target    any    `json:"target"`
+	Published any    `json:"published"`
+	Protocol  string `json:"protocol"`
+}
+
+// amontCompose (C70): the upstream Caddy proxies to, 127.0.0.1:n for the first TCP port published (services in
+// name order), "" when none is (no site: a worker). shortcut: the first port only; a project serving several
+// sites would need a port chosen per environment.
+func amontCompose(sortie string) string {
+	var c struct {
+		Services map[string]struct{ Ports []portCompose }
+	}
+	i := strings.IndexByte(sortie, '{')
+	if i < 0 || json.Unmarshal([]byte(sortie[i:]), &c) != nil {
+		return ""
+	}
+	for _, n := range slices.Sorted(maps.Keys(c.Services)) {
+		for _, p := range c.Services[n].Ports {
+			pub := fmt.Sprint(p.Published)
+			if (p.Protocol == "" || p.Protocol == "tcp") && pub != "" && len(pub) <= 5 && strings.Trim(pub, "0123456789") == "" {
+				return "127.0.0.1:" + pub
+			}
+		}
+	}
+	return ""
+}
+
+// fonctionSite ($b the environment's folder, $site the site file): sauverSite keeps the site file as it is
+// (remettreSite puts it back); ecrireSite writes the block read on standard input (empty: the site file
+// removed, C74), then Caddy's configuration is validated.
+const fonctionSite = `sauverSite() { rm -f -- "$b/.site-avant"; if [ -f "$site" ]; then cp -p -- "$site" "$b/.site-avant"; fi; }
+remettreSite() { if [ -f "$b/.site-avant" ]; then mv -f -- "$b/.site-avant" "$site"; else rm -f -- "$site"; fi; }
+ecrireSite() { mkdir -p -- "$b" && t=$(mktemp "$b/.site.XXXXXX") && cat > "$t" || { rm -f -- "$t"; echo "the site file cannot be written"; return 1; }
+  if [ ! -s "$t" ]; then rm -f -- "$t" "$site"; return 0; fi
+  command -v caddy >/dev/null 2>&1 && [ -f ` + caddyfileServeur + ` ] || { rm -f -- "$t"; echo "Caddy is not installed on this server (` + caddyfileServeur + ` missing): install it first"; return 5; }
+  mkdir -p /etc/caddy/sites && chmod 644 "$t" && mv -f -- "$t" "$site" || { rm -f -- "$t"; echo "the site file cannot be written"; return 1; }
+  grep -qxF 'import /etc/caddy/sites/*' ` + caddyfileServeur + ` || printf '\nimport /etc/caddy/sites/*\n' >> ` + caddyfileServeur + ` || return 1
+  o=$(caddy validate --config ` + caddyfileServeur + ` --adapter caddyfile 2>&1) || { echo "caddy validate refused the configuration:"; printf '%s\n' "$o" | tail -n 4; return 4; }; }
+`
+
+// scriptSite ($1 folder, $2 host; the block on standard input, empty = no site): the site file replaced when
+// going back (each version with its own method's site), put back as it was when Caddy refuses it.
+const scriptSite = `b=$1 site=/etc/caddy/sites/$2.caddy
+` + fonctionSite + `sauverSite || exit 1
+ecrireSite || { e=$?; remettreSite; exit $e; }
+rm -f -- "$b/.site-avant"`
+
+// scriptAnnulerCompose ($1 folder, $2 version, $3 compose folder, $4 Compose project, $5 host): a release
+// started on this server while another server failed: the version served before started again, its site file
+// put back, the release removed.
+const scriptAnnulerCompose = `b=$1 dd=$3 p=$4 site=/etc/caddy/sites/$5.caddy
+` + fonctionRelancer + fonctionSite + `relancer; remettreSite; rm -rf -- "$1/releases/$2"`
 
 // scriptRelancerCompose ($1 folder, $2 compose folder, $3 Compose project): after going back, current started.
 const scriptRelancerCompose = `b=$1 dd=$2 p=$3

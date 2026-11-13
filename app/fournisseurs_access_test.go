@@ -267,7 +267,7 @@ func TestBlocCaddy(t *testing.T) {
 		{Environnement{URL: "https://App.Exemple.fr/", Protection: "aucune"}, "ops@exemple.fr", h,
 			"app.exemple.fr {\n\ttls ops@exemple.fr\n" + entetes + "\treverse_proxy 127.0.0.1:8080\n}\n"},
 		{Environnement{URL: "https://dev.exemple.fr:8443", Protection: "auth_proxy"}, "", h,
-			"dev.exemple.fr:8443 {\n" + entetes + "\tbasic_auth {\n\t\tathanor " + h + "\n\t}\n\treverse_proxy 127.0.0.1:8080\n}\n"},
+			"dev.exemple.fr:8443 {\n" + entetes + "\tbasicauth {\n\t\tathanor " + h + "\n\t}\n\treverse_proxy 127.0.0.1:8080\n}\n"},
 		{Environnement{URL: "http://local.exemple.fr", Certificat: "id"}, "ops@exemple.fr", "",
 			"http://local.exemple.fr {\n" + strings.Replace(entetes, "\t\tStrict-Transport-Security \"max-age=31536000; includeSubDomains\"\n", "", 1) + "\treverse_proxy 127.0.0.1:8080\n}\n"},
 	} {
@@ -328,7 +328,7 @@ func TestBlocCaddy(t *testing.T) {
 		t.Errorf("auth_proxy block:\n%s", dev)
 	}
 	prod, err := s.blocCaddyEnv("demo", "prod", "s1", "127.0.0.1:3000")
-	if err != nil || strings.Contains(prod, "basic_auth") || !strings.Contains(prod, cfSeul) {
+	if err != nil || strings.Contains(prod, "basicauth") || !strings.Contains(prod, cfSeul) {
 		t.Errorf("prod block: %v\n%s", err, prod)
 	}
 	if _, err := s.blocCaddyEnv("demo", "staging", "s1", "127.0.0.1:3000"); err == nil {

@@ -75,7 +75,7 @@ func TestDetecterMethode(t *testing.T) {
 	}
 	g, err := composeGenere(depot, c[0], "api")
 	y, _ := base64.StdEncoding.DecodeString(g)
-	want := "# Written by Athanor: the project has a Dockerfile and no compose file.\nservices:\n  app:\n    build: .\n    env_file: .env\n    restart: unless-stopped\n    ports:\n      - \"8080:8080\"\n      - \"9000:9000/udp\"\n"
+	want := "# Written by Athanor: the project has a Dockerfile and no compose file.\nservices:\n  app:\n    build: .\n    env_file: .env\n    restart: unless-stopped\n    ports:\n      - \"127.0.0.1:8080:8080\"\n      - \"127.0.0.1:9000:9000/udp\"\n"
 	if err != nil || string(y) != want {
 		t.Errorf("generated compose:\n got  %q %v\n want %q", y, err, want)
 	}

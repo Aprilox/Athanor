@@ -1,8 +1,8 @@
 # Serveur SSH de test d'Athanor (étapes 5 et 8) : jamais un vrai serveur.
 # Utilisateur athanor (sudo sans mot de passe), connexion par mot de passe permise au départ, ufw, faux docker qui journalise,
-# git et Caddy (paquet Debian, site par défaut sur :80) démarré sans systemd : `sudo caddy reload --config /etc/caddy/Caddyfile`.
+# git, curl et Caddy (paquet Debian, site par défaut sur :80) démarré sans systemd : `sudo caddy reload --config /etc/caddy/Caddyfile`.
 FROM debian:bookworm-slim
-RUN apt-get update && apt-get install -y --no-install-recommends openssh-server sudo ufw iproute2 procps git caddy \
+RUN apt-get update && apt-get install -y --no-install-recommends openssh-server sudo ufw iproute2 procps git caddy curl \
  && rm -rf /var/lib/apt/lists/* \
  && useradd -m -s /bin/bash athanor && echo 'athanor:essai-athanor' | chpasswd \
  && echo 'athanor ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/athanor && chmod 440 /etc/sudoers.d/athanor \
