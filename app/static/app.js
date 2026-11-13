@@ -802,14 +802,8 @@ $("#notifs").addEventListener("click", async (ev) => {
     if (!x) return;
     b.disabled = true;
     if (a.approbation) return deciderDepuisCloche(a.approbation, x, b);
-    // M137: a prod incident's Retry and Go back ask for the owner's accord first
-    const preuve = x.accord ? await preuveMdp(t("{0} in production: retype Athanor's password.", [t(x.libelle)]), { ok: t(x.libelle) }, t("{0} in production?", [t(x.libelle)])) : {};
-    if (preuve === false) { b.disabled = false; return; }
-    if (x.route.endsWith("/incident") && x.corps.action !== "main") { b.textContent = t("Working…"); toast(t("Working… the site is checked from this PC right after.")); }
-    const r = await action(api(x.route, "POST", { ...x.corps, ...preuve }));
-    if (r && r.deploiement) toast(r.deploiement.etat === "ok" ? t("Done: the site answers again.") : t(r.deploiement.erreur || "Failed"), r.deploiement.etat === "ok" ? "ok" : "erreur");
+    const r = await agirAlerte(x, b);
     if (r && r.page) { fermerNotifs(); return allerProjet(r.projet, r.page.slice(1)); } // I take over: the server's sheet
-    if (!r) { b.disabled = false; b.textContent = t(x.libelle); }
     etat.hub = await api("hub").catch(() => etat.hub);
     if (etat.vue) rendreBandeau(etat.vue);
     const suite = $("#notifs .alerte-actions .btn") || document.querySelector("[data-notifs]"); if (suite) suite.focus();
@@ -817,6 +811,18 @@ $("#notifs").addEventListener("click", async (ev) => {
   }
   if (ev.target.closest("a") && !ev.target.closest("a[data-cible]")) fermerNotifs(); else cliqueProjet(ev);
 });
+// an alert's POST action (b its button, disabled by the caller), from the bell or a mission's incident card: the
+// answer, null when cancelled or refused (the button is back)
+async function agirAlerte(x, b) {
+  // M137: a prod incident's Retry and Go back ask for the owner's accord first
+  const preuve = x.accord ? await preuveMdp(t("{0} in production: retype Athanor's password.", [t(x.libelle)]), { ok: t(x.libelle) }, t("{0} in production?", [t(x.libelle)])) : {};
+  if (preuve === false) { b.disabled = false; return null; }
+  if (x.route.endsWith("/incident") && x.corps.action !== "main") { b.textContent = t("Working…"); toast(t("Working… the site is checked from this PC right after.")); }
+  const r = await action(api(x.route, "POST", { ...x.corps, ...preuve }));
+  if (r && r.deploiement) toast(r.deploiement.etat === "ok" ? t("Done: the site answers again.") : t(r.deploiement.erreur || "Failed"), r.deploiement.etat === "ok" ? "ok" : "erreur");
+  if (!r) { b.disabled = false; b.textContent = t(x.libelle); }
+  return r || null;
+}
 $("#page").addEventListener("click", cliqueProjet);
 // an approval decided from the bell: an access needs its vault entry and the window a password, so those open
 // the approval's card on For you; the others are sent at once
@@ -5019,11 +5025,17 @@ function voieMission(v, lien) {
   const cible = !lien || v.actuel === "inconnu" ? "" : dev ? `href="#suivi" data-projet="${h(v.ref)}" data-cible="suivi"` : v.serveur ? `href="#serveur/${encodeURIComponent(v.serveur)}"` : "";
   return `<span class="mis-voie-etat"><span class="pastille-module"><span class="ico ico-${dev ? "dev" : "serveurs"}" aria-hidden="true"></span>${h(mod)}</span>${cible ? `<a ${cible}>${h(nom)}</a>` : `<b>${h(nom)}</b>`}<span class="pv-etat ${classe}">${h(libelle)}</span>${v.detail ? `<span class="muet petit mis-voie-detail">${h(v.detail)}</span>` : ""}</span>`;
 }
+// M172: the relay's step under way of a launched or paused mission ("Relay: Verification"), "" otherwise
+function etapeRelais(m) {
+  const rang = m.relais && ["lancee", "en_pause"].includes(m.etat) ? RANG_RELAIS[m.relais.etape] ?? 0 : 5;
+  return rang < 5 ? t("Relay: {0}", [t(RELAIS_MISSION[rang])]) : "";
+}
 function ligneMission(m) {
   const titre = (m.carte || {}).titre, phrase = m.phrase.length > 140 ? m.phrase.slice(0, 140) + "…" : m.phrase;
   return `<li><a class="bloc mis-ligne" href="#missions/${encodeURIComponent(m.id)}"><span class="badge mis-etat-${h(m.etat)}">${h(t(ETATS_MISSION[m.etat] || m.etat))}</span>
     <span class="mis-phrase">${titre ? `<b>${h(titre)}</b> ` : ""}<span class="muet">${h(phrase)}</span></span>
     <span class="muet petit">${h(new Date(m.cree).toLocaleDateString(document.documentElement.lang || "en"))}</span>
+    ${etapeRelais(m) ? `<span class="petit mis-relais-etape">${h(etapeRelais(m))}</span>` : ""}
     ${(m.voies || []).length ? `<span class="mis-voies-ligne">${m.voies.map((v) => voieMission(v, false)).join("")}</span>` : ""}</a></li>`;
 }
 // Home's Missions block: the 3 newest, See all; the empty state says where to start
@@ -5059,7 +5071,8 @@ pages.mission = async () => {
   suivreMissionDirect();
   return `<div class="missions mis-detail">${retour}
     <div><div class="ligne m0 tuile-tete"><h2 class="m0" id="mis-titre">${h((m.carte || {}).titre || t("New mission"))}</h2><span class="badge mis-etat-${h(m.etat)}" id="mis-badge">${h(t(ETATS_MISSION[m.etat] || m.etat))}</span></div>
-      <p class="muet petit mis-phrase">${h(m.phrase)}</p>${m.etat === "echec" && fin.detail ? `<p class="mis-avert" role="note">${h(fin.message ? texteMessage(fin.message) : fin.detail)}</p>` : ""}</div>
+      <p class="muet petit mis-phrase">${h(m.phrase)}</p>${m.etat === "echec" && fin.detail ? `<p class="mis-avert" role="note">${h(fin.message ? texteMessage(fin.message) : fin.detail)}</p>` : ""}
+      ${["lancee", "en_pause"].includes(m.etat) ? controlesMission(m) : ""}</div>
     <div id="mission-direct" class="mis-detail">${missionDirect(m)}</div>
     ${m.carte ? `<section class="bloc mis-carte" aria-labelledby="mis-titre">${carteMission(d)}</section>` : ""}
   </div>`;
@@ -5112,17 +5125,65 @@ function voieDirect(v) {
 }
 function missionDirect(m) {
   const lancee = (m.historique || []).find((x) => x.etat === "lancee"), j = [...(m.journal || [])].reverse(), n = etat.missionJournalN || 50;
-  const pol = POLITIQUES_MISSION.find((p) => p[0] === m.politique);
-  return `<section class="bloc" aria-labelledby="mis-voies-titre"><div class="ligne m0 tuile-tete"><h2 class="m0" id="mis-voies-titre">${t("Lanes")}</h2><span class="espace"></span>${pol ? `<span class="muet petit">${h(t("Policy: {0}", [t(pol[1])]))}</span>` : ""}</div>
+  const pol = POLITIQUES_MISSION.find((p) => p[0] === m.politique), r = m.relais || {};
+  const nonDonne = m.etat === "lancee" && r.etape === "accord_prod" && (m.journal || []).some((e) => e.id === `accord:${r.accord}:refusee` || e.id === `accord:${r.accord}:expiree`);
+  return `${incidentMission(m)}<section class="bloc" aria-labelledby="mis-voies-titre"><div class="ligne m0 tuile-tete"><h2 class="m0" id="mis-voies-titre">${t("Lanes")}</h2><span class="espace"></span>${pol ? `<span class="muet petit">${h(t("Policy: {0}", [t(pol[1])]))}</span>` : ""}</div>
       ${(m.voies || []).length ? `<ul class="mis-voies-liste mis-voies-direct">${m.voies.map(voieDirect).join("")}</ul>${lancee ? `<p class="muet petit m0">${t("Launched on {0}", [h(new Date(lancee.t).toLocaleString(document.documentElement.lang || "en"))])}</p>` : ""}`
         : `<p class="muet m0">${t("The lanes start when the mission is launched.")}</p>`}
     </section>
-    ${m.relais ? `<section class="bloc" aria-labelledby="mis-relais-titre"><h2 id="mis-relais-titre">${t("Relay")}</h2>${friseRelais(m)}</section>` : ""}
+    ${m.relais ? `<section class="bloc" aria-labelledby="mis-relais-titre"><h2 id="mis-relais-titre">${t("Relay")}</h2>${friseRelais(m)}
+      ${nonDonne ? `<p class="ligne m0 mis-redemander"><span>${t("The production accord was not given.")}</span><button type="button" class="btn btn-petit btn-primaire" data-mis-ctl="redemander">${t("Ask again")}</button></p>` : ""}</section>` : ""}
     <section class="bloc" aria-labelledby="mis-journal-titre"><h2 id="mis-journal-titre">${t("Journal")} <span class="muet">${j.length}</span></h2>
       ${j.length ? `<ol class="mis-journal">${j.slice(0, n).map(ligneJournal).join("")}</ol>${j.length > n ? `<button type="button" class="btn btn-petit" id="mis-plus" data-mis-plus>${t("See more")} (${j.length - n})</button>` : ""}`
         : `<p class="muet m0">${t("No event yet: the journal fills in as the lanes move on.")}</p>`}
     </section>`;
 }
+// M172: the header's controls of a launched or paused mission: its policy (looser = the owner's password), Pause or
+// Resume (the owner's password), Stop (confirmed: nothing is undone)
+const RIGUEUR_POLITIQUE = ["autonome", "prod", "tout"];
+function controlesMission(m) {
+  return `<div class="ligne m0 mis-controles">
+    <fieldset class="mis-pol-direct"><legend>${t("Policy")}</legend>${POLITIQUES_MISSION.map(([v, l]) => `<label class="radio"><input type="radio" name="mis-pol-direct" value="${v}"${m.politique === v ? " checked" : ""}> ${t(l)}</label>`).join("")}</fieldset>
+    <span class="espace"></span>
+    ${m.etat === "en_pause" ? `<button type="button" class="btn btn-primaire" data-mis-ctl="reprendre">${t("Resume")}</button>` : `<button type="button" class="btn" data-mis-ctl="pause">${t("Pause")}</button>`}
+    <button type="button" class="btn btn-danger" data-mis-ctl="arreter">${t("Stop")}</button></div>`;
+}
+// P6: the incident of the mission's project (the bell's, from the health of its environments), its actions as the bell's
+function incidentMission(m) {
+  const projet = ((m.voies || []).find((v) => v.module === "dev") || {}).ref;
+  const a = projet && [...alertesHub(), ...((etat.hub || {}).ignorees || [])].find((x) => (x.element || "").startsWith(projet + "/") && (x.actions || []).some((y) => (y.route || "").endsWith("/incident")));
+  if (!a) return "";
+  const distant = (etat.vue || {}).distant;
+  return `<section class="bloc mis-incident" aria-labelledby="mis-inc-titre"><h2 id="mis-inc-titre" class="m0">✖ ${t("Incident")}</h2>
+    <p class="m0">${h(t(a.raison, (a.args || []).map(texteMessage)))}</p>
+    <div class="ligne m0">${a.actions.map((x, i) => `<button type="button" class="btn btn-petit${i === 0 ? " btn-primaire" : ""}" data-mis-inc="${i}" data-empreinte="${h(a.empreinte)}"${distant && !x.distance ? ` disabled title="${h(t("On the computer only"))}"` : ""}>${h(t(x.libelle))}</button>`).join("")}</div></section>`;
+}
+document.addEventListener("click", async (ev) => {
+  const b = ev.target.closest("[data-mis-ctl]"), m = (etat.missionVue || {}).mission; if (!b || !m) return;
+  const a = b.dataset.misCtl;
+  if (a === "arreter" && await choisir(t("Stop the mission? Nothing will be undone: the environments and the accesses stay."), [{ id: "non", texte: t("Keep it going") }, { id: "oui", texte: t("Stop the mission"), danger: true }]) !== "oui") return;
+  const p = a === "reprendre" ? await preuveMdp(t("Resuming the mission: retype Athanor's password."), { ok: t("Resume") }) : {};
+  if (!p) return;
+  b.disabled = true;
+  if (!(await actionMission(a, p))) b.disabled = false;
+});
+document.addEventListener("change", async (ev) => {
+  const m = (etat.missionVue || {}).mission; if (ev.target.name !== "mis-pol-direct" || !m) return;
+  const v = ev.target.value, souple = RIGUEUR_POLITIQUE.indexOf(v) < RIGUEUR_POLITIQUE.indexOf(m.politique);
+  const p = souple ? await preuveMdp(t("A looser policy: retype Athanor's password."), { ok: t("Change the policy") }) : {};
+  if (!p || !(await actionMission("politique", { politique: v, ...p }))) rendrePage(); // the radio goes back to the policy held
+});
+document.addEventListener("click", async (ev) => {
+  const b = ev.target.closest("[data-mis-inc]"); if (!b) return;
+  const a = [...alertesHub(), ...((etat.hub || {}).ignorees || [])].find((x) => x.empreinte === b.dataset.empreinte), x = a && (a.actions || [])[+b.dataset.misInc];
+  if (!x) return;
+  b.disabled = true;
+  const r = await agirAlerte(x, b);
+  if (r && r.page) return allerProjet(r.projet, r.page.slice(1)); // I take over: the server's sheet
+  etat.hub = await api("hub").catch(() => etat.hub);
+  if (etat.vue) rendreBandeau(etat.vue);
+  if (r && etat.page === "mission") await rendrePage();
+});
 let minuterieDirect;
 function suivreMissionDirect() {
   clearTimeout(minuterieDirect);

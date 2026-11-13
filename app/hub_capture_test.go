@@ -152,8 +152,33 @@ func TestCaptureHub(t *testing.T) {
 	// mission-carte-* (M156): the bakery's card, proposed (?on=1), with an open question (?question=1); removed otherwise
 	t.Cleanup(func() { _ = os.RemoveAll(dossierMissions()) })
 	// mission-cloche-tel (M158): ?lancer=1 adds capture03, the same card whose orchestrator asks to launch it
+	// mission-pause-* (M172): Resume starts the project's pilot, Pause and Stop stop it; none in the screenshots' kit
+	demarrer, arreter := demarrerPiloteMission, arreterPiloteMission
+	demarrerPiloteMission = func(*Serveur, Projet) (string, error) { return "", nil }
+	arreterPiloteMission = func(*Serveur, Projet) error { return nil }
+	t.Cleanup(func() { demarrerPiloteMission, arreterPiloteMission = demarrer, arreter })
 	mux.HandleFunc("POST /test/mission", func(w http.ResponseWriter, r *http.Request) {
 		s.fermerLancementMission("capture03", "hub", "refuser", "capture") // never left pending for the next screenshots
+		// M172: the follower Resume started ends before capture06 comes back
+		if _, suivie := suivisMission.Load("capture06"); suivie {
+			_, _ = modifierMission("capture06", func(m *Mission) error { m.Etat = "arretee"; return nil })
+			for i := 0; i < 80; i++ {
+				if _, ok := suivisMission.Load("capture06"); !ok {
+					break
+				}
+				time.Sleep(100 * time.Millisecond)
+			}
+		}
+		if f := lireSante(); f.Envs["projet-01/prod"].Etat != "" { // mission-incident-* (M172): its incident, gone with its taking over
+			modifierSante(func(f *fichierSante) {
+				delete(f.Envs, "projet-01/prod")
+				for k := range f.Mains {
+					if strings.HasPrefix(k, "sante-projet-01/prod") {
+						delete(f.Mains, k)
+					}
+				}
+			})
+		}
 		_ = os.RemoveAll(dossierMissions())
 		_ = os.Remove(filepath.Join(dossierTaches("c0ffee02"), "7a5c0e11d2b4.json")) // ?liste=1's task
 		_ = os.Remove(filepath.Join(dossierTaches("c0ffee01"), "9b1d3e5f7a20.json")) // and capture06's
@@ -267,6 +292,22 @@ func TestCaptureHub(t *testing.T) {
 			} {
 				if x.ID == "capture06" && !direct || x.ID != "capture06" && !liste {
 					continue
+				}
+				// M172: ?refus=1, the prod accord refused (Ask again); ?incident=1, the prod deployed then red (P6)
+				if x.ID == "capture06" && r.URL.Query().Get("refus") != "" {
+					x.Relais = &RelaisMission{Etape: "accord_prod", Commit: x.Relais.Commit, DeploiementDev: "d16", Accord: "a9"}
+					x.Journal = append(slices.Clone(x.Journal), EntreeJournal{ID: "accord:a9:refusee", T: heure.Add(4 * time.Minute).Format(formatCree),
+						Cle: "Accord not given ({2}): {0} ({1})", Params: []string{"deploiement", "prod", "refusee"}, Niveau: "attention"})
+				}
+				if x.ID == "capture06" && r.URL.Query().Get("incident") != "" {
+					x.Relais = &RelaisMission{Etape: "prod_deploye", Commit: x.Relais.Commit, DeploiementDev: "d16", DeploiementProd: "p1"}
+					x.Journal = append(slices.Clone(x.Journal), EntreeJournal{ID: "incident:p1", T: heure.Add(4 * time.Minute).Format(formatCree),
+						Cle: "Production incident on {0}: retry, go back to the previous version or take over", Params: []string{"projet-01.fr"}, Niveau: "erreur"})
+					echec := &VerifDeploiement{OK: false, Problemes: []string{"statut"}, HTTP: ResultatHTTP{URL: "https://projet-01.fr", Statut: 502}, T: "2026-11-12T09:15:00Z"}
+					modifierSante(func(f *fichierSante) {
+						f.Envs["projet-01/prod"] = SanteEnv{Etat: "incident", Rouges: 2, RougeDepuis: "2026-11-12T09:00:00Z", T: "2026-11-12T09:15:00Z", Verification: echec,
+							Problemes: []ProblemeSante{{Code: "verif", Rouge: true}}}
+					})
 				}
 				x.Mentions, x.Questions = MentionsMission{Projets: []string{}, Serveurs: []string{}, Cles: []string{}}, []QuestionMission{}
 				if err := enregistrerMission(x); err != nil {

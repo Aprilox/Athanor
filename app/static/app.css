@@ -1193,3 +1193,14 @@ a.mis-ligne:hover, a.mis-ligne:focus-visible { border-color: var(--accent); }
 .mis-j-attention span { color: var(--attention); }
 .mis-j-erreur { border-left-color: var(--erreur) !important; }
 .mis-j-erreur span { color: var(--erreur-vif); }
+/* M172: the controls of a launched mission, its incident card, the relay's step in the lists */
+.mis-controles { margin-top: 10px; gap: 8px 12px; flex-wrap: wrap; align-items: center; }
+.mis-pol-direct { border: 1px solid var(--line); border-radius: 8px; padding: 2px 10px 6px; margin: 0; display: flex; flex-wrap: wrap; gap: 2px 16px; min-width: 0; }
+.mis-pol-direct legend { padding: 0 4px; font-size: 12.5px; color: var(--muted); }
+.mis-pol-direct label.radio { display: flex; align-items: center; gap: 6px; margin: 2px 0; font-size: 14px; }
+.mis-incident { border-left: 4px solid var(--erreur); display: flex; flex-direction: column; gap: 8px; }
+.mis-incident h2 { color: var(--erreur-vif); }
+.mis-incident .ligne { flex-wrap: wrap; gap: 8px; }
+.mis-redemander { gap: 8px; flex-wrap: wrap; align-items: center; }
+.mis-relais-etape { font-weight: 600; }
+.mis-controles .btn-danger { color: var(--erreur-vif); } /* AA on the dark themes too */
