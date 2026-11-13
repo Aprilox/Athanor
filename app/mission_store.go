@@ -35,6 +35,7 @@ type VoieMission struct {
 	Actuel  string `json:"actuel,omitempty"`
 	Detail  string `json:"detail,omitempty"`
 	Serveur string `json:"serveur,omitempty"`
+	Nom     string `json:"nom,omitempty"` // a remote Dev lane: its project as nom@instance
 	// Studio lane: the milestones done of the plan, the title of the one in progress, what the project lead does
 	Fait     int    `json:"fait,omitempty"`
 	Total    int    `json:"total,omitempty"`

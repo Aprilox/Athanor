@@ -5237,20 +5237,22 @@ function assistantServeur(c) {
 }
 // --- Missions (M159): one line per mission (state, sentence, lanes as they are now, date), its detail at #missions/<id>
 const ETATS_MISSION = { preparation: "Being prepared", proposee: "Proposed", acceptee: "Accepted", lancee: "Launched", terminee: "Finished", annulee: "Cancelled", echec: "Failed", en_pause: "Paused", arretee: "Stopped" };
-const ETATS_VOIE_DEV = { travaille: ["Working", "pv-claude"], termine: ["Finished", "pv-ok"], arrete: ["Stopped", ""] };
+const ETATS_VOIE_DEV = { travaille: ["Working", "pv-claude"], termine: ["Finished", "pv-ok"], arrete: ["Stopped", ""], hors_ligne: ["Offline: the mission waits", "pv-vous"], attente: ["Waiting to be sent", "pv-vous"] };
+// M190: a Studio lane, on this PC (dev) or on a remote Athanor (dev_distant, ref "remote id/project", nom = nom@instance)
+const voieStudio = (v) => v.module === "dev" || v.module === "dev_distant";
 // a lane's state read now by the API (voiesEnDirect): Studio = the project's pilot, Servers = its task
 function etatVoie(v) {
   if (v.etat === "refusee") return [t("Refused: native Windows mode"), "pv-vous"];
   if (!v.actuel || v.actuel === "inconnu") return [t("Not found"), "pv-vous"];
-  if (v.module === "dev") { const [l, c] = ETATS_VOIE_DEV[v.actuel] || [v.actuel, ""]; return [t(l), c]; }
+  if (voieStudio(v)) { const [l, c] = ETATS_VOIE_DEV[v.actuel] || [v.actuel, ""]; return [t(l), c]; }
   return ETATS_TACHE_SRV()[v.actuel] || [v.actuel, ""];
 }
 // lien: the project (selected, then its Overview) or the task's server; never inside a line that is a link itself
 function voieMission(v, lien) {
-  const [libelle, classe] = etatVoie(v), dev = v.module === "dev";
-  const mod = t((etat.hubModules || []).find((m) => m.id === v.module)?.nom || v.module);
-  const nom = dev ? v.ref : ((etat.mentionsSugg || []).find((x) => x.type === "serveur" && x.ref === v.serveur) || {}).nom || v.serveur || v.ref;
-  const cible = !lien || v.actuel === "inconnu" ? "" : dev ? `href="#suivi" data-projet="${h(v.ref)}" data-cible="suivi"` : v.serveur ? `href="#serveur/${encodeURIComponent(v.serveur)}"` : "";
+  const [libelle, classe] = etatVoie(v), dev = voieStudio(v), distant = v.module === "dev_distant";
+  const mod = distant ? t("Remote Studio") : t((etat.hubModules || []).find((m) => m.id === v.module)?.nom || v.module);
+  const nom = distant ? v.nom || v.ref : dev ? v.ref : ((etat.mentionsSugg || []).find((x) => x.type === "serveur" && x.ref === v.serveur) || {}).nom || v.serveur || v.ref;
+  const cible = !lien || v.actuel === "inconnu" ? "" : distant ? `href="#global"` : dev ? `href="#suivi" data-projet="${h(v.ref)}" data-cible="suivi"` : v.serveur ? `href="#serveur/${encodeURIComponent(v.serveur)}"` : "";
   return `<span class="mis-voie-etat"><span class="pastille-module"><span class="ico ico-${dev ? "dev" : "serveurs"}" aria-hidden="true"></span>${h(mod)}</span>${cible ? `<a ${cible}>${h(nom)}</a>` : `<b>${h(nom)}</b>`}<span class="pv-etat ${classe}">${h(libelle)}</span>${v.detail ? `<span class="muet petit mis-voie-detail">${h(v.detail)}</span>` : ""}</span>`;
 }
 // M172: the relay's step under way of a launched or paused mission ("Relay: Verification"), "" otherwise
@@ -5347,7 +5349,7 @@ function ligneJournal(e) {
 }
 // a lane, live: the module's line (state, link) then Studio's milestone n/N and what the project lead does
 function voieDirect(v) {
-  const n = v.fait || 0, avance = v.module !== "dev" || !v.total ? "" : v.titre ? t("Milestone {0}/{1}: {2}", [Math.min(n + 1, v.total), v.total, v.titre]) : t("{0} / {1} milestones done", [n, v.total]);
+  const n = v.fait || 0, avance = !voieStudio(v) || !v.total ? "" : v.titre ? t("Milestone {0}/{1}: {2}", [Math.min(n + 1, v.total), v.total, v.titre]) : t("{0} / {1} milestones done", [n, v.total]);
   const decider = v.actuel === "attente_accord" ? `<a class="btn btn-petit" href="#pourvous">${t("See the plan")}</a>` : "";
   return `<li class="mis-voie">${voieMission(v, true)}${avance ? `<p class="m0">${h(avance)}</p>` : ""}${v.activite ? `<p class="m0 muet petit">${h(t(v.activite))}</p>` : ""}${decider}</li>`;
 }

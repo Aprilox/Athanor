@@ -376,7 +376,7 @@ func TestMissionP5(t *testing.T) {
 	m := lu.Mission
 	var c CarteMission
 	_ = json.Unmarshal(m.Carte, &c)
-	if m.Etat != "proposee" || c.Projet != (ProjetCarte{projet, true}) || len(c.Envs) != 2 || c.Envs[0].Protection != "auth_proxy" || c.Envs[1].URL != "https://"+hoteProd ||
+	if m.Etat != "proposee" || c.Projet != (ProjetCarte{Nom: projet, Nouveau: true}) || len(c.Envs) != 2 || c.Envs[0].Protection != "auth_proxy" || c.Envs[1].URL != "https://"+hoteProd ||
 		len(c.Acces) != 1 || c.Acces[0].ID != cf.ID || c.Acces[0].Decoche || !slices.Equal(c.Touche.Zones, []string{"martin.fr"}) ||
 		!slices.Contains(c.Approbations, ApprobationPrevue{"mise_en_prod", "https://" + hoteProd}) {
 		t.Fatalf("card: %s %+v", m.Etat, c)

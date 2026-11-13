@@ -68,6 +68,7 @@ func (s *Serveur) observerMission(id string) bool {
 	if err != nil || !missionSuivie(m.Etat) {
 		return false
 	}
+	s.relancerVoiesDistantes(m)
 	evts, relais := s.evenementsMission(m)
 	m, err = modifierMission(id, func(m *Mission) error {
 		if !missionSuivie(m.Etat) {
@@ -81,6 +82,7 @@ func (s *Serveur) observerMission(id string) bool {
 		return false
 	}
 	s.relaisProd(id)
+	s.finirMissionDistante(id)
 	m, err = lireMission(id)
 	return err == nil && missionSuivie(m.Etat)
 }
@@ -137,6 +139,8 @@ func (s *Serveur) evenementsMission(m Mission) ([]EntreeJournal, RelaisMission) 
 	relais := RelaisMission{}
 	for _, v := range s.voiesEnDirect(m).Voies {
 		switch v.Module {
+		case moduleDevDistant:
+			s.evenementsDistants(v, noter)
 		case "dev":
 			p, ok := s.projetParNom(v.Ref)
 			if !ok {

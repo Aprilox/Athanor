@@ -150,7 +150,13 @@ func (s *Serveur) lancerMission(id, qui, dossier, empreinte string) (Mission, er
 		return m, err
 	}
 	s.ecrireAudit(LigneAudit{Type: "evenement", De: qui, Vers: "missions", Projet: prefixeMission + id, Mission: id, Action: "mission lancée", Resultat: c.Titre})
-	voies, faits, err := s.etapesMission(c, m.Politique, qui, dossier)
+	var voies []VoieMission
+	var faits []EvenementMission
+	if c.Projet.Distant != "" {
+		voies, faits, err = s.etapesDistantes(c, qui, id)
+	} else {
+		voies, faits, err = s.etapesMission(c, m.Politique, qui, dossier)
+	}
 	defer s.suivreMission(id) // stops by itself at once if the launch ended in echec
 	return modifierMission(id, func(m *Mission) error {
 		m.Voies = voies

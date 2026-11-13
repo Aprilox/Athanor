@@ -109,6 +109,7 @@ func (s *Serveur) apiControleMission(action string) http.HandlerFunc {
 		switch action {
 		case "pause":
 			if m, err = s.mettreEnPause(id, qui, qui); err == nil {
+				s.ordreVoiesDistantes(m, "pause_fin_cycle")
 				if p, ok := s.projetMission(m); ok && p.PiloteActif() {
 					marqueAuto(p, false)
 					if e := arreterPiloteMission(s, p); e != nil {
@@ -153,6 +154,7 @@ func (s *Serveur) reprendreMission(id, qui string) (Mission, error) {
 			marqueAuto(p, true)
 		}
 	}
+	s.ordreVoiesDistantes(m, "demarrer")
 	s.suivreMission(id)
 	return lireMission(id)
 }
@@ -206,6 +208,7 @@ func (s *Serveur) arreterMission(id, qui string) (Mission, error) {
 			s.noterJournalMission(id, s.entreeJournal("arret:pilote", time.Now(), "erreur", "The pilot of {0} did not stop: {1}", p.Nom, e.Error()))
 		}
 	}
+	s.ordreVoiesDistantes(m, "arreter")
 	s.arreterOrchestrateur(id, errMissionArretee)
 	s.revoquerJetons("mission arrêtée", func(x SessionHub) bool {
 		return x.Projet == prefixeMission+id || avecProjet && x.Projet == p.Nom || x.Mission != "" && taches[x.Mission]

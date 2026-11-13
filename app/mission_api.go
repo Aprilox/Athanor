@@ -142,6 +142,8 @@ func (s *Serveur) voiesEnDirect(m Mission) Mission {
 			if ok {
 				s.avancementVoie(v, p, e.JalonEnCours)
 			}
+		case moduleDevDistant:
+			s.voieDistanteEnDirect(v)
 		case "servers":
 			if t, ok := tacheMission(v.Ref); ok && len(t.Serveurs) > 0 {
 				v.Actuel, v.Serveur = t.Etat, t.Serveurs[0]

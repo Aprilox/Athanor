@@ -102,6 +102,12 @@ func outilModulesEtat(s *Serveur, _ SessionHub, args json.RawMessage) (string, e
 		}
 		projets = append(projets, p)
 	}
+	for _, x := range s.devDistants() { // M190: a remote's projects, nom@instance (data it sent, bounded on reading)
+		for _, p := range x.projets {
+			projets = append(projets, map[string]any{"nom": p.Nom + "@" + x.d.Nom, "distant": true, "en_ligne": x.enLigne,
+				"actif": p.PiloteActif, "phase": p.Phase, "plan": p.Plan + "; now: " + p.Jalon})
+		}
+	}
 	coffre := []map[string]string{}
 	if s.coffre != nil && s.coffreErr == nil {
 		for _, e := range s.coffre.Liste() {

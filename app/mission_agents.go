@@ -25,7 +25,9 @@ func consigneOrchestrateur(phrase string, mentions []string) string {
 		"whose sentence asks for it (parallele: faster, more quota; eco: the quota first; rapide: built fast, everything " +
 		"verified at the end), each true or false; envs (nom dev, staging or prod, " +
 		"url, protection aucune, auth_proxy or access, serveurs by id); serveurs.brief (DNS, certificates, proxy, protection, " +
-		"firewall); acces (vault entries by name, pour = project/env or server id); jalons_estimes (1 to 60). If it returns an " +
+		"firewall); acces (vault entries by name, pour = project/env or server id); jalons_estimes (1 to 60). A project named " +
+		"nom@instance (distant true) is on a remote Athanor: nouveau false, a dev.brief, and no envs, serveurs or acces " +
+		"(its own Athanor deploys it). If it returns an " +
 		"error, fix the card and call it again. Athanor computes the approvals, what will be touched and the estimate itself.\n" +
 		"5. Then say in one or two plain sentences what the card proposes, and stop.\n" +
 		"6. Only when a later owner's message asks to launch the card as it is, call lancer_mission with the mission id " +

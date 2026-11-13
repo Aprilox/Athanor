@@ -15,6 +15,7 @@ import (
 type ProjetCarte struct {
 	Nom     string `json:"nom"`
 	Nouveau bool   `json:"nouveau"`
+	Distant string `json:"distant,omitempty"` // worked out by validerCarte: "remote id/project" of a nom@instance (mission_distant.go)
 }
 
 type BriefCarte struct {
@@ -126,6 +127,7 @@ type contexteCarte struct {
 	coutCycle    float64
 	masquer      func(string) string
 	regle        func(RegleAccord) bool // the owner's "never ask again" rules in place (nil: none)
+	distants     []devDistant           // the paired remotes carrying dev, with their projects
 }
 
 const (
@@ -164,6 +166,11 @@ func validerCarte(c *CarteMission, x contexteCarte) error {
 		return erreurEntree(fmt.Sprintf("%d vault entries at most", maxAccesCarte))
 	}
 	i := slices.IndexFunc(x.projets, func(p Projet) bool { return strings.EqualFold(p.Nom, c.Projet.Nom) })
+	if c.Projet.Distant = ""; !c.Projet.Nouveau && i < 0 {
+		if err, distant := validerCarteDistante(c, x); distant {
+			return err
+		}
+	}
 	switch {
 	case c.Projet.Nouveau && !reNomProjet.MatchString(c.Projet.Nom):
 		return erreurEntree("Invalid project name (letters, digits, spaces, dashes, 60 characters at most)")
@@ -446,5 +453,6 @@ func (s *Serveur) contexteCarte() contexteCarte {
 		x.regle = s.approbations.Regle
 	}
 	x.minutesCycle, x.coutCycle = moyennesCycles(projets)
+	x.distants = s.devDistants()
 	return x
 }

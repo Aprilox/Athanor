@@ -152,7 +152,7 @@ func TestMissionCarteMartin(t *testing.T) {
 		t.Fatalf("mission %+v, consignes %q", m, consignes)
 	}
 	// the lanes: Dev builds a new project, Servers prepares in parallel
-	if c.Projet != (ProjetCarte{"boulangerie-martin", true}) || c.Dev.Brief == "" || !strings.Contains(c.Serveurs.Brief, "Caddy") || len(c.Envs) != 2 {
+	if c.Projet != (ProjetCarte{Nom: "boulangerie-martin", Nouveau: true}) || c.Dev.Brief == "" || !strings.Contains(c.Serveurs.Brief, "Caddy") || len(c.Envs) != 2 {
 		t.Fatalf("lanes: %+v", c)
 	}
 	if e := c.Envs[0]; e.Nom != "dev" || e.URL != "https://dev.martin.fr" || e.Protection != "auth_proxy" || !slices.Equal(e.Serveurs, []string{"v1"}) {

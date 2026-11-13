@@ -15,11 +15,12 @@ import (
 // fauxDevDistant: a remote Athanor carrying dev, reduced to its MCP: it answers the tools its owner granted
 // (tools/list), refuses the others, and records every tools/call it receives.
 type fauxDevDistant struct {
-	mu      sync.Mutex
-	jeton   string
-	outils  []string
-	projets []map[string]any
-	appels  []string // "name projet action"
+	mu       sync.Mutex
+	jeton    string
+	outils   []string
+	projets  []map[string]any
+	appels   []string // "name projet action"
+	demandes []string // the texts of ajouter_demande
 }
 
 func (f *fauxDevDistant) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -72,6 +73,9 @@ func (f *fauxDevDistant) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				p["pilote_actif"] = a["action"] == "demarrer"
 			}
 		}
+		texte("ok", false)
+	case "ajouter_demande":
+		f.demandes = append(f.demandes, toString(a["texte"]))
 		texte("ok", false)
 	}
 }
