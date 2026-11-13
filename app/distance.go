@@ -275,7 +275,8 @@ func interditDistance(r *http.Request) bool {
 	case p == "/api/distance" && r.Method == http.MethodGet, strings.HasPrefix(p, "/api/distance/appareils/"):
 		return false
 	case strings.HasPrefix(p, "/api/distance"), strings.HasPrefix(p, "/api/instance"),
-		p == "/api/mot-de-passe", p == "/api/ouvrir", p == "/api/mcp": // the hub's MCP: local pilots only
+		p == "/api/mot-de-passe", p == "/api/ouvrir", strings.HasPrefix(p, "/api/mcp"), // the hub's MCP and its pairing: local only
+		p == "/api/clients": // MCP clients: paired and revoked at the computer only
 		return true
 	case p == "/api/env" && r.URL.Query().Get("secrets") != "":
 		return true

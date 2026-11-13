@@ -45,8 +45,11 @@ type Serveur struct {
 	majProjets    sync.Mutex      // one update of the folder lists at a time
 	// remote access (distance.go): its state, and the routes the tunnel's server shares with the window
 	distOnce sync.Once
-	distEtat *distance
-	mux      http.Handler
+	// external MCP clients (hub_clients.go), read at first use
+	clientsOnce sync.Once
+	clientsEtat *magasinClients
+	distEtat    *distance
+	mux         http.Handler
 	// the vault (coffre_serveur.go); coffreErr: its file exists but could not be read
 	coffre    *Coffre
 	coffreErr error
@@ -489,8 +492,12 @@ func (s *Serveur) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/options", s.garde(false, s.apiEcrireOptions))
 	mux.HandleFunc("POST /api/bureau/{action}", s.garde(false, s.apiBureau))
 	mux.HandleFunc("GET /api/ecran", s.garde(false, s.apiEcran))
-	mux.HandleFunc("POST /api/instance/{action}", s.apiInstance) // second launch (its own secret, see instance.go)
-	mux.HandleFunc("POST /api/mcp", s.apiMCP)                    // the hub's MCP: its session token only, outside garde (hub_mcp.go)
+	mux.HandleFunc("POST /api/instance/{action}", s.apiInstance)       // second launch (its own secret, see instance.go)
+	mux.HandleFunc("POST /api/mcp", s.apiMCP)                          // the hub's MCP: its session token only, outside garde (hub_mcp.go)
+	mux.HandleFunc("POST /api/mcp/appairer", s.apiAppairerClient)      // an MCP client's pairing: the 6 digits, outside garde (hub_clients.go)
+	mux.HandleFunc("POST /api/mcp/appairer/statut", s.apiStatutClient) // and the owner's answer
+	mux.HandleFunc("GET /api/clients", s.garde(false, s.apiClients))
+	mux.HandleFunc("POST /api/clients", s.garde(false, s.apiClients))
 	mux.HandleFunc("POST /api/ouvrir", s.garde(false, s.apiOuvrir))
 	mux.HandleFunc("POST /api/fenetre", s.garde(false, s.apiFenetre)) // the terminal: Athanor's window as well
 	mux.HandleFunc("POST /api/fin-vue", s.garde(false, s.apiFinVue))
