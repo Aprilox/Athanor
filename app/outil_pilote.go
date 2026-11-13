@@ -89,9 +89,12 @@ type pilote struct {
 	parallel       bool
 	parallelMax    int
 	eco            bool   // the eco mode (ECO=1 in .athanor/.env): every lever but the model and the effort set for the quota
-	optionsCycle   string // what the current cycle runs with, for stats.tsv: "ponytail,eco,rtk"
+	optionsCycle   string // what the current cycle runs with, for stats.tsv: "ponytail,eco,fast,rtk"
 	rtkBin         string // RTK, when Claude's commands go through it (its measures: mesureRTK)
 	ecoAnnonce     string // "1"/"0": the eco state last logged
+	rapide         bool   // the fast mode (FAST=1 in .athanor/.env): quick checks only, the whole verification at the end
+	rapideAnnonce  string // "1"/"0": the fast state last logged
+	refusRapide    int    // deliveries reopened by this run because the fast mode's verification was owed
 	bashMax        string // BASH_MAX_OUTPUT_LENGTH outside the eco mode
 	quotaOuvriers  bool
 	modeleVerif    string

@@ -1438,12 +1438,14 @@ func (p *pilote) lireModeParallele() {
 	p.parallel = false
 	p.parallelMax = 3
 	b, _ := os.ReadFile(filepath.Join(p.etat, ".env"))
-	parStr, maxStr, ecoStr := "0", "3", "0"
+	parStr, maxStr, ecoStr, rapideStr := "0", "3", "0", "0"
 	for _, l := range strings.Split(string(b), "\n") {
 		l = strings.TrimSuffix(l, "\r")
 		switch {
 		case strings.HasPrefix(l, "ECO="):
 			ecoStr = l[len("ECO="):]
+		case strings.HasPrefix(l, "FAST="):
+			rapideStr = l[len("FAST="):]
 		case strings.HasPrefix(l, "PARALLEL="):
 			parStr = l[len("PARALLEL="):]
 		case strings.HasPrefix(l, "PARALLELE="):
@@ -1466,16 +1468,21 @@ func (p *pilote) lireModeParallele() {
 		}
 		p.ecoAnnonce = e
 	}
+	p.rapide = rapideStr == "1"
+	if e := map[bool]string{true: "1", false: "0"}[p.rapide]; e != p.rapideAnnonce {
+		if p.rapide {
+			p.log("Fast mode on: speed first. Quick checks only at each milestone, no review on the way; the full check, the tester, the critic and every fix come in the final verification, before the delivery.")
+		} else if p.rapideAnnonce != "" {
+			p.log("Fast mode off: back to the usual way of working. What was built in the fast mode is verified first (.athanor/FAST_DEBT).")
+		}
+		p.rapideAnnonce = e
+	}
 	if p.jalonPC != nil {
 		// several computers: each one builds one milestone at a time (the others are the parallel workers)
 		if parStr == "1" {
 			p.logUneFois("pcs-parallele", "Several computers: the parallel mode is off on this project, each computer building one milestone at a time.")
 		}
 		return
-	}
-	if parStr == "1" && p.eco {
-		p.logUneFois("eco-parallele", "Eco mode on: the parallel mode is off (the two do not run together).")
-		parStr = "0"
 	}
 	if parStr == "1" {
 		p.parallel = true
@@ -1737,6 +1744,53 @@ The user switched on the **eco mode**: in this project the quota comes before ev
 - **Short outputs:** never more than 40 lines printed at once (command outputs are also cut by the pilot in this mode); logs go to files, then ` + "`tail`" + ` or ` + "`grep`" + `.
 - **Brief writing:** a ` + "`.athanor/LOG.md`" + ` entry fits in 3 lines, your final answer in 5 lines plus the last lines of the check.
 `
+
+// consignesEcoOuvrier: the eco mode for a parallel worker, which already works alone on one milestone: only
+// what its session can spare (the reviews and the framing are the lead's).
+const consignesEcoOuvrier = `
+## Eco mode (active for this project)
+
+The quota comes first in this project. Images: 4 reads at most, on a reduced contact sheet or a crop, never one identical to its reference. Read only your milestone's line and the sections it names (` + "`grep -n word .athanor/MAP.md`" + ` first), never a whole document to be sure. Never more than 40 lines printed at once (command outputs are also cut by the pilot in this mode): logs go to files, then ` + "`tail`" + ` or ` + "`grep`" + `. Your report fits in 5 lines.
+`
+
+// detteRapide: the file that says milestones were built in the fast mode and that the whole verification is
+// still owed. The pilot writes it when a fast cycle starts; Claude deletes it once everything is verified.
+const detteRapide = "FAST_DEBT"
+
+// maxRefusRapide: deliveries one run of the pilot reopens for that debt before it stops and tells the user.
+const maxRefusRapide = 3
+
+// consignesRapidePilote: the fast mode's rules, added last to the instructions of every cycle but the framing:
+// the long waits of a cycle (the full check, the reviews) move to one final verification.
+const consignesRapidePilote = `
+
+## Fast mode (active for this project)
+
+The user switched on the **fast mode**: in this project speed comes first until the delivery, and the whole verification happens once, at the end. The user knows the project may be buggy or unpolished on the way. These rules come before "Start and end of each cycle", "Working fast and frugally", "Your team (sub-agents)" and the phases wherever they differ.
+
+- **End of a milestone:** run only ` + "`bash .athanor/check.sh quick <pattern>`" + ` on what the milestone built and see its ` + "`CHECK: PASSED`" + `, then tick, log and commit. Never the full check on the way, not even for a stage line.
+- **No review on the way.** ` + "`tester`" + ` and ` + "`critic`" + ` do not run at the end of the complete slice, at the end of a stage nor in the polish: they run in the final verification.
+- **Do not chase defects.** A defect that does not block the milestones to come gets one line in ` + "`.athanor/BUGS.md`" + ` (what, where, how to see it) and you move on. Fix at once only what breaks the build, the quick check or a milestone to come. Look only at the screenshots the milestone needs to be built right.
+- **The final verification** starts when every milestone but the delivery is ticked (in a plan in stages: in the last stage). It is long: it is the price of the speed so far.
+  1. The full ` + "`bash .athanor/check.sh`" + `, fixed until it passes.
+  2. ` + "`tester`" + `, then ` + "`critic`" + `, on the whole project against ` + "`.athanor/REQUEST.md`" + `; their findings go to ` + "`.athanor/BUGS.md`" + `.
+  3. Fix **every** open line of ` + "`.athanor/BUGS.md`" + `, the small ones too (what truly cannot be fixed here is explained in the final report), then the full check again and a second ` + "`tester`" + ` pass on what was fixed. Repeat until nothing is left open.
+  If it does not fit in one cycle, add the remaining fixes to ` + "`.athanor/PLAN.md`" + ` as milestones before the delivery and carry on at the next cycle.
+- ` + "**`.athanor/" + detteRapide + "`**" + ` (written by the pilot) says that this verification is owed. Delete it only once the final verification is complete, right before you write ` + "`STATUS: DONE`" + `: the pilot reopens a delivery made while that file exists.
+`
+
+// consignesRapideEco: with the eco mode too, the final verification is the eco mode's single review.
+const consignesRapideEco = "- **With the eco mode:** the final verification is the eco mode's single review: `tester` and `critic` once each, no second pass; you still fix every finding yourself.\n"
+
+// consignesDetteRapide: the fast mode was switched off (or the project came from a fast run) while the whole
+// verification is owed: it is done before anything else, or at the delivery in the eco mode (its single review).
+func consignesDetteRapide(eco bool) string {
+	quand := "Do it before any new milestone"
+	if eco {
+		quand = "In the eco mode, do it at the delivery, as its single review (`tester` and `critic` once each)"
+	}
+	return "\n\n## Verification owed (the fast mode was switched off)\n\nMilestones of this project were built in the fast mode: quick checks only, no review, known defects left in `.athanor/BUGS.md`. `.athanor/" + detteRapide + "` says that the whole verification is still owed. " + quand + ": the full `bash .athanor/check.sh`, fixed until it passes; `tester`, then `critic`, on what exists against `.athanor/REQUEST.md`; every open line of `.athanor/BUGS.md` fixed, the small ones too; the full check again. Then delete `.athanor/" + detteRapide + "`, add the log entry and commit. If it does not fit in one cycle, carry on at the next one: the file stays until it is done, and the pilot reopens a delivery made while it exists.\n"
+}
 
 func trouverBashNatifPilote() string {
 	existe := func(p string) bool { st, err := os.Stat(p); return err == nil && !st.IsDir() }
@@ -2515,6 +2569,18 @@ func lancerPilote(args []string) int {
 		if maxH, atteinte := p.dureeMaxAtteinte(); atteinte {
 			p.terminer(fmt.Sprintf("Maximum duration reached (%d h of work). The work in progress is in the project folder.", maxH))
 		}
+		// a delivery made while the fast mode's whole verification is owed: reopened, the next cycle pays it
+		if p.estTermine() && fichierRegulierPilote(filepath.Join(p.etat, detteRapide)) {
+			fRep := filepath.Join(p.etat, "FINAL_REPORT.md")
+			if b, err := os.ReadFile(fRep); err == nil {
+				_ = os.WriteFile(fRep, reStatusDonePilote.ReplaceAll(b, []byte("STATUS: REOPENED (the final verification of the fast mode is owed: .athanor/FAST_DEBT)")), 0o644)
+			}
+			if p.refusRapide++; p.refusRapide > maxRefusRapide {
+				p.etatPhase = "arrete"
+				p.terminer("Delivery refused " + strconv.Itoa(maxRefusRapide) + " times: what was built in the fast mode was not verified as a whole (.athanor/FAST_DEBT). Start again to retry, or delete that file to accept the delivery as it is.")
+			}
+			p.log("Delivery reopened: what was built in the fast mode is verified as a whole first (full check, tester, critic, every fix), then .athanor/FAST_DEBT is deleted.")
+		}
 		if p.estTermine() {
 			_ = os.WriteFile(filepath.Join(p.etat, "done", ".last-delivery"), []byte(time.Now().Format("20060102-150405")+"\n"), 0o644)
 			codeGH := p.githubPousser()
@@ -2652,6 +2718,9 @@ func lancerPilote(args []string) int {
 		if p.eco {
 			opts = append(opts, "eco")
 		}
+		if p.rapide && !cadrage {
+			opts = append(opts, "fast")
+		}
 		if p.rtkBin != "" {
 			opts = append(opts, "rtk")
 		}
@@ -2659,6 +2728,19 @@ func lancerPilote(args []string) int {
 			opts = append(opts, "cadrage")
 		}
 		p.optionsCycle = strings.Join(opts, ",")
+		// the fast mode: what its cycles build is owed a whole verification (consignesRapidePilote); with the
+		// mode off, the lead pays that debt first, alone
+		fDette := filepath.Join(p.etat, detteRapide)
+		if p.rapide && !cadrage && !fichierRegulierPilote(fDette) {
+			_ = os.WriteFile(fDette, []byte(time.Now().Format("2006-01-02 15:04")+"\n"), 0o644)
+		}
+		detteDue := !p.rapide && !cadrage && fichierRegulierPilote(fDette)
+		// the eco mode: shorter command outputs, for the lead and for the workers
+		bashMax := p.bashMax
+		if n, err := strconv.Atoi(bashMax); p.eco && (err != nil || n > bashMaxEco) {
+			bashMax = strconv.Itoa(bashMaxEco)
+		}
+		_ = os.Setenv("BASH_MAX_OUTPUT_LENGTH", bashMax)
 		mode := "serie"
 		butCycle := but
 		if j := p.jalonPC; j != nil && !cadrage && j.ID != jalonCadragePC && j.ID != jalonLivraisonPC {
@@ -2697,6 +2779,7 @@ func lancerPilote(args []string) int {
 				!fichierRegulierPilote(filepath.Join(p.etat, "TIDY")) &&
 				!fichierRegulierPilote(filepath.Join(p.etat, "FOR_YOU_ANSWERED")) &&
 				!fichierRegulierPilote(filepath.Join(p.etat, "SAVE_CHECK")) &&
+				(!detteDue || p.eco) &&
 				tailleFichierPilote(filepath.Join(p.prive, "relais.md")) == 0 {
 				if p.planADesVagues() {
 					raisonSerie := p.raisonSerieParallele()
@@ -2785,17 +2868,24 @@ func lancerPilote(args []string) int {
 			consignesCycle = filepath.Join(p.prive, "CLAUDE.ponytail.md")
 			_ = os.WriteFile(consignesCycle, append(b1, []byte(ajout)...), 0o644)
 		}
-		// the eco mode: its rules last (they come before the others), shorter command outputs
-		bashMax := p.bashMax
+		// the eco mode, then the fast mode: their rules last (they come before the others)
 		if p.eco && mode == "serie" {
 			b1, _ := os.ReadFile(consignesCycle)
 			consignesCycle = filepath.Join(p.prive, "CLAUDE.eco.md")
 			_ = os.WriteFile(consignesCycle, append(b1, []byte(consignesEcoPilote)...), 0o644)
-			if n, err := strconv.Atoi(bashMax); err != nil || n > bashMaxEco {
-				bashMax = strconv.Itoa(bashMaxEco)
-			}
 		}
-		_ = os.Setenv("BASH_MAX_OUTPUT_LENGTH", bashMax)
+		if mode == "serie" && !cadrage && (p.rapide || detteDue) {
+			ajout := consignesDetteRapide(p.eco)
+			if p.rapide {
+				ajout = consignesRapidePilote
+				if p.eco {
+					ajout += consignesRapideEco
+				}
+			}
+			b1, _ := os.ReadFile(consignesCycle)
+			consignesCycle = filepath.Join(p.prive, "CLAUDE.rapide.md")
+			_ = os.WriteFile(consignesCycle, append(b1, []byte(ajout)...), 0o644)
+		}
 		if mode == "serie" {
 			texteConsignes, _ := os.ReadFile(consignesCycle)
 			cArgs := []string{"-p", butCycle, "--permission-mode", "bypassPermissions", "--settings", p.reglages, "--permission-prompts", "none", "--output-format", "stream-json", "--verbose"}

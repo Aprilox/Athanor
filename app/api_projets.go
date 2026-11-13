@@ -119,6 +119,7 @@ type EtatVue struct {
 	Maj         *EtatMaj              `json:"maj,omitempty"`    // updates of Athanor (maj.go)
 	GitHub      *SuiviGitHub          `json:"github,omitempty"` // the Overview's GitHub line (.athanor/github.json)
 	Eco         bool                  `json:"eco,omitempty"`    // the project's eco mode (.athanor/.env ECO=1)
+	Rapide      bool                  `json:"rapide,omitempty"` // the project's fast mode (.athanor/.env FAST=1)
 	Gains       *GainsVue             `json:"gains,omitempty"`  // the savings measured on the project's cycles (gains.go)
 	// a stop asked for the end of the current cycle: "arret" (Stop after cycle), "relance" (restart to
 	// apply settings); the buttons say so
@@ -213,6 +214,7 @@ func (s *Serveur) apiEtat(w http.ResponseWriter, r *http.Request) {
 		vue.Stats = p.LireStats()
 		vue.Gains = calculerGains(vue.Stats, ponytailDansEnv(kit.Env()))
 		vue.Eco = p.EcoActif()
+		vue.Rapide = p.modeActif("FAST")
 		if b, err := lireAtelier(p, "github.json", 64<<10); err == nil {
 			var g SuiviGitHub
 			if json.Unmarshal(b, &g) == nil {
@@ -679,7 +681,8 @@ func (s *Serveur) arreterApresCycle(p Projet) (string, error) {
 type ModeVue struct {
 	Parallele    bool `json:"parallele"`
 	ParalleleMax int  `json:"parallele_max"`
-	Eco          bool `json:"eco"` // the eco mode: the quota first (never together with the parallel mode)
+	Eco          bool `json:"eco"`    // the eco mode: the quota first
+	Rapide       bool `json:"rapide"` // the fast mode: quick checks only, the whole verification at the end
 	// the project's own framing time box in minutes (nil, or 0 when written: the global FRAMING_MAX_MIN);
 	// absent from a POST, it is left as it is (the terminal interface does not send it)
 	CadrageMax    *int `json:"cadrage_max,omitempty"`
@@ -727,14 +730,13 @@ func (p Projet) LireMode() ModeVue {
 			m.Parallele = l.Valeur == "1"
 		case "ECO":
 			m.Eco = l.Valeur == "1"
+		case "FAST":
+			m.Rapide = l.Valeur == "1"
 		case "PARALLEL_MAX":
 			if n, err := strconv.Atoi(l.Valeur); err == nil && n >= 2 && n <= 10 {
 				m.ParalleleMax = n
 			}
 		}
-	}
-	if m.Eco {
-		m.Parallele = false // the pilot runs the eco mode alone
 	}
 	if n := cadrageProjet(p.envProjet()); n > 0 {
 		m.CadrageMax = &n
@@ -746,9 +748,12 @@ func (p Projet) LireMode() ModeVue {
 }
 
 // EcoActif: the project's eco mode, read without touching the file (the Overview asks every few seconds).
-func (p Projet) EcoActif() bool {
+func (p Projet) EcoActif() bool { return p.modeActif("ECO") }
+
+// modeActif: a mode of the project (ECO, FAST) as its .athanor/.env says, read without touching the file.
+func (p Projet) modeActif(cle string) bool {
 	for _, l := range LireEnv(p.envProjet()) {
-		if l.Cle == "ECO" {
+		if l.Cle == cle {
 			return l.Valeur == "1"
 		}
 	}
@@ -756,11 +761,15 @@ func (p Projet) EcoActif() bool {
 }
 
 func (s *Serveur) apiMode(w http.ResponseWriter, r *http.Request) {
-	p, ok := s.projetRequis(w, r)
-	if !ok {
-		return
+	// ?defaut=1: the settings of a project not created yet (the New project page shows them beside its form)
+	m := ModeVue{ParalleleMax: 3}
+	if r.URL.Query().Get("defaut") == "" {
+		p, ok := s.projetRequis(w, r)
+		if !ok {
+			return
+		}
+		m = p.LireMode()
 	}
-	m := p.LireMode()
 	m.CadrageGlobal, m.DureeMaxGlobal = 25, 0
 	for _, l := range LireEnv(s.kitCourant().Env()) {
 		if n, err := strconv.Atoi(strings.TrimSpace(l.Valeur)); l.Cle == "FRAMING_MAX_MIN" && err == nil && n >= 0 {
@@ -777,23 +786,33 @@ func (s *Serveur) apiEcrireMode(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	var m ModeVue
-	if err := lireCorps(r, &m); err != nil {
+	// "rapide" absent (a page loaded before the fast mode existed, still open): that mode stays as it is
+	var c struct {
+		ModeVue
+		Rapide *bool `json:"rapide"`
+	}
+	if err := lireCorps(r, &c); err != nil {
 		s.erreur(w, http.StatusBadRequest, err.Error())
 		return
+	}
+	avant := p.LireMode()
+	m := c.ModeVue
+	m.Rapide = avant.Rapide
+	if c.Rapide != nil {
+		m.Rapide = *c.Rapide
 	}
 	if m.ParalleleMax < 2 || m.ParalleleMax > 10 {
 		m.ParalleleMax = 3
 	}
-	if m.Eco {
-		m.Parallele = false // one or the other
-	}
-	v := map[string]string{"PARALLEL": "0", "PARALLEL_MAX": strconv.Itoa(m.ParalleleMax), "ECO": "0"}
+	v := map[string]string{"PARALLEL": "0", "PARALLEL_MAX": strconv.Itoa(m.ParalleleMax), "ECO": "0", "FAST": "0"}
 	if m.Parallele {
 		v["PARALLEL"] = "1"
 	}
 	if m.Eco {
 		v["ECO"] = "1"
+	}
+	if m.Rapide {
+		v["FAST"] = "1"
 	}
 	if m.CadrageMax != nil {
 		v["FRAMING_MAX_MIN"] = "" // 0: back to the global value
@@ -816,7 +835,6 @@ func (s *Serveur) apiEcrireMode(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	avant := p.LireMode()
 	if err := os.MkdirAll(p.Atelier(), 0o755); err != nil {
 		s.erreur(w, http.StatusInternalServerError, err.Error())
 		return
@@ -825,21 +843,27 @@ func (s *Serveur) apiEcrireMode(w http.ResponseWriter, r *http.Request) {
 		s.erreur(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	// the message tells what this call changed (the modes are independent switches)
+	memesModes := m.Parallele == avant.Parallele && m.Eco == avant.Eco && m.Rapide == avant.Rapide
 	switch {
-	case m.DureeMax != nil && m.Parallele == avant.Parallele && m.Eco == avant.Eco:
+	case m.DureeMax != nil && memesModes:
 		s.msg(w, "Work time limit saved for this project: a running pilot applies it before its next cycle.")
-	case m.CadrageMax != nil && m.Parallele == avant.Parallele && m.Eco == avant.Eco:
+	case m.CadrageMax != nil && memesModes:
 		s.msg(w, "Framing time box saved: it applies to this project's next framing.")
+	case m.Rapide && !avant.Rapide:
+		s.msg(w, "Fast mode on: it applies from the next cycle. The project may be buggy or unpolished on the way; everything is verified and fixed before the delivery.")
+	case avant.Rapide && !m.Rapide:
+		s.msg(w, "Fast mode off: from the next cycle, what was built in the fast mode is verified as a whole first.")
 	case m.Eco && !avant.Eco:
-		s.msg(w, "Eco mode on: it applies from the next cycle (the parallel mode is off).")
-	case m.Parallele:
-		s.msg(w, "Parallel mode on: it applies from the next cycle (the plan is first organized in waves).")
+		s.msg(w, "Eco mode on: it applies from the next cycle.")
 	case avant.Eco && !m.Eco:
 		s.msg(w, "Eco mode off: it applies from the next cycle.")
-	case m.Eco:
-		s.msg(w, "Eco mode on: it applies from the next cycle (the parallel mode is off).")
-	default:
+	case m.Parallele && !avant.Parallele:
+		s.msg(w, "Parallel mode on: it applies from the next cycle (the plan is first organized in waves).")
+	case avant.Parallele && !m.Parallele:
 		s.msg(w, "Parallel mode off: from the next cycle, the lead works milestone by milestone.")
+	default:
+		s.msg(w, "Working mode saved: it applies from the next cycle.")
 	}
 }
 

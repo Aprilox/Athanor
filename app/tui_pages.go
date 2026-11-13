@@ -450,6 +450,9 @@ func (a *appTUI) phrase() (string, string, couleurT) {
 		if v.Eco {
 			sous = append(sous, t("eco mode"))
 		}
+		if v.Rapide {
+			sous = append(sous, t("fast mode"))
+		}
 		if v.Contexte > 0 {
 			sous = append(sous, t("context {0} tokens", fmtTokensTUI(v.Contexte)))
 		}

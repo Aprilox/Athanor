@@ -370,6 +370,126 @@ printf '{"type":"result","subtype":"success","is_error":false,"num_turns":2,"dur
 exit 0
 `
 
+// scriptFauxClaudeRapide: call 1 (fast and eco on) notes what it received and switches the fast mode off as
+// the app would, the whole verification still owed; call 2 (verification owed) delivers without it; call 3
+// pays the debt (deletes .athanor/FAST_DEBT) and delivers.
+const scriptFauxClaudeRapide = `#!/usr/bin/env bash
+set -u
+case "${1:-}" in
+  --help)
+    echo "--strict-mcp-config --setting-sources --append-system-prompt-file --agents --plugin-dir"
+    exit 0 ;;
+  --version)
+    echo "claude 2.1.285"
+    exit 0 ;;
+esac
+prompt_txt=""
+prompt_file=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --append-system-prompt-file) prompt_file="$2"; shift 2 ;;
+    --append-system-prompt) prompt_txt="$2"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+[ -n "$prompt_file" ] && [ -f "$prompt_file" ] && prompt_txt=$(cat "$prompt_file")
+ETAT="$PWD/.athanor"
+n=0
+[ -f "$ETAT/appel_test_n" ] && n=$(cat "$ETAT/appel_test_n")
+n=$(( n + 1 ))
+echo "$n" > "$ETAT/appel_test_n"
+rapide=non
+printf '%s' "$prompt_txt" | grep -q "## Fast mode (active for this project)" && rapide=oui
+eco=non
+printf '%s' "$prompt_txt" | grep -q "With the eco mode:" && eco=oui
+due=non
+printf '%s' "$prompt_txt" | grep -q "## Verification owed (the fast mode was switched off)" && due=oui
+dette=non
+[ -f "$ETAT/FAST_DEBT" ] && dette=oui
+rapport=aucun
+[ -f "$ETAT/FINAL_REPORT.md" ] && rapport=$(grep -o "STATUS: [A-Z]*" "$ETAT/FINAL_REPORT.md" | head -n 1)
+echo "$n $rapide $eco $due $dette $rapport" >> "$ETAT/rapide_vu"
+if [ "$n" = 1 ]; then
+  sed -i.bak 's/^FAST=1/FAST=0/' "$ETAT/.env" && rm -f "$ETAT/.env.bak"
+  echo "part 1" > "$PWD/app.txt"
+  git add -A && git commit -qm "M1: part 1"
+  printf '{"type":"result","subtype":"success","is_error":false,"num_turns":2,"duration_ms":3000,"duration_api_ms":2000,"total_cost_usd":0.02,"usage":{"input_tokens":2000,"output_tokens":200},"result":"Part 1"}\n'
+  exit 0
+fi
+[ "$n" = 3 ] && rm -f "$ETAT/FAST_DEBT"
+echo "done $n" >> "$PWD/app.txt"
+sed -i.bak 's/^- \[ \] M1 /- [x] M1 /' "$ETAT/PLAN.md" && rm -f "$ETAT/PLAN.md.bak"
+printf '# Final Report\nSTATUS: DONE\n' > "$ETAT/FINAL_REPORT.md"
+git add -A && git commit -qm "M1: done $n"
+printf '{"type":"assistant","message":{"usage":{"input_tokens":2000,"cache_read_input_tokens":0,"cache_creation_input_tokens":0,"output_tokens":200},"content":[{"type":"text","text":"CHECK: PASSED"}]}}\n'
+printf '{"type":"result","subtype":"success","is_error":false,"num_turns":2,"duration_ms":3000,"duration_api_ms":2000,"total_cost_usd":0.02,"usage":{"input_tokens":2000,"output_tokens":200},"result":"Done"}\n'
+exit 0
+`
+
+// scriptFauxClaudeParallele: the lead alone builds the skeleton (M1); a parallel worker notes what it received
+// in a file of its milestone and commits on its branch; the lead's verification after the merges ticks the
+// milestones; the lead alone then delivers
+// (the fast mode's whole verification counted as done: .athanor/FAST_DEBT deleted).
+const scriptFauxClaudeParallele = `#!/usr/bin/env bash
+set -u
+case "${1:-}" in
+  --help)
+    echo "--strict-mcp-config --setting-sources --append-system-prompt-file --agents --plugin-dir"
+    exit 0 ;;
+  --version)
+    echo "claude 2.1.285"
+    exit 0 ;;
+esac
+prompt_txt=""
+prompt_file=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --append-system-prompt-file) prompt_file="$2"; shift 2 ;;
+    --append-system-prompt) prompt_txt="$2"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+[ -n "$prompt_file" ] && [ -f "$prompt_file" ] && prompt_txt=$(cat "$prompt_file")
+ETAT="$PWD/.athanor"
+a() { printf '%s' "$prompt_txt" | grep -q -- "$1" && echo oui || echo non; }
+eco=$(a "## Eco mode (active for this project)")
+rapide=$(a "## Fast mode (active for this project)")
+resultat() {
+  printf '{"type":"assistant","message":{"usage":{"input_tokens":2000,"cache_read_input_tokens":0,"cache_creation_input_tokens":0,"output_tokens":200},"content":[{"type":"text","text":"CHECK: PASSED"}]}}\n'
+  printf '{"type":"result","subtype":"success","is_error":false,"num_turns":2,"duration_ms":3000,"duration_api_ms":2000,"total_cost_usd":0.02,"usage":{"input_tokens":2000,"output_tokens":200},"result":"%s"}\n' "$1"
+  exit 0
+}
+if [ "$(a "## You are a parallel worker")" = oui ]; then
+  id=$(printf '%s' "$prompt_txt" | grep -o 'auto/M[0-9]*' | head -n 1 | sed 's|auto/||')
+  echo "$id $eco $rapide ${BASH_MAX_OUTPUT_LENGTH:-}" > "$PWD/vu-$id.js"
+  git add -A && git commit -qm "$id: built"
+  resultat "Report of $id"
+fi
+if [ "$(a "## Verification after a parallel cycle")" = oui ]; then
+  echo "verif $eco $(a "the full check waits for the final verification") $(a "one\*\* full check") ${BASH_MAX_OUTPUT_LENGTH:-}" >> "$ETAT/para_vu"
+  for id in M2 M3 M4; do
+    [ -f "$PWD/vu-$id.js" ] && sed -i.bak "s/^- \[ \] $id /- [x] $id /" "$ETAT/PLAN.md" && rm -f "$ETAT/PLAN.md.bak"
+  done
+  echo "verified" >> "$PWD/app.txt"
+  git add -A && git commit -qm "Verify the parallel cycle"
+  resultat "Verified"
+fi
+dette=non
+[ -f "$ETAT/FAST_DEBT" ] && dette=oui
+echo "chef $eco $rapide $dette" >> "$ETAT/para_vu"
+if grep -q '^- \[ \] M1 ' "$ETAT/PLAN.md"; then
+  echo "skeleton" > "$PWD/app.txt"
+  sed -i.bak 's/^- \[ \] M1 /- [x] M1 /' "$ETAT/PLAN.md" && rm -f "$ETAT/PLAN.md.bak"
+  git add -A && git commit -qm "M1: Skeleton"
+  resultat "Skeleton"
+fi
+rm -f "$ETAT/FAST_DEBT"
+echo "delivered" >> "$PWD/app.txt"
+printf '# Final Report\nSTATUS: DONE\n' > "$ETAT/FINAL_REPORT.md"
+git add -A && git commit -qm "Deliver"
+resultat "Done"
+`
+
 // executerPilote: the Go pilot on a throw-away kit and project, started as the application does (athanor
 // demarrer, in the foreground here); its output, shown when a check fails.
 func executerPilote(t *testing.T, bin, kit, projet, fakeClaude string, extraEnv []string) string {
@@ -643,8 +763,7 @@ func TestBancPilote(t *testing.T) {
 		_ = os.MkdirAll(filepath.Join(projet, ".athanor"), 0o755)
 		_ = os.WriteFile(filepath.Join(projet, ".athanor", "REQUEST.md"), []byte("# Request\n\nBuild feature M1.\n"), 0o644)
 		_ = os.WriteFile(filepath.Join(projet, ".athanor", "PLAN.md"), []byte("# Plan\n\n- [ ] M1 : Core feature\n"), 0o644)
-		// both asked by hand: the eco mode wins, the parallel mode stays off
-		_ = os.WriteFile(filepath.Join(projet, ".athanor", ".env"), []byte("PARALLEL=1\nECO=1\n"), 0o644)
+		_ = os.WriteFile(filepath.Join(projet, ".athanor", ".env"), []byte("ECO=1\n"), 0o644)
 		sortie := executerPilote(t, binTemp, kit, projet, fakeClaude, nil)
 		vu, _ := os.ReadFile(filepath.Join(projet, ".athanor", "eco_vu"))
 		p := Projet{Nom: "test", Dossier: projet}
@@ -663,10 +782,91 @@ func TestBancPilote(t *testing.T) {
 		}
 		verifier(strings.Join(opts, "|") == "ponytail,eco|ponytail", "stats options: %q", opts)
 		verifier(strings.Contains(sortie, "Ponytail "+versionPonytail+" on"), "Ponytail announced")
-		verifier(strings.Contains(sortie, "Eco mode on") && strings.Contains(sortie, "the parallel mode is off") && strings.Contains(sortie, "Eco mode off"), "eco messages in the pilot's log")
-		avantFin, _, _ := strings.Cut(sortie, "Eco mode off")
-		verifier(!strings.Contains(avantFin, "Parallel mode:"), "no parallel cycle in the eco mode")
+		verifier(strings.Contains(sortie, "Eco mode on") && !strings.Contains(sortie, "the parallel mode is off") && strings.Contains(sortie, "Eco mode off"), "eco messages in the pilot's log")
 		verifier(strings.HasPrefix(etat.Etat, "DONE"), "final state: %+v", etat)
+		if echec {
+			t.Logf("pilot output:\n%s", sortie)
+		}
+	})
+	// the fast mode with the eco mode: its rules reach Claude, the debt file is written, a delivery made while
+	// the whole verification is owed is reopened, with the mode on or switched off
+	t.Run("mode_rapide", func(t *testing.T) {
+		kit := preparerKitEssaiPilote(t, binTemp)
+		fakeClaude := filepath.Join(kit, "fake-claude-rapide.sh")
+		if err := os.WriteFile(fakeClaude, []byte(strings.ReplaceAll(scriptFauxClaudeRapide, "\r\n", "\n")), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		projet := filepath.Join(dossierEssaiPilote(t), "projet")
+		_ = os.MkdirAll(filepath.Join(projet, ".athanor"), 0o755)
+		_ = os.WriteFile(filepath.Join(projet, ".athanor", "REQUEST.md"), []byte("# Request\n\nBuild feature M1.\n"), 0o644)
+		_ = os.WriteFile(filepath.Join(projet, ".athanor", "PLAN.md"), []byte("# Plan\n\n- [ ] M1 : Core feature\n"), 0o644)
+		_ = os.WriteFile(filepath.Join(projet, ".athanor", ".env"), []byte("ECO=1\nFAST=1\n"), 0o644)
+		sortie := executerPilote(t, binTemp, kit, projet, fakeClaude, nil)
+		vu, _ := os.ReadFile(filepath.Join(projet, ".athanor", "rapide_vu"))
+		p := Projet{Nom: "test", Dossier: projet}
+		etat, _ := p.LireEtat()
+		echec := false
+		verifier := func(ok bool, format string, a ...any) {
+			if !ok {
+				echec = true
+				t.Errorf(format, a...)
+			}
+		}
+		// call: fast rules, their eco line, verification owed, debt file, state of the final report
+		verifier(strings.TrimSpace(string(vu)) == "1 oui oui non oui aucun\n2 non non oui oui aucun\n3 non non oui oui STATUS: REOPENED", "what Claude received: %q", vu)
+		var opts []string
+		for _, st := range p.LireStats() {
+			opts = append(opts, st.Options)
+		}
+		verifier(strings.Join(opts, "|") == "ponytail,eco,fast|ponytail,eco|ponytail,eco", "stats options: %q", opts)
+		verifier(strings.Contains(sortie, "Fast mode on") && strings.Contains(sortie, "Fast mode off"), "fast messages in the pilot's log")
+		verifier(strings.Count(sortie, "Delivery reopened: what was built in the fast mode") == 1, "the delivery without the verification is reopened once")
+		verifier(strings.HasPrefix(etat.Etat, "DONE") && projetLivre(p), "final state: %+v", etat)
+		verifier(!fichierRegulierPilote(filepath.Join(p.Atelier(), detteRapide)), "the debt file is gone")
+		if echec {
+			t.Logf("pilot output:\n%s", sortie)
+		}
+	})
+	// the three modes together: the workers get the eco rules and its short outputs, the lead verifies the
+	// merges with quick checks (the fast mode), then delivers alone once the whole verification is done
+	t.Run("parallele_eco_rapide", func(t *testing.T) {
+		kit := preparerKitEssaiPilote(t, binTemp)
+		fakeClaude := filepath.Join(kit, "fake-claude-parallele.sh")
+		if err := os.WriteFile(fakeClaude, []byte(strings.ReplaceAll(scriptFauxClaudeParallele, "\r\n", "\n")), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		projet := filepath.Join(dossierEssaiPilote(t), "projet")
+		_ = os.MkdirAll(filepath.Join(projet, ".athanor"), 0o755)
+		_ = os.WriteFile(filepath.Join(projet, ".athanor", "REQUEST.md"), []byte("# Request\n\nBuild M1 to M4.\n"), 0o644)
+		_ = os.WriteFile(filepath.Join(projet, ".athanor", "PLAN.md"), []byte("# Plan\n\n- [ ] M1 : Skeleton — Files: app.txt. Depends on: none. Acceptance: it runs.\n"+
+			"- [ ] M2 : Two — Files: vu-M2.js. Depends on: M1. Acceptance: the file exists.\n"+
+			"- [ ] M3 : Three — Files: vu-M3.js. Depends on: M1. Acceptance: the file exists.\n"+
+			"- [ ] M4 : Four — Files: vu-M4.js. Depends on: M1. Acceptance: the file exists.\n"), 0o644)
+		_ = os.WriteFile(filepath.Join(projet, ".athanor", ".env"), []byte("PARALLEL=1\nPARALLEL_MAX=3\nECO=1\nFAST=1\n"), 0o644)
+		sortie := executerPilote(t, binTemp, kit, projet, fakeClaude, nil)
+		p := Projet{Nom: "test", Dossier: projet}
+		etat, _ := p.LireEtat()
+		echec := false
+		verifier := func(ok bool, format string, a ...any) {
+			if !ok {
+				echec = true
+				t.Errorf(format, a...)
+			}
+		}
+		// each worker: the eco rules (the worker's own), not the lead's fast rules, the short outputs
+		for _, id := range []string{"M2", "M3", "M4"} {
+			vu, _ := os.ReadFile(filepath.Join(projet, "vu-"+id+".js"))
+			verifier(strings.TrimSpace(string(vu)) == id+" oui non 8000", "worker %s received: %q", id, vu)
+		}
+		// the verification: the eco rules, the quick check instead of the full one; then the lead alone, with
+		// the fast rules and the debt file
+		vu, _ := os.ReadFile(filepath.Join(p.Atelier(), "para_vu"))
+		verifier(strings.TrimSpace(string(vu)) == "chef oui oui oui\nverif oui oui non 8000\nchef oui oui oui", "what the lead received: %q", vu)
+		plan, _ := os.ReadFile(filepath.Join(p.Atelier(), "PLAN.md"))
+		verifier(strings.Count(string(plan), "- [x]") == 4, "plan:\n%s", plan)
+		verifier(strings.Contains(sortie, "Eco mode on") && strings.Contains(sortie, "Fast mode on") && strings.Contains(sortie, "Workers finished"), "the modes and the workers in the pilot's log")
+		verifier(!strings.Contains(sortie, "Delivery reopened"), "the delivery made after the verification is accepted")
+		verifier(strings.HasPrefix(etat.Etat, "DONE") && projetLivre(p), "final state: %+v", etat)
 		if echec {
 			t.Logf("pilot output:\n%s", sortie)
 		}

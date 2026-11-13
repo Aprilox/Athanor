@@ -23,6 +23,7 @@
   <a href="#comment-ça-marche"><b>Comment ça marche</b></a> ·
   <a href="#mode-parallèle"><b>Mode parallèle</b></a> ·
   <a href="#mode-éco"><b>Mode éco</b></a> ·
+  <a href="#mode-fast"><b>Mode fast</b></a> ·
   <a href="#économiser-le-quota"><b>Économiser le quota</b></a> ·
   <a href="#plusieurs-ordinateurs"><b>Plusieurs ordinateurs</b></a> ·
   <a href="#lapplication"><b>L'application</b></a> ·
@@ -54,6 +55,7 @@ Vous décrivez ce que vous voulez : un jeu, un site, une application, un outil. 
 | **Une boucle autonome** | Un jalon par cycle et un contexte neuf à chaque fois : les tours restent économes et le projet ne dérive pas. Quota atteint → pause jusqu'à sa réouverture, ou bascule sur un modèle de secours. Erreur → nouvel essai avec un délai croissant. Cycle muet ou trop long → coupé et repris. PC redémarré → reprise là où il s'était arrêté. Tout l'état est dans des fichiers. |
 | **Mode parallèle** | Un interrupteur par projet. Un plan fin avec dépendances ; jusqu'à 10 ouvriers réalisent des jalons indépendants en même temps, chacun dans sa copie de travail git ; le pilote fusionne chacun dès qu'il termine et lance le suivant, et le chef vérifie une fois à la fin. |
 | **Mode éco** | Un interrupteur par projet, quand le quota compte plus que la vitesse : le chef fait le travail lui-même au lieu de le confier à des sous-agents, une seule revue à la livraison, 4 images au plus par cycle, des sorties de commandes plus courtes. Le modèle et l'effort restent tels que vous les avez réglés. |
+| **Mode fast** | Un interrupteur par projet, quand c'est le temps de construction qui compte le plus : des vérifications rapides seulement à chaque jalon et aucune revue en cours de route ; la vérification complète, le testeur, le critique et toutes les corrections viennent une seule fois, dans une vérification finale que le pilote impose avant la livraison. Les trois modes se cumulent. |
 | **Ponytail, intégré** | Activé par défaut : Claude réalise chaque jalon avec la plus petite modification complète (les règles de [Ponytail](https://github.com/dietrichgebert/ponytail)), jamais moins que la demande. Le Suivi montre ce qui est mesuré : le cache, ce que RTK a épargné, et les cycles avec et sans, côte à côte. |
 | **Plusieurs ordinateurs** | Deux, trois ou dix ordinateurs construisent un même projet ensemble par son dépôt GitHub, chacun avec un compte qui peut y envoyer (celui du propriétaire, ou celui d'un contributeur : pas besoin d'organisation) : chacun prend un jalon qu'aucun autre ne construit, d'abord ceux pour lesquels il est le meilleur (une grosse carte graphique pour la 3D, un réseau rapide pour les gros téléchargements), et ils fusionnent le travail les uns des autres après chaque jalon. Le Suivi montre quels ordinateurs sont là et ce que chacun construit. |
 | **Une vraie équipe** | Un chef de projet et des sous-agents : `scout`, `architect`, `creator`, `developer`, `tester`, `critic`, et un `executor` bon marché (Haiku par défaut) pour le travail mécanique. Les éclaireurs lisent pour le cadrage, les tests indépendants et la critique finale sont toujours délégués. |
@@ -196,16 +198,18 @@ Pareil sous Windows (PowerShell), Linux et macOS : cela construit `Athanor.exe` 
 1. Le chef écrit un **plan fin avec des dépendances explicites** : beaucoup de petits jalons autonomes, chacun avec les fichiers qu'il touche, `Depends on:` les jalons dont il a besoin, et ses critères d'acceptation. M1 est toujours la fondation (squelette, `check.sh`, contrats partagés).
 2. Le pilote fait tourner un **ordonnanceur** : chaque jalon dont les dépendances sont fusionnées reçoit un **ouvrier** (sa propre session Claude, sa propre copie de travail git `.athanor/work/M5` et sa branche `auto/M5`), en commençant par 2 et en en ajoutant un chaque fois qu'un ouvrier livre, jusqu'au nombre choisi. Dès qu'un ouvrier atteint le quota, plus aucun ne démarre ; s'ils l'ont tous atteint, la vérification du chef est sautée et le pilote attend, puis fait un jalon avec le chef seul avant de relancer des ouvriers. Le pilote laisse aussi le chef travailler seul, le temps d'un cycle, quand des ouvriers ne seraient pas rentables : moins de 3 jalons prêts en même temps, uniquement des jalons de documentation (ils se citent entre eux et entrent en conflit), ou le quota des 5 heures à 75 % ou celui de la semaine à 85 %. Deux jalons dont les fiches citent les mêmes fichiers ne tournent jamais en même temps. Les ouvriers partagent un tableau, `.athanor/BOARD.md`, écrit par le pilote toutes les quelques secondes : ce que fait chacun et les fichiers qu'il tient. Un ouvrier qui a besoin d'un fichier hors de sa fiche le réserve d'abord (`.athanor/RESERVE`) ; le pilote l'accorde sauf si un autre ouvrier le tient, et aucun nouvel ouvrier ne démarre sur un fichier réservé.
 3. Dès qu'un ouvrier termine, le pilote **fusionne sa branche immédiatement** quand elle s'applique sans conflit, coche le jalon et lance les jalons suivants devenus prêts. Personne n'attend l'ouvrier le plus lent.
-4. En fin de cycle, **une seule** session du chef vérifie tout : elle fusionne les branches en conflit, lance la vérification complète, corrige ce que les fusions ont cassé et note le reste dans `BUGS.md`.
+4. En fin de cycle, **une seule** session du chef vérifie tout : elle fusionne les branches en conflit, lance la vérification complète (les vérifications rapides des jalons fusionnés en mode fast), corrige ce que les fusions ont cassé et note le reste dans `BUGS.md`.
 5. **Les demandes en attente n'attendent pas.** Au début de chaque cycle, elles rejoignent la demande en cours : le chef ajoute leurs jalons au plan, avec leurs dépendances.
 
 Chaque ouvrier ne porte que son jalon en contexte : le travail est découpé en petites sessions économes au lieu d'une seule énorme. Un ouvrier peut confier ses longues séries de tests et ses recherches à `executor` (modèle bon marché) et ne lire que les échecs ; il n'appelle aucun autre sous-agent. La page *Équipe* montre une carte par ouvrier avec les sous-agents qu'il a appelés, et le *Journal* étiquette leurs lignes `[M5]`. Le mode parallèle consomme plus de quota par heure (une session par ouvrier) mais beaucoup moins de temps.
+
+Il se cumule avec les deux autres modes. Avec le **mode éco**, chaque ouvrier et la vérification du chef suivent ses règles : peu d'images, moins de lecture, des sorties de commandes coupées à 8 000 caractères. Avec le **mode fast**, des vérifications rapides suivent les fusions et la vérification d'ensemble attend la fin.
 
 ---
 
 ## Mode éco
 
-*Gérer → Mode de travail → Mode éco*, par projet (dans un terminal : **M**, puis *Mode de travail*). Pour quand le quota compte plus que la vitesse. Il ne tourne jamais avec le mode parallèle : activer l'un coupe l'autre.
+*Gérer → Mode de travail → Mode éco*, par projet (dans un terminal : **M**, puis *Mode de travail*). Pour quand le quota compte plus que la vitesse. Il se cumule avec le mode parallèle (les ouvriers suivent aussi ses règles) et avec le mode fast.
 
 Mesuré sur un vrai projet de jeu, **ce sont les sous-agents qui consomment le plus** (80 à 87 % des jetons de ses cycles) : chacun repart de zéro et repaie tout son contexte à chaque tour. Le mode éco coupe donc d'abord là :
 
@@ -215,6 +219,21 @@ Mesuré sur un vrai projet de jeu, **ce sont les sous-agents qui consomment le p
 - **Moins de lecture, des sorties courtes.** La fin du journal, le jalon en cours, les seules sections utiles ; les sorties de commandes coupées à 8 000 caractères (`BASH_MAX_OUTPUT_LENGTH`, 20 000 sinon).
 
 Le **modèle et l'effort de réflexion ne sont pas touchés** : ils restent tels que vous les avez réglés. Pour économiser encore plus, choisissez un modèle plus petit pour le chef (Sonnet) et un effort plus bas (`medium` ou `low`) dans *Réglages → Modèles*. Le Suivi affiche *mode éco* pendant un cycle ; l'interrupteur s'applique dès le prochain cycle.
+
+---
+
+## Mode fast
+
+*Gérer → Mode de travail → Mode fast*, par projet (dans un terminal : **M**, puis *Mode de travail*), ou dès la création du projet. Pour quand c'est le temps de construction qui compte le plus. Mesuré sur trois vrais projets, **un tiers à la moitié du temps d'un cycle part dans la vérification complète qui termine chaque jalon**, et davantage à mesure que le projet grossit. Le mode fast reporte cette attente, et les revues, à la fin.
+
+- **Des vérifications rapides seulement.** À la fin d'un jalon, Claude lance `check.sh quick` sur ce qu'il vient de construire, puis commite. Aucune vérification complète en cours de route : ni pour une ligne d'étape, ni après un cycle parallèle.
+- **Aucune revue en cours de route.** `tester` et `critic` ne passent ni après la tranche complète, ni en fin d'étape, ni au polish.
+- **Les défauts sont notés, pas poursuivis.** Une ligne dans `BUGS.md`, corrigée tout de suite seulement si elle bloque la suite. **Jusqu'à la fin, le projet peut être bugué, mal fini ou avec des problèmes de finition.**
+- **Tout est vérifié et corrigé à la fin.** Avant la livraison vient la vérification finale : la vérification complète jusqu'à ce qu'elle passe, `tester` puis `critic` sur tout le projet, **chaque** remarque corrigée (les petites aussi), la vérification complète à nouveau et un second passage du testeur, jusqu'à ce qu'il ne reste rien. La livraison est aussi finie que sans ce mode. Le dernier jalon est plus long, puisqu'il porte la vérification de tout le projet.
+- **Le pilote l'impose.** Un cycle en mode fast laisse `.athanor/FAST_DEBT` ; Claude ne le supprime qu'une fois la vérification finale terminée. Une livraison faite tant que ce fichier existe est rouverte (trois fois au plus par lancement ; ensuite le pilote s'arrête et le dit).
+- **Désactivé en cours de route** : ce qui a été construit en mode fast est d'abord vérifié en entier (à la livraison en mode éco, comme son unique revue), puis le travail reprend comme d'habitude.
+
+Le cadrage ne change pas. Le Suivi affiche *mode fast* pendant un cycle ; l'interrupteur s'applique dès le prochain cycle. Les trois modes se cumulent : parallèle et fast ensemble, c'est la façon la plus rapide de construire ; avec le mode éco, la vérification finale est son unique revue (`tester` et `critic` une fois chacun, chaque remarque quand même corrigée).
 
 ---
 
@@ -312,7 +331,7 @@ Les captures sont en anglais ; l'interface s'affiche dans la langue choisie.
 | **Journal** | le journal lisible (Claude parle, outils, résultats, sous-agents, pilote) ou brut (JSON), filtrable |
 | **À distance** | l'accès à distance activé ou coupé, le lien et le QR code qui appairent un téléphone ou un autre ordinateur, les appareils de confiance (connecté maintenant ou vu à telle heure, d'où), les renommer ou les retirer d'un ✕ ; le nom de cet ordinateur et ce qu'il sait bien faire, pour les autres ordinateurs d'un projet |
 | **Guide** | des tutoriels pas à pas, toujours dans le menu, avec pour chaque étape un bouton qui ouvre la bonne page : démarrer un projet, GitHub (connecter l'ordinateur, lier, travailler chacun son tour), votre téléphone (et votre propre domaine, et comment ne plus l'utiliser), plusieurs ordinateurs (ce qu'il faut, connecter chaque ordinateur, rejoindre, ce que chacun sait bien faire) ; les premiers pas et les pages y renvoient |
-| **Nouveau projet / Rejoindre un projet** (dans le sélecteur de projet) | un nom, le dossier (*Parcourir…* ouvre la fenêtre de choix de dossier du système) et ce que vous voulez ; ou rejoindre un projet que d'autres ordinateurs construisent déjà, depuis son dépôt |
+| **Nouveau projet / Rejoindre un projet** (dans le sélecteur de projet) | un nom, le dossier (*Parcourir…* ouvre la fenêtre de choix de dossier du système) et ce que vous voulez, avec les réglages du projet à côté du formulaire (les modes parallèle, éco et fast, le cadrage le plus long, la limite de temps de travail) ; ou rejoindre un projet que d'autres ordinateurs construisent déjà, depuis son dépôt |
 | **Gérer** (dans le sélecteur de projet) | renommer le projet ; déplacer ou renommer son dossier ; le faire pointer vers un autre dossier (le plan et les demandes suivent, les jalons sont vérifiés d'après son contenu) ; vérifier les jalons ; l'archiver ; le supprimer (de la liste, son atelier ou tout le dossier, à la corbeille) ; le lier à GitHub |
 | **Skills & MCP** | la bibliothèque (catalogue vérifié, recherche dans SkillsMP et le registre MCP, lien GitHub, vos propres skills, configurations MCP collées), un interrupteur par projet, les clés d'API des serveurs (rangées à part, jamais réaffichées) et leurs réglages (une adresse, un port, un chemin : détectés dans la configuration, affichés en clair avec leur valeur par défaut), *Voir / modifier* la configuration d'un serveur, ses réglages et le programme à ouvrir en JSON (y compris un serveur collé), *Tester* démarre un serveur dans sa cage et liste ses outils, et vérifie un skill (son en-tête, et si ses scripts ont leur programme ici et se lisent) ; quand un test échoue, **Corriger avec Claude** trouve une configuration (ou réécrit une copie du skill, montrée en diff avant *Appliquer*) qui marche sur ce système, la teste avant de la garder, et *Annuler la correction* remet ce qu'elle a remplacé ; chaque correction est aussi notée pour tout le monde dans `logs/corrections/`, et celles du catalogue vérifié peuvent être écrites dans une copie du code d'Athanor (`athanor extensions appliquer-corrections KIT CODE`) ; *Se connecter* une fois à un serveur distant qui le demande (OAuth), pour tous les projets ; **Plugins** : tout le catalogue des plugins Claude Code (catalogue officiel plus les vôtres), avec recherche, installés en un clic et activés projet par projet |
 | **Installation & santé** | Un onglet par mode (Windows natif et WSL sous Windows ; Linux ; macOS), l'actuel marqué : *Tout installer* pour lui, ou y basculer. *Tout vérifier*, *Tester la barrière* pour de vrai, *Réparer* ligne par ligne, *Demander à Claude* de réparer ou d'installer quelque chose |
@@ -618,7 +637,7 @@ Oui. Rien n'est lié à un nom d'utilisateur ni à une lettre de disque : les ch
 Poussez un tag de version : GitHub lance d'abord toutes les vérifications de la CI sur le commit du tag (tests sous Windows, Linux et macOS, exécutable unique, toutes les cibles), puis compile les applications et publie la version ([`.github/workflows/release.yml`](.github/workflows/release.yml)). Si une seule vérification échoue (ou la suite), rien n'est publié : le tag est supprimé, ainsi que la version si elle avait déjà été créée, et les mises à jour d'Athanor ne la proposent jamais. Corrigez, commitez, puis poussez à nouveau le même tag (`git tag -f v2.42.0 && git push origin v2.42.0`).
 
 ```bash
-git tag v2.51.8 && git push origin v2.51.8
+git tag v2.52.0 && git push origin v2.52.0
 ```
 
 Gardez la version de [`app/winres/athanor.rc`](app/winres/athanor.rc) et `versionAthanor` dans [`app/commandes.go`](app/commandes.go) alignées sur le tag (un test vérifie qu'elles concordent), et écrivez les nouveautés dans `docs/releases/VERSION.md` (par ex. [`docs/releases/2.31.0.md`](docs/releases/2.31.0.md)) : elles ouvrent la page de la version.

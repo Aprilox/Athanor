@@ -209,8 +209,9 @@ func TestDossiersRefuses(t *testing.T) {
 
 func jsonTexte(s string) string { b, _ := json.Marshal(s); return string(b) }
 
-// TestModeEco: the eco mode and the parallel mode never together; the Overview says so.
-func TestModeEco(t *testing.T) {
+// TestModes: the parallel, eco and fast modes are three switches that add up; each change says what it
+// changed, and a project not created yet gets the defaults.
+func TestModes(t *testing.T) {
 	a := t.TempDir()
 	pa := Projet{Nom: "alpha", Dossier: a}
 	ecrire(t, pa.Plan(), planTest)
@@ -218,41 +219,75 @@ func TestModeEco(t *testing.T) {
 	s.csrf = "jeton"
 	mux := http.NewServeMux()
 	s.routes(mux)
-	appel := func(methode, corps string) map[string]any {
+	appelSur := func(methode, chemin, corps string) map[string]any {
 		t.Helper()
-		r := httptest.NewRequest(methode, "/api/mode?p=alpha", strings.NewReader(corps))
+		r := httptest.NewRequest(methode, chemin, strings.NewReader(corps))
 		r.Header.Set("X-Athanor", "jeton")
 		w := httptest.NewRecorder()
 		mux.ServeHTTP(w, r)
 		var v map[string]any
 		json.Unmarshal(w.Body.Bytes(), &v)
 		if w.Code != 200 {
-			t.Fatalf("%s %s: %d %v", methode, corps, w.Code, v)
+			t.Fatalf("%s %s %s: %d %v", methode, chemin, corps, w.Code, v)
 		}
 		return v
 	}
+	appel := func(methode, corps string) map[string]any {
+		t.Helper()
+		return appelSur(methode, "/api/mode?p=alpha", corps)
+	}
 	env := func() string { b, _ := os.ReadFile(pa.envProjet()); return string(b) }
-	appel("POST", `{"parallele":true,"parallele_max":6,"eco":false}`)
-	if m := appel("GET", ""); m["parallele"] != true || m["eco"] != false || pa.EcoActif() {
+	if v := appel("POST", `{"parallele":true,"parallele_max":6,"eco":false}`); !strings.Contains(texteRep(v), "Parallel mode on") {
+		t.Fatalf("parallel message: %v", v)
+	}
+	if m := appel("GET", ""); m["parallele"] != true || m["eco"] != false || m["rapide"] != false || pa.EcoActif() {
 		t.Fatalf("parallel: %v", m)
 	}
-	// eco asked with parallel still ticked: eco alone, the workers' maximum kept
-	if v := appel("POST", `{"parallele":true,"parallele_max":6,"eco":true}`); !strings.Contains(texteRep(v), "Eco mode on") {
+	// eco on top of parallel: both stay, the workers' maximum kept
+	if v := appel("POST", `{"parallele":true,"parallele_max":6,"eco":true}`); !strings.Contains(texteRep(v), "Eco mode on") || strings.Contains(texteRep(v), "parallel") {
 		t.Fatalf("eco message: %v", v)
 	}
-	if m := appel("GET", ""); m["parallele"] != false || m["eco"] != true || m["parallele_max"] != float64(6) || !pa.EcoActif() {
-		t.Fatalf("eco: %v\n%s", m, env())
+	if m := appel("GET", ""); m["parallele"] != true || m["eco"] != true || m["parallele_max"] != float64(6) || !pa.EcoActif() {
+		t.Fatalf("eco with parallel: %v\n%s", m, env())
 	}
-	if e := env(); !strings.Contains(e, "ECO=1") || !strings.Contains(e, "PARALLEL=0") {
+	// the fast mode on top of both
+	if v := appel("POST", `{"parallele":true,"parallele_max":6,"eco":true,"rapide":true}`); !strings.Contains(texteRep(v), "Fast mode on") || !strings.Contains(texteRep(v), "verified and fixed before the delivery") {
+		t.Fatalf("fast message: %v", v)
+	}
+	if m := appel("GET", ""); m["parallele"] != true || m["eco"] != true || m["rapide"] != true || !pa.modeActif("FAST") {
+		t.Fatalf("the three modes: %v\n%s", m, env())
+	}
+	if e := env(); !strings.Contains(e, "ECO=1") || !strings.Contains(e, "PARALLEL=1") || !strings.Contains(e, "FAST=1") {
 		t.Fatalf(".env: %s", e)
 	}
-	// hand-edited both on: still read as eco only
-	_ = os.WriteFile(pa.envProjet(), []byte("PARALLEL=1\nECO=1\n"), 0o644)
-	if m := pa.LireMode(); m.Parallele || !m.Eco {
-		t.Fatalf("both by hand: %+v", m)
+	// a time setting saved with the modes as they are: its own message, the modes untouched
+	if v := appel("POST", `{"parallele":true,"parallele_max":6,"eco":true,"rapide":true,"cadrage_max":45}`); !strings.Contains(texteRep(v), "Framing time box saved") {
+		t.Fatalf("framing message: %v", v)
 	}
-	if v := appel("POST", `{"parallele":false,"parallele_max":6,"eco":false}`); !strings.Contains(texteRep(v), "Eco mode off") || pa.EcoActif() {
+	// hand-edited: read as written
+	_ = os.WriteFile(pa.envProjet(), []byte("PARALLEL=1\nECO=1\nFAST=1\n"), 0o644)
+	if m := pa.LireMode(); !m.Parallele || !m.Eco || !m.Rapide {
+		t.Fatalf("the three by hand: %+v", m)
+	}
+	// a page loaded before the fast mode existed does not send it: the mode stays as it is
+	if v := appel("POST", `{"parallele":true,"parallele_max":6,"eco":true}`); !strings.Contains(texteRep(v), "Working mode saved") || !pa.modeActif("FAST") {
+		t.Fatalf("fast mode not sent: %v\n%s", v, env())
+	}
+	if v := appel("POST", `{"parallele":true,"parallele_max":6,"eco":true,"rapide":false}`); !strings.Contains(texteRep(v), "Fast mode off") || pa.modeActif("FAST") {
+		t.Fatalf("fast off: %v", v)
+	}
+	if v := appel("POST", `{"parallele":true,"parallele_max":6,"eco":false}`); !strings.Contains(texteRep(v), "Eco mode off") || pa.EcoActif() {
 		t.Fatalf("eco off: %v", v)
+	}
+	if v := appel("POST", `{"parallele":false,"parallele_max":6,"eco":false}`); !strings.Contains(texteRep(v), "Parallel mode off") || pa.LireMode().Parallele {
+		t.Fatalf("parallel off: %v", v)
+	}
+	// New project: the defaults, with no project named (and with none at all)
+	if m := appelSur("GET", "/api/mode?defaut=1", ""); m["parallele"] != false || m["eco"] != false || m["rapide"] != false || m["parallele_max"] != float64(3) || m["cadrage_global"] != float64(25) {
+		t.Fatalf("defaults: %v", m)
+	}
+	if m := appelSur("GET", "/api/mode?defaut=1&p=nobody", ""); m["parallele_max"] != float64(3) {
+		t.Fatalf("defaults, unknown project: %v", m)
 	}
 }
 

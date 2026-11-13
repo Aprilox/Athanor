@@ -648,44 +648,38 @@ func (a *appTUI) gererProjet() {
 		})
 }
 
-// choisirModeTravail: one milestone at a time, the parallel mode or the eco mode (never both), as the
-// app's Manage page; rep is GET /api/mode.
+// choisirModeTravail: the parallel, eco and fast modes, three switches that add up, as the app's Manage
+// page; choosing one switches it on or off. rep is GET /api/mode.
 func (a *appTUI) choisirModeTravail(rep map[string]any) {
-	par, _ := rep["parallele"].(bool)
-	eco, _ := rep["eco"].(bool)
+	etats := map[string]bool{}
+	for _, k := range []string{"parallele", "eco", "rapide"} {
+		etats[k], _ = rep[k].(bool)
+	}
 	maxi := 3
 	if f, ok := rep["parallele_max"].(float64); ok {
 		maxi = int(f)
 	}
-	actuel := "serie"
-	switch {
-	case eco:
-		actuel = "eco"
-	case par:
-		actuel = "parallele"
-	}
-	ids := [][2]string{{"serie", "One milestone at a time"}, {"parallele", "Parallel mode"}, {"eco", "Eco mode"}}
 	var choix []choixTUI
-	sel := 0
-	for i, c := range ids {
+	for _, c := range [][2]string{{"parallele", "Parallel mode"}, {"eco", "Eco mode"}, {"rapide", "Fast mode"}} {
 		texte := a.t(c[1])
-		if c[0] == actuel {
+		if etats[c[0]] {
 			texte += "  ✓"
-			sel = i
 		}
 		choix = append(choix, choixTUI{id: c[0], texte: texte})
 	}
 	choix = append(choix, choixTUI{id: "", texte: a.t("Cancel")})
-	texte := a.t("Parallel mode: several workers at once, faster, uses more quota.") + "\n" +
-		a.t("Eco mode: the quota first: the lead works alone, one review at delivery, few images, short outputs. The model and the effort stay as set.") + "\n\n" +
+	texte := a.t("The three modes add up: choose one to switch it on or off.") + "\n\n" +
+		a.t("Parallel mode: several workers at once, faster, uses more quota.") + "\n" +
+		a.t("Eco mode: the quota first: the lead works alone, one review at delivery, few images, short outputs. The model and the effort stay as set.") + "\n" +
+		a.t("Fast mode: speed first: quick checks at each milestone, no review on the way. Until the end the project may be buggy or badly finished; everything is verified and fixed before the delivery, so the last milestone is longer.") + "\n\n" +
 		a.t("To save even more: a smaller model for the lead (Sonnet) and a lower thinking effort (medium or low), in Settings.")
 	a.demander(a.t("Working mode"), texte, choix, func(id string) {
-		if id == "" || id == actuel {
+		if id == "" {
 			return
 		}
-		a.agir("POST", "mode", map[string]any{"parallele": id == "parallele", "parallele_max": maxi, "eco": id == "eco"}, nil)
+		etats[id] = !etats[id]
+		a.agir("POST", "mode", map[string]any{"parallele": etats["parallele"], "parallele_max": maxi, "eco": etats["eco"], "rapide": etats["rapide"]}, nil)
 	})
-	a.dialogue.sel = sel
 }
 
 // equipeDirecte: the direct link of the project (equipe_directe.go), as the Overview's "Team, live": the
