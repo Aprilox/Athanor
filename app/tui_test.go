@@ -235,6 +235,8 @@ func TestTUITraduction(t *testing.T) {
 	u = append(u, p4...)
 	p5, _ := os.ReadFile("tui_missions.go")
 	u = append(u, p5...)
+	p6, _ := os.ReadFile("tui_approbations.go")
+	u = append(u, p6...)
 	src := string(b) + string(c) + string(d) + strings.ReplaceAll(string(u), "app.t(", "a.t(")
 	for _, l := range []string{"fr", "es", "de", "it", "pt"} {
 		dico := dicoTUI(l)

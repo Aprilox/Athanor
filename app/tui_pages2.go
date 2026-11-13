@@ -17,6 +17,7 @@ import (
 func (a *appTUI) chargerPages2() {
 	switch a.page {
 	case pPourVous:
+		a.chargerApprobations()
 		a.charger("pourvous", 3*time.Second, func(c clientTUI) (func(*appTUI), error) {
 			var r struct {
 				Taches []TacheUtilVue `json:"taches"`
@@ -62,6 +63,9 @@ func (a *appTUI) raccourcisPages2() []raccourci {
 	t := a.t
 	switch a.page {
 	case pPourVous:
+		if x := a.apprChoisie(); x != nil {
+			return a.raccourcisApprTUI(*x)
+		}
 		return []raccourci{{"Enter", t("Done")}, {"k", t("Skip: find another way")}}
 	case pGitHub:
 		if a.gh == nil {
@@ -83,10 +87,17 @@ func (a *appTUI) raccourcisPages2() []raccourci {
 func (a *appTUI) touchePages2(ev evenementTUI, k string, defiler func(*int, int)) {
 	switch a.page {
 	case pPourVous:
-		switch k {
-		case "entree":
+		appr := a.apprChoisie() != nil
+		switch {
+		case appr && k == "y":
+			a.deciderApprTUI("accepter")
+		case appr && k == "r":
+			a.deciderApprTUI("refuser")
+		case appr && k == "t":
+			a.deciderApprTUI("toujours")
+		case !appr && k == "entree":
 			a.repondreTache(false)
-		case "k":
+		case !appr && k == "k":
 			a.repondreTache(true)
 		default:
 			defiler(&a.selTache, -1)
@@ -179,29 +190,46 @@ func (a *appTUI) pagePourVous(e *ecranT, x, y, l, h int) {
 		hl = max(6, h/2) // a narrow terminal: the list above, the selected task below
 	}
 	ix, iy, il, ih := a.boite(e, x, y, lg, hl, a.t("For you"), true)
+	ap := a.apprAttente() // every project's, first
+	taches := a.taches
 	if a.vue == nil || a.vue.Projet == nil {
+		taches = nil
+	}
+	if len(ap)+len(taches) == 0 {
+		if taches != nil || a.vue != nil && a.vue.Projet != nil {
+			a.texteBloc(e, ix, iy, il, ih, a.t("Nothing for you: what Claude cannot do itself (an account, a payment, a key…) shows up here, with the exact steps."), a.st(p.muet, fond))
+		}
 		return
 	}
-	if len(a.taches) == 0 {
-		a.texteBloc(e, ix, iy, il, ih, a.t("Nothing for you: what Claude cannot do itself (an account, a payment, a key…) shows up here, with the exact steps."), a.st(p.muet, fond))
-		return
-	}
-	a.liste(e, ix, iy, il, ih, len(a.taches), &a.selTache, func(i int, f couleurT) (string, string, styleT, styleT) {
-		t := a.taches[i]
+	a.liste(e, ix, iy, il, ih, len(ap)+len(taches), &a.selTache, func(i int, f couleurT) (string, string, styleT, styleT) {
+		if i < len(ap) {
+			return a.ligneApprTUI(ap[i], f)
+		}
+		t := taches[i-len(ap)]
 		lib, c := a.etatTacheLib(t)
 		return "● " + t.Titre, lib, a.gras(p.encre, f), a.st(c, f)
 	})
 	a.zoneMolette(x, y, lg, hl, func(s int) { a.selTache += s })
-	t := a.taches[min(a.selTache, len(a.taches)-1)]
+	titre := ""
+	if a.selTache < len(ap) {
+		titre = a.titreApprTUI(ap[a.selTache])
+	} else {
+		titre = taches[a.selTache-len(ap)].Titre
+	}
 	var dx, dy, dw, dh int
 	if l >= 110 {
-		dx, dy, dw, dh = a.boite(e, x+lg, y, l-lg, h, t.Titre, false)
+		dx, dy, dw, dh = a.boite(e, x+lg, y, l-lg, h, titre, false)
 	} else {
 		if h-hl < 4 {
 			return
 		}
-		dx, dy, dw, dh = a.boite(e, x, y+hl, l, h-hl, t.Titre, false)
+		dx, dy, dw, dh = a.boite(e, x, y+hl, l, h-hl, titre, false)
 	}
+	if a.selTache < len(ap) {
+		a.detailApprTUI(e, dx, dy, dw, dh, ap[a.selTache])
+		return
+	}
+	t := taches[a.selTache-len(ap)]
 	yy := dy
 	yy += a.texteBloc(e, dx, yy, dw, dh-(yy-dy), t.Details, a.st(p.encre, fond))
 	if t.Attendu != "" {
@@ -233,10 +261,11 @@ func (a *appTUI) pagePourVous(e *ecranT, x, y, l, h int) {
 
 // repondreTache: done (an answer, the values asked for) or skip (Claude finds another way).
 func (a *appTUI) repondreTache(passer bool) {
-	if len(a.taches) == 0 {
+	i := a.selTache - len(a.apprAttente()) // the approvals come first in the list
+	if i < 0 || len(a.taches) == 0 {
 		return
 	}
-	t := a.taches[min(a.selTache, len(a.taches)-1)]
+	t := a.taches[min(i, len(a.taches)-1)]
 	if t.Etat == "close" {
 		return
 	}

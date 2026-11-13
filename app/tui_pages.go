@@ -338,7 +338,7 @@ func (a *appTUI) barreBas(e *ecranT) {
 	if a.page != pAccueil {
 		glob = append(glob, raccourci{"H", t("Home")})
 	}
-	glob = append(glob, raccourci{"q", t("Quit")})
+	glob = append(glob, raccourci{"q", t("Quit")}, raccourci{"!", t("Emergency stop")})
 	x := 1
 	ecrire := func(r raccourci, fin bool) bool {
 		lt := largeurTexte(r.k) + 1 + largeurTexte(r.lib) + 2
@@ -1654,6 +1654,8 @@ func (a *appTUI) dessinerAide(e *ecranT) {
 		{"p, [ ]", t("Choose a project")},
 		{"N · M", t("New project") + " · " + t("Manage")},
 		{"g", t("Get GitHub's work")},
+		{"!", t("Emergency stop")},
+		{"y · r · t", t("For you") + ": " + t("Accept") + " · " + t("Refuse") + " · " + t("Never ask again")},
 		{"E · p r a", t("Missions") + ": " + t("Pause") + " · " + t("Resume") + " · " + t("Stop")},
 		{"↑ ↓ PgUp PgDn", t("Scroll")},
 		{"n · e · d", t("New request") + " · " + t("Note along the way") + " · " + t("Delete")},

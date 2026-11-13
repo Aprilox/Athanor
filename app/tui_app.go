@@ -216,7 +216,8 @@ type appTUI struct {
 
 	// For you, Team, GitHub, Settings (tui_pages2.go)
 	taches       []TacheUtilVue
-	selTache     int
+	selTache     int // approvals first, then the tasks (tui_approbations.go)
+	appr         *reponseApprTUI
 	agents       []Agent
 	selAgent     int
 	gh           *GitHubVue

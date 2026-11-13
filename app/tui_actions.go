@@ -135,6 +135,8 @@ func (a *appTUI) touche(ev evenementTUI) {
 		a.ouvrirFenetre()
 	case "M":
 		a.gererProjet()
+	case "!":
+		a.arretUrgenceTUI()
 	default:
 		a.touchePage(ev, k)
 	}
