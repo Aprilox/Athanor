@@ -85,6 +85,10 @@ func (s *Serveur) traiterBus(m MessageHub) MessageHub {
 		if !slices.Contains(actionsOrchestrateur[m.Vers], m.Action) {
 			return refusBus("action not allowed to the orchestrator")
 		}
+	case strings.HasPrefix(m.De, "client:"): // a paired hub (envoyer_bus): the Servers actions only, I6 below
+		if m.Vers != "servers" {
+			return refusBus("action not allowed to a client")
+		}
 	case de == nil:
 		return refusBus("unknown sender")
 	}
@@ -99,6 +103,8 @@ func (s *Serveur) traiterBus(m MessageHub) MessageHub {
 		if md.etat != "en_ligne" {
 			return refusBus("remote Athanor unreachable")
 		}
+	} else if strings.HasPrefix(m.De, "client:") {
+		// a server is no project: the client's grant of envoyer_bus is its access
 	} else if raison := s.accesBus(m); raison != "" {
 		return refusBus(raison)
 	}

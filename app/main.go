@@ -85,33 +85,16 @@ func main() {
 	s.routesInterface(mux)
 	s.demarrerDistance(mux) // remote access, as it was left (distance.go)
 
-	ecoute, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", config.Port))
+	ecoute, err := ecouterLocal(config.Port)
 	if err != nil {
-		if ecoute, err = net.Listen("tcp", "127.0.0.1:0"); err != nil {
-			log.Fatal(err)
-		}
+		log.Fatal(err)
 	}
 	url := "http://" + ecoute.Addr().String() + "/"
 	// the address alone opens nothing (only the windows Athanor opens can use it, acces.go)
 	if !terminal {
 		fmt.Println("Athanor is running (" + url + "). To open its window again, start Athanor again: the address alone does not open it. The pilots keep working even when this terminal is closed.")
 	}
-	// Only local names are accepted in the Host header: a web page pointing its own domain to
-	// 127.0.0.1 ("DNS rebinding") is refused before reaching anything.
-	port := ecoute.Addr().(*net.TCPAddr).Port
-	hotes := map[string]bool{fmt.Sprintf("127.0.0.1:%d", port): true, fmt.Sprintf("localhost:%d", port): true}
-	filtre := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !hotes[strings.ToLower(r.Host)] {
-			http.Error(w, "Forbidden", http.StatusForbidden)
-			return
-		}
-		w.Header().Set("X-Frame-Options", "DENY")
-		w.Header().Set("Referrer-Policy", "no-referrer")
-		mux.ServeHTTP(w, r)
-	})
-	srv := &http.Server{Handler: filtre, ReadHeaderTimeout: 10 * time.Second}
-	go func() { log.Fatal(srv.Serve(ecoute)) }()
-	time.Sleep(150 * time.Millisecond)
+	port := servirLocal(ecoute, mux)
 	lienApp = func() string { return s.lienOuverture(url) }
 	ecrireInstance(port)
 	pilotesAvantFermeture = func() []string { _, noms := s.pilotesNatifs(); return noms }
@@ -166,6 +149,35 @@ func main() {
 	s.fermetureNative()
 	effacerInstance()
 	remettreBureau()
+}
+
+// ecouterLocal: Athanor's API listens on 127.0.0.1 only (I7): the port asked, else a free one.
+func ecouterLocal(port int) (net.Listener, error) {
+	l, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+	if err != nil && port != 0 {
+		l, err = net.Listen("tcp", "127.0.0.1:0")
+	}
+	return l, err
+}
+
+// servirLocal: serves mux on ecoute and returns its port. Only local names are accepted in the Host header:
+// a web page pointing its own domain to 127.0.0.1 ("DNS rebinding") is refused before reaching anything.
+func servirLocal(ecoute net.Listener, mux http.Handler) int {
+	port := ecoute.Addr().(*net.TCPAddr).Port
+	hotes := map[string]bool{fmt.Sprintf("127.0.0.1:%d", port): true, fmt.Sprintf("localhost:%d", port): true}
+	filtre := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !hotes[strings.ToLower(r.Host)] {
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
+		}
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("Referrer-Policy", "no-referrer")
+		mux.ServeHTTP(w, r)
+	})
+	srv := &http.Server{Handler: filtre, ReadHeaderTimeout: 10 * time.Second}
+	go func() { log.Fatal(srv.Serve(ecoute)) }()
+	time.Sleep(150 * time.Millisecond)
+	return port
 }
 
 // lienApp: a single-use address of the interface, for a window opened now (acces.go).

@@ -36,6 +36,9 @@ type ClientMCP struct {
 // approval, launches a mission, reads a vault value or touches a server.
 var outilsClients = []string{"etat", "projets", "plan", "demandes", "ajouter_demande", "pilote", "missions", "proposer_mission", "approbations"}
 
+// outilsAthanor: granted to another Athanor only (a hub paired with a module, module_sans_fenetre.go).
+var outilsAthanor = []string{"serveurs", "taches_serveur", "envoyer_bus"}
+
 var sortesClients = []string{"desktop", "code", "athanor"}
 
 // pauseRefusClient: a wrong code waits this long (a variable for the tests).
@@ -244,7 +247,7 @@ func (s *Serveur) vueClients() map[string]any {
 		}
 	}
 	slices.SortFunc(demandes, func(a, b demandeClient) int { return int(a.Quand - b.Quand) })
-	v := map[string]any{"clients": liste, "demandes": demandes, "outils": outilsClients, "urgence": s.urgenceClients()}
+	v := map[string]any{"clients": liste, "demandes": demandes, "outils": outilsClients, "outils_athanor": outilsAthanor, "urgence": s.urgenceClients()}
 	if exe, err := os.Executable(); err == nil { // the command the snippets give to Claude Desktop and Claude Code
 		v["commande"] = exe
 	}
@@ -307,7 +310,7 @@ func (s *Serveur) perimetreClient(projets, outils []string) ([]string, []string,
 		return nil, nil, errors.New("Choose at least one tool.")
 	}
 	for _, o := range outils {
-		if !slices.Contains(outilsClients, o) {
+		if !slices.Contains(outilsClients, o) && !slices.Contains(outilsAthanor, o) {
 			return nil, nil, errors.New("Unknown tool: " + o)
 		}
 	}
@@ -351,6 +354,10 @@ func (s *Serveur) deciderClient(ref string, accepter bool, projets, outils []str
 		return errors.New("This request is no longer there (over 10 minutes old).")
 	}
 	nom := d.Nom
+	if accepter && d.Sorte != "athanor" && slices.ContainsFunc(outils, func(o string) bool { return slices.Contains(outilsAthanor, o) }) {
+		m.mu.Unlock()
+		return errors.New("The servers' tools are for another Athanor only.")
+	}
 	if !accepter {
 		d.etat = "refusee"
 		m.mu.Unlock()

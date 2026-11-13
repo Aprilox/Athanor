@@ -101,6 +101,9 @@ func (s *Serveur) apiInstance(w http.ResponseWriter, r *http.Request) {
 	switch r.PathValue("action") {
 	case "montrer":
 		demanderFenetre()
+	case "module-code", "module-demandes", "module-decider": // athanor module appairer (module_sans_fenetre.go)
+		s.apiInstanceModule(w, r)
+		return
 	case "urgence": // athanor arret-urgence
 		s.ecrireJSON(w, s.arretUrgence("terminal"))
 		return

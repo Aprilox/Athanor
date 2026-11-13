@@ -26,7 +26,7 @@ func TestMCPExterne(t *testing.T) {
 	sessionOrchestrateur = func(*Serveur, context.Context, string) error { return nil }
 	t.Cleanup(func() { sessionOrchestrateur = ancienne })
 
-	if !slices.Equal(slices.Sorted(maps.Keys(outilsExternes)), slices.Sorted(slices.Values(outilsClients))) {
+	if !slices.Equal(slices.Sorted(maps.Keys(outilsExternes)), slices.Sorted(slices.Values(append(append([]string{}, outilsClients...), outilsAthanor...)))) {
 		t.Fatal("the tools offered at pairing and the client tools differ")
 	}
 

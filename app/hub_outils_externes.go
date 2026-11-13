@@ -48,6 +48,82 @@ func init() {
 		Schema: objet(map[string]any{"phrase": texte("What you want done, in one sentence")}, "phrase"), Faire: outilClientProposerMission}
 	outilsExternes["approbations"] = OutilClient{Description: "The approvals waiting for the owner on the projects you may see. Only the owner decides, in Athanor's window or on a paired phone.",
 		Schema: objet(map[string]any{}), Faire: outilClientApprobations}
+	// another Athanor only (a hub paired with a module without a window, module_sans_fenetre.go)
+	serveur := texte("The server's id, as the serveurs tool lists it")
+	outilsExternes["serveurs"] = OutilClient{Description: "This Athanor's servers (Servers module): id, name, roles, state, last seen.",
+		Schema: objet(map[string]any{}), Faire: outilClientServeurs}
+	outilsExternes["taches_serveur"] = OutilClient{Description: "A server's tasks, newest first: id, text, state, dates, result.",
+		Schema: objet(map[string]any{"serveur": serveur}, "serveur"), Faire: outilClientTachesServeur}
+	outilsExternes["envoyer_bus"] = OutilClient{Description: "Ask the Servers module one of its declared actions (fiche, rafraichir_fiche) with donnees {serveur}. On a prod server the owner of this Athanor accepts first: the answer then says it waits.",
+		Schema: objet(map[string]any{"action": map[string]any{"type": "string", "enum": moduleServeurs{}.Actions()}, "donnees": map[string]any{"type": "object"}}, "action"), Faire: outilClientEnvoyerBus}
+}
+
+var errPasAthanor = errors.New("this tool is for another Athanor only")
+
+func outilClientServeurs(s *Serveur, c ClientMCP, args json.RawMessage) (string, error) {
+	if c.Sorte != "athanor" {
+		return "", errPasAthanor
+	}
+	if err := lireArguments(args, &struct{}{}); err != nil {
+		return "", err
+	}
+	l, err := lireServeurs()
+	if err != nil {
+		return "", err
+	}
+	vus := []map[string]any{}
+	for _, v := range l {
+		vus = append(vus, map[string]any{"id": v.ID, "nom": v.Nom, "roles": append([]string{}, v.Roles...), "etat": v.Etat, "vu": v.Vu})
+	}
+	return enJSON(map[string]any{"serveurs": vus}), nil
+}
+
+func outilClientTachesServeur(s *Serveur, c ClientMCP, args json.RawMessage) (string, error) {
+	var a struct {
+		Serveur string `json:"serveur"`
+	}
+	if c.Sorte != "athanor" {
+		return "", errPasAthanor
+	}
+	if err := lireArguments(args, &a); err != nil {
+		return "", err
+	}
+	l, err := lireServeurs()
+	if err != nil {
+		return "", err
+	}
+	if !idServeurValide.MatchString(a.Serveur) || !slices.ContainsFunc(l, func(v ServeurInventaire) bool { return v.ID == a.Serveur }) {
+		return "", errServeurInconnu
+	}
+	taches := []map[string]any{}
+	for _, t := range tachesServeur(a.Serveur) {
+		taches = append(taches, map[string]any{"id": t.ID, "texte": s.masquerSecrets(t.Texte), "etat": t.Etat, "cree": t.Cree, "fin": t.Fin, "resultat": s.masquerSecrets(t.Resultat)})
+	}
+	return enJSON(map[string]any{"taches": taches}), nil
+}
+
+// outilClientEnvoyerBus: through this Athanor's bus (I5 audit, I6 here: a prod server waits for its owner).
+func outilClientEnvoyerBus(s *Serveur, c ClientMCP, args json.RawMessage) (string, error) {
+	var a struct {
+		Action  string         `json:"action"`
+		Donnees map[string]any `json:"donnees"`
+	}
+	if c.Sorte != "athanor" {
+		return "", errPasAthanor
+	}
+	if err := lireArguments(args, &a); err != nil {
+		return "", err
+	}
+	m := MessageHub{De: "client:" + c.Nom, Vers: "servers", Action: a.Action, Donnees: a.Donnees}
+	if id, _ := a.Donnees["serveur"].(string); id != "" {
+		if l, err := lireServeurs(); err == nil {
+			if i := slices.IndexFunc(l, func(v ServeurInventaire) bool { return v.ID == id }); i >= 0 && slices.Contains(l[i].Roles, "prod") {
+				m.Env = "prod"
+			}
+		}
+	}
+	rep := s.envoyerBus(m)
+	return enJSON(map[string]any{"etat": rep.Etat, "raison": rep.Raison, "donnees": rep.Donnees}), nil
 }
 
 func tousProjets(c ClientMCP) bool { return slices.Contains(c.Projets, "*") }

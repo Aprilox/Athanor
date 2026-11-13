@@ -34,6 +34,9 @@ type Annonce struct {
 	Dossier string   `json:"dossier"`
 }
 
+// nomInstance: the name given by athanor module servers --nom (the host name otherwise).
+var nomInstance string
+
 func dossierAnnonces() string {
 	d, err := os.UserConfigDir()
 	if err != nil {
@@ -52,6 +55,9 @@ func fichierAnnonce() string { return filepath.Join(dossierAnnonces(), idInstanc
 
 func ecrireAnnonce(port int) {
 	nom, _ := os.Hostname()
+	if nomInstance != "" {
+		nom = nomInstance
+	}
 	a := Annonce{ID: idInstance(), Nom: nom, Version: versionAthanor, Port: port, PID: os.Getpid(), Dossier: dossierAthanor()}
 	for _, m := range modulesHub() {
 		a.Modules = append(a.Modules, m.ID())
