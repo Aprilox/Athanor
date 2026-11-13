@@ -664,7 +664,14 @@ func cheminHistorique(projet, env string) string {
 	return filepath.Join(dossierModule("servers"), "deploiements", projet+"-"+env+".json")
 }
 
+// historiqueDeploiements: under historiqueMu, a read during noterHistorique's rename fails on Windows (empty list).
 func historiqueDeploiements(projet, env string) []Deploiement {
+	historiqueMu.Lock()
+	defer historiqueMu.Unlock()
+	return lireHistorique(projet, env)
+}
+
+func lireHistorique(projet, env string) []Deploiement {
 	var l []Deploiement
 	lireJSONFichier(cheminHistorique(projet, env), &l)
 	return l
@@ -674,7 +681,7 @@ func historiqueDeploiements(projet, env string) []Deploiement {
 func noterHistorique(d Deploiement) error {
 	historiqueMu.Lock()
 	defer historiqueMu.Unlock()
-	l := historiqueDeploiements(d.Projet, d.Env)
+	l := lireHistorique(d.Projet, d.Env)
 	if i := slices.IndexFunc(l, func(x Deploiement) bool { return x.ID == d.ID }); i >= 0 {
 		l[i] = d
 	} else {
