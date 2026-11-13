@@ -219,30 +219,49 @@ func (s *Serveur) apiCreerMission(w http.ResponseWriter, r *http.Request) {
 		s.erreurMissionHTTP(w, err)
 		return
 	}
+	m, err := s.creerMission(phrase, mentions, deQui(r))
+	if n, occupe := err.(missionsOccupees); occupe {
+		s.erreurArgs(w, http.StatusTooManyRequests, "{0} missions are already being prepared: wait for one of their cards", strconv.Itoa(int(n)))
+		return
+	}
+	if err != nil {
+		s.erreur(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.ecrireJSON(w, map[string]any{"mission": m})
+}
+
+// missionsOccupees: that many orchestrators already prepare a card.
+type missionsOccupees int
+
+func (n missionsOccupees) Error() string {
+	return strconv.Itoa(int(n)) + " missions are already being prepared: wait for one of their cards"
+}
+
+// creerMission: a mission in preparation for phrase (checked by the caller) and its orchestrator's session; the
+// same sentence already being prepared gives that mission. qui goes to the audit log.
+func (s *Serveur) creerMission(phrase string, mentions MentionsMission, qui string) (Mission, error) {
 	verrouCreationMission.Lock()
 	defer verrouCreationMission.Unlock()
 	phrase = s.masquerSecrets(phrase)
 	l := lireMissions()
 	if i := slices.IndexFunc(l, func(m Mission) bool { return m.Etat == "preparation" && m.Phrase == phrase }); i >= 0 {
-		s.ecrireJSON(w, map[string]any{"mission": l[i]}) // the same sentence being prepared: that mission
-		return
+		return l[i], nil
 	}
 	orchestrateursEnCours.Lock()
 	occupes := len(orchestrateursEnCours.m)
 	orchestrateursEnCours.Unlock()
 	if occupes >= maxOrchestrateurs {
-		s.erreurArgs(w, http.StatusTooManyRequests, "{0} missions are already being prepared: wait for one of their cards", strconv.Itoa(occupes))
-		return
+		return Mission{}, missionsOccupees(occupes)
 	}
 	cree := time.Now().UTC().Format(formatCree)
 	m := Mission{ID: aleatoire(8), Phrase: phrase, Mentions: mentions, Etat: "preparation", Politique: "prod",
 		Voies: []VoieMission{}, Questions: []QuestionMission{}, Historique: []EvenementMission{{T: cree, Etat: "preparation"}}, Cree: cree}
 	if err := enregistrerMission(m); err != nil {
-		s.erreur(w, http.StatusInternalServerError, err.Error())
-		return
+		return Mission{}, err
 	}
-	s.ecrireAudit(LigneAudit{Type: "evenement", De: deQui(r), Vers: "missions", Projet: prefixeMission + m.ID, Mission: m.ID, Action: "mission créée"})
-	s.ecrireJSON(w, map[string]any{"mission": s.relancerOuEchec(m.ID, "")})
+	s.ecrireAudit(LigneAudit{Type: "evenement", De: qui, Vers: "missions", Projet: prefixeMission + m.ID, Mission: m.ID, Action: "mission créée"})
+	return s.relancerOuEchec(m.ID, ""), nil
 }
 
 // apiModifierMission: POST /api/missions/{id}/modifier {acces_decoches[]{entree, pour}, politique, envs, projet,

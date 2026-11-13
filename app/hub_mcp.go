@@ -1,8 +1,8 @@
 package main
 
 // The hub's MCP route (ARCHITECTURE.md, stage 4): POST /api/mcp, JSON-RPC (initialize, tools/list,
-// tools/call), outside garde. Only "Authorization: Bearer <session token>" opens it, and that token opens
-// nothing else; every call checks the token again (tool, scope, expiry) and goes to the audit log.
+// tools/call), outside garde. Only "Authorization: Bearer <session or client token>" opens it, and that token
+// opens nothing else (a client's tools: hub_outils_externes.go); every call checks the token again (tool, scope, expiry) and goes to the audit log.
 
 import (
 	"encoding/json"
@@ -45,10 +45,14 @@ type erreurMCP struct {
 func (s *Serveur) apiMCP(w http.ResponseWriter, r *http.Request) {
 	jeton, bearer := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
 	x, ok := SessionHub{}, false
+	client, estClient := ClientMCP{}, false
 	if bearer {
-		x, ok = s.verifierJeton(strings.TrimSpace(jeton))
+		jeton = strings.TrimSpace(jeton)
+		if x, ok = s.verifierJeton(jeton); !ok { // an external client's token (hub_clients.go), read again at each call
+			client, estClient = s.verifierClient(jeton)
+		}
 	}
-	if !ok {
+	if !ok && !estClient {
 		s.auditRefusMCP()
 		w.Header().Set("WWW-Authenticate", "Bearer")
 		repondreMCP(w, http.StatusUnauthorized, nil, nil, &erreurMCP{-32001, "invalid, expired or revoked session token"})
@@ -90,6 +94,10 @@ func (s *Serveur) apiMCP(w http.ResponseWriter, r *http.Request) {
 	case "ping":
 		repondreMCP(w, http.StatusOK, q.ID, map[string]any{}, nil)
 	case "tools/list":
+		if estClient {
+			repondreMCP(w, http.StatusOK, q.ID, map[string]any{"tools": outilsListeClient(client)}, nil)
+			return
+		}
 		outils := []map[string]any{}
 		for _, nom := range x.Outils {
 			if o, ok := outilsHub[nom]; ok {
@@ -98,6 +106,10 @@ func (s *Serveur) apiMCP(w http.ResponseWriter, r *http.Request) {
 		}
 		repondreMCP(w, http.StatusOK, q.ID, map[string]any{"tools": outils}, nil)
 	case "tools/call":
+		if estClient {
+			s.appelOutilClient(w, client, q)
+			return
+		}
 		s.appelOutilMCP(w, x, q)
 	default:
 		repondreMCP(w, http.StatusOK, q.ID, nil, &erreurMCP{-32601, "method not found: " + q.Method})

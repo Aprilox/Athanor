@@ -202,12 +202,22 @@ func TestMCPJetonsRefuses(t *testing.T) {
 	}
 }
 
-// TestMCPJetonAutresRoutes: a valid session token opens no other route of serveur.go.
+// TestMCPJetonAutresRoutes: a valid session token, or an external client's (M183), opens no other route of serveur.go.
 func TestMCPJetonAutresRoutes(t *testing.T) {
 	s, mux, _ := serveurMCPTest(t)
 	jeton, err := s.jetons.Creer("demo", outilsPilote)
 	if err != nil {
 		t.Fatal(err)
+	}
+	client := aleatoire(32)
+	_ = os.Remove(cheminClients())
+	t.Cleanup(func() { _ = os.Remove(cheminClients()) })
+	m := s.cli()
+	m.mu.Lock()
+	m.liste = append(m.liste, ClientMCP{ID: "c1", Nom: "Claude Code", Sorte: "code", Jeton: hacherJeton(client), Outils: outilsClients, Projets: []string{"*"}})
+	m.mu.Unlock()
+	if _, ok := s.verifierClient(client); !ok {
+		t.Fatal("test client not recognised")
 	}
 	src, err := os.ReadFile("serveur.go")
 	if err != nil {
@@ -224,12 +234,17 @@ func TestMCPJetonAutresRoutes(t *testing.T) {
 			vue = true
 			continue
 		}
-		r := httptest.NewRequest(m[1], "http://127.0.0.1"+joker.ReplaceAllString(m[2], "x"), strings.NewReader("{}"))
-		r.Header.Set("Authorization", "Bearer "+jeton)
-		w := httptest.NewRecorder()
-		mux.ServeHTTP(w, r)
-		if w.Code != http.StatusForbidden && w.Code != http.StatusUnauthorized {
-			t.Errorf("%s %s with a session token: %d", m[1], m[2], w.Code)
+		if strings.HasPrefix(m[2], "/api/mcp/appairer") { // public pairing (a code, never a token): "{}" is a bad request
+			continue
+		}
+		for sorte, j := range map[string]string{"session": jeton, "client": client} {
+			r := httptest.NewRequest(m[1], "http://127.0.0.1"+joker.ReplaceAllString(m[2], "x"), strings.NewReader("{}"))
+			r.Header.Set("Authorization", "Bearer "+j)
+			w := httptest.NewRecorder()
+			mux.ServeHTTP(w, r)
+			if w.Code != http.StatusForbidden && w.Code != http.StatusUnauthorized {
+				t.Errorf("%s %s with a %s token: %d", m[1], m[2], sorte, w.Code)
+			}
 		}
 	}
 	if !vue {

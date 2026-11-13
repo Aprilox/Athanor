@@ -363,12 +363,8 @@ func (s *Serveur) apiPilote(w http.ResponseWriter, r *http.Request) {
 	var err error
 	switch r.PathValue("action") {
 	case "demarrer":
-		marqueAuto(p, true)
-		cle, err := s.demarrerPilote(p)
+		cle, err := s.demarrerPiloteAuto(p)
 		if err != nil {
-			if err.Error() == texteLivreRienDeNeuf {
-				marqueAuto(p, false) // nothing to restart when the application starts
-			}
 			s.erreur(w, http.StatusInternalServerError, err.Error())
 			return
 		}
@@ -715,6 +711,16 @@ func (s *Serveur) demarrerPilote(p Projet) (string, error) {
 		return "", err
 	}
 	return "Pilot started: the first cycle (framing) takes a few minutes.", nil
+}
+
+// demarrerPiloteAuto: Start as the button does: the pilot also restarts with the application.
+func (s *Serveur) demarrerPiloteAuto(p Projet) (string, error) {
+	marqueAuto(p, true)
+	cle, err := s.demarrerPilote(p)
+	if err != nil && err.Error() == texteLivreRienDeNeuf {
+		marqueAuto(p, false) // nothing to restart when the application starts
+	}
+	return cle, err
 }
 
 // arreterPiloteProjet: stops the project's pilot now (the current cycle is interrupted).
