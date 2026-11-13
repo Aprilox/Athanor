@@ -51,7 +51,7 @@ type ToucheCarte struct {
 	DNS      []string `json:"dns"`
 	Zones    []string `json:"zones"`
 	Fichiers []string `json:"fichiers"`
-	Dossier  string   `json:"dossier,omitempty"` // the existing project's folder; "" for a new project
+	Dossier  string   `json:"dossier,omitempty"` // the project's folder (a new one: where it will be created)
 }
 
 // EstimationCarte: a range; Mesure false = no stats.tsv on this PC (25 min a cycle, cost unknown).
@@ -264,10 +264,10 @@ func calculerCarte(c CarteMission, politique string, x contexteCarte) CarteMissi
 	if !x.infraOuvert && slices.ContainsFunc(c.Acces, func(a AccesCarte) bool { return a.Portee == "infra" && !a.Decoche }) {
 		c.Approbations = append(c.Approbations, ApprobationPrevue{Type: "deverrouiller_coffre"})
 	}
-	if !c.Projet.Nouveau {
-		if i := slices.IndexFunc(x.projets, func(p Projet) bool { return p.Nom == c.Projet.Nom }); i >= 0 {
-			c.Touche.Dossier = x.projets[i].Dossier
-		}
+	if c.Projet.Nouveau {
+		c.Touche.Dossier = dossierProjetNeuf(c.Projet.Nom, x.projets) // where Lancer creates it, unless chosen on the PC
+	} else if i := slices.IndexFunc(x.projets, func(p Projet) bool { return p.Nom == c.Projet.Nom }); i >= 0 {
+		c.Touche.Dossier = x.projets[i].Dossier
 	}
 	if x.natif && (c.Serveurs.Brief != "" || len(c.Touche.Serveurs) > 0) {
 		c.AvertissementServeurs = errServeursNatif.Error()

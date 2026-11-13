@@ -154,7 +154,11 @@ func TestCalculerCarte(t *testing.T) {
 	}
 	c := calculerCarte(carte, "prod", x)
 	tc := c.Touche
-	if !slices.Equal(tc.Serveurs, []string{"vps-dev", "vps-prod"}) || !slices.Equal(tc.DNS, []string{"dev.martin.fr", "martin.fr"}) || !slices.Equal(tc.Zones, []string{"martin.fr"}) || tc.Dossier != "" {
+	neuf, _ := os.UserHomeDir() // a new project goes next to the last project (a Windows path is relative elsewhere)
+	if filepath.IsAbs(`C:\Dev\site`) {
+		neuf = `C:\Dev`
+	}
+	if !slices.Equal(tc.Serveurs, []string{"vps-dev", "vps-prod"}) || !slices.Equal(tc.DNS, []string{"dev.martin.fr", "martin.fr"}) || !slices.Equal(tc.Zones, []string{"martin.fr"}) || tc.Dossier != filepath.Join(neuf, "boulangerie-martin") {
 		t.Errorf("touched: %+v", tc)
 	}
 	for _, f := range []string{"/etc/caddy/sites/dev.martin.fr.caddy", "/etc/caddy/sites/martin.fr.caddy", "/srv/athanor/boulangerie-martin-dev", "/srv/athanor/boulangerie-martin-prod"} {

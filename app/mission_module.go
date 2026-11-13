@@ -12,13 +12,19 @@ func (moduleMissions) Pages() []PageModule {
 	return []PageModule{{Hash: "#missions", Ordre: 10, Icone: "missions", Libelle: "Missions"}}
 }
 
-// Elements: a mission whose orchestrator asks the owner a question is in the bell until it is answered.
+// Elements: a mission whose orchestrator asks the owner a question is in the bell until it is answered, as is a
+// launch that stopped.
 func (moduleMissions) Elements(*Serveur) []ElementHub {
 	var out []ElementHub
 	for _, m := range lireMissions() {
 		if q, ok := questionOuverte(m); ok && preparable(Mission{Etat: m.Etat}) == nil {
 			out = append(out, ElementHub{ID: m.ID, Titre: titreMission(m), Etat: "actif", Lien: "#missions",
 				Attente: &AttenteElement{Raison: "The orchestrator asks: {0}", Args: []any{q.Texte}, Page: "#missions", Cle: q.ID}})
+		}
+		// a launch stopped by a failed step (mission_lancer.go): its reason, until the owner dismisses it
+		if h := m.Historique; m.Etat == "echec" && len(h) > 1 && h[len(h)-2].Etat == "lancee" {
+			out = append(out, ElementHub{ID: m.ID, Titre: titreMission(m), Etat: "termine", Lien: "#missions",
+				Attente: &AttenteElement{Raison: "The launch of the mission stopped: {0}", Args: []any{h[len(h)-1].Detail}, Page: "#missions"}})
 		}
 	}
 	return out

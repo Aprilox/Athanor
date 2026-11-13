@@ -426,52 +426,53 @@ func (s *Serveur) apiAjouterProjet(w http.ResponseWriter, r *http.Request) {
 		s.erreur(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	c.Nom, c.Dossier = strings.TrimSpace(c.Nom), strings.TrimSpace(c.Dossier)
-	if !reNomProjet.MatchString(c.Nom) {
-		s.erreur(w, http.StatusBadRequest, "Invalid project name (letters, digits, spaces, dashes, 60 characters at most)")
+	p, code, err := s.ajouterProjet(c.Nom, c.Dossier, c.Demande, c.Rejoindre)
+	if err != nil {
+		s.erreur(w, code, err.Error())
 		return
 	}
-	if !filepath.IsAbs(c.Dossier) {
-		s.erreur(w, http.StatusBadRequest, "Give the full path of the development folder (e.g. D:\\Dev\\my-site)")
-		return
+	s.ecrireJSON(w, map[string]any{"message_key": "Project “{0}” added.", "args": []string{p.Nom}, "nom": p.Nom})
+}
+
+// ajouterProjet: a new project nom in folder brut (checked: absolute, not a system or kit folder, not another
+// project's), with demande as its first request when its workshop has none; it becomes the active project.
+// code: the HTTP answer of err. rejoindre: joining the computers of a project (a new or empty folder).
+func (s *Serveur) ajouterProjet(nom, brut, demande string, rejoindre bool) (Projet, int, error) {
+	nom, brut = strings.TrimSpace(nom), strings.TrimSpace(brut)
+	if !reNomProjet.MatchString(nom) {
+		return Projet{}, http.StatusBadRequest, errors.New("Invalid project name (letters, digits, spaces, dashes, 60 characters at most)")
 	}
-	dossier := cheminWindowsPropre(filepath.Clean(c.Dossier))
+	if !filepath.IsAbs(brut) {
+		return Projet{}, http.StatusBadRequest, errors.New("Give the full path of the development folder (e.g. D:\\Dev\\my-site)")
+	}
+	dossier := cheminWindowsPropre(filepath.Clean(brut))
 	if cle := dossierInterdit(dossier, s.kitCourant().Racine); cle != "" {
-		s.erreur(w, http.StatusBadRequest, cle)
-		return
+		return Projet{}, http.StatusBadRequest, errors.New(cle)
 	}
-	if c.Rejoindre {
-		if e, err := os.ReadDir(dossier); err == nil {
-			for _, x := range e {
-				if n := x.Name(); n != ".athanor" && n != ".DS_Store" && !strings.EqualFold(n, "desktop.ini") && !strings.EqualFold(n, "Thumbs.db") {
-					s.erreur(w, http.StatusBadRequest, "To join a project, choose a new or empty folder: the team's files arrive in it.")
-					return
-				}
-			}
+	if rejoindre {
+		if dossierAvecFichiers(dossier) {
+			return Projet{}, http.StatusBadRequest, errors.New("To join a project, choose a new or empty folder: the team's files arrive in it.")
 		}
-		c.Demande = ""
+		demande = ""
 	}
 	s.mu.Lock()
 	for _, p := range s.config.Projets {
-		if strings.EqualFold(p.Nom, c.Nom) || strings.EqualFold(filepath.Clean(p.Dossier), dossier) {
+		if strings.EqualFold(p.Nom, nom) || strings.EqualFold(filepath.Clean(p.Dossier), dossier) {
 			s.mu.Unlock()
-			s.erreur(w, http.StatusBadRequest, "A project with this name or folder already exists")
-			return
+			return Projet{}, http.StatusBadRequest, errors.New("A project with this name or folder already exists")
 		}
 	}
 	s.mu.Unlock()
 	if err := s.conflitProjets(dossier, ""); err != nil {
-		s.erreur(w, http.StatusBadRequest, err.Error())
-		return
+		return Projet{}, http.StatusBadRequest, err
 	}
-	p := Projet{Nom: c.Nom, Dossier: dossier}
+	p := Projet{Nom: nom, Dossier: dossier}
 	if err := os.MkdirAll(p.Atelier(), 0o755); err != nil {
-		s.erreur(w, http.StatusInternalServerError, "Cannot create the folder: "+err.Error())
-		return
+		return Projet{}, http.StatusInternalServerError, errors.New("Cannot create the folder: " + err.Error())
 	}
-	if strings.TrimSpace(c.Demande) != "" {
+	if strings.TrimSpace(demande) != "" {
 		if b, _ := os.ReadFile(p.Demande()); demandeVide(string(b)) {
-			_ = os.WriteFile(p.Demande(), []byte(s.texteDemande(c.Nom, c.Demande)), 0o644)
+			_ = os.WriteFile(p.Demande(), []byte(s.texteDemande(nom, demande)), 0o644)
 		}
 	}
 	s.mu.Lock()
@@ -481,11 +482,10 @@ func (s *Serveur) apiAjouterProjet(w http.ResponseWriter, r *http.Request) {
 	err := ecrireConfig(s.config)
 	s.mu.Unlock()
 	if err != nil {
-		s.erreur(w, http.StatusInternalServerError, err.Error())
-		return
+		return Projet{}, http.StatusInternalServerError, err
 	}
 	s.apresChangementProjets()
-	s.ecrireJSON(w, map[string]any{"message_key": "Project “{0}” added.", "args": []string{p.Nom}, "nom": p.Nom})
+	return p, 0, nil
 }
 
 // texteDemande composes the first request of a project (title, date, text, notes section).

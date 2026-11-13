@@ -124,23 +124,27 @@ func (s *Serveur) apiAjouterDemande(w http.ResponseWriter, r *http.Request) {
 	if strings.TrimSpace(c.Titre) == "" {
 		c.Titre = court(c.Texte, 50)
 	}
-	// First request of the project: it becomes THE request.
+	ou, f, err := s.ajouterDemande(p, c.Titre, c.Texte)
+	switch {
+	case err != nil:
+		s.erreur(w, http.StatusInternalServerError, err.Error())
+	case ou == "demande":
+		s.ecrireJSON(w, map[string]any{"message_key": "Request saved: all that is left is to start.", "ou": "demande"})
+	default:
+		s.ecrireJSON(w, map[string]any{"message_key": "Queued: {0}", "args": []string{f}, "ou": "attente", "fichier": filepath.Base(f)})
+	}
+}
+
+// ajouterDemande: texte becomes the project's request if it has none yet (ou "demande"), otherwise a request
+// queued in file f (ou "attente").
+func (s *Serveur) ajouterDemande(p Projet, titre, texte string) (ou, f string, err error) {
 	if b, _ := os.ReadFile(p.Demande()); demandeVide(string(b)) {
 		_ = os.MkdirAll(p.Atelier(), 0o755)
-		if err := os.WriteFile(p.Demande(), []byte(s.texteDemande(c.Titre, c.Texte)), 0o644); err != nil {
-			s.erreur(w, http.StatusInternalServerError, err.Error())
-			return
-		}
-		s.ecrireJSON(w, map[string]any{"message_key": "Request saved: all that is left is to start.", "ou": "demande"})
-		return
+		return "demande", "", os.WriteFile(p.Demande(), []byte(s.texteDemande(titre, texte)), 0o644)
 	}
-	texte := "# " + strings.TrimSpace(c.Titre) + "\n\n" + libelle(s.langue(), "demande_le") + " " + DateCourte() + ".\n\n" + strings.TrimSpace(c.Texte) + "\n"
-	f, err := p.AjouterDemande(c.Titre, texte)
-	if err != nil {
-		s.erreur(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	s.ecrireJSON(w, map[string]any{"message_key": "Queued: {0}", "args": []string{f}, "ou": "attente", "fichier": filepath.Base(f)})
+	texte = "# " + strings.TrimSpace(titre) + "\n\n" + libelle(s.langue(), "demande_le") + " " + DateCourte() + ".\n\n" + strings.TrimSpace(texte) + "\n"
+	f, err = p.AjouterDemande(titre, texte)
+	return "attente", f, err
 }
 
 func (s *Serveur) apiOrdreDemandes(w http.ResponseWriter, r *http.Request) {

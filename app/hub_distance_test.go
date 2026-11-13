@@ -95,6 +95,7 @@ func TestDistanceToutesRoutes(t *testing.T) {
 		{"POST", "/api/missions/x/modifier", false}, // changed, answered and cancelled from an unlocked device
 		{"POST", "/api/missions/x/repondre", false},
 		{"POST", "/api/missions/x/annuler", false},
+		{"POST", "/api/missions/x/lancer", false},
 		{"GET", "/api/missions/x/annuler", true},
 		{"POST", "/api/missions/x/supprimer", true}, // invented: refused by default
 		{"POST", "/api/missions/x/y/annuler", true},
