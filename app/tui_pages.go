@@ -477,6 +477,9 @@ func (a *appTUI) phrase() (string, string, couleurT) {
 		if v.Eco {
 			sous = append(sous, t("eco mode"))
 		}
+		if v.Rapide {
+			sous = append(sous, t("fast mode"))
+		}
 		if v.Contexte > 0 {
 			sous = append(sous, t("context {0} tokens", fmtTokensTUI(v.Contexte)))
 		}
@@ -583,12 +586,26 @@ func (a *appTUI) lignesMaintenant(l int) [][]segTUI {
 		r = append(r, []segTUI{{"N ", a.gras(p.accent, fond)}, {t("New project"), a.st(p.encre, fond)}})
 		return r
 	}
+	// what was changed while the pilot runs and that it has not taken yet (reglages_pris.go)
+	modesAttente, reglagesAttente := false, false
+	for _, x := range v.EnAttente {
+		modesAttente = modesAttente || x == "modes"
+		reglagesAttente = reglagesAttente || x == "reglages"
+	}
+	if modesAttente {
+		r = append(r, []segTUI{{"⏳ " + t("New working mode: taken at the end of this cycle"), a.st(p.attention, fond)}})
+	}
 	if v.ArretDemande != "" {
 		lib := t("Stop requested: end of cycle")
 		if v.ArretDemande == "relance" {
 			lib = t("Restart requested: end of cycle")
+			if reglagesAttente {
+				lib = t("Restart at the end of the cycle: new settings")
+			}
 		}
 		r = append(r, []segTUI{{"⏳ " + lib, a.st(p.attention, fond)}})
+	} else if reglagesAttente {
+		r = append(r, []segTUI{{"↻ " + t("New settings: restart after cycle"), a.st(p.attention, fond)}})
 	}
 	if v.PourVous > 0 {
 		texte("🙋 "+t("Claude needs you")+" · "+t("{0} task(s) on the For you page", v.PourVous), a.gras(p.attention, fond))

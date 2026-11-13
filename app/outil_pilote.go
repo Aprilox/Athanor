@@ -73,8 +73,12 @@ type pilote struct {
 	ecranImposs, ecranSignale                                    bool
 	ecranAvant                                                   map[string]string
 
-	cycle          int
-	debut          int64
+	cycle int
+	// the work time limit (MAX_HOURS): the time the pilot worked, kept in prive/travail; its waits (dormir)
+	// and the time it is stopped never count
+	travail        time.Duration
+	ticTravail     time.Time
+	sommeil        time.Duration
 	etatPhase      string
 	etatReprise    string
 	etatDebutCycle string
@@ -85,20 +89,27 @@ type pilote struct {
 	parallel       bool
 	parallelMax    int
 	eco            bool   // the eco mode (ECO=1 in .athanor/.env): every lever but the model and the effort set for the quota
-	optionsCycle   string // what the current cycle runs with, for stats.tsv: "ponytail,eco,rtk"
+	optionsCycle   string // what the current cycle runs with, for stats.tsv: "ponytail,eco,fast,rtk"
 	rtkBin         string // RTK, when Claude's commands go through it (its measures: mesureRTK)
 	ecoAnnonce     string // "1"/"0": the eco state last logged
-	bashMax        string // BASH_MAX_OUTPUT_LENGTH outside the eco mode
-	quotaOuvriers  bool
-	modeleVerif    string
-	verrouFichier  *os.File
-	pontCmd        *exec.Cmd
-	syncCmd        *exec.Cmd
-	ecranCmd       *exec.Cmd
-	arretCh        chan struct{}
-	arretOnce      sync.Once
-	enArret        atomic.Bool
-	battementStop  chan struct{}
+	rapide         bool   // the fast mode (FAST=1 in .athanor/.env): quick checks only, the whole verification at the end
+	rapideAnnonce  string // "1"/"0": the fast state last logged
+	refusRapide    int    // deliveries reopened by this run because the fast mode's verification was owed
+	// what this pilot read, told to the app in STATE.json (reglages_pris.go): the tool's settings at its start,
+	// the project's working modes at the start of its cycle
+	empreinteReglages string
+	modesLus          string
+	bashMax           string // BASH_MAX_OUTPUT_LENGTH outside the eco mode
+	quotaOuvriers     bool
+	modeleVerif       string
+	verrouFichier     *os.File
+	pontCmd           *exec.Cmd
+	syncCmd           *exec.Cmd
+	ecranCmd          *exec.Cmd
+	arretCh           chan struct{}
+	arretOnce         sync.Once
+	enArret           atomic.Bool
+	battementStop     chan struct{}
 	// several computers on the project (pcs_pilote.go): the milestone this computer took, its team
 	jalonPC     *Jalon
 	equipePC    *equipePC
@@ -339,6 +350,8 @@ func (p *pilote) statut(etat string) {
 	o.mettre("debut_cycle", p.etatDebutCycle)
 	o.mettre("ouvriers", p.etatOuvriers)
 	o.mettre("demandes_en_attente", attente)
+	o.mettre("reglages", p.empreinteReglages)
+	o.mettre("modes", p.modesLus)
 	var b bytes.Buffer
 	enc := json.NewEncoder(&b)
 	enc.SetEscapeHTML(false)
@@ -400,7 +413,7 @@ func (p *pilote) prochaineDemande() bool {
 	plan := filepath.Join(p.etat, "PLAN.md")
 	if _, err := os.Stat(plan); err == nil {
 		if pf, err := os.OpenFile(plan, os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
-			_, _ = fmt.Fprintf(pf, "\n- [ ] Resume: new request %q (\"Next request\" section of .athanor/REQUEST.md)\n  - Re-read this request, turn it into verifiable milestones appended to this plan, the last one being a new delivery (.athanor/FINAL_REPORT.md with STATUS: DONE).\n", nom)
+			_, _ = fmt.Fprintf(pf, "\n- [ ] Resume: new request %q (\"Next request\" section of .athanor/REQUEST.md)\n  - Re-read this request, turn it into verifiable milestones appended to this plan (cut into stages if it is too large for 25 milestones, as .athanor/guides/FRAMING.md says), the last one being a new delivery (.athanor/FINAL_REPORT.md with STATUS: DONE).\n", nom)
 			pf.Close()
 		}
 	}
@@ -525,6 +538,8 @@ func (p *pilote) enregistrerStats(f, etat, etiquette, depot string) {
 // dormir: the pilot waits; true when the wait was cut short by a new connection to Claude put in Settings
 // (read every few seconds: the quota, the key or the budget it waited for may be another account's now).
 func (p *pilote) dormir(secondes int) bool {
+	debutSommeil := time.Now()
+	defer func() { p.sommeil += time.Since(debutSommeil) }() // a wait is never work (compterTravail)
 	s := secondes * p.secondsPerMinute / 60
 	var d time.Duration
 	if s > 0 {
@@ -722,7 +737,6 @@ func (p *pilote) attendreUtilisateur() {
 	p.log(fmt.Sprintf("Waiting for you: %d task(s) on the For you page. The pilot resumes as soon as you answer one.", pv))
 	p.etatPhase = "attente_vous"
 	p.statut(fmt.Sprintf("Waiting for you (%d task(s))", pv))
-	debutAttente := time.Now().Unix()
 	shaDemande := func() string {
 		b, err := os.ReadFile(filepath.Join(p.etat, "REQUEST.md"))
 		if err != nil {
@@ -753,9 +767,7 @@ func (p *pilote) attendreUtilisateur() {
 			p.statut(fmt.Sprintf("Waiting for you (%d task(s))", pv))
 		}
 	}
-	_ = os.Remove(fWait)
-	p.debut += time.Now().Unix() - debutAttente
-	_ = os.WriteFile(filepath.Join(p.prive, "debut"), []byte(strconv.FormatInt(p.debut, 10)+"\n"), 0o644)
+	_ = os.Remove(fWait) // the wait went through dormir: it is not counted as work
 	if _, err := os.Stat(fStop); err != nil {
 		p.log("Resuming: an answer arrived (or the request changed).")
 	}

@@ -33,10 +33,11 @@ function titreJalon(texte) {
 // A milestone: one line with its title; a click opens the details (files, dependencies, acceptance,
 // notes) and the actions (move, remove) that edit PLAN.md. `etat.ouverts` remembers which are open.
 function rendreJalon(j, etatJalon, compact) {
-  const ico = j.fait ? "✔" : etatJalon === "en-cours" ? "▶" : "○";
+  const ico = j.fait ? "✔" : etatJalon === "en-cours" ? "▶" : j.etape ? "◆" : "○";
   const cle = "jalon:" + (j.id || j.titre), ouvert = etat.ouverts.has(cle);
   const peutEditer = !j.fait && !(etatJalon === "en-cours" && etat.vue && etat.vue.actif); // "next up" while stopped is still editable
   const details = ouvert ? `<div class="jalon-details">
+      ${j.etape && !j.fait ? `<div class="muet">${t("Next stage: planned in detail when the previous one is done.")}</div>` : ""}
       ${j.detail ? `<div>${md(j.detail)}</div>` : ""}
       ${j.fichiers ? `<div><span class="muet">${t("Files")}</span> <code>${h(j.fichiers)}</code></div>` : ""}
       ${j.depend && j.depend.length ? `<div><span class="muet">${t("Depends on")}</span> ${j.depend.map((d) => `<code>${h(d)}</code>`).join(" ")}</div>` : ""}
@@ -46,8 +47,11 @@ function rendreJalon(j, etatJalon, compact) {
         ${peutEditer ? `<button class="btn btn-petit" data-jalon="${h(j.id)}" data-jalon-action="monter" title="${h(t("Move up"))}">↑</button><button class="btn btn-petit" data-jalon="${h(j.id)}" data-jalon-action="descendre" title="${h(t("Move down"))}">↓</button><button class="btn btn-petit btn-danger" data-jalon="${h(j.id)}" data-jalon-action="retirer">${t("Remove from the plan")}</button>` : `<span class="muet petit">${j.fait ? t("Done: it stays in the plan.") : t("Being built: stop after the cycle to change it.")}</span>`}
       </div>` : ""}
     </div>` : "";
-  return `${j.vague ? `<li class="vague">${h(j.vague)}</li>` : ""}<li class="${etatJalon} ${ouvert ? "ouvert" : ""}" data-jalon-cle="${h(cle)}"><span class="jalon-ico">${ico}</span><div class="jalon-corps"><div class="jalon-titre">${md(j.titre)}<span class="jalon-chevron">${ouvert ? "▾" : "▸"}</span></div>${details}</div></li>`;
+  return `${j.vague ? `<li class="vague">${h(j.vague)}</li>` : ""}<li class="${etatJalon} ${ouvert ? "ouvert" : ""}${j.etape ? " etape" : ""}" data-jalon-cle="${h(cle)}"><span class="jalon-ico">${ico}</span><div class="jalon-corps"><div class="jalon-titre">${md(j.titre)}<span class="jalon-chevron">${ouvert ? "▾" : "▸"}</span></div>${details}</div></li>`;
 }
+
+// A plan in stages (a large request): "Stage 2/5 · " before its progress, from the project's view.
+const texteEtape = (x) => x && x.etapes ? t("Stage {0}/{1}", [x.etape, x.etapes]) + " · " : "";
 
 // The plan's list: the milestones the pilot archived (done long ago) are folded into one line that opens them.
 function listePlan(plan, compact) {
@@ -471,7 +475,7 @@ async function annoncerFins(v) {
   finsAnnoncees.add(p.nom + "|" + p.fin.cle);
   const livre = p.fin.livre || /^DONE/.test(p.fin.message || "");
   const texte = livre ? t("The deliverable and the final report are in the project folder.")
-    : /^Maximum duration reached/.test(p.fin.message || "") ? t("It reached the maximum duration (MAX_HOURS in the settings). The work in progress is in the project folder; start it again to go on.")
+    : /^Maximum duration reached/.test(p.fin.message || "") ? t("It reached its work time limit (in Settings, or in Manage › Working mode for this project). The work in progress is in the project folder: raise the limit or choose Unlimited, then start it again.")
     : t(p.fin.message || "");
   const ouvrir = await confirmer(texte, { titre: livre ? t("“{0}” is finished", [p.nom]) : t("The pilot of “{0}” has stopped", [p.nom]), ok: t("Open the folder"), annuler: t("Close") });
   await api("fin-vue?p=" + encodeURIComponent(p.nom), "POST", { cle: p.fin.cle }).catch(() => {});
@@ -590,7 +594,7 @@ function phraseEtat(v) {
   switch (e.phase) {
     // the pilot has just stopped (its last heartbeat is still recent): same wording as a stopped pilot
     case "arrete": return { classe: "", titre: t("Pilot stopped"), sous: e.dernier_commit ? t("Last saved work: {0}", [e.dernier_commit]) : t("Click Start to resume.") };
-    case "travail": return { classe: "travaille", titre: e.ouvriers ? t("{0} workers in parallel: {1}", [e.ouvriers.split(/\s+/).length, e.ouvriers.split(/\s+/).join(", ")]) : /^Merging/.test(e.etat || "") ? t("The lead merges the workers' branches") : e.jalon_en_cours ? t("Claude is working on {0}", [titreJalon(e.jalon_en_cours)]) : t("Claude is working"), sous: [e.debut_cycle && t("for {0}", [depuis(e.debut_cycle)]), t("cycle {0}", [e.cycle]), e.template, v.eco && t("eco mode"), v.contexte && t("context {0} tokens", [fmtTokens(v.contexte)])].filter(Boolean).join(" · ") };
+    case "travail": return { classe: "travaille", titre: e.ouvriers ? t("{0} workers in parallel: {1}", [e.ouvriers.split(/\s+/).length, e.ouvriers.split(/\s+/).join(", ")]) : /^Merging/.test(e.etat || "") ? t("The lead merges the workers' branches") : e.jalon_en_cours ? t("Claude is working on {0}", [titreJalon(e.jalon_en_cours)]) : t("Claude is working"), sous: [e.debut_cycle && t("for {0}", [depuis(e.debut_cycle)]), t("cycle {0}", [e.cycle]), e.template, v.eco && t("eco mode"), v.rapide && t("fast mode"), v.contexte && t("context {0} tokens", [fmtTokens(v.contexte)])].filter(Boolean).join(" · ") };
     case "quota": return { classe: "quota", titre: t("Usage limit reached, Claude is waiting"), sous: t("Resumes {0} · cycle {1}", [e.reprise_prevue || t("as soon as possible"), e.cycle]) };
     case "budget": return { classe: "quota", titre: t("API budget or credit used up, Claude is waiting"), sous: t("Raise the budget, count again (API spend, below) or put another API key in Settings: the pilot resumes at once.") };
     case "attente_vous": return { classe: "quota", titre: t("Claude is waiting for you"), sous: t("{0} task(s) on the For you page: the pilot resumes as soon as you answer one.", [v.pour_vous || 0]) };
@@ -892,8 +896,14 @@ function rendreBandeau(v) {
   if (v.projet && !global && v.projet.acces) boutons.push(blocAccesDemarrer(v.projet.acces, v.distant));
   if (v.kit_valide && v.projet && !global) {
     if (v.actif) {
+      // what was changed while this pilot runs and that it has not taken yet (en_attente, from what the pilot
+      // itself says it read): the working mode at its next cycle, the settings when it restarts (asked by
+      // the app for the end of the cycle; cancelled, a button asks it again)
+      const attente = v.en_attente || [];
+      if (attente.includes("modes")) boutons.push(`<span class="btn btn-attente inerte" title="${h(t("The pilot reads the working mode when a cycle starts: the cycle under way keeps the one it started with."))}">⏳ ${t("New working mode: taken at the end of this cycle")}</span>`);
+      if (attente.includes("reglages") && !v.arret_demande) boutons.push(`<button class="btn btn-attente" data-act="redemarrer-apres-cycle" title="${h(t("The pilot runs with the settings it started with. Click to restart it at the end of this cycle."))}">↻ ${t("New settings: restart after cycle")}</button>`);
       // a stop asked for the end of the cycle: the button says it, and a click withdraws it
-      if (v.arret_demande) boutons.push(`<button class="btn btn-attente" data-arret="annuler" title="${h(t("Click to cancel: the pilot then goes on after this cycle."))}">⏳ ${v.arret_demande === "relance" ? t("Restart requested: end of cycle") : t("Stop requested: end of cycle")}</button>`);
+      if (v.arret_demande) boutons.push(`<button class="btn btn-attente" data-arret="annuler" title="${h(t("Click to cancel: the pilot then goes on after this cycle."))}">⏳ ${v.arret_demande === "relance" ? t(attente.includes("reglages") ? "Restart at the end of the cycle: new settings" : "Restart requested: end of cycle") : t("Stop requested: end of cycle")}</button>`);
       else boutons.push(`<button class="btn" data-act="arreter-apres-cycle" title="${h(t("Finishes the current milestone, saves it, then stops. Nothing is lost."))}">${t("Stop after cycle")}</button>`);
       boutons.push(`<button class="btn btn-danger" data-act="arreter" title="${h(t("Cuts the current cycle: unsaved work will be redone."))}">${t("Stop now")}</button>`);
     } else {
@@ -1329,32 +1339,69 @@ $("#visite").addEventListener("click", (ev) => {
 });
 document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && etat.visite >= 0 && !$("#visite").hidden) finirVisite(); });
 
-// --- working mode of the project (serial lead, or parallel workers + merge)
+// --- working mode of the project: the parallel, eco and fast modes (independent switches), the framing time
+// box and the work time limit. The same block serves Manage and New project (there on etat.npMode, sent once
+// the project exists).
 async function rendreMode() {
-  const m = await api("mode").catch(() => null); if (!m) return "";
+  const m = await api("mode").catch(() => null);
+  return m ? blocMode(m) : "";
+}
+// the "i" of a mode: what it does (the line beside its switch stays short)
+const NOMS_MODES = { PARALLEL: "Parallel mode", ECO: "Eco mode", FAST: "Fast mode" };
+const DETAILS_MODES = {
+  PARALLEL: ["The lead writes a fine-grained plan with dependencies. Workers build independent milestones at the same time, each in its own git working copy; the pilot merges each one as soon as it finishes and starts the next.", "Much faster on a project that splits well; it uses more quota (one session per worker). It starts with 2 workers and adds one each time a worker delivers, up to the maximum you choose.", "With the eco mode, every worker reads and prints less. With the fast mode, only quick checks follow the merges. Applies from the next cycle."],
+  ECO: ["Every lever but the model and the effort is set for the quota: the lead does the work itself instead of handing it to sub-agents (they use most of the quota), at most 4 images per cycle, shorter command outputs.", "The critic and the tester run once, at the delivery. Slower to polish, much lighter on the quota.", "With the parallel mode, the workers follow the same rules. Applies from the next cycle."],
+  FAST: ["Speed first: at each milestone, Claude runs only the quick check on what it just built, then moves on. No full check, no tester and no critic on the way.", "While the project is being built, it may be buggy, unpolished or badly finished: the defects seen on the way are noted, and fixed at once only when they block what comes next.", "At the end of the project, everything is verified again and fixed: the full check, the tester and the critic on the whole project, then every defect found, until nothing is left. The delivery is as finished as without this mode.", "The last milestone is therefore longer: it carries the verification of the whole project. The pilot refuses a delivery made without it.", "Switched off on the way: what was built in the fast mode is verified as a whole first. Applies from the next cycle."],
+};
+const boutonMode = (cle) => `<button type="button" class="chat-info" data-detail-mode="${cle}" title="${h(t("What this mode does"))}" aria-label="${h(t("What this mode does"))}">i</button>`;
+function detailMode(cle) {
+  return choisir((DETAILS_MODES[cle] || []).map((l) => "• " + t(l)).join("\n"), [{ id: "ok", texte: t("OK"), primaire: true }], { titre: t(NOMS_MODES[cle] || cle) });
+}
+function blocMode(m) {
   etat.modeMax = m.parallele_max;
-  // one line per mode, under each other: the long explanations are in the tooltips
-  const long = t("the lead writes a fine-grained plan with dependencies; workers build independent milestones at the same time, each in its own git working copy; the pilot merges each one as soon as it finishes and starts the next, and the lead verifies and fixes. Much faster; uses more quota (one session per worker).");
-  const longEco = t("Every lever but the model and the effort is set for the quota: the lead does the work itself instead of handing it to sub-agents (they use most of the quota), the critic and the tester run once, at delivery, at most 4 images per cycle, shorter command outputs. Slower to polish, much lighter on the quota. Applies from the next cycle.");
+  const ligne = (id, cle, actif, court) => `<div class="ligne m0 mode-suite">
+    <label class="interrupteur m0"><input type="checkbox" id="${id}" ${actif ? "checked" : ""}><span><b>${t(NOMS_MODES[cle])}</b></span></label>${boutonMode(cle)}
+    <span class="muet petit">${court}</span>`;
   return `<div class="bloc mode-ligne"><div class="mode-grille">
     <h2 class="m0">${t("Working mode")}</h2>
-    <div class="ligne m0">
-    <label class="interrupteur m0" title="${h(long)}"><input type="checkbox" id="md-parallele" ${m.parallele ? "checked" : ""}><span><b>${t("Parallel mode")}</b></span></label>
-    <span class="muet petit" title="${h(long)}">${m.parallele ? t("several workers at once: faster, uses more quota") : t("one milestone at a time; parallel: several workers at once, faster, more quota")}</span>
+    ${ligne("md-parallele", "PARALLEL", m.parallele, m.parallele ? t("several workers at once: faster, uses more quota") : t("one milestone at a time; parallel: several workers at once, faster, more quota"))}
     ${m.parallele ? `<span class="espace"></span><span class="petit" title="${h(t("Starts with 2, adds one each time a worker delivers, and starts no more once the quota is met. Applies from the next cycle."))}">${t("Workers at most")}</span><div class="choix m0">${[2, 3, 4, 6, 8, 10].map((n) => `<button type="button" data-max="${n}" class="${m.parallele_max === n ? "actif" : ""}">${n}</button>`).join("")}</div>` : ""}
     </div>
-    <div class="ligne m0 mode-suite">
-    <label class="interrupteur m0" title="${h(longEco)}"><input type="checkbox" id="md-eco" ${m.eco ? "checked" : ""}><span><b>${t("Eco mode")}</b></span></label>
-    <span class="muet petit" title="${h(longEco)}">${m.eco ? t("the quota first: the lead works alone, one review at delivery, few images, short outputs") : t("spends as little quota as possible; never together with the parallel mode")}</span>
+    ${ligne("md-eco", "ECO", m.eco, m.eco ? t("the quota first: the lead works alone, one review at delivery, few images, short outputs") : t("spends as little quota as possible"))}
     </div>
     ${m.eco ? `<p class="muet petit m0 mode-suite">${t("To save even more: a smaller model for the lead (Sonnet) and a lower thinking effort (medium or low), in Settings.")}</p>` : ""}
+    ${ligne("md-rapide", "FAST", m.rapide, m.rapide ? t("speed first: quick checks at each milestone, everything verified and fixed at the end") : t("builds as fast as possible; everything is verified and fixed at the end"))}
+    </div>
+    ${m.rapide ? `<p class="attention petit m0 mode-suite">${t("Until the end, the project may be buggy or badly finished. The last milestone is longer: it verifies and fixes the whole project.")}</p>` : ""}
+    <p class="muet petit m0 mode-suite">${t("The three modes add up: switch on the ones you want.")}</p>
+    <div class="ligne m0 mode-suite">
+    <span class="petit"><b>${t("Longest framing")}</b>${boutonDetail("FRAMING_MAX_MIN")}</span>
+    <span class="muet petit">${t("the first cycle, which writes the plan")}</span>
+    <span class="espace"></span><div class="choix m0">${[0, 25, 45, 60, 90].map((n) => `<button type="button" data-cadrage="${n}" class="${(m.cadrage_max || 0) === n ? "actif" : ""}">${n ? t("{0} min", [n]) : m.cadrage_global ? t("Like Settings ({0} min)", [m.cadrage_global]) : t("Like Settings (no limit)")}</button>`).join("")}</div>
+    <input type="number" id="md-cadrage" class="cadrage-autre" min="10" max="240" inputmode="numeric" value="${m.cadrage_max && ![25, 45, 60, 90].includes(m.cadrage_max) ? m.cadrage_max : ""}" placeholder="${h(t("Other (min)"))}" aria-label="${h(t("Other (min)"))}" title="${h(t("Other (min)"))}">
+    </div>
+    <div class="ligne m0 mode-suite">
+    <span class="petit"><b>${t("Work time limit")}</b>${boutonDetail("MAX_HOURS")}</span>
+    <span class="muet petit">${t("only the time the pilot works counts")}</span>
+    <span class="espace"></span><div class="choix m0">${[-1, 72, 168, 336, 720, 0].map((n) => `<button type="button" data-duree-max="${n}" class="${(m.duree_max ?? -1) === n ? "actif" : ""}">${n >= 0 ? libelleDuree(n) : m.duree_max_global ? t("Like Settings ({0} h)", [m.duree_max_global]) : t("Like Settings (unlimited)")}</button>`).join("")}</div>
+    <input type="number" id="md-duree-max" class="cadrage-autre" min="1" max="87600" inputmode="numeric" value="${m.duree_max > 0 && ![72, 168, 336, 720].includes(m.duree_max) ? m.duree_max : ""}" placeholder="${h(t("Other (h)"))}" aria-label="${h(t("Other (h)"))}" title="${h(t("Other (h)"))}">
+    </div>
   </div></div>`;
 }
-async function enregistrerMode(parallele, max, eco) {
-  const r = await action(api("mode", "POST", { parallele, parallele_max: max, eco: !!eco }));
+// changerMode: the block as it is on the page, with one change. changement: { parallele, parallele_max, eco,
+// rapide, cadrage_max (0: back to Settings), duree_max (0: unlimited, -1: back to Settings) }; what is left
+// out stays as it is. On New project nothing is sent yet: the choice waits in etat.npMode for the creation.
+async function changerMode(changement) {
+  const corps = { parallele: $("#md-parallele").checked, parallele_max: maxModeActif(), eco: $("#md-eco").checked, rapide: $("#md-rapide").checked, ...changement };
+  if (etat.page === "nouveau") {
+    Object.assign(etat.npMode, corps);
+    const zone = $("#np-mode"); if (zone) zone.innerHTML = blocMode(etat.npMode);
+    return;
+  }
+  const r = await action(api("mode", "POST", corps));
   if (r) rendrePage();
 }
-function maxModeActif() { const actif = $("#page .mode-ligne .choix button.actif"); return actif ? Number(actif.dataset.max) : etat.modeMax || 3; }
+function maxModeActif() { const actif = $("#page .mode-ligne .choix button.actif[data-max]"); return actif ? Number(actif.dataset.max) : etat.modeMax || 3; }
 
 // --- chat with Claude about the project (api_chat.go): by default Claude reads and answers, a change becomes
 // a note for the pilot; with "change the files" ticked, Claude changes them (Athanor commits them), after the
@@ -1805,7 +1852,7 @@ function ligneElement(e, modules) {
     <div class="cp-tete"><span class="dot ${classe}" aria-hidden="true"></span><b class="cp-nom">${h(e.titre)}</b><span class="pastille-module"><span class="ico ico-${h(m.id)}" aria-hidden="true"></span>${h(t(m.nom))}</span></div>
     <div class="el-etat petit">${e.attente ? `<span class="cp-besoin">${t("Needs you")}</span> <span>${h(t(e.attente.raison, (e.attente.args || []).map(texteMessage)))}</span>` : `<span class="muet">${t(libelle)}</span>`}</div>
     ${act ? `<div class="cp-jalon petit" title="${h(act)}">${h(act)}</div>` : ""}
-    ${a && a.total ? `<div class="barre"><i style="width:${(a.fait / a.total) * 100}%"></i></div>` : ""}${a && a.texte ? `<div class="muet petit">${h(t(a.texte, [a.fait, a.total]))}</div>` : ""}
+    ${a && a.total ? `<div class="barre"><i style="width:${(a.fait / a.total) * 100}%"></i></div>` : ""}${a && a.texte ? `<div class="muet petit">${a.total ? texteEtape({ etape: a.etape_plan, etapes: a.etapes_plan }) : ""}${h(t(a.texte, [a.fait, a.total]))}</div>` : ""}
   </a>`;
 }
 pages.global = async () => {
@@ -2107,7 +2154,7 @@ pages.suivi = async () => {
     </div>
     ${v.depense ? rendreDepense(v.depense) : rendreQuota(v.quota, v.quota_arret)}</div>
     <div class="bloc bloc-plan"><div class="bloc-tete"><h2>${t("Project plan")}</h2>${plan.length ? boutonDefil("plan") : ""}</div>
-      ${plan.length ? `<div class="barre"><i style="width:${(faits / plan.length) * 100}%"></i></div><div class="muet petit">${t("{0} / {1} milestones done", [faits, plan.length])}</div>
+      ${plan.length ? `<div class="barre"><i style="width:${(faits / plan.length) * 100}%"></i></div><div class="muet petit">${texteEtape(v.projet)}${t("{0} / {1} milestones done", [faits, plan.length])}</div>
       <ul class="plan">${listePlan(plan, false)}</ul>`
         : `<div class="vide">${t("No plan yet: Claude writes it during the first cycle (framing).")}</div>`}
     </div>
@@ -2725,8 +2772,14 @@ function formulaireRejoindre() {
     </div>`;
 }
 const ongletsNouveau = () => `<div class="onglets"><button class="${etat.npRejoindre ? "" : "actif"}" data-np-mode="nouveau">${t("New project")}</button><button class="${etat.npRejoindre ? "actif" : ""}" data-np-mode="rejoindre">${t("Join a project")}</button></div>`;
-pages.nouveau = async () => { connexionConnueGH(); return pageNouveau(); };
-const pageNouveau = () => `${ongletsNouveau()}<div class="page-etroite">
+// the project's settings beside the form (the block of Manage › Working mode): chosen here, sent once the
+// project exists
+pages.nouveau = async () => {
+  connexionConnueGH();
+  if (!etat.npMode) { const m = await api("mode?defaut=1").catch(() => null); if (m) etat.npMode = { ...m, duree_max: -1 }; }
+  return pageNouveau();
+};
+const pageNouveau = () => `${ongletsNouveau()}<div class="${etat.npRejoindre || !etat.npMode ? "page-etroite" : "np-colonnes"}">
     ${etat.npRejoindre ? formulaireRejoindre() : `<div class="bloc"><h2>${t("New project")}</h2>
       <p class="intro petit">${t("A project = a development folder, anywhere on the PC (existing or new). The tool only adds a .athanor subfolder (request, plan, log, checks): delete it at the end and the project is clean.")}</p>
       <label class="champ"><span>${t("Name")}</span><input type="text" id="np-nom" placeholder="${h(t("e.g. watch-store"))}"></label>
@@ -2736,7 +2789,7 @@ const pageNouveau = () => `${ongletsNouveau()}<div class="page-etroite">
       ${zonePieces("np")}
       <div class="champ gh-nouveau"><span>GitHub</span>${choixGitHub("np", nomDepot(""))}</div>
       <button class="btn btn-primaire" id="np-creer">${t("Create the project")}</button>
-    </div>`}
+    </div>${etat.npMode ? `<div class="np-reglages"><p class="muet petit m0">${t("This project's settings: you can change them later in Manage.")}</p><div id="np-mode">${blocMode(etat.npMode)}</div></div>` : ""}`}
   </div>`;
 
 // champDossier: a folder field with its Browse… button (the system's dialog, or Athanor's picker)
@@ -3878,13 +3931,40 @@ const REGLAGES = {
   FRAMING_MODEL: ["modeles", "Model of the framing"], WORKER_MODEL: ["modeles", "Model of the parallel workers"],
   SUBAGENT_MODEL: ["modeles", "Model of the sub-agents"], CHEAP_MODEL: ["modeles", "Cheap model"], EFFORT: ["modeles", "Thinking effort"],
   CLOSE_AFTER_MILESTONE: ["marche", "One milestone per cycle"], RELAY_CONTEXT_K: ["marche", "Fresh session beyond"],
-  MAX_HOURS: ["marche", "Safety stop after"], CYCLE_MAX_MIN: ["marche", "Longest cycle"], IDLE_MAX_MIN: ["marche", "Silent cycle stopped after"],
+  MAX_HOURS: ["marche", "Work time limit"], CYCLE_MAX_MIN: ["marche", "Longest cycle"], IDLE_MAX_MIN: ["marche", "Silent cycle stopped after"],
   FRAMING_MAX_MIN: ["marche", "Longest framing"], RTK: ["marche", "Compressed command outputs"], PONYTAIL: ["marche", "Simplest code (Ponytail)"],
   KEEP_AWAKE: ["marche", "Keep the PC awake"],
   LANGUAGE: ["avance", "Language of Claude's documents"], TZ: ["avance", "Time zone of the logs"],
   QUOTA_WAIT_MIN: ["avance", "Wait when the quota's end is unknown"], ERROR_WAIT_MIN: ["avance", "Wait after an error"],
 };
 const GROUPES_REGLAGES = [["connexion", "Connection"], ["modeles", "Models"], ["marche", "How the pilot works"]];
+// the "i" of a setting: what a lower or a higher value changes (the line under its name stays short)
+const DETAILS_REGLAGES = {
+  MODEL: ["Stronger (opus): better plans, decisions and fixes; each turn uses more quota.", "Lighter (sonnet): more cycles for the same quota, enough for simpler or well-planned projects."],
+  FALLBACK_MODEL: ["Set: when the main model's quota runs out, the pilot carries on with this model until the quota reopens.", "Empty: the pilot pauses until the quota reopens."],
+  FRAMING_MODEL: ["The framing writes the plan that every milestone follows: a strong model here pays off for the whole project, for the quota of a single cycle.", "Empty: the lead's model."],
+  WORKER_MODEL: ["Each parallel worker carries out one well-written milestone sheet: execution work, where sonnet is usually enough.", "Stronger: fewer mistakes on hard milestones, but every worker uses more quota, and several run at once."],
+  SUBAGENT_MODEL: ["Empty: the lead's model. auto: the lead picks one for each call (a light model to read, a strong one to review).", "A lighter model here saves a lot: a sub-agent starts from zero and rereads the project every time."],
+  CHEAP_MODEL: ["Used by the executor sub-agent for mechanical work (long outputs, searches, edits repeated over many files): the cheapest model is enough.", "Empty: the same model as the other sub-agents, which uses more quota for the same work."],
+  EFFORT: ["Higher (high, xhigh, max): Claude thinks longer before acting; better on hard problems, slower, and it uses more quota.", "Lower (low, medium): faster and cheaper, enough for simple or well-planned work. Empty: the model's normal effort."],
+  CLOSE_AFTER_MILESTONE: ["On: the pilot closes the cycle a few minutes after a milestone's commit, and the next milestone starts with a fresh, light context (cheaper turns).", "Off: the session ends when Claude stops on its own, which costs more if it lingers."],
+  RELAY_CONTEXT_K: ["Lower: a fresh session takes over more often; cheaper turns, but each new session rereads its notes.", "Higher: longer sessions that keep more in mind, but every turn costs more as the context grows. 0: never; Claude Code may then compact the context by itself and blur the thread."],
+  MAX_HOURS: ["Only the time the pilot works counts: a pause, a quota wait, a stopped pilot or Athanor closed do not count. Past the limit, the pilot stops, whatever the project's state.", "Unlimited (0, the default): the pilot works until the project is delivered, which stops it by itself, or until you stop it.", "A limit only caps what a project can use (720 = 30 days of work). A project can have its own: Manage › Working mode."],
+  CYCLE_MAX_MIN: ["Lower: a cycle that drags is cut sooner (the work done stays, the milestone resumes), but a long milestone (a big build, a game engine) may be cut before its end.", "Higher: more patience for long milestones; a stuck cycle wastes more time."],
+  IDLE_MAX_MIN: ["A cycle with no activity for this long is stopped, then resumed.", "Lower: a frozen session is caught sooner, but a long silent command (a build, tests) may be cut. Higher: the opposite."],
+  FRAMING_MAX_MIN: ["Lower: the plan is ready sooner, but less precise on a large project (code skimmed, vaguer milestone sheets, a quick review).", "Higher: a more precise plan. It is a ceiling, not a duration: a framing that ends sooner stops sooner. Past it, one short cycle (15 min at most) finishes the plan.", "Advice: 25 for a small project, 45 to 60 for a large code base or large attached files. A project can have its own: Manage › Working mode."],
+  RTK: ["On: command outputs are compressed before Claude reads them; fewer tokens, the signal is kept.", "Off: full outputs, only to investigate a problem; it uses more quota."],
+  PONYTAIL: ["On: each milestone is built with the smallest complete change, never less than the request; less code, fewer bugs, less quota.", "Off: Claude may add structure and options nobody asked for."],
+  QUOTA_WAIT_MIN: ["Only when Claude does not say when the quota reopens: the pilot waits this long, then tries again.", "Lower: resumes sooner, but may try several times for nothing. Higher: fewer tries, maybe a longer idle time."],
+  ERROR_WAIT_MIN: ["After an error or a stopped cycle, the pilot waits this long, then twice as long at each new error in a row, up to a ceiling.", "Lower: retries sooner. Higher: lets a passing outage (network, service) end before the next try."],
+};
+function detailReglage(cle) {
+  const nom = (REGLAGES[cle] || [])[1];
+  return choisir((DETAILS_REGLAGES[cle] || []).map((l) => "• " + t(l)).join("\n"), [{ id: "ok", texte: t("OK"), primaire: true }], { titre: nom ? t(nom) : cle });
+}
+// a work time limit (MAX_HOURS, in hours of work) for its button: 0 is unlimited
+const libelleDuree = (n) => n === 0 ? t("Unlimited") : { 72: t("3 days"), 168: t("1 week"), 336: t("2 weeks"), 720: t("30 days") }[n] || t("{0} h", [n]);
+const boutonDetail = (cle) => DETAILS_REGLAGES[cle] ? `<button type="button" class="chat-info" data-detail-reglage="${h(cle)}" title="${h(t("What a lower or a higher value changes"))}" aria-label="${h(t("What a lower or a higher value changes"))}">i</button>` : "";
 const EFFORTS = ["", "low", "medium", "high", "xhigh", "max"];
 // the connection (connexion_claude.go): the subscription's token or an API key; each one's settings shown
 // with it only
@@ -3904,6 +3984,7 @@ function champReglage(l, modeles) {
   if (["MODEL", "FALLBACK_MODEL", "FRAMING_MODEL", "WORKER_MODEL", "CHEAP_MODEL"].includes(l.cle)) return choix(["", ...modeles], nomModele);
   if (l.cle === "SUBAGENT_MODEL") return choix(["", ...modeles, "auto"], nomModele);
   if (l.cle === "EFFORT") return choix(EFFORTS, (m) => m || t("normal"));
+  if (l.cle === "MAX_HOURS") return choix(["72", "168", "336", "720", "0"], (m) => libelleDuree(Number(m)));
   if (l.cle === "CLAUDE_AUTH") return choix(["subscription", "api"], (m) => t(m === "api" ? "API key (paid per use)" : "Claude subscription (token)"));
   if (l.cle === "KEEP_AWAKE") return choix(["1", "screen", "0"], (m) => t({ "1": "PC awake", screen: "PC and screen awake", "0": "no" }[m]));
   if (["RTK", "PONYTAIL", "UNREAL_MCP", "CLOSE_AFTER_MILESTONE"].includes(l.cle) && (l.valeur === "0" || l.valeur === "1")) return `<label class="interrupteur m0"><input type="checkbox" id="${id}" data-cle="${h(l.cle)}" ${l.valeur === "1" ? "checked" : ""}> <span>${l.valeur === "1" ? t("enabled") : t("disabled")}</span></label>`;
@@ -3920,7 +4001,7 @@ pages.reglages = async () => {
   const ligne = (l) => {
     const nom = (REGLAGES[l.cle] || [])[1];
     const m = MODE_CONNEXION[l.cle];
-    return `<div class="reglage" ${m ? `data-connexion="${m}" ${m !== mode ? "hidden" : ""}` : ""}><div>${nom ? `<div class="nom-reglage">${h(t(nom))} <code class="cle-env">${h(l.cle)}</code></div>` : `<div class="cle">${h(l.cle)}</div>`}<div class="aide">${h(t(l.aide))}</div></div><div>${champReglage(l, modeles)}</div></div>`;
+    return `<div class="reglage" ${m ? `data-connexion="${m}" ${m !== mode ? "hidden" : ""}` : ""}><div>${nom ? `<div class="nom-reglage">${h(t(nom))} <code class="cle-env">${h(l.cle)}</code>${boutonDetail(l.cle)}</div>` : `<div class="cle">${h(l.cle)}</div>`}<div class="aide">${h(t(l.aide))}</div></div><div>${champReglage(l, modeles)}</div></div>`;
   };
   const rang = (c) => { const i = ORDRE_CONNEXION.indexOf(c); return i < 0 ? 99 : i; };
   const groupe = (g) => lignes.filter((l) => (REGLAGES[l.cle] || ["avance"])[0] === g).sort((a, b) => g === "connexion" ? rang(a.cle) - rang(b.cle) : 0);
@@ -5735,7 +5816,12 @@ $("#page").addEventListener("click", async (ev) => {
   if (b.dataset.pv) return repondreTache(b);
   if (b.dataset.choisirPieces) return $("#" + b.dataset.choisirPieces + "-fichiers").click();
   if (b.dataset.retirerPiece) { const [id, i] = b.dataset.retirerPiece.split("|"); (etat.pieces[id] || []).splice(Number(i), 1); $("#" + id + "-liste").innerHTML = listePieces(id); return; }
-  if (b.dataset.max && page === "projet") return enregistrerMode($("#md-parallele").checked, Number(b.dataset.max), $("#md-eco") && $("#md-eco").checked);
+  const pageMode = page === "projet" || (page === "nouveau" && etat.npMode);
+  if (b.dataset.max && pageMode) return changerMode({ parallele_max: Number(b.dataset.max) });
+  if (b.dataset.cadrage !== undefined && pageMode) return changerMode({ cadrage_max: Number(b.dataset.cadrage) });
+  if (b.dataset.dureeMax !== undefined && pageMode) return changerMode({ duree_max: Number(b.dataset.dureeMax) });
+  if (b.dataset.detailReglage) return detailReglage(b.dataset.detailReglage);
+  if (b.dataset.detailMode) return detailMode(b.dataset.detailMode);
   if (page === "nouveau") {
     if (b.dataset.npMode) { etat.npRejoindre = b.dataset.npMode === "rejoindre"; return rendrePage(); }
     if (b.id === "rj-rejoindre") {
@@ -5771,6 +5857,9 @@ $("#page").addEventListener("click", async (ev) => {
       if (r) {
         etat.projet = r.nom; etat.evenements = []; etat.dernierJournal = 0;
         if ((etat.pieces.np || []).length) await envoyerPieces("np", "demande", r.nom);
+        // the settings chosen beside the form, when they differ from the defaults
+        const md = etat.npMode; etat.npMode = null;
+        if (md && (md.parallele || md.eco || md.rapide || md.cadrage_max || md.duree_max !== -1)) await api("mode", "POST", { parallele: md.parallele, parallele_max: md.parallele_max, eco: md.eco, rapide: md.rapide, cadrage_max: md.cadrage_max || 0, duree_max: md.duree_max }).catch((e) => toast(e.message, "erreur"));
         // the sign-in window opens (the link shows under Manage), or, with this computer connected, linked at once
         if (gh) { const rl = await action(api("github", "POST", gh)); if (rl && rl.lie_compte) await resultatLierCompte(rl, gh); if (rl && rl.cree) toast(t("Private repository created and linked: {0}", [rl.cree]), "ok"); }
         await rafraichir(); location.hash = "#suivi";
@@ -5875,8 +5964,12 @@ $("#page").addEventListener("change", (ev) => {
   if (i.id === "gh-auteur-email") { const a = $("#gh-auteur-autre"); a.hidden = i.value !== ""; if (!a.hidden) a.focus(); }
   if (i.hasAttribute("data-gh-auto")) action(api("github", "POST", { action: "auto", auto: i.checked })).then((r) => { if (!r) i.checked = !i.checked; });
   if (i.hasAttribute("data-gh-atelier")) action(api("github", "POST", { action: "atelier", atelier: i.checked })).then((r) => { if (!r) i.checked = !i.checked; });
-  if (i.id === "md-parallele") enregistrerMode(i.checked, maxModeActif(), i.checked ? false : $("#md-eco") && $("#md-eco").checked); // one or the other
-  if (i.id === "md-eco") enregistrerMode(i.checked ? false : $("#md-parallele").checked, maxModeActif(), i.checked);
+  if (i.id === "md-parallele" || i.id === "md-eco" || i.id === "md-rapide") changerMode({}); // the switches add up
+  // the framing time box typed by hand (10 to 240 min) and the work time limit (1 to 87600 h), checked by the
+  // server, saved when the field is left
+  const entre = (min, max) => i.value !== "" && Number.isFinite(Number(i.value)) && Math.round(Number(i.value)) >= min && Math.round(Number(i.value)) <= max;
+  if (i.id === "md-cadrage" && i.value !== "") { if (entre(10, 240)) changerMode({ cadrage_max: Math.round(Number(i.value)) }); else toast(t("The framing time box is between 10 and 240 minutes."), "erreur"); }
+  if (i.id === "md-duree-max" && i.value !== "") { if (entre(1, 87600)) changerMode({ duree_max: Math.round(Number(i.value)) }); else toast(t("The work time limit is between 1 and 87600 hours, or unlimited."), "erreur"); }
 });
 // attached files: chosen with the button or dropped on a form's zone; a file dropped elsewhere is ignored
 // (otherwise the window would open it in place of the application)

@@ -77,18 +77,23 @@ func consignesOuvrierParallele(ident, ligne string, executor, reprise bool) stri
 		"- End with a report of at most 10 lines: done / not done / files touched / what the lead needs to know to merge.\n"
 }
 
-func consignesFusionParallele(fusionnes, aFusionner, echoues string) string {
+func consignesFusionParallele(fusionnes, aFusionner, echoues string, rapide bool) string {
 	ou := func(s string) string {
 		if s == "" {
 			return "none"
 		}
 		return s
 	}
+	// the fast mode: no full check before the final verification, the quick one on what was merged
+	controle := "Then **one** full check `bash .athanor/check.sh`"
+	if rapide {
+		controle = "Then `bash .athanor/check.sh quick <pattern>` on each merged milestone (the fast mode: the full check waits for the final verification)"
+	}
 	return "\n## Verification after a parallel cycle\n\nThe pilot has just run workers in parallel (reports in `.athanor/WORKER_REPORTS.md`):\n" +
 		"- **Merged automatically** (no conflict, already in the current branch): " + ou(fusionnes) + ". Verify them, do not redo them.\n" +
 		"- **To merge by you** (conflicts): " + ou(aFusionner) + ". For each, in plan order: `git merge --no-ff auto/<milestone>`, resolve the conflict keeping the intent of both sides, complete the merge, run `bash .athanor/check.sh quick <pattern>`.\n" +
 		"- **Failed or empty** (no usable commit): " + ou(echoues) + ". Their branch may hold partial work; decide whether to keep it or redo the milestone later.\n" +
-		"Then **one** full check `bash .athanor/check.sh` and fix whatever the merges broke (small fixes only; a real rework becomes a note in `.athanor/BUGS.md`). In `.athanor/PLAN.md`, keep ticked only the milestones that really pass; untick the others and note in `.athanor/BUGS.md` what is missing. One log entry, one commit.\n"
+		controle + " and fix whatever the merges broke (small fixes only; a real rework becomes a note in `.athanor/BUGS.md`). In `.athanor/PLAN.md`, keep ticked only the milestones that really pass; untick the others and note in `.athanor/BUGS.md` what is missing. One log entry, one commit.\n"
 }
 
 type ouvrier struct {
@@ -191,6 +196,9 @@ func (p *pilote) lancerOuvrier(ident, ligne, journal, modele string) (*ouvrier, 
 	consignes := lireTexteBrut(p.consignesBaseParallele()) + consignesOuvrierParallele(ident, ligne, agents != "", reprise)
 	if ponytailActif() {
 		consignes += consignesPonytail
+	}
+	if p.eco {
+		consignes += consignesEcoOuvrier
 	}
 	if fRelais := filepath.Join(p.prive, "relais-"+ident+".md"); tailleFichierPilote(fRelais) > 0 {
 		consignes += "\n" + lireTexteBrut(fRelais)
@@ -793,7 +801,12 @@ func (p *pilote) cycleParallele(prefixe, template string) int {
 	if ponytailActif() {
 		ponytail = consignesPonytail
 	}
-	consignes := strings.TrimRight(lireTexteBrut(p.consignesBaseParallele())+consignesFusionParallele(joindre(fusionnes), joindre(aFusionner), joindre(echoues))+ponytail, "\r\n")
+	// the eco mode: the lead verifies with its rules too (the reviews wait for the delivery)
+	eco := ""
+	if p.eco {
+		eco = consignesEcoPilote
+	}
+	consignes := strings.TrimRight(lireTexteBrut(p.consignesBaseParallele())+consignesFusionParallele(joindre(fusionnes), joindre(aFusionner), joindre(echoues), p.rapide)+ponytail+eco, "\r\n")
 	args := []string{"-p", but, "--permission-mode", "bypassPermissions", "--settings", p.reglages, "--permission-prompts", "none", "--output-format", "stream-json", "--verbose"}
 	args = append(args, p.argsSurs...)
 	args = append(args, "--append-system-prompt", consignes)

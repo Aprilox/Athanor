@@ -190,6 +190,10 @@ type Etat struct {
 	DebutCycle        string `json:"debut_cycle"`
 	DemandesEnAttente int64  `json:"demandes_en_attente"`
 	Ouvriers          string `json:"ouvriers"` // parallel mode: milestones being built by workers, separated by spaces
+	// what this pilot read (reglages_pris.go): the tool's settings when it started, the project's working modes
+	// when its cycle started; empty for a pilot older than 2.52.1
+	Reglages string `json:"reglages"`
+	Modes    string `json:"modes"`
 }
 
 func (p Projet) LireEtat() (Etat, bool) {
@@ -542,6 +546,7 @@ type Jalon struct {
 	Complet     string   `json:"complet"`
 	Vague       string   `json:"vague,omitempty"`   // parallel mode: title of the wave ("Wave 2") that starts at this milestone
 	Archive     bool     `json:"archive,omitempty"` // done long ago: moved by the pilot to archives/PLAN_TERMINE.md
+	Etape       bool     `json:"etape,omitempty"`   // a stage line ("S2: Stage 2/5 — …"): planned in detail when it comes up
 	Reprise     string   `json:"-"`                 // several computers: none could run its program (pcs_relais.go), what Claude is told
 	Suite       string   `json:"-"`                 // several computers: another computer's unfinished work on it (pcs_encours.go)
 }
@@ -706,6 +711,35 @@ func (p Projet) lirePlanSansCache() []Jalon {
 	return append(v, plan...)
 }
 
+// reEtapePlan: a stage line of a large request's plan ("S2: Stage 2/5 — The vault. Goal: …"), written by the
+// framing (template/guides/FRAMING.md): the lead plans that stage in detail when it comes up, never a worker.
+// The "S" identifier is required: a game's "M5: Stage 2 — the forest" is an ordinary milestone.
+var reEtapePlan = regexp.MustCompile(`(?i)^S\d+\s*:\s*Stage\s+(\d+)(?:\s*/\s*(\d+))?\b`)
+
+// etapesPlan: the stage under way and the number of stages (0, 0: a plan without stages). Stage 1 has no
+// line (the framing details it at once): each ticked stage line moves the project one stage on.
+func etapesPlan(plan []Jalon) (int, int) {
+	lignes, faites, total := 0, 0, 0
+	for _, j := range plan {
+		if !j.Etape {
+			continue
+		}
+		lignes++
+		if j.Fait {
+			faites++
+		}
+		if m := reEtapePlan.FindStringSubmatch(j.Complet); m != nil && m[2] != "" {
+			if n, _ := strconv.Atoi(m[2]); n > total {
+				total = n
+			}
+		}
+	}
+	if lignes == 0 {
+		return 0, 0
+	}
+	return faites + 1, max(total, lignes+1)
+}
+
 func analyserPlan(texte string) []Jalon {
 	var v []Jalon
 	vague := ""
@@ -717,6 +751,7 @@ func analyserPlan(texte string) []Jalon {
 		case (strings.HasPrefix(t, "- [x] ") || strings.HasPrefix(t, "- [X] ") || strings.HasPrefix(t, "- [ ] ")) && len(l) > 0 && l[0] != ' ' && l[0] != '\t':
 			j := decouperJalon(strings.TrimSpace(t[6:]))
 			j.Fait = t[3] != ' '
+			j.Etape = reEtapePlan.MatchString(j.Complet)
 			j.Vague, vague = vague, ""
 			v = append(v, j)
 		case len(v) > 0 && len(l) > 0 && (l[0] == ' ' || l[0] == '\t') && strings.TrimSpace(l) != "":

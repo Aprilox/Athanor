@@ -23,6 +23,7 @@
   <a href="#how-it-works"><b>How it works</b></a> ·
   <a href="#parallel-mode"><b>Parallel mode</b></a> ·
   <a href="#eco-mode"><b>Eco mode</b></a> ·
+  <a href="#fast-mode"><b>Fast mode</b></a> ·
   <a href="#saving-the-quota"><b>Saving the quota</b></a> ·
   <a href="#several-computers"><b>Several computers</b></a> ·
   <a href="#the-app"><b>The app</b></a> ·
@@ -57,6 +58,7 @@ You describe what you want: a game, a website, an app, a tool. Athanor runs [Cla
 | **An autonomous loop** | One milestone per cycle, a fresh context each time, so turns stay cheap and the project never drifts. Usage limit reached → pause until it reopens, or switch to a fallback model. Error → retry with a growing delay. Silent or over-long cycle → cut and resumed. PC restarted → resumes where it stopped. All state lives in files. |
 | **Parallel mode** | One switch per project. A fine-grained plan with dependencies; up to 10 workers build independent milestones at once, each in its own git worktree; the pilot merges each one as soon as it finishes and starts the next, and the lead verifies once at the end. |
 | **Eco mode** | One switch per project, for when the quota matters more than speed: the lead does the work itself instead of handing it to sub-agents, one review at delivery, at most 4 images per cycle, shorter command outputs. The model and the effort stay as you set them. |
+| **Fast mode** | One switch per project, for when the build time matters most: quick checks only at each milestone and no review on the way; the full check, the tester, the critic and every fix come once, in a final verification the pilot enforces before the delivery. The three modes add up. |
 | **Ponytail, built in** | On by default: Claude builds each milestone with the smallest complete change ([Ponytail](https://github.com/dietrichgebert/ponytail)'s rules), never less than the request. The Overview shows what is measured: the cache, what RTK spared, and the cycles with and without side by side. |
 | **Several computers** | Two, three or ten computers build one project together through its GitHub repository, each with an account that can push to it (the owner's, or a collaborator's: no organization needed): each one takes a milestone no other one builds, the ones it is best at first (a big graphics card for the 3D, a fast network for the big downloads), and they merge each other's work after every milestone. The Overview shows which computers are there and what each one builds. |
 | **A real team** | A project lead plus sub-agents: `scout`, `architect`, `creator`, `developer`, `tester`, `critic`, and a cheap `executor` (Haiku by default) for mechanical work. Scouts read for the framing, independent tests and the final critique are always delegated. |
@@ -188,6 +190,8 @@ The same on Windows (PowerShell), Linux and macOS: it builds `Athanor.exe` and `
 | Polish | the `critic` uses the result like a demanding user and files bugs in `BUGS.md` |
 | Delivery | `deliverable/`, `TEST_GUIDE.md`, then `FINAL_REPORT.md` with `STATUS: DONE`. The pilot takes the next queued request, or stops |
 
+**Large projects, in stages.** A request too large for 25 milestones is neither squeezed into oversized milestones nor reduced: the framing cuts it into stages, as many as it takes, each one complete and tested at its end. It details the first one only; every later stage is one line of the plan (`- [ ] S2: Stage 2/5 — …`). When the pilot reaches it, the `tester` then the `critic` review what is done, and the lead details the stage into real milestones, with the code of the earlier stages in hand. The polish and the delivery come with the last stage. The Overview and *All projects* show the stage under way ("Stage 2/5"). In parallel mode a stage line is never handed to a worker: the lead details it itself; in eco mode the review only happens at the delivery.
+
 ---
 
 ## Parallel mode
@@ -197,16 +201,18 @@ The same on Windows (PowerShell), Linux and macOS: it builds `Athanor.exe` and `
 1. The lead writes a **fine-grained plan with explicit dependencies**: many small, self-contained milestones, each with the files it touches, `Depends on:` the milestones it needs, and acceptance criteria. M1 is always the foundation (skeleton, `check.sh`, shared contracts).
 2. The pilot runs a **scheduler**: every milestone whose dependencies are merged gets a **worker** (its own Claude session, its own git worktree `.athanor/work/M5` and branch `auto/M5`), starting with 2 and adding one each time a worker delivers, up to the chosen number. As soon as a worker meets the quota, no other one starts; if they all met it, the lead's verification is skipped and the pilot waits, then runs one milestone with the lead alone before starting workers again. The pilot also lets the lead work alone, for that cycle, when workers would not pay off: fewer than 3 milestones ready at once, only documentation milestones (they link to each other and conflict), or the 5-hour quota at 75% or the weekly one at 85%. Two milestones whose sheets name the same files never run at the same time. The workers share a board, `.athanor/BOARD.md`, written by the pilot every few seconds: what each one is doing and the files it holds. A worker that needs a file outside its sheet reserves it first (`.athanor/RESERVE`); the pilot grants it unless another worker holds it, and no new worker starts on a reserved file.
 3. As soon as a worker finishes, the pilot **merges its branch immediately** when it applies cleanly, ticks the milestone, and starts the next ready milestones. Nobody waits for the slowest worker.
-4. At the end of the cycle, **one** session of the lead verifies everything: it merges the branches that conflicted, runs the full check, fixes what the merges broke, and files the rest in `BUGS.md`.
+4. At the end of the cycle, **one** session of the lead verifies everything: it merges the branches that conflicted, runs the full check (the quick checks of the merged milestones in the fast mode), fixes what the merges broke, and files the rest in `BUGS.md`.
 5. **Queued requests don't wait.** At the start of each cycle they join the current request: the lead adds their milestones to the plan, with their dependencies.
 
 Each worker only carries its own milestone in context, so the work is split into small, cheap sessions instead of one huge one. A worker may hand its long test runs and searches to `executor` (cheap model) and read only the failures; it calls no other sub-agent. The Team page shows one card per worker with the sub-agents it called, and the Log tags their lines `[M5]`. Parallel mode uses more quota per hour (one session per worker) but far less wall-clock time.
+
+It adds up with the two other modes. With the **eco mode**, every worker and the lead's verification follow its rules: few images, less reading, command outputs cut at 8,000 characters. With the **fast mode**, quick checks follow the merges and the whole verification waits for the end.
 
 ---
 
 ## Eco mode
 
-*Manage → Working mode → Eco mode*, per project (in a terminal: **M**, then *Working mode*). For when the quota matters more than speed. It never runs with the parallel mode: switching one on switches the other off.
+*Manage → Working mode → Eco mode*, per project (in a terminal: **M**, then *Working mode*). For when the quota matters more than speed. It adds up with the parallel mode (the workers follow its rules too) and with the fast mode.
 
 Measured on a real game project, **sub-agents use most of the quota** (80 to 87 % of the tokens of its cycles): each one starts from zero and pays again for its whole context at every turn. So the eco mode cuts there first:
 
@@ -216,6 +222,21 @@ Measured on a real game project, **sub-agents use most of the quota** (80 to 87 
 - **Less reading, shorter outputs.** The end of the log, the current milestone, the needed sections only; command outputs cut at 8,000 characters (`BASH_MAX_OUTPUT_LENGTH`, 20,000 otherwise).
 
 The **model and the thinking effort are not touched**: they stay as you set them. To save even more, choose a smaller model for the lead (Sonnet) and a lower effort (`medium` or `low`) in *Settings → Models*. The Overview shows *eco mode* while a cycle runs; the switch applies from the next cycle.
+
+---
+
+## Fast mode
+
+*Manage → Working mode → Fast mode*, per project (in a terminal: **M**, then *Working mode*), or right when you create the project. For when the build time matters most. Measured on three real projects, **a third to a half of a cycle's time goes into the full check that ends every milestone**, and more as the project grows. The fast mode moves that wait, and the reviews, to the end.
+
+- **Quick checks only.** At the end of a milestone, Claude runs `check.sh quick` on what it just built, then commits. No full check on the way: not for a stage line, not after a parallel cycle.
+- **No review on the way.** `tester` and `critic` do not run after the complete slice, at the end of a stage or in the polish.
+- **Defects are noted, not chased.** One line in `BUGS.md`, fixed at once only when it blocks what comes next. **Until the end, the project may be buggy, unpolished or badly finished.**
+- **Everything is verified and fixed at the end.** Before the delivery comes the final verification: the full check until it passes, `tester` then `critic` on the whole project, **every** finding fixed (the small ones too), the full check again and a second tester pass, until nothing is left. The delivery is as finished as without the mode. The last milestone is longer, since it carries the verification of the whole project.
+- **The pilot enforces it.** A fast cycle leaves `.athanor/FAST_DEBT`; Claude deletes it only once the final verification is complete. A delivery made while that file exists is reopened (three times at most per run; then the pilot stops and says so).
+- **Switched off on the way**: what was built in the fast mode is verified as a whole first (at the delivery in the eco mode, as its single review), then the work goes on as usual.
+
+The framing is unchanged. The Overview shows *fast mode* while a cycle runs; the switch applies from the next cycle, and the Overview says *New working mode: taken at the end of this cycle* until the pilot has really read it. The three modes add up: parallel and fast together is the fastest way to build; with the eco mode, the final verification is its single review (`tester` and `critic` once each, every finding still fixed).
 
 ---
 
@@ -315,11 +336,11 @@ The screenshots show the dark "Slate" and the "Light" palettes.
 | **Log** | the readable log (Claude speaks, tools, results, sub-agents, pilot) or the raw JSON, filterable |
 | **Remote** | remote access on or off, the link and QR code that pair a phone or another computer, the trusted devices (connected now or last seen, from where), rename or ✕ remove one; this computer's name and what it is good at, for the other computers of a project |
 | **Guide** | the **?** beside the bell: each part's tutorial to replay, and step-by-step topics with a button that opens the right page for each step: finding your way, starting a project, the vault and project access, GitHub (connecting the computer, linking, working in turns), your phone (and your own domain, and how to stop using it), several computers (what it needs, connecting each computer, joining, what each one is good at), the terminal; the first steps and the pages link to them |
-| **New project / Join a project** (in the project picker) | a name, the folder (*Browse…* opens the system's folder dialog) and what you want; or join a project other computers already build, from its repository |
+| **New project / Join a project** (in the project picker) | a name, the folder (*Browse…* opens the system's folder dialog) and what you want, with the project's settings beside the form (the parallel, eco and fast modes, the longest framing, the work time limit); or join a project other computers already build, from its repository |
 | **Manage** (in the project picker) | rename the project; move or rename its folder; point it to another folder (the plan and requests come along, the milestones are checked against what it contains); check the milestones; archive it; delete it (from the list, its workshop or the whole folder, to the recycle bin); link it to GitHub |
 | **Skills & MCP** | the library (verified catalog, search in SkillsMP and the MCP Registry, GitHub link, your own skills, pasted MCP configurations), a switch per project, the API keys of the servers (stored apart, never shown) and their settings (an address, a port, a path: detected in the configuration, shown in clear with their default), *View / edit* a server's configuration, settings and program to open as JSON (pasted ones included), *Test* starts a server in its cage and lists its tools, and checks a skill (its header, and whether its scripts have their program here and parse); when a test fails, **Fix with Claude** finds a configuration (or rewrites a copy of the skill, shown as a diff before *Apply*) that works on this system, tests it before keeping it, and *Undo the fix* puts back what it replaced; every fix is also written for everyone in `logs/corrections/`, and the verified catalog's fixes can be written into a copy of Athanor's code (`athanor extensions appliquer-corrections KIT CODE`); *Sign in* once to a remote server that asks for it (OAuth), for every project; **Plugins**: the whole catalog of Claude Code plugins (official marketplace plus yours), searchable, installed in one click and switched on per project |
 | **Setup & health** | One tab per mode (native Windows and WSL on Windows; Linux; macOS), the current one marked: *Install everything* for it, or switch to it. *Check everything*, *Test the sandbox* for real, *Repair* line by line, *Ask Claude* to repair or install something |
-| **Settings → Claude** | the pilot's settings, the kit's `.env` (token masked, models, effort, watchdog…, rarely used ones under *Advanced*), *Save and restart after cycle* |
+| **Settings → Claude** | the pilot's settings, the kit's `.env` (token masked, models, effort, watchdog…, rarely used ones under *Advanced*). Saved while a pilot runs, they are taken by themselves: the pilot restarts with them at the end of its cycle, and its button says so (a click cancels) |
 | **Settings → Options** | language, palette and accent, a shortcut to the installed Athanor (the Desktop, the applications menu, the Mac's Applications), this computer's connection to GitHub, project list (removing a project never touches its folder), restart the pilots on opening, start with the computer, "Claude" desktop, password, tool folder, version and updates |
 
 **Finding your way**: the menu on the left has one level: *Home*, *Projects*, one entry per module (**Studio**, the projects Claude builds, and the **Vault**), *Settings* at the bottom; a module's entry reopens the page you last saw in it. A module's pages are tabs at the top: Studio's (the project picker, then Overview, Team, Requests, Chat, For you, Access, Log, Manage) are the pages described above; Settings holds Settings, Skills & MCP, Setup & health and Remote. On a phone, ☰ opens the menu and the tabs scroll sideways. The **bell**, at the top of every page, gathers what needs you in every module, one line each with its reason: *View* opens the right page, *Ignore* hides the line without deleting anything (*Ignored alerts* keeps it, *Reopen* brings it back, and it returns by itself when its reason changes). The **?** beside it opens the Guide. **Tutorials**: Home, Studio and the Vault each show a short tour on your first visit; the Guide's *Tutorials* replays them and *Settings → Options* shows them all again. The update to the hub moves nothing: projects, settings, keys and old links stay where they were. The *Missions* block shows the last three missions. *Guide › Finding your way* walks through it, and the terminal opens on the same home page (*H*).
@@ -500,7 +521,7 @@ Installed software is detected on **every drive** (`C:`, `D:`…), and the newes
 
 ## Configuration
 
-Everything is editable in the app (*Settings*), or in `.env` ([`.env.example`](.env.example) documents every key).
+Everything is editable in the app (*Settings*), or in `.env` ([`.env.example`](.env.example) documents every key). In *Settings → Claude*, an "i" next to a setting explains what a lower or a higher value changes. The framing time box (`FRAMING_MAX_MIN`) can also be set project by project: *Manage → Working mode → Longest framing* (25, 45, 60 or 90 minutes, or a time of your own from 10 to 240 minutes in the "Other" box; "Like Settings" takes the shared value).
 
 | Key | Role |
 |---|---|
@@ -516,7 +537,7 @@ Everything is editable in the app (*Settings*), or in `.env` ([`.env.example`](.
 | `RELAY_CONTEXT_K` | context, in thousands of tokens, past which a fresh session takes over the milestone (default 110, 0 = never) |
 | `EFFORT` | reasoning effort, `low` to `max` |
 | `LANGUAGE` | language Claude works and documents in (set by the app) |
-| `MAX_HOURS` | safety stop (default 168, one week) |
+| `MAX_HOURS` | work time limit, in hours: only the time the pilot works counts (not its waits, nor the time it is stopped); 0 = unlimited, the default, the pilot stopping by itself at the delivery; a project can have its own: *Manage → Working mode* |
 | `QUOTA_WAIT_MIN` | wait when the quota reset time cannot be read |
 | `IDLE_MAX_MIN`, `CYCLE_MAX_MIN`, `CLOSE_AFTER_MILESTONE` | cycle watchdog, one milestone per cycle |
 | `KEEP_AWAKE` | the PC stays awake while a pilot runs: `1` (default; the screen too for Roblox Studio and Unreal), `screen` (the screen always), `0` (off) |
@@ -557,7 +578,7 @@ Found a vulnerability? Please open a [private security advisory](https://github.
 - The pilots run in the background, without a window (in WSL on Windows, unless you chose the native mode): you can close the app.
 - The PC stays awake while a pilot runs (`KEEP_AWAKE`), even with the app closed; for Roblox Studio and Unreal the screen stays on too, because a locked Windows session draws nothing (no captures, no play tests). Do not lock the session yourself (Win + L) before a night of Roblox or Unreal, and check that the screen saver does not ask for a sign-in on resume.
 - *Settings → Options*: "Open Athanor when the computer starts" and "Restart the pilots that were running, when the app opens".
-- Safety stop after `MAX_HOURS` (counted from the project's first start); raise it in *Settings* to go on.
+- No time limit by default: the pilot works until the delivery, which stops it by itself. To set one: *Work time limit* (`MAX_HOURS`) in *Settings*, or for this project alone in *Manage → Working mode*. Only the time the pilot works counts: its waits (quota, errors, "For you"), a pause or Athanor closed do not.
 
 ## Finished project, follow-ups, new project
 
@@ -690,7 +711,7 @@ Yes. Nothing is tied to a user name or a drive letter: paths come from your prof
 Push a version tag: GitHub first runs every CI check on the tagged commit (tests on Windows, Linux and macOS, the single executable, every build target), then builds the apps and publishes the release ([`.github/workflows/release.yml`](.github/workflows/release.yml)). If a single check fails (or anything after it), nothing is published: the tag is removed, and the release too if it was already created, so Athanor's updates never offer it. Fix, commit, then push the same tag again (`git tag -f v2.42.0 && git push origin v2.42.0`):
 
 ```bash
-git tag v2.51.3 && git push origin v2.51.3
+git tag v2.52.1 && git push origin v2.52.1
 ```
 
 Keep the version in [`app/winres/athanor.rc`](app/winres/athanor.rc) and `versionAthanor` in [`app/commandes.go`](app/commandes.go) in step with the tag (a test checks they match), and write what is new in `docs/releases/VERSION.md` (e.g. [`docs/releases/2.31.0.md`](docs/releases/2.31.0.md)): it opens the release page.

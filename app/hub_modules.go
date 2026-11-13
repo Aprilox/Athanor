@@ -79,6 +79,9 @@ type Avancement struct {
 	Total int    `json:"total"`
 	Texte string `json:"texte"`           // under the bar, {0} done of {1}; alone when Total is 0 ("No plan yet")
 	Etape string `json:"etape,omitempty"` // the step in progress, {0} of {1} ("Milestone {0}/{1}")
+	// a Dev plan cut into stages: the stage under way, out of how many (etapesPlan)
+	EtapePlan  int `json:"etape_plan,omitempty"`
+	EtapesPlan int `json:"etapes_plan,omitempty"`
 }
 
 // AttenteElement: why the owner is needed (an i18n key and its arguments) and the page to answer it.
