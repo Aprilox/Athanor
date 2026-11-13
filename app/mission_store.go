@@ -75,6 +75,19 @@ type Mission struct {
 	Journal    []EntreeJournal    `json:"journal,omitempty"` // at most maxJournalMission, the oldest first
 }
 
+// MarshalJSON: the mission with its card's print (empreinteCarte), which the window sends back to launch it (R3).
+func (m Mission) MarshalJSON() ([]byte, error) {
+	type brute Mission
+	e := ""
+	if len(m.Carte) > 0 {
+		e = empreinteCarte(m)
+	}
+	return json.Marshal(struct {
+		brute
+		Empreinte string `json:"empreinte,omitempty"`
+	}{brute(m), e})
+}
+
 var (
 	idMissionValide    = regexp.MustCompile(`^[a-z0-9]{6,32}$`)
 	errMissionInconnue = errors.New("unknown mission")

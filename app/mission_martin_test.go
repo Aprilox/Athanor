@@ -161,9 +161,9 @@ func TestMissionCarteMartin(t *testing.T) {
 	if e := c.Envs[1]; e.Nom != "prod" || e.URL != "https://martin.fr" || !slices.Equal(e.Serveurs, []string{"v1"}) {
 		t.Fatalf("prod: %+v", e)
 	}
-	// the accesses, resolved by the vault and ticked; never a value
+	// the accesses, resolved by the vault; never a value; the infra token ticked, the code key never mentioned unticked (R4)
 	if len(c.Acces) != 2 || c.Acces[0].ID != cf.ID || c.Acces[0].Portee != "infra" || c.Acces[1].ID != maps.ID ||
-		slices.ContainsFunc(c.Acces, func(a AccesCarte) bool { return a.Decoche || a.ARemplir }) {
+		c.Acces[0].Decoche || !c.Acces[1].Decoche || slices.ContainsFunc(c.Acces, func(a AccesCarte) bool { return a.ARemplir }) {
 		t.Fatalf("accesses: %+v", c.Acces)
 	}
 	// worked out by the Go (the agent's empty list and its "autre" server dropped)
@@ -190,7 +190,8 @@ func TestMissionCarteMartin(t *testing.T) {
 	}
 
 	// 3. Lancer: the project created and its pilot started, the ticked access given, both Servers tasks run
-	v = appel("POST", "/api/missions/"+id+"/lancer", `{"mot_de_passe":"mdp-test"}`, http.StatusOK)
+	m, _ = lireMission(id)
+	v = appel("POST", "/api/missions/"+id+"/lancer", `{"mot_de_passe":"mdp-test","empreinte":"`+empreinteCarte(m)+`"}`, http.StatusOK)
 	for i := 0; i < 400; i++ {
 		tachesEnCours.Lock()
 		n := len(tachesEnCours.m)

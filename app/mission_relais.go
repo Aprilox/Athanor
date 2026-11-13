@@ -29,10 +29,24 @@ func (s *Serveur) accordProd(m Mission, projet, sha string) Approbation {
 	e := s.acces.Environnements(projet)["prod"]
 	hote := cmp.Or(hoteEnv(&e), projet)
 	avant, n, changements := s.changementsProd(projet, sha)
-	return Approbation{Projet: projet, Env: "prod", Mission: m.ID, Agent: "relais", Action: actionDeploiement,
+	ap := Approbation{Projet: projet, Env: "prod", Mission: m.ID, Agent: "relais", Action: actionDeploiement,
 		Raison: "mission " + m.ID + ": commit " + sha + " → " + hote,
 		Details: map[string]string{"mission": m.ID, "empreinte": empreinteCarte(m), "sha": sha, "commit": shaCourt(sha), "env": "prod", "url": e.URL,
 			"hote": hote, "serveurs": listeServeursAccord(e.Serveurs), "avant": shaCourt(avant), "commits": n, "changements": changements}}
+	// R1 (C68, C69): the deployment runs with Accorde, so the owner reads the build files it would run first
+	if p, ok := s.projetParNom(projet); ok {
+		if f := fichiersBuildChanges(p, "prod", sha, s.configProdMission(projet)); len(f) > 0 {
+			ap.Details["fichiers_build"] = couper(strings.Join(f, ", "), 300)
+			ap.Raison += "; build files changed: " + ap.Details["fichiers_build"]
+		}
+	}
+	return ap
+}
+
+// configProdMission: the method prod is deployed with: its own, or dev's checked one for its first deployment.
+func (s *Serveur) configProdMission(projet string) *ConfigDeploiement {
+	envs := s.acces.Environnements(projet)
+	return cmp.Or(envs["prod"].Deploiement, envs["dev"].Deploiement)
 }
 
 // changementsProd (P7): what the prod deployment of sha changes, for the owner deciding from a phone: the version
@@ -87,6 +101,9 @@ func (s *Serveur) relaisProd(id string) {
 	}
 	head, _ := gitSortie(p.Dossier, "rev-parse", "HEAD")
 	r := *m.Relais
+	if r.Etape != "prod_deploye" && s.attendCoffre(m) { // R7: the infra keys locked, the accord would be used for a deployment that cannot run
+		return
+	}
 	switch r.Etape {
 	case "dev_verifie":
 		if vues[i].Actuel != "termine" || r.Commit == "" || r.Commit != head || !prodPrete(vues, p.Nom) {
@@ -167,9 +184,9 @@ func (s *Serveur) accordOuDeployer(m Mission, projet, sha string) {
 // deployerProdMission: the engine started on prod with the owner's accord; not started → the accord given back
 // (the next step tries again) and said in the journal.
 func (s *Serveur) deployerProdMission(id, projet, sha, accord string) {
-	o := OptionsDeploiement{Auteur: "relais", Accorde: true}
-	if envs := s.acces.Environnements(projet); envs["prod"].Deploiement == nil {
-		o.Config = envs["dev"].Deploiement // prod's first deployment: the method dev was checked with (recorded on prod once it went through)
+	o := OptionsDeploiement{Auteur: "relais", Accorde: true} // the accord showed the build files (accordProd)
+	if s.acces.Environnements(projet)["prod"].Deploiement == nil {
+		o.Config = s.configProdMission(projet) // prod's first deployment: the method dev was checked with (recorded on prod once it went through)
 	}
 	d, suite, err := commencerDeploiementMission(s, projet, "prod", sha, o)
 	if err != nil {

@@ -293,7 +293,7 @@ func TestMissionTelephone(t *testing.T) {
 	if m, _ := lireMission(tel); string(m.Carte) != string(avant.Carte) {
 		t.Fatalf("card changed from the phone: %s", m.Carte)
 	}
-	if w := appelDistance(h, "POST", "/api/missions/"+tel+"/lancer", cle, "", api...); w.Code != 200 {
+	if w := appelDistance(h, "POST", "/api/missions/"+tel+"/lancer", cle, `{"empreinte":"`+empreinteCarte(avant)+`"}`, api...); w.Code != 200 {
 		t.Fatalf("launch from the phone: %d %s", w.Code, w.Body)
 	}
 }

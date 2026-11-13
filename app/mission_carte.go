@@ -56,6 +56,7 @@ type EnvCarte struct {
 	Politique    string    `json:"politique,omitempty"`
 	Avant        *EnvCarte `json:"avant,omitempty"`
 	Proprietaire bool      `json:"proprietaire,omitempty"`
+	Plancher     string    `json:"plancher,omitempty"` // R5: "accord" when the existing environment already asked; no policy change goes under it
 }
 
 // AccesCarte: a vault entry the mission uses, by name; ID, Type and Portee come from the vault, ARemplir says
@@ -362,7 +363,7 @@ func envSansAffaiblir(e EnvCarte, politique string, actuels map[string]Environne
 		a.Protection = "aucune"
 	}
 	if a.Politique == "accord" {
-		e.Politique = "accord"
+		e.Politique, e.Plancher = "accord", "accord"
 	}
 	if !e.Proprietaire {
 		if a.Protection != "aucune" {

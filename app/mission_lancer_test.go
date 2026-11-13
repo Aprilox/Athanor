@@ -101,6 +101,9 @@ func TestMissionLancer(t *testing.T) {
 		if corps = strings.TrimSuffix(strings.TrimPrefix(corps, "{"), "}"); corps != "" {
 			corps = "," + corps
 		}
+		if m, err := lireMission(id); err == nil { // R3: the card the window shows
+			corps += `,"empreinte":"` + empreinteCarte(m) + `"`
+		}
 		return lancerBrut(id, `{"mot_de_passe":"mdp-test"`+corps+"}")
 	}
 	proposer := func(c CarteMission, politique, etat string) string {

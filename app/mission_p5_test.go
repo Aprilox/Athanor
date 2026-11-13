@@ -383,7 +383,8 @@ func TestMissionP5(t *testing.T) {
 	}
 
 	// 2. Lancer (proof of presence): the project, its environments (with the zone's provider), the pilot, both Servers tasks
-	appel("POST", "/api/missions/"+mid+"/lancer", `{"mot_de_passe":"`+mdp+`"}`, http.StatusOK)
+	stocke, _ := lireMission(mid) // the print the window received (the map above reorders the card)
+	appel("POST", "/api/missions/"+mid+"/lancer", `{"mot_de_passe":"`+mdp+`","empreinte":"`+empreinteCarte(stocke)+`"}`, http.StatusOK)
 	m, _ = lireMission(mid)
 	p, ok := cur.projetNomme(projet)
 	if !ok || m.Etat != "lancee" || len(m.Voies) != 3 || m.Voies[1].Module != "servers" || m.Voies[2].Module != "servers" {

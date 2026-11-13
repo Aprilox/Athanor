@@ -274,10 +274,9 @@ func (s *Serveur) changerPolitiqueMission(id, qui, pol string) (Mission, error) 
 		if !ok {
 			continue
 		}
-		// shortcut: the floor is the policy the card showed as "Before" (C81); an existing environment identical to
-		// the card had no "Before" and may go down to auto, record its policy at launch if that matters
+		// R5: never under the existing environment's own policy, read when the card was worked out (C81)
 		cible := politiqueEnvMission(ec.Nom, pol)
-		if ec.Avant != nil && ec.Avant.Politique == "accord" {
+		if ec.Plancher == "accord" || ec.Avant != nil && ec.Avant.Politique == "accord" {
 			cible = "accord"
 		}
 		if pol == "tout" && s.approbations != nil {

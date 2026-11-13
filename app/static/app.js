@@ -2090,7 +2090,7 @@ document.addEventListener("click", async (ev) => {
     if (r) { etat.missionEdition = null; majZoneMission(); }
   } else if (a === "lancer") { // C78: launching gives the card's keys, as the Access page does
     const p = await preuveMdp(t("Launching the mission gives its keys to the project: retype Athanor's password."), { ok: t("Launch") });
-    if (p) await actionMission("lancer", p);
+    if (p) await actionMission("lancer", { ...p, empreinte: m.empreinte }); // R3: the card read, never a newer one
   }
   else if (a === "annuler") { if (await choisir(t("Cancel this mission? Nothing has been built or deployed yet."), [{ id: "non", texte: t("Keep it") }, { id: "oui", texte: t("Cancel the mission"), danger: true }]) === "oui") await actionMission("annuler"); }
   else if (a === "oublier") { etat.missionVue = null; majZoneMission(); }

@@ -143,7 +143,11 @@ func outilProposerMission(s *Serveur, x SessionHub, args json.RawMessage) (strin
 		var avant CarteMission // C83: the boxes the owner unticked stay unticked, by (entry, pour)
 		_ = json.Unmarshal(m.Carte, &avant)
 		for i := range c.Acces {
-			c.Acces[i].Decoche = slices.ContainsFunc(avant.Acces, func(a AccesCarte) bool { return a.Decoche && memeAcces(a, c.Acces[i]) })
+			j := slices.IndexFunc(avant.Acces, func(a AccesCarte) bool { return memeAcces(a, c.Acces[i]) })
+			// R4: a new code entry the owner never named (a README line read by etat_projet…) arrives unticked; an
+			// infra one never leaves Athanor's Go and each use waits for an accepted plan
+			nommee := c.Acces[i].Portee == "infra" || slices.Contains(m.Mentions.Cles, c.Acces[i].ID)
+			c.Acces[i].Decoche = j >= 0 && avant.Acces[j].Decoche || j < 0 && (c.Acces[i].ID == "" || !nommee)
 		}
 		c = calculerCarte(c, m.Politique, ctx)
 		b, err := json.Marshal(c)

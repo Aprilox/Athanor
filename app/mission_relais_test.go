@@ -19,6 +19,7 @@ import (
 // card → the mission ends once dev is checked.
 func TestMissionRelaisProd(t *testing.T) {
 	s := serveurCoffreTest(t)
+	motDePasseCoffreTest(t, s) // the infra key open: a mission on servers waits for it (R7)
 	if err := modifierServeurs(func(l []ServeurInventaire) ([]ServeurInventaire, error) {
 		return append(l, ServeurInventaire{ID: "a1", Nom: "web-1", Hote: "203.0.113.5", Roles: []string{"dev", "prod"}}), nil
 	}); err != nil {

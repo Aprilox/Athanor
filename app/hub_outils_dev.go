@@ -244,6 +244,11 @@ func outilDemanderDeploiement(s *Serveur, x SessionHub, args json.RawMessage) (s
 	if !slices.Contains(envsProjet, env) {
 		return "", errors.New("unknown environment: dev, staging or prod")
 	}
+	if env == "prod" && slices.ContainsFunc(lireMissions(), func(m Mission) bool { // R6: the mission's relay alone asks for prod
+		return (m.Etat == "lancee" || m.Etat == "en_pause") && slices.ContainsFunc(m.Voies, func(v VoieMission) bool { return v.Module == "dev" && v.Ref == x.Projet })
+	}) {
+		return "", errors.New("a mission covers this project: its prod is deployed by the mission once dev is checked, after the owner's accord; do not ask for it, go on with your work")
+	}
 	if len(commit) == 64 && strings.Trim(commit, "0123456789abcdef") == "" { // B81: the engine archives SHA-1 commits only
 		return "", errors.New("this commit is a SHA-256 hash: Athanor's engine deploys only repositories with SHA-1 commits (40 hexadecimal characters); nothing was asked")
 	}

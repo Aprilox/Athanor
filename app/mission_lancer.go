@@ -7,6 +7,7 @@ package main
 // and to the bell; nothing already done is undone.
 
 import (
+	"cmp"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -329,12 +330,14 @@ func missionTout(env string) bool {
 	})
 }
 
-// apiLancerMission: POST /api/missions/{id}/lancer {dossier?, mot_de_passe}: the mission launched (its state and lanes in the
-// answer, echec with the reason if a step failed). The folder is chosen on the PC only.
+// apiLancerMission: POST /api/missions/{id}/lancer {dossier?, mot_de_passe, empreinte}: the mission launched (its state and lanes in the
+// answer, echec with the reason if a step failed). The folder is chosen on the PC only; empreinte is the card the
+// owner read (R3: absent or another one, nothing is launched).
 func (s *Serveur) apiLancerMission(w http.ResponseWriter, r *http.Request) {
 	var c struct {
 		Dossier    string `json:"dossier"`
 		MotDePasse string `json:"mot_de_passe"`
+		Empreinte  string `json:"empreinte"`
 	}
 	if r.ContentLength != 0 && lireCorps(r, &c) != nil {
 		s.erreur(w, http.StatusBadRequest, "Invalid request")
@@ -348,7 +351,7 @@ func (s *Serveur) apiLancerMission(w http.ResponseWriter, r *http.Request) {
 	if appareilDe(r) != "" {
 		c.Dossier = ""
 	}
-	m, err := s.lancerMission(r.PathValue("id"), deQui(r), strings.TrimSpace(c.Dossier), "")
+	m, err := s.lancerMission(r.PathValue("id"), deQui(r), strings.TrimSpace(c.Dossier), cmp.Or(c.Empreinte, "absente"))
 	if err != nil {
 		s.erreurMissionHTTP(w, err)
 		return

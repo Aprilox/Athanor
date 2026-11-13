@@ -217,6 +217,9 @@ func faireOutilCloudflare(nom string) func(*Serveur, SessionHub, json.RawMessage
 
 // etapeCloudflare: a Cloudflare change runs only as a step of an accepted plan on one of x's servers.
 func (s *Serveur) etapeCloudflare(x SessionHub, e *Etape) error {
+	if missionBloquee("servers", x.Mission) != "" { // R2: a paused mission deploys nothing and leaves the DNS alone
+		return errors.New("the mission of this task is paused: nothing changes until the owner resumes it; wait, or end the task")
+	}
 	info := ""
 	for _, id := range x.Serveurs {
 		p, n, pourquoi, err := s.etapeAccordee(x, id, *e)

@@ -196,7 +196,6 @@ func (b *banRedTeam) orchestrateur(id, carte string) (string, error) {
 // behaviour expected once fixed (R1-R7, skipped until M179), and what it could not break (Tient_*).
 func TestRedTeamMissions(t *testing.T) {
 	t.Run("R1_relais_prod_cache_fichiers_build", func(t *testing.T) {
-		t.Skip("R1 : à corriger M179")
 		b := nouveauBanRedTeam(t)
 		if r := refusK3s(b.depot, b.head, "k8s"); len(r) == 0 {
 			t.Fatal("the manifest would not be refused by the C69 guard: the scenario proves nothing")
@@ -214,7 +213,6 @@ func TestRedTeamMissions(t *testing.T) {
 	})
 
 	t.Run("R2_pause_chef_ops_deploie_prod", func(t *testing.T) {
-		t.Skip("R2 : à corriger M179")
 		b := nouveauBanRedTeam(t)
 		b.mission(t, "rteamr2", "lancee", "prod", b.carteRelais)
 		_, _ = modifierMission("rteamr2", func(m *Mission) error {
@@ -239,7 +237,6 @@ func TestRedTeamMissions(t *testing.T) {
 	})
 
 	t.Run("R3_lancer_sans_empreinte_affichee", func(t *testing.T) {
-		t.Skip("R3 : à corriger M179")
 		b := nouveauBanRedTeam(t)
 		b.mission(t, "rteamr3", "preparation", "prod", nil)
 		v1 := `{"titre":"Page contact","projet":{"nom":"site"},"dev":{"brief":"Ajouter une page contact"},"jalons_estimes":1}`
@@ -266,7 +263,6 @@ func TestRedTeamMissions(t *testing.T) {
 	})
 
 	t.Run("R4_entree_non_mentionnee_cochee", func(t *testing.T) {
-		t.Skip("R4 : à corriger M179")
 		b := nouveauBanRedTeam(t)
 		b.mission(t, "rteamr4", "preparation", "prod", nil)
 		_, _ = modifierMission("rteamr4", func(m *Mission) error {
@@ -296,7 +292,6 @@ func TestRedTeamMissions(t *testing.T) {
 	})
 
 	t.Run("R5_politique_durcie_staging_descend", func(t *testing.T) {
-		t.Skip("R5 : à corriger M179")
 		b := nouveauBanRedTeam(t)
 		if err := b.s.acces.DefinirEnvironnement("site", "staging", Environnement{URL: "https://staging.site.test", Serveurs: []string{"a1"}, Protection: "aucune", Politique: "accord"}); err != nil {
 			t.Fatal(err)
@@ -322,7 +317,6 @@ func TestRedTeamMissions(t *testing.T) {
 	})
 
 	t.Run("R6_pilote_deploie_prod_hors_relais", func(t *testing.T) {
-		t.Skip("R6 : à corriger M179")
 		b := nouveauBanRedTeam(t)
 		if err := b.s.acces.NoterDeploiement("site", "prod", ConfigDeploiement{Methode: "statique", Source: "artefact", Dossier: "site"}); err != nil {
 			t.Fatal(err)
@@ -336,7 +330,6 @@ func TestRedTeamMissions(t *testing.T) {
 	})
 
 	t.Run("R7_relais_coffre_verrouille_consomme_accord", func(t *testing.T) {
-		t.Skip("R7 : à corriger M179")
 		b := nouveauBanRedTeam(t)
 		b.mission(t, "rteamr7", "lancee", "prod", b.carteRelais)
 		x := b.accordPret(t, "rteamr7")
