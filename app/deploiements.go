@@ -76,9 +76,11 @@ type OptionsDeploiement struct {
 var (
 	verrousDeploiement sync.Map // "projet/env" → *sync.Mutex
 	historiqueMu       sync.Mutex
-	reDossierPublie    = regexp.MustCompile(`^[A-Za-z0-9_\-][A-Za-z0-9._\-]*(/[A-Za-z0-9_\-][A-Za-z0-9._\-]*)*$`)
+	reDossierPublie    = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9._\-]*(/[A-Za-z0-9_][A-Za-z0-9._\-]*)*$`) // B82: never "-…", an option for a command
 	reCommitComplet    = regexp.MustCompile(`^[0-9a-f]{40}$`)
 )
+
+const maxDossierPublie = 300
 
 func validerConfigDeploiement(c ConfigDeploiement) error {
 	switch {
@@ -86,8 +88,8 @@ func validerConfigDeploiement(c ConfigDeploiement) error {
 		return errors.New("deployment method: statique, compose or k3s")
 	case c.Source != "artefact" && c.Source != "git":
 		return errors.New("deployment source: artefact or git")
-	case c.Dossier != "" && !reDossierPublie.MatchString(c.Dossier):
-		return errors.New("dossier: a folder of the repository, relative, without \"..\", spaces or hidden parts")
+	case len(c.Dossier) > maxDossierPublie || c.Dossier != "" && !reDossierPublie.MatchString(c.Dossier):
+		return fmt.Errorf("dossier: a folder of the repository, relative, of %d characters at most, without \"..\", spaces, hidden parts or a part starting with \"-\"", maxDossierPublie)
 	case c.Construire != "" && c.Source != "artefact":
 		return errors.New("construire needs the artefact source: the build runs on this PC and its output is sent")
 	case len([]rune(c.Construire)) > maxCommande || strings.ContainsFunc(c.Construire, func(r rune) bool { return r < ' ' }):
@@ -118,7 +120,8 @@ func nomProjetServeur(projet string) string {
 }
 
 // verifierArchive: every entry of the tar.gz stays inside the release (relative, no "..", a link only to a
-// place inside it) and is a file, a folder or such a link; dossier must be in it.
+// place inside it, links of the archive followed) and is a file, a folder or such a link; dossier must be in it.
+// The servers check the links again once extracted (extraireVersion).
 func verifierArchive(chemin, dossier string) error {
 	f, err := os.Open(chemin)
 	if err != nil {
@@ -130,6 +133,7 @@ func verifierArchive(chemin, dossier string) error {
 		return fmt.Errorf("unreadable archive: %w", err)
 	}
 	tr, trouve := tar.NewReader(gz), dossier == ""
+	liens, noms := map[string]string{}, []string(nil)
 	for {
 		h, err := tr.Next()
 		if err == io.EOF {
@@ -148,18 +152,58 @@ func verifierArchive(chemin, dossier string) error {
 		switch h.Typeflag {
 		case tar.TypeReg, tar.TypeDir:
 		case tar.TypeSymlink:
-			if c := path.Join(path.Dir(nom), h.Linkname); path.IsAbs(h.Linkname) || c == ".." || strings.HasPrefix(c, "../") {
-				return fmt.Errorf("archive refused: the link %q points out of the release (%q)", h.Name, h.Linkname)
-			}
+			liens[nom] = h.Linkname
 		default:
 			return fmt.Errorf("archive refused: %q is not a file, a folder or a link", h.Name)
 		}
+		noms = append(noms, nom)
 		trouve = trouve || nom == dossier || strings.HasPrefix(nom, dossier+"/")
+	}
+	for _, n := range noms { // B75: once every link is known, as the server will follow them (chains included)
+		if dansVersion(n, liens) {
+			continue
+		}
+		if l, ok := liens[n]; ok {
+			return fmt.Errorf("archive refused: the link %q points out of the release (%q)", n, l)
+		}
+		return fmt.Errorf("archive refused: %q leaves the release through a link", n)
 	}
 	if !trouve {
 		return fmt.Errorf("the commit has no folder %q to publish", dossier)
 	}
 	return nil
+}
+
+// dansVersion (B75): p followed from the release's root through the archive's links, each step resolved before
+// the next ".." (not lexically); false when it climbs above the root, meets an absolute link or loops.
+func dansVersion(p string, liens map[string]string) bool {
+	var pile []string
+	reste, sauts := strings.Split(p, "/"), 0
+	for len(reste) > 0 {
+		c := reste[0]
+		reste = reste[1:]
+		switch c {
+		case "", ".":
+			continue
+		case "..":
+			if len(pile) == 0 {
+				return false
+			}
+			pile = pile[:len(pile)-1]
+			continue
+		}
+		pile = append(pile, c)
+		l, ok := liens[strings.Join(pile, "/")]
+		if !ok {
+			continue
+		}
+		if sauts++; sauts > 40 || path.IsAbs(l) {
+			return false
+		}
+		pile = pile[:len(pile)-1]
+		reste = append(strings.Split(l, "/"), reste...)
+	}
+	return true
 }
 
 // echecSSH: err, or the script's code and the end of its output when it did not exit 0.
@@ -184,6 +228,7 @@ umask 022
 mkdir -p -- "$b/releases" && mkdir -- "$r" || { rm -f -- "$a"; echo "the release $4 cannot be made"; exit 1; }
 tar -xzf "$a" -C "$r" --no-same-owner --no-same-permissions || { rm -f -- "$a"; rm -rf -- "$r"; echo "the archive could not be extracted"; exit 1; }
 rm -f -- "$a"
+rr=$(readlink -f -- "$r") && x=$(find "$r" -type l -exec readlink -m -- {} + | while IFS= read -r t; do case "$t" in "$rr"|"$rr"/*) ;; *) echo "$t"; break;; esac; done) && [ -z "$x" ] || { rm -rf -- "$r"; echo "archive refused: a link of the release points out of it once extracted"; exit 1; }
 `
 
 // scriptPreparer ($1 the archive sent, $2 its SHA-256 ("" for an archive git made on the server), $3 the environment's folder, $4 the version, $5 the
@@ -353,6 +398,7 @@ func (s *Serveur) finirDeploiement(ctx context.Context, p Projet, e Environnemen
 		}
 		err = s.verifierApres(ctx, e, &d)
 	}
+	d.Erreur = s.masquerSecrets(d.Erreur) // B77: a server may echo what it read (key, .env); the history reaches the phone
 	if e2 := noterHistorique(d); err == nil && e2 != nil {
 		err = fmt.Errorf("deployed, but the history cannot be written: %w", e2)
 	}
@@ -362,6 +408,7 @@ func (s *Serveur) finirDeploiement(ctx context.Context, p Projet, e Environnemen
 		} else {
 			d.Etat, d.Erreur = "revenu", d.Erreur+"; went back automatically to "+r.Version
 		}
+		d.Erreur = s.masquerSecrets(d.Erreur)
 		_ = noterHistorique(d)
 	}
 	return d, err

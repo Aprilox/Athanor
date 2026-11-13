@@ -13,7 +13,6 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
-	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -233,9 +232,6 @@ func (s *Serveur) cleCodeNommee(nom string) string {
 	return id
 }
 
-// commitValide (C61): a full commit hash, SHA-1 or SHA-256 (a prefix could name another commit made later).
-var commitValide = regexp.MustCompile(`^([0-9a-f]{40}|[0-9a-f]{64})$`)
-
 // outilDemanderDeploiement (M120): the environment's policy decides (politiqueDeploiement); prod and the
 // "accord" policy wait for the owner (one accord, one deployment). An accepted one runs in the background with
 // the environment's recorded method (M135); without one, nothing is asked: a Servers task deploys first.
@@ -248,8 +244,11 @@ func outilDemanderDeploiement(s *Serveur, x SessionHub, args json.RawMessage) (s
 	if !slices.Contains(envsProjet, env) {
 		return "", errors.New("unknown environment: dev, staging or prod")
 	}
-	if !commitValide.MatchString(commit) {
-		return "", errors.New("commit must be the full commit hash (40 or 64 hexadecimal characters, git rev-parse HEAD)")
+	if len(commit) == 64 && strings.Trim(commit, "0123456789abcdef") == "" { // B81: the engine archives SHA-1 commits only
+		return "", errors.New("this commit is a SHA-256 hash: Athanor's engine deploys only repositories with SHA-1 commits (40 hexadecimal characters); nothing was asked")
+	}
+	if !reCommitComplet.MatchString(commit) { // C61: a prefix could name another commit made later
+		return "", errors.New("commit must be the full commit hash (40 hexadecimal characters, git rev-parse HEAD)")
 	}
 	e := s.acces.Environnements(x.Projet)[env]
 	if len(e.Serveurs) == 0 {
@@ -265,19 +264,27 @@ func outilDemanderDeploiement(s *Serveur, x SessionHub, args json.RawMessage) (s
 	// C63: the accord is for these servers, this agent and this mission (Reprendre compares them)
 	ap := Approbation{Projet: x.Projet, Env: env, Mission: x.Mission, Agent: x.Agent, Action: actionDeploiement,
 		Details: map[string]string{"commit": commit, "hote": hote, "serveurs": listeServeursAccord(e.Serveurs)}, Raison: "commit " + commit + " → " + hote}
-	var fichiers []string
-	if p, ok := s.projetNomme(x.Projet); ok {
-		fichiers = fichiersBuildChanges(p, env, commit, e.Deploiement)
+	p, ok := s.projetNomme(x.Projet)
+	if !ok {
+		return "", errors.New("unknown project")
 	}
+	if sha, err := gitSortie(p.Dossier, "rev-parse", "--verify", "--quiet", "--end-of-options", commit+"^{commit}"); err != nil || sha != commit {
+		return "", fmt.Errorf("commit %s is not in the project's repository (commit your work first); nothing was asked", commit) // B81: never an accord that cannot be used
+	}
+	fichiers := fichiersBuildChanges(p, env, commit, e.Deploiement)
 	if len(fichiers) > 0 { // C68, C69: the build or the containers would run changed files of the repository: the owner reads them
 		ap.Details["fichiers_build"] = couper(strings.Join(fichiers, ", "), 300)
 		ap.Raison += "; build files changed: " + ap.Details["fichiers_build"]
 	}
-	accepte := func(par string, accorde bool) (string, error) {
+	accepte := func(par, accord string) (string, error) {
 		s.ecrireAudit(LigneAudit{Type: "evenement", De: x.Agent, Vers: "hub", Mission: x.Mission, Projet: x.Projet, Env: env, Agent: x.Agent,
 			Action: "déploiement accepté", Resultat: "commit " + commit + " → " + hote + " (" + par + ")"})
-		d, suite, err := s.commencerDeploiement(x.Projet, env, commit, OptionsDeploiement{Auteur: "agent", Accorde: accorde})
+		d, suite, err := s.commencerDeploiement(x.Projet, env, commit, OptionsDeploiement{Auteur: "agent", Accorde: accord != ""})
 		if err != nil {
+			if accord != "" { // C75: nothing started (a deployment already running…): the owner's accord stays usable
+				s.approbations.Rendre(accord)
+				return "", fmt.Errorf("deployment accepted (%s) but not started: %s; the accord is kept: call demander_deploiement again later", par, s.masquerSecrets(err.Error()))
+			}
 			return "", fmt.Errorf("deployment accepted (%s) but not started: %s", par, s.masquerSecrets(err.Error()))
 		}
 		go func() { _, _ = suite(context.Background()) }() // its result goes to the history (deploiement_etat)
@@ -287,7 +294,7 @@ func outilDemanderDeploiement(s *Serveur, x SessionHub, args json.RawMessage) (s
 		return "waiting for the owner, id " + id + ": once accepted, call demander_deploiement again with the same environment and commit; go on with work that does not need it", nil
 	}
 	if accord, raison := s.politiqueDeploiement(x.Projet, env, len(fichiers) > 0); !accord { // C69: changed build or container files are destructive
-		return accepte(raison, false)
+		return accepte(raison, "")
 	}
 	y, etat, err := s.approbations.Reprendre(ap)
 	switch {
@@ -295,7 +302,7 @@ func outilDemanderDeploiement(s *Serveur, x SessionHub, args json.RawMessage) (s
 	case etat == "utilisee":
 		s.ecrireAudit(LigneAudit{Type: "evenement", De: x.Agent, Vers: "hub", Mission: x.Mission, Projet: x.Projet, Env: env,
 			Agent: x.Agent, Action: "approbation utilisée: " + actionDeploiement, Resultat: y.ID})
-		return accepte("the owner's accord "+y.ID, true)
+		return accepte("the owner's accord "+y.ID, y.ID)
 	case etat == "attente":
 		return attente(y.ID)
 	default:

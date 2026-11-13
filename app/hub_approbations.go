@@ -249,6 +249,18 @@ func (a *Approbations) Reprendre(x Approbation) (Approbation, string, error) {
 	return Approbation{}, "", nil
 }
 
+// Rendre (B81, C75): an accord used by Reprendre given back when the action it allowed did not start.
+func (a *Approbations) Rendre(id string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for i := range a.liste {
+		if a.liste[i].ID == id && a.liste[i].Utilisee != "" {
+			a.liste[i].Utilisee = ""
+			_ = a.enregistrer()
+		}
+	}
+}
+
 // ANotifier (C29): at most one phone notification per project within delaiNotification.
 func (a *Approbations) ANotifier(projet string) bool {
 	a.mu.Lock()

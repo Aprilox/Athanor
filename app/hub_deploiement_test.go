@@ -14,17 +14,20 @@ import (
 // approval that a rule may lift. M126: only a full hash (C61); the accord is bound to the sorted servers,
 // the agent and the mission (C63); a destructive deployment always asks (C64). M135: without a recorded method
 // nothing is asked (a Servers task deploys first); an accepted one starts the engine (here it stops at once: no
-// such project); a staging accord never serves prod.
+// such project); a staging accord never serves prod. M148 (B81, C75): a commit missing from the repository or a
+// SHA-256 one is refused before anything is asked; an accord whose deployment did not start is kept.
 func TestDemanderDeploiement(t *testing.T) {
 	s := serveurBusTest(t)
 	s.config.Langue = "fr"
+	depot, c := depotEssai(t, map[string]string{"a": "1"}, map[string]string{"a": "2"}, map[string]string{"a": "3"}, map[string]string{"a": "4"})
+	s.config.Projets[0].Dossier = depot
 	if err := s.acces.DefinirEnvironnement("demo", "dev", Environnement{URL: "https://dev.martin.fr", Serveurs: []string{"s1"}, Protection: "aucune", Politique: "auto"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := outilDemanderDeploiement(s, SessionHub{Projet: "demo", Agent: "pilote"}, json.RawMessage(`{"environnement":"dev","commit":"`+strings.Repeat("ab12", 10)+`"}`)); err == nil || !strings.Contains(err.Error(), "must be made by a Servers task") {
 		t.Errorf("without a method: %v", err)
 	}
-	methode := &ConfigDeploiement{Methode: "statique", Source: "artefact"}
+	methode := &ConfigDeploiement{Methode: "statique", Source: "git"} // no deployment key: the engine never starts here
 	for env, e := range map[string]Environnement{
 		"dev":     {URL: "https://dev.martin.fr", Serveurs: []string{"s1"}, Protection: "aucune", Politique: "auto"},
 		"staging": {Serveurs: []string{"s1"}, Protection: "aucune", Politique: "accord"},
@@ -42,14 +45,14 @@ func TestDemanderDeploiement(t *testing.T) {
 		return outilDemanderDeploiement(s, x, json.RawMessage(`{"environnement":"`+env+`","commit":"`+commit+`"}`))
 	}
 	deployer := func(env, commit string) (string, error) { return deployerPar(x, env, commit) }
-	// accepted: started, or (no such project here) refused by the engine; both say why it was accepted
+	// accepted, then refused by the engine (git source without key); it says why it was accepted
 	reponse := func(txt string, err error) string {
 		if err != nil {
 			return err.Error()
 		}
 		return txt
 	}
-	shaA, shaB, shaC, shaD := strings.Repeat("ab12", 10), strings.Repeat("cd34", 10), strings.Repeat("ef56", 16), strings.Repeat("0a9b", 10)
+	shaA, shaB, shaC, shaD := c[0], c[1], c[2], c[3]
 	idDe := func(txt string, err error) string {
 		t.Helper()
 		_, apres, ok := strings.Cut(txt, "waiting for the owner, id ")
@@ -58,10 +61,20 @@ func TestDemanderDeploiement(t *testing.T) {
 		}
 		return apres[:strings.Index(apres, ":")]
 	}
-	for _, c := range [][2]string{{"preprod", shaA}, {"prod", "abc; rm -rf /"}, {"prod", ""}, {"prod", shaA[:7]}, {"prod", shaA[:39]}, {"prod", shaA + "a"}, {"prod", shaC[:63]}} {
+	for _, c := range [][2]string{{"preprod", shaA}, {"prod", "abc; rm -rf /"}, {"prod", ""}, {"prod", shaA[:7]}, {"prod", shaA[:39]}, {"prod", shaA + "a"}, {"prod", strings.Repeat("ef56", 16)[:63]}} {
 		if txt, err := deployer(c[0], c[1]); err == nil {
 			t.Errorf("%v accepted: %s", c, txt)
 		}
+	}
+	// B81: neither a commit missing from the repository nor a SHA-256 one is ever asked to the owner
+	if _, err := deployer("prod", strings.Repeat("ee", 20)); err == nil || !strings.Contains(err.Error(), "is not in the project's repository") {
+		t.Errorf("missing commit: %v", err)
+	}
+	if _, err := deployer("prod", strings.Repeat("ef56", 16)); err == nil || !strings.Contains(err.Error(), "SHA-256") {
+		t.Errorf("SHA-256 commit: %v", err)
+	}
+	if l, _ := s.approbations.Liste(); len(l) != 0 {
+		t.Fatalf("asked for a commit that cannot be deployed: %+v", l)
 	}
 	if accord, _ := s.politiqueDeploiement("demo", "prod", false); !accord {
 		t.Error("prod without accord")
@@ -109,11 +122,14 @@ func TestDemanderDeploiement(t *testing.T) {
 	if _, _, err := s.deciderApprobation("fenetre", id, "accepter", "", "", ""); err != nil {
 		t.Fatal(err)
 	}
-	if txt := reponse(deployer("prod", shaA)); !strings.Contains(txt, "accepted (the owner's accord "+id+")") {
-		t.Fatalf("accepted prod: %q", txt)
+	// C75: the engine refused before starting: the accord is kept for the next call
+	for range 2 {
+		if txt := reponse(deployer("prod", shaA)); !strings.Contains(txt, "accepted (the owner's accord "+id+")") || !strings.Contains(txt, "the accord is kept") {
+			t.Fatalf("accepted prod: %q", txt)
+		}
 	}
-	if idDe(deployer("prod", shaA)) == id {
-		t.Error("one accord let two deployments through")
+	if ap, _ := s.approbations.Lire(id); ap.Utilisee != "" {
+		t.Errorf("an accord whose deployment did not start stays used: %+v", ap)
 	}
 
 	// C63: an accord is for its servers, its agent and its mission
@@ -143,8 +159,8 @@ func TestDemanderDeploiement(t *testing.T) {
 	if txt := reponse(deployer("prod", shaC)); !strings.Contains(txt, "accepted (the owner's accord "+idC+")") {
 		t.Errorf("pilote/M5 after the others: %q", txt)
 	}
-	if ap, _ := s.approbations.Lire(idC); ap.Utilisee == "" {
-		t.Error("accord not marked used")
+	if ap, _ := s.approbations.Lire(idC); ap.Utilisee != "" || ap.Etat != "acceptee" {
+		t.Errorf("accord after a deployment that did not start: %+v", ap)
 	}
 
 	// staging in accord: an approval; "never ask again" turns it into a rule for staging only

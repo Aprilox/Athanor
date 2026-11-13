@@ -35,7 +35,7 @@ func init() {
 		"The method is then recorded so that later deployments need no agent. A step of an accepted plan only.",
 		Schema: schemaObjet(map[string]any{"env": env, "methode": parmi("statique: Caddy serves a folder; compose: docker compose up of the release; k3s: kubectl apply of a manifests folder on a k3s server, only when the owner asked for Kubernetes", "statique", "compose", "k3s"),
 			"source":     parmi("artefact: the commit archived on this PC and sent; git: each server fetches it with the deployment key", "artefact", "git"),
-			"dossier":    schemaTexte("The published folder (statique), the compose file's folder or the manifests' folder (k3s), relative to the repository; empty: its root"),
+			"dossier":    map[string]any{"type": "string", "maxLength": maxDossierPublie, "description": "The published folder (statique), the compose file's folder or the manifests' folder (k3s), relative to the repository; empty: its root"},
 			"construire": schemaTexte("A build command run on this PC in a checkout of the commit before the archive (artefact source only)"),
 			"commit":     schemaTexte("The full commit hash"), "classe": classe}, "env", "methode", "source", "commit"),
 		Faire: faireOutilDeploiement("deployer")}

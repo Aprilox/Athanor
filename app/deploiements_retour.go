@@ -268,7 +268,7 @@ func (s *Serveur) revenirVerrouille(ctx context.Context, projet, env, auteur, ci
 			_ = noterHistorique(h[quitte.i])
 		}
 	}
-	d.Fin = time.Now().UTC().Format(time.RFC3339)
+	d.Fin, d.Erreur = time.Now().UTC().Format(time.RFC3339), s.masquerSecrets(d.Erreur) // B77
 	_ = noterHistorique(d)
 	s.ecrireAudit(LigneAudit{Type: "evenement", De: auteur, Vers: "hub", Projet: projet, Env: env, Action: "deploiement.retour",
 		Resultat: d.Etat + " " + d.Version + " " + couper(d.Erreur, 160)})
