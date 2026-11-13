@@ -1842,8 +1842,24 @@ function activiteElement(e) {
   const quoi = [e.activite ? titreJalon(e.activite) : "", e.action ? t(e.action) : ""].filter(Boolean).join(", ");
   return j && quoi ? t("{0}: {1}", [j, quoi]) : j || quoi;
 }
+// M189: a remote Athanor's project (nom@instance): no page here, its pilot's buttons; greyed when the remote is offline
+function boutonsDistant(e) {
+  if (e.hors_ligne) return `<div class="muet petit">${t("Offline: last state known")}</div>`;
+  const b = (ordre, lib, cl = "") => `<button type="button" class="btn btn-petit${cl}" data-pilote-distant="${h(ordre)}">${t(lib)}</button>`;
+  return `<div class="ligne m0">${e.etat === "actif" ? b("pause_fin_cycle", "Stop after cycle") + b("arreter", "Stop now", " btn-danger") : b("demarrer", "Start", " btn-primaire")}</div>`;
+}
 function ligneElement(e, modules) {
   const m = modules.find((x) => x.id === e.module) || { id: e.module, nom: e.module };
+  if (e.distant) {
+    const [classe, libelle] = e.hors_ligne ? ["", "Offline"] : ETATS_ELEMENT[e.etat] || ETATS_ELEMENT.inactif, a = e.avancement, act = activiteElement(e);
+    return `<div class="bloc carte-projet ligne-element element-distant${e.attente ? " besoin" : ""}${e.hors_ligne ? " hors-ligne" : ""}" data-distant-id="${h(e.distant)}" data-distant-projet="${h(e.nom_distant)}">
+    <div class="cp-tete"><span class="dot ${classe}" aria-hidden="true"></span><b class="cp-nom">${h(e.titre)}</b><span class="pastille-module"><span class="ico ico-${h(m.id)}" aria-hidden="true"></span>${h(t(m.nom))}</span></div>
+    <div class="el-etat petit">${e.attente ? `<span class="cp-besoin">${t("Needs you")}</span> <span>${h(t(e.attente.raison, e.attente.args || []))}</span>` : `<span class="muet">${t(libelle)}</span>`}</div>
+    ${act ? `<div class="cp-jalon petit" title="${h(act)}">${h(act)}</div>` : ""}
+    ${a && a.total ? `<div class="barre"><i style="width:${(a.fait / a.total) * 100}%"></i></div>` : ""}${a && a.texte ? `<div class="muet petit">${h(t(a.texte, [a.fait, a.total]))}</div>` : ""}
+    ${boutonsDistant(e)}
+  </div>`;
+  }
   const [classe, libelle] = ETATS_ELEMENT[e.etat] || ETATS_ELEMENT.inactif, a = e.avancement, act = activiteElement(e);
   const cible = e.attente ? e.attente.page : e.lien;
   // a Dev project: the project is selected before its page opens (cliqueProjet), any other module: a plain link
@@ -1872,6 +1888,13 @@ pages.global = async () => {
   if (!tous.length) return `${actions}<div class="vide">${t("No project.")}</div>`;
   return `${actions}${barre}${liste.length ? `<div class="grille-projets">${liste.map((e) => ligneElement(e, modules)).join("")}</div>` : `<div class="vide">${t("Nothing here right now.")}</div>`}`;
 };
+document.addEventListener("click", async (ev) => {
+  const b = ev.target.closest("[data-pilote-distant]"); if (!b) return;
+  const c = b.closest("[data-distant-id]"); b.disabled = true;
+  const v = await action(api("distants", "POST", { action: "pilote", id: c.dataset.distantId, projet: c.dataset.distantProjet, ordre: b.dataset.piloteDistant }));
+  if (v) toast(t("Order sent to {0}.", [c.querySelector(".cp-nom").textContent]));
+  rendrePage();
+});
 document.addEventListener("click", (ev) => {
   const b = ev.target.closest("[data-filtre-projets]"); if (!b) return;
   etat.filtreProjets = b.dataset.filtreProjets; rendrePage();

@@ -216,7 +216,7 @@ func outilClientEtat(s *Serveur, c ClientMCP, args json.RawMessage) (string, err
 		}
 		alertes = append(alertes, map[string]any{"module": a.Module, "element": a.Element, "titre": a.Titre, "raison": raison})
 	}
-	return enJSON(map[string]any{"modules": modules, "alertes": alertes}), nil
+	return enJSON(map[string]any{"instance": nomCetteInstance(), "modules": modules, "alertes": alertes}), nil
 }
 
 func outilClientProjets(s *Serveur, c ClientMCP, args json.RawMessage) (string, error) {

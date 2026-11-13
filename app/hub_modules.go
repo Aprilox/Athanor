@@ -71,6 +71,10 @@ type ElementHub struct {
 	Attente    *AttenteElement `json:"attente,omitempty"`  // nil: nothing waits for the owner
 	Lien       string          `json:"lien"`               // the page that opens it
 	Projet     string          `json:"projet,omitempty"`   // the Dev project to select before opening Lien
+	// a project of a remote Athanor (hub_dev_distants.go): the remote's id, the project's name there, greyed offline
+	Distant    string `json:"distant,omitempty"`
+	NomDistant string `json:"nom_distant,omitempty"`
+	HorsLigne  bool   `json:"hors_ligne,omitempty"`
 }
 
 // Avancement: the module's own words for it (i18n keys), so that a server is not told in milestones.

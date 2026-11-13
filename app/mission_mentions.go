@@ -41,6 +41,11 @@ func (s *Serveur) candidatsMentions() []MentionTrouvee {
 			l = append(l, MentionTrouvee{Type: "projet", Ref: p.Nom, Nom: p.Nom})
 		}
 	}
+	for _, x := range s.devDistants() { // a remote Athanor's project: nom@instance, its ref names the remote by id
+		for _, p := range x.projets {
+			l = append(l, MentionTrouvee{Type: "projet", Ref: p.Nom + "@" + x.d.ID, Nom: p.Nom + "@" + x.d.Nom, Detail: x.d.Nom})
+		}
+	}
 	serveurs, _ := lireServeurs() // an unreadable inventory: no server to mention
 	for _, sv := range serveurs {
 		l = append(l, MentionTrouvee{Type: "serveur", Ref: sv.ID, Nom: sv.Nom, Detail: sv.Hote})

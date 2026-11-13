@@ -42,9 +42,10 @@ type magasinDistants struct {
 	mu       sync.Mutex
 	liste    []Distant
 	etats    map[string]string
-	jetons   map[string]string   // tokens waiting for the vault to open (memory only)
-	attentes map[string]*Distant // pairings waiting for the other owner's yes, by request secret
-	message  string              // the last pairing that failed, said once in the window
+	jetons   map[string]string          // tokens waiting for the vault to open (memory only)
+	attentes map[string]*Distant        // pairings waiting for the other owner's yes, by request secret
+	projets  map[string][]ProjetDistant // a remote that carries dev: its projects (the last list read, kept offline)
+	message  string                     // the last pairing that failed, said once in the window
 }
 
 func cheminDistants() string { return filepath.Join(dossierAthanor(), "hub", "distants.json") }
@@ -56,7 +57,7 @@ var clientDistants = &http.Client{Timeout: 10 * time.Second}
 
 func (s *Serveur) dst() *magasinDistants {
 	s.distantsOnce.Do(func() {
-		m := &magasinDistants{etats: map[string]string{}, jetons: map[string]string{}, attentes: map[string]*Distant{}}
+		m := &magasinDistants{etats: map[string]string{}, jetons: map[string]string{}, attentes: map[string]*Distant{}, projets: map[string][]ProjetDistant{}}
 		if b, err := os.ReadFile(cheminDistants()); err == nil && json.Unmarshal(b, &m.liste) != nil {
 			m.liste = nil
 		}
@@ -326,7 +327,7 @@ func (s *Serveur) rafraichirDistant(id string) {
 			s.auditDistant(d.Nom, "jeton distant", "mis au coffre")
 		}
 	}
-	etat, outils, modules := "en_ligne", d.Outils, d.Modules
+	etat, outils, modules, nom := "en_ligne", d.Outils, d.Modules, d.Nom
 	res, err := s.appelDistant(d, "tools/list", map[string]any{})
 	if err == nil {
 		var l struct{ Tools []struct{ Name string } }
@@ -336,8 +337,14 @@ func (s *Serveur) rafraichirDistant(id string) {
 			outils = append(outils, o.Name)
 		}
 		if slices.Contains(outils, "etat") {
-			var e struct{ Modules []struct{ ID string } }
+			var e struct {
+				Instance string
+				Modules  []struct{ ID string }
+			}
 			if texte, err2 := s.outilDistant(d, "etat", nil); err2 == nil && json.Unmarshal([]byte(texte), &e) == nil {
+				if u, _ := url.Parse(d.URL); d.URL != "" && u != nil && d.Nom == u.Host && strings.TrimSpace(e.Instance) != "" {
+					nom = couper(strings.TrimSpace(e.Instance), 60) // added by its address: named after the instance once it answers
+				}
 				modules = []string{}
 				for _, x := range e.Modules {
 					modules = append(modules, x.ID)
@@ -345,6 +352,7 @@ func (s *Serveur) rafraichirDistant(id string) {
 			}
 		}
 	}
+	projets, devLu := s.lireProjetsDistant(d, err == nil, outils, modules)
 	switch {
 	case err == nil:
 	case errors.Is(err, errDistantRevoque):
@@ -357,13 +365,16 @@ func (s *Serveur) rafraichirDistant(id string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.etats[id] = etat
+	if devLu {
+		m.projets[id] = projets
+	}
 	j := slices.IndexFunc(m.liste, func(x Distant) bool { return x.ID == id })
 	if j < 0 {
 		return
 	}
 	x := &m.liste[j]
-	ecrire := !slices.Equal(x.Outils, outils) || !slices.Equal(x.Modules, modules)
-	x.Outils, x.Modules = outils, modules
+	ecrire := !slices.Equal(x.Outils, outils) || !slices.Equal(x.Modules, modules) || x.Nom != nom
+	x.Outils, x.Modules, x.Nom = outils, modules, nom
 	if etat == "en_ligne" {
 		now := time.Now().UTC().Format(time.RFC3339)
 		ecrire = ecrire || !strings.HasPrefix(x.Vu, now[:16]) // at most once a minute
@@ -419,6 +430,7 @@ func (s *Serveur) retirerDistant(id string) error {
 	}
 	delete(m.jetons, id)
 	delete(m.etats, id)
+	delete(m.projets, id)
 	err := m.enregistrer()
 	m.mu.Unlock()
 	if d.Coffre != "" && s.coffre != nil {
@@ -449,9 +461,9 @@ func (s *Serveur) vueDistants() map[string]any {
 	return v
 }
 
-// apiDistants: POST {action: ajouter (url, code) | retirer (id)} (the computer only, like the instances).
+// apiDistants: POST {action: ajouter (url, code) | retirer (id) | pilote (id, projet, ordre)} (the computer only, like the instances).
 func (s *Serveur) apiDistants(w http.ResponseWriter, r *http.Request) {
-	var c struct{ Action, URL, Code, ID string }
+	var c struct{ Action, URL, Code, ID, Projet, Ordre string }
 	if lireCorps(r, &c) != nil {
 		s.erreur(w, 400, "Invalid request.")
 		return
@@ -462,6 +474,8 @@ func (s *Serveur) apiDistants(w http.ResponseWriter, r *http.Request) {
 		err = s.ajouterDistant(c.URL, c.Code)
 	case "retirer":
 		err = s.retirerDistant(c.ID)
+	case "pilote":
+		err = s.piloteDistant(c.ID, c.Projet, c.Ordre)
 	default:
 		err = errors.New("Unknown action.")
 	}

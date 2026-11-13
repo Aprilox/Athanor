@@ -107,6 +107,9 @@ html.cadre .dialogue, html.cadre .verrou, html.cadre .assistant { top: var(--bar
 .carte-projet.courant { box-shadow: inset 3px 0 0 var(--accent); }
 .carte-projet.besoin { border-color: var(--attention); }
 .carte-projet .barre { margin: 6px 0 0; }
+.element-distant { cursor: default; }
+.element-distant.hors-ligne { opacity: .55; }
+.element-distant .ligne { margin-top: 6px; gap: 6px; }
 /* Home of the hub */
 .accueil { display: flex; flex-direction: column; gap: 16px; }
 .accueil > .bloc + .bloc { margin-top: 0; }

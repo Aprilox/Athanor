@@ -53,11 +53,17 @@ func idInstance() string {
 
 func fichierAnnonce() string { return filepath.Join(dossierAnnonces(), idInstance()+".json") }
 
-func ecrireAnnonce(port int) {
-	nom, _ := os.Hostname()
+// nomCetteInstance: the name this Athanor shows to the others (--nom, the host name otherwise).
+func nomCetteInstance() string {
 	if nomInstance != "" {
-		nom = nomInstance
+		return nomInstance
 	}
+	nom, _ := os.Hostname()
+	return nom
+}
+
+func ecrireAnnonce(port int) {
+	nom := nomCetteInstance()
 	a := Annonce{ID: idInstance(), Nom: nom, Version: versionAthanor, Port: port, PID: os.Getpid(), Dossier: dossierAthanor()}
 	for _, m := range modulesHub() {
 		a.Modules = append(a.Modules, m.ID())

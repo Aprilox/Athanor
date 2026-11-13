@@ -60,7 +60,7 @@ func (moduleDev) Elements(s *Serveur) []ElementHub {
 		}
 		out = append(out, e)
 	}
-	return out
+	return append(out, s.elementsDevDistants()...)
 }
 
 // attenteDev: what a project waits for from the owner (besoinProjet), with the bell's texts.
@@ -91,11 +91,22 @@ func (moduleDev) Resume(s *Serveur) ResumeModule {
 			besoins++
 		}
 	}
+	distants := 0
+	for _, x := range s.devDistants() {
+		distants += len(x.projets)
+		for _, p := range x.projets {
+			enCours += boolInt(x.enLigne && p.PiloteActif)
+			besoins += boolInt(x.enLigne && p.Besoin != "")
+		}
+	}
 	r := ResumeModule{Stats: []StatModule{
 		{Cle: "Projects running", Valeur: enCours, Page: "#global"},
 		{Cle: "Milestones done today", Valeur: jalonsDuJour(fichierJalonsFaits(), time.Now()), Page: "#global"},
 		{Cle: "Projects that need you", Valeur: besoins, Page: "#global"},
 	}, Besoin: besoins, Etat: "inactif"}
+	if distants > 0 {
+		r.Stats = append(r.Stats, StatModule{Cle: "Remote projects", Valeur: distants, Page: "#global"})
+	}
 	s.mu.Lock()
 	projets := append([]Projet{}, s.config.Projets...)
 	s.mu.Unlock()
