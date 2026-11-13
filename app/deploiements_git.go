@@ -8,7 +8,6 @@ package main
 import (
 	"context"
 	"errors"
-	"fmt"
 	"regexp"
 	"strings"
 
@@ -67,5 +66,5 @@ func recupererGit(ctx context.Context, c *ssh.Client, g *sourceGit, base, commit
 	if a := l[len(l)-1]; strings.HasPrefix(a, base+"/.git-") {
 		return a, nil
 	}
-	return "", fmt.Errorf("unexpected answer of the git fetch: %q", couper(string(r.Sortie), 200))
+	return "", errMoteur("unexpected answer of the git fetch: \"{0}\"", couper(string(r.Sortie), 200))
 }

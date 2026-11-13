@@ -78,7 +78,7 @@ func lancerConstruireDeploiement(args []string) int {
 func construireDeploiement(depot, commit, dossier, archive string, cage func(src string) (*exec.Cmd, error), journal io.Writer) error {
 	gitDir, err := gitSortie(depot, "rev-parse", "--path-format=absolute", "--git-dir")
 	if err != nil {
-		return fmt.Errorf("%s is not a git repository", depot)
+		return errMoteur("{0} is not a git repository", depot)
 	}
 	commun, err := gitSortie(depot, "rev-parse", "--path-format=absolute", "--git-common-dir")
 	if err != nil {
@@ -105,7 +105,7 @@ func construireDeploiement(depot, commit, dossier, archive string, cage func(src
 		cacherFenetre(c)
 		out, err := c.Output()
 		if err != nil {
-			return "", fmt.Errorf("git %s: %v %s", args[0], err, couper(strings.TrimSpace(erreurs.String()), 300))
+			return "", errMoteur("git {0}: {1} {2}", args[0], err, couper(strings.TrimSpace(erreurs.String()), 300))
 		}
 		return strings.TrimSpace(string(out)), nil
 	}
@@ -138,7 +138,7 @@ func construireDeploiement(depot, commit, dossier, archive string, cage func(src
 	err = c.Wait()
 	stop()
 	if err != nil {
-		return fmt.Errorf("the build failed (%v); nothing was switched", err)
+		return errMoteur("the build failed ({0}); nothing was switched", err)
 	}
 	// created after the build: nothing the build left in the temporary folders is read
 	apres, err := os.MkdirTemp("", "athanor-construire-git-")
@@ -157,7 +157,7 @@ func construireDeploiement(depot, commit, dossier, archive string, cage func(src
 	}
 	if dossier != "" {
 		if _, err := git(apres, "add", "-f", "--", dossier); err != nil {
-			return fmt.Errorf("the published folder %s is missing after the build: %w", dossier, err)
+			return errMoteur("the published folder {0} is missing after the build: {1}", dossier, err)
 		}
 	}
 	arbre, err := git(apres, "write-tree")

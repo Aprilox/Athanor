@@ -86,12 +86,9 @@ func (s *Serveur) verifierApres(ctx context.Context, e Environnement, d *Deploie
 	if d.Verification.OK {
 		return nil
 	}
-	msg := strings.Join(d.Verification.Problemes, ", ")
-	if d.Verification.HTTP.Erreur != "" {
-		msg += ": " + couper(d.Verification.HTTP.Erreur, 200)
-	}
-	d.Etat, d.Erreur = "echec", "the external verification failed: "+msg
-	return errors.New(d.Erreur)
+	m := messageVerification(d.Verification)
+	d.Etat, d.Message = "echec", m
+	return m
 }
 
 // scriptLireCible ($1 the environment's folder, $2 the version aimed at, "" for the previous one): the release
@@ -184,16 +181,16 @@ func (s *Serveur) revenirVerrouille(ctx context.Context, projet, env, auteur, ci
 		}
 		c, err := s.connecterServeur(ctx, l[i])
 		if err != nil {
-			return Deploiement{}, fmt.Errorf("%s: %w", id, err)
+			return Deploiement{}, errMoteur("{0}: {1}", id, err)
 		}
 		serveurs = append(serveurs, serveurPret{id, c})
 		r, err := executerSSH(ctx, c, commeRoot(scriptLireCible, base, cible), nil, delaiCommande)
 		if err := echecSSH(r, err); err != nil {
-			return Deploiement{}, fmt.Errorf("%s: %w; nothing was switched", id, err)
+			return Deploiement{}, errMoteur("{0}: {1}; nothing was switched", id, err)
 		}
 		ct := strings.SplitN(strings.TrimSpace(string(r.Sortie)), "\n", 2)
 		if len(ct) != 2 || !strings.HasPrefix(ct[1], "releases/") {
-			return Deploiement{}, fmt.Errorf("%s: unexpected answer %q", id, couper(string(r.Sortie), 200))
+			return Deploiement{}, errMoteur("{0}: unexpected answer \"{1}\"", id, couper(string(r.Sortie), 200))
 		}
 		t := strings.TrimPrefix(ct[1], "releases/")
 		if version != "" && t != version {
@@ -207,7 +204,7 @@ func (s *Serveur) revenirVerrouille(ctx context.Context, projet, env, auteur, ci
 	d := Deploiement{ID: aleatoire(8), Projet: projet, Env: env, Commit: vise.commit, Methode: vise.methode, Version: version, Dossier: &vise.dossier,
 		Amont: vise.amont, Etat: "en_cours", Auteur: auteur, Retour: true, Serveurs: e.Serveurs, Debut: debut.Format(time.RFC3339)}
 	if err := noterHistorique(d); err != nil {
-		return d, fmt.Errorf("the deployment history cannot be written: %w", err)
+		return d, errMoteur("the deployment history cannot be written: {0}", err)
 	}
 	// servir: what serves the current release of one server, with the method of version v
 	servir := func(ctx context.Context, x serveurPret, v versionConnue) error {
@@ -244,23 +241,23 @@ func (s *Serveur) revenirVerrouille(ctx context.Context, projet, env, auteur, ci
 			break
 		}
 		if err = servir(ctx, x.serveurPret, vise); err != nil {
-			err = fmt.Errorf("%s: %w", x.id, err)
+			err = errMoteur("{0}: {1}", x.id, err)
 		}
 	}
 	d.Etat = "ok"
 	if err == nil {
 		err = s.verifierApres(ctx, e, &d)
 	} else {
-		d.Etat, d.Erreur = "echec", err.Error()
+		d.Etat, d.Message = "echec", messageDe(err)
 	}
 	if err != nil && len(touches) > 0 { // the version left served again everywhere
 		remettreLiens(ctx, touches, base)
 		for _, x := range touches {
 			if e2 := servir(context.WithoutCancel(ctx), x.serveurPret, quitte); e2 != nil {
-				d.Erreur += "; " + x.id + ": the version left could not be served again: " + couper(e2.Error(), 200)
+				d.Message = suite(d.Message, errMoteur("{0}: the version left could not be served again: {1}", x.id, e2))
 			}
 		}
-		d.Erreur += "; the links were put back on " + actuelle
+		d.Message = suite(d.Message, errMoteur("the links were put back on {0}", actuelle))
 	} else if err == nil {
 		d.Bascule = true
 		if quitte.i >= 0 && actuelle != version {
@@ -268,7 +265,8 @@ func (s *Serveur) revenirVerrouille(ctx context.Context, projet, env, auteur, ci
 			_ = noterHistorique(h[quitte.i])
 		}
 	}
-	d.Fin, d.Erreur = time.Now().UTC().Format(time.RFC3339), s.masquerSecrets(d.Erreur) // B77
+	d.Fin = time.Now().UTC().Format(time.RFC3339)
+	s.noterMessage(&d) // B77
 	_ = noterHistorique(d)
 	s.ecrireAudit(LigneAudit{Type: "evenement", De: auteur, Vers: "hub", Projet: projet, Env: env, Action: "deploiement.retour",
 		Resultat: d.Etat + " " + d.Version + " " + couper(d.Erreur, 160)})

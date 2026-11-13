@@ -369,7 +369,7 @@ func TestDeploiementStatiqueConteneur(t *testing.T) {
 	resoudreTest(t, hote+":80", "127.0.0.1:1")
 	// C71: its automatic way back fails its check too: the links put back on it
 	if d6, err := s.deployer(ctx, "m131", "dev", c1, OptionsDeploiement{Config: site, Auteur: "proprietaire"}); err == nil || d6.Etat != "echec" ||
-		d6.Verification == nil || d6.Verification.OK || !strings.Contains(d6.Erreur, "the external verification failed: injoignable") ||
+		d6.Verification == nil || d6.Verification.OK || !strings.Contains(d6.Erreur, "the external verification failed: the site does not answer") ||
 		!strings.Contains(d6.Erreur, "the automatic way back failed") || liensServeur() != "releases/"+d6.Version+"\nreleases/"+d4.Version+"\n" {
 		t.Errorf("failed check: %v %+v %q", err, d6, liensServeur())
 	}

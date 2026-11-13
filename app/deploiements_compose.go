@@ -34,7 +34,7 @@ func nomCompose(projet, env string) string {
 func fichiersDossierCommit(depot, commit, dossier string) ([]string, error) {
 	o, err := gitSortie(depot, "ls-tree", "--name-only", commit+":"+dossier)
 	if err != nil {
-		return nil, fmt.Errorf("the commit has no folder %q", dossier)
+		return nil, errMoteur("the commit has no folder \"{0}\"", dossier)
 	}
 	return strings.Split(o, "\n"), nil
 }
@@ -64,7 +64,7 @@ func composeGenere(depot, commit, dossier string) (string, error) {
 		return "", nil
 	}
 	if !slices.Contains(noms, "Dockerfile") {
-		return "", fmt.Errorf("the Compose method needs a compose.yaml or a Dockerfile in %q", "/"+dossier)
+		return "", errMoteur("the Compose method needs a compose.yaml or a Dockerfile in \"{0}\"", "/"+dossier)
 	}
 	df, err := gitSortie(depot, "show", commit+":"+path.Join(dossier, "Dockerfile"))
 	if err != nil {
@@ -111,10 +111,10 @@ func (s *Serveur) fichierEnvCompose(projet, env string) (string, error) {
 		}
 		v, err := s.coffre.Valeur(e.ID)
 		if err != nil {
-			return "", fmt.Errorf("%s cannot be read from the vault (open its code key): %w", a.Variable, err)
+			return "", errMoteur("{0} cannot be read from the vault (open its code key): {1}", a.Variable, err)
 		}
 		if strings.ContainsAny(v, "'\r\n\x00") {
-			return "", fmt.Errorf("the value of %s has a quote or a line break, which a Compose .env cannot hold", a.Variable)
+			return "", errMoteur("the value of {0} has a quote or a line break, which a Compose .env cannot hold", a.Variable)
 		}
 		lignes[a.Variable] = a.Variable + "='" + v + "'\n"
 	}

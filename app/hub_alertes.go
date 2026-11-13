@@ -99,6 +99,10 @@ func alertesApprobations(l []Approbation) []AlerteHub {
 				raison, args = "Deploy {0} to production? Commit {1}", []any{x.Details["hote"], x.Details["commit"]}
 			}
 		}
+		titre := x.Projet
+		if x.Agent == agentDurcir { // B80: Athanor's own plan, titled by the server, its fixed summary translated
+			titre, raison, args = cmp.Or(x.Details["nom"], x.Details["serveur"]), x.Raison, nil
+		}
 		decision := func(id, libelle string) ActionAlerte {
 			return ActionAlerte{ID: id, Libelle: libelle, Route: "hub/approbations", Corps: map[string]any{"id": x.ID, "decision": id}, Distance: true}
 		}
@@ -106,7 +110,7 @@ func alertesApprobations(l []Approbation) []AlerteHub {
 		if x.Action == actionPlanServeur && x.Details["regle"] != "oui" || x.Action == actionDeploiement && (x.Env == "prod" || x.Details["fichiers_build"] != "") { // destructive, prod or changed build files: an accord every time
 			actions = actions[:2]
 		}
-		out = append(out, AlerteHub{Empreinte: "appr-" + x.ID, Module: "dev", Element: x.Projet, Titre: x.Projet, Raison: raison, Args: args, Approbation: &x,
+		out = append(out, AlerteHub{Empreinte: "appr-" + x.ID, Module: "dev", Element: x.Projet, Titre: titre, Raison: raison, Args: args, Approbation: &x,
 			Actions: actions})
 	}
 	return out

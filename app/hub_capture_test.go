@@ -196,6 +196,27 @@ func TestCaptureHub(t *testing.T) {
 			}
 		}
 	})
+	// durcir-cloche-clair (B80): Athanor's own hardening plan of "web-1", its project internal
+	mux.HandleFunc("POST /test/durcir", func(w http.ResponseWriter, r *http.Request) {
+		if l, _ := s.approbations.Liste(); slices.ContainsFunc(l, func(x Approbation) bool { return x.Agent == agentDurcir }) {
+			return
+		}
+		etapes, err := s.planDurcissement(ServeurInventaire{ID: "c0ffee04", Nom: "web-1", Utilisateur: "debian"}, map[string]bool{"utilisateur": true})
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		pl := PlanServeur{Serveur: "c0ffee04", Nom: "web-1", Env: "dev", Projet: prefixeServeur + "c0ffee04", Agent: agentDurcir, Resume: resumeDurcissement, Etapes: etapes}
+		ap, err := s.approbations.Demander(Approbation{Projet: pl.Projet, Env: pl.Env, Agent: agentDurcir, Action: actionPlanServeur, Raison: resumeDurcissement,
+			Details: map[string]string{"serveur": "c0ffee04", "nom": "web-1", "classe": classeHaute(etapes), "etapes": fmt.Sprint(len(etapes)), "regle": "non"}})
+		if err == nil {
+			pl.ID, pl.Cree, pl.Expire = ap.ID, ap.Cree, ap.Expire
+			err = s.enregistrerPlan(pl)
+		}
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+		}
+	})
 	ecoute, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -392,7 +413,7 @@ func historiqueCapture(t *testing.T, p Projet) {
 	v1, v2 := jugerVerification(Environnement{Protection: "access"}, acc), jugerVerification(Environnement{Protection: "access"}, ouvert)
 	for _, d := range []Deploiement{
 		{ID: "cap1", Commit: "4f1c2a9e8b7d6c5b4a39281706f5e4d3c2b1a090", Etat: "ok", Auteur: "agent", Debut: "2026-11-10T09:12:00Z", Verification: &v1},
-		{ID: "cap2", Commit: "9a8b7c6d5e4f30211203f4e5d6c7b8a9f0e1d2c3", Etat: "revenu", Auteur: "proprietaire", Debut: "2026-11-11T16:40:00Z", Verification: &v2, Erreur: "the external verification failed: ouvert"},
+		{ID: "cap2", Commit: "9a8b7c6d5e4f30211203f4e5d6c7b8a9f0e1d2c3", Etat: "revenu", Auteur: "proprietaire", Debut: "2026-11-11T16:40:00Z", Verification: &v2, Message: messageVerification(&v2)},
 		{ID: "cap3", Commit: "4f1c2a9e8b7d6c5b4a39281706f5e4d3c2b1a090", Etat: "ok", Auteur: "proprietaire", Retour: true, Debut: "2026-11-11T16:45:00Z", Verification: &v1},
 	} {
 		d.Projet, d.Env, d.Methode, d.Serveurs = p.Nom, "prod", "statique", []string{"c0ffee01"}

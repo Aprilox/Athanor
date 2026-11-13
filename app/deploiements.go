@@ -55,6 +55,7 @@ type Deploiement struct {
 	Version      string            `json:"version"`
 	Etat         string            `json:"etat"` // en_cours | ok | echec | revenu
 	Erreur       string            `json:"erreur,omitempty"`
+	Message      *MessageMoteur    `json:"message,omitempty"`      // B79: Erreur to translate (nil before M149)
 	Verification *VerifDeploiement `json:"verification,omitempty"` // the external check once served (M133)
 	Auteur       string            `json:"auteur"`                 // agent | relais | proprietaire | auto (C76: the automatic way back)
 	Retour       bool              `json:"retour,omitempty"`       // a way back to the previous version (M133)
@@ -130,7 +131,7 @@ func verifierArchive(chemin, dossier string) error {
 	defer f.Close()
 	gz, err := gzip.NewReader(f)
 	if err != nil {
-		return fmt.Errorf("unreadable archive: %w", err)
+		return errMoteur("unreadable archive: {0}", err)
 	}
 	tr, trouve := tar.NewReader(gz), dossier == ""
 	liens, noms := map[string]string{}, []string(nil)
@@ -140,21 +141,21 @@ func verifierArchive(chemin, dossier string) error {
 			break
 		}
 		if err != nil {
-			return fmt.Errorf("unreadable archive: %w", err)
+			return errMoteur("unreadable archive: {0}", err)
 		}
 		if h.Typeflag == tar.TypeXGlobalHeader { // git archive's commit id
 			continue
 		}
 		nom := path.Clean(h.Name)
 		if path.IsAbs(h.Name) || nom == ".." || strings.HasPrefix(nom, "../") || slices.Contains(strings.Split(h.Name, "/"), "..") {
-			return fmt.Errorf("archive refused: %q leaves the release", h.Name)
+			return errMoteur("archive refused: \"{0}\" leaves the release", h.Name)
 		}
 		switch h.Typeflag {
 		case tar.TypeReg, tar.TypeDir:
 		case tar.TypeSymlink:
 			liens[nom] = h.Linkname
 		default:
-			return fmt.Errorf("archive refused: %q is not a file, a folder or a link", h.Name)
+			return errMoteur("archive refused: \"{0}\" is not a file, a folder or a link", h.Name)
 		}
 		noms = append(noms, nom)
 		trouve = trouve || nom == dossier || strings.HasPrefix(nom, dossier+"/")
@@ -164,12 +165,12 @@ func verifierArchive(chemin, dossier string) error {
 			continue
 		}
 		if l, ok := liens[n]; ok {
-			return fmt.Errorf("archive refused: the link %q points out of the release (%q)", n, l)
+			return errMoteur("archive refused: the link \"{0}\" points out of the release (\"{1}\")", n, l)
 		}
-		return fmt.Errorf("archive refused: %q leaves the release through a link", n)
+		return errMoteur("archive refused: \"{0}\" leaves the release through a link", n)
 	}
 	if !trouve {
-		return fmt.Errorf("the commit has no folder %q to publish", dossier)
+		return errMoteur("the commit has no folder \"{0}\" to publish", dossier)
 	}
 	return nil
 }
@@ -209,7 +210,7 @@ func dansVersion(p string, liens map[string]string) bool {
 // echecSSH: err, or the script's code and the end of its output when it did not exit 0.
 func echecSSH(r ResultatSSH, err error) error {
 	if err == nil && r.Code != 0 {
-		err = fmt.Errorf("code %d: %s", r.Code, couper(strings.TrimSpace(string(r.Sortie)), 600))
+		err = errMoteur("code {0}: {1}", r.Code, &MessageMoteur{Cle: couper(strings.TrimSpace(string(r.Sortie)), 600)}) // a known script line is translated
 	}
 	return err
 }
@@ -289,7 +290,7 @@ func basculerTous(ctx context.Context, serveurs []serveurPret, base, version str
 		}
 		if e != nil {
 			remettreLiens(ctx, touches, base)
-			return nil, fmt.Errorf("%s: switch: %w", x.id, e)
+			return nil, errMoteur("{0}: switch: {1}", x.id, e)
 		}
 	}
 	return touches, nil
@@ -378,7 +379,7 @@ func (s *Serveur) commencerDeploiement(projet, env, commit string, o OptionsDepl
 		Etat: "en_cours", Auteur: o.Auteur, Accorde: o.Accorde, Dossier: &dossier, Serveurs: e.Serveurs, Debut: debut.Format(time.RFC3339)}
 	if err := noterHistorique(d); err != nil {
 		verrou.Unlock()
-		return d, nil, fmt.Errorf("the deployment history cannot be written: %w", err)
+		return d, nil, errMoteur("the deployment history cannot be written: {0}", err)
 	}
 	return d, func(ctx context.Context) (Deploiement, error) {
 		defer verrou.Unlock()
@@ -391,24 +392,24 @@ func (s *Serveur) finirDeploiement(ctx context.Context, p Projet, e Environnemen
 	err := s.deployerVersion(ctx, p, e, cfg, &d)
 	d.Etat, d.Fin = "ok", time.Now().UTC().Format(time.RFC3339)
 	if err != nil {
-		d.Etat, d.Erreur = "echec", err.Error()
+		d.Etat, d.Message = "echec", messageDe(err)
 	} else {
 		if e2 := s.acces.NoterDeploiement(d.Projet, d.Env, cfg); e2 != nil {
-			d.Erreur = "deployed, but the method could not be recorded: " + e2.Error()
+			d.Message = messageDe(errMoteur("deployed, but the method could not be recorded: {0}", e2))
 		}
 		err = s.verifierApres(ctx, e, &d)
 	}
-	d.Erreur = s.masquerSecrets(d.Erreur) // B77: a server may echo what it read (key, .env); the history reaches the phone
+	s.noterMessage(&d) // B77: a server may echo what it read (key, .env); the history reaches the phone
 	if e2 := noterHistorique(d); err == nil && e2 != nil {
-		err = fmt.Errorf("deployed, but the history cannot be written: %w", e2)
+		err = errMoteur("deployed, but the history cannot be written: {0}", e2)
 	}
 	if retourAutomatique(e, d) { // after the failure is noted: the way back marks it revenu
 		if r, e2 := s.revenirVerrouille(ctx, d.Projet, d.Env, "auto", ""); e2 != nil {
-			d.Erreur += "; the automatic way back failed: " + couper(e2.Error(), 300)
+			d.Message = suite(d.Message, errMoteur("the automatic way back failed: {0}", e2))
 		} else {
-			d.Etat, d.Erreur = "revenu", d.Erreur+"; went back automatically to "+r.Version
+			d.Etat, d.Message = "revenu", suite(d.Message, errMoteur("went back automatically to {0}", r.Version))
 		}
-		d.Erreur = s.masquerSecrets(d.Erreur)
+		s.noterMessage(&d)
 		_ = noterHistorique(d)
 	}
 	return d, err
@@ -430,7 +431,7 @@ func (s *Serveur) deployerVersion(ctx context.Context, p Projet, e Environnement
 			return err
 		}
 	} else if out, err := gitP(p.Dossier, nil, "archive", "--format=tar.gz", "-o", archive, d.Commit).CombinedOutput(); err != nil {
-		return fmt.Errorf("git archive: %v %s", err, couper(strings.TrimSpace(string(out)), 300))
+		return errMoteur("git archive: {0} {1}", err, couper(strings.TrimSpace(string(out)), 300))
 	}
 	if err := verifierArchive(archive, cfg.Dossier); err != nil {
 		return err
@@ -447,7 +448,7 @@ func (s *Serveur) deployerVersion(ctx context.Context, p Projet, e Environnement
 		}
 		cle, err := s.coffre.Valeur(e.CleDeploiement)
 		if err != nil {
-			return fmt.Errorf("the deployment key cannot be read from the vault: %w", err)
+			return errMoteur("the deployment key cannot be read from the vault: {0}", err)
 		}
 		g, somme = &sourceGit{url, hotes, cle, "/etc/athanor/deploy/" + nomProjetServeur(d.Projet)}, ""
 	}
@@ -469,7 +470,7 @@ func (s *Serveur) deployerVersion(ctx context.Context, p Projet, e Environnement
 	// gives root on the server: the k3s manifests read here, the Compose configuration on each server below
 	garde := !d.Accorde && d.Auteur != "proprietaire"
 	refus := func(r []string) error {
-		return fmt.Errorf("refused without the owner's accord, this would give root on the server: %s; the owner deploys it from the environment's card, or sets its policy to accord; nothing was switched", couper(strings.Join(r, "; "), 400))
+		return errMoteur("refused without the owner's accord, this would give root on the server: {0}; the owner deploys it from the environment's card, or sets its policy to accord; nothing was switched", couper(strings.Join(r, "; "), 400))
 	}
 	if garde && cfg.Methode == "k3s" {
 		if r := refusK3s(p.Dossier, d.Commit, cfg.Dossier); len(r) > 0 {
@@ -513,7 +514,7 @@ func (s *Serveur) deployerVersion(ctx context.Context, p Projet, e Environnement
 		c, sortie, err := s.preparerVersion(ctx, l, id, archive, d.ID, g, d.Commit, base, d.Version, script, args, entree)
 		if err != nil {
 			annulerTout()
-			return fmt.Errorf("%s: %w; nothing was switched", id, err)
+			return errMoteur("{0}: {1}; nothing was switched", id, err)
 		}
 		prets = append(prets, serveurPret{id, c})
 		if cfg.Methode != "compose" {
@@ -521,27 +522,27 @@ func (s *Serveur) deployerVersion(ctx context.Context, p Projet, e Environnement
 		}
 		if r := refusCompose(sortie, base+"/releases/"+d.Version); garde && len(r) > 0 {
 			annulerTout()
-			return fmt.Errorf("%s: %w", id, refus(r))
+			return errMoteur("{0}: {1}", id, refus(r))
 		}
 		bloc := "" // C70: Caddy in front of the first port published on 127.0.0.1, with the protection; none: no site
 		if d.Amont = amontCompose(sortie); d.Amont != "" {
 			if bloc, err = s.blocCaddyEnv(d.Projet, d.Env, id, d.Amont); err != nil {
 				annulerTout()
-				return fmt.Errorf("%s: %w; nothing was switched", id, err)
+				return errMoteur("{0}: {1}; nothing was switched", id, err)
 			}
 		}
 		if err := echecSSH(executerSSH(ctx, c, commeRoot(scriptLancerCompose, base, d.Version, cfg.Dossier, nomCompose(d.Projet, d.Env), hote), strings.NewReader(bloc), delaiDeploiement)); err != nil {
 			prets = prets[:len(prets)-1] // the release is already removed and the version served before started again
 			c.Close()
 			annulerTout()
-			return fmt.Errorf("%s: %w; nothing was switched", id, err)
+			return errMoteur("{0}: {1}; nothing was switched", id, err)
 		}
 	}
 	// every server ready: the switch everywhere (C71: on a failure, the links put back and the releases removed),
 	// then the reload, server by server
 	if _, err := basculerTous(ctx, prets, base, d.Version); err != nil {
 		annulerTout()
-		return fmt.Errorf("%w; nothing was switched", err)
+		return errMoteur("{0}; nothing was switched", err)
 	}
 	d.Bascule = true
 	recharger := scriptRecharger
@@ -550,7 +551,7 @@ func (s *Serveur) deployerVersion(ctx context.Context, p Projet, e Environnement
 	}
 	for _, x := range prets {
 		if err := echecSSH(executerSSH(ctx, x.c, commeRoot(recharger, base, fmt.Sprint(versionsGardees)), nil, delaiDeploiement)); err != nil {
-			return fmt.Errorf("%s: %w", x.id, err)
+			return errMoteur("{0}: {1}", x.id, err)
 		}
 	}
 	return nil
@@ -585,7 +586,7 @@ func (s *Serveur) construireArchive(ctx context.Context, p Projet, commit string
 	stop()
 	if err != nil {
 		l := strings.Split(strings.TrimSpace(nettoyerANSI(journal.String())), "\n")
-		return fmt.Errorf("the build failed (%v): %s; nothing was switched", err, couper(s.masquerSecrets(strings.Join(l[max(0, len(l)-6):], "\n")), 600))
+		return errMoteur("the build failed ({0}): {1}; nothing was switched", err, couper(s.masquerSecrets(strings.Join(l[max(0, len(l)-6):], "\n")), 600))
 	}
 	return nil
 }
@@ -653,7 +654,7 @@ func envoyerArchive(ctx context.Context, c *ssh.Client, local, nom string) (stri
 	}
 	if _, err := io.Copy(dst, src); err != nil {
 		dst.Close()
-		return "", fmt.Errorf("sending the archive: %w", err)
+		return "", errMoteur("sending the archive: {0}", err)
 	}
 	return distant, dst.Close()
 }

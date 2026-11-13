@@ -39,15 +39,16 @@ type SanteEnv struct {
 
 // Incident: what the bell, the phone and the environment card tell, and what Retry deploys again.
 type Incident struct {
-	Cle        string `json:"cle"`
-	Source     string `json:"source"` // deploiement | sante
-	Echec      string `json:"echec"`  // what failed
-	Tente      string `json:"tente"`  // what was tried
-	Commit     string `json:"commit,omitempty"`
-	Retour     bool   `json:"retour,omitempty"`      // the failure was a way back: Retry goes back again
-	Cible      string `json:"cible,omitempty"`       // C71: the version that way back aimed at (Retry aims at it again)
-	SansRetour bool   `json:"sans_retour,omitempty"` // C71: Go back not offered (failed before its switch, or already back)
-	PrisEnMain string `json:"pris_en_main,omitempty"`
+	Cle        string         `json:"cle"`
+	Source     string         `json:"source"`            // deploiement | sante
+	Echec      string         `json:"echec"`             // what failed
+	Message    *MessageMoteur `json:"message,omitempty"` // B79: Echec to translate (a deployment's)
+	Tente      string         `json:"tente"`             // what was tried
+	Commit     string         `json:"commit,omitempty"`
+	Retour     bool           `json:"retour,omitempty"`      // the failure was a way back: Retry goes back again
+	Cible      string         `json:"cible,omitempty"`       // C71: the version that way back aimed at (Retry aims at it again)
+	SansRetour bool           `json:"sans_retour,omitempty"` // C71: Go back not offered (failed before its switch, or already back)
+	PrisEnMain string         `json:"pris_en_main,omitempty"`
 }
 
 type fichierSante struct {
@@ -260,7 +261,7 @@ func (s *Serveur) incidentEnv(f fichierSante, projet, env string) *Incident {
 	}
 	if n > 0 && (h[n-1].Etat == "echec" || n < len(h)) {
 		d := h[n-1]
-		i = &Incident{Cle: "deploi-" + d.ID, Source: "deploiement", Echec: d.Erreur, Commit: d.Commit, Retour: d.Retour,
+		i = &Incident{Cle: "deploi-" + d.ID, Source: "deploiement", Echec: d.Erreur, Message: d.Message, Commit: d.Commit, Retour: d.Retour,
 			SansRetour: n < len(h) || avantBascule(d)}
 		if d.Retour {
 			i.Cible = d.Version
@@ -269,9 +270,9 @@ func (s *Serveur) incidentEnv(f fichierSante, projet, env string) *Incident {
 		case d.Retour:
 			i.Tente = s.textePush("t_retour")
 		case d.Verification != nil:
-			i.Tente = fmt.Sprintf(s.textePush("t_verif"), d.Methode, couper(d.Commit, 7))
+			i.Tente = fmt.Sprintf(s.textePush("t_verif"), s.methodeLisible(d.Methode), couper(d.Commit, 7))
 		default:
-			i.Tente = fmt.Sprintf(s.textePush("t_deploi"), d.Methode, couper(d.Commit, 7))
+			i.Tente = fmt.Sprintf(s.textePush("t_deploi"), s.methodeLisible(d.Methode), couper(d.Commit, 7))
 		}
 	} else if sv := f.Envs[projet+"/"+env]; !f.Arret && sv.Etat == "incident" {
 		i = &Incident{Cle: "sante-" + projet + "/" + env + "-" + sv.RougeDepuis, Source: "sante", Echec: s.texteProblemes(sv.Problemes),
@@ -331,7 +332,7 @@ func (s *Serveur) alertesIncidents() []AlerteHub {
 		}
 		h := sha256.Sum256([]byte("incident\x00" + x.Projet + "\x00" + x.Cle))
 		out = append(out, AlerteHub{Empreinte: hex.EncodeToString(h[:12]), Module: "servers", Element: x.Projet + "/" + x.Env, Titre: x.Projet,
-			Raison: "{0} is in trouble. What failed: {1}. What was tried: {2}.", Args: []any{x.Env, s.masquerSecrets(couper(x.Echec, 300)), x.Tente},
+			Raison: "{0} is in trouble. What failed: {1}. What was tried: {2}.", Args: []any{x.Env, echecLisible(s, x), x.Tente},
 			Actions: actions})
 	}
 	return out

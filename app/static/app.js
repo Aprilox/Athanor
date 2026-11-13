@@ -751,7 +751,7 @@ const boutonGuide = (classe) => `<a href="#guide" class="${classe} btn-guide" ar
 // actions marked distance stay active (the server refuses the others: 403).
 function ligneAlerte(a, ignoree) {
   const m = ((etat.hub || {}).modules || []).find((x) => x.id === a.module) || { nom: a.module };
-  const texte = t("{0}, {1}: {2}", [t(m.nom), a.titre, t(a.raison, (a.args || []).map(String))]);
+  const texte = t("{0}, {1}: {2}", [t(m.nom), a.titre, t(a.raison, (a.args || []).map(texteMessage))]);
   const distant = (etat.vue || {}).distant;
   const actions = (a.actions || []).map((x, i) => x.page ? `<a class="btn btn-petit" href="${h(x.page)}"${x.projet ? ` data-projet="${h(x.projet)}" data-cible="${h(x.page.slice(1))}"` : ""}>${t(x.libelle)}</a>`
     : `<button type="button" class="btn btn-petit${x.id === "accepter" ? " btn-primaire" : ""}" data-alerte="${h(x.id)}" data-empreinte="${h(a.empreinte)}" data-i="${i}"${distant && !x.distance ? ` disabled title="${h(t("On the computer only"))}"` : ""}>${t(x.libelle)}</button>`).join("");
@@ -2770,7 +2770,9 @@ function blocCritique(c) {
 function carteApprobation(x, ap, codes) {
   const d = x.details || {};
   const p = (ap.plans || {})[x.id];
-  if (x.action === "plan_serveur") return carteDecision(x, ap, `<span class="badge">${h(x.env)}</span> <strong>${h(t("Plan for {0}", [d.nom || d.serveur]))}</strong> <span>${h(x.projet)}</span>`,
+  const durcir = x.agent === "durcissement"; // B80: Athanor's own plan, titled by the server (its project is internal)
+  if (x.action === "plan_serveur") return carteDecision(x, ap, durcir ? `<strong>${h(t("Harden this server: {0}", [d.nom || d.serveur]))}</strong>`
+    : `<span class="badge">${h(x.env)}</span> <strong>${h(t("Plan for {0}", [d.nom || d.serveur]))}</strong> <span>${h(x.projet)}</span>`,
     [t("Server role: {0}", [x.env]), t("{0} step(s)", [d.etapes || "?"])], blocPlan(x, p), d.regle === "oui" && t("Never ask again for this server"), p && p.critique && !p.critique.verdict);
   // a deployment (M120): prod is never decided by a rule
   if (x.action === "deploiement") return carteDecision(x, ap, `<span class="badge">${h(x.env)}</span> <strong>${h(x.env === "prod" ? t("Deploy {0} to production?", [d.hote]) : t("Deploy {0} to {1}?", [d.hote, x.env]))}</strong> <span>${h(x.projet)}</span>`,
@@ -4400,7 +4402,7 @@ function blocDeploiements(nom, e, liste, distant) {
     const [icone, etiquette] = d.retour && d.etat === "ok" ? ["↩", "Back to the previous version"] : ETATS_DEPLOI[d.etat] || ["", d.etat];
     return `<li class="env-deploi-${h(d.etat)}"><div class="ligne m0 petit"><span class="badge">${icone} ${h(t(etiquette))}</span><code>${h((d.commit || "").slice(0, 7))}</code>
       <span class="muet">${h(dateLisible(d.debut))} · ${h(t(AUTEURS_DEPLOI[d.auteur] || d.auteur))}</span></div>
-      ${d.verification ? `<p class="petit${d.verification.ok ? "" : " attention"}">${h(texteVerif(d.verification, e.protection))}</p>` : d.erreur ? `<p class="petit attention">${h(t(d.erreur))}</p>` : ""}</li>`;
+      ${d.verification ? `<p class="petit${d.verification.ok ? "" : " attention"}">${h(texteVerif(d.verification, e.protection))}</p>` : d.erreur ? `<p class="petit attention">${h(d.message ? texteMessage(d.message) : t(d.erreur))}</p>` : ""}</li>`;
   };
   return `<div class="env-deploi" data-env-deploi><h4>${t("Deployments")}</h4>
     ${liste.length ? `<ul class="env-deploi-liste">${liste.map(ligne).join("")}</ul>` : `<p class="muet petit">${t("Nothing deployed yet.")}</p>`}
@@ -4416,7 +4418,7 @@ function blocSante(s, e) {
   return `<div class="env-sante env-sante-${h(s.etat)}" data-env-sante><h4>${t("Health")}</h4>
     <p class="ligne m0 petit"><span class="badge">${icone} ${h(t(etiquette))}</span>${s.t ? `<span class="muet">${h(t("Checked {0}", [dateLisible(s.t)]))}</span>` : ""}</p>
     ${(s.problemes || []).map((p) => `<p class="petit${p.rouge ? " attention" : ""}">${h(probleme(p))}</p>`).join("")}
-    ${i ? `<p class="petit attention">${h(t("What failed: {0}.", [i.echec]))} ${h(t("What was tried: {0}.", [i.tente]))}</p>
+    ${i ? `<p class="petit attention">${h(t("What failed: {0}.", [i.message ? texteMessage(i.message) : t(i.echec)]))} ${h(t("What was tried: {0}.", [i.tente]))}</p>
       <p class="petit muet">${i.pris_en_main ? h(t("You took over {0}.", [dateLisible(i.pris_en_main)])) : t(i.sans_retour ? "The bell offers: Retry, I take over." : "The bell offers: Retry, Go back to the previous version, I take over.")}</p>` : ""}</div>`;
 }
 // the Servers page: how often the deployed sites are checked (or not at all)
@@ -4444,7 +4446,7 @@ $("#page").addEventListener("click", async (ev) => {
     tpl.innerHTML = blocDeploiements(env, { ...(r.deploiement ? { deploiement: true } : {}), protection: c.querySelector('[data-env-champ="protection"]').value }, r.deploiements || []);
     c.querySelector("[data-env-deploi]").replaceWith(tpl.content.firstElementChild);
     const d = r.deploiement || {};
-    toast(d.etat === "ok" ? t("{0} serves its previous version again.", [env]) : t(d.erreur || "Failed"), d.etat === "ok" ? "ok" : "erreur");
+    toast(d.etat === "ok" ? t("{0} serves its previous version again.", [env]) : d.message ? texteMessage(d.message) : t(d.erreur || "Failed"), d.etat === "ok" ? "ok" : "erreur");
   } catch (e) { err.textContent = e.message; err.hidden = false; b.disabled = false; b.textContent = t("Go back to the previous version"); }
 });
 // the project's GitHub deployment key (one for every environment), made on demand (M119)

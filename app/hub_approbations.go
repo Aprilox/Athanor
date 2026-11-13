@@ -435,6 +435,9 @@ func (s *Serveur) messageApprobation(x Approbation) MessagePush {
 	}
 	if x.Action == actionPlanServeur { // "Plan for web-1", the plan's summary below
 		titre, texte = fmt.Sprintf(s.textePush("appr_plan"), cmp.Or(x.Details["nom"], x.Details["serveur"])), x.Projet+" · "+x.Raison
+		if x.Agent == agentDurcir { // B80: no internal project, the fixed summary in Athanor's language
+			texte = s.textePush("durcir")
+		}
 	}
 	return MessagePush{Titre: titre, Texte: texte, URL: "/#pourvous", Tag: "appr-" + x.ID}
 }
