@@ -50,6 +50,8 @@ type EvenementMission struct {
 	T      string `json:"t"`
 	Etat   string `json:"etat"`
 	Detail string `json:"detail,omitempty"`
+	// B87: Detail to translate (a launch's failed step), an English template of i18n.js and its arguments
+	Message *MessageMoteur `json:"message,omitempty"`
 }
 
 type Mission struct {

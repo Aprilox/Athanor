@@ -179,6 +179,9 @@ func TestCaptureHub(t *testing.T) {
 			Voies: []VoieMission{}, Questions: []QuestionMission{}, Historique: []EvenementMission{{T: cree, Etat: "proposee"}}, Cree: cree}
 		if r.URL.Query().Get("question") != "" {
 			m.Questions = append(m.Questions, QuestionMission{ID: "q1", Texte: "Quel serveur pour l'environnement de dev ?", Choix: []string{"Serveur maison", "VPS production"}, Cree: cree})
+			if r.URL.Query().Get("long") != "" { // mission-question-tel (B90): a choice longer than a phone's line
+				m.Questions[0].Choix = append(m.Questions[0].Choix, "autre domaine très long qui ne tient pas sur une ligne")
+			}
 		}
 		if err := enregistrerMission(m); err != nil {
 			http.Error(w, err.Error(), 500)
@@ -217,7 +220,9 @@ func TestCaptureHub(t *testing.T) {
 				{ID: "capture04", Phrase: "Une page de contact pour @projet-01", Etat: "terminee", Politique: "prod", Voies: []VoieMission{{Module: "dev", Ref: "projet-01", Etat: "lancee"}},
 					Historique: []EvenementMission{{T: "2026-11-10T10:00:00Z", Etat: "terminee"}}, Cree: "2026-11-10T09:00:00Z"},
 				{ID: "capture05", Phrase: "Mettre @projet-03 en ligne sur un serveur", Etat: "echec", Politique: "prod", Voies: []VoieMission{},
-					Historique: []EvenementMission{{T: "2026-11-09T10:00:00Z", Etat: "echec", Detail: "the orchestrator's session stopped: usage limit reached"}}, Cree: "2026-11-09T09:58:00Z"},
+					// B87: a launch stopped by a failed step, its reason a key of i18n.js (the bell and the detail page translate it)
+					Historique: []EvenementMission{{T: "2026-11-09T09:59:00Z", Etat: "lancee", Detail: "hub"}, {T: "2026-11-09T10:00:00Z", Etat: "echec", Detail: "the project projet-03 no longer exists",
+						Message: &MessageMoteur{Cle: "the project {0} no longer exists", Args: []any{"projet-03"}}}}, Cree: "2026-11-09T09:58:00Z"},
 			} {
 				x.Mentions, x.Questions = MentionsMission{Projets: []string{}, Serveurs: []string{}, Cles: []string{}}, []QuestionMission{}
 				if err := enregistrerMission(x); err != nil {

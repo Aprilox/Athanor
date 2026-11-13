@@ -48,6 +48,7 @@ func TestMessageMoteur(t *testing.T) {
 // its scripts print, so that TestWebTraduction asks i18n.js for each in the five languages.
 func clesMoteur(t *testing.T) []string {
 	fichiers, _ := filepath.Glob("deploiements*.go")
+	fichiers = append(fichiers, "mission_lancer.go") // B87: a launch's failed step
 	re := regexp.MustCompile(`(?:errMoteur\(|Cle: )("(?:[^"\\]|\\.)*")`)
 	vide := regexp.MustCompile(`^[{}\d:;, ]*$`) // "{0}: {1}", "{0}; {1}": nothing to translate
 	var cles []string

@@ -1085,7 +1085,7 @@ a.mis-ligne:hover, a.mis-ligne:focus-visible { border-color: var(--accent); }
 .mis-detail { display: flex; flex-direction: column; gap: 12px; }
 .mis-detail > .bloc { margin: 0; }
 .mis-etat-proposee, .mis-etat-acceptee { color: var(--info); border-color: currentColor; }
-.mis-etat-echec { color: var(--erreur); border-color: currentColor; }
+.mis-etat-echec { color: var(--erreur-vif); border-color: currentColor; }
 /* M156: the mission card under the home bar */
 #mission-zone:empty { display: none; }
 .mis-carte { display: flex; flex-direction: column; gap: 10px; }
@@ -1111,6 +1111,7 @@ a.mis-ligne:hover, a.mis-ligne:focus-visible { border-color: var(--accent); }
 @media (prefers-reduced-motion: reduce) { .mis-anim { animation: none; } }
 .mis-question { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border-left: 3px solid var(--accent); background: var(--panel-2); border-radius: 6px; }
 .mis-question p { overflow-wrap: anywhere; }
+.mis-question .btn { white-space: normal; max-width: 100%; text-align: left; } /* B90: a long choice wraps inside the frame */
 .mis-echec { border-color: var(--erreur); }
 @media (max-width: 760px) { .mis-voies, .mis-grille { grid-template-columns: minmax(0, 1fr); } }
 .srv-msg { margin-bottom: 12px; border-color: var(--attention); }

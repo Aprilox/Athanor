@@ -280,11 +280,15 @@ func TestMissionLancer(t *testing.T) {
 	if h := m.Historique[len(m.Historique)-1]; code != 200 || m.Etat != "echec" || len(m.Voies) != 0 || h.Etat != "echec" || !strings.Contains(h.Detail, "starting the pilot: the kit cannot be found") {
 		t.Fatalf("failed step: %d %+v", code, m)
 	}
+	// B87: the reason as a key of i18n.js and its argument, for the bell and the detail page in their language
+	if msg := m.Historique[len(m.Historique)-1].Message; msg == nil || msg.Cle != "starting the pilot: {0}" || fmt.Sprint(msg.Args) != "[the kit cannot be found]" {
+		t.Fatalf("failed step's message: %+v", msg)
+	}
 	if len(consignes) != 2 {
 		t.Fatal("a Servers task was launched after the failed step")
 	}
 	if el := (moduleMissions{}).Elements(s); !slices.ContainsFunc(el, func(e ElementHub) bool {
-		return e.ID == rate && e.Attente != nil && e.Attente.Raison == "The launch of the mission stopped: {0}" && strings.Contains(e.Attente.Args[0].(string), "the kit cannot be found")
+		return e.ID == rate && e.Attente != nil && e.Attente.Raison == "The launch of the mission stopped: {0}" && strings.Contains(fmt.Sprint(e.Attente.Args[0]), "the kit cannot be found")
 	}) {
 		t.Fatalf("no bell for the failed launch: %+v", el)
 	}

@@ -28,8 +28,12 @@ func (moduleMissions) Elements(*Serveur) []ElementHub {
 		}
 		// a launch stopped by a failed step (mission_lancer.go): its reason, until the owner dismisses it
 		if h := m.Historique; m.Etat == "echec" && len(h) > 1 && h[len(h)-2].Etat == "lancee" {
+			var raison any = h[len(h)-1].Detail
+			if h[len(h)-1].Message != nil { // B87: said in the page's language
+				raison = h[len(h)-1].Message
+			}
 			out = append(out, ElementHub{ID: m.ID, Titre: titreMission(m), Etat: "termine", Lien: "#missions",
-				Attente: &AttenteElement{Raison: "The launch of the mission stopped: {0}", Args: []any{h[len(h)-1].Detail}, Page: "#missions"}})
+				Attente: &AttenteElement{Raison: "The launch of the mission stopped: {0}", Args: []any{raison}, Page: "#missions"}})
 		}
 	}
 	return out

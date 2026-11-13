@@ -1797,7 +1797,7 @@ function ligneElement(e, modules) {
   const lien = e.projet ? `href="${h(cible)}" data-projet="${h(e.projet)}" data-cible="${h(cible.replace(/^#/, ""))}"` : `href="${h(cible)}"`;
   return `<a ${lien} class="bloc carte-projet ligne-element${e.attente ? " besoin" : ""}${e.projet && etat.vue && etat.vue.projet && etat.vue.projet.nom === e.projet ? " courant" : ""}">
     <div class="cp-tete"><span class="dot ${classe}" aria-hidden="true"></span><b class="cp-nom">${h(e.titre)}</b><span class="pastille-module"><span class="ico ico-${h(m.id)}" aria-hidden="true"></span>${h(t(m.nom))}</span></div>
-    <div class="el-etat petit">${e.attente ? `<span class="cp-besoin">${t("Needs you")}</span> <span>${h(t(e.attente.raison, e.attente.args || []))}</span>` : `<span class="muet">${t(libelle)}</span>`}</div>
+    <div class="el-etat petit">${e.attente ? `<span class="cp-besoin">${t("Needs you")}</span> <span>${h(t(e.attente.raison, (e.attente.args || []).map(texteMessage)))}</span>` : `<span class="muet">${t(libelle)}</span>`}</div>
     ${act ? `<div class="cp-jalon petit" title="${h(act)}">${h(act)}</div>` : ""}
     ${a && a.total ? `<div class="barre"><i style="width:${(a.fait / a.total) * 100}%"></i></div>` : ""}${a && a.texte ? `<div class="muet petit">${h(t(a.texte, [a.fait, a.total]))}</div>` : ""}
   </a>`;
@@ -5057,7 +5057,7 @@ pages.mission = async () => {
   if (aLancer) return `<div class="missions mis-detail">${retour}<div id="mission-zone" aria-live="polite">${zoneMission()}</div></div>`;
   return `<div class="missions mis-detail">${retour}
     <div><div class="ligne m0 tuile-tete"><h2 class="m0" id="mis-titre">${h((m.carte || {}).titre || t("New mission"))}</h2><span class="badge mis-etat-${h(m.etat)}">${h(t(ETATS_MISSION[m.etat] || m.etat))}</span></div>
-      <p class="muet petit mis-phrase">${h(m.phrase)}</p>${m.etat === "echec" && fin.detail ? `<p class="mis-avert" role="note">${h(fin.detail)}</p>` : ""}</div>
+      <p class="muet petit mis-phrase">${h(m.phrase)}</p>${m.etat === "echec" && fin.detail ? `<p class="mis-avert" role="note">${h(fin.message ? texteMessage(fin.message) : fin.detail)}</p>` : ""}</div>
     <section class="bloc" aria-labelledby="mis-voies-titre"><h2 id="mis-voies-titre">${t("Lanes")}</h2>
       ${(m.voies || []).length ? `<ul class="mis-voies-liste">${m.voies.map((v) => `<li>${voieMission(v, true)}</li>`).join("")}</ul>${lancee ? `<p class="muet petit m0">${t("Launched on {0}", [h(new Date(lancee.t).toLocaleString(document.documentElement.lang || "en"))])}</p>` : ""}`
         : `<p class="muet m0">${t("The lanes start when the mission is launched.")}</p>`}

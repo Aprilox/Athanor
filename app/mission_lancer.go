@@ -143,7 +143,11 @@ func (s *Serveur) lancerMission(id, qui, dossier, empreinte string) (Mission, er
 		m.Historique = append(m.Historique, faits...) // C86: what was given and set, even when a later step failed
 		if err != nil {
 			m.Etat = "echec"
-			m.Historique = append(m.Historique, evenementMission("echec", couper(s.masquerSecrets(err.Error()), 300)))
+			e := evenementMission("echec", couper(s.masquerSecrets(err.Error()), 300))
+			if s.masquerSecrets(err.Error()) == err.Error() { // B87: translated where shown; nothing masked to leak
+				e.Message = messageDe(err)
+			}
+			m.Historique = append(m.Historique, e)
 		}
 		for _, v := range voies {
 			if v.Etat == "refusee" {
@@ -197,22 +201,22 @@ func (s *Serveur) etapesMission(c CarteMission, politique, qui, dossier string) 
 	if c.Projet.Nouveau {
 		var err error
 		if p, _, err = s.ajouterProjet(c.Projet.Nom, dossier, c.Dev.Brief, false); err != nil {
-			return voies, faits, errors.New("creating the project: " + err.Error())
+			return voies, faits, errMoteur("creating the project: {0}", err)
 		}
 	} else {
 		var ok bool
 		if p, ok = s.projetNomme(c.Projet.Nom); !ok {
-			return voies, faits, errors.New("the project " + c.Projet.Nom + " no longer exists")
+			return voies, faits, errMoteur("the project {0} no longer exists", c.Projet.Nom)
 		}
 		if c.Dev.Brief != "" {
 			if _, _, err := s.ajouterDemande(p, c.Titre, c.Dev.Brief); err != nil {
-				return voies, faits, errors.New("adding the request: " + err.Error())
+				return voies, faits, errMoteur("adding the request: {0}", err)
 			}
 		}
 	}
 	// 2. the ticked vault entries (an entry already given stays as it is; one to fill is the owner's)
 	if s.acces == nil {
-		return voies, faits, errors.New("the access file cannot be read")
+		return voies, faits, errMoteur("the access file cannot be read")
 	}
 	for _, a := range c.Acces {
 		if a.Decoche || a.ARemplir {
@@ -224,7 +228,7 @@ func (s *Serveur) etapesMission(c CarteMission, politique, qui, dossier string) 
 			continue
 		}
 		if err != nil {
-			return voies, faits, errors.New("giving " + a.Entree + ": " + err.Error())
+			return voies, faits, errMoteur("giving {0}: {1}", a.Entree, err)
 		}
 		s.auditAcces(qui, p.Nom, "acces_accorde", e, g.Variable, g.Env)
 		faits = append(faits, evenementMission("lancee", "access given: "+a.Entree+" → "+g.Variable+" ("+g.Env+")"))
@@ -232,7 +236,7 @@ func (s *Serveur) etapesMission(c CarteMission, politique, qui, dossier string) 
 	// C86: in the project's secrets.env now, a pilot already running included (demarrerPilote stops before it)
 	if len(faits) > 0 {
 		if _, err := s.injecterAcces(p, nil); err != nil {
-			return voies, faits, errors.New("writing the access given: " + err.Error())
+			return voies, faits, errMoteur("writing the access given: {0}", err)
 		}
 	}
 	// 3. the environments: the card's URL, protection and servers, the mission's policy (prod: always accord)
@@ -247,7 +251,7 @@ func (s *Serveur) etapesMission(c CarteMission, politique, qui, dossier string) 
 			err = s.acces.DefinirEnvironnement(p.Nom, ec.Nom, v)
 		}
 		if err != nil {
-			return voies, faits, errors.New("the environment " + ec.Nom + ": " + err.Error())
+			return voies, faits, errMoteur("the environment {0}: {1}", ec.Nom, err)
 		}
 		faits = append(faits, evenementMission("lancee", "environment set: "+ec.Nom+" "+ec.URL+", "+ec.Protection+", "+ec.Politique))
 		// C82: a tout mission asks every deployment of its environments: the owner's "never ask again" ends (as B71)
@@ -255,14 +259,14 @@ func (s *Serveur) etapesMission(c CarteMission, politique, qui, dossier string) 
 			if _, err := s.approbations.RetirerRegles(func(r RegleAccord) bool {
 				return r.Projet == p.Nom && r.Env == ec.Nom && r.Action == actionDeploiement
 			}); err != nil {
-				return voies, faits, errors.New("the environment " + ec.Nom + ": " + err.Error())
+				return voies, faits, errMoteur("the environment {0}: {1}", ec.Nom, err)
 			}
 		}
 	}
 	// 4. the pilot (it injects the grants given above)
 	if c.Dev.Brief != "" {
 		if _, err := demarrerPiloteMission(s, p); err != nil {
-			return voies, faits, errors.New("starting the pilot: " + err.Error())
+			return voies, faits, errMoteur("starting the pilot: {0}", err)
 		}
 		audit(VoieMission{Module: "dev", Ref: p.Nom, Etat: "lancee"})
 	}
@@ -282,7 +286,7 @@ func (s *Serveur) etapesMission(c CarteMission, politique, qui, dossier string) 
 		texte := c.Serveurs.Brief + "\n\nMission \"" + c.Titre + "\", environment " + ec.Nom + ": " + ec.URL + ", protection " + ec.Protection + "."
 		t, err := s.lancerTache(couper(texte, maxTexteTache-1), ec.Serveurs, false, env)
 		if err != nil {
-			return voies, faits, errors.New("the Servers task for " + env + ": " + err.Error())
+			return voies, faits, errMoteur("the Servers task for {0}: {1}", env, err)
 		}
 		audit(VoieMission{Module: "servers", Ref: t.ID, Etat: t.Etat})
 	}
