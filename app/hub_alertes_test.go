@@ -19,6 +19,7 @@ func TestHubAlertes(t *testing.T) {
 	modulesMu.Unlock()
 	t.Cleanup(func() { modulesMu.Lock(); modules = avant; modulesMu.Unlock() })
 	domaine := &AttenteElement{Raison: "Choose a domain", Page: "#missions"}
+	retirerModuleTest("missions") // the fake stands for the real Missions module
 	enregistrerModule(moduleFactice{id: "missions", ordre: 10, el: []ElementHub{{ID: "m2", Titre: "Domaine", Etat: "actif", Lien: "#missions", Attente: domaine}}})
 	enregistrerModule(moduleFactice{id: "serveurs", ordre: 30, el: []ElementHub{
 		{ID: "vps-1", Titre: "vps-1", Etat: "actif", Lien: "#serveurs", Attente: &AttenteElement{Raison: "Disk {0} % full", Args: []any{91}, Page: "#serveurs"}},

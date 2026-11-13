@@ -216,6 +216,7 @@ a[data-href] { cursor: pointer; }
 .ico-dev { --ico: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M8.5 7 3.5 12l5 5M15.5 7l5 5-5 5'/></svg>"); }
 .ico-missions { --ico: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2'><circle cx='12' cy='12' r='8'/><circle cx='12' cy='12' r='3'/></svg>"); }
 .ico-serveurs { --ico: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round'><rect x='3.5' y='4' width='17' height='7' rx='2'/><rect x='3.5' y='13' width='17' height='7' rx='2'/><path d='M7.5 7.5h.01M7.5 16.5h.01'/></svg>"); }
+.ico-missions { --ico: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M5 21V4'/><path d='M5 4h12l-2.5 4 2.5 4H5'/></svg>"); }
 .ico-coffre { --ico: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2'><rect x='4.5' y='10.5' width='15' height='10' rx='2'/><path d='M8 10.5V7.5a4 4 0 0 1 8 0v3'/></svg>"); }
 .ico-servers { --ico: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round'><rect x='4' y='4' width='16' height='7' rx='1.5'/><rect x='4' y='13' width='16' height='7' rx='1.5'/><path d='M8 7.5h.01M8 16.5h.01M12 7.5h4M12 16.5h4'/></svg>"); }
 .ico-reglages { --ico: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round'><path d='M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1'/><circle cx='15' cy='6' r='2'/><circle cx='9' cy='12' r='2'/><circle cx='17' cy='18' r='2'/></svg>"); }
@@ -1058,6 +1059,12 @@ ol.guide-access li { margin: 5px 0; }
 .srv-tourne { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .srv-vide { text-align: center; }
 .srv-vide p { max-width: 520px; margin-left: auto; margin-right: auto; }
+/* Missions page (#missions) */
+.mis-liste { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.mis-ligne { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0; }
+.mis-phrase { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.mis-etat-proposee, .mis-etat-acceptee { color: var(--info); border-color: currentColor; }
+.mis-etat-echec { color: var(--erreur); border-color: currentColor; }
 .srv-msg { margin-bottom: 12px; border-color: var(--attention); }
 .srv-empreinte-valeur { display: inline-block; padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel-2); overflow-wrap: anywhere; }
 .srv-facons { border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px 10px; margin: 12px 0 0; display: flex; flex-direction: column; gap: 8px; }

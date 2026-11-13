@@ -352,6 +352,14 @@ func (m moduleFactice) Resume(*Serveur) ResumeModule   { return ResumeModule{Eta
 func (m moduleFactice) Elements(*Serveur) []ElementHub { return m.el }
 func (m moduleFactice) Tutoriel() []EtapeTutoriel      { return nil }
 
+// retirerModuleTest: takes a real module out of the list for a test that registers a fake one with its id
+// (the caller restores the list in its Cleanup).
+func retirerModuleTest(id string) {
+	modulesMu.Lock()
+	modules = slices.DeleteFunc(modules, func(m Module) bool { return m.ID() == id })
+	modulesMu.Unlock()
+}
+
 // TestHubElements: GET /api/hub aggregates the elements of two dummy modules registered from outside
 // (no other module's code touched), marks their module, puts what waits for the owner first; a Dev
 // project gives its progress and link; no secret value of a project or of the vault is in the answer.
@@ -365,6 +373,7 @@ func TestHubElements(t *testing.T) {
 	modules = slices.DeleteFunc(modules, func(m Module) bool { return m.ID() == "servers" })
 	modulesMu.Unlock()
 	enregistrerModule(moduleFactice{id: "serveurs", ordre: 30, el: []ElementHub{{ID: "vps-1", Titre: "vps-1", Etat: "actif", Lien: "#serveurs"}}})
+	retirerModuleTest("missions") // the fake stands for the real Missions module
 	enregistrerModule(moduleFactice{id: "missions", ordre: 10, el: []ElementHub{
 		{ID: "m1", Titre: "Site en ligne", Etat: "actif", Lien: "#missions"},
 		{ID: "m2", Titre: "Domaine", Etat: "actif", Lien: "#missions", Attente: &AttenteElement{Raison: "Choose a domain", Page: "#missions"}},

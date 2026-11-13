@@ -72,7 +72,7 @@ func (a *appTUI) pageAccueil(e *ecranT, x, y, l, h int) {
 		}
 	}
 	cols := 1
-	if l >= 84 {
+	if l >= 76 { // 80 columns: two tiles a row, or 4 modules leave no room for what needs the owner
 		cols = min(2, len(mods))
 	}
 	if l >= 126 {

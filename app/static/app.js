@@ -4796,6 +4796,22 @@ function assistantServeur(c) {
     <div class="ligne"><button type="submit" class="btn btn-primaire">${empreinte ? t("Add the server") : t("Continue")}</button><button type="button" class="btn" data-srv-fermer>${t("Cancel")}</button></div>
   </form>`;
 }
+// --- Missions: one line per mission (state, sentence, date); the cards, lanes and detail come with M159.
+const ETATS_MISSION = { preparation: "Being prepared", proposee: "Proposed", acceptee: "Accepted", lancee: "Launched", terminee: "Finished", annulee: "Cancelled", echec: "Failed" };
+pages.missions = async () => {
+  const d = await api("missions"), lang = document.documentElement.lang || "en";
+  const ligne = (m) => `<li class="bloc mis-ligne"><span class="badge mis-etat-${h(m.etat)}">${h(t(ETATS_MISSION[m.etat] || m.etat))}</span>
+    <span class="mis-phrase">${h(m.phrase.length > 140 ? m.phrase.slice(0, 140) + "…" : m.phrase)}</span>
+    <span class="muet petit">${h(new Date(m.cree).toLocaleDateString(lang))}</span></li>`;
+  return `<div class="missions">
+    <div class="ligne cof-tete"><h2 class="m0">${t("Missions")} <span class="muet">${d.missions.length}</span></h2></div>
+    ${d.missions.length ? `<ul class="mis-liste">${d.missions.map(ligne).join("")}</ul>`
+      : `<div class="vide srv-vide"><p><b>${t("No mission yet")}</b></p>
+      <p class="muet">${t("Say what you want in the bar of the home page, for example “Put @my-shop online at shop.example.com”. The orchestrator prepares a mission card first: what will be built and deployed, what will be touched, what it will ask your approval for. Nothing starts before you launch it.")}</p>
+      <a class="btn btn-primaire" href="#accueil">${t("Go to the home page")}</a></div>`}
+  </div>`;
+};
+
 pages.serveurs = async () => {
   const distant = !!(etat.vue || {}).distant;
   const [d, c] = await Promise.all([api("serveurs"), distant ? null : api("coffre").catch(() => null)]);

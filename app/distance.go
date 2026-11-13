@@ -295,7 +295,7 @@ func interditDistance(r *http.Request) bool {
 
 // prefixesHub: the hub's routes, closed to devices by default (an allowlist, unlike interditDistance):
 // a new route under these prefixes stays refused from a device until it is added to autorisesDistance.
-var prefixesHub = []string{"/api/hub", "/api/coffre", "/api/acces", "/api/serveurs", "/api/fournisseurs"}
+var prefixesHub = []string{"/api/hub", "/api/coffre", "/api/acces", "/api/serveurs", "/api/fournisseurs", "/api/missions"}
 
 // autorisesDistance: "METHOD path" of the hub a device may call (reading only, never a secret value).
 var autorisesDistance = map[string]bool{"GET /api/hub": true, "GET /api/coffre": true, "GET /api/acces": true,
@@ -303,15 +303,18 @@ var autorisesDistance = map[string]bool{"GET /api/hub": true, "GET /api/coffre":
 	"GET /api/hub/approbations": true, "POST /api/hub/approbations": true, // P7: the owner decides from the phone
 	"POST /api/hub/urgence": true,                                 // the emergency stop, from the phone too
 	"GET /api/serveurs":     true, "GET /api/serveurs/{id}": true, // the inventory and a server's sheet, read only
-	"GET /api/serveurs/{id}/taches": true, // a server's tasks, read only (plans are decided by the approval card)
-	"GET /api/fournisseurs":         true} // the providers, zones and rights (never a token); added, tested, removed on the PC
+	"GET /api/serveurs/{id}/taches": true,                                 // a server's tasks, read only (plans are decided by the approval card)
+	"GET /api/missions":             true, "GET /api/missions/{id}": true, // the missions, read only (written on the PC)
+	"GET /api/fournisseurs": true} // the providers, zones and rights (never a token); added, tested, removed on the PC
 
 // refuseHubDistance: a hub route that is not in autorisesDistance (plain prefix: "/api/hubx" is refused too).
 func refuseHubDistance(r *http.Request) bool {
 	for _, p := range prefixesHub {
 		if strings.HasPrefix(r.URL.Path, p) {
 			chemin := r.URL.Path
-			if id, ok := strings.CutPrefix(chemin, "/api/serveurs/"); ok && id != "" && !strings.Contains(id, "/") {
+			if id, ok := strings.CutPrefix(chemin, "/api/missions/"); ok && id != "" && !strings.Contains(id, "/") {
+				chemin = "/api/missions/{id}"
+			} else if id, ok := strings.CutPrefix(chemin, "/api/serveurs/"); ok && id != "" && !strings.Contains(id, "/") {
 				chemin = "/api/serveurs/{id}"
 			} else if id, ok := strings.CutSuffix(id, "/taches"); ok && id != "" && !strings.Contains(id, "/") {
 				chemin = "/api/serveurs/{id}/taches"

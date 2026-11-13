@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -1015,10 +1016,11 @@ func TestTUIAccueil(t *testing.T) {
 	attendreTUI(t, a, func() bool { return a.vue != nil && a.hub != nil })
 	// the same data as /api/hub
 	attendu, _ := json.Marshal(moduleDev{}.Resume(s))
-	if len(a.hub.Modules) != len(modulesHub()) || a.hub.Modules[0].ID != "hub" || a.hub.Modules[1].ID != "dev" {
+	dev := slices.IndexFunc(a.hub.Modules, func(m ModuleVue) bool { return m.ID == "dev" })
+	if len(a.hub.Modules) != len(modulesHub()) || a.hub.Modules[0].ID != "hub" || dev < 0 {
 		t.Fatalf("modules %+v", a.hub.Modules)
 	}
-	if lu, _ := json.Marshal(a.hub.Modules[1].Resume); string(lu) != string(attendu) {
+	if lu, _ := json.Marshal(a.hub.Modules[dev].Resume); string(lu) != string(attendu) {
 		t.Fatalf("tile %s, /api/hub %s", lu, attendu)
 	}
 	for _, taille := range [][2]int{{80, 24}, {120, 40}} {

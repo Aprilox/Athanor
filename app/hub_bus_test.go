@@ -58,7 +58,7 @@ func TestBusRefus(t *testing.T) {
 		change func(*MessageHub)
 		raison string
 	}{
-		{"module absent", func(m *MessageHub) { m.Vers = "missions" }, "module absent"},
+		{"module absent", func(m *MessageHub) { m.Vers = "inconnu" }, "module absent"},
 		{"servers: no deploy yet", func(m *MessageHub) { m.Vers, m.Action = "servers", "deployer" }, "action not declared"},
 		{"unknown sender", func(m *MessageHub) { m.De = "inconnu" }, "unknown sender"},
 		{"undeclared action", func(m *MessageHub) { m.Action = "supprimer" }, "action not declared"},
