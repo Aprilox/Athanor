@@ -4482,7 +4482,7 @@ function afficherNonAppaire() {
 
 async function rendreOptions() {
   setTimeout(majConnexionGH, 0); // the GitHub block fills in once the page is there (WSL may be slow)
-  const [o, cl] = await Promise.all([api("options"), api("clients").catch(() => null)]);
+  const [o, cl, inst] = await Promise.all([api("options"), api("clients").catch(() => null), api("instances").catch(() => null)]);
   etat.optionsVue = o; etat.clientsVue = cl;
   const b = o.bureau || {};
   return `<div class="grille grille-2">
@@ -4511,6 +4511,7 @@ async function rendreOptions() {
         <p class="muet petit mt-2">${t("Rename a project, move its folder, archive or delete it: “Manage”.")}</p>
       </div>
       ${rendreClientsMCP(cl)}
+      ${rendreInstancesPC(inst)}
       <div class="bloc"${b.message === "Virtual desktop: Windows only." ? " hidden" : ""}><h2>${t("“Claude” desktop")}</h2>
         <label class="interrupteur"><input type="checkbox" id="op-bureau" data-option ${o.bureau_virtuel ? "checked" : ""}><span>${t("Open the programs Claude starts (Unreal, Blender, a game under test) on a desktop of their own")}</span></label>
         <p class="petit ${b.disponible ? "ok" : "attention"}">${h(t(b.message || ""))}</p>
@@ -4607,6 +4608,22 @@ $("#page").addEventListener("click", async (ev) => {
   }
   const v = await action(api("clients", "POST", corps));
   if (v) majClientsMCP(v);
+});
+// Settings › Remote Athanors › On this PC (hub_annonce.go): the other Athanors of this computer, read from
+// their announcement; Pair asks the 6 digits the other one shows, never a link without them
+function rendreInstancesPC(v) {
+  if (!v) return "";
+  const liste = (v.instances || []).map((i) => `<div class="ligne instance-pc" data-id="${h(i.id)}"><span><b>${h(i.nom)}</b> <span class="muet petit">Athanor ${h(i.version)} · ${h((i.modules || []).join(", "))}</span><br><span class="muet petit chemin-court">${h(i.dossier)}</span></span><span class="espace"></span>
+      ${i.attente ? `<span class="petit attention">${t("Waiting for the other one's yes")}</span>` : `<input type="text" class="code-instance" inputmode="numeric" maxlength="6" placeholder="${t("6-digit code")}" aria-label="${t("6-digit code")}"> <button class="btn btn-petit" data-instance="appairer">${t("Pair")}</button>`}</div>`).join("");
+  return `<div class="bloc local-seul" id="bloc-instances-pc"><h2>${t("Remote Athanors")}</h2><h3>${t("On this PC")}</h3>
+    <p class="muet petit">${t("The other Athanors running on this computer. Pairing is never automatic: type the 6-digit code the other one shows (Settings › MCP clients › Connect), then accept in its window.")}</p>
+    ${liste || `<p class="muet petit">${t("No other Athanor is running on this computer.")}</p>`}</div>`;
+}
+$("#page").addEventListener("click", async (ev) => {
+  const b = ev.target.closest("[data-instance]"); if (!b) return;
+  const l = b.closest(".instance-pc");
+  const v = await action(api("instances", "POST", { id: l.dataset.id, code: l.querySelector(".code-instance").value }));
+  if (v) { const n = await api("instances").catch(() => null); const bloc = $("#bloc-instances-pc"); if (n && bloc) bloc.outerHTML = rendreInstancesPC(n); }
 });
 // the updates of Athanor (maj.go): the version, the latest one published, "Update now"
 function rendreBlocMaj(o) {

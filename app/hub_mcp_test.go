@@ -234,7 +234,7 @@ func TestMCPJetonAutresRoutes(t *testing.T) {
 			vue = true
 			continue
 		}
-		if strings.HasPrefix(m[2], "/api/mcp/appairer") { // public pairing (a code, never a token): "{}" is a bad request
+		if strings.HasPrefix(m[2], "/api/mcp/appairer") || m[2] == "/api/annonce" { // public pairing (a code, never a token): "{}" is a bad request
 			continue
 		}
 		for sorte, j := range map[string]string{"session": jeton, "client": client} {

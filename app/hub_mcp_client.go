@@ -55,7 +55,7 @@ func init() {
 			} else if len(args) != 2 {
 				return usage()
 			}
-			if err := appairerClientTerminal(os.Stdin, os.Stderr, args[1], sorte, fichierInstance()); err != nil {
+			if err := appairerClientTerminal(os.Stdin, os.Stderr, args[1], sorte, fichierAnnonce()); err != nil {
 				fmt.Fprintln(os.Stderr, "✖", err)
 				return 1
 			}
@@ -64,7 +64,7 @@ func init() {
 		if len(args) != 1 || !nomClientValide.MatchString(args[0]) {
 			return usage()
 		}
-		relaisMCP(os.Stdin, os.Stdout, fichierJetonClient(args[0]), fichierInstance(), 60*time.Second, textesClient)
+		relaisMCP(os.Stdin, os.Stdout, fichierJetonClient(args[0]), fichierAnnonce(), 60*time.Second, textesClient)
 		return 0
 	})
 }

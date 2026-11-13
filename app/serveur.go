@@ -496,6 +496,9 @@ func (s *Serveur) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/mcp", s.apiMCP)                          // the hub's MCP: its session token only, outside garde (hub_mcp.go)
 	mux.HandleFunc("POST /api/mcp/appairer", s.apiAppairerClient)      // an MCP client's pairing: the 6 digits, outside garde (hub_clients.go)
 	mux.HandleFunc("POST /api/mcp/appairer/statut", s.apiStatutClient) // and the owner's answer
+	mux.HandleFunc("GET /api/annonce", repondreAnnonce(idInstance))    // public: id and version only (hub_annonce.go)
+	mux.HandleFunc("GET /api/instances", s.garde(false, s.apiInstances))
+	mux.HandleFunc("POST /api/instances", s.garde(false, s.apiInstances))
 	mux.HandleFunc("GET /api/clients", s.garde(false, s.apiClients))
 	mux.HandleFunc("POST /api/clients", s.garde(false, s.apiClients))
 	mux.HandleFunc("POST /api/ouvrir", s.garde(false, s.apiOuvrir))

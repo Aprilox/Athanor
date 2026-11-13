@@ -65,9 +65,11 @@ func ecrireInstance(port int) {
 	_ = os.MkdirAll(filepath.Dir(f), 0o700)
 	b, _ := json.Marshal(infoInstance{port, jetonInstance, os.Getpid()})
 	_ = os.WriteFile(f, b, 0o600)
+	ecrireAnnonce(port) // hub_annonce.go
 }
 
 func effacerInstance() {
+	effacerAnnonce()
 	b, err := os.ReadFile(fichierInstance())
 	var i infoInstance
 	if err == nil && json.Unmarshal(b, &i) == nil && i.PID == os.Getpid() {
