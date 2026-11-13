@@ -3036,8 +3036,10 @@ function carteApprobation(x, ap, codes) {
     [t("Server role: {0}", [x.env]), t("{0} step(s)", [d.etapes || "?"])], blocPlan(x, p), d.regle === "oui" && t("Never ask again for this server"), p && p.critique && !p.critique.verdict);
   // a deployment (M120): prod is never decided by a rule
   if (x.action === "deploiement") return carteDecision(x, ap, `<span class="badge">${h(x.env)}</span> <strong>${h(x.env === "prod" ? t("Deploy {0} to production?", [d.hote]) : t("Deploy {0} to {1}?", [d.hote, x.env]))}</strong> <span>${h(x.projet)}</span>`,
-    [t("Commit {0}", [d.commit]), d.serveurs && t("Servers: {0}", [d.serveurs]), d.fichiers_build && t("Build files changed: {0}", [d.fichiers_build])],
-    x.env === "prod" ? `<div class="pv-details">${h(t("Production always asks you: one accord, one deployment."))}</div>` : d.fichiers_build ? `<div class="pv-details">${h(t("Its build command will run these changed files on this PC, inside the pilot's barrier: one accord, one deployment."))}</div>` : "",
+    [t("Commit {0}", [d.commit || (d.sha || "").slice(0, 7)]), d.avant && t("Online now: version {0}", [d.avant]), d.serveurs && t("Servers: {0}", [d.serveurs]), d.fichiers_build && t("Build files changed: {0}", [d.fichiers_build])],
+    // P7: a mission's prod accord says where it goes, what changes and opens the mission
+    (d.mission ? `${/^https?:\/\//.test(d.url || "") ? `<div class="pv-details"><a href="${h(d.url)}" target="_blank" rel="noopener">${h(d.url)}</a></div>` : ""}${d.commits ? `<div class="pv-details"><strong>${h(t("What changes: {0} new commit(s)", [d.commits]))}</strong>${d.changements ? ` <span class="appr-changements">${h(d.changements)}</span>` : ""}</div>` : ""}` : "") +
+    (x.env === "prod" ? `<div class="pv-details">${h(t("Production always asks you: one accord, one deployment."))}${d.mission ? ` <a href="#missions/${encodeURIComponent(d.mission)}">${h(t("See the mission"))}</a>` : ""}</div>` : d.fichiers_build ? `<div class="pv-details">${h(t("Its build command will run these changed files on this PC, inside the pilot's barrier: one accord, one deployment."))}</div>` : ""),
     x.env !== "prod" && !d.fichiers_build && t("Never ask again for this project and environment"));
   // M158: the orchestrator asks to launch its card; accepting launches it as Launch does (never a rule)
   // C77: the environments, prod and the ticked access of the very card it launches

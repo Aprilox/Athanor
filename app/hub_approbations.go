@@ -432,7 +432,8 @@ func (s *Serveur) messageApprobation(x Approbation) MessagePush {
 		if x.Env == "prod" {
 			titre = fmt.Sprintf(s.textePush("appr_prod"), x.Details["hote"])
 		}
-		if m := x.Details["mission"]; m != "" { // M168: the mission's prod accord opens its page
+		if m := x.Details["mission"]; m != "" { // M168: the mission's prod accord opens its page; P7: where and what changes
+			texte = fmt.Sprintf(s.textePush("appr_prod_t"), x.Projet, x.Details["commit"], cmp.Or(x.Details["url"], "—"), cmp.Or(x.Details["commits"], "?"), cmp.Or(x.Details["changements"], "—"))
 			return MessagePush{Titre: titre, Texte: texte, URL: "/#missions/" + m, Tag: "appr-" + x.ID}
 		}
 	}

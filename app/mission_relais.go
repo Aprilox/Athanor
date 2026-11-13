@@ -9,8 +9,11 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"maps"
 	"net/http"
 	"slices"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -25,10 +28,42 @@ var relaisProdMu sync.Mutex
 func (s *Serveur) accordProd(m Mission, projet, sha string) Approbation {
 	e := s.acces.Environnements(projet)["prod"]
 	hote := cmp.Or(hoteEnv(&e), projet)
+	avant, n, changements := s.changementsProd(projet, sha)
 	return Approbation{Projet: projet, Env: "prod", Mission: m.ID, Agent: "relais", Action: actionDeploiement,
 		Raison: "mission " + m.ID + ": commit " + sha + " → " + hote,
-		Details: map[string]string{"mission": m.ID, "empreinte": empreinteCarte(m), "sha": sha, "env": "prod", "url": e.URL,
-			"hote": hote, "serveurs": listeServeursAccord(e.Serveurs)}}
+		Details: map[string]string{"mission": m.ID, "empreinte": empreinteCarte(m), "sha": sha, "commit": shaCourt(sha), "env": "prod", "url": e.URL,
+			"hote": hote, "serveurs": listeServeursAccord(e.Serveurs), "avant": shaCourt(avant), "commits": n, "changements": changements}}
+}
+
+// changementsProd (P7): what the prod deployment of sha changes, for the owner deciding from a phone: the version
+// prod serves now ("" before the first one), the number of commits since it and the newest three's subjects, the vault's values masked;
+// cut under bornerApprobation's length so that the same accord compares equal.
+func (s *Serveur) changementsProd(projet, sha string) (avant, n, changements string) {
+	h := historiqueDeploiements(projet, "prod")
+	for _, d := range slices.Backward(h) {
+		if d.Etat == "ok" {
+			avant = d.Commit
+			break
+		}
+	}
+	p, ok := s.projetParNom(projet)
+	if !ok {
+		return avant, "", ""
+	}
+	plage := []string{"log", "--format=%s", "-n", "20", sha}
+	if avant != "" {
+		plage = append(plage, "^"+avant)
+	}
+	out, err := gitSortie(p.Dossier, plage...)
+	if err != nil || out == "" {
+		return avant, "0", ""
+	}
+	l := strings.Split(out, "\n")
+	n = strconv.Itoa(len(l))
+	if len(l) == 20 {
+		n = "20+"
+	}
+	return avant, n, couper(s.masquerSecrets(strings.Join(l[:min(len(l), 3)], "; ")), 190)
 }
 
 // relaisProd: one step of mission id's prod relay, from what its sources say now.
@@ -64,9 +99,10 @@ func (s *Serveur) relaisProd(id string) {
 		s.accordOuDeployer(m, p.Nom, head)
 	case "accord_prod":
 		ap := s.accordProd(m, p.Nom, r.Commit)
+		bornerApprobation(&ap)
 		x, lu := s.approbations.Lire(r.Accord)
-		if r.Commit != head || lu && (x.Details["empreinte"] != ap.Details["empreinte"] || x.Details["sha"] != r.Commit) {
-			// the project or the card changed since: that accord is for something else, asked again on what is there now
+		if r.Commit != head || lu && !maps.Equal(x.Details, ap.Details) {
+			// the project, the card or what prod serves changed since: that accord is for something else, asked again on what is there now
 			if lu && x.Etat == "attente" {
 				s.refuserAccordMission(x.ID, "relais", "la mission a changé")
 			}

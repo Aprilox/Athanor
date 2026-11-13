@@ -135,6 +135,12 @@ func (a *appTUI) lignesApprTUI(x Approbation) []ligneCouleur {
 			meta = append(meta, t("Build files changed: {0}", d["fichiers_build"]))
 		}
 		corps = nil // its commit and host are on the lines above (the web shows no reason either)
+		if d["avant"] != "" {
+			meta = append(meta, t("Online now: version {0}", d["avant"]))
+		}
+		if d["mission"] != "" { // P7: where it goes and what changes, as on the web
+			corps = append(corps, firstNonEmpty(d["url"], "—"), t("What changes: {0} new commit(s)", firstNonEmpty(d["commits"], "?"))+" "+d["changements"])
+		}
 		if x.Env == "prod" {
 			corps = append(corps, t("Production always asks you: one accord, one deployment."))
 		}

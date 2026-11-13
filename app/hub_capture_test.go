@@ -159,6 +159,12 @@ func TestCaptureHub(t *testing.T) {
 	t.Cleanup(func() { demarrerPiloteMission, arreterPiloteMission = demarrer, arreter })
 	mux.HandleFunc("POST /test/mission", func(w http.ResponseWriter, r *http.Request) {
 		s.fermerLancementMission("capture03", "hub", "refuser", "capture") // never left pending for the next screenshots
+		enAttente, _ := s.approbations.Liste()
+		for _, x := range enAttente { // mission-accord-tel's prod accord neither
+			if x.Mission == "capture06" && x.Etat == "attente" {
+				s.refuserAccordMission(x.ID, "hub", "capture")
+			}
+		}
 		// M172: the follower Resume started ends before capture06 comes back
 		if _, suivie := suivisMission.Load("capture06"); suivie {
 			_, _ = modifierMission("capture06", func(m *Mission) error { m.Etat = "arretee"; return nil })
@@ -313,6 +319,25 @@ func TestCaptureHub(t *testing.T) {
 				if err := enregistrerMission(x); err != nil {
 					http.Error(w, err.Error(), 500)
 					return
+				}
+				// mission-accord-tel (M175, P7): ?accord=1, capture06's prod accord pending, as the relay asks it
+				if x.ID == "capture06" && r.URL.Query().Get("accord") != "" {
+					sha := x.Relais.Commit
+					x.Relais = &RelaisMission{Etape: "accord_prod", Commit: sha, DeploiementDev: "d16"}
+					y, err := s.demanderApprobation(Approbation{Projet: "projet-01", Env: "prod", Mission: x.ID, Agent: "relais", Action: actionDeploiement,
+						Raison: "mission " + x.ID + ": commit " + sha + " → projet-01.fr",
+						Details: map[string]string{"mission": x.ID, "empreinte": empreinteCarte(x), "sha": sha, "commit": shaCourt(sha), "env": "prod", "url": "https://projet-01.fr",
+							"hote": "projet-01.fr", "serveurs": "VPS production", "avant": "3b8e0d2", "commits": "3",
+							"changements": "M4: envoi de l'e-mail de contact; M3: formulaire de contact; M2: page Contact dans le menu"}})
+					if err != nil {
+						http.Error(w, err.Error(), 500)
+						return
+					}
+					x.Relais.Accord = y.ID
+					if err := enregistrerMission(x); err != nil {
+						http.Error(w, err.Error(), 500)
+						return
+					}
 				}
 			}
 		}

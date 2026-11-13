@@ -99,6 +99,10 @@ func alertesApprobations(l []Approbation) []AlerteHub {
 			if x.Env == "prod" {
 				raison, args = "Deploy {0} to production? Commit {1}", []any{x.Details["hote"], cmp.Or(x.Details["commit"], x.Details["sha"])}
 			}
+			if x.Details["mission"] != "" { // P7: a mission's prod accord says where and what changes, decided from a phone
+				raison, args = "Deploy {0} to production? Commit {1} → {2}. {3} new commit(s): {4}", []any{x.Details["hote"], x.Details["commit"],
+					cmp.Or(x.Details["url"], "—"), cmp.Or(x.Details["commits"], "?"), cmp.Or(x.Details["changements"], "—")}
+			}
 		}
 		titre, module := x.Projet, "dev"
 		if x.Action == actionMission { // M158: the orchestrator asks to launch its card, titled by it
