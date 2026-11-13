@@ -9,7 +9,7 @@ type moduleMissions struct{}
 func (moduleMissions) ID() string  { return "missions" }
 func (moduleMissions) Nom() string { return "Missions" }
 func (moduleMissions) Pages() []PageModule {
-	return []PageModule{{Hash: "#missions", Ordre: 10, Icone: "missions", Libelle: "Missions"}}
+	return []PageModule{{Hash: "#missions", Ordre: 10, Icone: "missions", Libelle: "Missions", Fils: []string{"#mission"}}}
 }
 
 // Elements: a mission whose orchestrator asks the owner a question is in the bell until it is answered, as is a

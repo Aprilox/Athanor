@@ -1147,6 +1147,7 @@ function naviguer() {
   if (page === "rejoindre") { etat.npRejoindre = true; history.replaceState(null, "", "#nouveau"); page = "nouveau"; } else if (page === "nouveau" && etat.page !== "nouveau") etat.npRejoindre = false;
   // the settings always open on Options (or on the tab asked for, the guided tour)
   if (page === "reglages" && etat.page !== "reglages") { etat.ongletReglages = etat.ongletDemande || "options"; etat.ongletDemande = null; }
+  if (page.startsWith("missions/")) { etat.missionId = decodeURIComponent(page.slice(9)); page = "mission"; } // one mission, its id in the hash
   if (page.startsWith("serveur/")) { srv.id = decodeURIComponent(page.slice(8)); page = "serveur"; } // one server's sheet, its id in the hash
   if (!pages[page]) { page = "accueil"; history.replaceState(null, "", "#accueil"); } // an unknown hash: Home
   etat.page = page;
@@ -1950,9 +1951,7 @@ pages.accueil = async () => {
     <div id="mission-zone" aria-live="polite">${zoneMission()}</div>
     <div class="grille-hub">${modules.filter((m) => ((m.resume || {}).stats || []).length).map(tuileModule).join("")}</div>
     ${blocEnCours(d.elements || [], modules)}
-    ${modules.some((m) => m.id === "missions") ? "" : `<section class="bloc missions"><h2>${t("Missions")}</h2>
-      <div class="missions-vide"><span class="missions-icone" aria-hidden="true"></span><div><b>${t("No mission yet")}</b><div class="muet petit">${t("Coming soon: one sentence, and Studio and Servers work together.")}</div></div></div>
-    </section>`}
+    ${blocMissions(lm)}
   </div>`;
 };
 // M156: Send creates a mission; its card shows under the bar (DESIGN §Missions). etat.missionVue = GET /api/missions/{id}.
@@ -2011,7 +2010,7 @@ function majZoneMission() {
 }
 async function lireMissionVue() {
   const d = etat.missionVue;
-  if (!d || etat.page !== "accueil" || !$("#mission-zone")) return;
+  if (!d || !["accueil", "mission"].includes(etat.page) || !$("#mission-zone")) return;
   try { etat.missionVue = await api("missions/" + encodeURIComponent(d.mission.id)); } catch { /* next try in 2 s */ }
   majZoneMission();
 }
@@ -2019,6 +2018,8 @@ async function actionMission(chemin, corps) {
   const d = etat.missionVue; if (!d) return null;
   const r = await action(api("missions/" + encodeURIComponent(d.mission.id) + "/" + chemin, "POST", corps || {}), "");
   if (r && r.mission) { etat.missionVue = { mission: r.mission, orchestrateur: chemin === "repondre" || !!(corps && corps.consigne) }; majZoneMission(); }
+  // the detail page of a mission just launched or cancelled: shown again with its lanes
+  if (r && r.mission && etat.page === "mission" && !ACTIVE_MISSION.includes(r.mission.etat)) await rendrePage();
   return r;
 }
 document.addEventListener("click", async (ev) => {
@@ -4980,19 +4981,68 @@ function assistantServeur(c) {
     <div class="ligne"><button type="submit" class="btn btn-primaire">${empreinte ? t("Add the server") : t("Continue")}</button><button type="button" class="btn" data-srv-fermer>${t("Cancel")}</button></div>
   </form>`;
 }
-// --- Missions: one line per mission (state, sentence, date); the cards, lanes and detail come with M159.
+// --- Missions (M159): one line per mission (state, sentence, lanes as they are now, date), its detail at #missions/<id>
 const ETATS_MISSION = { preparation: "Being prepared", proposee: "Proposed", acceptee: "Accepted", lancee: "Launched", terminee: "Finished", annulee: "Cancelled", echec: "Failed" };
+const ETATS_VOIE_DEV = { travaille: ["Working", "pv-claude"], termine: ["Finished", "pv-ok"], arrete: ["Stopped", ""] };
+// a lane's state read now by the API (voiesEnDirect): Studio = the project's pilot, Servers = its task
+function etatVoie(v) {
+  if (v.etat === "refusee") return [t("Refused: native Windows mode"), "pv-vous"];
+  if (!v.actuel || v.actuel === "inconnu") return [t("Not found"), "pv-vous"];
+  if (v.module === "dev") { const [l, c] = ETATS_VOIE_DEV[v.actuel] || [v.actuel, ""]; return [t(l), c]; }
+  return ETATS_TACHE_SRV()[v.actuel] || [v.actuel, ""];
+}
+// lien: the project (selected, then its Overview) or the task's server; never inside a line that is a link itself
+function voieMission(v, lien) {
+  const [libelle, classe] = etatVoie(v), dev = v.module === "dev";
+  const mod = t((etat.hubModules || []).find((m) => m.id === v.module)?.nom || v.module);
+  const nom = dev ? v.ref : ((etat.mentionsSugg || []).find((x) => x.type === "serveur" && x.ref === v.serveur) || {}).nom || v.serveur || v.ref;
+  const cible = !lien || v.actuel === "inconnu" ? "" : dev ? `href="#suivi" data-projet="${h(v.ref)}" data-cible="suivi"` : v.serveur ? `href="#serveur/${encodeURIComponent(v.serveur)}"` : "";
+  return `<span class="mis-voie-etat"><span class="pastille-module"><span class="ico ico-${dev ? "dev" : "serveurs"}" aria-hidden="true"></span>${h(mod)}</span>${cible ? `<a ${cible}>${h(nom)}</a>` : `<b>${h(nom)}</b>`}<span class="pv-etat ${classe}">${h(libelle)}</span>${v.detail ? `<span class="muet petit mis-voie-detail">${h(v.detail)}</span>` : ""}</span>`;
+}
+function ligneMission(m) {
+  const titre = (m.carte || {}).titre, phrase = m.phrase.length > 140 ? m.phrase.slice(0, 140) + "…" : m.phrase;
+  return `<li><a class="bloc mis-ligne" href="#missions/${encodeURIComponent(m.id)}"><span class="badge mis-etat-${h(m.etat)}">${h(t(ETATS_MISSION[m.etat] || m.etat))}</span>
+    <span class="mis-phrase">${titre ? `<b>${h(titre)}</b> ` : ""}<span class="muet">${h(phrase)}</span></span>
+    <span class="muet petit">${h(new Date(m.cree).toLocaleDateString(document.documentElement.lang || "en"))}</span>
+    ${(m.voies || []).length ? `<span class="mis-voies-ligne">${m.voies.map((v) => voieMission(v, false)).join("")}</span>` : ""}</a></li>`;
+}
+// Home's Missions block: the 3 newest, See all; the empty state says where to start
+function blocMissions(l) {
+  return `<section class="bloc missions" aria-labelledby="missions-titre">
+    <div class="ligne m0 tuile-tete"><h2 class="m0" id="missions-titre">${t("Missions")}</h2><span class="espace"></span>${l.length ? `<a class="btn btn-petit" href="#missions">${t("See all")} (${l.length}) →</a>` : ""}</div>
+    ${l.length ? `<ul class="mis-liste">${l.slice(0, 3).map(ligneMission).join("")}</ul>`
+      : `<div class="missions-vide"><span class="missions-icone" aria-hidden="true"></span><div><b>${t("No mission yet")}</b><div class="muet petit">${t("One sentence in the bar above, and Studio and Servers work together.")}</div></div></div>`}
+  </section>`;
+}
 pages.missions = async () => {
-  const d = await api("missions"), lang = document.documentElement.lang || "en";
-  const ligne = (m) => `<li class="bloc mis-ligne"><span class="badge mis-etat-${h(m.etat)}">${h(t(ETATS_MISSION[m.etat] || m.etat))}</span>
-    <span class="mis-phrase">${h(m.phrase.length > 140 ? m.phrase.slice(0, 140) + "…" : m.phrase)}</span>
-    <span class="muet petit">${h(new Date(m.cree).toLocaleDateString(lang))}</span></li>`;
+  const [d, sugg] = await Promise.all([api("missions"), api("mentions").catch(() => ({}))]);
+  etat.mentionsSugg = sugg.mentions || [];
   return `<div class="missions">
     <div class="ligne cof-tete"><h2 class="m0">${t("Missions")} <span class="muet">${d.missions.length}</span></h2></div>
-    ${d.missions.length ? `<ul class="mis-liste">${d.missions.map(ligne).join("")}</ul>`
+    ${d.missions.length ? `<ul class="mis-liste">${d.missions.map(ligneMission).join("")}</ul>`
       : `<div class="vide srv-vide"><p><b>${t("No mission yet")}</b></p>
       <p class="muet">${t("Say what you want in the bar of the home page, for example “Put @my-shop online at shop.example.com”. The orchestrator prepares a mission card first: what will be built and deployed, what will be touched, what it will ask your approval for. Nothing starts before you launch it.")}</p>
       <a class="btn btn-primaire" href="#accueil">${t("Go to the home page")}</a></div>`}
+  </div>`;
+};
+// One mission (#missions/<id>): its card (still to launch: the home's, with its buttons) and its lanes with their links
+pages.mission = async () => {
+  const [d, sugg] = await Promise.all([api("missions/" + encodeURIComponent(etat.missionId || "")), api("mentions").catch(() => ({}))]);
+  etat.mentionsSugg = sugg.mentions || []; etat.missionVue = d;
+  const m = d.mission, aLancer = ACTIVE_MISSION.includes(m.etat), fin = (m.historique || []).slice(-1)[0] || {};
+  clearTimeout(minuterieMission);
+  if (aLancer && travailleMission(d)) minuterieMission = setTimeout(lireMissionVue, 2000);
+  const lancee = (m.historique || []).find((x) => x.etat === "lancee"), retour = `<div class="ligne m0"><a class="btn btn-petit" href="#missions">← ${t("Missions")}</a></div>`;
+  // still being prepared or to launch: the home's card, its question and its buttons (the lanes come at the launch)
+  if (aLancer) return `<div class="missions mis-detail">${retour}<div id="mission-zone" aria-live="polite">${zoneMission()}</div></div>`;
+  return `<div class="missions mis-detail">${retour}
+    <div><div class="ligne m0 tuile-tete"><h2 class="m0" id="mis-titre">${h((m.carte || {}).titre || t("New mission"))}</h2><span class="badge mis-etat-${h(m.etat)}">${h(t(ETATS_MISSION[m.etat] || m.etat))}</span></div>
+      <p class="muet petit mis-phrase">${h(m.phrase)}</p>${m.etat === "echec" && fin.detail ? `<p class="mis-avert" role="note">${h(fin.detail)}</p>` : ""}</div>
+    <section class="bloc" aria-labelledby="mis-voies-titre"><h2 id="mis-voies-titre">${t("Lanes")}</h2>
+      ${(m.voies || []).length ? `<ul class="mis-voies-liste">${m.voies.map((v) => `<li>${voieMission(v, true)}</li>`).join("")}</ul>${lancee ? `<p class="muet petit m0">${t("Launched on {0}", [h(new Date(lancee.t).toLocaleString(document.documentElement.lang || "en"))])}</p>` : ""}`
+        : `<p class="muet m0">${t("The lanes start when the mission is launched.")}</p>`}
+    </section>
+    ${m.carte ? `<section class="bloc mis-carte" aria-labelledby="mis-titre">${carteMission(d)}</section>` : ""}
   </div>`;
 };
 

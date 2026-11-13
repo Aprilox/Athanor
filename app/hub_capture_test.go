@@ -155,6 +155,7 @@ func TestCaptureHub(t *testing.T) {
 	mux.HandleFunc("POST /test/mission", func(w http.ResponseWriter, r *http.Request) {
 		s.fermerLancementMission("capture03", "hub", "refuser", "capture") // never left pending for the next screenshots
 		_ = os.RemoveAll(dossierMissions())
+		_ = os.Remove(filepath.Join(dossierTaches("c0ffee02"), "7a5c0e11d2b4.json")) // ?liste=1's task
 		if r.URL.Query().Get("on") == "" {
 			return
 		}
@@ -190,6 +191,39 @@ func TestCaptureHub(t *testing.T) {
 			}
 			if _, err := outilLancerMission(s, SessionHub{Mission: m.ID, Agent: agentOrchestrateur}, json.RawMessage(`{"id":"capture03"}`)); err != nil {
 				http.Error(w, err.Error(), 500)
+			}
+		}
+		// missions-* (M159): ?liste=1 adds missions launched (a project's pilot and a Servers task waiting for the
+		// owner), finished, failed and cancelled, older than the bakery's
+		if r.URL.Query().Get("liste") != "" {
+			tache := TacheServeurs{ID: "7a5c0e11d2b4", Texte: "Noms DNS et proxy", Serveurs: []string{"c0ffee02"}, Etat: "attente_accord", Env: "projet-02/staging",
+				Cree: "2026-11-12T08:00:00Z", Historique: []EvenementTache{}}
+			if err := enregistrerTache(tache); err != nil {
+				http.Error(w, err.Error(), 500)
+				return
+			}
+			c := CarteMission{Titre: "Paiement en ligne de la boutique", Projet: ProjetCarte{Nom: "projet-02"}, Dev: BriefCarte{"Ajouter le paiement par carte au panier."},
+				Envs:     []EnvCarte{{Nom: "staging", URL: "https://recette.boutique.fr", Protection: "auth_proxy", Serveurs: []string{"c0ffee02"}}},
+				Serveurs: BriefCarte{"Nom DNS de recette, certificat et proxy."}, JalonsEstimes: 3}
+			if err := validerCarte(&c, ctx); err != nil {
+				http.Error(w, err.Error(), 500)
+				return
+			}
+			bc, _ := json.Marshal(calculerCarte(c, "tout", ctx))
+			for _, x := range []Mission{
+				{ID: "capture02", Phrase: "Ajouter le paiement par carte à @projet-02 et le mettre en recette sur recette.boutique.fr", Etat: "lancee", Carte: bc, Politique: "tout",
+					Voies:      []VoieMission{{Module: "dev", Ref: "projet-02", Etat: "lancee"}, {Module: "servers", Ref: tache.ID, Etat: "preparation"}},
+					Historique: []EvenementMission{{T: "2026-11-12T07:55:00Z", Etat: "proposee"}, {T: "2026-11-12T08:00:00Z", Etat: "lancee", Detail: "hub"}}, Cree: "2026-11-12T07:50:00Z"},
+				{ID: "capture04", Phrase: "Une page de contact pour @projet-01", Etat: "terminee", Politique: "prod", Voies: []VoieMission{{Module: "dev", Ref: "projet-01", Etat: "lancee"}},
+					Historique: []EvenementMission{{T: "2026-11-10T10:00:00Z", Etat: "terminee"}}, Cree: "2026-11-10T09:00:00Z"},
+				{ID: "capture05", Phrase: "Mettre @projet-03 en ligne sur un serveur", Etat: "echec", Politique: "prod", Voies: []VoieMission{},
+					Historique: []EvenementMission{{T: "2026-11-09T10:00:00Z", Etat: "echec", Detail: "the orchestrator's session stopped: usage limit reached"}}, Cree: "2026-11-09T09:58:00Z"},
+			} {
+				x.Mentions, x.Questions = MentionsMission{Projets: []string{}, Serveurs: []string{}, Cles: []string{}}, []QuestionMission{}
+				if err := enregistrerMission(x); err != nil {
+					http.Error(w, err.Error(), 500)
+					return
+				}
 			}
 		}
 	})

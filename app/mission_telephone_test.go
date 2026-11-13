@@ -159,7 +159,7 @@ func TestMissionTelephone(t *testing.T) {
 	}
 	m, _ := lireMission(paiement)
 	x, _ := s.approbations.Lire(d.ID)
-	if m.Etat != "lancee" || len(m.Voies) != 1 || m.Voies[0] != (VoieMission{"dev", "boutique", "lancee"}) || !slices.Equal(pilotes, []string{"boutique"}) ||
+	if m.Etat != "lancee" || len(m.Voies) != 1 || m.Voies[0] != (VoieMission{Module: "dev", Ref: "boutique", Etat: "lancee"}) || !slices.Equal(pilotes, []string{"boutique"}) ||
 		x.Etat != "acceptee" || x.Par != "appareil:"+idTel || m.Historique[len(m.Historique)-1].Detail != "appareil:"+idTel {
 		t.Fatalf("launched from the phone: %+v, %+v, %v", m, x, pilotes)
 	}

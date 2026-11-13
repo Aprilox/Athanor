@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -77,9 +78,58 @@ func (s *Serveur) relancerOuEchec(id, enTete string) Mission {
 	return m
 }
 
-// apiMissions: GET /api/missions, every mission, the newest first.
+// tacheMission: the Servers task id wherever its server is (a running one as it is now).
+func tacheMission(id string) (TacheServeurs, bool) {
+	if !idMissionValide.MatchString(id) {
+		return TacheServeurs{}, false
+	}
+	fichiers, _ := filepath.Glob(filepath.Join(dossierModule("servers"), "*", "taches", id+".json"))
+	for _, f := range fichiers {
+		if t := tacheParID(filepath.Base(filepath.Dir(filepath.Dir(f))), id); t.ID == id {
+			return t, true
+		}
+	}
+	return TacheServeurs{}, false
+}
+
+// voiesEnDirect: m's lanes with their state read now, on the project's pilot (dev: travaille, termine, arrete) or
+// on the Servers task (its state and server); a project or task gone is "inconnu".
+func (s *Serveur) voiesEnDirect(m Mission) Mission {
+	m.Voies = slices.Clone(m.Voies)
+	for i := range m.Voies {
+		v := &m.Voies[i]
+		switch v.Module {
+		case "dev":
+			p, ok := s.projetParNom(v.Ref)
+			e, lu := p.LireEtat()
+			switch {
+			case !ok:
+				v.Actuel = "inconnu"
+			case p.PiloteActif():
+				v.Actuel, v.Detail = "travaille", e.JalonEnCours
+			case lu && e.Phase == "termine":
+				v.Actuel = "termine"
+			default:
+				v.Actuel = "arrete"
+			}
+		case "servers":
+			if t, ok := tacheMission(v.Ref); ok && len(t.Serveurs) > 0 {
+				v.Actuel, v.Serveur = t.Etat, t.Serveurs[0]
+			} else if v.Etat != "refusee" {
+				v.Actuel = "inconnu"
+			}
+		}
+	}
+	return m
+}
+
+// apiMissions: GET /api/missions, every mission, the newest first, its lanes as they are now.
 func (s *Serveur) apiMissions(w http.ResponseWriter, _ *http.Request) {
-	s.ecrireJSON(w, map[string]any{"missions": lireMissions()})
+	l := lireMissions()
+	for i := range l {
+		l[i] = s.voiesEnDirect(l[i])
+	}
+	s.ecrireJSON(w, map[string]any{"missions": l})
 }
 
 // apiMission: GET /api/missions/{id}; unknown, damaged or hostile id → 404. orchestrateur: its session runs now.
@@ -89,7 +139,7 @@ func (s *Serveur) apiMission(w http.ResponseWriter, r *http.Request) {
 		s.erreur(w, http.StatusNotFound, err.Error())
 		return
 	}
-	s.ecrireJSON(w, map[string]any{"mission": m, "orchestrateur": orchestrateurTravaille(m.ID)})
+	s.ecrireJSON(w, map[string]any{"mission": s.voiesEnDirect(m), "orchestrateur": orchestrateurTravaille(m.ID)})
 }
 
 // apiCreerMission: POST /api/missions {phrase, mentions[]{type, ref}} → a mission in preparation and its session.

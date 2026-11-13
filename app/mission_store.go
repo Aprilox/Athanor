@@ -31,6 +31,10 @@ type VoieMission struct {
 	Module string `json:"module"`
 	Ref    string `json:"ref"`
 	Etat   string `json:"etat"`
+	// read now by the API, never stored (voiesEnDirect): the pilot's or the task's state, the milestone, the task's server
+	Actuel  string `json:"actuel,omitempty"`
+	Detail  string `json:"detail,omitempty"`
+	Serveur string `json:"serveur,omitempty"`
 }
 
 // QuestionMission: a question of the orchestrator to the owner (at most 4 choices), with the answer.

@@ -1076,6 +1076,14 @@ ol.guide-access li { margin: 5px 0; }
 .mis-liste { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .mis-ligne { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0; }
 .mis-phrase { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+/* M159: a line is a link to the mission; its lanes below, each with its state read now */
+a.mis-ligne { color: inherit; text-decoration: none; }
+a.mis-ligne:hover, a.mis-ligne:focus-visible { border-color: var(--accent); }
+.mis-voies-ligne { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.mis-voie-etat { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px; min-width: 0; overflow-wrap: anywhere; }
+.mis-voies-liste { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.mis-detail { display: flex; flex-direction: column; gap: 12px; }
+.mis-detail > .bloc { margin: 0; }
 .mis-etat-proposee, .mis-etat-acceptee { color: var(--info); border-color: currentColor; }
 .mis-etat-echec { color: var(--erreur); border-color: currentColor; }
 /* M156: the mission card under the home bar */

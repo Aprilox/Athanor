@@ -24,6 +24,11 @@ import (
 func TestMissionLancer(t *testing.T) {
 	s := serveurCoffreTest(t)
 	motDePasseCoffreTest(t, s)
+	// the config next to the test binary moves dossierAthanor() there (installationAncienne): written now, as the
+	// launch's new project does, so the servers' and missions' folders does not move in the middle (run alone, 404 otherwise)
+	if err := ecrireConfig(s.config); err != nil {
+		t.Fatal(err)
+	}
 	temoin := "TEMOIN-" + aleatoire(10)
 	stripe, err := s.coffre.Ajouter(EntreeCoffre{Nom: "Clé Stripe", Famille: "secret", Type: "stripe"}, temoin+"-code")
 	if err != nil {
@@ -152,7 +157,7 @@ func TestMissionLancer(t *testing.T) {
 		t.Fatalf("two clicks: %v", codes)
 	}
 	m, _ := lireMission(neuf)
-	if m.Etat != "lancee" || len(m.Voies) != 3 || m.Voies[0] != (VoieMission{"dev", "boulangerie-martin", "lancee"}) || m.Voies[1].Module != "servers" || m.Voies[2].Module != "servers" {
+	if m.Etat != "lancee" || len(m.Voies) != 3 || m.Voies[0] != (VoieMission{Module: "dev", Ref: "boulangerie-martin", Etat: "lancee"}) || m.Voies[1].Module != "servers" || m.Voies[2].Module != "servers" {
 		t.Fatalf("launched mission: %+v", m)
 	}
 	p, ok := s.projetNomme("boulangerie-martin")
@@ -181,6 +186,22 @@ func TestMissionLancer(t *testing.T) {
 	if code, _ := lancer(neuf, ""); code != http.StatusConflict { // launched: never again
 		t.Fatalf("second launch: %d", code)
 	}
+	// M159: the lanes read now — the project's pilot stopped (the fake pilot leaves no process), each task with its server
+	r := httptest.NewRequest("GET", "/api/missions/"+neuf, nil)
+	r.Header.Set("X-Athanor", "jeton")
+	r.AddCookie(&http.Cookie{Name: cookieAcces, Value: "cle"})
+	r.AddCookie(&http.Cookie{Name: "athanor_session", Value: s.session})
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, r)
+	var lu struct{ Mission Mission }
+	_ = json.Unmarshal(w.Body.Bytes(), &lu)
+	if v := lu.Mission.Voies; len(v) != 3 || v[0].Actuel != "arrete" || v[1].Actuel != "finie" || v[2].Actuel != "finie" ||
+		!slices.Contains([]string{"a1", "a2"}, v[1].Serveur) || v[1].Serveur == v[2].Serveur {
+		t.Fatalf("lanes now: %s", w.Body.String())
+	}
+	if m, _ := lireMission(neuf); m.Voies[1].Actuel != "" { // never stored
+		t.Fatalf("stored lane: %+v", m.Voies[1])
+	}
 
 	// 2. an existing project in native Windows mode: the brief queued, the Servers lane refused, Dev launched
 	modeNatif.Store(true)
@@ -188,7 +209,7 @@ func TestMissionLancer(t *testing.T) {
 	existant := proposer(CarteMission{Titre: "Page de paiement", Projet: ProjetCarte{Nom: "boutique"}, Dev: BriefCarte{Brief: "Ajouter le paiement"},
 		Serveurs: BriefCarte{Brief: "Ouvrir le port"}, JalonsEstimes: 2, Envs: []EnvCarte{{Nom: "dev", URL: "https://dev.boutique.fr", Serveurs: []string{"a2"}}}}, "tout", "proposee")
 	code, m := lancer(existant, `{"dossier":"C:\\ailleurs"}`)
-	if code != 200 || m.Etat != "lancee" || len(m.Voies) != 2 || m.Voies[0] != (VoieMission{"dev", "boutique", "lancee"}) || m.Voies[1] != (VoieMission{"servers", "boutique/dev", "refusee"}) ||
+	if code != 200 || m.Etat != "lancee" || len(m.Voies) != 2 || m.Voies[0] != (VoieMission{Module: "dev", Ref: "boutique", Etat: "lancee"}) || m.Voies[1] != (VoieMission{Module: "servers", Ref: "boutique/dev", Etat: "refusee"}) ||
 		!strings.Contains(m.Historique[len(m.Historique)-1].Detail, errServeursNatif.Error()) {
 		t.Fatalf("native mode: %d %+v", code, m)
 	}
