@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/base64"
+	"os"
 	"os/exec"
 	"runtime"
 	"testing"
@@ -21,6 +22,9 @@ func oublierCompte(compte string) {
 
 // The real keystore of this system: DPAPI on Windows, skipped elsewhere when the tool is missing or locked.
 func TestCoffreSystemeReel(t *testing.T) {
+	if runtime.GOOS != "windows" && os.Getenv("ATHANOR_TEST_TROUSSEAU_REEL") != "1" {
+		t.Skip("real Keychain / Secret Service skipped: it may ask the owner (ATHANOR_TEST_TROUSSEAU_REEL=1 to run it)")
+	}
 	s := enveloppeSystemeLocale()
 	if s == nil {
 		if runtime.GOOS == "windows" {

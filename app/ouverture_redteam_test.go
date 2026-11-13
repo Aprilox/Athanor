@@ -51,6 +51,9 @@ func verifierI7Executable(t *testing.T) {
 		mdns bool
 		args []string
 	}{{"fenetre", false, nil}, {"fenetre-mdns", true, nil}, {"module", false, []string{"module", "servers", "--nom", "vps-i7"}}}
+	if !reseauReelPermis() {
+		modes = slices.Delete(modes, 1, 2) // the multicast socket would make the firewall ask the owner (sans_popup_test.go)
+	}
 	var wg sync.WaitGroup
 	for _, m := range modes {
 		wg.Add(1)

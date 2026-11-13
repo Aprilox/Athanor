@@ -38,6 +38,11 @@ jobs:
         run: go vet .
       - name: Tests
         shell: bash
+        # nobody to ask on a runner: the real mDNS socket and the real Keychain / Secret Service are tested here
+        # (skipped on a developer's computer, where they would open a firewall or keychain prompt)
+        env:
+          ATHANOR_TEST_RESEAU: "1"
+          ATHANOR_TEST_TROUSSEAU_REEL: "1"
         # the failures also go into the run's annotations (readable without opening the whole log)
         run: |
           set +e   # the step's shell stops at the first failure otherwise (-e, pipefail): the annotations below would never be written

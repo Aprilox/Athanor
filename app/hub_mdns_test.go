@@ -121,6 +121,10 @@ func verifierMDNSOffOn(t *testing.T) {
 	if s.mdns.conn != nil {
 		t.Fatal("mDNS socket open while off")
 	}
+	if !reseauReelPermis() {
+		t.Log("mDNS on: real multicast socket skipped here (a firewall prompt; Linux or ATHANOR_TEST_RESEAU=1)")
+		return
+	}
 	if err := s.demarrerMDNS(); err != nil {
 		t.Logf("mDNS on: multicast unavailable here (%v), the socket part is skipped", err)
 		return
