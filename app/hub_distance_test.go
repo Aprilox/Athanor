@@ -47,7 +47,7 @@ func TestDistanceToutesRoutes(t *testing.T) {
 			t.Errorf("%s %s: %d (reached %v), want the route reached", methode, chemin, code, ok)
 		}
 	}
-	for _, r := range []string{"GET /api/hub", "POST /api/hub/alertes", "POST /api/mot-de-passe", "POST /api/ouvrir", "POST /api/instance/{action}", "POST /api/distance", "GET /api/projets", "POST /api/mcp/appairer", "POST /api/mcp/appairer/statut", "GET /api/clients", "POST /api/clients", "GET /api/annonce", "GET /api/instances", "POST /api/instances"} {
+	for _, r := range []string{"GET /api/hub", "POST /api/hub/alertes", "POST /api/mot-de-passe", "POST /api/ouvrir", "POST /api/instance/{action}", "POST /api/distance", "GET /api/projets", "POST /api/mcp/appairer", "POST /api/mcp/appairer/statut", "GET /api/clients", "POST /api/clients", "GET /api/annonce", "GET /api/instances", "POST /api/instances", "POST /api/instances/mdns"} {
 		if !vus[r] {
 			t.Errorf("route %q no longer in serveur.go: update this test", r)
 		}
@@ -116,7 +116,8 @@ func TestDistanceToutesRoutes(t *testing.T) {
 		{"GET", "/api/annonce", true},              // the announcement and the instances of this PC (M185)
 		{"GET", "/api/instances", true},
 		{"POST", "/api/instances", true},
-		{"GET", "/api/clients", true}, // MCP clients: the computer's window only
+		{"POST", "/api/instances/mdns", true}, // the local network discovery: the computer only (M186)
+		{"GET", "/api/clients", true},         // MCP clients: the computer's window only
 		{"POST", "/api/clients", true},
 		{"POST", "/api/instance/x", true},
 		{"POST", "/api/distance", true},

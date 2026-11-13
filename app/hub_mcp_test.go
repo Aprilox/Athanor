@@ -261,7 +261,7 @@ func TestMCPJetonAutresRoutes(t *testing.T) {
 func TestI7Listeners(t *testing.T) {
 	fichiers, _ := filepath.Glob("*.go")
 	ecoute := regexp.MustCompile(`\bnet\.Listen\w*\(|ListenAndServe\w*\(|\.Listen\(ctx|ListenConfig`)
-	n := 0
+	n, multicast := 0, 0
 	for _, f := range fichiers {
 		if strings.HasSuffix(f, "_test.go") {
 			continue
@@ -273,7 +273,9 @@ func TestI7Listeners(t *testing.T) {
 		for i, ligne := range strings.Split(string(b), "\n") {
 			if ecoute.MatchString(ligne) {
 				n++
-				if !strings.Contains(ligne, `"127.0.0.1:`) {
+				if f == "hub_mdns.go" && strings.Contains(ligne, "net.ListenMulticastUDP(") {
+					multicast++ // the one exception: mDNS, off by default (checked below)
+				} else if !strings.Contains(ligne, `"127.0.0.1:`) {
 					t.Errorf("%s:%d listens elsewhere than on 127.0.0.1: %s", f, i+1, strings.TrimSpace(ligne))
 				}
 			}
@@ -282,4 +284,8 @@ func TestI7Listeners(t *testing.T) {
 	if n < 4 {
 		t.Fatalf("only %d listeners found", n)
 	}
+	if multicast != 1 {
+		t.Fatalf("%d multicast sockets in hub_mdns.go (exactly one expected)", multicast)
+	}
+	verifierMDNSOffOn(t) // hub_mdns_test.go: off by default, no socket outside the loopback while off
 }

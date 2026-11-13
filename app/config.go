@@ -37,6 +37,8 @@ type Config struct {
 	TerminalPilote bool `json:"terminal_pilote,omitempty"`
 	// no look for a new version of Athanor when it opens (maj.go; on by default)
 	PasVerifierMaj bool `json:"pas_verifier_maj,omitempty"`
+	// local network discovery (hub_mdns.go): off by default, turned on by the owner only
+	MDNS bool `json:"mdns,omitempty"`
 	// end of a pilot already announced to the user (project folder → STATE.json "maj" of that end)
 	FinsVues map[string]string `json:"fins_vues,omitempty"`
 	// remote access: on or off, its local port, the trusted devices (distance.go; hashes of keys only)

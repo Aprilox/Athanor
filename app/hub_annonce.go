@@ -148,7 +148,10 @@ func (s *Serveur) apiInstances(w http.ResponseWriter, r *http.Request) {
 		autres = append(autres, map[string]any{"id": a.ID, "nom": a.Nom, "version": a.Version, "modules": a.Modules, "dossier": a.Dossier, "attente": attente})
 	}
 	if r.Method == http.MethodGet {
-		s.ecrireJSON(w, map[string]any{"instances": autres})
+		s.mu.Lock()
+		mdns := s.config.MDNS
+		s.mu.Unlock()
+		s.ecrireJSON(w, map[string]any{"instances": autres, "mdns": mdns, "reseau": s.instancesReseau(), "tunnel": s.adresseTunnel() != ""})
 		return
 	}
 	var c struct{ ID, Code string }

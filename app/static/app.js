@@ -4617,8 +4617,19 @@ function rendreInstancesPC(v) {
       ${i.attente ? `<span class="petit attention">${t("Waiting for the other one's yes")}</span>` : `<input type="text" class="code-instance" inputmode="numeric" maxlength="6" placeholder="${t("6-digit code")}" aria-label="${t("6-digit code")}"> <button class="btn btn-petit" data-instance="appairer">${t("Pair")}</button>`}</div>`).join("");
   return `<div class="bloc local-seul" id="bloc-instances-pc"><h2>${t("Remote Athanors")}</h2><h3>${t("On this PC")}</h3>
     <p class="muet petit">${t("The other Athanors running on this computer. Pairing is never automatic: type the 6-digit code the other one shows (Settings › MCP clients › Connect), then accept in its window.")}</p>
-    ${liste || `<p class="muet petit">${t("No other Athanor is running on this computer.")}</p>`}</div>`;
+    ${liste || `<p class="muet petit">${t("No other Athanor is running on this computer.")}</p>`}
+    <h3>${t("On the local network")}</h3>
+    <label class="ligne"><input type="checkbox" id="mdns-actif" ${v.mdns ? "checked" : ""}> ${t("Discover the Athanors of the local network (mDNS)")}</label>
+    <p class="muet petit">${t("Off by default. On: this Athanor tells the computers of your network its name and its remote access address (nothing else, and nothing without remote access), and lists the Athanors that do the same. Nothing is linked without the 6-digit code.")}</p>
+    ${v.mdns ? `${v.tunnel ? "" : `<p class="petit attention">${t("Remote access is off: this Athanor announces nothing, it only looks for the others.")}</p>`}
+    ${(v.reseau || []).map((i) => `<div class="ligne instance-reseau"><span><b>${h(i.nom || i.id)}</b><br><span class="muet petit chemin-court">${h(i.url)}</span></span></div>`).join("") || `<p class="muet petit">${t("No Athanor found on the local network yet.")}</p>`}
+    ${(v.reseau || []).length ? `<p class="muet petit">${t("A proposal only: to link one, add its address with the 6-digit code it shows.")}</p>` : ""}` : ""}</div>`;
 }
+$("#page").addEventListener("change", async (ev) => {
+  if (ev.target.id !== "mdns-actif") return;
+  await action(api("instances/mdns", "POST", { actif: ev.target.checked }));
+  const n = await api("instances").catch(() => null); const bloc = $("#bloc-instances-pc"); if (n && bloc) bloc.outerHTML = rendreInstancesPC(n);
+});
 $("#page").addEventListener("click", async (ev) => {
   const b = ev.target.closest("[data-instance]"); if (!b) return;
   const l = b.closest(".instance-pc");

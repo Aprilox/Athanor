@@ -29,6 +29,7 @@ type Serveur struct {
 	bureau       *Bureau
 	verifs       []*Verif // WSL mode
 	verifsNatif  []*Verif // native Windows mode
+	mdns         etatMDNS // local network discovery, on only by the owner (hub_mdns.go)
 	session      string   // session token when a password is set ("" = locked)
 	csrf         string
 	cleAcces     string               // cookie of the windows Athanor opened (acces.go); empty = no check (tests)
@@ -499,6 +500,7 @@ func (s *Serveur) routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/annonce", repondreAnnonce(idInstance))    // public: id and version only (hub_annonce.go)
 	mux.HandleFunc("GET /api/instances", s.garde(false, s.apiInstances))
 	mux.HandleFunc("POST /api/instances", s.garde(false, s.apiInstances))
+	mux.HandleFunc("POST /api/instances/mdns", s.garde(false, s.apiMDNS))
 	mux.HandleFunc("GET /api/clients", s.garde(false, s.apiClients))
 	mux.HandleFunc("POST /api/clients", s.garde(false, s.apiClients))
 	mux.HandleFunc("POST /api/ouvrir", s.garde(false, s.apiOuvrir))
