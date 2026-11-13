@@ -393,6 +393,9 @@ label.champ > span { display: block; color: var(--muted); font-size: 13px; margi
 .grille-2 { grid-template-columns: 1fr 1fr; }
 .grille-3 { grid-template-columns: repeat(3, 1fr); }
 .colonne { display: flex; flex-direction: column; gap: 16px; }
+.grille-2 > .colonne { min-width: 0; } /* a long path or snippet never widens the page */
+.chemin-projet, #bloc-clients-mcp code, #bloc-clients-mcp pre { overflow-wrap: anywhere; white-space: pre-wrap; }
+#bloc-clients-mcp .code-client { font-size: 1.6em; font-weight: 600; letter-spacing: .12em; }
 @media (max-width: 1150px) { .grille-2, .grille-3 { grid-template-columns: 1fr; } .page, .bandeau { padding-left: 20px; padding-right: 20px; } }
 .vide { color: var(--muted); padding: 24px; text-align: center; border: 1px dashed var(--line); border-radius: var(--rayon); }
 dl.fiche { display: grid; grid-template-columns: minmax(110px, max-content) 1fr; gap: 6px 18px; margin: 0; }

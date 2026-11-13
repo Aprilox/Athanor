@@ -4482,8 +4482,8 @@ function afficherNonAppaire() {
 
 async function rendreOptions() {
   setTimeout(majConnexionGH, 0); // the GitHub block fills in once the page is there (WSL may be slow)
-  const o = await api("options");
-  etat.optionsVue = o;
+  const [o, cl] = await Promise.all([api("options"), api("clients").catch(() => null)]);
+  etat.optionsVue = o; etat.clientsVue = cl;
   const b = o.bureau || {};
   return `<div class="grille grille-2">
     <div class="colonne">
@@ -4507,9 +4507,10 @@ async function rendreOptions() {
     </div>
     <div class="colonne">
       <div class="bloc"><h2>${t("Projects")}</h2>
-        ${(o.projets || []).length ? `<table class="tab"><tbody>${o.projets.map((p) => `<tr><td><b>${h(p.nom)}</b>${p.archive ? ` <span class="badge">${t("archived")}</span>` : ""}</td><td class="muet">${h(p.dossier)}</td><td class="droite"><button class="btn btn-petit" data-gerer="${h(p.nom)}" data-archive="${p.archive ? 1 : ""}">${t("Manage")}</button></td></tr>`).join("")}</tbody></table>` : `<div class="vide">${t("No project.")}</div>`}
+        ${(o.projets || []).length ? `<table class="tab"><tbody>${o.projets.map((p) => `<tr><td><b>${h(p.nom)}</b>${p.archive ? ` <span class="badge">${t("archived")}</span>` : ""}</td><td class="muet chemin-projet">${h(p.dossier)}</td><td class="droite"><button class="btn btn-petit" data-gerer="${h(p.nom)}" data-archive="${p.archive ? 1 : ""}">${t("Manage")}</button></td></tr>`).join("")}</tbody></table>` : `<div class="vide">${t("No project.")}</div>`}
         <p class="muet petit mt-2">${t("Rename a project, move its folder, archive or delete it: “Manage”.")}</p>
       </div>
+      ${rendreClientsMCP(cl)}
       <div class="bloc"${b.message === "Virtual desktop: Windows only." ? " hidden" : ""}><h2>${t("“Claude” desktop")}</h2>
         <label class="interrupteur"><input type="checkbox" id="op-bureau" data-option ${o.bureau_virtuel ? "checked" : ""}><span>${t("Open the programs Claude starts (Unreal, Blender, a game under test) on a desktop of their own")}</span></label>
         <p class="petit ${b.disponible ? "ok" : "attention"}">${h(t(b.message || ""))}</p>
@@ -4545,6 +4546,68 @@ async function rendreOptions() {
     </div>
   </div>`;
 };
+// Settings › MCP clients (hub_clients.go, hub_mcp_client.go): Claude Desktop or Claude Code pair with the
+// 6 digits shown here, the owner accepts with a scope (projects, tools), revokes; ready-to-copy snippets
+const OUTILS_LECTURE = ["etat", "projets", "plan", "demandes", "missions", "approbations"];
+function rendreClientsMCP(c) {
+  if (!c) return "";
+  const projets = ((etat.optionsVue || {}).projets || []).filter((p) => !p.archive).map((p) => p.nom);
+  const exe = c.commande || "Athanor", q = (x) => /[\s"]/.test(x) ? JSON.stringify(x) : x;
+  const code = c.code ? `<div class="bloc-code mt-1"><code class="code-client" id="clients-code">${h(c.code)}</code> <button class="btn btn-petit" type="button" data-clients="fermer">${t("Close")}</button>
+      <div class="muet petit">${t("In a terminal on this PC: {0}, then type this code. It works once, for 10 minutes.", [`<code>${h(q(exe))} mcp-client appairer claude-desktop --sorte desktop</code>`])}</div></div>`
+    : `<div class="ligne mt-1"><button class="btn" type="button" data-clients="code" ${c.urgence ? "disabled" : ""}>${t("Connect a client")}</button></div>`;
+  const demandes = (c.demandes || []).map((d) => `<div class="demande-client mt-1" data-ref="${h(d.ref)}">
+      <p class="m0">⚠ <b>${h(t("{0} wants to use Athanor's MCP", [d.nom]))}</b> <span class="badge">${h(d.sorte)}</span> <span class="muet petit">${h(d.ip || "")}</span></p>
+      <div class="muet petit mt-1">${t("Projects it may see")}</div>
+      <div class="ligne cases-client"><label class="interrupteur m0"><input type="checkbox" data-cl-projet="*"><span>${t("All projects")}</span></label>${projets.map((n) => `<label class="interrupteur m0"><input type="checkbox" data-cl-projet="${h(n)}"><span>${h(n)}</span></label>`).join("")}</div>
+      <div class="muet petit mt-1">${t("Tools it may use")}</div>
+      <div class="ligne cases-client">${(c.outils || []).map((o) => `<label class="interrupteur m0"><input type="checkbox" data-cl-outil="${h(o)}" ${OUTILS_LECTURE.includes(o) ? "checked" : ""}><span><code>${h(o)}</code></span></label>`).join("")}</div>
+      <div class="ligne mt-1"><button class="btn btn-primaire" type="button" data-clients="accepter">${t("Accept")}</button> <button class="btn btn-petit" type="button" data-clients="refuser">${t("Refuse")}</button></div></div>`).join("");
+  const liste = (c.clients || []).length ? `<table class="tab mt-1"><tbody>${c.clients.map((x) => `<tr><td><b>${h(x.nom)}</b> <span class="badge">${h(x.sorte)}</span><div class="muet petit">${x.projets.includes("*") ? t("All projects") : h(x.projets.join(", "))} · ${h(x.outils.join(", "))}</div></td>
+      <td class="muet petit">${x.vu ? h(t("Used {0}", [dateLisible(x.vu)])) : t("Never used")}</td><td class="droite"><button class="btn btn-petit" type="button" data-clients="revoquer" data-id="${h(x.id)}">${t("Revoke")}</button></td></tr>`).join("")}</tbody></table>`
+    : `<div class="vide mt-1">${t("No client connected.")}</div>`;
+  const bureau = JSON.stringify({ mcpServers: { athanor: { command: exe, args: ["mcp-client", "claude-desktop"] } } }, null, 2);
+  const extrait = (id, titre, texte) => `<div class="muet petit mt-1">${titre}</div><div class="ligne m0"><pre class="code croit m0" id="${id}">${h(texte)}</pre><button class="btn btn-petit" type="button" data-clients="copier" data-cible="${id}">${t("Copy")}</button></div>`;
+  return `<div class="bloc local-seul" id="bloc-clients-mcp"><h2>${t("MCP clients")}</h2>
+    <p class="intro petit">${t("Claude Desktop or Claude Code on this PC can follow your projects through Athanor's MCP: only the projects and tools you allow. No client can decide an approval, launch a mission or read the vault.")}</p>
+    ${c.urgence ? `<p class="attention petit">${t("Emergency stop: the MCP clients are suspended and pairing is closed until Resume.")}</p>` : ""}
+    ${code}${demandes}${liste}
+    <details class="mt-1"><summary class="petit">${t("Ready-to-copy configuration")}</summary>
+      ${extrait("cl-appairer", t("1. Pair (in a terminal, with the code shown above)"), `${q(exe)} mcp-client appairer claude-desktop --sorte desktop`)}
+      ${extrait("cl-bureau", t("2. Claude Desktop: add to claude_desktop_config.json"), bureau)}
+      ${extrait("cl-code", t("Claude Code (paired with --sorte code under the name claude-code)"), `claude mcp add athanor -- ${q(exe)} mcp-client claude-code`)}
+    </details></div>`;
+}
+async function majClientsMCP(v) {
+  v = v || await api("clients").catch(() => null);
+  const b = $("#bloc-clients-mcp");
+  if (!v || !b || JSON.stringify(v) === JSON.stringify(etat.clientsVue)) return;
+  etat.clientsVue = v;
+  b.outerHTML = rendreClientsMCP(v);
+}
+// a code open or a request waiting: the block follows the terminal's pairing
+setInterval(() => {
+  const v = etat.clientsVue;
+  if (etat.page === "reglages" && $("#bloc-clients-mcp") && v && (v.code || (v.demandes || []).length)) majClientsMCP();
+}, 3000);
+$("#page").addEventListener("click", async (ev) => {
+  const b = ev.target.closest("[data-clients]"); if (!b) return;
+  const a = b.dataset.clients;
+  if (a === "copier") { const c = document.getElementById(b.dataset.cible); if (c) navigator.clipboard.writeText(c.textContent).then(() => toast(t("Copied."), "ok")); return; }
+  const corps = { action: a };
+  if (a === "revoquer") {
+    if (!await confirmer(t("Revoke this client? Its token stops working at once; it must pair again."), { ok: t("Revoke") })) return;
+    corps.id = b.dataset.id;
+  }
+  if (a === "accepter" || a === "refuser") {
+    const d = b.closest(".demande-client");
+    corps.ref = d.dataset.ref;
+    corps.projets = [...d.querySelectorAll("[data-cl-projet]:checked")].map((i) => i.dataset.clProjet);
+    corps.outils = [...d.querySelectorAll("[data-cl-outil]:checked")].map((i) => i.dataset.clOutil);
+  }
+  const v = await action(api("clients", "POST", corps));
+  if (v) majClientsMCP(v);
+});
 // the updates of Athanor (maj.go): the version, the latest one published, "Update now"
 function rendreBlocMaj(o) {
   const v = etat.vue || {}, m = v.maj || {};

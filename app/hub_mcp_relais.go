@@ -37,15 +37,27 @@ func init() {
 	})
 }
 
+// textesRelais: what the relay says when the hub cannot answer (the pilot's session or an external client).
+type textesRelais struct{ nom, ferme, sansJeton, refuse string }
+
+var textesHub = textesRelais{nomMCPHub,
+	"Athanor is not open on this computer: the hub's tools are unavailable. Carry on without them; note in .athanor/BLOCKERS.md what needed them.",
+	"No hub session token: this pilot was not started by Athanor (or was stopped), so the hub's tools are unavailable.",
+	"The hub refused this session's token (expired or revoked: the pilot was stopped or restarted). The hub's tools are unavailable until the next start."}
+
 // relaisMCPHub: one request at a time until stdin ends.
-// shortcut: requests are relayed in turn (a slow tool holds the next ones), concurrent calls if a tool ever needs it.
 func relaisMCPHub(in io.Reader, out io.Writer, fichierJeton, fichierInst string, delai time.Duration) {
+	relaisMCP(in, out, fichierJeton, fichierInst, delai, textesHub)
+}
+
+// shortcut: requests are relayed in turn (a slow tool holds the next ones), concurrent calls if a tool ever needs it.
+func relaisMCP(in io.Reader, out io.Writer, fichierJeton, fichierInst string, delai time.Duration, tx textesRelais) {
 	client := &http.Client{Timeout: delai}
 	lecteur := bufio.NewReader(in)
 	for {
 		ligne, err := lecteur.ReadBytes('\n')
 		if l := bytes.TrimSpace(ligne); len(l) > 0 {
-			if rep := relaisUneRequete(client, l, fichierJeton, fichierInst); rep != nil {
+			if rep := relaisUneRequete(client, l, fichierJeton, fichierInst, tx); rep != nil {
 				_, _ = out.Write(append(rep, '\n'))
 			}
 		}
@@ -56,7 +68,7 @@ func relaisMCPHub(in io.Reader, out io.Writer, fichierJeton, fichierInst string,
 }
 
 // relaisUneRequete: the line to write back (nil for a notification or a client's answer).
-func relaisUneRequete(client *http.Client, ligne []byte, fichierJeton, fichierInst string) []byte {
+func relaisUneRequete(client *http.Client, ligne []byte, fichierJeton, fichierInst string, tx textesRelais) []byte {
 	var q requeteMCP
 	if json.Unmarshal(ligne, &q) != nil {
 		return reponseRelais(nil, nil, &erreurMCP{-32700, "parse error"})
@@ -64,7 +76,7 @@ func relaisUneRequete(client *http.Client, ligne []byte, fichierJeton, fichierIn
 	if len(q.ID) == 0 || string(q.ID) == "null" || q.Method == "" {
 		return nil // notifications (the hub has nothing to do with them) and answers
 	}
-	corps, panne := envoyerHub(client, ligne, fichierJeton, fichierInst)
+	corps, panne := envoyerHub(client, ligne, fichierJeton, fichierInst, tx)
 	if panne == "" {
 		return corps
 	}
@@ -72,7 +84,7 @@ func relaisUneRequete(client *http.Client, ligne []byte, fichierJeton, fichierIn
 	case "initialize": // the server stays connected; its tools answer the error until Athanor is back
 		return reponseRelais(q.ID, map[string]any{"protocolVersion": versionsMCP[0],
 			"capabilities": map[string]any{"tools": map[string]any{}},
-			"serverInfo":   map[string]any{"name": nomMCPHub, "version": versionAthanor}}, nil)
+			"serverInfo":   map[string]any{"name": tx.nom, "version": versionAthanor}}, nil)
 	case "ping":
 		return reponseRelais(q.ID, map[string]any{}, nil)
 	case "tools/list":
@@ -84,8 +96,8 @@ func relaisUneRequete(client *http.Client, ligne []byte, fichierJeton, fichierIn
 }
 
 // envoyerHub: the hub's answer, or why there is none (the text the agent reads).
-func envoyerHub(client *http.Client, ligne []byte, fichierJeton, fichierInst string) ([]byte, string) {
-	const ferme = "Athanor is not open on this computer: the hub's tools are unavailable. Carry on without them; note in .athanor/BLOCKERS.md what needed them."
+func envoyerHub(client *http.Client, ligne []byte, fichierJeton, fichierInst string, tx textesRelais) ([]byte, string) {
+	ferme := tx.ferme
 	b, err := os.ReadFile(fichierInst)
 	var i infoInstance
 	if err != nil || json.Unmarshal(b, &i) != nil || i.Port <= 0 {
@@ -93,7 +105,7 @@ func envoyerHub(client *http.Client, ligne []byte, fichierJeton, fichierInst str
 	}
 	jeton, err := os.ReadFile(fichierJeton)
 	if err != nil || len(bytes.TrimSpace(jeton)) == 0 {
-		return nil, "No hub session token: this pilot was not started by Athanor (or was stopped), so the hub's tools are unavailable."
+		return nil, tx.sansJeton
 	}
 	req, _ := http.NewRequest("POST", "http://127.0.0.1:"+strconv.Itoa(i.Port)+"/api/mcp", bytes.NewReader(ligne))
 	req.Header.Set("Authorization", "Bearer "+string(bytes.TrimSpace(jeton)))
@@ -106,7 +118,7 @@ func envoyerHub(client *http.Client, ligne []byte, fichierJeton, fichierInst str
 	corps, err := io.ReadAll(io.LimitReader(r.Body, 8<<20))
 	switch {
 	case r.StatusCode == http.StatusUnauthorized:
-		return nil, "The hub refused this session's token (expired or revoked: the pilot was stopped or restarted). The hub's tools are unavailable until the next start."
+		return nil, tx.refuse
 	case err != nil || r.StatusCode != http.StatusOK || !json.Valid(corps):
 		return nil, "The hub did not answer properly (HTTP " + strconv.Itoa(r.StatusCode) + "). Try again later."
 	}

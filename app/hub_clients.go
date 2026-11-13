@@ -241,6 +241,9 @@ func (s *Serveur) vueClients() map[string]any {
 	}
 	slices.SortFunc(demandes, func(a, b demandeClient) int { return int(a.Quand - b.Quand) })
 	v := map[string]any{"clients": liste, "demandes": demandes, "outils": outilsClients, "urgence": s.urgenceClients()}
+	if exe, err := os.Executable(); err == nil { // the command the snippets give to Claude Desktop and Claude Code
+		v["commande"] = exe
+	}
 	if m.code != "" && time.Now().Before(m.codeFin) {
 		v["code"], v["code_fin"], v["essais"] = m.code, m.codeFin.Unix(), m.essais
 	}
