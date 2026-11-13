@@ -346,7 +346,7 @@ func (s *Serveur) demarrerMaitre(p Projet) error {
 	h := &hubEquipe{projet: p, etat: "demarrage", vus: map[string]vuNoeud{}, arret: make(chan struct{}), essaisIP: map[string]int{}, demandes: map[string]*demandeDirecte{}}
 	hubs[p.Nom] = h
 	directMu.Unlock()
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	ln, err := ecouterLocal(0)
 	if err != nil {
 		s.arreterMaitre(p.Nom)
 		return err

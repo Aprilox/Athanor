@@ -440,16 +440,15 @@ func (s *Serveur) ouvrirEcouteDistance(mux http.Handler) error {
 	var e net.Listener
 	var err error
 	// right after an update the previous Athanor may still hold it a moment: the tunnel kept since then points there
-	for i := 0; port > 0 && i < 20; i++ {
-		if e, err = net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port)); err == nil {
-			break
-		}
-		time.Sleep(500 * time.Millisecond)
-	}
-	if e == nil {
-		if e, err = net.Listen("tcp", "127.0.0.1:0"); err != nil {
+	for i := 0; i < 20; i++ {
+		if e, err = ecouterLocal(port); err != nil {
 			return err
 		}
+		if port <= 0 || e.Addr().(*net.TCPAddr).Port == port || i == 19 {
+			break
+		}
+		_ = e.Close() // another free port: the kept tunnel's one may be released in a moment
+		time.Sleep(500 * time.Millisecond)
 	}
 	nouveau := e.Addr().(*net.TCPAddr).Port
 	if nouveau != port {

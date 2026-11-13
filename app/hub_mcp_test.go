@@ -257,11 +257,13 @@ func TestMCPJetonAutresRoutes(t *testing.T) {
 	}
 }
 
-// TestI7Listeners: every listener of the application is on 127.0.0.1 (never all the interfaces).
+// TestI7Listeners: every listener of the application goes through ecouterLocal (127.0.0.1 only, never all the
+// interfaces), the mDNS socket aside; then the real executable, windowless, as a module, mDNS off and on, answers
+// on no port of this computer's network address (verifierI7Executable, ouverture_redteam_test.go).
 func TestI7Listeners(t *testing.T) {
 	fichiers, _ := filepath.Glob("*.go")
-	ecoute := regexp.MustCompile(`\bnet\.Listen\w*\(|ListenAndServe\w*\(|\.Listen\(ctx|ListenConfig`)
-	n, multicast := 0, 0
+	ecoute := regexp.MustCompile(`\bnet\.Listen\w*\(|ListenAndServe\w*\(|\.Listen\(ctx|\.ListenPacket\(|ListenConfig`)
+	n, multicast, appels := 0, 0, 0
 	for _, f := range fichiers {
 		if strings.HasSuffix(f, "_test.go") {
 			continue
@@ -270,22 +272,32 @@ func TestI7Listeners(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		dans := false // inside func ecouterLocal (main.go)
 		for i, ligne := range strings.Split(string(b), "\n") {
-			if ecoute.MatchString(ligne) {
+			if strings.HasPrefix(ligne, "func ") {
+				dans = f == "main.go" && strings.HasPrefix(ligne, "func ecouterLocal(")
+			} else if strings.Contains(ligne, "ecouterLocal(") {
+				appels++
+			}
+			if !ecoute.MatchString(ligne) {
+				continue
+			}
+			switch {
+			case dans && strings.Contains(ligne, `net.Listen("tcp", `) && strings.Contains(ligne, `"127.0.0.1:`):
 				n++
-				if f == "hub_mdns.go" && strings.Contains(ligne, "net.ListenMulticastUDP(") {
-					multicast++ // the one exception: mDNS, off by default (checked below)
-				} else if !strings.Contains(ligne, `"127.0.0.1:`) {
-					t.Errorf("%s:%d listens elsewhere than on 127.0.0.1: %s", f, i+1, strings.TrimSpace(ligne))
-				}
+			case f == "hub_mdns.go" && strings.Contains(ligne, "net.ListenMulticastUDP("):
+				multicast++ // the one exception: mDNS, off by default (checked below)
+			default:
+				t.Errorf("%s:%d listens outside ecouterLocal: %s", f, i+1, strings.TrimSpace(ligne))
 			}
 		}
 	}
-	if n < 4 {
-		t.Fatalf("only %d listeners found", n)
+	if n != 2 || appels < 6 {
+		t.Fatalf("ecouterLocal: %d listens inside (2 expected), %d callers (at least 6 expected)", n, appels)
 	}
 	if multicast != 1 {
 		t.Fatalf("%d multicast sockets in hub_mdns.go (exactly one expected)", multicast)
 	}
 	verifierMDNSOffOn(t) // hub_mdns_test.go: off by default, no socket outside the loopback while off
+	verifierI7Executable(t)
 }

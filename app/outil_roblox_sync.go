@@ -414,7 +414,7 @@ func servirRoblox(projet, fichierPid string) int {
 	cle := cleAleatoire()
 	etat := &etatRoblox{}
 	chargeRoblox(projet, etat) // the dates of reference
-	l, err := net.Listen("tcp", "127.0.0.1:0")
+	l, err := ecouterLocal(0)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
