@@ -73,7 +73,7 @@ func (s *Serveur) avancerRelais(p Projet, maintenant time.Time) <-chan struct{} 
 		return nil
 	}
 	e := s.acces.Environnements(p.Nom)["dev"]
-	if !e.DeployerAuJalon {
+	if !e.DeployerAuJalon || missionBloquee("dev", p.Nom) != "" { // a paused mission: the relay waits for Resume
 		return nil
 	}
 	if e.Deploiement != nil && e.Deploiement.Source == "git" {

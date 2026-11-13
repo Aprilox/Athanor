@@ -387,11 +387,7 @@ func (s *Serveur) apiAnnulerMission(w http.ResponseWriter, r *http.Request) {
 		s.erreurMissionHTTP(w, err)
 		return
 	}
-	orchestrateursEnCours.Lock()
-	if e := orchestrateursEnCours.m[id]; e != nil {
-		e.annuler(errMissionAnnulee)
-	}
-	orchestrateursEnCours.Unlock()
+	s.arreterOrchestrateur(id, errMissionAnnulee)
 	s.revoquerJetons("mission annulée", func(x SessionHub) bool { return x.Projet == prefixeMission+id })
 	s.fermerLancementMission(id, deQui(r), "refuser", "mission annulée")
 	s.ecrireAudit(LigneAudit{Type: "evenement", De: deQui(r), Vers: "missions", Projet: prefixeMission + id, Mission: id, Action: "mission annulée"})

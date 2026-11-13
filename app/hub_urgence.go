@@ -37,6 +37,7 @@ func (s *Serveur) arretUrgence(qui string) ResultatUrgence {
 		r.Jetons = len(s.jetons.Liste())
 	}
 	s.revoquerJetons("arrêt d'urgence", func(SessionHub) bool { return true })
+	s.pauserMissionsUrgence(qui)
 	if s.approbations != nil {
 		verrouDecision.Lock() // an accept in progress ends first, then nothing pending is left
 		l, err := s.approbations.RefuserTout(qui)

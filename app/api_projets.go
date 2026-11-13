@@ -679,6 +679,9 @@ func (s *Serveur) demarrerPilote(p Projet) (string, error) {
 	if p.PiloteActif() {
 		return "The pilot is already running on this project.", nil // message key
 	}
+	if id := missionBloquee("dev", p.Nom); id != "" {
+		return "", errors.New("A mission on this project is paused: resume it on its page to start the pilot.")
+	}
 	// delivered, and nothing new since (livraison.go): the pilot would end at once
 	if projetLivre(p) && len(p.LireFileAttente()) == 0 && nouveauDepuisLivraison(p.Dossier).Vide() {
 		return "", errors.New(texteLivreRienDeNeuf)
