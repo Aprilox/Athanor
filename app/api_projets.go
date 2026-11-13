@@ -438,33 +438,16 @@ func (s *Serveur) apiAjouterProjet(w http.ResponseWriter, r *http.Request) {
 // project's), with demande as its first request when its workshop has none; it becomes the active project.
 // code: the HTTP answer of err. rejoindre: joining the computers of a project (a new or empty folder).
 func (s *Serveur) ajouterProjet(nom, brut, demande string, rejoindre bool) (Projet, int, error) {
-	nom, brut = strings.TrimSpace(nom), strings.TrimSpace(brut)
-	if !reNomProjet.MatchString(nom) {
-		return Projet{}, http.StatusBadRequest, errors.New("Invalid project name (letters, digits, spaces, dashes, 60 characters at most)")
-	}
-	if !filepath.IsAbs(brut) {
-		return Projet{}, http.StatusBadRequest, errors.New("Give the full path of the development folder (e.g. D:\\Dev\\my-site)")
-	}
-	dossier := cheminWindowsPropre(filepath.Clean(brut))
-	if cle := dossierInterdit(dossier, s.kitCourant().Racine); cle != "" {
-		return Projet{}, http.StatusBadRequest, errors.New(cle)
+	nom = strings.TrimSpace(nom)
+	dossier, err := s.controlerProjetNeuf(nom, brut)
+	if err != nil {
+		return Projet{}, http.StatusBadRequest, err
 	}
 	if rejoindre {
 		if dossierAvecFichiers(dossier) {
 			return Projet{}, http.StatusBadRequest, errors.New("To join a project, choose a new or empty folder: the team's files arrive in it.")
 		}
 		demande = ""
-	}
-	s.mu.Lock()
-	for _, p := range s.config.Projets {
-		if strings.EqualFold(p.Nom, nom) || strings.EqualFold(filepath.Clean(p.Dossier), dossier) {
-			s.mu.Unlock()
-			return Projet{}, http.StatusBadRequest, errors.New("A project with this name or folder already exists")
-		}
-	}
-	s.mu.Unlock()
-	if err := s.conflitProjets(dossier, ""); err != nil {
-		return Projet{}, http.StatusBadRequest, err
 	}
 	p := Projet{Nom: nom, Dossier: dossier}
 	if err := os.MkdirAll(p.Atelier(), 0o755); err != nil {
@@ -479,13 +462,38 @@ func (s *Serveur) ajouterProjet(nom, brut, demande string, rejoindre bool) (Proj
 	p.MigrerAtelier()
 	s.config.Projets = append(s.config.Projets, p)
 	s.config.ProjetActif = p.Nom
-	err := ecrireConfig(s.config)
+	err = ecrireConfig(s.config)
 	s.mu.Unlock()
 	if err != nil {
 		return Projet{}, http.StatusInternalServerError, err
 	}
 	s.apresChangementProjets()
 	return p, 0, nil
+}
+
+// controlerProjetNeuf: the checks of a new project before anything is written (B88: a mission makes them before
+// it is launched); the cleaned folder.
+func (s *Serveur) controlerProjetNeuf(nom, brut string) (string, error) {
+	brut = strings.TrimSpace(brut)
+	if !reNomProjet.MatchString(nom) {
+		return "", errors.New("Invalid project name (letters, digits, spaces, dashes, 60 characters at most)")
+	}
+	if !filepath.IsAbs(brut) {
+		return "", errors.New("Give the full path of the development folder (e.g. D:\\Dev\\my-site)")
+	}
+	dossier := cheminWindowsPropre(filepath.Clean(brut))
+	if cle := dossierInterdit(dossier, s.kitCourant().Racine); cle != "" {
+		return "", errors.New(cle)
+	}
+	s.mu.Lock()
+	for _, p := range s.config.Projets {
+		if strings.EqualFold(p.Nom, nom) || strings.EqualFold(filepath.Clean(p.Dossier), dossier) {
+			s.mu.Unlock()
+			return "", errors.New("A project with this name or folder already exists")
+		}
+	}
+	s.mu.Unlock()
+	return dossier, s.conflitProjets(dossier, "")
 }
 
 // texteDemande composes the first request of a project (title, date, text, notes section).

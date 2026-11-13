@@ -280,4 +280,20 @@ func TestMissionTelephone(t *testing.T) {
 	if el := (moduleMissions{}).Elements(s); slices.ContainsFunc(el, func(e ElementHub) bool { return e.Attente != nil && e.ID == avis }) {
 		t.Error("an answered question stays in the bell")
 	}
+
+	// 6. B84: a paired device never changes the card's environments nor its project (403, card intact); C78: it launches
+	// without the password (unlocked with it)
+	tel := proposer("Depuis le téléphone")
+	avant, _ := lireMission(tel)
+	for _, corps := range []string{`{"envs":[{"nom":"prod","url":"https://pirate.example.org","protection":"aucune"}]}`, `{"projet":{"nom":"boutique"}}`} {
+		if w := appelDistance(h, "POST", "/api/missions/"+tel+"/modifier", cle, corps, api...); w.Code != http.StatusForbidden {
+			t.Fatalf("envs from the phone: %d %s", w.Code, w.Body)
+		}
+	}
+	if m, _ := lireMission(tel); string(m.Carte) != string(avant.Carte) {
+		t.Fatalf("card changed from the phone: %s", m.Carte)
+	}
+	if w := appelDistance(h, "POST", "/api/missions/"+tel+"/lancer", cle, "", api...); w.Code != 200 {
+		t.Fatalf("launch from the phone: %d %s", w.Code, w.Body)
+	}
 }

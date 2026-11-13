@@ -129,6 +129,9 @@ func outilProposerMission(s *Serveur, x SessionHub, args json.RawMessage) (strin
 	for i := range c.Acces { // C83: unticking is the owner's, never the agent's
 		c.Acces[i].Decoche = false
 	}
+	for i := range c.Envs { // C81: an environment given by the owner never comes from the agent
+		c.Envs[i].Proprietaire = false
+	}
 	ctx := s.contexteCarte()
 	if err := validerCarte(&c, ctx); err != nil {
 		return "", errors.New("the card was refused, fix it and call proposer_mission again: " + err.Error())

@@ -26,6 +26,11 @@ type EnvCarte struct {
 	URL        string   `json:"url"`
 	Protection string   `json:"protection"` // aucune | auth_proxy | access
 	Serveurs   []string `json:"serveurs"`   // inventory ids
+	// worked out by calculerCarte (C81): the policy the launch writes, and the existing environment when the
+	// mission changes it; Proprietaire: the owner gave this environment in Modify (never the agent)
+	Politique    string    `json:"politique,omitempty"`
+	Avant        *EnvCarte `json:"avant,omitempty"`
+	Proprietaire bool      `json:"proprietaire,omitempty"`
 }
 
 // AccesCarte: a vault entry the mission uses, by name; ID, Type and Portee come from the vault, ARemplir says
@@ -77,6 +82,7 @@ type CarteMission struct {
 	Touche                ToucheCarte         `json:"touche"`
 	Estimation            EstimationCarte     `json:"estimation"`
 	AvertissementServeurs string              `json:"avertissement_serveurs,omitempty"`
+	AvertissementInfra    string              `json:"avertissement_infra,omitempty"` // C80: an infra entry ticked in native mode
 }
 
 // contexteCarte: what the card is checked against, read once (s.contexteCarte).
@@ -88,7 +94,9 @@ type contexteCarte struct {
 	zones        []string          // the providers' DNS zones
 	infraOuvert  bool
 	natif        bool
-	minutesCycle float64 // measured average, 0 = unknown
+	envs         map[string]map[string]Environnement // project → its configured environments
+	forcerInfra  map[string]bool                     // project → infra entries forced in native mode
+	minutesCycle float64                             // measured average, 0 = unknown
 	coutCycle    float64
 	masquer      func(string) string
 }
@@ -152,7 +160,7 @@ func validerCarte(c *CarteMission, x contexteCarte) error {
 		if err != nil {
 			return err
 		}
-		e.URL, e.Protection, e.Serveurs = v.URL, v.Protection, v.Serveurs
+		e.URL, e.Protection, e.Serveurs, e.Politique, e.Avant = v.URL, v.Protection, v.Serveurs, "", nil
 		h := hoteURL(e.URL)
 		if h == "" {
 			continue
@@ -235,6 +243,10 @@ func calculerCarte(c CarteMission, politique string, x contexteCarte) CarteMissi
 			*l = append(*l, v)
 		}
 	}
+	c.Envs = slices.Clone(c.Envs)
+	for k := range c.Envs {
+		c.Envs[k] = envSansAffaiblir(c.Envs[k], politique, x.envs[c.Projet.Nom], c.Projet.Nouveau)
+	}
 	nomServeur := map[string]ServeurInventaire{}
 	for _, sv := range x.inventaire {
 		nomServeur[sv.ID] = sv
@@ -281,6 +293,10 @@ func calculerCarte(c CarteMission, politique string, x contexteCarte) CarteMissi
 	if x.natif && (c.Serveurs.Brief != "" || len(c.Touche.Serveurs) > 0) {
 		c.AvertissementServeurs = errServeursNatif.Error()
 	}
+	c.AvertissementInfra = ""
+	if x.natif && (c.Projet.Nouveau || !x.forcerInfra[c.Projet.Nom]) && slices.ContainsFunc(c.Acces, func(a AccesCarte) bool { return a.Portee == "infra" && !a.Decoche }) {
+		c.AvertissementInfra = errAccesInfraNatif.Error()
+	}
 	m, est := x.minutesCycle, EstimationCarte{Jalons: c.JalonsEstimes, Mesure: x.minutesCycle > 0}
 	if m <= 0 {
 		m = minutesDefaut
@@ -292,6 +308,38 @@ func calculerCarte(c CarteMission, politique string, x contexteCarte) CarteMissi
 	}
 	c.Estimation = est
 	return c
+}
+
+// envSansAffaiblir (C81): e with the policy the launch writes, the strictest of the mission's and the existing
+// one; unless the owner gave e in Modify, an existing protection is never changed and existing servers never
+// replaced. Avant: the existing environment when the mission changes it, for the card's "before → after".
+func envSansAffaiblir(e EnvCarte, politique string, actuels map[string]Environnement, nouveau bool) EnvCarte {
+	e.Politique, e.Avant = politiqueEnvMission(e.Nom, politique), nil
+	a, ok := actuels[e.Nom]
+	if nouveau || !ok {
+		return e
+	}
+	if a.Politique == "" {
+		a.Politique = "accord" // validerEnvironnement's default
+	}
+	if a.Protection == "" {
+		a.Protection = "aucune"
+	}
+	if a.Politique == "accord" {
+		e.Politique = "accord"
+	}
+	if !e.Proprietaire {
+		if a.Protection != "aucune" {
+			e.Protection = a.Protection
+		}
+		if len(a.Serveurs) > 0 {
+			e.Serveurs = slices.Clone(a.Serveurs)
+		}
+	}
+	if a.URL != e.URL || a.Protection != e.Protection || a.Politique != e.Politique || !slices.Equal(a.Serveurs, e.Serveurs) {
+		e.Avant = &EnvCarte{Nom: e.Nom, URL: a.URL, Protection: a.Protection, Serveurs: slices.Clone(a.Serveurs), Politique: a.Politique}
+	}
+	return e
 }
 
 // zoneHote: the longest known zone holding h; without one, its last two labels (shortcut: no public suffix
@@ -337,7 +385,15 @@ func (s *Serveur) contexteCarte() contexteCarte {
 	x := contexteCarte{projets: projets, hotes: map[string]string{}, infraOuvert: s.etatCoffre().Infra, natif: modeNatif.Load(), masquer: s.masquerSecrets}
 	x.inventaire, _ = lireServeurs() // unreadable: no server, every server of the card is unknown
 	if s.acces != nil {
-		x.hotes = s.acces.Hotes()
+		x.hotes, x.envs, x.forcerInfra = s.acces.Hotes(), map[string]map[string]Environnement{}, map[string]bool{}
+		for _, p := range projets {
+			x.envs[p.Nom], x.forcerInfra[p.Nom] = map[string]Environnement{}, s.acces.Projet(p.Nom).ForcerInfraNatif
+			for n, e := range s.acces.Environnements(p.Nom) {
+				if e.URL != "" || len(e.Serveurs) > 0 || e.Protection != "aucune" || e.Deploiement != nil { // configured, not envDefaut
+					x.envs[p.Nom][n] = e
+				}
+			}
+		}
 	}
 	if s.coffre != nil && s.coffreErr == nil {
 		x.entrees = s.coffre.Liste()

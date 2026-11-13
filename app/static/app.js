@@ -1961,6 +1961,9 @@ const POLITIQUES_MISSION = [["prod", "Ask me for production", "Production and it
   ["tout", "Ask me for everything", "Every Servers plan and every deployment waits for your approval."], ["autonome", "Autonomous", "Only putting in production waits for your approval."]];
 const travailleMission = (d) => d.orchestrateur || d.mission.etat === "preparation";
 const heuresMission = (m) => m < 90 ? `${m} min` : `${Math.round(m / 60)} h`;
+// C81: an environment of the card (protection, servers named by nom, policy); sansUrl: the URL is shown apart
+const envMission = (x, sansUrl, nom) => [sansUrl ? "" : x.url || "—", t(PROTECTIONS_ENV[x.protection] || x.protection || ""), (x.serveurs || []).length ? t("Servers") + " " + x.serveurs.map(nom).join(", ") : "",
+  x.politique ? t(x.politique === "auto" ? "Automatic when nothing is destroyed" : "Ask for my approval") : ""].filter(Boolean).join(" · ");
 function carteMission(d) {
   const m = d.mission, c = m.carte, ed = etat.missionEdition && etat.missionEdition.id === m.id ? etat.missionEdition : null;
   const nomServeur = (r) => ((etat.mentionsSugg || []).find((x) => x.type === "serveur" && x.ref === r) || {}).nom || r;
@@ -1971,8 +1974,8 @@ function carteMission(d) {
       <div class="mis-voie"><h3>${t("Servers")}</h3>${c.avertissement_serveurs ? `<p class="mis-avert" role="note">⚠ ${t("Native Windows mode: the Servers lane needs WSL, or Force on the project's Access page.")}</p>` : ""}<p class="mis-brief">${h(c.serveurs.brief || t("Nothing to prepare on the servers."))}</p></div>
     </div>
     <div class="mis-grille">
-      <div><h3>${t("Environments")}</h3>${(c.envs || []).length ? `<ul class="mis-envs">${c.envs.map((x) => `<li><b>${h(x.nom)}</b> <span class="mis-url">${h(x.url || "—")}</span> <span class="muet petit">${h(t(PROTECTIONS_ENV[x.protection] || x.protection))}</span></li>`).join("")}</ul>` : `<span class="muet">—</span>`}
-        <h3>${t("Access used")}</h3>${(c.acces || []).length ? `<ul class="mis-acces">${c.acces.map((a, i) => `<li><label class="case"><input type="checkbox" data-mis-acces="${i}"${(ed ? !ed.decoches.includes(i) : !a.decoche) ? " checked" : ""}${dis}> <b>${h(a.entree)}</b></label> ${a.type ? `<span class="etiquette">${h(a.type)}</span>` : ""}${a.a_remplir ? ` <span class="badge mis-remplir">${t("to fill")}</span>` : ""} <span class="muet petit">${t("used for {0}", [h(nomServeur(a.pour))])}</span></li>`).join("")}</ul>` : `<span class="muet">${t("No vault entry.")}</span>`}</div>
+      <div><h3>${t("Environments")}</h3>${(c.envs || []).length ? `<ul class="mis-envs">${c.envs.map((x) => `<li><b>${h(x.nom)}</b> <span class="mis-url">${h(x.url || "—")}</span> <span class="muet petit">${h(envMission(x, true, nomServeur))}</span>${x.avant ? `<div class="muet petit mis-avant">${h(t("Before: {0}", [envMission(x.avant, false, nomServeur)]))}</div>` : ""}</li>`).join("")}</ul>` : `<span class="muet">—</span>`}
+        <h3>${t("Access used")}</h3>${c.avertissement_infra ? `<p class="mis-avert" role="note">⚠ ${t("Native Windows mode: an infra key is ticked. Untick it, or switch to WSL (an existing project can also Force on its Access page).")}</p>` : ""}${(c.acces || []).length ? `<ul class="mis-acces">${c.acces.map((a, i) => `<li><label class="case"><input type="checkbox" data-mis-acces="${i}"${(ed ? !ed.decoches.includes(i) : !a.decoche) ? " checked" : ""}${dis}> <b>${h(a.entree)}</b></label> ${a.type ? `<span class="etiquette">${h(a.type)}</span>` : ""}${a.a_remplir ? ` <span class="badge mis-remplir">${t("to fill")}</span>` : ""} <span class="muet petit">${t("used for {0}", [h(nomServeur(a.pour))])}</span></li>`).join("")}</ul>` : `<span class="muet">${t("No vault entry.")}</span>`}</div>
       <div><h3>${t("I will ask for your approval for")}</h3>${liste((c.approbations || []).map((a) => t(APPROBATIONS_PREVUES[a.type] || a.type, [a.cible || ""])))}
         <h3>${t("What will be touched")}</h3><dl class="fiche mis-touche">
           <dt>${t("Servers")}</dt><dd>${liste(c.touche.serveurs)}</dd><dt>${t("DNS names")}</dt><dd>${liste(c.touche.dns)}</dd>
@@ -2032,7 +2035,10 @@ document.addEventListener("click", async (ev) => {
     const ed = etat.missionEdition, consigne = ed.consigne.trim();
     const r = await actionMission("modifier", { acces_decoches: ed.decoches.map((i) => ({ entree: m.carte.acces[i].entree, pour: m.carte.acces[i].pour })), politique: ed.politique, ...(consigne ? { consigne } : {}) });
     if (r) { etat.missionEdition = null; majZoneMission(); }
-  } else if (a === "lancer") await actionMission("lancer");
+  } else if (a === "lancer") { // C78: launching gives the card's keys, as the Access page does
+    const p = await preuveMdp(t("Launching the mission gives its keys to the project: retype Athanor's password."), { ok: t("Launch") });
+    if (p) await actionMission("lancer", p);
+  }
   else if (a === "annuler") { if (await choisir(t("Cancel this mission? Nothing has been built or deployed yet."), [{ id: "non", texte: t("Keep it") }, { id: "oui", texte: t("Cancel the mission"), danger: true }]) === "oui") await actionMission("annuler"); }
   else if (a === "oublier") { etat.missionVue = null; majZoneMission(); }
 });

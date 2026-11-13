@@ -190,7 +190,7 @@ func TestMissionCarteMartin(t *testing.T) {
 	}
 
 	// 3. Lancer: the project created and its pilot started, the ticked access given, both Servers tasks run
-	v = appel("POST", "/api/missions/"+id+"/lancer", "", http.StatusOK)
+	v = appel("POST", "/api/missions/"+id+"/lancer", `{"mot_de_passe":"mdp-test"}`, http.StatusOK)
 	for i := 0; i < 400; i++ {
 		tachesEnCours.Lock()
 		n := len(tachesEnCours.m)

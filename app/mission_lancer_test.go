@@ -78,8 +78,8 @@ func TestMissionLancer(t *testing.T) {
 
 	var reponses strings.Builder
 	var muRep sync.Mutex
-	lancer := func(id, corps string) (int, Mission) {
-		r := httptest.NewRequest("POST", "/api/missions/"+id+"/lancer", strings.NewReader(corps))
+	appel := func(chemin, corps string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest("POST", chemin, strings.NewReader(corps))
 		r.Header.Set("X-Athanor", "jeton")
 		r.AddCookie(&http.Cookie{Name: cookieAcces, Value: "cle"})
 		r.AddCookie(&http.Cookie{Name: "athanor_session", Value: s.session})
@@ -88,9 +88,19 @@ func TestMissionLancer(t *testing.T) {
 		muRep.Lock()
 		reponses.WriteString(w.Body.String())
 		muRep.Unlock()
+		return w
+	}
+	lancerBrut := func(id, corps string) (int, Mission) {
+		w := appel("/api/missions/"+id+"/lancer", corps)
 		var v struct{ Mission Mission }
 		_ = json.Unmarshal(w.Body.Bytes(), &v)
 		return w.Code, v.Mission
+	}
+	lancer := func(id, corps string) (int, Mission) { // C78: the owner retypes the password in the window
+		if corps = strings.TrimSuffix(strings.TrimPrefix(corps, "{"), "}"); corps != "" {
+			corps = "," + corps
+		}
+		return lancerBrut(id, `{"mot_de_passe":"mdp-test"`+corps+"}")
 	}
 	proposer := func(c CarteMission, politique, etat string) string {
 		t.Helper()
@@ -246,6 +256,89 @@ func TestMissionLancer(t *testing.T) {
 	}
 	if code, _ := lancer("inconnue1", ""); code != http.StatusNotFound {
 		t.Fatalf("unknown mission: %d", code)
+	}
+
+	// 5. C78: the window's cookie without the password, or with a wrong one, launches nothing (401), the mission intact
+	preuve := proposer(CarteMission{Titre: "Avec preuve", Projet: ProjetCarte{Nom: "boutique"}, Dev: BriefCarte{Brief: "x"}, JalonsEstimes: 1}, "prod", "proposee")
+	for _, corps := range []string{"", `{"mot_de_passe":"faux"}`} {
+		if code, _ := lancerBrut(preuve, corps); code != http.StatusUnauthorized {
+			t.Fatalf("launched without the password (%s): %d", corps, code)
+		}
+	}
+	if m, _ := lireMission(preuve); m.Etat != "proposee" {
+		t.Fatalf("refused launch, yet %s", m.Etat)
+	}
+
+	// 6. C80: native mode, an infra entry ticked → refused, said on the card; a forced existing project passes, a new one never
+	modeNatif.Store(true)
+	cInfra := CarteMission{Titre: "Infra en natif", Projet: ProjetCarte{Nom: "boutique"}, Dev: BriefCarte{Brief: "x"}, JalonsEstimes: 1,
+		Acces: []AccesCarte{{Entree: "Jeton Cloudflare", Pour: "boutique"}}}
+	infra := proposer(cInfra, "prod", "proposee")
+	if code, m := lancer(infra, ""); code != http.StatusBadRequest || m.Etat != "" {
+		t.Fatalf("infra in native mode: %d %+v", code, m)
+	}
+	if m, _ := lireMission(infra); m.Etat != "proposee" || !strings.Contains(string(m.Carte), "avertissement_infra") {
+		t.Fatalf("infra in native mode: %s %s", m.Etat, m.Carte)
+	}
+	x := s.contexteCarte()
+	if err := validerCarte(&cInfra, x); err != nil {
+		t.Fatal(err)
+	}
+	x.forcerInfra["boutique"] = true
+	if c := calculerCarte(cInfra, "prod", x); c.AvertissementInfra != "" {
+		t.Fatalf("forced project still warned: %+v", c)
+	}
+	cInfra.Projet = ProjetCarte{Nom: "boutique", Nouveau: true}
+	if c := calculerCarte(cInfra, "prod", x); c.AvertissementInfra == "" {
+		t.Fatal("a new project in native mode, not warned")
+	}
+	modeNatif.Store(false)
+
+	echecPilote = false
+	// 7. C81: an existing staging (auth_proxy, a2, accord) never weakened by the mission (aucune, no server, policy prod):
+	// before → after on the card; the owner's Modify changes the protection, the policy stays the strictest
+	if err := s.acces.DefinirEnvironnement("boutique", "staging", Environnement{URL: "https://staging.boutique.fr", Protection: "auth_proxy",
+		Serveurs: []string{"a2"}, Politique: "accord"}); err != nil {
+		t.Fatal(err)
+	}
+	cStaging := CarteMission{Titre: "Préprod", Projet: ProjetCarte{Nom: "boutique"}, Dev: BriefCarte{Brief: "x"}, JalonsEstimes: 1,
+		Envs: []EnvCarte{{Nom: "staging", URL: "https://pre.boutique.fr", Protection: "aucune"}}}
+	staging := proposer(cStaging, "prod", "proposee")
+	var c CarteMission
+	m, _ = lireMission(staging)
+	_ = json.Unmarshal(m.Carte, &c)
+	if e := c.Envs[0]; e.Protection != "auth_proxy" || !slices.Equal(e.Serveurs, []string{"a2"}) || e.Politique != "accord" ||
+		e.Avant == nil || e.Avant.URL != "https://staging.boutique.fr" || e.Avant.Protection != "auth_proxy" {
+		t.Fatalf("staging on the card: %+v %+v", e, e.Avant)
+	}
+	if code, m := lancer(staging, ""); code != 200 || m.Etat != "lancee" {
+		t.Fatalf("staging launch: %d %+v", code, m)
+	}
+	if e := s.acces.Environnements("boutique")["staging"]; e.URL != "https://pre.boutique.fr" || e.Protection != "auth_proxy" ||
+		!slices.Equal(e.Serveurs, []string{"a2"}) || e.Politique != "accord" {
+		t.Fatalf("staging weakened: %+v", e)
+	}
+	staging = proposer(cStaging, "autonome", "proposee")
+	if w := appel("/api/missions/"+staging+"/modifier", `{"envs":[{"nom":"staging","url":"https://pre.boutique.fr","protection":"aucune","serveurs":[]}]}`); w.Code != 200 {
+		t.Fatalf("owner's modify: %d %s", w.Code, w.Body)
+	}
+	m, _ = lireMission(staging)
+	_ = json.Unmarshal(m.Carte, &c)
+	if e := c.Envs[0]; e.Protection != "aucune" || len(e.Serveurs) != 0 || e.Politique != "accord" || !e.Proprietaire ||
+		e.Avant == nil || e.Avant.Protection != "auth_proxy" {
+		t.Fatalf("owner's staging: %+v %+v", e, e.Avant)
+	}
+
+	// 8. B88: the new project's folder checked before lancee (relative, network, system, ../, taken, no parent) → 400, intact
+	neuf2 := proposer(CarteMission{Titre: "Un autre site", Projet: ProjetCarte{Nom: "site-neuf", Nouveau: true}, Dev: BriefCarte{Brief: "x"}, JalonsEstimes: 1}, "prod", "proposee")
+	for _, d := range []string{`relatif\x`, `\\serveur\partage\neuf`, `C:\Windows\System32\neuf`, `..\..\neuf`, boutique.Dossier, filepath.Join(base, "absent", "neuf")} {
+		b, _ := json.Marshal(d)
+		if code, _ := lancer(neuf2, `{"dossier":`+string(b)+`}`); code != http.StatusBadRequest {
+			t.Fatalf("folder %s: %d", d, code)
+		}
+	}
+	if m, _ := lireMission(neuf2); m.Etat != "proposee" || len(m.Historique) != 1 {
+		t.Fatalf("refused folders, yet %s %+v", m.Etat, m.Historique)
 	}
 	finies()
 	if strings.Contains(reponses.String(), temoin) {

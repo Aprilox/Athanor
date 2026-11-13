@@ -188,6 +188,10 @@ func (s *Serveur) apiModifierMission(w http.ResponseWriter, r *http.Request) {
 		s.erreur(w, http.StatusBadRequest, "Invalid request")
 		return
 	}
+	if appareilDe(r) != "" && (c.Envs != nil || c.Projet != nil) { // B84: an environment's configuration is the PC's, as /environnements
+		s.erreur(w, http.StatusForbidden, "The environments and the project of a card are changed on the PC")
+		return
+	}
 	consigne := strings.TrimSpace(c.Consigne)
 	switch {
 	case len([]rune(consigne)) > maxConsigneMission:
@@ -236,6 +240,9 @@ func (s *Serveur) apiModifierMission(w http.ResponseWriter, r *http.Request) {
 		}
 		if c.Envs != nil {
 			carte.Envs = *c.Envs
+			for i := range carte.Envs { // C81: given by the owner, its protection and servers are kept as they are
+				carte.Envs[i].Proprietaire = true
+			}
 		}
 		if c.Projet != nil {
 			carte.Projet = *c.Projet

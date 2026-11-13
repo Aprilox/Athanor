@@ -75,8 +75,8 @@ func politiqueEnvMission(env, politique string) string {
 // lancerMission: mission id launched by qui; dossier: the new project's folder chosen on the PC ("" = next to
 // the other projects); empreinte: the card the accord was asked for ("" = the card as it is, the owner's Launch).
 // Refused (nothing done) while the orchestrator works, without a card, when the card is not that of empreinte or
-// changed while it was checked, when an infra entry is ticked and the infra keys are locked, or when the new
-// project's folder already holds files.
+// changed while it was checked, when an infra entry is ticked and the infra keys are locked or the PC is in native
+// mode, or when the new project's folder cannot be created (B88).
 func (s *Serveur) lancerMission(id, qui, dossier, empreinte string) (Mission, error) {
 	m, err := lireMission(id)
 	pasLancable := func(m *Mission) error {
@@ -107,6 +107,9 @@ func (s *Serveur) lancerMission(id, qui, dossier, empreinte string) (Mission, er
 		return m, err
 	}
 	c = calculerCarte(c, m.Politique, x)
+	if c.AvertissementInfra != "" { // C80: native mode, an infra entry ticked, the project not forced (a new one never is)
+		return m, errAccesInfraNatif
+	}
 	if !x.infraOuvert && slices.ContainsFunc(c.Acces, func(a AccesCarte) bool { return a.Portee == "infra" && !a.Decoche }) {
 		return m, errMissionInfraVerrouille
 	}
@@ -114,8 +117,8 @@ func (s *Serveur) lancerMission(id, qui, dossier, empreinte string) (Mission, er
 		if dossier == "" {
 			dossier = dossierProjetNeuf(c.Projet.Nom, x.projets)
 		}
-		if dossierAvecFichiers(dossier) {
-			return m, erreurEntreeArgs{"The folder {0} already holds files: choose another folder for the new project", []string{dossier}}
+		if err := s.controlerDossierMission(c.Projet.Nom, dossier); err != nil { // B88: refused before lancee, the mission intact
+			return m, err
 		}
 	}
 	apresControleLancement(id)
@@ -149,6 +152,35 @@ func (s *Serveur) lancerMission(id, qui, dossier, empreinte string) (Mission, er
 		}
 		return nil
 	})
+}
+
+// controlerDossierMission (B88): what would make the new project's creation fail, checked before the launch:
+// the project's checks, a folder already holding files, a parent that does not exist or cannot be written.
+func (s *Serveur) controlerDossierMission(nom, dossier string) error {
+	d, err := s.controlerProjetNeuf(nom, dossier)
+	if err != nil {
+		return erreurEntree(err.Error())
+	}
+	if strings.HasPrefix(d, `\\`) || strings.HasPrefix(d, "//") { // a network share: unreachable for the pilot's sandbox
+		return erreurEntreeArgs{"The folder {0} is on a network share: choose a folder of this PC for the new project", []string{d}}
+	}
+	if strings.HasPrefix(d, `\`) || strings.HasPrefix(d, "//") { // a network share: unreachable for the pilot's sandbox
+		return erreurEntreeArgs{"The folder {0} is on a network share: choose a folder of this PC for the new project", []string{d}}
+	}
+	if dossierAvecFichiers(d) {
+		return erreurEntreeArgs{"The folder {0} already holds files: choose another folder for the new project", []string{d}}
+	}
+	if fi, err := os.Stat(d); err == nil && fi.IsDir() {
+		return nil // an empty folder already there
+	}
+	parent := filepath.Dir(d)
+	f, err := os.CreateTemp(parent, ".athanor-essai-*")
+	if err != nil {
+		return erreurEntreeArgs{"The folder {0} cannot be created there: choose another folder for the new project", []string{d}}
+	}
+	_ = f.Close()
+	_ = os.Remove(f.Name())
+	return nil
 }
 
 // etapesMission: the launch's steps in order; the lanes started so far, and the first step's error.
@@ -199,8 +231,8 @@ func (s *Serveur) etapesMission(c CarteMission, politique, qui, dossier string) 
 	actuels := s.acces.Environnements(p.Nom)
 	for _, ec := range c.Envs {
 		e := actuels[ec.Nom]
-		e.URL, e.Protection, e.Serveurs = ec.URL, ec.Protection, ec.Serveurs
-		e.Politique, e.DeployerAuJalon = politiqueEnvMission(ec.Nom, politique), ec.Nom == "dev"
+		e.URL, e.Protection, e.Serveurs = ec.URL, ec.Protection, ec.Serveurs // C81: never weakened (envSansAffaiblir)
+		e.Politique, e.DeployerAuJalon = ec.Politique, ec.Nom == "dev"
 		v, err := validerEnvironnement(ec.Nom, e, inventaire)
 		if err == nil {
 			err = s.acces.DefinirEnvironnement(p.Nom, ec.Nom, v)
@@ -239,14 +271,20 @@ func (s *Serveur) etapesMission(c CarteMission, politique, qui, dossier string) 
 	return voies, nil
 }
 
-// apiLancerMission: POST /api/missions/{id}/lancer {dossier?}: the mission launched (its state and lanes in the
+// apiLancerMission: POST /api/missions/{id}/lancer {dossier?, mot_de_passe}: the mission launched (its state and lanes in the
 // answer, echec with the reason if a step failed). The folder is chosen on the PC only.
 func (s *Serveur) apiLancerMission(w http.ResponseWriter, r *http.Request) {
 	var c struct {
-		Dossier string `json:"dossier"`
+		Dossier    string `json:"dossier"`
+		MotDePasse string `json:"mot_de_passe"`
 	}
 	if r.ContentLength != 0 && lireCorps(r, &c) != nil {
 		s.erreur(w, http.StatusBadRequest, "Invalid request")
+		return
+	}
+	if code, err := s.preuvePresence(r, c.MotDePasse); err != nil { // C78: launching gives vault entries, as /api/acces (C25)
+		s.ecrireAudit(LigneAudit{Type: "evenement", De: deQui(r), Vers: "missions", Mission: r.PathValue("id"), Action: "lancement refusé", Resultat: err.Error()})
+		s.erreur(w, code, err.Error())
 		return
 	}
 	if appareilDe(r) != "" {
