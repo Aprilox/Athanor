@@ -233,6 +233,8 @@ func TestTUITraduction(t *testing.T) {
 	u = append(u, p3...)
 	p4, _ := os.ReadFile("tui_accueil.go")
 	u = append(u, p4...)
+	p5, _ := os.ReadFile("tui_missions.go")
+	u = append(u, p5...)
 	src := string(b) + string(c) + string(d) + strings.ReplaceAll(string(u), "app.t(", "a.t(")
 	for _, l := range []string{"fr", "es", "de", "it", "pt"} {
 		dico := dicoTUI(l)
@@ -310,6 +312,12 @@ func essaiServeurTUI(t *testing.T) (*Serveur, *clientTUI, Projet) {
 	_ = os.MkdirAll(filepath.Join(kit, "template"), 0o755)
 	_ = os.WriteFile(filepath.Join(kit, "template", "CLAUDE.md"), []byte("# x\n"), 0o644)
 	s := nouveauServeur(Config{Kit: kit, Projets: []Projet{p}, ProjetActif: "essai", Langue: "fr"})
+	return s, clientTUIPour(t, s), p
+}
+
+// clientTUIPour: the terminal's access to s, served by a test server (the address alone refused).
+func clientTUIPour(t *testing.T, s *Serveur) *clientTUI {
+	t.Helper()
 	s.cleAcces = aleatoire(24)
 	mux := http.NewServeMux()
 	s.routes(mux)
@@ -328,7 +336,7 @@ func essaiServeurTUI(t *testing.T) (*Serveur, *clientTUI, Projet) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return s, c, p
+	return c
 }
 
 // attendreTUI: the server's answers applied until cond holds.

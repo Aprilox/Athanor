@@ -152,11 +152,25 @@ func (a *appTUI) pageAccueil(e *ecranT, x, y, l, h int) {
 		}
 		yc += he
 	}
-	if hm := min(4, y+h-yc); hm >= 3 {
-		ix, iy, il, _ := a.boite(e, x, yc, l, hm, t("Missions"), false)
-		e.texte(ix, iy, il, "◇ "+t("No mission yet"), a.gras(p.encre, p.panneau))
-		if hm >= 4 {
-			e.texte(ix+2, iy+1, il-2, t("Coming soon: one sentence, and Studio and Servers work together."), a.st(p.muet, p.panneau))
+	// Missions: the 3 newest (state, title, relay step; a click opens one), See all; the empty state says where to start
+	nm := min(3, len(a.missions))
+	if hm := min(2+max(2, nm), y+h-yc); hm >= 3 {
+		ix, iy, il, ih := a.boite(e, x, yc, l, hm, t("Missions"), false)
+		if nm == 0 {
+			e.texte(ix, iy, il, "◇ "+t("No mission yet"), a.gras(p.encre, p.panneau))
+			if hm >= 4 {
+				e.texte(ix+2, iy+1, il-2, t("One sentence in the home bar of Athanor's window, and Studio and Servers work together."), a.st(p.muet, p.panneau))
+			}
+		} else {
+			tout := " " + t("See all ({0})", len(a.missions)) + " → "
+			if lo := largeurTexte(tout); l > lo+largeurTexte(t("Missions"))+8 {
+				e.texte(x+l-lo-2, yc, lo, tout, a.gras(p.accent, p.panneau))
+				a.zone(x+l-lo-2, yc, lo, 1, func() { a.allerPage(pMissions) })
+			}
+			le := a.largeurEtatsTUI(a.missions[:nm])
+			for i, m := range a.missions[:min(nm, ih)] {
+				a.ligneMissionTUI(e, ix, iy+i, il, le, m, p.panneau)
+			}
 		}
 	}
 }

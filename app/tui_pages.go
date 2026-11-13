@@ -77,6 +77,8 @@ func (a *appTUI) dessiner(e *ecranT) {
 			a.pageDistance(e, x, y, l, h)
 		case pAccueil:
 			a.pageAccueil(e, x, y, l, h)
+		case pMissions:
+			a.pageMissions(e, x, y, l, h)
 		}
 	}
 	a.barreBas(e)
@@ -253,8 +255,11 @@ func (a *appTUI) onglets(e *ecranT, y int) {
 
 // numeroPage: the key of a page (1…9, then 0 for the tenth).
 func numeroPage(i int) string {
-	if i == pAccueil {
+	switch i {
+	case pAccueil:
 		return "H"
+	case pMissions:
+		return "E"
 	}
 	return strconv.Itoa((i + 1) % 10)
 }
@@ -300,7 +305,9 @@ func (a *appTUI) raccourcisPage() []raccourci {
 	case pDistance:
 		r = a.raccourcisDistance()
 	case pAccueil:
-		r = []raccourci{{"Enter", t("Open")}, {"1…0", t("Studio pages")}}
+		r = []raccourci{{"Enter", t("Open")}, {"E", t("Missions")}, {"1…0", t("Studio pages")}}
+	case pMissions:
+		r = a.raccourcisMissions()
 	default:
 		r = a.raccourcisPages2()
 	}
@@ -344,7 +351,10 @@ func (a *appTUI) barreBas(e *ecranT) {
 	}
 	// the page's keys first, then the global ones, as many as fit
 	tous := append(a.raccourcisPage(), glob...)
-	for _, r := range tous {
+	for i, r := range tous {
+		if i >= len(tous)-len(glob) && a.lettrePage(r.k) != "" {
+			continue // a global key the page takes for itself (a, p on Missions)
+		}
 		if !ecrire(r, false) {
 			break
 		}
@@ -1644,6 +1654,7 @@ func (a *appTUI) dessinerAide(e *ecranT) {
 		{"p, [ ]", t("Choose a project")},
 		{"N · M", t("New project") + " · " + t("Manage")},
 		{"g", t("Get GitHub's work")},
+		{"E · p r a", t("Missions") + ": " + t("Pause") + " · " + t("Resume") + " · " + t("Stop")},
 		{"↑ ↓ PgUp PgDn", t("Scroll")},
 		{"n · e · d", t("New request") + " · " + t("Note along the way") + " · " + t("Delete")},
 		{"o r u / f", t("Log") + ": " + t("Tools") + ", " + t("Results") + ", " + t("Sub-agents") + ", " + t("filter…") + ", " + t("Follow")},

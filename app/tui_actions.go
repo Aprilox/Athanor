@@ -95,8 +95,10 @@ func (a *appTUI) touche(ev evenementTUI) {
 		a.allerPage(9)
 	case "H":
 		a.allerPage(pAccueil)
-	case "echap": // back home, unless it clears the log's filter
-		if a.page == pJournal && a.recherche.texte() != "" {
+	case "E":
+		a.allerPage(pMissions)
+	case "echap": // back home, unless it clears the log's filter or closes a mission
+		if a.page == pJournal && a.recherche.texte() != "" || a.page == pMissions && a.misOuverte != "" {
 			a.touchePage(ev, k)
 		} else {
 			a.allerPage(pAccueil)
@@ -141,7 +143,7 @@ func (a *appTUI) touche(ev evenementTUI) {
 // lettresPages: the letters a page gives a meaning of its own; there they come before the keys of every
 // page (p is the project chooser elsewhere, the palette in Settings; a is Stop after cycle elsewhere, the
 // automatic push on GitHub), typed small or capital.
-var lettresPages = map[int]string{pReglages: "lpar", pGitHub: "cdlrptaugbko", pDistance: "ovrd"}
+var lettresPages = map[int]string{pReglages: "lpar", pGitHub: "cdlrptaugbko", pDistance: "ovrd", pMissions: "pra"}
 
 func (a *appTUI) lettrePage(k string) string {
 	if len([]rune(k)) != 1 {
@@ -261,6 +263,8 @@ func (a *appTUI) touchePage(ev evenementTUI, k string) {
 		a.touchePages2(ev, k, defiler)
 	case pDistance:
 		a.toucheDistance(k, defiler)
+	case pMissions:
+		a.toucheMissions(k)
 	case pSante:
 		switch k {
 		case "v":
