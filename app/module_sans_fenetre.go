@@ -108,6 +108,7 @@ func (s *Serveur) apiInstanceModule(w http.ResponseWriter, r *http.Request) {
 		m.code, m.codeFin, m.essais = sixChiffres(), time.Now().Add(dureeCodeDirect), 0
 		code, fin := m.code, m.codeFin
 		m.mu.Unlock()
+		ecrireCodeTest(code)
 		s.ecrireJSON(w, map[string]any{"code": code, "fin": fin.Unix()})
 	case "module-demandes":
 		s.ecrireJSON(w, map[string]any{"demandes": s.vueClients()["demandes"]})

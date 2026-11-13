@@ -49,7 +49,7 @@ func TestDeuxInstances(t *testing.T) {
 		cache, config := filepath.Join(d, "cache"), filepath.Join(d, "config")
 		cmd := exec.Command(copie)
 		cmd.Dir = d
-		cmd.Env = append(os.Environ(), "ATHANOR_TEST=1", "ATHANOR_SANS_FENETRE=1", "LocalAppData="+cache, "LOCALAPPDATA="+cache,
+		cmd.Env = append(os.Environ(), "ATHANOR_TEST=1", "ATHANOR_SANS_FENETRE=1", "ATHANOR_TEST_CODE_FICHIER="+filepath.Join(d, "code.txt"), "LocalAppData="+cache, "LOCALAPPDATA="+cache,
 			"APPDATA="+config, "HOME="+filepath.Join(d, "home"), "XDG_CACHE_HOME="+cache, "XDG_CONFIG_HOME="+config)
 		var journal bytes.Buffer
 		cmd.Stdout, cmd.Stderr = &journal, &journal
@@ -98,14 +98,20 @@ func TestDeuxInstances(t *testing.T) {
 	a := lancer("a", nil)
 	b := lancer("b", []Projet{{Nom: "jeu", Dossier: jeu}})
 
-	// B opens a code (Settings › MCP clients › Connect) and shows it; A adds B by its address and that code
+	// B opens a code (Settings › MCP clients › Connect); the CI reads it through the test hook
+	// (ATHANOR_TEST_CODE_FICHIER); A adds B by its address and that code
 	var clients struct {
 		Code     string
 		Demandes []demandeClient
 	}
-	if err := b.appel("POST", "clients", map[string]string{"action": "code"}, &clients); err != nil || len(clients.Code) != 6 {
-		t.Fatalf("B's code: %q, %v", clients.Code, err)
+	if err := b.appel("POST", "clients", map[string]string{"action": "code"}, &clients); err != nil {
+		t.Fatalf("B's code: %v", err)
 	}
+	lu, _ := os.ReadFile(filepath.Join(racine, "b", "code.txt"))
+	if len(lu) != 6 || string(lu) != clients.Code {
+		t.Fatalf("code from the hook %q, shown %q", lu, clients.Code)
+	}
+	clients.Code = string(lu)
 	var faux struct{}
 	mauvais := map[bool]string{true: "111111", false: "000000"}[clients.Code == "000000"]
 	if err := a.appel("POST", "distants", map[string]string{"action": "ajouter", "url": b.base, "code": mauvais}, &faux); err == nil {
@@ -200,5 +206,23 @@ func TestDeuxInstances(t *testing.T) {
 	}
 	if err := b.appel("POST", "mcp", map[string]any{"jsonrpc": "2.0", "id": 1, "method": "tools/list"}, &faux); err == nil {
 		t.Error("the window's session opened B's MCP")
+	}
+}
+
+// TestCodeTestInactif: the code file of the CI is written only under ATHANOR_TEST=1.
+func TestCodeTestInactif(t *testing.T) {
+	f := filepath.Join(t.TempDir(), "code.txt")
+	t.Setenv("ATHANOR_TEST_CODE_FICHIER", f)
+	for _, v := range []string{"", "0", "true"} {
+		t.Setenv("ATHANOR_TEST", v)
+		ecrireCodeTest("123456")
+		if _, err := os.Stat(f); err == nil {
+			t.Fatalf("code written with ATHANOR_TEST=%q", v)
+		}
+	}
+	t.Setenv("ATHANOR_TEST", "1")
+	ecrireCodeTest("123456")
+	if b, _ := os.ReadFile(f); string(b) != "123456" {
+		t.Fatalf("code file = %q under ATHANOR_TEST=1", b)
 	}
 }

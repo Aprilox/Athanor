@@ -284,7 +284,9 @@ func (s *Serveur) apiClients(w http.ResponseWriter, r *http.Request) {
 		m := s.cli()
 		m.mu.Lock()
 		m.code, m.codeFin, m.essais = sixChiffres(), time.Now().Add(dureeCodeDirect), 0
+		code := m.code
 		m.mu.Unlock()
+		ecrireCodeTest(code)
 	case "fermer":
 		m := s.cli()
 		m.mu.Lock()
@@ -302,6 +304,14 @@ func (s *Serveur) apiClients(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.ecrireJSON(w, s.vueClients())
+}
+
+// ecrireCodeTest: the CI's two instances (deux_instances_test.go) read a new pairing code from the file
+// ATHANOR_TEST_CODE_FICHIER names; only under ATHANOR_TEST=1, never in a real launch.
+func ecrireCodeTest(code string) {
+	if f := os.Getenv("ATHANOR_TEST_CODE_FICHIER"); f != "" && os.Getenv("ATHANOR_TEST") == "1" {
+		_ = os.WriteFile(f, []byte(code), 0o600)
+	}
 }
 
 // perimetreClient: the scope chosen on screen, checked (known tools only; "*" or projects that exist).
