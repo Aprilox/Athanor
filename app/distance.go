@@ -276,7 +276,7 @@ func interditDistance(r *http.Request) bool {
 		return false
 	case strings.HasPrefix(p, "/api/distance"), strings.HasPrefix(p, "/api/instance"),
 		p == "/api/mot-de-passe", p == "/api/ouvrir", strings.HasPrefix(p, "/api/mcp"), // the hub's MCP and its pairing: local only
-		p == "/api/clients", p == "/api/annonce", p == "/api/instances": // MCP clients, the instances of this PC: the computer only
+		p == "/api/clients", p == "/api/annonce", p == "/api/instances", p == "/api/distants": // MCP clients, the instances of this PC: the computer only
 		return true
 	case p == "/api/env" && r.URL.Query().Get("secrets") != "":
 		return true
@@ -342,6 +342,10 @@ func (s *Serveur) gestionDistance(mux http.Handler) http.Handler {
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		w.Header().Set("Strict-Transport-Security", "max-age=31536000")
+		if r.Method == http.MethodPost && r.URL.Path == "/api/mcp" && s.clientAthanor(r) { // a paired remote hub (hub_distants.go)
+			mux.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), cleContexte(cleTunnel), true)))
+			return
+		}
 		id := s.appareilValide(r)
 		if id == "" { // without a key: counted per address (distance_limite.go)
 			if ok, attente := s.autoriserSansCle(r); !ok {
@@ -353,6 +357,11 @@ func (s *Serveur) gestionDistance(mux http.Handler) http.Handler {
 			// its form names where it comes from (with "no-referrer", browsers send "Origin: null")
 			w.Header().Set("Referrer-Policy", "same-origin")
 			s.appairer(w, r)
+			return
+		}
+		if r.Method == http.MethodPost && (r.URL.Path == "/api/mcp/appairer" || r.URL.Path == "/api/mcp/appairer/statut") {
+			// another Athanor pairs with this one through its tunnel (sorte athanor only: apiAppairerClient)
+			mux.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), cleContexte(cleTunnel), true)))
 			return
 		}
 		if id == "" && fichiersPublicsDistance[r.URL.Path] {

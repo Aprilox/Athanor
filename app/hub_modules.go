@@ -179,7 +179,7 @@ func (s *Serveur) apiHub(w http.ResponseWriter, r *http.Request) {
 
 func (s *Serveur) vueHub() ([]ModuleVue, []ElementHub) {
 	v, el := []ModuleVue{}, []ElementHub{}
-	for _, m := range modulesHub() {
+	for _, m := range s.modulesTous() {
 		_, projet := m.(moduleAProjet)
 		v = append(v, ModuleVue{ID: m.ID(), Nom: m.Nom(), Pages: pagesModule(m), Resume: m.Resume(s), Tutoriel: m.Tutoriel(), Projet: projet})
 		for _, e := range m.Elements(s) {

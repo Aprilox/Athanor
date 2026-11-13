@@ -71,6 +71,7 @@ func main() {
 	if config.MDNS {
 		_ = s.demarrerMDNS() // the owner turned the local network discovery on (hub_mdns.go)
 	}
+	go s.surveillerDistants()   // the paired remote Athanors, every 15 s (hub_distants.go)
 	go s.surveillerTaches()     // system notifications for the tasks of the user (api_pourvous.go)
 	go s.surveillerJalonsPush() // milestones done, projects delivered: on the paired devices (distance_push.go)
 	go s.verifierMajFond()      // a new version of Athanor (maj.go)

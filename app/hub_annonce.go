@@ -151,7 +151,7 @@ func (s *Serveur) apiInstances(w http.ResponseWriter, r *http.Request) {
 		s.mu.Lock()
 		mdns := s.config.MDNS
 		s.mu.Unlock()
-		s.ecrireJSON(w, map[string]any{"instances": autres, "mdns": mdns, "reseau": s.instancesReseau(), "tunnel": s.adresseTunnel() != ""})
+		s.ecrireJSON(w, map[string]any{"instances": autres, "mdns": mdns, "reseau": s.instancesReseau(), "tunnel": s.adresseTunnel() != "", "distants": s.vueDistants()})
 		return
 	}
 	var c struct{ ID, Code string }
@@ -192,6 +192,7 @@ func (s *Serveur) appairerInstance(dossier, id, code string) error {
 		demandesInstances.Lock()
 		demandesInstances.m[a.ID] = v.Demande
 		demandesInstances.Unlock()
+		s.suivreAppairageDistant(Distant{Nom: a.Nom + " · " + a.ID, Instance: a.ID}, v.Demande) // the token, once the other one accepts (hub_distants.go)
 		return nil
 	}
 	return errors.New("This Athanor is no longer running on this computer.")

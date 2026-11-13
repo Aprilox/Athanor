@@ -4615,7 +4615,18 @@ function rendreInstancesPC(v) {
   if (!v) return "";
   const liste = (v.instances || []).map((i) => `<div class="ligne instance-pc" data-id="${h(i.id)}"><span><b>${h(i.nom)}</b> <span class="muet petit">Athanor ${h(i.version)} · ${h((i.modules || []).join(", "))}</span><br><span class="muet petit chemin-court">${h(i.dossier)}</span></span><span class="espace"></span>
       ${i.attente ? `<span class="petit attention">${t("Waiting for the other one's yes")}</span>` : `<input type="text" class="code-instance" inputmode="numeric" maxlength="6" placeholder="${t("6-digit code")}" aria-label="${t("6-digit code")}"> <button class="btn btn-petit" data-instance="appairer">${t("Pair")}</button>`}</div>`).join("");
-  return `<div class="bloc local-seul" id="bloc-instances-pc"><h2>${t("Remote Athanors")}</h2><h3>${t("On this PC")}</h3>
+  const ds = v.distants || {}, ETATS_DISTANT = { en_ligne: ["ok", "Online"], hors_ligne: ["", "Offline"], coffre: ["attention", "Vault locked"], revoque: ["attention", "Pairing revoked"] };
+  const lies = (ds.liste || []).map((d) => { const [cl, lib] = ETATS_DISTANT[d.etat] || ["", "Connecting…"]; return `<div class="ligne distant" data-id="${h(d.id)}"><span><b>${h(d.nom)}</b> <span class="petit ${cl}">${t(lib)}</span> <span class="muet petit">${h((d.modules || []).join(", "))}</span><br><span class="muet petit chemin-court">${h(d.url || t("On this PC"))}${d.vu ? " · " + h(t("Seen {0}", [dateLisible(d.vu)])) : ""}</span>
+      ${d.memoire ? `<br><span class="petit attention">${t("Unlock the vault: until then this Athanor's token is kept in memory only (lost if Athanor closes).")}</span>` : d.etat === "coffre" ? `<br><span class="petit attention">${t("The vault is locked: unlock it to reach this Athanor.")}</span>` : d.etat === "revoque" ? `<br><span class="petit attention">${t("The other Athanor revoked this link: remove it, then pair again.")}</span>` : ""}</span><span class="espace"></span>
+      <button class="btn btn-petit" data-distant="retirer">${t("Remove")}</button></div>`; }).join("")
+    + (ds.attentes || []).map((d) => `<div class="ligne distant-attente"><span><b>${h(d.nom)}</b><br><span class="muet petit chemin-court">${h(d.url || t("On this PC"))}</span></span><span class="espace"></span><span class="petit attention">${t("Waiting for the other one's yes")}</span></div>`).join("");
+  return `<div class="bloc local-seul" id="bloc-instances-pc"><h2>${t("Remote Athanors")}</h2>
+    ${ds.message ? `<p class="petit attention">${h(t(ds.message))}</p>` : ""}
+    ${lies || `<p class="muet petit">${t("No remote Athanor linked yet.")}</p>`}
+    <h3>${t("Add a remote Athanor")}</h3>
+    <p class="muet petit">${t("Its remote access address and the 6-digit code it shows (Settings › MCP clients › Connect); its owner then accepts this Athanor on its screen. The token is kept in the vault.")}</p>
+    <div class="ligne"><input type="url" id="distant-url" placeholder="https://…" aria-label="${t("Remote access address")}"> <input type="text" id="distant-code" inputmode="numeric" maxlength="6" placeholder="${t("6-digit code")}" aria-label="${t("6-digit code")}"> <button class="btn btn-petit" data-distant="ajouter">${t("Add")}</button></div>
+    <h3>${t("On this PC")}</h3>
     <p class="muet petit">${t("The other Athanors running on this computer. Pairing is never automatic: type the 6-digit code the other one shows (Settings › MCP clients › Connect), then accept in its window.")}</p>
     ${liste || `<p class="muet petit">${t("No other Athanor is running on this computer.")}</p>`}
     <h3>${t("On the local network")}</h3>
@@ -4629,6 +4640,14 @@ $("#page").addEventListener("change", async (ev) => {
   if (ev.target.id !== "mdns-actif") return;
   await action(api("instances/mdns", "POST", { actif: ev.target.checked }));
   const n = await api("instances").catch(() => null); const bloc = $("#bloc-instances-pc"); if (n && bloc) bloc.outerHTML = rendreInstancesPC(n);
+});
+$("#page").addEventListener("click", async (ev) => {
+  const b = ev.target.closest("[data-distant]"); if (!b) return;
+  const corps = { action: b.dataset.distant };
+  if (corps.action === "ajouter") { corps.url = $("#distant-url").value; corps.code = $("#distant-code").value; }
+  else { if (!await confirmer(t("Remove this remote Athanor? Its token is revoked on both sides when it answers."), { ok: t("Remove") })) return; corps.id = b.closest(".distant").dataset.id; }
+  const v = await action(api("distants", "POST", corps));
+  if (v) { if (corps.action === "ajouter") toast(t("Code accepted: accept this Athanor in the other one's window.")); const n = await api("instances").catch(() => null); const bloc = $("#bloc-instances-pc"); if (n && bloc) bloc.outerHTML = rendreInstancesPC(n); }
 });
 $("#page").addEventListener("click", async (ev) => {
   const b = ev.target.closest("[data-instance]"); if (!b) return;

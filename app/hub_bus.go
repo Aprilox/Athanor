@@ -72,7 +72,7 @@ func refusBus(raison string) MessageHub { return MessageHub{Etat: "refuse", Rais
 
 func (s *Serveur) traiterBus(m MessageHub) MessageHub {
 	var de, vers Module
-	for _, x := range modulesHub() {
+	for _, x := range s.modulesTous() {
 		if x.ID() == m.De {
 			de = x
 		}
@@ -95,7 +95,11 @@ func (s *Serveur) traiterBus(m MessageHub) MessageHub {
 	if !ok || !slices.Contains(r.Actions(), m.Action) {
 		return refusBus("action not declared")
 	}
-	if raison := s.accesBus(m); raison != "" {
+	if md, distant := vers.(moduleDistant); distant { // a remote Athanor: its own scope checks the project
+		if md.etat != "en_ligne" {
+			return refusBus("remote Athanor unreachable")
+		}
+	} else if raison := s.accesBus(m); raison != "" {
 		return refusBus(raison)
 	}
 	if rep, attend := s.accordBus(m, vers); attend {

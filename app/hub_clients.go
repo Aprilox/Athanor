@@ -132,6 +132,10 @@ func (s *Serveur) apiAppairerClient(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	c.Nom = coupeOctets(strings.TrimSpace(c.Nom), 60)
+	if depuisTunnel(r) && c.Sorte != "athanor" { // through the tunnel: another Athanor only, never Desktop or Code
+		repondreDirect(w, 403, map[string]string{"erreur": "only another Athanor pairs through remote access"})
+		return
+	}
 	if c.Nom == "" || !slices.Contains(sortesClients, c.Sorte) {
 		repondreDirect(w, 400, map[string]string{"erreur": "a name and a kind (desktop, code or athanor) are needed"})
 		return
@@ -387,4 +391,23 @@ func (s *Serveur) revoquerClient(id string) error {
 		s.auditClient(c.Nom, "mcp révocation", "jeton révoqué")
 	}
 	return err
+}
+
+// cleTunnel: the request came through the remote access tunnel (gestionDistance), not from this computer.
+const cleTunnel = "tunnel"
+
+func depuisTunnel(r *http.Request) bool {
+	v, _ := r.Context().Value(cleContexte(cleTunnel)).(bool)
+	return v
+}
+
+// clientAthanor: the request carries the token of a paired remote Athanor (sorte athanor), the only
+// client token valid through the tunnel (Desktop, Code and the agents' session tokens stay local).
+func (s *Serveur) clientAthanor(r *http.Request) bool {
+	jeton, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+	if !ok {
+		return false
+	}
+	c, ok := s.verifierClient(strings.TrimSpace(jeton))
+	return ok && c.Sorte == "athanor"
 }

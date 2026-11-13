@@ -47,10 +47,12 @@ type Serveur struct {
 	// remote access (distance.go): its state, and the routes the tunnel's server shares with the window
 	distOnce sync.Once
 	// external MCP clients (hub_clients.go), read at first use
-	clientsOnce sync.Once
-	clientsEtat *magasinClients
-	distEtat    *distance
-	mux         http.Handler
+	clientsOnce  sync.Once
+	clientsEtat  *magasinClients
+	distantsOnce sync.Once
+	distantsEtat *magasinDistants
+	distEtat     *distance
+	mux          http.Handler
 	// the vault (coffre_serveur.go); coffreErr: its file exists but could not be read
 	coffre    *Coffre
 	coffreErr error
@@ -501,6 +503,7 @@ func (s *Serveur) routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/instances", s.garde(false, s.apiInstances))
 	mux.HandleFunc("POST /api/instances", s.garde(false, s.apiInstances))
 	mux.HandleFunc("POST /api/instances/mdns", s.garde(false, s.apiMDNS))
+	mux.HandleFunc("POST /api/distants", s.garde(false, s.apiDistants)) // remote Athanors: add, remove (hub_distants.go)
 	mux.HandleFunc("GET /api/clients", s.garde(false, s.apiClients))
 	mux.HandleFunc("POST /api/clients", s.garde(false, s.apiClients))
 	mux.HandleFunc("POST /api/ouvrir", s.garde(false, s.apiOuvrir))

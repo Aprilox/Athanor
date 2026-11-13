@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"strings"
 	"testing"
 )
 
@@ -39,6 +40,9 @@ func TestDistanceToutesRoutes(t *testing.T) {
 		vus[methode+" "+m[2]] = true
 		r, _ := http.NewRequest(methode, "https://abc-def.trycloudflare.com"+chemin, nil)
 		refus := interditDistance(r) || refuseHubDistance(r)
+		if strings.HasPrefix(chemin, "/api/mcp/appairer") { // another Athanor pairs through the tunnel (sorte athanor, M187)
+			refus = false
+		}
 		code, ok := appel(methode, chemin)
 		switch {
 		case refus && (code != http.StatusForbidden || ok):
@@ -47,7 +51,7 @@ func TestDistanceToutesRoutes(t *testing.T) {
 			t.Errorf("%s %s: %d (reached %v), want the route reached", methode, chemin, code, ok)
 		}
 	}
-	for _, r := range []string{"GET /api/hub", "POST /api/hub/alertes", "POST /api/mot-de-passe", "POST /api/ouvrir", "POST /api/instance/{action}", "POST /api/distance", "GET /api/projets", "POST /api/mcp/appairer", "POST /api/mcp/appairer/statut", "GET /api/clients", "POST /api/clients", "GET /api/annonce", "GET /api/instances", "POST /api/instances", "POST /api/instances/mdns"} {
+	for _, r := range []string{"GET /api/hub", "POST /api/hub/alertes", "POST /api/mot-de-passe", "POST /api/ouvrir", "POST /api/instance/{action}", "POST /api/distance", "GET /api/projets", "POST /api/mcp/appairer", "POST /api/mcp/appairer/statut", "GET /api/clients", "POST /api/clients", "GET /api/annonce", "GET /api/instances", "POST /api/instances", "POST /api/instances/mdns", "POST /api/distants"} {
 		if !vus[r] {
 			t.Errorf("route %q no longer in serveur.go: update this test", r)
 		}
@@ -110,10 +114,10 @@ func TestDistanceToutesRoutes(t *testing.T) {
 		{"GET", "/api/hubx", true}, // plain prefix
 		{"POST", "/api/mot-de-passe", true},
 		{"POST", "/api/ouvrir", true},
-		{"POST", "/api/mcp", true},                 // the hub's MCP: never through the tunnel
-		{"POST", "/api/mcp/appairer", true},        // an MCP client's pairing: local only (M182)
-		{"POST", "/api/mcp/appairer/statut", true}, // and its answer
-		{"GET", "/api/annonce", true},              // the announcement and the instances of this PC (M185)
+		{"POST", "/api/mcp", true},                  // the hub's MCP: only with a remote Athanor's token (TestDistantAppairage)
+		{"POST", "/api/mcp/appairer", false},        // another Athanor's pairing passes (sorte athanor only, M187)
+		{"POST", "/api/mcp/appairer/statut", false}, // and its answer
+		{"GET", "/api/annonce", true},               // the announcement and the instances of this PC (M185)
 		{"GET", "/api/instances", true},
 		{"POST", "/api/instances", true},
 		{"POST", "/api/instances/mdns", true}, // the local network discovery: the computer only (M186)

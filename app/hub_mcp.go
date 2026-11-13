@@ -111,6 +111,12 @@ func (s *Serveur) apiMCP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.appelOutilMCP(w, x, q)
+	case "athanor/revoquer": // a remote hub that removes this Athanor revokes its own token here (hub_distants.go)
+		if !estClient || s.revoquerClient(client.ID) != nil {
+			repondreMCP(w, http.StatusOK, q.ID, nil, &erreurMCP{-32601, "method not found: " + q.Method})
+			return
+		}
+		repondreMCP(w, http.StatusOK, q.ID, map[string]any{}, nil)
 	default:
 		repondreMCP(w, http.StatusOK, q.ID, nil, &erreurMCP{-32601, "method not found: " + q.Method})
 	}
