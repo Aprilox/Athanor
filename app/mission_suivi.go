@@ -2,7 +2,8 @@ package main
 
 // Following a launched mission (ARCHITECTURE §étape 10 Suivi): one goroutine per mission lancee/en_pause reads the
 // sources (the project's pilot through voiesEnDirect, the milestones done, the deployment history, the Servers tasks,
-// the linked approvals) and writes the journal at each transition; it starts nothing by itself.
+// the linked approvals) and writes the journal at each transition; it starts nothing by itself but the prod relay
+// (mission_relais.go).
 
 import (
 	"cmp"
@@ -76,7 +77,12 @@ func (s *Serveur) observerMission(id string) bool {
 		avancerRelais(m, relais)
 		return nil
 	})
-	return err == nil
+	if err != nil {
+		return false
+	}
+	s.relaisProd(id)
+	m, err = lireMission(id)
+	return err == nil && missionSuivie(m.Etat)
 }
 
 // ajouterJournal: evts not written yet added in time order; at maxJournalMission, the oldest removed, and an
@@ -118,10 +124,7 @@ func (s *Serveur) evenementsMission(m Mission) ([]EntreeJournal, RelaisMission) 
 	}
 	var evts []EntreeJournal
 	noter := func(id string, t time.Time, niveau, cle string, params ...string) {
-		for i, p := range params {
-			params[i] = couper(s.masquerSecrets(p), 200)
-		}
-		evts = append(evts, EntreeJournal{ID: couper(s.masquerSecrets(id), 200), T: t.UTC().Format(formatCree), Cle: cle, Params: params, Niveau: niveau})
+		evts = append(evts, s.entreeJournal(id, t, niveau, cle, params...))
 	}
 	var c CarteMission
 	_ = json.Unmarshal(m.Carte, &c)
@@ -209,6 +212,14 @@ func (s *Serveur) evenementsMission(m Mission) ([]EntreeJournal, RelaisMission) 
 		}
 	}
 	return evts, relais
+}
+
+// entreeJournal: a journal entry, its event id and parameters masked and bounded.
+func (s *Serveur) entreeJournal(id string, t time.Time, niveau, cle string, params ...string) EntreeJournal {
+	for i, p := range params {
+		params[i] = couper(s.masquerSecrets(p), 200)
+	}
+	return EntreeJournal{ID: couper(s.masquerSecrets(id), 200), T: t.UTC().Format(formatCree), Cle: cle, Params: params, Niveau: niveau}
 }
 
 // cmpDate: the date t, or d when t is empty or unreadable.

@@ -37,6 +37,7 @@ Si la session de l'orchestrateur échoue après vous avoir montré une carte, la
 - **Annuler.** Avant le lancement, *Annuler la mission* l'abandonne : rien n'a été construit ni déployé.
 
 La page *Missions* liste chaque mission avec son état et ses voies (lues en direct sur le pilote du projet et la tâche Serveurs) ; la page d'une mission montre sa carte et les liens vers son projet et sa tâche. Les trois dernières sont sur la page d'accueil.
+- **Après le lancement.** Chaque jalon livré se déploie en *dev* puis se vérifie depuis ce PC. Quand la voie Studio a fini la demande, que le dernier déploiement *dev* vérifié porte la dernière version du projet et que les tâches Serveurs de la *prod* sont finies, Athanor vous demande « Mise en prod de <hôte> ? » (cloche, *Pour vous*, notification qui ouvre la mission). Cet accord vaut pour cette mission, cette version exacte et ces serveurs, une seule fois, quelle que soit la politique, même *autonome* ; si la carte ou la version a changé entre-temps, il est refusé et redemandé. Accepté : la *prod* est déployée puis vérifiée, et la mission se termine. Refusé : la mission attend votre *Redemander*. Un échec ouvre l'incident habituel (*Réessayer*, *Revenir à la version d'avant*, *Je prends la main*), noté au journal de la mission. Sans *prod* sur la carte, la mission se termine dès que *dev* est vérifié.
 
 ## Depuis votre téléphone
 

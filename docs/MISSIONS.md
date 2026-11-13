@@ -37,6 +37,7 @@ If the orchestrator's session fails after showing you a card, the card stays and
 - **Cancel.** Before launching, *Cancel the mission* drops it: nothing has been built or deployed.
 
 The *Missions* page lists every mission with its state and its lanes (read live from the project's pilot and the Servers task); a mission's page shows its card and links to its project and its task. The last three are on the home page.
+- **After the launch.** Each delivered milestone is deployed to *dev*, then checked from this PC. Once the Studio lane finished the request, the latest checked *dev* deployment carries the project's latest version and the *prod* Servers tasks are done, Athanor asks you "Deploy <host> to production?" (bell, *For you*, a notification that opens the mission). That accord is for this mission, this exact version and these servers, once, whatever the policy, even *autonomous*; if the card or the version changed meanwhile, it is refused and asked again. Accepted: *prod* is deployed then checked, and the mission ends. Refused: the mission waits for your *Ask again*. A failure opens the usual incident (*Retry*, *Go back to the previous version*, *I take over*), written in the mission's journal. Without *prod* on the card, the mission ends as soon as *dev* is checked.
 
 ## From your phone
 

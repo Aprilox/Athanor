@@ -428,9 +428,12 @@ func (s *Serveur) messageApprobation(x Approbation) MessagePush {
 	}
 	titre := fmt.Sprintf(s.textePush("appr_titre"), moduleDev{}.Nom(), x.Projet, quoi)
 	if x.Action == actionDeploiement { // "Deploy martin.fr to production?", the project and commit below
-		titre, texte = fmt.Sprintf(s.textePush("appr_deploi"), x.Details["hote"], x.Env), x.Projet+" · commit "+x.Details["commit"]
+		titre, texte = fmt.Sprintf(s.textePush("appr_deploi"), x.Details["hote"], x.Env), x.Projet+" · commit "+cmp.Or(x.Details["commit"], x.Details["sha"])
 		if x.Env == "prod" {
 			titre = fmt.Sprintf(s.textePush("appr_prod"), x.Details["hote"])
+		}
+		if m := x.Details["mission"]; m != "" { // M168: the mission's prod accord opens its page
+			return MessagePush{Titre: titre, Texte: texte, URL: "/#missions/" + m, Tag: "appr-" + x.ID}
 		}
 	}
 	if x.Action == actionMission { // "Launch the mission …?", what accepting does below
@@ -571,6 +574,12 @@ func (s *Serveur) deciderApprobation(qui, id, decision, entree, envChoisi, varia
 			return x, 0, err
 		}
 	}
+	if x.Action == actionDeploiement && x.Details["mission"] != "" && decision == "accepter" { // M168: only for the card it was asked for
+		if m, err := lireMission(x.Details["mission"]); err != nil || empreinteCarte(m) != x.Details["empreinte"] {
+			s.refuserAccordMission(id, qui, "carte changée")
+			return x, 0, errCarteChangee
+		}
+	}
 	accorde, idEntree := "", ""
 	if x.Action == "demander_acces" && decision != "refuser" {
 		if code, err := s.accesPretErr(x.Projet); err != nil {
@@ -611,6 +620,15 @@ func (s *Serveur) deciderApprobation(qui, id, decision, entree, envChoisi, varia
 
 // errMissionSansRegle: a mission is launched by one accord, never by a rule.
 var errMissionSansRegle = erreurEntree("A mission is launched once: accept or refuse it")
+
+// refuserAccordMission: a pending accord of a mission's relay refused by par, because of motif (the mission
+// changed since it was asked).
+func (s *Serveur) refuserAccordMission(id, par, motif string) {
+	if x, err := s.approbations.Decider(id, "refuser", par); err == nil {
+		s.ecrireAudit(LigneAudit{Type: "evenement", De: par, Vers: "hub", Mission: x.Mission, Projet: x.Projet, Env: x.Env, Agent: x.Agent,
+			Action: "approbation refuser", Resultat: x.Action + " " + x.ID + " → " + x.Etat + " (" + motif + ")"})
+	}
+}
 
 // fermerLancementMission: the pending launch request (lancer_mission) of mission id, decided by par: refused when
 // the owner cancelled the mission (accepting it later launches nothing), accepted when Launch launched it.

@@ -305,7 +305,7 @@ var autorisesDistance = map[string]bool{"GET /api/hub": true, "GET /api/coffre":
 	"GET /api/serveurs":     true, "GET /api/serveurs/{id}": true, // the inventory and a server's sheet, read only
 	"GET /api/serveurs/{id}/taches": true,                                 // a server's tasks, read only (plans are decided by the approval card)
 	"GET /api/missions":             true, "GET /api/missions/{id}": true, // the missions (created on the PC only)
-	"POST /api/missions/{id}/modifier": true, "POST /api/missions/{id}/repondre": true, "POST /api/missions/{id}/annuler": true, "POST /api/missions/{id}/lancer": true, // as the approvals: an unlocked device
+	"POST /api/missions/{id}/modifier": true, "POST /api/missions/{id}/repondre": true, "POST /api/missions/{id}/annuler": true, "POST /api/missions/{id}/lancer": true, "POST /api/missions/{id}/redemander": true, // as the approvals: an unlocked device
 	"GET /api/mentions":     true, // the @ list of the home bar: names and types, never a value
 	"GET /api/fournisseurs": true} // the providers, zones and rights (never a token); added, tested, removed on the PC
 

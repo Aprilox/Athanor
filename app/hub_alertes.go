@@ -95,9 +95,9 @@ func alertesApprobations(l []Approbation) []AlerteHub {
 			raison, args, toujours = "Plan for {0} ({1}): {2}", []any{cmp.Or(x.Details["nom"], x.Details["serveur"]), x.Env, x.Raison}, "Never ask again for this server"
 		}
 		if x.Action == actionDeploiement {
-			raison, args = "Deploy {0} to {1}? Commit {2}", []any{x.Details["hote"], x.Env, x.Details["commit"]}
+			raison, args = "Deploy {0} to {1}? Commit {2}", []any{x.Details["hote"], x.Env, cmp.Or(x.Details["commit"], x.Details["sha"])}
 			if x.Env == "prod" {
-				raison, args = "Deploy {0} to production? Commit {1}", []any{x.Details["hote"], x.Details["commit"]}
+				raison, args = "Deploy {0} to production? Commit {1}", []any{x.Details["hote"], cmp.Or(x.Details["commit"], x.Details["sha"])}
 			}
 		}
 		titre, module := x.Projet, "dev"

@@ -1,0 +1,208 @@
+package main
+
+// The mission's relay to prod (ARCHITECTURE §étape 10 Relais): once the Studio lane finished, the latest dev
+// deployment checked on the project's HEAD and the prod Servers tasks done, the owner's accord for prod is asked,
+// bound to the mission, its card's print, the full SHA and the servers, used once; accepted → the engine deploys
+// prod and its check ends the mission. Never without an accord, whatever the mission's policy (no rule lets it by).
+
+import (
+	"cmp"
+	"context"
+	"encoding/json"
+	"net/http"
+	"slices"
+	"sync"
+	"time"
+)
+
+// commencerDeploiementMission: the engine's start (the tests replace it; the engine has its own tests).
+var commencerDeploiementMission = (*Serveur).commencerDeploiement
+
+// relaisProdMu: one relay step at a time (the follower and Ask again), so that one accord starts one deployment.
+var relaisProdMu sync.Mutex
+
+// accordProd: the accord the prod deployment of sha for mission m waits for (Reprendre compares all of it).
+func (s *Serveur) accordProd(m Mission, projet, sha string) Approbation {
+	e := s.acces.Environnements(projet)["prod"]
+	hote := cmp.Or(hoteEnv(&e), projet)
+	return Approbation{Projet: projet, Env: "prod", Mission: m.ID, Agent: "relais", Action: actionDeploiement,
+		Raison: "mission " + m.ID + ": commit " + sha + " → " + hote,
+		Details: map[string]string{"mission": m.ID, "empreinte": empreinteCarte(m), "sha": sha, "env": "prod", "url": e.URL,
+			"hote": hote, "serveurs": listeServeursAccord(e.Serveurs)}}
+}
+
+// relaisProd: one step of mission id's prod relay, from what its sources say now.
+func (s *Serveur) relaisProd(id string) {
+	relaisProdMu.Lock()
+	defer relaisProdMu.Unlock()
+	m, err := lireMission(id)
+	if err != nil || m.Etat != "lancee" || m.Relais == nil || s.approbations == nil || s.acces == nil {
+		return
+	}
+	var c CarteMission
+	_ = json.Unmarshal(m.Carte, &c)
+	vues := s.voiesEnDirect(m).Voies
+	i := slices.IndexFunc(vues, func(v VoieMission) bool { return v.Module == "dev" })
+	if i < 0 {
+		return
+	}
+	p, ok := s.projetParNom(vues[i].Ref)
+	if !ok {
+		return
+	}
+	head, _ := gitSortie(p.Dossier, "rev-parse", "HEAD")
+	r := *m.Relais
+	switch r.Etape {
+	case "dev_verifie":
+		if vues[i].Actuel != "termine" || r.Commit == "" || r.Commit != head || !prodPrete(vues, p.Nom) {
+			return
+		}
+		if !slices.ContainsFunc(c.Envs, func(e EnvCarte) bool { return e.Nom == "prod" }) {
+			s.finirMission(id, "dev_verifie", "no prod on the card: dev checked on "+shaCourt(head))
+			return
+		}
+		s.accordOuDeployer(m, p.Nom, head)
+	case "accord_prod":
+		ap := s.accordProd(m, p.Nom, r.Commit)
+		x, lu := s.approbations.Lire(r.Accord)
+		if r.Commit != head || lu && (x.Details["empreinte"] != ap.Details["empreinte"] || x.Details["sha"] != r.Commit) {
+			// the project or the card changed since: that accord is for something else, asked again on what is there now
+			if lu && x.Etat == "attente" {
+				s.refuserAccordMission(x.ID, "relais", "la mission a changé")
+			}
+			s.majRelais(id, "accord_prod", func(r *RelaisMission) { r.Etape, r.Accord = "dev_verifie", "" })
+			return
+		}
+		if lu && x.Etat == "acceptee" && x.Utilisee == "" {
+			s.accordOuDeployer(m, p.Nom, r.Commit)
+		} // pending: wait; refused or expired: Ask again (POST /api/missions/{id}/redemander)
+	case "prod_deploye":
+		h := historiqueDeploiements(p.Nom, "prod")
+		j := slices.IndexFunc(h, func(d Deploiement) bool { return d.ID == r.DeploiementProd })
+		if j < 0 {
+			return
+		}
+		d := h[len(h)-1] // the newest since ours: Retry makes a new one
+		e := s.acces.Environnements(p.Nom)["prod"]
+		switch {
+		case d.Etat == "en_cours" || d.Etat == "ok" && d.Verification == nil:
+		case d.Etat == "ok" && d.Verification.OK && !d.Retour:
+			s.finirMission(id, "prod_deploye", "prod checked: "+e.URL+" (version "+shaCourt(d.Commit)+")")
+		default: // P6: the environment's incident carries Retry, Go back and Take over
+			s.noterJournalMission(id, s.entreeJournal("incident:"+d.ID, time.Now(), "erreur",
+				"Production incident on {0}: retry, go back to the previous version or take over", cmp.Or(hoteEnv(&e), p.Nom)))
+		}
+	}
+}
+
+// prodPrete: every Servers task of the mission for the project's prod is done.
+func prodPrete(vues []VoieMission, projet string) bool {
+	for _, v := range vues {
+		if v.Module != "servers" {
+			continue
+		}
+		if t, ok := tacheMission(v.Ref); ok && t.Env == projet+"/prod" && t.Etat != "finie" {
+			return false
+		}
+	}
+	return true
+}
+
+// accordOuDeployer: the owner's accord for sha used now (the deployment starts), or asked (the relay waits for it).
+func (s *Serveur) accordOuDeployer(m Mission, projet, sha string) {
+	ap := s.accordProd(m, projet, sha)
+	y, etat, err := s.approbations.Reprendre(ap)
+	switch {
+	case err != nil:
+		return
+	case etat == "utilisee":
+		s.ecrireAudit(LigneAudit{Type: "evenement", De: "relais", Vers: "hub", Mission: m.ID, Projet: projet, Env: "prod",
+			Agent: "relais", Action: "approbation utilisée: " + actionDeploiement, Resultat: y.ID})
+		s.deployerProdMission(m.ID, projet, sha, y.ID)
+		return
+	case etat == "":
+		if y, err = s.demanderApprobation(ap); err != nil {
+			return
+		}
+	}
+	s.majRelais(m.ID, m.Relais.Etape, func(r *RelaisMission) { r.Etape, r.Commit, r.Accord = "accord_prod", sha, y.ID })
+}
+
+// deployerProdMission: the engine started on prod with the owner's accord; not started → the accord given back
+// (the next step tries again) and said in the journal.
+func (s *Serveur) deployerProdMission(id, projet, sha, accord string) {
+	d, suite, err := commencerDeploiementMission(s, projet, "prod", sha, OptionsDeploiement{Auteur: "relais", Accorde: true})
+	if err != nil {
+		s.approbations.Rendre(accord)
+		s.noterJournalMission(id, s.entreeJournal("prod:"+accord+":non_lance", time.Now(), "erreur",
+			"The production deployment did not start: {0}", err.Error()))
+		s.majRelais(id, "", func(r *RelaisMission) { r.Etape, r.Commit, r.Accord = "accord_prod", sha, accord })
+		return
+	}
+	s.ecrireAudit(LigneAudit{Type: "evenement", De: "relais", Vers: "hub", Mission: id, Projet: projet, Env: "prod",
+		Agent: "relais", Action: "déploiement prod de la mission", Resultat: "commit " + sha + " → " + d.ID})
+	s.majRelais(id, "", func(r *RelaisMission) {
+		r.Etape, r.Commit, r.Accord, r.DeploiementProd = "prod_deploye", sha, accord, d.ID
+	})
+	go func() {
+		if d, _ := suite(context.Background()); d.Etat != "ok" || d.Verification != nil && !d.Verification.OK {
+			s.notifierIncidents()
+		}
+	}()
+}
+
+// majRelais: mission id's relay changed by f, only while it is still at step depuis ("": any) and launched.
+func (s *Serveur) majRelais(id, depuis string, f func(*RelaisMission)) {
+	_, _ = modifierMission(id, func(m *Mission) error {
+		if m.Relais == nil || m.Etat != "lancee" || depuis != "" && m.Relais.Etape != depuis {
+			return errMissionInconnue
+		}
+		f(m.Relais)
+		return nil
+	})
+}
+
+func (s *Serveur) noterJournalMission(id string, e EntreeJournal) {
+	_, _ = modifierMission(id, func(m *Mission) error { ajouterJournal(m, []EntreeJournal{e}); return nil })
+}
+
+// finirMission: the relay's last step reached from step depuis, the mission ended.
+func (s *Serveur) finirMission(id, depuis, detail string) {
+	m, err := modifierMission(id, func(m *Mission) error {
+		if m.Relais == nil || m.Etat != "lancee" || m.Relais.Etape != depuis {
+			return errMissionInconnue
+		}
+		m.Relais.Etape, m.Etat = "termine", "terminee"
+		m.Historique = append(m.Historique, evenementMission("terminee", detail))
+		ajouterJournal(m, []EntreeJournal{s.entreeJournal("mission:terminee", time.Now(), "info", "Mission done: {0}", detail)})
+		return nil
+	})
+	if err == nil {
+		s.ecrireAudit(LigneAudit{Type: "evenement", De: "relais", Vers: "missions", Projet: prefixeMission + id, Mission: id, Action: "mission terminée", Resultat: m.Relais.Etape})
+	}
+}
+
+// apiRedemanderProd: POST /api/missions/{id}/redemander: the prod accord refused or expired is asked again.
+func (s *Serveur) apiRedemanderProd(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	relaisProdMu.Lock()
+	m, err := modifierMission(id, func(m *Mission) error {
+		if m.Etat != "lancee" || m.Relais == nil || m.Relais.Etape != "accord_prod" {
+			return erreurMission{http.StatusConflict, "This mission does not wait for a production accord"}
+		}
+		if x, ok := s.approbations.Lire(m.Relais.Accord); ok && (x.Etat == "attente" || x.Etat == "acceptee" && x.Utilisee == "") {
+			return erreurMission{http.StatusConflict, "The production accord is already asked or given"}
+		}
+		m.Relais.Etape, m.Relais.Accord = "dev_verifie", ""
+		return nil
+	})
+	relaisProdMu.Unlock()
+	if err != nil {
+		s.erreurMissionHTTP(w, err)
+		return
+	}
+	s.ecrireAudit(LigneAudit{Type: "evenement", De: deQui(r), Vers: "missions", Projet: prefixeMission + id, Mission: id, Action: "accord de prod redemandé"})
+	s.relaisProd(id)
+	m, _ = lireMission(id)
+	s.ecrireJSON(w, map[string]any{"mission": m})
+}
