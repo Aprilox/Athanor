@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 )
 
 // The states of a mission, in their usual order.
@@ -58,6 +59,7 @@ type Mission struct {
 	Questions  []QuestionMission  `json:"questions"`
 	Historique []EvenementMission `json:"historique"`
 	Cree       string             `json:"cree"`
+	Session    string             `json:"session,omitempty"` // the orchestrator's Claude session, resumed with --resume
 }
 
 var (
@@ -76,6 +78,23 @@ func enregistrerMission(m Mission) error {
 	}
 	b, _ := json.MarshalIndent(m, "", "  ")
 	return ecrireAtomique(filepath.Join(dossierMissions(), m.ID+".json"), b, 0o600)
+}
+
+// verrouMissions: the orchestrator's end and its tools (M154) change the same files.
+var verrouMissions sync.Mutex
+
+// modifierMission: mission id read, changed by f and written under verrouMissions (f's error: nothing written).
+func modifierMission(id string, f func(*Mission) error) (Mission, error) {
+	verrouMissions.Lock()
+	defer verrouMissions.Unlock()
+	m, err := lireMission(id)
+	if err == nil {
+		err = f(&m)
+	}
+	if err == nil {
+		err = enregistrerMission(m)
+	}
+	return m, err
 }
 
 // lireMission: a hostile id (path, dots, capitals) is unknown, as is a damaged file.

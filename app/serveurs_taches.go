@@ -88,12 +88,22 @@ const prefixeVerifEchouee = "the external verification failed: "
 // sessionTacheServeurs runs one Claude session of a task in dossier (consigne.txt, reprise, hub-jeton and mcp.json
 // are there; the session works in dossier/travail and writes its stream to session.jsonl). Tests replace it.
 var sessionTacheServeurs = func(s *Serveur, ctx context.Context, dossier string) error {
-	c := commandeKit(s.kitCourant(), "session-serveurs", dossier)
+	return executerSessionKit(ctx, commandeSessionKit(s, "session-serveurs", dossier), delaiSessionTache+time.Minute)
+}
+
+// commandeSessionKit: the kit's command of a hub session (COMMAND FOLDER), without any secret in its environment.
+func commandeSessionKit(s *Serveur, commande, dossier string) *exec.Cmd {
+	c := commandeKit(s.kitCourant(), commande, dossier)
 	if instanceSessionsServeurs != "" {
 		c.Args = append(c.Args, instanceSessionsServeurs)
 	}
 	c.Env = envSansSecrets(s, c.Env)
 	cacherFenetre(c)
+	return c
+}
+
+// executerSessionKit: c run until it ends, ctx stops or delai passes (the kit's own limit failed).
+func executerSessionKit(ctx context.Context, c *exec.Cmd, delai time.Duration) error {
 	if err := c.Start(); err != nil {
 		return err
 	}
@@ -106,7 +116,7 @@ var sessionTacheServeurs = func(s *Serveur, ctx context.Context, dossier string)
 		arreterArbre(c)
 		<-fin
 		return context.Cause(ctx)
-	case <-time.After(delaiSessionTache + time.Minute):
+	case <-time.After(delai):
 		arreterArbre(c)
 		<-fin
 		return errors.New("the session exceeded its time limit")
@@ -581,7 +591,10 @@ func (s *Serveur) apiArreterTacheServeur(w http.ResponseWriter, r *http.Request)
 // ----------------------------------------------------------------------------- the kit's side
 
 func init() {
-	enregistrerCommande("session-serveurs", "session-serveurs FOLDER [INSTANCE_FILE]: one Claude session of a Servers task (launched by the application)", lancerSessionServeurs)
+	enregistrerCommande("session-serveurs", "session-serveurs FOLDER [INSTANCE_FILE]: one Claude session of a Servers task (launched by the application)",
+		func(args []string) int { return lancerSessionHub(args, delaiSessionTache) })
+	enregistrerCommande("session-orchestrateur", "session-orchestrateur FOLDER [INSTANCE_FILE]: one Claude session of a mission's orchestrator (launched by the application)",
+		func(args []string) int { return lancerSessionHub(args, delaiOrchestrateur) })
 }
 
 // argsSessionServeurs: the ops lead's Claude: the hub's tools only (no built-in tool, no other MCP server).
@@ -594,10 +607,11 @@ func argsSessionServeurs(consigne, mcp, reprise string) []string {
 	return a
 }
 
-// lancerSessionServeurs: run where the pilot runs (Windows, WSL, macOS, Linux), in FOLDER/travail, an empty folder.
-func lancerSessionServeurs(args []string) int {
+// lancerSessionHub: a Servers task's or an orchestrator's session, run where the pilot runs (Windows, WSL, macOS,
+// Linux), in FOLDER/travail, an empty folder, killed after delai.
+func lancerSessionHub(args []string, delai time.Duration) int {
 	if len(args) < 1 || len(args) > 2 {
-		fmt.Fprintln(os.Stderr, "Launched by the application: a server's page › Tasks.")
+		fmt.Fprintln(os.Stderr, "Launched by the application (a server's tasks, a mission).")
 		return 2
 	}
 	kit, _ := os.Getwd()
@@ -640,7 +654,7 @@ func lancerSessionServeurs(args []string) int {
 		fmt.Fprintln(os.Stderr, "Claude Code does not start:", err)
 		return 1
 	}
-	minuteur := time.AfterFunc(delaiSessionTache, func() { tuerGroupeSante(c) })
+	minuteur := time.AfterFunc(delai, func() { tuerGroupeSante(c) })
 	defer minuteur.Stop()
 	if c.Wait() != nil {
 		return 1
