@@ -115,6 +115,26 @@ jobs:
         working-directory: app
         run: go run . construire --all
 
+  two-instances:
+    # two real Athanor executables in separate folders (app/deux_instances_test.go): paired by a 6-digit code
+    # and the owner's accord, the hub reads the other's state and pauses its project's pilot at the end of
+    # its cycle; a client never paired is refused
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: app/go.mod
+      - name: Two instances
+        # a skip would pass silently: the PASS line is required
+        run: |
+          go test -count=1 -timeout 4m -run '^TestDeuxInstances$' -v . | tee deux.log
+          grep -q -- '--- PASS: TestDeuxInstances' deux.log
+
   servers-ssh:
     # the Servers module against a real sshd (app/testdata/serveur-ssh, never a real server): an agent's MCP
     # route adds it, reads its sheet, changes it only by an accepted plan, is refused destructive or masked

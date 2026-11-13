@@ -14,7 +14,7 @@ import (
 // exeKit: the kit's executable, else this very program (a kit without its own copy: a development build).
 func exeKit(k Kit) string {
 	e := filepath.Join(k.Racine, "athanor")
-	if st, err := os.Stat(e); err == nil && st.Mode().IsRegular() {
+	if st, err := os.Stat(e); k.Racine != "" && err == nil && st.Mode().IsRegular() { // no kit: never a relative name (found in the PATH)
 		return e
 	}
 	if s, err := os.Executable(); err == nil {

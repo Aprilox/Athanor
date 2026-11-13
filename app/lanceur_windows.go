@@ -13,7 +13,7 @@ import (
 // exeKit: the kit's Athanor.exe, else this very program.
 func exeKit(k Kit) string {
 	e := filepath.Join(k.Racine, "Athanor.exe")
-	if st, err := os.Stat(e); err == nil && st.Mode().IsRegular() {
+	if st, err := os.Stat(e); k.Racine != "" && err == nil && st.Mode().IsRegular() { // no kit: never a relative name (found in the PATH)
 		return e
 	}
 	if s, err := os.Executable(); err == nil {
