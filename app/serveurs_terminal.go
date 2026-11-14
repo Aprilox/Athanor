@@ -19,6 +19,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -57,6 +58,8 @@ type sessionTerminal struct {
 	lecteur     bool      // a GET reads the output now
 	vuLecteur   time.Time // when the last reader left (or the opening)
 	ecran       []byte    // the last ecranTerminalMax bytes sent, replayed to the next reader (a reloaded page)
+	muSFTP      sync.Mutex
+	sftp        *sftp.Client // the files panel's channel on the same connection (serveurs_sftp.go), closed with it
 }
 
 var terminaux = struct {

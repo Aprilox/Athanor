@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -599,6 +600,24 @@ func serveursCapture(t *testing.T, s *Serveur) int {
 		t.Fatal(err)
 	}
 	mem.autoriser(signataire.PublicKey())
+	// the files panel's folder (terminal-fichiers): what the prompt's ls shows
+	if c, err := connecterSSH(context.Background(), AccesSSH{Hote: mem.hote, Port: mem.port, Utilisateur: "pi", Cle: []byte(pem), Empreinte: mem.empreinte}); err != nil {
+		t.Fatal(err)
+	} else if cs, err := sftp.NewClient(c); err != nil {
+		t.Fatal(err)
+	} else {
+		for _, d := range []string{"/backups", "/photos", "/www"} {
+			_ = cs.Mkdir(d)
+		}
+		for nom, contenu := range map[string]string{"/restart.sh": "#!/bin/sh\nsystemctl restart caddy\n", "/notes.txt": strings.Repeat("Penser au certificat.\n", 90), "/www/index.html": "<h1>Maison</h1>\n", "/backups/2026-11-12.tar.gz": strings.Repeat("x", 48<<10)} {
+			if f, err := cs.Create(nom); err == nil {
+				_, _ = f.Write([]byte(contenu))
+				f.Close()
+			}
+		}
+		cs.Close()
+		c.Close()
+	}
 	avant := dialSSH
 	dialSSH = func(ctx context.Context, adresse string, conf *ssh.ClientConfig) (*ssh.Client, error) {
 		switch adresse {

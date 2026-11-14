@@ -322,7 +322,7 @@ func TestTerminalDistance(t *testing.T) {
 		w := appelDistance(h, methode, chemin, cle, corps, "X-Athanor", "jeton")
 		return w.Code == http.StatusForbidden && strings.Contains(w.Body.String(), "Not available from a remote device")
 	}
-	routes := [][2]string{{"POST", "/api/serveurs/ab12/terminal"}, {"GET", "/api/serveurs/ab12/terminal/x"}, {"POST", "/api/serveurs/ab12/terminal/x"}, {"GET", "/api/serveurs/ab12/sftp"}}
+	routes := [][2]string{{"POST", "/api/serveurs/ab12/terminal"}, {"GET", "/api/serveurs/ab12/terminal/x"}, {"POST", "/api/serveurs/ab12/terminal/x"}, {"GET", "/api/serveurs/ab12/sftp/x"}, {"POST", "/api/serveurs/ab12/sftp/x"}, {"POST", "/api/serveurs/ab12/sftp/x/fichier"}, {"GET", "/api/serveurs/ab12/sftp/x/fichier"}}
 	for _, r := range routes {
 		if !refuse(r[0], r[1], `{}`) {
 			t.Errorf("%s %s reached from a device by default", r[0], r[1])

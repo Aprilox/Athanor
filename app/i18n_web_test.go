@@ -122,8 +122,9 @@ func TestWebTraduction(t *testing.T) {
 	cles = append(cles, errDossierAbsolu.Error(), errDossierPoints.Error(), errDossierAbsent.Error(), errDossierLien.Error(), errDossierSecret.Error(),
 		errDossierAthanor.Error(), errDossierSysteme.Error(), errDossiersTrop.Error(), errPieceAccueilTropGrosse.Error(),
 		"This type of file is not accepted: images, PDF and text files only.") // the home conversation's folders and files (M196)
-	cles = append(cles, clesMoteur(t)...)         // the engine's messages (B79)
-	cles = append(cles, clesJournalMission(t)...) // a mission's journal (M171)
+	cles = append(cles, errSFTPAbsent, errSFTPExiste, errSFTPInconnu, errSFTPRefuse, errSFTPDossier, errSFTPChemin, errSFTPMemeNom, errSFTPTropGros) // the files panel (M231c)
+	cles = append(cles, clesMoteur(t)...)                                                                                                            // the engine's messages (B79)
+	cles = append(cles, clesJournalMission(t)...)                                                                                                    // a mission's journal (M171)
 	for _, l := range []string{"fr", "es", "de", "it", "pt"} {
 		dico := dicoTUI(l)
 		if len(dico) < 1000 {

@@ -1314,11 +1314,36 @@ a.mis-ligne:hover, a.mis-ligne:focus-visible { border-color: var(--accent); }
 .terminal-page { display: flex; flex-direction: column; gap: 10px; }
 .term-barre { flex-wrap: wrap; align-items: center; gap: 8px; }
 .term-message { display: flex; flex-direction: column; gap: 6px; border-left: 3px solid var(--attention, #d9a03f); }
-.term-hote { height: calc(100dvh - 210px); min-height: 260px; border: 1px solid var(--line); border-radius: 8px; padding: 6px; overflow: hidden; }
+.term-zones { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 340px); gap: 10px; height: calc(100dvh - 210px); min-height: 260px; }
+.term-zones.sans-fichiers { grid-template-columns: minmax(0, 1fr); }
+.term-zones.sans-fichiers .sftp, .term-onglets { display: none; }
+.term-hote { height: 100%; min-height: 0; border: 1px solid var(--line); border-radius: 8px; padding: 6px; overflow: hidden; }
+/* Files panel (SFTP) beside the terminal */
+.sftp { display: flex; flex-direction: column; gap: 8px; min-height: 0; border: 1px solid var(--line); border-radius: 8px; padding: 8px; background: var(--panel); }
+.sftp.depot { outline: 2px dashed var(--accent); outline-offset: -4px; }
+.sftp-tete { display: flex; flex-direction: column; gap: 6px; }
+.sftp-chemin { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 13px; }
+.sftp-dossier { background: none; border: 0; padding: 2px 4px; border-radius: 4px; color: var(--accent); cursor: pointer; font: inherit; }
+.sftp-dossier:hover { background: var(--line); }
+.sftp-liste { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; min-height: 60px; }
+.sftp-entree { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; width: 100%; text-align: left; background: none; border: 0; border-radius: 6px; padding: 5px 8px; color: var(--ink); cursor: pointer; font: inherit; }
+.sftp-entree:hover { background: var(--line); }
+.sftp-entree.choisi { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+.sftp-entree.choisi .muet { color: var(--ink); }
+.sftp-nom { font-size: 14px; overflow-wrap: anywhere; }
+.sftp-nom.dossier { font-weight: 600; }
+.sftp-renommer { width: 100%; box-sizing: border-box; }
+.sftp-vide { margin: 4px 0; }
+.sftp-actions { flex-wrap: wrap; gap: 6px; min-height: 30px; align-items: center; }
 .term-ecran, .term-ecran .xterm { height: 100%; }
 .term-ecran .xterm .xterm-viewport { background-color: transparent; } /* xterm's #000 showed under the last row; .term-hote has the palette's background */
 .srv-reglage-terminal { margin-top: 8px; }
 @media (max-width: 700px) {
   .term-aide, .term-adresse { display: none; }
-  .term-hote { height: calc(100dvh - 180px); padding: 4px; }
+  .term-hote { padding: 4px; }
+  .term-zones { grid-template-columns: minmax(0, 1fr); height: calc(100dvh - 220px); }
+  .term-onglets { display: flex; }
+  .term-bascule-fichiers { display: none; }
+  .term-zones.sans-fichiers .sftp { display: flex; }
+  .term-zones[data-onglet="terminal"] .sftp, .term-zones[data-onglet="fichiers"] .term-hote { display: none; }
 }
