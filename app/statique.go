@@ -32,7 +32,7 @@ func empreinteStatique(sous fs.FS, nom string) string {
 
 // pageVersionnee: index.html with the hash of each of its files in their addresses.
 func pageVersionnee(sous fs.FS, page string) string {
-	for _, f := range []string{"app.css", "i18n.js", "app.js"} {
+	for _, f := range []string{"app.css", "i18n.js", "app.js", "email.js"} {
 		if e := empreinteStatique(sous, f); e != "" {
 			page = strings.ReplaceAll(page, `"`+f+`"`, `"`+f+`?v=`+e+`"`)
 		}

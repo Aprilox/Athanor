@@ -58,7 +58,11 @@ func clesWeb(t *testing.T) []string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	js := strings.ReplaceAll(string(b), "\r\n", "\n")
+	email, err := os.ReadFile("static/email.js") // the e-mail module page (M201)
+	if err != nil {
+		t.Fatal(err)
+	}
+	js := strings.ReplaceAll(string(b)+"\n"+string(email), "\r\n", "\n")
 	// clesTUI also gives the terminal's own few keys (its pages, its form help): translated all the same
 	cles := clesTUI(js)
 	vu := map[string]bool{}

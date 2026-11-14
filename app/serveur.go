@@ -554,6 +554,11 @@ func (s *Serveur) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/pcs/machine", s.garde(false, s.apiPCsMachine))
 	mux.HandleFunc("GET /api/push", s.garde(false, s.apiPush))
 	mux.HandleFunc("POST /api/push", s.garde(false, s.apiPush))
+	for _, m := range modulesHub() {
+		if r, ok := m.(moduleRoutes); ok {
+			r.Routes(mux, s)
+		}
+	}
 }
 
 // ----------------------------------------------------------------------------- locking

@@ -3,6 +3,7 @@ package main
 import (
 	"net/http"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -25,9 +26,17 @@ func TestDistanceToutesRoutes(t *testing.T) {
 		return w.Code, atteint
 	}
 
-	src, err := os.ReadFile("serveur.go")
-	if err != nil {
-		t.Fatal(err)
+	// serveur.go and the modules that declare their own routes (moduleRoutes)
+	fichiers, _ := filepath.Glob("*.go")
+	var src []byte
+	for _, f := range fichiers {
+		if !strings.HasSuffix(f, "_test.go") {
+			b, err := os.ReadFile(f)
+			if err != nil {
+				t.Fatal(err)
+			}
+			src = append(src, b...)
+		}
 	}
 	motifs := regexp.MustCompile(`mux\.HandleFunc\("([A-Z]+) (/[^"]*)"`).FindAllStringSubmatch(string(src), -1)
 	if len(motifs) < 50 {
@@ -51,7 +60,7 @@ func TestDistanceToutesRoutes(t *testing.T) {
 			t.Errorf("%s %s: %d (reached %v), want the route reached", methode, chemin, code, ok)
 		}
 	}
-	for _, r := range []string{"GET /api/hub", "POST /api/hub/alertes", "POST /api/mot-de-passe", "POST /api/ouvrir", "POST /api/instance/{action}", "POST /api/distance", "GET /api/projets", "POST /api/mcp/appairer", "POST /api/mcp/appairer/statut", "GET /api/clients", "POST /api/clients", "GET /api/annonce", "GET /api/instances", "POST /api/instances", "POST /api/instances/mdns", "POST /api/distants"} {
+	for _, r := range []string{"GET /api/hub", "POST /api/hub/alertes", "POST /api/mot-de-passe", "POST /api/ouvrir", "POST /api/instance/{action}", "POST /api/distance", "GET /api/projets", "POST /api/mcp/appairer", "POST /api/mcp/appairer/statut", "GET /api/clients", "POST /api/clients", "GET /api/annonce", "GET /api/instances", "POST /api/instances", "POST /api/instances/mdns", "POST /api/distants", "GET /api/email/comptes"} {
 		if !vus[r] {
 			t.Errorf("route %q no longer in serveur.go: update this test", r)
 		}

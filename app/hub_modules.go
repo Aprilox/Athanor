@@ -26,6 +26,11 @@ type Module interface {
 	Tutoriel() []EtapeTutoriel
 }
 
+// moduleRoutes: a module with its own API declares its routes itself (the older modules keep theirs in serveur.go).
+type moduleRoutes interface {
+	Routes(mux *http.ServeMux, s *Serveur)
+}
+
 // EtapeTutoriel: one step of a module's tour: its title and text (i18n keys, English), the element it
 // shows (a CSS selector, "" = none, the bubble in the middle) and its page ("" = the module's first page).
 type EtapeTutoriel struct {
