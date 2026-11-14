@@ -135,7 +135,7 @@ html.cadre .dialogue, html.cadre .verrou, html.cadre .assistant { top: var(--bar
 .grille-hub { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
 .grille-hub > .bloc + .bloc { margin-top: 0; }
 .tuile-module.besoin { border-color: var(--attention); }
-.en-cours { display: flex; flex-direction: column; gap: 12px; }
+:is(.a-repondre, .en-cours) { display: flex; flex-direction: column; gap: 12px; }
 .tuile-tete { gap: 8px; flex-wrap: nowrap; }
 .tuile-tete h2 { font-size: 16px; }
 .tuile-raccourcis { gap: 6px; margin-top: 10px; }
@@ -146,10 +146,7 @@ html.cadre .dialogue, html.cadre .verrou, html.cadre .assistant { top: var(--bar
 .hub-valeur.hub-statut { font-size: 16px; }
 .hub-stat .quota-ligne, .hub-stat .barre { display: block; }
 .hub-stat .quota-ligne .barre { margin: 4px 0 2px; height: 6px; background: var(--panel); }
-.missions-vide { display: flex; align-items: center; gap: 14px; padding: 6px 0 2px; }
-.missions-icone { width: 34px; height: 34px; flex: none; border-radius: 50%; border: 2px dashed var(--line); position: relative; }
-.missions-icone::after { content: ""; position: absolute; inset: 9px; border-radius: 50%; background: var(--accent-halo); }
-@media (max-width: 700px) { .grille-hub, .en-cours .grille-projets { grid-template-columns: 1fr; } .accueil-barre .ligne { flex-wrap: wrap; } .accueil-barre .btn-primaire { width: 100%; justify-content: center; text-align: center; } }
+@media (max-width: 700px) { .grille-hub, :is(.a-repondre, .en-cours) .grille-projets { grid-template-columns: 1fr; } .accueil-barre .ligne { flex-wrap: wrap; } .accueil-barre .btn-primaire { width: 100%; justify-content: center; text-align: center; } }
 /* M195: the home conversation, history above, a large field at the bottom, its powers folded under it */
 .accueil .hub-chat-fil { flex: none; max-height: 46vh; min-height: 0; overflow: auto; margin: 0; }
 .hub-chat-fil .vide { padding: 10px 12px; border: 0; background: var(--panel-2); text-align: left; }

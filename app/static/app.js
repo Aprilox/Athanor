@@ -1933,7 +1933,7 @@ pages.global = async () => {
   const d = await lireHub(), modules = d.modules || [], tous = d.elements || [];
   etat.globalSig = JSON.stringify([modules, tous]);
   const archives = (v.projets || []).filter((x) => x.archive).length;
-  const actions = `<div class="ligne projets-actions"><a class="btn btn-petit" href="#nouveau">+ ${t("New project")}</a><a class="btn btn-petit" href="#rejoindre">⇄ ${t("Join a project")}</a>${archives ? `<a class="btn btn-petit btn-fantome" href="#archives">🗄 ${t("Archived projects ({0})", [archives])}</a>` : ""}</div>`;
+  const actions = `<div class="ligne projets-actions"><a class="btn btn-primaire" href="#nouveau">${t("New project")}</a><a class="btn btn-petit btn-fantome" href="#rejoindre">${t("Join a project")}</a>${archives ? `<a class="btn btn-petit btn-fantome" href="#archives">${t("Archived projects ({0})", [archives])}</a>` : ""}</div>`;
   // filters: all, needs me, in progress, then one per module that has elements
   const avec = modules.filter((m) => tous.some((e) => e.module === m.id));
   const filtres = [["tous", t("All")], ["besoin", t("Needs me")], ["actif", t("In progress")], ...(avec.length > 1 ? avec.map((m) => ["m:" + m.id, t(m.nom)]) : [])];
@@ -1982,14 +1982,17 @@ function raccourcisDev() {
   const v = etat.vue || {}, archives = (v.projets || []).filter((x) => x.archive).length;
   return `<div class="ligne m0 tuile-raccourcis"><a class="btn btn-petit btn-fantome" href="#nouveau">+ ${t("New project")}</a>${v.projet ? `<a class="btn btn-petit btn-fantome" href="#projet">⚙ ${t("Manage this project")}</a>` : ""}${archives ? `<a class="btn btn-petit btn-fantome" href="#archives">🗄 ${t("Archived projects ({0})", [archives])}</a>` : ""}</div>`;
 }
-// Home's "In progress": the same elements as Projects, those that need the owner first (the API's order), then the working ones
-function blocEnCours(tous, modules) {
-  const liste = tous.filter((e) => e.attente || e.etat === "actif").slice(0, 6);
-  return `<section class="bloc en-cours" aria-labelledby="en-cours-titre">
-    <div class="ligne m0 tuile-tete"><h2 class="m0" id="en-cours-titre">${t("In progress")}</h2><span class="espace"></span><a class="btn btn-petit" href="#global">${t("See all")} →</a></div>
-    ${liste.length ? `<div class="grille-projets">${liste.map((e) => ligneElement(e, modules)).join("")}</div>` : `<div class="vide">${t("Nothing in progress right now.")}</div>`}
+// Home, under the chat (M228): what waits for the owner (with why), then what works, then the modules; each list is the Projects' elements
+function blocListeAccueil(cl, titre, liste, vide, modules, apres = "") {
+  return `<section class="bloc ${cl}" aria-labelledby="${cl}-titre">
+    <div class="ligne m0 tuile-tete"><h2 class="m0" id="${cl}-titre">${t(titre)}</h2><span class="espace"></span><a class="btn btn-petit" href="#global">${t("See all")} →</a></div>
+    ${liste.length ? `<div class="grille-projets">${liste.slice(0, 6).map((e) => ligneElement(e, modules)).join("")}</div>` : `<div class="vide">${t(vide)}</div>`}${apres}
   </section>`;
 }
+const blocAttente = (tous, modules) => blocListeAccueil("a-repondre", "Waiting for your answer", tous.filter((e) => e.attente), "Nothing waits for you.", modules);
+// the missions under way join "In progress" (no Missions block of its own: the Missions menu entry lists them all)
+const blocEnCours = (tous, modules, lm = []) => blocListeAccueil("en-cours", "In progress", tous.filter((e) => !e.attente && e.etat === "actif"), "Nothing in progress right now.", modules,
+  lm.length ? `<ul class="mis-liste">${lm.slice(0, 3).map(ligneMission).join("")}</ul>` : "");
 // M151: mentions of the bar. A chip = { type: projet|serveur|cle|nouveau, ref, nom }; the Go checks the refs again.
 const TYPES_MENTION = { projet: "Project", serveur: "Server", cle: "Vault key", dossier: "Folder", nouveau: "New project" };
 const pucesMentions = () => (etat.accueilMentions || []).map((m, i) => `<span class="puce-mention puce-${m.type}" title="${h(t(TYPES_MENTION[m.type]))}">${m.type === "nouveau" ? "" : "@"}${h(m.nom)}<button type="button" class="puce-x" data-retirer-mention="${i}" aria-label="${h(t("Remove {0}", [m.nom]))}">×</button></span>`).join("");
@@ -2102,9 +2105,9 @@ pages.accueil = async () => {
       <div class="muet petit local-seul chat-replie" id="accueil-aide">${t("Type @ to name a project, a server or a vault key.")} ${t("The orchestrator prepares a mission card first: nothing starts before you press Launch.")}</div>
     </form>
     <div id="mission-zone" aria-live="polite">${zoneMission()}</div>
+    ${blocAttente(d.elements || [], modules)}
+    ${blocEnCours(d.elements || [], modules, lm.filter((x) => ["acceptee", "lancee", "en_pause"].includes(x.etat)))}
     <div class="grille-hub">${modules.filter((m) => ((m.resume || {}).stats || []).length).map(tuileModule).join("")}</div>
-    ${blocEnCours(d.elements || [], modules)}
-    ${blocMissions(lm)}
   </div>`;
 };
 // M156: Send creates a mission; its card shows under the bar (DESIGN §Missions). etat.missionVue = GET /api/missions/{id}.
@@ -2433,10 +2436,10 @@ pages.suivi = async () => {
   const cache = somme("cache_lu"), plein = somme("entree_tokens") + somme("cache_ecrit");
   const ratio = cache + plein ? Math.round((cache / (cache + plein)) * 100) : 0;
   const g = v.gains;
-  return `${bandeauRaccourci()}${v.pour_vous ? `<a class="bloc pv-bandeau" href="#pourvous">🙋 <strong>${t("Claude needs you")}</strong> · ${t("{0} task(s) on the For you page", [v.pour_vous])} →</a>` : ""}
+  return `${bandeauRaccourci()}${v.pour_vous ? `<a class="bloc pv-bandeau" href="#pourvous"><strong>${t("Claude needs you")}</strong> · ${t("{0} task(s) on the For you page", [v.pour_vous])} →</a>` : ""}
   <div class="grille grille-2">
     <div class="colonne"><div class="bloc"><h2>${t("Right now")}</h2>
-      ${v.actif && v.pilote_ancien ? `<p class="muet petit">ℹ ${v.version_pilote
+      ${v.actif && v.pilote_ancien ? `<p class="muet petit">${v.version_pilote
         ? t("Athanor {0} is installed and the app already uses it. This pilot keeps running on {1}, the version it started with, until it is started again: it then moves to {0} by itself (to do it now: Stop after cycle, then Start). Nothing to do, nothing is lost.", [h(v.version), h(v.version_pilote)])
         : t("Athanor {0} is installed and the app already uses it. This pilot keeps running on the version it started with until it is started again: it then moves to {0} by itself (to do it now: Stop after cycle, then Start). Nothing to do, nothing is lost.", [h(v.version)])}</p>` : ""}
       <dl class="fiche">
@@ -2450,9 +2453,10 @@ pages.suivi = async () => {
       </dl>
       <div class="ligne mt-2">
         <button class="btn btn-petit" data-ouvrir="projet">${t("Open the project")}</button>
-        <button class="btn btn-petit" data-ouvrir="atelier">${t("Workshop (.athanor)")}</button>
-        <button class="btn btn-petit" data-ouvrir="deliverable">${t("Deliverable")}</button>
       </div>
+      <details class="plus-options"><summary>${t("More options")}</summary><div class="ligne m0">
+        <button class="btn btn-petit" data-ouvrir="atelier">${t("Workshop (.athanor)")}</button>
+        <button class="btn btn-petit" data-ouvrir="deliverable">${t("Deliverable")}</button></div></details>
     </div>
     ${v.depense ? rendreDepense(v.depense) : rendreQuota(v.quota, v.quota_arret)}</div>
     <div class="bloc bloc-plan"><div class="bloc-tete"><h2>${t("Project plan")}</h2>${plan.length ? boutonDefil("plan") : ""}</div>
@@ -2854,25 +2858,10 @@ pages.projet = async () => {
   return `<div class="gestion">
   ${p.actif ? `<div class="bloc"><p class="attention">${t("The pilot is running: stop it to rename, move, archive or delete the project.")}</p></div>` : ""}
   ${await rendreMode()}
-  <div class="grille grille-2">
-    <div class="bloc"><h2>${t("Name")}</h2>
+  <div class="bloc"><h2>${t("Name")}</h2>
       <div class="ligne"><input type="text" id="gp-nom" value="${h(p.nom)}"><button class="btn" data-gestion="renommer" ${dis}>${t("Rename")}</button></div>
       <p class="muet petit">${t("Only the name shown in Athanor: the folder keeps its name.")}</p>
     </div>
-    <div class="bloc"><h2>${t("Milestones")}</h2>
-      <p class="muet petit">${t("Athanor compares the ticked milestones with what the folder contains: in an empty folder nothing is done, and a milestone whose files are missing is unticked. When the files come back, it is ticked again by itself. Claude checks more thoroughly at the next start.")}</p>
-      ${decoches.length ? `<ul class="petit">${decoches.map(([id, r]) => `<li><b>${h(id)}</b> <span class="muet">${h(t(r.startsWith("missing: ") ? "missing: {0}" : r, [r.slice(9)]))}</span></li>`).join("")}</ul>` : ""}
-      ${g.reverifier ? `<p class="petit ok">${t("Claude checks the milestones at the next start.")}</p>` : ""}
-      <div class="ligne"><button class="btn btn-petit" data-gestion="verifier" ${dis}>${t("Check now")}</button><button class="btn btn-petit" data-gestion="verifier-claude" ${dis}>${t("Have Claude check them at the next start")}</button></div>
-    </div>
-  </div>
-  <div class="bloc"><h2>${t("Folder")}</h2>
-    <p><code>${h(p.dossier)}</code>${g.vide ? ` <span class="muet petit">(${t("empty")})</span>` : ""}</p>
-    <label class="champ"><span>${t("Move or rename the folder, with everything in it (same drive)")}</span>
-      <div class="ligne"><input type="text" id="gp-deplacer" value="${h(p.dossier)}"><button class="btn" data-gestion="deplacer" ${dis}>${t("Move")}</button></div></label>
-    <label class="champ mt-2"><span>${t("Use another folder (created if needed): the plan and the requests come along, the milestones are checked against what it contains")}</span>
-      <div class="ligne"><input type="text" id="gp-dossier" placeholder="${h(t("e.g. D:\\Dev\\my-site"))}"><button class="btn" type="button" data-parcourir="gp-dossier">${t("Browse…")}</button><button class="btn" data-gestion="dossier" ${dis}>${t("Use this folder")}</button></div></label>
-  </div>
   <div class="bloc" id="gh-bloc">${blocGitHubInitial()}</div>
   <div class="grille grille-2">
     <div class="bloc"><h2>${t("Archive")}</h2>
@@ -2885,7 +2874,23 @@ pages.projet = async () => {
       <label class="radio"><input type="radio" name="gp-suppr" value="dossier"> ${t("Send the whole folder to the recycle bin")}</label>
       <button class="btn btn-danger mt-2" data-gestion="supprimer" data-dossier="${h(p.dossier)}" ${dis}>${t("Delete the project")}</button>
     </div>
-  </div></div>`;
+  </div>
+  <details class="bloc plus-options"${decoches.length ? " open" : ""}><summary>${t("More options")}</summary>
+  <div class="grille grille-2">
+    <div class="bloc"><h2>${t("Milestones")}</h2>
+      <p class="muet petit">${t("Athanor compares the ticked milestones with what the folder contains: in an empty folder nothing is done, and a milestone whose files are missing is unticked. When the files come back, it is ticked again by itself. Claude checks more thoroughly at the next start.")}</p>
+      ${decoches.length ? `<ul class="petit">${decoches.map(([id, r]) => `<li><b>${h(id)}</b> <span class="muet">${h(t(r.startsWith("missing: ") ? "missing: {0}" : r, [r.slice(9)]))}</span></li>`).join("")}</ul>` : ""}
+      ${g.reverifier ? `<p class="petit ok">${t("Claude checks the milestones at the next start.")}</p>` : ""}
+      <div class="ligne"><button class="btn btn-petit" data-gestion="verifier" ${dis}>${t("Check now")}</button><button class="btn btn-petit" data-gestion="verifier-claude" ${dis}>${t("Have Claude check them at the next start")}</button></div>
+    </div>
+    <div class="bloc"><h2>${t("Folder")}</h2>
+    <p><code>${h(p.dossier)}</code>${g.vide ? ` <span class="muet petit">(${t("empty")})</span>` : ""}</p>
+    <label class="champ"><span>${t("Move or rename the folder, with everything in it (same drive)")}</span>
+      <div class="ligne"><input type="text" id="gp-deplacer" value="${h(p.dossier)}"><button class="btn" data-gestion="deplacer" ${dis}>${t("Move")}</button></div></label>
+    <label class="champ mt-2"><span>${t("Use another folder (created if needed): the plan and the requests come along, the milestones are checked against what it contains")}</span>
+      <div class="ligne"><input type="text" id="gp-dossier" placeholder="${h(t("e.g. D:\\Dev\\my-site"))}"><button class="btn" type="button" data-parcourir="gp-dossier">${t("Browse…")}</button><button class="btn" data-gestion="dossier" ${dis}>${t("Use this folder")}</button></div></label>
+  </div>
+  </div></details></div>`;
 };
 
 pages.archives = async () => {
@@ -5641,13 +5646,6 @@ function ligneMission(m) {
     ${(m.voies || []).length ? `<span class="mis-voies-ligne">${m.voies.map((v) => voieMission(v, false)).join("")}</span>` : ""}</a></li>`;
 }
 // Home's Missions block: the 3 newest, See all; the empty state says where to start
-function blocMissions(l) {
-  return `<section class="bloc missions" aria-labelledby="missions-titre">
-    <div class="ligne m0 tuile-tete"><h2 class="m0" id="missions-titre">${t("Missions")}</h2><span class="espace"></span>${l.length ? `<a class="btn btn-petit" href="#missions">${t("See all")} (${l.length}) →</a>` : ""}</div>
-    ${l.length ? `<ul class="mis-liste">${l.slice(0, 3).map(ligneMission).join("")}</ul>`
-      : `<div class="missions-vide"><span class="missions-icone" aria-hidden="true"></span><div><b>${t("No mission yet")}</b><div class="muet petit">${t("One sentence in the bar above, and Studio and Servers work together.")}</div></div></div>`}
-  </section>`;
-}
 pages.missions = async () => {
   const [d, sugg] = await Promise.all([api("missions"), api("mentions").catch(() => ({}))]);
   etat.mentionsSugg = sugg.mentions || [];
