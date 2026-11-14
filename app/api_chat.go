@@ -55,6 +55,8 @@ type MessageChat struct {
 	// "relance" when it started again after it, else why not
 	Pause  bool   `json:"pause,omitempty"`
 	Pilote string `json:"pilote,omitempty"`
+	// Action: the home conversation's card (hub_chat_actions.go) once the user launched or refused it
+	Action *CarteActionChat `json:"action,omitempty"`
 }
 
 type conversationChat struct {

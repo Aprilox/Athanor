@@ -47,7 +47,7 @@ func TestHubChatPouvoirs(t *testing.T) {
 	if projetAccueil(s.kitCourant()).Dossier == p.Dossier || idChat(projetAccueil(s.kitCourant())) == idChat(p) {
 		t.Fatal("the home conversation is the project's")
 	}
-	for _, x := range []string{"GET /api/hub/chat", "POST /api/hub/chat", "POST /api/hub/chat/pouvoirs", "POST /api/hub/chat/effacer"} {
+	for _, x := range []string{"GET /api/hub/chat", "POST /api/hub/chat", "POST /api/hub/chat/pouvoirs", "POST /api/hub/chat/effacer", "POST /api/hub/chat/action"} {
 		m, c, _ := strings.Cut(x, " ")
 		r, _ := http.NewRequest(m, "https://abc-def.trycloudflare.com"+c, nil)
 		if !refuseHubDistance(r) {

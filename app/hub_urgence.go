@@ -38,6 +38,14 @@ func (s *Serveur) arretUrgence(qui string) ResultatUrgence {
 	}
 	s.revoquerJetons("arrêt d'urgence", func(SessionHub) bool { return true })
 	s.pauserMissionsUrgence(qui)
+	chatMu.Lock() // the home conversation's turn stops too (its cards can no longer be launched: carteActionChat)
+	if en := chatsActifs[projetAccueil(s.kitCourant()).Dossier]; en != nil {
+		en.arrete = true
+		if en.cmd != nil && en.cmd.Process != nil {
+			arreterArbre(en.cmd)
+		}
+	}
+	chatMu.Unlock()
 	if s.approbations != nil {
 		verrouDecision.Lock() // an accept in progress ends first, then nothing pending is left
 		l, err := s.approbations.RefuserTout(qui)

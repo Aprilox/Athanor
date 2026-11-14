@@ -1928,7 +1928,7 @@ function blocEnCours(tous, modules) {
   </section>`;
 }
 // M151: mentions of the bar. A chip = { type: projet|serveur|cle|nouveau, ref, nom }; the Go checks the refs again.
-const TYPES_MENTION = { projet: "Project", serveur: "Server", cle: "Vault key", nouveau: "New project" };
+const TYPES_MENTION = { projet: "Project", serveur: "Server", cle: "Vault key", dossier: "Folder", nouveau: "New project" };
 const pucesMentions = () => (etat.accueilMentions || []).map((m, i) => `<span class="puce-mention puce-${m.type}" title="${h(t(TYPES_MENTION[m.type]))}">${m.type === "nouveau" ? "" : "@"}${h(m.nom)}<button type="button" class="puce-x" data-retirer-mention="${i}" aria-label="${h(t("Remove {0}", [m.nom]))}">×</button></span>`).join("");
 function suggestionsMentions() {
   const pris = new Set((etat.accueilMentions || []).map((m) => m.type + "\0" + m.ref)), l = etat.mentionsSugg || [];
@@ -2155,17 +2155,60 @@ document.addEventListener("submit", (ev) => { if (ev.target.id === "accueil-form
 // M195: the home conversation (hub_chat.go), the project chat with the hub's scope. Its powers are the
 // conversation's (kept by the server, off by default, gone with a new conversation), always shown under the field.
 let minuterieHubChat;
-const sansCartes = (m) => ({ ...m, texte: (m.texte || "").replace(/<(note|agent|mcp)>[\s\S]*?<\/\1>/g, "") }); // cards of the project chat: not here
+const sansCartes = (m) => ({ ...m, texte: (m.texte || "").replace(/<(note|agent|mcp|action)>[\s\S]*?<\/\1>/g, "") }); // cards of the project chat: not here; its own card: carteActionHub
 function filHub(d) {
-  const msgs = (d.messages || []).map(sansCartes);
-  let html = msgs.length ? msgs.map(messageChat).join("") : `<div class="vide">${t("Ask anything about your projects, servers or missions. By default the assistant only reads and answers: it sees no file and no key until you give it more under “What the assistant can do”.")}</div>`;
+  const msgs = (d.messages || []).map(sansCartes), cartes = d.actions || {};
+  let html = msgs.length ? msgs.map((m, i) => messageChat(m, i) + (cartes[i] ? carteActionHub(cartes[i], i) : "")).join("") : `<div class="vide">${t("Ask anything about your projects, servers or missions. By default the assistant only reads and answers: it sees no file and no key until you give it more under “What the assistant can do”.")}</div>`;
   if (d.en_cours) {
     const p = d.partiel || {}, textes = p.textes || [], outils = p.outils || [];
-    html += `<div class="chat-msg chat-claude"><div class="chat-bulle chat-attente">${textes.length ? mdChat(textes[textes.length - 1].replace(/<(note|agent|mcp)>[\s\S]*$/, "")) : ""}
+    html += `<div class="chat-msg chat-claude"><div class="chat-bulle chat-attente">${textes.length ? mdChat(textes[textes.length - 1].replace(/<(note|agent|mcp|action)>[\s\S]*$/, "")) : ""}
       <div class="muet petit"><span class="chat-points"><i></i><i></i><i></i></span> ${outils.length ? h(t(outils[outils.length - 1])) : t("Claude is thinking…")}</div></div></div>`;
   }
   return html;
 }
+// M197: the card of an action the assistant proposes (computed by the Go: hub_chat_actions.go): what, on what, with
+// which accesses; Launch, Change (its fields) or Refuse. Nothing runs before Launch.
+const ICONES_ACTION = { projet: "🚀", pilote: "▶", demande: "📝", remarque: "💬", mission: "🧭" };
+function carteActionHub(c, i) {
+  const v = (x) => h(String(x || "")), ty = c.type;
+  const projets = (etat.mentionsSugg || []).filter((m) => m.type === "projet" && !m.detail).map((m) => m.nom);
+  if (c.projet && !projets.includes(c.projet)) projets.unshift(c.projet);
+  const choixProjet = `<label class="champ"><span>${t("Project")}</span><select data-cact="projet">${projets.map((n) => `<option ${n === c.projet ? "selected" : ""}>${h(n)}</option>`).join("")}</select></label>`;
+  const champs = ty === "projet" ? `<label class="champ"><span>${t("Name")}</span><input type="text" data-cact="projet" value="${v(c.projet)}"></label>
+      <label class="champ"><span>${t("Folder")}</span><input type="text" data-cact="dossier" value="${v(c.dossier)}" spellcheck="false"></label>`
+    : ty === "mission" ? "" : choixProjet;
+  const titre = ty === "demande" ? `<label class="champ"><span>${t("Title")}</span><input type="text" data-cact="titre" value="${v(c.titre)}"></label>` : "";
+  const texte = ty === "pilote" ? "" : `<label class="champ"><span>${t("Text")}</span><textarea data-cact="texte" rows="5">${v(c.texte)}</textarea></label>`;
+  const decide = c.etat ? `<div class="${c.etat === "lancee" ? "ok" : "muet"} petit" role="status">${c.etat === "lancee" ? "✔ " + t("Launched") : "✕ " + t("Refused")}${c.resultat ? " — " + h(t(c.resultat, c.args || [])) : ""}</div>`
+    : `${c.erreur ? `<div class="attention petit" role="alert">${h(t(c.erreur))}</div>` : ""}
+      <div class="carte-action-champs" hidden>${champs}${titre}${texte}</div>
+      <div class="ligne m0 mt-1"><button type="button" class="btn btn-petit btn-primaire" data-cact-decision="lancer" data-index="${i}">${t("Launch")}</button>
+        <button type="button" class="btn btn-petit" data-cact-modifier aria-expanded="false">${t("Edit")}</button>
+        <button type="button" class="btn btn-petit" data-cact-decision="refuser" data-index="${i}">${t("Refuse")}</button></div>`;
+  return `<div class="chat-msg chat-claude"><div class="chat-bulle chat-note carte-action" data-carte-action="${i}" data-type="${v(ty)}">
+    <div class="muet petit">${t("Action proposed: nothing runs before you launch it")}</div>
+    <div><b>${ICONES_ACTION[ty] || "•"} ${h(t(c.quoi || "Action"))}</b></div>
+    <div class="petit">${t("On")}: <code class="croit">${v(c.sur)}</code></div>
+    ${c.titre ? `<div><b>${v(c.titre)}</b></div>` : ""}${c.texte ? `<div class="petit">${mdChat(c.texte)}</div>` : ""}
+    <div class="petit muet">${t("With which accesses")}:</div><ul class="petit m0">${(c.acces || []).map((a) => `<li>${h(t(a))}</li>`).join("")}</ul>
+    ${decide}</div></div>`;
+}
+document.addEventListener("click", async (ev) => {
+  const m = ev.target.closest("[data-cact-modifier]");
+  if (m) {
+    const z = m.closest("[data-carte-action]").querySelector(".carte-action-champs");
+    z.hidden = !z.hidden; m.setAttribute("aria-expanded", String(!z.hidden));
+    if (!z.hidden) { const f = z.querySelector("input, select, textarea"); if (f) f.focus(); }
+    return;
+  }
+  const b = ev.target.closest("[data-cact-decision]"); if (!b) return;
+  const carte = b.closest("[data-carte-action]"), a = { type: carte.dataset.type };
+  carte.querySelectorAll("[data-cact]").forEach((x) => { a[x.dataset.cact] = x.value; });
+  b.disabled = true;
+  const r = await action(api("hub/chat/action", "POST", { index: Number(b.dataset.index), decision: b.dataset.cactDecision, action: a }));
+  b.disabled = false;
+  if (r) majHubChat(true);
+});
 const POUVOIRS_HUB = [["internet", "🌐", "Internet", "Searches and reads the web when a message needs it."],
   ["ecriture", "✏️", "Writing", "Changes files, only in the folders you point to it with read and write, never elsewhere."]];
 const resumePouvoirs = (pv) => [t("Reads and answers"), ...POUVOIRS_HUB.filter(([k]) => pv[k]).map(([, i, n]) => i + " " + t(n)),
@@ -2217,7 +2260,7 @@ async function majHubChat(force) {
   etat.hubChat = d;
   clearTimeout(minuterieHubChat);
   if (d.en_cours) minuterieHubChat = setTimeout(() => majHubChat(false), 1500);
-  const sig = JSON.stringify([d.messages.length, d.en_cours, d.partiel, d.pouvoirs]);
+  const sig = JSON.stringify([d.messages.length, d.en_cours, d.partiel, d.pouvoirs, d.actions]);
   if (!force && sig === etat.hubChatSig) return;
   etat.hubChatSig = sig;
   const fil = $("#hub-chat-fil"); if (!fil) return;

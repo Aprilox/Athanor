@@ -455,6 +455,7 @@ func (s *Serveur) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/hub/chat/pouvoirs", s.garde(false, s.apiHubChatPouvoirs))
 	mux.HandleFunc("POST /api/hub/chat/piece", s.garde(false, s.apiHubChatPiece)) // its attached files (hub_chat_dossiers.go)
 	mux.HandleFunc("POST /api/hub/chat/arreter", s.garde(false, s.apiHubChatArreter))
+	mux.HandleFunc("POST /api/hub/chat/action", s.garde(false, s.apiHubChatAction)) // its cards (hub_chat_actions.go)
 	mux.HandleFunc("POST /api/hub/chat/effacer", s.garde(false, s.apiHubChatEffacer))
 	mux.HandleFunc("POST /api/ameliorer", s.garde(false, s.apiAmeliorerDemande))
 	mux.HandleFunc("PUT /api/demande", s.garde(false, s.apiEcrireDemande))

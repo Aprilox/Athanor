@@ -6,13 +6,14 @@ package main
 import (
 	"errors"
 	"net/http"
+	"path/filepath"
 	"slices"
 	"strings"
 )
 
 // MentionTrouvee: one suggestion of the @ list (Detail: a server's host, an entry's type; never a value).
 type MentionTrouvee struct {
-	Type   string `json:"type"` // projet | serveur | cle
+	Type   string `json:"type"` // projet | serveur | cle | dossier (a folder pointed to the home conversation)
 	Ref    string `json:"ref"`
 	Nom    string `json:"nom"`
 	Detail string `json:"detail,omitempty"`
@@ -55,6 +56,9 @@ func (s *Serveur) candidatsMentions() []MentionTrouvee {
 			l = append(l, MentionTrouvee{Type: "cle", Ref: e.ID, Nom: e.Nom, Detail: e.Type})
 		}
 	}
+	for _, d := range lireConversation(s.kitCourant(), projetAccueil(s.kitCourant())).Pouvoirs.Dossiers {
+		l = append(l, MentionTrouvee{Type: "dossier", Ref: d.Chemin, Nom: filepath.Base(d.Chemin), Detail: d.Chemin})
+	}
 	return l
 }
 
@@ -75,7 +79,7 @@ func (s *Serveur) chercherMentions(q string) []MentionTrouvee {
 			parType[m.Type] = append(parType[m.Type], m)
 		}
 	}
-	types, pris := []string{"projet", "serveur", "cle"}, map[string]int{}
+	types, pris := []string{"projet", "serveur", "cle", "dossier"}, map[string]int{}
 	for n, avance := 0, true; n < maxMentions && avance; {
 		avance = false
 		for _, ty := range types {
@@ -112,6 +116,9 @@ func (s *Serveur) resoudreMentions(l []MentionDemandee) (MentionsMission, error)
 	for _, d := range l {
 		if d.Type == "nouveau" {
 			m.Nouveau = true
+			continue
+		}
+		if d.Type == "dossier" { // the home conversation's: a mission gets no folder this way
 			continue
 		}
 		if !connus[d.Type+"\x00"+d.Ref] {
