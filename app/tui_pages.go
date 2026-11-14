@@ -434,7 +434,7 @@ func (a *appTUI) phrase() (string, string, couleurT) {
 		if e.DernierCommit != "" {
 			return t("Pilot stopped"), t("Last saved work: {0}", e.DernierCommit), p.muet
 		}
-		return t("Pilot stopped"), t("Click Start to resume."), p.muet
+		return t("Ready to start"), t("Click Start: Claude begins with your request."), p.muet
 	}
 	if !v.KitValide {
 		return t("Tool folder not found"), t("Set it in Options."), p.erreur

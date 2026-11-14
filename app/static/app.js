@@ -585,16 +585,18 @@ function depuis(iso) {
 }
 function phraseEtat(v) {
   const e = v.etat || {};
+  // no saved work yet: the project was never started, so "resume" would mislead a newcomer
+  const arrete = () => e.dernier_commit ? { classe: "", titre: t("Pilot stopped"), sous: t("Last saved work: {0}", [e.dernier_commit]) } : { classe: "", titre: t("Ready to start"), sous: t("Click Start: Claude begins with your request.") };
   if (!v.kit_valide) return { classe: "", titre: t("Tool folder not found"), sous: t("Set it in Options.") };
   if (!v.projet) return { classe: "", titre: v.kit_installe ? t("No project yet") : t("Ready to install"), sous: v.kit_installe ? t("Add a project: its development folder, and what you want.") : t("Follow the steps below: everything happens in this window.") };
   if (!v.actif) {
     if (!v.kit_installe) return { classe: "", titre: t("Ready to install"), sous: t("Follow the steps below: everything happens in this window.") };
     if (v.demande_vide) return { classe: "", titre: t("Waiting for your first request"), sous: t("Describe what you want in Requests, then start.") };
-    return { classe: "", titre: t("Pilot stopped"), sous: e.dernier_commit ? t("Last saved work: {0}", [e.dernier_commit]) : t("Click Start to resume.") };
+    return arrete();
   }
   switch (e.phase) {
     // the pilot has just stopped (its last heartbeat is still recent): same wording as a stopped pilot
-    case "arrete": return { classe: "", titre: t("Pilot stopped"), sous: e.dernier_commit ? t("Last saved work: {0}", [e.dernier_commit]) : t("Click Start to resume.") };
+    case "arrete": return arrete();
     case "travail": return { classe: "travaille", titre: e.ouvriers ? t("{0} workers in parallel: {1}", [e.ouvriers.split(/\s+/).length, e.ouvriers.split(/\s+/).join(", ")]) : /^Merging/.test(e.etat || "") ? t("The lead merges the workers' branches") : e.jalon_en_cours ? t("Claude is working on {0}", [titreJalon(e.jalon_en_cours)]) : t("Claude is working"), sous: [e.debut_cycle && t("for {0}", [depuis(e.debut_cycle)]), t("cycle {0}", [e.cycle]), e.template, v.eco && t("eco mode"), v.rapide && t("fast mode"), v.contexte && t("context {0} tokens", [fmtTokens(v.contexte)])].filter(Boolean).join(" · ") };
     case "quota": return { classe: "quota", titre: t("Usage limit reached, Claude is waiting"), sous: t("Resumes {0} · cycle {1}", [e.reprise_prevue || t("as soon as possible"), e.cycle]) };
     case "budget": return { classe: "quota", titre: t("API budget or credit used up, Claude is waiting"), sous: t("Raise the budget, count again (API spend, below) or put another API key in Settings: the pilot resumes at once.") };
@@ -1297,7 +1299,9 @@ function lancerTourChat() {
   lancerTutoriel({ ...m, tutoriel: (m.tutoriel || []).filter((e) => /^#(accueil-form|hub-)/.test(e.cible || "")) });
 }
 function etapesVisite() { return etat.etapesVisite || []; }
-function demarrerVisite() { const a = document.activeElement; etat.focusVisite = a && a !== document.body ? cleFocus(a) : ""; etat.visite = 0; montrerVisite(); }
+function demarrerVisite() { const a = document.activeElement; etat.focusVisite = a && a !== document.body ? cleFocus(a) : ""; etat.pageVisite = location.hash; etat.visite = 0; montrerVisite(); }
+// Skip, Escape or Finish: back to the page the tour started from (a project's Access borrows the vault's tour, which opens the Vault)
+function quitterVisite() { const p = etat.pageVisite; finirVisite(); if (p && location.hash !== p) location.hash = p; }
 function finirVisite() {
   // the focus goes back to what had it before the tour, else to the “?”, never to the top of the page
   const perdu = $("#visite").contains(document.activeElement) || document.activeElement === document.body;
@@ -1337,7 +1341,7 @@ function placerBulle() {
 }
 async function montrerVisite() {
   const etapes = etapesVisite(), n = etat.visite;
-  if (n < 0 || n >= etapes.length) return finirVisite();
+  if (n < 0 || n >= etapes.length) return quitterVisite();
   const e = etapes[n];
   if (location.hash !== "#" + e.page) location.hash = "#" + e.page; else await rendrePage();
   let cible = null;
@@ -1371,11 +1375,11 @@ async function montrerVisite() {
 }
 $("#visite").addEventListener("click", (ev) => {
   const b = ev.target.closest("[data-visite]"); if (!b) return;
-  if (b.dataset.visite === "passer") return finirVisite();
+  if (b.dataset.visite === "passer") return quitterVisite();
   etat.visite += b.dataset.visite === "retour" ? -1 : 1;
   montrerVisite();
 });
-document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && etat.visite >= 0 && !$("#visite").hidden) finirVisite(); });
+document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && etat.visite >= 0 && !$("#visite").hidden) quitterVisite(); });
 
 // --- working mode of the project: the parallel, eco and fast modes (independent switches), the framing time
 // box and the work time limit. The same block serves Manage and New project (there on etat.npMode, sent once
@@ -5288,9 +5292,20 @@ $("#page").addEventListener("click", async (ev) => {
 // phone, unlocked with it, passes): {} or {mot_de_passe} for the request, false when cancelled; sinon: asked anyway without the field
 async function preuveMdp(texte, options, sinon) {
   const ap = await api("hub/approbations").catch(() => ({}));
+  if (ap.appareil_requis && !(etat.vue || {}).distant) return premierMdp(options);
   if (!ap.mot_de_passe_requis) return sinon && !(await confirmer(sinon, options)) ? false : {};
   const mdp = await confirmer(texte, { ...options, mdp: true });
   return mdp === false ? false : { mot_de_passe: mdp };
+}
+// premierMdp: no password yet (a fresh install), so the proof cannot be made: the password is chosen right here,
+// instead of a dead end pointing to Options; the server keeps its first-password checks (no agent running, 12 characters)
+async function premierMdp(options) {
+  const mdp = await confirmer(t("This needs a password for Athanor, so that no program of this PC can do it in your place. Choose one now (12 characters at least) and keep it: Athanor asks for it before sensitive actions and to open the keys of your servers."),
+    { ...options, mdp: true, titre: t("Choose a password"), ok: t("Save and continue") });
+  if (mdp === false) return false;
+  if (!(await action(api("mot-de-passe", "POST", { ancien: "", nouveau: mdp })))) return false;
+  rafraichir();
+  return { mot_de_passe: mdp };
 }
 async function changerAcces(corps) {
   if (corps.action === "ajouter" || (corps.action === "forcer" && corps.forcer)) {

@@ -139,7 +139,7 @@ Claude works in Seatbelt, the sandbox built into macOS (the same one Claude Code
 ### 3. Your first ten minutes
 
 1. **Home.** Athanor opens on its hub. Ask the assistant anything about Athanor, or say what you want done: it proposes a card, and nothing starts before you press *Launch*. The *?* beside the bell opens the Guide; each module (Home, Studio, the Vault, Servers, E-mail, Missions) shows a short tour on your first visit, replayed from *Guide › Tutorials*.
-2. **A password.** *Settings → Options → Lock*. It locks the app, protects the vault's server keys and is asked again for every approval: set it before adding a server.
+2. **A password.** *Settings → Options → Lock*. It locks the app, protects the vault's server keys and is asked again for every approval: set it before adding a server. Not set yet? The first action that needs it (giving a key to a project, for instance) asks you to choose it on the spot.
 3. **The vault.** *Vault → Paste*: a `.env` block, a token or an MCP configuration. Athanor recognises each key and keeps it encrypted; *Test* checks it with its provider. The keys of your existing projects are already there (imported at the first start, nothing changed for their pilots).
 4. **A project.** *Studio → New project*: a name, a folder and what you want, in your words (✨ *Improve with Claude* turns a few words into a complete request), then *Start*. Its *Access* tab says which vault keys the pilot gets, environment by environment.
 5. **Optional: a server.** *Servers → Add a server*: its address, then its fingerprint to confirm, then a key. Its sheet appears a minute later. Try it first on a server of no importance ([docs/SERVEUR_DE_TEST.md](docs/SERVEUR_DE_TEST.md)).
