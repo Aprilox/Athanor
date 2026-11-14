@@ -39,7 +39,11 @@ func (s *serveurSSHMemoire) terminal(canal ssh.Channel, r *ssh.Request) bool {
 		noter("resize " + taille(r.Payload))
 	case "shell":
 		go func() {
-			canal.Write([]byte("$ "))
+			invite := "$ "
+			if s.invite != "" {
+				invite = s.invite
+			}
+			canal.Write([]byte(invite))
 			var tout []byte
 			b := make([]byte, 4096)
 			for {
@@ -70,9 +74,10 @@ func (s *serveurSSHMemoire) terminal(canal ssh.Channel, r *ssh.Request) bool {
 
 // lecteurTerminal: the output stream read in the background, as the page reads it.
 type lecteurTerminal struct {
-	mu   sync.Mutex
-	b    bytes.Buffer
-	fini chan struct{}
+	mu    sync.Mutex
+	b     bytes.Buffer
+	fini  chan struct{}
+	corps io.Closer
 }
 
 func (l *lecteurTerminal) attendre(t *testing.T, texte string) {
@@ -152,7 +157,7 @@ func TestTerminalSSH(t *testing.T) {
 		if rep.StatusCode != http.StatusOK {
 			t.Fatalf("stream: %d", rep.StatusCode)
 		}
-		l := &lecteurTerminal{fini: make(chan struct{})}
+		l := &lecteurTerminal{fini: make(chan struct{}), corps: rep.Body}
 		go func() {
 			defer close(l.fini)
 			defer rep.Body.Close()
@@ -204,6 +209,26 @@ func TestTerminalSSH(t *testing.T) {
 	if rep, _ := requete("GET", "/api/serveurs/"+srv.ID+"/terminal/"+id, ""); rep.StatusCode != http.StatusConflict {
 		t.Fatalf("second reader: %d, want 409", rep.StatusCode)
 	}
+	// a reloaded page: the next reader gets the screen so far first
+	l.corps.Close()
+	l.attendreFin(t)
+	for i := 0; ; i++ { // the server notices the reader left
+		terminaux.Lock()
+		st := terminaux.m[id]
+		terminaux.Unlock()
+		st.mu.Lock()
+		parti := !st.lecteur
+		st.mu.Unlock()
+		if parti {
+			break
+		}
+		if i == 50 {
+			t.Fatal("the first reader never left")
+		}
+		time.Sleep(40 * time.Millisecond)
+	}
+	l = lire(id)
+	l.attendre(t, "echo bonjour-tape")
 	if c, _ := agir(id, map[string]any{"entree": "x"}, "Origin", "https://evil.example"); c != http.StatusForbidden {
 		t.Fatalf("other origin: %d, want 403", c)
 	}

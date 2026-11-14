@@ -31,6 +31,7 @@ type serveurSSHMemoire struct {
 	autorisees      []ssh.PublicKey // keys let in besides the one given at launch (autoriser)
 	fichiers        sftp.Handlers   // its in-memory SFTP files, kept across connections
 	tailles         chan string     // PTY sizes asked ("pty 80x24", "resize 120x40"), for the terminal's tests
+	invite          string          // the shell's first words (the captures' coloured prompt); "$ " when empty
 }
 
 // autoriser: the key is now in the server's authorized_keys.

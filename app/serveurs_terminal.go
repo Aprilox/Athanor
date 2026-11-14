@@ -32,6 +32,8 @@ var (
 	delaiLecteurTerminal    = time.Minute      // nobody reads its output (page closed): closed
 )
 
+const ecranTerminalMax = 64 << 10
+
 // Why a terminal closed (the interface translates them).
 const (
 	finTerminalDeconnecte = "disconnected" // Disconnect, or the owner closed it
@@ -54,6 +56,7 @@ type sessionTerminal struct {
 	mu          sync.Mutex
 	lecteur     bool      // a GET reads the output now
 	vuLecteur   time.Time // when the last reader left (or the opening)
+	ecran       []byte    // the last ecranTerminalMax bytes sent, replayed to the next reader (a reloaded page)
 }
 
 var terminaux = struct {
@@ -268,16 +271,40 @@ func (s *Serveur) apiTerminalFlux(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Accel-Buffering", "no")
 	w.WriteHeader(http.StatusOK)
 	_ = rc.Flush()
-	envoyer := func(b []byte) bool {
+	ecrire := func(b []byte) bool {
 		if _, err := w.Write(b); err != nil {
 			return false
 		}
+		t.mu.Lock()
+		t.ecran = append(t.ecran, b...)
+		if n := len(t.ecran) - ecranTerminalMax; n > 0 { // shortcut: cut after a line end, a full-screen program redraws on the size sent next
+			coupe := t.ecran[n:]
+			if i := bytes.IndexByte(coupe, '\n'); i >= 0 {
+				coupe = coupe[i+1:]
+			}
+			t.ecran = bytes.Clone(coupe)
+		}
+		t.mu.Unlock()
+		return true
+	}
+	envoyer := func(b []byte) bool {
+		if !ecrire(b) {
+			return false
+		}
 		for len(t.sortie) > 0 { // whatever else is ready, in the same flush
-			if _, err := w.Write(<-t.sortie); err != nil {
+			if !ecrire(<-t.sortie) {
 				return false
 			}
 		}
 		return rc.Flush() == nil
+	}
+	t.mu.Lock()
+	deja := t.ecran
+	t.mu.Unlock()
+	if len(deja) > 0 { // the screen so far, for a page that comes back
+		if _, err := w.Write(deja); err != nil || rc.Flush() != nil {
+			return
+		}
 	}
 	for {
 		select {

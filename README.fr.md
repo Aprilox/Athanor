@@ -880,6 +880,7 @@ Les issues et pull requests sont les bienvenues. Avant d'en ouvrir une :
 - [VirtualDesktop](https://github.com/MScholtes/VirtualDesktop) de Markus Scholtes (MIT), compilé au premier usage : solution de secours quand le bureau « Claude » ne peut pas être créé (fenêtres déplacées sur un bureau virtuel).
 - [go-webview2](https://github.com/jchv/go-webview2) (MIT) pour la fenêtre Windows, [purego](https://github.com/ebitengine/purego) (Apache 2.0) pour l'icône du Dock sur le Mac, et [bubblewrap](https://github.com/containers/bubblewrap) pour la barrière.
 - [cloudflared](https://github.com/cloudflare/cloudflared) (Apache 2.0), téléchargé au premier usage, pour le tunnel de l'accès à distance, et [rsc.io/qr](https://github.com/rsc/qr) (BSD-3-Clause) pour ses QR codes.
+- [xterm.js](https://github.com/xtermjs/xterm.js) et son module d'ajustement (MIT), copiés dans `app/static/xterm` avec leur licence, qui dessinent le terminal des serveurs.
 - Les paquets Go [x/crypto](https://pkg.go.dev/golang.org/x/crypto) et [x/sys](https://pkg.go.dev/golang.org/x/sys) (BSD-3-Clause), pour les connexions SSH aux serveurs et les appels système.
 
 ## Licence

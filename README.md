@@ -880,6 +880,7 @@ Issues and pull requests are welcome. Before opening one:
 - [VirtualDesktop](https://github.com/MScholtes/VirtualDesktop) by Markus Scholtes (MIT), compiled on first use: fallback when the "Claude" desktop cannot be created (windows moved to a virtual desktop).
 - [go-webview2](https://github.com/jchv/go-webview2) (MIT) for the Windows window, [purego](https://github.com/ebitengine/purego) (Apache 2.0) for the Mac's Dock icon, and [bubblewrap](https://github.com/containers/bubblewrap) for the sandbox.
 - [cloudflared](https://github.com/cloudflare/cloudflared) (Apache 2.0), downloaded on first use, for the remote-access tunnel, and [rsc.io/qr](https://github.com/rsc/qr) (BSD-3-Clause) for its QR codes.
+- [xterm.js](https://github.com/xtermjs/xterm.js) and its fit add-on (MIT), copied into `app/static/xterm` with their licence, which draw the servers' terminal.
 - The Go [x/crypto](https://pkg.go.dev/golang.org/x/crypto) and [x/sys](https://pkg.go.dev/golang.org/x/sys) packages (BSD-3-Clause), for SSH connections to servers and system calls.
 
 ## License

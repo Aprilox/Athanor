@@ -1309,3 +1309,16 @@ a.mis-ligne:hover, a.mis-ligne:focus-visible { border-color: var(--accent); }
   .splash { animation: splash-fondu .25s ease-out both !important; }
   .splash.splash-fin { transition: opacity .2s ease !important; }
 }
+
+/* Terminal (#terminal/<id>): xterm.js fills the space left under the bar, on every screen */
+.terminal-page { display: flex; flex-direction: column; gap: 10px; }
+.term-barre { flex-wrap: wrap; align-items: center; gap: 8px; }
+.term-message { display: flex; flex-direction: column; gap: 6px; border-left: 3px solid var(--attention, #d9a03f); }
+.term-hote { height: calc(100dvh - 210px); min-height: 260px; border: 1px solid var(--line); border-radius: 8px; padding: 6px; overflow: hidden; }
+.term-ecran, .term-ecran .xterm { height: 100%; }
+.term-ecran .xterm .xterm-viewport { background-color: transparent; } /* xterm's #000 showed under the last row; .term-hote has the palette's background */
+.srv-reglage-terminal { margin-top: 8px; }
+@media (max-width: 700px) {
+  .term-aide, .term-adresse { display: none; }
+  .term-hote { height: calc(100dvh - 180px); padding: 4px; }
+}

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -14,6 +15,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"golang.org/x/crypto/ssh"
 )
 
 // TestCaptureHub serves the real interface on a free local port, with a temporary data folder and 20
@@ -89,7 +92,7 @@ func TestCaptureHub(t *testing.T) {
 	if err := ecrireConfig(s.config); err != nil {
 		t.Fatal(err)
 	}
-	portSSH := serveursCapture(t)
+	portSSH := serveursCapture(t, s)
 	historiqueCapture(t, projets[0])
 	fournisseursCapture(t, s)
 	// the agents' pending approvals (cloche-*, appr-*): an access, a staging deploy, a prod one refused by the script
@@ -573,15 +576,46 @@ func fournisseursCapture(t *testing.T, s *Serveur) {
 
 // serveursCapture: the Servers page (serveurs-*): four servers (two with a sheet read from testdata, one
 // waiting for its key, one unreachable) and an in-memory SSH server whose port the wizard capture types,
-// so "Continue" reads a real fingerprint. Returns that port.
-func serveursCapture(t *testing.T) int {
-	ssh := lancerSSHMemoire(t, nil, "", func(string, []byte) (string, int) { return "", 1 })
+// so "Continue" reads a real fingerprint. Returns that port. The terminal's captures (terminal-*): Home server
+// opens a shell on that in-memory server with the vault's SSH key; Ancien VPS's address answers nothing.
+func serveursCapture(t *testing.T, s *Serveur) int {
+	mem := lancerSSHMemoire(t, nil, "", func(string, []byte) (string, int) { return "", 1 })
+	mem.invite = "Linux maison 6.1.0-28-arm64 #1 SMP Debian 6.1.119-1 aarch64\r\n\r\n" +
+		"\x1b[1mLast login:\x1b[0m Thu Nov 13 21:04:11 2026 from 192.168.1.12\r\n" +
+		"\x1b[1;34mbackups\x1b[0m  \x1b[1;34mphotos\x1b[0m  \x1b[1;32mrestart.sh\x1b[0m  notes.txt  \x1b[1;36mwww\x1b[0m\r\n" +
+		"\x1b[1;32mpi@maison\x1b[0m:\x1b[1;34m~\x1b[0m$ "
+	var cle string
+	for _, e := range s.coffre.Liste() {
+		if e.Nom == "SSH_VPS_PROD" {
+			cle = e.ID
+		}
+	}
+	pem, err := s.coffre.Valeur(cle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signataire, err := ssh.ParsePrivateKey([]byte(pem))
+	if err != nil {
+		t.Fatal(err)
+	}
+	mem.autoriser(signataire.PublicKey())
+	avant := dialSSH
+	dialSSH = func(ctx context.Context, adresse string, conf *ssh.ClientConfig) (*ssh.Client, error) {
+		switch adresse {
+		case "192.168.1.40:2222": // its confirmed fingerprint is the in-memory server's own
+			return avant(ctx, fmt.Sprintf("127.0.0.1:%d", mem.port), conf)
+		case "old.example.net:22":
+			return nil, errors.New("dial tcp: connection refused")
+		}
+		return avant(ctx, adresse, conf)
+	}
+	t.Cleanup(func() { dialSSH = avant })
 	maintenant := time.Now()
 	liste := []ServeurInventaire{
 		{ID: "c0ffee01", Nom: "VPS production", Hote: "vps.example.org", Port: 22, Utilisateur: "deploy", EmpreinteHote: "SHA256:q3XyV0b8mFh2kLtR7cWnJ5sPzA1dE9gUoK4iY6vBxN0", Roles: []string{"prod"}, Etat: "ok", Cree: maintenant.Add(-72 * time.Hour), Vu: maintenant.Add(-20 * time.Minute), MotDePasseCoupe: true},
-		{ID: "c0ffee02", Nom: "Home server", Hote: "192.168.1.40", Port: 2222, Utilisateur: "pi", Roles: []string{"dev"}, Etat: "ok", Cree: maintenant.Add(-48 * time.Hour), Vu: maintenant.Add(-3 * time.Hour)},
+		{ID: "c0ffee02", Nom: "Home server", Hote: "192.168.1.40", Port: 2222, Utilisateur: "pi", Cle: cle, EmpreinteHote: mem.empreinte, Roles: []string{"dev"}, Etat: "ok", Cree: maintenant.Add(-48 * time.Hour), Vu: maintenant.Add(-3 * time.Hour)},
 		{ID: "c0ffee03", Nom: "Staging", Hote: "staging.example.org", Port: 22, Utilisateur: "root", Roles: []string{"dev", "prod"}, Etat: "inconnu", Cree: maintenant.Add(-10 * time.Minute)},
-		{ID: "c0ffee04", Nom: "Ancien VPS", Hote: "old.example.net", Port: 22, Utilisateur: "admin", Roles: nil, Etat: "injoignable", Cree: maintenant.Add(-900 * time.Hour), Vu: maintenant.Add(-200 * time.Hour)},
+		{ID: "c0ffee04", Nom: "Ancien VPS", Hote: "old.example.net", Port: 22, Utilisateur: "admin", Cle: cle, EmpreinteHote: "SHA256:Zk4pQ8wR2mVnY7tL1cXbE5sHdA9gUoJ3iF6rKvN0aTq", Roles: nil, Etat: "injoignable", Cree: maintenant.Add(-900 * time.Hour), Vu: maintenant.Add(-200 * time.Hour)},
 	}
 	if err := modifierServeurs(func([]ServeurInventaire) ([]ServeurInventaire, error) { return liste, nil }); err != nil {
 		t.Fatal(err)
@@ -607,7 +641,7 @@ func serveursCapture(t *testing.T) int {
 			t.Fatal(err)
 		}
 	}
-	return ssh.port
+	return mem.port
 }
 
 // historiqueCapture (M133, projet-environnements-*): prod's history for its Deployments block, written once

@@ -1182,6 +1182,9 @@ function naviguer() {
   if (page === "reglages" && etat.page !== "reglages") { etat.ongletReglages = etat.ongletDemande || "options"; etat.ongletDemande = null; }
   if (page.startsWith("missions/")) { etat.missionId = decodeURIComponent(page.slice(9)); page = "mission"; } // one mission, its id in the hash
   if (page.startsWith("serveur/")) { srv.id = decodeURIComponent(page.slice(8)); page = "serveur"; } // one server's sheet, its id in the hash
+  const termAvant = etat.page === "terminal" ? term.id : null;
+  if (page.startsWith("terminal/")) { term.id = decodeURIComponent(page.slice(9)); page = "terminal"; } // a server's terminal
+  if (termAvant !== null && (page !== "terminal" || term.id !== termAvant)) quitterTerminal();
   if (!pages[page]) { page = "accueil"; history.replaceState(null, "", "#accueil"); } // an unknown hash: Home
   etat.page = page;
   // T-M218-1: a tour stays on its own pages; another page opened from the menu ends it
@@ -5242,6 +5245,14 @@ $("#page").addEventListener("change", async (ev) => {
   const m = +sel.value;
   if (await action(api("serveurs/sante", "POST", m ? { minutes: m } : { arret: true }))) toast(m ? t("The sites are checked every {0} minutes.", [m]) : t("The sites' health checks are off."), "ok");
 });
+$("#page").addEventListener("change", async (ev) => {
+  const c = ev.target.closest("[data-srv-term-distance]"); if (!c) return;
+  const oui = c.checked;
+  if (oui && !(await confirmer(t("Allow a shell on your servers from your paired phone or computer? Anyone holding that device could then type commands on them. You can turn it off here at any time."), { ok: t("Allow") }))) { c.checked = false; return; }
+  if (!(await action(api("serveurs/terminal-distance", "POST", { autoriser: oui, confirme: oui })))) { c.checked = !oui; return; }
+  srv.termDistance = oui;
+  toast(oui ? t("The terminal can now be opened from your paired devices.") : t("The terminal is off from your paired devices."), "ok");
+});
 const AUTEURS_DEPLOI = { agent: "by the agent", relais: "after a milestone", proprietaire: "by you", auto: "automatically, after a failed check" };
 $("#page").addEventListener("click", async (ev) => {
   const b = ev.target.closest("[data-env-revenir]"); if (!b) return;
@@ -5591,6 +5602,7 @@ function carteServeur(x, fiche, envs, santeSites) {
     ${(envs || []).length ? `<div class="ligne m0 petit srv-sante">${envs.map((pe) => { const st = ((santeSites || {}).envs || {})[pe], [ic, et] = ETATS_SANTE[st] || ["·", "Not checked yet"];
       return `<span class="badge srv-sante-${h(st || "aucun")}" title="${h(t(et))}">${ic} ${h(pe)}</span>`; }).join("")}</div>` : ""}
     <div class="muet petit">${x.vu ? h(t("Seen {0}", [dateLisible(x.vu)])) : h(t("Added {0}", [dateLisible(x.cree)]))}</div>
+    ${x.etat !== "inconnu" && (!(etat.vue || {}).distant || srv.termDistance) ? `<div class="ligne m0"><a class="btn btn-petit btn-primaire" href="#terminal/${encodeURIComponent(x.id)}" data-srv-connecter>${t("Connect")}</a></div>` : ""}
     ${x.etat === "inconnu" && !(etat.vue || {}).distant ? `<div class="ligne m0"><button type="button" class="btn btn-petit btn-primaire" data-srv-verifier="${h(x.id)}">${t("Verify")}</button><span class="muet petit">${t("once its public key is on the server")}</span></div>` : ""}
   </div>`;
 }
@@ -5847,6 +5859,7 @@ pages.serveurs = async () => {
   const distant = !!(etat.vue || {}).distant;
   const [d, c] = await Promise.all([api("serveurs"), distant ? null : api("coffre").catch(() => null)]);
   // shortcut: one request per server for its sheet; fine up to the tens of servers aimed at (E12: 10)
+  srv.termDistance = !!d.terminal_distance;
   const fiches = await Promise.all(d.serveurs.map((x) => api("serveurs/" + encodeURIComponent(x.id)).then((r) => r.fiche).catch(() => null)));
   const liste = d.serveurs.map((x, i) => carteServeur(x, fiches[i], (d.environnements || {})[x.id], d.sante)).join("");
   return `<div class="serveurs">
@@ -5856,7 +5869,7 @@ pages.serveurs = async () => {
     ${liste ? `<div class="grille-projets">${liste}</div>` : srv.aj ? "" : `<div class="vide srv-vide"><p><b>${t("No server yet")}</b></p>
       <p class="muet">${t("Add your VPS or your home server: Athanor checks its fingerprint, connects with a key kept in the vault, then reads what runs on it.")}</p>
       ${distant ? "" : `<button type="button" class="btn btn-primaire" data-srv-ajouter>${t("Add a server")}</button>`}</div>`}
-    ${d.serveurs.length && !srv.aj ? `<details class="plus-options"><summary>${t("More options")}</summary>${reglageSante(d.sante || {}, distant)}</details>` : ""}
+    ${d.serveurs.length && !srv.aj ? `<details class="plus-options"><summary>${t("More options")}</summary>${reglageSante(d.sante || {}, distant)}${distant ? "" : `<label class="radio petit srv-reglage-terminal"><input type="checkbox" data-srv-term-distance${d.terminal_distance ? " checked" : ""}> ${t("Allow the terminal and the server's files from paired devices")}</label>`}</details>` : ""}
   </div>`;
 };
 // the wizard's fields as typed, kept before each render (the address step, then the chosen way)
@@ -6056,7 +6069,8 @@ pages.serveur = async () => {
       <div class="ligne m0 srv-utilise"><span class="muet petit">${t("Used by")}</span>${(d.environnements || []).length ? d.environnements.map((pe) => `<a class="badge" href="#acces" data-projet="${h(pe.slice(0, pe.lastIndexOf("/")))}" data-cible="acces">${h(pe)}</a>`).join("") : `<span class="muet petit">${t("No project environment uses this server yet.")}</span>`}</div>
       <div class="muet petit">${x.mot_de_passe_coupe ? t("Password logins are cut: Athanor and you connect with keys only.") : t("Password logins are still open on this server.")}</div>
       <div class="muet petit">${f && f.date ? h(t("Sheet read {0}", [dateLisible(f.date)])) : ""}${x.vu ? (f && f.date ? " · " : "") + h(t("Seen {0}", [dateLisible(x.vu)])) : ""}</div>
-      ${distant ? `<p class="muet petit m0">${t("Read only from this device: the server is changed on the computer.")}</p>` : `<div class="ligne m0">
+      ${distant ? `<p class="muet petit m0">${t("Read only from this device: the server is changed on the computer.")}</p>${srv.termDistance && !attente ? `<div class="ligne m0"><a class="btn btn-primaire" href="#terminal/${encodeURIComponent(x.id)}">${t("Connect")}</a></div>` : ""}` : `<div class="ligne m0">
+        ${attente ? "" : `<a class="btn btn-primaire" href="#terminal/${encodeURIComponent(x.id)}" data-srv-connecter>${t("Connect")}</a>`}
         ${attente ? `<button type="button" class="btn btn-primaire" data-srv-verifier="${h(x.id)}">${t("Verify")}</button>` : `<button type="button" class="btn" data-srv-rafraichir>↻ ${t("Refresh")}</button>`}
         ${!attente && !x.mot_de_passe_coupe ? `<button type="button" class="btn" data-srv-couper="${h(x.id)}">${t("Cut password logins")}</button>` : ""}
         ${attente ? "" : `<button type="button" class="btn" data-srv-durcir="${h(x.id)}" title="${h(t("A fixed plan: a user with sudo instead of root, SSH keys only, no root login, a firewall that refuses all but SSH, 80 and 443, security updates, the clock synchronised, Caddy. Each step already in place is skipped; you accept the plan first."))}">🛡 ${t("Harden this server")}</button>`}</div>`}
@@ -6205,6 +6219,191 @@ $("#page").addEventListener("click", async (ev) => {
   rendrePage();
 });
 
+// --- Terminal (#terminal/<id>, M231b): the shell is opened by the Go side (serveurs_terminal.go) with the vault's
+// key; the page only exchanges bytes with it and draws them with xterm.js (app/static/xterm, MIT, loaded here only)
+const term = { id: "", serveur: "", session: "", nom: "", x: null, fit: null, el: null, lecteur: null, attente: "", enVol: false, msg: null, obs: null };
+const FINS_TERMINAL = { disconnected: "You disconnected.", ended: "The session ended on the server (exit, or the connection was lost).",
+  idle: "Closed after 15 minutes without activity.", abandoned: "Closed: nobody looked at it for a minute." };
+// a refusal in plain words, then what to do about it (the Go side already says it for a refused key or a changed fingerprint)
+const SOLUTIONS_TERMINAL = {
+  "The server did not answer": "Check that the server is on and that its address and port are right, then try again.",
+  "The vault is locked: unlock Athanor to use this secret": "Unlock Athanor with its password, then connect again.",
+  "Too many terminals are open: close one first": "Disconnect a terminal you no longer use, or wait a minute for a closed page's terminal to end.",
+  "This terminal is already open in another window": "Use that window, or close it: this one can read the terminal a moment later.",
+  "The server refused to open a terminal": "The server accepted the key but not a shell for this user: check the user's shell on the server.",
+  "Not available from a remote device": "The terminal is off from paired devices: allow it on the computer, in Servers › More options.",
+};
+// Athanor's light and dark terminal palettes (the full theme choice comes in the terminal's settings)
+const PALETTES_TERMINAL = {
+  sombre: { background: "#141b24", foreground: "#e9eef3", cursor: "#3fc6a5", cursorAccent: "#141b24", selectionBackground: "#3a4b60",
+    black: "#1b2430", red: "#f2777a", green: "#7fd88f", yellow: "#f0c674", blue: "#6cb6ff", magenta: "#d6a0f5", cyan: "#5fd7d7", white: "#c9d1d9",
+    brightBlack: "#7d8b99", brightRed: "#ff9a9c", brightGreen: "#a3f0ae", brightYellow: "#ffe08a", brightBlue: "#9ccfff", brightMagenta: "#e8c1ff", brightCyan: "#8ff0f0", brightWhite: "#ffffff" },
+  clair: { background: "#fbfbf9", foreground: "#1f2933", cursor: "#0f7a62", cursorAccent: "#fbfbf9", selectionBackground: "#c8dbf5",
+    black: "#1f2933", red: "#b42318", green: "#1f7a33", yellow: "#8a5a00", blue: "#1f5fbf", magenta: "#8e3fb0", cyan: "#0e6f78", white: "#59636e",
+    brightBlack: "#4a5560", brightRed: "#c9372c", brightGreen: "#256f3a", brightYellow: "#7a4f00", brightBlue: "#2c69cb", brightMagenta: "#7a4fd6", brightCyan: "#0b6570", brightWhite: "#2b3640" },
+};
+const paletteTerminal = () => PALETTES_TERMINAL[["clair", "sable"].includes(etat.theme) ? "clair" : "sombre"];
+let xtermCharge;
+function chargerXterm() {
+  if (window.Terminal) return Promise.resolve();
+  const script = (src) => new Promise((ok, ko) => { const s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = () => ko(new Error(t("Error {0}", [src]))); document.head.append(s); });
+  if (!document.querySelector('link[href="xterm/xterm.css"]')) { const l = document.createElement("link"); l.rel = "stylesheet"; l.href = "xterm/xterm.css"; document.head.append(l); }
+  return (xtermCharge ||= script("xterm/xterm.js").then(() => script("xterm/addon-fit.js")).catch((e) => { xtermCharge = null; throw e; }));
+}
+pages.terminal = async () => {
+  const distant = !!(etat.vue || {}).distant, d = await api("serveurs"), x = d.serveurs.find((s) => s.id === term.id);
+  srv.termDistance = !!d.terminal_distance;
+  const retour = `<p class="m0"><a href="#serveurs" class="petit">← ${t("Servers")}</a></p>`;
+  if (!x) return `<div class="serveurs">${retour}<div class="vide"><p><b>${t(d.serveurs.length ? "This server is not in your list." : "No server yet")}</b></p>
+    <p class="muet">${t("Add a server first, then press Connect on its card: its terminal opens here.")}</p><a class="btn btn-primaire" href="#serveurs">${t("Servers")}</a></div></div>`;
+  const avis = distant && !d.terminal_distance ? [t("The terminal is off from paired devices: a shell is the strongest right on a server."), t("It can be allowed on the computer, in Servers › More options.")]
+    : x.etat === "inconnu" ? [t("Athanor cannot reach this server with its key yet."), t("Put its public key on the server, then press Verify on its sheet.")] : null;
+  term.nom = x.nom;
+  return `<div class="serveurs terminal-page">
+    <div class="ligne m0 term-barre"><a href="#serveur/${encodeURIComponent(x.id)}" class="petit">← ${h(x.nom)}</a>
+      <code class="muet petit term-adresse">${h(x.utilisateur)}@${h(x.hote)}</code><span class="pastille attend" id="term-etat">${t("Connecting…")}</span><span class="espace"></span>
+      ${avis ? "" : `<span class="muet petit term-aide">${t("Copy: Ctrl+Shift+C · Paste: Ctrl+Shift+V")}</span>
+      <button type="button" class="btn btn-petit" data-term-copier>${t("Copy")}</button><button type="button" class="btn btn-petit" data-term-coller>${t("Paste")}</button>
+      <button type="button" class="btn btn-petit" data-term-deconnecter>${t("Disconnect")}</button>`}</div>
+    ${avis ? `<div class="bloc term-message"><p class="m0"><b>${h(avis[0])}</b></p><p class="muet m0">${h(avis[1])}</p><div class="ligne m0"><a class="btn" href="#serveur/${encodeURIComponent(x.id)}">${t("Back to the server")}</a></div></div>`
+      : `<div class="bloc term-message" id="term-message" role="alert" hidden></div><div class="term-hote" id="term-hote"></div>`}
+  </div>`;
+};
+// the terminal fills the content area down to its bottom edge (a fixed calc() overflowed under the page's header)
+function hauteurTerminal() {
+  const p = $("#page"), hote = $("#term-hote"); if (!p || !hote) return;
+  const bas = p.getBoundingClientRect().bottom - parseFloat(getComputedStyle(p).paddingBottom);
+  hote.style.height = Math.max(220, Math.floor(bas - hote.getBoundingClientRect().top - 2)) + "px";
+}
+function etatTerminal(texte, classe) { const e = $("#term-etat"); if (e) { e.textContent = texte; e.className = "pastille " + classe; } }
+// a message above the terminal: what happened, what to do, and Connect again
+function messageTerminal(titre, solution) {
+  term.msg = titre ? [titre, solution] : null;
+  const m = $("#term-message"); if (!m) return;
+  m.hidden = !titre;
+  const hote = $("#term-hote"); if (hote) { hote.inert = !!titre; hauteurTerminal(); } // no keyboard into a terminal that is not connected
+  if (titre) m.innerHTML = `<p class="m0"><b>${h(titre)}</b></p>${solution ? `<p class="muet m0">${h(solution)}</p>` : ""}<div class="ligne m0"><button type="button" class="btn btn-primaire" data-term-reconnecter>${t("Connect again")}</button><a class="btn" href="#serveur/${encodeURIComponent(term.id)}">${t("Back to the server")}</a></div>`;
+  $(".term-barre")?.querySelectorAll("[data-term-copier], [data-term-coller], [data-term-deconnecter]").forEach((b) => (b.disabled = !!titre));
+}
+function erreurTerminal(cle, texte) {
+  etatTerminal(t("Not connected"), "attend");
+  messageTerminal(texte || t(cle), SOLUTIONS_TERMINAL[cle] ? t(SOLUTIONS_TERMINAL[cle]) : "");
+}
+async function monterTerminal() {
+  const hote = $("#term-hote"); if (!hote) return;
+  try { await chargerXterm(); } catch (e) { return erreurTerminal("", e.message); }
+  if (!$("#term-hote") || etat.page !== "terminal") return;
+  if (!term.x) {
+    term.el = document.createElement("div"); term.el.className = "term-ecran";
+    hote.append(term.el);
+    term.x = new window.Terminal({ cursorBlink: true, scrollback: 5000, fontSize: 14, theme: paletteTerminal(),
+      fontFamily: 'ui-monospace, "Cascadia Mono", Consolas, "DejaVu Sans Mono", Menlo, monospace' });
+    term.fit = new window.FitAddon.FitAddon(); term.x.loadAddon(term.fit); term.x.open(term.el);
+    term.x.onData(taperTerminal);
+    term.x.onResize(({ cols, rows }) => { if (term.session) agirTerminal({ cols, lignes: rows }); });
+    term.x.attachCustomKeyEventHandler((e) => {
+      if (e.type !== "keydown") return true;
+      const k = e.key.toLowerCase(), ctrl = e.ctrlKey || e.metaKey;
+      if (ctrl && e.shiftKey && k === "c" || e.ctrlKey && !e.shiftKey && k === "c" && term.x.hasSelection()) { e.preventDefault(); copierTerminal(); return false; }
+      if (ctrl && k === "v") return false; // the browser's paste event: xterm pastes it (bracketed paste kept)
+      return true;
+    });
+    term.obs = new ResizeObserver(() => requestAnimationFrame(() => { hauteurTerminal(); if (term.el.isConnected && term.el.offsetWidth) term.fit.fit(); }));
+  } else hote.append(term.el);
+  term.obs.disconnect(); term.obs.observe($("#page")); hauteurTerminal();
+  term.x.options.theme = paletteTerminal(); hote.style.background = paletteTerminal().background;
+  term.fit.fit();
+  if (term.msg) return messageTerminal(...term.msg);
+  if (term.serveur !== term.id) { // another server: its own screen and session
+    if (term.session) agirTerminal({ fermer: true });
+    term.x.reset(); term.session = sessionStorage.getItem("athanor.terminal." + term.id) || ""; term.serveur = term.id;
+  }
+  if (!term.lecteur) connecterTerminal();
+  else { etatTerminal(t("Connected"), "travaille"); term.x.focus(); }
+}
+async function connecterTerminal() {
+  messageTerminal(null); etatTerminal(t("Connecting…"), "attend");
+  const id = term.id;
+  if (!term.session) {
+    try {
+      const r = await api("serveurs/" + encodeURIComponent(id) + "/terminal", "POST", { cols: term.x.cols, lignes: term.x.rows });
+      term.session = r.session; sessionStorage.setItem("athanor.terminal." + id, r.session);
+    } catch (e) { return id === term.id && erreurTerminal((e.data || {}).erreur_key || "", e.message); }
+  }
+  lireTerminal(id, term.session);
+}
+// the output, read as a byte stream until the terminal ends (or the page leaves: aborted)
+async function lireTerminal(id, session) {
+  const ctl = new AbortController(); term.lecteur = ctl;
+  try {
+    const r = await fetch(`/api/serveurs/${encodeURIComponent(id)}/terminal/${encodeURIComponent(session)}`, { headers: { "X-Athanor": CSRF }, signal: ctl.signal });
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      term.lecteur = null;
+      if (r.status === 410) { // closed meanwhile (a reload after it ended): a new one, once
+        sessionStorage.removeItem("athanor.terminal." + id); term.session = "";
+        return d.fin === "abandoned" || d.fin === "ended" ? connecterTerminal() : finTerminal(d.fin);
+      }
+      return erreurTerminal(d.erreur_key || "", d.erreur_key ? t(d.erreur_key) : t("Error {0}", [r.status]));
+    }
+    term.x.reset(); // the Go side replays the screen so far
+    etatTerminal(t("Connected"), "travaille"); term.x.options.disableStdin = false; term.x.focus();
+    agirTerminal({ cols: term.x.cols, lignes: term.x.rows }); // the size it had when the page was away
+    const lu = r.body.getReader();
+    for (;;) { const { value, done } = await lu.read(); if (done) break; term.x.write(value); }
+  } catch (e) { if (ctl.signal.aborted) return; }
+  if (term.lecteur !== ctl) return;
+  term.lecteur = null;
+  // the stream ended: the terminal closed; the Go side says why
+  const f = await fetch(`/api/serveurs/${encodeURIComponent(id)}/terminal/${encodeURIComponent(session)}`, { method: "POST", headers: { "X-Athanor": CSRF, "Content-Type": "application/json" }, body: "{}" })
+    .then((r) => r.json()).catch(() => ({}));
+  if (term.session === session) finTerminal(f.fin || "ended");
+}
+function finTerminal(raison) {
+  sessionStorage.removeItem("athanor.terminal." + term.id); term.session = "";
+  if (term.x) term.x.options.disableStdin = true;
+  etatTerminal(t("Disconnected"), "attend");
+  messageTerminal(t("Disconnected"), t(FINS_TERMINAL[raison] || FINS_TERMINAL.ended));
+}
+async function agirTerminal(corps) {
+  if (!term.session) return null;
+  const r = await fetch(`/api/serveurs/${encodeURIComponent(term.serveur)}/terminal/${encodeURIComponent(term.session)}`, { method: "POST", headers: { "X-Athanor": CSRF, "Content-Type": "application/json" }, body: JSON.stringify(corps) }).catch(() => null);
+  return r && r.json().catch(() => ({}));
+}
+// keystrokes in order, gathered while one request is on its way (a paste: in pieces under the Go side's limit)
+async function taperTerminal(d) {
+  term.attente += d;
+  if (term.enVol) return;
+  term.enVol = true;
+  while (term.attente && term.session) {
+    let n = Math.min(term.attente.length, 16000);
+    if (n < term.attente.length && /[\ud800-\udbff]/.test(term.attente[n - 1])) n--; // never half a character
+    const morceau = term.attente.slice(0, n); term.attente = term.attente.slice(n);
+    await agirTerminal({ entree: morceau });
+  }
+  term.attente = ""; term.enVol = false;
+}
+function copierTerminal() {
+  const s = term.x && term.x.getSelection();
+  if (!s) return toast(t("Select text in the terminal first."));
+  navigator.clipboard.writeText(s).then(() => toast(t("Copied."), "ok"), () => toast(t("The browser refused to copy."), "erreur"));
+}
+// leaving the page: the stream stops; the Go side ends the terminal a minute later unless the page comes back
+function quitterTerminal() { if (term.lecteur) { term.lecteur.abort(); term.lecteur = null; } if (term.obs) term.obs.disconnect(); term.msg = null; }
+$("#page").addEventListener("click", async (ev) => {
+  if (etat.page !== "terminal") return;
+  const b = ev.target.closest("[data-term-copier], [data-term-coller], [data-term-deconnecter], [data-term-reconnecter]"); if (!b) return;
+  const d = b.dataset;
+  if (d.termCopier !== undefined) return copierTerminal();
+  if (d.termColler !== undefined) {
+    return navigator.clipboard.readText().then((s) => { term.x.paste(s); term.x.focus(); }, () => toast(t("The browser refused to paste: use Ctrl+Shift+V in the terminal."), "erreur"));
+  }
+  if (d.termReconnecter !== undefined) { term.msg = null; term.x.reset(); return connecterTerminal(); }
+  const lecteur = term.lecteur; term.lecteur = null; if (lecteur) lecteur.abort();
+  await agirTerminal({ fermer: true });
+  finTerminal("disconnected");
+});
+
 pages.audit = async () => {
   const f = aud.f, qs = new URLSearchParams(Object.entries(f).filter(([, v]) => v)), lignes = [];
   let d, avant = 0;
@@ -6282,6 +6481,7 @@ async function rendrePage() {
   proposerTutoriel();
   if (etat.page === "journal") rendreJournal();
   if (etat.page === "sante") rendreSortie();
+  if (etat.page === "terminal") monterTerminal();
 }
 
 // the scroll of each list of the page, kept across a rebuild: same element = same classes, same rank

@@ -39,8 +39,11 @@ func adresseSSH(hote string, port int) string {
 	return net.JoinHostPort(hote, strconv.Itoa(port))
 }
 
-// dialSSH : TCP puis poignée de main SSH, le tout borné par delaiSSH (un serveur muet ne bloque pas).
-func dialSSH(ctx context.Context, adresse string, conf *ssh.ClientConfig) (*ssh.Client, error) {
+// dialSSH : TCP puis poignée de main SSH, le tout borné par delaiSSH (un serveur muet ne bloque pas) ;
+// variable pour que le monde des captures dirige un serveur de démonstration vers son serveur en mémoire.
+var dialSSH = dialSSHReseau
+
+func dialSSHReseau(ctx context.Context, adresse string, conf *ssh.ClientConfig) (*ssh.Client, error) {
 	ctx, annuler := context.WithTimeout(ctx, delaiSSH)
 	defer annuler()
 	conn, err := (&net.Dialer{}).DialContext(ctx, "tcp", adresse)
