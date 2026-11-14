@@ -1176,6 +1176,8 @@ function naviguer() {
   if (page.startsWith("serveur/")) { srv.id = decodeURIComponent(page.slice(8)); page = "serveur"; } // one server's sheet, its id in the hash
   if (!pages[page]) { page = "accueil"; history.replaceState(null, "", "#accueil"); } // an unknown hash: Home
   etat.page = page;
+  // T-M218-1: a tour stays on its own pages; another page opened from the menu ends it
+  if (etat.visite >= 0 && (etapesVisite()[etat.visite] || {}).page !== page) finirVisite();
   // the page remembered for its module's entry
   const m = moduleDePage(page);
   if (m && m.id !== "hub" && etat.pagesModules[m.id] !== "#" + page) {
@@ -1321,6 +1323,8 @@ function placerBulle() {
     let haut = z.bottom + 14; if (haut + hb > window.innerHeight - 8) haut = Math.max(8, z.top - hb - 14);
     bulle.style.top = haut + "px";
     bulle.style.left = Math.max(8, Math.min(z.left, window.innerWidth - l - 8)) + "px";
+  } else if ((etat.visiteSelecteurs || []).length) { // its target gone (a form opened over it): aside, bottom right, never over the form
+    bulle.style.top = Math.max(8, window.innerHeight - bulle.offsetHeight - 16) + "px"; bulle.style.left = Math.max(8, window.innerWidth - bulle.offsetWidth - 16) + "px";
   } else { bulle.style.top = Math.max(8, (window.innerHeight - bulle.offsetHeight) / 2) + "px"; bulle.style.left = Math.max(8, (window.innerWidth - bulle.offsetWidth) / 2) + "px"; }
 }
 async function montrerVisite() {
@@ -6147,6 +6151,7 @@ async function rendrePage() {
   const a = document.activeElement, saisie = a && a.id && $("#page").contains(a) && a.matches("input[type=text], textarea") ? [a.id, a.selectionStart, a.selectionEnd] : null;
   garderFocus($("#page"), () => { $("#page").innerHTML = html; });
   etat.pageRendue = etat.page;
+  if (etat.visite >= 0 && !$("#visite").hidden) { etat.visiteCible = null; placerVoile(); placerBulle(); } // the page rebuilt: the target found again, or the bubble aside
   // text of the Home bar: kept across a live refresh, then handed to the chat or the new project's request
   const barre = $("#accueil-texte"); if (barre) barre.value = etat.accueilTexte || "";
   const pre = etat.preRempli;

@@ -138,7 +138,7 @@ Claude travaille dans Seatbelt, la barrière intégrée à macOS (celle qu'utili
 
 ### 3. Vos dix premières minutes
 
-1. **L'accueil.** Athanor s'ouvre sur son hub. Posez à l'assistant n'importe quelle question sur Athanor, ou dites ce que vous voulez faire : il propose une carte, et rien ne démarre avant que vous appuyiez sur *Lancer*. Le *?* à côté de la cloche ouvre le Guide ; l'Accueil, Studio et le Coffre montrent chacun une courte visite à votre première venue.
+1. **L'accueil.** Athanor s'ouvre sur son hub. Posez à l'assistant n'importe quelle question sur Athanor, ou dites ce que vous voulez faire : il propose une carte, et rien ne démarre avant que vous appuyiez sur *Lancer*. Le *?* à côté de la cloche ouvre le Guide ; chaque module (Accueil, Studio, Coffre, Serveurs, E-mail, Missions) montre une courte visite à votre première venue, à rejouer depuis *Guide › Tutoriels*.
 2. **Un mot de passe.** *Réglages → Options → Verrou*. Il verrouille l'application, protège les clés de serveurs du coffre et est redemandé à chaque approbation : définissez-le avant d'ajouter un serveur.
 3. **Le coffre.** *Coffre → Coller* : un bloc `.env`, un jeton ou une configuration MCP. Athanor reconnaît chaque clé et la garde chiffrée ; *Tester* la vérifie auprès de son fournisseur. Les clés de vos projets existants y sont déjà (importées au premier démarrage, rien n'a changé pour leurs pilotes).
 4. **Un projet.** *Studio → Nouveau projet* : un nom, un dossier et ce que vous voulez, avec vos mots (✨ *Améliorer avec Claude* transforme quelques mots en une demande complète), puis *Démarrer*. Son onglet *Accès* dit quelles clés du coffre le pilote reçoit, environnement par environnement.

@@ -42,7 +42,17 @@ func (moduleMissions) Elements(s *Serveur) []ElementHub {
 	}
 	return out
 }
-func (moduleMissions) Tutoriel() []EtapeTutoriel { return nil }
+
+// Tutoriel: the Missions page's 5 steps (no mission yet: the bubble in the middle for the lanes).
+func (moduleMissions) Tutoriel() []EtapeTutoriel {
+	return []EtapeTutoriel{
+		{Titre: "One sentence is enough", Texte: "Say what you want in the bar of the home page, for example “Put @my-shop online at shop.example.com”. The orchestrator answers with a mission card.", Cible: ".missions .cof-tete"},
+		{Titre: "The card first", Texte: "The card says what will be built and deployed, what will be touched and what will ask for your accord. Change it or refuse it: nothing starts before you press Launch.", Cible: ".mis-liste, .missions .vide"},
+		{Titre: "Lanes", Texte: "A launched mission runs in lanes: the project's pilot builds, the Servers agent prepares the environments, then the DNS names and HTTPS. Click a mission to see each lane, its state and its links.", Cible: ".mis-liste"},
+		{Titre: "Your accord", Texte: "A plan, a deployment to prod or the infra vault waits for you: the bell and your phone ask, and you answer from there. Pause and Stop are at the top of the mission's page.", Cible: "[data-notifs]"},
+		{Titre: "Find it again", Texte: "This tutorial stays in the “?”, with the guide “Launch a mission”.", Cible: ".btn-guide"},
+	}
+}
 
 // Resume: missions in progress (being prepared or launched), to launch (proposed or accepted), done.
 func (moduleMissions) Resume(*Serveur) ResumeModule {
