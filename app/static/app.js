@@ -1442,10 +1442,16 @@ const chat = { modele: (() => { try { return localStorage.getItem("chatModele") 
   // Internet: Claude may search and read the web, only when the message needs it (remembered on this device)
   internet: (() => { try { return localStorage.getItem("chatInternet") === "1"; } catch (e) { return false; } })() };
 
-function mdChat(s) {
+// M227b: emojis and pictograms out of the assistant's text, on display only (the conversation keeps them), never in
+// inline code; a space is kept only between two words. ©, ® and ™ stay.
+const RE_EMOJI = /([ \t]?)(?:(?![©®™])\p{Extended_Pictographic}|[\u{1F1E6}-\u{1F1FF}\u{1F3FB}-\u{1F3FF}\uFE0F\u200D\u20E3])+([ \t]?)/gu;
+const sansEmoji = (s) => s.split(/(`[^`\n]+`)/).map((x, i) => i % 2 ? x : x.replace(RE_EMOJI, (m, a, b, o, t) => a && b || b && o && !/\s/.test(t[o - 1]) ? " " : "")).join("");
+
+// sobre: the assistant's text (sansEmoji outside code blocks); the user's text is shown as written
+function mdChat(s, sobre) {
   return String(s || "").split(/```/).map((bloc, i) => {
     if (i % 2) return `<pre class="chat-code">${h(bloc.replace(/^[a-zA-Z0-9_+-]*\n/, ""))}</pre>`;
-    return h(bloc).replace(/`([^`\n]+)`/g, "<code>$1</code>").replace(/\*\*([^*\n]+)\*\*/g, "<b>$1</b>")
+    return h(sobre ? sansEmoji(bloc) : bloc).replace(/`([^`\n]+)`/g, "<code>$1</code>").replace(/\*\*([^*\n]+)\*\*/g, "<b>$1</b>")
       .replace(/^(\s*)[-*] (.*)$/gm, "$1• $2").replace(/^#{1,4} (.*)$/gm, "<b>$1</b>")
       .replace(/(^|[^\w*])\*(\S(?:[^*\n]*\S)?)\*(?![\w*])/gm, "$1<i>$2</i>").replace(/\n/g, "<br>"); // M195: *italic*, never a*b*c
   }).join("");
@@ -1453,8 +1459,8 @@ function mdChat(s) {
 
 function messageChat(m, i) {
   const quand = m.quand ? new Date(m.quand).toLocaleTimeString(document.documentElement.lang || "en", { hour: "2-digit", minute: "2-digit" }) : "";
-  const pieces = (m.pieces || []).length ? `<div class="petit muet">${m.pieces.map((x) => "📎 " + h(x.split("/").pop())).join("<br>")}</div>` : "";
-  if (m.role === "vous") return `<div class="chat-msg chat-vous"><div class="chat-bulle">${mdChat(m.texte)}${pieces}</div><div class="chat-meta">${h(quand)}${m.mode === "modif" ? " · " + (m.pause ? t("changes the files after the pilot's cycle") : t("may change the files")) : ""}${m.internet ? " · 🌐 " + t("Internet") : ""}</div></div>`;
+  const pieces = (m.pieces || []).length ? `<div class="petit muet">${m.pieces.map((x) => h(x.split("/").pop())).join("<br>")}</div>` : "";
+  if (m.role === "vous") return `<div class="chat-msg chat-vous"><div class="chat-bulle">${mdChat(m.texte)}${pieces}</div><div class="chat-meta">${h(quand)}${m.mode === "modif" ? " · " + (m.pause ? t("changes the files after the pilot's cycle") : t("may change the files")) : ""}${m.internet ? " · " + t("Internet") : ""}</div></div>`;
   const relance = m.pilote ? `<div class="chat-meta">${m.pilote === "relance" ? `<span class="ok">▶ ${t("The pilot started again.")}</span>` : `<span class="attention">${t("The pilot did not start again: {0}", [h(t(m.pilote))])}</span>`}</div>` : "";
   if (m.role === "erreur") return `<div class="chat-msg chat-claude"><div class="chat-bulle chat-erreur">${h(t(m.texte))}</div>${relance}</div>`;
   const note = (m.texte.match(/<note>([\s\S]*?)<\/note>/) || [])[1];
@@ -1462,7 +1468,7 @@ function messageChat(m, i) {
   const mcp = (m.texte.match(/<mcp>([\s\S]*?)<\/mcp>/) || [])[1];
   const texte = m.texte.replace(/<(note|agent|mcp)>[\s\S]*?<\/\1>/g, "").trim();
   const actions = (m.outils || []).length ? `<details class="chat-actions"><summary>${t("{0} action(s)", [m.outils.length])}</summary>${m.outils.map((o) => `<div>${h(t(o))}</div>`).join("")}</details>` : "";
-  return `<div class="chat-msg chat-claude"><div class="chat-bulle">${mdChat(texte)}
+  return `<div class="chat-msg chat-claude"><div class="chat-bulle">${mdChat(texte, true)}
     ${note ? `<div class="chat-note"><div class="muet petit">${t("Note for the pilot")}</div><div>${mdChat(note.trim())}</div>
       <div class="ligne m0 mt-1">${m.note ? `<span class="ok petit">✔ ${t("Sent to the pilot")}</span>` : `<button type="button" class="btn btn-petit btn-primaire" data-chat-note="${i}">${t("Send to the pilot")}</button>`}</div></div>` : ""}
     ${agent !== undefined ? carteAgentChat(agent, m, i) : ""}
@@ -1486,7 +1492,7 @@ function carteMCPChat(json, m, i) {
     <label class="champ"><span>${t("What it lets the pilot do")}</span><input type="text" data-cm="description" value="${v(a.description)}"></label>
     <label class="champ"><span>${t("Configuration")}</span><textarea data-cm="config" rows="5" spellcheck="false">${h(JSON.stringify(a.config, null, 2))}</textarea></label>
     ${a.source ? `<div class="petit muet">${t("Source: {0}", [h(a.source)])}</div>` : ""}
-    ${fichiers.map(([n, c]) => `<details class="chat-actions"><summary>📄 ${h(n)}</summary><pre class="chat-code">${h(String(c))}</pre></details>`).join("")}
+    ${fichiers.map(([n, c]) => `<details class="chat-actions"><summary>${h(n)}</summary><pre class="chat-code">${h(String(c))}</pre></details>`).join("")}
     <label class="interrupteur"><input type="checkbox" data-cm="windows" ${a.windows ? "checked" : ""}><span>${t("Windows program: runs on Windows, outside the cage, with your rights")}</span></label>
     <div class="ligne m0 mt-1"><button type="button" class="btn btn-petit btn-primaire" data-chat-mcp="${i}">${t("Add to the library")}</button>
       <span class="petit muet">${t("Its keys, if it needs any, are filled in on the Skills & MCP page.")}</span></div></div>`;
@@ -1541,7 +1547,7 @@ function filChat(d) {
   } else if (d.en_cours) {
     const p = d.partiel || {};
     const textes = p.textes || [], outils = p.outils || [];
-    html += `<div class="chat-msg chat-claude"><div class="chat-bulle chat-attente">${textes.length ? mdChat(textes[textes.length - 1].replace(/<(note|agent|mcp)>[\s\S]*$/, "")) : ""}
+    html += `<div class="chat-msg chat-claude"><div class="chat-bulle chat-attente">${textes.length ? mdChat(textes[textes.length - 1].replace(/<(note|agent|mcp)>[\s\S]*$/, ""), true) : ""}
       <div class="muet petit"><span class="chat-points"><i></i><i></i><i></i></span> ${outils.length ? h(t(outils[outils.length - 1])) : t("Claude is thinking…")}</div></div></div>`;
   }
   return html;
@@ -1579,9 +1585,9 @@ function aideChat() {
   return choisir([
     t("• Questions: how a part works, where something is, what the pilot did, why a milestone failed. Claude reads the project's files to answer."),
     t("• Notes for the pilot: by default Claude changes nothing. A change you ask for becomes a note with a “Send to the pilot” button; the pilot reads it at its next cycle."),
-    t("• ✏️ Change the files: switched on, Claude makes the change you ask for itself (no commands), and Athanor commits it. If the pilot runs, it pauses at the end of its cycle, then starts again."),
-    t("• 📎 Files: attach or paste images, PDF, documents; Claude reads them, and a note sent to the pilot names them."),
-    t("• 🌐 Internet: Claude may search the web, only when a message needs it."),
+    t("• Change the files: switched on, Claude makes the change you ask for itself (no commands), and Athanor commits it. If the pilot runs, it pauses at the end of its cycle, then starts again."),
+    t("• Files: attach or paste images, PDF, documents; Claude reads them, and a note sent to the pilot names them."),
+    t("• Internet: Claude may search the web, only when a message needs it."),
     t("• Sub-agents: describe a specialist for the team; Claude shapes it with you, then a card adds it with one click."),
     t("• MCP servers: name a program or a service the pilot should drive; Claude finds a server (or writes one), then a card adds it to the library."),
   ].join("\n"), [{ id: "ok", texte: t("OK"), primaire: true }], { titre: t("What the chat can do"), large: true });
@@ -1609,8 +1615,8 @@ pages.chat = async () => {
       <textarea id="chat-texte" rows="${tactile() ? 2 : 3}" placeholder="${h(tactile() ? t("Your question or the change you want…") : t("Your question or the change you want… (Enter sends, Shift+Enter: new line)"))}"></textarea>
       ${zonePieces("ct")}
       <div class="ligne m0 mt-1 chat-options">
-        <label class="interrupteur m0 petit" title="${h(t("Off: Claude changes nothing, a change becomes a note for the pilot. On: Claude changes the files you ask it to change, and Athanor commits them (a running pilot pauses at the end of its cycle)."))}"><input type="checkbox" id="chat-modif" ${chat.modif ? "checked" : ""}><span>✏️ ${t("Change the files")}</span></label>
-        <label class="interrupteur m0 petit" title="${h(t("Claude may search and read the web for your messages, only when one needs it (look online, compare with what exists elsewhere, a current fact). A question about the project is answered from its files."))}"><input type="checkbox" id="chat-internet" ${chat.internet ? "checked" : ""}><span>🌐 ${t("Internet")}</span></label></div>
+        <label class="interrupteur m0 petit" title="${h(t("Off: Claude changes nothing, a change becomes a note for the pilot. On: Claude changes the files you ask it to change, and Athanor commits them (a running pilot pauses at the end of its cycle)."))}"><input type="checkbox" id="chat-modif" ${chat.modif ? "checked" : ""}><span>${t("Change the files")}</span></label>
+        <label class="interrupteur m0 petit" title="${h(t("Claude may search and read the web for your messages, only when one needs it (look online, compare with what exists elsewhere, a current fact). A question about the project is answered from its files."))}"><input type="checkbox" id="chat-internet" ${chat.internet ? "checked" : ""}><span>${t("Internet")}</span></label></div>
       <div class="ligne m0 mt-1"><span class="petit muet">${t("Model")}</span><div class="choix m0" id="chat-modeles">${modeles.map((m) => `<button type="button" data-chat-modele="${h(m)}" class="${chat.modele === m ? "actif" : ""}">${h(m || t("account default"))}</button>`).join("")}</div>
         <span class="espace"></span>
         <button type="button" class="btn" id="chat-stop" hidden>${t("Stop")}</button>
@@ -2071,7 +2077,7 @@ pages.accueil = async () => {
       <ul class="pieces-liste" id="hc-liste">${listePieces("hc")}</ul>
       <div class="ligne m0 puces-suggestions local-seul" id="accueil-sugg" role="group" aria-label="${h(t("Add to your request"))}">${suggestionsMentions()}</div>
       <div class="ligne m0 mt-1 hub-chat-bas">${pouvoirsHub(hc.pouvoirs || {})}<span class="espace"></span>
-        <button type="button" class="btn local-seul" data-choisir-pieces="hc" title="${h(t("Images, PDF and text files, 20 MB at most each; you can also drop or paste them"))}">📎 ${t("Attach files")}</button>
+        <button type="button" class="btn local-seul" data-choisir-pieces="hc" title="${h(t("Images, PDF and text files, 20 MB at most each; you can also drop or paste them"))}">${t("Attach files")}</button>
         <button type="button" class="btn local-seul" id="accueil-mission">${t("Create a mission")}</button>
         <button type="button" class="btn local-seul" id="hub-chat-stop" ${hc.en_cours ? "" : "hidden"}>${t("Stop")}</button>
         <button type="submit" class="btn btn-primaire local-seul" id="hub-chat-envoyer" ${hc.en_cours ? "hidden" : ""}>${t("Send")}</button></div>
@@ -2203,14 +2209,13 @@ function filHub(d) {
   let html = msgs.length ? msgs.map((m, i) => messageChat(m, i) + (cartes[i] ? carteActionHub(cartes[i], i) : "")).join("") : `<div class="vide">${t("Ask anything about your projects, servers or missions. By default the assistant only reads and answers: it sees no file and no key until you give it more under “What the assistant can do”.")}</div>`;
   if (d.en_cours) {
     const p = d.partiel || {}, textes = p.textes || [], outils = p.outils || [];
-    html += `<div class="chat-msg chat-claude"><div class="chat-bulle chat-attente">${textes.length ? mdChat(textes[textes.length - 1].replace(/<(note|agent|mcp|action)>[\s\S]*$/, "")) : ""}
+    html += `<div class="chat-msg chat-claude"><div class="chat-bulle chat-attente">${textes.length ? mdChat(textes[textes.length - 1].replace(/<(note|agent|mcp|action)>[\s\S]*$/, ""), true) : ""}
       <div class="muet petit"><span class="chat-points"><i></i><i></i><i></i></span> ${outils.length ? h(t(outils[outils.length - 1])) : t("Claude is thinking…")}</div></div></div>`;
   }
   return html;
 }
 // M197: the card of an action the assistant proposes (computed by the Go: hub_chat_actions.go): what, on what, with
 // which accesses; Launch, Change (its fields) or Refuse. Nothing runs before Launch.
-const ICONES_ACTION = { projet: "🚀", pilote: "▶", demande: "📝", remarque: "💬", mission: "🧭", agent: "🧩", mcp: "🔌", attribuer: "📌" };
 const MODELES_AGENT = [["", "Like the other sub-agents"], ["eco", "Cheap model (mechanical work)"], ["fort", "Most capable model (hard reasoning)"]];
 // M198: a sub-agent or an MCP server (the <agent> and <mcp> cards of the project chat) added to the library and switched
 // on in the projects ticked here; attribuer: one of the library switched on in projects. The Go checks them again.
@@ -2259,7 +2264,7 @@ function carteActionHub(c, i) {
         <button type="button" class="btn btn-petit" data-cact-decision="refuser" data-index="${i}">${t("Refuse")}</button></div>`;
   return `<div class="chat-msg chat-claude"><div class="chat-bulle chat-note carte-action" data-carte-action="${i}" data-type="${v(ty)}" ${ty === "attribuer" ? `data-element="${v(c.element)}" data-nom="${v(c.nom)}"` : ""}>
     <div class="muet petit">${t("Action proposed: nothing runs before you launch it")}</div>
-    <div><b>${ICONES_ACTION[ty] || "•"} ${h(t(c.quoi || "Action"))}</b></div>
+    <div><b>${h(t(c.quoi || "Action"))}</b></div>
     <div class="petit">${t("{0}: {1}", [t("On"), `<code class="croit">${v(c.sur)}</code>`])}</div>
     ${c.titre ? `<div><b>${v(c.titre)}</b></div>` : ""}${c.texte ? `<div class="petit">${mdChat(c.texte)}</div>` : ""}
     <div class="petit muet">${t("{0}: {1}", [t("With which accesses"), ""])}</div><ul class="petit m0">${(c.acces || []).map((a) => `<li>${h(t(a))}</li>`).join("")}</ul>
@@ -2289,10 +2294,10 @@ document.addEventListener("change", (ev) => {
   const z = ev.target.closest("[data-carte-action]")?.querySelector("[data-cact-confirme]");
   if (z) { z.hidden = !ev.target.checked; if (!ev.target.checked) z.querySelector("input").checked = false; }
 });
-const POUVOIRS_HUB = [["internet", "🌐", "Internet", "Searches and reads the web when a message needs it."],
-  ["ecriture", "✏️", "Writing", "Changes files, only in the folders you point to it with read and write, never elsewhere."]];
-const resumePouvoirs = (pv) => [t("Reads and answers"), ...POUVOIRS_HUB.filter(([k]) => pv[k]).map(([, i, n]) => i + " " + t(n)),
-  ...((pv.dossiers || []).length ? ["📁 " + t("{0} folder(s)", [pv.dossiers.length])] : [])].join(" · ");
+const POUVOIRS_HUB = [["internet", "Internet", "Searches and reads the web when a message needs it."],
+  ["ecriture", "Writing", "Changes files, only in the folders you point to it with read and write, never elsewhere."]];
+const resumePouvoirs = (pv) => [t("Reads and answers"), ...POUVOIRS_HUB.filter(([k]) => pv[k]).map(([, n]) => t(n)),
+  ...((pv.dossiers || []).length ? [t("{0} folder(s)", [pv.dossiers.length])] : [])].join(" · ");
 // M196: the folders pointed (checked by the server, hub_chat_dossiers.go), each read only or read and write
 function listeDossiersHub(pv) {
   const l = pv.dossiers || [];
@@ -2303,9 +2308,9 @@ function listeDossiersHub(pv) {
 }
 function pouvoirsHub(pv) {
   return `<details class="hub-pouvoirs" id="hub-pouvoirs"><summary>${t("{0}: {1}", [t("What the assistant can do"), `<span id="hub-pouvoirs-resume">${h(resumePouvoirs(pv))}</span>`]).replace(" :", " :")}</summary>
-    ${POUVOIRS_HUB.map(([k, i, n, aide]) => `<label class="interrupteur m0 local-seul"><input type="checkbox" data-pouvoir="${k}" ${pv[k] ? "checked" : ""} aria-describedby="pv-aide-${k}"><span>${i} ${t(n)}</span></label>
+    ${POUVOIRS_HUB.map(([k, n, aide]) => `<label class="interrupteur m0 local-seul"><input type="checkbox" data-pouvoir="${k}" ${pv[k] ? "checked" : ""} aria-describedby="pv-aide-${k}"><span>${t(n)}</span></label>
     <p class="petit muet m0 local-seul" id="pv-aide-${k}">${t(aide)}</p>`).join("")}
-    <div class="hub-dossiers"><div class="ligne m0"><strong>📁 ${t("Folders")}</strong><span class="espace"></span><button type="button" class="btn btn-petit local-seul" id="hub-dossier-ajouter">${t("Add a folder…")}</button></div>
+    <div class="hub-dossiers"><div class="ligne m0"><strong>${t("Folders")}</strong><span class="espace"></span><button type="button" class="btn btn-petit local-seul" id="hub-dossier-ajouter">${t("Add a folder…")}</button></div>
       <p class="petit muet m0" id="pv-aide-dossiers">${t("The assistant reads only the folders you point here; with Writing on, it changes files only in those set to “read and write”. Drop a folder here to add it.")}</p>
       <ul class="hub-dossiers-liste" id="hub-dossiers-liste" aria-describedby="pv-aide-dossiers">${listeDossiersHub(pv)}</ul></div></details>`;
 }
@@ -2594,7 +2599,7 @@ const GUIDE = [
   { id: "assistant", titre: "Talk to the home assistant", intro: "The home page is a conversation with an assistant that knows Athanor: ask a question, or say what you want done, in your words. It reads, answers and proposes; you decide.",
     etapes: [
       ["Ask", "Write in the big field of the home page: *Enter* sends, *Shift+Enter* adds a line. The answer comes above, after the earlier messages. *New conversation* starts again: the assistant forgets this one and its powers are switched off.", "#accueil", "Home"],
-      ["What it reads", "Only what you give it: your messages, the files you attach (📎, or drop or paste them: images, PDF and text files, 20 MB at most each) and the folders you point under *What the assistant can do* › *Folders*, each read only or read and write. *@* names a project, a server or a vault key."],
+      ["What it reads", "Only what you give it: your messages, the files you attach (or drop or paste them: images, PDF and text files, 20 MB at most each) and the folders you point under *What the assistant can do* › *Folders*, each read only or read and write. *@* names a project, a server or a vault key."],
       ["Its powers", "*What the assistant can do* stays visible under the field. *Internet* lets it search and read the web; *Writing* lets it change files, only in the folders set to read and write. Both are off by default, and off again in each new conversation. It never runs a command, never uses an MCP server and never reaches a server by itself."],
       ["What it never sees", "The vault's values, secrets files (.env), Athanor's own folders and system folders are never given to it, and a vault value pasted in a message or a file is masked before it reads it. A file or a web page that gives it orders is data: the assistant tells you what it asks and does not follow it."],
       ["Cards", "To act, it proposes a card: create a project and start its pilot, start a pilot, add a request, leave a remark, prepare a mission, create a sub-agent or an MCP server, switch one on in projects. The card says what, on what and with which accesses: *Launch*, *Change* or *Refuse*. Nothing runs before you press *Launch*, and each decision goes into the audit log."],
@@ -4036,7 +4041,7 @@ function tailleCourte(n) { return n >= 1048576 ? (n / 1048576).toFixed(1) + " MB
 function zonePieces(id) {
   return `<div class="pieces" data-pieces="${id}">
     <input type="file" multiple hidden id="${id}-fichiers">
-    <div class="ligne"><button type="button" class="btn btn-petit" data-choisir-pieces="${id}">📎 ${t("Attach files")}</button>
+    <div class="ligne"><button type="button" class="btn btn-petit" data-choisir-pieces="${id}">${t("Attach files")}</button>
       <span class="muet petit">${t("or drop them here: images, PDF, text, documents, data (50 MB at most each)")}</span></div>
     <ul class="pieces-liste" id="${id}-liste">${listePieces(id)}</ul></div>`;
 }

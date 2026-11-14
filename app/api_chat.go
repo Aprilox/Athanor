@@ -318,6 +318,18 @@ func (s *Serveur) apiChatEnvoyer(w http.ResponseWriter, r *http.Request) {
 	s.envoyerChat(w, p, c, consigneChat, consigneQuestion, consigneModif)
 }
 
+// consigneSobre: how Claude writes in every conversation (project chat, the Studio's "Discuss", the home chat),
+// written once here (M227b); the page still strips pictograms from the display (app.js: sansEmoji).
+const consigneSobre = `
+
+How you write, in every conversation: no emojis, no pictograms, no decorative symbols. Short, plain
+sentences; get to the point. A list only when it truly helps; code and commands in code blocks.`
+
+// promptChat: a conversation's system prompt, the mode's instructions in place of %s, then consigneSobre.
+func promptChat(gabarit, consigne string) string {
+	return strings.Replace(gabarit, "%s", consigne, 1) + consigneSobre
+}
+
 // envoyerChat: the user's message into the conversation, then Claude's turn (gabarit: the system prompt,
 // its %s the instructions of the mode, question or modif).
 func (s *Serveur) envoyerChat(w http.ResponseWriter, p Projet, c demandeChat, gabarit, question, modif string) {
@@ -383,7 +395,7 @@ func (s *Serveur) envoyerChat(w http.ResponseWriter, p Projet, c demandeChat, ga
 	}
 	fichiers := map[string]string{
 		id + ".msg":     strings.TrimSpace(texte),
-		id + ".prompt":  strings.Replace(gabarit, "%s", consigne, 1),
+		id + ".prompt":  promptChat(gabarit, consigne),
 		id + ".subject": "Chat: " + sujet,
 	}
 	if c.Internet {
