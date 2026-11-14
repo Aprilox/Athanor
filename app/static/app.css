@@ -806,6 +806,9 @@ input.large { flex: 1; min-width: 200px; width: auto; }
 .appr-champs { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0 14px; }
 .appr-champs select { width: 100%; }
 .appr-champs label.champ > a { display: inline-block; margin-top: 4px; }
+.appr-champs > details { grid-column: 1 / -1; }
+.appr-champs > details[open] { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0 14px; }
+.appr-champs > details > summary { grid-column: 1 / -1; }
 .alerte.alerte-appr { border-left: 3px solid var(--attention); }
 .pv-form { margin-top: 10px; }
 .pv-form textarea, .pv-form input[type=password] { width: 100%; }
@@ -917,6 +920,9 @@ input.large { flex: 1; min-width: 200px; width: auto; }
 .btn-menu { width: 40px; height: 40px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-2); display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; cursor: pointer; padding: 0; flex: none; }
 .btn-menu span { display: block; width: 18px; height: 2px; border-radius: 1px; background: var(--ink); }
 .distant [data-bureau] { display: none !important; }
+/* M230: the chat's model choice is set once: folded behind "Options" on every screen, unless a model was chosen */
+.btn.chat-options-bureau { display: inline-flex; }
+.chat:not(.ouvert) .chat-modele-repli { display: none; }
 @media (max-width: 700px) {
   .app, html.cadre .app { display: flex; flex-direction: column; height: 100vh; height: 100dvh; margin-top: 0; }
   .barre-mobile { display: flex; flex: none; z-index: 30; align-items: center; gap: 10px; padding: 8px 12px; background: var(--panel); border-bottom: 1px solid var(--line); }

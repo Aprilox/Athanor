@@ -1202,6 +1202,7 @@ function montrerAncre(id, essais = 40) {
   if (!x) { if (essais > 0) setTimeout(() => montrerAncre(id, essais - 1), 150); return; }
   const repli = x.querySelector(":scope > details"); // a folded block (Overview › Other computers): opened
   if (repli && !repli.open) repli.open = true;
+  const parent = x.closest("details:not([open])"); if (parent) parent.open = true; // a block folded under More options: shown
   x.scrollIntoView({ behavior: "smooth", block: "center" });
   if (x.matches("input, textarea")) x.focus({ preventScroll: true }); // a field the link points at: ready to type in
   x.classList.remove("surligne"); void x.offsetWidth; x.classList.add("surligne");
@@ -1638,8 +1639,8 @@ pages.chat = async () => {
       <div class="ligne m0 mt-1 chat-options chat-replie">
         <label class="interrupteur m0 petit" title="${h(t("Off: Claude changes nothing, a change becomes a note for the pilot. On: Claude changes the files you ask it to change, and Athanor commits them (a running pilot pauses at the end of its cycle)."))}"><input type="checkbox" id="chat-modif" ${chat.modif ? "checked" : ""}><span>${t("Change the files")}</span></label>
         <label class="interrupteur m0 petit" title="${h(t("Claude may search and read the web for your messages, only when one needs it (look online, compare with what exists elsewhere, a current fact). A question about the project is answered from its files."))}"><input type="checkbox" id="chat-internet" ${chat.internet ? "checked" : ""}><span>${t("Internet")}</span></label></div>
-      <div class="ligne m0 mt-1"><span class="petit muet">${t("Model")}</span><div class="choix m0 chat-replie" id="chat-modeles">${modeles.map((m) => `<button type="button" data-chat-modele="${h(m)}" class="${chat.modele === m ? "actif" : ""}">${h(m || t("account default"))}</button>`).join("")}</div>
-        <span class="espace"></span>${boutonOptions()}
+      <div class="ligne m0 mt-1"><span class="ligne m0 chat-replie${chat.modele ? "" : " chat-modele-repli"}"><span class="petit muet">${t("Model")}</span><div class="choix m0" id="chat-modeles">${modeles.map((m) => `<button type="button" data-chat-modele="${h(m)}" class="${chat.modele === m ? "actif" : ""}">${h(m || t("account default"))}</button>`).join("")}</div></span>
+        <span class="espace"></span>${boutonOptions(chat.modele ? "" : "chat-options-bureau")}
         <button type="button" class="btn" id="chat-stop" hidden>${t("Stop")}</button>
         <button type="button" class="btn btn-primaire" id="chat-envoyer">${t("Send")}</button></div>
     </div>
@@ -3413,9 +3414,10 @@ function carteApprobation(x, ap, codes) {
   const entree = f.entree ?? (codes.find((e) => e.nom === nom) || {}).id ?? "", env = f.env || x.env, variable = f.variable ?? nom;
   const champs = acces ? `<div class="appr-champs">
       <label class="champ"><span>${t("Vault key (code)")}</span>${codes.length ? `<select data-appr-entree><option value="">${t("Choose a key…")}</option>${codes.map((e) => `<option value="${h(e.id)}"${e.id === entree ? " selected" : ""}>${h(e.nom)}</option>`).join("")}</select>` : `<span class="muet petit">${t("No project key (code) in the vault yet.")}</span>`}
-        <a class="petit" href="#coffre">＋ ${t("Add a key")}</a></label>
+        <a class="petit" href="#coffre">${t("Add a key")}</a></label>
+      <details class="plus-options"${env !== x.env || variable !== nom ? " open" : ""}><summary>${t("More options")}</summary>
       <label class="champ"><span>${t("Environment")}</span><select data-appr-env>${ENVS_APPR.map((e) => `<option value="${e}"${e === env ? " selected" : ""}>${h(nomEnv(e))}</option>`).join("")}</select></label>
-      <label class="champ"><span>${t("Variable name")}</span><input type="text" data-appr-var value="${h(variable)}" maxlength="100" spellcheck="false" placeholder="${h(t("the vault's name"))}"></label></div>` : "";
+      <label class="champ"><span>${t("Variable name")}</span><input type="text" data-appr-var value="${h(variable)}" maxlength="100" spellcheck="false" placeholder="${h(t("the vault's name"))}"></label></details></div>` : "";
   return carteDecision(x, ap, `<span class="badge">${h(nomEnv(x.env))}</span> <strong>${h(x.projet)}</strong> <span>${h(acces ? t("access requested") : x.action)}</span>`,
     [acces && nom && t("proposed variable: {0}", [nom])], `<div class="pv-details">${h(x.raison)}</div>${champs}`, t("Never ask again for this project and environment"));
 }
@@ -3423,13 +3425,13 @@ function carteApprobation(x, ap, codes) {
 function carteDecision(x, ap, tete, meta, corps, toujours, sansAccord) {
   const natif = ap.mot_de_passe_requis ? `<label class="champ"><span>${t("Athanor's password")}</span><input type="password" data-appr-mdp autocomplete="current-password"></label>
       <p class="muet petit">${t("Any program of this PC can drive this window, so a decision asks for Athanor's password.")}</p>`
-    : ap.appareil_requis ? `<p class="petit attention">⚠ ${t("An agent of this PC could decide in your place: choose a password for Athanor in Options first, then retype it here (or decide from a paired phone)")}</p>` : "";
+    : ap.appareil_requis ? `<p class="petit attention">${t("An agent of this PC could decide in your place: choose a password for Athanor in Options first, then retype it here (or decide from a paired phone)")}</p>` : "";
   const bloque = ap.appareil_requis ? " disabled" : "";
   return `<div class="bloc pv-carte appr-carte" id="appr-${h(x.id)}" data-appr="${h(x.id)}">
     <div class="pv-tete">${tete} <span class="pv-etat pv-vous">${h(t("expires {0}", [dans(Date.parse(x.expire) / 1000)]))}</span></div>
     <div class="muet petit">${[t("Asked by {0}", [x.agent]), x.mission, ...meta].filter(Boolean).map(h).join(" · ")}</div>
     ${corps}${natif}
-    <div class="ligne mt-1 appr-boutons"><button type="button" class="btn btn-primaire" data-appr-decision="accepter"${bloque || (sansAccord ? " disabled" : "")}>✓ ${t("Accept")}</button><button type="button" class="btn" data-appr-decision="refuser"${bloque}>${t("Refuse")}</button>${toujours ? `<button type="button" class="btn" data-appr-decision="toujours"${bloque || (sansAccord ? " disabled" : "")}>${h(toujours)}</button>` : ""}</div>
+    <div class="ligne mt-1 appr-boutons"><button type="button" class="btn btn-primaire" data-appr-decision="accepter"${bloque || (sansAccord ? " disabled" : "")}>${t("Accept")}</button><button type="button" class="btn" data-appr-decision="refuser"${bloque}>${t("Refuse")}</button>${toujours ? `<button type="button" class="btn" data-appr-decision="toujours"${bloque || (sansAccord ? " disabled" : "")}>${h(toujours)}</button>` : ""}</div>
   </div>`;
 }
 async function sectionApprobations() {
@@ -4372,9 +4374,12 @@ pages.reglages = async () => {
   };
   const rang = (c) => { const i = ORDRE_CONNEXION.indexOf(c); return i < 0 ? 99 : i; };
   const groupe = (g) => lignes.filter((l) => (REGLAGES[l.cle] || ["avance"])[0] === g).sort((a, b) => g === "connexion" ? rang(a.cle) - rang(b.cle) : 0);
-  const avertAPI = `<div class="avert-connexion petit" data-connexion="api" ${mode !== "api" ? "hidden" : ""}><b>⚠ ${t("With an API key")}</b> ${t("the plugins and connectors of your claude.ai account (Gmail, Drive… added in the Claude app) do not work. The Skills, the MCP servers and every extension of Athanor work the same. Each run of Claude is billed to the API account: Overview shows the spend, and the pilot waits once the budget is spent.")}</div>`;
+  const avertAPI = `<div class="avert-connexion petit" data-connexion="api" ${mode !== "api" ? "hidden" : ""}><b>${t("With an API key")}</b> ${t("the plugins and connectors of your claude.ai account (Gmail, Drive… added in the Claude app) do not work. The Skills, the MCP servers and every extension of Athanor work the same. Each run of Claude is billed to the API account: Overview shows the spend, and the pilot waits once the budget is spent.")}</div>`;
   const actif = etat.vue && etat.vue.actif;
   const avance = groupe("avance");
+  // M230: only the connection is needed to begin; the models and the pilot's pace have safe defaults, folded
+  const blocGroupe = ([g, titre]) => { const l = groupe(g); return l.length ? `<div class="bloc"><h2>${t(titre)}</h2>${l.map(ligne).join("")}${g === "connexion" ? avertAPI : ""}</div>` : ""; };
+  const plus = GROUPES_REGLAGES.slice(1).map(blocGroupe).join("") + (avance.length ? `<div class="bloc"><h2>${t("Advanced")} <span class="muet petit">${t("{0} setting(s)", [avance.length])}</span></h2>${avance.map(ligne).join("")}</div>` : "");
   return `${tete}
   <div class="ligne reglages-tete">
     <p class="muet m0 croit">${t("The pilot reads these settings when it starts (a new token or API key: at once). The token and the API key give access to your Claude account: never share them.")}</p>
@@ -4382,8 +4387,8 @@ pages.reglages = async () => {
     <button class="btn btn-primaire" id="rg-enregistrer">${t("Save")}</button>
     ${actif ? `<button class="btn" id="rg-redemarrer" title="${h(t("Saves, lets the current milestone finish, then restarts the pilot with the new settings."))}">${t("Save and restart after cycle")}</button>` : ""}
   </div>
-  ${GROUPES_REGLAGES.map(([g, titre]) => { const l = groupe(g); return l.length ? `<div class="bloc"><h2>${t(titre)}</h2>${l.map(ligne).join("")}${g === "connexion" ? avertAPI : ""}</div>` : ""; }).join("")}
-  ${avance.length ? `<div class="bloc"><details><summary>${t("Advanced")} <span class="muet petit">${t("{0} setting(s)", [avance.length])}</span></summary>${avance.map(ligne).join("")}</details></div>` : ""}`;
+  ${GROUPES_REGLAGES.slice(0, 1).map(blocGroupe).join("")}
+  ${plus.trim() ? `<details class="bloc plus-options"><summary>${t("More options")}</summary>${plus}</details>` : ""}`;
 };
 
 function lireEnvFormulaire() {
@@ -4838,6 +4843,9 @@ async function rendreOptions() {
   const [o, cl, inst] = await Promise.all([api("options"), api("clients").catch(() => null), api("instances").catch(() => null)]);
   etat.optionsVue = o; etat.clientsVue = cl;
   const b = o.bureau || {};
+  // M230: what everyone sets stays in view; what is set once (or never) is folded, opened when it holds something to read
+  const cv = cl || {}, iv = inst || {};
+  const utilise = !!(cv.code || (cv.demandes || []).length || (cv.clients || []).length || (iv.instances || []).length || ((iv.distants || {}).liste || []).length || !o.kit_valide || b.restantes);
   return `<div class="grille grille-2">
     <div class="colonne">
       <div class="bloc"><h2>${t("Appearance")}</h2>
@@ -4845,12 +4853,11 @@ async function rendreOptions() {
         <p class="muet petit mt-1">${t("Also sets the language Claude uses for its plan, log and documents in new projects.")}</p>
         <label class="champ mt-3"><span>${t("Palette and accent")}</span></label>${rendreApparence()}
       </div>
-      <div class="bloc" id="bloc-connexion-gh"><h2>GitHub</h2>${rendreConnexionGH(etat.ghConnexion)}</div>
-      <div class="bloc" id="bloc-raccourci">${blocRaccourci(raccourciConnu(), true) || `<h2>${t("Shortcut")}</h2>${attenteRaccourci()}`}</div>
       <div class="bloc"><h2>${t("Startup")}</h2>
         <label class="interrupteur"><input type="checkbox" id="op-lancer" data-option ${o.lancer_pilote_au_demarrage ? "checked" : ""}><span>${t("Restart the pilots that were running, when the app opens")}</span></label>
         <label class="interrupteur"><input type="checkbox" id="op-animation" data-option ${o.animation ? "checked" : ""}><span>${t("Show the launch animation when Athanor Hub starts")}</span></label>
         <label class="interrupteur"><input type="checkbox" id="op-windows" data-option ${o.demarrage_windows ? "checked" : ""}><span>${t(o.windows ? "Open Athanor when Windows starts" : (etat.vue || {}).systeme === "darwin" ? "Open Athanor when you log in to the Mac" : "Open Athanor when your desktop session starts")}</span></label>
+        <div class="ligne mt-1"><button class="btn btn-petit" id="op-guide">${t("Show the first-launch guide and the tutorials again")}</button></div>
       </div>
       <div class="bloc local-seul" id="bloc-verrou"><h2>${t("Lock")}</h2>
         <p class="intro petit">${t("With a password, the padlock locks the app: Claude keeps working, but nothing can be seen, changed or read (keys included) without the password. The app starts locked.")}</p>
@@ -4860,12 +4867,27 @@ async function rendreOptions() {
       </div>
     </div>
     <div class="colonne">
-      <div class="bloc"><h2>${t("Projects")}</h2>
-        ${(o.projets || []).length ? `<table class="tab"><tbody>${o.projets.map((p) => `<tr><td><b>${h(p.nom)}</b>${p.archive ? ` <span class="badge">${t("archived")}</span>` : ""}</td><td class="muet chemin-projet">${h(p.dossier)}</td><td class="droite"><button class="btn btn-petit" data-gerer="${h(p.nom)}" data-archive="${p.archive ? 1 : ""}">${t("Manage")}</button></td></tr>`).join("")}</tbody></table>` : `<div class="vide">${t("No project.")}</div>`}
-        <p class="muet petit mt-2">${t("Rename a project, move its folder, archive or delete it: “Manage”.")}</p>
-      </div>
+      <div class="bloc" id="bloc-connexion-gh"><h2>GitHub</h2>${rendreConnexionGH(etat.ghConnexion)}</div>
+      <div class="bloc" id="bloc-version"><h2>${t("Version")}</h2>${rendreBlocMaj(o)}</div>
+    </div>
+  </div>
+  <details class="bloc plus-options" id="options-plus"${utilise ? " open" : ""}><summary>${t("More options")}</summary>
+  <div class="grille grille-2">
+    <div class="colonne">
       ${rendreClientsMCP(cl)}
       ${rendreInstancesPC(inst)}
+      <div class="bloc" id="bloc-raccourci">${blocRaccourci(raccourciConnu(), true) || `<h2>${t("Shortcut")}</h2>${attenteRaccourci()}`}</div>
+    </div>
+    <div class="colonne">
+      <div class="bloc"${o.windows ? "" : " hidden"}><h2>${t("Execution mode")}</h2>
+        <label class="radio"><input type="radio" name="op-mode" id="op-natif" data-option ${o.mode_natif ? "checked" : ""}> <b>${t("Native Windows")}</b> <span class="muet">${t("(recommended to begin: nothing else to install)")}</span></label>
+        <p class="petit attention">${t("No sandbox in this mode: Claude can read and change any file of your PC and run any program, without asking. The file guard only covers its file tools. Use it for projects you trust.")}</p>
+        <label class="radio"><input type="radio" name="op-mode" id="op-wsl" data-option ${o.mode_natif ? "" : "checked"}> <b>WSL</b> <span class="muet">${t("(Claude works in a sandbox: it only writes in the project; installs Linux once)")}</span></label>
+        <p class="petit ${o.git_bash ? "ok" : "attention"}">${o.git_bash ? h(t("Git for Windows: {0}", [o.git_bash.replace(/[\\/](usr[\\/])?bin[\\/]bash\.exe$/i, "")])) : t("Git for Windows is missing: Setup & health → Install everything.")}</p>
+        <p class="muet petit">${t("Applies to the pilots started afterwards. When you close Athanor while native pilots run, it asks whether they go on in the background.")}</p>
+        <label class="interrupteur mt-1"><input type="checkbox" id="op-terminal" data-option ${o.terminal_pilote ? "checked" : ""}><span>${t("Show the pilot's terminal")}</span></label>
+        <p class="muet petit">${t("Off: the programs a native pilot starts (bash, git, go, the checks) run in a hidden console, and no window opens. On: one minimised window in the taskbar shows the pilot live, without ever taking the focus. For the pilots started afterwards.")}</p>
+      </div>
       <div class="bloc"${b.message === "Virtual desktop: Windows only." ? " hidden" : ""}><h2>${t("“Claude” desktop")}</h2>
         <label class="interrupteur"><input type="checkbox" id="op-bureau" data-option ${o.bureau_virtuel ? "checked" : ""}><span>${t("Open the programs Claude starts (Unreal, Blender, a game under test) on a desktop of their own")}</span></label>
         <p class="petit ${b.disponible ? "ok" : "attention"}">${h(t(b.message || ""))}</p>
@@ -4881,25 +4903,15 @@ async function rendreOptions() {
         <label class="champ mt-2"${b.isole || b.ecran ? " hidden" : ""}><span>${t("Recognized: programs inside the projects and in tools\\, “Athanor” windows, and these executables (one per line)")}</span><textarea id="op-programmes" data-option class="code" rows="5">${h(o.programmes_supplementaires)}</textarea></label>
         <p class="muet petit"${b.isole || b.ecran ? " hidden" : ""}>${t("Windows shortcut to switch desktops: Ctrl + Win + ← / →.")}</p>
       </div>
-      <div class="bloc"${o.windows ? "" : " hidden"}><h2>${t("Execution mode")}</h2>
-        <label class="radio"><input type="radio" name="op-mode" id="op-natif" data-option ${o.mode_natif ? "checked" : ""}> <b>${t("Native Windows")}</b> <span class="muet">${t("(recommended to begin: nothing else to install)")}</span></label>
-        <p class="petit attention">${t("No sandbox in this mode: Claude can read and change any file of your PC and run any program, without asking. The file guard only covers its file tools. Use it for projects you trust.")}</p>
-        <label class="radio"><input type="radio" name="op-mode" id="op-wsl" data-option ${o.mode_natif ? "" : "checked"}> <b>WSL</b> <span class="muet">${t("(Claude works in a sandbox: it only writes in the project; installs Linux once)")}</span></label>
-        <p class="petit ${o.git_bash ? "ok" : "attention"}">${o.git_bash ? h(t("Git for Windows: {0}", [o.git_bash.replace(/[\\/](usr[\\/])?bin[\\/]bash\.exe$/i, "")])) : t("Git for Windows is missing: Setup & health → Install everything.")}</p>
-        <p class="muet petit">${t("Applies to the pilots started afterwards. When you close Athanor while native pilots run, it asks whether they go on in the background.")}</p>
-        <label class="interrupteur mt-1"><input type="checkbox" id="op-terminal" data-option ${o.terminal_pilote ? "checked" : ""}><span>${t("Show the pilot's terminal")}</span></label>
-        <p class="muet petit">${t("Off: the programs a native pilot starts (bash, git, go, the checks) run in a hidden console, and no window opens. On: one minimised window in the taskbar shows the pilot live, without ever taking the focus. For the pilots started afterwards.")}</p>
-      </div>
       <div class="bloc local-seul"><h2>${t("Athanor's folder")}</h2>
         <p class="m0"><code class="chemin-kit">${h(o.kit)}</code></p><div class="muet petit mt-1">${o.kit_valide ? "✔ " + t("Athanor's own files: settings, token, logs, the tools Claude installs. Your projects are elsewhere.") : "✖ " + t("this folder is not the tool")}</div>
-        <div class="ligne mt-1"><button class="btn btn-petit" data-ouvrir="kit">${t("Open the folder")}</button><button class="btn btn-petit" data-ouvrir="logs">${t("Logs folder")}</button><span class="espace"></span><button class="btn btn-petit" id="op-guide">${t("Show the first-launch guide and the tutorials again")}</button></div>
+        <div class="ligne mt-1"><button class="btn btn-petit" data-ouvrir="kit">${t("Open the folder")}</button><button class="btn btn-petit" data-ouvrir="logs">${t("Logs folder")}</button></div>
         <details class="mt-1" ${o.kit_valide ? "" : "open"}><summary class="petit muet">${t("Use another tool folder (advanced)")}</summary>
           <p class="muet petit">${t("Only for a tool folder you moved or copied yourself: Athanor then uses that one, with its settings and token.")}</p>
           <input type="text" id="op-kit" data-option value="${h(o.kit)}" aria-label="${h(t("Use another tool folder (advanced)"))}"></details>
       </div>
-      <div class="bloc" id="bloc-version"><h2>${t("Version")}</h2>${rendreBlocMaj(o)}</div>
     </div>
-  </div>`;
+  </div></details>`;
 };
 // Settings › MCP clients (hub_clients.go, hub_mcp_client.go): Claude Desktop or Claude Code pair with the
 // 6 digits shown here, the owner accepts with a scope (projects, tools), revokes; ready-to-copy snippets
@@ -4938,6 +4950,7 @@ async function majClientsMCP(v) {
   const b = $("#bloc-clients-mcp");
   if (!v || !b || JSON.stringify(v) === JSON.stringify(etat.clientsVue)) return;
   etat.clientsVue = v;
+  const repli = b.closest("details"); if (repli && (v.code || (v.demandes || []).length)) repli.open = true; // a client waiting: never folded away
   b.outerHTML = rendreClientsMCP(v);
 }
 // a code open or a request waiting: the block follows the terminal's pairing
@@ -6231,10 +6244,11 @@ async function rendrePage() {
   const defils = positionsDefil();
   // the field being typed in keeps its focus and its cursor across a live refresh (e.g. the Team page's search)
   const a = document.activeElement, saisie = a && a.id && $("#page").contains(a) && a.matches("input[type=text], textarea") ? [a.id, a.selectionStart, a.selectionEnd] : null;
-  const replis = etat.pageRendue === etat.page ? [...$("#page").querySelectorAll("details.plus-options")].map((x) => x.open) : []; // opened by hand: kept open across a refresh
+  const vueRepli = etat.page + "/" + (etat.page === "reglages" ? etat.ongletReglages : ""); // two tabs of one page: two sets of folds
+  const replis = etat.repliRendu === vueRepli ? [...$("#page").querySelectorAll("details.plus-options")].map((x) => x.open) : []; // opened by hand: kept open across a refresh
   garderFocus($("#page"), () => { $("#page").innerHTML = html; });
   $("#page").querySelectorAll("details.plus-options").forEach((x, i) => { if (replis[i]) x.open = true; });
-  etat.pageRendue = etat.page;
+  etat.pageRendue = etat.page; etat.repliRendu = vueRepli;
   if (etat.visite >= 0 && !$("#visite").hidden) { etat.visiteCible = null; placerVoile(); placerBulle(); } // the page rebuilt: the target found again, or the bubble aside
   // text of the Home bar: kept across a live refresh, then handed to the chat or the new project's request
   const barre = $("#accueil-texte"); if (barre) barre.value = etat.accueilTexte || "";
