@@ -750,7 +750,7 @@ function boutonCloche(v, classe) {
   return `<button type="button" class="${classe} cloche${n ? " sonne" : ""}" data-notifs aria-haspopup="true" aria-expanded="${etat.notifsOuvert ? "true" : "false"}" aria-label="${h(titre)}" title="${h(titre)}"><svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.94 1.94 0 0 0 3.4 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>${n ? `<span class="cloche-n">${n}</span>` : ""}</button>`;
 }
 // the Guide: a "?" beside the bell (it is no menu entry any more)
-const boutonGuide = (classe) => `<a href="#guide" class="${classe} btn-guide" aria-label="${h(t("Guide"))}" title="${h(t("Guide"))}">?</a>`;
+const boutonGuide = (classe) => `<a href="#guide" class="${classe} btn-guide"${etat.page === "guide" ? ' aria-current="page"' : ""} aria-label="${h(t("Guide"))}" title="${h(t("Guide"))}">?</a>`;
 // one alert on one line, "Dev, ma-boutique: why", and its actions as the server gives them: a page (View, through
 // allerProjet for a Dev project) or a POST (Ignore, Reopen, an approval's decision). From a paired device only the
 // actions marked distance stay active (the server refuses the others: 403).
@@ -858,7 +858,7 @@ async function deciderApprobation(corps) {
 function phraseGlobale(m) {
   const n = alertesHub().length, actifs = ((etat.hub || {}).elements || []).filter((e) => e.etat === "actif").length;
   const page = m && m.id === "hub" ? m.pages.find((x) => x.hash === "#" + pageParente(etat.page)) : null; // Home, Projects
-  return { classe: n ? "quota" : actifs ? "travaille" : "", titre: page ? t(page.libelle) : m ? t(m.nom) : "Athanor", sous: [actifs ? t("{0} in progress", [actifs]) : t("idle"), n && t("{0} alert(s) need you", [n])].filter(Boolean).join(" · ") };
+  return { classe: n ? "quota" : actifs ? "travaille" : "", titre: page ? t(page.libelle) : m ? t(m.nom) : etat.page === "guide" ? t("Guide") : "Athanor", sous: [actifs ? t("{0} in progress", [actifs]) : t("idle"), n && t("{0} alert(s) need you", [n])].filter(Boolean).join(" · ") };
 }
 // the pages of a module that works on the selector's project (Studio): Start, access, the project's line
 const avecProjet = (m) => !!m && !!m.projet;
@@ -2085,7 +2085,7 @@ pages.accueil = async () => {
 const ACTIVE_MISSION = ["preparation", "proposee"];
 const APPROBATIONS_PREVUES = { mise_en_prod: "Putting {0} in production", plan_serveurs: "The Servers plan of {0}", deploiement: "Each deployment to {0}", durcissement: "Hardening the server {0}", deverrouiller_coffre: "Unlocking the infra vault" };
 const POLITIQUES_MISSION = [["prod", "Ask me for production", "Production and its servers' plans wait for your approval."],
-  ["tout", "Ask me for everything", "Every Servers plan and every deployment waits for your approval."], ["autonome", "Autonomous", "Only putting in production waits for your approval."]];
+  ["tout", "Ask me for everything", "Every Servers plan and every deployment waits for your approval."], ["autonome", "Autonomous", "Production still always waits for your approval, even in autonomous mode; everything else (Servers plans, dev and staging) runs without you."]];
 const travailleMission = (d) => d.orchestrateur || d.mission.etat === "preparation";
 const heuresMission = (m) => m < 90 ? `${m} min` : `${Math.round(m / 60)} h`;
 // C81: an environment of the card (protection, servers named by nom, policy); sansUrl: the URL is shown apart
@@ -2220,7 +2220,7 @@ function champsEquipeHub(c, projets) {
   if (ty === "attribuer") return { vue: surProjets, champs: "" };
   if (ty === "agent") return {
     vue: `${c.description ? `<div class="petit">${h(c.description)}</div>` : ""}
-      <div class="petit muet">${t("Model")}: ${t((MODELES_AGENT.find(([k]) => k === (c.modele || "")) || MODELES_AGENT[0])[1])}${c.lecture_seule ? " · " + t("Read only") : ""}</div>${surProjets}`,
+      <div class="petit muet">${t("{0}: {1}", [t("Model"), ""])}${t((MODELES_AGENT.find(([k]) => k === (c.modele || "")) || MODELES_AGENT[0])[1])}${c.lecture_seule ? " · " + t("Read only") : ""}</div>${surProjets}`,
     champs: `<label class="champ"><span>${t("Name")}</span><input type="text" data-cact="nom" value="${v(c.nom)}" spellcheck="false"></label>
       <label class="champ"><span>${t("When the lead should call it")}</span><textarea data-cact="description" rows="2">${v(c.description)}</textarea></label>
       <label class="champ"><span>${t("Its instructions")}</span><textarea data-cact="consignes" rows="8">${v(c.consignes)}</textarea></label>
@@ -2229,7 +2229,7 @@ function champsEquipeHub(c, projets) {
   };
   return {
     vue: `${c.description ? `<div class="petit">${h(c.description)}</div>` : ""}${c.source ? `<div class="petit muet">${t("Source: {0}", [`<code class="croit">${v(c.source)}</code>`])}</div>` : ""}
-      ${(c.fichiers || []).length ? `<div class="petit muet">${t("MCP server written by Claude")}: ${c.fichiers.map((f) => `<code>${h(f)}</code>`).join(", ")}</div>` : ""}${surProjets}
+      ${(c.fichiers || []).length ? `<div class="petit muet">${t("{0}: {1}", [t("MCP server written by Claude"), ""])}${c.fichiers.map((f) => `<code>${h(f)}</code>`).join(", ")}</div>` : ""}${surProjets}
       <label class="interrupteur m0 attention" data-cact-confirme ${c.windows ? "" : "hidden"}><input type="checkbox" data-cact="confirme_windows" ${c.confirme_windows ? "checked" : ""}><span>${t("I understand: this server runs on Windows, outside the cage, with my rights; it can read and change my files and run programs.")}</span></label>`,
     champs: `<label class="champ"><span>${t("Name")}</span><input type="text" data-cact="nom" value="${v(c.nom)}" spellcheck="false"></label>
       <label class="champ"><span>${t("What it lets the pilot do")}</span><textarea data-cact="description" rows="2">${v(c.description)}</textarea></label>
@@ -2258,9 +2258,9 @@ function carteActionHub(c, i) {
   return `<div class="chat-msg chat-claude"><div class="chat-bulle chat-note carte-action" data-carte-action="${i}" data-type="${v(ty)}" ${ty === "attribuer" ? `data-element="${v(c.element)}" data-nom="${v(c.nom)}"` : ""}>
     <div class="muet petit">${t("Action proposed: nothing runs before you launch it")}</div>
     <div><b>${ICONES_ACTION[ty] || "•"} ${h(t(c.quoi || "Action"))}</b></div>
-    <div class="petit">${t("On")}: <code class="croit">${v(c.sur)}</code></div>
+    <div class="petit">${t("{0}: {1}", [t("On"), `<code class="croit">${v(c.sur)}</code>`])}</div>
     ${c.titre ? `<div><b>${v(c.titre)}</b></div>` : ""}${c.texte ? `<div class="petit">${mdChat(c.texte)}</div>` : ""}
-    <div class="petit muet">${t("With which accesses")}:</div><ul class="petit m0">${(c.acces || []).map((a) => `<li>${h(t(a))}</li>`).join("")}</ul>
+    <div class="petit muet">${t("{0}: {1}", [t("With which accesses"), ""])}</div><ul class="petit m0">${(c.acces || []).map((a) => `<li>${h(t(a))}</li>`).join("")}</ul>
     ${decide}</div></div>`;
 }
 document.addEventListener("click", async (ev) => {
@@ -2780,6 +2780,7 @@ const GUIDE = [
   { id: "terminal", titre: "In a terminal", intro: "On Linux and macOS, Athanor also runs in a terminal, like btop: the same projects, overview, log, requests, chat and checks, with the keyboard and the mouse. Handy on a server reached through SSH.",
     etapes: [
       ["Open it", "`./athanor tui` in a terminal, in Athanor's folder (or the downloaded file: `./Athanor-Linux-x64 tui`). Through SSH, or on a Linux without a screen, `./athanor` alone opens it."],
+      ["What stays in the window", "The terminal holds the home page, the missions and the Studio pages. The Vault, Servers, E-mail, Access and the home chat stay in the window: *w* opens it on a computer with a screen, and a paired phone reaches it through remote access."],
       ["The window instead", "`./athanor gui` opens the window whatever the guess (a computer reached through SSH whose screen you use, say)."],
       ["Alongside the window", "With Athanor already open, `./athanor tui` shows the same Athanor in the terminal: both stay in step. In the terminal, *w* opens the window as well."],
       ["The keys", "*1*–*9* the pages, *s* Start, *a* Stop after cycle, *x* Stop now, *p* the project, *n* a request, *i* writes in the chat, *?* every key, *q* quits. The mouse works too."],
@@ -3598,7 +3599,7 @@ pages.extensions = async () => {
   const test = (x) => type === "skill" ? testSkill(x) : testExt(x);
   const voir = (x) => ext.voir && ext.voir.id === x.id && ext.voir.type === type ? `<div class="ext-voir">
       ${type === "skill" ? `<textarea class="code" rows="14" data-ext-texte="${h(x.id)}">${h(ext.voir.texte)}</textarea>
-        ${ext.voir.fichiers && ext.voir.fichiers.length > 1 ? `<div class="muet petit">${t("Files")}: ${ext.voir.fichiers.map((f) => `<code>${h(f)}</code>`).join(" ")}</div>` : ""}
+        ${ext.voir.fichiers && ext.voir.fichiers.length > 1 ? `<div class="muet petit">${t("{0}: {1}", [t("Files"), ""])}${ext.voir.fichiers.map((f) => `<code>${h(f)}</code>`).join(" ")}</div>` : ""}
         <div class="ligne"><button class="btn btn-petit" data-ext-enregistrer="${h(x.id)}">${t("Save the skill")}</button></div>`
         : ext.voir.modifiable ? `<textarea class="code" rows="16" spellcheck="false" data-ext-texte="${h(x.id)}">${h(ext.voir.texte)}</textarea>
         <div class="muet petit">${t("“reglages”: name → default value (the value used is in its field below the server). “ouvrir”: the program the pilot opens for this server before each cycle: “programme” (blender, roblox-studio, unreal-editor, or C:\\…\\name.exe), “args” ({FICHIER}: the project's file), “fichiers” (e.g. *.blend), “sans_fichier”, “processus”, the “port” to wait for, “delai” in seconds. ${NAME}: a setting or a key.")}</div>
@@ -3619,7 +3620,7 @@ pages.extensions = async () => {
         <button class="btn btn-petit btn-danger" data-ext-retirer="${type}|${h(x.id)}" title="${h(t("Remove"))}">✕</button></div>
     </div>`).join("");
   const cartes = cat.map((c) => `<div class="ext-carte">
-      <div class="ext-nom">${h(c.nom)} <span class="muet petit">${h(c.licence)}</span></div>
+      <div class="ext-nom">${h(t(c.nom))} <span class="muet petit">${h(c.licence)}</span></div>
       <div class="ext-desc">${h(c.description)}</div>
       <div class="muet petit">${[c.depot ? h(c.depot.includes("://") ? c.depot.split("://")[1] : "github.com/" + c.depot) : "", c.prerequis ? t("needs {0}", [c.prerequis]) : ""].filter(Boolean).join(" · ")}${(c.secrets || []).length ? " · " + c.secrets.map((sc) => sc.optionnel ? t("optional key") : t("key required")).join(", ") : ""}${c.scripts ? " · " + t("scripts") : ""}</div>
       <div class="ligne">${c.installe ? `<span class="ok petit">✓ ${t("Installed")}</span>` : `<button class="btn btn-petit btn-primaire" data-ext-installer="${type}|${h(c.id)}" ${occupe(type + "|" + c.id)}>${ext.occupe === type + "|" + c.id ? t("Installing…") : t("Install")}</button>`}</div>
@@ -5670,7 +5671,7 @@ function missionDirect(m) {
 const RIGUEUR_POLITIQUE = ["autonome", "prod", "tout"];
 function controlesMission(m) {
   return `<div class="ligne m0 mis-controles">
-    <fieldset class="mis-pol-direct"><legend>${t("Policy")}</legend>${POLITIQUES_MISSION.map(([v, l]) => `<label class="radio"><input type="radio" name="mis-pol-direct" value="${v}"${m.politique === v ? " checked" : ""}> ${t(l)}</label>`).join("")}</fieldset>
+    <fieldset class="mis-pol-direct"><legend>${t("Policy")}</legend>${POLITIQUES_MISSION.map(([v, l, aide]) => `<label class="radio" title="${h(t(aide))}"><input type="radio" name="mis-pol-direct" value="${v}"${m.politique === v ? " checked" : ""}> ${t(l)}</label>`).join("")}</fieldset>
     <span class="espace"></span>
     ${m.etat === "en_pause" ? `<button type="button" class="btn btn-primaire" data-mis-ctl="reprendre">${t("Resume")}</button>` : `<button type="button" class="btn" data-mis-ctl="pause">${t("Pause")}</button>`}
     <button type="button" class="btn btn-danger" data-mis-ctl="arreter">${t("Stop")}</button></div>`;

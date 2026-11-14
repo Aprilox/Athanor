@@ -25,7 +25,7 @@ func TestJugerSante(t *testing.T) {
 		t.Errorf("certificate under 3 days: %s", enJSON(l))
 	}
 	s := &Serveur{}
-	if txt := s.texteProblemes(l); txt != "the site fails its check from this PC; its certificate expires in 10 days; the disk of vps is 95% full" {
+	if txt := s.texteProblemes(l); txt != "the site does not pass the check made from this PC; its certificate expires in 10 days; the disk of vps is 95% full" {
 		t.Errorf("plain words: %q", txt)
 	}
 	s.config.Langue = "fr"
@@ -123,7 +123,7 @@ func TestSanteIncidents(t *testing.T) {
 	}
 	s.controlerSante(ctx)
 	i := s.incidentEnv(lireSante(), projet, "staging")
-	if i == nil || i.Source != "sante" || i.Commit != servi || !strings.Contains(i.Echec, "fails its check") || !strings.Contains(i.Tente, "2 checks in a row") {
+	if i == nil || i.Source != "sante" || i.Commit != servi || !strings.Contains(i.Echec, "does not pass the check") || !strings.Contains(i.Tente, "2 checks in a row") {
 		t.Fatalf("red twice: %s", enJSON(i))
 	}
 	if v := s.vueSante(projet)["staging"].(map[string]any); v["etat"] != "incident" {

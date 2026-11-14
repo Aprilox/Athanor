@@ -455,8 +455,8 @@ func (s *Serveur) lancerTourChat(k Kit, p Projet, en *chatEnCours, id string) er
 			if i := strings.LastIndex(detail, "\n"); i >= 0 {
 				detail = detail[i+1:]
 			}
-			if detail == "" {
-				detail = err.Error()
+			if detail == "" { // Claude quit without a word: most often not signed in on this computer
+				detail = "Claude stopped without an answer: it may not be signed in on this computer. Open Setup & health, check Claude, then try again."
 			}
 		}
 		commit, _ := os.ReadFile(filepath.Join(d, id+".commit"))

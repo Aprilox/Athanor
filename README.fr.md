@@ -156,7 +156,7 @@ Votre jeton, vos réglages, vos projets, `logs/` et `tools/` ne sont jamais touc
 <details>
 <summary><b>Le compiler soi-même</b> (depuis le code source)</summary>
 
-Avec [Go](https://go.dev/dl/) 1.27.3 ou plus (Go 1.21 ou plus télécharge seul la 1.27.3 ; pas de Go ? `winget install GoLang.Go`, `sudo apt install golang-go` ou `brew install go`) :
+Avec [Go](https://go.dev/dl/) 1.27.4 ou plus (Go 1.21 ou plus télécharge seul la 1.27.4 ; pas de Go ? `winget install GoLang.Go`, `sudo apt install golang-go` ou `brew install go`) :
 
 ```bash
 git clone https://github.com/Aprilox/Athanor.git
@@ -612,7 +612,7 @@ Le MCP d'Athanor s'ouvre à deux sortes de clients, toujours par un code à 6 ch
 
 <img src="docs/images/terminal.png" alt="Athanor dans un terminal : les projets et les pages à gauche, l'état du projet, le quota de l'abonnement et le plan avec ses jalons">
 
-Sous Linux et macOS, Athanor tourne aussi dans le terminal, comme btop ou htop : le même Athanor que sa fenêtre, sur le même serveur, donc les deux montrent toujours la même chose. Fait pour un serveur joint en SSH, un Linux sans bureau, ou simplement votre propre terminal.
+Sous Linux et macOS, Athanor tourne aussi dans le terminal, comme btop ou htop : le même Athanor que sa fenêtre, sur le même serveur, donc les deux montrent toujours la même chose. Fait pour un serveur joint en SSH, un Linux sans bureau, ou simplement votre propre terminal. Le terminal réunit l'accueil, les missions et les pages du Studio ci-dessous ; le Coffre, les Serveurs, l'E-mail, les Accès et le chat d'accueil restent dans la fenêtre (ouvrez-la sur cet ordinateur avec *w*, ou depuis un téléphone appairé par l'accès à distance).
 
 - **L'ouvrir** : `./athanor tui` dans le dossier d'Athanor (ou le fichier téléchargé : `./Athanor-Linux-x64 tui`). En SSH (`SSH_CONNECTION` défini), ou sur un Linux sans écran (ni `DISPLAY` ni `WAYLAND_DISPLAY`), `./athanor` seul l'ouvre. `./athanor gui` ouvre la fenêtre quoi qu'en dise la détection.
 - **Sur un serveur** : lancez Athanor avec un utilisateur normal, pas en root : Claude Code refuse de travailler en root (Installation & santé le dit, et *Démarrer* refuse). Sur un VPS neuf : `adduser NOM`, `usermod -aG sudo NOM`, connectez-vous en `NOM`, puis `./Athanor-Linux-x64`.

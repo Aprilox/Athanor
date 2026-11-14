@@ -48,7 +48,7 @@ sudo systemctl daemon-reload && sudo systemctl enable --now athanor-module
 sudo -u deploy /home/deploy/athanor/athanor module appairer   # une fois, pour appairer votre hub
 ```
 
-Plus de détails dans [MODULE.md](MODULE.md) (en anglais).
+Plus de détails dans [MODULE.md](MODULE.md#français).
 
 ## Ce qu'un lien distant ne peut jamais faire
 

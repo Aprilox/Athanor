@@ -156,7 +156,7 @@ Your token, settings, projects, `logs/` and `tools/` are never touched by an upd
 <details>
 <summary><b>Build it yourself</b> (from the source code)</summary>
 
-With [Go](https://go.dev/dl/) 1.27.3 or later (Go 1.21 or later downloads 1.27.3 by itself; no Go? `winget install GoLang.Go`, `sudo apt install golang-go` or `brew install go`):
+With [Go](https://go.dev/dl/) 1.27.4 or later (Go 1.21 or later downloads 1.27.4 by itself; no Go? `winget install GoLang.Go`, `sudo apt install golang-go` or `brew install go`):
 
 ```bash
 git clone https://github.com/Aprilox/Athanor.git
@@ -612,7 +612,7 @@ Athanor's MCP opens to two kinds of clients, always by a 6-digit code **and** yo
 
 <img src="docs/images/terminal.png" alt="Athanor in a terminal: the projects and pages on the left, the state of the project, the subscription quota and the plan with its milestones">
 
-On Linux and macOS, Athanor also runs in the terminal, like btop or htop: the same Athanor as its window, on the same server, so both always show the same thing. Made for a server reached through SSH, a Linux without a desktop, or simply your own terminal.
+On Linux and macOS, Athanor also runs in the terminal, like btop or htop: the same Athanor as its window, on the same server, so both always show the same thing. Made for a server reached through SSH, a Linux without a desktop, or simply your own terminal. The terminal holds the home page, the missions and the Studio pages below; the Vault, Servers, E-mail, Access and the home chat stay in the window (open it on this computer with *w*, or from a paired phone through remote access).
 
 - **Open it**: `./athanor tui` in Athanor's folder (or the downloaded file: `./Athanor-Linux-x64 tui`). Through SSH (`SSH_CONNECTION` set), or on a Linux without a screen (no `DISPLAY` nor `WAYLAND_DISPLAY`), `./athanor` alone opens it. `./athanor gui` opens the window whatever the guess.
 - **On a server**: run Athanor as a normal user, not as root: Claude Code refuses to work as root (Setup & health says so, and *Start* refuses). On a fresh VPS: `adduser NAME`, `usermod -aG sudo NAME`, log in as `NAME`, then `./Athanor-Linux-x64`.

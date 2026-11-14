@@ -219,7 +219,7 @@ func TestCaptureHub(t *testing.T) {
 			Mentions: MentionsMission{Serveurs: []string{"c0ffee01"}, Nouveau: true}, Etat: "proposee", Carte: b, Politique: "prod",
 			Voies: []VoieMission{}, Questions: []QuestionMission{}, Historique: []EvenementMission{{T: cree, Etat: "proposee"}}, Cree: cree}
 		if r.URL.Query().Get("question") != "" {
-			m.Questions = append(m.Questions, QuestionMission{ID: "q1", Texte: "Quel serveur pour l'environnement de dev ?", Choix: []string{"Serveur maison", "VPS production"}, Cree: cree})
+			m.Questions = append(m.Questions, QuestionMission{ID: "q1", Texte: "Quel serveur pour l'environnement de dev ?", Choix: []string{"Home server", "VPS production"}, Cree: cree})
 			if r.URL.Query().Get("long") != "" { // mission-question-tel (B90): a choice longer than a phone's line
 				m.Questions[0].Choix = append(m.Questions[0].Choix, "autre domaine très long qui ne tient pas sur une ligne")
 			}
@@ -366,7 +366,7 @@ func TestCaptureHub(t *testing.T) {
 			id, nom, env, resume string
 			etapes               []EtapePlan
 		}{
-			{"c0ffee02", "Serveur maison", "dev", "Mettre nginx à jour et recharger sa configuration pour l'aperçu de la boutique.", []EtapePlan{
+			{"c0ffee02", "Home server", "dev", "Mettre nginx à jour et recharger sa configuration pour l'aperçu de la boutique.", []EtapePlan{
 				{Outil: "ssh_commande", Arguments: json.RawMessage(`{"commande":"apt-get install -y nginx"}`), Pourquoi: "La version installée a une faille corrigée en 1.26."},
 				{Outil: "fichier_ecrire", Arguments: json.RawMessage(`{"chemin":"/etc/nginx/sites-available/boutique","contenu":"server { listen 80; root /var/www/boutique; }"}`), Pourquoi: "Servir l'aperçu depuis " + long},
 				{Outil: "service", Arguments: json.RawMessage(`{"action":"reload","nom":"nginx"}`), Pourquoi: "Prendre la nouvelle configuration sans couper le site <b>maintenant</b>."}}},
@@ -463,7 +463,7 @@ func coffreCapture(t *testing.T) *Coffre {
 	for _, e := range []EntreeCoffre{
 		{Nom: "CLOUDFLARE_API_TOKEN", Famille: "secret", Type: "cloudflare", Portee: "infra", Note: "DNS et tunnels de example.org"},
 		{Nom: "SSH_VPS_PROD", Famille: "secret", Type: "ssh", Portee: "infra", Note: "Serveur de production, utilisateur deploy"},
-		{Nom: "GITHUB_TOKEN", Famille: "secret", Type: "github", Portee: "code", Note: "Lecture des dépôts privés", Source: "projet:boutique"},
+		{Nom: "GITHUB_TOKEN", Famille: "secret", Type: "github", Portee: "code", Note: "Reads private repositories", Source: "projet:boutique"},
 		{Nom: "ANTHROPIC_API_KEY", Famille: "secret", Type: "anthropic", Portee: "code", Source: "mcp:assistant"},
 		{Nom: "STRIPE_SECRET_KEY", Famille: "secret", Type: "stripe", Portee: "code", Note: "Mode test de la boutique"},
 		{Nom: "NODE_ENV", Famille: "variable", Note: "Mode des builds"},
@@ -579,8 +579,8 @@ func serveursCapture(t *testing.T) int {
 	maintenant := time.Now()
 	liste := []ServeurInventaire{
 		{ID: "c0ffee01", Nom: "VPS production", Hote: "vps.example.org", Port: 22, Utilisateur: "deploy", EmpreinteHote: "SHA256:q3XyV0b8mFh2kLtR7cWnJ5sPzA1dE9gUoK4iY6vBxN0", Roles: []string{"prod"}, Etat: "ok", Cree: maintenant.Add(-72 * time.Hour), Vu: maintenant.Add(-20 * time.Minute), MotDePasseCoupe: true},
-		{ID: "c0ffee02", Nom: "Serveur maison", Hote: "192.168.1.40", Port: 2222, Utilisateur: "pi", Roles: []string{"dev"}, Etat: "ok", Cree: maintenant.Add(-48 * time.Hour), Vu: maintenant.Add(-3 * time.Hour)},
-		{ID: "c0ffee03", Nom: "Préproduction", Hote: "staging.example.org", Port: 22, Utilisateur: "root", Roles: []string{"dev", "prod"}, Etat: "inconnu", Cree: maintenant.Add(-10 * time.Minute)},
+		{ID: "c0ffee02", Nom: "Home server", Hote: "192.168.1.40", Port: 2222, Utilisateur: "pi", Roles: []string{"dev"}, Etat: "ok", Cree: maintenant.Add(-48 * time.Hour), Vu: maintenant.Add(-3 * time.Hour)},
+		{ID: "c0ffee03", Nom: "Staging", Hote: "staging.example.org", Port: 22, Utilisateur: "root", Roles: []string{"dev", "prod"}, Etat: "inconnu", Cree: maintenant.Add(-10 * time.Minute)},
 		{ID: "c0ffee04", Nom: "Ancien VPS", Hote: "old.example.net", Port: 22, Utilisateur: "admin", Roles: nil, Etat: "injoignable", Cree: maintenant.Add(-900 * time.Hour), Vu: maintenant.Add(-200 * time.Hour)},
 	}
 	if err := modifierServeurs(func([]ServeurInventaire) ([]ServeurInventaire, error) { return liste, nil }); err != nil {

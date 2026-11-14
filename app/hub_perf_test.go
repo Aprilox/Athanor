@@ -37,7 +37,7 @@ func fauxProjet(t *testing.T, racine, nom string, n, faits int) Projet {
 	for f, c := range map[string]string{
 		p.Plan():                                 plan.String(),
 		p.EtatJSON():                             `{"phase":"travail","cycle":3}`,
-		filepath.Join(p.FileAttente(), "001.md"): "Une demande\n",
+		filepath.Join(p.FileAttente(), "001.md"): "A request\n",
 	} {
 		if err := os.WriteFile(f, []byte(c), 0o644); err != nil {
 			t.Fatal(err)

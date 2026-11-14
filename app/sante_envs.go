@@ -332,7 +332,7 @@ func (s *Serveur) alertesIncidents() []AlerteHub {
 		}
 		h := sha256.Sum256([]byte("incident\x00" + x.Projet + "\x00" + x.Cle))
 		out = append(out, AlerteHub{Empreinte: hex.EncodeToString(h[:12]), Module: "servers", Element: x.Projet + "/" + x.Env, Titre: x.Projet,
-			Raison: "{0} is in trouble. What failed: {1}. What was tried: {2}.", Args: []any{x.Env, echecLisible(s, x), x.Tente},
+			Raison: "The {0} environment is in trouble. What failed: {1}. What was tried: {2}.", Args: []any{x.Env, echecLisible(s, x), x.Tente},
 			Actions: actions})
 	}
 	return out
