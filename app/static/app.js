@@ -6143,25 +6143,29 @@ $("#page").addEventListener("submit", async (ev) => {
   ev.preventDefault();
   const champ = $("#srv-tache-texte"), texte = champ.value.trim(), b = ev.submitter || ev.target.querySelector("[type=submit]");
   if (!texte) return champ.focus();
-  const url = "serveurs/" + encodeURIComponent(srv.fiche.id) + "/taches";
   b.disabled = true;
-  const env = ($("#srv-tache-env") || {}).value || "";
   try {
-    const r = await api(url, "POST", { texte, env }).catch(async (e) => {
-      if (!e.data || !e.data.proposer_wsl) throw e;
-      const c = await choisir(t("Native Windows mode has no barrier: an agent working on your servers would run with all your rights on this PC. Switch to WSL, or force this task knowing the risk."),
-        [{ id: "wsl", texte: t("Switch to WSL"), primaire: true }, { id: "forcer", texte: t("Force this task"), danger: true }, { id: "", texte: t("Cancel") }], { titre: t("Native Windows mode") });
-      if (c === "wsl") { location.hash = "#options@bloc-direct"; return null; }
-      if (c !== "forcer") return null;
-      const p = await preuveMdp(t("Forcing a Servers task without the barrier: retype Athanor's password."), { ok: t("Force this task"), danger: true }, t("Force this task without the barrier?"));
-      return p ? api(url, "POST", { texte, env, forcer: true, ...p }) : null;
-    }).catch((e) => { if (e.message !== t("Locked")) toast(e.message, "erreur"); return null; });
+    const r = await lancerTacheSrv(srv.fiche.id, texte, ($("#srv-tache-env") || {}).value || "");
     if (!r) return;
     srv.texte = ""; srv.ouvertes.add(r.tache.id);
     toast(t("Task launched: the agent reads the server first."), "ok");
     rendrePage();
   } finally { b.disabled = false; }
 });
+// a task launched on a server (its sheet, the assistant beside its terminal); native Windows mode proposes WSL, or
+// forcing it with Athanor's password; null when nothing was launched (the error already shown)
+function lancerTacheSrv(id, texte, env) {
+  const url = "serveurs/" + encodeURIComponent(id) + "/taches";
+  return api(url, "POST", { texte, env }).catch(async (e) => {
+    if (!e.data || !e.data.proposer_wsl) throw e;
+    const c = await choisir(t("Native Windows mode has no barrier: an agent working on your servers would run with all your rights on this PC. Switch to WSL, or force this task knowing the risk."),
+      [{ id: "wsl", texte: t("Switch to WSL"), primaire: true }, { id: "forcer", texte: t("Force this task"), danger: true }, { id: "", texte: t("Cancel") }], { titre: t("Native Windows mode") });
+    if (c === "wsl") { location.hash = "#options@bloc-direct"; return null; }
+    if (c !== "forcer") return null;
+    const p = await preuveMdp(t("Forcing a Servers task without the barrier: retype Athanor's password."), { ok: t("Force this task"), danger: true }, t("Force this task without the barrier?"));
+    return p ? api(url, "POST", { texte, env, forcer: true, ...p }) : null;
+  }).catch((e) => { if (e.message !== t("Locked")) toast(e.message, "erreur"); return null; });
+}
 // the countdown of the changes waiting for confirmation; at its end the server has undone the change: read it again
 setInterval(() => {
   let fini = false;
@@ -6315,12 +6319,13 @@ pages.terminal = async () => {
       ${avis ? "" : `<span class="muet petit term-aide">${t("Copy: Ctrl+Shift+C · Paste: Ctrl+Shift+V")}</span>
       <button type="button" class="btn btn-petit" data-term-copier>${t("Copy")}</button><button type="button" class="btn btn-petit" data-term-coller>${t("Paste")}</button>
       <button type="button" class="btn btn-petit term-bascule-fichiers" data-term-fichiers aria-pressed="${!sf.cache}">${t("Files")}</button>
+      <button type="button" class="btn btn-petit term-bascule-ia" data-term-ia aria-pressed="${ia.visible}">${t("Assistant")}</button>
       <button type="button" class="btn btn-petit term-bouton-reglages" data-term-reglages aria-expanded="${!!term.essai}" aria-controls="term-reglages-zone" title="${h(t("Theme, text size, cursor"))}">⚙ ${t("Settings")}</button>
       <button type="button" class="btn btn-petit" data-term-deconnecter>${t("Disconnect")}</button>`}</div>
     ${avis ? `<div class="bloc term-message"><p class="m0"><b>${h(avis[0])}</b></p><p class="muet m0">${h(avis[1])}</p><div class="ligne m0"><a class="btn" href="#serveur/${encodeURIComponent(x.id)}">${t("Back to the server")}</a></div></div>`
       : `<div class="bloc term-message" id="term-message" role="alert" hidden></div><div id="term-reglages-zone">${term.essai ? panneauReglagesTerminal() : ""}</div>
-      <div class="onglets term-onglets" role="tablist">${["terminal", "fichiers"].map((o) => `<button type="button" role="tab" class="${sf.onglet === o ? "actif" : ""}" aria-selected="${sf.onglet === o}" data-term-onglet="${o}">${t(o === "terminal" ? "Terminal" : "Files")}</button>`).join("")}</div>
-      <div class="term-zones${sf.cache ? " sans-fichiers" : ""}" id="term-zones" data-onglet="${sf.onglet}"><div class="term-hote" id="term-hote"></div><aside class="sftp" id="sftp" aria-label="${h(t("Files"))}"></aside></div>`}
+      <div class="onglets term-onglets" role="tablist">${["terminal", "fichiers", "ia"].map((o) => `<button type="button" role="tab" class="${sf.onglet === o ? "actif" : ""}" aria-selected="${sf.onglet === o}" data-term-onglet="${o}">${t({ terminal: "Terminal", fichiers: "Files", ia: "Assistant" }[o])}</button>`).join("")}</div>
+      <div class="term-zones${sf.cache ? " sans-fichiers" : ""}${ia.visible ? " avec-ia" : ""}" id="term-zones" data-onglet="${sf.onglet}"><div class="term-hote" id="term-hote"></div><aside class="sftp" id="sftp" aria-label="${h(t("Files"))}"></aside>${panneauIA(distant)}</div>`}
   </div>`;
 };
 // the terminal fills the content area down to its bottom edge (a fixed calc() overflowed under the page's header)
@@ -6444,7 +6449,7 @@ function copierTerminal() {
   navigator.clipboard.writeText(s).then(() => toast(t("Copied."), "ok"), () => toast(t("The browser refused to copy."), "erreur"));
 }
 // leaving the page: the stream stops; the Go side ends the terminal a minute later unless the page comes back
-function quitterTerminal() { if (term.lecteur) { term.lecteur.abort(); term.lecteur = null; } if (term.obs) term.obs.disconnect(); term.msg = null; term.essai = null; }
+function quitterTerminal() { clearTimeout(ia.minuteur); if (term.lecteur) { term.lecteur.abort(); term.lecteur = null; } if (term.obs) term.obs.disconnect(); term.msg = null; term.essai = null; }
 // --- Files panel beside the terminal (M231c): the server's files through the terminal's own SSH connection
 // (serveurs_sftp.go); a click selects an entry, a second click (or a double click) opens a folder.
 // On a phone the terminal and the files share the screen through two tabs.
@@ -6542,10 +6547,16 @@ function ongletTerminal(o) {
 }
 $("#page").addEventListener("click", async (ev) => {
   if (etat.page !== "terminal") return;
-  const b = ev.target.closest("[data-term-onglet], [data-term-fichiers], [data-sftp-aller], [data-sftp-haut], [data-sftp-actualiser], [data-sftp-entree], [data-sftp-ouvrir], [data-sftp-telecharger], [data-sftp-renommer], [data-sftp-renommer-ok], [data-sftp-renommer-annuler], [data-sftp-supprimer]");
+  const b = ev.target.closest("[data-term-onglet], [data-term-fichiers], [data-term-ia], [data-sftp-aller], [data-sftp-haut], [data-sftp-actualiser], [data-sftp-entree], [data-sftp-ouvrir], [data-sftp-telecharger], [data-sftp-renommer], [data-sftp-renommer-ok], [data-sftp-renommer-annuler], [data-sftp-supprimer]");
   if (!b) return;
   const d = b.dataset, e = sf.entrees.find((x) => x.nom === sf.choisi);
   if (d.termOnglet) return ongletTerminal(d.termOnglet);
+  if (d.termIa !== undefined) {
+    ia.visible = !ia.visible; localStorage.setItem("athanor.terminal.ia", ia.visible ? "1" : "0");
+    b.setAttribute("aria-pressed", ia.visible); $("#term-zones")?.classList.toggle("avec-ia", ia.visible);
+    if (ia.visible) { rendreIA(); $("#ia-texte")?.focus(); }
+    return requestAnimationFrame(() => term.fit && term.fit.fit());
+  }
   if (d.termFichiers !== undefined) {
     sf.cache = !sf.cache; localStorage.setItem("athanor.terminal.fichiers", sf.cache ? "0" : "1");
     b.setAttribute("aria-pressed", !sf.cache); $("#term-zones")?.classList.toggle("sans-fichiers", sf.cache);
@@ -6589,6 +6600,100 @@ $("#page").addEventListener("drop", (ev) => {
   if (etat.page !== "terminal" || !ev.target.closest("#sftp") || !term.session) return;
   ev.preventDefault(); $("#sftp").classList.remove("depot");
   if (ev.dataTransfer.files.length) envoyerSftp([...ev.dataTransfer.files]);
+});
+// --- The assistant beside the terminal (M231e): a Servers task on this server whose every call shows here live.
+// Mode "separate connection": its agent's calls each open their own SSH session (serveurs_ia_terminal.go), with
+// the same guards as any task: risk class, a plan before any change, your decision, backups, outputs as data.
+const ia = { visible: localStorage.getItem("athanor.terminal.ia") === "1", taches: [], plans: {}, lu: "", minuteur: 0, ouvertes: new Set(), suivi: true };
+const ETATS_ACTION_IA = () => ({ en_cours: [t("running…"), "pv-claude"], ok: [t("Done"), "pv-ok"], erreur: [t("Failed"), "pv-vous"], refusee: [t("Refused"), "pv-vous"] });
+function panneauIA(distant) {
+  const mode = (v, titre, phrase, actif) => `<label class="ia-mode${actif ? " actif" : ""}"><input type="radio" name="ia-mode" value="${v}"${actif ? " checked" : " disabled"}>
+    <span><b>${t(titre)}</b> <span class="muet petit">${t(phrase)}</span></span></label>`;
+  return `<aside class="ia" id="ia" aria-label="${h(t("Assistant"))}">
+    <fieldset class="ia-modes"><legend class="petit">${t("How the assistant works")}</legend>
+      ${mode("apart", "Separate connection", "It opens its own SSH session on the server, so it never gets in your way; you follow each command here.", true)}
+      ${mode("direct", "Live in my terminal", "Its commands are typed into your terminal and you watch them run.", false)}</fieldset>
+    <div class="ia-fil" id="ia-fil" aria-live="polite"></div>
+    <div class="ia-encours" id="ia-encours"></div>
+    ${distant ? `<p class="muet petit m0">${t("Tasks are launched from the computer; their plans are decided on their cards, on the For you page.")}</p>`
+      : `<form class="ia-saisie" id="ia-form"><label for="ia-texte" class="cache-visuel">${t("Ask the assistant")}</label>
+      <textarea id="ia-texte" rows="2" maxlength="4000" placeholder="${h(t("e.g. Install and configure Caddy for this domain"))}"></textarea>
+      <button type="submit" class="btn btn-primaire">${t("Send")}</button></form>`}
+  </aside>`;
+}
+// the server's tasks read again; again in 1.5 s while one runs and the page is still this terminal
+async function chargerIA() {
+  clearTimeout(ia.minuteur);
+  const id = term.id; if (!$("#ia") || !id) return;
+  const r = await api("serveurs/" + encodeURIComponent(id) + "/taches").catch(() => null);
+  if (etat.page !== "terminal" || term.id !== id) return;
+  if (r) { const sig = JSON.stringify(r.taches) + JSON.stringify(r.plans); if (sig !== ia.lu || !$("#ia-fil").childElementCount) { ia.lu = sig; ia.taches = r.taches || []; ia.plans = r.plans || {}; rendreIA(); } }
+  if (ia.taches.some((x) => !tacheFinie(x))) ia.minuteur = setTimeout(chargerIA, 1500);
+}
+function actionIA(a) {
+  const [lib, cl] = ETATS_ACTION_IA()[a.etat] || [a.etat, ""], cla = CLASSES_ETAPE()[a.classe];
+  const quoi = a.outil === "ssh_commande" ? "$ " + a.quoi : a.outil + (a.quoi ? " · " + a.quoi : "");
+  const corps = (a.sortie ? `<pre class="ia-sortie">${h(a.sortie)}${a.coupee ? "\n…" : ""}</pre>` : "") + (a.detail ? `<p class="petit m0 ${a.etat === "refusee" ? "pv-vous" : "muet"}">${h(t(a.detail))}</p>` : "")
+    + (a.etat === "erreur" && !a.detail ? `<p class="petit muet m0">${h(t("Exit code {0}", [a.code]))}</p>` : "");
+  const tete = `<code class="ia-quoi">${h(quoi)}</code> ${cla ? `<span class="pv-etat ${cla[1]}">${h(cla[0])}</span>` : ""} <span class="pv-etat ${cl}">${h(lib)}</span>`;
+  const cle = a.t + "#" + a.n;
+  return corps ? `<li><details class="ia-action" data-ia-action="${h(cle)}"${ia.ouvertes.has(cle) ? " open" : ""}><summary>${tete}</summary>${corps}</details></li>` : `<li class="ia-action">${tete}</li>`;
+}
+function tacheIA(x) {
+  const [lib, cl] = ETATS_TACHE_SRV()[x.etat] || [x.etat, ""], fin = (x.historique || []).slice(-1)[0] || {};
+  const plan = x.etat === "attente_accord" && (x.plans || []).length ? x.plans[x.plans.length - 1] : "", p = plan && ia.plans[plan];
+  return `<div class="ia-tache" data-tache="${h(x.id)}"><p class="ia-demande">${h(x.texte)}</p>
+    ${(x.actions || []).length ? `<ol class="ia-actions">${x.actions.map(actionIA).join("")}</ol>` : ""}
+    ${p ? `<div class="ia-plan"><p class="m0"><b>${t("Plan to apply")}</b> <span class="muet petit">${h(t("{0} step(s)", [(p.etapes || []).length]))}</span></p>${blocPlan({}, p)}
+      ${(etat.vue || {}).distant ? "" : `<div class="ligne m0"><button type="button" class="btn btn-primaire btn-petit" data-ia-decider="accepter" data-plan="${h(plan)}">${t("Accept")}</button>
+      <button type="button" class="btn btn-petit" data-ia-decider="refuser" data-plan="${h(plan)}">${t("Refuse")}</button>
+      <a href="#pourvous" class="petit" data-ia-carte="${h(plan)}">${t("Decide on its card")}</a></div>`}</div>` : ""}
+    ${x.resultat ? `<p class="ia-reponse">${h(x.resultat)}</p>` : ""}
+    ${tacheFinie(x) ? `<p class="m0 petit"><span class="pv-etat ${cl}">${h(lib)}</span>${["echec", "arretee"].includes(x.etat) && fin.detail ? ` <span class="muet">${h(t(fin.detail))}</span>` : ""}</p>` : ""}</div>`;
+}
+function rendreIA() {
+  const fil = $("#ia-fil"), zone = $("#ia-encours"); if (!fil || !zone) return;
+  const l = ia.taches.slice(0, 10).reverse(), courante = ia.taches.find((x) => !tacheFinie(x)), bas = fil.scrollHeight - fil.scrollTop - fil.clientHeight < 40;
+  fil.innerHTML = l.length ? l.map(tacheIA).join("") : `<div class="ia-vide"><p class="m0"><b>${t("Ask in plain words what this server needs.")}</b></p>
+    <p class="muet petit m0">${t("The assistant reads the server first, then proposes a plan: nothing changes before you accept it, a destructive step backs up first, and what the server answers is never taken as an order.")}</p></div>`;
+  if (bas || ia.suivi) { fil.scrollTop = fil.scrollHeight; ia.suivi = false; }
+  const enCours = courante && (courante.actions || []).filter((a) => a.etat === "en_cours").slice(-1)[0];
+  const texte = !courante ? t("The assistant is idle.") : enCours ? t("Running: {0}", [enCours.quoi]) : (ETATS_TACHE_SRV()[courante.etat] || [courante.etat])[0];
+  zone.innerHTML = `<span class="pastille ${courante ? (courante.etat === "attente_accord" ? "attend" : "travaille") : ""}"></span><span class="ia-encours-texte petit">${h(texte)}</span>
+    <button type="button" class="btn btn-danger btn-petit" data-ia-arreter="${h(courante ? courante.id : "")}"${courante && !(etat.vue || {}).distant ? "" : " disabled"}>${t("Stop")}</button>`;
+  const b = $("#ia-form [type=submit]"); if (b) b.disabled = !!courante;
+}
+$("#page").addEventListener("toggle", (ev) => {
+  const d = ev.target; if (etat.page !== "terminal" || !d.matches || !d.matches(".ia-action")) return;
+  if (d.open) ia.ouvertes.add(d.dataset.iaAction); else ia.ouvertes.delete(d.dataset.iaAction);
+}, true);
+$("#page").addEventListener("submit", async (ev) => {
+  if (etat.page !== "terminal" || ev.target.id !== "ia-form") return;
+  ev.preventDefault();
+  const champ = $("#ia-texte"), texte = champ.value.trim(), b = ev.target.querySelector("[type=submit]");
+  if (!texte) return champ.focus();
+  b.disabled = true;
+  const r = await lancerTacheSrv(term.id, texte, "");
+  if (!r) { b.disabled = false; return; }
+  champ.value = ""; ia.suivi = true; ia.taches.unshift(r.tache); rendreIA(); chargerIA();
+});
+$("#page").addEventListener("keydown", (ev) => { // Enter sends, Shift+Enter makes a new line
+  if (etat.page === "terminal" && ev.target.id === "ia-texte" && ev.key === "Enter" && !ev.shiftKey && !ev.isComposing) { ev.preventDefault(); $("#ia-form").requestSubmit(); }
+});
+$("#page").addEventListener("click", async (ev) => {
+  if (etat.page !== "terminal") return;
+  const b = ev.target.closest("[data-ia-arreter], [data-ia-decider], [data-ia-carte]"); if (!b) return;
+  const d = b.dataset;
+  if (d.iaCarte) { etat.apprCible = d.iaCarte; return; } // the link opens For you, where the card is scrolled to
+  b.disabled = true;
+  if (d.iaArreter) {
+    if (await action(api("serveurs/" + encodeURIComponent(term.id) + "/taches/" + encodeURIComponent(d.iaArreter) + "/arreter", "POST"))) toast(t("Task stopped."), "ok");
+    return chargerIA();
+  }
+  // a password or a paired device to decide, or a plan that leaves only Athanor's key: decided on its card
+  const r = await api("hub/approbations").catch(() => ({})), p = ia.plans[d.plan] || {};
+  if (r.mot_de_passe_requis || r.appareil_requis || (p.seule_cle && d.iaDecider !== "refuser")) { etat.apprCible = d.plan; location.hash = "#pourvous"; return; }
+  if (await deciderApprobation({ id: d.plan, decision: d.iaDecider })) chargerIA(); else b.disabled = false;
 });
 // the Settings panel: every change shows at once in the terminal; nothing is kept before Save
 $("#page").addEventListener("input", (ev) => {
@@ -6694,7 +6799,7 @@ async function rendrePage() {
   proposerTutoriel();
   if (etat.page === "journal") rendreJournal();
   if (etat.page === "sante") rendreSortie();
-  if (etat.page === "terminal") monterTerminal();
+  if (etat.page === "terminal") { monterTerminal(); chargerIA(); }
 }
 
 // the scroll of each list of the page, kept across a rebuild: same element = same classes, same rank

@@ -13,7 +13,7 @@ func consigneChefOps(texte string, serveurs []string) string {
 		"How you work:\n" +
 		"1. Read before anything: serveurs_liste, serveur_fiche and runbook_lire for each server, then the state you need " +
 		"(read-only calls: fichier_lire, ssh_commande with read commands, service status, docker ps or logs, pare_feu status).\n" +
-		"2. If nothing must change, answer the owner in a few plain sentences and stop.\n" +
+		"2. If nothing must change, answer the owner in a few plain sentences (no emojis, no headings) and stop.\n" +
 		"3. Otherwise call proposer_plan once: the smallest set of steps, each with its exact tool and arguments, why, and " +
 		"for a destructive step the paths to back up (sauvegarde) or why nothing needs keeping (sans_sauvegarde). A firewall " +
 		"change is a pare_feu step, never ufw, iptables or nft through ssh_commande (no automatic rollback there). Then stop " +
@@ -31,7 +31,7 @@ func consigneApplication(plan string) string {
 		"2. For a firewall or SSH change, check you can still read the server, then call confirmer_changement with its id.\n" +
 		"3. Check the result with read-only calls (the service answers, the file holds what it should).\n" +
 		"4. Call runbook_ajouter once: what changed, the backups Athanor reported, how to go back.\n" +
-		"5. Answer the owner in a few plain sentences: done or not, and what was checked.\n"
+		"5. Answer the owner in a few plain sentences (no emojis, no headings): done or not, and what was checked.\n"
 }
 
 // consigneEnv: what a task launched for an environment adds (M116): its host names and its Cloudflare tools.

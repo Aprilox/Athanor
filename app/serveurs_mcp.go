@@ -115,10 +115,12 @@ func faireOutilServeur(nom string) func(*Serveur, SessionHub, json.RawMessage) (
 			return "", err
 		}
 		e, err := s.avantOutil(x, id, nom, a)
+		tache, n := s.debutAction(x, nom, a, e, err) // the assistant's panel shows it live (M231e)
 		if err != nil {
 			return "", errors.New(s.masquerSecrets(err.Error()))
 		}
 		r, err := s.appelerOutilServeur(s.contexteSession(x.Hache), x.Agent, id, nom, e.Arguments, sauvegardeDe(e))
+		s.finAction(tache, n, r, err)
 		if e.Classe > ClasseLecture {
 			s.noterRunbook(id, e, r, err)
 		}

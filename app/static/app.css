@@ -1353,16 +1353,44 @@ a.mis-ligne:hover, a.mis-ligne:focus-visible { border-color: var(--accent); }
 .term-reglages-ligne input[type="range"] { color: inherit; background: transparent; accent-color: var(--accent); }
 .term-reglages-ligne output { min-width: 2.2em; font-variant-numeric: tabular-nums; }
 .srv-reglage-terminal { margin-top: 8px; }
+/* the assistant beside the terminal (M231e): its modes on top, what it did, what runs now with Stop, then the question */
+.term-zones.avec-ia { grid-template-columns: minmax(0, 1fr) minmax(220px, 280px) minmax(280px, 360px); }
+.term-zones.sans-fichiers.avec-ia { grid-template-columns: minmax(0, 1fr) minmax(300px, 380px); }
+.term-zones:not(.avec-ia) .ia { display: none; }
+.ia { display: flex; flex-direction: column; gap: 8px; min-height: 0; border: 1px solid var(--line); border-radius: 8px; padding: 8px; background: var(--panel); }
+.ia-modes { border: 0; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
+.ia-modes legend { color: var(--muted); margin-bottom: 2px; }
+.ia-mode { display: flex; gap: 6px; align-items: flex-start; padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; font-size: .9em; cursor: pointer; }
+.ia-mode.actif { border-color: var(--accent); }
+.ia-mode:has(input:disabled) { border-style: dashed; cursor: default; }
+.ia-mode input { margin: 3px 0 0; }
+.ia-mode .muet { display: block; }
+.ia-fil { flex: 1; min-height: 80px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+.ia-vide { display: flex; flex-direction: column; gap: 4px; margin: auto 0; }
+.ia-tache { display: flex; flex-direction: column; gap: 6px; }
+.ia-demande { margin: 0; align-self: flex-end; max-width: 92%; padding: 6px 9px; border-radius: 8px; background: color-mix(in srgb, var(--accent) 16%, transparent); white-space: pre-wrap; overflow-wrap: anywhere; }
+.ia-actions { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; font-size: 13px; }
+.ia-action summary { cursor: pointer; }
+.ia-quoi { white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--mono); font-size: 12.5px; }
+.ia-sortie { max-height: 180px; overflow: auto; margin: 4px 0; padding: 6px 8px; background: var(--sombre); border: 1px solid var(--line); border-radius: 6px; font-family: var(--mono); font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ia-plan { display: flex; flex-direction: column; gap: 6px; border-left: 3px solid var(--attention); padding-left: 8px; }
+.ia-reponse { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ia-encours { display: flex; align-items: center; gap: 8px; border-top: 1px solid var(--line); padding-top: 6px; }
+.ia-encours-texte { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.ia-saisie { display: flex; gap: 6px; align-items: flex-end; }
+.ia-saisie textarea { flex: 1; min-width: 0; resize: vertical; }
 @media (max-width: 700px) {
   .term-aide, .term-adresse { display: none; }
   .term-hote { padding: 4px; }
-  .term-zones { grid-template-columns: minmax(0, 1fr); height: calc(100dvh - 220px); }
+  .term-zones, .term-zones.avec-ia, .term-zones.sans-fichiers.avec-ia { grid-template-columns: minmax(0, 1fr); height: calc(100dvh - 220px); }
   .term-onglets { display: flex; }
-  .term-bascule-fichiers { display: none; }
+  .term-bascule-fichiers, .term-bascule-ia { display: none; }
   .term-themes { grid-template-columns: 1fr 1fr; }
   .term-theme { padding: 5px 6px; gap: 6px; min-width: 0; overflow-wrap: anywhere; }
   .term-apercu i:nth-of-type(n+4) { display: none; }
   .term-apercu-auto { width: 34px; }
   .term-zones.sans-fichiers .sftp { display: flex; }
-  .term-zones[data-onglet="terminal"] .sftp, .term-zones[data-onglet="fichiers"] .term-hote { display: none; }
+  .term-zones:not(.avec-ia) .ia { display: flex; }
+  .term-zones[data-onglet="terminal"] .sftp, .term-zones[data-onglet="fichiers"] .term-hote, .term-zones[data-onglet="ia"] .term-hote, .term-zones[data-onglet="ia"] .sftp,
+  .term-zones[data-onglet="terminal"] .ia, .term-zones[data-onglet="fichiers"] .ia { display: none; }
 }

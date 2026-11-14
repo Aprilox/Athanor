@@ -48,6 +48,7 @@ type TacheServeurs struct {
 	Resultat     string             `json:"resultat,omitempty"`
 	Verification *VerificationTache `json:"verification,omitempty"` // the external verifier's report (M98)
 	Historique   []EvenementTache   `json:"historique"`
+	Actions      []ActionTache      `json:"actions,omitempty"` // every tool call of its agents, live (M231e)
 }
 
 // EvenementTache: a state reached, and what brought it (a plan's id, an error).
@@ -195,7 +196,7 @@ func (e *tacheEnCours) copie() TacheServeurs {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	t := e.t
-	t.Serveurs, t.Plans, t.Historique = slices.Clone(t.Serveurs), slices.Clone(t.Plans), slices.Clone(t.Historique)
+	t.Serveurs, t.Plans, t.Historique, t.Actions = slices.Clone(t.Serveurs), slices.Clone(t.Plans), slices.Clone(t.Historique), slices.Clone(t.Actions)
 	return t
 }
 
