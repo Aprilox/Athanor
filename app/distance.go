@@ -303,6 +303,7 @@ var autorisesDistance = map[string]bool{"GET /api/hub": true, "GET /api/coffre":
 	"GET /api/hub/audit": true, "POST /api/hub/audit/verifier": true, // the audit log: read and checked, never written
 	"GET /api/hub/approbations": true, "POST /api/hub/approbations": true, // P7: the owner decides from the phone
 	"POST /api/hub/urgence": true,                                 // the emergency stop, from the phone too
+	"GET /api/hub/chat":     true,                                 // M199: the home conversation, read only (sent, powers, folders, cards: the computer only)
 	"GET /api/serveurs":     true, "GET /api/serveurs/{id}": true, // the inventory and a server's sheet, read only
 	"GET /api/serveurs/{id}/taches": true,                                 // a server's tasks, read only (plans are decided by the approval card)
 	"GET /api/missions":             true, "GET /api/missions/{id}": true, // the missions (created on the PC only)

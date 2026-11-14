@@ -82,6 +82,14 @@ func TestDistanceToutesRoutes(t *testing.T) {
 		{"POST", "/api/hub/approbations/x", true},
 		{"POST", "/api/hub/urgence", false}, // the emergency stop from the phone
 		{"GET", "/api/hub/urgence", true},
+		{"GET", "/api/hub/chat", false}, // M199: the home conversation read from a device
+		{"POST", "/api/hub/chat", true}, // never written, nor its powers, folders, files and cards
+		{"POST", "/api/hub/chat/pouvoirs", true},
+		{"POST", "/api/hub/chat/piece", true},
+		{"POST", "/api/hub/chat/action", true},
+		{"POST", "/api/hub/chat/arreter", true},
+		{"POST", "/api/hub/chat/effacer", true},
+		{"GET", "/api/hub/chatx", true},
 		{"POST", "/api/acces", true},
 		{"GET", "/api/acces/x", true},
 		{"GET", "/api/serveurs", false},   // the inventory, read from a device

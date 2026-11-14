@@ -44,7 +44,7 @@ func (s *Serveur) apiHubChat(w http.ResponseWriter, r *http.Request) {
 	rep := s.etatChat(p)
 	conv := lireConversation(s.kitCourant(), p)
 	rep["pouvoirs"], rep["actions"] = conv.Pouvoirs, s.cartesConversation(conv)
-	s.ecrireJSON(w, rep)
+	s.ecrireJSONMasque(w, rep) // M199: no vault value in what the page (or a device) reads
 }
 
 func (s *Serveur) apiHubChatEnvoyer(w http.ResponseWriter, r *http.Request) {
@@ -56,6 +56,12 @@ func (s *Serveur) apiHubChatEnvoyer(w http.ResponseWriter, r *http.Request) {
 	p := projetAccueil(k)
 	if err := os.MkdirAll(p.Dossier, 0o700); err != nil {
 		s.erreur(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	c.Message = s.masquerSecrets(c.Message) // M199: a vault value typed or pasted never reaches the model
+	alerte, err := s.examinerPiecesAccueil(p, c.Pieces)
+	if err != nil {
+		s.erreur(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	// the powers are the conversation's, never the message's; the folders checked again (one may have changed)
@@ -73,7 +79,7 @@ func (s *Serveur) apiHubChatEnvoyer(w http.ResponseWriter, r *http.Request) {
 			c.Dossiers[i].Ecriture = false
 		}
 	}
-	liste := consigneActionsAccueil + s.texteEtatHub() + texteDossiersChat(c.Dossiers, c.Mode == "modif")
+	liste := consigneActionsAccueil + s.texteEtatHub() + texteDossiersChat(c.Dossiers, c.Mode == "modif") + alerte
 	s.envoyerChat(w, p, c, consigneAccueil, consigneLectureAccueil+liste, consigneEcritureAccueil+liste)
 }
 
