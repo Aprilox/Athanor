@@ -1934,7 +1934,13 @@ function tuileModule(m) {
     <div class="ligne m0 tuile-tete"><span class="dot ${classe}" aria-hidden="true"></span><h2 class="m0">${h(t(m.nom))}</h2><span class="muet petit">${h(t(libelle))}</span><span class="espace"></span>
       ${ouvrir ? `<a class="btn btn-petit" href="${h(ouvrir.hash)}">${t("Open")} →</a>` : ""}</div>
     <div class="hub-stats">${(r.stats || []).map(statModule).join("")}</div>
+    ${m.id === "dev" ? raccourcisDev() : ""}
   </section>`;
+}
+// B6: New project, Manage and Archives one tap from Home (the phone needed three: menu, selector, entry)
+function raccourcisDev() {
+  const v = etat.vue || {}, archives = (v.projets || []).filter((x) => x.archive).length;
+  return `<div class="ligne m0 tuile-raccourcis"><a class="btn btn-petit btn-fantome" href="#nouveau">+ ${t("New project")}</a>${v.projet ? `<a class="btn btn-petit btn-fantome" href="#projet">⚙ ${t("Manage this project")}</a>` : ""}${archives ? `<a class="btn btn-petit btn-fantome" href="#archives">🗄 ${t("Archived projects ({0})", [archives])}</a>` : ""}</div>`;
 }
 // Home's "In progress": the same elements as Projects, those that need the owner first (the API's order), then the working ones
 function blocEnCours(tous, modules) {
@@ -2279,7 +2285,7 @@ function listeDossiersHub(pv) {
     : `<li class="muet petit">${t("No folder: the assistant sees no file of your computer.")}</li>`;
 }
 function pouvoirsHub(pv) {
-  return `<details class="hub-pouvoirs" id="hub-pouvoirs"><summary>${t("What the assistant can do")}: <span id="hub-pouvoirs-resume">${h(resumePouvoirs(pv))}</span></summary>
+  return `<details class="hub-pouvoirs" id="hub-pouvoirs"><summary>${t("{0}: {1}", [t("What the assistant can do"), `<span id="hub-pouvoirs-resume">${h(resumePouvoirs(pv))}</span>`])}</summary>
     ${POUVOIRS_HUB.map(([k, i, n, aide]) => `<label class="interrupteur m0 local-seul"><input type="checkbox" data-pouvoir="${k}" ${pv[k] ? "checked" : ""} aria-describedby="pv-aide-${k}"><span>${i} ${t(n)}</span></label>
     <p class="petit muet m0 local-seul" id="pv-aide-${k}">${t(aide)}</p>`).join("")}
     <div class="hub-dossiers"><div class="ligne m0"><strong>📁 ${t("Folders")}</strong><span class="espace"></span><button type="button" class="btn btn-petit local-seul" id="hub-dossier-ajouter">${t("Add a folder…")}</button></div>
@@ -2845,7 +2851,7 @@ pages.archives = async () => {
   const l = ((etat.vue && etat.vue.projets) || []).filter((x) => x.archive);
   return `<div class="bloc gestion"><h2>${t("Archived projects")}</h2>
     <p class="muet petit">${t("Out of the project list and never restarted. Bring one back to work on it again.")}</p>
-    ${l.length ? `<table class="tab"><tbody>${l.map((p) => `<tr><td><b>${h(p.nom)}</b></td><td class="muet">${h(p.dossier)}</td><td class="droite"><div class="ligne fin">
+    ${l.length ? `<table class="tab tab-pile"><tbody>${l.map((p) => `<tr><td><b>${h(p.nom)}</b></td><td class="muet">${h(p.dossier)}</td><td class="droite"><div class="ligne fin">
       <button class="btn btn-petit" data-gestion="desarchiver" data-nom="${h(p.nom)}">${t("Bring back")}</button>
       <select data-mode-suppr><option value="liste">${t("Remove from the list only")}</option><option value="atelier">${t("+ its workshop to the recycle bin")}</option><option value="dossier">${t("The whole folder to the recycle bin")}</option></select>
       <button class="btn btn-petit btn-danger" data-gestion="supprimer" data-nom="${h(p.nom)}" data-dossier="${h(p.dossier)}">${t("Delete")}</button></div></td></tr>`).join("")}</tbody></table>`
@@ -5265,7 +5271,7 @@ async function testerCoffre(corps, sortie, champNote) {
 function carteCoffre(x) {
   const secret = x.famille === "secret", infra = x.portee === "infra";
   return `<div class="bloc carte-coffre" data-coffre-id="${h(x.id)}">
-    <div class="cp-tete"><b class="cp-nom">${h(x.nom)}</b>${secret ? `<span class="badge">${h(typeCoffre(x.type))}</span><span class="badge${infra ? " badge-infra" : ""}" title="${h(infra ? t("Server key: opens only with your password") : t("Project key: reopens alone on this PC"))}">${infra ? "infra" : "code"}</span>` : ""}
+    <div class="cp-tete"><b class="cp-nom" title="${h(x.nom)}">${h(x.nom)}</b>${secret ? `<span class="badge">${h(typeCoffre(x.type))}</span><span class="badge${infra ? " badge-infra" : ""}" title="${h(infra ? t("Server key: opens only with your password") : t("Project key: reopens alone on this PC"))}">${infra ? "infra" : "code"}</span>` : ""}
       <details class="menu-coffre"><summary class="btn btn-petit" aria-label="${h(t("Actions"))}">⋯</summary><div class="menu-coffre-liste">
         ${secret && TESTABLES_COFFRE.has(x.type) ? `<button type="button" data-cof-tester="${h(x.id)}">${t("Test")}</button>` : ""}<button type="button" data-cof-modifier="${h(x.id)}">${t("Edit")}</button><button type="button" data-cof-remplacer="${h(x.id)}">${t("Replace the value")}</button><button type="button" class="danger" data-cof-supprimer="${h(x.id)}">${t("Delete")}</button>
       </div></details></div>
@@ -6482,7 +6488,8 @@ async function rafraichir() {
       etat.dernierAppareil = v.dernier_appareil;
     }
     marquerDistance(v);
-    if (v.langue && v.langue !== etat.langue) { etat.langue = v.langue; appliquerLangue(v.langue); traduireNav(); }
+    // a language changed elsewhere (another window, a device, the TUI): the page too, not only the menu (never at start: B2)
+    if (v.langue && v.langue !== etat.langue) { const avant = etat.langue; etat.langue = v.langue; appliquerLangue(v.langue); traduireNav(); if (avant && etat.page && etat.assistant < 0) rendrePage(); }
     if ((v.theme || "") !== etat.theme || (v.accent || "") !== etat.accent) { etat.theme = v.theme || ""; etat.accent = v.accent || ""; appliquerTheme(etat.theme, etat.accent); }
     if (!v.verrouille && v.bienvenue && !v.distant && etat.assistant < 0) { etat.assistant = 0; rendreAssistant(); }
     if (v.verrouille !== etat.verrouille) { etat.verrouille = v.verrouille; afficherVerrou(); if (!v.verrouille) rendrePage(); }

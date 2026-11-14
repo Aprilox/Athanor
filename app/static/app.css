@@ -131,12 +131,14 @@ html.cadre .dialogue, html.cadre .verrou, html.cadre .assistant { top: var(--bar
 .puces-suggestions { flex-wrap: wrap; gap: 6px; }
 .puce-sugg { border-radius: 12px; }
 .tutoriels { flex-wrap: wrap; gap: 8px; }
+.tutoriels .croit { min-width: 220px; } /* phone: the sentence goes to its own line instead of one word per line */
 .grille-hub { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
 .grille-hub > .bloc + .bloc { margin-top: 0; }
 .tuile-module.besoin { border-color: var(--attention); }
 .en-cours { display: flex; flex-direction: column; gap: 12px; }
 .tuile-tete { gap: 8px; flex-wrap: nowrap; }
 .tuile-tete h2 { font-size: 16px; }
+.tuile-raccourcis { gap: 6px; margin-top: 10px; }
 .hub-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 14px; }
 .hub-stat { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--rayon); background: var(--panel-2); color: inherit; text-decoration: none; min-width: 0; }
 .hub-stat:hover, .hub-stat:focus-visible { border-color: var(--accent); }
@@ -921,6 +923,10 @@ input.large { flex: 1; min-width: 200px; width: auto; }
   .bloc { padding: 14px; }
   .grille-2, .grille-3 { grid-template-columns: 1fr; }
   table.tab { display: block; overflow-x: auto; }
+  /* a table whose last column holds its buttons: one row per card, never scrolled out of sight (Archives) */
+  table.tab-pile tr { display: grid; grid-template-columns: minmax(0, 1fr); border-bottom: 1px solid var(--line-2); padding: 6px 0; }
+  table.tab-pile td { border-bottom: 0; padding: 2px 0; overflow-wrap: anywhere; }
+  table.tab-pile td.droite { text-align: left; }
   .btn { min-height: 40px; }
   .btn-petit { min-height: 36px; }
   input, select, textarea { font-size: 16px; } /* no zoom on focus (iOS) */
@@ -931,6 +937,7 @@ input.large { flex: 1; min-width: 200px; width: auto; }
   .chat { height: auto; min-height: 0; padding-bottom: 0; }
   .chat-tete h2 { font-size: 17px; }
   .chat-tete .croit { min-width: 0; flex-basis: 100%; order: 3; }
+  .accueil-chat .chat-tete .croit { order: 0; } /* home: the question first, its buttons under it */
   .chat-fil { flex: none; overflow: visible; margin: 10px 0 6px; min-height: 40vh; }
   .chat-msg { max-width: 92%; }
   .chat-bulle { font-size: 15.5px; padding: 10px 13px; }
@@ -1067,7 +1074,7 @@ ol.guide-access li { margin: 5px 0; }
 .acc-garde { border-top: 1px solid var(--line); padding-top: 8px; display: flex; flex-direction: column; gap: 6px; }
 .acc-garde p { margin: 0; }
 .acc-garde > b { color: var(--attention); }
-.acc-acces .cp-nom { white-space: normal; overflow-wrap: anywhere; }
+.acc-acces .cp-nom { white-space: normal; overflow-wrap: anywhere; flex-basis: 100%; } /* B19: the name on its own line, its badge and button under it */
 .acc-repli { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; }
 @media (max-width: 900px) { .acc-grille, .acc-envs { grid-template-columns: 1fr; } .acc-env { min-height: 0; } }
 .env-cartes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
