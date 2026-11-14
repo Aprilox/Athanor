@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -158,6 +159,94 @@ func TestHubValeurQuota(t *testing.T) {
 	} {
 		if g := valeurQuota(c.q); g != c.veut {
 			t.Errorf("valeurQuota(%+v) = %v, want %v", c.q, g, c.veut)
+		}
+	}
+}
+
+// M206: 50 projects and 10 servers (each with its sheet): the projects' view and every route the pages ask
+// every 1.5 s stay under a second each (target < 200 ms).
+func TestHubPerf50Projets10Serveurs(t *testing.T) {
+	d := t.TempDir()
+	var projets []Projet
+	for i := 0; i < 50; i++ {
+		projets = append(projets, fauxProjet(t, d, fmt.Sprintf("projet-%02d", i), 40, i%41))
+	}
+	fiche := analyserFiche(lireTestdata(t, "fiche-debian.txt"))
+	fiche.Date = time.Now()
+	bf, _ := json.Marshal(fiche)
+	var ids []string
+	for i := 0; i < 10; i++ {
+		id := aleatoire(8)
+		ids = append(ids, id)
+		dir := filepath.Join(dossierModule("servers"), id)
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "fiche.json"), bf, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := modifierServeurs(func(l []ServeurInventaire) ([]ServeurInventaire, error) {
+		for i, id := range ids {
+			l = append(l, ServeurInventaire{ID: id, Nom: fmt.Sprintf("perf-%d", i), Hote: fmt.Sprintf("203.0.113.%d", 10+i), Port: 22, Utilisateur: "deploy",
+				Roles: []string{"dev", "prod"}[i%2 : i%2+1], Etat: "ok", Cree: time.Now(), Vu: time.Now()})
+		}
+		return l, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { // the shard's other tests share the inventory
+		_ = modifierServeurs(func(l []ServeurInventaire) ([]ServeurInventaire, error) {
+			return slices.DeleteFunc(l, func(x ServeurInventaire) bool { return slices.Contains(ids, x.ID) }), nil
+		})
+		for _, id := range ids {
+			_ = os.RemoveAll(filepath.Join(dossierModule("servers"), id))
+		}
+	})
+	s := nouveauServeur(Config{Kit: t.TempDir(), Projets: projets, ProjetActif: "projet-00", Langue: "en"})
+	s.csrf, s.cleAcces = "jeton", "cle"
+	mux := http.NewServeMux()
+	s.routes(mux)
+	debut := time.Now()
+	if v := s.vuesProjets("projet-00"); len(v) != 50 || v[5].Faits != 5 || v[5].Jalons != 40 {
+		t.Fatalf("projects' view: %d projects", len(v))
+	}
+	t.Logf("vuesProjets: %v", time.Since(debut))
+	appel := func(chemin string) (time.Duration, string) {
+		r := httptest.NewRequest("GET", chemin, nil)
+		r.Header.Set("X-Athanor", "jeton")
+		r.AddCookie(&http.Cookie{Name: cookieAcces, Value: "cle"})
+		w := httptest.NewRecorder()
+		debut := time.Now()
+		mux.ServeHTTP(w, r)
+		duree := time.Since(debut)
+		if w.Code != http.StatusOK {
+			t.Fatalf("%s: %d %.300s", chemin, w.Code, w.Body.String())
+		}
+		return duree, w.Body.String()
+	}
+	for _, chemin := range []string{"/api/hub", "/api/etat?p=projet-00", "/api/serveurs", "/api/projets", "/api/missions"} {
+		froid, corps := appel(chemin)
+		chaud, _ := appel(chemin) // the pages ask again every 1.5 s: the caches' case
+		t.Logf("%s: %v (again: %v)", chemin, froid, chaud)
+		if froid > time.Second || chaud > time.Second {
+			t.Errorf("%s: %v then %v, want < 1 s", chemin, froid, chaud)
+		}
+		switch chemin {
+		case "/api/hub":
+			if n := strings.Count(corps, `"total":40`); n != 50 {
+				t.Errorf("/api/hub: %d Dev elements with their progress, want 50", n)
+			}
+		case "/api/serveurs":
+			for _, id := range ids {
+				if !strings.Contains(corps, id) {
+					t.Errorf("/api/serveurs: server %s missing", id)
+				}
+			}
+		case "/api/projets":
+			if !strings.Contains(corps, "projet-49") {
+				t.Errorf("/api/projets: projet-49 missing: %.300s", corps)
+			}
 		}
 	}
 }

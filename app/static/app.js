@@ -100,6 +100,7 @@ function messageDe(r) {
   return r.message || "";
 }
 async function api(chemin, methode = "GET", corps) {
+  if (methode !== "GET") etat.hubLu = 0; // a change: the next lireHub() asks again
   if (etat.projet) chemin += (chemin.includes("?") ? "&" : "?") + "p=" + encodeURIComponent(etat.projet);
   const r = await fetch("/api/" + chemin, {
     method: methode, headers: { "X-Athanor": CSRF, "Content-Type": "application/json" },
@@ -1138,7 +1139,9 @@ function marquerNav(v) {
   marquerDistance(v);
 }
 // the menu keeps the HTML's entries if it fails (locked: loaded again once unlocked)
-const chargerMenu = () => api("hub").then((d) => rendreMenu(d.modules || [])).catch(() => {});
+// C3: one /api/hub per load or refresh tick: the menu and the pages reuse the answer the tick read less than a second ago
+const lireHub = () => (etat.hub && Date.now() - (etat.hubLu || 0) < 1000 ? Promise.resolve(etat.hub) : api("hub"));
+const chargerMenu = () => lireHub().then((d) => rendreMenu(d.modules || [])).catch(() => {});
 function traduireNav() {
   if (etat.hubModules) rendreMenu(etat.hubModules);
   else document.querySelectorAll("#nav-tiroir [data-libelle]").forEach((x) => { x.textContent = t(x.dataset.libelle); });
@@ -1887,7 +1890,7 @@ function ligneElement(e, modules) {
 }
 pages.global = async () => {
   const v = etat.vue; if (!v) return "";
-  const d = await api("hub"), modules = d.modules || [], tous = d.elements || [];
+  const d = await lireHub(), modules = d.modules || [], tous = d.elements || [];
   etat.globalSig = JSON.stringify([modules, tous]);
   const archives = (v.projets || []).filter((x) => x.archive).length;
   const actions = `<div class="ligne projets-actions"><a class="btn btn-petit" href="#nouveau">+ ${t("New project")}</a><a class="btn btn-petit" href="#rejoindre">⇄ ${t("Join a project")}</a>${archives ? `<a class="btn btn-petit btn-fantome" href="#archives">🗄 ${t("Archived projects ({0})", [archives])}</a>` : ""}</div>`;
@@ -2022,7 +2025,7 @@ document.addEventListener("click", (ev) => {
 // Tab leaves the field: the list goes too
 document.addEventListener("focusout", (ev) => { if (ev.target.id === "accueil-texte" && etat.mentionListe) fermerListeMentions(); });
 pages.accueil = async () => {
-  const [d, sugg, mis] = await Promise.all([api("hub"), api("mentions").catch(() => ({})), api("missions").catch(() => ({}))]), modules = d.modules || [];
+  const [d, sugg, mis] = await Promise.all([lireHub(), api("mentions").catch(() => ({})), api("missions").catch(() => ({}))]), modules = d.modules || [];
   // the card shown: the one followed in this window, else the newest still being prepared or proposed
   const lm = mis.missions || [], vue = etat.missionVue, courante = (vue && lm.find((x) => x.id === vue.mission.id)) || lm.find((x) => ACTIVE_MISSION.includes(x.etat));
   etat.missionVue = courante ? await api("missions/" + encodeURIComponent(courante.id)).catch(() => null) : null;
@@ -6496,7 +6499,7 @@ async function rafraichir() {
         const d = await api("hub").catch(() => null);
         if (d) {
           const cloche = (x) => JSON.stringify([(x || {}).alertes, (x || {}).ignorees]), change = cloche(d) !== cloche(etat.hub);
-          etat.hub = d; proposerTutoriel(); // the first /api/hub of a visit: the page's tour may wait for it
+          etat.hub = d; etat.hubLu = Date.now(); proposerTutoriel(); // the first /api/hub of a visit: the page's tour may wait for it
           const sig = JSON.stringify([d.modules || [], d.elements || []]);
           if (etat.page === "global" ? sig !== etat.globalSig : etat.page === "accueil" && sig !== etat.hubSig) rendrePage();
           if (change) rendreBandeau(v);

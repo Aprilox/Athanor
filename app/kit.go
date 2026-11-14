@@ -653,6 +653,11 @@ func (p Projet) LirePlan() []Jalon {
 		return v
 	}
 	planCacheMu.Lock()
+	for f := range planCache { // C5: a project removed, renamed or moved is never asked again: forget it
+		if _, err := os.Stat(f); err != nil {
+			delete(planCache, f)
+		}
+	}
 	planCache[p.Plan()] = planEnCache{cle, v}
 	planCacheMu.Unlock()
 	return append([]Jalon(nil), v...)

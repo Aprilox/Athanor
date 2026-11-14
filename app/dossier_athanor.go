@@ -20,6 +20,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 // nomConfig: athanor-config.json (Windows), athanor-config-linux.json, athanor-config-darwin.json.
@@ -43,8 +44,9 @@ func dossierAthanorDefaut() string {
 	return dossierDonneesApp()
 }
 
-// dossierExecutable: the folder of the running executable.
-func dossierExecutable() string {
+// dossierExecutable: the folder of the running executable, resolved once (M206: every dossierAthanor() of a
+// page's request paid an EvalSymlinks).
+var dossierExecutable = sync.OnceValue(func() string {
 	exe, err := os.Executable()
 	if err != nil {
 		return ""
@@ -53,7 +55,7 @@ func dossierExecutable() string {
 		exe = r
 	}
 	return filepath.Dir(exe)
-}
+})
 
 // installationAncienne: the executable sits in a kit folder of an older version (its configuration
 // file next to it, or its .env and template/): that folder stays Athanor's folder.

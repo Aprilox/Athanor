@@ -22,6 +22,7 @@ import (
 
 type Serveur struct {
 	mu           sync.Mutex
+	mdpMu        sync.Mutex // one password change at a time (apiMotDePasse)
 	config       Config
 	kit          Kit // read with kitCourant() (can change from Options)
 	kitMu        sync.RWMutex
@@ -660,18 +661,21 @@ func (s *Serveur) apiMotDePasse(w http.ResponseWriter, r *http.Request) {
 		Nouveau string `json:"nouveau"`
 	}
 	_ = lireCorps(r, &c)
+	// C14: the PBKDF2 runs (check, vault rewrap, new hash) happen outside s.mu, which every route takes;
+	// mdpMu keeps two changes from crossing
+	s.mdpMu.Lock()
+	defer s.mdpMu.Unlock()
 	s.mu.Lock()
-	premier := s.config.MotDePasseHash == ""
+	actuel, actuelSel := s.config.MotDePasseHash, s.config.Sel
 	s.mu.Unlock()
+	premier := actuel == ""
 	if premier { // C25: an agent must not choose the password it would then retype
 		if code, err := s.preuveAbsence(); err != nil {
 			s.erreur(w, code, err.Error())
 			return
 		}
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if ok, _ := verifierMotDePasse(s.config.Sel, c.Ancien, s.config.MotDePasseHash); s.config.MotDePasseHash != "" && !ok {
+	if ok, _ := verifierMotDePasse(actuelSel, c.Ancien, actuel); !premier && !ok {
 		s.erreur(w, http.StatusUnauthorized, "Wrong current password")
 		return
 	}
@@ -680,20 +684,25 @@ func (s *Serveur) apiMotDePasse(w http.ResponseWriter, r *http.Request) {
 		s.erreur(w, http.StatusBadRequest, "At least 12 characters")
 		return
 	}
-	nouveau := c.Nouveau
+	nouveau, nouveauHash := c.Nouveau, ""
 	if retrait {
 		nouveau = ""
+	} else {
+		nouveauHash = hacherMotDePasse(c.Nouveau)
 	}
 	if code, err := s.changerMdpCoffre(c.Ancien, nouveau); err != nil {
 		s.erreur(w, code, err.Error())
 		return
 	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	// read again: a login may have rewritten the old hash in the new format meanwhile (remplacerHashMdp)
 	hash, sel, session := s.config.MotDePasseHash, s.config.Sel, s.session
 	if retrait {
 		s.config.MotDePasseHash, s.config.Sel, s.session = "", "", ""
 	} else {
 		s.config.Sel = "" // only the old format used it
-		s.config.MotDePasseHash = hacherMotDePasse(c.Nouveau)
+		s.config.MotDePasseHash = nouveauHash
 		s.ouvrirSession(w)
 	}
 	if err := ecrireConfig(s.config); err != nil {
