@@ -37,7 +37,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/overview.png" alt="Athanor overview: three workers building milestones in parallel, the project plan organized in waves, the subscription quota with an automatic stop, and the progress towards the last milestone" width="100%">
+  <img src="docs/images/hub.png" alt="Athanor's home page: the assistant's conversation box with project and server mentions, and the Missions, Studio and Servers tiles with their live figures" width="100%">
 </p>
 
 Athanor is a **hub**: one program, one window, from which you drive **modules** that work together on **missions**, without ever reaching each other's data or secrets. **Studio** runs [Claude Code](https://claude.com/claude-code) cycle after cycle on your own PC, with your own Claude subscription, until a game, a website, an app or a tool is delivered. **Servers** prepares your VPS, its DNS and its certificates, and deploys what Studio builds. The **vault** keeps every key encrypted, and gives each project only what you grant it. One sentence on the home page can set them all to work:
@@ -66,6 +66,10 @@ Athanor answers with a **mission card**: what Studio will build, what Servers wi
 Each module keeps its own data (`modules/<name>/` in Athanor's folder) and talks to the others only through the hub, which checks, logs, and asks you when it matters. *Guide › Finding your way* walks through it, in the window and in the [terminal](#in-a-terminal).
 
 ---
+
+<p align="center">
+  <img src="docs/images/modules.svg" alt="The modules: you, MCP clients and remote Athanors reach the hub, always paired; the hub holds the vault and checks every link; Studio, Servers and E-mail each keep their own folder and never talk to each other directly" width="100%">
+</p>
 
 ## Quick start
 
@@ -488,6 +492,10 @@ Installed software is detected on **every drive** (`C:`, `D:`…), and the newes
 
 The vault keeps the keys; *Access* decides which project gets which, environment by environment. The rule behind both: a project's pilot only ever receives the *code* keys you granted it for its current environment, and your servers' keys never leave Athanor's process.
 
+| | |
+|---|---|
+| <img src="docs/images/vault.png" alt="Vault page: seven secrets with their provider, their scope (code or infra) and their note, values never shown, and the Paste and Add buttons"><br>**Vault**: every key encrypted, scope *code* or *infra* | <img src="docs/images/access.png" alt="Access tab of a project: the vault entries on the left with their dev, staging and prod boxes, the project's environments on the right, and the infra keys kept by Athanor"><br>**Access**: drag a key onto an environment |
+
 ### The vault
 
 *Vault*, in the menu, keeps the keys, tokens and settings of your projects and servers in one place, encrypted in Athanor's folder (`hub/coffre.json`). *Guide › The vault* walks through it.
@@ -518,6 +526,10 @@ What the vault protects against, and what it does not, is in the [security model
 
 *Servers*, in the menu, lists your VPS and home servers, each with its sheet and its tasks. *Guide › Add a server*, *Guide › Give a task to the Servers agent*, *Guide › Environments and Cloudflare* and *Guide › Put a site online* walk through them. To try it first on a server of no importance, see [docs/SERVEUR_DE_TEST.md](docs/SERVEUR_DE_TEST.md); everything Athanor reads, writes and never does on a new server is in [docs/MACHINE_NEUVE.md](docs/MACHINE_NEUVE.md).
 
+<p align="center">
+  <img src="docs/images/servers.png" alt="Servers page: four servers with their state, their address, their system, their roles and what runs on them, and the health check of the deployed sites" width="100%">
+</p>
+
 - **Adding one.** The address, the port, the user and the roles (*dev* for tests and previews, *prod* for your live site). Athanor first reads the fingerprint of the server's host key for you to confirm: it never accepts one silently, and a fingerprint that changes later is refused with a clear message. Then three ways to connect: an SSH key already in the vault; a new ed25519 key made by Athanor (you copy its public part onto the server, then *Verify*); or the server's password, used once to put Athanor's own key there, never saved nor written to a page or a log. Athanor then offers to *Cut password logins*, never on its own. A server is added on the computer, and needs a password for Athanor (its key is an *infra* entry); a paired phone sees the list and the sheets, read only.
 - **The sheet.** Ready about a minute after adding: system, processors, memory, disk, listening ports, the software present (Docker, Compose, k3s, kubectl, nginx, Caddy, ufw), the firewall, running services and containers. It is read again on *Refresh*, after each change Athanor makes, and every 6 hours while the vault's *infra* key is open. It is kept in Athanor's folder (`modules/servers/<id>/`, with a readable `FICHE.md`), never with a key or a password. The roles are changed there; *Remove this server* forgets it without touching the server, and keeps its key in the vault unless you tick the box.
 - **What Athanor runs on a server.** The sheet is one read-only shell script: `/etc/os-release`, `uname`, `nproc`, memory and disk, `ss` (or `netstat`), `command -v` for each tool, `ufw status`, the running services and containers, with `sudo -n` only where it needs no password. Adding with the password appends Athanor's public key to `~/.ssh/authorized_keys`. *Cut password logins* writes `/etc/ssh/sshd_config.d/00-athanor.conf`, checks it with `sshd -t`, reloads SSH and connects again with the key; if anything fails, the file is removed. Anything else goes through a plan you accepted (below).
@@ -540,6 +552,10 @@ A mission is one sentence that sets several modules to work; an approval is an a
 ### Missions
 
 One sentence on the home page, and several modules work together: **Studio** builds the project, **Servers** prepares where it runs. *Guide › Launch a mission* walks through it; every step, the orchestrator's tools and what it can never do: [docs/MISSIONS.md](docs/MISSIONS.md).
+
+<p align="center">
+  <img src="docs/images/mission.png" alt="A mission running: its policy, the Studio and Servers lanes, the relay from milestone delivered to production waiting for your accord, and the translated journal" width="100%">
+</p>
 
 - **The sentence.** In the field of the home conversation, for example “Make a site for the Martin bakery and put it online at martin.fr, with a protected dev on @vps”. `@` names a project, a server or a vault key by its name (never a value) and turns it into a chip; the chips under the field add a recent project, a server or *New project*. *Create a mission* creates the mission (the assistant can also propose one as a card).
 - **The card.** An orchestrator (a short Claude session with no tool of its own, in an empty folder) reads a summary of the modules and proposes a card: what Studio will build (a new project or one of yours), what Servers will prepare (DNS, certificates, proxy, protection, firewall), the environments with their address and protection, and the vault entries each one gets, with a box to untick (*to fill* when the vault does not hold it yet). Athanor checks the card, then works out itself what you will be asked to approve, what will be touched (servers, DNS names, files) and an estimate from the cycles measured on this PC. A question from the orchestrator comes at the top of the card, with its choices as buttons.
@@ -564,6 +580,10 @@ While it works, the pilot talks to Athanor through a small MCP server of its own
 ## E-mail
 
 *E-mail*, in the menu, keeps the SMTP accounts your deployed apps send their e-mails through (sign-up, password reset, orders). *Guide › Send e-mails from your apps* walks through it.
+
+<p align="center">
+  <img src="docs/images/email.png" alt="E-mail page: an SMTP account with its server, port and sender, the Send a test e-mail and Configure sending buttons" width="100%">
+</p>
 
 - **An account.** Choose the provider (Gmail, Outlook, OVH, Brevo, Mailgun, SendGrid or another server: it fills in the server, the port and the security, which you can still change), then the user name, the sender and the password: for Gmail, Outlook and Yahoo, an *app password*. The password goes straight into the vault (type *E-mail account*, *code* scope) and is never shown again; the account's file, `modules/email/comptes.json`, holds no password.
 - **The test.** *Send a test e-mail* sends a short message to the address you choose (STARTTLS, implicit TLS on 465, or nothing to this PC only; 20 seconds at most; 5 tests a minute). A failure is said in plain words, never with the server's raw answer, stays on the card and waits in the bell until a test passes; each test is written to the audit log, without the password.
@@ -621,6 +641,10 @@ Each rule has an automatic test in the CI and, where it can be shown for real, a
 | **I6** | Production and destructive actions wait for your accord. | Decided by the hub's code, not by the agent: *prod* deployments always wait (even in an autonomous mission), each approval asks for Athanor's password again. |
 | **I7** | Nothing is open to the network without pairing. | The app, its API and its MCP listen on `127.0.0.1` only; remote access goes through the tunnel and device pairing. `TestI7Listeners` checks every listener of the real executable. |
 | **I8** | No secret in the repository, the tests or the CI. | Tests generate fake values; no real account is used in the CI, and every push is scanned for secrets. |
+
+<p align="center">
+  <img src="docs/images/security-model.svg" alt="The security model: an agent's request goes through the hub, which checks the link, then waits for your accord in production, and only Athanor's code acts with the infra key; below, the eight rules I1 to I8" width="100%">
+</p>
 
 **Native Windows mode.** It has no sandbox, so an agent could open the *code* key through DPAPI as you can. Linking an *infra* entry to a project, Servers tasks and giving infrastructure keys through *For you* are refused there by default, with an offer to use WSL; *Force, knowing the risk* allows it project by project, after a confirmation, and each forced use is logged.
 

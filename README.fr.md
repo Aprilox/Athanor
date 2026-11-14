@@ -37,7 +37,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/overview.png" alt="Vue d'ensemble d'Athanor : trois ouvriers réalisent des jalons en parallèle, le plan du projet organisé en vagues, le quota de l'abonnement avec un arrêt automatique et l'avancement vers le dernier jalon" width="100%">
+  <img src="docs/images/hub.png" alt="La page d'accueil d'Athanor : la conversation avec l'assistant et ses mentions de projets et de serveurs, et les tuiles Missions, Studio et Serveurs avec leurs chiffres en direct" width="100%">
 </p>
 
 Athanor est un **hub** : un seul programme, une seule fenêtre, d'où vous pilotez des **modules** qui travaillent ensemble sur des **missions**, sans jamais accéder aux données ni aux secrets les uns des autres. **Studio** lance [Claude Code](https://claude.com/claude-code) cycle après cycle sur votre propre PC, avec votre propre abonnement Claude, jusqu'à la livraison d'un jeu, d'un site, d'une application ou d'un outil. **Serveurs** prépare votre VPS, son DNS et ses certificats, et déploie ce que Studio construit. Le **coffre** garde chaque clé chiffrée et ne donne à chaque projet que ce que vous lui accordez. Une seule phrase sur la page d'accueil peut tous les mettre au travail :
@@ -66,6 +66,10 @@ Athanor répond par une **carte de mission** : ce que Studio va construire, ce q
 Chaque module garde ses propres données (`modules/<nom>/` dans le dossier d'Athanor) et ne parle aux autres que par le hub, qui vérifie, journalise et vous demande quand c'est important. *Guide › Se repérer* en fait le tour, dans la fenêtre et dans le [terminal](#dans-un-terminal).
 
 ---
+
+<p align="center">
+  <img src="docs/images/modules.svg" alt="Les modules : vous, les clients MCP et les Athanor distants joignent le hub, toujours après appairage ; le hub tient le coffre et vérifie chaque lien ; Studio, Serveurs et E-mail gardent chacun leur dossier et ne se parlent jamais directement" width="100%">
+</p>
 
 ## Démarrage rapide
 
@@ -488,6 +492,10 @@ Les logiciels installés sont détectés sur **tous les disques** (`C:`, `D:`…
 
 Le coffre garde les clés ; *Accès* décide quel projet reçoit lesquelles, environnement par environnement. La règle qui sous-tend les deux : le pilote d'un projet ne reçoit jamais que les clés *code* que vous lui avez accordées pour son environnement en cours, et les clés de vos serveurs ne quittent jamais le processus d'Athanor.
 
+| | |
+|---|---|
+| <img src="docs/images/vault.png" alt="Page Coffre : sept secrets avec leur fournisseur, leur portée (code ou infra) et leur note, valeurs jamais affichées, et les boutons Coller et Ajouter"><br>**Coffre** : chaque clé chiffrée, portée *code* ou *infra* | <img src="docs/images/access.png" alt="Onglet Accès d'un projet : les entrées du coffre à gauche avec leurs cases dev, staging et prod, les environnements du projet à droite, et les clés infra gardées par Athanor"><br>**Accès** : glisser une clé sur un environnement |
+
 ### Le coffre
 
 *Coffre*, dans le menu, garde les clés, jetons et réglages de vos projets et de vos serveurs au même endroit, chiffrés dans le dossier d'Athanor (`hub/coffre.json`). *Guide › Le coffre* le présente pas à pas.
@@ -518,6 +526,10 @@ Ce que le coffre protège, et ce qu'il ne protège pas, est dans le [modèle de 
 
 *Serveurs*, dans le menu, liste vos VPS et serveurs maison, chacun avec sa fiche et ses tâches. *Guide › Ajouter un serveur*, *Guide › Confier une tâche à l'agent Serveurs*, *Guide › Environnements et Cloudflare* et *Guide › Mettre un site en ligne* vous accompagnent. Pour l'essayer d'abord sur un serveur sans importance, voir [docs/SERVEUR_DE_TEST.md](docs/SERVEUR_DE_TEST.md) ; tout ce qu'Athanor lit, écrit et ne fait jamais sur une machine neuve est dans [docs/MACHINE_NEUVE.md](docs/MACHINE_NEUVE.md).
 
+<p align="center">
+  <img src="docs/images/servers.png" alt="Page Serveurs : quatre serveurs avec leur état, leur adresse, leur système, leurs rôles et ce qui y tourne, et la vérification de santé des sites déployés" width="100%">
+</p>
+
 - **En ajouter un.** L'adresse, le port, l'utilisateur et les rôles (*dev* pour les essais et les aperçus, *prod* pour votre site en ligne). Athanor lit d'abord l'empreinte de la clé d'hôte du serveur pour que vous la confirmiez : il n'en accepte jamais une en silence, et une empreinte qui change plus tard est refusée avec un message clair. Puis trois façons de se connecter : une clé SSH déjà dans le coffre ; une nouvelle clé ed25519 faite par Athanor (vous copiez sa partie publique sur le serveur, puis *Vérifier*) ; ou le mot de passe du serveur, utilisé une seule fois pour y poser la clé d'Athanor, jamais gardé ni écrit dans une page ou un journal. Athanor propose ensuite de *Couper les connexions par mot de passe*, jamais de lui-même. Un serveur s'ajoute sur l'ordinateur et demande un mot de passe à Athanor (sa clé est une entrée *infra*) ; un téléphone appairé voit la liste et les fiches, en lecture seule.
 - **La fiche.** Prête environ une minute après l'ajout : système, processeurs, mémoire, disque, ports à l'écoute, logiciels présents (Docker, Compose, k3s, kubectl, nginx, Caddy, ufw), pare-feu, services et conteneurs en marche. Elle est relue sur *Actualiser*, après chaque changement fait par Athanor, et toutes les 6 heures tant que la clé *infra* du coffre est ouverte. Elle est gardée dans le dossier d'Athanor (`modules/servers/<id>/`, avec un `FICHE.md` lisible), jamais avec une clé ou un mot de passe. Les rôles se changent là ; *Retirer ce serveur* l'oublie sans toucher au serveur, et garde sa clé dans le coffre sauf si vous cochez la case.
 - **Ce qu'Athanor exécute sur un serveur.** La fiche est un seul script shell en lecture seule : `/etc/os-release`, `uname`, `nproc`, mémoire et disque, `ss` (ou `netstat`), `command -v` pour chaque outil, `ufw status`, les services et conteneurs en marche, avec `sudo -n` seulement là où il ne demande pas de mot de passe. L'ajout par mot de passe ajoute la clé publique d'Athanor à `~/.ssh/authorized_keys`. *Couper les connexions par mot de passe* écrit `/etc/ssh/sshd_config.d/00-athanor.conf`, le vérifie avec `sshd -t`, recharge SSH et se reconnecte avec la clé ; si quoi que ce soit échoue, le fichier est retiré. Tout le reste passe par un plan que vous avez accepté (ci-dessous).
@@ -540,6 +552,10 @@ Une mission est une phrase qui met plusieurs modules au travail ; une approbatio
 ### Missions
 
 Une phrase sur la page d'accueil, et plusieurs modules travaillent ensemble : **Studio** construit le projet, **Serveurs** prépare l'endroit où il tourne. *Guide › Lancer une mission* la parcourt ; chaque étape, les outils de l'orchestrateur et ce qu'il ne peut jamais faire : [docs/MISSIONS.md](docs/MISSIONS.fr.md).
+
+<p align="center">
+  <img src="docs/images/mission.png" alt="Une mission en cours : sa politique, les voies Studio et Serveurs, le relais du jalon livré jusqu'à la production qui attend votre accord, et le journal traduit" width="100%">
+</p>
 
 - **La phrase.** Dans le champ de la conversation d'accueil, par exemple « Fais un site pour la boulangerie Martin et mets-le en ligne sur martin.fr, avec une dev protégée sur @vps ». `@` nomme un projet, un serveur ou une clé du coffre par son nom (jamais une valeur) et en fait une puce ; les puces sous le champ ajoutent un projet récent, un serveur ou *Nouveau projet*. *Créer une mission* crée la mission (l'assistant peut aussi en proposer une sous forme de carte).
 - **La carte.** Un orchestrateur (une courte session Claude sans outil à elle, dans un dossier vide) lit un résumé des modules et propose une carte : ce que Studio construira (un nouveau projet ou l'un des vôtres), ce que Serveurs préparera (DNS, certificats, proxy, protection, pare-feu), les environnements avec leur adresse et leur protection, et les entrées du coffre que chacun reçoit, avec une case à décocher (*à remplir* quand le coffre ne l'a pas encore). Athanor vérifie la carte, puis calcule lui-même ce qui vous sera demandé, ce qui sera touché (serveurs, noms DNS, fichiers) et une estimation tirée des cycles mesurés sur ce PC. Une question de l'orchestrateur s'affiche en haut de la carte, avec ses choix en boutons.
@@ -564,6 +580,10 @@ Pendant qu'il travaille, le pilote parle à Athanor par un petit serveur MCP à 
 ## E-mail
 
 *E-mail*, dans le menu, garde les comptes SMTP par lesquels vos applis déployées envoient leurs e-mails (inscription, mot de passe oublié, commandes). *Guide › Envoyer des e-mails depuis vos applis* le détaille.
+
+<p align="center">
+  <img src="docs/images/email.png" alt="Page E-mail : un compte SMTP avec son serveur, son port et son expéditeur, les boutons Envoyer un e-mail de test et Configurer l'envoi" width="100%">
+</p>
 
 - **Un compte.** Choisissez le fournisseur (Gmail, Outlook, OVH, Brevo, Mailgun, SendGrid ou un autre serveur : il remplit le serveur, le port et la sécurité, que vous pouvez encore changer), puis le nom d'utilisateur, l'expéditeur et le mot de passe : pour Gmail, Outlook et Yahoo, un *mot de passe d'application*. Le mot de passe va directement dans le coffre (type *Compte e-mail*, portée *code*) et n'est plus jamais affiché ; le fichier des comptes, `modules/email/comptes.json`, ne contient aucun mot de passe.
 - **Le test.** *Envoyer un e-mail de test* envoie un court message à l'adresse de votre choix (STARTTLS, TLS implicite sur 465, ou rien vers ce PC seulement ; 20 secondes au plus ; 5 tests par minute). Un échec est dit en mots simples, jamais avec la réponse brute du serveur, reste sur la carte et attend dans la cloche jusqu'à ce qu'un test passe ; chaque test est écrit au journal d'audit, sans le mot de passe.
@@ -621,6 +641,10 @@ Chaque règle a un test automatique dans la CI et, là où on peut le montrer po
 | **I6** | La production et les actions destructrices attendent votre accord. | Décidé par le code du hub, pas par l'agent : les déploiements en *prod* attendent toujours (même dans une mission autonome), chaque approbation redemande le mot de passe d'Athanor. |
 | **I7** | Rien n'est ouvert au réseau sans appairage. | L'application, son API et son MCP n'écoutent que sur `127.0.0.1` ; l'accès à distance passe par le tunnel et l'appairage des appareils. `TestI7Listeners` vérifie chaque écoute du vrai exécutable. |
 | **I8** | Aucun secret dans le dépôt, les tests ni la CI. | Les tests fabriquent de fausses valeurs ; aucun vrai compte n'est utilisé dans la CI, et chaque envoi est passé au crible à la recherche de secrets. |
+
+<p align="center">
+  <img src="docs/images/security-model.svg" alt="Le modèle de sécurité : la demande d'un agent passe par le hub, qui vérifie le lien, puis attend votre accord en production, et seul le code d'Athanor agit avec la clé infra ; en dessous, les huit règles I1 à I8" width="100%">
+</p>
 
 **Mode Windows natif.** Il n'a pas de barrière, donc un agent pourrait ouvrir la clé *code* par DPAPI, comme vous. Lier une entrée *infra* à un projet, les tâches Serveurs et donner des clés d'infrastructure par *Pour vous* y sont refusés par défaut, avec la proposition de passer par WSL ; *Forcer en connaissance de cause* l'autorise projet par projet, après une confirmation, et chaque usage forcé est journalisé.
 

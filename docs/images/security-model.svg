@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 590" width="1200" height="590" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="fl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 Z" fill="#8fa3b8"/></marker>
+    <marker id="fa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 Z" fill="#3fc6a5"/></marker>
+  </defs>
+  <style>
+    .t { fill: #e8eef5; font-size: 17px; font-weight: 600; }
+    .s { fill: #9fb0c2; font-size: 13.5px; }
+    .k { fill: #3fc6a5; font-size: 12.5px; font-weight: 600; letter-spacing: 1.2px; }
+    .r { fill: #f2a35e; font-size: 12.5px; font-weight: 600; letter-spacing: 1.2px; }
+    .box { fill: #1c2633; stroke: #2e3c4d; stroke-width: 1.5; }
+    .acc { fill: #17352f; stroke: #3fc6a5; stroke-width: 1.5; }
+    .vault { fill: #2b2417; stroke: #f2a35e; stroke-width: 1.5; }
+    .ln { stroke: #8fa3b8; stroke-width: 1.8; fill: none; marker-end: url(#fl); }
+    .la { stroke: #3fc6a5; stroke-width: 2; fill: none; marker-end: url(#fa); }
+    .both { marker-start: url(#fl); }
+    .bota { marker-start: url(#fa); }
+    .no { stroke: #e0636b; stroke-width: 2; fill: none; stroke-dasharray: 6 5; }
+    .not { fill: #e0636b; font-size: 13px; font-weight: 600; }
+  </style>
+  <rect width="1200" height="590" rx="24" fill="#111821"/>
+  <rect class="box" x="40" y="40" width="208" height="140" rx="14"/>
+  <text class="k" x="60" y="70">AGENT</text>
+  <text class="t" x="60" y="97">Studio or Servers</text>
+  <text class="s" x="60" y="121">asks for a tool:</text>
+  <text class="s" x="60" y="141">deploy, add a DNS record</text>
+  <rect class="acc" x="268" y="40" width="208" height="140" rx="14"/>
+  <text class="k" x="288" y="70">HUB · I5</text>
+  <text class="t" x="288" y="97">Is the link real?</text>
+  <text class="s" x="288" y="121">this project, this server,</text>
+  <text class="s" x="288" y="141">this environment; logged</text>
+  <path class="la" d="M250 110 H264"/>
+  <rect class="acc" x="496" y="40" width="208" height="140" rx="14"/>
+  <text class="k" x="516" y="70">ACCORD · I6</text>
+  <text class="t" x="516" y="97">Prod? Destructive?</text>
+  <text class="s" x="516" y="121">waits for your yes and</text>
+  <text class="s" x="516" y="141">Athanor&#x27;s password</text>
+  <path class="la" d="M478 110 H492"/>
+  <rect class="vault" x="724" y="40" width="208" height="140" rx="14"/>
+  <text class="r" x="744" y="70">ATHANOR · I2</text>
+  <text class="t" x="744" y="97">Go code acts</text>
+  <text class="s" x="744" y="121">with the infra key, which</text>
+  <text class="s" x="744" y="141">the agent never sees</text>
+  <path class="la" d="M706 110 H720"/>
+  <rect class="box" x="952" y="40" width="208" height="140" rx="14"/>
+  <text class="k" x="972" y="70">SERVER</text>
+  <text class="t" x="972" y="97">Your VPS, Cloudflare</text>
+  <text class="s" x="972" y="121">plan reviewed, backup,</text>
+  <text class="s" x="972" y="141">risky firewall change undone</text>
+  <path class="la" d="M934 110 H948"/>
+  <text class="k" x="40" y="222">THE EIGHT RULES · EACH ONE HAS AN AUTOMATIC TEST</text>
+  <rect class="box" x="40" y="240" width="265" height="132" rx="14"/>
+  <text class="k" x="60" y="270">I1</text>
+  <text class="t" x="60" y="297">Code keys</text>
+  <text class="s" x="60" y="321">only those granted to the</text>
+  <text class="s" x="60" y="341">project, for its environment</text>
+  <rect class="box" x="325" y="240" width="265" height="132" rx="14"/>
+  <text class="k" x="345" y="270">I2</text>
+  <text class="t" x="345" y="297">Infra keys</text>
+  <text class="s" x="345" y="321">never leave Athanor&#x27;s process:</text>
+  <text class="s" x="345" y="341">no file, log, page or API</text>
+  <rect class="box" x="610" y="240" width="265" height="132" rx="14"/>
+  <text class="k" x="630" y="270">I3</text>
+  <text class="t" x="630" y="297">Encrypted vault</text>
+  <text class="s" x="630" y="321">AES-256-GCM; locked vault =</text>
+  <text class="s" x="630" y="341">no infrastructure action</text>
+  <rect class="box" x="895" y="240" width="265" height="132" rx="14"/>
+  <text class="k" x="915" y="270">I4</text>
+  <text class="t" x="915" y="297">Separate modules</text>
+  <text class="s" x="915" y="321">none writes another&#x27;s data;</text>
+  <text class="s" x="915" y="341">the sandbox refuses it</text>
+  <rect class="box" x="40" y="390" width="265" height="132" rx="14"/>
+  <text class="k" x="60" y="420">I5</text>
+  <text class="t" x="60" y="447">Through the hub</text>
+  <text class="s" x="60" y="471">every link checked, written to</text>
+  <text class="s" x="60" y="491">a SHA-256 chained audit log</text>
+  <rect class="box" x="325" y="390" width="265" height="132" rx="14"/>
+  <text class="k" x="345" y="420">I6</text>
+  <text class="t" x="345" y="447">Your accord</text>
+  <text class="s" x="345" y="471">prod and destructive actions</text>
+  <text class="s" x="345" y="491">wait, decided by code</text>
+  <rect class="box" x="610" y="390" width="265" height="132" rx="14"/>
+  <text class="k" x="630" y="420">I7</text>
+  <text class="t" x="630" y="447">127.0.0.1 only</text>
+  <text class="s" x="630" y="471">remote access through the</text>
+  <text class="s" x="630" y="491">tunnel and device pairing</text>
+  <rect class="box" x="895" y="390" width="265" height="132" rx="14"/>
+  <text class="k" x="915" y="420">I8</text>
+  <text class="t" x="915" y="447">No secret in git</text>
+  <text class="s" x="915" y="471">fake values in the tests,</text>
+  <text class="s" x="915" y="491">every push scanned</text>
+  <text class="s" x="40" y="558">Guards against a tricked or mistaken agent, the network and a copied disk; not against malware running with your rights.</text>
+</svg>
