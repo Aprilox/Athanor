@@ -207,8 +207,17 @@ func (s *Serveur) apiTerminalOuvrir(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	terminaux.Lock()
-	terminaux.m[t.id] = t
+	plein = len(terminaux.m) >= sessionsTerminalMax // checked again: openings at the same time all passed the first check
+	if !plein {
+		terminaux.m[t.id] = t
+	}
 	terminaux.Unlock()
+	if plein {
+		t.sess.Close()
+		client.Close()
+		s.erreur(w, http.StatusTooManyRequests, "Too many terminals are open: close one first")
+		return
+	}
 	go func() { _ = t.sess.Wait(); t.fermer(finTerminalTermine) }()
 	go t.surveiller()
 	s.ecrireAudit(LigneAudit{Type: "evenement", De: de, Vers: "serveur:" + srv.ID, Action: "terminal.open", Resultat: "ok"})
@@ -377,6 +386,7 @@ func (s *Serveur) apiTerminalAgir(w http.ResponseWriter, r *http.Request) {
 	}
 	if c.Cols != 0 || c.Lignes != 0 {
 		if err := t.sess.WindowChange(lignes, cols); err != nil {
+			t.fermer(finTerminalTermine)
 			s.terminalFerme(w, finTerminalTermine)
 			return
 		}
@@ -406,6 +416,22 @@ func routeShellDistance(chemin string) bool {
 	return len(p) >= 2 && p[0] != "" && (p[1] == "terminal" || p[1] == "sftp")
 }
 
+// fermerTerminaux: closes the open terminals (and their files panel) for which fermer is true; how many.
+func fermerTerminaux(fermer func(*sessionTerminal) bool) int {
+	terminaux.Lock()
+	var l []*sessionTerminal
+	for _, t := range terminaux.m {
+		if fermer(t) {
+			l = append(l, t)
+		}
+	}
+	terminaux.Unlock()
+	for _, t := range l {
+		t.fermer(finTerminalDeconnecte)
+	}
+	return len(l)
+}
+
 func (s *Serveur) shellDistanceAutorise() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -433,6 +459,9 @@ func (s *Serveur) apiTerminalDistance(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		resultat += " (config: " + err.Error() + ")"
+	}
+	if !c.Autoriser { // a device's terminal already open closes too
+		fermerTerminaux(func(t *sessionTerminal) bool { return strings.HasPrefix(t.de, "appareil:") })
 	}
 	s.ecrireAudit(LigneAudit{Type: "evenement", De: deQui(r), Vers: "hub", Action: "remote terminal", Resultat: resultat})
 	if err != nil {

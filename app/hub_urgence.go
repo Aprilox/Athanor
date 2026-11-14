@@ -24,6 +24,7 @@ type ResultatUrgence struct {
 	Approbations int      `json:"approbations"`
 	Regles       int      `json:"regles"` // "never ask again" rules removed
 	Pilotes      int      `json:"pilotes"`
+	Terminaux    int      `json:"terminaux"`        // server terminals closed (with their files panel)
 	Echecs       []string `json:"echecs,omitempty"` // projects whose pilot did not stop
 	Verrouille   bool     `json:"verrouille"`       // window and devices locked (a password exists)
 }
@@ -67,6 +68,7 @@ func (s *Serveur) arretUrgence(qui string) ResultatUrgence {
 			fmt.Fprintln(os.Stderr, "emergency stop: approvals:", err)
 		}
 	}
+	r.Terminaux = fermerTerminaux(func(*sessionTerminal) bool { return true })
 	if s.coffre != nil {
 		s.coffre.Fermer()
 	}
@@ -102,7 +104,7 @@ func (s *Serveur) arretUrgence(qui string) ResultatUrgence {
 		}()
 	}
 	wg.Wait()
-	res := fmt.Sprintf("%d jeton(s) révoqué(s), %d approbation(s) refusée(s), %d règle(s) retirée(s), %d pilote(s) arrêté(s), coffre verrouillé, %d secrets.env vidé(s)", r.Jetons, r.Approbations, r.Regles, r.Pilotes, vides)
+	res := fmt.Sprintf("%d jeton(s) révoqué(s), %d approbation(s) refusée(s), %d règle(s) retirée(s), %d pilote(s) arrêté(s), %d terminal(aux) fermé(s), coffre verrouillé, %d secrets.env vidé(s)", r.Jetons, r.Approbations, r.Regles, r.Pilotes, r.Terminaux, vides)
 	if len(r.Echecs) > 0 {
 		res += fmt.Sprintf(", %d pilote(s) non arrêté(s)", len(r.Echecs))
 	}

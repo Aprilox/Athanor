@@ -244,6 +244,12 @@ func TestIATerminalDirect(t *testing.T) {
 	if c := taper(`{"cols":90,"lignes":20}`); c != http.StatusOK {
 		t.Errorf("resize while locked: %d", c)
 	}
+	if c, _ := requete("POST", "/api/serveurs/"+srv.ID+"/sftp/"+session, `{"supprimer":"/srv"}`); c.StatusCode != http.StatusLocked {
+		t.Errorf("files changed while the assistant works live: %d, want 423", c.StatusCode)
+	}
+	if c, _ := requete("GET", "/api/serveurs/"+srv.ID+"/sftp/"+session+"?chemin=/", ""); c.StatusCode != http.StatusOK {
+		t.Errorf("files listed while the assistant works live: %d", c.StatusCode)
+	}
 	if c, v := requete("GET", "/api/serveurs/"+srv.ID+"/taches", ""); c.StatusCode != http.StatusOK || !strings.Contains(fmt.Sprint(v), "direct:true") || strings.Contains(fmt.Sprint(v), session) {
 		t.Errorf("tasks (live, without the terminal's session): %d %v", c.StatusCode, v)
 	}

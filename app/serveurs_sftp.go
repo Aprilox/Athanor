@@ -33,6 +33,7 @@ const (
 	errSFTPChemin   = "Invalid path"
 	errSFTPMemeNom  = "Choose another name"
 	errSFTPTropGros = "This file is too large to send from here"
+	errSFTPLien     = "This name is a link: open the folder of its target to replace that file"
 )
 
 // clientSFTP: the terminal's SFTP channel, opened at the first use.
@@ -71,6 +72,10 @@ func (s *Serveur) sftpDe(w http.ResponseWriter, r *http.Request) (*sessionTermin
 	t, raison := terminalDe(r)
 	if t == nil {
 		s.terminalFerme(w, raison)
+		return nil, nil, false
+	}
+	if r.Method == http.MethodPost && tacheDirecte(t.id) != nil { // live mode: the files are locked like the keyboard
+		s.erreur(w, http.StatusLocked, "The assistant is working in this terminal: stop it or take over first")
 		return nil, nil, false
 	}
 	c, err := t.clientSFTP()
@@ -212,6 +217,9 @@ func (s *Serveur) apiSFTPEnvoyer(w http.ResponseWriter, r *http.Request) {
 	}
 	avant, err := c.Lstat(chemin)
 	switch {
+	case err == nil && avant.Mode()&fs.ModeSymlink != 0: // renaming over it would turn the link into a plain file with the link's 0777 mode
+		s.erreur(w, http.StatusConflict, errSFTPLien)
+		return
 	case err == nil && (avant.IsDir() || r.URL.Query().Get("remplacer") != "1"):
 		s.erreur(w, http.StatusConflict, errSFTPExiste)
 		return

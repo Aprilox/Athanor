@@ -109,6 +109,15 @@ func TestTerminalSFTP(t *testing.T) {
 	if c := envoyer("/dossier", "x", true); c != http.StatusConflict {
 		t.Fatalf("a folder replaced by a file: %d", c)
 	}
+	if err := cs.Symlink("/dossier/a.txt", "/lien"); err != nil {
+		t.Fatal(err)
+	}
+	if c := envoyer("/lien", "x", true); c != http.StatusConflict { // never turned into a plain file with the link's mode
+		t.Fatalf("a link replaced by a file: %d", c)
+	}
+	if err := cs.Remove("/lien"); err != nil {
+		t.Fatal(err)
+	}
 	for _, cas := range []struct {
 		corps string
 		code  int
@@ -148,6 +157,35 @@ func TestTerminalSFTP(t *testing.T) {
 	}
 	if c, _, _ := requete("GET", base, ""); c != http.StatusGone {
 		t.Errorf("files of a closed terminal: %d", c)
+	}
+	// the emergency stop and switching off the remote terminal close what is open (critic C1-4)
+	ouvrir := func() string {
+		t.Helper()
+		c, b, _ := requete("POST", "/api/serveurs/"+srv.ID+"/terminal", `{}`)
+		var o struct{ Session string }
+		if json.Unmarshal(b, &o); c != http.StatusOK || o.Session == "" {
+			t.Fatalf("open: %d %s", c, b)
+		}
+		return o.Session
+	}
+	appareil, fenetre := ouvrir(), ouvrir()
+	terminaux.Lock()
+	terminaux.m[appareil].de = "appareil:tel"
+	terminaux.Unlock()
+	if c, b, _ := requete("POST", "/api/serveurs/terminal-distance", `{"autoriser":false}`); c != http.StatusOK {
+		t.Fatalf("remote terminal off: %d %s", c, b)
+	}
+	if c, _, _ := requete("GET", "/api/serveurs/"+srv.ID+"/sftp/"+appareil, ""); c != http.StatusGone {
+		t.Errorf("a device's terminal left open after the remote terminal was switched off: %d", c)
+	}
+	if c, _, _ := requete("GET", "/api/serveurs/"+srv.ID+"/sftp/"+fenetre, ""); c != http.StatusOK {
+		t.Errorf("the window's terminal closed by the remote switch: %d", c)
+	}
+	if n := fermerTerminaux(func(*sessionTerminal) bool { return true }); n != 1 {
+		t.Errorf("terminals closed by the emergency stop's call: %d, want 1", n)
+	}
+	if c, _, _ := requete("GET", "/api/serveurs/"+srv.ID+"/sftp/"+fenetre, ""); c != http.StatusGone {
+		t.Errorf("terminal left open after fermerTerminaux: %d", c)
 	}
 	journal := journalAuditTexte(t)
 	for _, x := range []string{"sftp.upload", "/notes.txt (14 bytes)", "sftp.download", "sftp.rename", "/notes.txt -\\u003e /lu.txt", "sftp.delete"} {

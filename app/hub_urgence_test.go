@@ -150,7 +150,7 @@ func TestArretUrgence(t *testing.T) {
 		t.Errorf("alert: %+v", a)
 	}
 	j := auditTexte(t)
-	if !strings.Contains(j, "arrêt d'urgence 2 jeton(s) révoqué(s), 2 approbation(s) refusée(s), 1 règle(s) retirée(s), 1 pilote(s) arrêté(s), coffre verrouillé, 0 secrets.env vidé(s), 1 pilote(s) non arrêté(s)") ||
+	if !strings.Contains(j, "arrêt d'urgence 2 jeton(s) révoqué(s), 2 approbation(s) refusée(s), 1 règle(s) retirée(s), 1 pilote(s) arrêté(s), 0 terminal(aux) fermé(s), coffre verrouillé, 0 secrets.env vidé(s), 1 pilote(s) non arrêté(s)") ||
 		strings.Count(j, "→ refusee (arrêt d'urgence)") != 2 || !strings.Contains(j, "jeton révoqué arrêt d'urgence") {
 		t.Errorf("audit log:\n%s", j)
 	}
