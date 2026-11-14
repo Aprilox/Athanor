@@ -1074,6 +1074,8 @@ function marquerDistance(v) {
 // open: the page under the veil is inert (the keyboard stays in the drawer), Escape closes it back to ☰
 // closed on a phone, the drawer is inert too: the keyboard never enters it off-screen
 const TEL = matchMedia("(max-width: 700px)"); // the one phone threshold (the CSS has the same)
+// M227c: the height of the content area, for a chat that fills it on a phone (app.css: --h-page)
+if (window.ResizeObserver && document.getElementById("page")) new ResizeObserver(([e]) => document.documentElement.style.setProperty("--h-page", Math.floor(e.contentRect.height) + "px")).observe(document.getElementById("page"));
 function menuMobile(ouvert) { document.body.classList.toggle("menu-ouvert", ouvert); $("#btn-menu").setAttribute("aria-expanded", String(ouvert)); $("main.principal").inert = ouvert; $("#nav-tiroir").inert = TEL.matches && !ouvert; }
 menuMobile(false);
 document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && document.body.classList.contains("menu-ouvert")) { menuMobile(false); $("#btn-menu").focus(); } });
@@ -1448,10 +1450,15 @@ const RE_EMOJI = /([ \t]?)(?:(?![©®™])\p{Extended_Pictographic}|[\u{1F1E6}-\
 const sansEmoji = (s) => s.split(/(`[^`\n]+`)/).map((x, i) => i % 2 ? x : x.replace(RE_EMOJI, (m, a, b, o, t) => a && b || b && o && !/\s/.test(t[o - 1]) ? " " : "")).join("");
 
 // sobre: the assistant's text (sansEmoji outside code blocks); the user's text is shown as written
+// M227c: a Markdown table (header, |---| line, rows) becomes a table in its own sideways-scrolling block
+const tableauChat = (s) => s.replace(/(^|\n)(\|[^\n]*\|[ \t]*\n\|[ \t:|-]*-[ \t:|-]*\|[ \t]*(?:\n\|[^\n]*\|[ \t]*)*)\n?/g, (_, a, b) => {
+  const l = b.split("\n").map((x) => x.trim().slice(1, -1).split("|").map((c) => c.trim()));
+  return a + `<div class="chat-tableau"><table><thead><tr>${l[0].map((c) => `<th>${c}</th>`).join("")}</tr></thead><tbody>${l.slice(2).map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+});
 function mdChat(s, sobre) {
   return String(s || "").split(/```/).map((bloc, i) => {
     if (i % 2) return `<pre class="chat-code">${h(bloc.replace(/^[a-zA-Z0-9_+-]*\n/, ""))}</pre>`;
-    return h(sobre ? sansEmoji(bloc) : bloc).replace(/`([^`\n]+)`/g, "<code>$1</code>").replace(/\*\*([^*\n]+)\*\*/g, "<b>$1</b>")
+    return tableauChat(h(sobre ? sansEmoji(bloc) : bloc)).replace(/`([^`\n]+)`/g, "<code>$1</code>").replace(/\*\*([^*\n]+)\*\*/g, "<b>$1</b>")
       .replace(/^(\s*)[-*] (.*)$/gm, "$1• $2").replace(/^#{1,4} (.*)$/gm, "<b>$1</b>")
       .replace(/(^|[^\w*])\*(\S(?:[^*\n]*\S)?)\*(?![\w*])/gm, "$1<i>$2</i>").replace(/\n/g, "<br>"); // M195: *italic*, never a*b*c
   }).join("");
@@ -1561,11 +1568,10 @@ async function majChat(force) {
   if (!force && sig === chat.signature) return;
   chat.signature = sig;
   const fil = $("#chat-fil"); if (!fil) return;
-  // on a phone the conversation scrolls with the content area (app.css), elsewhere in its own box
-  const boite = TEL.matches ? $("#page") : fil;
-  const enBas = boite.scrollHeight - boite.scrollTop - boite.clientHeight < (boite === fil ? 80 : 120);
+  const enBas = auBas(fil);
   fil.innerHTML = filChat(d);
-  if (enBas || force) boite.scrollTop = boite.scrollHeight;
+  if (enBas || force) fil.scrollTop = fil.scrollHeight;
+  majBoutonBas(fil);
   const b = $("#chat-envoyer"), s = $("#chat-stop"), m = $("#chat-mode");
   if (b) b.hidden = d.en_cours;
   if (s) s.hidden = !d.en_cours;
@@ -1593,6 +1599,18 @@ function aideChat() {
   ].join("\n"), [{ id: "ok", texte: t("OK"), primaire: true }], { titre: t("What the chat can do"), large: true });
 }
 
+// M227c: a thread follows its bottom only when the reader is there; scrolled up, "Go to the latest message" brings them back
+const auBas = (f) => f.scrollHeight - f.scrollTop - f.clientHeight < 80;
+function majBoutonBas(f) { const b = document.getElementById(f.id + "-bas"); if (b) b.hidden = auBas(f); }
+const boutonBas = (id) => `<button type="button" class="btn btn-petit chat-bas" id="${id}-bas" hidden>${t("Go to the latest message")}</button>`;
+document.addEventListener("scroll", (ev) => { if (ev.target.classList && ev.target.classList.contains("chat-fil")) majBoutonBas(ev.target); }, true);
+document.addEventListener("click", (ev) => {
+  const b = ev.target.closest(".chat-bas"), o = ev.target.closest("[data-chat-options]");
+  if (b) { const f = document.getElementById(b.id.slice(0, -4)); if (f) { f.scrollTop = f.scrollHeight; b.hidden = true; } }
+  // on a phone the chat's secondary bars stay folded behind "Options" (app.css)
+  if (o) { const c = o.closest(".chat, .accueil-chat"); o.setAttribute("aria-expanded", String(c.classList.toggle("ouvert"))); }
+});
+const boutonOptions = (classe = "") => `<button type="button" class="btn tel-seul ${classe}" data-chat-options aria-expanded="false">${t("Options")}</button>`;
 // tactile: a phone or a tablet (a finger, no mouse)
 const tactile = () => matchMedia("(pointer: coarse)").matches;
 // the field of the chat grows with what is written, up to a third of the screen (then it scrolls)
@@ -1608,17 +1626,17 @@ pages.chat = async () => {
   if (!modeles.includes(chat.modele)) modeles.push(chat.modele);
   setTimeout(() => majChat(true), 0);
   return `<div class="bloc chat">
-    <div class="ligne m0 chat-tete"><h2 class="m0">${t("Chat with Claude")} <button type="button" class="chat-info" id="chat-info" title="${h(t("What the chat can do"))}" aria-label="${h(t("What the chat can do"))}">i</button></h2><span class="muet petit croit" id="chat-mode">${modeChat()}</span>
-      <button type="button" class="btn btn-petit" id="chat-nouveau">${t("New conversation")}</button></div>
-    <div class="chat-fil" id="chat-fil"></div>
+    <div class="ligne m0 chat-tete"><h2 class="m0">${t("Chat with Claude")} <button type="button" class="chat-info" id="chat-info" title="${h(t("What the chat can do"))}" aria-label="${h(t("What the chat can do"))}">i</button></h2><span class="muet petit croit chat-replie" id="chat-mode">${modeChat()}</span>
+      <button type="button" class="btn btn-petit chat-replie" id="chat-nouveau">${t("New conversation")}</button></div>
+    <div class="chat-fil" id="chat-fil" role="log" aria-live="polite" aria-label="${h(t("Conversation"))}"></div>${boutonBas("chat-fil")}
     <div class="chat-saisie">
       <textarea id="chat-texte" rows="${tactile() ? 2 : 3}" placeholder="${h(tactile() ? t("Your question or the change you want…") : t("Your question or the change you want… (Enter sends, Shift+Enter: new line)"))}"></textarea>
       ${zonePieces("ct")}
-      <div class="ligne m0 mt-1 chat-options">
+      <div class="ligne m0 mt-1 chat-options chat-replie">
         <label class="interrupteur m0 petit" title="${h(t("Off: Claude changes nothing, a change becomes a note for the pilot. On: Claude changes the files you ask it to change, and Athanor commits them (a running pilot pauses at the end of its cycle)."))}"><input type="checkbox" id="chat-modif" ${chat.modif ? "checked" : ""}><span>${t("Change the files")}</span></label>
         <label class="interrupteur m0 petit" title="${h(t("Claude may search and read the web for your messages, only when one needs it (look online, compare with what exists elsewhere, a current fact). A question about the project is answered from its files."))}"><input type="checkbox" id="chat-internet" ${chat.internet ? "checked" : ""}><span>${t("Internet")}</span></label></div>
-      <div class="ligne m0 mt-1"><span class="petit muet">${t("Model")}</span><div class="choix m0" id="chat-modeles">${modeles.map((m) => `<button type="button" data-chat-modele="${h(m)}" class="${chat.modele === m ? "actif" : ""}">${h(m || t("account default"))}</button>`).join("")}</div>
-        <span class="espace"></span>
+      <div class="ligne m0 mt-1"><span class="petit muet">${t("Model")}</span><div class="choix m0 chat-replie" id="chat-modeles">${modeles.map((m) => `<button type="button" data-chat-modele="${h(m)}" class="${chat.modele === m ? "actif" : ""}">${h(m || t("account default"))}</button>`).join("")}</div>
+        <span class="espace"></span>${boutonOptions()}
         <button type="button" class="btn" id="chat-stop" hidden>${t("Stop")}</button>
         <button type="button" class="btn btn-primaire" id="chat-envoyer">${t("Send")}</button></div>
     </div>
@@ -2068,20 +2086,20 @@ pages.accueil = async () => {
     <form class="bloc accueil-barre accueil-chat" id="accueil-form" data-pieces="hc">
       <div class="ligne m0 chat-tete"><label for="accueil-texte" class="accueil-titre croit">${t("What do you want to do?")}</label>
         <button type="button" class="btn btn-petit" id="hub-chat-aide" title="${h(t("How the assistant works"))}" aria-label="${h(t("How the assistant works"))}">?</button>
-        <button type="button" class="btn btn-petit local-seul" id="hub-chat-nouveau">${t("New conversation")}</button></div>
-      <div class="chat-fil hub-chat-fil" id="hub-chat-fil" role="log" aria-label="${h(t("Conversation"))}">${filHub(hc)}</div>
+        <button type="button" class="btn btn-petit local-seul chat-replie" id="hub-chat-nouveau">${t("New conversation")}</button></div>
+      <div class="chat-fil hub-chat-fil" id="hub-chat-fil" role="log" aria-live="polite" aria-label="${h(t("Conversation"))}">${filHub(hc)}</div>${boutonBas("hub-chat-fil")}
       <p class="petit muet m0 distant-seul">${t("From a device, this conversation is read only: write to the assistant on the computer.")}</p>
       <div class="champ-mentions local-seul" id="accueil-champ"><span id="accueil-puces" class="puces-mentions">${pucesMentions()}</span><textarea id="accueil-texte" class="croit" rows="${tactile() ? 2 : 3}" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="accueil-liste" aria-describedby="accueil-aide" placeholder="${h(tactile() ? t("Ask, or say what you want done…") : t("Ask, or say what you want done… (Enter sends, Shift+Enter: new line)"))}"></textarea></div>
       <ul id="accueil-liste" class="liste-mentions" role="listbox" aria-label="${h(t("Mentions"))}" hidden></ul>
       <input type="file" multiple hidden id="hc-fichiers" accept="image/png,image/jpeg,image/gif,image/webp,.pdf,.txt,.md,.csv,.tsv,.json,.yaml,.yml,.xml,.toml,.ini,.log,.html,.css,.js,.ts,.go,.py,.sql">
       <ul class="pieces-liste" id="hc-liste">${listePieces("hc")}</ul>
-      <div class="ligne m0 puces-suggestions local-seul" id="accueil-sugg" role="group" aria-label="${h(t("Add to your request"))}">${suggestionsMentions()}</div>
-      <div class="ligne m0 mt-1 hub-chat-bas">${pouvoirsHub(hc.pouvoirs || {})}<span class="espace"></span>
-        <button type="button" class="btn local-seul" data-choisir-pieces="hc" title="${h(t("Images, PDF and text files, 20 MB at most each; you can also drop or paste them"))}">${t("Attach files")}</button>
-        <button type="button" class="btn local-seul" id="accueil-mission">${t("Create a mission")}</button>
+      <div class="ligne m0 puces-suggestions local-seul chat-replie" id="accueil-sugg" role="group" aria-label="${h(t("Add to your request"))}">${suggestionsMentions()}</div>
+      <div class="ligne m0 mt-1 hub-chat-bas">${pouvoirsHub(hc.pouvoirs || {})}<span class="espace"></span>${boutonOptions("local-seul")}
+        <button type="button" class="btn local-seul chat-replie" data-choisir-pieces="hc" title="${h(t("Images, PDF and text files, 20 MB at most each; you can also drop or paste them"))}">${t("Attach files")}</button>
+        <button type="button" class="btn local-seul chat-replie" id="accueil-mission">${t("Create a mission")}</button>
         <button type="button" class="btn local-seul" id="hub-chat-stop" ${hc.en_cours ? "" : "hidden"}>${t("Stop")}</button>
         <button type="submit" class="btn btn-primaire local-seul" id="hub-chat-envoyer" ${hc.en_cours ? "hidden" : ""}>${t("Send")}</button></div>
-      <div class="muet petit local-seul" id="accueil-aide">${t("Type @ to name a project, a server or a vault key.")} ${t("The orchestrator prepares a mission card first: nothing starts before you press Launch.")}</div>
+      <div class="muet petit local-seul chat-replie" id="accueil-aide">${t("Type @ to name a project, a server or a vault key.")} ${t("The orchestrator prepares a mission card first: nothing starts before you press Launch.")}</div>
     </form>
     <div id="mission-zone" aria-live="polite">${zoneMission()}</div>
     <div class="grille-hub">${modules.filter((m) => ((m.resume || {}).stats || []).length).map(tuileModule).join("")}</div>
@@ -2349,9 +2367,10 @@ async function majHubChat(force) {
   if (!force && sig === etat.hubChatSig) return;
   etat.hubChatSig = sig;
   const fil = $("#hub-chat-fil"); if (!fil) return;
-  const enBas = fil.scrollHeight - fil.scrollTop - fil.clientHeight < 80;
+  const enBas = auBas(fil);
   fil.innerHTML = filHub(d);
   if (enBas || force) fil.scrollTop = fil.scrollHeight;
+  majBoutonBas(fil);
   const pv = d.pouvoirs || {};
   document.querySelectorAll("[data-pouvoir]").forEach((c) => { c.checked = !!pv[c.dataset.pouvoir]; });
   const r = $("#hub-pouvoirs-resume"); if (r) r.textContent = resumePouvoirs(pv);

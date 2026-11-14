@@ -173,7 +173,7 @@ html.cadre .dialogue, html.cadre .verrou, html.cadre .assistant { top: var(--bar
 .hub-dossiers-liste li { display: flex; align-items: center; gap: 8px; padding: 3px 0; min-width: 0; }
 .hub-dossiers-liste code { overflow-wrap: anywhere; font-size: 13px; }
 .accueil-chat.survol { border-color: var(--accent); background: var(--panel-3); }
-@media (max-width: 700px) { .accueil .hub-chat-fil { max-height: 55vh; } .accueil-barre .hub-chat-bas .btn { flex: 1 1 auto; justify-content: center; } }
+@media (max-width: 700px) { .accueil-barre .hub-chat-bas .btn { flex: 1 1 auto; justify-content: center; } }
 .cp-tete { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .cp-nom { font-size: 15.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
 .cp-besoin { background: var(--attention); color: var(--sur-attention); border-radius: 10px; padding: 0 8px; font-size: 12px; font-weight: 600; line-height: 19px; white-space: nowrap; }
@@ -840,6 +840,13 @@ input.large { flex: 1; min-width: 200px; width: auto; }
 .chat-actions summary { cursor: pointer; }
 .chat-actions div { font-family: var(--mono); font-size: 11.5px; padding: 1px 0; }
 .chat-saisie textarea { width: 100%; resize: vertical; }
+/* M227c: a table of an answer scrolls in its own block; "Go to the latest message" floats over the bottom of the thread */
+.chat-tableau { overflow-x: auto; margin: 6px 0; max-width: 100%; }
+.chat-tableau table { border-collapse: collapse; font-size: .93em; }
+.chat-tableau th, .chat-tableau td { border: 1px solid var(--line); padding: 4px 8px; text-align: left; white-space: nowrap; }
+.chat-tableau th { background: var(--panel); }
+.chat-bas { display: flex; position: relative; z-index: 3; margin: -46px auto 10px; box-shadow: var(--ombre); }
+.tel-seul { display: none; }
 .chat-points i { display: inline-block; width: 5px; height: 5px; margin-right: 3px; border-radius: 50%; background: var(--muted); animation: chat-point 1.2s infinite ease-in-out; }
 .chat-points i:nth-child(2) { animation-delay: .2s; } .chat-points i:nth-child(3) { animation-delay: .4s; }
 @keyframes chat-point { 0%, 80%, 100% { opacity: .25; } 40% { opacity: 1; } }
@@ -947,17 +954,25 @@ input.large { flex: 1; min-width: 200px; width: auto; }
   input, select, textarea { font-size: 16px; } /* no zoom on focus (iOS) */
   .dialogue-carte { width: calc(100vw - 24px); }
   .appairage { flex-direction: column; }
-  /* Chat on a phone: the conversation takes the content area (it scrolls with it, never in a small box), the field
-     to write in stays at the bottom of the screen */
-  .chat { height: auto; min-height: 0; padding-bottom: 0; }
+  /* Chat on a phone (M227c): the chat takes the content area (--h-page, measured by app.js), its thread scrolls alone,
+     the field stays at the bottom; the secondary bars stay folded behind "Options" */
+  .chat { height: var(--h-page, 80dvh); min-height: 0; padding-bottom: 0; }
+  .page:has(> .chat) { padding-bottom: 10px; }
+  .accueil-chat { max-height: var(--h-page, 80dvh); }
+  .accueil .hub-chat-fil { flex: 0 1 auto; max-height: none; min-height: 96px; }
+  .tel-seul { display: inline-flex; }
+  .chat:not(.ouvert) .chat-replie, .accueil-chat:not(.ouvert) .chat-replie, .chat:not(.ouvert) .pieces:not(:has(li)) { display: none; }
+  .principal:has(#page > .chat) .bandeau { display: none; } /* the bar above names the project, its tabs stay */
+  .chat-claude { align-self: stretch; }
+  .chat-fil { overscroll-behavior: contain; }
   .chat-tete h2 { font-size: 17px; }
   .chat-tete .croit { min-width: 0; flex-basis: 100%; order: 3; }
   .accueil-chat .chat-tete { flex-wrap: nowrap; } /* home: the question, then its two buttons on the same row */
   .accueil-chat .chat-tete .croit { order: 0; flex: 1 1 auto; min-width: 0; }
-  .chat-fil { flex: none; overflow: visible; margin: 10px 0 6px; min-height: 40vh; }
-  .chat-msg { max-width: 92%; }
+  .chat-fil { flex: 1 1 auto; min-height: 0; margin: 10px 0 6px; }
+  .chat-msg { max-width: 100%; }
   .chat-bulle { font-size: 15.5px; padding: 10px 13px; }
-  .chat-saisie { position: sticky; bottom: 0; z-index: 5; margin: 0 -14px; padding: 8px 14px calc(10px + env(safe-area-inset-bottom)); background: var(--panel); border-top: 1px solid var(--line); border-radius: 0 0 var(--rayon) var(--rayon); }
+  .chat-saisie { margin: 0 -14px; padding: 8px 14px calc(10px + env(safe-area-inset-bottom)); background: var(--panel); border-top: 1px solid var(--line); border-radius: 0 0 var(--rayon) var(--rayon); }
   .chat-saisie textarea { min-height: 56px; max-height: 32vh; resize: none; }
   .chat-saisie .ligne { flex-wrap: nowrap; gap: 8px; }
   .chat-saisie .chat-options { flex-wrap: wrap; gap: 6px 14px; }
