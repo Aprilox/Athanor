@@ -123,6 +123,7 @@ type ResumeAcces struct {
 
 func resumerAcces(p ProjetAcces, entrees []EntreeCoffre) ResumeAcces {
 	r := ResumeAcces{Env: p.Env, Envs: envsProjet}
+	refusee := modeNatif.Load() && !p.ForcerInfraNatif
 	par := map[string]EntreeCoffre{}
 	for _, e := range entrees {
 		par[e.ID] = e
@@ -132,8 +133,8 @@ func resumerAcces(p ProjetAcces, entrees []EntreeCoffre) ResumeAcces {
 			r.Preuve = append(r.Preuve, a.Env)
 		}
 		e, ok := par[a.Entree]
-		if !ok || a.Env != p.Env {
-			continue
+		if !ok || a.Env != p.Env || e.Portee != "code" && refusee {
+			continue // C-M218-9: an infra entry of a native project not forced is used by nobody
 		}
 		r.Total++
 		switch {

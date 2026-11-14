@@ -86,11 +86,13 @@ func (s *Serveur) planInjection(p Projet, garder map[string]string) (lignes []li
 		return nil, etat, false
 	}
 	entrees := map[string]EntreeCoffre{}
-	valeursVariables := map[string]bool{} // a variable is compared by its value: no key needed
+	// a variable is compared by its name and value (no key needed): a value alone ("587", "false") would
+	// take any line of the old file that happens to hold it (M204)
+	valeursVariables := map[string]bool{}
 	for _, e := range s.coffre.Liste() {
 		entrees[e.ID] = e
 		if e.Famille == "variable" {
-			valeursVariables[e.Valeur] = true
+			valeursVariables[e.Nom+"="+e.Valeur] = true
 		}
 	}
 	empreintes := true
@@ -104,6 +106,11 @@ func (s *Serveur) planInjection(p Projet, garder map[string]string) (lignes []li
 	}
 	donnees := map[string]string{}
 	pa := s.acces.Projet(p.Nom)
+	for _, a := range pa.Acces {
+		if e := entrees[a.Entree]; e.Famille == "variable" {
+			valeursVariables[a.Variable+"="+e.Valeur] = true // also under the name it is given here
+		}
+	}
 	for _, a := range pa.Acces {
 		e, ok := entrees[a.Entree]
 		if !ok || a.Env != pa.Env || e.Portee != "code" {
@@ -128,8 +135,8 @@ func (s *Serveur) planInjection(p Projet, garder map[string]string) (lignes []li
 	for _, f := range s.coffre.EmpreintesConnues() {
 		connues[f] = true
 	}
-	dansCoffre := func(v string) bool {
-		return valeursVariables[v] || (empreintes && connues[s.coffre.Empreinte(v)])
+	dansCoffre := func(nom, v string) bool {
+		return valeursVariables[nom+"="+v] || (empreintes && connues[s.coffre.Empreinte(v)])
 	}
 	avant, err := lireAtelier(p, "secrets.env", tailleTachesMax)
 	if err != nil && !os.IsNotExist(err) {
@@ -143,7 +150,7 @@ func (s *Serveur) planInjection(p Projet, garder map[string]string) (lignes []li
 			lignes = append(lignes, l)
 			continue
 		}
-		if _, ok := donnees[l.nom]; ok || pris[l.nom] || dansCoffre(l.valeur) {
+		if _, ok := donnees[l.nom]; ok || pris[l.nom] || dansCoffre(l.nom, l.valeur) {
 			continue // replaced by its grant, or a vault value not granted here: it goes
 		}
 		lignes = append(lignes, l)

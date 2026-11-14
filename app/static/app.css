@@ -1074,6 +1074,7 @@ ol.guide-access li { margin: 5px 0; }
 .acc-garde { border-top: 1px solid var(--line); padding-top: 8px; display: flex; flex-direction: column; gap: 6px; }
 .acc-garde p { margin: 0; }
 .acc-garde > b { color: var(--attention); }
+.acc-refusee { opacity: .65; border-style: dashed; }
 .acc-acces .cp-nom { white-space: normal; overflow-wrap: anywhere; flex-basis: 100%; } /* B19: the name on its own line, its badge and button under it */
 .acc-repli { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; }
 @media (max-width: 900px) { .acc-grille, .acc-envs { grid-template-columns: 1fr; } .acc-env { min-height: 0; } }

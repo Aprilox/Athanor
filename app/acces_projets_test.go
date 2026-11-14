@@ -49,10 +49,23 @@ func TestResumeAcces(t *testing.T) {
 		{Entree: "s1", Env: "dev"}, {Entree: "s2", Env: "dev"}, {Entree: "v1", Env: "dev"}, {Entree: "i1", Env: "dev"},
 		{Entree: "s1", Env: "prod"}, {Entree: "disparue", Env: "dev"},
 	}}
+	natif := modeNatif.Load()
+	t.Cleanup(func() { modeNatif.Store(natif) })
+	modeNatif.Store(false)
 	r := resumerAcces(p, entrees)
 	if r.Env != "dev" || r.Total != 4 || r.Secrets != 2 || r.Variables != 1 || r.Infra != 1 || len(r.Envs) != 3 {
 		t.Fatalf("dev: %+v", r)
 	}
+	// C-M218-9: native mode refuses the infra entry (not counted) until the project is forced
+	modeNatif.Store(true)
+	if r := resumerAcces(p, entrees); r.Total != 3 || r.Infra != 0 {
+		t.Fatalf("native: %+v", r)
+	}
+	p.ForcerInfraNatif = true
+	if r := resumerAcces(p, entrees); r.Total != 4 || r.Infra != 1 {
+		t.Fatalf("native forced: %+v", r)
+	}
+	modeNatif.Store(false)
 	p.Env = "prod"
 	if r := resumerAcces(p, entrees); r.Total != 1 || r.Secrets != 1 || r.Variables+r.Infra != 0 {
 		t.Fatalf("prod: %+v", r)

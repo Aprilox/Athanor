@@ -206,3 +206,24 @@ func TestInjectionAcces(t *testing.T) {
 		t.Fatal("imported value in an API answer")
 	}
 }
+
+// TestInjectionVariableCourte (M204): a vault variable is recognised by its name and value, so a fallback
+// line that only shares a short value ("587") stays in the pilot's file, while the variable's own old line goes.
+func TestInjectionVariableCourte(t *testing.T) {
+	s := serveurCoffreTest(t)
+	_ = os.Remove(s.acces.chemin)
+	s.chargerAcces()
+	t.Cleanup(func() { _ = os.Remove(s.acces.chemin) })
+	p := Projet{Nom: "demo", Dossier: filepath.Join(t.TempDir(), "demo")}
+	if err := os.MkdirAll(p.Atelier(), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.coffre.Ajouter(EntreeCoffre{Nom: "SMTP_PORT", Famille: "variable", Type: "autre", Source: "email:test"}, "587"); err != nil {
+		t.Fatal(err)
+	}
+	ecrireFichier(t, filepath.Join(p.Atelier(), "secrets.env"), "SMTP_PORT='587'\nDB_PORT='587'\n", 0o600)
+	_, etat, _ := s.planInjection(p, nil)
+	if etat.Etat != "ok" || !slices.Equal(etat.Repli, []string{"DB_PORT"}) {
+		t.Fatalf("repli: %+v", etat)
+	}
+}

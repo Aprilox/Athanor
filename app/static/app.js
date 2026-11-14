@@ -878,9 +878,12 @@ function garderFocus(zone, rendre) {
 // the environment given to the pilot and what it receives, next to Start (summary computed by the server)
 function blocAccesDemarrer(ac, distant) {
   const pl = (n) => new Intl.PluralRules(document.documentElement.lang || "en").select(n) !== "one";
-  const recu = [ac.secrets && (pl(ac.secrets) ? t("{0} test keys", [ac.secrets]) : t("{0} test key", [ac.secrets])),
+  const dev = ac.env === "dev"; // C-M218-3: "test keys" only where they are test keys
+  const recu = [ac.secrets && (pl(ac.secrets) ? t(dev ? "{0} test keys" : "{0} keys", [ac.secrets]) : t(dev ? "{0} test key" : "{0} key", [ac.secrets])),
     ac.variables && (pl(ac.variables) ? t("{0} variables", [ac.variables]) : t("{0} variable", [ac.variables]))].filter(Boolean);
-  const phrase = recu.length ? t("The pilot will have access to: {0}.", [recu.join(", ")]) : t("The pilot receives nothing from the vault.");
+  // C-M218-2: the badge also counts the server keys Athanor keeps, so the sentence says them
+  const phrase = (recu.length ? t("The pilot will have access to: {0}.", [recu.join(", ")]) : t("The pilot receives nothing from the vault."))
+    + (ac.infra ? " " + t(pl(ac.infra) ? "{0} server keys kept by Athanor" : "{0} server key kept by Athanor", [ac.infra]) + "." : "");
   const verrou = ac.etat === "verrouille" ? `<span class="badge badge-infra" title="${h(t("The vault is locked: the pilot's file is not updated until you unlock it."))}">🔒 ${t("vault locked")}</span>` : "";
   const envs = (ac.envs || []).map((e) => `<option value="${h(e)}" ${e === ac.env ? "selected" : ""}>${h(e)}</option>`).join("");
   const choix = distant ? `<span class="badge" title="${h(t("Environment"))}">${h(ac.env)}</span>` // a paired device only reads the grants
@@ -5032,10 +5035,10 @@ let numeroRendu = 0;
 // (ARCHITECTURE §Accès); drag an entry onto a column, or tick its box (keyboard, touch). Names only, no value.
 const acc = { projet: "" };
 const AUTO_ACCES = { migration: "imported", pourvous: "added automatically (For you)" };
-function ligneAcces(a) {
+function ligneAcces(a, refusee) {
   const k = h(a.entree + "|" + a.env), auto = AUTO_ACCES[a.auto];
-  return `<li class="acc-acces">
-    <div class="ligne m0"><b class="cp-nom" title="${h(a.nom)}">${h(a.nom)}</b>${auto ? `<span class="badge">${t(auto)}</span>` : ""}<button type="button" class="btn btn-petit" data-acc-retirer="${k}">${t("Remove")}</button></div>
+  return `<li class="acc-acces${refusee ? " acc-refusee" : ""}">
+    <div class="ligne m0"><b class="cp-nom" title="${h(a.nom)}">${h(a.nom)}</b>${auto ? `<span class="badge">${t(auto)}</span>` : ""}${refusee ? `<span class="badge badge-infra">${t("refused in native mode")}</span>` : ""}<button type="button" class="btn btn-petit" data-acc-retirer="${k}">${t("Remove")}</button></div>
     ${a.portee === "infra" ? "" : `<input type="text" class="acc-var" data-acc-var="${k}" value="${h(a.variable)}" maxlength="100" spellcheck="false" aria-label="${h(t("Variable name") + " — " + a.nom + " (" + a.env + ")")}">`}
   </li>`;
 }
@@ -5048,6 +5051,7 @@ pages.acces = async () => {
   const entrees = (c.entrees || []).slice().sort((a, b) => a.famille.localeCompare(b.famille) || a.nom.localeCompare(b.nom));
   const inj = d.injection || {}, envs = d.envs || ["dev", "staging", "prod"];
   const donne = (id, env) => d.acces.some((a) => a.entree === id && a.env === env);
+  const refusee = d.natif && !d.forcer_infra_natif; // C-M218-9: infra grants used by nobody until Force is ticked
   const carte = (x) => `<li class="acc-entree" draggable="true" data-acc-entree="${h(x.id)}">
     <div class="ligne m0"><b class="cp-nom" title="${h(x.note || x.nom)}">${h(x.nom)}</b><span class="badge">${h(x.famille === "secret" ? typeCoffre(x.type) : t("Variable"))}</span>${x.famille === "secret" ? `<span class="badge${x.portee === "infra" ? " badge-infra" : ""}">${x.portee === "infra" ? "infra" : "code"}</span>` : ""}</div>
     <div class="acc-cases" role="group" aria-label="${h(x.nom)}">${envs.map((e) => `<label><input type="checkbox" data-acc-case="${h(x.id + "|" + e)}"${donne(x.id, e) ? " checked" : ""}> ${e}</label>`).join("")}</div>
@@ -5056,10 +5060,10 @@ pages.acces = async () => {
     const l = d.acces.filter((a) => a.env === env), code = l.filter((a) => a.portee !== "infra"), infra = l.filter((a) => a.portee === "infra");
     return `<section class="acc-env${env === d.env ? " acc-courant" : ""}" data-acc-env="${env}" aria-label="${env}">
       <h3>${env}${env === d.env ? ` <span class="muet petit">· ${t("current")}</span>` : ""}</h3>
-      ${code.length ? `<ul class="acc-liste">${code.map(ligneAcces).join("")}</ul>` : infra.length ? "" : `<p class="muet petit acc-depot">${t("Drop an entry here, or tick it on the left.")}</p>`}
+      ${code.length ? `<ul class="acc-liste">${code.map((a) => ligneAcces(a)).join("")}</ul>` : infra.length ? "" : `<p class="muet petit acc-depot">${t("Drop an entry here, or tick it on the left.")}</p>`}
       ${infra.length ? `<div class="acc-garde"><b class="petit">🔒 ${t("Kept by Athanor, never given to the pilot")}</b>
         <p class="muet petit">${t("The keys of your servers stay with Athanor for its own actions (deployments): the pilot never receives them.")}</p>
-        <ul class="acc-liste">${infra.map(ligneAcces).join("")}</ul></div>` : ""}
+        <ul class="acc-liste">${infra.map((a) => ligneAcces(a, refusee)).join("")}</ul></div>` : ""}
     </section>`;
   };
   return `<div class="acces">
@@ -5351,7 +5355,7 @@ pages.coffre = async () => {
     ${e.mot_de_passe && !e.infra ? `<form class="bloc cof-verrou" id="cof-verrou"><span class="croit">🔒 ${t("Vault locked: the keys of your servers open only with your password")}</span>
       <span class="ligne m0"><input type="password" id="cof-mdp" autocomplete="current-password" placeholder="${h(t("Password"))}" aria-label="${h(t("Password"))}"><button type="submit" class="btn btn-primaire">${t("Unlock")}</button></span></form>` : ""}
     <div class="ligne cof-tete"><div class="onglets">${onglet("secret", t("Secrets"))}${onglet("variable", t("Variables"))}</div><span class="espace"></span><button type="button" class="btn" data-cof-coller>${t("Paste")}</button><button type="button" class="btn btn-primaire" data-cof-ajouter>+ ${t("Add")}</button></div>
-    ${e.mot_de_passe ? "" : `<p class="muet petit">${t("No password for Athanor: the infra scope (the keys of your servers) stays unavailable.")} <a href="#options@bloc-verrou">${t("Settings › Options › Lock")}</a></p>`}
+    ${e.mot_de_passe ? "" : `<p class="petit attention ligne m0 cof-sans-mdp"><span class="croit">${t("Set a password for Athanor to keep the keys of your servers in the vault.")}</span><a class="btn btn-petit" href="#options@bloc-verrou">${t("Set a password")}</a></p>`}
     ${m.importees ? `<p class="muet petit cof-migration">${t("{0} keys imported from your old files.", [m.importees])} <button type="button" class="btn btn-petit" data-cof-mig-annuler>${t("Undo the import")}</button></p>`
       : m.annulee ? `<p class="muet petit cof-migration">${t("Import from your old files undone (the files themselves are unchanged).")} <button type="button" class="btn btn-petit" data-cof-mig-importer>${t("Import again")}</button></p>` : ""}
     ${cof.colle ? formulaireColle() : cof.form ? formulaireCoffre() : ""}
