@@ -152,7 +152,15 @@ html.cadre .dialogue, html.cadre .verrou, html.cadre .assistant { top: var(--bar
 @media (max-width: 700px) { .grille-hub, .en-cours .grille-projets { grid-template-columns: 1fr; } .accueil-barre .ligne { flex-wrap: wrap; } .accueil-barre .btn-primaire { width: 100%; justify-content: center; text-align: center; } }
 /* M195: the home conversation, history above, a large field at the bottom, its powers folded under it */
 .accueil .hub-chat-fil { flex: none; max-height: 46vh; min-height: 0; overflow: auto; margin: 0; }
-.hub-chat-fil .vide { padding: 6px 2px; }
+.hub-chat-fil .vide { padding: 10px 12px; border: 0; background: var(--panel-2); text-align: left; }
+/* E-mail: one framed card per account, its buttons wrapped (M203/M205) */
+.email .grille-projets { margin-top: 16px; }
+.carte-email { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.carte-email > p { margin: 0; overflow-wrap: anywhere; }
+.carte-email .ligne { flex-wrap: wrap; gap: 8px; }
+.carte-email .echec { color: var(--erreur-vif); } /* AA on the card's panel in the dark themes */
+.carte-email > .ligne:last-child { margin-top: 8px; }
+#em-mdp[aria-invalid="true"] { border-color: var(--erreur); }
 .champ-mentions textarea { border: 0; background: transparent; flex: 1 1 100%; outline: none; resize: vertical; font-size: 16px; padding: 10px 12px 10px 6px; min-height: 60px; }
 .champ-mentions:focus-within { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-halo); }
 .accueil-barre .hub-chat-bas { flex-wrap: wrap; gap: 8px; align-items: flex-start; }
@@ -920,6 +928,10 @@ input.large { flex: 1; min-width: 200px; width: auto; }
   .etat-phrase .sous { white-space: normal; }
   .bandeau .actions { display: flex; flex-wrap: wrap; gap: 8px; width: 100%; }
   .bandeau .actions .btn:not(.cloche):not(.btn-guide) { flex: 1 1 auto; justify-content: center; } /* the bell and the “?” stay icons */
+  /* a module page (no project): its title is in the bar above; the line of state, the bell and the “?” share one row */
+  .bandeau-global h1 { display: none; }
+  .bandeau-global .etat-phrase { flex: 1 1 150px; min-width: 0; }
+  .bandeau-global .actions { width: auto; }
   .page { padding: 14px 12px 48px; }
   .bloc { padding: 14px; }
   .grille-2, .grille-3 { grid-template-columns: 1fr; }
@@ -938,7 +950,8 @@ input.large { flex: 1; min-width: 200px; width: auto; }
   .chat { height: auto; min-height: 0; padding-bottom: 0; }
   .chat-tete h2 { font-size: 17px; }
   .chat-tete .croit { min-width: 0; flex-basis: 100%; order: 3; }
-  .accueil-chat .chat-tete .croit { order: 0; } /* home: the question first, its buttons under it */
+  .accueil-chat .chat-tete { flex-wrap: nowrap; } /* home: the question, then its two buttons on the same row */
+  .accueil-chat .chat-tete .croit { order: 0; flex: 1 1 auto; min-width: 0; }
   .chat-fil { flex: none; overflow: visible; margin: 10px 0 6px; min-height: 40vh; }
   .chat-msg { max-width: 92%; }
   .chat-bulle { font-size: 15.5px; padding: 10px 13px; }
@@ -1121,6 +1134,7 @@ ol.guide-access li { margin: 5px 0; }
 .mis-liste { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .mis-ligne { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0; }
 .mis-phrase { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.mis-phrase > b { display: block; } /* the card's title, its sentence under it */
 /* M159: a line is a link to the mission; its lanes below, each with its state read now */
 a.mis-ligne { color: inherit; text-decoration: none; }
 a.mis-ligne:hover, a.mis-ligne:focus-visible { border-color: var(--accent); }

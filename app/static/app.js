@@ -929,6 +929,7 @@ function rendreBandeau(v) {
   const nbActifs = (v.projets || []).filter((x) => x.actif).length;
   const html = `<div class="etat-phrase">${nomProjet}<h1 title="${h(p.titre)}"><span class="point ${p.classe}"></span><span>${h(p.titre)}</span></h1><div class="sous" title="${h(p.sous)}">${h(p.sous)}</div></div><div class="actions">${boutons.join("")}</div>`;
   // rebuilt only when it changed, keeping the focus (the bell, the "?" under the keyboard)
+  $("#bandeau").classList.toggle("bandeau-global", global); // C-M218-12: on a phone its title is already in the bar above
   if ($("#bandeau").dataset.html !== html) garderFocus($("#bandeau"), () => { $("#bandeau").innerHTML = html; $("#bandeau").dataset.html = html; });
   // only what changed: a refresh with the same data sends no mutation to the menu
   const ecrire = (el, x, attr = "textContent") => { if (el[attr] !== x) el[attr] = x; };
@@ -1200,6 +1201,7 @@ function montrerAncre(id, essais = 40) {
   const repli = x.querySelector(":scope > details"); // a folded block (Overview › Other computers): opened
   if (repli && !repli.open) repli.open = true;
   x.scrollIntoView({ behavior: "smooth", block: "center" });
+  if (x.matches("input, textarea")) x.focus({ preventScroll: true }); // a field the link points at: ready to type in
   x.classList.remove("surligne"); void x.offsetWidth; x.classList.add("surligne");
   setTimeout(() => x.classList.remove("surligne"), 2600);
 }
@@ -5578,7 +5580,7 @@ pages.missions = async () => {
   const [d, sugg] = await Promise.all([api("missions"), api("mentions").catch(() => ({}))]);
   etat.mentionsSugg = sugg.mentions || [];
   return `<div class="missions">
-    <div class="ligne cof-tete"><h2 class="m0">${t("Missions")} <span class="muet">${d.missions.length}</span></h2></div>
+    <div class="ligne cof-tete"><h2 class="m0">${t("Missions")} <span class="muet">${d.missions.length}</span></h2>${d.missions.length ? `<span class="espace"></span><a class="btn btn-primaire" href="#accueil@accueil-texte" data-nouvelle-mission>${t("New mission")}</a>` : ""}</div>
     ${d.missions.length ? `<ul class="mis-liste">${d.missions.map(ligneMission).join("")}</ul>`
       : `<div class="vide srv-vide"><p><b>${t("No mission yet")}</b></p>
       <p class="muet">${t("Say what you want in the bar of the home page, for example “Put @my-shop online at shop.example.com”. The orchestrator prepares a mission card first: what will be built and deployed, what will be touched, what it will ask your approval for. Nothing starts before you launch it.")}</p>

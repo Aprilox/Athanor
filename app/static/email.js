@@ -39,7 +39,7 @@ function formulaireEmail() {
 pages.email = async () => {
   const d = await api("email/comptes");
   em.comptes = d.comptes || []; em.projets = d.projets_hub || []; em.envs = d.envs || [];
-  const carte = (c) => `<div class="carte" data-em-compte="${h(c.id)}"><div class="ligne"><span class="ico ico-email" aria-hidden="true"></span><strong>${h(c.nom)}</strong></div>
+  const carte = (c) => `<div class="bloc carte-email" data-em-compte="${h(c.id)}"><div class="ligne"><span class="ico ico-email" aria-hidden="true"></span><strong>${h(c.nom)}</strong></div>
     <p class="muet petit">${h(c.utilisateur || c.expediteur)} · ${h(c.hote)}:${h(String(c.port))} · ${h(t(SECURITES_EMAIL[c.securite] || c.securite))}</p>
     <p class="muet petit">${t("{0}: {1}", [t("Sender"), h(c.expediteur)])}</p>
     ${c.dernier_test ? `<p class="petit ${c.dernier_test.ok ? "ok" : "echec"}" data-em-resultat>${t("Last test ({0}, to {1}): {2}", [new Date(c.dernier_test.t).toLocaleString(), h(c.dernier_test.destinataire), h(t(c.dernier_test.message))])}</p>` : ""}
@@ -58,6 +58,7 @@ pages.email = async () => {
   </div>`;
 };
 
+document.addEventListener("input", (ev) => { if (ev.target.id === "em-mdp") ev.target.removeAttribute("aria-invalid"); });
 document.addEventListener("change", (ev) => {
   if (ev.target.id !== "em-preset") return;
   const p = PRESETS_EMAIL.find((x) => x.id === ev.target.value);
@@ -126,7 +127,7 @@ document.addEventListener("submit", async (ev) => {
     utilisateur: $("#em-utilisateur").value.trim(), expediteur: $("#em-expediteur").value.trim(), mot_de_passe: $("#em-mdp").value };
   const r = await action(api(id ? "email/comptes/" + encodeURIComponent(id) : "email/comptes", "POST", corps));
   $("#em-mdp").value = ""; // the password never stays in the page
-  if (!r) return;
+  if (!r) { const m = $("#em-mdp"); m.placeholder = t("Type the password again"); m.setAttribute("aria-invalid", "true"); return; } // T-M218-3: an empty field says why
   em.form = null;
   toast(id ? t("{0} saved.", [r.nom]) : t("{0} added.", [r.nom]), "ok"); rendrePage();
 });
