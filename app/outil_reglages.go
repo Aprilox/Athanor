@@ -216,7 +216,14 @@ func construireReglages(kitArg, sortie string) error {
 	sandbox.mettre("allowUnsandboxedCommands", false)
 	sandbox.mettre("excludedCommands", exclus)
 	// and the kit's executable: Claude's own commands (athanor screenshots, map, todo…) run it in the sandbox
-	sandbox.mettre("filesystem", filesystemBarriere(kit, tools, append(append(append(append(append([]string{}, projets...), tools), lectures...), logiciels...), joinOS(kit, "athanor"))))
+	// A8: the other projects' secrets.env, readable otherwise when they sit outside ~/ and /mnt
+	var autres []string
+	for _, p := range lireConfig().Projets {
+		if d := realpathPython(cheminReglages(p.Dossier)); p.Dossier != "" && !ensemble[d] && d != projet {
+			autres = append(autres, joinOS(d, ".athanor", "secrets.env"))
+		}
+	}
+	sandbox.mettre("filesystem", filesystemBarriere(kit, tools, append(append(append(append(append([]string{}, projets...), tools), lectures...), logiciels...), joinOS(kit, "athanor")), autres...))
 	sandbox.mettre("network", map[string]any{"allowedDomains": []string{"*"}})
 	var creds []map[string]string
 	for _, v := range []string{"CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY", "GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN"} {
@@ -436,7 +443,7 @@ func lancerChatOutil(args []string) int {
 // filesystemBarriere: the files Claude's sandbox (bubblewrap in WSL and Linux, Seatbelt on macOS) lets the
 // pilot write and read: tools/ (and the project, its folder), never the home nor the Windows drives, except
 // the folders it reads.
-func filesystemBarriere(kit, tools string, lectures []string) objetJSON {
+func filesystemBarriere(kit, tools string, lectures []string, interdits ...string) objetJSON {
 	var fs objetJSON
 	fs.mettre("allowWrite", []string{tools})
 	// I4: Athanor's data stays out of reach even if a project or tools/ were to contain it (the pilot reads its
@@ -446,7 +453,7 @@ func filesystemBarriere(kit, tools string, lectures []string) objetJSON {
 	if len(proteges) > 0 {
 		fs.mettre("denyWrite", proteges)
 	}
-	fs.mettre("denyRead", append([]string{"~/", "/mnt"}, proteges...))
+	fs.mettre("denyRead", append(append([]string{"~/", "/mnt"}, proteges...), interdits...))
 	fs.mettre("allowRead", lectures)
 	return fs
 }

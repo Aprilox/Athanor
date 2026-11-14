@@ -208,9 +208,9 @@ func TestCoffreChangerMdpDeuxFois(t *testing.T) {
 	apres, _ := os.ReadFile(chemin)
 	_ = json.Unmarshal(avant, &fa)
 	_ = json.Unmarshal(apres, &fb)
-	for i := range fa.Entrees { // only the envelopes are rewritten
-		if fa.Entrees[i].Valeur != fb.Entrees[i].Valeur {
-			t.Fatal("an entry was re-encrypted")
+	for i := range fa.Entrees { // C11: new data keys, so every entry is resealed
+		if fa.Entrees[i].Valeur == fb.Entrees[i].Valeur || (fa.Entrees[i].Empreinte != "" && fb.Entrees[i].Empreinte == fa.Entrees[i].Empreinte) {
+			t.Fatal("an entry kept its old seal or fingerprint after a password change")
 		}
 	}
 	c = rouvrir(t, chemin, nil)

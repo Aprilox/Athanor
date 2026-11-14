@@ -173,6 +173,9 @@ func (p *pilote) lancerOuvrier(ident, ligne, journal, modele string) (*ouvrier, 
 			if b, err := os.ReadFile(src); err == nil {
 				st, _ := os.Stat(src)
 				_ = os.WriteFile(filepath.Join(at, f), b, st.Mode().Perm())
+				if f == "secrets.env" {
+					_ = restreindreFichier(filepath.Join(at, f)) // B20: the copy too
+				}
 			}
 		}
 	}

@@ -80,6 +80,7 @@ func (s *Serveur) arretUrgence(qui string) ResultatUrgence {
 	}
 	projets := append([]Projet{}, s.config.Projets...)
 	s.mu.Unlock()
+	vides := s.viderAccesUrgence(projets)
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	for _, p := range projets { // in parallel: each stop may take up to 2 min
@@ -101,7 +102,7 @@ func (s *Serveur) arretUrgence(qui string) ResultatUrgence {
 		}()
 	}
 	wg.Wait()
-	res := fmt.Sprintf("%d jeton(s) révoqué(s), %d approbation(s) refusée(s), %d règle(s) retirée(s), %d pilote(s) arrêté(s), coffre verrouillé", r.Jetons, r.Approbations, r.Regles, r.Pilotes)
+	res := fmt.Sprintf("%d jeton(s) révoqué(s), %d approbation(s) refusée(s), %d règle(s) retirée(s), %d pilote(s) arrêté(s), coffre verrouillé, %d secrets.env vidé(s)", r.Jetons, r.Approbations, r.Regles, r.Pilotes, vides)
 	if len(r.Echecs) > 0 {
 		res += fmt.Sprintf(", %d pilote(s) non arrêté(s)", len(r.Echecs))
 	}

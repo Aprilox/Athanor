@@ -541,6 +541,13 @@ func (s *Serveur) apiGestion(w http.ResponseWriter, r *http.Request) {
 			s.erreur(w, http.StatusInternalServerError, err.Error())
 			return
 		}
+		// A6: the old folder is no longer the project: its copy of the grants goes, the new one is rewritten
+		if filepath.Clean(p.Atelier()) != filepath.Clean(nouveau.Atelier()) {
+			_ = os.Remove(cheminSecrets(p))
+		}
+		if _, err := os.Stat(cheminSecrets(nouveau)); err == nil {
+			_, _ = s.injecterAcces(nouveau, nil)
+		}
 		s.suivreGitHub(p.Dossier, cible)
 		decoches, recoches, _ := nouveau.VerifierJalons()
 		demanderReverification(nouveau, "project pointed from "+p.Dossier+" to "+cible)
@@ -748,6 +755,9 @@ func (s *Serveur) retirerProjet(p Projet) error {
 	if s.acces != nil {
 		s.oublierCleDeploiement(p.Nom) // the vault entry goes with the grants (the repository: oublierGitHub)
 		_ = s.acces.SupprimerProjet(p.Nom)
+		if _, err := os.Stat(cheminSecrets(p)); err == nil { // A6: files kept, the granted values leave them
+			_, _ = s.injecterAcces(p, nil)
+		}
 	}
 	k := s.kitCourant()
 	choix := lireChoix(k)

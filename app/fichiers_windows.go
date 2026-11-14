@@ -24,3 +24,27 @@ func verrouillerFd(f *os.File) error {
 }
 
 func runtimeWindows() bool { return true }
+
+// restreindreFichier: the file readable and writable by the current account only (B20): its DACL no longer
+// inherits the folder's (a project under C:\ gives "Authenticated Users" Modify); Go ignores 0600 on NTFS.
+func restreindreFichier(chemin string) error {
+	u, err := windows.GetCurrentProcessToken().GetTokenUser()
+	if err != nil {
+		return err
+	}
+	acl, err := windows.ACLFromEntries([]windows.EXPLICIT_ACCESS{{
+		AccessPermissions: windows.GENERIC_ALL,
+		AccessMode:        windows.SET_ACCESS,
+		Inheritance:       windows.NO_INHERITANCE,
+		Trustee: windows.TRUSTEE{
+			TrusteeForm:  windows.TRUSTEE_IS_SID,
+			TrusteeType:  windows.TRUSTEE_IS_USER,
+			TrusteeValue: windows.TrusteeValueFromSID(u.User.Sid),
+		},
+	}}, nil)
+	if err != nil {
+		return err
+	}
+	return windows.SetNamedSecurityInfo(chemin, windows.SE_FILE_OBJECT,
+		windows.DACL_SECURITY_INFORMATION|windows.PROTECTED_DACL_SECURITY_INFORMATION, nil, nil, acl, nil)
+}

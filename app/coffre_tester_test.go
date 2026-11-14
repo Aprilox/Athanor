@@ -222,6 +222,10 @@ func TestCoffreTesterAPI(t *testing.T) {
 	if code != 200 || v["ok"] != true || v["note"].(map[string]any)["cle"] != "GitHub token of account {0}; scopes: {1}" {
 		t.Fatalf("saved entry: %d %v", code, v)
 	}
+	// C15: the type of the form does not send a saved entry to another provider
+	if code, v = appel(map[string]string{"id": e["id"].(string), "type": "cloudflare"}, "/api/coffre/tester"); code != 200 || v["type"] != "github" {
+		t.Fatalf("saved entry tested as the form type: %d %v", code, v)
+	}
 	code, v = appel(map[string]any{"texte": "export GITHUB_TOKEN=" + jeton, "i": 0}, "/api/coffre/tester")
 	if code != 200 || v["ok"] != true || v["type"] != "github" {
 		t.Fatalf("pasted text: %d %v", code, v)

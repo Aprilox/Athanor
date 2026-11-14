@@ -16,3 +16,6 @@ func ouvrirSansLien(chemin string, mode int, perm os.FileMode) (*os.File, error)
 func verrouillerFd(f *os.File) error { return syscall.Flock(int(f.Fd()), syscall.LOCK_EX) }
 
 func runtimeWindows() bool { return false }
+
+// restreindreFichier: nothing to do, the file is created 0600.
+func restreindreFichier(string) error { return nil }

@@ -27,6 +27,9 @@ import (
 	"unicode/utf8"
 )
 
+// errPourVousDistant (A7): a stolen phone cannot swap the value behind a name the user granted from the vault.
+const errPourVousDistant = erreurEntree("This name is already given to the project from the vault: replace it from Athanor's window on the computer.")
+
 var (
 	verrouReponses = sync.RWMutex{} // replies.json and secrets.env, written by the application alone
 	reIDTache      = regexp.MustCompile(`^T[0-9]{1,5}$`)
@@ -182,8 +185,11 @@ func ecrireAtelier(p Projet, dossier, nom string, donnees []byte) error {
 	if e := f.Close(); err == nil {
 		err = e
 	}
+	base := p.Atelier()
+	if err == nil && strings.HasPrefix(nom, "secrets.env") { // before the rename: never a moment readable by others
+		err = restreindreFichier(filepath.Join(base, filepath.FromSlash(tmp)))
+	}
 	if err == nil {
-		base := p.Atelier()
 		err = os.Rename(filepath.Join(base, filepath.FromSlash(tmp)), filepath.Join(base, filepath.FromSlash(rel)))
 	}
 	if err != nil {
@@ -372,7 +378,7 @@ func (s *Serveur) apiPourVousVoir(w http.ResponseWriter, r *http.Request) {
 }
 
 // ecrireSecrets sets NAME='value' lines in .athanor/secrets.env (shell-quoted: the file is sourced); only
-// well-formed lines are kept. Returns the previous content, to put it back if the answer cannot be saved.
+// comments stay, the other lines go to secrets.env.ancien (B18). Returns the previous content, to put it back if the answer cannot be saved.
 func ecrireSecrets(p Projet, valeurs map[string]string) ([]byte, error) {
 	if len(valeurs) == 0 {
 		return nil, nil
@@ -381,12 +387,18 @@ func ecrireSecrets(p Projet, valeurs map[string]string) ([]byte, error) {
 	if err != nil && !os.IsNotExist(err) {
 		return nil, err
 	}
+	if err := ecarterLignes(p, avant); err != nil {
+		return nil, err
+	}
 	lignes := []string{"# Values you gave Claude on the For you page (sourced by its commands, never committed)."}
 	for _, l := range strings.Split(string(avant), "\n") {
+		l = strings.TrimRight(l, "\r")
 		if m := reLigneSecret.FindStringSubmatch(l); m != nil {
 			if _, remplace := valeurs[m[1]]; !remplace {
 				lignes = append(lignes, l)
 			}
+		} else if estCommentaireAutrui(l) { // B18: a line written by someone else stays
+			lignes = append(lignes, l)
 		}
 	}
 	noms := make([]string, 0, len(valeurs))
@@ -404,9 +416,21 @@ func ecrireSecrets(p Projet, valeurs map[string]string) ([]byte, error) {
 // pourvous:<project>) and grants each to the project for its current environment under the asked name;
 // a value already in the vault is granted as it is. ok false (nothing left behind): no vault, code key
 // closed or an error, the caller writes the file as before. annuler removes the entries it created.
-func (s *Serveur) pourVousAuCoffre(p Projet, tache string, valeurs map[string]string) (annuler func(), ok bool) {
+// distant (A7): from a remote device, an access of the asked name made otherwise than by For you is
+// never replaced: refus says so and nothing is changed.
+func (s *Serveur) pourVousAuCoffre(p Projet, tache string, valeurs map[string]string, distant bool) (annuler func(), ok bool, refus error) {
 	if len(valeurs) == 0 || s.coffre == nil || s.coffreErr != nil || s.acces == nil || s.accesErr != nil || s.coffre.OuvrirCode() != nil {
-		return nil, false
+		return nil, false, nil
+	}
+	env := s.acces.Projet(p.Nom).Env
+	if distant {
+		for _, a := range s.acces.Projet(p.Nom).Acces {
+			if _, demande := valeurs[a.Variable]; demande && a.Env == env && a.Auto != "pourvous" {
+				if v, err := s.coffre.Valeur(a.Entree); err != nil || v != valeurs[a.Variable] {
+					return nil, false, errPourVousDistant
+				}
+			}
+		}
 	}
 	source := "pourvous:" + p.Nom
 	parEmpreinte := map[string]string{} // fingerprint → id
@@ -428,7 +452,6 @@ func (s *Serveur) pourVousAuCoffre(p Projet, tache string, valeurs map[string]st
 		}
 		_ = s.synchroniserAcces() // their grants go with them
 	}
-	env := s.acces.Projet(p.Nom).Env
 	d := dicoTUI(s.langue())
 	for _, n := range slices.Sorted(maps.Keys(valeurs)) {
 		v := valeurs[n]
@@ -437,7 +460,7 @@ func (s *Serveur) pourVousAuCoffre(p Projet, tache string, valeurs map[string]st
 			if x, ok := parNom[n]; ok { // the same task answered again: its entry takes the new value
 				if s.coffre.RemplacerValeur(x.ID, v) != nil {
 					annuler()
-					return nil, false
+					return nil, false, nil
 				}
 				e = x
 			} else {
@@ -449,7 +472,7 @@ func (s *Serveur) pourVousAuCoffre(p Projet, tache string, valeurs map[string]st
 					Note: traduireTUI(d, "Given on the For you page ({0})", tache)}, v)
 				if err != nil {
 					annuler()
-					return nil, false
+					return nil, false, nil
 				}
 				creees = append(creees, x.ID)
 				e = x
@@ -480,10 +503,10 @@ func (s *Serveur) pourVousAuCoffre(p Projet, tache string, valeurs map[string]st
 		}
 		if err != nil {
 			annuler()
-			return nil, false
+			return nil, false, nil
 		}
 	}
-	return annuler, true
+	return annuler, true, nil
 }
 
 func (s *Serveur) apiPourVous(w http.ResponseWriter, r *http.Request) {
@@ -582,7 +605,11 @@ func (s *Serveur) apiPourVous(w http.ResponseWriter, r *http.Request) {
 		fichiers = append(fichiers, f)
 	}
 	// the vault first (V§6.1); without it, the project file as before
-	annulerCoffre, auCoffre := s.pourVousAuCoffre(p, c.ID, valeurs)
+	annulerCoffre, auCoffre, refus := s.pourVousAuCoffre(p, c.ID, valeurs, appareilDe(r) != "")
+	if refus != nil {
+		s.erreur(w, http.StatusConflict, refus.Error())
+		return
+	}
 	var secretsAvant []byte
 	var err error
 	if !auCoffre {

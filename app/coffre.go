@@ -187,8 +187,38 @@ func gcm(cle []byte) (cipher.AEAD, error) {
 	return cipher.NewGCM(b)
 }
 
-func aadCle(nom string) []byte        { return []byte("athanor-coffre:" + nom) }
-func aadEntree(e EntreeCoffre) []byte { return []byte(e.ID + "|" + e.Famille + "|" + e.Portee) }
+func aadCle(nom string) []byte { return []byte("athanor-coffre:" + nom) }
+
+// aadEntree binds a sealed value to its entry, name and type included (C12: two names swapped in the
+// file no longer open); aadEntreeV1 is the old binding, resealed by migrerAAD once the key is open.
+func aadEntree(e EntreeCoffre) []byte {
+	return fmt.Appendf(nil, "v2|%s|%s|%s|%q|%q", e.ID, e.Famille, e.Portee, e.Nom, e.Type)
+}
+func aadEntreeV1(e EntreeCoffre) []byte { return []byte(e.ID + "|" + e.Famille + "|" + e.Portee) }
+
+// migrerAAD reseals under aadEntree the secrets still sealed under aadEntreeV1 whose key is open.
+func (c *Coffre) migrerAAD() {
+	change := false
+	for i, e := range c.f.Entrees {
+		k := c.cleCode
+		if e.Portee == "infra" {
+			k = c.cleInfra
+		}
+		if e.Famille != "secret" || k == nil {
+			continue
+		}
+		if _, err := desceller(k, e.Valeur, aadEntree(e)); err == nil {
+			continue
+		}
+		if b, err := desceller(k, e.Valeur, aadEntreeV1(e)); err == nil {
+			c.f.Entrees[i].Valeur, change = sceller(k, b, aadEntree(e)), true
+			clear(b)
+		}
+	}
+	if change {
+		_ = c.enregistrer() // a failed write keeps the resealed values in memory for the next save
+	}
+}
 
 // kek: the key-encryption key derived from the password with the vault's own salt.
 func (c *Coffre) kek(mdp string) []byte {
@@ -241,8 +271,11 @@ func (c *Coffre) Deverrouiller(mdp string) error {
 	}
 	c.cleCode, c.cleInfra, c.urgence = code, infra, ""
 	if nouvelles && len(c.f.Entrees) > 0 {
-		return c.enregistrer()
+		if err := c.enregistrer(); err != nil {
+			return err
+		}
 	}
+	c.migrerAAD()
 	return nil
 }
 
@@ -283,6 +316,7 @@ func (c *Coffre) ouvrirCode() error {
 		return err
 	}
 	c.cleCode = k
+	c.migrerAAD()
 	return nil
 }
 
@@ -358,10 +392,10 @@ func (c *Coffre) Urgence() string {
 func (c *Coffre) ChangerMotDePasse(ancien, nouveau string) (err error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	kdf, cles, cleCode, cleInfra := c.f.KDF, c.f.Cles, c.cleCode, c.cleInfra
+	kdf, cles, cleCode, cleInfra, entrees := c.f.KDF, c.f.Cles, c.cleCode, c.cleInfra, slices.Clone(c.f.Entrees)
 	defer func() {
 		if err != nil { // file not written: the next save must not write envelopes the config does not match
-			c.f.KDF, c.f.Cles, c.cleCode, c.cleInfra = kdf, cles, cleCode, cleInfra
+			c.f.KDF, c.f.Cles, c.cleCode, c.cleInfra, c.f.Entrees = kdf, cles, cleCode, cleInfra, entrees
 		}
 	}()
 	code, infra := c.cleCode, c.cleInfra
@@ -402,18 +436,28 @@ func (c *Coffre) ChangerMotDePasse(ancien, nouveau string) (err error) {
 			return err
 		}
 	}
-	if code == nil {
-		code = octetsAleatoires(32)
+	// C11: new data keys, every entry resealed, so an old copy of the file and the old password no longer
+	// open today's secrets (the keystore envelope of the code key is redone with it).
+	c.cleCode, c.cleInfra = code, infra
+	clairs := make([]string, len(c.f.Entrees))
+	for i, e := range c.f.Entrees {
+		if clairs[i], err = c.dechiffrer(e); err != nil {
+			return err
+		}
 	}
-	if infra == nil {
-		infra = octetsAleatoires(32)
+	c.cleCode, c.cleInfra = octetsAleatoires(32), octetsAleatoires(32)
+	c.f.Entrees = slices.Clone(c.f.Entrees)
+	for i := range c.f.Entrees {
+		if err = c.poserValeur(&c.f.Entrees[i], clairs[i]); err != nil {
+			return err
+		}
 	}
 	c.f.KDF.Sel, c.f.KDF.Iter = aleatoire(16), max(c.f.KDF.Iter, iterMdp)
 	kek := c.kek(nouveau)
-	c.f.Cles.Code.Mdp = sceller(kek, code, aadCle("code"))
-	c.f.Cles.Infra.Mdp = sceller(kek, infra, aadCle("infra"))
-	c.envelopperSysteme(code)
-	c.cleCode, c.cleInfra = code, infra
+	c.f.Cles.Code.Mdp = sceller(kek, c.cleCode, aadCle("code"))
+	c.f.Cles.Infra.Mdp = sceller(kek, c.cleInfra, aadCle("infra"))
+	c.f.Cles.Code.Systeme = ""
+	c.envelopperSysteme(c.cleCode)
 	return c.enregistrerSiUtile()
 }
 
@@ -560,7 +604,7 @@ func (c *Coffre) ModifierMeta(id, nom, typ, note, portee string, valeur *string)
 		if err := c.poserValeur(&e, *valeur); err != nil {
 			return EntreeCoffre{}, err
 		}
-	} else if e.Famille == "secret" && e.Portee != ancienne.Portee {
+	} else if e.Famille == "secret" && (e.Portee != ancienne.Portee || e.Nom != ancienne.Nom || e.Type != ancienne.Type) {
 		clair, err := c.dechiffrer(ancienne)
 		if err != nil {
 			return EntreeCoffre{}, err
@@ -675,5 +719,9 @@ func (c *Coffre) enregistrer() error {
 	if err != nil {
 		return err
 	}
-	return ecrireAtomique(c.chemin, b, 0o600)
+	if err := ecrireAtomique(c.chemin, b, 0o600); err != nil {
+		return err
+	}
+	_ = os.Remove(c.chemin + ".ancien") // C11: the Windows fallback of ecrireAtomique keeps the old file aside
+	return nil
 }

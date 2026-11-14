@@ -3288,7 +3288,7 @@ function carteTache(x) {
   if (x.etat === "pour_vous") {
     corps += `<div class="pv-form">
       ${(x.secrets || []).map((n) => `<label class="champ"><span><code>${h(n)}</code> ${x.donnes && x.donnes[n] ? `<span class="pv-donne">✓ ${t("already given: leave empty to keep it")}</span>` : ""}</span>
-        <input type="password" autocomplete="off" spellcheck="false" data-pv-secret="${h(x.id)}|${h(n)}" value="${h(b.secrets[n] || "")}" placeholder="${h(t("paste it here: it stays on this PC, in the workshop, never in git"))}"></label>`).join("")}
+        <input type="password" autocomplete="off" spellcheck="false" data-pv-secret="${h(x.id)}|${h(n)}" value="${h(b.secrets[n] || "")}" placeholder="${h(t("paste it here: it goes into Athanor's vault on this PC, never into git"))}"></label>`).join("")}
       <label class="champ"><span>${t("Your answer (optional)")}</span><textarea rows="3" data-pv-texte="${h(x.id)}" placeholder="${h(t("e.g. Done, here is the address you asked for: … Or, to skip: I do not want a paid plan, use a free alternative."))}">${h(b.texte)}</textarea></label>
       ${zonePieces("pv-" + x.id)}
       <div class="ligne mt-1">
@@ -5067,6 +5067,7 @@ pages.acces = async () => {
         ${entrees.length ? `<ul class="acc-liste">${entrees.map(carte).join("")}</ul>` : `<p class="muet">${t("The vault is empty.")} <a href="#coffre">${t("Vault")}</a></p>`}</div>
       <div class="bloc acc-projet"><h2>${t("This project")}</h2>
         <div class="acc-envs">${envs.map(colonne).join("")}</div>
+        ${(inj.ignorees || []).length ? `<p class="petit attention acc-ignorees">⚠ ${t("Not given to the pilot: a value on several lines does not fit its file ({0}).", [inj.ignorees.join(", ")])}</p>` : ""}
         ${(inj.repli || []).length ? `<div class="acc-repli">${inj.repli.map((n) => `<p class="ligne m0 petit"><code>${h(n)}</code><span class="muet croit">${t("in the old file, not in the vault")}</span><button type="button" class="btn btn-petit" data-acc-importer>${t("Import")}</button></p>`).join("")}</div>` : ""}
       </div>
     </div>

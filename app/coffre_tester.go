@@ -414,7 +414,8 @@ func (s *Serveur) apiCoffreTester(w http.ResponseWriter, r *http.Request) {
 		}
 		typ, valeur = props[c.I].Type, props[c.I].valeur
 	}
-	if _, connu := typesCoffre[c.Type]; connu {
+	// C15: a saved entry is tested as its own type (a Stripe key never goes to GitHub because of the form)
+	if _, connu := typesCoffre[c.Type]; connu && c.ID == "" {
 		typ = c.Type
 	}
 	s.ecrireJSON(w, testerValeur(typ, valeur, c.Hote))

@@ -91,10 +91,12 @@ func TestCoffreInfraJamaisSysteme(t *testing.T) {
 	if err := c.ChangerMotDePasse("", "témoin-mdp"); err != nil {
 		t.Fatal(err)
 	}
+	infras := [][]byte{c.cleInfra}
 	ajouter(t, c, "SSH", "secret", "ssh", "", "v2")
 	if err := c.ChangerMotDePasse("témoin-mdp", "témoin-mdp-2"); err != nil {
 		t.Fatal(err)
 	}
+	infras = append(infras, c.cleInfra)
 	c.Verrouiller()
 	c = rouvrir(t, chemin, sys)
 	if err := c.OuvrirCode(); err != nil {
@@ -107,9 +109,15 @@ func TestCoffreInfraJamaisSysteme(t *testing.T) {
 	if c.cleInfra == nil || len(sys.vus) == 0 {
 		t.Fatalf("scenario did not run: infra %v, envelopes %d", c.cleInfra != nil, len(sys.vus))
 	}
-	for _, k := range sys.vus {
-		if bytes.Equal(k, c.cleInfra) || !bytes.Equal(k, c.cleCode) {
-			t.Fatal("the system keystore received another key than the code key")
+	infras = append(infras, c.cleInfra)
+	for _, k := range sys.vus { // a password change gives a new code key (C11): only code keys, never infra
+		for _, inf := range infras {
+			if bytes.Equal(k, inf) {
+				t.Fatal("the system keystore received an infra key")
+			}
 		}
+	}
+	if !bytes.Equal(sys.vus[len(sys.vus)-1], c.cleCode) {
+		t.Fatal("the last keystore envelope is not the current code key")
 	}
 }
