@@ -148,6 +148,16 @@ html.cadre .dialogue, html.cadre .verrou, html.cadre .assistant { top: var(--bar
 .missions-icone { width: 34px; height: 34px; flex: none; border-radius: 50%; border: 2px dashed var(--line); position: relative; }
 .missions-icone::after { content: ""; position: absolute; inset: 9px; border-radius: 50%; background: var(--accent-halo); }
 @media (max-width: 700px) { .grille-hub, .en-cours .grille-projets { grid-template-columns: 1fr; } .accueil-barre .ligne { flex-wrap: wrap; } .accueil-barre .btn-primaire { width: 100%; justify-content: center; text-align: center; } }
+/* M195: the home conversation, history above, a large field at the bottom, its powers folded under it */
+.accueil .hub-chat-fil { flex: none; max-height: 46vh; min-height: 0; overflow: auto; margin: 0; }
+.hub-chat-fil .vide { padding: 6px 2px; }
+.champ-mentions textarea { border: 0; background: transparent; flex: 1 1 100%; outline: none; resize: vertical; font-size: 16px; padding: 10px 12px 10px 6px; min-height: 60px; }
+.champ-mentions:focus-within { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-halo); }
+.accueil-barre .hub-chat-bas { flex-wrap: wrap; gap: 8px; align-items: flex-start; }
+.hub-pouvoirs { flex: 1 1 18em; min-width: 0; font-size: 14px; }
+.hub-pouvoirs summary { cursor: pointer; padding: 6px 0; }
+.hub-pouvoirs .interrupteur { margin-top: 6px; }
+@media (max-width: 700px) { .accueil .hub-chat-fil { max-height: 55vh; } .accueil-barre .hub-chat-bas .btn { flex: 1 1 auto; justify-content: center; } }
 .cp-tete { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .cp-nom { font-size: 15.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
 .cp-besoin { background: var(--attention); color: var(--sur-attention); border-radius: 10px; padding: 0 8px; font-size: 12px; font-weight: 600; line-height: 19px; white-space: nowrap; }

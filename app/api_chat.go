@@ -60,6 +60,8 @@ type MessageChat struct {
 type conversationChat struct {
 	Session  string        `json:"session"`
 	Messages []MessageChat `json:"messages"`
+	// the home conversation's powers (hub_chat.go), kept with it: a new conversation starts with all off
+	Pouvoirs PouvoirsChat `json:"pouvoirs"`
 }
 
 type chatEnCours struct {
@@ -245,6 +247,11 @@ func (s *Serveur) apiChat(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	s.ecrireJSON(w, s.etatChat(p))
+}
+
+// etatChat: a conversation (a project's, or the home one) with its turn under way.
+func (s *Serveur) etatChat(p Projet) map[string]any {
 	k := s.kitCourant()
 	c := lireConversation(k, p)
 	chatMu.Lock()
@@ -264,36 +271,52 @@ func (s *Serveur) apiChat(w http.ResponseWriter, r *http.Request) {
 		chatMu.Unlock()
 		rep["partiel"] = map[string]any{"textes": textes, "outils": outils, "mode": mode}
 	}
-	s.ecrireJSON(w, rep)
+	return rep
 }
 
-func (s *Serveur) apiChatEnvoyer(w http.ResponseWriter, r *http.Request) {
-	var c struct {
-		Message string `json:"message"`
-		Modele  string `json:"modele"`
-		// "modif": Claude may change the files (with the pilot running, it stops at the end of its cycle first,
-		// then starts again); anything else: a read-only turn, a change becomes a note for the pilot
-		Mode string `json:"mode"`
-		// Internet: Claude may search and read the web for this message, only when the request needs it
-		Internet bool     `json:"internet"`
-		Pieces   []string `json:"pieces"` // files attached, uploaded first (api_pieces.go, cible "chat")
-	}
-	if err := lireCorps(r, &c); err != nil || (strings.TrimSpace(c.Message) == "" && len(c.Pieces) == 0) {
+type demandeChat struct {
+	Message string `json:"message"`
+	Modele  string `json:"modele"`
+	// "modif": Claude may change the files (with the pilot running, it stops at the end of its cycle first,
+	// then starts again); anything else: a read-only turn, a change becomes a note for the pilot
+	Mode string `json:"mode"`
+	// Internet: Claude may search and read the web for this message, only when the request needs it
+	Internet bool     `json:"internet"`
+	Pieces   []string `json:"pieces"` // files attached, uploaded first (api_pieces.go, cible "chat")
+}
+
+// lireDemandeChat: the message read and checked (text or files, length, model); false once the error is written.
+func (s *Serveur) lireDemandeChat(w http.ResponseWriter, r *http.Request, c *demandeChat) bool {
+	if err := lireCorps(r, c); err != nil || (strings.TrimSpace(c.Message) == "" && len(c.Pieces) == 0) {
 		s.erreur(w, http.StatusBadRequest, "Write your message first")
-		return
+		return false
 	}
 	if utf8.RuneCountInString(c.Message) > 20000 {
 		s.erreur(w, http.StatusBadRequest, "Message too long (20,000 characters at most)")
-		return
+		return false
 	}
 	if c.Modele != "" && !reModele.MatchString(c.Modele) && !modelesChat[c.Modele] {
 		s.erreur(w, http.StatusBadRequest, "Unknown model")
+		return false
+	}
+	return true
+}
+
+func (s *Serveur) apiChatEnvoyer(w http.ResponseWriter, r *http.Request) {
+	var c demandeChat
+	if !s.lireDemandeChat(w, r, &c) {
 		return
 	}
 	p, ok := s.projetRequis(w, r)
 	if !ok {
 		return
 	}
+	s.envoyerChat(w, p, c, consigneChat, consigneQuestion, consigneModif)
+}
+
+// envoyerChat: the user's message into the conversation, then Claude's turn (gabarit: the system prompt,
+// its %s the instructions of the mode, question or modif).
+func (s *Serveur) envoyerChat(w http.ResponseWriter, p Projet, c demandeChat, gabarit, question, modif string) {
 	pieces, err := piecesChat(p, c.Pieces)
 	if err != nil {
 		s.erreur(w, http.StatusBadRequest, err.Error())
@@ -336,9 +359,9 @@ func (s *Serveur) apiChatEnvoyer(w http.ResponseWriter, r *http.Request) {
 	conv.Messages = append(conv.Messages, MessageChat{Role: "vous", Texte: texte, Mode: mode, Modele: c.Modele, Quand: time.Now().Format(time.RFC3339), Internet: c.Internet, Pieces: pieces, Pause: pause})
 	ecrireConversation(k, p, conv)
 
-	consigne := consigneQuestion
+	consigne := question
 	if mode == "modif" {
-		consigne = consigneModif
+		consigne = modif
 	}
 	sujet := strings.Join(strings.Fields(texte), " ")
 	if utf8.RuneCountInString(sujet) > 60 {
@@ -356,7 +379,7 @@ func (s *Serveur) apiChatEnvoyer(w http.ResponseWriter, r *http.Request) {
 	}
 	fichiers := map[string]string{
 		id + ".msg":     strings.TrimSpace(texte),
-		id + ".prompt":  strings.Replace(consigneChat, "%s", consigne, 1),
+		id + ".prompt":  strings.Replace(gabarit, "%s", consigne, 1),
 		id + ".subject": "Chat: " + sujet,
 	}
 	if c.Internet {
@@ -549,6 +572,7 @@ func (s *Serveur) finChat(k Kit, p Projet, en *chatEnCours, commit, detail strin
 		m.Pilote = s.relancerApresChat(p, commit, en.sujet)
 	}
 	conv.Messages = append(conv.Messages, m)
+	conv.Pouvoirs = lireConversation(k, p).Pouvoirs // switched during the turn: the user's latest choice
 	ecrireConversation(k, p, conv)
 	chatMu.Lock()
 	delete(chatsActifs, p.Dossier)
@@ -583,10 +607,12 @@ func texteChangeChat(langue string) string {
 }
 
 func (s *Serveur) apiChatArreter(w http.ResponseWriter, r *http.Request) {
-	p, ok := s.projetRequis(w, r)
-	if !ok {
-		return
+	if p, ok := s.projetRequis(w, r); ok {
+		s.arreterChat(w, p)
 	}
+}
+
+func (s *Serveur) arreterChat(w http.ResponseWriter, p Projet) {
 	chatMu.Lock()
 	en := chatsActifs[p.Dossier]
 	attente := false
@@ -608,10 +634,13 @@ func (s *Serveur) apiChatArreter(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Serveur) apiChatEffacer(w http.ResponseWriter, r *http.Request) {
-	p, ok := s.projetRequis(w, r)
-	if !ok {
-		return
+	if p, ok := s.projetRequis(w, r); ok {
+		s.effacerChat(w, p)
 	}
+}
+
+// effacerChat: a new conversation (Claude's session and the home's powers go with the old one).
+func (s *Serveur) effacerChat(w http.ResponseWriter, p Projet) {
 	chatMu.Lock()
 	enCours := chatsActifs[p.Dossier] != nil
 	chatMu.Unlock()

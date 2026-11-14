@@ -2016,12 +2016,20 @@ pages.accueil = async () => {
   if (etat.missionVue && travailleMission(etat.missionVue)) minuterieMission = setTimeout(lireMissionVue, 2000);
   etat.hubSig = JSON.stringify([modules, d.elements || []]); rendreMenu(modules);
   etat.mentionsSugg = sugg.mentions || []; etat.mentionListe = null;
+  const hc = etat.hubChat || { messages: [], pouvoirs: {} };
+  setTimeout(() => majHubChat(true), 0);
   return `<div class="accueil">
-    <form class="bloc accueil-barre" id="accueil-form">
-      <label for="accueil-texte" class="accueil-titre">${t("What do you want to do?")}</label>
-      <div class="ligne m0"><div class="champ-mentions croit" id="accueil-champ"><span id="accueil-puces" class="puces-mentions">${pucesMentions()}</span><input type="text" id="accueil-texte" class="croit" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="accueil-liste" aria-describedby="accueil-aide" placeholder="${h(t("Say it in one sentence…"))}"></div><button type="submit" class="btn btn-primaire">${t("Send")}</button></div>
+    <form class="bloc accueil-barre accueil-chat" id="accueil-form">
+      <div class="ligne m0 chat-tete"><label for="accueil-texte" class="accueil-titre croit">${t("What do you want to do?")}</label>
+        <button type="button" class="btn btn-petit" id="hub-chat-nouveau">${t("New conversation")}</button></div>
+      <div class="chat-fil hub-chat-fil" id="hub-chat-fil" role="log" aria-label="${h(t("Conversation"))}">${filHub(hc)}</div>
+      <div class="champ-mentions" id="accueil-champ"><span id="accueil-puces" class="puces-mentions">${pucesMentions()}</span><textarea id="accueil-texte" class="croit" rows="${tactile() ? 2 : 3}" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="accueil-liste" aria-describedby="accueil-aide" placeholder="${h(tactile() ? t("Ask, or say what you want done…") : t("Ask, or say what you want done… (Enter sends, Shift+Enter: new line)"))}"></textarea></div>
       <ul id="accueil-liste" class="liste-mentions" role="listbox" aria-label="${h(t("Mentions"))}" hidden></ul>
       <div class="ligne m0 puces-suggestions" id="accueil-sugg" role="group" aria-label="${h(t("Add to your request"))}">${suggestionsMentions()}</div>
+      <div class="ligne m0 mt-1 hub-chat-bas">${pouvoirsHub(hc.pouvoirs || {})}<span class="espace"></span>
+        <button type="button" class="btn" id="accueil-mission">${t("Create a mission")}</button>
+        <button type="button" class="btn" id="hub-chat-stop" ${hc.en_cours ? "" : "hidden"}>${t("Stop")}</button>
+        <button type="submit" class="btn btn-primaire" id="hub-chat-envoyer" ${hc.en_cours ? "hidden" : ""}>${t("Send")}</button></div>
       <div class="muet petit" id="accueil-aide">${t("Type @ to name a project, a server or a vault key.")} ${t("The orchestrator prepares a mission card first: nothing starts before you press Launch.")}</div>
     </form>
     <div id="mission-zone" aria-live="polite">${zoneMission()}</div>
@@ -2139,7 +2147,77 @@ async function envoyerAccueil() {
   etat.missionVue = { mission: r.mission, orchestrateur: r.mission.etat === "preparation" }; etat.missionEdition = null;
   majZoneMission();
 }
-document.addEventListener("submit", (ev) => { if (ev.target.id === "accueil-form") { ev.preventDefault(); envoyerAccueil(); } });
+document.addEventListener("submit", (ev) => { if (ev.target.id === "accueil-form") { ev.preventDefault(); envoyerHubChat(); } });
+
+// M195: the home conversation (hub_chat.go), the project chat with the hub's scope. Its powers are the
+// conversation's (kept by the server, off by default, gone with a new conversation), always shown under the field.
+let minuterieHubChat;
+const sansCartes = (m) => ({ ...m, texte: (m.texte || "").replace(/<(note|agent|mcp)>[\s\S]*?<\/\1>/g, "") }); // cards of the project chat: not here
+function filHub(d) {
+  const msgs = (d.messages || []).map(sansCartes);
+  let html = msgs.length ? msgs.map(messageChat).join("") : `<div class="vide">${t("Ask anything about your projects, servers or missions. By default the assistant only reads and answers: it sees no file and no key until you give it more under “What the assistant can do”.")}</div>`;
+  if (d.en_cours) {
+    const p = d.partiel || {}, textes = p.textes || [], outils = p.outils || [];
+    html += `<div class="chat-msg chat-claude"><div class="chat-bulle chat-attente">${textes.length ? mdChat(textes[textes.length - 1].replace(/<(note|agent|mcp)>[\s\S]*$/, "")) : ""}
+      <div class="muet petit"><span class="chat-points"><i></i><i></i><i></i></span> ${outils.length ? h(t(outils[outils.length - 1])) : t("Claude is thinking…")}</div></div></div>`;
+  }
+  return html;
+}
+const POUVOIRS_HUB = [["internet", "🌐", "Internet", "Searches and reads the web when a message needs it."],
+  ["ecriture", "✏️", "Writing", "Changes files, only in the folders you point to it with read and write, never elsewhere."]];
+const resumePouvoirs = (pv) => [t("Reads and answers"), ...POUVOIRS_HUB.filter(([k]) => pv[k]).map(([, i, n]) => i + " " + t(n))].join(" · ");
+function pouvoirsHub(pv) {
+  return `<details class="hub-pouvoirs" id="hub-pouvoirs"><summary>${t("What the assistant can do")}: <span id="hub-pouvoirs-resume">${h(resumePouvoirs(pv))}</span></summary>
+    ${POUVOIRS_HUB.map(([k, i, n, aide]) => `<label class="interrupteur m0"><input type="checkbox" data-pouvoir="${k}" ${pv[k] ? "checked" : ""} aria-describedby="pv-aide-${k}"><span>${i} ${t(n)}</span></label>
+    <p class="petit muet m0" id="pv-aide-${k}">${t(aide)}</p>`).join("")}</details>`;
+}
+async function majHubChat(force) {
+  if (etat.page !== "accueil") return;
+  const d = await api("hub/chat").catch(() => null); if (!d || etat.page !== "accueil") return;
+  etat.hubChat = d;
+  clearTimeout(minuterieHubChat);
+  if (d.en_cours) minuterieHubChat = setTimeout(() => majHubChat(false), 1500);
+  const sig = JSON.stringify([d.messages.length, d.en_cours, d.partiel, d.pouvoirs]);
+  if (!force && sig === etat.hubChatSig) return;
+  etat.hubChatSig = sig;
+  const fil = $("#hub-chat-fil"); if (!fil) return;
+  const enBas = fil.scrollHeight - fil.scrollTop - fil.clientHeight < 80;
+  fil.innerHTML = filHub(d);
+  if (enBas || force) fil.scrollTop = fil.scrollHeight;
+  const pv = d.pouvoirs || {};
+  document.querySelectorAll("[data-pouvoir]").forEach((c) => { c.checked = !!pv[c.dataset.pouvoir]; });
+  const r = $("#hub-pouvoirs-resume"); if (r) r.textContent = resumePouvoirs(pv);
+  const b = $("#hub-chat-envoyer"), st = $("#hub-chat-stop");
+  if (b) b.hidden = !!d.en_cours;
+  if (st) st.hidden = !d.en_cours;
+}
+async function envoyerHubChat() {
+  const champ = $("#accueil-texte"); if (!champ || etat.hubChatEnvoi) return;
+  const texte = champ.value.trim(), ments = etat.accueilMentions || [];
+  if (!texte) return;
+  etat.hubChatEnvoi = true; // a double Enter sends once
+  const message = ments.length ? texte + "\n\n" + ments.map((m) => "@" + m.nom).join(" ") : texte;
+  const r = await action(api("hub/chat", "POST", { message }), "").finally(() => { etat.hubChatEnvoi = false; });
+  if (!r) return;
+  etat.accueilTexte = ""; etat.accueilMentions = []; champ.value = ""; majMentions();
+  majHubChat(true);
+}
+document.addEventListener("keydown", (ev) => {
+  // Enter sends (Shift+Enter: a new line; on a phone Enter is a new line); with the mentions list open, it chooses
+  if (ev.target.id !== "accueil-texte" || ev.key !== "Enter" || ev.defaultPrevented || ev.shiftKey || ev.isComposing || etat.mentionListe || tactile()) return;
+  ev.preventDefault(); envoyerHubChat();
+});
+document.addEventListener("click", async (ev) => {
+  const b = ev.target.closest("#accueil-mission, #hub-chat-stop, #hub-chat-nouveau"); if (!b) return;
+  if (b.id === "accueil-mission") return envoyerAccueil();
+  if (b.id === "hub-chat-stop") { await action(api("hub/chat/arreter", "POST")); return majHubChat(true); }
+  if (await confirmer(t("Start a new conversation? The assistant forgets this one, and its powers are switched off."), { ok: t("New conversation") })) { await action(api("hub/chat/effacer", "POST")); majHubChat(true); }
+});
+document.addEventListener("change", async (ev) => {
+  if (!ev.target.matches("#hub-pouvoirs [data-pouvoir]")) return;
+  const pv = {}; document.querySelectorAll("#hub-pouvoirs [data-pouvoir]").forEach((c) => { pv[c.dataset.pouvoir] = c.checked; });
+  await action(api("hub/chat/pouvoirs", "POST", pv)); majHubChat(true);
+});
 document.addEventListener("input", (ev) => { if (ev.target.id === "accueil-texte") { etat.accueilTexte = ev.target.value; chercherMentions(ev.target); } });
 
 pages.suivi = async () => {
@@ -6246,6 +6324,7 @@ async function rafraichir() {
         }
       }
       if (etat.page === "chat") majChat(false);
+      if (etat.page === "accueil") majHubChat(false);
       if (etat.page === "distance") await majDistance();
       // after "Connect to GitHub": the window is the user's; the blocks follow until the connection is there
       if (etat.ghConnexionSuivi && Date.now() < etat.ghConnexionSuivi) {
