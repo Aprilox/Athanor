@@ -70,6 +70,9 @@ func TestCaptureHub(t *testing.T) {
 		for i := 0; i < 20 && os.RemoveAll(kit) != nil; i++ {
 			time.Sleep(500 * time.Millisecond)
 		}
+		if _, err := os.Stat(kit); err == nil {
+			t.Errorf("capture kit left behind: %s", kit)
+		}
 	}()
 	s := nouveauServeur(Config{Kit: kit, Projets: projets, ProjetActif: "projet-00", Langue: "fr", Theme: "clair", BienvenueVue: true})
 	s.cleAcces = aleatoire(24)

@@ -831,6 +831,8 @@ func (p *pilote) demarrerEveil() {
 			}
 		}
 		cmd := commande(exeAthanor, "--eveil", argEveil)
+		// never the project's folder: it outlives the pilot by up to 25 s and would hold it (no rename, no removal)
+		cmd.Dir = p.kit
 		if !p.natif && dossierExistePilote("/mnt/c") {
 			cmd.Dir = "/mnt/c"
 		}

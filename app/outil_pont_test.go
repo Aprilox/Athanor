@@ -32,10 +32,14 @@ var (
 func binaireAthanor(t *testing.T) string {
 	t.Helper()
 	binaireUneFois.Do(func() {
-		d, err := os.MkdirTemp("", "athanor-bin")
+		// under ../logs, not %TEMP%: removed by check.sh and by the next run's purge (baseEssais)
+		d, err := os.MkdirTemp(baseEssais(), "test-pilote-bin-*")
 		if err != nil {
 			binaireErreur = err
 			return
+		}
+		if a, err := filepath.Abs(d); err == nil {
+			d = a // the services may run from another folder
 		}
 		binaireTest = filepath.Join(d, "athanor")
 		out, err := exec.Command("go", "build", "-o", binaireTest, ".").CombinedOutput()
