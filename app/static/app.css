@@ -1337,6 +1337,21 @@ a.mis-ligne:hover, a.mis-ligne:focus-visible { border-color: var(--accent); }
 .sftp-actions { flex-wrap: wrap; gap: 6px; min-height: 30px; align-items: center; }
 .term-ecran, .term-ecran .xterm { height: 100%; }
 .term-ecran .xterm .xterm-viewport { background-color: transparent; } /* xterm's #000 showed under the last row; .term-hote has the palette's background */
+/* the terminal's Settings panel (M231d): themes as small previews, then size, spacing and cursor; the terminal stays visible below */
+.term-reglages { display: flex; flex-direction: column; gap: 10px; }
+.term-reglages fieldset { border: 0; padding: 0; }
+.term-reglages legend { font-weight: 600; margin-bottom: 6px; }
+.term-themes { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; }
+.term-theme { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; font-size: .9em; }
+.term-theme.actif { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.term-theme input { margin: 0; }
+.term-apercu { display: inline-flex; align-items: center; gap: 3px; padding: 3px 6px; border-radius: 5px; font: 12px ui-monospace, Consolas, monospace; border: 1px solid var(--line); }
+.term-apercu i { width: 7px; height: 7px; border-radius: 50%; }
+.term-apercu-auto { width: 50px; height: 20px; background: linear-gradient(135deg, #fbfbf9 50%, #141b24 50%); }
+.term-reglages-ligne { display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: center; }
+.term-reglages-ligne label { display: flex; align-items: center; gap: 6px; }
+.term-reglages-ligne input[type="range"] { color: inherit; background: transparent; accent-color: var(--accent); }
+.term-reglages-ligne output { min-width: 2.2em; font-variant-numeric: tabular-nums; }
 .srv-reglage-terminal { margin-top: 8px; }
 @media (max-width: 700px) {
   .term-aide, .term-adresse { display: none; }
@@ -1344,6 +1359,10 @@ a.mis-ligne:hover, a.mis-ligne:focus-visible { border-color: var(--accent); }
   .term-zones { grid-template-columns: minmax(0, 1fr); height: calc(100dvh - 220px); }
   .term-onglets { display: flex; }
   .term-bascule-fichiers { display: none; }
+  .term-themes { grid-template-columns: 1fr 1fr; }
+  .term-theme { padding: 5px 6px; gap: 6px; min-width: 0; overflow-wrap: anywhere; }
+  .term-apercu i:nth-of-type(n+4) { display: none; }
+  .term-apercu-auto { width: 34px; }
   .term-zones.sans-fichiers .sftp { display: flex; }
   .term-zones[data-onglet="terminal"] .sftp, .term-zones[data-onglet="fichiers"] .term-hote { display: none; }
 }

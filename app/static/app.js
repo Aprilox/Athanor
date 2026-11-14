@@ -6221,7 +6221,7 @@ $("#page").addEventListener("click", async (ev) => {
 
 // --- Terminal (#terminal/<id>, M231b): the shell is opened by the Go side (serveurs_terminal.go) with the vault's
 // key; the page only exchanges bytes with it and draws them with xterm.js (app/static/xterm, MIT, loaded here only)
-const term = { id: "", serveur: "", session: "", nom: "", x: null, fit: null, el: null, lecteur: null, attente: "", enVol: false, msg: null, obs: null };
+const term = { id: "", serveur: "", session: "", nom: "", x: null, fit: null, el: null, lecteur: null, attente: "", enVol: false, msg: null, obs: null, essai: null };
 const FINS_TERMINAL = { disconnected: "You disconnected.", ended: "The session ended on the server (exit, or the connection was lost).",
   idle: "Closed after 15 minutes without activity.", abandoned: "Closed: nobody looked at it for a minute." };
 // a refusal in plain words, then what to do about it (the Go side already says it for a refused key or a changed fingerprint)
@@ -6233,16 +6233,66 @@ const SOLUTIONS_TERMINAL = {
   "The server refused to open a terminal": "The server accepted the key but not a shell for this user: check the user's shell on the server.",
   "Not available from a remote device": "The terminal is off from paired devices: allow it on the computer, in Servers › More options.",
 };
-// Athanor's light and dark terminal palettes (the full theme choice comes in the terminal's settings)
+// the terminal's themes (M231d), written by hand from each project's published colours (all MIT, docs/CREDITS.md) and
+// lightened where a colour read below 4.5:1 on its background: TestPalettesTerminal checks every contrast
 const PALETTES_TERMINAL = {
-  sombre: { background: "#141b24", foreground: "#e9eef3", cursor: "#3fc6a5", cursorAccent: "#141b24", selectionBackground: "#3a4b60",
+  "athanor-sombre": { background: "#141b24", foreground: "#e9eef3", cursor: "#3fc6a5", cursorAccent: "#141b24", selectionBackground: "#3a4b60",
     black: "#1b2430", red: "#f2777a", green: "#7fd88f", yellow: "#f0c674", blue: "#6cb6ff", magenta: "#d6a0f5", cyan: "#5fd7d7", white: "#c9d1d9",
     brightBlack: "#7d8b99", brightRed: "#ff9a9c", brightGreen: "#a3f0ae", brightYellow: "#ffe08a", brightBlue: "#9ccfff", brightMagenta: "#e8c1ff", brightCyan: "#8ff0f0", brightWhite: "#ffffff" },
-  clair: { background: "#fbfbf9", foreground: "#1f2933", cursor: "#0f7a62", cursorAccent: "#fbfbf9", selectionBackground: "#c8dbf5",
+  "athanor-clair": { background: "#fbfbf9", foreground: "#1f2933", cursor: "#0f7a62", cursorAccent: "#fbfbf9", selectionBackground: "#c8dbf5",
     black: "#1f2933", red: "#b42318", green: "#1f7a33", yellow: "#8a5a00", blue: "#1f5fbf", magenta: "#8e3fb0", cyan: "#0e6f78", white: "#59636e",
     brightBlack: "#4a5560", brightRed: "#c9372c", brightGreen: "#256f3a", brightYellow: "#7a4f00", brightBlue: "#2c69cb", brightMagenta: "#7a4fd6", brightCyan: "#0b6570", brightWhite: "#2b3640" },
+  solarized: { background: "#002b36", foreground: "#93a1a1", cursor: "#2aa198", cursorAccent: "#002b36", selectionBackground: "#093844",
+    black: "#073642", red: "#e46a68", green: "#859900", yellow: "#b58900", blue: "#3a96dd", magenta: "#de66a0", cyan: "#2aa198", white: "#eee8d5",
+    brightBlack: "#83959b", brightRed: "#e5703a", brightGreen: "#9cb500", brightYellow: "#d4a10f", brightBlue: "#6aaee6", brightMagenta: "#9c9fe0", brightCyan: "#4fc0b5", brightWhite: "#fdf6e3" },
+  nord: { background: "#2e3440", foreground: "#d8dee9", cursor: "#88c0d0", cursorAccent: "#2e3440", selectionBackground: "#4c566a",
+    black: "#3b4252", red: "#da878e", green: "#a3be8c", yellow: "#ebcb8b", blue: "#81a1c1", magenta: "#b895b2", cyan: "#88c0d0", white: "#e5e9f0",
+    brightBlack: "#949fb3", brightRed: "#e0959b", brightGreen: "#b5cfa0", brightYellow: "#f2d9a6", brightBlue: "#9bb6d3", brightMagenta: "#c8a6c2", brightCyan: "#8fbcbb", brightWhite: "#eceff4" },
+  dracula: { background: "#282a36", foreground: "#f8f8f2", cursor: "#f8f8f2", cursorAccent: "#282a36", selectionBackground: "#44475a",
+    black: "#21222c", red: "#ff5555", green: "#50fa7b", yellow: "#f1fa8c", blue: "#bd93f9", magenta: "#ff79c6", cyan: "#8be9fd", white: "#f8f8f2",
+    brightBlack: "#8691be", brightRed: "#ff6e6e", brightGreen: "#69ff94", brightYellow: "#ffffa5", brightBlue: "#d6acff", brightMagenta: "#ff92df", brightCyan: "#a4ffff", brightWhite: "#ffffff" },
+  gruvbox: { background: "#282828", foreground: "#ebdbb2", cursor: "#ebdbb2", cursorAccent: "#282828", selectionBackground: "#504945",
+    black: "#3c3836", red: "#ed645b", green: "#a9a823", yellow: "#d79921", blue: "#5f9ea2", magenta: "#c67999", cyan: "#7aae7c", white: "#a89984",
+    brightBlack: "#9c8e80", brightRed: "#fb5946", brightGreen: "#b8bb26", brightYellow: "#fabd2f", brightBlue: "#83a598", brightMagenta: "#d3869b", brightCyan: "#8ec07c", brightWhite: "#ebdbb2" },
+  "one-dark": { background: "#282c34", foreground: "#abb2bf", cursor: "#528bff", cursorAccent: "#282c34", selectionBackground: "#3e4451",
+    black: "#3a3f4b", red: "#e2757d", green: "#98c379", yellow: "#e5c07b", blue: "#61afef", magenta: "#c678dd", cyan: "#56b6c2", white: "#abb2bf",
+    brightBlack: "#91959e", brightRed: "#ec8b92", brightGreen: "#addb8e", brightYellow: "#f0d197", brightBlue: "#86c3f5", brightMagenta: "#d896e8", brightCyan: "#79c9d3", brightWhite: "#e6e9ef" },
 };
-const paletteTerminal = () => PALETTES_TERMINAL[["clair", "sable"].includes(etat.theme) ? "clair" : "sombre"];
+const NOMS_PALETTES = { "athanor-clair": "Athanor light", "athanor-sombre": "Athanor dark", solarized: "Solarized", nord: "Nord", dracula: "Dracula", gruvbox: "Gruvbox", "one-dark": "One Dark" };
+// theme "" follows Athanor's own light or dark look; term.essai is what the open Settings panel shows live, until Save or Cancel
+const REGLAGES_TERMINAL = { theme: "", taille: 14, curseur: "block", interligne: 1 };
+const reglagesTerminal = () => { try { return { ...REGLAGES_TERMINAL, ...JSON.parse(localStorage.getItem("athanor.terminal.reglages") || "{}") }; } catch { return { ...REGLAGES_TERMINAL }; } };
+const reglagesActifs = () => term.essai || reglagesTerminal();
+const paletteTerminal = (r = reglagesActifs()) => PALETTES_TERMINAL[r.theme] || PALETTES_TERMINAL[["clair", "sable"].includes(etat.theme) ? "athanor-clair" : "athanor-sombre"];
+function appliquerReglagesTerminal() {
+  const hote = $("#term-hote"), r = reglagesActifs(), p = paletteTerminal(r); if (hote) hote.style.background = p.background;
+  if (!term.x) return;
+  Object.assign(term.x.options, { theme: p, fontSize: r.taille, cursorStyle: r.curseur, lineHeight: r.interligne });
+  if (term.el.isConnected && term.el.offsetWidth) term.fit.fit();
+}
+function panneauReglagesTerminal() {
+  const r = term.essai, choix = (v, n) => `<label class="term-theme${r.theme === v ? " actif" : ""}"><input type="radio" name="term-theme" value="${v}"${r.theme === v ? " checked" : ""} data-term-reglage="theme">
+    ${v ? `<span class="term-apercu" aria-hidden="true" style="background:${PALETTES_TERMINAL[v].background};color:${PALETTES_TERMINAL[v].foreground}">$ ${["red", "green", "yellow", "blue", "magenta"].map((c) => `<i style="background:${PALETTES_TERMINAL[v][c]}"></i>`).join("")}</span>` : `<span class="term-apercu term-apercu-auto" aria-hidden="true"></span>`}
+    <span>${t(n)}</span></label>`;
+  return `<div class="bloc term-reglages" id="term-reglages" role="group" aria-label="${h(t("Terminal settings"))}">
+    <fieldset class="m0"><legend>${t("Theme")}</legend><div class="term-themes">${choix("", "Like Athanor (light or dark)")}${Object.entries(NOMS_PALETTES).map(([v, n]) => choix(v, n)).join("")}</div></fieldset>
+    <div class="term-reglages-ligne">
+      <label>${t("Text size")} <input type="range" min="10" max="24" step="1" value="${r.taille}" data-term-reglage="taille"> <output>${r.taille}</output></label>
+      <label>${t("Line spacing")} <input type="range" min="1" max="1.6" step="0.1" value="${r.interligne}" data-term-reglage="interligne"> <output>${r.interligne.toFixed(1)}</output></label>
+      <label>${t("Cursor")} <select data-term-reglage="curseur">${[["block", "Block"], ["underline", "Underline"], ["bar", "Bar"]].map(([v, n]) => `<option value="${v}"${r.curseur === v ? " selected" : ""}>${t(n)}</option>`).join("")}</select></label>
+    </div>
+    <div class="ligne m0"><button type="button" class="btn btn-primaire" data-term-reglages-ok>${t("Save")}</button><button type="button" class="btn" data-term-reglages-annuler>${t("Cancel")}</button></div>
+  </div>`;
+}
+// Settings opens the panel on a copy (live preview); Save keeps it, Cancel (or Escape, or leaving the page) puts the old one back
+function reglagesTerminalOuverts(ouvrir, garder) {
+  if (garder && term.essai) localStorage.setItem("athanor.terminal.reglages", JSON.stringify(term.essai));
+  term.essai = ouvrir ? reglagesTerminal() : null;
+  const z = $("#term-reglages-zone"); if (z) z.innerHTML = term.essai ? panneauReglagesTerminal() : "";
+  $("[data-term-reglages]")?.setAttribute("aria-expanded", !!term.essai);
+  hauteurTerminal(); appliquerReglagesTerminal();
+  if (ouvrir) $("#term-reglages input:checked")?.focus(); else if (term.x && !term.msg) term.x.focus();
+}
 let xtermCharge;
 function chargerXterm() {
   if (window.Terminal) return Promise.resolve();
@@ -6265,9 +6315,10 @@ pages.terminal = async () => {
       ${avis ? "" : `<span class="muet petit term-aide">${t("Copy: Ctrl+Shift+C · Paste: Ctrl+Shift+V")}</span>
       <button type="button" class="btn btn-petit" data-term-copier>${t("Copy")}</button><button type="button" class="btn btn-petit" data-term-coller>${t("Paste")}</button>
       <button type="button" class="btn btn-petit term-bascule-fichiers" data-term-fichiers aria-pressed="${!sf.cache}">${t("Files")}</button>
+      <button type="button" class="btn btn-petit term-bouton-reglages" data-term-reglages aria-expanded="${!!term.essai}" aria-controls="term-reglages-zone" title="${h(t("Theme, text size, cursor"))}">⚙ ${t("Settings")}</button>
       <button type="button" class="btn btn-petit" data-term-deconnecter>${t("Disconnect")}</button>`}</div>
     ${avis ? `<div class="bloc term-message"><p class="m0"><b>${h(avis[0])}</b></p><p class="muet m0">${h(avis[1])}</p><div class="ligne m0"><a class="btn" href="#serveur/${encodeURIComponent(x.id)}">${t("Back to the server")}</a></div></div>`
-      : `<div class="bloc term-message" id="term-message" role="alert" hidden></div>
+      : `<div class="bloc term-message" id="term-message" role="alert" hidden></div><div id="term-reglages-zone">${term.essai ? panneauReglagesTerminal() : ""}</div>
       <div class="onglets term-onglets" role="tablist">${["terminal", "fichiers"].map((o) => `<button type="button" role="tab" class="${sf.onglet === o ? "actif" : ""}" aria-selected="${sf.onglet === o}" data-term-onglet="${o}">${t(o === "terminal" ? "Terminal" : "Files")}</button>`).join("")}</div>
       <div class="term-zones${sf.cache ? " sans-fichiers" : ""}" id="term-zones" data-onglet="${sf.onglet}"><div class="term-hote" id="term-hote"></div><aside class="sftp" id="sftp" aria-label="${h(t("Files"))}"></aside></div>`}
   </div>`;
@@ -6299,7 +6350,8 @@ async function monterTerminal() {
   if (!term.x) {
     term.el = document.createElement("div"); term.el.className = "term-ecran";
     hote.append(term.el);
-    term.x = new window.Terminal({ cursorBlink: true, scrollback: 5000, fontSize: 14, theme: paletteTerminal(),
+    const r = reglagesActifs();
+    term.x = new window.Terminal({ cursorBlink: true, scrollback: 5000, fontSize: r.taille, cursorStyle: r.curseur, lineHeight: r.interligne, theme: paletteTerminal(r),
       fontFamily: 'ui-monospace, "Cascadia Mono", Consolas, "DejaVu Sans Mono", Menlo, monospace' });
     term.fit = new window.FitAddon.FitAddon(); term.x.loadAddon(term.fit); term.x.open(term.el);
     term.x.onData(taperTerminal);
@@ -6314,8 +6366,7 @@ async function monterTerminal() {
     term.obs = new ResizeObserver(() => requestAnimationFrame(() => { hauteurTerminal(); if (term.el.isConnected && term.el.offsetWidth) term.fit.fit(); }));
   } else hote.append(term.el);
   term.obs.disconnect(); term.obs.observe($("#page")); hauteurTerminal(); rendreSftp();
-  term.x.options.theme = paletteTerminal(); hote.style.background = paletteTerminal().background;
-  term.fit.fit();
+  appliquerReglagesTerminal();
   if (term.msg) return messageTerminal(...term.msg);
   if (term.serveur !== term.id) { // another server: its own screen and session
     if (term.session) agirTerminal({ fermer: true });
@@ -6393,7 +6444,7 @@ function copierTerminal() {
   navigator.clipboard.writeText(s).then(() => toast(t("Copied."), "ok"), () => toast(t("The browser refused to copy."), "erreur"));
 }
 // leaving the page: the stream stops; the Go side ends the terminal a minute later unless the page comes back
-function quitterTerminal() { if (term.lecteur) { term.lecteur.abort(); term.lecteur = null; } if (term.obs) term.obs.disconnect(); term.msg = null; }
+function quitterTerminal() { if (term.lecteur) { term.lecteur.abort(); term.lecteur = null; } if (term.obs) term.obs.disconnect(); term.msg = null; term.essai = null; }
 // --- Files panel beside the terminal (M231c): the server's files through the terminal's own SSH connection
 // (serveurs_sftp.go); a click selects an entry, a second click (or a double click) opens a folder.
 // On a phone the terminal and the files share the screen through two tabs.
@@ -6539,10 +6590,23 @@ $("#page").addEventListener("drop", (ev) => {
   ev.preventDefault(); $("#sftp").classList.remove("depot");
   if (ev.dataTransfer.files.length) envoyerSftp([...ev.dataTransfer.files]);
 });
+// the Settings panel: every change shows at once in the terminal; nothing is kept before Save
+$("#page").addEventListener("input", (ev) => {
+  const c = etat.page === "terminal" && term.essai && ev.target.closest("[data-term-reglage]"); if (!c) return;
+  const k = c.dataset.termReglage, v = c.value;
+  term.essai[k] = k === "taille" ? parseInt(v, 10) : k === "interligne" ? parseFloat(v) : v;
+  const o = c.parentElement.querySelector("output"); if (o) o.textContent = k === "interligne" ? term.essai[k].toFixed(1) : v;
+  if (k === "theme") document.querySelectorAll(".term-theme").forEach((l) => l.classList.toggle("actif", l.querySelector("input").checked));
+  appliquerReglagesTerminal();
+});
+$("#page").addEventListener("keydown", (ev) => { if (etat.page === "terminal" && ev.key === "Escape" && ev.target.closest("#term-reglages")) { ev.preventDefault(); reglagesTerminalOuverts(false); } });
 $("#page").addEventListener("click", async (ev) => {
   if (etat.page !== "terminal") return;
-  const b = ev.target.closest("[data-term-copier], [data-term-coller], [data-term-deconnecter], [data-term-reconnecter]"); if (!b) return;
+  const b = ev.target.closest("[data-term-copier], [data-term-coller], [data-term-deconnecter], [data-term-reconnecter], [data-term-reglages], [data-term-reglages-ok], [data-term-reglages-annuler]"); if (!b) return;
   const d = b.dataset;
+  if (d.termReglages !== undefined) return reglagesTerminalOuverts(!term.essai);
+  if (d.termReglagesOk !== undefined) { reglagesTerminalOuverts(false, true); return toast(t("Terminal settings saved."), "ok"); }
+  if (d.termReglagesAnnuler !== undefined) return reglagesTerminalOuverts(false);
   if (d.termCopier !== undefined) return copierTerminal();
   if (d.termColler !== undefined) {
     return navigator.clipboard.readText().then((s) => { term.x.paste(s); term.x.focus(); }, () => toast(t("The browser refused to paste: use Ctrl+Shift+V in the terminal."), "erreur"));

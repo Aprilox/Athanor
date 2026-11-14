@@ -8,3 +8,7 @@ Third-party files shipped inside Athanor's interface.
 | `app/static/xterm/addon-fit.js` | xterm.js fit add-on | 0.11.0 | MIT (same authors, same licence) | npm `@xterm/addon-fit` |
 
 The files are copied as published, without their source maps; they load only on a server's terminal page and never from the network.
+
+## Terminal colour themes
+
+The terminal's Solarized, Nord, Dracula, Gruvbox and One Dark themes (`PALETTES_TERMINAL` in `app/static/app.js`) are written by hand after the colours each project publishes (Solarized by Ethan Schoonover, Nord by Arctic Ice Studio, Dracula by Zeno Rocha, Gruvbox by Pavel Pertsev, One Dark by the Atom team, all under the MIT licence). A few colours are lightened so that every one reads at 4.5:1 at least on its background (`TestPalettesTerminal`). The names are the projects' own; Athanor is not affiliated with them.
