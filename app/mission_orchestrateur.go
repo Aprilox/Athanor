@@ -195,15 +195,15 @@ func (s *Serveur) executerOrchestrateur(ctx context.Context, e *orchestrateurEnC
 	if echec { // C85: its pending launch request would wait forever
 		s.fermerLancementMission(id, "hub", "refuser", "mission en échec")
 	}
-	orchestrateursEnCours.Lock() // last: whoever sees the session ended reads the mission as it left it
-	delete(orchestrateursEnCours.m, id)
-	orchestrateursEnCours.Unlock()
 	issue := "ok"
 	if err != nil {
 		issue = couper(s.masquerSecrets(err.Error()), 300)
 	}
 	s.ecrireAudit(LigneAudit{Type: "evenement", De: "hub", Vers: "missions", Projet: prefixeMission + id, Mission: id, Agent: agentOrchestrateur,
 		Action: "orchestrateur terminé", Resultat: issue})
+	orchestrateursEnCours.Lock() // last (after the audit line too: M214): whoever sees the session ended reads the mission as it left it
+	delete(orchestrateursEnCours.m, id)
+	orchestrateursEnCours.Unlock()
 }
 
 // errPreparationCoupee: an orchestrator's session cut by Athanor's stop, before any card.

@@ -21,6 +21,11 @@ func TestRecupererGitHub(t *testing.T) {
 	ecrireEssai(t, conf, "")
 	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
 	t.Setenv("GIT_CONFIG_GLOBAL", conf)
+	// l'identité d'une session (GIT_AUTHOR_NAME…) l'emporterait sur le user.name de chaque dépôt d'essai
+	for _, v := range []string{"GIT_AUTHOR_NAME", "GIT_AUTHOR_EMAIL", "GIT_COMMITTER_NAME", "GIT_COMMITTER_EMAIL"} {
+		t.Setenv(v, "")
+		os.Unsetenv(v)
+	}
 	depot := filepath.Join(t.TempDir(), "github.git")
 	gitEssai(t, filepath.Dir(depot), "init", "-q", "--bare", "-b", "main", depot)
 	ancien := depotEssaiGH

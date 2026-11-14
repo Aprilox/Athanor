@@ -61,44 +61,54 @@ func TestConsoleCacheePilote(t *testing.T) {
 		os.Exit(0)
 	}
 
-	rapport := filepath.Join(t.TempDir(), "rapport.txt")
-	base := fenetresVisibles()
-	c := exec.Command(os.Args[0], "-test.run=^TestConsoleCacheePilote$")
-	c.Env = append(os.Environ(), "ATHANOR_TEST_CONSOLE=pilote", "ATHANOR_TEST_RAPPORT="+rapport)
-	// no console at all, hidden: how a Windows-subsystem Athanor.exe starts
-	c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: 0x00000008} // DETACHED_PROCESS
-	if err := c.Start(); err != nil {
-		t.Fatal(err)
-	}
-	fini := make(chan error, 1)
-	go func() { fini <- c.Wait() }()
-	var nouvelles []string
-	limite := time.After(60 * time.Second)
-attente:
-	for {
-		select {
-		case err := <-fini:
-			if err != nil {
-				t.Fatalf("pilot process: %v", err)
-			}
-			break attente
-		case <-limite:
-			_ = c.Process.Kill()
-			t.Fatal("pilot process still running after 60 s")
-		case <-time.After(100 * time.Millisecond):
-			for h, classe := range fenetresVisibles() {
-				if _, vu := base[h]; !vu && (classe == "ConsoleWindowClass" || classe == "CASCADIA_HOSTING_WINDOW_CLASS") {
-					nouvelles = append(nouvelles, classe)
-					base[h] = classe
+	// une mesure : lance le pilote sans console et relève les fenêtres de console apparues pendant ce temps
+	mesurer := func() ([]string, string) {
+		rapport := filepath.Join(t.TempDir(), "rapport.txt")
+		base := fenetresVisibles()
+		c := exec.Command(os.Args[0], "-test.run=^TestConsoleCacheePilote$")
+		c.Env = append(os.Environ(), "ATHANOR_TEST_CONSOLE=pilote", "ATHANOR_TEST_RAPPORT="+rapport)
+		// no console at all, hidden: how a Windows-subsystem Athanor.exe starts
+		c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: 0x00000008} // DETACHED_PROCESS
+		if err := c.Start(); err != nil {
+			t.Fatal(err)
+		}
+		fini := make(chan error, 1)
+		go func() { fini <- c.Wait() }()
+		var nouvelles []string
+		limite := time.After(60 * time.Second)
+	attente:
+		for {
+			select {
+			case err := <-fini:
+				if err != nil {
+					t.Fatalf("pilot process: %v", err)
+				}
+				break attente
+			case <-limite:
+				_ = c.Process.Kill()
+				t.Fatal("pilot process still running after 60 s")
+			case <-time.After(100 * time.Millisecond):
+				for h, classe := range fenetresVisibles() {
+					if _, vu := base[h]; !vu && (classe == "ConsoleWindowClass" || classe == "CASCADIA_HOSTING_WINDOW_CLASS") {
+						nouvelles = append(nouvelles, classe)
+						base[h] = classe
+					}
 				}
 			}
 		}
+		b, err := os.ReadFile(rapport)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return nouvelles, string(b)
 	}
-	b, err := os.ReadFile(rapport)
-	if err != nil {
-		t.Fatal(err)
+	nouvelles, r := mesurer()
+	// B59 : une console ouverte au même moment par un autre programme du bureau (build parallèle, autre test)
+	// suffit à faire échouer une mesure ; une vraie console du pilote réapparaît à la seconde
+	if len(nouvelles) > 0 {
+		t.Logf("console windows seen, measuring again: %v", nouvelles)
+		nouvelles, r = mesurer()
 	}
-	r := string(b)
 	if !strings.HasPrefix(r, temoinConsole) {
 		t.Fatalf("report not written by the pilot process: %q", r)
 	}

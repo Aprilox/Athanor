@@ -38,7 +38,6 @@ func TestGardeFenetresWindows(t *testing.T) {
 	case <-time.After(20 * time.Second):
 		t.Fatal("no window hidden")
 	}
-	time.Sleep(500 * time.Millisecond)
 	vue := false
 	cb := syscall.NewCallback(func(h, _ uintptr) uintptr {
 		if titreFenetre(h) == "athanor-essai" {
@@ -47,8 +46,17 @@ func TestGardeFenetresWindows(t *testing.T) {
 		}
 		return 1
 	})
-	pEnumWindows.Call(cb, 0)
-	if vue {
+	// B67 : attentes bornées plutôt que fixes, la machine chargée par le check peut être lente
+	visible := func() bool { vue = false; pEnumWindows.Call(cb, 0); return vue }
+	attendre := func(voulu bool, delai time.Duration) bool {
+		for fin := time.Now().Add(delai); time.Now().Before(fin); time.Sleep(100 * time.Millisecond) {
+			if visible() == voulu {
+				return true
+			}
+		}
+		return false
+	}
+	if !attendre(false, 5*time.Second) {
 		t.Fatal("the window is still shown")
 	}
 	_ = c.Process.Kill()
@@ -62,15 +70,16 @@ func TestGardeFenetresWindows(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = d.Process.Kill(); _ = d.Wait() }()
-	time.Sleep(4 * time.Second)
+	if !attendre(true, 20*time.Second) {
+		t.Fatal("Athanor's own window never shown")
+	}
+	time.Sleep(time.Second) // the guard would have hidden it by now
 	select {
 	case n := <-notes:
 		t.Fatal("hidden:", n)
 	default:
 	}
-	vue = false
-	pEnumWindows.Call(cb, 0)
-	if !vue {
+	if !visible() {
 		t.Fatal("Athanor's own window was hidden")
 	}
 }

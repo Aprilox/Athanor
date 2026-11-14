@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"testing"
 )
 
 type Config struct {
@@ -61,6 +62,11 @@ func cheminConfig() string {
 	if runtime.GOOS != "windows" {
 		nom = "athanor-config-" + runtime.GOOS + ".json"
 	}
+	if testing.Testing() {
+		// next to the test binary, it made that folder an "old installation" (dossierAthanor) for every later
+		// test of the process, whatever their own LocalAppData (B52, M214): the data folder instead
+		return filepath.Join(dossierAthanorDefaut(), nom)
+	}
 	exe, err := os.Executable()
 	if err != nil {
 		return nom
@@ -110,6 +116,7 @@ func ecrireConfig(c Config) error {
 	}
 	// written aside then renamed: a crash never leaves half a file (the project list would be lost)
 	f := cheminConfig()
+	_ = os.MkdirAll(filepath.Dir(f), 0o700) // under tests, a data folder not made yet
 	t, err := os.CreateTemp(filepath.Dir(f), ".athanor-config-*.tmp")
 	if err != nil {
 		return err

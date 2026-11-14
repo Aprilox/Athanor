@@ -9,9 +9,11 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
+	"time"
 )
 
 // The states of a mission, in their usual order.
@@ -131,7 +133,16 @@ func lireMission(id string) (Mission, error) {
 	if !idMissionValide.MatchString(id) {
 		return m, errMissionInconnue
 	}
-	b, err := os.ReadFile(filepath.Join(dossierMissions(), id+".json"))
+	f := filepath.Join(dossierMissions(), id+".json")
+	b, err := os.ReadFile(f)
+	// Windows: ecrireAtomique may hold the file in its rename, or have moved it to .ancien for a moment
+	for i := 0; err != nil && runtime.GOOS == "windows" && i < 10; i++ {
+		if _, e := os.Stat(f + ".ancien"); e != nil && errors.Is(err, os.ErrNotExist) {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+		b, err = os.ReadFile(f)
+	}
 	if err != nil || json.Unmarshal(b, &m) != nil || m.ID != id {
 		return Mission{}, errMissionInconnue
 	}

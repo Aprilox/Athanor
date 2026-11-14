@@ -1019,6 +1019,11 @@ func TestTUIEquipeDirecte(t *testing.T) {
 // TestTUIAccueil: the hub's home at launch, with the tiles of GET /api/hub, its key H (free on every
 // page), Escape back to it, 1…9, 0 unchanged.
 func TestTUIAccueil(t *testing.T) {
+	// B91 : un dossier d'Athanor à lui, sans les missions laissées par les tests précédents du même éclat
+	d := t.TempDir()
+	for _, v := range []string{"LOCALAPPDATA", "LocalAppData", "HOME", "XDG_DATA_HOME", "XDG_CONFIG_HOME"} {
+		t.Setenv(v, filepath.Join(d, "home"))
+	}
 	s, c, _ := essaiServeurTUI(t)
 	a := nouvelleAppTUI(c, true)
 	if a.page != pAccueil {
