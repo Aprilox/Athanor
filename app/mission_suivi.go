@@ -62,11 +62,14 @@ func dateSource(t string) time.Time {
 }
 
 // observerMission: one reading of id's sources, its new events written and its relay moved on; false when the
-// mission is no longer followed (gone, ended, stopped).
+// mission is no longer followed (gone, ended, stopped) and owes its remote lanes no order.
 func (s *Serveur) observerMission(id string) bool {
 	m, err := lireMission(id)
-	if err != nil || !missionSuivie(m.Etat) {
+	if err != nil {
 		return false
+	}
+	if du := s.renvoyerOrdresDistants(m); !missionSuivie(m.Etat) {
+		return du
 	}
 	s.relancerVoiesDistantes(m)
 	evts, relais := s.evenementsMission(m)
@@ -247,6 +250,9 @@ func (s *Serveur) reprendreMissions() {
 		case m.Etat == "preparation" && !orchestrateurTravaille(m.ID):
 			s.reprendrePreparation(m.ID)
 		case !missionSuivie(m.Etat):
+			if slices.ContainsFunc(m.Voies, func(v VoieMission) bool { return v.Ordre != "" }) {
+				s.suivreMission(m.ID) // a stop its remote missed while offline: still owed
+			}
 		case s.attendCoffre(m):
 			s.noterJournalMission(m.ID, s.entreeJournal(id, t, "attention", "Athanor restarted: the mission waits for the vault to be unlocked"))
 		default:

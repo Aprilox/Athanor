@@ -166,6 +166,14 @@ func TestMissionDevDistant(t *testing.T) {
 		if v := s.voiesEnDirect(b).Voies[0]; v.Actuel != "hors_ligne" {
 			t.Errorf("offline lane: %+v", v)
 		}
+		// M190: a pause sent while offline is kept on the lane, then taken by the remote on its return
+		if x := controle(a.ID, "pause", ""); x.Etat != "en_pause" {
+			t.Fatalf("offline pause: %s", x.Etat)
+		}
+		if x, _ := lireMission(a.ID); x.Voies[0].Ordre != "pause_fin_cycle" || !s.renvoyerOrdresDistants(lireMissionT(t, a.ID)) {
+			t.Fatalf("offline pause not kept: %+v", x.Voies)
+		}
+		nPause := len(un.appelsDe("pilote"))
 		// back online (a new address): the follower sends what the lane still owes, once
 		h1 = httptest.NewServer(un)
 		m.mu.Lock()
@@ -176,6 +184,15 @@ func TestMissionDevDistant(t *testing.T) {
 		s.observerMission(b.ID)
 		if x, _ := lireMission(b.ID); x.Voies[0].Etat != "lancee" || len(un.demandes) != 2 {
 			t.Fatalf("not sent once back: %+v %v", x.Voies, un.demandes)
+		}
+		if s.renvoyerOrdresDistants(lireMissionT(t, a.ID)) || !slices.Contains(un.appelsDe("pilote")[nPause:], "pilote jeu pause_fin_cycle") {
+			t.Fatalf("offline pause not sent on return: %v", un.appelsDe("pilote")[nPause:])
+		}
+		if x, _ := lireMission(a.ID); x.Voies[0].Ordre != "" || len(journal(a.ID, "The remote Athanor took on its return the order {0} for {1}")) != 1 {
+			t.Fatalf("order still owed: %+v %+v", x.Voies, x.Journal)
+		}
+		if x := controle(a.ID, "reprendre", `{"mot_de_passe":"`+mdpPreuveTest+`"}`); x.Etat != "lancee" {
+			t.Fatalf("resume after return: %s", x.Etat)
 		}
 		if x := controle(b.ID, "arreter", ""); x.Etat != "arretee" || !slices.Contains(un.appelsDe("pilote"), "pilote jeu arreter") {
 			t.Fatalf("stop: %s %v", x.Etat, un.appelsDe("pilote"))
@@ -210,4 +227,13 @@ func TestMissionDevDistant(t *testing.T) {
 	if j := lireJournalAuditTest(); !strings.Contains(j, "ajouter_demande") || !strings.Contains(j, moduleDevDistant) {
 		t.Error("the remote mission's orders are not in the audit log")
 	}
+}
+
+func lireMissionT(t *testing.T, id string) Mission {
+	t.Helper()
+	m, err := lireMission(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return m
 }

@@ -2038,17 +2038,18 @@ document.addEventListener("click", (ev) => {
 // Tab leaves the field: the list goes too
 document.addEventListener("focusout", (ev) => { if (ev.target.id === "accueil-texte" && etat.mentionListe) fermerListeMentions(); });
 pages.accueil = async () => {
-  const [d, sugg, mis] = await Promise.all([lireHub(), api("mentions").catch(() => ({})), api("missions").catch(() => ({}))]), modules = d.modules || [];
+  // B4: /api/hub failing still shows the chat bar, with a readable notice above it
+  const [d, sugg, mis] = await Promise.all([lireHub().catch((e) => ({ panne: e.message || String(e) })), api("mentions").catch(() => ({})), api("missions").catch(() => ({}))]), modules = d.modules || [];
   // the card shown: the one followed in this window, else the newest still being prepared or proposed
   const lm = mis.missions || [], vue = etat.missionVue, courante = (vue && lm.find((x) => x.id === vue.mission.id)) || lm.find((x) => ACTIVE_MISSION.includes(x.etat));
   etat.missionVue = courante ? await api("missions/" + encodeURIComponent(courante.id)).catch(() => null) : null;
   clearTimeout(minuterieMission);
   if (etat.missionVue && travailleMission(etat.missionVue)) minuterieMission = setTimeout(lireMissionVue, 2000);
-  etat.hubSig = JSON.stringify([modules, d.elements || []]); rendreMenu(modules);
+  etat.hubSig = JSON.stringify([modules, d.elements || []]); if (!d.panne) rendreMenu(modules);
   etat.mentionsSugg = sugg.mentions || []; etat.mentionListe = null;
   const hc = etat.hubChat || { messages: [], pouvoirs: {} };
   setTimeout(() => majHubChat(true), 0);
-  return `<div class="accueil">
+  return `<div class="accueil">${d.panne ? `<p class="bloc erreur" role="alert">${h(t("Athanor could not read its modules ({0}): the menu keeps its first entries. Reload the page in a moment.", [d.panne]))}</p>` : ""}
     <form class="bloc accueil-barre accueil-chat" id="accueil-form" data-pieces="hc">
       <div class="ligne m0 chat-tete"><label for="accueil-texte" class="accueil-titre croit">${t("What do you want to do?")}</label>
         <button type="button" class="btn btn-petit" id="hub-chat-aide" title="${h(t("How the assistant works"))}" aria-label="${h(t("How the assistant works"))}">?</button>
@@ -4872,7 +4873,7 @@ function rendreClientsMCP(c) {
       <div class="muet petit mt-1">${t("Projects it may see")}</div>
       <div class="ligne cases-client"><label class="interrupteur m0"><input type="checkbox" data-cl-projet="*"><span>${t("All projects")}</span></label>${projets.map((n) => `<label class="interrupteur m0"><input type="checkbox" data-cl-projet="${h(n)}"><span>${h(n)}</span></label>`).join("")}</div>
       <div class="muet petit mt-1">${t("Tools it may use")}</div>
-      <div class="ligne cases-client">${(c.outils || []).map((o) => `<label class="interrupteur m0"><input type="checkbox" data-cl-outil="${h(o)}" ${OUTILS_LECTURE.includes(o) ? "checked" : ""}><span><code>${h(o)}</code></span></label>`).join("")}</div>
+      <div class="ligne cases-client">${(c.outils || []).concat(d.sorte === "athanor" ? c.outils_athanor || [] : []).map((o) => `<label class="interrupteur m0"><input type="checkbox" data-cl-outil="${h(o)}" ${OUTILS_LECTURE.includes(o) ? "checked" : ""}><span><code>${h(o)}</code></span></label>`).join("")}</div>
       <div class="ligne mt-1"><button class="btn btn-primaire" type="button" data-clients="accepter">${t("Accept")}</button> <button class="btn btn-petit" type="button" data-clients="refuser">${t("Refuse")}</button></div></div>`).join("");
   const liste = (c.clients || []).length ? `<table class="tab mt-1"><tbody>${c.clients.map((x) => `<tr><td><b>${h(x.nom)}</b> <span class="badge">${h(x.sorte)}</span><div class="muet petit">${x.projets.includes("*") ? t("All projects") : h(x.projets.join(", "))} · ${h(x.outils.join(", "))}</div></td>
       <td class="muet petit">${x.vu ? h(t("Used {0}", [dateLisible(x.vu)])) : t("Never used")}</td><td class="droite"><button class="btn btn-petit" type="button" data-clients="revoquer" data-id="${h(x.id)}">${t("Revoke")}</button></td></tr>`).join("")}</tbody></table>`

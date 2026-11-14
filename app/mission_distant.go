@@ -198,16 +198,64 @@ func (s *Serveur) finirMissionDistante(id string) {
 }
 
 // ordreVoiesDistantes: a pilot order (pause_fin_cycle, demarrer, arreter) to m's remote lanes already started; one
-// that does not go through is said in the journal.
+// that does not go through is said in the journal and, for a remote offline, kept on the lane (M190): the
+// follower sends it on the remote's return (renvoyerOrdresDistants); a newer order replaces it.
 func (s *Serveur) ordreVoiesDistantes(m Mission, ordre string) {
-	for _, v := range s.voiesEnDirect(m).Voies {
+	du := false
+	for i, v := range s.voiesEnDirect(m).Voies {
 		if v.Module != moduleDevDistant || v.Etat != "lancee" || ordre == "demarrer" && v.Actuel == "termine" {
 			continue
 		}
 		id, projet, _ := strings.Cut(v.Ref, "/")
-		if err := s.piloteDistant(id, projet, ordre); err != nil {
+		err := s.piloteDistant(id, projet, ordre)
+		if err != nil {
 			s.noterJournalMission(m.ID, s.entreeJournal("distant:"+ordre+":"+v.Ref+":"+time.Now().UTC().Format(formatCree), time.Now(), "erreur",
 				"The remote Athanor did not take the order {0} for {1}: {2}", ordre, firstNonEmpty(v.Nom, v.Ref), err.Error()))
 		}
+		garde := ""
+		if err != nil && v.Actuel == "hors_ligne" {
+			garde, du = ordre, true
+		}
+		s.ordreVoie(m.ID, i, v.Ref, garde)
 	}
+	if du {
+		s.suivreMission(m.ID) // a stopped mission is no longer followed: kept followed until the order is delivered
+	}
+}
+
+// ordreVoie: lane i's owed order set (empty: none).
+func (s *Serveur) ordreVoie(id string, i int, ref, ordre string) {
+	_, _ = modifierMission(id, func(y *Mission) error {
+		if i < len(y.Voies) && y.Voies[i].Ref == ref {
+			y.Voies[i].Ordre = ordre
+		}
+		return nil
+	})
+}
+
+// renvoyerOrdresDistants: the orders mission m's remote lanes missed, sent to those back online; true while one
+// is still owed (its remote still offline). A remote back that refuses it, or a remote removed, drops it.
+func (s *Serveur) renvoyerOrdresDistants(m Mission) bool {
+	id, du := m.ID, false
+	for i, v := range m.Voies {
+		if v.Ordre == "" {
+			continue
+		}
+		x, p, ok := s.projetDistantRef(v.Ref)
+		if ok && !x.enLigne {
+			du = true
+			continue
+		}
+		if ok {
+			d, projet, _ := strings.Cut(v.Ref, "/")
+			cle, params := "The remote Athanor took on its return the order {0} for {1}", []string{v.Ordre, p.Nom + "@" + x.d.Nom}
+			niveau := "info"
+			if err := s.piloteDistant(d, projet, v.Ordre); err != nil {
+				cle, niveau, params = "The remote Athanor did not take the order {0} for {1}: {2}", "erreur", append(params, err.Error())
+			}
+			s.noterJournalMission(id, s.entreeJournal("distant:retour:"+v.Ordre+":"+v.Ref+":"+time.Now().UTC().Format(formatCree), time.Now(), niveau, cle, params...))
+		}
+		s.ordreVoie(id, i, v.Ref, "")
+	}
+	return du
 }

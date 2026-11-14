@@ -270,6 +270,10 @@ func (a Audit) Verifier() (VerifAudit, error) {
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return VerifAudit{}, err
 	}
+	if err != nil && prec != nil {
+		// Ecrire always writes fin: lines without it mean the end of the log was cut along with its mark.
+		return casse(precF, precL+1, "retiree")
+	}
 	if err == nil {
 		var n int
 		var h string
