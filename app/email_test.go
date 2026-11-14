@@ -40,7 +40,7 @@ func TestEmailModule(t *testing.T) {
 	if w.Code != 200 || !strings.HasPrefix(w.Body.String(), `{"comptes":[],`) {
 		t.Fatalf("GET /api/email/comptes: %d %s", w.Code, w.Body.String())
 	}
-	if r := email.Resume(s); len(r.Stats) != 1 || r.Etat != "inactif" {
+	if r := email.Resume(s); len(r.Stats) != 3 || r.Stats[2].Valeur != "Not tested" || r.Etat != "inactif" {
 		t.Fatalf("resume: %+v", r)
 	}
 	// one account on disk: listed, the tile counts it, no password field
@@ -53,6 +53,19 @@ func TestEmailModule(t *testing.T) {
 	}
 	if email.Resume(s).Etat != "ok" {
 		t.Fatal("an account must make the tile ok")
+	}
+	// the home conversation (M205): the account's name, never its server, user nor sender
+	if c := email.(moduleContexteChat).ContexteChat(s); !strings.Contains(c, "e-mail account Boutique: sends for no project") ||
+		strings.Contains(c, "smtp.exemple.fr") || strings.Contains(c, "u@exemple.fr") {
+		t.Fatalf("chat context: %q", c)
+	}
+	// a failed test: the tile asks for attention, the conversation knows it
+	os.WriteFile(fichierComptesEmail(), []byte(`[{"id":"a1","nom":"Boutique","hote":"smtp.exemple.fr","port":587,"securite":"starttls","utilisateur":"u","expediteur":"u@exemple.fr","entree":"e1","dernier_test":{"ok":false,"message":"x","t":"1"}}]`), 0o600)
+	if r := email.Resume(s); r.Etat != "attention" || r.Besoin != 1 || r.Stats[2].Valeur != "Failed" {
+		t.Fatalf("resume after a failed test: %+v", r)
+	}
+	if c := email.(moduleContexteChat).ContexteChat(s); !strings.Contains(c, "its last test failed") {
+		t.Fatalf("chat context after a failed test: %q", c)
 	}
 
 	// from a device: the list readable, the rest of the module refused by default

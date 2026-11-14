@@ -491,7 +491,7 @@ func TestTutoriels(t *testing.T) {
 			}
 		}
 	}
-	for _, id := range []string{"hub", "dev", "coffre"} {
+	for _, id := range []string{"hub", "dev", "coffre", "email"} {
 		if n := tours[id]; n < 4 || n > 6 {
 			t.Fatalf("%s tour: %d steps, want 4 to 6 (%v)", id, n, tours)
 		}

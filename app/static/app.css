@@ -328,7 +328,7 @@ a[data-href] { cursor: pointer; }
 .btn:disabled, .btn[aria-disabled="true"] { opacity: .45; cursor: default; pointer-events: none; }
 .btn-primaire { background: var(--accent); color: var(--sur-fort); border-color: transparent; font-weight: 600; }
 .btn-primaire:hover { background: var(--accent-2); }
-.btn-danger { color: var(--erreur); }
+.btn-danger { color: var(--erreur-vif); } /* AA on the dark themes too */
 .btn-petit { padding: 4px 10px; font-size: 13px; }
 .btn-fantome { background: none; border: 1px solid var(--line); border-radius: 6px; padding: 8px 12px; cursor: pointer; color: var(--muted); text-align: left; }
 .btn-fantome:hover { color: var(--ink); background: var(--panel-2); }
@@ -1239,4 +1239,3 @@ a.mis-ligne:hover, a.mis-ligne:focus-visible { border-color: var(--accent); }
 .mis-incident .ligne { flex-wrap: wrap; gap: 8px; }
 .mis-redemander { gap: 8px; flex-wrap: wrap; align-items: center; }
 .mis-relais-etape { font-weight: 600; }
-.mis-controles .btn-danger { color: var(--erreur-vif); } /* AA on the dark themes too */

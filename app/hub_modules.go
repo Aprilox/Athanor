@@ -31,6 +31,12 @@ type moduleRoutes interface {
 	Routes(mux *http.ServeMux, s *Serveur)
 }
 
+// moduleContexteChat (optional): what the home conversation may know of the module beyond its elements,
+// one "- [module] …" line per item, names only, never a value (the e-mail accounts, M205).
+type moduleContexteChat interface {
+	ContexteChat(s *Serveur) string
+}
+
 // EtapeTutoriel: one step of a module's tour: its title and text (i18n keys, English), the element it
 // shows (a CSS selector, "" = none, the bubble in the middle) and its page ("" = the module's first page).
 type EtapeTutoriel struct {

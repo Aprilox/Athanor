@@ -119,6 +119,11 @@ func (s *Serveur) texteEtatHub() string {
 	if b.Len() == 0 {
 		b.WriteString("(nothing yet: no project, no server)\n")
 	}
+	for _, m := range modulesHub() {
+		if c, ok := m.(moduleContexteChat); ok {
+			b.WriteString(c.ContexteChat(s))
+		}
+	}
 	// the library (M198): names and the projects they are on, never a configuration nor a key
 	k := s.kitCourant()
 	sur := func(dossiers []string) string {

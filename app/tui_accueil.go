@@ -82,12 +82,27 @@ func (a *appTUI) pageAccueil(e *ecranT, x, y, l, h int) {
 	lt := l / cols
 	besoin := 0
 	yc := y
+	var hauteurs []int // a row of tiles: as tall as its tallest
+	total := 0
 	for i := 0; i < len(mods); i += cols {
-		hr := 0 // a row of tiles: as tall as its tallest
+		hr := 0
 		for j := i; j < min(i+cols, len(mods)); j++ {
 			hr = max(hr, len(mods[j].Resume.Stats)+3)
 		}
-		hr = min(hr, y+h-yc)
+		hauteurs, total = append(hauteurs, hr), total+hr
+	}
+	// a short screen: the rows lose their last figures, bottom row first, so that "Needs you" and Missions stay
+	for k := len(hauteurs) - 1; total > h-4 && slices.Max(append([]int{0}, hauteurs...)) > 4; k-- {
+		if k < 0 {
+			k = len(hauteurs) - 1
+		}
+		if hauteurs[k] > 4 {
+			hauteurs[k]--
+			total--
+		}
+	}
+	for r, i := 0, 0; i < len(mods); r, i = r+1, i+cols {
+		hr := min(hauteurs[r], y+h-yc)
 		if hr < 3 {
 			break
 		}

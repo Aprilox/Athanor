@@ -52,7 +52,7 @@ pages.email = async () => {
       <div class="ligne m0"><button type="submit" class="btn btn-primaire">${t("Give the settings")}</button><button type="button" class="btn" data-em-config-annuler>${t("Cancel")}</button></div></form>` : `<p class="muet petit">${t("No project yet.")}</p>`) : ""}
     <div class="ligne m0"><button type="button" class="btn" data-em-tester="${h(c.id)}">${t("Send a test e-mail")}</button><button type="button" class="btn" data-em-configurer="${h(c.id)}">${t("Configure sending")}</button><button type="button" class="btn" data-em-modifier="${h(c.id)}">${t("Edit")}</button><button type="button" class="btn btn-danger" data-em-supprimer="${h(c.id)}">${t("Delete")}</button></div></div>`;
   return `<div class="email">
-    <p class="muet email-explication">${t("Add an SMTP account (your provider's sending server): Athanor keeps its password in the vault, tests the sending and gives your deployed apps what they need to send emails.")}</p>
+    <p class="muet email-explication">${t("Add an SMTP account (your provider's sending server): Athanor keeps its password in the vault, tests the sending and gives your deployed apps what they need to send emails.")} ${lienGuide("email")}</p>
     ${em.form ? formulaireEmail() : `<div class="ligne"><button type="button" class="btn btn-primaire" data-em-ajouter>${t("Add an email account")}</button></div>`}
     ${em.comptes.length ? `<div class="grille-projets">${em.comptes.map(carte).join("")}</div>` : em.form ? "" : `<div class="vide">${t("No email account yet.")}</div>`}
   </div>`;
