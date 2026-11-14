@@ -411,6 +411,8 @@ func (s *Serveur) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/serveurs/{id}/sftp/{session}", s.garde(false, s.apiSFTPAgir))
 	mux.HandleFunc("GET /api/serveurs/{id}/sftp/{session}/fichier", s.garde(false, s.apiSFTPTelecharger))
 	mux.HandleFunc("POST /api/serveurs/{id}/sftp/{session}/fichier", s.garde(false, s.apiSFTPEnvoyer))
+	mux.HandleFunc("POST /api/serveurs/{id}/sftp/{session}/ticket", s.garde(false, s.apiSFTPTicket))
+	mux.HandleFunc("GET /api/serveurs/{id}/sftp/{session}/ticket/{ticket}", s.apiSFTPTicketLire)
 	mux.HandleFunc("GET /api/acces", s.garde(false, s.apiAcces))
 	mux.HandleFunc("POST /api/acces", s.garde(false, s.apiAccesModifier))
 	mux.HandleFunc("GET /api/fournisseurs", s.garde(false, s.apiFournisseurs))

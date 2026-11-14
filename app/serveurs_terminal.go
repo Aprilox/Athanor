@@ -29,7 +29,7 @@ const (
 )
 
 var (
-	delaiInactiviteTerminal = 15 * time.Minute // no keystroke and no output: closed (tests shorten it)
+	delaiInactiviteTerminal = 15 * time.Minute // no keystroke, file work, assistant line or page opened: closed (tests shorten it)
 	delaiLecteurTerminal    = time.Minute      // nobody reads its output (page closed): closed
 )
 
@@ -53,7 +53,7 @@ type sessionTerminal struct {
 	stdin       io.WriteCloser
 	sortie      chan []byte // output chunks waiting for the reader
 	fini        chan struct{}
-	activite    atomic.Int64 // unix nano of the last keystroke or output
+	activite    atomic.Int64 // unix nano of the last keystroke, file work, assistant line or page opened (not output)
 	mu          sync.Mutex
 	lecteur     bool      // a GET reads the output now
 	vuLecteur   time.Time // when the last reader left (or the opening)
@@ -74,8 +74,7 @@ func (t *sessionTerminal) toucher() { t.activite.Store(time.Now().UnixNano()) }
 // behind, which slows the SSH channel instead of growing memory.
 func (t *sessionTerminal) Write(p []byte) (int, error) {
 	select {
-	case t.sortie <- bytes.Clone(p):
-		t.toucher()
+	case t.sortie <- bytes.Clone(p): // C1-8: output is not activity (htop or tail -f would keep it open forever)
 		return len(p), nil
 	case <-t.fini:
 		return 0, io.ErrClosedPipe
@@ -277,6 +276,9 @@ func (s *Serveur) apiTerminalFlux(w http.ResponseWriter, r *http.Request) {
 	occupe := t.lecteur
 	t.lecteur = true
 	t.mu.Unlock()
+	if !occupe {
+		t.toucher() // the page (re)opened counts as the owner being there
+	}
 	if occupe {
 		s.erreur(w, http.StatusConflict, "This terminal is already open in another window")
 		return
@@ -439,15 +441,23 @@ func (s *Serveur) shellDistanceAutorise() bool {
 }
 
 // apiTerminalDistance: POST /api/serveurs/terminal-distance {autoriser, confirme}: the terminal and SFTP from a
-// paired device. Allowing needs confirme (the interface asks first); refused from a device (not in the allowlist).
+// paired device. Allowing needs confirme (the interface asks first) and, once Athanor has a password, that
+// password retyped (C1-7: as the other strong rights); refused from a device (not in the allowlist).
 func (s *Serveur) apiTerminalDistance(w http.ResponseWriter, r *http.Request) {
 	var c struct {
-		Autoriser bool `json:"autoriser"`
-		Confirme  bool `json:"confirme"`
+		Autoriser  bool   `json:"autoriser"`
+		Confirme   bool   `json:"confirme"`
+		MotDePasse string `json:"mot_de_passe"`
 	}
 	if lireCorps(r, &c) != nil || c.Autoriser && !c.Confirme {
 		s.erreur(w, http.StatusBadRequest, "Invalid request")
 		return
+	}
+	if c.Autoriser {
+		if code, err := s.preuvePresence(r, c.MotDePasse); err != nil && err != errPreuveSansMdp {
+			s.erreur(w, code, err.Error())
+			return
+		}
 	}
 	s.mu.Lock()
 	s.config.Distance.Terminal = c.Autoriser

@@ -12,6 +12,7 @@ package main
 // the assistant's. Take over (apiReprendreMainTache) unlocks it and the task goes on in its own connection.
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -27,16 +28,17 @@ const (
 // ActionTache: one tool call of a task's agent, as the assistant's panel shows it. The output is the server's,
 // masked of the vault's values: data shown to the owner, never instructions.
 type ActionTache struct {
-	N      int    `json:"n"`
-	T      string `json:"t"`
-	Outil  string `json:"outil"`
-	Quoi   string `json:"quoi"`
-	Classe string `json:"classe,omitempty"` // lecture | changement | destructrice
-	Etat   string `json:"etat"`             // en_cours | ok | erreur | refusee
-	Code   int    `json:"code"`
-	Sortie string `json:"sortie,omitempty"`
-	Coupee bool   `json:"coupee,omitempty"`
-	Detail string `json:"detail,omitempty"`
+	N       int    `json:"n"`
+	T       string `json:"t"`
+	Outil   string `json:"outil"`
+	Libelle string `json:"libelle,omitempty"` // C1-10: the tool in plain English, an i18n.js key (libellesOutils)
+	Quoi    string `json:"quoi"`
+	Classe  string `json:"classe,omitempty"` // lecture | changement | destructrice
+	Etat    string `json:"etat"`             // en_cours | ok | erreur | refusee
+	Code    int    `json:"code"`
+	Sortie  string `json:"sortie,omitempty"`
+	Coupee  bool   `json:"coupee,omitempty"`
+	Detail  string `json:"detail,omitempty"`
 }
 
 // tacheDeSession: the running task a session token belongs to (its ops lead, critic or verifier), else nil.
@@ -87,13 +89,34 @@ func ecrireDansTerminal(t *tacheEnCours, texte string) {
 	x.afficher([]byte(strings.ReplaceAll(strings.ReplaceAll(texte, "\r\n", "\n"), "\n", "\r\n")))
 }
 
-// ligneAction: a call as the owner's terminal shows it ("$ command" for a command).
-func ligneAction(a ActionTache) string {
-	q := a.Outil + " " + a.Quoi
+// libellesOutils: the Servers tools as a beginner reads them (C1-10); the English texts are i18n.js keys, so the
+// page and the terminal's screen say them in the owner's language (TestLibellesOutils checks every language).
+var libellesOutils = map[string]string{
+	"serveurs_liste": "List the servers", "serveur_fiche": "Read the server's sheet", "fichier_lire": "Read a file",
+	"fichier_ecrire": "Write a file", "sftp_envoyer": "Send a file", "sftp_recuperer": "Fetch a file",
+	"service": "Service", "docker": "Docker", "pare_feu": "Firewall", "proposer_plan": "Propose a plan",
+	"confirmer_changement": "Confirm a change", "runbook_lire": "Read the runbook", "runbook_ajouter": "Add to the runbook",
+	"environnement_lire": "Read the environment", "deployer": "Deploy", "revenir_version": "Go back to the previous version",
+	"fournisseurs": "Providers", "dns_lister": "List the DNS records", "dns_ecrire": "Write a DNS record",
+	"dns_supprimer": "Delete a DNS record", "ssl_lire": "Read the SSL settings", "ssl_regler": "Set SSL",
+	"certificat_origine": "Origin certificate", "access_proteger": "Protect with Access", "access_retirer": "Remove the Access protection",
+}
+
+// texteTerminal: a text written on the terminal's screen, in the app's language (C1-9).
+func (s *Serveur) texteTerminal(cle string, args ...any) string {
+	s.mu.Lock()
+	l := s.config.Langue
+	s.mu.Unlock()
+	return traduireTUI(dicoTUI(l), cle, args...)
+}
+
+// ligneAction: a call as the owner's terminal shows it ("$ command" for a command, else the tool's label).
+func (s *Serveur) ligneAction(a ActionTache) string {
+	q := s.texteTerminal(cmp.Or(a.Libelle, a.Outil)) + " " + a.Quoi
 	if a.Outil == "ssh_commande" {
 		q = "$ " + a.Quoi
 	}
-	return "\n\x1b[1;36m[assistant]\x1b[0m " + strings.TrimSpace(q) + "\n"
+	return "\n\x1b[1;36m[" + s.texteTerminal("Assistant") + "]\x1b[0m " + strings.TrimSpace(q) + "\n"
 }
 
 // quoiAction: what a call does, in one line: its command, its action and name, its paths, its rule (never a
@@ -121,7 +144,7 @@ func (s *Serveur) debutAction(x SessionHub, outil string, a map[string]json.RawM
 	if t == nil {
 		return nil, 0
 	}
-	act := ActionTache{T: time.Now().UTC().Format(time.RFC3339), Outil: outil, Quoi: couper(s.masquerSecrets(quoiAction(a)), 500), Etat: "en_cours"}
+	act := ActionTache{T: time.Now().UTC().Format(time.RFC3339), Outil: outil, Libelle: libellesOutils[outil], Quoi: couper(s.masquerSecrets(quoiAction(a)), 500), Etat: "en_cours"}
 	if refus != nil {
 		if c, err := classerEtape(outil, maps.Clone(a)); err == nil {
 			act.Classe = c.Classe.String()
@@ -140,7 +163,7 @@ func (s *Serveur) debutAction(x SessionHub, outil string, a map[string]json.RawM
 	}
 	t.mu.Unlock()
 	_ = enregistrerTache(t.copie())
-	l := ligneAction(act)
+	l := s.ligneAction(act)
 	if refus != nil {
 		l += "\x1b[33m✗ " + act.Detail + "\x1b[0m\n"
 	}
@@ -173,7 +196,7 @@ func (s *Serveur) finAction(t *tacheEnCours, n int, r ResultatOutil, err error) 
 			ecran += "\n"
 		}
 		if a.Etat == "erreur" {
-			ecran += fmt.Sprintf("\x1b[31m✗ exit %d %s\x1b[0m\n", a.Code, a.Detail)
+			ecran += "\x1b[31m✗ " + strings.TrimSpace(s.texteTerminal("Exit code {0}", a.Code)+" "+a.Detail) + "\x1b[0m\n"
 		}
 	}
 	t.mu.Unlock()

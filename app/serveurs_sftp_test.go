@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -89,6 +90,29 @@ func TestTerminalSFTP(t *testing.T) {
 	c, b, hd := requete("GET", base+"/fichier?chemin=/notes.txt", "")
 	if c != http.StatusOK || string(b) != "salut-remplace" || !strings.Contains(hd.Get("Content-Disposition"), "notes.txt") {
 		t.Fatalf("download: %d %q %v", c, b, hd)
+	}
+	// C1-14: a ticket, then a plain navigation (no header) streams the file once
+	c, b, _ = requete("POST", base+"/ticket", `{"chemin":"/notes.txt"}`)
+	var tk struct{ Ticket string }
+	if json.Unmarshal(b, &tk); c != http.StatusOK || tk.Ticket == "" {
+		t.Fatalf("ticket: %d %s", c, b)
+	}
+	if c, b, _ := requete("GET", "/api/serveurs/"+srv.ID+"/sftp/autre/ticket/"+tk.Ticket, "", "X-Athanor", ""); c != http.StatusGone {
+		t.Fatalf("ticket on another terminal: %d %s", c, b) // and it is spent
+	}
+	c, b, _ = requete("POST", base+"/ticket", `{"chemin":"/notes.txt"}`)
+	json.Unmarshal(b, &tk)
+	if c, b, _ := requete("GET", base+"/ticket/"+tk.Ticket, "", "X-Athanor", ""); c != http.StatusOK || string(b) != "salut-remplace" {
+		t.Fatalf("download by ticket: %d %q", c, b)
+	}
+	if c, _, _ := requete("GET", base+"/ticket/"+tk.Ticket, "", "X-Athanor", ""); c != http.StatusGone {
+		t.Fatalf("ticket used twice: %d", c)
+	}
+	// C1-15: another refusal in plain words, the server's answer after them
+	w := httptest.NewRecorder()
+	s.erreurSFTP(w, errors.New("sftp: failure"))
+	if !strings.Contains(w.Body.String(), prefixeSFTPEchec) || !strings.Contains(w.Body.String(), "sftp: failure") {
+		t.Fatalf("plain refusal: %s", w.Body.String())
 	}
 	terminaux.Lock()
 	tr := terminaux.m[o.Session]

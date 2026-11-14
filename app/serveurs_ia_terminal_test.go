@@ -235,7 +235,7 @@ func TestIATerminalDirect(t *testing.T) {
 	case <-time.After(20 * time.Second):
 		t.Fatal("the command never reached the server")
 	}
-	l.attendre(t, "[assistant]\x1b[0m $ df -h /")
+	l.attendre(t, "[Assistant]\x1b[0m $ df -h /")
 	l.attendre(t, "\x1b[33m✗ ")
 	l.attendre(t, "mot de passe de la base")
 	if c := taper(`{"entree":"echo moi\r"}`); c != http.StatusLocked {
@@ -256,7 +256,7 @@ func TestIATerminalDirect(t *testing.T) {
 	if c, _ := requete("POST", "/api/serveurs/"+srv.ID+"/taches/"+tache["id"].(string)+"/main", ""); c.StatusCode != http.StatusOK {
 		t.Fatalf("take over: %d", c.StatusCode)
 	}
-	l.attendre(t, "you have the keyboard")
+	l.attendre(t, "You have the keyboard")
 	if c := taper(`{"entree":"echo moi\r"}`); c != http.StatusOK {
 		t.Errorf("typing after Take over: %d", c)
 	}
@@ -288,4 +288,33 @@ func TestIATerminalDirect(t *testing.T) {
 	}
 	taper(`{"fermer":true}`)
 	l.attendreFin(t)
+}
+
+// TestLibellesOutils (C1-9, C1-10): every Servers tool has a readable label, and the labels and the texts written
+// on the terminal's screen exist in every language of i18n.js.
+func TestLibellesOutils(t *testing.T) {
+	cles := []string{"Assistant", "Exit code {0}", "The assistant's task ended: the keyboard is yours.",
+		"You have the keyboard; the assistant goes on in its own connection.", prefixeSFTPEchec}
+	for _, o := range outilsServeursMCP {
+		if o == "ssh_commande" { // shown as "$ command"
+			continue
+		}
+		if libellesOutils[o] == "" {
+			t.Errorf("no label for %s", o)
+		}
+		cles = append(cles, libellesOutils[o])
+	}
+	for _, l := range []string{"fr", "es", "de", "it", "pt"} {
+		d := dicoTUI(l)
+		for _, c := range cles {
+			if d[c] == "" {
+				t.Errorf("%s: %q not translated", l, c)
+			}
+		}
+	}
+	s := &Serveur{}
+	s.config.Langue = "fr"
+	if l := s.ligneAction(ActionTache{Outil: "fichier_lire", Libelle: libellesOutils["fichier_lire"], Quoi: "/etc/hosts"}); !strings.Contains(l, "[Assistant]") || !strings.Contains(l, "Lire un fichier /etc/hosts") {
+		t.Errorf("terminal line in French: %q", l)
+	}
 }

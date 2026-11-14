@@ -1380,7 +1380,7 @@ a.mis-ligne:hover, a.mis-ligne:focus-visible { border-color: var(--accent); }
 .ia-quoi { white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--mono); font-size: 12.5px; }
 .ia-sortie { max-height: 180px; overflow: auto; margin: 4px 0; padding: 6px 8px; background: var(--sombre); border: 1px solid var(--line); border-radius: 6px; font-family: var(--mono); font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .ia-plan { display: flex; flex-direction: column; gap: 6px; border-left: 3px solid var(--attention); padding-left: 8px; }
-.ia-reponse { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ia-reponse { margin: 0; overflow-wrap: anywhere; }
 .ia-encours { display: flex; align-items: center; gap: 8px; border-top: 1px solid var(--line); padding-top: 6px; }
 .ia-encours-texte { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .ia-saisie { display: flex; gap: 6px; align-items: flex-end; }

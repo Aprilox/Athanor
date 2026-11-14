@@ -17,23 +17,25 @@ import (
 	"path"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/pkg/sftp"
 )
 
 const (
-	envoiSFTPMax    = 4 << 30 // one upload
-	entreesSFTPMax  = 5000    // one folder's listing
-	errSFTPAbsent   = "This server does not offer file transfer (SFTP)"
-	errSFTPExiste   = "A file or folder with this name already exists"
-	errSFTPInconnu  = "This file or folder no longer exists"
-	errSFTPRefuse   = "The server refused: permission denied"
-	errSFTPDossier  = "This is a folder"
-	errSFTPChemin   = "Invalid path"
-	errSFTPMemeNom  = "Choose another name"
-	errSFTPTropGros = "This file is too large to send from here"
-	errSFTPLien     = "This name is a link: open the folder of its target to replace that file"
+	envoiSFTPMax     = 4 << 30 // one upload
+	entreesSFTPMax   = 5000    // one folder's listing
+	errSFTPAbsent    = "This server does not offer file transfer (SFTP)"
+	errSFTPExiste    = "A file or folder with this name already exists"
+	errSFTPInconnu   = "This file or folder no longer exists"
+	errSFTPRefuse    = "The server refused: permission denied"
+	errSFTPDossier   = "This is a folder"
+	errSFTPChemin    = "Invalid path"
+	errSFTPMemeNom   = "Choose another name"
+	errSFTPTropGros  = "This file is too large to send from here"
+	prefixeSFTPEchec = "The server could not do it: check its free disk space and this folder's rights, or try the same in the terminal. Its answer: "
+	errSFTPLien      = "This name is a link: open the folder of its target to replace that file"
 )
 
 // clientSFTP: the terminal's SFTP channel, opened at the first use.
@@ -94,8 +96,8 @@ func (s *Serveur) erreurSFTP(w http.ResponseWriter, err error) {
 		s.erreur(w, http.StatusNotFound, errSFTPInconnu)
 	case errors.Is(err, fs.ErrPermission):
 		s.erreur(w, http.StatusForbidden, errSFTPRefuse)
-	default:
-		s.erreur(w, http.StatusBadGateway, err.Error())
+	default: // C1-15: plain words and what to try first, the server's own answer after them
+		s.erreur(w, http.StatusBadGateway, prefixeSFTPEchec+err.Error())
 	}
 }
 
@@ -196,6 +198,71 @@ func (s *Serveur) apiSFTPTelecharger(w http.ResponseWriter, r *http.Request) {
 		resultat += " interrupted"
 	}
 	t.auditSFTP("sftp.download", resultat)
+}
+
+// C1-14: a download streams to the browser's own download (an <a download> navigation, never a whole blob in the
+// page). A navigation cannot send the anti-CSRF header, so the page first asks a ticket with it: single use,
+// 1 minute, bound to its terminal and path; the GET with that ticket still needs the access cookie and session.
+var ticketsSFTP = struct {
+	sync.Mutex
+	m map[string]ticketSFTP
+}{m: map[string]ticketSFTP{}}
+
+type ticketSFTP struct {
+	serveur, session, chemin string
+	fin                      time.Time
+}
+
+// apiSFTPTicket: POST /api/serveurs/{id}/sftp/{session}/ticket {chemin}: {ticket} for apiSFTPTicketLire.
+func (s *Serveur) apiSFTPTicket(w http.ResponseWriter, r *http.Request) {
+	var c struct {
+		Chemin string `json:"chemin"`
+	}
+	if lireCorps(r, &c) != nil || cheminSFTP(c.Chemin) == "" || cheminSFTP(c.Chemin) == "/" {
+		s.erreur(w, http.StatusBadRequest, errSFTPChemin)
+		return
+	}
+	if !memeOrigine(r) {
+		s.erreur(w, http.StatusForbidden, "Request refused (origin)")
+		return
+	}
+	if t, raison := terminalDe(r); t == nil { // not sftpDe: reading stays allowed in live mode (C1-6)
+		s.terminalFerme(w, raison)
+		return
+	}
+	jeton := aleatoire(24)
+	ticketsSFTP.Lock()
+	for k, x := range ticketsSFTP.m {
+		if time.Now().After(x.fin) {
+			delete(ticketsSFTP.m, k)
+		}
+	}
+	ticketsSFTP.m[jeton] = ticketSFTP{r.PathValue("id"), r.PathValue("session"), cheminSFTP(c.Chemin), time.Now().Add(time.Minute)}
+	ticketsSFTP.Unlock()
+	s.ecrireJSON(w, map[string]any{"ticket": jeton})
+}
+
+// apiSFTPTicketLire: GET /api/serveurs/{id}/sftp/{session}/ticket/{ticket}: the file, as apiSFTPTelecharger.
+// Not behind garde (no header on a navigation): the ticket stands for it, the access and the session are checked.
+func (s *Serveur) apiSFTPTicketLire(w http.ResponseWriter, r *http.Request) {
+	if !s.accesValide(r) {
+		s.erreur(w, http.StatusForbidden, "Request refused (origin)")
+		return
+	}
+	if s.verrouillePour(r) {
+		s.erreur(w, http.StatusUnauthorized, "Locked")
+		return
+	}
+	ticketsSFTP.Lock()
+	x, ok := ticketsSFTP.m[r.PathValue("ticket")]
+	delete(ticketsSFTP.m, r.PathValue("ticket"))
+	ticketsSFTP.Unlock()
+	if !ok || time.Now().After(x.fin) || x.serveur != r.PathValue("id") || x.session != r.PathValue("session") {
+		s.erreur(w, http.StatusGone, "This download link has expired: click Download again")
+		return
+	}
+	r.URL.RawQuery = url.Values{"chemin": {x.chemin}}.Encode()
+	s.apiSFTPTelecharger(w, r)
 }
 
 // apiSFTPEnvoyer: POST /api/serveurs/{id}/sftp/{session}/fichier?chemin=/abs/name[&remplacer=1], the bytes as

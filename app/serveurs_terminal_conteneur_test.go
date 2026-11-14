@@ -242,7 +242,7 @@ func TestTerminalConteneur(t *testing.T) {
 		t.Fatalf("live task: %v", tache)
 	}
 	attendreDebut()
-	l.attendre(t, "[assistant]\x1b[0m $ uname -s")
+	l.attendre(t, "[Assistant]\x1b[0m $ uname -s")
 	l.attendre(t, "\x1b[33m✗ ")
 	l.attendre(t, "mot de passe de la base")
 	if c := taper(map[string]any{"entree": "echo moi\r"}); c != http.StatusLocked {

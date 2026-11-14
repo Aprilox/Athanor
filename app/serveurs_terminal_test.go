@@ -61,6 +61,16 @@ func (s *serveurSSHMemoire) terminal(canal ssh.Channel, r *ssh.Request) bool {
 					continue
 				}
 				canal.Write(b[:n])
+				if string(b[:n]) == "top\r" { // a program that keeps writing (C1-8: not activity)
+					go func() {
+						for {
+							if _, err := canal.Write([]byte("top-tick\r\n")); err != nil {
+								return
+							}
+							time.Sleep(20 * time.Millisecond)
+						}
+					}()
+				}
 				if bytes.Contains(tout, []byte("exit\r")) {
 					canal.Write([]byte("\r\nlogout\r\n"))
 					canal.SendRequest("exit-status", false, binary.BigEndian.AppendUint32(nil, 0))
@@ -272,7 +282,9 @@ func TestTerminalSSH(t *testing.T) {
 	delaiInactiviteTerminal = 300 * time.Millisecond
 	id = ouvrir("")
 	l = lire(id)
-	l.attendreFin(t)
+	agir(id, map[string]any{"entree": "top\r"})
+	l.attendre(t, "top-tick")
+	l.attendreFin(t) // output alone does not keep it open (C1-8)
 	if c, v := agir(id, map[string]any{}); c != http.StatusGone || v["fin"] != finTerminalInactif {
 		t.Fatalf("idle: %d %v", c, v)
 	}
@@ -356,6 +368,17 @@ func TestTerminalDistance(t *testing.T) {
 	}
 	if c, _ := appel("/api/serveurs/terminal-distance", map[string]any{"autoriser": false}); c != http.StatusOK || sl.shellDistanceAutorise() {
 		t.Fatalf("forbid again: %d", c)
+	}
+	// C1-7: once Athanor has a password, allowing needs it retyped
+	sl.config.MotDePasseHash, sl.session = hacherMotDePasse("mdp-test"), "session"
+	if c, _ := appel("/api/serveurs/terminal-distance", map[string]any{"autoriser": true, "confirme": true, "mot_de_passe": "faux"}); c != http.StatusUnauthorized || sl.shellDistanceAutorise() {
+		t.Fatalf("allowed with a wrong password: %d", c)
+	}
+	if c, _ := appel("/api/serveurs/terminal-distance", map[string]any{"autoriser": true, "confirme": true, "mot_de_passe": "mdp-test"}); c != http.StatusOK || !sl.shellDistanceAutorise() {
+		t.Fatalf("allow with the password: %d", c)
+	}
+	if c, _ := appel("/api/serveurs/terminal-distance", map[string]any{"autoriser": false}); c != http.StatusOK {
+		t.Fatalf("forbid without the password: %d", c)
 	}
 	if !strings.Contains(journalAuditTexte(t), `"remote terminal"`) {
 		t.Error("setting change not in the audit log")

@@ -479,7 +479,7 @@ func (s *Serveur) finirTache(e *tacheEnCours, etat, detail string) {
 	tachesEnCours.Lock()
 	delete(tachesEnCours.m, e.t.ID)
 	tachesEnCours.Unlock()
-	ecrireDansTerminal(e, "\x1b[2m[assistant] "+etat+": the keyboard is yours\x1b[0m\n")
+	ecrireDansTerminal(e, "\x1b[2m"+s.texteTerminal("The assistant's task ended: the keyboard is yours.")+"\x1b[0m\n")
 	s.revoquerJetons("tâche "+etat, func(x SessionHub) bool { return x.Projet == projet || strings.HasPrefix(x.Projet, projet+":") })
 	l, _ := s.approbations.Liste()
 	for _, ap := range l {
@@ -608,7 +608,7 @@ func (s *Serveur) apiReprendreMainTache(w http.ResponseWriter, r *http.Request) 
 		s.erreur(w, http.StatusNotFound, "No running task of that id on this server")
 		return
 	}
-	ecrireDansTerminal(e, "\x1b[2m[assistant] you have the keyboard; it goes on in its own connection\x1b[0m\n")
+	ecrireDansTerminal(e, "\x1b[2m"+s.texteTerminal("You have the keyboard; the assistant goes on in its own connection.")+"\x1b[0m\n")
 	e.mu.Lock()
 	e.t.Direct, e.t.Terminal = false, ""
 	e.mu.Unlock()

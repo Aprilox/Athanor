@@ -5261,8 +5261,11 @@ $("#page").addEventListener("change", async (ev) => {
 $("#page").addEventListener("change", async (ev) => {
   const c = ev.target.closest("[data-srv-term-distance]"); if (!c) return;
   const oui = c.checked;
-  if (oui && !(await confirmer(t("Allow a shell on your servers from your paired phone or computer? Anyone holding that device could then type commands on them. You can turn it off here at any time."), { ok: t("Allow") }))) { c.checked = false; return; }
-  if (!(await action(api("serveurs/terminal-distance", "POST", { autoriser: oui, confirme: oui })))) { c.checked = !oui; return; }
+  const q = t("Allow a shell on your servers from your paired phone or computer? Anyone holding that device could then type commands on them. You can turn it off here at any time.");
+  // C1-7: Athanor's password retyped when it has one, as for the other strong rights
+  const preuve = oui ? ((await api("hub/approbations").catch(() => ({}))).mot_de_passe_requis ? await confirmer(q, { ok: t("Allow"), mdp: true }) : await confirmer(q, { ok: t("Allow") })) : true;
+  if (preuve === false) { c.checked = false; return; }
+  if (!(await action(api("serveurs/terminal-distance", "POST", { autoriser: oui, confirme: oui, ...(typeof preuve === "string" ? { mot_de_passe: preuve } : {}) })))) { c.checked = !oui; return; }
   srv.termDistance = oui;
   toast(oui ? t("The terminal can now be opened from your paired devices.") : t("The terminal is off from your paired devices."), "ok");
 });
@@ -6395,26 +6398,27 @@ async function monterTerminal() {
 }
 async function connecterTerminal() {
   messageTerminal(null); etatTerminal(t("Connecting…"), "attend");
-  const id = term.id;
+  const id = term.id, neuve = !term.session;
   if (!term.session) {
     try {
       const r = await api("serveurs/" + encodeURIComponent(id) + "/terminal", "POST", { cols: term.x.cols, lignes: term.x.rows });
       term.session = r.session; sessionStorage.setItem("athanor.terminal." + id, r.session);
     } catch (e) { return id === term.id && erreurTerminal((e.data || {}).erreur_key || "", e.message); }
   }
-  lireTerminal(id, term.session);
+  lireTerminal(id, term.session, neuve);
 }
 // the output, read as a byte stream until the terminal ends (or the page leaves: aborted)
-async function lireTerminal(id, session) {
+async function lireTerminal(id, session, neuve) {
   const ctl = new AbortController(); term.lecteur = ctl;
   try {
     const r = await fetch(`/api/serveurs/${encodeURIComponent(id)}/terminal/${encodeURIComponent(session)}`, { headers: { "X-Athanor": CSRF }, signal: ctl.signal });
     if (!r.ok) {
       const d = await r.json().catch(() => ({}));
       term.lecteur = null;
-      if (r.status === 410) { // closed meanwhile (a reload after it ended): a new one, once
+      if (r.status === 410) { // closed meanwhile (a reload after it ended): a new one, once; never for one just
+        // opened (C1-19: a shell that exits at once, nologin, would loop and could trip fail2ban)
         sessionStorage.removeItem("athanor.terminal." + id); term.session = "";
-        return d.fin === "abandoned" || d.fin === "ended" ? connecterTerminal() : finTerminal(d.fin);
+        return !neuve && (d.fin === "abandoned" || d.fin === "ended") ? connecterTerminal() : finTerminal(d.fin);
       }
       return erreurTerminal(d.erreur_key || "", d.erreur_key ? t(d.erreur_key) : t("Error {0}", [r.status]));
     }
@@ -6542,12 +6546,13 @@ async function envoyerSftp(fichiers) {
   }
   sf.envoi = null; chargerSftp(sf.chemin);
 }
-// shortcut: the whole file passes through the page's memory before it is saved; for very large files, use scp
+// C1-14: a single-use ticket, then the browser's own download streams the file (never held whole in the page)
 async function telechargerSftp(nom) {
-  const r = await fetch(urlSftp("/fichier?chemin=" + encodeURIComponent(joindreSftp(sf.chemin, nom))), { headers: { "X-Athanor": CSRF } }).catch(() => null);
-  if (!r || !r.ok) return toast(erreurSftp(r, r ? await r.json().catch(() => ({})) : {}), "erreur");
-  const a = document.createElement("a"); a.href = URL.createObjectURL(await r.blob()); a.download = nom;
-  document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 30000);
+  const r = await fetch(urlSftp("/ticket"), { method: "POST", headers: { "X-Athanor": CSRF, "Content-Type": "application/json" }, body: JSON.stringify({ chemin: joindreSftp(sf.chemin, nom) }) }).catch(() => null);
+  const d = r ? await r.json().catch(() => ({})) : {};
+  if (!r || !r.ok || !d.ticket) return toast(erreurSftp(r, d), "erreur");
+  const a = document.createElement("a"); a.href = urlSftp("/ticket/" + encodeURIComponent(d.ticket)); a.download = nom;
+  document.body.append(a); a.click(); a.remove();
 }
 async function renommerSftp() {
   const nom = ($("#sftp-renommer")?.value || "").trim(), ancien = sf.renomme;
@@ -6598,7 +6603,7 @@ $("#page").addEventListener("click", async (ev) => {
   if (d.sftpTelecharger !== undefined) return telechargerSftp(e.nom);
   if (d.sftpRenommer !== undefined) { sf.renomme = e.nom; return rendreSftp(); }
   if (d.sftpSupprimer !== undefined) {
-    const msg = e.dossier ? t("Delete the folder {0} and everything inside it from the server? This cannot be undone.", [e.nom]) : t("Delete {0} from the server? This cannot be undone.", [e.nom]);
+    const msg = e.lien ? t("Delete the link {0} from the server? Only the link goes; what it points to stays.", [e.nom]) : e.dossier ? t("Delete the folder {0} and everything inside it from the server? This cannot be undone.", [e.nom]) : t("Delete {0} from the server? This cannot be undone.", [e.nom]);
     if (!(await confirmer(msg, { ok: t("Delete"), danger: true }))) return;
     if (await agirSftp({ supprimer: joindreSftp(sf.chemin, e.nom) })) { toast(t("{0} deleted.", [e.nom]), "ok"); sf.choisi = ""; chargerSftp(sf.chemin); }
   }
@@ -6655,7 +6660,7 @@ async function chargerIA() {
 }
 function actionIA(a) {
   const [lib, cl] = ETATS_ACTION_IA()[a.etat] || [a.etat, ""], cla = CLASSES_ETAPE()[a.classe];
-  const quoi = a.outil === "ssh_commande" ? "$ " + a.quoi : a.outil + (a.quoi ? " · " + a.quoi : "");
+  const quoi = a.outil === "ssh_commande" ? "$ " + a.quoi : t(a.libelle || a.outil) + (a.quoi ? " · " + a.quoi : "");
   const corps = (a.sortie ? `<pre class="ia-sortie">${h(a.sortie)}${a.coupee ? "\n…" : ""}</pre>` : "") + (a.detail ? `<p class="petit m0 ${a.etat === "refusee" ? "pv-vous" : "muet"}">${h(t(a.detail))}</p>` : "")
     + (a.etat === "erreur" && !a.detail ? `<p class="petit muet m0">${h(t("Exit code {0}", [a.code]))}</p>` : "");
   const tete = `<code class="ia-quoi">${h(quoi)}</code> ${cla ? `<span class="pv-etat ${cla[1]}">${h(cla[0])}</span>` : ""} <span class="pv-etat ${cl}">${h(lib)}</span>`;
@@ -6671,7 +6676,7 @@ function tacheIA(x) {
       ${(etat.vue || {}).distant ? "" : `<div class="ligne m0"><button type="button" class="btn btn-primaire btn-petit" data-ia-decider="accepter" data-plan="${h(plan)}">${t("Accept")}</button>
       <button type="button" class="btn btn-petit" data-ia-decider="refuser" data-plan="${h(plan)}">${t("Refuse")}</button>
       <a href="#pourvous" class="petit" data-ia-carte="${h(plan)}">${t("Decide on its card")}</a></div>`}</div>` : ""}
-    ${x.resultat ? `<p class="ia-reponse">${h(x.resultat)}</p>` : ""}
+    ${x.resultat ? `<div class="ia-reponse">${mdChat(x.resultat, true)}</div>` : ""}
     ${tacheFinie(x) ? `<p class="m0 petit"><span class="pv-etat ${cl}">${h(lib)}</span>${["echec", "arretee"].includes(x.etat) && fin.detail ? ` <span class="muet">${h(t(fin.detail))}</span>` : ""}</p>` : ""}</div>`;
 }
 function rendreIA() {
