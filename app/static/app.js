@@ -866,13 +866,16 @@ function phraseGlobale(m) {
 const avecProjet = (m) => !!m && !!m.projet;
 // a rebuild keeps the keyboard focus on the same element (same identifying attributes), else the focus fell to the page
 function cleFocus(x) {
-  const s = ["id", "data-href", "data-page", "data-filtre", "data-act", "data-notifs", "data-guide", "data-projet", "data-cible", "href"].filter((a) => x.hasAttribute(a)).map((a) => `[${a}="${CSS.escape(x.getAttribute(a))}"]`).join("");
+  const s = ["id", "data-href", "data-page", "data-filtre", "data-act", "data-notifs", "data-guide", "data-projet", "data-cible", "data-theme", "href"].filter((a) => x.hasAttribute(a)).map((a) => `[${a}="${CSS.escape(x.getAttribute(a))}"]`).join("");
   return s && x.tagName.toLowerCase() + s;
 }
-function garderFocus(zone, rendre) {
-  const a = document.activeElement, cle = a && a !== zone && zone.contains(a) ? cleFocus(a) : "";
+const FOCALISABLES = "a[href], a[data-href], button, input, select, textarea, summary, [tabindex]";
+function garderFocus(zone, rendre, parRang = true) {
+  const a = document.activeElement, dedans = a && a !== zone && zone.contains(a), cle = dedans ? cleFocus(a) : "";
+  // no identifying attribute (a button of Settings…): the same rank among the zone's focusable elements
+  const rang = parRang && dedans && !cle ? [...zone.querySelectorAll(FOCALISABLES)].indexOf(a) : -1;
   rendre();
-  const b = cle && zone.querySelector(cle);
+  const b = cle ? zone.querySelector(cle) : rang >= 0 ? zone.querySelectorAll(FOCALISABLES)[rang] : null;
   if (b && b !== document.activeElement) b.focus({ preventScroll: true });
 }
 
@@ -6842,7 +6845,8 @@ async function rendrePage() {
   const a = document.activeElement, saisie = a && a.id && $("#page").contains(a) && a.matches("input[type=text], textarea") ? [a.id, a.selectionStart, a.selectionEnd] : null;
   const vueRepli = etat.page + "/" + (etat.page === "reglages" ? etat.ongletReglages : ""); // two tabs of one page: two sets of folds
   const replis = etat.repliRendu === vueRepli ? [...$("#page").querySelectorAll("details.plus-options")].map((x) => x.open) : []; // opened by hand: kept open across a refresh
-  garderFocus($("#page"), () => { $("#page").innerHTML = html; });
+  garderFocus($("#page"), () => { $("#page").innerHTML = html; }, etat.hashRendu === location.hash); // by rank only when the same view is refreshed
+  etat.hashRendu = location.hash;
   $("#page").querySelectorAll("details.plus-options").forEach((x, i) => { if (replis[i]) x.open = true; });
   etat.pageRendue = etat.page; etat.repliRendu = vueRepli;
   if (etat.visite >= 0 && !$("#visite").hidden) { etat.visiteCible = null; placerVoile(); placerBulle(); } // the page rebuilt: the target found again, or the bubble aside

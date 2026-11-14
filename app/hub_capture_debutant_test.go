@@ -22,7 +22,7 @@ func TestCaptureDebutant(t *testing.T) {
 	if sortie == "" {
 		t.Skip("ATHANOR_CAPTURE not set")
 	}
-	if m := os.Getenv("CAPTURE_MOTIF"); m != "" && !regexp.MustCompile(m).MatchString("debutant") {
+	if m := os.Getenv("CAPTURE_MOTIF"); m != "" && !regexp.MustCompile("(?i)"+m).MatchString("debutant") {
 		t.Skip("CAPTURE_MOTIF does not match debutant")
 	}
 	if strings.HasPrefix(os.Getenv("CAPTURE_PARTIE"), "avant:") {
