@@ -702,6 +702,9 @@ func (s *Serveur) demarrerPilote(p Projet) (string, error) {
 	if _, err := s.injecterAcces(p, nil); err != nil {
 		fmt.Fprintln(os.Stderr, "access injection:", p.Nom+":", err)
 	}
+	if !s.kitCourant().Valide() { // nothing to launch (no WSL started, never this very executable in the kit's place)
+		return "", errors.New("Tool folder not found")
+	}
 	// its hub token for this launch (without it the pilot still runs, its hub tools answer an error)
 	if err := s.creerJetonPilote(p); err != nil {
 		fmt.Fprintln(os.Stderr, "hub token:", p.Nom+":", err)

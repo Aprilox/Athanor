@@ -20,6 +20,7 @@ func serveurChatEssai(t *testing.T) (*Serveur, Projet, string, func(meth, chemin
 	d, _ := filepath.EvalSymlinks(t.TempDir())
 	p := Projet{Nom: "a", Dossier: d}
 	_ = os.MkdirAll(p.Atelier(), 0o755)
+	ecrire(t, filepath.Join(kit, "template", "CLAUDE.md"), "kit") // a valid kit: demarrerPilote refuses any other
 	s := nouveauServeur(Config{Kit: kit, Projets: []Projet{p}, ProjetActif: "a", Langue: "fr"})
 	s.csrf = "jeton"
 	mux := http.NewServeMux()
