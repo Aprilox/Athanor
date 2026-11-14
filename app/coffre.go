@@ -43,7 +43,7 @@ var (
 // typesCoffre: the closed list of entry types, with the scope proposed for each.
 var typesCoffre = map[string]string{
 	"cloudflare": "infra", "ssh": "infra", "certificat": "infra", "github": "infra", "aws": "infra",
-	"anthropic": "code", "openai": "code", "stripe": "code", "mot_de_passe": "code", "jeton": "code", "autre": "code",
+	"anthropic": "code", "openai": "code", "stripe": "code", "mot_de_passe": "code", "jeton": "code", "smtp": "code", "autre": "code",
 }
 
 // enveloppeSysteme: the system keystore (DPAPI, Keychain, Secret Service) that protects the code key.

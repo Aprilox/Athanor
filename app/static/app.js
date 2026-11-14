@@ -5233,9 +5233,9 @@ for (const type of ["dragover", "dragleave", "drop"]) $("#page").addEventListene
 });
 // --- Vault (Coffre module): the entries of /api/coffre, one tab per family; a secret's value never comes back
 const cof = { onglet: "secret", form: null, colle: null, d: { entrees: [], etat: {} } }; // colle: {texte, props} of "Paste"
-const TYPES_COFFRE = ["cloudflare", "ssh", "certificat", "github", "aws", "anthropic", "openai", "stripe", "mot_de_passe", "jeton", "autre"];
+const TYPES_COFFRE = ["cloudflare", "ssh", "certificat", "github", "aws", "anthropic", "openai", "stripe", "mot_de_passe", "jeton", "smtp", "autre"];
 const INFRA_COFFRE = new Set(["cloudflare", "ssh", "certificat", "github", "aws"]); // the scope proposed by type (ARCHITECTURE §Coffre)
-const typeCoffre = (x) => ({ ssh: t("SSH key"), certificat: t("Certificate"), mot_de_passe: t("Password"), jeton: t("Token"), autre: t("Other"),
+const typeCoffre = (x) => ({ ssh: t("SSH key"), certificat: t("Certificate"), mot_de_passe: t("Password"), jeton: t("Token"), smtp: t("E-mail account"), autre: t("Other"),
   cloudflare: "Cloudflare", github: "GitHub", aws: "AWS", anthropic: "Anthropic", openai: "OpenAI", stripe: "Stripe" })[x] || x;
 const entreeCoffre = (id) => (cof.d.entrees || []).find((x) => x.id === id);
 const TESTABLES_COFFRE = new Set(["cloudflare", "github", "ssh"]); // the types POST /api/coffre/tester checks

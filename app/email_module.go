@@ -33,13 +33,7 @@ func (moduleEmail) Tutoriel() []EtapeTutoriel { return nil }
 
 func (moduleEmail) Routes(mux *http.ServeMux, s *Serveur) {
 	mux.HandleFunc("GET /api/email/comptes", s.garde(false, s.apiEmailComptes))
-}
-
-func (s *Serveur) apiEmailComptes(w http.ResponseWriter, r *http.Request) {
-	liste, err := lireComptesEmail()
-	if err != nil {
-		s.erreur(w, http.StatusInternalServerError, "The email accounts cannot be read")
-		return
-	}
-	s.ecrireJSON(w, map[string]any{"comptes": liste})
+	mux.HandleFunc("POST /api/email/comptes", s.garde(false, s.apiEmailAjouter))
+	mux.HandleFunc("POST /api/email/comptes/{id}", s.garde(false, s.apiEmailModifier))
+	mux.HandleFunc("DELETE /api/email/comptes/{id}", s.garde(false, s.apiEmailSupprimer))
 }

@@ -183,22 +183,29 @@ func (s *Serveur) apiCoffreSupprimer(w http.ResponseWriter, r *http.Request) {
 	if s.cleDeServeur(w, id, "This key opens the server {0}: remove that server first") { // removed, it would cut it off
 		return
 	}
+	if err := s.retirerDuCoffre(id); err != nil {
+		s.erreurCoffre(w, err)
+		return
+	}
+	s.ecrireJSON(w, map[string]bool{"ok": true})
+}
+
+// retirerDuCoffre deletes an entry with its grants (also used by the e-mail module for an account's password).
+func (s *Serveur) retirerDuCoffre(id string) error {
 	if s.acces != nil && s.accesErr == nil {
 		// its grants go and the files are rewritten while it is still in the vault: its value is then
 		// recognised and leaves every secrets.env instead of staying there as an old-file line
 		reste := slices.DeleteFunc(s.coffre.Liste(), func(e EntreeCoffre) bool { return e.ID == id })
 		if err := s.acces.Synchroniser(reste, s.nomsProjets()); err != nil {
-			s.erreur(w, http.StatusInternalServerError, err.Error())
-			return
+			return err
 		}
 		s.injecterTous(nil)
 	}
 	if err := s.coffre.Supprimer(id); err != nil {
-		s.erreurCoffre(w, err)
-		return
+		return err
 	}
 	_ = s.synchroniserAcces()
-	s.ecrireJSON(w, map[string]bool{"ok": true})
+	return nil
 }
 
 // cleDeServeur: true, the refusal written (409 with the servers' names), when a server reaches its host with
