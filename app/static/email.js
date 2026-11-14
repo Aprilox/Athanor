@@ -12,7 +12,7 @@ const PRESETS_EMAIL = [
   { id: "sendgrid", nom: "SendGrid", hote: "smtp.sendgrid.net", port: 587, securite: "starttls" },
 ];
 const SECURITES_EMAIL = { starttls: "STARTTLS (port 587)", tls: "TLS (port 465)", none: "None (this PC only)" };
-const em = { comptes: [], form: null }; // form: null, {} (new) or {id}
+const em = { comptes: [], form: null, test: null }; // form: null, {} (new) or {id}; test: the account whose test form is open
 
 function formulaireEmail() {
   const x = em.form.id && em.comptes.find((c) => c.id === em.form.id);
@@ -42,7 +42,10 @@ pages.email = async () => {
   const carte = (c) => `<div class="carte" data-em-compte="${h(c.id)}"><div class="ligne"><span class="ico ico-email" aria-hidden="true"></span><strong>${h(c.nom)}</strong></div>
     <p class="muet petit">${h(c.utilisateur || c.expediteur)} · ${h(c.hote)}:${h(String(c.port))} · ${h(t(SECURITES_EMAIL[c.securite] || c.securite))}</p>
     <p class="muet petit">${t("Sender")}: ${h(c.expediteur)}</p>
-    <div class="ligne m0"><button type="button" class="btn" data-em-modifier="${h(c.id)}">${t("Edit")}</button><button type="button" class="btn btn-danger" data-em-supprimer="${h(c.id)}">${t("Delete")}</button></div></div>`;
+    ${c.dernier_test ? `<p class="petit ${c.dernier_test.ok ? "ok" : "echec"}" data-em-resultat>${t("Last test ({0}, to {1}): {2}", [new Date(c.dernier_test.t).toLocaleString(), h(c.dernier_test.destinataire), h(t(c.dernier_test.message))])}</p>` : ""}
+    ${em.test === c.id ? `<form class="ligne m0" data-em-test-form="${h(c.id)}" autocomplete="off"><label class="champ"><span>${t("Recipient")}</span><input type="email" id="em-dest" maxlength="320" spellcheck="false" required value="${h(em.dest || "")}" placeholder="you@example.org"></label>
+      <button type="submit" class="btn btn-primaire">${t("Send")}</button><button type="button" class="btn" data-em-test-annuler>${t("Cancel")}</button></form>` : ""}
+    <div class="ligne m0"><button type="button" class="btn" data-em-tester="${h(c.id)}">${t("Send a test e-mail")}</button><button type="button" class="btn" data-em-modifier="${h(c.id)}">${t("Edit")}</button><button type="button" class="btn btn-danger" data-em-supprimer="${h(c.id)}">${t("Delete")}</button></div></div>`;
   return `<div class="email">
     <p class="muet email-explication">${t("Add an SMTP account (your provider's sending server): Athanor keeps its password in the vault, tests the sending and gives your deployed apps what they need to send emails.")}</p>
     ${em.form ? formulaireEmail() : `<div class="ligne"><button type="button" class="btn btn-primaire" data-em-ajouter>${t("Add an email account")}</button></div>`}
@@ -59,14 +62,31 @@ document.addEventListener("change", (ev) => {
 });
 
 document.addEventListener("click", async (ev) => {
-  const b = ev.target.closest("[data-em-ajouter], [data-em-modifier], [data-em-annuler], [data-em-supprimer]");
+  const b = ev.target.closest("[data-em-ajouter], [data-em-modifier], [data-em-annuler], [data-em-supprimer], [data-em-tester], [data-em-test-annuler]");
   if (!b) return;
+  if (b.hasAttribute("data-em-tester")) { em.test = b.dataset.emTester; return rendrePage().then(() => $("#em-dest")?.focus()); }
+  if (b.hasAttribute("data-em-test-annuler")) { em.test = null; return rendrePage(); }
   if (b.hasAttribute("data-em-ajouter")) { em.form = {}; return rendrePage().then(() => $("#em-preset")?.focus()); }
   if (b.hasAttribute("data-em-modifier")) { em.form = { id: b.dataset.emModifier }; return rendrePage().then(() => $("#em-nom")?.focus()); }
   if (b.hasAttribute("data-em-annuler")) { em.form = null; return rendrePage(); }
   const c = em.comptes.find((x) => x.id === b.dataset.emSupprimer);
   if (!c || !(await confirmer(t("Delete the email account {0}? Its password leaves the vault, and the projects it was given to lose it.", [c.nom]), { ok: t("Delete"), danger: true }))) return;
   if (await action(api("email/comptes/" + encodeURIComponent(c.id), "DELETE"))) { toast(t("{0} deleted.", [c.nom]), "ok"); rendrePage(); }
+});
+
+// the test send: its result in plain words (a toast and the card); 20 s at most on the server's side
+document.addEventListener("submit", async (ev) => {
+  const f = ev.target.closest("[data-em-test-form]");
+  if (!f) return;
+  ev.preventDefault();
+  em.dest = $("#em-dest").value.trim();
+  const bouton = f.querySelector("[type=submit]");
+  bouton.disabled = true; bouton.textContent = t("Sending…");
+  let r = null;
+  try { r = await api("email/comptes/" + encodeURIComponent(f.dataset.emTestForm) + "/test", "POST", { destinataire: em.dest }); }
+  catch (e) { toast(e.message, "erreur"); bouton.disabled = false; bouton.textContent = t("Send"); return; }
+  toast(t(r.message), r.ok ? "ok" : "erreur");
+  em.test = null; rendrePage();
 });
 
 document.addEventListener("submit", async (ev) => {

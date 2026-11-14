@@ -163,7 +163,7 @@ func TestEmailComptes(t *testing.T) {
 func TestEmailComptesTraduction(t *testing.T) {
 	for _, l := range []string{"fr", "es", "de", "it", "pt"} {
 		dico := dicoTUI(l)
-		for _, c := range errsEmail {
+		for _, c := range append(append(errsEmail, errsEnvoi...), "The test e-mail of {0} failed: {1}") {
 			if _, ok := dico[c]; !ok {
 				t.Errorf("%s: no translation of %q", l, c)
 			}

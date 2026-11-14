@@ -30,6 +30,8 @@ type CompteEmail struct {
 	Entree      string `json:"entree"`
 	Cree        string `json:"cree"`
 	Modifie     string `json:"modifie"`
+	// the last test send (M203): on the card, and in the bell while it failed
+	DernierTest *ResultatEnvoiEmail `json:"dernier_test,omitempty"`
 }
 
 // the refusals of an account form: fixed messages (never the input), translated by the page
@@ -218,6 +220,7 @@ func (s *Serveur) apiEmailModifier(w http.ResponseWriter, r *http.Request) {
 	compte.Nom, compte.Hote, compte.Port, compte.Securite = c.Nom, c.Hote, c.Port, c.Securite
 	compte.Utilisateur, compte.Expediteur = c.Utilisateur, c.Expediteur
 	compte.Modifie = time.Now().UTC().Format(time.RFC3339)
+	compte.DernierTest = nil // changed settings: the last test no longer tells about them
 	liste[i] = compte
 	if err := ecrireComptesEmail(liste); err != nil {
 		s.erreur(w, http.StatusInternalServerError, errEmailComptes)

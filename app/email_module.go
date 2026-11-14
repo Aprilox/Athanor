@@ -20,7 +20,19 @@ func (moduleEmail) Nom() string { return "E-mail" }
 func (moduleEmail) Pages() []PageModule {
 	return []PageModule{{Hash: "#email", Ordre: 35, Icone: "email", Libelle: "E-mail"}}
 }
-func (moduleEmail) Elements(*Serveur) []ElementHub { return nil }
+
+// Elements: an account whose last test send failed waits for the owner (the bell) until a test passes.
+func (moduleEmail) Elements(*Serveur) []ElementHub {
+	liste, _ := lireComptesEmail()
+	var out []ElementHub
+	for _, c := range liste {
+		if d := c.DernierTest; d != nil && !d.OK {
+			out = append(out, ElementHub{ID: c.ID, Titre: c.Nom, Etat: "erreur", Lien: "#email",
+				Attente: &AttenteElement{Raison: "The test e-mail of {0} failed: {1}", Args: []any{c.Nom, d.Message}, Page: "#email", Cle: d.T}})
+		}
+	}
+	return out
+}
 func (moduleEmail) Resume(*Serveur) ResumeModule {
 	liste, _ := lireComptesEmail()
 	r := ResumeModule{Stats: []StatModule{{Cle: "Email accounts", Valeur: len(liste), Page: "#email"}}, Etat: "inactif"}
@@ -36,4 +48,5 @@ func (moduleEmail) Routes(mux *http.ServeMux, s *Serveur) {
 	mux.HandleFunc("POST /api/email/comptes", s.garde(false, s.apiEmailAjouter))
 	mux.HandleFunc("POST /api/email/comptes/{id}", s.garde(false, s.apiEmailModifier))
 	mux.HandleFunc("DELETE /api/email/comptes/{id}", s.garde(false, s.apiEmailSupprimer))
+	mux.HandleFunc("POST /api/email/comptes/{id}/test", s.garde(false, s.apiEmailTester))
 }
