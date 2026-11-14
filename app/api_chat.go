@@ -283,6 +283,8 @@ type demandeChat struct {
 	// Internet: Claude may search and read the web for this message, only when the request needs it
 	Internet bool     `json:"internet"`
 	Pieces   []string `json:"pieces"` // files attached, uploaded first (api_pieces.go, cible "chat")
+	// the home conversation's folders (hub_chat_dossiers.go), set by the server, never by the page
+	Dossiers []DossierChat `json:"-"`
 }
 
 // lireDemandeChat: the message read and checked (text or files, length, model); false once the error is written.
@@ -385,6 +387,10 @@ func (s *Serveur) envoyerChat(w http.ResponseWriter, p Projet, c demandeChat, ga
 	if c.Internet {
 		fichiers[id+".internet"] = "1" // outil_chat_session.go: WebSearch and WebFetch allowed for this turn
 	}
+	if len(c.Dossiers) > 0 {
+		b, _ := json.Marshal(c.Dossiers)
+		fichiers[id+".dossiers"] = string(b) // outil_chat_session.go: --add-dir, and the files guard's folders
+	}
 	for nom, contenu := range fichiers {
 		if err := os.WriteFile(filepath.Join(d, nom), []byte(contenu), 0o600); err != nil {
 			s.finChat(k, p, en, "", err.Error())
@@ -414,7 +420,7 @@ func (s *Serveur) envoyerChat(w http.ResponseWriter, p Projet, c demandeChat, ga
 }
 
 func nettoyerTourChat(d, id string) {
-	for _, ext := range []string{".msg", ".prompt", ".subject", ".commit", ".settings.json", ".err", ".internet"} {
+	for _, ext := range []string{".msg", ".prompt", ".subject", ".commit", ".settings.json", ".err", ".internet", ".dossiers"} {
 		os.Remove(filepath.Join(d, id+ext))
 	}
 }

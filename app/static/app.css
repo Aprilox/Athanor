@@ -157,6 +157,11 @@ html.cadre .dialogue, html.cadre .verrou, html.cadre .assistant { top: var(--bar
 .hub-pouvoirs { flex: 1 1 18em; min-width: 0; font-size: 14px; }
 .hub-pouvoirs summary { cursor: pointer; padding: 6px 0; }
 .hub-pouvoirs .interrupteur { margin-top: 6px; }
+.hub-dossiers { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 8px; }
+.hub-dossiers-liste { list-style: none; margin: 6px 0 0; padding: 0; }
+.hub-dossiers-liste li { display: flex; align-items: center; gap: 8px; padding: 3px 0; min-width: 0; }
+.hub-dossiers-liste code { overflow-wrap: anywhere; font-size: 13px; }
+.accueil-chat.survol { border-color: var(--accent); background: var(--panel-3); }
 @media (max-width: 700px) { .accueil .hub-chat-fil { max-height: 55vh; } .accueil-barre .hub-chat-bas .btn { flex: 1 1 auto; justify-content: center; } }
 .cp-tete { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .cp-nom { font-size: 15.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }

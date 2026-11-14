@@ -2019,14 +2019,17 @@ pages.accueil = async () => {
   const hc = etat.hubChat || { messages: [], pouvoirs: {} };
   setTimeout(() => majHubChat(true), 0);
   return `<div class="accueil">
-    <form class="bloc accueil-barre accueil-chat" id="accueil-form">
+    <form class="bloc accueil-barre accueil-chat" id="accueil-form" data-pieces="hc">
       <div class="ligne m0 chat-tete"><label for="accueil-texte" class="accueil-titre croit">${t("What do you want to do?")}</label>
         <button type="button" class="btn btn-petit" id="hub-chat-nouveau">${t("New conversation")}</button></div>
       <div class="chat-fil hub-chat-fil" id="hub-chat-fil" role="log" aria-label="${h(t("Conversation"))}">${filHub(hc)}</div>
       <div class="champ-mentions" id="accueil-champ"><span id="accueil-puces" class="puces-mentions">${pucesMentions()}</span><textarea id="accueil-texte" class="croit" rows="${tactile() ? 2 : 3}" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="accueil-liste" aria-describedby="accueil-aide" placeholder="${h(tactile() ? t("Ask, or say what you want done…") : t("Ask, or say what you want done… (Enter sends, Shift+Enter: new line)"))}"></textarea></div>
       <ul id="accueil-liste" class="liste-mentions" role="listbox" aria-label="${h(t("Mentions"))}" hidden></ul>
+      <input type="file" multiple hidden id="hc-fichiers" accept="image/png,image/jpeg,image/gif,image/webp,.pdf,.txt,.md,.csv,.tsv,.json,.yaml,.yml,.xml,.toml,.ini,.log,.html,.css,.js,.ts,.go,.py,.sql">
+      <ul class="pieces-liste" id="hc-liste">${listePieces("hc")}</ul>
       <div class="ligne m0 puces-suggestions" id="accueil-sugg" role="group" aria-label="${h(t("Add to your request"))}">${suggestionsMentions()}</div>
       <div class="ligne m0 mt-1 hub-chat-bas">${pouvoirsHub(hc.pouvoirs || {})}<span class="espace"></span>
+        <button type="button" class="btn" data-choisir-pieces="hc" title="${h(t("Images, PDF and text files, 20 MB at most each; you can also drop or paste them"))}">📎 ${t("Attach files")}</button>
         <button type="button" class="btn" id="accueil-mission">${t("Create a mission")}</button>
         <button type="button" class="btn" id="hub-chat-stop" ${hc.en_cours ? "" : "hidden"}>${t("Stop")}</button>
         <button type="submit" class="btn btn-primaire" id="hub-chat-envoyer" ${hc.en_cours ? "hidden" : ""}>${t("Send")}</button></div>
@@ -2165,11 +2168,48 @@ function filHub(d) {
 }
 const POUVOIRS_HUB = [["internet", "🌐", "Internet", "Searches and reads the web when a message needs it."],
   ["ecriture", "✏️", "Writing", "Changes files, only in the folders you point to it with read and write, never elsewhere."]];
-const resumePouvoirs = (pv) => [t("Reads and answers"), ...POUVOIRS_HUB.filter(([k]) => pv[k]).map(([, i, n]) => i + " " + t(n))].join(" · ");
+const resumePouvoirs = (pv) => [t("Reads and answers"), ...POUVOIRS_HUB.filter(([k]) => pv[k]).map(([, i, n]) => i + " " + t(n)),
+  ...((pv.dossiers || []).length ? ["📁 " + t("{0} folder(s)", [pv.dossiers.length])] : [])].join(" · ");
+// M196: the folders pointed (checked by the server, hub_chat_dossiers.go), each read only or read and write
+function listeDossiersHub(pv) {
+  const l = pv.dossiers || [];
+  return l.length ? l.map((d, i) => `<li><code class="croit">${h(d.chemin)}</code>
+    <select data-dossier-acces="${i}" aria-label="${h(t("Access to {0}", [d.chemin]))}"><option value="">${t("Read only")}</option><option value="1" ${d.ecriture ? "selected" : ""}>${t("Read and write")}</option></select>
+    <button type="button" class="btn-lien" data-dossier-retirer="${i}" title="${h(t("Remove"))}" aria-label="${h(t("Remove {0}", [d.chemin]))}">✕</button></li>`).join("")
+    : `<li class="muet petit">${t("No folder: the assistant sees no file of your computer.")}</li>`;
+}
 function pouvoirsHub(pv) {
   return `<details class="hub-pouvoirs" id="hub-pouvoirs"><summary>${t("What the assistant can do")}: <span id="hub-pouvoirs-resume">${h(resumePouvoirs(pv))}</span></summary>
     ${POUVOIRS_HUB.map(([k, i, n, aide]) => `<label class="interrupteur m0"><input type="checkbox" data-pouvoir="${k}" ${pv[k] ? "checked" : ""} aria-describedby="pv-aide-${k}"><span>${i} ${t(n)}</span></label>
-    <p class="petit muet m0" id="pv-aide-${k}">${t(aide)}</p>`).join("")}</details>`;
+    <p class="petit muet m0" id="pv-aide-${k}">${t(aide)}</p>`).join("")}
+    <div class="hub-dossiers"><div class="ligne m0"><strong>📁 ${t("Folders")}</strong><span class="espace"></span><button type="button" class="btn btn-petit" id="hub-dossier-ajouter">${t("Add a folder…")}</button></div>
+      <p class="petit muet m0" id="pv-aide-dossiers">${t("The assistant reads only the folders you point here; with Writing on, it changes files only in those set to “read and write”. Drop a folder here to add it.")}</p>
+      <ul class="hub-dossiers-liste" id="hub-dossiers-liste" aria-describedby="pv-aide-dossiers">${listeDossiersHub(pv)}</ul></div></details>`;
+}
+async function changerPouvoirs(change) {
+  await action(api("hub/chat/pouvoirs", "POST", { ...((etat.hubChat || {}).pouvoirs || {}), ...change }), "");
+  majHubChat(true);
+}
+// a folder from the system's dialog (or Athanor's picker); a dropped folder: the page cannot see its path, the
+// dialog opens to confirm it
+async function ajouterDossierHub(nomGlisse) {
+  const titre = nomGlisse ? t("Choose the folder {0} to confirm it", [nomGlisse]) : t("Choose a folder for the assistant");
+  let r = null;
+  if (!(etat.vue || {}).distant) r = await api("dossiers/choisir", "POST", { depart: "", titre }).catch((e) => { toast(e.message, "erreur"); return { annule: true }; });
+  if (!r || r.indisponible) r = await selecteurDossier("", titre);
+  if (!r || !r.chemin) return;
+  changerPouvoirs({ dossiers: [...(((etat.hubChat || {}).pouvoirs || {}).dossiers || []), { chemin: r.chemin, ecriture: false }] });
+}
+// attached files of the home conversation: images, PDF and text, 20 MB at most each (hub_chat_dossiers.go)
+const TYPES_PIECE_HUB = /\.(png|jpe?g|gif|webp|pdf|txt|md|csv|tsv|json|ya?ml|xml|toml|ini|log|html|css|js|ts|go|py|sql)$/i, TAILLE_PIECE_HUB = 20 * 1024 * 1024;
+function ajouterPiecesHub(fichiers) {
+  const l = etat.pieces.hc = etat.pieces.hc || [];
+  for (const f of fichiers) {
+    if (!TYPES_PIECE_HUB.test(f.name)) { toast(t("{0}: this type of file is not accepted (images, PDF and text files only).", [f.name]), "erreur"); continue; }
+    if (f.size > TAILLE_PIECE_HUB) { toast(t("{0} is too large (20 MB at most).", [f.name]), "erreur"); continue; }
+    if (!l.some((x) => x.name === f.name && x.size === f.size)) l.push(f);
+  }
+  const ul = $("#hc-liste"); if (ul) ul.innerHTML = listePieces("hc");
 }
 async function majHubChat(force) {
   if (etat.page !== "accueil") return;
@@ -2187,19 +2227,31 @@ async function majHubChat(force) {
   const pv = d.pouvoirs || {};
   document.querySelectorAll("[data-pouvoir]").forEach((c) => { c.checked = !!pv[c.dataset.pouvoir]; });
   const r = $("#hub-pouvoirs-resume"); if (r) r.textContent = resumePouvoirs(pv);
+  const ld = $("#hub-dossiers-liste"); if (ld) ld.innerHTML = listeDossiersHub(pv);
   const b = $("#hub-chat-envoyer"), st = $("#hub-chat-stop");
   if (b) b.hidden = !!d.en_cours;
   if (st) st.hidden = !d.en_cours;
 }
+async function envoyerPieceHub(f) {
+  const r = await fetch("/api/hub/chat/piece", { method: "POST", headers: { "X-Athanor": CSRF, "X-Nom-Fichier": encodeURIComponent(f.name) }, body: f });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.erreur_key ? t(d.erreur_key, d.args || []) : t("Error {0}", [r.status]));
+  return d;
+}
 async function envoyerHubChat() {
   const champ = $("#accueil-texte"); if (!champ || etat.hubChatEnvoi) return;
-  const texte = champ.value.trim(), ments = etat.accueilMentions || [];
-  if (!texte) return;
+  const texte = champ.value.trim(), ments = etat.accueilMentions || [], fichiers = etat.pieces.hc || [];
+  if (!texte && !fichiers.length) return;
   etat.hubChatEnvoi = true; // a double Enter sends once
   const message = ments.length ? texte + "\n\n" + ments.map((m) => "@" + m.nom).join(" ") : texte;
-  const r = await action(api("hub/chat", "POST", { message }), "").finally(() => { etat.hubChatEnvoi = false; });
+  const pieces = []; // the files first, then the message that names them; one that fails stops the sending
+  for (const f of fichiers) {
+    try { pieces.push((await envoyerPieceHub(f)).chemin); } catch (e) { toast(t("{0} could not be attached: {1}", [f.name, e.message]), "erreur"); etat.hubChatEnvoi = false; return; }
+  }
+  const r = await action(api("hub/chat", "POST", pieces.length ? { message, pieces } : { message }), "").finally(() => { etat.hubChatEnvoi = false; });
   if (!r) return;
   etat.accueilTexte = ""; etat.accueilMentions = []; champ.value = ""; majMentions();
+  etat.pieces.hc = []; const ul = $("#hc-liste"); if (ul) ul.innerHTML = "";
   majHubChat(true);
 }
 document.addEventListener("keydown", (ev) => {
@@ -2208,15 +2260,16 @@ document.addEventListener("keydown", (ev) => {
   ev.preventDefault(); envoyerHubChat();
 });
 document.addEventListener("click", async (ev) => {
-  const b = ev.target.closest("#accueil-mission, #hub-chat-stop, #hub-chat-nouveau"); if (!b) return;
+  const b = ev.target.closest("#accueil-mission, #hub-chat-stop, #hub-chat-nouveau, #hub-dossier-ajouter, [data-dossier-retirer]"); if (!b) return;
   if (b.id === "accueil-mission") return envoyerAccueil();
+  if (b.id === "hub-dossier-ajouter") return ajouterDossierHub();
+  if (b.dataset.dossierRetirer) return changerPouvoirs({ dossiers: (etat.hubChat.pouvoirs.dossiers || []).filter((x, i) => i !== +b.dataset.dossierRetirer) });
   if (b.id === "hub-chat-stop") { await action(api("hub/chat/arreter", "POST")); return majHubChat(true); }
   if (await confirmer(t("Start a new conversation? The assistant forgets this one, and its powers are switched off."), { ok: t("New conversation") })) { await action(api("hub/chat/effacer", "POST")); majHubChat(true); }
 });
 document.addEventListener("change", async (ev) => {
-  if (!ev.target.matches("#hub-pouvoirs [data-pouvoir]")) return;
-  const pv = {}; document.querySelectorAll("#hub-pouvoirs [data-pouvoir]").forEach((c) => { pv[c.dataset.pouvoir] = c.checked; });
-  await action(api("hub/chat/pouvoirs", "POST", pv)); majHubChat(true);
+  if (ev.target.matches("#hub-pouvoirs [data-dossier-acces]")) return changerPouvoirs({ dossiers: (etat.hubChat.pouvoirs.dossiers || []).map((x, i) => i === +ev.target.dataset.dossierAcces ? { ...x, ecriture: !!ev.target.value } : x) });
+  if (ev.target.matches("#hub-pouvoirs [data-pouvoir]")) changerPouvoirs({ [ev.target.dataset.pouvoir]: ev.target.checked });
 });
 document.addEventListener("input", (ev) => { if (ev.target.id === "accueil-texte") { etat.accueilTexte = ev.target.value; chercherMentions(ev.target); } });
 
@@ -3847,6 +3900,7 @@ function listePieces(id) {
   return (etat.pieces[id] || []).map((f, i) => `<li><span>${h(f.name)}</span> <span class="muet petit">${h(tailleCourte(f.size))}</span> <button type="button" class="btn-lien" data-retirer-piece="${id}|${i}" title="${h(t("Remove"))}">✕</button></li>`).join("");
 }
 function ajouterPieces(id, fichiers) {
+  if (id === "hc") return ajouterPiecesHub(fichiers); // the home conversation: its own types and size
   const l = etat.pieces[id] = etat.pieces[id] || [];
   for (const f of fichiers) {
     if (f.size > TAILLE_PIECE_MAX) { toast(t("{0} is too large (50 MB at most).", [f.name]), "erreur"); continue; }
@@ -6185,9 +6239,9 @@ $("#page").addEventListener("click", async (ev) => {
 
 // an image pasted in the chat's field (a screenshot): attached to the message
 $("#page").addEventListener("paste", (ev) => {
-  if (ev.target.id !== "chat-texte" || !ev.clipboardData || !ev.clipboardData.files.length) return;
+  if (!["chat-texte", "accueil-texte"].includes(ev.target.id) || !ev.clipboardData || !ev.clipboardData.files.length) return;
   ev.preventDefault();
-  ajouterPieces("ct", ev.clipboardData.files);
+  ajouterPieces(ev.target.id === "chat-texte" ? "ct" : "hc", ev.clipboardData.files);
 });
 $("#page").addEventListener("keydown", (ev) => {
   // on a touch screen, Enter is a new line (the keyboard has no Shift+Enter): the Send button sends
@@ -6225,15 +6279,23 @@ $("#page").addEventListener("change", (ev) => {
 window.addEventListener("dragover", (ev) => {
   if (!fichiersGlisses(ev)) return;
   const z = ev.target.closest && ev.target.closest("[data-pieces]");
-  document.querySelectorAll(".pieces.survol").forEach((x) => x !== z && x.classList.remove("survol"));
+  document.querySelectorAll("[data-pieces].survol").forEach((x) => x !== z && x.classList.remove("survol"));
   if (z) z.classList.add("survol");
   ev.dataTransfer.dropEffect = z ? "copy" : "none";
 });
-window.addEventListener("dragleave", (ev) => { if (!ev.relatedTarget) document.querySelectorAll(".pieces.survol").forEach((x) => x.classList.remove("survol")); });
+window.addEventListener("dragleave", (ev) => { if (!ev.relatedTarget) document.querySelectorAll("[data-pieces].survol").forEach((x) => x.classList.remove("survol")); });
 window.addEventListener("drop", (ev) => {
   if (!fichiersGlisses(ev)) return;
-  document.querySelectorAll(".pieces.survol").forEach((x) => x.classList.remove("survol"));
+  document.querySelectorAll("[data-pieces].survol").forEach((x) => x.classList.remove("survol"));
   const z = ev.target.closest && ev.target.closest("[data-pieces]");
+  if (z && z.dataset.pieces === "hc") { // a folder dropped on the home conversation is pointed, its files never sent
+    const entrees = [...ev.dataTransfer.items].map((i) => i.webkitGetAsEntry && i.webkitGetAsEntry());
+    const dossier = entrees.find((e) => e && e.isDirectory);
+    const fichiers = [...ev.dataTransfer.files].filter((f, i) => !(entrees[i] && entrees[i].isDirectory));
+    if (fichiers.length) ajouterPieces("hc", fichiers);
+    if (dossier) ajouterDossierHub(dossier.name);
+    return;
+  }
   if (z && ev.dataTransfer.files.length) ajouterPieces(z.dataset.pieces, ev.dataTransfer.files);
 });
 $("#page").addEventListener("change", (ev) => {

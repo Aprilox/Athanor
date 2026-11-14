@@ -115,8 +115,11 @@ func TestWebTraduction(t *testing.T) {
 		"This Cloudflare token sees no zone: give it access to your domain's zone.") // the providers (M114)
 	cles = append(cles, errCleDeploiementNonLie.Error(), errCleDeploiementGH) // the deployment key (M119)
 	cles = append(cles, "The mission waits for the vault to be unlocked")     // the bell after a restart (M170)
-	cles = append(cles, clesMoteur(t)...)                                     // the engine's messages (B79)
-	cles = append(cles, clesJournalMission(t)...)                             // a mission's journal (M171)
+	cles = append(cles, errDossierAbsolu.Error(), errDossierPoints.Error(), errDossierAbsent.Error(), errDossierLien.Error(), errDossierSecret.Error(),
+		errDossierAthanor.Error(), errDossierSysteme.Error(), errDossiersTrop.Error(), errPieceAccueilTropGrosse.Error(),
+		"This type of file is not accepted: images, PDF and text files only.") // the home conversation's folders and files (M196)
+	cles = append(cles, clesMoteur(t)...)         // the engine's messages (B79)
+	cles = append(cles, clesJournalMission(t)...) // a mission's journal (M171)
 	for _, l := range []string{"fr", "es", "de", "it", "pt"} {
 		dico := dicoTUI(l)
 		if len(dico) < 1000 {

@@ -9,12 +9,14 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 )
 
 type PouvoirsChat struct {
 	Internet bool `json:"internet"` // search and read the web
 	// Writing: change files, only in the folders pointed read and write (M196); with none, the turns only read
-	Ecriture bool `json:"ecriture"`
+	Ecriture bool          `json:"ecriture"`
+	Dossiers []DossierChat `json:"dossiers"` // the folders pointed (hub_chat_dossiers.go), each read only or read and write
 }
 
 func projetAccueil(k Kit) Projet { return Projet{Dossier: filepath.Join(dossierChat(k), "accueil")} }
@@ -32,6 +34,13 @@ const consigneLectureAccueil = `In this conversation you can only read and answe
 something done (create a project and start its pilot, launch a mission, leave a remark to a project), say in
 one or two sentences where to do it in Athanor: "New project" on the Projects page, the project's Requests
 page, or "Create a mission" under this conversation.`
+
+const consigneEcritureAccueil = `The user switched Writing on: you may change files (Edit, Write), but only inside the folders listed
+below as "read and write", never elsewhere, and only to make a change the user explicitly asks for in this
+message. A question, an idea or a remark gets an answer and no change; when unsure, ask first. You cannot run
+commands. Keep the change small and end with the list of the files you changed. For anything else (a project,
+its pilot, a mission), say where to do it in Athanor: "New project" on the Projects page, the project's
+Requests page, or "Create a mission" under this conversation.`
 
 func (s *Serveur) apiHubChat(w http.ResponseWriter, r *http.Request) {
 	p := projetAccueil(s.kitCourant())
@@ -51,9 +60,23 @@ func (s *Serveur) apiHubChatEnvoyer(w http.ResponseWriter, r *http.Request) {
 		s.erreur(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	// the powers are the conversation's, never the message's; writing waits for folders pointed read and write (M196)
-	c.Internet, c.Mode = lireConversation(k, p).Pouvoirs.Internet, "question"
-	s.envoyerChat(w, p, c, consigneAccueil, consigneLectureAccueil, consigneLectureAccueil)
+	// the powers are the conversation's, never the message's; the folders checked again (one may have changed)
+	pv := lireConversation(k, p).Pouvoirs
+	dossiers, err := verifierDossiersChat(k, pv.Dossiers)
+	if err != nil {
+		s.erreur(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	c.Internet, c.Mode, c.Dossiers = pv.Internet, "question", dossiers
+	if pv.Ecriture && slices.ContainsFunc(dossiers, func(d DossierChat) bool { return d.Ecriture }) {
+		c.Mode = "modif" // writing only where the user said read and write (the files guard of the session)
+	} else {
+		for i := range c.Dossiers {
+			c.Dossiers[i].Ecriture = false
+		}
+	}
+	liste := texteDossiersChat(c.Dossiers, c.Mode == "modif")
+	s.envoyerChat(w, p, c, consigneAccueil, consigneLectureAccueil+liste, consigneEcritureAccueil+liste)
 }
 
 // apiHubChatPouvoirs: the user switches a power on or off for this conversation.
@@ -65,6 +88,11 @@ func (s *Serveur) apiHubChatPouvoirs(w http.ResponseWriter, r *http.Request) {
 	}
 	k := s.kitCourant()
 	p := projetAccueil(k)
+	var err error
+	if c.Dossiers, err = verifierDossiersChat(k, c.Dossiers); err != nil {
+		s.erreur(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	conv := lireConversation(k, p)
 	conv.Pouvoirs = c
 	ecrireConversation(k, p, conv)

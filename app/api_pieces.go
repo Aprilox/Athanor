@@ -21,13 +21,14 @@ import (
 var taillePieceMax int64 = 50 << 20 // 50 MB per file (a variable for the tests)
 
 var (
-	reNomPiece         = regexp.MustCompile(`[^\p{L}\p{N}._() -]+`)
-	nomsReserves       = regexp.MustCompile(`(?i)^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\..*)?$`)
-	verrouDemandes     sync.Mutex // the request files, written by the attachments
-	enteteFichiers     = map[string]string{"en": "## Attached files", "fr": "## Fichiers joints", "es": "## Archivos adjuntos", "de": "## Angehängte Dateien", "it": "## File allegati", "pt": "## Ficheiros anexos"}
-	prefixeLignePJ     = "- `.athanor/attachments/"
-	errLienAtelier     = errors.New("The workshop holds a link where a folder is expected: nothing was written.")
-	errPieceTropGrosse = errors.New("File too large (50 MB at most).")
+	reNomPiece                = regexp.MustCompile(`[^\p{L}\p{N}._() -]+`)
+	nomsReserves              = regexp.MustCompile(`(?i)^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\..*)?$`)
+	verrouDemandes            sync.Mutex // the request files, written by the attachments
+	enteteFichiers            = map[string]string{"en": "## Attached files", "fr": "## Fichiers joints", "es": "## Archivos adjuntos", "de": "## Angehängte Dateien", "it": "## File allegati", "pt": "## Ficheiros anexos"}
+	prefixeLignePJ            = "- `.athanor/attachments/"
+	errLienAtelier            = errors.New("The workshop holds a link where a folder is expected: nothing was written.")
+	errPieceTropGrosse        = errors.New("File too large (50 MB at most).")
+	errPieceAccueilTropGrosse = errors.New("File too large (20 MB at most).")
 )
 
 // nomPiece: a file name that is safe on Windows and Linux and readable in Markdown.
@@ -141,8 +142,19 @@ func (s *Serveur) apiPiece(w http.ResponseWriter, r *http.Request) {
 		s.erreur(w, http.StatusBadRequest, "Invalid request")
 		return
 	}
+	s.recevoirPiece(w, r, p, fichier, sous, taillePieceMax)
+}
+
+// nomPieceEnvoyee: the file's name as the page sent it, made safe.
+func nomPieceEnvoyee(r *http.Request) string {
 	brut, _ := url.QueryUnescape(r.Header.Get("X-Nom-Fichier"))
-	nom := nomPiece(brut)
+	return nomPiece(brut)
+}
+
+// recevoirPiece: the file sent into .athanor/attachments/<sous>/ (max bytes at most), listed in fichier when
+// one is given; answers {nom, chemin, taille}.
+func (s *Serveur) recevoirPiece(w http.ResponseWriter, r *http.Request, p Projet, fichier, sous string, max int64) {
+	nom := nomPieceEnvoyee(r)
 	if _, err := dossierSur(p.Dossier, ".athanor"); err != nil {
 		s.erreur(w, http.StatusBadRequest, err.Error())
 		return
@@ -158,12 +170,15 @@ func (s *Serveur) apiPiece(w http.ResponseWriter, r *http.Request) {
 		s.erreur(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	n, err := io.Copy(t, io.LimitReader(r.Body, taillePieceMax+1))
+	n, err := io.Copy(t, io.LimitReader(r.Body, max+1))
 	if e := t.Close(); err == nil {
 		err = e
 	}
-	if err == nil && n > taillePieceMax {
+	if err == nil && n > max {
 		err = errPieceTropGrosse
+		if max == taillePieceAccueil {
+			err = errPieceAccueilTropGrosse
+		}
 	}
 	if err != nil {
 		os.Remove(t.Name())

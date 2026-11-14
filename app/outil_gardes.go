@@ -1,6 +1,6 @@
 package main
 
-// athanor hook fichiers ALLOWED… [--lecture=DIR…] | hook bash: the PreToolUse hooks of Claude's tools
+// athanor hook fichiers ALLOWED... [--lecture=DIR...] [--sans-secrets] | hook bash: the PreToolUse hooks of Claude's tools
 // (replace system/guard.py and system/bash_guard.py, same decisions and messages). Exit code 2 = the
 // action is refused and Claude reads why on stderr; any unreadable input lets the call through, as the
 // scripts did (a hook never blocks Claude by accident).
@@ -277,8 +277,11 @@ var reLecteurWindows = regexp.MustCompile(`^[A-Za-z]:[\\/]`)
 // gardeFichiers: "" when the call may go on, else the reason it is refused.
 func gardeFichiers(args []string, entree []byte) string {
 	var racines, lecture []string
+	sansSecrets := false // the chat: never a secrets file (.env, .env.*, secrets.env), even to read it
 	for _, r := range args {
-		if strings.HasPrefix(r, "--lecture=") {
+		if r == "--sans-secrets" {
+			sansSecrets = true
+		} else if strings.HasPrefix(r, "--lecture=") {
 			lecture = append(lecture, propreGarde(windowsGarde(strings.TrimPrefix(r, "--lecture="))))
 		} else {
 			racines = append(racines, propreGarde(windowsGarde(r)))
@@ -313,6 +316,9 @@ func gardeFichiers(args []string, entree []byte) string {
 	}
 	for _, c := range candidats {
 		chemin := normaliserGarde(c, base)
+		if n := strings.ToLower(chemin[strings.LastIndexAny(chemin, `/\`)+1:]); sansSecrets && (n == ".env" || strings.HasPrefix(n, ".env.") || n == "secrets.env") {
+			return "Refused by the guard: a secrets file is never read in the chat."
+		}
 		if !outilsEcriture[outil] && dedansGarde(chemin, lecture) {
 			continue
 		}
@@ -405,7 +411,7 @@ func gardeBash(entree []byte) string {
 
 func lancerHook(args []string) int {
 	if len(args) == 0 || (args[0] != "fichiers" && args[0] != "bash") {
-		fmt.Fprintln(os.Stderr, "usage: athanor hook fichiers ALLOWED... [--lecture=DIR...] | hook bash  (PreToolUse input on stdin)")
+		fmt.Fprintln(os.Stderr, "usage: athanor hook fichiers ALLOWED... [--lecture=DIR...] [--sans-secrets] | hook bash  (PreToolUse input on stdin)")
 		return 2
 	}
 	entree, err := io.ReadAll(io.LimitReader(os.Stdin, 64<<20))

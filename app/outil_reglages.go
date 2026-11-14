@@ -361,11 +361,22 @@ func reglagesChat(projet, sortie string) error { return reglagesChatInternet(pro
 
 // reglagesChatInternet: the chat's settings; internet: WebSearch and WebFetch let through (the user switched
 // Internet on for this message).
-func reglagesChatInternet(projet, sortie string, internet bool) error {
-	commande := ligneShell(exeHook(), "hook", "fichiers", projet)
-	if runtime.GOOS == "windows" {
-		commande = ligneShell(exeHook(), "hook", "fichiers", strings.ReplaceAll(projet, "\\", "/"))
+func reglagesChatInternet(projet, sortie string, internet bool, dossiers ...DossierChat) error {
+	// the files guard: the project, the folders pointed read and write; the others read only; never a secrets file
+	gardes := []string{"hook", "fichiers", "--sans-secrets", projet}
+	for _, d := range dossiers {
+		if d.Ecriture {
+			gardes = append(gardes, d.Chemin)
+		} else {
+			gardes = append(gardes, "--lecture="+d.Chemin)
+		}
 	}
+	if runtime.GOOS == "windows" {
+		for i := range gardes {
+			gardes[i] = strings.ReplaceAll(gardes[i], "\\", "/")
+		}
+	}
+	commande := ligneShell(append([]string{exeHook()}, gardes...)...)
 	var h objetJSON
 	h.mettre("type", "command")
 	h.mettre("timeout", 10)
@@ -378,6 +389,8 @@ func reglagesChatInternet(projet, sortie string, internet bool) error {
 	if internet {
 		interdits = []string{"Bash", "NotebookEdit"}
 	}
+	// the secrets files stay out of reach of every reading tool too (Grep, Glob), whatever the folder
+	interdits = append(interdits, "Read(**/.env)", "Read(**/.env.*)", "Read(**/secrets.env)")
 	r.mettre("permissions", map[string]any{"deny": interdits})
 	r.mettre("hooks", map[string]any{"PreToolUse": []objetJSON{c}})
 	r.mettre("includeCoAuthoredBy", false)

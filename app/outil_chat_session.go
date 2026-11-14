@@ -7,6 +7,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -32,7 +33,12 @@ func sessionChat(kit, projet, id, mode, modele, session string) int {
 		return 2
 	}
 	internet := existeP(c + ".internet") // the user switched Internet on for this message
-	if err := reglagesChatInternet(projet, c+".settings.json", internet); err != nil {
+	var dossiers []DossierChat           // the home conversation's folders (hub_chat_dossiers.go)
+	if b, err := os.ReadFile(c + ".dossiers"); err == nil && json.Unmarshal(b, &dossiers) != nil {
+		fmt.Fprintln(os.Stderr, "Cannot read the chat's folders")
+		return 2
+	}
+	if err := reglagesChatInternet(projet, c+".settings.json", internet, dossiers...); err != nil {
 		fmt.Fprintln(os.Stderr, "Cannot write the chat's settings")
 		return 2
 	}
@@ -63,6 +69,9 @@ func sessionChat(kit, projet, id, mode, modele, session string) int {
 		args = append(args, "--disallowedTools", "Bash", "Edit", "Write", "MultiEdit", "NotebookEdit")
 	}
 	args = append(append(args, sansWeb...), "Task")
+	for _, d := range dossiers {
+		args = append(args, "--add-dir", d.Chemin)
+	}
 	if modele != "" {
 		args = append(args, "--model", modele)
 	}

@@ -60,7 +60,7 @@ func init() {
 		"reprise":                {"reprise PROJECT PRIVATE_DIR: at the pilot's start, what a stop in the middle or another PC left (git locks repaired, the rest in .athanor/RESUME.md for Claude)", lancerReprise},
 		"mcp-ouvrir":             {"mcp-ouvrir KIT PROJECT OPENINGS.json: the programs the cycle's MCP servers drive, opened before it (the pilot)", lancerMCPOuvrir},
 		"detecter":               {"detecter [KIT]: the PC tools and the toolchain, into system/pc_tools.env and PROJECT/.athanor/PC_TOOLS.md (the pilot)", lancerDetecter},
-		"hook":                   {"hook fichiers ALLOWED... [--lecture=DIR...] | hook bash: the PreToolUse hooks of Claude's tools (stdin: the call)", lancerHook},
+		"hook":                   {"hook fichiers ALLOWED... [--lecture=DIR...] [--sans-secrets] | hook bash: the PreToolUse hooks of Claude's tools (stdin: the call)", lancerHook},
 		"reglages":               {"reglages KIT OUTPUT.json: the Claude Code settings of a cycle (PROJECT in the environment; the pilot)", lancerReglages},
 		"chat":                   {"chat settings PROJECT OUT: the Claude Code settings of the app's chat", lancerChatOutil},
 		"relais":                 {"relais contexte LOG | sur LOG | resume LOG [HANDOFF]: taking over a milestone when a session's context is full (the pilot)", lancerRelais},
