@@ -6154,16 +6154,16 @@ $("#page").addEventListener("submit", async (ev) => {
 });
 // a task launched on a server (its sheet, the assistant beside its terminal); native Windows mode proposes WSL, or
 // forcing it with Athanor's password; null when nothing was launched (the error already shown)
-function lancerTacheSrv(id, texte, env) {
+function lancerTacheSrv(id, texte, env, terminal) {
   const url = "serveurs/" + encodeURIComponent(id) + "/taches";
-  return api(url, "POST", { texte, env }).catch(async (e) => {
+  return api(url, "POST", { texte, env, terminal }).catch(async (e) => {
     if (!e.data || !e.data.proposer_wsl) throw e;
     const c = await choisir(t("Native Windows mode has no barrier: an agent working on your servers would run with all your rights on this PC. Switch to WSL, or force this task knowing the risk."),
       [{ id: "wsl", texte: t("Switch to WSL"), primaire: true }, { id: "forcer", texte: t("Force this task"), danger: true }, { id: "", texte: t("Cancel") }], { titre: t("Native Windows mode") });
     if (c === "wsl") { location.hash = "#options@bloc-direct"; return null; }
     if (c !== "forcer") return null;
     const p = await preuveMdp(t("Forcing a Servers task without the barrier: retype Athanor's password."), { ok: t("Force this task"), danger: true }, t("Force this task without the barrier?"));
-    return p ? api(url, "POST", { texte, env, forcer: true, ...p }) : null;
+    return p ? api(url, "POST", { texte, env, terminal, forcer: true, ...p }) : null;
   }).catch((e) => { if (e.message !== t("Locked")) toast(e.message, "erreur"); return null; });
 }
 // the countdown of the changes waiting for confirmation; at its end the server has undone the change: read it again
@@ -6406,7 +6406,7 @@ async function lireTerminal(id, session) {
       return erreurTerminal(d.erreur_key || "", d.erreur_key ? t(d.erreur_key) : t("Error {0}", [r.status]));
     }
     term.x.reset(); // the Go side replays the screen so far
-    etatTerminal(t("Connected"), "travaille"); term.x.options.disableStdin = false; term.x.focus();
+    etatTerminal(t("Connected"), "travaille"); term.x.options.disableStdin = !!ia.verrou; term.x.focus();
     agirTerminal({ cols: term.x.cols, lignes: term.x.rows }); // the size it had when the page was away
     chargerSftp(sf.serveur === id ? sf.chemin : "");
     const lu = r.body.getReader();
@@ -6604,15 +6604,17 @@ $("#page").addEventListener("drop", (ev) => {
 // --- The assistant beside the terminal (M231e): a Servers task on this server whose every call shows here live.
 // Mode "separate connection": its agent's calls each open their own SSH session (serveurs_ia_terminal.go), with
 // the same guards as any task: risk class, a plan before any change, your decision, backups, outputs as data.
-const ia = { visible: localStorage.getItem("athanor.terminal.ia") === "1", taches: [], plans: {}, lu: "", minuteur: 0, ouvertes: new Set(), suivi: true };
+// Mode "live in my terminal" (M231f): the same calls, also shown on your terminal's screen, its typing locked meanwhile.
+const ia = { visible: localStorage.getItem("athanor.terminal.ia") === "1", mode: localStorage.getItem("athanor.terminal.ia.mode") === "direct" ? "direct" : "apart",
+  verrou: "", taches: [], plans: {}, lu: "", minuteur: 0, ouvertes: new Set(), suivi: true };
 const ETATS_ACTION_IA = () => ({ en_cours: [t("running…"), "pv-claude"], ok: [t("Done"), "pv-ok"], erreur: [t("Failed"), "pv-vous"], refusee: [t("Refused"), "pv-vous"] });
 function panneauIA(distant) {
-  const mode = (v, titre, phrase, actif) => `<label class="ia-mode${actif ? " actif" : ""}"><input type="radio" name="ia-mode" value="${v}"${actif ? " checked" : " disabled"}>
+  const mode = (v, titre, phrase) => `<label class="ia-mode${ia.mode === v ? " actif" : ""}"><input type="radio" name="ia-mode" value="${v}"${ia.mode === v ? " checked" : ""}>
     <span><b>${t(titre)}</b> <span class="muet petit">${t(phrase)}</span></span></label>`;
   return `<aside class="ia" id="ia" aria-label="${h(t("Assistant"))}">
     <fieldset class="ia-modes"><legend class="petit">${t("How the assistant works")}</legend>
-      ${mode("apart", "Separate connection", "It opens its own SSH session on the server, so it never gets in your way; you follow each command here.", true)}
-      ${mode("direct", "Live in my terminal", "Its commands are typed into your terminal and you watch them run.", false)}</fieldset>
+      ${mode("apart", "Separate connection", "It opens its own SSH session on the server, so it never gets in your way; you follow each command here.")}
+      ${mode("direct", "Live in my terminal", "Its commands are typed into your terminal and you watch them run.")}</fieldset>
     <div class="ia-fil" id="ia-fil" aria-live="polite"></div>
     <div class="ia-encours" id="ia-encours"></div>
     ${distant ? `<p class="muet petit m0">${t("Tasks are launched from the computer; their plans are decided on their cards, on the For you page.")}</p>`
@@ -6642,7 +6644,7 @@ function actionIA(a) {
 function tacheIA(x) {
   const [lib, cl] = ETATS_TACHE_SRV()[x.etat] || [x.etat, ""], fin = (x.historique || []).slice(-1)[0] || {};
   const plan = x.etat === "attente_accord" && (x.plans || []).length ? x.plans[x.plans.length - 1] : "", p = plan && ia.plans[plan];
-  return `<div class="ia-tache" data-tache="${h(x.id)}"><p class="ia-demande">${h(x.texte)}</p>
+  return `<div class="ia-tache" data-tache="${h(x.id)}"><p class="ia-demande">${h(x.texte)}${x.direct ? ` <span class="pv-etat pv-claude">${t("In your terminal")}</span>` : ""}</p>
     ${(x.actions || []).length ? `<ol class="ia-actions">${x.actions.map(actionIA).join("")}</ol>` : ""}
     ${p ? `<div class="ia-plan"><p class="m0"><b>${t("Plan to apply")}</b> <span class="muet petit">${h(t("{0} step(s)", [(p.etapes || []).length]))}</span></p>${blocPlan({}, p)}
       ${(etat.vue || {}).distant ? "" : `<div class="ligne m0"><button type="button" class="btn btn-primaire btn-petit" data-ia-decider="accepter" data-plan="${h(plan)}">${t("Accept")}</button>
@@ -6662,7 +6664,31 @@ function rendreIA() {
   zone.innerHTML = `<span class="pastille ${courante ? (courante.etat === "attente_accord" ? "attend" : "travaille") : ""}"></span><span class="ia-encours-texte petit">${h(texte)}</span>
     <button type="button" class="btn btn-danger btn-petit" data-ia-arreter="${h(courante ? courante.id : "")}"${courante && !(etat.vue || {}).distant ? "" : " disabled"}>${t("Stop")}</button>`;
   const b = $("#ia-form [type=submit]"); if (b) b.disabled = !!courante;
+  verrouTerminal(courante && courante.direct ? courante.id : "");
 }
+// mode "live in my terminal": while the assistant works in it, the terminal takes no typing (the Go side refuses
+// it too, 423) and a banner over it says so, with Stop and Take over
+function verrouTerminal(id) {
+  ia.verrou = id;
+  const hote = $("#term-hote"); if (!hote) return;
+  let b = $("#term-verrou");
+  if (!id) { b?.remove(); hote.classList.remove("verrouille"); }
+  else if (!b || b.dataset.tache !== id) {
+    if (!b) { b = document.createElement("div"); b.id = "term-verrou"; b.className = "term-verrou"; b.setAttribute("role", "status"); hote.prepend(b); }
+    const dis = (etat.vue || {}).distant ? " disabled" : "";
+    b.dataset.tache = id;
+    b.innerHTML = `<span class="pastille travaille"></span><span class="term-verrou-texte" title="${h(t("Your typing is locked so that you never both type at once."))}"><b>${t("The assistant is working")}</b> <span class="petit">${t("Your typing is locked so that you never both type at once.")}</span></span>
+      <button type="button" class="btn btn-danger btn-petit" data-ia-arreter="${h(id)}"${dis}>${t("Stop")}</button><button type="button" class="btn btn-petit" data-ia-main="${h(id)}"${dis}>${t("Take over")}</button>`;
+    hote.classList.add("verrouille");
+  }
+  if (term.x && term.session && !term.msg) term.x.options.disableStdin = !!id;
+  requestAnimationFrame(() => term.fit && term.el && term.el.offsetWidth && term.fit.fit());
+}
+$("#page").addEventListener("change", (ev) => {
+  if (etat.page !== "terminal" || ev.target.name !== "ia-mode") return;
+  ia.mode = ev.target.value; localStorage.setItem("athanor.terminal.ia.mode", ia.mode);
+  document.querySelectorAll(".ia-mode").forEach((l) => l.classList.toggle("actif", l.querySelector("input").checked));
+});
 $("#page").addEventListener("toggle", (ev) => {
   const d = ev.target; if (etat.page !== "terminal" || !d.matches || !d.matches(".ia-action")) return;
   if (d.open) ia.ouvertes.add(d.dataset.iaAction); else ia.ouvertes.delete(d.dataset.iaAction);
@@ -6672,8 +6698,9 @@ $("#page").addEventListener("submit", async (ev) => {
   ev.preventDefault();
   const champ = $("#ia-texte"), texte = champ.value.trim(), b = ev.target.querySelector("[type=submit]");
   if (!texte) return champ.focus();
+  if (ia.mode === "direct" && !term.session) return toast(t("Connect the terminal first, or choose Separate connection."), "erreur");
   b.disabled = true;
-  const r = await lancerTacheSrv(term.id, texte, "");
+  const r = await lancerTacheSrv(term.id, texte, "", ia.mode === "direct" ? term.session : "");
   if (!r) { b.disabled = false; return; }
   champ.value = ""; ia.suivi = true; ia.taches.unshift(r.tache); rendreIA(); chargerIA();
 });
@@ -6682,10 +6709,16 @@ $("#page").addEventListener("keydown", (ev) => { // Enter sends, Shift+Enter mak
 });
 $("#page").addEventListener("click", async (ev) => {
   if (etat.page !== "terminal") return;
-  const b = ev.target.closest("[data-ia-arreter], [data-ia-decider], [data-ia-carte]"); if (!b) return;
+  const b = ev.target.closest("[data-ia-arreter], [data-ia-decider], [data-ia-carte], [data-ia-main]"); if (!b) return;
   const d = b.dataset;
   if (d.iaCarte) { etat.apprCible = d.iaCarte; return; } // the link opens For you, where the card is scrolled to
   b.disabled = true;
+  if (d.iaMain) {
+    if (await action(api("serveurs/" + encodeURIComponent(term.id) + "/taches/" + encodeURIComponent(d.iaMain) + "/main", "POST"))) {
+      toast(t("You have the keyboard; the assistant goes on in its own connection."), "ok"); verrouTerminal("");
+    }
+    await chargerIA(); return term.x && term.x.focus();
+  }
   if (d.iaArreter) {
     if (await action(api("serveurs/" + encodeURIComponent(term.id) + "/taches/" + encodeURIComponent(d.iaArreter) + "/arreter", "POST"))) toast(t("Task stopped."), "ok");
     return chargerIA();

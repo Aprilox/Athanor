@@ -82,6 +82,17 @@ func (t *sessionTerminal) Write(p []byte) (int, error) {
 	}
 }
 
+// afficher: text shown on the owner's screen, never sent to the shell (the assistant's live mode, M231f); dropped
+// after 2 s when nobody reads, so that the assistant never waits on a closed page.
+func (t *sessionTerminal) afficher(p []byte) {
+	select {
+	case t.sortie <- p:
+		t.toucher()
+	case <-t.fini:
+	case <-time.After(2 * time.Second):
+	}
+}
+
 // fermer: once; the SSH session and client closed, the reason kept a moment, the audit line written.
 func (t *sessionTerminal) fermer(raison string) {
 	terminaux.Lock()
@@ -369,6 +380,10 @@ func (s *Serveur) apiTerminalAgir(w http.ResponseWriter, r *http.Request) {
 			s.terminalFerme(w, finTerminalTermine)
 			return
 		}
+	}
+	if c.Entree != "" && tacheDirecte(t.id) != nil { // two authors never type at once (M231f)
+		s.erreur(w, http.StatusLocked, "The assistant is working in this terminal: stop it or take over first")
+		return
 	}
 	if c.Entree != "" {
 		if _, err := io.WriteString(t.stdin, c.Entree); err != nil {

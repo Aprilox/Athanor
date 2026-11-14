@@ -127,6 +127,7 @@ func TestDistanceToutesRoutes(t *testing.T) {
 		{"GET", "/api/fournisseursx", true},
 		{"POST", "/api/serveurs/x/taches", true}, // launched and stopped on this computer only
 		{"POST", "/api/serveurs/x/taches/t/arreter", true},
+		{"POST", "/api/serveurs/x/taches/t/main", true}, // Take over (M231f)
 		{"GET", "/api/serveurs/x/y/taches", true},
 		{"GET", "/api/hubx", true}, // plain prefix
 		{"POST", "/api/mot-de-passe", true},

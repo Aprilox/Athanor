@@ -49,6 +49,8 @@ type TacheServeurs struct {
 	Verification *VerificationTache `json:"verification,omitempty"` // the external verifier's report (M98)
 	Historique   []EvenementTache   `json:"historique"`
 	Actions      []ActionTache      `json:"actions,omitempty"` // every tool call of its agents, live (M231e)
+	Direct       bool               `json:"direct,omitempty"`  // "live in my terminal" (M231f): shown in the owner's terminal, its typing locked
+	Terminal     string             `json:"-"`                 // that terminal's session (never sent: it opens a shell)
 }
 
 // EvenementTache: a state reached, and what brought it (a plan's id, an error).
@@ -218,6 +220,11 @@ func (s *Serveur) lancerTacheServeurs(texte string, serveurs []string, forcee bo
 // lancerTache: env "projet/env" (M116) gives the task that environment's servers and the host name of its URL, the
 // only name its Cloudflare tools act on; serveurs must then be among the environment's.
 func (s *Serveur) lancerTache(texte string, serveurs []string, forcee bool, env string) (TacheServeurs, error) {
+	return s.lancerTacheDans(texte, serveurs, forcee, env, "")
+}
+
+// lancerTacheDans: terminal, an open terminal's session: the task works "live" in it (M231f).
+func (s *Serveur) lancerTacheDans(texte string, serveurs []string, forcee bool, env, terminal string) (TacheServeurs, error) {
 	texte = strings.TrimSpace(s.masquerSecrets(texte))
 	switch {
 	case texte == "" || len([]rune(texte)) > maxTexteTache:
@@ -254,7 +261,8 @@ func (s *Serveur) lancerTache(texte string, serveurs []string, forcee bool, env 
 			return TacheServeurs{}, errServeurInconnu
 		}
 	}
-	t := TacheServeurs{ID: aleatoire(6), Texte: texte, Serveurs: slices.Clone(serveurs), Forcee: forcee, Env: env, Cree: time.Now().UTC().Format(formatCree)}
+	t := TacheServeurs{ID: aleatoire(6), Texte: texte, Serveurs: slices.Clone(serveurs), Forcee: forcee, Env: env, Cree: time.Now().UTC().Format(formatCree),
+		Direct: terminal != "", Terminal: terminal}
 	dossier := dossierSessionTache(t.ID)
 	if err := os.MkdirAll(filepath.Join(dossier, "travail"), 0o700); err != nil {
 		return TacheServeurs{}, err
@@ -471,6 +479,7 @@ func (s *Serveur) finirTache(e *tacheEnCours, etat, detail string) {
 	tachesEnCours.Lock()
 	delete(tachesEnCours.m, e.t.ID)
 	tachesEnCours.Unlock()
+	ecrireDansTerminal(e, "\x1b[2m[assistant] "+etat+": the keyboard is yours\x1b[0m\n")
 	s.revoquerJetons("tâche "+etat, func(x SessionHub) bool { return x.Projet == projet || strings.HasPrefix(x.Projet, projet+":") })
 	l, _ := s.approbations.Liste()
 	for _, ap := range l {
@@ -554,12 +563,22 @@ func (s *Serveur) apiLancerTacheServeur(w http.ResponseWriter, r *http.Request) 
 		Forcer     bool   `json:"forcer"`
 		Env        string `json:"env"` // "projet/env", optional (M116)
 		MotDePasse string `json:"mot_de_passe"`
+		Terminal   string `json:"terminal"` // "live in my terminal": its open session on this server (M231f)
 	}
 	if lireCorps(r, &c) != nil {
 		s.erreur(w, http.StatusBadRequest, "Invalid request")
 		return
 	}
 	id := r.PathValue("id")
+	if c.Terminal != "" {
+		terminaux.Lock()
+		x := terminaux.m[c.Terminal]
+		terminaux.Unlock()
+		if x == nil || x.serveur != id {
+			s.terminalFerme(w, "")
+			return
+		}
+	}
 	forcee := modeNatif.Load() && c.Forcer
 	if modeNatif.Load() && !c.Forcer {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -570,12 +589,32 @@ func (s *Serveur) apiLancerTacheServeur(w http.ResponseWriter, r *http.Request) 
 	if forcee && !s.preuveServeur(w, r, c.MotDePasse, "tâche serveurs forcée refusée", id) {
 		return
 	}
-	t, err := s.lancerTache(c.Texte, []string{id}, forcee, c.Env)
+	t, err := s.lancerTacheDans(c.Texte, []string{id}, forcee, c.Env, c.Terminal)
 	if err != nil {
 		s.erreurServeurs(w, err)
 		return
 	}
 	s.ecrireJSON(w, map[string]any{"tache": t})
+}
+
+// apiReprendreMainTache: POST /api/serveurs/{id}/taches/{tache}/main: "Take over" (M231f): the owner's terminal
+// is unlocked and no longer shows the task, which goes on in its own connection.
+func (s *Serveur) apiReprendreMainTache(w http.ResponseWriter, r *http.Request) {
+	id, tache := r.PathValue("id"), r.PathValue("tache")
+	tachesEnCours.Lock()
+	e := tachesEnCours.m[tache]
+	tachesEnCours.Unlock()
+	if e == nil || !slices.Contains(e.copie().Serveurs, id) {
+		s.erreur(w, http.StatusNotFound, "No running task of that id on this server")
+		return
+	}
+	ecrireDansTerminal(e, "\x1b[2m[assistant] you have the keyboard; it goes on in its own connection\x1b[0m\n")
+	e.mu.Lock()
+	e.t.Direct, e.t.Terminal = false, ""
+	e.mu.Unlock()
+	_ = enregistrerTache(e.copie())
+	s.ecrireAudit(LigneAudit{Type: "evenement", De: deQui(r), Vers: "servers", Projet: prefixeTache + tache, Mission: tache, Action: "tâche serveurs : main reprise"})
+	s.ecrireJSON(w, map[string]any{"ok": true})
 }
 
 // apiArreterTacheServeur: POST /api/serveurs/{id}/taches/{tache}/arreter.

@@ -401,6 +401,7 @@ func (s *Serveur) routes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/serveurs/{id}", s.garde(false, s.apiServeurSupprimer))
 	mux.HandleFunc("GET /api/serveurs/{id}/taches", s.garde(false, s.apiTachesServeur))
 	mux.HandleFunc("POST /api/serveurs/{id}/taches", s.garde(false, s.apiLancerTacheServeur))
+	mux.HandleFunc("POST /api/serveurs/{id}/taches/{tache}/main", s.garde(false, s.apiReprendreMainTache))
 	mux.HandleFunc("POST /api/serveurs/{id}/taches/{tache}/arreter", s.garde(false, s.apiArreterTacheServeur))
 	mux.HandleFunc("POST /api/serveurs/{id}/terminal", s.garde(false, s.apiTerminalOuvrir))
 	mux.HandleFunc("GET /api/serveurs/{id}/terminal/{session}", s.garde(false, s.apiTerminalFlux))
