@@ -57,6 +57,8 @@ type corpsCoffre struct {
 	Note    *string `json:"note"`
 	Portee  *string `json:"portee"`
 	Valeur  *string `json:"valeur"`
+	// M225: the production value when it differs ("" goes back to one value for every environment)
+	Prod *string `json:"prod"`
 	// Athanor's password, retyped to move an infra entry to code (hub_preuve.go)
 	MotDePasse string `json:"mot_de_passe"`
 }
@@ -73,7 +75,7 @@ func lireCorpsCoffre(w http.ResponseWriter, r *http.Request) (corpsCoffre, error
 		return c, errCoffreNomLong
 	case c.Note != nil && utf8.RuneCountInString(*c.Note) > maxNoteCoffre:
 		return c, errCoffreNote
-	case c.Valeur != nil && len(*c.Valeur) > maxValeurCoffre:
+	case c.Valeur != nil && len(*c.Valeur) > maxValeurCoffre, c.Prod != nil && len(*c.Prod) > maxValeurCoffre:
 		return c, errCoffreTaille
 	case c.Valeur != nil && *c.Valeur == "":
 		return c, errCoffreValeur
@@ -115,6 +117,14 @@ func (s *Serveur) apiCoffreAjouter(w http.ResponseWriter, r *http.Request) {
 		s.erreurCoffre(w, err)
 		return
 	}
+	if c.Prod != nil && *c.Prod != "" {
+		if err := s.coffre.PoserValeurProd(e.ID, *c.Prod); err != nil {
+			_ = s.coffre.Supprimer(e.ID) // all or nothing
+			s.erreurCoffre(w, err)
+			return
+		}
+		e.DeuxValeurs = true
+	}
 	s.injecterTous(nil) // a value now in the vault and granted nowhere leaves the old files
 	s.ecrireJSON(w, e)
 }
@@ -151,7 +161,7 @@ func (s *Serveur) apiCoffreModifier(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if c.Nom != nil || c.Type != nil || c.Note != nil || c.Portee != nil || c.Valeur != nil {
+	if c.Nom != nil || c.Type != nil || c.Note != nil || c.Portee != nil || c.Valeur != nil || c.Prod != nil {
 		if e.Portee == "code" && val(c.Portee, e.Portee) == "infra" && s.acces != nil && s.accesErr == nil {
 			// code to infra: its grants go and the files are rewritten while it is still code (its fingerprint
 			// then recognises the value); an infra entry has none and would stay as an old-file line (M43 A1)
@@ -165,6 +175,13 @@ func (s *Serveur) apiCoffreModifier(w http.ResponseWriter, r *http.Request) {
 		if e, err = s.coffre.ModifierMeta(id, val(c.Nom, e.Nom), val(c.Type, e.Type), val(c.Note, e.Note), val(c.Portee, e.Portee), c.Valeur); err != nil {
 			s.erreurCoffre(w, err)
 			return
+		}
+		if c.Prod != nil {
+			if err := s.coffre.PoserValeurProd(id, *c.Prod); err != nil {
+				s.erreurCoffre(w, err)
+				return
+			}
+			e.DeuxValeurs = *c.Prod != ""
 		}
 		s.injecterTous(nil)
 	}

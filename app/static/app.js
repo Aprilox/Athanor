@@ -5313,17 +5313,31 @@ function carteCoffre(x) {
       <details class="menu-coffre"><summary class="btn btn-petit" aria-label="${h(t("Actions"))}">⋯</summary><div class="menu-coffre-liste">
         ${secret && TESTABLES_COFFRE.has(x.type) ? `<button type="button" data-cof-tester="${h(x.id)}">${t("Test")}</button>` : ""}<button type="button" data-cof-modifier="${h(x.id)}">${t("Edit")}</button><button type="button" data-cof-remplacer="${h(x.id)}">${t("Replace the value")}</button><button type="button" class="danger" data-cof-supprimer="${h(x.id)}">${t("Delete")}</button>
       </div></details></div>
-    <div class="petit cof-valeur">${secret ? `<span class="muet">•••• ${t("saved")}</span>` : `<code>${h(x.valeur)}</code>`}</div>
+    <div class="petit cof-valeur">${secret ? `<span class="muet">•••• ${t("saved")}${x.deux_valeurs ? " · " + h(t("testing and production")) : ""}</span>` : `<code>${h(x.valeur)}</code>${x.deux_valeurs ? ` · ${h(t("Production"))} <code>${h(x.prod)}</code>` : ""}`}</div>
     <div class="petit cof-note${x.note ? "" : " muet"}" title="${h(x.note)}">${x.note ? h(x.note) : t("No note for the AI")}</div>
     <div class="muet petit">${x.source ? h(t("Imported from {0}", [x.source])) + " · " : ""}${h(dateLisible(x.modifie))}</div>
   </div>`;
+}
+// M225: the environment a key's prefix says (Stripe-style sk_/rk_/pk_ test or live), "" when it says nothing
+const envDeCle = (v) => /^(?:sk|rk|pk)_live_/.test(v) ? "prod" : /^(?:sk|rk|pk)_test_/.test(v) ? "dev" : "";
+function deuxValeursCoffre(oui) {
+  $("#cof-deux").checked = oui; $("#cof-prod-bloc").hidden = !oui;
+  $("#cof-valeur-titre").textContent = t(oui ? "Value for testing" : "Value");
+}
+// a production key typed as the testing (or only) value, or a testing key as the production one: one button moves it
+function indiceEnvCoffre() {
+  const i = $("#cof-indice"); if (!i) return;
+  const prod = envDeCle($("#cof-valeur").value.trim()) === "prod", essai = $("#cof-deux").checked && envDeCle($("#cof-prod").value.trim()) === "dev";
+  i.hidden = !prod && !essai;
+  i.innerHTML = prod ? `${t("This looks like a production key.")} <button type="button" class="btn btn-petit" data-cof-env="prod">${t("Move to production")}</button>`
+    : essai ? `${t("This looks like a testing key.")} <button type="button" class="btn btn-petit" data-cof-env="dev">${t("Move to testing")}</button>` : "";
 }
 // the add/edit form: a secret's field stays empty ("•••• saved"), typing in it replaces the value
 function formulaireCoffre() {
   const x = cof.form.id && entreeCoffre(cof.form.id);
   if (cof.form.id && !x) { cof.form = null; return ""; }
   const secret = (x ? x.famille : cof.onglet) === "secret", mdp = cof.d.etat.mot_de_passe;
-  const type = x ? x.type : secret ? "jeton" : "autre", portee = x ? x.portee : "code";
+  const type = x ? x.type : secret ? "jeton" : "autre", portee = x ? x.portee : "code", deux = !!(x && x.deux_valeurs);
   return `<form class="bloc cof-form" id="cof-form" autocomplete="off">
     <h2>${x ? h(x.nom) : secret ? t("New secret") : t("New variable")}</h2>
     <label class="champ"><span>${t("Name")}</span><input type="text" id="cof-nom" maxlength="100" spellcheck="false" value="${h(x ? x.nom : "")}" placeholder="${secret ? "CLOUDFLARE_API_TOKEN" : "NODE_ENV"}"></label>
@@ -5332,7 +5346,11 @@ function formulaireCoffre() {
       <label class="champ"><span>${t("Scope")}</span><select id="cof-portee"><option value="code">${t("code — reopens alone on this PC")}</option><option value="infra"${portee === "infra" ? " selected" : ""}${mdp ? "" : " disabled"}>${t("infra — only with your password")}</option></select></label>
     </div>${mdp ? "" : `<p class="muet petit">${t("The infra scope needs a password for Athanor.")} <a href="#options@bloc-verrou">${t("Settings › Options › Lock")}</a></p>`}` : ""}
     <label class="champ"><span>${t("Note for the AI")}</span><textarea id="cof-note" rows="2" maxlength="2000" placeholder="${h(t("What it is for, e.g. DNS of example.org"))}">${h(x ? x.note : "")}</textarea></label>
-    <label class="champ"><span>${t("Value")}</span><input type="${secret ? "password" : "text"}" id="cof-valeur" autocomplete="new-password" spellcheck="false" value="${h(x && !secret ? x.valeur : "")}" placeholder="${x && secret ? "•••• " + h(t("saved")) : ""}"></label>
+    <label class="champ"><span id="cof-valeur-titre">${t(deux ? "Value for testing" : "Value")}</span><input type="${secret ? "password" : "text"}" id="cof-valeur" autocomplete="new-password" spellcheck="false" value="${h(x && !secret ? x.valeur : "")}" placeholder="${x && secret ? "•••• " + h(t("saved")) : ""}"></label>
+    <label class="petit cof-deux"><input type="checkbox" id="cof-deux"${deux ? " checked" : ""}> ${t("A different value for production")}</label>
+    <div id="cof-prod-bloc"${deux ? "" : " hidden"}><label class="champ"><span>${t("Value for production")}</span><input type="${secret ? "password" : "text"}" id="cof-prod" autocomplete="new-password" spellcheck="false" value="${h(x && !secret && x.prod || "")}" placeholder="${deux && secret ? "•••• " + h(t("saved")) : ""}"></label>
+      <p class="muet petit">${t("Testing and pre-production get the first value, production the second.")}</p></div>
+    <p class="petit cof-indice" id="cof-indice" aria-live="polite" hidden></p>
     ${x && secret ? `<p class="muet petit">${t("The value is never shown again: type a new one to replace it, or leave the field empty.")}</p>` : ""}
     ${x && secret && TESTABLES_COFFRE.has(x.type) ? `<div class="cof-test-bloc">
       ${x.type === "ssh" ? `<label class="champ"><span>${t("Server to try (optional)")}</span><input type="text" id="cof-hote" maxlength="255" spellcheck="false" placeholder="example.org:22"></label>` : ""}
@@ -5388,7 +5406,7 @@ pages.coffre = async () => {
 const rendreCoffre = (champ) => rendrePage().then(() => { const c = champ && document.getElementById(champ); if (c) c.focus(); });
 $("#page").addEventListener("click", async (ev) => {
   if (etat.page !== "coffre") return;
-  const b = ev.target.closest("[data-cof-onglet], [data-cof-ajouter], [data-cof-coller], [data-cof-analyser]:not([type=submit]), [data-cof-annuler], [data-cof-modifier], [data-cof-remplacer], [data-cof-supprimer], [data-cof-tester], [data-cof-test], [data-cof-p-tester], [data-cof-note], [data-cof-mig-annuler], [data-cof-mig-importer]");
+  const b = ev.target.closest("[data-cof-onglet], [data-cof-ajouter], [data-cof-env], [data-cof-coller], [data-cof-analyser]:not([type=submit]), [data-cof-annuler], [data-cof-modifier], [data-cof-remplacer], [data-cof-supprimer], [data-cof-tester], [data-cof-test], [data-cof-p-tester], [data-cof-note], [data-cof-mig-annuler], [data-cof-mig-importer]");
   if (!b) return;
   const d = b.dataset, menu = b.closest("details"); if (menu) menu.open = false;
   if (d.cofOnglet) { cof.onglet = d.cofOnglet; cof.form = cof.colle = null; return rendrePage(); }
@@ -5405,6 +5423,10 @@ $("#page").addEventListener("click", async (ev) => {
   if (d.cofColler !== undefined) { cof.form = null; cof.colle = {}; return rendreCoffre("cof-texte"); }
   if (d.cofAnalyser !== undefined) return analyserColle();
   if (d.cofAjouter !== undefined) { cof.form = {}; cof.colle = null; return rendreCoffre("cof-nom"); }
+  if (d.cofEnv) { // the two fields swap their values: the key goes where its prefix says
+    const v = $("#cof-valeur"), p = $("#cof-prod"); [v.value, p.value] = [p.value, v.value];
+    deuxValeursCoffre(true); indiceEnvCoffre(); return (d.cofEnv === "prod" ? v : p).focus();
+  }
   if (d.cofNote !== undefined) { (b.closest("[data-cof-prop]")?.querySelector(".cof-p-note") || $("#cof-note")).value = d.cofNote; return b.remove(); }
   if (d.cofPTester !== undefined) {
     const l = b.closest("[data-cof-prop]"), type = l.querySelector(".cof-p-type");
@@ -5421,12 +5443,16 @@ $("#page").addEventListener("click", async (ev) => {
   if (await action(api("coffre/" + encodeURIComponent(x.id), "DELETE"))) { if (cof.form && cof.form.id === x.id) cof.form = null; toast(t("{0} deleted.", [x.nom]), "ok"); rendrePage(); }
 });
 // a type proposes its scope (infra only when Athanor has a password)
-$("#page").addEventListener("input", (ev) => { if (ev.target.id === "cof-texte" && cof.colle) cof.colle.texte = ev.target.value; });
+$("#page").addEventListener("input", (ev) => {
+  if (ev.target.id === "cof-texte" && cof.colle) cof.colle.texte = ev.target.value;
+  if (ev.target.id === "cof-valeur" || ev.target.id === "cof-prod") indiceEnvCoffre();
+});
 $("#page").addEventListener("change", (ev) => {
   if (ev.target.matches(".cof-p-type")) {
     const p = ev.target.parentElement.querySelector(".cof-p-portee"), infra = INFRA_COFFRE.has(ev.target.value) && !p.querySelector('[value="infra"]').disabled;
     p.value = infra ? "infra" : "code";
   }
+  if (ev.target.id === "cof-deux") { deuxValeursCoffre(ev.target.checked); return indiceEnvCoffre(); }
   if (ev.target.id !== "cof-type") return;
   const p = $("#cof-portee"), infra = INFRA_COFFRE.has(ev.target.value) && !p.querySelector('[value="infra"]').disabled;
   p.value = infra ? "infra" : "code";
@@ -5460,6 +5486,9 @@ $("#page").addEventListener("submit", async (ev) => {
   if (secret) { corps.type = $("#cof-type").value; corps.portee = $("#cof-portee").value; }
   if (!x) { corps.famille = cof.onglet; if (!secret) corps.type = "autre"; }
   if (!x || (secret ? valeur !== "" : valeur !== x.valeur)) corps.valeur = valeur; // an empty secret field keeps the value
+  const prod = $("#cof-prod").value;
+  if (!$("#cof-deux").checked) { if (x && x.deux_valeurs) corps.prod = ""; } // back to one value everywhere
+  else if (secret ? prod !== "" : prod !== ((x && x.prod) || "")) corps.prod = prod;
   if (x && x.portee === "infra" && corps.portee === "code") { // C35: code reopens alone on this PC
     const p = await preuveMdp(t("Moving a key from infra to code: retype Athanor's password."), { ok: t("Move to code") });
     if (!p) return;
@@ -5467,7 +5496,7 @@ $("#page").addEventListener("submit", async (ev) => {
   }
   const r = await action(api(x ? "coffre/" + encodeURIComponent(x.id) : "coffre", "POST", corps));
   if (!r) return;
-  $("#cof-valeur").value = ""; cof.form = null;
+  $("#cof-valeur").value = $("#cof-prod").value = ""; cof.form = null;
   toast(x ? t("{0} saved.", [r.nom]) : t("{0} added.", [r.nom]), "ok"); rendrePage();
 });
 

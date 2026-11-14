@@ -84,17 +84,22 @@ func cleDuCompte(sortie string) ([]byte, error) {
 }
 
 type EntreeCoffre struct {
-	ID        string    `json:"id"`
-	Nom       string    `json:"nom"`
-	Famille   string    `json:"famille"` // secret | variable
-	Type      string    `json:"type"`
-	Note      string    `json:"note"`
-	Portee    string    `json:"portee"` // code | infra
-	Valeur    string    `json:"valeur"` // secret: base64(nonce‖AES-GCM); variable: clear
-	Source    string    `json:"source,omitempty"`
-	Empreinte string    `json:"empreinte,omitempty"`
-	Cree      time.Time `json:"cree"`
-	Modifie   time.Time `json:"modifie"`
+	ID        string `json:"id"`
+	Nom       string `json:"nom"`
+	Famille   string `json:"famille"` // secret | variable
+	Type      string `json:"type"`
+	Note      string `json:"note"`
+	Portee    string `json:"portee"` // code | infra
+	Valeur    string `json:"valeur"` // secret: base64(nonce‖AES-GCM); variable: clear
+	Source    string `json:"source,omitempty"`
+	Empreinte string `json:"empreinte,omitempty"`
+	// M225: the production value when it differs from Valeur (then the testing value), sealed under aadProd;
+	// older versions ignore these fields and use Valeur everywhere
+	Prod          string    `json:"prod,omitempty"`
+	EmpreinteProd string    `json:"empreinte_prod,omitempty"`
+	DeuxValeurs   bool      `json:"deux_valeurs,omitempty"` // set by masquer only, never on disk
+	Cree          time.Time `json:"cree"`
+	Modifie       time.Time `json:"modifie"`
 }
 
 type fichierCoffre struct {
@@ -194,6 +199,7 @@ func aadCle(nom string) []byte { return []byte("athanor-coffre:" + nom) }
 func aadEntree(e EntreeCoffre) []byte {
 	return fmt.Appendf(nil, "v2|%s|%s|%s|%q|%q", e.ID, e.Famille, e.Portee, e.Nom, e.Type)
 }
+func aadProd(e EntreeCoffre) []byte     { return append(aadEntree(e), "|prod"...) }
 func aadEntreeV1(e EntreeCoffre) []byte { return []byte(e.ID + "|" + e.Famille + "|" + e.Portee) }
 
 // migrerAAD reseals under aadEntree the secrets still sealed under aadEntreeV1 whose key is open.
@@ -539,6 +545,42 @@ func (c *Coffre) poserValeur(e *EntreeCoffre, valeur string) error {
 	return nil
 }
 
+// poserProd stores the production value of e like poserValeur ("" removes it: one value for every environment).
+func (c *Coffre) poserProd(e *EntreeCoffre, valeur string) error {
+	e.Prod, e.EmpreinteProd = "", ""
+	if valeur == "" {
+		return nil
+	}
+	if e.Famille == "variable" {
+		e.Prod = valeur
+	} else {
+		k, err := c.cle(e.Portee)
+		if err != nil {
+			return err
+		}
+		e.Prod = sceller(k, []byte(valeur), aadProd(*e))
+	}
+	if e.Portee != "infra" {
+		e.EmpreinteProd = c.empreinte(valeur)
+	}
+	return nil
+}
+
+// EmpreintesValeurs: the fingerprints of every value of the vault, production values included.
+func (c *Coffre) EmpreintesValeurs() map[string]bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	m := map[string]bool{}
+	for _, e := range c.f.Entrees {
+		for _, f := range []string{e.Empreinte, e.EmpreinteProd} {
+			if f != "" {
+				m[f] = true
+			}
+		}
+	}
+	return m
+}
+
 // EmpreintesConnues: id → fingerprint of the entries, for the import only (Liste never sends them).
 func (c *Coffre) EmpreintesConnues() map[string]string {
 	c.mu.Lock()
@@ -613,6 +655,15 @@ func (c *Coffre) ModifierMeta(id, nom, typ, note, portee string, valeur *string)
 			return EntreeCoffre{}, err
 		}
 	}
+	if e.Famille == "secret" && ancienne.Prod != "" && (e.Portee != ancienne.Portee || e.Nom != ancienne.Nom || e.Type != ancienne.Type) {
+		clair, err := c.dechiffrerProd(ancienne)
+		if err != nil {
+			return EntreeCoffre{}, err
+		}
+		if err := c.poserProd(&e, clair); err != nil {
+			return EntreeCoffre{}, err
+		}
+	}
 	e.Modifie = time.Now().UTC()
 	c.f.Entrees[i] = e
 	if err := c.enregistrer(); err != nil {
@@ -644,6 +695,28 @@ func (c *Coffre) RemplacerValeur(id, valeur string) error {
 	return nil
 }
 
+// PoserValeurProd sets the production value of an entry ("" removes it: Valeur serves every environment).
+func (c *Coffre) PoserValeurProd(id, valeur string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	i := c.indice(id)
+	if i < 0 {
+		return errCoffreInconnu
+	}
+	ancienne := c.f.Entrees[i]
+	e := ancienne
+	if err := c.poserProd(&e, valeur); err != nil {
+		return err
+	}
+	e.Modifie = time.Now().UTC()
+	c.f.Entrees[i] = e
+	if err := c.enregistrer(); err != nil {
+		c.f.Entrees[i] = ancienne
+		return err
+	}
+	return nil
+}
+
 func (c *Coffre) Supprimer(id string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -661,9 +734,9 @@ func (c *Coffre) Supprimer(id string) error {
 }
 
 func masquer(e EntreeCoffre) EntreeCoffre {
-	e.Empreinte = ""
+	e.Empreinte, e.EmpreinteProd, e.DeuxValeurs = "", "", e.Prod != ""
 	if e.Famille == "secret" {
-		e.Valeur = ""
+		e.Valeur, e.Prod = "", ""
 	}
 	return e
 }
@@ -688,6 +761,49 @@ func (c *Coffre) Valeur(id string) (string, error) {
 		return "", errCoffreInconnu
 	}
 	return c.dechiffrer(c.f.Entrees[i])
+}
+
+// ValeurPour: the clear value given to the environment env (the production value for prod when there is one).
+func (c *Coffre) ValeurPour(id, env string) (string, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	i := c.indice(id)
+	if i < 0 {
+		return "", errCoffreInconnu
+	}
+	if e := c.f.Entrees[i]; env == "prod" && e.Prod != "" {
+		return c.dechiffrerProd(e)
+	}
+	return c.dechiffrer(c.f.Entrees[i])
+}
+
+// ValeurProd: the clear production value ("" when the entry has one value only), for Athanor's own use.
+func (c *Coffre) ValeurProd(id string) (string, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	i := c.indice(id)
+	if i < 0 {
+		return "", errCoffreInconnu
+	}
+	if c.f.Entrees[i].Prod == "" {
+		return "", nil
+	}
+	return c.dechiffrerProd(c.f.Entrees[i])
+}
+
+func (c *Coffre) dechiffrerProd(e EntreeCoffre) (string, error) {
+	if e.Famille == "variable" {
+		return e.Prod, nil
+	}
+	k, err := c.cle(e.Portee)
+	if err != nil {
+		return "", err
+	}
+	b, err := desceller(k, e.Prod, aadProd(e))
+	if err != nil {
+		return "", errCoffreIllisible
+	}
+	return string(b), nil
 }
 
 func (c *Coffre) dechiffrer(e EntreeCoffre) (string, error) {

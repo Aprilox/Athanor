@@ -116,7 +116,7 @@ func (s *Serveur) planInjection(p Projet, garder map[string]string) (lignes []li
 		if !ok || a.Env != pa.Env || e.Portee != "code" {
 			continue // infra: kept by Athanor for its own actions, never given to the pilot
 		}
-		v, err := s.coffre.Valeur(e.ID)
+		v, err := s.coffre.ValeurPour(e.ID, a.Env)
 		if errors.Is(err, errCoffreVerrouille) || errors.Is(err, errCoffreSansMdp) {
 			etat.Etat = "verrouille"
 			return nil, etat, false
@@ -131,10 +131,7 @@ func (s *Serveur) planInjection(p Projet, garder map[string]string) (lignes []li
 		}
 		donnees[a.Variable] = v
 	}
-	connues := map[string]bool{}
-	for _, f := range s.coffre.EmpreintesConnues() {
-		connues[f] = true
-	}
+	connues := s.coffre.EmpreintesValeurs()
 	dansCoffre := func(nom, v string) bool {
 		return valeursVariables[nom+"="+v] || (empreintes && connues[s.coffre.Empreinte(v)])
 	}

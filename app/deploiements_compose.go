@@ -109,7 +109,7 @@ func (s *Serveur) fichierEnvCompose(projet, env string) (string, error) {
 		if !ok || a.Env != env || e.Portee != "code" {
 			continue
 		}
-		v, err := s.coffre.Valeur(e.ID)
+		v, err := s.coffre.ValeurPour(e.ID, env)
 		if err != nil {
 			return "", errMoteur("{0} cannot be read from the vault (open its code key): {1}", a.Variable, err)
 		}

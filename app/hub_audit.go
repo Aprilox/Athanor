@@ -305,6 +305,9 @@ func (s *Serveur) secretsOuverts() []string {
 			if x, err := s.coffre.Valeur(e.ID); err == nil && x != "" {
 				v = append(v, x)
 			}
+			if x, err := s.coffre.ValeurProd(e.ID); err == nil && x != "" {
+				v = append(v, x)
+			}
 		}
 	}
 	return v
