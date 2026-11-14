@@ -1,6 +1,6 @@
 {
-  "name": "Athanor",
-  "short_name": "Athanor",
+  "name": "Athanor Hub",
+  "short_name": "Athanor Hub",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

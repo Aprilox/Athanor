@@ -320,7 +320,7 @@ func (r *barreRetour) boucle(bureau uintptr) {
 	largeurEcran, _, _ := pGetSystemMetrics.Call(0) // SM_CXSCREEN
 	l, haut := int32(640), int32(46)
 	x := (int32(largeurEcran) - l) / 2
-	titre, _ := syscall.UTF16PtrFromString("Athanor")
+	titre, _ := syscall.UTF16PtrFromString("Athanor Hub")
 	h, _, err := pCreateWindowExW.Call(0x8|0x80, uintptr(unsafe.Pointer(classeBarre)), uintptr(unsafe.Pointer(titre)), // WS_EX_TOPMOST | WS_EX_TOOLWINDOW
 		0x80000000|0x10000000, uintptr(x), 0, uintptr(l), uintptr(haut), 0, 0, 0, 0) // WS_POPUP | WS_VISIBLE
 	if h == 0 {

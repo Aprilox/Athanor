@@ -182,7 +182,7 @@ func (s *Serveur) apiAppairerClient(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.auditClient(c.Nom, "mcp appairage", "code bon, en attente de l'accord")
-	go notifier(texteDemandeClient(s.langue(), c.Nom), "Athanor")
+	go notifier(texteDemandeClient(s.langue(), c.Nom), "Athanor Hub")
 	repondreDirect(w, 202, map[string]any{"attente": true, "demande": secret})
 }
 

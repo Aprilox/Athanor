@@ -858,7 +858,7 @@ async function deciderApprobation(corps) {
 function phraseGlobale(m) {
   const n = alertesHub().length, actifs = ((etat.hub || {}).elements || []).filter((e) => e.etat === "actif").length;
   const page = m && m.id === "hub" ? m.pages.find((x) => x.hash === "#" + pageParente(etat.page)) : null; // Home, Projects
-  return { classe: n ? "quota" : actifs ? "travaille" : "", titre: page ? t(page.libelle) : m ? t(m.nom) : etat.page === "guide" ? t("Guide") : "Athanor", sous: [actifs ? t("{0} in progress", [actifs]) : t("idle"), n && t("{0} alert(s) need you", [n])].filter(Boolean).join(" · ") };
+  return { classe: n ? "quota" : actifs ? "travaille" : "", titre: page ? t(page.libelle) : m ? t(m.nom) : etat.page === "guide" ? t("Guide") : "Athanor Hub", sous: [actifs ? t("{0} in progress", [actifs]) : t("idle"), n && t("{0} alert(s) need you", [n])].filter(Boolean).join(" · ") };
 }
 // the pages of a module that works on the selector's project (Studio): Start, access, the project's line
 const avecProjet = (m) => !!m && !!m.projet;

@@ -492,9 +492,9 @@ func texteFermerAvantMiseAJour(ancienne string) (string, string) {
 
 func texteEchecInstallation(d string, err error) (string, string) {
 	if langueSysteme() == "fr" {
-		return "Athanor", fmt.Sprintf("Impossible de préparer le dossier d'Athanor :\n\n    %s\n\n%v", d, err)
+		return "Athanor Hub", fmt.Sprintf("Impossible de préparer le dossier d'Athanor :\n\n    %s\n\n%v", d, err)
 	}
-	return "Athanor", fmt.Sprintf("Athanor's folder could not be prepared:\n\n    %s\n\n%v", d, err)
+	return "Athanor Hub", fmt.Sprintf("Athanor's folder could not be prepared:\n\n    %s\n\n%v", d, err)
 }
 
 func texteMiseAJourReportee(projets []string) (string, string) {

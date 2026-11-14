@@ -7,7 +7,7 @@ self.addEventListener("activate", (e) => e.waitUntil(self.clients.claim()));
 self.addEventListener("push", (e) => {
   let m = {};
   try { m = e.data ? e.data.json() : {}; } catch (_) { m = { texte: e.data ? e.data.text() : "" }; }
-  e.waitUntil(self.registration.showNotification(m.titre || "Athanor", {
+  e.waitUntil(self.registration.showNotification(m.titre || "Athanor Hub", {
     body: m.texte || "", icon: "/icone-180.png", badge: "/badge-96.png", tag: m.tag || undefined,
     renotify: !!m.tag, data: { url: typeof m.url === "string" && m.url.startsWith("/") && !m.url.startsWith("//") ? m.url : "/#suivi" },
   }));

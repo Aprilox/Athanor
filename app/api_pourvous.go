@@ -754,7 +754,7 @@ $n = [Windows.UI.Notifications.ToastNotification]::new($d)
 		go func() { _ = c.Wait() }()
 	default:
 		if chemin, err := exec.LookPath("notify-send"); err == nil {
-			c := commande(chemin, "-a", "Athanor", titre, texte)
+			c := commande(chemin, "-a", "Athanor Hub", titre, texte)
 			_ = c.Start()
 			go func() { _ = c.Wait() }()
 		}

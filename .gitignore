@@ -29,3 +29,7 @@ __pycache__/
 /local/
 # Test executable built for the owner (never committed)
 /deliverable/
+# Data of an executable started from the repository root (vault included)
+/hub/
+/modules/
+/Athanor-hub.exe

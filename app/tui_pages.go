@@ -126,7 +126,7 @@ func (a *appTUI) barreHaut(e *ecranT) {
 	v := a.vue
 	e.rect(0, 0, e.l, 1, a.st(p.encre, p.panneau))
 	x := 0
-	x += e.texte(x, 0, 0, " ◆ Athanor ", a.gras(p.surAccent, p.accent))
+	x += e.texte(x, 0, 0, " ◆ Athanor Hub ", a.gras(p.surAccent, p.accent))
 	x += e.texte(x, 0, 0, " v"+v.Version+" ", a.st(p.muet, p.panneau))
 	droite := ""
 	if v.PourVous > 0 {
