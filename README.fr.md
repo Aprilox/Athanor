@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="docs/images/logo.svg" width="112" height="112" alt="Logo Athanor">
+  <img src="docs/images/logo.svg" width="112" height="112" alt="Logo Athanor Hub">
 </p>
 
-<h1 align="center">Athanor</h1>
+<h1 align="center">Athanor Hub</h1>
 
 <h3 align="center">Un seul hub sur votre PC : Claude Code construit vos projets, les met en ligne, et ne détient jamais les clés.</h3>
 
@@ -37,17 +37,17 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/hub.png" alt="La page d'accueil d'Athanor : la conversation avec l'assistant et ses mentions de projets et de serveurs, et les tuiles Missions, Studio et Serveurs avec leurs chiffres en direct" width="100%">
+  <img src="docs/images/hub.png" alt="La page d'accueil d'Athanor Hub : la conversation avec l'assistant et ses mentions de projets et de serveurs, et les tuiles Missions, Studio et Serveurs avec leurs chiffres en direct" width="100%">
 </p>
 
-Athanor est un **hub** : un seul programme, une seule fenêtre, d'où vous pilotez des **modules** qui travaillent ensemble sur des **missions**, sans jamais accéder aux données ni aux secrets les uns des autres. **Studio** lance [Claude Code](https://claude.com/claude-code) cycle après cycle sur votre propre PC, avec votre propre abonnement Claude, jusqu'à la livraison d'un jeu, d'un site, d'une application ou d'un outil. **Serveurs** prépare votre VPS, son DNS et ses certificats, et déploie ce que Studio construit. Le **coffre** garde chaque clé chiffrée et ne donne à chaque projet que ce que vous lui accordez. Une seule phrase sur la page d'accueil peut tous les mettre au travail :
+Athanor Hub est un **hub** : un seul programme, une seule fenêtre, d'où vous pilotez des **modules** qui travaillent ensemble sur des **missions**, sans jamais accéder aux données ni aux secrets les uns des autres. **Studio** lance [Claude Code](https://claude.com/claude-code) cycle après cycle sur votre propre PC, avec votre propre abonnement Claude, jusqu'à la livraison d'un jeu, d'un site, d'une application ou d'un outil. **Serveurs** prépare votre VPS, son DNS et ses certificats, et déploie ce que Studio construit. Le **coffre** garde chaque clé chiffrée et ne donne à chaque projet que ce que vous lui accordez. Une seule phrase sur la page d'accueil peut tous les mettre au travail :
 
 > *Fais un site pour la boulangerie Martin et mets-le en ligne sur martin.fr, avec une dev protégée par mot de passe sur mon VPS.*
 
 Athanor répond par une **carte de mission** : ce que Studio va construire, ce que Serveurs va préparer (DNS, certificats, reverse proxy, protection, pare-feu), quelles clés chacun reçoit, et quand il demandera votre accord. Vous appuyez sur **Lancer**. Le site est construit, déployé en dev après chaque jalon, vérifié de l'extérieur, et part en production quand vous le dites. L'IA demande ; Athanor agit avec la clé, qu'il ne remet jamais. Vous pouvez fermer l'application, la verrouiller ou aller dormir : le four continue de brûler.
 
 > [!NOTE]
-> Athanor est un projet indépendant à source disponible. Il n'est ni affilié à Anthropic ni approuvé par Anthropic. Il pilote la commande officielle Claude Code avec votre propre abonnement.
+> Athanor est un projet indépendant à source disponible. Il n'est ni affilié à Anthropic ni approuvé par Anthropic. Il pilote la commande officielle Claude Code avec votre propre abonnement. Le programme, ses fichiers de téléchargement et son dossier de données gardent le nom *Athanor* : chaque ancien Athanor se met à jour vers Athanor Hub tout seul.
 
 ---
 
@@ -492,7 +492,7 @@ Les logiciels installés sont détectés sur **tous les disques** (`C:`, `D:`…
 
 ## Coffre et accès
 
-Le coffre garde les clés ; *Accès* décide quel projet reçoit lesquelles, environnement par environnement. La règle qui sous-tend les deux : le pilote d'un projet ne reçoit jamais que les clés *code* que vous lui avez accordées pour son environnement en cours, et les clés de vos serveurs ne quittent jamais le processus d'Athanor.
+Le coffre garde les clés ; *Accès* décide quel projet reçoit lesquelles. Une clé suffit : le projet la reçoit en essai comme en production, et vous n'activez *Séparer essai et production* que si un service vous donne deux clés (une de test et une réelle). Les clés *code* sont données au projet, dont le pilote lit la valeur ; les clés *infra* (serveurs, Cloudflare, SSH) restent chez Athanor, qui s'en sert lui-même et ne les donne jamais à l'IA.
 
 | | |
 |---|---|
@@ -515,8 +515,8 @@ Ce que le coffre protège, et ce qu'il ne protège pas, est dans le [modèle de 
 
 *Accès*, un onglet de Studio, décide quelles entrées du coffre le projet reçoit. *Guide › Les accès* le parcourt pas à pas.
 
-- **Accorder.** Les entrées du coffre à gauche, les environnements du projet (*dev*, *staging*, *prod*) à droite : glissez une entrée sur un environnement, ou cochez sa case. Le pilote la reçoit sous le nom de variable affiché, que vous pouvez changer.
-- **L'environnement et le badge.** À côté de *Démarrer*, une liste choisit l'environnement donné au pilote (*dev* au départ), un badge 🔑 compte les accès et ouvre le panneau, et une phrase dit ce que le pilote recevra (« 2 clés de test, 1 variable »). Un téléphone appairé les affiche, sans pouvoir les changer.
+- **Accorder.** Les entrées du coffre à gauche, les clés données à ce projet à droite : glissez-y une entrée, ou cochez sa case. *Séparer essai et production* affiche à la place trois colonnes (*essai*, *préproduction*, *production*), et une entrée du coffre peut garder une deuxième valeur pour la production. Le pilote la reçoit sous le nom de variable affiché, que vous pouvez changer.
+- **L'environnement et le badge.** À côté de *Démarrer*, une liste choisit l'environnement donné au pilote (*essai* au départ), un badge 🔑 compte les accès et ouvre le panneau, et une phrase dit ce que le pilote recevra (« 2 clés de test, 1 variable »). Un téléphone appairé les affiche, sans pouvoir les changer.
 - **Ce que reçoit le pilote.** Avant chaque démarrage, et à chaque changement, Athanor réécrit lui-même le `.athanor/secrets.env` du projet avec exactement les entrées *code* accordées pour l'environnement en cours ; retirer un accès en enlève tout de suite la valeur. Claude ne tient jamais le coffre. Une ligne de l'ancien fichier dont la valeur n'est pas au coffre est gardée, et le panneau propose de l'importer. Tant que la clé *code* est fermée, le fichier reste tel quel et le panneau le dit.
 - **Les clés de vos serveurs.** Une entrée *infra* (Cloudflare, SSH…) peut être liée à un projet, mais Athanor la garde pour ses propres actions : le pilote ne la reçoit jamais, et le panneau la range à part.
 - ***Pour vous*.** Une clé donnée sur la page *Pour vous* entre au coffre (portée *code*) avec un accès pour l'environnement en cours, marqué *ajoutée automatiquement*. Sans coffre utilisable, elle va dans le fichier du projet comme avant, et la page le dit. Une clé qui ressemble à une clé d'infrastructure (GitHub, AWS, Cloudflare, SSH…) n'est donnée au pilote qu'après votre confirmation, et elle est refusée en mode Windows natif sauf si *Forcer* est coché pour le projet : donnez-la plutôt dans le *Coffre*.

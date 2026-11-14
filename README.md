@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="docs/images/logo.svg" width="112" height="112" alt="Athanor logo">
+  <img src="docs/images/logo.svg" width="112" height="112" alt="Athanor Hub logo">
 </p>
 
-<h1 align="center">Athanor</h1>
+<h1 align="center">Athanor Hub</h1>
 
 <h3 align="center">One hub on your PC: Claude Code builds your projects, puts them online, and never holds the keys.</h3>
 
@@ -37,17 +37,17 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/hub.png" alt="Athanor's home page: the assistant's conversation box with project and server mentions, and the Missions, Studio and Servers tiles with their live figures" width="100%">
+  <img src="docs/images/hub.png" alt="Athanor Hub's home page: the assistant's conversation box with project and server mentions, and the Missions, Studio and Servers tiles with their live figures" width="100%">
 </p>
 
-Athanor is a **hub**: one program, one window, from which you drive **modules** that work together on **missions**, without ever reaching each other's data or secrets. **Studio** runs [Claude Code](https://claude.com/claude-code) cycle after cycle on your own PC, with your own Claude subscription, until a game, a website, an app or a tool is delivered. **Servers** prepares your VPS, its DNS and its certificates, and deploys what Studio builds. The **vault** keeps every key encrypted, and gives each project only what you grant it. One sentence on the home page can set them all to work:
+Athanor Hub is a **hub**: one program, one window, from which you drive **modules** that work together on **missions**, without ever reaching each other's data or secrets. **Studio** runs [Claude Code](https://claude.com/claude-code) cycle after cycle on your own PC, with your own Claude subscription, until a game, a website, an app or a tool is delivered. **Servers** prepares your VPS, its DNS and its certificates, and deploys what Studio builds. The **vault** keeps every key encrypted, and gives each project only what you grant it. One sentence on the home page can set them all to work:
 
 > *Make a site for the Martin bakery and put it online at martin.fr, with a password-protected dev on my VPS.*
 
 Athanor answers with a **mission card**: what Studio will build, what Servers will prepare (DNS, certificates, reverse proxy, protection, firewall), which keys each one gets, and when it will ask for your accord. You press **Launch**. The site is built, deployed to dev after each milestone, checked from outside, and goes to production when you say so. The AI asks; Athanor acts with the key, which it never hands over. You can close the app, lock it or go to bed: the furnace keeps burning.
 
 > [!NOTE]
-> Athanor is an independent, source-available project. It is not affiliated with or endorsed by Anthropic. It drives the official Claude Code CLI with your own subscription.
+> Athanor is an independent, source-available project. It is not affiliated with or endorsed by Anthropic. It drives the official Claude Code CLI with your own subscription. The program, its download files and its data folder keep the name *Athanor*, so every older Athanor updates to Athanor Hub by itself.
 
 ---
 
@@ -492,7 +492,7 @@ Installed software is detected on **every drive** (`C:`, `D:`…), and the newes
 
 ## Vault and access
 
-The vault keeps the keys; *Access* decides which project gets which, environment by environment. The rule behind both: a project's pilot only ever receives the *code* keys you granted it for its current environment, and your servers' keys never leave Athanor's process.
+The vault keeps the keys; *Access* decides which project gets which. One key is enough: the project gets it in testing as in production, and you turn on *Separate testing and production* only if a service gives you two keys (a test one and a live one). *Code* keys are given to the project, whose pilot reads their value; *infra* keys (servers, Cloudflare, SSH) stay with Athanor, which uses them itself and never gives them to the AI.
 
 | | |
 |---|---|
@@ -515,8 +515,8 @@ What the vault protects against, and what it does not, is in the [security model
 
 *Access*, a tab of Studio, decides which vault entries the project gets. *Guide › Project access* walks through it.
 
-- **Grant.** The vault's entries on the left, the project's environments (*dev*, *staging*, *prod*) on the right: drag an entry onto an environment, or tick its box. The pilot gets it under the variable name shown, which you can change.
-- **The environment and the badge.** Next to *Start*, a list chooses the environment given to the pilot (*dev* at first), a 🔑 badge counts the accesses and opens the panel, and a sentence says what the pilot will get (“2 test keys, 1 variable”). A paired phone shows them, and cannot change them.
+- **Grant.** The vault's entries on the left, the keys given to this project on the right: drag an entry there, or tick its box. *Separate testing and production* shows three columns instead (*testing*, *pre-production*, *production*), and a vault entry can hold a second value for production. The pilot gets it under the variable name shown, which you can change.
+- **The environment and the badge.** Next to *Start*, a list chooses the environment given to the pilot (*testing* at first), a 🔑 badge counts the accesses and opens the panel, and a sentence says what the pilot will get (“2 test keys, 1 variable”). A paired phone shows them, and cannot change them.
 - **What the pilot receives.** Before each start, and at each change, Athanor itself rewrites the project's `.athanor/secrets.env` with exactly the *code* entries granted for the current environment; removing an access takes its value out at once. Claude never holds the vault. A line of the old file whose value is not in the vault is kept, and the panel offers to import it. While the *code* key is closed, the file is left as it was and the panel says so.
 - **Your servers' keys.** An *infra* entry (Cloudflare, SSH…) can be linked to a project, but Athanor keeps it for its own actions: the pilot never receives it, and the panel shows it apart.
 - ***For you*.** A key you give on the *For you* page goes into the vault (scope *code*) with an access for the current environment, marked *added automatically*. Without a usable vault, it goes into the project's file as before, and the page says so. A key that looks like an infrastructure key (GitHub, AWS, Cloudflare, SSH…) is given to the pilot only once you confirm it, and is refused in native Windows mode unless *Force* is ticked for the project: give it in the *Vault* instead.
