@@ -885,7 +885,7 @@ function blocAccesDemarrer(ac, distant) {
   const phrase = (recu.length ? t("The pilot will have access to: {0}.", [recu.join(", ")]) : t("The pilot receives nothing from the vault."))
     + (ac.infra ? " " + t(pl(ac.infra) ? "{0} server keys kept by Athanor" : "{0} server key kept by Athanor", [ac.infra]) + "." : "");
   const verrou = ac.etat === "verrouille" ? `<span class="badge badge-infra" title="${h(t("The vault is locked: the pilot's file is not updated until you unlock it."))}">🔒 ${t("vault locked")}</span>` : "";
-  const envs = (ac.envs || []).map((e) => `<option value="${h(e)}" ${e === ac.env ? "selected" : ""}>${h(e)}</option>`).join("");
+  const envs = (ac.envs || []).map((e) => `<option value="${h(e)}" ${e === ac.env ? "selected" : ""}>${h(nomEnv(e))}</option>`).join("");
   const choix = distant ? `<span class="badge" title="${h(t("Environment"))}">${h(ac.env)}</span>` // a paired device only reads the grants
     : `<select data-env-acces aria-label="${h(t("Environment"))}" title="${h(t("Environment given to the pilot: changing it rewrites its values at once."))}">${envs}</select>`;
   return `<span class="acces-demarrer">${choix}`
@@ -3367,7 +3367,7 @@ function carteApprobation(x, ap, codes) {
     : `<span class="badge">${h(x.env)}</span> <strong>${h(t("Plan for {0}", [d.nom || d.serveur]))}</strong> <span>${h(x.projet)}</span>`,
     [t("Server role: {0}", [x.env]), t("{0} step(s)", [d.etapes || "?"])], blocPlan(x, p), d.regle === "oui" && t("Never ask again for this server"), p && p.critique && !p.critique.verdict);
   // a deployment (M120): prod is never decided by a rule
-  if (x.action === "deploiement") return carteDecision(x, ap, `<span class="badge">${h(x.env)}</span> <strong>${h(x.env === "prod" ? t("Deploy {0} to production?", [d.hote]) : t("Deploy {0} to {1}?", [d.hote, x.env]))}</strong> <span>${h(x.projet)}</span>`,
+  if (x.action === "deploiement") return carteDecision(x, ap, `<span class="badge">${h(nomEnv(x.env))}</span> <strong>${h(x.env === "prod" ? t("Deploy {0} to production?", [d.hote]) : t("Deploy {0} to {1}?", [d.hote, nomEnv(x.env)]))}</strong> <span>${h(x.projet)}</span>`,
     [t("Commit {0}", [d.commit || (d.sha || "").slice(0, 7)]), d.avant && t("Online now: version {0}", [d.avant]), d.serveurs && t("Servers: {0}", [d.serveurs]), d.fichiers_build && t("Build files changed: {0}", [d.fichiers_build])],
     // P7: a mission's prod accord says where it goes, what changes and opens the mission
     (d.mission ? `${/^https?:\/\//.test(d.url || "") ? `<div class="pv-details"><a href="${h(d.url)}" target="_blank" rel="noopener">${h(d.url)}</a></div>` : ""}${d.commits ? `<div class="pv-details"><strong>${h(t("What changes: {0} new commit(s)", [d.commits]))}</strong>${d.changements ? ` <span class="appr-changements">${h(d.changements)}</span>` : ""}</div>` : ""}` : "") +
@@ -3382,9 +3382,9 @@ function carteApprobation(x, ap, codes) {
   const champs = acces ? `<div class="appr-champs">
       <label class="champ"><span>${t("Vault key (code)")}</span>${codes.length ? `<select data-appr-entree><option value="">${t("Choose a key…")}</option>${codes.map((e) => `<option value="${h(e.id)}"${e.id === entree ? " selected" : ""}>${h(e.nom)}</option>`).join("")}</select>` : `<span class="muet petit">${t("No project key (code) in the vault yet.")}</span>`}
         <a class="petit" href="#coffre">＋ ${t("Add a key")}</a></label>
-      <label class="champ"><span>${t("Environment")}</span><select data-appr-env>${ENVS_APPR.map((e) => `<option${e === env ? " selected" : ""}>${e}</option>`).join("")}</select></label>
+      <label class="champ"><span>${t("Environment")}</span><select data-appr-env>${ENVS_APPR.map((e) => `<option value="${e}"${e === env ? " selected" : ""}>${h(nomEnv(e))}</option>`).join("")}</select></label>
       <label class="champ"><span>${t("Variable name")}</span><input type="text" data-appr-var value="${h(variable)}" maxlength="100" spellcheck="false" placeholder="${h(t("the vault's name"))}"></label></div>` : "";
-  return carteDecision(x, ap, `<span class="badge">${h(x.env)}</span> <strong>${h(x.projet)}</strong> <span>${h(acces ? t("access requested") : x.action)}</span>`,
+  return carteDecision(x, ap, `<span class="badge">${h(nomEnv(x.env))}</span> <strong>${h(x.projet)}</strong> <span>${h(acces ? t("access requested") : x.action)}</span>`,
     [acces && nom && t("proposed variable: {0}", [nom])], `<div class="pv-details">${h(x.raison)}</div>${champs}`, t("Never ask again for this project and environment"));
 }
 // an approval's card: its head, what it asks, the password when the window decides, and its decisions ("never ask again" only when allowed)
@@ -3406,7 +3406,7 @@ async function sectionApprobations() {
   const l = ((ap || {}).approbations || []).filter((x) => x.etat === "attente"), regles = (ap || {}).regles || [];
   const blocRegles = regles.length ? `<details class="bloc appr-regles"><summary>${t("“Never ask again” rules ({0})", [regles.length])}</summary>
       <p class="intro petit">${t("These requests are accepted without asking you. Ask again removes the rule; the emergency stop removes them all.")}</p>
-      ${regles.map((r) => `<div class="ligne m0"><span class="badge">${h(r.env)}</span> <strong>${h(r.projet)}</strong> <span>${h(r.action === "demander_acces" ? `${t("access requested")} ${r.nom || ""}` : r.action === "deploiement" ? t("deployment") : r.action)}</span><span class="espace"></span><button type="button" class="btn" data-regle="${h(JSON.stringify(r))}">${t("Ask again")}</button></div>`).join("")}</details>` : "";
+      ${regles.map((r) => `<div class="ligne m0"><span class="badge">${h(nomEnv(r.env))}</span> <strong>${h(r.projet)}</strong> <span>${h(r.action === "demander_acces" ? `${t("access requested")} ${r.nom || ""}` : r.action === "deploiement" ? t("deployment") : r.action)}</span><span class="espace"></span><button type="button" class="btn" data-regle="${h(JSON.stringify(r))}">${t("Ask again")}</button></div>`).join("")}</details>` : "";
   if (!l.length) return blocRegles;
   const cof = l.some((x) => x.action === "demander_acces") ? await api("coffre").catch(() => ({})) : {};
   const codes = (cof.entrees || []).filter((e) => e.famille === "secret" && e.portee === "code").sort((a, b) => a.nom.localeCompare(b.nom));
@@ -5038,11 +5038,21 @@ let numeroRendu = 0;
 // (ARCHITECTURE §Accès); drag an entry onto a column, or tick its box (keyboard, touch). Names only, no value.
 const acc = { projet: "" };
 const AUTO_ACCES = { migration: "imported", pourvous: "added automatically (For you)" };
+// M224: environments on screen in plain words, internal ids (dev, staging, prod) unchanged
+const NOMS_ENV = { dev: "Testing", staging: "Pre-production", prod: "Production" };
+const nomEnv = (e) => NOMS_ENV[e] ? t(NOMS_ENV[e]) : e;
+// M224: one list unless the project's keys differ per environment, or the owner split them (remembered per browser)
+const cleSeparer = (projet) => "acces-separer:" + projet;
+function accesUniformes(acces, envs) {
+  const par = {};
+  for (const a of acces) (par[a.entree] ||= []).push(a);
+  return Object.values(par).every((l) => envs.every((e) => l.some((a) => a.env === e)) && new Set(l.map((a) => a.variable)).size === 1);
+}
 function ligneAcces(a, refusee) {
   const k = h(a.entree + "|" + a.env), auto = AUTO_ACCES[a.auto];
   return `<li class="acc-acces${refusee ? " acc-refusee" : ""}">
     <div class="ligne m0"><b class="cp-nom" title="${h(a.nom)}">${h(a.nom)}</b>${auto ? `<span class="badge">${t(auto)}</span>` : ""}${refusee ? `<span class="badge badge-infra">${t("refused in native mode")}</span>` : ""}<button type="button" class="btn btn-petit" data-acc-retirer="${k}">${t("Remove")}</button></div>
-    ${a.portee === "infra" ? "" : `<input type="text" class="acc-var" data-acc-var="${k}" value="${h(a.variable)}" maxlength="100" spellcheck="false" aria-label="${h(t("Variable name") + " — " + a.nom + " (" + a.env + ")")}">`}
+    ${a.portee === "infra" ? "" : `<input type="text" class="acc-var" data-acc-var="${k}" value="${h(a.variable)}" maxlength="100" spellcheck="false" aria-label="${h(t("Variable name") + " — " + a.nom + (a.env === "*" ? "" : " (" + nomEnv(a.env) + ")"))}">`}
   </li>`;
 }
 pages.acces = async () => {
@@ -5055,30 +5065,37 @@ pages.acces = async () => {
   const inj = d.injection || {}, envs = d.envs || ["dev", "staging", "prod"];
   const donne = (id, env) => d.acces.some((a) => a.entree === id && a.env === env);
   const refusee = d.natif && !d.forcer_infra_natif; // C-M218-9: infra grants used by nobody until Force is ticked
+  const uniformes = accesUniformes(d.acces, envs);
+  let separer = !uniformes;
+  try { separer ||= localStorage.getItem(cleSeparer(projet)) === "1"; } catch (e) { /* storage unavailable */ }
   const carte = (x) => `<li class="acc-entree" draggable="true" data-acc-entree="${h(x.id)}">
     <div class="ligne m0"><b class="cp-nom" title="${h(x.note || x.nom)}">${h(x.nom)}</b><span class="badge">${h(x.famille === "secret" ? typeCoffre(x.type) : t("Variable"))}</span>${x.famille === "secret" ? `<span class="badge${x.portee === "infra" ? " badge-infra" : ""}">${x.portee === "infra" ? "infra" : "code"}</span>` : ""}</div>
-    <div class="acc-cases" role="group" aria-label="${h(x.nom)}">${envs.map((e) => `<label><input type="checkbox" data-acc-case="${h(x.id + "|" + e)}"${donne(x.id, e) ? " checked" : ""}> ${e}</label>`).join("")}</div>
+    <div class="acc-cases" role="group" aria-label="${h(x.nom)}">${separer ? envs.map((e) => `<label><input type="checkbox" data-acc-case="${h(x.id + "|" + e)}"${donne(x.id, e) ? " checked" : ""}> ${h(nomEnv(e))}</label>`).join("")
+      : `<label><input type="checkbox" data-acc-case="${h(x.id + "|*")}"${donne(x.id, envs[0]) ? " checked" : ""}> ${t("Given to this project")}</label>`}</div>
   </li>`;
   const colonne = (env) => {
-    const l = d.acces.filter((a) => a.env === env), code = l.filter((a) => a.portee !== "infra"), infra = l.filter((a) => a.portee === "infra");
-    return `<section class="acc-env${env === d.env ? " acc-courant" : ""}" data-acc-env="${env}" aria-label="${env}">
-      <h3>${env}${env === d.env ? ` <span class="muet petit">· ${t("current")}</span>` : ""}</h3>
-      ${code.length ? `<ul class="acc-liste">${code.map((a) => ligneAcces(a)).join("")}</ul>` : infra.length ? "" : `<p class="muet petit acc-depot">${t("Drop an entry here, or tick it on the left.")}</p>`}
+    const tous = env === "*", l = tous ? d.acces.filter((a) => a.env === envs[0]).map((a) => ({ ...a, env })) : d.acces.filter((a) => a.env === env);
+    const code = l.filter((a) => a.portee !== "infra"), infra = l.filter((a) => a.portee === "infra");
+    return `<section class="acc-env${env === d.env || tous ? " acc-courant" : ""}" data-acc-env="${env}" aria-label="${h(tous ? t("Keys given to this project") : nomEnv(env))}">
+      ${tous ? "" : `<h3>${h(nomEnv(env))}${env === d.env ? ` <span class="muet petit">· ${t("current")}</span>` : ""}</h3>`}
+      ${code.length ? `<ul class="acc-liste">${code.map((a) => ligneAcces(a)).join("")}</ul>` : infra.length ? "" : `<p class="muet petit acc-depot">${t(tous ? "No key given yet: tick one on the left, or drop it here." : "Drop an entry here, or tick it on the left.")}</p>`}
       ${infra.length ? `<div class="acc-garde"><b class="petit">🔒 ${t("Kept by Athanor, never given to the pilot")}</b>
         <p class="muet petit">${t("The keys of your servers stay with Athanor for its own actions (deployments): the pilot never receives them.")}</p>
         <ul class="acc-liste">${infra.map((a) => ligneAcces(a, refusee)).join("")}</ul></div>` : ""}
     </section>`;
   };
   return `<div class="acces">
-    <div class="bloc"><h2>${t("Access")}</h2><p class="intro petit">${t("Drag an entry of the vault onto an environment, or tick it: the pilot receives the project keys and variables of the current environment, under the variable name shown.")}</p>
+    <div class="bloc"><h2>${t("Access")}</h2><p class="intro petit">${t(separer ? "Drag an entry of the vault onto an environment, or tick it: the pilot receives the project keys and variables of the current environment, under the variable name shown." : "Tick a key of the vault, or drag it into the list: the project receives it under the variable name shown, whatever its environment.")}</p>
       ${inj.etat === "verrouille" ? `<p class="petit attention">🔒 ${t("The vault is locked: the pilot's file is not updated until you unlock it.")}</p>` : ""}
       ${d.natif ? `<div class="acc-natif"><p class="petit attention">⚠ ${t(d.forcer_infra_natif ? "Forced: infra entries can be linked to this project, and its deployments' build command runs without a barrier. This choice is logged." : "Native Windows mode: this PC has no barrier, any agent can read every file. Infra entries (your servers' keys) are refused for this project; switch to WSL in Settings › Options to keep them out of reach.")}</p>
         <label class="petit"><input type="checkbox" data-acc-forcer${d.forcer_infra_natif ? " checked" : ""}> ${t("Force, knowing the risk")}</label> <a class="petit" href="#options">${t("Options")}</a></div>` : ""}</div>
     <div class="acc-grille">
       <div class="bloc acc-coffre"><h2>${t("Vault")}</h2>
         ${entrees.length ? `<ul class="acc-liste">${entrees.map(carte).join("")}</ul>` : `<p class="muet">${t("The vault is empty.")} <a href="#coffre">${t("Vault")}</a></p>`}</div>
-      <div class="bloc acc-projet"><h2>${t("This project")}</h2>
-        <div class="acc-envs">${envs.map(colonne).join("")}</div>
+      <div class="bloc acc-projet"><h2>${t(separer ? "This project" : "Keys given to this project")}</h2>
+        <div class="acc-envs${separer ? "" : " acc-une"}">${(separer ? envs : ["*"]).map(colonne).join("")}</div>
+        <div class="acc-separer"><label class="petit"><input type="checkbox" data-acc-separer${separer ? " checked" : ""}${uniformes ? "" : " disabled"}> ${t("Separate testing and production")}</label>
+          <p class="muet petit">${t(uniformes ? "Many services give two keys, one to try things out (test) and one for real. Turn this on if you want to give a different key when the project is in testing and when it is live. Otherwise, leave it off." : "Some keys differ between testing and production: the split stays on until they are the same everywhere.")}</p></div>
         ${(inj.ignorees || []).length ? `<p class="petit attention acc-ignorees">⚠ ${t("Not given to the pilot: a value on several lines does not fit its file ({0}).", [inj.ignorees.join(", ")])}</p>` : ""}
         ${(inj.repli || []).length ? `<div class="acc-repli">${inj.repli.map((n) => `<p class="ligne m0 petit"><code>${h(n)}</code><span class="muet croit">${t("in the old file, not in the vault")}</span><button type="button" class="btn btn-petit" data-acc-importer>${t("Import")}</button></p>`).join("")}</div>` : ""}
       </div>
@@ -5096,8 +5113,8 @@ function blocEnvironnements(en, inventaire, fournisseurs, distant) {
     const srv = inventaire.filter((x) => e.serveurs.includes(x.id) || (prod ? (x.roles || []).includes("prod") : !(x.roles || []).includes("prod") || x.roles.includes("dev")));
     const fourn = fournisseurs.map((f) => [f.id, f.nom]);
     if (e.fournisseur && !fourn.some(([id]) => id === e.fournisseur)) fourn.push([e.fournisseur, e.fournisseur]);
-    return `<section class="env-carte${prod ? " env-prod" : ""}" data-env="${nom}" aria-label="${nom}">
-      <h3>${nom}${prod ? ` <span class="badge">🔒 ${t("approval always")}</span>` : ""}</h3>
+    return `<section class="env-carte${prod ? " env-prod" : ""}" data-env="${nom}" aria-label="${h(nomEnv(nom))}">
+      <h3>${h(nomEnv(nom))}${prod ? ` <span class="badge">🔒 ${t("approval always")}</span>` : ""}</h3>
       <label class="env-champ">${t("Address (URL)")}<input type="url" data-env-champ="url" value="${h(e.url)}" placeholder="https://app.example.com" maxlength="300" spellcheck="false"${ro}></label>
       <fieldset class="env-serveurs"><legend>${t("Servers")}</legend>
         ${srv.length ? srv.map((x) => `<label><input type="checkbox" data-env-serveur="${h(x.id)}"${e.serveurs.includes(x.id) ? " checked" : ""}${ro}> <span class="croit">${h(x.nom)}</span>${(x.roles || []).map((r) => `<span class="badge">${h(r)}</span>`).join("")}</label>`).join("")
@@ -5176,7 +5193,7 @@ $("#page").addEventListener("change", async (ev) => {
 const AUTEURS_DEPLOI = { agent: "by the agent", relais: "after a milestone", proprietaire: "by you", auto: "automatically, after a failed check" };
 $("#page").addEventListener("click", async (ev) => {
   const b = ev.target.closest("[data-env-revenir]"); if (!b) return;
-  const c = b.closest("[data-env]"), env = c.dataset.env, err = c.querySelector(".env-erreur"), question = t("Serve the previous version of {0} again? It is checked from this PC right after.", [env]);
+  const c = b.closest("[data-env]"), env = c.dataset.env, err = c.querySelector(".env-erreur"), question = t("Serve the previous version of {0} again? It is checked from this PC right after.", [nomEnv(env)]);
   const preuve = env === "prod" ? await preuveMdp(question, { ok: t("Go back") }, question) : (await confirmer(question, { ok: t("Go back") })) ? {} : false;
   if (preuve === false) return;
   b.disabled = true; err.hidden = true; b.textContent = t("Going back…");
@@ -5185,7 +5202,7 @@ $("#page").addEventListener("click", async (ev) => {
     tpl.innerHTML = blocDeploiements(env, { ...(r.deploiement ? { deploiement: true } : {}), protection: c.querySelector('[data-env-champ="protection"]').value }, r.deploiements || []);
     c.querySelector("[data-env-deploi]").replaceWith(tpl.content.firstElementChild);
     const d = r.deploiement || {};
-    toast(d.etat === "ok" ? t("{0} serves its previous version again.", [env]) : d.message ? texteMessage(d.message) : t(d.erreur || "Failed"), d.etat === "ok" ? "ok" : "erreur");
+    toast(d.etat === "ok" ? t("{0} serves its previous version again.", [nomEnv(env)]) : d.message ? texteMessage(d.message) : t(d.erreur || "Failed"), d.etat === "ok" ? "ok" : "erreur");
   } catch (e) { err.textContent = e.message; err.hidden = false; b.disabled = false; b.textContent = t("Go back to the previous version"); }
 });
 // the project's GitHub deployment key (one for every environment), made on demand (M119)
@@ -5216,7 +5233,7 @@ $("#page").addEventListener("click", async (ev) => {
   try {
     const en = await api("projets/" + encodeURIComponent(acc.projet) + "/environnements", "POST", corps), tpl = document.createElement("template");
     tpl.innerHTML = blocEnvironnements(en, acc.inv, acc.fourn, false); // B74: only this card is redrawn, the others keep what is typed
-    c.replaceWith(tpl.content.querySelector(`[data-env="${corps.env}"]`)); toast(t("Environment {0} saved.", [corps.env]), "ok");
+    c.replaceWith(tpl.content.querySelector(`[data-env="${corps.env}"]`)); toast(t("Environment {0} saved.", [nomEnv(corps.env)]), "ok");
   } catch (e) { err.textContent = e.message; err.hidden = false; b.disabled = false; } // the server's reason in the card, the fields kept
 });
 // C25 C35 C37: what an agent of this PC must not decide is retyped with Athanor's password in this window (a paired
@@ -5250,6 +5267,7 @@ $("#page").addEventListener("change", (ev) => {
   const x = ev.target;
   if (x.dataset.accCase) { const [entree, env] = x.dataset.accCase.split("|"); return changerAcces({ action: x.checked ? "ajouter" : "retirer", entree, env }); }
   if (x.matches("[data-acc-forcer]")) return forcerInfraNatif(x.checked);
+  if (x.matches("[data-acc-separer]")) { try { if (x.checked) localStorage.setItem(cleSeparer(acc.projet), "1"); else localStorage.removeItem(cleSeparer(acc.projet)); } catch (e) { /* storage unavailable */ } return rendrePage(); }
   if (x.dataset.accVar) { const [entree, env] = x.dataset.accVar.split("|"); return changerAcces({ action: "renommer", entree, env, variable: x.value.trim() }); }
 });
 // native Windows mode: infra entries need a confirmed, logged "force" per project

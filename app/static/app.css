@@ -1082,6 +1082,10 @@ ol.guide-access li { margin: 5px 0; }
 .acc-envs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .acc-env { border: 1px dashed var(--line); border-radius: var(--rayon); padding: 10px; min-height: 140px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .acc-env h3 { margin: 0; font-size: 14px; }
+.acc-envs.acc-une { grid-template-columns: 1fr; }
+.acc-une .acc-env { min-height: 80px; }
+.acc-separer { margin-top: 12px; }
+.acc-separer p { margin: 4px 0 0; }
 .acc-courant { border-style: solid; border-color: var(--accent); }
 .acc-survol { background: var(--accent-halo); border-color: var(--accent); }
 .acc-var { width: 100%; box-sizing: border-box; font-family: var(--mono, monospace); font-size: 12.5px; }

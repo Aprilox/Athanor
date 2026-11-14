@@ -207,6 +207,32 @@ func TestAccesProjets(t *testing.T) {
 		t.Fatalf("after changes: %v", v)
 	}
 
+	// M224: "*" gives, renames and takes back an entry in every environment under one name, with one password
+	_, v = poster(map[string]string{"projet": "demo", "action": "ajouter", "entree": var2.ID, "env": "*"})
+	g = acces(v)
+	for _, e := range envsProjet {
+		if g[var2.ID+"|"+e]["variable"] != "SITE_URL" {
+			t.Fatalf("* add, %s: %v", e, g)
+		}
+	}
+	if code, _ := poster(map[string]string{"projet": "demo", "action": "ajouter", "entree": var2.ID, "env": "*"}); code != http.StatusConflict {
+		t.Errorf("* add twice: %d", code)
+	}
+	_, v = poster(map[string]string{"projet": "demo", "action": "renommer", "entree": var2.ID, "env": "*", "variable": "SITE_ADDRESS"})
+	if g = acces(v); g[var2.ID+"|dev"]["variable"] != "SITE_ADDRESS" || g[var2.ID+"|prod"]["variable"] != "SITE_ADDRESS" || g[var2.ID+"|staging"]["variable"] != "SITE_ADDRESS" {
+		t.Fatalf("* rename: %v", g)
+	}
+	_, v = poster(map[string]string{"projet": "demo", "action": "retirer", "entree": var2.ID, "env": "*"})
+	if g = acces(v); g[var2.ID+"|dev"] != nil || g[var2.ID+"|staging"] != nil || g[var2.ID+"|prod"] != nil {
+		t.Fatalf("* remove: %v", g)
+	}
+	if code, _ := poster(map[string]string{"projet": "demo", "action": "retirer", "entree": var2.ID, "env": "*"}); code != http.StatusNotFound {
+		t.Errorf("* remove twice: %d", code)
+	}
+	if code, _ := poster(map[string]string{"projet": "demo", "action": "ajouter", "entree": var2.ID, "env": "staging"}); code != 200 {
+		t.Fatal("give back on staging:", code)
+	}
+
 	// removing the automatic grant does not bring it back
 	if code, _ := poster(map[string]string{"projet": "demo", "action": "retirer", "entree": importee, "env": "dev"}); code != 200 {
 		t.Fatal("remove automatic grant:", code)
@@ -402,5 +428,64 @@ func TestAccesClePartagee(t *testing.T) {
 		if contient(p) {
 			t.Errorf("project %s: the deleted entry's value stays in secrets.env", p.Nom)
 		}
+	}
+}
+
+// TestAccesAncienFichierInchange (M224): the single list of the Access panel changes nothing in hub/acces.json;
+// a file written by an older version (grants per environment) reads the same and comes back byte for byte after
+// a grant is given then taken back.
+func TestAccesAncienFichierInchange(t *testing.T) {
+	ancien := `{
+  "version": 1,
+  "projets": {
+    "boutique": {
+      "env": "staging",
+      "forcer_infra_natif": false,
+      "acces": [
+        {
+          "entree": "a1",
+          "env": "dev",
+          "variable": "STRIPE_KEY",
+          "cree": "2026-10-02T08:15:00Z"
+        },
+        {
+          "entree": "a2",
+          "env": "prod",
+          "variable": "STRIPE_KEY",
+          "cree": "2026-10-02T08:16:00Z"
+        },
+        {
+          "entree": "v1",
+          "env": "staging",
+          "variable": "SITE_URL",
+          "auto": "migration",
+          "cree": "2026-10-03T09:00:00Z"
+        }
+      ]
+    }
+  },
+  "auto_faits": [
+    "v1"
+  ]
+}`
+	chemin := filepath.Join(t.TempDir(), "acces.json")
+	if err := os.WriteFile(chemin, []byte(ancien), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	a, err := ouvrirAcces(chemin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p := a.Projet("boutique"); p.Env != "staging" || len(p.Acces) != 3 || p.Acces[1].Env != "prod" {
+		t.Fatalf("read: %+v", p)
+	}
+	if _, err := a.Ajouter("boutique", EntreeCoffre{ID: "v2", Famille: "variable", Type: "autre", Nom: "API_URL"}, "dev", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Retirer("boutique", "v2", "dev"); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(chemin); string(b) != ancien {
+		t.Fatalf("file changed:\n%s", b)
 	}
 }

@@ -110,7 +110,18 @@ func (s *Serveur) apiAcces(w http.ResponseWriter, r *http.Request) {
 	s.ecrireJSON(w, s.etatAcces(projet))
 }
 
-// apiAccesModifier: POST /api/acces {projet, action: ajouter|retirer|renommer|env|forcer, entree, env,
+// tousEnvs: env of ajouter|retirer|renommer meaning every environment of the project (M224: one list, no
+// environment shown); acces.json keeps one line per environment, as older versions read it.
+const tousEnvs = "*"
+
+func envsVises(env string) []string {
+	if env == tousEnvs {
+		return envsProjet
+	}
+	return []string{env}
+}
+
+// apiAccesModifier: POST /api/acces {projet, action: ajouter|retirer|renommer|env|forcer, entree, env (or "*"),
 // variable, forcer, confirme}.
 func (s *Serveur) apiAccesModifier(w http.ResponseWriter, r *http.Request) {
 	var c struct {
@@ -151,13 +162,31 @@ func (s *Serveur) apiAccesModifier(w http.ResponseWriter, r *http.Request) {
 			err = errAccesInfraNatif
 			break
 		}
-		var a AccesProjet
-		if a, err = s.acces.Ajouter(c.Projet, e, c.Env, c.Variable, ""); err == nil {
+		variable, donne := c.Variable, false
+		if c.Env == tousEnvs && variable == "" { // M224: the same variable in every environment
+			for _, x := range s.acces.Projet(c.Projet).Acces {
+				if x.Entree == e.ID {
+					variable = x.Variable
+				}
+			}
+		}
+		for _, env := range envsVises(c.Env) {
+			var a AccesProjet
+			if a, err = s.acces.Ajouter(c.Projet, e, env, variable, ""); errors.Is(err, errAccesDeja) && c.Env == tousEnvs {
+				err = nil
+				continue
+			} else if err != nil {
+				break
+			}
+			variable, donne = a.Variable, true
 			action := "acces_accorde"
 			if e.Portee == "infra" && modeNatif.Load() {
 				action = "acces_accorde_force" // an infra entry linked in native mode, the project forced
 			}
 			s.auditAcces(deQui(r), c.Projet, action, e, a.Variable, a.Env)
+		}
+		if err == nil && !donne {
+			err = errAccesDeja
 		}
 	case "forcer":
 		if c.Forcer && !c.Confirme {
@@ -168,12 +197,28 @@ func (s *Serveur) apiAccesModifier(w http.ResponseWriter, r *http.Request) {
 			s.ecrireAudit(LigneAudit{Type: "evenement", De: deQui(r), Vers: "hub", Projet: c.Projet, Action: "forcer_infra_natif",
 				Resultat: fmt.Sprint(c.Forcer)})
 		}
-	case "retirer":
-		if err = s.acces.Retirer(c.Projet, c.Entree, c.Env); err == nil {
-			s.auditAcces(deQui(r), c.Projet, "acces_retire", s.entreeCoffre(c.Entree), "", c.Env)
+	case "retirer", "renommer":
+		fait := false
+		for _, env := range envsVises(c.Env) {
+			if c.Action == "retirer" {
+				err = s.acces.Retirer(c.Projet, c.Entree, env)
+			} else {
+				err = s.acces.RenommerVariable(c.Projet, c.Entree, env, c.Variable)
+			}
+			if errors.Is(err, errAccesInconnu) && c.Env == tousEnvs {
+				err = nil
+				continue
+			} else if err != nil {
+				break
+			}
+			fait = true
+			if c.Action == "retirer" {
+				s.auditAcces(deQui(r), c.Projet, "acces_retire", s.entreeCoffre(c.Entree), "", env)
+			}
 		}
-	case "renommer":
-		err = s.acces.RenommerVariable(c.Projet, c.Entree, c.Env, c.Variable)
+		if err == nil && !fait {
+			err = errAccesInconnu
+		}
 	case "env":
 		err = s.acces.ChangerEnv(c.Projet, c.Env)
 	default:
