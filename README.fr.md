@@ -362,12 +362,14 @@ Les agents sont dans [`template/.claude/agents/`](template/.claude/agents) : mod
 
 ### Les pages
 
+<img src="docs/images/overview.png" alt="Page Vue d'ensemble du Studio : le menu du hub à gauche, l'état du projet avec son bouton Démarrer, et les cinq premiers pas" width="100%">
+
 | | |
 |:---:|:---:|
-| <img src="docs/images/team.png" alt="Page Équipe : le chef de projet avec les sous-agents qu'il a appelés, et trois ouvriers, chacun avec son executor"><br>**Équipe** : qui a appelé qui, ce que fait chacun, en direct | <img src="docs/images/log.png" alt="Page Journal en thème clair : événements du pilote, paroles de Claude, outils et sous-agents, lignes des ouvriers étiquetées [M5]"><br>**Journal** : lisible ou brut, filtrable, ouvriers étiquetés |
-| <img src="docs/images/requests.png" alt="Page Demandes : la demande en cours avec son plan en vagues, et deux demandes en attente réordonnables"><br>**Demandes** : une file réordonnable, des fichiers, des remarques en cours de route | <img src="docs/images/chat.png" alt="Page Discuter pendant que le pilote tourne : Claude répond à une question sur le code et transforme la correction en remarque envoyée au pilote"><br>**Discuter** : des questions sur le projet à tout moment |
-| <img src="docs/images/skills.png" alt="Page Skills &amp; MCP, onglet Skills : quatre skills installés, dont trois activés pour ce projet, et la recherche communautaire en dessous"><br>**Skills** : installés une fois, activés par projet | <img src="docs/images/mcp.png" alt="Page Skills &amp; MCP, onglet MCP : Context7 et Godot activés, un champ de clé API facultative, et la recherche dans le MCP Registry"><br>**MCP** : distants ou locaux dans une cage, testés en un clic |
-| <img src="docs/images/health.png" alt="Page Installation &amp; santé sous Windows, onglet WSL : toutes les vérifications au vert sauf Docker, facultatif"><br>**Installation & santé** : un onglet par mode, réparation ligne par ligne | <img src="docs/images/options.png" alt="Réglages, onglet Options : langue, cinq palettes et cinq accents, démarrage, bureau Claude, dossier de l'outil et version"><br>**Réglages → Options** : 6 langues, 5 palettes × 5 accents |
+| <img src="docs/images/team.png" alt="Page Équipe : le chef de projet avec le tester qu'il a appelé pendant ce cycle, et la bibliothèque de sous-agents"><br>**Équipe** : qui a appelé qui, ce que fait chacun, en direct | <img src="docs/images/log.png" alt="Page Journal : les paroles de Claude, un check lancé et un appel de sous-agent, filtrés par type"><br>**Journal** : lisible ou brut, filtrable, ouvriers étiquetés |
+| <img src="docs/images/requests.png" alt="Page Demandes : le formulaire d'une nouvelle demande, les fichiers et les remarques en cours de route, et une demande en file"><br>**Demandes** : une file réordonnable, des fichiers, des remarques en cours de route | <img src="docs/images/chat.png" alt="Page Chat : la zone de conversation avec ses fichiers joints et ses interrupteurs Modifier les fichiers et Internet"><br>**Discuter** : des questions sur le projet à tout moment |
+| <img src="docs/images/skills.png" alt="Page Skills &amp; MCP, onglet Skills : la recherche dans la communauté et le catalogue vérifié"><br>**Skills** : installés une fois, activés par projet | <img src="docs/images/mcp.png" alt="Page Skills &amp; MCP, onglet MCP : la recherche dans le registre MCP et le catalogue vérifié (Context7, Serena, Playwright)"><br>**MCP** : distants ou locaux dans une cage, testés en un clic |
+| <img src="docs/images/health.png" alt="Page Installation &amp; santé sous Windows, onglet WSL : Tout vérifier, Tout installer et une ligne par vérification"><br>**Installation & santé** : un onglet par mode, réparation ligne par ligne | <img src="docs/images/options.png" alt="Réglages, onglet Options : la langue, cinq palettes et cinq accents, et la liste des projets"><br>**Réglages → Options** : 6 langues, 5 palettes × 5 accents |
 
 Les captures montrent les palettes sombre « Ardoise » et « Clair ».
 
@@ -608,7 +610,7 @@ Le MCP d'Athanor s'ouvre à deux sortes de clients, toujours par un code à 6 ch
 
 ## Dans un terminal
 
-<img src="docs/images/terminal.png" alt="Athanor dans un terminal : les projets et les pages à gauche, l'état du pilote, le dernier commit de cet ordinateur et sur GitHub, le quota de l'abonnement et les cycles déjà faits au milieu, le plan en vagues à droite">
+<img src="docs/images/terminal.png" alt="Athanor dans un terminal : les projets et les pages à gauche, l'état du projet, le quota de l'abonnement et le plan avec ses jalons">
 
 Sous Linux et macOS, Athanor tourne aussi dans le terminal, comme btop ou htop : le même Athanor que sa fenêtre, sur le même serveur, donc les deux montrent toujours la même chose. Fait pour un serveur joint en SSH, un Linux sans bureau, ou simplement votre propre terminal.
 

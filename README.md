@@ -362,12 +362,14 @@ The agents live in [`template/.claude/agents/`](template/.claude/agents): edit t
 
 ### The pages
 
+<img src="docs/images/overview.png" alt="Studio's Overview page: the hub menu on the left, the project's state with its Start button, and the five first steps" width="100%">
+
 | | |
 |:---:|:---:|
-| <img src="docs/images/team.png" alt="Team page: the project lead with the sub-agents it called, and three workers, each with its own executor"><br>**Team**: who called whom, what each one does, live | <img src="docs/images/log.png" alt="Log page in the light theme: pilot events, Claude's words, tools and sub-agents, worker lines tagged [M5]"><br>**Log**: readable or raw, filtered, workers tagged |
-| <img src="docs/images/requests.png" alt="Requests page: the current request with its plan in waves, and two queued requests that can be reordered"><br>**Requests**: a queue you can reorder, files, notes along the way | <img src="docs/images/chat.png" alt="Chat page while the pilot runs: Claude answers a question about the code and turns the fix into a note sent to the pilot"><br>**Chat**: ask about the project at any time |
-| <img src="docs/images/skills.png" alt="Skills &amp; MCP page, Skills tab: four skills installed, three of them switched on for this project, and the community search below"><br>**Skills**: installed once, switched on per project | <img src="docs/images/mcp.png" alt="Skills &amp; MCP page, MCP tab: Context7 and Godot switched on, an optional API key field, and the MCP Registry search"><br>**MCP**: remote or local in a cage, tested in one click |
-| <img src="docs/images/health.png" alt="Setup &amp; health page on Windows, WSL tab: every check green except Docker, which is optional"><br>**Setup & health**: one tab per mode, repair line by line | <img src="docs/images/options.png" alt="Settings, Options tab: language, five palettes and five accents, startup, the Claude desktop, tool folder and version"><br>**Settings → Options**: 6 languages, 5 palettes × 5 accents |
+| <img src="docs/images/team.png" alt="Team page: the project lead with the tester it called this cycle, and the library of sub-agents"><br>**Team**: who called whom, what each one does, live | <img src="docs/images/log.png" alt="Log page: Claude's words, a check run and a sub-agent call, filtered by kind"><br>**Log**: readable or raw, filtered, workers tagged |
+| <img src="docs/images/requests.png" alt="Requests page: the form for a new request, files and notes along the way, and one queued request"><br>**Requests**: a queue you can reorder, files, notes along the way | <img src="docs/images/chat.png" alt="Chat page: the conversation box with its attached files and its Change the files and Internet switches"><br>**Chat**: ask about the project at any time |
+| <img src="docs/images/skills.png" alt="Skills &amp; MCP page, Skills tab: the community search and the verified catalog"><br>**Skills**: installed once, switched on per project | <img src="docs/images/mcp.png" alt="Skills &amp; MCP page, MCP tab: the MCP Registry search and the verified catalog (Context7, Serena, Playwright)"><br>**MCP**: remote or local in a cage, tested in one click |
+| <img src="docs/images/health.png" alt="Setup &amp; health page on Windows, WSL tab: Check everything, Install everything and one line per check"><br>**Setup & health**: one tab per mode, repair line by line | <img src="docs/images/options.png" alt="Settings, Options tab: language, five palettes and five accents, and the list of projects"><br>**Settings → Options**: 6 languages, 5 palettes × 5 accents |
 
 The screenshots show the dark "Slate" and the "Light" palettes.
 
@@ -608,7 +610,7 @@ Athanor's MCP opens to two kinds of clients, always by a 6-digit code **and** yo
 
 ## In a terminal
 
-<img src="docs/images/terminal.png" alt="Athanor in a terminal: the projects and pages on the left, the state of the pilot, the last commit of this computer and on GitHub, the subscription quota and the cycles so far in the middle, the plan in waves on the right">
+<img src="docs/images/terminal.png" alt="Athanor in a terminal: the projects and pages on the left, the state of the project, the subscription quota and the plan with its milestones">
 
 On Linux and macOS, Athanor also runs in the terminal, like btop or htop: the same Athanor as its window, on the same server, so both always show the same thing. Made for a server reached through SSH, a Linux without a desktop, or simply your own terminal.
 

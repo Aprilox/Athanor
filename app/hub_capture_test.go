@@ -57,7 +57,13 @@ func TestCaptureHub(t *testing.T) {
 	}
 	// a cycle log that reports the quota: the Home tile draws its bar
 	quota := `{"type":"rate_limit_event","rate_limit_info":{"status":"allowed","unifiedWindows":{"five_hour":{"utilization":0.41,"resetsAt":` + fmt.Sprint(time.Now().Unix()+3600) + `}}}}` + "\n"
-	if err := os.WriteFile(filepath.Join(projets[0].LogsDir(), "cycle-001.jsonl"), []byte(quota), 0o644); err != nil {
+	// and a few turns of the lead (the Log and Team pages of the docs' images: docs/images/log.png, team.png)
+	tours := `{"type":"assistant","message":{"content":[{"type":"text","text":"M4: tiles and level 1. I start with the tile set, then the first level."}]}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"bash .athanor/check.sh quick tiles","description":"Run the quick check on the tiles"}}]}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t2","name":"Agent","input":{"subagent_type":"tester","description":"tester (sonnet): checks level 1","prompt":"Play level 1 and report its bugs."}}]}}
+{"type":"assistant","message":{"content":[{"type":"text","text":"Quick check passed: 42 tests, 3 screenshots. Committing M4."}]}}
+`
+	if err := os.WriteFile(filepath.Join(projets[0].LogsDir(), "cycle-001.jsonl"), []byte(quota+tours), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	// the kit folder: a page's background check (Setup & health…) may still hold a file of it for a moment
