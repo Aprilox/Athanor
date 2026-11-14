@@ -100,7 +100,7 @@ func TestCoffreMigration(t *testing.T) {
 			t.Fatal("unexpected entry", e.Nom)
 		case e.Source != a[0] || e.Type != a[1] || e.Portee != "code" || e.Famille != "secret":
 			t.Errorf("%s: source %q type %q scope %q family %q", e.Nom, e.Source, e.Type, e.Portee, e.Famille)
-		case !strings.HasPrefix(e.Note, "Importé de "):
+		case e.Note != "": // B11: the card's translated "Imported from" line is enough
 			t.Errorf("%s: note %q", e.Nom, e.Note)
 		}
 		if err := lisible(s.coffre, e.ID, valeurs[e.Nom]); err != nil {
@@ -110,6 +110,20 @@ func TestCoffreMigration(t *testing.T) {
 	manuelle, err := s.coffre.Ajouter(EntreeCoffre{Nom: "MANUELLE", Famille: "secret", Type: "jeton"}, "temoin-manuelle-1")
 	if err != nil {
 		t.Fatal(err)
+	}
+	// B11: an older import's note (any language) is cleared, a note of the user's own is kept
+	ancienne, _ := s.coffre.Ajouter(EntreeCoffre{Nom: "ANCIENNE", Famille: "secret", Type: "jeton", Source: "projet:x", Note: "Importato da x/.athanor/secrets.env"}, "temoin-ancienne-1")
+	gardee, _ := s.coffre.Ajouter(EntreeCoffre{Nom: "GARDEE", Famille: "secret", Type: "jeton", Source: "projet:x", Note: "Stripe live key, never in dev"}, "temoin-gardee-1")
+	s.coffre.effacerNotesImport()
+	for _, e := range s.coffre.Liste() {
+		if (e.ID == ancienne.ID && e.Note != "") || (e.ID == gardee.ID && e.Note == "") {
+			t.Errorf("B11: %s note %q", e.Nom, e.Note)
+		}
+	}
+	for _, id := range []string{ancienne.ID, gardee.ID} {
+		if err := s.coffre.Supprimer(id); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	// 2nd start-up: nothing more; an imported entry the user deleted is not brought back

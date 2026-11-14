@@ -104,6 +104,7 @@ func (s *Serveur) migrerSecrets(auto bool) (int, error) {
 	}
 	migrationMu.Lock()
 	defer migrationMu.Unlock()
+	s.coffre.effacerNotesImport()
 	chemin := cheminMigration(s.coffre)
 	etat := lireEtatMigration(chemin)
 	if auto && (etat.Annulee || etat.Faite) { // an agent can write secrets.env: never import it behind the user's back
@@ -136,7 +137,6 @@ func (s *Serveur) migrerSecrets(auto bool) (int, error) {
 			importees[e.Nom+"|"+e.Source] = e.ID
 		}
 	}
-	d := dicoTUI(s.langue())
 	cree := 0
 	for _, a := range anciens {
 		if cree >= maxImportParPasse {
@@ -156,7 +156,7 @@ func (s *Serveur) migrerSecrets(auto bool) (int, error) {
 			}
 		} else {
 			e, err := s.coffre.Ajouter(EntreeCoffre{Nom: a.nom, Famille: "secret", Type: a.typ, Portee: "code",
-				Source: a.source, Note: traduireTUI(d, "Imported from {0}", a.fichier)}, a.valeur)
+				Source: a.source}, a.valeur) // B11: no note, the card's translated "Imported from" line says it
 			if errors.As(err, new(erreurEntree)) {
 				continue
 			}
@@ -310,4 +310,31 @@ func (s *Serveur) apiCoffreMigrationAnnuler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	s.ecrireJSON(w, map[string]int{"retirees": n})
+}
+
+// effacerNotesImport (B11): older imports wrote "Imported from FILE" as the note, in the language of
+// that day, under the card's own translated line; such a note is cleared, its date kept.
+func (c *Coffre) effacerNotesImport() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	var prefixes []string
+	for l := range languesConnues {
+		p, _, _ := strings.Cut(traduireTUI(dicoTUI(l), "Imported from {0}"), "{0}")
+		prefixes = append(prefixes, p)
+	}
+	change := false
+	for i, e := range c.f.Entrees {
+		if e.Source == "" || e.Note == "" || strings.ContainsRune(e.Note, '\n') {
+			continue
+		}
+		for _, p := range prefixes {
+			if strings.HasPrefix(e.Note, p) {
+				c.f.Entrees[i].Note, change = "", true
+				break
+			}
+		}
+	}
+	if change {
+		_ = c.enregistrer() // shortcut: a failed save keeps the old notes in the file; the next start clears them
+	}
 }

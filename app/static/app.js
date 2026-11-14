@@ -1431,7 +1431,8 @@ function mdChat(s) {
   return String(s || "").split(/```/).map((bloc, i) => {
     if (i % 2) return `<pre class="chat-code">${h(bloc.replace(/^[a-zA-Z0-9_+-]*\n/, ""))}</pre>`;
     return h(bloc).replace(/`([^`\n]+)`/g, "<code>$1</code>").replace(/\*\*([^*\n]+)\*\*/g, "<b>$1</b>")
-      .replace(/^(\s*)[-*] (.*)$/gm, "$1• $2").replace(/^#{1,4} (.*)$/gm, "<b>$1</b>").replace(/\n/g, "<br>");
+      .replace(/^(\s*)[-*] (.*)$/gm, "$1• $2").replace(/^#{1,4} (.*)$/gm, "<b>$1</b>")
+      .replace(/(^|[^\w*])\*(\S(?:[^*\n]*\S)?)\*(?![\w*])/gm, "$1<i>$2</i>").replace(/\n/g, "<br>"); // M195: *italic*, never a*b*c
   }).join("");
 }
 
@@ -2285,7 +2286,7 @@ function listeDossiersHub(pv) {
     : `<li class="muet petit">${t("No folder: the assistant sees no file of your computer.")}</li>`;
 }
 function pouvoirsHub(pv) {
-  return `<details class="hub-pouvoirs" id="hub-pouvoirs"><summary>${t("{0}: {1}", [t("What the assistant can do"), `<span id="hub-pouvoirs-resume">${h(resumePouvoirs(pv))}</span>`])}</summary>
+  return `<details class="hub-pouvoirs" id="hub-pouvoirs"><summary>${t("{0}: {1}", [t("What the assistant can do"), `<span id="hub-pouvoirs-resume">${h(resumePouvoirs(pv))}</span>`]).replace(" :", " :")}</summary>
     ${POUVOIRS_HUB.map(([k, i, n, aide]) => `<label class="interrupteur m0 local-seul"><input type="checkbox" data-pouvoir="${k}" ${pv[k] ? "checked" : ""} aria-describedby="pv-aide-${k}"><span>${i} ${t(n)}</span></label>
     <p class="petit muet m0 local-seul" id="pv-aide-${k}">${t(aide)}</p>`).join("")}
     <div class="hub-dossiers"><div class="ligne m0"><strong>📁 ${t("Folders")}</strong><span class="espace"></span><button type="button" class="btn btn-petit local-seul" id="hub-dossier-ajouter">${t("Add a folder…")}</button></div>
