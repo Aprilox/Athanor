@@ -49,4 +49,5 @@ func (moduleEmail) Routes(mux *http.ServeMux, s *Serveur) {
 	mux.HandleFunc("POST /api/email/comptes/{id}", s.garde(false, s.apiEmailModifier))
 	mux.HandleFunc("DELETE /api/email/comptes/{id}", s.garde(false, s.apiEmailSupprimer))
 	mux.HandleFunc("POST /api/email/comptes/{id}/test", s.garde(false, s.apiEmailTester))
+	mux.HandleFunc("POST /api/email/configurer", s.garde(false, s.apiEmailConfigurer))
 }

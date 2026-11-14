@@ -12,7 +12,7 @@ const PRESETS_EMAIL = [
   { id: "sendgrid", nom: "SendGrid", hote: "smtp.sendgrid.net", port: 587, securite: "starttls" },
 ];
 const SECURITES_EMAIL = { starttls: "STARTTLS (port 587)", tls: "TLS (port 465)", none: "None (this PC only)" };
-const em = { comptes: [], form: null, test: null }; // form: null, {} (new) or {id}; test: the account whose test form is open
+const em = { comptes: [], form: null, test: null, config: null, projets: [], envs: [] }; // form: null, {} (new) or {id}; test, config: the account whose test or sending form is open
 
 function formulaireEmail() {
   const x = em.form.id && em.comptes.find((c) => c.id === em.form.id);
@@ -38,14 +38,19 @@ function formulaireEmail() {
 
 pages.email = async () => {
   const d = await api("email/comptes");
-  em.comptes = d.comptes || [];
+  em.comptes = d.comptes || []; em.projets = d.projets_hub || []; em.envs = d.envs || [];
   const carte = (c) => `<div class="carte" data-em-compte="${h(c.id)}"><div class="ligne"><span class="ico ico-email" aria-hidden="true"></span><strong>${h(c.nom)}</strong></div>
     <p class="muet petit">${h(c.utilisateur || c.expediteur)} · ${h(c.hote)}:${h(String(c.port))} · ${h(t(SECURITES_EMAIL[c.securite] || c.securite))}</p>
     <p class="muet petit">${t("Sender")}: ${h(c.expediteur)}</p>
     ${c.dernier_test ? `<p class="petit ${c.dernier_test.ok ? "ok" : "echec"}" data-em-resultat>${t("Last test ({0}, to {1}): {2}", [new Date(c.dernier_test.t).toLocaleString(), h(c.dernier_test.destinataire), h(t(c.dernier_test.message))])}</p>` : ""}
     ${em.test === c.id ? `<form class="ligne m0" data-em-test-form="${h(c.id)}" autocomplete="off"><label class="champ"><span>${t("Recipient")}</span><input type="email" id="em-dest" maxlength="320" spellcheck="false" required value="${h(em.dest || "")}" placeholder="you@example.org"></label>
       <button type="submit" class="btn btn-primaire">${t("Send")}</button><button type="button" class="btn" data-em-test-annuler>${t("Cancel")}</button></form>` : ""}
-    <div class="ligne m0"><button type="button" class="btn" data-em-tester="${h(c.id)}">${t("Send a test e-mail")}</button><button type="button" class="btn" data-em-modifier="${h(c.id)}">${t("Edit")}</button><button type="button" class="btn btn-danger" data-em-supprimer="${h(c.id)}">${t("Delete")}</button></div></div>`;
+    ${(c.projets || []).length ? `<p class="petit" data-em-projets>${t("Sends for")}: ${c.projets.map((p) => `<span class="puce-mention">${h(p.projet)} · ${h(p.env)}<button type="button" class="puce-x" data-em-arreter="${h(c.id)}" data-projet="${h(p.projet)}" data-env="${h(p.env)}" aria-label="${h(t("Stop sending"))} ${h(p.projet)} ${h(p.env)}">×</button></span>`).join(" ")}</p>` : `<p class="muet petit">${t("Not used by any project yet.")}</p>`}
+    ${em.config === c.id ? (em.projets.length ? `<form class="m0" data-em-config-form="${h(c.id)}"><div class="ligne m0"><label class="champ"><span>${t("Project")}</span><select id="em-projet">${em.projets.map((p) => `<option>${h(p)}</option>`).join("")}</select></label>
+      <label class="champ"><span>${t("Environment")}</span><select id="em-env">${em.envs.map((e) => `<option>${h(e)}</option>`).join("")}</select></label></div>
+      <p class="muet petit">${t("The project receives SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_FROM and SMTP_PASSWORD: in dev through the pilot's secrets, in staging and prod in the deployed app's .env.")}</p>
+      <div class="ligne m0"><button type="submit" class="btn btn-primaire">${t("Give the settings")}</button><button type="button" class="btn" data-em-config-annuler>${t("Cancel")}</button></div></form>` : `<p class="muet petit">${t("No project yet.")}</p>`) : ""}
+    <div class="ligne m0"><button type="button" class="btn" data-em-tester="${h(c.id)}">${t("Send a test e-mail")}</button><button type="button" class="btn" data-em-configurer="${h(c.id)}">${t("Configure sending")}</button><button type="button" class="btn" data-em-modifier="${h(c.id)}">${t("Edit")}</button><button type="button" class="btn btn-danger" data-em-supprimer="${h(c.id)}">${t("Delete")}</button></div></div>`;
   return `<div class="email">
     <p class="muet email-explication">${t("Add an SMTP account (your provider's sending server): Athanor keeps its password in the vault, tests the sending and gives your deployed apps what they need to send emails.")}</p>
     ${em.form ? formulaireEmail() : `<div class="ligne"><button type="button" class="btn btn-primaire" data-em-ajouter>${t("Add an email account")}</button></div>`}
@@ -62,15 +67,25 @@ document.addEventListener("change", (ev) => {
 });
 
 document.addEventListener("click", async (ev) => {
-  const b = ev.target.closest("[data-em-ajouter], [data-em-modifier], [data-em-annuler], [data-em-supprimer], [data-em-tester], [data-em-test-annuler]");
+  const b = ev.target.closest("[data-em-ajouter], [data-em-modifier], [data-em-annuler], [data-em-supprimer], [data-em-tester], [data-em-test-annuler], [data-em-configurer], [data-em-config-annuler], [data-em-arreter]");
   if (!b) return;
+  if (b.hasAttribute("data-em-configurer")) { em.config = b.dataset.emConfigurer; return rendrePage().then(() => $("#em-projet")?.focus()); }
+  if (b.hasAttribute("data-em-config-annuler")) { em.config = null; return rendrePage(); }
+  if (b.hasAttribute("data-em-arreter")) {
+    const { projet, env } = b.dataset;
+    if (!(await confirmer(t("Stop sending for {0} ({1})? The app loses its SMTP_ settings.", [projet, env]), { ok: t("Stop sending"), danger: true }))) return;
+    if (await action(api("email/configurer", "POST", { compte: b.dataset.emArreter, projet, env, retirer: true }))) { toast(t("Sending stopped for {0} ({1}).", [projet, env]), "ok"); rendrePage(); }
+    return;
+  }
   if (b.hasAttribute("data-em-tester")) { em.test = b.dataset.emTester; return rendrePage().then(() => $("#em-dest")?.focus()); }
   if (b.hasAttribute("data-em-test-annuler")) { em.test = null; return rendrePage(); }
   if (b.hasAttribute("data-em-ajouter")) { em.form = {}; return rendrePage().then(() => $("#em-preset")?.focus()); }
   if (b.hasAttribute("data-em-modifier")) { em.form = { id: b.dataset.emModifier }; return rendrePage().then(() => $("#em-nom")?.focus()); }
   if (b.hasAttribute("data-em-annuler")) { em.form = null; return rendrePage(); }
   const c = em.comptes.find((x) => x.id === b.dataset.emSupprimer);
-  if (!c || !(await confirmer(t("Delete the email account {0}? Its password leaves the vault, and the projects it was given to lose it.", [c.nom]), { ok: t("Delete"), danger: true }))) return;
+  const question = (c && c.projets || []).length ? t("Delete the email account {0}? Its password leaves the vault, and these projects lose their sending settings: {1}.", [c.nom, c.projets.map((p) => p.projet + " (" + p.env + ")").join(", ")])
+    : t("Delete the email account {0}? Its password leaves the vault, and the projects it was given to lose it.", [c && c.nom]);
+  if (!c || !(await confirmer(question, { ok: t("Delete"), danger: true }))) return;
   if (await action(api("email/comptes/" + encodeURIComponent(c.id), "DELETE"))) { toast(t("{0} deleted.", [c.nom]), "ok"); rendrePage(); }
 });
 
@@ -87,6 +102,20 @@ document.addEventListener("submit", async (ev) => {
   catch (e) { toast(e.message, "erreur"); bouton.disabled = false; bouton.textContent = t("Send"); return; }
   toast(t(r.message), r.ok ? "ok" : "erreur");
   em.test = null; rendrePage();
+});
+
+// « Configure sending »: the account's SMTP_ settings granted to a project and an environment (Athanor's password retyped)
+document.addEventListener("submit", async (ev) => {
+  const f = ev.target.closest("[data-em-config-form]");
+  if (!f) return;
+  ev.preventDefault();
+  const projet = $("#em-projet").value, env = $("#em-env").value;
+  const p = await preuveMdp(t("Giving the sending settings to a project: retype Athanor's password."), { ok: t("Give the settings") });
+  if (!p) return;
+  if (await action(api("email/configurer", "POST", { compte: f.dataset.emConfigForm, projet, env, ...p }))) {
+    const c = em.comptes.find((x) => x.id === f.dataset.emConfigForm);
+    toast(t("{0} now sends for {1} ({2}).", [c ? c.nom : "", projet, env]), "ok"); em.config = null; rendrePage();
+  }
 });
 
 document.addEventListener("submit", async (ev) => {

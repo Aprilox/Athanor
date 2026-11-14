@@ -32,6 +32,8 @@ type CompteEmail struct {
 	Modifie     string `json:"modifie"`
 	// the last test send (M203): on the card, and in the bell while it failed
 	DernierTest *ResultatEnvoiEmail `json:"dernier_test,omitempty"`
+	// its sending settings (M204): SMTP_HOST… → vault variable, created at the first « Configure sending »
+	Variables map[string]string `json:"variables,omitempty"`
 }
 
 // the refusals of an account form: fixed messages (never the input), translated by the page
@@ -51,7 +53,7 @@ const (
 // errsEmail: every message of the module that reaches the page (TestEmailComptesTraduction).
 var errsEmail = []string{errEmailRequete.Error(), errEmailNom.Error(), errEmailHote.Error(), errEmailPort.Error(),
 	errEmailSecurite.Error(), errEmailUtilisateur.Error(), errEmailExpediteur.Error(), errEmailMdp.Error(),
-	errEmailInconnu.Error(), errEmailComptes}
+	errEmailInconnu.Error(), errEmailComptes, errEmailConflit.Error(), errEmailPasConfigu.Error()}
 
 var (
 	muComptesEmail sync.Mutex // comptes.json: read, changed and written under it
@@ -138,7 +140,15 @@ func (s *Serveur) apiEmailComptes(w http.ResponseWriter, r *http.Request) {
 		s.erreur(w, http.StatusInternalServerError, errEmailComptes)
 		return
 	}
-	s.ecrireJSON(w, map[string]any{"comptes": liste})
+	type compteVu struct {
+		CompteEmail
+		Projets []ProjetEmail `json:"projets"` // where it sends (M204): listed before a delete
+	}
+	vus := []compteVu{}
+	for _, c := range liste {
+		vus = append(vus, compteVu{c, s.acces.projetsEmail(c.Entree)})
+	}
+	s.ecrireJSON(w, map[string]any{"comptes": vus, "projets_hub": s.nomsProjets(), "envs": envsProjet})
 }
 
 // apiEmailAjouter: POST /api/email/comptes, a new account; its password goes into the vault (type smtp).
@@ -220,7 +230,14 @@ func (s *Serveur) apiEmailModifier(w http.ResponseWriter, r *http.Request) {
 	compte.Nom, compte.Hote, compte.Port, compte.Securite = c.Nom, c.Hote, c.Port, c.Securite
 	compte.Utilisateur, compte.Expediteur = c.Utilisateur, c.Expediteur
 	compte.Modifie = time.Now().UTC().Format(time.RFC3339)
-	compte.DernierTest = nil // changed settings: the last test no longer tells about them
+	compte.DernierTest = nil       // changed settings: the last test no longer tells about them
+	if len(compte.Variables) > 0 { // the projects it sends for get the new settings
+		if _, err := s.variablesCompteEmail(&compte); err != nil {
+			s.erreurCoffre(w, err)
+			return
+		}
+		s.injecterTous(nil)
+	}
 	liste[i] = compte
 	if err := ecrireComptesEmail(liste); err != nil {
 		s.erreur(w, http.StatusInternalServerError, errEmailComptes)
@@ -247,9 +264,11 @@ func (s *Serveur) apiEmailSupprimer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	compte := liste[i]
-	if err := s.retirerDuCoffre(compte.Entree); err != nil && !errors.Is(err, errCoffreInconnu) {
-		s.erreurCoffre(w, err)
-		return
+	for _, id := range entreesEmail(compte) { // its password and its variables, with every grant of them
+		if err := s.retirerDuCoffre(id); err != nil && !errors.Is(err, errCoffreInconnu) {
+			s.erreurCoffre(w, err)
+			return
+		}
 	}
 	if err := ecrireComptesEmail(slices.Delete(liste, i, i+1)); err != nil {
 		s.erreur(w, http.StatusInternalServerError, errEmailComptes)

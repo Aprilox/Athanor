@@ -37,7 +37,7 @@ func TestEmailModule(t *testing.T) {
 	email.(moduleRoutes).Routes(mux, s)
 	w := httptest.NewRecorder()
 	s.apiEmailComptes(w, httptest.NewRequest("GET", "/api/email/comptes", nil))
-	if w.Code != 200 || strings.TrimSpace(w.Body.String()) != `{"comptes":[]}` {
+	if w.Code != 200 || !strings.HasPrefix(w.Body.String(), `{"comptes":[],`) {
 		t.Fatalf("GET /api/email/comptes: %d %s", w.Code, w.Body.String())
 	}
 	if r := email.Resume(s); len(r.Stats) != 1 || r.Etat != "inactif" {
