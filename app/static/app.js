@@ -997,7 +997,13 @@ async function annulerArret(b) {
 $("#bandeau").addEventListener("change", async (ev) => {
   const sel = ev.target.closest("[data-env-acces]"); if (!sel || !etat.vue || !etat.vue.projet) return;
   sel.blur();
-  await action(api("acces", "POST", { projet: etat.vue.projet.nom, action: "env", env: sel.value })); // the server rewrites secrets.env
+  let corps = { projet: etat.vue.projet.nom, action: "env", env: sel.value };
+  if ((etat.vue.projet.acces?.preuve || []).includes(sel.value)) { // RT2: that environment's keys go to the pilot
+    const p = await preuveMdp(t("Moving to {0} gives the pilot this environment's keys: retype Athanor's password.", [sel.value]), { ok: t("Change") });
+    if (!p) return rafraichir();
+    corps = { ...corps, ...p };
+  }
+  await action(api("acces", "POST", corps)); // the server rewrites secrets.env
   await rafraichir();
   if (etat.page === "acces") rendrePage();
 });

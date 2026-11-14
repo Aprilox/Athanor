@@ -13,6 +13,9 @@ import (
 // TestAccesVariablesProposees: every name derived from a type is a valid shell name for secrets.env.
 func TestAccesVariablesProposees(t *testing.T) {
 	for typ := range typesCoffre {
+		if typ == "smtp" { // the email module writes its SMTP_* variables itself (email_config.go): no name proposed
+			continue
+		}
 		v, ok := variableParType[typ]
 		if !ok || !nomSecretValide(v) {
 			t.Errorf("type %s: proposed %q", typ, v)

@@ -86,9 +86,9 @@ func TestEmailComptes(t *testing.T) {
 	}
 	local := v["id"].(string)
 
-	// change without a password: the vault keeps it; renamed, the vault entry follows
-	code, v = appel("POST", "/api/email/comptes/"+id, compte(map[string]any{"nom": "Boutique pro", "port": 465, "securite": "tls", "mot_de_passe": ""}))
-	if code != 200 || v["nom"] != "Boutique pro" || v["port"] != float64(465) || v["entree"] != entree {
+	// change without a password, same server: the vault keeps it; renamed, the vault entry follows (another server: RT1)
+	code, v = appel("POST", "/api/email/comptes/"+id, compte(map[string]any{"nom": "Boutique pro", "expediteur": "pro@exemple.fr", "mot_de_passe": ""}))
+	if code != 200 || v["nom"] != "Boutique pro" || v["expediteur"] != "pro@exemple.fr" || v["entree"] != entree {
 		t.Fatalf("change: %d %v", code, v)
 	}
 	if err := lisible(s.coffre, entree, temoin); err != nil {

@@ -91,7 +91,7 @@ func TestClasserCommande(t *testing.T) {
 		{"sudo printenv", C},
 		{"sudo env", C},
 		{"/usr/bin/sudo env", C},
-		{"printenv", L},
+		{"printenv", C}, // RT3: the environment may hold secrets
 		{"sudo strings /dev/sda", D},
 		{"strings /usr/bin/ls", C},
 		{"sudo cat /dev/sda1", C},
@@ -161,7 +161,7 @@ func TestClasserCommande(t *testing.T) {
 		{"ls ~/.ssh/authorized_keys", L},
 		{"cat ~/.ssh/authorized_keys", L},
 		{"which nginx", L},
-		{"env", L},
+		{"env", C}, // RT3
 		{"date", L},
 
 		// destructive: known patterns, interpreters and masking prefixes

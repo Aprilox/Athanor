@@ -158,11 +158,12 @@ func TestInvariantI1(t *testing.T) {
 	// Start injects (it fails afterwards here: no kit)
 	_, _ = m.s.demarrerPilote(m.demo)
 	attendu("dev", m.tDev)
-	if code, _ := m.appel(t, "POST", "/api/acces", `{"projet":"demo","action":"env","env":"prod"}`); code != 200 {
+	avecMdpPreuve(m.s) // staging and prod hand over their keys: Athanor's password retyped (RT2)
+	if code, _ := m.appel(t, "POST", "/api/acces", `{"projet":"demo","action":"env","env":"prod","mot_de_passe":"`+mdpPreuveTest+`"}`); code != 200 {
 		t.Fatal("env prod:", code)
 	}
 	attendu("prod", m.tProd)
-	if code, _ := m.appel(t, "POST", "/api/acces", `{"projet":"demo","action":"env","env":"staging"}`); code != 200 {
+	if code, _ := m.appel(t, "POST", "/api/acces", `{"projet":"demo","action":"env","env":"staging","mot_de_passe":"`+mdpPreuveTest+`"}`); code != 200 {
 		t.Fatal("env staging:", code)
 	}
 	if got := lignesSecrets(t, m.demo); len(got) != 0 {

@@ -47,6 +47,7 @@ const (
 	errEmailExpediteur  = erreurEntree("The sender is not a valid e-mail address")
 	errEmailMdp         = erreurEntree("Give the account's password (1024 characters at most)")
 	errEmailInconnu     = erreurEntree("Unknown email account")
+	errEmailMdpServeur  = erreurEntree("The SMTP server changed: retype the account's password, so it only goes to the server you chose")
 	errEmailComptes     = "The email accounts cannot be read"
 )
 
@@ -215,6 +216,10 @@ func (s *Serveur) apiEmailModifier(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	compte := liste[i]
+	if c.MotDePasse == "" && (c.Hote != compte.Hote || c.Port != compte.Port || c.Securite != compte.Securite) {
+		s.erreurCoffre(w, errEmailMdpServeur) // RT1: the kept password must not follow the account to another server
+		return
+	}
 	if c.Nom != compte.Nom || c.MotDePasse != "" {
 		var mdp *string
 		if c.MotDePasse != "" {

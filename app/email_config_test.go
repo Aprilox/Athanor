@@ -134,7 +134,7 @@ func TestEmailConfigurer(t *testing.T) {
 	}
 
 	// a changed account reaches the projects it sends for
-	compte["port"], compte["securite"], compte["mot_de_passe"] = 465, "tls", ""
+	compte["port"], compte["securite"], compte["mot_de_passe"] = 465, "tls", temoin // another server: retyped (RT1)
 	if c, v := appel("POST", "/api/email/comptes/"+id, compte); c != 200 {
 		t.Fatalf("change: %d %v", c, v)
 	}

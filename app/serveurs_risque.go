@@ -406,7 +406,7 @@ func classerSegment(sg segmentShell, texte string) (Classe, string) {
 		}
 	}
 	mots := sg.mots
-	masque, affecte, sudo := "", false, false
+	masque, affecte := "", false
 	for len(mots) > 0 {
 		m := mots[0]
 		nom := m.texte
@@ -430,9 +430,6 @@ func classerSegment(sg segmentShell, texte string) (Classe, string) {
 		if _, ok := enveloppes[nom]; !ok || m.dynamique {
 			break
 		}
-		if nom == "sudo" || nom == "doas" {
-			sudo = true
-		}
 		reste, recherche, raison := sauterEnveloppe(nom, mots[1:])
 		if raison != "" {
 			return ClasseDestructrice, nom + " " + raison
@@ -445,8 +442,8 @@ func classerSegment(sg segmentShell, texte string) (Classe, string) {
 	}
 	if len(mots) == 0 {
 		switch {
-		case masque == "env" && sudo:
-			v.monter(ClasseChangement, "env under sudo shows root's environment, which may hold secrets")
+		case masque == "env": // RT3: the environment may hold secrets, with or without sudo
+			v.monter(ClasseChangement, "env shows the environment, which may hold secrets")
 		case masque == "env" || masque == "command" || masque == "" && !affecte:
 		case masque == "":
 			v.monter(ClasseChangement, "sets a shell variable")
@@ -470,8 +467,8 @@ func classerSegment(sg segmentShell, texte string) (Classe, string) {
 	args := mots[1:]
 	c, raison := classerNom(nom, textes(args), texte)
 	switch {
-	case c == ClasseLecture && sudo && nom == "printenv":
-		c, raison = ClasseChangement, "printenv under sudo shows root's environment, which may hold secrets"
+	case c == ClasseLecture && nom == "printenv": // RT3
+		c, raison = ClasseChangement, "printenv shows the environment, which may hold secrets"
 	case c == ClasseLecture && affecte:
 		c, raison = ClasseChangement, "environment variables imposed on "+nom
 	case c > ClasseLecture && (masque != "" || affecte):
@@ -875,8 +872,10 @@ var reglesCommandes = map[string]regle{
 			return ClasseDestructrice, "systemctl stops or restarts the whole server"
 		case unParmi(p, "stop disable mask kill") && uniteVitale(p):
 			return ClasseDestructrice, "systemctl cuts SSH or the network"
+		case unParmi(p[:min(1, len(p))], "show cat show-environment"): // RT3: Environment=… lines
+			return ClasseChangement, "systemctl " + p[0] + " shows a service's environment, which may hold secrets"
 		}
-		return classerSous("systemctl", p, "status show list-units list-unit-files list-sockets list-timers list-dependencies list-jobs is-active is-enabled is-failed is-system-running cat get-default show-environment help", "")
+		return classerSous("systemctl", p, "status list-units list-unit-files list-sockets list-timers list-dependencies list-jobs is-active is-enabled is-failed is-system-running get-default help", "")
 	},
 	"service": func(a []string, _ string) (Classe, string) {
 		p := positionnels(a)
@@ -1222,8 +1221,8 @@ func lectureInterdite(t string) Classe {
 		if sauvegardes(v, c) { // M92: Athanor's archives may hold secrets; restoring one is the owner's accord
 			return ClasseDestructrice
 		}
-		if p := strings.Join(c, "/"); p == "/var/backups" || p == "/var/backups/" {
-			pire = ClasseChangement // the folder that holds Athanor's backups: cd there then a relative path reaches them
+		if p := strings.Join(c, "/"); p == "/var/backups" || p == "/var/backups/" || uniteSystemd(c) {
+			pire = ClasseChangement // Athanor's backups folder (cd there then a relative path); RT3: a unit's Environment=
 		}
 		base := c[len(c)-1]
 		joker := strings.ContainsAny(v, "*?[")
@@ -1243,6 +1242,21 @@ func lectureInterdite(t string) Classe {
 		}
 	}
 	return pire
+}
+
+// uniteSystemd (RT3): a path, glob included, inside a folder of systemd units, whose Environment= lines may hold secrets.
+func uniteSystemd(c []string) bool {
+	for _, dossier := range []string{"/etc/systemd", "/run/systemd", "/lib/systemd", "/usr/lib/systemd"} {
+		d := strings.Split(dossier, "/")
+		dedans := len(c) >= len(d)
+		for i := 0; dedans && i < len(d); i++ {
+			dedans, _ = path.Match(c[i], d[i])
+		}
+		if dedans {
+			return true
+		}
+	}
+	return false
 }
 
 // cheminCritique: paths whose change can lock the owner out, break the boot or drive the kernel (/proc/sys*,
@@ -1287,6 +1301,9 @@ func classerOutil(outil string, a argsOutilServeur) (Classe, string) {
 	case "ssh_commande":
 		return classerCommande(a.Commande)
 	case "fichier_lire", "sftp_recuperer":
+		if uniteSystemd(nettoyer(cmp.Or(a.Chemin, a.Distant))) {
+			return ClasseChangement, "reads a systemd unit, whose Environment= lines may hold secrets" // RT3
+		}
 		return ClasseLecture, "reads a file"
 	case "fichier_ecrire", "sftp_envoyer":
 		p := cmp.Or(a.Chemin, a.Distant)

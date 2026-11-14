@@ -40,6 +40,7 @@ func TestInjectionAcces(t *testing.T) {
 		r := httptest.NewRequest(methode, chemin, strings.NewReader(corps))
 		r.Header.Set("X-Athanor", "jeton")
 		r.AddCookie(&http.Cookie{Name: cookieAcces, Value: "cle"})
+		r.AddCookie(cookieSessionTest)
 		w := httptest.NewRecorder()
 		mux.ServeHTTP(w, r)
 		reponses.WriteString(w.Body.String())
@@ -114,7 +115,8 @@ func TestInjectionAcces(t *testing.T) {
 	}
 
 	// the environment changes through the API: prod's entry instead of dev's
-	code, v := appel("POST", "/api/acces", `{"projet":"demo","action":"env","env":"prod"}`)
+	avecMdpPreuve(s) // prod hands over its keys: Athanor's password retyped (RT2)
+	code, v := appel("POST", "/api/acces", `{"projet":"demo","action":"env","env":"prod","mot_de_passe":"`+mdpPreuveTest+`"}`)
 	if c := lire(); code != 200 || !strings.Contains(c, tProd) || strings.Contains(c, tDev) {
 		t.Fatalf("env prod: %d\n%s", code, c)
 	}

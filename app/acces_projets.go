@@ -117,7 +117,8 @@ type ResumeAcces struct {
 	Secrets   int      `json:"secrets"`
 	Variables int      `json:"variables"`
 	Infra     int      `json:"infra"`
-	Etat      string   `json:"etat"` // the injection's state (EtatInjection.Etat)
+	Etat      string   `json:"etat"`             // the injection's state (EtatInjection.Etat)
+	Preuve    []string `json:"preuve,omitempty"` // RT2: the environments moving to needs Athanor's password (envDonneCles)
 }
 
 func resumerAcces(p ProjetAcces, entrees []EntreeCoffre) ResumeAcces {
@@ -127,6 +128,9 @@ func resumerAcces(p ProjetAcces, entrees []EntreeCoffre) ResumeAcces {
 		par[e.ID] = e
 	}
 	for _, a := range p.Acces {
+		if a.Env != "dev" && !slices.Contains(r.Preuve, a.Env) {
+			r.Preuve = append(r.Preuve, a.Env)
+		}
 		e, ok := par[a.Entree]
 		if !ok || a.Env != p.Env {
 			continue
@@ -276,6 +280,12 @@ func (a *Acces) ChangerEnv(projet, env string) error {
 		projetDe(f, projet).Env = env
 		return nil
 	})
+}
+
+// envDonneCles (RT2): moving the project to env (not dev, not the current one) gives the pilot keys granted for it.
+func (s *Serveur) envDonneCles(projet, env string) bool {
+	p := s.acces.Projet(projet)
+	return env != "dev" && env != p.Env && slices.ContainsFunc(p.Acces, func(a AccesProjet) bool { return a.Env == env })
 }
 
 // ForcerInfra sets the per-project "force, knowing the risk" of native Windows mode.
