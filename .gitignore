@@ -27,3 +27,5 @@ __pycache__/
 /dist/
 # repairs made on one PC (texts replacing the kit's, see app/remplacables.go)
 /local/
+# Test executable built for the owner (never committed)
+/deliverable/
