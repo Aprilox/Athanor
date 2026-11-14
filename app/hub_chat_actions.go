@@ -5,11 +5,14 @@ package main
 // is), the user launches, changes or refuses it, and every decision goes to the audit log (who, what, when, result).
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"regexp"
+	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -23,6 +26,20 @@ type ActionChat struct {
 	Dossier string `json:"dossier,omitempty"` // projet: its folder (empty: next to the latest project)
 	Titre   string `json:"titre,omitempty"`   // demande: its title
 	Texte   string `json:"texte,omitempty"`   // the request, the remark, the mission's sentence
+	// M198: agent | mcp (a <agent> or <mcp> card of api_chat.go, added to the library), attribuer (switched on in projects)
+	Projets      []string `json:"projets,omitempty"` // agent, mcp, attribuer: the projects (names) it is switched on in
+	Nom          string   `json:"nom,omitempty"`     // agent, mcp: its name; attribuer: the sub-agent's name or the server's id
+	Element      string   `json:"element,omitempty"` // attribuer: agent | mcp
+	Description  string   `json:"description,omitempty"`
+	Consignes    string   `json:"consignes,omitempty"` // agent: its instructions
+	Modele       string   `json:"modele,omitempty"`    // agent: "" | eco | fort
+	LectureSeule bool     `json:"lecture_seule,omitempty"`
+	Source       string   `json:"source,omitempty"` // mcp: the page it comes from
+	Config       string   `json:"config,omitempty"` // mcp: its configuration's JSON, as the card shows it
+	Windows      bool     `json:"windows,omitempty"`
+	// mcp: the user's separate confirmation that a Windows server runs outside the cage with their rights
+	ConfirmeWindows bool     `json:"confirme_windows,omitempty"`
+	Fichiers        []string `json:"fichiers,omitempty"` // mcp: the files Claude wrote (names; their content comes from the message)
 }
 
 // CarteActionChat: the card the page shows, computed here (Quoi and Acces are i18n keys, Sur is data).
@@ -56,9 +73,30 @@ user launches it):
 - {"type": "demande", "projet": "an existing project", "titre": "a short title", "texte": "the request or the task, self-contained"}: add a request (a task) to a project's queue, its pilot takes it after the current one;
 - {"type": "remarque", "projet": "an existing project", "texte": "the remark, short and self-contained"}: leave a remark its pilot reads at its next cycle;
 - {"type": "mission", "texte": "the mission in one sentence, naming its projects and servers"}: prepare a mission (servers, deployments, several projects); Athanor's orchestrator then prepares its own card.
+- {"type": "attribuer", "element": "agent" or "mcp", "nom": "the sub-agent's name or the MCP server's id, as in your library", "projets": ["exact project names"]}: switch a sub-agent or an MCP server of the library on in projects ("put it on my-shop").
 One action per answer, with the exact names of the projects below; a question gets an answer and no card.
 
-The state of Athanor now (projects and modules, from Athanor itself):
+Sub-agents: when the user wants a specialist sub-agent for their pilots, explain what it would do, ask few
+questions (what it does, when the lead calls it, what it must never do, cheap or strong model, whether it may
+change files, its name), then propose it once, at the end of your answer, between <agent> and </agent>, as JSON:
+{"nom": "lowercase letters, digits and dashes, 2 to 31", "description": "when the lead should call it, 400
+characters at most, in the user's language", "consignes": "its complete instructions, 6000 characters at most",
+"modele": "" or "eco" (cheap) or "fort" (strongest), "lecture_seule": true when it only reads and reports,
+"projets": ["the projects to switch it on in, when the user named them"]}. Names taken: architect, creator,
+developer, tester, critic, executor, scout.
+
+MCP servers: when the user wants a pilot to drive a program or a service through MCP, find an existing server
+(with Internet: the official MCP Registry, the program's documentation, GitHub) or write one (a single Python
+file run by uv, dependencies inline, PEP 723), then propose it once, at the end of your answer, between <mcp> and
+</mcp>, as JSON: {"nom": "a short name", "description": "what it lets the pilot do", "source": "its page or
+empty", "config": {"command": "…", "args": […], "env": {…}} or {"url": "…", "headers": {…}}, "windows": true only
+when it must run as a Windows program (outside the cage, with the user's rights), "fichiers": {"server.py": "the
+complete file"} only for a server you wrote (its config then {"command": "uv", "args": ["run", "--script",
+"${ATHANOR_MCP_DIR}/server.py"]}), "projets": ["the projects to switch it on in, when the user named them"]}.
+Never a key or a password in it: "${NAME}" in its place, the user fills it in on the Skills & MCP page.
+You never write team files or MCP configurations yourself: only the card the user validates changes them.
+
+The state of Athanor now (projects, modules and your library, from Athanor itself):
 `
 
 // texteEtatHub: the projects and the modules' elements, one line each, for the assistant (no value of the vault).
@@ -79,24 +117,134 @@ func (s *Serveur) texteEtatHub() string {
 		b.WriteString("\n")
 	}
 	if b.Len() == 0 {
-		return "(nothing yet: no project, no server)\n"
+		b.WriteString("(nothing yet: no project, no server)\n")
+	}
+	// the library (M198): names and the projects they are on, never a configuration nor a key
+	k := s.kitCourant()
+	sur := func(dossiers []string) string {
+		var l []string
+		for _, d := range dossiers {
+			if p, ok := s.projetDuDossierChat(d); ok {
+				l = append(l, p.Nom)
+			}
+		}
+		if len(l) == 0 {
+			return "on no project"
+		}
+		return "on " + strings.Join(l, ", ")
+	}
+	for _, a := range lireAgents(k).Agents {
+		fmt.Fprintf(&b, "- [library] sub-agent %s: %s\n", a.Nom, sur(a.Projets))
+	}
+	choix, biblio := lireChoix(k), lireBiblio(k)
+	ids := make([]string, 0, len(biblio.MCP))
+	for id := range biblio.MCP {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		var dossiers []string
+		for cle, ch := range choix {
+			if contient(ch.MCP, id) {
+				dossiers = append(dossiers, cle)
+			}
+		}
+		fmt.Fprintf(&b, "- [library] MCP server %s (%s): %s\n", id, biblio.MCP[id].Nom, sur(dossiers))
 	}
 	return s.masquerSecrets(b.String())
 }
 
 // lireActionChat: the action of a message of the assistant (false without one or when it cannot be read).
 func lireActionChat(texte string) (ActionChat, bool) {
-	m := reAction.FindStringSubmatch(texte)
-	if m == nil {
-		return ActionChat{}, false
+	brut := func(m []string) []byte {
+		j := strings.TrimSpace(m[1])
+		return []byte(strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(strings.TrimPrefix(j, "```json"), "```"), "```")))
 	}
-	j := strings.TrimSpace(m[1])
-	j = strings.TrimSuffix(strings.TrimPrefix(strings.TrimPrefix(j, "```json"), "```"), "```")
-	var a ActionChat
-	if json.Unmarshal([]byte(j), &a) != nil {
-		return ActionChat{}, true // a card that says it cannot be read
+	if m := reAction.FindStringSubmatch(texte); m != nil {
+		var a ActionChat
+		if json.Unmarshal(brut(m), &a) != nil {
+			return ActionChat{}, true // a card that says it cannot be read
+		}
+		return a, true
 	}
-	return a, true
+	// M198: the <agent> and <mcp> cards of the project chat (api_chat.go), here added to the library and to projects
+	if m := reAgent.FindStringSubmatch(texte); m != nil {
+		var a ActionChat
+		if json.Unmarshal(brut(m), &a) != nil {
+			return ActionChat{}, true
+		}
+		a.Type = "agent"
+		return a, true
+	}
+	if m := reMCP.FindStringSubmatch(texte); m != nil {
+		var x struct {
+			ActionChat
+			Config   json.RawMessage   `json:"config"`
+			Fichiers map[string]string `json:"fichiers"`
+		}
+		if json.Unmarshal(brut(m), &x) != nil {
+			return ActionChat{}, true
+		}
+		a := x.ActionChat
+		a.Type, a.Fichiers = "mcp", []string{}
+		if len(x.Config) > 0 {
+			var b bytes.Buffer
+			if json.Indent(&b, x.Config, "", "  ") == nil {
+				a.Config = b.String()
+			}
+		}
+		for n := range x.Fichiers {
+			a.Fichiers = append(a.Fichiers, n)
+		}
+		sort.Strings(a.Fichiers)
+		return a, true
+	}
+	return ActionChat{}, false
+}
+
+// projetsChat: the projects named on a card (case ignored, each once): their names as Athanor knows them and their
+// folders, or the first name unknown.
+func (s *Serveur) projetsChat(noms []string) ([]string, []string, string) {
+	l, dossiers := []string{}, []string{}
+	for _, n := range noms {
+		if n = strings.TrimSpace(n); n == "" {
+			continue
+		}
+		p, ok := s.projetLocalChat(n)
+		if !ok {
+			return nil, nil, n
+		}
+		if !slices.Contains(l, p.Nom) {
+			l, dossiers = append(l, p.Nom), append(dossiers, p.Dossier)
+		}
+	}
+	return l, dossiers, ""
+}
+
+// projetDuDossierChat: the project of a folder of the library (a sub-agent's projects, a key of projets.json).
+func (s *Serveur) projetDuDossierChat(d string) (Projet, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, p := range s.config.Projets {
+		if !p.Archive && normaliserDossier(p.Dossier) == normaliserDossier(d) {
+			return p, true
+		}
+	}
+	return Projet{}, false
+}
+
+// cleEnClairMCP: true when the configuration holds a key or a password in clear (never: "${NAME}" in its place).
+func cleEnClairMCP(config, id string) bool {
+	l, err := lireConfigCollee(config, id)
+	if err != nil {
+		return false
+	}
+	for _, c := range l {
+		if len(separerSecrets(&c)) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Serveur) projetLocalChat(nom string) (Projet, bool) {
@@ -115,6 +263,20 @@ func (s *Serveur) carteActionChat(a ActionChat) CarteActionChat {
 	a.Type, a.Projet, a.Dossier, a.Titre, a.Texte = strings.ToLower(strings.TrimSpace(a.Type)), strings.TrimSpace(a.Projet),
 		strings.TrimSpace(a.Dossier), strings.TrimSpace(a.Titre), strings.TrimSpace(a.Texte)
 	c := CarteActionChat{Acces: []string{}}
+	k := s.kitCourant()
+	// agent, mcp, attribuer: the projects it goes on, those the user ticked on the card
+	surProjets := func(nom string) string {
+		noms, _, inconnu := s.projetsChat(a.Projets)
+		if inconnu != "" && c.Erreur == "" {
+			c.Erreur = "Unknown project: choose one of yours."
+		}
+		a.Projets = noms
+		a.Projet, a.Dossier, a.Titre, a.Texte = "", "", "", ""
+		if len(noms) == 0 {
+			return nom
+		}
+		return nom + " → " + strings.Join(noms, ", ")
+	}
 	existant := func() {
 		if p, ok := s.projetLocalChat(a.Projet); ok {
 			a.Projet = p.Nom
@@ -162,10 +324,82 @@ func (s *Serveur) carteActionChat(a ActionChat) CarteActionChat {
 		if utf8.RuneCountInString(a.Texte) > maxPhraseMission {
 			c.Erreur = "Say what you want in one sentence, 4000 characters at most"
 		}
+	case "agent":
+		a.Nom, a.Description, a.Consignes, a.Modele = strings.ToLower(strings.TrimSpace(a.Nom)), strings.TrimSpace(a.Description), strings.TrimSpace(a.Consignes), strings.TrimSpace(a.Modele)
+		a.Element, a.Source, a.Config, a.Windows, a.ConfirmeWindows, a.Fichiers = "", "", "", false, false, nil
+		c.Quoi, c.Sur = "Add the sub-agent to your library", surProjets(a.Nom)
+		c.Acces = []string{"Adds it to your library of sub-agents (Team page); no file of a project changes."}
+		if len(a.Projets) > 0 {
+			c.Acces = append(c.Acces, "Switches it on in these projects: their pilot can call it from its next cycle.")
+		}
+		if a.LectureSeule {
+			c.Acces = append(c.Acces, "It only reads and reports: it changes no file.")
+		} else {
+			c.Acces = append(c.Acces, "It may change the files of the projects it is switched on in, like their pilot.")
+		}
+		if err := validerAgent(AgentPerso{Nom: a.Nom, Description: a.Description, Consignes: a.Consignes, Modele: a.Modele}); err != nil {
+			c.Erreur = err.Error()
+		} else if lireAgents(k).trouver(a.Nom) >= 0 {
+			c.Erreur = "A sub-agent already has this name."
+		}
+	case "mcp":
+		a.Nom, a.Description, a.Source, a.Config = strings.TrimSpace(a.Nom), strings.TrimSpace(a.Description), strings.TrimSpace(a.Source), strings.TrimSpace(a.Config)
+		a.Element, a.Consignes, a.Modele, a.LectureSeule = "", "", "", false
+		c.Quoi, c.Sur = "Add the MCP server to your library", surProjets(a.Nom)
+		c.Acces = []string{"Adds it to your library (Skills & MCP page)."}
+		if len(a.Fichiers) > 0 {
+			c.Acces = append(c.Acces, "Saves the files of the server Claude wrote in Athanor's tools folder.")
+		}
+		if len(a.Projets) > 0 {
+			c.Acces = append(c.Acces, "Switches it on in these projects: their pilot can use it from its next cycle.")
+		}
+		if a.Windows {
+			c.Acces = append(c.Acces, "Runs as a Windows program, outside the cage, with your rights: it can read and change your files and run programs.")
+		}
+		id := identExt(a.Nom)
+		switch l, err := lireConfigCollee(a.Config, firstNonEmpty(id, "mcp")); {
+		case !reIDExt.MatchString(id) || id == "unreal-mcp":
+			c.Erreur = "Invalid name"
+		case err != nil || len(l) != 1:
+			c.Erreur = "The configuration must hold one server"
+		case cleEnClairMCP(a.Config, id):
+			c.Erreur = "A key is written in clear: put ${NAME} in its place, you fill it in on the Skills & MCP page."
+		case a.Windows && !a.ConfirmeWindows:
+			c.Erreur = "Confirm that this server may run outside the cage, with your rights."
+		}
+	case "attribuer":
+		a.Element, a.Nom = strings.ToLower(strings.TrimSpace(a.Element)), strings.TrimSpace(a.Nom)
+		a.Description, a.Consignes, a.Modele, a.LectureSeule, a.Source, a.Config, a.Windows, a.ConfirmeWindows, a.Fichiers = "", "", "", false, "", "", false, false, nil
+		connu := false
+		if a.Element == "agent" {
+			a.Nom = strings.ToLower(a.Nom)
+			connu = lireAgents(k).trouver(a.Nom) >= 0
+			c.Quoi = "Switch the sub-agent on in projects"
+			c.Acces = []string{"Adds it to the team of these projects: their pilot can call it from its next cycle."}
+		} else {
+			a.Element = "mcp"
+			for id, m := range lireBiblio(k).MCP {
+				if id == identExt(a.Nom) || strings.EqualFold(m.Nom, a.Nom) {
+					a.Nom, connu = id, true
+					if m.Config.Type == "windows" {
+						c.Acces = append(c.Acces, "Runs as a Windows program, outside the cage, with your rights: it can read and change your files and run programs.")
+					}
+					break
+				}
+			}
+			c.Quoi = "Switch the MCP server on in projects"
+			c.Acces = append([]string{"Switches it on in these projects: their pilot can use it from its next cycle."}, c.Acces...)
+		}
+		c.Sur = surProjets(a.Nom)
+		if !connu && c.Erreur == "" {
+			c.Erreur = "Not in your library: add it first."
+		} else if len(a.Projets) == 0 && c.Erreur == "" {
+			c.Erreur = "Choose at least one project."
+		}
 	default:
 		c.Erreur = "This card cannot be read: ask the assistant to propose it again."
 	}
-	if c.Erreur == "" && a.Type != "pilote" && a.Texte == "" {
+	if c.Erreur == "" && slices.Contains([]string{"projet", "demande", "remarque", "mission"}, a.Type) && a.Texte == "" {
 		c.Erreur = "Write what it must do."
 	}
 	if c.Erreur == "" && utf8.RuneCountInString(a.Texte) > maxTexteAction {
@@ -198,10 +432,66 @@ func (s *Serveur) cartesConversation(conv conversationChat) map[string]CarteActi
 	return l
 }
 
-// executerActionChat: does what the card says; the result as an i18n key and its arguments.
-func (s *Serveur) executerActionChat(c CarteActionChat, qui string) (string, []string, error) {
+// executerActionChat: does what the card says (message: the assistant's message that proposed it); the result as an
+// i18n key and its arguments.
+func (s *Serveur) executerActionChat(c CarteActionChat, qui, message string) (string, []string, error) {
 	a := c.ActionChat
+	k := s.kitCourant()
+	_, dossiers, _ := s.projetsChat(a.Projets)
+	ajoute := func(nom string) (string, []string, error) {
+		if len(a.Projets) == 0 {
+			return "“{0}” added to your library: tell me on which projects to switch it on.", []string{nom}, nil
+		}
+		return "“{0}” added to your library and switched on in: {1}.", []string{nom, strings.Join(a.Projets, ", ")}, nil
+	}
 	switch a.Type {
+	case "agent":
+		verrouAgents.Lock()
+		defer verrouAgents.Unlock()
+		if !agentsLisibles(k) {
+			return "", nil, errors.New("extensions/agents.json is unreadable: fix or remove it, nothing was changed.")
+		}
+		f := lireAgents(k)
+		if _, _, err := enregistrerAgentPerso(k, &f, dossiers, "", AgentPerso{Nom: a.Nom, Description: a.Description, Consignes: a.Consignes, Modele: a.Modele, LectureSeule: a.LectureSeule}); err != nil {
+			return "", nil, err
+		}
+		return ajoute(a.Nom)
+	case "mcp":
+		// the files come from the assistant's message itself, never from the request
+		if _, _, err := ajouterMCPBiblio(k, a.Nom, a.Description, a.Source, a.Config, a.Windows, fichiersMCPMessage(message), dossiers); err != nil {
+			return "", nil, err
+		}
+		return ajoute(a.Nom)
+	case "attribuer":
+		if a.Element == "agent" {
+			verrouAgents.Lock()
+			defer verrouAgents.Unlock()
+			if !agentsLisibles(k) {
+				return "", nil, errors.New("extensions/agents.json is unreadable: fix or remove it, nothing was changed.")
+			}
+			f := lireAgents(k)
+			i := f.trouver(a.Nom)
+			if i < 0 {
+				return "", nil, errors.New("This sub-agent no longer exists.")
+			}
+			for _, d := range dossiers {
+				if !f.Agents[i].duDossier(d) {
+					f.Agents[i].Projets = append(f.Agents[i].Projets, d)
+				}
+				f.accepterAgent(d, a.Nom)
+			}
+			if err := ecrireAgents(k, f); err != nil {
+				return "", nil, err
+			}
+		} else {
+			extMu.Lock()
+			err := activerMCPProjets(k, a.Nom, dossiers)
+			extMu.Unlock()
+			if err != nil {
+				return "", nil, err
+			}
+		}
+		return "“{0}” switched on in: {1}.", []string{a.Nom, strings.Join(a.Projets, ", ")}, nil
 	case "projet":
 		p, _, err := s.ajouterProjet(a.Projet, a.Dossier, a.Texte, false)
 		if err != nil {
@@ -264,7 +554,7 @@ func (s *Serveur) apiHubChatAction(w http.ResponseWriter, r *http.Request) {
 		s.erreur(w, http.StatusConflict, "This card was already decided.")
 		return
 	}
-	c.Action.Type = propose.Type
+	c.Action.Type, c.Action.Fichiers = propose.Type, propose.Fichiers
 	carte := s.carteActionChat(c.Action)
 	qui := deQui(r)
 	audit := LigneAudit{Type: "evenement", De: qui, Vers: "hub", Projet: carte.Projet, Action: "chat d'accueil : " + carte.Quoi + " (" + carte.Sur + ")"}
@@ -276,7 +566,7 @@ func (s *Serveur) apiHubChatAction(w http.ResponseWriter, r *http.Request) {
 			s.erreur(w, http.StatusBadRequest, carte.Erreur)
 			return
 		}
-		cle, args, err := s.executerActionChat(carte, qui)
+		cle, args, err := s.executerActionChat(carte, qui, conv.Messages[c.Index].Texte)
 		if err != nil {
 			audit.Resultat = "échec : " + err.Error()
 			s.ecrireAudit(audit)

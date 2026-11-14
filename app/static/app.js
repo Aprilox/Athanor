@@ -2168,7 +2168,36 @@ function filHub(d) {
 }
 // M197: the card of an action the assistant proposes (computed by the Go: hub_chat_actions.go): what, on what, with
 // which accesses; Launch, Change (its fields) or Refuse. Nothing runs before Launch.
-const ICONES_ACTION = { projet: "🚀", pilote: "▶", demande: "📝", remarque: "💬", mission: "🧭" };
+const ICONES_ACTION = { projet: "🚀", pilote: "▶", demande: "📝", remarque: "💬", mission: "🧭", agent: "🧩", mcp: "🔌", attribuer: "📌" };
+const MODELES_AGENT = [["", "Like the other sub-agents"], ["eco", "Cheap model (mechanical work)"], ["fort", "Most capable model (hard reasoning)"]];
+// M198: a sub-agent or an MCP server (the <agent> and <mcp> cards of the project chat) added to the library and switched
+// on in the projects ticked here; attribuer: one of the library switched on in projects. The Go checks them again.
+function champsEquipeHub(c, projets) {
+  const v = (x) => h(String(x || "")), ty = c.type;
+  const choix = projets.map((n) => `<label class="interrupteur m0"><input type="checkbox" data-cact-projet value="${h(n)}" ${(c.projets || []).includes(n) ? "checked" : ""}><span>${h(n)}</span></label>`).join("")
+    || `<span class="muet petit">${t("No project yet.")}</span>`;
+  const surProjets = `<fieldset class="carte-action-projets m0"><legend class="petit">${ty === "attribuer" ? t("Projects") : t("Also switch it on in these projects (optional)")}</legend>${choix}</fieldset>`;
+  if (ty === "attribuer") return { vue: surProjets, champs: "" };
+  if (ty === "agent") return {
+    vue: `${c.description ? `<div class="petit">${h(c.description)}</div>` : ""}
+      <div class="petit muet">${t("Model")}: ${t((MODELES_AGENT.find(([k]) => k === (c.modele || "")) || MODELES_AGENT[0])[1])}${c.lecture_seule ? " · " + t("Read only") : ""}</div>${surProjets}`,
+    champs: `<label class="champ"><span>${t("Name")}</span><input type="text" data-cact="nom" value="${v(c.nom)}" spellcheck="false"></label>
+      <label class="champ"><span>${t("When the lead should call it")}</span><textarea data-cact="description" rows="2">${v(c.description)}</textarea></label>
+      <label class="champ"><span>${t("Its instructions")}</span><textarea data-cact="consignes" rows="8">${v(c.consignes)}</textarea></label>
+      <label class="champ"><span>${t("Model")}</span><select data-cact="modele">${MODELES_AGENT.map(([k, n]) => `<option value="${k}" ${k === (c.modele || "") ? "selected" : ""}>${t(n)}</option>`).join("")}</select></label>
+      <label class="interrupteur m0"><input type="checkbox" data-cact="lecture_seule" ${c.lecture_seule ? "checked" : ""}><span>${t("Read only: it reads and reports, never writes a file")}</span></label>`,
+  };
+  return {
+    vue: `${c.description ? `<div class="petit">${h(c.description)}</div>` : ""}${c.source ? `<div class="petit muet">${t("Source: {0}", [`<code class="croit">${v(c.source)}</code>`])}</div>` : ""}
+      ${(c.fichiers || []).length ? `<div class="petit muet">${t("MCP server written by Claude")}: ${c.fichiers.map((f) => `<code>${h(f)}</code>`).join(", ")}</div>` : ""}${surProjets}
+      <label class="interrupteur m0 attention" data-cact-confirme ${c.windows ? "" : "hidden"}><input type="checkbox" data-cact="confirme_windows" ${c.confirme_windows ? "checked" : ""}><span>${t("I understand: this server runs on Windows, outside the cage, with my rights; it can read and change my files and run programs.")}</span></label>`,
+    champs: `<label class="champ"><span>${t("Name")}</span><input type="text" data-cact="nom" value="${v(c.nom)}" spellcheck="false"></label>
+      <label class="champ"><span>${t("What it lets the pilot do")}</span><textarea data-cact="description" rows="2">${v(c.description)}</textarea></label>
+      <label class="champ"><span>${t("Source")}</span><input type="text" data-cact="source" value="${v(c.source)}" spellcheck="false"></label>
+      <label class="champ"><span>${t("Configuration")}</span><textarea data-cact="config" rows="8" class="code" spellcheck="false">${v(c.config)}</textarea></label>
+      <label class="interrupteur m0"><input type="checkbox" data-cact="windows" ${c.windows ? "checked" : ""}><span>${t("Windows program: runs on Windows, outside the cage, with your rights")}</span></label>`,
+  };
+}
 function carteActionHub(c, i) {
   const v = (x) => h(String(x || "")), ty = c.type;
   const projets = (etat.mentionsSugg || []).filter((m) => m.type === "projet" && !m.detail).map((m) => m.nom);
@@ -2177,15 +2206,16 @@ function carteActionHub(c, i) {
   const champs = ty === "projet" ? `<label class="champ"><span>${t("Name")}</span><input type="text" data-cact="projet" value="${v(c.projet)}"></label>
       <label class="champ"><span>${t("Folder")}</span><input type="text" data-cact="dossier" value="${v(c.dossier)}" spellcheck="false"></label>`
     : ty === "mission" ? "" : choixProjet;
+  const equipe = ["agent", "mcp", "attribuer"].includes(ty) ? champsEquipeHub(c, [...new Set([...(c.projets || []), ...projets.filter((n) => n && n !== c.projet)])]) : null;
   const titre = ty === "demande" ? `<label class="champ"><span>${t("Title")}</span><input type="text" data-cact="titre" value="${v(c.titre)}"></label>` : "";
-  const texte = ty === "pilote" ? "" : `<label class="champ"><span>${t("Text")}</span><textarea data-cact="texte" rows="5">${v(c.texte)}</textarea></label>`;
+  const texte = ty === "pilote" || equipe ? "" : `<label class="champ"><span>${t("Text")}</span><textarea data-cact="texte" rows="5">${v(c.texte)}</textarea></label>`;
   const decide = c.etat ? `<div class="${c.etat === "lancee" ? "ok" : "muet"} petit" role="status">${c.etat === "lancee" ? "✔ " + t("Launched") : "✕ " + t("Refused")}${c.resultat ? " — " + h(t(c.resultat, c.args || [])) : ""}</div>`
     : `${c.erreur ? `<div class="attention petit" role="alert">${h(t(c.erreur))}</div>` : ""}
-      <div class="carte-action-champs" hidden>${champs}${titre}${texte}</div>
+      ${equipe ? equipe.vue : ""}<div class="carte-action-champs" hidden>${equipe ? equipe.champs : champs + titre + texte}</div>
       <div class="ligne m0 mt-1"><button type="button" class="btn btn-petit btn-primaire" data-cact-decision="lancer" data-index="${i}">${t("Launch")}</button>
-        <button type="button" class="btn btn-petit" data-cact-modifier aria-expanded="false">${t("Edit")}</button>
+        ${ty === "attribuer" ? "" : `<button type="button" class="btn btn-petit" data-cact-modifier aria-expanded="false">${t("Edit")}</button>`}
         <button type="button" class="btn btn-petit" data-cact-decision="refuser" data-index="${i}">${t("Refuse")}</button></div>`;
-  return `<div class="chat-msg chat-claude"><div class="chat-bulle chat-note carte-action" data-carte-action="${i}" data-type="${v(ty)}">
+  return `<div class="chat-msg chat-claude"><div class="chat-bulle chat-note carte-action" data-carte-action="${i}" data-type="${v(ty)}" ${ty === "attribuer" ? `data-element="${v(c.element)}" data-nom="${v(c.nom)}"` : ""}>
     <div class="muet petit">${t("Action proposed: nothing runs before you launch it")}</div>
     <div><b>${ICONES_ACTION[ty] || "•"} ${h(t(c.quoi || "Action"))}</b></div>
     <div class="petit">${t("On")}: <code class="croit">${v(c.sur)}</code></div>
@@ -2203,11 +2233,19 @@ document.addEventListener("click", async (ev) => {
   }
   const b = ev.target.closest("[data-cact-decision]"); if (!b) return;
   const carte = b.closest("[data-carte-action]"), a = { type: carte.dataset.type };
-  carte.querySelectorAll("[data-cact]").forEach((x) => { a[x.dataset.cact] = x.value; });
+  carte.querySelectorAll("[data-cact]").forEach((x) => { a[x.dataset.cact] = x.type === "checkbox" ? x.checked : x.value; });
+  if (carte.querySelector(".carte-action-projets")) a.projets = [...carte.querySelectorAll("[data-cact-projet]:checked")].map((x) => x.value);
+  if (a.type === "attribuer") { a.element = carte.dataset.element; a.nom = carte.dataset.nom; }
   b.disabled = true;
   const r = await action(api("hub/chat/action", "POST", { index: Number(b.dataset.index), decision: b.dataset.cactDecision, action: a }));
   b.disabled = false;
   if (r) majHubChat(true);
+});
+// a server set as a Windows program asks its own confirmation, shown as soon as the box is ticked
+document.addEventListener("change", (ev) => {
+  if (ev.target.dataset?.cact !== "windows") return;
+  const z = ev.target.closest("[data-carte-action]")?.querySelector("[data-cact-confirme]");
+  if (z) { z.hidden = !ev.target.checked; if (!ev.target.checked) z.querySelector("input").checked = false; }
 });
 const POUVOIRS_HUB = [["internet", "🌐", "Internet", "Searches and reads the web when a message needs it."],
   ["ecriture", "✏️", "Writing", "Changes files, only in the folders you point to it with read and write, never elsewhere."]];

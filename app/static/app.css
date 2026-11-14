@@ -157,6 +157,8 @@ html.cadre .dialogue, html.cadre .verrou, html.cadre .assistant { top: var(--bar
 .hub-pouvoirs { flex: 1 1 18em; min-width: 0; font-size: 14px; }
 .hub-pouvoirs summary { cursor: pointer; padding: 6px 0; }
 .hub-pouvoirs .interrupteur { margin-top: 6px; }
+.carte-action-projets { display: flex; flex-wrap: wrap; gap: 4px 16px; border: 1px solid var(--line); border-radius: 6px; padding: 4px 10px 8px; margin: 6px 0; }
+.carte-action-projets legend { padding: 0 4px; }
 .hub-dossiers { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 8px; }
 .hub-dossiers-liste { list-style: none; margin: 6px 0 0; padding: 0; }
 .hub-dossiers-liste li { display: flex; align-items: center; gap: 8px; padding: 3px 0; min-width: 0; }

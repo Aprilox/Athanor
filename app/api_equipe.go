@@ -340,7 +340,7 @@ func (s *Serveur) apiAgentsPerso(w http.ResponseWriter, r *http.Request) {
 		f.accepterAgent(p.Dossier, a.Nom)
 		cle = "Sub-agent saved: it joins the team at the next cycle."
 	case "enregistrer":
-		cle, code, err := enregistrerAgentPerso(k, &f, p, c.Ancien, c.Agent)
+		cle, code, err := enregistrerAgentPerso(k, &f, []string{p.Dossier}, c.Ancien, c.Agent)
 		if err != nil {
 			s.erreur(w, code, err.Error())
 			return
@@ -368,16 +368,16 @@ func (f fichierAgents) trouver(nom string) int {
 	return -1
 }
 
-// enregistrerAgentPerso: a sub-agent of the library created (switched on in the project p) or changed
+// enregistrerAgentPerso: a sub-agent of the library created (switched on in the projects of these folders) or changed
 // (ancien: its name before; its projects stay), written to extensions/agents.json (the caller holds
 // verrouAgents and read f); the message for the user, or the HTTP code and the error.
-func enregistrerAgentPerso(k Kit, f *fichierAgents, p Projet, ancien string, a AgentPerso) (string, int, error) {
+func enregistrerAgentPerso(k Kit, f *fichierAgents, dossiers []string, ancien string, a AgentPerso) (string, int, error) {
 	a.Nom = strings.ToLower(strings.TrimSpace(a.Nom))
 	a.Description, a.Consignes = strings.TrimSpace(a.Description), strings.TrimSpace(a.Consignes)
 	if err := validerAgent(a); err != nil {
 		return "", http.StatusBadRequest, err
 	}
-	a.Projets, a.Projet, a.Origine, a.Cree = []string{p.Dossier}, "", "utilisateur", time.Now().Format("2006-01-02")
+	a.Projets, a.Projet, a.Origine, a.Cree = append([]string{}, dossiers...), "", "utilisateur", time.Now().Format("2006-01-02")
 	i := -1
 	if ancien != "" {
 		if i = f.trouver(ancien); i < 0 {
@@ -393,7 +393,9 @@ func enregistrerAgentPerso(k Kit, f *fichierAgents, p Projet, ancien string, a A
 	} else {
 		f.Agents = append(f.Agents, a)
 	}
-	f.accepterAgent(p.Dossier, a.Nom) // a name removed earlier and created again by the user is no longer refused
+	for _, d := range dossiers {
+		f.accepterAgent(d, a.Nom) // a name removed earlier and created again by the user is no longer refused
+	}
 	if err := ecrireAgents(k, *f); err != nil {
 		return "", http.StatusInternalServerError, err
 	}

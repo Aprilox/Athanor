@@ -744,7 +744,7 @@ func (s *Serveur) apiChatAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	f := lireAgents(k)
-	cle, code, err := enregistrerAgentPerso(k, &f, p, strings.TrimSpace(c.Ancien), c.Agent)
+	cle, code, err := enregistrerAgentPerso(k, &f, []string{p.Dossier}, strings.TrimSpace(c.Ancien), c.Agent)
 	verrouAgents.Unlock()
 	if err != nil {
 		s.erreur(w, code, err.Error())
@@ -794,57 +794,78 @@ func (s *Serveur) apiChatMCP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// the files come from Claude's message itself, never from the request
-	var prop struct {
-		Fichiers map[string]string `json:"fichiers"`
-	}
-	brut := strings.TrimSpace(reMCP.FindStringSubmatch(conv.Messages[c.Index].Texte)[1])
-	brut = strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(strings.TrimPrefix(brut, "```json"), "```"), "```"))
-	_ = json.Unmarshal([]byte(brut), &prop)
-	if err := verifierFichiersMCP(prop.Fichiers); err != nil {
-		s.erreur(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	extMu.Lock()
-	defer extMu.Unlock()
-	if len(prop.Fichiers) > 0 {
-		outils := filepath.Join(k.Racine, "tools")
-		_ = os.MkdirAll(outils, 0o755)
-		d, err := dossierSur(outils, "mcp-ecrits", id)
-		if err != nil {
-			s.erreur(w, http.StatusInternalServerError, err.Error())
-			return
-		}
-		for nom, contenu := range prop.Fichiers {
-			if err := ecrireSur(filepath.Join(d, nom), []byte(contenu)); err != nil {
-				s.erreur(w, http.StatusInternalServerError, err.Error())
-				return
-			}
-		}
-	}
-	ids, _, code, err := installerMCPPerso(k, c.Nom, c.Config, c.Source, c.Description, c.Windows)
+	id, code, err := ajouterMCPBiblio(k, c.Nom, c.Description, c.Source, c.Config, c.Windows, fichiersMCPMessage(conv.Messages[c.Index].Texte), []string{cleProjet(p)})
 	if err != nil {
 		s.erreur(w, code, err.Error())
 		return
 	}
-	choix := lireChoix(k)
-	ch := choix[cleProjet(p)]
-	if !contient(ch.MCP, ids[0]) {
-		ch.MCP = append(ch.MCP, ids[0])
-	}
-	if ch.Skills == nil {
-		ch.Skills = []string{}
-	}
-	choix[cleProjet(p)] = ch
-	if err := ecrireJSONFichier(filepath.Join(dossierExt(k), "projets.json"), choix, 0o644); err != nil {
-		s.erreur(w, http.StatusInternalServerError, err.Error())
-		return
-	}
 	conv = lireConversation(k, p)
 	if c.Index < len(conv.Messages) {
-		conv.Messages[c.Index].MCP = ids[0]
+		conv.Messages[c.Index].MCP = id
 		ecrireConversation(k, p, conv)
 	}
 	s.msg(w, "“{0}” added to the library and switched on in this project.", strings.TrimSpace(c.Nom))
+}
+
+// fichiersMCPMessage: the files of a server Claude wrote, as its message gives them between <mcp> and </mcp>.
+func fichiersMCPMessage(texte string) map[string]string {
+	var prop struct {
+		Fichiers map[string]string `json:"fichiers"`
+	}
+	if m := reMCP.FindStringSubmatch(texte); m != nil {
+		brut := strings.TrimSpace(m[1])
+		brut = strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(strings.TrimPrefix(brut, "```json"), "```"), "```"))
+		_ = json.Unmarshal([]byte(brut), &prop)
+	}
+	return prop.Fichiers
+}
+
+// ajouterMCPBiblio: a server proposed in a chat, as the user checked it on its card: the files of a server Claude
+// wrote into tools/mcp-ecrits/<id>/ (${ATHANOR_MCP_DIR}), the server into the library (as a pasted configuration,
+// api_extensions.go) and switched on in the projects of these keys (projets.json); its id, or the HTTP code and the error.
+func ajouterMCPBiblio(k Kit, nom, description, source, config string, windows bool, fichiers map[string]string, cles []string) (string, int, error) {
+	if err := verifierFichiersMCP(fichiers); err != nil {
+		return "", http.StatusBadRequest, err
+	}
+	extMu.Lock()
+	defer extMu.Unlock()
+	if len(fichiers) > 0 {
+		outils := filepath.Join(k.Racine, "tools")
+		_ = os.MkdirAll(outils, 0o755)
+		d, err := dossierSur(outils, "mcp-ecrits", identExt(nom))
+		if err != nil {
+			return "", http.StatusInternalServerError, err
+		}
+		for n, contenu := range fichiers {
+			if err := ecrireSur(filepath.Join(d, n), []byte(contenu)); err != nil {
+				return "", http.StatusInternalServerError, err
+			}
+		}
+	}
+	ids, _, code, err := installerMCPPerso(k, nom, config, source, description, windows)
+	if err != nil {
+		return "", code, err
+	}
+	return ids[0], 0, activerMCPProjets(k, ids[0], cles)
+}
+
+// activerMCPProjets: the library's server id switched on in the projects of these keys (extMu held).
+func activerMCPProjets(k Kit, id string, cles []string) error {
+	if len(cles) == 0 {
+		return nil
+	}
+	choix := lireChoix(k)
+	for _, cle := range cles {
+		ch := choix[cle]
+		if !contient(ch.MCP, id) {
+			ch.MCP = append(ch.MCP, id)
+		}
+		if ch.Skills == nil {
+			ch.Skills = []string{}
+		}
+		choix[cle] = ch
+	}
+	return ecrireJSONFichier(filepath.Join(dossierExt(k), "projets.json"), choix, 0o644)
 }
 
 // verifierFichiersMCP: the files of a server Claude wrote: plain names, 20 at most, 1 MB each, 4 MB in all.
