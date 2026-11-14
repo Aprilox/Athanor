@@ -30,6 +30,7 @@ type serveurSSHMemoire struct {
 	mu              sync.Mutex
 	autorisees      []ssh.PublicKey // keys let in besides the one given at launch (autoriser)
 	fichiers        sftp.Handlers   // its in-memory SFTP files, kept across connections
+	tailles         chan string     // PTY sizes asked ("pty 80x24", "resize 120x40"), for the terminal's tests
 }
 
 // autoriser: the key is now in the server's authorized_keys.
@@ -59,7 +60,7 @@ func nouvelleCleSSH(t *testing.T) (ssh.Signer, []byte) {
 func lancerSSHMemoire(t *testing.T, autorisee ssh.PublicKey, motDePasse string, repondre func(cmd string, entree []byte) (string, int)) *serveurSSHMemoire {
 	t.Helper()
 	hote, _ := nouvelleCleSSH(t)
-	s := &serveurSSHMemoire{hote: "127.0.0.1", empreinte: ssh.FingerprintSHA256(hote.PublicKey()), commandes: make(chan string, 100), fichiers: sftp.InMemHandler()}
+	s := &serveurSSHMemoire{hote: "127.0.0.1", empreinte: ssh.FingerprintSHA256(hote.PublicKey()), commandes: make(chan string, 100), fichiers: sftp.InMemHandler(), tailles: make(chan string, 100)}
 	if autorisee != nil {
 		s.autoriser(autorisee)
 	}
@@ -125,6 +126,9 @@ func (s *serveurSSHMemoire) servir(c net.Conn, conf *ssh.ServerConfig, repondre 
 					fs.Serve()
 					fs.Close()
 					return
+				}
+				if s.terminal(canal, r) {
+					continue
 				}
 				if r.Type != "exec" || len(r.Payload) < 4 {
 					r.Reply(false, nil)

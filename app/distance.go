@@ -65,6 +65,8 @@ type DistanceConfig struct {
 	TunnelID string `json:"tunnel_id,omitempty"`
 	// Athanor's key for the push services (distance_push.go: notifications on the devices)
 	Vapid string `json:"vapid,omitempty"`
+	// Terminal: the Servers terminal and SFTP allowed from a paired device (off by default: a shell is the strongest right)
+	Terminal bool `json:"terminal,omitempty"`
 }
 
 type cleContexte string
@@ -377,7 +379,7 @@ func (s *Serveur) gestionDistance(mux http.Handler) http.Handler {
 			s.pageDistance(w, http.StatusUnauthorized, "inconnu")
 			return
 		}
-		if interditDistance(r) || refuseHubDistance(r) {
+		if interditDistance(r) || refuseHubDistance(r) && !(routeShellDistance(r.URL.Path) && s.shellDistanceAutorise()) {
 			s.erreur(w, http.StatusForbidden, "Not available from a remote device")
 			return
 		}
