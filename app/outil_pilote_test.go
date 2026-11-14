@@ -575,6 +575,19 @@ func sautSiDefender(t *testing.T, msg string) {
 	}
 }
 
+// sautSiQuarantaine is called before reporting a failed check: a quarantine of the bench's executable during a
+// pilot run can make that run stop early without an error of its own, and only the next launch shows it.
+func sautSiQuarantaine(t *testing.T, bin string) {
+	f, err := os.Open(bin)
+	if err == nil {
+		_, err = f.Read(make([]byte, 1))
+		f.Close()
+	}
+	if err != nil {
+		sautSiDefender(t, err.Error())
+	}
+}
+
 func TestBancPilote(t *testing.T) {
 	if runtime.GOOS == "windows" && trouverBashNatifPilote() == "" {
 		t.Skip("Git Bash not found on Windows (the fake Claude Code is a bash script)")
@@ -634,6 +647,7 @@ func TestBancPilote(t *testing.T) {
 		echec := false
 		verifier := func(ok bool, format string, a ...any) {
 			if !ok {
+				sautSiQuarantaine(t, binTemp)
 				echec = true
 				t.Errorf(format, a...)
 			}
@@ -689,6 +703,7 @@ func TestBancPilote(t *testing.T) {
 		echec := false
 		verifier := func(ok bool, format string, a ...any) {
 			if !ok {
+				sautSiQuarantaine(t, binTemp)
 				echec = true
 				t.Errorf(format, a...)
 			}
@@ -725,6 +740,7 @@ func TestBancPilote(t *testing.T) {
 		echec := false
 		verifier := func(ok bool, format string, a ...any) {
 			if !ok {
+				sautSiQuarantaine(t, binTemp)
 				echec = true
 				t.Errorf(format, a...)
 			}
@@ -776,6 +792,7 @@ func TestBancPilote(t *testing.T) {
 		echec := false
 		verifier := func(ok bool, format string, a ...any) {
 			if !ok {
+				sautSiQuarantaine(t, binTemp)
 				echec = true
 				t.Errorf(format, a...)
 			}
@@ -828,6 +845,7 @@ func TestBancPilote(t *testing.T) {
 		echec := false
 		verifier := func(ok bool, format string, a ...any) {
 			if !ok {
+				sautSiQuarantaine(t, binTemp)
 				echec = true
 				t.Errorf(format, a...)
 			}
@@ -865,6 +883,7 @@ func TestBancPilote(t *testing.T) {
 		echec := false
 		verifier := func(ok bool, format string, a ...any) {
 			if !ok {
+				sautSiQuarantaine(t, binTemp)
 				echec = true
 				t.Errorf(format, a...)
 			}
@@ -909,6 +928,7 @@ func TestBancPilote(t *testing.T) {
 		echec := false
 		verifier := func(ok bool, format string, a ...any) {
 			if !ok {
+				sautSiQuarantaine(t, binTemp)
 				echec = true
 				t.Errorf(format, a...)
 			}
@@ -948,6 +968,7 @@ func TestBancPilote(t *testing.T) {
 		echec := false
 		verifier := func(ok bool, format string, a ...any) {
 			if !ok {
+				sautSiQuarantaine(t, binTemp)
 				echec = true
 				t.Errorf(format, a...)
 			}
