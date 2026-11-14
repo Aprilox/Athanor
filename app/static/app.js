@@ -4838,7 +4838,7 @@ async function rendreOptions() {
         <div class="ligne mt-1"><button class="btn btn-petit" data-ouvrir="kit">${t("Open the folder")}</button><button class="btn btn-petit" data-ouvrir="logs">${t("Logs folder")}</button><span class="espace"></span><button class="btn btn-petit" id="op-guide">${t("Show the first-launch guide and the tutorials again")}</button></div>
         <details class="mt-1" ${o.kit_valide ? "" : "open"}><summary class="petit muet">${t("Use another tool folder (advanced)")}</summary>
           <p class="muet petit">${t("Only for a tool folder you moved or copied yourself: Athanor then uses that one, with its settings and token.")}</p>
-          <input type="text" id="op-kit" data-option value="${h(o.kit)}"></details>
+          <input type="text" id="op-kit" data-option value="${h(o.kit)}" aria-label="${h(t("Use another tool folder (advanced)"))}"></details>
       </div>
       <div class="bloc" id="bloc-version"><h2>${t("Version")}</h2>${rendreBlocMaj(o)}</div>
     </div>
