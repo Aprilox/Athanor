@@ -4,7 +4,7 @@
 
 <h1 align="center">Athanor</h1>
 
-<h3 align="center">Let Claude Code build whole projects while you do something else.</h3>
+<h3 align="center">One hub on your PC: Claude Code builds your projects, puts them online, and never holds the keys.</h3>
 
 <p align="center">
   <i>The athanor was the alchemist's furnace, built to burn for days without going out and without anyone tending it.</i>
@@ -20,16 +20,15 @@
 
 <p align="center">
   <a href="#quick-start"><b>Quick start</b></a> ·
-  <a href="#how-it-works"><b>How it works</b></a> ·
-  <a href="#parallel-mode"><b>Parallel mode</b></a> ·
-  <a href="#eco-mode"><b>Eco mode</b></a> ·
-  <a href="#fast-mode"><b>Fast mode</b></a> ·
-  <a href="#saving-the-quota"><b>Saving the quota</b></a> ·
-  <a href="#several-computers"><b>Several computers</b></a> ·
-  <a href="#the-app"><b>The app</b></a> ·
-  <a href="#security"><b>Security</b></a> ·
+  <a href="#the-hub"><b>The hub</b></a> ·
+  <a href="#studio-projects-claude-builds"><b>Studio</b></a> ·
+  <a href="#vault-and-access"><b>Vault</b></a> ·
+  <a href="#servers"><b>Servers</b></a> ·
+  <a href="#missions-and-approvals"><b>Missions</b></a> ·
+  <a href="#e-mail"><b>E-mail</b></a> ·
+  <a href="#mcp-and-remote-athanors"><b>MCP</b></a> ·
+  <a href="#security-model"><b>Security</b></a> ·
   <a href="#faq"><b>FAQ</b></a> ·
-  <a href="#troubleshooting"><b>Troubleshooting</b></a> ·
   <a href="README.fr.md"><b>Français</b></a>
 </p>
 
@@ -41,38 +40,30 @@
   <img src="docs/images/overview.png" alt="Athanor overview: three workers building milestones in parallel, the project plan organized in waves, the subscription quota with an automatic stop, and the progress towards the last milestone" width="100%">
 </p>
 
-You describe what you want: a game, a website, an app, a tool. Athanor runs [Claude Code](https://claude.com/claude-code) **cycle after cycle** on your own PC, with your own Claude subscription. Every cycle finishes **one milestone of the plan**: Claude does the work, runs the project's checks, ticks the milestone and commits it. Then a fresh session takes the next one, until the project is delivered. You can close the app, lock it or go to bed. The furnace keeps burning.
+Athanor is a **hub**: one program, one window, from which you drive **modules** that work together on **missions**, without ever reaching each other's data or secrets. **Studio** runs [Claude Code](https://claude.com/claude-code) cycle after cycle on your own PC, with your own Claude subscription, until a game, a website, an app or a tool is delivered. **Servers** prepares your VPS, its DNS and its certificates, and deploys what Studio builds. The **vault** keeps every key encrypted, and gives each project only what you grant it. One sentence on the home page can set them all to work:
+
+> *Make a site for the Martin bakery and put it online at martin.fr, with a password-protected dev on my VPS.*
+
+Athanor answers with a **mission card**: what Studio will build, what Servers will prepare (DNS, certificates, reverse proxy, protection, firewall), which keys each one gets, and when it will ask for your accord. You press **Launch**. The site is built, deployed to dev after each milestone, checked from outside, and goes to production when you say so. The AI asks; Athanor acts with the key, which it never hands over. You can close the app, lock it or go to bed: the furnace keeps burning.
 
 > [!NOTE]
 > Athanor is an independent, source-available project. It is not affiliated with or endorsed by Anthropic. It drives the official Claude Code CLI with your own subscription.
 
 ---
 
-## Highlights
+## The modules
 
-| | |
-|---|---|
-| **One home page** | Athanor opens on its hub: a conversation with an assistant that knows Athanor (it proposes, you decide), one tile per module with its live figures, what is in progress and what needs you. A one-level menu (*Home*, *Projects*, **Studio**, the projects Claude builds, the **Vault**, *Settings*), tabs for each module's pages, one bell for every alert, and a short tutorial for each part. |
-| **The vault** | Your keys, tokens and settings in one encrypted place. *Paste* a `.env` block or an MCP configuration and Athanor recognises each key; *Test* checks it with its provider and drafts a note for the AI. Project keys reopen alone on this PC, server keys only with your password, and a copy of the disk opens nothing. |
-| **Project access** | Drag a vault entry onto a project's environment (*dev*, *staging*, *prod*), or tick it: Athanor writes exactly those keys for the pilot before each start, and a badge next to *Start* says what Claude will get. Your servers' keys stay with Athanor, never with the pilot. |
-| **An autonomous loop** | One milestone per cycle, a fresh context each time, so turns stay cheap and the project never drifts. Usage limit reached → pause until it reopens, or switch to a fallback model. Error → retry with a growing delay. Silent or over-long cycle → cut and resumed. PC restarted → resumes where it stopped. All state lives in files. |
-| **Parallel mode** | One switch per project. A fine-grained plan with dependencies; up to 10 workers build independent milestones at once, each in its own git worktree; the pilot merges each one as soon as it finishes and starts the next, and the lead verifies once at the end. |
-| **Eco mode** | One switch per project, for when the quota matters more than speed: the lead does the work itself instead of handing it to sub-agents, one review at delivery, at most 4 images per cycle, shorter command outputs. The model and the effort stay as you set them. |
-| **Fast mode** | One switch per project, for when the build time matters most: quick checks only at each milestone and no review on the way; the full check, the tester, the critic and every fix come once, in a final verification the pilot enforces before the delivery. The three modes add up. |
-| **Ponytail, built in** | On by default: Claude builds each milestone with the smallest complete change ([Ponytail](https://github.com/dietrichgebert/ponytail)'s rules), never less than the request. The Overview shows what is measured: the cache, what RTK spared, and the cycles with and without side by side. |
-| **Several computers** | Two, three or ten computers build one project together through its GitHub repository, each with an account that can push to it (the owner's, or a collaborator's: no organization needed): each one takes a milestone no other one builds, the ones it is best at first (a big graphics card for the 3D, a fast network for the big downloads), and they merge each other's work after every milestone. The Overview shows which computers are there and what each one builds. |
-| **A real team** | A project lead plus sub-agents: `scout`, `architect`, `creator`, `developer`, `tester`, `critic`, and a cheap `executor` (Haiku by default) for mechanical work. Scouts read for the framing, independent tests and the final critique are always delegated. |
-| **Skills & MCP** | Give Claude expertise and tools: a verified catalog (Anthropic skills, superpowers, Context7, Serena, Playwright, GitHub…), a search over thousands of community skills (SkillsMP) and over the official MCP Registry, any skill from a GitHub link, skills you write yourself, any MCP server pasted from its README, and Claude Code plugins from the official marketplace (and any other you add), like Shopify's or Stripe's. Switched on per project, for the lead and the parallel workers. Local MCP servers run in a cage, away from your files and the Claude token. |
-| **Tasks for you** | What Claude cannot do itself (create an account, pay, receive a code by SMS, generate a key) becomes a task on the *For you* page, with the exact steps; meanwhile Claude carries on with the rest, and the pilot pauses if nothing else can be done. You answer *done* (with a text, files, keys in a protected field) or *skip: find another way*; Claude checks it at once and tells you whether it works or what is still missing. |
-| **A sandbox** | Claude's commands run under bubblewrap + seccomp. They can write only in the project, never read the rest of your machine, and Internet stays open. |
-| **Your PC's software** | Unreal Engine, Blender, the Android SDK, Docker and winget are reached through a controlled bridge, command by command. |
-| **No UAC prompts** | Opt-in. One consent, and from then on Claude installs and runs what the project needs with administrator rights, silently. |
-| **A desktop app** | One file, that updates itself in one click. It shows the live team, the plan, the progress and the subscription quota (with automatic stops), the readable log and the request queue, lets you chat with Claude about the project, and runs health checks with one-click repair. It also runs several projects at once and keeps the programs Claude starts on a desktop of their own, out of your way. Themes, 6 languages. |
-| **In a terminal too** | On Linux and macOS, `./athanor tui` shows the whole app in the terminal, like btop: the projects, the overview, the live log, the requests, the chat and the checks, with the keyboard and the mouse. Through SSH, or on a Linux without a screen, it opens by itself; `./athanor gui` forces the window. |
-| **From your phone** | Turn on *Remote*, scan a QR code, and Athanor is on your phone (or another computer), from anywhere: the same live pages, start and stop, chat, requests. Through a Cloudflare tunnel, nothing to set up; only the devices you pair get in, and one tap removes one. From a terminal too (page *0*), so a server without a screen pairs a phone. |
-| **GitHub, connected once** | Connect each computer to your GitHub account once (*Settings → Options → GitHub*). Then a project is linked to a new private repository, or to any one your account can push to, with no window, and its commits go there after each milestone. The key stays out of Claude's reach; every push is checked for secrets and never forced. Two people can take turns on one repository, or several computers build it at once. |
-| **Clean projects** | A project is any folder on your PC, and Athanor keeps its own files in a folder of its own. Athanor only adds a `.athanor/` workshop, with its working documents (requirements, design, architecture), kept out of git on your computer alone, never through your `.gitignore` (unless you choose to share it on GitHub with the people you work with); delete it at the end and nothing is left behind. |
-| **Frugal by design** | Targeted reading rules, a quick check during the milestone and the full check once, screenshots assembled into contact sheets, a project map regenerated before each cycle, automatic archives, command output compression. The Overview page shows live how much of each session is re-read from the prompt cache. |
+| Module | What it does | Where |
+|---|---|---|
+| **[The hub](#the-hub)** | The home page: a conversation with an assistant that knows Athanor, one tile per module with its live figures, what is in progress and what needs you. One bell for every alert, one *Projects* page for everything under way, a Guide and a short tutorial for each part. | *Home*, *Projects* |
+| **[Studio](#studio-projects-claude-builds)** | The projects Claude builds, one milestone per cycle: plan, team of sub-agents, parallel, eco and fast modes, several computers on one project, skills and MCP servers, GitHub, tasks for you. | *Studio* |
+| **[Vault and access](#vault-and-access)** | Your keys, tokens and settings, encrypted. *Paste* a `.env` block and each key is recognised; *Test* checks it with its provider. Drag a key onto a project's *dev*, *staging* or *prod*: the pilot gets exactly that. | *Vault*, *Studio › Access* |
+| **[Servers](#servers)** | Your VPS and home servers: a sheet read in a minute, an ops agent that proposes plans you accept, Cloudflare DNS and HTTPS, deployments with a one-click rollback, health checks every 15 minutes. | *Servers* |
+| **[Missions and approvals](#missions-and-approvals)** | One sentence, several modules: a card to check, *Launch*, then lanes and a relay up to production. Every agent request comes to you as an approval; everything is written to a chained audit log; one red button stops it all. | *Home*, *Missions*, *For you*, *Audit log* |
+| **[E-mail](#e-mail)** | The SMTP accounts your deployed apps send through: a test in one click, the settings given to a project's environment, the password kept in the vault. | *E-mail* |
+| **[MCP and remote Athanors](#mcp-and-remote-athanors)** | Claude Desktop or Claude Code drive Athanor through its MCP; another Athanor (a laptop, a VPS running Servers alone) joins yours. Always paired by a code **and** your yes on screen. | *Settings* |
+
+Each module keeps its own data (`modules/<name>/` in Athanor's folder) and talks to the others only through the hub, which checks, logs, and asks you when it matters. *Guide › Finding your way* walks through it, in the window and in the [terminal](#in-a-terminal).
 
 ---
 
@@ -115,7 +106,7 @@ Everything of its own goes there: its copy of the executable, its settings and y
 4. **Optional, recommended**: *Setup & health* → *Administrator rights for installations* → *Repair*. Windows asks for your consent **once**; Claude never needs a UAC click again.
 5. **Add a project**: a name, its folder (existing or new, on any drive) and what you want. Technologies are free unless you impose some. ✨ *Improve with Claude* turns a few words into a complete request; you can go back to yours.
 6. **Start.** Add more projects the same way and run them side by side.
-7. **GitHub** (optional): *Settings → Options → GitHub → Connect to GitHub*, once; then *Manage → GitHub* links each project to a repository (see [GitHub](#the-app) below, and the in-app *Guide*).
+7. **GitHub** (optional): *Settings → Options → GitHub → Connect to GitHub*, once; then *Manage → GitHub* links each project to a repository (see [GitHub](#github) below, and the in-app *Guide*).
 
 **Linux** (everything runs natively, without WSL)
 
@@ -141,7 +132,16 @@ Then *Setup & health* → *Install everything* (Claude Code, the sandbox and the
 
 Claude works in Seatbelt, the sandbox built into macOS (the same one Claude Code uses): it only writes in the project. The MCP servers have a Seatbelt cage of their own. Unreal, Blender, Roblox Studio, Xcode and the Android SDK are found in their usual places and Claude runs them directly; Windows programs and Docker through `tool` are Windows and Linux only. On the Mac, the programs Claude opens show on your screen (there is no separate desktop as on Windows).
 
-### 3. Updating
+### 3. Your first ten minutes
+
+1. **Home.** Athanor opens on its hub. Ask the assistant anything about Athanor, or say what you want done: it proposes a card, and nothing starts before you press *Launch*. The *?* beside the bell opens the Guide; Home, Studio and the Vault each show a short tour on your first visit.
+2. **A password.** *Settings → Options → Lock*. It locks the app, protects the vault's server keys and is asked again for every approval: set it before adding a server.
+3. **The vault.** *Vault → Paste*: a `.env` block, a token or an MCP configuration. Athanor recognises each key and keeps it encrypted; *Test* checks it with its provider. The keys of your existing projects are already there (imported at the first start, nothing changed for their pilots).
+4. **A project.** *Studio → New project*: a name, a folder and what you want, in your words (✨ *Improve with Claude* turns a few words into a complete request), then *Start*. Its *Access* tab says which vault keys the pilot gets, environment by environment.
+5. **Optional: a server.** *Servers → Add a server*: its address, then its fingerprint to confirm, then a key. Its sheet appears a minute later. Try it first on a server of no importance ([docs/SERVEUR_DE_TEST.md](docs/SERVEUR_DE_TEST.md)).
+6. **Optional: a mission.** Back on *Home*, one sentence that names a project or a server with `@`, then *Create a mission*, check the card and *Launch*.
+
+### 4. Updating
 
 **From the app**: when a new version is out, an *Update to X.Y.Z* button shows at the top of the window (Athanor looks when it opens; *Settings → Options → Version* looks now, and can stop looking at opening). *Update now* downloads the file of your system, checks it against the release's checksums, then Athanor closes, puts the new version in place and opens again. Running pilots go on.
 
@@ -165,7 +165,64 @@ The same on Windows (PowerShell), Linux and macOS: it builds `Athanor.exe` and `
 
 ---
 
-## How it works
+## The hub
+
+**Home** is the page Athanor opens on: a conversation with the [home assistant](#the-home-assistant), one tile per module with its state and live figures (Studio: projects running, milestones done today, projects that need you, quota; Servers, Missions, E-mail…), each figure opening its page, and *In progress*: what waits for you first, then what is working, with *See all*. The *Missions* block shows the last three missions.
+
+**Projects** lists everything under way in every module: its state, its progress, what it is doing now (“Milestone 5/14: …”), what waits for you and why, a direct link; filters *All*, *Needs me*, *In progress*; *New project*, *Join a project*, the archived projects. The projects of a [remote Athanor](#mcp-and-remote-athanors) come in as `name@instance`.
+
+**Finding your way**: the menu on the left has one level: *Home*, *Projects*, one entry per module (**Studio**, the projects Claude builds, the **Vault**, **Servers**, **E-mail**, **Missions**), the *Audit log* and *Settings* at the bottom; a module's entry reopens the page you last saw in it. A module's pages are tabs at the top: Studio's (the project picker, then Overview, Team, Requests, Chat, For you, Access, Log, Manage) are the pages described above; Settings holds Settings, Skills & MCP, Setup & health and Remote. On a phone, ☰ opens the menu and the tabs scroll sideways. The **bell**, at the top of every page, gathers what needs you in every module, one line each with its reason: *View* opens the right page, *Ignore* hides the line without deleting anything (*Ignored alerts* keeps it, *Reopen* brings it back, and it returns by itself when its reason changes). The **?** beside it opens the Guide. **Tutorials**: Home, Studio and the Vault each show a short tour on your first visit; the Guide's *Tutorials* replays them and *Settings → Options* shows them all again. The update to the hub moves nothing: projects, settings, keys and old links stay where they were. The *Missions* block shows the last three missions. *Guide › Finding your way* walks through it, and the terminal opens on the same home page (*H*).
+
+**Start with the computer**: *Open Athanor when the computer starts* opens it with its window, on Windows, in a Linux desktop session and on macOS (at login). With *Restart the pilots that were running*, the projects you started and neither stopped nor saw delivered start again. Launching Athanor while it already runs only brings its window back: there is never a second copy.
+
+### Remote access, from your phone or another computer
+
+**Remote access**: *Remote* → switch it on. Athanor downloads Cloudflare's tunnel program once (`cloudflared`, checked against its release's checksum) and opens a "quick tunnel": an `https://….trycloudflare.com` address, no account. Scan the QR code with your phone's camera (or open the link on another computer), then type the 6-digit code the *Remote* page shows when you move the mouse over it (renewed every 20 seconds): the device becomes trusted and finds the same Athanor, laid out for its screen, live; on a phone, *Add to Home Screen* makes it an app. Everything works from there except what only the computer should do: the secrets, the remote access itself, the password, opening folders on the computer. The *Remote* page lists the devices, connected now or not, and ✕ removes one at once: its next click is refused. While remote access is on, the computer does not go to sleep (the screen can still turn off). The tunnel survives Athanor's restarts (an update), but its address changes when the computer restarts: scan the code again then. Cloudflare gives no uptime guarantee for quick tunnels.
+
+**Notifications on the phone**: on a paired phone, *Remote → This device → Notifications on this device*. The phone then gets a notification even with Athanor closed on it, when Claude needs you, when a milestone is done, when a project is delivered and when a computer of a team is stuck; a tap opens the right page. On an iPhone or iPad, add Athanor to the Home Screen first (iOS 16.4 or later) and switch them on from there.
+
+**Your own domain, a fixed address**: with a free Cloudflare account and a domain whose DNS is at Cloudflare, *Remote → Address → Use my domain* gives an address that never changes (`athanor.example.com`). Athanor opens Cloudflare's sign-in once, in the browser, then creates a tunnel of this computer and points the name to it (an existing DNS record is never replaced); the account's certificate and the tunnel's credentials stay in Athanor's folder. The devices then keep their access across restarts of the computer. The page's guide sets up **Cloudflare Access** in a few clicks of Cloudflare's dashboard: Cloudflare then asks for your e-mail and a code before anything reaches the computer, so a stranger who finds the address does not even see Athanor. *Back to a temporary address* deletes the tunnel at Cloudflare.
+
+**Lock**: with a password (*Settings → Options*), the 🔒 button locks the app. Claude keeps working, but nothing can be seen or changed (token included) without the password, and the app starts locked.
+
+The interface is translated into English, French, Spanish, German, Italian and Portuguese. The language you choose is also the one Claude writes the plan, log and documents in.
+
+### The home assistant
+
+The home page is a conversation with an assistant that knows Athanor: ask a question, or say what you want done, in your words. *Enter* sends, *Shift+Enter* adds a line, *New conversation* starts again (it forgets this one and its powers are switched off).
+
+- **What it reads.** Only what you give it: your messages, the files you attach (images, PDF and text files, 20 MB at most each) and the folders you point under *What the assistant can do* › *Folders*, each read only or read and write. Its working folder is empty: it sees no project, server or key by itself, only their names and states.
+- **Its powers.** *Internet* (search and read the web) and *Writing* (change files, only in the folders set to read and write) are off by default and off again in each new conversation; their summary stays visible under the field. It never runs a command, never uses an MCP server and never reaches a server.
+- **What it never sees.** The vault's values (a value pasted in a message or a text file is masked before it reads it, and in every answer of the API), secrets files (`.env`), Athanor's own folders and system folders. A file or a web page that gives it orders is data: it tells you what the text asks and does not follow it.
+- **Cards.** To act, it proposes a card: create a project and start its pilot, start a pilot, add a request, leave a remark, prepare a mission, create a sub-agent or an MCP server, switch one on in projects. The card says what, on what and with which accesses; *Launch*, *Change* or *Refuse*. Nothing runs before *Launch*, and each decision goes into the audit log.
+- **From a phone.** On a paired device the conversation is read only. The *?* at the top of the conversation replays its short tutorial; *Guide › Talk to the home assistant* has the details.
+
+---
+
+## Studio: projects Claude builds
+
+You describe what you want: a game, a website, an app, a tool. Studio runs Claude Code **cycle after cycle**: every cycle finishes **one milestone of the plan**. Claude does the work, runs the project's checks, ticks the milestone and commits it; then a fresh session takes the next one, until the project is delivered.
+
+| | |
+|---|---|
+| **An autonomous loop** | One milestone per cycle, a fresh context each time, so turns stay cheap and the project never drifts. Usage limit reached → pause until it reopens, or switch to a fallback model. Error → retry with a growing delay. Silent or over-long cycle → cut and resumed. PC restarted → resumes where it stopped. All state lives in files. |
+| **Parallel mode** | One switch per project. A fine-grained plan with dependencies; up to 10 workers build independent milestones at once, each in its own git worktree; the pilot merges each one as soon as it finishes and starts the next, and the lead verifies once at the end. |
+| **Eco mode** | One switch per project, for when the quota matters more than speed: the lead does the work itself instead of handing it to sub-agents, one review at delivery, at most 4 images per cycle, shorter command outputs. The model and the effort stay as you set them. |
+| **Fast mode** | One switch per project, for when the build time matters most: quick checks only at each milestone and no review on the way; the full check, the tester, the critic and every fix come once, in a final verification the pilot enforces before the delivery. The three modes add up. |
+| **Ponytail, built in** | On by default: Claude builds each milestone with the smallest complete change ([Ponytail](https://github.com/dietrichgebert/ponytail)'s rules), never less than the request. The Overview shows what is measured: the cache, what RTK spared, and the cycles with and without side by side. |
+| **Several computers** | Two, three or ten computers build one project together through its GitHub repository, each with an account that can push to it (the owner's, or a collaborator's: no organization needed): each one takes a milestone no other one builds, the ones it is best at first (a big graphics card for the 3D, a fast network for the big downloads), and they merge each other's work after every milestone. The Overview shows which computers are there and what each one builds. |
+| **A real team** | A project lead plus sub-agents: `scout`, `architect`, `creator`, `developer`, `tester`, `critic`, and a cheap `executor` (Haiku by default) for mechanical work. Scouts read for the framing, independent tests and the final critique are always delegated. |
+| **Skills & MCP** | Give Claude expertise and tools: a verified catalog (Anthropic skills, superpowers, Context7, Serena, Playwright, GitHub…), a search over thousands of community skills (SkillsMP) and over the official MCP Registry, any skill from a GitHub link, skills you write yourself, any MCP server pasted from its README, and Claude Code plugins from the official marketplace (and any other you add), like Shopify's or Stripe's. Switched on per project, for the lead and the parallel workers. Local MCP servers run in a cage, away from your files and the Claude token. |
+| **Tasks for you** | What Claude cannot do itself (create an account, pay, receive a code by SMS, generate a key) becomes a task on the *For you* page, with the exact steps; meanwhile Claude carries on with the rest, and the pilot pauses if nothing else can be done. You answer *done* (with a text, files, keys in a protected field) or *skip: find another way*; Claude checks it at once and tells you whether it works or what is still missing. |
+| **A sandbox** | Claude's commands run under bubblewrap + seccomp. They can write only in the project, never read the rest of your machine, and Internet stays open. |
+| **Your PC's software** | Unreal Engine, Blender, the Android SDK, Docker and winget are reached through a controlled bridge, command by command. |
+| **No UAC prompts** | Opt-in. One consent, and from then on Claude installs and runs what the project needs with administrator rights, silently. |
+| **A desktop app** | One file, that updates itself in one click. It shows the live team, the plan, the progress and the subscription quota (with automatic stops), the readable log and the request queue, lets you chat with Claude about the project, and runs health checks with one-click repair. It also runs several projects at once and keeps the programs Claude starts on a desktop of their own, out of your way. Themes, 6 languages. |
+| **GitHub, connected once** | Connect each computer to your GitHub account once (*Settings → Options → GitHub*). Then a project is linked to a new private repository, or to any one your account can push to, with no window, and its commits go there after each milestone. The key stays out of Claude's reach; every push is checked for secrets and never forced. Two people can take turns on one repository, or several computers build it at once. |
+| **Clean projects** | A project is any folder on your PC, and Athanor keeps its own files in a folder of its own. Athanor only adds a `.athanor/` workshop, with its working documents (requirements, design, architecture), kept out of git on your computer alone, never through your `.gitignore` (unless you choose to share it on GitHub with the people you work with); delete it at the end and nothing is left behind. |
+| **Frugal by design** | Targeted reading rules, a quick check during the milestone and the full check once, screenshots assembled into contact sheets, a project map regenerated before each cycle, automatic archives, command output compression. The Overview page shows live how much of each session is re-read from the prompt cache. |
+
+### How it works
 
 <p align="center">
   <img src="docs/images/how-it-works.svg" alt="How Athanor works: you describe the project, the pilot loop runs a Claude Code session per cycle, the lead delegates to sub-agents or to parallel workers, every cycle ends with merge, check, tick and commit" width="100%">
@@ -192,9 +249,7 @@ The same on Windows (PowerShell), Linux and macOS: it builds `Athanor.exe` and `
 
 **Large projects, in stages.** A request too large for 25 milestones is neither squeezed into oversized milestones nor reduced: the framing cuts it into stages, as many as it takes, each one complete and tested at its end. It details the first one only; every later stage is one line of the plan (`- [ ] S2: Stage 2/5 — …`). When the pilot reaches it, the `tester` then the `critic` review what is done, and the lead details the stage into real milestones, with the code of the earlier stages in hand. The polish and the delivery come with the last stage. The Overview and *All projects* show the stage under way ("Stage 2/5"). In parallel mode a stage line is never handed to a worker: the lead details it itself; in eco mode the review only happens at the delivery.
 
----
-
-## Parallel mode
+### Parallel mode
 
 *Manage → Working mode → Parallel mode*, per project, with 2 to 10 workers at most. Workers run on `WORKER_MODEL` (Sonnet by default): a well-written milestone sheet is execution work, the lead keeps its own model for the plan and the merges.
 
@@ -208,9 +263,7 @@ Each worker only carries its own milestone in context, so the work is split into
 
 It adds up with the two other modes. With the **eco mode**, every worker and the lead's verification follow its rules: few images, less reading, command outputs cut at 8,000 characters. With the **fast mode**, quick checks follow the merges and the whole verification waits for the end.
 
----
-
-## Eco mode
+### Eco mode
 
 *Manage → Working mode → Eco mode*, per project (in a terminal: **M**, then *Working mode*). For when the quota matters more than speed. It adds up with the parallel mode (the workers follow its rules too) and with the fast mode.
 
@@ -223,9 +276,7 @@ Measured on a real game project, **sub-agents use most of the quota** (80 to 87 
 
 The **model and the thinking effort are not touched**: they stay as you set them. To save even more, choose a smaller model for the lead (Sonnet) and a lower effort (`medium` or `low`) in *Settings → Models*. The Overview shows *eco mode* while a cycle runs; the switch applies from the next cycle.
 
----
-
-## Fast mode
+### Fast mode
 
 *Manage → Working mode → Fast mode*, per project (in a terminal: **M**, then *Working mode*), or right when you create the project. For when the build time matters most. Measured on three real projects, **a third to a half of a cycle's time goes into the full check that ends every milestone**, and more as the project grows. The fast mode moves that wait, and the reviews, to the end.
 
@@ -238,9 +289,7 @@ The **model and the thinking effort are not touched**: they stay as you set them
 
 The framing is unchanged. The Overview shows *fast mode* while a cycle runs; the switch applies from the next cycle, and the Overview says *New working mode: taken at the end of this cycle* until the pilot has really read it. The three modes add up: parallel and fast together is the fastest way to build; with the eco mode, the final verification is its single review (`tester` and `critic` once each, every finding still fixed).
 
----
-
-## Saving the quota
+### Saving the quota
 
 Three things work on every project, and the Overview's *Usage* shows what each one measurably brings.
 
@@ -250,9 +299,7 @@ Three things work on every project, and the Overview's *Usage* shows what each o
 
 In *Usage*: the share of reading the cache saved, the tokens RTK spared, and, once 3 successful cycles of each kind exist, the average cost of a cycle **with and without** Ponytail (and the eco mode) on this project. That last line is a trend, not a test: the milestones differ from one cycle to the next, and no one can measure the code Ponytail kept Claude from writing. In a terminal, the *Progress* box says the same in one line.
 
----
-
-## Several computers
+### Several computers
 
 One project, several computers working on it at the same time: your desktop with its big graphics card, a laptop on fibre, an old tower. They meet through the project's GitHub repository, nothing else to set up, on Windows, macOS and Linux alike.
 
@@ -290,9 +337,7 @@ One project, several computers working on it at the same time: your desktop with
 
 GitHub stays where the code goes and what the team falls back on: when the master does not answer, the computers go on as before and are seen through GitHub.
 
----
-
-## The team
+### The team
 
 | Agent | Role | Model |
 |---|---|---|
@@ -311,9 +356,7 @@ The agents live in [`template/.claude/agents/`](template/.claude/agents): edit t
 
 **Your own sub-agents.** On the Team page, **+ New sub-agent** adds a specialist of your own (a translator, a researcher for a domain, a level designer…): a name, when the lead should call it, its instructions (**✨ Improve with Claude** turns a few lines into a structured brief), a model (like the others, cheap or most capable), read only or not. It goes into your **sub-agent library**, kept in Athanor for all your projects and switched on in this one: the Team page lists the library with a switch per sub-agent for the current project, **Edit** (the change applies to every project that uses it) and **Delete** (it leaves every project). Or describe it to Claude in **Chat** ("a Blender specialist for the props"): it asks what it needs, then shows the sub-agent as a card you can still edit (✨ *Improve with Claude* there too), and **Add to the team** creates it (the same for changing one of yours). The lead can also propose one when a need keeps coming back: it writes `.athanor/agents/<name>.md`, the pilot checks it and adds it to the team at the next cycle, labelled *proposed by the lead*; you keep it, edit it, switch it off or delete it (a proposal switched off or deleted is never made again in that project); another project can switch it on too. These sub-agents work like the others: same sandbox, skills, MCP tools and attached files, callable by the lead and by parallel workers; the lead finds them in `.athanor/TEAM.md`, and a request can name one ("have `translator` do the texts"). They are stored in `extensions/agents.json` (no limit, in the library or in a project). The sub-agents of earlier versions join the library at the first start: one made for all your projects is switched on in each of them, one of a project in that project (two different ones with the same name: the second becomes `name-2`).
 
----
-
-## The app
+### The pages
 
 | | |
 |:---:|:---:|
@@ -326,8 +369,6 @@ The screenshots show the dark "Slate" and the "Light" palettes.
 
 | Page | What you do there |
 |---|---|
-| **Home** | the page Athanor opens on: a conversation with the home assistant (ask a question or say what you want done; `@` names a project, a server or a vault key; what it proposes comes as a card, and nothing starts before you press Launch), one tile per module with its state and live figures (Studio: projects running, milestones done today, projects that need you, quota), each figure opening its page, and *In progress*: what waits for you first, then what is working, with *See all* |
-| **Projects** | everything under way in every module: its state, its progress, what it is doing now (“Milestone 5/14: …”), what waits for you and why, a direct link; filters *All*, *Needs me*, *In progress*; *New project*, *Join a project*, the archived projects |
 | **Overview** | the state in one sentence, current milestone, the last commit of this computer and the last one on GitHub (and why a push did not go), ticked plan, the computers working on the project (what each one builds; folded while the project is not worked on with other computers), the subscription quota (5 hours, the week) with an automatic stop at the threshold you choose (with an API key: the API spend against your budget), the progress and its projection (when the last milestone should land, time and cost), usage per cycle (time, list-price cost, cache); *Start*, *Stop after cycle*, *Stop now*, *Working mode* |
 | **Team** | a tree: the lead and each worker with the sub-agents it called; click a sub-agent for the brief it was given and the report it handed back; the model each one runs on; who can be called, and the library of your own sub-agents (create, edit, delete, a switch per project) |
 | **For you** | what Claude needs from you: each task with its steps and links, a protected field for each key it asks for, files; *It's done* or *Skip: find another way*; Claude's verdict (verified, or what is still missing) and the history. A badge in the menu, a banner on Overview and a system notification announce a new task |
@@ -343,13 +384,22 @@ The screenshots show the dark "Slate" and the "Light" palettes.
 | **Settings → Claude** | the pilot's settings, the kit's `.env` (token masked, models, effort, watchdog…, rarely used ones under *Advanced*). Saved while a pilot runs, they are taken by themselves: the pilot restarts with them at the end of its cycle, and its button says so (a click cancels) |
 | **Settings → Options** | language, palette and accent, a shortcut to the installed Athanor (the Desktop, the applications menu, the Mac's Applications), this computer's connection to GitHub, project list (removing a project never touches its folder), restart the pilots on opening, start with the computer, "Claude" desktop, password, tool folder, version and updates |
 
-**Finding your way**: the menu on the left has one level: *Home*, *Projects*, one entry per module (**Studio**, the projects Claude builds, and the **Vault**), *Settings* at the bottom; a module's entry reopens the page you last saw in it. A module's pages are tabs at the top: Studio's (the project picker, then Overview, Team, Requests, Chat, For you, Access, Log, Manage) are the pages described above; Settings holds Settings, Skills & MCP, Setup & health and Remote. On a phone, ☰ opens the menu and the tabs scroll sideways. The **bell**, at the top of every page, gathers what needs you in every module, one line each with its reason: *View* opens the right page, *Ignore* hides the line without deleting anything (*Ignored alerts* keeps it, *Reopen* brings it back, and it returns by itself when its reason changes). The **?** beside it opens the Guide. **Tutorials**: Home, Studio and the Vault each show a short tour on your first visit; the Guide's *Tutorials* replays them and *Settings → Options* shows them all again. The update to the hub moves nothing: projects, settings, keys and old links stay where they were. The *Missions* block shows the last three missions. *Guide › Finding your way* walks through it, and the terminal opens on the same home page (*H*).
 
 **Skills & MCP, safely**: skills are loaded as a session plugin (`--plugin-dir`), so Claude only reads one when it needs it; it can read them but never change them. MCP servers are added to the session's own MCP configuration; a local one starts in a bubblewrap cage (`athanor mcp-cage`): system read-only, only the project and the tool caches writable, no home folder, no Windows drives, no Athanor folder, no Claude token. A *Windows program* (Roblox Studio's server, a `.exe` or a `.bat`, recognized when pasting and confirmed with the *Windows program* option) cannot be caged from WSL: it starts on Windows through WSL interop (`athanor mcp-windows`), with your rights, and only receives its own variables; Claude only sees its tools, and its whole process tree is stopped with the session. Requires Claude Code with `--plugin-dir` for skills.
 
 **Plugins, taken apart**: a plugin is downloaded once into the tool folder (from GitHub, pinned to the commit its marketplace gives) and switched on per project. Its skills, commands and sub-agents are loaded with `--plugin-dir`, read-only for Claude; its MCP servers join the MCP library (local ones in the cage, keys stored apart, a remote one signed in to once for every project); its hooks, LSP servers and monitors are left out, because they would run outside the sandbox. Plugins built by a command or published only on npm are listed but not installed.
 
 **Projects that follow their folder**: when a project points to another folder, Athanor compares the ticked milestones with what is there. In an empty folder nothing is done any more; a milestone whose listed files are missing is unticked; when the files come back, it is ticked again by itself. At the next start, Claude checks every milestone more thoroughly (`.athanor/REVERIFY`) and unticks what is really missing. Archived projects leave the list and are never restarted: *Archived projects*, at the bottom of the project list, brings them back.
+
+**A plan you can shape**: click a milestone to see its files, dependencies and acceptance criteria; move it up or down, or remove it (the other milestones stop depending on it), or edit `PLAN.md` as a whole.
+
+**"Claude" desktop**: the programs Claude starts never open on your screen, so they never interrupt your work or a full-screen game.
+- **Windows**: Unreal, Blender, a game under test and everything they start open on a Windows desktop of their own, the way the UAC prompt has its own (the gateways start them with `Athanor.exe isole`). They cannot take the focus, nor your mouse: while a pilot runs, a guard lifts the mouse lock of a game played on Claude's desktop (a Roblox play test, Unreal's play in editor) and puts back a cursor it moved (each correction in `logs/souris.log`). They are not heard either: while a pilot runs, their sound is muted, except while you look at Claude's desktop or with *Settings → Options → “Claude” desktop → Hear Claude's desktop* (Windows remembers a program's mute for its next start, so Athanor gives the sound back as soon as the program ends, when the pilot stops, and at its next start after a crash). *View Claude's desktop* switches the screen to it; the bar at the top, or Ctrl + Alt + B, brings you back.
+- **Windows, console programs**: a native pilot gives itself a hidden console that every program it starts shares (bash, git, go, the checks), so no console or Windows Terminal window opens and none takes the focus. To follow the pilot live, *Settings → Options → Execution mode → Show the pilot's terminal* shows that console as one minimised window in the taskbar, never brought to the front (for the pilots started afterwards).
+- **Linux**, and the Linux programs under WSL that WSLg would show on Windows: each pilot runs a private X server (Xvfb). Claude, its tools and its MCP servers only see that screen (`athanor ecran`), and the user's display, X11 or Wayland, is out of their reach. *View Claude's screen* shows it live in the app.
+- With the option off, new programs open on your screen again. Those already running stay where they are until they close: the app still lets you go and close them.
+
+### GitHub
 
 **GitHub, connected once per computer**: *Settings → Options → GitHub → Connect to GitHub* signs in one time and puts a key “Athanor (this computer)” on your GitHub account, kept in Athanor's data (out of Claude's reach in a sandbox). Every project of the computer pushes with it; linking a project needs it. That key opens every repository your account can push to; *Disconnect* removes it from this computer (GitHub then lists an entry you can remove under *Settings › SSH and GPG keys*); the projects stay linked, and push again with the new key once the computer is connected again. A project linked by a version before 2.39 with a key of its own (a deploy key) keeps pushing with it, and *Use my GitHub connection* moves it to the connection.
 
@@ -359,132 +409,7 @@ The screenshots show the dark "Slate" and the "Light" palettes.
 
 **A repository made on GitHub with a README** (or a licence, a `.gitignore`): its branch has a history of its own, nothing in common with the project's, so the first push is refused. *Manage → GitHub → Sort it out with GitHub's branch…* (also offered by *Get GitHub's work* and by the refused push): *Bring GitHub's files in* merges the two histories (a file both have differently: Claude merges it at its next cycle, nothing is lost), or *Replace GitHub's branch with this project* pushes over it, after showing which commits would leave the branch, and only as you saw it (if GitHub changed meanwhile, nothing is replaced). Never for several computers working together.
 
-**A plan you can shape**: click a milestone to see its files, dependencies and acceptance criteria; move it up or down, or remove it (the other milestones stop depending on it), or edit `PLAN.md` as a whole.
-
-**Start with the computer**: *Open Athanor when the computer starts* opens it with its window, on Windows, in a Linux desktop session and on macOS (at login). With *Restart the pilots that were running*, the projects you started and neither stopped nor saw delivered start again. Launching Athanor while it already runs only brings its window back: there is never a second copy.
-
-**Remote access**: *Remote* → switch it on. Athanor downloads Cloudflare's tunnel program once (`cloudflared`, checked against its release's checksum) and opens a "quick tunnel": an `https://….trycloudflare.com` address, no account. Scan the QR code with your phone's camera (or open the link on another computer), then type the 6-digit code the *Remote* page shows when you move the mouse over it (renewed every 20 seconds): the device becomes trusted and finds the same Athanor, laid out for its screen, live; on a phone, *Add to Home Screen* makes it an app. Everything works from there except what only the computer should do: the secrets, the remote access itself, the password, opening folders on the computer. The *Remote* page lists the devices, connected now or not, and ✕ removes one at once: its next click is refused. While remote access is on, the computer does not go to sleep (the screen can still turn off). The tunnel survives Athanor's restarts (an update), but its address changes when the computer restarts: scan the code again then. Cloudflare gives no uptime guarantee for quick tunnels.
-
-**Notifications on the phone**: on a paired phone, *Remote → This device → Notifications on this device*. The phone then gets a notification even with Athanor closed on it, when Claude needs you, when a milestone is done, when a project is delivered and when a computer of a team is stuck; a tap opens the right page. On an iPhone or iPad, add Athanor to the Home Screen first (iOS 16.4 or later) and switch them on from there.
-
-**Your own domain, a fixed address**: with a free Cloudflare account and a domain whose DNS is at Cloudflare, *Remote → Address → Use my domain* gives an address that never changes (`athanor.example.com`). Athanor opens Cloudflare's sign-in once, in the browser, then creates a tunnel of this computer and points the name to it (an existing DNS record is never replaced); the account's certificate and the tunnel's credentials stay in Athanor's folder. The devices then keep their access across restarts of the computer. The page's guide sets up **Cloudflare Access** in a few clicks of Cloudflare's dashboard: Cloudflare then asks for your e-mail and a code before anything reaches the computer, so a stranger who finds the address does not even see Athanor. *Back to a temporary address* deletes the tunnel at Cloudflare.
-
-**Lock**: with a password (*Settings → Options*), the 🔒 button locks the app. Claude keeps working, but nothing can be seen or changed (token included) without the password, and the app starts locked.
-
-**"Claude" desktop**: the programs Claude starts never open on your screen, so they never interrupt your work or a full-screen game.
-- **Windows**: Unreal, Blender, a game under test and everything they start open on a Windows desktop of their own, the way the UAC prompt has its own (the gateways start them with `Athanor.exe isole`). They cannot take the focus, nor your mouse: while a pilot runs, a guard lifts the mouse lock of a game played on Claude's desktop (a Roblox play test, Unreal's play in editor) and puts back a cursor it moved (each correction in `logs/souris.log`). They are not heard either: while a pilot runs, their sound is muted, except while you look at Claude's desktop or with *Settings → Options → “Claude” desktop → Hear Claude's desktop* (Windows remembers a program's mute for its next start, so Athanor gives the sound back as soon as the program ends, when the pilot stops, and at its next start after a crash). *View Claude's desktop* switches the screen to it; the bar at the top, or Ctrl + Alt + B, brings you back.
-- **Windows, console programs**: a native pilot gives itself a hidden console that every program it starts shares (bash, git, go, the checks), so no console or Windows Terminal window opens and none takes the focus. To follow the pilot live, *Settings → Options → Execution mode → Show the pilot's terminal* shows that console as one minimised window in the taskbar, never brought to the front (for the pilots started afterwards).
-- **Linux**, and the Linux programs under WSL that WSLg would show on Windows: each pilot runs a private X server (Xvfb). Claude, its tools and its MCP servers only see that screen (`athanor ecran`), and the user's display, X11 or Wayland, is out of their reach. *View Claude's screen* shows it live in the app.
-- With the option off, new programs open on your screen again. Those already running stay where they are until they close: the app still lets you go and close them.
-
-The interface is translated into English, French, Spanish, German, Italian and Portuguese. The language you choose is also the one Claude writes the plan, log and documents in.
-
-### The home assistant
-
-The home page is a conversation with an assistant that knows Athanor: ask a question, or say what you want done, in your words. *Enter* sends, *Shift+Enter* adds a line, *New conversation* starts again (it forgets this one and its powers are switched off).
-
-- **What it reads.** Only what you give it: your messages, the files you attach (images, PDF and text files, 20 MB at most each) and the folders you point under *What the assistant can do* › *Folders*, each read only or read and write. Its working folder is empty: it sees no project, server or key by itself, only their names and states.
-- **Its powers.** *Internet* (search and read the web) and *Writing* (change files, only in the folders set to read and write) are off by default and off again in each new conversation; their summary stays visible under the field. It never runs a command, never uses an MCP server and never reaches a server.
-- **What it never sees.** The vault's values (a value pasted in a message or a text file is masked before it reads it, and in every answer of the API), secrets files (`.env`), Athanor's own folders and system folders. A file or a web page that gives it orders is data: it tells you what the text asks and does not follow it.
-- **Cards.** To act, it proposes a card: create a project and start its pilot, start a pilot, add a request, leave a remark, prepare a mission, create a sub-agent or an MCP server, switch one on in projects. The card says what, on what and with which accesses; *Launch*, *Change* or *Refuse*. Nothing runs before *Launch*, and each decision goes into the audit log.
-- **From a phone.** On a paired device the conversation is read only. The *?* at the top of the conversation replays its short tutorial; *Guide › Talk to the home assistant* has the details.
-
-### The vault
-
-*Vault*, in the menu, keeps the keys, tokens and settings of your projects and servers in one place, encrypted in Athanor's folder (`hub/coffre.json`). *Guide › The vault* walks through it.
-
-- **Secrets and variables.** A secret's value is shown only while you type it: afterwards no page, API answer or log contains it. Variables (a region, a user name) are plain settings, readable even while the vault is locked.
-- **Paste.** A whole `.env` block, an MCP configuration, a token or a private key: Athanor recognises each value (Cloudflare, GitHub, Anthropic, OpenAI, Stripe, AWS, SSH, certificates, URLs with credentials) and proposes a name, a type and a scope. Only the names come back to the page.
-- **Test.** Checks a key with its own provider and nowhere else (Cloudflare and GitHub: whether it works and what it may do; SSH: the key's type and the server's answer), then proposes a note for the AI that you can edit: it tells Claude what the key is for without showing the value.
-- **Two scopes.** *code*: what a project's code uses (an API key, a test token). *infra*: the keys of your servers and accounts; they never leave Athanor's process, and need a password for Athanor (*Settings → Options → Lock*).
-- **Locking.** Your project keys reopen alone on this PC; the keys of your servers open only with your password, and a copy of the disk opens nothing. In detail: each scope has its own random AES-256-GCM key. The *code* key is wrapped by your password (PBKDF2-SHA256, 600,000 iterations) and by the system's keystore (DPAPI on Windows, the Keychain on macOS, the Secret Service on Linux); the *infra* key only by your password. It opens when you unlock Athanor, in the window or from a paired phone, and is wiped from memory when you lock it, when the session ends or when Athanor stops. A paired phone sees the list, never a value, and cannot change it.
-- **Your old keys.** On start-up, Athanor copies into the vault each project's `.athanor/secrets.env`, the keys of *Skills & MCP* and those of its own `.env`, without changing those files. Starting again imports nothing twice; *Undo the import* removes exactly what was added. Each imported project key is given back to its project at once (an access to *dev*, marked *imported*), so nothing changes for the pilot.
-
-**What the vault protects against, and what it does not.** Athanor guards against an agent that is tricked (a prompt injection in a web page, a README or a command's output), an agent that makes a mistake (`rm -rf`, the wrong server), someone on your local network or on the Internet (the app listens on `127.0.0.1` only, and a remote device must be paired), and a copied disk or backup (the vault file alone opens nothing). Each guard is in Athanor's Go code, never in an instruction to Claude, so it holds even if an agent obeys an attacker. It does **not** guard against malicious software running with all your user rights: such a program can read what you can read, watch what you type and wait for you to unlock.
-
-### Access
-
-*Access*, a tab of Studio, decides which vault entries the project gets. *Guide › Project access* walks through it.
-
-- **Grant.** The vault's entries on the left, the project's environments (*dev*, *staging*, *prod*) on the right: drag an entry onto an environment, or tick its box. The pilot gets it under the variable name shown, which you can change.
-- **The environment and the badge.** Next to *Start*, a list chooses the environment given to the pilot (*dev* at first), a 🔑 badge counts the accesses and opens the panel, and a sentence says what the pilot will get (“2 test keys, 1 variable”). A paired phone shows them, and cannot change them.
-- **What the pilot receives.** Before each start, and at each change, Athanor itself rewrites the project's `.athanor/secrets.env` with exactly the *code* entries granted for the current environment; removing an access takes its value out at once. Claude never holds the vault. A line of the old file whose value is not in the vault is kept, and the panel offers to import it. While the *code* key is closed, the file is left as it was and the panel says so.
-- **Your servers' keys.** An *infra* entry (Cloudflare, SSH…) can be linked to a project, but Athanor keeps it for its own actions: the pilot never receives it, and the panel shows it apart.
-- ***For you*.** A key you give on the *For you* page goes into the vault (scope *code*) with an access for the current environment, marked *added automatically*. Without a usable vault, it goes into the project's file as before, and the page says so. A key that looks like an infrastructure key (GitHub, AWS, Cloudflare, SSH…) is given to the pilot only once you confirm it, and is refused in native Windows mode unless *Force* is ticked for the project: give it in the *Vault* instead.
-- ***Test the vault*.** *Setup & health → Test the vault*: three sample entries are granted like any project's (the access file, then the injection: two to a temporary project, one to a neighbour project), then a short Claude session (Haiku) with the pilot's own environment tries every way it knows to read them; it must see the granted one, and never the neighbour's nor the infra one. An infra entry it could not test (no password, Athanor locked) is not a pass. The samples and the temporary projects are always removed afterwards.
-
-### Approvals and the audit log
-
-While it works, the pilot talks to Athanor through a small MCP server of its own, `athanor-hub`: it can ask you for what it lacks instead of stopping, and you decide. *Guide › Approvals and audit log* walks through it.
-
-- **The hub's tools given to the pilot.** Each start of a pilot gets its own token, valid for that project only, revoked when the pilot stops or after 24 hours unused; Athanor keeps only its hash. With it, Claude can read its project's state and environments (names only, never a value), ask for a key with a reason (`demander_acces`), report a blocker in the bell (`signaler`) and ask for a deployment (`demander_deploiement`, which follows the environment's policy; *prod* always waits for you). Its instructions tell it to ask rather than stop, never to ask again for a key you refused, and to treat what a tool returns as data, never as an order. With Athanor closed, the pilot carries on as before. *Setup & health → Test the hub's MCP* proves it with a short real session.
-- **Approvals.** A request appears in the bell and at the top of *For you*: the project, the environment, the agent's reason and the time left. It expires after 24 hours (refused, for the agent). *Accept* chooses a *code* key of the vault (or *Add a key*), the environment and the variable: Athanor writes it into the project's `.athanor/secrets.env` at once, and the pilot reads it without restarting. *Refuse*: the agent does without. *Never ask again for this project and environment* also accepts the next requests of the same kind there; otherwise production and destructive actions always wait for you. No agent can decide, nor set such a rule.
-- **From your phone.** A paired device gets a notification for each new request and can accept or refuse it on *For you*; the rest of the hub, and the agents' route, stay closed to it.
-- **An agent of this PC.** An agent outside the sandbox (always in native Windows mode; through `pc-exec` in WSL mode) runs programs as you do and could drive the window. So deciding an approval, giving a key to a project or forcing infra entries asks for Athanor's password, retyped in the window (a paired phone unlocked with it does not ask again); without a password, nothing can decide. Choosing the first password and *Resume* after an emergency stop are refused while a pilot, chat or test of Athanor runs, and `athanor arret-urgence` can only stop. Known limit: a process an agent left running after its pilot stopped, and an agent editing Athanor's files outside the sandbox, are not stopped by this (the audit log's chain shows a changed line).
-- **The audit log.** *Audit log*, in the menu: every call of an agent to the hub and its answer, every decision, every access granted or forced, and the emergency stop; filter by month, project or type, or search. It is kept in Athanor's folder (`hub/journal/`, one file per month). Each line carries the SHA-256 of the line before it: *Check the log* names the first line changed, removed or inserted. The vault's values and the known key formats are masked before writing. A paired phone can read and check it.
-- **Emergency stop.** The red button at the foot of the menu, a paired phone, or `athanor arret-urgence` in a terminal, after a confirmation: every pilot stops, every hub token is revoked, the pending requests are refused and the vault closes (the system's keystore no longer reopens it); with a password, the window and the devices are locked. To resume, unlock Athanor (without a password: *Resume* in the bell), then *Start* the projects.
-
-### Servers
-
-*Servers*, in the menu, lists your VPS and home servers, each with its sheet and its tasks. *Guide › Add a server*, *Guide › Give a task to the Servers agent*, *Guide › Environments and Cloudflare* and *Guide › Put a site online* walk through them. To try it first on a server of no importance, see [docs/SERVEUR_DE_TEST.md](docs/SERVEUR_DE_TEST.md); everything Athanor reads, writes and never does on a new server is in [docs/MACHINE_NEUVE.md](docs/MACHINE_NEUVE.md).
-
-- **Adding one.** The address, the port, the user and the roles (*dev* for tests and previews, *prod* for your live site). Athanor first reads the fingerprint of the server's host key for you to confirm: it never accepts one silently, and a fingerprint that changes later is refused with a clear message. Then three ways to connect: an SSH key already in the vault; a new ed25519 key made by Athanor (you copy its public part onto the server, then *Verify*); or the server's password, used once to put Athanor's own key there, never saved nor written to a page or a log. Athanor then offers to *Cut password logins*, never on its own. A server is added on the computer, and needs a password for Athanor (its key is an *infra* entry); a paired phone sees the list and the sheets, read only.
-- **The sheet.** Ready about a minute after adding: system, processors, memory, disk, listening ports, the software present (Docker, Compose, k3s, kubectl, nginx, Caddy, ufw), the firewall, running services and containers. It is read again on *Refresh*, after each change Athanor makes, and every 6 hours while the vault's *infra* key is open. It is kept in Athanor's folder (`modules/servers/<id>/`, with a readable `FICHE.md`), never with a key or a password. The roles are changed there; *Remove this server* forgets it without touching the server, and keeps its key in the vault unless you tick the box.
-- **What Athanor runs on a server.** The sheet is one read-only shell script: `/etc/os-release`, `uname`, `nproc`, memory and disk, `ss` (or `netstat`), `command -v` for each tool, `ufw status`, the running services and containers, with `sudo -n` only where it needs no password. Adding with the password appends Athanor's public key to `~/.ssh/authorized_keys`. *Cut password logins* writes `/etc/ssh/sshd_config.d/00-athanor.conf`, checks it with `sshd -t`, reloads SSH and connects again with the key; if anything fails, the file is removed. Anything else goes through a plan you accepted (below).
-- **The key stays with Athanor.** A server's key is an *infra* entry of the vault: it opens only with Athanor's password, is decrypted in memory only, and never leaves Athanor's process (not to the pilot, a page, a phone or the audit log). Removing a vault entry a server uses is refused, with the server's name.
-- **The Servers agent.** On a server's sheet, *Tasks*: say in one sentence what should be done, then *Launch*. An ops lead (a Claude session in its own empty workshop, out of your projects) gets Athanor's tools for the servers of that task only — a command, reading and writing a file, SFTP, services, Docker and Compose, the ufw firewall, the server's RUNBOOK — never the key itself, and loses them when the task ends. It reads the sheet, the RUNBOOK and the server's state, then proposes a plan. In native Windows mode a task is refused (*Switch to WSL*), unless you force it with Athanor's password.
-- **Guardrails.** Athanor ranks every step itself, *read*, *change* or *destructive* (a command hidden behind `bash -c`, `sudo` or an interpreter, or one it cannot analyse, counts as destructive). Reading runs without asking, except secrets (`/etc/shadow`, `~/.ssh/*`, `*.env`, private keys are refused). Anything else waits for a plan: a security critic (a read-only session) reviews it, then you *Accept* it in the bell, on *For you* or on your phone, with Athanor's password retyped. Each accepted step runs once, exactly as shown. Destructive steps and *prod* servers always wait for you; only changes on a *dev* server can be accepted once for all. Every call and decision goes to the audit log, the server's outputs are handed to the agent as data, and *Stop* or the emergency stop cuts the running command.
-- **Backups and automatic undo.** A replaced file keeps its old version in `/var/backups/athanor/prev/`, readable by root only; what a destructive step deletes is archived first in `/var/backups/athanor/`, or the step is refused. A firewall rule or an SSH setting is undone by the server itself after 5 minutes unless Athanor, connecting again, confirms it (*Keep this change*), so a wrong rule cannot lock you out.
-- **Checked from outside, written down.** After applying, an external verifier checks the result (HTTP status, certificate and its expiry, security headers, password asked); a failure rings the bell. Each server's `RUNBOOK.md` (*Runbook* on its sheet) keeps its access without secrets, its role, what runs, the plans applied, the backups and how to go back. *Setup & health › Test the Servers agent* plays a whole real task on Athanor's test container (Docker) in about 5 minutes.
-- **Environments.** On a project's *Access* page, *Environments* gives each of *dev*, *staging* and *prod* its address, its servers (a *prod* server goes only into *prod*), its protection and its deployment policy. *dev* and *staging* either ask for your approval or deploy automatically when nothing is destroyed; *prod* always asks (“Deploy example.com to production?”, in the bell, on *For you* and on your phone), and that cannot be turned off.
-- **Cloudflare (DNS and HTTPS).** *Servers › Providers* takes a Cloudflare API token with only the rights Athanor uses, on your domain's zone only; *Test* shows what it may do, without changing anything. A task launched *For the environment* lets the Servers agent read and change, on the environment's host name only, its DNS records, its HTTPS mode, an origin certificate (its private key made by Athanor, placed on the server, never given to the agent) and its protection: *Cloudflare Access* (only the e-mail addresses you give) or a *password in front of the site* (Caddy receives only its hash). Without Cloudflare, Caddy gets its own Let's Encrypt certificate. The rights to give, every call Athanor makes and what never reaches the AI: [docs/CLOUDFLARE.md](docs/CLOUDFLARE.md).
-- **Deployments.** A first deployment is a task launched *For the environment* (“Deploy my project to dev”): the Servers agent chooses the method — a static site served by Caddy, Docker Compose, or k3s only if you ask — and Athanor's own engine runs it, then reuses it with no agent: after each milestone if *Deploy to dev after each milestone delivered* is ticked, or when the pilot asks. Each version goes into its own folder on the server and the site switches to it at once; an external check follows, and *Go back to the previous version* puts the one before back in seconds (in *prod*, on your agreement). *Harden this server* applies a fixed plan to a new server (sudo user, keys only, firewall, security updates, Caddy). Every 15 minutes the deployed sites are checked from this PC; a failure rings the bell with *Retry*, *Go back to the previous version* and *I take over*. The methods, what is written on a server and what never reaches the AI: [docs/DEPLOY.md](docs/DEPLOY.md).
-- **Deployment key.** For a project linked to GitHub, *Create the deployment key* (under the environments) makes a key kept in the vault and adds it read-only to the repository, for the servers to fetch the code; unlinking or removing the project takes it off GitHub and out of the vault.
-
-### E-mail
-
-*E-mail*, in the menu, keeps the SMTP accounts your deployed apps send their e-mails through (sign-up, password reset, orders). *Guide › Send e-mails from your apps* walks through it.
-
-- **An account.** Choose the provider (Gmail, Outlook, OVH, Brevo, Mailgun, SendGrid or another server: it fills in the server, the port and the security, which you can still change), then the user name, the sender and the password: for Gmail, Outlook and Yahoo, an *app password*. The password goes straight into the vault (type *E-mail account*, *code* scope) and is never shown again; the account's file, `modules/email/comptes.json`, holds no password.
-- **The test.** *Send a test e-mail* sends a short message to the address you choose (STARTTLS, implicit TLS on 465, or nothing to this PC only; 20 seconds at most; 5 tests a minute). A failure is said in plain words, never with the server's raw answer, stays on the card and waits in the bell until a test passes; each test is written to the audit log, without the password.
-- **Your apps.** *Configure sending* gives a project, for one environment, `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_FROM` and `SMTP_PASSWORD`, through the project's access: in *dev* the pilot's secrets, in *staging* and *prod* the deployed app's environment file. Athanor asks for its password first, if it has one. A changed account updates every project that sends through it; the *×* next to a project stops its sending; deleting the account takes its settings out of every project, after a confirmation that names them.
-- **Who sees what.** A paired phone sees the accounts, read only. The home assistant knows the accounts' names and the projects they send for, never their settings nor their password.
-
-### Missions
-
-One sentence on the home page, and several modules work together: **Studio** builds the project, **Servers** prepares where it runs. *Guide › Launch a mission* walks through it; every step, the orchestrator's tools and what it can never do: [docs/MISSIONS.md](docs/MISSIONS.md).
-
-- **The sentence.** In the field of the home conversation, for example “Make a site for the Martin bakery and put it online at martin.fr, with a protected dev on @vps”. `@` names a project, a server or a vault key by its name (never a value) and turns it into a chip; the chips under the field add a recent project, a server or *New project*. *Create a mission* creates the mission (the assistant can also propose one as a card).
-- **The card.** An orchestrator (a short Claude session with no tool of its own, in an empty folder) reads a summary of the modules and proposes a card: what Studio will build (a new project or one of yours), what Servers will prepare (DNS, certificates, proxy, protection, firewall), the environments with their address and protection, and the vault entries each one gets, with a box to untick (*to fill* when the vault does not hold it yet). Athanor checks the card, then works out itself what you will be asked to approve, what will be touched (servers, DNS names, files) and an estimate from the cycles measured on this PC. A question from the orchestrator comes at the top of the card, with its choices as buttons.
-- **Policy, Edit, Launch.** *Ask me for production* (default), *Ask me for everything* or *Autonomous*; a deployment to *prod* waits for you whatever the choice. *Edit* changes the boxes and the policy at once, or sends a change you write back to the orchestrator. *Launch* does it all once: creates the project (or adds your request to an existing one) and starts its pilot, gives the ticked access, sets the environments (*dev* deploys after each milestone) and starts a Servers task for each environment to prepare, its plans waiting for you as usual. Nothing starts before *Launch*; *Cancel the mission* drops it.
-- **From your phone.** A paired, unlocked phone reads, answers, edits, launches and cancels a mission; “Launch the mission …?” comes in the bell, on *For you* and as a notification when the orchestrator asks you to launch.
-- **What the orchestrator cannot do.** It reads the names and states of your projects, servers, environments and vault entries, never a value or a file; it cannot read a project, reach a server, call Cloudflare, build or deploy — those tools are refused to its token, and each of its calls goes to the audit log. The *Missions* page, in the menu, lists every mission with its state and its lanes; the home page shows the last three.
-- **Following a mission.** A launched mission has its own page: *Lanes* shows Studio (the milestone being built) and Servers (the plan step) side by side; *Relay* follows *Milestone delivered → Dev deployment → Verification → Your accord → Production*, with the dev and prod addresses; the *Journal* tells each event in plain words, newest first, with no secret value. *Pause* holds the pilot, the Servers tasks and the deployments until *Resume* (Athanor's password); *Stop* ends it without undoing anything; the policy changes there too. Production always waits for your accord, for that commit and that mission once: the card shows the version online and what changes, and a paired, unlocked phone accepts it without the password. After Athanor restarts, each mission carries on where it was, never launched twice. In the terminal, *E* shows the same (*p* pause, *r* resume, *a* stop). *Guide › Follow a mission* walks through it; `TestMissionP5` runs a whole mission end to end in the CI, on a test SSH server.
-
-### MCP and remote Athanors
-
-Athanor's MCP opens to two kinds of clients, always by a 6-digit code **and** your yes on screen, never by an address open on your network or the Internet (nothing listens outside 127.0.0.1).
-
-- **Claude Desktop and Claude Code.** *Settings › MCP clients › Connect a client* shows a code; `Athanor mcp-client appairer claude-desktop --sorte desktop` in a terminal pairs it, and you choose the projects it may see and the tools it may use. *Ready-to-copy configuration* gives the entry for `claude_desktop_config.json` and the `claude mcp add` line. It reads the state of the modules, the plans, the requests, the missions and the approvals waiting; with the tools you tick, it adds a request, starts or pauses a pilot, or prepares a mission card that waits for your *Launch*. It never decides an approval, launches a mission, reads the vault or touches a server; *Revoke* stops its token at once. Step by step: [docs/MCP.md](docs/MCP.md).
-- **Remote Athanors.** *Settings › Remote Athanors › Add a remote Athanor* links another Athanor (on this PC, your network or a VPS) by its remote access address and the code it shows; its owner accepts and chooses what it lends, and the token is kept in your vault. Its projects come into *Projects* as `name@instance` (greyed while offline), you start or stop its pilot from here, a mission can aim at one of its projects, and a remote Servers module brings its servers and tasks — a production action still waits for its own owner's approval. Local network discovery (mDNS) is off by default and only ever proposes. `athanor module servers` runs Servers alone on a VPS, with no window (a systemd unit is in the doc). Step by step: [docs/REMOTE.md](docs/REMOTE.md).
-- **Tested.** `TestI7Listeners` checks that every listener of the real executable is on 127.0.0.1; `TestOuvertureNonAppaire` and a scripted red team try every route without a valid token; the CI job `two-instances` pairs two real Athanors and drives one from the other.
-
----
-
-## In a terminal
-
-<img src="docs/images/terminal.png" alt="Athanor in a terminal: the projects and pages on the left, the state of the pilot, the last commit of this computer and on GitHub, the subscription quota and the cycles so far in the middle, the plan in waves on the right">
-
-On Linux and macOS, Athanor also runs in the terminal, like btop or htop: the same Athanor as its window, on the same server, so both always show the same thing. Made for a server reached through SSH, a Linux without a desktop, or simply your own terminal.
-
-- **Open it**: `./athanor tui` in Athanor's folder (or the downloaded file: `./Athanor-Linux-x64 tui`). Through SSH (`SSH_CONNECTION` set), or on a Linux without a screen (no `DISPLAY` nor `WAYLAND_DISPLAY`), `./athanor` alone opens it. `./athanor gui` opens the window whatever the guess.
-- **On a server**: run Athanor as a normal user, not as root: Claude Code refuses to work as root (Setup & health says so, and *Start* refuses). On a fresh VPS: `adduser NAME`, `usermod -aG sudo NAME`, log in as `NAME`, then `./Athanor-Linux-x64`.
-- **With Athanor already open** (its window, or another terminal): `./athanor tui` shows that same Athanor. When the terminal is the one that started Athanor, Athanor stops with it (the pilots keep running); *w* opens the window as well, on a computer with a screen.
-- **Pages**: *H* Home, where the terminal opens (one block per module with its state and figures, what needs you, the missions; *Enter* opens the module's first page, *Esc* comes back to it), *E* Missions (the list with each state and relay step; *Enter* opens one: its lanes, its relay as text and the 10 newest lines of its journal; *p* pauses it, *r* resumes it with Athanor's password, *a* stops it after a confirmation; *Esc* back to the list), *1* Overview (the state, the last commit here and on GitHub, the quota or, with an API key, the spend (*$* counts it again from now), the cycles and the plan), *2* Log (live; *o*, *r*, *u* filter tools, results and sub-agents, */* searches, *f* follows), *3* Requests (*n* a new one, *e* a note along the way, *d* deletes, *Alt+↑/↓* reorders), *4* Chat (its field is ready as soon as the page opens: *Enter* sends, *Alt+Enter* a new line; *Esc* leaves it for *c* a new conversation, *m* the model and *w* Internet, *i* comes back to it), *5* Setup & health (*v* checks everything, *r* repairs and *I* installs everything right in the terminal, each command shown and sudo answered there, then Athanor comes back; *T* the token, or the API key in API mode). *6* For you (the agents' pending approvals first, every project, each with what it asks: environments, prod, ticked accesses, short SHA, a Servers plan step by step; *y* accepts, *r* refuses, *t* never asks again where the window offers it, with Athanor's password when it is asked for; then the tasks: *Enter* answers, with the values asked for in hidden fields; *k* skips), *7* Team, *8* GitHub (*c* connects this computer in the terminal, *l* links one of your repositories, *r* creates a private one, *p* pushes, *a* automatic push, *u* unlinks), *9* Settings (*Enter* edits a setting, secrets hidden; *l*, *p*, *a* the language, the palette, the accent), *0* Remote (*o* switches remote access on or off, the pairing QR code drawn in the terminal with its link, *v* shows the 6 digits for 10 seconds, *r* renames and *d* removes a trusted device: a server reached through SSH pairs a phone this way, with no window). On pages E, 8, 9 and 0 their own letters come first, small or capital. *!* on any page is the emergency stop, after a confirmation. The forms have *Save* and *Cancel* buttons (Tab, or a click; *F2* saves too); a form the server refuses stays open with the reason, and closing one with text in it asks first.
-- **Everywhere**: *s* Start (with the same questions as the window: no request yet, tools not installed, GitHub ahead), *a* Stop after cycle (again: let it go on), *x* Stop now, *p* or *[ ]* the project, *N* a new project, *M* manages it (rename, archive, remove from the list; the archived ones come back from *p*), *g* Get GitHub's work, *?* every key, *q* quits. The mouse clicks projects, pages and lines; the wheel scrolls.
-- **Its look**: the app's palette and accent, its language, in 24-bit colours when the terminal says it has them (else 256). Over SSH the terminal does not always say so: `ATHANOR_COULEURS=24 ./athanor tui` forces them. While the terminal serves Athanor, what Athanor prints goes to `logs/terminal.log`.
-
-## What Claude can and cannot do
+### What Claude can and cannot do
 
 | | |
 |---|---|
@@ -500,7 +425,7 @@ On Linux and macOS, Athanor also runs in the terminal, like btop or htop: the sa
 
 This table is the WSL mode, the default. In the native Windows mode below, there is no sandbox.
 
-### Native Windows mode (experimental)
+#### Native Windows mode (experimental)
 
 *Settings → Options → Execution mode → Native Windows*. The pilot is `Athanor.exe` itself and Claude Code is the Windows program (its commands run in Git Bash, the shell Claude Code uses on Windows): no WSL, the project's Windows folder and Windows programs are reached directly, and file access is faster.
 
@@ -512,9 +437,7 @@ This table is the WSL mode, the default. In the native Windows mode below, there
 - Claude's Linux screen does not exist in this mode; Claude's Windows desktop still keeps the programs it opens away from yours.
 - **The vault in this mode.** Any agent could open the *code* key through DPAPI, as you can: the project keys are then protected from a copied disk, not from Claude (they are meant for the project's code anyway). Linking an *infra* entry (your servers' keys) to a project is refused, with an offer to use WSL; *Force, knowing the risk*, in the project's *Access* panel, allows it for that project after a confirmation, and each forced link is logged (without the value). *Test the vault* runs here too and says what it could read.
 
----
-
-## Your PC's tools
+### Your PC's tools
 
 Claude works in Linux (WSL2 on Windows) and reaches your Windows software through gateways. The bridge runs each command **outside** the sandbox, with your rights:
 
@@ -544,6 +467,180 @@ Installed software is detected on **every drive** (`C:`, `D:`…), and the newes
 **Mobile games (Unreal)**: Android first (portable SDK and Java, `.apk` installed on a phone plugged in over USB), iOS kept portable (`docs/IOS_PORT.md`).
 
 **Docker (optional)**: needs Docker Desktop with *Settings > Resources > WSL integration*.
+
+### Running for days
+
+- The pilots run in the background, without a window (in WSL on Windows, unless you chose the native mode): you can close the app.
+- The PC stays awake while a pilot runs (`KEEP_AWAKE`), even with the app closed; for Roblox Studio and Unreal the screen stays on too, because a locked Windows session draws nothing (no captures, no play tests). Do not lock the session yourself (Win + L) before a night of Roblox or Unreal, and check that the screen saver does not ask for a sign-in on resume.
+- *Settings → Options*: "Open Athanor when the computer starts" and "Restart the pilots that were running, when the app opens".
+- No time limit by default: the pilot works until the delivery, which stops it by itself. To set one: *Work time limit* (`MAX_HOURS`) in *Settings*, or for this project alone in *Manage → Working mode*. Only the time the pilot works counts: its waits (quota, errors, "For you"), a pause or Athanor closed do not.
+
+### Finished project, follow-ups, new project
+
+- **Follow-up requests**: *Requests* page. As soon as the current request is done, the pilot takes the first queued one, appends it to `REQUEST.md` and reopens the project with a resume milestone.
+- **Note along the way**: *Requests* page, read at the start of the next cycle, without a restart.
+- **Reopen by hand**: replace `STATUS: DONE` with `STATUS: REOPENED` in `.athanor/FINAL_REPORT.md`, then *Start*.
+- **New project**: selector → *+ New project*. **Clean a finished project**: delete its `.athanor/` folder.
+
+---
+
+## Vault and access
+
+The vault keeps the keys; *Access* decides which project gets which, environment by environment. The rule behind both: a project's pilot only ever receives the *code* keys you granted it for its current environment, and your servers' keys never leave Athanor's process.
+
+### The vault
+
+*Vault*, in the menu, keeps the keys, tokens and settings of your projects and servers in one place, encrypted in Athanor's folder (`hub/coffre.json`). *Guide › The vault* walks through it.
+
+- **Secrets and variables.** A secret's value is shown only while you type it: afterwards no page, API answer or log contains it. Variables (a region, a user name) are plain settings, readable even while the vault is locked.
+- **Paste.** A whole `.env` block, an MCP configuration, a token or a private key: Athanor recognises each value (Cloudflare, GitHub, Anthropic, OpenAI, Stripe, AWS, SSH, certificates, URLs with credentials) and proposes a name, a type and a scope. Only the names come back to the page.
+- **Test.** Checks a key with its own provider and nowhere else (Cloudflare and GitHub: whether it works and what it may do; SSH: the key's type and the server's answer), then proposes a note for the AI that you can edit: it tells Claude what the key is for without showing the value.
+- **Two scopes.** *code*: what a project's code uses (an API key, a test token). *infra*: the keys of your servers and accounts; they never leave Athanor's process, and need a password for Athanor (*Settings → Options → Lock*).
+- **Locking.** Your project keys reopen alone on this PC; the keys of your servers open only with your password, and a copy of the disk opens nothing. In detail: each scope has its own random AES-256-GCM key. The *code* key is wrapped by your password (PBKDF2-SHA256, 600,000 iterations) and by the system's keystore (DPAPI on Windows, the Keychain on macOS, the Secret Service on Linux); the *infra* key only by your password. It opens when you unlock Athanor, in the window or from a paired phone, and is wiped from memory when you lock it, when the session ends or when Athanor stops. A paired phone sees the list, never a value, and cannot change it.
+- **Your old keys.** On start-up, Athanor copies into the vault each project's `.athanor/secrets.env`, the keys of *Skills & MCP* and those of its own `.env`, without changing those files. Starting again imports nothing twice; *Undo the import* removes exactly what was added. Each imported project key is given back to its project at once (an access to *dev*, marked *imported*), so nothing changes for the pilot.
+
+What the vault protects against, and what it does not, is in the [security model](#security-model).
+
+### Project access
+
+*Access*, a tab of Studio, decides which vault entries the project gets. *Guide › Project access* walks through it.
+
+- **Grant.** The vault's entries on the left, the project's environments (*dev*, *staging*, *prod*) on the right: drag an entry onto an environment, or tick its box. The pilot gets it under the variable name shown, which you can change.
+- **The environment and the badge.** Next to *Start*, a list chooses the environment given to the pilot (*dev* at first), a 🔑 badge counts the accesses and opens the panel, and a sentence says what the pilot will get (“2 test keys, 1 variable”). A paired phone shows them, and cannot change them.
+- **What the pilot receives.** Before each start, and at each change, Athanor itself rewrites the project's `.athanor/secrets.env` with exactly the *code* entries granted for the current environment; removing an access takes its value out at once. Claude never holds the vault. A line of the old file whose value is not in the vault is kept, and the panel offers to import it. While the *code* key is closed, the file is left as it was and the panel says so.
+- **Your servers' keys.** An *infra* entry (Cloudflare, SSH…) can be linked to a project, but Athanor keeps it for its own actions: the pilot never receives it, and the panel shows it apart.
+- ***For you*.** A key you give on the *For you* page goes into the vault (scope *code*) with an access for the current environment, marked *added automatically*. Without a usable vault, it goes into the project's file as before, and the page says so. A key that looks like an infrastructure key (GitHub, AWS, Cloudflare, SSH…) is given to the pilot only once you confirm it, and is refused in native Windows mode unless *Force* is ticked for the project: give it in the *Vault* instead.
+- ***Test the vault*.** *Setup & health → Test the vault*: three sample entries are granted like any project's (the access file, then the injection: two to a temporary project, one to a neighbour project), then a short Claude session (Haiku) with the pilot's own environment tries every way it knows to read them; it must see the granted one, and never the neighbour's nor the infra one. An infra entry it could not test (no password, Athanor locked) is not a pass. The samples and the temporary projects are always removed afterwards.
+
+---
+
+## Servers
+
+*Servers*, in the menu, lists your VPS and home servers, each with its sheet and its tasks. *Guide › Add a server*, *Guide › Give a task to the Servers agent*, *Guide › Environments and Cloudflare* and *Guide › Put a site online* walk through them. To try it first on a server of no importance, see [docs/SERVEUR_DE_TEST.md](docs/SERVEUR_DE_TEST.md); everything Athanor reads, writes and never does on a new server is in [docs/MACHINE_NEUVE.md](docs/MACHINE_NEUVE.md).
+
+- **Adding one.** The address, the port, the user and the roles (*dev* for tests and previews, *prod* for your live site). Athanor first reads the fingerprint of the server's host key for you to confirm: it never accepts one silently, and a fingerprint that changes later is refused with a clear message. Then three ways to connect: an SSH key already in the vault; a new ed25519 key made by Athanor (you copy its public part onto the server, then *Verify*); or the server's password, used once to put Athanor's own key there, never saved nor written to a page or a log. Athanor then offers to *Cut password logins*, never on its own. A server is added on the computer, and needs a password for Athanor (its key is an *infra* entry); a paired phone sees the list and the sheets, read only.
+- **The sheet.** Ready about a minute after adding: system, processors, memory, disk, listening ports, the software present (Docker, Compose, k3s, kubectl, nginx, Caddy, ufw), the firewall, running services and containers. It is read again on *Refresh*, after each change Athanor makes, and every 6 hours while the vault's *infra* key is open. It is kept in Athanor's folder (`modules/servers/<id>/`, with a readable `FICHE.md`), never with a key or a password. The roles are changed there; *Remove this server* forgets it without touching the server, and keeps its key in the vault unless you tick the box.
+- **What Athanor runs on a server.** The sheet is one read-only shell script: `/etc/os-release`, `uname`, `nproc`, memory and disk, `ss` (or `netstat`), `command -v` for each tool, `ufw status`, the running services and containers, with `sudo -n` only where it needs no password. Adding with the password appends Athanor's public key to `~/.ssh/authorized_keys`. *Cut password logins* writes `/etc/ssh/sshd_config.d/00-athanor.conf`, checks it with `sshd -t`, reloads SSH and connects again with the key; if anything fails, the file is removed. Anything else goes through a plan you accepted (below).
+- **The key stays with Athanor.** A server's key is an *infra* entry of the vault: it opens only with Athanor's password, is decrypted in memory only, and never leaves Athanor's process (not to the pilot, a page, a phone or the audit log). Removing a vault entry a server uses is refused, with the server's name.
+- **The Servers agent.** On a server's sheet, *Tasks*: say in one sentence what should be done, then *Launch*. An ops lead (a Claude session in its own empty workshop, out of your projects) gets Athanor's tools for the servers of that task only — a command, reading and writing a file, SFTP, services, Docker and Compose, the ufw firewall, the server's RUNBOOK — never the key itself, and loses them when the task ends. It reads the sheet, the RUNBOOK and the server's state, then proposes a plan. In native Windows mode a task is refused (*Switch to WSL*), unless you force it with Athanor's password.
+- **Guardrails.** Athanor ranks every step itself, *read*, *change* or *destructive* (a command hidden behind `bash -c`, `sudo` or an interpreter, or one it cannot analyse, counts as destructive). Reading runs without asking, except secrets (`/etc/shadow`, `~/.ssh/*`, `*.env`, private keys are refused). Anything else waits for a plan: a security critic (a read-only session) reviews it, then you *Accept* it in the bell, on *For you* or on your phone, with Athanor's password retyped. Each accepted step runs once, exactly as shown. Destructive steps and *prod* servers always wait for you; only changes on a *dev* server can be accepted once for all. Every call and decision goes to the audit log, the server's outputs are handed to the agent as data, and *Stop* or the emergency stop cuts the running command.
+- **Backups and automatic undo.** A replaced file keeps its old version in `/var/backups/athanor/prev/`, readable by root only; what a destructive step deletes is archived first in `/var/backups/athanor/`, or the step is refused. A firewall rule or an SSH setting is undone by the server itself after 5 minutes unless Athanor, connecting again, confirms it (*Keep this change*), so a wrong rule cannot lock you out.
+- **Checked from outside, written down.** After applying, an external verifier checks the result (HTTP status, certificate and its expiry, security headers, password asked); a failure rings the bell. Each server's `RUNBOOK.md` (*Runbook* on its sheet) keeps its access without secrets, its role, what runs, the plans applied, the backups and how to go back. *Setup & health › Test the Servers agent* plays a whole real task on Athanor's test container (Docker) in about 5 minutes.
+- **Environments.** On a project's *Access* page, *Environments* gives each of *dev*, *staging* and *prod* its address, its servers (a *prod* server goes only into *prod*), its protection and its deployment policy. *dev* and *staging* either ask for your approval or deploy automatically when nothing is destroyed; *prod* always asks (“Deploy example.com to production?”, in the bell, on *For you* and on your phone), and that cannot be turned off.
+- **Cloudflare (DNS and HTTPS).** *Servers › Providers* takes a Cloudflare API token with only the rights Athanor uses, on your domain's zone only; *Test* shows what it may do, without changing anything. A task launched *For the environment* lets the Servers agent read and change, on the environment's host name only, its DNS records, its HTTPS mode, an origin certificate (its private key made by Athanor, placed on the server, never given to the agent) and its protection: *Cloudflare Access* (only the e-mail addresses you give) or a *password in front of the site* (Caddy receives only its hash). Without Cloudflare, Caddy gets its own Let's Encrypt certificate. The rights to give, every call Athanor makes and what never reaches the AI: [docs/CLOUDFLARE.md](docs/CLOUDFLARE.md).
+- **Deployments.** A first deployment is a task launched *For the environment* (“Deploy my project to dev”): the Servers agent chooses the method — a static site served by Caddy, Docker Compose, or k3s only if you ask — and Athanor's own engine runs it, then reuses it with no agent: after each milestone if *Deploy to dev after each milestone delivered* is ticked, or when the pilot asks. Each version goes into its own folder on the server and the site switches to it at once; an external check follows, and *Go back to the previous version* puts the one before back in seconds (in *prod*, on your agreement). *Harden this server* applies a fixed plan to a new server (sudo user, keys only, firewall, security updates, Caddy). Every 15 minutes the deployed sites are checked from this PC; a failure rings the bell with *Retry*, *Go back to the previous version* and *I take over*. The methods, what is written on a server and what never reaches the AI: [docs/DEPLOY.md](docs/DEPLOY.md).
+- **Deployment key.** For a project linked to GitHub, *Create the deployment key* (under the environments) makes a key kept in the vault and adds it read-only to the repository, for the servers to fetch the code; unlinking or removing the project takes it off GitHub and out of the vault.
+
+---
+
+## Missions and approvals
+
+A mission is one sentence that sets several modules to work; an approval is an agent asking you for what it may not decide alone. Both end in the same places (the bell, *For you*, your phone) and both are written to the audit log.
+
+### Missions
+
+One sentence on the home page, and several modules work together: **Studio** builds the project, **Servers** prepares where it runs. *Guide › Launch a mission* walks through it; every step, the orchestrator's tools and what it can never do: [docs/MISSIONS.md](docs/MISSIONS.md).
+
+- **The sentence.** In the field of the home conversation, for example “Make a site for the Martin bakery and put it online at martin.fr, with a protected dev on @vps”. `@` names a project, a server or a vault key by its name (never a value) and turns it into a chip; the chips under the field add a recent project, a server or *New project*. *Create a mission* creates the mission (the assistant can also propose one as a card).
+- **The card.** An orchestrator (a short Claude session with no tool of its own, in an empty folder) reads a summary of the modules and proposes a card: what Studio will build (a new project or one of yours), what Servers will prepare (DNS, certificates, proxy, protection, firewall), the environments with their address and protection, and the vault entries each one gets, with a box to untick (*to fill* when the vault does not hold it yet). Athanor checks the card, then works out itself what you will be asked to approve, what will be touched (servers, DNS names, files) and an estimate from the cycles measured on this PC. A question from the orchestrator comes at the top of the card, with its choices as buttons.
+- **Policy, Edit, Launch.** *Ask me for production* (default), *Ask me for everything* or *Autonomous*; a deployment to *prod* waits for you whatever the choice. *Edit* changes the boxes and the policy at once, or sends a change you write back to the orchestrator. *Launch* does it all once: creates the project (or adds your request to an existing one) and starts its pilot, gives the ticked access, sets the environments (*dev* deploys after each milestone) and starts a Servers task for each environment to prepare, its plans waiting for you as usual. Nothing starts before *Launch*; *Cancel the mission* drops it.
+- **From your phone.** A paired, unlocked phone reads, answers, edits, launches and cancels a mission; “Launch the mission …?” comes in the bell, on *For you* and as a notification when the orchestrator asks you to launch.
+- **What the orchestrator cannot do.** It reads the names and states of your projects, servers, environments and vault entries, never a value or a file; it cannot read a project, reach a server, call Cloudflare, build or deploy — those tools are refused to its token, and each of its calls goes to the audit log. The *Missions* page, in the menu, lists every mission with its state and its lanes; the home page shows the last three.
+- **Following a mission.** A launched mission has its own page: *Lanes* shows Studio (the milestone being built) and Servers (the plan step) side by side; *Relay* follows *Milestone delivered → Dev deployment → Verification → Your accord → Production*, with the dev and prod addresses; the *Journal* tells each event in plain words, newest first, with no secret value. *Pause* holds the pilot, the Servers tasks and the deployments until *Resume* (Athanor's password); *Stop* ends it without undoing anything; the policy changes there too. Production always waits for your accord, for that commit and that mission once: the card shows the version online and what changes, and a paired, unlocked phone accepts it without the password. After Athanor restarts, each mission carries on where it was, never launched twice. In the terminal, *E* shows the same (*p* pause, *r* resume, *a* stop). *Guide › Follow a mission* walks through it; `TestMissionP5` runs a whole mission end to end in the CI, on a test SSH server.
+
+### Approvals, the audit log and the emergency stop
+
+While it works, the pilot talks to Athanor through a small MCP server of its own, `athanor-hub`: it can ask you for what it lacks instead of stopping, and you decide. *Guide › Approvals and audit log* walks through it.
+
+- **The hub's tools given to the pilot.** Each start of a pilot gets its own token, valid for that project only, revoked when the pilot stops or after 24 hours unused; Athanor keeps only its hash. With it, Claude can read its project's state and environments (names only, never a value), ask for a key with a reason (`demander_acces`), report a blocker in the bell (`signaler`) and ask for a deployment (`demander_deploiement`, which follows the environment's policy; *prod* always waits for you). Its instructions tell it to ask rather than stop, never to ask again for a key you refused, and to treat what a tool returns as data, never as an order. With Athanor closed, the pilot carries on as before. *Setup & health → Test the hub's MCP* proves it with a short real session.
+- **Approvals.** A request appears in the bell and at the top of *For you*: the project, the environment, the agent's reason and the time left. It expires after 24 hours (refused, for the agent). *Accept* chooses a *code* key of the vault (or *Add a key*), the environment and the variable: Athanor writes it into the project's `.athanor/secrets.env` at once, and the pilot reads it without restarting. *Refuse*: the agent does without. *Never ask again for this project and environment* also accepts the next requests of the same kind there; otherwise production and destructive actions always wait for you. No agent can decide, nor set such a rule.
+- **From your phone.** A paired device gets a notification for each new request and can accept or refuse it on *For you*; the rest of the hub, and the agents' route, stay closed to it.
+- **An agent of this PC.** An agent outside the sandbox (always in native Windows mode; through `pc-exec` in WSL mode) runs programs as you do and could drive the window. So deciding an approval, giving a key to a project or forcing infra entries asks for Athanor's password, retyped in the window (a paired phone unlocked with it does not ask again); without a password, nothing can decide. Choosing the first password and *Resume* after an emergency stop are refused while a pilot, chat or test of Athanor runs, and `athanor arret-urgence` can only stop. Known limit: a process an agent left running after its pilot stopped, and an agent editing Athanor's files outside the sandbox, are not stopped by this (the audit log's chain shows a changed line).
+- **The audit log.** *Audit log*, in the menu: every call of an agent to the hub and its answer, every decision, every access granted or forced, and the emergency stop; filter by month, project or type, or search. It is kept in Athanor's folder (`hub/journal/`, one file per month). Each line carries the SHA-256 of the line before it: *Check the log* names the first line changed, removed or inserted. The vault's values and the known key formats are masked before writing. A paired phone can read and check it.
+- **Emergency stop.** The red button at the foot of the menu, a paired phone, or `athanor arret-urgence` in a terminal, after a confirmation: every pilot stops, every hub token is revoked, the pending requests are refused and the vault closes (the system's keystore no longer reopens it); with a password, the window and the devices are locked. To resume, unlock Athanor (without a password: *Resume* in the bell), then *Start* the projects.
+
+---
+
+## E-mail
+
+*E-mail*, in the menu, keeps the SMTP accounts your deployed apps send their e-mails through (sign-up, password reset, orders). *Guide › Send e-mails from your apps* walks through it.
+
+- **An account.** Choose the provider (Gmail, Outlook, OVH, Brevo, Mailgun, SendGrid or another server: it fills in the server, the port and the security, which you can still change), then the user name, the sender and the password: for Gmail, Outlook and Yahoo, an *app password*. The password goes straight into the vault (type *E-mail account*, *code* scope) and is never shown again; the account's file, `modules/email/comptes.json`, holds no password.
+- **The test.** *Send a test e-mail* sends a short message to the address you choose (STARTTLS, implicit TLS on 465, or nothing to this PC only; 20 seconds at most; 5 tests a minute). A failure is said in plain words, never with the server's raw answer, stays on the card and waits in the bell until a test passes; each test is written to the audit log, without the password.
+- **Your apps.** *Configure sending* gives a project, for one environment, `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_FROM` and `SMTP_PASSWORD`, through the project's access: in *dev* the pilot's secrets, in *staging* and *prod* the deployed app's environment file. Athanor asks for its password first, if it has one. A changed account updates every project that sends through it; the *×* next to a project stops its sending; deleting the account takes its settings out of every project, after a confirmation that names them.
+- **Who sees what.** A paired phone sees the accounts, read only. The home assistant knows the accounts' names and the projects they send for, never their settings nor their password.
+
+---
+
+## MCP and remote Athanors
+
+| | |
+|:---:|:---:|
+| <img src="docs/images/mcp-clients.png" alt="Settings, MCP clients block: Claude Code paired with its scope, a request from Claude Desktop waiting with the projects and tools to tick, and the ready-to-copy configuration"><br>**MCP clients**: a code, your yes, a scope | <img src="docs/images/remote-athanors.png" alt="Settings, Remote Athanors block: two linked Athanors online with their Studio module, and the form to add one by its address and its 6-digit code"><br>**Remote Athanors**: another Athanor joins yours |
+
+Athanor's MCP opens to two kinds of clients, always by a 6-digit code **and** your yes on screen, never by an address open on your network or the Internet (nothing listens outside 127.0.0.1).
+
+- **Claude Desktop and Claude Code.** *Settings › MCP clients › Connect a client* shows a code; `Athanor mcp-client appairer claude-desktop --sorte desktop` in a terminal pairs it, and you choose the projects it may see and the tools it may use. *Ready-to-copy configuration* gives the entry for `claude_desktop_config.json` and the `claude mcp add` line. It reads the state of the modules, the plans, the requests, the missions and the approvals waiting; with the tools you tick, it adds a request, starts or pauses a pilot, or prepares a mission card that waits for your *Launch*. It never decides an approval, launches a mission, reads the vault or touches a server; *Revoke* stops its token at once. Step by step: [docs/MCP.md](docs/MCP.md).
+- **Remote Athanors.** *Settings › Remote Athanors › Add a remote Athanor* links another Athanor (on this PC, your network or a VPS) by its remote access address and the code it shows; its owner accepts and chooses what it lends, and the token is kept in your vault. Its projects come into *Projects* as `name@instance` (greyed while offline), you start or stop its pilot from here, a mission can aim at one of its projects, and a remote Servers module brings its servers and tasks — a production action still waits for its own owner's approval. Local network discovery (mDNS) is off by default and only ever proposes. `athanor module servers` runs Servers alone on a VPS, with no window (a systemd unit is in the doc). Step by step: [docs/REMOTE.md](docs/REMOTE.md).
+- **Tested.** `TestI7Listeners` checks that every listener of the real executable is on 127.0.0.1; `TestOuvertureNonAppaire` and a scripted red team try every route without a valid token; the CI job `two-instances` pairs two real Athanors and drives one from the other.
+
+---
+
+## In a terminal
+
+<img src="docs/images/terminal.png" alt="Athanor in a terminal: the projects and pages on the left, the state of the pilot, the last commit of this computer and on GitHub, the subscription quota and the cycles so far in the middle, the plan in waves on the right">
+
+On Linux and macOS, Athanor also runs in the terminal, like btop or htop: the same Athanor as its window, on the same server, so both always show the same thing. Made for a server reached through SSH, a Linux without a desktop, or simply your own terminal.
+
+- **Open it**: `./athanor tui` in Athanor's folder (or the downloaded file: `./Athanor-Linux-x64 tui`). Through SSH (`SSH_CONNECTION` set), or on a Linux without a screen (no `DISPLAY` nor `WAYLAND_DISPLAY`), `./athanor` alone opens it. `./athanor gui` opens the window whatever the guess.
+- **On a server**: run Athanor as a normal user, not as root: Claude Code refuses to work as root (Setup & health says so, and *Start* refuses). On a fresh VPS: `adduser NAME`, `usermod -aG sudo NAME`, log in as `NAME`, then `./Athanor-Linux-x64`.
+- **With Athanor already open** (its window, or another terminal): `./athanor tui` shows that same Athanor. When the terminal is the one that started Athanor, Athanor stops with it (the pilots keep running); *w* opens the window as well, on a computer with a screen.
+- **Pages**: *H* Home, where the terminal opens (one block per module with its state and figures, what needs you, the missions; *Enter* opens the module's first page, *Esc* comes back to it), *E* Missions (the list with each state and relay step; *Enter* opens one: its lanes, its relay as text and the 10 newest lines of its journal; *p* pauses it, *r* resumes it with Athanor's password, *a* stops it after a confirmation; *Esc* back to the list), *1* Overview (the state, the last commit here and on GitHub, the quota or, with an API key, the spend (*$* counts it again from now), the cycles and the plan), *2* Log (live; *o*, *r*, *u* filter tools, results and sub-agents, */* searches, *f* follows), *3* Requests (*n* a new one, *e* a note along the way, *d* deletes, *Alt+↑/↓* reorders), *4* Chat (its field is ready as soon as the page opens: *Enter* sends, *Alt+Enter* a new line; *Esc* leaves it for *c* a new conversation, *m* the model and *w* Internet, *i* comes back to it), *5* Setup & health (*v* checks everything, *r* repairs and *I* installs everything right in the terminal, each command shown and sudo answered there, then Athanor comes back; *T* the token, or the API key in API mode). *6* For you (the agents' pending approvals first, every project, each with what it asks: environments, prod, ticked accesses, short SHA, a Servers plan step by step; *y* accepts, *r* refuses, *t* never asks again where the window offers it, with Athanor's password when it is asked for; then the tasks: *Enter* answers, with the values asked for in hidden fields; *k* skips), *7* Team, *8* GitHub (*c* connects this computer in the terminal, *l* links one of your repositories, *r* creates a private one, *p* pushes, *a* automatic push, *u* unlinks), *9* Settings (*Enter* edits a setting, secrets hidden; *l*, *p*, *a* the language, the palette, the accent), *0* Remote (*o* switches remote access on or off, the pairing QR code drawn in the terminal with its link, *v* shows the 6 digits for 10 seconds, *r* renames and *d* removes a trusted device: a server reached through SSH pairs a phone this way, with no window). On pages E, 8, 9 and 0 their own letters come first, small or capital. *!* on any page is the emergency stop, after a confirmation. The forms have *Save* and *Cancel* buttons (Tab, or a click; *F2* saves too); a form the server refuses stays open with the reason, and closing one with text in it asks first.
+- **Everywhere**: *s* Start (with the same questions as the window: no request yet, tools not installed, GitHub ahead), *a* Stop after cycle (again: let it go on), *x* Stop now, *p* or *[ ]* the project, *N* a new project, *M* manages it (rename, archive, remove from the list; the archived ones come back from *p*), *g* Get GitHub's work, *?* every key, *q* quits. The mouse clicks projects, pages and lines; the wheel scrolls.
+- **Its look**: the app's palette and accent, its language, in 24-bit colours when the terminal says it has them (else 256). Over SSH the terminal does not always say so: `ATHANOR_COULEURS=24 ./athanor tui` forces them. While the terminal serves Athanor, what Athanor prints goes to `logs/terminal.log`.
+
+---
+
+## Security model
+
+**What Athanor guards against**: an agent that is tricked (a prompt injection in a web page, a README, an e-mail or a command's output), an agent that makes a mistake (`rm -rf`, the wrong server), someone on your local network or on the Internet, and a copied disk or backup. Each guard is in Athanor's Go code, never in an instruction to Claude, so it holds even if an agent obeys an attacker.
+
+**What it does not guard against**: malicious software running with all your user rights. Such a program can read what you can read, watch what you type and wait for you to unlock. And in [native Windows mode](#native-windows-mode-experimental) there is no sandbox: an agent can read any file of your PC (see below what is refused there by default).
+
+### The eight rules
+
+Each rule has an automatic test in the CI and, where it can be shown for real, a button in the app.
+
+| | Rule | How it holds, how it is proved |
+|---|---|---|
+| **I1** | A Studio agent receives only the *code* keys granted to its project, for the current environment. | Athanor itself writes the pilot's `.athanor/secrets.env` from the vault before each start; *Setup & health → Test the vault* runs a real Claude session that must see the granted key and never the neighbour's nor an *infra* one. |
+| **I2** | *Infra* secrets (SSH keys, Cloudflare tokens…) never leave Athanor's process. | No agent environment, plain file, log, page or API answer holds them; agents call tools and Athanor's Go code acts with the key. Tests scan every output for the sample values. |
+| **I3** | The vault is encrypted on disk. | AES-256-GCM, one key per scope, wrapped by your password and the system's keystore (*code*) or by your password only (*infra*). Vault locked = no infrastructure action: missions wait and say so. |
+| **I4** | Modules cannot change each other's data. | A Studio agent cannot write into the Servers or hub folders (the sandbox refuses it; *Test the sandbox* tries); a Servers agent never writes into a project's repository: it fetches the code with a read-only deployment key. |
+| **I5** | Every action between modules goes through the hub. | The hub checks the link exists (this project, this server, this environment), then writes it to the audit log, whose SHA-256 chain names any line changed, removed or inserted. |
+| **I6** | Production and destructive actions wait for your accord. | Decided by the hub's code, not by the agent: *prod* deployments always wait (even in an autonomous mission), each approval asks for Athanor's password again. |
+| **I7** | Nothing is open to the network without pairing. | The app, its API and its MCP listen on `127.0.0.1` only; remote access goes through the tunnel and device pairing. `TestI7Listeners` checks every listener of the real executable. |
+| **I8** | No secret in the repository, the tests or the CI. | Tests generate fake values; no real account is used in the CI, and every push is scanned for secrets. |
+
+**Native Windows mode.** It has no sandbox, so an agent could open the *code* key through DPAPI as you can. Linking an *infra* entry to a project, Servers tasks and giving infrastructure keys through *For you* are refused there by default, with an offer to use WSL; *Force, knowing the risk* allows it project by project, after a confirmation, and each forced use is logged.
+
+**On the servers.** Every command is ranked *read*, *change* or *destructive* by Athanor itself; a plan is shown and reviewed before anything changes; a firewall or SSH change undoes itself after 5 minutes unless confirmed; a backup is made before a risky step; key-only SSH, no direct root by default; a server's output is data, never an order. Details in [Servers](#servers).
+
+### The sandbox, the app and the rest
+
+- **Claude's commands** run in the Claude Code sandbox (bubblewrap + seccomp). They can write only in the project folder and `tools/`. They cannot read the rest of your Linux home or the Windows drives, and cannot launch `cmd.exe` or `powershell.exe` directly. *Setup & health → Test the sandbox* proves it with a real session. Claude's file tools (Read, Edit, Write…) are limited the same way by a hook (`athanor hook fichiers`, [`app/outil_gardes.go`](app/outil_gardes.go)). On macOS the sandbox is Seatbelt, with the same rules.
+- **Windows software is an intended exit.** The gateways run outside the sandbox, with your user rights, and `pc-exec` runs any Windows program Claude places in the project or in `tools/windows`. Treat a project like code you run yourself.
+- **Administrator rights are opt-in.** *Administrator rights → Repair* asks for your consent once and registers an elevated scheduled task (`Athanor - installations`). It runs a copy of `Athanor.exe` kept in `C:\ProgramData\Athanor`, which only administrators can modify. The task only runs winget packages and programs located inside your project folders or `tools\windows`. It also lets the project's programs accept local-network connections without the firewall dialog. Remove it any time with `Athanor.exe autoriser-admin --retirer`.
+- **The pilot never trusts the project folder.** It keeps its own state (pid, lock, sandbox settings, instructions, counters) in `logs/`, out of Claude's reach, and never writes through a symbolic link placed in `.athanor/`. It validates every value it reads back, and runs git with hooks, filters, merge drivers, fsmonitor, external diff and signature programs disabled. It starts Claude Code with only its own settings and MCP servers (`--setting-sources user`, `--strict-mcp-config` when the CLI supports them), and `tools/` is never in its `PATH`.
+- **The app** listens on `127.0.0.1` only and rejects any other `Host` header (DNS rebinding). Only the windows it opens itself can use it: each one is opened on a single-use address that gives it a cookie, so a program of the computer that finds the port (a command Claude runs, for instance) gets neither the page nor the API. It also requires a per-session secret header on every API call and stores the password salted and hashed. It never sends `.env` secrets unless asked, and while locked it shows only "running / phase / cycle".
+- **The hub's MCP route** (`/api/mcp`) answers only to a pilot session's token (`Authorization: Bearer`), never through the remote-access tunnel, and that token opens no other route of the app. Athanor's settings and its `hub/` and `modules/` folders are neither readable nor writable from the sandbox (bubblewrap or Seatbelt): *Test the sandbox* tries to write there and must fail. In native Windows mode, or for a Windows program `pc-exec` runs, nothing enforces this: the audit log's chain and Athanor's password (asked again for approvals, keys given and forced infra) are then the safeguards.
+- **Remote access** (off by default): a second server listens on `127.0.0.1` only, for `cloudflared`, and answers only the tunnel's host name. Without a trusted device's key nothing goes through, neither the page nor the API. A device gets its key by opening the pairing link: a random code, single-use, valid 2 minutes and renewed by itself, that only exists while the *Remote* page is open on the computer. It only opens a request: the device must then type 6 digits the computer shows under the mouse only, renewed every 20 seconds, so a photo of the QR code is not enough; three wrong digits end the request, and after 20 wrong codes in 10 minutes, pairing pauses. Each new device raises a notification on the computer. The key is a long random secret in an `HttpOnly`, `Secure` cookie; the configuration only keeps its SHA-256. With a password set, each device unlocks on its own, and one that types 5 wrong passwords is removed from the trusted devices (the computer says so). A device never reaches the secrets, the remote-access settings, the password or the folders of the computer. On its *Remote* page it sees its notifications, the state of the access, the trusted devices (to rename or remove them) and *This computer, for the other computers*; never the switch, the address settings nor the pairing link, its QR code or its digits, which the server does not even send to a device: a device can never let another one in. Past 60 requests a minute without a key, an address is refused for 10 minutes. With your own domain, Cloudflare Access can stop strangers before the computer. Notifications are encrypted for each device alone (Web Push, RFC 8291) and signed with a key Athanor makes once (VAPID): the browser's push service only relays bytes it cannot read, and Athanor only posts to the push services browsers use (Google's, Apple's, Mozilla's, Microsoft's), never to an address a device would choose. The traffic is HTTPS up to Cloudflare, which relays it to your computer.
+- **"Ask Claude" repair sessions** run outside the sandbox, in the tool folder, without `sudo`: on purpose, to repair the tooling itself. Anything that needs `sudo` or Windows is written to `logs/TODO_FOR_YOU.md` for you instead.
+- **GitHub**: each computer pushes with one key of its own on your GitHub account (“Athanor (computer)”), made at *Connect to GitHub* and kept in Athanor's GitHub data (`~/.local/share/athanor/github/connexion`; in the Linux home of WSL on Windows), which the sandbox cannot read. It opens every repository your account can push to: *Disconnect* removes it from the computer, and GitHub's *Settings › SSH and GPG keys* revokes it. The sign-ins themselves (to connect, or to create a repository) live in a temporary folder deleted right after: no GitHub sign-in is ever kept. The pilot pushes from a private git folder: nothing in the project's `.git` (which Claude can write) is used, GitHub's server identity is checked against the keys GitHub publishes, and `GH_TOKEN`/`GITHUB_TOKEN` are removed from Claude's environment.
+- **Several computers** talk only through the project's repository, with each computer's own key: no port is opened and no computer reaches another. What a computer publishes about itself is its name, what you wrote it is good at, its Athanor version and what it builds; nothing about the computer itself. The others' commits come in through the same private git folder, are merged by git with hooks and filters off, and the pilot's state, logs and secrets never leave a computer.
+- **Nothing personal is ever committed**: `.env`, `logs/`, `tools/` and the app's settings are git-ignored, and projects live outside the tool folder.
+
+Found a vulnerability? Please open a [private security advisory](https://github.com/Aprilox/Athanor/security/advisories/new) rather than a public issue.
 
 ---
 
@@ -581,42 +678,6 @@ When the quota is exhausted for every model, the pilot waits for it to reopen an
 
 ---
 
-## Security
-
-What the sandbox guarantees, and what it deliberately does not:
-
-- **Claude's commands** run in the Claude Code sandbox (bubblewrap + seccomp). They can write only in the project folder and `tools/`. They cannot read the rest of your Linux home or the Windows drives, and cannot launch `cmd.exe` or `powershell.exe` directly. *Setup & health → Test the sandbox* proves it with a real session. Claude's file tools (Read, Edit, Write…) are limited the same way by a hook (`athanor hook fichiers`, [`app/outil_gardes.go`](app/outil_gardes.go)). On macOS the sandbox is Seatbelt, with the same rules.
-- **Windows software is an intended exit.** The gateways run outside the sandbox, with your user rights, and `pc-exec` runs any Windows program Claude places in the project or in `tools/windows`. Treat a project like code you run yourself.
-- **Administrator rights are opt-in.** *Administrator rights → Repair* asks for your consent once and registers an elevated scheduled task (`Athanor - installations`). It runs a copy of `Athanor.exe` kept in `C:\ProgramData\Athanor`, which only administrators can modify. The task only runs winget packages and programs located inside your project folders or `tools\windows`. It also lets the project's programs accept local-network connections without the firewall dialog. Remove it any time with `Athanor.exe autoriser-admin --retirer`.
-- **The pilot never trusts the project folder.** It keeps its own state (pid, lock, sandbox settings, instructions, counters) in `logs/`, out of Claude's reach, and never writes through a symbolic link placed in `.athanor/`. It validates every value it reads back, and runs git with hooks, filters, merge drivers, fsmonitor, external diff and signature programs disabled. It starts Claude Code with only its own settings and MCP servers (`--setting-sources user`, `--strict-mcp-config` when the CLI supports them), and `tools/` is never in its `PATH`.
-- **The app** listens on `127.0.0.1` only and rejects any other `Host` header (DNS rebinding). Only the windows it opens itself can use it: each one is opened on a single-use address that gives it a cookie, so a program of the computer that finds the port (a command Claude runs, for instance) gets neither the page nor the API. It also requires a per-session secret header on every API call and stores the password salted and hashed. It never sends `.env` secrets unless asked, and while locked it shows only "running / phase / cycle".
-- **The hub's MCP route** (`/api/mcp`) answers only to a pilot session's token (`Authorization: Bearer`), never through the remote-access tunnel, and that token opens no other route of the app. Athanor's settings and its `hub/` and `modules/` folders are neither readable nor writable from the sandbox (bubblewrap or Seatbelt): *Test the sandbox* tries to write there and must fail. In native Windows mode, or for a Windows program `pc-exec` runs, nothing enforces this: the audit log's chain and Athanor's password (asked again for approvals, keys given and forced infra) are then the safeguards.
-- **Remote access** (off by default): a second server listens on `127.0.0.1` only, for `cloudflared`, and answers only the tunnel's host name. Without a trusted device's key nothing goes through, neither the page nor the API. A device gets its key by opening the pairing link: a random code, single-use, valid 2 minutes and renewed by itself, that only exists while the *Remote* page is open on the computer. It only opens a request: the device must then type 6 digits the computer shows under the mouse only, renewed every 20 seconds, so a photo of the QR code is not enough; three wrong digits end the request, and after 20 wrong codes in 10 minutes, pairing pauses. Each new device raises a notification on the computer. The key is a long random secret in an `HttpOnly`, `Secure` cookie; the configuration only keeps its SHA-256. With a password set, each device unlocks on its own, and one that types 5 wrong passwords is removed from the trusted devices (the computer says so). A device never reaches the secrets, the remote-access settings, the password or the folders of the computer. On its *Remote* page it sees its notifications, the state of the access, the trusted devices (to rename or remove them) and *This computer, for the other computers*; never the switch, the address settings nor the pairing link, its QR code or its digits, which the server does not even send to a device: a device can never let another one in. Past 60 requests a minute without a key, an address is refused for 10 minutes. With your own domain, Cloudflare Access can stop strangers before the computer. Notifications are encrypted for each device alone (Web Push, RFC 8291) and signed with a key Athanor makes once (VAPID): the browser's push service only relays bytes it cannot read, and Athanor only posts to the push services browsers use (Google's, Apple's, Mozilla's, Microsoft's), never to an address a device would choose. The traffic is HTTPS up to Cloudflare, which relays it to your computer.
-- **"Ask Claude" repair sessions** run outside the sandbox, in the tool folder, without `sudo`: on purpose, to repair the tooling itself. Anything that needs `sudo` or Windows is written to `logs/TODO_FOR_YOU.md` for you instead.
-- **GitHub**: each computer pushes with one key of its own on your GitHub account (“Athanor (computer)”), made at *Connect to GitHub* and kept in Athanor's GitHub data (`~/.local/share/athanor/github/connexion`; in the Linux home of WSL on Windows), which the sandbox cannot read. It opens every repository your account can push to: *Disconnect* removes it from the computer, and GitHub's *Settings › SSH and GPG keys* revokes it. The sign-ins themselves (to connect, or to create a repository) live in a temporary folder deleted right after: no GitHub sign-in is ever kept. The pilot pushes from a private git folder: nothing in the project's `.git` (which Claude can write) is used, GitHub's server identity is checked against the keys GitHub publishes, and `GH_TOKEN`/`GITHUB_TOKEN` are removed from Claude's environment.
-- **Several computers** talk only through the project's repository, with each computer's own key: no port is opened and no computer reaches another. What a computer publishes about itself is its name, what you wrote it is good at, its Athanor version and what it builds; nothing about the computer itself. The others' commits come in through the same private git folder, are merged by git with hooks and filters off, and the pilot's state, logs and secrets never leave a computer.
-- **Nothing personal is ever committed**: `.env`, `logs/`, `tools/` and the app's settings are git-ignored, and projects live outside the tool folder.
-
-Found a vulnerability? Please open a [private security advisory](https://github.com/Aprilox/Athanor/security/advisories/new) rather than a public issue.
-
----
-
-## Running for days
-
-- The pilots run in the background, without a window (in WSL on Windows, unless you chose the native mode): you can close the app.
-- The PC stays awake while a pilot runs (`KEEP_AWAKE`), even with the app closed; for Roblox Studio and Unreal the screen stays on too, because a locked Windows session draws nothing (no captures, no play tests). Do not lock the session yourself (Win + L) before a night of Roblox or Unreal, and check that the screen saver does not ask for a sign-in on resume.
-- *Settings → Options*: "Open Athanor when the computer starts" and "Restart the pilots that were running, when the app opens".
-- No time limit by default: the pilot works until the delivery, which stops it by itself. To set one: *Work time limit* (`MAX_HOURS`) in *Settings*, or for this project alone in *Manage → Working mode*. Only the time the pilot works counts: its waits (quota, errors, "For you"), a pause or Athanor closed do not.
-
-## Finished project, follow-ups, new project
-
-- **Follow-up requests**: *Requests* page. As soon as the current request is done, the pilot takes the first queued one, appends it to `REQUEST.md` and reopens the project with a resume milestone.
-- **Note along the way**: *Requests* page, read at the start of the next cycle, without a restart.
-- **Reopen by hand**: replace `STATUS: DONE` with `STATUS: REOPENED` in `.athanor/FINAL_REPORT.md`, then *Start*.
-- **New project**: selector → *+ New project*. **Clean a finished project**: delete its `.athanor/` folder.
-
----
-
 ## Commands without the app
 
 Everything the app does is a command of the executable (`Athanor.exe` on Windows, the downloaded `./Athanor-Linux-x64`, `Athanor.app/Contents/MacOS/athanor` on the Mac, or `athanor` in Athanor's folder; `Athanor.exe wsl COMMAND …` runs it in WSL):
@@ -633,6 +694,9 @@ Everything the app does is a command of the executable (`Athanor.exe` on Windows
 | `tester-cage` | prove the sandbox with a real session |
 | `autoriser-admin [--retirer]` | allow or remove administrator installations (Windows) |
 | `reseau-unreal` | WSL network for the Unreal MCP (Windows, once) |
+| `arret-urgence` | the emergency stop of the running Athanor (pilots stopped, hub tokens revoked, approvals refused, vault locked) |
+| `mcp-client appairer NAME [--sorte desktop\|code]` | pair Claude Desktop or Claude Code with Athanor's MCP (see [docs/MCP.md](docs/MCP.md)) |
+| `module servers [--nom NAME]` / `module appairer` | run Athanor without a window as its Servers module, on a VPS, and pair it with a hub (see [docs/REMOTE.md](docs/REMOTE.md)) |
 | `tui` / `gui` | the app in the terminal / in its window (Linux, macOS; see [In a terminal](#in-a-terminal)) |
 | `aide` | every command |
 
@@ -671,6 +735,7 @@ app/                   the app's Go sources, static UI (HTML, CSS, JS without de
                        LICENSE and these sources (app/embarque.go)
 template/              CLAUDE.md (Claude's instructions), guides/ (the parts only some cycles need), PC_TOOLS_GUIDE.md, .claude/agents/ (the team)
 docs/images/           README images
+docs/*.md              guides of the modules: missions, deployments, Cloudflare, MCP, remote Athanors, a test server, a new machine
 docs/releases/         what is new in each version (shown on the release page)
 .env.example           every setting, documented
 ```
@@ -717,6 +782,30 @@ Yes: Athanor only adds `.athanor/`, kept out of git through `.git/info/exclude` 
 Yes. Nothing is tied to a user name or a drive letter: paths come from your profile and software is detected on every drive. Download Athanor on each PC and run *Install everything* there. To go on with the same project from another PC: link it to GitHub with *Share the workshop (.athanor/) on GitHub*; on the other PC, connect to GitHub, create a project in an empty folder linked to the same repository (*Use one of my repositories*) and *Get GitHub's work* (*Start* offers it too): the plan comes along and the pilot takes it up where it stopped. Both at the same time: [Several computers](#several-computers).
 </details>
 
+<details>
+<summary><b>Do I need a server, Cloudflare or an e-mail account?</b></summary>
+
+No. Studio works alone, as Athanor always did: the other modules wait until you add a server, a Cloudflare token or an SMTP account. A mission without a server only builds.
+</details>
+
+<details>
+<summary><b>Can Claude see my server keys or deploy to production without me?</b></summary>
+
+No. A server's key is an *infra* entry of the vault: it never leaves Athanor's process, and an agent only calls tools that Athanor runs with it. Destructive steps, *prod* servers and production deployments always wait for your accord, with Athanor's password retyped (a paired, unlocked phone can accept too). See the [security model](#security-model).
+</details>
+
+<details>
+<summary><b>What if I forget Athanor's password?</b></summary>
+
+The project keys still reopen on this PC through the system's keystore. The *infra* keys (your servers', Cloudflare's) are wrapped by the password alone, so they cannot be recovered: add them again (a server's key can be made again by Athanor and placed with the server's password). Nothing else is lost: projects, settings and servers' sheets stay.
+</details>
+
+<details>
+<summary><b>I used Athanor before the hub. What changes for my projects?</b></summary>
+
+Nothing you have to do. The update moves nothing: projects, settings, the request queue, the team, remote access and old links stay where they were. At the first start the keys of each project's `.athanor/secrets.env`, of *Skills & MCP* and of Athanor's `.env` are copied into the vault (those files are left as they are), and each project key is granted back to its project's *dev*, so the pilots get exactly what they had. *Undo the import* removes what was added.
+</details>
+
 ---
 
 ## Troubleshooting
@@ -731,6 +820,9 @@ Yes. Nothing is tied to a user name or a drive letter: paths come from your prof
 | "Usage limit reached, Claude is waiting" | expected; with `FALLBACK_MODEL`, Claude goes on with the fallback model, unless the limit hit is the account's own (5 hours, the week), which the fallback model shares |
 | "Connection problem" | missing or wrong token: *Settings*, or *Repair* on the *Token and model access* line |
 | An installation needs administrator rights | *Setup & health* → *Administrator rights for installations* → *Repair* (once) |
+| “The vault is locked” on an action of Servers, a mission or a deployment | unlock Athanor (its password, in the window or on a paired phone): the *infra* key opens only with it |
+| A server refused with “the host key changed” | the server was reinstalled, or someone is in between: check the new fingerprint on the server itself (`ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub`), then remove and add the server again |
+| *Send a test e-mail* fails | the message says why in plain words; for Gmail, Outlook and Yahoo use an *app password*, not the account's own |
 
 ---
 
