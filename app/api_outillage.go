@@ -327,6 +327,7 @@ type OptionsVue struct {
 	VerifierMaj               bool       `json:"verifier_maj"`    // look for an update when Athanor opens (maj.go)
 	EntendreBureau            bool       `json:"entendre_bureau"` // the programs on Claude's desktop are heard
 	TerminalPilote            bool       `json:"terminal_pilote"` // the pilot's console is shown, minimised (Windows)
+	Animation                 bool       `json:"animation"`       // the launch animation (statique.go)
 }
 
 func (s *Serveur) apiOptions(w http.ResponseWriter, r *http.Request) {
@@ -337,7 +338,7 @@ func (s *Serveur) apiOptions(w http.ResponseWriter, r *http.Request) {
 	if projets == nil {
 		projets = []Projet{}
 	}
-	s.ecrireJSON(w, OptionsVue{projets, c.Kit, s.kitCourant().Valide(), c.LancerPiloteAuDemarrage, c.BureauVirtuel, c.ProgrammesSupplementaires, DemarrageWindowsActif(), c.MotDePasseHash != "", s.bureau.Etat(), modeNatif.Load(), runtime.GOOS == "windows", bashNatif(), !c.PasVerifierMaj, c.EntendreBureauClaude, c.TerminalPilote})
+	s.ecrireJSON(w, OptionsVue{projets, c.Kit, s.kitCourant().Valide(), c.LancerPiloteAuDemarrage, c.BureauVirtuel, c.ProgrammesSupplementaires, DemarrageWindowsActif(), c.MotDePasseHash != "", s.bureau.Etat(), modeNatif.Load(), runtime.GOOS == "windows", bashNatif(), !c.PasVerifierMaj, c.EntendreBureauClaude, c.TerminalPilote, !c.PasAnimation})
 }
 
 func (s *Serveur) apiEcrireOptions(w http.ResponseWriter, r *http.Request) {
@@ -351,6 +352,7 @@ func (s *Serveur) apiEcrireOptions(w http.ResponseWriter, r *http.Request) {
 		VerifierMaj               *bool  `json:"verifier_maj"`
 		EntendreBureau            *bool  `json:"entendre_bureau"`
 		TerminalPilote            *bool  `json:"terminal_pilote"`
+		Animation                 *bool  `json:"animation"`
 	}
 	if err := lireCorps(r, &c); err != nil {
 		s.erreur(w, http.StatusBadRequest, err.Error())
@@ -385,6 +387,9 @@ func (s *Serveur) apiEcrireOptions(w http.ResponseWriter, r *http.Request) {
 	}
 	if c.TerminalPilote != nil {
 		s.config.TerminalPilote = *c.TerminalPilote
+	}
+	if c.Animation != nil {
+		s.config.PasAnimation = !*c.Animation
 	}
 	s.config.Kit = nouveau.Racine
 	s.config.LancerPiloteAuDemarrage = c.LancerPiloteAuDemarrage

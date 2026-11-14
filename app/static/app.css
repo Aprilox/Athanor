@@ -1266,3 +1266,28 @@ a.mis-ligne:hover, a.mis-ligne:focus-visible { border-color: var(--accent); }
 .mis-incident .ligne { flex-wrap: wrap; gap: 8px; }
 .mis-redemander { gap: 8px; flex-wrap: wrap; align-items: center; }
 .mis-relais-etape { font-weight: 600; }
+
+/* ------------------------------------------------------------------ launch animation (splash.js, M227) */
+/* base styles = the final picture; the animations start from the hidden state ("both") */
+.splash { position: fixed; inset: 0; z-index: 10000; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; background: var(--bg); color: var(--ink); cursor: pointer; transition: opacity .35s ease; }
+.splash[hidden] { display: none; }
+.splash.splash-fin { opacity: 0; pointer-events: none; }
+.splash-logo { width: min(136px, 30vmin); height: auto; animation: splash-logo .7s cubic-bezier(.2, .7, .2, 1) both; }
+.splash-tuile { fill: var(--panel); stroke: var(--line); stroke-width: 2; }
+.splash-anneau, .splash-a, .splash-barre { fill: none; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 100; }
+.splash-anneau { stroke: var(--accent); stroke-width: 18; animation: splash-trait .9s .25s ease-in-out both; }
+.splash-fleche { fill: var(--accent); transform-box: fill-box; transform-origin: center; animation: splash-pop .3s 1.05s ease-out both; }
+.splash-a { stroke: var(--ink); stroke-width: 18; animation: splash-trait .6s .55s ease-out both; }
+.splash-barre { stroke: var(--ink); stroke-width: 16; animation: splash-trait .3s 1s ease-out both; }
+.splash-nom { font: 600 clamp(24px, 6vw, 34px)/1.1 var(--police-titre); letter-spacing: .02em; animation: splash-nom .7s 1.1s cubic-bezier(.2, .7, .2, 1) both; }
+.splash-nom b { color: var(--accent); font-weight: 600; }
+@keyframes splash-logo { from { opacity: 0; transform: scale(.92); } }
+@keyframes splash-trait { from { stroke-dashoffset: 100; opacity: 0; } 15% { opacity: 1; } }
+@keyframes splash-pop { from { opacity: 0; transform: scale(.5); } }
+@keyframes splash-nom { from { opacity: 0; transform: translateY(8px); letter-spacing: .18em; } }
+@keyframes splash-fondu { from { opacity: 0; } }
+/* reduced motion: the still picture, faded in and out (wins over the global "animation: none") */
+@media (prefers-reduced-motion: reduce) {
+  .splash { animation: splash-fondu .25s ease-out both !important; }
+  .splash.splash-fin { transition: opacity .2s ease !important; }
+}

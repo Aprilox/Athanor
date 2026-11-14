@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Athanor Hub</title>
 <meta name="csrf" content="__CSRF__">
+<meta name="lancement" content="__LANCEMENT__">
 <link rel="icon" href="logo.svg" type="image/svg+xml">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icone-180.png">
@@ -15,6 +16,18 @@
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
+<!-- launch animation: shown by splash.js once per launch of Athanor, skipped by a click or a key -->
+<div id="splash" class="splash" hidden aria-hidden="true">
+  <svg class="splash-logo" viewBox="0 0 256 256" width="112" height="112">
+    <rect class="splash-tuile" x="8" y="8" width="240" height="240" rx="56"/>
+    <path class="splash-anneau" pathLength="100" d="M 186 79 A 76 76 0 1 0 204 128"/>
+    <path class="splash-fleche" d="M 184 136 L 224 136 L 204 104 Z"/>
+    <path class="splash-a" pathLength="100" d="M 92 168 L 128 86 L 164 168"/>
+    <path class="splash-barre" pathLength="100" d="M 109 138 L 147 138"/>
+  </svg>
+  <div class="splash-nom">Athanor <b>Hub</b></div>
+</div>
+<script src="splash.js"></script>
 <header id="fenetre-barre" class="fb" hidden>
   <div class="fb-glisser">
     <img src="logo.svg" width="16" height="16" alt="" class="fb-logo" draggable="false">

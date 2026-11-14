@@ -80,7 +80,7 @@ func TestCaptureHub(t *testing.T) {
 			t.Errorf("capture kit left behind: %s", kit)
 		}
 	}()
-	s := nouveauServeur(Config{Kit: kit, Projets: projets, ProjetActif: "projet-00", Langue: "fr", Theme: "clair", BienvenueVue: true})
+	s := nouveauServeur(Config{Kit: kit, Projets: projets, ProjetActif: "projet-00", Langue: "fr", Theme: "clair", BienvenueVue: true, PasAnimation: true})
 	s.cleAcces = aleatoire(24)
 	s.coffre, s.coffreErr = coffreCapture(t), nil // never this PC's own vault
 	accesCapture(t, s, projets[0], projets[1])
