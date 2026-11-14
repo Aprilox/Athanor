@@ -490,7 +490,7 @@ const versionsDemande = new WeakMap(); // textarea → { mienne, claude, vue: "m
 function barreAmeliorer(id, genre = "") {
   const aide = genre === "agent" ? t("Claude rewrites these instructions: clearer, more complete, same intent. You can go back to yours.") : t("Claude rewrites your request: clearer, more complete, same intent. You can go back to yours.");
   return `<div class="ameliorer" data-pour="${id}">
-    <button type="button" class="btn btn-petit" data-ameliorer="${id}" data-genre="${genre}" title="${h(aide)}">✨ ${t("Improve with Claude")}</button>
+    <button type="button" class="btn btn-petit" data-ameliorer="${id}" data-genre="${genre}" title="${h(aide)}">${t("Improve with Claude")}</button>
     <button type="button" class="btn btn-petit" data-version="${id}" hidden></button>
     <span class="muet petit" data-etat-ameliorer="${id}"></span>
   </div>`;
@@ -501,7 +501,7 @@ function majBarreAmeliorer(id) {
   if (!bascule || !etiquette) return;
   bascule.hidden = !v;
   if (!v) { etiquette.textContent = ""; return; }
-  bascule.textContent = v.vue === "claude" ? "↩ " + t("Back to my version") : "✨ " + t("Use Claude's version");
+  bascule.textContent = v.vue === "claude" ? "↩ " + t("Back to my version") : t("Use Claude's version");
   etiquette.textContent = v.vue === "claude" ? t("Claude's version") : t("Your version");
 }
 document.addEventListener("input", (ev) => {
@@ -878,7 +878,7 @@ function garderFocus(zone, rendre) {
 
 // ----------------------------------------------------------------------------- shell: header, sidebar, project picker
 // the environment given to the pilot and what it receives, next to Start (summary computed by the server)
-function blocAccesDemarrer(ac, distant) {
+function blocAccesDemarrer(ac, distant, projet) {
   const pl = (n) => new Intl.PluralRules(document.documentElement.lang || "en").select(n) !== "one";
   const dev = ac.env === "dev"; // C-M218-3: "test keys" only where they are test keys
   const recu = [ac.secrets && (pl(ac.secrets) ? t(dev ? "{0} test keys" : "{0} keys", [ac.secrets]) : t(dev ? "{0} test key" : "{0} key", [ac.secrets])),
@@ -886,12 +886,15 @@ function blocAccesDemarrer(ac, distant) {
   // C-M218-2: the badge also counts the server keys Athanor keeps, so the sentence says them
   const phrase = (recu.length ? t("The pilot will have access to: {0}.", [recu.join(", ")]) : t("The pilot receives nothing from the vault."))
     + (ac.infra ? " " + t(pl(ac.infra) ? "{0} server keys kept by Athanor" : "{0} server key kept by Athanor", [ac.infra]) + "." : "");
-  const verrou = ac.etat === "verrouille" ? `<span class="badge badge-infra" title="${h(t("The vault is locked: the pilot's file is not updated until you unlock it."))}">🔒 ${t("vault locked")}</span>` : "";
+  const verrou = ac.etat === "verrouille" ? `<span class="badge badge-infra" title="${h(t("The vault is locked: the pilot's file is not updated until you unlock it."))}">${t("vault locked")}</span>` : "";
   const envs = (ac.envs || []).map((e) => `<option value="${h(e)}" ${e === ac.env ? "selected" : ""}>${h(nomEnv(e))}</option>`).join("");
-  const choix = distant ? `<span class="badge" title="${h(t("Environment"))}">${h(ac.env)}</span>` // a paired device only reads the grants
+  let separer = !ac.uniformes;
+  try { separer ||= localStorage.getItem(cleSeparer(projet)) === "1"; } catch (e) { /* storage unavailable */ }
+  // M232c: one list (same keys everywhere): no environment to choose next to Start
+  const choix = !separer ? "" : distant ? `<span class="badge" title="${h(t("Environment"))}">${h(ac.env)}</span>` // a paired device only reads the grants
     : `<select data-env-acces aria-label="${h(t("Environment"))}" title="${h(t("Environment given to the pilot: changing it rewrites its values at once."))}">${envs}</select>`;
   return `<span class="acces-demarrer">${choix}`
-    + `<a class="badge" href="#acces" title="${h(t("Open the Access panel"))}">🔑 ${pl(ac.total) ? t("{0} accesses", [ac.total]) : t("{0} access", [ac.total])}</a>${verrou}<span class="muet petit">${h(phrase)}</span></span>`;
+    + `<a class="badge" href="#acces" title="${h(t("Open the Access panel"))}">${pl(ac.total) ? t("{0} accesses", [ac.total]) : t("{0} access", [ac.total])}</a>${verrou}<span class="muet petit">${h(phrase)}</span></span>`;
 }
 
 function rendreBandeau(v) {
@@ -899,17 +902,17 @@ function rendreBandeau(v) {
   const mp = moduleDePage(pageParente(etat.page)), global = !avecProjet(mp);
   const p = global ? phraseGlobale(mp) : phraseEtat(v);
   const boutons = [];
-  if (v.projet && !global && v.projet.acces) boutons.push(blocAccesDemarrer(v.projet.acces, v.distant));
+  if (v.projet && !global && v.projet.acces) boutons.push(blocAccesDemarrer(v.projet.acces, v.distant, v.projet.nom));
   if (v.kit_valide && v.projet && !global) {
     if (v.actif) {
       // what was changed while this pilot runs and that it has not taken yet (en_attente, from what the pilot
       // itself says it read): the working mode at its next cycle, the settings when it restarts (asked by
       // the app for the end of the cycle; cancelled, a button asks it again)
       const attente = v.en_attente || [];
-      if (attente.includes("modes")) boutons.push(`<span class="btn btn-attente inerte" title="${h(t("The pilot reads the working mode when a cycle starts: the cycle under way keeps the one it started with."))}">⏳ ${t("New working mode: taken at the end of this cycle")}</span>`);
+      if (attente.includes("modes")) boutons.push(`<span class="btn btn-attente inerte" title="${h(t("The pilot reads the working mode when a cycle starts: the cycle under way keeps the one it started with."))}">${t("New working mode: taken at the end of this cycle")}</span>`);
       if (attente.includes("reglages") && !v.arret_demande) boutons.push(`<button class="btn btn-attente" data-act="redemarrer-apres-cycle" title="${h(t("The pilot runs with the settings it started with. Click to restart it at the end of this cycle."))}">↻ ${t("New settings: restart after cycle")}</button>`);
       // a stop asked for the end of the cycle: the button says it, and a click withdraws it
-      if (v.arret_demande) boutons.push(`<button class="btn btn-attente" data-arret="annuler" title="${h(t("Click to cancel: the pilot then goes on after this cycle."))}">⏳ ${v.arret_demande === "relance" ? t(attente.includes("reglages") ? "Restart at the end of the cycle: new settings" : "Restart requested: end of cycle") : t("Stop requested: end of cycle")}</button>`);
+      if (v.arret_demande) boutons.push(`<button class="btn btn-attente" data-arret="annuler" title="${h(t("Click to cancel: the pilot then goes on after this cycle."))}">${v.arret_demande === "relance" ? t(attente.includes("reglages") ? "Restart at the end of the cycle: new settings" : "Restart requested: end of cycle") : t("Stop requested: end of cycle")}</button>`);
       else boutons.push(`<button class="btn" data-act="arreter-apres-cycle" title="${h(t("Finishes the current milestone, saves it, then stops. Nothing is lost."))}">${t("Stop after cycle")}</button>`);
       boutons.push(`<button class="btn btn-danger" data-act="arreter" title="${h(t("Cuts the current cycle: unsaved work will be redone."))}">${t("Stop now")}</button>`);
     } else {
@@ -963,10 +966,10 @@ function rendreSelecteur(v) {
   const pos = avaitFocus ? document.activeElement.selectionStart : 0;
   m.innerHTML = `<input type="text" id="sel-recherche" placeholder="${h(t("Search a project…"))}" value="${h(etat.rechercheProjet || "")}">
     <div class="menu-liste">${liste.map((x) => `<a href="#suivi" data-projet="${h(x.nom)}" class="${x.courant ? "actif" : ""}"><span class="dot ${classePhase(x)}"></span><span class="nom">${h(x.nom)}</span><span class="muet petit">${x.actif ? t(x.phase === "quota" || x.phase === "budget" || x.phase === "attente_vous" ? "waiting" : "running") : t("stopped")}${x.attente ? " · " + t("{0} queued", [x.attente]) : ""}${x.pour_vous ? " · " + t("{0} for you", [x.pour_vous]) : ""}</span></a>`).join("") || `<div class="vide">${t("No project.")}</div>`}</div>
-    ${v.projet ? `<a href="#projet" class="menu-nouveau menu-gerer">⚙ ${t("Manage this project")}</a>` : ""}
+    ${v.projet ? `<a href="#projet" class="menu-nouveau menu-gerer">${t("Manage this project")}</a>` : ""}
     <a href="#nouveau" class="menu-nouveau">+ ${t("New project")}</a>
     <a href="#rejoindre" class="menu-nouveau">⇄ ${t("Join a project")}</a>
-    ${archives ? `<a href="#archives" class="menu-nouveau menu-archives">🗄 ${t("Archived projects ({0})", [archives])}</a>` : ""}`;
+    ${archives ? `<a href="#archives" class="menu-nouveau menu-archives">${t("Archived projects ({0})", [archives])}</a>` : ""}`;
   const r = $("#sel-recherche"); if (r) { r.focus(); r.setSelectionRange(pos, pos); }
 }
 
@@ -987,7 +990,7 @@ async function arreterPilote(b) {
   if (c === "apres") return arreterApresCycle(b.parentElement.querySelector('[data-act="arreter-apres-cycle"]'));
 }
 async function arreterApresCycle(b) {
-  if (b) { b.disabled = true; b.textContent = "⏳ " + t("Stop requested: end of cycle"); }
+  if (b) { b.disabled = true; b.textContent = t("Stop requested: end of cycle"); }
   await action(api("pilote/arreter-apres-cycle", "POST"));
   await rafraichir();
 }
@@ -1160,8 +1163,8 @@ function traduireNav() {
   if (etat.hubModules) rendreMenu(etat.hubModules);
   else document.querySelectorAll("#nav-tiroir [data-libelle]").forEach((x) => { x.textContent = t(x.dataset.libelle); });
   $("#nav-bas").setAttribute("aria-label", t("Settings"));
-  $("#btn-verrou").textContent = "🔒 " + t("Lock");
-  $("#btn-urgence").textContent = "⛔ " + t("Emergency stop");
+  $("#btn-verrou").textContent = t("Lock");
+  $("#btn-urgence").textContent = t("Emergency stop");
   $("#verrou-titre").textContent = t("Application locked");
   $("#verrou-mdp").placeholder = t("Password");
   $("#verrou-bouton").textContent = t("Unlock");
@@ -1991,7 +1994,7 @@ function tuileModule(m) {
 // B6: New project, Manage and Archives one tap from Home (the phone needed three: menu, selector, entry)
 function raccourcisDev() {
   const v = etat.vue || {}, archives = (v.projets || []).filter((x) => x.archive).length;
-  return `<div class="ligne m0 tuile-raccourcis"><a class="btn btn-petit btn-fantome" href="#nouveau">+ ${t("New project")}</a>${v.projet ? `<a class="btn btn-petit btn-fantome" href="#projet">⚙ ${t("Manage this project")}</a>` : ""}${archives ? `<a class="btn btn-petit btn-fantome" href="#archives">🗄 ${t("Archived projects ({0})", [archives])}</a>` : ""}</div>`;
+  return `<div class="ligne m0 tuile-raccourcis"><a class="btn btn-petit btn-fantome" href="#nouveau">+ ${t("New project")}</a>${v.projet ? `<a class="btn btn-petit btn-fantome" href="#projet">${t("Manage this project")}</a>` : ""}${archives ? `<a class="btn btn-petit btn-fantome" href="#archives">${t("Archived projects ({0})", [archives])}</a>` : ""}</div>`;
 }
 // Home, under the chat (M228): what waits for the owner (with why), then what works, then the modules; each list is the Projects' elements
 function blocListeAccueil(cl, titre, liste, vide, modules, apres = "") {
@@ -2501,7 +2504,7 @@ pages.suivi = async () => {
 
 // M136: the dev deployment after the last milestone (relais_jalon.go)
 function ligneRelais(r) {
-  const [icone, etiquette] = r.etat === "attente" ? ["⏳", "Waiting for the milestone's commit on GitHub"] : r.etat === "lance" ? ETATS_DEPLOI.en_cours : ETATS_DEPLOI[r.etat] || ["", r.etat];
+  const [icone, etiquette] = r.etat === "attente" ? ["…", "Waiting for the milestone's commit on GitHub"] : r.etat === "lance" ? ETATS_DEPLOI.en_cours : ETATS_DEPLOI[r.etat] || ["", r.etat];
   return `<span class="badge">${icone} ${h(t(etiquette))}</span> <code>${h((r.commit || "").slice(0, 7))}</code> <span class="muet petit">${md(r.jalon)} · ${h(dateLisible(r.date))}</span>${r.erreur ? `<div class="petit attention">${h(t(r.erreur))}</div>` : ""} <a class="petit" href="#acces">${t("Environments")}</a>`;
 }
 
@@ -2574,7 +2577,7 @@ document.addEventListener("click", async (ev) => {
 function bandeauRaccourci() {
   const r = raccourciConnu();
   if (!r || !r.lancement || !r.lancement.telechargement || (r.raccourcis || []).length || etat.raccourciPlusTard) return "";
-  return `<div class="bloc bandeau-raccourci"><h2>📌 ${t("Open Athanor directly next time")}</h2>
+  return `<div class="bloc bandeau-raccourci"><h2>${t("Open Athanor directly next time")}</h2>
     <p class="petit">${h(t("You opened Athanor from the file you downloaded ({0}). Athanor is installed in its own folder and updates itself there: create a shortcut to open it, and that file is no longer needed.", [nomRaccourci(r.lancement.fichier || "")]))}</p>
     ${blocRaccourci(r, false, `<button class="btn" data-raccourci="plus-tard">${t("Not now")}</button>`)}</div>`;
 }
@@ -2649,7 +2652,7 @@ const GUIDE = [
       ["Test", "*Test* checks a key with its own provider before you rely on it: Cloudflare and GitHub say whether it works and what it may do, an SSH key gives its type and whether its server answers. The key goes nowhere else."],
       ["The note for the AI", "After a test, Athanor proposes a short note from the result (the account, the zones, the rights). Change it as you like: it tells Claude what the key is for without showing it the value."],
       ["Two scopes: code and infra", "*code*: what a project's code uses (an API key, a test token). *infra*: the keys of your servers and accounts (Cloudflare, SSH, GitHub, a certificate, AWS). Athanor proposes the scope from the type, and you can change it. *infra* keys never leave Athanor and need a password for Athanor: without one, the infra scope stays greyed out.", "#options@bloc-verrou", "Settings › Options › Lock"],
-      ["Locked, unlocked", "The *code* keys reopen by themselves when Athanor starts on this PC. The *infra* keys open when you unlock Athanor (in the window, or from a paired phone) and close again when you lock it (🔒), when the session ends or when Athanor stops. Locked, the page says so and offers *Unlock*. A paired phone sees the list, never a value, and cannot change it."],
+      ["Locked, unlocked", "The *code* keys reopen by themselves when Athanor starts on this PC. The *infra* keys open when you unlock Athanor (in the window, or from a paired phone) and close again when you lock it, when the session ends or when Athanor stops. Locked, the page says so and offers *Unlock*. A paired phone sees the list, never a value, and cannot change it."],
       ["Your old keys come along", "On start-up, Athanor copies into the vault the keys it already had: each project's `.athanor/secrets.env`, the keys of *Skills & MCP* and those of its own `.env`. It reads those files without changing them, and starting again imports nothing twice. A line at the top of *Vault* gives the count: *Undo the import* removes exactly those entries, *Import again* brings them back."],
     ],
     note: "Your project keys reopen alone on this PC; the keys of your servers open only with your password, and a copy of the disk opens nothing." },
@@ -2657,7 +2660,7 @@ const GUIDE = [
     etapes: [
       ["The Access panel", "*Access*, a tab of *Studio*: the vault's entries on the left, the keys given to this project on the right. Drag an entry there, or tick its box: the pilot gets it under the variable name shown, which you can change. *Separate testing and production* shows three columns instead (*testing*, *pre-production*, *production*), and a vault entry can hold a second value for production.", "#acces", "Access"],
       ["The environment", "Next to *Start*, a list chooses the environment given to the pilot (*testing* at first). Changing it rewrites the pilot's values at once, and the panel follows. On a paired phone, the environment and the accesses are shown, never changed."],
-      ["The badge", "The 🔑 badge next to *Start* counts the project's accesses and opens the panel. The sentence beside it says what the pilot will get (“2 test keys, 1 variable”). *vault locked*: the pilot's file waits until you unlock Athanor."],
+      ["The badge", "The badge next to *Start* counts the project's accesses and opens the panel. The sentence beside it says what the pilot will get (“2 test keys, 1 variable”). *vault locked*: the pilot's file waits until you unlock Athanor."],
       ["Code or infra", "A *code* entry (a test key, a setting) goes to the pilot: only the entries of the current environment are written into the project's `.athanor/secrets.env`. An *infra* entry (Cloudflare, SSH…) can be linked to the project, but Athanor keeps it for its own actions and never gives it to the pilot. Removing an access takes its value out of the file at once."],
       ["Keys given on “For you”", "When Claude asks you for a key on *For you*, your answer goes into the vault (scope *code*) with an access for the current environment, marked *added automatically*. The keys of your projects' old files came in the same way: visible, and removable like the others.", "#pourvous", "For you"],
       ["Native Windows mode", "Without WSL, nothing separates Claude from the files of this PC: any agent could read them. Linking an *infra* entry is then refused, with an offer to use WSL. *Force, knowing the risk* allows it for one project after a confirmation, and the choice is logged. *code* entries work as usual."],
@@ -2713,7 +2716,7 @@ const GUIDE = [
     etapes: [
       ["Connect", "On the *Servers* page or a server's sheet, *Connect*: a real terminal opens, sized to the window, with colours, copy and paste, Ctrl+C and full-screen programs such as `nano` or `htop`. Athanor opens the SSH connection itself with the server's key and checks its fingerprint: the key never reaches the page. *Disconnect* ends it; a terminal left unused closes after 15 minutes.", "#serveurs", "Servers"],
       ["The files", "*Files* shows the server's files beside the terminal: open a folder, *Send files* (or drop them on the list), click a file to download it, rename it, delete it after a confirmation. Replacing a file of the same name asks first. On a phone, the tabs *Terminal*, *Files* and *Assistant* switch between them."],
-      ["Its look", "*⚙ Settings*, in the terminal's bar: the theme (Athanor light or dark, Solarized, Nord, Dracula, Gruvbox, One Dark), the text size, the line spacing and the cursor's shape. The terminal shows each choice at once; *Save* keeps it, *Cancel* or Esc puts the previous one back."],
+      ["Its look", "*Settings*, in the terminal's bar: the theme (Athanor light or dark, Solarized, Nord, Dracula, Gruvbox, One Dark), the text size, the line spacing and the cursor's shape. The terminal shows each choice at once; *Save* keeps it, *Cancel* or Esc puts the previous one back."],
       ["The assistant beside it", "*Assistant* opens a chat beside the terminal: say what should be done, then *Send*. Choose its mode at the top. *Separate connection*, the default: it works in its own SSH connection and your terminal stays yours; each command, its output and the one running show in the panel, with *Stop* always visible. *Live in my terminal*: its commands are written in your terminal, where you watch them run."],
       ["While it works live", "Your typing is locked under the banner *The assistant is working*: *Stop* ends its task, *Take over* gives you the keyboard back and the assistant goes on in its own connection. When it is done, the keyboard is yours again."],
       ["The same guardrails", "In both modes the assistant goes through the guardrails of *Give a task to the Servers agent*: reading runs, a change or a destructive command waits for a plan you accept and is refused without it. The vault's values are masked in what it shows; the server's key and passwords never reach the page or the AI."],
@@ -3214,7 +3217,7 @@ function selecteurDossier(depart, titre) {
     courant = r;
     $("#sd-chemin").textContent = r.chemin;
     $("#sd-racines").innerHTML = r.racines.map((x) => `<button class="btn btn-petit" data-chemin="${h(x.chemin)}">${x.nom === "~" ? t("Home folder") : h(x.nom)}</button>`).join("");
-    $("#sd-explorateur").innerHTML = (r.parent ? `<div class="parent" data-chemin="${h(r.parent)}">↑ ${t("parent folder")}</div>` : "") + (r.dossiers.map((d) => `<div data-chemin="${h(d.chemin)}">📁 ${h(d.nom)}</div>`).join("") || `<div class="muet">${t("No subfolder.")}</div>`);
+    $("#sd-explorateur").innerHTML = (r.parent ? `<div class="parent" data-chemin="${h(r.parent)}">↑ ${t("parent folder")}</div>` : "") + (r.dossiers.map((d) => `<div data-chemin="${h(d.chemin)}">${h(d.nom)}/</div>`).join("") || `<div class="muet">${t("No subfolder.")}</div>`);
   };
   montrer(depart);
   return new Promise((resoudre) => {
@@ -3259,10 +3262,10 @@ function activiteVivante(a) {
   if (a.statut !== "travaille" && a.statut !== "attend") return "";
   const depuis = a.derniere ? Math.max(0, Math.round(Date.now() / 1000 - a.derniere)) : null;
   const age = depuis === null ? "" : depuis < 60 ? t("last action {0} s ago", [depuis]) : t("last action {0} min ago", [Math.floor(depuis / 60)]);
-  const icone = { outil: "▶", texte: "💬", sous_agent: "👥" };
+  const icone = { outil: "▶", texte: "•", sous_agent: "»" };
   const liste = (a.actions || []).slice(-5).map((x) => `<li><span class="muet">${h(x.heure)}</span> ${icone[x.genre] || "•"} ${h(t(x.texte))}</li>`).join("");
   const long = depuis !== null && depuis >= 120 && a.statut === "travaille" ? ` · ${t("a long command may be running (a build, tests): it is still working")}` : "";
-  return `<div class="vivant">${age ? `<div class="muet petit">⏱ ${age}${long}</div>` : ""}${liste ? `<ul class="actions-agent">${liste}</ul>` : ""}</div>`;
+  return `<div class="vivant">${age ? `<div class="muet petit">${age}${long}</div>` : ""}${liste ? `<ul class="actions-agent">${liste}</ul>` : ""}</div>`;
 }
 
 function rendreAppel(a) {
@@ -3344,7 +3347,7 @@ function carteTache(x) {
   const b = brouillonTache(x.id);
   const meta = [x.jalons && x.jalons.length ? t("blocks {0}", [x.jalons.join(", ")]) : "", heureMaj(x.cree)].filter(Boolean).join(" · ");
   let corps = "";
-  if (x.etat === "pour_vous" && x.statut === "manque" && x.note) corps += `<div class="pv-note"><strong>🔁 ${t("Claude: still missing")}</strong><div>${avecLiens(x.note)}</div></div>`;
+  if (x.etat === "pour_vous" && x.statut === "manque" && x.note) corps += `<div class="pv-note"><strong>${t("Claude: still missing")}</strong><div>${avecLiens(x.note)}</div></div>`;
   if (x.etat !== "close") {
     if (x.details) corps += `<div class="pv-details">${avecLiens(x.details)}</div>`;
     if (x.attendu) corps += `<p class="petit"><strong>${t("What Claude needs back:")}</strong> ${avecLiens(x.attendu)}</p>`;
@@ -3357,7 +3360,7 @@ function carteTache(x) {
       ${zonePieces("pv-" + x.id)}
       <div class="ligne mt-1">
         <button class="btn btn-primaire" data-pv="fait" data-id="${h(x.id)}">✓ ${t("It's done")}</button>
-        <button class="btn" data-pv="passer" data-id="${h(x.id)}" title="${h(t("Claude will not ask again: it finds another way, guided by your text if you wrote one."))}">⏭ ${t("Skip: find another way")}</button>
+        <button class="btn" data-pv="passer" data-id="${h(x.id)}" title="${h(t("Claude will not ask again: it finds another way, guided by your text if you wrote one."))}">${t("Skip: find another way")}</button>
       </div></div>`;
   } else if (derniere && x.etat !== "close") {
     corps += `<p class="muet petit">${x.etat === "a_contourner" ? t("You skipped it: Claude finds another way at the start of its next cycle.") : t("You said it is done: Claude checks it at the start of its next cycle.")}${derniere.texte ? " " + h(t("Your answer: {0}", [derniere.texte])) : ""}</p>`;
@@ -3607,7 +3610,7 @@ function formulaireAgent() {
         <option value="fort" ${f.modele === "fort" ? "selected" : ""}>${t("Most capable model (hard reasoning)")}</option></select></label>
     </div>
     <label class="champ"><span>${t("When the lead should call it")}</span><input type="text" id="ag-description" value="${h(f.description || "")}" placeholder="${h(t("e.g. Translates the interface texts into Spanish and German, keeping the tone of the brand."))}"></label>
-    <label class="champ"><span>${t("Its instructions")}</span><textarea id="ag-consignes" rows="9" placeholder="${h(t("Its role, how it works, what it must always and never do, what it hands back. Write it as you would brief a colleague: ✨ Improve with Claude can structure it."))}">${h(f.consignes || "")}</textarea></label>
+    <label class="champ"><span>${t("Its instructions")}</span><textarea id="ag-consignes" rows="9" placeholder="${h(t("Its role, how it works, what it must always and never do, what it hands back. Write it as you would brief a colleague: Improve with Claude can structure it."))}">${h(f.consignes || "")}</textarea></label>
     ${barreAmeliorer("ag-consignes", "agent")}
     <label class="interrupteur"><input type="checkbox" id="ag-lecture" ${f.lecture_seule ? "checked" : ""}><span>${t("Read only: it reads and reports, never writes a file")}</span></label>
     <p class="muet petit">${f.ancien ? (f.n > 1 ? t("Used by {0} projects: the change applies to all of them.", [f.n]) : "") : t("Saved in the library and switched on in this project.")} ${t("Like the other sub-agents, it works inside the project's sandbox and has its skills, MCP tools and attached files.")}</p>
@@ -3757,7 +3760,7 @@ function champsServeur(x) {
 function serveurPlugin(x, d) {
   const sc = champsServeur(x);
   const distant = x.type === "http" || x.type === "sse";
-  return `<div class="plg-serveur"><div class="ligne"><span>🔌 <b>${h(x.nom)}</b> <span class="etiquette">${genreServeur(x.type)}</span></span>
+  return `<div class="plg-serveur"><div class="ligne"><span><b>${h(x.nom)}</b> <span class="etiquette">${genreServeur(x.type)}</span></span>
       <span class="espace"></span>${distant ? `<button class="btn btn-petit" data-ext-connexion="${h(x.id)}" title="${h(t("For a server that asks you to sign in (OAuth): once, valid for every project."))}">${t("Sign in")}</button>` : ""}
       <button class="btn btn-petit" data-ext-tester="${h(x.id)}" ${d.projet && ext.tests[x.id] !== "…" ? "" : "disabled"}>${t("Test")}</button></div>${sc}${testExt(x)}</div>`;
 }
@@ -3784,7 +3787,7 @@ function choixModeBlender(x) {
 }
 // --- "Fix with Claude" (ext_corriger.go, ext_skill.go): an extension whose test fails here
 function boutonCorriger(type, id) {
-  return `<div class="ligne mt-1"><button class="btn btn-petit btn-primaire" data-ext-corriger="${type}|${h(id)}">✨ ${t("Fix with Claude")}</button>
+  return `<div class="ligne mt-1"><button class="btn btn-petit btn-primaire" data-ext-corriger="${type}|${h(id)}">${t("Fix with Claude")}</button>
     <span class="muet petit">${type === "mcp" ? t("Claude looks for a configuration that works on this system; it is tested before it is kept, and written for everyone.") : t("Claude rewrites a copy of the skill so that it runs on every system; you see the changes before they replace anything.")}</span></div>`;
 }
 function testSkill(x) {
@@ -3802,7 +3805,7 @@ function etatCorrection(c, type, x) {
   if (c.encours) return `<div class="ext-test"><span class="chat-points"><i></i><i></i><i></i></span> ${etapes[c.etape] || t("Working…")} <span class="muet petit">${t("It takes a few minutes: you can go on meanwhile.")}</span></div>`;
   const r = c.resultat || {};
   const fermer = `<button class="btn btn-petit" data-ext-corr-fermer="${type}|${h(x.id)}">${t("Close")}</button>`;
-  const athanor = r.athanor ? `<div class="petit mt-1">🛠 ${t("Athanor's own way of running it is at fault: {0}", [h(r.athanor)])} <span class="muet">${t("(written for the next version of Athanor)")}</span></div>` : "";
+  const athanor = r.athanor ? `<div class="petit mt-1">${t("Athanor's own way of running it is at fault: {0}", [h(r.athanor)])} <span class="muet">${t("(written for the next version of Athanor)")}</span></div>` : "";
   if (r.deja) return `<div class="ext-test ok">✓ ${t("It works already: nothing to fix.")} ${fermer}</div>`;
   if (r.manque) return `<div class="ext-test echec">✕ ${t("A program is missing on this computer: {0}", [h(r.manque)])}${r.explication ? `<div class="petit">${h(r.explication)}</div>` : ""}
     <div class="ligne mt-1"><a class="btn btn-petit" href="#sante">${t("Setup & health")}</a>${fermer}</div></div>`;
@@ -3825,7 +3828,7 @@ function diffColore(d) {
 }
 function correctionFaite(x, type) {
   if (!x.correction) return "";
-  return `<div class="muet petit ext-corrige">✨ ${x.correction.le ? t("Fixed by Claude on {0}", [h(x.correction.le)]) : t("Fixed by Claude")}${x.correction.explication ? ": " + h(x.correction.explication) : ""}
+  return `<div class="muet petit ext-corrige">${x.correction.le ? t("Fixed by Claude on {0}", [h(x.correction.le)]) : t("Fixed by Claude")}${x.correction.explication ? ": " + h(x.correction.explication) : ""}
     <button class="btn btn-petit" data-ext-corr-annuler="${type}|${h(x.id)}">${t("Undo the fix")}</button></div>`;
 }
 // the fixes written for everyone (logs/corrections): into a copy of Athanor's code, then commit and push
@@ -3833,7 +3836,7 @@ function blocRapports() {
   const l = ext.rapports || []; if (!l.length) return "";
   const lignes = l.slice(0, 12).map((r) => `<li><b>${h(r.nom || r.id)}</b> <span class="etiquette">${h(r.genre === "skill" ? "skill" : "MCP")}</span> <span class="muet">${h(r.systeme)} · ${h(r.le)}</span>
       ${r.catalogue ? ` <span class="etiquette">${t("verified catalog")}</span>` : ""}${r.apres || (r.fichiers || []).length ? "" : ` <span class="muet">${t("no fix found")}</span>`}
-      ${r.explication ? `<div class="petit">${h(r.explication)}</div>` : ""}${r.athanor ? `<div class="petit">🛠 ${h(r.athanor)}</div>` : ""}</li>`).join("");
+      ${r.explication ? `<div class="petit">${h(r.explication)}</div>` : ""}${r.athanor ? `<div class="petit">${h(r.athanor)}</div>` : ""}</li>`).join("");
   return `<div class="bloc"><h2>${t("Fixes for everyone")} <span class="muet">${l.length}</span></h2>
     <p class="muet petit">${t("What Claude fixed or found on this computer, kept in logs/corrections of Athanor's folder. The verified catalog's fixes can be written into your copy of Athanor's code: commit and push it, and every Athanor gets them.")}</p>
     <ul class="ext-rapports">${lignes}</ul>
@@ -4474,7 +4477,7 @@ function blocDirect(nom) {
   let tete = "";
   if (d.role === "maitre") {
     const etatM = d.etat === "pret" ? `<span class="ok">✔ ${t("This computer is the master: the others join it with an invitation.")}</span>`
-      : d.etat === "erreur" ? `<span class="attention">✖ ${h(t(d.erreur || ""))}</span>` : `<span class="muet">⏳ ${t("Opening the team's link…")}</span>`;
+      : d.etat === "erreur" ? `<span class="attention">✖ ${h(t(d.erreur || ""))}</span>` : `<span class="muet">${t("Opening the team's link…")}</span>`;
     const invitation = d.code && d.adresse ? `<div class="bloc-code mt-1"><code id="direct-invit">${h(d.adresse)}#${h(d.code)}</code> <button class="btn btn-petit" type="button" data-direct="copier">${t("Copy")}</button>
       <div class="muet petit">${t("Paste it on the other computer (Overview › Team, live › Join), then accept it here. It works once, for 10 minutes.")} ${t("Only a computer you know: anyone with the invitation must still be accepted here.")}</div></div>` : "";
     const demandes = (d.demandes || []).map((x) => `<div class="ligne mt-1 demande-direct"><span>⚠ <b>${h(t("{0} wants to join the team", [x.nom || "?"]))}</b>${x.ip ? ` <span class="muet petit">${h(x.ip)}</span>` : ""}</span><span class="espace"></span>
@@ -4485,16 +4488,16 @@ function blocDirect(nom) {
     const ordre = d.ordre ? `<div class="muet petit">${h(t(d.ordre.action === "demarrer" ? "Last order: start, {0}" : "Last order: stop after the cycle, {0}", [dateLisible(new Date(d.ordre.quand * 1000).toISOString())]))}</div>` : "";
     const ordres = `<div class="ligne mt-1"><button class="btn btn-primaire" type="button" data-direct="demarrer-equipe" title="${h(t("Starts this computer's pilot, then every computer of the team (those whose user allows it)."))}">▶ ${t("Start the team")}</button><button class="btn" type="button" data-direct="arreter-equipe">${t("Stop the team after the cycle")}</button></div>${ordre}`;
     const pa = d.passation;
-    const passation = !pa ? "" : pa.etat === "en_cours" ? `<p class="petit"><span class="muet">⏳ ${h(t("Handing the team over to {0}: it takes it at its next beat…", [pa.nom]))}</span></p>` : `<p class="petit"><span class="attention">✖ ${h(t(pa.erreur || ""))}</span></p>`;
+    const passation = !pa ? "" : pa.etat === "en_cours" ? `<p class="petit"><span class="muet">${h(t("Handing the team over to {0}: it takes it at its next beat…", [pa.nom]))}</span></p>` : `<p class="petit"><span class="attention">✖ ${h(t(pa.erreur || ""))}</span></p>`;
     tete = `<p class="petit">${etatM}</p>${passation}${invitation}${demandes}${atelier}${ordres}<div class="ligne mt-1"><button class="btn" type="button" data-direct="inviter" ${d.etat !== "pret" ? "disabled" : ""}>${t("Invite a computer")}</button><span class="espace"></span><button class="btn btn-petit" type="button" data-direct="quitter">${t("End the team's link")}</button></div>`;
   } else if (d.role === "attente") {
-    tete = `<p class="petit"><span class="muet">⏳ ${t("Waiting for the master to accept this computer…")}</span></p><div class="ligne mt-1"><span class="espace"></span><button class="btn btn-petit" type="button" data-direct="quitter">${t("Cancel")}</button></div>`;
+    tete = `<p class="petit"><span class="muet">${t("Waiting for the master to accept this computer…")}</span></p><div class="ligne mt-1"><span class="espace"></span><button class="btn btn-petit" type="button" data-direct="quitter">${t("Cancel")}</button></div>`;
   } else {
     const etatN = d.etat === "connecte" ? `<span class="ok">✔ ${h(t("Connected to {0}, the master", [d.maitre || ""]))}</span>` : `<span class="attention">✖ ${h(t("The master ({0}) does not answer: the team is seen through GitHub meanwhile.", [d.maitre || ""]))}</span>${d.erreur ? ` <span class="muet petit">${h(t(d.erreur))}</span>` : ""}`;
     const at = d.atelier;
     const atelierN = d.atelier_lien ? `<div class="muet petit">${at && at.version ? h(t("Team workshop through the master's link: version {0}, {1} files.", [at.version, at.fichiers])) : t("Team workshop through the master's link.")}</div>` : "";
     const ordre = d.ordre ? `<div class="muet petit">${h(t(d.ordre.action === "demarrer" ? "The master started the team, {0}" : "The master stopped the team after the cycle, {0}", [dateLisible(new Date(d.ordre.quand * 1000).toISOString())]))}</div>` : "";
-    const relais = d.passation && d.passation.etat === "relais" ? `<p class="petit"><span class="muet">⏳ ${t("This computer takes the team over: the team's workshop comes, then its own link opens…")}</span></p>` : "";
+    const relais = d.passation && d.passation.etat === "relais" ? `<p class="petit"><span class="muet">${t("This computer takes the team over: the team's workshop comes, then its own link opens…")}</span></p>` : "";
     tete = `<p class="petit">${etatN}</p>${relais}${atelierN}
       <div class="mt-1"><label class="interrupteur m0"><input type="checkbox" data-direct-bascule="ordres" ${d.accepte_ordres ? "checked" : ""}><span>${t("The master may start and stop this computer's pilot")}</span></label>${ordre}</div>
       <div class="ligne mt-1"><span class="espace"></span><button class="btn btn-petit" type="button" data-direct="quitter">${t("Leave the team's link")}</button></div>`;
@@ -4583,7 +4586,7 @@ function rendreBlocPCs(vp) {
     // the switch is being turned on or off: it stays as the user put it until GitHub answers
     return `<div class="bloc" id="bloc-pcs"><h2>${t("Other computers")}</h2>
       <label class="interrupteur"><input type="checkbox" data-pcs-actif ${bascule === "on" ? "checked" : ""} disabled><span>${t("Work with other computers on {0}", [h(vp.depot || "")])}</span></label>
-      <p class="muet petit">⏳ ${bascule === "on" ? t("Turning on: Athanor reads GitHub and brings in the other computers' work…") : t("Turning off…")}</p>
+      <p class="muet petit">${bascule === "on" ? t("Turning on: Athanor reads GitHub and brings in the other computers' work…") : t("Turning off…")}</p>
     </div>`;
   }
   if (!vp.actif) {
@@ -4724,7 +4727,7 @@ pages.distance = async () => {
   const appareils = d.appareils.length ? `<table class="tab appareils"><tbody>${d.appareils.map((a) => `<tr>
       <td class="etroit"><span class="point-appareil ${a.en_ligne ? "en-ligne" : ""}" title="${h(a.en_ligne ? t("Connected now") : t("Not connected"))}"></span></td>
       <td><input class="nom-appareil" data-renommer="${h(a.id)}" value="${h(a.nom)}" maxlength="40" aria-label="${h(t("Name"))}">
-        <div class="muet petit">${a.moi ? `<span class="badge">${t("this device")}</span> ` : ""}${a.en_ligne ? `<b class="ok">${t("Connected now")}</b>` : a.vu_le ? h(t("Last seen {0}", [dateLisible(a.vu_le)])) : ""}${a.lieu ? " · " + h(a.lieu) : ""} · ${h(t("paired {0}", [dateLisible(a.ajoute)]))}${a.notifs ? ` · 🔔 ${t("notifications on")}` : ""}</div></td>
+        <div class="muet petit">${a.moi ? `<span class="badge">${t("this device")}</span> ` : ""}${a.en_ligne ? `<b class="ok">${t("Connected now")}</b>` : a.vu_le ? h(t("Last seen {0}", [dateLisible(a.vu_le)])) : ""}${a.lieu ? " · " + h(a.lieu) : ""} · ${h(t("paired {0}", [dateLisible(a.ajoute)]))}${a.notifs ? ` · ${t("notifications on")}` : ""}</div></td>
       <td class="droite"><button class="btn btn-petit btn-danger" data-retirer-appareil="${h(a.id)}" data-nom="${h(a.nom)}" ${a.moi ? "data-moi" : ""} title="${h(t("Remove from the trusted devices"))}" aria-label="${h(t("Remove from the trusted devices"))}">✕</button></td></tr>`).join("")}</tbody></table>`
     : `<div class="vide">${t("No device yet.")}</div>`;
   const gauche = distant ? `${await rendreCetAppareil()}
@@ -4772,8 +4775,8 @@ pages.distance = async () => {
 // your own domain (distance_domaine.go): a fixed address, and Cloudflare Access in front of it
 function blocDomaine(d) {
   const e = d.domaine_etape || "";
-  const etape = e === "connexion" ? `<p class="petit">⏳ ${t("Sign in to Cloudflare in the browser window that opened, then choose your domain.")}${d.domaine_lien ? ` <a href="${h(d.domaine_lien)}" target="_blank" rel="noopener noreferrer">${t("Open the sign-in page")}</a>` : ""}</p><button class="btn btn-petit" data-domaine="annuler">${t("Cancel")}</button>`
-    : e === "creation" ? `<p class="petit">⏳ ${t("Creating the tunnel and the address…")}</p>`
+  const etape = e === "connexion" ? `<p class="petit">${t("Sign in to Cloudflare in the browser window that opened, then choose your domain.")}${d.domaine_lien ? ` <a href="${h(d.domaine_lien)}" target="_blank" rel="noopener noreferrer">${t("Open the sign-in page")}</a>` : ""}</p><button class="btn btn-petit" data-domaine="annuler">${t("Cancel")}</button>`
+    : e === "creation" ? `<p class="petit">${t("Creating the tunnel and the address…")}</p>`
     : e === "erreur" ? `<p class="petit attention">✖ ${h(d.domaine_message || "")}</p>` : "";
   if (d.domaine) {
     return `<div class="bloc"><h2>${t("Address")}</h2>
@@ -4855,7 +4858,7 @@ $("#page").addEventListener("keydown", (ev) => { if (ev.key === "Enter" && ev.ta
 // on a device the computer removed: the page says so, nothing else works
 function afficherNonAppaire() {
   if (etat.nonAppaire) return; etat.nonAppaire = true;
-  document.body.innerHTML = `<div class="non-appaire"><div style="font-size:40px">🔒</div><h1>Athanor</h1><p>${h(t("This device is no longer paired with Athanor. On your computer, open Athanor › Remote and scan the QR code again."))}</p></div>`;
+  document.body.innerHTML = `<div class="non-appaire"><div class="cadenas" aria-hidden="true"></div><h1>Athanor</h1><p>${h(t("This device is no longer paired with Athanor. On your computer, open Athanor › Remote and scan the QR code again."))}</p></div>`;
 }
 
 async function rendreOptions() {
@@ -5118,7 +5121,7 @@ function ligneAcces(a, refusee) {
   const k = h(a.entree + "|" + a.env), auto = AUTO_ACCES[a.auto];
   return `<li class="acc-acces${refusee ? " acc-refusee" : ""}">
     <div class="ligne m0"><b class="cp-nom" title="${h(a.nom)}">${h(a.nom)}</b>${auto ? `<span class="badge">${t(auto)}</span>` : ""}${refusee ? `<span class="badge badge-infra">${t("refused in native mode")}</span>` : ""}<button type="button" class="btn btn-petit" data-acc-retirer="${k}">${t("Remove")}</button></div>
-    ${a.portee === "infra" ? "" : `<input type="text" class="acc-var" data-acc-var="${k}" value="${h(a.variable)}" maxlength="100" spellcheck="false" aria-label="${h(t("Variable name") + " — " + a.nom + (a.env === "*" ? "" : " (" + nomEnv(a.env) + ")"))}">`}
+    ${a.portee === "infra" ? "" : `<label class="acc-var-ligne"><span class="muet petit">${t("Variable name")}</span><input type="text" class="acc-var" data-acc-var="${k}" value="${h(a.variable)}" maxlength="100" spellcheck="false" aria-label="${h(t("Variable name") + " — " + a.nom + (a.env === "*" ? "" : " (" + nomEnv(a.env) + ")"))}"></label>`}
   </li>`;
 }
 pages.acces = async () => {
@@ -6089,7 +6092,7 @@ pages.serveur = async () => {
         ${attente ? "" : `<a class="btn btn-primaire" href="#terminal/${encodeURIComponent(x.id)}" data-srv-connecter>${t("Connect")}</a>`}
         ${attente ? `<button type="button" class="btn btn-primaire" data-srv-verifier="${h(x.id)}">${t("Verify")}</button>` : `<button type="button" class="btn" data-srv-rafraichir>↻ ${t("Refresh")}</button>`}
         ${!attente && !x.mot_de_passe_coupe ? `<button type="button" class="btn" data-srv-couper="${h(x.id)}">${t("Cut password logins")}</button>` : ""}
-        ${attente ? "" : `<button type="button" class="btn" data-srv-durcir="${h(x.id)}" title="${h(t("A fixed plan: a user with sudo instead of root, SSH keys only, no root login, a firewall that refuses all but SSH, 80 and 443, security updates, the clock synchronised, Caddy. Each step already in place is skipped; you accept the plan first."))}">🛡 ${t("Harden this server")}</button>`}</div>`}
+        ${attente ? "" : `<button type="button" class="btn" data-srv-durcir="${h(x.id)}" title="${h(t("A fixed plan: a user with sudo instead of root, SSH keys only, no root login, a firewall that refuses all but SSH, 80 and 443, security updates, the clock synchronised, Caddy. Each step already in place is skipped; you accept the plan first."))}">${t("Harden this server")}</button>`}</div>`}
     </div>
     ${blocTaches(ta, distant, (d.annulations || []).length ? `<div class="srv-annulations"><h4 class="m0">${t("Changes waiting for confirmation")}</h4>
       <p class="muet petit">${t("Athanor put a safety net on these firewall or SSH changes: unless you keep them, the server undoes them by itself when the countdown ends.")}</p>
@@ -6336,7 +6339,7 @@ pages.terminal = async () => {
       <button type="button" class="btn btn-petit" data-term-copier>${t("Copy")}</button><button type="button" class="btn btn-petit" data-term-coller>${t("Paste")}</button>
       <button type="button" class="btn btn-petit term-bascule-fichiers" data-term-fichiers aria-pressed="${!sf.cache}">${t("Files")}</button>
       <button type="button" class="btn btn-petit term-bascule-ia" data-term-ia aria-pressed="${ia.visible}">${t("Assistant")}</button>
-      <button type="button" class="btn btn-petit term-bouton-reglages" data-term-reglages aria-expanded="${!!term.essai}" aria-controls="term-reglages-zone" title="${h(t("Theme, text size, cursor"))}">⚙ ${t("Settings")}</button>
+      <button type="button" class="btn btn-petit term-bouton-reglages" data-term-reglages aria-expanded="${!!term.essai}" aria-controls="term-reglages-zone" title="${h(t("Theme, text size, cursor"))}">${t("Settings")}</button>
       <button type="button" class="btn btn-petit" data-term-deconnecter>${t("Disconnect")}</button>`}</div>
     ${avis ? `<div class="bloc term-message"><p class="m0"><b>${h(avis[0])}</b></p><p class="muet m0">${h(avis[1])}</p><div class="ligne m0"><a class="btn" href="#serveur/${encodeURIComponent(x.id)}">${t("Back to the server")}</a></div></div>`
       : `<div class="bloc term-message" id="term-message" role="alert" hidden></div><div id="term-reglages-zone">${term.essai ? panneauReglagesTerminal() : ""}</div>

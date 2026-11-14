@@ -694,7 +694,9 @@ textarea.en-attente { opacity: .55; }
 #ecran-img { width: 100%; height: auto; border-radius: 8px; border: 1px solid var(--line); background: #000; }
 .verrou { position: fixed; inset: 0; background: var(--voile); display: grid; place-items: center; z-index: 40; }
 .verrou-carte { width: 360px; text-align: center; display: flex; flex-direction: column; gap: 12px; }
-.verrou-cadenas { font-size: 40px; }
+.verrou-cadenas { line-height: 1; }
+.cadenas { display: inline-block; position: relative; width: 30px; height: 22px; margin-top: 18px; border-radius: 5px; background: var(--muted); }
+.cadenas::before { content: ""; position: absolute; left: 6px; bottom: 100%; width: 12px; height: 13px; border: 3px solid var(--muted); border-bottom: 0; border-radius: 9px 9px 0 0; }
 .verrou-carte form { display: flex; flex-direction: column; gap: 8px; }
 .verrou-erreur { color: var(--erreur); min-height: 1.4em; margin: 0; }
 .assistant { position: fixed; inset: 0; background: var(--bg); display: grid; place-items: center; z-index: 35; overflow: auto; padding: 24px; }
@@ -1106,7 +1108,9 @@ ol.guide-access li { margin: 5px 0; }
 .acc-separer p { margin: 4px 0 0; }
 .acc-courant { border-style: solid; border-color: var(--accent); }
 .acc-survol { background: var(--accent-halo); border-color: var(--accent); }
-.acc-var { width: 100%; box-sizing: border-box; font-family: var(--mono, monospace); font-size: 12.5px; }
+.acc-var-ligne { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+.acc-var-ligne > span { flex: none; }
+.acc-var { flex: 1; min-width: 0; width: 100%; box-sizing: border-box; font-family: var(--mono, monospace); font-size: 12.5px; }
 .acc-garde { border-top: 1px solid var(--line); padding-top: 8px; display: flex; flex-direction: column; gap: 6px; }
 .acc-garde p { margin: 0; }
 .acc-garde > b { color: var(--attention); }

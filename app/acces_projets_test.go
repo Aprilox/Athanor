@@ -489,3 +489,25 @@ func TestAccesAncienFichierInchange(t *testing.T) {
 		t.Fatalf("file changed:\n%s", b)
 	}
 }
+
+// TestAccesUniformes: no environment to choose next to Start while every key is given everywhere under one name.
+func TestAccesUniformes(t *testing.T) {
+	tous := func(entree, variable string) []AccesProjet {
+		var l []AccesProjet
+		for _, e := range envsProjet {
+			l = append(l, AccesProjet{Entree: entree, Env: e, Variable: variable})
+		}
+		return l
+	}
+	une := append(tous("a", "API_KEY"), tous("b", "MODE")...)
+	if !accesUniformes(nil) || !accesUniformes(une) || !resumerAcces(ProjetAcces{Env: "dev", Acces: append(une, AccesProjet{Entree: "disparue", Env: "dev"})}, []EntreeCoffre{{ID: "a"}, {ID: "b"}}).Uniformes {
+		t.Fatal("same keys everywhere: one list expected")
+	}
+	if accesUniformes(une[1:]) {
+		t.Fatal("a key missing in one environment: separate lists expected")
+	}
+	autre := append(tous("a", "API_KEY")[:2], AccesProjet{Entree: "a", Env: "prod", Variable: "PROD_KEY"})
+	if accesUniformes(autre) {
+		t.Fatal("another variable name in production: separate lists expected")
+	}
+}

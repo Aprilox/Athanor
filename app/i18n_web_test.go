@@ -137,3 +137,20 @@ func TestWebTraduction(t *testing.T) {
 		}
 	}
 }
+
+// TestInterfaceSansEmoji: labels, buttons and empty states carry no emoji (owner's note of 2026-11-14 19h22);
+// typographic signs (✓ ✕ ⚠ ☰ …) stay.
+func TestInterfaceSansEmoji(t *testing.T) {
+	re := regexp.MustCompile("[\U0001F300-\U0001FAFF⚙⛔✨⏱⏳⏭]")
+	for _, f := range []string{"static/app.js", "static/index.html", "static/i18n.js"} {
+		b, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i, l := range strings.Split(string(b), "\n") {
+			if m := re.FindAllString(l, 5); m != nil {
+				t.Errorf("%s:%d: emoji %q", f, i+1, m)
+			}
+		}
+	}
+}

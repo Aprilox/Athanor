@@ -119,6 +119,7 @@ type ResumeAcces struct {
 	Infra     int      `json:"infra"`
 	Etat      string   `json:"etat"`             // the injection's state (EtatInjection.Etat)
 	Preuve    []string `json:"preuve,omitempty"` // RT2: the environments moving to needs Athanor's password (envDonneCles)
+	Uniformes bool     `json:"uniformes"`        // same keys under the same names everywhere: no environment to choose (accesUniformes in app.js)
 }
 
 func resumerAcces(p ProjetAcces, entrees []EntreeCoffre) ResumeAcces {
@@ -128,6 +129,8 @@ func resumerAcces(p ProjetAcces, entrees []EntreeCoffre) ResumeAcces {
 	for _, e := range entrees {
 		par[e.ID] = e
 	}
+	// as the Access page sees them: grants of entries gone from the vault do not count
+	r.Uniformes = accesUniformes(slices.DeleteFunc(slices.Clone(p.Acces), func(a AccesProjet) bool { _, ok := par[a.Entree]; return !ok }))
 	for _, a := range p.Acces {
 		if a.Env != "dev" && !slices.Contains(r.Preuve, a.Env) {
 			r.Preuve = append(r.Preuve, a.Env)
@@ -361,4 +364,23 @@ func (a *Acces) SupprimerProjet(nom string) error {
 		delete(f.Projets, nom)
 		return nil
 	})
+}
+
+// accesUniformes: every entry is given in every environment of the project, under one variable name.
+func accesUniformes(acces []AccesProjet) bool {
+	par := map[string][]AccesProjet{}
+	for _, a := range acces {
+		par[a.Entree] = append(par[a.Entree], a)
+	}
+	for _, l := range par {
+		for _, e := range envsProjet {
+			if !slices.ContainsFunc(l, func(a AccesProjet) bool { return a.Env == e && a.Variable == l[0].Variable }) {
+				return false
+			}
+		}
+		if slices.ContainsFunc(l, func(a AccesProjet) bool { return a.Variable != l[0].Variable }) {
+			return false
+		}
+	}
+	return true
 }
