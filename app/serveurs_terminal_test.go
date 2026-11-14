@@ -56,6 +56,10 @@ func (s *serveurSSHMemoire) terminal(canal ssh.Channel, r *ssh.Request) bool {
 					canal.Write([]byte("^C\r\n$ "))
 					continue
 				}
+				if string(b[:n]) == "\r" { // an Enter on an empty line: a shell prints its prompt again
+					canal.Write([]byte("\r\n$ "))
+					continue
+				}
 				canal.Write(b[:n])
 				if bytes.Contains(tout, []byte("exit\r")) {
 					canal.Write([]byte("\r\nlogout\r\n"))

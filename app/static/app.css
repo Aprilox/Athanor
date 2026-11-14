@@ -1317,11 +1317,13 @@ a.mis-ligne:hover, a.mis-ligne:focus-visible { border-color: var(--accent); }
 .term-zones { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 340px); gap: 10px; height: calc(100dvh - 210px); min-height: 260px; }
 .term-zones.sans-fichiers { grid-template-columns: minmax(0, 1fr); }
 .term-zones.sans-fichiers .sftp, .term-onglets { display: none; }
-.term-hote { height: 100%; min-height: 0; border: 1px solid var(--line); border-radius: 8px; padding: 6px; overflow: hidden; position: relative; }
-.term-hote.verrouille { padding-top: 52px; border-color: var(--accent); }
-.term-verrou { position: absolute; top: 6px; left: 6px; right: 6px; display: flex; gap: 8px; align-items: center; padding: 6px 10px; border-radius: 6px;
+.term-hote { height: 100%; min-height: 0; border: 1px solid var(--line); border-radius: 8px; padding: 6px; overflow: hidden; overflow: clip; position: relative; } /* clip: a focus while the width changes could scroll a hidden overflow sideways (T1-2) */
+/* the banner sits above the screen, in the flow: its text wraps and the terminal keeps the height left under it */
+.term-hote.verrouille { display: flex; flex-direction: column; gap: 6px; border-color: var(--accent); }
+.term-hote.verrouille .term-ecran { flex: 1; min-height: 0; height: auto; }
+.term-verrou { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; padding: 6px 10px; border-radius: 6px;
   background: var(--panel); color: var(--ink); border: 1px solid var(--accent); z-index: 2; }
-.term-verrou-texte { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.term-verrou-texte { flex: 1 1 220px; min-width: 0; overflow-wrap: anywhere; }
 /* Files panel (SFTP) beside the terminal */
 .sftp { display: flex; flex-direction: column; gap: 8px; min-height: 0; border: 1px solid var(--line); border-radius: 8px; padding: 8px; background: var(--panel); }
 .sftp.depot { outline: 2px dashed var(--accent); outline-offset: -4px; }
@@ -1385,6 +1387,8 @@ a.mis-ligne:hover, a.mis-ligne:focus-visible { border-color: var(--accent); }
 .ia-saisie textarea { flex: 1; min-width: 0; resize: vertical; }
 @media (max-width: 700px) {
   .term-aide, .term-adresse { display: none; }
+  /* the terminal page folds the module tabs and the status band: the screen gets the height (the menu stays) */
+  main:has(.terminal-page) #barre-onglets, main:has(.terminal-page) #bandeau { display: none; }
   .term-hote { padding: 4px; }
   .term-zones, .term-zones.avec-ia, .term-zones.sans-fichiers.avec-ia { grid-template-columns: minmax(0, 1fr); height: calc(100dvh - 220px); }
   .term-onglets { display: flex; }

@@ -6329,7 +6329,7 @@ pages.terminal = async () => {
   return `<div class="serveurs terminal-page">
     <div class="ligne m0 term-barre"><a href="#serveur/${encodeURIComponent(x.id)}" class="petit">← ${h(x.nom)}</a>
       <code class="muet petit term-adresse">${h(x.utilisateur)}@${h(x.hote)}</code><span class="pastille attend" id="term-etat">${t("Connecting…")}</span><span class="espace"></span>
-      ${avis ? "" : `<span class="muet petit term-aide">${t("Copy: Ctrl+Shift+C · Paste: Ctrl+Shift+V")}</span>
+      ${avis ? "" : `<span class="muet petit term-aide">${t(MAC ? "Copy: Cmd+C · Paste: Cmd+V" : "Copy: Ctrl+Shift+C · Paste: Ctrl+Shift+V")}</span>
       <button type="button" class="btn btn-petit" data-term-copier>${t("Copy")}</button><button type="button" class="btn btn-petit" data-term-coller>${t("Paste")}</button>
       <button type="button" class="btn btn-petit term-bascule-fichiers" data-term-fichiers aria-pressed="${!sf.cache}">${t("Files")}</button>
       <button type="button" class="btn btn-petit term-bascule-ia" data-term-ia aria-pressed="${ia.visible}">${t("Assistant")}</button>
@@ -6377,13 +6377,13 @@ async function monterTerminal() {
     term.x.attachCustomKeyEventHandler((e) => {
       if (e.type !== "keydown") return true;
       const k = e.key.toLowerCase(), ctrl = e.ctrlKey || e.metaKey;
-      if (ctrl && e.shiftKey && k === "c" || e.ctrlKey && !e.shiftKey && k === "c" && term.x.hasSelection()) { e.preventDefault(); copierTerminal(); return false; }
+      if (ctrl && e.shiftKey && k === "c" || (e.ctrlKey && !e.shiftKey || e.metaKey) && k === "c" && term.x.hasSelection()) { e.preventDefault(); copierTerminal(); return false; }
       if (ctrl && k === "v") return false; // the browser's paste event: xterm pastes it (bracketed paste kept)
       return true;
     });
     term.obs = new ResizeObserver(() => requestAnimationFrame(() => { hauteurTerminal(); if (term.el.isConnected && term.el.offsetWidth) term.fit.fit(); }));
   } else hote.append(term.el);
-  term.obs.disconnect(); term.obs.observe($("#page")); hauteurTerminal(); rendreSftp();
+  term.obs.disconnect(); term.obs.observe($("#page")); term.obs.observe(hote); deuxPanneaux("ia"); hauteurTerminal(); rendreSftp();
   appliquerReglagesTerminal();
   if (term.msg) return messageTerminal(...term.msg);
   if (term.serveur !== term.id) { // another server: its own screen and session
@@ -6466,8 +6466,9 @@ function quitterTerminal() { clearTimeout(ia.minuteur); if (term.lecteur) { term
 // --- Files panel beside the terminal (M231c): the server's files through the terminal's own SSH connection
 // (serveurs_sftp.go); a click selects an entry, a second click (or a double click) opens a folder.
 // On a phone the terminal and the files share the screen through two tabs.
+const MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent); // Cmd instead of Ctrl in the terminal's help
 const sf = { serveur: "", chemin: "", entrees: [], tronque: false, choisi: "", renomme: "", envoi: null, charge: false, erreur: "",
-  onglet: "terminal", cache: localStorage.getItem("athanor.terminal.fichiers") === "0" };
+  onglet: "terminal", cache: localStorage.getItem("athanor.terminal.fichiers") !== "1" }; // Files stays folded until you open it
 const urlSftp = (suite = "") => `/api/serveurs/${encodeURIComponent(term.serveur)}/sftp/${encodeURIComponent(term.session)}${suite}`;
 const joindreSftp = (dossier, nom) => (dossier === "/" ? "" : dossier) + "/" + nom;
 const erreurSftp = (r, d) => d.erreur_key ? t(d.erreur_key) : d.erreur || t("Error {0}", [r ? r.status : 0]);
@@ -6553,6 +6554,14 @@ async function renommerSftp() {
   if (!nom || nom === ancien) { sf.renomme = ""; return rendreSftp(); }
   if (await agirSftp({ renommer: joindreSftp(sf.chemin, ancien), nom })) { sf.choisi = nom; chargerSftp(sf.chemin); }
 }
+// Files and Assistant both open would leave the terminal under 80 columns (htop, nano): the one just opened
+// stays, the other folds (not remembered). The ResizeObserver on #term-hote fits the terminal afterwards.
+function deuxPanneaux(garde) {
+  const z = $("#term-zones"); if (!z) return;
+  if (ia.visible && !sf.cache && !TEL.matches && z.clientWidth - 680 < 80 * reglagesActifs().taille * 0.62 + 16) { if (garde === "fichiers") ia.visible = false; else sf.cache = true; }
+  z.classList.toggle("avec-ia", ia.visible); z.classList.toggle("sans-fichiers", sf.cache);
+  $("[data-term-ia]")?.setAttribute("aria-pressed", ia.visible); $("[data-term-fichiers]")?.setAttribute("aria-pressed", !sf.cache);
+}
 function ongletTerminal(o) {
   sf.onglet = o; const z = $("#term-zones"); if (z) z.dataset.onglet = o;
   document.querySelectorAll(".term-onglets [data-term-onglet]").forEach((b) => { b.classList.toggle("actif", b.dataset.termOnglet === o); b.setAttribute("aria-selected", b.dataset.termOnglet === o); });
@@ -6566,14 +6575,13 @@ $("#page").addEventListener("click", async (ev) => {
   if (d.termOnglet) return ongletTerminal(d.termOnglet);
   if (d.termIa !== undefined) {
     ia.visible = !ia.visible; localStorage.setItem("athanor.terminal.ia", ia.visible ? "1" : "0");
-    b.setAttribute("aria-pressed", ia.visible); $("#term-zones")?.classList.toggle("avec-ia", ia.visible);
+    deuxPanneaux("ia");
     if (ia.visible) { rendreIA(); $("#ia-texte")?.focus(); }
-    return requestAnimationFrame(() => term.fit && term.fit.fit());
+    return;
   }
   if (d.termFichiers !== undefined) {
     sf.cache = !sf.cache; localStorage.setItem("athanor.terminal.fichiers", sf.cache ? "0" : "1");
-    b.setAttribute("aria-pressed", !sf.cache); $("#term-zones")?.classList.toggle("sans-fichiers", sf.cache);
-    return requestAnimationFrame(() => term.fit && term.fit.fit());
+    return deuxPanneaux("fichiers");
   }
   if (d.sftpAller) return chargerSftp(d.sftpAller);
   if (d.sftpHaut !== undefined) return chargerSftp(sf.chemin.replace(/\/[^/]*$/, "") || "/");
@@ -6627,7 +6635,7 @@ function panneauIA(distant) {
   return `<aside class="ia" id="ia" aria-label="${h(t("Assistant"))}">
     <fieldset class="ia-modes"><legend class="petit">${t("How the assistant works")}</legend>
       ${mode("apart", "Separate connection", "It opens its own SSH session on the server, so it never gets in your way; you follow each command here.")}
-      ${mode("direct", "Live in my terminal", "Its commands are typed into your terminal and you watch them run.")}</fieldset>
+      ${mode("direct", "Live in my terminal", "Its commands run in its own connection and are copied onto your terminal's screen as they run; your typing waits meanwhile. Your shell's folder, variables and history stay your own.")}</fieldset>
     <div class="ia-fil" id="ia-fil" aria-live="polite"></div>
     <div class="ia-encours" id="ia-encours"></div>
     ${distant ? `<p class="muet petit m0">${t("Tasks are launched from the computer; their plans are decided on their cards, on the For you page.")}</p>`
@@ -6657,7 +6665,7 @@ function actionIA(a) {
 function tacheIA(x) {
   const [lib, cl] = ETATS_TACHE_SRV()[x.etat] || [x.etat, ""], fin = (x.historique || []).slice(-1)[0] || {};
   const plan = x.etat === "attente_accord" && (x.plans || []).length ? x.plans[x.plans.length - 1] : "", p = plan && ia.plans[plan];
-  return `<div class="ia-tache" data-tache="${h(x.id)}"><p class="ia-demande">${h(x.texte)}${x.direct ? ` <span class="pv-etat pv-claude">${t("In your terminal")}</span>` : ""}</p>
+  return `<div class="ia-tache" data-tache="${h(x.id)}"><p class="ia-demande">${h(x.texte)}${x.direct ? ` <span class="pv-etat pv-claude">${t("Shown in your terminal")}</span>` : ""}</p>
     ${(x.actions || []).length ? `<ol class="ia-actions">${x.actions.map(actionIA).join("")}</ol>` : ""}
     ${p ? `<div class="ia-plan"><p class="m0"><b>${t("Plan to apply")}</b> <span class="muet petit">${h(t("{0} step(s)", [(p.etapes || []).length]))}</span></p>${blocPlan({}, p)}
       ${(etat.vue || {}).distant ? "" : `<div class="ligne m0"><button type="button" class="btn btn-primaire btn-petit" data-ia-decider="accepter" data-plan="${h(plan)}">${t("Accept")}</button>
@@ -6682,6 +6690,8 @@ function rendreIA() {
 // mode "live in my terminal": while the assistant works in it, the terminal takes no typing (the Go side refuses
 // it too, 423) and a banner over it says so, with Stop and Take over
 function verrouTerminal(id) {
+  // shortcut: an Enter on a free terminal shows the shell's prompt again under the copied lines; assumes the shell sits at its prompt
+  if (ia.verrou && !id && term.session && !term.msg) taperTerminal("\r");
   ia.verrou = id;
   const hote = $("#term-hote"); if (!hote) return;
   let b = $("#term-verrou");
@@ -6760,7 +6770,7 @@ $("#page").addEventListener("click", async (ev) => {
   if (d.termReglagesAnnuler !== undefined) return reglagesTerminalOuverts(false);
   if (d.termCopier !== undefined) return copierTerminal();
   if (d.termColler !== undefined) {
-    return navigator.clipboard.readText().then((s) => { term.x.paste(s); term.x.focus(); }, () => toast(t("The browser refused to paste: use Ctrl+Shift+V in the terminal."), "erreur"));
+    return navigator.clipboard.readText().then((s) => { term.x.paste(s); term.x.focus(); }, () => toast(t(MAC ? "The browser refused to paste: use Cmd+V in the terminal." : "The browser refused to paste: use Ctrl+Shift+V in the terminal."), "erreur"));
   }
   if (d.termReconnecter !== undefined) { term.msg = null; term.x.reset(); return connecterTerminal(); }
   const lecteur = term.lecteur; term.lecteur = null; if (lecteur) lecteur.abort();
