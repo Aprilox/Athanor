@@ -1918,8 +1918,8 @@ pages.global = async () => {
   const nb = (k) => tous.filter((e) => k === "tous" || (k === "besoin" ? !!e.attente : k === "actif" ? e.etat === "actif" : e.module === k.slice(2))).length;
   const barre = `<div class="filtres-projets" role="group" aria-label="${h(t("Filter"))}">${filtres.map(([k, lib]) => `<button type="button" class="filtre${k === f ? " actif" : ""}" data-filtre-projets="${h(k)}" aria-pressed="${k === f}">${h(lib)} <span class="muet">${nb(k)}</span></button>`).join("")}</div>`;
   const liste = tous.filter(garde);
-  if (!tous.length) return `${actions}<div class="vide">${t("No project.")}</div>`;
-  return `${actions}${barre}${liste.length ? `<div class="grille-projets">${liste.map((e) => ligneElement(e, modules)).join("")}</div>` : `<div class="vide">${t("Nothing here right now.")}</div>`}`;
+  if (!tous.length) return `<div class="projets">${actions}<div class="vide">${t("No project.")}</div></div>`;
+  return `<div class="projets">${actions}${barre}${liste.length ? `<div class="grille-projets">${liste.map((e) => ligneElement(e, modules)).join("")}</div>` : `<div class="vide">${t("Nothing here right now.")}</div>`}</div>`;
 };
 document.addEventListener("click", async (ev) => {
   const b = ev.target.closest("[data-pilote-distant]"); if (!b) return;

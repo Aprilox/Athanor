@@ -99,7 +99,7 @@ html.cadre .dialogue, html.cadre .verrou, html.cadre .assistant { top: var(--bar
 .alertes-ignorees summary { cursor: pointer; font-size: 13px; color: var(--faible); padding: 4px 10px; border-radius: 6px; }
 .alertes-ignorees summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 /* All projects: one card per project */
-.projets-actions { gap: 8px; margin-bottom: 16px; }
+.projets-actions { gap: 8px; }
 .grille-projets { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
 .carte-projet { display: flex; flex-direction: column; gap: 4px; color: inherit; text-decoration: none; cursor: pointer; min-width: 0; }
 .grille-projets > .bloc + .bloc { margin-top: 0; }
@@ -154,7 +154,6 @@ html.cadre .dialogue, html.cadre .verrou, html.cadre .assistant { top: var(--bar
 .accueil .hub-chat-fil { flex: none; max-height: 46vh; min-height: 0; overflow: auto; margin: 0; }
 .hub-chat-fil .vide { padding: 10px 12px; border: 0; background: var(--panel-2); text-align: left; }
 /* E-mail: one framed card per account, its buttons wrapped (M203/M205) */
-.email .grille-projets { margin-top: 16px; }
 .carte-email { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .carte-email > p { margin: 0; overflow-wrap: anywhere; }
 .carte-email .ligne { flex-wrap: wrap; gap: 8px; }
@@ -180,7 +179,7 @@ html.cadre .dialogue, html.cadre .verrou, html.cadre .assistant { top: var(--bar
 .cp-besoin { background: var(--attention); color: var(--sur-attention); border-radius: 10px; padding: 0 8px; font-size: 12px; font-weight: 600; line-height: 19px; white-space: nowrap; }
 .cp-jalon { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Projects: every module's elements, filtered by a row of chips */
-.filtres-projets { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 16px; }
+.filtres-projets { display: flex; flex-wrap: wrap; gap: 6px; }
 .filtre { background: transparent; color: var(--muted); border: 1px solid var(--line); border-radius: 16px; padding: 4px 12px; font: inherit; font-size: 13.5px; cursor: pointer; transition: background .12s ease, color .12s ease, border-color .12s ease; }
 .filtre:hover { color: var(--ink); border-color: var(--accent); }
 .filtre.actif { background: var(--panel-2); color: var(--ink); border-color: var(--accent); }
@@ -418,6 +417,9 @@ label.champ > span { display: block; color: var(--muted); font-size: 13px; margi
 .bloc { background: var(--panel); border: 1px solid var(--line); border-radius: var(--rayon); padding: 18px 20px; }
 .bloc + .bloc, .grille + .bloc, .grille + .ligne, .bloc + .grille { margin-top: 16px; }
 .grille > .bloc + .bloc, .colonne > .bloc + .bloc { margin-top: 0; }
+/* Module pages: one vertical rhythm, their blocks (explanation, actions, content) spaced by the gap alone */
+:is(.projets, .email, .coffre, .serveurs, .missions, .acces) { display: flex; flex-direction: column; gap: 16px; }
+:is(.projets, .email, .coffre, .serveurs, .missions, .acces) > :is(*, .bloc + .bloc) { margin-top: 0; margin-bottom: 0; }
 .bloc h2 { margin-bottom: 10px; }
 .bloc-liste { padding: 6px 8px; }
 .grille { display: grid; gap: 16px; align-items: start; }
@@ -1066,10 +1068,8 @@ ol.guide-access li { margin: 5px 0; }
 #cof-texte { -webkit-text-security: disc; } /* the pasted secrets stay off the screen; the proposals say what was found */
 .cof-verrou { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; border-color: var(--attention); margin-bottom: 12px; }
 .cof-verrou input { min-width: 180px; }
-.cof-explication { margin-top: 16px; }
 @media (max-width: 640px) { .cof-choix { grid-template-columns: 1fr; } .cof-verrou .ligne { width: 100%; } .cof-verrou input { flex: 1; min-width: 0; } }
 .cof-verrou input[type=password] { width: auto; }
-.cof-tete + p { margin-top: 8px; }
 /* Access (project page): the vault on the left, the three environments on the right */
 .acc-grille { display: grid; grid-template-columns: minmax(260px, 1fr) 2fr; gap: 16px; align-items: start; }
 .acc-grille > .bloc + .bloc { margin-top: 0; }
