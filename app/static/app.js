@@ -1255,13 +1255,27 @@ function proposerTutoriel() {
   const m = pg && pg.tour ? (etat.hubModules || []).find((x) => x.id === pg.tour) : moduleDePage(etat.page);
   if (!v || v.verrouille || v.bienvenue || etat.assistant >= 0 || etat.visite >= 0 || !m || !(m.tutoriel || []).length) return;
   etat.toursVus ||= new Set(); // a paired device may not write the preference: shown once per session there
-  if ((v.tours || {})[m.id] || etat.toursVus.has(m.id)) return;
+  const vu = (id) => (v.tours || {})[id] || etat.toursVus.has(id);
+  // M200: the Home's tour seen before the conversation existed: the conversation's own steps, once
+  if (m.id === "hub" && etat.page === "accueil" && vu("hub") && !vu(TOUR_CHAT)) {
+    etat.toursVus.add(TOUR_CHAT); (v.tours ||= {})[TOUR_CHAT] = true;
+    api("preferences", "POST", { tours: { [TOUR_CHAT]: true } }).catch(() => {});
+    return lancerTourChat();
+  }
+  if (vu(m.id)) return;
   const connu = !(m.id in (v.tours || {})) && (m.id === "dev" ? (v.projets || []).some((p) => p.faits > 0) : (m.resume || {}).etat === "ok"); // a module in use (Dev: a milestone done; the vault: a key stored)
-  etat.toursVus.add(m.id); (v.tours ||= {})[m.id] = true;
-  api("preferences", "POST", { tours: { [m.id]: true } }).catch(() => {});
+  const ids = m.id === "hub" ? [m.id, TOUR_CHAT] : [m.id]; // the Home's tour holds the conversation's steps
+  ids.forEach((id) => { etat.toursVus.add(id); (v.tours ||= {})[id] = true; });
+  api("preferences", "POST", { tours: Object.fromEntries(ids.map((id) => [id, true])) }).catch(() => {});
   // someone who already uses the module (never this tour, never reset): a reminder, not the tour
   if (connu) return toast(t("New: the tutorial is in the “?”."));
   lancerTutoriel(m);
+}
+const TOUR_CHAT = "hub-chat";
+// the home conversation's tour: the steps of the Home's tour that point into the conversation (hub_modules.go)
+function lancerTourChat() {
+  const m = (etat.hubModules || []).find((x) => x.id === "hub"); if (!m) return;
+  lancerTutoriel({ ...m, tutoriel: (m.tutoriel || []).filter((e) => /^#(accueil-form|hub-)/.test(e.cible || "")) });
 }
 function etapesVisite() { return etat.etapesVisite || []; }
 function demarrerVisite() { const a = document.activeElement; etat.focusVisite = a && a !== document.body ? cleFocus(a) : ""; etat.visite = 0; montrerVisite(); }
@@ -2021,6 +2035,7 @@ pages.accueil = async () => {
   return `<div class="accueil">
     <form class="bloc accueil-barre accueil-chat" id="accueil-form" data-pieces="hc">
       <div class="ligne m0 chat-tete"><label for="accueil-texte" class="accueil-titre croit">${t("What do you want to do?")}</label>
+        <button type="button" class="btn btn-petit" id="hub-chat-aide" title="${h(t("How the assistant works"))}" aria-label="${h(t("How the assistant works"))}">?</button>
         <button type="button" class="btn btn-petit local-seul" id="hub-chat-nouveau">${t("New conversation")}</button></div>
       <div class="chat-fil hub-chat-fil" id="hub-chat-fil" role="log" aria-label="${h(t("Conversation"))}">${filHub(hc)}</div>
       <p class="petit muet m0 distant-seul">${t("From a device, this conversation is read only: write to the assistant on the computer.")}</p>
@@ -2342,7 +2357,8 @@ document.addEventListener("keydown", (ev) => {
   ev.preventDefault(); envoyerHubChat();
 });
 document.addEventListener("click", async (ev) => {
-  const b = ev.target.closest("#accueil-mission, #hub-chat-stop, #hub-chat-nouveau, #hub-dossier-ajouter, [data-dossier-retirer]"); if (!b) return;
+  const b = ev.target.closest("#hub-chat-aide, #accueil-mission, #hub-chat-stop, #hub-chat-nouveau, #hub-dossier-ajouter, [data-dossier-retirer]"); if (!b) return;
+  if (b.id === "hub-chat-aide") return lancerTourChat();
   if (b.id === "accueil-mission") return envoyerAccueil();
   if (b.id === "hub-dossier-ajouter") return ajouterDossierHub();
   if (b.dataset.dossierRetirer) return changerPouvoirs({ dossiers: (etat.hubChat.pouvoirs.dossiers || []).filter((x, i) => i !== +b.dataset.dossierRetirer) });
@@ -2540,7 +2556,7 @@ const GUIDE = [
     etapes: [
       ["The menu", "On the left: *Home*, *Projects*, then one entry per module (*Studio*, *Vault*), and *Settings* at the bottom. A module's entry opens the page you last saw in it. On a phone, the ☰ button opens the menu, and a tap on an entry closes it.", "#accueil", "Home"],
       ["The home page", "*Home*: one tile per module, with its state (working, needs attention, idle) and its figures; a click on a figure opens its page, *Open* opens the module. Below, *In progress* shows what waits for you first, then what is working; *See all* opens *Projects*.", "#accueil", "Home"],
-      ["“What do you want to do?”", "Write it in one sentence in the bar of the home page, then *Send*: it becomes a mission, and its card shows under the bar. *@* names a project, a server or a vault key. Nothing starts before you press *Launch* on the card.", "#accueil", "Home"],
+      ["The assistant", "The home page opens on a conversation: ask a question, or say what you want done. *Guide › Talk to the home assistant* explains what it reads, what it can do and its cards.", "#accueil", "Home"],
       ["Projects", "*Projects* lists everything under way in every module: its state, its progress, what it is doing now (“Milestone 5/14: …”) and what waits for you, with the reason. The filters show everything, only what needs you or only what is in progress; a click on a line opens its page. *New project* and *Join a project* are at the top.", "#global", "Projects"],
       ["The tabs", "At the top of a module, one line of tabs holds its pages. *Studio*: the project picker, then *Overview*, *Team*, *Requests*, *Chat*, *For you*, *Access*, *Log* and *Manage*. *Settings*: *Settings*, *Skills & MCP*, *Setup & health* and *Remote*. On a phone, the line scrolls sideways.", "#suivi", "Overview"],
       ["The bell", "The bell, at the top of the window, gathers what needs you in every module, one line each with its reason (“Studio, my-shop: …”). *View* opens the right page. *Ignore* hides a line and deletes nothing: it waits under *Ignored alerts*, where *Reopen* brings it back, and it comes back by itself when its reason changes."],
@@ -2549,6 +2565,16 @@ const GUIDE = [
       ["In a terminal", "`./athanor tui` opens on the same home page: one block per module, what needs you and the missions. *H* or *Esc* comes back to it from any page, *Enter* opens the module, *1*–*9* and *0* still open Studio's pages."],
     ],
     note: "The update moved none of your projects, settings or keys, and old links and notifications still open the same pages as before." },
+  { id: "assistant", titre: "Talk to the home assistant", intro: "The home page is a conversation with an assistant that knows Athanor: ask a question, or say what you want done, in your words. It reads, answers and proposes; you decide.",
+    etapes: [
+      ["Ask", "Write in the big field of the home page: *Enter* sends, *Shift+Enter* adds a line. The answer comes above, after the earlier messages. *New conversation* starts again: the assistant forgets this one and its powers are switched off.", "#accueil", "Home"],
+      ["What it reads", "Only what you give it: your messages, the files you attach (📎, or drop or paste them: images, PDF and text files, 20 MB at most each) and the folders you point under *What the assistant can do* › *Folders*, each read only or read and write. *@* names a project, a server or a vault key."],
+      ["Its powers", "*What the assistant can do* stays visible under the field. *Internet* lets it search and read the web; *Writing* lets it change files, only in the folders set to read and write. Both are off by default, and off again in each new conversation. It never runs a command, never uses an MCP server and never reaches a server by itself."],
+      ["What it never sees", "The vault's values, secrets files (.env), Athanor's own folders and system folders are never given to it, and a vault value pasted in a message or a file is masked before it reads it. A file or a web page that gives it orders is data: the assistant tells you what it asks and does not follow it."],
+      ["Cards", "To act, it proposes a card: create a project and start its pilot, start a pilot, add a request, leave a remark, prepare a mission, create a sub-agent or an MCP server, switch one on in projects. The card says what, on what and with which accesses: *Launch*, *Change* or *Refuse*. Nothing runs before you press *Launch*, and each decision goes into the audit log."],
+      ["Missions", "*Create a mission* sends your sentence to the orchestrator, which prepares its own card under the conversation: lanes, environments, accesses, approvals, estimate. *Guide › Launch a mission* walks through one.", "#accueil", "Home"],
+      ["From a phone", "On a paired device the conversation is read only: you read it and its powers, and you write to the assistant on the computer. Approvals and the emergency stop still work from the phone. The *?* at the top of the conversation replays its short tutorial."],
+    ] },
   { id: "coffre", titre: "The vault", intro: "The vault keeps your keys, tokens and settings in one place, encrypted on the disk. A secret's value is shown only while you type it, never again, and no page or answer of Athanor contains it.",
     etapes: [
       ["Secrets and variables", "*Vault*, in the menu: *Secrets* hold what must stay hidden (a token, a password, a private key), *Variables* plain settings (a region, a user name), readable even while the vault is locked. *Add* creates one; the ⋯ menu of a card edits it, replaces its value or deletes it.", "#coffre", "Vault"],

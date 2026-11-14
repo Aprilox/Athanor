@@ -35,8 +35,15 @@ type EtapeTutoriel struct {
 	Page  string `json:"page,omitempty"`
 }
 
+// tourChatAccueil: the home conversation's short tour (the first steps of the Home's), seen apart from it so that
+// whoever saw the Home's tour before the conversation existed sees it once at their first use (M200).
+const tourChatAccueil = "hub-chat"
+
 // tutorielConnu: a module with that id declares a tour (the only ids /api/preferences keeps as seen).
 func tutorielConnu(id string) bool {
+	if id == tourChatAccueil {
+		return true
+	}
 	for _, m := range modulesHub() {
 		if m.ID() == id {
 			return len(m.Tutoriel()) > 0
@@ -210,10 +217,12 @@ func (moduleHub) Resume(*Serveur) ResumeModule {
 func (moduleHub) Elements(*Serveur) []ElementHub { return nil }
 func (moduleHub) Tutoriel() []EtapeTutoriel {
 	return []EtapeTutoriel{
-		{Titre: "What do you want to do?", Texte: "Say it here in one sentence: it goes to the chat of the current project, or starts a new project. Nothing is sent before you press Send there.", Cible: "#accueil-form"},
+		// M200: the home conversation (its steps, whose target is in the chat, are also its own short tour: tourChatAccueil)
+		{Titre: "Your assistant", Texte: "Ask a question or say what you want done, in your words. It reads only what you give it: your messages, the files you attach and the folders you point.", Cible: "#accueil-form"},
+		{Titre: "What it can do", Texte: "Internet and Writing are off by default, and off again in each new conversation. With Writing on, it changes files only in the folders you set to “read and write”. It never runs a command.", Cible: "#hub-pouvoirs"},
+		{Titre: "What it never sees", Texte: "The vault's values, your secrets files and Athanor's own folders are never given to it. A file or a web page that gives it orders is reported to you, never followed.", Cible: "#hub-chat-fil"},
+		{Titre: "Cards: you decide", Texte: "To act (a project, its pilot, a request, a mission, a sub-agent), it proposes a card: what, on what, with which accesses. Nothing runs before you press Launch. From a paired phone the conversation is read only. The “?” above replays these steps.", Cible: "#hub-chat-fil"},
 		{Titre: "One tile per part", Texte: "Each part of Athanor has its tile with what matters now. Click a figure to open its page.", Cible: ".grille-hub"},
-		{Titre: "In progress", Texte: "What is working right now, and first what waits for you, with the reason. “See all” opens the Projects page.", Cible: ".en-cours"},
 		{Titre: "The bell", Texte: "Everything that needs you, with why. “View” opens the right page, “Ignore” hides an alert until something changes.", Cible: "[data-notifs]"},
-		{Titre: "Projects", Texte: "Every project of every part on one page, with filters. This tutorial and the others stay in the “?”, at the top of the Guide.", Cible: `nav a[data-href="#global"]`},
 	}
 }
