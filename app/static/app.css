@@ -1214,6 +1214,7 @@ a.mis-ligne:hover, a.mis-ligne:focus-visible { border-color: var(--accent); }
 /* M156: the mission card under the home bar */
 #mission-zone:empty { display: none; }
 .mis-carte { display: flex; flex-direction: column; gap: 10px; }
+.mis-infra select { max-width: 100%; } /* the longest option (fr) wider than a phone's card */
 .mis-carte h3 { font-size: 13.5px; margin: 12px 0 6px; }
 .mis-carte .mis-phrase { margin: 0; }
 .mis-voies, .mis-grille { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 24px; }
