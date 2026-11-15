@@ -1588,7 +1588,7 @@ html.scene-pause .verrou * { animation-play-state: paused !important; }
   /* the terminal page folds the module tabs and the status band: the screen gets the height (the menu stays) */
   main:has(.terminal-page) #barre-onglets, main:has(.terminal-page) #bandeau { display: none; }
   .term-hote { padding: 4px; }
-  .term-zones, .term-zones.avec-ia { grid-template-columns: minmax(0, 1fr); height: calc(100dvh - 220px); }
+  .term-zones, .term-zones.avec-ia { grid-template-columns: minmax(0, 1fr); height: calc(100dvh - 220px); min-height: 160px; } /* the keyboard can leave little room */
   .term-onglets .term-onglet-ia { display: block; }
   .term-bascule-ia { display: none; }
   /* SFTP on a phone: one panel at a time under the selector, Send / Download instead of a drag, the menu as a bottom sheet */
@@ -1611,5 +1611,9 @@ html.scene-pause .verrou * { animation-play-state: paused !important; }
   .term-apercu-auto { width: 34px; }
   .term-zones:not(.avec-ia) .ia { display: flex; }
   .terminal-page:not([data-onglet="ia"]) .ia, .terminal-page[data-onglet="ia"] .term-hote, .terminal-page[data-onglet="ia"] .sftp { display: none; }
+  /* the assistant's tab: the terminal's own tools step aside; every control a 44 px touch target */
+  .terminal-page[data-onglet="ia"] .term-seul, .terminal-page[data-onglet="ia"] #term-reglages-zone { display: none; }
+  .terminal-page .btn, .terminal-page summary, .term-barre > a, [data-ia-carte] { min-height: 44px; }
+  .terminal-page summary, .term-barre > a, [data-ia-carte] { display: inline-flex; align-items: center; }
 }
 }

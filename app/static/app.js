@@ -3476,7 +3476,7 @@ function blocPlan(x, p) {
     <label class="champ"><span>${t("Public key")}</span><textarea readonly rows="2" class="code" data-seule-pub>${h(pub)}</textarea></label>
     <div class="ligne m0"><button type="button" class="btn btn-petit" data-seule-copier>${t("Copy")}</button><a class="btn btn-petit" download="athanor-${h(p.serveur)}.pub" href="data:text/plain;charset=utf-8,${encodeURIComponent(pub + "\n")}">${t("Download")}</a></div>
     <label class="ligne m0 mt-1"><input type="checkbox" data-appr-seule> <span>${h(t("I know that only Athanor's key will get in after this plan"))}</span></label>` : "";
-  return `<div class="pv-details">${h(p.agent === "durcissement" ? t(p.resume) : p.resume)}</div><ol class="plan-etapes">${etapes}</ol>
+  return `${p.resume ? `<div class="pv-details">${h(p.agent === "durcissement" ? t(p.resume) : p.resume)}</div>` : ""}<ol class="plan-etapes">${etapes}</ol>
     ${p.critique ? blocCritique(p.critique) : ""}${seule}`;
 }
 // the security critic's verdict (M98): reading, no risk found, or its risks one per line
@@ -6446,9 +6446,16 @@ pages.terminal = async () => {
 // the terminal fills the content area down to its bottom edge (a fixed calc() overflowed under the page's header)
 function hauteurTerminal() {
   const p = $("#page"), zones = $("#term-zones"); if (!p || !zones) return;
-  const bas = p.getBoundingClientRect().bottom - parseFloat(getComputedStyle(p).paddingBottom);
-  zones.style.height = Math.max(220, Math.floor(bas - zones.getBoundingClientRect().top - 2)) + "px";
+  const v = window.visualViewport, clavier = v ? Math.max(0, innerHeight - v.height - v.offsetTop) : 0; // phone: the on-screen keyboard covers the bottom
+  const bas = Math.min(p.getBoundingClientRect().bottom - parseFloat(getComputedStyle(p).paddingBottom), innerHeight - clavier);
+  zones.style.height = Math.max(clavier ? 160 : 220, Math.floor(bas - zones.getBoundingClientRect().top - 2)) + "px";
 }
+// the keyboard opens or closes: the zones shrink so that the assistant's input stays just above it
+if (window.visualViewport) visualViewport.addEventListener("resize", () => {
+  if (!$("#term-zones")) return;
+  hauteurTerminal();
+  const f = document.activeElement; if (f && f.closest("#term-zones")) requestAnimationFrame(() => f.scrollIntoView({ block: "nearest" }));
+});
 function etatTerminal(texte, classe) { const e = $("#term-etat"); if (e) { e.textContent = texte; e.className = "pastille " + classe; } }
 // a message above the terminal: what happened, what to do, and Connect again
 function messageTerminal(titre, solution) {
