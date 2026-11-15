@@ -1401,11 +1401,15 @@ html.scene-pause .verrou * { animation-play-state: paused !important; }
 .terminal-page[data-onglet="sftp"] .term-seul, .terminal-page[data-onglet="sftp"] #term-reglages-zone, .terminal-page[data-onglet="sftp"] .term-hote, .terminal-page:not([data-onglet="sftp"]) .sftp { display: none; }
 .term-hote { height: 100%; min-height: 0; border: 1px solid var(--line); border-radius: 8px; padding: 6px; overflow: hidden; overflow: clip; position: relative; } /* clip: a focus while the width changes could scroll a hidden overflow sideways (T1-2) */
 /* the banner sits above the screen, in the flow: its text wraps and the terminal keeps the height left under it */
-.term-hote.verrouille { display: flex; flex-direction: column; gap: 6px; border-color: var(--accent); }
-.term-hote.verrouille .term-ecran { flex: 1; min-height: 0; height: auto; }
+.term-hote.avec-bandeau { display: flex; flex-direction: column; gap: 6px; }
+.term-hote.verrouille { border-color: var(--accent); }
+.term-hote.avec-bandeau .term-ecran { flex: 1; min-height: 0; height: auto; }
 .term-verrou { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; padding: 6px 10px; border-radius: 6px;
   background: var(--panel); color: var(--ink); border: 1px solid var(--accent); z-index: 2; }
 .term-verrou-texte { flex: 1 1 220px; min-width: 0; overflow-wrap: anywhere; }
+.term-verrou.decision { border-color: var(--attention); }
+.pastille.arret { color: var(--erreur); }
+.pastille.arret::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 2px; background: currentColor; margin-right: 5px; vertical-align: 1px; }
 /* Files panel (SFTP) beside the terminal */
 /* SFTP tab: two panels (Local, the server), each with its own scrolling list; the page itself does not scroll */
 .sftp { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; min-height: 0; height: 100%; }
@@ -1550,6 +1554,7 @@ html.scene-pause .verrou * { animation-play-state: paused !important; }
 .ia-vide { display: flex; flex-direction: column; gap: 4px; margin: auto 0; }
 .ia-tache { display: flex; flex-direction: column; gap: 6px; }
 .ia-demande { margin: 0; align-self: flex-end; max-width: 92%; padding: 6px 9px; border-radius: 8px; background: color-mix(in srgb, var(--accent) 16%, transparent); white-space: pre-wrap; overflow-wrap: anywhere; }
+.ia-demande .pv-etat { color: var(--ink); } /* the accent on the accent-tinted bubble is below AA */
 .ia-actions { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; font-size: 13px; }
 .ia-action summary { cursor: pointer; }
 .ia-quoi { white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--mono); font-size: 12.5px; }

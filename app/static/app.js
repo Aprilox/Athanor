@@ -7324,6 +7324,7 @@ async function chargerIA() {
   const id = term.id; if (!$("#ia") || !id) return;
   const r = await api("serveurs/" + encodeURIComponent(id) + "/taches").catch(() => null);
   if (etat.page !== "terminal" || term.id !== id) return;
+  if (!r !== !!ia.hs) { ia.hs = !r; ia.lu = ""; if (!r) rendreIA(); }
   if (r) { const sig = JSON.stringify(r.taches) + JSON.stringify(r.plans); if (sig !== ia.lu || !$("#ia-fil").childElementCount) { ia.lu = sig; ia.taches = r.taches || []; ia.plans = r.plans || {}; rendreIA(); } }
   if (ia.taches.some((x) => !tacheFinie(x))) ia.minuteur = setTimeout(chargerIA, 1500);
 }
@@ -7336,51 +7337,74 @@ function actionIA(a) {
   const cle = a.t + "#" + a.n;
   return corps ? `<li><details class="ia-action" data-ia-action="${h(cle)}"${ia.ouvertes.has(cle) ? " open" : ""}><summary>${tete}</summary>${corps}</details></li>` : `<li class="ia-action">${tete}</li>`;
 }
+// the assistant's one state (M242b), sent by Go on each task (M242a): the terminal's banner, the chat's status line,
+// its cards and the terminal's lock all read it, never the task's own steps
+const assIA = (x) => x.assistant || ({ attente_accord: "attente_decision", arretee: "arretee", echec: "erreur", finie: "repos" })[x.etat] || "travail";
+const vivanteIA = (x) => ["travail", "attente_decision"].includes(assIA(x));
+function etatIA() {
+  if (ia.hs) return { etat: "hs" };
+  const v = ia.taches.filter(vivanteIA), x = v.find((y) => y.verrou) || v.find((y) => assIA(y) === "attente_decision") || v[0];
+  if (x) return { etat: assIA(x), tache: x };
+  const d = ia.taches[0];
+  return d && ["arretee", "erreur"].includes(assIA(d)) ? { etat: assIA(d), tache: d } : { etat: "repos" };
+}
+const planIA = (x) => (x.plans || []).slice(-1)[0] || "";
 function tacheIA(x) {
-  const [lib, cl] = ETATS_TACHE_SRV()[x.etat] || [x.etat, ""], fin = (x.historique || []).slice(-1)[0] || {};
-  const plan = x.etat === "attente_accord" && (x.plans || []).length ? x.plans[x.plans.length - 1] : "", p = plan && ia.plans[plan];
+  const a = assIA(x), fini = !vivanteIA(x), [lib, cl] = ETATS_TACHE_SRV()[{ arretee: "arretee", erreur: "echec" }[a] || x.etat] || [x.etat, ""], fin = (x.historique || []).slice(-1)[0] || {};
+  const plan = ["attente_decision", "arretee"].includes(a) ? planIA(x) : "", p = plan && ia.plans[plan], perime = a === "arretee";
   return `<div class="ia-tache" data-tache="${h(x.id)}"><p class="ia-demande">${h(x.texte)}${x.direct ? ` <span class="pv-etat pv-claude">${t("Shown in your terminal")}</span>` : ""}</p>
     ${(x.actions || []).length ? `<ol class="ia-actions">${x.actions.map(actionIA).join("")}</ol>` : ""}
-    ${p ? `<div class="ia-plan"><p class="m0"><b>${t("Plan to apply")}</b> <span class="muet petit">${h(tn((p.etapes || []).length, "1 step", "{0} steps", [(p.etapes || []).length]))}</span></p>${blocPlan({}, p)}
-      ${(etat.vue || {}).distant ? "" : `<div class="ligne m0"><button type="button" class="btn btn-primaire btn-petit" data-ia-decider="accepter" data-plan="${h(plan)}">${t("Accept")}</button>
+    ${p ? `<div class="ia-plan${perime ? " perime" : ""}"><p class="m0"><b>${t("Plan to apply")}</b> <span class="muet petit">${h(tn((p.etapes || []).length, "1 step", "{0} steps", [(p.etapes || []).length]))}</span></p>${blocPlan({}, p)}
+      ${perime ? `<p class="m0 petit pv-vous">${t("Not applied: the task was stopped before your decision.")}</p>` : (etat.vue || {}).distant ? "" : `<div class="ligne m0"><button type="button" class="btn btn-primaire btn-petit" data-ia-decider="accepter" data-plan="${h(plan)}">${t("Accept")}</button>
       <button type="button" class="btn btn-petit" data-ia-decider="refuser" data-plan="${h(plan)}">${t("Refuse")}</button>
+      <button type="button" class="btn btn-petit" data-ia-modifier="${h(x.id)}">${t("Modify")}</button>
       <a href="#approbations" class="petit" data-ia-carte="${h(plan)}">${t("Decide on its card")}</a></div>`}</div>` : ""}
     ${x.resultat ? `<div class="ia-reponse">${mdChat(x.resultat, true)}</div>` : ""}
-    ${tacheFinie(x) ? `<p class="m0 petit"><span class="pv-etat ${cl}">${h(lib)}</span>${["echec", "arretee"].includes(x.etat) && fin.detail ? ` <span class="muet">${h(t(fin.detail))}</span>` : ""}</p>` : ""}</div>`;
+    ${fini ? `<p class="m0 petit"><span class="pv-etat ${cl}">${h(lib)}</span>${["echec", "arretee"].includes(x.etat) && fin.detail ? ` <span class="muet">${h(t(fin.detail))}</span>` : ""}</p>` : ""}</div>`;
 }
 function rendreIA() {
   const fil = $("#ia-fil"), zone = $("#ia-encours"); if (!fil || !zone) return;
-  const l = ia.taches.slice(0, 10).reverse(), courante = ia.taches.find((x) => !tacheFinie(x)), bas = fil.scrollHeight - fil.scrollTop - fil.clientHeight < 40;
+  const l = ia.taches.slice(0, 10).reverse(), e = etatIA(), courante = vivanteIA(e.tache || {}) ? e.tache : null, bas = fil.scrollHeight - fil.scrollTop - fil.clientHeight < 40;
   fil.innerHTML = l.length ? l.map(tacheIA).join("") : `<div class="ia-vide"><p class="m0"><b>${t("Ask in plain words what this server needs.")}</b></p>
     <p class="muet petit m0">${t("The assistant reads the server first, then proposes a plan: nothing changes before you accept it, a destructive step backs up first, and what the server answers is never taken as an order.")}</p></div>`;
   if (bas || ia.suivi) { fil.scrollTop = fil.scrollHeight; ia.suivi = false; }
   const enCours = courante && (courante.actions || []).filter((a) => a.etat === "en_cours").slice(-1)[0];
-  const texte = !courante ? t("The assistant is idle.") : enCours ? t("Running: {0}", [enCours.quoi]) : (ETATS_TACHE_SRV()[courante.etat] || [courante.etat])[0];
-  zone.innerHTML = `<span class="pastille ${courante ? (courante.etat === "attente_accord" ? "attend" : "travaille") : ""}"></span><span class="ia-encours-texte petit">${h(texte)}</span>
+  const texte = { repos: t("The assistant is idle."), attente_decision: t("Waiting for your decision"), arretee: t("Stopped"), erreur: t("Failed"),
+    hs: t("Athanor does not answer: the assistant's state is unknown, your terminal stays free.") }[e.etat]
+    || (enCours ? t(courante.verrou ? "Running in your terminal: {0}" : "Running: {0}", [enCours.quoi]) : (ETATS_TACHE_SRV()[courante.etat] || [courante.etat])[0]);
+  zone.dataset.etat = e.etat;
+  zone.innerHTML = `<span class="pastille ${{ travail: "travaille", attente_decision: "attend", arretee: "arret", erreur: "arret", hs: "arret" }[e.etat] || ""}"></span><span class="ia-encours-texte petit">${h(texte)}</span>
     <button type="button" class="btn btn-danger btn-petit" data-ia-arreter="${h(courante ? courante.id : "")}"${courante && !(etat.vue || {}).distant ? "" : " disabled"}>${t("Stop")}</button>`;
   const f = $("#ia-file"); if (f) { f.hidden = !ia.attente; f.textContent = ia.attente ? t("Queued: it is sent as soon as the assistant is done.") : ""; }
   if (ia.attente && !courante && !ia.envoi) { const a = ia.attente; ia.attente = ""; envoyerIA(a); }
-  verrouTerminal(courante && courante.verrou ? courante.id : ""); // only while one of its commands runs (Go decides)
+  bandeauTerminal(e);
 }
-// mode "live in my terminal": while the assistant works in it, the terminal takes no typing (the Go side refuses
-// it too, 423) and a banner over it says so, with Stop and Take over
+// the banner over the terminal says the assistant's one state: "working" while one of its commands runs in this
+// terminal (mode "live in my terminal"), whose typing is locked then only (the Go side refuses it too, 423), with
+// Stop and Take over; "waiting for your decision" with Accept, Refuse and Modify, the terminal free; else nothing
+function bandeauTerminal(e) {
+  const x = e.tache, cle = e.etat === "travail" && x.verrou && term.session && !term.msg ? "v" + x.id : e.etat === "attente_decision" && ia.plans[planIA(x)] ? "d" + planIA(x) : "";
+  verrouTerminal(cle[0] === "v" ? x.id : "");
+  const hote = $("#term-hote"); if (!hote) return;
+  let b = $("#term-verrou");
+  if (!cle) { b?.remove(); hote.classList.remove("verrouille", "avec-bandeau"); }
+  else if (!b || b.dataset.cle !== cle) {
+    if (!b) { b = document.createElement("div"); b.id = "term-verrou"; b.setAttribute("role", "status"); hote.prepend(b); }
+    const dis = (etat.vue || {}).distant ? " disabled" : "", p = planIA(x);
+    b.dataset.cle = cle; b.className = "term-verrou" + (cle[0] === "d" ? " decision" : "");
+    b.innerHTML = cle[0] === "v" ? `<span class="pastille travaille"></span><span class="term-verrou-texte" title="${h(t("Your typing is locked so that you never both type at once."))}"><b>${t("The assistant is working")}</b> — <span class="petit">${t("Your typing is locked so that you never both type at once.")}</span></span>
+      <button type="button" class="btn btn-danger btn-petit" data-ia-arreter="${h(x.id)}"${dis}>${t("Stop")}</button><button type="button" class="btn btn-petit" data-ia-main="${h(x.id)}"${dis}>${t("Take over")}</button>`
+      : `<span class="pastille attend"></span><span class="term-verrou-texte"><b>${t("Waiting for your decision")}</b> — <span class="petit">${t("The assistant waits for your decision on its plan; your terminal stays yours.")}</span></span>
+      <button type="button" class="btn btn-primaire btn-petit" data-ia-decider="accepter" data-plan="${h(p)}"${dis}>${t("Accept")}</button><button type="button" class="btn btn-petit" data-ia-decider="refuser" data-plan="${h(p)}"${dis}>${t("Refuse")}</button><button type="button" class="btn btn-petit" data-ia-modifier="${h(x.id)}"${dis}>${t("Modify")}</button>`;
+    hote.classList.toggle("verrouille", cle[0] === "v"); hote.classList.add("avec-bandeau");
+  }
+  requestAnimationFrame(() => term.fit && term.el && term.el.offsetWidth && term.fit.fit());
+}
 function verrouTerminal(id) {
   // shortcut: an Enter on a free terminal shows the shell's prompt again under the copied lines; assumes the shell sits at its prompt
   if (ia.verrou && !id && term.session && !term.msg) taperTerminal("\r");
   ia.verrou = id;
-  const hote = $("#term-hote"); if (!hote) return;
-  let b = $("#term-verrou");
-  if (!id) { b?.remove(); hote.classList.remove("verrouille"); }
-  else if (!b || b.dataset.tache !== id) {
-    if (!b) { b = document.createElement("div"); b.id = "term-verrou"; b.className = "term-verrou"; b.setAttribute("role", "status"); hote.prepend(b); }
-    const dis = (etat.vue || {}).distant ? " disabled" : "";
-    b.dataset.tache = id;
-    b.innerHTML = `<span class="pastille travaille"></span><span class="term-verrou-texte" title="${h(t("Your typing is locked so that you never both type at once."))}"><b>${t("The assistant is working")}</b> — <span class="petit">${t("Your typing is locked so that you never both type at once.")}</span></span>
-      <button type="button" class="btn btn-danger btn-petit" data-ia-arreter="${h(id)}"${dis}>${t("Stop")}</button><button type="button" class="btn btn-petit" data-ia-main="${h(id)}"${dis}>${t("Take over")}</button>`;
-    hote.classList.add("verrouille");
-  }
   if (term.x && term.session && !term.msg) term.x.options.disableStdin = !!id;
-  requestAnimationFrame(() => term.fit && term.el && term.el.offsetWidth && term.fit.fit());
 }
 $("#page").addEventListener("change", (ev) => {
   if (etat.page !== "terminal" || ev.target.name !== "ia-mode") return;
@@ -7397,9 +7421,11 @@ $("#page").addEventListener("submit", async (ev) => {
   const champ = $("#ia-texte"), texte = champ.value.trim();
   if (!texte) return champ.focus();
   if (ia.envoi) return; // a double Enter sends once
+  const m = ia.modifier && ia.taches.find((x) => x.id === ia.modifier && assIA(x) === "attente_decision"); ia.modifier = "";
+  if (m) { if (!(await action(api("serveurs/" + encodeURIComponent(term.id) + "/taches/" + encodeURIComponent(m.id) + "/arreter", "POST")))) return; m.assistant = "arretee"; }
   if (ia.mode === "direct" && !term.session) return toast(t("Connect the terminal first, or choose Separate connection."), "erreur");
   // live in the terminal: one task at a time types in it, the next waits its turn (a separate connection runs at once)
-  if (ia.mode === "direct" && ia.taches.some((x) => x.direct && !tacheFinie(x))) { ia.attente = texte; champ.value = ""; return rendreIA(); }
+  if (ia.mode === "direct" && ia.taches.some((x) => x.direct && vivanteIA(x))) { ia.attente = texte; champ.value = ""; return rendreIA(); }
   if (await envoyerIA(texte)) champ.value = "";
 });
 // the button is greyed only while the request is really on its way, and says so; on a failure the text stays
@@ -7418,8 +7444,16 @@ $("#page").addEventListener("keydown", (ev) => { // Enter sends, Shift+Enter mak
 });
 $("#page").addEventListener("click", async (ev) => {
   if (etat.page !== "terminal") return;
-  const b = ev.target.closest("[data-ia-arreter], [data-ia-decider], [data-ia-carte], [data-ia-main]"); if (!b) return;
+  const b = ev.target.closest("[data-ia-arreter], [data-ia-decider], [data-ia-carte], [data-ia-main], [data-ia-modifier]"); if (!b) return;
   const d = b.dataset;
+  if (d.iaModifier) { // the request back in the field, "Changes:" after it; Send stops the task (its plan refused) and sends it again
+    const x = ia.taches.find((y) => y.id === d.iaModifier); if (!x) return;
+    if (!ia.visible && $("[data-term-ia]")?.offsetParent) $("[data-term-ia]").click(); // the panel shown beside the terminal
+    if ($('[data-term-onglet="ia"]')?.offsetParent) $('[data-term-onglet="ia"]').click(); // phone: the chat's tab
+    const c = $("#ia-texte"); if (!c) return;
+    ia.modifier = x.id; c.value = x.texte + "\n\n" + t("Changes:") + " "; c.focus(); c.setSelectionRange(c.value.length, c.value.length);
+    return toast(t("Write your changes, then Send: the plan is refused and the request goes again with them."), "ok");
+  }
   if (d.iaCarte) { etat.apprCible = d.iaCarte; return; } // the link opens For you, where the card is scrolled to
   b.disabled = true;
   if (d.iaMain) {
