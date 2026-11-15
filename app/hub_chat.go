@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 )
 
 type PouvoirsChat struct {
@@ -59,6 +60,22 @@ func (s *Serveur) apiHubChatEnvoyer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	c.Message = s.masquerSecrets(c.Message) // M199: a vault value typed or pasted never reaches the model
+	if len(c.Mentions) > 0 {
+		m, err := s.resoudreMentions(c.Mentions)
+		if err != nil {
+			s.erreur(w, http.StatusBadRequest, "A mention no longer exists: remove it and send again")
+			return
+		}
+		l := s.mentionsLisibles(m)
+		for _, d := range c.Mentions { // a folder: only one this conversation was given
+			if d.Type == "dossier" && slices.ContainsFunc(lireConversation(k, p).Pouvoirs.Dossiers, func(x DossierChat) bool { return x.Chemin == d.Ref }) {
+				l = append(l, "folder "+d.Ref)
+			}
+		}
+		if len(l) > 0 {
+			c.Message += "\n\n@" + strings.Join(l, "\n@") // e.g. "@server web (id x1, 203.0.113.5)"
+		}
+	}
 	alerte, err := s.examinerPiecesAccueil(p, c.Pieces)
 	if err != nil {
 		s.erreur(w, http.StatusBadRequest, err.Error())

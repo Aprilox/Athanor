@@ -2066,14 +2066,21 @@ const blocAttente = (tous, modules) => blocListeAccueil("a-repondre", "Waiting f
 const blocEnCours = (tous, modules, lm = []) => blocListeAccueil("en-cours", "In progress", tous.filter((e) => !e.attente && e.etat === "actif"), "Nothing in progress right now.", modules,
   lm.length ? `<ul class="mis-liste">${lm.slice(0, 3).map(ligneMission).join("")}</ul>` : "");
 // M151: mentions of the bar. A chip = { type: projet|serveur|cle|nouveau, ref, nom }; the Go checks the refs again.
-const TYPES_MENTION = { projet: "Project", serveur: "Server", cle: "Vault key", dossier: "Folder", nouveau: "New project" };
-const pucesMentions = () => (etat.accueilMentions || []).map((m, i) => `<span class="puce-mention puce-${m.type}" title="${h(t(TYPES_MENTION[m.type]))}">${m.type === "nouveau" ? "" : "@"}${h(m.nom)}<button type="button" class="puce-x" data-retirer-mention="${i}" aria-label="${h(t("Remove {0}", [m.nom]))}">×</button></span>`).join("");
+const TYPES_MENTION = { projet: "Project", serveur: "Server", cle: "Key", dossier: "Folder", nouveau: "New project" };
+const GROUPES_MENTION = { projet: "Projects", serveur: "Servers", cle: "Vault keys", dossier: "Folders" };
+const ICONES_MENTION = { projet: "projet", serveur: "serveur", cle: "cle", dossier: "dossier", nouveau: "plus" };
+// a chip shows its kind (icon + label) before the name: a project and a server of the same name never look alike
+const typeMention = (m) => `${ic(ICONES_MENTION[m.type])}${m.type === "nouveau" ? "" : `<span class="puce-type">${h(t(TYPES_MENTION[m.type]))}</span>`}`;
+const pucesMentions = () => (etat.accueilMentions || []).map((m, i) => `<span class="puce-mention puce-${m.type}" title="${h(t(TYPES_MENTION[m.type]))}">${typeMention(m)}${h(m.nom)}<button type="button" class="puce-x" data-retirer-mention="${i}" aria-label="${h(t("Remove {0}", [m.nom]))}">×</button></span>`).join("");
 function suggestionsMentions() {
   const pris = new Set((etat.accueilMentions || []).map((m) => m.type + "\0" + m.ref)), l = etat.mentionsSugg || [];
   // the three most recent of each kind, shown in name order (recency alone read as a random order)
   const trois = (type) => l.filter((m) => m.type === type).slice(0, 3).sort((a, b) => a.nom.localeCompare(b.nom, undefined, { numeric: true }));
-  const choix = [...trois("projet"), ...trois("serveur"), { type: "nouveau", ref: "", nom: t("New project") }];
-  return choix.filter((m) => !pris.has(m.type + "\0" + m.ref)).map((m) => `<button type="button" class="btn btn-petit puce-sugg" data-mention="${h(JSON.stringify(m))}">${m.type === "nouveau" ? "+ " : "@"}${h(m.nom)}</button>`).join("");
+  const bouton = (m) => `<button type="button" class="btn btn-petit puce-sugg puce-${m.type}" data-mention="${h(JSON.stringify(m))}">${typeMention(m)}${h(m.nom)}</button>`;
+  // grouped by kind, one group per type, the new project last
+  return ["projet", "serveur", "cle"].map((ty) => trois(ty).filter((m) => !pris.has(m.type + "\0" + m.ref)))
+    .filter((g) => g.length).map((g) => `<span class="groupe-sugg" role="group" aria-label="${h(t(GROUPES_MENTION[g[0].type]))}">${g.map(bouton).join("")}</span>`).join("")
+    + (pris.has("nouveau\0") ? "" : bouton({ type: "nouveau", ref: "", nom: t("New project") }));
 }
 function majMentions() {
   const z = $("#accueil-puces"), s = $("#accueil-sugg");
@@ -2099,8 +2106,9 @@ function fermerListeMentions() {
 function rendreListeMentions() {
   const liste = $("#accueil-liste"), champ = $("#accueil-texte"), ml = etat.mentionListe;
   if (!liste || !champ || !ml) return;
-  liste.innerHTML = ml.items.length ? ml.items.map((m, i) => `<li role="option" id="mention-opt-${i}" class="mention-opt${i === ml.actif ? " actif" : ""}" aria-selected="${i === ml.actif}" data-opt="${i}">
-    <span class="etiquette">${h(t(TYPES_MENTION[m.type]))}</span><b>${h(m.nom)}</b>${m.detail ? `<span class="muet petit">${h(m.detail)}</span>` : ""}</li>`).join("")
+  // the Go sends them grouped by type: a heading opens each group
+  liste.innerHTML = ml.items.length ? ml.items.map((m, i) => `${i === 0 || ml.items[i - 1].type !== m.type ? `<li role="presentation" class="mention-groupe">${ic(ICONES_MENTION[m.type])}${h(t(GROUPES_MENTION[m.type]))}</li>` : ""}<li role="option" id="mention-opt-${i}" class="mention-opt puce-${m.type}${i === ml.actif ? " actif" : ""}" aria-selected="${i === ml.actif}" data-opt="${i}">
+    ${ic(ICONES_MENTION[m.type])}<span class="etiquette">${h(t(TYPES_MENTION[m.type]))}</span><b>${h(m.nom)}</b>${m.detail ? `<span class="muet petit">${h(m.detail)}</span>` : ""}</li>`).join("")
     : `<li class="mention-vide muet petit" role="option" aria-disabled="true">${t("Nothing matches.")}</li>`;
   liste.hidden = false; champ.setAttribute("aria-expanded", "true");
   if (ml.items.length) { champ.setAttribute("aria-activedescendant", "mention-opt-" + ml.actif); $("#mention-opt-" + ml.actif).scrollIntoView({ block: "nearest" }); } else champ.removeAttribute("aria-activedescendant");
@@ -2470,12 +2478,12 @@ async function envoyerHubChat() {
   const texte = champ.value.trim(), ments = etat.accueilMentions || [], fichiers = etat.pieces.hc || [];
   if (!texte && !fichiers.length) return;
   etat.hubChatEnvoi = true; // a double Enter sends once
-  const message = ments.length ? texte + "\n\n" + ments.map((m) => "@" + m.nom).join(" ") : texte;
+  const message = texte; // the chips go typed (type + id): the Go adds them, never by name
   const pieces = []; // the files first, then the message that names them; one that fails stops the sending
   for (const f of fichiers) {
     try { pieces.push((await envoyerPieceHub(f)).chemin); } catch (e) { toast(t("{0} could not be attached: {1}", [f.name, e.message]), "erreur"); etat.hubChatEnvoi = false; return; }
   }
-  const r = await action(api("hub/chat", "POST", pieces.length ? { message, pieces } : { message }), "").finally(() => { etat.hubChatEnvoi = false; });
+  const r = await action(api("hub/chat", "POST", { message, ...(pieces.length && { pieces }), ...(ments.length && { mentions: ments.map((m) => ({ type: m.type, ref: m.ref })) }) }), "").finally(() => { etat.hubChatEnvoi = false; });
   if (!r) return;
   etat.accueilTexte = ""; etat.accueilMentions = []; champ.value = ""; champ.style.height = ""; majMentions();
   etat.pieces.hc = []; const ul = $("#hc-liste"); if (ul) ul.innerHTML = "";

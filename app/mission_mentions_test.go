@@ -74,3 +74,38 @@ func TestMentions(t *testing.T) {
 		t.Error("21 mentions accepted")
 	}
 }
+
+// TestMentionsMemeNom: a project and a server both named "boutique" stay two typed mentions, each resolved to
+// its own object by type and id; the name alone never resolves a server.
+func TestMentionsMemeNom(t *testing.T) {
+	s := serveurCoffreTest(t)
+	s.mu.Lock()
+	s.config.Projets = []Projet{{Nom: "boutique", Dossier: t.TempDir()}}
+	s.mu.Unlock()
+	if err := modifierServeurs(func(l []ServeurInventaire) ([]ServeurInventaire, error) {
+		return append(l, ServeurInventaire{ID: "srv9", Nom: "boutique", Hote: "203.0.113.9"}), nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	l := s.chercherMentions("boutique")
+	if len(l) != 2 || l[0].Type != "projet" || l[0].Ref != "boutique" || l[1].Type != "serveur" || l[1].Ref != "srv9" {
+		t.Fatalf("list: %+v", l)
+	}
+	m, err := s.resoudreMentions([]MentionDemandee{{"serveur", "srv9"}})
+	if err != nil || len(m.Projets) != 0 || len(m.Serveurs) != 1 || m.Serveurs[0] != "srv9" {
+		t.Fatalf("server: %+v %v", m, err)
+	}
+	if got := s.mentionsLisibles(m); len(got) != 1 || got[0] != "server boutique (id srv9, 203.0.113.9)" {
+		t.Errorf("server read as %q", got)
+	}
+	m, err = s.resoudreMentions([]MentionDemandee{{"projet", "boutique"}})
+	if err != nil || len(m.Serveurs) != 0 || len(m.Projets) != 1 {
+		t.Fatalf("project: %+v %v", m, err)
+	}
+	if got := s.mentionsLisibles(m); len(got) != 1 || got[0] != "project boutique" {
+		t.Errorf("project read as %q", got)
+	}
+	if _, err := s.resoudreMentions([]MentionDemandee{{"serveur", "boutique"}}); err != errMentionInconnue {
+		t.Errorf("a server named by its name alone: %v", err)
+	}
+}

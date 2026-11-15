@@ -285,6 +285,8 @@ type demandeChat struct {
 	// Internet: Claude may search and read the web for this message, only when the request needs it
 	Internet bool     `json:"internet"`
 	Pieces   []string `json:"pieces"` // files attached, uploaded first (api_pieces.go, cible "chat")
+	// the home bar's chips, resolved by type and id (resoudreMentions), never by the name alone
+	Mentions []MentionDemandee `json:"mentions"`
 	// the home conversation's folders (hub_chat_dossiers.go), set by the server, never by the page
 	Dossiers []DossierChat `json:"-"`
 }
