@@ -4887,9 +4887,11 @@ async function rendreOptions() {
       </div>
       <div class="bloc local-seul" id="bloc-verrou"><h2>${t("Lock")}</h2>
         <p class="intro petit">${t("With a password, the padlock locks the app: Claude keeps working, but nothing can be seen, changed or read (keys included) without the password. The app starts locked.")}</p>
-        ${o.mot_de_passe ? `<label class="champ"><span>${t("Current password")}</span><input type="password" id="mdp-ancien" autocomplete="current-password"></label>` : ""}
-        <label class="champ"><span>${o.mot_de_passe ? t("New password (empty to remove it)") : t("Password")}</span><input type="password" id="mdp-nouveau" autocomplete="new-password"></label>
-        <button class="btn" id="mdp-enregistrer">${o.mot_de_passe ? t("Change") : t("Enable the lock")}</button>
+        ${o.coffre_ancien_mdp ? `<p class="avert-connexion petit" id="mdp-coffre-ancien">${t("This vault is protected by an old password. Type that old password to take the vault back with its keys. If it is lost, you can start from an empty vault.")}</p>` : ""}
+        ${o.mot_de_passe || o.coffre_ancien_mdp ? `<label class="champ"><span>${t(o.mot_de_passe ? "Current password" : "Old password of the vault")}</span><input type="password" id="mdp-ancien" autocomplete="current-password"></label>` : ""}
+        <label class="champ"><span>${o.mot_de_passe ? t("New password (empty to remove it)") : o.coffre_ancien_mdp ? t("New password (12 characters at least)") : t("Password")}</span><input type="password" id="mdp-nouveau" autocomplete="new-password"></label>
+        <div class="ligne"><button class="btn" id="mdp-enregistrer">${o.mot_de_passe ? t("Change") : o.coffre_ancien_mdp ? t("Take the vault back") : t("Enable the lock")}</button>
+        ${o.coffre_ancien_mdp ? `<button class="btn btn-danger" id="mdp-vider">${t("Start from an empty vault")}</button>` : ""}</div>
       </div>
     </div>
     <div class="colonne">
@@ -7071,6 +7073,16 @@ $("#page").addEventListener("click", async (ev) => {
       const tours = Object.fromEntries((etat.hubModules || []).filter((m) => (m.tutoriel || []).length).map((m) => [m.id, false]));
       await action(api("preferences", "POST", { bienvenue_vue: false, tours })); etat.toursVus = new Set(); if (etat.vue) etat.vue.tours = { ...etat.vue.tours, ...tours };
       etat.assistant = 0; return rendreAssistant();
+    }
+    if (b.id === "mdp-vider") { // note 01h54: the old password is lost; nothing leaves the vault before this choice
+      const nouveau = $("#mdp-nouveau").value;
+      if (nouveau.length < 12) { toast(t("At least 12 characters"), "erreur"); $("#mdp-nouveau").focus(); return; }
+      const ok = await choisir(t("The keys saved in the vault (API keys, server keys, passwords, variables) will be removed from Athanor: projects and servers that use them will need them again. The old vault file is kept aside, still sealed by the old password. Then the new password protects an empty vault."),
+        [{ id: "non", texte: t("Cancel") }, { id: "oui", texte: t("Remove the keys and start from an empty vault"), danger: true }], { titre: t("Start from an empty vault?") });
+      if (ok !== "oui") return;
+      const r = await action(api("mot-de-passe", "POST", { nouveau, vider_coffre: true }));
+      if (r) { toast(t("Lock enabled: the padlock is at the bottom left."), "ok"); rendrePage(); rafraichir(); }
+      return;
     }
     if (b.id === "mdp-enregistrer") { const r = await action(api("mot-de-passe", "POST", { ancien: ($("#mdp-ancien") || {}).value || "", nouveau: $("#mdp-nouveau").value })); if (r) { toast(r.defini ? t("Lock enabled: the padlock is at the bottom left.") : t("Lock removed."), "ok"); rendrePage(); rafraichir(); } return; }
   }

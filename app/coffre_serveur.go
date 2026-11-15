@@ -73,7 +73,8 @@ func (s *Serveur) finSessionsCoffre() {
 // config changes, so both never disagree. Returns the HTTP status and message of a refusal.
 func (s *Serveur) changerMdpCoffre(ancien, nouveau string) (int, error) {
 	if s.coffreErr != nil {
-		return 500, s.coffreErr // never rewrite a vault file that could not be read
+		fmt.Fprintln(os.Stderr, "vault:", s.coffreErr)
+		return 500, errCoffreFichier // never rewrite a vault file that could not be read
 	}
 	if s.coffre == nil {
 		return 0, nil
@@ -84,6 +85,20 @@ func (s *Serveur) changerMdpCoffre(ancien, nouveau string) (int, error) {
 		return 0, nil
 	case errors.Is(err, errCoffreRetraitMdp):
 		return 409, err
+	case errors.Is(err, errCoffreMdp) && ancien == "":
+		return 409, errCoffreAncienMdp
+	case errors.Is(err, errCoffreMdp):
+		return 401, errCoffreAncienFaux
 	}
 	return 500, err
+}
+
+// coffreAncienMdp: the vault's keys are wrapped by a password (with a config holding none, an old one).
+func (s *Serveur) coffreAncienMdp() bool {
+	if s.coffre == nil {
+		return false
+	}
+	s.coffre.mu.Lock()
+	defer s.coffre.mu.Unlock()
+	return s.coffre.aMdp()
 }

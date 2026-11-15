@@ -38,6 +38,10 @@ var (
 	errCoffreFormat     = errors.New("The vault file has an unknown format")
 	errCoffreAbime      = errors.New("A vault value is damaged")
 	errCoffreIllisible  = errors.New("This vault value is damaged and cannot be read")
+	// note 01h54: a config without password next to a vault still wrapped by one (config reset or replaced)
+	errCoffreAncienMdp  = errors.New("This vault is protected by an old password: type that old password to take it back, or start from an empty vault")
+	errCoffreAncienFaux = errors.New("Wrong old password of the vault")
+	errCoffreFichier    = errors.New("The vault file cannot be read: it was left as it is (details in the log)")
 )
 
 // typesCoffre: the closed list of entry types, with the scope proposed for each.
@@ -224,6 +228,26 @@ func (c *Coffre) migrerAAD() {
 	if change {
 		_ = c.enregistrer() // a failed write keeps the resealed values in memory for the next save
 	}
+}
+
+// RepartirVide moves the vault file aside (vault.json.ancien-<date>, still sealed: its old password opens it)
+// and leaves an empty vault; only called after the user confirmed that its keys leave the vault.
+func (c *Coffre) RepartirVide() (string, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	copie := ""
+	if _, err := os.Stat(c.chemin); err == nil {
+		copie = c.chemin + ".ancien-" + time.Now().Format("20060102-150405")
+		if err := os.Rename(c.chemin, copie); err != nil {
+			return "", err
+		}
+	}
+	clear(c.cleCode)
+	clear(c.cleInfra)
+	c.cleCode, c.cleInfra = nil, nil
+	c.f = fichierCoffre{Version: 1}
+	c.f.KDF.Algo, c.f.KDF.Iter, c.f.KDF.Sel = prefixeMdp, iterMdp, aleatoire(16)
+	return copie, nil
 }
 
 // kek: the key-encryption key derived from the password with the vault's own salt.

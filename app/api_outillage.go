@@ -323,11 +323,12 @@ type OptionsVue struct {
 	Bureau                    EtatBureau `json:"bureau"`
 	ModeNatif                 bool       `json:"mode_natif"`
 	Windows                   bool       `json:"windows"`
-	GitBash                   string     `json:"git_bash"`        // its bash.exe, "" when missing
-	VerifierMaj               bool       `json:"verifier_maj"`    // look for an update when Athanor opens (maj.go)
-	EntendreBureau            bool       `json:"entendre_bureau"` // the programs on Claude's desktop are heard
-	TerminalPilote            bool       `json:"terminal_pilote"` // the pilot's console is shown, minimised (Windows)
-	Animation                 bool       `json:"animation"`       // the launch animation (statique.go)
+	GitBash                   string     `json:"git_bash"`          // its bash.exe, "" when missing
+	VerifierMaj               bool       `json:"verifier_maj"`      // look for an update when Athanor opens (maj.go)
+	EntendreBureau            bool       `json:"entendre_bureau"`   // the programs on Claude's desktop are heard
+	TerminalPilote            bool       `json:"terminal_pilote"`   // the pilot's console is shown, minimised (Windows)
+	Animation                 bool       `json:"animation"`         // the launch animation (statique.go)
+	CoffreAncienMdp           bool       `json:"coffre_ancien_mdp"` // no password, but a vault sealed by an old one
 }
 
 func (s *Serveur) apiOptions(w http.ResponseWriter, r *http.Request) {
@@ -338,7 +339,7 @@ func (s *Serveur) apiOptions(w http.ResponseWriter, r *http.Request) {
 	if projets == nil {
 		projets = []Projet{}
 	}
-	s.ecrireJSON(w, OptionsVue{projets, c.Kit, s.kitCourant().Valide(), c.LancerPiloteAuDemarrage, c.BureauVirtuel, c.ProgrammesSupplementaires, DemarrageWindowsActif(), c.MotDePasseHash != "", s.bureau.Etat(), modeNatif.Load(), runtime.GOOS == "windows", bashNatif(), !c.PasVerifierMaj, c.EntendreBureauClaude, c.TerminalPilote, !c.PasAnimation})
+	s.ecrireJSON(w, OptionsVue{projets, c.Kit, s.kitCourant().Valide(), c.LancerPiloteAuDemarrage, c.BureauVirtuel, c.ProgrammesSupplementaires, DemarrageWindowsActif(), c.MotDePasseHash != "", s.bureau.Etat(), modeNatif.Load(), runtime.GOOS == "windows", bashNatif(), !c.PasVerifierMaj, c.EntendreBureauClaude, c.TerminalPilote, !c.PasAnimation, c.MotDePasseHash == "" && s.coffreAncienMdp()})
 }
 
 func (s *Serveur) apiEcrireOptions(w http.ResponseWriter, r *http.Request) {

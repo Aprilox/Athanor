@@ -670,6 +670,7 @@ func (s *Serveur) apiMotDePasse(w http.ResponseWriter, r *http.Request) {
 	var c struct {
 		Ancien  string `json:"ancien"`
 		Nouveau string `json:"nouveau"`
+		Vider   bool   `json:"vider_coffre"` // note 01h54: the old password is lost, the user confirmed the empty vault
 	}
 	_ = lireCorps(r, &c)
 	// C14: the PBKDF2 runs (check, vault rewrap, new hash) happen outside s.mu, which every route takes;
@@ -694,6 +695,24 @@ func (s *Serveur) apiMotDePasse(w http.ResponseWriter, r *http.Request) {
 	if !retrait && utf8.RuneCountInString(c.Nouveau) < 12 { // it alone guards the infra key against a copied disk (I3)
 		s.erreur(w, http.StatusBadRequest, "At least 12 characters")
 		return
+	}
+	if premier && s.coffreAncienMdp() {
+		switch {
+		case c.Vider && retrait:
+			s.erreur(w, http.StatusBadRequest, "At least 12 characters")
+			return
+		case c.Vider:
+			copie, err := s.coffre.RepartirVide()
+			if err != nil {
+				s.erreur(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			c.Ancien = ""
+			s.ecrireAudit(LigneAudit{Type: "evenement", De: deQui(r), Vers: "hub", Action: "coffre vidé (ancien mot de passe perdu)", Resultat: filepath.Base(copie)})
+		case c.Ancien == "":
+			s.erreur(w, http.StatusConflict, errCoffreAncienMdp.Error())
+			return
+		}
 	}
 	nouveau, nouveauHash := c.Nouveau, ""
 	if retrait {
