@@ -1034,8 +1034,9 @@ func (a *appTUI) demanderMotDePasse() {
 	if a.form != nil || a.verrouDemande {
 		return
 	}
-	a.verrouDemande = true
+	// only while the password is sent: Escape closes the form and the next refresh asks again
 	a.formulaire(a.t("Athanor is locked"), a.t(aideFormulaireLigne), []champTUI{{lib: a.t("Password"), h: 1, s: &saisieT{masque: true}}}, func(v []string) {
+		a.verrouDemande = true
 		c := *a.c
 		go func() {
 			err := c.appel("POST", "deverrouiller", map[string]string{"mot_de_passe": v[0]}, nil)

@@ -470,6 +470,10 @@ func TestTUIVerrou(t *testing.T) {
 	a := nouvelleAppTUI(c, false)
 	a.tic()
 	attendreTUI(t, a, func() bool { return a.form != nil })
+	a.abandonnerFormulaire() // Escape: the prompt comes back at the next refresh
+	a.derniere["etat"] = time.Time{}
+	a.tic()
+	attendreTUI(t, a, func() bool { return a.form != nil })
 	taper(a, "faux\r")
 	attendreTUI(t, a, func() bool { return a.toastErr && a.form != nil })
 	taper(a, "\x15secret\r") // Ctrl+U clears the field
