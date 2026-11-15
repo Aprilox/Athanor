@@ -455,12 +455,53 @@ func TestCaptureHub(t *testing.T) {
 	ctx, fin := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer fin()
 	cmd := exec.CommandContext(ctx, "node", script, fichierURL, sortie)
-	cmd.Env = append(envNavigateur, "CAPTURE_P3_SECRETS="+cheminSecrets(projets[1]), fmt.Sprint("CAPTURE_SSH_PORT=", portSSH)) // P3: the infra value never lands there
+	// a line of the test server's key: looked for in the page (sftp-768-sombre), then in every file written
+	temoin := temoinCleSSH(t, s)
+	cmd.Env = append(envNavigateur, "CAPTURE_P3_SECRETS="+cheminSecrets(projets[1]), fmt.Sprint("CAPTURE_SSH_PORT=", portSSH), "CAPTURE_SSH_TEMOIN="+temoin) // P3: the infra value never lands there
 	sorties, err := cmd.CombinedOutput()
 	t.Logf("%s", sorties)
 	if err != nil {
 		t.Fatalf("capture script: %v", err)
 	}
+	if strings.Contains(string(sorties), temoin) {
+		t.Error("the server key's witness is in the capture script's output")
+	}
+	// the audit log, the hub's logs, the terminal's and SFTP's traces: none holds the key in clear
+	_ = filepath.WalkDir(d, func(chemin string, e os.DirEntry, err error) error {
+		if err != nil || e.IsDir() {
+			return nil
+		}
+		if b, err := os.ReadFile(chemin); err == nil && strings.Contains(string(b), temoin) {
+			t.Errorf("the server key's witness is in %s", chemin)
+		}
+		return nil
+	})
+}
+
+// temoinCleSSH: the longest line of the capture server's private key (SSH_VPS_PROD, an infra entry made at run time)
+func temoinCleSSH(t *testing.T, s *Serveur) string {
+	t.Helper()
+	for _, e := range s.coffre.Liste() {
+		if e.Nom != "SSH_VPS_PROD" {
+			continue
+		}
+		pem, err := s.coffre.Valeur(e.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		temoin := ""
+		for _, l := range strings.Split(pem, "\n") {
+			if l = strings.TrimSpace(l); len(l) > len(temoin) && !strings.HasPrefix(l, "-----") {
+				temoin = l
+			}
+		}
+		if len(temoin) < 40 {
+			t.Fatalf("SSH_VPS_PROD: no key line long enough (%d)", len(temoin))
+		}
+		return temoin
+	}
+	t.Fatal("SSH_VPS_PROD missing from the capture vault")
+	return ""
 }
 
 // coffreCapture: a vault with a fake keystore in t.TempDir(), its infra key opened by a password of its

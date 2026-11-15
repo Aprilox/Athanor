@@ -1452,7 +1452,16 @@ html.scene-pause .verrou * { animation-play-state: paused !important; }
 .sftp-message[hidden] { display: none; }
 .sftp-pied { min-height: 1.4em; overflow-wrap: anywhere; }
 /* SFTP actions: the menu, the selection zone, a drop target, the dialogs, the transfers at the bottom */
-.sftp { grid-template-rows: minmax(0, 1fr) auto; }
+.sftp { grid-template-rows: auto minmax(0, 1fr) auto; row-gap: 0; }
+.sftp-panneau { grid-row: 2; }
+/* above the panels: the first visit's tutorial, and on a phone the selector Local / the server */
+.sftp-haut { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+.sftp-haut:not(:has(.sftp-tuto)), .sftp-vues, .sftp-envoi { display: none; }
+.sftp-tuto { display: flex; gap: 8px 16px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; padding: 10px 12px; border: 1px solid var(--accent); border-left-width: 4px; border-radius: 8px; background: var(--panel); color: var(--ink); }
+.sftp-tuto > div { flex: 1 1 260px; min-width: 0; }
+.sftp-tuto h3 { font-size: 14px; }
+.sftp-tuto ul { margin-top: 4px; padding-left: 18px; font-size: 13.5px; display: grid; gap: 2px; overflow-wrap: anywhere; }
+.sftp-miette:focus-visible { outline-offset: -2px; }
 .sftp-actions { min-height: 36px; flex: none; display: inline-flex; align-items: center; gap: 4px; }
 .sftp-prise { display: flex; align-items: center; gap: 8px; min-width: 0; cursor: grab; }
 .sftp-zone { position: absolute; left: 4px; right: 4px; z-index: 2; pointer-events: none; border: 1px solid var(--accent); border-radius: 4px; background: color-mix(in srgb, var(--accent) 14%, transparent); }
@@ -1475,7 +1484,7 @@ html.scene-pause .verrou * { animation-play-state: paused !important; }
 .sftp-droits th, .sftp-droits td { padding: 4px 10px; text-align: center; font-weight: 500; }
 .sftp-droits th[scope="row"] { text-align: left; }
 .sftp-droits input { width: 22px; height: 22px; margin: 11px; accent-color: var(--accent); }
-.sftp-transferts { grid-column: 1 / -1; max-height: 128px; overflow: auto; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+.sftp-transferts { grid-column: 1 / -1; grid-row: 3; margin-top: 10px; max-height: 128px; overflow: auto; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
 .sftp-transferts[hidden] { display: none; }
 .sftp-tr-tete { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .sftp-tr-tete h3 { font-size: 14px; }
@@ -1490,6 +1499,14 @@ html.scene-pause .verrou * { animation-play-state: paused !important; }
 .sftp-tr progress { width: 100%; height: 6px; accent-color: var(--accent); }
 .sftp-tr-boutons { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
 .sftp-tr-boutons .btn { min-height: 30px; }
+/* a touch screen or a phone: every button and clickable area at least 44 px */
+@media (max-width: 700px), (pointer: coarse) {
+  .sftp-icone { min-width: 44px; min-height: 44px; }
+  .sftp-chemin, .sftp-filtre, .sftp-caches, .sftp-actions, .sftp-envoi, .sftp-entete button, .sftp-tr-boutons .btn, .sftp-tr-tete .btn { min-height: 44px; }
+  .sftp-miette { min-height: 42px; }
+  .sftp-entete button { min-width: 44px; }
+}
+@media (min-width: 701px) { @container (max-width: 420px) { .sftp-outils:has(.sftp-filtre) { flex-wrap: wrap; } .sftp-filtre { flex: 1 1 100%; } } } /* a narrow panel: the filter on its own row */
 @container (max-width: 560px) { .sftp-ligne { grid-template-columns: minmax(0, 1fr) 140px 76px; } .sftp-col-type { display: none; } }
 @container (max-width: 400px) { .sftp-ligne { grid-template-columns: minmax(0, 1fr) 76px; } .sftp-col-date { display: none; } }
 .term-ecran, .term-ecran .xterm { height: 100%; }
@@ -1550,7 +1567,20 @@ html.scene-pause .verrou * { animation-play-state: paused !important; }
   .term-zones, .term-zones.avec-ia { grid-template-columns: minmax(0, 1fr); height: calc(100dvh - 220px); }
   .term-onglets .term-onglet-ia { display: block; }
   .term-bascule-ia { display: none; }
-  .sftp { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); }
+  /* SFTP on a phone: one panel at a time under the selector, Send / Download instead of a drag, the menu as a bottom sheet */
+  .sftp { grid-template-columns: minmax(0, 1fr); }
+  .sftp-panneau { grid-column: 1; padding: 6px; }
+  .sftp[data-vue="local"] .sftp-panneau[data-cote="serveur"], .sftp[data-vue="serveur"] .sftp-panneau[data-cote="local"], .sftp-caches { display: none; }
+  .sftp-haut, .sftp-haut:not(:has(.sftp-tuto)) { display: flex; }
+  .sftp-vues { display: flex; gap: 4px; }
+  .sftp-vues .btn { flex: 1 1 0; min-width: 0; min-height: 44px; justify-content: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sftp-vues [aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 -3px 0 var(--accent); color: var(--ink); font-weight: 600; }
+  .sftp-titre { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; } /* the selector says which panel; the region keeps its name */
+  .sftp-envoi { display: inline-flex; align-items: center; justify-content: center; }
+  .sftp-outils:has(.sftp-filtre) { flex-wrap: wrap; }
+  .sftp-filtre { flex: 1 1 120px; }
+  .sftp-menu.feuille { left: 0; right: 0; top: auto; bottom: 0; min-width: 0; max-width: none; max-height: 75dvh; border-radius: 12px 12px 0 0; padding: 6px 8px calc(8px + env(safe-area-inset-bottom)); box-shadow: 0 0 0 100vmax rgba(5, 8, 12, .45); }
+  .sftp-feuille-titre { padding: 6px 10px 8px; font-size: 13px; font-weight: 600; color: var(--muted); }
   .term-themes { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
   .term-theme { padding: 6px 8px; gap: 4px 8px; }
   .term-apercu i:nth-of-type(n+4) { display: none; }
