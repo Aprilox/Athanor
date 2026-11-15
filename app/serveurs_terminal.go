@@ -9,6 +9,8 @@ package main
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -24,42 +26,52 @@ import (
 )
 
 const (
-	entreeTerminalMax   = 64 << 10 // one input message (a paste included)
-	sessionsTerminalMax = 8        // open terminals at once, every server together
+	entreeTerminalMax     = 64 << 10 // one input message (a paste included)
+	sessionsTerminalMax   = 8        // open terminals at once, every server together
+	tentativesReconnexion = 6        // a lost connection: attempts before giving up
 )
 
 var (
 	delaiInactiviteTerminal = 15 * time.Minute // no keystroke, file work, assistant line or page opened: closed (tests shorten it)
 	delaiLecteurTerminal    = time.Minute      // nobody reads its output (page closed): closed
+	delaiKeepalive          = 15 * time.Second // a keepalive this often; unanswered this long: the connection is lost
+	delaiReconnexion        = time.Second      // first wait before reconnecting, doubled each attempt (1, 2, 4, 8, 16 s)
+	plafondReconnexion      = 16 * time.Second
 )
 
 const ecranTerminalMax = 64 << 10
 
 // Why a terminal closed (the interface translates them).
 const (
-	finTerminalDeconnecte = "disconnected" // Disconnect, or the owner closed it
-	finTerminalTermine    = "ended"        // the shell ended (exit, logout, connection lost)
-	finTerminalInactif    = "idle"         // delaiInactiviteTerminal reached
-	finTerminalAbandonne  = "abandoned"    // no reader for delaiLecteurTerminal
+	finTerminalDeconnecte  = "disconnected"     // Disconnect, or the owner closed it
+	finTerminalTermine     = "ended"            // the shell ended (exit, logout, connection lost)
+	finTerminalInactif     = "idle"             // delaiInactiviteTerminal reached
+	finTerminalAbandonne   = "abandoned"        // no reader for delaiLecteurTerminal
+	finTerminalReconnexion = "reconnect_failed" // the connection was lost and tentativesReconnexion attempts failed
 )
 
+const errTerminalReconnexion = "The connection to the server was lost: Athanor is reconnecting"
+
 type sessionTerminal struct {
-	s           *Serveur
-	id, serveur string
-	de          string
-	debut       time.Time
-	client      *ssh.Client
-	sess        *ssh.Session
-	stdin       io.WriteCloser
-	sortie      chan []byte // output chunks waiting for the reader
-	fini        chan struct{}
-	activite    atomic.Int64 // unix nano of the last keystroke, file work, assistant line or page opened (not output)
-	mu          sync.Mutex
-	lecteur     bool      // a GET reads the output now
-	vuLecteur   time.Time // when the last reader left (or the opening)
-	ecran       []byte    // the last ecranTerminalMax bytes sent, replayed to the next reader (a reloaded page)
-	muSFTP      sync.Mutex
-	sftp        *sftp.Client // the files panel's channel on the same connection (serveurs_sftp.go), closed with it
+	s            *Serveur
+	id, serveur  string
+	de           string
+	debut        time.Time
+	client       *ssh.Client
+	sess         *ssh.Session
+	stdin        io.WriteCloser
+	sortie       chan []byte // output chunks waiting for the reader
+	fini         chan struct{}
+	activite     atomic.Int64 // unix nano of the last keystroke, file work, assistant line or page opened (not output)
+	mu           sync.Mutex
+	cols, lignes int           // the PTY's size, for a reconnection
+	tentative    int           // 0: connected; n: reconnecting, attempt n
+	perdue       chan struct{} // closed when the connection is lost: the reader leaves, the page follows the reconnection
+	lecteur      bool          // a GET reads the output now
+	vuLecteur    time.Time     // when the last reader left (or the opening)
+	ecran        []byte        // the last ecranTerminalMax bytes sent, replayed to the next reader (a reloaded page)
+	muSFTP       sync.Mutex
+	sftp         *sftp.Client // the files panel's channel on the same connection (serveurs_sftp.go), closed with it
 }
 
 var terminaux = struct {
@@ -108,8 +120,11 @@ func (t *sessionTerminal) fermer(raison string) {
 	terminaux.fins[t.id] = raison
 	terminaux.Unlock()
 	close(t.fini)
-	t.sess.Close()
-	t.client.Close()
+	t.mu.Lock()
+	sess, client := t.sess, t.client
+	t.mu.Unlock()
+	sess.Close()
+	client.Close()
 	t.s.ecrireAudit(LigneAudit{Type: "evenement", De: t.de, Vers: "serveur:" + t.serveur, Action: "terminal.close",
 		Resultat: fmt.Sprintf("%s after %s", raison, time.Since(t.debut).Round(time.Second))})
 }
@@ -199,9 +214,9 @@ func (s *Serveur) apiTerminalOuvrir(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	t := &sessionTerminal{s: s, id: aleatoire(16), serveur: srv.ID, de: de, debut: time.Now(), client: client,
-		sortie: make(chan []byte, 256), fini: make(chan struct{}), vuLecteur: time.Now()}
+		sortie: make(chan []byte, 256), fini: make(chan struct{}), vuLecteur: time.Now(), cols: cols, lignes: lignes, perdue: make(chan struct{})}
 	t.toucher()
-	if err := t.demarrer(cols, lignes); err != nil {
+	if t.sess, t.stdin, err = t.demarrer(client, cols, lignes); err != nil {
 		client.Close()
 		s.ecrireAudit(LigneAudit{Type: "evenement", De: de, Vers: "serveur:" + srv.ID, Action: "terminal.open", Resultat: "error: " + err.Error()})
 		s.erreur(w, http.StatusBadGateway, "The server refused to open a terminal")
@@ -213,27 +228,181 @@ func (s *Serveur) apiTerminalOuvrir(w http.ResponseWriter, r *http.Request) {
 		s.erreur(w, statut, msg)
 		return
 	}
-	go func() { _ = t.sess.Wait(); t.fermer(finTerminalTermine) }()
+	go t.vivre()
+	go t.garderEnVie(client)
 	go t.surveiller()
 	s.ecrireAudit(LigneAudit{Type: "evenement", De: de, Vers: "serveur:" + srv.ID, Action: "terminal.open", Resultat: "ok"})
 	s.ecrireJSON(w, map[string]any{"session": t.id, "serveur": srv.ID, "nom": srv.Nom})
 }
 
-// demarrer: the PTY (xterm-256color, the browser's size) and the login shell.
-func (t *sessionTerminal) demarrer(cols, lignes int) error {
-	var err error
-	if t.sess, err = t.client.NewSession(); err != nil {
-		return err
+// demarrer: the PTY (xterm-256color, the browser's size) and the login shell on client.
+func (t *sessionTerminal) demarrer(client *ssh.Client, cols, lignes int) (*ssh.Session, io.WriteCloser, error) {
+	sess, err := client.NewSession()
+	if err != nil {
+		return nil, nil, err
 	}
 	modes := ssh.TerminalModes{ssh.ECHO: 1, ssh.TTY_OP_ISPEED: 38400, ssh.TTY_OP_OSPEED: 38400}
-	if err = t.sess.RequestPty("xterm-256color", lignes, cols, modes); err != nil {
+	err = sess.RequestPty("xterm-256color", lignes, cols, modes)
+	var stdin io.WriteCloser
+	if err == nil {
+		stdin, err = sess.StdinPipe()
+	}
+	if err == nil {
+		sess.Stdout, sess.Stderr = t, t
+		err = sess.Shell()
+	}
+	if err != nil {
+		sess.Close()
+		return nil, nil, err
+	}
+	return sess, stdin, nil
+}
+
+func (t *sessionTerminal) ferme() bool {
+	select {
+	case <-t.fini:
+		return true
+	default:
+		return false
+	}
+}
+
+// vivre: waits for the shell; a shell that ended (exit, logout, a signal) closes the terminal, a connection
+// lost (no exit status: the server stopped answering, the network fell) is reconnected.
+func (t *sessionTerminal) vivre() {
+	for {
+		t.mu.Lock()
+		sess := t.sess
+		t.mu.Unlock()
+		err := sess.Wait()
+		var fin *ssh.ExitError
+		if err == nil || errors.As(err, &fin) || t.ferme() {
+			t.fermer(finTerminalTermine)
+			return
+		}
+		if !t.reconnecter() {
+			return
+		}
+	}
+}
+
+// garderEnVie: a keepalive every delaiKeepalive; a server that does not answer within delaiKeepalive (network
+// gone without a word) gets its connection closed, which vivre sees as lost.
+func (t *sessionTerminal) garderEnVie(c *ssh.Client) {
+	for {
+		select {
+		case <-t.fini:
+			return
+		case <-time.After(delaiKeepalive):
+		}
+		rep := make(chan error, 1)
+		go func() { _, _, err := c.SendRequest("keepalive@openssh.com", true, nil); rep <- err }()
+		select {
+		case err := <-rep:
+			if err != nil {
+				return // already closed: vivre knows
+			}
+		case <-time.After(delaiKeepalive):
+			c.Close()
+			return
+		case <-t.fini:
+			return
+		}
+	}
+}
+
+// reconnecter: up to tentativesReconnexion attempts, waiting 1, 2, 4, 8, 16, 16 s, with the vault's secrets as at
+// the opening (nothing asked again); true when a new shell runs, false when the terminal closed (given up, or
+// closed meanwhile).
+func (t *sessionTerminal) reconnecter() bool {
+	t.mu.Lock()
+	t.tentative = 1
+	close(t.perdue)
+	t.mu.Unlock()
+	t.muSFTP.Lock() // the files panel's channel died with the connection
+	if t.sftp != nil {
+		t.sftp.Close()
+		t.sftp = nil
+	}
+	t.muSFTP.Unlock()
+	t.s.ecrireAudit(LigneAudit{Type: "evenement", De: t.de, Vers: "serveur:" + t.serveur, Action: "terminal.lost", Resultat: "reconnecting"})
+	attente := delaiReconnexion
+	var err error
+	for n := 1; n <= tentativesReconnexion; n++ {
+		t.mu.Lock()
+		t.tentative = n
+		t.mu.Unlock()
+		select {
+		case <-t.fini:
+			return false
+		case <-time.After(attente):
+		}
+		attente = min(attente*2, plafondReconnexion)
+		if err = t.rebrancher(); err == nil {
+			if t.ferme() {
+				return false
+			}
+			t.s.ecrireAudit(LigneAudit{Type: "evenement", De: t.de, Vers: "serveur:" + t.serveur, Action: "terminal.reconnect", Resultat: fmt.Sprintf("ok (attempt %d)", n)})
+			return true
+		}
+	}
+	t.s.ecrireAudit(LigneAudit{Type: "evenement", De: t.de, Vers: "serveur:" + t.serveur, Action: "terminal.reconnect", Resultat: "error: " + err.Error()})
+	t.fermer(finTerminalReconnexion)
+	return false
+}
+
+// rebrancher: one attempt: the server read again from the inventory, a new connection and shell swapped in.
+func (t *sessionTerminal) rebrancher() error {
+	liste, err := lireServeurs()
+	if err != nil {
 		return err
 	}
-	if t.stdin, err = t.sess.StdinPipe(); err != nil {
+	i := slices.IndexFunc(liste, func(x ServeurInventaire) bool { return x.ID == t.serveur })
+	if i < 0 {
+		return errServeurInconnu
+	}
+	ctx, annuler := context.WithCancel(context.Background())
+	defer annuler()
+	go func() {
+		select {
+		case <-t.fini:
+			annuler()
+		case <-ctx.Done():
+		}
+	}()
+	client, err := t.s.connecterServeur(ctx, liste[i])
+	if err != nil {
 		return err
 	}
-	t.sess.Stdout, t.sess.Stderr = t, t
-	return t.sess.Shell()
+	t.mu.Lock()
+	cols, lignes := t.cols, t.lignes
+	t.mu.Unlock()
+	sess, stdin, err := t.demarrer(client, cols, lignes)
+	if err != nil {
+		client.Close()
+		return err
+	}
+	t.mu.Lock()
+	if t.ferme() { // closed meanwhile: fermer may have read the old client already
+		t.mu.Unlock()
+		sess.Close()
+		client.Close()
+		return nil
+	}
+	vieux := t.client
+	t.client, t.sess, t.stdin = client, sess, stdin
+	t.tentative, t.perdue = 0, make(chan struct{})
+	t.mu.Unlock()
+	vieux.Close()
+	go t.garderEnVie(client)
+	return nil
+}
+
+// reconnexion: the answer for a terminal reconnecting (the page shows the attempt, then reads again).
+func (s *Serveur) reconnexion(w http.ResponseWriter, statut, n int) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(statut)
+	_, _ = fmt.Fprintf(w, `{"ok":true,"reconnexion":%d,"tentatives":%d}`+"\n", n, tentativesReconnexion)
 }
 
 // terminalDe: the open session named by the path, on the server named by the path.
@@ -245,6 +414,13 @@ func terminalDe(r *http.Request) (*sessionTerminal, string) {
 		return nil, terminaux.fins[r.PathValue("session")]
 	}
 	return t, ""
+}
+
+// raisonFin: why this closed terminal ended.
+func (t *sessionTerminal) raisonFin() string {
+	terminaux.Lock()
+	defer terminaux.Unlock()
+	return terminaux.fins[t.id]
 }
 
 func (s *Serveur) terminalFerme(w http.ResponseWriter, raison string) {
@@ -269,9 +445,13 @@ func (s *Serveur) apiTerminalFlux(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	t.mu.Lock()
-	occupe := t.lecteur
-	t.lecteur = true
+	occupe, n, perdue := t.lecteur, t.tentative, t.perdue
+	t.lecteur = t.lecteur || n == 0
 	t.mu.Unlock()
+	if n > 0 {
+		s.reconnexion(w, http.StatusServiceUnavailable, n)
+		return
+	}
 	if !occupe {
 		t.toucher() // the page (re)opened counts as the owner being there
 	}
@@ -340,6 +520,13 @@ func (s *Serveur) apiTerminalFlux(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			return
+		case <-perdue: // the connection is lost: the page asks the state and follows the reconnection
+			for len(t.sortie) > 0 {
+				if !envoyer(<-t.sortie) {
+					return
+				}
+			}
+			return
 		case <-r.Context().Done():
 			return
 		}
@@ -382,10 +569,23 @@ func (s *Serveur) apiTerminalAgir(w http.ResponseWriter, r *http.Request) {
 		s.ecrireJSON(w, map[string]any{"fin": finTerminalDeconnecte})
 		return
 	}
+	t.mu.Lock()
 	if c.Cols != 0 || c.Lignes != 0 {
-		if err := t.sess.WindowChange(lignes, cols); err != nil {
-			t.fermer(finTerminalTermine)
-			s.terminalFerme(w, finTerminalTermine)
+		t.cols, t.lignes = cols, lignes
+	}
+	n, sess, stdin := t.tentative, t.sess, t.stdin
+	t.mu.Unlock()
+	if n > 0 {
+		if c.Entree != "" {
+			s.erreur(w, http.StatusConflict, errTerminalReconnexion)
+			return
+		}
+		s.reconnexion(w, http.StatusOK, n) // the new shell gets the size kept
+		return
+	}
+	if c.Cols != 0 || c.Lignes != 0 {
+		if err := sess.WindowChange(lignes, cols); err != nil && t.ferme() {
+			s.terminalFerme(w, t.raisonFin())
 			return
 		}
 	}
@@ -394,8 +594,12 @@ func (s *Serveur) apiTerminalAgir(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if c.Entree != "" {
-		if _, err := io.WriteString(t.stdin, c.Entree); err != nil {
-			s.terminalFerme(w, finTerminalTermine)
+		if _, err := io.WriteString(stdin, c.Entree); err != nil {
+			if t.ferme() {
+				s.terminalFerme(w, t.raisonFin())
+			} else { // the connection fell, vivre is about to notice
+				s.erreur(w, http.StatusConflict, errTerminalReconnexion)
+			}
 			return
 		}
 		t.toucher()

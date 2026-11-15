@@ -48,7 +48,10 @@ func (t *sessionTerminal) clientSFTP() (*sftp.Client, error) {
 	t.muSFTP.Lock()
 	defer t.muSFTP.Unlock()
 	if t.sftp == nil {
-		c, err := sftp.NewClient(t.client)
+		t.mu.Lock()
+		client := t.client
+		t.mu.Unlock()
+		c, err := sftp.NewClient(client)
 		if err != nil {
 			return nil, err
 		}

@@ -32,6 +32,20 @@ type serveurSSHMemoire struct {
 	fichiers        sftp.Handlers   // its in-memory SFTP files, kept across connections
 	tailles         chan string     // PTY sizes asked ("pty 80x24", "resize 120x40"), for the terminal's tests
 	invite          string          // the shell's first words (the captures' coloured prompt); "$ " when empty
+	coupe, gele     bool            // cut: connections dropped and new ones refused; frozen: global requests (keepalives) unanswered
+	conns           map[net.Conn]bool
+}
+
+// couper: cut (every connection dropped, new ones refused, as a server gone) or back up.
+func (s *serveurSSHMemoire) couper(coupe bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.coupe = coupe
+	if coupe {
+		for c := range s.conns {
+			c.Close()
+		}
+	}
 }
 
 // autoriser: the key is now in the server's authorized_keys.
@@ -96,6 +110,19 @@ func lancerSSHMemoire(t *testing.T, autorisee ssh.PublicKey, motDePasse string, 
 			if err != nil {
 				return
 			}
+			s.mu.Lock()
+			coupe := s.coupe
+			if !coupe {
+				if s.conns == nil {
+					s.conns = map[net.Conn]bool{}
+				}
+				s.conns[c] = true
+			}
+			s.mu.Unlock()
+			if coupe {
+				c.Close()
+				continue
+			}
 			go s.servir(c, conf, repondre)
 		}
 	}()
@@ -108,7 +135,16 @@ func (s *serveurSSHMemoire) servir(c net.Conn, conf *ssh.ServerConfig, repondre 
 	if err != nil {
 		return
 	}
-	go ssh.DiscardRequests(requetes)
+	go func() {
+		for r := range requetes {
+			s.mu.Lock()
+			gele := s.gele
+			s.mu.Unlock()
+			if r.WantReply && !gele {
+				r.Reply(false, nil)
+			}
+		}
+	}()
 	for nc := range canaux {
 		if nc.ChannelType() != "session" {
 			nc.Reject(ssh.UnknownChannelType, "session only")

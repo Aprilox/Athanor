@@ -6374,9 +6374,10 @@ $("#page").addEventListener("click", async (ev) => {
 
 // --- Terminal (#terminal/<id>, M231b): the shell is opened by the Go side (serveurs_terminal.go) with the vault's
 // key; the page only exchanges bytes with it and draws them with xterm.js (app/static/xterm, MIT, loaded here only)
-const term = { id: "", serveur: "", session: "", nom: "", x: null, fit: null, el: null, lecteur: null, attente: "", enVol: false, msg: null, obs: null, essai: null };
+const term = { id: "", serveur: "", session: "", nom: "", x: null, fit: null, el: null, lecteur: null, attente: "", enVol: false, msg: null, obs: null, essai: null, reco: "" };
 const FINS_TERMINAL = { disconnected: "You disconnected.", ended: "The session ended on the server (exit, or the connection was lost).",
-  idle: "Closed after 15 minutes without activity.", abandoned: "Closed: nobody looked at it for a minute." };
+  idle: "Closed after 15 minutes without activity.", abandoned: "Closed: nobody looked at it for a minute.",
+  reconnect_failed: "The server stopped answering: Athanor tried to reconnect 6 times without success. Check that the server is on, then try again." };
 // a refusal in plain words, then what to do about it (the Go side already says it for a refused key or a changed fingerprint)
 const SOLUTIONS_TERMINAL = {
   "The server did not answer": "Check that the server is on and that its address and port are right, then try again.",
@@ -6491,12 +6492,12 @@ if (window.visualViewport) visualViewport.addEventListener("resize", () => {
 });
 function etatTerminal(texte, classe) { const e = $("#term-etat"); if (e) { e.textContent = texte; e.className = "pastille " + classe; } }
 // a message above the terminal: what happened, what to do, and Connect again
-function messageTerminal(titre, solution) {
-  term.msg = titre ? [titre, solution] : null;
+function messageTerminal(titre, solution, bouton = "Connect again") {
+  term.msg = titre ? [titre, solution, bouton] : null;
   const m = $("#term-message"); if (!m) return;
   m.hidden = !titre;
   const hote = $("#term-hote"); if (hote) { hote.inert = !!titre; hauteurTerminal(); } // no keyboard into a terminal that is not connected
-  if (titre) m.innerHTML = `<p class="m0"><b>${h(titre)}</b></p>${solution ? `<p class="muet m0">${h(solution)}</p>` : ""}<div class="ligne m0"><button type="button" class="btn btn-primaire" data-term-reconnecter>${t("Connect again")}</button><a class="btn" href="#serveur/${encodeURIComponent(term.id)}">${t("Back to the server")}</a></div>`;
+  if (titre) m.innerHTML = `<p class="m0"><b>${h(titre)}</b></p>${solution ? `<p class="muet m0">${h(solution)}</p>` : ""}<div class="ligne m0"><button type="button" class="btn btn-primaire" data-term-reconnecter>${t(bouton)}</button><a class="btn" href="#serveur/${encodeURIComponent(term.id)}">${t("Back to the server")}</a></div>`;
   $(".term-barre")?.querySelectorAll("[data-term-copier], [data-term-coller], [data-term-deconnecter]").forEach((b) => (b.disabled = !!titre));
 }
 function erreurTerminal(cle, texte) {
@@ -6554,6 +6555,7 @@ async function lireTerminal(id, session, neuve) {
     if (!r.ok) {
       const d = await r.json().catch(() => ({}));
       term.lecteur = null;
+      if (d.reconnexion) return suivreReconnexion(id, session, d);
       if (r.status === 410) { // closed meanwhile (a reload after it ended): a new one, once; never for one just
         // opened (C1-19: a shell that exits at once, nologin, would loop and could trip fail2ban)
         sessionStorage.removeItem("athanor.terminal." + id); term.session = "";
@@ -6573,13 +6575,33 @@ async function lireTerminal(id, session, neuve) {
   // the stream ended: the terminal closed; the Go side says why
   const f = await fetch(`/api/serveurs/${encodeURIComponent(id)}/terminal/${encodeURIComponent(session)}`, { method: "POST", headers: { "X-Athanor": CSRF, "Content-Type": "application/json" }, body: "{}" })
     .then((r) => r.json()).catch(() => ({}));
-  if (term.session === session) finTerminal(f.fin || "ended");
+  if (term.session !== session) return;
+  if (f.reconnexion) return suivreReconnexion(id, session, f);
+  if (f.ok) return setTimeout(() => term.session === session && !term.lecteur && etat.page === "terminal" && lireTerminal(id, session, false), 500); // still alive (reconnected meanwhile)
+  finTerminal(f.fin || "ended");
+}
+// the connection to the server was lost (serveurs_terminal.go reconnecter): the attempt shown, no input, then the
+// screen read again on the new shell, or the reason it gave up (with Try again)
+async function suivreReconnexion(id, session, f) {
+  if (term.reco === session) return;
+  term.reco = session;
+  if (term.x) term.x.options.disableStdin = true;
+  while (term.session === session && etat.page === "terminal" && f && f.reconnexion) {
+    etatTerminal(t("Reconnecting… (attempt {0}/{1})", [f.reconnexion, f.tentatives]), "attend");
+    await new Promise((ok) => setTimeout(ok, 1000));
+    if (term.session !== session || etat.page !== "terminal") break;
+    f = await agirTerminal({});
+  }
+  term.reco = "";
+  if (term.session !== session || etat.page !== "terminal") return;
+  if (f && f.ok) { toast(t("Reconnected: a new shell started on the server."), "ok"); return lireTerminal(id, session, false); }
+  finTerminal((f && f.fin) || "ended");
 }
 function finTerminal(raison) {
   sessionStorage.removeItem("athanor.terminal." + term.id); term.session = "";
   if (term.x) term.x.options.disableStdin = true;
   etatTerminal(t("Disconnected"), "attend"); chargerPanneau("serveur");
-  messageTerminal(t("Disconnected"), t(FINS_TERMINAL[raison] || FINS_TERMINAL.ended));
+  messageTerminal(t("Disconnected"), t(FINS_TERMINAL[raison] || FINS_TERMINAL.ended), raison === "reconnect_failed" ? "Try again" : "Connect again");
 }
 async function agirTerminal(corps) {
   if (!term.session) return null;
@@ -7497,7 +7519,7 @@ function bandeauTerminal(e) {
 function verrouTerminal(id) {
   // nothing is typed when the lock falls: a line begun before it, or less/vim, must never receive an Enter (Go writes its message)
   ia.verrou = id;
-  if (term.x && term.session && !term.msg) term.x.options.disableStdin = !!id;
+  if (term.x && term.session && !term.msg && !term.reco) term.x.options.disableStdin = !!id;
 }
 $("#page").addEventListener("change", (ev) => {
   if (etat.page === "terminal" && ev.target.id === "ia-autorisation") return changerAutorisationIA(ev.target);

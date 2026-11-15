@@ -384,3 +384,165 @@ func TestTerminalDistance(t *testing.T) {
 		t.Error("setting change not in the audit log")
 	}
 }
+
+// TestTerminalSSHReconnexion (M244g): a connected terminal whose server drops or stops answering keepalives is
+// reconnected with backoff, the state shown (503 to a reader, 200 with the attempt to the page, keystrokes 409),
+// the size kept, nothing asked again; a server that never comes back closes it with reconnect_failed.
+func TestTerminalSSHReconnexion(t *testing.T) {
+	signer, prive := nouvelleCleSSH(t)
+	m := lancerSSHMemoire(t, signer.PublicKey(), "", nil)
+	s, srv := outilsServeursTest(t, m.hote, m.port, m.empreinte, prive)
+	ka, dr, pr := delaiKeepalive, delaiReconnexion, plafondReconnexion
+	t.Cleanup(func() { delaiKeepalive, delaiReconnexion, plafondReconnexion = ka, dr, pr })
+	delaiKeepalive, delaiReconnexion, plafondReconnexion = 100*time.Millisecond, 20*time.Millisecond, 80*time.Millisecond
+	mux := http.NewServeMux()
+	s.routes(mux)
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+	appel := func(methode, chemin string, corps any) *http.Response {
+		t.Helper()
+		b, _ := json.Marshal(corps)
+		r, _ := http.NewRequest(methode, ts.URL+"/api/serveurs/"+srv.ID+chemin, bytes.NewReader(b))
+		r.Header.Set("X-Athanor", "jeton")
+		r.AddCookie(&http.Cookie{Name: cookieAcces, Value: "cle"})
+		if s.session != "" {
+			r.AddCookie(&http.Cookie{Name: "athanor_session", Value: s.session})
+		}
+		rep, err := http.DefaultClient.Do(r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return rep
+	}
+	agir := func(id string, corps map[string]any) (int, map[string]any) {
+		t.Helper()
+		rep := appel("POST", "/terminal/"+id, corps)
+		defer rep.Body.Close()
+		var v map[string]any
+		_ = json.NewDecoder(rep.Body).Decode(&v)
+		return rep.StatusCode, v
+	}
+	lire := func(id string) *lecteurTerminal {
+		t.Helper()
+		rep := appel("GET", "/terminal/"+id, nil)
+		if rep.StatusCode != http.StatusOK {
+			t.Fatalf("stream: %d", rep.StatusCode)
+		}
+		l := &lecteurTerminal{fini: make(chan struct{}), corps: rep.Body}
+		go func() {
+			defer close(l.fini)
+			defer rep.Body.Close()
+			b := make([]byte, 4096)
+			for {
+				n, err := rep.Body.Read(b)
+				l.mu.Lock()
+				l.b.Write(b[:n])
+				l.mu.Unlock()
+				if err != nil {
+					return
+				}
+			}
+		}()
+		return l
+	}
+	attendreEtat := func(id string, ok func(int, map[string]any) bool, quoi string) map[string]any {
+		t.Helper()
+		for range 300 {
+			if c, v := agir(id, map[string]any{}); ok(c, v) {
+				return v
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+		c, v := agir(id, map[string]any{})
+		t.Fatalf("%s never seen: %d %v", quoi, c, v)
+		return nil
+	}
+	enReconnexion := func(c int, v map[string]any) bool {
+		n, _ := v["reconnexion"].(float64)
+		return c == http.StatusOK && n >= 1
+	}
+	connecte := func(c int, v map[string]any) bool {
+		return c == http.StatusOK && v["ok"] == true && v["reconnexion"] == nil
+	}
+	vider := func() {
+		for len(m.tailles) > 0 {
+			<-m.tailles
+		}
+	}
+
+	rep := appel("POST", "/terminal", map[string]any{"cols": 100, "lignes": 30})
+	var o map[string]any
+	_ = json.NewDecoder(rep.Body).Decode(&o)
+	rep.Body.Close()
+	id, _ := o["session"].(string)
+	if id == "" {
+		t.Fatalf("open: %d %v", rep.StatusCode, o)
+	}
+	l := lire(id)
+	l.attendre(t, "$ ")
+	agir(id, map[string]any{"entree": "avant-coupure"})
+	l.attendre(t, "avant-coupure")
+
+	// cut, then back up: the reader leaves, the page sees the attempt, the size changed meanwhile is the new PTY's
+	m.couper(true)
+	l.attendreFin(t)
+	v := attendreEtat(id, enReconnexion, "reconnecting")
+	if v["tentatives"] != float64(tentativesReconnexion) {
+		t.Fatalf("attempts: %v", v)
+	}
+	if r := appel("GET", "/terminal/"+id, nil); r.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("reader while reconnecting: %d, want 503", r.StatusCode)
+	} else {
+		r.Body.Close()
+	}
+	if c, _ := agir(id, map[string]any{"entree": "perdu"}); c != http.StatusConflict {
+		t.Fatalf("keystrokes while reconnecting: %d, want 409", c)
+	}
+	agir(id, map[string]any{"cols": 90, "lignes": 20})
+	vider()
+	m.couper(false)
+	attendreEtat(id, connecte, "reconnected")
+	select {
+	case x := <-m.tailles:
+		if x != "pty 90x20" {
+			t.Fatalf("new PTY %q, want pty 90x20", x)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("no new PTY")
+	}
+	l = lire(id)
+	l.attendre(t, "avant-coupure") // the screen so far, replayed
+	agir(id, map[string]any{"entree": "apres-reprise"})
+	l.attendre(t, "apres-reprise")
+
+	// a server that stops answering keepalives (no FIN): the connection is closed and reconnected
+	m.mu.Lock()
+	m.gele = true
+	m.mu.Unlock()
+	l.attendreFin(t)
+	attendreEtat(id, enReconnexion, "reconnecting after silent keepalives")
+	m.mu.Lock()
+	m.gele = false
+	m.mu.Unlock()
+	attendreEtat(id, connecte, "reconnected after keepalives")
+
+	// never back: given up after tentativesReconnexion attempts, with a reason the page explains
+	l = lire(id)
+	m.couper(true)
+	l.attendreFin(t)
+	attendreEtat(id, func(c int, v map[string]any) bool { return c == http.StatusGone && v["fin"] == finTerminalReconnexion }, "reconnect_failed")
+
+	journal := journalAuditTexte(t)
+	for i := 0; i < 50 && !strings.Contains(journal, finTerminalReconnexion+" after"); i++ { // written just after the 410
+		time.Sleep(20 * time.Millisecond)
+		journal = journalAuditTexte(t)
+	}
+	for _, x := range []string{`"terminal.lost"`, `"terminal.reconnect"`, "ok (attempt", finTerminalReconnexion + " after"} {
+		if !strings.Contains(journal, x) {
+			t.Errorf("audit log without %q", x)
+		}
+	}
+	if strings.Contains(journal, "avant-coupure") || strings.Contains(journal, strings.Split(string(prive), "\n")[1]) {
+		t.Error("typed text or the key in the audit log")
+	}
+}
