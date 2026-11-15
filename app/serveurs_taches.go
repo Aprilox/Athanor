@@ -51,6 +51,11 @@ type TacheServeurs struct {
 	Actions      []ActionTache      `json:"actions,omitempty"` // every tool call of its agents, live (M231e)
 	Direct       bool               `json:"direct,omitempty"`  // "live in my terminal" (M231f): shown in the owner's terminal, its typing locked
 	Terminal     string             `json:"-"`                 // that terminal's session (never sent: it opens a shell)
+	// Assistant: repos | travail | attente_decision | arretee | erreur, the one state the page's banner, chat and
+	// terminal lock read; Verrou: one of its commands runs now in the owner's terminal, whose typing and files are
+	// locked then, and only then (M242a).
+	Assistant string `json:"assistant,omitempty"`
+	Verrou    bool   `json:"verrou,omitempty"`
 }
 
 // EvenementTache: a state reached, and what brought it (a plan's id, an error).
@@ -69,6 +74,46 @@ type tacheEnCours struct {
 	reprise  string // the Claude session to resume
 	applique string // the plan being applied
 	annexe   string // the token's hash of the critic's or the verifier's session while it runs
+	ctx      context.Context
+	annonce  bool      // a call locked the owner's terminal and its unlocking is not said yet
+	finAppel time.Time // when its last call ended
+}
+
+const (
+	delaiClavierLibre = 3 * time.Second         // no command of the assistant for that long: the owner's terminal says it is free
+	maxDureeVerrou    = delaiSFTP + time.Minute // a call still "running" after that never locks (its end was lost)
+)
+
+// etatAssistant: a task's state as the assistant's one state (M242a).
+func etatAssistant(etat string) string {
+	switch etat {
+	case "attente_accord":
+		return "attente_decision"
+	case "arretee":
+		return "arretee"
+	case "echec":
+		return "erreur"
+	case "finie":
+		return "repos"
+	}
+	return "travail"
+}
+
+// arretee: the task was stopped (the owner, a revocation, the emergency stop), even while its session still dies.
+func (e *tacheEnCours) arretee() bool { return e.ctx != nil && e.ctx.Err() != nil }
+
+// verrouille: one of the task's calls runs now in the owner's terminal (e.mu held). Never while the assistant
+// thinks, waits for a decision, is stopped or failed, nor once the owner took over.
+func (e *tacheEnCours) verrouille(maintenant time.Time) bool {
+	if !e.t.Direct || e.t.Terminal == "" || e.arretee() || etatAssistant(e.t.Etat) != "travail" {
+		return false
+	}
+	for _, a := range e.t.Actions {
+		if d, err := time.Parse(time.RFC3339, a.T); a.Etat == "en_cours" && err == nil && maintenant.Sub(d) < maxDureeVerrou {
+			return true
+		}
+	}
+	return false
 }
 
 var tachesEnCours = struct {
@@ -183,6 +228,10 @@ func tacheForcee(hache string) bool {
 // verification) is written once.
 func (e *tacheEnCours) etat(etat, detail string) {
 	e.mu.Lock()
+	if e.arretee() && etat != "arretee" { // a stopped task's late steps never bring it back to life
+		e.mu.Unlock()
+		return
+	}
 	if h := e.t.Historique; len(h) > 0 && h[len(h)-1].Etat == etat && h[len(h)-1].Detail == couper(detail, 300) {
 		e.mu.Unlock()
 		return
@@ -199,6 +248,10 @@ func (e *tacheEnCours) copie() TacheServeurs {
 	defer e.mu.Unlock()
 	t := e.t
 	t.Serveurs, t.Plans, t.Historique, t.Actions = slices.Clone(t.Serveurs), slices.Clone(t.Plans), slices.Clone(t.Historique), slices.Clone(t.Actions)
+	t.Assistant, t.Verrou = etatAssistant(t.Etat), e.verrouille(time.Now())
+	if e.arretee() {
+		t.Assistant = "arretee"
+	}
 	return t
 }
 
@@ -280,7 +333,7 @@ func (s *Serveur) lancerTacheDans(texte string, serveurs []string, forcee bool, 
 		return TacheServeurs{}, err
 	}
 	ctx, annuler := context.WithCancelCause(context.Background())
-	e := &tacheEnCours{t: t, hache: hacherJeton(jeton), annuler: annuler}
+	e := &tacheEnCours{t: t, hache: hacherJeton(jeton), annuler: annuler, ctx: ctx}
 	tachesEnCours.Lock()
 	tachesEnCours.m[t.ID] = e
 	tachesEnCours.Unlock()
@@ -363,8 +416,10 @@ func (s *Serveur) surveillerTache(ctx context.Context, e *tacheEnCours, fin chan
 		}
 		if !slices.ContainsFunc(s.jetons.Liste(), func(x SessionHub) bool { return x.Hache == e.hache }) {
 			e.annuler(errTacheRevoquee)
+			e.etat("arretee", errTacheRevoquee.Error())
 			return
 		}
+		s.gardeFouVerrou(e, time.Now())
 		e.mu.Lock()
 		etat, plan := e.t.Etat, e.applique
 		e.mu.Unlock()
@@ -476,23 +531,32 @@ func (s *Serveur) attendreDecision(ctx context.Context, plan string) (Approbatio
 // finirTache: the final state, the token revoked (C33 cuts what it still runs), pending plans refused.
 func (s *Serveur) finirTache(e *tacheEnCours, etat, detail string) {
 	projet := prefixeTache + e.t.ID
+	s.revoquerJetons("tâche "+etat, func(x SessionHub) bool { return x.Projet == projet || strings.HasPrefix(x.Projet, projet+":") })
+	s.refuserPlansEnAttente(projet)
+	// its end written before it leaves the running ones: the page never reads a task neither running nor ended
+	e.etat(etat, detail)
+	e.mu.Lock()
+	e.t.Fin = time.Now().UTC().Format(time.RFC3339)
+	e.mu.Unlock()
+	_ = enregistrerTache(e.copie()) // a stop may have written this state already: Fin is saved in any case
 	tachesEnCours.Lock()
 	delete(tachesEnCours.m, e.t.ID)
 	tachesEnCours.Unlock()
-	ecrireDansTerminal(e, "\x1b[2m"+s.texteTerminal("The assistant's task ended: the keyboard is yours.")+"\x1b[0m\n")
-	s.revoquerJetons("tâche "+etat, func(x SessionHub) bool { return x.Projet == projet || strings.HasPrefix(x.Projet, projet+":") })
+	if context.Cause(e.ctx) != errTacheArretee { // a stop said it already
+		ecrireDansTerminal(e, "\x1b[2m"+s.texteTerminal("The assistant's task ended: the keyboard is yours.")+"\x1b[0m\n")
+	}
+	s.ecrireAudit(LigneAudit{Type: "evenement", De: "hub", Vers: "servers", Projet: projet, Mission: e.t.ID, Agent: agentServeurs,
+		Action: "tâche serveurs " + etat, Resultat: couper(detail, 300)})
+}
+
+// refuserPlansEnAttente: the plans of a task's project still waiting for the owner, refused by the hub.
+func (s *Serveur) refuserPlansEnAttente(projet string) {
 	l, _ := s.approbations.Liste()
 	for _, ap := range l {
 		if ap.Projet == projet && ap.Etat == "attente" {
 			_, _, _ = s.deciderApprobation("hub", ap.ID, "refuser", "", "", "")
 		}
 	}
-	e.mu.Lock()
-	e.t.Fin = time.Now().UTC().Format(time.RFC3339)
-	e.mu.Unlock()
-	e.etat(etat, detail)
-	s.ecrireAudit(LigneAudit{Type: "evenement", De: "hub", Vers: "servers", Projet: projet, Mission: e.t.ID, Agent: agentServeurs,
-		Action: "tâche serveurs " + etat, Resultat: couper(detail, 300)})
 }
 
 // arreterTache: the owner stops a running task (false: not running): its session is killed and its token revoked
@@ -502,10 +566,17 @@ func (s *Serveur) arreterTache(id string) bool {
 	e := tachesEnCours.m[id]
 	tachesEnCours.Unlock()
 	if e != nil {
+		deja := e.arretee() // a second Stop while its session dies says nothing again
 		e.annuler(errTacheArretee)
 		e.mu.Lock()
-		a := e.annexe
+		a, dit := e.annexe, e.t.Direct && e.t.Terminal != "" && !deja
+		e.annonce = false
 		e.mu.Unlock()
+		e.etat("arretee", errTacheArretee.Error()) // at once: the page and the lock never wait for its session to die
+		if dit {
+			ecrireDansTerminal(e, "\x1b[2m"+s.texteTerminal("The assistant was stopped: the keyboard is yours.")+"\x1b[0m\n")
+		}
+		s.refuserPlansEnAttente(prefixeTache + id) // a stopped task's plan never waits for a decision
 		s.revoquerJetons("tâche arrêtée", func(x SessionHub) bool { return x.Hache == e.hache || x.Hache == a && a != "" })
 	}
 	return e != nil
@@ -525,6 +596,11 @@ func tachesServeur(id string) []TacheServeurs {
 	for i := range l {
 		if e := tachesEnCours.m[l[i].ID]; e != nil {
 			l[i] = e.copie()
+		} else {
+			l[i].Verrou = false
+			if l[i].Fin == "" { // not running and never ended: Athanor stopped while it ran
+				l[i].Assistant = "erreur"
+			}
 		}
 	}
 	tachesEnCours.Unlock()
@@ -608,6 +684,10 @@ func (s *Serveur) apiReprendreMainTache(w http.ResponseWriter, r *http.Request) 
 	tachesEnCours.Lock()
 	e := tachesEnCours.m[tache]
 	tachesEnCours.Unlock()
+	if e == nil && slices.ContainsFunc(tachesServeur(id), func(t TacheServeurs) bool { return t.ID == tache }) {
+		s.ecrireJSON(w, map[string]any{"ok": true, "finie": true}) // ended meanwhile: the keyboard is the owner's already
+		return
+	}
 	if e == nil || !slices.Contains(e.copie().Serveurs, id) {
 		s.erreur(w, http.StatusNotFound, "No running task of that id on this server")
 		return
@@ -624,8 +704,12 @@ func (s *Serveur) apiReprendreMainTache(w http.ResponseWriter, r *http.Request) 
 // apiArreterTacheServeur: POST /api/serveurs/{id}/taches/{tache}/arreter.
 func (s *Serveur) apiArreterTacheServeur(w http.ResponseWriter, r *http.Request) {
 	id, tache := r.PathValue("id"), r.PathValue("tache")
-	if !slices.ContainsFunc(tachesServeur(id), func(t TacheServeurs) bool { return t.ID == tache }) || !s.arreterTache(tache) {
+	if !slices.ContainsFunc(tachesServeur(id), func(t TacheServeurs) bool { return t.ID == tache }) {
 		s.erreur(w, http.StatusNotFound, "No running task of that id on this server")
+		return
+	}
+	if !s.arreterTache(tache) { // ended meanwhile: nothing to stop, the page's view was late
+		s.ecrireJSON(w, map[string]any{"ok": true, "finie": true})
 		return
 	}
 	s.ecrireAudit(LigneAudit{Type: "evenement", De: deQui(r), Vers: "servers", Projet: prefixeTache + tache, Mission: tache, Action: "tâche serveurs arrêtée"})

@@ -56,19 +56,36 @@ func tacheDeSession(hache string) *tacheEnCours {
 	return nil
 }
 
-// tacheDirecte: the running task working live in the terminal session, else nil (its typing is then locked).
+// tacheDirecte: the task whose command runs now in the terminal session, else nil; its typing and files are locked
+// only then (M242a: before, any running task of that terminal locked it, waiting for a decision or stopped too).
 func tacheDirecte(session string) *tacheEnCours {
 	tachesEnCours.Lock()
 	defer tachesEnCours.Unlock()
+	maintenant := time.Now()
 	for _, e := range tachesEnCours.m {
 		e.mu.Lock()
-		ok := e.t.Terminal == session
+		ok := e.t.Terminal == session && e.verrouille(maintenant)
 		e.mu.Unlock()
 		if ok {
 			return e
 		}
 	}
 	return nil
+}
+
+// gardeFouVerrou: once a call locked the owner's terminal, no command of the assistant for delaiClavierLibre (it
+// thinks, waits, or its call's end was lost) says on that terminal that the keyboard is free again; true when said.
+func (s *Serveur) gardeFouVerrou(e *tacheEnCours, maintenant time.Time) bool {
+	e.mu.Lock()
+	libre := e.annonce && !e.verrouille(maintenant) && maintenant.Sub(e.finAppel) >= delaiClavierLibre && e.t.Terminal != ""
+	if libre {
+		e.annonce = false
+	}
+	e.mu.Unlock()
+	if libre {
+		ecrireDansTerminal(e, "\x1b[2m"+s.texteTerminal("No command of the assistant is running: you can type until its next one.")+"\x1b[0m\n")
+	}
+	return libre
 }
 
 // ecrireDansTerminal: texte (already masked of the vault's values) shown on the screen of the terminal t works
@@ -161,6 +178,7 @@ func (s *Serveur) debutAction(x SessionHub, outil string, a map[string]json.RawM
 	if len(t.t.Actions) > maxActionsTache {
 		t.t.Actions = t.t.Actions[len(t.t.Actions)-maxActionsTache:]
 	}
+	t.annonce = t.annonce || t.verrouille(time.Now())
 	t.mu.Unlock()
 	_ = enregistrerTache(t.copie())
 	l := s.ligneAction(act)
@@ -177,6 +195,7 @@ func (s *Serveur) finAction(t *tacheEnCours, n int, r ResultatOutil, err error) 
 		return
 	}
 	t.mu.Lock()
+	t.finAppel = time.Now()
 	ecran := ""
 	for i := range t.t.Actions {
 		a := &t.t.Actions[i]

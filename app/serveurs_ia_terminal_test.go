@@ -132,9 +132,8 @@ func tacheFinieGo(etat string) bool { return etat == "finie" || etat == "echec" 
 // (423) and a resize still passes; the terminal's session never leaves the Go side; Take over unlocks the typing,
 // says so on the screen, and the task goes on without writing there any more.
 func TestIATerminalDirect(t *testing.T) {
-	signer, prive := nouvelleCleSSH(t)
 	commence, libere := make(chan struct{}), make(chan struct{})
-	mem := lancerSSHMemoire(t, signer.PublicKey(), "", func(cmd string, _ []byte) (string, int) {
+	b := ouvrirBancIA(t, func(cmd string, _ []byte) (string, int) {
 		switch {
 		case strings.Contains(cmd, "LISEZMOI"):
 			return "mot de passe de la base : " + temoinOutils + "\n", 0
@@ -145,6 +144,113 @@ func TestIATerminalDirect(t *testing.T) {
 		}
 		return "ok", 0
 	})
+	srv, mux, session, l, requete, taper, reponses := b.srv, b.mux, b.session, b.l, b.requete, b.taper, b.reponses
+	ancien := sessionTacheServeurs
+	t.Cleanup(func() { sessionTacheServeurs = ancien })
+	sessionTacheServeurs = func(_ *Serveur, _ context.Context, dossier string) error {
+		b, _ := os.ReadFile(filepath.Join(dossier, "hub-jeton"))
+		appel := func(nom, args string) reponseMCP {
+			return appelMCP(t, mux, "Bearer "+strings.TrimSpace(string(b)), appelOutil(nom, args))
+		}
+		appel("fichier_lire", `{"serveur":"ab12","chemin":"/srv/app/LISEZMOI"}`)
+		appel("ssh_commande", `{"serveur":"ab12","commande":"rm -rf /srv/app"}`)
+		appel("ssh_commande", `{"serveur":"ab12","commande":"df -h /"}`)
+		appel("ssh_commande", `{"serveur":"ab12","commande":"uptime"}`)
+		j, _ := json.Marshal(map[string]any{"type": "result", "is_error": false, "result": "Le disque est rempli à 40 %."})
+		return os.WriteFile(filepath.Join(dossier, "session.jsonl"), []byte(`{"type":"system","subtype":"init","session_id":"s1"}`+"\n"+string(j)+"\n"), 0o600)
+	}
+	if c := taper(`{"entree":"ls -l\r"}`); c != http.StatusOK {
+		t.Fatalf("typing before the task: %d", c)
+	}
+	rep, v := requete("POST", "/api/serveurs/"+srv.ID+"/taches", `{"texte":"Regarde le disque","terminal":"`+session+`"}`)
+	tache, _ := v["tache"].(map[string]any)
+	if rep.StatusCode != http.StatusOK || tache == nil || tache["direct"] != true {
+		t.Fatalf("launch live: %d %v", rep.StatusCode, v)
+	}
+	if c, _ := requete("POST", "/api/serveurs/"+srv.ID+"/taches", `{"texte":"x","terminal":"inconnu"}`); c.StatusCode != http.StatusGone {
+		t.Errorf("launch with a closed terminal: %d", c.StatusCode)
+	}
+	select {
+	case <-commence:
+	case <-time.After(20 * time.Second):
+		t.Fatal("the command never reached the server")
+	}
+	l.attendre(t, "[Assistant]\x1b[0m $ df -h /")
+	l.attendre(t, "\x1b[33m✗ ")
+	l.attendre(t, "mot de passe de la base")
+	if c := taper(`{"entree":"echo moi\r"}`); c != http.StatusLocked {
+		t.Errorf("typing while the assistant works: %d, want 423", c)
+	}
+	if c := taper(`{"cols":90,"lignes":20}`); c != http.StatusOK {
+		t.Errorf("resize while locked: %d", c)
+	}
+	if c, _ := requete("POST", "/api/serveurs/"+srv.ID+"/sftp/"+session, `{"supprimer":"/srv"}`); c.StatusCode != http.StatusLocked {
+		t.Errorf("files changed while the assistant works live: %d, want 423", c.StatusCode)
+	}
+	if c, _ := requete("GET", "/api/serveurs/"+srv.ID+"/sftp/"+session+"?chemin=/", ""); c.StatusCode != http.StatusOK {
+		t.Errorf("files listed while the assistant works live: %d", c.StatusCode)
+	}
+	if c, v := requete("GET", "/api/serveurs/"+srv.ID+"/taches", ""); c.StatusCode != http.StatusOK || !strings.Contains(fmt.Sprint(v), "direct:true") ||
+		!strings.Contains(fmt.Sprint(v), "verrou:true") || strings.Contains(fmt.Sprint(v), session) {
+		t.Errorf("tasks (live, locked, without the terminal's session): %d %v", c.StatusCode, v)
+	}
+	debut := time.Now()
+	if c, _ := requete("POST", "/api/serveurs/"+srv.ID+"/taches/"+tache["id"].(string)+"/main", ""); c.StatusCode != http.StatusOK {
+		t.Fatalf("take over: %d", c.StatusCode)
+	}
+	l.attendre(t, "You have the keyboard")
+	if c := taper(`{"entree":"echo moi\r"}`); c != http.StatusOK {
+		t.Errorf("typing after Take over: %d", c)
+	}
+	if d := time.Since(debut); d > time.Second {
+		t.Errorf("Take over gave the keyboard back in %v, want < 1 s", d)
+	}
+	l.attendre(t, "echo moi")
+	close(libere)
+	var x TacheServeurs
+	for range 200 {
+		for _, y := range tachesServeur(srv.ID) {
+			if y.ID == tache["id"] {
+				x = y
+			}
+		}
+		if tacheFinieGo(x.Etat) {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if x.Etat != "finie" || len(x.Actions) != 4 || x.Direct || x.Assistant != "repos" || x.Verrou {
+		t.Fatalf("task: %s direct=%v assistant=%s verrou=%v, actions %+v", x.Etat, x.Direct, x.Assistant, x.Verrou, x.Actions)
+	}
+	l.mu.Lock()
+	ecran := l.b.String()
+	l.mu.Unlock()
+	if strings.Contains(ecran, "uptime") || strings.Contains(ecran, "40%") || strings.Contains(ecran, "keyboard is yours") {
+		t.Errorf("the task still wrote on the screen after Take over: %q", ecran)
+	}
+	if strings.Contains(ecran, temoinOutils) || strings.Contains(reponses.String(), temoinOutils) || strings.Contains(journalAuditTexte(t), temoinOutils) {
+		t.Error("the witness is on the screen, in an answer or in the audit log")
+	}
+	taper(`{"fermer":true}`)
+	l.attendreFin(t)
+}
+
+// bancIA: a Servers hub over an in-memory SSH server answering repondre, and its terminal open and read.
+type bancIA struct {
+	s        *Serveur
+	srv      ServeurInventaire
+	mux      *http.ServeMux
+	session  string
+	l        *lecteurTerminal
+	reponses *strings.Builder
+	requete  func(methode, chemin, corps string) (*http.Response, map[string]any)
+	taper    func(corps string) int
+}
+
+func ouvrirBancIA(t *testing.T, repondre func(cmd string, entree []byte) (string, int)) *bancIA {
+	t.Helper()
+	signer, prive := nouvelleCleSSH(t)
+	mem := lancerSSHMemoire(t, signer.PublicKey(), "", repondre)
 	s, srv := outilsServeursTest(t, mem.hote, mem.port, mem.empreinte, prive)
 	var err error
 	if s.approbations, err = ouvrirApprobations(t.TempDir()); err != nil {
@@ -153,7 +259,7 @@ func TestIATerminalDirect(t *testing.T) {
 	mux := http.NewServeMux()
 	s.routes(mux)
 	ts := httptest.NewServer(mux)
-	defer ts.Close()
+	t.Cleanup(ts.Close)
 	var reponses strings.Builder
 	requete := func(methode, chemin, corps string) (*http.Response, map[string]any) {
 		t.Helper()
@@ -204,97 +310,15 @@ func TestIATerminalDirect(t *testing.T) {
 		rep, _ := requete("POST", "/api/serveurs/"+srv.ID+"/terminal/"+session, corps)
 		return rep.StatusCode
 	}
-
-	ancien := sessionTacheServeurs
-	t.Cleanup(func() { sessionTacheServeurs = ancien })
-	sessionTacheServeurs = func(_ *Serveur, _ context.Context, dossier string) error {
-		b, _ := os.ReadFile(filepath.Join(dossier, "hub-jeton"))
-		appel := func(nom, args string) reponseMCP {
-			return appelMCP(t, mux, "Bearer "+strings.TrimSpace(string(b)), appelOutil(nom, args))
-		}
-		appel("fichier_lire", `{"serveur":"ab12","chemin":"/srv/app/LISEZMOI"}`)
-		appel("ssh_commande", `{"serveur":"ab12","commande":"rm -rf /srv/app"}`)
-		appel("ssh_commande", `{"serveur":"ab12","commande":"df -h /"}`)
-		appel("ssh_commande", `{"serveur":"ab12","commande":"uptime"}`)
-		j, _ := json.Marshal(map[string]any{"type": "result", "is_error": false, "result": "Le disque est rempli à 40 %."})
-		return os.WriteFile(filepath.Join(dossier, "session.jsonl"), []byte(`{"type":"system","subtype":"init","session_id":"s1"}`+"\n"+string(j)+"\n"), 0o600)
-	}
-	if c := taper(`{"entree":"ls -l\r"}`); c != http.StatusOK {
-		t.Fatalf("typing before the task: %d", c)
-	}
-	rep, v = requete("POST", "/api/serveurs/"+srv.ID+"/taches", `{"texte":"Regarde le disque","terminal":"`+session+`"}`)
-	tache, _ := v["tache"].(map[string]any)
-	if rep.StatusCode != http.StatusOK || tache == nil || tache["direct"] != true {
-		t.Fatalf("launch live: %d %v", rep.StatusCode, v)
-	}
-	if c, _ := requete("POST", "/api/serveurs/"+srv.ID+"/taches", `{"texte":"x","terminal":"inconnu"}`); c.StatusCode != http.StatusGone {
-		t.Errorf("launch with a closed terminal: %d", c.StatusCode)
-	}
-	select {
-	case <-commence:
-	case <-time.After(20 * time.Second):
-		t.Fatal("the command never reached the server")
-	}
-	l.attendre(t, "[Assistant]\x1b[0m $ df -h /")
-	l.attendre(t, "\x1b[33m✗ ")
-	l.attendre(t, "mot de passe de la base")
-	if c := taper(`{"entree":"echo moi\r"}`); c != http.StatusLocked {
-		t.Errorf("typing while the assistant works: %d, want 423", c)
-	}
-	if c := taper(`{"cols":90,"lignes":20}`); c != http.StatusOK {
-		t.Errorf("resize while locked: %d", c)
-	}
-	if c, _ := requete("POST", "/api/serveurs/"+srv.ID+"/sftp/"+session, `{"supprimer":"/srv"}`); c.StatusCode != http.StatusLocked {
-		t.Errorf("files changed while the assistant works live: %d, want 423", c.StatusCode)
-	}
-	if c, _ := requete("GET", "/api/serveurs/"+srv.ID+"/sftp/"+session+"?chemin=/", ""); c.StatusCode != http.StatusOK {
-		t.Errorf("files listed while the assistant works live: %d", c.StatusCode)
-	}
-	if c, v := requete("GET", "/api/serveurs/"+srv.ID+"/taches", ""); c.StatusCode != http.StatusOK || !strings.Contains(fmt.Sprint(v), "direct:true") || strings.Contains(fmt.Sprint(v), session) {
-		t.Errorf("tasks (live, without the terminal's session): %d %v", c.StatusCode, v)
-	}
-	if c, _ := requete("POST", "/api/serveurs/"+srv.ID+"/taches/"+tache["id"].(string)+"/main", ""); c.StatusCode != http.StatusOK {
-		t.Fatalf("take over: %d", c.StatusCode)
-	}
-	l.attendre(t, "You have the keyboard")
-	if c := taper(`{"entree":"echo moi\r"}`); c != http.StatusOK {
-		t.Errorf("typing after Take over: %d", c)
-	}
-	l.attendre(t, "echo moi")
-	close(libere)
-	var x TacheServeurs
-	for range 200 {
-		for _, y := range tachesServeur(srv.ID) {
-			if y.ID == tache["id"] {
-				x = y
-			}
-		}
-		if tacheFinieGo(x.Etat) {
-			break
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
-	if x.Etat != "finie" || len(x.Actions) != 4 || x.Direct {
-		t.Fatalf("task: %s direct=%v, actions %+v", x.Etat, x.Direct, x.Actions)
-	}
-	l.mu.Lock()
-	ecran := l.b.String()
-	l.mu.Unlock()
-	if strings.Contains(ecran, "uptime") || strings.Contains(ecran, "40%") || strings.Contains(ecran, "keyboard is yours") {
-		t.Errorf("the task still wrote on the screen after Take over: %q", ecran)
-	}
-	if strings.Contains(ecran, temoinOutils) || strings.Contains(reponses.String(), temoinOutils) || strings.Contains(journalAuditTexte(t), temoinOutils) {
-		t.Error("the witness is on the screen, in an answer or in the audit log")
-	}
-	taper(`{"fermer":true}`)
-	l.attendreFin(t)
+	return &bancIA{s: s, srv: srv, mux: mux, session: session, l: l, reponses: &reponses, requete: requete, taper: taper}
 }
 
 // TestLibellesOutils (C1-9, C1-10): every Servers tool has a readable label, and the labels and the texts written
 // on the terminal's screen exist in every language of i18n.js.
 func TestLibellesOutils(t *testing.T) {
 	cles := []string{"Assistant", "Exit code {0}", "The assistant's task ended: the keyboard is yours.",
-		"You have the keyboard; the assistant goes on in its own connection.", prefixeSFTPEchec}
+		"You have the keyboard; the assistant goes on in its own connection.", prefixeSFTPEchec,
+		"The assistant was stopped: the keyboard is yours.", "No command of the assistant is running: you can type until its next one."}
 	for _, o := range outilsServeursMCP {
 		if o == "ssh_commande" { // shown as "$ command"
 			continue

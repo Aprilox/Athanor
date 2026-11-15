@@ -7360,7 +7360,7 @@ function rendreIA() {
     <button type="button" class="btn btn-danger btn-petit" data-ia-arreter="${h(courante ? courante.id : "")}"${courante && !(etat.vue || {}).distant ? "" : " disabled"}>${t("Stop")}</button>`;
   const f = $("#ia-file"); if (f) { f.hidden = !ia.attente; f.textContent = ia.attente ? t("Queued: it is sent as soon as the assistant is done.") : ""; }
   if (ia.attente && !courante && !ia.envoi) { const a = ia.attente; ia.attente = ""; envoyerIA(a); }
-  verrouTerminal(courante && courante.direct ? courante.id : "");
+  verrouTerminal(courante && courante.verrou ? courante.id : ""); // only while one of its commands runs (Go decides)
 }
 // mode "live in my terminal": while the assistant works in it, the terminal takes no typing (the Go side refuses
 // it too, 423) and a banner over it says so, with Stop and Take over
