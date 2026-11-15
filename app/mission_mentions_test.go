@@ -56,6 +56,10 @@ func TestMentions(t *testing.T) {
 	if _, corps := appel("cloudflare"); !strings.Contains(corps, `"ref":"`+cle.ID+`","nom":"Jeton Cloudflare","detail":"cloudflare"`) || strings.Contains(corps, temoin) || strings.Contains(corps, "valeur") {
 		t.Errorf("vault entry by type: %s", corps)
 	}
+	// M244k7: the chips already chosen are left out before the cut, so the next ones come up
+	if _, corps := appel("noeud&sauf=serveur:x00&sauf=serveur:x01"); strings.Contains(corps, `"ref":"x00"`) || !strings.Contains(corps, `"ref":"x06"`) || !strings.Contains(corps, `"autres":{"serveur":23}`) {
+		t.Errorf("chosen chips not left out before the cut: %s", corps)
+	}
 	if _, corps := appel("zzz"); strings.TrimSpace(corps) != `{"autres":{},"mentions":[]}` {
 		t.Errorf("no match: %q", corps)
 	}

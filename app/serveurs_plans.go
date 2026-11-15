@@ -298,7 +298,8 @@ func outilProposerPlan(s *Serveur, x SessionHub, args json.RawMessage) (string, 
 	// the owner's "do not ask again for this server": the plan is accepted at once, without a ping (not in a tout mission, C82)
 	// M244k1: the Manual mode of the assistant asks every time, an old rule included
 	m := modeAutorisation(x, p.Serveur)
-	parRegle := regle && m != "manuel" && s.approbations.Regle(reglePlan(x.Projet, p.Serveur)) && !missionTout(x.Env)
+	// M244k7: in Auto or Modifications an unknown command waits for the owner, the rule included
+	parRegle := regle && m != "manuel" && !(inconnue && modeDemandeInconnue(m)) && s.approbations.Regle(reglePlan(x.Projet, p.Serveur)) && !missionTout(x.Env)
 	// M244f: the assistant's mode accepts it at once (auto, modifications: no dangerous step and no unknown command, M244k1; ignorer: any plan)
 	if m == "ignorer" || m != "" && m != "manuel" && haut < ClasseDestructrice && !construit && !inconnue {
 		parRegle = true
@@ -429,7 +430,8 @@ func (s *Serveur) planOuRegle(x SessionHub, id string, e *Etape) error {
 		audit(fmt.Sprintf("accordé : plan %s, étape %d (%s)", p.ID, n, e.Classe))
 		return nil
 	}
-	if _, prod := serveurProd(id); e.Classe <= ClasseChangement && !prod && modeAutorisation(x, id) != "manuel" && s.approbations.Regle(reglePlan(x.Projet, id)) && !missionTout(x.Env) {
+	m := modeAutorisation(x, id)
+	if _, prod := serveurProd(id); e.Classe <= ClasseChangement && !prod && m != "manuel" && !(etapeInconnue(*e) && modeDemandeInconnue(m)) && s.approbations.Regle(reglePlan(x.Projet, id)) && !missionTout(x.Env) {
 		audit("accordé : règle « ne plus demander » pour ce serveur (changement)")
 		return nil
 	}

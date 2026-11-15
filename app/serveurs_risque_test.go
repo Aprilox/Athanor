@@ -411,3 +411,36 @@ func TestClasserCommandeDangereuses(t *testing.T) {
 		}
 	}
 }
+
+// TestClasserCommandeM244k7: the second tester pass of M244k6 (git options, database clients, set, system files…).
+func TestClasserCommandeM244k7(t *testing.T) {
+	const L, C, D = ClasseLecture, ClasseChangement, ClasseDestructrice
+	cas := map[Classe][]string{
+		D: {"git -C /srv push --force", "git -C /srv reset --hard", "git -C /srv clean -fdx", "git --git-dir=/x push --force", "git --git-dir /x push --force",
+			"git --no-pager push --force", "git -P push -f", "git --work-tree=/srv reset --hard", "git -C /srv branch -D x", "git push origin +main",
+			"git push origin :main", "git branch -D x", "git checkout -- .", "git checkout .", "git checkout -f main", "git restore .", "git stash clear",
+			"git stash drop", "git rm -rf .", "git reflog expire --expire=now --all", "git gc --prune=now", "git submodule foreach 'rm x'",
+			`psql -c '\! rm -rf /srv/x'`, `mysql -e '\! rm x'`, "mysql -e 'system rm x'", "sqlite3 x.db '.shell rm x'", `psql -c "COPY x TO PROGRAM 'rm /srv/y'"`,
+			"redis-cli config set dir /etc/cron.d", `mysql -e "select 1 into outfile '/etc/cron.d/x'"`, "psql -c 'DROP /* x */ TABLE y'", "psql -c 'DROP/**/TABLE y'",
+			"mysql -e 'delete/* */from y'", `psql -c 'select 1 \g |sh'`,
+			"cp -t /etc x", "cp --target-directory=/etc x", "ln -sf /dev/null /etc/resolv.conf", "ln -sf /tmp/x /etc/hosts", "install x /usr/bin/ls",
+			"sed -i d /etc/hosts", "rsync x /etc/hosts", "tar xf x.tar -C /etc", "tar -xf x.tar --directory=/etc", "unzip -o x.zip -d /etc", "curl -o /etc/hosts http://x",
+			"wget -O /etc/resolv.conf http://x", "touch /etc/nologin", "mv /var/lib/mysql /tmp", "mv /etc/nginx /tmp", "echo x >> /etc/rc.local",
+			"echo x > /var/spool/cron/crontabs/root", "echo x >> /etc/anacrontab", "echo x >> /etc/bash.bashrc", "echo x > /etc/nsswitch.conf",
+			"tar --remove-files -cf a.tar /srv/x", "tar --delete -f x.tar y", "kubectl replace --force -f x.yaml", "kubectl scale --replicas=0 deploy/x",
+			"podman system reset -f", "zypper rm x", "kill $(pidof sshd)", "kill $(pgrep sshd)", "kill -9 `pidof sshd`", "pkill -u root", "pkill -U 0",
+			"cat /root/.bash_history", "cat /home/u/.mysql_history", "cat /root/.config/gcloud/credentials.db", "cat /etc/openvpn/x.ovpn", "cat /srv/app/config/secrets.yml"},
+		C: {"set", "kubectl get secret x -o yaml", "kubectl get secrets -A -o json", "kubectl describe pod x", "kubectl get pod x -o yaml",
+			"git checkout main", "git branch -d x", "git restore --staged x", "git push origin main", "git push origin HEAD:main", "git stash", "git pull",
+			"cp /etc/hosts /tmp/hosts.bak", "tar czf /tmp/l.tgz /var/log/nginx", "tar xf x.tar -C /srv/app", "psql -c 'select 1'", "kill 1234", "pkill -f worker.js",
+			"curl -o /tmp/x http://x", "unzip -o x.zip -d /srv/app", "rsync -a /etc/ /backup/etc", "install -m 755 x /usr/local/bin/x", "ln -s /srv/a /srv/b"},
+		L: {"git -C /srv status", "git -C /srv log -1", "git --no-pager diff", "set -e", "set -o pipefail", "kubectl get pods", "kubectl logs x", "cat /srv/app/history.txt"},
+	}
+	for want, l := range cas {
+		for _, c := range l {
+			if got, why := classerCommande(c); got != want {
+				t.Errorf("classerCommande(%q) = %s (%s), want %s", c, got, why, want)
+			}
+		}
+	}
+}

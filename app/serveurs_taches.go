@@ -672,14 +672,17 @@ func (s *Serveur) contexteSuite(id, suite string) string {
 	}
 	x, dernier := l[i], l[i].Resultat
 	if a := len(x.Actions); dernier == "" && a > 0 {
-		dernier = strings.TrimSpace(x.Actions[a-1].Quoi + "\n" + x.Actions[a-1].Sortie)
+		dernier = strings.TrimSpace(x.Actions[a-1].Quoi)
+		if o := strings.TrimSpace(x.Actions[a-1].Sortie); o != "" { // M244k7: what the server printed stays data
+			dernier += "\n" + enDonnees("server-output", "", couper(o, 2000))
+		}
 	}
 	if dernier == "" {
 		dernier = "(nothing yet)"
 	}
 	return s.masquerSecrets("The owner stopped your previous task to send the message below; it may answer a question you asked. " +
 		"Carry on from where that task was, with this message.\n\nPrevious request:\n" + couper(x.Texte, maxTexteTache) +
-		"\n\nYour last message on it:\n" + couper(dernier, 2000) + "\n\nThe owner's message now:\n")
+		"\n\nYour last message on it:\n" + couper(dernier, 2600) + "\n\nThe owner's message now:\n")
 }
 
 // apiLancerTacheServeur: POST /api/serveurs/{id}/taches {texte, forcer, mot_de_passe}. Native Windows mode: refused

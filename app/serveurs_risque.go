@@ -600,7 +600,7 @@ func sauterEnveloppe(nom string, mots []motShell) (reste []motShell, recherche b
 
 // --- Commands ---
 
-var lecturesSimples = ensemble("cat tac head tail zcat bzcat xzcat wc cut nl od hexdump file stat du df ls pwd whoami id groups uname uptime free top pgrep pidof w who last lastlog lsblk lsof findmnt lscpu lsmem lspci lsusb lsmod blkid printenv echo printf true false test [ [[ which type whereis basename dirname realpath readlink md5sum sha1sum sha256sum sha512sum cksum diff cmp ss netstat ping dig nslookup host getent jq column tr nproc arch vmstat iostat sleep seq comm join paste fold rev read set cd pushd popd exit return : iptables-save ip6tables-save apt-cache locale tty")
+var lecturesSimples = ensemble("cat tac head tail zcat bzcat xzcat wc cut nl od hexdump file stat du df ls pwd whoami id groups uname uptime free top pgrep pidof w who last lastlog lsblk lsof findmnt lscpu lsmem lspci lsusb lsmod blkid printenv echo printf true false test [ [[ which type whereis basename dirname realpath readlink md5sum sha1sum sha256sum sha512sum cksum diff cmp ss netstat ping dig nslookup host getent jq column tr nproc arch vmstat iostat sleep seq comm join paste fold rev read cd pushd popd exit return : iptables-save ip6tables-save apt-cache locale tty")
 var destructricesSimples = ensemble("rm unlink shred truncate dd wipefs fdisk sfdisk cfdisk parted gdisk sgdisk mkswap mke2fs blkdiscard shutdown reboot halt poweroff userdel deluser groupdel delgroup killall5 srm wipe dropdb dropuser iptables-restore ip6tables-restore")
 
 // M244k1: editors, pagers and make run commands too (vim -c '!…', less !…, a Makefile, zip -TT)
@@ -615,7 +615,7 @@ var destructricesRaison = map[string]string{
 
 // changementsConnus: commands that only write files in a way the owner expects (M244k1); any other command is
 // unknown and waits for the owner in the Auto mode.
-var changementsConnus = ensemble("mkdir rmdir touch ln install gzip gunzip bzip2 bunzip2 xz unxz zstd unzstd unzip ifup")
+var changementsConnus = ensemble("mkdir rmdir gzip gunzip bzip2 bunzip2 xz unxz zstd unzstd ifup")
 
 const raisonInconnue = " is not a known command"
 
@@ -694,6 +694,43 @@ func positionnels(a []string) []string {
 	return p
 }
 
+// valeursOption: the values of an option given as -X v (also ending a group: -qO v), -Xv, --long v or --long=v.
+func valeursOption(a []string, courte byte, longues ...string) []string {
+	var v []string
+	for i, x := range a {
+		if x == "--" {
+			break
+		}
+		suivant := ""
+		if i+1 < len(a) {
+			suivant = a[i+1]
+		}
+		n, val, egal := strings.Cut(x, "=")
+		switch {
+		case strings.HasPrefix(x, "--") && slices.Contains(longues, n) && egal:
+			v = append(v, val)
+		case strings.HasPrefix(x, "--") && slices.Contains(longues, n):
+			v = append(v, suivant)
+		case courte != 0 && len(x) > 1 && x[0] == '-' && x[1] != '-' && x[len(x)-1] == courte:
+			v = append(v, suivant)
+		case courte != 0 && len(x) > 2 && x[0] == '-' && x[1] == courte:
+			v = append(v, x[2:])
+		}
+	}
+	return v
+}
+
+// destination: where cp, ln or install write (-t dir, --target-directory=dir, or the last operand).
+func destination(a []string) []string {
+	if t := valeursOption(a, 't', "--target-directory"); len(t) > 0 {
+		return t
+	}
+	if p := positionnels(a); len(p) > 1 {
+		return p[len(p)-1:]
+	}
+	return nil
+}
+
 func unParmi(p []string, mots string) bool {
 	e := ensemble(mots)
 	return slices.ContainsFunc(p, func(x string) bool { return e[x] })
@@ -702,9 +739,11 @@ func unParmi(p []string, mots string) bool {
 type regle func(a []string, texte string) (Classe, string)
 
 var (
-	reSedLecture  = regexp.MustCompile(`^\s*(((\d+|\$|/[^/]*/)(\s*,\s*(\d+|\$|/[^/]*/))?\s*[pd=])|s/([^/\\]|\\.)*/([^/\\]|\\.)*/[gpiI0-9]*)\s*$`)
-	reSQLDetruit  = regexp.MustCompile(`(?i)\b(drop\s+(table|database|schema|index|view|user|role|owned)|truncate|delete\s+from|flushall|flushdb|dropdatabase|deletemany)\b|\.(drop|remove)\s*\(`)
-	unitesVitales = ensemble("ssh sshd networking network systemd-networkd NetworkManager")
+	reSedLecture     = regexp.MustCompile(`^\s*(((\d+|\$|/[^/]*/)(\s*,\s*(\d+|\$|/[^/]*/))?\s*[pd=])|s/([^/\\]|\\.)*/([^/\\]|\\.)*/[gpiI0-9]*)\s*$`)
+	reSQLDetruit     = regexp.MustCompile(`(?i)\b(drop\s+(table|database|schema|index|view|user|role|owned)|truncate|delete\s+from|flushall|flushdb|dropdatabase|deletemany)\b|\.(drop|remove)\s*\(`)
+	reSQLShell       = regexp.MustCompile(`(?i)\\!|\\[og]\s*\||(^|[\s'";])(system|\.shell|\.system|\.load)\s|\b(to|from)\s+program\b|\binto\s+(out|dump)file\b|\bconfig\s+set\b|\b(slaveof|replicaof)\b|\bmodule\s+load\b`)
+	reCommentaireSQL = regexp.MustCompile(`(?s)/\*.*?\*/`)
+	unitesVitales    = ensemble("ssh sshd networking network systemd-networkd NetworkManager")
 )
 
 func uniteVitale(p []string) bool {
@@ -740,7 +779,7 @@ func regleDocker(nom string) regle {
 		case "compose":
 			return classerSous(nom, p[1:], "ps logs ls images top version port events", "down rm kill exec run")
 		case "volume", "network", "image", "container", "system", "builder", "buildx", "context", "plugin", "secret", "config", "node", "service", "stack", "swarm":
-			return classerSous(nom, p[1:], "ls list df history", "rm remove prune kill exec run leave delete")
+			return classerSous(nom, p[1:], "ls list df history", "rm remove prune kill exec run leave delete reset")
 		}
 		return classerSous(nom, p, "ps images logs version info stats top port history diff search events", "rm rmi kill exec run prune")
 	}
@@ -791,6 +830,9 @@ var reglesCommandes = map[string]regle{
 		return ClasseLecture, ""
 	},
 	"sed": func(a []string, _ string) (Classe, string) {
+		if optionShell(a, "i", "--in-place") && slices.ContainsFunc(positionnels(a), cheminSysteme) {
+			return ClasseDestructrice, "sed edits a system file in place"
+		}
 		if optionShell(a, "if", "--in-place", "--file") {
 			return ClasseChangement, "sed edits files in place or runs a script file"
 		}
@@ -872,12 +914,18 @@ var reglesCommandes = map[string]regle{
 		return ClasseLecture, ""
 	},
 	"curl": func(a []string, _ string) (Classe, string) {
+		if slices.ContainsFunc(append(valeursOption(a, 'o', "--output"), valeursOption(a, 0, "--output-dir")...), cheminSysteme) {
+			return ClasseDestructrice, "curl overwrites a system file"
+		}
 		if optionShell(a, "oOdXTFKcD", "--output", "--remote-name", "--remote-name-all", "--output-dir", "--data", "--data-raw", "--data-binary", "--data-urlencode", "--data-ascii", "--json", "--request", "--upload-file", "--form", "--form-string", "--config", "--cookie-jar", "--dump-header", "--trace", "--trace-ascii", "--stderr", "--libcurl", "--etag-save", "--hsts", "--alt-svc") {
 			return ClasseChangement, "curl writes a file or sends data"
 		}
 		return ClasseLecture, ""
 	},
 	"wget": func(a []string, _ string) (Classe, string) {
+		if slices.ContainsFunc(append(valeursOption(a, 'O', "--output-document"), valeursOption(a, 'P', "--directory-prefix")...), cheminSysteme) {
+			return ClasseDestructrice, "wget overwrites a system file"
+		}
 		sortie := false
 		for i, x := range a {
 			suivant := i+1 < len(a) && a[i+1] == "-"
@@ -888,12 +936,15 @@ var reglesCommandes = map[string]regle{
 		}
 		return ClasseLecture, ""
 	},
-	"kill": func(a []string, _ string) (Classe, string) {
+	"kill": func(a []string, texte string) (Classe, string) {
 		if len(a) > 0 && strings.HasPrefix(a[0], "-") && a[0] != "--" {
 			a = a[1:] // the signal
 		}
 		if unParmi(a, "1 -1") {
 			return ClasseDestructrice, "kill targets init or every process"
+		}
+		if strings.Contains(texte, "ssh") || strings.Contains(texte, "systemd") { // M244k7: kill $(pidof sshd)
+			return ClasseDestructrice, "kill targets SSH or the init system"
 		}
 		return ClasseChangement, "kill stops processes"
 	},
@@ -965,7 +1016,14 @@ var reglesCommandes = map[string]regle{
 	},
 	"docker": regleDocker("docker"), "podman": regleDocker("podman"), "docker-compose": regleDocker("docker-compose"),
 	"kubectl": func(a []string, _ string) (Classe, string) {
-		return classerSous("kubectl", positionnels(a), "get describe logs top version cluster-info api-resources api-versions explain", "delete drain exec run debug")
+		p := positionnels(a)
+		switch {
+		case premier(p) == "replace" && optionShell(a, "", "--force"), premier(p) == "scale" && slices.ContainsFunc(valeursOption(a, 0, "--replicas"), func(x string) bool { return strings.Trim(x, "0") == "" }):
+			return ClasseDestructrice, "kubectl " + p[0] + " deletes or stops every pod"
+		case premier(p) == "describe", premier(p) == "get" && (len(p) > 1 && strings.HasPrefix(p[1], "secret") || slices.ContainsFunc(valeursOption(a, 'o', "--output"), func(x string) bool { return x != "wide" && x != "name" })):
+			return ClasseChangement, "kubectl " + p[0] + " shows secrets or a pod's environment"
+		}
+		return classerSous("kubectl", p, "get describe logs top version cluster-info api-resources api-versions explain", "delete drain exec run debug")
 	},
 	"iptables-save": regleSave, "ip6tables-save": regleSave,
 	"ss": func(a []string, _ string) (Classe, string) {
@@ -982,13 +1040,30 @@ var reglesCommandes = map[string]regle{
 		if optionShell(a, "", "--output") {
 			return ClasseChangement, "git --output writes a file"
 		}
-		p := positionnels(a)
-		switch {
-		case premier(p) == "clean", premier(p) == "reset" && slices.Contains(a, "--hard"),
-			premier(p) == "push" && optionShell(a, "f", "--force", "--force-with-lease", "--delete", "--mirror", "--prune"):
-			return ClasseDestructrice, "git " + p[0] + " drops work for good"
+		// M244k7: the global options (-C dir, --git-dir dir…) come before the subcommand
+		i := 0
+		for i < len(a) && strings.HasPrefix(a[i], "-") {
+			if ensemble("-C --git-dir --work-tree --namespace --super-prefix")[a[i]] {
+				i++
+			}
+			i++
 		}
-		return classerSous("git", p, "status log diff show rev-parse ls-files blame describe shortlog", "")
+		if i >= len(a) {
+			return ClasseLecture, ""
+		}
+		sous, r := a[i], a[i+1:]
+		p := positionnels(r)
+		switch {
+		case sous == "clean", sous == "reset" && slices.Contains(r, "--hard"), sous == "filter-branch", sous == "submodule" && premier(p) == "foreach",
+			sous == "push" && (optionShell(r, "fd", "--force", "--force-with-lease", "--delete", "--mirror", "--prune") || slices.ContainsFunc(p, func(x string) bool { return x != "" && (x[0] == '+' || x[0] == ':') })),
+			sous == "branch" && (optionShell(r, "D") || optionShell(r, "d", "--delete") && optionShell(r, "f", "--force")),
+			sous == "checkout" && (slices.Contains(r, "--") || slices.Contains(p, ".") || optionShell(r, "f", "--force")),
+			sous == "restore" && (!optionShell(r, "S", "--staged") || optionShell(r, "W", "--worktree")),
+			sous == "stash" && unParmi(p[:min(1, len(p))], "clear drop"), sous == "rm" && optionShell(r, "f", "--force"),
+			sous == "reflog" && unParmi(p[:min(1, len(p))], "expire delete"), sous == "gc" && slices.ContainsFunc(r, func(x string) bool { return strings.HasPrefix(x, "--prune") }):
+			return ClasseDestructrice, "git " + sous + " drops work for good or runs a command"
+		}
+		return classerSous("git", append([]string{sous}, p...), "status log diff show rev-parse ls-files blame describe shortlog", "")
 	},
 	"crontab": func(a []string, _ string) (Classe, string) {
 		switch {
@@ -1023,22 +1098,53 @@ var reglesCommandes = map[string]regle{
 		}) {
 			return ClasseDestructrice, "rsync deletes files or runs a remote shell"
 		}
+		if p := positionnels(a); len(p) > 1 && cheminSysteme(p[len(p)-1]) {
+			return ClasseDestructrice, "rsync overwrites a system folder or file"
+		}
 		return ClasseChangement, "rsync copies files"
 	},
 	"mv": func(a []string, _ string) (Classe, string) {
 		if slices.Contains(a, "/dev/null") {
 			return ClasseDestructrice, "mv to /dev/null destroys the file"
 		}
-		if slices.ContainsFunc(positionnels(a), cheminSysteme) {
+		p := positionnels(a)
+		if slices.ContainsFunc(p, cheminSysteme) || slices.ContainsFunc(p[:max(0, len(p)-1)], func(x string) bool { // M244k7: mv /etc/nginx /tmp
+			c := nettoyer(x)
+			return len(c) == 3 && c[0] == "" && c[1] == "etc" || len(c) == 4 && c[0] == "" && c[1] == "var" && c[2] == "lib"
+		}) {
 			return ClasseDestructrice, "mv moves or overwrites a system folder or file"
 		}
 		return ClasseChangement, "mv moves or overwrites files"
 	},
 	"cp": func(a []string, _ string) (Classe, string) {
-		if p := positionnels(a); len(p) > 1 && cheminSysteme(p[len(p)-1]) {
+		if slices.ContainsFunc(destination(a), cheminSysteme) {
 			return ClasseDestructrice, "cp overwrites a system folder or file"
 		}
 		return ClasseChangement, "cp copies files"
+	},
+	"ln": func(a []string, _ string) (Classe, string) {
+		if slices.ContainsFunc(destination(a), cheminSysteme) {
+			return ClasseDestructrice, "ln replaces a system folder or file"
+		}
+		return ClasseChangement, "ln changes files"
+	},
+	"install": func(a []string, _ string) (Classe, string) {
+		if slices.ContainsFunc(destination(a), cheminSysteme) {
+			return ClasseDestructrice, "install overwrites a system folder or file"
+		}
+		return ClasseChangement, "install changes files"
+	},
+	"touch": func(a []string, _ string) (Classe, string) {
+		if slices.ContainsFunc(positionnels(a), cheminSysteme) {
+			return ClasseDestructrice, "touch creates or changes a system file"
+		}
+		return ClasseChangement, "touch changes files"
+	},
+	"unzip": func(a []string, _ string) (Classe, string) {
+		if slices.ContainsFunc(valeursOption(a, 'd'), cheminSysteme) {
+			return ClasseDestructrice, "unzip overwrites files of a system folder"
+		}
+		return ClasseChangement, "unzip changes files"
 	},
 	"tar": regleTar,
 	"firewall-cmd": func(a []string, _ string) (Classe, string) {
@@ -1076,12 +1182,18 @@ var reglesCommandes = map[string]regle{
 		}
 		return ClasseDestructrice, "alias redefines a command"
 	},
+	"set": func(a []string, _ string) (Classe, string) {
+		if len(a) == 0 { // M244k7: like env
+			return ClasseChangement, "set shows every shell variable, which may hold secrets"
+		}
+		return ClasseLecture, ""
+	},
 }
 
 func init() {
 	for _, n := range []string{"apt", "apt-get", "dnf", "yum", "zypper", "apk"} {
 		reglesCommandes[n] = func(a []string, _ string) (Classe, string) {
-			return classerSous(n, positionnels(a), "list show search policy info depends rdepends madison showpkg check-update repolist", "remove purge autoremove autopurge erase del uninstall")
+			return classerSous(n, positionnels(a), "list show search policy info depends rdepends madison showpkg check-update repolist", "remove purge autoremove autopurge erase del uninstall rm")
 		}
 	}
 	for _, n := range []string{"chmod", "chown", "chgrp", "setfacl", "chattr"} {
@@ -1103,7 +1215,10 @@ func init() {
 	}
 	for _, n := range []string{"psql", "mysql", "mariadb", "sqlite3", "redis-cli", "mongo", "mongosh", "clickhouse-client", "cqlsh"} {
 		reglesCommandes[n] = func(_ []string, texte string) (Classe, string) {
-			if reSQLDetruit.MatchString(texte) {
+			if reSQLShell.MatchString(texte) { // M244k7: like vim -c '!…'
+				return ClasseDestructrice, n + " runs a shell command or writes a server file from the client"
+			}
+			if reSQLDetruit.MatchString(reCommentaireSQL.ReplaceAllString(texte, " ")) {
 				return ClasseDestructrice, n + " deletes database data (DROP, TRUNCATE, DELETE…)"
 			}
 			return ClasseChangement, n + " runs database statements"
@@ -1134,6 +1249,12 @@ func regleTar(a []string, _ string) (Classe, string) {
 		return len(n) > 3 && strings.HasPrefix(n, "--") && slices.ContainsFunc(tarExecute, func(d string) bool { return strings.HasPrefix(d, n) })
 	}) {
 		return ClasseDestructrice, "tar runs a command (-I, --to-command, --checkpoint-action…)"
+	}
+	if slices.ContainsFunc(a, func(x string) bool { return x == "--remove-files" || x == "--delete" }) {
+		return ClasseDestructrice, "tar deletes files (--remove-files, --delete)"
+	}
+	if slices.ContainsFunc(valeursOption(a, 'C', "--directory"), cheminSysteme) {
+		return ClasseDestructrice, "tar extracts into a system folder"
 	}
 	if optionShell(a, "t", "--list") && !optionShell(a, "xcruA", "--extract", "--get", "--create", "--append", "--update", "--delete", "--catenate", "--concatenate") {
 		return ClasseLecture, ""
@@ -1208,6 +1329,9 @@ func reglePkill(a []string, _ string) (Classe, string) {
 		return strings.Contains(x, "ssh") || strings.Contains(x, "systemd") || x == "init"
 	}) {
 		return ClasseDestructrice, "kills SSH or the init system"
+	}
+	if optionShell(a, "uU", "--euid", "--uid") {
+		return ClasseDestructrice, "pkill stops every process of an account"
 	}
 	return ClasseChangement, "stops processes"
 }
@@ -1290,10 +1414,11 @@ func nomSecret(b string) bool {
 		strings.HasSuffix(b, ".env"), strings.HasPrefix(b, ".env."),
 		(strings.HasPrefix(b, "id_") || strings.HasSuffix(b, "_key")) && !strings.HasSuffix(b, ".pub"),
 		b == ".my.cnf", b == "debian.cnf", b == ".pgpass", b == "credentials", b == ".netrc",
-		strings.HasPrefix(b, "wg") && strings.HasSuffix(b, ".conf"):
+		strings.HasPrefix(b, "wg") && strings.HasSuffix(b, ".conf"),
+		strings.HasSuffix(b, "_history"), strings.HasPrefix(b, "credentials"), strings.HasPrefix(b, "secrets."): // M244k7: typed passwords, gcloud, Rails
 		return true
 	}
-	return slices.Contains([]string{".key", ".pem", ".p12", ".pfx", ".ppk"}, path.Ext(b))
+	return slices.Contains([]string{".key", ".pem", ".p12", ".pfx", ".ppk", ".ovpn"}, path.Ext(b))
 }
 
 // cheminSecret: nomSecret, or a file that is only a secret in its folder (~/.docker/config.json, ~/.kube/config,
@@ -1397,7 +1522,7 @@ func cheminSysteme(t string) bool {
 		return true
 	}
 	return slices.ContainsFunc([]string{"/etc/cron", "/etc/hosts", "/etc/resolv.conf", "/etc/network", "/etc/netplan", "/etc/systemd", "/etc/init.d",
-		"/etc/selinux", "/etc/security", "/etc/environment", "/etc/ld.so", "/etc/profile", "/var/log/", "/usr/bin/", "/usr/sbin/", "/bin/", "/sbin/"},
+		"/etc/selinux", "/etc/security", "/etc/environment", "/etc/ld.so", "/etc/profile", "/etc/rc", "/etc/anacrontab", "/etc/bash.bashrc", "/etc/nsswitch.conf", "/etc/nologin", "/var/spool/cron", "/var/log/", "/usr/bin/", "/usr/sbin/", "/bin/", "/sbin/"},
 		func(d string) bool { return strings.HasPrefix(p, d) })
 }
 

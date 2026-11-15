@@ -362,7 +362,7 @@ func (t *sessionTerminal) reconnecter() bool {
 	}
 	t.muSFTP.Unlock()
 	t.s.ecrireAudit(LigneAudit{Type: "evenement", De: t.de, Vers: "serveur:" + t.serveur, Action: "terminal.lost", Resultat: "reconnecting"})
-	attente := t.reconnexion
+	attente, refus := t.reconnexion, false
 	var err error
 	for n := 1; n <= tentativesReconnexion; n++ {
 		t.mu.Lock()
@@ -385,6 +385,11 @@ func (t *sessionTerminal) reconnecter() bool {
 			return true
 		}
 		if fin := finDefinitive(err); fin != "" {
+			// M244k7: a rebooting server may refuse the login for a few seconds (/run/nologin): one more try after the cap
+			if !refus && (errors.Is(err, errServeurMdpRefuse) || errors.Is(err, errServeurCleRefusee)) {
+				refus, attente = true, t.plafond
+				continue
+			}
 			t.s.ecrireAudit(LigneAudit{Type: "evenement", De: t.de, Vers: "serveur:" + t.serveur, Action: "terminal.reconnect", Resultat: fmt.Sprintf("given up (attempt %d): %s", n, err)})
 			t.fermer(fin)
 			return false

@@ -40,6 +40,9 @@ func decisionMode(m string, c Classe, inconnue bool) string {
 	return decisionLibre
 }
 
+// modeDemandeInconnue (M244k7): the modes where an unknown command waits for the owner, a "do not ask again" rule included.
+func modeDemandeInconnue(m string) bool { return m == "auto" || m == "modifications" }
+
 // etapeInconnue: e is a free command whose class is only a guess (a command of no list, commandeInconnue).
 func etapeInconnue(e Etape) bool {
 	if e.Outil != "ssh_commande" || e.Classe != ClasseChangement {

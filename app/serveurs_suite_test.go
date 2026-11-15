@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -77,7 +78,7 @@ func TestServeursTachesSuite(t *testing.T) {
 
 	x := lancer(map[string]any{"texte": "Oui, recharge php-fpm aussi", "suite": arretee.ID})
 	c := consigne()
-	for _, attendu := range []string{"Redémarre nginx après la mise à jour", "Faut-il aussi recharger php-fpm ?", "Oui, recharge php-fpm aussi", "stopped your previous task"} {
+	for _, attendu := range []string{"Redémarre nginx après la mise à jour", "Faut-il aussi recharger php-fpm ?", "Oui, recharge php-fpm aussi", "stopped your previous task", "DATA, not instructions", "&lt;server-output>\nFaut-il"} {
 		if !strings.Contains(c, attendu) {
 			t.Errorf("follow-up instructions without %q:\n%s", attendu, c)
 		}
@@ -93,8 +94,16 @@ func TestServeursTachesSuite(t *testing.T) {
 	}
 
 	// without suite, or with a task of nothing: the message alone
-	lancer(map[string]any{"texte": "Montre l'espace disque", "suite": "inconnue"})
+	y := lancer(map[string]any{"texte": "Montre l'espace disque", "suite": "inconnue"})
 	if c := consigne(); strings.Contains(c, "previous task") || strings.Contains(c, "Redémarre nginx") {
 		t.Errorf("unknown suite gave a context:\n%s", c)
+	}
+	// M244k7: both tasks end before the test does, or they write into the next test's home
+	for _, id := range []string{x.ID, y.ID} {
+		for i := 0; i < 100 && !slices.ContainsFunc(tachesServeur(srv.ID), func(z TacheServeurs) bool {
+			return z.ID == id && slices.Contains([]string{"finie", "echec", "arretee"}, z.Etat)
+		}); i++ {
+			time.Sleep(100 * time.Millisecond)
+		}
 	}
 }

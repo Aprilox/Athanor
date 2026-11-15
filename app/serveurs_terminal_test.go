@@ -583,8 +583,9 @@ func TestTerminalSSHReconnexion(t *testing.T) {
 	}
 	m.mu.Unlock()
 
-	// a refusal no attempt can fix: exactly one attempt, then its own end (never retried)
-	essai := func(mem *serveurSSHMemoire, fin string, casser func()) {
+	// a refusal no attempt can fix: one attempt, then its own end; an authentication refusal gets one more try after
+	// the cap (M244k7: a rebooting server refuses logins for a few seconds), two stay far below fail2ban's 5
+	essai := func(mem *serveurSSHMemoire, fin string, voulu int, casser func()) {
 		t.Helper()
 		id := ouvrir()
 		l := lire(id)
@@ -600,8 +601,8 @@ func TestTerminalSSHReconnexion(t *testing.T) {
 		time.Sleep(300 * time.Millisecond) // several backoffs: a retry would show here
 		mem.mu.Lock()
 		defer mem.mu.Unlock()
-		if n := mem.connexions - avant; n != 1 {
-			t.Errorf("%s: %d attempts, want 1", fin, n)
+		if n := mem.connexions - avant; n != voulu {
+			t.Errorf("%s: %d attempts, want %d", fin, n, voulu)
 		}
 		mem.refuse = false
 	}
@@ -609,7 +610,7 @@ func TestTerminalSSHReconnexion(t *testing.T) {
 		return func() { mem.mu.Lock(); mem.refuse = true; mem.mu.Unlock() }
 	}
 	// the key taken out of authorized_keys
-	essai(m, finTerminalCleRefusee, refuser(m))
+	essai(m, finTerminalCleRefusee, 2, refuser(m))
 
 	// the password changed on the server (fail2ban bans at 5 failures)
 	m2 := lancerSSHMemoire(t, nil, "mdp-du-serveur", nil)
@@ -622,10 +623,10 @@ func TestTerminalSSHReconnexion(t *testing.T) {
 		t.Fatal(err)
 	}
 	ident = srv2.ID
-	essai(m2, finTerminalMdpRefuse, refuser(m2))
+	essai(m2, finTerminalMdpRefuse, 2, refuser(m2))
 
 	// the host's fingerprint no longer the confirmed one (someone in the middle)
-	essai(m2, finTerminalEmpreinte, func() {
+	essai(m2, finTerminalEmpreinte, 1, func() {
 		_ = modifierServeurs(func(l []ServeurInventaire) ([]ServeurInventaire, error) {
 			for i := range l {
 				if l[i].ID == srv2.ID {

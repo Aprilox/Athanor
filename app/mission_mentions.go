@@ -72,11 +72,15 @@ func boolInt(b bool) int {
 }
 
 // chercherMentions: the candidates whose name (or detail) contains q, case-insensitive, at most mentionsParGroupe
-// of each type (14 projects never hide the servers and keys), kept grouped by type; autres = how many more per type.
-func (s *Serveur) chercherMentions(q string) (l []MentionTrouvee, autres map[string]int) {
+// of each type (14 projects never hide the servers and keys), kept grouped by type; autres = how many more per type;
+// sauf: the chips already chosen ("type:ref"), left out before the cut (M244k7).
+func (s *Serveur) chercherMentions(q string, sauf ...string) (l []MentionTrouvee, autres map[string]int) {
 	q = strings.ToLower(strings.TrimSpace(q))
 	parType := map[string][]MentionTrouvee{}
 	for _, m := range s.candidatsMentions() {
+		if slices.Contains(sauf, m.Type+":"+m.Ref) {
+			continue
+		}
 		if q == "" || strings.Contains(strings.ToLower(m.Nom), q) || strings.Contains(strings.ToLower(m.Detail), q) {
 			parType[m.Type] = append(parType[m.Type], m)
 		}
@@ -94,7 +98,7 @@ func (s *Serveur) chercherMentions(q string) (l []MentionTrouvee, autres map[str
 
 // apiMentions: GET /api/mentions?q=, the @ list of the home bar.
 func (s *Serveur) apiMentions(w http.ResponseWriter, r *http.Request) {
-	l, autres := s.chercherMentions(r.URL.Query().Get("q"))
+	l, autres := s.chercherMentions(r.URL.Query().Get("q"), r.URL.Query()["sauf"]...)
 	s.ecrireJSON(w, map[string]any{"mentions": l, "autres": autres})
 }
 

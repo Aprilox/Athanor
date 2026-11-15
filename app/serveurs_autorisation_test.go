@@ -161,6 +161,16 @@ func TestAutorisationModes(t *testing.T) {
 	if got := plan("systemctl restart php-fpm"); got != "attente" {
 		t.Errorf("manuel: an old rule accepted a plan (%s)", got)
 	}
+	// M244k7: in Auto or Modifications the rule does not let an unknown command through either
+	for _, m := range []string{"auto", "modifications"} {
+		choisir(m, false)
+		if commande("nginx -s reload") || plan("certbot renew") != "attente" {
+			t.Errorf("%s: the rule let an unknown command or its plan through", m)
+		}
+	}
+	if choisir("modifications", false); !commande("systemctl restart php-fpm") {
+		t.Error("modifications: the rule no longer lets a known change through")
+	}
 	// a task of the sheet (not the panel): the plan rules, whatever the mode
 	choisir("ignorer", true)
 	e.mu.Lock()
