@@ -694,6 +694,23 @@ func positionnels(a []string) []string {
 	return p
 }
 
+// sansOptions: the words without the given options and the value that follows them (-n ns; -n=ns and --x=v go alone).
+func sansOptions(a []string, options string) []string {
+	e, r := ensemble(options), []string(nil)
+	for i := 0; i < len(a); i++ {
+		n, _, _ := strings.Cut(a[i], "=")
+		switch {
+		case a[i] == "--":
+			return append(r, a[i:]...)
+		case e[a[i]]:
+			i++
+		case !e[n]:
+			r = append(r, a[i])
+		}
+	}
+	return r
+}
+
 // valeursOption: the values of an option given as -X v (also ending a group: -qO v), -Xv, --long v or --long=v.
 func valeursOption(a []string, courte byte, longues ...string) []string {
 	var v []string
@@ -742,6 +759,7 @@ var (
 	reSedLecture     = regexp.MustCompile(`^\s*(((\d+|\$|/[^/]*/)(\s*,\s*(\d+|\$|/[^/]*/))?\s*[pd=])|s/([^/\\]|\\.)*/([^/\\]|\\.)*/[gpiI0-9]*)\s*$`)
 	reSQLDetruit     = regexp.MustCompile(`(?i)\b(drop\s+(table|database|schema|index|view|user|role|owned)|truncate|delete\s+from|flushall|flushdb|dropdatabase|deletemany)\b|\.(drop|remove)\s*\(`)
 	reSQLShell       = regexp.MustCompile(`(?i)\\!|\\[og]\s*\||(^|[\s'";])(system|\.shell|\.system|\.load)\s|\b(to|from)\s+program\b|\binto\s+(out|dump)file\b|\bconfig\s+set\b|\b(slaveof|replicaof)\b|\bmodule\s+load\b`)
+	reSQLFichier     = regexp.MustCompile(`(?i)(?:\.(?:output|once|backup|save)\s+(?:\w+\s+)?|\bto\s+)['"]?(/[^\s'";]*)`)
 	reCommentaireSQL = regexp.MustCompile(`(?s)/\*.*?\*/|--[^\n]*|#[^\n]*`) // block and line comments; the raw text is tested too (MySQL /*! … */ runs)
 	unitesVitales    = ensemble("ssh sshd networking network systemd-networkd NetworkManager")
 )
@@ -1016,7 +1034,7 @@ var reglesCommandes = map[string]regle{
 	},
 	"docker": regleDocker("docker"), "podman": regleDocker("podman"), "docker-compose": regleDocker("docker-compose"),
 	"kubectl": func(a []string, _ string) (Classe, string) {
-		p := positionnels(a)
+		p := positionnels(sansOptions(a, "-n --namespace --context --cluster --kubeconfig -s --server --user --token --as --as-group -l --selector")) // M244k9: kubectl -n prod scale…
 		switch {
 		case premier(p) == "replace" && optionShell(a, "", "--force"), premier(p) == "scale" && slices.ContainsFunc(valeursOption(a, 0, "--replicas"), func(x string) bool { return strings.Trim(x, "0") == "" }):
 			return ClasseDestructrice, "kubectl " + p[0] + " deletes or stops every pod"
@@ -1036,6 +1054,9 @@ var reglesCommandes = map[string]regle{
 		// shortcut: a pager or external diff set in the repository's own config still runs on read commands; refuse such repos when agents may write them.
 		if optionShell(a, "c", "--config-env", "--exec-path") {
 			return ClasseDestructrice, "git -c can run a command"
+		}
+		if slices.ContainsFunc(valeursOption(a, 0, "--output"), cheminSysteme) {
+			return ClasseDestructrice, "git --output overwrites a system file"
 		}
 		if optionShell(a, "", "--output") {
 			return ClasseChangement, "git --output writes a file"
@@ -1060,7 +1081,12 @@ var reglesCommandes = map[string]regle{
 			sous == "checkout" && (slices.Contains(r, "--") || slices.Contains(p, ".") || optionShell(r, "f", "--force")),
 			sous == "restore" && (!optionShell(r, "S", "--staged") || optionShell(r, "W", "--worktree")),
 			sous == "stash" && unParmi(p[:min(1, len(p))], "clear drop"), sous == "rm" && optionShell(r, "f", "--force"),
-			sous == "reflog" && unParmi(p[:min(1, len(p))], "expire delete"), sous == "gc" && slices.ContainsFunc(r, func(x string) bool { return strings.HasPrefix(x, "--prune") }):
+			sous == "reflog" && unParmi(p[:min(1, len(p))], "expire delete"), sous == "gc" && slices.ContainsFunc(r, func(x string) bool { return strings.HasPrefix(x, "--prune") }),
+			// M244k9: commands that run a shell or overwrite branches and work
+			sous == "rebase" && optionShell(r, "x", "--exec"), sous == "bisect" && premier(p) == "run", sous == "switch" && optionShell(r, "fC", "--force", "--discard-changes", "--force-create"),
+			sous == "branch" && (optionShell(r, "MC") || optionShell(r, "mc", "--move", "--copy") && optionShell(r, "f", "--force")), sous == "checkout" && optionShell(r, "B"),
+			sous == "tag" && optionShell(r, "d", "--delete"), sous == "update-ref" && optionShell(r, "d"), sous == "prune" && optionShell(r, "", "--expire"), sous == "worktree" && premier(p) == "remove" && optionShell(r, "f", "--force"),
+			sous == "config" && slices.ContainsFunc(p, func(x string) bool { return strings.HasPrefix(x, "!") }):
 			return ClasseDestructrice, "git " + sous + " drops work for good or runs a command"
 		}
 		return classerSous("git", append([]string{sous}, p...), "status log diff show rev-parse ls-files blame describe shortlog", "")
@@ -1107,8 +1133,13 @@ var reglesCommandes = map[string]regle{
 		if slices.Contains(a, "/dev/null") {
 			return ClasseDestructrice, "mv to /dev/null destroys the file"
 		}
-		p := positionnels(a)
-		if slices.ContainsFunc(p, cheminSysteme) || slices.ContainsFunc(p[:max(0, len(p)-1)], func(x string) bool { // M244k7: mv /etc/nginx /tmp
+		p, sources := positionnels(a), []string(nil)
+		if t := valeursOption(a, 't', "--target-directory"); len(t) > 0 { // M244k9: mv -t /tmp /etc/nginx
+			sources = slices.DeleteFunc(slices.Clone(p), func(x string) bool { return slices.Contains(t, x) })
+		} else {
+			sources = p[:max(0, len(p)-1)]
+		}
+		if slices.ContainsFunc(p, cheminSysteme) || slices.ContainsFunc(sources, func(x string) bool { // M244k7: mv /etc/nginx /tmp
 			c := nettoyer(x)
 			return len(c) == 3 && c[0] == "" && c[1] == "etc" || len(c) == 4 && c[0] == "" && c[1] == "var" && c[2] == "lib"
 		}) {
@@ -1218,6 +1249,11 @@ func init() {
 			if reSQLShell.MatchString(texte) { // M244k7: like vim -c '!…'
 				return ClasseDestructrice, n + " runs a shell command or writes a server file from the client"
 			}
+			for _, m := range reSQLFichier.FindAllStringSubmatch(texte, -1) { // M244k9: sqlite3 '.output /etc/hosts', COPY x TO '/etc/cron.d/x'
+				if cheminSysteme(m[1]) || cheminCritique(m[1]) {
+					return ClasseDestructrice, n + " overwrites a system file"
+				}
+			}
 			if reSQLDetruit.MatchString(texte) || reSQLDetruit.MatchString(reCommentaireSQL.ReplaceAllString(texte, " ")) {
 				return ClasseDestructrice, n + " deletes database data (DROP, TRUNCATE, DELETE…)"
 			}
@@ -1253,7 +1289,7 @@ func regleTar(a []string, _ string) (Classe, string) {
 	if slices.ContainsFunc(a, func(x string) bool { return x == "--remove-files" || x == "--delete" }) {
 		return ClasseDestructrice, "tar deletes files (--remove-files, --delete)"
 	}
-	if slices.ContainsFunc(valeursOption(a, 'C', "--directory"), cheminSysteme) {
+	if optionShell(a, "x", "--extract", "--get") && slices.ContainsFunc(valeursOption(a, 'C', "--directory"), cheminSysteme) { // M244k9: -C of an archive is only read
 		return ClasseDestructrice, "tar extracts into a system folder"
 	}
 	if optionShell(a, "t", "--list") && !optionShell(a, "xcruA", "--extract", "--get", "--create", "--append", "--update", "--delete", "--catenate", "--concatenate") {
@@ -1415,7 +1451,8 @@ func nomSecret(b string) bool {
 		(strings.HasPrefix(b, "id_") || strings.HasSuffix(b, "_key")) && !strings.HasSuffix(b, ".pub"),
 		b == ".my.cnf", b == "debian.cnf", b == ".pgpass", b == "credentials", b == ".netrc",
 		strings.HasPrefix(b, "wg") && strings.HasSuffix(b, ".conf"),
-		strings.HasSuffix(b, "_history"), strings.HasPrefix(b, "credentials"), strings.HasPrefix(b, "secrets."): // M244k7: typed passwords, gcloud, Rails
+		strings.HasSuffix(b, "_history"), strings.HasPrefix(b, "credentials"), strings.HasPrefix(b, "secrets."), // M244k7: typed passwords, gcloud, Rails
+		b == ".viminfo", b == ".lesshst": // M244k9: typed text and searches
 		return true
 	}
 	return slices.Contains([]string{".key", ".pem", ".p12", ".pfx", ".ppk", ".ovpn"}, path.Ext(b))
@@ -1425,7 +1462,8 @@ func nomSecret(b string) bool {
 // k3s's kubeconfig /etc/rancher/k3s/k3s.yaml, M139).
 func cheminSecret(c []string) bool {
 	n := len(c)
-	return nomSecret(c[n-1]) || n > 1 && slices.Contains([]string{".docker/config.json", ".kube/config", "k3s/k3s.yaml"}, c[n-2]+"/"+c[n-1])
+	p := strings.Join(c, "/") // M244k9: Docker/Compose secrets, Kubernetes service account token
+	return nomSecret(c[n-1]) || strings.HasPrefix(p, "/run/secrets/") || strings.HasPrefix(p, "/var/run/secrets/") || n > 1 && slices.Contains([]string{".docker/config.json", ".kube/config", "k3s/k3s.yaml"}, c[n-2]+"/"+c[n-1])
 }
 
 var candidatsSecrets = []string{"shadow", "gshadow", "environ", ".env", "prod.env", ".env.local", "id_rsa", "id_ed25519", "ssh_host_ed25519_key", "server.key", "privkey.pem", "cert.p12", ".my.cnf", "debian.cnf", ".pgpass", "credentials", ".netrc", "wg0.conf", "k3s.yaml"}
@@ -1518,7 +1556,7 @@ func cheminCritique(t string) bool {
 // logins or the logs; for the commands that move, overwrite or change rights (a read stays a read).
 func cheminSysteme(t string) bool {
 	p := strings.Join(nettoyer(t), "/")
-	if ensemble("/ /etc /usr /bin /sbin /lib /lib32 /lib64 /var /root /home /opt /srv /boot /dev /proc /sys /run")[p] {
+	if ensemble("/ /etc /usr /bin /sbin /lib /lib32 /lib64 /var /root /home /opt /srv /boot /dev /proc /sys /run /usr/bin /usr/sbin /var/log")[p] {
 		return true
 	}
 	return slices.ContainsFunc([]string{"/etc/cron", "/etc/hosts", "/etc/resolv.conf", "/etc/network", "/etc/netplan", "/etc/systemd", "/etc/init.d",

@@ -444,3 +444,29 @@ func TestClasserCommandeM244k7(t *testing.T) {
 		}
 	}
 }
+
+// TestClasserCommandeM244k9: the short tester pass on M244k7 (kubectl global options, system folders, git, file writes, tar -C, secrets).
+func TestClasserCommandeM244k9(t *testing.T) {
+	const L, C, D = ClasseLecture, ClasseChangement, ClasseDestructrice
+	cas := map[Classe][]string{
+		D: {"kubectl -n prod scale deploy/x --replicas=0", "kubectl -n prod scale deploy/x --replicas 0", "kubectl -n prod replace --force -f x.yaml",
+			"kubectl --context c scale deploy/x --replicas=0", "kubectl --namespace prod delete pod x", "kubectl -n=prod scale deploy/x --replicas=0",
+			"cp -t /usr/bin x", "install -t /usr/bin x", "cp x /usr/bin", "cp x /usr/sbin", "cp x /var/log", "mv x /usr/bin", "tar xf x.tar -C /usr/bin", "mv -t /tmp /etc/nginx",
+			"git rebase --exec 'rm x' main", "git rebase -x rm main", "git bisect run sh x", "git branch -M main", "git branch -m -f a b", "git checkout -B x",
+			"git switch -f x", "git switch --discard-changes x", "git tag -d v1", "git update-ref -d refs/heads/x", "git prune --expire now", "git worktree remove -f x",
+			"git config alias.x '!rm -rf /srv'", "git log --output=/etc/hosts", "git diff --output=/etc/hosts", "sqlite3 x.db '.output /etc/hosts'",
+			"sqlite3 x.db '.backup /etc/hosts'", "sqlite3 x.db '.backup main /etc/cron.d/x'", "sqlite3 x.db '.once /etc/cron.d/x'", "sqlite3 x.db '.save /etc/passwd'",
+			`psql -c "COPY x TO '/etc/cron.d/x'"`, "cat /run/secrets/db_password", "cat /var/run/secrets/kubernetes.io/serviceaccount/token", "cat ~/.viminfo", "cat /root/.lesshst"},
+		C: {"tar czf /tmp/b.tgz -C /etc nginx", "tar cf x.tar -C /etc .", "kubectl -n prod scale deploy/x --replicas=3", "kubectl -n prod apply -f x.yaml",
+			"git log --output=/tmp/x", "git branch -m a b", "git switch main", "git tag v1", "git prune", "git rebase main", "git config user.name x",
+			"cp x /usr/local/bin/x", "mv -t /tmp /srv/a", "sqlite3 x.db '.output /tmp/x'", `psql -c "COPY x TO '/tmp/x.csv'"`, `psql -c "GRANT SELECT ON x TO bob"`},
+		L: {"kubectl -n prod get pods", "kubectl --context c logs x", "git log -1", "cat /run/x.pid"},
+	}
+	for want, l := range cas {
+		for _, c := range l {
+			if got, why := classerCommande(c); got != want {
+				t.Errorf("classerCommande(%q) = %s (%s), want %s", c, got, why, want)
+			}
+		}
+	}
+}
