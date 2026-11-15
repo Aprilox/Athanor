@@ -8,8 +8,9 @@ package main
 //   - modifications: the assistant makes a plan and applies it; a plan without a dangerous step nor an unknown
 //     command is accepted at once;
 //   - ignorer: everything runs, nothing is asked (chosen with a warning and a confirmation).
-// It applies only to the tasks launched from the terminal's assistant panel (TacheServeurs.Panneau); missions and
-// the sheet's tasks keep the plan rules of serveurs_plans.go.
+// It applies only to the tasks launched from the terminal's assistant panel (TacheServeurs.Panneau, set in Go when
+// the request names an open terminal of this server opened in the window, M244k2); missions and the sheet's tasks
+// keep the plan rules of serveurs_plans.go. "ignorer" is chosen only with a password and the window unlocked.
 
 import (
 	"encoding/json"
@@ -90,6 +91,14 @@ func (s *Serveur) apiAutorisationServeur(w http.ResponseWriter, r *http.Request)
 	}
 	if c.Mode == "ignorer" && !c.Confirmer {
 		s.erreur(w, http.StatusConflict, "Confirm the Ignore permissions mode: the assistant will then do everything without asking")
+		return
+	}
+	// M244k2: the rule of planDecidableFenetre: a password exists and this window is unlocked with it (never asked again)
+	s.mu.Lock()
+	mdp := s.config.MotDePasseHash != ""
+	s.mu.Unlock()
+	if c.Mode == "ignorer" && (!mdp || s.verrouillePour(r)) {
+		s.erreur(w, http.StatusForbidden, "An agent of this PC could choose Ignore permissions in your place: choose a password for Athanor in Options first, then unlock Athanor with it")
 		return
 	}
 	id := r.PathValue("id")

@@ -645,6 +645,18 @@ func (s *Serveur) apiTachesServeur(w http.ResponseWriter, r *http.Request) {
 	s.ecrireJSON(w, map[string]any{"taches": taches, "plans": plans, "natif": modeNatif.Load(), "sans_rappels": s.sansRappelsNatif(), "autorisation": modeServeur(srv)})
 }
 
+// panneauDe (M244k2): the task is sent from the assistant panel of depuis, an open terminal of server id the window
+// opened: the server's permission mode applies. Never on a request's word (a sheet's task, a device, panneau: true).
+func panneauDe(r *http.Request, depuis, id string) bool {
+	if depuis == "" || appareilDe(r) != "" {
+		return false
+	}
+	terminaux.Lock()
+	defer terminaux.Unlock()
+	x := terminaux.m[depuis]
+	return x != nil && x.serveur == id && x.de == "fenetre"
+}
+
 // apiLancerTacheServeur: POST /api/serveurs/{id}/taches {texte, forcer, mot_de_passe}. Native Windows mode: refused
 // with the WSL proposal, unless the owner forces it, with Athanor's password retyped.
 func (s *Serveur) apiLancerTacheServeur(w http.ResponseWriter, r *http.Request) {
@@ -654,16 +666,19 @@ func (s *Serveur) apiLancerTacheServeur(w http.ResponseWriter, r *http.Request) 
 		Env        string `json:"env"` // "projet/env", optional (M116)
 		MotDePasse string `json:"mot_de_passe"`
 		Terminal   string `json:"terminal"` // "live in my terminal": its open session on this server (M231f)
-		Panneau    bool   `json:"panneau"`  // from the terminal's assistant panel (M244f)
+		Depuis     string `json:"depuis"`   // the open terminal whose assistant panel sends it (M244f, M244k2)
 	}
 	if lireCorps(r, &c) != nil {
 		s.erreur(w, http.StatusBadRequest, "Invalid request")
 		return
 	}
 	id := r.PathValue("id")
-	if c.Terminal != "" {
+	for _, sess := range []string{c.Terminal, c.Depuis} {
+		if sess == "" {
+			continue
+		}
 		terminaux.Lock()
-		x := terminaux.m[c.Terminal]
+		x := terminaux.m[sess]
 		terminaux.Unlock()
 		if x == nil || x.serveur != id {
 			s.terminalFerme(w, "")
@@ -681,7 +696,7 @@ func (s *Serveur) apiLancerTacheServeur(w http.ResponseWriter, r *http.Request) 
 	if forcee && !sansRappel && !s.preuveServeur(w, r, c.MotDePasse, "tâche serveurs forcée refusée", id) {
 		return
 	}
-	t, err := s.lancerTacheDans(c.Texte, []string{id}, forcee, c.Env, c.Terminal, c.Panneau)
+	t, err := s.lancerTacheDans(c.Texte, []string{id}, forcee, c.Env, c.Terminal, panneauDe(r, c.Depuis, id))
 	if err != nil {
 		s.erreurServeurs(w, err)
 		return

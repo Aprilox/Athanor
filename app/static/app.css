@@ -1104,6 +1104,7 @@ ol.guide-access li { margin: 5px 0; }
 .carte-coffre { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .carte-coffre .cp-nom { flex: 1; min-width: 0; overflow-wrap: anywhere; /* a key name is never cut: it wraps */ font-family: var(--mono, monospace); font-size: 13.5px; }
 .badge-infra { color: var(--attention); border-color: var(--attention); }
+.badge-danger { color: var(--erreur-vif); border-color: var(--erreur-vif); font-weight: 600; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; }
 .acces-demarrer { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .acces-demarrer a.badge { text-decoration: none; }
 .srv-utilise a.badge { text-decoration: none; cursor: pointer; }

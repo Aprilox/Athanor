@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -66,11 +67,13 @@ func TestAutorisationModes(t *testing.T) {
 		b, _ := json.Marshal(map[string]any{"mode": mode, "confirmer": confirmer})
 		r := httptest.NewRequest("POST", "/api/serveurs/"+srv.ID+"/autorisation", strings.NewReader(string(b)))
 		r.SetPathValue("id", srv.ID)
+		r.AddCookie(&http.Cookie{Name: "athanor_session", Value: s.session})
 		w := httptest.NewRecorder()
 		s.apiAutorisationServeur(w, r)
 		return w.Code
 	}
-	commande := func(cmd string) bool { // true: it ran on the server
+	s.config.MotDePasseHash, s.session = hacherMotDePasse("mdp-m244f"), "session-m244f" // M244k2: ignorer needs both
+	commande := func(cmd string) bool {                                                 // true: it ran on the server
 		t.Helper()
 		txt, e := appel("ssh_commande", `{"serveur":"`+srv.ID+`","commande":"`+cmd+`"}`)
 		if e && !strings.Contains(txt, "plan required") {
@@ -173,5 +176,76 @@ func TestAutorisationModes(t *testing.T) {
 	b := journalAuditTexte(t)
 	if !strings.Contains(b, "mode de l'assistant") || !strings.Contains(b, "mode « ignorer »") {
 		t.Errorf("audit: mode changes or grants missing")
+	}
+}
+
+// TestAutorisationIgnorerGarde (M244k2): Ignore permissions only with Athanor's password set and the window unlocked
+// with it; a task gets the server's mode only from the panel of an open terminal the window opened.
+func TestAutorisationIgnorerGarde(t *testing.T) {
+	s, srv := outilsServeursTest(t, "127.0.0.1", 22, "SHA256:x", nil)
+	choisir := func(mode, cookie, appareil string) int {
+		t.Helper()
+		b, _ := json.Marshal(map[string]any{"mode": mode, "confirmer": true})
+		r := httptest.NewRequest("POST", "/api/serveurs/"+srv.ID+"/autorisation", strings.NewReader(string(b)))
+		r.SetPathValue("id", srv.ID)
+		if cookie != "" {
+			r.AddCookie(&http.Cookie{Name: "athanor_session", Value: cookie})
+		}
+		if appareil != "" {
+			r = r.WithContext(context.WithValue(r.Context(), cleContexte(nomCleAppareil), appareil))
+		}
+		w := httptest.NewRecorder()
+		s.apiAutorisationServeur(w, r)
+		return w.Code
+	}
+	mode := func() string { l, _ := serveurProd(srv.ID); return modeServeur(l) }
+	if c := choisir("ignorer", "", ""); c != http.StatusForbidden || mode() != "manuel" {
+		t.Errorf("no password for Athanor: %d, mode %s", c, mode())
+	}
+	if c := choisir("auto", "", ""); c != 200 || mode() != "auto" {
+		t.Errorf("auto without a password: %d, mode %s", c, mode())
+	}
+	s.config.MotDePasseHash, s.session = hacherMotDePasse("mdp-k2"), "session-k2"
+	for _, cookie := range []string{"", "autre"} { // locked: no session cookie, or not the one the password set
+		if c := choisir("ignorer", cookie, ""); c != http.StatusForbidden || mode() != "auto" {
+			t.Errorf("locked window (cookie %q): %d, mode %s", cookie, c, mode())
+		}
+	}
+	if c := choisir("ignorer", "session-k2", "tel"); c != http.StatusForbidden || mode() != "auto" {
+		t.Errorf("from a paired device: %d, mode %s", c, mode())
+	}
+	if c := choisir("ignorer", "session-k2", ""); c != 200 || mode() != "ignorer" {
+		t.Errorf("unlocked window: %d, mode %s", c, mode())
+	}
+
+	// panneau comes from an open terminal of this server, opened in the window, never from the request
+	terminaux.Lock()
+	terminaux.m["k2-fen"] = &sessionTerminal{id: "k2-fen", serveur: srv.ID, de: "fenetre"}
+	terminaux.m["k2-tel"] = &sessionTerminal{id: "k2-tel", serveur: srv.ID, de: "appareil:tel"}
+	terminaux.m["k2-autre"] = &sessionTerminal{id: "k2-autre", serveur: "autre-serveur", de: "fenetre"}
+	terminaux.Unlock()
+	t.Cleanup(func() {
+		terminaux.Lock()
+		delete(terminaux.m, "k2-fen")
+		delete(terminaux.m, "k2-tel")
+		delete(terminaux.m, "k2-autre")
+		terminaux.Unlock()
+	})
+	r := httptest.NewRequest("POST", "/api/serveurs/"+srv.ID+"/taches", strings.NewReader(`{"texte":"x","panneau":true}`))
+	var c struct {
+		Depuis string `json:"depuis"`
+	}
+	if lireCorps(r, &c) != nil || panneauDe(r, c.Depuis, srv.ID) {
+		t.Error("panneau: true in the request gave the server's mode")
+	}
+	for depuis, want := range map[string]bool{"k2-fen": true, "k2-tel": false, "k2-autre": false, "inconnue": false, "": false} {
+		if got := panneauDe(httptest.NewRequest("POST", "/", nil), depuis, srv.ID); got != want {
+			t.Errorf("panneauDe(%q) = %v, want %v", depuis, got, want)
+		}
+	}
+	rt := httptest.NewRequest("POST", "/", nil)
+	rt = rt.WithContext(context.WithValue(rt.Context(), cleContexte(nomCleAppareil), "tel"))
+	if panneauDe(rt, "k2-fen", srv.ID) {
+		t.Error("a paired device's request got the server's mode")
 	}
 }

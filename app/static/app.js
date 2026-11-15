@@ -1237,7 +1237,7 @@ function naviguer() {
   if (page.startsWith("missions/")) { etat.missionId = decodeURIComponent(page.slice(9)); page = "mission"; } // one mission, its id in the hash
   if (page.startsWith("serveur/")) { srv.id = decodeURIComponent(page.slice(8)); page = "serveur"; } // one server's sheet, its id in the hash
   const termAvant = etat.page === "terminal" ? term.id : null;
-  if (page.startsWith("terminal/")) { term.id = decodeURIComponent(page.slice(9)); page = "terminal"; } // a server's terminal
+  if (page.startsWith("terminal/")) { term.id = decodeURIComponent(page.slice(9)); page = "terminal"; if (term.id !== termAvant) ia.autorisation = ""; } // a server's terminal; its mode read again (M244k2)
   if (termAvant !== null && (page !== "terminal" || term.id !== termAvant)) quitterTerminal();
   if (!pages[page]) { page = "accueil"; history.replaceState(null, "", "#accueil"); } // an unknown hash: Home
   const pageAvant = etat.page;
@@ -5698,13 +5698,15 @@ function ligneAudit(l, lang) {
 }
 // --- Servers (#serveurs): inventory cards and the add wizard (address → fingerprint to confirm → one of three ways)
 const srv = { aj: null, texte: "", ouvertes: new Set() }; // aj: the wizard ({etape: "adresse" | "empreinte" | "cle" | "coupure", …}), kept across renders
+// M244k2: Ignore permissions shown wherever the server is, not only in its assistant's panel
+const badgeSansGarde = (x, cache) => `<span class="badge badge-danger" data-sans-garde title="${h(t("Ignore permissions: the assistant runs every command on this server without asking you."))}"${cache ? " hidden" : ""}>${ic("alerte")} ${t("No safeguard")}</span>`;
 function carteServeur(x, fiche, envs, santeSites) {
   const sante = { ok: t("Reachable"), injoignable: t("Unreachable"), empreinte_changee: t("Host fingerprint changed") }[x.etat] || t("Waiting for its key"), cls = x.etat === "ok" ? "travaille" : "attend", f = fiche || {};
   const tourne = [...(f.conteneurs || []).filter((c) => /^(up|running)/i.test(c.etat)).map((c) => c.nom), ...(f.services || [])];
   const resume = !fiche ? t("Its sheet is not made yet.")
     : tourne.length ? t("Running: {0}", [tourne.slice(0, 6).join(", ") + (tourne.length > 6 ? " +" + (tourne.length - 6) : "")]) : t("Nothing seen running.");
   return `<div class="bloc carte-serveur" data-srv-id="${h(x.id)}">
-    <div class="cp-tete"><a class="cp-nom" href="#serveur/${encodeURIComponent(x.id)}"><b>${h(x.nom)}</b></a><span class="pastille ${cls}">${sante}</span></div>
+    <div class="cp-tete"><a class="cp-nom" href="#serveur/${encodeURIComponent(x.id)}"><b>${h(x.nom)}</b></a>${x.autorisation === "ignorer" ? badgeSansGarde(x) : ""}<span class="pastille ${cls}">${sante}</span></div>
     <div class="muet petit"><code>${h(x.utilisateur)}@${h(x.hote)}${x.port === 22 ? "" : ":" + x.port}</code>${f.systeme && f.systeme.nom ? " · " + h(f.systeme.nom) : ""}</div>
     <div class="ligne m0">${(x.roles || []).length ? x.roles.map((r) => `<span class="badge${r === "prod" ? " badge-infra" : ""}">${h(r)}</span>`).join("") : `<span class="muet petit">${t("No role yet")}</span>`}${(envs || []).length ? `<span class="badge badge-env" title="${h(t("Used by") + " " + envs.join(", "))}">${h(t("Environments: {0}", [envs.length]))}</span>` : ""}</div>
     <div class="petit srv-tourne" title="${h(tourne.join(", "))}">${h(resume)}</div>
@@ -6195,7 +6197,7 @@ pages.serveur = async () => {
     <p class="m0"><a href="#serveurs" class="petit">${ic("gauche")} ${t("Servers")}</a></p>
     ${distant ? "" : messagesCoffreServeurs(c)}
     <div class="bloc srv-tete">
-      <div class="cp-tete"><h2 class="m0 cp-nom">${h(x.nom)}</h2><span class="pastille ${x.etat === "ok" ? "travaille" : "attend"}">${sante}</span></div>
+      <div class="cp-tete"><h2 class="m0 cp-nom">${h(x.nom)}</h2>${x.autorisation === "ignorer" ? badgeSansGarde(x) : ""}<span class="pastille ${x.etat === "ok" ? "travaille" : "attend"}">${sante}</span></div>
       <div class="muet petit"><code>${h(x.utilisateur)}@${h(x.hote)}${x.port === 22 ? "" : ":" + x.port}</code>${x.empreinte_hote ? ` · ${t("Fingerprint")} <code class="srv-empreinte-courte">${h(x.empreinte_hote)}</code>` : ""}</div>
       <div class="ligne m0"><span class="muet petit">${t("Roles")}</span>${role("dev")}${role("prod")}${distant && !x.roles.length ? `<span class="muet petit">${t("No role yet")}</span>` : ""}</div>
       <div class="ligne m0 srv-utilise"><span class="muet petit">${t("Used by")}</span>${(d.environnements || []).length ? d.environnements.map((pe) => `<a class="badge" href="#acces" data-projet="${h(pe.slice(0, pe.lastIndexOf("/")))}" data-cible="acces">${h(pe)}</a>`).join("") : `<span class="muet petit">${t("No project environment uses this server yet.")}</span>`}</div>
@@ -6286,18 +6288,18 @@ $("#page").addEventListener("submit", async (ev) => {
 });
 // a task launched on a server (its sheet, the assistant beside its terminal); native Windows mode proposes WSL, or
 // forcing it with Athanor's password; null when nothing was launched (the error already shown)
-function lancerTacheSrv(id, texte, env, terminal, panneau) {
+function lancerTacheSrv(id, texte, env, terminal, depuis) {
   const url = "serveurs/" + encodeURIComponent(id) + "/taches";
-  return api(url, "POST", { texte, env, terminal, panneau }).catch(async (e) => {
+  return api(url, "POST", { texte, env, terminal, depuis }).catch(async (e) => {
     if (!e.data || !e.data.proposer_wsl) throw e;
     const { choix: c, coche } = await choisir(t("Native Windows mode has no barrier: an agent working on your servers would run with all your rights on this PC. Switch to WSL, or force this task knowing the risk."),
       [{ id: "wsl", texte: t("Switch to WSL"), primaire: true }, { id: "forcer", texte: t("Force this task"), danger: true }, { id: "", texte: t("Cancel") }], { titre: t("Native Windows mode"), case: t("Don't remind me again") });
     if (c === "wsl") { location.hash = "#options@bloc-direct"; return null; }
     if (c !== "forcer") return null;
     // M240r2: the same switch as Settings › Options, the password once; this task then goes through without asking
-    if (coche) return (await rappelsNatif(true)) ? api(url, "POST", { texte, env, terminal, panneau }) : null;
+    if (coche) return (await rappelsNatif(true)) ? api(url, "POST", { texte, env, terminal, depuis }) : null;
     const p = await preuveMdp(t("Forcing a Servers task without the barrier: retype Athanor's password."), { ok: t("Force this task"), danger: true }, t("Force this task without the barrier?"));
-    return p ? api(url, "POST", { texte, env, terminal, panneau, forcer: true, ...p }) : null;
+    return p ? api(url, "POST", { texte, env, terminal, depuis, forcer: true, ...p }) : null;
   }).catch((e) => { if (e.message !== t("Locked")) toast(e.message, "erreur"); return null; });
 }
 // native mode's reminders (the one switch, kept in the preferences): turning them off asks for Athanor's password
@@ -6465,7 +6467,7 @@ pages.terminal = async () => {
   term.nom = x.nom;
   return `<div class="serveurs terminal-page" data-onglet="${sf.onglet}">
     <div class="ligne m0 term-barre"><a href="#serveur/${encodeURIComponent(x.id)}" class="petit">${ic("gauche")} ${h(x.nom)}</a>
-      <code class="muet petit term-adresse">${h(x.utilisateur)}@${h(x.hote)}</code><span class="pastille attend" id="term-etat">${t("Connecting…")}</span><span class="espace"></span>
+      <code class="muet petit term-adresse">${h(x.utilisateur)}@${h(x.hote)}</code>${badgeSansGarde(x, x.autorisation !== "ignorer")}<span class="pastille attend" id="term-etat">${t("Connecting…")}</span><span class="espace"></span>
       ${avis ? "" : `<span class="muet petit term-aide term-seul">${t(MAC ? "Copy: Cmd+C · Paste: Cmd+V" : "Copy: Ctrl+Shift+C · Paste: Ctrl+Shift+V")}</span>
       <button type="button" class="btn btn-petit term-seul" data-term-copier>${t("Copy")}</button><button type="button" class="btn btn-petit term-seul" data-term-coller>${t("Paste")}</button>
       <button type="button" class="btn btn-petit term-bascule-ia" data-term-ia aria-pressed="${ia.visible}">${t("Assistant")}</button>
@@ -7391,19 +7393,21 @@ function rendreTransferts() {
 // the same guards as any task: risk class, a plan before any change, your decision, backups, outputs as data.
 // Mode "live in my terminal" (M231f): the same calls, also shown on your terminal's screen, its typing locked meanwhile.
 const ia = { visible: localStorage.getItem("athanor.terminal.ia") === "1", mode: localStorage.getItem("athanor.terminal.ia.mode") === "direct" ? "direct" : "apart",
-  verrou: "", taches: [], plans: {}, lu: "", minuteur: 0, ouvertes: new Set(), suivi: true, envoi: false, attente: "", autorisation: "manuel" };
+  verrou: "", taches: [], plans: {}, lu: "", minuteur: 0, ouvertes: new Set(), suivi: true, envoi: false, attente: "", autorisation: "" };
 // M244f: the assistant's permission mode, kept per server and decided in Go (serveurs_autorisation.go)
 const AUTORISATIONS_IA = () => [["manuel", t("Manual"), t("Asks you before every command, reads included.")],
-  ["auto", t("Auto"), t("Asks you only before a dangerous command (deleting, formatting, stopping, permissions, firewall…).")],
-  ["modifications", t("Accept changes"), t("Makes its plan and applies it; asks you only before a dangerous command.")],
+  ["auto", t("Auto"), t("Runs reads and changes at once; asks you before a dangerous command (deleting, formatting, stopping, permissions, firewall…) or a command it does not know.")],
+  ["modifications", t("Accept changes"), t("Writes its whole plan in the thread first, then applies it without waiting for you; asks you only when the plan holds a dangerous command or one it does not know.")],
   ["ignorer", t("Ignore permissions"), t("Does everything without asking you, dangerous commands included.")]];
 function aideAutorisationIA() {
+  if (!ia.autorisation) return h(t("Loading…")); // M244k2: never the previous server's mode
   const [, , phrase] = AUTORISATIONS_IA().find(([v]) => v === ia.autorisation) || AUTORISATIONS_IA()[0];
   return ia.autorisation === "ignorer" ? `${ic("alerte")} ${h(phrase)}` : h(phrase);
 }
 function majAutorisationIA() {
   const sel = $("#ia-autorisation"), z = $("#ia-autorisation-zone"); if (!sel || !z) return;
-  sel.value = ia.autorisation; z.classList.toggle("danger", ia.autorisation === "ignorer"); $("#ia-autorisation-aide").innerHTML = aideAutorisationIA();
+  const b = $(".term-barre [data-sans-garde]"); if (b && ia.autorisation) b.hidden = ia.autorisation !== "ignorer";
+  sel.value = ia.autorisation; sel.disabled = !ia.autorisation || !$("#ia-form"); z.classList.toggle("danger", ia.autorisation === "ignorer"); $("#ia-autorisation-aide").innerHTML = aideAutorisationIA();
 }
 async function changerAutorisationIA(sel) {
   const mode = sel.value, avant = ia.autorisation;
@@ -7422,7 +7426,7 @@ function panneauIA(distant) {
     <fieldset class="ia-modes"><legend class="cache-visuel">${t("How the assistant works")}</legend>
       ${MODES.map(([v, titre]) => `<label class="ia-mode${ia.mode === v ? " actif" : ""}"><input type="radio" name="ia-mode" value="${v}"${ia.mode === v ? " checked" : ""}><b>${t(titre)}</b></label>`).join("")}</fieldset>
     <div class="ia-autorisation${ia.autorisation === "ignorer" ? " danger" : ""}" id="ia-autorisation-zone"><label for="ia-autorisation" class="petit">${t("Permissions")}</label>
-      <select id="ia-autorisation" aria-describedby="ia-autorisation-aide"${distant ? " disabled" : ""}>${AUTORISATIONS_IA().map(([v, titre]) => `<option value="${v}"${ia.autorisation === v ? " selected" : ""}>${h(titre)}</option>`).join("")}</select>
+      <select id="ia-autorisation" aria-describedby="ia-autorisation-aide"${distant || !ia.autorisation ? " disabled" : ""}>${AUTORISATIONS_IA().map(([v, titre]) => `<option value="${v}"${ia.autorisation === v ? " selected" : ""}>${h(titre)}</option>`).join("")}</select>
       <span class="petit" id="ia-autorisation-aide">${aideAutorisationIA()}</span></div>
     <details class="ia-aide"><summary class="petit">${t("How does it work?")}</summary>
       ${MODES.map(([, titre, phrase]) => `<p class="petit m0"><b>${t(titre)}</b> — ${t(phrase)}</p>`).join("")}
@@ -7577,7 +7581,7 @@ $("#page").addEventListener("submit", async (ev) => {
 async function envoyerIA(texte) {
   const b = $("#ia-form [type=submit]");
   ia.envoi = true; if (b) { b.disabled = true; b.textContent = t("Sending…"); }
-  const r = await lancerTacheSrv(term.id, texte, "", ia.mode === "direct" ? term.session : "", true).finally(() => {
+  const r = await lancerTacheSrv(term.id, texte, "", ia.mode === "direct" ? term.session : "", term.session).finally(() => {
     ia.envoi = false; const b2 = $("#ia-form [type=submit]"); if (b2) { b2.disabled = false; b2.textContent = t("Send"); }
   });
   if (!r) { const c = $("#ia-texte"); if (c && !c.value.trim()) c.value = texte; return false; }
