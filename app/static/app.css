@@ -1556,10 +1556,15 @@ html.scene-pause .verrou * { animation-play-state: paused !important; }
 .term-reglages-ligne output { min-width: 2.2em; font-variant-numeric: tabular-nums; }
 .srv-reglage-terminal { margin-top: 8px; }
 /* the assistant beside the terminal (M231e): its modes on top, what it did, what runs now with Stop, then the question */
-.term-zones.avec-ia { grid-template-columns: minmax(0, 1fr) minmax(300px, 380px); }
-.term-zones:not(.avec-ia) .ia { display: none; }
+/* the line between them (note 19h03 §8) sets --ia-largeur; each side keeps its minimum width so that nothing disappears */
+.term-zones.avec-ia { grid-template-columns: minmax(320px, 1fr) 12px minmax(300px, var(--ia-largeur, 380px)); column-gap: 0; }
+.term-zones:not(.avec-ia) .ia, .term-zones:not(.avec-ia) .term-separateur { display: none; }
+.term-separateur { position: relative; cursor: col-resize; touch-action: none; border-radius: 4px; outline-offset: -2px; }
+.term-separateur::before { content: ""; position: absolute; top: 0; bottom: 0; left: 5px; width: 2px; border-radius: 2px; background: var(--line); }
+.term-separateur:hover::before, .term-separateur:focus-visible::before, .term-separateur.glisse::before { background: var(--accent); }
 /* a tablet (or a narrow window): beside the menu, the assistant beside the terminal left it a dozen columns; under it, both keep the width */
 @media (min-width: 701px) and (max-width: 900px) {
+  .term-zones.avec-ia .term-separateur { display: none; }
   .term-zones.avec-ia { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 2fr) minmax(0, 3fr); } /* the assistant's plan and its input need more height than the shell */
   main:has(.term-zones.avec-ia) #barre-onglets, main:has(.term-zones.avec-ia) #bandeau { display: none; } /* stacked, both need the height (as on a phone) */
 }
@@ -1571,6 +1576,8 @@ html.scene-pause .verrou * { animation-play-state: paused !important; }
 .ia-autorisation { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
 .ia-autorisation select { flex: 0 1 auto; min-width: 0; }
 .ia-autorisation #ia-autorisation-aide { flex: 1 1 100%; color: var(--muted); }
+/* the mode's sentence only in the Ignore warning: elsewhere the panel needs the height (the list's tooltip, screen readers and How does it work? keep it) */
+.ia-autorisation:not(.danger) #ia-autorisation-aide { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .ia-autorisation.danger { padding: 6px 8px; border: 1px solid var(--erreur); border-radius: 6px; background: color-mix(in srgb, var(--erreur) 10%, transparent); }
 .ia-autorisation.danger #ia-autorisation-aide { color: var(--ink); font-weight: 600; }
 .ia-autorisation.danger .ic { color: var(--erreur); }
@@ -1578,7 +1585,7 @@ html.scene-pause .verrou * { animation-play-state: paused !important; }
 .ia-aide[open] { display: flex; flex-direction: column; gap: 4px; }
 .ia-fil-zone { position: relative; flex: 1; min-height: 32px; display: flex; flex-direction: column; }
 .ia-dernier { position: absolute; bottom: 6px; left: 50%; transform: translateX(-50%); box-shadow: 0 2px 8px rgba(0, 0, 0, .25); white-space: nowrap; }
-.ia-decision { max-height: 60%; overflow-y: auto; flex: 0 1 auto; min-height: min(150px, 35%); } /* the thread gives its height first; the card scrolls before it pushes the input out */
+.ia-decision { max-height: 60%; overflow-y: auto; flex: 0 1 auto; min-height: min(130px, 30%); } /* the thread gives its height first; the card scrolls before it pushes the input out */
 @media (max-width: 700px) { .ia-mode { min-height: 44px; } }
 .ia-decision .ia-plan > .ligne:last-child { position: sticky; bottom: 0; background: var(--panel); padding-block: 4px; } /* the card scrolls, its decision stays in view */
 .ia-file { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-radius: 6px; background: color-mix(in srgb, var(--accent) 10%, transparent); }
@@ -1616,6 +1623,8 @@ html.scene-pause .verrou * { animation-play-state: paused !important; }
   .term-hote { padding: 4px; }
   .term-zones, .term-zones.avec-ia { grid-template-columns: minmax(0, 1fr); height: calc(100dvh - 220px); min-height: 160px; } /* the keyboard can leave little room */
   .term-onglets .term-onglet-ia { display: block; }
+  .term-zones.clavier .ia-autorisation, .term-zones.clavier .ia-aide { display: none; } /* the on-screen keyboard open: the input keeps its room */
+  .term-zones .term-separateur { display: none; } /* one view at a time under the tabs: nothing to resize */
   .term-bascule-ia { display: none; }
   /* SFTP on a phone: one panel at a time under the selector, Send / Download instead of a drag, the menu as a bottom sheet */
   .sftp { grid-template-columns: minmax(0, 1fr); }
@@ -1639,7 +1648,7 @@ html.scene-pause .verrou * { animation-play-state: paused !important; }
   .terminal-page:not([data-onglet="ia"]) .ia, .terminal-page[data-onglet="ia"] .term-hote, .terminal-page[data-onglet="ia"] .sftp { display: none; }
   /* the assistant's tab: the terminal's own tools step aside; every control a 44 px touch target */
   .terminal-page[data-onglet="ia"] .term-seul, .terminal-page[data-onglet="ia"] #term-reglages-zone { display: none; }
-  .terminal-page .btn, .terminal-page summary, .term-barre > a, [data-ia-carte] { min-height: 44px; }
+  .terminal-page .btn, .terminal-page summary, .terminal-page select, .term-barre > a, [data-ia-carte] { min-height: 44px; }
   .terminal-page summary, .term-barre > a, [data-ia-carte] { display: inline-flex; align-items: center; }
 }
 }

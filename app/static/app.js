@@ -6474,14 +6474,43 @@ pages.terminal = async () => {
     ${avis ? `<div class="bloc term-message"><p class="m0"><b>${h(avis[0])}</b></p><p class="muet m0">${h(avis[1])}</p><div class="ligne m0"><a class="btn" href="#serveur/${encodeURIComponent(x.id)}">${t("Back to the server")}</a></div></div>`
       : `<div class="bloc term-message" id="term-message" role="alert" hidden></div><div id="term-reglages-zone">${term.essai ? panneauReglagesTerminal() : ""}</div>
       <div class="onglets term-onglets" role="tablist" aria-label="${h(t("Connection views"))}">${[["terminal", t("Terminal"), "term-hote"], ["sftp", t("SFTP"), "sftp"], ["ia", t("Assistant"), "ia"]].map(([o, nom, zone]) => `<button type="button" role="tab" id="term-onglet-${o}" class="term-onglet-${o}${sf.onglet === o ? " actif" : ""}" aria-selected="${sf.onglet === o}" aria-controls="${zone}" tabindex="${sf.onglet === o ? 0 : -1}" data-term-onglet="${o}">${nom}</button>`).join("")}</div>
-      <div class="term-zones${ia.visible ? " avec-ia" : ""}" id="term-zones"><div class="term-hote" id="term-hote" role="tabpanel" aria-labelledby="term-onglet-terminal"></div><section class="sftp" id="sftp" role="tabpanel" aria-labelledby="term-onglet-sftp"></section>${panneauIA(distant)}</div>`}
+      <div class="term-zones${ia.visible ? " avec-ia" : ""}" id="term-zones"${largeurIAGardee() ? ` style="--ia-largeur:${largeurIAGardee()}px"` : ""}><div class="term-hote" id="term-hote" role="tabpanel" aria-labelledby="term-onglet-terminal"></div><section class="sftp" id="sftp" role="tabpanel" aria-labelledby="term-onglet-sftp"></section><div class="term-separateur" role="separator" tabindex="0" aria-orientation="vertical" aria-controls="ia" aria-label="${h(t("Width of the assistant"))}" title="${h(t("Drag or use the arrow keys to resize; double-click to reset"))}" data-term-separateur></div>${panneauIA(distant)}</div>`}
   </div>`;
 };
+// note 19h03 §8: the line between the terminal and the assistant sets the assistant's width, kept on this device;
+// the grid keeps both above their minimum (CSS); stacked (tablet, phone) the line is hidden
+const IA_MIN = 300, TERM_MIN = 320, SEPARATEUR = 12;
+function largeurIAGardee() { try { return +localStorage.getItem("athanor.terminal.iaLargeur") || 0; } catch (e) { return 0; } }
+function largeurIA(l) { // l = null: back to the default width
+  const z = $("#term-zones"); if (!z) return;
+  const v = l == null ? 0 : Math.round(Math.min(Math.max(IA_MIN, z.clientWidth - TERM_MIN - SEPARATEUR), Math.max(IA_MIN, l)));
+  if (v) z.style.setProperty("--ia-largeur", v + "px"); else z.style.removeProperty("--ia-largeur");
+  try { if (v) localStorage.setItem("athanor.terminal.iaLargeur", v); else localStorage.removeItem("athanor.terminal.iaLargeur"); } catch (e) { /* this window only */ }
+  ariaSeparateur();
+}
+function ariaSeparateur() {
+  const s = $("[data-term-separateur]"), z = $("#term-zones"), p = $("#ia"); if (!s || !z || !p) return;
+  s.setAttribute("aria-valuemin", IA_MIN); s.setAttribute("aria-valuemax", Math.max(IA_MIN, z.clientWidth - TERM_MIN - SEPARATEUR)); s.setAttribute("aria-valuenow", p.offsetWidth);
+}
+$("#page").addEventListener("pointerdown", (ev) => {
+  const s = ev.target.closest && ev.target.closest("[data-term-separateur]"); if (!s || ev.button !== 0) return;
+  ev.preventDefault(); s.setPointerCapture(ev.pointerId); s.classList.add("glisse");
+  const droite = $("#term-zones").getBoundingClientRect().right, bouger = (e) => largeurIA(droite - e.clientX - SEPARATEUR / 2);
+  const fin = () => { s.classList.remove("glisse"); s.removeEventListener("pointermove", bouger); s.removeEventListener("pointerup", fin); s.removeEventListener("pointercancel", fin); };
+  s.addEventListener("pointermove", bouger); s.addEventListener("pointerup", fin); s.addEventListener("pointercancel", fin);
+});
+$("#page").addEventListener("dblclick", (ev) => { if (ev.target.closest && ev.target.closest("[data-term-separateur]")) largeurIA(null); });
+$("#page").addEventListener("focusin", (ev) => { if (ev.target.matches && ev.target.matches("[data-term-separateur]")) ariaSeparateur(); });
+$("#page").addEventListener("keydown", (ev) => { // the arrows move the line (left: a wider assistant), Shift for big steps
+  if (!ev.target.matches || !ev.target.matches("[data-term-separateur]") || !["ArrowLeft", "ArrowRight"].includes(ev.key)) return;
+  ev.preventDefault(); largeurIA($("#ia").offsetWidth + (ev.key === "ArrowLeft" ? 1 : -1) * (ev.shiftKey ? 80 : 20));
+});
 // the terminal fills the content area down to its bottom edge (a fixed calc() overflowed under the page's header)
 function hauteurTerminal() {
   const p = $("#page"), zones = $("#term-zones"); if (!p || !zones) return;
   const v = window.visualViewport, clavier = v ? Math.max(0, innerHeight - v.height - v.offsetTop) : 0; // phone: the on-screen keyboard covers the bottom
   const bas = Math.min(p.getBoundingClientRect().bottom - parseFloat(getComputedStyle(p).paddingBottom), innerHeight - clavier);
+  zones.classList.toggle("clavier", clavier > 0);
   zones.style.height = Math.max(clavier ? 160 : 220, Math.floor(bas - zones.getBoundingClientRect().top - 2)) + "px";
 }
 // the keyboard opens or closes: the zones shrink so that the assistant's input stays just above it
@@ -6524,7 +6553,7 @@ async function monterTerminal() {
       if (ctrl && k === "v") return false; // the browser's paste event: xterm pastes it (bracketed paste kept)
       return true;
     });
-    term.obs = new ResizeObserver(() => requestAnimationFrame(() => { hauteurTerminal(); if (term.el.isConnected && term.el.offsetWidth) term.fit.fit(); rendreLignes("local"); rendreLignes("serveur"); }));
+    term.obs = new ResizeObserver(() => requestAnimationFrame(() => { hauteurTerminal(); ariaSeparateur(); if (term.el.isConnected && term.el.offsetWidth) term.fit.fit(); rendreLignes("local"); rendreLignes("serveur"); }));
   } else hote.append(term.el);
   term.obs.disconnect(); term.obs.observe($("#page")); term.obs.observe(hote); majIA(); hauteurTerminal(); rendreSftp();
   appliquerReglagesTerminal();
@@ -7477,7 +7506,7 @@ function dessinerIA() {
   if (ia.attente && !courante && !ia.envoi) { const a = ia.attente; ia.attente = ""; envoyerIA(a); } // sent: the queued line goes now
   const f = $("#ia-file");
   if (f) { f.hidden = !ia.attente; f.innerHTML = ia.attente ? `<span class="ia-file-texte petit" title="${h(ia.attente)}">${h(t("Queued: {0}", [ia.attente.replace(/\s+/g, " ")]))}</span>
-    <button type="button" class="btn btn-petit" data-ia-annuler-file>${t("Cancel")}</button>` : ""; }
+    <button type="button" class="btn btn-petit" data-ia-envoyer-file title="${h(t("Stops the task typing in your terminal, then sends this message"))}">${t("Send now")}</button><button type="button" class="btn btn-petit" data-ia-annuler-file>${t("Cancel")}</button>` : ""; }
   const enCours = courante && (courante.actions || []).filter((a) => a.etat === "en_cours").slice(-1)[0];
   const texte = { repos: t("The assistant is idle."), attente_decision: t("Waiting for your decision"), arretee: t("Stopped"), erreur: erreurIA(e.tache),
     hs: t("Athanor does not answer: the assistant's state is unknown, your terminal stays free.") }[e.etat]
@@ -7561,6 +7590,15 @@ $("#page").addEventListener("keydown", (ev) => { // Enter sends, Shift+Enter mak
 $("#page").addEventListener("click", async (ev) => {
   if (etat.page !== "terminal") return;
   if (ev.target.closest("[data-ia-dernier]")) { const fil = $("#ia-fil"); fil.scrollTop = fil.scrollHeight; return basFilIA(); }
+  if (ev.target.closest("[data-ia-envoyer-file]")) { // note 19h03 §7: the queued line goes ahead (an answer to the assistant's question); the task typing in the terminal stops first
+    const a = ia.attente; if (!a || ia.envoi) return;
+    ia.attente = ""; rendreIA();
+    for (const x of ia.taches.filter((y) => y.direct && vivanteIA(y))) {
+      if (!(await action(api("serveurs/" + encodeURIComponent(term.id) + "/taches/" + encodeURIComponent(x.id) + "/arreter", "POST")))) { ia.attente = a; return rendreIA(); } // not stopped: the line stays queued
+      x.assistant = "arretee";
+    }
+    return envoyerIA(a);
+  }
   if (ev.target.closest("[data-ia-annuler-file]")) { // the queued message is not sent; back in the field when that one is empty
     const c = $("#ia-texte"); if (c && !c.value.trim()) c.value = ia.attente;
     ia.attente = ""; rendreIA(); return c && c.focus();
