@@ -1485,12 +1485,12 @@ html.scene-pause .verrou * { animation-play-state: paused !important; }
 .sftp-droits th, .sftp-droits td { padding: 4px 10px; text-align: center; font-weight: 500; }
 .sftp-droits th[scope="row"] { text-align: left; }
 .sftp-droits input { width: 22px; height: 22px; margin: 11px; accent-color: var(--accent); }
-.sftp-transferts { grid-column: 1 / -1; grid-row: 3; margin-top: 10px; max-height: 128px; overflow: auto; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+.sftp-transferts { grid-column: 1 / -1; grid-row: 3; margin-top: 10px; max-height: 128px; overflow: hidden; display: flex; flex-direction: column; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
 .sftp-transferts[hidden] { display: none; }
 .sftp-tr-tete { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .sftp-tr-tete h3 { font-size: 14px; }
 .sftp-tr-tete .btn { margin-left: auto; }
-.sftp-tr-liste { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.sftp-tr-liste { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; overflow: auto; min-height: 0; } /* only the list scrolls, the head stays in view */
 .sftp-tr { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; }
 .sftp-tr-ic { color: var(--accent); }
 .sftp-tr-texte { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 10px; row-gap: 2px; align-items: baseline; min-width: 0; }

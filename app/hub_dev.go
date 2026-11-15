@@ -71,7 +71,11 @@ func (moduleDev) Elements(s *Serveur) []ElementHub {
 func attenteDev(pv ProjetVue) *AttenteElement {
 	switch pv.Besoin {
 	case "pour_vous":
-		return &AttenteElement{Raison: "{0} task(s) on the For you page", Args: []any{pv.PourVous}, Page: "#pourvous", Cle: strings.Join(pv.idsPourVous, ",")}
+		raison := "{0} tasks on the For you page"
+		if pv.PourVous == 1 {
+			raison = "1 task on the For you page"
+		}
+		return &AttenteElement{Raison: raison, Args: []any{pv.PourVous}, Page: "#pourvous", Cle: strings.Join(pv.idsPourVous, ",")}
 	case "attente_vous":
 		return &AttenteElement{Raison: "Claude is waiting for you", Page: "#pourvous"}
 	case "connexion":

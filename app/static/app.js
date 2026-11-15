@@ -61,7 +61,7 @@ function listePlan(plan, compact) {
   const archives = plan.filter((j) => j.archive), reste = plan.filter((j) => !j.archive);
   const ouvert = etat.ouverts.has("plan:archives");
   const ligne = (j) => rendreJalon(j, etatDuJalon(j, () => premier ? (premier = false, true) : false), compact);
-  const tete = archives.length ? `<li class="coche plan-archives" data-plan-archives><span class="jalon-ico">${ic("ok")}</span><div class="jalon-corps"><div class="jalon-titre">${t("{0} milestone(s) done earlier", [archives.length])}<span class="jalon-chevron">${ouvert ? ic("bas") : ic("droite")}</span></div></div></li>` : "";
+  const tete = archives.length ? `<li class="coche plan-archives" data-plan-archives><span class="jalon-ico">${ic("ok")}</span><div class="jalon-corps"><div class="jalon-titre">${tn(archives.length, "1 milestone done earlier", "{0} milestones done earlier", [archives.length])}<span class="jalon-chevron">${ouvert ? ic("bas") : ic("droite")}</span></div></div></li>` : "";
   return tete + (ouvert ? archives.map(ligne).join("") : "") + reste.map(ligne).join("");
 }
 
@@ -636,7 +636,7 @@ function phraseEtat(v) {
     case "travail": return { classe: "travaille", titre: e.ouvriers ? t("{0} workers in parallel: {1}", [e.ouvriers.split(/\s+/).length, e.ouvriers.split(/\s+/).join(", ")]) : /^Merging/.test(e.etat || "") ? t("The lead merges the workers' branches") : e.jalon_en_cours ? t("Claude is working on {0}", [titreJalon(e.jalon_en_cours)]) : t("Claude is working"), sous: [e.debut_cycle && t("for {0}", [depuis(e.debut_cycle)]), t("cycle {0}", [e.cycle]), e.template, v.eco && t("eco mode"), v.rapide && t("fast mode"), v.contexte && t("context {0} tokens", [fmtTokens(v.contexte)])].filter(Boolean).join(" · ") };
     case "quota": return { classe: "quota", titre: t("Usage limit reached, Claude is waiting"), sous: t("Resumes {0} · cycle {1}", [e.reprise_prevue || t("as soon as possible"), e.cycle]) };
     case "budget": return { classe: "quota", titre: t("API budget or credit used up, Claude is waiting"), sous: t("Raise the budget, count again (API spend, below) or put another API key in Settings: the pilot resumes at once.") };
-    case "attente_vous": return { classe: "quota", titre: t("Claude is waiting for you"), sous: t("{0} task(s) on the For you page: the pilot resumes as soon as you answer one.", [v.pour_vous || 0]) };
+    case "attente_vous": return { classe: "quota", titre: t("Claude is waiting for you"), sous: tn(v.pour_vous || 0, "1 task on the For you page: the pilot resumes as soon as you answer it.", "{0} tasks on the For you page: the pilot resumes as soon as you answer one.", [v.pour_vous || 0]) };
     case "entre_cycles": return { classe: "entre_cycles", titre: t("Between two cycles"), sous: t("Cycle {0} is done, the next one starts with a fresh context.", [e.cycle]) };
     case "erreur": return { classe: "erreur", titre: t("Error, retry scheduled"), sous: e.etat };
     case "connexion": return { classe: "connexion", titre: t("Connection problem"), sous: t("Check the token or the API key in Settings, or go through Setup & health: a new one is used at once.") };
@@ -768,7 +768,7 @@ window.athanorFermeture = (noms) => {
 function besoinProjet(x) {
   // the rule lives in Go (besoinProjet, hub_dev.go): only its text and its page here
   switch (x.besoin) {
-    case "pour_vous": return { texte: t("{0} task(s) on the For you page", [x.pour_vous]), page: "pourvous" };
+    case "pour_vous": return { texte: tn(x.pour_vous, "1 task on the For you page", "{0} tasks on the For you page", [x.pour_vous]), page: "pourvous" };
     case "attente_vous": return { texte: t("Claude is waiting for you"), page: "pourvous" };
     case "connexion": return { texte: t("Connection problem"), page: "suivi" };
     case "budget": return { texte: t("API budget or credit used up, Claude is waiting"), page: "suivi" };
@@ -1116,7 +1116,7 @@ document.addEventListener("click", (ev) => { if (etat.selecteurOuvert && !ev.tar
 function marquerDistance(v) {
   const a = document.querySelector('#onglets-module a[data-page="distance"]'); if (!a) return;
   const n = v.distance_active ? v.connectes || 0 : 0;
-  a.dataset.connectes = n ? String(n) : ""; a.title = v.distance_active ? t("Remote access on: {0} device(s) connected", [n]) : "";
+  a.dataset.connectes = n ? String(n) : ""; a.title = v.distance_active ? tn(n, "Remote access on: 1 device connected", "Remote access on: {0} devices connected", [n]) : "";
   a.classList.toggle("distance-active", !!v.distance_active);
 }
 // phones: the sidebar is a drawer (Menu button), closed again by a choice or a tap beside it
@@ -1215,6 +1215,8 @@ function traduireNav() {
   $("#verrou-bouton").textContent = t("Unlock");
 }
 
+// a count in words, singular or plural (never "task(s)"): the key for 1, else the plural key
+function tn(n, un, plusieurs, args) { return t(Number(n) === 1 ? un : plusieurs, args); }
 // the bell's count in words, singular or plural (never "alert(s)")
 function alertesVous(n) { return n === 1 ? t("1 alert needs you") : t("{0} alerts need you", [n]); }
 function naviguer() {
@@ -1928,7 +1930,7 @@ function rendreAvancement(stats, plan, faits, actif) {
   const resume = reste <= 0 ? t("Every milestone of the plan is done.")
     : eta ? t("At this pace, the last milestone around {0}: about {1} h of work and ≈ {2} $ more at list price.", [quandLisible(eta / 1000), heuresReste.toLocaleString(lang, { maximumFractionDigits: heuresReste < 10 ? 1 : 0 }), Math.round(coutReste)])
     : t("The estimate appears after two milestones.");
-  return `<div class="bloc"><div class="ligne m0"><h2 class="m0">${t("Progress")}</h2><span class="espace"></span><span class="muet petit">${t("{0} milestone(s) left", [Math.max(0, reste)])}</span></div>
+  return `<div class="bloc"><div class="ligne m0"><h2 class="m0">${t("Progress")}</h2><span class="espace"></span><span class="muet petit">${tn(Math.max(0, reste), "1 milestone left", "{0} milestones left", [Math.max(0, reste)])}</span></div>
     <p class="av-resume">${h(resume)}</p>
     <svg class="avancement" viewBox="0 0 ${L} ${H}" role="img" aria-label="${h(resume)}">
       ${grilles}<path class="av-aire" d="${aire}"/>${breaks}${barres}<path class="av-ligne" d="${chemin}"/>${projection}${pts}
@@ -2393,7 +2395,7 @@ document.addEventListener("change", (ev) => {
 const POUVOIRS_HUB = [["internet", "Internet", "Searches and reads the web when a message needs it."],
   ["ecriture", "Writing", "Changes files, only in the folders you point to it with read and write, never elsewhere."]];
 const resumePouvoirs = (pv) => [t("Reads and answers"), ...POUVOIRS_HUB.filter(([k]) => pv[k]).map(([, n]) => t(n)),
-  ...((pv.dossiers || []).length ? [t("{0} folder(s)", [pv.dossiers.length])] : [])].join(" · ");
+  ...((pv.dossiers || []).length ? [tn(pv.dossiers.length, "1 folder", "{0} folders", [pv.dossiers.length])] : [])].join(" · ");
 // M196: the folders pointed (checked by the server, hub_chat_dossiers.go), each read only or read and write
 function listeDossiersHub(pv) {
   const l = pv.dossiers || [];
@@ -2511,7 +2513,7 @@ pages.suivi = async () => {
   const cache = somme("cache_lu"), plein = somme("entree_tokens") + somme("cache_ecrit");
   const ratio = cache + plein ? Math.round((cache / (cache + plein)) * 100) : 0;
   const g = v.gains;
-  return `${bandeauRaccourci()}${v.pour_vous ? `<a class="bloc pv-bandeau" href="#pourvous"><strong>${t("Claude needs you")}</strong> · ${t("{0} task(s) on the For you page", [v.pour_vous])} →</a>` : ""}
+  return `${bandeauRaccourci()}${v.pour_vous ? `<a class="bloc pv-bandeau" href="#pourvous"><strong>${t("Claude needs you")}</strong> · ${tn(v.pour_vous, "1 task on the For you page", "{0} tasks on the For you page", [v.pour_vous])} →</a>` : ""}
   <div class="grille grille-2">
     <div class="colonne"><div class="bloc"><h2>${t("Right now")}</h2>
       ${v.actif && v.pilote_ancien ? `<p class="muet petit">${v.version_pilote
@@ -3027,7 +3029,7 @@ async function gererProjet(act, nom, bouton) {
   if (!r) return;
   if (corps.action === "verifier") {
     const d = (r.decoches || []).length, c = (r.recoches || []).length;
-    toast(d || c ? t("{0} milestone(s) unticked, {1} ticked again.", [d, c]) : t("The milestones match the folder."), "ok");
+    toast(d || c ? t("Milestones unticked: {0}, ticked again: {1}.", [d, c]) : t("The milestones match the folder."), "ok");
     if (corps.mode === "claude") toast(t("Claude checks the milestones at the next start."), "ok");
   }
   if (act === "renommer" && r.nom) etat.projet = r.nom;
@@ -3489,7 +3491,7 @@ function carteApprobation(x, ap, codes) {
   const durcir = x.agent === "durcissement"; // B80: Athanor's own plan, titled by the server (its project is internal)
   if (x.action === "plan_serveur") return carteDecision(x, ap, durcir ? `<strong>${h(t("Harden this server: {0}", [d.nom || d.serveur]))}</strong>`
     : `<span class="badge">${h(x.env)}</span> <strong>${h(t("Plan for {0}", [d.nom || d.serveur]))}</strong> <span>${h(x.projet)}</span>`,
-    [t("Server role: {0}", [x.env]), t("{0} step(s)", [d.etapes || "?"])], blocPlan(x, p), d.regle === "oui" && t("Never ask again for this server"), p && p.critique && !p.critique.verdict);
+    [t("Server role: {0}", [x.env]), tn(d.etapes || "?", "1 step", "{0} steps", [d.etapes || "?"])], blocPlan(x, p), d.regle === "oui" && t("Never ask again for this server"), p && p.critique && !p.critique.verdict);
   // a deployment (M120): prod is never decided by a rule
   if (x.action === "deploiement") return carteDecision(x, ap, `<span class="badge">${h(nomEnv(x.env))}</span> <strong>${h(x.env === "prod" ? t("Deploy {0} to production?", [d.hote]) : t("Deploy {0} to {1}?", [d.hote, nomEnv(x.env)]))}</strong> <span>${h(x.projet)}</span>`,
     [t("Commit {0}", [d.commit || (d.sha || "").slice(0, 7)]), d.avant && t("Online now: version {0}", [d.avant]), d.serveurs && t("Servers: {0}", [d.serveurs]), d.fichiers_build && t("Build files changed: {0}", [d.fichiers_build])],
@@ -3647,7 +3649,7 @@ function blocBibliothequeAgents(biblio) {
       <label class="interrupteur" title="${h(t("Used by this project"))}"><input type="checkbox" data-ag-actif="${h(a.nom)}" ${a.actif ? "checked" : ""}></label>
       <div class="ext-corps"><div class="ext-nom">${h(a.nom)} <span class="etiquette">${a.origine === "chef" ? t("proposed by the lead") : t("created by you")}</span>${a.lecture_seule ? ` <span class="etiquette">${t("read only")}</span>` : ""}</div>
         <div class="ext-desc">${h(a.description)}</div>
-        <div class="muet petit">${t("Used by {0} project(s)", [(a.projets || []).length])}</div></div>
+        <div class="muet petit">${tn((a.projets || []).length, "Used by 1 project", "Used by {0} projects", [(a.projets || []).length])}</div></div>
       <div class="ext-actions"><button class="btn btn-petit" data-ag="modifier" data-nom="${h(a.nom)}">${t("Edit")}</button><button class="btn btn-petit btn-danger" data-ag="supprimer" data-nom="${h(a.nom)}" title="${h(t("Delete"))}">${ic("croix")}</button></div></div>`; }).join("");
   const vus = biblio.filter((a) => agentCorrespond(a, etat.agRecherche)).length;
   return `<div class="bloc mt-2"><h2>${t("Sub-agent library")} <span class="muet">${biblio.length}</span></h2>
@@ -4689,7 +4691,7 @@ function rendreBlocPCs(vp) {
         ${p.capacites || (p.mots || []).length ? `<div class="muet petit">${h(p.capacites || "")}${(p.mots || []).length ? ` <span class="mots-pc">${p.mots.map((m) => `<code>${h(m)}</code>`).join(" ")}</span>` : ""}</div>` : ""}</td>
       <td>${etatPC(p)}${p.en_ligne && p.pilote && p.jalon && principal(p.jalon, p) ? `<div class="muet petit">${h(t("in place of {0}", [principal(p.jalon, p)]))}</div>` : ""}${p.pousse ? `<div class="muet petit">${h(t("last push: {0}", [p.pousse]))}</div>` : ""}${refus(p)}</td></tr>`).join("");
   const enLigne = (vp.pcs || []).filter((p) => p.en_ligne).length;
-  return `<div class="bloc" id="bloc-pcs"><div class="bloc-tete"><h2>${t("Computers on this project")}</h2>${(vp.pcs || []).length ? `<span class="muet petit">${h(t("{0} other(s) online", [enLigne]))}</span>` : ""}</div>
+  return `<div class="bloc" id="bloc-pcs"><div class="bloc-tete"><h2>${t("Computers on this project")}</h2>${(vp.pcs || []).length ? `<span class="muet petit">${h(tn(enLigne, "1 other online", "{0} others online", [enLigne]))}</span>` : ""}</div>
     <table class="tab appareils pcs">${lignes}</table>
     ${vp.erreur ? `<p class="petit attention">${ic("croix")} ${h(erreurPCs(vp.erreur))}</p>` : ""}
     ${(vp.notes || []).length ? `<h3 class="mt-2">${t("Notes between the computers")}</h3><ul class="notes-pcs muet petit">${vp.notes.map((n) => `<li>${md(n.replace(/^-\s*/, ""))}</li>`).join("")}</ul>` : ""}
@@ -6201,7 +6203,7 @@ function carteTacheServeur(x, plans, distant) {
     const p = plans[id], attend = x.etat === "attente_accord" && i === x.plans.length - 1;
     if (!p) return `<p class="muet petit">${h(t("Plan {0}: no longer kept.", [i + 1]))}</p>`;
     const faites = (p.etapes || []).filter((e) => e.etat === "ok").length;
-    return `<div class="srv-tache-plan"><h4 class="m0">${h(t("Plan {0}", [i + 1]))} <span class="muet petit">${h(t("{0} of {1} step(s) applied", [faites, (p.etapes || []).length]))}</span></h4>${blocPlan({}, p)}
+    return `<div class="srv-tache-plan"><h4 class="m0">${h(t("Plan {0}", [i + 1]))} <span class="muet petit">${h(t("Steps applied: {0} of {1}", [faites, (p.etapes || []).length]))}</span></h4>${blocPlan({}, p)}
       ${attend ? `<p class="m0"><a href="#pourvous" class="btn btn-primaire" data-srv-tache-carte="${h(id)}">${t("Decide on its card")}</a></p>` : ""}</div>`;
   }).join("");
   const v = x.verification;
@@ -7339,7 +7341,7 @@ function tacheIA(x) {
   const plan = x.etat === "attente_accord" && (x.plans || []).length ? x.plans[x.plans.length - 1] : "", p = plan && ia.plans[plan];
   return `<div class="ia-tache" data-tache="${h(x.id)}"><p class="ia-demande">${h(x.texte)}${x.direct ? ` <span class="pv-etat pv-claude">${t("Shown in your terminal")}</span>` : ""}</p>
     ${(x.actions || []).length ? `<ol class="ia-actions">${x.actions.map(actionIA).join("")}</ol>` : ""}
-    ${p ? `<div class="ia-plan"><p class="m0"><b>${t("Plan to apply")}</b> <span class="muet petit">${h(t("{0} step(s)", [(p.etapes || []).length]))}</span></p>${blocPlan({}, p)}
+    ${p ? `<div class="ia-plan"><p class="m0"><b>${t("Plan to apply")}</b> <span class="muet petit">${h(tn((p.etapes || []).length, "1 step", "{0} steps", [(p.etapes || []).length]))}</span></p>${blocPlan({}, p)}
       ${(etat.vue || {}).distant ? "" : `<div class="ligne m0"><button type="button" class="btn btn-primaire btn-petit" data-ia-decider="accepter" data-plan="${h(plan)}">${t("Accept")}</button>
       <button type="button" class="btn btn-petit" data-ia-decider="refuser" data-plan="${h(plan)}">${t("Refuse")}</button>
       <a href="#approbations" class="petit" data-ia-carte="${h(plan)}">${t("Decide on its card")}</a></div>`}</div>` : ""}

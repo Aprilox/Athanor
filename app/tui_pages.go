@@ -508,7 +508,7 @@ func (a *appTUI) phrase() (string, string, couleurT) {
 	case "budget":
 		return t("API budget or credit used up, Claude is waiting"), t("Raise the budget, count again (API spend, below) or put another API key in Settings: the pilot resumes at once."), p.attention
 	case "attente_vous":
-		return t("Claude is waiting for you"), t("{0} task(s) on the For you page: the pilot resumes as soon as you answer one.", v.PourVous), p.attention
+		return t("Claude is waiting for you"), tuiPluriel(t, v.PourVous, "1 task on the For you page: the pilot resumes as soon as you answer it.", "{0} tasks on the For you page: the pilot resumes as soon as you answer one."), p.attention
 	case "entre_cycles":
 		return t("Between two cycles"), t("Cycle {0} is done, the next one starts with a fresh context.", e.Cycle), p.ok
 	case "erreur":
@@ -627,7 +627,7 @@ func (a *appTUI) lignesMaintenant(l int) [][]segTUI {
 		r = append(r, []segTUI{{"↻ " + t("New settings: restart after cycle"), a.st(p.attention, fond)}})
 	}
 	if v.PourVous > 0 {
-		texte("🙋 "+t("Claude needs you")+" · "+t("{0} task(s) on the For you page", v.PourVous), a.gras(p.attention, fond))
+		texte("🙋 "+t("Claude needs you")+" · "+tuiPluriel(t, v.PourVous, "1 task on the For you page", "{0} tasks on the For you page"), a.gras(p.attention, fond))
 	}
 	if v.Actif && v.PiloteAncien {
 		if v.VersionPilote != "" {

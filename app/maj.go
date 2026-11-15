@@ -497,11 +497,22 @@ func textesProgresMaj(langue string) [6]string {
 }
 
 // nettoyerMaj: what an update left in logs/maj, once the new version runs.
+// The downloaded executable that installed this version may still run for a few seconds and hold its
+// file: try again until it is gone (about a minute at most).
 func nettoyerMaj(k Kit) {
-	if versionKit(k.Racine) == versionAthanor {
-		_ = os.RemoveAll(dossierMaj(k))
+	if versionKit(k.Racine) != versionAthanor {
+		return
+	}
+	for i := 0; i < 20; i++ {
+		if os.RemoveAll(dossierMaj(k)) == nil {
+			return
+		}
+		time.Sleep(pauseNettoyageMaj)
 	}
 }
+
+// pauseNettoyageMaj: between two tries of nettoyerMaj (shortened by the tests).
+var pauseNettoyageMaj = 3 * time.Second
 
 // apiMaj: what is known of the updates; ?verifier=1 asks GitHub now.
 func (s *Serveur) apiMaj(w http.ResponseWriter, r *http.Request) {

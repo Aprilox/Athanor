@@ -210,8 +210,8 @@ func TestHubAncienneConfig(t *testing.T) {
 		fichiers[p.Demande()] = "# Demande\n\nUn " + nom + ".\n"
 		fichiers[p.Plan()] = "# Plan\n\n- [x] M1 : squelette\n- [ ] M2 : tranche\n"
 		fichiers[filepath.Join(p.FileAttente(), "01-suite.md")] = "Ajouter un mode sombre.\n"
-		fichiers[filepath.Join(p.Atelier(), "secrets.env")] = "API_TOKEN=temoin-projet-9150\n"
-		fichiers[filepath.Join(p.Dossier, ".env")] = "DB_PASSWORD=temoin-db-2286\n"
+		fichiers[filepath.Join(p.Atelier(), "secrets.env")] = "API_TOKEN=temoin-projet-9150\n" // gitleaks:allow (fake value: the test checks it never leaks)
+		fichiers[filepath.Join(p.Dossier, ".env")] = "DB_PASSWORD=temoin-db-2286\n"            // gitleaks:allow (fake value: the test checks it never leaks)
 		fichiers[filepath.Join(p.Dossier, "index.html")] = "<h1>" + nom + "</h1>\n"
 	}
 	projets = append(projets, Projet{Nom: "ancien", Dossier: filepath.Join(d, "projets", "ancien"), Archive: true})
@@ -441,7 +441,7 @@ func TestHubElements(t *testing.T) {
 func TestHubAttenteDev(t *testing.T) {
 	for besoin, veut := range map[string]string{
 		"":             "<nil>",
-		"pour_vous":    "{0} task(s) on the For you page [2] #pourvous",
+		"pour_vous":    "{0} tasks on the For you page [2] #pourvous",
 		"attente_vous": "Claude is waiting for you [] #pourvous",
 		"connexion":    "Connection problem [] #suivi",
 		"budget":       "API budget or credit used up, Claude is waiting [] #suivi",

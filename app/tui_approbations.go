@@ -124,7 +124,7 @@ func (a *appTUI) lignesApprTUI(x Approbation) []ligneCouleur {
 	corps := []string{x.Raison}
 	switch x.Action {
 	case actionPlanServeur:
-		meta = append(meta, t("Server role: {0}", x.Env), t("{0} step(s)", firstNonEmpty(d["etapes"], "?")))
+		meta = append(meta, t("Server role: {0}", x.Env), tuiPluriel(t, firstNonEmpty(d["etapes"], "?"), "1 step", "{0} steps"))
 		corps = nil
 	case actionDeploiement:
 		meta = append(meta, x.Projet, t("Commit {0}", shaCourt(firstNonEmpty(d["commit"], d["sha"]))))

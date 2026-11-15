@@ -85,8 +85,8 @@ func TestTUIAccueilServeur(t *testing.T) {
 	}
 	// "In progress" and the bell's alerts with their reason; a click on a line opens its project's page
 	txt := voir("accueil-120x40", 120, 40)
-	for _, x := range []string{"En cours", "Tout voir (20)", "! Studio, projet-03 : 1 tâche(s) sur la page Pour vous",
-		"! Studio, projet-07 : 1 tâche(s)", "projet-07  Studio  1 tâche(s) sur la page Pour vous"} {
+	for _, x := range []string{"En cours", "Tout voir (20)", "! Studio, projet-03 : 1 tâche sur la page Pour vous",
+		"! Studio, projet-07 : 1 tâche", "projet-07  Studio  1 tâche sur la page Pour vous"} {
 		if !strings.Contains(txt, x) {
 			t.Errorf("no %q in\n%s", x, txt)
 		}
