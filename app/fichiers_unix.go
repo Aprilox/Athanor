@@ -4,6 +4,7 @@ package main
 
 import (
 	"os"
+	"path/filepath"
 	"syscall"
 )
 
@@ -19,3 +20,6 @@ func runtimeWindows() bool { return false }
 
 // restreindreFichier: nothing to do, the file is created 0600.
 func restreindreFichier(string) error { return nil }
+
+// cheminFinal: the path the system really opens, links resolved; an error if it does not exist.
+func cheminFinal(chemin string) (string, error) { return filepath.EvalSymlinks(chemin) }

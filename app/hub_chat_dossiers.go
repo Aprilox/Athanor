@@ -55,6 +55,9 @@ func verifierDossierChat(k Kit, brut string) (string, error) {
 		return "", errDossierPoints
 	}
 	c := filepath.Clean(brut)
+	if runtime.GOOS == "windows" && strings.HasPrefix(c, `\\`) {
+		return "", errDossierAbsolu // UNC, \\?\, \\.\: a drive letter only
+	}
 	// each step of the path: no symbolic link, no junction (Windows: a mount point that Readlink reads)
 	for d := c; ; d = filepath.Dir(d) {
 		fi, err := os.Lstat(d)
@@ -76,27 +79,43 @@ func verifierDossierChat(k Kit, brut string) (string, error) {
 			break
 		}
 	}
+	// the path as typed and as the system opens it (an 8.3 short name leads to the same folder)
+	reel := cheminReel(c)
+	if runtime.GOOS == "windows" && strings.HasPrefix(reel, `\\`) {
+		return "", errDossierAbsolu
+	}
+	for _, x := range []string{c, reel} {
+		if err := interditChat(k, x); err != nil {
+			return "", err
+		}
+	}
+	return c, nil
+}
+
+// interditChat: why the folder c (cleaned) can never be given to the assistant, or nil.
+func interditChat(k Kit, c string) error {
 	for _, x := range strings.FieldsFunc(c, func(r rune) bool { return r == '/' || r == '\\' }) {
 		if n := strings.ToLower(x); n == ".env" || n == "secrets.env" {
-			return "", errDossierSecret
+			return errDossierSecret
 		}
 	}
 	if filepath.Dir(c) == c {
-		return "", errDossierSysteme // a drive, the root
+		return errDossierSysteme // a drive, the root
 	}
 	for _, d := range dossiersSysteme() { // the same as for a project's folder (api_projets.go)
-		if d != "" && sousChemin(c, filepath.Clean(d)) {
-			return "", errDossierSysteme
+		if d != "" && (sousChemin(c, filepath.Clean(d)) || sousChemin(c, cheminReel(d))) {
+			return errDossierSysteme
 		}
 	}
 	if home, err := os.UserHomeDir(); err == nil && home != "" {
-		home = filepath.Clean(home)
-		if sousChemin(home, c) { // the home folder or a parent of it
-			return "", errDossierSysteme
-		}
-		for _, x := range []string{".ssh", ".gnupg", ".aws", ".claude", ".config", ".docker", ".kube"} {
-			if sousChemin(c, filepath.Join(home, x)) {
-				return "", errDossierSysteme
+		for _, h := range []string{filepath.Clean(home), cheminReel(home)} {
+			if sousChemin(h, c) { // the home folder or a parent of it
+				return errDossierSysteme
+			}
+			for _, x := range []string{".ssh", ".gnupg", ".aws", ".claude", ".config", ".docker", ".kube"} {
+				if sousChemin(c, filepath.Join(h, x)) {
+					return errDossierSysteme
+				}
 			}
 		}
 	}
@@ -105,11 +124,13 @@ func verifierDossierChat(k Kit, brut string) (string, error) {
 		if a == "" {
 			continue
 		}
-		if a = filepath.Clean(a); sousChemin(c, a) || sousChemin(a, c) {
-			return "", errDossierAthanor
+		for _, b := range []string{filepath.Clean(a), cheminReel(a)} {
+			if sousChemin(c, b) || sousChemin(b, c) {
+				return errDossierAthanor
+			}
 		}
 	}
-	return c, nil
+	return nil
 }
 
 // verifierDossiersChat: the list checked, without doubles.

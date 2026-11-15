@@ -961,6 +961,40 @@ func (s *Serveur) apiEcrireMode(w http.ResponseWriter, r *http.Request) {
 // and the gateways that run outside the sandbox), that would be inside the tool, or that would be a drive
 // root or the home folder (git and Claude would see everything). Returns the message key, or "".
 func dossierInterdit(dossier, kit string) string {
+	const lettre = "Give the full path of the development folder (e.g. D:\\Dev\\my-site)"
+	if runtimeWindows() && strings.HasPrefix(filepath.Clean(dossier), `\\`) {
+		return lettre // UNC, \\?\, \\.\: a drive letter only (and never wait for a network host)
+	}
+	reel := cheminReel(dossier)
+	if runtimeWindows() && strings.HasPrefix(reel, `\\`) {
+		return lettre
+	}
+	// as typed and as the system opens it (a junction, a link or an 8.3 short name leads elsewhere)
+	if cle := dossierInterditTel(dossier, kit); cle != "" {
+		return cle
+	}
+	return dossierInterditTel(reel, cheminReel(kit))
+}
+
+// cheminReel: the path as the system opens it: its deepest existing part resolved (cheminFinal), the rest appended.
+func cheminReel(c string) string {
+	if c == "" {
+		return ""
+	}
+	c = filepath.Clean(c)
+	reste := ""
+	for d := c; ; d = filepath.Dir(d) {
+		if r, err := cheminFinal(d); err == nil {
+			return filepath.Join(r, reste)
+		}
+		if filepath.Dir(d) == d {
+			return c
+		}
+		reste = filepath.Join(filepath.Base(d), reste)
+	}
+}
+
+func dossierInterditTel(dossier, kit string) string {
 	norm := func(p string) string {
 		p = strings.ToLower(filepath.Clean(p))
 		return strings.TrimRight(p, `\/`) + string(filepath.Separator)

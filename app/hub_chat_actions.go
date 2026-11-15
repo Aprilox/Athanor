@@ -362,6 +362,7 @@ func (s *Serveur) carteActionChat(a ActionChat) CarteActionChat {
 			c.Acces = append(c.Acces, "Runs as a Windows program, outside the cage, with your rights: it can read and change your files and run programs.")
 		}
 		id := identExt(a.Nom)
+		_, homonyme := lireBiblio(k).MCP[id]
 		switch l, err := lireConfigCollee(a.Config, firstNonEmpty(id, "mcp")); {
 		case !reIDExt.MatchString(id) || id == "unreal-mcp":
 			c.Erreur = "Invalid name"
@@ -371,6 +372,8 @@ func (s *Serveur) carteActionChat(a ActionChat) CarteActionChat {
 			c.Erreur = "A key is written in clear: put ${NAME} in its place, you fill it in on the Skills & MCP page."
 		case a.Windows && !a.ConfirmeWindows:
 			c.Erreur = "Confirm that this server may run outside the cage, with your rights."
+		case homonyme:
+			c.Erreur = errMCPHomonyme.Error()
 		}
 	case "attribuer":
 		a.Element, a.Nom = strings.ToLower(strings.TrimSpace(a.Element)), strings.TrimSpace(a.Nom)

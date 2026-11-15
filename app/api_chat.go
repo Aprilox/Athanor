@@ -832,6 +832,8 @@ func fichiersMCPMessage(texte string) map[string]string {
 	return prop.Fichiers
 }
 
+var errMCPHomonyme = errors.New("An MCP server already has this name: remove it first on the Skills & MCP page, or give another name.")
+
 // ajouterMCPBiblio: a server proposed in a chat, as the user checked it on its card: the files of a server Claude
 // wrote into tools/mcp-ecrits/<id>/ (${ATHANOR_MCP_DIR}), the server into the library (as a pasted configuration,
 // api_extensions.go) and switched on in the projects of these keys (projets.json); its id, or the HTTP code and the error.
@@ -841,6 +843,10 @@ func ajouterMCPBiblio(k Kit, nom, description, source, config string, windows bo
 	}
 	extMu.Lock()
 	defer extMu.Unlock()
+	// never over an installed server: its files, its keys and the projects it is on would go to the new code
+	if _, existe := lireBiblio(k).MCP[identExt(nom)]; existe {
+		return "", http.StatusConflict, errMCPHomonyme
+	}
 	if len(fichiers) > 0 {
 		outils := filepath.Join(k.Racine, "tools")
 		_ = os.MkdirAll(outils, 0o755)

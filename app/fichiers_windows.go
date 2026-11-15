@@ -5,6 +5,7 @@ package main
 import (
 	"errors"
 	"os"
+	"strings"
 
 	"golang.org/x/sys/windows"
 )
@@ -24,6 +25,39 @@ func verrouillerFd(f *os.File) error {
 }
 
 func runtimeWindows() bool { return true }
+
+// cheminFinal: the path the system really opens (junctions, links and 8.3 short names resolved), with its drive
+// letter, or \\server\share for a network one; an error if it does not exist. (filepath.EvalSymlinks no longer
+// follows junctions and keeps the short names.)
+func cheminFinal(chemin string) (string, error) {
+	p, err := windows.UTF16PtrFromString(chemin)
+	if err != nil {
+		return "", err
+	}
+	h, err := windows.CreateFile(p, 0, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE, nil,
+		windows.OPEN_EXISTING, windows.FILE_FLAG_BACKUP_SEMANTICS, 0)
+	if err != nil {
+		return "", err
+	}
+	defer windows.CloseHandle(h)
+	buf := make([]uint16, 512)
+	for {
+		n, err := windows.GetFinalPathNameByHandle(h, &buf[0], uint32(len(buf)), 0)
+		if err != nil {
+			return "", err
+		}
+		if int(n) < len(buf) {
+			buf = buf[:n]
+			break
+		}
+		buf = make([]uint16, n+1)
+	}
+	s := windows.UTF16ToString(buf)
+	if strings.HasPrefix(s, `\\?\UNC\`) {
+		return `\\` + s[len(`\\?\UNC\`):], nil
+	}
+	return strings.TrimPrefix(s, `\\?\`), nil
+}
 
 // restreindreFichier: the file readable and writable by the current account only (B20): its DACL no longer
 // inherits the folder's (a project under C:\ gives "Authenticated Users" Modify); Go ignores 0600 on NTFS.

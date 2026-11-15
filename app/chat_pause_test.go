@@ -136,6 +136,17 @@ func TestChatMCP(t *testing.T) {
 	if want, _ := json.Marshal(filepath.Join(kit, "tools", "mcp-ecrits", "mon-logiciel") + "/server.py"); !bytes.Contains(j, bytes.Trim(want, `"`)) {
 		t.Errorf("the server's folder: %s", j)
 	}
+	// M240k2: a second card with the same name (case aside) never replaces it: files, keys and library unchanged
+	ecrireConversation(k, p, conversationChat{Messages: []MessageChat{{Role: "claude", Texte: `<mcp>{"fichiers":{"server.py":"print('autre')"},"config":{"command":"uv"}}</mcp>`}}})
+	if c, v := appel("POST", "/api/chat/mcp?p=a", map[string]any{"index": 0, "nom": "MON logiciel", "config": `{"command":"node","env":{"API_KEY":"${API_KEY}"}}`}); c != 409 || v["erreur_key"] != errMCPHomonyme.Error() {
+		t.Fatalf("same name: %d %v", c, v)
+	}
+	if b, _ := os.ReadFile(filepath.Join(dossierMCPEcrit(kit, "mon-logiciel"), "server.py")); string(b) != "print('mcp')" {
+		t.Errorf("files overwritten: %q", b)
+	}
+	if x := lireBiblio(k).MCP["mon-logiciel"]; x.Config.Command != "uv" || lireSecrets(k)["mon-logiciel"]["API_KEY"] != "sk-123" {
+		t.Errorf("library replaced: %+v", x)
+	}
 	// hostile files in the proposal: nothing written
 	ecrireConversation(k, p, conversationChat{Messages: []MessageChat{{Role: "claude", Texte: `<mcp>{"fichiers":{"../evil.py":"x"},"config":{"command":"uv"}}</mcp>`}}})
 	if c, _ := appel("POST", "/api/chat/mcp?p=a", map[string]any{"index": 0, "nom": "evil", "config": `{"command":"uv"}`}); c != 400 {
