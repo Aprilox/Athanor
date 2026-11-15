@@ -347,9 +347,25 @@ func TestInvariantI8(t *testing.T) {
 	}, "|"))
 	racine := ".."
 	ignores := []string{".git", ".athanor", ".claude", "node_modules", "third_party", "deliverable", "dist"}
+	gi, err := os.ReadFile("../.gitignore")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var locaux []string // the root paths .gitignore keeps out of git (the owner's .env, logs, vault data): never committed
+	for _, l := range strings.Split(string(gi), "\n") {
+		if l = strings.TrimSpace(l); strings.HasPrefix(l, "/") {
+			locaux = append(locaux, filepath.Join(racine, strings.Trim(l, "/")))
+		}
+	}
 	lus := 0
-	err := filepath.WalkDir(racine, func(c string, e fs.DirEntry, err error) error {
+	err = filepath.WalkDir(racine, func(c string, e fs.DirEntry, err error) error {
 		if err != nil {
+			return nil
+		}
+		if slices.ContainsFunc(locaux, func(m string) bool { ok, _ := filepath.Match(m, c); return ok }) {
+			if e.IsDir() {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 		if e.IsDir() {

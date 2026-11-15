@@ -488,7 +488,7 @@ func outilSFTPEnvoyer(ctx context.Context, c *ssh.Client, srv ServeurInventaire,
 		}
 	}
 	if err == nil {
-		err = cs.PosixRename(part, cible) // replaces the target in one step
+		err = remplacerSFTP(cs, part, cible) // replaces the target in one step where the server can
 	}
 	if err != nil {
 		r := ResultatOutil{Code: -1}

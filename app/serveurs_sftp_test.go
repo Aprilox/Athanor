@@ -4,11 +4,14 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
+
+	"github.com/pkg/sftp"
 )
 
 // TestTerminalSFTP: the files panel on the terminal's connection against the in-memory server: list, upload
@@ -211,6 +214,20 @@ func TestTerminalSFTP(t *testing.T) {
 	if c, _, _ := requete("GET", "/api/serveurs/"+srv.ID+"/sftp/"+fenetre, ""); c != http.StatusGone {
 		t.Errorf("terminal left open after fermerTerminaux: %d", c)
 	}
+	// T2-1: a terminal still connecting during a group closing is refused at its registration if it would have closed
+	terminaux.Lock()
+	vues := len(terminaux.coupures)
+	terminaux.Unlock()
+	fermerTerminaux(func(t *sessionTerminal) bool { return strings.HasPrefix(t.de, "appareil:") })
+	if c, _ := enregistrerTerminal(&sessionTerminal{id: "t21-appareil", de: "appareil:tel"}, vues); c != http.StatusConflict {
+		t.Errorf("a device's terminal connecting during the remote cut registered: %d", c)
+	}
+	if c, _ := enregistrerTerminal(&sessionTerminal{id: "t21-fenetre"}, vues); c != 0 {
+		t.Errorf("the window's terminal connecting during the remote cut refused: %d", c)
+	}
+	terminaux.Lock()
+	delete(terminaux.m, "t21-fenetre")
+	terminaux.Unlock()
 	journal := journalAuditTexte(t)
 	for _, x := range []string{"sftp.upload", "/notes.txt (14 bytes)", "sftp.download", "sftp.rename", "/notes.txt -\\u003e /lu.txt", "sftp.delete"} {
 		if !strings.Contains(journal, x) {
@@ -221,5 +238,57 @@ func TestTerminalSFTP(t *testing.T) {
 		if strings.Contains(journal, x) {
 			t.Errorf("audit log holds %q", x)
 		}
+	}
+}
+
+// TestRemplacerSFTPSansPosixRename (T2-2): a server without OpenSSH's posix-rename (Dropbear, BusyBox) still gets
+// the upload in place of the old file, and a new file too
+func TestRemplacerSFTPSansPosixRename(t *testing.T) {
+	if err := sftp.SetSFTPExtensions("hardlink@openssh.com", "statvfs@openssh.com"); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = sftp.SetSFTPExtensions("hardlink@openssh.com", "posix-rename@openssh.com", "statvfs@openssh.com")
+	})
+	cs, cc := net.Pipe()
+	srv := sftp.NewRequestServer(cs, sftp.InMemHandler())
+	go func() { _ = srv.Serve() }()
+	t.Cleanup(func() { _ = srv.Close() })
+	c, err := sftp.NewClientPipe(cc, cc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	if _, ok := c.HasExtension("posix-rename@openssh.com"); ok {
+		t.Fatal("posix-rename still offered")
+	}
+	ecrire := func(chemin, texte string) {
+		f, err := c.Create(chemin)
+		if err == nil {
+			_, err = f.Write([]byte(texte))
+			_ = f.Close()
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, avant := range []bool{true, false} {
+		if avant {
+			ecrire("/a", "vieux")
+		}
+		ecrire("/a.part", "neuf")
+		if err := remplacerSFTP(c, "/a.part", "/a"); err != nil {
+			t.Fatalf("replace (old file %v): %v", avant, err)
+		}
+		f, err := c.Open("/a")
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, _ := io.ReadAll(f)
+		_ = f.Close()
+		if _, err := c.Stat("/a.part"); string(b) != "neuf" || err == nil {
+			t.Errorf("old file %v: content %q, part left: %v", avant, b, err == nil)
+		}
+		_ = c.Remove("/a")
 	}
 }

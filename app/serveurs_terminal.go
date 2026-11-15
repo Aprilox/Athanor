@@ -66,6 +66,8 @@ var terminaux = struct {
 	sync.Mutex
 	m    map[string]*sessionTerminal
 	fins map[string]string // closed session -> why, for the interface's last question (bounded)
+	// every group closing (emergency stop, remote terminal off): a terminal still connecting meanwhile checks them
+	coupures []func(*sessionTerminal) bool
 }{m: map[string]*sessionTerminal{}, fins: map[string]string{}}
 
 func (t *sessionTerminal) toucher() { t.activite.Store(time.Now().UnixNano()) }
@@ -183,7 +185,7 @@ func (s *Serveur) apiTerminalOuvrir(w http.ResponseWriter, r *http.Request) {
 	}
 	srv := liste[i]
 	terminaux.Lock()
-	plein := len(terminaux.m) >= sessionsTerminalMax
+	plein, vues := len(terminaux.m) >= sessionsTerminalMax, len(terminaux.coupures)
 	terminaux.Unlock()
 	if plein {
 		s.erreur(w, http.StatusTooManyRequests, "Too many terminals are open: close one first")
@@ -205,16 +207,10 @@ func (s *Serveur) apiTerminalOuvrir(w http.ResponseWriter, r *http.Request) {
 		s.erreur(w, http.StatusBadGateway, "The server refused to open a terminal")
 		return
 	}
-	terminaux.Lock()
-	plein = len(terminaux.m) >= sessionsTerminalMax // checked again: openings at the same time all passed the first check
-	if !plein {
-		terminaux.m[t.id] = t
-	}
-	terminaux.Unlock()
-	if plein {
+	if statut, msg := enregistrerTerminal(t, vues); statut != 0 {
 		t.sess.Close()
 		client.Close()
-		s.erreur(w, http.StatusTooManyRequests, "Too many terminals are open: close one first")
+		s.erreur(w, statut, msg)
 		return
 	}
 	go func() { _ = t.sess.Wait(); t.fermer(finTerminalTermine) }()
@@ -419,8 +415,24 @@ func routeShellDistance(chemin string) bool {
 }
 
 // fermerTerminaux: closes the open terminals (and their files panel) for which fermer is true; how many.
+// enregistrerTerminal: the session joins the open ones, unless a group closing since its opening began (vues =
+// len(coupures) then) would have closed it, or the limit was reached meanwhile; 0 when registered
+func enregistrerTerminal(t *sessionTerminal, vues int) (int, string) {
+	terminaux.Lock()
+	defer terminaux.Unlock()
+	if slices.ContainsFunc(terminaux.coupures[vues:], func(f func(*sessionTerminal) bool) bool { return f(t) }) {
+		return http.StatusConflict, "Terminals were just closed by an emergency stop or by switching off the remote terminal: open it again if you need it"
+	}
+	if len(terminaux.m) >= sessionsTerminalMax { // checked again: openings at the same time all passed the first check
+		return http.StatusTooManyRequests, "Too many terminals are open: close one first"
+	}
+	terminaux.m[t.id] = t
+	return 0, ""
+}
+
 func fermerTerminaux(fermer func(*sessionTerminal) bool) int {
 	terminaux.Lock()
+	terminaux.coupures = append(terminaux.coupures, fermer)
 	var l []*sessionTerminal
 	for _, t := range terminaux.m {
 		if fermer(t) {

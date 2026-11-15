@@ -309,7 +309,7 @@ func (s *Serveur) apiSFTPEnvoyer(w http.ResponseWriter, r *http.Request) {
 		err = c.Chmod(part, avant.Mode().Perm())
 	}
 	if err == nil {
-		err = c.PosixRename(part, chemin)
+		err = remplacerSFTP(c, part, chemin)
 	}
 	if err != nil {
 		_ = c.Remove(part)
@@ -324,6 +324,18 @@ func (s *Serveur) apiSFTPEnvoyer(w http.ResponseWriter, r *http.Request) {
 	}
 	t.auditSFTP("sftp.upload", fmt.Sprintf("%s (%d bytes)", chemin, n))
 	s.ecrireJSON(w, map[string]any{"chemin": chemin, "taille": n})
+}
+
+// remplacerSFTP: part takes cible's place, in one step where the server has OpenSSH's posix-rename; Dropbear,
+// BusyBox and some NAS lack it (T2-2): the old file goes first, then a plain rename (a short moment without it)
+func remplacerSFTP(c *sftp.Client, part, cible string) error {
+	if _, ok := c.HasExtension("posix-rename@openssh.com"); ok {
+		return c.PosixRename(part, cible)
+	}
+	if err := c.Remove(cible); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	return c.Rename(part, cible)
 }
 
 // apiSFTPAgir: POST /api/serveurs/{id}/sftp/{session} {renommer, nom} or {supprimer}: rename an entry inside its

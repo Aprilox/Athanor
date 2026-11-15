@@ -6711,7 +6711,7 @@ function verrouTerminal(id) {
     if (!b) { b = document.createElement("div"); b.id = "term-verrou"; b.className = "term-verrou"; b.setAttribute("role", "status"); hote.prepend(b); }
     const dis = (etat.vue || {}).distant ? " disabled" : "";
     b.dataset.tache = id;
-    b.innerHTML = `<span class="pastille travaille"></span><span class="term-verrou-texte" title="${h(t("Your typing is locked so that you never both type at once."))}"><b>${t("The assistant is working")}</b> <span class="petit">${t("Your typing is locked so that you never both type at once.")}</span></span>
+    b.innerHTML = `<span class="pastille travaille"></span><span class="term-verrou-texte" title="${h(t("Your typing is locked so that you never both type at once."))}"><b>${t("The assistant is working")}</b> — <span class="petit">${t("Your typing is locked so that you never both type at once.")}</span></span>
       <button type="button" class="btn btn-danger btn-petit" data-ia-arreter="${h(id)}"${dis}>${t("Stop")}</button><button type="button" class="btn btn-petit" data-ia-main="${h(id)}"${dis}>${t("Take over")}</button>`;
     hote.classList.add("verrouille");
   }
