@@ -7185,6 +7185,12 @@ function afficherVerrou() {
   const v = $("#verrou"); v.hidden = !etat.verrouille; v.classList.remove("ouvre");
   if (etat.verrouille) { const e = (etat.vue && etat.vue.etat) || {}; $("#verrou-etat").textContent = etat.vue && etat.vue.actif ? t("Claude keeps working{0}.", [e.cycle ? " (" + t("cycle {0}", [e.cycle]) + ")" : ""]) : t("The pilot is stopped."); setTimeout(() => $("#verrou-mdp").focus(), 50); }
 }
+// phone: the on-screen keyboard never hides the password field (without visualViewport the lock screen simply scrolls)
+if (window.visualViewport) visualViewport.addEventListener("resize", () => {
+  const v = $("#verrou"); if (v.hidden) return;
+  v.style.setProperty("--clavier", Math.max(0, Math.round(innerHeight - visualViewport.height - visualViewport.offsetTop)) + "px");
+  if (document.activeElement === $("#verrou-mdp")) $("#verrou-mdp").scrollIntoView({ block: "nearest" });
+});
 $("#verrou-form").addEventListener("submit", async (ev) => {
   ev.preventDefault();
   const v = $("#verrou");

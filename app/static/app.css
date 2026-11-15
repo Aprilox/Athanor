@@ -692,8 +692,10 @@ textarea.en-attente { opacity: .55; }
 .ecran-tete { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .ecran-tete h3 { margin: 0; }
 #ecran-img { width: 100%; height: auto; border-radius: 8px; border: 1px solid var(--line); background: #000; }
-.verrou { position: fixed; inset: 0; background: var(--voile); display: grid; place-items: center; z-index: 40; }
-.verrou-carte { width: 360px; text-align: center; display: flex; flex-direction: column; gap: 12px; }
+/* margin: auto centres the card and keeps it reachable when it is taller than the screen (phone in landscape, keyboard open);
+   --clavier = height hidden by the on-screen keyboard (app.js, visualViewport) */
+.verrou { position: fixed; inset: 0; background: var(--voile); display: grid; z-index: 40; overflow-y: auto; padding: 16px 16px calc(16px + var(--clavier, 0px)); }
+.verrou-carte { width: min(360px, 100%); margin: auto; text-align: center; display: flex; flex-direction: column; gap: 12px; }
 .verrou-cadenas { line-height: 1; }
 .cadenas { display: inline-block; position: relative; width: 30px; height: 22px; margin-top: 18px; border-radius: 5px; background: var(--muted); }
 .cadenas::before { content: ""; position: absolute; left: 6px; bottom: 100%; width: 12px; height: 13px; border: 3px solid var(--muted); border-bottom: 0; border-radius: 9px 9px 0 0; }
@@ -1340,6 +1342,14 @@ html.scene-pause .verrou * { animation-play-state: paused !important; }
 @keyframes vs-ouvre { to { stroke-dashoffset: 0; transform: translateY(-14px); } }
 @keyframes vs-eclat { to { opacity: .5; transform: scale(3.2); } }
 @media (prefers-reduced-motion: reduce) { html[data-scene] .verrou { transition: opacity .2s ease !important; } }
+/* phone (portrait or landscape): the same story, lighter: a smaller drawing, no blur, a tighter card */
+@media (max-width: 700px), (max-height: 500px) {
+  html[data-scene] .verrou-scene { width: min(96px, 24vmin); }
+  .vs-lueur { filter: none; opacity: .1; }
+  @keyframes vs-souffle { 50% { opacity: .2; transform: scale(1.06); } }
+  html[data-scene] .verrou-nom { font-size: 24px; }
+  html[data-scene] .verrou-carte { gap: 8px; }
+}
 
 /* Terminal (#terminal/<id>): xterm.js fills the space left under the bar, on every screen */
 .terminal-page { display: flex; flex-direction: column; gap: 10px; }
