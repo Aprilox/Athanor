@@ -742,7 +742,7 @@ var (
 	reSedLecture     = regexp.MustCompile(`^\s*(((\d+|\$|/[^/]*/)(\s*,\s*(\d+|\$|/[^/]*/))?\s*[pd=])|s/([^/\\]|\\.)*/([^/\\]|\\.)*/[gpiI0-9]*)\s*$`)
 	reSQLDetruit     = regexp.MustCompile(`(?i)\b(drop\s+(table|database|schema|index|view|user|role|owned)|truncate|delete\s+from|flushall|flushdb|dropdatabase|deletemany)\b|\.(drop|remove)\s*\(`)
 	reSQLShell       = regexp.MustCompile(`(?i)\\!|\\[og]\s*\||(^|[\s'";])(system|\.shell|\.system|\.load)\s|\b(to|from)\s+program\b|\binto\s+(out|dump)file\b|\bconfig\s+set\b|\b(slaveof|replicaof)\b|\bmodule\s+load\b`)
-	reCommentaireSQL = regexp.MustCompile(`(?s)/\*.*?\*/`)
+	reCommentaireSQL = regexp.MustCompile(`(?s)/\*.*?\*/|--[^\n]*|#[^\n]*`) // block and line comments; the raw text is tested too (MySQL /*! … */ runs)
 	unitesVitales    = ensemble("ssh sshd networking network systemd-networkd NetworkManager")
 )
 
@@ -1218,7 +1218,7 @@ func init() {
 			if reSQLShell.MatchString(texte) { // M244k7: like vim -c '!…'
 				return ClasseDestructrice, n + " runs a shell command or writes a server file from the client"
 			}
-			if reSQLDetruit.MatchString(reCommentaireSQL.ReplaceAllString(texte, " ")) {
+			if reSQLDetruit.MatchString(texte) || reSQLDetruit.MatchString(reCommentaireSQL.ReplaceAllString(texte, " ")) {
 				return ClasseDestructrice, n + " deletes database data (DROP, TRUNCATE, DELETE…)"
 			}
 			return ClasseChangement, n + " runs database statements"

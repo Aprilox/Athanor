@@ -422,7 +422,7 @@ func TestClasserCommandeM244k7(t *testing.T) {
 			"git stash drop", "git rm -rf .", "git reflog expire --expire=now --all", "git gc --prune=now", "git submodule foreach 'rm x'",
 			`psql -c '\! rm -rf /srv/x'`, `mysql -e '\! rm x'`, "mysql -e 'system rm x'", "sqlite3 x.db '.shell rm x'", `psql -c "COPY x TO PROGRAM 'rm /srv/y'"`,
 			"redis-cli config set dir /etc/cron.d", `mysql -e "select 1 into outfile '/etc/cron.d/x'"`, "psql -c 'DROP /* x */ TABLE y'", "psql -c 'DROP/**/TABLE y'",
-			"mysql -e 'delete/* */from y'", `psql -c 'select 1 \g |sh'`,
+			"mysql -e 'delete/* */from y'", "mysql -e '/*!50000 DROP TABLE y */'", "psql -c 'DROP -- x\nTABLE y'", `psql -c 'select 1 \g |sh'`,
 			"cp -t /etc x", "cp --target-directory=/etc x", "ln -sf /dev/null /etc/resolv.conf", "ln -sf /tmp/x /etc/hosts", "install x /usr/bin/ls",
 			"sed -i d /etc/hosts", "rsync x /etc/hosts", "tar xf x.tar -C /etc", "tar -xf x.tar --directory=/etc", "unzip -o x.zip -d /etc", "curl -o /etc/hosts http://x",
 			"wget -O /etc/resolv.conf http://x", "touch /etc/nologin", "mv /var/lib/mysql /tmp", "mv /etc/nginx /tmp", "echo x >> /etc/rc.local",
