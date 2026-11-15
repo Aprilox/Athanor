@@ -783,7 +783,7 @@ const alertesHub = () => (etat.hub && etat.hub.alertes) || [];
 function boutonCloche(v, classe) {
   const n = alertesHub().length;
   if (!n && !projetsVisibles(v).length && !((etat.hub || {}).ignorees || []).length) return "";
-  const titre = n ? t("{0} alert(s) need you", [n]) : t("Nothing needs you right now.");
+  const titre = n ? alertesVous(n) : t("Nothing needs you right now.");
   return `<button type="button" class="${classe} cloche${n ? " sonne" : ""}" data-notifs aria-haspopup="true" aria-expanded="${etat.notifsOuvert ? "true" : "false"}" aria-label="${h(titre)}" title="${h(titre)}"><svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.94 1.94 0 0 0 3.4 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>${n ? `<span class="cloche-n">${n}</span>` : ""}</button>`;
 }
 // the Guide: a "?" beside the bell (it is no menu entry any more)
@@ -895,7 +895,7 @@ async function deciderApprobation(corps) {
 function phraseGlobale(m) {
   const n = alertesHub().length, actifs = ((etat.hub || {}).elements || []).filter((e) => e.etat === "actif").length;
   const page = m && m.id === "hub" ? m.pages.find((x) => x.hash === "#" + pageParente(etat.page)) : null; // Home, Projects
-  return { classe: n ? "quota" : actifs ? "travaille" : "", titre: page ? t(page.libelle) : m ? t(m.nom) : etat.page === "guide" ? t("Guide") : "Athanor Hub", sous: [actifs ? t("{0} in progress", [actifs]) : t("idle"), n && t("{0} alert(s) need you", [n])].filter(Boolean).join(" · ") };
+  return { classe: n ? "quota" : actifs ? "travaille" : "", titre: page ? t(page.libelle) : m ? t(m.nom) : etat.page === "guide" ? t("Guide") : "Athanor Hub", sous: [actifs ? t("{0} in progress", [actifs]) : t("idle"), n && alertesVous(n)].filter(Boolean).join(" · ") };
 }
 // the pages of a module that works on the selector's project (Studio): Start, access, the project's line
 const avecProjet = (m) => !!m && !!m.projet;
@@ -968,7 +968,7 @@ function rendreBandeau(v) {
   else if (maj.disponible) boutons.unshift(`<button class="btn btn-maj" data-maj="voir" title="${h(t("Athanor {0} is available (you have {1})", [maj.derniere, v.version]))}">${ic("maj")} ${t("Update to {0}", [h(maj.derniere)])}</button>`);
   if (!cadre.actif) boutons.push(boutonCloche(v, "btn"), boutonGuide("btn"));
   rendreBarre(v);
-  const nomProjet = v.projet && !global ? `<div class="muet petit">${h(v.projet.nom)} · ${h(v.projet.dossier)}</div>` : "";
+  const nomProjet = v.projet && !global ? `<div class="muet petit" title="${h(v.projet.dossier)}">${h(v.projet.nom)}</div>` : "";
   const nbActifs = (v.projets || []).filter((x) => x.actif).length;
   const html = `<div class="etat-phrase">${nomProjet}<h1 title="${h(p.titre)}"><span class="point ${p.classe}"></span><span>${h(p.titre)}</span></h1><div class="sous" title="${h(p.sous)}">${h(p.sous)}</div></div><div class="actions">${boutons.join("")}</div>`;
   // rebuilt only when it changed, keeping the focus (the bell, the "?" under the keyboard)
@@ -976,9 +976,8 @@ function rendreBandeau(v) {
   if ($("#bandeau").dataset.html !== html) garderFocus($("#bandeau"), () => { $("#bandeau").innerHTML = html; $("#bandeau").dataset.html = html; });
   // only what changed: a refresh with the same data sends no mutation to the menu
   const ecrire = (el, x, attr = "textContent") => { if (el[attr] !== x) el[attr] = x; };
-  ecrire($("#nav-sous"), nbActifs ? t("{0} project(s) running", [nbActifs]) : t("idle"));
+  ecrire($("#nav-sous"), nbActifs ? (nbActifs === 1 ? t("1 project running") : t("{0} projects running", [nbActifs])) : t("idle"));
   ecrire($("#bm-titre"), v.projet && !global ? v.projet.nom : p.titre);
-  ecrire($("#nav-kit"), v.kit || ""); ecrire($("#nav-kit"), v.kit || "", "title");
   const nv = $("#nav-version");
   ecrire(nv, v.version ? "v" + v.version : "");
   nv.classList.toggle("maj-dispo", !!maj.disponible);
@@ -1192,7 +1191,7 @@ function marquerNav(v) {
     if (b.title !== ti) b.title = ti;
   };
   const besoins = etat.hub ? alertesHub().length : projetsVisibles(v).filter(besoinProjet).length; // every module, as the bell counts
-  nb('#nav-menu a[data-page="global"]', besoins, true, t("{0} alert(s) need you", [besoins]));
+  nb('#nav-menu a[data-page="global"]', besoins, true, alertesVous(besoins));
   nb('#onglets-module a[data-page="demandes"]', v.attente);
   nb('#onglets-module a[data-page="pourvous"]', v.pour_vous, true);
   marquerDistance(v);
@@ -1212,6 +1211,8 @@ function traduireNav() {
   $("#verrou-bouton").textContent = t("Unlock");
 }
 
+// the bell's count in words, singular or plural (never "alert(s)")
+function alertesVous(n) { return n === 1 ? t("1 alert needs you") : t("{0} alerts need you", [n]); }
 function naviguer() {
   if (document.body.classList.contains("menu-ouvert")) menuMobile(false);
   let page = (location.hash || "#accueil").slice(1);
@@ -1233,6 +1234,7 @@ function naviguer() {
   if (page.startsWith("terminal/")) { term.id = decodeURIComponent(page.slice(9)); page = "terminal"; } // a server's terminal
   if (termAvant !== null && (page !== "terminal" || term.id !== termAvant)) quitterTerminal();
   if (!pages[page]) { page = "accueil"; history.replaceState(null, "", "#accueil"); } // an unknown hash: Home
+  const pageAvant = etat.page;
   etat.page = page;
   // T-M218-1: a tour stays on its own pages; another page opened from the menu ends it
   if (etat.visite >= 0 && (etapesVisite()[etat.visite] || {}).page !== page) finirVisite();
@@ -1246,6 +1248,7 @@ function naviguer() {
   marquerMenu();
   if (etat.vue) rendreBandeau(etat.vue); // the All projects page has its own header
   rendrePage();
+  if (page !== pageAvant && !ancre) $("#page").scrollTop = 0; // another page opens at its top
 }
 window.addEventListener("hashchange", naviguer);
 // montrerAncre: once the page has it (some blocks come a moment later), the block scrolled to and lit up
@@ -2061,7 +2064,9 @@ const TYPES_MENTION = { projet: "Project", serveur: "Server", cle: "Vault key", 
 const pucesMentions = () => (etat.accueilMentions || []).map((m, i) => `<span class="puce-mention puce-${m.type}" title="${h(t(TYPES_MENTION[m.type]))}">${m.type === "nouveau" ? "" : "@"}${h(m.nom)}<button type="button" class="puce-x" data-retirer-mention="${i}" aria-label="${h(t("Remove {0}", [m.nom]))}">×</button></span>`).join("");
 function suggestionsMentions() {
   const pris = new Set((etat.accueilMentions || []).map((m) => m.type + "\0" + m.ref)), l = etat.mentionsSugg || [];
-  const choix = [...l.filter((m) => m.type === "projet").slice(0, 3), ...l.filter((m) => m.type === "serveur").slice(0, 3), { type: "nouveau", ref: "", nom: t("New project") }];
+  // the three most recent of each kind, shown in name order (recency alone read as a random order)
+  const trois = (type) => l.filter((m) => m.type === type).slice(0, 3).sort((a, b) => a.nom.localeCompare(b.nom, undefined, { numeric: true }));
+  const choix = [...trois("projet"), ...trois("serveur"), { type: "nouveau", ref: "", nom: t("New project") }];
   return choix.filter((m) => !pris.has(m.type + "\0" + m.ref)).map((m) => `<button type="button" class="btn btn-petit puce-sugg" data-mention="${h(JSON.stringify(m))}">${m.type === "nouveau" ? "+ " : "@"}${h(m.nom)}</button>`).join("");
 }
 function majMentions() {
@@ -5278,7 +5283,7 @@ const ETATS_DEPLOI = { ok: ["ok", "Deployed"], echec: ["croix", "Failed"], reven
 const PROBLEMES_VERIF = { injoignable: "The site does not answer: {1}", tls: "The certificate is not valid: {2}", statut: "Unexpected status {0}", ouvert: "The site opens without identification (status {0})" };
 function texteVerif(v, protection) {
   const x = v.http || {}, tls = x.tls || {}, l = [];
-  if (v.ok) l.push(t("Checked from this PC: status {0}", [x.statut]) + (protection !== "aucune" ? ", " + t("closed without identification") : ""));
+  if (v.ok) l.push(t("Responds from this PC ({0})", [x.statut]) + (protection !== "aucune" ? ", " + t("closed without identification") : ""));
   else l.push((v.problemes || []).map((p) => t(PROBLEMES_VERIF[p] || p, [x.statut, x.erreur || "", tls.erreur_certificat || ""])).join(" · "));
   if (x.tls && tls.certificat_valide) l.push(t("certificate valid, {0} days left", [tls.jours_restants]));
   if ((x.en_tetes_manquants || []).length) l.push(t("missing security headers: {0}", [x.en_tetes_manquants.join(", ")]));
