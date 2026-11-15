@@ -6139,9 +6139,14 @@ const goLisible = (mo) => t("{0} GB", [(mo / 1024).toFixed(mo >= 10240 ? 0 : 1)]
 function ficheServeur(f) {
   const s = f.systeme || {}, r = f.ressources || {}, j = Math.floor((s.allume_s || 0) / 86400);
   const lignes = (l) => l.filter(([, v]) => v !== "" && v != null).map(([k, v]) => `<div class="srv-kv"><span class="muet">${t(k)}</span><span>${v}</span></div>`).join("");
-  const bloc = (titre, corps, n) => `<div class="bloc srv-section"><h3>${t(titre)}${n == null ? "" : ` <span class="muet">${n}</span>`}</h3>${corps}</div>`;
+  const bloc = (titre, corps, n) => n === 0 && corps === vide("None seen.") // an empty list folds into one line
+    ? `<div class="bloc srv-section srv-section-vide"><h3>${t(titre)} <span class="muet">0</span> <span class="muet petit">· ${t("None seen.")}</span></h3></div>`
+    : `<div class="bloc srv-section"><h3>${t(titre)}${n == null ? "" : ` <span class="muet">${n}</span>`}</h3>${corps}</div>`;
+  // long lists show their first items; "See all (n)" unfolds them, kept open across renders
+  const plafond = (cle, n, max, corps) => n <= max ? corps : `<div class="srv-plafond${srv.ouvertes.has(cle) ? " ouvert" : ""}">${corps}<button type="button" class="btn btn-petit srv-tout" data-srv-tout="${cle}" aria-expanded="${srv.ouvertes.has(cle)}">${srv.ouvertes.has(cle) ? t("Show less") : t("See all ({0})", [n])}</button></div>`;
+  const plus = (i, max) => i >= max ? ' class="srv-plus"' : "";
+  const table = (tetes, rangs, max = Infinity) => `<div class="srv-table"><table><thead><tr>${tetes.map((x) => `<th>${t(x)}</th>`).join("")}</tr></thead><tbody>${rangs.map((r, i) => `<tr${plus(i, max)}>${r.map((c) => `<td>${c}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
   const vide = (x) => `<p class="muet petit">${t(x)}</p>`;
-  const table = (tetes, rangs) => `<div class="srv-table"><table><thead><tr>${tetes.map((x) => `<th>${t(x)}</th>`).join("")}</tr></thead><tbody>${rangs.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
   const ports = f.ports || [], logiciels = f.logiciels || [], services = f.services || [], conteneurs = f.conteneurs || [];
   const presents = logiciels.filter((l) => l.present), absents = logiciels.filter((l) => !l.present);
   const pareFeu = { actif: t("on"), inactif: t("off"), absent: t("not installed") }[f.pare_feu] || t("unknown");
@@ -6150,10 +6155,10 @@ function ficheServeur(f) {
       ["Up for", s.allume_s ? h(j >= 2 ? t("{0} days", [j]) : t("{0} h", [Math.floor(s.allume_s / 3600)])) : ""], ["Sudo without a password", f.sudo ? t("yes") : t("no")], ["Firewall", h(pareFeu)]]))}
     ${bloc("Resources", lignes([["Processors", r.processeurs || ""], ["Memory", r.memoire_mo ? h(t("{0} free of {1}", [goLisible(r.memoire_libre_mo), goLisible(r.memoire_mo)])) : ""],
       ["Disk (/)", r.disque_mo ? h(t("{0} free of {1}", [goLisible(r.disque_libre_mo), goLisible(r.disque_mo)])) : ""]]))}
-    ${bloc("Listening ports", ports.length ? table(["Port", "Protocol", "Address", "Program"], ports.map((p) => [`<b>${p.port}</b>`, h(p.proto), `<code>${h(p.adresse)}</code>`, h(p.processus || "—")])) : vide("None seen."), ports.length)}
+    ${bloc("Listening ports", ports.length ? plafond("sec:ports", ports.length, 10, table(["Port", "Protocol", "Address", "Program"], ports.map((p) => [`<b>${p.port}</b>`, h(p.proto), `<code>${h(p.adresse)}</code>`, h(p.processus || "—")]), 10)) : vide("None seen."), ports.length)}
     ${bloc("Software", (presents.length ? `<div class="ligne m0">${presents.map((l) => `<span class="badge">${h(l.nom)}${l.version ? ` <span class="muet">${h(l.version)}</span>` : ""}</span>`).join("")}</div>` : vide("None of the usual software."))
       + (absents.length ? `<p class="muet petit">${h(t("Not installed: {0}", [absents.map((l) => l.nom).join(", ")]))}</p>` : ""), presents.length)}
-    ${bloc("Services", services.length ? `<div class="ligne m0">${services.map((x) => `<span class="badge">${h(x)}</span>`).join("")}</div>` : vide("None seen."), services.length)}
+    ${bloc("Services", services.length ? plafond("sec:services", services.length, 15, `<div class="ligne m0">${services.map((x, i) => `<span class="badge${i >= 15 ? " srv-plus" : ""}">${h(x)}</span>`).join("")}</div>`) : vide("None seen."), services.length)}
     ${bloc("Containers", conteneurs.length ? table(["Name", "Image", "State"], conteneurs.map((c) => [`<b>${h(c.nom)}</b>`, `<code>${h(c.image)}</code>`, h(c.etat)])) : vide("None seen."), conteneurs.length)}
     ${(f.remarques || []).length ? `<div class="bloc srv-section srv-remarques"><h3>${t("Not read")}</h3><ul>${f.remarques.map((x) => `<li class="petit">${h(t(x))}</li>`).join("")}</ul></div>` : ""}
   </div>`;
@@ -6310,6 +6315,8 @@ $("#page").addEventListener("change", async (ev) => {
 });
 $("#page").addEventListener("click", async (ev) => {
   if (etat.page !== "serveur") return;
+  const tout = ev.target.closest("[data-srv-tout]");
+  if (tout) { const c = tout.dataset.srvTout; if (srv.ouvertes.has(c)) srv.ouvertes.delete(c); else srv.ouvertes.add(c); return rendrePage(); }
   const b = ev.target.closest("[data-srv-rafraichir], [data-srv-couper], [data-srv-durcir], [data-srv-verifier], [data-srv-retirer], [data-srv-garder], [data-srv-tache-arreter], [data-srv-tache-carte]");
   if (!b) return;
   const x = srv.fiche, url = "serveurs/" + encodeURIComponent(x.id), d = b.dataset;

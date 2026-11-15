@@ -1267,8 +1267,15 @@ a.mis-ligne:hover, a.mis-ligne:focus-visible { border-color: var(--accent); }
 .srv-tete .cp-nom { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .srv-tete code, .srv-section code { overflow-wrap: anywhere; }
 .srv-fiche input[type=checkbox] { width: 16px; }
-.srv-sections { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
-.srv-section { min-width: 0; }
+/* masonry-like columns: each card keeps its own height, no card is stretched to its row's tallest */
+.srv-sections { columns: 300px; column-gap: 12px; }
+.srv-section { min-width: 0; break-inside: avoid; display: block; }
+.srv-sections > .bloc + .bloc { margin-top: 12px; }
+.srv-section-vide h3 { margin: 0; }
+.srv-section-vide { padding-top: 10px; padding-bottom: 10px; }
+.srv-plafond:not(.ouvert) .srv-plus { display: none; }
+.srv-tout { margin-top: 8px; }
+.srv-table code { overflow-wrap: normal; white-space: nowrap; }
 .srv-fiche > .bloc, .srv-sections > .bloc { margin: 0; } /* the gaps space them; .bloc + .bloc would shift all but the first */
 .srv-section h3, .srv-retirer h3 { margin: 0 0 8px; font-size: 15px; }
 .srv-kv { display: grid; grid-template-columns: minmax(110px, 40%) 1fr; gap: 8px; padding: 3px 0; border-bottom: 1px solid var(--line); font-size: 13.5px; }
