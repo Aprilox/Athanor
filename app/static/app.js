@@ -7384,7 +7384,9 @@ function erreurIA(x) { // the status line of a failed task says why, as its thre
   const fin = ((x || {}).historique || []).slice(-1)[0] || {};
   return t("Failed: {0}", [fin.detail ? t(fin.detail) : t("The task failed without giving a reason.")]);
 }
-function rendreIA() {
+// redrawn at each poll that brings news: a keyboard user's focus stays where it was
+function rendreIA() { const p = $("#ia"); if (p) garderFocus(p, dessinerIA); }
+function dessinerIA() {
   const fil = $("#ia-fil"), zone = $("#ia-encours"); if (!fil || !zone) return;
   const l = ia.taches.slice(0, 10).reverse(), e = etatIA(), courante = vivanteIA(e.tache || {}) ? e.tache : null, bas = fil.scrollHeight - fil.scrollTop - fil.clientHeight < 40;
   fil.innerHTML = l.length ? l.map(tacheIA).join("") : `<div class="ia-vide"><p class="m0"><b>${t("Ask in plain words what this server needs.")}</b></p>

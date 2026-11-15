@@ -83,11 +83,16 @@ func origineConnexion() map[string]string {
 
 // lireConnexionClaude: the connection of the tool's .env (else of origine).
 func lireConnexionClaude(kit string, origine map[string]string) connexionClaude {
+	return connexionDesLignes(LireEnv(filepath.Join(kit, ".env")), origine)
+}
+
+// connexionDesLignes: the connection of lines of .env already read (else of origine).
+func connexionDesLignes(lignes []LigneEnv, origine map[string]string) connexionClaude {
 	v := map[string]string{}
 	for k, x := range origine {
 		v[k] = x
 	}
-	for _, l := range LireEnv(filepath.Join(kit, ".env")) {
+	for _, l := range lignes {
 		for _, k := range clesConnexionClaude {
 			if l.Cle == k && strings.TrimSpace(l.Valeur) != "" {
 				v[k] = strings.TrimSpace(l.Valeur)
