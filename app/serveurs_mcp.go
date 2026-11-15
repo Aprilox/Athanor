@@ -191,8 +191,23 @@ func (s *Serveur) avantOutil(x SessionHub, id, outil string, a map[string]json.R
 		return Etape{}, err
 	}
 	e, err := classerEtape(outil, a)
-	if err == nil && e.Classe > ClasseLecture {
-		err = s.planOuRegle(x, id, &e)
+	switch m := modeAutorisation(x, id); {
+	case err != nil:
+	case m == "": // a mission's or the sheet's task: a plan before any change
+		if e.Classe > ClasseLecture {
+			err = s.planOuRegle(x, id, &e)
+		}
+	case decisionMode(m, e.Classe) == decisionLibre: // M244f: the owner's mode for this server's assistant
+		if missionBloquee("servers", x.Mission) != "" {
+			err = errors.New("the task is paused: nothing changes on a server until the owner resumes it")
+			break
+		}
+		s.ecrireAudit(LigneAudit{Type: "evenement", De: x.Agent, Vers: "serveur:" + id, Projet: x.Projet, Mission: x.Mission,
+			Agent: x.Agent, Action: "serveurs." + outil, Resultat: "accordé : mode « " + m + " » de l'assistant (" + e.Classe.String() + ")"})
+	default:
+		if err = s.planOuRegle(x, id, &e); err != nil && e.Classe == ClasseLecture {
+			err = fmt.Errorf("%w (the owner chose the Manual mode for this server's assistant: every command, a read too, runs as a step of an accepted plan)", err)
+		}
 	}
 	if err != nil {
 		s.ecrireAudit(LigneAudit{Type: "evenement", De: x.Agent, Vers: "serveur:" + id, Projet: x.Projet, Mission: x.Mission,

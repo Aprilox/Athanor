@@ -6286,18 +6286,18 @@ $("#page").addEventListener("submit", async (ev) => {
 });
 // a task launched on a server (its sheet, the assistant beside its terminal); native Windows mode proposes WSL, or
 // forcing it with Athanor's password; null when nothing was launched (the error already shown)
-function lancerTacheSrv(id, texte, env, terminal) {
+function lancerTacheSrv(id, texte, env, terminal, panneau) {
   const url = "serveurs/" + encodeURIComponent(id) + "/taches";
-  return api(url, "POST", { texte, env, terminal }).catch(async (e) => {
+  return api(url, "POST", { texte, env, terminal, panneau }).catch(async (e) => {
     if (!e.data || !e.data.proposer_wsl) throw e;
     const { choix: c, coche } = await choisir(t("Native Windows mode has no barrier: an agent working on your servers would run with all your rights on this PC. Switch to WSL, or force this task knowing the risk."),
       [{ id: "wsl", texte: t("Switch to WSL"), primaire: true }, { id: "forcer", texte: t("Force this task"), danger: true }, { id: "", texte: t("Cancel") }], { titre: t("Native Windows mode"), case: t("Don't remind me again") });
     if (c === "wsl") { location.hash = "#options@bloc-direct"; return null; }
     if (c !== "forcer") return null;
     // M240r2: the same switch as Settings › Options, the password once; this task then goes through without asking
-    if (coche) return (await rappelsNatif(true)) ? api(url, "POST", { texte, env, terminal }) : null;
+    if (coche) return (await rappelsNatif(true)) ? api(url, "POST", { texte, env, terminal, panneau }) : null;
     const p = await preuveMdp(t("Forcing a Servers task without the barrier: retype Athanor's password."), { ok: t("Force this task"), danger: true }, t("Force this task without the barrier?"));
-    return p ? api(url, "POST", { texte, env, terminal, forcer: true, ...p }) : null;
+    return p ? api(url, "POST", { texte, env, terminal, panneau, forcer: true, ...p }) : null;
   }).catch((e) => { if (e.message !== t("Locked")) toast(e.message, "erreur"); return null; });
 }
 // native mode's reminders (the one switch, kept in the preferences): turning them off asks for Athanor's password
@@ -7340,7 +7340,28 @@ function rendreTransferts() {
 // the same guards as any task: risk class, a plan before any change, your decision, backups, outputs as data.
 // Mode "live in my terminal" (M231f): the same calls, also shown on your terminal's screen, its typing locked meanwhile.
 const ia = { visible: localStorage.getItem("athanor.terminal.ia") === "1", mode: localStorage.getItem("athanor.terminal.ia.mode") === "direct" ? "direct" : "apart",
-  verrou: "", taches: [], plans: {}, lu: "", minuteur: 0, ouvertes: new Set(), suivi: true, envoi: false, attente: "" };
+  verrou: "", taches: [], plans: {}, lu: "", minuteur: 0, ouvertes: new Set(), suivi: true, envoi: false, attente: "", autorisation: "manuel" };
+// M244f: the assistant's permission mode, kept per server and decided in Go (serveurs_autorisation.go)
+const AUTORISATIONS_IA = () => [["manuel", t("Manual"), t("Asks you before every command, reads included.")],
+  ["auto", t("Auto"), t("Asks you only before a dangerous command (deleting, formatting, stopping, permissions, firewall…).")],
+  ["modifications", t("Accept changes"), t("Makes its plan and applies it; asks you only before a dangerous command.")],
+  ["ignorer", t("Ignore permissions"), t("Does everything without asking you, dangerous commands included.")]];
+function aideAutorisationIA() {
+  const [, , phrase] = AUTORISATIONS_IA().find(([v]) => v === ia.autorisation) || AUTORISATIONS_IA()[0];
+  return ia.autorisation === "ignorer" ? `${ic("alerte")} ${h(phrase)}` : h(phrase);
+}
+function majAutorisationIA() {
+  const sel = $("#ia-autorisation"), z = $("#ia-autorisation-zone"); if (!sel || !z) return;
+  sel.value = ia.autorisation; z.classList.toggle("danger", ia.autorisation === "ignorer"); $("#ia-autorisation-aide").innerHTML = aideAutorisationIA();
+}
+async function changerAutorisationIA(sel) {
+  const mode = sel.value, avant = ia.autorisation;
+  if (mode === "ignorer" && !(await confirmer(t("The assistant will run every command on this server without asking you, deleting, formatting, stopping or firewall changes included. Choose it only for a server you can rebuild."),
+    { titre: t("Ignore permissions?"), ok: t("Ignore permissions"), danger: true }))) { sel.value = avant; return sel.focus(); }
+  const r = await action(api("serveurs/" + encodeURIComponent(term.id) + "/autorisation", "POST", { mode, confirmer: mode === "ignorer" }));
+  if (r) ia.autorisation = r.autorisation || mode;
+  majAutorisationIA();
+}
 const ETATS_ACTION_IA = () => ({ en_cours: [t("running…"), "pv-claude"], ok: [t("Done"), "pv-ok"], erreur: [t("Failed"), "pv-vous"], refusee: [t("Refused"), "pv-vous"] });
 function panneauIA(distant) {
   const MODES = [["apart", "Separate connection", "It opens its own SSH session on the server, so it never gets in your way; you follow each command here."],
@@ -7349,8 +7370,12 @@ function panneauIA(distant) {
   return `<aside class="ia" id="ia" aria-label="${h(t("Assistant"))}">
     <fieldset class="ia-modes"><legend class="cache-visuel">${t("How the assistant works")}</legend>
       ${MODES.map(([v, titre]) => `<label class="ia-mode${ia.mode === v ? " actif" : ""}"><input type="radio" name="ia-mode" value="${v}"${ia.mode === v ? " checked" : ""}><b>${t(titre)}</b></label>`).join("")}</fieldset>
+    <div class="ia-autorisation${ia.autorisation === "ignorer" ? " danger" : ""}" id="ia-autorisation-zone"><label for="ia-autorisation" class="petit">${t("Permissions")}</label>
+      <select id="ia-autorisation" aria-describedby="ia-autorisation-aide"${distant ? " disabled" : ""}>${AUTORISATIONS_IA().map(([v, titre]) => `<option value="${v}"${ia.autorisation === v ? " selected" : ""}>${h(titre)}</option>`).join("")}</select>
+      <span class="petit" id="ia-autorisation-aide">${aideAutorisationIA()}</span></div>
     <details class="ia-aide"><summary class="petit">${t("How does it work?")}</summary>
-      ${MODES.map(([, titre, phrase]) => `<p class="petit m0"><b>${t(titre)}</b> — ${t(phrase)}</p>`).join("")}</details>
+      ${MODES.map(([, titre, phrase]) => `<p class="petit m0"><b>${t(titre)}</b> — ${t(phrase)}</p>`).join("")}
+      ${AUTORISATIONS_IA().map(([, titre, phrase]) => `<p class="petit m0"><b>${h(titre)}</b> — ${h(phrase)}</p>`).join("")}</details>
     <div class="ia-fil-zone"><div class="ia-fil" id="ia-fil" aria-live="polite"></div>
       <button type="button" class="btn btn-petit ia-dernier" id="ia-dernier" data-ia-dernier hidden>${t("Go to the latest message")} ${ic("descendre")}</button></div>
     <div class="ia-decision" id="ia-decision" hidden></div>
@@ -7370,6 +7395,7 @@ async function chargerIA() {
   const r = await api("serveurs/" + encodeURIComponent(id) + "/taches?terminal=" + encodeURIComponent(term.session || "")).catch(() => null);
   if (etat.page !== "terminal" || term.id !== id) return;
   if (!r !== !!ia.hs) { ia.hs = !r; ia.lu = ""; if (!r) rendreIA(); }
+  if (r && r.autorisation && r.autorisation !== ia.autorisation) { ia.autorisation = r.autorisation; majAutorisationIA(); }
   if (r) { const sig = JSON.stringify(r.taches) + JSON.stringify(r.plans); if (sig !== ia.lu || !$("#ia-fil").childElementCount) { ia.lu = sig; ia.taches = r.taches || []; ia.plans = r.plans || {}; rendreIA(); } }
   if (ia.taches.some((x) => !tacheFinie(x))) ia.minuteur = setTimeout(chargerIA, 1500);
 }
@@ -7474,6 +7500,7 @@ function verrouTerminal(id) {
   if (term.x && term.session && !term.msg) term.x.options.disableStdin = !!id;
 }
 $("#page").addEventListener("change", (ev) => {
+  if (etat.page === "terminal" && ev.target.id === "ia-autorisation") return changerAutorisationIA(ev.target);
   if (etat.page !== "terminal" || ev.target.name !== "ia-mode") return;
   ia.mode = ev.target.value; localStorage.setItem("athanor.terminal.ia.mode", ia.mode);
   document.querySelectorAll(".ia-mode").forEach((l) => l.classList.toggle("actif", l.querySelector("input").checked));
@@ -7499,7 +7526,7 @@ $("#page").addEventListener("submit", async (ev) => {
 async function envoyerIA(texte) {
   const b = $("#ia-form [type=submit]");
   ia.envoi = true; if (b) { b.disabled = true; b.textContent = t("Sending…"); }
-  const r = await lancerTacheSrv(term.id, texte, "", ia.mode === "direct" ? term.session : "").finally(() => {
+  const r = await lancerTacheSrv(term.id, texte, "", ia.mode === "direct" ? term.session : "", true).finally(() => {
     ia.envoi = false; const b2 = $("#ia-form [type=submit]"); if (b2) { b2.disabled = false; b2.textContent = t("Send"); }
   });
   if (!r) { const c = $("#ia-texte"); if (c && !c.value.trim()) c.value = texte; return false; }

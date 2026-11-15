@@ -35,6 +35,9 @@ type ServeurInventaire struct {
 	// how Athanor connects (M244e): "mot_de_passe" (the password kept in the vault, no key) | "cle_generee" |
 	// "cle_importee" | "cle_coffre"; empty: a key (servers added before 3.0.0)
 	Auth string `json:"auth,omitempty"`
+	// the terminal assistant's permission mode (M244f, serveurs_autorisation.go): manuel | auto | modifications |
+	// ignorer; empty: manuel
+	Autorisation string `json:"autorisation,omitempty"`
 }
 
 // parMotDePasse: Athanor reaches srv with its password (vault entry srv.Cle), not with a key.

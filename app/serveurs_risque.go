@@ -599,6 +599,9 @@ var destructricesSimples = ensemble("rm unlink shred truncate dd wipefs fdisk sf
 var interpretes = ensemble("sh bash dash zsh ksh mksh fish csh tcsh busybox eval source . xargs parallel watch su runuser flock nsenter unshare systemd-run at batch screen tmux ssh sshpass script expect strace ltrace gdb trap shopt enable osascript deno bun julia Rscript java pkexec run0 sg setpriv ssh-agent fakeroot")
 var privileges = ensemble("passwd chpasswd usermod useradd adduser gpasswd visudo setcap chage")
 var reSUID = regexp.MustCompile(`^0*[2-7][0-7]{3}$|(^|,)[ugoa]*[+=][rwxXt]*s`)
+
+// reTousEcrire: a chmod mode that lets anyone write (octal others 2, 3, 6, 7; o, a or no one named with +w or =w), M244f
+var reTousEcrire = regexp.MustCompile(`^[0-7]*[2367]$|(^|,)[ug]*[oa][ugoa]*[+=][rxXtst]*w|(^|,)[+=][rxXts]*w`)
 var metadonneesDisque = ensemble("ls stat lsblk blkid df du findmnt lsof realpath readlink basename dirname test [ [[ echo printf file") // read a disk's name, not its content
 var evalueIndices = ensemble("[[ [ test printf read let declare typeset local export unset mapfile readarray")
 var prefixesInterpretes = []string{"python", "pypy", "perl", "ruby", "php", "node", "lua", "tclsh", "pwsh", "mkfs"}
@@ -1016,6 +1019,9 @@ func init() {
 			}
 			if n == "chmod" && slices.ContainsFunc(a, reSUID.MatchString) {
 				return ClasseDestructrice, "chmod sets the setuid or setgid bit: a program then runs with its owner's rights"
+			}
+			if n == "chmod" && slices.ContainsFunc(a, reTousEcrire.MatchString) {
+				return ClasseDestructrice, "chmod lets anyone write there"
 			}
 			return ClasseChangement, n + " changes permissions"
 		}

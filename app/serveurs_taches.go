@@ -51,6 +51,7 @@ type TacheServeurs struct {
 	Actions      []ActionTache      `json:"actions,omitempty"` // every tool call of its agents, live (M231e)
 	Direct       bool               `json:"direct,omitempty"`  // "live in my terminal" (M231f): shown in the owner's terminal, its typing locked
 	Terminal     string             `json:"-"`                 // that terminal's session (never sent: it opens a shell)
+	Panneau      bool               `json:"panneau,omitempty"` // launched from the terminal's assistant panel: the server's permission mode applies (M244f)
 	// Assistant: repos | travail | attente_decision | arretee | erreur, the one state the page's banner, chat and
 	// terminal lock read; Verrou: one of its commands runs now in the owner's terminal, whose typing and files are
 	// locked then, and only then (M242a).
@@ -273,11 +274,12 @@ func (s *Serveur) lancerTacheServeurs(texte string, serveurs []string, forcee bo
 // lancerTache: env "projet/env" (M116) gives the task that environment's servers and the host name of its URL, the
 // only name its Cloudflare tools act on; serveurs must then be among the environment's.
 func (s *Serveur) lancerTache(texte string, serveurs []string, forcee bool, env string) (TacheServeurs, error) {
-	return s.lancerTacheDans(texte, serveurs, forcee, env, "")
+	return s.lancerTacheDans(texte, serveurs, forcee, env, "", false)
 }
 
-// lancerTacheDans: terminal, an open terminal's session: the task works "live" in it (M231f).
-func (s *Serveur) lancerTacheDans(texte string, serveurs []string, forcee bool, env, terminal string) (TacheServeurs, error) {
+// lancerTacheDans: terminal, an open terminal's session: the task works "live" in it (M231f); panneau, launched from
+// the terminal's assistant panel (its server's permission mode applies, M244f).
+func (s *Serveur) lancerTacheDans(texte string, serveurs []string, forcee bool, env, terminal string, panneau bool) (TacheServeurs, error) {
 	texte = strings.TrimSpace(s.masquerSecrets(texte))
 	switch {
 	case texte == "" || len([]rune(texte)) > maxTexteTache:
@@ -315,7 +317,7 @@ func (s *Serveur) lancerTacheDans(texte string, serveurs []string, forcee bool, 
 		}
 	}
 	t := TacheServeurs{ID: aleatoire(6), Texte: texte, Serveurs: slices.Clone(serveurs), Forcee: forcee, Env: env, Cree: time.Now().UTC().Format(formatCree),
-		Direct: terminal != "", Terminal: terminal}
+		Direct: terminal != "", Terminal: terminal, Panneau: panneau}
 	dossier := dossierSessionTache(t.ID)
 	if err := os.MkdirAll(filepath.Join(dossier, "travail"), 0o700); err != nil {
 		return TacheServeurs{}, err
@@ -639,7 +641,8 @@ func (s *Serveur) apiTachesServeur(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	s.ecrireJSON(w, map[string]any{"taches": taches, "plans": plans, "natif": modeNatif.Load(), "sans_rappels": s.sansRappelsNatif()})
+	srv, _ := serveurProd(id)
+	s.ecrireJSON(w, map[string]any{"taches": taches, "plans": plans, "natif": modeNatif.Load(), "sans_rappels": s.sansRappelsNatif(), "autorisation": modeServeur(srv)})
 }
 
 // apiLancerTacheServeur: POST /api/serveurs/{id}/taches {texte, forcer, mot_de_passe}. Native Windows mode: refused
@@ -651,6 +654,7 @@ func (s *Serveur) apiLancerTacheServeur(w http.ResponseWriter, r *http.Request) 
 		Env        string `json:"env"` // "projet/env", optional (M116)
 		MotDePasse string `json:"mot_de_passe"`
 		Terminal   string `json:"terminal"` // "live in my terminal": its open session on this server (M231f)
+		Panneau    bool   `json:"panneau"`  // from the terminal's assistant panel (M244f)
 	}
 	if lireCorps(r, &c) != nil {
 		s.erreur(w, http.StatusBadRequest, "Invalid request")
@@ -677,7 +681,7 @@ func (s *Serveur) apiLancerTacheServeur(w http.ResponseWriter, r *http.Request) 
 	if forcee && !sansRappel && !s.preuveServeur(w, r, c.MotDePasse, "tâche serveurs forcée refusée", id) {
 		return
 	}
-	t, err := s.lancerTacheDans(c.Texte, []string{id}, forcee, c.Env, c.Terminal)
+	t, err := s.lancerTacheDans(c.Texte, []string{id}, forcee, c.Env, c.Terminal, c.Panneau)
 	if err != nil {
 		s.erreurServeurs(w, err)
 		return

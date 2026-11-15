@@ -1568,6 +1568,12 @@ html.scene-pause .verrou * { animation-play-state: paused !important; }
 .ia-mode { flex: 1 1 0; min-width: 0; display: flex; gap: 6px; align-items: center; padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; font-size: .9em; cursor: pointer; }
 .ia-mode b { font-weight: 600; overflow-wrap: anywhere; }
 .ia-mode.actif { background: color-mix(in srgb, var(--accent) 12%, transparent); border-color: var(--accent); }
+.ia-autorisation { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.ia-autorisation select { flex: 0 1 auto; min-width: 0; }
+.ia-autorisation #ia-autorisation-aide { flex: 1 1 100%; color: var(--muted); }
+.ia-autorisation.danger { padding: 6px 8px; border: 1px solid var(--erreur); border-radius: 6px; background: color-mix(in srgb, var(--erreur) 10%, transparent); }
+.ia-autorisation.danger #ia-autorisation-aide { color: var(--ink); font-weight: 600; }
+.ia-autorisation.danger .ic { color: var(--erreur); }
 .ia-aide summary { cursor: pointer; color: var(--muted); width: fit-content; }
 .ia-aide[open] { display: flex; flex-direction: column; gap: 4px; }
 .ia-fil-zone { position: relative; flex: 1; min-height: 32px; display: flex; flex-direction: column; }

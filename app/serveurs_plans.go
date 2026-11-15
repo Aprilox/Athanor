@@ -296,6 +296,10 @@ func outilProposerPlan(s *Serveur, x SessionHub, args json.RawMessage) (string, 
 		Details: map[string]string{"serveur": p.Serveur, "nom": p.Nom, "classe": haut.String(), "etapes": strconv.Itoa(len(p.Etapes)), "regle": map[bool]string{true: "oui", false: "non"}[regle]}}
 	// the owner's "do not ask again for this server": the plan is accepted at once, without a ping (not in a tout mission, C82)
 	parRegle := regle && s.approbations.Regle(reglePlan(x.Projet, p.Serveur)) && !missionTout(x.Env)
+	// M244f: the assistant's mode accepts it at once (auto, modifications: no dangerous step; ignorer: any plan)
+	if m := modeAutorisation(x, p.Serveur); m == "ignorer" || m != "" && m != "manuel" && haut < ClasseDestructrice && !construit {
+		parRegle = true
+	}
 	var ap Approbation
 	if parRegle {
 		ap, err = s.approbations.Demander(demande)
@@ -422,7 +426,7 @@ func (s *Serveur) planOuRegle(x SessionHub, id string, e *Etape) error {
 		audit(fmt.Sprintf("accordé : plan %s, étape %d (%s)", p.ID, n, e.Classe))
 		return nil
 	}
-	if _, prod := serveurProd(id); e.Classe == ClasseChangement && !prod && s.approbations.Regle(reglePlan(x.Projet, id)) && !missionTout(x.Env) {
+	if _, prod := serveurProd(id); e.Classe <= ClasseChangement && !prod && s.approbations.Regle(reglePlan(x.Projet, id)) && !missionTout(x.Env) {
 		audit("accordé : règle « ne plus demander » pour ce serveur (changement)")
 		return nil
 	}
