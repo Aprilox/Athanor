@@ -1589,7 +1589,8 @@ html.scene-pause .verrou * { animation-play-state: paused !important; }
 .ia-decision { max-height: 60%; overflow-y: auto; flex: 0 1 auto; min-height: min(130px, 30%); } /* the thread gives its height first; the card scrolls before it pushes the input out */
 @media (max-width: 700px) { .ia-mode { min-height: 44px; } }
 .ia-decision .ia-plan > .ligne:last-child { position: sticky; bottom: 0; background: var(--panel); padding-block: 4px; } /* the card scrolls, its decision stays in view */
-.ia-file { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-radius: 6px; background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.ia-file { display: flex; flex-direction: column; gap: 4px; max-height: 30%; overflow-y: auto; flex-shrink: 0; } /* several queued messages scroll before they push the input out */
+.ia-file-ligne { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-radius: 6px; background: color-mix(in srgb, var(--accent) 10%, transparent); }
 .ia-file[hidden] { display: none; }
 .ia-actions .pv-etat, .ia-demande .pv-etat { white-space: nowrap; margin-inline-start: 4px; } /* a badge never glued to the command, never cut in two */
 .ia-encours [data-vide] { visibility: hidden; } /* Stop keeps its room: the status line never jumps */

@@ -274,12 +274,13 @@ func (s *Serveur) lancerTacheServeurs(texte string, serveurs []string, forcee bo
 // lancerTache: env "projet/env" (M116) gives the task that environment's servers and the host name of its URL, the
 // only name its Cloudflare tools act on; serveurs must then be among the environment's.
 func (s *Serveur) lancerTache(texte string, serveurs []string, forcee bool, env string) (TacheServeurs, error) {
-	return s.lancerTacheDans(texte, serveurs, forcee, env, "", false)
+	return s.lancerTacheDans(texte, serveurs, forcee, env, "", false, "")
 }
 
 // lancerTacheDans: terminal, an open terminal's session: the task works "live" in it (M231f); panneau, launched from
-// the terminal's assistant panel (its server's permission mode applies, M244f).
-func (s *Serveur) lancerTacheDans(texte string, serveurs []string, forcee bool, env, terminal string, panneau bool) (TacheServeurs, error) {
+// the terminal's assistant panel (its server's permission mode applies, M244f); contexte, what the agent reads
+// before the request (contexteSuite: the task the owner stopped to send it), never shown as the request.
+func (s *Serveur) lancerTacheDans(texte string, serveurs []string, forcee bool, env, terminal string, panneau bool, contexte string) (TacheServeurs, error) {
 	texte = strings.TrimSpace(s.masquerSecrets(texte))
 	switch {
 	case texte == "" || len([]rune(texte)) > maxTexteTache:
@@ -327,7 +328,7 @@ func (s *Serveur) lancerTacheDans(texte string, serveurs []string, forcee bool, 
 		err = ecrireAtomique(filepath.Join(dossier, "hub-jeton"), []byte(jeton+"\n"), 0o600)
 	}
 	if err == nil {
-		err = os.WriteFile(filepath.Join(dossier, "consigne.txt"), []byte(consigneChefOps(texte, t.Serveurs)+consigneEnv(env, hotes)), 0o600)
+		err = os.WriteFile(filepath.Join(dossier, "consigne.txt"), []byte(consigneChefOps(contexte+texte, t.Serveurs)+consigneEnv(env, hotes)), 0o600)
 	}
 	if err != nil {
 		_, _ = s.jetons.Revoquer(func(x SessionHub) bool { return x.Projet == prefixeTache+t.ID })
@@ -657,6 +658,30 @@ func panneauDe(r *http.Request, depuis, id string) bool {
 	return x != nil && x.serveur == id && x.de == "fenetre"
 }
 
+// contexteSuite: the stopped task suite of server id (its request, then its last message: its answer, or else its
+// last action and what it printed), for the owner's next message to read as a follow-up, an answer to its question
+// included; secrets masked, bounded. "" when there is no such task.
+func (s *Serveur) contexteSuite(id, suite string) string {
+	if suite == "" {
+		return ""
+	}
+	l := tachesServeur(id)
+	i := slices.IndexFunc(l, func(x TacheServeurs) bool { return x.ID == suite })
+	if i < 0 {
+		return ""
+	}
+	x, dernier := l[i], l[i].Resultat
+	if a := len(x.Actions); dernier == "" && a > 0 {
+		dernier = strings.TrimSpace(x.Actions[a-1].Quoi + "\n" + x.Actions[a-1].Sortie)
+	}
+	if dernier == "" {
+		dernier = "(nothing yet)"
+	}
+	return s.masquerSecrets("The owner stopped your previous task to send the message below; it may answer a question you asked. " +
+		"Carry on from where that task was, with this message.\n\nPrevious request:\n" + couper(x.Texte, maxTexteTache) +
+		"\n\nYour last message on it:\n" + couper(dernier, 2000) + "\n\nThe owner's message now:\n")
+}
+
 // apiLancerTacheServeur: POST /api/serveurs/{id}/taches {texte, forcer, mot_de_passe}. Native Windows mode: refused
 // with the WSL proposal, unless the owner forces it, with Athanor's password retyped.
 func (s *Serveur) apiLancerTacheServeur(w http.ResponseWriter, r *http.Request) {
@@ -667,6 +692,7 @@ func (s *Serveur) apiLancerTacheServeur(w http.ResponseWriter, r *http.Request) 
 		MotDePasse string `json:"mot_de_passe"`
 		Terminal   string `json:"terminal"` // "live in my terminal": its open session on this server (M231f)
 		Depuis     string `json:"depuis"`   // the open terminal whose assistant panel sends it (M244f, M244k2)
+		Suite      string `json:"suite"`    // "Send now": the task stopped for it, whose request and last message go with it (M244k4)
 	}
 	if lireCorps(r, &c) != nil {
 		s.erreur(w, http.StatusBadRequest, "Invalid request")
@@ -696,7 +722,7 @@ func (s *Serveur) apiLancerTacheServeur(w http.ResponseWriter, r *http.Request) 
 	if forcee && !sansRappel && !s.preuveServeur(w, r, c.MotDePasse, "tâche serveurs forcée refusée", id) {
 		return
 	}
-	t, err := s.lancerTacheDans(c.Texte, []string{id}, forcee, c.Env, c.Terminal, panneauDe(r, c.Depuis, id))
+	t, err := s.lancerTacheDans(c.Texte, []string{id}, forcee, c.Env, c.Terminal, panneauDe(r, c.Depuis, id), s.contexteSuite(id, c.Suite))
 	if err != nil {
 		s.erreurServeurs(w, err)
 		return

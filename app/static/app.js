@@ -6288,16 +6288,16 @@ $("#page").addEventListener("submit", async (ev) => {
 });
 // a task launched on a server (its sheet, the assistant beside its terminal); native Windows mode proposes WSL, or
 // forcing it with Athanor's password; null when nothing was launched (the error already shown)
-function lancerTacheSrv(id, texte, env, terminal, depuis) {
+function lancerTacheSrv(id, texte, env, terminal, depuis, suite) {
   const url = "serveurs/" + encodeURIComponent(id) + "/taches";
-  return api(url, "POST", { texte, env, terminal, depuis }).catch(async (e) => {
+  return api(url, "POST", { texte, env, terminal, depuis, suite }).catch(async (e) => {
     if (!e.data || !e.data.proposer_wsl) throw e;
     const { choix: c, coche } = await choisir(t("Native Windows mode has no barrier: an agent working on your servers would run with all your rights on this PC. Switch to WSL, or force this task knowing the risk."),
       [{ id: "wsl", texte: t("Switch to WSL"), primaire: true }, { id: "forcer", texte: t("Force this task"), danger: true }, { id: "", texte: t("Cancel") }], { titre: t("Native Windows mode"), case: t("Don't remind me again") });
     if (c === "wsl") { location.hash = "#options@bloc-direct"; return null; }
     if (c !== "forcer") return null;
     // M240r2: the same switch as Settings › Options, the password once; this task then goes through without asking
-    if (coche) return (await rappelsNatif(true)) ? api(url, "POST", { texte, env, terminal, depuis }) : null;
+    if (coche) return (await rappelsNatif(true)) ? api(url, "POST", { texte, env, terminal, depuis, suite }) : null;
     const p = await preuveMdp(t("Forcing a Servers task without the barrier: retype Athanor's password."), { ok: t("Force this task"), danger: true }, t("Force this task without the barrier?"));
     return p ? api(url, "POST", { texte, env, terminal, depuis, forcer: true, ...p }) : null;
   }).catch((e) => { if (e.message !== t("Locked")) toast(e.message, "erreur"); return null; });
@@ -7398,7 +7398,7 @@ function rendreTransferts() {
 // the same guards as any task: risk class, a plan before any change, your decision, backups, outputs as data.
 // Mode "live in my terminal" (M231f): the same calls, also shown on your terminal's screen, its typing locked meanwhile.
 const ia = { visible: localStorage.getItem("athanor.terminal.ia") === "1", mode: localStorage.getItem("athanor.terminal.ia.mode") === "direct" ? "direct" : "apart",
-  verrou: "", taches: [], plans: {}, lu: "", minuteur: 0, ouvertes: new Set(), suivi: true, envoi: false, attente: "", autorisation: "" };
+  verrou: "", taches: [], plans: {}, lu: "", minuteur: 0, ouvertes: new Set(), suivi: true, envoi: false, file: [], autorisation: "" };
 // M244f: the assistant's permission mode, kept per server and decided in Go (serveurs_autorisation.go)
 const AUTORISATIONS_IA = () => [["manuel", t("Manual"), t("Asks you before every command, reads included.")],
   ["auto", t("Auto"), t("Runs reads and changes at once; asks you before a dangerous command (deleting, formatting, stopping, permissions, firewall…) or a command it does not know.")],
@@ -7512,10 +7512,10 @@ function dessinerIA() {
     <p class="muet petit m0">${t("The assistant reads the server first, then proposes a plan: nothing changes before you accept it, a destructive step backs up first, and what the server answers is never taken as an order.")}</p></div>`;
   const dec = $("#ia-decision"), cartes = ia.taches.filter((x) => assIA(x) === "attente_decision").map(planCarteIA).join("");
   if (dec) { dec.hidden = !cartes; dec.innerHTML = cartes; }
-  if (ia.attente && !courante && !ia.envoi) { const a = ia.attente; ia.attente = ""; envoyerIA(a); } // sent: the queued line goes now
+  if (ia.file.length && !courante && !ia.envoi) envoyerIA(ia.file.shift()); // the assistant is free: the first queued message goes now, the next ones wait their turn
   const f = $("#ia-file");
-  if (f) { f.hidden = !ia.attente; f.innerHTML = ia.attente ? `<span class="ia-file-texte petit" title="${h(ia.attente)}">${h(t("Queued: {0}", [ia.attente.replace(/\s+/g, " ")]))}</span>
-    <button type="button" class="btn btn-petit" data-ia-envoyer-file title="${h(t("Stops the task typing in your terminal, then sends this message"))}">${t("Send now")}</button><button type="button" class="btn btn-petit" data-ia-annuler-file>${t("Cancel")}</button>` : ""; }
+  if (f) { f.hidden = !ia.file.length; f.innerHTML = ia.file.map((a, i) => `<div class="ia-file-ligne"><span class="ia-file-texte petit" title="${h(a)}">${h(t("Queued: {0}", [a.replace(/\s+/g, " ")]))}</span>
+    <button type="button" class="btn btn-petit" data-ia-envoyer-file="${i}" title="${h(t("Stops the task typing in your terminal, then sends this message"))}">${t("Send now")}</button><button type="button" class="btn btn-petit" data-ia-retirer-file="${i}">${t("Remove")}</button></div>`).join(""); }
   const enCours = courante && (courante.actions || []).filter((a) => a.etat === "en_cours").slice(-1)[0];
   const texte = { repos: t("The assistant is idle."), attente_decision: t("Waiting for your decision"), arretee: t("Stopped"), erreur: erreurIA(e.tache),
     hs: t("Athanor does not answer: the assistant's state is unknown, your terminal stays free.") }[e.etat]
@@ -7579,14 +7579,15 @@ $("#page").addEventListener("submit", async (ev) => {
   if (m) { if (!(await action(api("serveurs/" + encodeURIComponent(term.id) + "/taches/" + encodeURIComponent(m.id) + "/arreter", "POST")))) return; m.assistant = "arretee"; }
   if (ia.mode === "direct" && !term.session) return toast(t("Connect the terminal first, or choose Separate connection."), "erreur");
   // live in the terminal: one task at a time types in it, the next waits its turn (a separate connection runs at once)
-  if (ia.mode === "direct" && ia.taches.some((x) => x.direct && vivanteIA(x))) { ia.attente = texte; champ.value = ""; return rendreIA(); }
+  if (ia.mode === "direct" && ia.taches.some((x) => x.direct && vivanteIA(x))) { ia.file.push(texte); champ.value = ""; return rendreIA(); }
   if (await envoyerIA(texte)) champ.value = "";
 });
 // the button is greyed only while the request is really on its way, and says so; on a failure the text stays
-async function envoyerIA(texte) {
+// suite: the task stopped for this message (Send now): the Go side gives the agent its request and last message too
+async function envoyerIA(texte, suite) {
   const b = $("#ia-form [type=submit]");
   ia.envoi = true; if (b) { b.disabled = true; b.textContent = t("Sending…"); }
-  const r = await lancerTacheSrv(term.id, texte, "", ia.mode === "direct" ? term.session : "", term.session).finally(() => {
+  const r = await lancerTacheSrv(term.id, texte, "", ia.mode === "direct" ? term.session : "", term.session, suite).finally(() => {
     ia.envoi = false; const b2 = $("#ia-form [type=submit]"); if (b2) { b2.disabled = false; b2.textContent = t("Send"); }
   });
   if (!r) { const c = $("#ia-texte"); if (c && !c.value.trim()) c.value = texte; return false; }
@@ -7599,18 +7600,22 @@ $("#page").addEventListener("keydown", (ev) => { // Enter sends, Shift+Enter mak
 $("#page").addEventListener("click", async (ev) => {
   if (etat.page !== "terminal") return;
   if (ev.target.closest("[data-ia-dernier]")) { const fil = $("#ia-fil"); fil.scrollTop = fil.scrollHeight; return basFilIA(); }
-  if (ev.target.closest("[data-ia-envoyer-file]")) { // note 19h03 §7: the queued line goes ahead (an answer to the assistant's question); the task typing in the terminal stops first
-    const a = ia.attente; if (!a || ia.envoi) return;
-    ia.attente = ""; rendreIA();
+  const fe = ev.target.closest("[data-ia-envoyer-file]");
+  if (fe) { // note 19h03 §7: this queued message goes ahead (an answer to the assistant's question); the task typing in the terminal stops first, and goes with it as its context (M244k4)
+    const i = +fe.dataset.iaEnvoyerFile, a = ia.file[i]; if (a === undefined || ia.envoi) return;
+    ia.file.splice(i, 1); rendreIA();
+    let suite = "";
     for (const x of ia.taches.filter((y) => y.direct && vivanteIA(y))) {
-      if (!(await action(api("serveurs/" + encodeURIComponent(term.id) + "/taches/" + encodeURIComponent(x.id) + "/arreter", "POST")))) { ia.attente = a; return rendreIA(); } // not stopped: the line stays queued
-      x.assistant = "arretee";
+      if (!(await action(api("serveurs/" + encodeURIComponent(term.id) + "/taches/" + encodeURIComponent(x.id) + "/arreter", "POST")))) { ia.file.splice(i, 0, a); return rendreIA(); } // not stopped: the message stays queued, in its place
+      x.assistant = "arretee"; suite = suite || x.id;
     }
-    return envoyerIA(a);
+    return envoyerIA(a, suite);
   }
-  if (ev.target.closest("[data-ia-annuler-file]")) { // the queued message is not sent; back in the field when that one is empty
-    const c = $("#ia-texte"); if (c && !c.value.trim()) c.value = ia.attente;
-    ia.attente = ""; rendreIA(); return c && c.focus();
+  const fr = ev.target.closest("[data-ia-retirer-file]");
+  if (fr) { // this queued message is not sent; back in the field when that one is empty, so typed text is never lost
+    const [a] = ia.file.splice(+fr.dataset.iaRetirerFile, 1);
+    const c = $("#ia-texte"); if (c && !c.value.trim() && a) c.value = a;
+    rendreIA(); return c && c.focus();
   }
   const b = ev.target.closest("[data-ia-arreter], [data-ia-decider], [data-ia-carte], [data-ia-main], [data-ia-modifier], [data-ia-reessayer]"); if (!b) return;
   const d = b.dataset;
