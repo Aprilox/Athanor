@@ -62,6 +62,7 @@ func testRepriseRegles(t *testing.T) {
 		{ID: "prepaveccarte", Phrase: "un shop", Etat: "preparation", Carte: sansInfra, Politique: "prod", Cree: cree},
 		lancee("reprendre1", sansInfra),
 		lancee("attendinfra1", avecServeur),
+		func() Mission { m := lancee("pause1", sansInfra); m.Etat = "en_pause"; return m }(),
 	}
 	for _, m := range missions {
 		if err := enregistrerMission(m); err != nil {
@@ -104,6 +105,15 @@ func testRepriseRegles(t *testing.T) {
 		}
 		if x, _ := s.approbations.Lire(bon.ID); x.Etat != "attente" {
 			t.Fatalf("accord for the card as it is: %s", x.Etat)
+		}
+	})
+	t.Run("pause_sans_ligne", func(t *testing.T) { // M240l1: a paused mission is followed, never told "resumes"
+		m, _ := lireMission("pause1")
+		if ids, cles := journalCles(m); slices.ContainsFunc(ids, func(i string) bool { return strings.HasPrefix(i, "redemarrage:") }) {
+			t.Fatalf("journal: %v", cles)
+		}
+		if _, suivie := suivisMission.Load("pause1"); !suivie || m.Etat != "en_pause" {
+			t.Fatalf("paused mission: %s, followed %v", m.Etat, suivie)
 		}
 	})
 	t.Run("reprise_sans_relancer", func(t *testing.T) {

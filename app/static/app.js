@@ -1187,6 +1187,7 @@ function traduireNav() {
 }
 
 function naviguer() {
+  if (document.body.classList.contains("menu-ouvert")) menuMobile(false);
   let page = (location.hash || "#accueil").slice(1);
   // "#page@block": the page, then that block of it shown (the Guide's buttons: Settings › Options › GitHub…)
   let ancre = "";
@@ -1941,8 +1942,8 @@ function ligneElement(e, modules) {
   if (e.distant) {
     const [classe, libelle] = e.hors_ligne ? ["", "Offline"] : ETATS_ELEMENT[e.etat] || ETATS_ELEMENT.inactif, a = e.avancement, act = activiteElement(e);
     return `<div class="bloc carte-projet ligne-element element-distant${e.attente ? " besoin" : ""}${e.hors_ligne ? " hors-ligne" : ""}" data-distant-id="${h(e.distant)}" data-distant-projet="${h(e.nom_distant)}">
-    <div class="cp-tete"><span class="dot ${classe}" aria-hidden="true"></span><b class="cp-nom">${h(e.titre)}</b><span class="pastille-module"><span class="ico ico-${h(m.id)}" aria-hidden="true"></span>${h(t(m.nom))}</span></div>
-    <div class="el-etat petit">${e.attente ? `<span class="cp-besoin">${t("Needs you")}</span> <span>${h(t(e.attente.raison, e.attente.args || []))}</span>` : `<span class="muet">${t(libelle)}</span>`}</div>
+    <div class="cp-tete"><span class="dot ${classe}" aria-hidden="true"></span><b class="cp-nom" title="${h(e.titre)}">${h(e.titre)}</b><span class="pastille-module"><span class="ico ico-${h(m.id)}" aria-hidden="true"></span>${h(t(m.nom))}</span></div>
+    <div class="el-etat petit">${e.attente ? `<span class="cp-besoin">${t("Needs you")}</span> <span title="${h(t(e.attente.raison, e.attente.args || []))}">${h(t(e.attente.raison, e.attente.args || []))}</span>` : `<span class="muet">${t(libelle)}</span>`}</div>
     ${act ? `<div class="cp-jalon petit" title="${h(act)}">${h(act)}</div>` : ""}
     ${a && a.total ? `<div class="barre"><i style="width:${(a.fait / a.total) * 100}%"></i></div>` : ""}${a && a.texte ? `<div class="muet petit">${h(t(a.texte, [a.fait, a.total]))}</div>` : ""}
     ${boutonsDistant(e)}
@@ -1953,8 +1954,8 @@ function ligneElement(e, modules) {
   // a Dev project: the project is selected before its page opens (cliqueProjet), any other module: a plain link
   const lien = e.projet ? `href="${h(cible)}" data-projet="${h(e.projet)}" data-cible="${h(cible.replace(/^#/, ""))}"` : `href="${h(cible)}"`;
   return `<a ${lien} class="bloc carte-projet ligne-element${e.attente ? " besoin" : ""}${e.projet && etat.vue && etat.vue.projet && etat.vue.projet.nom === e.projet ? " courant" : ""}">
-    <div class="cp-tete"><span class="dot ${classe}" aria-hidden="true"></span><b class="cp-nom">${h(e.titre)}</b><span class="pastille-module"><span class="ico ico-${h(m.id)}" aria-hidden="true"></span>${h(t(m.nom))}</span></div>
-    <div class="el-etat petit">${e.attente ? `<span class="cp-besoin">${t("Needs you")}</span> <span>${h(t(e.attente.raison, (e.attente.args || []).map(texteMessage)))}</span>` : `<span class="muet">${t(libelle)}</span>`}</div>
+    <div class="cp-tete"><span class="dot ${classe}" aria-hidden="true"></span><b class="cp-nom" title="${h(e.titre)}">${h(e.titre)}</b><span class="pastille-module"><span class="ico ico-${h(m.id)}" aria-hidden="true"></span>${h(t(m.nom))}</span></div>
+    <div class="el-etat petit">${e.attente ? `<span class="cp-besoin">${t("Needs you")}</span> <span title="${h(t(e.attente.raison, (e.attente.args || []).map(texteMessage)))}">${h(t(e.attente.raison, (e.attente.args || []).map(texteMessage)))}</span>` : `<span class="muet">${t(libelle)}</span>`}</div>
     ${act ? `<div class="cp-jalon petit" title="${h(act)}">${h(act)}</div>` : ""}
     ${a && a.total ? `<div class="barre"><i style="width:${(a.fait / a.total) * 100}%"></i></div>` : ""}${a && a.texte ? `<div class="muet petit">${a.total ? texteEtape({ etape: a.etape_plan, etapes: a.etapes_plan }) : ""}${h(t(a.texte, [a.fait, a.total]))}</div>` : ""}
   </a>`;
@@ -2557,11 +2558,11 @@ function raccourciConnu() {
     if (l && l.ancien) toast(t("The file you opened is Athanor {0}, older than the installed one ({1}): nothing was replaced, the installed Athanor opened.", [l.ancien, (etat.vue || {}).version || ""]), "ok");
     if (l && l.mis_a_jour) toast(t("Athanor updated from {0} to {1}.", [l.mis_a_jour, (etat.vue || {}).version || ""]), "ok");
     if (l && (l.repares || []).length) toast(t("Same version opened again: {0} damaged file(s) of the installed Athanor put back.", [l.repares.length]), "ok");
-    if (["suivi", "reglages"].includes(etat.page)) rendrePage();
+    if (!majBlocRaccourci() && etat.page === "suivi") rendrePage();
   }).catch((e) => { // said, with a button to ask again (never "loading" for ever)
     etat.raccourciErreur = (e && e.message) || String(e); etat.raccourciLu = false;
     if (etat.assistant >= 0) rendreAssistant();
-    if (etat.page === "reglages") rendrePage();
+    majBlocRaccourci();
   });
   return null;
 }
@@ -2572,6 +2573,12 @@ function attenteRaccourci() {
 }
 function nomRaccourci(f) { return String(f).split(/[\\/]/).pop(); }
 // blocRaccourci: the folder (proposed: the Desktop, the Mac's Applications) and the button
+// Settings' shortcut block filled in place: the rest of the page (a password being typed) is not rebuilt
+function majBlocRaccourci() {
+  const b = etat.page === "reglages" && $("#bloc-raccourci");
+  if (b) b.innerHTML = blocRaccourci(etat.raccourci, true) || `<h2>${t("Shortcut")}</h2>${attenteRaccourci()}`;
+  return !!b;
+}
 function blocRaccourci(r, titre, plus, champ = "rc-dossier") {
   if (!r) return "";
   const faits = r.raccourcis || [];
@@ -2878,7 +2885,7 @@ pages.guide = async () => {
     <div class="etapes">${sujet.etapes.map(([titre, texte, lien, libelle], i) => `<div class="etape ${lien ? "" : "sans-lien"}"><div class="n">${i + 1}</div>
       <div><b>${t(titre)}</b><div class="d">${mdGuide(t(texte))}</div></div>
       ${lien ? `<a class="btn btn-petit" href="${lien}">${t(libelle)}</a>` : ""}</div>`).join("")}</div>
-    ${sujet.note ? `<p class="muet petit mt-2">ℹ ${mdGuide(t(sujet.note))}</p>` : ""}
+    ${sujet.note ? `<p class="muet petit mt-2">${mdGuide(t(sujet.note))}</p>` : ""}
   </div>`;
 };
 document.addEventListener("click", (ev) => {
@@ -4232,7 +4239,8 @@ function rendreJournal() {
   el.innerHTML = items.slice(-1500).map((e) => f.brut
     ? `<div class="ev g-${h(e.genre)}"><span class="h">${h(e.heure)}</span><span class="m"></span><span class="t">${h(e.brut)}</span></div>`
     : `<div class="ev g-${h(e.genre)} ${e.sous_agent ? "sous" : ""} ${e.detail ? "cliquable" : ""}" data-n="${e.n}"><span class="h">${h(e.heure)}</span><span class="m"></span><span class="t">${e.sous_agent ? (ic("sous") + " ") : ""}${h(t(e.titre))}</span></div>${etat.ouverts.has(e.n) && e.detail ? `<div class="ev-detail">${h(e.detail)}</div>` : ""}`
-  ).join("");
+  ).join("") || `<div class="vide">${t(etat.evenements.length ? "Nothing matches." : "No log yet: it fills in once the pilot runs.")}</div>`;
+  el.classList.toggle("journal-vide", !items.length);
   if (etat.defilAuto.journal) el.scrollTop = el.scrollHeight;
   else el.scrollTop = Math.min(haut, el.scrollHeight);
   if (!el.dataset.suivi) {
@@ -5429,7 +5437,7 @@ function carteCoffre(x) {
       </div></details></div>
     <div class="petit cof-valeur">${secret ? `<span class="muet">•••• ${t("saved")}${x.deux_valeurs ? " · " + h(t("testing and production")) : ""}</span>` : `<code>${h(x.valeur)}</code>${x.deux_valeurs ? ` · ${h(t("Production"))} <code>${h(x.prod)}</code>` : ""}`}</div>
     <div class="petit cof-note${x.note ? "" : " muet"}" title="${h(x.note)}">${x.note ? h(x.note) : t("No note for the AI")}</div>
-    <div class="muet petit">${x.source ? h(t("Imported from {0}", [x.source])) + " · " : ""}${h(dateLisible(x.modifie))}</div>
+    <div class="muet petit">${x.source ? h(x.source.startsWith("serveurs:") ? t("Key made for a server") : t("Imported from {0}", [x.source])) + " · " : ""}${h(dateLisible(x.modifie))}</div>
   </div>`;
 }
 // M225: the environment a key's prefix says (Stripe-style sk_/rk_/pk_ test or live), "" when it says nothing
@@ -5614,6 +5622,8 @@ $("#page").addEventListener("submit", async (ev) => {
   toast(x ? t("{0} saved.", [r.nom]) : t("{0} added.", [r.nom]), "ok"); rendrePage();
 });
 
+// "error: <English message>" written by the Go: shown in the page's language (other results are codes)
+function resultatAudit(r) { const m = /^error: (.*)$/s.exec(r); return m ? t("error: {0}", [t(m[1])]) : r; }
 // --- Audit log (#audit): what the modules asked, answered and did, newest first; read only (also from a paired device)
 const aud = { f: { mois: "", projet: "", type: "", q: "" }, pages: 1, verif: null };
 const TYPES_AUDIT = { demande: "Requests", reponse: "Answers", evenement: "Events" };
@@ -5624,7 +5634,7 @@ function ligneAudit(l, lang) {
   const d = new Date(l.t), heure = isNaN(d) ? l.t : d.toLocaleTimeString(lang, { hour: "2-digit", minute: "2-digit" });
   const qui = [l.mission, l.agent].filter(Boolean).join(" · ");
   return `<li class="aud-ligne aud-${h(l.type)}"><span class="muet aud-heure">${h(heure)}</span>
-    <span class="aud-texte"><b>${h(quiAudit(l.de))}</b> → ${h(quiAudit(l.vers))}${l.projet ? ", " + h(l.projet) : ""} : <code>${h(l.action || l.type)}</code>${l.resultat ? " — " + h(l.resultat) : ""}${qui ? ` <span class="muet">(${h(qui)})</span>` : ""}</span>
+    <span class="aud-texte"><b>${h(quiAudit(l.de))}</b> → ${h(quiAudit(l.vers))}${l.projet ? ", " + h(l.projet) : ""} : <code>${h(l.action || l.type)}</code>${l.resultat ? " — " + h(resultatAudit(l.resultat)) : ""}${qui ? ` <span class="muet">(${h(qui)})</span>` : ""}</span>
     <span class="muet petit aud-n" title="${h(l.id)}">#${l.n}</span></li>`;
 }
 // --- Servers (#serveurs): inventory cards and the add wizard (address → fingerprint to confirm → one of three ways)
@@ -7255,7 +7265,7 @@ async function rafraichir() {
     if (!v.verrouille) {
       await lireJournal();
       // the Team page follows live, except while text is selected in it (a brief, a report)
-      if ((etat.page === "equipe" && !String(window.getSelection() || "") && !etat.agForm) || (etat.page === "suivi" && !document.activeElement.matches("input, textarea, select"))) rendrePage();
+      if (!String(window.getSelection() || "") && ((etat.page === "equipe" && !etat.agForm) || (etat.page === "suivi" && !document.activeElement.matches("input, textarea, select")))) rendrePage();
       // /api/hub every other tick (every tick on Projects): the bell's alerts; Projects and Home are rebuilt only
       // when a module's tile or an element changed (the card or the bar under the keyboard keeps its focus)
       if (etat.page === "global" || ++etat.hubTic % 2 === 0 || !etat.hub) {

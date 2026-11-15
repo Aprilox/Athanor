@@ -255,6 +255,8 @@ func (s *Serveur) reprendreMissions() {
 			}
 		case s.attendCoffre(m):
 			s.noterJournalMission(m.ID, s.entreeJournal(id, t, "attention", "Athanor restarted: the mission waits for the vault to be unlocked"))
+		case m.Etat == "en_pause":
+			s.suivreMission(m.ID) // followed again, nothing to tell: it stays paused
 		default:
 			s.noterJournalMission(m.ID, s.entreeJournal(id, t, "info", "Athanor restarted: the mission resumes"))
 			s.suivreMission(m.ID)

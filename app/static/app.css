@@ -306,6 +306,8 @@ a[data-href] { cursor: pointer; }
 .barre-onglets .menu-projets { right: auto; width: min(340px, 90vw); }
 .onglets-module { display: flex; gap: 2px; overflow-x: auto; min-width: 0; flex: 1; scrollbar-width: thin; }
 .onglets-module a { color: var(--muted); text-decoration: none; white-space: nowrap; padding: 9px 12px 11px; font-size: 14.5px; border-bottom: 2px solid transparent; display: inline-flex; align-items: center; gap: 6px; transition: color .12s ease, border-color .12s ease; }
+/* tablets: every tab in view on two lines rather than a bar cut mid-word */
+@media (min-width: 601px) { .onglets-module { flex-wrap: wrap; overflow-x: visible; } }
 .onglets-module a:hover { color: var(--ink); }
 .onglets-module a.actif { color: var(--ink); border-bottom-color: var(--accent); font-weight: 500; }
 .onglets-module a:focus-visible { outline-offset: -2px; border-radius: 6px; }
@@ -625,6 +627,7 @@ textarea.en-attente { opacity: .55; }
 .chemin { color: var(--muted); font-size: 12.5px; font-family: var(--mono); word-break: break-all; margin: 4px 0; }
 
 /* --- log */
+.journal.journal-vide { height: auto; background: none; border: 0; padding: 0; }
 .journal-tools { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
 .journal-tools label { color: var(--muted); display: flex; gap: 5px; align-items: center; cursor: pointer; }
 .journal-tools input[type=text] { width: 180px; }
