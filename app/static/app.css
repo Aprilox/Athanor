@@ -1189,7 +1189,7 @@ ol.guide-access li { margin: 5px 0; }
 /* Missions page (#missions) */
 .mis-liste { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .mis-ligne { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0; }
-.mis-phrase { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.mis-phrase { flex: 1 1 12em; min-width: 0; overflow-wrap: anywhere; }
 .mis-phrase > b { display: block; } /* the card's title, its sentence under it */
 /* M159: a line is a link to the mission; its lanes below, each with its state read now */
 a.mis-ligne { color: inherit; text-decoration: none; }
