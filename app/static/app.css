@@ -261,6 +261,34 @@ a[data-href] { cursor: pointer; }
 .ico-servers { --ico: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round'><rect x='4' y='4' width='16' height='7' rx='1.5'/><rect x='4' y='13' width='16' height='7' rx='1.5'/><path d='M8 7.5h.01M8 16.5h.01M12 7.5h4M12 16.5h4'/></svg>"); }
 .ico-reglages { --ico: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round'><path d='M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1'/><circle cx='15' cy='6' r='2'/><circle cx='9' cy='12' r='2'/><circle cx='17' cy='18' r='2'/></svg>"); }
 .ico-audit { --ico: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M12 3.5 19.5 6v5.5c0 4.3-3.1 7.6-7.5 9-4.4-1.4-7.5-4.7-7.5-9V6z'/><path d='m8.5 12 2.5 2.5 4.5-5'/></svg>"); }
+/* M239: the interface's small icons (tick, cross, warning, state dot, arrows…): one stroke style, the text's colour, no emoji or symbol font */
+:root {
+  --ic-ok: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><path d='M5 12.5l4.5 4.5L19 7.5'/></svg>");
+  --ic-croix: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><path d='M6.5 6.5l11 11M17.5 6.5l-11 11'/></svg>");
+  --ic-alerte: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><path d='M12 4 21 19.5H3z'/><path d='M12 10v4M12 16.8v.1'/></svg>");
+  --ic-lecture: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><path d='M8 5.5v13l10.5-6.5z' fill='black' stroke='none'/></svg>");
+  --ic-bas: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><path d='M6 9.5l6 6 6-6'/></svg>");
+  --ic-droite: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><path d='M9.5 6l6 6-6 6'/></svg>");
+  --ic-gauche: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><path d='M19 12H5M11 6l-6 6 6 6'/></svg>");
+  --ic-haut: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><path d='M12 19V5M6 11l6-6 6 6'/></svg>");
+  --ic-descendre: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><path d='M12 5v14M6 13l6 6 6-6'/></svg>");
+  --ic-retour: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><path d='M9 14 4.5 9.5 9 5'/><path d='M4.5 9.5H14a5.5 5.5 0 0 1 0 11h-3'/></svg>");
+  --ic-actualiser: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><path d='M19.5 12a7.5 7.5 0 1 1-2.2-5.3'/><path d='M19.5 4.5v4h-4'/></svg>");
+  --ic-point: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='5' fill='black' stroke='none'/></svg>");
+  --ic-cercle: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='6.5'/></svg>");
+  --ic-losange: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><path d='M12 4.5 19.5 12 12 19.5 4.5 12z' fill='black' stroke='none'/></svg>");
+  --ic-etoile: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><path d='M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.8l-5.2 2.8 1-5.8-4.3-4.1 5.9-.8z' fill='black' stroke='none'/></svg>");
+  --ic-maj: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><path d='M12 20V8M6.5 13.5 12 8l5.5 5.5M5 4h14'/></svg>");
+  --ic-echange: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><path d='M4 8h15M15 4l4 4-4 4M20 16H5M9 12l-4 4 4 4'/></svg>");
+  --ic-sous: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><path d='M6 4v8.5a3 3 0 0 0 3 3h10M15 11.5l4 4-4 4'/></svg>");
+  --ic-attente: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='7.5' stroke-dasharray='3 3.3'/></svg>");
+  --ic-actions: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><circle cx='5' cy='12' r='2' fill='black' stroke='none'/><circle cx='12' cy='12' r='2' fill='black' stroke='none'/><circle cx='19' cy='12' r='2' fill='black' stroke='none'/></svg>");
+  --ic-plus: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><path d='M12 5v14M5 12h14'/></svg>");
+  --ic-info: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='8.5'/><path d='M12 11v5.5M12 7.8v.1'/></svg>");
+  --ic-menu: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><path d='M4 7h16M4 12h16M4 17h16'/></svg>");
+}
+.ic { display: inline-block; width: 1em; height: 1em; vertical-align: -.14em; flex: none; background: currentColor; -webkit-mask: var(--ico) center / contain no-repeat; mask: var(--ico) center / contain no-repeat; --ico: var(--ic-point); }
+.ic-ok { --ico: var(--ic-ok); } .ic-croix { --ico: var(--ic-croix); } .ic-alerte { --ico: var(--ic-alerte); } .ic-lecture { --ico: var(--ic-lecture); } .ic-bas { --ico: var(--ic-bas); } .ic-droite { --ico: var(--ic-droite); } .ic-gauche { --ico: var(--ic-gauche); } .ic-haut { --ico: var(--ic-haut); } .ic-descendre { --ico: var(--ic-descendre); } .ic-retour { --ico: var(--ic-retour); } .ic-actualiser { --ico: var(--ic-actualiser); } .ic-point { --ico: var(--ic-point); } .ic-cercle { --ico: var(--ic-cercle); } .ic-losange { --ico: var(--ic-losange); } .ic-etoile { --ico: var(--ic-etoile); } .ic-maj { --ico: var(--ic-maj); } .ic-echange { --ico: var(--ic-echange); } .ic-sous { --ico: var(--ic-sous); } .ic-attente { --ico: var(--ic-attente); } .ic-actions { --ico: var(--ic-actions); } .ic-plus { --ico: var(--ic-plus); } .ic-info { --ico: var(--ic-info); } .ic-menu { --ico: var(--ic-menu); }
 .audit .journal-tools select { max-width: 170px; }
 .aud-jour { font-size: 13px; font-weight: 600; color: var(--muted); margin: 16px 0 6px; text-transform: capitalize; }
 .aud-liste { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: var(--rayon); background: var(--panel); }
@@ -534,7 +562,7 @@ table.tab tr:last-child td { border-bottom: 0; }
 .pastille { font-size: 12px; font-weight: 500; color: var(--muted); white-space: nowrap; }
 .pastille.travaille { color: var(--ok); }
 .pastille.attend { color: var(--attention); }
-.pastille.travaille::before, .pastille.attend::before { content: "● "; font-size: 9px; vertical-align: 1px; }
+.pastille.travaille::before, .pastille.attend::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: currentColor; margin-right: 5px; vertical-align: 1px; }
 .agent.chef .avatar { color: var(--accent); }
 .agent.ouvrier .avatar { font-size: 12px; }
 .equipe-section { margin: 22px 0 10px; font-size: 15px; }
@@ -623,8 +651,8 @@ textarea.en-attente { opacity: .55; }
 .verif { display: grid; grid-template-columns: 34px 1fr auto; gap: 12px; align-items: center; padding: 10px 12px; border-bottom: 1px solid var(--line-2); }
 .verif:last-child { border-bottom: 0; }
 .verif.choisi { background: var(--panel-2); border-radius: 6px; }
-.verif .ico { font-size: 20px; text-align: center; }
-.verif .ico.ok { color: var(--ok); } .verif .ico.echec { color: var(--erreur); } .verif .ico.facultatif { color: var(--attention); } .verif .ico.en_cours { color: var(--info); }
+.verif .v-ico { font-size: 20px; text-align: center; }
+.verif .v-ico.ok { color: var(--ok); } .verif .v-ico.echec { color: var(--erreur); } .verif .v-ico.facultatif { color: var(--attention); } .verif .v-ico.en_cours { color: var(--info); }
 .verif .resume { color: var(--muted); font-size: 13px; }
 .verif.v-echec .resume { color: var(--erreur); }
 .verif.v-echec.v-facultatif .resume { color: var(--attention); }
@@ -653,7 +681,7 @@ textarea.en-attente { opacity: .55; }
 .bloc-repliable > details > summary { display: flex; align-items: baseline; gap: 10px; list-style: none; color: var(--ink); font-weight: normal; }
 .bloc-repliable > details > summary::-webkit-details-marker { display: none; }
 .bloc-repliable > details > summary h2 { margin: 0; }
-.bloc-repliable > details > summary::before { content: "▸"; color: var(--muted); transition: transform .15s; display: inline-block; }
+.bloc-repliable > details > summary::before { content: ""; width: 12px; height: 12px; flex: none; background: var(--muted); -webkit-mask: var(--ic-droite) center / contain no-repeat; mask: var(--ic-droite) center / contain no-repeat; transition: transform .15s; display: inline-block; }
 .bloc-repliable > details[open] > summary::before { transform: rotate(90deg); }
 
 /* --- appearance: language, palette and accent pickers */
@@ -1053,7 +1081,7 @@ ol.guide-access li { margin: 5px 0; }
 .gains .perte { color: var(--attention); }
 .gains ul { padding-left: 18px; }
 
-/* Coffre (vault) page: entry cards, their ⋯ menu, the form and the locked banner */
+/* Coffre (vault) page: entry cards, their Actions menu, the form and the locked banner */
 .carte-coffre { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .carte-coffre .cp-nom { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono, monospace); font-size: 13.5px; }
 .badge-infra { color: var(--attention); border-color: var(--attention); }
@@ -1263,11 +1291,11 @@ a.mis-ligne:hover, a.mis-ligne:focus-visible { border-color: var(--accent); }
 .mis-pastille { width: 18px; height: 18px; box-sizing: border-box; border-radius: 50%; border: 2px solid var(--line); background: var(--panel); display: grid; place-items: center; font-size: 11px; line-height: 1; font-weight: 700; }
 .mis-relais .r-fait, .mis-relais .r-cours, .mis-relais .r-attente, .mis-relais .r-echec { color: var(--ink); }
 .r-fait .mis-pastille { border-color: var(--ok); background: var(--ok); color: var(--panel); }
-.r-fait .mis-pastille::after { content: "✓"; }
+.r-fait .mis-pastille::after, .r-echec .mis-pastille::after { content: ""; width: 11px; height: 11px; background: currentColor; -webkit-mask: var(--ic-ok) center / contain no-repeat; mask: var(--ic-ok) center / contain no-repeat; }
 .r-cours .mis-pastille, .r-attente .mis-pastille { border-color: var(--accent); }
 .r-cours .mis-pastille { animation: pulse 2s infinite; }
 .r-echec .mis-pastille { border-color: var(--erreur); background: var(--erreur); color: #fff; }
-.r-echec .mis-pastille::after { content: "✕"; }
+.r-echec .mis-pastille::after { -webkit-mask-image: var(--ic-croix); mask-image: var(--ic-croix); }
 .mis-relais li.r-echec { color: var(--erreur-vif); }
 @media (prefers-reduced-motion: reduce) { .r-cours .mis-pastille { animation: none; } }
 @media (max-width: 480px) { .mis-relais li { font-size: 11.5px; } }

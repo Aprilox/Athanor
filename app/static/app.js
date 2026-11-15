@@ -4,6 +4,8 @@
 const CSRF = document.querySelector('meta[name="csrf"]').content;
 const $ = (s, r = document) => r.querySelector(s);
 const h = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+// M239: a sober icon drawn by a CSS mask in the text colour (no emoji, no symbol font), hidden from screen readers
+const ic = (n) => `<i class="ic ic-${n}" aria-hidden="true"></i>`;
 // pilot phase (STATE.json) -> status dot class
 const classePhase = (x) => !x || !x.actif ? "" : ({ travail: "travaille", quota: "quota", budget: "quota", attente_vous: "quota", erreur: "erreur", connexion: "erreur", entre_cycles: "entre_cycles" }[x.phase] || "travaille");
 // escaped text with `code` spans rendered (the plan and requests are Markdown-ish)
@@ -33,7 +35,7 @@ function titreJalon(texte) {
 // A milestone: one line with its title; a click opens the details (files, dependencies, acceptance,
 // notes) and the actions (move, remove) that edit PLAN.md. `etat.ouverts` remembers which are open.
 function rendreJalon(j, etatJalon, compact) {
-  const ico = j.fait ? "✔" : etatJalon === "en-cours" ? "▶" : j.etape ? "◆" : "○";
+  const ico = j.fait ? ic("ok") : etatJalon === "en-cours" ? ic("lecture") : j.etape ? ic("losange") : ic("cercle");
   const cle = "jalon:" + (j.id || j.titre), ouvert = etat.ouverts.has(cle);
   const peutEditer = !j.fait && !(etatJalon === "en-cours" && etat.vue && etat.vue.actif); // "next up" while stopped is still editable
   const details = ouvert ? `<div class="jalon-details">
@@ -44,10 +46,10 @@ function rendreJalon(j, etatJalon, compact) {
       ${j.acceptation ? `<div><span class="muet">${t("Acceptance")}</span> ${md(j.acceptation)}</div>` : ""}
       ${j.notes && j.notes.length ? `<ul class="jalon-notes">${j.notes.map((n) => `<li>${md(n)}</li>`).join("")}</ul>` : ""}
       ${j.id ? `<div class="ligne jalon-actions">
-        ${peutEditer ? `<button class="btn btn-petit" data-jalon="${h(j.id)}" data-jalon-action="monter" title="${h(t("Move up"))}">↑</button><button class="btn btn-petit" data-jalon="${h(j.id)}" data-jalon-action="descendre" title="${h(t("Move down"))}">↓</button><button class="btn btn-petit btn-danger" data-jalon="${h(j.id)}" data-jalon-action="retirer">${t("Remove from the plan")}</button>` : `<span class="muet petit">${j.fait ? t("Done: it stays in the plan.") : t("Being built: stop after the cycle to change it.")}</span>`}
+        ${peutEditer ? `<button class="btn btn-petit" data-jalon="${h(j.id)}" data-jalon-action="monter" title="${h(t("Move up"))}">${ic("haut")}</button><button class="btn btn-petit" data-jalon="${h(j.id)}" data-jalon-action="descendre" title="${h(t("Move down"))}">${ic("descendre")}</button><button class="btn btn-petit btn-danger" data-jalon="${h(j.id)}" data-jalon-action="retirer">${t("Remove from the plan")}</button>` : `<span class="muet petit">${j.fait ? t("Done: it stays in the plan.") : t("Being built: stop after the cycle to change it.")}</span>`}
       </div>` : ""}
     </div>` : "";
-  return `${j.vague ? `<li class="vague">${h(j.vague)}</li>` : ""}<li class="${etatJalon} ${ouvert ? "ouvert" : ""}${j.etape ? " etape" : ""}" data-jalon-cle="${h(cle)}"><span class="jalon-ico">${ico}</span><div class="jalon-corps"><div class="jalon-titre">${md(j.titre)}<span class="jalon-chevron">${ouvert ? "▾" : "▸"}</span></div>${details}</div></li>`;
+  return `${j.vague ? `<li class="vague">${h(j.vague)}</li>` : ""}<li class="${etatJalon} ${ouvert ? "ouvert" : ""}${j.etape ? " etape" : ""}" data-jalon-cle="${h(cle)}"><span class="jalon-ico">${ico}</span><div class="jalon-corps"><div class="jalon-titre">${md(j.titre)}<span class="jalon-chevron">${ouvert ? ic("bas") : ic("droite")}</span></div>${details}</div></li>`;
 }
 
 // A plan in stages (a large request): "Stage 2/5 · " before its progress, from the project's view.
@@ -59,7 +61,7 @@ function listePlan(plan, compact) {
   const archives = plan.filter((j) => j.archive), reste = plan.filter((j) => !j.archive);
   const ouvert = etat.ouverts.has("plan:archives");
   const ligne = (j) => rendreJalon(j, etatDuJalon(j, () => premier ? (premier = false, true) : false), compact);
-  const tete = archives.length ? `<li class="coche plan-archives" data-plan-archives><span class="jalon-ico">✔</span><div class="jalon-corps"><div class="jalon-titre">${t("{0} milestone(s) done earlier", [archives.length])}<span class="jalon-chevron">${ouvert ? "▾" : "▸"}</span></div></div></li>` : "";
+  const tete = archives.length ? `<li class="coche plan-archives" data-plan-archives><span class="jalon-ico">${ic("ok")}</span><div class="jalon-corps"><div class="jalon-titre">${t("{0} milestone(s) done earlier", [archives.length])}<span class="jalon-chevron">${ouvert ? ic("bas") : ic("droite")}</span></div></div></li>` : "";
   return tete + (ouvert ? archives.map(ligne).join("") : "") + reste.map(ligne).join("");
 }
 
@@ -144,11 +146,11 @@ function choisir(message, boutons, options = {}) {
 // this computer's connection to GitHub (outil_github_connexion.go): one sign-in, kept, for every project
 function rendreConnexionGH(c) {
   if (!c) return `<p class="muet petit">${t("Updating…")}</p>`;
-  if (c.connecte) return `<p class="ok m0">✔ ${t("Connected as {0}", [h(c.login)])}${c.lie_le ? ` <span class="muet petit">· ${h(t("since {0}", [dateLisible(c.lie_le)]))}</span>` : ""}</p>
+  if (c.connecte) return `<p class="ok m0">${ic("ok")} ${t("Connected as {0}", [h(c.login)])}${c.lie_le ? ` <span class="muet petit">· ${h(t("since {0}", [dateLisible(c.lie_le)]))}</span>` : ""}</p>
     <p class="muet petit">${t("Every project of this computer is linked to a repository your account can push to (yours, or one you are a collaborator of) without signing in again: Manage › GitHub › Use one of my repositories. Only creating a new repository opens a sign-in.")}</p>
     <p class="muet petit">${t("Athanor keeps a key “Athanor (this computer)” on your GitHub account (Settings › SSH and GPG keys), out of Claude's reach. It opens every repository your account can push to.")}</p>
     <div class="ligne"><button class="btn btn-petit" data-connexion-gh="connecter">${t("Connect again")}</button><button class="btn btn-petit btn-danger" data-connexion-gh="deconnecter">${t("Disconnect")}</button></div>
-    <div class="mt-1"><p class="m0">${c.acces_garde ? `<span class="ok">✔</span> ${t("Create repositories without a window: on")}` : `<span class="muet">○</span> ${t("Create repositories without a window: off")}`}</p>
+    <div class="mt-1"><p class="m0">${c.acces_garde ? `<span class="ok">${ic("ok")}</span> ${t("Create repositories without a window: on")}` : `<span class="muet">${ic("cercle")}</span> ${t("Create repositories without a window: off")}`}</p>
       <p class="muet petit m0">${t("Creating a repository goes through GitHub's API, which the key cannot reach: by default it opens a sign-in each time, and nothing of it is kept. On: one sign-in is kept on this computer, out of Claude's reach, and used only to create your repositories. It opens your account's repositories: keeping it is keeping that power on the disk (revocable on GitHub, Settings › Applications).")}</p>
       <div class="ligne mt-1">${c.acces_garde ? `<button class="btn btn-petit" data-connexion-gh="oublier-acces">${t("Forget this access")}</button>` : `<button class="btn btn-petit" data-connexion-gh="garder-acces">${t("Keep the access (one sign-in)")}</button>`}</div></div>`;
   return `<p class="muet petit m0">${t("Connect this computer to your GitHub account once: then every project is linked to one of your repositories, or one you are a collaborator of, without signing in again.")}</p>
@@ -501,7 +503,7 @@ function majBarreAmeliorer(id) {
   if (!bascule || !etiquette) return;
   bascule.hidden = !v;
   if (!v) { etiquette.textContent = ""; return; }
-  bascule.textContent = v.vue === "claude" ? "↩ " + t("Back to my version") : t("Use Claude's version");
+  bascule.innerHTML = v.vue === "claude" ? ic("retour") + " " + h(t("Back to my version")) : h(t("Use Claude's version"));
   etiquette.textContent = v.vue === "claude" ? t("Claude's version") : t("Your version");
 }
 document.addEventListener("input", (ev) => {
@@ -562,7 +564,7 @@ function ligneGitHubSuivi(g, local) {
   const env = g.envoye, d = g.dernier;
   let txt = env ? `${h(env.commit)} <span class="petit">· ${h(heureMaj(env.quand))}</span>` : t("nothing pushed yet");
   const echec = d && d.resultat !== "ok" && d.resultat !== "attente" && (!env || d.quand > env.quand);
-  if (env && memeCommit(env.commit, local)) txt += ` <span class="petit">✓ ${t("up to date")}</span>`;
+  if (env && memeCommit(env.commit, local)) txt += ` <span class="petit">${ic("ok")} ${t("up to date")}</span>`;
   else if (local && !echec) txt += ` <span class="petit">· ${t("the local one is not pushed yet")}</span>`;
   if (!g.auto) txt += ` <span class="petit">· ${t("automatic push off")}</span>`;
   const msg = echec ? `<div class="quota petit">${h(t(d.modele || "", d.args || []))}</div>` : "";
@@ -913,7 +915,7 @@ function rendreBandeau(v) {
       // the app for the end of the cycle; cancelled, a button asks it again)
       const attente = v.en_attente || [];
       if (attente.includes("modes")) boutons.push(`<span class="btn btn-attente inerte" title="${h(t("The pilot reads the working mode when a cycle starts: the cycle under way keeps the one it started with."))}">${t("New working mode: taken at the end of this cycle")}</span>`);
-      if (attente.includes("reglages") && !v.arret_demande) boutons.push(`<button class="btn btn-attente" data-act="redemarrer-apres-cycle" title="${h(t("The pilot runs with the settings it started with. Click to restart it at the end of this cycle."))}">↻ ${t("New settings: restart after cycle")}</button>`);
+      if (attente.includes("reglages") && !v.arret_demande) boutons.push(`<button class="btn btn-attente" data-act="redemarrer-apres-cycle" title="${h(t("The pilot runs with the settings it started with. Click to restart it at the end of this cycle."))}">${ic("actualiser")} ${t("New settings: restart after cycle")}</button>`);
       // a stop asked for the end of the cycle: the button says it, and a click withdraws it
       if (v.arret_demande) boutons.push(`<button class="btn btn-attente" data-arret="annuler" title="${h(t("Click to cancel: the pilot then goes on after this cycle."))}">${v.arret_demande === "relance" ? t(attente.includes("reglages") ? "Restart at the end of the cycle: new settings" : "Restart requested: end of cycle") : t("Stop requested: end of cycle")}</button>`);
       else boutons.push(`<button class="btn" data-act="arreter-apres-cycle" title="${h(t("Finishes the current milestone, saves it, then stops. Nothing is lost."))}">${t("Stop after cycle")}</button>`);
@@ -930,7 +932,7 @@ function rendreBandeau(v) {
   const maj = v.maj || {};
   if (maj.en_cours === "telechargement") boutons.unshift(`<button class="btn btn-maj" disabled>${t("Downloading the update… {0} %", [maj.avancement || 0])}</button>`);
   else if (maj.en_cours === "redemarrage") boutons.unshift(`<button class="btn btn-maj" disabled>${t("Athanor restarts…")}</button>`);
-  else if (maj.disponible) boutons.unshift(`<button class="btn btn-maj" data-maj="voir" title="${h(t("Athanor {0} is available (you have {1})", [maj.derniere, v.version]))}">⬆ ${t("Update to {0}", [h(maj.derniere)])}</button>`);
+  else if (maj.disponible) boutons.unshift(`<button class="btn btn-maj" data-maj="voir" title="${h(t("Athanor {0} is available (you have {1})", [maj.derniere, v.version]))}">${ic("maj")} ${t("Update to {0}", [h(maj.derniere)])}</button>`);
   if (!cadre.actif) boutons.push(boutonCloche(v, "btn"), boutonGuide("btn"));
   rendreBarre(v);
   const nomProjet = v.projet && !global ? `<div class="muet petit">${h(v.projet.nom)} · ${h(v.projet.dossier)}</div>` : "";
@@ -950,7 +952,7 @@ function rendreBandeau(v) {
   ecrire(nv, maj.disponible ? t("Athanor {0} is available (you have {1})", [maj.derniere, v.version]) : t("Version of Athanor: click to look for an update"), "title");
   const sel = $("#sel-projet");
   sel.setAttribute("aria-expanded", etat.selecteurOuvert ? "true" : "false");
-  sel.innerHTML = v.projet ? `<span class="dot ${classePhase(v.projet)}"></span><span class="nom">${h(v.projet.nom)}</span><span class="chevron">▾</span>` : `<span class="nom muet">${t("Choose a project")}</span><span class="chevron">▾</span>`;
+  sel.innerHTML = v.projet ? `<span class="dot ${classePhase(v.projet)}"></span><span class="nom">${h(v.projet.nom)}</span><span class="chevron">${ic("bas")}</span>` : `<span class="nom muet">${t("Choose a project")}</span><span class="chevron">${ic("bas")}</span>`;
   marquerNav(v);
   ecrire($("#btn-verrou"), !v.mot_de_passe, "hidden");
   if (v.projet && etat.projet !== v.projet.nom) etat.projet = v.projet.nom;
@@ -971,7 +973,7 @@ function rendreSelecteur(v) {
     <div class="menu-liste">${liste.map((x) => `<a href="#suivi" data-projet="${h(x.nom)}" class="${x.courant ? "actif" : ""}"><span class="dot ${classePhase(x)}"></span><span class="nom">${h(x.nom)}</span><span class="muet petit">${x.actif ? t(x.phase === "quota" || x.phase === "budget" || x.phase === "attente_vous" ? "waiting" : "running") : t("stopped")}${x.attente ? " · " + t("{0} queued", [x.attente]) : ""}${x.pour_vous ? " · " + t("{0} for you", [x.pour_vous]) : ""}</span></a>`).join("") || `<div class="vide">${t("No project.")}</div>`}</div>
     ${v.projet ? `<a href="#projet" class="menu-nouveau menu-gerer">${t("Manage this project")}</a>` : ""}
     <a href="#nouveau" class="menu-nouveau">+ ${t("New project")}</a>
-    <a href="#rejoindre" class="menu-nouveau">⇄ ${t("Join a project")}</a>
+    <a href="#rejoindre" class="menu-nouveau">${ic("echange")} ${t("Join a project")}</a>
     ${archives ? `<a href="#archives" class="menu-nouveau menu-archives">${t("Archived projects ({0})", [archives])}</a>` : ""}`;
   const r = $("#sel-recherche"); if (r) { r.focus(); r.setSelectionRange(pos, pos); }
 }
@@ -1078,8 +1080,8 @@ function marquerDistance(v) {
   a.dataset.connectes = n ? String(n) : ""; a.title = v.distance_active ? t("Remote access on: {0} device(s) connected", [n]) : "";
   a.classList.toggle("distance-active", !!v.distance_active);
 }
-// phones: the sidebar is a drawer (☰), closed again by a choice or a tap beside it
-// open: the page under the veil is inert (the keyboard stays in the drawer), Escape closes it back to ☰
+// phones: the sidebar is a drawer (Menu button), closed again by a choice or a tap beside it
+// open: the page under the veil is inert (the keyboard stays in the drawer), Escape closes it back to the Menu button
 // closed on a phone, the drawer is inert too: the keyboard never enters it off-screen
 const TEL = matchMedia("(max-width: 700px)"); // the one phone threshold (the CSS has the same)
 // M227c: the height of the content area, for a chat that fills it on a phone (app.css: --h-page)
@@ -1485,7 +1487,7 @@ function messageChat(m, i) {
   const quand = m.quand ? new Date(m.quand).toLocaleTimeString(document.documentElement.lang || "en", { hour: "2-digit", minute: "2-digit" }) : "";
   const pieces = (m.pieces || []).length ? `<div class="petit muet">${m.pieces.map((x) => h(x.split("/").pop())).join("<br>")}</div>` : "";
   if (m.role === "vous") return `<div class="chat-msg chat-vous"><div class="chat-bulle">${mdChat(m.texte)}${pieces}</div><div class="chat-meta">${h(quand)}${m.mode === "modif" ? " · " + (m.pause ? t("changes the files after the pilot's cycle") : t("may change the files")) : ""}${m.internet ? " · " + t("Internet") : ""}</div></div>`;
-  const relance = m.pilote ? `<div class="chat-meta">${m.pilote === "relance" ? `<span class="ok">▶ ${t("The pilot started again.")}</span>` : `<span class="attention">${t("The pilot did not start again: {0}", [h(t(m.pilote))])}</span>`}</div>` : "";
+  const relance = m.pilote ? `<div class="chat-meta">${m.pilote === "relance" ? `<span class="ok">${ic("lecture")} ${t("The pilot started again.")}</span>` : `<span class="attention">${t("The pilot did not start again: {0}", [h(t(m.pilote))])}</span>`}</div>` : "";
   if (m.role === "erreur") return `<div class="chat-msg chat-claude"><div class="chat-bulle chat-erreur">${h(t(m.texte))}</div>${relance}</div>`;
   const note = (m.texte.match(/<note>([\s\S]*?)<\/note>/) || [])[1];
   const agent = (m.texte.match(/<agent>([\s\S]*?)<\/agent>/) || [])[1];
@@ -1494,7 +1496,7 @@ function messageChat(m, i) {
   const actions = (m.outils || []).length ? `<details class="chat-actions"><summary>${t("{0} action(s)", [m.outils.length])}</summary>${m.outils.map((o) => `<div>${h(t(o))}</div>`).join("")}</details>` : "";
   return `<div class="chat-msg chat-claude"><div class="chat-bulle">${mdChat(texte, true)}
     ${note ? `<div class="chat-note"><div class="muet petit">${t("Note for the pilot")}</div><div>${mdChat(note.trim())}</div>
-      <div class="ligne m0 mt-1">${m.note ? `<span class="ok petit">✔ ${t("Sent to the pilot")}</span>` : `<button type="button" class="btn btn-petit btn-primaire" data-chat-note="${i}">${t("Send to the pilot")}</button>`}</div></div>` : ""}
+      <div class="ligne m0 mt-1">${m.note ? `<span class="ok petit">${ic("ok")} ${t("Sent to the pilot")}</span>` : `<button type="button" class="btn btn-petit btn-primaire" data-chat-note="${i}">${t("Send to the pilot")}</button>`}</div></div>` : ""}
     ${agent !== undefined ? carteAgentChat(agent, m, i) : ""}
     ${mcp !== undefined ? carteMCPChat(mcp, m, i) : ""}
     ${actions}</div>
@@ -1507,7 +1509,7 @@ function carteMCPChat(json, m, i) {
   let a;
   try { a = JSON.parse(json.trim().replace(/^```(json)?|```$/g, "")); } catch (e) { a = null; }
   if (!a || typeof a !== "object" || !a.config || typeof a.config !== "object") return `<div class="chat-note"><div class="muet petit">${t("Claude's proposal could not be read: ask it to write it again.")}</div><pre class="chat-code">${h(json.trim())}</pre></div>`;
-  if (m.mcp) return `<div class="chat-note"><span class="ok petit">✔ ${t("Added to the library and switched on: {0}", [h(m.mcp)])}</span> <a href="#extensions" class="petit">${t("Skills & MCP")}</a></div>`;
+  if (m.mcp) return `<div class="chat-note"><span class="ok petit">${ic("ok")} ${t("Added to the library and switched on: {0}", [h(m.mcp)])}</span> <a href="#extensions" class="petit">${t("Skills & MCP")}</a></div>`;
   const v = (x) => h(String(x || ""));
   const fichiers = a.fichiers && typeof a.fichiers === "object" ? Object.entries(a.fichiers) : [];
   return `<div class="chat-note chat-agent" data-chat-mcp-carte="${i}"><div class="muet petit">${fichiers.length ? t("MCP server written by Claude") : t("MCP server proposed")}</div>
@@ -1536,7 +1538,7 @@ function carteAgentChat(json, m, i) {
   let a;
   try { a = JSON.parse(json.trim().replace(/^```(json)?|```$/g, "")); } catch (e) { a = null; }
   if (!a || typeof a !== "object") return `<div class="chat-note"><div class="muet petit">${t("Claude's proposal could not be read: ask it to write it again.")}</div><pre class="chat-code">${h(json.trim())}</pre></div>`;
-  if (m.agent) return `<div class="chat-note"><span class="ok petit">✔ ${t("Added to the team: {0}", [h(m.agent)])}</span> <a href="#equipe" class="petit">${t("Team")}</a></div>`;
+  if (m.agent) return `<div class="chat-note"><span class="ok petit">${ic("ok")} ${t("Added to the team: {0}", [h(m.agent)])}</span> <a href="#equipe" class="petit">${t("Team")}</a></div>`;
   const v = (x) => h(String(x || ""));
   return `<div class="chat-note chat-agent" data-chat-agent-carte="${i}"><div class="muet petit">${a.ancien ? t("Changes to the sub-agent {0}", [v(a.ancien)]) : t("Sub-agent proposed")}</div>
     <input type="hidden" data-ca="ancien" value="${v(a.ancien)}">
@@ -1597,13 +1599,13 @@ async function majChat(force) {
 
 // what Claude may do with the next message: the pilot's state, and the "change the files" switch (at the bottom)
 function modeChat() {
-  const point = chat.piloteActif ? `<span class="attention">●</span>` : `<span class="ok">●</span>`;
+  const point = chat.piloteActif ? `<span class="attention">${ic("point")}</span>` : `<span class="ok">${ic("point")}</span>`;
   if (!chat.modif) return `${point} ${t("Claude reads and answers: a change you ask for becomes a note for the pilot, sent with one click.")}`;
   if (chat.piloteActif) return `${point} ${t("The pilot stops at the end of its current cycle, Claude changes the files, Athanor commits them, then the pilot starts again on its own with a note of the change.")}`;
   return `${point} ${t("The pilot is stopped: Claude can change the project's files (no commands), and Athanor commits them.")}`;
 }
 
-// the ⓘ of the chat: what it can do
+// the info button of the chat: what it can do
 function aideChat() {
   return choisir([
     t("• Questions: how a part works, where something is, what the pilot did, why a milestone failed. Claude reads the project's files to answer."),
@@ -1863,7 +1865,7 @@ function rendreAvancement(stats, plan, faits, actif) {
   const detail = choisi ? `<div class="av-detail"><div class="ligne m0"><b class="croit">${md(choisi.titre)}</b>
       <span class="muet petit">${rang + 1} / ${infos.length}</span>
       <button class="btn btn-petit" data-av-pas="-1" ${rang <= 0 ? "disabled" : ""} title="${h(t("Previous milestone (←)"))}">‹</button><button class="btn btn-petit" data-av-pas="1" ${rang >= infos.length - 1 ? "disabled" : ""} title="${h(t("Next milestone (→)"))}">›</button>
-      <button class="btn btn-petit" data-av-fermer title="${h(t("Close"))}">✕</button></div>
+      <button class="btn btn-petit" data-av-fermer title="${h(t("Close"))}">${ic("croix")}</button></div>
       ${choisi.detail ? `<div class="muet petit mt-1">${md(choisi.detail)}</div>` : ""}
       <dl class="fiche mt-2"><dt>${t("Finished")}</dt><dd>${h(choisi.quand)} · ${h(t("{0} / {1} milestones done", [choisi.s.faits, total]))}</dd>
       <dt>${t("Cycles")}</dt><dd>${h(choisi.cycles.join(", "))}</dd>
@@ -2144,11 +2146,11 @@ function carteMission(d) {
   const e = c.estimation || {}, actif = !travailleMission(d) && m.etat === "proposee", dis = ed ? "" : " disabled";
   return `<div class="mis-voies">
       <div class="mis-voie"><h3>${t((etat.hubModules || []).find((m) => m.id === "dev")?.nom || "dev")}</h3><p class="m0"><b>${h(c.projet.nom)}</b> <span class="etiquette">${t(c.projet.nouveau ? "New project" : "Existing project")}</span></p><p class="mis-brief">${h(c.dev.brief || "")}</p>${c.dev.modes ? `<p class="m0">${[["parallele", "Parallel mode"], ["eco", "Eco mode"], ["rapide", "Fast mode"]].filter(([k]) => c.dev.modes[k]).map(([, n]) => `<span class="etiquette">${t(n)}</span>`).join(" ")}</p>` : ""}</div>
-      <div class="mis-voie"><h3>${t("Servers")}</h3>${c.avertissement_serveurs ? `<p class="mis-avert" role="note">⚠ ${t("Native Windows mode: the Servers lane needs WSL, or Force on the project's Access page.")}</p>` : ""}<p class="mis-brief">${h(c.serveurs.brief || t("Nothing to prepare on the servers."))}</p></div>
+      <div class="mis-voie"><h3>${t("Servers")}</h3>${c.avertissement_serveurs ? `<p class="mis-avert" role="note">${ic("alerte")} ${t("Native Windows mode: the Servers lane needs WSL, or Force on the project's Access page.")}</p>` : ""}<p class="mis-brief">${h(c.serveurs.brief || t("Nothing to prepare on the servers."))}</p></div>
     </div>
     <div class="mis-grille">
       <div><h3>${t("Environments")}</h3>${(c.envs || []).length ? `<ul class="mis-envs">${c.envs.map((x) => `<li><b>${h(x.nom)}</b> <span class="mis-url">${h(x.url || "—")}</span> <span class="muet petit">${h(envMission(x, true, nomServeur))}</span>${x.avant ? `<div class="muet petit mis-avant">${h(t("Before: {0}", [envMission(x.avant, false, nomServeur)]))}</div>` : ""}</li>`).join("")}</ul>` : `<span class="muet">—</span>`}
-        <h3>${t("Access used")}</h3>${c.avertissement_infra ? `<p class="mis-avert" role="note">⚠ ${t("Native Windows mode: an infra key is ticked. Untick it, or switch to WSL (an existing project can also Force on its Access page).")}</p>` : ""}${(c.acces || []).length ? `<ul class="mis-acces">${c.acces.map((a, i) => `<li><label class="case"><input type="checkbox" data-mis-acces="${i}"${(ed ? !ed.decoches.includes(i) : !a.decoche) ? " checked" : ""}${dis}> <b>${h(a.entree)}</b></label> ${a.type ? `<span class="etiquette">${h(a.type)}</span>` : ""}${a.a_remplir ? ` <span class="badge mis-remplir">${t("to fill")}</span>` : ""} <span class="muet petit">${t("used for {0}", [h(nomServeur(a.pour))])}</span></li>`).join("")}</ul>` : `<span class="muet">${t("No vault entry.")}</span>`}</div>
+        <h3>${t("Access used")}</h3>${c.avertissement_infra ? `<p class="mis-avert" role="note">${ic("alerte")} ${t("Native Windows mode: an infra key is ticked. Untick it, or switch to WSL (an existing project can also Force on its Access page).")}</p>` : ""}${(c.acces || []).length ? `<ul class="mis-acces">${c.acces.map((a, i) => `<li><label class="case"><input type="checkbox" data-mis-acces="${i}"${(ed ? !ed.decoches.includes(i) : !a.decoche) ? " checked" : ""}${dis}> <b>${h(a.entree)}</b></label> ${a.type ? `<span class="etiquette">${h(a.type)}</span>` : ""}${a.a_remplir ? ` <span class="badge mis-remplir">${t("to fill")}</span>` : ""} <span class="muet petit">${t("used for {0}", [h(nomServeur(a.pour))])}</span></li>`).join("")}</ul>` : `<span class="muet">${t("No vault entry.")}</span>`}</div>
       <div><h3>${t("I will ask for your approval for")}</h3>${liste((c.approbations || []).map((a) => t(APPROBATIONS_PREVUES[a.type] || a.type, [a.cible || ""])))}
         <h3>${t("What will be touched")}</h3><dl class="fiche mis-touche">
           <dt>${t("Servers")}</dt><dd>${liste(c.touche.serveurs)}</dd><dt>${t("DNS names")}</dt><dd>${liste(c.touche.dns)}</dd>
@@ -2294,7 +2296,7 @@ function carteActionHub(c, i) {
   const equipe = ["agent", "mcp", "attribuer"].includes(ty) ? champsEquipeHub(c, [...new Set([...(c.projets || []), ...projets.filter((n) => n && n !== c.projet)])]) : null;
   const titre = ty === "demande" ? `<label class="champ"><span>${t("Title")}</span><input type="text" data-cact="titre" value="${v(c.titre)}"></label>` : "";
   const texte = ty === "pilote" || equipe ? "" : `<label class="champ"><span>${t("Text")}</span><textarea data-cact="texte" rows="5">${v(c.texte)}</textarea></label>`;
-  const decide = c.etat ? `<div class="${c.etat === "lancee" ? "ok" : "muet"} petit" role="status">${c.etat === "lancee" ? "✔ " + t("Launched") : "✕ " + t("Refused")}${c.resultat ? " — " + h(t(c.resultat, c.args || [])) : ""}</div>`
+  const decide = c.etat ? `<div class="${c.etat === "lancee" ? "ok" : "muet"} petit" role="status">${c.etat === "lancee" ? (ic("ok") + " ") + t("Launched") : (ic("croix") + " ") + t("Refused")}${c.resultat ? " — " + h(t(c.resultat, c.args || [])) : ""}</div>`
     : `${c.erreur ? `<div class="attention petit" role="alert">${h(t(c.erreur))}</div>` : ""}
       ${equipe ? equipe.vue : ""}<div class="carte-action-champs" hidden>${equipe ? equipe.champs : champs + titre + texte}</div>
       <div class="ligne m0 mt-1"><button type="button" class="btn btn-petit btn-primaire" data-cact-decision="lancer" data-index="${i}">${t("Launch")}</button>
@@ -2341,7 +2343,7 @@ function listeDossiersHub(pv) {
   const l = pv.dossiers || [];
   return l.length ? l.map((d, i) => `<li><code class="croit">${h(d.chemin)}</code>
     <select data-dossier-acces="${i}" aria-label="${h(t("Access to {0}", [d.chemin]))}"><option value="">${t("Read only")}</option><option value="1" ${d.ecriture ? "selected" : ""}>${t("Read and write")}</option></select>
-    <button type="button" class="btn-lien" data-dossier-retirer="${i}" title="${h(t("Remove"))}" aria-label="${h(t("Remove {0}", [d.chemin]))}">✕</button></li>`).join("")
+    <button type="button" class="btn-lien" data-dossier-retirer="${i}" title="${h(t("Remove"))}" aria-label="${h(t("Remove {0}", [d.chemin]))}">${ic("croix")}</button></li>`).join("")
     : `<li class="muet petit">${t("No folder: the assistant sees no file of your computer.")}</li>`;
 }
 function pouvoirsHub(pv) {
@@ -2507,8 +2509,8 @@ pages.suivi = async () => {
 
 // M136: the dev deployment after the last milestone (relais_jalon.go)
 function ligneRelais(r) {
-  const [icone, etiquette] = r.etat === "attente" ? ["…", "Waiting for the milestone's commit on GitHub"] : r.etat === "lance" ? ETATS_DEPLOI.en_cours : ETATS_DEPLOI[r.etat] || ["", r.etat];
-  return `<span class="badge">${icone} ${h(t(etiquette))}</span> <code>${h((r.commit || "").slice(0, 7))}</code> <span class="muet petit">${md(r.jalon)} · ${h(dateLisible(r.date))}</span>${r.erreur ? `<div class="petit attention">${h(t(r.erreur))}</div>` : ""} <a class="petit" href="#acces">${t("Environments")}</a>`;
+  const [icone, etiquette] = r.etat === "attente" ? ["attente", "Waiting for the milestone's commit on GitHub"] : r.etat === "lance" ? ETATS_DEPLOI.en_cours : ETATS_DEPLOI[r.etat] || ["", r.etat];
+  return `<span class="badge">${icone ? ic(icone) : ""} ${h(t(etiquette))}</span> <code>${h((r.commit || "").slice(0, 7))}</code> <span class="muet petit">${md(r.jalon)} · ${h(dateLisible(r.date))}</span>${r.erreur ? `<div class="petit attention">${h(t(r.erreur))}</div>` : ""} <a class="petit" href="#acces">${t("Environments")}</a>`;
 }
 
 // the installers of this system: on Windows, one per mode (choosing it also selects that mode)
@@ -2563,7 +2565,7 @@ function blocRaccourci(r, titre, plus, champ = "rc-dossier") {
     : r.systeme === "windows" ? t("An Athanor shortcut that opens the installed Athanor (the copy kept in Athanor's folder, which updates itself), also added to the Start menu: the downloaded file can then be deleted.")
     : t("A launcher that opens the installed Athanor (also added to the applications menu): the downloaded file can then be deleted.");
   return `${titre ? `<h2>${t("Shortcut")}</h2>` : ""}<p class="muet petit m0">${explication}</p>
-    ${faits.map((f) => `<p class="ok petit m0">✔ <code title="${h(f)}">${h(nomRaccourci(f))}</code> <span class="muet">${h(f.replace(/[\\/][^\\/]*$/, ""))}</span></p>`).join("")}
+    ${faits.map((f) => `<p class="ok petit m0">${ic("ok")} <code title="${h(f)}">${h(nomRaccourci(f))}</code> <span class="muet">${h(f.replace(/[\\/][^\\/]*$/, ""))}</span></p>`).join("")}
     <label class="champ mt-1"><span>${t("Folder of the shortcut")}</span>${champDossier(champ, r.defaut || "", "", false, t("Choose the shortcut's folder"))}</label>
     <div class="ligne mt-1"><button class="btn ${faits.length ? "" : "btn-primaire"}" data-raccourci="creer" data-champ="${champ}">${faits.length ? t("Make another shortcut") : t("Create the shortcut")}</button>${plus || ""}</div>`;
 }
@@ -2625,7 +2627,7 @@ const GUIDE = [
     note: "*Stop after cycle* lets the current milestone finish, *Stop now* cuts it. Everything is kept in files: the pilot resumes where it stopped, even after the computer restarts." },
   { id: "hub", titre: "Finding your way", intro: "Athanor Hub opens on its home page: what is going on and what needs you, at a glance. Each part of Athanor is a module with its own entry in the menu: *Studio*, the projects Claude builds, the *Vault*, your keys, then *Servers*, *E-mail* and *Missions*.",
     etapes: [
-      ["The menu", "On the left: *Home*, *Projects*, then one entry per module (*Studio*, *Vault*, *Servers*, *E-mail*, *Missions*), and *Settings* at the bottom. A module's entry opens the page you last saw in it. On a phone, the ☰ button opens the menu, and a tap on an entry closes it.", "#accueil", "Home"],
+      ["The menu", "On the left: *Home*, *Projects*, then one entry per module (*Studio*, *Vault*, *Servers*, *E-mail*, *Missions*), and *Settings* at the bottom. A module's entry opens the page you last saw in it. On a phone, the *Menu* button opens the menu, and a tap on an entry closes it.", "#accueil", "Home"],
       ["The home page", "*Home*: one tile per module, with its state (working, needs attention, idle) and its figures; a click on a figure opens its page, *Open* opens the module. Below, *In progress* shows what waits for you first, then what is working; *See all* opens *Projects*.", "#accueil", "Home"],
       ["The assistant", "The home page opens on a conversation: ask a question, or say what you want done. *Guide › Talk to the home assistant* explains what it reads, what it can do and its cards.", "#accueil", "Home"],
       ["Projects", "*Projects* lists everything under way in every module: its state, its progress, what it is doing now (“Milestone 5/14: …”) and what waits for you, with the reason. The filters show everything, only what needs you or only what is in progress; a click on a line opens its page. *New project* and *Join a project* are at the top.", "#global", "Projects"],
@@ -2650,7 +2652,7 @@ const GUIDE = [
     ] },
   { id: "coffre", titre: "The vault", intro: "The vault keeps your keys, tokens and settings in one place, encrypted on the disk. A secret's value is shown only while you type it, never again, and no page or answer of Athanor contains it.",
     etapes: [
-      ["Secrets and variables", "*Vault*, in the menu: *Secrets* hold what must stay hidden (a token, a password, a private key), *Variables* plain settings (a region, a user name), readable even while the vault is locked. *Add* creates one; the ⋯ menu of a card edits it, replaces its value or deletes it.", "#coffre", "Vault"],
+      ["Secrets and variables", "*Vault*, in the menu: *Secrets* hold what must stay hidden (a token, a password, a private key), *Variables* plain settings (a region, a user name), readable even while the vault is locked. *Add* creates one; the *Actions* menu of a card edits it, replaces its value or deletes it.", "#coffre", "Vault"],
       ["Paste", "*Paste* takes a whole `.env` block, an MCP configuration, a token or a private key. Athanor recognises each value (Cloudflare, GitHub, Anthropic, OpenAI, Stripe, AWS, SSH…) and proposes a name, a type and a scope; untick what you do not want to keep, then save. Only the names come back to the page, never the values."],
       ["Test", "*Test* checks a key with its own provider before you rely on it: Cloudflare and GitHub say whether it works and what it may do, an SSH key gives its type and whether its server answers. The key goes nowhere else."],
       ["The note for the AI", "After a test, Athanor proposes a short note from the result (the account, the zones, the rights). Change it as you like: it tells Claude what the key is for without showing it the value."],
@@ -2818,7 +2820,7 @@ const GUIDE = [
       ["Switch it on", "*Remote* › *Remote access*. The first time, Athanor downloads Cloudflare's tunnel program.", "#distance", "Remote"],
       ["Pair the phone", "Scan the QR code with the phone's camera (or open the link on the other device), then type the 6 digits the computer shows when the mouse is over them. They change every 20 seconds, so a photo of the QR code is not enough."],
       ["Use it", "The phone gets the same pages, laid out for its screen: start, stop, chat, requests. *Add to Home Screen* makes it an app. The secrets, the remote settings and the computer's folders stay on the computer."],
-      ["Remove a device", "*Remote* › *Trusted devices*: ✕ removes one at once. Switching remote access off closes the tunnel for every device."],
+      ["Remove a device", "*Remote* › *Trusted devices*: the cross button removes one at once. Switching remote access off closes the tunnel for every device."],
       ["A fixed address (optional)", "The temporary address changes when the computer restarts. With a domain whose DNS is at Cloudflare (a free account is enough): *Address › Use my domain*, then sign in to Cloudflare once. The page also shows how to add Cloudflare Access: an e-mail and a code are asked before anything reaches the computer."],
       ["Notifications on the phone", "On the phone, *Remote* › *This device* › *Notifications on this device*: a notification even with Athanor closed, when Claude needs you, a milestone is done, a project is delivered or a computer of a team is stuck. On an iPhone or iPad, add Athanor to the Home Screen first and open it from there."],
       ["Stop using your domain", "*Address › Back to a temporary address* deletes the tunnel at Cloudflare. Then, in Cloudflare's dashboard: delete the name's CNAME record (*DNS › Records*), and the Access application if you made one (*Zero Trust › Access › Applications*). If the computer was off at that moment, delete the tunnel there too (*Zero Trust › Networks › Tunnels*)."],
@@ -3045,7 +3047,7 @@ function rendreGitHub(r) {
   const cx = g.connexion_pc || {};
   if (!g.lie) return `<h2>GitHub</h2>
     <p class="muet petit">${t("Send the project's commits to one of your GitHub repositories, by itself after each milestone.")} ${lienGuide("github")}</p>${manque}
-    <div class="gh-etape ${cx.connecte ? "faite" : ""}"><b>1. ${t("This computer connected to GitHub")}</b>${cx.connecte ? `<p class="ok petit m0">✔ ${t("Connected as {0}", [h(cx.login)])}</p>`
+    <div class="gh-etape ${cx.connecte ? "faite" : ""}"><b>1. ${t("This computer connected to GitHub")}</b>${cx.connecte ? `<p class="ok petit m0">${ic("ok")} ${t("Connected as {0}", [h(cx.login)])}</p>`
       : `<p class="petit m0">${t("Once per computer: Athanor then links any repository your account can push to (yours, or one you are a collaborator of).")}</p><div class="ligne"><button class="btn btn-primaire" data-connexion-gh="connecter">${t("Connect to GitHub")}</button></div>`}</div>
     <div class="gh-etape"><b>2. ${t("Repository")}</b>${choixGitHub("gh", r.nom_propose || "")}</div>
     <div class="gh-etape"><b>3. ${t("Commits")}</b>${rendreAuteur(g.identite)}</div>
@@ -3054,9 +3056,9 @@ function rendreGitHub(r) {
       ${cx.connecte ? "" : `<p class="muet petit">${t("Connect this computer to GitHub first (step 1).")}</p>`}</div>`;
   const cls = !d ? "" : d.resultat === "ok" ? "ok" : d.resultat === "attente" ? "muet" : "bloque";
   const quand = d && d.quand ? String(d.quand).replace("T", " ").slice(0, 16) : "";
-  const test = etat.ghTest && etat.ghTest.projet === etat.projet ? `<p class="petit ${etat.ghTest.ok ? "ok" : "bloque"}">${etat.ghTest.ok ? "✔" : "✖"} ${h(t(etat.ghTest.message_key || "", etat.ghTest.args || []))}</p>${!etat.ghTest.ok && etat.ghTest.detail ? `<p class="muet petit"><code>${h(etat.ghTest.detail)}</code></p>` : ""}` : "";
+  const test = etat.ghTest && etat.ghTest.projet === etat.projet ? `<p class="petit ${etat.ghTest.ok ? "ok" : "bloque"}">${etat.ghTest.ok ? ic("ok") : ic("croix")} ${h(t(etat.ghTest.message_key || "", etat.ghTest.args || []))}</p>${!etat.ghTest.ok && etat.ghTest.detail ? `<p class="muet petit"><code>${h(etat.ghTest.detail)}</code></p>` : ""}` : "";
   return `<h2>GitHub</h2>${manque}
-    <p class="gh-statut"><span class="ok">✔</span> ${t("Linked to")} <b>${h(g.depot)}</b> · ${t("branch")} <code>${h(g.branche)}</code>${g.compte ? ` · ${t("account")} ${h(g.compte)}` : ""} <button class="btn btn-petit" data-gh="ouvrir">${t("Open on GitHub")}</button></p>
+    <p class="gh-statut"><span class="ok">${ic("ok")}</span> ${t("Linked to")} <b>${h(g.depot)}</b> · ${t("branch")} <code>${h(g.branche)}</code>${g.compte ? ` · ${t("account")} ${h(g.compte)}` : ""} <button class="btn btn-petit" data-gh="ouvrir">${t("Open on GitHub")}</button></p>
     <div class="ligne"><button class="btn" data-gh="tester">${t("Test the connection")}</button><button class="btn" data-gh="pousser">${t("Push now")}</button><button class="btn btn-primaire" data-gh="wip" title="${h(t("Commits what is in the folder now (“M3: … (in progress)”) and pushes it, without Claude: someone else can take over, even with no quota left."))}">${t("Save and push the work in progress")}</button>${d && d.resultat === "bloque" && d.sha ? `<button class="btn btn-danger" data-gh="malgre" data-sha="${h(d.sha)}">${t("Push anyway")}</button>` : ""}</div>
     <p class="muet petit">${t("Commits what is in the folder now (“M3: … (in progress)”) and pushes it, without Claude: someone else can take over, even with no quota left.")}</p>
     ${g.equipe ? "" : `<div class="ligne mt-1"><button class="btn" data-gh="recuperer">${t("Get GitHub's work")}</button></div>
@@ -3157,7 +3159,7 @@ function formulaireRejoindre() {
       <label class="champ"><span>${t("Name")}</span><input type="text" id="np-nom" placeholder="${h(t("the repository's name"))}"></label>
       <label class="champ"><span>${t("Folder of the project on this computer")}</span>${champDossier("np-dossier", "", t("e.g. D:\\Dev\\watch-store"), true)}</label>
       <p class="muet petit">${t("A new or empty folder: the team's files arrive in it.")}</p>
-      ${(etat.ghConnexion || {}).connecte ? `<p class="ok petit">✔ ${t("This computer is connected to GitHub as {0}: the project arrives at once.", [h(etat.ghConnexion.login)])}</p>`
+      ${(etat.ghConnexion || {}).connecte ? `<p class="ok petit">${ic("ok")} ${t("This computer is connected to GitHub as {0}: the project arrives at once.", [h(etat.ghConnexion.login)])}</p>`
         : `<p class="attention petit" data-avis-connexion>${t("First, connect this computer to GitHub (once): with the account the repository's owner added as a collaborator.")} <button class="btn btn-petit" type="button" data-connexion-gh="connecter">${t("Connect to GitHub")}</button></p>`}
       <button class="btn btn-primaire" id="rj-rejoindre" ${(etat.ghConnexion || {}).connecte ? "" : "disabled"}>${t("Join the project")}</button>
     </div>`;
@@ -3220,7 +3222,7 @@ function selecteurDossier(depart, titre) {
     courant = r;
     $("#sd-chemin").textContent = r.chemin;
     $("#sd-racines").innerHTML = r.racines.map((x) => `<button class="btn btn-petit" data-chemin="${h(x.chemin)}">${x.nom === "~" ? t("Home folder") : h(x.nom)}</button>`).join("");
-    $("#sd-explorateur").innerHTML = (r.parent ? `<div class="parent" data-chemin="${h(r.parent)}">↑ ${t("parent folder")}</div>` : "") + (r.dossiers.map((d) => `<div data-chemin="${h(d.chemin)}">${h(d.nom)}/</div>`).join("") || `<div class="muet">${t("No subfolder.")}</div>`);
+    $("#sd-explorateur").innerHTML = (r.parent ? `<div class="parent" data-chemin="${h(r.parent)}">${ic("haut")} ${t("parent folder")}</div>` : "") + (r.dossiers.map((d) => `<div data-chemin="${h(d.chemin)}">${h(d.nom)}/</div>`).join("") || `<div class="muet">${t("No subfolder.")}</div>`);
   };
   montrer(depart);
   return new Promise((resoudre) => {
@@ -3265,7 +3267,7 @@ function activiteVivante(a) {
   if (a.statut !== "travaille" && a.statut !== "attend") return "";
   const depuis = a.derniere ? Math.max(0, Math.round(Date.now() / 1000 - a.derniere)) : null;
   const age = depuis === null ? "" : depuis < 60 ? t("last action {0} s ago", [depuis]) : t("last action {0} min ago", [Math.floor(depuis / 60)]);
-  const icone = { outil: "▶", texte: "•", sous_agent: "»" };
+  const icone = { outil: ic("lecture"), texte: "•", sous_agent: "»" };
   const liste = (a.actions || []).slice(-5).map((x) => `<li><span class="muet">${h(x.heure)}</span> ${icone[x.genre] || "•"} ${h(t(x.texte))}</li>`).join("");
   const long = depuis !== null && depuis >= 120 && a.statut === "travaille" ? ` · ${t("a long command may be running (a build, tests): it is still working")}` : "";
   return `<div class="vivant">${age ? `<div class="muet petit">${age}${long}</div>` : ""}${liste ? `<ul class="actions-agent">${liste}</ul>` : ""}</div>`;
@@ -3281,7 +3283,7 @@ function rendreAppel(a) {
         ${a.mission ? `<div class="appel-mission">${h(a.mission)}</div>` : ""}
         ${a.statut === "travaille" && a.activite ? `<div class="activite">${h(t(a.activite))}</div>` : ""}
         ${activiteVivante(a)}</div>
-      <span class="jalon-chevron">${ouvert ? "▾" : "▸"}</span></div>
+      <span class="jalon-chevron">${ouvert ? ic("bas") : ic("droite")}</span></div>
     ${ouvert ? `<div class="appel-details">
       ${a.bulle && a.statut !== "termine" ? `<div class="bulle">${h(a.bulle.length > 700 ? a.bulle.slice(0, 700) + "…" : a.bulle)}</div>` : ""}
       ${a.consigne ? `<div><div class="muet petit">${t("Brief it was given")}</div><pre class="texte-agent">${h(a.consigne)}</pre></div>` : ""}
@@ -3331,7 +3333,7 @@ const ETATS_TACHE = () => ({
   a_contourner: [t("Claude looks for another way"), "pv-claude"],
 });
 function etiquetteTache(x) {
-  if (x.etat === "close") return x.statut === "verifiee" ? [t("Verified ✓"), "pv-ok"] : [t("Resolved"), "pv-ok"];
+  if (x.etat === "close") return x.statut === "verifiee" ? [t("Verified"), "pv-ok"] : [t("Resolved"), "pv-ok"];
   if (x.etat === "pour_vous" && x.statut === "manque") return [t("Something is missing"), "pv-vous"];
   return ETATS_TACHE()[x.etat] || [x.etat, ""];
 }
@@ -3357,12 +3359,12 @@ function carteTache(x) {
   }
   if (x.etat === "pour_vous") {
     corps += `<div class="pv-form">
-      ${(x.secrets || []).map((n) => `<label class="champ"><span><code>${h(n)}</code> ${x.donnes && x.donnes[n] ? `<span class="pv-donne">✓ ${t("already given: leave empty to keep it")}</span>` : ""}</span>
+      ${(x.secrets || []).map((n) => `<label class="champ"><span><code>${h(n)}</code> ${x.donnes && x.donnes[n] ? `<span class="pv-donne">${ic("ok")} ${t("already given: leave empty to keep it")}</span>` : ""}</span>
         <input type="password" autocomplete="off" spellcheck="false" data-pv-secret="${h(x.id)}|${h(n)}" value="${h(b.secrets[n] || "")}" placeholder="${h(t("paste it here: it goes into Athanor's vault on this PC, never into git"))}"></label>`).join("")}
       <label class="champ"><span>${t("Your answer (optional)")}</span><textarea rows="3" data-pv-texte="${h(x.id)}" placeholder="${h(t("e.g. Done, here is the address you asked for: … Or, to skip: I do not want a paid plan, use a free alternative."))}">${h(b.texte)}</textarea></label>
       ${zonePieces("pv-" + x.id)}
       <div class="ligne mt-1">
-        <button class="btn btn-primaire" data-pv="fait" data-id="${h(x.id)}">✓ ${t("It's done")}</button>
+        <button class="btn btn-primaire" data-pv="fait" data-id="${h(x.id)}">${ic("ok")} ${t("It's done")}</button>
         <button class="btn" data-pv="passer" data-id="${h(x.id)}" title="${h(t("Claude will not ask again: it finds another way, guided by your text if you wrote one."))}">${t("Skip: find another way")}</button>
       </div></div>`;
   } else if (derniere && x.etat !== "close") {
@@ -3396,8 +3398,8 @@ function blocPlan(x, p) {
   if (!p) return `<div class="pv-details">${h(x.raison)}</div>`;
   const etapes = (p.etapes || []).map((e) => {
     const [lib, cl] = CLASSES_ETAPE()[e.classe] || [e.classe, ""];
-    // C52: a step marked run waits for its result, then says ✓ or ✗ (and why)
-    const fait = !e.executee ? "" : e.etat === "ok" ? ` <span class="pv-etat pv-ok">✓ ${t("applied")}</span>` : e.etat === "echec" ? ` <span class="pv-etat pv-vous">✗ ${t("failed")}</span>` : ` <span class="pv-etat pv-claude">${t("running…")}</span>`;
+    // C52: a step marked run waits for its result, then says applied or failed (and why)
+    const fait = !e.executee ? "" : e.etat === "ok" ? ` <span class="pv-etat pv-ok">${ic("ok")} ${t("applied")}</span>` : e.etat === "echec" ? ` <span class="pv-etat pv-vous">${ic("croix")} ${t("failed")}</span>` : ` <span class="pv-etat pv-claude">${t("running…")}</span>`;
     return `<li><div class="plan-etape-tete"><code>${h(e.outil)}</code> <span class="pv-etat ${cl}">${h(lib)}</span>${fait}</div>
       ${e.raison ? `<div class="petit muet">${t("Why this class:")} <span lang="en">${h(e.raison)}</span></div>` : ""}${e.etat === "echec" && e.message ? `<div class="petit echec">${h(e.message)}</div>` : ""}
       <div class="plan-args">${argumentsLisibles(e.lisible)}</div><div class="pv-details m0">${h(e.durcir ? t(e.pourquoi) : e.pourquoi)}</div>
@@ -3405,7 +3407,7 @@ function blocPlan(x, p) {
   }).join("");
   // C73: only Athanor's key gets in after this hardening: said, its public key exported, a box to tick
   const pub = p.seule_cle ? p.seule_cle + " athanor" : "";
-  const seule = pub && x.id ? `<p class="petit attention">⚠ ${h(t("Only Athanor's key will get into this server: passwords are cut and no other key lets root in. Put your own public key in root's ~/.ssh/authorized_keys first (hardening copies it to athanor), then refuse this plan and ask for it again; or keep a copy of Athanor's public key below."))}</p>
+  const seule = pub && x.id ? `<p class="petit attention">${ic("alerte")} ${h(t("Only Athanor's key will get into this server: passwords are cut and no other key lets root in. Put your own public key in root's ~/.ssh/authorized_keys first (hardening copies it to athanor), then refuse this plan and ask for it again; or keep a copy of Athanor's public key below."))}</p>
     <label class="champ"><span>${t("Public key")}</span><textarea readonly rows="2" class="code" data-seule-pub>${h(pub)}</textarea></label>
     <div class="ligne m0"><button type="button" class="btn btn-petit" data-seule-copier>${t("Copy")}</button><a class="btn btn-petit" download="athanor-${h(p.serveur)}.pub" href="data:text/plain;charset=utf-8,${encodeURIComponent(pub + "\n")}">${t("Download")}</a></div>
     <label class="ligne m0 mt-1"><input type="checkbox" data-appr-seule> <span>${h(t("I know that only Athanor's key will get in after this plan"))}</span></label>` : "";
@@ -3581,7 +3583,7 @@ function blocBibliothequeAgents(biblio) {
       <div class="ext-corps"><div class="ext-nom">${h(a.nom)} <span class="etiquette">${a.origine === "chef" ? t("proposed by the lead") : t("created by you")}</span>${a.lecture_seule ? ` <span class="etiquette">${t("read only")}</span>` : ""}</div>
         <div class="ext-desc">${h(a.description)}</div>
         <div class="muet petit">${t("Used by {0} project(s)", [(a.projets || []).length])}</div></div>
-      <div class="ext-actions"><button class="btn btn-petit" data-ag="modifier" data-nom="${h(a.nom)}">${t("Edit")}</button><button class="btn btn-petit btn-danger" data-ag="supprimer" data-nom="${h(a.nom)}" title="${h(t("Delete"))}">✕</button></div></div>`; }).join("");
+      <div class="ext-actions"><button class="btn btn-petit" data-ag="modifier" data-nom="${h(a.nom)}">${t("Edit")}</button><button class="btn btn-petit btn-danger" data-ag="supprimer" data-nom="${h(a.nom)}" title="${h(t("Delete"))}">${ic("croix")}</button></div></div>`; }).join("");
   const vus = biblio.filter((a) => agentCorrespond(a, etat.agRecherche)).length;
   return `<div class="bloc mt-2"><h2>${t("Sub-agent library")} <span class="muet">${biblio.length}</span></h2>
     <p class="muet petit">${t("Kept in Athanor for all your projects: switch on the ones this project uses. It applies from the next cycle.")}</p>
@@ -3602,7 +3604,7 @@ function filtrerAgents() {
 // its description fits or when a request names it.
 function formulaireAgent() {
   const f = etat.agForm;
-  if (!f) return `<div class="ligne mt-2"><button class="btn" data-ag="nouveau">＋ ${t("New sub-agent")}</button>
+  if (!f) return `<div class="ligne mt-2"><button class="btn" data-ag="nouveau">${ic("plus")} ${t("New sub-agent")}</button>
     <span class="muet petit">${t("A specialist of your own (a translator, a researcher, a level designer…): the lead calls it when its description fits, or when your request names it. The lead can also propose some.")} ${t("Or describe it to Claude in Chat: it asks what it needs and writes it for you.")}</span></div>`;
   return `<div class="bloc agent-form mt-2"><h2>${f.ancien ? t("Edit {0}", [f.ancien]) : t("New sub-agent")}</h2>
     <div class="grille grille-2">
@@ -3679,28 +3681,28 @@ pages.extensions = async () => {
         ${type === "mcp" && (x.type === "http" || x.type === "sse") && !/^https?:\/\/(localhost|127\.|0\.0\.0\.0|\[::1\]|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(x.resume || "") ? `<button class="btn btn-petit" data-ext-connexion="${h(x.id)}" title="${h(t("For a server that asks you to sign in (OAuth): once, valid for every project."))}">${t("Sign in")}</button>` : ""}
         ${type === "mcp" ? `<button class="btn btn-petit" data-ext-tester="${h(x.id)}" ${d.projet ? "" : "disabled"} ${ext.tests[x.id] === "…" ? "disabled" : ""}>${t("Test")}</button>`
           : `<button class="btn btn-petit" data-ext-tester-skill="${h(x.id)}" ${ext.tests["skill|" + x.id] === "…" ? "disabled" : ""}>${t("Test")}</button>`}
-        <button class="btn btn-petit btn-danger" data-ext-retirer="${type}|${h(x.id)}" title="${h(t("Remove"))}">✕</button></div>
+        <button class="btn btn-petit btn-danger" data-ext-retirer="${type}|${h(x.id)}" title="${h(t("Remove"))}">${ic("croix")}</button></div>
     </div>`).join("");
   const cartes = cat.map((c) => `<div class="ext-carte">
       <div class="ext-nom">${h(t(c.nom))} <span class="muet petit">${h(c.licence)}</span></div>
       <div class="ext-desc">${h(c.description)}</div>
       <div class="muet petit">${[c.depot ? h(c.depot.includes("://") ? c.depot.split("://")[1] : "github.com/" + c.depot) : "", c.prerequis ? t("needs {0}", [c.prerequis]) : ""].filter(Boolean).join(" · ")}${(c.secrets || []).length ? " · " + c.secrets.map((sc) => sc.optionnel ? t("optional key") : t("key required")).join(", ") : ""}${c.scripts ? " · " + t("scripts") : ""}</div>
-      <div class="ligne">${c.installe ? `<span class="ok petit">✓ ${t("Installed")}</span>` : `<button class="btn btn-petit btn-primaire" data-ext-installer="${type}|${h(c.id)}" ${occupe(type + "|" + c.id)}>${ext.occupe === type + "|" + c.id ? t("Installing…") : t("Install")}</button>`}</div>
+      <div class="ligne">${c.installe ? `<span class="ok petit">${ic("ok")} ${t("Installed")}</span>` : `<button class="btn btn-petit btn-primaire" data-ext-installer="${type}|${h(c.id)}" ${occupe(type + "|" + c.id)}>${ext.occupe === type + "|" + c.id ? t("Installing…") : t("Install")}</button>`}</div>
     </div>`).join("");
   // search: SkillsMP for skills, the official MCP Registry for servers
   const rech = ext.recherche[o];
   const resultats = !rech.res ? "" : !rech.res.length ? `<div class="vide">${t("Nothing found: try another word, in English (e.g. testing, react, docs).")}</div>` : rech.res.map((x, i) => o === "skills" ? `<div class="ext-ligne">
-      <div class="ext-corps"><div class="ext-nom">${h(x.nom)} <span class="muet petit">${x.auteur ? t("by {0}", [h(x.auteur)]) : ""}${x.etoiles ? " · ★ " + x.etoiles : ""}</span></div>
+      <div class="ext-corps"><div class="ext-nom">${h(x.nom)} <span class="muet petit">${x.auteur ? t("by {0}", [h(x.auteur)]) : ""}${x.etoiles ? ` · ${ic("etoile")} ${x.etoiles}` : ""}</span></div>
         ${x.description ? `<div class="ext-desc">${h(x.description)}</div>` : ""}<div class="muet petit ext-source">${h(x.url.replace(/^https:\/\//, ""))}</div>
         ${ext.apercu && ext.apercu.i === i ? (ext.apercu.texte === "…" ? `<div class="muet petit">${t("Downloading…")}</div>` : `<pre class="texte-agent ext-apercu">${h(ext.apercu.texte)}</pre>`) : ""}</div>
       <div class="ext-actions"><button class="btn btn-petit" data-ext-apercu="${i}">${ext.apercu && ext.apercu.i === i ? t("Close") : t("View")}</button>
-        ${x.installe ? `<span class="ok petit">✓ ${t("Installed")}</span>` : `<button class="btn btn-petit btn-primaire" data-ext-installer-res="${i}" ${occupe("res|" + i)}>${ext.occupe === "res|" + i ? t("Installing…") : t("Install")}</button>`}</div></div>`
+        ${x.installe ? `<span class="ok petit">${ic("ok")} ${t("Installed")}</span>` : `<button class="btn btn-petit btn-primaire" data-ext-installer-res="${i}" ${occupe("res|" + i)}>${ext.occupe === "res|" + i ? t("Installing…") : t("Install")}</button>`}</div></div>`
     : `<div class="ext-ligne">
       <div class="ext-corps"><div class="ext-nom">${h(x.titre)} <span class="muet petit">${h(x.version || "")}</span>${x.genre ? ` <span class="etiquette">${x.genre === "remote" ? t("remote") : t("local, in a cage") + " · " + h(x.genre)}</span>` : ""}</div>
         ${x.description ? `<div class="ext-desc">${h(x.description)}</div>` : ""}
         <div class="muet petit ext-source">${h(x.nom)}${x.depot ? " · " + h(x.depot.replace(/^https:\/\//, "")) : ""}${x.cles && x.cles.length ? " · " + t("keys: {0}", [x.cles.join(", ")]) : ""}</div>
         ${x.installable ? "" : `<div class="muet petit">${h(t(x.raison || ""))}</div>`}</div>
-      <div class="ext-actions">${x.installe ? `<span class="ok petit">✓ ${t("Installed")}</span>` : x.installable ? `<button class="btn btn-petit btn-primaire" data-ext-installer-res="${i}" ${occupe("res|" + i)}>${ext.occupe === "res|" + i ? t("Installing…") : t("Install")}</button>` : ""}</div></div>`).join("");
+      <div class="ext-actions">${x.installe ? `<span class="ok petit">${ic("ok")} ${t("Installed")}</span>` : x.installable ? `<button class="btn btn-petit btn-primaire" data-ext-installer-res="${i}" ${occupe("res|" + i)}>${ext.occupe === "res|" + i ? t("Installing…") : t("Install")}</button>` : ""}</div></div>`).join("");
   const blocRecherche = `<div class="bloc"><h2>${o === "skills" ? t("Search the community") : t("Search the MCP Registry")}</h2>
     <p class="muet petit">${o === "skills" ? t("Thousands of skills published on GitHub, found through SkillsMP. Not checked by hand: read a skill (View) before installing it.") : t("The official directory of MCP servers. Not checked by hand: only install servers you trust; local ones run in a cage.")}</p>
     <div class="ligne"><input type="text" id="ext-q" class="large" value="${h(rech.q)}" placeholder="${h(o === "skills" ? t("e.g. front-end, testing, react, documentation") : t("e.g. github, database, figma, search"))}"><button class="btn" data-ext-rechercher ${occupe("recherche")}>${ext.occupe === "recherche" ? t("Looking…") : t("Search")}</button></div>
@@ -3731,7 +3733,7 @@ pages.extensions = async () => {
     <p class="muet petit">${t("Well-known open-source projects, checked by hand. Installing copies them into Athanor; nothing is used until you switch it on for a project.")}</p>
     <div class="ext-catalogue">${cartes}</div></div>
   <div class="bloc"><h2>${t("Add your own")}</h2>
-    <div class="ext-avert">⚠ ${o === "skills" ? t("A skill guides Claude: only add skills from sources you trust. Read it first (View / edit).") : t("An MCP server runs code on your PC: only add servers you trust. Local servers run in a cage: no access to your personal files, your Windows drives or the Claude token.")}</div>
+    <div class="ext-avert">${ic("alerte")} ${o === "skills" ? t("A skill guides Claude: only add skills from sources you trust. Read it first (View / edit).") : t("An MCP server runs code on your PC: only add servers you trust. Local servers run in a cage: no access to your personal files, your Windows drives or the Claude token.")}</div>
     ${ajouter}</div>`;
 };
 
@@ -3756,7 +3758,7 @@ function champsServeur(x) {
       <input type="text" autocomplete="off" spellcheck="false" data-ext-cle="${h(x.id)}|${h(sc.nom)}" value="${h(sc.valeur || "")}" placeholder="${h(sc.defaut || "")}">
       <button class="btn btn-petit" data-ext-cle-ok="${h(x.id)}|${h(sc.nom)}">${t("Save")}</button></div>`
     : `<div class="ext-secret ${sc.defini || sc.optionnel ? "" : "manquant"}">
-      <code>${h(sc.nom)}</code> <span class="petit">${sc.defini ? "✓ " + t("key saved") : sc.optionnel ? t("optional key: better limits") : t("key required: the server is skipped without it")}</span>
+      <code>${h(sc.nom)}</code> <span class="petit">${sc.defini ? (ic("ok") + " ") + t("key saved") : sc.optionnel ? t("optional key: better limits") : t("key required: the server is skipped without it")}</span>
       <input type="password" autocomplete="off" data-ext-cle="${h(x.id)}|${h(sc.nom)}" placeholder="${h(sc.defini ? t("Replace the key") : t("Paste the key"))}">
       <button class="btn btn-petit" data-ext-cle-ok="${h(x.id)}|${h(sc.nom)}">${t("Save")}</button>${sc.lien ? ` <span class="muet petit">${h(sc.lien.replace(/^https:\/\//, ""))}</span>` : ""}</div>`).join("");
 }
@@ -3773,8 +3775,8 @@ function testExt(x) {
   if (!r) return "";
   if (r === "…") return `<div class="muet petit">${x.type === "windows" ? t("Starting the Windows program…") : t("Starting the server in its cage… (the first time, it downloads it: up to two minutes)")}</div>`;
   const cle = /^missing key/.test(r.erreur || "");
-  return r.ok ? `<div class="ext-test ok">✓ ${r.outils && r.outils.length ? t("Works: {0} tools ({1})", [r.outils.length, h(r.outils.slice(0, 8).join(", ")) + (r.outils.length > 8 ? "…" : "")]) : t(r.note || "Works.")}</div>`
-    : `<div class="ext-test echec">✕ ${h(t(r.erreur || "Failed"))}${r.details && r.details.length ? `<pre class="texte-agent">${h(r.details.join("\n"))}</pre>` : ""}
+  return r.ok ? `<div class="ext-test ok">${ic("ok")} ${r.outils && r.outils.length ? t("Works: {0} tools ({1})", [r.outils.length, h(r.outils.slice(0, 8).join(", ")) + (r.outils.length > 8 ? "…" : "")]) : t(r.note || "Works.")}</div>`
+    : `<div class="ext-test echec">${ic("croix")} ${h(t(r.erreur || "Failed"))}${r.details && r.details.length ? `<pre class="texte-agent">${h(r.details.join("\n"))}</pre>` : ""}
       ${cle ? "" : boutonCorriger("mcp", x.id)}</div>`;
 }
 // Blender's server: how Claude works with it (blender_apercu.go)
@@ -3797,11 +3799,11 @@ function testSkill(x) {
   const c = ext.corr["skill|" + x.id]; if (c) return etatCorrection(c, "skill", x);
   const r = ext.tests["skill|" + x.id]; if (!r) return "";
   if (r === "…") return `<div class="muet petit">${t("Checking the skill and its scripts…")}</div>`;
-  if (r.erreur) return `<div class="ext-test echec">✕ ${h(t(r.erreur))}</div>`;
+  if (r.erreur) return `<div class="ext-test echec">${ic("croix")} ${h(t(r.erreur))}</div>`;
   const pb = r.problemes || [];
-  const liste = pb.length ? `<ul class="m0 petit">${pb.map((p) => `<li>${p.grave ? "✕" : "⚠"} <code>${h(p.fichier)}</code> ${h(t(p.cle || p.message, p.args || []))}</li>`).join("")}</ul>` : "";
-  if (r.ok && !pb.length) return `<div class="ext-test ok">✓ ${t("Runs here: {0} script(s) checked", [r.scripts || 0])}</div>`;
-  return `<div class="ext-test ${r.ok ? "ok" : "echec"}">${r.ok ? "✓ " + t("Runs here; may fail on another system:") : "✕ " + t("Will not run as it is on this computer:")}${liste}${boutonCorriger("skill", x.id)}</div>`;
+  const liste = pb.length ? `<ul class="m0 petit">${pb.map((p) => `<li>${p.grave ? ic("croix") : ic("alerte")} <code>${h(p.fichier)}</code> ${h(t(p.cle || p.message, p.args || []))}</li>`).join("")}</ul>` : "";
+  if (r.ok && !pb.length) return `<div class="ext-test ok">${ic("ok")} ${t("Runs here: {0} script(s) checked", [r.scripts || 0])}</div>`;
+  return `<div class="ext-test ${r.ok ? "ok" : "echec"}">${r.ok ? (ic("ok") + " ") + t("Runs here; may fail on another system:") : (ic("croix") + " ") + t("Will not run as it is on this computer:")}${liste}${boutonCorriger("skill", x.id)}</div>`;
 }
 function etatCorrection(c, type, x) {
   const etapes = { test: c.essai ? t("testing Claude's fix ({0}/3)…", [c.essai]) : t("testing it as it is…"), claude: type === "mcp" ? t("Claude looks for the cause and a fix ({0}/3)…", [c.essai || 1]) : t("Claude rewrites a copy of the skill…") };
@@ -3809,21 +3811,21 @@ function etatCorrection(c, type, x) {
   const r = c.resultat || {};
   const fermer = `<button class="btn btn-petit" data-ext-corr-fermer="${type}|${h(x.id)}">${t("Close")}</button>`;
   const athanor = r.athanor ? `<div class="petit mt-1">${t("Athanor's own way of running it is at fault: {0}", [h(r.athanor)])} <span class="muet">${t("(written for the next version of Athanor)")}</span></div>` : "";
-  if (r.deja) return `<div class="ext-test ok">✓ ${t("It works already: nothing to fix.")} ${fermer}</div>`;
-  if (r.manque) return `<div class="ext-test echec">✕ ${t("A program is missing on this computer: {0}", [h(r.manque)])}${r.explication ? `<div class="petit">${h(r.explication)}</div>` : ""}
+  if (r.deja) return `<div class="ext-test ok">${ic("ok")} ${t("It works already: nothing to fix.")} ${fermer}</div>`;
+  if (r.manque) return `<div class="ext-test echec">${ic("croix")} ${t("A program is missing on this computer: {0}", [h(r.manque)])}${r.explication ? `<div class="petit">${h(r.explication)}</div>` : ""}
     <div class="ligne mt-1"><a class="btn btn-petit" href="#sante">${t("Setup & health")}</a>${fermer}</div></div>`;
-  if (type === "mcp" && r.ok) return `<div class="ext-test ok">✓ ${t("Fixed by Claude: it works now ({0} tools).", [(r.outils || []).length])}${r.explication ? `<div class="petit">${h(r.explication)}</div>` : ""}
+  if (type === "mcp" && r.ok) return `<div class="ext-test ok">${ic("ok")} ${t("Fixed by Claude: it works now ({0} tools).", [(r.outils || []).length])}${r.explication ? `<div class="petit">${h(r.explication)}</div>` : ""}
     <div class="muet petit">${t("Kept in this computer's library (Undo puts back the previous one) and written for everyone in logs/corrections.")}</div>${athanor}<div class="ligne mt-1">${fermer}</div></div>`;
   if (type === "skill" && r.fichiers && r.fichiers.length) {
     const reste = (r.apres || []).filter((p) => p.grave);
-    return `<div class="ext-test ${r.ok ? "ok" : "echec"}">${r.ok ? "✓ " + t("Claude's fix passes the test. Look at the changes, then apply them.") : "⚠ " + t("Claude's fix still fails the test: {0}", [h(reste.map((p) => p.fichier + ": " + t(p.cle || p.message, p.args || [])).join("; "))])}
+    return `<div class="ext-test ${r.ok ? "ok" : "echec"}">${r.ok ? (ic("ok") + " ") + t("Claude's fix passes the test. Look at the changes, then apply them.") : (ic("alerte") + " ") + t("Claude's fix still fails the test: {0}", [h(reste.map((p) => p.fichier + ": " + t(p.cle || p.message, p.args || [])).join("; "))])}
       ${r.explication ? `<div class="petit">${h(r.explication)}</div>` : ""}
       <div class="muet petit">${t("Files changed: {0}", [r.fichiers.map((f) => h(f)).join(", ")])}</div>
       <pre class="texte-agent diff">${diffColore(r.diff || "")}</pre>${athanor}
       <div class="ligne mt-1"><button class="btn btn-petit btn-primaire" data-ext-corr-appliquer="${h(x.id)}">${t("Apply the fix")}</button>${fermer}</div></div>`;
   }
   const essais = (r.essais || []).map((e, i) => `<li>${h(e.explication || t("Try {0}", [i + 1]))} → <span class="erreur">${h(t(e.erreur || ""))}</span></li>`).join("");
-  return `<div class="ext-test echec">✕ ${h(t(r.erreur || "No fix found"))}${r.explication ? `<div class="petit">${h(r.explication)}</div>` : ""}${essais ? `<ul class="m0 petit">${essais}</ul>` : ""}${athanor}
+  return `<div class="ext-test echec">${ic("croix")} ${h(t(r.erreur || "No fix found"))}${r.explication ? `<div class="petit">${h(r.explication)}</div>` : ""}${essais ? `<ul class="m0 petit">${essais}</ul>` : ""}${athanor}
     <div class="ligne mt-1"><button class="btn btn-petit" data-ext-corriger="${type}|${h(x.id)}">${t("Try again")}</button>${fermer}</div></div>`;
 }
 function diffColore(d) {
@@ -3877,11 +3879,11 @@ async function pagePlugins(d) {
         <div class="ext-nom">${h(x.nom)} ${x.version ? `<span class="muet petit">${h(x.version)}</span>` : ""} ${x.auteur ? `<span class="muet petit">· ${t("by {0}", [h(x.auteur)])}</span>` : ""}</div>
         ${x.description ? `<div class="ext-desc">${h(x.description)}</div>` : ""}
         <div class="muet petit ext-source">${h(resumePlugin(x))}${x.source ? " · " + h(x.source) : ""}</div>
-        ${(x.ecartes || []).length ? `<div class="muet petit">⚠ ${t("Left out, they would run outside Claude's sandbox: {0}", [x.ecartes.join(", ")])}</div>` : ""}
+        ${(x.ecartes || []).length ? `<div class="muet petit">${ic("alerte")} ${t("Left out, they would run outside Claude's sandbox: {0}", [x.ecartes.join(", ")])}</div>` : ""}
         ${(serveurs[x.id] || []).map((s) => serveurPlugin(s, d)).join("")}
       </div>
       <div class="ext-actions"><button class="btn btn-petit" data-plg-maj data-plg-installer="${h(x.marche)}|${h(x.entree || x.id)}" ${occ("i|" + x.marche + "|" + (x.entree || x.id))} title="${h(t("Download its latest version"))}">${plg.occupe === "i|" + x.marche + "|" + (x.entree || x.id) ? t("Updating…") : t("Update")}</button>
-        <button class="btn btn-petit btn-danger" data-plg-retirer="${h(x.id)}" title="${h(t("Remove"))}">✕</button></div></div>`).join("");
+        <button class="btn btn-petit btn-danger" data-plg-retirer="${h(x.id)}" title="${h(t("Remove"))}">${ic("croix")}</button></div></div>`).join("");
   // the catalog: every plugin of every marketplace, filtered here
   const q = plg.q.toLowerCase(), cat = p.catalogue || [];
   const categories = [...new Set(cat.map((x) => x.categorie).filter(Boolean))].sort();
@@ -3892,11 +3894,11 @@ async function pagePlugins(d) {
       <div class="ext-desc">${h(x.description)}</div>
       <div class="muet petit">${[x.auteur && t("by {0}", [h(x.auteur)]), x.source && h(x.source)].filter(Boolean).join(" · ")}</div>
       ${x.raison ? `<div class="muet petit">${h(t(x.raison))}</div>` : ""}
-      <div class="ligne">${x.installe ? `<span class="ok petit">✓ ${t("Installed")}</span>` : x.raison ? "" : `<button class="btn btn-petit btn-primaire" data-plg-installer="${h(x.marche)}|${h(x.nom)}" ${occ("i|" + x.marche + "|" + x.nom)}>${plg.occupe === "i|" + x.marche + "|" + x.nom ? t("Installing…") : t("Install")}</button>`}
+      <div class="ligne">${x.installe ? `<span class="ok petit">${ic("ok")} ${t("Installed")}</span>` : x.raison ? "" : `<button class="btn btn-petit btn-primaire" data-plg-installer="${h(x.marche)}|${h(x.nom)}" ${occ("i|" + x.marche + "|" + x.nom)}>${plg.occupe === "i|" + x.marche + "|" + x.nom ? t("Installing…") : t("Install")}</button>`}
         ${x.homepage && /^https:\/\//.test(x.homepage) ? `<a href="#" class="petit" data-lien="${h(x.homepage)}">${t("Web page")}</a>` : ""}</div></div>`).join("");
   const marches = (p.marches || []).map((m) => `<div class="ligne petit"><span><b>${h(m.nom)}</b> <span class="muet">${m.depot ? "github.com/" + h(m.depot) : h(m.url || "")} · ${m.charge ? t("{0} plugin(s)", [m.n]) : m.erreur ? h(t(m.erreur)) : t("not loaded yet")}${m.maj ? " · " + t("updated {0}", [h(m.maj)]) : ""}</span></span><span class="espace"></span>
       <button class="btn btn-petit" data-plg-marche="actualiser|${h(m.id)}" ${occ("m|" + m.id)}>${plg.occupe === "m|" + m.id ? t("Loading…") : t("Refresh")}</button>
-      ${m.id === "claude-plugins-official" ? "" : `<button class="btn btn-petit btn-danger" data-plg-marche="retirer|${h(m.id)}" title="${h(t("Remove"))}">✕</button>`}</div>`).join("");
+      ${m.id === "claude-plugins-official" ? "" : `<button class="btn btn-petit btn-danger" data-plg-marche="retirer|${h(m.id)}" title="${h(t("Remove"))}">${ic("croix")}</button>`}</div>`).join("");
   return `<div class="bloc"><h2>${t("In Athanor")}</h2>
       <p class="muet petit">${d.projet ? t("The switch turns it on or off for “{0}”.", [d.projet]) : t("Choose a project to switch them on or off.")} ${t("A plugin brings skills, commands, sub-agents and MCP servers at once. Keys and sign-ins are given once here, for every project.")}</p>
       ${installes || `<div class="vide">${t("No plugin installed yet: pick one from the catalog below.")}</div>`}</div>
@@ -4101,7 +4103,7 @@ function zonePieces(id) {
     <ul class="pieces-liste" id="${id}-liste">${listePieces(id)}</ul></div>`;
 }
 function listePieces(id) {
-  return (etat.pieces[id] || []).map((f, i) => `<li><span>${h(f.name)}</span> <span class="muet petit">${h(tailleCourte(f.size))}</span> <button type="button" class="btn-lien" data-retirer-piece="${id}|${i}" title="${h(t("Remove"))}">✕</button></li>`).join("");
+  return (etat.pieces[id] || []).map((f, i) => `<li><span>${h(f.name)}</span> <span class="muet petit">${h(tailleCourte(f.size))}</span> <button type="button" class="btn-lien" data-retirer-piece="${id}|${i}" title="${h(t("Remove"))}">${ic("croix")}</button></li>`).join("");
 }
 function ajouterPieces(id, fichiers) {
   if (id === "hc") return ajouterPiecesHub(fichiers); // the home conversation: its own types and size
@@ -4166,12 +4168,12 @@ pages.demandes = async () => {
     <div class="colonne">
       <div class="bloc"><h2>${t("Where things stand")}</h2>
       <div class="flux">
-        ${[...d.faites.filter((f) => f.livree), ...d.faites.filter((f) => !f.livree)].map((f) => `<div class="carte-demande ${f.livree ? "faite" : "integree"}"><div class="num">${f.livree ? "✔" : "+"}</div><div class="corps"><div class="titre">${h(f.titre)}</div><div class="meta">${f.livree ? t("done") : t("added to the plan")}${f.date ? " · " + h(f.date) : ""}</div></div></div>`).join("")}
-        ${enCours ? `<div class="carte-demande en-cours"><div class="num">▶</div><div class="corps"><div class="titre">${h(titreDemande)}</div><div class="meta">${etat.vue && etat.vue.actif ? t("in progress") : t("current request, pilot stopped")}</div>
+        ${[...d.faites.filter((f) => f.livree), ...d.faites.filter((f) => !f.livree)].map((f) => `<div class="carte-demande ${f.livree ? "faite" : "integree"}"><div class="num">${f.livree ? ic("ok") : "+"}</div><div class="corps"><div class="titre">${h(f.titre)}</div><div class="meta">${f.livree ? t("done") : t("added to the plan")}${f.date ? " · " + h(f.date) : ""}</div></div></div>`).join("")}
+        ${enCours ? `<div class="carte-demande en-cours"><div class="num">${ic("lecture")}</div><div class="corps"><div class="titre">${h(titreDemande)}</div><div class="meta">${etat.vue && etat.vue.actif ? t("in progress") : t("current request, pilot stopped")}</div>
           ${plan.length ? `<ul class="plan jalons-mini">${listePlan(plan, true)}</ul>` : ""}
           </div></div>` : `<div class="vide">${t("No current request. Write the first one on the left: it becomes the project's request.")}</div>`}
         ${d.attente.map((a, i) => `<div class="carte-demande" data-fichier="${h(a.fichier)}"><div class="num">${i + 1}</div><div class="corps"><div class="titre">${h(a.apercu || a.nom)}</div><div class="meta">${t("queued")} · ${h(a.nom)}</div></div>
-          <div class="tools"><button class="btn btn-petit" data-monter title="${h(t("Move up"))}" ${i === 0 ? "disabled" : ""}>↑</button><button class="btn btn-petit" data-descendre title="${h(t("Move down"))}" ${i === d.attente.length - 1 ? "disabled" : ""}>↓</button><button class="btn btn-petit btn-danger" data-retirer title="${h(t("Remove"))}">✕</button></div></div>`).join("")}
+          <div class="tools"><button class="btn btn-petit" data-monter title="${h(t("Move up"))}" ${i === 0 ? "disabled" : ""}>${ic("haut")}</button><button class="btn btn-petit" data-descendre title="${h(t("Move down"))}" ${i === d.attente.length - 1 ? "disabled" : ""}>${ic("descendre")}</button><button class="btn btn-petit btn-danger" data-retirer title="${h(t("Remove"))}">${ic("croix")}</button></div></div>`).join("")}
       </div></div>
     </div>
   </div>`;
@@ -4215,7 +4217,7 @@ function rendreJournal() {
   etat.rendJournal = true; setTimeout(() => { etat.rendJournal = false; }, 0);
   el.innerHTML = items.slice(-1500).map((e) => f.brut
     ? `<div class="ev g-${h(e.genre)}"><span class="h">${h(e.heure)}</span><span class="m"></span><span class="t">${h(e.brut)}</span></div>`
-    : `<div class="ev g-${h(e.genre)} ${e.sous_agent ? "sous" : ""} ${e.detail ? "cliquable" : ""}" data-n="${e.n}"><span class="h">${h(e.heure)}</span><span class="m"></span><span class="t">${e.sous_agent ? "↳ " : ""}${h(t(e.titre))}</span></div>${etat.ouverts.has(e.n) && e.detail ? `<div class="ev-detail">${h(e.detail)}</div>` : ""}`
+    : `<div class="ev g-${h(e.genre)} ${e.sous_agent ? "sous" : ""} ${e.detail ? "cliquable" : ""}" data-n="${e.n}"><span class="h">${h(e.heure)}</span><span class="m"></span><span class="t">${e.sous_agent ? (ic("sous") + " ") : ""}${h(t(e.titre))}</span></div>${etat.ouverts.has(e.n) && e.detail ? `<div class="ev-detail">${h(e.detail)}</div>` : ""}`
   ).join("");
   if (etat.defilAuto.journal) el.scrollTop = el.scrollHeight;
   else el.scrollTop = Math.min(haut, el.scrollHeight);
@@ -4247,10 +4249,10 @@ async function lireJournal() {
 // the checks' list alone: refreshed in place while a check or a repair runs (majSante), so the fields
 // below keep what is typed in them and the output keeps its scroll
 function listeSante(verifs) {
-  const ico = (v) => v.statut === "ok" ? ["✔", "ok"] : v.statut === "en_cours" ? ["◌", "en_cours"] : v.statut === "echec" ? (v.facultatif ? ["!", "facultatif"] : ["✖", "echec"]) : ["○", ""];
+  const ico = (v) => v.statut === "ok" ? ["ok", "ok"] : v.statut === "en_cours" ? ["attente", "en_cours"] : v.statut === "echec" ? (v.facultatif ? ["alerte", "facultatif"] : ["croix", "echec"]) : ["cercle", ""];
   return verifs.map((v) => { const [i, c] = ico(v); return `
     <div class="verif v-${h(v.statut)} ${v.facultatif ? "v-facultatif" : ""} ${etat.verifChoisie === v.id ? "choisi" : ""}" data-id="${h(v.id)}" data-tache="${h(v.tache_id)}">
-      <div class="ico ${c}">${i}</div>
+      <div class="v-ico ${c}">${ic(i)}</div>
       <div><div class="titre" data-voir="${h(v.tache_id)}" title="${h(t(v.explication))}">${h(t(v.titre))}</div><div class="resume">${h(v.en_reparation ? t("repair in progress…") : v.resume || t(v.explication))}</div></div>
       <div class="ligne">
         ${v.statut === "echec" && !v.en_reparation ? `${v.reparation_auto ? `<button class="btn btn-petit" data-reparer title="${h(t(v.reparation_info))}">${t("Repair")}</button>` : ""}<button class="btn btn-petit" data-claude>${t("Ask Claude")}</button>` : ""}
@@ -4462,7 +4464,7 @@ function blocDirect(nom) {
   const intro = `<p class="intro petit">${t("Direct link: the computers of the team see each other live (what each one builds, its quota, its cost) through a link of their own, separate from the remote access: a team member can never reach this computer's panel. The code still goes through GitHub.")}</p>`;
   if (!d || d.etat === "fini") {
     return `<div class="bloc" id="bloc-direct"><h2>${t("Team, live")}</h2>${intro}
-      ${d && d.erreur ? `<p class="petit"><span class="attention">✖ ${h(t(d.erreur))}</span></p>` : ""}
+      ${d && d.erreur ? `<p class="petit"><span class="attention">${ic("croix")} ${h(t(d.erreur))}</span></p>` : ""}
       <div class="ligne"><button class="btn" type="button" data-direct="maitre">${t("Be the master of the team")}</button></div>
       <div class="ligne mt-1"><input type="text" id="direct-invitation" placeholder="https://….trycloudflare.com#123456"><button class="btn" type="button" data-direct="rejoindre">${t("Join with an invitation")}</button></div>
     </div>`;
@@ -4479,24 +4481,24 @@ function blocDirect(nom) {
   }).join("");
   let tete = "";
   if (d.role === "maitre") {
-    const etatM = d.etat === "pret" ? `<span class="ok">✔ ${t("This computer is the master: the others join it with an invitation.")}</span>`
-      : d.etat === "erreur" ? `<span class="attention">✖ ${h(t(d.erreur || ""))}</span>` : `<span class="muet">${t("Opening the team's link…")}</span>`;
+    const etatM = d.etat === "pret" ? `<span class="ok">${ic("ok")} ${t("This computer is the master: the others join it with an invitation.")}</span>`
+      : d.etat === "erreur" ? `<span class="attention">${ic("croix")} ${h(t(d.erreur || ""))}</span>` : `<span class="muet">${t("Opening the team's link…")}</span>`;
     const invitation = d.code && d.adresse ? `<div class="bloc-code mt-1"><code id="direct-invit">${h(d.adresse)}#${h(d.code)}</code> <button class="btn btn-petit" type="button" data-direct="copier">${t("Copy")}</button>
       <div class="muet petit">${t("Paste it on the other computer (Overview › Team, live › Join), then accept it here. It works once, for 10 minutes.")} ${t("Only a computer you know: anyone with the invitation must still be accepted here.")}</div></div>` : "";
-    const demandes = (d.demandes || []).map((x) => `<div class="ligne mt-1 demande-direct"><span>⚠ <b>${h(t("{0} wants to join the team", [x.nom || "?"]))}</b>${x.ip ? ` <span class="muet petit">${h(x.ip)}</span>` : ""}</span><span class="espace"></span>
+    const demandes = (d.demandes || []).map((x) => `<div class="ligne mt-1 demande-direct"><span>${ic("alerte")} <b>${h(t("{0} wants to join the team", [x.nom || "?"]))}</b>${x.ip ? ` <span class="muet petit">${h(x.ip)}</span>` : ""}</span><span class="espace"></span>
       <button class="btn btn-primaire" type="button" data-direct="accepter" data-id="${h(x.ref)}">${t("Accept")}</button> <button class="btn btn-petit" type="button" data-direct="refuser" data-id="${h(x.ref)}">${t("Refuse")}</button></div>`).join("");
     const at = d.atelier;
     const atelier = `<div class="mt-1"><label class="interrupteur m0" title="${h(t("The plan, the request, the log and the notes go from computer to computer through this link, never through GitHub (for a public repository): .athanor/ then stays out of the commits on every computer. GitHub still carries the code."))}"><input type="checkbox" data-direct-bascule="atelier" ${d.atelier_lien ? "checked" : ""}><span><b>${t("Workshop through the direct link")}</b> <span class="muet petit">${t("not on GitHub")}</span></span></label>
       ${d.atelier_lien && at ? `<div class="muet petit">${at.version ? h(t("Team workshop: version {0}, {1} files, last change by {2} ({3})", [at.version, at.fichiers, at.par || "?", at.quand ? dateLisible(at.quand) : "—"])) : t("Team workshop: empty for now (the request comes with it)")}</div>` : ""}</div>`;
     const ordre = d.ordre ? `<div class="muet petit">${h(t(d.ordre.action === "demarrer" ? "Last order: start, {0}" : "Last order: stop after the cycle, {0}", [dateLisible(new Date(d.ordre.quand * 1000).toISOString())]))}</div>` : "";
-    const ordres = `<div class="ligne mt-1"><button class="btn btn-primaire" type="button" data-direct="demarrer-equipe" title="${h(t("Starts this computer's pilot, then every computer of the team (those whose user allows it)."))}">▶ ${t("Start the team")}</button><button class="btn" type="button" data-direct="arreter-equipe">${t("Stop the team after the cycle")}</button></div>${ordre}`;
+    const ordres = `<div class="ligne mt-1"><button class="btn btn-primaire" type="button" data-direct="demarrer-equipe" title="${h(t("Starts this computer's pilot, then every computer of the team (those whose user allows it)."))}">${ic("lecture")} ${t("Start the team")}</button><button class="btn" type="button" data-direct="arreter-equipe">${t("Stop the team after the cycle")}</button></div>${ordre}`;
     const pa = d.passation;
-    const passation = !pa ? "" : pa.etat === "en_cours" ? `<p class="petit"><span class="muet">${h(t("Handing the team over to {0}: it takes it at its next beat…", [pa.nom]))}</span></p>` : `<p class="petit"><span class="attention">✖ ${h(t(pa.erreur || ""))}</span></p>`;
+    const passation = !pa ? "" : pa.etat === "en_cours" ? `<p class="petit"><span class="muet">${h(t("Handing the team over to {0}: it takes it at its next beat…", [pa.nom]))}</span></p>` : `<p class="petit"><span class="attention">${ic("croix")} ${h(t(pa.erreur || ""))}</span></p>`;
     tete = `<p class="petit">${etatM}</p>${passation}${invitation}${demandes}${atelier}${ordres}<div class="ligne mt-1"><button class="btn" type="button" data-direct="inviter" ${d.etat !== "pret" ? "disabled" : ""}>${t("Invite a computer")}</button><span class="espace"></span><button class="btn btn-petit" type="button" data-direct="quitter">${t("End the team's link")}</button></div>`;
   } else if (d.role === "attente") {
     tete = `<p class="petit"><span class="muet">${t("Waiting for the master to accept this computer…")}</span></p><div class="ligne mt-1"><span class="espace"></span><button class="btn btn-petit" type="button" data-direct="quitter">${t("Cancel")}</button></div>`;
   } else {
-    const etatN = d.etat === "connecte" ? `<span class="ok">✔ ${h(t("Connected to {0}, the master", [d.maitre || ""]))}</span>` : `<span class="attention">✖ ${h(t("The master ({0}) does not answer: the team is seen through GitHub meanwhile.", [d.maitre || ""]))}</span>${d.erreur ? ` <span class="muet petit">${h(t(d.erreur))}</span>` : ""}`;
+    const etatN = d.etat === "connecte" ? `<span class="ok">${ic("ok")} ${h(t("Connected to {0}, the master", [d.maitre || ""]))}</span>` : `<span class="attention">${ic("croix")} ${h(t("The master ({0}) does not answer: the team is seen through GitHub meanwhile.", [d.maitre || ""]))}</span>${d.erreur ? ` <span class="muet petit">${h(t(d.erreur))}</span>` : ""}`;
     const at = d.atelier;
     const atelierN = d.atelier_lien ? `<div class="muet petit">${at && at.version ? h(t("Team workshop through the master's link: version {0}, {1} files.", [at.version, at.fichiers])) : t("Team workshop through the master's link.")}</div>` : "";
     const ordre = d.ordre ? `<div class="muet petit">${h(t(d.ordre.action === "demarrer" ? "The master started the team, {0}" : "The master stopped the team after the cycle, {0}", [dateLisible(new Date(d.ordre.quand * 1000).toISOString())]))}</div>` : "";
@@ -4601,7 +4603,7 @@ function rendreBlocPCs(vp) {
       <ol class="pas-pcs petit">
         <li>${t("Each person can push to {0}: its owner adds them as collaborators on GitHub (the repository's Settings › Collaborators). No organization needed.", [h(vp.depot || "")])}</li>
         <li>${t("Each computer is connected to GitHub with that account (Settings › Options › GitHub).")}
-          ${cx.connecte ? `<span class="ok">✔ ${t("This computer: {0}", [h(cx.login || "")])}</span>` : `<button class="btn btn-petit" type="button" data-connexion-gh="connecter">${t("Connect to GitHub")}</button>`}</li>
+          ${cx.connecte ? `<span class="ok">${ic("ok")} ${t("This computer: {0}", [h(cx.login || "")])}</span>` : `<button class="btn btn-petit" type="button" data-connexion-gh="connecter">${t("Connect to GitHub")}</button>`}</li>
         <li>${t("Here, switch on Work with other computers: the workshop (.athanor/) is shared, so the others get the request and the plan.")}</li>
         <li>${t("On each other computer: New project › Join a project, with {0}, the same branch and an empty folder.", [h(vp.depot || "")])}</li>
       </ol>
@@ -4614,7 +4616,7 @@ function rendreBlocPCs(vp) {
     const r = tous.flatMap((x) => (x.refus || []).filter((y) => y.jalon === jalon).map((y) => [y.quand, x.nom])).sort();
     return r.length && r[0][1] !== p.nom ? r[0][1] : "";
   };
-  const refus = (p) => (p.refus || []).map((r) => `<div class="petit attention">✖ ${h(t("{0} does not work here", [r.outil ? r.outil[0].toUpperCase() + r.outil.slice(1) : ""]))} · ${h(r.jalon)}${r.pourquoi ? ` <span class="muet">— ${h(r.pourquoi)}</span>` : ""}</div>`).join("");
+  const refus = (p) => (p.refus || []).map((r) => `<div class="petit attention">${ic("croix")} ${h(t("{0} does not work here", [r.outil ? r.outil[0].toUpperCase() + r.outil.slice(1) : ""]))} · ${h(r.jalon)}${r.pourquoi ? ` <span class="muet">— ${h(r.pourquoi)}</span>` : ""}</div>`).join("");
   const lignes = tous.map((p) => `<tr>
       <td class="etroit"><span class="point-appareil ${p.en_ligne ? "en-ligne" : ""}"></span></td>
       <td><b>${h(p.nom)}</b>${p.moi ? ` <span class="badge">${t("this computer")}</span>` : ""}
@@ -4623,7 +4625,7 @@ function rendreBlocPCs(vp) {
   const enLigne = (vp.pcs || []).filter((p) => p.en_ligne).length;
   return `<div class="bloc" id="bloc-pcs"><div class="bloc-tete"><h2>${t("Computers on this project")}</h2>${(vp.pcs || []).length ? `<span class="muet petit">${h(t("{0} other(s) online", [enLigne]))}</span>` : ""}</div>
     <table class="tab appareils pcs">${lignes}</table>
-    ${vp.erreur ? `<p class="petit attention">✖ ${h(erreurPCs(vp.erreur))}</p>` : ""}
+    ${vp.erreur ? `<p class="petit attention">${ic("croix")} ${h(erreurPCs(vp.erreur))}</p>` : ""}
     ${(vp.notes || []).length ? `<h3 class="mt-2">${t("Notes between the computers")}</h3><ul class="notes-pcs muet petit">${vp.notes.map((n) => `<li>${md(n.replace(/^-\s*/, ""))}</li>`).join("")}</ul>` : ""}
     ${!(vp.pcs || []).length ? `<p class="muet petit">${t("No other computer yet. On the other computer: Join a project (in the project picker), with this same repository and branch.")}</p>` : ""}
     <div class="ligne mt-2"><a class="btn btn-petit" href="#distance">${t("What this computer is good at")}</a>${lienGuide("pcs")}<span class="espace"></span>
@@ -4724,24 +4726,24 @@ pages.distance = async () => {
     arret: ["muet", t("Off: no device can reach Athanor.")],
     installation: ["muet", t("Downloading Cloudflare's tunnel program (once)…")],
     demarrage: ["muet", t("Opening the tunnel…")],
-    pret: ["ok", "✔ " + t("Reachable at {0}", [d.adresse || ""])],
-    erreur: ["attention", "✖ " + (d.message || t("The tunnel did not start."))],
+    pret: ["ok", t("Reachable at {0}", [d.adresse || ""]), "ok"],
+    erreur: ["attention", d.message || t("The tunnel did not start."), "croix"],
   }[d.etat] || ["muet", ""];
   const appareils = d.appareils.length ? `<table class="tab appareils"><tbody>${d.appareils.map((a) => `<tr>
       <td class="etroit"><span class="point-appareil ${a.en_ligne ? "en-ligne" : ""}" title="${h(a.en_ligne ? t("Connected now") : t("Not connected"))}"></span></td>
       <td><input class="nom-appareil" data-renommer="${h(a.id)}" value="${h(a.nom)}" maxlength="40" aria-label="${h(t("Name"))}">
         <div class="muet petit">${a.moi ? `<span class="badge">${t("this device")}</span> ` : ""}${a.en_ligne ? `<b class="ok">${t("Connected now")}</b>` : a.vu_le ? h(t("Last seen {0}", [dateLisible(a.vu_le)])) : ""}${a.lieu ? " · " + h(a.lieu) : ""} · ${h(t("paired {0}", [dateLisible(a.ajoute)]))}${a.notifs ? ` · ${t("notifications on")}` : ""}</div></td>
-      <td class="droite"><button class="btn btn-petit btn-danger" data-retirer-appareil="${h(a.id)}" data-nom="${h(a.nom)}" ${a.moi ? "data-moi" : ""} title="${h(t("Remove from the trusted devices"))}" aria-label="${h(t("Remove from the trusted devices"))}">✕</button></td></tr>`).join("")}</tbody></table>`
+      <td class="droite"><button class="btn btn-petit btn-danger" data-retirer-appareil="${h(a.id)}" data-nom="${h(a.nom)}" ${a.moi ? "data-moi" : ""} title="${h(t("Remove from the trusted devices"))}" aria-label="${h(t("Remove from the trusted devices"))}">${ic("croix")}</button></td></tr>`).join("")}</tbody></table>`
     : `<div class="vide">${t("No device yet.")}</div>`;
   const gauche = distant ? `${await rendreCetAppareil()}
       <div class="bloc"><h2>${t("Remote access")}</h2>
-        <p class="petit ${statut[0]}">${h(statut[1])}</p>
+        <p class="petit ${statut[0]}">${statut[2] ? ic(statut[2]) + " " : ""}${h(statut[1])}</p>
         <p class="muet petit">${t("This device is paired: it follows and drives Athanor from anywhere. The switch, the address and the pairing of new devices are on the computer only.")} ${lienGuide("distance")}</p>
       </div>` : `
       <div class="bloc"><h2>${t("Remote access")}</h2>
         <p class="intro petit">${t("Follow and drive Athanor from your phone or another computer, from anywhere: through a Cloudflare tunnel (https, nothing to set up). Only the devices you pair here get in.")} ${lienGuide("distance")}</p>
         <label class="interrupteur"><input type="checkbox" id="dist-actif" ${d.actif ? "checked" : ""}><span>${t("Remote access")}</span></label>
-        <p class="petit ${statut[0]}" id="dist-statut">${h(statut[1])}</p>
+        <p class="petit ${statut[0]}" id="dist-statut">${statut[2] ? ic(statut[2]) + " " : ""}${h(statut[1])}</p>
         <p class="muet petit">${d.domaine ? t("While remote access is on, the computer does not go to sleep (the screen can still turn off); Athanor must stay open.") : t("The address changes when the computer restarts: scan the code again then. While remote access is on, the computer does not go to sleep (the screen can still turn off); Athanor must stay open.")}</p>
       </div>
       ${blocDomaine(d)}
@@ -4762,7 +4764,7 @@ pages.distance = async () => {
     </div>
     <div class="colonne">
       <div class="bloc"><h2>${t("Trusted devices")}</h2>${appareils}
-        <p class="muet petit mt-2">${t("✕ removes a device: its next click is refused, and it must scan the code again to come back.")}</p>
+        <p class="muet petit mt-2">${t("The cross button removes a device: its next click is refused, and it must scan the code again to come back.")}</p>
       </div>
       ${m ? `<div class="bloc"><h2>${t("This computer, for the other computers")}</h2>
         <p class="intro petit">${t("When several computers build a project (Overview › Other computers), each one says what it is good at: the pilot gives it the milestones that need it, and leaves the others to the computers that have what they need.")} ${lienGuide("pcs")}</p>
@@ -4780,10 +4782,10 @@ function blocDomaine(d) {
   const e = d.domaine_etape || "";
   const etape = e === "connexion" ? `<p class="petit">${t("Sign in to Cloudflare in the browser window that opened, then choose your domain.")}${d.domaine_lien ? ` <a href="${h(d.domaine_lien)}" target="_blank" rel="noopener noreferrer">${t("Open the sign-in page")}</a>` : ""}</p><button class="btn btn-petit" data-domaine="annuler">${t("Cancel")}</button>`
     : e === "creation" ? `<p class="petit">${t("Creating the tunnel and the address…")}</p>`
-    : e === "erreur" ? `<p class="petit attention">✖ ${h(d.domaine_message || "")}</p>` : "";
+    : e === "erreur" ? `<p class="petit attention">${ic("croix")} ${h(d.domaine_message || "")}</p>` : "";
   if (d.domaine) {
     return `<div class="bloc"><h2>${t("Address")}</h2>
-      <p class="ok m0">✔ ${t("Your domain: {0}", [h("https://" + d.domaine)])}</p>
+      <p class="ok m0">${ic("ok")} ${t("Your domain: {0}", [h("https://" + d.domaine)])}</p>
       <p class="muet petit">${t("A fixed address: the devices keep their access when the computer restarts.")}</p>
       ${etape}
       <details class="mt-2"><summary>${t("Let Cloudflare check who comes in (Cloudflare Access)")}</summary>
@@ -4932,7 +4934,7 @@ async function rendreOptions() {
         <p class="muet petit"${b.isole || b.ecran ? " hidden" : ""}>${t("Windows shortcut to switch desktops: Ctrl + Win + ← / →.")}</p>
       </div>
       <div class="bloc local-seul"><h2>${t("Athanor's folder")}</h2>
-        <p class="m0"><code class="chemin-kit">${h(o.kit)}</code></p><div class="muet petit mt-1">${o.kit_valide ? "✔ " + t("Athanor's own files: settings, token, logs, the tools Claude installs. Your projects are elsewhere.") : "✖ " + t("this folder is not the tool")}</div>
+        <p class="m0"><code class="chemin-kit">${h(o.kit)}</code></p><div class="muet petit mt-1">${o.kit_valide ? (ic("ok") + " ") + t("Athanor's own files: settings, token, logs, the tools Claude installs. Your projects are elsewhere.") : (ic("croix") + " ") + t("this folder is not the tool")}</div>
         <div class="ligne mt-1"><button class="btn btn-petit" data-ouvrir="kit">${t("Open the folder")}</button><button class="btn btn-petit" data-ouvrir="logs">${t("Logs folder")}</button></div>
         <details class="mt-1" ${o.kit_valide ? "" : "open"}><summary class="petit muet">${t("Use another tool folder (advanced)")}</summary>
           <p class="muet petit">${t("Only for a tool folder you moved or copied yourself: Athanor then uses that one, with its settings and token.")}</p>
@@ -4952,7 +4954,7 @@ function rendreClientsMCP(c) {
       <div class="muet petit">${t("In a terminal on this PC: {0}, then type this code. It works once, for 10 minutes.", [`<code>${h(q(exe))} mcp-client appairer claude-desktop --sorte desktop</code>`])}</div></div>`
     : `<div class="ligne mt-1"><button class="btn" type="button" data-clients="code" ${c.urgence ? "disabled" : ""}>${t("Connect a client")}</button></div>`;
   const demandes = (c.demandes || []).map((d) => `<div class="demande-client mt-1" data-ref="${h(d.ref)}">
-      <p class="m0">⚠ <b>${h(t("{0} wants to use Athanor's MCP", [d.nom]))}</b> <span class="badge">${h(d.sorte)}</span> <span class="muet petit">${h(d.ip || "")}</span></p>
+      <p class="m0">${ic("alerte")} <b>${h(t("{0} wants to use Athanor's MCP", [d.nom]))}</b> <span class="badge">${h(d.sorte)}</span> <span class="muet petit">${h(d.ip || "")}</span></p>
       <div class="muet petit mt-1">${t("Projects it may see")}</div>
       <div class="ligne cases-client"><label class="interrupteur m0"><input type="checkbox" data-cl-projet="*"><span>${t("All projects")}</span></label>${projets.map((n) => `<label class="interrupteur m0"><input type="checkbox" data-cl-projet="${h(n)}"><span>${h(n)}</span></label>`).join("")}</div>
       <div class="muet petit mt-1">${t("Tools it may use")}</div>
@@ -5060,7 +5062,7 @@ function rendreBlocMaj(o) {
   else if (m.en_cours === "telechargement") etatTexte = `<p class="petit">${t("Downloading the update… {0} %", [m.avancement || 0])}</p><div class="barre m0"><i style="width:${Math.min(100, m.avancement || 0)}%"></i></div>`;
   else if (m.en_cours === "redemarrage") etatTexte = `<p class="ok petit">${t("Athanor restarts…")}</p>`;
   else if (m.disponible) etatTexte = `<p class="attention m0"><b>${t("Athanor {0} is available (you have {1})", [h(m.derniere), h(v.version)])}</b></p>`;
-  else if (m.derniere) etatTexte = `<p class="ok petit">✔ ${t("Up to date (checked {0}).", [h(quand)])}</p>`;
+  else if (m.derniere) etatTexte = `<p class="ok petit">${ic("ok")} ${t("Up to date (checked {0}).", [h(quand)])}</p>`;
   if (m.erreur && !m.en_cours) etatTexte += `<p class="attention petit">${h(t(m.erreur))}</p>`;
   const langue = document.documentElement.lang || "en", parties = String(m.notes || "").split(/\n---\n/);
   const notes = m.disponible && m.notes ? `<details class="mt-1"><summary class="petit">${t("What's new")}</summary><div class="notes-maj">${mdChat((langue === "fr" && parties[1] ? parties[1] : parties[0]).trim())}</div></details>` : "";
@@ -5217,12 +5219,12 @@ function blocEnvironnements(en, inventaire, fournisseurs, distant) {
     ${blocCleDeploiement(en, distant)}</div></details>`;
 }
 // M133: an environment's last deployments, their external check, and the way back to the previous version
-const ETATS_DEPLOI = { ok: ["✔", "Deployed"], echec: ["✖", "Failed"], revenu: ["↩", "Replaced by going back"], en_cours: ["…", "Running"] };
+const ETATS_DEPLOI = { ok: ["ok", "Deployed"], echec: ["croix", "Failed"], revenu: ["retour", "Replaced by going back"], en_cours: ["attente", "Running"] };
 const PROBLEMES_VERIF = { injoignable: "The site does not answer: {1}", tls: "The certificate is not valid: {2}", statut: "Unexpected status {0}", ouvert: "The site opens without identification (status {0})" };
 function texteVerif(v, protection) {
   const x = v.http || {}, tls = x.tls || {}, l = [];
-  if (v.ok) l.push("✔ " + t("Checked from this PC: status {0}", [x.statut]) + (protection !== "aucune" ? ", " + t("closed without identification") : ""));
-  else l.push("⚠ " + (v.problemes || []).map((p) => t(PROBLEMES_VERIF[p] || p, [x.statut, x.erreur || "", tls.erreur_certificat || ""])).join(" · "));
+  if (v.ok) l.push(t("Checked from this PC: status {0}", [x.statut]) + (protection !== "aucune" ? ", " + t("closed without identification") : ""));
+  else l.push((v.problemes || []).map((p) => t(PROBLEMES_VERIF[p] || p, [x.statut, x.erreur || "", tls.erreur_certificat || ""])).join(" · "));
   if (x.tls && tls.certificat_valide) l.push(t("certificate valid, {0} days left", [tls.jours_restants]));
   if ((x.en_tetes_manquants || []).length) l.push(t("missing security headers: {0}", [x.en_tetes_manquants.join(", ")]));
   return l.join(" · ");
@@ -5231,24 +5233,24 @@ function texteVerif(v, protection) {
 const avantBascule = (d) => d.etat === "echec" && !d.retour && !d.bascule && !d.verification;
 function blocDeploiements(nom, e, liste, distant) {
   const ligne = (d) => {
-    const [icone, etiquette] = d.retour && d.etat === "ok" ? ["↩", "Back to the previous version"] : ETATS_DEPLOI[d.etat] || ["", d.etat];
-    return `<li class="env-deploi-${h(d.etat)}"><div class="ligne m0 petit"><span class="badge">${icone} ${h(t(etiquette))}</span><code>${h((d.commit || "").slice(0, 7))}</code>
+    const [icone, etiquette] = d.retour && d.etat === "ok" ? ["retour", "Back to the previous version"] : ETATS_DEPLOI[d.etat] || ["", d.etat];
+    return `<li class="env-deploi-${h(d.etat)}"><div class="ligne m0 petit"><span class="badge">${icone ? ic(icone) : ""} ${h(t(etiquette))}</span><code>${h((d.commit || "").slice(0, 7))}</code>
       <span class="muet">${h(dateLisible(d.debut))} · ${h(t(AUTEURS_DEPLOI[d.auteur] || d.auteur))}</span></div>
-      ${d.verification ? `<p class="petit${d.verification.ok ? "" : " attention"}">${h(texteVerif(d.verification, e.protection))}</p>` : d.erreur ? `<p class="petit attention">${h(d.message ? texteMessage(d.message) : t(d.erreur))}</p>` : ""}</li>`;
+      ${d.verification ? `<p class="petit${d.verification.ok ? "" : " attention"}">${ic(d.verification.ok ? "ok" : "alerte")} ${h(texteVerif(d.verification, e.protection))}</p>` : d.erreur ? `<p class="petit attention">${h(d.message ? texteMessage(d.message) : t(d.erreur))}</p>` : ""}</li>`;
   };
   return `<div class="env-deploi" data-env-deploi><h4>${t("Deployments")}</h4>
     ${liste.length ? `<ul class="env-deploi-liste">${liste.map(ligne).join("")}</ul>` : `<p class="muet petit">${t("Nothing deployed yet.")}</p>`}
     ${!distant && e.deploiement && liste.length > 1 && !avantBascule(liste[0]) ? `<button type="button" class="btn btn-petit" data-env-revenir>${t("Go back to the previous version")}</button>` : ""}</div>`;
 }
 // M137: an environment's health (checked every 15 minutes by default) and its incident, if any
-const ETATS_SANTE = { ok: ["✔", "Healthy"], alerte: ["⚠", "Warning"], incident: ["✖", "Incident"] };
+const ETATS_SANTE = { ok: ["ok", "Healthy"], alerte: ["alerte", "Warning"], incident: ["croix", "Incident"] };
 const PROBLEMES_SANTE = { certificat: "The certificate expires in {0} days", disque: "Disk {1}% full on {0}", memoire: "Memory {1}% used on {0}" };
 function blocSante(s, e) {
   if (!s) return "";
   const [icone, etiquette] = ETATS_SANTE[s.etat] || ["", s.etat], i = s.incident;
   const probleme = (p) => p.code === "verif" && s.verification ? texteVerif(s.verification, e.protection) : t(PROBLEMES_SANTE[p.code] || p.code, (p.args || []).map(String));
   return `<div class="env-sante env-sante-${h(s.etat)}" data-env-sante><h4>${t("Health")}</h4>
-    <p class="ligne m0 petit"><span class="badge">${icone} ${h(t(etiquette))}</span>${s.t ? `<span class="muet">${h(t("Checked {0}", [dateLisible(s.t)]))}</span>` : ""}</p>
+    <p class="ligne m0 petit"><span class="badge">${icone ? ic(icone) : ""} ${h(t(etiquette))}</span>${s.t ? `<span class="muet">${h(t("Checked {0}", [dateLisible(s.t)]))}</span>` : ""}</p>
     ${(s.problemes || []).map((p) => `<p class="petit${p.rouge ? " attention" : ""}">${h(probleme(p))}</p>`).join("")}
     ${i ? `<p class="petit attention">${h(t("What failed: {0}.", [i.message ? texteMessage(i.message) : t(i.echec)]))} ${h(t("What was tried: {0}.", [i.tente]))}</p>
       <p class="petit muet">${i.pris_en_main ? h(t("You took over {0}.", [dateLisible(i.pris_en_main)])) : t(i.sans_retour ? "The bell offers: Retry, I take over." : "The bell offers: Retry, Go back to the previous version, I take over.")}</p>` : ""}</div>`;
@@ -5296,7 +5298,7 @@ $("#page").addEventListener("click", async (ev) => {
 function blocCleDeploiement(en, distant) {
   const cle = en.envs.some((n) => en.environnements[n].cle_deploiement);
   return `<div class="env-cle" data-env-cle-bloc><h3>${t("Deployment key")}</h3>
-    <p class="petit">${cle ? `✔ ${t("Created by Athanor, read-only on the repository")}` : t("A read-only key on the project's GitHub repository, kept in the vault: the servers use it to fetch the code.")}</p>
+    <p class="petit">${cle ? `${ic("ok")} ${t("Created by Athanor, read-only on the repository")}` : t("A read-only key on the project's GitHub repository, kept in the vault: the servers use it to fetch the code.")}</p>
     ${cle || distant ? "" : `<button type="button" class="btn btn-petit" data-env-cle>${t("Create the deployment key")}</button>`}
     <p class="petit attention env-erreur" role="alert" hidden></p></div>`;
 }
@@ -5401,14 +5403,14 @@ async function testerCoffre(corps, sortie, champNote) {
   if (!r) { sortie.hidden = true; return; }
   const n = r.note ? t(r.note.cle, r.note.args) : "";
   if (n && !champNote.value.trim()) champNote.value = n;
-  sortie.innerHTML = `<span class="${r.ok ? "ok" : "echec"}">${r.ok ? "✓" : "✗"}</span> ${r.resultat.map((m) => h(t(m.cle, m.args))).join("<br>")}`
+  sortie.innerHTML = `<span class="${r.ok ? "ok" : "echec"}">${r.ok ? ic("ok") : ic("croix")}</span> ${r.resultat.map((m) => h(t(m.cle, m.args))).join("<br>")}`
     + (n && champNote.value.trim() !== n ? ` <button type="button" class="btn btn-petit" data-cof-note="${h(n)}">${t("Use as note")}</button>` : "");
 }
 function carteCoffre(x) {
   const secret = x.famille === "secret", infra = x.portee === "infra";
   return `<div class="bloc carte-coffre" data-coffre-id="${h(x.id)}">
     <div class="cp-tete"><b class="cp-nom" title="${h(x.nom)}">${h(x.nom)}</b>${secret ? `<span class="badge">${h(typeCoffre(x.type))}</span><span class="badge${infra ? " badge-infra" : ""}" title="${h(infra ? t("Server key: opens only with your password") : t("Project key: reopens alone on this PC"))}">${infra ? "infra" : "code"}</span>` : ""}
-      <details class="menu-coffre"><summary class="btn btn-petit" aria-label="${h(t("Actions"))}">⋯</summary><div class="menu-coffre-liste">
+      <details class="menu-coffre"><summary class="btn btn-petit" aria-label="${h(t("Actions"))}">${ic("actions")}</summary><div class="menu-coffre-liste">
         ${secret && TESTABLES_COFFRE.has(x.type) ? `<button type="button" data-cof-tester="${h(x.id)}">${t("Test")}</button>` : ""}<button type="button" data-cof-modifier="${h(x.id)}">${t("Edit")}</button><button type="button" data-cof-remplacer="${h(x.id)}">${t("Replace the value")}</button><button type="button" class="danger" data-cof-supprimer="${h(x.id)}">${t("Delete")}</button>
       </div></details></div>
     <div class="petit cof-valeur">${secret ? `<span class="muet">•••• ${t("saved")}${x.deux_valeurs ? " · " + h(t("testing and production")) : ""}</span>` : `<code>${h(x.valeur)}</code>${x.deux_valeurs ? ` · ${h(t("Production"))} <code>${h(x.prod)}</code>` : ""}`}</div>
@@ -5733,7 +5735,7 @@ pages.mission = async () => {
   const m = d.mission, aLancer = ACTIVE_MISSION.includes(m.etat), fin = (m.historique || []).slice(-1)[0] || {};
   clearTimeout(minuterieMission);
   if (aLancer && travailleMission(d)) minuterieMission = setTimeout(lireMissionVue, 2000);
-  const retour = `<div class="ligne m0"><a class="btn btn-petit" href="#missions">← ${t("Missions")}</a></div>`;
+  const retour = `<div class="ligne m0"><a class="btn btn-petit" href="#missions">${ic("gauche")} ${t("Missions")}</a></div>`;
   // still being prepared or to launch: the home's card, its question and its buttons (the lanes come at the launch)
   if (aLancer) return `<div class="missions mis-detail">${retour}<div id="mission-zone" aria-live="polite">${zoneMission()}</div></div>`;
   if (etat.missionJournalDe !== m.id) { etat.missionJournalDe = m.id; etat.missionJournalN = 50; }
@@ -5823,7 +5825,7 @@ function incidentMission(m) {
   const a = projet && [...alertesHub(), ...((etat.hub || {}).ignorees || [])].find((x) => (x.element || "").startsWith(projet + "/") && (x.actions || []).some((y) => (y.route || "").endsWith("/incident")));
   if (!a) return "";
   const distant = (etat.vue || {}).distant;
-  return `<section class="bloc mis-incident" aria-labelledby="mis-inc-titre"><h2 id="mis-inc-titre" class="m0">✖ ${t("Incident")}</h2>
+  return `<section class="bloc mis-incident" aria-labelledby="mis-inc-titre"><h2 id="mis-inc-titre" class="m0">${ic("croix")} ${t("Incident")}</h2>
     <p class="m0">${h(t(a.raison, (a.args || []).map(texteMessage)))}</p>
     <div class="ligne m0">${a.actions.map((x, i) => `<button type="button" class="btn btn-petit${i === 0 ? " btn-primaire" : ""}" data-mis-inc="${i}" data-empreinte="${h(a.empreinte)}"${distant && !x.distance ? ` disabled title="${h(t("On the computer only"))}"` : ""}>${h(t(x.libelle))}</button>`).join("")}</div></section>`;
 }
@@ -6084,7 +6086,7 @@ pages.serveur = async () => {
   const role = (r) => distant ? ((x.roles || []).includes(r) ? `<span class="badge${r === "prod" ? " badge-infra" : ""}">${r}</span>` : "")
     : `<label class="radio"><input type="checkbox" class="srv-fiche-role" value="${r}"${(x.roles || []).includes(r) ? " checked" : ""}> ${r === "dev" ? t("dev (tests, previews)") : t("prod (your live site)")}</label>`;
   return `<div class="serveurs srv-fiche">
-    <p class="m0"><a href="#serveurs" class="petit">← ${t("Servers")}</a></p>
+    <p class="m0"><a href="#serveurs" class="petit">${ic("gauche")} ${t("Servers")}</a></p>
     ${distant ? "" : messagesCoffreServeurs(c)}
     <div class="bloc srv-tete">
       <div class="cp-tete"><h2 class="m0 cp-nom">${h(x.nom)}</h2><span class="pastille ${x.etat === "ok" ? "travaille" : "attend"}">${sante}</span></div>
@@ -6095,7 +6097,7 @@ pages.serveur = async () => {
       <div class="muet petit">${f && f.date ? h(t("Sheet read {0}", [dateLisible(f.date)])) : ""}${x.vu ? (f && f.date ? " · " : "") + h(t("Seen {0}", [dateLisible(x.vu)])) : ""}</div>
       ${distant ? `<p class="muet petit m0">${t("Read only from this device: the server is changed on the computer.")}</p>${srv.termDistance && !attente ? `<div class="ligne m0"><a class="btn btn-primaire" href="#terminal/${encodeURIComponent(x.id)}">${t("Connect")}</a></div>` : ""}` : `<div class="ligne m0">
         ${attente ? "" : `<a class="btn btn-primaire" href="#terminal/${encodeURIComponent(x.id)}" data-srv-connecter>${t("Connect")}</a>`}
-        ${attente ? `<button type="button" class="btn btn-primaire" data-srv-verifier="${h(x.id)}">${t("Verify")}</button>` : `<button type="button" class="btn" data-srv-rafraichir>↻ ${t("Refresh")}</button>`}
+        ${attente ? `<button type="button" class="btn btn-primaire" data-srv-verifier="${h(x.id)}">${t("Verify")}</button>` : `<button type="button" class="btn" data-srv-rafraichir>${ic("actualiser")} ${t("Refresh")}</button>`}
         ${!attente && !x.mot_de_passe_coupe ? `<button type="button" class="btn" data-srv-couper="${h(x.id)}">${t("Cut password logins")}</button>` : ""}
         ${attente ? "" : `<button type="button" class="btn" data-srv-durcir="${h(x.id)}" title="${h(t("A fixed plan: a user with sudo instead of root, SSH keys only, no root login, a firewall that refuses all but SSH, 80 and 443, security updates, the clock synchronised, Caddy. Each step already in place is skipped; you accept the plan first."))}">${t("Harden this server")}</button>`}</div>`}
     </div>
@@ -6331,14 +6333,14 @@ function chargerXterm() {
 pages.terminal = async () => {
   const distant = !!(etat.vue || {}).distant, d = await api("serveurs"), x = d.serveurs.find((s) => s.id === term.id);
   srv.termDistance = !!d.terminal_distance;
-  const retour = `<p class="m0"><a href="#serveurs" class="petit">← ${t("Servers")}</a></p>`;
+  const retour = `<p class="m0"><a href="#serveurs" class="petit">${ic("gauche")} ${t("Servers")}</a></p>`;
   if (!x) return `<div class="serveurs">${retour}<div class="vide"><p><b>${t(d.serveurs.length ? "This server is not in your list." : "No server yet")}</b></p>
     <p class="muet">${t("Add a server first, then press Connect on its card: its terminal opens here.")}</p><a class="btn btn-primaire" href="#serveurs">${t("Servers")}</a></div></div>`;
   const avis = distant && !d.terminal_distance ? [t("The terminal is off from paired devices: a shell is the strongest right on a server."), t("It can be allowed on the computer, in Servers › More options.")]
     : x.etat === "inconnu" ? [t("Athanor cannot reach this server with its key yet."), t("Put its public key on the server, then press Verify on its sheet.")] : null;
   term.nom = x.nom;
   return `<div class="serveurs terminal-page">
-    <div class="ligne m0 term-barre"><a href="#serveur/${encodeURIComponent(x.id)}" class="petit">← ${h(x.nom)}</a>
+    <div class="ligne m0 term-barre"><a href="#serveur/${encodeURIComponent(x.id)}" class="petit">${ic("gauche")} ${h(x.nom)}</a>
       <code class="muet petit term-adresse">${h(x.utilisateur)}@${h(x.hote)}</code><span class="pastille attend" id="term-etat">${t("Connecting…")}</span><span class="espace"></span>
       ${avis ? "" : `<span class="muet petit term-aide">${t(MAC ? "Copy: Cmd+C · Paste: Cmd+V" : "Copy: Ctrl+Shift+C · Paste: Ctrl+Shift+V")}</span>
       <button type="button" class="btn btn-petit" data-term-copier>${t("Copy")}</button><button type="button" class="btn btn-petit" data-term-coller>${t("Paste")}</button>
@@ -6816,8 +6818,8 @@ pages.audit = async () => {
       <span class="espace"></span>
       <button type="button" class="btn" data-aud-verifier>${t("Check the log")}</button>
     </div>
-    ${v ? v.ok ? `<p class="bloc aud-verif ok">✓ ${t("The log is intact: {0} lines checked, none changed, removed or inserted.", [v.lignes])}</p>`
-      : `<p class="bloc aud-verif echec">✗ ${t("Line {0} of {1} is {2}: the log was touched from that line on.", [v.ligne, v.fichier, t(RAISONS_AUDIT[v.raison] || v.raison)])}</p>` : ""}
+    ${v ? v.ok ? `<p class="bloc aud-verif ok">${ic("ok")} ${t("The log is intact: {0} lines checked, none changed, removed or inserted.", [v.lignes])}</p>`
+      : `<p class="bloc aud-verif echec">${ic("croix")} ${t("Line {0} of {1} is {2}: the log was touched from that line on.", [v.ligne, v.fichier, t(RAISONS_AUDIT[v.raison] || v.raison)])}</p>` : ""}
     ${liste ? liste + "</ul>" : `<div class="vide">${Object.values(f).some(Boolean) ? t("No line matches these filters.") : t("Nothing in the audit log yet: the modules' requests, the access given or taken and the approvals will be written here.")}</div>`}
     ${avant ? `<p><button type="button" class="btn" data-aud-plus>${t("Older lines")}</button></p>` : ""}
     <p class="muet petit">${t("Each line carries the fingerprint of the one before: a line changed or removed shows at the check. This log is only written by Athanor, never by a page; the pilot's own log is in Log.")}</p>
@@ -7262,7 +7264,7 @@ async function rafraichir() {
           etat.ghConnexionSuivi = 0; toast(t("Connected to GitHub as {0}.", [c.login]), "ok");
           if (etat.page === "projet") majGitHub();
           // the new project's page keeps what was typed: only its notices change
-          document.querySelectorAll("[data-avis-connexion]").forEach((x) => { x.className = "ok petit"; x.textContent = "✔ " + t("Connected as {0}", [c.login]); });
+          document.querySelectorAll("[data-avis-connexion]").forEach((x) => { x.className = "ok petit"; x.innerHTML = ic("ok") + " " + t("Connected as {0}", [h(c.login)]); });
           const rj = $("#rj-rejoindre"); if (rj) rj.disabled = false;
         }
       }
