@@ -322,11 +322,14 @@ func TestTerminalConteneur(t *testing.T) {
 	l.attendre(t, "[Assistant]\x1b[0m $ uname -s")
 	l.attendre(t, "\x1b[33m✗ ")
 	l.attendre(t, "mot de passe de la base")
-	if c := taper(map[string]any{"entree": "echo moi\r"}); c != http.StatusLocked {
-		t.Errorf("typing while the assistant works live: %d, want 423", c)
+	// the lock lives only while one of its commands runs (note 15h45): between two, the owner types
+	// (the 423 during a command is TestVerrouEtatAssistant's)
+	if c := taper(map[string]any{"entree": "echo moi-$((1+1))\r"}); c != http.StatusOK {
+		t.Errorf("typing while the live assistant runs no command: %d, want 200", c)
 	}
+	l.attendre(t, "moi-2")
 	if c := taper(map[string]any{"cols": 110, "lignes": 35}); c != http.StatusOK {
-		t.Errorf("resize while locked: %d", c)
+		t.Errorf("resize during a live task: %d", c)
 	}
 	libere <- struct{}{}
 	verifierActions(attendreTache(tache["id"].(string)))

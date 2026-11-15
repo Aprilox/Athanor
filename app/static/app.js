@@ -7319,7 +7319,7 @@ function panneauIA(distant) {
     <details class="ia-aide"><summary class="petit">${t("How does it work?")}</summary>
       ${MODES.map(([, titre, phrase]) => `<p class="petit m0"><b>${t(titre)}</b> — ${t(phrase)}</p>`).join("")}</details>
     <div class="ia-fil-zone"><div class="ia-fil" id="ia-fil" aria-live="polite"></div>
-      <button type="button" class="btn btn-petit ia-dernier" id="ia-dernier" data-ia-dernier hidden>${t("Go to the latest message")} ↓</button></div>
+      <button type="button" class="btn btn-petit ia-dernier" id="ia-dernier" data-ia-dernier hidden>${t("Go to the latest message")} ${ic("descendre")}</button></div>
     <div class="ia-decision" id="ia-decision" hidden></div>
     <div class="ia-encours" id="ia-encours"></div>
     ${distant ? `<p class="muet petit m0">${t("Tasks are launched from the computer; their plans are decided on their cards, on the For you page.")}</p>`
