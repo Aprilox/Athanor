@@ -33,6 +33,8 @@ type serveurSSHMemoire struct {
 	tailles         chan string     // PTY sizes asked ("pty 80x24", "resize 120x40"), for the terminal's tests
 	invite          string          // the shell's first words (the captures' coloured prompt); "$ " when empty
 	coupe, gele     bool            // cut: connections dropped and new ones refused; frozen: global requests (keepalives) unanswered
+	refuse          bool            // every key and password refused (changed on the server)
+	connexions      int             // connections accepted (not cut)
 	conns           map[net.Conn]bool
 }
 
@@ -83,6 +85,9 @@ func lancerSSHMemoire(t *testing.T, autorisee ssh.PublicKey, motDePasse string, 
 		PublicKeyCallback: func(_ ssh.ConnMetadata, k ssh.PublicKey) (*ssh.Permissions, error) {
 			s.mu.Lock()
 			defer s.mu.Unlock()
+			if s.refuse {
+				return nil, os.ErrPermission
+			}
 			for _, a := range s.autorisees {
 				if bytes.Equal(k.Marshal(), a.Marshal()) {
 					return nil, nil
@@ -91,7 +96,10 @@ func lancerSSHMemoire(t *testing.T, autorisee ssh.PublicKey, motDePasse string, 
 			return nil, os.ErrPermission
 		},
 		PasswordCallback: func(_ ssh.ConnMetadata, mdp []byte) (*ssh.Permissions, error) {
-			if motDePasse != "" && string(mdp) == motDePasse {
+			s.mu.Lock()
+			refuse := s.refuse
+			s.mu.Unlock()
+			if motDePasse != "" && string(mdp) == motDePasse && !refuse {
 				return nil, nil
 			}
 			return nil, os.ErrPermission
@@ -117,6 +125,7 @@ func lancerSSHMemoire(t *testing.T, autorisee ssh.PublicKey, motDePasse string, 
 					s.conns = map[net.Conn]bool{}
 				}
 				s.conns[c] = true
+				s.connexions++
 			}
 			s.mu.Unlock()
 			if coupe {

@@ -395,6 +395,7 @@ func TestTerminalSSHReconnexion(t *testing.T) {
 	ka, dr, pr := delaiKeepalive, delaiReconnexion, plafondReconnexion
 	t.Cleanup(func() { delaiKeepalive, delaiReconnexion, plafondReconnexion = ka, dr, pr })
 	delaiKeepalive, delaiReconnexion, plafondReconnexion = 100*time.Millisecond, 20*time.Millisecond, 80*time.Millisecond
+	ident := srv.ID
 	mux := http.NewServeMux()
 	s.routes(mux)
 	ts := httptest.NewServer(mux)
@@ -402,7 +403,7 @@ func TestTerminalSSHReconnexion(t *testing.T) {
 	appel := func(methode, chemin string, corps any) *http.Response {
 		t.Helper()
 		b, _ := json.Marshal(corps)
-		r, _ := http.NewRequest(methode, ts.URL+"/api/serveurs/"+srv.ID+chemin, bytes.NewReader(b))
+		r, _ := http.NewRequest(methode, ts.URL+"/api/serveurs/"+ident+chemin, bytes.NewReader(b))
 		r.Header.Set("X-Athanor", "jeton")
 		r.AddCookie(&http.Cookie{Name: cookieAcces, Value: "cle"})
 		if s.session != "" {
@@ -470,14 +471,25 @@ func TestTerminalSSHReconnexion(t *testing.T) {
 		}
 	}
 
-	rep := appel("POST", "/terminal", map[string]any{"cols": 100, "lignes": 30})
-	var o map[string]any
-	_ = json.NewDecoder(rep.Body).Decode(&o)
-	rep.Body.Close()
-	id, _ := o["session"].(string)
-	if id == "" {
-		t.Fatalf("open: %d %v", rep.StatusCode, o)
+	ouvrir := func() string {
+		t.Helper()
+		rep := appel("POST", "/terminal", map[string]any{"cols": 100, "lignes": 30})
+		var o map[string]any
+		_ = json.NewDecoder(rep.Body).Decode(&o)
+		rep.Body.Close()
+		id, _ := o["session"].(string)
+		if id == "" {
+			t.Fatalf("open: %d %v", rep.StatusCode, o)
+		}
+		return id
 	}
+	finie := func(fin string) func(int, map[string]any) bool {
+		return func(c int, v map[string]any) bool {
+			return c == http.StatusGone && v["fin"] == fin && v["tentatives"] == float64(tentativesReconnexion)
+		}
+	}
+
+	id := ouvrir()
 	l := lire(id)
 	l.attendre(t, "$ ")
 	agir(id, map[string]any{"entree": "avant-coupure"})
@@ -530,7 +542,8 @@ func TestTerminalSSHReconnexion(t *testing.T) {
 	l = lire(id)
 	m.couper(true)
 	l.attendreFin(t)
-	attendreEtat(id, func(c int, v map[string]any) bool { return c == http.StatusGone && v["fin"] == finTerminalReconnexion }, "reconnect_failed")
+	attendreEtat(id, finie(finTerminalReconnexion), "reconnect_failed")
+	m.couper(false)
 
 	journal := journalAuditTexte(t)
 	for i := 0; i < 50 && !strings.Contains(journal, finTerminalReconnexion+" after"); i++ { // written just after the 410
@@ -545,4 +558,81 @@ func TestTerminalSSHReconnexion(t *testing.T) {
 	if strings.Contains(journal, "avant-coupure") || strings.Contains(journal, strings.Split(string(prive), "\n")[1]) {
 		t.Error("typed text or the key in the audit log")
 	}
+	// a link that keeps falling: after reconnexionsMax reconnections within fenetreReconnexions, the next loss gives up
+	id = ouvrir()
+	for n := range reconnexionsMax {
+		l = lire(id)
+		l.attendre(t, "$ ")
+		m.couper(true)
+		l.attendreFin(t)
+		m.couper(false)
+		attendreEtat(id, connecte, fmt.Sprintf("reconnection %d", n+1))
+	}
+	l = lire(id)
+	l.attendre(t, "$ ")
+	m.mu.Lock()
+	avant := m.connexions
+	m.mu.Unlock()
+	m.couper(true)
+	l.attendreFin(t)
+	m.couper(false)
+	attendreEtat(id, finie(finTerminalInstable), "unstable")
+	m.mu.Lock()
+	if n := m.connexions - avant; n != 0 {
+		t.Errorf("unstable link: %d new connections, want none", n)
+	}
+	m.mu.Unlock()
+
+	// a refusal no attempt can fix: exactly one attempt, then its own end (never retried)
+	essai := func(mem *serveurSSHMemoire, fin string, casser func()) {
+		t.Helper()
+		id := ouvrir()
+		l := lire(id)
+		l.attendre(t, "$ ")
+		casser()
+		mem.mu.Lock()
+		avant := mem.connexions
+		mem.mu.Unlock()
+		mem.couper(true)
+		l.attendreFin(t)
+		mem.couper(false)
+		attendreEtat(id, finie(fin), fin)
+		time.Sleep(300 * time.Millisecond) // several backoffs: a retry would show here
+		mem.mu.Lock()
+		defer mem.mu.Unlock()
+		if n := mem.connexions - avant; n != 1 {
+			t.Errorf("%s: %d attempts, want 1", fin, n)
+		}
+		mem.refuse = false
+	}
+	refuser := func(mem *serveurSSHMemoire) func() {
+		return func() { mem.mu.Lock(); mem.refuse = true; mem.mu.Unlock() }
+	}
+	// the key taken out of authorized_keys
+	essai(m, finTerminalCleRefusee, refuser(m))
+
+	// the password changed on the server (fail2ban bans at 5 failures)
+	m2 := lancerSSHMemoire(t, nil, "mdp-du-serveur", nil)
+	mdp, err := s.coffre.Ajouter(EntreeCoffre{Nom: "Mot de passe VPS 2", Famille: "secret", Type: "mot_de_passe", Portee: "infra"}, "mdp-du-serveur")
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv2 := ServeurInventaire{ID: "cd34", Nom: "VPS 2", Hote: m2.hote, Port: m2.port, Utilisateur: "athanor", Auth: "mot_de_passe", Cle: mdp.ID, EmpreinteHote: m2.empreinte, Etat: "ok"}
+	if err := modifierServeurs(func(l []ServeurInventaire) ([]ServeurInventaire, error) { return append(l, srv2), nil }); err != nil {
+		t.Fatal(err)
+	}
+	ident = srv2.ID
+	essai(m2, finTerminalMdpRefuse, refuser(m2))
+
+	// the host's fingerprint no longer the confirmed one (someone in the middle)
+	essai(m2, finTerminalEmpreinte, func() {
+		_ = modifierServeurs(func(l []ServeurInventaire) ([]ServeurInventaire, error) {
+			for i := range l {
+				if l[i].ID == srv2.ID {
+					l[i].EmpreinteHote = m.empreinte
+				}
+			}
+			return l, nil
+		})
+	})
 }

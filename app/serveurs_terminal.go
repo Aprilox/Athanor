@@ -28,15 +28,17 @@ import (
 const (
 	entreeTerminalMax     = 64 << 10 // one input message (a paste included)
 	sessionsTerminalMax   = 8        // open terminals at once, every server together
-	tentativesReconnexion = 6        // a lost connection: attempts before giving up
+	tentativesReconnexion = 10       // a lost connection: attempts before giving up (about 3 min: a reboot gets through)
+	reconnexionsMax       = 3        // reconnections within fenetreReconnexions; one more loss gives up (a link that keeps falling)
 )
 
 var (
 	delaiInactiviteTerminal = 15 * time.Minute // no keystroke, file work, assistant line or page opened: closed (tests shorten it)
 	delaiLecteurTerminal    = time.Minute      // nobody reads its output (page closed): closed
 	delaiKeepalive          = 15 * time.Second // a keepalive this often; unanswered this long: the connection is lost
-	delaiReconnexion        = time.Second      // first wait before reconnecting, doubled each attempt (1, 2, 4, 8, 16 s)
-	plafondReconnexion      = 16 * time.Second
+	delaiReconnexion        = time.Second      // first wait before reconnecting, doubled each attempt (1, 2, 4, 8, 16, 30… s)
+	plafondReconnexion      = 30 * time.Second
+	fenetreReconnexions     = 5 * time.Minute
 )
 
 const ecranTerminalMax = 64 << 10
@@ -48,7 +50,28 @@ const (
 	finTerminalInactif     = "idle"             // delaiInactiviteTerminal reached
 	finTerminalAbandonne   = "abandoned"        // no reader for delaiLecteurTerminal
 	finTerminalReconnexion = "reconnect_failed" // the connection was lost and tentativesReconnexion attempts failed
+	finTerminalInstable    = "unstable"         // lost again after reconnexionsMax reconnections within fenetreReconnexions
+	// the connection was lost and the server answers, but no attempt can succeed: given up at once
+	finTerminalMdpRefuse  = "password_refused"    // the password changed (retrying would trip fail2ban)
+	finTerminalCleRefusee = "key_refused"         // the key was taken out of authorized_keys, or the vault's key is unusable
+	finTerminalEmpreinte  = "fingerprint_changed" // possibly someone in the middle
+	finTerminalRetire     = "server_removed"      // the server left the inventory
 )
+
+// finDefinitive: the end reason for an error that no new attempt can fix ("" when a new attempt may succeed).
+func finDefinitive(err error) string {
+	switch {
+	case errors.Is(err, errServeurMdpRefuse):
+		return finTerminalMdpRefuse
+	case errors.Is(err, errServeurCleRefusee), errors.Is(err, errServeurPhrase), errors.Is(err, errServeurPasCle):
+		return finTerminalCleRefusee
+	case errors.Is(err, errEmpreinteChangee):
+		return finTerminalEmpreinte
+	case errors.Is(err, errServeurInconnu):
+		return finTerminalRetire
+	}
+	return ""
+}
 
 const errTerminalReconnexion = "The connection to the server was lost: Athanor is reconnecting"
 
@@ -72,6 +95,9 @@ type sessionTerminal struct {
 	ecran        []byte        // the last ecranTerminalMax bytes sent, replayed to the next reader (a reloaded page)
 	muSFTP       sync.Mutex
 	sftp         *sftp.Client // the files panel's channel on the same connection (serveurs_sftp.go), closed with it
+	reprises     []time.Time  // when the last reconnections succeeded (reconnexionsMax within fenetreReconnexions)
+	// the delays read once at the opening (a test changing them never races a terminal still running)
+	inactivite, lecteurMax, keepalive, reconnexion, plafond time.Duration
 }
 
 var terminaux = struct {
@@ -131,7 +157,7 @@ func (t *sessionTerminal) fermer(raison string) {
 
 // surveiller: closes the terminal when idle or abandoned.
 func (t *sessionTerminal) surveiller() {
-	tic := time.NewTicker(max(min(delaiInactiviteTerminal, delaiLecteurTerminal)/4, 10*time.Millisecond))
+	tic := time.NewTicker(max(min(t.inactivite, t.lecteurMax)/4, 10*time.Millisecond))
 	defer tic.Stop()
 	for {
 		select {
@@ -139,12 +165,12 @@ func (t *sessionTerminal) surveiller() {
 			return
 		case <-tic.C:
 			t.mu.Lock()
-			abandonne := !t.lecteur && time.Since(t.vuLecteur) > delaiLecteurTerminal
+			abandonne := !t.lecteur && time.Since(t.vuLecteur) > t.lecteurMax
 			t.mu.Unlock()
 			switch {
 			case abandonne:
 				t.fermer(finTerminalAbandonne)
-			case time.Since(time.Unix(0, t.activite.Load())) > delaiInactiviteTerminal:
+			case time.Since(time.Unix(0, t.activite.Load())) > t.inactivite:
 				t.fermer(finTerminalInactif)
 			}
 		}
@@ -214,7 +240,8 @@ func (s *Serveur) apiTerminalOuvrir(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	t := &sessionTerminal{s: s, id: aleatoire(16), serveur: srv.ID, de: de, debut: time.Now(), client: client,
-		sortie: make(chan []byte, 256), fini: make(chan struct{}), vuLecteur: time.Now(), cols: cols, lignes: lignes, perdue: make(chan struct{})}
+		sortie: make(chan []byte, 256), fini: make(chan struct{}), vuLecteur: time.Now(), cols: cols, lignes: lignes, perdue: make(chan struct{}),
+		inactivite: delaiInactiviteTerminal, lecteurMax: delaiLecteurTerminal, keepalive: delaiKeepalive, reconnexion: delaiReconnexion, plafond: plafondReconnexion}
 	t.toucher()
 	if t.sess, t.stdin, err = t.demarrer(client, cols, lignes); err != nil {
 		client.Close()
@@ -286,14 +313,14 @@ func (t *sessionTerminal) vivre() {
 	}
 }
 
-// garderEnVie: a keepalive every delaiKeepalive; a server that does not answer within delaiKeepalive (network
+// garderEnVie: a keepalive every t.keepalive; a server that does not answer within t.keepalive (network
 // gone without a word) gets its connection closed, which vivre sees as lost.
 func (t *sessionTerminal) garderEnVie(c *ssh.Client) {
 	for {
 		select {
 		case <-t.fini:
 			return
-		case <-time.After(delaiKeepalive):
+		case <-time.After(t.keepalive):
 		}
 		rep := make(chan error, 1)
 		go func() { _, _, err := c.SendRequest("keepalive@openssh.com", true, nil); rep <- err }()
@@ -302,7 +329,7 @@ func (t *sessionTerminal) garderEnVie(c *ssh.Client) {
 			if err != nil {
 				return // already closed: vivre knows
 			}
-		case <-time.After(delaiKeepalive):
+		case <-time.After(t.keepalive):
 			c.Close()
 			return
 		case <-t.fini:
@@ -311,11 +338,20 @@ func (t *sessionTerminal) garderEnVie(c *ssh.Client) {
 	}
 }
 
-// reconnecter: up to tentativesReconnexion attempts, waiting 1, 2, 4, 8, 16, 16 s, with the vault's secrets as at
-// the opening (nothing asked again); true when a new shell runs, false when the terminal closed (given up, or
-// closed meanwhile).
+// reconnecter: up to tentativesReconnexion attempts, waiting 1, 2, 4, 8, 16, then 30 s, with the vault's secrets
+// as at the opening (nothing asked again); a refusal no attempt can fix (password, key, fingerprint, server
+// removed) or a link lost again after reconnexionsMax reconnections within fenetreReconnexions gives up at once.
+// True when a new shell runs, false when the terminal closed (given up, or closed meanwhile).
 func (t *sessionTerminal) reconnecter() bool {
 	t.mu.Lock()
+	t.reprises = slices.DeleteFunc(t.reprises, func(x time.Time) bool { return time.Since(x) > fenetreReconnexions })
+	if len(t.reprises) >= reconnexionsMax {
+		t.mu.Unlock()
+		t.s.ecrireAudit(LigneAudit{Type: "evenement", De: t.de, Vers: "serveur:" + t.serveur, Action: "terminal.lost",
+			Resultat: fmt.Sprintf("given up: lost again after %d reconnections in %s", reconnexionsMax, fenetreReconnexions)})
+		t.fermer(finTerminalInstable)
+		return false
+	}
 	t.tentative = 1
 	close(t.perdue)
 	t.mu.Unlock()
@@ -326,7 +362,7 @@ func (t *sessionTerminal) reconnecter() bool {
 	}
 	t.muSFTP.Unlock()
 	t.s.ecrireAudit(LigneAudit{Type: "evenement", De: t.de, Vers: "serveur:" + t.serveur, Action: "terminal.lost", Resultat: "reconnecting"})
-	attente := delaiReconnexion
+	attente := t.reconnexion
 	var err error
 	for n := 1; n <= tentativesReconnexion; n++ {
 		t.mu.Lock()
@@ -337,13 +373,21 @@ func (t *sessionTerminal) reconnecter() bool {
 			return false
 		case <-time.After(attente):
 		}
-		attente = min(attente*2, plafondReconnexion)
+		attente = min(attente*2, t.plafond)
 		if err = t.rebrancher(); err == nil {
 			if t.ferme() {
 				return false
 			}
+			t.mu.Lock()
+			t.reprises = append(t.reprises, time.Now())
+			t.mu.Unlock()
 			t.s.ecrireAudit(LigneAudit{Type: "evenement", De: t.de, Vers: "serveur:" + t.serveur, Action: "terminal.reconnect", Resultat: fmt.Sprintf("ok (attempt %d)", n)})
 			return true
+		}
+		if fin := finDefinitive(err); fin != "" {
+			t.s.ecrireAudit(LigneAudit{Type: "evenement", De: t.de, Vers: "serveur:" + t.serveur, Action: "terminal.reconnect", Resultat: fmt.Sprintf("given up (attempt %d): %s", n, err)})
+			t.fermer(fin)
+			return false
 		}
 	}
 	t.s.ecrireAudit(LigneAudit{Type: "evenement", De: t.de, Vers: "serveur:" + t.serveur, Action: "terminal.reconnect", Resultat: "error: " + err.Error()})
@@ -429,7 +473,7 @@ func (s *Serveur) terminalFerme(w http.ResponseWriter, raison string) {
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(http.StatusGone)
-	_, _ = fmt.Fprintf(w, `{"erreur_key":"This terminal is closed","erreur":"This terminal is closed","fin":%q}`+"\n", raison)
+	_, _ = fmt.Fprintf(w, `{"erreur_key":"This terminal is closed","erreur":"This terminal is closed","fin":%q,"tentatives":%d}`+"\n", raison, tentativesReconnexion)
 }
 
 // apiTerminalFlux: GET /api/serveurs/{id}/terminal/{session}: the shell's output as a byte stream, one reader

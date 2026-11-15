@@ -6379,7 +6379,12 @@ $("#page").addEventListener("click", async (ev) => {
 const term = { id: "", serveur: "", session: "", nom: "", x: null, fit: null, el: null, lecteur: null, attente: "", enVol: false, msg: null, obs: null, essai: null, reco: "" };
 const FINS_TERMINAL = { disconnected: "You disconnected.", ended: "The session ended on the server (exit, or the connection was lost).",
   idle: "Closed after 15 minutes without activity.", abandoned: "Closed: nobody looked at it for a minute.",
-  reconnect_failed: "The server stopped answering: Athanor tried to reconnect 6 times without success. Check that the server is on, then try again." };
+  reconnect_failed: "The server stopped answering: Athanor tried to reconnect {0} times without success. Check that the server is on, then try again.",
+  unstable: "The connection kept dropping (lost again after 3 reconnections in 5 minutes): Athanor stopped trying. Check the network or the server, then try again.",
+  password_refused: "The connection was lost and the server now refuses the password: Athanor did not try again (repeated failures can get this computer banned). Update the password in the vault, then connect again.",
+  key_refused: "The connection was lost and the server now refuses the key: Athanor did not try again. Check that its public part is still in ~/.ssh/authorized_keys, then connect again.",
+  fingerprint_changed: "The connection was lost and the server's host fingerprint changed: Athanor did not reconnect (someone may be in the middle). Check the server, then remove it and add it again.",
+  server_removed: "The connection was lost and this server is no longer in your list: Athanor did not reconnect." };
 // a refusal in plain words, then what to do about it (the Go side already says it for a refused key or a changed fingerprint)
 const SOLUTIONS_TERMINAL = {
   "The server did not answer": "Check that the server is on and that its address and port are right, then try again.",
@@ -6590,7 +6595,7 @@ async function lireTerminal(id, session, neuve) {
       if (r.status === 410) { // closed meanwhile (a reload after it ended): a new one, once; never for one just
         // opened (C1-19: a shell that exits at once, nologin, would loop and could trip fail2ban)
         sessionStorage.removeItem("athanor.terminal." + id); term.session = "";
-        return !neuve && (d.fin === "abandoned" || d.fin === "ended") ? connecterTerminal() : finTerminal(d.fin);
+        return !neuve && (d.fin === "abandoned" || d.fin === "ended") ? connecterTerminal() : finTerminal(d.fin, d.tentatives);
       }
       return erreurTerminal(d.erreur_key || "", d.erreur_key ? t(d.erreur_key) : t("Error {0}", [r.status]));
     }
@@ -6609,7 +6614,7 @@ async function lireTerminal(id, session, neuve) {
   if (term.session !== session) return;
   if (f.reconnexion) return suivreReconnexion(id, session, f);
   if (f.ok) return setTimeout(() => term.session === session && !term.lecteur && etat.page === "terminal" && lireTerminal(id, session, false), 500); // still alive (reconnected meanwhile)
-  finTerminal(f.fin || "ended");
+  finTerminal(f.fin || "ended", f.tentatives);
 }
 // the connection to the server was lost (serveurs_terminal.go reconnecter): the attempt shown, no input, then the
 // screen read again on the new shell, or the reason it gave up (with Try again)
@@ -6626,13 +6631,13 @@ async function suivreReconnexion(id, session, f) {
   term.reco = "";
   if (term.session !== session || etat.page !== "terminal") return;
   if (f && f.ok) { toast(t("Reconnected: a new shell started on the server."), "ok"); return lireTerminal(id, session, false); }
-  finTerminal((f && f.fin) || "ended");
+  finTerminal((f && f.fin) || "ended", f && f.tentatives);
 }
-function finTerminal(raison) {
+function finTerminal(raison, tentatives) {
   sessionStorage.removeItem("athanor.terminal." + term.id); term.session = "";
   if (term.x) term.x.options.disableStdin = true;
   etatTerminal(t("Disconnected"), "attend"); chargerPanneau("serveur");
-  messageTerminal(t("Disconnected"), t(FINS_TERMINAL[raison] || FINS_TERMINAL.ended), raison === "reconnect_failed" ? "Try again" : "Connect again");
+  messageTerminal(t("Disconnected"), t(FINS_TERMINAL[raison] || FINS_TERMINAL.ended, [String(tentatives || 10)]), raison === "reconnect_failed" || raison === "unstable" ? "Try again" : "Connect again");
 }
 async function agirTerminal(corps) {
   if (!term.session) return null;
