@@ -107,8 +107,11 @@ func TestDistanceToutesRoutes(t *testing.T) {
 		{"DELETE", "/api/serveurs/x", true},
 		{"POST", "/api/serveurs/ajouter", true},
 		{"GET", "/api/serveurs/x/y", true},
-		{"GET", "/api/serveurs/x/taches", false}, // a server's tasks, read from a device (M97)
-		{"GET", "/api/missions", false},          // the missions, read from a device (M150)
+		{"GET", "/api/serveurs/x/taches", false},  // a server's tasks, read from a device (M97)
+		{"GET", "/api/serveurs/local/sftp", true}, // this computer.s files (SFTP page, Local panel): refused unless the remote terminal is allowed
+		{"POST", "/api/serveurs/local/sftp", true},
+		{"GET", "/api/serveurs/x/sftp/y/texte", true},
+		{"GET", "/api/missions", false}, // the missions, read from a device (M150)
 		{"GET", "/api/missions/x", false},
 		{"POST", "/api/missions/x", true},
 		{"GET", "/api/missions/x/y", true},

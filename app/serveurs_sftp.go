@@ -25,7 +25,9 @@ import (
 
 const (
 	envoiSFTPMax     = 4 << 30 // one upload
-	entreesSFTPMax   = 5000    // one folder's listing
+	entreesSFTPMax   = 50000   // one folder's listing (the page virtualises it)
+	texteSFTPMax     = 1 << 20 // a text file opened in the page
+	inventaireMax    = 200     // paths named before a deletion
 	errSFTPAbsent    = "This server does not offer file transfer (SFTP)"
 	errSFTPExiste    = "A file or folder with this name already exists"
 	errSFTPInconnu   = "This file or folder no longer exists"
@@ -36,6 +38,9 @@ const (
 	errSFTPTropGros  = "This file is too large to send from here"
 	prefixeSFTPEchec = "The server could not do it: check its free disk space and this folder's rights, or try the same in the terminal. Its answer: "
 	errSFTPLien      = "This name is a link: open the folder of its target to replace that file"
+	errSFTPMode      = "Permissions: give an octal value such as 755 or 644"
+	errSFTPTexte     = "This file is not a text file of 1 MB or less: download it instead"
+	errSFTPChange    = "This file changed on the server since you opened it: open it again"
 )
 
 // clientSFTP: the terminal's SFTP channel, opened at the first use.
@@ -112,6 +117,7 @@ type entreeSFTP struct {
 	Taille  int64  `json:"taille"`
 	Modifie int64  `json:"modifie"` // unix seconds
 	Mode    string `json:"mode"`
+	Cible   string `json:"cible,omitempty"` // a link's target
 }
 
 // apiSFTPLister: GET /api/serveurs/{id}/sftp/{session}?chemin=/abs (empty: the user's home folder).
@@ -142,6 +148,7 @@ func (s *Serveur) apiSFTPLister(w http.ResponseWriter, r *http.Request) {
 		e := entreeSFTP{Nom: fi.Name(), Dossier: fi.IsDir(), Taille: fi.Size(), Modifie: fi.ModTime().Unix(), Mode: fi.Mode().String()}
 		if fi.Mode()&fs.ModeSymlink != 0 { // a link to a folder opens like a folder
 			e.Lien = true
+			e.Cible, _ = c.ReadLink(path.Join(chemin, fi.Name()))
 			if cible, err := c.Stat(path.Join(chemin, fi.Name())); err == nil {
 				e.Dossier = cible.IsDir()
 			}
@@ -342,9 +349,13 @@ func remplacerSFTP(c *sftp.Client, part, cible string) error {
 // folder, or delete a file or a whole folder (the interface asks for confirmation first).
 func (s *Serveur) apiSFTPAgir(w http.ResponseWriter, r *http.Request) {
 	var a struct {
-		Renommer  string `json:"renommer"`
-		Nom       string `json:"nom"`
-		Supprimer string `json:"supprimer"`
+		Renommer    string   `json:"renommer"`
+		Nom         string   `json:"nom"`
+		Supprimer   string   `json:"supprimer"`
+		Dossier     string   `json:"dossier"`     // new folder: its parent, with nom
+		Permissions []string `json:"permissions"` // chmod of these paths to mode
+		Mode        string   `json:"mode"`
+		Inventaire  string   `json:"inventaire"` // what deleting this path would remove
 	}
 	if lireCorps(r, &a) != nil {
 		s.erreur(w, http.StatusBadRequest, "Invalid request")
@@ -396,6 +407,56 @@ func (s *Serveur) apiSFTPAgir(w http.ResponseWriter, r *http.Request) {
 		}
 		t.auditSFTP("sftp.delete", chemin)
 		s.ecrireJSON(w, map[string]any{"ok": true})
+	case a.Dossier != "":
+		parent := cheminSFTP(a.Dossier)
+		if parent == "" || !nomSFTP(a.Nom) {
+			s.erreur(w, http.StatusBadRequest, errSFTPChemin)
+			return
+		}
+		chemin := path.Join(parent, a.Nom)
+		if _, err := c.Lstat(chemin); err == nil {
+			s.erreur(w, http.StatusConflict, errSFTPExiste)
+			return
+		}
+		if err := c.Mkdir(chemin); err != nil {
+			s.erreurSFTP(w, err)
+			return
+		}
+		t.auditSFTP("sftp.mkdir", chemin)
+		s.ecrireJSON(w, map[string]any{"chemin": chemin})
+	case len(a.Permissions) > 0:
+		mode, ok := modeOctal(a.Mode)
+		if !ok {
+			s.erreur(w, http.StatusBadRequest, errSFTPMode)
+			return
+		}
+		for _, p := range a.Permissions {
+			if cheminSFTP(p) == "" || cheminSFTP(p) == "/" {
+				s.erreur(w, http.StatusBadRequest, errSFTPChemin)
+				return
+			}
+		}
+		for _, p := range a.Permissions {
+			if err := c.Chmod(cheminSFTP(p), mode); err != nil {
+				t.auditSFTP("sftp.chmod", cheminSFTP(p)+" "+a.Mode+": refused")
+				s.erreurSFTP(w, err)
+				return
+			}
+			t.auditSFTP("sftp.chmod", cheminSFTP(p)+" "+a.Mode)
+		}
+		s.ecrireJSON(w, map[string]any{"ok": true})
+	case a.Inventaire != "":
+		chemin := cheminSFTP(a.Inventaire)
+		if chemin == "" || chemin == "/" {
+			s.erreur(w, http.StatusBadRequest, errSFTPChemin)
+			return
+		}
+		inv, err := inventaireSFTP(c, chemin)
+		if err != nil {
+			s.erreurSFTP(w, err)
+			return
+		}
+		s.ecrireJSON(w, inv)
 	default:
 		s.erreur(w, http.StatusBadRequest, "Invalid request")
 	}

@@ -142,6 +142,28 @@ func TestTerminalConteneur(t *testing.T) {
 	if c, b, _ := requete("GET", base+"/fichier?chemin="+url.QueryEscape(dossier+"/notes.txt"), ""); c != http.StatusOK || string(b) != "remplace-par-sftp\n" {
 		t.Errorf("download: %d %q", c, b)
 	}
+	// the SFTP page on a real OpenSSH: new folder, chmod in octal seen as drwxr-x---, a text opened then saved
+	if c, b, _ := requete("POST", base, `{"dossier":"`+dossier+`","nom":"sous"}`); c != http.StatusOK {
+		t.Errorf("new folder: %d %s", c, b)
+	}
+	if c, b, _ := requete("POST", base, `{"permissions":["`+dossier+`/sous"],"mode":"750"}`); c != http.StatusOK {
+		t.Errorf("chmod: %d %s", c, b)
+	}
+	c, b, _ = requete("GET", base+"?chemin="+url.QueryEscape(dossier), "")
+	if c != http.StatusOK || !strings.Contains(string(b), `"nom":"sous","dossier":true`) || !strings.Contains(string(b), `"mode":"drwxr-x---"`) {
+		t.Errorf("listing after chmod: %d %s", c, b)
+	}
+	c, b, _ = requete("GET", base+"/texte?chemin="+url.QueryEscape(dossier+"/notes.txt"), "")
+	var tx struct{ Modifie int64 }
+	if json.Unmarshal(b, &tx); c != http.StatusOK || !strings.Contains(string(b), "remplace-par-sftp") {
+		t.Errorf("open text: %d %s", c, b)
+	}
+	corps, _ := json.Marshal(map[string]any{"chemin": dossier + "/notes.txt", "contenu": "edite-dans-la-page\n", "modifie": tx.Modifie})
+	if c, b, _ := requete("POST", base+"/texte", string(corps)); c != http.StatusOK {
+		t.Errorf("save text: %d %s", c, b)
+	}
+	taper(map[string]any{"entree": "tr a-z A-Z < ~/e2e-ia/notes.txt\r"})
+	l.attendre(t, "EDITE-DANS-LA-PAGE")
 	if c, b, _ := requete("POST", base, `{"supprimer":"`+dossier+`/notes.txt"}`); c != http.StatusOK {
 		t.Errorf("delete: %d %s", c, b)
 	}

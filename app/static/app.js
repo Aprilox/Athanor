@@ -5341,7 +5341,7 @@ $("#page").addEventListener("change", async (ev) => {
 $("#page").addEventListener("change", async (ev) => {
   const c = ev.target.closest("[data-srv-term-distance]"); if (!c) return;
   const oui = c.checked;
-  const q = t("Allow a shell on your servers from your paired phone or computer? Anyone holding that device could then type commands on them. You can turn it off here at any time.");
+  const q = t("Allow a shell on your servers from your paired phone or computer? Anyone holding that device could then type commands on them. You can turn it off here at any time.") + " " + t("The SFTP page's Local panel, the files of this computer, is allowed with it.");
   // C1-7: Athanor's password retyped when it has one, as for the other strong rights
   const preuve = oui ? ((await api("hub/approbations").catch(() => ({}))).mot_de_passe_requis ? await confirmer(q, { ok: t("Allow"), mdp: true }) : await confirmer(q, { ok: t("Allow") })) : true;
   if (preuve === false) { c.checked = false; return; }
