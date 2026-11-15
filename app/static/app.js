@@ -6571,8 +6571,9 @@ function quitterTerminal() { clearTimeout(ia.minuteur); if (term.lecteur) { term
 const MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent); // Cmd instead of Ctrl in the terminal's help
 const LIGNE_SFTP = 44, RACINES_SFTP = ":racines"; // px per row (a 44 px target); the list of this computer's disks
 const panneauSftp = () => ({ chemin: null, entrees: [], vues: [], tronque: false, charge: false, erreur: "", code: 0, erreurChemin: "", saisie: false,
-  avant: [], apres: [], filtre: "", tri: "nom", sens: 1, actif: -1, choisi: new Set(), racines: [], sep: "/", parent: "", serveur: "", jeton: 0 });
-const sf = { onglet: "terminal", caches: localStorage.getItem("athanor.sftp.caches") !== "0", dernier: "serveur", local: panneauSftp(), serveur: panneauSftp() };
+  avant: [], apres: [], filtre: "", tri: "nom", sens: 1, actif: -1, ancre: -1, choisi: new Set(), racines: [], sep: "/", parent: "", serveur: "", jeton: 0 });
+const sf = { onglet: "terminal", caches: localStorage.getItem("athanor.sftp.caches") !== "0", dernier: "serveur", local: panneauSftp(), serveur: panneauSftp(),
+  transferts: [], envois: [], etats: {}, minuteur: 0, question: "", ecartes: new Set(), glisse: "" }; // envois: files dropped from the system's explorer, sent by the page itself
 const urlSftp = (suite = "") => `/api/serveurs/${encodeURIComponent(term.serveur)}/sftp/${encodeURIComponent(term.session)}${suite}`;
 const joindreSftp = (dossier, nom) => (dossier === "/" ? "" : dossier) + "/" + nom;
 const erreurSftp = (r, d) => d.erreur_key ? t(d.erreur_key) : d.erreur || t("Error {0}", [r ? r.status : 0]);
@@ -6661,8 +6662,9 @@ function rendrePanneau(cote, focus) {
         ${bouton("data-sftp-actualiser", "actualiser", t("Refresh"), !pret && cote === "serveur" && !term.session)}</div>
       ${p.erreurChemin ? `<p class="erreur petit m0" id="sftp-erreur-${cote}" role="alert">${h(p.erreurChemin)}</p>` : ""}
       <div class="sftp-outils"><input type="search" class="sftp-filtre" value="${h(p.filtre)}" placeholder="${h(t("Filter"))}" aria-label="${h(t("Filter this folder"))}"${pret ? "" : " disabled"}>
-        <button type="button" class="btn btn-petit sftp-caches" data-sftp-caches aria-pressed="${sf.caches}">${t("Hidden files")}</button></div></div>
-    <div class="sftp-liste"><div class="sftp-grille" role="grid" tabindex="0" aria-labelledby="sftp-titre-${cote}"><div role="rowgroup" class="sftp-entete"></div><div role="rowgroup" class="sftp-espace"></div></div>
+        <button type="button" class="btn btn-petit sftp-caches" data-sftp-caches aria-pressed="${sf.caches}">${t("Hidden files")}</button>
+        <button type="button" class="btn btn-petit sftp-actions" data-sftp-menu aria-haspopup="menu" aria-expanded="false"${pret ? "" : " disabled"}>${t("Actions")}${ic("bas")}</button></div></div>
+    <div class="sftp-liste"><div class="sftp-grille" role="grid" aria-multiselectable="true" tabindex="0" aria-labelledby="sftp-titre-${cote}"><div role="rowgroup" class="sftp-entete"></div><div role="rowgroup" class="sftp-espace"></div></div>
       <div class="sftp-message" hidden></div></div>
     <p class="muet petit m0 sftp-pied" aria-live="polite"></p>`;
   rendreListe(cote);
@@ -6684,8 +6686,11 @@ function rendreListe(cote) {
     : p.filtre.trim() ? [t("Nothing matches “{0}”", [p.filtre.trim()]), t("Clear the filter to see the whole folder.")] : [t("Only hidden files here"), t("Press Hidden files to show them.")];
   m.hidden = !etat; m.classList.toggle("erreur-etat", !!p.erreur); m.setAttribute("role", p.erreur ? "alert" : "status");
   if (etat) m.innerHTML = `<p class="m0"><b>${h(etat[0])}</b></p>${etat[1] ? `<p class="muet petit m0">${h(etat[1])}</p>` : ""}`;
-  el.querySelector(".sftp-pied").textContent = p.chemin === null || p.erreur ? "" : [t("Items: {0}", [p.vues.length]), p.choisi.size ? t("Selected: {0}", [p.choisi.size]) : "", p.tronque ? t("Only the first entries of this very large folder are shown.") : ""].filter(Boolean).join(" · ");
-  rendreLignes(cote);
+  piedSftp(cote); rendreLignes(cote);
+}
+function piedSftp(cote) {
+  const p = sf[cote], el = $(`.sftp-panneau[data-cote="${cote}"] .sftp-pied`); if (!el) return;
+  el.textContent = p.chemin === null || p.erreur ? "" : [t("Items: {0}", [p.vues.length]), p.choisi.size ? t("Selected: {0}", [p.choisi.size]) : "", p.tronque ? t("Only the first entries of this very large folder are shown.") : ""].filter(Boolean).join(" · ");
 }
 const dateSftp = (s) => new Intl.DateTimeFormat(document.documentElement.lang || "en", { dateStyle: "medium", timeStyle: "short" }).format(s * 1000);
 function ligneSftp(cote, x, i) {
@@ -6693,12 +6698,13 @@ function ligneSftp(cote, x, i) {
   r.className = "sftp-ligne sftp-entree" + (x.nom.startsWith(".") ? " cache" : "") + (p.choisi.has(x.nom) ? " choisi" : "") + (i === p.actif ? " actif" : "");
   r.id = `sftp-${cote}-${i}`; r.dataset.i = i; r.style.top = i * LIGNE_SFTP + "px";
   r.setAttribute("role", "row"); r.setAttribute("aria-rowindex", i + 2); r.setAttribute("aria-selected", p.choisi.has(x.nom));
-  const n = cel("nom"), ico = document.createElement("span"), txt = document.createElement("span"), nom = document.createElement("span");
+  const n = cel("nom"), prise = document.createElement("span"), ico = document.createElement("span"), txt = document.createElement("span"), nom = document.createElement("span");
+  prise.className = "sftp-prise"; prise.draggable = true; // dragged by its name; the other cells start a selection zone
   ico.className = "ic ic-" + (x.lien ? "lien" : x.dossier ? "dossier" : "fichier"); ico.setAttribute("aria-hidden", "true");
   txt.className = "sftp-texte"; nom.className = "sftp-nom"; nom.textContent = nom.title = x.nom; txt.append(nom);
   const sous = [cote === "serveur" ? x.mode : "", x.lien ? "→ " + (x.cible || t("Link")) : ""].filter(Boolean).join("  ");
   if (sous) { const s = document.createElement("span"); s.className = "sftp-sous"; s.textContent = sous; txt.append(s); }
-  n.append(ico, txt);
+  prise.append(ico, txt); n.append(prise);
   cel("date", x.modifie ? dateSftp(x.modifie) : ""); cel("taille", x.dossier ? "" : tailleSftp(x.taille)); cel("type", typeSftp(x));
   return r;
 }
@@ -6714,20 +6720,38 @@ function rendreLignes(cote, force) {
   esp.replaceChildren(f);
   if (p.actif >= 0 && $(`#sftp-${cote}-${p.actif}`)) g.setAttribute("aria-activedescendant", `sftp-${cote}-${p.actif}`); else g.removeAttribute("aria-activedescendant");
 }
-// a row becomes the active one (and the selection): scrolled into view
-function activerSftp(cote, i) {
+// a row becomes the active one, scrolled into view: the selection (etendre: from the anchor to it, as Shift does)
+function activerSftp(cote, i, etendre) {
   const p = sf[cote], g = grilleSftp(cote); if (!g || !p.vues.length) return;
-  i = Math.max(0, Math.min(p.vues.length - 1, i)); p.actif = i; p.choisi = new Set([p.vues[i].nom]);
+  i = Math.max(0, Math.min(p.vues.length - 1, i)); p.actif = i;
+  if (etendre && p.ancre >= 0) p.choisi = new Set(p.vues.slice(Math.min(p.ancre, i), Math.max(p.ancre, i) + 1).map((x) => x.nom));
+  else { p.choisi = new Set([p.vues[i].nom]); p.ancre = i; }
   const haut = g.querySelector(".sftp-entete").offsetHeight, y = haut + i * LIGNE_SFTP;
   if (y < g.scrollTop + haut) g.scrollTop = y - haut; else if (y + LIGNE_SFTP > g.scrollTop + g.clientHeight) g.scrollTop = y + LIGNE_SFTP - g.clientHeight;
   rendreLignes(cote); // the rows stay the same nodes (a double click needs both clicks on one): only their state changes
-  g.querySelectorAll(".sftp-entree").forEach((r) => { const x = p.vues[+r.dataset.i], oui = p.choisi.has(x.nom); r.classList.toggle("choisi", oui); r.classList.toggle("actif", +r.dataset.i === i); r.setAttribute("aria-selected", oui); });
-  g.setAttribute("aria-activedescendant", `sftp-${cote}-${i}`);
-  $(`.sftp-panneau[data-cote="${cote}"] .sftp-pied`).textContent = [t("Items: {0}", [p.vues.length]), t("Selected: {0}", [1])].join(" · ");
+  majChoixSftp(cote);
 }
-function ouvrirSftp(cote, i) {
-  const p = sf[cote], x = p.vues[i];
-  if (x && x.dossier) chargerPanneau(cote, cheminDe(cote, x.nom));
+function majChoixSftp(cote) {
+  const p = sf[cote], g = grilleSftp(cote); if (!g) return;
+  g.querySelectorAll(".sftp-entree").forEach((r) => { const x = p.vues[+r.dataset.i], oui = p.choisi.has(x.nom); r.classList.toggle("choisi", oui); r.classList.toggle("actif", +r.dataset.i === p.actif); r.setAttribute("aria-selected", oui); });
+  if (p.actif >= 0 && $(`#sftp-${cote}-${p.actif}`)) g.setAttribute("aria-activedescendant", `sftp-${cote}-${p.actif}`);
+  piedSftp(cote);
+}
+// a click on a row: alone, Ctrl (Cmd) adds or removes it, Shift takes the rows from the anchor
+function cliquerSftp(cote, i, ev) {
+  const p = sf[cote], x = p.vues[i]; if (!x) return;
+  if (ev.shiftKey) return activerSftp(cote, i, true);
+  if (!(ev.ctrlKey || ev.metaKey)) return activerSftp(cote, i);
+  if (p.choisi.has(x.nom)) p.choisi.delete(x.nom); else p.choisi.add(x.nom);
+  p.actif = p.ancre = i; majChoixSftp(cote);
+}
+const choisisSftp = (cote) => sf[cote].vues.filter((x) => sf[cote].choisi.has(x.nom));
+const LOCAL_FERME = () => t("Athanor never opens nor runs this computer's files: send it to the server to view it there.");
+function ouvrirSftp(cote, i) { const x = sf[cote].vues[i]; if (x) ouvrirEntreeSftp(cote, x); }
+function ouvrirEntreeSftp(cote, x) {
+  if (x.dossier) return chargerPanneau(cote, cheminDe(cote, x.nom));
+  if (cote === "local") return toast(LOCAL_FERME());
+  editerSftp(x);
 }
 function historiqueSftp(cote, sens) {
   const p = sf[cote], de = sens < 0 ? p.avant : p.apres, vers = sens < 0 ? p.apres : p.avant;
@@ -6742,8 +6766,10 @@ function saisieSftp(cote, oui) {
 // the SFTP tab: both panels, the Local one read the first time the tab shows
 function rendreSftp() {
   const el = $("#sftp"); if (!el) return;
-  if (!el.childElementCount) el.innerHTML = `<div class="sftp-panneau" data-cote="local" role="region" aria-labelledby="sftp-titre-local"></div><div class="sftp-panneau" data-cote="serveur" role="region" aria-labelledby="sftp-titre-serveur"></div>`;
-  rendrePanneau("local"); rendrePanneau("serveur");
+  if (!el.childElementCount) el.innerHTML = `<div class="sftp-panneau" data-cote="local" role="region" aria-labelledby="sftp-titre-local"></div><div class="sftp-panneau" data-cote="serveur" role="region" aria-labelledby="sftp-titre-serveur"></div>
+    <section class="sftp-transferts" id="sftp-transferts" aria-labelledby="sftp-transferts-titre" hidden></section><p class="cache-visuel" id="sftp-annonce" aria-live="polite"></p>`;
+  rendrePanneau("local"); rendrePanneau("serveur"); rendreTransferts();
+  if (sf.onglet === "sftp") lireTransferts();
   if (sf.onglet === "sftp" && sf.local.chemin === null && !sf.local.charge && !sf.local.erreur) chargerPanneau("local", "");
 }
 function majIA() {
@@ -6755,10 +6781,16 @@ function ongletTerminal(o) {
   if (o === "terminal" && term.x) requestAnimationFrame(() => { term.fit.fit(); term.x.focus(); });
   if (o === "sftp") rendreSftp();
 }
+function basculerCachesSftp() {
+  sf.caches = !sf.caches; localStorage.setItem("athanor.sftp.caches", sf.caches ? "1" : "0");
+  document.querySelectorAll("[data-sftp-caches]").forEach((x) => x.setAttribute("aria-pressed", sf.caches));
+  rendreListe("local"); rendreListe("serveur");
+}
 $("#page").addEventListener("click", (ev) => {
   if (etat.page !== "terminal") return;
-  const b = ev.target.closest("[data-term-onglet], [data-term-ia], [data-sftp-precedent], [data-sftp-suivant], [data-sftp-parent], [data-sftp-aller], [data-sftp-actualiser], [data-sftp-caches], [data-sftp-tri], .sftp-chemin, .sftp-entree");
+  const b = ev.target.closest("[data-term-onglet], [data-term-ia], [data-sftp-precedent], [data-sftp-suivant], [data-sftp-parent], [data-sftp-aller], [data-sftp-actualiser], [data-sftp-caches], [data-sftp-tri], [data-sftp-menu], [data-sftp-tr], .sftp-chemin, .sftp-entree");
   if (!b) return;
+  if (b.dataset.sftpTr) return agirTransfert(b.dataset.sftpTr, b.dataset.action);
   const d = b.dataset, cote = b.closest("[data-cote]")?.dataset.cote, p = sf[cote];
   if (d.termOnglet) return ongletTerminal(d.termOnglet);
   if (d.termIa !== undefined) {
@@ -6766,11 +6798,7 @@ $("#page").addEventListener("click", (ev) => {
     if (ia.visible) { rendreIA(); $("#ia-texte")?.focus(); }
     return;
   }
-  if (d.sftpCaches !== undefined) {
-    sf.caches = !sf.caches; localStorage.setItem("athanor.sftp.caches", sf.caches ? "1" : "0");
-    document.querySelectorAll("[data-sftp-caches]").forEach((x) => x.setAttribute("aria-pressed", sf.caches));
-    rendreListe("local"); rendreListe("serveur"); return;
-  }
+  if (d.sftpCaches !== undefined) return basculerCachesSftp();
   if (!p) return;
   sf.dernier = cote;
   if (d.sftpPrecedent !== undefined) return historiqueSftp(cote, -1);
@@ -6783,7 +6811,9 @@ $("#page").addEventListener("click", (ev) => {
     p.actif = -1; rendreListe(cote); return $(`.sftp-panneau[data-cote="${cote}"] [data-sftp-tri="${d.sftpTri}"]`)?.focus();
   }
   if (b.classList.contains("sftp-chemin")) return p.saisie || saisieSftp(cote, true);
-  if (d.i !== undefined) { activerSftp(cote, +d.i); grilleSftp(cote).focus(); }
+  if (d.sftpMenu !== undefined) return $("#sftp-menu")?.dataset.cote === cote ? fermerMenuSftp(true) : menuSftp(cote);
+  if (d.i !== undefined && !sf.zoneFaite) { cliquerSftp(cote, +d.i, ev); grilleSftp(cote).focus(); }
+  sf.zoneFaite = false;
 });
 $("#page").addEventListener("dblclick", (ev) => {
   const r = etat.page === "terminal" && ev.target.closest(".sftp-entree"), cote = r && r.closest("[data-cote]").dataset.cote;
@@ -6808,9 +6838,13 @@ $("#page").addEventListener("keydown", (ev) => {
   if (!ev.target.matches(".sftp-grille")) return;
   const page = Math.max(1, Math.floor(ev.target.clientHeight / LIGNE_SFTP) - 1);
   const vers = { ArrowDown: p.actif + 1, ArrowUp: p.actif < 0 ? 0 : p.actif - 1, Home: 0, End: p.vues.length - 1, PageDown: p.actif + page, PageUp: p.actif - page }[k];
-  if (vers !== undefined) { ev.preventDefault(); return activerSftp(cote, vers); }
+  if (vers !== undefined) { ev.preventDefault(); return activerSftp(cote, vers, ev.shiftKey); }
   if (k === "Enter" && p.actif >= 0) { ev.preventDefault(); return ouvrirSftp(cote, p.actif); }
-  if (k === "Backspace" && p.parent) { ev.preventDefault(); chargerPanneau(cote, p.parent); }
+  if (k === "Backspace" && p.parent) { ev.preventDefault(); return chargerPanneau(cote, p.parent); }
+  if ((ev.ctrlKey || ev.metaKey) && k.toLowerCase() === "a") { ev.preventDefault(); return actionSftp(cote, "tout"); }
+  const raccourci = { F2: "renommer", Delete: "supprimer", ContextMenu: "" }[k];
+  if (raccourci === "") { ev.preventDefault(); return menuSftp(cote); }
+  if (raccourci) { ev.preventDefault(); const a = actionsSftp(cote).find((x) => x[0] === raccourci); if (a[2]) toast(a[2]); else actionSftp(cote, raccourci); }
 });
 $("#page").addEventListener("input", (ev) => {
   if (etat.page !== "terminal" || !ev.target.matches(".sftp-filtre")) return;
@@ -6826,6 +6860,415 @@ $("#page").addEventListener("focusin", (ev) => { const c = etat.page === "termin
 $("#page").addEventListener("scroll", (ev) => { // capture: a list's own scroll does not bubble
   if (ev.target.classList?.contains("sftp-grille")) requestAnimationFrame(() => rendreLignes(ev.target.closest("[data-cote]").dataset.cote));
 }, true);
+// --- SFTP actions (note 12h34): the Actions menu of each panel (also a right click, F2, Delete, Ctrl+A), the
+// dialogs (a name, the permissions, a text file), drag and drop between the panels or from the system's explorer,
+// and the transfers at the bottom (the queue lives in Go: serveurs_sftp_transferts.go; the page polls it).
+async function agirSftp(cote, corps) {
+  const r = await fetch(cote === "local" ? "/api/serveurs/local/sftp" : urlSftp(), { method: "POST", headers: { "X-Athanor": CSRF, "Content-Type": "application/json" }, body: JSON.stringify(corps) }).catch(() => null);
+  const d = r ? await r.json().catch(() => ({})) : {};
+  if (!r || !r.ok) { toast(erreurSftp(r, d), "erreur"); return null; }
+  return d;
+}
+// [id, label, reason it is greyed out (or ""), shortcut]
+function actionsSftp(cote) {
+  const p = sf[cote], l = choisisSftp(cote), o = sf[cote === "local" ? "serveur" : "local"], n = l.length;
+  const racines = p.chemin === RACINES_SFTP, ouvert = p.chemin !== null && !p.erreur && !p.charge;
+  const aucun = !n ? t("Select a file or folder first.") : "", un = n > 1 ? t("Select only one item.") : "";
+  const disque = racines && n ? t("A disk cannot be changed from here: open it first.") : "";
+  const protege = l.some((x) => x.protege) ? t("Athanor's data folder (vault, keys, settings) is never changed nor sent from here.") : "";
+  const session = !term.session ? t("Connect the terminal first.") : "";
+  const cible = o.chemin === null || o.chemin === RACINES_SFTP || o.erreur ? t("Open a folder in the other panel first.") : "";
+  return [
+    ["ouvrir", t("Open"), aucun || un || (cote === "local" && !l[0].dossier ? LOCAL_FERME() : ""), "Enter"],
+    ["copier", cote === "local" ? t("Send to the server") : t("Download to this computer"), aucun || session || disque || protege || cible, ""],
+    ["renommer", t("Rename"), aucun || un || disque || protege, "F2"],
+    ["supprimer", t("Delete"), aucun || disque || protege, t("Del")],
+    ["permissions", t("Permissions"), cote === "local" ? t("Permissions are changed on the server's files only.") : aucun, ""],
+    ["dossier", t("New folder"), !ouvert || racines ? t("Open a folder first.") : "", ""],
+    ["actualiser", t("Refresh"), cote === "serveur" && session, ""],
+    ["caches", sf.caches ? t("Hide hidden files") : t("Show hidden files"), "", ""],
+    ["tout", t("Select all"), !p.vues.length ? t("Nothing to select in this folder.") : "", MAC ? "Cmd+A" : "Ctrl+A"],
+  ];
+}
+// the menu: under its button, or at the pointer (a right click); the greyed items say why, and stay readable
+function menuSftp(cote, x, y) {
+  fermerMenuSftp();
+  const pan = $(`.sftp-panneau[data-cote="${cote}"]`), b = pan?.querySelector("[data-sftp-menu]"); if (!b || b.disabled) return;
+  const m = document.createElement("div");
+  m.className = "sftp-menu"; m.id = "sftp-menu"; m.dataset.cote = cote; m.setAttribute("role", "menu"); m.setAttribute("aria-label", t("Actions"));
+  m.innerHTML = actionsSftp(cote).map(([id, nom, raison, touche]) => `<button type="button" role="menuitem" tabindex="-1" class="sftp-menu-item" data-sftp-act="${id}"${raison ? ` aria-disabled="true" aria-describedby="sftp-raison-${id}"` : ""}>
+    <span class="sftp-menu-nom">${h(nom)}${touche ? `<kbd>${h(touche)}</kbd>` : ""}</span>${raison ? `<span class="sftp-raison" id="sftp-raison-${id}">${h(raison)}</span>` : ""}</button>`).join("");
+  document.body.append(m);
+  const r = b.getBoundingClientRect(), l = m.offsetWidth, hm = m.offsetHeight;
+  const gauche = x ?? r.right - l, haut = y ?? (r.bottom + hm + 8 < innerHeight ? r.bottom + 4 : r.top - hm - 4);
+  m.style.left = Math.max(8, Math.min(innerWidth - l - 8, gauche)) + "px"; m.style.top = Math.max(8, Math.min(innerHeight - hm - 8, haut)) + "px";
+  b.setAttribute("aria-expanded", "true");
+  (m.querySelector(".sftp-menu-item:not([aria-disabled])") || m.querySelector(".sftp-menu-item")).focus();
+}
+function fermerMenuSftp(rendre) {
+  const m = $("#sftp-menu"); if (!m) return;
+  const b = $(`.sftp-panneau[data-cote="${m.dataset.cote}"] [data-sftp-menu]`);
+  m.remove(); b?.setAttribute("aria-expanded", "false");
+  if (rendre) b?.focus();
+}
+document.addEventListener("click", (ev) => {
+  const m = $("#sftp-menu"); if (!m) return;
+  const it = ev.target.closest("#sftp-menu [data-sftp-act]");
+  if (it) { if (it.getAttribute("aria-disabled") !== "true") { fermerMenuSftp(); actionSftp(m.dataset.cote, it.dataset.sftpAct); } return; }
+  if (!ev.target.closest("[data-sftp-menu]")) fermerMenuSftp();
+}, true);
+document.addEventListener("keydown", (ev) => {
+  const m = $("#sftp-menu"); if (!m || !m.contains(document.activeElement)) return;
+  const l = [...m.querySelectorAll(".sftp-menu-item")], i = l.indexOf(document.activeElement);
+  const vers = { ArrowDown: i + 1, ArrowUp: i - 1, Home: 0, End: l.length - 1 }[ev.key];
+  if (vers !== undefined) { ev.preventDefault(); l[(vers + l.length) % l.length].focus(); }
+  else if (ev.key === "Escape" || ev.key === "Tab") { ev.preventDefault(); fermerMenuSftp(true); }
+});
+document.addEventListener("focusin", (ev) => { const m = $("#sftp-menu"); if (m && !m.contains(ev.target) && !ev.target.closest?.("[data-sftp-menu]")) fermerMenuSftp(); });
+$("#page").addEventListener("contextmenu", (ev) => { // a right click on a row: that row (kept if already selected), then the menu at the pointer
+  const r = etat.page === "terminal" && ev.target.closest(".sftp-entree"); if (!r) return;
+  const cote = r.closest("[data-cote]").dataset.cote, x = sf[cote].vues[+r.dataset.i];
+  ev.preventDefault();
+  if (x && !sf[cote].choisi.has(x.nom)) activerSftp(cote, +r.dataset.i);
+  menuSftp(cote, ev.clientX, ev.clientY);
+});
+function actionSftp(cote, id) {
+  const p = sf[cote], l = choisisSftp(cote);
+  sf.dernier = cote;
+  if (id === "ouvrir") return ouvrirEntreeSftp(cote, l[0]);
+  if (id === "copier") return copierSftp(cote, l.map((x) => x.nom));
+  if (id === "renommer") return renommerSftp(cote, l[0]);
+  if (id === "supprimer") return supprimerSftp(cote, l);
+  if (id === "permissions") return permissionsSftp(l);
+  if (id === "dossier") return nouveauDossierSftp(cote);
+  if (id === "actualiser") return chargerPanneau(cote, p.chemin === null ? "" : p.chemin, "actualiser");
+  if (id === "caches") return basculerCachesSftp();
+  if (id === "tout") { p.choisi = new Set(p.vues.map((x) => x.nom)); p.ancre = 0; majChoixSftp(cote); grilleSftp(cote)?.focus(); }
+}
+// modaleSftp(titre, corps html, [{ id, texte, primaire, danger }], { large, init(el), valider(id, el) → true to close })
+// → Promise<id | null>. Escape or a click outside: null. Above the page, below the app's confirmation dialog.
+function modaleSftp(titre, corps, boutons, o = {}) {
+  const fond = document.createElement("div"), avant = document.activeElement, garde = gardePopup();
+  fond.className = "dialogue sftp-modale" + (o.large ? " dialogue-large" : ""); fond.setAttribute("role", "dialog"); fond.setAttribute("aria-modal", "true"); fond.setAttribute("aria-labelledby", "sftp-modale-titre");
+  fond.innerHTML = `<div class="dialogue-carte"><h3 id="sftp-modale-titre">${h(titre)}</h3>${corps}<p class="erreur petit m0" role="alert" hidden></p>
+    <div class="dialogue-boutons">${boutons.map((b) => `<button type="button" class="btn ${b.primaire ? "btn-primaire" : b.danger ? "btn-danger" : ""}" data-m="${h(b.id)}">${h(b.texte)}</button>`).join("")}</div></div>`;
+  document.body.append(fond);
+  o.init?.(fond);
+  (fond.querySelector("input:not([type=checkbox]), textarea") || fond.querySelector("[data-m]")).focus();
+  return new Promise((resoudre) => {
+    let occupe = false;
+    const fin = (v) => { fond.remove(); document.removeEventListener("keydown", clavier, true); if (avant?.isConnected) avant.focus(); resoudre(v); };
+    const choisir = async (id) => {
+      if (occupe) return;
+      if (o.valider) { occupe = true; const ok = await o.valider(id, fond).catch(() => false); occupe = false; if (!ok) return; }
+      fin(id);
+    };
+    const clavier = (e) => {
+      if (!$("#dialogue").hidden || !$("#choix").hidden) return; // the confirmation on top has the keys
+      if (garde.touche(e)) { e.preventDefault(); e.stopPropagation(); return; }
+      if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); choisir(null); }
+      else if (e.key === "Enter" && e.target.matches("input:not([type=checkbox])")) { e.preventDefault(); e.stopPropagation(); const b = fond.querySelector(".btn-primaire, .btn-danger"); if (b && !b.disabled) choisir(b.dataset.m); }
+      else if (e.key === "Tab") {
+        const l = [...fond.querySelectorAll("input, textarea, button:not([disabled])")].filter((x) => x.offsetWidth), i = l.indexOf(document.activeElement);
+        e.preventDefault(); l[(i + (e.shiftKey ? l.length - 1 : 1)) % l.length]?.focus();
+      }
+    };
+    fond.addEventListener("click", (e) => { const b = e.target.closest("[data-m]"); if (b) { if (!garde.clic(e)) choisir(b.dataset.m); } else if (e.target === fond) choisir(null); });
+    document.addEventListener("keydown", clavier, true);
+  });
+}
+const erreurModale = (el, m) => { const p = el.querySelector("[role=alert]"); p.textContent = m || ""; p.hidden = !m; return false; };
+// a name typed in a dialog ("" when cancelled): the part before the extension is selected, as in a file explorer
+async function nomSftp(titre, texte, valeur, ok) {
+  let nom = "";
+  const r = await modaleSftp(titre, `<label class="champ-bloc"><span>${h(texte)}</span><input type="text" class="sftp-nom-champ" spellcheck="false" autocomplete="off"></label>`,
+    [{ id: "", texte: t("Cancel") }, { id: "ok", texte: ok, primaire: true }], {
+      init: (el) => { const c = el.querySelector("input"); c.value = valeur; requestAnimationFrame(() => c.setSelectionRange(0, valeur.lastIndexOf(".") > 0 ? valeur.lastIndexOf(".") : valeur.length)); },
+      valider: async (id, el) => {
+        if (id !== "ok") return true;
+        nom = el.querySelector("input").value.trim();
+        return nom && !/[/\\]/.test(nom) && nom !== "." && nom !== ".." ? true : erreurModale(el, t("Give a name without / nor \\."));
+      } });
+  return r === "ok" ? nom : "";
+}
+async function renommerSftp(cote, x) {
+  const nom = await nomSftp(t("Rename"), t("New name for “{0}”", [x.nom]), x.nom, t("Rename"));
+  if (!nom || nom === x.nom) return;
+  if (await agirSftp(cote, { renommer: cheminDe(cote, x.nom), nom })) { sf[cote].choisi = new Set([nom]); chargerPanneau(cote, sf[cote].chemin, "actualiser"); annoncerSftp(t("Renamed: {0}", [nom])); }
+}
+async function nouveauDossierSftp(cote) {
+  const nom = await nomSftp(t("New folder"), t("Name of the new folder"), "", t("Create"));
+  if (nom && await agirSftp(cote, { dossier: sf[cote].chemin, nom })) { sf[cote].choisi = new Set([nom]); chargerPanneau(cote, sf[cote].chemin, "actualiser"); annoncerSftp(t("Folder created: {0}", [nom])); }
+}
+// a deletion says what goes first: one file by its name, otherwise how many files and folders, their size and paths
+async function supprimerSftp(cote, l) {
+  let fichiers = 0, dossiers = 0, taille = 0, tronque = false; const chemins = [];
+  for (const x of l) {
+    if (!x.dossier || x.lien) { fichiers++; taille += x.taille; chemins.push(cheminDe(cote, x.nom)); continue; }
+    const d = await agirSftp(cote, { inventaire: cheminDe(cote, x.nom) }); if (!d) return;
+    fichiers += d.fichiers; dossiers += d.dossiers; taille += d.taille; tronque ||= d.tronque; chemins.push(...d.chemins);
+  }
+  const seul = l.length === 1 && (!l[0].dossier || l[0].lien);
+  const message = seul ? t("Delete “{0}”? This cannot be undone.", [l[0].nom])
+    : t("Delete {0} files and {1} folders ({2})? This cannot be undone.", [fichiers + (tronque ? "+" : ""), dossiers, tailleSftp(taille)]) + "\n\n" + chemins.slice(0, 8).join("\n")
+      + (chemins.length > 8 || tronque ? "\n" + t("…and more.") : "");
+  if (!(await confirmer(message, { titre: t("Delete"), ok: t("Delete"), danger: true }))) return;
+  for (const x of l) if (!(await agirSftp(cote, { supprimer: cheminDe(cote, x.nom) }))) break;
+  sf[cote].choisi.clear(); chargerPanneau(cote, sf[cote].chemin, "actualiser");
+  annoncerSftp(t("Deleted: {0}", [l.length === 1 ? l[0].nom : t("{0} items", [l.length])]));
+}
+// permissions: a box per right (owner, group, others × read, write, run) and the octal value, kept in step
+const modeDe = (m) => (m || "").slice(-9).split("").reduce((v, c, i) => v | (c !== "-" ? 1 << (8 - i) : 0), 0);
+async function permissionsSftp(l) {
+  const qui = [t("Owner"), t("Group"), t("Others")], quoi = [t("Read"), t("Write"), t("Run")];
+  const grille = `<p class="muet petit">${h(l.length > 1 ? t("Applies to the {0} selected items.", [l.length]) : l[0].nom)}</p>
+    <table class="sftp-droits"><thead><tr><th></th>${quoi.map((x) => `<th scope="col">${h(x)}</th>`).join("")}</tr></thead><tbody>
+    ${qui.map((q, i) => `<tr><th scope="row">${h(q)}</th>${quoi.map((x, j) => `<td><input type="checkbox" data-bit="${8 - i * 3 - j}" aria-label="${h(q + " : " + x)}"></td>`).join("")}</tr>`).join("")}</tbody></table>
+    <label class="champ-bloc"><span>${h(t("Octal value"))}</span><input type="text" class="sftp-octal" inputmode="numeric" maxlength="4" spellcheck="false" autocomplete="off"></label>`;
+  let mode = "";
+  const r = await modaleSftp(t("Permissions"), grille, [{ id: "", texte: t("Cancel") }, { id: "ok", texte: t("Apply"), primaire: true }], {
+    init: (el) => {
+      const champ = el.querySelector(".sftp-octal"), cases = [...el.querySelectorAll("[data-bit]")];
+      const vers = (v) => cases.forEach((c) => (c.checked = !!(v & (1 << +c.dataset.bit))));
+      champ.value = modeDe(l[0].mode).toString(8).padStart(3, "0"); vers(modeDe(l[0].mode));
+      el.addEventListener("change", (e) => { if (e.target.dataset.bit) champ.value = cases.reduce((v, c) => v | (c.checked ? 1 << +c.dataset.bit : 0), 0).toString(8).padStart(3, "0"); });
+      champ.addEventListener("input", () => { if (/^[0-7]{3,4}$/.test(champ.value)) vers(parseInt(champ.value.slice(-3), 8)); });
+    },
+    valider: async (id, el) => {
+      if (id !== "ok") return true;
+      mode = el.querySelector(".sftp-octal").value.trim();
+      if (!/^[0-7]{3,4}$/.test(mode)) return erreurModale(el, t("Give an octal value such as 755 or 644."));
+      return !!(await agirSftp("serveur", { permissions: l.map((x) => cheminDe("serveur", x.nom)), mode }));
+    } });
+  if (r === "ok") { chargerPanneau("serveur", sf.serveur.chemin, "actualiser"); annoncerSftp(t("Permissions set to {0}", [mode])); }
+}
+// a text file of 1 MB or less opens in a dialog to read and edit; saved on the server after a confirmation.
+// Anything else is downloaded, never run.
+async function editerSftp(x) {
+  const chemin = cheminDe("serveur", x.nom);
+  if (x.taille > 1 << 20) { toast(t("This file is larger than 1 MB: it is downloaded instead.")); return telechargerSftp(chemin, x.nom); }
+  const r = await fetch(urlSftp("/texte?chemin=" + encodeURIComponent(chemin)), { headers: { "X-Athanor": CSRF } }).catch(() => null);
+  const d = r ? await r.json().catch(() => ({})) : {};
+  if (r?.status === 422) { toast(t("This is not a text file: it is downloaded instead.")); return telechargerSftp(chemin, x.nom); }
+  if (!r || !r.ok) return toast(erreurSftp(r, d), "erreur");
+  let modifie = d.modifie, initial = d.contenu;
+  const r2 = await modaleSftp(x.nom, `<p class="muet petit m0 sftp-editeur-chemin">${h(chemin)}</p><textarea class="sftp-editeur" spellcheck="false" aria-label="${h(t("Content of {0}", [x.nom]))}"></textarea>`,
+    [{ id: "fermer", texte: t("Close") }, { id: "telecharger", texte: t("Download") }, { id: "enregistrer", texte: t("Save"), primaire: true }], {
+      large: true,
+      init: (el) => {
+        const z = el.querySelector("textarea"), b = el.querySelector('[data-m="enregistrer"]');
+        z.value = initial; b.disabled = true; z.addEventListener("input", () => (b.disabled = z.value === initial));
+      },
+      valider: async (id, el) => {
+        const z = el.querySelector("textarea"), change = z.value !== initial;
+        if (id === "telecharger") { telechargerSftp(chemin, x.nom); return false; }
+        if (id !== "enregistrer") return !change || confirmer(t("Close without saving your changes?"), { ok: t("Close"), danger: true });
+        if (!change || !(await confirmer(t("Save “{0}” on the server? Its content there is replaced.", [x.nom]), { ok: t("Save") }))) return false;
+        const e = await fetch(urlSftp("/texte"), { method: "POST", headers: { "X-Athanor": CSRF, "Content-Type": "application/json" }, body: JSON.stringify({ chemin, contenu: z.value, modifie }) }).catch(() => null);
+        const de = e ? await e.json().catch(() => ({})) : {};
+        if (!e || !e.ok) return erreurModale(el, erreurSftp(e, de));
+        initial = z.value; modifie = de.modifie; el.querySelector('[data-m="enregistrer"]').disabled = true;
+        erreurModale(el, ""); toast(t("{0} saved on the server.", [x.nom]), "ok"); annoncerSftp(t("Saved: {0}", [x.nom]));
+        chargerPanneau("serveur", sf.serveur.chemin, "actualiser");
+        return false; // the file stays open
+      } });
+  return r2;
+}
+// C1-14: a single-use ticket, then the browser's own download streams the file (never held whole in the page)
+async function telechargerSftp(chemin, nom) {
+  const r = await fetch(urlSftp("/ticket"), { method: "POST", headers: { "X-Athanor": CSRF, "Content-Type": "application/json" }, body: JSON.stringify({ chemin }) }).catch(() => null);
+  const d = r ? await r.json().catch(() => ({})) : {};
+  if (!r || !r.ok || !d.ticket) return toast(erreurSftp(r, d), "erreur");
+  const a = document.createElement("a"); a.href = urlSftp("/ticket/" + encodeURIComponent(d.ticket)); a.download = nom;
+  document.body.append(a); a.click(); a.remove();
+}
+// copy to the other panel: a transfer of the Go queue (envoi or telechargement) into dossier, by default the other
+// panel's folder
+async function copierSftp(de, noms, dossier) {
+  const vers = de === "local" ? "serveur" : "local";
+  if (!term.session) return toast(t("Connect the terminal first."), "erreur");
+  if (!noms.length) return;
+  const r = await fetch(urlSftp("/transferts"), { method: "POST", headers: { "X-Athanor": CSRF, "Content-Type": "application/json" },
+    body: JSON.stringify({ sens: de === "local" ? "envoi" : "telechargement", sources: noms.map((n) => cheminDe(de, n)), dossier: dossier || sf[vers].chemin }) }).catch(() => null);
+  const d = r ? await r.json().catch(() => ({})) : {};
+  if (!r || !r.ok) return toast(erreurSftp(r, d), "erreur");
+  for (const id of d.transferts || []) sf.etats[id] ??= "attente"; // known as ours: a transfer done before the first poll still refreshes the panel
+  lireTransferts();
+}
+// --- drag and drop: a row's name to the other panel (or onto one of its folders); files from the system's explorer
+// onto the server panel. A selection zone starts on a row's other cells or on the empty space.
+$("#page").addEventListener("dragstart", (ev) => {
+  const r = etat.page === "terminal" && ev.target.closest?.(".sftp-entree"); if (!r) return;
+  const cote = r.closest("[data-cote]").dataset.cote, p = sf[cote], x = p.vues[+r.dataset.i];
+  if (!p.choisi.has(x.nom)) activerSftp(cote, +r.dataset.i);
+  sf.glisse = cote;
+  ev.dataTransfer.effectAllowed = "copy";
+  ev.dataTransfer.setData("application/x-athanor-sftp", cote);
+});
+$("#page").addEventListener("dragend", () => { sf.glisse = ""; document.querySelectorAll(".sftp-panneau.depot").forEach((x) => x.classList.remove("depot")); });
+// where a drop lands: the folder row under it, else the panel's folder ("" when nothing can be dropped there)
+function depotSftp(ev) {
+  const pan = etat.page === "terminal" && ev.target.closest?.(".sftp-panneau"); if (!pan) return null;
+  const cote = pan.dataset.cote, p = sf[cote], fichiers = ev.dataTransfer?.types.includes("Files");
+  if (!(sf.glisse && sf.glisse !== cote) && !(fichiers && cote === "serveur")) return null;
+  if (p.chemin === null || p.chemin === RACINES_SFTP || p.erreur) return null;
+  const r = ev.target.closest(".sftp-entree"), x = r && p.vues[+r.dataset.i];
+  return { cote, pan, dossier: x && x.dossier && !x.protege ? cheminDe(cote, x.nom) : p.chemin };
+}
+$("#page").addEventListener("dragover", (ev) => {
+  const d = depotSftp(ev);
+  if (!d) { if (ev.target.closest?.(".sftp-panneau") && ev.dataTransfer.types.includes("Files")) { ev.preventDefault(); ev.dataTransfer.dropEffect = "none"; } return; } // never the browser opening the file
+  ev.preventDefault(); ev.dataTransfer.dropEffect = "copy";
+  document.querySelectorAll(".sftp-panneau.depot").forEach((x) => x !== d.pan && x.classList.remove("depot")); d.pan.classList.add("depot");
+});
+$("#page").addEventListener("dragleave", (ev) => { const pan = ev.target.closest?.(".sftp-panneau"); if (pan && !pan.contains(ev.relatedTarget)) pan.classList.remove("depot"); });
+$("#page").addEventListener("drop", (ev) => {
+  const pan = etat.page === "terminal" && ev.target.closest?.(".sftp-panneau"); if (!pan) return;
+  ev.preventDefault(); pan.classList.remove("depot");
+  const d = depotSftp(ev), de = sf.glisse; sf.glisse = "";
+  if (!d) return ev.dataTransfer.types.includes("Files") && toast(t("To send files from your file explorer, drop them on the server's panel."));
+  if (de && de !== d.cote) return copierSftp(de, choisisSftp(de).map((x) => x.nom), d.dossier);
+  const dossiers = [...ev.dataTransfer.items].some((i) => i.webkitGetAsEntry?.()?.isDirectory);
+  // shortcut: a folder from the explorer is refused (the browser gives no path); it goes through the Local panel
+  if (dossiers) toast(t("Folders cannot be dropped from your file explorer: open their parent in the Local panel and drag them from there."));
+  const f = [...ev.dataTransfer.files].filter((x, i) => !ev.dataTransfer.items[i]?.webkitGetAsEntry?.()?.isDirectory);
+  if (f.length) envoyerNavigateur(f, d.dossier);
+});
+// the selection zone: the rows it crosses (by their index: rows off screen too); Ctrl keeps the earlier selection
+$("#page").addEventListener("pointerdown", (ev) => {
+  const g = etat.page === "terminal" && ev.button === 0 && ev.pointerType === "mouse" && ev.target.closest?.(".sftp-grille");
+  if (!g || ev.target.closest(".sftp-prise, .sftp-entete") || ev.target === g && ev.offsetX > g.clientWidth) return; // not its scrollbar
+  const cote = g.closest("[data-cote]").dataset.cote, p = sf[cote], haut = g.querySelector(".sftp-entete").offsetHeight;
+  const y = (e) => e.clientY - g.getBoundingClientRect().top + g.scrollTop - haut, y0 = y(ev), base = ev.ctrlKey || ev.metaKey ? new Set(p.choisi) : new Set();
+  let zone = null;
+  const bouger = (e) => {
+    const y1 = y(e);
+    if (!zone && Math.abs(y1 - y0) < 6) return;
+    if (!zone) { zone = document.createElement("div"); zone.className = "sftp-zone"; g.append(zone); }
+    const a = Math.max(0, Math.min(y0, y1)), b = Math.max(y0, y1);
+    zone.style.top = haut + a + "px"; zone.style.height = b - a + "px";
+    const i0 = Math.floor(a / LIGNE_SFTP), i1 = Math.min(p.vues.length - 1, Math.floor(b / LIGNE_SFTP));
+    p.choisi = new Set(base); for (let i = i0; i <= i1; i++) p.choisi.add(p.vues[i].nom);
+    p.actif = i1 >= i0 ? (y1 > y0 ? i1 : i0) : -1; majChoixSftp(cote);
+  };
+  const lacher = () => { document.removeEventListener("pointermove", bouger); document.removeEventListener("pointerup", lacher); if (zone) { zone.remove(); sf.zoneFaite = true; g.focus(); } };
+  document.addEventListener("pointermove", bouger); document.addEventListener("pointerup", lacher);
+});
+// files from the explorer, sent by the page one after the other (a name taken: the same question as the queue's)
+async function envoyerNavigateur(fichiers, dossier) {
+  const d = await fetch(urlSftp("?chemin=" + encodeURIComponent(dossier)), { headers: { "X-Athanor": CSRF } }).then((r) => r.json()).catch(() => ({}));
+  const pris = new Set((d.entrees || []).map((x) => x.nom));
+  let tous = "";
+  for (const f of fichiers) {
+    if (!term.session) break;
+    let nom = f.name, remplacer = false;
+    if (pris.has(nom)) {
+      const c = tous ? { choix: tous } : await questionConflit(nom, dossier, fichiers.length > 1);
+      if (c?.tous) tous = c.choix;
+      if (!c || c.choix === "passer") continue;
+      if (c.choix === "garder") nom = nomLibreSftp(nom, pris); else remplacer = true;
+    }
+    pris.add(nom);
+    const e = { id: "n" + Math.random().toString(36).slice(2), sens: "envoi", par: "vous", nom, total: f.size, fait: 0, vitesse: 0, etat: "en_cours", page: true };
+    sf.envois.push(e); annoncerEtat(e); rendreTransferts();
+    const r = await new Promise((fin) => {
+      const x = new XMLHttpRequest(), t0 = performance.now(); e.xhr = x;
+      x.open("POST", urlSftp("/fichier?chemin=" + encodeURIComponent(joindreSftp(dossier, nom)) + (remplacer ? "&remplacer=1" : "")));
+      x.setRequestHeader("X-Athanor", CSRF); x.setRequestHeader("Content-Type", "application/octet-stream");
+      x.upload.onprogress = (p) => { e.fait = p.loaded; e.vitesse = Math.round(p.loaded / Math.max(0.001, (performance.now() - t0) / 1000)); rendreTransferts(); };
+      x.onload = () => { let j = {}; try { j = JSON.parse(x.responseText); } catch { /* not JSON */ } fin({ ok: x.status === 200, status: x.status, j }); };
+      x.onerror = () => fin({ ok: false, status: 0, j: {} });
+      x.onabort = () => fin({ annule: true });
+      x.send(f);
+    });
+    delete e.xhr;
+    Object.assign(e, r.annule ? { etat: "annule" } : r.ok ? { etat: "termine", fait: f.size } : { etat: "erreur", erreur: erreurSftp(r, r.j) });
+    annoncerEtat(e); rendreTransferts();
+  }
+  chargerPanneau("serveur", sf.serveur.chemin, "actualiser");
+}
+function nomLibreSftp(nom, pris) {
+  const i = nom.lastIndexOf("."), base = i > 0 ? nom.slice(0, i) : nom, ext = i > 0 ? nom.slice(i) : "";
+  for (let n = 1; ; n++) { const x = `${base} (${n})${ext}`; if (!pris.has(x)) return x; }
+}
+// the name is taken: replace, keep both or skip, never an overwrite without an answer (Escape: no answer yet)
+function questionConflit(nom, dossier, plusieurs) {
+  return choisir(t("“{0}” already exists in {1}. What do you want to do?", [nom, dossier]), [
+    { id: "passer", texte: t("Skip") }, { id: "garder", texte: t("Keep both") }, { id: "remplacer", texte: t("Replace"), danger: true }],
+  { titre: t("Name already taken"), case: plusieurs ? t("Apply to all the next conflicts") : "" }).then((r) => { const c = plusieurs ? r.choix : r; return c ? { choix: c, tous: plusieurs && r.coche } : null; });
+}
+// --- the transfers: polled while one is under way (or the SFTP tab is open), shown at the bottom, announced politely
+const ACTIF_TR = ["attente", "en_cours", "conflit"];
+async function lireTransferts() {
+  clearTimeout(sf.minuteur);
+  if (etat.page !== "terminal" || !term.session) return;
+  const r = await fetch(urlSftp("/transferts"), { headers: { "X-Athanor": CSRF } }).catch(() => null);
+  const d = r && r.ok ? await r.json().catch(() => null) : null;
+  if (d) {
+    const fini = { envoi: false, telechargement: false };
+    for (const x of d.transferts || []) { if (sf.etats[x.id] && sf.etats[x.id] !== x.etat && x.etat === "termine") fini[x.sens] = true; annoncerEtat(x); }
+    sf.transferts = d.transferts || []; rendreTransferts();
+    if (fini.envoi && sf.serveur.chemin) chargerPanneau("serveur", sf.serveur.chemin, "actualiser");
+    if (fini.telechargement && sf.local.chemin) chargerPanneau("local", sf.local.chemin, "actualiser");
+    const c = sf.transferts.find((x) => x.etat === "conflit" && !sf.ecartes.has(x.id));
+    if (c && !sf.question) demanderConflit(c);
+  }
+  const actifs = [...sf.transferts, ...sf.envois].some((x) => ACTIF_TR.includes(x.etat));
+  if (actifs || sf.onglet === "sftp") sf.minuteur = setTimeout(lireTransferts, actifs ? 700 : 4000);
+}
+async function demanderConflit(x) {
+  sf.question = x.id;
+  const r = await questionConflit(x.conflit || x.nom, x.cible ? x.cible.replace(/[\\/][^\\/]*$/, "") || "/" : x.sens === "envoi" ? t("the server") : t("this computer"), true);
+  sf.question = "";
+  if (!r) { sf.ecartes.add(x.id); return rendreTransferts(); } // asked again from its row
+  agirTransfert(x.id, r.choix, r.tous);
+}
+async function agirTransfert(id, action, tous) {
+  const e = sf.envois.find((x) => x.id === id);
+  if (e) { if (action === "annuler") e.xhr?.abort(); if (action === "retirer") sf.envois.splice(sf.envois.indexOf(e), 1); return rendreTransferts(); }
+  if (action === "choisir") { sf.ecartes.delete(id); const x = sf.transferts.find((y) => y.id === id); return x && demanderConflit(x); }
+  if (action === "vider") {
+    sf.envois = sf.envois.filter((x) => ACTIF_TR.includes(x.etat));
+    for (const x of sf.transferts.filter((y) => !ACTIF_TR.includes(y.etat))) await agirTransfert(x.id, "retirer");
+    return lireTransferts();
+  }
+  const r = await fetch(urlSftp("/transferts/" + encodeURIComponent(id)), { method: "POST", headers: { "X-Athanor": CSRF, "Content-Type": "application/json" }, body: JSON.stringify({ action, tous: !!tous }) }).catch(() => null);
+  if (!r || !r.ok) { const d = r ? await r.json().catch(() => ({})) : {}; if (action !== "retirer") toast(erreurSftp(r, d), "erreur"); }
+  if (action !== "vider") lireTransferts();
+}
+function annoncerSftp(m) { const a = $("#sftp-annonce"); if (a) { a.textContent = ""; requestAnimationFrame(() => (a.textContent = m)); } }
+// a polite announcement when a transfer starts, ends, fails or waits for an answer (never at each percent)
+function annoncerEtat(x) {
+  const id = x.id, e = x.etat, nom = x.nom, avant = sf.etats[id];
+  if (avant === e) return;
+  sf.etats[id] = e;
+  if (avant === undefined && !ACTIF_TR.includes(e)) return; // already over when first seen: not news
+  const m = { en_cours: avant ? "" : t("Transfer started: {0}", [nom]), termine: t("Transfer done: {0}", [nom]), erreur: t("Transfer failed: {0}", [nom]), annule: t("Transfer cancelled: {0}", [nom]), conflit: t("Name already taken: {0}", [nom]) }[e];
+  if (m) annoncerSftp(m);
+}
+const etatTr = () => ({ attente: t("Waiting"), en_cours: t("In progress"), conflit: t("Waiting for your answer"), termine: t("Done"), passe: t("Skipped"), annule: t("Cancelled"), erreur: t("Failed") });
+function rendreTransferts() {
+  const el = $("#sftp-transferts"); if (!el) return;
+  // the focus survives the redraw: the same button, else the one at its place, else the last panel used
+  const f = el.contains(document.activeElement) ? document.activeElement : null, boutons = () => [...el.querySelectorAll("button")], rang = f ? boutons().indexOf(f) : -1;
+  const garder = () => f && (el.querySelector(`[data-sftp-tr="${CSS.escape(f.dataset.sftpTr || "")}"][data-action="${CSS.escape(f.dataset.action || "")}"]`)
+    || boutons()[Math.min(rang, boutons().length - 1)] || grilleSftp(sf.dernier || "serveur"))?.focus();
+  const l = [...sf.envois, ...sf.transferts];
+  el.hidden = !l.length; if (!l.length) { el.replaceChildren(); return garder(); }
+  const actifs = l.filter((x) => ACTIF_TR.includes(x.etat)).length, ET = etatTr();
+  const bouton = (x, action, texte, primaire) => `<button type="button" class="btn btn-petit${primaire ? " btn-primaire" : ""}" data-sftp-tr="${h(x.id)}" data-action="${action}" aria-label="${h(texte + " : " + x.nom)}">${h(texte)}</button>`;
+  el.innerHTML = `<div class="sftp-tr-tete"><h3 id="sftp-transferts-titre" class="m0">${t("Transfers")}</h3><span class="muet petit">${h(actifs ? t("{0} under way", [actifs]) : t("All done"))}</span>
+    ${l.some((x) => !ACTIF_TR.includes(x.etat)) ? `<button type="button" class="btn btn-petit" data-sftp-tr="*" data-action="vider">${t("Clear finished")}</button>` : ""}</div>
+    <ul class="sftp-tr-liste">${l.map((x) => {
+      const pc = x.total ? Math.min(100, Math.round(100 * x.fait / x.total)) : x.etat === "termine" ? 100 : 0;
+      const detail = [x.total ? `${tailleSftp(x.fait)} / ${tailleSftp(x.total)}` : "", x.etat === "en_cours" && x.vitesse ? tailleSftp(x.vitesse) + "/s" : "", x.fichiers_total > 1 ? t("{0} of {1} files", [x.fichiers, x.fichiers_total]) : "", ET[x.etat] || x.etat].filter(Boolean).join(" · ");
+      return `<li class="sftp-tr sftp-tr-${h(x.etat)}"><span class="sftp-tr-ic" title="${h(x.sens === "envoi" ? t("Sent to the server") : t("Downloaded to this computer"))}">${ic(x.sens === "envoi" ? "haut" : "bas")}</span>
+        <div class="sftp-tr-texte"><span class="sftp-tr-nom">${h(x.nom)}${x.par === "assistant" ? ` <span class="badge petit">${t("by the assistant")}</span>` : ""}</span>
+          <progress max="100" value="${pc}" aria-label="${h(x.nom)}"></progress><span class="muet petit">${h(detail)}${x.erreur ? ` — <span class="erreur">${h(x.erreur)}</span>` : ""}</span></div>
+        <div class="sftp-tr-boutons">${x.etat === "conflit" ? bouton(x, "choisir", t("Choose…"), true) : ""}${ACTIF_TR.includes(x.etat) && !(x.page && x.etat === "attente") ? bouton(x, "annuler", t("Cancel")) : ""}${x.etat === "erreur" && x.par === "vous" && !x.page ? bouton(x, "reprendre", t("Resume")) : ""}${!ACTIF_TR.includes(x.etat) ? bouton(x, "retirer", t("Remove")) : ""}</div></li>`;
+    }).join("")}</ul>`;
+  garder();
+}
 // --- The assistant beside the terminal (M231e): a Servers task on this server whose every call shows here live.
 // Mode "separate connection": its agent's calls each open their own SSH session (serveurs_ia_terminal.go), with
 // the same guards as any task: risk class, a plan before any change, your decision, backups, outputs as data.

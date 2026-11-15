@@ -1451,6 +1451,45 @@ html.scene-pause .verrou * { animation-play-state: paused !important; }
 .sftp-message { position: absolute; inset: 44px 8px auto; text-align: center; padding: 24px 12px; display: flex; flex-direction: column; gap: 4px; pointer-events: none; }
 .sftp-message[hidden] { display: none; }
 .sftp-pied { min-height: 1.4em; overflow-wrap: anywhere; }
+/* SFTP actions: the menu, the selection zone, a drop target, the dialogs, the transfers at the bottom */
+.sftp { grid-template-rows: minmax(0, 1fr) auto; }
+.sftp-actions { min-height: 36px; flex: none; display: inline-flex; align-items: center; gap: 4px; }
+.sftp-prise { display: flex; align-items: center; gap: 8px; min-width: 0; cursor: grab; }
+.sftp-zone { position: absolute; left: 4px; right: 4px; z-index: 2; pointer-events: none; border: 1px solid var(--accent); border-radius: 4px; background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.sftp-panneau.depot { outline: 2px dashed var(--accent); outline-offset: -2px; }
+.sftp-menu { position: fixed; z-index: 40; display: flex; flex-direction: column; min-width: 240px; max-width: min(340px, calc(100vw - 16px)); max-height: calc(100dvh - 16px); overflow: auto; padding: 4px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--ombre); }
+.sftp-menu-item { display: flex; flex-direction: column; gap: 2px; min-height: 44px; justify-content: center; padding: 6px 10px; border: 0; border-radius: 6px; background: none; color: var(--ink); font: inherit; font-size: 14px; text-align: left; cursor: pointer; }
+.sftp-menu-item:hover, .sftp-menu-item:focus { background: color-mix(in srgb, var(--accent) 14%, transparent); outline: none; }
+.sftp-menu-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.sftp-menu-item[aria-disabled="true"] { cursor: default; }
+.sftp-menu-item[aria-disabled="true"] .sftp-menu-nom { color: var(--muted); }
+.sftp-menu-nom { display: flex; justify-content: space-between; gap: 12px; }
+.sftp-menu-nom kbd { font: 11.5px var(--mono); color: var(--muted); }
+.sftp-raison { font-size: 12px; color: var(--muted); line-height: 1.35; }
+.sftp-modale { z-index: 45; } /* under the app's confirmation, which can open on top of it */
+.sftp-modale label { display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+.sftp-editeur { width: 100%; min-height: min(55dvh, 480px); resize: vertical; font: 13px/1.45 var(--mono); tab-size: 4; padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); }
+.sftp-editeur-chemin { font-family: var(--mono); overflow-wrap: anywhere; margin-top: -10px; }
+.sftp-droits { border-collapse: collapse; font-size: 14px; }
+.sftp-droits th, .sftp-droits td { padding: 4px 10px; text-align: center; font-weight: 500; }
+.sftp-droits th[scope="row"] { text-align: left; }
+.sftp-droits input { width: 22px; height: 22px; margin: 11px; accent-color: var(--accent); }
+.sftp-transferts { grid-column: 1 / -1; max-height: 128px; overflow: auto; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+.sftp-transferts[hidden] { display: none; }
+.sftp-tr-tete { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.sftp-tr-tete h3 { font-size: 14px; }
+.sftp-tr-tete .btn { margin-left: auto; }
+.sftp-tr-liste { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.sftp-tr { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; }
+.sftp-tr-ic { color: var(--accent); }
+.sftp-tr-texte { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 10px; row-gap: 2px; align-items: baseline; min-width: 0; }
+.sftp-tr-texte progress { grid-row: 2; grid-column: 1 / -1; }
+.sftp-tr-texte > .muet { grid-row: 1; grid-column: 2; text-align: right; }
+.sftp-tr-nom { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13.5px; }
+.sftp-tr progress { width: 100%; height: 6px; accent-color: var(--accent); }
+.sftp-tr-boutons { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+.sftp-tr-boutons .btn { min-height: 30px; }
 @container (max-width: 560px) { .sftp-ligne { grid-template-columns: minmax(0, 1fr) 140px 76px; } .sftp-col-type { display: none; } }
 @container (max-width: 400px) { .sftp-ligne { grid-template-columns: minmax(0, 1fr) 76px; } .sftp-col-date { display: none; } }
 .term-ecran, .term-ecran .xterm { height: 100%; }
