@@ -222,11 +222,12 @@ func (tr *transfertSFTP) cotes() (src, dst coteT, err error) {
 	return coteServeur{c}, coteLocal{}, nil
 }
 
-// renouvelerSFTP: the next clientSFTP opens a new channel on the same connection (after a channel error).
-func (t *sessionTerminal) renouvelerSFTP() {
+// renouvelerSFTP: the next clientSFTP opens a new channel on the same connection (after an error on
+// channel c); a channel already renewed by a parallel transfer is kept, or each would close the other's.
+func (t *sessionTerminal) renouvelerSFTP(c *sftp.Client) {
 	t.muSFTP.Lock()
 	defer t.muSFTP.Unlock()
-	if t.sftp != nil {
+	if t.sftp != nil && t.sftp == c {
 		t.sftp.Close()
 		t.sftp = nil
 	}
@@ -640,7 +641,10 @@ func (tr *transfertSFTP) copier(ctx context.Context, de, vers string, e elementT
 	tr.part = part
 	transferts.Unlock()
 	for essai := 0; ; essai++ {
-		err := tr.copierUneFois(ctx, de, part, e.taille, reprise || essai > 0)
+		src, dst, err := tr.cotes()
+		if err == nil {
+			err = tr.copierUneFois(ctx, src, dst, de, part, e.taille, reprise || essai > 0)
+		}
 		if err == nil {
 			break
 		}
@@ -653,7 +657,14 @@ func (tr *transfertSFTP) copier(ctx context.Context, de, vers string, e elementT
 		transferts.Lock()
 		tr.Reprises++
 		transferts.Unlock()
-		tr.t.renouvelerSFTP()
+		canal := src
+		if tr.Sens == "envoi" {
+			canal = dst
+		}
+		var refus *sftp.StatusError // the server answered: its channel works, other transfers keep it
+		if s, ok := canal.(coteServeur); ok && !errors.As(err, &refus) {
+			tr.t.renouvelerSFTP(s.c)
+		}
 		select {
 		case <-time.After(pauseRepriseTransfert * time.Duration(essai+1)):
 		case <-ctx.Done():
@@ -675,11 +686,7 @@ func (tr *transfertSFTP) copier(ctx context.Context, de, vers string, e elementT
 }
 
 // copierUneFois: de (taille bytes when listed) into part, from the end of part when reprendre (else from the start).
-func (tr *transfertSFTP) copierUneFois(ctx context.Context, de, part string, taille int64, reprendre bool) error {
-	src, dst, err := tr.cotes()
-	if err != nil {
-		return err
-	}
+func (tr *transfertSFTP) copierUneFois(ctx context.Context, src, dst coteT, de, part string, taille int64, reprendre bool) error {
 	in, err := src.Open(de)
 	if err != nil {
 		return err

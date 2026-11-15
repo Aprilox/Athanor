@@ -61,7 +61,7 @@ func nouvelleCleSSH(t *testing.T) (ssh.Signer, []byte) {
 func lancerSSHMemoire(t *testing.T, autorisee ssh.PublicKey, motDePasse string, repondre func(cmd string, entree []byte) (string, int)) *serveurSSHMemoire {
 	t.Helper()
 	hote, _ := nouvelleCleSSH(t)
-	s := &serveurSSHMemoire{hote: "127.0.0.1", empreinte: ssh.FingerprintSHA256(hote.PublicKey()), commandes: make(chan string, 100), fichiers: sftp.InMemHandler(), tailles: make(chan string, 100)}
+	s := &serveurSSHMemoire{hote: "127.0.0.1", empreinte: ssh.FingerprintSHA256(hote.PublicKey()), commandes: make(chan string, 100), fichiers: fichiersMemoire(), tailles: make(chan string, 100)}
 	if autorisee != nil {
 		s.autoriser(autorisee)
 	}
@@ -360,4 +360,19 @@ func TestSiteExemple(t *testing.T) {
 			t.Fatalf("site d'exemple %s : %v %.100q", v, err, b)
 		}
 	}
+}
+
+// fichiersMemoire: sftp.InMemHandler whose reads do not mark a file failed forever when a channel closes
+// while it is open (a real server just closes the handle; transfers renew their channel and read again).
+func fichiersMemoire() sftp.Handlers {
+	h := sftp.InMemHandler()
+	h.FileGet = lectureSeule{h.FileGet}
+	return h
+}
+
+type lectureSeule struct{ sftp.FileReader }
+
+func (l lectureSeule) Fileread(r *sftp.Request) (io.ReaderAt, error) {
+	f, err := l.FileReader.Fileread(r)
+	return struct{ io.ReaderAt }{f}, err
 }

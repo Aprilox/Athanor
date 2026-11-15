@@ -187,7 +187,9 @@ func TestSFTPTransferts(t *testing.T) {
 	}
 	dl := filepath.Join(loc, "dl")
 	_ = os.Mkdir(dl, 0o755)
+	mu.Lock()
 	coupures = 0
+	mu.Unlock()
 	id = lancer("telechargement", []string{"/dest/gros.bin", "/dest/dossier"}, dl)[0]
 	if x := fini(id); x.Etat != "termine" || x.Reprises != 1 {
 		t.Errorf("download resumed: %+v", x)

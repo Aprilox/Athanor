@@ -285,12 +285,15 @@ a[data-href] { cursor: pointer; }
   --ic-sous: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><path d='M6 4v8.5a3 3 0 0 0 3 3h10M15 11.5l4 4-4 4'/></svg>");
   --ic-attente: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='7.5' stroke-dasharray='3 3.3'/></svg>");
   --ic-actions: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><circle cx='5' cy='12' r='2' fill='black' stroke='none'/><circle cx='12' cy='12' r='2' fill='black' stroke='none'/><circle cx='19' cy='12' r='2' fill='black' stroke='none'/></svg>");
+  --ic-dossier: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'><path d='M3 6.5A1.5 1.5 0 0 1 4.5 5h4.6l2 2.2h8.4A1.5 1.5 0 0 1 21 8.7v9.8a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5z'/></svg>");
+  --ic-fichier: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linejoin='round'><path d='M6 3h8l4 4v14H6zM14 3v4h4'/></svg>");
+  --ic-lien: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round'><path d='M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1'/></svg>");
   --ic-plus: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><path d='M12 5v14M5 12h14'/></svg>");
   --ic-info: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='8.5'/><path d='M12 11v5.5M12 7.8v.1'/></svg>");
   --ic-menu: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><path d='M4 7h16M4 12h16M4 17h16'/></svg>");
 }
 .ic { display: inline-block; width: 1em; height: 1em; vertical-align: -.14em; flex: none; background: currentColor; -webkit-mask: var(--ico) center / contain no-repeat; mask: var(--ico) center / contain no-repeat; --ico: var(--ic-point); }
-.ic-ok { --ico: var(--ic-ok); } .ic-croix { --ico: var(--ic-croix); } .ic-alerte { --ico: var(--ic-alerte); } .ic-lecture { --ico: var(--ic-lecture); } .ic-bas { --ico: var(--ic-bas); } .ic-droite { --ico: var(--ic-droite); } .ic-gauche { --ico: var(--ic-gauche); } .ic-haut { --ico: var(--ic-haut); } .ic-descendre { --ico: var(--ic-descendre); } .ic-retour { --ico: var(--ic-retour); } .ic-actualiser { --ico: var(--ic-actualiser); } .ic-point { --ico: var(--ic-point); } .ic-cercle { --ico: var(--ic-cercle); } .ic-losange { --ico: var(--ic-losange); } .ic-etoile { --ico: var(--ic-etoile); } .ic-maj { --ico: var(--ic-maj); } .ic-echange { --ico: var(--ic-echange); } .ic-sous { --ico: var(--ic-sous); } .ic-attente { --ico: var(--ic-attente); } .ic-actions { --ico: var(--ic-actions); } .ic-plus { --ico: var(--ic-plus); } .ic-info { --ico: var(--ic-info); } .ic-menu { --ico: var(--ic-menu); }
+.ic-ok { --ico: var(--ic-ok); } .ic-croix { --ico: var(--ic-croix); } .ic-alerte { --ico: var(--ic-alerte); } .ic-lecture { --ico: var(--ic-lecture); } .ic-bas { --ico: var(--ic-bas); } .ic-droite { --ico: var(--ic-droite); } .ic-gauche { --ico: var(--ic-gauche); } .ic-haut { --ico: var(--ic-haut); } .ic-descendre { --ico: var(--ic-descendre); } .ic-retour { --ico: var(--ic-retour); } .ic-actualiser { --ico: var(--ic-actualiser); } .ic-point { --ico: var(--ic-point); } .ic-cercle { --ico: var(--ic-cercle); } .ic-losange { --ico: var(--ic-losange); } .ic-etoile { --ico: var(--ic-etoile); } .ic-maj { --ico: var(--ic-maj); } .ic-echange { --ico: var(--ic-echange); } .ic-sous { --ico: var(--ic-sous); } .ic-attente { --ico: var(--ic-attente); } .ic-actions { --ico: var(--ic-actions); } .ic-plus { --ico: var(--ic-plus); } .ic-info { --ico: var(--ic-info); } .ic-menu { --ico: var(--ic-menu); } .ic-dossier { --ico: var(--ic-dossier); } .ic-fichier { --ico: var(--ic-fichier); } .ic-lien { --ico: var(--ic-lien); }
 .audit .journal-tools select { max-width: 170px; }
 .aud-jour { font-size: 13px; font-weight: 600; color: var(--muted); margin: 16px 0 6px; text-transform: capitalize; }
 .aud-liste { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: var(--rayon); background: var(--panel); }
@@ -373,7 +376,7 @@ a[data-href] { cursor: pointer; }
 .btn-urgence, .btn-urgence:hover { color: var(--erreur-vif); border-color: var(--erreur-vif); }
 textarea { width: 100%; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; resize: vertical; min-height: 80px; }
 textarea.code, .code { font-family: var(--mono); font-size: 13px; }
-input[type=text], input[type=password], input[type=number], input[type=url] { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; width: 100%; }
+input[type=text], input[type=password], input[type=number], input[type=url], input[type=search] { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; width: 100%; }
 select { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
 /* our own check boxes and radio buttons (the toggles below keep their switch) */
 input[type=checkbox]:not(.interrupteur input), input[type=radio] {
@@ -1390,9 +1393,11 @@ html.scene-pause .verrou * { animation-play-state: paused !important; }
 .terminal-page { display: flex; flex-direction: column; gap: 10px; }
 .term-barre { flex-wrap: wrap; align-items: center; gap: 8px; }
 .term-message { display: flex; flex-direction: column; gap: 6px; border-left: 3px solid var(--attention, #d9a03f); }
-.term-zones { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 340px); gap: 10px; height: calc(100dvh - 210px); min-height: 260px; }
-.term-zones.sans-fichiers { grid-template-columns: minmax(0, 1fr); }
-.term-zones.sans-fichiers .sftp, .term-onglets { display: none; }
+.term-zones { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; height: calc(100dvh - 210px); min-height: 260px; }
+.term-onglets { margin: 0; }
+.term-onglets button { min-height: 44px; }
+.term-onglets .term-onglet-ia { display: none; }
+.terminal-page[data-onglet="sftp"] .term-seul, .terminal-page[data-onglet="sftp"] #term-reglages-zone, .terminal-page[data-onglet="sftp"] .term-hote, .terminal-page:not([data-onglet="sftp"]) .sftp { display: none; }
 .term-hote { height: 100%; min-height: 0; border: 1px solid var(--line); border-radius: 8px; padding: 6px; overflow: hidden; overflow: clip; position: relative; } /* clip: a focus while the width changes could scroll a hidden overflow sideways (T1-2) */
 /* the banner sits above the screen, in the flow: its text wraps and the terminal keeps the height left under it */
 .term-hote.verrouille { display: flex; flex-direction: column; gap: 6px; border-color: var(--accent); }
@@ -1401,22 +1406,53 @@ html.scene-pause .verrou * { animation-play-state: paused !important; }
   background: var(--panel); color: var(--ink); border: 1px solid var(--accent); z-index: 2; }
 .term-verrou-texte { flex: 1 1 220px; min-width: 0; overflow-wrap: anywhere; }
 /* Files panel (SFTP) beside the terminal */
-.sftp { display: flex; flex-direction: column; gap: 8px; min-height: 0; border: 1px solid var(--line); border-radius: 8px; padding: 8px; background: var(--panel); }
-.sftp.depot { outline: 2px dashed var(--accent); outline-offset: -4px; }
+/* SFTP tab: two panels (Local, the server), each with its own scrolling list; the page itself does not scroll */
+.sftp { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; min-height: 0; height: 100%; }
+.sftp-panneau { display: flex; flex-direction: column; gap: 6px; min-height: 0; min-width: 0; border: 1px solid var(--line); border-radius: 8px; padding: 8px; background: var(--panel); container-type: inline-size; }
 .sftp-tete { display: flex; flex-direction: column; gap: 6px; }
-.sftp-chemin { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 13px; }
-.sftp-dossier { background: none; border: 0; padding: 2px 4px; border-radius: 4px; color: var(--accent); cursor: pointer; font: inherit; }
-.sftp-dossier:hover { background: var(--line); }
-.sftp-liste { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; min-height: 60px; }
-.sftp-entree { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; width: 100%; text-align: left; background: none; border: 0; border-radius: 6px; padding: 5px 8px; color: var(--ink); cursor: pointer; font: inherit; }
-.sftp-entree:hover { background: var(--line); }
-.sftp-entree.choisi { background: color-mix(in srgb, var(--accent) 22%, transparent); }
-.sftp-entree.choisi .muet { color: var(--ink); }
-.sftp-nom { font-size: 14px; overflow-wrap: anywhere; }
-.sftp-nom.dossier { font-weight: 600; }
-.sftp-renommer { width: 100%; box-sizing: border-box; }
-.sftp-vide { margin: 4px 0; }
-.sftp-actions { flex-wrap: wrap; gap: 6px; min-height: 30px; align-items: center; }
+.sftp-titre { margin: 0; font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.sftp-outils { display: flex; gap: 4px; align-items: center; min-width: 0; }
+.sftp-icone { min-width: 36px; min-height: 36px; padding: 0; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+.sftp-chemin { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: flex-end; min-height: 36px; border: 1px solid var(--line); border-radius: 6px; padding: 0 4px; cursor: text; overflow: hidden; }
+.sftp-chemin.saisie { border-color: var(--accent); justify-content: flex-start; }
+.sftp-chemin:focus-within { outline: 2px solid var(--accent); outline-offset: -1px; }
+.sftp-miettes { display: flex; align-items: center; justify-content: flex-end; min-width: 0; white-space: nowrap; font: 13px var(--mono); }
+.sftp-miette { background: none; border: 0; padding: 5px; border-radius: 4px; color: var(--ink); cursor: pointer; font: inherit; white-space: nowrap; flex: none; }
+.sftp-miette:hover { background: var(--line); }
+.sftp-miette[aria-current] { font-weight: 600; }
+.sftp-sep { color: var(--muted); font-size: 10px; flex: none; }
+.sftp-chemin-champ { flex: 1; min-width: 0; border: 0; background: transparent; font: 13px var(--mono); color: var(--ink); padding: 6px 4px; outline: none; }
+.sftp-filtre { flex: 1; min-width: 0; min-height: 36px; }
+.sftp-caches { min-height: 36px; flex: none; }
+.sftp-liste { position: relative; flex: 1; min-height: 0; display: flex; }
+.sftp-grille { flex: 1; min-height: 0; overflow: auto; position: relative; border-radius: 6px; }
+.sftp-grille:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.sftp-ligne { display: grid; grid-template-columns: minmax(0, 1fr) 150px 84px 110px; align-items: center; column-gap: 10px; padding: 0 8px; }
+.sftp-entete { position: sticky; top: 0; z-index: 1; background: var(--panel); border-bottom: 1px solid var(--line); }
+.sftp-entete button { background: none; border: 0; padding: 8px 0; min-height: 36px; font: inherit; font-size: 12.5px; font-weight: 600; color: var(--muted); cursor: pointer; display: inline-flex; gap: 4px; align-items: center; }
+.sftp-entete [aria-sort="ascending"] button, .sftp-entete [aria-sort="descending"] button { color: var(--ink); }
+.sftp-espace { position: relative; }
+.sftp-entree { position: absolute; left: 0; right: 0; height: 44px; font-size: 13.5px; border-radius: 6px; cursor: default; user-select: none; }
+.sftp-entree:hover { background: color-mix(in srgb, var(--line) 60%, transparent); }
+.sftp-entree.choisi { background: color-mix(in srgb, var(--accent) 20%, transparent); }
+.sftp-grille:focus-visible .sftp-entree.actif { box-shadow: inset 0 0 0 2px var(--accent); }
+.sftp-entree.cache .sftp-nom { color: var(--muted); font-style: italic; } /* dimmed by colour, not opacity: AA contrast kept */
+.sftp-entree.cache .ic { opacity: .6; }
+.sftp-entree.choisi .sftp-nom, .sftp-entree.choisi .sftp-sous, .sftp-entree.choisi > div:not(.sftp-col-nom) { color: var(--ink); }
+.sftp-entree > div { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sftp-col-nom { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.sftp-col-nom .ic { font-size: 16px; color: var(--muted); }
+.sftp-col-nom .ic-dossier { color: var(--accent); }
+.sftp-texte { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+.sftp-nom, .sftp-sous { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sftp-sous { font: 11.5px var(--mono); color: var(--muted); }
+.sftp-entree .sftp-col-date, .sftp-entree .sftp-col-taille, .sftp-entree .sftp-col-type { color: var(--muted); font-size: 12.5px; }
+.sftp-col-taille { text-align: right; justify-self: end; }
+.sftp-message { position: absolute; inset: 44px 8px auto; text-align: center; padding: 24px 12px; display: flex; flex-direction: column; gap: 4px; pointer-events: none; }
+.sftp-message[hidden] { display: none; }
+.sftp-pied { min-height: 1.4em; overflow-wrap: anywhere; }
+@container (max-width: 560px) { .sftp-ligne { grid-template-columns: minmax(0, 1fr) 140px 76px; } .sftp-col-type { display: none; } }
+@container (max-width: 400px) { .sftp-ligne { grid-template-columns: minmax(0, 1fr) 76px; } .sftp-col-date { display: none; } }
 .term-ecran, .term-ecran .xterm { height: 100%; }
 .term-ecran .xterm .xterm-viewport { background-color: transparent; } /* xterm's #000 showed under the last row; .term-hote has the palette's background */
 /* the terminal's Settings panel (M231d): themes as small previews, then size, spacing and cursor; the terminal stays visible below */
@@ -1443,8 +1479,7 @@ html.scene-pause .verrou * { animation-play-state: paused !important; }
 .term-reglages-ligne output { min-width: 2.2em; font-variant-numeric: tabular-nums; }
 .srv-reglage-terminal { margin-top: 8px; }
 /* the assistant beside the terminal (M231e): its modes on top, what it did, what runs now with Stop, then the question */
-.term-zones.avec-ia { grid-template-columns: minmax(0, 1fr) minmax(220px, 280px) minmax(280px, 360px); }
-.term-zones.sans-fichiers.avec-ia { grid-template-columns: minmax(0, 1fr) minmax(300px, 380px); }
+.term-zones.avec-ia { grid-template-columns: minmax(0, 1fr) minmax(300px, 380px); }
 .term-zones:not(.avec-ia) .ia { display: none; }
 .ia { display: flex; flex-direction: column; gap: 8px; min-height: 0; border: 1px solid var(--line); border-radius: 8px; padding: 8px; background: var(--panel); }
 .ia-modes { border: 0; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
@@ -1473,15 +1508,15 @@ html.scene-pause .verrou * { animation-play-state: paused !important; }
   /* the terminal page folds the module tabs and the status band: the screen gets the height (the menu stays) */
   main:has(.terminal-page) #barre-onglets, main:has(.terminal-page) #bandeau { display: none; }
   .term-hote { padding: 4px; }
-  .term-zones, .term-zones.avec-ia, .term-zones.sans-fichiers.avec-ia { grid-template-columns: minmax(0, 1fr); height: calc(100dvh - 220px); }
-  .term-onglets { display: flex; }
-  .term-bascule-fichiers, .term-bascule-ia { display: none; }
+  .term-zones, .term-zones.avec-ia { grid-template-columns: minmax(0, 1fr); height: calc(100dvh - 220px); }
+  .term-onglets .term-onglet-ia { display: block; }
+  .term-bascule-ia { display: none; }
+  .sftp { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); }
   .term-themes { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
   .term-theme { padding: 6px 8px; gap: 4px 8px; }
   .term-apercu i:nth-of-type(n+4) { display: none; }
   .term-apercu-auto { width: 34px; }
-  .term-zones.sans-fichiers .sftp { display: flex; }
   .term-zones:not(.avec-ia) .ia { display: flex; }
-  .term-zones[data-onglet="terminal"] .sftp, .term-zones[data-onglet="fichiers"] .term-hote, .term-zones[data-onglet="ia"] .term-hote, .term-zones[data-onglet="ia"] .sftp,
-  .term-zones[data-onglet="terminal"] .ia, .term-zones[data-onglet="fichiers"] .ia { display: none; }
+  .terminal-page:not([data-onglet="ia"]) .ia, .terminal-page[data-onglet="ia"] .term-hote, .terminal-page[data-onglet="ia"] .sftp { display: none; }
+}
 }

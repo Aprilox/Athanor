@@ -34,8 +34,19 @@ func TestCaptureHub(t *testing.T) {
 	d := t.TempDir()
 	// the Athanor folder (the audit log in hub/journal…) in the test's folder, never this PC's; the browser keeps the real environment
 	envNavigateur := os.Environ()
-	for _, v := range []string{"LOCALAPPDATA", "LocalAppData", "HOME", "XDG_DATA_HOME", "XDG_CONFIG_HOME"} {
+	for _, v := range []string{"LOCALAPPDATA", "LocalAppData", "HOME", "USERPROFILE", "XDG_DATA_HOME", "XDG_CONFIG_HOME"} {
 		t.Setenv(v, filepath.Join(d, "athanor"))
+	}
+	// the SFTP page's Local panel opens on this personal folder (USERPROFILE on Windows), never the PC's own
+	for _, n := range []string{"Documents", "Images", "projets", ".config"} {
+		if err := os.MkdirAll(filepath.Join(d, "athanor", n), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for n, c := range map[string]string{"notes-locales.txt": "À envoyer sur le serveur.\n", ".gitconfig": "[user]\n", "Documents/devis.pdf": strings.Repeat("%", 48000)} {
+		if err := os.WriteFile(filepath.Join(d, "athanor", n), []byte(c), 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
 	var projets []Projet
 	for i := 0; i < 20; i++ {
