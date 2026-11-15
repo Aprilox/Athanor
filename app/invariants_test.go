@@ -403,14 +403,26 @@ func TestInvariantI8(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	n := 0
+	n, avecCommit, sansCommit := 0, map[string]bool{}, []string{}
 	for _, l := range strings.Split(string(ign), "\n") {
-		if l = strings.TrimSpace(l); l != "" && !strings.HasPrefix(l, "#") {
+		if l = strings.TrimSpace(l); l == "" || strings.HasPrefix(l, "#") {
+			continue
+		}
+		if c, reste, ok := strings.Cut(l, ":"); ok && len(c) == 40 {
 			n++
+			avecCommit[reste] = true
+		} else {
+			sansCommit = append(sansCommit, l)
 		}
 	}
-	if n != 7 { // the 5 already on main and the 2 of commit d91e71c (M54), never rewritten
-		t.Fatalf(".gitleaksignore: %d fingerprints, want the 7 of older commits (a new fake value starts with \"temoin\")", n)
+	// the 5 already on main, the 2 of commit d91e71c (M54) and the vendored xterm.js (M231a), never rewritten
+	if n != 8 {
+		t.Fatalf(".gitleaksignore: %d fingerprints, want the 8 of older commits (a new fake value starts with \"temoin\")", n)
+	}
+	for _, l := range sansCommit { // fingerprints of "gitleaks dir": only the same lines as above
+		if !avecCommit[l] {
+			t.Fatalf(".gitleaksignore: %q is not one of the commit fingerprints", l)
+		}
 	}
 
 	// the CI: the gitleaks job runs, and no secret of the repository is used (no real account)
