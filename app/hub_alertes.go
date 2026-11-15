@@ -136,7 +136,7 @@ func (s *Serveur) alertesHub(el []ElementHub) (actives, cachees []AlerteHub) {
 		l, _ := s.approbations.Liste()
 		actives = append(alertesApprobations(l), actives...)
 	}
-	actives = append(s.alerteUrgence(), actives...)
+	actives = append(append(s.alerteUrgence(), s.alertesAttenteInfra()...), actives...)
 	return actives, cachees
 }
 

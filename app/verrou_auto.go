@@ -38,17 +38,28 @@ func (s *Serveur) resteVerrouAuto(t time.Time) time.Duration {
 }
 
 // verifierVerrouAuto locks the window once its delay passed; true when it did.
+// A running mission granted the infra key keeps it open until its deadline or its end (closed then, when
+// nobody is unlocked); the padlock and the emergency stop still close everything.
 func (s *Serveur) verifierVerrouAuto(t time.Time) bool {
+	gardee := infraGardee(t)
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	d := s.dist()
+	if s.infraMission && !gardee && s.session == "" {
+		s.infraMission = false
+		d.mu.Lock()
+		s.fermerCoffreSiPersonne(d)
+		d.mu.Unlock()
+	}
 	if s.resteVerrouAuto(t) != 0 {
 		return false
 	}
 	s.session = ""
-	d := s.dist()
-	d.mu.Lock()
-	s.fermerCoffreSiPersonne(d)
-	d.mu.Unlock()
+	if s.infraMission = gardee; !gardee {
+		d.mu.Lock()
+		s.fermerCoffreSiPersonne(d)
+		d.mu.Unlock()
+	}
 	s.ecrireAudit(LigneAudit{Type: "evenement", De: "hub", Vers: "hub", Action: "verrouillage automatique", Resultat: verrouAutoDe(s.config.VerrouAuto)})
 	return true
 }

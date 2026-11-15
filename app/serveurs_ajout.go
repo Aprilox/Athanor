@@ -9,6 +9,7 @@ package main
 // modules/servers holds it.
 
 import (
+	"cmp"
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
@@ -116,7 +117,7 @@ func (s *Serveur) apiServeursEmpreinte(w http.ResponseWriter, r *http.Request) {
 // connecterServeur: a client reached with the vault entry's key and the confirmed fingerprint, its error
 // told in the owner's words.
 func (s *Serveur) connecterServeur(ctx context.Context, srv ServeurInventaire) (*ssh.Client, error) {
-	cle, err := s.coffre.Valeur(srv.Cle)
+	cle, err := s.valeurInfra(ctx, srv.Cle, "servers", cmp.Or(srv.Nom, srv.ID)) // locked: waits for the unlock
 	if err != nil {
 		return nil, err
 	}

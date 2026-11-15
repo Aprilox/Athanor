@@ -38,6 +38,11 @@ type Serveur struct {
 	mdns         etatMDNS  // local network discovery, on only by the owner (hub_mdns.go)
 	session      string    // session token when a password is set ("" = locked)
 	actifLe      time.Time // the owner's last action in the window (auto-lock, verrou_auto.go)
+	infraMission bool      // the auto-lock left the infra key open for a granted mission (verrou_auto.go)
+	attenteMu    sync.Mutex
+	attentes     map[int]attenteInfra // the steps waiting for the infra key (infra_attente.go)
+	attenteN     int
+	infraOuverte chan struct{} // closed at each unlock
 	csrf         string
 	cleAcces     string               // cookie of the windows Athanor opened (acces.go); empty = no check (tests)
 	ouvertures   map[string]time.Time // single-use window addresses
@@ -199,7 +204,7 @@ func (s *Serveur) garde(libre bool, h http.HandlerFunc) http.HandlerFunc {
 
 func (s *Serveur) ouvrirSession(w http.ResponseWriter) {
 	s.session = aleatoire(24)
-	s.actifLe = horlogeVerrou()
+	s.actifLe, s.infraMission = horlogeVerrou(), false
 	http.SetCookie(w, &http.Cookie{Name: "athanor_session", Value: s.session, Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode})
 }
 

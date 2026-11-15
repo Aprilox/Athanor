@@ -64,19 +64,20 @@ type EvenementMission struct {
 }
 
 type Mission struct {
-	ID         string             `json:"id"`
-	Phrase     string             `json:"phrase"` // masked by masquerSecrets, at most 4000 characters
-	Mentions   MentionsMission    `json:"mentions"`
-	Etat       string             `json:"etat"`
-	Carte      json.RawMessage    `json:"carte,omitempty"` // the mission card (CarteMission, M152)
-	Politique  string             `json:"politique"`       // prod | tout | autonome
-	Voies      []VoieMission      `json:"voies"`
-	Questions  []QuestionMission  `json:"questions"`
-	Historique []EvenementMission `json:"historique"`
-	Cree       string             `json:"cree"`
-	Session    string             `json:"session,omitempty"` // the orchestrator's Claude session, resumed with --resume
-	Relais     *RelaisMission     `json:"relais,omitempty"`  // once launched (mission_suivi.go)
-	Journal    []EntreeJournal    `json:"journal,omitempty"` // at most maxJournalMission, the oldest first
+	ID          string             `json:"id"`
+	Phrase      string             `json:"phrase"` // masked by masquerSecrets, at most 4000 characters
+	Mentions    MentionsMission    `json:"mentions"`
+	Etat        string             `json:"etat"`
+	Carte       json.RawMessage    `json:"carte,omitempty"` // the mission card (CarteMission, M152)
+	Politique   string             `json:"politique"`       // prod | tout | autonome
+	Voies       []VoieMission      `json:"voies"`
+	Questions   []QuestionMission  `json:"questions"`
+	Historique  []EvenementMission `json:"historique"`
+	Cree        string             `json:"cree"`
+	Session     string             `json:"session,omitempty"`      // the orchestrator's Claude session, resumed with --resume
+	Relais      *RelaisMission     `json:"relais,omitempty"`       // once launched (mission_suivi.go)
+	Journal     []EntreeJournal    `json:"journal,omitempty"`      // at most maxJournalMission, the oldest first
+	InfraJusqua string             `json:"infra_jusqua,omitempty"` // infra key kept despite the auto-lock: "mission" or RFC 3339 (infra_attente.go)
 }
 
 // MarshalJSON: the mission with its card's print (empreinteCarte), which the window sends back to launch it (R3).

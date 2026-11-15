@@ -10,11 +10,13 @@ import (
 	"cmp"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 )
 
 // demarrerPiloteMission: replaced by the tests (a fake pilot).
@@ -344,6 +346,7 @@ func (s *Serveur) apiLancerMission(w http.ResponseWriter, r *http.Request) {
 		Dossier    string `json:"dossier"`
 		MotDePasse string `json:"mot_de_passe"`
 		Empreinte  string `json:"empreinte"`
+		Infra      string `json:"infra_ouverte"` // "" | mission | 1h | 4h | 8h
 	}
 	if r.ContentLength != 0 && lireCorps(r, &c) != nil {
 		s.erreur(w, http.StatusBadRequest, "Invalid request")
@@ -363,5 +366,8 @@ func (s *Serveur) apiLancerMission(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.fermerLancementMission(m.ID, deQui(r), "accepter", "mission lancée")
+	if err := garderInfraMission(m.ID, c.Infra, time.Now()); err != nil {
+		fmt.Fprintln(os.Stderr, "mission infra:", err)
+	}
 	s.ecrireJSON(w, map[string]any{"mission": m})
 }
