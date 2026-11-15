@@ -781,6 +781,7 @@ func (s *Serveur) apiChatMCP(w http.ResponseWriter, r *http.Request) {
 		Source      string `json:"source"`
 		Config      string `json:"config"` // the JSON of the server, as the card shows it
 		Windows     bool   `json:"windows"`
+		Confirme    bool   `json:"confirme_windows"` // a Windows program runs outside the cage: confirmed apart
 	}
 	if err := lireCorps(r, &c); err != nil {
 		s.erreur(w, http.StatusBadRequest, err.Error())
@@ -796,6 +797,14 @@ func (s *Serveur) apiChatMCP(w http.ResponseWriter, r *http.Request) {
 		s.erreur(w, http.StatusBadRequest, "This message proposes no MCP server")
 		return
 	}
+	if conv.Messages[c.Index].MCP != "" {
+		s.erreur(w, http.StatusConflict, "This card was already decided.")
+		return
+	}
+	if c.Windows && !c.Confirme {
+		s.erreur(w, http.StatusBadRequest, "Confirm that this server may run outside the cage, with your rights.")
+		return
+	}
 	id := identExt(c.Nom)
 	if !reIDExt.MatchString(id) || id == "unreal-mcp" {
 		s.erreur(w, http.StatusBadRequest, "Invalid name")
@@ -807,10 +816,18 @@ func (s *Serveur) apiChatMCP(w http.ResponseWriter, r *http.Request) {
 	}
 	// the files come from Claude's message itself, never from the request
 	id, code, err := ajouterMCPBiblio(k, c.Nom, c.Description, c.Source, c.Config, c.Windows, fichiersMCPMessage(conv.Messages[c.Index].Texte), []string{cleProjet(p)})
+	audit := LigneAudit{Type: "evenement", De: deQui(r), Vers: "hub", Projet: p.Nom, Action: "chat : ajout du serveur MCP " + identExt(c.Nom)}
+	if c.Windows {
+		audit.Action += " (programme Windows, hors cage)"
+	}
 	if err != nil {
+		audit.Resultat = "échec : " + err.Error()
+		s.ecrireAudit(audit)
 		s.erreur(w, code, err.Error())
 		return
 	}
+	audit.Resultat = "ajouté et activé : " + id
+	s.ecrireAudit(audit)
 	conv = lireConversation(k, p)
 	if c.Index < len(conv.Messages) {
 		conv.Messages[c.Index].MCP = id

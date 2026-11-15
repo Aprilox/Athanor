@@ -53,6 +53,32 @@ func instanceExistante(action string) bool {
 	return r.StatusCode == http.StatusOK
 }
 
+// verrouInstance: held by the running instance for its whole life (the system lets it go when it ends).
+var verrouInstance *os.File
+
+// attendreInstanceQuiDemarre takes the instance lock. Held by another launch (started a moment before, its
+// instance.json not written yet): wait until that one answers, then the code below joins it as usual.
+// shortcut: after 20 s without an answer this launch starts anyway (a hung first launch must not stop Athanor).
+func attendreInstanceQuiDemarre(terminal bool) {
+	f := fichierInstance()
+	_ = os.MkdirAll(filepath.Dir(f), 0o700)
+	if verrouInstance = verrouFichierGH(f+".verrou", 0); verrouInstance != nil {
+		return
+	}
+	for fin := time.Now().Add(20 * time.Second); time.Now().Before(fin); time.Sleep(250 * time.Millisecond) {
+		if terminal {
+			if _, existe := lienInstanceTerminal(); existe {
+				return
+			}
+		} else if instanceExistante("ping") {
+			return
+		}
+		if verrouInstance = verrouFichierGH(f+".verrou", 0); verrouInstance != nil {
+			return // the other launch stopped before serving
+		}
+	}
+}
+
 // The running instance's side.
 var (
 	jetonInstance   = aleatoire(24)

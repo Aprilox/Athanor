@@ -397,7 +397,7 @@ func reglagesChatInternet(projet, sortie string, internet bool, dossiers ...Doss
 		interdits = []string{"Bash", "NotebookEdit"}
 	}
 	// the secrets files stay out of reach of every reading tool too (Grep, Glob), whatever the folder
-	interdits = append(interdits, "Read(**/.env)", "Read(**/.env.*)", "Read(**/secrets.env)")
+	interdits = append(interdits, "Read(**/.env)", "Read(**/.env.*)", "Read(**/secrets.env)", "Read(**/secrets.env.*)")
 	r.mettre("permissions", map[string]any{"deny": interdits})
 	r.mettre("hooks", map[string]any{"PreToolUse": []objetJSON{c}})
 	r.mettre("includeCoAuthoredBy", false)

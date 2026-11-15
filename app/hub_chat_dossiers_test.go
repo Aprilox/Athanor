@@ -92,6 +92,7 @@ func TestGardeDossiersChat(t *testing.T) {
 		{"Read", filepath.Join(lecture, ".env"), false},
 		{"Read", filepath.Join(ecriture, ".env.local"), false},
 		{"Read", filepath.Join(ecriture, ".athanor", "secrets.env"), false},
+		{"Read", filepath.Join(ecriture, ".athanor", "secrets.env.ancien"), false},
 	} {
 		if g := appel(c.outil, c.chemin); (g == "") != c.permis {
 			t.Errorf("%s %s: %q", c.outil, c.chemin, g)
@@ -104,7 +105,7 @@ func TestGardeDossiersChat(t *testing.T) {
 	}
 	b, _ := os.ReadFile(sortie)
 	r := strings.ReplaceAll(string(b), `\\`, "/")
-	for _, x := range []string{"--sans-secrets", "--lecture=" + filepath.ToSlash(lecture), filepath.ToSlash(ecriture), "Read(**/.env)", "Read(**/secrets.env)"} {
+	for _, x := range []string{"--sans-secrets", "--lecture=" + filepath.ToSlash(lecture), filepath.ToSlash(ecriture), "Read(**/.env)", "Read(**/secrets.env)", "Read(**/secrets.env.*)"} {
 		if !strings.Contains(r, x) {
 			t.Errorf("settings without %q: %s", x, r)
 		}

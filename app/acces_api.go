@@ -136,6 +136,14 @@ func (s *Serveur) apiAccesModifier(w http.ResponseWriter, r *http.Request) {
 	if !s.accesPret(w, c.Projet) {
 		return
 	}
+	if c.Action == "ajouter" && modeNatif.Load() && !s.acces.Projet(c.Projet).ForcerInfraNatif {
+		for _, x := range s.coffre.Liste() {
+			if x.ID == c.Entree && x.Portee == "infra" { // refused before asking for the password
+				s.erreur(w, http.StatusConflict, errAccesInfraNatif.Error())
+				return
+			}
+		}
+	}
 	if c.Action == "ajouter" || c.Action == "forcer" && c.Forcer || // C25: giving a key, not taking one back
 		c.Action == "env" && s.envDonneCles(c.Projet, c.Env) { // RT2: staging or prod hands the pilot that env's keys
 		if code, err := s.preuvePresence(r, c.MotDePasse); err != nil {

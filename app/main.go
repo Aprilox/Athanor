@@ -48,6 +48,7 @@ func main() {
 		}
 	}
 	terminal := interfaceTerminal()
+	attendreInstanceQuiDemarre(terminal) // two launches at the same moment: the second joins the first
 	// Already running: it shows its window, this launch stops (never two Athanor at once); in a terminal,
 	// the terminal interface on the Athanor that runs.
 	if terminal {

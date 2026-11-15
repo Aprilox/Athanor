@@ -12,7 +12,7 @@ type moduleServeurs struct{}
 func (moduleServeurs) ID() string  { return "servers" }
 func (moduleServeurs) Nom() string { return "Servers" }
 func (moduleServeurs) Pages() []PageModule {
-	return []PageModule{{Hash: "#serveurs", Ordre: 30, Icone: "serveurs", Libelle: "Servers", Fils: []string{"#serveur", "#terminal"}},
+	return []PageModule{{Hash: "#serveurs", Ordre: 30, Icone: "serveurs", Libelle: "Servers", Fils: []string{"#serveur", "#terminal", "#approbations"}},
 		{Hash: "#fournisseurs", Ordre: 31, Icone: "serveurs", Libelle: "Providers"}}
 }
 

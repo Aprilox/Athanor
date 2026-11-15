@@ -861,7 +861,7 @@ async function deciderApprobation(corps) {
   toast(r.etat === "refusee" ? t("Refused: the agent is told and does without it.") : t("Accepted: the agent is told and carries on."), "ok");
   etat.hub = await api("hub").catch(() => etat.hub);
   if (etat.vue) rendreBandeau(etat.vue);
-  if (etat.page === "pourvous" || etat.page === "accueil") rendrePage();
+  if (["pourvous", "accueil", "approbations"].includes(etat.page)) rendrePage();
   return r;
 }
 
@@ -1539,8 +1539,10 @@ function carteMCPChat(json, m, i) {
 async function ajouterMCPChat(b) {
   const carte = b.closest("[data-chat-mcp-carte]"); if (!carte) return;
   const champ = (n) => carte.querySelector(`[data-cm="${n}"]`);
+  const windows = champ("windows").checked;
+  if (windows && !(await confirmer(t("Confirm that this server may run outside the cage, with your rights."), { ok: t("Add to the library"), danger: true }))) return;
   b.disabled = true;
-  const r = await action(api("chat/mcp", "POST", { index: Number(b.dataset.chatMcp), nom: champ("nom").value.trim(), description: champ("description").value, source: champ("source").value, config: champ("config").value, windows: champ("windows").checked }));
+  const r = await action(api("chat/mcp", "POST", { index: Number(b.dataset.chatMcp), nom: champ("nom").value.trim(), description: champ("description").value, source: champ("source").value, config: champ("config").value, windows, confirme_windows: windows }));
   b.disabled = false;
   if (r) majChat(true);
 }
@@ -3507,7 +3509,7 @@ $("#page").addEventListener("click", async (ev) => {
   b.disabled = true;
   if (!(await action(api("hub/approbations", "POST", { ...JSON.parse(b.dataset.regle), decision: "redemander" })))) { b.disabled = false; return; }
   toast(t("Rule removed: the next requests ask you again."), "ok");
-  if (etat.page === "pourvous") rendrePage();
+  if (etat.page === "pourvous" || etat.page === "approbations") rendrePage();
 });
 $("#page").addEventListener("click", (ev) => {
   const b = ev.target.closest("[data-seule-copier]"), z = b && b.closest("[data-appr]")?.querySelector("[data-seule-pub]");
@@ -3526,6 +3528,8 @@ $("#page").addEventListener("click", async (ev) => {
   if (await deciderApprobation(corps)) delete etat.apprForm[corps.id]; else b.disabled = false;
 });
 
+// a plan of a Servers task (terminal assistant): its card alone, under Servers, never in a project's For you
+pages.approbations = async () => (await sectionApprobations()) || `<div class="vide">${t("Nothing waits for you.")}</div>`;
 pages.pourvous = async () => {
   pvProjet();
   const [r, appr] = await Promise.all([api("pourvous"), sectionApprobations()]);
@@ -5158,7 +5162,7 @@ pages.acces = async () => {
   if (!projet) return `<div class="vide">${t("Choose a project")}</div>`;
   const [d, c, en, sv, fo] = await Promise.all([api("acces?projet=" + encodeURIComponent(projet)), api("coffre"),
     api("projets/" + encodeURIComponent(projet) + "/environnements"), api("serveurs").catch(() => ({})), api("fournisseurs").catch(() => ({}))]);
-  acc.projet = projet; cof.d = c; acc.inv = sv.serveurs || []; acc.fourn = fo.fournisseurs || [];
+  acc.projet = projet; acc.refusee = d.natif && !d.forcer_infra_natif; cof.d = c; acc.inv = sv.serveurs || []; acc.fourn = fo.fournisseurs || [];
   const entrees = (c.entrees || []).slice().sort((a, b) => a.famille.localeCompare(b.famille) || a.nom.localeCompare(b.nom));
   const inj = d.injection || {}, envs = d.envs || ["dev", "staging", "prod"];
   const donne = (id, env) => d.acces.some((a) => a.entree === id && a.env === env);
@@ -5367,7 +5371,8 @@ async function premierMdp(options) {
   return { mot_de_passe: mdp };
 }
 async function changerAcces(corps) {
-  if (corps.action === "ajouter" || (corps.action === "forcer" && corps.forcer)) {
+  const infraRefusee = corps.action === "ajouter" && acc.refusee && ((cof.d && cof.d.entrees) || []).some((x) => x.id === corps.entree && x.portee === "infra");
+  if (!infraRefusee && (corps.action === "ajouter" || (corps.action === "forcer" && corps.forcer))) { // the server refuses an infra key in native mode before any password
     const p = await preuveMdp(t("Giving a key to a project: retype Athanor's password."), { ok: t("Give the key") });
     if (!p) return rendrePage();
     corps = { ...corps, ...p };
@@ -6709,7 +6714,7 @@ function tacheIA(x) {
     ${p ? `<div class="ia-plan"><p class="m0"><b>${t("Plan to apply")}</b> <span class="muet petit">${h(t("{0} step(s)", [(p.etapes || []).length]))}</span></p>${blocPlan({}, p)}
       ${(etat.vue || {}).distant ? "" : `<div class="ligne m0"><button type="button" class="btn btn-primaire btn-petit" data-ia-decider="accepter" data-plan="${h(plan)}">${t("Accept")}</button>
       <button type="button" class="btn btn-petit" data-ia-decider="refuser" data-plan="${h(plan)}">${t("Refuse")}</button>
-      <a href="#pourvous" class="petit" data-ia-carte="${h(plan)}">${t("Decide on its card")}</a></div>`}</div>` : ""}
+      <a href="#approbations" class="petit" data-ia-carte="${h(plan)}">${t("Decide on its card")}</a></div>`}</div>` : ""}
     ${x.resultat ? `<div class="ia-reponse">${mdChat(x.resultat, true)}</div>` : ""}
     ${tacheFinie(x) ? `<p class="m0 petit"><span class="pv-etat ${cl}">${h(lib)}</span>${["echec", "arretee"].includes(x.etat) && fin.detail ? ` <span class="muet">${h(t(fin.detail))}</span>` : ""}</p>` : ""}</div>`;
 }
@@ -6783,11 +6788,11 @@ $("#page").addEventListener("click", async (ev) => {
   }
   if (d.iaArreter) {
     if (await action(api("serveurs/" + encodeURIComponent(term.id) + "/taches/" + encodeURIComponent(d.iaArreter) + "/arreter", "POST"))) toast(t("Task stopped."), "ok");
-    return chargerIA();
+    await chargerIA(); return term.x && term.x.focus(); // the keyboard back to the terminal, as after Take over
   }
   // a password or a paired device to decide, or a plan that leaves only Athanor's key: decided on its card
   const r = await api("hub/approbations").catch(() => ({})), p = ia.plans[d.plan] || {};
-  if (r.mot_de_passe_requis || r.appareil_requis || (p.seule_cle && d.iaDecider !== "refuser")) { etat.apprCible = d.plan; location.hash = "#pourvous"; return; }
+  if (r.mot_de_passe_requis || r.appareil_requis || (p.seule_cle && d.iaDecider !== "refuser")) { etat.apprCible = d.plan; location.hash = "#approbations"; return; } // the server's plan, outside any project
   if (await deciderApprobation({ id: d.plan, decision: d.iaDecider })) chargerIA(); else b.disabled = false;
 });
 // the Settings panel: every change shows at once in the terminal; nothing is kept before Save
@@ -6887,7 +6892,7 @@ async function rendrePage() {
   } else if (pre && etat.page !== "accueil") etat.preRempli = null; // went elsewhere: the text is not carried to a later visit
   remettreDefil(defils);
   // an approval opened from the bell: its card in view, its first field focused
-  const appr = etat.apprCible && etat.page === "pourvous" && document.getElementById("appr-" + etat.apprCible);
+  const appr = etat.apprCible && (etat.page === "pourvous" || etat.page === "approbations") && document.getElementById("appr-" + etat.apprCible);
   if (appr) { etat.apprCible = null; appr.scrollIntoView({ block: "center" }); appr.querySelector("select, input, button")?.focus({ preventScroll: true }); }
   const champ = saisie && document.getElementById(saisie[0]);
   if (champ) { champ.focus({ preventScroll: true }); champ.setSelectionRange(saisie[1], saisie[2]); }

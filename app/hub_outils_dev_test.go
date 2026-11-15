@@ -146,7 +146,8 @@ func TestOutilsDev(t *testing.T) {
 	if _, _, err = s.deciderApprobation("fenetre", l[0].ID, "toujours", e2.ID, "", ""); err != nil || !s.approbations.Regle(regle) {
 		t.Fatalf("toujours: %v", err)
 	}
-	if _, err = s.coffre.Ajouter(EntreeCoffre{Nom: "MISTRAL_KEY", Famille: "secret", Type: "autre", Portee: "code"}, "témoin-mistral-"+aleatoire(6)); err != nil {
+	e3, err := s.coffre.Ajouter(EntreeCoffre{Nom: "MISTRAL_KEY", Famille: "secret", Type: "autre", Portee: "code"}, "témoin-mistral-"+aleatoire(6))
+	if err != nil {
 		t.Fatal(err)
 	}
 	if txt, _ = appel("demander_acces", `{"nom":"MISTRAL_KEY","raison":"tests"}`); !strings.HasPrefix(txt, "waiting for the owner") {
@@ -162,6 +163,19 @@ func TestOutilsDev(t *testing.T) {
 	}
 	if txt, _ = appel("etat", "{}"); !strings.Contains(txt, `"OPENAI_API_KEY"`) {
 		t.Errorf("granted key not received: %s", txt)
+	}
+	// M240l2: the rule also plays when the key the owner chose has another name than the variable asked
+	if l[1].Details["nom"] != "ABSENT_KEY" {
+		t.Fatalf("approvals: %+v", l)
+	}
+	if _, _, err = s.deciderApprobation("fenetre", l[1].ID, "toujours", e3.ID, "", ""); err != nil {
+		t.Fatalf("toujours with another key: %v", err)
+	}
+	if err = s.acces.Retirer("demo", e3.ID, "dev"); err != nil {
+		t.Fatal(err)
+	}
+	if txt, _ = appel("demander_acces", `{"nom":"ABSENT_KEY","raison":"tests"}`); !strings.Contains(txt, "granted by the owner's rule") {
+		t.Errorf("rule with a key of another name: %s", txt)
 	}
 	l = l[:1]
 

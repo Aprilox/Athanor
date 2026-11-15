@@ -13,7 +13,6 @@ package main
 import (
 	"errors"
 	"net/http"
-	"time"
 )
 
 var (
@@ -33,8 +32,7 @@ func (s *Serveur) preuvePresence(r *http.Request, mdp string) (int, error) {
 	if appareilDe(r) != "" {
 		return 0, nil // garde let it in: unlocked with the password on that device
 	}
-	time.Sleep(400 * time.Millisecond) // slows down bursts of attempts, as apiDeverrouiller
-	if ok, _ := verifierMotDePasse(sel, mdp, hash); !ok {
+	if ok, _ := s.verifierMdpLent(sel, mdp, hash, true); !ok {
 		return http.StatusUnauthorized, errors.New("Wrong password")
 	}
 	return 0, nil

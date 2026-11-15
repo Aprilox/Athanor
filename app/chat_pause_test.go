@@ -126,6 +126,17 @@ func TestChatMCP(t *testing.T) {
 	if conv := lireConversation(k, p); conv.Messages[1].MCP != "mon-logiciel" {
 		t.Errorf("message not marked: %+v", conv.Messages[1])
 	}
+	// M240l2: a decided card is not played twice, and the addition is in the audit log
+	if c, v := appel("POST", "/api/chat/mcp?p=a", map[string]any{"index": 1, "nom": "Autre", "config": cfg}); c != 409 || v["erreur_key"] != "This card was already decided." {
+		t.Fatalf("second click: %d %v", c, v)
+	}
+	audite := false
+	for _, l := range lignesAudit(t, dossierJournalAudit()) {
+		audite = audite || strings.Contains(l.Action, "mon-logiciel") && strings.Contains(l.Resultat, "mon-logiciel")
+	}
+	if !audite {
+		t.Error("no audit line for the MCP server added from the chat")
+	}
 	var def objetJSON
 	_ = json.Unmarshal([]byte(`{"config":{"type":"stdio","command":"uv","args":["run","--script","${ATHANOR_MCP_DIR}/server.py"]}}`), &def)
 	srv, raison := serveurMCP(kit, "mon-logiciel", def, objetJSON{}, p.Dossier, "")
@@ -135,6 +146,14 @@ func TestChatMCP(t *testing.T) {
 	j, _ := json.Marshal(srv)
 	if want, _ := json.Marshal(filepath.Join(kit, "tools", "mcp-ecrits", "mon-logiciel") + "/server.py"); !bytes.Contains(j, bytes.Trim(want, `"`)) {
 		t.Errorf("the server's folder: %s", j)
+	}
+	// M240l2: a Windows program outside the cage needs its own confirmation
+	ecrireConversation(k, p, conversationChat{Messages: []MessageChat{{Role: "claude", Texte: `<mcp>{"config":{"command":"x.exe"}}</mcp>`}}})
+	if c, v := appel("POST", "/api/chat/mcp?p=a", map[string]any{"index": 0, "nom": "Prog Windows", "config": `{"command":"x.exe"}`, "windows": true}); c != 400 || v["erreur_key"] != "Confirm that this server may run outside the cage, with your rights." {
+		t.Fatalf("windows without confirmation: %d %v", c, v)
+	}
+	if _, ok := lireBiblio(k).MCP["prog-windows"]; ok {
+		t.Error("windows program added without confirmation")
 	}
 	// M240k2: a second card with the same name (case aside) never replaces it: files, keys and library unchanged
 	ecrireConversation(k, p, conversationChat{Messages: []MessageChat{{Role: "claude", Texte: `<mcp>{"fichiers":{"server.py":"print('autre')"},"config":{"command":"uv"}}</mcp>`}}})

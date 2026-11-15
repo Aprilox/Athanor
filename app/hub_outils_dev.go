@@ -199,8 +199,9 @@ func outilDemanderAcces(s *Serveur, x SessionHub, args json.RawMessage) (string,
 	}
 	ap := Approbation{Projet: x.Projet, Env: env, Mission: x.Mission, Agent: x.Agent,
 		Action: "demander_acces", Details: map[string]string{"nom": nom}, Raison: s.masquerSecrets(raison)}
-	// the owner's "never ask again" for this project and environment: only the vault entry it granted, under that name
-	if id := s.cleCodeNommee(nom); id != "" && s.approbations.Regle(RegleAccord{x.Projet, env, ap.Action, id, nom}) {
+	// the owner's "never ask again" for this project and environment: only the vault entry it granted for that
+	// variable (its own name may differ), while it is still a code secret of the vault
+	if id := s.approbations.EntreeRegle(x.Projet, env, ap.Action, nom); id != "" && s.cleCode(id) {
 		if d, err := s.approbations.Demander(ap); err == nil {
 			if _, _, err := s.deciderApprobation("regle", d.ID, "accepter", id, "", ""); err == nil {
 				return nom + " granted by the owner's rule for this project and environment: it is in .athanor/secrets.env (read it again, no restart needed)", nil
@@ -218,18 +219,11 @@ func outilDemanderAcces(s *Serveur, x SessionHub, args json.RawMessage) (string,
 	return attente(d.ID), nil
 }
 
-// cleCodeNommee: the id of the vault's only code secret named nom ("" when none or several: the owner chooses).
-func (s *Serveur) cleCodeNommee(nom string) string {
-	id := ""
-	for _, e := range s.coffre.Liste() {
-		if e.Nom == nom && e.Portee == "code" && e.Famille == "secret" {
-			if id != "" {
-				return ""
-			}
-			id = e.ID
-		}
-	}
-	return id
+// cleCode: id is a code secret of the vault.
+func (s *Serveur) cleCode(id string) bool {
+	return slices.ContainsFunc(s.coffre.Liste(), func(e EntreeCoffre) bool {
+		return e.ID == id && e.Portee == "code" && e.Famille == "secret"
+	})
 }
 
 // outilDemanderDeploiement (M120): the environment's policy decides (politiqueDeploiement); prod and the

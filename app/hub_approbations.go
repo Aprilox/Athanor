@@ -382,6 +382,18 @@ func (a *Approbations) Regle(r RegleAccord) bool {
 	return slices.Contains(a.regles, r)
 }
 
+// EntreeRegle: the vault entry the owner granted with "do not ask again" for the variable nom ("" none).
+func (a *Approbations) EntreeRegle(projet, env, action, nom string) string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for _, r := range a.regles {
+		if r.Projet == projet && r.Env == env && r.Action == action && r.Nom == nom && r.Entree != "" {
+			return r.Entree
+		}
+	}
+	return ""
+}
+
 // ----------------------------------------------------------------------------- server side
 
 func (s *Serveur) chargerApprobations() {

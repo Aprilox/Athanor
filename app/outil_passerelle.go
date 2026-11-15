@@ -277,7 +277,9 @@ func (p *passerelle) windowsVar(args []string) int {
 		p.refus(2, "Refused: the path must be inside $TOOLS/windows or a detected SDK (%s).", reel)
 	}
 	win := versWindowsP(reel)
-	c := commande("powershell.exe", "-NoProfile", "-Command", "[Environment]::SetEnvironmentVariable('"+nom+"', '"+win+"', 'User')")
+	// the path goes through the environment, never into the command (a ' in a folder name would run code)
+	c := commande("powershell.exe", "-NoProfile", "-Command", "[Environment]::SetEnvironmentVariable('"+nom+"', $env:ATHANOR_VAR_VALEUR, 'User')")
+	c.Env = append(os.Environ(), "ATHANOR_VAR_VALEUR="+win, "WSLENV="+strings.Trim(os.Getenv("WSLENV")+":ATHANOR_VAR_VALEUR", ":"))
 	c.Stdin, c.Stdout, c.Stderr = os.Stdin, p.sortie, p.erreur
 	if code := codeCommande(c.Run(), c); code != 0 {
 		return code

@@ -316,7 +316,7 @@ func gardeFichiers(args []string, entree []byte) string {
 	}
 	for _, c := range candidats {
 		chemin := normaliserGarde(c, base)
-		if n := strings.ToLower(chemin[strings.LastIndexAny(chemin, `/\`)+1:]); sansSecrets && (n == ".env" || strings.HasPrefix(n, ".env.") || n == "secrets.env") {
+		if n := strings.ToLower(chemin[strings.LastIndexAny(chemin, `/\`)+1:]); sansSecrets && (n == ".env" || strings.HasPrefix(n, ".env.") || strings.HasPrefix(n, "secrets.env")) {
 			return "Refused by the guard: a secrets file is never read in the chat."
 		}
 		if !outilsEcriture[outil] && dedansGarde(chemin, lecture) {

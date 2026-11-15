@@ -23,6 +23,8 @@ import (
 type Serveur struct {
 	mu           sync.Mutex
 	mdpMu        sync.Mutex // one password change at a time (apiMotDePasse)
+	essaisMu     sync.Mutex // one password check at a time (verifierMdpLent)
+	echecsMdp    int        // wrong passwords typed on this PC since the last right one
 	config       Config
 	kit          Kit // read with kitCourant() (can change from Options)
 	kitMu        sync.RWMutex
@@ -579,6 +581,26 @@ func (s *Serveur) routes(mux *http.ServeMux) {
 // (a stolen phone cannot try password after password).
 const essaisMdpDistance = 5
 
+// verifierMdpLent checks a typed password one attempt at a time (parallel attempts wait their turn); each
+// wrong password typed on this PC lengthens the pause (0.4 s, 0.8 s… up to 5 s), a right one resets it.
+func (s *Serveur) verifierMdpLent(sel, mdp, hash string, local bool) (ok, aRemplacer bool) {
+	s.essaisMu.Lock()
+	defer s.essaisMu.Unlock()
+	time.Sleep(pauseMdp(s.echecsMdp))
+	ok, aRemplacer = verifierMotDePasse(sel, mdp, hash)
+	switch {
+	case ok:
+		s.echecsMdp = 0
+	case local: // a remote device has its own count (essaisMdpDistance)
+		s.echecsMdp++
+	}
+	return ok, aRemplacer
+}
+
+func pauseMdp(echecs int) time.Duration {
+	return min(400*time.Millisecond<<min(echecs, 4), 5*time.Second)
+}
+
 func (s *Serveur) apiDeverrouiller(w http.ResponseWriter, r *http.Request) {
 	var c struct {
 		MotDePasse string `json:"mot_de_passe"`
@@ -591,9 +613,8 @@ func (s *Serveur) apiDeverrouiller(w http.ResponseWriter, r *http.Request) {
 		s.ecrireJSON(w, map[string]bool{"ok": true})
 		return
 	}
-	time.Sleep(400 * time.Millisecond) // slows down bursts of attempts (without holding the application)
 	id := appareilDe(r)
-	ok, aRemplacer := verifierMotDePasse(sel, c.MotDePasse, hash)
+	ok, aRemplacer := s.verifierMdpLent(sel, c.MotDePasse, hash, id == "")
 	if aRemplacer {
 		s.remplacerHashMdp(hash, c.MotDePasse)
 	}
