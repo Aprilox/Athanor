@@ -199,7 +199,7 @@ func outilProposerPlan(s *Serveur, x SessionHub, args json.RawMessage) (string, 
 	if prod {
 		p.Env = "prod"
 	}
-	haut, resumeEtapes, construit := ClasseLecture, []string{}, false
+	haut, resumeEtapes, construit, inconnue := ClasseLecture, []string{}, false, false
 	for i, e := range a.Etapes {
 		echec := func(err error) (string, error) {
 			s.ecrireAudit(LigneAudit{Type: "evenement", De: x.Agent, Vers: "serveur:" + a.Serveur, Projet: x.Projet, Mission: x.Mission,
@@ -286,6 +286,7 @@ func outilProposerPlan(s *Serveur, x SessionHub, args json.RawMessage) (string, 
 			sans = ""
 		}
 		haut = max(haut, et.Classe)
+		inconnue = inconnue || etapeInconnue(et)
 		p.Etapes = append(p.Etapes, EtapePlan{Outil: et.Outil, Arguments: et.Arguments, Classe: et.Classe.String(), Raison: et.Raison, Pourquoi: pourquoi,
 			Sauvegarde: sauvegarde, SansSauvegarde: couper(sans, 300)})
 		resumeEtapes = append(resumeEtapes, et.Outil+" "+et.Classe.String())
@@ -295,9 +296,11 @@ func outilProposerPlan(s *Serveur, x SessionHub, args json.RawMessage) (string, 
 	demande := Approbation{Projet: x.Projet, Env: p.Env, Mission: x.Mission, Agent: x.Agent, Action: actionPlanServeur, Raison: resume,
 		Details: map[string]string{"serveur": p.Serveur, "nom": p.Nom, "classe": haut.String(), "etapes": strconv.Itoa(len(p.Etapes)), "regle": map[bool]string{true: "oui", false: "non"}[regle]}}
 	// the owner's "do not ask again for this server": the plan is accepted at once, without a ping (not in a tout mission, C82)
-	parRegle := regle && s.approbations.Regle(reglePlan(x.Projet, p.Serveur)) && !missionTout(x.Env)
-	// M244f: the assistant's mode accepts it at once (auto, modifications: no dangerous step; ignorer: any plan)
-	if m := modeAutorisation(x, p.Serveur); m == "ignorer" || m != "" && m != "manuel" && haut < ClasseDestructrice && !construit {
+	// M244k1: the Manual mode of the assistant asks every time, an old rule included
+	m := modeAutorisation(x, p.Serveur)
+	parRegle := regle && m != "manuel" && s.approbations.Regle(reglePlan(x.Projet, p.Serveur)) && !missionTout(x.Env)
+	// M244f: the assistant's mode accepts it at once (auto, modifications: no dangerous step and no unknown command, M244k1; ignorer: any plan)
+	if m == "ignorer" || m != "" && m != "manuel" && haut < ClasseDestructrice && !construit && !inconnue {
 		parRegle = true
 	}
 	var ap Approbation
@@ -426,7 +429,7 @@ func (s *Serveur) planOuRegle(x SessionHub, id string, e *Etape) error {
 		audit(fmt.Sprintf("accordé : plan %s, étape %d (%s)", p.ID, n, e.Classe))
 		return nil
 	}
-	if _, prod := serveurProd(id); e.Classe <= ClasseChangement && !prod && s.approbations.Regle(reglePlan(x.Projet, id)) && !missionTout(x.Env) {
+	if _, prod := serveurProd(id); e.Classe <= ClasseChangement && !prod && modeAutorisation(x, id) != "manuel" && s.approbations.Regle(reglePlan(x.Projet, id)) && !missionTout(x.Env) {
 		audit("accordé : règle « ne plus demander » pour ce serveur (changement)")
 		return nil
 	}

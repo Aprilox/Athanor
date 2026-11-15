@@ -197,7 +197,7 @@ func (s *Serveur) avantOutil(x SessionHub, id, outil string, a map[string]json.R
 		if e.Classe > ClasseLecture {
 			err = s.planOuRegle(x, id, &e)
 		}
-	case decisionMode(m, e.Classe) == decisionLibre: // M244f: the owner's mode for this server's assistant
+	case decisionMode(m, e.Classe, etapeInconnue(e)) == decisionLibre: // M244f: the owner's mode for this server's assistant
 		if missionBloquee("servers", x.Mission) != "" {
 			err = errors.New("the task is paused: nothing changes on a server until the owner resumes it")
 			break

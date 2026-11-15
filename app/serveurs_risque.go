@@ -23,8 +23,9 @@ func (c Classe) String() string { return [...]string{"lecture", "changement", "d
 
 // verdict keeps the highest class seen and the first reason that reached it.
 type verdict struct {
-	classe Classe
-	raison string
+	classe   Classe
+	raison   string
+	inconnue bool // a command of no list ran: the Auto mode asks the owner (M244k1)
 }
 
 func (v *verdict) monter(c Classe, raison string) {
@@ -45,24 +46,28 @@ func classerCommande(cmd string) (Classe, string) {
 	return v.classe, v.raison
 }
 
+// commandeInconnue: cmd runs a command that is on no list (its class is then a guess: change).
+func commandeInconnue(cmd string) bool { return classerTexte(cmd, 0).inconnue }
+
 func classerTexte(cmd string, prof int) verdict {
 	for _, r := range cmd {
 		if r != '\t' && r != '\n' && caractereInvisible(r) {
-			return verdict{ClasseDestructrice, "control or invisible character: what is shown is not what runs"}
+			return verdict{classe: ClasseDestructrice, raison: "control or invisible character: what is shown is not what runs"}
 		}
 	}
 	if prof > 8 {
-		return verdict{ClasseDestructrice, "substitutions nested too deep to analyse"}
+		return verdict{classe: ClasseDestructrice, raison: "substitutions nested too deep to analyse"}
 	}
 	l := lexeurShell{s: cmd, prof: prof}
 	l.lire()
 	if l.ko != "" {
-		return verdict{ClasseDestructrice, "cannot be analysed (" + l.ko + "): treated as destructive"}
+		return verdict{classe: ClasseDestructrice, raison: "cannot be analysed (" + l.ko + "): treated as destructive"}
 	}
 	v := l.v
 	for _, sg := range l.segs {
 		c, r := classerSegment(sg, cmd)
 		v.monter(c, r)
+		v.inconnue = v.inconnue || c == ClasseChangement && strings.HasSuffix(r, raisonInconnue)
 	}
 	return v
 }
@@ -281,6 +286,7 @@ func (l *lexeurShell) substitution(i int) {
 func (l *lexeurShell) sousCommande(inner string) {
 	v := classerTexte(inner, l.prof+1)
 	l.v.monter(v.classe, v.raison)
+	l.v.inconnue = l.v.inconnue || v.inconnue
 	l.dans, l.cite, l.dyn = true, true, true
 }
 
@@ -399,7 +405,7 @@ func classerSegment(sg segmentShell, texte string) (Classe, string) {
 		case r.cible.dynamique:
 			v.monter(ClasseChangement, "writes to a path computed at run time")
 		case t == "/dev/null" || t == "/dev/stdout" || t == "/dev/stderr" || strings.HasPrefix(t, "/dev/fd/"):
-		case cheminCritique(t) || disque(t) || lectureInterdite(t) == ClasseDestructrice:
+		case cheminCritique(t) || cheminSysteme(t) || disque(t) || lectureInterdite(t) == ClasseDestructrice:
 			v.monter(ClasseDestructrice, "writes to a protected system path: "+t)
 		default:
 			v.monter(ClasseChangement, "writes to a file: "+t)
@@ -596,7 +602,23 @@ func sauterEnveloppe(nom string, mots []motShell) (reste []motShell, recherche b
 
 var lecturesSimples = ensemble("cat tac head tail zcat bzcat xzcat wc cut nl od hexdump file stat du df ls pwd whoami id groups uname uptime free top pgrep pidof w who last lastlog lsblk lsof findmnt lscpu lsmem lspci lsusb lsmod blkid printenv echo printf true false test [ [[ which type whereis basename dirname realpath readlink md5sum sha1sum sha256sum sha512sum cksum diff cmp ss netstat ping dig nslookup host getent jq column tr nproc arch vmstat iostat sleep seq comm join paste fold rev read set cd pushd popd exit return : iptables-save ip6tables-save apt-cache locale tty")
 var destructricesSimples = ensemble("rm unlink shred truncate dd wipefs fdisk sfdisk cfdisk parted gdisk sgdisk mkswap mke2fs blkdiscard shutdown reboot halt poweroff userdel deluser groupdel delgroup killall5 srm wipe dropdb dropuser iptables-restore ip6tables-restore")
-var interpretes = ensemble("sh bash dash zsh ksh mksh fish csh tcsh busybox eval source . xargs parallel watch su runuser flock nsenter unshare systemd-run at batch screen tmux ssh sshpass script expect strace ltrace gdb trap shopt enable osascript deno bun julia Rscript java pkexec run0 sg setpriv ssh-agent fakeroot")
+
+// M244k1: editors, pagers and make run commands too (vim -c '!…', less !…, a Makefile, zip -TT)
+var interpretes = ensemble("vi vim nvim vimdiff view ex rvim ed emacs nano pico joe mc less more most man make zip sh bash dash zsh ksh mksh fish csh tcsh busybox eval source . xargs parallel watch su runuser flock nsenter unshare systemd-run at batch screen tmux ssh sshpass script expect strace ltrace gdb trap shopt enable osascript deno bun julia Rscript java pkexec run0 sg setpriv ssh-agent fakeroot")
+var destructricesRaison = map[string]string{
+	"vgremove": "removes LVM volumes and their data", "pvremove": "removes LVM volumes and their data", "lvremove": "removes LVM volumes and their data",
+	"lvreduce": "shrinks an LVM volume, which can destroy its data", "vgreduce": "removes a disk from an LVM group",
+	"ifdown": "takes a network link down, which can cut SSH", "umount": "unmounts a file system services may be using",
+	"swapoff": "turns swap off, which can make the server run out of memory", "setenforce": "changes SELinux enforcement",
+	"rmmod": "unloads a kernel module", "pam-auth-update": "changes how accounts log in",
+}
+
+// changementsConnus: commands that only write files in a way the owner expects (M244k1); any other command is
+// unknown and waits for the owner in the Auto mode.
+var changementsConnus = ensemble("mkdir rmdir touch ln install gzip gunzip bzip2 bunzip2 xz unxz zstd unzstd unzip ifup")
+
+const raisonInconnue = " is not a known command"
+
 var privileges = ensemble("passwd chpasswd usermod useradd adduser gpasswd visudo setcap chage")
 var reSUID = regexp.MustCompile(`^0*[2-7][0-7]{3}$|(^|,)[ugoa]*[+=][rwxXt]*s`)
 
@@ -621,6 +643,10 @@ func classerNom(nom string, a []string, texte string) (Classe, string) {
 	switch {
 	case destructricesSimples[nom]:
 		return ClasseDestructrice, nom + " deletes or overwrites data"
+	case destructricesRaison[nom] != "":
+		return ClasseDestructrice, nom + " " + destructricesRaison[nom]
+	case changementsConnus[nom]:
+		return ClasseChangement, nom + " changes files"
 	case privileges[nom]:
 		return ClasseDestructrice, nom + " changes accounts, passwords or privileges"
 	case interpretes[nom] || slices.ContainsFunc(prefixesInterpretes, func(p string) bool { return strings.HasPrefix(nom, p) }):
@@ -634,7 +660,7 @@ func classerNom(nom string, a []string, texte string) (Classe, string) {
 	case lecturesSimples[nom]:
 		return ClasseLecture, ""
 	}
-	return ClasseChangement, nom + " is not a known read-only command"
+	return ClasseChangement, nom + raisonInconnue
 }
 
 // optionShell: an option among the short letters (alone or grouped: -rf) or the long names (--x or --x=…), before "--".
@@ -802,7 +828,12 @@ var reglesCommandes = map[string]regle{
 		}
 		return ClasseLecture, ""
 	},
-	"tee": func([]string, string) (Classe, string) { return ClasseChangement, "tee writes files" },
+	"tee": func(a []string, _ string) (Classe, string) {
+		if slices.ContainsFunc(positionnels(a), cheminSysteme) {
+			return ClasseDestructrice, "tee overwrites a system file"
+		}
+		return ClasseChangement, "tee writes files"
+	},
 	"date": func(a []string, _ string) (Classe, string) {
 		if optionShell(a, "s", "--set") || slices.ContainsFunc(positionnels(a), func(x string) bool { return !strings.HasPrefix(x, "+") }) {
 			return ClasseChangement, "date sets the clock"
@@ -836,7 +867,7 @@ var reglesCommandes = map[string]regle{
 	},
 	"sysctl": func(a []string, _ string) (Classe, string) {
 		if optionShell(a, "wp", "--write", "--load", "--system") || slices.ContainsFunc(a, func(x string) bool { return strings.Contains(x, "=") }) {
-			return ClasseChangement, "sysctl changes kernel settings"
+			return ClasseDestructrice, "sysctl changes kernel settings live (network, memory, security)"
 		}
 		return ClasseLecture, ""
 	},
@@ -866,14 +897,18 @@ var reglesCommandes = map[string]regle{
 		}
 		return ClasseChangement, "kill stops processes"
 	},
-	"pkill":   reglePkill,
-	"killall": reglePkill,
+	"pkill": reglePkill,
+	"killall": func([]string, string) (Classe, string) {
+		return ClasseDestructrice, "killall stops every process with that name"
+	},
 	"systemctl": func(a []string, _ string) (Classe, string) {
 		p := positionnels(a)
 		switch {
 		case unParmi(p, "poweroff reboot halt kexec isolate rescue emergency suspend hibernate default soft-reboot"):
 			return ClasseDestructrice, "systemctl stops or restarts the whole server"
-		case unParmi(p, "stop disable mask kill") && uniteVitale(p):
+		case unParmi(p, "mask"):
+			return ClasseDestructrice, "systemctl mask prevents a service from starting at all"
+		case unParmi(p, "stop disable kill") && uniteVitale(p):
 			return ClasseDestructrice, "systemctl cuts SSH or the network"
 		case unParmi(p[:min(1, len(p))], "show cat show-environment"): // RT3: Environment=… lines
 			return ClasseChangement, "systemctl " + p[0] + " shows a service's environment, which may hold secrets"
@@ -994,7 +1029,44 @@ var reglesCommandes = map[string]regle{
 		if slices.Contains(a, "/dev/null") {
 			return ClasseDestructrice, "mv to /dev/null destroys the file"
 		}
+		if slices.ContainsFunc(positionnels(a), cheminSysteme) {
+			return ClasseDestructrice, "mv moves or overwrites a system folder or file"
+		}
 		return ClasseChangement, "mv moves or overwrites files"
+	},
+	"cp": func(a []string, _ string) (Classe, string) {
+		if p := positionnels(a); len(p) > 1 && cheminSysteme(p[len(p)-1]) {
+			return ClasseDestructrice, "cp overwrites a system folder or file"
+		}
+		return ClasseChangement, "cp copies files"
+	},
+	"tar": regleTar,
+	"firewall-cmd": func(a []string, _ string) (Classe, string) {
+		lit := func(x string) bool {
+			return slices.ContainsFunc([]string{"--list-", "--get-", "--query-", "--info-", "--state", "--zone", "--permanent"}, func(p string) bool { return strings.HasPrefix(x, p) })
+		}
+		if len(a) > 0 && !slices.ContainsFunc(a, func(x string) bool { return !lit(x) }) {
+			return ClasseLecture, ""
+		}
+		return ClasseDestructrice, pareFeuSeul("firewall-cmd")
+	},
+	"route": func(a []string, _ string) (Classe, string) {
+		p := positionnels(a)
+		switch {
+		case unParmi(p, "del delete flush"):
+			return ClasseDestructrice, "route removes routes, which can cut SSH"
+		case len(p) == 0:
+			return ClasseLecture, ""
+		}
+		return ClasseChangement, "route changes the network"
+	},
+	"nmcli": regleObjetVerbe("nmcli", "show status list monitor", "down delete off disconnect reload"),
+	"btrfs": regleObjetVerbe("btrfs", "show list df usage", "delete remove"),
+	"zpool": func(a []string, _ string) (Classe, string) {
+		return classerSous("zpool", positionnels(a), "list status iostat get history", "destroy remove detach offline clear labelclear export split")
+	},
+	"zfs": func(a []string, _ string) (Classe, string) {
+		return classerSous("zfs", positionnels(a), "list get", "destroy rollback")
 	},
 	"init":    regleInit,
 	"telinit": regleInit,
@@ -1014,6 +1086,9 @@ func init() {
 	}
 	for _, n := range []string{"chmod", "chown", "chgrp", "setfacl", "chattr"} {
 		reglesCommandes[n] = func(a []string, _ string) (Classe, string) {
+			if slices.ContainsFunc(positionnels(a), cheminSysteme) {
+				return ClasseDestructrice, n + " changes the rights of a system folder or file"
+			}
 			if optionShell(a, "R", "--recursive") {
 				return ClasseDestructrice, n + " -R changes a whole tree"
 			}
@@ -1034,6 +1109,36 @@ func init() {
 			return ClasseChangement, n + " runs database statements"
 		}
 	}
+}
+
+// regleObjetVerbe: nom OBJECT VERB… (nmcli connection down, btrfs subvolume delete): the verb after the object.
+func regleObjetVerbe(nom, lecture, destructeurs string) regle {
+	return func(a []string, _ string) (Classe, string) {
+		p := positionnels(a)
+		if len(p) > 0 {
+			p = p[1:]
+		}
+		return classerSous(nom, p, lecture, destructeurs)
+	}
+}
+
+// tarExecute: GNU tar's options that run a command (long options may be abbreviated).
+var tarExecute = []string{"--use-compress-program", "--to-command", "--checkpoint-action", "--info-script", "--new-volume-script", "--rsh-command", "--rmt-command"}
+
+func regleTar(a []string, _ string) (Classe, string) {
+	if len(a) > 0 && !strings.HasPrefix(a[0], "-") {
+		a = append([]string{"-" + a[0]}, a[1:]...) // old style: tar xzf
+	}
+	if optionShell(a, "IF") || slices.ContainsFunc(a, func(x string) bool {
+		n, _, _ := strings.Cut(x, "=")
+		return len(n) > 3 && strings.HasPrefix(n, "--") && slices.ContainsFunc(tarExecute, func(d string) bool { return strings.HasPrefix(d, n) })
+	}) {
+		return ClasseDestructrice, "tar runs a command (-I, --to-command, --checkpoint-action…)"
+	}
+	if optionShell(a, "t", "--list") && !optionShell(a, "xcruA", "--extract", "--get", "--create", "--append", "--update", "--delete", "--catenate", "--concatenate") {
+		return ClasseLecture, ""
+	}
+	return ClasseChangement, "tar writes or extracts files"
 }
 
 func regleSave(a []string, _ string) (Classe, string) {
@@ -1282,6 +1387,18 @@ func cheminCritique(t string) bool {
 		return true
 	}
 	return ensemble("sshd_config sudoers shadow gshadow passwd group fstab authorized_keys")[c[len(c)-1]]
+}
+
+// cheminSysteme (M244k1): a top system folder itself, or a file whose loss breaks the network, the schedule, the
+// logins or the logs; for the commands that move, overwrite or change rights (a read stays a read).
+func cheminSysteme(t string) bool {
+	p := strings.Join(nettoyer(t), "/")
+	if ensemble("/ /etc /usr /bin /sbin /lib /lib32 /lib64 /var /root /home /opt /srv /boot /dev /proc /sys /run")[p] {
+		return true
+	}
+	return slices.ContainsFunc([]string{"/etc/cron", "/etc/hosts", "/etc/resolv.conf", "/etc/network", "/etc/netplan", "/etc/systemd", "/etc/init.d",
+		"/etc/selinux", "/etc/security", "/etc/environment", "/etc/ld.so", "/etc/profile", "/var/log/", "/usr/bin/", "/usr/sbin/", "/bin/", "/sbin/"},
+		func(d string) bool { return strings.HasPrefix(p, d) })
 }
 
 func disque(t string) bool {

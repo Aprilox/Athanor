@@ -4,13 +4,15 @@ package main
 // decided here, never in the agent's instructions. The one list of dangerous commands is classerCommande's
 // destructive class (deleting, formatting, stopping, permissions, firewall…, serveurs_risque.go).
 //   - manuel: every call waits for the owner's accept (a plan), reads included;
-//   - auto: reads and changes run at once, a dangerous call waits for the owner;
-//   - modifications: the assistant makes a plan and applies it; a plan without a dangerous step is accepted at once;
+//   - auto: reads and changes run at once, a dangerous call or a command of no list (M244k1) waits for the owner;
+//   - modifications: the assistant makes a plan and applies it; a plan without a dangerous step nor an unknown
+//     command is accepted at once;
 //   - ignorer: everything runs, nothing is asked (chosen with a warning and a confirmation).
 // It applies only to the tasks launched from the terminal's assistant panel (TacheServeurs.Panneau); missions and
 // the sheet's tasks keep the plan rules of serveurs_plans.go.
 
 import (
+	"encoding/json"
 	"net/http"
 	"slices"
 )
@@ -23,17 +25,27 @@ const (
 	decisionProprietaire = "proprietaire" // waits for the owner's accept
 )
 
-// decisionMode: what mode m does with a call of class c (an unknown or empty mode is manuel).
-func decisionMode(m string, c Classe) string {
+// decisionMode: what mode m does with a call of class c, inconnue when it runs a command of no list (an unknown or
+// empty mode is manuel).
+func decisionMode(m string, c Classe, inconnue bool) string {
 	switch {
 	case m == "ignorer":
 		return decisionLibre
-	case c == ClasseDestructrice || m != "auto" && m != "modifications":
+	case c == ClasseDestructrice || inconnue || m != "auto" && m != "modifications":
 		return decisionProprietaire
 	case m == "modifications" && c == ClasseChangement:
 		return decisionPlan
 	}
 	return decisionLibre
+}
+
+// etapeInconnue: e is a free command whose class is only a guess (a command of no list, commandeInconnue).
+func etapeInconnue(e Etape) bool {
+	if e.Outil != "ssh_commande" || e.Classe != ClasseChangement {
+		return false
+	}
+	var a argsOutilServeur
+	return json.Unmarshal(e.Arguments, &a) != nil || commandeInconnue(a.Commande)
 }
 
 // modeAutorisation: the mode of server id when x is the session of a task launched from its terminal's assistant

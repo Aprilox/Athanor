@@ -21,7 +21,7 @@ func TestAutorisationModes(t *testing.T) {
 	}
 	for m, d := range attendu {
 		for c := ClasseLecture; c <= ClasseDestructrice; c++ {
-			if got := decisionMode(m, c); got != d[c] {
+			if got := decisionMode(m, c, false); got != d[c] {
 				t.Errorf("mode %q, %s: %s, want %s", m, c, got, d[c])
 			}
 		}
@@ -132,6 +132,32 @@ func TestAutorisationModes(t *testing.T) {
 	if commande("systemctl restart caddy") {
 		t.Error("modifications: a change ran without a plan")
 	}
+	// M244k1: a command of no list waits for the owner in Auto, and its plan is not accepted at once (nor in modifications)
+	for c, m := range map[Classe]string{ClasseLecture: "auto", ClasseChangement: "modifications"} {
+		if decisionMode(m, ClasseChangement, true) != decisionProprietaire || decisionMode("ignorer", c, true) != decisionLibre {
+			t.Errorf("%s: an unknown command does not wait for the owner", m)
+		}
+	}
+	choisir("auto", false)
+	if commande("nginx -s reload") || plan("nginx -s reload") != "attente" {
+		t.Error("auto: an unknown command ran or its plan was accepted at once")
+	}
+	if !commande("mkdir -p /srv/site") {
+		t.Error("auto: a known change waits for the owner")
+	}
+	choisir("modifications", false)
+	if plan("certbot renew") != "attente" {
+		t.Error("modifications: the plan of an unknown command was accepted at once")
+	}
+	// M244k1: the Manual mode asks before every command, an old rule "do not ask again for this server" included
+	s.approbations.regles = append(s.approbations.regles, reglePlan(prefixeTache+"m244f", srv.ID))
+	choisir("manuel", false)
+	if commande("systemctl restart php-fpm") || commande("uptime") {
+		t.Error("manuel: an old rule let a command run")
+	}
+	if got := plan("systemctl restart php-fpm"); got != "attente" {
+		t.Errorf("manuel: an old rule accepted a plan (%s)", got)
+	}
 	// a task of the sheet (not the panel): the plan rules, whatever the mode
 	choisir("ignorer", true)
 	e.mu.Lock()
@@ -139,6 +165,9 @@ func TestAutorisationModes(t *testing.T) {
 	e.mu.Unlock()
 	if !commande("uptime") || commande("rm -rf /srv/autre") {
 		t.Error("a sheet's task follows the assistant's mode")
+	}
+	if !commande("systemctl restart caddy") { // the rule still holds outside the panel's Manual mode
+		t.Error("the rule no longer lets a sheet's task change the server")
 	}
 	// the audit names the mode, never more than the class
 	b := journalAuditTexte(t)
