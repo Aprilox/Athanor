@@ -705,6 +705,9 @@ func (s *Serveur) demarrerPilote(p Projet) (string, error) {
 	if !s.kitCourant().Valide() { // nothing to launch (no WSL started, never this very executable in the kit's place)
 		return "", errors.New("Tool folder not found")
 	}
+	if !fichierRegulierPilote(filepath.Join(s.kitCourant().Racine, ".env")) { // the launcher refuses the same way, but detached nobody reads it
+		return "", errors.New(texteSansClaude)
+	}
 	// its hub token for this launch (without it the pilot still runs, its hub tools answer an error)
 	if err := s.creerJetonPilote(p); err != nil {
 		fmt.Fprintln(os.Stderr, "hub token:", p.Nom+":", err)

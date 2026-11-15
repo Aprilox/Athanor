@@ -292,8 +292,15 @@ async function demarrerPilote(b) {
   if (b) { b.textContent = avant; b.disabled = ok; }
   if (!ok) return;
   etat.demarrage[etat.projet] = Date.now() + 25000;
-  await action(api("pilote/demarrer", "POST"));
+  const r = await api("pilote/demarrer", "POST").catch((e) => e);
+  if (!(r instanceof Error)) { const m = messageDe(r); if (m) toast(m, "ok"); }
+  else { delete etat.demarrage[etat.projet]; if (r.data?.erreur_key === SANS_CLAUDE) proposerClaude(r.message); else if (r.message !== t("Locked")) toast(r.message, "erreur"); }
   setTimeout(rafraichir, 800);
+}
+// the pilot cannot start without a connection to Claude (api_projets.go): say why, with the way to fix it
+const SANS_CLAUDE = "Claude is not connected yet: connect it in Settings › Claude, then start the pilot.";
+async function proposerClaude(message) {
+  if (await choisir(message, [{ id: "", texte: t("Cancel") }, { id: "claude", texte: t("Open Settings › Claude"), primaire: true }]) === "claude") location.hash = "#claude";
 }
 
 // ----------------------------------------------------------------------------- confirmation dialog
@@ -1188,6 +1195,7 @@ function naviguer() {
   if (ancre) montrerAncre(ancre);
   // the application's options are a tab of the settings now (older links, and the texts that say "Options")
   if (page === "options") { etat.ongletReglages = "options"; history.replaceState(null, "", "#reglages"); page = "reglages"; }
+  if (page === "claude") { etat.ongletReglages = etat.ongletDemande = "claude"; history.replaceState(null, "", "#reglages"); page = "reglages"; }
   // joining a project: the second tab of the new project page
   if (page === "rejoindre") { etat.npRejoindre = true; history.replaceState(null, "", "#nouveau"); page = "nouveau"; } else if (page === "nouveau" && etat.page !== "nouveau") etat.npRejoindre = false;
   // the settings always open on Options (or on the tab asked for, the guided tour)
@@ -2215,7 +2223,9 @@ document.addEventListener("click", async (ev) => {
     const r = await actionMission("modifier", { acces_decoches: ed.decoches.map((i) => ({ entree: m.carte.acces[i].entree, pour: m.carte.acces[i].pour })), politique: ed.politique, ...(consigne ? { consigne } : {}) });
     if (r) { etat.missionEdition = null; majZoneMission(); }
   } else if (a === "lancer") { // C78: launching gives the card's keys, as the Access page does
-    const p = await preuveMdp(t("Launching the mission gives its keys to the project: retype Athanor's password."), { ok: t("Launch") });
+    if (m.carte.avertissement_serveurs && await choisir(t("Native Windows mode: this mission's Servers lane will be refused when it launches, so nothing will be deployed. To deploy, switch to WSL in Settings › Options (or Force on the project's Access page) before launching."),
+      [{ id: "", texte: t("Cancel") }, { id: "oui", texte: t("Launch without the Servers lane"), primaire: true }], { titre: t("Before launching") }) !== "oui") return;
+    const p =await preuveMdp(t("Launching the mission gives its keys to the project: retype Athanor's password."), { ok: t("Launch") });
     if (p) await actionMission("lancer", { ...p, empreinte: m.empreinte }); // R3: the card read, never a newer one
   }
   else if (a === "annuler") { if (await choisir(t("Cancel this mission? Nothing has been built or deployed yet."), [{ id: "non", texte: t("Keep it") }, { id: "oui", texte: t("Cancel the mission"), danger: true }]) === "oui") await actionMission("annuler"); }
@@ -2300,7 +2310,7 @@ function carteActionHub(c, i) {
   const equipe = ["agent", "mcp", "attribuer"].includes(ty) ? champsEquipeHub(c, [...new Set([...(c.projets || []), ...projets.filter((n) => n && n !== c.projet)])]) : null;
   const titre = ty === "demande" ? `<label class="champ"><span>${t("Title")}</span><input type="text" data-cact="titre" value="${v(c.titre)}"></label>` : "";
   const texte = ty === "pilote" || equipe ? "" : `<label class="champ"><span>${t("Text")}</span><textarea data-cact="texte" rows="5">${v(c.texte)}</textarea></label>`;
-  const decide = c.etat ? `<div class="${c.etat === "lancee" ? "ok" : "muet"} petit" role="status">${c.etat === "lancee" ? (ic("ok") + " ") + t("Launched") : (ic("croix") + " ") + t("Refused")}${c.resultat ? " — " + h(t(c.resultat, c.args || [])) : ""}</div>`
+  const decide = c.etat ? `<div class="${c.etat === "lancee" ? "ok" : "muet"} petit" role="status">${c.etat === "lancee" ? (ic("ok") + " ") + t("Launched") : (ic("croix") + " ") + t("Refused")}${c.resultat ? " — " + h(t(c.resultat, (c.args || []).map((x) => t(x)))) : ""}${(c.args || []).includes(SANS_CLAUDE) ? ` <a href="#claude">${t("Open Settings › Claude")}</a>` : ""}</div>`
     : `${c.erreur ? `<div class="attention petit" role="alert">${h(t(c.erreur))}</div>` : ""}
       ${equipe ? equipe.vue : ""}<div class="carte-action-champs" hidden>${equipe ? equipe.champs : champs + titre + texte}</div>
       <div class="ligne m0 mt-1"><button type="button" class="btn btn-petit btn-primaire" data-cact-decision="lancer" data-index="${i}">${t("Launch")}</button>
@@ -2328,7 +2338,7 @@ document.addEventListener("click", async (ev) => {
   if (carte.querySelector(".carte-action-projets")) a.projets = [...carte.querySelectorAll("[data-cact-projet]:checked")].map((x) => x.value);
   if (a.type === "attribuer") { a.element = carte.dataset.element; a.nom = carte.dataset.nom; }
   b.disabled = true;
-  const r = await action(api("hub/chat/action", "POST", { index: Number(b.dataset.index), decision: b.dataset.cactDecision, action: a }));
+  const r = await action(api("hub/chat/action", "POST", { index: Number(b.dataset.index), decision: b.dataset.cactDecision, action: a }).then((x) => ({ ...x, args: (x.args || []).map((y) => t(y)) }))); // an argument may be a message key (the pilot's start)
   b.disabled = false;
   if (r) majHubChat(true);
 });

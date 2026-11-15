@@ -117,3 +117,25 @@ func lireI18nEssai(t *testing.T) string {
 	}
 	return string(b)
 }
+
+// M240k3: Start without a connection to Claude (no .env in the kit): refused with why, never "Pilot started".
+func TestDemarrerSansClaude(t *testing.T) {
+	kit := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(kit, "template"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(kit, "template", "CLAUDE.md"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s := nouveauServeur(Config{Kit: kit})
+	p := Projet{Nom: "sans-claude", Dossier: t.TempDir()}
+	if msg, err := s.demarrerPilote(p); err == nil || err.Error() != texteSansClaude {
+		t.Fatalf("no .env: %q %v", msg, err)
+	}
+	if !strings.Contains(lireI18nEssai(t), `"`+texteSansClaude+`"`) {
+		t.Fatal("not translated")
+	}
+	if b, _ := statique.ReadFile("static/app.js"); !strings.Contains(string(b), `const SANS_CLAUDE = "`+texteSansClaude+`"`) {
+		t.Fatal("the interface no longer recognises the refusal (SANS_CLAUDE)")
+	}
+}

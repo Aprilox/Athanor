@@ -212,6 +212,9 @@ func (s *Serveur) apiRemarque(w http.ResponseWriter, r *http.Request) {
 	s.msg(w, "Note added: Claude reads it at the start of the next cycle.")
 }
 
+// texteSansClaude: Start without a connection to Claude (no .env in the tool folder).
+const texteSansClaude = "Claude is not connected yet: connect it in Settings › Claude, then start the pilot."
+
 // texteLivreRienDeNeuf: Start on a delivered project to which nothing was added.
 const texteLivreRienDeNeuf = "This project is delivered and nothing new came since: add a request to the queue or a note, then start it again."
 
