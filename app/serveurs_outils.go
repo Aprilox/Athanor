@@ -136,7 +136,12 @@ $S sh -c 'umask 077; mkdir -p -- "${1%/*}" && cp -- "$0" "$1" && chmod 600 -- "$
 // appelerOutilServeur runs tool outil on server id for de (who asks, for the log), after archiving sv, and
 // writes the audit line.
 func (s *Serveur) appelerOutilServeur(ctx context.Context, de, id, outil string, args json.RawMessage, sv Sauvegarde) (ResultatOutil, error) {
+	fin := func(ResultatOutil, error) {}
+	if outil == "sftp_envoyer" || outil == "sftp_recuperer" { // shown in the SFTP tab's transfers
+		fin = noterTransfertAssistant(id, outil, args)
+	}
 	r, err := s.executerOutilServeur(ctx, de, id, outil, args, sv)
+	fin(r, err)
 	r.Sortie = s.masquerSecrets(r.Sortie)
 	if len(r.Sortie) > sortieMaxOutil {
 		r.Sortie, r.Coupee = r.Sortie[:sortieMaxOutil], true

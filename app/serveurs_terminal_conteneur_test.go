@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"io/fs"
 	"net/http"
@@ -166,6 +168,59 @@ func TestTerminalConteneur(t *testing.T) {
 	l.attendre(t, "EDITE-DANS-LA-PAGE")
 	if c, b, _ := requete("POST", base, `{"supprimer":"`+dossier+`/notes.txt"}`); c != http.StatusOK {
 		t.Errorf("delete: %d %s", c, b)
+	}
+	// the transfer queue on a real OpenSSH: 3 MiB sent with one cut (resumed), seen by the shell, fetched back
+	loc := t.TempDir()
+	gros := bytes.Repeat([]byte("0123456789abcdef"), 3<<16)
+	if err := os.WriteFile(filepath.Join(loc, "gros.bin"), gros, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	pause := pauseRepriseTransfert
+	pauseRepriseTransfert = 10 * time.Millisecond
+	coupe := false
+	fauteTransfert = func(tr *transfertSFTP) error {
+		transferts.Lock()
+		defer transferts.Unlock()
+		if tr.Fait >= 1<<20 && !coupe {
+			coupe = true
+			return errors.New("connection reset by peer")
+		}
+		return nil
+	}
+	t.Cleanup(func() { pauseRepriseTransfert, fauteTransfert = pause, nil })
+	transferer := func(sens, source, vers string) etatTransfert {
+		t.Helper()
+		corps, _ := json.Marshal(map[string]any{"sens": sens, "sources": []string{source}, "dossier": vers})
+		c, b, _ := requete("POST", base+"/transferts", string(corps))
+		var r struct{ Transferts []string }
+		if json.Unmarshal(b, &r); c != http.StatusOK || len(r.Transferts) != 1 {
+			t.Fatalf("transfer: %d %s", c, b)
+		}
+		for fin := time.Now().Add(20 * time.Second); time.Now().Before(fin); time.Sleep(20 * time.Millisecond) {
+			_, b, _ := requete("GET", base+"/transferts", "")
+			var l struct{ Transferts []etatTransfert }
+			_ = json.Unmarshal(b, &l)
+			for _, x := range l.Transferts {
+				if x.ID == r.Transferts[0] && !actif(x.Etat) {
+					return x
+				}
+			}
+		}
+		t.Fatal("transfer still running")
+		return etatTransfert{}
+	}
+	if x := transferer("envoi", filepath.Join(loc, "gros.bin"), dossier); x.Etat != "termine" || x.Reprises != 1 {
+		t.Errorf("upload: %+v", x)
+	}
+	taper(map[string]any{"entree": "echo TAILLE-$(wc -c < ~/e2e-ia/gros.bin)\r"})
+	l.attendre(t, "TAILLE-3145728")
+	_ = os.Mkdir(filepath.Join(loc, "retour"), 0o755)
+	coupe = false
+	if x := transferer("telechargement", dossier+"/gros.bin", filepath.Join(loc, "retour")); x.Etat != "termine" || x.Reprises != 1 {
+		t.Errorf("download: %+v", x)
+	}
+	if b, _ := os.ReadFile(filepath.Join(loc, "retour", "gros.bin")); !bytes.Equal(b, gros) {
+		t.Errorf("downloaded back: %d bytes", len(b))
 	}
 	// the witness lives in a file on the server, as a real password would
 	if c := envoyer(dossier+"/LISEZMOI", "mot de passe de la base : "+temoinOutils+"\n", false); c != http.StatusOK {
