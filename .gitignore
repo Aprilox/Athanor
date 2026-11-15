@@ -33,3 +33,6 @@ __pycache__/
 /hub/
 /modules/
 /Athanor-hub.exe
+# Published executables copied to the root to try them (same files as the Releases)
+/Athanor-Windows-*.exe
+/Athanor-Linux-*
