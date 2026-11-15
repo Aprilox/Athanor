@@ -38,7 +38,7 @@ type Serveur struct {
 	mdns         etatMDNS  // local network discovery, on only by the owner (hub_mdns.go)
 	session      string    // session token when a password is set ("" = locked)
 	actifLe      time.Time // the owner's last action in the window (auto-lock, verrou_auto.go)
-	infraMission bool      // the auto-lock left the infra key open for a granted mission (verrou_auto.go)
+	verrouAuto   bool      // the window locked by its timer: the vault stays open for the background (verrou_auto.go)
 	attenteMu    sync.Mutex
 	attentes     map[int]attenteInfra // the steps waiting for the infra key (infra_attente.go)
 	attenteN     int
@@ -204,7 +204,7 @@ func (s *Serveur) garde(libre bool, h http.HandlerFunc) http.HandlerFunc {
 
 func (s *Serveur) ouvrirSession(w http.ResponseWriter) {
 	s.session = aleatoire(24)
-	s.actifLe, s.infraMission = horlogeVerrou(), false
+	s.actifLe, s.verrouAuto = horlogeVerrou(), false
 	http.SetCookie(w, &http.Cookie{Name: "athanor_session", Value: s.session, Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode})
 }
 
@@ -716,7 +716,7 @@ func (s *Serveur) apiVerrouiller(w http.ResponseWriter, r *http.Request) {
 		delete(d.deverrouilles, id) // a device locks itself only
 	} else {
 		d.deverrouilles = map[string]bool{} // the computer locks every device too
-		s.session = ""
+		s.session, s.verrouAuto = "", false // the padlock closes the vault, auto-locked or not
 		http.SetCookie(w, &http.Cookie{Name: "athanor_session", Value: "", Path: "/", MaxAge: -1})
 	}
 	s.fermerCoffreSiPersonne(d)

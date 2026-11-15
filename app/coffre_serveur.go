@@ -47,9 +47,10 @@ func (s *Serveur) deverrouillerCoffre(mdp string) {
 }
 
 // fermerCoffreSiPersonne closes the infra key when neither the computer's window nor any remote
-// device is unlocked any more. Called with s.mu and the remote state's lock held.
+// device is unlocked any more; a window locked by its timer still holds it (note 19h03 §3). Called with s.mu
+// and the remote state's lock held.
 func (s *Serveur) fermerCoffreSiPersonne(d *distance) {
-	if s.coffre == nil || s.session != "" {
+	if s.coffre == nil || s.session != "" || s.verrouAuto {
 		return
 	}
 	for _, ok := range d.deverrouilles {

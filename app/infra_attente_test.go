@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 )
@@ -91,64 +92,63 @@ func TestInfraAttente(t *testing.T) {
 	}
 }
 
-// TestInfraMissionAccordee: a running mission granted the infra key for 4 hours keeps it open through the
-// automatic lock until its deadline; the padlock still closes everything.
-func TestInfraMissionAccordee(t *testing.T) {
+// TestVerrouAutoGardeInfra (note 19h03 §3): the automatic lock locks the interface only. A task then gets the
+// infra key at once (no wait, no alert) and closing the remote access leaves it open; the padlock still
+// closes the vault, and the audit logs the lock but no secret.
+func TestVerrouAutoGardeInfra(t *testing.T) {
 	s := serveurCoffreTest(t)
 	maintenant := time.Date(2026, 11, 15, 10, 0, 0, 0, time.UTC)
 	avant := horlogeVerrou
 	horlogeVerrou = func() time.Time { return maintenant }
 	t.Cleanup(func() { horlogeVerrou = avant })
-	ouvrir := func() {
-		avecMdpPreuve(s)
-		s.mu.Lock()
-		s.actifLe = maintenant
-		s.mu.Unlock()
-		if err := s.coffre.Deverrouiller(mdpPreuveTest); err != nil {
-			t.Fatal(err)
-		}
-	}
+	avecMdpPreuve(s)
+	s.mu.Lock()
+	s.actifLe = maintenant
+	s.mu.Unlock()
 	if err := s.coffre.ChangerMotDePasse("", mdpPreuveTest); err != nil {
 		t.Fatal(err)
 	}
-	ouvrir()
-	if err := enregistrerMission(Mission{ID: "mission01", Etat: "lancee", Politique: "prod"}); err != nil {
+	if err := s.coffre.Deverrouiller(mdpPreuveTest); err != nil {
 		t.Fatal(err)
 	}
-	if err := garderInfraMission("mission01", "4h", maintenant); err != nil {
+	cle, err := s.coffre.Ajouter(EntreeCoffre{Nom: "SSH_WEB", Famille: "secret", Type: "ssh"}, "cle-temoin-verrou")
+	if err != nil {
 		t.Fatal(err)
 	}
-	if !s.verifierVerrouAuto(maintenant.Add(61*time.Minute)) || !s.etatCoffre().Infra {
-		t.Fatal("the granted mission lost the infra key at the automatic lock")
+	if !s.verifierVerrouAuto(maintenant.Add(61*time.Minute)) || !s.fenetreVerrouillee() {
+		t.Fatal("the window did not lock after its delay")
 	}
-	if s.verifierVerrouAuto(maintenant.Add(3 * time.Hour)); !s.etatCoffre().Infra {
-		t.Fatal("infra key closed before the deadline")
+	if !s.etatCoffre().Infra {
+		t.Fatal("the automatic lock closed the infra key")
 	}
-	if s.verifierVerrouAuto(maintenant.Add(4*time.Hour + time.Minute)); s.etatCoffre().Infra {
-		t.Fatal("infra key still open after the deadline")
+	ctx, annuler := context.WithTimeout(context.Background(), time.Second)
+	defer annuler()
+	if v, err := s.valeurInfra(ctx, cle.ID, "missions", "mission01"); err != nil || v != "cle-temoin-verrou" {
+		t.Fatalf("a task did not get the infra key after the automatic lock: %q %v", v, err)
 	}
-
-	// without a grant (the mission ended), the automatic lock closes it; with one, the padlock closes it
-	ouvrir()
-	if _, err := modifierMission("mission01", func(m *Mission) error { m.Etat = "terminee"; return nil }); err != nil {
-		t.Fatal(err)
+	if a, _ := s.alertesHub(nil); slices.ContainsFunc(a, func(x AlerteHub) bool { return x.Empreinte == "infra-attente-missions-mission01" }) {
+		t.Fatal("a wait alert after the automatic lock")
 	}
-	if !s.verifierVerrouAuto(maintenant.Add(2*time.Hour)) || s.etatCoffre().Infra {
-		t.Fatal("an ended mission kept the infra key")
-	}
-	ouvrir()
-	if _, err := modifierMission("mission01", func(m *Mission) error { m.Etat = "lancee"; m.InfraJusqua = "mission"; return nil }); err != nil {
-		t.Fatal(err)
+	s.fermerEcouteDistance() // the remote access closed meanwhile: the window still holds the vault
+	if !s.etatCoffre().Infra {
+		t.Fatal("closing the remote access closed the vault during the automatic lock")
 	}
 	mux := http.NewServeMux()
 	s.routes(mux)
-	r := httptest.NewRequest("POST", "/api/verrouiller", nil)
-	r.Header.Set("X-Athanor", "jeton")
-	r.AddCookie(&http.Cookie{Name: cookieAcces, Value: "cle"})
-	r.AddCookie(cookieSessionTest)
-	w := httptest.NewRecorder()
-	mux.ServeHTTP(w, r)
-	if w.Code != 200 || s.etatCoffre().Infra {
-		t.Fatalf("the padlock left the infra key open: %d", w.Code)
+	appel := func(chemin string) int {
+		r := httptest.NewRequest("POST", chemin, nil)
+		r.Header.Set("X-Athanor", "jeton")
+		r.AddCookie(&http.Cookie{Name: cookieAcces, Value: "cle"})
+		r.AddCookie(cookieSessionTest)
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, r)
+		return w.Code
+	}
+	// the padlock, even on the auto-locked window, closes everything
+	if c := appel("/api/verrouiller"); c != 200 || s.etatCoffre().Infra {
+		t.Fatalf("the padlock left the infra key open: %d", c)
+	}
+	if j := lireJournalAuditTest(); !strings.Contains(j, "verrouillage automatique") || strings.Contains(j, "cle-temoin-verrou") {
+		t.Fatal("a secret in the audit")
 	}
 }

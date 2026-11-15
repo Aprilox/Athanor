@@ -2222,7 +2222,6 @@ function carteMission(d) {
         <p class="muet petit m0">${e.cout_max ? t("About {0} $ to {1} $ of quota (list price)", [e.cout_min, e.cout_max]) : t("Quota unknown until a first cycle is measured on this PC.")}</p></div>
     </div>
     <fieldset class="mis-politique"><legend>${t("Policy")}</legend>${POLITIQUES_MISSION.map(([v, l, aide]) => `<label class="radio"><input type="radio" name="mis-politique" value="${v}"${(ed ? ed.politique : m.politique) === v ? " checked" : ""}${dis}> <span><b>${t(l)}</b><br><span class="muet petit">${t(aide)}</span></span></label>`).join("")}</fieldset>
-    ${actif && !ed && ((c.acces || []).some((x) => x.portee === "infra" && !x.decoche) || (c.envs || []).some((x) => (x.serveurs || []).length)) ? `<label class="champ mis-infra"><span>${t("Infra keys during the mission")}</span><select id="mis-infra">${[["", "Follow the automatic lock"], ["mission", "Kept open until the mission ends"], ["1h", "Kept open for 1 hour"], ["4h", "Kept open for 4 hours"], ["8h", "Kept open for 8 hours"]].map(([v, l]) => `<option value="${v}">${t(l)}</option>`).join("")}</select></label>` : ""}
     ${ed ? `<label for="mis-consigne" class="petit">${t("Ask for a change (optional)")}</label><textarea id="mis-consigne" rows="2" maxlength="2000" placeholder="${h(t("For example: put the dev on the home server"))}">${h(ed.consigne)}</textarea>
       <div class="ligne"><button type="button" class="btn btn-primaire" data-mis="appliquer">${t("Apply")}</button><button type="button" class="btn" data-mis="fermer">${t("Cancel")}</button></div>`
     : actif ? `<div class="ligne"><button type="button" class="btn" data-mis="modifier">${t("Edit")}</button><button type="button" class="btn btn-primaire" data-mis="lancer">${t("Launch")}</button><span class="espace"></span><button type="button" class="btn" data-mis="annuler">${t("Cancel the mission")}</button></div>` : ""}`;
@@ -2278,7 +2277,7 @@ document.addEventListener("click", async (ev) => {
     if (m.carte.avertissement_serveurs && await choisir(t("Native Windows mode: this mission's Servers lane will be refused when it launches, so nothing will be deployed. To deploy, switch to WSL in Settings › Options (or Force on the project's Access page) before launching."),
       [{ id: "", texte: t("Cancel") }, { id: "oui", texte: t("Launch without the Servers lane"), primaire: true }], { titre: t("Before launching") }) !== "oui") return;
     const p =await preuveMdp(t("Launching the mission gives its keys to the project: retype Athanor's password."), { ok: t("Launch") });
-    if (p) await actionMission("lancer", { ...p, empreinte: m.empreinte, infra_ouverte: ($("#mis-infra") || {}).value || "" }); // R3: the card read, never a newer one
+    if (p) await actionMission("lancer", { ...p, empreinte: m.empreinte }); // R3: the card read, never a newer one
   }
   else if (a === "annuler") { if (await choisir(t("Cancel this mission? Nothing has been built or deployed yet."), [{ id: "non", texte: t("Keep it") }, { id: "oui", texte: t("Cancel the mission"), danger: true }]) === "oui") await actionMission("annuler"); }
   else if (a === "oublier") { etat.missionVue = null; majZoneMission(); }

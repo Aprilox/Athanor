@@ -7,9 +7,9 @@ import (
 	"time"
 )
 
-// Auto-lock (note 12h28 §3): the computer's window locks itself after the owner's inactivity. It takes the
-// padlock's path for the window only (apiVerrouiller): the session goes, the infra key too when no device is
-// unlocked; pilots, missions, tasks, tunnels and SSH sessions are never touched. Remote devices keep their own unlock.
+// Auto-lock (note 12h28 §3, note 19h03 §3): the computer's window locks itself after the owner's inactivity. Only
+// its session goes: the vault and its infra keys, pilots, missions, tasks, tunnels and SSH sessions are never
+// touched. Remote devices keep their own unlock.
 
 // ordreVerrouAuto: the choices, shortest first (a longer one asks for the password); 0 = no timer.
 var ordreVerrouAuto = []string{"15m", "1h", "8h", "fermeture", "jamais"}
@@ -37,29 +37,16 @@ func (s *Serveur) resteVerrouAuto(t time.Time) time.Duration {
 	return max(0, s.actifLe.Add(d).Sub(t))
 }
 
-// verifierVerrouAuto locks the window once its delay passed; true when it did.
-// A running mission granted the infra key keeps it open until its deadline or its end (closed then, when
-// nobody is unlocked); the padlock and the emergency stop still close everything.
+// verifierVerrouAuto locks the window once its delay passed; true when it did. Only the interface locks (note
+// 19h03 §3): the vault and its infra keys stay as they are, so AIs, missions, tasks and SSH sessions go on; the
+// padlock and the emergency stop still close everything.
 func (s *Serveur) verifierVerrouAuto(t time.Time) bool {
-	gardee := infraGardee(t)
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	d := s.dist()
-	if s.infraMission && !gardee && s.session == "" {
-		s.infraMission = false
-		d.mu.Lock()
-		s.fermerCoffreSiPersonne(d)
-		d.mu.Unlock()
-	}
 	if s.resteVerrouAuto(t) != 0 {
 		return false
 	}
-	s.session = ""
-	if s.infraMission = gardee; !gardee {
-		d.mu.Lock()
-		s.fermerCoffreSiPersonne(d)
-		d.mu.Unlock()
-	}
+	s.session, s.verrouAuto = "", true
 	s.ecrireAudit(LigneAudit{Type: "evenement", De: "hub", Vers: "hub", Action: "verrouillage automatique", Resultat: verrouAutoDe(s.config.VerrouAuto)})
 	return true
 }

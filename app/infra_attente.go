@@ -4,11 +4,12 @@ import (
 	"context"
 	"errors"
 	"slices"
-	"time"
 )
 
 // A step that needs the infra key while the vault is locked waits for the unlock instead of failing (note 12h28
 // §3): the bell says what waits and why, the rest goes on, and the step resumes where it was once unlocked.
+// The automatic lock never closes the vault (verrou_auto.go): once opened by the password, the infra keys serve
+// without asking again; only a vault never opened since the start (or closed by the padlock) makes a step wait.
 
 type attenteInfra struct {
 	Module, Element string
@@ -95,32 +96,4 @@ func cmpTexte(a, b string) int {
 		return 1
 	}
 	return 0
-}
-
-// dureesInfraMission: how long a launched mission keeps the infra key open despite the automatic lock.
-var dureesInfraMission = map[string]time.Duration{"1h": time.Hour, "4h": 4 * time.Hour, "8h": 8 * time.Hour}
-
-// garderInfraMission: the owner's choice at launch ("mission" = until it ends or stops, or a duration), kept on it.
-func garderInfraMission(id, choix string, t time.Time) error {
-	jusqua := ""
-	if d, ok := dureesInfraMission[choix]; ok {
-		jusqua = t.Add(d).UTC().Format(time.RFC3339)
-	} else if choix == "mission" {
-		jusqua = "mission"
-	} else {
-		return nil
-	}
-	_, err := modifierMission(id, func(m *Mission) error { m.InfraJusqua = jusqua; return nil })
-	return err
-}
-
-// infraGardee: a running mission was granted the infra key until now at least.
-func infraGardee(t time.Time) bool {
-	return slices.ContainsFunc(lireMissions(), func(m Mission) bool {
-		if !missionSuivie(m.Etat) || m.InfraJusqua == "" {
-			return false
-		}
-		f, err := time.Parse(time.RFC3339, m.InfraJusqua)
-		return m.InfraJusqua == "mission" || (err == nil && t.Before(f))
-	})
 }

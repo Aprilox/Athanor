@@ -71,8 +71,8 @@ func TestVerrouAuto(t *testing.T) {
 	if !s.verifierVerrouAuto(maintenant) {
 		t.Fatal("not locked after the delay")
 	}
-	if s.etatCoffre().Infra {
-		t.Fatal("infra key still open once locked")
+	if !s.etatCoffre().Infra {
+		t.Fatal("the automatic lock closed the infra key (interface only, note 19h03 §3)")
 	}
 	if _, v := appel("GET", "/api/etat", ""); v["verrouille"] != true || v["verrou_dans"] != float64(-1) {
 		t.Fatalf("state once locked: %v", v)

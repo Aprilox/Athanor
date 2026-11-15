@@ -77,7 +77,7 @@ type Mission struct {
 	Session     string             `json:"session,omitempty"`      // the orchestrator's Claude session, resumed with --resume
 	Relais      *RelaisMission     `json:"relais,omitempty"`       // once launched (mission_suivi.go)
 	Journal     []EntreeJournal    `json:"journal,omitempty"`      // at most maxJournalMission, the oldest first
-	InfraJusqua string             `json:"infra_jusqua,omitempty"` // infra key kept despite the auto-lock: "mission" or RFC 3339 (infra_attente.go)
+	InfraJusqua string             `json:"infra_jusqua,omitempty"` // former option (removed, note 19h03 §3): still read from older missions, never used
 }
 
 // MarshalJSON: the mission with its card's print (empreinteCarte), which the window sends back to launch it (R3).
