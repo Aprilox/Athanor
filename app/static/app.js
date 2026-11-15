@@ -7303,19 +7303,23 @@ const ia = { visible: localStorage.getItem("athanor.terminal.ia") === "1", mode:
   verrou: "", taches: [], plans: {}, lu: "", minuteur: 0, ouvertes: new Set(), suivi: true, envoi: false, attente: "" };
 const ETATS_ACTION_IA = () => ({ en_cours: [t("running…"), "pv-claude"], ok: [t("Done"), "pv-ok"], erreur: [t("Failed"), "pv-vous"], refusee: [t("Refused"), "pv-vous"] });
 function panneauIA(distant) {
-  const mode = (v, titre, phrase) => `<label class="ia-mode${ia.mode === v ? " actif" : ""}"><input type="radio" name="ia-mode" value="${v}"${ia.mode === v ? " checked" : ""}>
-    <span><b>${t(titre)}</b> <span class="muet petit">${t(phrase)}</span></span></label>`;
+  const MODES = [["apart", "Separate connection", "It opens its own SSH session on the server, so it never gets in your way; you follow each command here."],
+    ["direct", "Live in my terminal", "Its commands run in its own connection and are copied onto your terminal's screen as they run; your typing waits meanwhile. Your shell's folder, variables and history stay your own."]];
+  // M242c, top to bottom: the compact modes, the thread, the decision card, the status line, the queued line, the input
   return `<aside class="ia" id="ia" aria-label="${h(t("Assistant"))}">
-    <fieldset class="ia-modes"><legend class="petit">${t("How the assistant works")}</legend>
-      ${mode("apart", "Separate connection", "It opens its own SSH session on the server, so it never gets in your way; you follow each command here.")}
-      ${mode("direct", "Live in my terminal", "Its commands run in its own connection and are copied onto your terminal's screen as they run; your typing waits meanwhile. Your shell's folder, variables and history stay your own.")}</fieldset>
-    <div class="ia-fil" id="ia-fil" aria-live="polite"></div>
+    <fieldset class="ia-modes"><legend class="cache-visuel">${t("How the assistant works")}</legend>
+      ${MODES.map(([v, titre]) => `<label class="ia-mode${ia.mode === v ? " actif" : ""}"><input type="radio" name="ia-mode" value="${v}"${ia.mode === v ? " checked" : ""}><b>${t(titre)}</b></label>`).join("")}</fieldset>
+    <details class="ia-aide"><summary class="petit">${t("How does it work?")}</summary>
+      ${MODES.map(([, titre, phrase]) => `<p class="petit m0"><b>${t(titre)}</b> — ${t(phrase)}</p>`).join("")}</details>
+    <div class="ia-fil-zone"><div class="ia-fil" id="ia-fil" aria-live="polite"></div>
+      <button type="button" class="btn btn-petit ia-dernier" id="ia-dernier" data-ia-dernier hidden>${t("Go to the latest message")} ↓</button></div>
+    <div class="ia-decision" id="ia-decision" hidden></div>
     <div class="ia-encours" id="ia-encours"></div>
     ${distant ? `<p class="muet petit m0">${t("Tasks are launched from the computer; their plans are decided on their cards, on the For you page.")}</p>`
-      : `<form class="ia-saisie" id="ia-form"><label for="ia-texte" class="cache-visuel">${t("Ask the assistant")}</label>
+      : `<div class="ia-file" id="ia-file" role="status" hidden></div>
+      <form class="composeur" id="ia-form"><label for="ia-texte" class="cache-visuel">${t("Ask the assistant")}</label>
       <textarea id="ia-texte" rows="2" maxlength="4000" placeholder="${h(t("e.g. Install and configure Caddy for this domain"))}"></textarea>
-      <button type="submit" class="btn btn-primaire">${t("Send")}</button>
-      <p class="petit muet m0" id="ia-file" role="status" hidden></p></form>`}
+      <div class="composeur-bas"><button type="submit" class="btn btn-primaire">${t("Send")}</button></div></form>`}
   </aside>`;
 }
 // the server's tasks read again; again in 1.5 s while one runs and the page is still this terminal
@@ -7349,16 +7353,20 @@ function etatIA() {
   return d && ["arretee", "erreur"].includes(assIA(d)) ? { etat: assIA(d), tache: d } : { etat: "repos" };
 }
 const planIA = (x) => (x.plans || []).slice(-1)[0] || "";
-function tacheIA(x) {
-  const a = assIA(x), fini = !vivanteIA(x), [lib, cl] = ETATS_TACHE_SRV()[{ arretee: "arretee", erreur: "echec" }[a] || x.etat] || [x.etat, ""], fin = (x.historique || []).slice(-1)[0] || {};
-  const plan = ["attente_decision", "arretee"].includes(a) ? planIA(x) : "", p = plan && ia.plans[plan], perime = a === "arretee";
-  return `<div class="ia-tache" data-tache="${h(x.id)}"><p class="ia-demande">${h(x.texte)}${x.direct ? ` <span class="pv-etat pv-claude">${t("Shown in your terminal")}</span>` : ""}</p>
-    ${(x.actions || []).length ? `<ol class="ia-actions">${x.actions.map(actionIA).join("")}</ol>` : ""}
-    ${p ? `<div class="ia-plan${perime ? " perime" : ""}"><p class="m0"><b>${t("Plan to apply")}</b> <span class="muet petit">${h(tn((p.etapes || []).length, "1 step", "{0} steps", [(p.etapes || []).length]))}</span></p>${blocPlan({}, p)}
+// a task's plan: in the decision card over the input while it waits, struck "not applied" in the thread once stopped
+function planCarteIA(x) {
+  const plan = planIA(x), p = plan && ia.plans[plan], perime = assIA(x) === "arretee"; if (!p) return "";
+  return `<div class="ia-plan${perime ? " perime" : ""}"><p class="m0"><b>${t("Plan to apply")}</b> <span class="muet petit">${h(tn((p.etapes || []).length, "1 step", "{0} steps", [(p.etapes || []).length]))}</span></p>${blocPlan({}, p)}
       ${perime ? `<p class="m0 petit pv-vous">${t("Not applied: the task was stopped before your decision.")}</p>` : (etat.vue || {}).distant ? "" : `<div class="ligne m0"><button type="button" class="btn btn-primaire btn-petit" data-ia-decider="accepter" data-plan="${h(plan)}">${t("Accept")}</button>
       <button type="button" class="btn btn-petit" data-ia-decider="refuser" data-plan="${h(plan)}">${t("Refuse")}</button>
       <button type="button" class="btn btn-petit" data-ia-modifier="${h(x.id)}">${t("Modify")}</button>
-      <a href="#approbations" class="petit" data-ia-carte="${h(plan)}">${t("Decide on its card")}</a></div>`}</div>` : ""}
+      <a href="#approbations" class="petit" data-ia-carte="${h(plan)}">${t("Decide on its card")}</a></div>`}</div>`;
+}
+function tacheIA(x) {
+  const a = assIA(x), fini = !vivanteIA(x), [lib, cl] = ETATS_TACHE_SRV()[{ arretee: "arretee", erreur: "echec" }[a] || x.etat] || [x.etat, ""], fin = (x.historique || []).slice(-1)[0] || {};
+  return `<div class="ia-tache" data-tache="${h(x.id)}"><p class="ia-demande">${h(x.texte)}${x.direct ? ` <span class="pv-etat pv-claude">${t("Shown in your terminal")}</span>` : ""}</p>
+    ${(x.actions || []).length ? `<ol class="ia-actions">${x.actions.map(actionIA).join("")}</ol>` : ""}
+    ${a === "arretee" ? planCarteIA(x) : ""}
     ${x.resultat ? `<div class="ia-reponse">${mdChat(x.resultat, true)}</div>` : ""}
     ${fini ? `<p class="m0 petit"><span class="pv-etat ${cl}">${h(lib)}</span>${["echec", "arretee"].includes(x.etat) && fin.detail ? ` <span class="muet">${h(t(fin.detail))}</span>` : ""}</p>` : ""}</div>`;
 }
@@ -7367,18 +7375,29 @@ function rendreIA() {
   const l = ia.taches.slice(0, 10).reverse(), e = etatIA(), courante = vivanteIA(e.tache || {}) ? e.tache : null, bas = fil.scrollHeight - fil.scrollTop - fil.clientHeight < 40;
   fil.innerHTML = l.length ? l.map(tacheIA).join("") : `<div class="ia-vide"><p class="m0"><b>${t("Ask in plain words what this server needs.")}</b></p>
     <p class="muet petit m0">${t("The assistant reads the server first, then proposes a plan: nothing changes before you accept it, a destructive step backs up first, and what the server answers is never taken as an order.")}</p></div>`;
-  if (bas || ia.suivi) { fil.scrollTop = fil.scrollHeight; ia.suivi = false; }
+  const dec = $("#ia-decision"), cartes = ia.taches.filter((x) => assIA(x) === "attente_decision").map(planCarteIA).join("");
+  if (dec) { dec.hidden = !cartes; dec.innerHTML = cartes; }
+  if (ia.attente && !courante && !ia.envoi) { const a = ia.attente; ia.attente = ""; envoyerIA(a); } // sent: the queued line goes now
+  const f = $("#ia-file");
+  if (f) { f.hidden = !ia.attente; f.innerHTML = ia.attente ? `<span class="ia-file-texte petit" title="${h(ia.attente)}">${h(t("Queued: {0}", [ia.attente.replace(/\s+/g, " ")]))}</span>
+    <button type="button" class="btn btn-petit" data-ia-annuler-file>${t("Cancel")}</button>` : ""; }
   const enCours = courante && (courante.actions || []).filter((a) => a.etat === "en_cours").slice(-1)[0];
   const texte = { repos: t("The assistant is idle."), attente_decision: t("Waiting for your decision"), arretee: t("Stopped"), erreur: t("Failed"),
     hs: t("Athanor does not answer: the assistant's state is unknown, your terminal stays free.") }[e.etat]
-    || (enCours ? t(courante.verrou ? "Running in your terminal: {0}" : "Running: {0}", [enCours.quoi]) : (ETATS_TACHE_SRV()[courante.etat] || [courante.etat])[0]);
+    || (enCours ? t(courante.verrou ? "Running in your terminal: {0}" : "Running: {0}", [enCours.quoi]) : (ETATS_TACHE_SRV()[courante.etat] || [t("The assistant is working")])[0]);
   zone.dataset.etat = e.etat;
   zone.innerHTML = `<span class="pastille ${{ travail: "travaille", attente_decision: "attend", arretee: "arret", erreur: "arret", hs: "arret" }[e.etat] || ""}"></span><span class="ia-encours-texte petit">${h(texte)}</span>
     <button type="button" class="btn btn-danger btn-petit" data-ia-arreter="${h(courante ? courante.id : "")}"${courante && !(etat.vue || {}).distant ? "" : " disabled"}>${t("Stop")}</button>`;
-  const f = $("#ia-file"); if (f) { f.hidden = !ia.attente; f.textContent = ia.attente ? t("Queued: it is sent as soon as the assistant is done.") : ""; }
-  if (ia.attente && !courante && !ia.envoi) { const a = ia.attente; ia.attente = ""; envoyerIA(a); }
+  // after the zones under the thread took their height (decision card, queued line): its bottom stays in view
+  if (bas || ia.suivi) { fil.scrollTop = fil.scrollHeight; ia.suivi = false; }
+  basFilIA();
   bandeauTerminal(e);
 }
+// the thread follows new messages while it is read at its bottom; scrolled up, a button brings it back down
+function basFilIA() {
+  const fil = $("#ia-fil"), b = $("#ia-dernier"); if (fil && b) b.hidden = fil.scrollHeight - fil.scrollTop - fil.clientHeight < 40;
+}
+$("#page").addEventListener("scroll", (ev) => { if (ev.target.id === "ia-fil") basFilIA(); }, true);
 // the banner over the terminal says the assistant's one state: "working" while one of its commands runs in this
 // terminal (mode "live in my terminal"), whose typing is locked then only (the Go side refuses it too, 423), with
 // Stop and Take over; "waiting for your decision" with Accept, Refuse and Modify, the terminal free; else nothing
@@ -7444,6 +7463,11 @@ $("#page").addEventListener("keydown", (ev) => { // Enter sends, Shift+Enter mak
 });
 $("#page").addEventListener("click", async (ev) => {
   if (etat.page !== "terminal") return;
+  if (ev.target.closest("[data-ia-dernier]")) { const fil = $("#ia-fil"); fil.scrollTop = fil.scrollHeight; return basFilIA(); }
+  if (ev.target.closest("[data-ia-annuler-file]")) { // the queued message is not sent; back in the field when that one is empty
+    const c = $("#ia-texte"); if (c && !c.value.trim()) c.value = ia.attente;
+    ia.attente = ""; rendreIA(); return c && c.focus();
+  }
   const b = ev.target.closest("[data-ia-arreter], [data-ia-decider], [data-ia-carte], [data-ia-main], [data-ia-modifier]"); if (!b) return;
   const d = b.dataset;
   if (d.iaModifier) { // the request back in the field, "Changes:" after it; Send stops the task (its plan refused) and sends it again

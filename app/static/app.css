@@ -1543,14 +1543,22 @@ html.scene-pause .verrou * { animation-play-state: paused !important; }
 .term-zones.avec-ia { grid-template-columns: minmax(0, 1fr) minmax(300px, 380px); }
 .term-zones:not(.avec-ia) .ia { display: none; }
 .ia { display: flex; flex-direction: column; gap: 8px; min-height: 0; border: 1px solid var(--line); border-radius: 8px; padding: 8px; background: var(--panel); }
-.ia-modes { border: 0; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
-.ia-modes legend { color: var(--muted); margin-bottom: 2px; }
-.ia-mode { display: flex; gap: 6px; align-items: flex-start; padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; font-size: .9em; cursor: pointer; }
+.ia-modes { border: 0; padding: 0; margin: 0; display: flex; gap: 4px; }
+.ia-mode { flex: 1 1 0; min-width: 0; display: flex; gap: 6px; align-items: center; padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; font-size: .9em; cursor: pointer; }
+.ia-mode b { font-weight: 600; overflow-wrap: anywhere; }
+.ia-mode.actif { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.ia-aide summary { cursor: pointer; color: var(--muted); width: fit-content; }
+.ia-aide[open] { display: flex; flex-direction: column; gap: 4px; }
+.ia-fil-zone { position: relative; flex: 1; min-height: 80px; display: flex; flex-direction: column; }
+.ia-dernier { position: absolute; bottom: 6px; left: 50%; transform: translateX(-50%); box-shadow: 0 2px 8px rgba(0, 0, 0, .25); white-space: nowrap; }
+.ia-decision { max-height: 45%; overflow-y: auto; flex: none; }
+.ia-file { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-radius: 6px; background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.ia-file[hidden] { display: none; }
+.ia-file-texte { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ia-mode.actif { border-color: var(--accent); }
 .ia-mode:has(input:disabled) { border-style: dashed; cursor: default; }
 .ia-mode input { margin: 3px 0 0; }
-.ia-mode .muet { display: block; }
-.ia-fil { flex: 1; min-height: 80px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+.ia-fil { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
 .ia-vide { display: flex; flex-direction: column; gap: 4px; margin: auto 0; }
 .ia-tache { display: flex; flex-direction: column; gap: 6px; }
 .ia-demande { margin: 0; align-self: flex-end; max-width: 92%; padding: 6px 9px; border-radius: 8px; background: color-mix(in srgb, var(--accent) 16%, transparent); white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -1563,8 +1571,12 @@ html.scene-pause .verrou * { animation-play-state: paused !important; }
 .ia-reponse { margin: 0; overflow-wrap: anywhere; }
 .ia-encours { display: flex; align-items: center; gap: 8px; border-top: 1px solid var(--line); padding-top: 6px; }
 .ia-encours-texte { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-.ia-saisie { display: flex; gap: 6px; align-items: flex-end; }
-.ia-saisie textarea { flex: 1; min-width: 0; resize: vertical; }
+/* the shared chat input (M242c): the field across the whole width, two lines then growing up to a limit where it
+   scrolls, Send under it on the right so that nothing beside it ever narrows it; 16 px on touch (no zoom on focus) */
+.composeur { display: flex; flex-direction: column; gap: 6px; }
+.composeur textarea { width: 100%; min-height: calc(2lh + 22px); max-height: min(40vh, 220px); field-sizing: content; overflow-y: auto; resize: none; }
+.composeur-bas { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+@media (pointer: coarse) { .composeur textarea { font-size: 16px; } }
 @media (max-width: 700px) {
   .term-aide, .term-adresse { display: none; }
   /* the terminal page folds the module tabs and the status band: the screen gets the height (the menu stays) */
