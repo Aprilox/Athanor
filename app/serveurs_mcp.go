@@ -26,7 +26,9 @@ var outilsServeursMCP = append([]string{"serveurs_liste", "serveur_fiche", "ssh_
 
 var (
 	errServeursAgent = errors.New("the Servers tools answer only a Servers agent's session")
-	errServeursNatif = errors.New("Native Windows mode has no barrier: Athanor gives no agent its servers here. Switch to WSL in Settings › Options, or the owner ticks Force on this project's Access page, knowing the risk")
+	// infoServeursNatif: a mission's card in native Windows mode (Servers lane, or an infra entry): not a refusal
+	infoServeursNatif = "Native Windows mode: without a barrier, the servers' keys can be read by this mission's agents. This launch is logged."
+	errServeursNatif  = errors.New("Native Windows mode has no barrier: Athanor gives no agent its servers here. Switch to WSL in Settings › Options, or the owner ticks Force on this project's Access page, knowing the risk")
 )
 
 func init() {

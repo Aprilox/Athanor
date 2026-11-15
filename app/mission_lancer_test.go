@@ -241,7 +241,8 @@ func TestMissionLancer(t *testing.T) {
 		t.Fatalf("stored lane: %+v", m.Voies[1])
 	}
 
-	// 2. an existing project in native Windows mode: the brief queued, the Servers lane refused, Dev launched
+	// 2. an existing project in native Windows mode: the brief queued, Dev launched, the Servers lane launched without a
+	// barrier (launching is the owner's accord): the project forced, both logged
 	modeNatif.Store(true)
 	t.Cleanup(func() { modeNatif.Store(false) })
 	existant := proposer(CarteMission{Titre: "Page de paiement", Projet: ProjetCarte{Nom: "boutique"}, Dev: BriefCarte{Brief: "Ajouter le paiement"},
@@ -270,11 +271,27 @@ func TestMissionLancer(t *testing.T) {
 	if err := s.planOuRegle(SessionHub{Projet: prefixeTache + "t2", Mission: "t2", Agent: agentServeurs, Env: "autre/dev"}, "a2", &e); err != nil {
 		t.Fatalf("a change of another task under the server's rule: %v", err)
 	}
-	if code != 200 || m.Etat != "lancee" || len(m.Voies) != 2 || m.Voies[0] != (VoieMission{Module: "dev", Ref: "boutique", Etat: "lancee"}) || m.Voies[1] != (VoieMission{Module: "servers", Ref: "boutique/dev", Etat: "refusee"}) ||
-		!strings.Contains(m.Historique[len(m.Historique)-1].Detail, errServeursNatif.Error()) {
+	if code != 200 || m.Etat != "lancee" || len(m.Voies) != 2 || m.Voies[0] != (VoieMission{Module: "dev", Ref: "boutique", Etat: "lancee"}) || m.Voies[1].Module != "servers" ||
+		m.Voies[1].Etat == "refusee" || m.Voies[1].Ref == "" || m.Voies[1].Ref == "boutique/dev" || !slices.ContainsFunc(m.Historique, func(h EvenementMission) bool {
+		return strings.Contains(h.Detail, "the project is forced by this launch")
+	}) {
 		t.Fatalf("native mode: %d %+v", code, m)
 	}
-	if f := boutique.LireFileAttente(); len(f) != 1 || len(consignes) != 2 || pilotes[len(pilotes)-1] != "boutique" {
+	var tache TacheServeurs
+	if b, err := os.ReadFile(filepath.Join(dossierTaches("a2"), m.Voies[1].Ref+".json")); err != nil || json.Unmarshal(b, &tache) != nil || !tache.Forcee || !s.acces.Projet("boutique").ForcerInfraNatif {
+		t.Fatalf("native mode: task %+v %v, project not forced", tache, err)
+	}
+	natifs := map[string]bool{}
+	for _, l := range lignesAudit(t, dossierJournalAudit()) {
+		if l.Projet == "boutique" && (l.Action == "forcer_infra_natif" || l.Action == "voie Serveurs sans barrière" && strings.HasPrefix(l.Resultat, m.Voies[1].Ref+" (boutique/dev")) {
+			natifs[l.Action] = true
+		}
+	}
+	if len(natifs) != 2 {
+		t.Fatalf("native launch not logged: %v", natifs)
+	}
+	attendreTachesMission(t, &mu, &consignes, 3)
+	if f := boutique.LireFileAttente(); len(f) != 1 || len(consignes) != 3 || pilotes[len(pilotes)-1] != "boutique" {
 		t.Fatalf("queue %v, tasks %d, pilots %v", f, len(consignes), pilotes)
 	}
 	if d := s.acces.Environnements("boutique")["dev"]; d.Politique != "accord" || !d.DeployerAuJalon {
@@ -294,7 +311,7 @@ func TestMissionLancer(t *testing.T) {
 	if msg := m.Historique[len(m.Historique)-1].Message; msg == nil || msg.Cle != "starting the pilot: {0}" || fmt.Sprint(msg.Args) != "[the kit cannot be found]" {
 		t.Fatalf("failed step's message: %+v", msg)
 	}
-	if len(consignes) != 2 {
+	if len(consignes) != 3 {
 		t.Fatal("a Servers task was launched after the failed step")
 	}
 	if el := (moduleMissions{}).Elements(s); !slices.ContainsFunc(el, func(e ElementHub) bool {
@@ -324,16 +341,24 @@ func TestMissionLancer(t *testing.T) {
 		t.Fatalf("refused launch, yet %s", m.Etat)
 	}
 
-	// 6. C80: native mode, an infra entry ticked → refused, said on the card; a forced existing project passes, a new one never
+	// 6. C80: native mode, an infra entry ticked, the project not forced: said on the card (information), the launch
+	// forces the project; a forced existing project is not warned, a new one always
 	modeNatif.Store(true)
+	if err := s.acces.ForcerInfra("boutique", false); err != nil {
+		t.Fatal(err)
+	}
 	cInfra := CarteMission{Titre: "Infra en natif", Projet: ProjetCarte{Nom: "boutique"}, Dev: BriefCarte{Brief: "x"}, JalonsEstimes: 1,
 		Acces: []AccesCarte{{Entree: "Jeton Cloudflare", Pour: "boutique"}}}
 	infra := proposer(cInfra, "prod", "proposee")
-	if code, m := lancer(infra, ""); code != http.StatusBadRequest || m.Etat != "" {
+	if m, _ := lireMission(infra); !strings.Contains(string(m.Carte), "avertissement_infra") {
+		t.Fatalf("infra in native mode, not said: %s", m.Carte)
+	}
+	echecPilote = false
+	if code, m := lancer(infra, ""); code != 200 || m.Etat != "lancee" || !s.acces.Projet("boutique").ForcerInfraNatif {
 		t.Fatalf("infra in native mode: %d %+v", code, m)
 	}
-	if m, _ := lireMission(infra); m.Etat != "proposee" || !strings.Contains(string(m.Carte), "avertissement_infra") {
-		t.Fatalf("infra in native mode: %s %s", m.Etat, m.Carte)
+	if err := s.acces.ForcerInfra("boutique", false); err != nil {
+		t.Fatal(err)
 	}
 	x := s.contexteCarte()
 	if err := validerCarte(&cInfra, x); err != nil {
@@ -401,5 +426,18 @@ func TestMissionLancer(t *testing.T) {
 	}
 	if l := lignesAudit(t, dossierJournalAudit()); !slices.ContainsFunc(l, func(x LigneAudit) bool { return x.Action == "mission lancée" && x.Mission == neuf }) {
 		t.Fatal("no audit line for the launch")
+	}
+}
+
+// attendreTachesMission: the fake chef ops writes its consigne from the task's goroutine
+func attendreTachesMission(t *testing.T, mu *sync.Mutex, consignes *[]string, n int) {
+	t.Helper()
+	for fin := time.Now().Add(5 * time.Second); time.Now().Before(fin); time.Sleep(20 * time.Millisecond) {
+		mu.Lock()
+		l := len(*consignes)
+		mu.Unlock()
+		if l >= n {
+			return
+		}
 	}
 }

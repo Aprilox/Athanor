@@ -109,7 +109,7 @@ type CarteMission struct {
 	Touche                ToucheCarte         `json:"touche"`
 	Estimation            EstimationCarte     `json:"estimation"`
 	AvertissementServeurs string              `json:"avertissement_serveurs,omitempty"`
-	AvertissementInfra    string              `json:"avertissement_infra,omitempty"` // C80: an infra entry ticked in native mode
+	AvertissementInfra    string              `json:"avertissement_infra,omitempty"` // C80: an infra entry ticked in native mode, the project not forced (launching forces it)
 }
 
 // contexteCarte: what the card is checked against, read once (s.contexteCarte).
@@ -335,11 +335,11 @@ func calculerCarte(c CarteMission, politique string, x contexteCarte) CarteMissi
 		c.Touche.Dossier = x.projets[i].Dossier
 	}
 	if x.natif && (c.Serveurs.Brief != "" || len(c.Touche.Serveurs) > 0) {
-		c.AvertissementServeurs = errServeursNatif.Error()
+		c.AvertissementServeurs = infoServeursNatif // information only: launching is the owner's accord (logged)
 	}
 	c.AvertissementInfra = ""
 	if x.natif && (c.Projet.Nouveau || !x.forcerInfra[c.Projet.Nom]) && slices.ContainsFunc(c.Acces, func(a AccesCarte) bool { return a.Portee == "infra" && !a.Decoche }) {
-		c.AvertissementInfra = errAccesInfraNatif.Error()
+		c.AvertissementInfra = infoServeursNatif // not blocking: launching forces the project (logged)
 	}
 	m, est := x.minutesCycle, EstimationCarte{Jalons: c.JalonsEstimes, Mesure: x.minutesCycle > 0}
 	if m <= 0 {

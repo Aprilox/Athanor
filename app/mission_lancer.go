@@ -120,9 +120,6 @@ func (s *Serveur) lancerMission(id, qui, dossier, empreinte string) (Mission, er
 		return m, err
 	}
 	c = calculerCarte(c, m.Politique, x)
-	if c.AvertissementInfra != "" { // C80: native mode, an infra entry ticked, the project not forced (a new one never is)
-		return m, errAccesInfraNatif
-	}
 	if !x.infraOuvert && slices.ContainsFunc(c.Acces, func(a AccesCarte) bool { return a.Portee == "infra" && !a.Decoche }) {
 		return m, errMissionInfraVerrouille
 	}
@@ -168,12 +165,6 @@ func (s *Serveur) lancerMission(id, qui, dossier, empreinte string) (Mission, er
 				e.Message = messageDe(err)
 			}
 			m.Historique = append(m.Historique, e)
-		}
-		for _, v := range voies {
-			if v.Etat == "refusee" {
-				m.Historique = append(m.Historique, evenementMission("lancee", "servers lane refused: "+errServeursNatif.Error()))
-				break
-			}
 		}
 		return nil
 	})
@@ -240,10 +231,18 @@ func (s *Serveur) etapesMission(c CarteMission, politique, qui, dossier string) 
 			}
 		}
 	}
-	// 2. the ticked vault entries (an entry already given stays as it is; one to fill is the owner's)
 	if s.acces == nil {
 		return voies, faits, errMoteur("the access file cannot be read")
 	}
+	// native Windows mode: launching a mission with a Servers lane or an infra entry is the owner's Force for its project (logged)
+	if modeNatif.Load() && (c.AvertissementServeurs != "" || c.AvertissementInfra != "") && !s.acces.Projet(p.Nom).ForcerInfraNatif {
+		if err := s.acces.ForcerInfra(p.Nom, true); err != nil {
+			return voies, faits, errMoteur("forcing the project in native Windows mode: {0}", err)
+		}
+		s.ecrireAudit(LigneAudit{Type: "evenement", De: qui, Vers: "hub", Projet: p.Nom, Action: "forcer_infra_natif", Resultat: "true (mission lancée en mode Windows natif)"})
+		faits = append(faits, evenementMission("lancee", "native Windows mode: the project is forced by this launch (logged)"))
+	}
+	// 2. the ticked vault entries (an entry already given stays as it is; one to fill is the owner's)
 	for _, a := range c.Acces {
 		if a.Decoche || a.ARemplir {
 			continue
@@ -299,7 +298,7 @@ func (s *Serveur) etapesMission(c CarteMission, politique, qui, dossier string) 
 		}
 		audit(VoieMission{Module: "dev", Ref: p.Nom, Etat: "lancee"})
 	}
-	// 5. one Servers task per environment with servers; native Windows mode: the lane is refused, Dev goes on
+	// 5. one Servers task per environment with servers; native Windows mode: launched without a barrier, logged
 	if c.Serveurs.Brief == "" {
 		return voies, faits, nil
 	}
@@ -308,16 +307,17 @@ func (s *Serveur) etapesMission(c CarteMission, politique, qui, dossier string) 
 			continue
 		}
 		env := p.Nom + "/" + ec.Nom
-		if modeNatif.Load() {
-			audit(VoieMission{Module: "servers", Ref: env, Etat: "refusee"})
-			continue
-		}
+		natif := modeNatif.Load()
 		texte := c.Serveurs.Brief + "\n\nMission \"" + c.Titre + "\", environment " + ec.Nom + ": " + ec.URL + ", protection " + ec.Protection + "."
-		t, err := s.lancerTache(couper(texte, maxTexteTache-1), ec.Serveurs, false, env)
+		t, err := s.lancerTache(couper(texte, maxTexteTache-1), ec.Serveurs, natif, env)
 		if err != nil {
 			return voies, faits, errMoteur("the Servers task for {0}: {1}", env, err)
 		}
 		audit(VoieMission{Module: "servers", Ref: t.ID, Etat: t.Etat})
+		if natif {
+			s.ecrireAudit(LigneAudit{Type: "evenement", De: qui, Vers: "servers", Projet: p.Nom, Action: "voie Serveurs sans barrière",
+				Resultat: t.ID + " (" + env + ", mission lancée en mode Windows natif)"})
+		}
 	}
 	return voies, faits, nil
 }

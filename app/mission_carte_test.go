@@ -185,8 +185,8 @@ func TestCalculerCarte(t *testing.T) {
 	if e := c.Estimation; !e.Mesure || e.MinutesMin != 180 || e.MinutesMax != 360 || e.CoutMin != 9 || e.CoutMax != 18 {
 		t.Errorf("measured estimate: %+v", e)
 	}
-	if c.AvertissementServeurs != errServeursNatif.Error() {
-		t.Errorf("native mode: no Servers warning")
+	if c.AvertissementServeurs != infoServeursNatif {
+		t.Errorf("native mode: no Servers information")
 	}
 	// an existing project: its folder is touched; zones without a provider: the last two labels
 	e := carteMartin()
