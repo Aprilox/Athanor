@@ -58,3 +58,39 @@ func TestPreuveAbsence(t *testing.T) {
 		}
 	}
 }
+
+// TestPlanTacheFenetre (note 19h03 §3): the plan of an owner's Servers task is decided in the window unlocked with
+// the password, without retyping it; locked, without the session or for a mission's plan, the proof is still asked.
+func TestPlanTacheFenetre(t *testing.T) {
+	s := serveurCoffreTest(t)
+	avecMdpPreuve(s)
+	plan := func(projet string) string {
+		x, err := s.demanderApprobation(Approbation{Projet: projet, Env: "dev", Agent: agentServeurs, Action: actionPlanServeur, Raison: "plan", Details: map[string]string{"serveur": "ab12"}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return x.ID
+	}
+	decider := func(id string, cookie *http.Cookie) int {
+		return appelCoffre(t, s.apiApprobationDecider, "", `{"id":"`+id+`","decision":"accepter"}`, cookie).Code
+	}
+	tache, mission := plan(prefixeTache+"t1"), plan("demo")
+	for nom, c := range map[string]*http.Cookie{"no session": nil, "another session": {Name: "athanor_session", Value: "autre"}} {
+		if code := decider(tache, c); code != http.StatusUnauthorized {
+			t.Errorf("task plan, %s, no password: %d", nom, code)
+		}
+	}
+	if code := decider(mission, cookieSessionTest); code != http.StatusUnauthorized {
+		t.Errorf("mission plan with the window's session only: %d", code)
+	}
+	if code := decider(tache, cookieSessionTest); code != 200 || s.approbations.PourAgent(tache) != "acceptee" {
+		t.Errorf("task plan in the unlocked window: %d %s", code, s.approbations.PourAgent(tache))
+	}
+	autre := plan(prefixeTache + "t2")
+	s.mu.Lock()
+	s.session = "" // the auto-lock closed the window's session
+	s.mu.Unlock()
+	if code := decider(autre, cookieSessionTest); code != http.StatusUnauthorized {
+		t.Errorf("task plan once the window is locked: %d", code)
+	}
+}

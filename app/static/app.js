@@ -2782,7 +2782,7 @@ const GUIDE = [
       ["Native mode's warnings", "Tick *Don't remind me again* in that window, or the switch in Settings › Options, and the next tasks are forced without asking nor the password. Each forcing stays logged, the *Native mode: no barrier* label stays at the top, and infra keys, production and destructive steps keep their own decision."],
       ["The plan", "The agent first reads the sheet, the RUNBOOK and the state of the server. To change anything it must propose a plan: a summary, then numbered steps, each with its tool, its arguments and why. A security critic, another session that can only read, reviews it first; its verdict (no risk found, or the risks one per line) is on the plan's card."],
       ["Three classes", "Athanor ranks every step itself, whatever the agent says: *read* runs without asking; *change* (installing, writing a file, a service, a firewall rule) and *destructive* (deleting, stopping SSH, resetting the firewall) wait for a plan. A command hidden behind `bash -c`, `sudo`, an interpreter, or one Athanor cannot analyse counts as destructive."],
-      ["Your agreement", "The plan waits in the bell and on *For you* for 2 hours. *Accept* asks for Athanor's password again, or comes from a paired phone; *Refuse*, and nothing runs. Each accepted step runs once, exactly as shown: any other step needs a new plan. *Never ask again for this server* is offered only for changes on a *dev* server; destructive steps and *prod* always wait for you.", "#pourvous", "For you"],
+      ["Your agreement", "The plan waits in the bell and on *For you* for 2 hours. *Accept* decides it in the window you unlocked with Athanor's password (the assistant's chat beside the terminal too), or from a paired phone; *Refuse*, and nothing runs. Each accepted step runs once, exactly as shown: any other step needs a new plan. *Never ask again for this server* is offered only for changes on a *dev* server; destructive steps and *prod* always wait for you.", "#pourvous", "For you"],
       ["Backups first", "Before a file is replaced, its old version is kept away from it, in `/var/backups/athanor/prev/<path>`, readable by root only (the result gives its former mode and owner). A destructive step names what to keep: it is archived in `/var/backups/athanor/`, readable by root only, before the step runs; the step is refused if the archive fails or would take more than half the free space, and the 10 newest archives are kept."],
       ["Automatic undo", "A firewall rule or an SSH setting could lock Athanor out. Before one, the previous state is kept on the server and an undo is scheduled there. Athanor then connects again; *Keep this change*, on the server's sheet with its countdown, or the agent's confirmation cancels the undo. Without it, the server puts everything back by itself after 5 minutes."],
       ["Check and RUNBOOK", "After applying, an external verifier, another read-only session, checks the result from outside: HTTP status, certificate and its expiry, security headers, password asked. A failed check puts the task in failure and rings the bell. Each server has its `RUNBOOK.md` (*Runbook* on its sheet): access without secrets, role, what runs, the history of plans, the backups and how to go back."],
@@ -3523,7 +3523,8 @@ function carteApprobation(x, ap, codes) {
 }
 // an approval's card: its head, what it asks, the password when the window decides, and its decisions ("never ask again" only when allowed)
 function carteDecision(x, ap, tete, meta, corps, toujours, sansAccord) {
-  const natif = ap.mot_de_passe_requis ? `<label class="champ"><span>${t("Athanor's password")}</span><input type="password" data-appr-mdp autocomplete="current-password"></label>
+  const tache = x.action === "plan_serveur" && (x.projet || "").startsWith("servers:tache:"); // the owner's own task: planDecidableFenetre
+  const natif = ap.mot_de_passe_requis && !tache ?`<label class="champ"><span>${t("Athanor's password")}</span><input type="password" data-appr-mdp autocomplete="current-password"></label>
       <p class="muet petit">${t("Any program of this PC can drive this window, so a decision asks for Athanor's password.")}</p>`
     : ap.appareil_requis ? `<p class="petit attention">${t("An agent of this PC could decide in your place: choose a password for Athanor in Options first, then retype it here (or decide from a paired phone)")}</p>` : "";
   const bloque = ap.appareil_requis ? " disabled" : "";
@@ -4965,7 +4966,7 @@ async function rendreOptions() {
       <div class="bloc local-seul" id="bloc-verrou"><h2>${t("Lock")}</h2>
         <p class="intro petit">${t("With a password, the padlock locks the app: Claude keeps working, but nothing can be seen, changed or read (keys included) without the password. The app starts locked.")}</p>
         ${o.mot_de_passe ? `<label class="champ"><span>${t("Lock automatically")}</span><select id="op-verrou-auto" data-avant="${o.verrou_auto || "1h"}">${[["15m", "After 15 minutes of inactivity"], ["1h", "After 1 hour of inactivity"], ["8h", "After 8 hours of inactivity"], ["fermeture", "When Athanor closes"], ["jamais", "Never automatically"]].map(([v, l]) => `<option value="${v}"${o.verrou_auto === v ? " selected" : ""}>${t(l)}</option>`).join("")}</select></label>
-        <p class="muet petit">${t("Only the window and the infra keys lock: pilots, missions, tasks, tunnels and open SSH sessions keep running, and what you typed stays. Only your own actions in this window restart the delay. Athanor always starts locked; a longer delay asks for the password.")}</p>` : ""}
+        <p class="muet petit">${t("Only the interface locks: the vault and its keys stay open, so AIs, pilots, missions, tasks, tunnels and open SSH sessions keep running, and the page comes back as you left it. Only your own actions in this window restart the delay. Athanor always starts locked; a longer delay asks for the password.")}</p>` : ""}
         ${o.coffre_ancien_mdp ? `<p class="avert-connexion petit" id="mdp-coffre-ancien">${t("This vault is protected by an old password. Type that old password to take the vault back with its keys. If it is lost, you can start from an empty vault.")}</p>` : ""}
         ${o.mot_de_passe || o.coffre_ancien_mdp ? `<label class="champ"><span>${t(o.mot_de_passe ? "Current password" : "Old password of the vault")}</span><input type="password" id="mdp-ancien" autocomplete="current-password"></label>` : ""}
         <label class="champ"><span>${o.mot_de_passe ? t("New password (empty to remove it)") : o.coffre_ancien_mdp ? t("New password (12 characters at least)") : t("Password")}</span><input type="password" id="mdp-nouveau" autocomplete="new-password"></label>
@@ -7520,9 +7521,10 @@ $("#page").addEventListener("click", async (ev) => {
     if (await action(api("serveurs/" + encodeURIComponent(term.id) + "/taches/" + encodeURIComponent(d.iaArreter) + "/arreter", "POST"))) toast(t("Task stopped."), "ok");
     await chargerIA(); return term.x && term.x.focus(); // the keyboard back to the terminal, as after Take over
   }
-  // a password or a paired device to decide, or a plan that leaves only Athanor's key: decided on its card
+  // no password yet, or a plan that leaves only Athanor's key: decided on its card; the window the password unlocked
+  // decides its own task's plan right here (note 19h03 §3: no code asked again, the terminal stays open)
   const r = await api("hub/approbations").catch(() => ({})), p = ia.plans[d.plan] || {};
-  if (r.mot_de_passe_requis || r.appareil_requis || (p.seule_cle && d.iaDecider !== "refuser")) { etat.apprCible = d.plan; location.hash = "#approbations"; return; } // the server's plan, outside any project
+  if (r.appareil_requis || (p.seule_cle && d.iaDecider !== "refuser")) { etat.apprCible = d.plan; location.hash = "#approbations"; return; } // the server's plan, outside any project
   if (await deciderApprobation({ id: d.plan, decision: d.iaDecider })) chargerIA(); else b.disabled = false;
 });
 // the Settings panel: every change shows at once in the terminal; nothing is kept before Save

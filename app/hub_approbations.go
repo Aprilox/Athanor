@@ -538,9 +538,11 @@ func (s *Serveur) apiApprobationDecider(w http.ResponseWriter, r *http.Request) 
 		refus(http.StatusConflict, errSeuleCle)
 		return
 	}
-	if code, err := s.preuvePresence(r, c.MotDePasse); err != nil { // C24 C25: WSL mode too
-		refus(code, err)
-		return
+	if !s.planDecidableFenetre(r, c.ID) {
+		if code, err := s.preuvePresence(r, c.MotDePasse); err != nil { // C24 C25: WSL mode too
+			refus(code, err)
+			return
+		}
 	}
 	x, code, err := s.deciderApprobation(qui, c.ID, c.Decision, c.Entree, c.Env, c.Variable)
 	if err != nil {

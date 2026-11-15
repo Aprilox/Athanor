@@ -9,10 +9,13 @@ package main
 //   - absence: no pilot, chat or test session Athanor started is running (an agent only lives in one).
 // shortcut: absence misses a process an agent left detached after its pilot stopped, and an agent can edit
 // Athanor's files (DESIGN.md §Limite de la barrière); upgrade with a confirmation off this PC.
+// One exception (note 19h03 §3, planDecidableFenetre): the plan of a Servers task the owner gave is decided in the
+// window the password unlocked, whose session cookie only that typed password sets.
 
 import (
 	"errors"
 	"net/http"
+	"strings"
 )
 
 var (
@@ -38,6 +41,17 @@ func (s *Serveur) preuvePresence(r *http.Request, mdp string) (int, error) {
 		return http.StatusUnauthorized, errors.New("Wrong password")
 	}
 	return 0, nil
+}
+
+// planDecidableFenetre (note 19h03 §3): the plan of a Servers task the owner gave (its terminal's assistant, a
+// server's sheet), decided in the computer's window unlocked with the password: not asked again. A plan of a mission
+// or of the hardening, and every other decision, keep their proof.
+func (s *Serveur) planDecidableFenetre(r *http.Request, id string) bool {
+	x, ok := s.approbations.Lire(id)
+	s.mu.Lock()
+	mdp := s.config.MotDePasseHash != ""
+	s.mu.Unlock()
+	return ok && mdp && x.Action == actionPlanServeur && strings.HasPrefix(x.Projet, prefixeTache) && appareilDe(r) == "" && !s.verrouillePour(r)
 }
 
 // agentEnCours: what Athanor started that runs an agent now ("" none): a pilot, a chat, Test the hub's MCP.
