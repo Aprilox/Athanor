@@ -1685,10 +1685,10 @@ document.addEventListener("click", (ev) => {
 const boutonOptions = (classe = "") => `<button type="button" class="btn tel-seul ${classe}" data-chat-options aria-expanded="false">${t("Options")}</button>`;
 // tactile: a phone or a tablet (a finger, no mouse)
 const tactile = () => matchMedia("(pointer: coarse)").matches;
-// the field of the chat grows with what is written, up to a third of the screen (then it scrolls)
+// the chat fields grow with what is written through CSS field-sizing; without it, the same by hand (max-height in app.css)
 document.addEventListener("input", (ev) => {
-  const z = ev.target; if (z.id !== "chat-texte" || !TEL.matches) return;
-  z.style.height = "auto"; z.style.height = Math.min(z.scrollHeight + 2, Math.round(innerHeight * 0.32)) + "px";
+  const z = ev.target; if (!z.matches?.(".composeur textarea, textarea.composeur-champ") || CSS.supports("field-sizing", "content")) return;
+  z.style.height = "auto"; z.style.height = z.scrollHeight + 2 + "px";
 });
 pages.chat = async () => {
   const [d, mod] = await Promise.all([api("chat"), chat.modeles ? Promise.resolve({ modeles: chat.modeles }) : api("modeles").catch(() => ({ modeles: [] }))]);
@@ -1702,7 +1702,7 @@ pages.chat = async () => {
       <button type="button" class="btn btn-petit chat-replie" id="chat-nouveau">${t("New conversation")}</button></div>
     <div class="chat-fil" id="chat-fil" role="log" aria-live="polite" aria-label="${h(t("Conversation"))}"></div>${boutonBas("chat-fil")}
     <div class="chat-saisie">
-      <textarea id="chat-texte" rows="${tactile() ? 2 : 3}" placeholder="${h(tactile() ? t("Your question or the change you want…") : t("Your question or the change you want… (Enter sends, Shift+Enter: new line)"))}"></textarea>
+      <textarea id="chat-texte" class="composeur-champ" rows="2" placeholder="${h(tactile() ? t("Your question or the change you want…") : t("Your question or the change you want… (Enter sends, Shift+Enter: new line)"))}"></textarea>
       ${zonePieces("ct")}
       <div class="ligne m0 mt-1 chat-options chat-replie">
         <label class="interrupteur m0 petit" title="${h(t("Off: Claude changes nothing, a change becomes a note for the pilot. On: Claude changes the files you ask it to change, and Athanor commits them (a running pilot pauses at the end of its cycle)."))}"><input type="checkbox" id="chat-modif" ${chat.modif ? "checked" : ""}><span>${t("Change the files")}</span></label>
@@ -2166,7 +2166,7 @@ pages.accueil = async () => {
         <button type="button" class="btn btn-petit local-seul chat-replie" id="hub-chat-nouveau">${t("New conversation")}</button></div>
       <div class="chat-fil hub-chat-fil" id="hub-chat-fil" role="log" aria-live="polite" aria-label="${h(t("Conversation"))}">${filHub(hc)}</div>${boutonBas("hub-chat-fil")}
       <p class="petit muet m0 distant-seul">${t("From a device, this conversation is read only: write to the assistant on the computer.")}</p>
-      <div class="champ-mentions local-seul" id="accueil-champ"><span id="accueil-puces" class="puces-mentions">${pucesMentions()}</span><textarea id="accueil-texte" class="croit" rows="${tactile() ? 2 : 3}" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="accueil-liste" aria-describedby="accueil-aide" placeholder="${h(tactile() ? t("Ask, or say what you want done…") : t("Ask, or say what you want done… (Enter sends, Shift+Enter: new line)"))}"></textarea></div>
+      <div class="champ-mentions local-seul" id="accueil-champ"><span id="accueil-puces" class="puces-mentions">${pucesMentions()}</span><textarea id="accueil-texte" class="croit composeur-champ" rows="2" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="accueil-liste" aria-describedby="accueil-aide" placeholder="${h(tactile() ? t("Ask, or say what you want done…") : t("Ask, or say what you want done… (Enter sends, Shift+Enter: new line)"))}"></textarea></div>
       <ul id="accueil-liste" class="liste-mentions" role="listbox" aria-label="${h(t("Mentions"))}" hidden></ul>
       <input type="file" multiple hidden id="hc-fichiers" accept="image/png,image/jpeg,image/gif,image/webp,.pdf,.txt,.md,.csv,.tsv,.json,.yaml,.yml,.xml,.toml,.ini,.log,.html,.css,.js,.ts,.go,.py,.sql">
       <ul class="pieces-liste" id="hc-liste">${listePieces("hc")}</ul>
@@ -2292,7 +2292,7 @@ async function envoyerAccueil() {
   etat.envoiMission = true; // B86: a double click sends once
   const r = await action(api("missions", "POST", { phrase: texte, mentions: (etat.accueilMentions || []).map((m) => ({ type: m.type, ref: m.ref })) }), "").finally(() => { etat.envoiMission = false; });
   if (!r) return;
-  etat.accueilTexte = ""; etat.accueilMentions = []; $("#accueil-texte").value = ""; majMentions();
+  etat.accueilTexte = ""; etat.accueilMentions = []; $("#accueil-texte").value = ""; $("#accueil-texte").style.height = ""; majMentions();
   etat.missionVue = { mission: r.mission, orchestrateur: r.mission.etat === "preparation" }; etat.missionEdition = null;
   majZoneMission();
 }
@@ -2477,7 +2477,7 @@ async function envoyerHubChat() {
   }
   const r = await action(api("hub/chat", "POST", pieces.length ? { message, pieces } : { message }), "").finally(() => { etat.hubChatEnvoi = false; });
   if (!r) return;
-  etat.accueilTexte = ""; etat.accueilMentions = []; champ.value = ""; majMentions();
+  etat.accueilTexte = ""; etat.accueilMentions = []; champ.value = ""; champ.style.height = ""; majMentions();
   etat.pieces.hc = []; const ul = $("#hc-liste"); if (ul) ul.innerHTML = "";
   majHubChat(true);
 }

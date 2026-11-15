@@ -157,8 +157,9 @@ html.cadre .dialogue, html.cadre .verrou, html.cadre .assistant { top: var(--bar
 .carte-email .echec { color: var(--erreur-vif); } /* AA on the card's panel in the dark themes */
 .carte-email > .ligne:last-child { margin-top: 8px; }
 #em-mdp[aria-invalid="true"] { border-color: var(--erreur); }
-.champ-mentions textarea { border: 0; background: transparent; flex: 1 1 100%; outline: none; resize: vertical; font-size: 16px; padding: 10px 12px 10px 6px; min-height: 60px; }
+.champ-mentions textarea { border: 0; background: transparent; flex: 1 1 100%; outline: none; font-size: 16px; padding: 10px 12px 10px 6px; }
 .champ-mentions:focus-within { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-halo); }
+.champ-mentions textarea:focus-visible { box-shadow: none; } /* the box around it shows the focus (one ring, not two) */
 .accueil-barre .hub-chat-bas { flex-wrap: wrap; gap: 8px; align-items: flex-start; }
 .hub-pouvoirs { flex: 1 1 18em; min-width: 0; font-size: 14px; }
 .hub-pouvoirs summary { cursor: pointer; padding: 6px 0; }
@@ -880,7 +881,6 @@ input.large { flex: 1; min-width: 200px; width: auto; }
 .chat-actions { margin-top: 8px; font-size: 12.5px; color: var(--muted); }
 .chat-actions summary { cursor: pointer; }
 .chat-actions div { font-family: var(--mono); font-size: 11.5px; padding: 1px 0; }
-.chat-saisie textarea { width: 100%; resize: vertical; }
 /* M227c: a table of an answer scrolls in its own block; "Go to the latest message" floats over the bottom of the thread */
 .chat-tableau { overflow-x: auto; margin: 6px 0; max-width: 100%; }
 .chat-tableau table { border-collapse: collapse; font-size: .93em; }
@@ -1017,7 +1017,6 @@ input.large { flex: 1; min-width: 200px; width: auto; }
   .chat-msg { max-width: 100%; }
   .chat-bulle { font-size: 15.5px; padding: 10px 13px; }
   .chat-saisie { margin: 0 -14px; padding: 8px 14px calc(10px + env(safe-area-inset-bottom)); background: var(--panel); border-top: 1px solid var(--line); border-radius: 0 0 var(--rayon) var(--rayon); }
-  .chat-saisie textarea { min-height: 56px; max-height: 32vh; resize: none; }
   .chat-saisie .ligne { flex-wrap: nowrap; gap: 8px; }
   .chat-saisie .chat-options { flex-wrap: wrap; gap: 6px 14px; }
   .chat-saisie .ligne > .petit.muet { display: none; }
@@ -1572,11 +1571,12 @@ html.scene-pause .verrou * { animation-play-state: paused !important; }
 .ia-encours { display: flex; align-items: center; gap: 8px; border-top: 1px solid var(--line); padding-top: 6px; }
 .ia-encours-texte { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 /* the shared chat input (M242c): the field across the whole width, two lines then growing up to a limit where it
-   scrolls, Send under it on the right so that nothing beside it ever narrows it; 16 px on touch (no zoom on focus) */
+   scrolls, Send under it on the right so that nothing beside it ever narrows it; 16 px on touch (no zoom on focus);
+   .composeur-champ: the same field in the chats whose form holds more than the input (home, project, M242d) */
 .composeur { display: flex; flex-direction: column; gap: 6px; }
-.composeur textarea { width: 100%; min-height: calc(2lh + 22px); max-height: min(40vh, 220px); field-sizing: content; overflow-y: auto; resize: none; }
+.composeur textarea, textarea.composeur-champ { width: 100%; min-height: calc(2lh + 22px); max-height: min(40vh, 220px); field-sizing: content; overflow-y: auto; resize: none; }
 .composeur-bas { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
-@media (pointer: coarse) { .composeur textarea { font-size: 16px; } }
+@media (pointer: coarse) { .composeur textarea, textarea.composeur-champ { font-size: 16px; } }
 @media (max-width: 700px) {
   .term-aide, .term-adresse { display: none; }
   /* the terminal page folds the module tabs and the status band: the screen gets the height (the menu stays) */
