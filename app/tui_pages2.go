@@ -54,6 +54,9 @@ func (a *appTUI) chargerPages2() {
 			if err := c.lire("env", &r); err != nil {
 				return nil, err
 			}
+			if r == nil { // read but empty (a kit without .env.example): not "still loading"
+				r = []LigneEnv{}
+			}
 			return func(a *appTUI) { a.env = r }, nil
 		})
 	}
@@ -372,7 +375,11 @@ func (a *appTUI) pageEquipe(e *ecranT, x, y, l, h int) {
 		if ag.Modele != "" {
 			chiffres = append(chiffres, ag.Modele)
 		}
-		detail := firstNonEmpty(ag.Bulle, firstNonEmpty(ag.Activite, ag.Mission))
+		mission := ag.Mission
+		if ag.Genre == "chef" { // the lead's mission is an app text; the others' are their briefs
+			mission = a.t(mission)
+		}
+		detail := firstNonEmpty(ag.Bulle, firstNonEmpty(ag.Activite, mission))
 		return lignes[i].ind + "● " + nom + "  " + strings.Join(chiffres, " · "), strings.Repeat(" ", len([]rune(lignes[i].ind))+2) + detail, a.gras(c, f), a.st(p.muet, f)
 	})
 	a.zoneMolette(x, y, l, h, func(s int) { a.selAgent += s })
@@ -570,7 +577,11 @@ func (a *appTUI) pageReglages(e *ecranT, x, y, l, h int) {
 	pref := fmt.Sprintf("%s: %s   ·   %s: %s   ·   %s: %s", a.t("Language"), nomLangue(v.Langue), a.t("Palette"), a.t(noms[firstNonEmpty(v.Theme, "ardoise")]), a.t("Accent"), a.t(noms[firstNonEmpty(v.Accent, "sarcelle")]))
 	e.texte(ix, iy, il, pref, a.st(p.encre, fond))
 	if len(a.env) == 0 {
-		e.texte(ix, iy+2, il, a.t("Updating…"), a.st(p.muet, fond))
+		msg := a.t("Updating…")
+		if a.env != nil {
+			msg = a.t("No settings yet (Settings › Claude)")
+		}
+		e.texte(ix, iy+2, il, msg, a.st(p.muet, fond))
 		return
 	}
 	a.liste(e, ix, iy+2, il, ih-2, len(a.env), &a.selReglage, func(i int, f couleurT) (string, string, styleT, styleT) {

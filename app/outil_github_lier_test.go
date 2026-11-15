@@ -55,9 +55,7 @@ esac
 `
 
 func TestLierGitHub(t *testing.T) {
-	if _, err := exec.LookPath("ssh-keygen"); err != nil {
-		t.Skip("no ssh-keygen")
-	}
+	sshKeygenUtilisable(t)
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("no git")
 	}
@@ -182,9 +180,7 @@ func TestLierGitHub(t *testing.T) {
 // TestConnecterGitHub: the computer's connection: one sign-in asking for the account's keys, a key
 // "Athanor (PC)" on the account, kept; the sign-in itself deleted.
 func TestConnecterGitHub(t *testing.T) {
-	if _, err := exec.LookPath("ssh-keygen"); err != nil {
-		t.Skip("no ssh-keygen")
-	}
+	sshKeygenUtilisable(t)
 	bin := t.TempDir()
 	trace := filepath.Join(t.TempDir(), "trace")
 	if err := os.WriteFile(filepath.Join(bin, "gh"), []byte(faux_gh), 0o755); err != nil {
@@ -218,5 +214,17 @@ func TestConnecterGitHub(t *testing.T) {
 	connexionGHCommande(nil, &b)
 	if !strings.Contains(b.String(), `"connecte":true`) || !strings.Contains(b.String(), `"login":"moi"`) || strings.Contains(b.String(), "888") {
 		t.Fatalf("state: %s", b.String())
+	}
+}
+
+// sshKeygenUtilisable: skips when ssh-keygen is missing or cannot make a key here (a container user
+// without a passwd entry, for one).
+func sshKeygenUtilisable(t *testing.T) {
+	t.Helper()
+	if _, err := exec.LookPath(programmeGH("ssh-keygen")); err != nil {
+		t.Skip("no ssh-keygen")
+	}
+	if out, err := exec.Command(programmeGH("ssh-keygen"), "-q", "-t", "ed25519", "-N", "", "-f", filepath.ToSlash(filepath.Join(t.TempDir(), "k"))).CombinedOutput(); err != nil {
+		t.Skipf("ssh-keygen cannot make a key here: %v %s", err, out)
 	}
 }

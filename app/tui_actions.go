@@ -445,6 +445,7 @@ func (a *appTUI) formulaire(titre, aide string, champs []champTUI, fn func([]str
 
 const aideFormulaireMulti = "Tab: next field or button · Enter: new line · F2 (or Ctrl+S): save · Esc: cancel"
 const aideFormulaireLigne = "Tab: next field or button · Enter: save · Esc: cancel"
+const aideDeverrouiller = "Tab: next field or button · Enter: unlock · Esc: cancel"
 
 // ----------------------------------------------------------------------------- the pilot
 
@@ -1035,7 +1036,7 @@ func (a *appTUI) demanderMotDePasse() {
 		return
 	}
 	// only while the password is sent: Escape closes the form and the next refresh asks again
-	a.formulaire(a.t("Athanor is locked"), a.t(aideFormulaireLigne), []champTUI{{lib: a.t("Password"), h: 1, s: &saisieT{masque: true}}}, func(v []string) {
+	a.formulaire(a.t("Athanor is locked"), a.t(aideDeverrouiller), []champTUI{{lib: a.t("Password"), h: 1, s: &saisieT{masque: true}}}, func(v []string) {
 		a.verrouDemande = true
 		c := *a.c
 		go func() {
@@ -1049,6 +1050,7 @@ func (a *appTUI) demanderMotDePasse() {
 			}
 		}()
 	})
+	a.form.bouton = a.t("Unlock")
 }
 
 // ouvrirFenetre: Athanor's window as well (a computer with a screen).

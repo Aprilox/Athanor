@@ -470,6 +470,12 @@ func TestTUIVerrou(t *testing.T) {
 	a := nouvelleAppTUI(c, false)
 	a.tic()
 	attendreTUI(t, a, func() bool { return a.form != nil })
+	// the locked screen: the form alone, its button says what it does
+	ev := nouvelEcran(80, 24)
+	a.dessiner(ev)
+	if tx := ev.texteEcran(); !strings.Contains(tx, a.t("Unlock")) || strings.Contains(tx, a.t("Save")) || strings.Contains(tx, a.t("Updating…")) || strings.Contains(tx, "1…0") {
+		t.Fatalf("locked screen:\n%s", tx)
+	}
 	a.abandonnerFormulaire() // Escape: the prompt comes back at the next refresh
 	a.derniere["etat"] = time.Time{}
 	a.tic()
@@ -1122,5 +1128,48 @@ func TestTUIAccueil(t *testing.T) {
 		if !strings.Contains(e.texteEcran(), x) {
 			t.Fatalf("no %q in\n%s", x, e.texteEcran())
 		}
+	}
+}
+
+func TestTUIEtroitEtCalme(t *testing.T) {
+	a := nouvelleAppTUI(&clientTUI{projet: "a"}, false)
+	a.vue = &EtatVue{Version: versionAthanor, KitValide: true, KitInstalle: true, Langue: "fr", Projets: []ProjetVue{{Nom: "a", Courant: true}}, Projet: &ProjetVue{Nom: "a"}}
+	a.langue, a.d = "fr", dicoTUI("fr")
+	// 80 columns: every page keeps a tab, the active one by its name, and it can be clicked
+	a.page = pReglages
+	a.env = []LigneEnv{} // read, but the kit has no settings
+	e := nouvelEcran(80, 24)
+	a.dessiner(e)
+	onglets := e.ligneTexte(1)
+	for _, k := range []string{" H ", " E ", " 1 ", " 5 ", " 8 ", "   0", "9 Réglages"} {
+		if !strings.Contains(onglets, k) {
+			t.Fatalf("tab %q missing: %q", k, onglets)
+		}
+	}
+	if !strings.Contains(e.texteEcran(), "Pas encore de réglages") || strings.Contains(e.texteEcran(), "Mise à jour") {
+		t.Fatalf("empty settings:\n%s", e.texteEcran())
+	}
+	x := strings.LastIndex(onglets, " 0")
+	a.souris(evenementTUI{genre: evSouris, x: len([]rune(onglets[:x])) + 1, y: 1, appui: true})
+	if a.page != pDistance {
+		t.Fatalf("click on tab 0: page %d", a.page)
+	}
+	// the lead's mission in the app's language
+	a.page = pEquipe
+	a.agents = []Agent{{ID: "chef", Genre: "chef", Statut: "attend", Mission: "Leads the current milestone: reads the plan, codes, checks, commits."}}
+	e = nouvelEcran(120, 30)
+	a.dessiner(e)
+	if strings.Contains(e.texteEcran(), "Leads the current") {
+		t.Fatalf("team in English:\n%s", e.texteEcran())
+	}
+	// a reply on its way: a still screen (no spinner)
+	a.page = pChat
+	a.chat = &reponseChatTUI{EnCours: true}
+	a.dessiner(e)
+	avant := e.texteEcran()
+	time.Sleep(250 * time.Millisecond)
+	a.dessiner(e)
+	if e.texteEcran() != avant || strings.ContainsAny(avant, "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏") {
+		t.Fatalf("the chat moves:\n%s", avant)
 	}
 }

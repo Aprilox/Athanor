@@ -42,6 +42,12 @@ func (a *appTUI) dessiner(e *ecranT) {
 		a.dessinerCouches(e)
 		return
 	}
+	if a.vue.Verrouille { // only the password form and its refusal, on a plain background
+		a.dessinerToast(e)
+		a.zonesHaut = len(a.zones)
+		a.dessinerCouches(e)
+		return
+	}
 	a.barreHaut(e)
 	y, h := 1, e.h-2
 	x := 0
@@ -82,6 +88,14 @@ func (a *appTUI) dessiner(e *ecranT) {
 		}
 	}
 	a.barreBas(e)
+	a.dessinerToast(e)
+	a.zonesHaut = len(a.zones)
+	a.dessinerCouches(e)
+}
+
+// dessinerToast: the last announcement, bottom right.
+func (a *appTUI) dessinerToast(e *ecranT) {
+	p := a.pal
 	if a.toast != "" {
 		coul := p.accent
 		if a.toastErr {
@@ -102,8 +116,6 @@ func (a *appTUI) dessiner(e *ecranT) {
 			e.texte(tx+2, ty+i, lt, li, a.st(p.encre, p.panneau))
 		}
 	}
-	a.zonesHaut = len(a.zones)
-	a.dessinerCouches(e)
 }
 
 // couleurPhase: the colour of a project's state (the app's dot).
@@ -237,8 +249,15 @@ func (a *appTUI) onglets(e *ecranT, y int) {
 	p := a.pal
 	e.rect(0, y, e.l, 1, a.st(p.encre, p.fond))
 	x := 1
+	plein := 1
+	for _, i := range ordrePages {
+		plein += largeurTexte(" "+numeroPage(i)+" "+a.t(clesPages[i])+" ") + 1
+	}
 	for _, i := range ordrePages {
 		lib := " " + numeroPage(i) + " " + a.t(clesPages[i]) + " "
+		if plein > e.l && i != a.page { // narrow terminal: the other pages by their key only
+			lib = " " + numeroPage(i) + " "
+		}
 		st := a.st(p.muet, p.fond)
 		if i == a.page {
 			st = a.gras(p.surAccent, p.accent)
@@ -1393,7 +1412,6 @@ func (a *appTUI) pageChat(e *ecranT, x, y, l, h int) {
 				lignes = append(lignes, lc{"  ▸ " + o, a.st(p.muet, fond)})
 			}
 		}
-		lignes = append(lignes, lc{"  " + string("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"[(time.Now().UnixMilli()/100%10)*3:(time.Now().UnixMilli()/100%10)*3+3]), a.st(p.accent, fond)})
 	}
 	if len(a.chat.Messages) == 0 && !a.chat.EnCours {
 		for i, li := range envelopper(a.t("Ask Claude about the project, or for a change: it reads the code, the plan and the log."), il) {
@@ -1630,7 +1648,11 @@ func (a *appTUI) dessinerFormulaire(e *ecranT) {
 	}
 	// the buttons: Save, Cancel (Tab reaches them, a click presses them)
 	bx := ix
-	for i, lib := range []string{a.t("Save"), a.t("Cancel")} {
+	valider := a.t("Save")
+	if f.bouton != "" {
+		valider = f.bouton
+	}
+	for i, lib := range []string{valider, a.t("Cancel")} {
 		texte := " " + lib + " "
 		st := a.st(p.encre, p.ligne)
 		if i == 0 {

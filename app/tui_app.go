@@ -148,6 +148,7 @@ type formulaireTUI struct {
 	champs []champTUI
 	sel    int
 	fn     func(valeurs []string)
+	bouton string   // the label of the confirm button ("Save" when empty)
 	erreur string   // what the server answered: the form stays open with it
 	debut  []string // the fields as the form opened: closing it unchanged asks nothing
 }
