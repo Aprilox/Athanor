@@ -98,6 +98,10 @@ func TestCoffreTemoinNullePart(t *testing.T) {
 		t.Fatalf("secret: %d %v", code, v)
 	}
 	id := v["id"].(string)
+	// the same name in the same scope (here the default one): refused, nothing added
+	if code, v = appel("POST", "/api/coffre", entree(map[string]string{"nom": "API_URL", "famille": "variable", "type": "autre", "valeur": "y"})); code != http.StatusBadRequest || v["erreur"] != "An entry with this name already exists in this scope" {
+		t.Fatalf("duplicate: %d %v", code, v)
+	}
 
 	// infra without a password: refused, the key is not there
 	code, v = appel("POST", "/api/coffre", entree(map[string]string{"nom": "SSH", "famille": "secret", "type": "ssh", "valeur": temoin}))

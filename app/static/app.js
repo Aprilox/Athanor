@@ -1308,7 +1308,10 @@ function proposerTutoriel() {
     return lancerTourChat();
   }
   if (vu(m.id)) return;
-  const connu = !(m.id in (v.tours || {})) && (m.id === "dev" ? (v.projets || []).some((p) => p.faits > 0) : (m.resume || {}).etat === "ok"); // a module in use (Dev: a milestone done; the vault: a key stored)
+  // a module in use (Dev: a milestone done; the vault: a key stored; the Home: an earlier version's user, with a
+  // tour seen or a milestone done)
+  const ancien = Object.keys(v.tours || {}).length > 0 || (v.projets || []).some((p) => p.faits > 0);
+  const connu = !(m.id in (v.tours || {})) && (m.id === "dev" ? (v.projets || []).some((p) => p.faits > 0) : m.id === "hub" ? ancien : (m.resume || {}).etat === "ok");
   const ids = m.id === "hub" ? [m.id, TOUR_CHAT] : [m.id]; // the Home's tour holds the conversation's steps
   ids.forEach((id) => { etat.toursVus.add(id); (v.tours ||= {})[id] = true; });
   api("preferences", "POST", { tours: Object.fromEntries(ids.map((id) => [id, true])) }).catch(() => {});
@@ -7247,6 +7250,7 @@ $("#btn-urgence").addEventListener("click", async () => {
 // --- refresh loop
 async function rafraichir() {
   if (etat.nonAppaire) return; // a device the computer removed: nothing more to ask
+  etat.rafraichiLe = Date.now();
   try {
     const demande = etat.projet;
     const v = await fetch("/api/etat" + (demande ? "?p=" + encodeURIComponent(demande) : ""), { headers: { "X-Athanor": CSRF } }).then((r) => r.json());
@@ -7333,5 +7337,11 @@ async function rafraichir() {
   await chargerMenu();
   if (location.hash === "#bienvenue") location.hash = "#suivi";
   naviguer();
-  setInterval(rafraichir, 1500);
+  // a hidden page (another tab, a minimized window) asks every 15 s instead of 1.5 s; a tick never overlaps the last
+  setInterval(async () => {
+    if (etat.rafraichit || (document.hidden && Date.now() - etat.rafraichiLe < 15000)) return;
+    etat.rafraichit = true;
+    try { await rafraichir(); } finally { etat.rafraichit = false; }
+  }, 1500);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden && !etat.rafraichit) rafraichir(); });
 })();

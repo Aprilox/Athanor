@@ -179,8 +179,9 @@ func (s *Serveur) verrouillePour(r *http.Request) bool {
 func (s *Serveur) garde(libre bool, h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Every API route requires the secret header, reads included: a web page can neither know it
-		// nor send it (the Host header check, in main.go, blocks "DNS rebinding").
-		if !s.accesValide(r) || !egal(r.Header.Get("X-Athanor"), s.csrf) {
+		// nor send it (the Host header check, in main.go, blocks "DNS rebinding"); a foreign Origin is
+		// refused too (defence in depth: another local port is the same "site" for SameSite cookies).
+		if !s.accesValide(r) || !egal(r.Header.Get("X-Athanor"), s.csrf) || !memeOrigine(r) {
 			s.erreur(w, http.StatusForbidden, "Request refused (origin)")
 			return
 		}

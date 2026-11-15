@@ -148,3 +148,27 @@ func TestRedTeamClasseurEnvironnement(t *testing.T) {
 		t.Errorf("fichier_lire /var/log/syslog: %v", c)
 	}
 }
+
+// A foreign Origin is refused on every guarded API route, even with every token valid; the page's own is not.
+func TestGardeOrigineEtrangere(t *testing.T) {
+	s := serveurCoffreTest(t)
+	mux := http.NewServeMux()
+	s.routes(mux)
+	for _, cas := range []struct {
+		origine string
+		code    int
+	}{{"http://pirate.example", http.StatusForbidden}, {"http://127.0.0.1:1", http.StatusForbidden}, {"null", http.StatusForbidden}, {"http://example.com", http.StatusOK}, {"", http.StatusOK}} {
+		r := httptest.NewRequest("GET", "/api/etat", nil) // Host: example.com
+		r.Header.Set("X-Athanor", "jeton")
+		if cas.origine != "" {
+			r.Header.Set("Origin", cas.origine)
+		}
+		r.AddCookie(&http.Cookie{Name: cookieAcces, Value: "cle"})
+		r.AddCookie(cookieSessionTest)
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, r)
+		if w.Code != cas.code {
+			t.Errorf("Origin %q: %d, want %d", cas.origine, w.Code, cas.code)
+		}
+	}
+}

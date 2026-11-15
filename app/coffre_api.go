@@ -111,8 +111,13 @@ func (s *Serveur) apiCoffreAjouter(w http.ResponseWriter, r *http.Request) {
 		s.erreurCoffre(w, err)
 		return
 	}
-	e, err := s.coffre.Ajouter(EntreeCoffre{Nom: val(c.Nom, ""), Famille: c.Famille, Type: val(c.Type, ""),
-		Note: val(c.Note, ""), Portee: val(c.Portee, "")}, *c.Valeur)
+	nouvelle := EntreeCoffre{Nom: val(c.Nom, ""), Famille: c.Famille, Type: val(c.Type, ""), Note: val(c.Note, ""), Portee: val(c.Portee, "")}
+	// two entries of one name in one scope could not be told apart in a grant, nor in what a pilot receives
+	if p := porteeEntree(nouvelle); slices.ContainsFunc(s.coffre.Liste(), func(x EntreeCoffre) bool { return x.Nom == nouvelle.Nom && x.Portee == p }) {
+		s.erreurCoffre(w, erreurEntree("An entry with this name already exists in this scope"))
+		return
+	}
+	e, err := s.coffre.Ajouter(nouvelle, *c.Valeur)
 	if err != nil {
 		s.erreurCoffre(w, err)
 		return

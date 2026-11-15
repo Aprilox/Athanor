@@ -104,7 +104,8 @@ func TestBancEquipe(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		bin += ".exe"
 	}
-	if out, err := exec.Command("go", "build", "-tags", "essai", "-o", bin, ".").CombinedOutput(); err != nil {
+	if out, err := exec.Command("go", "build", "-tags", "essai", "-ldflags=-s -w", "-o", bin, ".").CombinedOutput(); err != nil {
+		sautSiDefender(t, string(out))
 		t.Fatalf("go build: %v\n%s", err, out)
 	}
 	fins := []bool{false, true}

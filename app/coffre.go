@@ -618,15 +618,22 @@ func (c *Coffre) EmpreintesConnues() map[string]string {
 	return m
 }
 
+// porteeEntree: the entry's scope, or its default (a variable: code; a secret: its type's).
+func porteeEntree(e EntreeCoffre) string {
+	switch {
+	case e.Portee != "":
+		return e.Portee
+	case e.Famille == "variable":
+		return "code"
+	}
+	return typesCoffre[e.Type]
+}
+
 // Ajouter adds an entry (ID, dates and fingerprint set here) and returns it without its secret value.
 func (c *Coffre) Ajouter(e EntreeCoffre, valeur string) (EntreeCoffre, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if e.Portee == "" && e.Famille == "variable" {
-		e.Portee = "code"
-	} else if e.Portee == "" {
-		e.Portee = typesCoffre[e.Type]
-	}
+	e.Portee = porteeEntree(e)
 	if err := verifierEntree(e); err != nil {
 		return EntreeCoffre{}, err
 	}
