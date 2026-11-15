@@ -444,6 +444,7 @@ This table is the WSL mode, the default. In the native Windows mode below, there
 - The mode applies to the pilots started afterwards; stop the running ones first. When you close Athanor while native pilots run, it asks whether they go on in the background or stop.
 - Claude's Linux screen does not exist in this mode; Claude's Windows desktop still keeps the programs it opens away from yours.
 - **The vault in this mode.** Any agent could open the *code* key through DPAPI, as you can: the project keys are then protected from a copied disk, not from Claude (they are meant for the project's code anyway). Linking an *infra* entry (your servers' keys) to a project is refused, with an offer to use WSL; *Force, knowing the risk*, in the project's *Access* panel, allows it for that project after a confirmation, and each forced link is logged (without the value). *Test the vault* runs here too and says what it could read.
+- **The warnings.** A label *Native mode: no barrier* stays at the top of every page. A Servers task is refused with *Switch to WSL* or *Force this task* (Athanor's password). *Don't remind me again* in that window, or *Settings → Options → Don't show the native Windows mode warnings anymore* (off by default, Athanor's password to turn it on), forces the next tasks without asking: each forcing stays in the audit log, and infra entries, production and destructive steps keep their own decision.
 
 ### Your PC's tools
 

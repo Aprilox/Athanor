@@ -5,6 +5,7 @@ package main
 import (
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"math"
 	"net/http"
 	"os"
@@ -323,12 +324,13 @@ type OptionsVue struct {
 	Bureau                    EtatBureau `json:"bureau"`
 	ModeNatif                 bool       `json:"mode_natif"`
 	Windows                   bool       `json:"windows"`
-	GitBash                   string     `json:"git_bash"`          // its bash.exe, "" when missing
-	VerifierMaj               bool       `json:"verifier_maj"`      // look for an update when Athanor opens (maj.go)
-	EntendreBureau            bool       `json:"entendre_bureau"`   // the programs on Claude's desktop are heard
-	TerminalPilote            bool       `json:"terminal_pilote"`   // the pilot's console is shown, minimised (Windows)
-	Animation                 bool       `json:"animation"`         // the launch animation (statique.go)
-	CoffreAncienMdp           bool       `json:"coffre_ancien_mdp"` // no password, but a vault sealed by an old one
+	GitBash                   string     `json:"git_bash"`           // its bash.exe, "" when missing
+	VerifierMaj               bool       `json:"verifier_maj"`       // look for an update when Athanor opens (maj.go)
+	EntendreBureau            bool       `json:"entendre_bureau"`    // the programs on Claude's desktop are heard
+	TerminalPilote            bool       `json:"terminal_pilote"`    // the pilot's console is shown, minimised (Windows)
+	Animation                 bool       `json:"animation"`          // the launch animation (statique.go)
+	CoffreAncienMdp           bool       `json:"coffre_ancien_mdp"`  // no password, but a vault sealed by an old one
+	SansRappelsNatif          bool       `json:"sans_rappels_natif"` // native mode's reminders turned off (config)
 }
 
 func (s *Serveur) apiOptions(w http.ResponseWriter, r *http.Request) {
@@ -339,7 +341,45 @@ func (s *Serveur) apiOptions(w http.ResponseWriter, r *http.Request) {
 	if projets == nil {
 		projets = []Projet{}
 	}
-	s.ecrireJSON(w, OptionsVue{projets, c.Kit, s.kitCourant().Valide(), c.LancerPiloteAuDemarrage, c.BureauVirtuel, c.ProgrammesSupplementaires, DemarrageWindowsActif(), c.MotDePasseHash != "", s.bureau.Etat(), modeNatif.Load(), runtime.GOOS == "windows", bashNatif(), !c.PasVerifierMaj, c.EntendreBureauClaude, c.TerminalPilote, !c.PasAnimation, c.MotDePasseHash == "" && s.coffreAncienMdp()})
+	s.ecrireJSON(w, OptionsVue{projets, c.Kit, s.kitCourant().Valide(), c.LancerPiloteAuDemarrage, c.BureauVirtuel, c.ProgrammesSupplementaires, DemarrageWindowsActif(), c.MotDePasseHash != "", s.bureau.Etat(), modeNatif.Load(), runtime.GOOS == "windows", bashNatif(), !c.PasVerifierMaj, c.EntendreBureauClaude, c.TerminalPilote, !c.PasAnimation, c.MotDePasseHash == "" && s.coffreAncienMdp(), c.SansRappelsNatif})
+}
+
+// apiRappelsNatif: POST /api/options/rappels-natif {actif, mot_de_passe}: the one switch of native mode's
+// reminders (Settings and the reminder's own "Don't remind me again"). Turning them off asks for Athanor's
+// password (an agent of this PC could drive the window); turning them back on asks nothing. Logged.
+func (s *Serveur) apiRappelsNatif(w http.ResponseWriter, r *http.Request) {
+	var c struct {
+		Actif      bool   `json:"actif"`
+		MotDePasse string `json:"mot_de_passe"`
+	}
+	if lireCorps(r, &c) != nil {
+		s.erreur(w, http.StatusBadRequest, "Invalid request")
+		return
+	}
+	if c.Actif {
+		if code, err := s.preuvePresence(r, c.MotDePasse); err != nil {
+			s.ecrireAudit(LigneAudit{Type: "evenement", De: deQui(r), Vers: "hub", Action: "rappels du mode natif refusé", Resultat: err.Error()})
+			s.erreur(w, code, err.Error())
+			return
+		}
+	}
+	s.mu.Lock()
+	s.config.SansRappelsNatif = c.Actif
+	err := ecrireConfig(s.config)
+	s.mu.Unlock()
+	if err != nil {
+		s.erreur(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.ecrireAudit(LigneAudit{Type: "evenement", De: deQui(r), Vers: "hub", Action: "sans_rappels_natif", Resultat: fmt.Sprint(c.Actif)})
+	s.ecrireJSON(w, map[string]any{"sans_rappels_natif": c.Actif})
+}
+
+// sansRappelsNatif: native Windows mode with its reminders turned off by the owner.
+func (s *Serveur) sansRappelsNatif() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return modeNatif.Load() && s.config.SansRappelsNatif
 }
 
 func (s *Serveur) apiEcrireOptions(w http.ResponseWriter, r *http.Request) {

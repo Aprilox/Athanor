@@ -518,6 +518,7 @@ func (s *Serveur) routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/maj", s.garde(false, s.apiMaj))
 	mux.HandleFunc("POST /api/maj/installer", s.garde(false, s.apiInstallerMaj))
 	mux.HandleFunc("POST /api/options", s.garde(false, s.apiEcrireOptions))
+	mux.HandleFunc("POST /api/options/rappels-natif", s.garde(false, s.apiRappelsNatif))
 	mux.HandleFunc("POST /api/bureau/{action}", s.garde(false, s.apiBureau))
 	mux.HandleFunc("GET /api/ecran", s.garde(false, s.apiEcran))
 	mux.HandleFunc("POST /api/instance/{action}", s.apiInstance)       // second launch (its own secret, see instance.go)

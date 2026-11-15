@@ -32,6 +32,9 @@ type Config struct {
 	// native Windows mode: the pilot is Athanor.exe and Claude Code the Windows program, without
 	// WSL nor sandbox (natif_windows.go)
 	ModeNatif bool `json:"mode_natif"`
+	// native Windows mode: no reminder nor password before forcing a Servers task (the owner's choice,
+	// logged at each forcing; infra entries, prod and destructive steps keep their own decision)
+	SansRappelsNatif bool `json:"sans_rappels_natif,omitempty"`
 	// the programs on Claude's desktop are heard while a pilot runs (bureau_calme_windows.go; muted by default)
 	EntendreBureauClaude bool `json:"entendre_bureau_claude,omitempty"`
 	// the pilot's hidden console is shown, minimised and never activated (console_windows.go; off by default)

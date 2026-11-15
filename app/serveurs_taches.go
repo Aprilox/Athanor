@@ -552,7 +552,7 @@ func (s *Serveur) apiTachesServeur(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	s.ecrireJSON(w, map[string]any{"taches": taches, "plans": plans, "natif": modeNatif.Load()})
+	s.ecrireJSON(w, map[string]any{"taches": taches, "plans": plans, "natif": modeNatif.Load(), "sans_rappels": s.sansRappelsNatif()})
 }
 
 // apiLancerTacheServeur: POST /api/serveurs/{id}/taches {texte, forcer, mot_de_passe}. Native Windows mode: refused
@@ -579,20 +579,24 @@ func (s *Serveur) apiLancerTacheServeur(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 	}
-	forcee := modeNatif.Load() && c.Forcer
-	if modeNatif.Load() && !c.Forcer {
+	sansRappel := s.sansRappelsNatif() // the owner turned native mode's reminders off: no question, no password
+	forcee := modeNatif.Load() && (c.Forcer || sansRappel)
+	if modeNatif.Load() && !forcee {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		w.WriteHeader(http.StatusConflict)
 		_ = json.NewEncoder(w).Encode(map[string]any{"error": errServeursNatif.Error(), "proposer_wsl": true})
 		return
 	}
-	if forcee && !s.preuveServeur(w, r, c.MotDePasse, "tâche serveurs forcée refusée", id) {
+	if forcee && !sansRappel && !s.preuveServeur(w, r, c.MotDePasse, "tâche serveurs forcée refusée", id) {
 		return
 	}
 	t, err := s.lancerTacheDans(c.Texte, []string{id}, forcee, c.Env, c.Terminal)
 	if err != nil {
 		s.erreurServeurs(w, err)
 		return
+	}
+	if forcee && sansRappel {
+		s.ecrireAudit(LigneAudit{Type: "evenement", De: deQui(r), Vers: "servers", Mission: t.ID, Action: "tâche serveurs forcée sans rappel", Resultat: id})
 	}
 	s.ecrireJSON(w, map[string]any{"tache": t})
 }

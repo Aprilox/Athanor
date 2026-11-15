@@ -286,6 +286,8 @@ func interditDistance(r *http.Request) bool {
 		return true
 	case p == "/api/extensions/corrections/appliquer": // writes into a folder of the computer
 		return true
+	case p == "/api/options/rappels-natif": // native mode's reminders: turned off at the computer only
+		return true
 	case p == "/api/sante/agent-serveurs": // B63: Docker, the vault and a real session, forced without the password
 		return true
 	case strings.HasPrefix(p, "/api/projets/") && strings.HasSuffix(p, "/environnements") && r.Method != http.MethodGet:

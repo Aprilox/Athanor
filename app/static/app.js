@@ -125,7 +125,8 @@ async function action(promesse, genreOk = "ok") {
   catch (e) { if (e.message !== t("Locked")) toast(e.message, "erreur"); return null; }
 }
 
-// choisir(message, [{ id, texte, primaire, danger }], { titre }) → Promise<id | null> (Escape: null)
+// choisir(message, [{ id, texte, primaire, danger }], { titre, case }) → Promise<id | null> (Escape: null);
+// with case (the text of a checkbox under the message): Promise<{ choix, coche }>
 // A popup opened by a first Enter (or click) is never validated by the next one (note 12h28): no Enter or Space for
 // 400 ms after it opens, never a held key's repeat, no click that began before it opened or ends a double click.
 let appuiDernier = 0;
@@ -148,6 +149,7 @@ function choisir(message, boutons, options = {}) {
   $("#choix-texte").textContent = message;
   $("#choix-titre").textContent = options.titre || ""; $("#choix-titre").hidden = !options.titre;
   fond.classList.toggle("dialogue-large", !!options.large);
+  const kase = $("#choix-case"); kase.hidden = !options.case; kase.querySelector("input").checked = false; kase.querySelector("span").textContent = options.case || "";
   $("#choix-boutons").innerHTML = boutons.map((b) => `<button type="button" class="btn ${b.primaire ? "btn-primaire" : b.danger ? "btn-danger" : ""}" data-choix="${h(b.id)}">${h(b.texte)}</button>`).join("");
   const avant = document.activeElement;
   fond.hidden = false;
@@ -155,7 +157,7 @@ function choisir(message, boutons, options = {}) {
   const sur = $('#choix-boutons [data-choix=""]') || $("#choix-boutons button:not(.btn-primaire):not(.btn-danger)") || $("#choix-boutons button"); if (sur) sur.focus();
   const garde = gardePopup();
   return new Promise((resoudre) => {
-    const fin = (v) => { fond.hidden = true; fond.onclick = null; document.removeEventListener("keydown", clavier, true); if (avant && avant.focus) avant.focus(); resoudre(v); };
+    const fin = (v) => { fond.hidden = true; fond.onclick = null; document.removeEventListener("keydown", clavier, true); if (avant && avant.focus) avant.focus(); resoudre(options.case ? { choix: v, coche: kase.querySelector("input").checked } : v); };
     const clavier = (e) => { if (garde.touche(e)) { e.preventDefault(); e.stopPropagation(); } else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); fin(null); } };
     fond.onclick = (e) => { const b = e.target.closest("[data-choix]"); if (b) { if (!garde.clic(e)) fin(b.dataset.choix); } else if (e.target === fond) fin(null); };
     document.addEventListener("keydown", clavier, true);
@@ -967,6 +969,7 @@ function rendreBandeau(v) {
   else if (maj.en_cours === "redemarrage") boutons.unshift(`<button class="btn btn-maj" disabled>${t("Athanor restarts…")}</button>`);
   else if (maj.disponible) boutons.unshift(`<button class="btn btn-maj" data-maj="voir" title="${h(t("Athanor {0} is available (you have {1})", [maj.derniere, v.version]))}">${ic("maj")} ${t("Update to {0}", [h(maj.derniere)])}</button>`);
   if (!cadre.actif) boutons.push(boutonCloche(v, "btn"), boutonGuide("btn"));
+  if (v.natif) boutons.unshift(`<a class="etiquette puce-natif" href="#options" role="status" title="${h(t("Native Windows mode: nothing separates the AI from the files of this PC. Settings › Options."))}">${t("Native mode: no barrier")}</a>`);
   rendreBarre(v);
   const nomProjet = v.projet && !global ? `<div class="muet petit" title="${h(v.projet.dossier)}">${h(v.projet.nom)}</div>` : "";
   const nbActifs = (v.projets || []).filter((x) => x.actif).length;
@@ -2765,6 +2768,7 @@ const GUIDE = [
     etapes: [
       ["Ask", "On the server's sheet, the *Tasks* block: type what should be done (“Install nginx and serve my site over HTTPS”), then *Launch*. The Servers agent gets tools for this server only, never its key nor its password, and loses them when the task ends. Tasks are launched from the computer; a paired phone follows them, read only.", "#serveurs", "Servers"],
       ["In native Windows mode", "Native mode has no barrier: an agent would run with all your rights on this PC. The task is refused, with *Switch to WSL*, or *Force this task* with Athanor's password if you accept the risk."],
+      ["Native mode's warnings", "Tick *Don't remind me again* in that window, or the switch in Settings › Options, and the next tasks are forced without asking nor the password. Each forcing stays logged, the *Native mode: no barrier* label stays at the top, and infra keys, production and destructive steps keep their own decision."],
       ["The plan", "The agent first reads the sheet, the RUNBOOK and the state of the server. To change anything it must propose a plan: a summary, then numbered steps, each with its tool, its arguments and why. A security critic, another session that can only read, reviews it first; its verdict (no risk found, or the risks one per line) is on the plan's card."],
       ["Three classes", "Athanor ranks every step itself, whatever the agent says: *read* runs without asking; *change* (installing, writing a file, a service, a firewall rule) and *destructive* (deleting, stopping SSH, resetting the firewall) wait for a plan. A command hidden behind `bash -c`, `sudo`, an interpreter, or one Athanor cannot analyse counts as destructive."],
       ["Your agreement", "The plan waits in the bell and on *For you* for 2 hours. *Accept* asks for Athanor's password again, or comes from a paired phone; *Refuse*, and nothing runs. Each accepted step runs once, exactly as shown: any other step needs a new plan. *Never ask again for this server* is offered only for changes on a *dev* server; destructive steps and *prod* always wait for you.", "#pourvous", "For you"],
@@ -4977,6 +4981,8 @@ async function rendreOptions() {
         <p class="muet petit">${t("Applies to the pilots started afterwards. When you close Athanor while native pilots run, it asks whether they go on in the background.")}</p>
         <label class="interrupteur mt-1"><input type="checkbox" id="op-terminal" data-option ${o.terminal_pilote ? "checked" : ""}><span>${t("Show the pilot's terminal")}</span></label>
         <p class="muet petit">${t("Off: the programs a native pilot starts (bash, git, go, the checks) run in a hidden console, and no window opens. On: one minimised window in the taskbar shows the pilot live, without ever taking the focus. For the pilots started afterwards.")}</p>
+        <label class="interrupteur mt-1"><input type="checkbox" id="op-sans-rappels"${o.sans_rappels_natif ? " checked" : ""}><span>${t("Don't show the native Windows mode warnings anymore")}</span></label>
+        <p class="muet petit">${t("In native mode, the AI can read the files of this PC. This setting only removes the reminders and their password before forcing a Servers task, not the risk. Every forcing stays logged; infra keys, production and destructive steps keep their own decision. Turning the warnings off asks for Athanor's password.")}</p>
       </div>
       <div class="bloc"${b.message === "Virtual desktop: Windows only." ? " hidden" : ""}><h2>${t("“Claude” desktop")}</h2>
         <label class="interrupteur"><input type="checkbox" id="op-bureau" data-option ${o.bureau_virtuel ? "checked" : ""}><span>${t("Open the programs Claude starts (Unreal, Blender, a game under test) on a desktop of their own")}</span></label>
@@ -6214,7 +6220,7 @@ function blocTaches(ta, distant, annulations, envs) {
       <label for="srv-tache-texte"><b>${t("What should be done on this server?")}</b></label>
       <textarea id="srv-tache-texte" rows="3" maxlength="4000" placeholder="${h(t("e.g. Install nginx and serve my site over HTTPS"))}">${h(srv.texte)}</textarea>
       <p class="muet petit m0">${t("The Servers agent reads the server, then proposes a plan. Nothing changes before you accept it on its card; a security critic reads it first, the paths a step names are archived before it runs, a file the agent rewrites keeps its previous copy, and an external check follows.")}</p>
-      ${(ta || {}).natif ? `<p class="petit pv-vous m0">${t("Native Windows mode has no barrier: a task runs only if you force it, with Athanor's password.")}</p>` : ""}
+      ${(ta || {}).natif ? `<p class="petit pv-vous m0">${t((ta || {}).sans_rappels ? "Native Windows mode has no barrier: your tasks are forced without asking (warnings turned off in Settings › Options), and logged." : "Native Windows mode has no barrier: a task runs only if you force it, with Athanor's password.")}</p>` : ""}
       ${envs.length ? `<label class="petit" for="srv-tache-env">${t("For the environment")} <select id="srv-tache-env"><option value="">${t("None (this server only)")}</option>${envs.map((pe) => `<option value="${h(pe)}">${h(pe)}</option>`).join("")}</select></label>
       <p class="muet petit m0">${t("With an environment, the agent can also change the DNS, HTTPS and protection of its address, on that name only.")}</p>` : ""}
       <div class="ligne m0"><button type="submit" class="btn btn-primaire">${t("Launch")}</button></div></form>`}
@@ -6247,13 +6253,21 @@ function lancerTacheSrv(id, texte, env, terminal) {
   const url = "serveurs/" + encodeURIComponent(id) + "/taches";
   return api(url, "POST", { texte, env, terminal }).catch(async (e) => {
     if (!e.data || !e.data.proposer_wsl) throw e;
-    const c = await choisir(t("Native Windows mode has no barrier: an agent working on your servers would run with all your rights on this PC. Switch to WSL, or force this task knowing the risk."),
-      [{ id: "wsl", texte: t("Switch to WSL"), primaire: true }, { id: "forcer", texte: t("Force this task"), danger: true }, { id: "", texte: t("Cancel") }], { titre: t("Native Windows mode") });
+    const { choix: c, coche } = await choisir(t("Native Windows mode has no barrier: an agent working on your servers would run with all your rights on this PC. Switch to WSL, or force this task knowing the risk."),
+      [{ id: "wsl", texte: t("Switch to WSL"), primaire: true }, { id: "forcer", texte: t("Force this task"), danger: true }, { id: "", texte: t("Cancel") }], { titre: t("Native Windows mode"), case: t("Don't remind me again") });
     if (c === "wsl") { location.hash = "#options@bloc-direct"; return null; }
     if (c !== "forcer") return null;
+    // M240r2: the same switch as Settings › Options, the password once; this task then goes through without asking
+    if (coche) return (await rappelsNatif(true)) ? api(url, "POST", { texte, env, terminal }) : null;
     const p = await preuveMdp(t("Forcing a Servers task without the barrier: retype Athanor's password."), { ok: t("Force this task"), danger: true }, t("Force this task without the barrier?"));
     return p ? api(url, "POST", { texte, env, terminal, forcer: true, ...p }) : null;
   }).catch((e) => { if (e.message !== t("Locked")) toast(e.message, "erreur"); return null; });
+}
+// native mode's reminders (the one switch, kept in the preferences): turning them off asks for Athanor's password
+async function rappelsNatif(off) {
+  const p = off ? await preuveMdp(t("Turning off native Windows mode's warnings: retype Athanor's password. Servers tasks will then be forced without asking; every forcing stays logged."), { ok: t("Turn off the warnings"), danger: true }, t("Turn off native Windows mode's warnings?")) : {};
+  if (!p) return false;
+  return !!(await action(api("options/rappels-natif", "POST", { actif: off, ...p })));
 }
 // the countdown of the changes waiting for confirmation; at its end the server has undone the change: read it again
 setInterval(() => {
@@ -7192,6 +7206,7 @@ $("#page").addEventListener("change", (ev) => {
   if (i.id === "rg-secrets") { etat.envSecrets = i.checked; rendrePage(); }
   if (i.type === "checkbox" && i.dataset.cle) i.nextElementSibling.textContent = i.checked ? t("enabled") : t("disabled");
   if (etat.page === "reglages" && i.hasAttribute("data-option")) enregistrerOptions();
+  if (i.id === "op-sans-rappels") rappelsNatif(i.checked).then((ok) => { if (!ok) i.checked = !i.checked; });
   if (i.hasAttribute("data-gh-coauteur")) action(api("github", "POST", Object.assign({ action: "identite" }, lireAuteur()))).then((r) => { if (!r) i.checked = !i.checked; });
   if (i.id === "gh-auteur-email") { const a = $("#gh-auteur-autre"); a.hidden = i.value !== ""; if (!a.hidden) a.focus(); }
   if (i.hasAttribute("data-gh-auto")) action(api("github", "POST", { action: "auto", auto: i.checked })).then((r) => { if (!r) i.checked = !i.checked; });

@@ -826,6 +826,8 @@ input.large { flex: 1; min-width: 200px; width: auto; }
 .pv-tete { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .pv-etat { font-size: 12px; padding: 1px 8px; border-radius: 10px; border: 1px solid currentColor; white-space: nowrap; }
 .pv-vous { color: var(--attention); }
+.puce-natif { color: var(--attention); border-color: var(--attention); text-decoration: none; align-self: center; }
+#choix-case { display: flex; gap: 8px; align-items: center; margin: 4px 0 12px; }
 .pv-claude { color: var(--accent); }
 .pv-ok { color: var(--ok); }
 .pv-details { white-space: pre-wrap; overflow-wrap: anywhere; margin: 10px 0; line-height: 1.5; }

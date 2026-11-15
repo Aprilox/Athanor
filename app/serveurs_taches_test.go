@@ -225,6 +225,26 @@ func TestServeursTaches(t *testing.T) {
 	if w.Code != http.StatusConflict || json.Unmarshal(w.Body.Bytes(), &rep) != nil || !rep.ProposerWSL {
 		t.Errorf("native mode answer: %d %s", w.Code, w.Body)
 	}
+	// M240r2: native mode's reminders turned off by the owner: forced without the question nor the password
+	jouer = func(context.Context, int, sessionFausse) (string, string) { return "sess-4", "nothing to do" }
+	s.mu.Lock()
+	s.config.SansRappelsNatif = true
+	s.mu.Unlock()
+	w = httptest.NewRecorder()
+	r = httptest.NewRequest("POST", "/api/serveurs/ab12/taches", strings.NewReader(`{"texte":"x"}`))
+	r.SetPathValue("id", srv.ID)
+	s.apiLancerTacheServeur(w, r)
+	var lance struct {
+		Tache TacheServeurs `json:"tache"`
+	}
+	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &lance) != nil || !lance.Tache.Forcee {
+		t.Errorf("task without the reminder: %d %s", w.Code, w.Body)
+	} else {
+		attendre(lance.Tache.ID, "finie", "echec", "arretee")
+	}
+	s.mu.Lock()
+	s.config.SansRappelsNatif = false
+	s.mu.Unlock()
 	modeNatif.Store(false)
 
 	// the task files: no vault value
@@ -234,7 +254,7 @@ func TestServeursTaches(t *testing.T) {
 			t.Errorf("vault value in %s", f)
 		}
 	}
-	if len(fichiers) != 3 {
-		t.Errorf("%d task files, 3 expected", len(fichiers))
+	if len(fichiers) != 4 {
+		t.Errorf("%d task files, 4 expected", len(fichiers))
 	}
 }
