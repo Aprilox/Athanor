@@ -39,6 +39,7 @@ type EtapePlan struct {
 	Outil      string          `json:"outil"`
 	Arguments  json.RawMessage `json:"arguments,omitempty"`
 	Lisible    string          `json:"lisible,omitempty"` // the arguments as the page shows them (masked, cut)
+	Libelle    string          `json:"libelle,omitempty"` // the tool in plain words (libellesOutils), set for the page
 	Classe     string          `json:"classe"`
 	Raison     string          `json:"raison"`
 	Pourquoi   string          `json:"pourquoi"`
@@ -453,6 +454,7 @@ func (s *Serveur) planAffiche(id string) (PlanServeur, error) {
 	}
 	for i := range p.Etapes {
 		p.Etapes[i].Lisible = couper(s.masquerSecrets(string(p.Etapes[i].Arguments)), 4000)
+		p.Etapes[i].Libelle = libellesOutils[p.Etapes[i].Outil]
 		p.Etapes[i].Arguments = nil
 	}
 	p.Resume = s.masquerSecrets(p.Resume)

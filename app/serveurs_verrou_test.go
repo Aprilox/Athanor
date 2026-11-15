@@ -43,6 +43,12 @@ func TestVerrouEtatAssistant(t *testing.T) {
 	if tacheDirecte("autre") != nil { // a reload or a reconnection opens another session
 		t.Error("another terminal session is locked by the task's command")
 	}
+	for sess, verrou := range map[string]bool{"sess": true, "autre": false, "": false} { // the page reads its session's lock
+		l := []TacheServeurs{e.copie()}
+		if verrouPourSession(l, sess); l[0].Verrou != verrou {
+			t.Errorf("lock read by session %q: %v, want %v", sess, l[0].Verrou, verrou)
+		}
+	}
 	cas("command ended", "application", []ActionTache{{N: 1, T: enCours.T, Etat: "ok"}}, "sess", "travail", false)
 	cas("command failed", "application", []ActionTache{{N: 1, T: enCours.T, Etat: "erreur"}}, "sess", "travail", false)
 	cas("refused", "application", []ActionTache{{N: 1, T: enCours.T, Etat: "refusee"}}, "sess", "travail", false)

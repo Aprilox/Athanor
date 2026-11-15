@@ -610,6 +610,14 @@ func tachesServeur(id string) []TacheServeurs {
 
 // ----------------------------------------------------------------------------- API
 
+// verrouPourSession: a terminal page reads the lock of its own session only: Go refuses the typing of the task's
+// session alone, so a second tab or a phone on the same server is neither locked nor told "working".
+func verrouPourSession(taches []TacheServeurs, session string) {
+	for i := range taches {
+		taches[i].Verrou = taches[i].Verrou && session != "" && taches[i].Terminal == session
+	}
+}
+
 // apiTachesServeur: GET /api/serveurs/{id}/taches (a paired device reads it too).
 func (s *Serveur) apiTachesServeur(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
@@ -618,6 +626,9 @@ func (s *Serveur) apiTachesServeur(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	taches, plans := tachesServeur(id), map[string]PlanServeur{} // the plans as the page shows them (masked)
+	if r.URL.Query().Has("terminal") {
+		verrouPourSession(taches, r.URL.Query().Get("terminal"))
+	}
 	for _, t := range taches {
 		for _, p := range t.Plans {
 			if s.approbations == nil {

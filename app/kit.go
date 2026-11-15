@@ -386,7 +386,12 @@ func EcrireEnv(chemin string, valeurs map[string]string) error {
 	if err := os.WriteFile(tmp, []byte(sb.String()), 0o600); err != nil {
 		return err
 	}
-	if err := os.Rename(tmp, chemin); err != nil {
+	err := os.Rename(tmp, chemin)
+	for i := 0; err != nil && i < 25; i++ { // Windows refuses it while a reader holds .env open: a moment later it goes
+		time.Sleep(20 * time.Millisecond)
+		err = os.Rename(tmp, chemin)
+	}
+	if err != nil {
 		_ = os.Remove(tmp)
 		return os.WriteFile(chemin, []byte(sb.String()), 0o600)
 	}

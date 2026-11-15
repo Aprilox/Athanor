@@ -3465,7 +3465,7 @@ function blocPlan(x, p) {
     const [lib, cl] = CLASSES_ETAPE()[e.classe] || [e.classe, ""];
     // C52: a step marked run waits for its result, then says applied or failed (and why)
     const fait = !e.executee ? "" : e.etat === "ok" ? ` <span class="pv-etat pv-ok">${ic("ok")} ${t("applied")}</span>` : e.etat === "echec" ? ` <span class="pv-etat pv-vous">${ic("croix")} ${t("failed")}</span>` : ` <span class="pv-etat pv-claude">${t("running…")}</span>`;
-    return `<li><div class="plan-etape-tete"><code>${h(e.outil)}</code> <span class="pv-etat ${cl}">${h(lib)}</span>${fait}</div>
+    return `<li><div class="plan-etape-tete">${e.libelle ? `<span class="plan-outil">${h(t(e.libelle))}</span>` : `<code>${h(e.outil)}</code>`} <span class="pv-etat ${cl}">${h(lib)}</span>${fait}</div>
       ${e.raison ? `<div class="petit muet">${t("Why this class:")} <span lang="en">${h(e.raison)}</span></div>` : ""}${e.etat === "echec" && e.message ? `<div class="petit echec">${h(e.message)}</div>` : ""}
       <div class="plan-args">${argumentsLisibles(e.lisible)}</div><div class="pv-details m0">${h(e.durcir ? t(e.pourquoi) : e.pourquoi)}</div>
       ${(e.sauvegarde || []).length ? `<div class="petit plan-args">${h(t("Backed up first: {0}", [e.sauvegarde.join(", ")]))}</div>` : ""}${e.sans_sauvegarde ? `<div class="petit plan-args">${h(t("No backup: {0}", [e.durcir ? t(e.sans_sauvegarde) : e.sans_sauvegarde]))}</div>` : ""}${e.archive ? `<div class="petit plan-args">${h(t("Archive made: {0}", [e.archive]))}</div>` : ""}</li>`;
@@ -7333,7 +7333,8 @@ function panneauIA(distant) {
 async function chargerIA() {
   clearTimeout(ia.minuteur);
   const id = term.id; if (!$("#ia") || !id) return;
-  const r = await api("serveurs/" + encodeURIComponent(id) + "/taches").catch(() => null);
+  // its own session's lock only: another tab on this server is never locked by this one's task
+  const r = await api("serveurs/" + encodeURIComponent(id) + "/taches?terminal=" + encodeURIComponent(term.session || "")).catch(() => null);
   if (etat.page !== "terminal" || term.id !== id) return;
   if (!r !== !!ia.hs) { ia.hs = !r; ia.lu = ""; if (!r) rendreIA(); }
   if (r) { const sig = JSON.stringify(r.taches) + JSON.stringify(r.plans); if (sig !== ia.lu || !$("#ia-fil").childElementCount) { ia.lu = sig; ia.taches = r.taches || []; ia.plans = r.plans || {}; rendreIA(); } }
@@ -7371,11 +7372,17 @@ function planCarteIA(x) {
 }
 function tacheIA(x) {
   const a = assIA(x), fini = !vivanteIA(x), [lib, cl] = ETATS_TACHE_SRV()[{ arretee: "arretee", erreur: "echec" }[a] || x.etat] || [x.etat, ""], fin = (x.historique || []).slice(-1)[0] || {};
+  const carte = a === "arretee" ? planCarteIA(x) : ""; // a stopped task with a plan: its card says it, once
   return `<div class="ia-tache" data-tache="${h(x.id)}"><p class="ia-demande">${h(x.texte)}${x.direct ? ` <span class="pv-etat pv-claude">${t("Shown in your terminal")}</span>` : ""}</p>
     ${(x.actions || []).length ? `<ol class="ia-actions">${x.actions.map(actionIA).join("")}</ol>` : ""}
-    ${a === "arretee" ? planCarteIA(x) : ""}
+    ${carte}
     ${x.resultat ? `<div class="ia-reponse">${mdChat(x.resultat, true)}</div>` : ""}
-    ${fini ? `<p class="m0 petit"><span class="pv-etat ${cl}">${h(lib)}</span>${["echec", "arretee"].includes(x.etat) && fin.detail ? ` <span class="muet">${h(t(fin.detail))}</span>` : ""}</p>` : ""}</div>`;
+    ${!fini || carte ? "" : a === "erreur" ? `<p class="m0 petit ia-echec"><span class="echec">${h(fin.detail ? t(fin.detail) : t("The task failed without giving a reason."))}</span>${(etat.vue || {}).distant ? "" : ` <button type="button" class="btn btn-petit" data-ia-reessayer="${h(x.id)}">${t("Retry")}</button>`}</p>`
+      : `<p class="m0 petit"><span class="pv-etat ${cl}">${h(lib)}</span>${x.etat === "arretee" && fin.detail ? ` <span class="muet">${h(t(fin.detail))}</span>` : ""}</p>`}</div>`;
+}
+function erreurIA(x) { // the status line of a failed task says why, as its thread does
+  const fin = ((x || {}).historique || []).slice(-1)[0] || {};
+  return t("Failed: {0}", [fin.detail ? t(fin.detail) : t("The task failed without giving a reason.")]);
 }
 function rendreIA() {
   const fil = $("#ia-fil"), zone = $("#ia-encours"); if (!fil || !zone) return;
@@ -7389,12 +7396,12 @@ function rendreIA() {
   if (f) { f.hidden = !ia.attente; f.innerHTML = ia.attente ? `<span class="ia-file-texte petit" title="${h(ia.attente)}">${h(t("Queued: {0}", [ia.attente.replace(/\s+/g, " ")]))}</span>
     <button type="button" class="btn btn-petit" data-ia-annuler-file>${t("Cancel")}</button>` : ""; }
   const enCours = courante && (courante.actions || []).filter((a) => a.etat === "en_cours").slice(-1)[0];
-  const texte = { repos: t("The assistant is idle."), attente_decision: t("Waiting for your decision"), arretee: t("Stopped"), erreur: t("Failed"),
+  const texte = { repos: t("The assistant is idle."), attente_decision: t("Waiting for your decision"), arretee: t("Stopped"), erreur: erreurIA(e.tache),
     hs: t("Athanor does not answer: the assistant's state is unknown, your terminal stays free.") }[e.etat]
     || (enCours ? t(courante.verrou ? "Running in your terminal: {0}" : "Running: {0}", [enCours.quoi]) : (ETATS_TACHE_SRV()[courante.etat] || [t("The assistant is working")])[0]);
   zone.dataset.etat = e.etat;
   zone.innerHTML = `<span class="pastille ${{ travail: "travaille", attente_decision: "attend", arretee: "arret", erreur: "arret", hs: "arret" }[e.etat] || ""}"></span><span class="ia-encours-texte petit">${h(texte)}</span>
-    <button type="button" class="btn btn-danger btn-petit" data-ia-arreter="${h(courante ? courante.id : "")}"${courante && !(etat.vue || {}).distant ? "" : " disabled"}>${t("Stop")}</button>`;
+    <button type="button" class="btn btn-danger btn-petit" data-ia-arreter="${h(courante ? courante.id : "")}"${courante ? (etat.vue || {}).distant ? " disabled" : "" : ' disabled aria-hidden="true" data-vide'}>${t("Stop")}</button>`;
   // after the zones under the thread took their height (decision card, queued line): its bottom stays in view
   if (bas || ia.suivi) { fil.scrollTop = fil.scrollHeight; ia.suivi = false; }
   basFilIA();
@@ -7418,17 +7425,16 @@ function bandeauTerminal(e) {
     if (!b) { b = document.createElement("div"); b.id = "term-verrou"; b.setAttribute("role", "status"); hote.prepend(b); }
     const dis = (etat.vue || {}).distant ? " disabled" : "", p = planIA(x);
     b.dataset.cle = cle; b.className = "term-verrou" + (cle[0] === "d" ? " decision" : "");
-    b.innerHTML = cle[0] === "v" ? `<span class="pastille travaille"></span><span class="term-verrou-texte" title="${h(t("Your typing is locked so that you never both type at once."))}"><b>${t("The assistant is working")}</b> — <span class="petit">${t("Your typing is locked so that you never both type at once.")}</span></span>
+    b.innerHTML = cle[0] === "v" ? `<span class="pastille travaille"></span><span class="term-verrou-texte" title="${h(t("Your typing is locked so that you never both type at once."))}"><b>${t("The assistant is working")}</b> <span class="petit">${t("Your typing is locked so that you never both type at once.")}</span></span>
       <button type="button" class="btn btn-danger btn-petit" data-ia-arreter="${h(x.id)}"${dis}>${t("Stop")}</button><button type="button" class="btn btn-petit" data-ia-main="${h(x.id)}"${dis}>${t("Take over")}</button>`
-      : `<span class="pastille attend"></span><span class="term-verrou-texte"><b>${t("Waiting for your decision")}</b> — <span class="petit">${t("The assistant waits for your decision on its plan; your terminal stays yours.")}</span></span>
+      : `<span class="pastille attend"></span><span class="term-verrou-texte"><b>${t("Waiting for your decision")}</b> <span class="petit">${t("The assistant waits for your decision on its plan; your terminal stays yours.")}</span></span>
       <button type="button" class="btn btn-primaire btn-petit" data-ia-decider="accepter" data-plan="${h(p)}"${dis}>${t("Accept")}</button><button type="button" class="btn btn-petit" data-ia-decider="refuser" data-plan="${h(p)}"${dis}>${t("Refuse")}</button><button type="button" class="btn btn-petit" data-ia-modifier="${h(x.id)}"${dis}>${t("Modify")}</button>`;
     hote.classList.toggle("verrouille", cle[0] === "v"); hote.classList.add("avec-bandeau");
   }
   requestAnimationFrame(() => term.fit && term.el && term.el.offsetWidth && term.fit.fit());
 }
 function verrouTerminal(id) {
-  // shortcut: an Enter on a free terminal shows the shell's prompt again under the copied lines; assumes the shell sits at its prompt
-  if (ia.verrou && !id && term.session && !term.msg) taperTerminal("\r");
+  // nothing is typed when the lock falls: a line begun before it, or less/vim, must never receive an Enter (Go writes its message)
   ia.verrou = id;
   if (term.x && term.session && !term.msg) term.x.options.disableStdin = !!id;
 }
@@ -7475,7 +7481,7 @@ $("#page").addEventListener("click", async (ev) => {
     const c = $("#ia-texte"); if (c && !c.value.trim()) c.value = ia.attente;
     ia.attente = ""; rendreIA(); return c && c.focus();
   }
-  const b = ev.target.closest("[data-ia-arreter], [data-ia-decider], [data-ia-carte], [data-ia-main], [data-ia-modifier]"); if (!b) return;
+  const b = ev.target.closest("[data-ia-arreter], [data-ia-decider], [data-ia-carte], [data-ia-main], [data-ia-modifier], [data-ia-reessayer]"); if (!b) return;
   const d = b.dataset;
   if (d.iaModifier) { // the request back in the field, "Changes:" after it; Send stops the task (its plan refused) and sends it again
     const x = ia.taches.find((y) => y.id === d.iaModifier); if (!x) return;
@@ -7485,6 +7491,7 @@ $("#page").addEventListener("click", async (ev) => {
     ia.modifier = x.id; c.value = x.texte + "\n\n" + t("Changes:") + " "; c.focus(); c.setSelectionRange(c.value.length, c.value.length);
     return toast(t("Write your changes, then Send: the plan is refused and the request goes again with them."), "ok");
   }
+  if (d.iaReessayer) { const x = ia.taches.find((y) => y.id === d.iaReessayer); if (x) envoyerIA(x.texte); return; } // the failed request, sent again
   if (d.iaCarte) { etat.apprCible = d.iaCarte; return; } // the link opens For you, where the card is scrolled to
   b.disabled = true;
   if (d.iaMain) {

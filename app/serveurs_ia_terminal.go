@@ -109,7 +109,7 @@ func ecrireDansTerminal(t *tacheEnCours, texte string) {
 // libellesOutils: the Servers tools as a beginner reads them (C1-10); the English texts are i18n.js keys, so the
 // page and the terminal's screen say them in the owner's language (TestLibellesOutils checks every language).
 var libellesOutils = map[string]string{
-	"serveurs_liste": "List the servers", "serveur_fiche": "Read the server's sheet", "fichier_lire": "Read a file",
+	"ssh_commande": "Run a command", "serveurs_liste": "List the servers", "serveur_fiche": "Read the server's sheet", "fichier_lire": "Read a file",
 	"fichier_ecrire": "Write a file", "sftp_envoyer": "Send a file", "sftp_recuperer": "Fetch a file",
 	"service": "Service", "docker": "Docker", "pare_feu": "Firewall", "proposer_plan": "Propose a plan",
 	"confirmer_changement": "Confirm a change", "runbook_lire": "Read the runbook", "runbook_ajouter": "Add to the runbook",
