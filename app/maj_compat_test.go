@@ -115,8 +115,14 @@ func TestMajCompatDonneesFigees(t *testing.T) {
 		if dossierAthanorDefaut() != `C:\Users\u\AppData\Local\Athanor` || dossierDonneesApp() != `C:\Users\u\AppData\Local\Athanor` {
 			t.Fatalf("data folder moved: %s", dossierAthanorDefaut())
 		}
-	} else if filepath.Base(dossierDonneesApp()) != "Athanor" {
-		t.Fatalf("data folder moved: %s", dossierDonneesApp())
+	} else {
+		want := "Athanor" // macOS
+		if runtime.GOOS == "linux" {
+			want = "athanor" // ~/.local/share/athanor since 2.26
+		}
+		if filepath.Base(dossierDonneesApp()) != want {
+			t.Fatalf("data folder moved: %s", dossierDonneesApp())
+		}
 	}
 }
 
