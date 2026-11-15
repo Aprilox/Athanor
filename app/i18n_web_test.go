@@ -106,7 +106,8 @@ func TestWebTraduction(t *testing.T) {
 	for _, e := range []error{errCoffreVerrouille, errCoffreSansMdp, errCoffreMdp, errCoffreInconnu, errCoffreRetraitMdp,
 		errCoffreTrousseau, errCoffreFormat, errCoffreAbime, errCoffreIllisible, errServeurAdresse, errServeurPort,
 		errServeurUtilisateur, errServeurEmpreinte, errServeurMode, errServeurPasCle, errServeurPhrase, errServeurInjoignable,
-		errServeurCleRefusee, errEmpreinteChangee, errServeurCleCode} { // the vault's errors reach the toast (B14)
+		errServeurCleRefusee, errEmpreinteChangee, errServeurCleCode, errServeurMdpRefuse, errServeurCleImport, errServeurPhraseVide,
+		errServeurPhraseFaux, errServeurSansCle, errCoupureMotDePasse} { // the vault's errors reach the toast (B14)
 		cles = append(cles, e.Error())
 	}
 	cles = append(cles, errTacheArretee.Error(), errTacheRevoquee.Error(), prefixeVerifEchouee) // a task's end (B64)

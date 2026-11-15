@@ -683,7 +683,7 @@ func serveursCapture(t *testing.T, s *Serveur) int {
 	t.Cleanup(func() { dialSSH = avant })
 	maintenant := time.Now()
 	liste := []ServeurInventaire{
-		{ID: "c0ffee01", Nom: "VPS production", Hote: "vps.example.org", Port: 22, Utilisateur: "deploy", EmpreinteHote: "SHA256:q3XyV0b8mFh2kLtR7cWnJ5sPzA1dE9gUoK4iY6vBxN0", Roles: []string{"prod"}, Etat: "ok", Cree: maintenant.Add(-72 * time.Hour), Vu: maintenant.Add(-20 * time.Minute), MotDePasseCoupe: true},
+		{ID: "c0ffee01", Nom: "VPS production", Hote: "vps.example.org", Port: 22, Utilisateur: "deploy", EmpreinteHote: "SHA256:q3XyV0b8mFh2kLtR7cWnJ5sPzA1dE9gUoK4iY6vBxN0", Roles: []string{"prod"}, Auth: "cle_generee", Etat: "ok", Cree: maintenant.Add(-72 * time.Hour), Vu: maintenant.Add(-20 * time.Minute), MotDePasseCoupe: true},
 		{ID: "c0ffee02", Nom: "Home server", Hote: "192.168.1.40", Port: 2222, Utilisateur: "pi", Cle: cle, EmpreinteHote: mem.empreinte, Roles: []string{"dev"}, Etat: "ok", Cree: maintenant.Add(-48 * time.Hour), Vu: maintenant.Add(-3 * time.Hour)},
 		{ID: "c0ffee03", Nom: "Staging", Hote: "staging.example.org", Port: 22, Utilisateur: "root", Roles: []string{"dev", "prod"}, Etat: "inconnu", Cree: maintenant.Add(-10 * time.Minute)},
 		{ID: "c0ffee04", Nom: "Ancien VPS", Hote: "old.example.net", Port: 22, Utilisateur: "admin", Cle: cle, EmpreinteHote: "SHA256:Zk4pQ8wR2mVnY7tL1cXbE5sHdA9gUoJ3iF6rKvN0aTq", Roles: nil, Etat: "injoignable", Cree: maintenant.Add(-900 * time.Hour), Vu: maintenant.Add(-200 * time.Hour)},

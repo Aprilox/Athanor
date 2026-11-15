@@ -2761,7 +2761,7 @@ const GUIDE = [
       ["Before you start", "A server's key is an *infra* entry of the vault: it opens only with Athanor's password. Choose one, then unlock Athanor; otherwise the Servers page tells you. A server is added on the computer, not from a paired phone.", "#options@bloc-verrou", "Settings › Options › Lock"],
       ["The address", "*Servers*, in the menu, then *+ Add a server*: the address, the port (22 by default), the user (`root` or a user with `sudo`), a name if you like, and its roles: *dev* for tests and previews, *prod* for your live site. Then *Continue*.", "#serveurs", "Servers"],
       ["The fingerprint", "Athanor reads the fingerprint the server presents and shows it. Compare it with the one the server itself gives (`for f in /etc/ssh/ssh_host_*_key.pub; do ssh-keygen -lf $f; done`, typed on the server or in your host's console), then tick *It is my server's fingerprint*. From then on Athanor refuses any other: if it changes, the connection is refused with a clear message."],
-      ["Three ways to connect", "*A key of the vault*: an SSH key you already use for this server. *A new key made by Athanor*: copy its public part into the server's `~/.ssh/authorized_keys`, or run the command shown on the server, then *Verify*. *The server's password, once*: Athanor puts its own key there for you. In native Windows mode, giving an existing key of the vault asks for Athanor's password."],
+      ["Four ways to connect", "*The server's password*: Athanor keeps it in the vault and connects with it; no key is made and password logins stay open on the server. *A new key made by Athanor*: give the server's password once and Athanor puts the key there, or copy its public part into the server's `~/.ssh/authorized_keys` (or run the command shown), then *Verify*. *An SSH key you already have*: paste it or choose its file, with its passphrase if it has one; Athanor keeps it in the vault. *A key of the vault*: an SSH key you already use for this server. In native Windows mode, giving an existing key of the vault asks for Athanor's password."],
       ["The password, never kept", "With the password, Athanor connects once, adds its own key (ed25519, kept in the vault) to the server, then connects again with that key to check it. The password is neither saved nor written to any page or log."],
       ["Cut password logins", "Athanor then offers *Cut password logins*, never on its own: nobody can then try passwords on the server. It writes one small SSH setting (`/etc/ssh/sshd_config.d/00-athanor.conf`), checks it with `sshd -t`, reloads SSH and connects again with its key; if anything fails, it removes the setting again. *Later* leaves them open: the button stays on the server's sheet."],
       ["The server's sheet", "Click the server's card: system, processors, memory, disk, listening ports, software (Docker, Compose, k3s, nginx, Caddy, ufw…), firewall, running services and containers, read by one read-only script. *Refresh* reads it again; Athanor also does every 6 hours while the vault is open. The roles change there too; *Remove this server* forgets it without touching the server, and its key stays in the vault unless you tick the box. A paired phone sees the sheets, read only."],
@@ -5756,12 +5756,17 @@ function assistantServeur(c) {
       <p><code class="srv-empreinte-valeur">${h(a.empreinte)}</code>${a.typeCle ? ` <span class="petit">(${h(a.typeCle)})</span>` : ""}</p>
       <label class="radio"><input type="checkbox" id="srv-confirme"${a.confirme ? " checked" : ""} required> ${t("It is my server's fingerprint")}</label>
       <fieldset class="srv-facons"><legend>${t("How should Athanor connect?")}</legend>
+        <label class="radio srv-facon"><input type="radio" name="srv-mode" value="mot_de_passe"${a.mode === "mot_de_passe" ? " checked" : ""}> <span><b>${t("The server's password")}</b><br><span class="muet petit">${t("Athanor keeps it in the vault and connects with it. No key is made.")}</span></span></label>
+        ${a.mode === "mot_de_passe" ? `<div class="srv-sous"><input type="password" id="srv-mdp-serveur" autocomplete="off" aria-label="${h(t("The server's password"))}" placeholder="${h(t("The server's password"))}" required></div>` : ""}
+        <label class="radio srv-facon"><input type="radio" name="srv-mode" value="generee"${a.mode === "generee" ? " checked" : ""}> <span><b>${t("A new key made by Athanor")}</b><br><span class="muet petit">${t("Give the server's password once and Athanor puts the key there (the password is not kept), or leave it empty to copy the public part onto the server yourself.")}</span></span></label>
+        ${a.mode === "generee" ? `<div class="srv-sous"><input type="password" id="srv-mdp-serveur" autocomplete="off" aria-label="${h(t("The server's password (optional, used once)"))}" placeholder="${h(t("The server's password (optional, used once)"))}"></div>` : ""}
+        <label class="radio srv-facon"><input type="radio" name="srv-mode" value="importee"${a.mode === "importee" ? " checked" : ""}> <span><b>${t("An SSH key you already have")}</b><br><span class="muet petit">${t("Paste its private key or choose its file. Athanor keeps it in the vault.")}</span></span></label>
+        ${a.mode === "importee" ? `<div class="srv-sous srv-import">
+          <textarea id="srv-cle-importee" rows="4" class="code" spellcheck="false" autocomplete="off" aria-label="${h(t("Private key"))}" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----" required></textarea>
+          <div class="ligne m0"><label class="btn btn-petit">${t("Choose a file")}<input type="file" id="srv-cle-fichier" class="cache-visuel"></label><input type="password" id="srv-phrase" autocomplete="off" aria-label="${h(t("Passphrase (if the key has one)"))}" placeholder="${h(t("Passphrase (if the key has one)"))}"></div></div>` : ""}
         <label class="radio srv-facon"><input type="radio" name="srv-mode" value="coffre"${a.mode === "coffre" ? " checked" : ""}${cles.length ? "" : " disabled"}> <span><b>${t("A key of the vault")}</b><br><span class="muet petit">${cles.length ? t("An SSH key you already use for this server.") : t("No SSH key in the vault yet.")}</span></span></label>
         ${a.mode === "coffre" && cles.length ? `<div class="srv-sous"><select id="srv-cle-coffre" aria-label="${h(t("A key of the vault"))}">${cles.map((e) => `<option value="${h(e.id)}"${e.id === a.cle ? " selected" : ""}>${h(e.nom)}</option>`).join("")}</select>
           ${v.natif ? `<label class="champ"><span>${t("Athanor's password")}</span><input type="password" id="srv-mdp-athanor" autocomplete="current-password"></label><p class="muet petit">${t("Native Windows mode: any program of this PC can drive this window, so giving an existing server key asks for Athanor's password.")}</p>` : ""}</div>` : ""}
-        <label class="radio srv-facon"><input type="radio" name="srv-mode" value="generee"${a.mode === "generee" ? " checked" : ""}> <span><b>${t("A new key made by Athanor")}</b><br><span class="muet petit">${t("You copy its public part onto the server, then press Verify.")}</span></span></label>
-        <label class="radio srv-facon"><input type="radio" name="srv-mode" value="mot_de_passe"${a.mode === "mot_de_passe" ? " checked" : ""}> <span><b>${t("The server's password, once")}</b><br><span class="muet petit">${t("Athanor uses it once to put its own key, and never keeps it.")}</span></span></label>
-        ${a.mode === "mot_de_passe" ? `<div class="srv-sous"><input type="password" id="srv-mdp-serveur" autocomplete="off" aria-label="${h(t("The server's password"))}" placeholder="${h(t("The server's password"))}"></div>` : ""}
       </fieldset></div>` : `<p class="muet petit">${t("Athanor first reads the server's fingerprint, for you to confirm.")}</p>`}
     <div class="ligne"><button type="submit" class="btn btn-primaire">${empreinte ? t("Add the server") : t("Continue")}</button><button type="button" class="btn" data-srv-fermer>${t("Cancel")}</button></div>
   </form>`;
@@ -5982,6 +5987,8 @@ pages.serveurs = async () => {
   </div>`;
 };
 // the wizard's fields as typed, kept before each render (the address step, then the chosen way)
+// how Athanor connects to a server (ServeurInventaire.Auth); none: a key (servers added before 3.0.0)
+const AUTH_SRV = { mot_de_passe: "its password, kept in the vault", cle_generee: "a key made by Athanor", cle_importee: "an imported SSH key", cle_coffre: "a key of the vault" };
 function lireAssistantServeur() {
   const a = srv.aj, val = (id) => { const e = document.getElementById(id); return e ? e.value : undefined; };
   if (!a || !$("#srv-form")) return a;
@@ -5993,11 +6000,11 @@ function lireAssistantServeur() {
   if (conf) a.confirme = conf.checked;
   return a;
 }
-// a server reached: its sheet's error told, then the next step (by password: propose to cut password logins)
+// a server reached: its sheet's error told, then the next step (key put by password: propose to cut password logins)
 function serveurAjoute(r, mode) {
   if (r.fiche_erreur) toast(t(r.fiche_erreur), "erreur");
   toast(t("{0} added", [r.serveur.nom]), "ok");
-  srv.aj = mode === "mot_de_passe" && !r.serveur.mot_de_passe_coupe ? { etape: "coupure", serveur: r.serveur } : null;
+  srv.aj = mode === "pose" && !r.serveur.mot_de_passe_coupe ? { etape: "coupure", serveur: r.serveur } : null;
   return rendrePage();
 }
 $("#page").addEventListener("click", async (ev) => {
@@ -6005,7 +6012,7 @@ $("#page").addEventListener("click", async (ev) => {
   const b = ev.target.closest("[data-srv-ajouter], [data-srv-fermer], [data-srv-verifier], [data-srv-couper], [data-srv-copier], [name=srv-mode]");
   if (!b) return;
   const d = b.dataset;
-  if (b.name === "srv-mode") { lireAssistantServeur(); return rendrePage().then(() => { const c = $("#srv-mdp-serveur") || $("#srv-cle-coffre"); if (c) c.focus(); }); }
+  if (b.name === "srv-mode") { lireAssistantServeur(); return rendrePage().then(() => { const c = $("#srv-mdp-serveur") || $("#srv-cle-importee") || $("#srv-cle-coffre"); if (c) c.focus(); }); }
   if (d.srvAjouter !== undefined) { srv.aj = { etape: "adresse", roles: [] }; return rendrePage().then(() => $("#srv-hote").focus()); }
   if (d.srvFermer !== undefined) { srv.aj = null; return rendrePage(); }
   if (d.srvCopier) { const c = document.getElementById(d.srvCopier); return navigator.clipboard.writeText(c.value).then(() => toast(t("Copied."), "ok"), () => c.select()); }
@@ -6014,6 +6021,15 @@ $("#page").addEventListener("click", async (ev) => {
   const r = await action(api("serveurs/" + encodeURIComponent(d.srvCouper), "POST", { couper_mot_de_passe: true }));
   b.disabled = false;
   if (r) { toast(t("Password logins are cut on {0}.", [srv.aj.serveur.nom]), "ok"); srv.aj = null; rendrePage(); }
+});
+// an SSH key read from its file into the paste field (it stays in the page until the form is sent)
+$("#page").addEventListener("change", (ev) => {
+  if (etat.page !== "serveurs" || ev.target.id !== "srv-cle-fichier") return;
+  const f = ev.target.files[0];
+  ev.target.value = "";
+  if (!f) return;
+  if (f.size > 16384) return toast(t("This file is too large to be an SSH key."), "erreur");
+  f.text().then((v) => { $("#srv-cle-importee").value = v; $("#srv-phrase").focus(); });
 });
 $("#page").addEventListener("submit", async (ev) => {
   if (etat.page !== "serveurs") return;
@@ -6034,11 +6050,13 @@ $("#page").addEventListener("submit", async (ev) => {
     }
     const corps = { nom: a.nom, hote: a.hote, port: a.port, utilisateur: a.utilisateur, roles: a.roles, empreinte: a.empreinte, mode: a.mode };
     if (a.mode === "coffre") { corps.cle = a.cle; const m = $("#srv-mdp-athanor"); if (m) corps.mot_de_passe = m.value; }
-    if (a.mode === "mot_de_passe") corps.mot_de_passe_serveur = $("#srv-mdp-serveur").value; // read here, never kept in srv.aj
+    // secrets read here, never kept in srv.aj
+    if (a.mode === "mot_de_passe" || a.mode === "generee") corps.mot_de_passe_serveur = $("#srv-mdp-serveur").value;
+    if (a.mode === "importee") Object.assign(corps, { cle_importee: $("#srv-cle-importee").value, passphrase: $("#srv-phrase").value });
     const r = await action(api("serveurs/ajouter", "POST", corps));
     if (!r) return;
-    if (a.mode === "generee") { srv.aj = { etape: "cle", serveur: r.serveur, public: r.cle_publique, commande: r.commande }; return rendrePage(); }
-    return serveurAjoute(r, a.mode);
+    if (a.mode === "generee" && !corps.mot_de_passe_serveur) { srv.aj = { etape: "cle", serveur: r.serveur, public: r.cle_publique, commande: r.commande }; return rendrePage(); }
+    return serveurAjoute(r, a.mode === "generee" ? "pose" : a.mode);
   } finally { bouton.disabled = false; }
 });
 // --- Providers (#fournisseurs): the Cloudflare tokens (infra vault entries) the Servers agent uses for DNS and HTTPS (fournisseurs.go)
@@ -6181,13 +6199,13 @@ pages.serveur = async () => {
       <div class="muet petit"><code>${h(x.utilisateur)}@${h(x.hote)}${x.port === 22 ? "" : ":" + x.port}</code>${x.empreinte_hote ? ` · ${t("Fingerprint")} <code class="srv-empreinte-courte">${h(x.empreinte_hote)}</code>` : ""}</div>
       <div class="ligne m0"><span class="muet petit">${t("Roles")}</span>${role("dev")}${role("prod")}${distant && !x.roles.length ? `<span class="muet petit">${t("No role yet")}</span>` : ""}</div>
       <div class="ligne m0 srv-utilise"><span class="muet petit">${t("Used by")}</span>${(d.environnements || []).length ? d.environnements.map((pe) => `<a class="badge" href="#acces" data-projet="${h(pe.slice(0, pe.lastIndexOf("/")))}" data-cible="acces">${h(pe)}</a>`).join("") : `<span class="muet petit">${t("No project environment uses this server yet.")}</span>`}</div>
-      <div class="muet petit">${x.mot_de_passe_coupe ? t("Password logins are cut: Athanor and you connect with keys only.") : t("Password logins are still open on this server.")}</div>
+      <div class="muet petit srv-auth">${t("Athanor connects with: {0}", [t(AUTH_SRV[x.auth] || "an SSH key")])}${x.auth === "mot_de_passe" ? "" : " · " + (x.mot_de_passe_coupe ? t("Password logins are cut: Athanor and you connect with keys only.") : t("Password logins are still open on this server."))}</div>
       <div class="muet petit">${f && f.date ? h(t("Sheet read {0}", [dateLisible(f.date)])) : ""}${x.vu ? (f && f.date ? " · " : "") + h(t("Seen {0}", [dateLisible(x.vu)])) : ""}</div>
       ${distant ? `<p class="muet petit m0">${t("Read only from this device: the server is changed on the computer.")}</p>${srv.termDistance && !attente ? `<div class="ligne m0"><a class="btn btn-primaire" href="#terminal/${encodeURIComponent(x.id)}">${t("Connect")}</a></div>` : ""}` : `<div class="ligne m0">
         ${attente ? "" : `<a class="btn btn-primaire" href="#terminal/${encodeURIComponent(x.id)}" data-srv-connecter>${t("Connect")}</a>`}
         ${attente ? `<button type="button" class="btn btn-primaire" data-srv-verifier="${h(x.id)}">${t("Verify")}</button>` : `<button type="button" class="btn" data-srv-rafraichir>${ic("actualiser")} ${t("Refresh")}</button>`}
-        ${!attente && !x.mot_de_passe_coupe ? `<button type="button" class="btn" data-srv-couper="${h(x.id)}">${t("Cut password logins")}</button>` : ""}
-        ${attente ? "" : `<button type="button" class="btn" data-srv-durcir="${h(x.id)}" title="${h(t("A fixed plan: a user with sudo instead of root, SSH keys only, no root login, a firewall that refuses all but SSH, 80 and 443, security updates, the clock synchronised, Caddy. Each step already in place is skipped; you accept the plan first."))}">${t("Harden this server")}</button>`}</div>`}
+        ${!attente && !x.mot_de_passe_coupe && x.auth !== "mot_de_passe" ? `<button type="button" class="btn" data-srv-couper="${h(x.id)}">${t("Cut password logins")}</button>` : ""}
+        ${attente || x.auth === "mot_de_passe" ? "" : `<button type="button" class="btn" data-srv-durcir="${h(x.id)}" title="${h(t("A fixed plan: a user with sudo instead of root, SSH keys only, no root login, a firewall that refuses all but SSH, 80 and 443, security updates, the clock synchronised, Caddy. Each step already in place is skipped; you accept the plan first."))}">${t("Harden this server")}</button>`}</div>`}
     </div>
     ${blocTaches(ta, distant, (d.annulations || []).length ? `<div class="srv-annulations"><h4 class="m0">${t("Changes waiting for confirmation")}</h4>
       <p class="muet petit">${t("Athanor put a safety net on these firewall or SSH changes: unless you keep them, the server undoes them by itself when the countdown ends.")}</p>

@@ -32,7 +32,13 @@ type ServeurInventaire struct {
 	Vu              time.Time `json:"vu,omitzero"`
 	Etat            string    `json:"etat"` // "ok" | "injoignable" | "empreinte_changee" | "inconnu"
 	MotDePasseCoupe bool      `json:"mot_de_passe_coupe"`
+	// how Athanor connects (M244e): "mot_de_passe" (the password kept in the vault, no key) | "cle_generee" |
+	// "cle_importee" | "cle_coffre"; empty: a key (servers added before 3.0.0)
+	Auth string `json:"auth,omitempty"`
 }
+
+// parMotDePasse: Athanor reaches srv with its password (vault entry srv.Cle), not with a key.
+func (srv ServeurInventaire) parMotDePasse() bool { return srv.Auth == "mot_de_passe" }
 
 type fichierServeurs struct {
 	Version  int                 `json:"version"`

@@ -340,7 +340,7 @@ func serveurConteneurTest(t *testing.T) (*Serveur, func(string, map[string]any) 
 	}
 	_, v := appelAPI("/api/serveurs/empreinte", map[string]any{"hote": hote, "port": port})
 	code, v := appelAPI("/api/serveurs/ajouter", map[string]any{"nom": "Conteneur", "hote": hote, "port": port, "utilisateur": "athanor",
-		"empreinte": v["empreinte"], "mode": "mot_de_passe", "mot_de_passe_serveur": motDePasseConteneurSSH})
+		"empreinte": v["empreinte"], "mode": "generee", "mot_de_passe_serveur": motDePasseConteneurSSH})
 	if code != 200 {
 		t.Fatalf("addition: %d %v", code, v)
 	}

@@ -116,7 +116,7 @@ func TestServeursTemoin(t *testing.T) {
 	})
 
 	code, v := appelAPI("/api/serveurs/ajouter", map[string]any{"nom": "VPS", "hote": srv.hote, "port": srv.port, "utilisateur": "athanor",
-		"empreinte": srv.empreinte, "mode": "mot_de_passe", "mot_de_passe_serveur": mdp})
+		"empreinte": srv.empreinte, "mode": "generee", "mot_de_passe_serveur": mdp})
 	if code != 200 {
 		t.Fatalf("addition: %d %v", code, v)
 	}
@@ -551,7 +551,7 @@ func TestServeursScenarioConteneur(t *testing.T) {
 	}
 	empreinte := v["empreinte"].(string)
 	code, v = appelAPI("/api/serveurs/ajouter", map[string]any{"nom": "Conteneur", "hote": hote, "port": port, "utilisateur": "athanor",
-		"empreinte": empreinte, "mode": "mot_de_passe", "mot_de_passe_serveur": motDePasseConteneurSSH})
+		"empreinte": empreinte, "mode": "generee", "mot_de_passe_serveur": motDePasseConteneurSSH})
 	if code != 200 || v["fiche"] == nil {
 		t.Fatalf("addition with the password: %d %v", code, v)
 	}

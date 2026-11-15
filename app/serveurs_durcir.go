@@ -216,6 +216,9 @@ func (s *Serveur) planDurcissement(srv ServeurInventaire, etat map[string]bool) 
 
 // clePubliqueServeur: the public key (type and base64) of the vault key Athanor uses for srv.
 func (s *Serveur) clePubliqueServeur(srv ServeurInventaire) (string, error) {
+	if srv.parMotDePasse() {
+		return "", errServeurSansCle
+	}
 	cle, err := s.coffre.Valeur(srv.Cle)
 	if err != nil {
 		return "", err

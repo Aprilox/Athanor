@@ -103,7 +103,7 @@ func TestServeursAjoutMotDePasse(t *testing.T) {
 		return "", 0
 	})
 	corps := func(m map[string]any) map[string]any {
-		c := map[string]any{"nom": "VPS", "hote": srv.hote, "port": srv.port, "utilisateur": "athanor", "empreinte": srv.empreinte, "mode": "mot_de_passe"}
+		c := map[string]any{"nom": "VPS", "hote": srv.hote, "port": srv.port, "utilisateur": "athanor", "empreinte": srv.empreinte, "mode": "generee"}
 		for k, v := range m {
 			c[k] = v
 		}
@@ -112,7 +112,7 @@ func TestServeursAjoutMotDePasse(t *testing.T) {
 	entrees := len(s.coffre.Liste())
 
 	// 1) no password, a wrong one: refused, nothing kept
-	if code, v := appel("/api/serveurs/ajouter", corps(nil)); code != http.StatusBadRequest || v["erreur"] != errServeurMdpVide.Error() {
+	if code, v := appel("/api/serveurs/ajouter", corps(map[string]any{"mode": "mot_de_passe"})); code != http.StatusBadRequest || v["erreur"] != errServeurMdpVide.Error() {
 		t.Errorf("no password: %d %v", code, v)
 	}
 	if code, v := appel("/api/serveurs/ajouter", corps(map[string]any{"mot_de_passe_serveur": "mauvais"})); code != http.StatusConflict || v["erreur"] != errServeurMdpRefuse.Error() {
@@ -203,7 +203,7 @@ func TestServeursAjoutMotDePasse(t *testing.T) {
 			return nil
 		})
 	}
-	for _, a := range []string{"serveur_ajoute", "(mot_de_passe)", "mot_de_passe_coupe", "coupure du mot de passe refusée"} {
+	for _, a := range []string{"serveur_ajoute", "(generee)", "mot_de_passe_coupe", "coupure du mot de passe refusée"} {
 		if !strings.Contains(audit.String(), a) {
 			t.Errorf("audit log without %q", a)
 		}
@@ -403,7 +403,7 @@ func TestServeursMotDePasseConteneur(t *testing.T) {
 	}
 	empreinte := v["empreinte"].(string)
 	code, v = appel("/api/serveurs/ajouter", map[string]any{"nom": "Conteneur", "hote": hote, "port": port, "utilisateur": "athanor",
-		"empreinte": empreinte, "mode": "mot_de_passe", "mot_de_passe_serveur": motDePasseConteneurSSH})
+		"empreinte": empreinte, "mode": "generee", "mot_de_passe_serveur": motDePasseConteneurSSH})
 	if code != 200 {
 		t.Fatalf("addition with the password: %d %v", code, v)
 	}
