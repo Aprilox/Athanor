@@ -355,7 +355,7 @@ a[data-href] { cursor: pointer; }
 .point.erreur, .point.connexion { background: var(--erreur); }
 .point.entre_cycles { background: var(--info); }
 @keyframes pulse { 0% { box-shadow: 0 0 0 0 var(--accent-halo); } 70% { box-shadow: 0 0 0 10px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
-.actions { display: flex; gap: 8px; flex: none; flex-wrap: wrap; }
+.actions { display: flex; gap: 8px; flex: 0 1 auto; min-width: 0; flex-wrap: wrap; } /* shrinks and wraps: a long German Start row stays inside the page */
 
 /* --- buttons and fields */
 .btn { background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 8px 14px; cursor: pointer; white-space: nowrap; text-decoration: none; color: var(--ink); display: inline-flex; align-items: center; gap: 6px; line-height: 1.3; }
