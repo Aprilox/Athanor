@@ -365,7 +365,11 @@ func (s *Serveur) apiPilote(w http.ResponseWriter, r *http.Request) {
 	case "demarrer":
 		cle, err := s.demarrerPiloteAuto(p)
 		if err != nil {
-			s.erreur(w, http.StatusInternalServerError, err.Error())
+			code := http.StatusInternalServerError
+			if m := err.Error(); m == texteSansClaude || m == texteLivreRienDeNeuf { // a refusal the page explains, not a failure
+				code = http.StatusConflict
+			}
+			s.erreur(w, code, err.Error())
 			return
 		}
 		s.msg(w, cle)

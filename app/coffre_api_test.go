@@ -102,6 +102,16 @@ func TestCoffreTemoinNullePart(t *testing.T) {
 	if code, v = appel("POST", "/api/coffre", entree(map[string]string{"nom": "API_URL", "famille": "variable", "type": "autre", "valeur": "y"})); code != http.StatusBadRequest || v["erreur"] != "An entry with this name already exists in this scope" {
 		t.Fatalf("duplicate: %d %v", code, v)
 	}
+	if code, v = appel("POST", "/api/coffre", entree(map[string]string{"nom": "api_url", "famille": "variable", "type": "autre", "valeur": "y"})); code != http.StatusBadRequest {
+		t.Fatalf("duplicate in another case: %d %v", code, v)
+	}
+	// renaming onto a taken name: refused; changing only the note of an entry keeps working
+	if code, v = appel("POST", "/api/coffre/"+id, `{"nom":"API_URL"}`); code != http.StatusBadRequest || v["erreur"] != errNomPris.Error() {
+		t.Fatalf("rename onto a taken name: %d %v", code, v)
+	}
+	if code, v = appel("POST", "/api/coffre/"+id, `{"note":"autre note"}`); code != 200 {
+		t.Fatalf("note only: %d %v", code, v)
+	}
 
 	// infra without a password: refused, the key is not there
 	code, v = appel("POST", "/api/coffre", entree(map[string]string{"nom": "SSH", "famille": "secret", "type": "ssh", "valeur": temoin}))

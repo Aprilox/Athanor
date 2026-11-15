@@ -112,9 +112,8 @@ func (s *Serveur) apiCoffreAjouter(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	nouvelle := EntreeCoffre{Nom: val(c.Nom, ""), Famille: c.Famille, Type: val(c.Type, ""), Note: val(c.Note, ""), Portee: val(c.Portee, "")}
-	// two entries of one name in one scope could not be told apart in a grant, nor in what a pilot receives
-	if p := porteeEntree(nouvelle); slices.ContainsFunc(s.coffre.Liste(), func(x EntreeCoffre) bool { return x.Nom == nouvelle.Nom && x.Portee == p }) {
-		s.erreurCoffre(w, erreurEntree("An entry with this name already exists in this scope"))
+	if s.nomPris(nouvelle.Nom, porteeEntree(nouvelle), "") {
+		s.erreurCoffre(w, errNomPris)
 		return
 	}
 	e, err := s.coffre.Ajouter(nouvelle, *c.Valeur)
@@ -132,6 +131,17 @@ func (s *Serveur) apiCoffreAjouter(w http.ResponseWriter, r *http.Request) {
 	}
 	s.injecterTous(nil) // a value now in the vault and granted nowhere leaves the old files
 	s.ecrireJSON(w, e)
+}
+
+// errNomPris: two entries of one name in one scope could not be told apart in a grant, nor in what a pilot
+// receives (case ignored: Windows variables have none).
+var errNomPris = erreurEntree("An entry with this name already exists in this scope")
+
+// nomPris: another entry than sauf already has this name (any case) in this scope.
+func (s *Serveur) nomPris(nom, portee, sauf string) bool {
+	return slices.ContainsFunc(s.coffre.Liste(), func(x EntreeCoffre) bool {
+		return x.ID != sauf && x.Portee == portee && strings.EqualFold(x.Nom, nom)
+	})
 }
 
 // apiCoffreModifier: POST /api/coffre/{id}, new metadata and/or a new value.
@@ -153,6 +163,10 @@ func (s *Serveur) apiCoffreModifier(w http.ResponseWriter, r *http.Request) {
 	}
 	if e.ID == "" {
 		s.erreurCoffre(w, errCoffreInconnu)
+		return
+	}
+	if nom, portee := val(c.Nom, e.Nom), val(c.Portee, e.Portee); (nom != e.Nom || portee != e.Portee) && s.nomPris(nom, portee, id) {
+		s.erreurCoffre(w, errNomPris)
 		return
 	}
 	versCode := e.Portee == "infra" && val(c.Portee, e.Portee) == "code"
