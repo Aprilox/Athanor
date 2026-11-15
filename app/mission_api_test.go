@@ -33,7 +33,9 @@ func TestMissionAPI(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	s.config.Projets = append(s.config.Projets, Projet{Nom: "boutique", Dossier: filepath.Join(t.TempDir(), "boutique")})
+	boutique := filepath.Join(t.TempDir(), "boutique")
+	_ = os.MkdirAll(boutique, 0o755) // a project whose folder is gone cannot be mentioned
+	s.config.Projets = append(s.config.Projets, Projet{Nom: "boutique", Dossier: boutique})
 	s.session = aleatoire(8) // Athanor's password is set: the window is unlocked
 	mux := http.NewServeMux()
 	s.routes(mux)

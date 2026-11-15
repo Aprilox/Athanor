@@ -850,7 +850,7 @@ Rien que vous ayez à faire. La mise à jour ne déplace rien : projets, réglag
 | « Problème de connexion » | jeton absent ou faux : *Réglages*, ou *Réparer* sur la ligne *Jeton et accès au modèle* |
 | Une installation demande les droits administrateur | *Installation & santé* → *Droits administrateur pour les installations* → *Réparer* (une seule fois) |
 | « Le coffre est verrouillé » sur une action de Serveurs, une mission ou un déploiement | déverrouillez Athanor (son mot de passe, dans la fenêtre ou sur un téléphone appairé) : la clé *infra* ne s'ouvre qu'avec lui |
-| Un serveur refusé avec « la clé d'hôte a changé » | le serveur a été réinstallé, ou quelqu'un s'est glissé entre les deux : vérifiez la nouvelle empreinte sur le serveur lui-même (`ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub`), puis retirez et ajoutez de nouveau le serveur |
+| Un serveur refusé avec « la clé d'hôte a changé » | le serveur a été réinstallé, ou quelqu'un s'est glissé entre les deux : vérifiez la nouvelle empreinte sur le serveur lui-même (`for f in /etc/ssh/ssh_host_*_key.pub; do ssh-keygen -lf $f; done`), puis retirez et ajoutez de nouveau le serveur |
 | *Envoyer un e-mail de test* échoue | le message dit pourquoi en mots simples ; pour Gmail, Outlook et Yahoo, utilisez un *mot de passe d'application*, pas celui du compte |
 
 ---

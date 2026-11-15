@@ -468,3 +468,38 @@ func TestServeursMotDePasseConteneur(t *testing.T) {
 		t.Errorf("drop-in file: %q", r.Sortie)
 	}
 }
+
+// TestServeursEtatConnexion: a failed connection (terminal, tool) shows the server unreachable in the
+// list, a later success reachable again; a cancelled attempt changes nothing.
+func TestServeursEtatConnexion(t *testing.T) {
+	signer, prive := nouvelleCleSSH(t)
+	mem := lancerSSHMemoire(t, signer.PublicKey(), "", func(string, []byte) (string, int) { return "", 0 })
+	s, srv := outilsServeursTest(t, mem.hote, mem.port, mem.empreinte, prive)
+	vu := time.Now().Add(-time.Hour).UTC().Truncate(time.Second)
+	_ = modifierServeurs(func(l []ServeurInventaire) ([]ServeurInventaire, error) { l[0].Vu = vu; return l, nil })
+	etat := func() ServeurInventaire { l, _ := lireServeurs(); return l[0] }
+	ecoute, _ := net.Listen("tcp", "127.0.0.1:0") // a port nobody listens on any more: the server is stopped
+	arrete := srv
+	arrete.Port = ecoute.Addr().(*net.TCPAddr).Port
+	ecoute.Close()
+
+	annule, fin := context.WithCancel(context.Background())
+	fin()
+	if _, err := s.connecterServeur(annule, arrete); err == nil || etat().Etat != "ok" {
+		t.Fatalf("a cancelled attempt changed the state: %v, %+v", err, etat())
+	}
+	if _, err := s.connecterServeur(context.Background(), arrete); err != errServeurInjoignable {
+		t.Fatalf("stopped server: %v", err)
+	}
+	if e := etat(); e.Etat != "injoignable" || !e.Vu.Equal(vu) {
+		t.Fatalf("after the failure: %+v", e)
+	}
+	c, err := s.connecterServeur(context.Background(), srv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.Close()
+	if e := etat(); e.Etat != "ok" || !e.Vu.After(vu) {
+		t.Fatalf("back: %+v", e)
+	}
+}

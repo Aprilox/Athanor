@@ -55,6 +55,10 @@ func (moduleDev) Elements(s *Serveur) []ElementHub {
 			e.Etat = "termine"
 		}
 		e.Attente = attenteDev(pv)
+		if !pv.Existe { // its folder is gone (moved, deleted, a drive unplugged): find it again or remove it
+			e.Avancement = &Avancement{Texte: "Folder not found"}
+			e.Attente = &AttenteElement{Raison: "The folder {0} is no longer there: on Manage, point the project to where it is now (Use another folder) or remove it from the list.", Args: []any{pv.Dossier}, Page: "#projet", Cle: pv.Dossier}
+		}
 		if g, ok := s.signalProjet(pv.Nom); ok && e.Attente == nil {
 			e.Attente = &AttenteElement{Raison: "The pilot reports a blocker: {0}", Args: []any{g.Texte}, Page: "#suivi", Cle: g.ID}
 		}

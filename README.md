@@ -850,7 +850,7 @@ Nothing you have to do. The update moves nothing: projects, settings, the reques
 | "Connection problem" | missing or wrong token: *Settings*, or *Repair* on the *Token and model access* line |
 | An installation needs administrator rights | *Setup & health* → *Administrator rights for installations* → *Repair* (once) |
 | “The vault is locked” on an action of Servers, a mission or a deployment | unlock Athanor (its password, in the window or on a paired phone): the *infra* key opens only with it |
-| A server refused with “the host key changed” | the server was reinstalled, or someone is in between: check the new fingerprint on the server itself (`ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub`), then remove and add the server again |
+| A server refused with “the host key changed” | the server was reinstalled, or someone is in between: check the new fingerprint on the server itself (`for f in /etc/ssh/ssh_host_*_key.pub; do ssh-keygen -lf $f; done`), then remove and add the server again |
 | *Send a test e-mail* fails | the message says why in plain words; for Gmail, Outlook and Yahoo use an *app password*, not the account's own |
 
 ---

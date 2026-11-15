@@ -2703,7 +2703,7 @@ const GUIDE = [
     etapes: [
       ["Before you start", "A server's key is an *infra* entry of the vault: it opens only with Athanor's password. Choose one, then unlock Athanor; otherwise the Servers page tells you. A server is added on the computer, not from a paired phone.", "#options@bloc-verrou", "Settings › Options › Lock"],
       ["The address", "*Servers*, in the menu, then *+ Add a server*: the address, the port (22 by default), the user (`root` or a user with `sudo`), a name if you like, and its roles: *dev* for tests and previews, *prod* for your live site. Then *Continue*.", "#serveurs", "Servers"],
-      ["The fingerprint", "Athanor reads the fingerprint the server presents and shows it. Compare it with the one the server itself gives (`ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub`, typed on the server or in your host's console), then tick *It is my server's fingerprint*. From then on Athanor refuses any other: if it changes, the connection is refused with a clear message."],
+      ["The fingerprint", "Athanor reads the fingerprint the server presents and shows it. Compare it with the one the server itself gives (`for f in /etc/ssh/ssh_host_*_key.pub; do ssh-keygen -lf $f; done`, typed on the server or in your host's console), then tick *It is my server's fingerprint*. From then on Athanor refuses any other: if it changes, the connection is refused with a clear message."],
       ["Three ways to connect", "*A key of the vault*: an SSH key you already use for this server. *A new key made by Athanor*: copy its public part into the server's `~/.ssh/authorized_keys`, or run the command shown on the server, then *Verify*. *The server's password, once*: Athanor puts its own key there for you. In native Windows mode, giving an existing key of the vault asks for Athanor's password."],
       ["The password, never kept", "With the password, Athanor connects once, adds its own key (ed25519, kept in the vault) to the server, then connects again with that key to check it. The password is neither saved nor written to any page or log."],
       ["Cut password logins", "Athanor then offers *Cut password logins*, never on its own: nobody can then try passwords on the server. It writes one small SSH setting (`/etc/ssh/sshd_config.d/00-athanor.conf`), checks it with `sshd -t`, reloads SSH and connects again with its key; if anything fails, it removes the setting again. *Later* leaves them open: the button stays on the server's sheet."],
@@ -5683,8 +5683,8 @@ function assistantServeur(c) {
     </div>
     <div class="champ"><span>${t("Roles")}</span><div class="ligne m0">${role("dev")}${role("prod")}</div></div>
     ${empreinte ? `<div class="srv-empreinte">
-      <p class="petit">${t("The server presents this fingerprint. Check that it is your server's (on the server: {0}), then confirm it: Athanor will refuse any other.", ["<code>ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub</code>"])}</p>
-      <p><code class="srv-empreinte-valeur">${h(a.empreinte)}</code></p>
+      <p class="petit">${t("The server presents this fingerprint. Check that it is your server's (on the server: {0}), then confirm it: Athanor will refuse any other.", [`<code>${h(a.commande || "ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub")}</code>`])}</p>
+      <p><code class="srv-empreinte-valeur">${h(a.empreinte)}</code>${a.typeCle ? ` <span class="petit">(${h(a.typeCle)})</span>` : ""}</p>
       <label class="radio"><input type="checkbox" id="srv-confirme"${a.confirme ? " checked" : ""} required> ${t("It is my server's fingerprint")}</label>
       <fieldset class="srv-facons"><legend>${t("How should Athanor connect?")}</legend>
         <label class="radio srv-facon"><input type="radio" name="srv-mode" value="coffre"${a.mode === "coffre" ? " checked" : ""}${cles.length ? "" : " disabled"}> <span><b>${t("A key of the vault")}</b><br><span class="muet petit">${cles.length ? t("An SSH key you already use for this server.") : t("No SSH key in the vault yet.")}</span></span></label>
@@ -5960,7 +5960,7 @@ $("#page").addEventListener("submit", async (ev) => {
   try {
     if (a.etape === "adresse") { // the fingerprint first, never accepted silently
       const r = await action(api("serveurs/empreinte", "POST", { hote: a.hote, port: a.port }));
-      if (r) { Object.assign(a, { etape: "empreinte", empreinte: r.empreinte, confirme: false, mode: a.mode || "generee" }); await rendrePage(); $("#srv-confirme").focus(); }
+      if (r) { Object.assign(a, { etape: "empreinte", empreinte: r.empreinte, typeCle: r.type, commande: r.commande, confirme: false, mode: a.mode || "generee" }); await rendrePage(); $("#srv-confirme").focus(); }
       return;
     }
     const corps = { nom: a.nom, hote: a.hote, port: a.port, utilisateur: a.utilisateur, roles: a.roles, empreinte: a.empreinte, mode: a.mode };

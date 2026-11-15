@@ -85,10 +85,19 @@ func TestHubJalonsDuJour(t *testing.T) {
 	if g := len(lireJalonsFaits(fichier)); g != 1 {
 		t.Fatalf("a milestone noted twice: %d entries", g)
 	}
+	// M3 ticked while Athanor was stopped: the next start notes it (from plans_vus.json), once
+	ecrire(3, "")
+	faits = map[string]map[string]bool{}
+	if n := observerPlan(p, faits, fichier, maintenant); len(n) != 1 || !strings.HasPrefix(n[0].Titre, "M3") {
+		t.Fatalf("milestone done during the stop: %v", n)
+	}
+	if n := observerPlan(p, map[string]map[string]bool{}, fichier, maintenant); len(n) != 0 || len(lireJalonsFaits(fichier)) != 2 {
+		t.Fatalf("noted again after another restart: %v", n)
+	}
 	// yesterday's milestone is not today's; old entries are dropped
 	_ = noterJalonFait(fichier, "b", "Ancien", maintenant.Add(-40*24*time.Hour))
 	_ = noterJalonFait(fichier, "b", "Hier", maintenant.AddDate(0, 0, -1))
-	if g := jalonsDuJour(fichier, maintenant); g != 1 {
+	if g := jalonsDuJour(fichier, maintenant); g != 2 {
 		t.Fatalf("yesterday counted today: %d", g)
 	}
 	_ = noterJalonFait(fichier, "b", "Nouveau", maintenant)
@@ -97,8 +106,8 @@ func TestHubJalonsDuJour(t *testing.T) {
 			t.Fatal("an entry older than 30 days was kept")
 		}
 	}
-	if g := jalonsDuJour(fichier, maintenant); g != 2 {
-		t.Fatalf("today: %d, want 2", g)
+	if g := jalonsDuJour(fichier, maintenant); g != 3 {
+		t.Fatalf("today: %d, want 3", g)
 	}
 }
 

@@ -544,3 +544,27 @@ func TestTutoriels(t *testing.T) {
 		t.Fatalf("Home tour not reset: %v", e["tours"])
 	}
 }
+
+// TestHubProjetDisparu: a project whose folder is gone says so on Projects (and sends to Manage, where
+// it is pointed elsewhere or removed); the chat no longer offers it.
+func TestHubProjetDisparu(t *testing.T) {
+	s := serveurCoffreTest(t)
+	disparu := Projet{Nom: "projet-disparu", Dossier: filepath.Join(t.TempDir(), "plus-la")}
+	s.mu.Lock()
+	s.config.Projets = append(s.config.Projets, disparu)
+	s.mu.Unlock()
+	var e *ElementHub
+	for _, x := range (moduleDev{}).Elements(s) {
+		if x.ID == disparu.Nom {
+			e = &x
+		}
+	}
+	if e == nil || e.Avancement == nil || e.Avancement.Texte != "Folder not found" || e.Attente == nil || e.Attente.Page != "#projet" || len(e.Attente.Args) != 1 || e.Attente.Args[0] != disparu.Dossier {
+		t.Fatalf("missing folder not told: %+v", e)
+	}
+	for _, m := range s.candidatsMentions() {
+		if m.Ref == disparu.Nom {
+			t.Fatal("offered in the chat's mentions")
+		}
+	}
+}

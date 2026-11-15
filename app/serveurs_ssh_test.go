@@ -172,7 +172,10 @@ func TestConnexionSSH(t *testing.T) {
 	ctx := context.Background()
 	acces := AccesSSH{Hote: srv.hote, Port: srv.port, Utilisateur: "athanor", Cle: pemCle, Empreinte: srv.empreinte}
 
-	vue, err := empreinteHoteSSH(ctx, srv.hote, srv.port)
+	vue, typ, err := empreinteHoteSSH(ctx, srv.hote, srv.port)
+	if nom, cmd := cleHote(typ); nom == "" || !strings.HasSuffix(cmd, "_key.pub") {
+		t.Errorf("type %q: %q, %q", typ, nom, cmd)
+	}
 	if err != nil || vue != srv.empreinte {
 		t.Fatalf("empreinte présentée %q (%v), attendue %q", vue, err, srv.empreinte)
 	}
@@ -270,7 +273,7 @@ func TestConnexionSSHConteneur(t *testing.T) {
 	}
 	port, _ := strconv.Atoi(portTxt)
 	ctx := context.Background()
-	empreinte, err := empreinteHoteSSH(ctx, hote, port)
+	empreinte, typ, err := empreinteHoteSSH(ctx, hote, port)
 	if err != nil {
 		t.Fatalf("empreinte du conteneur : %v", err)
 	}
@@ -279,6 +282,11 @@ func TestConnexionSSHConteneur(t *testing.T) {
 		t.Fatalf("connexion au conteneur : %v", err)
 	}
 	defer c.Close()
+	// la commande que la page donne affiche l'empreinte montrée, avec le même type (comme ssh-keygen -l)
+	nom, commande := cleHote(typ)
+	if r, err := executerSSH(ctx, c, commande, nil, 10*time.Second); err != nil || !strings.Contains(string(r.Sortie), empreinte) || !strings.Contains(string(r.Sortie), "("+nom+")") {
+		t.Fatalf("%s : %q %v, attendu %s (%s)", commande, r.Sortie, err, empreinte, nom)
+	}
 	r, err := executerSSH(ctx, c, "id -un && sudo -n true && echo sudo-ok", nil, 10*time.Second)
 	if err != nil || r.Code != 0 || string(r.Sortie) != "athanor\nsudo-ok\n" {
 		t.Fatalf("commande dans le conteneur : %q code %d %v", r.Sortie, r.Code, err)
@@ -311,7 +319,7 @@ func TestCaddyConteneur(t *testing.T) {
 	}
 	port, _ := strconv.Atoi(portTxt)
 	ctx := context.Background()
-	empreinte, err := empreinteHoteSSH(ctx, hote, port)
+	empreinte, typ, err := empreinteHoteSSH(ctx, hote, port)
 	if err != nil {
 		t.Fatalf("empreinte du conteneur : %v", err)
 	}
@@ -320,6 +328,11 @@ func TestCaddyConteneur(t *testing.T) {
 		t.Fatalf("connexion au conteneur : %v", err)
 	}
 	defer c.Close()
+	// la commande que la page donne affiche l'empreinte montrée, avec le même type (comme ssh-keygen -l)
+	nom, commande := cleHote(typ)
+	if r, err := executerSSH(ctx, c, commande, nil, 10*time.Second); err != nil || !strings.Contains(string(r.Sortie), empreinte) || !strings.Contains(string(r.Sortie), "("+nom+")") {
+		t.Fatalf("%s : %q %v, attendu %s (%s)", commande, r.Sortie, err, empreinte, nom)
+	}
 	r, err := executerSSH(ctx, c, "git --version >/dev/null && sudo -n caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile 2>&1 && ps -o user= -C caddy", nil, 30*time.Second)
 	if err != nil || r.Code != 0 || !strings.HasSuffix("\n"+strings.TrimSpace(string(r.Sortie)), "\ncaddy") {
 		t.Fatalf("git, caddy reload et utilisateur de Caddy : %q code %d %v", r.Sortie, r.Code, err)

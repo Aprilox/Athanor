@@ -104,12 +104,13 @@ func (s *Serveur) apiServeursEmpreinte(w http.ResponseWriter, r *http.Request) {
 		s.erreur(w, statutAjout(err), err.Error())
 		return
 	}
-	e, err := empreinteHoteSSH(r.Context(), c.Hote, c.Port)
+	e, typ, err := empreinteHoteSSH(r.Context(), c.Hote, c.Port)
 	if err != nil {
 		s.erreur(w, http.StatusBadGateway, errServeurInjoignable.Error())
 		return
 	}
-	s.ecrireJSON(w, map[string]string{"empreinte": e})
+	nom, commande := cleHote(typ)
+	s.ecrireJSON(w, map[string]string{"empreinte": e, "type": nom, "commande": commande})
 }
 
 // connecterServeur: a client reached with the vault entry's key and the confirmed fingerprint, its error
@@ -120,7 +121,33 @@ func (s *Serveur) connecterServeur(ctx context.Context, srv ServeurInventaire) (
 		return nil, err
 	}
 	c, err := connecterSSH(ctx, AccesSSH{Hote: srv.Hote, Port: srv.Port, Utilisateur: srv.Utilisateur, Cle: []byte(cle), Empreinte: srv.EmpreinteHote})
-	return c, erreurConnexion(err, errServeurCleRefusee)
+	err = erreurConnexion(err, errServeurCleRefusee)
+	noterJoignable(srv.ID, err, ctx.Err() == nil)
+	return c, err
+}
+
+// noterJoignable: the list shows what the last connection learnt (a terminal, a tool, a deployment), not
+// only the last sheet: unreachable after a failure (not one the owner cancelled), reachable again after a
+// success. A changed fingerprint keeps its own state (rafraichirFiche, C43).
+func noterJoignable(id string, err error, abouti bool) {
+	injoignable := errors.Is(err, errServeurInjoignable) || errors.Is(err, errServeurCleRefusee)
+	if id == "" || (err != nil && (!injoignable || !abouti)) {
+		return
+	}
+	_ = modifierServeurs(func(l []ServeurInventaire) ([]ServeurInventaire, error) {
+		i := slices.IndexFunc(l, func(x ServeurInventaire) bool { return x.ID == id })
+		switch {
+		case i < 0 || l[i].Vu.IsZero() || l[i].Etat == "empreinte_changee":
+			return nil, errServeurInconnu // not added yet, or a state this connection cannot settle: unchanged
+		case err != nil && l[i].Etat != "injoignable":
+			l[i].Etat = "injoignable"
+		case err == nil && l[i].Etat == "injoignable":
+			l[i].Etat, l[i].Vu = "ok", time.Now().UTC()
+		default:
+			return nil, errServeurInconnu // nothing to write
+		}
+		return l, nil
+	})
 }
 
 // erreurConnexion: a connection error as the owner reads it (refuse: what an authentication refusal means).

@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"strconv"
+	"strings"
 	"time"
 
 	"golang.org/x/crypto/ssh"
@@ -66,18 +67,32 @@ func dialSSHReseau(ctx context.Context, adresse string, conf *ssh.ClientConfig) 
 	return ssh.NewClient(c, canaux, requetes), nil
 }
 
-// empreinteHoteSSH : l'empreinte que présente le serveur, à faire confirmer par le propriétaire (aucune authentification tentée).
-func empreinteHoteSSH(ctx context.Context, hote string, port int) (string, error) {
-	var vue string
+// empreinteHoteSSH : l'empreinte que présente le serveur, à faire confirmer par le propriétaire (aucune
+// authentification tentée), et le type de sa clé (celle que le client négocie : ECDSA avant ed25519).
+func empreinteHoteSSH(ctx context.Context, hote string, port int) (string, string, error) {
+	var vue, typ string
 	conf := &ssh.ClientConfig{User: "athanor", HostKeyCallback: func(_ string, _ net.Addr, k ssh.PublicKey) error {
-		vue = ssh.FingerprintSHA256(k)
+		vue, typ = ssh.FingerprintSHA256(k), k.Type()
 		return errEmpreinteChangee // on s'arrête là
 	}}
 	_, err := dialSSH(ctx, adresseSSH(hote, port), conf)
 	if vue != "" {
-		return vue, nil
+		return vue, typ, nil
 	}
-	return "", err
+	return "", "", err
+}
+
+// cleHote : le type d'une clé d'hôte comme ssh-keygen -l l'écrit (ED25519, ECDSA, RSA) et la commande qui
+// donne son empreinte sur le serveur.
+func cleHote(typ string) (string, string) {
+	nom := map[string]string{"ssh-ed25519": "ed25519", "ssh-rsa": "rsa", "ssh-dss": "dsa"}[typ]
+	if strings.HasPrefix(typ, "ecdsa-") {
+		nom = "ecdsa"
+	}
+	if nom == "" { // un type rare : toutes les clés du serveur, le propriétaire y retrouve la sienne
+		return strings.ToUpper(typ), "for f in /etc/ssh/ssh_host_*_key.pub; do ssh-keygen -lf $f; done"
+	}
+	return strings.ToUpper(nom), "ssh-keygen -lf /etc/ssh/ssh_host_" + nom + "_key.pub"
 }
 
 // connecterSSH : client authentifié par clé ou mot de passe, refusé si l'empreinte d'hôte manque ou diffère.

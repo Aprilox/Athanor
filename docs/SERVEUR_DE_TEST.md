@@ -20,7 +20,7 @@ To see the whole path — public address, certificates, the external check — r
 
 - **Size**: 1 vCPU, 1 to 2 GB of memory, 10 to 25 GB of disk is plenty.
 - **System**: Debian 12 or Ubuntu 24.04 LTS, freshly installed.
-- **Access**: `root` or a user with `sudo`, SSH on port 22 (or any port you give Athanor). Note the fingerprint shown by the host's console (`ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub`) to compare it when adding.
+- **Access**: `root` or a user with `sudo`, SSH on port 22 (or any port you give Athanor). Note the fingerprint shown by the host's console (`for f in /etc/ssh/ssh_host_*_key.pub; do ssh-keygen -lf $f; done`) to compare it when adding.
 - **Role**: add it as *dev*. Changes on a *dev* server can be accepted once for all (*Never ask again for this server*); a *prod* server always waits for you.
 - **Nothing of value on it**, and a host snapshot if the host offers one. Delete it when you are done.
 
@@ -44,7 +44,7 @@ Pour voir tout le chemin — adresse publique, certificats, vérification extern
 
 - **Taille** : 1 vCPU, 1 à 2 Go de mémoire, 10 à 25 Go de disque suffisent largement.
 - **Système** : Debian 12 ou Ubuntu 24.04 LTS, fraîchement installé.
-- **Accès** : `root` ou un utilisateur qui a `sudo`, SSH sur le port 22 (ou celui que vous donnez à Athanor). Notez l'empreinte affichée par la console de l'hébergeur (`ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub`) pour la comparer à l'ajout.
+- **Accès** : `root` ou un utilisateur qui a `sudo`, SSH sur le port 22 (ou celui que vous donnez à Athanor). Notez l'empreinte affichée par la console de l'hébergeur (`for f in /etc/ssh/ssh_host_*_key.pub; do ssh-keygen -lf $f; done`) pour la comparer à l'ajout.
 - **Rôle** : ajoutez-le en *dev*. Les changements sur un serveur *dev* peuvent être acceptés une fois pour toutes (*Ne plus demander pour ce serveur*) ; un serveur *prod* vous attend toujours.
 - **Rien de précieux dessus**, et un instantané chez l'hébergeur s'il en propose. Supprimez-le une fois l'essai fini.
 

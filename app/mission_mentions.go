@@ -38,7 +38,7 @@ func (s *Serveur) candidatsMentions() []MentionTrouvee {
 	slices.Reverse(projets)
 	slices.SortStableFunc(projets, func(a, b Projet) int { return boolInt(b.Nom == actif) - boolInt(a.Nom == actif) })
 	for _, p := range projets {
-		if !p.Archive {
+		if !p.Archive && p.Existe() { // a project whose folder is gone is not offered (Projects says so)
 			l = append(l, MentionTrouvee{Type: "projet", Ref: p.Nom, Nom: p.Nom})
 		}
 	}

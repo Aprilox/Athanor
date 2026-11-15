@@ -61,15 +61,20 @@ func jalonsDuJour(fichier string, maintenant time.Time) int {
 	return n
 }
 
-// observerPlan: the milestones of p that became done since the last look (none on the first look,
-// which only learns what is already there); faits keeps what was seen, per project folder. Each one is
-// dated in fichier.
+// observerPlan: the milestones of p that became done since the last look; faits keeps what was seen,
+// per project folder, and plans_vus.json (next to fichier) keeps it across restarts, so a milestone
+// ticked while Athanor was stopped is still noted. A project never seen (nothing on disk either) only
+// learns what is already there. Each new one is dated in fichier.
 func observerPlan(p Projet, faits map[string]map[string]bool, fichier string, quand time.Time) []Jalon {
 	b, err := os.ReadFile(p.Plan())
 	if err != nil {
 		return nil
 	}
+	vus := filepath.Join(filepath.Dir(fichier), "plans_vus.json")
 	avant, connu := faits[p.Dossier]
+	if !connu {
+		avant, connu = lirePlansVus(vus)[p.Dossier]
+	}
 	maintenant := map[string]bool{}
 	var nouveaux []Jalon
 	for _, j := range analyserPlan(string(b)) {
@@ -81,6 +86,21 @@ func observerPlan(p Projet, faits map[string]map[string]bool, fichier string, qu
 			}
 		}
 	}
+	if !connu || len(maintenant) != len(avant) || len(nouveaux) > 0 {
+		jalonsMu.Lock()
+		v := lirePlansVus(vus)
+		v[p.Dossier] = maintenant
+		_ = ecrireJSONFichier(vus, v, 0o600)
+		jalonsMu.Unlock()
+	}
 	faits[p.Dossier] = maintenant
 	return nouveaux
+}
+
+func lirePlansVus(fichier string) map[string]map[string]bool {
+	v := map[string]map[string]bool{}
+	if b, err := os.ReadFile(fichier); err == nil {
+		_ = json.Unmarshal(b, &v)
+	}
+	return v
 }
