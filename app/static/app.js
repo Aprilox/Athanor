@@ -1161,7 +1161,7 @@ function marquerNav(v) {
 // the menu keeps the HTML's entries if it fails (locked: loaded again once unlocked)
 // C3: one /api/hub per load or refresh tick: the menu and the pages reuse the answer the tick read less than a second ago
 const lireHub = () => (etat.hub && Date.now() - (etat.hubLu || 0) < 1000 ? Promise.resolve(etat.hub) : api("hub"));
-const chargerMenu = () => lireHub().then((d) => rendreMenu(d.modules || [])).catch(() => {});
+const chargerMenu = () => etat.verrouille ? Promise.resolve() : lireHub().then((d) => rendreMenu(d.modules || [])).catch(() => {});
 function traduireNav() {
   if (etat.hubModules) rendreMenu(etat.hubModules);
   else document.querySelectorAll("#nav-tiroir [data-libelle]").forEach((x) => { x.textContent = t(x.dataset.libelle); });
@@ -6836,7 +6836,7 @@ $("#page").addEventListener("change", (ev) => {
 
 async function rendrePage() {
   // renders overlap (a live refresh of one page, a click to another): only the last one asked is shown
-  if (!etat.page) return;
+  if (!etat.page || etat.verrouille) return; // locked: no data asked before the password (rendered at unlock)
   const n = ++numeroRendu;
   const p = pages[etat.page] || pages.suivi;
   let html;
@@ -7226,7 +7226,7 @@ async function rafraichir() {
     if (v.langue && v.langue !== etat.langue) { const avant = etat.langue; etat.langue = v.langue; appliquerLangue(v.langue); traduireNav(); if (avant && etat.page && etat.assistant < 0) rendrePage(); }
     if ((v.theme || "") !== etat.theme || (v.accent || "") !== etat.accent) { etat.theme = v.theme || ""; etat.accent = v.accent || ""; appliquerTheme(etat.theme, etat.accent); }
     if (!v.verrouille && v.bienvenue && !v.distant && etat.assistant < 0) { etat.assistant = 0; rendreAssistant(); }
-    if (v.verrouille !== etat.verrouille) { etat.verrouille = v.verrouille; afficherVerrou(); if (!v.verrouille) rendrePage(); }
+    if (v.verrouille !== etat.verrouille) { etat.verrouille = v.verrouille; afficherVerrou(); if (!v.verrouille) { rendrePage(); chargerMenu(); } }
     rendreBandeau(v);
     if (etat.visite >= 0 && !$("#visite").hidden) { placerVoile(); placerBulle(); }
     annoncerFins(v);
