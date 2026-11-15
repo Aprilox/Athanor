@@ -334,7 +334,7 @@ func calculerCarte(c CarteMission, politique string, x contexteCarte) CarteMissi
 	} else if i := slices.IndexFunc(x.projets, func(p Projet) bool { return p.Nom == c.Projet.Nom }); i >= 0 {
 		c.Touche.Dossier = x.projets[i].Dossier
 	}
-	if x.natif && (c.Serveurs.Brief != "" || len(c.Touche.Serveurs) > 0) {
+	if x.natif && c.Serveurs.Brief != "" { // M245: an environment's servers alone (no Servers lane) force nothing
 		c.AvertissementServeurs = infoServeursNatif // information only: launching is the owner's accord (logged)
 	}
 	c.AvertissementInfra = ""

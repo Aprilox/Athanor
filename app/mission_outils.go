@@ -313,7 +313,11 @@ func resumeCarteAccord(m Mission) map[string]string {
 			acces = append(acces, a.Entree+" → "+a.Pour)
 		}
 	}
-	return map[string]string{"envs": cmp.Or(strings.Join(envs, ", "), "—"), "acces": cmp.Or(strings.Join(acces, ", "), "—"), "prod": prod}
+	natif := "" // M245: accepting it in native mode forces the project, as Launch does: the request says so
+	if c.AvertissementServeurs != "" || c.AvertissementInfra != "" {
+		natif = "oui"
+	}
+	return map[string]string{"envs": cmp.Or(strings.Join(envs, ", "), "—"), "acces": cmp.Or(strings.Join(acces, ", "), "—"), "prod": prod, "natif": natif}
 }
 
 // accordMissionAttente: mission id's pending launch request (lancer_mission), if any.

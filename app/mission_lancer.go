@@ -88,8 +88,8 @@ func politiqueEnvMission(env, politique string) string {
 // lancerMission: mission id launched by qui; dossier: the new project's folder chosen on the PC ("" = next to
 // the other projects); empreinte: the card the accord was asked for ("" = the card as it is, the owner's Launch).
 // Refused (nothing done) while the orchestrator works, without a card, when the card is not that of empreinte or
-// changed while it was checked, when an infra entry is ticked and the infra keys are locked or the PC is in native
-// mode, or when the new project's folder cannot be created (B88).
+// changed while it was checked, when an infra entry is ticked and the infra keys are locked, or when the new
+// project's folder cannot be created (B88). In native Windows mode a Servers lane or an infra entry forces the project (logged).
 func (s *Serveur) lancerMission(id, qui, dossier, empreinte string) (Mission, error) {
 	m, err := lireMission(id)
 	pasLancable := func(m *Mission) error {
@@ -255,7 +255,11 @@ func (s *Serveur) etapesMission(c CarteMission, politique, qui, dossier string) 
 		if err != nil {
 			return voies, faits, errMoteur("giving {0}: {1}", a.Entree, err)
 		}
-		s.auditAcces(qui, p.Nom, "acces_accorde", e, g.Variable, g.Env)
+		action := "acces_accorde"
+		if e.Portee == "infra" && modeNatif.Load() {
+			action = "acces_accorde_force" // as the Access page: an infra entry given in native mode, the project forced
+		}
+		s.auditAcces(qui, p.Nom, action, e, g.Variable, g.Env)
 		faits = append(faits, evenementMission("lancee", "access given: "+a.Entree+" → "+g.Variable+" ("+g.Env+")"))
 	}
 	// C86: in the project's secrets.env now, a pilot already running included (demarrerPilote stops before it)

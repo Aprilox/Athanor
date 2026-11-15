@@ -20,8 +20,8 @@ import (
 // files (nothing done); a new project launched once out of two simultaneous clicks (project created with the Dev
 // brief as its request, ticked entries given to their environment and not the unticked one, environments set with
 // prod on accord and dev deploying at each milestone, the fake pilot started, one Servers task per environment
-// with the fake chef ops); an existing project in native mode (the brief queued, the Servers lane refused, Dev
-// launched); a failed step (echec, history, bell, nothing after it); a mission in another state answers 409.
+// with the fake chef ops); an existing project in native mode (the brief queued, the Servers task forced and the
+// project forced, both logged, Dev launched); a failed step (echec, history, bell, nothing after it); a mission in another state answers 409.
 func TestMissionLancer(t *testing.T) {
 	s := serveurCoffreTest(t)
 	motDePasseCoffreTest(t, s)
@@ -356,6 +356,14 @@ func TestMissionLancer(t *testing.T) {
 	echecPilote = false
 	if code, m := lancer(infra, ""); code != 200 || m.Etat != "lancee" || !s.acces.Projet("boutique").ForcerInfraNatif {
 		t.Fatalf("infra in native mode: %d %+v", code, m)
+	}
+	if m, _ := lireMission(infra); resumeCarteAccord(m)["natif"] != "oui" { // M245: a lancer_mission request says it
+		t.Fatalf("native forcing not said in the accord request: %v", resumeCarteAccord(m))
+	}
+	if l := lignesAudit(t, dossierJournalAudit()); !slices.ContainsFunc(l, func(x LigneAudit) bool { // M245: as the Access page
+		return x.Projet == "boutique" && x.Action == "acces_accorde_force"
+	}) {
+		t.Fatal("infra entry given in native mode not logged acces_accorde_force")
 	}
 	if err := s.acces.ForcerInfra("boutique", false); err != nil {
 		t.Fatal(err)
