@@ -126,6 +126,23 @@ async function action(promesse, genreOk = "ok") {
 }
 
 // choisir(message, [{ id, texte, primaire, danger }], { titre }) → Promise<id | null> (Escape: null)
+// A popup opened by a first Enter (or click) is never validated by the next one (note 12h28): no Enter or Space for
+// 400 ms after it opens, never a held key's repeat, no click that began before it opened or ends a double click.
+let appuiDernier = 0;
+document.addEventListener("pointerdown", () => { appuiDernier = performance.now(); }, true);
+function gardePopup() {
+  const ouverte = performance.now();
+  return {
+    touche: (e) => (e.key === "Enter" || e.key === " ") && (e.repeat || performance.now() - ouverte < 400),
+    clic: (e) => e.detail > 1 || (e.detail === 1 && appuiDernier < ouverte), // detail 0: a key, already filtered
+  };
+}
+// Enter sends once (note 12h28): not the repeats of a held key nor the Enter that ends a composition; Shift+Enter is a new line
+function entreeEnvoie(ev, envoyer) {
+  if (ev.key !== "Enter" || ev.shiftKey || ev.isComposing || ev.keyCode === 229) return false;
+  ev.preventDefault(); if (!ev.repeat) envoyer();
+  return true;
+}
 function choisir(message, boutons, options = {}) {
   const fond = $("#choix");
   $("#choix-texte").textContent = message;
@@ -134,11 +151,13 @@ function choisir(message, boutons, options = {}) {
   $("#choix-boutons").innerHTML = boutons.map((b) => `<button type="button" class="btn ${b.primaire ? "btn-primaire" : b.danger ? "btn-danger" : ""}" data-choix="${h(b.id)}">${h(b.texte)}</button>`).join("");
   const avant = document.activeElement;
   fond.hidden = false;
-  const premier = $("#choix-boutons .btn-primaire") || $("#choix-boutons button"); if (premier) premier.focus();
+  // the safest first: Cancel, else a plain button, never the main or a destructive action
+  const sur = $('#choix-boutons [data-choix=""]') || $("#choix-boutons button:not(.btn-primaire):not(.btn-danger)") || $("#choix-boutons button"); if (sur) sur.focus();
+  const garde = gardePopup();
   return new Promise((resoudre) => {
     const fin = (v) => { fond.hidden = true; fond.onclick = null; document.removeEventListener("keydown", clavier, true); if (avant && avant.focus) avant.focus(); resoudre(v); };
-    const clavier = (e) => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); fin(null); } };
-    fond.onclick = (e) => { const b = e.target.closest("[data-choix]"); if (b) fin(b.dataset.choix); else if (e.target === fond) fin(null); };
+    const clavier = (e) => { if (garde.touche(e)) { e.preventDefault(); e.stopPropagation(); } else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); fin(null); } };
+    fond.onclick = (e) => { const b = e.target.closest("[data-choix]"); if (b) { if (!garde.clic(e)) fin(b.dataset.choix); } else if (e.target === fond) fin(null); };
     document.addEventListener("keydown", clavier, true);
   });
 }
@@ -317,7 +336,8 @@ function confirmer(message, options = {}) {
   ok.className = "btn " + (options.danger ? "btn-danger" : "btn-primaire");
   const avant = document.activeElement;
   fond.hidden = false;
-  (options.mdp ? champ : ok).focus();
+  (options.mdp ? champ : annuler).focus(); // the safe action first; a password field takes the typing
+  const garde = gardePopup();
   return new Promise((resoudre) => {
     const fin = (valeur) => {
       if (options.mdp && valeur) valeur = champ.value; // mdp: the password typed, or false
@@ -329,12 +349,17 @@ function confirmer(message, options = {}) {
       resoudre(valeur);
     };
     const clavier = (e) => {
-      if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); fin(false); }
-      else if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); fin(document.activeElement !== annuler); }
+      if (garde.touche(e)) { e.preventDefault(); e.stopPropagation(); }
+      else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); fin(false); }
+      else if (e.key === "Enter") { // only the focused button (or the password field, which validates)
+        e.preventDefault(); e.stopPropagation();
+        const a = document.activeElement;
+        if (a === ok || a === champ) fin(true); else if (a === annuler) fin(false);
+      }
       else if (e.key === "Tab") { e.preventDefault(); const l = options.mdp ? [champ, annuler, ok] : [annuler, ok]; l[(l.indexOf(document.activeElement) + (e.shiftKey ? l.length - 1 : 1)) % l.length].focus(); }
     };
-    ok.onclick = () => fin(true);
-    annuler.onclick = () => fin(false);
+    ok.onclick = (e) => { if (!garde.clic(e)) fin(true); };
+    annuler.onclick = (e) => { if (!garde.clic(e)) fin(false); };
     fond.onclick = (e) => { if (e.target === fond) fin(false); };
     document.addEventListener("keydown", clavier, true);
   });
@@ -722,16 +747,17 @@ window.athanorFermeture = (noms) => {
     document.removeEventListener("keydown", clavier, true);
     window.athanorFermer(choix);
   };
+  const garde = gardePopup(); // Enter activates only the focused button (Cancel at first)
   const clavier = (e) => {
-    if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); fin("annuler"); }
-    else if (e.key === "Enter" && !document.activeElement.closest("[data-fermer]")) { e.preventDefault(); e.stopPropagation(); fin("continuer"); }
+    if (garde.touche(e)) { e.preventDefault(); e.stopPropagation(); }
+    else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); fin("annuler"); }
   };
   document.removeEventListener("keydown", fond._clavier || (() => {}), true);
   fond._clavier = clavier;
   document.addEventListener("keydown", clavier, true);
-  fond.onclick = (e) => { const b = e.target.closest("[data-fermer]"); if (b) fin(b.dataset.fermer); };
+  fond.onclick = (e) => { const b = e.target.closest("[data-fermer]"); if (b && !garde.clic(e)) fin(b.dataset.fermer); };
   fond.hidden = false;
-  $('#fermeture [data-fermer="continuer"]').focus();
+  $('#fermeture [data-fermer="annuler"]').focus();
   window.athanorFermer("affiche");
 };
 
@@ -2445,8 +2471,8 @@ async function envoyerHubChat() {
 }
 document.addEventListener("keydown", (ev) => {
   // Enter sends (Shift+Enter: a new line; on a phone Enter is a new line); with the mentions list open, it chooses
-  if (ev.target.id !== "accueil-texte" || ev.key !== "Enter" || ev.defaultPrevented || ev.shiftKey || ev.isComposing || etat.mentionListe || tactile()) return;
-  ev.preventDefault(); envoyerHubChat();
+  if (ev.target.id !== "accueil-texte" || ev.defaultPrevented || etat.mentionListe || tactile()) return;
+  entreeEnvoie(ev, envoyerHubChat);
 });
 document.addEventListener("click", async (ev) => {
   const b = ev.target.closest("#hub-chat-aide, #accueil-mission, #hub-chat-stop, #hub-chat-nouveau, #hub-dossier-ajouter, [data-dossier-retirer]"); if (!b) return;
@@ -6674,7 +6700,7 @@ $("#page").addEventListener("drop", (ev) => {
 // the same guards as any task: risk class, a plan before any change, your decision, backups, outputs as data.
 // Mode "live in my terminal" (M231f): the same calls, also shown on your terminal's screen, its typing locked meanwhile.
 const ia = { visible: localStorage.getItem("athanor.terminal.ia") === "1", mode: localStorage.getItem("athanor.terminal.ia.mode") === "direct" ? "direct" : "apart",
-  verrou: "", taches: [], plans: {}, lu: "", minuteur: 0, ouvertes: new Set(), suivi: true };
+  verrou: "", taches: [], plans: {}, lu: "", minuteur: 0, ouvertes: new Set(), suivi: true, envoi: false, attente: "" };
 const ETATS_ACTION_IA = () => ({ en_cours: [t("running…"), "pv-claude"], ok: [t("Done"), "pv-ok"], erreur: [t("Failed"), "pv-vous"], refusee: [t("Refused"), "pv-vous"] });
 function panneauIA(distant) {
   const mode = (v, titre, phrase) => `<label class="ia-mode${ia.mode === v ? " actif" : ""}"><input type="radio" name="ia-mode" value="${v}"${ia.mode === v ? " checked" : ""}>
@@ -6688,7 +6714,8 @@ function panneauIA(distant) {
     ${distant ? `<p class="muet petit m0">${t("Tasks are launched from the computer; their plans are decided on their cards, on the For you page.")}</p>`
       : `<form class="ia-saisie" id="ia-form"><label for="ia-texte" class="cache-visuel">${t("Ask the assistant")}</label>
       <textarea id="ia-texte" rows="2" maxlength="4000" placeholder="${h(t("e.g. Install and configure Caddy for this domain"))}"></textarea>
-      <button type="submit" class="btn btn-primaire">${t("Send")}</button></form>`}
+      <button type="submit" class="btn btn-primaire">${t("Send")}</button>
+      <p class="petit muet m0" id="ia-file" role="status" hidden></p></form>`}
   </aside>`;
 }
 // the server's tasks read again; again in 1.5 s while one runs and the page is still this terminal
@@ -6731,7 +6758,8 @@ function rendreIA() {
   const texte = !courante ? t("The assistant is idle.") : enCours ? t("Running: {0}", [enCours.quoi]) : (ETATS_TACHE_SRV()[courante.etat] || [courante.etat])[0];
   zone.innerHTML = `<span class="pastille ${courante ? (courante.etat === "attente_accord" ? "attend" : "travaille") : ""}"></span><span class="ia-encours-texte petit">${h(texte)}</span>
     <button type="button" class="btn btn-danger btn-petit" data-ia-arreter="${h(courante ? courante.id : "")}"${courante && !(etat.vue || {}).distant ? "" : " disabled"}>${t("Stop")}</button>`;
-  const b = $("#ia-form [type=submit]"); if (b) b.disabled = !!courante;
+  const f = $("#ia-file"); if (f) { f.hidden = !ia.attente; f.textContent = ia.attente ? t("Queued: it is sent as soon as the assistant is done.") : ""; }
+  if (ia.attente && !courante && !ia.envoi) { const a = ia.attente; ia.attente = ""; envoyerIA(a); }
   verrouTerminal(courante && courante.direct ? courante.id : "");
 }
 // mode "live in my terminal": while the assistant works in it, the terminal takes no typing (the Go side refuses
@@ -6766,16 +6794,27 @@ $("#page").addEventListener("toggle", (ev) => {
 $("#page").addEventListener("submit", async (ev) => {
   if (etat.page !== "terminal" || ev.target.id !== "ia-form") return;
   ev.preventDefault();
-  const champ = $("#ia-texte"), texte = champ.value.trim(), b = ev.target.querySelector("[type=submit]");
+  const champ = $("#ia-texte"), texte = champ.value.trim();
   if (!texte) return champ.focus();
+  if (ia.envoi) return; // a double Enter sends once
   if (ia.mode === "direct" && !term.session) return toast(t("Connect the terminal first, or choose Separate connection."), "erreur");
-  b.disabled = true;
-  const r = await lancerTacheSrv(term.id, texte, "", ia.mode === "direct" ? term.session : "");
-  if (!r) { b.disabled = false; return; }
-  champ.value = ""; ia.suivi = true; ia.taches.unshift(r.tache); rendreIA(); chargerIA();
+  // live in the terminal: one task at a time types in it, the next waits its turn (a separate connection runs at once)
+  if (ia.mode === "direct" && ia.taches.some((x) => x.direct && !tacheFinie(x))) { ia.attente = texte; champ.value = ""; return rendreIA(); }
+  if (await envoyerIA(texte)) champ.value = "";
 });
+// the button is greyed only while the request is really on its way, and says so; on a failure the text stays
+async function envoyerIA(texte) {
+  const b = $("#ia-form [type=submit]");
+  ia.envoi = true; if (b) { b.disabled = true; b.textContent = t("Sending…"); }
+  const r = await lancerTacheSrv(term.id, texte, "", ia.mode === "direct" ? term.session : "").finally(() => {
+    ia.envoi = false; const b2 = $("#ia-form [type=submit]"); if (b2) { b2.disabled = false; b2.textContent = t("Send"); }
+  });
+  if (!r) { const c = $("#ia-texte"); if (c && !c.value.trim()) c.value = texte; return false; }
+  ia.suivi = true; ia.taches.unshift(r.tache); rendreIA(); chargerIA();
+  return true;
+}
 $("#page").addEventListener("keydown", (ev) => { // Enter sends, Shift+Enter makes a new line
-  if (etat.page === "terminal" && ev.target.id === "ia-texte" && ev.key === "Enter" && !ev.shiftKey && !ev.isComposing) { ev.preventDefault(); $("#ia-form").requestSubmit(); }
+  if (etat.page === "terminal" && ev.target.id === "ia-texte") entreeEnvoie(ev, () => $("#ia-form").requestSubmit());
 });
 $("#page").addEventListener("click", async (ev) => {
   if (etat.page !== "terminal") return;
@@ -7130,7 +7169,7 @@ $("#page").addEventListener("paste", (ev) => {
 });
 $("#page").addEventListener("keydown", (ev) => {
   // on a touch screen, Enter is a new line (the keyboard has no Shift+Enter): the Send button sends
-  if (ev.target.id === "chat-texte" && ev.key === "Enter" && !ev.shiftKey && !ev.isComposing && !tactile()) { ev.preventDefault(); envoyerChat(); }
+  if (ev.target.id === "chat-texte" && !tactile()) entreeEnvoie(ev, envoyerChat);
 });
 
 $("#page").addEventListener("change", (ev) => {
