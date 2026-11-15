@@ -331,6 +331,7 @@ type OptionsVue struct {
 	Animation                 bool       `json:"animation"`          // the launch animation (statique.go)
 	CoffreAncienMdp           bool       `json:"coffre_ancien_mdp"`  // no password, but a vault sealed by an old one
 	SansRappelsNatif          bool       `json:"sans_rappels_natif"` // native mode's reminders turned off (config)
+	VerrouAuto                string     `json:"verrou_auto"`        // the auto-lock's delay (verrou_auto.go)
 }
 
 func (s *Serveur) apiOptions(w http.ResponseWriter, r *http.Request) {
@@ -341,7 +342,7 @@ func (s *Serveur) apiOptions(w http.ResponseWriter, r *http.Request) {
 	if projets == nil {
 		projets = []Projet{}
 	}
-	s.ecrireJSON(w, OptionsVue{projets, c.Kit, s.kitCourant().Valide(), c.LancerPiloteAuDemarrage, c.BureauVirtuel, c.ProgrammesSupplementaires, DemarrageWindowsActif(), c.MotDePasseHash != "", s.bureau.Etat(), modeNatif.Load(), runtime.GOOS == "windows", bashNatif(), !c.PasVerifierMaj, c.EntendreBureauClaude, c.TerminalPilote, !c.PasAnimation, c.MotDePasseHash == "" && s.coffreAncienMdp(), c.SansRappelsNatif})
+	s.ecrireJSON(w, OptionsVue{projets, c.Kit, s.kitCourant().Valide(), c.LancerPiloteAuDemarrage, c.BureauVirtuel, c.ProgrammesSupplementaires, DemarrageWindowsActif(), c.MotDePasseHash != "", s.bureau.Etat(), modeNatif.Load(), runtime.GOOS == "windows", bashNatif(), !c.PasVerifierMaj, c.EntendreBureauClaude, c.TerminalPilote, !c.PasAnimation, c.MotDePasseHash == "" && s.coffreAncienMdp(), c.SansRappelsNatif, verrouAutoDe(c.VerrouAuto)})
 }
 
 // apiRappelsNatif: POST /api/options/rappels-natif {actif, mot_de_passe}: the one switch of native mode's

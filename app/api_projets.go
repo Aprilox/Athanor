@@ -106,6 +106,7 @@ type EtatVue struct {
 	KitInstalle bool                  `json:"kit_installe"`
 	Kit         string                `json:"kit"`
 	Verrouille  bool                  `json:"verrouille"`
+	VerrouDans  int                   `json:"verrou_dans"` // seconds before the window locks itself, -1 = no timer
 	MotDePasse  bool                  `json:"mot_de_passe"`
 	Projets     []ProjetVue           `json:"projets"`
 	Projet      *ProjetVue            `json:"projet"`
@@ -164,6 +165,7 @@ func (s *Serveur) apiEtat(w http.ResponseWriter, r *http.Request) {
 	kit, mdp, courant := s.kitCourant(), s.config.MotDePasseHash != "", s.config.ProjetActif
 	langue, bienvenue, hubVu := s.config.Langue, !s.config.BienvenueVue, s.config.HubVu
 	theme, accent := s.config.Theme, s.config.Accent
+	verrouDans := secondesReste(s.resteVerrouAuto(horlogeVerrou()))
 	tours := map[string]bool{}
 	for id, vu := range s.config.Tours {
 		tours[id] = vu
@@ -177,6 +179,9 @@ func (s *Serveur) apiEtat(w http.ResponseWriter, r *http.Request) {
 	}
 	vue := EtatVue{KitValide: kit.Valide(), KitInstalle: kit.Installe(), Verrouille: verrou, MotDePasse: mdp, Maintenant: time.Now().Format("15:04"), DemandeVide: true, Langue: langue, Theme: theme, Accent: accent, Bienvenue: bienvenue, HubVu: hubVu, Tours: tours, Version: versionAthanor}
 	vue.Distant = appareilDe(r) != ""
+	if vue.VerrouDans = -1; !vue.Distant && !verrou {
+		vue.VerrouDans = verrouDans
+	}
 	vue.DistanceActive, vue.Connectes = s.connectesDistance()
 	if !vue.Distant {
 		vue.DernierAppareil = s.dernierAppareil()

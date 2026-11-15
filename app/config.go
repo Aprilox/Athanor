@@ -34,7 +34,8 @@ type Config struct {
 	ModeNatif bool `json:"mode_natif"`
 	// native Windows mode: no reminder nor password before forcing a Servers task (the owner's choice,
 	// logged at each forcing; infra entries, prod and destructive steps keep their own decision)
-	SansRappelsNatif bool `json:"sans_rappels_natif,omitempty"`
+	SansRappelsNatif bool   `json:"sans_rappels_natif,omitempty"`
+	VerrouAuto       string `json:"verrou_auto,omitempty"` // auto-lock: 15m | 1h ("" = 1h) | 8h | fermeture | jamais
 	// the programs on Claude's desktop are heard while a pilot runs (bureau_calme_windows.go; muted by default)
 	EntendreBureauClaude bool `json:"entendre_bureau_claude,omitempty"`
 	// the pilot's hidden console is shown, minimised and never activated (console_windows.go; off by default)

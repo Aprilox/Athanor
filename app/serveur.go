@@ -33,10 +33,11 @@ type Serveur struct {
 	kitMu        sync.RWMutex
 	logs         map[string]*Journal
 	bureau       *Bureau
-	verifs       []*Verif // WSL mode
-	verifsNatif  []*Verif // native Windows mode
-	mdns         etatMDNS // local network discovery, on only by the owner (hub_mdns.go)
-	session      string   // session token when a password is set ("" = locked)
+	verifs       []*Verif  // WSL mode
+	verifsNatif  []*Verif  // native Windows mode
+	mdns         etatMDNS  // local network discovery, on only by the owner (hub_mdns.go)
+	session      string    // session token when a password is set ("" = locked)
+	actifLe      time.Time // the owner's last action in the window (auto-lock, verrou_auto.go)
 	csrf         string
 	cleAcces     string               // cookie of the windows Athanor opened (acces.go); empty = no check (tests)
 	ouvertures   map[string]time.Time // single-use window addresses
@@ -198,6 +199,7 @@ func (s *Serveur) garde(libre bool, h http.HandlerFunc) http.HandlerFunc {
 
 func (s *Serveur) ouvrirSession(w http.ResponseWriter) {
 	s.session = aleatoire(24)
+	s.actifLe = horlogeVerrou()
 	http.SetCookie(w, &http.Cookie{Name: "athanor_session", Value: s.session, Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode})
 }
 
@@ -519,6 +521,8 @@ func (s *Serveur) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/maj/installer", s.garde(false, s.apiInstallerMaj))
 	mux.HandleFunc("POST /api/options", s.garde(false, s.apiEcrireOptions))
 	mux.HandleFunc("POST /api/options/rappels-natif", s.garde(false, s.apiRappelsNatif))
+	mux.HandleFunc("POST /api/options/verrou-auto", s.garde(false, s.apiVerrouAuto))
+	mux.HandleFunc("POST /api/activite", s.garde(false, s.apiActivite))
 	mux.HandleFunc("POST /api/bureau/{action}", s.garde(false, s.apiBureau))
 	mux.HandleFunc("GET /api/ecran", s.garde(false, s.apiEcran))
 	mux.HandleFunc("POST /api/instance/{action}", s.apiInstance)       // second launch (its own secret, see instance.go)

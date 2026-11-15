@@ -1208,6 +1208,7 @@ function traduireNav() {
   else document.querySelectorAll("#nav-tiroir [data-libelle]").forEach((x) => { x.textContent = t(x.dataset.libelle); });
   $("#nav-bas").setAttribute("aria-label", t("Settings"));
   $("#btn-verrou").textContent = t("Lock");
+  $("#btn-verrou").title = t("Lock now");
   $("#btn-urgence").textContent = t("Emergency stop");
   $("#verrou-titre").textContent = t("Application locked");
   $("#verrou-mdp").placeholder = t("Password");
@@ -4953,6 +4954,8 @@ async function rendreOptions() {
       </div>
       <div class="bloc local-seul" id="bloc-verrou"><h2>${t("Lock")}</h2>
         <p class="intro petit">${t("With a password, the padlock locks the app: Claude keeps working, but nothing can be seen, changed or read (keys included) without the password. The app starts locked.")}</p>
+        ${o.mot_de_passe ? `<label class="champ"><span>${t("Lock automatically")}</span><select id="op-verrou-auto" data-avant="${o.verrou_auto || "1h"}">${[["15m", "After 15 minutes of inactivity"], ["1h", "After 1 hour of inactivity"], ["8h", "After 8 hours of inactivity"], ["fermeture", "When Athanor closes"], ["jamais", "Never automatically"]].map(([v, l]) => `<option value="${v}"${o.verrou_auto === v ? " selected" : ""}>${t(l)}</option>`).join("")}</select></label>
+        <p class="muet petit">${t("Only the window and the infra keys lock: pilots, missions, tasks, tunnels and open SSH sessions keep running, and what you typed stays. Only your own actions in this window restart the delay. Athanor always starts locked; a longer delay asks for the password.")}</p>` : ""}
         ${o.coffre_ancien_mdp ? `<p class="avert-connexion petit" id="mdp-coffre-ancien">${t("This vault is protected by an old password. Type that old password to take the vault back with its keys. If it is lost, you can start from an empty vault.")}</p>` : ""}
         ${o.mot_de_passe || o.coffre_ancien_mdp ? `<label class="champ"><span>${t(o.mot_de_passe ? "Current password" : "Old password of the vault")}</span><input type="password" id="mdp-ancien" autocomplete="current-password"></label>` : ""}
         <label class="champ"><span>${o.mot_de_passe ? t("New password (empty to remove it)") : o.coffre_ancien_mdp ? t("New password (12 characters at least)") : t("Password")}</span><input type="password" id="mdp-nouveau" autocomplete="new-password"></label>
@@ -6269,6 +6272,13 @@ async function rappelsNatif(off) {
   if (!p) return false;
   return !!(await action(api("options/rappels-natif", "POST", { actif: off, ...p })));
 }
+// auto-lock (note 12h28 §3): a longer delay asks for the password; the select goes back on a refusal
+async function verrouAuto(i) {
+  const ordre = ["15m", "1h", "8h", "fermeture", "jamais"], avant = i.dataset.avant || "1h";
+  const p = ordre.indexOf(i.value) > ordre.indexOf(avant) ? await preuveMdp(t("A longer automatic lock delay: retype Athanor's password."), { ok: t("Change") }, t("Lock automatically less often?")) : {};
+  const r = p ? await action(api("options/verrou-auto", "POST", { valeur: i.value, ...p })) : null;
+  if (r) { i.dataset.avant = r.verrou_auto; rafraichir(); } else i.value = avant;
+}
 // the countdown of the changes waiting for confirmation; at its end the server has undone the change: read it again
 setInterval(() => {
   let fini = false;
@@ -7206,6 +7216,7 @@ $("#page").addEventListener("change", (ev) => {
   if (i.id === "rg-secrets") { etat.envSecrets = i.checked; rendrePage(); }
   if (i.type === "checkbox" && i.dataset.cle) i.nextElementSibling.textContent = i.checked ? t("enabled") : t("disabled");
   if (etat.page === "reglages" && i.hasAttribute("data-option")) enregistrerOptions();
+  if (i.id === "op-verrou-auto") verrouAuto(i);
   if (i.id === "op-sans-rappels") rappelsNatif(i.checked).then((ok) => { if (!ok) i.checked = !i.checked; });
   if (i.hasAttribute("data-gh-coauteur")) action(api("github", "POST", Object.assign({ action: "identite" }, lireAuteur()))).then((r) => { if (!r) i.checked = !i.checked; });
   if (i.id === "gh-auteur-email") { const a = $("#gh-auteur-autre"); a.hidden = i.value !== ""; if (!a.hidden) a.focus(); }
@@ -7298,6 +7309,19 @@ $("#verrou-form").addEventListener("submit", async (ev) => {
     $("#verrou-mdp").select();
   }
 });
+// the time left before the window locks itself, discreet under the padlock (-1: no timer)
+function afficherResteVerrou(s) {
+  const e = $("#verrou-reste"); e.hidden = !(s >= 0);
+  if (s >= 0) e.textContent = t("Locks in {0}", [s >= 5400 ? Math.round(s / 3600) + " h" : Math.max(1, Math.ceil(s / 60)) + " min"]);
+}
+// only the owner's own actions restart the delay (never the refresh loop), sent at most every 20 seconds
+let activiteLe = 0;
+for (const n of ["pointerdown", "keydown", "wheel", "touchstart"]) addEventListener(n, () => {
+  const v = etat.vue || {};
+  if (etat.verrouille || v.distant || !(v.verrou_dans >= 0) || Date.now() - activiteLe < 20000) return;
+  activiteLe = Date.now();
+  api("activite", "POST").then((r) => afficherResteVerrou(r.verrou_dans)).catch(() => {});
+}, { capture: true, passive: true });
 $("#btn-verrou").addEventListener("click", async () => { await action(api("verrouiller", "POST")); etat.verrouille = true; afficherVerrou(); });
 $("#btn-urgence").addEventListener("click", async () => {
   if (!(await confirmer(t("Emergency stop? Every pilot stops now (the current cycle is cut), every hub session is revoked, the pending approvals are refused, the “never ask again” rules are removed and the vault is locked. To resume: unlock Athanor, then Start each project."), { ok: t("Emergency stop"), danger: true }))) return;
@@ -7328,6 +7352,7 @@ async function rafraichir() {
     if (!v.verrouille && v.bienvenue && !v.distant && etat.assistant < 0) { etat.assistant = 0; rendreAssistant(); }
     if (v.verrouille !== etat.verrouille) { etat.verrouille = v.verrouille; afficherVerrou(); if (!v.verrouille) { rendrePage(); chargerMenu(); } }
     rendreBandeau(v);
+    afficherResteVerrou(v.verrou_dans);
     if (etat.visite >= 0 && !$("#visite").hidden) { placerVoile(); placerBulle(); }
     annoncerFins(v);
     if (!v.verrouille) {

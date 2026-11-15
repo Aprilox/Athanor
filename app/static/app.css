@@ -245,6 +245,7 @@ a[data-href] { cursor: pointer; }
 .nav nav a.actif { background: var(--panel-2); color: var(--ink); box-shadow: inset 3px 0 0 var(--accent); }
 .nav nav a .pastille, .onglets-module a .pastille { margin-left: auto; background: var(--attention); color: var(--sur-attention); border-radius: 10px; padding: 0 7px; font-size: 12px; font-weight: 600; line-height: 18px; }
 .nav-pied { margin-top: auto; display: flex; flex-direction: column; gap: 8px; }
+.verrou-reste { text-align: center; margin-top: -4px; }
 .nav nav a { transition: background .12s ease, color .12s ease; }
 .nav nav a .nb:empty { display: none; }
 /* the menu's icons: a stroke drawing in the text's colour (an SVG mask, no image file) */
