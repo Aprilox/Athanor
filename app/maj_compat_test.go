@@ -56,8 +56,8 @@ func TestMajCompatNomsFiges(t *testing.T) {
 	}
 }
 
-// TestMajCompatAncienneCopie: this build, standing for an older installed copy, finds the newer release's file
-// for each system and checks it against the release's SHA256SUMS.txt (a stand-in GitHub, never the real one).
+// TestMajCompatAncienneCopie: a 2.x copy finds the 3.0.0 release's file for each system and checks it against
+// the release's SHA256SUMS.txt (a stand-in GitHub, never the real one).
 func TestMajCompatAncienneCopie(t *testing.T) {
 	avant := systemeMaj
 	t.Cleanup(func() { systemeMaj = avant })
@@ -74,7 +74,7 @@ func TestMajCompatAncienneCopie(t *testing.T) {
 		for nom := range contenus {
 			assets += fmt.Sprintf(`{"name":%q,"browser_download_url":"%s/f/%s"},`, nom, srv.URL, nom)
 		}
-		fmt.Fprintf(w, `{"tag_name":"v99.0.0","html_url":"x","body":"","assets":[%s{"name":"SHA256SUMS.txt","browser_download_url":"%s/s"}]}`, assets, srv.URL)
+		fmt.Fprintf(w, `{"tag_name":"v3.0.0","html_url":"x","body":"","assets":[%s{"name":"SHA256SUMS.txt","browser_download_url":"%s/s"}]}`, assets, srv.URL)
 	})
 	mux.HandleFunc("/f/", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write(contenus[strings.TrimPrefix(r.URL.Path, "/f/")])
@@ -87,7 +87,7 @@ func TestMajCompatAncienneCopie(t *testing.T) {
 	for sys, nom := range nomsPubliesFiges {
 		systemeMaj = sys
 		v, _, _, fichier, urlSommes, err := lireDerniereVersion()
-		if err != nil || v != "99.0.0" || !versionPlusRecente(v, versionAthanor) || fichier != srv.URL+"/f/"+nom || urlSommes == "" {
+		if err != nil || v != "3.0.0" || !versionPlusRecente(v, "2.52.1") || fichier != srv.URL+"/f/"+nom || urlSommes == "" {
 			t.Fatalf("%s: %s %s %v", sys, v, fichier, err)
 		}
 		f, fs := filepath.Join(d, "maj.part"), filepath.Join(d, "SHA256SUMS.txt")
@@ -117,5 +117,37 @@ func TestMajCompatDonneesFigees(t *testing.T) {
 		}
 	} else if filepath.Base(dossierDonneesApp()) != "Athanor" {
 		t.Fatalf("data folder moved: %s", dossierDonneesApp())
+	}
+}
+
+// TestMajCompat2xVers3: 3.0.0 is newer than every 2.x, and this executable (standing for the downloaded 3.0.0)
+// replaces the executable of a 2.52.1 folder made in a temporary folder, keeping its data.
+func TestMajCompat2xVers3(t *testing.T) {
+	if versionAthanor != "3.0.0" {
+		t.Fatalf("versionAthanor %s", versionAthanor)
+	}
+	for _, ancienne := range []string{"2.52.1", "2.9.0", "2.24.29"} {
+		if !versionPlusRecente("3.0.0", ancienne) || versionPlusRecente(ancienne, "3.0.0") {
+			t.Fatalf("3.0.0 not newer than %s", ancienne)
+		}
+	}
+	avecArchive(t, kitDeTest)
+	d := t.TempDir()
+	for rel, c := range map[string]string{"system/version.txt": "2.52.1\n", filepath.Base(exeDuKit(d)): "old 2.52.1 executable", ".env": "KEEP=1\n", "logs/x.log": "log"} {
+		f := filepath.Join(d, filepath.FromSlash(rel))
+		_ = os.MkdirAll(filepath.Dir(f), 0o755)
+		if err := os.WriteFile(f, []byte(c), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	r, err := deployerKit(d)
+	if err != nil || !r.Exe {
+		t.Fatalf("executable not replaced: %+v %v", r, err)
+	}
+	if lire(t, exeDuKit(d)) == "old 2.52.1 executable" || strings.TrimSpace(lire(t, filepath.Join(d, "system", "version.txt"))) != "3.0.0" {
+		t.Fatal("the 2.52.1 folder was not moved to 3.0.0")
+	}
+	if lire(t, filepath.Join(d, ".env")) != "KEEP=1\n" || lire(t, filepath.Join(d, "logs", "x.log")) != "log" {
+		t.Fatal("the update touched the user's data")
 	}
 }
