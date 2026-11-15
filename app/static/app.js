@@ -6794,7 +6794,7 @@ function tutoSftp() {
     <ul class="m0">${l.map((x) => `<li>${x}</li>`).join("")}</ul></div><button type="button" class="btn btn-petit" data-sftp-tuto>${t("Got it")}</button></aside>`;
 }
 function majIA() {
-  $("#term-zones")?.classList.toggle("avec-ia", ia.visible); $("[data-term-ia]")?.setAttribute("aria-pressed", ia.visible);
+  $("#term-zones")?.classList.toggle("avec-ia", ia.visible); $("[data-term-ia]")?.setAttribute("aria-pressed", ia.visible); hauteurTerminal(); // opening it can fold the header (701-900 px)
 }
 function ongletTerminal(o) {
   sf.onglet = o; const pg = $(".terminal-page"); if (pg) pg.dataset.onglet = o;
