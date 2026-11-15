@@ -27,6 +27,8 @@ type MentionDemandee struct {
 
 const maxMentions = 20
 
+const mentionsParGroupe = 5 // the @ list: 4 types × 5 stays within maxMentions
+
 var errMentionInconnue = errors.New("unknown mention")
 
 // candidatsMentions: every project (the active one first, then the newest), server and vault entry.
@@ -69,9 +71,9 @@ func boolInt(b bool) int {
 	return 0
 }
 
-// chercherMentions: the candidates whose name (or detail) contains q, case-insensitive, at most 20, shared
-// in turn between the types (30 projects never hide the servers and keys), kept grouped by type.
-func (s *Serveur) chercherMentions(q string) []MentionTrouvee {
+// chercherMentions: the candidates whose name (or detail) contains q, case-insensitive, at most mentionsParGroupe
+// of each type (14 projects never hide the servers and keys), kept grouped by type; autres = how many more per type.
+func (s *Serveur) chercherMentions(q string) (l []MentionTrouvee, autres map[string]int) {
 	q = strings.ToLower(strings.TrimSpace(q))
 	parType := map[string][]MentionTrouvee{}
 	for _, m := range s.candidatsMentions() {
@@ -79,27 +81,21 @@ func (s *Serveur) chercherMentions(q string) []MentionTrouvee {
 			parType[m.Type] = append(parType[m.Type], m)
 		}
 	}
-	types, pris := []string{"projet", "serveur", "cle", "dossier"}, map[string]int{}
-	for n, avance := 0, true; n < maxMentions && avance; {
-		avance = false
-		for _, ty := range types {
-			if n < maxMentions && pris[ty] < len(parType[ty]) {
-				pris[ty]++
-				n++
-				avance = true
-			}
+	l, autres = []MentionTrouvee{}, map[string]int{}
+	for _, ty := range []string{"projet", "serveur", "cle", "dossier"} {
+		g := parType[ty]
+		if len(g) > mentionsParGroupe {
+			autres[ty], g = len(g)-mentionsParGroupe, g[:mentionsParGroupe]
 		}
+		l = append(l, g...)
 	}
-	l := []MentionTrouvee{}
-	for _, ty := range types {
-		l = append(l, parType[ty][:pris[ty]]...)
-	}
-	return l
+	return l, autres
 }
 
 // apiMentions: GET /api/mentions?q=, the @ list of the home bar.
 func (s *Serveur) apiMentions(w http.ResponseWriter, r *http.Request) {
-	s.ecrireJSON(w, map[string]any{"mentions": s.chercherMentions(r.URL.Query().Get("q"))})
+	l, autres := s.chercherMentions(r.URL.Query().Get("q"))
+	s.ecrireJSON(w, map[string]any{"mentions": l, "autres": autres})
 }
 
 // resoudreMentions: the chips checked against what exists now (a removed server, a hostile ref → errMentionInconnue,

@@ -2108,7 +2108,7 @@ function rendreListeMentions() {
   if (!liste || !champ || !ml) return;
   // the Go sends them grouped by type: a heading opens each group
   liste.innerHTML = ml.items.length ? ml.items.map((m, i) => `${i === 0 || ml.items[i - 1].type !== m.type ? `<li role="presentation" class="mention-groupe">${ic(ICONES_MENTION[m.type])}${h(t(GROUPES_MENTION[m.type]))}</li>` : ""}<li role="option" id="mention-opt-${i}" class="mention-opt puce-${m.type}${i === ml.actif ? " actif" : ""}" aria-selected="${i === ml.actif}" data-opt="${i}">
-    ${ic(ICONES_MENTION[m.type])}<span class="etiquette">${h(t(TYPES_MENTION[m.type]))}</span><b>${h(m.nom)}</b>${m.detail ? `<span class="muet petit">${h(m.detail)}</span>` : ""}</li>`).join("")
+    ${ic(ICONES_MENTION[m.type])}<span class="etiquette">${h(t(TYPES_MENTION[m.type]))}</span><b>${h(m.nom)}</b>${m.detail ? `<span class="muet petit">${h(m.detail)}</span>` : ""}</li>${(ml.autres || {})[m.type] && (i === ml.items.length - 1 || ml.items[i + 1].type !== m.type) ? `<li role="presentation" class="mention-autres muet petit">${h(t("{0} more: type to filter", [ml.autres[m.type]]))}</li>` : ""}`).join("")
     : `<li class="mention-vide muet petit" role="option" aria-disabled="true">${t("Nothing matches.")}</li>`;
   liste.hidden = false; champ.setAttribute("aria-expanded", "true");
   if (ml.items.length) { champ.setAttribute("aria-activedescendant", "mention-opt-" + ml.actif); $("#mention-opt-" + ml.actif).scrollIntoView({ block: "nearest" }); } else champ.removeAttribute("aria-activedescendant");
@@ -2118,13 +2118,14 @@ async function chercherMentions(champ) {
   const mot = motMention(champ);
   if (!mot) { fermerListeMentions(); return; }
   const n = ++numeroMentions;
-  let items = [];
+  let items = [], autres = {};
   try { // the chips already chosen are not offered again
     const pris = new Set((etat.accueilMentions || []).map((m) => m.type + "\0" + m.ref));
-    items = ((await api("mentions?q=" + encodeURIComponent(mot.q))).mentions || []).filter((m) => !pris.has(m.type + "\0" + m.ref));
+    const r = await api("mentions?q=" + encodeURIComponent(mot.q));
+    items = (r.mentions || []).filter((m) => !pris.has(m.type + "\0" + m.ref)); autres = r.autres || {};
   } catch { /* no list: the text stays as typed */ }
   if (n !== numeroMentions || !motMention(champ)) return; // a later keystroke won
-  etat.mentionListe = { items, actif: 0, debut: mot.debut };
+  etat.mentionListe = { items, autres, actif: 0, debut: mot.debut };
   rendreListeMentions();
 }
 function choisirMention(i) {

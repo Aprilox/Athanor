@@ -43,7 +43,7 @@ func TestMentions(t *testing.T) {
 		return w.Code, w.Body.String()
 	}
 	code, corps := appel("")
-	if code != 200 || strings.Count(corps, `"type"`) != maxMentions || strings.Contains(corps, temoin) || !strings.Contains(corps, cle.ID) { // 31 servers never hide the key
+	if code != 200 || strings.Count(corps, `"type":"serveur"`) != mentionsParGroupe || !strings.Contains(corps, `"autres":{"serveur":26}`) || strings.Contains(corps, temoin) || !strings.Contains(corps, cle.ID) { // 31 servers never hide the key
 		t.Fatalf("empty q: %d %s", code, corps)
 	}
 	// the active project first, then the newest; the archived one never
@@ -56,7 +56,7 @@ func TestMentions(t *testing.T) {
 	if _, corps := appel("cloudflare"); !strings.Contains(corps, `"ref":"`+cle.ID+`","nom":"Jeton Cloudflare","detail":"cloudflare"`) || strings.Contains(corps, temoin) || strings.Contains(corps, "valeur") {
 		t.Errorf("vault entry by type: %s", corps)
 	}
-	if _, corps := appel("zzz"); corps != `{"mentions":[]}`+"\n" && corps != `{"mentions":[]}` {
+	if _, corps := appel("zzz"); strings.TrimSpace(corps) != `{"autres":{},"mentions":[]}` {
 		t.Errorf("no match: %q", corps)
 	}
 
@@ -87,7 +87,7 @@ func TestMentionsMemeNom(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	l := s.chercherMentions("boutique")
+	l, _ := s.chercherMentions("boutique")
 	if len(l) != 2 || l[0].Type != "projet" || l[0].Ref != "boutique" || l[1].Type != "serveur" || l[1].Ref != "srv9" {
 		t.Fatalf("list: %+v", l)
 	}

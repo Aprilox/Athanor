@@ -142,7 +142,7 @@ func TestDevDistants(t *testing.T) {
 	if !slices.ContainsFunc(r.Stats, func(x StatModule) bool { return x.Cle == "Remote projects" && x.Valeur == 2 }) {
 		t.Errorf("Dev tile without the remote projects: %+v", r.Stats)
 	}
-	if l := s.chercherMentions("jeu"); !slices.ContainsFunc(l, func(x MentionTrouvee) bool { return x.Type == "projet" && x.Nom == "jeu@Atelier" && x.Ref == "jeu@d1" }) {
+	if l, _ := s.chercherMentions("jeu"); !slices.ContainsFunc(l, func(x MentionTrouvee) bool { return x.Type == "projet" && x.Nom == "jeu@Atelier" && x.Ref == "jeu@d1" }) {
 		t.Errorf("@jeu does not find the remote project: %+v", l)
 	}
 	if _, err := s.resoudreMentions([]MentionDemandee{{Type: "projet", Ref: "jeu@d1"}}); err != nil {

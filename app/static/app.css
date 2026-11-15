@@ -136,6 +136,7 @@ html.cadre .dialogue, html.cadre .verrou, html.cadre .assistant { top: var(--bar
 .groupe-sugg { display: inline-flex; flex-wrap: wrap; gap: 6px; padding-right: 8px; margin-right: 2px; border-right: 1px solid var(--line); }
 .mention-groupe { display: flex; align-items: center; font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); padding: 8px 8px 2px; }
 .mention-groupe:first-child { padding-top: 2px; }
+.mention-autres { padding: 2px 8px 6px 30px; font-style: italic; }
 /* phone: the typed suggestions stay on one line that scrolls sideways, the bar keeps its height */
 @media (max-width: 700px) { .puces-suggestions { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; } .puces-suggestions > *, .groupe-sugg { flex: none; flex-wrap: nowrap; } }
 .tutoriels { flex-wrap: wrap; gap: 8px; }
@@ -1311,7 +1312,7 @@ a.mis-ligne:hover, a.mis-ligne:focus-visible { border-color: var(--accent); }
 .mis-voies-direct { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .mis-voies-direct .mis-voie { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
 @media (max-width: 600px) { .mis-voies-direct { grid-template-columns: minmax(0, 1fr); } }
-.cache-visuel { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.cache-visuel { position: absolute !important; width: 1px !important; height: 1px !important; min-width: 0 !important; padding: 0 !important; border: 0 !important; overflow: hidden; clip-path: inset(50%); white-space: nowrap; } /* !important: visually hidden must win over the form rules (.cof-form input) */
 .mis-relais { list-style: none; margin: 4px 0 8px; padding: 0; display: flex; }
 .mis-relais li { flex: 1; min-width: 0; position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; font-size: 12.5px; overflow-wrap: break-word; hyphens: auto; color: var(--muted); }
 .mis-relais li + li::before { content: ""; position: absolute; top: 8px; right: calc(50% + 11px); left: calc(-50% + 11px); height: 2px; background: var(--line); }
