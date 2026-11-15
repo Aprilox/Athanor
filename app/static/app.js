@@ -7170,13 +7170,22 @@ $("#page").addEventListener("input", (ev) => {
 
 // --- lock
 function afficherVerrou() {
-  const v = $("#verrou"); v.hidden = !etat.verrouille;
+  const v = $("#verrou"); v.hidden = !etat.verrouille; v.classList.remove("ouvre");
   if (etat.verrouille) { const e = (etat.vue && etat.vue.etat) || {}; $("#verrou-etat").textContent = etat.vue && etat.vue.actif ? t("Claude keeps working{0}.", [e.cycle ? " (" + t("cycle {0}", [e.cycle]) + ")" : ""]) : t("The pilot is stopped."); setTimeout(() => $("#verrou-mdp").focus(), 50); }
 }
 $("#verrou-form").addEventListener("submit", async (ev) => {
   ev.preventDefault();
-  try { await api("deverrouiller", "POST", { mot_de_passe: $("#verrou-mdp").value }); etat.verrouille = false; $("#verrou-mdp").value = ""; $("#verrou-erreur").textContent = ""; afficherVerrou(); rafraichir(); rendrePage(); chargerMenu(); }
-  catch (e) { $("#verrou-erreur").textContent = e.message; }
+  const v = $("#verrou");
+  try {
+    await api("deverrouiller", "POST", { mot_de_passe: $("#verrou-mdp").value }); etat.verrouille = false; $("#verrou-mdp").value = ""; $("#verrou-erreur").textContent = "";
+    // scene on: the padlock opens and the glow spreads while the home page loads underneath, then the lock goes
+    if ("scene" in document.documentElement.dataset) { v.classList.add("ouvre"); setTimeout(() => { if (!etat.verrouille) afficherVerrou(); }, 600); } else afficherVerrou();
+    rafraichir(); rendrePage(); chargerMenu();
+  } catch (e) {
+    $("#verrou-erreur").textContent = e.message;
+    v.classList.remove("secousse"); void v.offsetWidth; v.classList.add("secousse"); // a short shake, the scene goes on
+    $("#verrou-mdp").select();
+  }
 });
 $("#btn-verrou").addEventListener("click", async () => { await action(api("verrouiller", "POST")); etat.verrouille = true; afficherVerrou(); });
 $("#btn-urgence").addEventListener("click", async () => {

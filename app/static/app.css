@@ -1314,6 +1314,33 @@ a.mis-ligne:hover, a.mis-ligne:focus-visible { border-color: var(--accent); }
   .splash.splash-fin { transition: opacity .2s ease !important; }
 }
 
+/* lock screen as the second part of the opening scene (html[data-scene], set by splash.js when the animation is on):
+   the athanor waits, its glow breathes, a padlock is drawn in line; wrong password = a short shake; right = it opens */
+.verrou-scene, .verrou-nom { display: none; }
+html[data-scene] .verrou { background: var(--bg); transition: opacity .4s .15s ease; } /* the padlock opens first */
+html[data-scene] .verrou-cadenas, html[data-scene] #verrou-etat { display: none; }
+html[data-scene] .verrou-scene { display: block; margin: 0 auto; width: min(136px, 30vmin); height: auto; overflow: visible; }
+html[data-scene] .verrou-nom { display: block; animation: none; }
+html[data-scene] #verrou-titre { font-size: 15px; font-weight: 500; color: var(--muted); margin: 0; }
+html[data-scene] .verrou-carte { animation: vs-carte .5s .15s cubic-bezier(.2, .7, .2, 1) both; }
+.vs-lueur { fill: var(--accent); opacity: .16; filter: blur(14px); transform-origin: 128px 128px; animation: vs-souffle 3.6s ease-in-out infinite; }
+.vs-anneau { fill: none; stroke: var(--accent); stroke-width: 18; stroke-linecap: round; opacity: .55; }
+.vs-fleche { fill: var(--accent); opacity: .55; }
+.vs-anse, .vs-corps, .vs-trou { fill: none; stroke: var(--ink); stroke-width: 9; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 100; animation: splash-trait .8s .2s ease-out both; }
+.vs-corps { animation-delay: .45s; }
+.vs-trou { stroke-width: 8; animation-delay: .9s; }
+.verrou.secousse .verrou-carte { animation: vs-secousse .38s ease-in-out; }
+.verrou.ouvre .vs-anse { animation: vs-ouvre .35s ease-out forwards; }
+.verrou.ouvre .vs-lueur { animation: vs-eclat .5s ease-out forwards; }
+.verrou.ouvre { opacity: 0; pointer-events: none; }
+html.scene-pause .verrou * { animation-play-state: paused !important; }
+@keyframes vs-souffle { 50% { opacity: .34; transform: scale(1.1); } }
+@keyframes vs-carte { from { opacity: 0; transform: translateY(10px); } }
+@keyframes vs-secousse { 20% { transform: translateX(-8px); } 40% { transform: translateX(7px); } 60% { transform: translateX(-5px); } 80% { transform: translateX(3px); } }
+@keyframes vs-ouvre { to { stroke-dashoffset: 0; transform: translateY(-14px); } }
+@keyframes vs-eclat { to { opacity: .5; transform: scale(3.2); } }
+@media (prefers-reduced-motion: reduce) { html[data-scene] .verrou { transition: opacity .2s ease !important; } }
+
 /* Terminal (#terminal/<id>): xterm.js fills the space left under the bar, on every screen */
 .terminal-page { display: flex; flex-direction: column; gap: 10px; }
 .term-barre { flex-wrap: wrap; align-items: center; gap: 8px; }
