@@ -659,7 +659,7 @@ textarea.en-attente { opacity: .55; }
 /* --- appearance: language, palette and accent pickers */
 .langues { display: flex; flex-wrap: wrap; gap: 8px; }
 .palettes { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 10px; }
-.palette { border: 2px solid var(--line); border-radius: 10px; padding: 8px; background: var(--bg); cursor: pointer; text-align: left; display: flex; flex-direction: column; gap: 8px; }
+.palette { border: 2px solid var(--line); border-radius: 10px; padding: 8px; background: var(--bg); cursor: pointer; text-align: left; display: flex; flex-direction: column; gap: 8px; min-width: 0; overflow-wrap: anywhere; }
 .palette:hover { border-color: var(--muted); }
 .palette.actif { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-halo); }
 .palette .apercu { height: 46px; border-radius: 6px; border: 1px solid var(--line); display: grid; grid-template-columns: 26px 1fr; overflow: hidden; }
@@ -1317,7 +1317,7 @@ a.mis-ligne:hover, a.mis-ligne:focus-visible { border-color: var(--accent); }
 /* lock screen as the second part of the opening scene (html[data-scene], set by splash.js when the animation is on):
    the athanor waits, its glow breathes, a padlock is drawn in line; wrong password = a short shake; right = it opens */
 .verrou-scene, .verrou-nom { display: none; }
-html[data-scene] .verrou { background: var(--bg); transition: opacity .4s .15s ease; } /* the padlock opens first */
+html[data-scene] .verrou { background: var(--bg); transition: opacity .35s .15s ease; } /* the padlock opens first */
 html[data-scene] .verrou-cadenas, html[data-scene] #verrou-etat { display: none; }
 html[data-scene] .verrou-scene { display: block; margin: 0 auto; width: min(136px, 30vmin); height: auto; overflow: visible; }
 html[data-scene] .verrou-nom { display: block; animation: none; }
@@ -1378,10 +1378,17 @@ html.scene-pause .verrou * { animation-play-state: paused !important; }
 .term-reglages { display: flex; flex-direction: column; gap: 10px; }
 .term-reglages fieldset { border: 0; padding: 0; }
 .term-reglages legend { font-weight: 600; margin-bottom: 6px; }
-.term-themes { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; }
-.term-theme { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; font-size: .9em; }
-.term-theme.actif { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
-.term-theme input { margin: 0; }
+/* note 01h54: 4 columns at most, fewer as the panel narrows; each card keeps its content inside (no overlap) */
+.term-themes { display: grid; grid-template-columns: repeat(auto-fill, minmax(max(190px, calc((100% - 24px) / 4)), 1fr)); gap: 8px; }
+.term-theme { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "choix nom" "choix apercu"; align-items: center; gap: 6px 10px; min-width: 0; min-height: 44px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; font-size: .9em; }
+.term-theme:hover { border-color: color-mix(in srgb, var(--accent) 50%, var(--line)); }
+.term-theme.actif { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.term-theme:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+.term-theme input { grid-area: choix; margin: 0; width: 18px; height: 18px; accent-color: var(--accent); }
+.term-theme .term-apercu { grid-area: apercu; justify-self: start; }
+.term-theme-nom { grid-area: nom; overflow-wrap: anywhere; line-height: 1.25; }
+.term-reglages .btn, .term-reglages select { min-height: 44px; }
+.term-reglages-ligne label { min-height: 44px; }
 .term-apercu { display: inline-flex; align-items: center; gap: 3px; padding: 3px 6px; border-radius: 5px; font: 12px ui-monospace, Consolas, monospace; border: 1px solid var(--line); }
 .term-apercu i { width: 7px; height: 7px; border-radius: 50%; }
 .term-apercu-auto { width: 50px; height: 20px; background: linear-gradient(135deg, #fbfbf9 50%, #141b24 50%); }
@@ -1424,8 +1431,8 @@ html.scene-pause .verrou * { animation-play-state: paused !important; }
   .term-zones, .term-zones.avec-ia, .term-zones.sans-fichiers.avec-ia { grid-template-columns: minmax(0, 1fr); height: calc(100dvh - 220px); }
   .term-onglets { display: flex; }
   .term-bascule-fichiers, .term-bascule-ia { display: none; }
-  .term-themes { grid-template-columns: 1fr 1fr; }
-  .term-theme { padding: 5px 6px; gap: 6px; min-width: 0; overflow-wrap: anywhere; }
+  .term-themes { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+  .term-theme { padding: 6px 8px; gap: 4px 8px; }
   .term-apercu i:nth-of-type(n+4) { display: none; }
   .term-apercu-auto { width: 34px; }
   .term-zones.sans-fichiers .sftp { display: flex; }

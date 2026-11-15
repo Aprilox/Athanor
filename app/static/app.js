@@ -6301,7 +6301,7 @@ function appliquerReglagesTerminal() {
 function panneauReglagesTerminal() {
   const r = term.essai, choix = (v, n) => `<label class="term-theme${r.theme === v ? " actif" : ""}"><input type="radio" name="term-theme" value="${v}"${r.theme === v ? " checked" : ""} data-term-reglage="theme">
     ${v ? `<span class="term-apercu" aria-hidden="true" style="background:${PALETTES_TERMINAL[v].background};color:${PALETTES_TERMINAL[v].foreground}">$ ${["red", "green", "yellow", "blue", "magenta"].map((c) => `<i style="background:${PALETTES_TERMINAL[v][c]}"></i>`).join("")}</span>` : `<span class="term-apercu term-apercu-auto" aria-hidden="true"></span>`}
-    <span>${t(n)}</span></label>`;
+    <span class="term-theme-nom">${t(n)}</span></label>`;
   return `<div class="bloc term-reglages" id="term-reglages" role="group" aria-label="${h(t("Terminal settings"))}">
     <fieldset class="m0"><legend>${t("Theme")}</legend><div class="term-themes">${choix("", "Like Athanor (light or dark)")}${Object.entries(NOMS_PALETTES).map(([v, n]) => choix(v, n)).join("")}</div></fieldset>
     <div class="term-reglages-ligne">
