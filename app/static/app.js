@@ -963,19 +963,23 @@ function rendreBandeau(v) {
 function rendreSelecteur(v) {
   const m = $("#menu-projets"); if (!m) return;
   m.hidden = !etat.selecteurOuvert;
-  if (!etat.selecteurOuvert) return;
+  if (!etat.selecteurOuvert) { m.dataset.html = ""; return; }
   const q = (etat.rechercheProjet || "").toLowerCase();
   const liste = (v.projets || []).filter((x) => !x.archive && (!q || x.nom.toLowerCase().includes(q) || x.dossier.toLowerCase().includes(q)));
   const archives = (v.projets || []).filter((x) => x.archive).length;
   const avaitFocus = document.activeElement && document.activeElement.id === "sel-recherche";
   const pos = avaitFocus ? document.activeElement.selectionStart : 0;
-  m.innerHTML = `<input type="text" id="sel-recherche" placeholder="${h(t("Search a project…"))}" value="${h(etat.rechercheProjet || "")}">
+  const html = `<input type="text" id="sel-recherche" placeholder="${h(t("Search a project…"))}" value="${h(etat.rechercheProjet || "")}">
     <div class="menu-liste">${liste.map((x) => `<a href="#suivi" data-projet="${h(x.nom)}" class="${x.courant ? "actif" : ""}"><span class="dot ${classePhase(x)}"></span><span class="nom">${h(x.nom)}</span><span class="muet petit">${x.actif ? t(x.phase === "quota" || x.phase === "budget" || x.phase === "attente_vous" ? "waiting" : "running") : t("stopped")}${x.attente ? " · " + t("{0} queued", [x.attente]) : ""}${x.pour_vous ? " · " + t("{0} for you", [x.pour_vous]) : ""}</span></a>`).join("") || `<div class="vide">${t("No project.")}</div>`}</div>
     ${v.projet ? `<a href="#projet" class="menu-nouveau menu-gerer">${t("Manage this project")}</a>` : ""}
     <a href="#nouveau" class="menu-nouveau">+ ${t("New project")}</a>
     <a href="#rejoindre" class="menu-nouveau">${ic("echange")} ${t("Join a project")}</a>
     ${archives ? `<a href="#archives" class="menu-nouveau menu-archives">${t("Archived projects ({0})", [archives])}</a>` : ""}`;
-  const r = $("#sel-recherche"); if (r) { r.focus(); r.setSelectionRange(pos, pos); }
+  // rebuilt only when it changes: the list keeps its scroll and the keyboard focus between refreshes
+  if (m.dataset.html === html) return;
+  const ouverture = !m.dataset.html;
+  m.dataset.html = html; m.innerHTML = html;
+  const r = $("#sel-recherche"); if (r && (avaitFocus || ouverture)) { r.focus(); r.setSelectionRange(pos, pos); }
 }
 
 // Stop now cuts the cycle: asked first, with Stop after cycle offered instead. A stop asked for the end of
