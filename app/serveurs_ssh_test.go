@@ -274,6 +274,12 @@ func TestConnexionSSHConteneur(t *testing.T) {
 	port, _ := strconv.Atoi(portTxt)
 	ctx := context.Background()
 	empreinte, typ, err := empreinteHoteSSH(ctx, hote, port)
+	// M240l5 : juste après un autre test sur le même sshd, il ferme encore des connexions non authentifiées
+	// (MaxStartups) : « handshake failed: EOF » ; deux nouveaux essais espacés
+	for i := 0; err != nil && i < 2; i++ {
+		time.Sleep(2 * time.Second)
+		empreinte, typ, err = empreinteHoteSSH(ctx, hote, port)
+	}
 	if err != nil {
 		t.Fatalf("empreinte du conteneur : %v", err)
 	}
@@ -320,6 +326,12 @@ func TestCaddyConteneur(t *testing.T) {
 	port, _ := strconv.Atoi(portTxt)
 	ctx := context.Background()
 	empreinte, typ, err := empreinteHoteSSH(ctx, hote, port)
+	// M240l5 : juste après un autre test sur le même sshd, il ferme encore des connexions non authentifiées
+	// (MaxStartups) : « handshake failed: EOF » ; deux nouveaux essais espacés
+	for i := 0; err != nil && i < 2; i++ {
+		time.Sleep(2 * time.Second)
+		empreinte, typ, err = empreinteHoteSSH(ctx, hote, port)
+	}
 	if err != nil {
 		t.Fatalf("empreinte du conteneur : %v", err)
 	}

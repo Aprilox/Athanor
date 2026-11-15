@@ -215,8 +215,10 @@ func versionOutil(kit, nom string, cmd ...string) string {
 	ctx, fin := context.WithTimeout(context.Background(), 8*time.Second)
 	defer fin()
 	shim := cheminOutil(kit + "/system/natif/" + cmd[0])
-	if natif && estFichier(shim) { // the pilot's Git Bash finds these shims first (python3, jq…)
-		c = commandeContexte(ctx, "bash", append([]string{shim}, cmd[1:]...)...)
+	// the pilot's Git Bash finds these shims first (python3, jq…); never "bash" from the PATH: in native
+	// Windows it is WSL's bash.exe (WindowsApps, System32), which starts WSL and its wslhost windows
+	if b := trouverBashNatifPilote(); natif && estFichier(shim) && b != "" {
+		c = commandeContexte(ctx, b, append([]string{shim}, cmd[1:]...)...)
 	} else {
 		if _, err := exec.LookPath(cmd[0]); err != nil {
 			return "- " + nom + ": not installed"

@@ -1814,7 +1814,7 @@ func trouverBashNatifPilote() string {
 		racine := filepath.Dir(filepath.Dir(g))
 		candidats = append(candidats, filepath.Join(racine, "bin", "bash.exe"))
 	}
-	if b, err := exec.LookPath("bash.exe"); err == nil {
+	if b, err := exec.LookPath("bash.exe"); err == nil && !bashWSL(b) {
 		candidats = append(candidats, b)
 	}
 	for _, c := range candidats {
@@ -1823,6 +1823,12 @@ func trouverBashNatifPilote() string {
 		}
 	}
 	return ""
+}
+
+// bashWSL: the bash.exe of WSL (WindowsApps alias, System32), which runs Linux, not Git Bash.
+func bashWSL(chemin string) bool {
+	d := strings.ToLower(strings.ReplaceAll(chemin, `\`, "/"))
+	return strings.HasSuffix(d, "/windowsapps/bash.exe") || strings.HasSuffix(d, "/system32/bash.exe")
 }
 
 func cheminNatifPilote(s string) string {

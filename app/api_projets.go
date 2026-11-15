@@ -972,6 +972,14 @@ func dossierInterdit(dossier, kit string) string {
 	if runtimeWindows() && strings.HasPrefix(filepath.Clean(dossier), `\\`) {
 		return lettre // UNC, \\?\, \\.\: a drive letter only (and never wait for a network host)
 	}
+	if reste := filepath.Clean(dossier); runtimeWindows() {
+		if len(reste) >= 2 && reste[1] == ':' {
+			reste = reste[2:]
+		}
+		if strings.ContainsAny(reste, `:*?"<>|`) {
+			return lettre // a data stream (dossier::$DATA) or a character Windows refuses in a name
+		}
+	}
 	reel := cheminReel(dossier)
 	if runtimeWindows() && strings.HasPrefix(reel, `\\`) {
 		return lettre

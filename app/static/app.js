@@ -1948,7 +1948,7 @@ function ligneElement(e, modules) {
     const [classe, libelle] = e.hors_ligne ? ["", "Offline"] : ETATS_ELEMENT[e.etat] || ETATS_ELEMENT.inactif, a = e.avancement, act = activiteElement(e);
     return `<div class="bloc carte-projet ligne-element element-distant${e.attente ? " besoin" : ""}${e.hors_ligne ? " hors-ligne" : ""}" data-distant-id="${h(e.distant)}" data-distant-projet="${h(e.nom_distant)}">
     <div class="cp-tete"><span class="dot ${classe}" aria-hidden="true"></span><b class="cp-nom" title="${h(e.titre)}">${h(e.titre)}</b><span class="pastille-module"><span class="ico ico-${h(m.id)}" aria-hidden="true"></span>${h(t(m.nom))}</span></div>
-    <div class="el-etat petit">${e.attente ? `<span class="cp-besoin">${t("Needs you")}</span> <span title="${h(t(e.attente.raison, e.attente.args || []))}">${h(t(e.attente.raison, e.attente.args || []))}</span>` : `<span class="muet">${t(libelle)}</span>`}</div>
+    <div class="el-etat petit">${e.attente ? `<span class="cp-besoin">${t("Needs you")}</span> <span class="el-raison" title="${h(t(e.attente.raison, e.attente.args || []))}">${h(t(e.attente.raison, e.attente.args || []))}</span>` : `<span class="muet">${t(libelle)}</span>`}</div>
     ${act ? `<div class="cp-jalon petit" title="${h(act)}">${h(act)}</div>` : ""}
     ${a && a.total ? `<div class="barre"><i style="width:${(a.fait / a.total) * 100}%"></i></div>` : ""}${a && a.texte ? `<div class="muet petit">${h(t(a.texte, [a.fait, a.total]))}</div>` : ""}
     ${boutonsDistant(e)}
@@ -1960,7 +1960,7 @@ function ligneElement(e, modules) {
   const lien = e.projet ? `href="${h(cible)}" data-projet="${h(e.projet)}" data-cible="${h(cible.replace(/^#/, ""))}"` : `href="${h(cible)}"`;
   return `<a ${lien} class="bloc carte-projet ligne-element${e.attente ? " besoin" : ""}${e.projet && etat.vue && etat.vue.projet && etat.vue.projet.nom === e.projet ? " courant" : ""}">
     <div class="cp-tete"><span class="dot ${classe}" aria-hidden="true"></span><b class="cp-nom" title="${h(e.titre)}">${h(e.titre)}</b><span class="pastille-module"><span class="ico ico-${h(m.id)}" aria-hidden="true"></span>${h(t(m.nom))}</span></div>
-    <div class="el-etat petit">${e.attente ? `<span class="cp-besoin">${t("Needs you")}</span> <span title="${h(t(e.attente.raison, (e.attente.args || []).map(texteMessage)))}">${h(t(e.attente.raison, (e.attente.args || []).map(texteMessage)))}</span>` : `<span class="muet">${t(libelle)}</span>`}</div>
+    <div class="el-etat petit">${e.attente ? `<span class="cp-besoin">${t("Needs you")}</span> <span class="el-raison" title="${h(t(e.attente.raison, (e.attente.args || []).map(texteMessage)))}">${h(t(e.attente.raison, (e.attente.args || []).map(texteMessage)))}</span>` : `<span class="muet">${t(libelle)}</span>`}</div>
     ${act ? `<div class="cp-jalon petit" title="${h(act)}">${h(act)}</div>` : ""}
     ${a && a.total ? `<div class="barre"><i style="width:${(a.fait / a.total) * 100}%"></i></div>` : ""}${a && a.texte ? `<div class="muet petit">${a.total ? texteEtape({ etape: a.etape_plan, etapes: a.etapes_plan }) : ""}${h(t(a.texte, [a.fait, a.total]))}</div>` : ""}
   </a>`;

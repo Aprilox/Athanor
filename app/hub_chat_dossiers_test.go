@@ -98,6 +98,34 @@ func TestGardeDossiersChat(t *testing.T) {
 			t.Errorf("%s %s: %q", c.outil, c.chemin, g)
 		}
 	}
+	// M240l5: a search (Grep's glob and path, Glob's pattern) aimed at a secrets file or at .athanor is refused
+	recherche := func(outil string, entree map[string]any) string {
+		b, _ := json.Marshal(map[string]any{"tool_name": outil, "tool_input": entree, "cwd": projet})
+		return gardeFichiers(args, b)
+	}
+	for _, c := range []struct {
+		outil  string
+		entree map[string]any
+		permis bool
+	}{
+		{"Grep", map[string]any{"pattern": ".", "path": ".athanor", "glob": "secrets.env"}, false},
+		{"Grep", map[string]any{"pattern": ".", "glob": "secrets.*"}, false},
+		{"Grep", map[string]any{"pattern": "KEY", "glob": "*.env*"}, false},
+		{"Grep", map[string]any{"pattern": "KEY", "glob": "**/{a,.e*}"}, false},
+		{"Grep", map[string]any{"pattern": "x", "path": filepath.Join(projet, ".athanor")}, false},
+		{"Grep", map[string]any{"pattern": "x", "path": filepath.Join(projet, ".ENV")}, false},
+		{"Glob", map[string]any{"pattern": "**/.env*"}, false},
+		{"Glob", map[string]any{"pattern": ".ath*/**"}, false},
+		{"Glob", map[string]any{"pattern": "**/secret?.env"}, false},
+		{"Grep", map[string]any{"pattern": "secrets.env|\\.env", "glob": "*.go"}, true}, // Grep's pattern is the text searched
+		{"Grep", map[string]any{"pattern": "x", "glob": "**/*.md", "path": ecriture}, true},
+		{"Glob", map[string]any{"pattern": "**/*"}, true},
+		{"Glob", map[string]any{"pattern": "src/*.{js,ts}"}, true},
+	} {
+		if g := recherche(c.outil, c.entree); (g == "") != c.permis {
+			t.Errorf("%s %v: %q", c.outil, c.entree, g)
+		}
+	}
 	// the settings of the session: the guard's folders, and the deny rules of the secrets files
 	sortie := filepath.Join(racine, "reglages.json")
 	if err := reglagesChatInternet(projet, sortie, false, DossierChat{Chemin: lecture}, DossierChat{Chemin: ecriture, Ecriture: true}); err != nil {

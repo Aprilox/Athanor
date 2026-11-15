@@ -184,6 +184,7 @@ html.cadre .dialogue, html.cadre .verrou, html.cadre .assistant { top: var(--bar
 .pastille-module .ico { width: 13px; height: 13px; }
 .el-etat { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .el-etat > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.el-etat > .el-raison { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow-wrap: anywhere; } /* M240l5: the instruction visible, a long path wraps */
 .fb-boutons { display: flex; flex: none; }
 .fb-btn { width: 46px; border: 0; padding: 0; background: transparent; color: var(--ink); font: 10px/1 "Segoe Fluent Icons", "Segoe MDL2 Assets"; display: grid; place-items: center; }
 .fb-btn:hover, .fb-btn.survol { background: var(--panel-3); }

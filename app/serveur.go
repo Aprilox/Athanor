@@ -8,6 +8,7 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -16,15 +17,17 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode/utf8"
 )
 
 type Serveur struct {
 	mu           sync.Mutex
-	mdpMu        sync.Mutex // one password change at a time (apiMotDePasse)
-	essaisMu     sync.Mutex // one password check at a time (verifierMdpLent)
-	echecsMdp    int        // wrong passwords typed on this PC since the last right one
+	mdpMu        sync.Mutex   // one password change at a time (apiMotDePasse)
+	essaisMu     sync.Mutex   // one password check at a time (verifierMdpLent)
+	essaisFile   atomic.Int32 // password checks waiting or running (bounded: essaisMdpFile)
+	echecsMdp    int          // wrong passwords typed on this PC since the last right one
 	config       Config
 	kit          Kit // read with kitCourant() (can change from Options)
 	kitMu        sync.RWMutex
@@ -582,9 +585,21 @@ func (s *Serveur) routes(mux *http.ServeMux) {
 // (a stolen phone cannot try password after password).
 const essaisMdpDistance = 5
 
-// verifierMdpLent checks a typed password one attempt at a time (parallel attempts wait their turn); each
-// wrong password typed on this PC lengthens the pause (0.4 s, 0.8 s… up to 5 s), a right one resets it.
-func (s *Serveur) verifierMdpLent(sel, mdp, hash string, local bool) (ok, aRemplacer bool) {
+// essaisMdpFile: password checks that may wait their turn; one more is refused at once (errTropEssaisMdp)
+// instead of making the right password wait behind a pile of wrong ones.
+const essaisMdpFile = 3
+
+var errTropEssaisMdp = errors.New("Too many password attempts at once: wait a few seconds and try again")
+
+// verifierMdpLent checks a typed password one attempt at a time (parallel attempts wait their turn, at most
+// essaisMdpFile: plein when the queue is full); each wrong password typed on this PC lengthens the pause
+// (0.4 s, 0.8 s… up to 5 s), a right one resets it.
+func (s *Serveur) verifierMdpLent(sel, mdp, hash string, local bool) (ok, aRemplacer, plein bool) {
+	if s.essaisFile.Add(1) > essaisMdpFile {
+		s.essaisFile.Add(-1)
+		return false, false, true
+	}
+	defer s.essaisFile.Add(-1)
 	s.essaisMu.Lock()
 	defer s.essaisMu.Unlock()
 	time.Sleep(pauseMdp(s.echecsMdp))
@@ -595,7 +610,7 @@ func (s *Serveur) verifierMdpLent(sel, mdp, hash string, local bool) (ok, aRempl
 	case local: // a remote device has its own count (essaisMdpDistance)
 		s.echecsMdp++
 	}
-	return ok, aRemplacer
+	return ok, aRemplacer, false
 }
 
 func pauseMdp(echecs int) time.Duration {
@@ -615,7 +630,11 @@ func (s *Serveur) apiDeverrouiller(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := appareilDe(r)
-	ok, aRemplacer := s.verifierMdpLent(sel, c.MotDePasse, hash, id == "")
+	ok, aRemplacer, plein := s.verifierMdpLent(sel, c.MotDePasse, hash, id == "")
+	if plein {
+		s.erreur(w, http.StatusTooManyRequests, errTropEssaisMdp.Error())
+		return
+	}
 	if aRemplacer {
 		s.remplacerHashMdp(hash, c.MotDePasse)
 	}

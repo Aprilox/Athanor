@@ -19,6 +19,11 @@ func TestMdpEssaisSerialises(t *testing.T) {
 		g.Add(1)
 		go func() { defer g.Done(); s.verifierMdpLent("", "faux", hash, true) }()
 	}
+	// M240l5: a fourth attempt while three wait or run is refused at once (429), the queue stays bounded
+	time.Sleep(100 * time.Millisecond)
+	if t0 := time.Now(); func() bool { _, _, plein := s.verifierMdpLent("", "faux", hash, true); return plein }() == false || time.Since(t0) > 50*time.Millisecond {
+		t.Fatal("a fourth attempt in the queue was not refused at once")
+	}
 	g.Wait()
 	// in parallel they still pay 0.4 + 0.8 + 1.6 s, one after the other
 	if d := time.Since(debut); d < 2800*time.Millisecond || s.echecsMdp != 3 {
@@ -28,7 +33,7 @@ func TestMdpEssaisSerialises(t *testing.T) {
 	if s.echecsMdp != 3 {
 		t.Fatalf("remote attempt counted: %d", s.echecsMdp)
 	}
-	if ok, _ := s.verifierMdpLent("", "le-bon-mot-de-passe", hash, true); !ok || s.echecsMdp != 0 {
+	if ok, _, plein := s.verifierMdpLent("", "le-bon-mot-de-passe", hash, true); !ok || plein || s.echecsMdp != 0 {
 		t.Fatalf("right password: %v, %d failures", ok, s.echecsMdp)
 	}
 }

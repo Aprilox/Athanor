@@ -74,6 +74,12 @@ func TestCheminsReelsWindows(t *testing.T) {
 			t.Errorf("project %q (junction into the kit) accepted", c)
 		}
 	}
+	// M240l5: a data stream of the kit or a name Windows refuses: refused before any folder is made
+	for _, c := range []string{kit + "::$DATA", filepath.Join(base, "a:flux"), filepath.Join(base, "a?b")} {
+		if dossierInterdit(c, kit) == "" {
+			t.Errorf("project %q accepted", c)
+		}
+	}
 	// a normal folder still passes, existing or not
 	_ = os.MkdirAll(filepath.Join(base, "site"), 0o755)
 	for _, c := range []string{filepath.Join(base, "site"), filepath.Join(base, "neuf", "projet")} {

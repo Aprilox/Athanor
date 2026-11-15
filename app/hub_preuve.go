@@ -32,7 +32,9 @@ func (s *Serveur) preuvePresence(r *http.Request, mdp string) (int, error) {
 	if appareilDe(r) != "" {
 		return 0, nil // garde let it in: unlocked with the password on that device
 	}
-	if ok, _ := s.verifierMdpLent(sel, mdp, hash, true); !ok {
+	if ok, _, plein := s.verifierMdpLent(sel, mdp, hash, true); plein {
+		return http.StatusTooManyRequests, errTropEssaisMdp
+	} else if !ok {
 		return http.StatusUnauthorized, errors.New("Wrong password")
 	}
 	return 0, nil
