@@ -7,6 +7,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 )
@@ -18,6 +19,7 @@ var (
 	relaisMissionTUI = []string{"Milestone delivered", "Going online", "Verification", "Your accord", "Production"}
 	rangRelaisTUI    = map[string]int{"construction": 0, "dev_deploye": 2, "dev_verifie": 3, "accord_prod": 3, "prod_deploye": 4, "termine": 5}
 	politiquesTUI    = map[string]string{"prod": "Ask me for production", "tout": "Ask me for everything", "autonome": "Autonomous"}
+	permissionsTUI   = map[string]string{"manuel": "Manual", "auto": "Auto", "modifications": "Accept changes", "ignorer": "Ignore permissions"} // AUTORISATIONS_IA
 	motsJournalTUI   = map[string]string{"fenetre": "from this computer", "emergency stop": "emergency stop", "refusee": "refused", "expiree": "expired",
 		"echec": "failed", "arretee": "stopped", "accord": "after your accord", "auto": "automatically", "deploiement": "deployment",
 		"mission": "launch", "plan_serveurs": "Servers plan"}
@@ -297,6 +299,17 @@ func (a *appTUI) detailMission(e *ecranT, x, y, l, h int, m Mission) {
 	e.texte(x+n+3, y, l-n-4, "["+etat+"]", a.gras(a.couleurEtatMission(m.Etat), p.fond))
 	e.texte(x+1, y+2, l-2, strings.Join(strings.Fields(m.Phrase), " "), a.st(p.muet, p.fond))
 	yc := y + 3
+	if c := carteTUI(m); c.Serveurs.Brief != "" || slices.ContainsFunc(c.Envs, func(v EnvCarte) bool { return len(v.Serveurs) > 0 }) { // M272: the Servers lane's mode, as the web's badge
+		mode, coul := a.t("Settings default"), p.muet
+		if c.Permissions != "" {
+			mode = a.t(firstNonEmpty(permissionsTUI[c.Permissions], c.Permissions))
+		}
+		if c.Permissions == "ignorer" {
+			coul = p.erreur
+		}
+		e.texte(x+1, yc, l-2, t("Permissions: {0}", mode), a.st(coul, p.fond))
+		yc += 2
+	}
 	if echecLancement(m) { // M267: the reason, as the web says it (Retry and Edit are on the web page)
 		ev := raisonEchec(m)
 		raison := ev.Detail

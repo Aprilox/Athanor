@@ -1601,6 +1601,15 @@ html.scene-pause .verrou * { animation-play-state: paused !important; }
 .ia-autorisation.danger { padding: 6px 8px; border: 1px solid var(--erreur); border-radius: 6px; background: color-mix(in srgb, var(--erreur) 10%, transparent); }
 .ia-autorisation.danger #ia-autorisation-aide { color: var(--ink); font-weight: 600; }
 .ia-autorisation.danger .ic { color: var(--erreur); }
+/* M272: the same selector on a mission's Servers lane and in Settings › Permissions, its sentence always shown */
+.mis-permissions, .perm-usage { margin-top: 8px; }
+.mis-permissions #mis-permissions-aide, .perm-usage .perm-quoi, .perm-usage [id$="-aide"] { flex: 1 1 100%; color: var(--muted); }
+.mis-permissions.danger #mis-permissions-aide, .perm-usage.danger [id$="-aide"] { color: var(--ink); font-weight: 600; }
+.perm-usage label { flex: 1 1 auto; }
+.perm-menu { margin-top: 8px; }
+.mis-perm { font-weight: 500; vertical-align: middle; }
+.mis-secrets { display: grid; gap: 4px; margin: 8px 0 0; border: 1px solid var(--erreur); border-radius: 6px; padding: 6px 8px; }
+.mis-secret { width: 100%; box-sizing: border-box; font-family: var(--mono, monospace); -webkit-text-security: disc; resize: vertical; }
 .ia-aide summary { cursor: pointer; color: var(--muted); width: fit-content; }
 .ia-aide[open] { display: flex; flex-direction: column; gap: 4px; }
 .ia-fil-zone { position: relative; flex: 1; min-height: 32px; display: flex; flex-direction: column; }

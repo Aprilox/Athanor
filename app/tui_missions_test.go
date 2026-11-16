@@ -25,7 +25,7 @@ func TestTUIMissions(t *testing.T) {
 	_ = os.RemoveAll(dossierMissions())
 	t.Cleanup(func() { _ = os.RemoveAll(dossierMissions()) })
 	maintenant := time.Now().UTC()
-	carte, _ := json.Marshal(CarteMission{Titre: "Site de Martin", Projet: ProjetCarte{Nom: "martin"},
+	carte, _ := json.Marshal(CarteMission{Titre: "Site de Martin", Projet: ProjetCarte{Nom: "martin"}, Permissions: "auto", Serveurs: BriefCarte{Brief: "Préparer nginx"},
 		Envs: []EnvCarte{{Nom: "dev", URL: "https://dev.martin.test"}, {Nom: "prod", URL: "https://martin.test"}}})
 	m := Mission{ID: "tuimis01", Phrase: "Mettre le site de Martin en ligne", Etat: "lancee", Politique: "prod", Carte: carte,
 		Voies: []VoieMission{{Module: "dev", Ref: "martin", Etat: "lancee"}}, Relais: &RelaisMission{Etape: "dev_verifie"}, Cree: maintenant.Format(formatCree)}
@@ -81,7 +81,7 @@ func TestTUIMissions(t *testing.T) {
 	if strings.Contains(d, a.t("Policy: {0}", a.t("Ask me for production"))) { // M258: no policy to choose
 		t.Fatalf("policy shown: %s", d)
 	}
-	contient("detail", d, a.t("Lanes"), a.t(moduleDev{}.Nom())+"  martin", a.t("Not found"),
+	contient("detail", d, a.t("Permissions: {0}", a.t("Auto")), a.t("Lanes"), a.t(moduleDev{}.Nom())+"  martin", a.t("Not found"),
 		"✓ "+a.t("Milestone delivered")+"  ✓ "+a.t("Going online")+"  ✓ "+a.t("Verification")+"  ● "+a.t("Your accord")+"  ○ "+a.t("Production"),
 		a.t("Online:")+" https://dev.martin.test", a.t("Milestone delivered: {0}", "A12"), a.t("Milestone delivered: {0}", "A03"), "p "+a.t("Pause"), "a "+a.t("Stop"))
 	if strings.Contains(d, "A02") || strings.Contains(d, "https://martin.test") {

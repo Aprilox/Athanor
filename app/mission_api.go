@@ -283,7 +283,7 @@ func (s *Serveur) apiModifierMission(w http.ResponseWriter, r *http.Request) {
 		Consigne      string        `json:"consigne"`
 		BriefDev      *string       `json:"brief_dev"`      // M270: the briefs change in every changeable state, after a stop too
 		BriefServeurs *string       `json:"brief_serveurs"` // (the consigne rewrites the card through the orchestrator, before a launch only)
-		Permissions   string        `json:"permissions"`    // M271: the Servers lane's mode; ignorer needs confirmer and the password
+		Permissions   *string       `json:"permissions"`    // M271: the Servers lane's mode ("" = Settings'); ignorer needs confirmer and the password
 		Confirmer     bool          `json:"confirmer"`
 		MotDePasse    string        `json:"mot_de_passe"`
 	}
@@ -295,8 +295,8 @@ func (s *Serveur) apiModifierMission(w http.ResponseWriter, r *http.Request) {
 		s.erreur(w, http.StatusForbidden, "The environments and the project of a card are changed on the PC")
 		return
 	}
-	if c.Permissions != "" {
-		if code, err := s.choixIgnorer(r, c.Permissions, c.Confirmer, c.MotDePasse); err != nil {
+	if c.Permissions != nil && *c.Permissions != "" {
+		if code, err := s.choixIgnorer(r, *c.Permissions, c.Confirmer, c.MotDePasse); err != nil {
 			s.erreur(w, code, err.Error())
 			return
 		}
@@ -361,8 +361,8 @@ func (s *Serveur) apiModifierMission(w http.ResponseWriter, r *http.Request) {
 		if c.BriefServeurs != nil {
 			carte.Serveurs.Brief = *c.BriefServeurs
 		}
-		if c.Permissions != "" {
-			carte.Permissions = c.Permissions
+		if c.Permissions != nil {
+			carte.Permissions = *c.Permissions
 		}
 		return nil
 	})

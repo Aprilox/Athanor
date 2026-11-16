@@ -90,6 +90,16 @@ func TestMissionPermissions(t *testing.T) {
 	if code, corps := appel(chemin, `{"permissions":"ignorer","confirmer":true,"mot_de_passe":"mdp-test"}`); code != http.StatusOK || modeMission(id) != "ignorer" {
 		t.Fatalf("ignorer with the password: %d %s, mode %q", code, corps, modeMission(id))
 	}
+	// M272: "" gives the mission back to Settings › Permissions (the card's "Settings default" option); absent changes nothing
+	if code, corps := appel(chemin, `{"permissions":""}`); code != http.StatusOK || modeMission(id) != "auto" {
+		t.Errorf("back to the settings: %d %s, mode %q", code, corps, modeMission(id))
+	}
+	if code, corps := appel(chemin, `{"permissions":"ignorer","confirmer":true,"mot_de_passe":"mdp-test"}`); code != http.StatusOK || modeMission(id) != "ignorer" {
+		t.Fatalf("ignorer again: %d %s, mode %q", code, corps, modeMission(id))
+	}
+	if code, corps := appel(chemin, `{}`); code != http.StatusOK || modeMission(id) != "ignorer" {
+		t.Errorf("an absent mode changed it: %d %s, mode %q", code, corps, modeMission(id))
+	}
 	// Settings › Permissions: a known use and mode, ignorer guarded as for a mission; the assistant's default is a server's without a mode
 	for _, k := range []struct {
 		corps string

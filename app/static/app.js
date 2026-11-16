@@ -2257,7 +2257,7 @@ function carteMission(d) {
     pj ? "" : `<dt>${t("Folder")}</dt><dd>${c.touche.dossier ? h(c.touche.dossier) : t("A new folder for the project")}</dd>`].join("");
   return `<div class="mis-voies${srv ? "" : " mis-une"}">
       <div class="mis-voie"><h3>${c.dev.brief ? t((etat.hubModules || []).find((m) => m.id === "dev")?.nom || "dev") : t("Project")}</h3><p class="m0"><b>${h(c.projet.nom)}</b> <span class="etiquette">${t(c.projet.nouveau ? "New project" : "Existing project")}</span></p>${c.dev.brief ? `<p class="mis-brief">${h(c.dev.brief)}</p>` : ""}${c.dev.modes ? `<p class="m0">${[["parallele", "Parallel mode"], ["eco", "Eco mode"], ["rapide", "Fast mode"]].filter(([k]) => c.dev.modes[k]).map(([, n]) => `<span class="etiquette">${t(n)}</span>`).join(" ")}</p>` : ""}</div>
-      ${srv ? `<div class="mis-voie"><h3>${t("Servers")}</h3>${c.avertissement_serveurs ? avert : ""}<p class="mis-brief">${h(t(c.serveurs.brief || "Nothing to prepare on the servers."))}</p></div>` : ""}
+      ${srv ? `<div class="mis-voie"><h3>${t("Servers")} ${badgePermission(modeEffectif(c))}</h3>${c.avertissement_serveurs ? avert : ""}<p class="mis-brief">${h(t(c.serveurs.brief || "Nothing to prepare on the servers."))}</p>${permissionsMission(m, modif || apres)}</div>` : ""}
     </div>
     ${pj}${ressources}
     <div class="mis-grille">
@@ -2273,6 +2273,31 @@ function carteMission(d) {
       <div class="ligne"><button type="button" class="btn btn-primaire" data-mis="appliquer">${t("Apply")}</button><button type="button" class="btn" data-mis="fermer">${t("Cancel")}</button></div>`
     : actif ? `<div class="ligne"><button type="button" class="btn" data-mis="modifier">${t("Edit")}</button><button type="button" class="btn btn-primaire" data-mis="lancer">${t("Launch")}</button><span class="espace"></span><button type="button" class="btn" data-mis="annuler">${t("Cancel the mission")}</button></div>`
     : modif && (c.dev.brief || c.serveurs.brief) ? `<div class="ligne"><button type="button" class="btn" data-mis="modifier">${t("Edit the brief")}</button></div>` : ""}`;
+}
+// M272: the Servers lane's permission mode: the card's, else Settings › Permissions (missions), else Manual
+const modeEffectif = (c) => (c && c.permissions) || (etat.permDefaut || {}).missions || "manuel";
+const badgePermission = (mode) => `<span class="badge mis-perm${mode === "ignorer" ? " badge-danger" : ""}" title="${h(t("Permissions"))}">${mode === "ignorer" ? ic("alerte") + " " : ""}${h(titrePermission(mode))}</span>`;
+function lirePermDefaut() { // read once; Settings › Permissions sets it back to null
+  if (etat.permDefaut) return;
+  etat.permDefaut = {}; api("reglages/permissions").then((r) => { etat.permDefaut = r.permissions || {}; majZoneMission(); }).catch(() => {});
+}
+// the entries still to fill of a mission in Ignore permissions not launched yet: typed once on its card (secrets[] of /lancer)
+const entreesARemplir = (m) => modeEffectif(m.carte) === "ignorer" && m.etat === "proposee" ? [...new Set((m.carte.acces || []).filter((a) => a.a_remplir && !a.decoche).map((a) => a.entree))] : [];
+function permissionsMission(m, modif) {
+  lirePermDefaut();
+  const c = m.carte, eff = modeEffectif(c), vals = (etat.missionSecrets || {})[m.id] || {}, l = entreesARemplir(m);
+  return `<div class="ia-autorisation mis-permissions${eff === "ignorer" ? " danger" : ""}"><label for="mis-permissions" class="petit">${t("Permissions")}</label>
+    ${selecteurPermissions("mis-permissions", c.permissions || "", { defaut: t("Settings default ({0})", [titrePermission((etat.permDefaut || {}).missions || "manuel")]), desactive: !modif, distant: (etat.vue || {}).distant })}
+    <span class="petit" id="mis-permissions-aide">${aidePermission(eff, PERMISSIONS_MISSION())}</span></div>
+    ${l.length ? `<fieldset class="mis-secrets"><legend>${t("Give now what the mission needs")}</legend>
+      <p class="muet petit m0">${t("Typed once, kept in the vault, never logged: the mission will not ask for it again.")}</p>
+      ${l.map((e, i) => `<label for="mis-secret-${i}" class="petit"><b>${h(e)}</b></label><textarea id="mis-secret-${i}" class="mis-secret" data-mis-secret="${h(e)}" rows="1" autocomplete="off" spellcheck="false" placeholder="${h(t("Password, or private key"))}">${h(vals[e] || "")}</textarea>`).join("")}</fieldset>` : ""}`;
+}
+async function changerPermissionsMission(sel) {
+  const m = (etat.missionVue || {}).mission; if (!m) return;
+  const mode = sel.value, avant = m.carte.permissions || "";
+  const p = mode !== "ignorer" ? {} : await confirmerIgnorer(t("The mission will act on its servers without asking you, dangerous commands and production deployments included, and will not stop to ask for a password. Choose it only for servers you can rebuild."));
+  if (!p || !(await actionMission("modifier", { permissions: mode, confirmer: mode === "ignorer", ...p }))) { sel.value = avant; sel.focus(); }
 }
 // M254: a new project's settings, folded: its folder, its working mode (the Manage block), its GitHub repository;
 // each change is saved on the card (POST /projet), the folder checked at once (its error under the field)
@@ -2324,6 +2349,7 @@ const raisonEchec = (m) => [...(m.historique || [])].reverse().find((x) => x.eta
 document.addEventListener("change", (ev) => {
   const i = ev.target;
   if (i.id === "mis-dossier") enregistrerProjetMission({ dossier: i.value.trim() });
+  else if (i.id === "mis-permissions") changerPermissionsMission(i);
   // M264: the Manage › GitHub block (choixGitHub "mis"); a field typed in selects its option, an invalid repository said once typed
   else if (i.name === "mis-gh") enregistrerProjetMission({ github: i.value === "existant" ? "lier" : i.value, depot: "" });
   else if (i.id === "mis-gh-nom") enregistrerProjetMission({ github: "creer", depot: i.value.trim() ? nomDepot(i.value) : "" });
@@ -2420,7 +2446,9 @@ document.addEventListener("click", async (ev) => {
       toast(t("Write the repository to link as OWNER/NAME, then launch."), "erreur"); return;
     }
     const p =await preuveMdp(t("Launching the mission gives its keys to the project: retype Athanor's password."), { ok: t("Launch") });
-    if (p) await actionMission("lancer", { ...p, empreinte: m.empreinte }); // R3: the card read, never a newer one
+    const vals = (etat.missionSecrets || {})[m.id] || {}; // M272: typed once on the card, into the vault (never kept in the page after)
+    const secrets = entreesARemplir(m).filter((e) => (vals[e] || "").trim()).map((e) => /PRIVATE KEY-----/.test(vals[e]) ? { entree: e, type: "ssh", valeur: vals[e].trim() + "\n" } : { entree: e, type: "mot_de_passe", valeur: vals[e].replace(/\r?\n$/, "") });
+    if (p && await actionMission("lancer", { ...p, empreinte: m.empreinte, ...(secrets.length ? { secrets } : {}) })) delete (etat.missionSecrets || {})[m.id]; // R3: the card read, never a newer one
   }
   else if (a === "annuler") { if (await choisir(t("Cancel this mission? Nothing has been built or deployed yet."), [{ id: "non", texte: t("Keep it") }, { id: "oui", texte: t("Cancel the mission"), danger: true }]) === "oui") await actionMission("annuler"); }
   else if (a === "oublier") { etat.missionVue = null; majZoneMission(); }
@@ -2430,6 +2458,10 @@ document.addEventListener("click", (ev) => {
   const c = $("#mis-carte-detail"); if (!c) return;
   c.scrollIntoView({ block: "start", behavior: "smooth" });
   ($("#mis-res-ajouter") || $("#mis-projet summary") || c).focus({ preventScroll: true });
+});
+document.addEventListener("input", (ev) => {
+  const s = ev.target.dataset.misSecret, m = (etat.missionVue || {}).mission;
+  if (s !== undefined && m) ((etat.missionSecrets ||= {})[m.id] ||= {})[s] = ev.target.value; // memory only, never stored
 });
 document.addEventListener("input", (ev) => { if (ev.target.id === "mis-consigne" && etat.missionEdition) etat.missionEdition.consigne = ev.target.value; else if (ev.target.id === "mis-brief-dev" && etat.missionEdition) etat.missionEdition.dev = ev.target.value; else if (ev.target.id === "mis-brief-srv" && etat.missionEdition) etat.missionEdition.srv = ev.target.value; else if (ev.target.id === "mis-q-libre") etat.missionReponse = ev.target.value; });
 document.addEventListener("submit", async (ev) => {
@@ -5091,6 +5123,30 @@ function afficherNonAppaire() {
   document.body.innerHTML = `<div class="non-appaire"><div class="cadenas" aria-hidden="true"></div><h1>Athanor</h1><p>${h(t("This device is no longer paired with Athanor. On your computer, open Athanor › Remote and scan the QR code again."))}</p></div>`;
 }
 
+// M272: Settings › Permissions, the default mode of each use (usagesPermissions in Go), the same selector as the assistant's
+const USAGES_PERMISSIONS = () => [["assistant", t("SSH and SFTP assistant"), t("The assistant beside a server's terminal and files, on every server without a mode of its own."), AUTORISATIONS_IA()],
+  ["missions", t("Missions"), t("The Servers lane of every mission without a mode of its own."), PERMISSIONS_MISSION()]];
+const menuPermissions = (p) => USAGES_PERMISSIONS().map(([u, titre, quoi, phrases]) => {
+  const mode = p[u] || "manuel";
+  return `<div class="ia-autorisation perm-usage${mode === "ignorer" ? " danger" : ""}"><label for="perm-${u}"><b>${h(titre)}</b></label>${selecteurPermissions("perm-" + u, mode, { distant: (etat.vue || {}).distant })}
+    <span class="muet petit perm-quoi">${h(quoi)}</span><span class="petit" id="perm-${u}-aide">${aidePermission(mode, phrases)}</span></div>`;
+}).join("");
+async function ouvrirPermissions(b) {
+  const z = $("#perm-menu"), ouvrir = b.getAttribute("aria-expanded") !== "true";
+  if (ouvrir) { const r = await action(api("reglages/permissions"), ""); if (!r) return; etat.permReglages = r.permissions || {}; z.innerHTML = menuPermissions(etat.permReglages); }
+  b.setAttribute("aria-expanded", String(ouvrir)); z.hidden = !ouvrir;
+  if (ouvrir) $("#perm-assistant").focus();
+}
+async function changerPermissionsUsage(sel) {
+  const usage = sel.id.slice(5), mode = sel.value, avant = etat.permReglages[usage] || "manuel";
+  const p = mode !== "ignorer" ? {} : await confirmerIgnorer(t(usage === "missions"
+    ? "Every mission without a mode of its own will act on its servers without asking you, dangerous commands and production deployments included. Choose it only for servers you can rebuild."
+    : "The assistant will run every command without asking you on every server without a mode of its own, deleting, formatting, stopping or firewall changes included. Choose it only for servers you can rebuild."));
+  if (!p || !(await action(api("reglages/permissions", "POST", { usage, mode, confirmer: mode === "ignorer", ...p }), ""))) { sel.value = avant; return sel.focus(); }
+  etat.permReglages[usage] = mode; etat.permDefaut = null; // the missions' cards read the new default
+  const z = $("#perm-menu"); garderFocus(z, () => { z.innerHTML = menuPermissions(etat.permReglages); });
+  toast(t("Default mode saved."), "ok");
+}
 async function rendreOptions() {
   setTimeout(majConnexionGH, 0); // the GitHub block fills in once the page is there (WSL may be slow)
   const [o, cl, inst] = await Promise.all([api("options"), api("clients").catch(() => null), api("instances").catch(() => null)]);
@@ -5126,6 +5182,10 @@ async function rendreOptions() {
     <div class="colonne">
       <div class="bloc" id="bloc-connexion-gh"><h2>GitHub</h2>${rendreConnexionGH(etat.ghConnexion)}</div>
       <div class="bloc" id="bloc-version"><h2>${t("Version")}</h2>${rendreBlocMaj(o)}</div>
+      <div class="bloc" id="bloc-permissions"><h2>${t("Permissions")}</h2>
+        <p class="intro petit">${t("What Athanor's agents may do on your servers without asking you, for each use. A server or a mission can still choose its own mode.")}</p>
+        <button type="button" class="btn" id="op-permissions" aria-expanded="false" aria-controls="perm-menu">${t("Permissions")}</button>
+        <div class="perm-menu" id="perm-menu" hidden></div></div>
     </div>
   </div>
   <details class="bloc plus-options" id="options-plus"${utilise ? " open" : ""}><summary>${t("More options")}</summary>
@@ -7569,10 +7629,30 @@ const AUTORISATIONS_IA = () => [["manuel", t("Manual"), t("Asks you before every
   ["auto", t("Auto"), t("Runs reads and changes at once; asks you before a dangerous command (deleting, formatting, stopping, permissions, firewall…) or a command it does not know.")],
   ["modifications", t("Accept changes"), t("Writes its whole plan in the thread first, then applies it without waiting for you; asks you only when the plan holds a dangerous command or one it does not know.")],
   ["ignorer", t("Ignore permissions"), t("Does everything without asking you, dangerous commands included.")]];
+// M272: the same four modes for a mission's Servers lane (modeMission in Go: Manual keeps the plan rules)
+const PERMISSIONS_MISSION = () => [["manuel", t("Manual"), t("Reads the servers freely; asks your accord for each plan of changes.")],
+  ["auto", t("Auto"), t("Runs reads and changes on the servers at once; asks you before a dangerous command or a command it does not know.")],
+  ["modifications", t("Accept changes"), t("Applies its plans of changes without waiting for you; asks you only when a plan holds a dangerous command or one it does not know.")],
+  ["ignorer", t("Ignore permissions"), t("Does everything without asking you, dangerous commands and production deployments included, and never stops for a password.")]];
+// M272: the one permission selector (the terminal's assistant, a mission's Servers lane, Settings › Permissions);
+// defaut: the "" option (Settings' mode); distant: Ignore permissions is chosen in Athanor's window only
+function selecteurPermissions(id, mode, { defaut, desactive, distant } = {}) {
+  const l = (defaut ? [["", defaut]] : []).concat(AUTORISATIONS_IA());
+  return `<select id="${id}" aria-describedby="${id}-aide"${desactive ? " disabled" : ""}>${l.map(([v, titre]) => `<option value="${v}"${mode === v ? " selected" : ""}${distant && v === "ignorer" && mode !== v ? " disabled" : ""}>${h(titre)}</option>`).join("")}</select>`;
+}
+function aidePermission(mode, phrases) {
+  const [, , phrase] = phrases.find(([v]) => v === mode) || phrases[0];
+  return mode === "ignorer" ? `${ic("alerte")} ${h(phrase)}` : h(phrase);
+}
+const titrePermission = (mode) => (AUTORISATIONS_IA().find(([v]) => v === mode) || AUTORISATIONS_IA()[0])[1];
+// M272: Ignore permissions is confirmed, with Athanor's password when it has one (choixIgnorer in Go): {} or
+// {mot_de_passe} for the request, false when cancelled
+async function confirmerIgnorer(texte) {
+  return preuveMdp(texte + " " + t("Retype Athanor's password to confirm."), { titre: t("Ignore permissions?"), ok: t("Ignore permissions"), danger: true }, texte);
+}
 function aideAutorisationIA() {
   if (!ia.autorisation) return h(t("Loading…")); // M244k2: never the previous server's mode
-  const [, , phrase] = AUTORISATIONS_IA().find(([v]) => v === ia.autorisation) || AUTORISATIONS_IA()[0];
-  return ia.autorisation === "ignorer" ? `${ic("alerte")} ${h(phrase)}` : h(phrase);
+  return aidePermission(ia.autorisation, AUTORISATIONS_IA());
 }
 function majAutorisationIA() {
   const sel = $("#ia-autorisation"), z = $("#ia-autorisation-zone"); if (!sel || !z) return;
@@ -7596,7 +7676,7 @@ function panneauIA(distant) {
     <fieldset class="ia-modes"><legend class="cache-visuel">${t("How the assistant works")}</legend>
       ${MODES.map(([v, titre]) => `<label class="ia-mode${ia.mode === v ? " actif" : ""}"><input type="radio" name="ia-mode" value="${v}"${ia.mode === v ? " checked" : ""}><b>${t(titre)}</b></label>`).join("")}</fieldset>
     <div class="ia-autorisation${ia.autorisation === "ignorer" ? " danger" : ""}" id="ia-autorisation-zone"><label for="ia-autorisation" class="petit">${t("Permissions")}</label>
-      <select id="ia-autorisation" aria-describedby="ia-autorisation-aide"${distant || !ia.autorisation ? " disabled" : ""}>${AUTORISATIONS_IA().map(([v, titre]) => `<option value="${v}"${ia.autorisation === v ? " selected" : ""}>${h(titre)}</option>`).join("")}</select>
+      ${selecteurPermissions("ia-autorisation", ia.autorisation, { desactive: distant || !ia.autorisation })}
       <span class="petit" id="ia-autorisation-aide">${aideAutorisationIA()}</span></div>
     <details class="ia-aide"><summary class="petit">${t("How does it work?")}</summary>
       ${MODES.map(([, titre, phrase]) => `<p class="petit m0"><b>${t(titre)}</b> — ${t(phrase)}</p>`).join("")}
@@ -8116,6 +8196,7 @@ $("#page").addEventListener("click", async (ev) => {
   if (page === "reglages") {
     if (b.dataset.gerer) { if (b.dataset.archive) { location.hash = "#archives"; return; } etat.projet = b.dataset.gerer; etat.evenements = []; etat.dernierJournal = 0; await rafraichir(); location.hash = "#projet"; return; }
     if (b.dataset.retirerProjet) { if (await confirmer(t("Remove “{0}” from the list? Its folder stays intact.", [b.dataset.retirerProjet]), { ok: t("Remove from list"), danger: true })) { await action(api("projets/" + encodeURIComponent(b.dataset.retirerProjet), "DELETE")); if (etat.projet === b.dataset.retirerProjet) etat.projet = ""; await rafraichir(); rendrePage(); } return; }
+    if (b.id === "op-permissions") return ouvrirPermissions(b);
     if (b.id === "op-guide") { // the wizard, then every tutorial again at the next visit of its part (false: reset, never a reminder)
       const tours = Object.fromEntries((etat.hubModules || []).filter((m) => (m.tutoriel || []).length).map((m) => [m.id, false]));
       await action(api("preferences", "POST", { bienvenue_vue: false, tours })); etat.toursVus = new Set(); if (etat.vue) etat.vue.tours = { ...etat.vue.tours, ...tours };
@@ -8161,6 +8242,7 @@ $("#page").addEventListener("change", (ev) => {
   if (i.id === "rg-secrets") { etat.envSecrets = i.checked; rendrePage(); }
   if (i.type === "checkbox" && i.dataset.cle) i.nextElementSibling.textContent = i.checked ? t("enabled") : t("disabled");
   if (etat.page === "reglages" && i.hasAttribute("data-option")) enregistrerOptions();
+  if (etat.page === "reglages" && /^perm-(assistant|missions)$/.test(i.id)) changerPermissionsUsage(i);
   if (i.id === "op-verrou-auto") verrouAuto(i);
   if (i.id === "op-sans-rappels") rappelsNatif(i.checked).then((ok) => { if (!ok) i.checked = !i.checked; });
   if (i.hasAttribute("data-gh-coauteur")) action(api("github", "POST", Object.assign({ action: "identite" }, lireAuteur()))).then((r) => { if (!r) i.checked = !i.checked; });
