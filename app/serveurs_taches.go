@@ -402,8 +402,8 @@ func (s *Serveur) executerTache(ctx context.Context, e *tacheEnCours, dossier st
 	case err != nil:
 		fin, detail = "echec", s.masquerSecrets(err.Error())
 	}
+	_ = os.RemoveAll(dossier) // before the end is announced: a finished task leaves no token file behind
 	s.finirTache(e, fin, detail)
-	_ = os.RemoveAll(dossier)
 }
 
 // surveillerTache: a revoked token (emergency stop, the owner's revocation, expiry) stops the task; during the
