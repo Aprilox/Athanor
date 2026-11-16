@@ -243,7 +243,7 @@ func (s *Serveur) reprendreMission(id, qui string) (Mission, error) {
 		if avant == "arretee" && m.Relais != nil && m.Relais.Etape == "accord_prod" { // its accord was refused by the stop
 			m.Relais.Etape, m.Relais.Accord = "dev_verifie", ""
 		}
-		m.Etat = "lancee"
+		m.Etat, m.Suppression = "lancee", nil // resumed: a deletion asked after the milestone is withdrawn
 		m.Historique = append(m.Historique, evenementMission("lancee", "resumed: "+qui))
 		ajouterJournal(m, []EntreeJournal{s.entreeJournal("reprise:"+time.Now().UTC().Format(formatCree), time.Now(), "info", "Mission resumed: {0}", qui)})
 		return nil

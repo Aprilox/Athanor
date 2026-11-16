@@ -122,7 +122,11 @@ func TestDistanceToutesRoutes(t *testing.T) {
 		{"POST", "/api/missions/x/annuler", false},
 		{"POST", "/api/missions/x/lancer", false},
 		{"GET", "/api/missions/x/annuler", true},
-		{"POST", "/api/missions/x/supprimer", true}, // invented: refused by default
+		{"POST", "/api/missions/x/supprimer", false}, // deleted as cancelled (note 10h04), the preview read
+		{"GET", "/api/missions/x/suppression", false},
+		{"POST", "/api/missions/vider", false},
+		{"GET", "/api/missions/vider", true},       // only the emptying is allowed by that exact path
+		{"POST", "/api/missions/x/detruire", true}, // invented: refused by default
 		{"POST", "/api/missions/x/y/annuler", true},
 		{"GET", "/api/fournisseurs", false}, // the providers, zones and rights, read from a device (M114)
 		{"POST", "/api/fournisseurs", true}, // added, tested, removed on this computer only

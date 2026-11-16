@@ -313,6 +313,7 @@ var autorisesDistance = map[string]bool{"GET /api/hub": true, "GET /api/coffre":
 	"GET /api/missions":             true, "GET /api/missions/{id}": true, // the missions (created on the PC only)
 	"POST /api/missions/{id}/modifier": true, "POST /api/missions/{id}/ressources": true, "POST /api/missions/{id}/repondre": true, "POST /api/missions/{id}/annuler": true, "POST /api/missions/{id}/lancer": true, "POST /api/missions/{id}/redemander": true, // as the approvals: an unlocked device
 	"POST /api/missions/{id}/pause": true, "POST /api/missions/{id}/reprendre": true, "POST /api/missions/{id}/arreter": true, "POST /api/missions/{id}/politique": true, // P7
+	"GET /api/missions/{id}/suppression": true, "POST /api/missions/{id}/supprimer": true, "POST /api/missions/vider": true, // deleted as cancelled: an unlocked device
 	"GET /api/mentions":     true, // the @ list of the home bar: names and types, never a value
 	"GET /api/fournisseurs": true} // the providers, zones and rights (never a token); added, tested, removed on the PC
 
@@ -321,7 +322,7 @@ func refuseHubDistance(r *http.Request) bool {
 	for _, p := range prefixesHub {
 		if strings.HasPrefix(r.URL.Path, p) {
 			chemin := r.URL.Path
-			if id, ok := strings.CutPrefix(chemin, "/api/missions/"); ok && id != "" && !strings.Contains(id, "/") {
+			if id, ok := strings.CutPrefix(chemin, "/api/missions/"); ok && id != "" && id != "vider" && !strings.Contains(id, "/") {
 				chemin = "/api/missions/{id}"
 			} else if id, action, ok := strings.Cut(strings.TrimPrefix(chemin, "/api/missions/"), "/"); ok && strings.HasPrefix(chemin, "/api/missions/") && id != "" && !strings.Contains(action, "/") {
 				chemin = "/api/missions/{id}/" + action

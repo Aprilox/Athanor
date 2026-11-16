@@ -100,6 +100,9 @@ func (s *Serveur) observerMission(id string) bool {
 			m = x
 		}
 	}
+	if err == nil && s.suppressionApresJalon(m) { // deleted once paused, after a restart too
+		return false
+	}
 	return err == nil && missionSuivie(m.Etat)
 }
 
