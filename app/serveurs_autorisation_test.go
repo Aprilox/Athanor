@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 )
@@ -45,7 +46,7 @@ func TestAutorisationModes(t *testing.T) {
 	}
 	mux := http.NewServeMux()
 	s.routes(mux)
-	jeton, err := s.jetons.CreerSession(SessionHub{Projet: prefixeTache + "m244f", Mission: "m244f", Agent: agentServeurs, Outils: outilsServeursMCP, Serveurs: []string{srv.ID}})
+	jeton, err := s.jetons.CreerSession(SessionHub{Projet: prefixeTache + "m244f", Mission: "m244fm", Agent: agentServeurs, Outils: outilsServeursMCP, Serveurs: []string{srv.ID}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -181,6 +182,36 @@ func TestAutorisationModes(t *testing.T) {
 	}
 	if !commande("systemctl restart caddy") { // the rule still holds outside the panel's Manual mode
 		t.Error("the rule no longer lets a sheet's task change the server")
+	}
+	// M271: a mission's Servers task follows the mission's mode: its card's, else Settings › Permissions (missions); Manual: the plan rules
+	_ = os.RemoveAll(dossierMissions())
+	t.Cleanup(func() { _ = os.RemoveAll(dossierMissions()) })
+	carte := func(mode string) {
+		t.Helper()
+		b, _ := json.Marshal(CarteMission{Permissions: mode})
+		if err := enregistrerMission(Mission{ID: "m244fm", Etat: "lancee", Politique: "prod", Carte: b}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	carte("ignorer")
+	if !commande("rm -rf /srv/m271") || plan("rm -rf /srv/m271b") != "acceptee" {
+		t.Error("a mission in ignorer: a dangerous command or plan waited for the owner")
+	}
+	carte("auto")
+	if !commande("uptime") || commande("rm -rf /srv/m271") || plan("rm -rf /srv/m271") != "attente" {
+		t.Error("a mission in auto: wrong decisions")
+	}
+	carte("")
+	s.config.PermissionsUsage = map[string]string{"missions": "ignorer"}
+	if err := ecrireConfig(s.config); err != nil {
+		t.Fatal(err)
+	}
+	if !commande("rm -rf /srv/m271c") {
+		t.Error("a mission without a mode does not take Settings › Permissions")
+	}
+	carte("manuel")
+	if !commande("uptime") || commande("rm -rf /srv/m271") {
+		t.Error("a mission in manuel does not keep the plan rules")
 	}
 	// the audit names the mode, never more than the class
 	b := journalAuditTexte(t)

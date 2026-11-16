@@ -214,4 +214,21 @@ func TestMissionRelaisProd(t *testing.T) {
 	if sans.Etat != "terminee" || sans.Relais.Etape != "termine" || sans.Relais.Accord != "" || len(lances) != 2 {
 		t.Fatalf("no prod: %s %+v %v", sans.Etat, sans.Relais, lances)
 	}
+
+	// 8. M271: the mission's Ignore permissions mode: the prod accord accepted at once (no ping, no password), deployed, audited
+	ig := mission("relaisignorer", "prod", "dev", "prod")
+	_, _ = modifierMission(ig.ID, func(m *Mission) error {
+		var c CarteMission
+		_ = json.Unmarshal(m.Carte, &c)
+		c.Permissions = "ignorer"
+		m.Carte, _ = json.Marshal(c)
+		return nil
+	})
+	ig = observer(ig.ID)
+	if y, _ := s.approbations.Lire(ig.Relais.Accord); ig.Relais.Etape != "prod_deploye" || len(lances) != 3 || y.Etat != "acceptee" || y.Utilisee == "" {
+		t.Fatalf("ignorer: %+v %v %+v", ig.Relais, lances, y)
+	}
+	if b := journalAuditTexte(t); !strings.Contains(b, "déploiement accepté sans confirmation") {
+		t.Error("ignorer: the deployment without confirmation is not audited")
+	}
 }

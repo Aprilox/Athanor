@@ -150,6 +150,7 @@ func outilProposerMission(s *Serveur, x SessionHub, args json.RawMessage) (strin
 		}
 		var avant CarteMission // C83: the boxes the owner unticked stay unticked, by (entry, pour)
 		_ = json.Unmarshal(m.Carte, &avant)
+		c.Permissions = avant.Permissions                                                                                 // M271: the owner's only
 		if a := avant.Projet; a.Proprietaire && a.Nouveau && c.Projet.Nouveau && strings.EqualFold(a.Nom, c.Projet.Nom) { // M254: kept
 			c.Projet.Dossier, c.Projet.GitHub, c.Projet.Depot, c.Projet.Proprietaire, c.Dev.Modes = a.Dossier, a.GitHub, a.Depot, true, avant.Dev.Modes
 		}

@@ -13,7 +13,9 @@ package main
 // keep the plan rules of serveurs_plans.go. "ignorer" is chosen only with a password and the window unlocked.
 
 import (
+	"cmp"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"slices"
 )
@@ -61,8 +63,12 @@ func modeAutorisation(x SessionHub, id string) string {
 	}
 	t.mu.Lock()
 	panneau := t.t.Panneau && t.hache == x.Hache // the critic's or the verifier's session runs nothing
+	propre := t.hache == x.Hache
 	t.mu.Unlock()
 	if !panneau {
+		if propre && x.Mission != "" { // M271: a mission's Servers task follows the mission's mode
+			return modeMission(x.Mission)
+		}
 		return ""
 	}
 	srv, _ := serveurProd(id)
@@ -74,7 +80,40 @@ func modeServeur(srv ServeurInventaire) string {
 	if slices.Contains(modesAutorisation, srv.Autorisation) {
 		return srv.Autorisation
 	}
+	if d := lireConfig().PermissionsUsage["assistant"]; slices.Contains(modesAutorisation, d) { // M271: Settings › Permissions
+		return d
+	}
 	return "manuel"
+}
+
+// modeMission (M271): the mode of mission id's Servers lane, its card's or else Settings › Permissions (missions);
+// "" for Manual or none: the plan rules of serveurs_plans.go (reads run, each change in a plan the owner accepts).
+func modeMission(id string) string {
+	m, err := lireMission(id)
+	var c CarteMission
+	if err != nil || json.Unmarshal(m.Carte, &c) != nil {
+		return ""
+	}
+	if mode := cmp.Or(c.Permissions, lireConfig().PermissionsUsage["missions"]); mode != "manuel" && slices.Contains(modesAutorisation, mode) {
+		return mode
+	}
+	return ""
+}
+
+// choixIgnorer (M271): mode is a known mode; "ignorer" only from Athanor's window, confirmed, with the password
+// (an agent of this PC could otherwise choose it in the owner's place).
+func (s *Serveur) choixIgnorer(r *http.Request, mode string, confirmer bool, mdp string) (int, error) {
+	switch {
+	case !slices.Contains(modesAutorisation, mode):
+		return http.StatusBadRequest, errors.New("Unknown permission mode (manuel, auto, modifications or ignorer)")
+	case mode != "ignorer":
+		return 0, nil
+	case appareilDe(r) != "":
+		return http.StatusForbidden, errors.New("Ignore permissions is chosen in Athanor's window")
+	case !confirmer:
+		return http.StatusConflict, errors.New("Confirm the Ignore permissions mode: nothing will then be asked before a risky action")
+	}
+	return s.preuvePresence(r, mdp)
 }
 
 // apiAutorisationServeur: POST /api/serveurs/{id}/autorisation {mode, confirmer}: the assistant's mode for this
@@ -119,4 +158,50 @@ func (s *Serveur) apiAutorisationServeur(w http.ResponseWriter, r *http.Request)
 	}
 	s.ecrireAudit(LigneAudit{Type: "evenement", De: deQui(r), Vers: "serveur:" + id, Action: "mode de l'assistant", Resultat: c.Mode})
 	s.ecrireJSON(w, map[string]any{"autorisation": c.Mode})
+}
+
+// usagesPermissions (M271): the uses Settings › Permissions gives a default mode to.
+var usagesPermissions = []string{"assistant", "missions"}
+
+// apiPermissionsReglages: GET /api/reglages/permissions, the default mode of each use ("" = Manual).
+func (s *Serveur) apiPermissionsReglages(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	p := map[string]string{}
+	for _, u := range usagesPermissions {
+		p[u] = s.config.PermissionsUsage[u]
+	}
+	s.mu.Unlock()
+	s.ecrireJSON(w, map[string]any{"permissions": p, "modes": modesAutorisation})
+}
+
+// apiChoisirPermissions: POST /api/reglages/permissions {usage, mode, confirmer, mot_de_passe}: the default mode of a
+// use, applied to every server and mission that has none of its own; "ignorer" as for a mission (choixIgnorer).
+func (s *Serveur) apiChoisirPermissions(w http.ResponseWriter, r *http.Request) {
+	var c struct {
+		Usage      string `json:"usage"`
+		Mode       string `json:"mode"`
+		Confirmer  bool   `json:"confirmer"`
+		MotDePasse string `json:"mot_de_passe"`
+	}
+	if lireCorps(r, &c) != nil || !slices.Contains(usagesPermissions, c.Usage) {
+		s.erreur(w, http.StatusBadRequest, "Invalid request")
+		return
+	}
+	if code, err := s.choixIgnorer(r, c.Mode, c.Confirmer, c.MotDePasse); err != nil {
+		s.erreur(w, code, err.Error())
+		return
+	}
+	s.mu.Lock()
+	if s.config.PermissionsUsage == nil {
+		s.config.PermissionsUsage = map[string]string{}
+	}
+	s.config.PermissionsUsage[c.Usage] = c.Mode
+	err := ecrireConfig(s.config)
+	s.mu.Unlock()
+	if err != nil {
+		s.erreur(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.ecrireAudit(LigneAudit{Type: "evenement", De: deQui(r), Vers: "hub", Action: "permissions par défaut: " + c.Usage, Resultat: c.Mode})
+	s.ecrireJSON(w, map[string]any{"usage": c.Usage, "mode": c.Mode})
 }

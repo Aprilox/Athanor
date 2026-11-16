@@ -420,6 +420,8 @@ func (s *Serveur) routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/serveurs/{id}/taches", s.garde(false, s.apiTachesServeur))
 	mux.HandleFunc("POST /api/serveurs/{id}/taches", s.garde(false, s.apiLancerTacheServeur))
 	mux.HandleFunc("POST /api/serveurs/{id}/autorisation", s.garde(false, s.apiAutorisationServeur))
+	mux.HandleFunc("GET /api/reglages/permissions", s.garde(false, s.apiPermissionsReglages))
+	mux.HandleFunc("POST /api/reglages/permissions", s.garde(false, s.apiChoisirPermissions))
 	mux.HandleFunc("POST /api/serveurs/{id}/taches/{tache}/main", s.garde(false, s.apiReprendreMainTache))
 	mux.HandleFunc("POST /api/serveurs/{id}/taches/{tache}/arreter", s.garde(false, s.apiArreterTacheServeur))
 	mux.HandleFunc("POST /api/serveurs/{id}/terminal", s.garde(false, s.apiTerminalOuvrir))

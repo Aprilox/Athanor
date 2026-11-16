@@ -344,7 +344,7 @@ func clientTUIPour(t *testing.T, s *Serveur) *clientTUI {
 // attendreTUI: the server's answers applied until cond holds.
 func attendreTUI(t *testing.T, a *appTUI, cond func() bool) {
 	t.Helper()
-	fin := time.After(10 * time.Second)
+	fin := time.After(30 * time.Second) // under the full check's parallel shards a TUI step took over 10 s (M267, M271)
 	for !cond() {
 		select {
 		case f := <-a.majs:

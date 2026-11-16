@@ -462,9 +462,10 @@ func missionTout(env string) bool {
 // owner read (R3: absent or another one, nothing is launched).
 func (s *Serveur) apiLancerMission(w http.ResponseWriter, r *http.Request) {
 	var c struct {
-		Dossier    string `json:"dossier"`
-		MotDePasse string `json:"mot_de_passe"`
-		Empreinte  string `json:"empreinte"`
+		Dossier    string            `json:"dossier"`
+		MotDePasse string            `json:"mot_de_passe"`
+		Empreinte  string            `json:"empreinte"`
+		Secrets    []secretLancement `json:"secrets"` // M271: the values of the card's entries still to fill (SSH password, key)
 	}
 	if r.ContentLength != 0 && lireCorps(r, &c) != nil {
 		s.erreur(w, http.StatusBadRequest, "Invalid request")
@@ -478,6 +479,10 @@ func (s *Serveur) apiLancerMission(w http.ResponseWriter, r *http.Request) {
 	if appareilDe(r) != "" {
 		c.Dossier = ""
 	}
+	if err := s.rangerSecretsLancement(r, r.PathValue("id"), c.Secrets); err != nil {
+		s.erreurMissionHTTP(w, err)
+		return
+	}
 	m, err := s.lancerMission(r.PathValue("id"), deQui(r), strings.TrimSpace(c.Dossier), cmp.Or(c.Empreinte, "absente"))
 	if err != nil {
 		s.erreurMissionHTTP(w, err)
@@ -485,4 +490,44 @@ func (s *Serveur) apiLancerMission(w http.ResponseWriter, r *http.Request) {
 	}
 	s.fermerLancementMission(m.ID, deQui(r), "accepter", "mission lancée")
 	s.ecrireJSON(w, map[string]any{"mission": m})
+}
+
+// secretLancement (M271): a value typed at the launch for an entry of the card still to fill.
+type secretLancement struct {
+	Entree string `json:"entree"`
+	Type   string `json:"type"` // ssh (a private key) or mot_de_passe
+	Valeur string `json:"valeur"`
+}
+
+// rangerSecretsLancement (M271): each value goes into the vault under its entry's name, only for an entry the card
+// waits for (ARemplir), so the launch then gives it; the audit names the entry, never the value.
+func (s *Serveur) rangerSecretsLancement(r *http.Request, id string, secrets []secretLancement) error {
+	if len(secrets) == 0 {
+		return nil
+	}
+	m, err := lireMission(id)
+	var c CarteMission
+	if err != nil || json.Unmarshal(m.Carte, &c) != nil {
+		return cmp.Or(err, errors.New("This mission has no card yet"))
+	}
+	if s.coffreErr != nil || s.coffre == nil {
+		return erreurMission{http.StatusInternalServerError, "The vault file cannot be read"}
+	}
+	for _, x := range secrets {
+		if !slices.ContainsFunc(c.Acces, func(a AccesCarte) bool { return a.ARemplir && !a.Decoche && strings.EqualFold(a.Entree, x.Entree) }) {
+			return erreurEntreeArgs{"{0} is not an entry this card waits for", []string{x.Entree}}
+		}
+		if x.Type != "ssh" && x.Type != "mot_de_passe" || x.Valeur == "" {
+			return erreurEntree("A value typed at the launch is an SSH key (ssh) or a password (mot_de_passe), not empty")
+		}
+		e := EntreeCoffre{Nom: strings.TrimSpace(x.Entree), Famille: "secret", Type: x.Type}
+		if s.nomPris(e.Nom, porteeEntree(e), "") {
+			return erreurMission{http.StatusConflict, "An entry of the vault is already named " + e.Nom}
+		}
+		if _, err := s.coffre.Ajouter(e, x.Valeur); err != nil {
+			return erreurMission{http.StatusConflict, err.Error()}
+		}
+		s.ecrireAudit(LigneAudit{Type: "evenement", De: deQui(r), Vers: "coffre", Mission: id, Action: "secret rangé au lancement", Resultat: e.Nom})
+	}
+	return nil
 }

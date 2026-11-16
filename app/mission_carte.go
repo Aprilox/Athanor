@@ -121,6 +121,8 @@ type CarteMission struct {
 	Serveurs      BriefCarte   `json:"serveurs"`
 	Acces         []AccesCarte `json:"acces"`
 	JalonsEstimes int          `json:"jalons_estimes"`
+	// M271: the owner's permission mode for the Servers lane (modesAutorisation, "" = Settings › Permissions), never the agent's
+	Permissions string `json:"permissions,omitempty"`
 	// worked out by calculerCarte: whatever the agent sends here is replaced
 	Approbations          []ApprobationPrevue `json:"approbations"`
 	Touche                ToucheCarte         `json:"touche"`
@@ -175,6 +177,8 @@ func validerCarte(c *CarteMission, x contexteCarte) error {
 		return erreurEntree(fmt.Sprintf("A lane's brief is %d characters at most", maxBriefCarte))
 	case c.Dev.Brief == "" && c.Serveurs.Brief == "" && len(c.Acces) == 0: // M268b: keys only is a mission too
 		return erreurEntree("The card needs at least one lane: a Dev brief, a Servers brief or vault entries")
+	case c.Permissions != "" && !slices.Contains(modesAutorisation, c.Permissions): // M271
+		return erreurEntree("Unknown permission mode (manuel, auto, modifications or ignorer)")
 	case c.JalonsEstimes < 1 || c.JalonsEstimes > 60:
 		return erreurEntree("jalons_estimes is between 1 and 60")
 	case len(c.Envs) > len(envsProjet):

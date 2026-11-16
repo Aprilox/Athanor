@@ -216,6 +216,15 @@ func (s *Serveur) accordOuDeployer(m Mission, projet, sha string) {
 			Agent: "relais", Action: "approbation utilisée: " + actionDeploiement, Resultat: y.ID})
 		s.deployerProdMission(m.ID, projet, env, sha, y.ID)
 		return
+	case etat == "" && modeMission(m.ID) == "ignorer": // M271: accepted at once, without a ping nor a password
+		if y, err = s.approbations.Demander(ap); err != nil {
+			return
+		}
+		if y, _, err = s.deciderApprobation("regle", y.ID, "accepter", "", "", ""); err != nil {
+			return
+		}
+		s.ecrireAudit(LigneAudit{Type: "evenement", De: "relais", Vers: "hub", Mission: m.ID, Projet: projet, Env: env, Agent: "relais",
+			Action: "déploiement accepté sans confirmation", Resultat: "mode « ignorer » de la mission : " + ap.Raison})
 	case etat == "":
 		if y, err = s.demanderApprobation(ap); err != nil {
 			return

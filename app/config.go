@@ -20,13 +20,15 @@ type Config struct {
 	BureauVirtuel             bool     `json:"bureau_virtuel"`
 	ProgrammesSupplementaires string   `json:"programmes_supplementaires"`
 	MotDePasseHash            string   `json:"mot_de_passe_hash,omitempty"`
-	Sel                       string   `json:"sel,omitempty"`
-	Port                      int      `json:"port"`
-	Langue                    string   `json:"langue"` // "" = never chosen (welcome wizard)
-	Theme                     string   `json:"theme"`  // interface palette (see themesConnus)
-	Accent                    string   `json:"accent"` // interface accent color (see accentsConnus)
-	BienvenueVue              bool     `json:"bienvenue_vue"`
-	HubVu                     bool     `json:"hub_vu,omitempty"` // the one-line hub tour was dismissed
+	// M271: Settings › Permissions, the default mode by use ("assistant": a server's terminal assistant, "missions")
+	PermissionsUsage map[string]string `json:"permissions_usage,omitempty"`
+	Sel              string            `json:"sel,omitempty"`
+	Port             int               `json:"port"`
+	Langue           string            `json:"langue"` // "" = never chosen (welcome wizard)
+	Theme            string            `json:"theme"`  // interface palette (see themesConnus)
+	Accent           string            `json:"accent"` // interface accent color (see accentsConnus)
+	BienvenueVue     bool              `json:"bienvenue_vue"`
+	HubVu            bool              `json:"hub_vu,omitempty"` // the one-line hub tour was dismissed
 	// the modules whose tour was shown (Module.Tutoriel: once, then from the Guide)
 	Tours map[string]bool `json:"tours,omitempty"`
 	// native Windows mode: the pilot is Athanor.exe and Claude Code the Windows program, without

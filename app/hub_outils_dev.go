@@ -294,6 +294,8 @@ func outilDemanderDeploiement(s *Serveur, x SessionHub, args json.RawMessage) (s
 	}
 	if accord, raison := s.politiqueDeploiement(x.Projet, env, len(fichiers) > 0); !accord { // C69: changed build or container files are destructive
 		return accepte(raison, "")
+	} else if x.Mission != "" && modeMission(x.Mission) == "ignorer" { // M271: the owner chose to be asked nothing
+		return accepte("the mission's Ignore permissions mode, instead of: "+raison, "")
 	}
 	y, etat, err := s.approbations.Reprendre(ap)
 	switch {

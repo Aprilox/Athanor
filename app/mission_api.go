@@ -6,6 +6,7 @@ package main
 // mission is created on the PC (autorisesDistance).
 
 import (
+	"cmp"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -282,6 +283,9 @@ func (s *Serveur) apiModifierMission(w http.ResponseWriter, r *http.Request) {
 		Consigne      string        `json:"consigne"`
 		BriefDev      *string       `json:"brief_dev"`      // M270: the briefs change in every changeable state, after a stop too
 		BriefServeurs *string       `json:"brief_serveurs"` // (the consigne rewrites the card through the orchestrator, before a launch only)
+		Permissions   string        `json:"permissions"`    // M271: the Servers lane's mode; ignorer needs confirmer and the password
+		Confirmer     bool          `json:"confirmer"`
+		MotDePasse    string        `json:"mot_de_passe"`
 	}
 	if lireCorps(r, &c) != nil {
 		s.erreur(w, http.StatusBadRequest, "Invalid request")
@@ -290,6 +294,12 @@ func (s *Serveur) apiModifierMission(w http.ResponseWriter, r *http.Request) {
 	if appareilDe(r) != "" && (c.Envs != nil || c.Projet != nil) { // B84: an environment's configuration is the PC's, as /environnements
 		s.erreur(w, http.StatusForbidden, "The environments and the project of a card are changed on the PC")
 		return
+	}
+	if c.Permissions != "" {
+		if code, err := s.choixIgnorer(r, c.Permissions, c.Confirmer, c.MotDePasse); err != nil {
+			s.erreur(w, code, err.Error())
+			return
+		}
 	}
 	consigne := strings.TrimSpace(c.Consigne)
 	switch {
@@ -351,6 +361,9 @@ func (s *Serveur) apiModifierMission(w http.ResponseWriter, r *http.Request) {
 		if c.BriefServeurs != nil {
 			carte.Serveurs.Brief = *c.BriefServeurs
 		}
+		if c.Permissions != "" {
+			carte.Permissions = c.Permissions
+		}
 		return nil
 	})
 	if err != nil {
@@ -358,7 +371,7 @@ func (s *Serveur) apiModifierMission(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.ecrireAudit(LigneAudit{Type: "evenement", De: deQui(r), Vers: "missions", Projet: prefixeMission + id, Mission: id,
-		Action: "carte de mission modifiée", Resultat: "politique " + m.Politique})
+		Action: "carte de mission modifiée", Resultat: "politique " + m.Politique + ", permissions " + cmp.Or(carte.Permissions, "réglages")})
 	if consigne != "" {
 		b, _ := json.MarshalIndent(carte, "", " ")
 		m = s.relancerOuEchec(id, "The owner asks this change to the card: "+consigne+"\n\nThe card as it is now, with the owner's changes:\n"+string(b))
