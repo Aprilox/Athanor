@@ -157,4 +157,18 @@ func TestTUIMissions(t *testing.T) {
 	if a.page != pAccueil {
 		t.Fatalf("Escape from the list: %d", a.page)
 	}
+	// M267: a failed launch: its reason, translated (a nested engine message, read back from JSON), in the detail
+	echec := Mission{ID: "tuimis03", Phrase: "y", Etat: "echec", Politique: "prod", Carte: ancienne, Cree: maintenant.Add(-2 * time.Hour).Format(formatCree),
+		Historique: []EvenementMission{{Etat: "lancee"}, {Etat: "echec", Detail: "giving CloudFlare: x", Message: &MessageMoteur{Cle: "giving {0}: {1}",
+			Args: []any{"CloudFlare", &MessageMoteur{Cle: "creating the project: {0}", Args: []any{"boom"}}}}}}}
+	if err := enregistrerMission(echec); err != nil {
+		t.Fatal(err)
+	}
+	attendreTUI(t, a, func() bool {
+		a.derniere["missions"] = time.Time{}
+		a.chargerMissions()
+		return slices.ContainsFunc(a.missions, func(m Mission) bool { return m.ID == "tuimis03" })
+	})
+	a.page, a.misOuverte = pMissions, "tuimis03"
+	contient("failed launch", ecran(140, 40), a.t("The launch of the mission stopped: {0}", a.t("giving {0}: {1}", "CloudFlare", a.t("creating the project: {0}", "boom"))))
 }

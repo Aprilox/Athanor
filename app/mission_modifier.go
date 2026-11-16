@@ -60,7 +60,7 @@ func envsEnPreparation(m Mission) map[string]string {
 const (
 	figeOrchestrateur = "The orchestrator is working on this card: wait for it to finish"
 	figeAccord        = "A launch request for this card waits for your decision: refuse it first to change the card"
-	figeProjet        = "The project is created: change its settings in Manage my project"
+	figeProjet        = "The project is created: change its settings with Manage this project"
 	figeConsigne      = "The mission is launched: the orchestrator no longer rewrites its card; add a request to its project instead"
 	figePolitique     = "The policy of a launched mission is changed with its controls"
 	figeDistant       = "The project is on another PC: its environments and accesses are changed there"

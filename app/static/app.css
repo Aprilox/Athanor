@@ -122,6 +122,7 @@ html.cadre .dialogue, html.cadre .verrou, html.cadre .assistant { top: var(--bar
 .champ-mentions input[type=text] { border: 0; background: transparent; flex: 1 1 12em; outline: none; }
 .puces-mentions { display: contents; }
 .puce-mention { display: inline-flex; align-items: center; gap: 2px; font-size: 13.5px; font-weight: 500; border: 1px solid var(--accent); border-radius: 12px; padding: 1px 2px 1px 9px; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.puce-figee { border-style: dashed; padding-right: 9px; } /* M267: frozen by an action in progress (its reason in its title and under the chips) */
 .puce-x { border: 0; background: none; color: inherit; font-size: 16px; line-height: 1; cursor: pointer; padding: 2px 6px; border-radius: 10px; }
 .puce-x:hover, .puce-x:focus-visible { background: var(--line); }
 .liste-mentions { list-style: none; margin: -6px 0 0; padding: 4px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); max-height: 260px; overflow-y: auto; }

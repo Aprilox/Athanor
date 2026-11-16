@@ -6,6 +6,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
 )
@@ -268,6 +269,25 @@ func (a *appTUI) pageMissions(e *ecranT, x, y, l, h int) {
 }
 
 // detailMission: one mission: its title and state, its sentence, its lanes, its relay, its journal.
+// messageTUI: an engine message in the user's language, its nested messages too (texteMessage on the web; read
+// back from JSON, a nested one is a map).
+func (a *appTUI) messageTUI(m *MessageMoteur) string {
+	args := make([]any, len(m.Args))
+	for i, x := range m.Args {
+		switch v := x.(type) {
+		case *MessageMoteur:
+			args[i] = a.messageTUI(v)
+		case map[string]any:
+			cle, _ := v["cle"].(string)
+			sous, _ := v["args"].([]any)
+			args[i] = a.messageTUI(&MessageMoteur{Cle: cle, Args: sous})
+		default:
+			args[i] = fmt.Sprint(x)
+		}
+	}
+	return a.t(m.Cle, args...)
+}
+
 func (a *appTUI) detailMission(e *ecranT, x, y, l, h int, m Mission) {
 	p, t := a.pal, a.t
 	fin := y + h
@@ -277,6 +297,16 @@ func (a *appTUI) detailMission(e *ecranT, x, y, l, h int, m Mission) {
 	e.texte(x+n+3, y, l-n-4, "["+etat+"]", a.gras(a.couleurEtatMission(m.Etat), p.fond))
 	e.texte(x+1, y+2, l-2, strings.Join(strings.Fields(m.Phrase), " "), a.st(p.muet, p.fond))
 	yc := y + 3
+	if echecLancement(m) { // M267: the reason, as the web says it (Retry and Edit are on the web page)
+		ev := raisonEchec(m)
+		raison := ev.Detail
+		if ev.Message != nil {
+			raison = a.messageTUI(ev.Message)
+		}
+		e.texte(x+1, yc, l-2, t("The launch of the mission stopped: {0}", raison), a.st(p.erreur, p.fond))
+		e.texte(x+1, yc+1, l-2, t("Change what is needed (a key, a server), then retry: what was already done stays."), a.st(p.muet, p.fond))
+		yc += 3
+	}
 	// the lanes: two lines each (state, then the milestone and the activity)
 	hv := min(2+max(1, 2*len(m.Voies)), fin-yc)
 	if hv >= 3 {

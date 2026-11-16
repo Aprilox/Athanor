@@ -256,6 +256,28 @@ func TestCaptureHub(t *testing.T) {
 				http.Error(w, err.Error(), 500)
 			}
 		}
+		// mission-echec-* (M267): ?echec=1, capture07 alone, its launch stopped at a vault key (M265's case), its card changeable
+		if r.URL.Query().Get("echec") != "" {
+			c7 := CarteMission{Titre: "Site de démonstration de la boulangerie", Projet: ProjetCarte{Nom: "boulangerie-demo", Nouveau: true},
+				Dev:      BriefCarte{Brief: "Une page d'accueil, les horaires et les pains du jour."},
+				Envs:     []EnvCarte{{Nom: "site", URL: "https://demo.boulangerie-martin.fr", Serveurs: []string{"c0ffee02"}}},
+				Serveurs: BriefCarte{Brief: "Nom DNS chez Cloudflare, certificat et proxy."},
+				Acces:    []AccesCarte{{Entree: "CLOUDFLARE_API_TOKEN", Pour: "c0ffee02"}}, JalonsEstimes: 3}
+			if err := validerCarte(&c7, ctx); err != nil {
+				http.Error(w, err.Error(), 500)
+				return
+			}
+			b7, _ := json.Marshal(calculerCarte(c7, "prod", ctx))
+			m7 := Mission{ID: "capture07", Phrase: "Mettre la démo de la boulangerie en ligne sur @Home server avec la clé Cloudflare", Etat: "echec", Carte: b7, Politique: "prod",
+				Voies: []VoieMission{}, Questions: []QuestionMission{}, Cree: "2026-11-12T09:00:00Z",
+				Historique: []EvenementMission{{T: "2026-11-12T09:01:00Z", Etat: "proposee"}, {T: "2026-11-12T09:02:00Z", Etat: "lancee", Detail: "hub"},
+					{T: "2026-11-12T09:02:01Z", Etat: "echec", Detail: "giving CLOUDFLARE_API_TOKEN: Unknown environment for this project",
+						Message: &MessageMoteur{Cle: "giving {0}: {1}", Args: []any{"CLOUDFLARE_API_TOKEN", &MessageMoteur{Cle: "Unknown environment for this project"}}}}}}
+			if err := enregistrerMission(m7); err != nil {
+				http.Error(w, err.Error(), 500)
+				return
+			}
+		}
 		// missions-* (M159): ?liste=1 adds missions launched (a project's pilot and a Servers task waiting for the
 		// owner), finished, failed and cancelled, older than the bakery's
 		// ?direct=1 (M171): capture06 alone, so the list's counts stay
@@ -338,6 +360,8 @@ func TestCaptureHub(t *testing.T) {
 				case x.ID != "capture06" || q == "":
 				case q == "attente":
 					x.Voies = []VoieMission{x.Voies[0], {Module: "servers", Etat: "attente_plan", Env: "projet-01/prod"}}
+				case q == "fige": // M267: its task prepares prod: that environment's servers frozen on the card
+					x.Voies = []VoieMission{x.Voies[0], {Module: "servers", Ref: tache6.ID, Etat: "preparation", Env: "projet-01/prod"}}
 				default:
 					x.Journal = append(slices.Clone(x.Journal), EntreeJournal{ID: "prep:projet-01/prod", T: heure.Add(4 * time.Minute).Format(formatCree),
 						Cle: "The plan is ready: the Servers lane prepares {0}", Params: []string{"prod"}, Niveau: "info"})

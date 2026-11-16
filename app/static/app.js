@@ -2229,11 +2229,16 @@ function carteMission(d) {
   const nomServeur = (r) => ((etat.mentionsSugg || []).find((x) => x.type === "serveur" && x.ref === r) || {}).nom || r;
   const liste = (l) => l && l.length ? `<ul class="mis-puces">${l.map((x) => `<li>${h(x)}</li>`).join("")}</ul>` : `<span class="muet">—</span>`;
   const e = c.estimation || {}, actif = !travailleMission(d) && m.etat === "proposee", srv = serveurLie(c);
+  // M267: launched once, the card still changes (its resources, a project not created yet) but what an action in
+  // progress freezes (m.figes, champsFiges in Go), said with its reason instead of its button
+  const fg = m.figes || {}, apres = lanceeMission(m) && ETATS_MODIFIABLES.includes(m.etat);
+  const modif = actif || (apres && !fg.carte), figeRes = (r) => fg.envs || (r.type === "serveur" && fg["env:" + r.env]) || "";
+  const raisons = apres ? [...new Set([fg.carte, fg.envs, fg.projet, ...ressourcesMission().map(figeRes)].filter(Boolean))] : [];
   const avert = `<p class="mis-avert" role="note">${ic("alerte")} ${t("Native mode: this mission's agents can read the servers' keys (logged).")}</p>`;
   const gauche = (srv ? `<h3>${t("Online")}</h3>${(c.envs || []).length ? `<ul class="mis-envs">${c.envs.map((x) => `<li><span class="mis-url">${h(x.url || "—")}</span>${badgeProd(x.production)}${x.avant ? `<div class="muet petit mis-avant">${h(t("Before: {0}", [envMission(x.avant, false, nomServeur)]))}</div>` : ""}</li>`).join("")}</ul>` : `<span class="muet">—</span>`}` : "");
   // M253: the resources chosen, as removable chips, and "Add a resource" (category, then a list with a search)
-  const mr = actif && etat.missionRes && etat.missionRes.id === m.id ? etat.missionRes : null, res = ressourcesMission();
-  const puce = (r, i) => `<span class="puce-mention puce-${r.type}"${r.pour ? ` title="${h(t("used for {0}", [r.pour]))}"` : ""}>${typeMention(r)}${h(r.nom)}${r.remplir ? ` <span class="badge mis-remplir">${t("to fill")}</span>` : ""}${actif ? `<button type="button" class="puce-x" data-mis-retirer="${i}" aria-label="${h(t("Remove {0}", [r.nom]))}">×</button>` : ""}</span>`;
+  const mr = modif && etat.missionRes && etat.missionRes.id === m.id ? etat.missionRes : null, res = ressourcesMission();
+  const puce = (r, i) => `<span class="puce-mention puce-${r.type}${apres && figeRes(r) ? " puce-figee" : ""}"${apres && figeRes(r) ? ` title="${h(t(figeRes(r)))}"` : r.pour ? ` title="${h(t("used for {0}", [r.pour]))}"` : ""}>${typeMention(r)}${h(r.nom)}${r.remplir ? ` <span class="badge mis-remplir">${t("to fill")}</span>` : ""}${modif && !figeRes(r) ? `<button type="button" class="puce-x" data-mis-retirer="${i}" aria-label="${h(t("Remove {0}", [r.nom]))}">×</button>` : ""}</span>`;
   const cats = [["serveur", "Server"], ["cle", "Key"], ["fournisseur", "API / provider"]].filter(([k]) => k !== "serveur" || !(etat.vue || {}).distant); // B84: a server is added on the PC
   const chercher = { serveur: "Find a server", cle: "Find a vault key", fournisseur: "Find an API or a provider" };
   const menu = !mr ? "" : `<div class="mis-res-menu" id="mis-res">${mr.type ? `<label for="mis-res-q" class="petit">${t(chercher[mr.type])}</label>
@@ -2243,8 +2248,9 @@ function carteMission(d) {
       <div class="ligne m0">${mr.type ? `<button type="button" class="btn btn-petit" data-mis-res-retour>${t("Back")}</button>` : ""}<span class="espace"></span><button type="button" class="btn btn-petit" data-mis-res-fermer>${t("Close")}</button></div></div>`;
   const ressources = `<div class="mis-ressources"><h3 id="mis-res-titre">${t("Resources")}</h3>${c.avertissement_infra && !c.avertissement_serveurs ? avert : ""}
       <div class="ligne m0 mis-res-puces" role="group" aria-labelledby="mis-res-titre">${res.map(puce).join("") || `<span class="muet petit">${t("No resource yet: add a server, a key or an API if the project needs one.")}</span>`}
-      ${actif ? `<button type="button" class="btn btn-petit" id="mis-res-ajouter" aria-expanded="${!!mr}" aria-controls="mis-res">${ic("plus")}${t("Add a resource")}</button>` : ""}</div>${menu}</div>`;
-  const pj = c.projet.nouveau && actif && !c.projet.distant ? sectionProjet(c) : "";
+      ${modif && !fg.envs ? `<button type="button" class="btn btn-petit" id="mis-res-ajouter" aria-expanded="${!!mr}" aria-controls="mis-res">${ic("plus")}${t("Add a resource")}</button>` : ""}</div>${menu}
+      ${raisons.map((x) => `<p class="muet petit m0 mis-fige">${ic("info")} ${h(t(x))}</p>`).join("")}</div>`;
+  const pj = c.projet.nouveau && modif && !fg.projet && !c.projet.distant ? sectionProjet(c) : "";
   // only the rows that hold something: an empty "Files —" said nothing (M255)
   const touche = [srv && (c.touche.dns || []).length ? `<dt>${t("DNS names")}</dt><dd>${liste(c.touche.dns)}</dd>` : "",
     (c.touche.fichiers || []).length ? `<dt>${t("Files")}</dt><dd>${liste(c.touche.fichiers)}</dd>` : "",
@@ -2297,7 +2303,19 @@ async function enregistrerProjetMission(change) {
   majZoneMission();
 }
 // the launch stopped at a failed step (its last events: the launch, then the echec): resumed by Launch
-const echecLancement = (m) => m.etat === "echec" && (m.historique || []).some((x) => x.etat === "lancee");
+const echecLancement = (m) => m.etat === "echec" && lanceeMission(m);
+// M266: the states whose card changes (etatsModifiables in Go); lanceeMission: launched at least once (lanceeUneFois)
+const ETATS_MODIFIABLES = ["proposee", "echec", "lancee", "arret_demande", "en_pause", "arretee"];
+const lanceeMission = (m) => (m.historique || []).some((x) => x.etat === "lancee");
+// M267: a failed launch: its reason in the page's language, then Retry (launch again: what was done stays) and Edit
+// (the card below, on the mission's page; from the home, that page)
+function blocEchecLancement(m, ici) {
+  const fin = raisonEchec(m), raison = fin.message ? texteMessage(fin.message) : fin.detail || "";
+  const modifier = ici ? !m.carte ? "" : `<button type="button" class="btn btn-petit" data-mis-edition>${t("Edit the mission")}</button>` : `<a class="btn btn-petit" href="#missions/${encodeURIComponent(m.id)}">${t("Edit the mission")}</a>`;
+  return `<section class="bloc mis-carte mis-echec" role="alert"><b>${h(t("The launch of the mission stopped: {0}", [raison]))}</b>
+    <p class="muet petit m0">${t("Change what is needed (a key, a server), then retry: what was already done stays.")}</p>
+    <div class="ligne"><button type="button" class="btn btn-primaire btn-petit" data-mis="lancer">${t("Retry")}</button>${modifier}${ici ? "" : `<button type="button" class="btn btn-petit" data-mis="oublier">${t("Close")}</button>`}</div></section>`;
+}
 // raisonEchec (M266): the event that put the mission in echec; the owner's changes after it are "modifiee"
 const raisonEchec = (m) => [...(m.historique || [])].reverse().find((x) => x.etat === "echec") || {};
 document.addEventListener("change", (ev) => {
@@ -2322,7 +2340,7 @@ const estimationMission = (e) => `<h3>${t("Estimate")}</h3><p class="m0">${t(e.j
 function ressourcesMission() {
   const c = ((etat.missionVue || {}).mission || {}).carte || {}, l = [];
   const nom = (r) => ((etat.mentionsSugg || []).find((x) => x.type === "serveur" && x.ref === r) || {}).nom || (etat.nomsServeurs || {})[r] || r;
-  for (const e of c.envs || []) for (const r of e.serveurs || []) if (!l.some((x) => x.ref === r)) l.push({ type: "serveur", ref: r, nom: nom(r) });
+  for (const e of c.envs || []) for (const r of e.serveurs || []) if (!l.some((x) => x.ref === r)) l.push({ type: "serveur", ref: r, nom: nom(r), env: e.nom });
   for (const a of c.acces || []) if (!a.decoche && !l.some((x) => x.type === "cle" && x.nom === a.entree)) l.push({ type: "cle", ref: a.id || a.entree, nom: a.entree, remplir: a.a_remplir, pour: nom(a.pour) });
   return l;
 }
@@ -2345,8 +2363,7 @@ document.addEventListener("click", async (ev) => {
 function zoneMission() {
   const d = etat.missionVue; if (!d) return "";
   const m = d.mission, q = (m.questions || []).find((x) => !x.reponse), fin = m.etat === "echec" ? raisonEchec(m) : (m.historique || []).slice(-1)[0] || {};
-  if (echecLancement(m)) return `<section class="bloc mis-carte mis-echec" role="alert"><b>${h(t("The launch of the mission stopped: {0}", [fin.message ? texteMessage(fin.message) : fin.detail || ""]))}</b>
-    <div class="ligne"><button type="button" class="btn btn-primaire btn-petit" data-mis="lancer">${t("Resume the launch")}</button><button type="button" class="btn btn-petit" data-mis="oublier">${t("Close")}</button></div></section>`;
+  if (echecLancement(m)) return blocEchecLancement(m, false);
   if (m.etat === "echec") return `<section class="bloc mis-carte mis-echec" role="alert"><b>${t("The orchestrator could not prepare the card.")}</b> <span class="muet">${h(fin.message ? texteMessage(fin.message) : fin.detail || "")}</span>
     <div class="ligne"><button type="button" class="btn btn-petit" data-mis="oublier">${t("Close")}</button></div></section>`;
   if (!ACTIVE_MISSION.includes(m.etat)) return m.etat === "annulee" ? "" : `<section class="bloc mis-carte"><b>${h(t(ETATS_MISSION[m.etat] || m.etat))}</b> · ${h((m.carte || {}).titre || "")} <a href="#missions">${t("See the missions")} →</a></section>`;
@@ -2361,8 +2378,8 @@ function zoneMission() {
 }
 let minuterieMission;
 function majZoneMission() {
-  const z = $("#mission-zone"); if (!z) return;
-  garderFocus(z, () => { z.innerHTML = zoneMission(); });
+  const z = $("#mission-zone") || $("#mis-carte-detail"); if (!z) return;
+  garderFocus(z, () => { z.innerHTML = z.id === "mission-zone" ? zoneMission() : carteMission(etat.missionVue); });
   clearTimeout(minuterieMission);
   const d = etat.missionVue;
   if (d && travailleMission(d) && ACTIVE_MISSION.includes(d.mission.etat)) minuterieMission = setTimeout(lireMissionVue, 2000); // the state is read every 2 s
@@ -2397,6 +2414,12 @@ document.addEventListener("click", async (ev) => {
   }
   else if (a === "annuler") { if (await choisir(t("Cancel this mission? Nothing has been built or deployed yet."), [{ id: "non", texte: t("Keep it") }, { id: "oui", texte: t("Cancel the mission"), danger: true }]) === "oui") await actionMission("annuler"); }
   else if (a === "oublier") { etat.missionVue = null; majZoneMission(); }
+});
+document.addEventListener("click", (ev) => {
+  if (!ev.target.closest("[data-mis-edition]")) return;
+  const c = $("#mis-carte-detail"); if (!c) return;
+  c.scrollIntoView({ block: "start", behavior: "smooth" });
+  ($("#mis-res-ajouter") || $("#mis-projet summary") || c).focus({ preventScroll: true });
 });
 document.addEventListener("input", (ev) => { if (ev.target.id === "mis-consigne" && etat.missionEdition) etat.missionEdition.consigne = ev.target.value; else if (ev.target.id === "mis-q-libre") etat.missionReponse = ev.target.value; });
 document.addEventListener("submit", async (ev) => {
@@ -5917,11 +5940,10 @@ pages.mission = async () => {
   suivreMissionDirect();
   return `<div class="missions mis-detail">${retour}
     <div><div class="ligne m0 tuile-tete"><h2 class="m0" id="mis-titre">${h((m.carte || {}).titre || t("New mission"))}</h2><span class="badge mis-etat-${h(m.etat)}" id="mis-badge">${h(t(ETATS_MISSION[m.etat] || m.etat))}</span></div>
-      <p class="muet petit mis-phrase">${h(m.phrase)}</p>${m.etat === "echec" && fin.detail ? `<p class="mis-avert" role="note">${h(fin.message ? texteMessage(fin.message) : fin.detail)}</p>` : ""}
-      ${echecLancement(m) ? `<div class="ligne m0"><button type="button" class="btn btn-primaire" data-mis="lancer">${t("Resume the launch")}</button></div>` : ""}
+      <p class="muet petit mis-phrase">${h(m.phrase)}</p>${echecLancement(m) ? blocEchecLancement(m, true) : m.etat === "echec" && fin.detail ? `<p class="mis-avert" role="note">${h(fin.message ? texteMessage(fin.message) : fin.detail)}</p>` : ""}
       ${["lancee", "en_pause", "arret_demande", "arretee"].includes(m.etat) ? controlesMission(m) : ""}</div>
     <div id="mission-direct" class="mis-detail">${missionDirect(m)}</div>
-    ${m.carte ? `<section class="bloc mis-carte" aria-labelledby="mis-titre">${carteMission(d)}</section>` : ""}
+    ${m.carte ? `<section class="bloc mis-carte" id="mis-carte-detail" aria-labelledby="mis-titre">${carteMission(d)}</section>` : ""}
   </div>`;
 };
 // M171: a launched mission, live (DESIGN §Mission en direct): its lanes side by side, the relay's steps and URLs, the
