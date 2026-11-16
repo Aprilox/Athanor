@@ -49,7 +49,10 @@ const PREFIXES = ["The server could not do it: check its free disk space and thi
 
 const DICT = {
 fr: {
+  "*Delete the mission*, on its page or the *×* of its line on *Missions*, says first what goes: the mission, its journal and its Servers tasks. A running mission asks how to stop it first. Its project and folder (to the recycle bin) and the access it gave go only if you tick them, for a project the mission created; the GitHub repository and what is online stay. *Clear finished missions* empties the list; *d* in the terminal.": "*Supprimer la mission*, sur sa page ou par le *×* de sa ligne sur *Missions*, dit d'abord ce qui part : la mission, son journal et ses tâches Serveurs. Une mission en cours demande d'abord comment l'arrêter. Son projet et son dossier (à la corbeille) et les accès qu'elle a donnés ne partent que si vous les cochez, pour un projet créé par la mission ; le dépôt GitHub et ce qui est en ligne restent. *Vider les missions terminées* allège la liste ; *d* dans le terminal.",
+  "Delete a mission": "Supprimer une mission",
   "This mission is running: choose how to stop it first": "Cette mission est en cours : choisissez d'abord comment l'arrêter",
+  "Cannot send the project's folder to the recycle bin: close what uses it, then delete again": "Impossible de mettre le dossier du projet à la corbeille : fermez ce qui l'utilise, puis supprimez de nouveau",
   "The project's folder leads elsewhere (a link or a junction): it is never deleted": "Le dossier du projet mène ailleurs (un lien ou une jonction) : il n'est jamais supprimé",
   "The project's folder is a link or not a folder: it is never deleted": "Le dossier du projet est un lien ou n'est pas un dossier : il n'est jamais supprimé",
   "The project's folder path is not a full path": "Le chemin du dossier du projet n'est pas un chemin complet",
@@ -61,7 +64,7 @@ fr: {
   "{0} missions deleted.": "{0} missions supprimées.",
   "Delete them": "Les supprimer",
   "Clear finished missions": "Vider les missions terminées",
-  "Delete the {0} finished, cancelled, failed or stopped missions? Only the missions and their journals go: their projects, folders and what they put online stay.": "Supprimer les {0} missions terminées, annulées, en échec ou arrêtées ? Seuls les missions et leurs journaux partent : leurs projets, dossiers et ce qu'elles ont mis en ligne restent.",
+  "Delete the {0} finished, cancelled, failed or stopped missions? Only the missions and their journals go: their projects, folders and what they put online stay.": "Supprimer les {0} missions terminées, annulées, en échec ou arrêtées ? Seules les missions et leurs journaux partent : leurs projets, dossiers et ce qu'elles ont mis en ligne restent.",
   "Mission deleted.": "Mission supprimée.",
   "The mission will be deleted when the current milestone ends.": "La mission sera supprimée à la fin du jalon en cours.",
   "Delete the mission": "Supprimer la mission",
@@ -798,7 +801,10 @@ fr: {
   "Run a command": "Lancer une commande", "The task failed without giving a reason.": "La tâche a échoué sans donner de raison.",
 },
 es: {
+  "*Delete the mission*, on its page or the *×* of its line on *Missions*, says first what goes: the mission, its journal and its Servers tasks. A running mission asks how to stop it first. Its project and folder (to the recycle bin) and the access it gave go only if you tick them, for a project the mission created; the GitHub repository and what is online stay. *Clear finished missions* empties the list; *d* in the terminal.": "*Eliminar la misión*, en su página o con la *×* de su línea en *Misiones*, dice primero lo que se va: la misión, su registro y sus tareas de Servidores. Una misión en curso pregunta primero cómo detenerla. Su proyecto y su carpeta (a la papelera) y los accesos que dio solo se van si los marca, para un proyecto creado por la misión; el repositorio de GitHub y lo publicado se quedan. *Vaciar las misiones terminadas* vacía la lista; *d* en el terminal.",
+  "Delete a mission": "Eliminar una misión",
   "This mission is running: choose how to stop it first": "Esta misión está en curso: elija primero cómo detenerla",
+  "Cannot send the project's folder to the recycle bin: close what uses it, then delete again": "No se puede enviar la carpeta del proyecto a la papelera: cierre lo que la esté usando y vuelva a eliminar",
   "The project's folder leads elsewhere (a link or a junction): it is never deleted": "La carpeta del proyecto lleva a otro sitio (un enlace o una unión): nunca se elimina",
   "The project's folder is a link or not a folder: it is never deleted": "La carpeta del proyecto es un enlace o no es una carpeta: nunca se elimina",
   "The project's folder path is not a full path": "La ruta de la carpeta del proyecto no es una ruta completa",
@@ -1515,7 +1521,10 @@ es: {
   "Run a command": "Ejecutar un comando", "The task failed without giving a reason.": "La tarea falló sin dar un motivo.",
 },
 de: {
+  "*Delete the mission*, on its page or the *×* of its line on *Missions*, says first what goes: the mission, its journal and its Servers tasks. A running mission asks how to stop it first. Its project and folder (to the recycle bin) and the access it gave go only if you tick them, for a project the mission created; the GitHub repository and what is online stay. *Clear finished missions* empties the list; *d* in the terminal.": "*Mission löschen*, auf ihrer Seite oder über das *×* ihrer Zeile unter *Missionen*, sagt zuerst, was geht: die Mission, ihr Journal und ihre Server-Aufgaben. Eine laufende Mission fragt zuerst, wie sie angehalten wird. Ihr Projekt und Ordner (in den Papierkorb) und die erteilten Zugänge gehen nur, wenn Sie sie ankreuzen, und nur bei einem von der Mission erstellten Projekt; das GitHub-Repository und was online ist, bleiben. *Beendete Missionen leeren* leert die Liste; *d* im Terminal.",
+  "Delete a mission": "Eine Mission löschen",
   "This mission is running: choose how to stop it first": "Diese Mission läuft: Wählen Sie zuerst, wie sie angehalten wird",
+  "Cannot send the project's folder to the recycle bin: close what uses it, then delete again": "Der Projektordner kann nicht in den Papierkorb verschoben werden: Schließen Sie, was ihn verwendet, und löschen Sie erneut",
   "The project's folder leads elsewhere (a link or a junction): it is never deleted": "Der Projektordner führt woandershin (Verknüpfung oder Junction): Er wird nie gelöscht",
   "The project's folder is a link or not a folder: it is never deleted": "Der Projektordner ist eine Verknüpfung oder kein Ordner: Er wird nie gelöscht",
   "The project's folder path is not a full path": "Der Ordnerpfad des Projekts ist kein vollständiger Pfad",
@@ -2226,7 +2235,10 @@ de: {
   "Run a command": "Einen Befehl ausführen", "The task failed without giving a reason.": "Die Aufgabe ist ohne Angabe eines Grundes fehlgeschlagen.",
 },
 it: {
+  "*Delete the mission*, on its page or the *×* of its line on *Missions*, says first what goes: the mission, its journal and its Servers tasks. A running mission asks how to stop it first. Its project and folder (to the recycle bin) and the access it gave go only if you tick them, for a project the mission created; the GitHub repository and what is online stay. *Clear finished missions* empties the list; *d* in the terminal.": "*Elimina la missione*, sulla sua pagina o con la *×* della sua riga in *Missioni*, dice prima cosa se ne va: la missione, il suo diario e le sue attività Server. Una missione in corso chiede prima come fermarla. Il suo progetto e la cartella (nel cestino) e gli accessi concessi se ne vanno solo se li spunti, per un progetto creato dalla missione; il repository GitHub e ciò che è online restano. *Svuota le missioni terminate* svuota l'elenco; *d* nel terminale.",
+  "Delete a mission": "Eliminare una missione",
   "This mission is running: choose how to stop it first": "Questa missione è in corso: scegli prima come fermarla",
+  "Cannot send the project's folder to the recycle bin: close what uses it, then delete again": "Impossibile spostare la cartella del progetto nel cestino: chiudi ciò che la usa, poi elimina di nuovo",
   "The project's folder leads elsewhere (a link or a junction): it is never deleted": "La cartella del progetto porta altrove (un collegamento o una giunzione): non viene mai eliminata",
   "The project's folder is a link or not a folder: it is never deleted": "La cartella del progetto è un collegamento o non è una cartella: non viene mai eliminata",
   "The project's folder path is not a full path": "Il percorso della cartella del progetto non è un percorso completo",
@@ -2937,7 +2949,10 @@ it: {
   "Run a command": "Eseguire un comando", "The task failed without giving a reason.": "L'attività non è riuscita senza indicare un motivo.",
 },
 pt: {
+  "*Delete the mission*, on its page or the *×* of its line on *Missions*, says first what goes: the mission, its journal and its Servers tasks. A running mission asks how to stop it first. Its project and folder (to the recycle bin) and the access it gave go only if you tick them, for a project the mission created; the GitHub repository and what is online stay. *Clear finished missions* empties the list; *d* in the terminal.": "*Eliminar a missão*, na sua página ou com o *×* da sua linha em *Missões*, diz primeiro o que sai: a missão, o seu registo e as suas tarefas de Servidores. Uma missão em curso pergunta primeiro como pará-la. O seu projeto e a pasta (para a reciclagem) e os acessos que deu só saem se os marcar, para um projeto criado pela missão; o repositório GitHub e o que está online ficam. *Limpar as missões terminadas* esvazia a lista; *d* no terminal.",
+  "Delete a mission": "Eliminar uma missão",
   "This mission is running: choose how to stop it first": "Esta missão está em curso: escolha primeiro como pará-la",
+  "Cannot send the project's folder to the recycle bin: close what uses it, then delete again": "Não é possível enviar a pasta do projeto para a lixeira: feche o que a está usando e exclua novamente",
   "The project's folder leads elsewhere (a link or a junction): it is never deleted": "A pasta do projeto leva a outro lado (uma ligação ou junção): nunca é eliminada",
   "The project's folder is a link or not a folder: it is never deleted": "A pasta do projeto é uma ligação ou não é uma pasta: nunca é eliminada",
   "The project's folder path is not a full path": "O caminho da pasta do projeto não é um caminho completo",

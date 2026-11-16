@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -211,6 +212,16 @@ func TestMissionSuppression(t *testing.T) {
 		if _, b := appel("GET", "/api/missions/"+id+"/suppression", ""); !strings.Contains(b, `"dossier_ok":true`) || !strings.Contains(b, `"projet":"neuf"`) {
 			t.Fatalf("preview: %s", b)
 		}
+		// the folder still held by the pilot just stopped: refused twice, then it goes
+		refus, normale := 2, corbeilleMission
+		pauseCorbeille = time.Millisecond
+		corbeilleMission = func(d string) error {
+			if refus--; refus >= 0 {
+				return errors.New("Windows refused (a file in use?)")
+			}
+			return normale(d)
+		}
+		defer func() { corbeilleMission, pauseCorbeille = normale, 500*time.Millisecond }()
 		if c, b := appel("POST", "/api/missions/"+id+"/supprimer", `{"projet":true}`); c != 200 || !strings.Contains(b, "folder "+strings.ReplaceAll(neuf.Dossier, `\`, `\\`)) {
 			t.Fatalf("delete with the folder: %d %s", c, b)
 		}

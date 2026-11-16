@@ -261,8 +261,14 @@ func (s *Serveur) supprimerMission(id, qui string, o OptionsSuppression) ([]stri
 	}
 	if o.Projet {
 		if _, err := os.Lstat(p.Dossier); err == nil {
-			if err := corbeilleMission(p.Dossier); err != nil {
-				return retire, erreurMission{http.StatusInternalServerError, "Cannot send the project's folder to the recycle bin: " + err.Error()}
+			// a pilot just stopped (or an indexer) releases its files a few seconds later: Windows refuses until then
+			err := corbeilleMission(p.Dossier)
+			for i := 0; err != nil && i < 20; i++ {
+				time.Sleep(pauseCorbeille)
+				err = corbeilleMission(p.Dossier)
+			}
+			if err != nil {
+				return retire, erreurMission{http.StatusInternalServerError, "Cannot send the project's folder to the recycle bin: close what uses it, then delete again"}
 			}
 		}
 		if err := s.retirerProjet(p); err != nil {
@@ -306,6 +312,8 @@ func tachesDeMission(m Mission) map[string]bool {
 }
 
 var corbeilleMission = mettreALaCorbeille // a test sees what goes, without the real recycle bin
+
+var pauseCorbeille = 500 * time.Millisecond // between two tries of the recycle bin (10 s in all)
 
 var errMissionSupprimee = errors.New("the mission was deleted by the owner")
 
