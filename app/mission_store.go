@@ -81,6 +81,8 @@ type Mission struct {
 	Journal     []EntreeJournal     `json:"journal,omitempty"`      // at most maxJournalMission, the oldest first
 	Suppression *OptionsSuppression `json:"suppression,omitempty"`  // asked while running: done once the milestone ends
 	InfraJusqua string              `json:"infra_jusqua,omitempty"` // former option (removed, note 19h03 §3): still read from older missions, never used
+	// M266: what of the card cannot change now and why (champsFiges), worked out at each reading, never written
+	Figes map[string]string `json:"figes,omitempty"`
 }
 
 // MarshalJSON: the mission with its card's print (empreinteCarte), which the window sends back to launch it (R3).
@@ -104,6 +106,7 @@ var (
 func dossierMissions() string { return filepath.Join(dossierAthanor(), "hub", "missions") }
 
 func enregistrerMission(m Mission) error {
+	m.Figes = nil
 	if !idMissionValide.MatchString(m.ID) || !slices.Contains(etatsMission, m.Etat) {
 		return errors.New("invalid mission")
 	}

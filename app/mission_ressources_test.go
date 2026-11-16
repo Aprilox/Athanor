@@ -156,8 +156,12 @@ func TestMissionCarteRessources(t *testing.T) {
 		t.Fatalf("a vault entry removed by its name: %v", err)
 	}
 
-	// a mission no longer proposed: its card stays as it is
+	// M266: a launched mission's card still changes; a finished one stays as it is
 	if _, err := modifierMission(id, func(m *Mission) error { m.Etat = "lancee"; return nil }); err != nil {
+		t.Fatal(err)
+	}
+	ressource(`{"type":"serveur","ref":"a1"}`, http.StatusOK)
+	if _, err := modifierMission(id, func(m *Mission) error { m.Etat = "terminee"; return nil }); err != nil {
 		t.Fatal(err)
 	}
 	ressource(`{"type":"serveur","ref":"a1"}`, http.StatusConflict)

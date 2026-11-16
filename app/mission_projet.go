@@ -62,7 +62,7 @@ func (s *Serveur) apiProjetMission(w http.ResponseWriter, r *http.Request) {
 		s.erreurMissionHTTP(w, err)
 		return
 	}
-	m, _, err = s.changerCarte(id, "project settings changed", func(_ *Mission, carte *CarteMission, _ contexteCarte) error {
+	m, _, err = s.changerCarte(id, deQui(r), "project settings changed", func(_ *Mission, carte *CarteMission, _ contexteCarte) error {
 		if !carte.Projet.Nouveau || !strings.EqualFold(carte.Projet.Nom, avant.Projet.Nom) { // changed by the agent meanwhile
 			return errCarteChangee
 		}

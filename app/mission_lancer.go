@@ -176,11 +176,8 @@ func (s *Serveur) lancerMission(id, qui, dossier, empreinte string) (Mission, er
 	})
 }
 
-// echecLancement: m's launch stopped at a failed step (its last events: the launch, then the echec); it can be resumed.
-func echecLancement(m Mission) bool {
-	h := m.Historique
-	return m.Etat == "echec" && len(h) > 1 && h[len(h)-2].Etat == "lancee"
-}
+// echecLancement: m's launch stopped at a failed step (in echec after a launch, changed since or not); it can be resumed.
+func echecLancement(m Mission) bool { return m.Etat == "echec" && lanceeUneFois(m) }
 
 // faitMission: a launch event of m starts with debut (what a failed launch already did).
 func faitMission(m Mission, debut string) bool {
@@ -261,61 +258,32 @@ func (s *Serveur) etapesMission(c CarteMission, politique, qui, dossier string, 
 		return voies, faits, errMoteur("the access file cannot be read")
 	}
 	// native Windows mode: launching a mission with a Servers lane or an infra entry is the owner's Force for its project (logged)
-	if modeNatif.Load() && (c.AvertissementServeurs != "" || c.AvertissementInfra != "") && !s.acces.Projet(p.Nom).ForcerInfraNatif {
-		if err := s.acces.ForcerInfra(p.Nom, true); err != nil {
-			return voies, faits, errMoteur("forcing the project in native Windows mode: {0}", err)
-		}
-		s.ecrireAudit(LigneAudit{Type: "evenement", De: qui, Vers: "hub", Projet: p.Nom, Action: "forcer_infra_natif", Resultat: "true (mission lancée en mode Windows natif)"})
+	if force, err := s.forcerNatifMission(p, c, qui); err != nil {
+		return voies, faits, err
+	} else if force {
 		faits = append(faits, evenementMission("lancee", "native Windows mode: the project is forced by this launch (logged)"))
 	}
 	// 2. the environments (M265: before the grants, which name them): the card's URL, protection and servers, the mission's policy (prod: always accord)
 	inventaire, _ := lireServeurs()
 	actuels := s.acces.Environnements(p.Nom)
 	for _, ec := range c.Envs {
-		e := actuels[ec.Nom]
-		e.URL, e.Protection, e.Serveurs = ec.URL, ec.Protection, ec.Serveurs // C81: never weakened (envSansAffaiblir)
-		// M247: Production from the card (never lowered); the milestone relay on the first other environment only
-		e.Production = e.Production || ec.Production
-		e.Politique, e.DeployerAuJalon = ec.Politique, relaisAuJalon(c, ec, e, inventaire)
-		if e.Fournisseur == "" { // the Servers lane's DNS: the provider holding the host's zone, its token ticked on the card
-			e.Fournisseur = fournisseurCoche(hoteURL(ec.URL), c.Acces)
-		}
-		v, err := validerEnvironnement(ec.Nom, e, inventaire)
-		if err == nil {
-			err = s.acces.DefinirEnvironnement(p.Nom, ec.Nom, v)
-		}
-		if err != nil {
-			return voies, faits, errMoteur("the environment {0}: {1}", ec.Nom, err)
+		if err := s.definirEnvCarte(p, c, ec, politique, actuels, inventaire); err != nil {
+			return voies, faits, err
 		}
 		faits = append(faits, evenementMission("lancee", "environment set: "+ec.Nom+" "+ec.URL+", "+ec.Protection+", "+ec.Politique))
-		// C82: a tout mission asks every deployment of its environments: the owner's "never ask again" ends (as B71)
-		if politique == "tout" && s.approbations != nil {
-			if _, err := s.approbations.RetirerRegles(func(r RegleAccord) bool {
-				return r.Projet == p.Nom && r.Env == ec.Nom && r.Action == actionDeploiement
-			}); err != nil {
-				return voies, faits, errMoteur("the environment {0}: {1}", ec.Nom, err)
-			}
-		}
 	}
 	// 3. the ticked vault entries (an entry already given stays as it is; one to fill is the owner's)
 	for _, a := range c.Acces {
 		if a.Decoche || a.ARemplir {
 			continue
 		}
-		e := s.entreeCoffre(a.ID)
-		g, err := s.acces.Ajouter(p.Nom, e, envAcces(a.Pour, c), "", "mission")
-		if errors.Is(err, errAccesDeja) {
-			continue
-		}
+		f, err := s.donnerAccesCarte(p, c, a, qui)
 		if err != nil {
-			return voies, faits, errMoteur("giving {0}: {1}", a.Entree, err)
+			return voies, faits, err
 		}
-		action := "acces_accorde"
-		if e.Portee == "infra" && modeNatif.Load() {
-			action = "acces_accorde_force" // as the Access page: an infra entry given in native mode, the project forced
+		if f.Detail != "" {
+			faits = append(faits, f)
 		}
-		s.auditAcces(qui, p.Nom, action, e, g.Variable, g.Env)
-		faits = append(faits, evenementMission("lancee", "access given: "+a.Entree+" → "+g.Variable+" ("+g.Env+")"))
 	}
 	// C86: in the project's secrets.env now, a pilot already running included (demarrerPilote stops before it)
 	if len(faits) > 0 {
@@ -351,6 +319,67 @@ func (s *Serveur) etapesMission(c CarteMission, politique, qui, dossier string, 
 		audit(v)
 	}
 	return voies, faits, nil
+}
+
+// forcerNatifMission: in native Windows mode, a card with a Servers lane or an infra entry forces p (the owner's
+// Force, logged), once; whether it did.
+func (s *Serveur) forcerNatifMission(p Projet, c CarteMission, qui string) (bool, error) {
+	if !modeNatif.Load() || c.AvertissementServeurs == "" && c.AvertissementInfra == "" || s.acces.Projet(p.Nom).ForcerInfraNatif {
+		return false, nil
+	}
+	if err := s.acces.ForcerInfra(p.Nom, true); err != nil {
+		return false, errMoteur("forcing the project in native Windows mode: {0}", err)
+	}
+	s.ecrireAudit(LigneAudit{Type: "evenement", De: qui, Vers: "hub", Projet: p.Nom, Action: "forcer_infra_natif", Resultat: "true (mission lancée en mode Windows natif)"})
+	return true, nil
+}
+
+// definirEnvCarte: card environment ec written to p (actuels: p's environments as they are): the card's URL,
+// protection and servers, the mission's policy (prod: always accord).
+func (s *Serveur) definirEnvCarte(p Projet, c CarteMission, ec EnvCarte, politique string, actuels map[string]Environnement, inventaire []ServeurInventaire) error {
+	e := actuels[ec.Nom]
+	e.URL, e.Protection, e.Serveurs = ec.URL, ec.Protection, ec.Serveurs // C81: never weakened (envSansAffaiblir)
+	// M247: Production from the card (never lowered); the milestone relay on the first other environment only
+	e.Production = e.Production || ec.Production
+	e.Politique, e.DeployerAuJalon = ec.Politique, relaisAuJalon(c, ec, e, inventaire)
+	if e.Fournisseur == "" { // the Servers lane's DNS: the provider holding the host's zone, its token ticked on the card
+		e.Fournisseur = fournisseurCoche(hoteURL(ec.URL), c.Acces)
+	}
+	v, err := validerEnvironnement(ec.Nom, e, inventaire)
+	if err == nil {
+		err = s.acces.DefinirEnvironnement(p.Nom, ec.Nom, v)
+	}
+	if err != nil {
+		return errMoteur("the environment {0}: {1}", ec.Nom, err)
+	}
+	// C82: a tout mission asks every deployment of its environments: the owner's "never ask again" ends (as B71)
+	if politique == "tout" && s.approbations != nil {
+		if _, err := s.approbations.RetirerRegles(func(r RegleAccord) bool {
+			return r.Projet == p.Nom && r.Env == ec.Nom && r.Action == actionDeploiement
+		}); err != nil {
+			return errMoteur("the environment {0}: {1}", ec.Nom, err)
+		}
+	}
+	return nil
+}
+
+// donnerAccesCarte: ticked line a of card c given to p for its environment ("mission" grant), audited; its history
+// line (empty when p already had it).
+func (s *Serveur) donnerAccesCarte(p Projet, c CarteMission, a AccesCarte, qui string) (EvenementMission, error) {
+	e := s.entreeCoffre(a.ID)
+	g, err := s.acces.Ajouter(p.Nom, e, envAcces(a.Pour, c), "", "mission")
+	if errors.Is(err, errAccesDeja) {
+		return EvenementMission{}, nil
+	}
+	if err != nil {
+		return EvenementMission{}, errMoteur("giving {0}: {1}", a.Entree, err)
+	}
+	action := "acces_accorde"
+	if e.Portee == "infra" && modeNatif.Load() {
+		action = "acces_accorde_force" // as the Access page: an infra entry given in native mode, the project forced
+	}
+	s.auditAcces(qui, p.Nom, action, e, g.Variable, g.Env)
+	return evenementMission("lancee", "access given: "+a.Entree+" → "+g.Variable+" ("+g.Env+")"), nil
 }
 
 // planPret (M249): p's framing is done, its plan holds at least one milestone.

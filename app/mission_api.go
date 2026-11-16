@@ -121,10 +121,10 @@ func tacheMission(id string) (TacheServeurs, bool) {
 	return TacheServeurs{}, false
 }
 
-// voiesEnDirect: m's lanes with their state read now, on the project's pilot (dev: travaille, termine, arrete) or
+// voiesEnDirect: m's lanes with their state read now (and its frozen fields, M266), on the project's pilot (dev: travaille, termine, arrete) or
 // on the Servers task (its state and server); a project or task gone is "inconnu".
 func (s *Serveur) voiesEnDirect(m Mission) Mission {
-	m.Voies = slices.Clone(m.Voies)
+	m.Voies, m.Figes = slices.Clone(m.Voies), s.champsFiges(m)
 	for i := range m.Voies {
 		v := &m.Voies[i]
 		switch v.Module {
@@ -303,7 +303,13 @@ func (s *Serveur) apiModifierMission(w http.ResponseWriter, r *http.Request) {
 	if consigne != "" {
 		detail = "change asked: " + couper(s.masquerSecrets(consigne), 280)
 	}
-	m, carte, err := s.changerCarte(id, detail, func(m *Mission, carte *CarteMission, _ contexteCarte) error {
+	m, carte, err := s.changerCarte(id, deQui(r), detail, func(m *Mission, carte *CarteMission, _ contexteCarte) error {
+		if lanceeUneFois(*m) && consigne != "" { // M266: the orchestrator's card is closed once launched
+			return erreurMission{http.StatusConflict, figeConsigne}
+		}
+		if lanceeUneFois(*m) && c.Politique != "" && c.Politique != m.Politique {
+			return erreurMission{http.StatusConflict, figePolitique}
+		}
 		if _, ouverte := questionOuverte(*m); ouverte && consigne != "" {
 			return erreurMission{http.StatusConflict, "Answer the orchestrator's question first"}
 		}
@@ -354,43 +360,65 @@ func (s *Serveur) apiModifierMission(w http.ResponseWriter, r *http.Request) {
 
 // changerCarte: the card of mission id changed by f under the mission's lock, then checked and computed again
 // by the Go (validerCarte, calculerCarte) and noted in its history with detail; refused while a launch accord
-// waits (C77), outside proposee and while the orchestrator works. A changed card changes its print (empreinteCarte).
-func (s *Serveur) changerCarte(id, detail string, f func(*Mission, *CarteMission, contexteCarte) error) (Mission, CarteMission, error) {
+// waits (C77), while the orchestrator works, and in the states of no etatsModifiables. M266: launched once, the
+// fields an action in progress freezes stay (controlerFiges), the project is checked as it exists now, and the
+// change goes to the project at once by qui (appliquerCarte). A changed card changes its print (empreinteCarte).
+func (s *Serveur) changerCarte(id, qui, detail string, f func(*Mission, *CarteMission, contexteCarte) error) (Mission, CarteMission, error) {
 	if _, ok := s.accordMissionAttente(id); ok { // C77: the card asked to launch stays as it is (its print is checked too)
-		return Mission{}, CarteMission{}, erreurMission{http.StatusConflict, "A launch request for this card waits for your decision: refuse it first to change the card"}
+		return Mission{}, CarteMission{}, erreurMission{http.StatusConflict, figeAccord}
 	}
 	ctx := s.contexteCarte()
-	var carte CarteMission
+	var carte, avant CarteMission
 	m, err := modifierMission(id, func(m *Mission) error {
 		switch {
-		case m.Etat != "proposee":
+		case !slices.Contains(etatsModifiables, m.Etat):
 			return erreurMission{http.StatusConflict, "This mission is " + m.Etat + ": its card can no longer be changed"}
 		case orchestrateurTravaille(id):
-			return erreurMission{http.StatusConflict, "The orchestrator is working on this card: wait for it to finish"}
+			return erreurMission{http.StatusConflict, figeOrchestrateur}
+		case len(m.Carte) == 0:
+			return erreurMission{http.StatusConflict, "This mission has no card yet"}
 		}
-		if err := json.Unmarshal(m.Carte, &carte); err != nil {
+		if json.Unmarshal(m.Carte, &carte) != nil || json.Unmarshal(m.Carte, &avant) != nil {
 			return errors.New("the mission's card cannot be read")
 		}
 		if err := f(m, &carte, ctx); err != nil {
 			return err
 		}
-		if err := validerCarte(&carte, ctx); err != nil {
+		lancee := lanceeUneFois(*m)
+		if lancee {
+			if err := controlerFiges(*m, avant, carte); err != nil {
+				return err
+			}
+		}
+		v := carte
+		if projetFige(*m, avant) { // the project exists now: checked as an existing one, the card keeps what it was
+			v.Projet.Nouveau, v.Dev.Modes = false, nil
+		}
+		if err := validerCarte(&v, ctx); err != nil {
 			return err
 		}
-		carte = calculerCarte(carte, m.Politique, ctx)
+		v.Projet.Nouveau, v.Dev.Modes = carte.Projet.Nouveau, carte.Dev.Modes
+		carte = calculerCarte(v, m.Politique, ctx)
 		b, err := json.Marshal(carte)
 		if err != nil {
 			return err
 		}
 		m.Carte = b
-		m.Historique = append(m.Historique, evenementMission(m.Etat, detail))
+		etat := m.Etat
+		if lancee { // M266: never hides the reason of a failure (raisonEchec)
+			etat = "modifiee"
+		}
+		m.Historique = append(m.Historique, evenementMission(etat, detail))
 		return nil
 	})
+	if err == nil && lanceeUneFois(m) {
+		m = s.appliquerCarte(m, avant, carte, qui)
+	}
 	return m, carte, err
 }
 
 // apiRessourceMission: POST /api/missions/{id}/ressources {type: serveur|cle|fournisseur, ref, retirer} ("Add a
-// resource", M252): one resource of a card not launched added or removed (changerRessource), the card checked
+// resource", M252): one resource of a card added or removed (M266: launched too, given to its project at once) (changerRessource), the card checked
 // and computed again; its print changes, so a launch asked before is refused (errCarteChangee). A server is
 // changed on the PC only (B84, as the environments of /modifier).
 func (s *Serveur) apiRessourceMission(w http.ResponseWriter, r *http.Request) {
@@ -409,7 +437,7 @@ func (s *Serveur) apiRessourceMission(w http.ResponseWriter, r *http.Request) {
 	}
 	fournisseurs, _ := lireFournisseurs() // unreadable: no provider to add (the ref is then unknown)
 	id, action := r.PathValue("id"), map[bool]string{false: "resource added: ", true: "resource removed: "}[c.Retirer]
-	m, _, err := s.changerCarte(id, action+c.Type, func(_ *Mission, carte *CarteMission, x contexteCarte) error {
+	m, _, err := s.changerCarte(id, deQui(r), action+c.Type, func(_ *Mission, carte *CarteMission, x contexteCarte) error {
 		return changerRessource(carte, c.Type, strings.TrimSpace(c.Ref), c.Retirer, x, fournisseurs)
 	})
 	if errors.Is(err, errMentionInconnue) {

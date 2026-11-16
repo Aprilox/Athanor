@@ -2297,7 +2297,9 @@ async function enregistrerProjetMission(change) {
   majZoneMission();
 }
 // the launch stopped at a failed step (its last events: the launch, then the echec): resumed by Launch
-const echecLancement = (m) => { const h = m.historique || []; return m.etat === "echec" && h.length > 1 && h[h.length - 2].etat === "lancee"; };
+const echecLancement = (m) => m.etat === "echec" && (m.historique || []).some((x) => x.etat === "lancee");
+// raisonEchec (M266): the event that put the mission in echec; the owner's changes after it are "modifiee"
+const raisonEchec = (m) => [...(m.historique || [])].reverse().find((x) => x.etat === "echec") || {};
 document.addEventListener("change", (ev) => {
   const i = ev.target;
   if (i.id === "mis-dossier") enregistrerProjetMission({ dossier: i.value.trim() });
@@ -2342,7 +2344,7 @@ document.addEventListener("click", async (ev) => {
 });
 function zoneMission() {
   const d = etat.missionVue; if (!d) return "";
-  const m = d.mission, q = (m.questions || []).find((x) => !x.reponse), fin = (m.historique || []).slice(-1)[0] || {};
+  const m = d.mission, q = (m.questions || []).find((x) => !x.reponse), fin = m.etat === "echec" ? raisonEchec(m) : (m.historique || []).slice(-1)[0] || {};
   if (echecLancement(m)) return `<section class="bloc mis-carte mis-echec" role="alert"><b>${h(t("The launch of the mission stopped: {0}", [fin.message ? texteMessage(fin.message) : fin.detail || ""]))}</b>
     <div class="ligne"><button type="button" class="btn btn-primaire btn-petit" data-mis="lancer">${t("Resume the launch")}</button><button type="button" class="btn btn-petit" data-mis="oublier">${t("Close")}</button></div></section>`;
   if (m.etat === "echec") return `<section class="bloc mis-carte mis-echec" role="alert"><b>${t("The orchestrator could not prepare the card.")}</b> <span class="muet">${h(fin.message ? texteMessage(fin.message) : fin.detail || "")}</span>
@@ -5905,7 +5907,7 @@ pages.missions = async () => {
 pages.mission = async () => {
   const [d, sugg] = await Promise.all([api("missions/" + encodeURIComponent(etat.missionId || "")), api("mentions").catch(() => ({}))]);
   etat.mentionsSugg = sugg.mentions || []; etat.missionVue = d;
-  const m = d.mission, aLancer = ACTIVE_MISSION.includes(m.etat), fin = (m.historique || []).slice(-1)[0] || {};
+  const m = d.mission, aLancer = ACTIVE_MISSION.includes(m.etat), fin = m.etat === "echec" ? raisonEchec(m) : (m.historique || []).slice(-1)[0] || {};
   clearTimeout(minuterieMission);
   if (aLancer && travailleMission(d)) minuterieMission = setTimeout(lireMissionVue, 2000);
   const retour = `<div class="ligne m0"><a class="btn btn-petit" href="#missions">${ic("gauche")} ${t("Missions")}</a><span class="espace"></span><button type="button" class="btn btn-petit btn-danger" data-mis-suppr="${h(m.id)}">${t("Delete the mission")}</button></div>`;

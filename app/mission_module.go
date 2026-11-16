@@ -31,10 +31,10 @@ func (moduleMissions) Elements(s *Serveur) []ElementHub {
 				Attente: &AttenteElement{Raison: "The mission waits for the vault to be unlocked", Page: "#missions"}})
 		}
 		// a launch stopped by a failed step (mission_lancer.go): its reason, until the owner dismisses it
-		if h := m.Historique; echecLancement(m) {
-			var raison any = h[len(h)-1].Detail
-			if h[len(h)-1].Message != nil { // B87: said in the page's language
-				raison = h[len(h)-1].Message
+		if e := raisonEchec(m); echecLancement(m) {
+			var raison any = e.Detail
+			if e.Message != nil { // B87: said in the page's language
+				raison = e.Message
 			}
 			out = append(out, ElementHub{ID: m.ID, Titre: titreMission(m), Etat: "termine", Lien: "#missions",
 				Attente: &AttenteElement{Raison: "The launch of the mission stopped: {0}", Args: []any{raison}, Page: "#missions"}})
