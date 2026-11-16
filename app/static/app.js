@@ -2202,7 +2202,7 @@ pages.accueil = async () => {
         <button type="button" class="btn local-seul chat-replie" id="accueil-mission">${t("Create a mission")}</button>
         <button type="button" class="btn local-seul" id="hub-chat-stop" ${hc.en_cours ? "" : "hidden"}>${t("Stop")}</button>
         <button type="submit" class="btn btn-primaire local-seul" id="hub-chat-envoyer" ${hc.en_cours ? "hidden" : ""}>${t("Send")}</button></div>
-      <div class="muet petit local-seul chat-replie" id="accueil-aide">${t("Type @ to name a project, a server or a vault key.")} ${t("The orchestrator prepares a mission card first: nothing starts before you press Launch.")}</div>
+      <div class="muet petit local-seul chat-replie" id="accueil-aide">${t("Type @ to name a project, a server or a vault key.")}</div>
     </form>
     <div id="mission-zone" aria-live="polite">${zoneMission()}</div>
     ${blocAttente(d.elements || [], modules)}
@@ -2244,6 +2244,10 @@ function carteMission(d) {
       <div class="ligne m0 mis-res-puces" role="group" aria-labelledby="mis-res-titre">${res.map(puce).join("") || `<span class="muet petit">${t("No resource yet: add a server, a key or an API if the project needs one.")}</span>`}
       ${actif ? `<button type="button" class="btn btn-petit" id="mis-res-ajouter" aria-expanded="${!!mr}" aria-controls="mis-res">${ic("plus")}${t("Add a resource")}</button>` : ""}</div>${menu}</div>`;
   const pj = c.projet.nouveau && actif && !c.projet.distant ? sectionProjet(c) : "";
+  // only the rows that hold something: an empty "Files —" said nothing (M255)
+  const touche = [srv && (c.touche.dns || []).length ? `<dt>${t("DNS names")}</dt><dd>${liste(c.touche.dns)}</dd>` : "",
+    (c.touche.fichiers || []).length ? `<dt>${t("Files")}</dt><dd>${liste(c.touche.fichiers)}</dd>` : "",
+    pj ? "" : `<dt>${t("Folder")}</dt><dd>${c.touche.dossier ? h(c.touche.dossier) : t("A new folder for the project")}</dd>`].join("");
   return `<div class="mis-voies${srv ? "" : " mis-une"}">
       <div class="mis-voie"><h3>${t((etat.hubModules || []).find((m) => m.id === "dev")?.nom || "dev")}</h3><p class="m0"><b>${h(c.projet.nom)}</b> <span class="etiquette">${t(c.projet.nouveau ? "New project" : "Existing project")}</span></p><p class="mis-brief">${h(c.dev.brief || "")}</p>${c.dev.modes ? `<p class="m0">${[["parallele", "Parallel mode"], ["eco", "Eco mode"], ["rapide", "Fast mode"]].filter(([k]) => c.dev.modes[k]).map(([, n]) => `<span class="etiquette">${t(n)}</span>`).join(" ")}</p>` : ""}</div>
       ${srv ? `<div class="mis-voie"><h3>${t("Servers")}</h3>${c.avertissement_serveurs ? avert : ""}<p class="mis-brief">${h(c.serveurs.brief || t("Nothing to prepare on the servers."))}</p></div>` : ""}
@@ -2252,9 +2256,7 @@ function carteMission(d) {
     <div class="mis-grille">
       ${gauche ? `<div>${gauche}</div>` : ""}
       <div>${(c.approbations || []).length ? `<h3>${t("I will ask for your approval for")}</h3>${liste(c.approbations.map((a) => t(APPROBATIONS_PREVUES[a.type] || a.type, [a.cible || ""])))}` : ""}
-        <h3>${t("What will be touched")}</h3><dl class="fiche mis-touche">
-          ${srv ? `<dt>${t("DNS names")}</dt><dd>${liste(c.touche.dns)}</dd>` : ""}
-          <dt>${t("Files")}</dt><dd>${liste(c.touche.fichiers)}</dd>${pj ? "" : `<dt>${t("Folder")}</dt><dd>${c.touche.dossier ? h(c.touche.dossier) : t("A new folder for the project")}</dd>`}</dl>
+        ${touche ? `<h3>${t("What will be touched")}</h3><dl class="fiche mis-touche">${touche}</dl>` : ""}
         ${gauche ? estimationMission(e) : ""}</div>
       ${gauche ? "" : `<div>${estimationMission(e)}</div>`}
     </div>
@@ -2418,7 +2420,7 @@ let minuterieHubChat;
 const sansCartes = (m) => ({ ...m, texte: (m.texte || "").replace(/<(note|agent|mcp|action)>[\s\S]*?<\/\1>/g, "") }); // cards of the project chat: not here; its own card: carteActionHub
 function filHub(d) {
   const msgs = (d.messages || []).map(sansCartes), cartes = d.actions || {};
-  let html = msgs.length ? msgs.map((m, i) => messageChat(m, i) + (cartes[i] ? carteActionHub(cartes[i], i) : "")).join("") : `<div class="vide">${t("Ask anything about your projects, servers or missions. By default the assistant only reads and answers: it sees no file and no key until you give it more under “What the assistant can do”.")}</div>`;
+  let html = msgs.length ? msgs.map((m, i) => messageChat(m, i) + (cartes[i] ? carteActionHub(cartes[i], i) : "")).join("") : `<div class="vide">${t("Ask anything about your projects, servers or missions.")}</div>`;
   if (d.en_cours) {
     const p = d.partiel || {}, textes = p.textes || [], outils = p.outils || [];
     html += `<div class="chat-msg chat-claude"><div class="chat-bulle chat-attente">${textes.length ? mdChat(textes[textes.length - 1].replace(/<(note|agent|mcp|action)>[\s\S]*$/, ""), true) : ""}
@@ -5786,7 +5788,7 @@ function carteServeur(x, fiche, envs, santeSites) {
   return `<div class="bloc carte-serveur" data-srv-id="${h(x.id)}">
     <div class="cp-tete"><a class="cp-nom" href="#serveur/${encodeURIComponent(x.id)}"><b>${h(x.nom)}</b></a>${x.autorisation === "ignorer" ? badgeSansGarde(x) : ""}<span class="pastille ${cls}">${sante}</span></div>
     <div class="muet petit"><code>${h(x.utilisateur)}@${h(x.hote)}${x.port === 22 ? "" : ":" + x.port}</code>${f.systeme && f.systeme.nom ? " · " + h(f.systeme.nom) : ""}</div>
-    <div class="ligne m0">${(x.roles || []).includes("prod") ? `<span class="badge badge-infra">${t("Production")}</span>` : ""}${(envs || []).length ? `<span class="badge badge-env" title="${h(t("Used by") + " " + envs.join(", "))}">${h(t("Environments: {0}", [envs.length]))}</span>` : ""}</div>
+    ${(x.roles || []).includes("prod") ? `<div class="ligne m0"><span class="badge badge-infra">${t("Production")}</span></div>` : ""}
     <div class="petit srv-tourne" title="${h(tourne.join(", "))}">${h(resume)}</div>
     ${(envs || []).length ? `<div class="ligne m0 petit srv-sante">${envs.map((pe) => { const st = ((santeSites || {}).envs || {})[pe], [ic, et] = ETATS_SANTE[st] || ["·", "Not checked yet"];
       return `<span class="badge srv-sante-${h(st || "aucun")}" title="${h(t(et))}">${ic} ${h(pe)}</span>`; }).join("")}</div>` : ""}
