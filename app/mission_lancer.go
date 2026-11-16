@@ -93,7 +93,7 @@ func politiqueEnvMission(production bool, politique string) string {
 func (s *Serveur) lancerMission(id, qui, dossier, empreinte string) (Mission, error) {
 	m, err := lireMission(id)
 	pasLancable := func(m *Mission) error {
-		if m.Etat != "proposee" && m.Etat != "acceptee" {
+		if m.Etat != "proposee" && m.Etat != "acceptee" && !echecLancement(*m) {
 			return erreurMission{http.StatusConflict, "This mission is " + m.Etat + ": it cannot be launched"}
 		}
 		return nil
@@ -115,6 +115,11 @@ func (s *Serveur) lancerMission(id, qui, dossier, empreinte string) (Mission, er
 	if err := json.Unmarshal(m.Carte, &c); err != nil {
 		return m, err
 	}
+	// M254: a launch resumed after a failed step: the project it created and the request it added stay as they are
+	repris := m.Etat == "echec"
+	if repris && faitMission(m, "project created: ") {
+		c.Projet.Nouveau, c.Dev.Modes = false, nil
+	}
 	x := s.contexteCarte()
 	if err := validerCarte(&c, x); err != nil { // what changed since the card (a project removed, a host taken)
 		return m, err
@@ -124,9 +129,7 @@ func (s *Serveur) lancerMission(id, qui, dossier, empreinte string) (Mission, er
 		return m, errMissionInfraVerrouille
 	}
 	if c.Projet.Nouveau {
-		if dossier == "" {
-			dossier = dossierProjetNeuf(c.Projet.Nom, x.projets)
-		}
+		dossier = cmp.Or(dossier, c.Projet.Dossier, dossierProjetNeuf(c.Projet.Nom, x.projets))
 		if err := s.controlerDossierMission(c.Projet.Nom, dossier); err != nil { // B88: refused before lancee, the mission intact
 			return m, err
 		}
@@ -152,7 +155,7 @@ func (s *Serveur) lancerMission(id, qui, dossier, empreinte string) (Mission, er
 	if c.Projet.Distant != "" {
 		voies, faits, err = s.etapesDistantes(c, qui, id)
 	} else {
-		voies, faits, err = s.etapesMission(c, m.Politique, qui, dossier)
+		voies, faits, err = s.etapesMission(c, m.Politique, qui, dossier, repris && faitMission(m, "request added: "))
 	}
 	defer s.suivreMission(id) // stops by itself at once if the launch ended in echec
 	return modifierMission(id, func(m *Mission) error {
@@ -168,6 +171,17 @@ func (s *Serveur) lancerMission(id, qui, dossier, empreinte string) (Mission, er
 		}
 		return nil
 	})
+}
+
+// echecLancement: m's launch stopped at a failed step (its last events: the launch, then the echec); it can be resumed.
+func echecLancement(m Mission) bool {
+	h := m.Historique
+	return m.Etat == "echec" && len(h) > 1 && h[len(h)-2].Etat == "lancee"
+}
+
+// faitMission: a launch event of m starts with debut (what a failed launch already did).
+func faitMission(m Mission, debut string) bool {
+	return slices.ContainsFunc(m.Historique, func(e EvenementMission) bool { return e.Etat == "lancee" && strings.HasPrefix(e.Detail, debut) })
 }
 
 // controlerDossierMission (B88): what would make the new project's creation fail, checked before the launch:
@@ -201,7 +215,7 @@ func (s *Serveur) controlerDossierMission(nom, dossier string) error {
 
 // etapesMission: the launch's steps in order; the lanes started so far, one history line per entry given and
 // environment set (C86), and the first step's error.
-func (s *Serveur) etapesMission(c CarteMission, politique, qui, dossier string) ([]VoieMission, []EvenementMission, error) {
+func (s *Serveur) etapesMission(c CarteMission, politique, qui, dossier string, demandeFaite bool) ([]VoieMission, []EvenementMission, error) {
 	voies, faits := []VoieMission{}, []EvenementMission{}
 	audit := func(v VoieMission) {
 		voies = append(voies, v)
@@ -214,8 +228,9 @@ func (s *Serveur) etapesMission(c CarteMission, politique, qui, dossier string) 
 		if p, _, err = s.ajouterProjet(c.Projet.Nom, dossier, c.Dev.Brief, false); err != nil {
 			return voies, faits, errMoteur("creating the project: {0}", err)
 		}
+		faits = append(faits, evenementMission("lancee", "project created: "+p.Dossier))
 		if md := c.Dev.Modes; md != nil { // before its pilot starts: its first cycle reads them
-			if err := p.ecrireMode(ModeVue{Parallele: md.Parallele, Eco: md.Eco, Rapide: md.Rapide}); err != nil {
+			if err := p.ecrireMode(ModeVue{Parallele: md.Parallele, ParalleleMax: md.ParalleleMax, Eco: md.Eco, Rapide: md.Rapide, CadrageMax: md.CadrageMax, DureeMax: md.DureeMax}); err != nil {
 				return voies, faits, errMoteur("the working modes: {0}", err)
 			}
 			faits = append(faits, evenementMission("lancee", "working modes set: "+nomsModes(*md)))
@@ -225,11 +240,19 @@ func (s *Serveur) etapesMission(c CarteMission, politique, qui, dossier string) 
 		if p, ok = s.projetNomme(c.Projet.Nom); !ok {
 			return voies, faits, errMoteur("the project {0} no longer exists", c.Projet.Nom)
 		}
-		if c.Dev.Brief != "" {
+		if c.Dev.Brief != "" && !demandeFaite {
 			if _, _, err := s.ajouterDemande(p, c.Titre, c.Dev.Brief); err != nil {
 				return voies, faits, errMoteur("adding the request: {0}", err)
 			}
+			faits = append(faits, evenementMission("lancee", "request added: "+c.Titre))
 		}
+	}
+	// M254: the GitHub repository the owner chose, linked before the pilot pushes anything (again on a resumed launch)
+	if c.Projet.GitHub != "" {
+		if err := githubMission(s, p, c.Projet.GitHub, c.Projet.Depot); err != nil {
+			return voies, faits, errMoteur("the project {0} is created in {1}, but its GitHub repository is not linked: {2}. Fix it, then resume the launch", p.Nom, p.Dossier, err)
+		}
+		faits = append(faits, evenementMission("lancee", "GitHub repository linked: "+c.Projet.Depot))
 	}
 	if s.acces == nil {
 		return voies, faits, errMoteur("the access file cannot be read")

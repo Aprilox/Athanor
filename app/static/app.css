@@ -1668,3 +1668,7 @@ html.scene-pause .verrou * { animation-play-state: paused !important; }
 .mis-voies.mis-une { grid-template-columns: minmax(0, 1fr); }
 .mis-politique-plus > summary, .mis-pol-plus > summary { cursor: pointer; font-weight: 600; font-size: 13px; }
 .mis-politique-plus[open] > .mis-politique, .mis-pol-plus[open] > .mis-pol-direct { margin-top: 6px; }
+.mis-projet { margin: 10px 0; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
+.mis-projet > summary { cursor: pointer; font-size: 13px; overflow-wrap: anywhere; } .mis-projet[open] > summary { margin-bottom: 8px; }
+.mis-projet .mode-ligne { margin: 8px 0; } .mis-projet #mis-dossier { min-width: 0; }
+.mis-projet .mis-github { display: grid; gap: 4px; margin: 0; }

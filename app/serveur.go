@@ -399,6 +399,7 @@ func (s *Serveur) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/missions", s.garde(false, s.apiCreerMission))
 	mux.HandleFunc("POST /api/missions/{id}/modifier", s.garde(false, s.apiModifierMission))
 	mux.HandleFunc("POST /api/missions/{id}/ressources", s.garde(false, s.apiRessourceMission))
+	mux.HandleFunc("POST /api/missions/{id}/projet", s.garde(false, s.apiProjetMission))
 	mux.HandleFunc("POST /api/missions/{id}/repondre", s.garde(false, s.apiRepondreMission))
 	mux.HandleFunc("POST /api/missions/{id}/annuler", s.garde(false, s.apiAnnulerMission))
 	mux.HandleFunc("POST /api/missions/{id}/lancer", s.garde(false, s.apiLancerMission))

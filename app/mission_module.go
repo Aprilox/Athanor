@@ -31,7 +31,7 @@ func (moduleMissions) Elements(s *Serveur) []ElementHub {
 				Attente: &AttenteElement{Raison: "The mission waits for the vault to be unlocked", Page: "#missions"}})
 		}
 		// a launch stopped by a failed step (mission_lancer.go): its reason, until the owner dismisses it
-		if h := m.Historique; m.Etat == "echec" && len(h) > 1 && h[len(h)-2].Etat == "lancee" {
+		if h := m.Historique; echecLancement(m) {
 			var raison any = h[len(h)-1].Detail
 			if h[len(h)-1].Message != nil { // B87: said in the page's language
 				raison = h[len(h)-1].Message

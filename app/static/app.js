@@ -1503,6 +1503,7 @@ function blocMode(m) {
 // out stays as it is. On New project nothing is sent yet: the choice waits in etat.npMode for the creation.
 async function changerMode(changement) {
   const corps = { parallele: $("#md-parallele").checked, parallele_max: maxModeActif(), eco: $("#md-eco").checked, rapide: $("#md-rapide").checked, ...changement };
+  if ($("#mis-mode")) return enregistrerProjetMission({ modes: { ...((((etat.missionVue || {}).mission || {}).carte || {}).dev || {}).modes, ...corps } });
   if (etat.page === "nouveau") {
     Object.assign(etat.npMode, corps);
     const zone = $("#np-mode"); if (zone) zone.innerHTML = blocMode(etat.npMode);
@@ -2242,17 +2243,18 @@ function carteMission(d) {
   const ressources = `<div class="mis-ressources"><h3 id="mis-res-titre">${t("Resources")}</h3>${c.avertissement_infra && !c.avertissement_serveurs ? avert : ""}
       <div class="ligne m0 mis-res-puces" role="group" aria-labelledby="mis-res-titre">${res.map(puce).join("") || `<span class="muet petit">${t("No resource yet: add a server, a key or an API if the project needs one.")}</span>`}
       ${actif ? `<button type="button" class="btn btn-petit" id="mis-res-ajouter" aria-expanded="${!!mr}" aria-controls="mis-res">${ic("plus")}${t("Add a resource")}</button>` : ""}</div>${menu}</div>`;
+  const pj = c.projet.nouveau && actif && !c.projet.distant ? sectionProjet(c) : "";
   return `<div class="mis-voies${srv ? "" : " mis-une"}">
       <div class="mis-voie"><h3>${t((etat.hubModules || []).find((m) => m.id === "dev")?.nom || "dev")}</h3><p class="m0"><b>${h(c.projet.nom)}</b> <span class="etiquette">${t(c.projet.nouveau ? "New project" : "Existing project")}</span></p><p class="mis-brief">${h(c.dev.brief || "")}</p>${c.dev.modes ? `<p class="m0">${[["parallele", "Parallel mode"], ["eco", "Eco mode"], ["rapide", "Fast mode"]].filter(([k]) => c.dev.modes[k]).map(([, n]) => `<span class="etiquette">${t(n)}</span>`).join(" ")}</p>` : ""}</div>
       ${srv ? `<div class="mis-voie"><h3>${t("Servers")}</h3>${c.avertissement_serveurs ? avert : ""}<p class="mis-brief">${h(c.serveurs.brief || t("Nothing to prepare on the servers."))}</p></div>` : ""}
     </div>
-    ${ressources}
+    ${pj}${ressources}
     <div class="mis-grille">
       ${gauche ? `<div>${gauche}</div>` : ""}
       <div>${(c.approbations || []).length ? `<h3>${t("I will ask for your approval for")}</h3>${liste(c.approbations.map((a) => t(APPROBATIONS_PREVUES[a.type] || a.type, [a.cible || ""])))}` : ""}
         <h3>${t("What will be touched")}</h3><dl class="fiche mis-touche">
           ${srv ? `<dt>${t("DNS names")}</dt><dd>${liste(c.touche.dns)}</dd>` : ""}
-          <dt>${t("Files")}</dt><dd>${liste(c.touche.fichiers)}</dd><dt>${t("Folder")}</dt><dd>${c.touche.dossier ? h(c.touche.dossier) : t("A new folder for the project")}</dd></dl>
+          <dt>${t("Files")}</dt><dd>${liste(c.touche.fichiers)}</dd>${pj ? "" : `<dt>${t("Folder")}</dt><dd>${c.touche.dossier ? h(c.touche.dossier) : t("A new folder for the project")}</dd>`}</dl>
         ${gauche ? estimationMission(e) : ""}</div>
       ${gauche ? "" : `<div>${estimationMission(e)}</div>`}
     </div>
@@ -2262,6 +2264,49 @@ function carteMission(d) {
       <div class="ligne"><button type="button" class="btn btn-primaire" data-mis="appliquer">${t("Apply")}</button><button type="button" class="btn" data-mis="fermer">${t("Cancel")}</button></div>`
     : actif ? `<div class="ligne"><button type="button" class="btn" data-mis="modifier">${t("Edit")}</button><button type="button" class="btn btn-primaire" data-mis="lancer">${t("Launch")}</button><span class="espace"></span><button type="button" class="btn" data-mis="annuler">${t("Cancel the mission")}</button></div>` : ""}`;
 }
+// M254: a new project's settings, folded: its folder, its working mode (the Manage block), its GitHub repository;
+// each change is saved on the card (POST /projet), the folder checked at once (its error under the field)
+const GITHUB_MISSION = [["", "No repository"], ["lier", "Link an existing repository"], ["creer", "Create a private repository"]];
+function sectionProjet(c) {
+  const p = c.projet, distant = (etat.vue || {}).distant, err = etat.missionProjetErreur || "";
+  if (!etat.modeDefaut) { etat.modeDefaut = {}; api("mode?defaut=1").then((m) => { etat.modeDefaut = m; majZoneMission(); }).catch(() => {}); }
+  const md = { cadrage_global: 25, duree_max_global: 0, ...etat.modeDefaut, parallele_max: 3, ...(c.dev.modes || {}) };
+  const modes = [["parallele", "Parallel mode"], ["eco", "Eco mode"], ["rapide", "Fast mode"]].filter(([k]) => md[k]).map(([, n]) => t(n)).join(", ") || t("usual mode");
+  const gh = GITHUB_MISSION.find((x) => x[0] === (p.github || "")) || GITHUB_MISSION[0];
+  const resume = [p.dossier || c.touche.dossier, modes, t(gh[1]) + (p.depot ? " (" + p.depot + ")" : "")].filter(Boolean).join(" · ");
+  return `<details class="mis-projet" id="mis-projet"${etat.missionProjetOuvert || err ? " open" : ""}><summary><b>${t("Project")}</b> <span class="muet petit">${h(resume)}</span></summary>
+      <label for="mis-dossier" class="petit"><b>${t("Folder")}</b></label>
+      <div class="ligne m0"><input type="text" id="mis-dossier" class="croit" value="${h(p.dossier || c.touche.dossier || "")}"${distant ? " readonly" : ""} aria-describedby="mis-dossier-aide${err ? " mis-dossier-err" : ""}"${err ? ' aria-invalid="true"' : ""}>
+        ${distant ? "" : `<button type="button" class="btn btn-petit" data-parcourir="mis-dossier" data-titre="${h(t("Choose the project's folder"))}">${t("Choose…")}</button>`}</div>
+      <p class="muet petit m0" id="mis-dossier-aide">${t(distant ? "The folder is chosen on the PC." : "An empty folder, or a new one in an existing folder. By default, next to your other projects.")}</p>
+      ${err ? `<p class="attention petit m0" id="mis-dossier-err" role="alert">${h(err)}</p>` : ""}
+      <div id="mis-mode">${blocMode(md)}</div>
+      <fieldset class="mis-github"><legend>${t("GitHub repository")}</legend>
+        ${GITHUB_MISSION.map(([v, l]) => `<label class="radio"><input type="radio" name="mis-github" value="${v}"${gh[0] === v ? " checked" : ""}> <span>${t(l)}</span></label>`).join("")}
+        ${gh[0] ? `<label for="mis-depot" class="petit">${t(gh[0] === "lier" ? "Repository (OWNER/NAME)" : "Name of the new repository")}</label><input type="text" id="mis-depot" value="${h(p.depot || "")}"${gh[0] === "lier" ? ' placeholder="octocat/my-site"' : ""}>` : ""}
+        <p class="muet petit m0">${t("The repository is linked right after the project is created, with this computer's GitHub connection.")}</p></fieldset></details>`;
+}
+async function enregistrerProjetMission(change) {
+  const m = (etat.missionVue || {}).mission, c = m && m.carte; if (!c) return;
+  const corps = { dossier: c.projet.dossier || "", modes: c.dev.modes || null, github: c.projet.github || "", depot: c.projet.depot || "", ...change };
+  etat.missionProjetOuvert = true;
+  try {
+    const r = await api("missions/" + encodeURIComponent(m.id) + "/projet", "POST", corps);
+    etat.missionProjetErreur = "";
+    if (r && r.mission) etat.missionVue = { ...etat.missionVue, mission: r.mission };
+  } catch (e) { if ("dossier" in change) etat.missionProjetErreur = e.message; else toast(e.message, "erreur"); }
+  majZoneMission();
+}
+// the launch stopped at a failed step (its last events: the launch, then the echec): resumed by Launch
+const echecLancement = (m) => { const h = m.historique || []; return m.etat === "echec" && h.length > 1 && h[h.length - 2].etat === "lancee"; };
+document.addEventListener("change", (ev) => {
+  const i = ev.target;
+  if (i.id === "mis-dossier") enregistrerProjetMission({ dossier: i.value.trim() });
+  else if (i.name === "mis-github") enregistrerProjetMission({ github: i.value, depot: "" });
+  else if (i.id === "mis-depot") enregistrerProjetMission({ depot: i.value.trim() });
+});
+// the folder picker (parcourir) fills the field with a synthetic input event: saved as a typed change is
+document.addEventListener("input", (ev) => { if (ev.target.id === "mis-dossier" && !ev.isTrusted) enregistrerProjetMission({ dossier: ev.target.value.trim() }); });
 const estimationMission = (e) => `<h3>${t("Estimate")}</h3><p class="m0">${t("{0} to {1} of work, about {2} milestones", [heuresMission(e.minutes_min), heuresMission(e.minutes_max), e.jalons])}</p>
         <p class="muet petit m0">${e.cout_max ? t("About {0} $ to {1} $ of quota (list price)", [e.cout_min, e.cout_max]) : t("Quota unknown until a first cycle is measured on this PC.")}</p>`;
 // M253: the card's resources: its servers (one chip each) and its vault entries (one chip per entry, the unticked ones
@@ -2292,6 +2337,8 @@ document.addEventListener("click", async (ev) => {
 function zoneMission() {
   const d = etat.missionVue; if (!d) return "";
   const m = d.mission, q = (m.questions || []).find((x) => !x.reponse), fin = (m.historique || []).slice(-1)[0] || {};
+  if (echecLancement(m)) return `<section class="bloc mis-carte mis-echec" role="alert"><b>${h(t("The launch of the mission stopped: {0}", [fin.message ? texteMessage(fin.message) : fin.detail || ""]))}</b>
+    <div class="ligne"><button type="button" class="btn btn-primaire btn-petit" data-mis="lancer">${t("Resume the launch")}</button><button type="button" class="btn btn-petit" data-mis="oublier">${t("Close")}</button></div></section>`;
   if (m.etat === "echec") return `<section class="bloc mis-carte mis-echec" role="alert"><b>${t("The orchestrator could not prepare the card.")}</b> <span class="muet">${h(fin.detail || "")}</span>
     <div class="ligne"><button type="button" class="btn btn-petit" data-mis="oublier">${t("Close")}</button></div></section>`;
   if (!ACTIVE_MISSION.includes(m.etat)) return m.etat === "annulee" ? "" : `<section class="bloc mis-carte"><b>${h(t(ETATS_MISSION[m.etat] || m.etat))}</b> · ${h((m.carte || {}).titre || "")} <a href="#missions">${t("See the missions")} →</a></section>`;
@@ -4716,7 +4763,8 @@ function pcsOuvert() {
   return etat.pcsOuvert;
 }
 document.addEventListener("toggle", (ev) => {
-  if (ev.target && ev.target.classList && ev.target.classList.contains("mis-pol-plus")) etat.misPolOuvert = ev.target.open; // M248: stays open across the live refresh
+  if (ev.target && ev.target.classList && ev.target.classList.contains("mis-pol-plus")) etat.misPolOuvert = ev.target.open;
+  if (ev.target && ev.target.id === "mis-projet") etat.missionProjetOuvert = ev.target.open; // M254: stays open across a save // M248: stays open across the live refresh
   if (!ev.target || ev.target.id !== "pcs-repli") return;
   etat.pcsOuvert = ev.target.open;
   try { localStorage.setItem("pcsOuvert", etat.pcsOuvert ? "1" : "0"); } catch (e) { /* this device only */ }
@@ -5862,6 +5910,7 @@ pages.mission = async () => {
   return `<div class="missions mis-detail">${retour}
     <div><div class="ligne m0 tuile-tete"><h2 class="m0" id="mis-titre">${h((m.carte || {}).titre || t("New mission"))}</h2><span class="badge mis-etat-${h(m.etat)}" id="mis-badge">${h(t(ETATS_MISSION[m.etat] || m.etat))}</span></div>
       <p class="muet petit mis-phrase">${h(m.phrase)}</p>${m.etat === "echec" && fin.detail ? `<p class="mis-avert" role="note">${h(fin.message ? texteMessage(fin.message) : fin.detail)}</p>` : ""}
+      ${echecLancement(m) ? `<div class="ligne m0"><button type="button" class="btn btn-primaire" data-mis="lancer">${t("Resume the launch")}</button></div>` : ""}
       ${["lancee", "en_pause", "arret_demande", "arretee"].includes(m.etat) ? controlesMission(m) : ""}</div>
     <div id="mission-direct" class="mis-detail">${missionDirect(m)}</div>
     ${m.carte ? `<section class="bloc mis-carte" aria-labelledby="mis-titre">${carteMission(d)}</section>` : ""}
@@ -7866,7 +7915,7 @@ $("#page").addEventListener("click", async (ev) => {
   if (b.dataset.pv) return repondreTache(b);
   if (b.dataset.choisirPieces) return $("#" + b.dataset.choisirPieces + "-fichiers").click();
   if (b.dataset.retirerPiece) { const [id, i] = b.dataset.retirerPiece.split("|"); (etat.pieces[id] || []).splice(Number(i), 1); $("#" + id + "-liste").innerHTML = listePieces(id); return; }
-  const pageMode = page === "projet" || (page === "nouveau" && etat.npMode);
+  const pageMode = page === "projet" || (page === "nouveau" && etat.npMode) || $("#mis-mode");
   if (b.dataset.max && pageMode) return changerMode({ parallele_max: Number(b.dataset.max) });
   if (b.dataset.cadrage !== undefined && pageMode) return changerMode({ cadrage_max: Number(b.dataset.cadrage) });
   if (b.dataset.dureeMax !== undefined && pageMode) return changerMode({ duree_max: Number(b.dataset.dureeMax) });

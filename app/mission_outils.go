@@ -138,6 +138,7 @@ func outilProposerMission(s *Serveur, x SessionHub, args json.RawMessage) (strin
 	for i := range c.Envs { // C81: an environment given by the owner never comes from the agent
 		c.Envs[i].Proprietaire = false
 	}
+	c.Projet.Dossier, c.Projet.GitHub, c.Projet.Depot, c.Projet.Proprietaire = "", "", "", false // M254: the owner's only
 	ctx := s.contexteCarte()
 	if err := validerCarte(&c, ctx); err != nil {
 		return "", errors.New("the card was refused, fix it and call proposer_mission again: " + err.Error())
@@ -148,6 +149,9 @@ func outilProposerMission(s *Serveur, x SessionHub, args json.RawMessage) (strin
 		}
 		var avant CarteMission // C83: the boxes the owner unticked stay unticked, by (entry, pour)
 		_ = json.Unmarshal(m.Carte, &avant)
+		if a := avant.Projet; a.Proprietaire && a.Nouveau && c.Projet.Nouveau && strings.EqualFold(a.Nom, c.Projet.Nom) { // M254: kept
+			c.Projet.Dossier, c.Projet.GitHub, c.Projet.Depot, c.Projet.Proprietaire, c.Dev.Modes = a.Dossier, a.GitHub, a.Depot, true, avant.Dev.Modes
+		}
 		for i := range c.Acces {
 			j := slices.IndexFunc(avant.Acces, func(a AccesCarte) bool { return memeAcces(a, c.Acces[i]) })
 			// R4: a new code entry the owner never named (a README line read by etat_projet…) arrives unticked; an
