@@ -7,11 +7,11 @@ How Athanor puts a project online: who can start a deployment, the three methods
 ## Who starts a deployment
 
 - **The Servers agent**, in a task launched *For the environment* on a server's sheet: its plan holds a `deployer` step (classed as a *change*), which runs only once you accept the plan. Its first plan chooses the method; Athanor records it in the environment so that later deployments need no agent.
-- **The pilot of the project**, with the hub's `demander_deploiement` tool: *dev* and *staging* follow their policy (*Ask for my approval* or *Automatic when nothing is destroyed*); *prod* always waits for you.
-- **The relay after a milestone**: with *Deploy to dev after each milestone delivered* ticked on the *dev* card, each ticked milestone sends the project's last commit to *dev*. Never to *prod*.
+- **The pilot of the project**, with the hub's `demander_deploiement` tool: an environment follows its policy, set by its mission (*Ask for my approval* or *Automatic when nothing is destroyed*); a *Production* environment always waits for you.
+- **The relay after a milestone**: on the environment a mission links to the project, each ticked milestone sends the project's last commit there. Never to a *Production* environment.
 - **You**: *Go back to the previous version* on an environment's card, *Retry* or *Go back* on an incident.
 
-A deployment to *prod*, or a going back in *prod*, needs your agreement each time: Athanor's password retyped, or a paired phone. An agreement is bound to the full commit SHA, the servers, the project and who asked; it cannot be reused for another commit, and nothing touches the server before it.
+A deployment to a *Production* environment, or a going back there, needs your agreement each time: Athanor's password retyped, or a paired phone. An agreement is bound to the full commit SHA, the servers, the project and who asked; it cannot be reused for another commit, and nothing touches the server before it.
 
 ## The methods
 
@@ -23,7 +23,7 @@ A deployment to *prod*, or a going back in *prod*, needs your agreement each tim
 
 **Where the code comes from.** Either **git**: the server fetches the exact commit from GitHub with the project's deployment key (read-only on the repository, created in the *Environments* panel), using a pinned github.com host key; or an **archive**: Athanor makes a `tar.gz` of the commit on this PC (`git archive`, or the output of the environment's build command run in a clean copy of that commit, in a temporary folder and inside the pilot's barrier; in native Windows mode, refused unless the project is forced on its *Access* page, and logged), sends it by SFTP and checks its SHA-256. An archive with an absolute path, a `..`, or a link leaving the version is refused before anything is written.
 
-**What only the owner can let through.** A changed build file, compose file, Dockerfile or file of the k3s manifests' folder (compared with the last deployment the owner accepted) makes the deployment destructive: it waits for the owner even in dev or staging with the *auto* policy, a rule or *Deploy to dev at each milestone*. Without the owner's accord for that very deployment, a Compose configuration (read with `docker compose config --format json` on the server) that asks for `privileged`, `cap_add`, `devices`, `security_opt`, the host's network, PID, IPC, user or cgroup namespace, or a host path outside the version is refused before anything starts; so are k3s manifests with a `hostPath`, `hostNetwork`/`hostPID`/`hostIPC`, a privileged container or a remote base.
+**What only the owner can let through.** A changed build file, compose file, Dockerfile or file of the k3s manifests' folder (compared with the last deployment the owner accepted) makes the deployment destructive: it waits for the owner even on an environment with the *auto* policy, a rule or the deployment after each milestone. Without the owner's accord for that very deployment, a Compose configuration (read with `docker compose config --format json` on the server) that asks for `privileged`, `cap_add`, `devices`, `security_opt`, the host's network, PID, IPC, user or cgroup namespace, or a host path outside the version is refused before anything starts; so are k3s manifests with a `hostPath`, `hostNetwork`/`hostPID`/`hostIPC`, a privileged container or a remote base.
 
 ## What Athanor writes on a server
 
@@ -43,7 +43,7 @@ The steps, in Go code, never a shell script written by an agent: prepare the ver
 
 ## Going back and history
 
-Each environment's history (commit, method, version, state, check, who started it, dates) is kept in Athanor's folder (`modules/servers/deploiements/<project>-<env>.json`) and shown as *Deployments* on its card. *Go back to the previous version* serves the version noted before it starts on every server (`current` points at it; `compose up` / `kubectl apply` of it), reloads and checks again; if a server or the check fails, every server is put back on the version it left. *Retry* of a failed way back aims at the same version. In dev and staging under the *auto* policy, a version that fails its check after the switch goes back by itself (never in production); the bell still tells it. A deployment that failed before its switch changed nothing: *Go back* is not offered.
+Each environment's history (commit, method, version, state, check, who started it, dates) is kept in Athanor's folder (`modules/servers/deploiements/<project>-<env>.json`) and shown as *Deployments* on its card. *Go back to the previous version* serves the version noted before it starts on every server (`current` points at it; `compose up` / `kubectl apply` of it), reloads and checks again; if a server or the check fails, every server is put back on the version it left. *Retry* of a failed way back aims at the same version. On an environment under the *auto* policy, a version that fails its check after the switch goes back by itself (never on a *Production* one); the bell still tells it. A deployment that failed before its switch changed nothing: *Go back* is not offered.
 
 ## Health and incidents
 

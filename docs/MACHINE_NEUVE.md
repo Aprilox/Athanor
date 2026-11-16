@@ -18,7 +18,7 @@ One read-only shell script, run on adding, on *Refresh* and every 6 hours while 
 
 ### Anything else: only through a plan you accepted
 
-The Servers agent can read without asking (files, logs, services, containers), except secrets: `/etc/shadow`, `/etc/gshadow`, `~/.ssh/*` (other than `authorized_keys`), `*.env` files and private keys are refused. **Any change** — installing, writing a file, a service, a firewall rule, Docker — runs only as a step of a plan you accepted, once, exactly as shown. Destructive steps and any step on a *prod* server always wait for you.
+The Servers agent can read without asking (files, logs, services, containers), except secrets: `/etc/shadow`, `/etc/gshadow`, `~/.ssh/*` (other than `authorized_keys`), `*.env` files and private keys are refused. **Any change** — installing, writing a file, a service, a firewall rule, Docker — runs only as a step of a plan you accepted, once, exactly as shown. Destructive steps and any step on a server that carries a *Production* environment always wait for you.
 
 What an accepted plan can leave on the server, besides the change itself:
 
@@ -31,7 +31,7 @@ What an accepted plan can leave on the server, besides the change itself:
 ### What Athanor never does
 
 - It never sends the server's key or password to an agent, a page, a phone or the audit log.
-- It never runs a change, a destructive command or anything on a *prod* server without your agreement.
+- It never runs a change, a destructive command or anything on a server that carries a *Production* environment without your agreement.
 - It never accepts a host key it was not shown, nor a fingerprint that changed.
 - It never installs software of its own, opens a port, creates a user or touches another server than the one of the task.
 - *Remove this server* forgets it in Athanor and changes nothing on the server (its key in `authorized_keys` stays until you remove it).
@@ -54,7 +54,7 @@ Un seul script shell en lecture seule, lancé à l'ajout, sur *Actualiser* et to
 
 ### Tout le reste : seulement par un plan que vous avez accepté
 
-L'agent Serveurs peut lire sans demander (fichiers, journaux, services, conteneurs), sauf les secrets : `/etc/shadow`, `/etc/gshadow`, `~/.ssh/*` (hors `authorized_keys`), les fichiers `*.env` et les clés privées sont refusés. **Tout changement** — installer, écrire un fichier, un service, une règle de pare-feu, Docker — ne s'exécute que comme étape d'un plan que vous avez accepté, une fois, exactement comme montré. Les étapes destructrices et toute étape sur un serveur *prod* vous attendent toujours.
+L'agent Serveurs peut lire sans demander (fichiers, journaux, services, conteneurs), sauf les secrets : `/etc/shadow`, `/etc/gshadow`, `~/.ssh/*` (hors `authorized_keys`), les fichiers `*.env` et les clés privées sont refusés. **Tout changement** — installer, écrire un fichier, un service, une règle de pare-feu, Docker — ne s'exécute que comme étape d'un plan que vous avez accepté, une fois, exactement comme montré. Les étapes destructrices et toute étape sur un serveur portant un environnement *Production* vous attendent toujours.
 
 Ce qu'un plan accepté peut laisser sur le serveur, en plus du changement lui-même :
 
@@ -67,7 +67,7 @@ Ce qu'un plan accepté peut laisser sur le serveur, en plus du changement lui-m�
 ### Ce qu'Athanor ne fait jamais
 
 - Il ne donne jamais la clé ni le mot de passe du serveur à un agent, une page, un téléphone ou le journal d'audit.
-- Il n'exécute jamais un changement, une commande destructrice ni quoi que ce soit sur un serveur *prod* sans votre accord.
+- Il n'exécute jamais un changement, une commande destructrice ni quoi que ce soit sur un serveur portant un environnement *Production* sans votre accord.
 - Il n'accepte jamais une clé d'hôte qu'il ne vous a pas montrée, ni une empreinte qui a changé.
 - Il n'installe jamais de logiciel à lui, n'ouvre pas de port, ne crée pas d'utilisateur et ne touche à aucun autre serveur que celui de la tâche.
 - *Retirer ce serveur* l'oublie dans Athanor et ne change rien sur le serveur (sa clé dans `authorized_keys` reste jusqu'à ce que vous la retiriez).

@@ -14,7 +14,7 @@ athanor module appairer                    # in a second terminal: shows the 6-d
 
 On your hub: *Settings › Remote Athanors › Add*, with the module's remote access address and the code. The
 module's terminal then asks `Accept? [y/N]`: type `y`. The hub sees the module's servers, their tasks, and can
-ask the Servers module for a server's sheet or its refresh. A refresh on a **prod** server waits for an approval
+ask the Servers module for a server's sheet or its refresh. A refresh on a server that carries a **Production** environment waits for an approval
 of the module's owner (a phone paired with the module), never decided by the hub.
 
 ### Example systemd unit
@@ -55,7 +55,7 @@ athanor module appairer                    # dans un second terminal : affiche l
 
 Sur votre hub : *Réglages › Athanor distants › Ajouter*, avec l'adresse d'accès à distance du module et le code. Le
 terminal du module demande alors `Accept? [y/N]` : tapez `y`. Le hub voit les serveurs du module et leurs tâches, et
-peut demander au module Serveurs la fiche d'un serveur ou sa mise à jour. Une mise à jour d'un serveur de **prod**
+peut demander au module Serveurs la fiche d'un serveur ou sa mise à jour. Une mise à jour d'un serveur portant un environnement **Production**
 attend l'accord du propriétaire du module (un téléphone appairé au module), jamais décidé par le hub.
 
 ### Exemple d'unité systemd

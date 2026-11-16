@@ -21,7 +21,7 @@ To see the whole path — public address, certificates, the external check — r
 - **Size**: 1 vCPU, 1 to 2 GB of memory, 10 to 25 GB of disk is plenty.
 - **System**: Debian 12 or Ubuntu 24.04 LTS, freshly installed.
 - **Access**: `root` or a user with `sudo`, SSH on port 22 (or any port you give Athanor). Note the fingerprint shown by the host's console (`for f in /etc/ssh/ssh_host_*_key.pub; do ssh-keygen -lf $f; done`) to compare it when adding.
-- **Role**: add it as *dev*. Changes on a *dev* server can be accepted once for all (*Never ask again for this server*); a *prod* server always waits for you.
+- **Caution**: keep it out of any *Production* mission. Its changes can then be accepted once for all (*Never ask again for this server*); a server that carries a *Production* environment always waits for you.
 - **Nothing of value on it**, and a host snapshot if the host offers one. Delete it when you are done.
 
 Then *Servers › + Add a server*, cut password logins when Athanor offers it, and give a first task such as “Install nginx and serve a test page”. What Athanor does on such a new machine is listed in [MACHINE_NEUVE.md](MACHINE_NEUVE.md).
@@ -45,7 +45,7 @@ Pour voir tout le chemin — adresse publique, certificats, vérification extern
 - **Taille** : 1 vCPU, 1 à 2 Go de mémoire, 10 à 25 Go de disque suffisent largement.
 - **Système** : Debian 12 ou Ubuntu 24.04 LTS, fraîchement installé.
 - **Accès** : `root` ou un utilisateur qui a `sudo`, SSH sur le port 22 (ou celui que vous donnez à Athanor). Notez l'empreinte affichée par la console de l'hébergeur (`for f in /etc/ssh/ssh_host_*_key.pub; do ssh-keygen -lf $f; done`) pour la comparer à l'ajout.
-- **Rôle** : ajoutez-le en *dev*. Les changements sur un serveur *dev* peuvent être acceptés une fois pour toutes (*Ne plus demander pour ce serveur*) ; un serveur *prod* vous attend toujours.
+- **Prudence** : gardez-le hors de toute mission en *Production*. Ses changements peuvent alors être acceptés une fois pour toutes (*Ne plus demander pour ce serveur*) ; un serveur portant un environnement *Production* vous attend toujours.
 - **Rien de précieux dessus**, et un instantané chez l'hébergeur s'il en propose. Supprimez-le une fois l'essai fini.
 
 Puis *Serveurs › + Ajouter un serveur*, coupez la connexion par mot de passe quand Athanor le propose, et donnez une première tâche comme « Installer nginx et servir une page de test ». Ce qu'Athanor fait sur une telle machine neuve est listé dans [MACHINE_NEUVE.md](MACHINE_NEUVE.md).
