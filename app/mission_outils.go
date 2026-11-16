@@ -157,9 +157,11 @@ func outilProposerMission(s *Serveur, x SessionHub, args json.RawMessage) (strin
 		for i := range c.Acces {
 			j := slices.IndexFunc(avant.Acces, func(a AccesCarte) bool { return memeAcces(a, c.Acces[i]) })
 			// R4: a new code entry the owner never named (a README line read by etat_projet…) arrives unticked; an
-			// infra one never leaves Athanor's Go and each use waits for an accepted plan
-			nommee := c.Acces[i].Portee == "infra" || slices.Contains(m.Mentions.Cles, c.Acces[i].ID)
-			c.Acces[i].Decoche = j >= 0 && avant.Acces[j].Decoche || j < 0 && (c.Acces[i].ID == "" || !nommee)
+			// infra one never leaves Athanor's Go and each use waits for an accepted plan; M275b: an entry still to fill for
+			// a server the owner mentioned (its SSH password or key) arrives ticked, to be typed once at the launch
+			nommee := c.Acces[i].Portee == "infra" || slices.Contains(m.Mentions.Cles, c.Acces[i].ID) ||
+				c.Acces[i].ARemplir && slices.Contains(m.Mentions.Serveurs, c.Acces[i].Pour)
+			c.Acces[i].Decoche = j >= 0 && avant.Acces[j].Decoche || j < 0 && !nommee
 		}
 		c = calculerCarte(c, m.Politique, ctx)
 		b, err := json.Marshal(c)

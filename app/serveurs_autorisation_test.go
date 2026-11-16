@@ -213,6 +213,15 @@ func TestAutorisationModes(t *testing.T) {
 	if !commande("uptime") || commande("rm -rf /srv/m271") {
 		t.Error("a mission in manuel does not keep the plan rules")
 	}
+	// M275b: as Athanor launches it (lancerTacheDans), a task's session carries the task's own id: its mission is the one
+	// whose Servers lane it is
+	bc, _ := json.Marshal(CarteMission{Permissions: "ignorer"})
+	if err := enregistrerMission(Mission{ID: "m275bm", Etat: "lancee", Politique: "prod", Carte: bc, Voies: []VoieMission{{Module: "servers", Ref: "m244f"}}}); err != nil {
+		t.Fatal(err)
+	}
+	if m := modeAutorisation(SessionHub{Mission: "m244f", Hache: hacherJeton(jeton)}, srv.ID); m != "ignorer" {
+		t.Errorf("a mission's task as launched: mode %q, want its mission's ignorer", m)
+	}
 	// the audit names the mode, never more than the class
 	b := journalAuditTexte(t)
 	if !strings.Contains(b, "mode de l'assistant") || !strings.Contains(b, "mode « ignorer »") {

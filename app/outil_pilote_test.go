@@ -653,7 +653,7 @@ func TestBancPilote(t *testing.T) {
 			}
 		}
 		verifier(strings.Join(etatsStats, ",") == "1:ok,2:ok,3:ok,4:ok", "stats.tsv cycles/states: %v", etatsStats)
-		verifier(etat.Phase == "entre_cycles" && strings.HasPrefix(etat.Etat, "DONE") && etat.Cycle == 4 && etat.DemandesEnAttente == 0, "STATE.json: %+v", etat)
+		verifier(etat.Phase == "termine" && strings.HasPrefix(etat.Etat, "DONE") && etat.Cycle == 4 && etat.DemandesEnAttente == 0, "STATE.json: %+v", etat)
 		verifier(len(commits) >= 3 && commits[0] == "M3: extra request delivered", "git commits: %v", commits)
 		verifier(strings.TrimSpace(string(helloB)) == "Hello Athanor\nExtra feature", "hello.txt: %q", helloB)
 		verifier(strings.Contains(string(rapB), "STATUS: DONE"), "FINAL_REPORT.md: %q", rapB)
@@ -712,7 +712,7 @@ func TestBancPilote(t *testing.T) {
 		verifier(strings.Join(modelesStats, ",") == "opus-principal,opus-principal,sonnet-secours", "stats models: %v", modelesStats)
 		verifier(fichierRegulierPilote(filepath.Join(p.Atelier(), "relay_seen")), "relay notes not passed to cycle 2")
 		verifier(strings.TrimSpace(string(fbB)) == "sonnet-secours", "fallback model not used on cycle 3: %q", fbB)
-		verifier(etat.Phase == "entre_cycles" && strings.HasPrefix(etat.Etat, "DONE"), "final state: %+v", etat)
+		verifier(etat.Phase == "termine" && strings.HasPrefix(etat.Etat, "DONE"), "final state: %+v", etat)
 		if echec {
 			t.Logf("pilot output:\n%s", sortie)
 		}

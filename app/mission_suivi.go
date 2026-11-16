@@ -79,6 +79,7 @@ func (s *Serveur) observerMission(id string) bool {
 	s.relancerVoiesDistantes(m)
 	if m.Etat == "lancee" {
 		m = s.preparerServeursMission(m)
+		m = s.premierDeploiementMission(m)
 	}
 	evts, relais := s.evenementsMission(m)
 	m, err = modifierMission(id, func(m *Mission) error {
@@ -161,6 +162,83 @@ func (s *Serveur) preparerServeursMission(m Mission) Mission {
 			Action: "préparation des serveurs", Resultat: cmp.Or(x.Ref, "échec") + " (" + v.Env + ")"})
 	}
 	return m
+}
+
+// prefixePremierDeploiement: how the brief of a mission's first deployment task starts.
+const prefixePremierDeploiement = "First deployment"
+
+// premierDeploiementMission (M275b): once a milestone is delivered, the card's linked environment still without a
+// deployment method gets its first deployment from the Servers lane (a task, once, after its preparation); the
+// relay then deploys each later milestone with the method that task chose.
+func (s *Serveur) premierDeploiementMission(m Mission) Mission {
+	if s.acces == nil {
+		return m
+	}
+	verrouPreparation.Lock() // two readings at once: one task
+	defer verrouPreparation.Unlock()
+	if x, err := lireMission(m.ID); err == nil {
+		m = x
+	}
+	var c CarteMission
+	_ = json.Unmarshal(m.Carte, &c)
+	k := slices.IndexFunc(c.Envs, func(e EnvCarte) bool { return e.Nom == envJalonCarte(c) && len(e.Serveurs) > 0 })
+	p, ok := s.projetMission(m)
+	if m.Etat != "lancee" || k < 0 || !ok || s.acces.Environnements(p.Nom)[c.Envs[k].Nom].Deploiement != nil {
+		return m
+	}
+	ec, env := c.Envs[k], p.Nom+"/"+c.Envs[k].Nom
+	if slices.ContainsFunc(m.Journal, func(e EntreeJournal) bool { return e.ID == "deploi1:"+env }) {
+		return m // asked once
+	}
+	for _, v := range m.Voies { // its preparation done first
+		t, lu := tacheMission(v.Ref)
+		if v.Module == "servers" && v.Env == env && (v.Etat == "attente_plan" || lu && !slices.Contains([]string{"finie", "echec", "arretee"}, t.Etat)) {
+			return m
+		}
+	}
+	lance := time.Time{}
+	if i := slices.IndexFunc(m.Historique, func(e EvenementMission) bool { return e.Etat == "lancee" }); i >= 0 {
+		lance = dateSource(m.Historique[i].T).Truncate(time.Second)
+	}
+	head, err := gitSortie(p.Dossier, "rev-parse", "HEAD")
+	if err != nil || !reCommitComplet.MatchString(head) ||
+		!slices.ContainsFunc(lireJalonsFaits(fichierJalonsFaits()), func(j JalonFait) bool { return j.Projet == p.Dossier && !j.Date.Before(lance) }) {
+		return m
+	}
+	t, err := s.lancerTache(couper(briefPremierDeploiement(c, ec, p, head), maxTexteTache-1), ec.Serveurs, modeNatif.Load(), env)
+	now := time.Now()
+	e := s.entreeJournal("deploi1:"+env, now, "info", "A milestone is delivered: the Servers lane makes the first deployment to {0}", ec.Nom)
+	if err != nil {
+		e = s.entreeJournal("deploi1:"+env, now, "erreur", "The first deployment to {0} could not start: {1}", ec.Nom, err.Error())
+	}
+	suite, errM := modifierMission(m.ID, func(mm *Mission) error {
+		if mm.Etat != "lancee" {
+			return errMissionInconnue
+		}
+		if err == nil {
+			mm.Voies = append(mm.Voies, VoieMission{Module: "servers", Ref: t.ID, Etat: t.Etat, Env: env})
+		}
+		ajouterJournal(mm, []EntreeJournal{e})
+		return nil
+	})
+	if errM != nil { // stopped or paused meanwhile: the task just launched is not left behind
+		if err == nil {
+			s.arreterTache(t.ID)
+		}
+		return m
+	}
+	s.ecrireAudit(LigneAudit{Type: "evenement", De: "mission", Vers: "servers", Mission: m.ID, Projet: p.Nom, Env: ec.Nom,
+		Action: "premier déploiement", Resultat: cmp.Or(t.ID, "échec") + " (" + env + ", commit " + head + ")"})
+	return suite
+}
+
+// briefPremierDeploiement (M275b): what the first deployment task does: commit head of p to ec with one deployer step.
+func briefPremierDeploiement(c CarteMission, ec EnvCarte, p Projet, head string) string {
+	return prefixePremierDeploiement + " of project " + p.Nom + " to environment " + ec.Nom + " (" + ec.URL + "), mission \"" + c.Titre + "\": " +
+		"a milestone is delivered and this environment has no deployment method yet. Propose one plan whose step is deployer " +
+		"(env " + ec.Nom + ", commit " + head + ", source artefact; the method and the published folder from the project's files: " +
+		"statique for a static site, compose when it has a compose file), then apply it once accepted. Athanor then deploys " +
+		"each later milestone itself with that method.\n"
 }
 
 // ajouterJournal: evts not written yet added in time order; at maxJournalMission, the oldest removed, and an

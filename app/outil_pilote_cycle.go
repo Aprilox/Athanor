@@ -2607,6 +2607,7 @@ func lancerPilote(args []string) int {
 			} else if !p.prochaineDemande() && !p.rouvrirApresLivraison() {
 				noterLivraison(p.projet) // what this delivery was made against: the next start compares with it
 				_ = os.Remove(filepath.Join(p.etat, "auto"))
+				p.etatPhase = "termine" // M275b: ended on its own after a cycle (not "entre_cycles"): the hub and the missions read it
 				p.terminer("DONE: the deliverable and FINAL_REPORT.md are in the project folder. To go on: add a request or a note, then start again.")
 			}
 		}

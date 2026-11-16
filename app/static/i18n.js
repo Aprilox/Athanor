@@ -45,10 +45,16 @@ function t(cle, args) {
 }
 // B79: an engine message, {cle, args} whose arguments are texts or messages, said in the page's language
 const texteMessage = (m) => m && typeof m === "object" ? t(m.cle, (m.args || []).map(texteMessage)) : String(m ?? "");
-const PREFIXES = ["The server could not do it: check its free disk space and this folder's rights, or try the same in the terminal. Its answer: ", "prod checked: ", "no prod on the card: dev checked on ", "the external verification failed: ", "Cannot download the marketplace: ", "Cannot download the plugin: ", "Needs a setting the registry does not give, add it by hand from its README: ", "Cannot download the repository: ", "missing key ", "Worker ", "Builds milestone ", "Runs: ", "Reads ", "Edits ", "Writes ", "Searches ", "Sub-agent ", "End of cycle: ", "Usage limit: ", "Session opened, model ", "Waits for sub-agent ", "Reviews the report of ", "Repair: ", "Claude repairs: ", "Claude: ", "Invalid setting: ", "Cannot create the folder: ", "Start with Windows: ", "Queued: ", "Claude is repairing “", "Invalid JSON: ", "Invalid file pattern (a name with * and ?, no folder): ", "Invalid process name: ", "A key is not a setting (write ${NAME} in the configuration and fill in its field below the server): "];
+const PREFIXES = ["no Studio lane: the vault entries are given", "no Studio lane: the Servers tasks are done", "no environment on the card: the Studio lane finished the request", "The server could not do it: check its free disk space and this folder's rights, or try the same in the terminal. Its answer: ", "prod checked: ", "no prod on the card: dev checked on ", "the external verification failed: ", "Cannot download the marketplace: ", "Cannot download the plugin: ", "Needs a setting the registry does not give, add it by hand from its README: ", "Cannot download the repository: ", "missing key ", "Worker ", "Builds milestone ", "Runs: ", "Reads ", "Edits ", "Writes ", "Searches ", "Sub-agent ", "End of cycle: ", "Usage limit: ", "Session opened, model ", "Waits for sub-agent ", "Reviews the report of ", "Repair: ", "Claude repairs: ", "Claude: ", "Invalid setting: ", "Cannot create the folder: ", "Start with Windows: ", "Queued: ", "Claude is repairing “", "Invalid JSON: ", "Invalid file pattern (a name with * and ?, no folder): ", "Invalid process name: ", "A key is not a setting (write ${NAME} in the configuration and fill in its field below the server): "];
 
 const DICT = {
 fr: {
+  "no Studio lane: the vault entries are given": "pas de voie Studio : les entrées du coffre sont données",
+  "no Studio lane: the Servers tasks are done": "pas de voie Studio : les tâches Serveurs sont finies",
+  "no environment on the card: the Studio lane finished the request": "aucun environnement sur la carte : la voie Studio a fini la demande",
+  "Launching the mission: retype Athanor's password.": "Lancer la mission : retapez le mot de passe d'Athanor.",
+  "The first deployment to {0} could not start: {1}": "Le premier déploiement sur {0} n'a pas pu démarrer : {1}",
+  "A milestone is delivered: the Servers lane makes the first deployment to {0}": "Un jalon est livré : la voie Serveurs fait le premier déploiement sur {0}",
   "command stopped: the operation was cancelled (task stopped, session revoked or emergency stop)": "commande arrêtée : l'opération a été annulée (tâche arrêtée, session révoquée ou arrêt d'urgence)",
   "this environment has no deployment method yet: a first deployment is made by a Servers task": "cet environnement n'a pas encore de méthode de déploiement : le premier déploiement est fait par la voie Serveurs de la mission (ou une tâche Serveurs)",
   "The card needs at least one lane: a Dev brief, a Servers brief or vault entries": "La carte a besoin d'au moins une voie : un brief Studio, un brief Serveurs ou des clés du coffre",
@@ -818,6 +824,12 @@ fr: {
   "Run a command": "Lancer une commande", "The task failed without giving a reason.": "La tâche a échoué sans donner de raison.",
 },
 es: {
+  "no Studio lane: the vault entries are given": "sin vía Estudio: las entradas de la caja fuerte están dadas",
+  "no Studio lane: the Servers tasks are done": "sin vía Estudio: las tareas de Servidores están hechas",
+  "no environment on the card: the Studio lane finished the request": "ningún entorno en la tarjeta: la vía Estudio terminó la solicitud",
+  "Launching the mission: retype Athanor's password.": "Lanzar la misión: vuelva a escribir la contraseña de Athanor.",
+  "The first deployment to {0} could not start: {1}": "El primer despliegue en {0} no pudo empezar: {1}",
+  "A milestone is delivered: the Servers lane makes the first deployment to {0}": "Se entregó un hito: la vía Servidores hace el primer despliegue en {0}",
   "command stopped: the operation was cancelled (task stopped, session revoked or emergency stop)": "comando detenido: la operación se canceló (tarea detenida, sesión revocada o parada de emergencia)",
   "this environment has no deployment method yet: a first deployment is made by a Servers task": "este entorno aún no tiene método de despliegue: el primer despliegue lo hace la vía Servidores de la misión (o una tarea Servidores)",
   "The card needs at least one lane: a Dev brief, a Servers brief or vault entries": "La tarjeta necesita al menos una vía: un brief de Studio, un brief de Servidores o claves del cofre",
@@ -1555,6 +1567,12 @@ es: {
   "Run a command": "Ejecutar un comando", "The task failed without giving a reason.": "La tarea falló sin dar un motivo.",
 },
 de: {
+  "no Studio lane: the vault entries are given": "keine Studio-Spur: die Tresoreinträge sind übergeben",
+  "no Studio lane: the Servers tasks are done": "keine Studio-Spur: die Server-Aufgaben sind erledigt",
+  "no environment on the card: the Studio lane finished the request": "keine Umgebung auf der Karte: die Studio-Spur hat die Anfrage beendet",
+  "Launching the mission: retype Athanor's password.": "Mission starten: geben Sie das Passwort von Athanor erneut ein.",
+  "The first deployment to {0} could not start: {1}": "Das erste Deployment auf {0} konnte nicht starten: {1}",
+  "A milestone is delivered: the Servers lane makes the first deployment to {0}": "Ein Meilenstein ist geliefert: die Server-Spur macht das erste Deployment auf {0}",
   "command stopped: the operation was cancelled (task stopped, session revoked or emergency stop)": "Befehl gestoppt: Der Vorgang wurde abgebrochen (Aufgabe gestoppt, Sitzung widerrufen oder Notstopp)",
   "this environment has no deployment method yet: a first deployment is made by a Servers task": "diese Umgebung hat noch keine Bereitstellungsmethode: die erste Bereitstellung übernimmt die Spur Server der Mission (oder eine Server-Aufgabe)",
   "The card needs at least one lane: a Dev brief, a Servers brief or vault entries": "Die Karte braucht mindestens eine Spur: ein Studio-Briefing, ein Server-Briefing oder Tresoreinträge",
@@ -2286,6 +2304,12 @@ de: {
   "Run a command": "Einen Befehl ausführen", "The task failed without giving a reason.": "Die Aufgabe ist ohne Angabe eines Grundes fehlgeschlagen.",
 },
 it: {
+  "no Studio lane: the vault entries are given": "nessuna corsia Studio: le voci della cassaforte sono date",
+  "no Studio lane: the Servers tasks are done": "nessuna corsia Studio: i compiti Server sono finiti",
+  "no environment on the card: the Studio lane finished the request": "nessun ambiente sulla scheda: la corsia Studio ha finito la richiesta",
+  "Launching the mission: retype Athanor's password.": "Avviare la missione: digita di nuovo la password di Athanor.",
+  "The first deployment to {0} could not start: {1}": "Il primo deploy su {0} non è potuto partire: {1}",
+  "A milestone is delivered: the Servers lane makes the first deployment to {0}": "Un traguardo è consegnato: la corsia Server fa il primo deploy su {0}",
   "command stopped: the operation was cancelled (task stopped, session revoked or emergency stop)": "comando interrotto: l'operazione è stata annullata (attività interrotta, sessione revocata o arresto di emergenza)",
   "this environment has no deployment method yet: a first deployment is made by a Servers task": "questo ambiente non ha ancora un metodo di distribuzione: la prima distribuzione la fa la corsia Server della missione (o un'attività Server)",
   "The card needs at least one lane: a Dev brief, a Servers brief or vault entries": "La scheda ha bisogno di almeno una corsia: un brief Studio, un brief Server o chiavi della cassaforte",
@@ -3017,6 +3041,12 @@ it: {
   "Run a command": "Eseguire un comando", "The task failed without giving a reason.": "L'attività non è riuscita senza indicare un motivo.",
 },
 pt: {
+  "no Studio lane: the vault entries are given": "sem via Estúdio: as entradas do cofre foram dadas",
+  "no Studio lane: the Servers tasks are done": "sem via Estúdio: as tarefas de Servidores estão feitas",
+  "no environment on the card: the Studio lane finished the request": "nenhum ambiente no cartão: a via Estúdio terminou o pedido",
+  "Launching the mission: retype Athanor's password.": "Lançar a missão: volte a escrever a palavra-passe do Athanor.",
+  "The first deployment to {0} could not start: {1}": "O primeiro deploy em {0} não pôde começar: {1}",
+  "A milestone is delivered: the Servers lane makes the first deployment to {0}": "Um marco foi entregue: a via Servidores faz o primeiro deploy em {0}",
   "command stopped: the operation was cancelled (task stopped, session revoked or emergency stop)": "comando interrompido: a operação foi cancelada (tarefa interrompida, sessão revogada ou paragem de emergência)",
   "this environment has no deployment method yet: a first deployment is made by a Servers task": "este ambiente ainda não tem método de implantação: a primeira implantação é feita pela via Servidores da missão (ou uma tarefa Servidores)",
   "The card needs at least one lane: a Dev brief, a Servers brief or vault entries": "O cartão precisa de pelo menos uma via: um brief do Studio, um brief de Servidores ou chaves do cofre",

@@ -2142,8 +2142,10 @@ function choisirMention(id, i) {
 }
 function choisirMentionAccueil(m, champ, ml) {
   const v = champ.value, fin = champ.selectionStart;
-  champ.value = v.slice(0, ml.debut) + v.slice(fin).replace(/^\s*/, ""); // the @word goes, the text before keeps its space
-  etat.accueilTexte = champ.value; champ.setSelectionRange(ml.debut, ml.debut);
+  // M275b: the @word becomes the chosen name, so that the sentence stays whole on the card and in the lists (the chip carries the reference)
+  const avant = v.slice(0, ml.debut) + m.nom + " ";
+  champ.value = avant + v.slice(fin).replace(/^\s*/, "");
+  etat.accueilTexte = champ.value; champ.setSelectionRange(avant.length, avant.length);
   fermerListeMentions(); ajouterMention(m); champ.focus();
 }
 document.addEventListener("keydown", (ev) => {
@@ -2369,8 +2371,9 @@ const estimationMission = (e) => `<h3>${t("Estimate")}</h3><p class="m0">${t(e.j
 function ressourcesMission() {
   const c = ((etat.missionVue || {}).mission || {}).carte || {}, l = [];
   const nom = (r) => ((etat.mentionsSugg || []).find((x) => x.type === "serveur" && x.ref === r) || {}).nom || (etat.nomsServeurs || {})[r] || r;
+  const vault = (n) => (etat.mentionsSugg || []).some((x) => x.type === "cle" && x.nom === n); // M275b: typed at the launch, it is no longer "to fill"
   for (const e of c.envs || []) for (const r of e.serveurs || []) if (!l.some((x) => x.ref === r)) l.push({ type: "serveur", ref: r, nom: nom(r), env: e.nom });
-  for (const a of c.acces || []) if (!a.decoche && !l.some((x) => x.type === "cle" && x.nom === a.entree)) l.push({ type: "cle", ref: a.id || a.entree, nom: a.entree, remplir: a.a_remplir, pour: nom(a.pour) });
+  for (const a of c.acces || []) if (!a.decoche && !l.some((x) => x.type === "cle" && x.nom === a.entree)) l.push({ type: "cle", ref: a.id || a.entree, nom: a.entree, remplir: a.a_remplir && !vault(a.entree), pour: nom(a.pour) });
   return l;
 }
 function fermerRessources() { etat.missionRes = null; majZoneMission(); $("#mis-res-ajouter")?.focus(); }
@@ -2445,7 +2448,8 @@ document.addEventListener("click", async (ev) => {
       const f = $("#mis-gh-depot"); if (f) { f.scrollIntoView({ block: "center" }); f.focus(); }
       toast(t("Write the repository to link as OWNER/NAME, then launch."), "erreur"); return;
     }
-    const p =await preuveMdp(t("Launching the mission gives its keys to the project: retype Athanor's password."), { ok: t("Launch") });
+    const cles = (m.carte.acces || []).some((x) => !x.decoche); // M275b: said only when the card gives keys
+    const p = await preuveMdp(cles ? t("Launching the mission gives its keys to the project: retype Athanor's password.") : t("Launching the mission: retype Athanor's password."), { ok: t("Launch") });
     const vals = (etat.missionSecrets || {})[m.id] || {}; // M272: typed once on the card, into the vault (never kept in the page after)
     const secrets = entreesARemplir(m).filter((e) => (vals[e] || "").trim()).map((e) => /PRIVATE KEY-----/.test(vals[e]) ? { entree: e, type: "ssh", valeur: vals[e].trim() + "\n" } : { entree: e, type: "mot_de_passe", valeur: vals[e].replace(/\r?\n$/, "") });
     if (p && await actionMission("lancer", { ...p, empreinte: m.empreinte, ...(secrets.length ? { secrets } : {}) })) delete (etat.missionSecrets || {})[m.id]; // R3: the card read, never a newer one
@@ -6073,7 +6077,8 @@ function missionDirect(m) {
   const r = m.relais || {};
   const nonDonne = m.etat === "lancee" && r.etape === "accord_prod" && (m.journal || []).some((e) => e.id === `accord:${r.accord}:refusee` || e.id === `accord:${r.accord}:expiree`);
   // M268b: a keys-only mission has no lane and no relay once launched (its keys are given at the launch)
-  const sansVoie = lancee && !(m.voies || []).length, avecStudio = !!(m.carte && m.carte.dev && m.carte.dev.brief);
+  // M275b: the relay (online, checked) only for a Studio lane that puts something online (an environment on the card)
+  const sansVoie = lancee && !(m.voies || []).length, avecStudio = !!(m.carte && m.carte.dev && m.carte.dev.brief && (m.carte.envs || []).length);
   return `${incidentMission(m)}${sansVoie ? "" : `<section class="bloc" aria-labelledby="mis-voies-titre"><div class="ligne m0 tuile-tete"><h2 class="m0" id="mis-voies-titre">${t("Lanes")}</h2></div>
       ${(m.voies || []).length ? `<ul class="mis-voies-liste mis-voies-direct">${m.voies.map((v) => voieDirect(v, m.etat)).join("")}</ul>${lancee ? `<p class="muet petit m0">${t("Launched on {0}", [h(new Date(lancee.t).toLocaleString(document.documentElement.lang || "en"))])}</p>` : ""}`
         : `<p class="muet m0">${t("The lanes start when the mission is launched.")}</p>`}

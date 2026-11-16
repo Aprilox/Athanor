@@ -134,6 +134,12 @@ func (s *Serveur) relaisProd(id string) {
 		}
 		return
 	}
+	if len(c.Envs) == 0 { // M275b: the Studio lane alone (nothing deployed): done once its pilot finished the request
+		if vues[i].Actuel == "termine" {
+			s.finirMission(id, m.Relais.Etape, "no environment on the card: the Studio lane finished the request")
+		}
+		return
+	}
 	p, ok := s.projetParNom(vues[i].Ref)
 	if !ok {
 		return

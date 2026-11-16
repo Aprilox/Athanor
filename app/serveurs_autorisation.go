@@ -67,12 +67,23 @@ func modeAutorisation(x SessionHub, id string) string {
 	t.mu.Unlock()
 	if !panneau {
 		if propre && x.Mission != "" { // M271: a mission's Servers task follows the mission's mode
-			return modeMission(x.Mission)
+			return modeMission(cmp.Or(missionDeTache(x.Mission), x.Mission))
 		}
 		return ""
 	}
 	srv, _ := serveurProd(id)
 	return modeServeur(srv)
+}
+
+// missionDeTache (M275b): the mission whose Servers lane is task id, "" for none (a task's session carries the task's
+// own id, not its mission's).
+func missionDeTache(id string) string {
+	for _, m := range lireMissions() {
+		if slices.ContainsFunc(m.Voies, func(v VoieMission) bool { return v.Module == "servers" && v.Ref == id }) {
+			return m.ID
+		}
+	}
+	return ""
 }
 
 // modeServeur: srv's mode, manuel when never chosen.

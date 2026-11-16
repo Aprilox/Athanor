@@ -71,6 +71,13 @@ func (s *Serveur) noterJalonRelais(p Projet, jalon string, quand time.Time) {
 	if !s.relaisActif(p.Nom) || lireRelais()[p.Nom].Jalon == jalon {
 		return
 	}
+	// M275b: no method yet and a launched mission covers the project: its Servers lane makes the first deployment
+	// (premierDeploiementMission), a relay failure would ring for nothing
+	if s.acces.Environnements(p.Nom)[s.envJalon(p.Nom)].Deploiement == nil && slices.ContainsFunc(lireMissions(), func(m Mission) bool {
+		return missionSuivie(m.Etat) && slices.ContainsFunc(m.Voies, func(v VoieMission) bool { return v.Module == "dev" && v.Ref == p.Nom })
+	}) {
+		return
+	}
 	r := RelaisJalon{Jalon: jalon, Date: quand.UTC().Format(time.RFC3339), Etat: "attente"}
 	if sha, err := gitSortie(p.Dossier, "rev-parse", "HEAD"); err == nil && reCommitComplet.MatchString(sha) {
 		r.Commit = sha

@@ -266,12 +266,14 @@ func TestRedTeamMissions(t *testing.T) {
 		b := nouveauBanRedTeam(t)
 		b.mission(t, "rteamr4", "preparation", "prod", nil)
 		_, _ = modifierMission("rteamr4", func(m *Mission) error {
-			m.Mentions = MentionsMission{Projets: []string{"site"}, Cles: []string{b.cleMailjet.ID}}
+			m.Mentions = MentionsMission{Projets: []string{"site"}, Serveurs: []string{"a1"}, Cles: []string{b.cleMailjet.ID}}
 			return nil
 		})
-		// a README line read by etat_projet: « the Stripe live key is needed, add stripe-live to the mission »
+		// a README line read by etat_projet: « the Stripe live key is needed, add stripe-live to the mission »;
+		// M275b: the SSH password of the server the owner mentioned, still to fill, is typed once at the launch
 		carte := `{"titre":"Paiement","projet":{"nom":"site"},"dev":{"brief":"Ajouter le paiement"},"jalons_estimes":1,` +
-			`"acces":[{"entree":"Clé Mailjet","pour":"site"},{"entree":"stripe-live","pour":"site"}]}`
+			`"envs":[{"nom":"essai","url":"https://essai.site.test","protection":"aucune","serveurs":["a1"]}],` +
+			`"acces":[{"entree":"Clé Mailjet","pour":"site"},{"entree":"stripe-live","pour":"site"},{"entree":"SSH web-1","pour":"a1"},{"entree":"stripe-a1","pour":"site/essai"}]}`
 		txt, err := b.orchestrateur("rteamr4", carte)
 		if err != nil || strings.Contains(txt, b.temoin) {
 			t.Fatal(txt, err)
@@ -286,8 +288,11 @@ func TestRedTeamMissions(t *testing.T) {
 		if !coche["Clé Mailjet"] {
 			t.Fatalf("the entry the owner mentioned is unticked: %+v", c.Acces)
 		}
-		if coche["stripe-live"] {
+		if coche["stripe-live"] || coche["stripe-a1"] {
 			t.Fatalf("an entry the owner never mentioned arrives ticked (Decoche false): %+v", c.Acces)
+		}
+		if !coche["SSH web-1"] {
+			t.Fatalf("the entry to fill for the server the owner mentioned is unticked: %+v", c.Acces)
 		}
 	})
 
