@@ -181,6 +181,9 @@ func outilDemanderAcces(s *Serveur, x SessionHub, args json.RawMessage) (string,
 	if err != nil {
 		return "", err
 	}
+	if demandeAccesServeur([]string{nom}, raison) {
+		return "", errors.New(refusAccesServeur)
+	}
 	env, recus, _, err := s.recusParEnv(x.Projet)
 	if err != nil {
 		return "", err
@@ -254,7 +257,7 @@ func outilDemanderDeploiement(s *Serveur, x SessionHub, args json.RawMessage) (s
 		return "", errors.New(env + " has no server yet: the owner adds one in the project's Environments panel; go on with work that does not need it")
 	}
 	if e.Deploiement == nil {
-		return "", errors.New(env + " has no deployment method yet: a first deployment must be made by a Servers task (the owner launches it from the environment's card); go on with work that does not need it")
+		return "", errors.New(env + " has no deployment method yet: a first deployment is made by the mission's Servers lane (or a Servers task the owner launches from the environment's card); never ask for a server's access, go on with work that does not need it")
 	}
 	hote := x.Projet
 	if u, err := url.Parse(e.URL); err == nil && u.Hostname() != "" {

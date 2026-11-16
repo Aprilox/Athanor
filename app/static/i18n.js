@@ -49,6 +49,7 @@ const PREFIXES = ["The server could not do it: check its free disk space and thi
 
 const DICT = {
 fr: {
+  "this environment has no deployment method yet: a first deployment is made by a Servers task": "cet environnement n'a pas encore de méthode de déploiement : le premier déploiement est fait par la voie Serveurs de la mission (ou une tâche Serveurs)",
   "The card needs at least one lane: a Dev brief, a Servers brief or vault entries": "La carte a besoin d'au moins une voie : un brief Studio, un brief Serveurs ou des clés du coffre",
   "The Servers lane is preparing this environment: wait for it to end, or pause the mission": "La voie Serveurs prépare cet environnement : attendez qu'elle ait fini, ou mettez la mission en pause",
   "The project is on another PC: its environments and accesses are changed there": "Le projet est sur un autre PC : ses environnements et ses accès se changent là-bas",
@@ -816,6 +817,7 @@ fr: {
   "Run a command": "Lancer une commande", "The task failed without giving a reason.": "La tâche a échoué sans donner de raison.",
 },
 es: {
+  "this environment has no deployment method yet: a first deployment is made by a Servers task": "este entorno aún no tiene método de despliegue: el primer despliegue lo hace la vía Servidores de la misión (o una tarea Servidores)",
   "The card needs at least one lane: a Dev brief, a Servers brief or vault entries": "La tarjeta necesita al menos una vía: un brief de Studio, un brief de Servidores o claves del cofre",
   "The Servers lane is preparing this environment: wait for it to end, or pause the mission": "La vía Servidores está preparando este entorno: espere a que termine o pause la misión",
   "The project is on another PC: its environments and accesses are changed there": "El proyecto está en otro PC: sus entornos y accesos se cambian allí",
@@ -1551,6 +1553,7 @@ es: {
   "Run a command": "Ejecutar un comando", "The task failed without giving a reason.": "La tarea falló sin dar un motivo.",
 },
 de: {
+  "this environment has no deployment method yet: a first deployment is made by a Servers task": "diese Umgebung hat noch keine Bereitstellungsmethode: die erste Bereitstellung übernimmt die Spur Server der Mission (oder eine Server-Aufgabe)",
   "The card needs at least one lane: a Dev brief, a Servers brief or vault entries": "Die Karte braucht mindestens eine Spur: ein Studio-Briefing, ein Server-Briefing oder Tresoreinträge",
   "The Servers lane is preparing this environment: wait for it to end, or pause the mission": "Die Spur Server bereitet diese Umgebung vor: Warten Sie das Ende ab oder pausieren Sie die Mission",
   "The project is on another PC: its environments and accesses are changed there": "Das Projekt liegt auf einem anderen PC: Seine Umgebungen und Zugriffe werden dort geändert",
@@ -2280,6 +2283,7 @@ de: {
   "Run a command": "Einen Befehl ausführen", "The task failed without giving a reason.": "Die Aufgabe ist ohne Angabe eines Grundes fehlgeschlagen.",
 },
 it: {
+  "this environment has no deployment method yet: a first deployment is made by a Servers task": "questo ambiente non ha ancora un metodo di distribuzione: la prima distribuzione la fa la corsia Server della missione (o un'attività Server)",
   "The card needs at least one lane: a Dev brief, a Servers brief or vault entries": "La scheda ha bisogno di almeno una corsia: un brief Studio, un brief Server o chiavi della cassaforte",
   "The Servers lane is preparing this environment: wait for it to end, or pause the mission": "La corsia Server sta preparando questo ambiente: attendi che finisca o metti in pausa la missione",
   "The project is on another PC: its environments and accesses are changed there": "Il progetto è su un altro PC: i suoi ambienti e accessi si cambiano lì",
@@ -3009,6 +3013,7 @@ it: {
   "Run a command": "Eseguire un comando", "The task failed without giving a reason.": "L'attività non è riuscita senza indicare un motivo.",
 },
 pt: {
+  "this environment has no deployment method yet: a first deployment is made by a Servers task": "este ambiente ainda não tem método de implantação: a primeira implantação é feita pela via Servidores da missão (ou uma tarefa Servidores)",
   "The card needs at least one lane: a Dev brief, a Servers brief or vault entries": "O cartão precisa de pelo menos uma via: um brief do Studio, um brief de Servidores ou chaves do cofre",
   "The Servers lane is preparing this environment: wait for it to end, or pause the mission": "A via Servidores está a preparar este ambiente: espere que termine ou pause a missão",
   "The project is on another PC: its environments and accesses are changed there": "O projeto está noutro PC: os seus ambientes e acessos alteram-se lá",

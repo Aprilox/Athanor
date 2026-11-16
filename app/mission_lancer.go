@@ -226,7 +226,7 @@ func (s *Serveur) etapesMission(c CarteMission, politique, qui, dossier string, 
 	var p Projet
 	if c.Projet.Nouveau {
 		var err error
-		if p, _, err = s.ajouterProjet(c.Projet.Nom, dossier, c.Dev.Brief, false); err != nil {
+		if p, _, err = s.ajouterProjet(c.Projet.Nom, dossier, demandeStudio(c), false); err != nil {
 			return voies, faits, errMoteur("creating the project: {0}", err)
 		}
 		faits = append(faits, evenementMission("lancee", "project created: "+p.Dossier))
@@ -242,7 +242,7 @@ func (s *Serveur) etapesMission(c CarteMission, politique, qui, dossier string, 
 			return voies, faits, errMoteur("the project {0} no longer exists", c.Projet.Nom)
 		}
 		if c.Dev.Brief != "" && !demandeFaite {
-			if _, _, err := s.ajouterDemande(p, c.Titre, c.Dev.Brief); err != nil {
+			if _, _, err := s.ajouterDemande(p, c.Titre, demandeStudio(c)); err != nil {
 				return voies, faits, errMoteur("adding the request: {0}", err)
 			}
 			faits = append(faits, evenementMission("lancee", "request added: "+c.Titre))
@@ -381,6 +381,16 @@ func (s *Serveur) donnerAccesCarte(p Projet, c CarteMission, a AccesCarte, qui s
 	}
 	s.auditAcces(qui, p.Nom, action, e, g.Variable, g.Env)
 	return evenementMission("lancee", "access given: "+a.Entree+" → "+g.Variable+" ("+g.Env+")"), nil
+}
+
+// demandeStudio (M273): the Dev brief as the project's request; with an environment on the card, one line says the
+// mission deploys it, so that the Studio plans no deployment and asks for no server's access.
+func demandeStudio(c CarteMission) string {
+	if len(c.Envs) == 0 {
+		return c.Dev.Brief
+	}
+	return c.Dev.Brief + "\n\nDeployment:this Athanor mission's Servers lane puts the project on its servers, with the vault's keys. " +
+		"Build it ready to deploy (build, tests, a deployment file when useful): no deployment milestone, no request for a server's access."
 }
 
 // planPret (M249): p's framing is done, its plan holds at least one milestone.

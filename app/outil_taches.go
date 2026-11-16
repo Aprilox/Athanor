@@ -29,6 +29,31 @@ const (
 // the same as taches.py's).
 var reJalon = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,19}$`)
 
+// M273: a server's access is never asked by a project (its texts or its secret names): the Studio builds, the
+// mission's Servers lane deploys with the vault's servers and keys.
+var (
+	reAccesServeur    = regexp.MustCompile(`(?i)\bssh\b|private key|cl[ée]f? priv[ée]e|user@host|utilisateur@h[ôo]te|\b[a-z0-9_.-]+@\d{1,3}(\.\d{1,3}){3}\b`)
+	reSecretServeur   = regexp.MustCompile(`(^|_)SSH(_|$)|PRIVATE_KEY|(DEPLOY|SERVER|SERVEUR|VPS)_(HOST|USER|KEY|PORT|IP|PASSWORD)`)
+	refusAccesServeur = "a server's access (an SSH address, user@host, a port, a private key) is never asked by a project: " +
+		"the deployment is the Athanor mission's Servers lane, with the servers and keys of the vault. Leave the project " +
+		"ready to deploy (build, tests, a deployment file when useful) and go on with the rest; nothing was asked"
+)
+
+// demandeAccesServeur (M273): secret names or texts that ask for a server's access.
+func demandeAccesServeur(secrets []string, textes ...string) bool {
+	for _, n := range secrets {
+		if reSecretServeur.MatchString(strings.ToUpper(n)) {
+			return true
+		}
+	}
+	for _, t := range textes {
+		if reAccesServeur.MatchString(t) {
+			return true
+		}
+	}
+	return false
+}
+
 func maintenantTache() string { return time.Now().Format("2006-01-02T15:04:05") }
 
 type erreurTache string
@@ -405,6 +430,9 @@ func todoAjouter(projet string, args []string) (string, error) {
 	if utf8.RuneCountInString(details) > maxDetails {
 		return "", erreurTache(fmt.Sprintf("details: %d characters at most", maxDetails))
 	}
+	if o.besoin != nil && demandeAccesServeur(nil, *o.besoin) || demandeAccesServeur(o.secrets, titre, details) {
+		return "", erreurTache(refusAccesServeur)
+	}
 	d, liberer, err := verrouTaches(projet)
 	if err != nil {
 		return "", err
@@ -487,6 +515,9 @@ func todoModifier(projet string, args []string) (string, error) {
 	details := lireEntreeTache()
 	if utf8.RuneCountInString(details) > maxDetails {
 		return "", erreurTache(fmt.Sprintf("details: %d characters at most", maxDetails))
+	}
+	if o.besoin != nil && demandeAccesServeur(nil, *o.besoin) || demandeAccesServeur(o.secrets, details) {
+		return "", erreurTache(refusAccesServeur)
 	}
 	d, liberer, err := verrouTaches(projet)
 	if err != nil {

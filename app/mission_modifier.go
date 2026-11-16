@@ -215,7 +215,7 @@ func (s *Serveur) appliquerCarte(m Mission, avant, apres CarteMission, qui strin
 		faits = append(faits, evenementMission("modifiee", "Servers brief changed: its environments prepared again with it"))
 	}
 	if apres.Dev.Brief != avant.Dev.Brief && apres.Dev.Brief != "" { // M270: the project's pilot reads it as a new request
-		if _, _, err := s.ajouterDemande(p, apres.Titre, apres.Dev.Brief); err != nil {
+		if _, _, err := s.ajouterDemande(p, apres.Titre, demandeStudio(apres)); err != nil {
 			echoue(errMoteur("the new Studio brief: {0}", err))
 		} else {
 			faits = append(faits, evenementMission("modifiee", "Studio brief changed: added to the project as a request"))
