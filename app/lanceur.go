@@ -26,7 +26,8 @@ func executerKitArgs(k Kit, delai time.Duration, args ...string) (string, error)
 	c.Stdout, c.Stderr = &bout, &bout
 	err := c.Start()
 	if err == nil {
-		minuteur := time.AfterFunc(delai, func() { _ = c.Process.Kill() })
+		// the whole tree: wsl.exe starts a second wsl.exe that would keep the kit folder busy
+		minuteur := time.AfterFunc(delai, func() { terminerProcessus(c.Process.Pid); _ = c.Process.Kill() })
 		err = c.Wait()
 		if !minuteur.Stop() {
 			err = fmt.Errorf("no answer after %d s", int(delai.Seconds()))

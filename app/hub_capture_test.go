@@ -82,13 +82,14 @@ func TestCaptureHub(t *testing.T) {
 		t.Fatal(err)
 	}
 	// the kit folder: a page's background check (Setup & health…) may still hold a file of it for a moment
-	// on Windows, so it is removed with retries instead of t.TempDir()'s single try
+	// on Windows, so it is removed with retries instead of t.TempDir()'s single try; up to 60 s: the GitHub check
+	// (45 s at most, then its whole tree is stopped) may still be waiting for a slow WSL
 	kit, err := os.MkdirTemp("", "capture-kit")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() {
-		for i := 0; i < 20 && os.RemoveAll(kit) != nil; i++ {
+		for i := 0; i < 120 && os.RemoveAll(kit) != nil; i++ {
 			time.Sleep(500 * time.Millisecond)
 		}
 		if _, err := os.Stat(kit); err == nil {
