@@ -55,7 +55,7 @@ func TestValiderCarte(t *testing.T) {
 		{"titre sur deux lignes", func(c *CarteMission) { c.Titre = "a\nb" }, "title"},
 		{"jalons 0", func(c *CarteMission) { c.JalonsEstimes = 0 }, "jalons_estimes"},
 		{"jalons 61", func(c *CarteMission) { c.JalonsEstimes = 61 }, "jalons_estimes"},
-		{"aucune voie", func(c *CarteMission) { c.Dev.Brief, c.Serveurs.Brief = "", "" }, "at least one lane"},
+		{"aucune voie", func(c *CarteMission) { c.Dev.Brief, c.Serveurs.Brief, c.Acces = "", "", nil }, "at least one lane"},
 		{"brief trop long", func(c *CarteMission) { c.Dev.Brief = strings.Repeat("é", maxBriefCarte+1) }, "brief"},
 		{"nom de projet invalide", func(c *CarteMission) { c.Projet.Nom = "../x" }, "Invalid project name"},
 		{"projet neuf déjà pris", func(c *CarteMission) { c.Projet.Nom = "SITE-EXISTANT" }, "already exists"},

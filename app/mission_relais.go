@@ -127,7 +127,11 @@ func (s *Serveur) relaisProd(id string) {
 	_ = json.Unmarshal(m.Carte, &c)
 	vues := s.voiesEnDirect(m).Voies
 	i := slices.IndexFunc(vues, func(v VoieMission) bool { return v.Module == "dev" })
-	if i < 0 {
+	if i < 0 { // M268b: no Studio lane (servers or keys only): done once every Servers task is
+		if c.Dev.Brief == "" && m.Relais.Etape == "construction" &&
+			!slices.ContainsFunc(vues, func(v VoieMission) bool { return v.Module != "servers" || v.Actuel != "finie" }) {
+			s.finirMission(id, "construction", cmp.Or(map[bool]string{true: "no Studio lane: the Servers tasks are done"}[len(vues) > 0], "no Studio lane: the vault entries are given"))
+		}
 		return
 	}
 	p, ok := s.projetParNom(vues[i].Ref)

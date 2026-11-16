@@ -173,8 +173,8 @@ func validerCarte(c *CarteMission, x contexteCarte) error {
 		return erreurEntree(fmt.Sprintf("The card needs a title of one line, %d characters at most", maxTitreCarte))
 	case len([]rune(c.Dev.Brief)) > maxBriefCarte || len([]rune(c.Serveurs.Brief)) > maxBriefCarte:
 		return erreurEntree(fmt.Sprintf("A lane's brief is %d characters at most", maxBriefCarte))
-	case c.Dev.Brief == "" && c.Serveurs.Brief == "":
-		return erreurEntree("The card needs at least one lane: a Dev brief or a Servers brief")
+	case c.Dev.Brief == "" && c.Serveurs.Brief == "" && len(c.Acces) == 0: // M268b: keys only is a mission too
+		return erreurEntree("The card needs at least one lane: a Dev brief, a Servers brief or vault entries")
 	case c.JalonsEstimes < 1 || c.JalonsEstimes > 60:
 		return erreurEntree("jalons_estimes is between 1 and 60")
 	case len(c.Envs) > len(envsProjet):

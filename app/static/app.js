@@ -2256,7 +2256,7 @@ function carteMission(d) {
     (c.touche.fichiers || []).length ? `<dt>${t("Files")}</dt><dd>${liste(c.touche.fichiers)}</dd>` : "",
     pj ? "" : `<dt>${t("Folder")}</dt><dd>${c.touche.dossier ? h(c.touche.dossier) : t("A new folder for the project")}</dd>`].join("");
   return `<div class="mis-voies${srv ? "" : " mis-une"}">
-      <div class="mis-voie"><h3>${t((etat.hubModules || []).find((m) => m.id === "dev")?.nom || "dev")}</h3><p class="m0"><b>${h(c.projet.nom)}</b> <span class="etiquette">${t(c.projet.nouveau ? "New project" : "Existing project")}</span></p><p class="mis-brief">${h(c.dev.brief || "")}</p>${c.dev.modes ? `<p class="m0">${[["parallele", "Parallel mode"], ["eco", "Eco mode"], ["rapide", "Fast mode"]].filter(([k]) => c.dev.modes[k]).map(([, n]) => `<span class="etiquette">${t(n)}</span>`).join(" ")}</p>` : ""}</div>
+      <div class="mis-voie"><h3>${c.dev.brief ? t((etat.hubModules || []).find((m) => m.id === "dev")?.nom || "dev") : t("Project")}</h3><p class="m0"><b>${h(c.projet.nom)}</b> <span class="etiquette">${t(c.projet.nouveau ? "New project" : "Existing project")}</span></p>${c.dev.brief ? `<p class="mis-brief">${h(c.dev.brief)}</p>` : ""}${c.dev.modes ? `<p class="m0">${[["parallele", "Parallel mode"], ["eco", "Eco mode"], ["rapide", "Fast mode"]].filter(([k]) => c.dev.modes[k]).map(([, n]) => `<span class="etiquette">${t(n)}</span>`).join(" ")}</p>` : ""}</div>
       ${srv ? `<div class="mis-voie"><h3>${t("Servers")}</h3>${c.avertissement_serveurs ? avert : ""}<p class="mis-brief">${h(t(c.serveurs.brief || "Nothing to prepare on the servers."))}</p></div>` : ""}
     </div>
     ${pj}${ressources}
@@ -6008,11 +6008,13 @@ function missionDirect(m) {
   const lancee = (m.historique || []).find((x) => x.etat === "lancee"), j = [...(m.journal || [])].reverse(), n = etat.missionJournalN || 50;
   const r = m.relais || {};
   const nonDonne = m.etat === "lancee" && r.etape === "accord_prod" && (m.journal || []).some((e) => e.id === `accord:${r.accord}:refusee` || e.id === `accord:${r.accord}:expiree`);
-  return `${incidentMission(m)}<section class="bloc" aria-labelledby="mis-voies-titre"><div class="ligne m0 tuile-tete"><h2 class="m0" id="mis-voies-titre">${t("Lanes")}</h2></div>
+  // M268b: a keys-only mission has no lane and no relay once launched (its keys are given at the launch)
+  const sansVoie = lancee && !(m.voies || []).length, avecStudio = !!(m.carte && m.carte.dev && m.carte.dev.brief);
+  return `${incidentMission(m)}${sansVoie ? "" : `<section class="bloc" aria-labelledby="mis-voies-titre"><div class="ligne m0 tuile-tete"><h2 class="m0" id="mis-voies-titre">${t("Lanes")}</h2></div>
       ${(m.voies || []).length ? `<ul class="mis-voies-liste mis-voies-direct">${m.voies.map((v) => voieDirect(v, m.etat)).join("")}</ul>${lancee ? `<p class="muet petit m0">${t("Launched on {0}", [h(new Date(lancee.t).toLocaleString(document.documentElement.lang || "en"))])}</p>` : ""}`
         : `<p class="muet m0">${t("The lanes start when the mission is launched.")}</p>`}
-    </section>
-    ${m.relais ? `<section class="bloc" aria-labelledby="mis-relais-titre"><h2 id="mis-relais-titre">${t("Relay")}</h2>${friseRelais(m)}
+    </section>`}
+    ${m.relais && avecStudio ? `<section class="bloc" aria-labelledby="mis-relais-titre"><h2 id="mis-relais-titre">${t("Relay")}</h2>${friseRelais(m)}
       ${nonDonne ? `<p class="ligne m0 mis-redemander"><span>${t("The production accord was not given.")}</span><button type="button" class="btn btn-petit btn-primaire" data-mis-ctl="redemander">${t("Ask again")}</button></p>` : ""}</section>` : ""}
     <section class="bloc" aria-labelledby="mis-journal-titre"><h2 id="mis-journal-titre">${t("Journal")} <span class="muet">${j.length}</span></h2>
       ${j.length ? `<ol class="mis-journal">${j.slice(0, n).map(ligneJournal).join("")}</ol>${j.length > n ? `<button type="button" class="btn btn-petit" id="mis-plus" data-mis-plus>${t("See more")} (${j.length - n})</button>` : ""}`

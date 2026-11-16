@@ -29,7 +29,10 @@ func consigneOrchestrateur(phrase string, mentions []string) string {
 		"out, the site is deployed after each milestone; read it from the sentence, never ask); serveurs.brief (DNS, certificates, proxy, protection, " +
 		"firewall); acces (vault entries by name, pour = project/env or server id); jalons_estimes (1 to 60). A project named " +
 		"nom@instance (distant true) is on a remote Athanor: nouveau false, a dev.brief, and no envs, serveurs or acces " +
-		"(its own Athanor deploys it). If it returns an " +
+		"(its own Athanor deploys it). Give only the lanes the sentence uses, never one it does not ask for: dev.brief only " +
+		"when something is to be built (left empty for an infrastructure mission on an existing project); envs and " +
+		"serveurs.brief only when servers are involved; acces only for the keys the work needs (a card of acces alone gives " +
+		"keys to a project). If it returns an " +
 		"error, fix the card and call it again. Athanor computes the approvals, what will be touched and the estimate itself.\n" +
 		"5. Then say in one or two plain sentences what the card proposes, and stop.\n" +
 		"6. Only when a later owner's message asks to launch the card as it is, call lancer_mission with the mission id " +

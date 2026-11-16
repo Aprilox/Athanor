@@ -128,6 +128,44 @@ func TestMissionLancerNatifM245(t *testing.T) {
 			t.Fatalf("custom environment: %s grants %v audit %v %+v", m.Etat, envs, a, m.Historique)
 		}
 	})
+	// M268b: the four kinds of mission (Studio only, servers only, keys only, all three) launch only their own lanes;
+	// one without a Studio lane ends once its Servers tasks are done (keys only: at once).
+	t.Run("voies_selon_le_type_de_mission", func(t *testing.T) {
+		modules := func(m Mission) string {
+			var l []string
+			for _, v := range m.Voies {
+				l = append(l, v.Module)
+			}
+			return strings.Join(l, ",")
+		}
+		cle := []AccesCarte{{Entree: "Jeton Cloudflare", Pour: "p-cle"}}
+		for _, k := range []struct {
+			nom, voies string
+			c          CarteMission
+			fin        bool
+		}{
+			{"p-studio", "dev", CarteMission{Titre: "Studio", Dev: BriefCarte{Brief: "x"}}, false},
+			{"p-serveur", "servers", CarteMission{Titre: "Serveur", Serveurs: BriefCarte{Brief: "nginx"}, Envs: envServeur("p-serveur")}, true},
+			{"p-cle", "", CarteMission{Titre: "Clé", Acces: cle}, true},
+			{"p-tout", "dev,servers", CarteMission{Titre: "Tout", Dev: BriefCarte{Brief: "x"}, Serveurs: BriefCarte{Brief: "nginx"}, Envs: envServeur("p-tout"),
+				Acces: []AccesCarte{{Entree: "Jeton Cloudflare", Pour: "p-tout"}}}, false},
+		} {
+			m, _ := lance(k.nom, false, false, k.c)
+			if m.Etat != "lancee" || modules(m) != k.voies {
+				t.Fatalf("%s: %s lanes %q, want %q %+v", k.nom, m.Etat, modules(m), k.voies, m.Historique)
+			}
+			s.observerMission(m.ID)
+			if m, _ = lireMission(m.ID); (m.Etat == "terminee") != k.fin {
+				t.Fatalf("%s: state %s after its lanes, ended wanted %v %+v", k.nom, m.Etat, k.fin, m.Voies)
+			}
+		}
+		if len(s.acces.Projet("p-cle").Acces) == 0 {
+			t.Fatal("keys-only mission: the key was not given")
+		}
+		if err := validerCarte(&CarteMission{Titre: "Rien", Projet: ProjetCarte{Nom: "p-cle"}, JalonsEstimes: 1}, s.contexteCarte()); err == nil {
+			t.Fatal("a card with no lane at all was accepted")
+		}
+	})
 	t.Run("natif_projet_deja_force_pas_de_double_audit", func(t *testing.T) {
 		m, a := lance("p-deja", true, true, CarteMission{Titre: "Srv", Dev: BriefCarte{Brief: "x"}, Serveurs: BriefCarte{Brief: "Ouvrir le port"}, Envs: envServeur("p-deja")})
 		if m.Etat != "lancee" || a["forcer_infra_natif"] != 0 || a["voie Serveurs sans barrière"] != 1 || forcesParLancement(m) {
