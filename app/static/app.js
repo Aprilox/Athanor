@@ -2914,7 +2914,7 @@ const GUIDE = [
     note: "Your project keys reopen alone on this PC; the keys of your servers open only with your password, and a copy of the disk opens nothing." },
   { id: "acces", titre: "Project access", intro: "One key is enough: give it to a project and the project gets it, in testing as in production; turn on *Separate testing and production* only if a service gives you two keys (a test one and a live one). *Code* keys are given to the project, whose pilot reads their value as a variable; *infra* keys (servers, Cloudflare, SSH) stay with Athanor, which uses them itself and never gives them to the AI.",
     etapes: [
-      ["The Access panel", "*Access*, a tab of *Studio*: the vault's entries on the left, the keys given to this project on the right. Drag an entry there, or tick its box: the pilot gets it under the variable name shown, which you can change. *Separate testing and production* shows three columns instead (*testing*, *pre-production*, *production*), and a vault entry can hold a second value for production.", "#acces", "Access"],
+      ["The Access panel", "*Access*, a tab of *Studio*: the vault's entries on the left, the keys given to this project on the right. Drag an entry there, or tick its box, then *Save the changes* (the password is asked once): the pilot gets it under the variable name shown, which you can change. *Separate testing and production* shows three columns instead (*testing*, *pre-production*, *production*), and a vault entry can hold a second value for production.", "#acces", "Access"],
       ["The environment", "Next to *Start*, a list chooses the environment given to the pilot (*testing* at first). Changing it rewrites the pilot's values at once, and the panel follows. On a paired phone, the environment and the accesses are shown, never changed."],
       ["The badge", "The badge next to *Start* counts the project's accesses and opens the panel. The sentence beside it says what the pilot will get (“2 test keys, 1 variable”). *vault locked*: the pilot's file waits until you unlock Athanor."],
       ["Code or infra", "A *code* entry (a test key, a setting) goes to the pilot: only the entries of the current environment are written into the project's `.athanor/secrets.env`. An *infra* entry (Cloudflare, SSH…) can be linked to the project, but Athanor keeps it for its own actions and never gives it to the pilot. Removing an access takes its value out of the file at once."],
@@ -5406,7 +5406,7 @@ async function enregistrerOptions() {
 let numeroRendu = 0;
 // --- Access (project page): the vault on the left, this project's grants by environment on the right
 // (ARCHITECTURE §Accès); drag an entry onto a column, or tick its box (keyboard, touch). Names only, no value.
-const acc = { projet: "" };
+const acc = { projet: "", attente: {} };
 const AUTO_ACCES = { migration: "imported", pourvous: "added automatically (For you)" };
 // M224: environments on screen in plain words, internal ids (dev, staging, prod) unchanged
 const NOMS_ENV = { dev: "Testing", staging: "Pre-production", prod: "Production" };
@@ -5430,18 +5430,20 @@ pages.acces = async () => {
   if (!projet) return `<div class="vide">${t("Choose a project")}</div>`;
   const [d, c, en, sv] = await Promise.all([api("acces?projet=" + encodeURIComponent(projet)), api("coffre"),
     api("projets/" + encodeURIComponent(projet) + "/environnements"), api("serveurs").catch(() => ({}))]);
+  if (acc.projet !== projet) acc.attente = {}; // the boxes ticked or unticked, "entree|env" → given, until Save
   acc.projet = projet; acc.refusee = d.natif && !d.forcer_infra_natif; cof.d = c;
   const entrees = (c.entrees || []).slice().sort((a, b) => a.famille.localeCompare(b.famille) || a.nom.localeCompare(b.nom));
   const inj = d.injection || {}, envs = d.envs || ["dev", "staging", "prod"];
   const donne = (id, env) => d.acces.some((a) => a.entree === id && a.env === env);
+  const coche = (k, oui) => (k in acc.attente ? acc.attente[k] : oui) ? " checked" : "";
   const refusee = d.natif && !d.forcer_infra_natif; // C-M218-9: infra grants used by nobody until Force is ticked
   const uniformes = accesUniformes(d.acces, envs);
   let separer = !uniformes;
   try { separer ||= localStorage.getItem(cleSeparer(projet)) === "1"; } catch (e) { /* storage unavailable */ }
   const carte = (x) => `<li class="acc-entree" draggable="true" data-acc-entree="${h(x.id)}">
     <div class="ligne m0"><b class="cp-nom" title="${h(x.note || x.nom)}">${h(x.nom)}</b><span class="badge">${h(x.famille === "secret" ? typeCoffre(x.type) : t("Variable"))}</span>${x.famille === "secret" ? `<span class="badge${x.portee === "infra" ? " badge-infra" : ""}">${x.portee === "infra" ? "infra" : "code"}</span>` : ""}</div>
-    <div class="acc-cases" role="group" aria-label="${h(x.nom)}">${separer ? envs.map((e) => `<label><input type="checkbox" data-acc-case="${h(x.id + "|" + e)}"${donne(x.id, e) ? " checked" : ""}> ${h(nomEnv(e))}</label>`).join("")
-      : `<label><input type="checkbox" data-acc-case="${h(x.id + "|*")}"${donne(x.id, envs[0]) ? " checked" : ""}> ${t("Given to this project")}</label>`}</div>
+    <div class="acc-cases" role="group" aria-label="${h(x.nom)}">${separer ? envs.map((e) => `<label><input type="checkbox" data-acc-case="${h(x.id + "|" + e)}"${coche(x.id + "|" + e, donne(x.id, e))}> ${h(nomEnv(e))}</label>`).join("")
+      : `<label><input type="checkbox" data-acc-case="${h(x.id + "|*")}"${coche(x.id + "|*", donne(x.id, envs[0]))}> ${t("Given to this project")}</label>`}</div>
   </li>`;
   const colonne = (env) => {
     const tous = env === "*", l = tous ? d.acces.filter((a) => a.env === envs[0]).map((a) => ({ ...a, env })) : d.acces.filter((a) => a.env === env);
@@ -5461,7 +5463,8 @@ pages.acces = async () => {
         <label class="petit"><input type="checkbox" data-acc-forcer${d.forcer_infra_natif ? " checked" : ""}> ${t("Force, knowing the risk")}</label> <a class="petit" href="#options">${t("Options")}</a></div>` : ""}</div>
     <div class="acc-grille">
       <div class="bloc acc-coffre"><h2>${t("Vault")}</h2>
-        ${entrees.length ? `<ul class="acc-liste">${entrees.map(carte).join("")}</ul>` : `<p class="muet">${t("The vault is empty.")} <a href="#coffre">${t("Vault")}</a></p>`}</div>
+        ${entrees.length ? `<ul class="acc-liste">${entrees.map(carte).join("")}</ul>` : `<p class="muet">${t("The vault is empty.")} <a href="#coffre">${t("Vault")}</a></p>`}
+        <div class="ligne acc-attente" id="acc-attente"${Object.keys(acc.attente).length ? "" : " hidden"}><button type="button" class="btn btn-primaire btn-petit" data-acc-enregistrer>${t("Save the changes")}</button><button type="button" class="btn btn-petit" data-acc-annuler>${t("Cancel")}</button></div></div>
       <div class="bloc acc-projet"><h2>${t(separer ? "This project" : "Keys given to this project")}</h2>
         <div class="acc-envs${separer ? "" : " acc-une"}">${(separer ? envs : ["*"]).map(colonne).join("")}</div>
         <div class="acc-separer"><label class="petit"><input type="checkbox" data-acc-separer${separer ? " checked" : ""}${uniformes ? "" : " disabled"}> ${t("Separate testing and production")}</label>
@@ -5617,8 +5620,25 @@ async function changerAcces(corps) {
   rendrePage(); // an error re-renders too: the box goes back to what the server holds
   return r;
 }
+// the ticked boxes wait for Save, which asks the password once for every key given (owner's note, 2026-11-17)
+const majAttenteAcces = () => { const b = $("#acc-attente"); if (b) b.hidden = !Object.keys(acc.attente).length; };
+async function enregistrerAcces() {
+  const infra = (id) => acc.refusee && ((cof.d && cof.d.entrees) || []).some((x) => x.id === id && x.portee === "infra");
+  const l = Object.entries(acc.attente).map(([k, oui]) => { const [entree, env] = k.split("|"); return { action: oui ? "ajouter" : "retirer", entree, env }; });
+  const preuve = l.some((c) => c.action === "ajouter" && !infra(c.entree)); // the server refuses an infra key in native mode before any password
+  const p = preuve ? await preuveMdp(t("Giving a key to a project: retype Athanor's password."), { ok: t("Save the changes") }) : {};
+  if (!p) return;
+  for (const c of l) {
+    const r = await action(api("acces", "POST", { projet: acc.projet, ...c, ...(c.action === "ajouter" ? p : {}) }));
+    if (!r && c.action === "ajouter" && !infra(c.entree)) break; // a wrong password is tried once: the rest stays ticked
+    delete acc.attente[c.entree + "|" + c.env];
+  }
+  rendrePage();
+}
 $("#page").addEventListener("click", async (ev) => {
   if (etat.page !== "acces") return;
+  if (ev.target.closest("[data-acc-enregistrer]")) return enregistrerAcces();
+  if (ev.target.closest("[data-acc-annuler]")) { acc.attente = {}; return rendrePage(); }
   const b = ev.target.closest("[data-acc-retirer], [data-acc-importer]"); if (!b) return;
   if (b.dataset.accRetirer) { const [entree, env] = b.dataset.accRetirer.split("|"); return changerAcces({ action: "retirer", entree, env }); }
   b.disabled = true;
@@ -5628,7 +5648,7 @@ $("#page").addEventListener("click", async (ev) => {
 $("#page").addEventListener("change", (ev) => {
   if (etat.page !== "acces") return;
   const x = ev.target;
-  if (x.dataset.accCase) { const [entree, env] = x.dataset.accCase.split("|"); return changerAcces({ action: x.checked ? "ajouter" : "retirer", entree, env }); }
+  if (x.dataset.accCase) { const k = x.dataset.accCase; if (k in acc.attente) delete acc.attente[k]; else acc.attente[k] = x.checked; return majAttenteAcces(); }
   if (x.matches("[data-acc-forcer]")) return forcerInfraNatif(x.checked);
   if (x.matches("[data-acc-separer]")) { try { if (x.checked) localStorage.setItem(cleSeparer(acc.projet), "1"); else localStorage.removeItem(cleSeparer(acc.projet)); } catch (e) { /* storage unavailable */ } return rendrePage(); }
   if (x.dataset.accVar) { const [entree, env] = x.dataset.accVar.split("|"); return changerAcces({ action: "renommer", entree, env, variable: x.value.trim() }); }
@@ -5648,7 +5668,8 @@ for (const type of ["dragover", "dragleave", "drop"]) $("#page").addEventListene
   c.classList.toggle("acc-survol", type === "dragover");
   if (type !== "drop") return;
   const entree = ev.dataTransfer.getData("text/plain"), env = c.dataset.accEnv;
-  if (entree && !c.querySelector(`[data-acc-retirer="${CSS.escape(entree + "|" + env)}"]`)) changerAcces({ action: "ajouter", entree, env });
+  const k = entree + "|" + env, b = $(`[data-acc-case="${CSS.escape(k)}"]`);
+  if (entree && b && !c.querySelector(`[data-acc-retirer="${CSS.escape(k)}"]`)) { b.checked = true; acc.attente[k] = true; majAttenteAcces(); } // waits for Save, as a ticked box
 });
 // --- Vault (Coffre module): the entries of /api/coffre, one tab per family; a secret's value never comes back
 const cof = { onglet: "secret", form: null, colle: null, d: { entrees: [], etat: {} } }; // colle: {texte, props} of "Paste"

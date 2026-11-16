@@ -1149,6 +1149,7 @@ ol.guide-access li { margin: 5px 0; }
 .acc-grille { display: grid; grid-template-columns: minmax(260px, 1fr) 2fr; gap: 16px; align-items: start; }
 .acc-grille > .bloc + .bloc { margin-top: 0; }
 .acc-liste { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.acc-attente { position: sticky; bottom: 0; background: var(--panel); padding-block: 8px; } /* a long vault keeps its Save in view */
 .acc-entree, .acc-acces { border: 1px solid var(--line); border-radius: var(--rayon); padding: 8px 10px; background: var(--bg); display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .acc-entree { cursor: grab; }
 .acc-entree .cp-nom, .acc-acces .cp-nom { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono, monospace); font-size: 13px; }
