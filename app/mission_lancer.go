@@ -268,33 +268,7 @@ func (s *Serveur) etapesMission(c CarteMission, politique, qui, dossier string, 
 		s.ecrireAudit(LigneAudit{Type: "evenement", De: qui, Vers: "hub", Projet: p.Nom, Action: "forcer_infra_natif", Resultat: "true (mission lancée en mode Windows natif)"})
 		faits = append(faits, evenementMission("lancee", "native Windows mode: the project is forced by this launch (logged)"))
 	}
-	// 2. the ticked vault entries (an entry already given stays as it is; one to fill is the owner's)
-	for _, a := range c.Acces {
-		if a.Decoche || a.ARemplir {
-			continue
-		}
-		e := s.entreeCoffre(a.ID)
-		g, err := s.acces.Ajouter(p.Nom, e, envAcces(a.Pour, c), "", "mission")
-		if errors.Is(err, errAccesDeja) {
-			continue
-		}
-		if err != nil {
-			return voies, faits, errMoteur("giving {0}: {1}", a.Entree, err)
-		}
-		action := "acces_accorde"
-		if e.Portee == "infra" && modeNatif.Load() {
-			action = "acces_accorde_force" // as the Access page: an infra entry given in native mode, the project forced
-		}
-		s.auditAcces(qui, p.Nom, action, e, g.Variable, g.Env)
-		faits = append(faits, evenementMission("lancee", "access given: "+a.Entree+" → "+g.Variable+" ("+g.Env+")"))
-	}
-	// C86: in the project's secrets.env now, a pilot already running included (demarrerPilote stops before it)
-	if len(faits) > 0 {
-		if _, err := s.injecterAcces(p, nil); err != nil {
-			return voies, faits, errMoteur("writing the access given: {0}", err)
-		}
-	}
-	// 3. the environments: the card's URL, protection and servers, the mission's policy (prod: always accord)
+	// 2. the environments (M265: before the grants, which name them): the card's URL, protection and servers, the mission's policy (prod: always accord)
 	inventaire, _ := lireServeurs()
 	actuels := s.acces.Environnements(p.Nom)
 	for _, ec := range c.Envs {
@@ -321,6 +295,32 @@ func (s *Serveur) etapesMission(c CarteMission, politique, qui, dossier string, 
 			}); err != nil {
 				return voies, faits, errMoteur("the environment {0}: {1}", ec.Nom, err)
 			}
+		}
+	}
+	// 3. the ticked vault entries (an entry already given stays as it is; one to fill is the owner's)
+	for _, a := range c.Acces {
+		if a.Decoche || a.ARemplir {
+			continue
+		}
+		e := s.entreeCoffre(a.ID)
+		g, err := s.acces.Ajouter(p.Nom, e, envAcces(a.Pour, c), "", "mission")
+		if errors.Is(err, errAccesDeja) {
+			continue
+		}
+		if err != nil {
+			return voies, faits, errMoteur("giving {0}: {1}", a.Entree, err)
+		}
+		action := "acces_accorde"
+		if e.Portee == "infra" && modeNatif.Load() {
+			action = "acces_accorde_force" // as the Access page: an infra entry given in native mode, the project forced
+		}
+		s.auditAcces(qui, p.Nom, action, e, g.Variable, g.Env)
+		faits = append(faits, evenementMission("lancee", "access given: "+a.Entree+" → "+g.Variable+" ("+g.Env+")"))
+	}
+	// C86: in the project's secrets.env now, a pilot already running included (demarrerPilote stops before it)
+	if len(faits) > 0 {
+		if _, err := s.injecterAcces(p, nil); err != nil {
+			return voies, faits, errMoteur("writing the access given: {0}", err)
 		}
 	}
 	// 4. the pilot (it injects the grants given above)

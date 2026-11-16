@@ -114,6 +114,20 @@ func TestMissionLancerNatifM245(t *testing.T) {
 			t.Fatalf("Servers lane in native mode: %s %v %+v", m.Etat, a, m.Voies)
 		}
 	})
+	// M265: the 13h03 failure — an environment named by the card ("site", not dev/staging/prod) and the Cloudflare
+	// token given to its server: the grant waited for an environment set only afterwards ("Unknown environment").
+	t.Run("environnement_de_la_carte_avant_les_acces", func(t *testing.T) {
+		m, a := lance("p-site", true, false, CarteMission{Titre: "Site", Dev: BriefCarte{Brief: "x"}, Serveurs: BriefCarte{Brief: "nginx"},
+			Envs:  []EnvCarte{{Nom: "site", URL: "https://demo.p-site.fr", Protection: "aucune", Serveurs: []string{"a2"}}},
+			Acces: []AccesCarte{{Entree: "Jeton Cloudflare", Pour: "a2"}, {Entree: "Jeton Cloudflare", Pour: "p-site"}}})
+		envs := map[string]bool{}
+		for _, g := range s.acces.Projet("p-site").Acces {
+			envs[g.Env] = true
+		}
+		if m.Etat != "lancee" || !envs["site"] || !envs["dev"] || a["acces_accorde_force"] != 2 {
+			t.Fatalf("custom environment: %s grants %v audit %v %+v", m.Etat, envs, a, m.Historique)
+		}
+	})
 	t.Run("natif_projet_deja_force_pas_de_double_audit", func(t *testing.T) {
 		m, a := lance("p-deja", true, true, CarteMission{Titre: "Srv", Dev: BriefCarte{Brief: "x"}, Serveurs: BriefCarte{Brief: "Ouvrir le port"}, Envs: envServeur("p-deja")})
 		if m.Etat != "lancee" || a["forcer_infra_natif"] != 0 || a["voie Serveurs sans barrière"] != 1 || forcesParLancement(m) {

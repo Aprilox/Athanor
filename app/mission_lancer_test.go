@@ -193,7 +193,7 @@ func TestMissionLancer(t *testing.T) {
 	if len(donne) != 2 || !donne[stripe.ID+"/dev"] || !donne[cf.ID+"/prod"] {
 		t.Fatalf("grants: %v", donne)
 	}
-	// C86: one history line per entry given and environment set; the grants in secrets.env after step 2 (the
+	// C86: one history line per environment set and entry given (M265: environments first); the grants in secrets.env after step 3 (the
 	// fake pilot injects nothing, as a pilot already running)
 	faits := []string{}
 	for _, h := range m.Historique {
@@ -201,7 +201,7 @@ func TestMissionLancer(t *testing.T) {
 			faits = append(faits, strings.SplitN(h.Detail, " → ", 2)[0])
 		}
 	}
-	if !slices.Equal(faits, []string{"access given: Clé Stripe", "access given: Jeton Cloudflare", "environment set: dev https://dev.martin.fr, auth_proxy, auto", "environment set: prod https://martin.fr, aucune, accord"}) {
+	if !slices.Equal(faits, []string{"environment set: dev https://dev.martin.fr, auth_proxy, auto", "environment set: prod https://martin.fr, aucune, accord", "access given: Clé Stripe", "access given: Jeton Cloudflare"}) {
 		t.Fatalf("history of the launch: %q", faits)
 	}
 	if b, err := os.ReadFile(filepath.Join(dossier, ".athanor", "secrets.env")); err != nil || !strings.Contains(string(b), temoin+"-code") {
