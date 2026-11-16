@@ -76,7 +76,9 @@ func (s *Serveur) echouerMission(m *Mission, err error) bool {
 		m.Historique = append(m.Historique, evenementMission("proposee", "error: "+detail))
 	case m.Etat == "preparation" || m.Etat == "proposee":
 		m.Etat = "echec"
-		m.Historique = append(m.Historique, evenementMission("echec", detail))
+		e := evenementMission("echec", detail)
+		e.Message = messageDe(err).masquer(s.masquerSecrets) // M258: translated by the page
+		m.Historique = append(m.Historique, e)
 		return true
 	}
 	return false

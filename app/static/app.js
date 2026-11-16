@@ -1034,7 +1034,7 @@ async function arreterPilote(b) {
   if (c === "jalon") return arreterApresCycle(b);
 }
 // M251: the ways to stop offered (jalon, pause, immediat), each said in one paragraph; the choice, or null
-const LIBELLES_ARRET = { jalon: "Finish the current milestone", pause: "Pause", immediat: "Stop now" };
+const LIBELLES_ARRET = { jalon: "Finish the current milestone", pause: "Put on pause", immediat: "Stop immediately" }; // M258: the request's words
 function choisirArret(titre, modes, textes) {
   return choisir(modes.map((x) => t(textes[x])).join("\n\n"), [{ id: "", texte: t("Cancel") },
     ...modes.map((x) => ({ id: x, texte: t(LIBELLES_ARRET[x]), primaire: x === "jalon", danger: x === "immediat" }))], { titre, large: true });
@@ -1467,23 +1467,24 @@ const boutonMode = (cle) => `<button type="button" class="chat-info" data-detail
 function detailMode(cle) {
   return choisir((DETAILS_MODES[cle] || []).map((l) => "• " + t(l)).join("\n"), [{ id: "ok", texte: t("OK"), primaire: true }], { titre: t(NOMS_MODES[cle] || cle) });
 }
-function blocMode(m) {
+// carte (M258): the mission card's version, the three modes with one fixed line each, no framing nor time limit
+function blocMode(m, carte) {
   etat.modeMax = m.parallele_max;
   const ligne = (id, cle, actif, court) => `<div class="ligne m0 mode-suite">
     <label class="interrupteur m0"><input type="checkbox" id="${id}" ${actif ? "checked" : ""}><span><b>${t(NOMS_MODES[cle])}</b></span></label>${boutonMode(cle)}
     <span class="muet petit">${court}</span>`;
   return `<div class="bloc mode-ligne"><div class="mode-grille">
     <h2 class="m0">${t("Working mode")}</h2>
-    ${ligne("md-parallele", "PARALLEL", m.parallele, m.parallele ? t("several workers at once: faster, uses more quota") : t("one milestone at a time; parallel: several workers at once, faster, more quota"))}
+    ${ligne("md-parallele", "PARALLEL", m.parallele, m.parallele || carte ? t("several workers at once: faster, uses more quota") : t("one milestone at a time; parallel: several workers at once, faster, more quota"))}
     ${m.parallele ? `<span class="espace"></span><span class="petit" title="${h(t("Starts with 2, adds one each time a worker delivers, and starts no more once the quota is met. Applies from the next cycle."))}">${t("Workers at most")}</span><div class="choix m0">${[2, 3, 4, 6, 8, 10].map((n) => `<button type="button" data-max="${n}" class="${m.parallele_max === n ? "actif" : ""}">${n}</button>`).join("")}</div>` : ""}
     </div>
-    ${ligne("md-eco", "ECO", m.eco, m.eco ? t("the quota first: the lead works alone, one review at delivery, few images, short outputs") : t("spends as little quota as possible"))}
+    ${ligne("md-eco", "ECO", m.eco, m.eco && !carte ? t("the quota first: the lead works alone, one review at delivery, few images, short outputs") : t("spends as little quota as possible"))}
     </div>
-    ${m.eco ? `<p class="muet petit m0 mode-suite">${t("To save even more: a smaller model for the lead (Sonnet) and a lower thinking effort (medium or low), in Settings.")}</p>` : ""}
-    ${ligne("md-rapide", "FAST", m.rapide, m.rapide ? t("speed first: quick checks at each milestone, everything verified and fixed at the end") : t("builds as fast as possible; everything is verified and fixed at the end"))}
+    ${m.eco && !carte ? `<p class="muet petit m0 mode-suite">${t("To save even more: a smaller model for the lead (Sonnet) and a lower thinking effort (medium or low), in Settings.")}</p>` : ""}
+    ${ligne("md-rapide", "FAST", m.rapide, m.rapide && !carte ? t("speed first: quick checks at each milestone, everything verified and fixed at the end") : t("builds as fast as possible; everything is verified and fixed at the end"))}
     </div>
     ${m.rapide ? `<p class="attention petit m0 mode-suite">${t("Until the end, the project may be buggy or badly finished. The last milestone is longer: it verifies and fixes the whole project.")}</p>` : ""}
-    <p class="muet petit m0 mode-suite">${t("The three modes add up: switch on the ones you want.")}</p>
+    ${carte ? "" : `<p class="muet petit m0 mode-suite">${t("The three modes add up: switch on the ones you want.")}</p>
     <div class="ligne m0 mode-suite">
     <span class="petit"><b>${t("Longest framing")}</b>${boutonDetail("FRAMING_MAX_MIN")}</span>
     <span class="muet petit">${t("the first cycle, which writes the plan")}</span>
@@ -1495,7 +1496,7 @@ function blocMode(m) {
     <span class="muet petit">${t("only the time the pilot works counts")}</span>
     <span class="espace"></span><div class="choix m0">${[-1, 72, 168, 336, 720, 0].map((n) => `<button type="button" data-duree-max="${n}" class="${(m.duree_max ?? -1) === n ? "actif" : ""}">${n >= 0 ? libelleDuree(n) : m.duree_max_global ? t("Like Settings ({0} h)", [m.duree_max_global]) : t("Like Settings (unlimited)")}</button>`).join("")}</div>
     <input type="number" id="md-duree-max" class="cadrage-autre" min="1" max="87600" inputmode="numeric" value="${m.duree_max > 0 && ![72, 168, 336, 720].includes(m.duree_max) ? m.duree_max : ""}" placeholder="${h(t("Other (h)"))}" aria-label="${h(t("Other (h)"))}" title="${h(t("Other (h)"))}">
-    </div>
+    </div>`}
   </div></div>`;
 }
 // changerMode: the block as it is on the page, with one change. changement: { parallele, parallele_max, eco,
@@ -2079,15 +2080,10 @@ const ICONES_MENTION = { projet: "projet", serveur: "serveur", cle: "cle", fourn
 // a chip shows its kind (icon + label) before the name: a project and a server of the same name never look alike
 const typeMention = (m) => `${ic(ICONES_MENTION[m.type])}${m.type === "nouveau" ? "" : `<span class="puce-type">${h(t(TYPES_MENTION[m.type]))}</span>`}`;
 const pucesMentions = () => (etat.accueilMentions || []).map((m, i) => `<span class="puce-mention puce-${m.type}" title="${h(t(TYPES_MENTION[m.type]))}">${typeMention(m)}${h(m.nom)}<button type="button" class="puce-x" data-retirer-mention="${i}" aria-label="${h(t("Remove {0}", [m.nom]))}">×</button></span>`).join("");
+// M258: the resources come with @ (a row of every resource was unreadable with many servers); only the new project, which @ does not offer, stays a chip
 function suggestionsMentions() {
-  const pris = new Set((etat.accueilMentions || []).map((m) => m.type + "\0" + m.ref)), l = etat.mentionsSugg || [];
-  // the three most recent of each kind, shown in name order (recency alone read as a random order)
-  const trois = (type) => l.filter((m) => m.type === type).slice(0, 3).sort((a, b) => a.nom.localeCompare(b.nom, undefined, { numeric: true }));
-  const bouton = (m) => `<button type="button" class="btn btn-petit puce-sugg puce-${m.type}" data-mention="${h(JSON.stringify(m))}">${typeMention(m)}${h(m.nom)}</button>`;
-  // grouped by kind, one group per type, the new project last
-  return ["projet", "serveur", "cle"].map((ty) => trois(ty).filter((m) => !pris.has(m.type + "\0" + m.ref)))
-    .filter((g) => g.length).map((g) => `<span class="groupe-sugg" role="group" aria-label="${h(t(GROUPES_MENTION[g[0].type]))}">${g.map(bouton).join("")}</span>`).join("")
-    + (pris.has("nouveau\0") ? "" : bouton({ type: "nouveau", ref: "", nom: t("New project") }));
+  const pris = (etat.accueilMentions || []).some((m) => m.type === "nouveau");
+  return pris ? "" : `<button type="button" class="btn btn-petit puce-sugg puce-nouveau" data-mention="${h(JSON.stringify({ type: "nouveau", ref: "", nom: t("New project") }))}">${typeMention({ type: "nouveau" })}${h(t("New project"))}</button>`;
 }
 function majMentions() {
   const z = $("#accueil-puces"), s = $("#accueil-sugg");
@@ -2212,9 +2208,15 @@ pages.accueil = async () => {
 };
 // M156: Send creates a mission; its card shows under the bar (DESIGN §Missions). etat.missionVue = GET /api/missions/{id}.
 const ACTIVE_MISSION = ["preparation", "proposee"];
-const APPROBATIONS_PREVUES = { mise_en_prod: "Putting {0} in production", plan_serveurs: "The Servers plan of {0}", deploiement: "Each deployment to {0}", durcissement: "Hardening the server {0}", deverrouiller_coffre: "Unlocking the infra vault" };
-const POLITIQUES_MISSION = [["prod", "Ask me for production", "Production and its servers' plans wait for your approval."],
-  ["tout", "Ask me for everything", "Every Servers plan and every deployment waits for your approval."], ["autonome", "Autonomous", "Production still always waits for your approval, even in autonomous mode; everything else (Servers plans, the other environments) runs without you."]];
+const APPROBATIONS_PREVUES = { mise_en_prod: "Putting {0} in production", plan_serveurs: "Preparing the server {0}", deploiement: "Each deployment to {0}", durcissement: "Hardening the server {0}", deverrouiller_coffre: "Unlocking the infra vault" };
+// M258: no policy to choose any more (every risky action asks); the names stay for the journal of older missions
+// M258: an approval's target as the owner reads it: an environment's servers (plan) or address (deployment), not its name
+function cibleApprobation(c, a, nom) {
+  const e = (c.envs || []).find((x) => x.nom === a.cible);
+  if (!e || !["plan_serveurs", "deploiement"].includes(a.type)) return a.cible || "";
+  return a.type === "plan_serveurs" ? (e.serveurs || []).map(nom).join(", ") || a.cible : e.url || a.cible;
+}
+const POLITIQUES_MISSION = [["prod", "Ask me for production"], ["tout", "Ask me for everything"], ["autonome", "Autonomous"]];
 const travailleMission = (d) => d.orchestrateur || d.mission.etat === "preparation";
 const heuresMission = (m) => m < 90 ? `${m} min` : `${Math.round(m / 60)} h`;
 // C81: an environment of the card (its servers named by nom); sansUrl: the URL is shown apart. M248: no protection nor policy
@@ -2226,10 +2228,9 @@ function carteMission(d) {
   const m = d.mission, c = m.carte, ed = etat.missionEdition && etat.missionEdition.id === m.id ? etat.missionEdition : null;
   const nomServeur = (r) => ((etat.mentionsSugg || []).find((x) => x.type === "serveur" && x.ref === r) || {}).nom || r;
   const liste = (l) => l && l.length ? `<ul class="mis-puces">${l.map((x) => `<li>${h(x)}</li>`).join("")}</ul>` : `<span class="muet">—</span>`;
-  const e = c.estimation || {}, actif = !travailleMission(d) && m.etat === "proposee", dis = ed ? "" : " disabled", srv = serveurLie(c);
-  const avert = `<p class="mis-avert" role="note">${ic("alerte")} ${t("Native Windows mode: without a barrier, the servers' keys can be read by this mission's agents. This launch is logged.")}</p>`;
-  const pol = POLITIQUES_MISSION.find((p) => p[0] === (ed ? ed.politique : m.politique)) || POLITIQUES_MISSION[0];
-  const gauche = (srv ? `<h3>${t("Environments")}</h3>${(c.envs || []).length ? `<ul class="mis-envs">${c.envs.map((x) => `<li><b>${h(x.nom)}</b>${badgeProd(x.production)} <span class="mis-url">${h(x.url || "—")}</span> <span class="muet petit">${h(envMission({ ...x, production: false }, true, nomServeur))}</span>${x.avant ? `<div class="muet petit mis-avant">${h(t("Before: {0}", [envMission(x.avant, false, nomServeur)]))}</div>` : ""}</li>`).join("")}</ul>` : `<span class="muet">—</span>`}` : "");
+  const e = c.estimation || {}, actif = !travailleMission(d) && m.etat === "proposee", srv = serveurLie(c);
+  const avert = `<p class="mis-avert" role="note">${ic("alerte")} ${t("Native mode: this mission's agents can read the servers' keys (logged).")}</p>`;
+  const gauche = (srv ? `<h3>${t("Online")}</h3>${(c.envs || []).length ? `<ul class="mis-envs">${c.envs.map((x) => `<li><span class="mis-url">${h(x.url || "—")}</span>${badgeProd(x.production)}${x.avant ? `<div class="muet petit mis-avant">${h(t("Before: {0}", [envMission(x.avant, false, nomServeur)]))}</div>` : ""}</li>`).join("")}</ul>` : `<span class="muet">—</span>`}` : "");
   // M253: the resources chosen, as removable chips, and "Add a resource" (category, then a list with a search)
   const mr = actif && etat.missionRes && etat.missionRes.id === m.id ? etat.missionRes : null, res = ressourcesMission();
   const puce = (r, i) => `<span class="puce-mention puce-${r.type}"${r.pour ? ` title="${h(t("used for {0}", [r.pour]))}"` : ""}>${typeMention(r)}${h(r.nom)}${r.remplir ? ` <span class="badge mis-remplir">${t("to fill")}</span>` : ""}${actif ? `<button type="button" class="puce-x" data-mis-retirer="${i}" aria-label="${h(t("Remove {0}", [r.nom]))}">×</button>` : ""}</span>`;
@@ -2255,13 +2256,11 @@ function carteMission(d) {
     ${pj}${ressources}
     <div class="mis-grille">
       ${gauche ? `<div>${gauche}</div>` : ""}
-      <div>${(c.approbations || []).length ? `<h3>${t("I will ask for your approval for")}</h3>${liste(c.approbations.map((a) => t(APPROBATIONS_PREVUES[a.type] || a.type, [a.cible || ""])))}` : ""}
-        ${touche ? `<h3>${t("What will be touched")}</h3><dl class="fiche mis-touche">${touche}</dl>` : ""}
+      <div>${(c.approbations || []).length ? `<h3>${t("I will ask for your approval for")}</h3>${liste(c.approbations.map((a) => t(APPROBATIONS_PREVUES[a.type] || a.type, [cibleApprobation(c, a, nomServeur)])))}` : ""}
+        ${touche ? `<details class="mis-touche-plus"><summary><b>${t("What will be touched")}</b></summary><dl class="fiche mis-touche">${touche}</dl></details>` : ""}
         ${gauche ? estimationMission(e) : ""}</div>
       ${gauche ? "" : `<div>${estimationMission(e)}</div>`}
     </div>
-    ${srv ? `<details class="mis-politique-plus"${ed ? " open" : ""}><summary>${h(t("Policy: {0}", [t(pol[1])]))}</summary>
-      <fieldset class="mis-politique"><legend>${t("Policy")}</legend>${POLITIQUES_MISSION.map(([v, l, aide]) => `<label class="radio"><input type="radio" name="mis-politique" value="${v}"${pol[0] === v ? " checked" : ""}${dis}> <span><b>${t(l)}</b><br><span class="muet petit">${t(aide)}</span></span></label>`).join("")}</fieldset></details>` : ""}
     ${ed ? `<label for="mis-consigne" class="petit">${t("Ask for a change (optional)")}</label><textarea id="mis-consigne" rows="2" maxlength="2000" placeholder="${h(t("For example: put the dev on the home server"))}">${h(ed.consigne)}</textarea>
       <div class="ligne"><button type="button" class="btn btn-primaire" data-mis="appliquer">${t("Apply")}</button><button type="button" class="btn" data-mis="fermer">${t("Cancel")}</button></div>`
     : actif ? `<div class="ligne"><button type="button" class="btn" data-mis="modifier">${t("Edit")}</button><button type="button" class="btn btn-primaire" data-mis="lancer">${t("Launch")}</button><span class="espace"></span><button type="button" class="btn" data-mis="annuler">${t("Cancel the mission")}</button></div>` : ""}`;
@@ -2282,7 +2281,7 @@ function sectionProjet(c) {
         ${distant ? "" : `<button type="button" class="btn btn-petit" data-parcourir="mis-dossier" data-titre="${h(t("Choose the project's folder"))}">${t("Choose…")}</button>`}</div>
       <p class="muet petit m0" id="mis-dossier-aide">${t(distant ? "The folder is chosen on the PC." : "An empty folder, or a new one in an existing folder. By default, next to your other projects.")}</p>
       ${err ? `<p class="attention petit m0" id="mis-dossier-err" role="alert">${h(err)}</p>` : ""}
-      <div id="mis-mode">${blocMode(md)}</div>
+      <div id="mis-mode">${blocMode(md, true)}</div>
       <fieldset class="mis-github"><legend>${t("GitHub repository")}</legend>
         ${GITHUB_MISSION.map(([v, l]) => `<label class="radio"><input type="radio" name="mis-github" value="${v}"${gh[0] === v ? " checked" : ""}> <span>${t(l)}</span></label>`).join("")}
         ${gh[0] ? `<label for="mis-depot" class="petit">${t(gh[0] === "lier" ? "Repository (OWNER/NAME)" : "Name of the new repository")}</label><input type="text" id="mis-depot" value="${h(p.depot || "")}"${gh[0] === "lier" ? ' placeholder="octocat/my-site"' : ""}>` : ""}
@@ -2309,8 +2308,8 @@ document.addEventListener("change", (ev) => {
 });
 // the folder picker (parcourir) fills the field with a synthetic input event: saved as a typed change is
 document.addEventListener("input", (ev) => { if (ev.target.id === "mis-dossier" && !ev.isTrusted) enregistrerProjetMission({ dossier: ev.target.value.trim() }); });
-const estimationMission = (e) => `<h3>${t("Estimate")}</h3><p class="m0">${t("{0} to {1} of work, about {2} milestones", [heuresMission(e.minutes_min), heuresMission(e.minutes_max), e.jalons])}</p>
-        <p class="muet petit m0">${e.cout_max ? t("About {0} $ to {1} $ of quota (list price)", [e.cout_min, e.cout_max]) : t("Quota unknown until a first cycle is measured on this PC.")}</p>`;
+const estimationMission = (e) => `<h3>${t("Estimate")}</h3><p class="m0">${t(e.jalons === 1 ? "{0} to {1} of work, about 1 milestone" : "{0} to {1} of work, about {2} milestones", [heuresMission(e.minutes_min), heuresMission(e.minutes_max), e.jalons])}</p>
+        <p class="muet petit m0">${e.cout_max ? t("About {0} $ to {1} $ of quota (list price)", [e.cout_min, e.cout_max]) : ""}</p>`;
 // M253: the card's resources: its servers (one chip each) and its vault entries (one chip per entry, the unticked ones
 // left out); ref = what POST /ressources takes (an entry to fill, not in the vault yet, goes by its name)
 function ressourcesMission() {
@@ -2341,7 +2340,7 @@ function zoneMission() {
   const m = d.mission, q = (m.questions || []).find((x) => !x.reponse), fin = (m.historique || []).slice(-1)[0] || {};
   if (echecLancement(m)) return `<section class="bloc mis-carte mis-echec" role="alert"><b>${h(t("The launch of the mission stopped: {0}", [fin.message ? texteMessage(fin.message) : fin.detail || ""]))}</b>
     <div class="ligne"><button type="button" class="btn btn-primaire btn-petit" data-mis="lancer">${t("Resume the launch")}</button><button type="button" class="btn btn-petit" data-mis="oublier">${t("Close")}</button></div></section>`;
-  if (m.etat === "echec") return `<section class="bloc mis-carte mis-echec" role="alert"><b>${t("The orchestrator could not prepare the card.")}</b> <span class="muet">${h(fin.detail || "")}</span>
+  if (m.etat === "echec") return `<section class="bloc mis-carte mis-echec" role="alert"><b>${t("The orchestrator could not prepare the card.")}</b> <span class="muet">${h(fin.message ? texteMessage(fin.message) : fin.detail || "")}</span>
     <div class="ligne"><button type="button" class="btn btn-petit" data-mis="oublier">${t("Close")}</button></div></section>`;
   if (!ACTIVE_MISSION.includes(m.etat)) return m.etat === "annulee" ? "" : `<section class="bloc mis-carte"><b>${h(t(ETATS_MISSION[m.etat] || m.etat))}</b> · ${h((m.carte || {}).titre || "")} <a href="#missions">${t("See the missions")} →</a></section>`;
   const prep = travailleMission(d) && !q ? `<div class="mis-prep" role="status"><span class="mis-anim" aria-hidden="true"></span>${t("The orchestrator is preparing the card…")}<span class="espace"></span>${m.carte ? "" : `<button type="button" class="btn btn-petit" data-mis="annuler">${t("Cancel")}</button>`}</div>` : "";
@@ -2379,11 +2378,11 @@ document.addEventListener("click", async (ev) => {
   const b = ev.target.closest("[data-mis], [data-mis-choix]"), d = etat.missionVue; if (!b || !d) return;
   const m = d.mission, a = b.dataset.mis;
   if (b.dataset.misChoix !== undefined) { const q = m.questions.find((x) => !x.reponse); etat.missionReponse = ""; await actionMission("repondre", { question: q.id, choix: q.choix[+b.dataset.misChoix] }); return; }
-  if (a === "modifier") { etat.missionEdition = { id: m.id, politique: m.politique, consigne: "" }; etat.missionRes = null; majZoneMission(); $("#mission-zone input[type=radio], #mis-consigne")?.focus(); }
+  if (a === "modifier") { etat.missionEdition = { id: m.id, consigne: "" }; etat.missionRes = null; majZoneMission(); $("#mis-consigne")?.focus(); }
   else if (a === "fermer") { etat.missionEdition = null; majZoneMission(); }
   else if (a === "appliquer") {
     const ed = etat.missionEdition, consigne = ed.consigne.trim();
-    const r = await actionMission("modifier", { acces_decoches: (m.carte.acces || []).filter((x) => x.decoche).map((x) => ({ entree: x.entree, pour: x.pour })), politique: ed.politique, ...(consigne ? { consigne } : {}) });
+    const r = await actionMission("modifier", { acces_decoches: (m.carte.acces || []).filter((x) => x.decoche).map((x) => ({ entree: x.entree, pour: x.pour })), ...(consigne ? { consigne } : {}) });
     if (r) { etat.missionEdition = null; majZoneMission(); }
   } else if (a === "lancer") { // C78: launching gives the card's keys, as the Access page does
     const p =await preuveMdp(t("Launching the mission gives its keys to the project: retype Athanor's password."), { ok: t("Launch") });
@@ -2391,10 +2390,6 @@ document.addEventListener("click", async (ev) => {
   }
   else if (a === "annuler") { if (await choisir(t("Cancel this mission? Nothing has been built or deployed yet."), [{ id: "non", texte: t("Keep it") }, { id: "oui", texte: t("Cancel the mission"), danger: true }]) === "oui") await actionMission("annuler"); }
   else if (a === "oublier") { etat.missionVue = null; majZoneMission(); }
-});
-document.addEventListener("change", (ev) => {
-  const ed = etat.missionEdition; if (!ed) return;
-  if (ev.target.name === "mis-politique") ed.politique = ev.target.value;
 });
 document.addEventListener("input", (ev) => { if (ev.target.id === "mis-consigne" && etat.missionEdition) etat.missionEdition.consigne = ev.target.value; else if (ev.target.id === "mis-q-libre") etat.missionReponse = ev.target.value; });
 document.addEventListener("submit", async (ev) => {
@@ -2420,7 +2415,7 @@ let minuterieHubChat;
 const sansCartes = (m) => ({ ...m, texte: (m.texte || "").replace(/<(note|agent|mcp|action)>[\s\S]*?<\/\1>/g, "") }); // cards of the project chat: not here; its own card: carteActionHub
 function filHub(d) {
   const msgs = (d.messages || []).map(sansCartes), cartes = d.actions || {};
-  let html = msgs.length ? msgs.map((m, i) => messageChat(m, i) + (cartes[i] ? carteActionHub(cartes[i], i) : "")).join("") : `<div class="vide">${t("Ask anything about your projects, servers or missions.")}</div>`;
+  let html = msgs.length ? msgs.map((m, i) => messageChat(m, i) + (cartes[i] ? carteActionHub(cartes[i], i) : "")).join("") : `<div class="vide"></div>`;
   if (d.en_cours) {
     const p = d.partiel || {}, textes = p.textes || [], outils = p.outils || [];
     html += `<div class="chat-msg chat-claude"><div class="chat-bulle chat-attente">${textes.length ? mdChat(textes[textes.length - 1].replace(/<(note|agent|mcp|action)>[\s\S]*$/, ""), true) : ""}
@@ -2943,25 +2938,24 @@ const GUIDE = [
     note: "The password never appears on a page, in an answer of Athanor, in the audit log nor on a paired phone (it sees the accounts, read only). The home assistant knows the accounts' names and the projects they send for, never their settings." },
   { id: "missions", titre: "Launch a mission", intro: "One sentence on the home page, and several modules work together: Studio builds the project, Servers prepares where it will run. An orchestrator first turns your sentence into a mission card; nothing starts before you press *Launch*.",
     etapes: [
-      ["The sentence and its mentions", "In the bar *What do you want to do?* of the home page, say what you want in one sentence, for example “Put @my-shop online at shop.example.com”. Type *@* to name a project, a server or a vault key (by its name, never its value): your choice becomes a chip, and its *×* takes it off. The chips under the bar add a recent project, a server or *New project*. *Send* creates the mission.", "#accueil", "Home"],
-      ["The mission card", "The orchestrator reads the state of the modules, then proposes its card under the bar: what *Studio* will build (a new project with its folder, or one of yours), what will be touched (files, folder) and an estimate drawn from the cycles already measured on this PC. When a server is linked, the card also shows what *Servers* will prepare (DNS, certificates, proxy, firewall), the address and the policy, folded, with a *Production* badge when your sentence speaks of production: every risky action on it then waits for your agreement. The orchestrator works out by itself what it can (new project or existing one, its name and folder, the resources) and asks only what it cannot guess. When it needs to know something, its question comes at the top of the card, with its choices as buttons and a field for your own answer."],
+      ["The sentence and its mentions", "In the bar *What do you want to do?* of the home page, say what you want in one sentence, for example “Put @my-shop online at shop.example.com”. Type *@* to name a project, a server or a vault key (by its name, never its value): your choice becomes a chip, and its *×* takes it off. The *New project* chip under the bar asks for a new project. *Send* creates the mission.", "#accueil", "Home"],
+      ["The mission card", "The orchestrator reads the state of the modules, then proposes its card under the bar: what *Studio* will build (a new project with its folder, or one of yours), an estimate drawn from the cycles already measured on this PC and, folded, what will be touched (files, folder). When a server is linked, the card also shows what *Servers* will prepare (DNS, certificates, proxy, firewall) and the address where the site goes online, with a *Production* badge when your sentence speaks of production. Every risky action asks for your agreement, whatever the server. The orchestrator works out by itself what it can (new project or existing one, its name and folder, the resources) and asks only what it cannot guess. When it needs to know something, its question comes at the top of the card, with its choices as buttons and a field for your own answer."],
       ["Resources", "The servers, vault keys and APIs the mission uses show as chips; the *×* of a chip takes it off. *Add a resource* offers *Server*, *Key* or *API / provider*, then a list with a search field, without what the card already has (a server is added on the computer only). Adding a server brings the Servers lane; taking the last one off removes it. A key the vault does not hold yet is marked *to fill*: add it in the *Vault*, the orchestrator never creates one. *I will ask for your approval for* is worked out by Athanor, not by the orchestrator: production always, hardening a server not hardened yet, unlocking the vault when an *infra* key is needed."],
-      ["The project", "For a new project, the folded *Project* section holds what the assistant cannot guess: the folder (*Choose…*; an empty or new folder, never a system folder or another project's, checked at once), the working mode and the GitHub repository (*No repository* by default, an existing one to link, or a new private one, named after the project)."],
-      ["The policy", "Shown only when the mission has a server, folded under *Policy*. *Ask me for production* (the default): production and its servers' plans wait for you, the other environments deploy on their own. *Ask me for everything*: every Servers plan and every deployment waits for you. *Autonomous*: only putting in production waits for you. Whatever you choose, a deployment to a *Production* environment always waits for your agreement."],
-      ["Edit the card", "*Edit* opens the policy and a field *Ask for a change* (“put the site on the home server”). *Apply*: the policy changes the card at once, with no agent; a change you write goes back to the orchestrator, which proposes a new card. *Cancel the mission* drops it: nothing has been built or deployed yet."],
+      ["The project", "For a new project, the folded *Project* section holds what the assistant cannot guess: the folder (*Choose…*; an empty or new folder, never a system folder or another project's, checked at once), the working mode (the framing and the time limit stay in *Manage*) and the GitHub repository (*No repository* by default, an existing one to link, or a new private one, named after the project)."],
+      ["Edit the card", "*Edit* opens a field *Ask for a change* (“put the site on the home server”). *Apply* sends it back to the orchestrator, which proposes a new card. *Cancel the mission* drops it: nothing has been built or deployed yet."],
       ["Launch the mission", "*Launch* does it all, once: the new project is created with its folder, mode and repository (or your request joins the queue of the existing one) and its pilot starts, the resources' access are given and the environments are set (the one that is not *Production* is deployed after each milestone). With a server, Servers prepares it as soon as the project's plan exists, while Studio builds, its plans waiting as usual. If the mission uses an *infra* key, unlock the vault first. A step that fails stops the next ones and rings the bell; what is done stays done, and *Resume the launch* goes on from the first step not done. *Missions*, in the menu, lists every mission with its state and its lanes.", "#missions", "Missions"],
       ["From your phone", "On a paired phone, unlocked, the same card can be read, answered, edited, launched or cancelled. When the orchestrator asks you to launch, “Launch the mission …?” comes in the bell, on *For you* and as a notification: *Accept* launches it as *Launch* does (on the computer, with Athanor's password retyped). Its questions come in the bell too, with their choices as buttons.", "#pourvous", "For you"],
       ["What the orchestrator cannot do", "The orchestrator is a Claude session with no tool of its own, in an empty folder, with no secret in its environment. It reads a summary of the modules (projects and their plan in one line, servers, environments, the names and types of the vault entries, never a value), proposes the card, asks you questions and asks you to launch. It cannot read a project's files, reach a server, call Cloudflare, build or deploy: those tools are refused to its token, and each of its calls is written to the audit log."],
     ],
     note: "Once launched, each lane follows its module's usual rules: the pilot's approvals, the Servers agent's plans and the deployments of *Guide › Put a site online*. What a mission does, step by step: docs/MISSIONS.md in the repository." },
-  { id: "mission-direct", titre: "Follow a mission", intro: "Once launched, a mission has its own page: what Studio and Servers are doing side by side, the relay from a delivered milestone to production, and a journal in plain words. You pause it, stop it or change its policy there, and it carries on after Athanor restarts.",
+  { id: "mission-direct", titre: "Follow a mission", intro: "Once launched, a mission has its own page: what Studio and Servers are doing side by side, the relay from a delivered milestone to production, and a journal in plain words. You pause it or stop it there, and it carries on after Athanor restarts.",
     etapes: [
-      ["The mission's page", "*Missions*, in the menu, lists every mission with its state and its lanes; click one to open its page: its sentence, its state, its policy and the *Stop* button at the top. The page reads the mission again every 2 seconds while you look at it: nothing to refresh.", "#missions", "Missions"],
+      ["The mission's page", "*Missions*, in the menu, lists every mission with its state and its lanes; click one to open its page: its sentence, its state and the *Stop* button at the top. The page reads the mission again every 2 seconds while you look at it: nothing to refresh.", "#missions", "Missions"],
       ["The lanes", "*Lanes* shows the modules side by side (one under the other on a phone): *Studio* with its project and the milestone being built (“Milestone 3/8: contact form”), *Servers* with its task and the step of its plan, or *See the plan* when it waits for your agreement. Each name opens its page."],
-      ["The relay", "*Relay* follows the way to production in five steps: *Milestone delivered*, *Dev deployment*, *Verification*, *Your accord*, *Production* (the first three without a *Production* environment). The steps done are ticked, the current one moves gently, a failed one turns red. The addresses show below once they exist."],
+      ["The relay", "*Relay* follows the way online: *Milestone delivered*, *Going online*, *Verification*, then *Your accord* and *Production* when the card has a *Production* badge. The steps done are ticked, the current one moves gently, a failed one turns red. The addresses show below once they exist."],
       ["The journal", "One line per event, the newest first, with its time and a short sentence: a milestone delivered, a deployment checked from outside, production waiting for your accord. Warnings are amber, errors red; 50 lines show, *See more* opens the rest. An incident on the mission's site comes at the top of the page with *Retry*, *Go back to the previous version* and *I take over*."],
       ["Production, from your phone", "Once Studio's lane is done and dev is deployed and checked on the project's last commit, Athanor asks for your accord for production: the bell, *For you* and your phone get a card with the address, the commit, the version online now and what changes (the number of new commits and the subjects of the last ones). On a paired phone, unlocked, *Accept* is enough; on the computer, retype Athanor's password. The accord is good once, for that commit and that mission; refused or expired, *Ask again* on the mission's page asks once more. No policy lets production through without it.", "#pourvous", "For you"],
-      ["Stop, resume, policy", "*Stop* offers three ways: *Finish the current milestone* (the mission pauses once it is saved), *Pause* (the pilot stops now; the Servers tasks and the deployments wait) or *Stop now* (its pending accords are refused). Nothing is undone: the environments and the access stay, and *Resume*, with Athanor's password, picks the mission up where it stopped. The policy changes here too: a stricter one at once, a looser one with the password. The emergency stop pauses every mission."],
+      ["Stop and resume", "*Stop* offers three ways: *Finish the current milestone* (the mission pauses once it is saved), *Put on pause* (the pilot stops now; the Servers tasks and the deployments wait) or *Stop immediately* (its pending accords are refused). Nothing is undone: the environments and the access stay, and *Resume*, with Athanor's password, picks the mission up where it stopped. The emergency stop pauses every mission."],
       ["After a restart", "Close Athanor or restart the PC: at the next start each launched mission is followed again where it was, never launched twice, and the journal says “Athanor restarted: the mission resumes”. A production accord asked before stays valid only if nothing changed since; otherwise it is refused, and *Ask again* asks once more. A mission that needs an *infra* key waits until you unlock the vault; a paused mission stays paused."],
       ["In a terminal", "On Linux and macOS, *E* in the terminal opens the same list; *Enter* shows a mission with its lanes, its relay as text and the 10 newest lines of its journal. *p* pauses it, *r* resumes it with Athanor's password, *a* stops it after a confirmation. The production accord is decided on page *6* (*For you*): *y* accepts, *r* refuses."],
     ],
@@ -4766,8 +4760,7 @@ function pcsOuvert() {
   return etat.pcsOuvert;
 }
 document.addEventListener("toggle", (ev) => {
-  if (ev.target && ev.target.classList && ev.target.classList.contains("mis-pol-plus")) etat.misPolOuvert = ev.target.open;
-  if (ev.target && ev.target.id === "mis-projet") etat.missionProjetOuvert = ev.target.open; // M254: stays open across a save // M248: stays open across the live refresh
+  if (ev.target && ev.target.id === "mis-projet") etat.missionProjetOuvert = ev.target.open; // M254: stays open across a save
   if (!ev.target || ev.target.id !== "pcs-repli") return;
   etat.pcsOuvert = ev.target.open;
   try { localStorage.setItem("pcsOuvert", etat.pcsOuvert ? "1" : "0"); } catch (e) { /* this device only */ }
@@ -5858,16 +5851,17 @@ const ETATS_VOIE_DEV = { travaille: ["Working", "pv-claude"], termine: ["Finishe
 // M190: a Studio lane, on this PC (dev) or on a remote Athanor (dev_distant, ref "remote id/project", nom = nom@instance)
 const voieStudio = (v) => v.module === "dev" || v.module === "dev_distant";
 // a lane's state read now by the API (voiesEnDirect): Studio = the project's pilot, Servers = its task
-function etatVoie(v) {
+function etatVoie(v, etatMission) {
   if (v.etat === "refusee") return [t("Refused: native Windows mode"), "pv-vous"];
   if (!v.actuel || v.actuel === "inconnu") return [t("Not found"), "pv-vous"];
   if (v.actuel === "attente_plan") return [t("Waiting for the project's plan"), ""]; // M249: Servers prepares once the plan exists
+  if (voieStudio(v) && v.actuel === "arrete" && etatMission === "en_pause") return [t("Paused"), ""]; // M258: the pilot stopped by the pause
   if (voieStudio(v)) { const [l, c] = ETATS_VOIE_DEV[v.actuel] || [v.actuel, ""]; return [t(l), c]; }
   return ETATS_TACHE_SRV()[v.actuel] || [v.actuel, ""];
 }
 // lien: the project (selected, then its Overview) or the task's server; never inside a line that is a link itself
-function voieMission(v, lien) {
-  const [libelle, classe] = etatVoie(v), dev = voieStudio(v), distant = v.module === "dev_distant";
+function voieMission(v, lien, etatMission) {
+  const [libelle, classe] = etatVoie(v, etatMission), dev = voieStudio(v), distant = v.module === "dev_distant";
   const mod = distant ? t("Remote Studio") : t((etat.hubModules || []).find((m) => m.id === v.module)?.nom || v.module);
   const nom = distant ? v.nom || v.ref : dev ? v.ref : ((etat.mentionsSugg || []).find((x) => x.type === "serveur" && x.ref === v.serveur) || {}).nom || v.serveur || v.ref || v.env;
   const cible = !lien || v.actuel === "inconnu" ? "" : distant ? `href="#global"` : dev ? `href="#suivi" data-projet="${h(v.ref)}" data-cible="suivi"` : v.serveur ? `href="#serveur/${encodeURIComponent(v.serveur)}"` : "";
@@ -5884,7 +5878,7 @@ function ligneMission(m) {
     <span class="mis-phrase">${titre ? `<b>${h(titre)}</b> ` : ""}<span class="muet">${h(phrase)}</span></span>
     <span class="muet petit">${h(new Date(m.cree).toLocaleDateString(document.documentElement.lang || "en"))}</span>
     ${etapeRelais(m) ? `<span class="petit mis-relais-etape">${h(etapeRelais(m))}</span>` : ""}
-    ${(m.voies || []).length ? `<span class="mis-voies-ligne">${m.voies.map((v) => voieMission(v, false)).join("")}</span>` : ""}</a></li>`;
+    ${(m.voies || []).length ? `<span class="mis-voies-ligne">${m.voies.map((v) => voieMission(v, false, m.etat)).join("")}</span>` : ""}</a></li>`;
 }
 // Home's Missions block: the 3 newest, See all; the empty state says where to start
 pages.missions = async () => {
@@ -5921,26 +5915,32 @@ pages.mission = async () => {
 };
 // M171: a launched mission, live (DESIGN §Mission en direct): its lanes side by side, the relay's steps and URLs, the
 // journal in plain words; read again every 2 s while the page is shown, the tab visible and the mission followed
-const RELAIS_MISSION = ["Milestone delivered", "Dev deployment", "Verification", "Your accord", "Production"];
+const RELAIS_MISSION = ["Milestone delivered", "Going online", "Verification", "Your accord", "Production"];
 const RANG_RELAIS = { construction: 0, dev_deploye: 2, dev_verifie: 3, accord_prod: 3, prod_deploye: 4, termine: 5 };
 const ETATS_ETAPE = { fait: "done", cours: "in progress", attente: "in progress", echec: "failed", "": "to come" };
 // the relay step of the newest journal entry when it is an error (a deployment, a check, the prod): red until it moves on
-function etapeEchec(j) {
+function etapeEchec(j, dev, prod) {
   const e = j[j.length - 1], env = ((e || {}).params || [])[0];
   if (!e || e.niveau !== "erreur") return -1;
   if (/^(incident|prod):/.test(e.id)) return 4;
-  if (/^(deploi|verif):.*:echec$/.test(e.id)) return env === "prod" ? 4 : env === "dev" ? (e.id.startsWith("deploi") ? 1 : 2) : -1;
+  if (/^(deploi|verif):.*:echec$/.test(e.id)) return prod && env === prod.nom ? 4 : dev && env === dev.nom ? (e.id.startsWith("deploi") ? 1 : 2) : -1;
   return -1;
 }
+// M258: the card's environments as the relay uses them (envFinal, envJalonCarte in Go): the Production one (its
+// badge) closes the relay with the accord; the other one goes online after each milestone
+function envsRelais(c) {
+  const envs = (c || {}).envs || [], prod = envs.find((x) => x.production || x.nom === "prod");
+  return { prod, dev: envs.find((x) => x.nom === "dev" && !x.production) || envs.find((x) => !x.production && x.nom !== "prod") };
+}
 function friseRelais(m) {
-  const envs = (m.carte || {}).envs || [], dev = envs.find((x) => x.nom === "dev"), prod = envs.find((x) => x.nom === "prod");
-  const rang = RANG_RELAIS[m.relais.etape] ?? 0, echec = etapeEchec(m.journal || []);
+  const { dev, prod } = envsRelais(m.carte);
+  const rang = RANG_RELAIS[m.relais.etape] ?? 0, echec = etapeEchec(m.journal || [], dev, prod);
   const etapes = (prod ? RELAIS_MISSION : RELAIS_MISSION.slice(0, 3)).map((l, i) => {
     const c = echec >= 0 ? (i < echec ? "fait" : i === echec ? "echec" : "") : i < rang ? "fait" : i === rang ? (m.etat === "lancee" ? "cours" : "attente") : "";
     return `<li class="r-${c || "avenir"}"${c === "cours" ? ' aria-current="step"' : ""}><span class="mis-pastille" aria-hidden="true"></span><span>${t(l)}</span><span class="cache-visuel"> (${t(ETATS_ETAPE[c])})</span></li>`;
   }).join("");
   const url = (e, l) => e && e.url ? `<span>${t(l)} <a href="${h(e.url)}" target="_blank" rel="noopener noreferrer" class="mis-url">${h(e.url)}</a></span>` : "";
-  const urls = [rang >= 2 ? url(dev, "Dev:") : "", prod && rang >= 4 ? url(prod, "Prod:") : ""].filter(Boolean);
+  const urls = [rang >= 2 ? url(dev, "Online:") : "", prod && rang >= 4 ? url(prod, "Production:") : ""].filter(Boolean);
   return `<ol class="mis-relais">${etapes}</ol>${urls.length ? `<p class="ligne m0 petit mis-relais-url">${urls.join("")}</p>` : ""}`;
 }
 // a journal parameter said in the page's language: who acted, a state, a policy, an action; names and URLs as they are
@@ -5960,17 +5960,17 @@ function ligneJournal(e) {
   return `<li class="mis-j-${h(e.niveau)}"><time datetime="${h(e.t)}">${h(quand)}</time><span>${h(texteJournal(e))}</span></li>`;
 }
 // a lane, live: the module's line (state, link) then Studio's milestone n/N and what the project lead does
-function voieDirect(v) {
+function voieDirect(v, etatMission) {
   const n = v.fait || 0, avance = !voieStudio(v) || !v.total ? "" : v.titre ? t("Milestone {0}/{1}: {2}", [Math.min(n + 1, v.total), v.total, v.titre]) : t("{0} / {1} milestones done", [n, v.total]);
   const decider = v.actuel === "attente_accord" ? `<a class="btn btn-petit" href="#pourvous">${t("See the plan")}</a>` : "";
-  return `<li class="mis-voie">${voieMission(v, true)}${avance ? `<p class="m0">${h(avance)}</p>` : ""}${v.activite ? `<p class="m0 muet petit">${h(t(v.activite))}</p>` : ""}${decider}</li>`;
+  return `<li class="mis-voie">${voieMission(v, true, etatMission)}${avance ? `<p class="m0">${h(avance)}</p>` : ""}${v.activite ? `<p class="m0 muet petit">${h(t(v.activite))}</p>` : ""}${decider}</li>`;
 }
 function missionDirect(m) {
   const lancee = (m.historique || []).find((x) => x.etat === "lancee"), j = [...(m.journal || [])].reverse(), n = etat.missionJournalN || 50;
   const r = m.relais || {};
   const nonDonne = m.etat === "lancee" && r.etape === "accord_prod" && (m.journal || []).some((e) => e.id === `accord:${r.accord}:refusee` || e.id === `accord:${r.accord}:expiree`);
   return `${incidentMission(m)}<section class="bloc" aria-labelledby="mis-voies-titre"><div class="ligne m0 tuile-tete"><h2 class="m0" id="mis-voies-titre">${t("Lanes")}</h2></div>
-      ${(m.voies || []).length ? `<ul class="mis-voies-liste mis-voies-direct">${m.voies.map(voieDirect).join("")}</ul>${lancee ? `<p class="muet petit m0">${t("Launched on {0}", [h(new Date(lancee.t).toLocaleString(document.documentElement.lang || "en"))])}</p>` : ""}`
+      ${(m.voies || []).length ? `<ul class="mis-voies-liste mis-voies-direct">${m.voies.map((v) => voieDirect(v, m.etat)).join("")}</ul>${lancee ? `<p class="muet petit m0">${t("Launched on {0}", [h(new Date(lancee.t).toLocaleString(document.documentElement.lang || "en"))])}</p>` : ""}`
         : `<p class="muet m0">${t("The lanes start when the mission is launched.")}</p>`}
     </section>
     ${m.relais ? `<section class="bloc" aria-labelledby="mis-relais-titre"><h2 id="mis-relais-titre">${t("Relay")}</h2>${friseRelais(m)}
@@ -5980,22 +5980,18 @@ function missionDirect(m) {
         : `<p class="muet m0">${t("No event yet: the journal fills in as the lanes move on.")}</p>`}
     </section>`;
 }
-// M172: the header's controls of a launched, paused, stopping or stopped mission: its policy (looser = the owner's
-// password), Resume (the owner's password), Stop and its ways (M251: the milestone, a pause, now; nothing is undone)
-const RIGUEUR_POLITIQUE = ["autonome", "prod", "tout"];
+// M172: the header's controls of a launched, paused, stopping or stopped mission: Resume (the owner's password), Stop and its ways (M251: the milestone, a pause, now; nothing is undone)
 function controlesMission(m) {
   return `<div class="ligne m0 mis-controles">
-    ${serveurLie(m.carte) ? `<details class="mis-pol-plus"${etat.misPolOuvert ? " open" : ""}><summary>${h(t("Policy: {0}", [t((POLITIQUES_MISSION.find((p) => p[0] === m.politique) || POLITIQUES_MISSION[0])[1])]))}</summary>
-      <fieldset class="mis-pol-direct"><legend>${t("Policy")}</legend>${POLITIQUES_MISSION.map(([v, l, aide]) => `<label class="radio" title="${h(t(aide))}"><input type="radio" name="mis-pol-direct" value="${v}"${m.politique === v ? " checked" : ""}> ${t(l)}</label>`).join("")}</fieldset></details>` : ""}
     <span class="espace"></span>${m.etat === "arret_demande" ? `<span class="muet petit">${t("Stops at the end of the milestone in progress: Resume cancels this stop.")}</span>` : ""}
     ${m.etat === "lancee" ? "" : `<button type="button" class="btn btn-primaire" data-mis-ctl="reprendre">${t("Resume")}</button>`}
-    ${m.etat === "arretee" ? "" : `<button type="button" class="btn${m.etat === "lancee" ? "" : " btn-danger"}" data-mis-ctl="arreter">${t(m.etat === "en_pause" ? "Stop now" : "Stop")}</button>`}</div>`;
+    ${m.etat === "arretee" ? "" : `<button type="button" class="btn${m.etat === "lancee" ? "" : " btn-danger"}" data-mis-ctl="arreter">${t(m.etat === "en_pause" ? "Stop immediately" : "Stop")}</button>`}</div>`;
 }
 // M251: the ways a mission can still stop, from its state (a paused one: only now)
 const MODES_ARRET_MISSION = { lancee: ["jalon", "pause", "immediat"], arret_demande: ["pause", "immediat"], en_pause: ["immediat"] };
-const TEXTES_ARRET_MISSION = { jalon: "Finish the current milestone: the pilot completes it and saves it, then the mission pauses. Nothing is lost.",
-  pause: "Pause: the pilot stops now; the mission, its Servers tasks and its deployments wait for Resume.",
-  immediat: "Stop now: the mission stops and its pending accords are refused. Nothing is undone: the environments and the access stay, and Resume picks it up later." };
+const TEXTES_ARRET_MISSION = { jalon: "Finish the current milestone: the pilot saves it, then the mission pauses.",
+  pause: "Put on pause: everything stops now and waits for Resume.",
+  immediat: "Stop immediately: the pending accords are refused, nothing is undone." };
 // P6: the incident of the mission's project (the bell's, from the health of its environments), its actions as the bell's
 function incidentMission(m) {
   const projet = ((m.voies || []).find((v) => v.module === "dev") || {}).ref;
@@ -6015,12 +6011,6 @@ document.addEventListener("click", async (ev) => {
   if (!p) return;
   b.disabled = true;
   if (!(await actionMission(a, p))) b.disabled = false;
-});
-document.addEventListener("change", async (ev) => {
-  const m = (etat.missionVue || {}).mission; if (ev.target.name !== "mis-pol-direct" || !m) return;
-  const v = ev.target.value, souple = RIGUEUR_POLITIQUE.indexOf(v) < RIGUEUR_POLITIQUE.indexOf(m.politique);
-  const p = souple ? await preuveMdp(t("A looser policy: retype Athanor's password."), { ok: t("Change the policy") }) : {};
-  if (!p || !(await actionMission("politique", { politique: v, ...p }))) rendrePage(); // the radio goes back to the policy held
 });
 document.addEventListener("click", async (ev) => {
   const b = ev.target.closest("[data-mis-inc]"); if (!b) return;

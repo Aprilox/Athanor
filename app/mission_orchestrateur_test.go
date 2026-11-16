@@ -185,9 +185,16 @@ func TestOrchestrateurSession(t *testing.T) {
 		{"sess-2", "API overloaded " + temoin, true, "ended with an error: API overloaded"},
 		{"", "", false, "did not start"},
 		{"sess-3", "Nothing to do.", false, "without proposing a card: Nothing to do."},
+		{"sess-4", "Préparation terminée.", false, "The card was refused: a.test is already the address of p/dev"}, // M258: the refusal, not the agent's words
 	} {
-		id := []string{"mis002", "mis003", "mis004"}[i]
+		id := []string{"mis002", "mis003", "mis004", "mis005"}[i]
 		nouvelle(id)
+		if i == 3 {
+			_, _ = modifierMission(id, func(m *Mission) error {
+				m.RefusCarte = messageDe(erreurEntreeArgs{errEnvHotePris, []string{"a.test", "p/dev"}})
+				return nil
+			})
+		}
 		jouer = func(context.Context, string) (string, string, bool) { return cas.id, cas.res, cas.enErreur }
 		if err := s.lancerOrchestrateur(id, ""); err != nil {
 			t.Fatal(err)
@@ -195,6 +202,9 @@ func TestOrchestrateurSession(t *testing.T) {
 		m := finie(id)
 		if d := m.Historique[len(m.Historique)-1].Detail; m.Etat != "echec" || !strings.Contains(d, cas.raison) || strings.Contains(d, temoin) {
 			t.Errorf("%s: %s %q", id, m.Etat, d)
+		}
+		if g := m.Historique[len(m.Historique)-1].Message; i == 3 && (g == nil || g.Cle != "The card was refused: {0}" || len(g.Args) != 1 || g.Args[0].(*MessageMoteur).Cle != errEnvHotePris) {
+			t.Errorf("refusal to translate: %+v", g)
 		}
 	}
 	if err := s.lancerOrchestrateur("inconnue1", ""); err != errMissionInconnue {

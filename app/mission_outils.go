@@ -141,6 +141,7 @@ func outilProposerMission(s *Serveur, x SessionHub, args json.RawMessage) (strin
 	c.Projet.Dossier, c.Projet.GitHub, c.Projet.Depot, c.Projet.Proprietaire = "", "", "", false // M254: the owner's only
 	ctx := s.contexteCarte()
 	if err := validerCarte(&c, ctx); err != nil {
+		_, _ = modifierMission(x.Mission, func(m *Mission) error { m.RefusCarte = messageDe(err); return nil }) // M258: said to the owner if no card follows
 		return "", errors.New("the card was refused, fix it and call proposer_mission again: " + err.Error())
 	}
 	m, err := modifierMission(x.Mission, func(m *Mission) error {
@@ -164,7 +165,7 @@ func outilProposerMission(s *Serveur, x SessionHub, args json.RawMessage) (strin
 		if err != nil {
 			return err
 		}
-		m.Carte, m.Etat = b, "proposee"
+		m.Carte, m.Etat, m.RefusCarte = b, "proposee", nil
 		m.Historique = append(m.Historique, EvenementMission{T: time.Now().UTC().Format(formatCree), Etat: "proposee", Detail: c.Titre})
 		return nil
 	})

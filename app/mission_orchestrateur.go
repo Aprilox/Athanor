@@ -182,9 +182,12 @@ func (s *Serveur) executerOrchestrateur(ctx context.Context, e *orchestrateurEnC
 			m.Session = sid
 		}
 		if err == nil && m.Etat == "preparation" && !slices.ContainsFunc(m.Questions, func(q QuestionMission) bool { return q.Reponse == "" }) {
-			err = errors.New("the orchestrator ended without proposing a card")
-			if resultat != "" {
-				err = errors.New(err.Error() + ": " + couper(resultat, 200))
+			// M258: the owner reads why, in their language: the last refusal of a card, else the agent's last words
+			err = &MessageMoteur{Cle: "The orchestrator stopped without proposing a card."}
+			if m.RefusCarte != nil {
+				err = &MessageMoteur{Cle: "The card was refused: {0}", Args: []any{m.RefusCarte}}
+			} else if resultat != "" {
+				err = &MessageMoteur{Cle: "The orchestrator stopped without proposing a card: {0}", Args: []any{couper(resultat, 200)}}
 			}
 		}
 		if err != nil { // a cancelled or launched mission keeps its state, a proposed card too (B85)

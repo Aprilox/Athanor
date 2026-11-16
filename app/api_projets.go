@@ -984,7 +984,7 @@ func dossierInterdit(dossier, kit string) string {
 			reste = reste[2:]
 		}
 		if strings.ContainsAny(reste, `:*?"<>|`) {
-			return lettre // a data stream (dossier::$DATA) or a character Windows refuses in a name
+			return "This path holds a character Windows refuses in a folder name: : * ? \" < > |" // a data stream (dossier::$DATA) or a refused character (M258: said as such)
 		}
 	}
 	reel := cheminReel(dossier)

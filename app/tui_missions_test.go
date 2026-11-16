@@ -78,9 +78,12 @@ func TestTUIMissions(t *testing.T) {
 		t.Fatalf("Enter: %q", a.misOuverte)
 	}
 	d := ecran(120, 40)
-	contient("detail", d, a.t("Lanes"), a.t(moduleDev{}.Nom())+"  martin", a.t("Not found"), a.t("Policy: {0}", a.t("Ask me for production")),
-		"✓ "+a.t("Milestone delivered")+"  ✓ "+a.t("Dev deployment")+"  ✓ "+a.t("Verification")+"  ● "+a.t("Your accord")+"  ○ "+a.t("Production"),
-		a.t("Dev:")+" https://dev.martin.test", a.t("Milestone delivered: {0}", "A12"), a.t("Milestone delivered: {0}", "A03"), "p "+a.t("Pause"), "a "+a.t("Stop"))
+	if strings.Contains(d, a.t("Policy: {0}", a.t("Ask me for production"))) { // M258: no policy to choose
+		t.Fatalf("policy shown: %s", d)
+	}
+	contient("detail", d, a.t("Lanes"), a.t(moduleDev{}.Nom())+"  martin", a.t("Not found"),
+		"✓ "+a.t("Milestone delivered")+"  ✓ "+a.t("Going online")+"  ✓ "+a.t("Verification")+"  ● "+a.t("Your accord")+"  ○ "+a.t("Production"),
+		a.t("Online:")+" https://dev.martin.test", a.t("Milestone delivered: {0}", "A12"), a.t("Milestone delivered: {0}", "A03"), "p "+a.t("Pause"), "a "+a.t("Stop"))
 	if strings.Contains(d, "A02") || strings.Contains(d, "https://martin.test") {
 		t.Fatalf("an 11th journal line or the prod URL before its step:\n%s", d)
 	}

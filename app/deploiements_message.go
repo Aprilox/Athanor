@@ -83,6 +83,13 @@ func messageDe(err error) *MessageMoteur {
 	if errors.As(err, &m) && m.Error() == err.Error() {
 		return m
 	}
+	if a, ok := err.(erreurEntreeArgs); ok { // M258: an input error's key and arguments, translated by the page
+		m = &MessageMoteur{Cle: a.cle}
+		for _, x := range a.args {
+			m.Args = append(m.Args, x)
+		}
+		return m
+	}
 	return &MessageMoteur{Cle: err.Error()}
 }
 

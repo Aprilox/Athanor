@@ -73,6 +73,7 @@ type Mission struct {
 	Politique   string             `json:"politique"`       // prod | tout | autonome
 	Voies       []VoieMission      `json:"voies"`
 	Questions   []QuestionMission  `json:"questions"`
+	RefusCarte  *MessageMoteur     `json:"refus_carte,omitempty"` // M258: why the last card was refused, said if none follows
 	Historique  []EvenementMission `json:"historique"`
 	Cree        string             `json:"cree"`
 	Session     string             `json:"session,omitempty"`      // the orchestrator's Claude session, resumed with --resume

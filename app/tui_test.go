@@ -441,7 +441,7 @@ func TestTUIContreLeServeur(t *testing.T) {
 	}
 	// the modes add up: the fast mode on top of the eco mode
 	taper(a, "\x1b[B\x1b[B\r")
-	attendreTUI(t, a, func() bool { return p.modeActif("FAST") && strings.Contains(a.toast, "Mode fast activé") })
+	attendreTUI(t, a, func() bool { return p.modeActif("FAST") && strings.Contains(a.toast, "Mode rapide activé") })
 	if m := p.LireMode(); m.Parallele || !m.Eco || !m.Rapide {
 		t.Fatalf("mode: %+v", m)
 	}

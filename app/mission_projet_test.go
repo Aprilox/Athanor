@@ -124,6 +124,11 @@ func TestMissionProjet(t *testing.T) {
 			t.Errorf("%s: %d %s, want 400", nom, w.Code, w.Body.String())
 		}
 	}
+	if runtimeWindows() { // M258: a refused character is said as such, not as "give the full path"
+		if w := appel("/api/missions/"+id+"/projet", `{"dossier":`+jsonTexte(filepath.Join(base, "a<b|c"))+`}`); w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "refuses in a folder name") {
+			t.Errorf("refused characters: %d %s", w.Code, w.Body.String())
+		}
+	}
 	if m, _ := lireMission(id); empreinteCarte(m) != empreinteCarte(avant) {
 		t.Fatal("a refused setting changed the card")
 	}

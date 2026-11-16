@@ -14,7 +14,7 @@ import (
 var (
 	etatsMissionTUI = map[string]string{"preparation": "Being prepared", "proposee": "Proposed", "acceptee": "Accepted", "lancee": "Launched",
 		"terminee": "Finished", "annulee": "Cancelled", "echec": "Failed", "en_pause": "Paused", "arretee": "Stopped", "arret_demande": "Stopping after the milestone"}
-	relaisMissionTUI = []string{"Milestone delivered", "Dev deployment", "Verification", "Your accord", "Production"}
+	relaisMissionTUI = []string{"Milestone delivered", "Going online", "Verification", "Your accord", "Production"}
 	rangRelaisTUI    = map[string]int{"construction": 0, "dev_deploye": 2, "dev_verifie": 3, "accord_prod": 3, "prod_deploye": 4, "termine": 5}
 	politiquesTUI    = map[string]string{"prod": "Ask me for production", "tout": "Ask me for everything", "autonome": "Autonomous"}
 	motsJournalTUI   = map[string]string{"fenetre": "from this computer", "emergency stop": "emergency stop", "refusee": "refused", "expiree": "expired",
@@ -112,7 +112,7 @@ func (a *appTUI) texteJournalTUI(e EntreeJournal) string {
 }
 
 // etapeEchecTUI: the relay step of the newest journal entry when it is an error (the web's etapeEchec), else -1.
-func etapeEchecTUI(j []EntreeJournal) int {
+func etapeEchecTUI(j []EntreeJournal, dev, prod string) int {
 	if len(j) == 0 || j[len(j)-1].Niveau != "erreur" {
 		return -1
 	}
@@ -125,10 +125,11 @@ func etapeEchecTUI(j []EntreeJournal) int {
 	case strings.HasPrefix(e.ID, "incident:"), strings.HasPrefix(e.ID, "prod:"):
 		return 4
 	case (strings.HasPrefix(e.ID, "deploi:") || strings.HasPrefix(e.ID, "verif:")) && strings.HasSuffix(e.ID, ":echec"):
-		switch env {
-		case "prod":
+		switch {
+		case env == "":
+		case env == prod:
 			return 4
-		case "dev":
+		case env == dev:
 			if strings.HasPrefix(e.ID, "deploi:") {
 				return 1
 			}
@@ -138,20 +139,21 @@ func etapeEchecTUI(j []EntreeJournal) int {
 	return -1
 }
 
-// friseTUI: the relay in text, "✓ Milestone delivered  ✓ Dev deployment  ● Verification  ○ Your accord  ○ Production"
+// friseTUI: the relay in text, "✓ Milestone delivered  ✓ Going online  ● Verification  ○ Your accord  ○ Production"
 // (3 steps without a prod on the card), then the dev and prod URLs once deployed.
 func (a *appTUI) friseTUI(m Mission) (string, string) {
 	c := carteTUI(m)
-	var dev, prod *EnvCarte
+	var dev, prod *EnvCarte // M258: the relay's environments (envJalonCarte, envFinal), not their names
+	nd, np := envJalonCarte(c), envFinal(c)
 	for i := range c.Envs {
 		switch c.Envs[i].Nom {
-		case "dev":
+		case nd:
 			dev = &c.Envs[i]
-		case "prod":
+		case np:
 			prod = &c.Envs[i]
 		}
 	}
-	rang, echec := rangRelaisTUI[m.Relais.Etape], etapeEchecTUI(m.Journal)
+	rang, echec := rangRelaisTUI[m.Relais.Etape], etapeEchecTUI(m.Journal, nd, np)
 	etapes := relaisMissionTUI
 	if prod == nil {
 		etapes = etapes[:3]
@@ -171,16 +173,16 @@ func (a *appTUI) friseTUI(m Mission) (string, string) {
 	}
 	var urls []string
 	if dev != nil && dev.URL != "" && rang >= 2 {
-		urls = append(urls, a.t("Dev:")+" "+dev.URL)
+		urls = append(urls, a.t("Online:")+" "+dev.URL)
 	}
 	if prod != nil && prod.URL != "" && rang >= 4 {
-		urls = append(urls, a.t("Prod:")+" "+prod.URL)
+		urls = append(urls, a.t("Production:")+" "+prod.URL)
 	}
 	return strings.Join(l, "  "), strings.Join(urls, "   ")
 }
 
 // texteVoieTUI: a lane's module, name, state, then Studio's milestone n/N and what the project lead does.
-func (a *appTUI) texteVoieTUI(v VoieMission) (string, string, string) {
+func (a *appTUI) texteVoieTUI(v VoieMission, etatMission string) (string, string, string) {
 	mod, nom := a.t(moduleDev{}.Nom()), v.Ref
 	if v.Module != "dev" {
 		mod, nom = a.t(moduleServeurs{}.Nom()), firstNonEmpty(v.Serveur, v.Ref)
@@ -190,6 +192,8 @@ func (a *appTUI) texteVoieTUI(v VoieMission) (string, string, string) {
 		etat = a.t("Refused: native Windows mode")
 	} else if v.Actuel == "" || v.Actuel == "inconnu" {
 		etat = a.t("Not found")
+	} else if v.Module == "dev" && v.Actuel == "arrete" && etatMission == "en_pause" { // M258: stopped by the pause
+		etat = a.t("Paused")
 	}
 	var plus []string
 	if v.Module == "dev" && v.Total > 0 {
@@ -263,7 +267,7 @@ func (a *appTUI) pageMissions(e *ecranT, x, y, l, h int) {
 	}
 }
 
-// detailMission: one mission: its title, state and policy, its sentence, its lanes, its relay, its journal.
+// detailMission: one mission: its title and state, its sentence, its lanes, its relay, its journal.
 func (a *appTUI) detailMission(e *ecranT, x, y, l, h int, m Mission) {
 	p, t := a.pal, a.t
 	fin := y + h
@@ -271,9 +275,6 @@ func (a *appTUI) detailMission(e *ecranT, x, y, l, h int, m Mission) {
 	n := e.texte(x+1, y, l-2, "← "+titreMissionTUI(m), a.gras(p.encre, p.fond))
 	a.zone(x+1, y, 2, 1, func() { a.misOuverte = "" })
 	e.texte(x+n+3, y, l-n-4, "["+etat+"]", a.gras(a.couleurEtatMission(m.Etat), p.fond))
-	if pol := politiquesTUI[m.Politique]; pol != "" {
-		e.texte(x+1, y+1, l-2, t("Policy: {0}", t(pol)), a.st(p.muet, p.fond))
-	}
 	e.texte(x+1, y+2, l-2, strings.Join(strings.Fields(m.Phrase), " "), a.st(p.muet, p.fond))
 	yc := y + 3
 	// the lanes: two lines each (state, then the milestone and the activity)
@@ -287,7 +288,7 @@ func (a *appTUI) detailMission(e *ecranT, x, y, l, h int, m Mission) {
 			if 2*i >= ih {
 				break
 			}
-			nom, et, plus := a.texteVoieTUI(v)
+			nom, et, plus := a.texteVoieTUI(v, m.Etat)
 			ln := e.texte(ix, iy+2*i, il, nom, a.gras(p.encre, p.panneau))
 			e.texte(ix+ln+2, iy+2*i, il-ln-2, et, a.st(p.accent, p.panneau))
 			if plus != "" && 2*i+1 < ih {
