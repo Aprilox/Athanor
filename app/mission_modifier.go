@@ -122,6 +122,9 @@ func controlerFiges(m Mission, avant, apres CarteMission) error {
 		return erreurMission{http.StatusConflict, figeDistant}
 	}
 	for nom := range envsEnPreparation(m) {
+		if apres.Serveurs.Brief != avant.Serveurs.Brief { // M270: a running Servers task keeps the brief it was given
+			return erreurMission{http.StatusConflict, figeEnv + " (" + nom + ")"}
+		}
 		serveurs := func(c CarteMission) string {
 			i := slices.IndexFunc(c.Envs, func(e EnvCarte) bool { return e.Nom == nom })
 			if i < 0 {
@@ -202,6 +205,21 @@ func (s *Serveur) appliquerCarte(m Mission, avant, apres CarteMission, qui strin
 			continue
 		}
 		faits = append(faits, evenementMission("modifiee", "environment left by the card: "+ea.Nom))
+	}
+	if apres.Serveurs.Brief != avant.Serveurs.Brief && apres.Serveurs.Brief != "" { // M270: its lanes prepared again with the new brief
+		for _, ec := range apres.Envs {
+			if len(ec.Serveurs) > 0 && !slices.Contains(aPreparer, ec.Nom) {
+				aPreparer = append(aPreparer, ec.Nom)
+			}
+		}
+		faits = append(faits, evenementMission("modifiee", "Servers brief changed: its environments prepared again with it"))
+	}
+	if apres.Dev.Brief != avant.Dev.Brief && apres.Dev.Brief != "" { // M270: the project's pilot reads it as a new request
+		if _, _, err := s.ajouterDemande(p, apres.Titre, apres.Dev.Brief); err != nil {
+			echoue(errMoteur("the new Studio brief: {0}", err))
+		} else {
+			faits = append(faits, evenementMission("modifiee", "Studio brief changed: added to the project as a request"))
+		}
 	}
 	clesAv, av := donnesCarte(avant)
 	clesAp, ap := donnesCarte(apres)

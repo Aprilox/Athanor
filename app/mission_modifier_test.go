@@ -221,6 +221,65 @@ func TestMissionModifiable(t *testing.T) {
 		}
 	})
 
+	// M270 (note of 16h11 §1): stopped, its briefs and resources change, then it resumes with them
+	t.Run("arretee_modifiee_puis_reprise", func(t *testing.T) {
+		piloteKO = false
+		id, m := lancee("p-arret")
+		if m.Etat != "lancee" {
+			t.Fatalf("launch: %s %+v", m.Etat, m.Historique)
+		}
+		if code, m := appel("/api/missions/"+id+"/arreter", `{"mode":"immediat"}`); code != http.StatusOK || m.Etat != "arretee" {
+			t.Fatalf("stop: %d %s", code, m.Etat)
+		}
+		code, vue := appel("/api/missions/"+id, "")
+		if code != http.StatusOK || vue.Figes["carte"] != "" {
+			t.Fatalf("a stopped mission locked: %d %v", code, vue.Figes)
+		}
+		if code, _ = appel("/api/missions/"+id+"/ressources", `{"type":"cle","ref":"`+smtp.ID+`"}`); code != http.StatusOK || len(octroi("p-arret", smtp.ID)) != 1 {
+			t.Fatalf("key added after a stop: %d %+v", code, octroi("p-arret", smtp.ID))
+		}
+		code, m = appel("/api/missions/"+id+"/modifier", `{"brief_dev":"Ajouter une page Contact"}`)
+		var c CarteMission
+		_ = json.Unmarshal(m.Carte, &c)
+		file, _ := os.ReadDir(Projet{Nom: "p-arret", Dossier: filepath.Join(base, "p-arret")}.FileAttente())
+		if code != http.StatusOK || c.Dev.Brief != "Ajouter une page Contact" || m.Etat != "arretee" || len(file) != 2 || !evenement(m, "modifiee", "Studio brief changed") {
+			t.Fatalf("Studio brief changed after a stop: %d %s %q, requests %d, %+v", code, m.Etat, c.Dev.Brief, len(file), m.Historique)
+		}
+		if code, m = appel("/api/missions/"+id+"/reprendre", `{"mot_de_passe":"mdp-test"}`); code != http.StatusOK || m.Etat != "lancee" {
+			t.Fatalf("resumed after the change: %d %s", code, m.Etat)
+		}
+		_ = json.Unmarshal(m.Carte, &c)
+		if c.Dev.Brief != "Ajouter une page Contact" || len(octroi("p-arret", smtp.ID)) != 1 {
+			t.Fatalf("the change lost by the resume: %q %+v", c.Dev.Brief, octroi("p-arret", smtp.ID))
+		}
+
+		// a running Servers task keeps its brief; the new one comes once it is over
+		code, m = appel("/api/missions/"+id+"/ressources", `{"type":"serveur","ref":"a2"}`)
+		m = s.preparerServeursMission(m)
+		attendre()
+		i := slices.IndexFunc(m.Voies, func(v VoieMission) bool { return v.Module == "servers" && v.Env == "p-arret/site" })
+		if code != http.StatusOK || i < 0 || m.Voies[i].Ref == "" {
+			t.Fatalf("Servers lane: %d %+v", code, m.Voies)
+		}
+		ref := m.Voies[i].Ref
+		tachesEnCours.Lock()
+		tachesEnCours.m[ref] = &tacheEnCours{}
+		tachesEnCours.Unlock()
+		code, _ = appel("/api/missions/"+id+"/modifier", `{"brief_serveurs":"Installer nginx"}`)
+		tachesEnCours.Lock()
+		delete(tachesEnCours.m, ref)
+		tachesEnCours.Unlock()
+		if code != http.StatusConflict {
+			t.Fatalf("Servers brief changed under its running task: %d", code)
+		}
+		code, m = appel("/api/missions/"+id+"/modifier", `{"brief_serveurs":"Installer nginx"}`)
+		_ = json.Unmarshal(m.Carte, &c)
+		i = slices.IndexFunc(m.Voies, func(v VoieMission) bool { return v.Module == "servers" && v.Env == "p-arret/site" })
+		if code != http.StatusOK || c.Serveurs.Brief != "Installer nginx" || i < 0 || m.Voies[i].Etat != "attente_plan" || !evenement(m, "modifiee", "Servers brief changed") {
+			t.Fatalf("Servers brief changed once its task is over: %d %q %+v", code, c.Serveurs.Brief, m.Voies)
+		}
+	})
+
 	// a grant the owner gave by hand is never taken back by a mission's change
 	t.Run("octroi_du_proprietaire_garde", func(t *testing.T) {
 		id, m := lancee("p-main")

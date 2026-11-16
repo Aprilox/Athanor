@@ -2267,9 +2267,12 @@ function carteMission(d) {
         ${gauche ? estimationMission(e) : ""}</div>
       ${gauche ? "" : `<div>${estimationMission(e)}</div>`}
     </div>
-    ${ed ? `<label for="mis-consigne" class="petit">${t("Ask for a change (optional)")}</label><textarea id="mis-consigne" rows="2" maxlength="2000" placeholder="${h(t("For example: put the dev on the home server"))}">${h(ed.consigne)}</textarea>
+    ${ed ? `${apres ? `${c.dev.brief ? `<label for="mis-brief-dev" class="petit">${t("Studio brief")}</label><textarea id="mis-brief-dev" rows="4" maxlength="4000">${h(ed.dev)}</textarea>` : ""}${c.serveurs.brief ? `<label for="mis-brief-srv" class="petit">${t("Servers brief")}</label><textarea id="mis-brief-srv" rows="3" maxlength="4000">${h(ed.srv)}</textarea>` : ""}
+      <p class="muet petit m0">${t("A new Studio brief reaches the project as a request; a new Servers brief prepares its environments again.")}</p>`
+      : `<label for="mis-consigne" class="petit">${t("Ask for a change (optional)")}</label><textarea id="mis-consigne" rows="2" maxlength="2000" placeholder="${h(t("For example: put the dev on the home server"))}">${h(ed.consigne)}</textarea>`}
       <div class="ligne"><button type="button" class="btn btn-primaire" data-mis="appliquer">${t("Apply")}</button><button type="button" class="btn" data-mis="fermer">${t("Cancel")}</button></div>`
-    : actif ? `<div class="ligne"><button type="button" class="btn" data-mis="modifier">${t("Edit")}</button><button type="button" class="btn btn-primaire" data-mis="lancer">${t("Launch")}</button><span class="espace"></span><button type="button" class="btn" data-mis="annuler">${t("Cancel the mission")}</button></div>` : ""}`;
+    : actif ? `<div class="ligne"><button type="button" class="btn" data-mis="modifier">${t("Edit")}</button><button type="button" class="btn btn-primaire" data-mis="lancer">${t("Launch")}</button><span class="espace"></span><button type="button" class="btn" data-mis="annuler">${t("Cancel the mission")}</button></div>`
+    : modif && (c.dev.brief || c.serveurs.brief) ? `<div class="ligne"><button type="button" class="btn" data-mis="modifier">${t("Edit the brief")}</button></div>` : ""}`;
 }
 // M254: a new project's settings, folded: its folder, its working mode (the Manage block), its GitHub repository;
 // each change is saved on the card (POST /projet), the folder checked at once (its error under the field)
@@ -2402,11 +2405,12 @@ document.addEventListener("click", async (ev) => {
   const b = ev.target.closest("[data-mis], [data-mis-choix]"), d = etat.missionVue; if (!b || !d) return;
   const m = d.mission, a = b.dataset.mis;
   if (b.dataset.misChoix !== undefined) { const q = m.questions.find((x) => !x.reponse); etat.missionReponse = ""; await actionMission("repondre", { question: q.id, choix: q.choix[+b.dataset.misChoix] }); return; }
-  if (a === "modifier") { etat.missionEdition = { id: m.id, consigne: "" }; etat.missionRes = null; majZoneMission(); $("#mis-consigne")?.focus(); }
+  if (a === "modifier") { etat.missionEdition = { id: m.id, consigne: "", dev: m.carte.dev.brief || "", srv: m.carte.serveurs.brief || "" }; etat.missionRes = null; majZoneMission(); ($("#mis-consigne") || $("#mis-brief-dev") || $("#mis-brief-srv"))?.focus(); }
   else if (a === "fermer") { etat.missionEdition = null; majZoneMission(); }
   else if (a === "appliquer") {
     const ed = etat.missionEdition, consigne = ed.consigne.trim();
-    const r = await actionMission("modifier", { acces_decoches: (m.carte.acces || []).filter((x) => x.decoche).map((x) => ({ entree: x.entree, pour: x.pour })), ...(consigne ? { consigne } : {}) });
+    const briefs = { ...(ed.dev.trim() !== (m.carte.dev.brief || "") ? { brief_dev: ed.dev.trim() } : {}), ...(ed.srv.trim() !== (m.carte.serveurs.brief || "") ? { brief_serveurs: ed.srv.trim() } : {}) };
+    const r = await actionMission("modifier", { acces_decoches: (m.carte.acces || []).filter((x) => x.decoche).map((x) => ({ entree: x.entree, pour: x.pour })), ...(consigne ? { consigne } : {}), ...briefs });
     if (r) { etat.missionEdition = null; majZoneMission(); }
   } else if (a === "lancer") { // C78: launching gives the card's keys, as the Access page does
     const pc = (m.carte || {}).projet || {};
@@ -2427,7 +2431,7 @@ document.addEventListener("click", (ev) => {
   c.scrollIntoView({ block: "start", behavior: "smooth" });
   ($("#mis-res-ajouter") || $("#mis-projet summary") || c).focus({ preventScroll: true });
 });
-document.addEventListener("input", (ev) => { if (ev.target.id === "mis-consigne" && etat.missionEdition) etat.missionEdition.consigne = ev.target.value; else if (ev.target.id === "mis-q-libre") etat.missionReponse = ev.target.value; });
+document.addEventListener("input", (ev) => { if (ev.target.id === "mis-consigne" && etat.missionEdition) etat.missionEdition.consigne = ev.target.value; else if (ev.target.id === "mis-brief-dev" && etat.missionEdition) etat.missionEdition.dev = ev.target.value; else if (ev.target.id === "mis-brief-srv" && etat.missionEdition) etat.missionEdition.srv = ev.target.value; else if (ev.target.id === "mis-q-libre") etat.missionReponse = ev.target.value; });
 document.addEventListener("submit", async (ev) => {
   if (ev.target.id !== "mis-q-form") return;
   ev.preventDefault();

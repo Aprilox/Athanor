@@ -280,6 +280,8 @@ func (s *Serveur) apiModifierMission(w http.ResponseWriter, r *http.Request) {
 		Envs          *[]EnvCarte   `json:"envs"`
 		Projet        *ProjetCarte  `json:"projet"`
 		Consigne      string        `json:"consigne"`
+		BriefDev      *string       `json:"brief_dev"`      // M270: the briefs change in every changeable state, after a stop too
+		BriefServeurs *string       `json:"brief_serveurs"` // (the consigne rewrites the card through the orchestrator, before a launch only)
 	}
 	if lireCorps(r, &c) != nil {
 		s.erreur(w, http.StatusBadRequest, "Invalid request")
@@ -342,6 +344,12 @@ func (s *Serveur) apiModifierMission(w http.ResponseWriter, r *http.Request) {
 		}
 		if c.Politique != "" {
 			m.Politique = c.Politique
+		}
+		if c.BriefDev != nil {
+			carte.Dev.Brief = *c.BriefDev
+		}
+		if c.BriefServeurs != nil {
+			carte.Serveurs.Brief = *c.BriefServeurs
 		}
 		return nil
 	})
