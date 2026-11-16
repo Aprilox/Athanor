@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -289,6 +290,36 @@ func TestHubAncienneConfig(t *testing.T) {
 	}
 	if e := appel(demarrer(), "GET", "/api/etat", ""); e["hub_vu"] != true {
 		t.Fatalf("hub_vu not kept after a restart: %v", e["hub_vu"])
+	}
+}
+
+// TestConfigNeuvePremierLancement: no config file is a first launch (native mode on Windows, the kit having
+// no WSL installation); once a file exists, the next read is not one any more (M276).
+func TestConfigNeuvePremierLancement(t *testing.T) {
+	d := t.TempDir()
+	for _, v := range []string{"LOCALAPPDATA", "LocalAppData", "HOME", "XDG_DATA_HOME", "XDG_CONFIG_HOME"} {
+		t.Setenv(v, filepath.Join(d, "home"))
+	}
+	cfg := cheminConfig()
+	if avant, err := os.ReadFile(cfg); err == nil {
+		t.Cleanup(func() { _ = os.WriteFile(cfg, avant, 0o600) })
+	} else {
+		t.Cleanup(func() { _ = os.Remove(cfg) })
+	}
+	_ = os.Remove(cfg)
+	c := lireConfig()
+	c.Kit = filepath.Join(d, "kit")
+	if s := nouveauServeur(c); !configNeuve.Load() || s.config.ModeNatif != (runtime.GOOS == "windows") {
+		t.Fatalf("no config file: first launch %v, native mode %v", configNeuve.Load(), s.config.ModeNatif)
+	}
+	if err := os.MkdirAll(filepath.Dir(cfg), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(cfg, []byte(`{"mode_natif":false}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if c := lireConfig(); configNeuve.Load() || nouveauServeur(c).config.ModeNatif {
+		t.Fatal("a saved config is read as a first launch")
 	}
 }
 
