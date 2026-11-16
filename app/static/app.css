@@ -1216,6 +1216,15 @@ ol.guide-access li { margin: 5px 0; }
 /* M159: a line is a link to the mission; its lanes below, each with its state read now */
 a.mis-ligne { color: inherit; text-decoration: none; }
 a.mis-ligne:hover, a.mis-ligne:focus-visible { border-color: var(--accent); }
+/* M261: Missions page, each line's delete button beside its card; the delete dialog's options stacked */
+.mis-liste-suppr > li { display: flex; align-items: flex-start; gap: 6px; }
+.mis-liste-suppr > li > a { flex: 1; min-width: 0; }
+.mis-suppr-btn { flex: none; margin-top: 10px; }
+.mis-suppr { display: flex; flex-direction: column; gap: 12px; }
+.mis-suppr fieldset { border: 1px solid var(--line); border-radius: 8px; margin: 0; padding: 6px 12px; }
+.mis-suppr label.radio, .mis-suppr label.case { display: flex; flex-direction: row; align-items: flex-start; gap: 8px; margin: 4px 0; font-size: 14px; overflow-wrap: anywhere; }
+.mis-suppr label.case > span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.mis-suppr input { margin-top: 3px; flex: none; }
 .mis-voies-ligne { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 6px 14px; }
 .mis-voie-etat { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px; min-width: 0; overflow-wrap: anywhere; }
 .mis-voies-liste { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 8px; }

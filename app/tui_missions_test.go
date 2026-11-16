@@ -131,13 +131,27 @@ func TestTUIMissions(t *testing.T) {
 	taper(a, "\r")
 	attendreTUI(t, a, etat("arretee"))
 	contient("stopped", ecran(120, 40), a.t("Stopped"), a.t("from this computer"))
-	if r := a.raccourcisMissions(); len(r) != 2 || r[1].k != "r" { // M250: a stopped mission can be resumed
+	if r := a.raccourcisMissions(); len(r) != 3 || r[1].k != "r" || r[2].k != "d" { // M250: a stopped mission can be resumed; M261: deleted
 		t.Fatalf("keys of a stopped mission: %v", r)
 	}
-	// Escape: the list, then home
-	taper(a, "\x1b")
-	if a.page != pMissions || a.misOuverte != "" {
-		t.Fatalf("Escape from the detail: page %d, open %q", a.page, a.misOuverte)
+	// M261 d: Cancel is focused (Enter keeps it); Tab then Enter deletes it and goes back to the list
+	id := a.misOuverte
+	taper(a, "d")
+	if a.dialogue == nil || len(a.dialogue.choix) != 2 || a.dialogue.choix[0].id != "" {
+		t.Fatalf("d: confirmation %+v", a.dialogue)
+	}
+	taper(a, "\r")
+	if _, err := lireMission(id); err != nil {
+		t.Fatalf("Enter on Cancel deleted the mission: %v", err)
+	}
+	taper(a, "d")
+	taper(a, "\t")
+	taper(a, "\r")
+	attendreTUI(t, a, func() bool { _, err := lireMission(id); return err != nil && a.misOuverte == "" })
+	attendreTUI(t, a, func() bool { return len(a.missions) == 1 })
+	// Escape from the list (the deleted mission's detail closed): home
+	if a.page != pMissions {
+		t.Fatalf("after the deletion: page %d", a.page)
 	}
 	taper(a, "\x1b")
 	if a.page != pAccueil {

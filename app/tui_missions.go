@@ -362,6 +362,7 @@ func (a *appTUI) raccourcisMissions() []raccourci {
 		if m.Etat == "lancee" || m.Etat == "en_pause" || m.Etat == "arret_demande" {
 			r = append(r, raccourci{"a", t("Stop")})
 		}
+		r = append(r, raccourci{"d", t("Delete")})
 	}
 	return r
 }
@@ -402,6 +403,23 @@ func (a *appTUI) toucheMissions(k string) {
 						a.agir("POST", "missions/"+id+"/arreter", nil, relire)
 					}
 				})
+		}
+	case "d", "suppr": // M261: the mission's own files only (the project, its folder and the access stay: the window offers them)
+		if m != nil {
+			id, texte, corps := m.ID, a.t("Delete the mission “{0}”? Its journal, its Servers tasks and its follow-up files go; its project, folder and what it put online stay.", titreMissionTUI(*m)), map[string]string{}
+			if m.Etat == "lancee" || m.Etat == "arret_demande" {
+				texte, corps["arret"] = texte+"  "+a.t("It is running: it is stopped immediately first."), "immediat"
+			}
+			a.demander(a.t("Delete the mission"), texte, []choixTUI{{id: "", texte: a.t("Cancel")}, {id: "oui", texte: a.t("Delete the mission"), danger: true}}, func(id2 string) {
+				if id2 == "oui" {
+					a.agir("POST", "missions/"+id+"/supprimer", corps, func(map[string]any) {
+						if a.misOuverte == id {
+							a.misOuverte = ""
+						}
+						relire(nil)
+					})
+				}
+			})
 		}
 	}
 }

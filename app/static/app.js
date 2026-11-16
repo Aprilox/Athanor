@@ -5872,21 +5872,22 @@ function etapeRelais(m) {
   const rang = m.relais && ["lancee", "en_pause", "arret_demande"].includes(m.etat) ? RANG_RELAIS[m.relais.etape] ?? 0 : 5;
   return rang < 5 ? t("Relay: {0}", [t(RELAIS_MISSION[rang])]) : "";
 }
-function ligneMission(m) {
+function ligneMission(m, suppr) {
   const titre = (m.carte || {}).titre, phrase = m.phrase.length > 140 ? m.phrase.slice(0, 140) + "…" : m.phrase;
   return `<li><a class="bloc mis-ligne" href="#missions/${encodeURIComponent(m.id)}"><span class="badge mis-etat-${h(m.etat)}">${h(t(ETATS_MISSION[m.etat] || m.etat))}</span>
     <span class="mis-phrase">${titre ? `<b>${h(titre)}</b> ` : ""}<span class="muet">${h(phrase)}</span></span>
     <span class="muet petit">${h(new Date(m.cree).toLocaleDateString(document.documentElement.lang || "en"))}</span>
     ${etapeRelais(m) ? `<span class="petit mis-relais-etape">${h(etapeRelais(m))}</span>` : ""}
-    ${(m.voies || []).length ? `<span class="mis-voies-ligne">${m.voies.map((v) => voieMission(v, false, m.etat)).join("")}</span>` : ""}</a></li>`;
+    ${(m.voies || []).length ? `<span class="mis-voies-ligne">${m.voies.map((v) => voieMission(v, false, m.etat)).join("")}</span>` : ""}</a>${suppr === true ? `<button type="button" class="btn btn-petit mis-suppr-btn" data-mis-suppr="${h(m.id)}" aria-label="${h(t("Delete the mission"))}" title="${h(t("Delete the mission"))}">${ic("croix")}</button>` : ""}</li>`;
 }
 // Home's Missions block: the 3 newest, See all; the empty state says where to start
 pages.missions = async () => {
   const [d, sugg] = await Promise.all([api("missions"), api("mentions").catch(() => ({}))]);
   etat.mentionsSugg = sugg.mentions || [];
+  const finies = d.missions.filter((m) => ["terminee", "annulee", "echec", "arretee"].includes(m.etat)).length; // etatsFinis in Go
   return `<div class="missions">
-    <div class="ligne cof-tete"><h2 class="m0">${t("Missions")} <span class="muet">${d.missions.length}</span></h2>${d.missions.length ? `<span class="espace"></span><a class="btn btn-primaire" href="#accueil@accueil-texte" data-nouvelle-mission>${t("New mission")}</a>` : ""}</div>
-    ${d.missions.length ? `<ul class="mis-liste">${d.missions.map(ligneMission).join("")}</ul>`
+    <div class="ligne cof-tete"><h2 class="m0">${t("Missions")} <span class="muet">${d.missions.length}</span></h2>${d.missions.length ? `<span class="espace"></span>${finies ? `<button type="button" class="btn" data-mis-vider="${finies}">${t("Clear finished missions")}</button>` : ""}<a class="btn btn-primaire" href="#accueil@accueil-texte" data-nouvelle-mission>${t("New mission")}</a>` : ""}</div>
+    ${d.missions.length ? `<ul class="mis-liste mis-liste-suppr">${d.missions.map((m) => ligneMission(m, true)).join("")}</ul>`
       : `<div class="vide srv-vide"><p><b>${t("No mission yet")}</b></p>
       <p class="muet">${t("Say what you want in the bar of the home page, for example “Put @my-shop online at shop.example.com”. The orchestrator prepares a mission card first: what will be built and deployed, what will be touched, what it will ask your approval for. Nothing starts before you launch it.")}</p>
       <a class="btn btn-primaire" href="#accueil">${t("Go to the home page")}</a></div>`}
@@ -5899,7 +5900,7 @@ pages.mission = async () => {
   const m = d.mission, aLancer = ACTIVE_MISSION.includes(m.etat), fin = (m.historique || []).slice(-1)[0] || {};
   clearTimeout(minuterieMission);
   if (aLancer && travailleMission(d)) minuterieMission = setTimeout(lireMissionVue, 2000);
-  const retour = `<div class="ligne m0"><a class="btn btn-petit" href="#missions">${ic("gauche")} ${t("Missions")}</a></div>`;
+  const retour = `<div class="ligne m0"><a class="btn btn-petit" href="#missions">${ic("gauche")} ${t("Missions")}</a><span class="espace"></span><button type="button" class="btn btn-petit btn-danger" data-mis-suppr="${h(m.id)}">${t("Delete the mission")}</button></div>`;
   // still being prepared or to launch: the home's card, its question and its buttons (the lanes come at the launch)
   if (aLancer) return `<div class="missions mis-detail">${retour}<div id="mission-zone" aria-live="polite">${zoneMission()}</div></div>`;
   if (etat.missionJournalDe !== m.id) { etat.missionJournalDe = m.id; etat.missionJournalN = 50; }
@@ -6011,6 +6012,49 @@ document.addEventListener("click", async (ev) => {
   if (!p) return;
   b.disabled = true;
   if (!(await actionMission(a, p))) b.disabled = false;
+});
+// M261: delete a mission (mission_supprimer.go): what goes is read first; its project and folder, and the access it
+// gave, only when ticked (unticked by default); a running one is stopped first, after its milestone or now
+const lienDepot = (d) => /^[\w.-]+\/[\w.-]+$/.test(d) ? `<a href="https://github.com/${h(d)}" target="_blank" rel="noopener noreferrer">${h(d)}</a>` : `<b>${h(d)}</b>`;
+async function supprimerMissionUI(id) {
+  const a = await api(`missions/${encodeURIComponent(id)}/suppression`).catch((e) => { toast(e.message, "erreur"); return null; });
+  if (!a) return;
+  const enLigne = ["preparation", "proposee", "acceptee"].includes(a.etat) ? [] : (a.envs || []).filter((e) => e.url);
+  const corps = `<div class="mis-suppr">
+    <p>${h(t("The mission, its journal and its follow-up files are deleted."))}${a.taches ? " " + h(t("Its Servers tasks too ({0}).", [a.taches])) : ""}</p>
+    ${a.differee ? `<p class="muet petit">${h(t("Its deletion is already asked: it is done when the current milestone ends."))}</p>` : ""}
+    ${a.en_cours ? `<fieldset><legend class="petit">${h(t("It is running:"))}</legend>
+      <label class="radio"><input type="radio" name="mis-arret" value="jalon" checked> ${h(t("Finish the current milestone, then delete it"))}</label>
+      <label class="radio"><input type="radio" name="mis-arret" value="immediat"> ${h(t("Stop it immediately, then delete it"))}</label></fieldset>` : ""}
+    ${a.projet ? `<label class="case"><input type="checkbox" data-suppr="projet"${a.dossier_ok ? "" : " disabled"}><span>${h(t("Also remove the project “{0}” from Studio and send its folder to the recycle bin", [a.projet]))}
+      ${a.dossier ? `<code class="petit">${h(a.dossier)}</code>` : ""}${a.dossier_non ? `<span class="muet petit">${h(t(a.dossier_non))}</span>` : ""}</span></label>` : ""}
+    ${(a.acces || []).length ? `<label class="case"><input type="checkbox" data-suppr="acces"><span>${h(t("Also remove the access it gave: {0}", [a.acces.join(", ")]))}
+      <span class="muet petit">${h(t("The vault entries stay."))}</span></span></label>` : ""}
+    ${a.depot ? `<p class="muet petit">${h(t("The GitHub repository stays:"))} ${lienDepot(a.depot)}</p>` : ""}
+    ${enLigne.length ? `<p class="muet petit">${h(t("What it put online stays on the servers:"))} ${enLigne.map((e) => `${h(e.nom)} <span class="mis-url">${h(e.url)}</span>`).join(", ")}</p>` : ""}</div>`;
+  let r = null;
+  const choix = await modaleSftp(t("Delete this mission?"), corps, [{ id: "", texte: t("Cancel") }, { id: "ok", texte: t("Delete the mission"), danger: true }], {
+    large: true, valider: async (b, el) => {
+      if (b !== "ok") return true;
+      const coche = (x) => !!el.querySelector(`[data-suppr="${x}"]:checked`);
+      const arret = a.en_cours ? (el.querySelector('[name="mis-arret"]:checked') || {}).value : undefined;
+      r = await api(`missions/${encodeURIComponent(id)}/supprimer`, "POST", { projet: coche("projet"), acces: coche("acces"), arret }).catch((e) => erreurModale(el, e.message));
+      return !!r;
+    } });
+  if (choix !== "ok" || !r) return;
+  toast(r.differee ? t("The mission will be deleted when the current milestone ends.") : t("Mission deleted."), "ok");
+  if (!r.differee && etat.page === "mission") location.hash = "#missions"; else await rendrePage();
+}
+document.addEventListener("click", async (ev) => {
+  const b = ev.target.closest("[data-mis-suppr], [data-mis-vider]"); if (!b) return;
+  ev.preventDefault();
+  if (b.dataset.misSuppr) return supprimerMissionUI(b.dataset.misSuppr);
+  const n = +b.dataset.misVider;
+  if (!(await confirmer(t("Delete the {0} finished, cancelled, failed or stopped missions? Only the missions and their journals go: their projects, folders and what they put online stay.", [n]), { titre: t("Clear finished missions"), ok: t("Delete them"), danger: true }))) return;
+  b.disabled = true;
+  const r = await action(api("missions/vider", "POST"), "");
+  if (r) toast(t("{0} missions deleted.", [r.supprimees]), "ok");
+  await rendrePage();
 });
 document.addEventListener("click", async (ev) => {
   const b = ev.target.closest("[data-mis-inc]"); if (!b) return;
@@ -7159,7 +7203,7 @@ function modaleSftp(titre, corps, boutons, o = {}) {
       if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); choisir(null); }
       else if (e.key === "Enter" && e.target.matches("input:not([type=checkbox])")) { e.preventDefault(); e.stopPropagation(); const b = fond.querySelector(".btn-primaire, .btn-danger"); if (b && !b.disabled) choisir(b.dataset.m); }
       else if (e.key === "Tab") {
-        const l = [...fond.querySelectorAll("input, textarea, button:not([disabled])")].filter((x) => x.offsetWidth), i = l.indexOf(document.activeElement);
+        const l = [...fond.querySelectorAll("input:not([disabled]), textarea, button:not([disabled]), a[href]")].filter((x) => x.offsetWidth), i = l.indexOf(document.activeElement);
         e.preventDefault(); l[(i + (e.shiftKey ? l.length - 1 : 1)) % l.length]?.focus();
       }
     };
