@@ -38,6 +38,7 @@ func TestMissionProjet(t *testing.T) {
 	var pilotes, appelsGH []string
 	creations, echecsGH := 0, 1
 	lies := map[string]bool{}
+	var dernierPC ProjetCarte
 	ancienPilote, ancienGH := demarrerPiloteMission, githubMission
 	t.Cleanup(func() { demarrerPiloteMission, githubMission = ancienPilote, ancienGH })
 	demarrerPiloteMission = func(_ *Serveur, p Projet) (string, error) {
@@ -46,9 +47,11 @@ func TestMissionProjet(t *testing.T) {
 		pilotes = append(pilotes, p.Nom)
 		return "Pilot started", nil
 	}
-	githubMission = func(_ *Serveur, p Projet, mode, depot string) error { // a fake GitHub: fails echecsGH times first
+	githubMission = func(_ *Serveur, p Projet, pc ProjetCarte) error {
+		mode, depot := pc.GitHub, pc.Depot // a fake GitHub: fails echecsGH times first
 		mu.Lock()
 		defer mu.Unlock()
+		dernierPC = pc
 		appelsGH = append(appelsGH, mode+" "+depot)
 		if lies[p.Nom] {
 			return nil
@@ -208,11 +211,24 @@ func TestMissionProjet(t *testing.T) {
 
 	// 6. linking an existing repository (its address accepted); an existing project's card has no project settings
 	id2 := proposer(CarteMission{Titre: "Blog", Projet: ProjetCarte{Nom: "blog-poterie", Nouveau: true}, Dev: BriefCarte{Brief: "Un blog"}, JalonsEstimes: 2})
-	if w := appel("/api/missions/"+id2+"/projet", `{"github":"lier","depot":"https://github.com/moi/blog.git"}`); w.Code != http.StatusOK {
+	// M264: "link" chosen before the repository is typed: kept on the card, refused at the launch, nothing created
+	if w := appel("/api/missions/"+id2+"/projet", `{"github":"lier","depot":""}`); w.Code != http.StatusOK {
+		t.Fatalf("link chosen, not typed: %d %s", w.Code, w.Body.String())
+	}
+	if c := carte(id2); c.Projet.GitHub != "lier" || c.Projet.Depot != "" {
+		t.Fatalf("link not kept: %+v", c.Projet)
+	}
+	if code, m = lancer(id2); code != http.StatusBadRequest {
+		t.Fatalf("launch with no repository: %d %s", code, m.Etat)
+	}
+	if _, ok := s.projetNomme("blog-poterie"); ok {
+		t.Fatal("a project was created for a launch refused")
+	}
+	if w := appel("/api/missions/"+id2+"/projet", `{"github":"lier","depot":"https://github.com/moi/blog.git","auto":false,"atelier":true}`); w.Code != http.StatusOK {
 		t.Fatalf("link: %d %s", w.Code, w.Body.String())
 	}
-	if code, m = lancer(id2); code != http.StatusOK || m.Etat != "lancee" || appelsGH[len(appelsGH)-1] != "lier moi/blog" {
-		t.Fatalf("link launch: %d %s %v", code, m.Etat, appelsGH)
+	if code, m = lancer(id2); code != http.StatusOK || m.Etat != "lancee" || appelsGH[len(appelsGH)-1] != "lier moi/blog" || !dernierPC.SansPousse || !dernierPC.Atelier {
+		t.Fatalf("link launch: %d %s %v %+v", code, m.Etat, appelsGH, dernierPC)
 	}
 	id3 := proposer(CarteMission{Titre: "Soldes", Projet: ProjetCarte{Nom: "boutique"}, Dev: BriefCarte{Brief: "Les soldes"}, JalonsEstimes: 1})
 	if w := appel("/api/missions/"+id3+"/projet", `{"github":"creer"}`); w.Code != http.StatusBadRequest {

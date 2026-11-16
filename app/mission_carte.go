@@ -19,10 +19,13 @@ type ProjetCarte struct {
 	Distant string `json:"distant,omitempty"` // worked out by validerCarte: "remote id/project" of a nom@instance (mission_distant.go)
 	// M254, a new project only, set by the owner (POST /projet, never the agent): its folder ("" = next to the
 	// other projects), its GitHub repository (github: "" none, lier an existing OWNER/NAME, creer a private name)
-	Dossier      string `json:"dossier,omitempty"`
-	GitHub       string `json:"github,omitempty"`
-	Depot        string `json:"depot,omitempty"`
-	Proprietaire bool   `json:"proprietaire,omitempty"` // the owner set them: a new card from the agent keeps them (and the modes)
+	Dossier string `json:"dossier,omitempty"`
+	GitHub  string `json:"github,omitempty"`
+	Depot   string `json:"depot,omitempty"`
+	// M264: the two boxes of Manage › GitHub (choixGitHub): automatic push off, workshop shared
+	SansPousse   bool `json:"sans_pousse,omitempty"`
+	Atelier      bool `json:"atelier,omitempty"`
+	Proprietaire bool `json:"proprietaire,omitempty"` // the owner set them: a new card from the agent keeps them (and the modes)
 }
 
 type BriefCarte struct {

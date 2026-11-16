@@ -22,6 +22,8 @@ func (s *Serveur) apiProjetMission(w http.ResponseWriter, r *http.Request) {
 		Modes   *ModesCarte `json:"modes"`
 		GitHub  string      `json:"github"`
 		Depot   string      `json:"depot"`
+		Auto    *bool       `json:"auto"` // nil: on, as in Manage
+		Atelier bool        `json:"atelier"`
 	}
 	if lireCorps(r, &c) != nil {
 		s.erreur(w, http.StatusBadRequest, "Invalid request")
@@ -65,6 +67,7 @@ func (s *Serveur) apiProjetMission(w http.ResponseWriter, r *http.Request) {
 			return errCarteChangee
 		}
 		carte.Projet.Dossier, carte.Projet.GitHub, carte.Projet.Depot, carte.Projet.Proprietaire = dossier, c.GitHub, depot, true
+		carte.Projet.SansPousse, carte.Projet.Atelier = c.Auto != nil && !*c.Auto, c.Atelier && c.GitHub != ""
 		carte.Dev.Modes = c.Modes
 		return nil
 	})
@@ -85,6 +88,9 @@ func depotMission(mode, depot, nom string) (string, error) {
 	case "":
 		return "", nil
 	case "lier":
+		if depot == "" { // M264: the choice is kept while the repository is still to type; the launch refuses it
+			return "", nil
+		}
 		depot = strings.TrimSuffix(strings.TrimPrefix(depot, "https://github.com/"), ".git")
 		if !reDepotGitHub.MatchString(depot) {
 			return "", erreurEntree("Invalid repository: write it as OWNER/NAME (e.g. octocat/my-site).")
@@ -119,7 +125,8 @@ func validerModesCarte(m *ModesCarte) error {
 // Manage › GitHub does (auto push on): an existing OWNER/NAME, or a private repository created with the access
 // kept here. A project already linked is left as it is: a launch resumed never creates a second repository.
 // Replaced by the tests (a fake GitHub).
-var githubMission = func(s *Serveur, p Projet, mode, depot string) error {
+var githubMission = func(s *Serveur, p Projet, pc ProjetCarte) error {
+	mode, depot, auto, atelier := pc.GitHub, pc.Depot, map[bool]string{true: "0", false: "1"}[pc.SansPousse], map[bool]string{true: "1", false: "0"}[pc.Atelier]
 	v, err := s.etatGitHub(p)
 	switch {
 	case err != nil:
@@ -130,7 +137,7 @@ var githubMission = func(s *Serveur, p Projet, mode, depot string) error {
 		return errors.New("This computer is not connected to GitHub: Settings › Options › GitHub.")
 	}
 	if mode == "lier" {
-		out, _ := s.executerGitHub(p, 15*time.Minute, "lier-compte", depot, "1", "", "0", "0", "0")
+		out, _ := s.executerGitHub(p, 15*time.Minute, "lier-compte", depot, auto, "", atelier, "0", "0")
 		var res ResultatLierCompte
 		if lireJSONFinal(out, &res) != nil {
 			return errors.New(raisonPoussee(out))
@@ -143,7 +150,7 @@ var githubMission = func(s *Serveur, p Projet, mode, depot string) error {
 	if !v.ConnexionPC.AccesGarde { // no sign-in window in a launch
 		return errors.New("Creating a repository from a mission needs the access kept on this computer: Settings › Options › GitHub.")
 	}
-	out, err := s.executerGitHub(p, 15*time.Minute, "lier", "creer", depot, "1", "", "0")
+	out, err := s.executerGitHub(p, 15*time.Minute, "lier", "creer", depot, auto, "", atelier)
 	if gh, _ := s.etatGitHub(p); err != nil || !gh.Lie {
 		return errors.New(firstNonEmpty(derniereLigneTexte(out), "GitHub: unreadable answer from WSL"))
 	}

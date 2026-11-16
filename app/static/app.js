@@ -2267,14 +2267,13 @@ function carteMission(d) {
 }
 // M254: a new project's settings, folded: its folder, its working mode (the Manage block), its GitHub repository;
 // each change is saved on the card (POST /projet), the folder checked at once (its error under the field)
-const GITHUB_MISSION = [["", "No repository"], ["lier", "Link an existing repository"], ["creer", "Create a private repository"]];
+const GITHUB_MISSION = { "": "No GitHub for now", lier: "Use one of my repositories", creer: "Create a private repository" };
 function sectionProjet(c) {
   const p = c.projet, distant = (etat.vue || {}).distant, err = etat.missionProjetErreur || "";
   if (!etat.modeDefaut) { etat.modeDefaut = {}; api("mode?defaut=1").then((m) => { etat.modeDefaut = m; majZoneMission(); }).catch(() => {}); }
   const md = { cadrage_global: 25, duree_max_global: 0, ...etat.modeDefaut, parallele_max: 3, ...(c.dev.modes || {}) };
   const modes = [["parallele", "Parallel mode"], ["eco", "Eco mode"], ["rapide", "Fast mode"]].filter(([k]) => md[k]).map(([, n]) => t(n)).join(", ") || t("usual mode");
-  const gh = GITHUB_MISSION.find((x) => x[0] === (p.github || "")) || GITHUB_MISSION[0];
-  const resume = [p.dossier || c.touche.dossier, modes, t(gh[1]) + (p.depot ? " (" + p.depot + ")" : "")].filter(Boolean).join(" · ");
+  const resume = [p.dossier || c.touche.dossier, modes, t(GITHUB_MISSION[p.github || ""] || GITHUB_MISSION[""]) + (p.depot ? " (" + p.depot + ")" : "")].filter(Boolean).join(" · ");
   return `<details class="mis-projet" id="mis-projet"${etat.missionProjetOuvert || err ? " open" : ""}><summary><b>${t("Project")}</b> <span class="muet petit">${h(resume)}</span></summary>
       <label for="mis-dossier" class="petit"><b>${t("Folder")}</b></label>
       <div class="ligne m0"><input type="text" id="mis-dossier" class="croit" value="${h(p.dossier || c.touche.dossier || "")}"${distant ? " readonly" : ""} aria-describedby="mis-dossier-aide${err ? " mis-dossier-err" : ""}"${err ? ' aria-invalid="true"' : ""}>
@@ -2283,13 +2282,12 @@ function sectionProjet(c) {
       ${err ? `<p class="attention petit m0" id="mis-dossier-err" role="alert">${h(err)}</p>` : ""}
       <div id="mis-mode">${blocMode(md, true)}</div>
       <fieldset class="mis-github"><legend>${t("GitHub repository")}</legend>
-        ${GITHUB_MISSION.map(([v, l]) => `<label class="radio"><input type="radio" name="mis-github" value="${v}"${gh[0] === v ? " checked" : ""}> <span>${t(l)}</span></label>`).join("")}
-        ${gh[0] ? `<label for="mis-depot" class="petit">${t(gh[0] === "lier" ? "Repository (OWNER/NAME)" : "Name of the new repository")}</label><input type="text" id="mis-depot" value="${h(p.depot || "")}"${gh[0] === "lier" ? ' placeholder="octocat/my-site"' : ""}>` : ""}
+        ${choixGitHub("mis", nomDepot(p.nom), p)}
         <p class="muet petit m0">${t("The repository is linked right after the project is created, with this computer's GitHub connection.")}</p></fieldset></details>`;
 }
 async function enregistrerProjetMission(change) {
   const m = (etat.missionVue || {}).mission, c = m && m.carte; if (!c) return;
-  const corps = { dossier: c.projet.dossier || "", modes: c.dev.modes || null, github: c.projet.github || "", depot: c.projet.depot || "", ...change };
+  const corps = { dossier: c.projet.dossier || "", modes: c.dev.modes || null, github: c.projet.github || "", depot: c.projet.depot || "", auto: !c.projet.sans_pousse, atelier: !!c.projet.atelier, ...change };
   etat.missionProjetOuvert = true;
   try {
     const r = await api("missions/" + encodeURIComponent(m.id) + "/projet", "POST", corps);
@@ -2303,8 +2301,15 @@ const echecLancement = (m) => { const h = m.historique || []; return m.etat === 
 document.addEventListener("change", (ev) => {
   const i = ev.target;
   if (i.id === "mis-dossier") enregistrerProjetMission({ dossier: i.value.trim() });
-  else if (i.name === "mis-github") enregistrerProjetMission({ github: i.value, depot: "" });
-  else if (i.id === "mis-depot") enregistrerProjetMission({ depot: i.value.trim() });
+  // M264: the Manage › GitHub block (choixGitHub "mis"); a field typed in selects its option, an invalid repository said once typed
+  else if (i.name === "mis-gh") enregistrerProjetMission({ github: i.value === "existant" ? "lier" : i.value, depot: "" });
+  else if (i.id === "mis-gh-nom") enregistrerProjetMission({ github: "creer", depot: i.value.trim() ? nomDepot(i.value) : "" });
+  else if (i.id === "mis-gh-depot") {
+    const d = depotSaisi(i.value);
+    if (i.value.trim() && !d) { i.setAttribute("aria-invalid", "true"); toast(t("Write the repository as OWNER/NAME (e.g. octocat/my-site)."), "erreur"); return; }
+    enregistrerProjetMission({ github: "lier", depot: d });
+  } else if (i.id === "mis-gh-auto") enregistrerProjetMission({ auto: i.checked });
+  else if (i.id === "mis-gh-atelier") enregistrerProjetMission({ atelier: i.checked });
 });
 // the folder picker (parcourir) fills the field with a synthetic input event: saved as a typed change is
 document.addEventListener("input", (ev) => { if (ev.target.id === "mis-dossier" && !ev.isTrusted) enregistrerProjetMission({ dossier: ev.target.value.trim() }); });
@@ -3159,16 +3164,18 @@ function nomDepot(nom) {
   const s = String(nom || "").replace(/ /g, "-").replace(/[^A-Za-z0-9._-]/g, "").replace(/^[.-]+|[.-]+$/g, "").slice(0, 100);
   return s || "athanor-project";
 }
-function choixGitHub(pre, nomPropose) {
-  return `${pre === "np" ? `<label class="radio"><input type="radio" name="np-gh" value="" checked> ${t("No GitHub for now")}</label>` : ""}
-    <label class="radio"><input type="radio" name="${pre}-gh" value="creer" ${pre === "np" ? "" : "checked"}> ${t("Create a private repository")}</label>
-    <input type="text" class="gh-champ" id="${pre}-gh-nom" placeholder="${h(nomPropose)}">
-    <label class="radio"><input type="radio" name="${pre}-gh" value="existant"> ${t("Use one of my repositories")}</label>
-    <input type="text" class="gh-champ" id="${pre}-gh-depot" placeholder="${h(t("OWNER/NAME, e.g. octocat/my-site"))}">
-    <label class="interrupteur"><input type="checkbox" id="${pre}-gh-auto" checked><span>${t("Push automatically after each milestone")}</span></label>
-    ${caseAtelier(`id="${pre}-gh-atelier"`, false)}
+// v: the choice already made (a mission card, M264: {github: "" | lier | creer, depot, sans_pousse, atelier})
+function choixGitHub(pre, nomPropose, v) {
+  const mode = v ? v.github || "" : pre === "gh" ? "creer" : "", coche = (x) => mode === x ? " checked" : "";
+  return `${pre !== "gh" ? `<label class="radio"><input type="radio" name="${pre}-gh" value=""${coche("")}> ${t("No GitHub for now")}</label>` : ""}
+    <label class="radio"><input type="radio" name="${pre}-gh" value="creer"${coche("creer")}> ${t("Create a private repository")}</label>
+    <input type="text" class="gh-champ" id="${pre}-gh-nom" placeholder="${h(nomPropose)}" value="${h(v && mode === "creer" && v.depot !== nomPropose ? v.depot || "" : "")}" aria-label="${h(t("Create a private repository"))}">
+    <label class="radio"><input type="radio" name="${pre}-gh" value="existant"${coche("lier")}> ${t("Use one of my repositories")}</label>
+    <input type="text" class="gh-champ" id="${pre}-gh-depot" placeholder="${h(t("OWNER/NAME, e.g. octocat/my-site"))}" value="${h(mode === "lier" ? v.depot || "" : "")}" aria-label="${h(t("Use one of my repositories"))}">
+    <label class="interrupteur"><input type="checkbox" id="${pre}-gh-auto"${v && v.sans_pousse ? "" : " checked"}><span>${t("Push automatically after each milestone")}</span></label>
+    ${caseAtelier(`id="${pre}-gh-atelier"`, !!(v && v.atelier))}
     ${(etat.ghConnexion || {}).connecte ? `<p class="muet petit">${etat.ghConnexion.acces_garde ? t("This computer is connected to GitHub as {0}: one of your repositories is linked at once, and a new one is created at once too (the access is kept).", [h(etat.ghConnexion.login)]) : t("This computer is connected to GitHub as {0}: one of your repositories is linked at once; creating a new one opens a sign-in.", [h(etat.ghConnexion.login)])}</p>`
-      : pre === "np" ? `<p class="attention petit" data-avis-connexion>${t("To link a project, connect this computer to GitHub first, once (Settings › Options › GitHub).")} <button class="btn btn-petit" type="button" data-connexion-gh="connecter">${t("Connect to GitHub")}</button></p>` : ""}`;
+      : pre !== "gh" ? `<p class="attention petit" data-avis-connexion>${t("To link a project, connect this computer to GitHub first, once (Settings › Options › GitHub).")} <button class="btn btn-petit" type="button" data-connexion-gh="connecter">${t("Connect to GitHub")}</button></p>` : ""}`;
 }
 // the workshop shared on GitHub: for someone who takes the project over with their Athanor (off by default)
 function caseAtelier(attribut, coche) {

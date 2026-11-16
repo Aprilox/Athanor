@@ -128,6 +128,9 @@ func (s *Serveur) lancerMission(id, qui, dossier, empreinte string) (Mission, er
 	if !x.infraOuvert && slices.ContainsFunc(c.Acces, func(a AccesCarte) bool { return a.Portee == "infra" && !a.Decoche }) {
 		return m, errMissionInfraVerrouille
 	}
+	if c.Projet.Nouveau && c.Projet.GitHub == "lier" && c.Projet.Depot == "" { // M264: chosen, never typed
+		return m, erreurEntree("Invalid repository: write it as OWNER/NAME (e.g. octocat/my-site).")
+	}
 	if c.Projet.Nouveau {
 		dossier = cmp.Or(dossier, c.Projet.Dossier, dossierProjetNeuf(c.Projet.Nom, x.projets))
 		if err := s.controlerDossierMission(c.Projet.Nom, dossier); err != nil { // B88: refused before lancee, the mission intact
@@ -249,7 +252,7 @@ func (s *Serveur) etapesMission(c CarteMission, politique, qui, dossier string, 
 	}
 	// M254: the GitHub repository the owner chose, linked before the pilot pushes anything (again on a resumed launch)
 	if c.Projet.GitHub != "" {
-		if err := githubMission(s, p, c.Projet.GitHub, c.Projet.Depot); err != nil {
+		if err := githubMission(s, p, c.Projet); err != nil {
 			return voies, faits, errMoteur("the project {0} is created in {1}, but its GitHub repository is not linked: {2}. Fix it, then resume the launch", p.Nom, p.Dossier, err)
 		}
 		faits = append(faits, evenementMission("lancee", "GitHub repository linked: "+c.Projet.Depot))
