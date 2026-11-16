@@ -239,7 +239,7 @@ func outilDemanderDeploiement(s *Serveur, x SessionHub, args json.RawMessage) (s
 		return "", errors.New("unknown environment: one of the project's environments (lire_environnements)")
 	}
 	if s.prudenceRenforcee(x.Projet, env) && slices.ContainsFunc(lireMissions(), func(m Mission) bool { // R6: the mission's relay alone asks for prod
-		return (m.Etat == "lancee" || m.Etat == "en_pause") && slices.ContainsFunc(m.Voies, func(v VoieMission) bool { return v.Module == "dev" && v.Ref == x.Projet })
+		return missionSuivie(m.Etat) && slices.ContainsFunc(m.Voies, func(v VoieMission) bool { return v.Module == "dev" && v.Ref == x.Projet })
 	}) {
 		return "", errors.New("a mission covers this project: its prod is deployed by the mission once dev is checked, after the owner's accord; do not ask for it, go on with your work")
 	}

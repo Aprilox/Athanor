@@ -128,7 +128,7 @@ func TestTUIMissions(t *testing.T) {
 	taper(a, "\r")
 	attendreTUI(t, a, etat("arretee"))
 	contient("stopped", ecran(120, 40), a.t("Stopped"), a.t("from this computer"))
-	if r := a.raccourcisMissions(); len(r) != 1 {
+	if r := a.raccourcisMissions(); len(r) != 2 || r[1].k != "r" { // M250: a stopped mission can be resumed
 		t.Fatalf("keys of a stopped mission: %v", r)
 	}
 	// Escape: the list, then home

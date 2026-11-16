@@ -276,7 +276,7 @@ func (s *Serveur) etapesMission(c CarteMission, politique, qui, dossier string) 
 		e.URL, e.Protection, e.Serveurs = ec.URL, ec.Protection, ec.Serveurs // C81: never weakened (envSansAffaiblir)
 		// M247: Production from the card (never lowered); the milestone relay on the first other environment only
 		e.Production = e.Production || ec.Production
-		e.Politique, e.DeployerAuJalon = ec.Politique, ec.Nom == envJalonCarte(c) && !e.Production && !serveurRoleProd(ec.Serveurs, inventaire)
+		e.Politique, e.DeployerAuJalon = ec.Politique, relaisAuJalon(c, ec, e, inventaire)
 		if e.Fournisseur == "" { // the Servers lane's DNS: the provider holding the host's zone, its token ticked on the card
 			e.Fournisseur = fournisseurCoche(hoteURL(ec.URL), c.Acces)
 		}
@@ -329,6 +329,12 @@ func (s *Serveur) etapesMission(c CarteMission, politique, qui, dossier string) 
 
 // planPret (M249): p's framing is done, its plan holds at least one milestone.
 func planPret(p Projet) bool { return len(p.LirePlan()) > 0 }
+
+// relaisAuJalon: ec (e as it will be written) is deployed after each milestone: the card's linked environment, never
+// a Production one nor one on a server of the old prod role. Read at the launch and at the resume of a stopped mission.
+func relaisAuJalon(c CarteMission, ec EnvCarte, e Environnement, inventaire []ServeurInventaire) bool {
+	return ec.Nom == envJalonCarte(c) && !e.Production && !serveurRoleProd(ec.Serveurs, inventaire)
+}
 
 // lancerPreparation (M249): ec's Servers task, its brief the standard preparation adapted to p's plan; native
 // Windows mode: launched without a barrier, logged.

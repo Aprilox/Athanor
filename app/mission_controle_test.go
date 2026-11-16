@@ -246,7 +246,10 @@ func TestMissionControle(t *testing.T) {
 		})
 		t.Run("journal", func(t *testing.T) {
 			x, _ := lireMission(m.ID)
-			for _, id := range []string{"arret", "arret:env:dev", "arret:env:prod", "arret:serveur:a1", "arret:acces"} {
+			if !slices.ContainsFunc(x.Journal, func(e EntreeJournal) bool { return strings.HasPrefix(e.ID, "arret:2") }) {
+				t.Fatalf("the journal does not say the stop: %+v", x.Journal)
+			}
+			for _, id := range []string{"arret:env:dev", "arret:env:prod", "arret:serveur:a1", "arret:acces"} {
 				if !slices.ContainsFunc(x.Journal, func(e EntreeJournal) bool { return e.ID == id }) {
 					t.Fatalf("the journal does not say %s: %+v", id, x.Journal)
 				}
@@ -256,7 +259,7 @@ func TestMissionControle(t *testing.T) {
 			}
 		})
 		t.Run("fin", func(t *testing.T) {
-			for _, a := range []string{"pause", "reprendre", "arreter"} {
+			for _, a := range []string{"pause", "arreter"} { // resumed, it can (M250: TestMissionArretReprise)
 				if c, _, _ := appel(m.ID, a, mdp); c != http.StatusConflict {
 					t.Fatalf("%s a stopped mission: %d", a, c)
 				}

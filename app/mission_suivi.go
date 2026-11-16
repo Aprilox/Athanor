@@ -56,7 +56,10 @@ func (s *Serveur) suivreMission(id string) {
 	}()
 }
 
-func missionSuivie(etat string) bool { return etat == "lancee" || etat == "en_pause" }
+// missionSuivie: lancee, en_pause, or arret_demande (M250: the pilot ends its milestone, then the mission pauses).
+func missionSuivie(etat string) bool {
+	return etat == "lancee" || etat == "en_pause" || etat == "arret_demande"
+}
 
 func dateSource(t string) time.Time {
 	d, _ := time.Parse(time.RFC3339, t)
@@ -92,6 +95,11 @@ func (s *Serveur) observerMission(id string) bool {
 	s.relaisProd(id)
 	s.finirMissionDistante(id)
 	m, err = lireMission(id)
+	if err == nil && m.Etat == "arret_demande" && s.jalonFini(m) { // M250: the milestone is done, the mission pauses
+		if x, e := s.mettreEnPause(id, "hub", raisonFinJalon); e == nil {
+			m = x
+		}
+	}
 	return err == nil && missionSuivie(m.Etat)
 }
 
@@ -317,8 +325,8 @@ func (s *Serveur) reprendreMissions() {
 			}
 		case s.attendCoffre(m):
 			s.noterJournalMission(m.ID, s.entreeJournal(id, t, "attention", "Athanor restarted: the mission waits for the vault to be unlocked"))
-		case m.Etat == "en_pause":
-			s.suivreMission(m.ID) // followed again, nothing to tell: it stays paused
+		case m.Etat == "en_pause" || m.Etat == "arret_demande":
+			s.suivreMission(m.ID) // followed again, nothing to tell: it stays paused, or pauses once its milestone is done
 		default:
 			s.noterJournalMission(m.ID, s.entreeJournal(id, t, "info", "Athanor restarted: the mission resumes"))
 			s.suivreMission(m.ID)

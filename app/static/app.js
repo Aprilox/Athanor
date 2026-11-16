@@ -5749,7 +5749,7 @@ function assistantServeur(c) {
   </form>`;
 }
 // --- Missions (M159): one line per mission (state, sentence, lanes as they are now, date), its detail at #missions/<id>
-const ETATS_MISSION = { preparation: "Being prepared", proposee: "Proposed", acceptee: "Accepted", lancee: "Launched", terminee: "Finished", annulee: "Cancelled", echec: "Failed", en_pause: "Paused", arretee: "Stopped" };
+const ETATS_MISSION = { preparation: "Being prepared", proposee: "Proposed", acceptee: "Accepted", lancee: "Launched", terminee: "Finished", annulee: "Cancelled", echec: "Failed", en_pause: "Paused", arretee: "Stopped", arret_demande: "Stopping after the milestone" };
 const ETATS_VOIE_DEV = { travaille: ["Working", "pv-claude"], termine: ["Finished", "pv-ok"], arrete: ["Stopped", ""], hors_ligne: ["Offline: the mission waits", "pv-vous"], attente: ["Waiting to be sent", "pv-vous"] };
 // M190: a Studio lane, on this PC (dev) or on a remote Athanor (dev_distant, ref "remote id/project", nom = nom@instance)
 const voieStudio = (v) => v.module === "dev" || v.module === "dev_distant";

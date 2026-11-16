@@ -379,12 +379,12 @@ func (s *Serveur) apiPilote(w http.ResponseWriter, r *http.Request) {
 		}
 		s.msg(w, cle)
 		return
-	case "arreter":
+	case "arreter", "pause": // M250: a project's pilot paused is stopped now; Start picks it up where it stopped
 		marqueAuto(p, false)
-		sortie, err = s.arreterPiloteProjet(p)
-	case "arreter-apres-cycle":
+		err = arreterPiloteMission(s, p)
+	case "arreter-apres-cycle": // M250: "finish the milestone in progress" (a cycle ends with its milestone)
 		marqueAuto(p, false)
-		sortie, err = s.arreterApresCycle(p)
+		sortie, err = s.demanderArretApresCycle(p)
 	case "redemarrer-apres-cycle":
 		s.mu.Lock()
 		s.relancer[p.Nom] = true
@@ -411,6 +411,8 @@ func (s *Serveur) apiPilote(w http.ResponseWriter, r *http.Request) {
 	switch r.PathValue("action") {
 	case "arreter":
 		s.msg(w, "The pilot is stopped.")
+	case "pause":
+		s.msg(w, "The pilot is paused: Start picks it up where it stopped.")
 	case "arreter-apres-cycle":
 		s.msg(w, "The pilot will stop at the end of this cycle: nothing is lost.")
 	case "redemarrer-apres-cycle":

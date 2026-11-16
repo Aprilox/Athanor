@@ -13,7 +13,7 @@ import (
 // the web's ETATS_MISSION, RELAIS_MISSION, RANG_RELAIS, POLITIQUES_MISSION and MOTS_JOURNAL (app.js)
 var (
 	etatsMissionTUI = map[string]string{"preparation": "Being prepared", "proposee": "Proposed", "acceptee": "Accepted", "lancee": "Launched",
-		"terminee": "Finished", "annulee": "Cancelled", "echec": "Failed", "en_pause": "Paused", "arretee": "Stopped"}
+		"terminee": "Finished", "annulee": "Cancelled", "echec": "Failed", "en_pause": "Paused", "arretee": "Stopped", "arret_demande": "Stopping after the milestone"}
 	relaisMissionTUI = []string{"Milestone delivered", "Dev deployment", "Verification", "Your accord", "Production"}
 	rangRelaisTUI    = map[string]int{"construction": 0, "dev_deploye": 2, "dev_verifie": 3, "accord_prod": 3, "prod_deploye": 4, "termine": 5}
 	politiquesTUI    = map[string]string{"prod": "Ask me for production", "tout": "Ask me for everything", "autonome": "Autonomous"}
@@ -79,7 +79,7 @@ func (a *appTUI) couleurEtatMission(etat string) couleurT {
 	switch etat {
 	case "lancee":
 		return a.pal.ok
-	case "en_pause", "proposee", "preparation":
+	case "en_pause", "proposee", "preparation", "arret_demande":
 		return a.pal.attention
 	case "echec", "arretee":
 		return a.pal.erreur
@@ -355,10 +355,10 @@ func (a *appTUI) raccourcisMissions() []raccourci {
 		switch m.Etat {
 		case "lancee":
 			r = append(r, raccourci{"p", t("Pause")})
-		case "en_pause":
+		case "en_pause", "arretee", "arret_demande": // M250: a stopped mission can be resumed too
 			r = append(r, raccourci{"r", t("Resume")})
 		}
-		if m.Etat == "lancee" || m.Etat == "en_pause" {
+		if m.Etat == "lancee" || m.Etat == "en_pause" || m.Etat == "arret_demande" {
 			r = append(r, raccourci{"a", t("Stop")})
 		}
 	}
@@ -385,7 +385,7 @@ func (a *appTUI) toucheMissions(k string) {
 			a.agir("POST", "missions/"+m.ID+"/pause", nil, relire)
 		}
 	case "r":
-		if m != nil && m.Etat == "en_pause" {
+		if m != nil && (m.Etat == "en_pause" || m.Etat == "arretee" || m.Etat == "arret_demande") {
 			id := m.ID
 			a.formulaire(a.t("Resume"), a.t("Resuming the mission: retype Athanor's password.")+"  "+a.t(aideFormulaireLigne),
 				[]champTUI{{lib: a.t("Password"), h: 1, s: &saisieT{masque: true}}}, func(v []string) {
@@ -393,7 +393,7 @@ func (a *appTUI) toucheMissions(k string) {
 				})
 		}
 	case "a":
-		if m != nil && (m.Etat == "lancee" || m.Etat == "en_pause") {
+		if m != nil && (m.Etat == "lancee" || m.Etat == "en_pause" || m.Etat == "arret_demande") {
 			id := m.ID
 			a.demander(a.t("Stop the mission"), a.t("Stop the mission? Nothing will be undone: the environments and the accesses stay."),
 				[]choixTUI{{id: "oui", texte: a.t("Stop the mission"), danger: true}, {id: "", texte: a.t("Keep it going")}}, func(id2 string) {
