@@ -304,7 +304,7 @@ func (a *appTUI) detailMission(e *ecranT, x, y, l, h int, m Mission) {
 			raison = a.messageTUI(ev.Message)
 		}
 		e.texte(x+1, yc, l-2, t("The launch of the mission stopped: {0}", raison), a.st(p.erreur, p.fond))
-		e.texte(x+1, yc+1, l-2, t("Change what is needed (a key, a server), then retry: what was already done stays."), a.st(p.muet, p.fond))
+		e.texte(x+1, yc+1, l-2, t("Fix the cause or change the mission, then retry: what was already done stays."), a.st(p.muet, p.fond))
 		yc += 3
 	}
 	// the lanes: two lines each (state, then the milestone and the activity)

@@ -117,7 +117,8 @@ func (s *Serveur) lancerMission(id, qui, dossier, empreinte string) (Mission, er
 	}
 	// M254: a launch resumed after a failed step: the project it created and the request it added stay as they are
 	repris := m.Etat == "echec"
-	if repris && faitMission(m, "project created: ") {
+	projetCree := repris && faitMission(m, "project created: ") // M268: its request is already the card's Dev brief
+	if projetCree {
 		c.Projet.Nouveau, c.Dev.Modes = false, nil
 	}
 	x := s.contexteCarte()
@@ -129,7 +130,7 @@ func (s *Serveur) lancerMission(id, qui, dossier, empreinte string) (Mission, er
 		return m, errMissionInfraVerrouille
 	}
 	if c.Projet.Nouveau && c.Projet.GitHub == "lier" && c.Projet.Depot == "" { // M264: chosen, never typed
-		return m, erreurEntree("Invalid repository: write it as OWNER/NAME (e.g. octocat/my-site).")
+		return m, erreurEntree("Write the repository to link as OWNER/NAME, then launch.")
 	}
 	if c.Projet.Nouveau {
 		dossier = cmp.Or(dossier, c.Projet.Dossier, dossierProjetNeuf(c.Projet.Nom, x.projets))
@@ -158,7 +159,7 @@ func (s *Serveur) lancerMission(id, qui, dossier, empreinte string) (Mission, er
 	if c.Projet.Distant != "" {
 		voies, faits, err = s.etapesDistantes(c, qui, id)
 	} else {
-		voies, faits, err = s.etapesMission(c, m.Politique, qui, dossier, repris && faitMission(m, "request added: "))
+		voies, faits, err = s.etapesMission(c, m.Politique, qui, dossier, projetCree || repris && faitMission(m, "request added: "))
 	}
 	defer s.suivreMission(id) // stops by itself at once if the launch ended in echec
 	return modifierMission(id, func(m *Mission) error {
@@ -250,7 +251,7 @@ func (s *Serveur) etapesMission(c CarteMission, politique, qui, dossier string, 
 	// M254: the GitHub repository the owner chose, linked before the pilot pushes anything (again on a resumed launch)
 	if c.Projet.GitHub != "" {
 		if err := githubMission(s, p, c.Projet); err != nil {
-			return voies, faits, errMoteur("the project {0} is created in {1}, but its GitHub repository is not linked: {2}. Fix it, then resume the launch", p.Nom, p.Dossier, err)
+			return voies, faits, errMoteur("the project {0} is created in {1}, but its GitHub repository is not linked: {2}", p.Nom, p.Dossier, err)
 		}
 		faits = append(faits, evenementMission("lancee", "GitHub repository linked: "+c.Projet.Depot))
 	}

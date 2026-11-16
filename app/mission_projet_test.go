@@ -202,6 +202,9 @@ func TestMissionProjet(t *testing.T) {
 		}
 	}
 	demande, _ := os.ReadFile(p.Demande())
+	if file, _ := os.ReadDir(p.FileAttente()); len(file) != 0 { // M268: the brief is already the new project's request
+		t.Fatalf("resume: the request queued again: %d file(s)", len(file))
+	}
 	if n != 1 || creations != 1 || strings.Count(string(demande), "TEMOIN-BRIEF") != 1 || len(pilotes) != 1 || strings.Join(appelsGH, ",") != "creer atelier-poterie,creer atelier-poterie" {
 		t.Fatalf("resume: %d projects, %d repositories, request %q, pilots %v, GitHub %v", n, creations, demande, pilotes, appelsGH)
 	}
