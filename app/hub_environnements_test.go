@@ -218,7 +218,7 @@ func TestEnvironnementsAPI(t *testing.T) {
 	}
 
 	code, v := appel("GET", "/api/projets/demo/environnements", "")
-	if code != 200 || len(v["envs"].([]any)) != 3 || env(v, "prod")["politique"] != "accord" || env(v, "dev")["serveurs"] == nil {
+	if code != 200 || len(v["envs"].([]any)) != 0 || len(v["prudence"].([]any)) != 0 { // M248: no card for an environment not made
 		t.Fatalf("GET: %d %v", code, v)
 	}
 	if code, _ := appel("GET", "/api/projets/inconnu/environnements", ""); code != 404 {
@@ -237,7 +237,7 @@ func TestEnvironnementsAPI(t *testing.T) {
 		t.Errorf("prod: %d %v", code, v)
 	}
 	if code, v := appel("POST", "/api/projets/demo/environnements", `{"env":"dev","url":"https://dev.exemple.fr","serveurs":["`+dev+`"],"politique":"auto"}`); code != 200 ||
-		env(v, "dev")["politique"] != "auto" || env(v, "prod")["protection"] != "access" {
+		env(v, "dev")["politique"] != "auto" || env(v, "prod")["protection"] != "access" || fmt.Sprint(v["envs"], v["prudence"]) != "[dev prod] [prod]" {
 		t.Errorf("dev: %d %v", code, v)
 	}
 	// B71: saving an environment with "Ask for my accord" ends its "never ask again" deployment rule, only that one

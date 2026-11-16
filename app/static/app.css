@@ -1227,7 +1227,7 @@ a.mis-ligne:hover, a.mis-ligne:focus-visible { border-color: var(--accent); }
 #mission-zone:empty { display: none; }
 .mis-carte { display: flex; flex-direction: column; gap: 10px; }
 .mis-carte h3 { font-size: 13.5px; margin: 12px 0 6px; }
-.mis-carte .mis-phrase { margin: 0; }
+.mis-carte .mis-phrase { margin: 0; flex: none; } /* the card is a column: no 12em height from the list row rule */
 .mis-voies, .mis-grille { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 24px; }
 .mis-voie { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; min-width: 0; }
 .mis-voie h3 { margin-top: 0; }
@@ -1656,3 +1656,7 @@ html.scene-pause .verrou * { animation-play-state: paused !important; }
 }
 }
 .plan-outil { font-weight: 600; } /* the tool in plain words (never a <b>: the plan cards hold no markup of their own) */
+/* M248: a card without a server has one lane; the mission policy folded */
+.mis-voies.mis-une { grid-template-columns: minmax(0, 1fr); }
+.mis-politique-plus > summary, .mis-pol-plus > summary { cursor: pointer; font-weight: 600; font-size: 13px; }
+.mis-politique-plus[open] > .mis-politique, .mis-pol-plus[open] > .mis-pol-direct { margin-top: 6px; }

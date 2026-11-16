@@ -2197,36 +2197,44 @@ pages.accueil = async () => {
 const ACTIVE_MISSION = ["preparation", "proposee"];
 const APPROBATIONS_PREVUES = { mise_en_prod: "Putting {0} in production", plan_serveurs: "The Servers plan of {0}", deploiement: "Each deployment to {0}", durcissement: "Hardening the server {0}", deverrouiller_coffre: "Unlocking the infra vault" };
 const POLITIQUES_MISSION = [["prod", "Ask me for production", "Production and its servers' plans wait for your approval."],
-  ["tout", "Ask me for everything", "Every Servers plan and every deployment waits for your approval."], ["autonome", "Autonomous", "Production still always waits for your approval, even in autonomous mode; everything else (Servers plans, dev and staging) runs without you."]];
+  ["tout", "Ask me for everything", "Every Servers plan and every deployment waits for your approval."], ["autonome", "Autonomous", "Production still always waits for your approval, even in autonomous mode; everything else (Servers plans, the other environments) runs without you."]];
 const travailleMission = (d) => d.orchestrateur || d.mission.etat === "preparation";
 const heuresMission = (m) => m < 90 ? `${m} min` : `${Math.round(m / 60)} h`;
-// C81: an environment of the card (protection, servers named by nom, policy); sansUrl: the URL is shown apart
-const envMission = (x, sansUrl, nom) => [sansUrl ? "" : x.url || "—", t(PROTECTIONS_ENV[x.protection] || x.protection || ""), (x.serveurs || []).length ? t("Servers") + " " + x.serveurs.map(nom).join(", ") : "",
-  x.politique ? t(x.politique === "auto" ? "Automatic when nothing is destroyed" : "Ask for my approval") : ""].filter(Boolean).join(" · ");
+// C81: an environment of the card (its servers named by nom); sansUrl: the URL is shown apart. M248: no protection nor policy
+const envMission = (x, sansUrl, nom) => [sansUrl ? "" : x.url || "—", x.production ? t("Production") : "", (x.serveurs || []).length ? t("Servers") + " " + x.serveurs.map(nom).join(", ") : ""].filter(Boolean).join(" · ");
+// M248: a card without a server reads as a Studio project alone: no Servers lane, environments, DNS nor policy
+const serveurLie = (c) => !!(c && ((c.serveurs || {}).brief || (c.envs || []).some((x) => (x.serveurs || []).length) || ((c.touche || {}).serveurs || []).length));
+const badgeProd = (oui) => oui ? ` <span class="badge badge-infra">${t("Production")}</span>` : "";
 function carteMission(d) {
   const m = d.mission, c = m.carte, ed = etat.missionEdition && etat.missionEdition.id === m.id ? etat.missionEdition : null;
   const nomServeur = (r) => ((etat.mentionsSugg || []).find((x) => x.type === "serveur" && x.ref === r) || {}).nom || r;
   const liste = (l) => l && l.length ? `<ul class="mis-puces">${l.map((x) => `<li>${h(x)}</li>`).join("")}</ul>` : `<span class="muet">—</span>`;
-  const e = c.estimation || {}, actif = !travailleMission(d) && m.etat === "proposee", dis = ed ? "" : " disabled";
-  return `<div class="mis-voies">
+  const e = c.estimation || {}, actif = !travailleMission(d) && m.etat === "proposee", dis = ed ? "" : " disabled", srv = serveurLie(c);
+  const avert = `<p class="mis-avert" role="note">${ic("alerte")} ${t("Native Windows mode: without a barrier, the servers' keys can be read by this mission's agents. This launch is logged.")}</p>`;
+  const pol = POLITIQUES_MISSION.find((p) => p[0] === (ed ? ed.politique : m.politique)) || POLITIQUES_MISSION[0];
+  const gauche = (srv ? `<h3>${t("Environments")}</h3>${(c.envs || []).length ? `<ul class="mis-envs">${c.envs.map((x) => `<li><b>${h(x.nom)}</b>${badgeProd(x.production)} <span class="mis-url">${h(x.url || "—")}</span> <span class="muet petit">${h(envMission({ ...x, production: false }, true, nomServeur))}</span>${x.avant ? `<div class="muet petit mis-avant">${h(t("Before: {0}", [envMission(x.avant, false, nomServeur)]))}</div>` : ""}</li>`).join("")}</ul>` : `<span class="muet">—</span>`}` : "")
+    + (srv || (c.acces || []).length ? `<h3>${t("Access used")}</h3>${c.avertissement_infra && !c.avertissement_serveurs ? avert : ""}${(c.acces || []).length ? `<ul class="mis-acces">${c.acces.map((a, i) => `<li><label class="case"><input type="checkbox" data-mis-acces="${i}"${(ed ? !ed.decoches.includes(i) : !a.decoche) ? " checked" : ""}${dis}> <b>${h(a.entree)}</b></label> ${a.type ? `<span class="etiquette">${h(a.type)}</span>` : ""}${a.a_remplir ? ` <span class="badge mis-remplir">${t("to fill")}</span>` : ""} <span class="muet petit">${t("used for {0}", [h(nomServeur(a.pour))])}</span></li>`).join("")}</ul>` : `<span class="muet">${t("No vault entry.")}</span>`}` : "");
+  return `<div class="mis-voies${srv ? "" : " mis-une"}">
       <div class="mis-voie"><h3>${t((etat.hubModules || []).find((m) => m.id === "dev")?.nom || "dev")}</h3><p class="m0"><b>${h(c.projet.nom)}</b> <span class="etiquette">${t(c.projet.nouveau ? "New project" : "Existing project")}</span></p><p class="mis-brief">${h(c.dev.brief || "")}</p>${c.dev.modes ? `<p class="m0">${[["parallele", "Parallel mode"], ["eco", "Eco mode"], ["rapide", "Fast mode"]].filter(([k]) => c.dev.modes[k]).map(([, n]) => `<span class="etiquette">${t(n)}</span>`).join(" ")}</p>` : ""}</div>
-      <div class="mis-voie"><h3>${t("Servers")}</h3>${c.avertissement_serveurs ? `<p class="mis-avert" role="note">${ic("alerte")} ${t("Native Windows mode: without a barrier, the servers' keys can be read by this mission's agents. This launch is logged.")}</p>` : ""}<p class="mis-brief">${h(c.serveurs.brief || t("Nothing to prepare on the servers."))}</p></div>
+      ${srv ? `<div class="mis-voie"><h3>${t("Servers")}</h3>${c.avertissement_serveurs ? avert : ""}<p class="mis-brief">${h(c.serveurs.brief || t("Nothing to prepare on the servers."))}</p></div>` : ""}
     </div>
     <div class="mis-grille">
-      <div><h3>${t("Environments")}</h3>${(c.envs || []).length ? `<ul class="mis-envs">${c.envs.map((x) => `<li><b>${h(x.nom)}</b> <span class="mis-url">${h(x.url || "—")}</span> <span class="muet petit">${h(envMission(x, true, nomServeur))}</span>${x.avant ? `<div class="muet petit mis-avant">${h(t("Before: {0}", [envMission(x.avant, false, nomServeur)]))}</div>` : ""}</li>`).join("")}</ul>` : `<span class="muet">—</span>`}
-        <h3>${t("Access used")}</h3>${c.avertissement_infra && !c.avertissement_serveurs ? `<p class="mis-avert" role="note">${ic("alerte")} ${t("Native Windows mode: without a barrier, the servers' keys can be read by this mission's agents. This launch is logged.")}</p>` : ""}${(c.acces || []).length ? `<ul class="mis-acces">${c.acces.map((a, i) => `<li><label class="case"><input type="checkbox" data-mis-acces="${i}"${(ed ? !ed.decoches.includes(i) : !a.decoche) ? " checked" : ""}${dis}> <b>${h(a.entree)}</b></label> ${a.type ? `<span class="etiquette">${h(a.type)}</span>` : ""}${a.a_remplir ? ` <span class="badge mis-remplir">${t("to fill")}</span>` : ""} <span class="muet petit">${t("used for {0}", [h(nomServeur(a.pour))])}</span></li>`).join("")}</ul>` : `<span class="muet">${t("No vault entry.")}</span>`}</div>
-      <div><h3>${t("I will ask for your approval for")}</h3>${liste((c.approbations || []).map((a) => t(APPROBATIONS_PREVUES[a.type] || a.type, [a.cible || ""])))}
+      ${gauche ? `<div>${gauche}</div>` : ""}
+      <div>${(c.approbations || []).length ? `<h3>${t("I will ask for your approval for")}</h3>${liste(c.approbations.map((a) => t(APPROBATIONS_PREVUES[a.type] || a.type, [a.cible || ""])))}` : ""}
         <h3>${t("What will be touched")}</h3><dl class="fiche mis-touche">
-          <dt>${t("Servers")}</dt><dd>${liste(c.touche.serveurs)}</dd><dt>${t("DNS names")}</dt><dd>${liste(c.touche.dns)}</dd>
+          ${srv ? `<dt>${t("Servers")}</dt><dd>${liste(c.touche.serveurs)}</dd><dt>${t("DNS names")}</dt><dd>${liste(c.touche.dns)}</dd>` : ""}
           <dt>${t("Files")}</dt><dd>${liste(c.touche.fichiers)}</dd><dt>${t("Folder")}</dt><dd>${c.touche.dossier ? h(c.touche.dossier) : t("A new folder for the project")}</dd></dl>
-        <h3>${t("Estimate")}</h3><p class="m0">${t("{0} to {1} of work, about {2} milestones", [heuresMission(e.minutes_min), heuresMission(e.minutes_max), e.jalons])}</p>
-        <p class="muet petit m0">${e.cout_max ? t("About {0} $ to {1} $ of quota (list price)", [e.cout_min, e.cout_max]) : t("Quota unknown until a first cycle is measured on this PC.")}</p></div>
+        ${gauche ? estimationMission(e) : ""}</div>
+      ${gauche ? "" : `<div>${estimationMission(e)}</div>`}
     </div>
-    <fieldset class="mis-politique"><legend>${t("Policy")}</legend>${POLITIQUES_MISSION.map(([v, l, aide]) => `<label class="radio"><input type="radio" name="mis-politique" value="${v}"${(ed ? ed.politique : m.politique) === v ? " checked" : ""}${dis}> <span><b>${t(l)}</b><br><span class="muet petit">${t(aide)}</span></span></label>`).join("")}</fieldset>
+    ${srv ? `<details class="mis-politique-plus"${ed ? " open" : ""}><summary>${h(t("Policy: {0}", [t(pol[1])]))}</summary>
+      <fieldset class="mis-politique"><legend>${t("Policy")}</legend>${POLITIQUES_MISSION.map(([v, l, aide]) => `<label class="radio"><input type="radio" name="mis-politique" value="${v}"${pol[0] === v ? " checked" : ""}${dis}> <span><b>${t(l)}</b><br><span class="muet petit">${t(aide)}</span></span></label>`).join("")}</fieldset></details>` : ""}
     ${ed ? `<label for="mis-consigne" class="petit">${t("Ask for a change (optional)")}</label><textarea id="mis-consigne" rows="2" maxlength="2000" placeholder="${h(t("For example: put the dev on the home server"))}">${h(ed.consigne)}</textarea>
       <div class="ligne"><button type="button" class="btn btn-primaire" data-mis="appliquer">${t("Apply")}</button><button type="button" class="btn" data-mis="fermer">${t("Cancel")}</button></div>`
     : actif ? `<div class="ligne"><button type="button" class="btn" data-mis="modifier">${t("Edit")}</button><button type="button" class="btn btn-primaire" data-mis="lancer">${t("Launch")}</button><span class="espace"></span><button type="button" class="btn" data-mis="annuler">${t("Cancel the mission")}</button></div>` : ""}`;
 }
+const estimationMission = (e) => `<h3>${t("Estimate")}</h3><p class="m0">${t("{0} to {1} of work, about {2} milestones", [heuresMission(e.minutes_min), heuresMission(e.minutes_max), e.jalons])}</p>
+        <p class="muet petit m0">${e.cout_max ? t("About {0} $ to {1} $ of quota (list price)", [e.cout_min, e.cout_max]) : t("Quota unknown until a first cycle is measured on this PC.")}</p>`;
 function zoneMission() {
   const d = etat.missionVue; if (!d) return "";
   const m = d.mission, q = (m.questions || []).find((x) => !x.reponse), fin = (m.historique || []).slice(-1)[0] || {};
@@ -2268,7 +2276,7 @@ document.addEventListener("click", async (ev) => {
   const b = ev.target.closest("[data-mis], [data-mis-choix]"), d = etat.missionVue; if (!b || !d) return;
   const m = d.mission, a = b.dataset.mis;
   if (b.dataset.misChoix !== undefined) { const q = m.questions.find((x) => !x.reponse); etat.missionReponse = ""; await actionMission("repondre", { question: q.id, choix: q.choix[+b.dataset.misChoix] }); return; }
-  if (a === "modifier") { etat.missionEdition = { id: m.id, decoches: m.carte.acces.map((x, i) => x.decoche ? i : -1).filter((i) => i >= 0), politique: m.politique, consigne: "" }; majZoneMission(); $("#mission-zone input[type=checkbox], #mission-zone input[type=radio]")?.focus(); }
+  if (a === "modifier") { etat.missionEdition = { id: m.id, decoches: m.carte.acces.map((x, i) => x.decoche ? i : -1).filter((i) => i >= 0), politique: m.politique, consigne: "" }; majZoneMission(); $("#mission-zone input[type=checkbox], #mission-zone input[type=radio], #mis-consigne")?.focus(); }
   else if (a === "fermer") { etat.missionEdition = null; majZoneMission(); }
   else if (a === "appliquer") {
     const ed = etat.missionEdition, consigne = ed.consigne.trim();
@@ -2758,7 +2766,7 @@ const GUIDE = [
   { id: "serveurs", titre: "Add a server", intro: "Add your VPS or your home server: Athanor checks its fingerprint, connects with its own key kept in the vault, and reads what runs on it, in about a minute. A server's password is never kept.",
     etapes: [
       ["Before you start", "A server's key is an *infra* entry of the vault: it opens only with Athanor's password. Choose one, then unlock Athanor; otherwise the Servers page tells you. A server is added on the computer, not from a paired phone.", "#options@bloc-verrou", "Settings › Options › Lock"],
-      ["The address", "*Servers*, in the menu, then *+ Add a server*: the address, the port (22 by default), the user (`root` or a user with `sudo`), a name if you like, and its roles: *dev* for tests and previews, *prod* for your live site. Then *Continue*.", "#serveurs", "Servers"],
+      ["The address", "*Servers*, in the menu, then *+ Add a server*: the address, the port (22 by default), the user (`root` or a user with `sudo`) and a name if you like. Then *Continue*.", "#serveurs", "Servers"],
       ["The fingerprint", "Athanor reads the fingerprint the server presents and shows it. Compare it with the one the server itself gives (`for f in /etc/ssh/ssh_host_*_key.pub; do ssh-keygen -lf $f; done`, typed on the server or in your host's console), then tick *It is my server's fingerprint*. From then on Athanor refuses any other: if it changes, the connection is refused with a clear message."],
       ["Four ways to connect", "*The server's password*: Athanor keeps it in the vault and connects with it; no key is made and password logins stay open on the server. *A new key made by Athanor*: give the server's password once and Athanor puts the key there, or copy its public part into the server's `~/.ssh/authorized_keys` (or run the command shown), then *Verify*. *An SSH key you already have*: paste it or choose its file, with its passphrase if it has one; Athanor keeps it in the vault. *A key of the vault*: an SSH key you already use for this server. In native Windows mode, giving an existing key of the vault asks for Athanor's password."],
       ["The password, never kept", "With the password, Athanor connects once, adds its own key (ed25519, kept in the vault) to the server, then connects again with that key to check it. The password is neither saved nor written to any page or log."],
@@ -2800,12 +2808,12 @@ const GUIDE = [
       ["From a paired device", "A shell is the strongest right on a server: from a paired phone or computer, the terminal and the files are off. On this computer, *Allow the terminal and the server's files from paired devices* turns them on, after a confirmation. The audit log names each connection and each file changed, never what is typed nor a file's content.", "#serveurs", "Servers"],
     ],
     note: "Nothing to install on the server: Athanor uses its usual SSH connection, and the terminal itself (xterm.js) is part of Athanor." },
-  { id: "environnements", titre: "Environments and Cloudflare", intro: "An environment is where a project runs: *dev* for tests, *staging* to check before going live, *prod* for your live site. Each has its address, its servers, its protection and its deployment policy.",
+  { id: "environnements", titre: "Environments and Cloudflare", intro: "An environment is where a project runs: an address and the servers behind it. A mission makes it from what you describe; when you speak of production, it is marked *Production* and every risky action on it waits for your agreement.",
     etapes: [
-      ["Describe an environment", "On the project's *Access* page, the *Environments* block has one card per environment: its address (URL), its servers, its protection, its deployment policy and its DNS provider, then *Save*. A server with the *prod* role goes only into *prod*, and *prod* takes only those. A paired phone sees the cards, read only.", "#acces", "Access"],
-      ["The deployment policy", "*dev* and *staging* either *Ask for my approval* or deploy *Automatic when nothing is destroyed*. *prod* always asks: the card “Deploy example.com to production?”, with its commit and its server, comes in the bell, on *For you* and on your phone, and never offers *Never ask again*.", "#pourvous", "For you"],
-      ["A token with minimum rights", "Cloudflare is reached with a token you create with only the rights Athanor uses (*Zone › Zone › Read*, *DNS › Edit*, *SSL and Certificates › Edit*, and *Access: Apps and Policies › Edit* only for Access), on your domain's zone only. Add it in *Servers › Providers*, *Test* it, then choose it as the environment's DNS provider. *Guide › Connect Cloudflare* gives every click.", "#fournisseurs", "Providers"],
-      ["A task for an environment", "On the sheet of one of its servers, *Tasks*: choose it under *For the environment*, then say what should be done (“Point app.example.com at this server over HTTPS”). The agent may then read and change the DNS records, the HTTPS mode and the protection of the environment's address, and of that name only: another name or another zone is refused. Each change goes through a plan you accept; *prod* always waits for you.", "#serveurs", "Servers"],
+      ["Your environments", "On the project's *Access* page, the *Environments* block lists the ones the project has, read only: address, servers, health and deployments, with a *Production* badge on those that ask for your agreement every time. It stays absent until a mission links a server. To change an environment, describe it in a mission (“put the demo on my home server”).", "#acces", "Access"],
+      ["The deployment policy", "On a *Production* environment every deployment asks you: the card “Deploy example.com to production?”, with its commit and its server, comes in the bell, on *For you* and on your phone, and never offers *Never ask again*. The other environments follow the mission's policy.", "#pourvous", "For you"],
+      ["A token with minimum rights", "Cloudflare is reached with a token you create with only the rights Athanor uses (*Zone › Zone › Read*, *DNS › Edit*, *SSL and Certificates › Edit*, and *Access: Apps and Policies › Edit* only for Access), on your domain's zone only. Add it in *Servers › Providers* and *Test* it: a mission then uses it for the environment's address. *Guide › Connect Cloudflare* gives every click.", "#fournisseurs", "Providers"],
+      ["A task for an environment", "On the sheet of one of its servers, *Tasks*: choose it under *For the environment*, then say what should be done (“Point app.example.com at this server over HTTPS”). The agent may then read and change the DNS records, the HTTPS mode and the protection of the environment's address, and of that name only: another name or another zone is refused. Each change goes through a plan you accept; a *Production* environment always waits for you.", "#serveurs", "Servers"],
       ["Protection", "*None (public)*; *Cloudflare Access (e-mail sign-in)*: only the e-mail addresses you give can open the site, with a code Cloudflare sends them; or *Password in front of the site*: a password of the vault (*infra*), of which the web server (Caddy) receives only a hash. The password itself is never written on the server nor shown to the agent."],
       ["The origin certificate", "With Cloudflare in front, Athanor makes the HTTPS certificate between Cloudflare and your server: its private key is made by Athanor, kept in the vault and placed on every server of the environment (`/etc/athanor/tls/`, readable by root and Caddy only), never handed to the agent; its expiry is kept with the environment. Without Cloudflare, Caddy gets its own certificate (Let's Encrypt), with the technical e-mail `ACME_EMAIL` of the vault."],
       ["The deployment key", "For a project linked to GitHub, *Create the deployment key*, under the cards, makes a key kept in the vault and adds it read-only to the repository: the servers will fetch the code with it and can never push. Unlinking or removing the project takes it off the repository and out of the vault."],
@@ -2813,11 +2821,11 @@ const GUIDE = [
     note: "The token, the certificate's key, the proxy password and the deployment key stay in the vault: Athanor uses them itself, and the agent only sees zones, rights and results. *Guide › Put a site online* follows a deployment from the first one to production." },
   { id: "deployer", titre: "Put a site online", intro: "From a project on this PC to a site anyone can open: Athanor deploys a commit to an environment, checks it from outside, keeps the version before it, and watches the site afterwards.",
     etapes: [
-      ["The environment", "On the project's *Access* page, give *dev* (then *staging* and *prod*) its address and its servers, as in *Guide › Environments and Cloudflare*. Each environment has its own folder on its servers, `/srv/athanor/<project>-<env>/`, with its versions side by side.", "#acces", "Access"],
+      ["The environment", "Describe it in a mission (“put my site online on my server at app.example.com”): the mission creates the environment with its address and its servers, as in *Guide › Environments and Cloudflare*. Each environment has its own folder on its servers, `/srv/athanor/<project>-<env>/`, with its versions side by side.", "#acces", "Access"],
       ["Harden a new server", "On a server you have just added, *Harden this server* shows a fixed plan written by Athanor, not by an agent: a user with sudo instead of root, SSH keys only, no root login, a firewall that refuses all but SSH, 80 and 443, security updates, the clock synchronised, Caddy. Each step already in place is skipped; you accept the plan first.", "#serveurs", "Servers"],
       ["The first deployment", "On the sheet of one of the environment's servers, *Tasks*: choose it under *For the environment* and say “Deploy my project to dev”. The agent picks the method in its plan: a static site served by Caddy, Docker Compose when the project has a compose file or a Dockerfile, or k3s only if you ask for it; the code comes from GitHub with the deployment key, or as an archive made on this PC. Once you accept, Athanor's own engine deploys and remembers the method for the next ones."],
-      ["Dev after each milestone", "Tick *Deploy to dev after each milestone delivered* on the *dev* card: each time the pilot ticks a milestone, the project's last commit goes to dev and is checked, with no agent. The pilot may also ask for a deployment itself; *dev* and *staging* then follow their policy. Never production."],
-      ["Production, on your agreement", "A deployment to *prod* always waits for you: the card “Deploy example.com to production?”, with its commit and its servers, comes in the bell, on *For you* and on your phone. *Accept* with Athanor's password retyped, or from a paired phone; one agreement is good for that commit only, and nothing touches the server before it.", "#pourvous", "For you"],
+      ["After each milestone", "When a mission has a server, each time the pilot ticks a milestone the project's last commit goes to its environment and is checked, with no agent, as the mission's policy allows. Never to a *Production* environment: there, the final deployment waits for your agreement."],
+      ["Production, on your agreement", "A deployment to a *Production* environment always waits for you: the card “Deploy example.com to production?”, with its commit and its servers, comes in the bell, on *For you* and on your phone. *Accept* with Athanor's password retyped, or from a paired phone; one agreement is good for that commit only, and nothing touches the server before it.", "#pourvous", "For you"],
       ["Going back", "Each version goes into its own folder, then the site switches to it at once; the version before stays beside it, and the 5 newest are kept. The *Deployments* list of each environment shows who deployed which commit and what the check found. *Go back to the previous version* puts the one before back in a few seconds and checks it again; in *prod* it waits for your agreement too."],
       ["Health and incidents", "From this PC, every 15 minutes (*Health of the deployed sites* on the *Servers* page: 5 to 60 minutes, or off): the site's answer, its certificate, its security headers and protection, the disk and memory of its servers. A failed deployment, or a site found unwell twice in a row, rings the bell and your phone with what failed and what was tried, and three actions: *Retry*, *Go back to the previous version*, *I take over* (stops the automatic deployments of that environment and opens the server's sheet).", "#serveurs", "Servers"],
     ],
@@ -2834,9 +2842,9 @@ const GUIDE = [
   { id: "missions", titre: "Launch a mission", intro: "One sentence on the home page, and several modules work together: Studio builds the project, Servers prepares where it will run. An orchestrator first turns your sentence into a mission card; nothing starts before you press *Launch*.",
     etapes: [
       ["The sentence and its mentions", "In the bar *What do you want to do?* of the home page, say what you want in one sentence, for example “Put @my-shop online at shop.example.com”. Type *@* to name a project, a server or a vault key (by its name, never its value): your choice becomes a chip, and its *×* takes it off. The chips under the bar add a recent project, a server or *New project*. *Send* creates the mission.", "#accueil", "Home"],
-      ["The mission card", "The orchestrator reads the state of the modules, then proposes its card under the bar: what *Studio* will build (a new project with its folder, or one of yours), what *Servers* will prepare (DNS, certificates, proxy, protection, firewall), the environments with their address and protection, what will be touched (servers, DNS names, files) and an estimate drawn from the cycles already measured on this PC. When it needs to know something, its question comes at the top of the card, with its choices as buttons and a field for your own answer."],
+      ["The mission card", "The orchestrator reads the state of the modules, then proposes its card under the bar: what *Studio* will build (a new project with its folder, or one of yours), what will be touched (files, folder) and an estimate drawn from the cycles already measured on this PC. When a server is linked, the card also shows what *Servers* will prepare (DNS, certificates, proxy, firewall), the environments with their address and the policy, folded. When it needs to know something, its question comes at the top of the card, with its choices as buttons and a field for your own answer."],
       ["The access it uses", "*Access used* lists the vault entries the mission will give, each with a box: untick one and the project or the server does not get it. An entry the vault does not hold yet is marked *to fill*: add it in the *Vault*, the orchestrator never creates one. *I will ask for your approval for* is worked out by Athanor, not by the orchestrator: production always, hardening a server not hardened yet, unlocking the vault when an *infra* key is needed."],
-      ["The policy", "Three choices on the card. *Ask me for production* (the default): production and its servers' plans wait for you, *dev* and *staging* deploy on their own. *Ask me for everything*: every Servers plan and every deployment waits for you. *Autonomous*: only putting in production waits for you. Whatever you choose, a deployment to *prod* always waits for your agreement."],
+      ["The policy", "Shown only when the mission has a server, folded under *Policy*. *Ask me for production* (the default): production and its servers' plans wait for you, the other environments deploy on their own. *Ask me for everything*: every Servers plan and every deployment waits for you. *Autonomous*: only putting in production waits for you. Whatever you choose, a deployment to a *Production* environment always waits for your agreement."],
       ["Edit the card", "*Edit* opens the boxes, the policy and a field *Ask for a change* (“put the dev on the home server”). *Apply*: the boxes and the policy change the card at once, with no agent; a change you write goes back to the orchestrator, which proposes a new card. *Cancel the mission* drops it: nothing has been built or deployed yet."],
       ["Launch the mission", "*Launch* does it all, once: the new project is created (or your request joins the queue of the existing one) and its pilot starts, the access you ticked are given, the environments are set (*dev* deploys after each milestone), and a Servers task starts for each environment to prepare, its plans waiting as usual. If the mission uses an *infra* key, unlock the vault first. A step that fails stops the next ones and rings the bell; what is done stays done. *Missions*, in the menu, lists every mission with its state and its lanes.", "#missions", "Missions"],
       ["From your phone", "On a paired phone, unlocked, the same card can be read, answered, edited, launched or cancelled. When the orchestrator asks you to launch, “Launch the mission …?” comes in the bell, on *For you* and as a notification: *Accept* launches it as *Launch* does (on the computer, with Athanor's password retyped). Its questions come in the bell too, with their choices as buttons.", "#pourvous", "For you"],
@@ -3497,10 +3505,10 @@ function carteApprobation(x, ap, codes) {
   const p = (ap.plans || {})[x.id];
   const durcir = x.agent === "durcissement"; // B80: Athanor's own plan, titled by the server (its project is internal)
   if (x.action === "plan_serveur") return carteDecision(x, ap, durcir ? `<strong>${h(t("Harden this server: {0}", [d.nom || d.serveur]))}</strong>`
-    : `<span class="badge">${h(x.env)}</span> <strong>${h(t("Plan for {0}", [d.nom || d.serveur]))}</strong> <span>${h(x.projet)}</span>`,
-    [t("Server role: {0}", [x.env]), tn(d.etapes || "?", "1 step", "{0} steps", [d.etapes || "?"])], blocPlan(x, p), d.regle === "oui" && t("Never ask again for this server"), p && p.critique && !p.critique.verdict);
+    : `${x.production ? `<span class="badge badge-infra">${t("Production")}</span> ` : ""}<strong>${h(t("Plan for {0}", [d.nom || d.serveur]))}</strong> <span>${h(x.projet)}</span>`,
+    [tn(d.etapes || "?", "1 step", "{0} steps", [d.etapes || "?"])], blocPlan(x, p), d.regle === "oui" && t("Never ask again for this server"), p && p.critique && !p.critique.verdict);
   // a deployment (M120): prod is never decided by a rule
-  if (x.action === "deploiement") return carteDecision(x, ap, `<span class="badge">${h(nomEnv(x.env))}</span> <strong>${h(x.production ? t("Deploy {0} to production?", [d.hote]) : t("Deploy {0} to {1}?", [d.hote, nomEnv(x.env)]))}</strong> <span>${h(x.projet)}</span>`,
+  if (x.action === "deploiement") return carteDecision(x, ap, `<span class="badge${x.production ? " badge-infra" : ""}">${h(x.production ? t("Production") : nomEnv(x.env))}</span> <strong>${h(x.production ? t("Deploy {0} to production?", [d.hote]) : t("Deploy {0} to {1}?", [d.hote, nomEnv(x.env)]))}</strong> <span>${h(x.projet)}</span>`,
     [t("Commit {0}", [d.commit || (d.sha || "").slice(0, 7)]), d.avant && t("Online now: version {0}", [d.avant]), d.serveurs && t("Servers: {0}", [d.serveurs]), d.fichiers_build && t("Build files changed: {0}", [d.fichiers_build])],
     // P7: a mission's prod accord says where it goes, what changes and opens the mission
     (d.mission ? `${/^https?:\/\//.test(d.url || "") ? `<div class="pv-details"><a href="${h(d.url)}" target="_blank" rel="noopener">${h(d.url)}</a></div>` : ""}${d.commits ? `<div class="pv-details"><strong>${h(t("What changes: {0} new commit(s)", [d.commits]))}</strong>${d.changements ? ` <span class="appr-changements">${h(d.changements)}</span>` : ""}</div>` : ""}` : "") +
@@ -3508,7 +3516,7 @@ function carteApprobation(x, ap, codes) {
     !x.production && !d.fichiers_build && t("Never ask again for this project and environment"));
   // M158: the orchestrator asks to launch its card; accepting launches it as Launch does (never a rule)
   // C77: the environments, prod and the ticked access of the very card it launches
-  if (x.action === "mission") return carteDecision(x, ap, `${d.prod === "oui" ? `<span class="badge">prod</span> ` : ""}<strong>${h(t("Launch the mission {0}?", [d.titre]))}</strong>`,
+  if (x.action === "mission") return carteDecision(x, ap, `${d.prod === "oui" ? `<span class="badge badge-infra">${t("Production")}</span> ` : ""}<strong>${h(t("Launch the mission {0}?", [d.titre]))}</strong>`,
     [t("Environments: {0}", [d.envs || "—"]), t("Access: {0}", [d.acces || "—"])], `${d.natif === "oui" ? `<p class="mis-avert" role="note">${ic("alerte")} ${h(t("Native Windows mode: without a barrier, the servers' keys can be read by this mission's agents. This launch is logged."))}</p>` : ""}<div class="pv-details">${h(t("Accepting launches the mission as its Launch button does."))} <a href="#missions/${encodeURIComponent(x.mission || "")}">${h(t("See the card"))}</a></div>`, false);
   const acces = x.action === "demander_acces", f = etat.apprForm[x.id] || {}, nom = (x.details || {}).nom || "";
   const entree = f.entree ?? (codes.find((e) => e.nom === nom) || {}).id ?? "", env = f.env || x.env, variable = f.variable ?? nom;
@@ -4655,6 +4663,7 @@ function pcsOuvert() {
   return etat.pcsOuvert;
 }
 document.addEventListener("toggle", (ev) => {
+  if (ev.target && ev.target.classList && ev.target.classList.contains("mis-pol-plus")) etat.misPolOuvert = ev.target.open; // M248: stays open across the live refresh
   if (!ev.target || ev.target.id !== "pcs-repli") return;
   etat.pcsOuvert = ev.target.open;
   try { localStorage.setItem("pcsOuvert", etat.pcsOuvert ? "1" : "0"); } catch (e) { /* this device only */ }
@@ -5214,9 +5223,9 @@ function ligneAcces(a, refusee) {
 pages.acces = async () => {
   const projet = (etat.vue && etat.vue.projet && etat.vue.projet.nom) || etat.projet;
   if (!projet) return `<div class="vide">${t("Choose a project")}</div>`;
-  const [d, c, en, sv, fo] = await Promise.all([api("acces?projet=" + encodeURIComponent(projet)), api("coffre"),
-    api("projets/" + encodeURIComponent(projet) + "/environnements"), api("serveurs").catch(() => ({})), api("fournisseurs").catch(() => ({}))]);
-  acc.projet = projet; acc.refusee = d.natif && !d.forcer_infra_natif; cof.d = c; acc.inv = sv.serveurs || []; acc.fourn = fo.fournisseurs || [];
+  const [d, c, en, sv] = await Promise.all([api("acces?projet=" + encodeURIComponent(projet)), api("coffre"),
+    api("projets/" + encodeURIComponent(projet) + "/environnements"), api("serveurs").catch(() => ({}))]);
+  acc.projet = projet; acc.refusee = d.natif && !d.forcer_infra_natif; cof.d = c;
   const entrees = (c.entrees || []).slice().sort((a, b) => a.famille.localeCompare(b.famille) || a.nom.localeCompare(b.nom));
   const inj = d.injection || {}, envs = d.envs || ["dev", "staging", "prod"];
   const donne = (id, env) => d.acces.some((a) => a.entree === id && a.env === env);
@@ -5256,47 +5265,28 @@ pages.acces = async () => {
         ${(inj.repli || []).length ? `<div class="acc-repli">${inj.repli.map((n) => `<p class="ligne m0 petit"><code>${h(n)}</code><span class="muet croit">${t("in the old file, not in the vault")}</span><button type="button" class="btn btn-petit" data-acc-importer>${t("Import")}</button></p>`).join("")}</div>` : ""}
       </div>
     </div>
-    ${blocEnvironnements(en, sv.serveurs || [], fo.fournisseurs || [], !!(etat.vue || {}).distant)}
+    ${blocEnvironnements(en, sv.serveurs || [], !!(etat.vue || {}).distant)}
   </div>`;
 };
-// --- Environments (ARCHITECTURE §Environnements): one card per environment, saved whole by POST; prod's policy is locked
-const PROTECTIONS_ENV = { aucune: "None (public)", access: "Cloudflare Access (e-mail sign-in)", auth_proxy: "Password in front of the site" };
-function blocEnvironnements(en, inventaire, fournisseurs, distant) {
-  const ro = distant ? " disabled" : "";
-  const options = (liste, val) => liste.map(([v, l]) => `<option value="${h(v)}"${v === val ? " selected" : ""}>${h(l)}</option>`).join("");
+// --- Environments (M248): the project's own, read only — made and changed by its missions; absent when it has none
+function blocEnvironnements(en, inventaire, distant) {
+  if (!(en.envs || []).length) return "";
+  const nomSrv = (id) => (inventaire.find((x) => x.id === id) || {}).nom || id, prudence = en.prudence || [];
   const carte = (nom) => {
-    const e = en.environnements[nom], prod = nom === "prod";
-    const srv = inventaire.filter((x) => e.serveurs.includes(x.id) || (prod ? (x.roles || []).includes("prod") : !(x.roles || []).includes("prod") || x.roles.includes("dev")));
-    const fourn = fournisseurs.map((f) => [f.id, f.nom]);
-    if (e.fournisseur && !fourn.some(([id]) => id === e.fournisseur)) fourn.push([e.fournisseur, e.fournisseur]);
-    return `<section class="env-carte${prod ? " env-prod" : ""}" data-env="${nom}" aria-label="${h(nomEnv(nom))}">
-      <h3>${h(nomEnv(nom))}${prod ? ` <span class="badge">${t("approval always")}</span>` : ""}</h3>
-      <label class="env-champ">${t("Address (URL)")}<input type="url" data-env-champ="url" value="${h(e.url)}" placeholder="https://app.example.com" maxlength="300" spellcheck="false"${ro}></label>
-      <fieldset class="env-serveurs"><legend>${t("Servers")}</legend>
-        ${srv.length ? srv.map((x) => `<label><input type="checkbox" data-env-serveur="${h(x.id)}"${e.serveurs.includes(x.id) ? " checked" : ""}${ro}> <span class="croit">${h(x.nom)}</span>${(x.roles || []).map((r) => `<span class="badge">${h(r)}</span>`).join("")}</label>`).join("")
-          : `<p class="muet petit">${t("No server for this environment yet.")}${distant ? "" : ` <a href="#serveurs">${t("Servers")}</a>`}</p>`}
-        <p class="muet petit">${t(prod ? "Production only runs on servers with the prod role." : "Servers with the prod role alone are kept for production.")}</p>
-      </fieldset>
-      <label class="env-champ">${t("Protection")}<select data-env-champ="protection"${ro}>${options(Object.entries(PROTECTIONS_ENV).map(([v, l]) => [v, t(l)]), e.protection)}</select></label>
-      ${prod ? `<div class="env-champ"><span>${t("Deployment policy")}</span><p class="petit">${t("Production always asks for your approval before a deployment: this cannot be turned off.")}</p></div>`
-        : `<label class="env-champ">${t("Deployment policy")}<select data-env-champ="politique"${ro}>${options([["accord", t("Ask for my approval")], ["auto", t("Automatic when nothing is destroyed")]], e.politique)}</select></label>`}
-      ${nom === "dev" ? `<label class="env-champ env-relais"><span><input type="checkbox" data-env-champ="relais"${e.deployer_au_jalon ? " checked" : ""}${ro}> ${t("Deploy to dev after each milestone delivered")}</span>
-        <span class="muet petit">${t("Each time a milestone is ticked, the project's last commit is deployed to dev with its recorded method, then checked. Never production.")}</span></label>` : ""}
-      ${fourn.length ? `<label class="env-champ">${t("DNS provider")}<select data-env-champ="fournisseur"${ro}>${options([["", t("None")], ...fourn], e.fournisseur || "")}</select></label>`
-        : `<div class="env-champ"><span>${t("DNS provider")}</span><p class="muet petit">${t("None: providers (Cloudflare) are added in Servers.")}</p></div>`}
+    const e = en.environnements[nom], titre = nomEnv(nom);
+    return `<section class="env-carte${e.production ? " env-prod" : ""}" data-env="${h(nom)}" data-protection="${h(e.protection || "aucune")}"${prudence.includes(nom) ? " data-prudence" : ""} aria-label="${h(titre)}">
+      <h3>${h(titre)}${e.production && titre !== t("Production") ? badgeProd(true) : ""}</h3>
+      <p>${/^https?:\/\//.test(e.url || "") ? `<a href="${h(e.url)}" target="_blank" rel="noopener">${h(e.url)}</a>` : `<span class="muet">${t("No address yet.")}</span>`}</p>
+      <p class="muet petit">${(e.serveurs || []).length ? h(t("Servers") + " " + e.serveurs.map(nomSrv).join(", ")) : t("No server for this environment yet.")}</p>
       <p class="petit attention env-erreur" role="alert" hidden></p>
-      ${distant ? "" : `<button type="button" class="btn btn-petit" data-env-enregistrer>${t("Save")}</button>`}
       ${blocSante((en.sante || {})[nom], e)}
       ${blocDeploiements(nom, e, (en.deploiements || {})[nom] || [], distant)}
     </section>`;
   };
-  // M229: folded until something is set (an address, a server, a provider, a deployment): open then, to be read without a click
-  const utilise = en.envs.some((n) => { const e = en.environnements[n]; return e.url || e.serveurs.length || e.fournisseur || e.deploiement || e.cle_deploiement || (en.sante || {})[n] || ((en.deploiements || {})[n] || []).length; });
-  return `<details class="bloc plus-options"${utilise ? " open" : ""}><summary>${t("More options")}</summary><div class="bloc environnements"><h2>${t("Environments")}</h2>
-    <p class="intro petit">${t("Where each environment of the project runs: its address, its servers, its protection and whether a deployment waits for your approval.")}</p>
-    ${distant ? `<p class="petit muet">${t("Shown only: change the environments on the PC.")}</p>` : ""}
+  return `<div class="bloc environnements"><h2>${t("Environments")}</h2>
+    <p class="intro petit">${t("Where the project runs, as its missions set it up. To change one, describe it in a mission.")}</p>
     <div class="env-cartes">${en.envs.map(carte).join("")}</div>
-    ${blocCleDeploiement(en, distant)}</div></details>`;
+    ${blocCleDeploiement(en, distant)}</div>`;
 }
 // M133: an environment's last deployments, their external check, and the way back to the previous version
 const ETATS_DEPLOI = { ok: ["ok", "Deployed"], echec: ["croix", "Failed"], revenu: ["retour", "Replaced by going back"], en_cours: ["attente", "Running"] };
@@ -5363,12 +5353,12 @@ const AUTEURS_DEPLOI = { agent: "by the agent", relais: "after a milestone", pro
 $("#page").addEventListener("click", async (ev) => {
   const b = ev.target.closest("[data-env-revenir]"); if (!b) return;
   const c = b.closest("[data-env]"), env = c.dataset.env, err = c.querySelector(".env-erreur"), question = t("Serve the previous version of {0} again? It is checked from this PC right after.", [nomEnv(env)]);
-  const preuve = env === "prod" ? await preuveMdp(question, { ok: t("Go back") }, question) : (await confirmer(question, { ok: t("Go back") })) ? {} : false;
+  const preuve = c.dataset.prudence ? await preuveMdp(question, { ok: t("Go back") }, question) : (await confirmer(question, { ok: t("Go back") })) ? {} : false;
   if (preuve === false) return;
   b.disabled = true; err.hidden = true; b.textContent = t("Going back…");
   try {
     const r = await api("projets/" + encodeURIComponent(acc.projet) + "/revenir", "POST", { env, ...preuve }), tpl = document.createElement("template");
-    tpl.innerHTML = blocDeploiements(env, { ...(r.deploiement ? { deploiement: true } : {}), protection: c.querySelector('[data-env-champ="protection"]').value }, r.deploiements || []);
+    tpl.innerHTML = blocDeploiements(env, { ...(r.deploiement ? { deploiement: true } : {}), protection: c.dataset.protection }, r.deploiements || []);
     c.querySelector("[data-env-deploi]").replaceWith(tpl.content.firstElementChild);
     const d = r.deploiement || {};
     toast(d.etat === "ok" ? t("{0} serves its previous version again.", [nomEnv(env)]) : d.message ? texteMessage(d.message) : t(d.erreur || "Failed"), d.etat === "ok" ? "ok" : "erreur");
@@ -5391,19 +5381,6 @@ $("#page").addEventListener("click", async (ev) => {
     const r = await api("projets/" + encodeURIComponent(acc.projet) + "/cle-deploiement", "POST", {});
     toast(r.deja ? t("The deployment key already exists.") : t("Deployment key created, read-only on {0}.", [r.depot]), "ok"); rendrePage();
   } catch (e) { err.textContent = e.message; err.hidden = false; b.disabled = false; }
-});
-$("#page").addEventListener("click", async (ev) => {
-  if (etat.page !== "acces") return;
-  const b = ev.target.closest("[data-env-enregistrer]"); if (!b) return;
-  const c = b.closest("[data-env]"), err = c.querySelector(".env-erreur"), champ = (k) => c.querySelector(`[data-env-champ="${k}"]`);
-  const corps = { env: c.dataset.env, url: champ("url").value.trim(), serveurs: [...c.querySelectorAll("[data-env-serveur]:checked")].map((x) => x.dataset.envServeur),
-    protection: champ("protection").value, politique: champ("politique") ? champ("politique").value : "accord", fournisseur: champ("fournisseur") ? champ("fournisseur").value : "", deployer_au_jalon: !!(champ("relais") && champ("relais").checked) };
-  b.disabled = true; err.hidden = true;
-  try {
-    const en = await api("projets/" + encodeURIComponent(acc.projet) + "/environnements", "POST", corps), tpl = document.createElement("template");
-    tpl.innerHTML = blocEnvironnements(en, acc.inv, acc.fourn, false); // B74: only this card is redrawn, the others keep what is typed
-    c.replaceWith(tpl.content.querySelector(`[data-env="${corps.env}"]`)); toast(t("Environment {0} saved.", [nomEnv(corps.env)]), "ok");
-  } catch (e) { err.textContent = e.message; err.hidden = false; b.disabled = false; } // the server's reason in the card, the fields kept
 });
 // C25 C35 C37: what an agent of this PC must not decide is retyped with Athanor's password in this window (a paired
 // phone, unlocked with it, passes): {} or {mot_de_passe} for the request, false when cancelled; sinon: asked anyway without the field
@@ -5708,7 +5685,7 @@ function carteServeur(x, fiche, envs, santeSites) {
   return `<div class="bloc carte-serveur" data-srv-id="${h(x.id)}">
     <div class="cp-tete"><a class="cp-nom" href="#serveur/${encodeURIComponent(x.id)}"><b>${h(x.nom)}</b></a>${x.autorisation === "ignorer" ? badgeSansGarde(x) : ""}<span class="pastille ${cls}">${sante}</span></div>
     <div class="muet petit"><code>${h(x.utilisateur)}@${h(x.hote)}${x.port === 22 ? "" : ":" + x.port}</code>${f.systeme && f.systeme.nom ? " · " + h(f.systeme.nom) : ""}</div>
-    <div class="ligne m0">${(x.roles || []).length ? x.roles.map((r) => `<span class="badge${r === "prod" ? " badge-infra" : ""}">${h(r)}</span>`).join("") : `<span class="muet petit">${t("No role yet")}</span>`}${(envs || []).length ? `<span class="badge badge-env" title="${h(t("Used by") + " " + envs.join(", "))}">${h(t("Environments: {0}", [envs.length]))}</span>` : ""}</div>
+    <div class="ligne m0">${(x.roles || []).includes("prod") ? `<span class="badge badge-infra">${t("Production")}</span>` : ""}${(envs || []).length ? `<span class="badge badge-env" title="${h(t("Used by") + " " + envs.join(", "))}">${h(t("Environments: {0}", [envs.length]))}</span>` : ""}</div>
     <div class="petit srv-tourne" title="${h(tourne.join(", "))}">${h(resume)}</div>
     ${(envs || []).length ? `<div class="ligne m0 petit srv-sante">${envs.map((pe) => { const st = ((santeSites || {}).envs || {})[pe], [ic, et] = ETATS_SANTE[st] || ["·", "Not checked yet"];
       return `<span class="badge srv-sante-${h(st || "aucun")}" title="${h(t(et))}">${ic} ${h(pe)}</span>`; }).join("")}</div>` : ""}
@@ -5728,7 +5705,6 @@ function messagesCoffreServeurs(c) {
 }
 function assistantServeur(c) {
   const a = srv.aj, cles = ((c || {}).entrees || []).filter((e) => e.famille === "secret" && e.type === "ssh"), v = etat.vue || {};
-  const role = (r) => `<label class="radio"><input type="checkbox" class="srv-role" value="${r}"${(a.roles || []).includes(r) ? " checked" : ""}> ${r === "dev" ? t("dev (tests, previews)") : t("prod (your live site)")}</label>`;
   if (a.etape === "cle") return `<div class="bloc cof-form srv-form" id="srv-cle">
     <h2>${h(t("Put this key on {0}", [a.serveur.nom]))}</h2>
     <p class="petit">${t("Athanor made a key for this server and keeps its private part in the vault. Add its public part to the server, then press Verify.")}</p>
@@ -5752,7 +5728,6 @@ function assistantServeur(c) {
       <label class="champ"><span>${t("User")}</span><input type="text" id="srv-utilisateur" maxlength="32" spellcheck="false" placeholder="root" value="${h(a.utilisateur || "")}"${fige} required></label>
       <label class="champ"><span>${t("Name (optional)")}</span><input type="text" id="srv-nom" maxlength="100" placeholder="${h(t("e.g. Production VPS"))}" value="${h(a.nom || "")}"></label>
     </div>
-    <div class="champ"><span>${t("Roles")}</span><div class="ligne m0">${role("dev")}${role("prod")}</div></div>
     ${empreinte ? `<div class="srv-empreinte">
       <p class="petit">${t("The server presents this fingerprint. Check that it is your server's (on the server: {0}), then confirm it: Athanor will refuse any other.", [`<code>${h(a.commande || "ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub")}</code>`])}</p>
       <p><code class="srv-empreinte-valeur">${h(a.empreinte)}</code>${a.typeCle ? ` <span class="petit">(${h(a.typeCle)})</span>` : ""}</p>
@@ -5886,9 +5861,9 @@ function voieDirect(v) {
 }
 function missionDirect(m) {
   const lancee = (m.historique || []).find((x) => x.etat === "lancee"), j = [...(m.journal || [])].reverse(), n = etat.missionJournalN || 50;
-  const pol = POLITIQUES_MISSION.find((p) => p[0] === m.politique), r = m.relais || {};
+  const r = m.relais || {};
   const nonDonne = m.etat === "lancee" && r.etape === "accord_prod" && (m.journal || []).some((e) => e.id === `accord:${r.accord}:refusee` || e.id === `accord:${r.accord}:expiree`);
-  return `${incidentMission(m)}<section class="bloc" aria-labelledby="mis-voies-titre"><div class="ligne m0 tuile-tete"><h2 class="m0" id="mis-voies-titre">${t("Lanes")}</h2><span class="espace"></span>${pol ? `<span class="muet petit">${h(t("Policy: {0}", [t(pol[1])]))}</span>` : ""}</div>
+  return `${incidentMission(m)}<section class="bloc" aria-labelledby="mis-voies-titre"><div class="ligne m0 tuile-tete"><h2 class="m0" id="mis-voies-titre">${t("Lanes")}</h2></div>
       ${(m.voies || []).length ? `<ul class="mis-voies-liste mis-voies-direct">${m.voies.map(voieDirect).join("")}</ul>${lancee ? `<p class="muet petit m0">${t("Launched on {0}", [h(new Date(lancee.t).toLocaleString(document.documentElement.lang || "en"))])}</p>` : ""}`
         : `<p class="muet m0">${t("The lanes start when the mission is launched.")}</p>`}
     </section>
@@ -5904,7 +5879,8 @@ function missionDirect(m) {
 const RIGUEUR_POLITIQUE = ["autonome", "prod", "tout"];
 function controlesMission(m) {
   return `<div class="ligne m0 mis-controles">
-    <fieldset class="mis-pol-direct"><legend>${t("Policy")}</legend>${POLITIQUES_MISSION.map(([v, l, aide]) => `<label class="radio" title="${h(t(aide))}"><input type="radio" name="mis-pol-direct" value="${v}"${m.politique === v ? " checked" : ""}> ${t(l)}</label>`).join("")}</fieldset>
+    ${serveurLie(m.carte) ? `<details class="mis-pol-plus"${etat.misPolOuvert ? " open" : ""}><summary>${h(t("Policy: {0}", [t((POLITIQUES_MISSION.find((p) => p[0] === m.politique) || POLITIQUES_MISSION[0])[1])]))}</summary>
+      <fieldset class="mis-pol-direct"><legend>${t("Policy")}</legend>${POLITIQUES_MISSION.map(([v, l, aide]) => `<label class="radio" title="${h(t(aide))}"><input type="radio" name="mis-pol-direct" value="${v}"${m.politique === v ? " checked" : ""}> ${t(l)}</label>`).join("")}</fieldset></details>` : ""}
     <span class="espace"></span>
     ${m.etat === "en_pause" ? `<button type="button" class="btn btn-primaire" data-mis-ctl="reprendre">${t("Resume")}</button>` : `<button type="button" class="btn" data-mis-ctl="pause">${t("Pause")}</button>`}
     <button type="button" class="btn btn-danger" data-mis-ctl="arreter">${t("Stop")}</button></div>`;
@@ -5994,8 +5970,7 @@ const AUTH_SRV = { mot_de_passe: "its password, kept in the vault", cle_generee:
 function lireAssistantServeur() {
   const a = srv.aj, val = (id) => { const e = document.getElementById(id); return e ? e.value : undefined; };
   if (!a || !$("#srv-form")) return a;
-  Object.assign(a, { hote: val("srv-hote").trim(), port: +val("srv-port") || 22, utilisateur: val("srv-utilisateur").trim(), nom: val("srv-nom").trim(),
-    roles: [...document.querySelectorAll(".srv-role:checked")].map((e) => e.value) });
+  Object.assign(a, { hote: val("srv-hote").trim(), port: +val("srv-port") || 22, utilisateur: val("srv-utilisateur").trim(), nom: val("srv-nom").trim() });
   const m = document.querySelector('[name="srv-mode"]:checked'), cle = val("srv-cle-coffre"), conf = $("#srv-confirme");
   if (m) a.mode = m.value;
   if (cle !== undefined) a.cle = cle;
@@ -6015,7 +5990,7 @@ $("#page").addEventListener("click", async (ev) => {
   if (!b) return;
   const d = b.dataset;
   if (b.name === "srv-mode") { lireAssistantServeur(); return rendrePage().then(() => { const c = $("#srv-mdp-serveur") || $("#srv-cle-importee") || $("#srv-cle-coffre"); if (c) c.focus(); }); }
-  if (d.srvAjouter !== undefined) { srv.aj = { etape: "adresse", roles: [] }; return rendrePage().then(() => $("#srv-hote").focus()); }
+  if (d.srvAjouter !== undefined) { srv.aj = { etape: "adresse" }; return rendrePage().then(() => $("#srv-hote").focus()); }
   if (d.srvFermer !== undefined) { srv.aj = null; return rendrePage(); }
   if (d.srvCopier) { const c = document.getElementById(d.srvCopier); return navigator.clipboard.writeText(c.value).then(() => toast(t("Copied."), "ok"), () => c.select()); }
   b.disabled = true;
@@ -6050,7 +6025,7 @@ $("#page").addEventListener("submit", async (ev) => {
       if (r) { Object.assign(a, { etape: "empreinte", empreinte: r.empreinte, typeCle: r.type, commande: r.commande, confirme: false, mode: a.mode || "generee" }); await rendrePage(); $("#srv-confirme").focus(); }
       return;
     }
-    const corps = { nom: a.nom, hote: a.hote, port: a.port, utilisateur: a.utilisateur, roles: a.roles, empreinte: a.empreinte, mode: a.mode };
+    const corps = { nom: a.nom, hote: a.hote, port: a.port, utilisateur: a.utilisateur, empreinte: a.empreinte, mode: a.mode };
     if (a.mode === "coffre") { corps.cle = a.cle; const m = $("#srv-mdp-athanor"); if (m) corps.mot_de_passe = m.value; }
     // secrets read here, never kept in srv.aj
     if (a.mode === "mot_de_passe" || a.mode === "generee") corps.mot_de_passe_serveur = $("#srv-mdp-serveur").value;
@@ -6191,15 +6166,12 @@ pages.serveur = async () => {
   const x = d.serveur, f = d.fiche, attente = x.etat === "inconnu";
   srv.fiche = x; // the actions below act on the server shown
   const sante = { ok: t("Reachable"), injoignable: t("Unreachable"), empreinte_changee: t("Host fingerprint changed") }[x.etat] || t("Waiting for its key");
-  const role = (r) => distant ? ((x.roles || []).includes(r) ? `<span class="badge${r === "prod" ? " badge-infra" : ""}">${r}</span>` : "")
-    : `<label class="radio"><input type="checkbox" class="srv-fiche-role" value="${r}"${(x.roles || []).includes(r) ? " checked" : ""}> ${r === "dev" ? t("dev (tests, previews)") : t("prod (your live site)")}</label>`;
   return `<div class="serveurs srv-fiche">
     <p class="m0"><a href="#serveurs" class="petit">${ic("gauche")} ${t("Servers")}</a></p>
     ${distant ? "" : messagesCoffreServeurs(c)}
     <div class="bloc srv-tete">
-      <div class="cp-tete"><h2 class="m0 cp-nom">${h(x.nom)}</h2>${x.autorisation === "ignorer" ? badgeSansGarde(x) : ""}<span class="pastille ${x.etat === "ok" ? "travaille" : "attend"}">${sante}</span></div>
+      <div class="cp-tete"><h2 class="m0 cp-nom">${h(x.nom)}</h2>${(x.roles || []).includes("prod") ? `<span class="badge badge-infra">${t("Production")}</span>` : ""}${x.autorisation === "ignorer" ? badgeSansGarde(x) : ""}<span class="pastille ${x.etat === "ok" ? "travaille" : "attend"}">${sante}</span></div>
       <div class="muet petit"><code>${h(x.utilisateur)}@${h(x.hote)}${x.port === 22 ? "" : ":" + x.port}</code>${x.empreinte_hote ? ` · ${t("Fingerprint")} <code class="srv-empreinte-courte">${h(x.empreinte_hote)}</code>` : ""}</div>
-      <div class="ligne m0"><span class="muet petit">${t("Roles")}</span>${role("dev")}${role("prod")}${distant && !x.roles.length ? `<span class="muet petit">${t("No role yet")}</span>` : ""}</div>
       <div class="ligne m0 srv-utilise"><span class="muet petit">${t("Used by")}</span>${(d.environnements || []).length ? d.environnements.map((pe) => `<a class="badge" href="#acces" data-projet="${h(pe.slice(0, pe.lastIndexOf("/")))}" data-cible="acces">${h(pe)}</a>`).join("") : `<span class="muet petit">${t("No project environment uses this server yet.")}</span>`}</div>
       <div class="muet petit srv-auth">${t("Athanor connects with: {0}", [t(AUTH_SRV[x.auth] || "an SSH key")])}${x.auth === "mot_de_passe" ? "" : " · " + (x.mot_de_passe_coupe ? t("Password logins are cut: Athanor and you connect with keys only.") : t("Password logins are still open on this server."))}</div>
       <div class="muet petit">${f && f.date ? h(t("Sheet read {0}", [dateLisible(f.date)])) : ""}${x.vu ? (f && f.date ? " · " : "") + h(t("Seen {0}", [dateLisible(x.vu)])) : ""}</div>
@@ -6325,14 +6297,6 @@ setInterval(() => {
   }
   if (fini && etat.page === "serveur") setTimeout(rendrePage, 3000);
 }, 1000);
-$("#page").addEventListener("change", async (ev) => {
-  if (etat.page !== "serveur" || !ev.target.matches(".srv-fiche-role")) return;
-  const roles = [...document.querySelectorAll(".srv-fiche-role:checked")].map((e) => e.value);
-  let p = {}; // C37: without prod, an agent may act on it as on a test server
-  if ((srv.fiche.roles || []).includes("prod") && !roles.includes("prod")) p = await preuveMdp(t("Taking the prod role away: retype Athanor's password."), { ok: t("Take prod away"), danger: true });
-  if (p && await action(api("serveurs/" + encodeURIComponent(srv.fiche.id), "POST", { roles, ...p }))) toast(t("Roles saved."), "ok");
-  rendrePage();
-});
 $("#page").addEventListener("click", async (ev) => {
   if (etat.page !== "serveur") return;
   const tout = ev.target.closest("[data-srv-tout]");

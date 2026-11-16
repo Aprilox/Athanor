@@ -224,6 +224,9 @@ func TestCaptureHub(t *testing.T) {
 			Acces: []AccesCarte{{Entree: "CLOUDFLARE_API_TOKEN", Pour: "boulangerie-martin/prod"}, {Entree: "SSH_VPS_PROD", Pour: "c0ffee01"},
 				{Entree: "STRIPE_SECRET_KEY", Pour: "boulangerie-martin"}, {Entree: "SMTP_PASSWORD", Pour: "boulangerie-martin"}},
 			JalonsEstimes: 8}
+		if r.URL.Query().Get("studio") != "" { // M248 (mission-carte-studio-*): a project alone, no server linked
+			c.Envs, c.Serveurs, c.Acces = nil, BriefCarte{}, c.Acces[2:]
+		}
 		if err := validerCarte(&c, ctx); err != nil {
 			http.Error(w, err.Error(), 500)
 			return
@@ -402,7 +405,7 @@ func TestCaptureHub(t *testing.T) {
 				pl.Etapes = append(pl.Etapes, e)
 			}
 			regle := map[bool]string{true: "oui", false: "non"}[p.env == "dev" && haut < ClasseDestructrice]
-			ap, err := s.approbations.Demander(Approbation{Projet: pl.Projet, Env: p.env, Mission: pl.Mission, Agent: pl.Agent, Action: actionPlanServeur, Raison: p.resume,
+			ap, err := s.approbations.Demander(Approbation{Projet: pl.Projet, Env: p.env, Production: p.env == "prod", Mission: pl.Mission, Agent: pl.Agent, Action: actionPlanServeur, Raison: p.resume,
 				Details: map[string]string{"serveur": p.id, "nom": p.nom, "classe": haut.String(), "etapes": fmt.Sprint(len(pl.Etapes)), "regle": regle, "seule_cle": map[bool]string{true: "oui"}[p.env == "prod"]}})
 			if err != nil {
 				http.Error(w, err.Error(), 500)
@@ -573,12 +576,13 @@ func accesCapture(t *testing.T, s *Serveur, p, p3 Projet) {
 			t.Fatal(nom, err)
 		}
 	}
-	// M112 (projet-environnements-*): prod configured on c0ffee01 with its deployment key; staging set by the script
+	// M112 (projet-environnements-*): prod configured on c0ffee01 with its deployment key; M248: staging made here (no fields left on the page)
 	if err := s.acces.modifier(func(f *fichierAcces) error {
 		projetDe(f, p.Nom).Environnements = map[string]*Environnement{"prod": {URL: "https://boutique.example.org", Serveurs: []string{"c0ffee01"},
 			Protection: "access", Politique: "accord", Deploiement: &ConfigDeploiement{Methode: "statique", Source: "git"}},
 			// M136: dev deployed after each milestone (its box ticked, its last relay in suivi-relais-clair)
-			"dev": {Serveurs: []string{}, Protection: "aucune", Politique: "accord", DeployerAuJalon: true}}
+			"dev":     {Serveurs: []string{}, Protection: "aucune", Politique: "accord", DeployerAuJalon: true},
+			"staging": {URL: "https://preprod.example.org", Serveurs: []string{"c0ffee02"}, Protection: "aucune", Politique: "auto"}}
 		projetDe(f, p.Nom).CleDeploiement = "cle-deploiement-capture"
 		return nil
 	}); err != nil {

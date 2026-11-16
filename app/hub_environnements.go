@@ -8,6 +8,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"net"
 	"net/http"
 	"net/url"
@@ -435,13 +436,15 @@ func (s *Serveur) apiEnvironnements(w http.ResponseWriter, r *http.Request) {
 	if !s.accesPret(w, projet) {
 		return
 	}
-	envs, l := s.acces.Environnements(projet), s.acces.EnvsDe(projet)
-	for _, nom := range l { // shortcut: the Environments panel still shows a card per name, until M248 lists only existing ones
-		if _, ok := envs[nom]; !ok {
-			envs[nom] = envDefaut()
+	// M248: only the environments the project has, read only on the page; prudence: those whose going back asks the password
+	envs := s.acces.Environnements(projet)
+	l, prudence := append([]string{}, slices.Sorted(maps.Keys(envs))...), []string{} // [] for an empty project, never null
+	for _, nom := range l {
+		if s.prudenceRenforcee(projet, nom) {
+			prudence = append(prudence, nom)
 		}
 	}
-	s.ecrireJSON(w, map[string]any{"projet": projet, "envs": l, "environnements": envs, "deploiements": s.deploiementsAffiches(projet), "sante": s.vueSante(projet)})
+	s.ecrireJSON(w, map[string]any{"projet": projet, "envs": l, "environnements": envs, "prudence": prudence, "deploiements": s.deploiementsAffiches(projet), "sante": s.vueSante(projet)})
 }
 
 // apiEnvironnementModifier: POST /api/projets/{nom}/environnements {env, url, serveurs, protection,
