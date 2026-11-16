@@ -591,7 +591,12 @@ func tachesServeur(id string) []TacheServeurs {
 	l := []TacheServeurs{}
 	for _, f := range fichiers {
 		var t TacheServeurs
-		if b, err := os.ReadFile(f); err == nil && json.Unmarshal(b, &t) == nil {
+		b, err := os.ReadFile(f)
+		for i := 0; err != nil && !os.IsNotExist(err) && i < 5; i++ { // Windows refuses the read while ecrireAtomique renames over it
+			time.Sleep(20 * time.Millisecond)
+			b, err = os.ReadFile(f)
+		}
+		if err == nil && json.Unmarshal(b, &t) == nil {
 			l = append(l, t)
 		}
 	}
