@@ -508,6 +508,13 @@ func changerRessource(c *CarteMission, typ, ref string, retirer bool, x contexte
 		return errMentionInconnue
 	}
 	j := slices.IndexFunc(x.entrees, func(e EntreeCoffre) bool { return e.ID == ref })
+	if retirer && typ == "cle" && j < 0 && ref != "" { // an entry to fill is not in the vault yet: removed by its name (M253)
+		n := len(c.Acces)
+		if c.Acces = slices.DeleteFunc(c.Acces, func(b AccesCarte) bool { return b.ID == "" && strings.EqualFold(b.Entree, ref) }); len(c.Acces) == n {
+			return errMentionInconnue
+		}
+		return nil
+	}
 	if ref == "" || j < 0 {
 		return errMentionInconnue
 	}

@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -141,6 +142,18 @@ func TestMissionCarteRessources(t *testing.T) {
 	}
 	if mm, err := s.resoudreMentions([]MentionDemandee{{"fournisseur", "cf1"}}); err != nil || !slices.Equal(mm.Cles, []string{jeton.ID}) {
 		t.Fatalf("provider chip: %+v %v", mm, err)
+	}
+
+	// M253: an entry to fill (not in the vault yet) is removed by its name, once; a vault entry's name is not enough
+	cr := CarteMission{Projet: ProjetCarte{Nom: "boutique"}, Acces: []AccesCarte{{Entree: "SMTP_A_REMPLIR", Pour: "boutique", ARemplir: true}, {Entree: "Jeton Cloudflare", Pour: "boutique", ID: jeton.ID}}}
+	if err := changerRessource(&cr, "cle", "smtp_a_remplir", true, contexteCarte{}, nil); err != nil || len(cr.Acces) != 1 {
+		t.Fatalf("entry to fill removed: %v %+v", err, cr.Acces)
+	}
+	if err := changerRessource(&cr, "cle", "SMTP_A_REMPLIR", true, contexteCarte{}, nil); !errors.Is(err, errMentionInconnue) {
+		t.Fatalf("removed twice: %v", err)
+	}
+	if err := changerRessource(&cr, "cle", "Jeton Cloudflare", true, contexteCarte{}, nil); !errors.Is(err, errMentionInconnue) || len(cr.Acces) != 1 {
+		t.Fatalf("a vault entry removed by its name: %v", err)
 	}
 
 	// a mission no longer proposed: its card stays as it is

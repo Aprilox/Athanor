@@ -2072,9 +2072,9 @@ const blocAttente = (tous, modules) => blocListeAccueil("a-repondre", "Waiting f
 const blocEnCours = (tous, modules, lm = []) => blocListeAccueil("en-cours", "In progress", tous.filter((e) => !e.attente && e.etat === "actif"), "Nothing in progress right now.", modules,
   lm.length ? `<ul class="mis-liste">${lm.slice(0, 3).map(ligneMission).join("")}</ul>` : "");
 // M151: mentions of the bar. A chip = { type: projet|serveur|cle|nouveau, ref, nom }; the Go checks the refs again.
-const TYPES_MENTION = { projet: "Project", serveur: "Server", cle: "Key", dossier: "Folder", nouveau: "New project" };
-const GROUPES_MENTION = { projet: "Projects", serveur: "Servers", cle: "Vault keys", dossier: "Folders" };
-const ICONES_MENTION = { projet: "projet", serveur: "serveur", cle: "cle", dossier: "dossier", nouveau: "plus" };
+const TYPES_MENTION = { projet: "Project", serveur: "Server", cle: "Key", fournisseur: "Provider", dossier: "Folder", nouveau: "New project" };
+const GROUPES_MENTION = { projet: "Projects", serveur: "Servers", cle: "Vault keys", fournisseur: "Providers", dossier: "Folders" };
+const ICONES_MENTION = { projet: "projet", serveur: "serveur", cle: "cle", fournisseur: "lien", dossier: "dossier", nouveau: "plus" };
 // a chip shows its kind (icon + label) before the name: a project and a server of the same name never look alike
 const typeMention = (m) => `${ic(ICONES_MENTION[m.type])}${m.type === "nouveau" ? "" : `<span class="puce-type">${h(t(TYPES_MENTION[m.type]))}</span>`}`;
 const pucesMentions = () => (etat.accueilMentions || []).map((m, i) => `<span class="puce-mention puce-${m.type}" title="${h(t(TYPES_MENTION[m.type]))}">${typeMention(m)}${h(m.nom)}<button type="button" class="puce-x" data-retirer-mention="${i}" aria-label="${h(t("Remove {0}", [m.nom]))}">×</button></span>`).join("");
@@ -2103,57 +2103,67 @@ function motMention(champ) {
   const r = /(^|\s)@([^\s@]*)$/.exec(champ.value.slice(0, champ.selectionStart));
   return r ? { q: r[2], debut: champ.selectionStart - r[2].length - 1 } : null;
 }
-function fermerListeMentions() {
-  const liste = $("#accueil-liste"), champ = $("#accueil-texte");
-  etat.mentionListe = null;
+// M253: one list for the home bar's @ and the card's "Add a resource": a combobox field, its listbox, its option
+// ids, how the query is read, the chips already taken, the one type asked (card) and what a choice does; etat[cle] = the open list
+const LISTES_MENTIONS = {
+  "accueil-texte": { liste: "accueil-liste", opt: "mention-opt", cle: "mentionListe", mot: motMention, pris: () => etat.accueilMentions || [], choisir: choisirMentionAccueil },
+  "mis-res-q": { liste: "mis-res-liste", opt: "mis-res-opt", cle: "missionResListe", mot: (c) => ({ q: c.value.trim(), debut: 0 }), pris: ressourcesMission, type: () => (etat.missionRes || {}).type, choisir: ajouterRessourceMission },
+};
+function fermerListeMentions(id = "accueil-texte") {
+  const cfg = LISTES_MENTIONS[id], liste = $("#" + cfg.liste), champ = $("#" + id);
+  etat[cfg.cle] = null;
   if (liste) { liste.hidden = true; liste.innerHTML = ""; }
   if (champ) { champ.setAttribute("aria-expanded", "false"); champ.removeAttribute("aria-activedescendant"); }
 }
-function rendreListeMentions() {
-  const liste = $("#accueil-liste"), champ = $("#accueil-texte"), ml = etat.mentionListe;
+function rendreListeMentions(id = "accueil-texte") {
+  const cfg = LISTES_MENTIONS[id], liste = $("#" + cfg.liste), champ = $("#" + id), ml = etat[cfg.cle], o = cfg.opt;
   if (!liste || !champ || !ml) return;
-  // the Go sends them grouped by type: a heading opens each group
-  liste.innerHTML = ml.items.length ? ml.items.map((m, i) => `${i === 0 || ml.items[i - 1].type !== m.type ? `<li role="presentation" class="mention-groupe">${ic(ICONES_MENTION[m.type])}${h(t(GROUPES_MENTION[m.type]))}</li>` : ""}<li role="option" id="mention-opt-${i}" class="mention-opt puce-${m.type}${i === ml.actif ? " actif" : ""}" aria-selected="${i === ml.actif}" data-opt="${i}">
+  // the Go sends them grouped by type: a heading opens each group (the card asks one type: no heading)
+  liste.innerHTML = ml.items.length ? ml.items.map((m, i) => `${!cfg.type && (i === 0 || ml.items[i - 1].type !== m.type) ? `<li role="presentation" class="mention-groupe">${ic(ICONES_MENTION[m.type])}${h(t(GROUPES_MENTION[m.type]))}</li>` : ""}<li role="option" id="${o}-${i}" class="mention-opt puce-${m.type}${i === ml.actif ? " actif" : ""}" aria-selected="${i === ml.actif}" data-opt="${i}">
     ${ic(ICONES_MENTION[m.type])}<span class="etiquette">${h(t(TYPES_MENTION[m.type]))}</span><b>${h(m.nom)}</b>${m.detail ? `<span class="muet petit">${h(m.detail)}</span>` : ""}</li>${(ml.autres || {})[m.type] && (i === ml.items.length - 1 || ml.items[i + 1].type !== m.type) ? `<li role="presentation" class="mention-autres muet petit">${h(ml.autres[m.type] === 1 ? t("1 more: type to filter") : t("{0} more: type to filter", [ml.autres[m.type]]))}</li>` : ""}`).join("")
     : `<li class="mention-vide muet petit" role="option" aria-disabled="true">${t("Nothing matches.")}</li>`;
   liste.hidden = false; champ.setAttribute("aria-expanded", "true");
-  if (ml.items.length) { champ.setAttribute("aria-activedescendant", "mention-opt-" + ml.actif); $("#mention-opt-" + ml.actif).scrollIntoView({ block: "nearest" }); } else champ.removeAttribute("aria-activedescendant");
+  if (ml.items.length) { champ.setAttribute("aria-activedescendant", `${o}-${ml.actif}`); $(`#${o}-${ml.actif}`).scrollIntoView({ block: "nearest" }); } else champ.removeAttribute("aria-activedescendant");
 }
-let numeroMentions = 0;
 async function chercherMentions(champ) {
-  const mot = motMention(champ);
-  if (!mot) { fermerListeMentions(); return; }
-  const n = ++numeroMentions;
+  const cfg = LISTES_MENTIONS[champ.id], mot = cfg.mot(champ);
+  if (!mot) { fermerListeMentions(champ.id); return; }
+  const n = cfg.n = (cfg.n || 0) + 1, type = cfg.type ? cfg.type() : "";
   let items = [], autres = {};
   try { // the chips already chosen are not offered again
-    const pris = new Set((etat.accueilMentions || []).map((m) => m.type + "\0" + m.ref));
-    const r = await api("mentions?q=" + encodeURIComponent(mot.q) + [...pris].map((p) => "&sauf=" + encodeURIComponent(p.replace("\0", ":"))).join(""));
+    const pris = new Set(cfg.pris().map((m) => m.type + "\0" + m.ref));
+    const r = await api("mentions?q=" + encodeURIComponent(mot.q) + (type ? "&type=" + type : "") + [...pris].map((p) => "&sauf=" + encodeURIComponent(p.replace("\0", ":"))).join(""));
     items = (r.mentions || []).filter((m) => !pris.has(m.type + "\0" + m.ref)); autres = r.autres || {};
   } catch { /* no list: the text stays as typed */ }
-  if (n !== numeroMentions || !motMention(champ)) return; // a later keystroke won
-  etat.mentionListe = { items, autres, actif: 0, debut: mot.debut };
-  rendreListeMentions();
+  if (n !== cfg.n || !cfg.mot(champ) || !champ.isConnected) return; // a later keystroke won
+  etat[cfg.cle] = { items, autres, actif: 0, debut: mot.debut };
+  rendreListeMentions(champ.id);
 }
-function choisirMention(i) {
-  const champ = $("#accueil-texte"), ml = etat.mentionListe, m = ml && ml.items[i];
-  if (!champ || !m) return;
+function choisirMention(id, i) {
+  const cfg = LISTES_MENTIONS[id], champ = $("#" + id), ml = etat[cfg.cle], m = ml && ml.items[i];
+  if (champ && m) cfg.choisir(m, champ, ml);
+}
+function choisirMentionAccueil(m, champ, ml) {
   const v = champ.value, fin = champ.selectionStart;
   champ.value = v.slice(0, ml.debut) + v.slice(fin).replace(/^\s*/, ""); // the @word goes, the text before keeps its space
   etat.accueilTexte = champ.value; champ.setSelectionRange(ml.debut, ml.debut);
   fermerListeMentions(); ajouterMention(m); champ.focus();
 }
 document.addEventListener("keydown", (ev) => {
-  if (ev.target.id !== "accueil-texte") return;
-  const ml = etat.mentionListe;
-  if (ml && ev.key === "Escape") { ev.preventDefault(); ev.stopPropagation(); fermerListeMentions(); return; }
+  const id = ev.target.id, cfg = LISTES_MENTIONS[id]; if (!cfg) return;
+  const ml = etat[cfg.cle], carte = id === "mis-res-q";
+  if ((ml || carte) && ev.key === "Escape") { ev.preventDefault(); ev.stopPropagation(); if (carte) fermerRessources(); else fermerListeMentions(id); return; }
   if (ml && ml.items.length && (ev.key === "ArrowDown" || ev.key === "ArrowUp")) {
-    ev.preventDefault(); ml.actif = (ml.actif + (ev.key === "ArrowDown" ? 1 : ml.items.length - 1)) % ml.items.length; rendreListeMentions(); return;
+    ev.preventDefault(); ml.actif = (ml.actif + (ev.key === "ArrowDown" ? 1 : ml.items.length - 1)) % ml.items.length; rendreListeMentions(id); return;
   }
-  if (ml && ml.items.length && ev.key === "Enter") { ev.preventDefault(); choisirMention(ml.actif); return; }
+  if (ml && ml.items.length && ev.key === "Enter") { ev.preventDefault(); choisirMention(id, ml.actif); return; }
   // Backspace at the very start removes the last chip
-  if (ev.key === "Backspace" && ev.target.selectionStart === 0 && ev.target.selectionEnd === 0 && (etat.accueilMentions || []).length) { etat.accueilMentions.pop(); majMentions(); }
+  if (!carte && ev.key === "Backspace" && ev.target.selectionStart === 0 && ev.target.selectionEnd === 0 && (etat.accueilMentions || []).length) { etat.accueilMentions.pop(); majMentions(); }
 });
-document.addEventListener("mousedown", (ev) => { const o = ev.target.closest("#accueil-liste [data-opt]"); if (o) { ev.preventDefault(); choisirMention(+o.dataset.opt); } });
+document.addEventListener("mousedown", (ev) => {
+  const o = ev.target.closest(".liste-mentions [data-opt]"), id = o && Object.keys(LISTES_MENTIONS).find((k) => LISTES_MENTIONS[k].liste === o.parentElement.id);
+  if (id) { ev.preventDefault(); choisirMention(id, +o.dataset.opt); }
+});
 document.addEventListener("click", (ev) => {
   const x = ev.target.closest("[data-retirer-mention]"), s = ev.target.closest("[data-mention]");
   if (x) { (etat.accueilMentions || []).splice(+x.dataset.retirerMention, 1); majMentions(); $("#accueil-texte")?.focus(); }
@@ -2218,17 +2228,30 @@ function carteMission(d) {
   const e = c.estimation || {}, actif = !travailleMission(d) && m.etat === "proposee", dis = ed ? "" : " disabled", srv = serveurLie(c);
   const avert = `<p class="mis-avert" role="note">${ic("alerte")} ${t("Native Windows mode: without a barrier, the servers' keys can be read by this mission's agents. This launch is logged.")}</p>`;
   const pol = POLITIQUES_MISSION.find((p) => p[0] === (ed ? ed.politique : m.politique)) || POLITIQUES_MISSION[0];
-  const gauche = (srv ? `<h3>${t("Environments")}</h3>${(c.envs || []).length ? `<ul class="mis-envs">${c.envs.map((x) => `<li><b>${h(x.nom)}</b>${badgeProd(x.production)} <span class="mis-url">${h(x.url || "—")}</span> <span class="muet petit">${h(envMission({ ...x, production: false }, true, nomServeur))}</span>${x.avant ? `<div class="muet petit mis-avant">${h(t("Before: {0}", [envMission(x.avant, false, nomServeur)]))}</div>` : ""}</li>`).join("")}</ul>` : `<span class="muet">—</span>`}` : "")
-    + (srv || (c.acces || []).length ? `<h3>${t("Access used")}</h3>${c.avertissement_infra && !c.avertissement_serveurs ? avert : ""}${(c.acces || []).length ? `<ul class="mis-acces">${c.acces.map((a, i) => `<li><label class="case"><input type="checkbox" data-mis-acces="${i}"${(ed ? !ed.decoches.includes(i) : !a.decoche) ? " checked" : ""}${dis}> <b>${h(a.entree)}</b></label> ${a.type ? `<span class="etiquette">${h(a.type)}</span>` : ""}${a.a_remplir ? ` <span class="badge mis-remplir">${t("to fill")}</span>` : ""} <span class="muet petit">${t("used for {0}", [h(nomServeur(a.pour))])}</span></li>`).join("")}</ul>` : `<span class="muet">${t("No vault entry.")}</span>`}` : "");
+  const gauche = (srv ? `<h3>${t("Environments")}</h3>${(c.envs || []).length ? `<ul class="mis-envs">${c.envs.map((x) => `<li><b>${h(x.nom)}</b>${badgeProd(x.production)} <span class="mis-url">${h(x.url || "—")}</span> <span class="muet petit">${h(envMission({ ...x, production: false }, true, nomServeur))}</span>${x.avant ? `<div class="muet petit mis-avant">${h(t("Before: {0}", [envMission(x.avant, false, nomServeur)]))}</div>` : ""}</li>`).join("")}</ul>` : `<span class="muet">—</span>`}` : "");
+  // M253: the resources chosen, as removable chips, and "Add a resource" (category, then a list with a search)
+  const mr = actif && etat.missionRes && etat.missionRes.id === m.id ? etat.missionRes : null, res = ressourcesMission();
+  const puce = (r, i) => `<span class="puce-mention puce-${r.type}"${r.pour ? ` title="${h(t("used for {0}", [r.pour]))}"` : ""}>${typeMention(r)}${h(r.nom)}${r.remplir ? ` <span class="badge mis-remplir">${t("to fill")}</span>` : ""}${actif ? `<button type="button" class="puce-x" data-mis-retirer="${i}" aria-label="${h(t("Remove {0}", [r.nom]))}">×</button>` : ""}</span>`;
+  const cats = [["serveur", "Server"], ["cle", "Key"], ["fournisseur", "API / provider"]].filter(([k]) => k !== "serveur" || !(etat.vue || {}).distant); // B84: a server is added on the PC
+  const chercher = { serveur: "Find a server", cle: "Find a vault key", fournisseur: "Find an API or a provider" };
+  const menu = !mr ? "" : `<div class="mis-res-menu" id="mis-res">${mr.type ? `<label for="mis-res-q" class="petit">${t(chercher[mr.type])}</label>
+      <input type="text" id="mis-res-q" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="mis-res-liste">
+      <ul id="mis-res-liste" class="liste-mentions mis-res-liste" role="listbox" aria-label="${h(t(chercher[mr.type]))}" hidden></ul>`
+    : `<p class="m0 petit" id="mis-res-quoi">${t("What do you want to add?")}</p><div class="ligne m0" role="group" aria-labelledby="mis-res-quoi">${cats.map(([k, l]) => `<button type="button" class="btn btn-petit" data-mis-res-type="${k}">${ic(ICONES_MENTION[k])}${t(l)}</button>`).join("")}</div>`}
+      <div class="ligne m0">${mr.type ? `<button type="button" class="btn btn-petit" data-mis-res-retour>${t("Back")}</button>` : ""}<span class="espace"></span><button type="button" class="btn btn-petit" data-mis-res-fermer>${t("Close")}</button></div></div>`;
+  const ressources = `<div class="mis-ressources"><h3 id="mis-res-titre">${t("Resources")}</h3>${c.avertissement_infra && !c.avertissement_serveurs ? avert : ""}
+      <div class="ligne m0 mis-res-puces" role="group" aria-labelledby="mis-res-titre">${res.map(puce).join("") || `<span class="muet petit">${t("No resource yet: add a server, a key or an API if the project needs one.")}</span>`}
+      ${actif ? `<button type="button" class="btn btn-petit" id="mis-res-ajouter" aria-expanded="${!!mr}" aria-controls="mis-res">${ic("plus")}${t("Add a resource")}</button>` : ""}</div>${menu}</div>`;
   return `<div class="mis-voies${srv ? "" : " mis-une"}">
       <div class="mis-voie"><h3>${t((etat.hubModules || []).find((m) => m.id === "dev")?.nom || "dev")}</h3><p class="m0"><b>${h(c.projet.nom)}</b> <span class="etiquette">${t(c.projet.nouveau ? "New project" : "Existing project")}</span></p><p class="mis-brief">${h(c.dev.brief || "")}</p>${c.dev.modes ? `<p class="m0">${[["parallele", "Parallel mode"], ["eco", "Eco mode"], ["rapide", "Fast mode"]].filter(([k]) => c.dev.modes[k]).map(([, n]) => `<span class="etiquette">${t(n)}</span>`).join(" ")}</p>` : ""}</div>
       ${srv ? `<div class="mis-voie"><h3>${t("Servers")}</h3>${c.avertissement_serveurs ? avert : ""}<p class="mis-brief">${h(c.serveurs.brief || t("Nothing to prepare on the servers."))}</p></div>` : ""}
     </div>
+    ${ressources}
     <div class="mis-grille">
       ${gauche ? `<div>${gauche}</div>` : ""}
       <div>${(c.approbations || []).length ? `<h3>${t("I will ask for your approval for")}</h3>${liste(c.approbations.map((a) => t(APPROBATIONS_PREVUES[a.type] || a.type, [a.cible || ""])))}` : ""}
         <h3>${t("What will be touched")}</h3><dl class="fiche mis-touche">
-          ${srv ? `<dt>${t("Servers")}</dt><dd>${liste(c.touche.serveurs)}</dd><dt>${t("DNS names")}</dt><dd>${liste(c.touche.dns)}</dd>` : ""}
+          ${srv ? `<dt>${t("DNS names")}</dt><dd>${liste(c.touche.dns)}</dd>` : ""}
           <dt>${t("Files")}</dt><dd>${liste(c.touche.fichiers)}</dd><dt>${t("Folder")}</dt><dd>${c.touche.dossier ? h(c.touche.dossier) : t("A new folder for the project")}</dd></dl>
         ${gauche ? estimationMission(e) : ""}</div>
       ${gauche ? "" : `<div>${estimationMission(e)}</div>`}
@@ -2241,6 +2264,31 @@ function carteMission(d) {
 }
 const estimationMission = (e) => `<h3>${t("Estimate")}</h3><p class="m0">${t("{0} to {1} of work, about {2} milestones", [heuresMission(e.minutes_min), heuresMission(e.minutes_max), e.jalons])}</p>
         <p class="muet petit m0">${e.cout_max ? t("About {0} $ to {1} $ of quota (list price)", [e.cout_min, e.cout_max]) : t("Quota unknown until a first cycle is measured on this PC.")}</p>`;
+// M253: the card's resources: its servers (one chip each) and its vault entries (one chip per entry, the unticked ones
+// left out); ref = what POST /ressources takes (an entry to fill, not in the vault yet, goes by its name)
+function ressourcesMission() {
+  const c = ((etat.missionVue || {}).mission || {}).carte || {}, l = [];
+  const nom = (r) => ((etat.mentionsSugg || []).find((x) => x.type === "serveur" && x.ref === r) || {}).nom || (etat.nomsServeurs || {})[r] || r;
+  for (const e of c.envs || []) for (const r of e.serveurs || []) if (!l.some((x) => x.ref === r)) l.push({ type: "serveur", ref: r, nom: nom(r) });
+  for (const a of c.acces || []) if (!a.decoche && !l.some((x) => x.type === "cle" && x.nom === a.entree)) l.push({ type: "cle", ref: a.id || a.entree, nom: a.entree, remplir: a.a_remplir, pour: nom(a.pour) });
+  return l;
+}
+function fermerRessources() { etat.missionRes = null; majZoneMission(); $("#mis-res-ajouter")?.focus(); }
+async function ajouterRessourceMission(m) {
+  if (m.type === "serveur") (etat.nomsServeurs = etat.nomsServeurs || {})[m.ref] = m.nom;
+  if (await actionMission("ressources", { type: m.type, ref: m.ref })) fermerRessources();
+}
+document.addEventListener("click", async (ev) => {
+  const d = etat.missionVue, b = ev.target.closest("#mis-res-ajouter, [data-mis-res-type], [data-mis-res-retour], [data-mis-res-fermer], [data-mis-retirer]"); if (!b || !d) return;
+  if (b.dataset.misRetirer !== undefined) {
+    const r = ressourcesMission()[+b.dataset.misRetirer];
+    if (r && await actionMission("ressources", { type: r.type, ref: r.ref, retirer: true })) $("#mis-res-ajouter")?.focus();
+  } else if (b.dataset.misResFermer !== undefined || (b.id === "mis-res-ajouter" && etat.missionRes)) fermerRessources();
+  else {
+    etat.missionRes = { id: d.mission.id, type: b.dataset.misResType || "" }; majZoneMission();
+    const q = $("#mis-res-q"); if (q) { q.focus(); chercherMentions(q); } else $("[data-mis-res-type]")?.focus();
+  }
+});
 function zoneMission() {
   const d = etat.missionVue; if (!d) return "";
   const m = d.mission, q = (m.questions || []).find((x) => !x.reponse), fin = (m.historique || []).slice(-1)[0] || {};
@@ -2282,11 +2330,11 @@ document.addEventListener("click", async (ev) => {
   const b = ev.target.closest("[data-mis], [data-mis-choix]"), d = etat.missionVue; if (!b || !d) return;
   const m = d.mission, a = b.dataset.mis;
   if (b.dataset.misChoix !== undefined) { const q = m.questions.find((x) => !x.reponse); etat.missionReponse = ""; await actionMission("repondre", { question: q.id, choix: q.choix[+b.dataset.misChoix] }); return; }
-  if (a === "modifier") { etat.missionEdition = { id: m.id, decoches: m.carte.acces.map((x, i) => x.decoche ? i : -1).filter((i) => i >= 0), politique: m.politique, consigne: "" }; majZoneMission(); $("#mission-zone input[type=checkbox], #mission-zone input[type=radio], #mis-consigne")?.focus(); }
+  if (a === "modifier") { etat.missionEdition = { id: m.id, politique: m.politique, consigne: "" }; etat.missionRes = null; majZoneMission(); $("#mission-zone input[type=radio], #mis-consigne")?.focus(); }
   else if (a === "fermer") { etat.missionEdition = null; majZoneMission(); }
   else if (a === "appliquer") {
     const ed = etat.missionEdition, consigne = ed.consigne.trim();
-    const r = await actionMission("modifier", { acces_decoches: ed.decoches.map((i) => ({ entree: m.carte.acces[i].entree, pour: m.carte.acces[i].pour })), politique: ed.politique, ...(consigne ? { consigne } : {}) });
+    const r = await actionMission("modifier", { acces_decoches: (m.carte.acces || []).filter((x) => x.decoche).map((x) => ({ entree: x.entree, pour: x.pour })), politique: ed.politique, ...(consigne ? { consigne } : {}) });
     if (r) { etat.missionEdition = null; majZoneMission(); }
   } else if (a === "lancer") { // C78: launching gives the card's keys, as the Access page does
     const p =await preuveMdp(t("Launching the mission gives its keys to the project: retype Athanor's password."), { ok: t("Launch") });
@@ -2297,8 +2345,7 @@ document.addEventListener("click", async (ev) => {
 });
 document.addEventListener("change", (ev) => {
   const ed = etat.missionEdition; if (!ed) return;
-  if (ev.target.dataset.misAcces !== undefined) { const i = +ev.target.dataset.misAcces; ed.decoches = ev.target.checked ? ed.decoches.filter((x) => x !== i) : [...ed.decoches, i]; }
-  else if (ev.target.name === "mis-politique") ed.politique = ev.target.value;
+  if (ev.target.name === "mis-politique") ed.politique = ev.target.value;
 });
 document.addEventListener("input", (ev) => { if (ev.target.id === "mis-consigne" && etat.missionEdition) etat.missionEdition.consigne = ev.target.value; else if (ev.target.id === "mis-q-libre") etat.missionReponse = ev.target.value; });
 document.addEventListener("submit", async (ev) => {
@@ -2519,7 +2566,7 @@ document.addEventListener("change", async (ev) => {
   if (ev.target.matches("#hub-pouvoirs [data-dossier-acces]")) return changerPouvoirs({ dossiers: (etat.hubChat.pouvoirs.dossiers || []).map((x, i) => i === +ev.target.dataset.dossierAcces ? { ...x, ecriture: !!ev.target.value } : x) });
   if (ev.target.matches("#hub-pouvoirs [data-pouvoir]")) changerPouvoirs({ [ev.target.dataset.pouvoir]: ev.target.checked });
 });
-document.addEventListener("input", (ev) => { if (ev.target.id === "accueil-texte") { etat.accueilTexte = ev.target.value; chercherMentions(ev.target); } });
+document.addEventListener("input", (ev) => { if (ev.target.id === "accueil-texte") etat.accueilTexte = ev.target.value; if (LISTES_MENTIONS[ev.target.id]) chercherMentions(ev.target); });
 
 pages.suivi = async () => {
   const v = etat.vue; if (!v) return "";
