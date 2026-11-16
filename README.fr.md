@@ -379,7 +379,7 @@ Les captures montrent les palettes sombre « Ardoise » et « Clair ».
 
 | Page | Ce qu'on y fait |
 |---|---|
-| **Suivi** | l'état en une phrase, le jalon en cours, le dernier commit de cet ordinateur et le dernier sur GitHub (et pourquoi un envoi n'est pas parti), le plan coché, les ordinateurs qui travaillent sur le projet (ce que chacun construit ; replié tant que le projet ne se fait pas à plusieurs ordinateurs), le quota de l'abonnement (5 heures, la semaine) avec un arrêt automatique au seuil choisi (avec une clé API : la dépense API face à votre budget), l'avancement et sa projection (quand le dernier jalon devrait tomber, en temps et en coût), la consommation par cycle (durée, coût catalogue, cache) ; *Démarrer*, *Arrêter après le cycle*, *Arrêter maintenant*, *Mode de travail* |
+| **Suivi** | l'état en une phrase, le jalon en cours, le dernier commit de cet ordinateur et le dernier sur GitHub (et pourquoi un envoi n'est pas parti), le plan coché, les ordinateurs qui travaillent sur le projet (ce que chacun construit ; replié tant que le projet ne se fait pas à plusieurs ordinateurs), le quota de l'abonnement (5 heures, la semaine) avec un arrêt automatique au seuil choisi (avec une clé API : la dépense API face à votre budget), l'avancement et sa projection (quand le dernier jalon devrait tomber, en temps et en coût), la consommation par cycle (durée, coût catalogue, cache) ; *Démarrer*, *Arrêter* (terminer le jalon en cours, ou arrêter maintenant), *Mode de travail* |
 | **Équipe** | un arbre : le chef et chaque ouvrier avec les sous-agents qu'il a appelés ; un clic sur un sous-agent montre la consigne reçue et le rapport rendu ; le modèle de chacun ; qui peut être appelé, et la bibliothèque de vos sous-agents (créer, modifier, supprimer, un interrupteur par projet) |
 | **Pour vous** | ce dont Claude a besoin de vous : chaque tâche avec ses étapes et ses liens, un champ protégé pour chaque clé demandée, des fichiers ; *C'est fait* ou *Passer : trouve une autre solution* ; le verdict de Claude (vérifiée, ou ce qui manque encore) et l'historique. Une pastille dans le menu, un bandeau sur le *Suivi* et une notification système annoncent une nouvelle tâche |
 | **Demandes** | la demande en cours et son plan, les demandes à la suite (horodatées, réordonnables), les remarques en cours de route ; ✨ *Améliorer avec Claude* reformule une demande plus claire et plus complète, et vous pouvez revenir à la vôtre ; 📎 joignez des fichiers à une demande (cahier des charges, maquettes, photos, PDF, données) : ils restent dans l'atelier et Claude les lit avec la demande |
@@ -793,7 +793,7 @@ Tout ce que Claude Code peut construire et vérifier seul dans un dossier : site
 <details>
 <summary><b>Puis-je le guider pendant qu'il travaille ?</b></summary>
 
-Oui. *Demandes → Remarque en cours de route* est lue au début du cycle suivant. Les nouvelles demandes vont dans la file et se réordonnent. *Arrêter après le cycle* termine le jalon en cours, l'enregistre, puis s'arrête : rien n'est perdu.
+Oui. *Demandes → Remarque en cours de route* est lue au début du cycle suivant. Les nouvelles demandes vont dans la file et se réordonnent. *Arrêter › Terminer le jalon en cours* l'achève, l'enregistre, puis s'arrête : rien n'est perdu.
 </details>
 
 <details>

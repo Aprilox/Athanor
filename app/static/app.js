@@ -237,7 +237,7 @@ function annoncerRecuperation(r) {
     "aucun": [t("GitHub's branch {0} has no commit yet: nothing to bring in.", [r.branche || "main"]), "ok"],
     "conflit": [t("GitHub's work and this folder's change the same lines: nothing was changed yet. Claude merges them at the start of the next cycle, keeping both."), "ok"],
     "sale": [t("This folder has changes not committed: save them first (Save and push the work in progress), then get GitHub's work."), "erreur"],
-    "pilote": [t("The pilot is running: stop it first (Stop after cycle), then get GitHub's work."), "erreur"],
+    "pilote": [t("The pilot is running: stop it first (Stop › Finish the current milestone), then get GitHub's work."), "erreur"],
   }[n] || [t("GitHub's work not brought in: {0}", [r.detail || n || "?"]), "erreur"];
   toast(textes[0], textes[1]);
   return ["a-jour", "fusion", "rejoint", "aucun", "conflit"].includes(n);
@@ -953,8 +953,7 @@ function rendreBandeau(v) {
       if (attente.includes("reglages") && !v.arret_demande) boutons.push(`<button class="btn btn-attente" data-act="redemarrer-apres-cycle" title="${h(t("The pilot runs with the settings it started with. Click to restart it at the end of this cycle."))}">${ic("actualiser")} ${t("New settings: restart after cycle")}</button>`);
       // a stop asked for the end of the cycle: the button says it, and a click withdraws it
       if (v.arret_demande) boutons.push(`<button class="btn btn-attente" data-arret="annuler" title="${h(t("Click to cancel: the pilot then goes on after this cycle."))}">${v.arret_demande === "relance" ? t(attente.includes("reglages") ? "Restart at the end of the cycle: new settings" : "Restart requested: end of cycle") : t("Stop requested: end of cycle")}</button>`);
-      else boutons.push(`<button class="btn" data-act="arreter-apres-cycle" title="${h(t("Finishes the current milestone, saves it, then stops. Nothing is lost."))}">${t("Stop after cycle")}</button>`);
-      boutons.push(`<button class="btn btn-danger" data-act="arreter" title="${h(t("Cuts the current cycle: unsaved work will be redone."))}">${t("Stop now")}</button>`);
+      boutons.push(`<button class="btn${v.arret_demande ? " btn-danger" : ""}" data-act="arreter">${t(v.arret_demande ? "Stop now" : "Stop")}</button>`);
     } else {
       // right after a click, the pilot takes a few seconds to show up: no second start
       const enDemarrage = (etat.demarrage[v.projet.nom] || 0) > Date.now();
@@ -1027,11 +1026,18 @@ async function arreterPilote(b) {
     if (c === "maintenant") { b.disabled = true; await action(api("pilote/arreter", "POST")); setTimeout(rafraichir, 800); }
     return;
   }
-  const c = await choisir(t("The current cycle is cut off: what Claude has not saved yet is lost, and will be done again at the next start.\n\nTo lose nothing, choose “Stop after cycle”: Claude finishes the current milestone, saves it, then the pilot stops by itself."), [
-    { id: "", texte: t("Cancel") }, { id: "apres", texte: t("Stop after cycle"), primaire: true }, { id: "maintenant", texte: t("Stop now"), danger: true }],
-    { titre: t("Stop the pilot now?"), large: true });
-  if (c === "maintenant") { b.disabled = true; await action(api("pilote/arreter", "POST")); setTimeout(rafraichir, 800); }
-  if (c === "apres") return arreterApresCycle(b.parentElement.querySelector('[data-act="arreter-apres-cycle"]'));
+  // M251: a pilot alone has two ways (its pause is a stop now: Start picks it up where it stopped)
+  const c = await choisirArret(t("Stop the pilot?"), ["jalon", "immediat"], {
+    jalon: "Finish the current milestone: Claude completes it and saves it, then the pilot stops. Nothing is lost.",
+    immediat: "Stop now: the current cycle is cut off; what Claude has not saved yet is done again at the next Start." });
+  if (c === "immediat") { b.disabled = true; await action(api("pilote/arreter", "POST")); setTimeout(rafraichir, 800); }
+  if (c === "jalon") return arreterApresCycle(b);
+}
+// M251: the ways to stop offered (jalon, pause, immediat), each said in one paragraph; the choice, or null
+const LIBELLES_ARRET = { jalon: "Finish the current milestone", pause: "Pause", immediat: "Stop now" };
+function choisirArret(titre, modes, textes) {
+  return choisir(modes.map((x) => t(textes[x])).join("\n\n"), [{ id: "", texte: t("Cancel") },
+    ...modes.map((x) => ({ id: x, texte: t(LIBELLES_ARRET[x]), primaire: x === "jalon", danger: x === "immediat" }))], { titre, large: true });
 }
 async function arreterApresCycle(b) {
   if (b) { b.disabled = true; b.textContent = t("Stop requested: end of cycle"); }
@@ -2189,7 +2195,7 @@ pages.accueil = async () => {
     </form>
     <div id="mission-zone" aria-live="polite">${zoneMission()}</div>
     ${blocAttente(d.elements || [], modules)}
-    ${blocEnCours(d.elements || [], modules, lm.filter((x) => ["acceptee", "lancee", "en_pause"].includes(x.etat)))}
+    ${blocEnCours(d.elements || [], modules, lm.filter((x) => ["acceptee", "lancee", "en_pause", "arret_demande"].includes(x.etat)))}
     <div class="grille-hub">${modules.filter((m) => ((m.resume || {}).stats || []).length).map(tuileModule).join("")}</div>
   </div>`;
 };
@@ -2702,7 +2708,7 @@ const GUIDE = [
       ["Follow and answer", "*Overview* shows the milestone in progress, the plan and your quota. *For you* lists what only you can do (create an account, give a key, read a code received by SMS): answer there, Claude checks it.", "#pourvous", "For you"],
       ["Add along the way", "A new request waits in the queue and joins the plan at the next cycle. *Chat* answers your questions about the project at any time."],
     ],
-    note: "*Stop after cycle* lets the current milestone finish, *Stop now* cuts it. Everything is kept in files: the pilot resumes where it stopped, even after the computer restarts." },
+    note: "*Stop* offers *Finish the current milestone*, which loses nothing, or *Stop now*, which cuts it. Everything is kept in files: the pilot resumes where it stopped, even after the computer restarts." },
   { id: "hub", titre: "Finding your way", intro: "Athanor Hub opens on its home page: what is going on and what needs you, at a glance. Each part of Athanor is a module with its own entry in the menu: *Studio*, the projects Claude builds, the *Vault*, your keys, then *Servers*, *E-mail* and *Missions*.",
     etapes: [
       ["The menu", "On the left: *Home*, *Projects*, then one entry per module (*Studio*, *Vault*, *Servers*, *E-mail*, *Missions*), and *Settings* at the bottom. A module's entry opens the page you last saw in it. On a phone, the *Menu* button opens the menu, and a tap on an entry closes it.", "#accueil", "Home"],
@@ -2853,12 +2859,12 @@ const GUIDE = [
     note: "Once launched, each lane follows its module's usual rules: the pilot's approvals, the Servers agent's plans and the deployments of *Guide › Put a site online*. What a mission does, step by step: docs/MISSIONS.md in the repository." },
   { id: "mission-direct", titre: "Follow a mission", intro: "Once launched, a mission has its own page: what Studio and Servers are doing side by side, the relay from a delivered milestone to production, and a journal in plain words. You pause it, stop it or change its policy there, and it carries on after Athanor restarts.",
     etapes: [
-      ["The mission's page", "*Missions*, in the menu, lists every mission with its state and its lanes; click one to open its page: its sentence, its state, its policy and the *Pause* and *Stop* buttons at the top. The page reads the mission again every 2 seconds while you look at it: nothing to refresh.", "#missions", "Missions"],
+      ["The mission's page", "*Missions*, in the menu, lists every mission with its state and its lanes; click one to open its page: its sentence, its state, its policy and the *Stop* button at the top. The page reads the mission again every 2 seconds while you look at it: nothing to refresh.", "#missions", "Missions"],
       ["The lanes", "*Lanes* shows the modules side by side (one under the other on a phone): *Studio* with its project and the milestone being built (“Milestone 3/8: contact form”), *Servers* with its task and the step of its plan, or *See the plan* when it waits for your agreement. Each name opens its page."],
       ["The relay", "*Relay* follows the way to production in five steps: *Milestone delivered*, *Dev deployment*, *Verification*, *Your accord*, *Production* (the first three when the mission has no prod). The steps done are ticked, the current one moves gently, a failed one turns red. The address of dev, then of prod, shows below once it exists."],
       ["The journal", "One line per event, the newest first, with its time and a short sentence: a milestone delivered, a deployment checked from outside, production waiting for your accord. Warnings are amber, errors red; 50 lines show, *See more* opens the rest. An incident on the mission's site comes at the top of the page with *Retry*, *Go back to the previous version* and *I take over*."],
       ["Production, from your phone", "Once Studio's lane is done and dev is deployed and checked on the project's last commit, Athanor asks for your accord for production: the bell, *For you* and your phone get a card with the address, the commit, the version online now and what changes (the number of new commits and the subjects of the last ones). On a paired phone, unlocked, *Accept* is enough; on the computer, retype Athanor's password. The accord is good once, for that commit and that mission; refused or expired, *Ask again* on the mission's page asks once more. No policy lets production through without it.", "#pourvous", "For you"],
-      ["Pause, stop, policy", "*Pause* stops the project's pilot and holds the mission: its Servers tasks and its deployments wait until *Resume*, which asks for Athanor's password. *Stop* ends it for good, after a confirmation: its pilot stops, its Servers tasks are cancelled and its pending accords refused, but nothing is undone: the environments and the access stay. The policy changes here too: a stricter one at once, a looser one with the password. The emergency stop pauses every mission."],
+      ["Stop, resume, policy", "*Stop* offers three ways: *Finish the current milestone* (the mission pauses once it is saved), *Pause* (the pilot stops now; the Servers tasks and the deployments wait) or *Stop now* (its pending accords are refused). Nothing is undone: the environments and the access stay, and *Resume*, with Athanor's password, picks the mission up where it stopped. The policy changes here too: a stricter one at once, a looser one with the password. The emergency stop pauses every mission."],
       ["After a restart", "Close Athanor or restart the PC: at the next start each launched mission is followed again where it was, never launched twice, and the journal says “Athanor restarted: the mission resumes”. A production accord asked before stays valid only if nothing changed since; otherwise it is refused, and *Ask again* asks once more. A mission that needs an *infra* key waits until you unlock the vault; a paused mission stays paused."],
       ["In a terminal", "On Linux and macOS, *E* in the terminal opens the same list; *Enter* shows a mission with its lanes, its relay as text and the 10 newest lines of its journal. *p* pauses it, *r* resumes it with Athanor's password, *a* stops it after a confirmation. The production accord is decided on page *6* (*For you*): *y* accepts, *r* refuses."],
     ],
@@ -5771,7 +5777,7 @@ function voieMission(v, lien) {
 }
 // M172: the relay's step under way of a launched or paused mission ("Relay: Verification"), "" otherwise
 function etapeRelais(m) {
-  const rang = m.relais && ["lancee", "en_pause"].includes(m.etat) ? RANG_RELAIS[m.relais.etape] ?? 0 : 5;
+  const rang = m.relais && ["lancee", "en_pause", "arret_demande"].includes(m.etat) ? RANG_RELAIS[m.relais.etape] ?? 0 : 5;
   return rang < 5 ? t("Relay: {0}", [t(RELAIS_MISSION[rang])]) : "";
 }
 function ligneMission(m) {
@@ -5809,7 +5815,7 @@ pages.mission = async () => {
   return `<div class="missions mis-detail">${retour}
     <div><div class="ligne m0 tuile-tete"><h2 class="m0" id="mis-titre">${h((m.carte || {}).titre || t("New mission"))}</h2><span class="badge mis-etat-${h(m.etat)}" id="mis-badge">${h(t(ETATS_MISSION[m.etat] || m.etat))}</span></div>
       <p class="muet petit mis-phrase">${h(m.phrase)}</p>${m.etat === "echec" && fin.detail ? `<p class="mis-avert" role="note">${h(fin.message ? texteMessage(fin.message) : fin.detail)}</p>` : ""}
-      ${["lancee", "en_pause"].includes(m.etat) ? controlesMission(m) : ""}</div>
+      ${["lancee", "en_pause", "arret_demande", "arretee"].includes(m.etat) ? controlesMission(m) : ""}</div>
     <div id="mission-direct" class="mis-detail">${missionDirect(m)}</div>
     ${m.carte ? `<section class="bloc mis-carte" aria-labelledby="mis-titre">${carteMission(d)}</section>` : ""}
   </div>`;
@@ -5875,17 +5881,22 @@ function missionDirect(m) {
         : `<p class="muet m0">${t("No event yet: the journal fills in as the lanes move on.")}</p>`}
     </section>`;
 }
-// M172: the header's controls of a launched or paused mission: its policy (looser = the owner's password), Pause or
-// Resume (the owner's password), Stop (confirmed: nothing is undone)
+// M172: the header's controls of a launched, paused, stopping or stopped mission: its policy (looser = the owner's
+// password), Resume (the owner's password), Stop and its ways (M251: the milestone, a pause, now; nothing is undone)
 const RIGUEUR_POLITIQUE = ["autonome", "prod", "tout"];
 function controlesMission(m) {
   return `<div class="ligne m0 mis-controles">
     ${serveurLie(m.carte) ? `<details class="mis-pol-plus"${etat.misPolOuvert ? " open" : ""}><summary>${h(t("Policy: {0}", [t((POLITIQUES_MISSION.find((p) => p[0] === m.politique) || POLITIQUES_MISSION[0])[1])]))}</summary>
       <fieldset class="mis-pol-direct"><legend>${t("Policy")}</legend>${POLITIQUES_MISSION.map(([v, l, aide]) => `<label class="radio" title="${h(t(aide))}"><input type="radio" name="mis-pol-direct" value="${v}"${m.politique === v ? " checked" : ""}> ${t(l)}</label>`).join("")}</fieldset></details>` : ""}
-    <span class="espace"></span>
-    ${m.etat === "en_pause" ? `<button type="button" class="btn btn-primaire" data-mis-ctl="reprendre">${t("Resume")}</button>` : `<button type="button" class="btn" data-mis-ctl="pause">${t("Pause")}</button>`}
-    <button type="button" class="btn btn-danger" data-mis-ctl="arreter">${t("Stop")}</button></div>`;
+    <span class="espace"></span>${m.etat === "arret_demande" ? `<span class="muet petit">${t("Stops at the end of the milestone in progress: Resume cancels this stop.")}</span>` : ""}
+    ${m.etat === "lancee" ? "" : `<button type="button" class="btn btn-primaire" data-mis-ctl="reprendre">${t("Resume")}</button>`}
+    ${m.etat === "arretee" ? "" : `<button type="button" class="btn${m.etat === "lancee" ? "" : " btn-danger"}" data-mis-ctl="arreter">${t(m.etat === "en_pause" ? "Stop now" : "Stop")}</button>`}</div>`;
 }
+// M251: the ways a mission can still stop, from its state (a paused one: only now)
+const MODES_ARRET_MISSION = { lancee: ["jalon", "pause", "immediat"], arret_demande: ["pause", "immediat"], en_pause: ["immediat"] };
+const TEXTES_ARRET_MISSION = { jalon: "Finish the current milestone: the pilot completes it and saves it, then the mission pauses. Nothing is lost.",
+  pause: "Pause: the pilot stops now; the mission, its Servers tasks and its deployments wait for Resume.",
+  immediat: "Stop now: the mission stops and its pending accords are refused. Nothing is undone: the environments and the access stay, and Resume picks it up later." };
 // P6: the incident of the mission's project (the bell's, from the health of its environments), its actions as the bell's
 function incidentMission(m) {
   const projet = ((m.voies || []).find((v) => v.module === "dev") || {}).ref;
@@ -5899,8 +5910,9 @@ function incidentMission(m) {
 document.addEventListener("click", async (ev) => {
   const b = ev.target.closest("[data-mis-ctl]"), m = (etat.missionVue || {}).mission; if (!b || !m) return;
   const a = b.dataset.misCtl;
-  if (a === "arreter" && await choisir(t("Stop the mission? Nothing will be undone: the environments and the accesses stay."), [{ id: "non", texte: t("Keep it going") }, { id: "oui", texte: t("Stop the mission"), danger: true }]) !== "oui") return;
-  const p = a === "reprendre" ? await preuveMdp(t("Resuming the mission: retype Athanor's password."), { ok: t("Resume") }) : {};
+  const mode = a === "arreter" ? await choisirArret(t("Stop the mission?"), MODES_ARRET_MISSION[m.etat] || ["immediat"], TEXTES_ARRET_MISSION) : "";
+  if (a === "arreter" && !mode) return;
+  const p = a === "reprendre" ? await preuveMdp(t("Resuming the mission: retype Athanor's password."), { ok: t("Resume") }) : mode ? { mode } : {};
   if (!p) return;
   b.disabled = true;
   if (!(await actionMission(a, p))) b.disabled = false;
@@ -5926,7 +5938,7 @@ let minuterieDirect;
 function suivreMissionDirect() {
   clearTimeout(minuterieDirect);
   const m = (etat.missionVue || {}).mission;
-  if (!m || !["lancee", "en_pause"].includes(m.etat)) return;
+  if (!m || !["lancee", "en_pause", "arret_demande"].includes(m.etat)) return;
   minuterieDirect = setTimeout(async () => {
     const ici = () => etat.page === "mission" && $("#mission-direct") && (etat.missionVue || {}).mission?.id === m.id;
     if (!ici()) return;
