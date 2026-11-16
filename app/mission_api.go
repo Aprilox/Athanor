@@ -147,6 +147,8 @@ func (s *Serveur) voiesEnDirect(m Mission) Mission {
 		case "servers":
 			if t, ok := tacheMission(v.Ref); ok && len(t.Serveurs) > 0 {
 				v.Actuel, v.Serveur = t.Etat, t.Serveurs[0]
+			} else if v.Etat == "attente_plan" { // M249: prepared once the project's plan exists
+				v.Actuel = v.Etat
 			} else if v.Etat != "refusee" {
 				v.Actuel = "inconnu"
 			}

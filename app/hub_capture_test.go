@@ -332,6 +332,15 @@ func TestCaptureHub(t *testing.T) {
 					x.Journal = append(slices.Clone(x.Journal), EntreeJournal{ID: "accord:a9:refusee", T: heure.Add(4 * time.Minute).Format(formatCree),
 						Cle: "Accord not given ({2}): {0} ({1})", Params: []string{"deploiement", "prod", "refusee"}, Niveau: "attention"})
 				}
+				// M249: ?prepa=attente, the Servers lane waits for the project's plan; ?prepa=lancee, it has just started
+				switch q := r.URL.Query().Get("prepa"); {
+				case x.ID != "capture06" || q == "":
+				case q == "attente":
+					x.Voies = []VoieMission{x.Voies[0], {Module: "servers", Etat: "attente_plan", Env: "projet-01/prod"}}
+				default:
+					x.Journal = append(slices.Clone(x.Journal), EntreeJournal{ID: "prep:projet-01/prod", T: heure.Add(4 * time.Minute).Format(formatCree),
+						Cle: "The plan is ready: the Servers lane prepares {0}", Params: []string{"prod"}, Niveau: "info"})
+				}
 				if x.ID == "capture06" && r.URL.Query().Get("incident") != "" {
 					x.Relais = &RelaisMission{Etape: "prod_deploye", Commit: x.Relais.Commit, DeploiementDev: "d16", DeploiementProd: "p1"}
 					x.Journal = append(slices.Clone(x.Journal), EntreeJournal{ID: "incident:p1", T: heure.Add(4 * time.Minute).Format(formatCree),

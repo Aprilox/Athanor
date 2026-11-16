@@ -8,8 +8,10 @@ package main
 import (
 	"cmp"
 	"encoding/json"
+	"errors"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -72,6 +74,9 @@ func (s *Serveur) observerMission(id string) bool {
 		return du
 	}
 	s.relancerVoiesDistantes(m)
+	if m.Etat == "lancee" {
+		m = s.preparerServeursMission(m)
+	}
 	evts, relais := s.evenementsMission(m)
 	m, err = modifierMission(id, func(m *Mission) error {
 		if !missionSuivie(m.Etat) {
@@ -88,6 +93,63 @@ func (s *Serveur) observerMission(id string) bool {
 	s.finirMissionDistante(id)
 	m, err = lireMission(id)
 	return err == nil && missionSuivie(m.Etat)
+}
+
+var verrouPreparation sync.Mutex
+
+// preparerServeursMission (M249): m's Servers lanes waiting for the plan launched once it exists, each recorded at
+// once with its task (a restart or a relay finds its Ref and launches nothing again), journalled and audited.
+func (s *Serveur) preparerServeursMission(m Mission) Mission {
+	attend := func(v VoieMission) bool { return v.Module == "servers" && v.Etat == "attente_plan" }
+	if !slices.ContainsFunc(m.Voies, attend) {
+		return m
+	}
+	verrouPreparation.Lock() // two readings at once (the follower, a test, a relay): one launch
+	defer verrouPreparation.Unlock()
+	if x, err := lireMission(m.ID); err == nil {
+		m = x
+	}
+	p, ok := s.projetMission(m)
+	if !slices.ContainsFunc(m.Voies, attend) || !ok || !planPret(p) {
+		return m
+	}
+	var c CarteMission
+	_ = json.Unmarshal(m.Carte, &c)
+	for _, v := range m.Voies {
+		if !attend(v) {
+			continue
+		}
+		_, nom, _ := strings.Cut(v.Env, "/")
+		x, err := VoieMission{}, errors.New("this environment is no longer on the card")
+		if k := slices.IndexFunc(c.Envs, func(e EnvCarte) bool { return e.Nom == nom && len(e.Serveurs) > 0 }); k >= 0 {
+			x, err = s.lancerPreparation(c, c.Envs[k], p, "mission")
+		}
+		now := time.Now()
+		e := s.entreeJournal("prep:"+v.Env, now, "info", "The plan is ready: the Servers lane prepares {0}", nom)
+		if err != nil {
+			x = VoieMission{Module: "servers", Etat: "echec", Env: v.Env}
+			e = s.entreeJournal("prep:"+v.Env, now, "erreur", "The Servers preparation of {0} could not start: {1}", nom, err.Error())
+		}
+		suite, errM := modifierMission(m.ID, func(mm *Mission) error {
+			i := slices.IndexFunc(mm.Voies, func(y VoieMission) bool { return attend(y) && y.Env == v.Env })
+			if mm.Etat != "lancee" || i < 0 {
+				return errMissionInconnue
+			}
+			mm.Voies[i] = x
+			ajouterJournal(mm, []EntreeJournal{e})
+			return nil
+		})
+		if errM != nil { // stopped or paused meanwhile: the task just launched is not left behind
+			if x.Ref != "" {
+				s.arreterTache(x.Ref)
+			}
+			return m
+		}
+		m = suite
+		s.ecrireAudit(LigneAudit{Type: "evenement", De: "mission", Vers: "servers", Mission: m.ID, Projet: p.Nom, Env: nom,
+			Action: "préparation des serveurs", Resultat: cmp.Or(x.Ref, "échec") + " (" + v.Env + ")"})
+	}
+	return m
 }
 
 // ajouterJournal: evts not written yet added in time order; at maxJournalMission, the oldest removed, and an

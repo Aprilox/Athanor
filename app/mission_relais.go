@@ -189,6 +189,9 @@ func prodPrete(vues []VoieMission, projet, env string) bool {
 		if v.Module != "servers" {
 			continue
 		}
+		if v.Etat == "attente_plan" && v.Env == projet+"/"+env { // M249: its preparation has not even started
+			return false
+		}
 		if t, ok := tacheMission(v.Ref); ok && t.Env == projet+"/"+env && t.Etat != "finie" {
 			return false
 		}

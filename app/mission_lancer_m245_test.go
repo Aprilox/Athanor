@@ -59,6 +59,7 @@ func TestMissionLancerNatifM245(t *testing.T) {
 		t.Helper()
 		p := Projet{Nom: nom, Dossier: filepath.Join(base, nom)}
 		ecrireFichier(t, p.Demande(), "# "+nom+"\n\nUn projet.\n", 0o644)
+		ecrireFichier(t, p.Plan(), "# Plan\n\n- [ ] M1 : Le site\n", 0o644) // M249: framed already, the Servers lane starts at once
 		s.config.Projets = append(s.config.Projets, p)
 		if force {
 			if err := s.acces.ForcerInfra(nom, true); err != nil {

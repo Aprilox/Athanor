@@ -44,6 +44,7 @@ type VoieMission struct {
 	Total    int    `json:"total,omitempty"`
 	Titre    string `json:"titre,omitempty"`
 	Activite string `json:"activite,omitempty"`
+	Env      string `json:"env,omitempty"` // a Servers lane (M249): its "project/env", prepared once the project's plan exists
 }
 
 // QuestionMission: a question of the orchestrator to the owner (at most 4 choices), with the answer.

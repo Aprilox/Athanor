@@ -48,6 +48,7 @@ func TestMissionLancer(t *testing.T) {
 	base := t.TempDir()
 	boutique := Projet{Nom: "boutique", Dossier: filepath.Join(base, "boutique")}
 	ecrireFichier(t, boutique.Demande(), "# Boutique\n\nUne boutique en ligne.\n", 0o644)
+	ecrireFichier(t, boutique.Plan(), "# Plan\n\n- [x] M1 : Boutique en ligne\n", 0o644) // M249: framed already, its Servers lane starts at the launch
 	s.config.Projets = append(s.config.Projets, boutique)
 	mux := http.NewServeMux()
 	s.routes(mux)
@@ -215,6 +216,17 @@ func TestMissionLancer(t *testing.T) {
 	}
 	if pr := envs["prod"]; pr.URL != "https://martin.fr" || pr.Politique != "accord" || pr.DeployerAuJalon || !slices.Equal(pr.Serveurs, []string{"a1"}) {
 		t.Fatalf("prod: %+v", pr)
+	}
+	// M249: a new project has no plan yet: both Servers lanes wait for it, then start once (the follower's reading)
+	if len(consignes) != 0 || m.Voies[1].Etat != "attente_plan" || m.Voies[1].Ref != "" || m.Voies[2].Env != "boulangerie-martin/prod" {
+		t.Fatalf("Servers lanes before the plan: %+v, tasks %d", m.Voies, len(consignes))
+	}
+	ecrireFichier(t, p.Plan(), "# Plan\n\n- [ ] M1 : Le site vitrine avec les horaires\n", 0o644)
+	s.observerMission(neuf)
+	s.observerMission(neuf)
+	finies()
+	if m, _ = lireMission(neuf); m.Voies[1].Ref == "" || m.Voies[2].Ref == "" || m.Voies[1].Etat == "attente_plan" {
+		t.Fatalf("Servers lanes after the plan: %+v", m.Voies)
 	}
 	if len(consignes) != 2 || !slices.ContainsFunc(consignes, func(c string) bool {
 		return strings.Contains(c, "DNS, certificats et Caddy") && strings.Contains(c, "environment prod: https://martin.fr")

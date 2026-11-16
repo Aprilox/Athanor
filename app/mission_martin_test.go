@@ -206,6 +206,18 @@ func TestMissionCarteMartin(t *testing.T) {
 		m.Voies[1].Module != "servers" || m.Voies[2].Module != "servers" || !slices.Equal(pilotes, []string{"boulangerie-martin"}) {
 		t.Fatalf("launched: %+v, pilots %v", m, pilotes)
 	}
+	// M249: the new project's plan written by its framing: the follower's next reading starts both Servers lanes
+	ecrireFichier(t, (Projet{Dossier: filepath.Join(base, "boulangerie-martin")}).Plan(), "# Plan\n\n- [ ] M1 : Le site vitrine\n", 0o644)
+	s.observerMission(id)
+	for i := 0; i < 400; i++ {
+		tachesEnCours.Lock()
+		n := len(tachesEnCours.m)
+		tachesEnCours.Unlock()
+		if n == 0 {
+			break
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
 	mu.Lock()
 	if len(taches) != 2 || !slices.ContainsFunc(taches, func(x string) bool { return strings.Contains(x, "https://dev.martin.fr") }) ||
 		!slices.ContainsFunc(taches, func(x string) bool { return strings.Contains(x, "environment prod: https://martin.fr") }) {

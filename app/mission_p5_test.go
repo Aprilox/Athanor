@@ -394,6 +394,10 @@ func TestMissionP5(t *testing.T) {
 	if d, pr := envs["dev"], envs["prod"]; d.Protection != "auth_proxy" || !d.DeployerAuJalon || d.Fournisseur != "f1" || pr.Politique != "accord" || pr.Fournisseur != "f1" {
 		t.Fatalf("environments: %+v %+v", d, pr)
 	}
+	// M249: the new project's framing writes its plan; the follower's next reading starts both Servers preparations
+	ecrireFichier(t, p.Plan(), "# Plan\n\n- [ ] M1 : Le site vitrine\n", 0o644)
+	cur.observerMission(mid)
+	m, _ = lireMission(mid)
 	taches := map[string]string{}
 	for _, voie := range m.Voies[1:] {
 		x, _ := tacheMission(voie.Ref)

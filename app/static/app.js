@@ -5757,6 +5757,7 @@ const voieStudio = (v) => v.module === "dev" || v.module === "dev_distant";
 function etatVoie(v) {
   if (v.etat === "refusee") return [t("Refused: native Windows mode"), "pv-vous"];
   if (!v.actuel || v.actuel === "inconnu") return [t("Not found"), "pv-vous"];
+  if (v.actuel === "attente_plan") return [t("Waiting for the project's plan"), ""]; // M249: Servers prepares once the plan exists
   if (voieStudio(v)) { const [l, c] = ETATS_VOIE_DEV[v.actuel] || [v.actuel, ""]; return [t(l), c]; }
   return ETATS_TACHE_SRV()[v.actuel] || [v.actuel, ""];
 }
@@ -5764,7 +5765,7 @@ function etatVoie(v) {
 function voieMission(v, lien) {
   const [libelle, classe] = etatVoie(v), dev = voieStudio(v), distant = v.module === "dev_distant";
   const mod = distant ? t("Remote Studio") : t((etat.hubModules || []).find((m) => m.id === v.module)?.nom || v.module);
-  const nom = distant ? v.nom || v.ref : dev ? v.ref : ((etat.mentionsSugg || []).find((x) => x.type === "serveur" && x.ref === v.serveur) || {}).nom || v.serveur || v.ref;
+  const nom = distant ? v.nom || v.ref : dev ? v.ref : ((etat.mentionsSugg || []).find((x) => x.type === "serveur" && x.ref === v.serveur) || {}).nom || v.serveur || v.ref || v.env;
   const cible = !lien || v.actuel === "inconnu" ? "" : distant ? `href="#global"` : dev ? `href="#suivi" data-projet="${h(v.ref)}" data-cible="suivi"` : v.serveur ? `href="#serveur/${encodeURIComponent(v.serveur)}"` : "";
   return `<span class="mis-voie-etat"><span class="pastille-module"><span class="ico ico-${dev ? "dev" : "serveurs"}" aria-hidden="true"></span>${h(mod)}</span>${cible ? `<a ${cible}>${h(nom)}</a>` : `<b>${h(nom)}</b>`}<span class="pv-etat ${classe}">${h(libelle)}</span>${v.detail ? `<span class="muet petit mis-voie-detail">${h(v.detail)}</span>` : ""}</span>`;
 }
