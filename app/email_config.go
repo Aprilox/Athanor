@@ -163,7 +163,7 @@ func (s *Serveur) apiEmailConfigurer(w http.ResponseWriter, r *http.Request) {
 	if !s.accesPret(w, c.Projet) {
 		return
 	}
-	if !slices.Contains(envsProjet, c.Env) {
+	if !s.acces.EnvConnu(c.Projet, c.Env) {
 		s.erreur(w, http.StatusBadRequest, errAccesEnv.Error())
 		return
 	}

@@ -113,7 +113,7 @@ func TestWebTraduction(t *testing.T) {
 	cles = append(cles, errTacheArretee.Error(), errTacheRevoquee.Error(), prefixeVerifEchouee) // a task's end (B64)
 	cles = append(cles, "This key opens the server {0}: it stays in the infra scope", "This key opens the server {0}: remove that server first")
 	cles = append(cles, errEnvURL.Error(), errEnvURLIP.Error(), errEnvURLIDN.Error(), errEnvURLPort.Error(), errEnvProtect.Error(), errEnvPolitique.Error(), errEnvProdAuto.Error(), errEnvFourn.Error(), errEnvAuthHTTP.Error(),
-		errEnvPasProd, errEnvProd, "Take this server out of these environments first: {0}") // the Environments panel (M112)
+		errEnvNom.Error(), errEnvRelais.Error(), errAccesEnv.Error()) // the Environments panel (M112)
 	cles = append(cles, errFournisseursFichier.Error(), errFournisseurCle.Error(), errFournisseurPortee.Error(), errFournisseurNom.Error(),
 		errFournisseurUtilise, "This Cloudflare token has expired: create a new one and replace it in the Vault.",
 		"This Cloudflare token is disabled: enable it again on Cloudflare or replace it.",

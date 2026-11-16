@@ -146,12 +146,12 @@ func TestCleDeploiement(t *testing.T) {
 	}
 	id := lireIDCleDeploiement(dGH)
 	envs := s.acces.Environnements("demo")
-	if id == "" || s.acces.CleDeploiementProjet("demo") != l[0].ID || envs["dev"].CleDeploiement != l[0].ID || envs["prod"].CleDeploiement != l[0].ID ||
-		vueEnvironnement(envs["prod"], nil)["cle_deploiement_prete"] != true || s.acces.Environnements("autre")["dev"].CleDeploiement != "" {
+	if id == "" || s.acces.CleDeploiementProjet("demo") != l[0].ID || len(envs) != 0 || s.acces.CleDeploiementProjet("autre") != "" {
 		t.Fatalf("recorded: %q %+v", id, envs)
 	}
 	// saving an environment keeps it; already there: nothing, GitHub not called again
-	if err := s.acces.DefinirEnvironnement("demo", "dev", envDefaut()); err != nil || s.acces.Environnements("demo")["dev"].CleDeploiement != l[0].ID {
+	if err := s.acces.DefinirEnvironnement("demo", "dev", envDefaut()); err != nil || s.acces.Environnements("demo")["dev"].CleDeploiement != l[0].ID ||
+		vueEnvironnement(s.acces.Environnements("demo")["dev"], nil)["cle_deploiement_prete"] != true {
 		t.Fatal("kept on save:", err)
 	}
 	if code, v := creer("demo"); code != 200 || v["deja"] != true || len(cles()) != 1 || lireTrace() != attendu {

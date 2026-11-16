@@ -236,12 +236,6 @@ func (s *Serveur) apiServeurModifier(w http.ResponseWriter, r *http.Request) {
 		if i >= 0 && slices.Contains(liste[i].Roles, "prod") && !slices.Contains(roles, "prod") && !s.preuveServeur(w, r, c.MotDePasse, "retrait du rôle prod refusé", liste[i].Nom) {
 			return // C37: without prod an agent may act on it as on a test server
 		}
-		if i >= 0 && s.acces != nil {
-			if l := s.acces.envsIncompatibles(liste[i].ID, roles); len(l) > 0 {
-				s.erreurArgs(w, http.StatusConflict, "Take this server out of these environments first: {0}", strings.Join(l, ", "))
-				return // a prod server in a dev environment would be deployed to without approval
-			}
-		}
 	}
 	var rendu, avant ServeurInventaire
 	err := modifierServeurs(func(l []ServeurInventaire) ([]ServeurInventaire, error) {

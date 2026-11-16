@@ -32,13 +32,19 @@ func oublierRelais(projet string) {
 // TestRelaisJalon (M136): only dev takes the relay; a milestone done is relayed once (not again, not after a
 // restart); without a method it fails into the bell; a git source waits for the push, then tries anyway.
 func TestRelaisJalon(t *testing.T) {
-	for _, env := range []string{"prod", "staging"} {
-		if _, err := validerEnvironnement(env, Environnement{URL: "https://x.test", DeployerAuJalon: true}, nil); err != errEnvRelais {
-			t.Errorf("%s with the relay: %v", env, err)
+	for _, c := range []struct {
+		nom string
+		e   Environnement
+	}{{"prod", Environnement{}}, {"site", Environnement{Production: true}}} { // M246: never a Production environment
+		c.e.URL, c.e.DeployerAuJalon = "https://x.test", true
+		if _, err := validerEnvironnement(c.nom, c.e, nil); err != errEnvRelais {
+			t.Errorf("%s with the relay: %v", c.nom, err)
 		}
 	}
-	if e, err := validerEnvironnement("dev", Environnement{URL: "https://x.test", DeployerAuJalon: true}, nil); err != nil || !e.DeployerAuJalon {
-		t.Errorf("dev with the relay: %v %+v", err, e)
+	for _, env := range []string{"dev", "staging", "demo.exemple.fr"} {
+		if e, err := validerEnvironnement(env, Environnement{URL: "https://x.test", DeployerAuJalon: true}, nil); err != nil || !e.DeployerAuJalon {
+			t.Errorf("%s with the relay: %v %+v", env, err, e)
+		}
 	}
 
 	s, _, _ := serveursAjoutTest(t)

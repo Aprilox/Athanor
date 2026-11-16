@@ -71,7 +71,7 @@ func init() {
 	outilsHub["serveurs_liste"] = OutilHub{Description: "The servers you may work on: id, name, roles, state, last seen.",
 		Schema: schemaObjet(map[string]any{}), Faire: outilServeursListe}
 	outilsHub["environnement_lire"] = OutilHub{Description: "A project's environment that runs on your servers: URL, protection, deployment policy and its servers you may work on.",
-		Schema: schemaObjet(map[string]any{"projet": schemaTexte("The project's name"), "env": parmi("The environment", envsProjet...)}, "projet", "env"), Faire: outilEnvironnementLire}
+		Schema: schemaObjet(map[string]any{"projet": schemaTexte("The project's name"), "env": schemaTexte("The environment")}, "projet", "env"), Faire: outilEnvironnementLire}
 	outilsHub["serveur_fiche"] = OutilHub{Description: "A server's sheet (system, resources, ports, software, services, containers), as Athanor last read it.",
 		Schema: schemaObjet(map[string]any{"serveur": srv}, "serveur"), Faire: outilServeurFiche}
 }
@@ -346,7 +346,7 @@ func outilEnvironnementLire(s *Serveur, x SessionHub, args json.RawMessage) (str
 		return "", err
 	}
 	var e Environnement
-	if s.acces != nil && slices.Contains(envsProjet, a.Env) && slices.Contains(s.nomsProjets(), a.Projet) {
+	if s.acces != nil && s.acces.EnvConnu(a.Projet, a.Env) && slices.Contains(s.nomsProjets(), a.Projet) {
 		e = s.acces.Environnements(a.Projet)[a.Env]
 	}
 	srv := []map[string]any{}

@@ -27,7 +27,7 @@ func TestClasserDeploiement(t *testing.T) {
 		{"deployer", `{"env":"dev","methode":"k3s","source":"artefact","dossier":"k8s","commit":"` + sha + `"}`, ClasseChangement, ""}, // M139
 		{"deployer", `{"env":"dev","methode":"helm","source":"artefact","commit":"` + sha + `"}`, 0, "statique, compose or k3s"},
 		{"deployer", `{"env":"dev","methode":"statique","source":"artefact","commit":"` + sha[:12] + `"}`, 0, "full commit hash"},
-		{"deployer", `{"env":"qa","methode":"statique","source":"artefact","commit":"` + sha + `"}`, 0, "env:"},
+		{"deployer", `{"env":"../qa","methode":"statique","source":"artefact","commit":"` + sha + `"}`, 0, "env:"},
 		{"deployer", `{"env":"dev","methode":"statique","source":"artefact","commit":"` + sha + `","serveur":"x"}`, 0, "invalid arguments"},
 		{"revenir_version", `{"env":"prod"}`, ClasseChangement, ""},
 	} {

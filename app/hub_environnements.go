@@ -1,6 +1,6 @@
 package main
 
-// Stage 7: a project's environments (dev, staging, prod): its URL, the inventory servers it runs on, its
+// Stage 7: a project's environments (M246: free internal names, no dev/staging/prod label): its URL, the inventory servers it runs on, its
 // protection, its deployment policy, its DNS provider and its deployment key. They live in hub/acces.json
 // next to the grants, so renaming or deleting a project carries them along. Never a secret value: the
 // provider and the key are ids.
@@ -31,8 +31,11 @@ type Environnement struct {
 	CertificatServeurs []string `json:"certificat_serveurs,omitempty"`
 	// how it is deployed (M131), recorded by Athanor after a first deployment, never by a request
 	Deploiement *ConfigDeploiement `json:"deploiement,omitempty"`
-	// dev only (M136): the project's HEAD deployed to dev after each milestone delivered (relais_jalon.go)
+	// never on a Production environment (M136): the project's HEAD deployed after each milestone (relais_jalon.go)
 	DeployerAuJalon bool `json:"deployer_au_jalon,omitempty"`
+	// M246: stronger caution (an accord for every risky action); set by the mission when its request speaks of
+	// production, and on reading for an older "prod" environment or one on a server with the old prod role
+	Production bool `json:"production,omitempty"`
 }
 
 var (
@@ -46,7 +49,8 @@ var (
 	errEnvProtect   = erreurEntree("Unknown protection (aucune, access or auth_proxy)")
 	errEnvPolitique = erreurEntree("Unknown policy (accord or auto)")
 	errEnvProdAuto  = erreurEntree("Production always asks for your approval: its policy cannot be automatic")
-	errEnvRelais    = erreurEntree("Only dev can be deployed after each milestone: staging and production wait for a request")
+	errEnvRelais    = erreurEntree("Production is deployed on request only, never after each milestone")
+	errEnvNom       = erreurEntree("Invalid environment name: lower-case letters, digits, dots and dashes")
 	errEnvFourn     = erreurEntree("Unknown provider")
 	errEnvAuthHTTP  = erreurEntree("The password protection needs an https:// address: over http:// the password would travel in clear")
 )
@@ -65,11 +69,7 @@ func (e erreurEntreeArgs) Error() string {
 	return m
 }
 
-const (
-	errEnvPasProd  = "{0} is not a production server: production only runs on servers with the prod role"
-	errEnvProd     = "{0} is a production server: it can only be used by production"
-	errEnvHotePris = "{0} is already the address of {1}: one host name per environment"
-)
+const errEnvHotePris = "{0} is already the address of {1}: one host name per environment"
 
 // envDefaut: an environment not configured yet.
 func envDefaut() Environnement {
@@ -106,12 +106,18 @@ func validerURLEnv(brut string) (string, error) {
 	return u.String(), nil
 }
 
+// nomEnvValide (M246): an environment's internal name, also a file name (deployment history) and never "*".
+func nomEnvValide(nom string) bool {
+	return len(nom) <= 100 && nomHoteValide.MatchString(nom)
+}
+
 // validerEnvironnement checks e for environment nom against the inventory (pure: tested without HTTP).
-// A prod server only goes into prod, and prod only takes prod servers; prod's policy is always accord.
+// A Production environment's policy is always accord; any server may serve any environment (M246).
 func validerEnvironnement(nom string, e Environnement, inventaire []ServeurInventaire) (Environnement, error) {
-	if !slices.Contains(envsProjet, nom) {
-		return e, errAccesEnv
+	if !nomEnvValide(nom) {
+		return e, errEnvNom
 	}
+	e.Production = e.Production || nom == "prod" || serveurRoleProd(e.Serveurs, inventaire)
 	var err error
 	if e.URL, err = validerURLEnv(e.URL); err != nil {
 		return e, err
@@ -131,10 +137,10 @@ func validerEnvironnement(nom string, e Environnement, inventaire []ServeurInven
 	if !slices.Contains(politiquesEnv, e.Politique) {
 		return e, errEnvPolitique
 	}
-	if nom == "prod" && e.Politique != "accord" {
+	if e.Production && e.Politique != "accord" {
 		return e, errEnvProdAuto
 	}
-	if e.DeployerAuJalon && nom != "dev" {
+	if e.DeployerAuJalon && e.Production {
 		return e, errEnvRelais
 	}
 	if e.Fournisseur != "" && !idServeurValide.MatchString(e.Fournisseur) {
@@ -146,13 +152,6 @@ func validerEnvironnement(nom string, e Environnement, inventaire []ServeurInven
 		if i < 0 {
 			return e, erreurEntree(errServeurInconnu.Error())
 		}
-		prod := slices.Contains(inventaire[i].Roles, "prod")
-		switch {
-		case nom == "prod" && !prod:
-			return e, erreurEntreeArgs{errEnvPasProd, []string{inventaire[i].Nom}}
-		case nom != "prod" && prod && !slices.Contains(inventaire[i].Roles, "dev"): // dev+prod: the owner shares one VPS (V§1)
-			return e, erreurEntreeArgs{errEnvProd, []string{inventaire[i].Nom}}
-		}
 		if !slices.Contains(ids, id) {
 			ids = append(ids, id)
 		}
@@ -161,27 +160,78 @@ func validerEnvironnement(nom string, e Environnement, inventaire []ServeurInven
 	return e, nil
 }
 
-// Environnements: every environment of the project, the ones not configured with their defaults (a copy).
+// serveurRoleProd: whether one of ids has the old prod role without dev in the inventory (M246 migration; a
+// VPS with both roles was shared by dev and prod, V§1).
+func serveurRoleProd(ids []string, inventaire []ServeurInventaire) bool {
+	return slices.ContainsFunc(inventaire, func(v ServeurInventaire) bool {
+		return slices.Contains(ids, v.ID) && slices.Contains(v.Roles, "prod") && !slices.Contains(v.Roles, "dev")
+	})
+}
+
+// marquerProduction (M246): an older "prod" environment, or one on a server with the old prod role, reads as
+// Production; in memory only, the file is written again only when it is changed.
+func marquerProduction(f *fichierAcces, inventaire []ServeurInventaire) {
+	for _, p := range f.Projets {
+		if p == nil {
+			continue
+		}
+		for nom, e := range p.Environnements {
+			if e != nil && (nom == "prod" || serveurRoleProd(e.Serveurs, inventaire)) {
+				e.Production = true
+			}
+		}
+	}
+}
+
+// Environnements: every environment the project has (none for a project without a site), a copy.
 func (a *Acces) Environnements(projet string) map[string]Environnement {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	r := map[string]Environnement{}
-	for _, nom := range envsProjet {
-		e := envDefaut()
-		if p := a.f.Projets[projet]; p != nil && p.Environnements[nom] != nil {
-			e = *p.Environnements[nom]
-			e.Serveurs = append([]string{}, e.Serveurs...)
-			if e.Deploiement != nil {
-				c := *e.Deploiement
-				e.Deploiement = &c
-			}
+	p := a.f.Projets[projet]
+	if p == nil {
+		return r
+	}
+	for nom, x := range p.Environnements {
+		if x == nil {
+			continue
 		}
-		if p := a.f.Projets[projet]; p != nil {
-			e.CleDeploiement = p.CleDeploiement // one key per project
+		e := *x
+		e.Serveurs = append([]string{}, e.Serveurs...)
+		if e.Deploiement != nil {
+			c := *e.Deploiement
+			e.Deploiement = &c
 		}
+		e.CleDeploiement = p.CleDeploiement // one key per project
 		r[nom] = e
 	}
 	return r
+}
+
+// EnvsDe (M246): the names a project's environment may have: the base ones (its grants, the pilot's
+// environment) then every environment it was given, sorted.
+func (a *Acces) EnvsDe(projet string) []string {
+	l := slices.Clone(envsProjet)
+	if a == nil {
+		return l
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	var autres []string
+	if p := a.f.Projets[projet]; p != nil {
+		for nom := range p.Environnements {
+			if !slices.Contains(l, nom) {
+				autres = append(autres, nom)
+			}
+		}
+	}
+	slices.Sort(autres)
+	return append(l, autres...)
+}
+
+// EnvConnu: whether env is one of the project's environment names (EnvsDe).
+func (a *Acces) EnvConnu(projet, env string) bool {
+	return slices.Contains(a.EnvsDe(projet), env)
 }
 
 // DefinirEnvironnement replaces environment nom of the project (already validated); its certificate stays,
@@ -331,29 +381,19 @@ func (a *Acces) RetirerServeur(id string) ([]string, error) {
 	})
 }
 
-// envsIncompatibles: the "project/env" a server with these roles can no longer be in (a role change).
-func (a *Acces) envsIncompatibles(id string, roles []string) []string {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	var l []string
-	for nomP, p := range a.f.Projets {
-		for nomE, e := range p.Environnements {
-			if slices.Contains(e.Serveurs, id) && (nomE == "prod") != slices.Contains(roles, "prod") {
-				l = append(l, nomP+"/"+nomE)
-			}
-		}
-	}
-	slices.Sort(l)
-	return l
-}
-
 // apiEnvironnements: GET /api/projets/{nom}/environnements.
 func (s *Serveur) apiEnvironnements(w http.ResponseWriter, r *http.Request) {
 	projet := r.PathValue("nom")
 	if !s.accesPret(w, projet) {
 		return
 	}
-	s.ecrireJSON(w, map[string]any{"projet": projet, "envs": envsProjet, "environnements": s.acces.Environnements(projet), "deploiements": deploiementsAffiches(projet), "sante": s.vueSante(projet)})
+	envs, l := s.acces.Environnements(projet), s.acces.EnvsDe(projet)
+	for _, nom := range l { // shortcut: the Environments panel still shows a card per name, until M248 lists only existing ones
+		if _, ok := envs[nom]; !ok {
+			envs[nom] = envDefaut()
+		}
+	}
+	s.ecrireJSON(w, map[string]any{"projet": projet, "envs": l, "environnements": envs, "deploiements": s.deploiementsAffiches(projet), "sante": s.vueSante(projet)})
 }
 
 // apiEnvironnementModifier: POST /api/projets/{nom}/environnements {env, url, serveurs, protection,

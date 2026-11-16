@@ -274,9 +274,9 @@ func (s *Serveur) revenirVerrouille(ctx context.Context, projet, env, auteur, ci
 }
 
 // deploiementsAffiches: env → its last deployments, newest first (the environment cards).
-func deploiementsAffiches(projet string) map[string][]Deploiement {
+func (s *Serveur) deploiementsAffiches(projet string) map[string][]Deploiement {
 	m := map[string][]Deploiement{}
-	for _, env := range envsProjet {
+	for _, env := range s.acces.EnvsDe(projet) {
 		h := historiqueDeploiements(projet, env)
 		slices.Reverse(h)
 		m[env] = h[:min(len(h), 5)]
@@ -292,7 +292,7 @@ func (s *Serveur) apiRevenir(w http.ResponseWriter, r *http.Request) {
 		Env        string `json:"env"`
 		MotDePasse string `json:"mot_de_passe"`
 	}
-	if lireCorps(r, &c) != nil || !slices.Contains(envsProjet, c.Env) {
+	if lireCorps(r, &c) != nil || !s.acces.EnvConnu(projet, c.Env) {
 		s.erreur(w, http.StatusBadRequest, "Invalid request")
 		return
 	}
@@ -313,5 +313,5 @@ func (s *Serveur) apiRevenir(w http.ResponseWriter, r *http.Request) {
 		s.erreur(w, http.StatusConflict, err.Error())
 		return
 	}
-	s.ecrireJSON(w, map[string]any{"deploiement": d, "deploiements": deploiementsAffiches(projet)[c.Env]})
+	s.ecrireJSON(w, map[string]any{"deploiement": d, "deploiements": s.deploiementsAffiches(projet)[c.Env]})
 }

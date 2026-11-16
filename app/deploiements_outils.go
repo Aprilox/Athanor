@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"slices"
 	"strings"
 )
 
@@ -29,7 +28,7 @@ func init() {
 	parmi := func(d string, l ...string) map[string]any {
 		return map[string]any{"type": "string", "description": d, "enum": append([]string{}, l...)}
 	}
-	env := parmi("The environment of your task", envsProjet...)
+	env := schemaTexte("The environment of your task")
 	classe := parmi("Your own class of this action; the code's class is kept when higher", "lecture", "changement", "destructrice")
 	outilsHub["deployer"] = OutilHub{Description: "Deploy a commit of the project to your task's environment with Athanor's engine (release, atomic switch, external check). " +
 		"The method is then recorded so that later deployments need no agent. A step of an accepted plan only.",
@@ -50,8 +49,8 @@ func classerDeploiement(outil string, brut json.RawMessage) (Classe, string, arg
 	if err := lireArguments(brut, &a); err != nil {
 		return 0, "", a, err
 	}
-	if !slices.Contains(envsProjet, a.Env) {
-		return 0, "", a, errors.New("env: dev, staging or prod")
+	if !nomEnvValide(a.Env) { // the project's environment is checked when the deployment starts
+		return 0, "", a, errors.New("env: the name of your task's environment")
 	}
 	if outil == "revenir_version" {
 		return ClasseChangement, "switches " + a.Env + " back to its previous version", a, nil

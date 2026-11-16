@@ -149,7 +149,7 @@ func outilEnvironnements(s *Serveur, x SessionHub, args json.RawMessage) (string
 	}
 	envs := s.acces.Environnements(x.Projet)
 	l := []map[string]any{}
-	for _, e := range envsProjet {
+	for _, e := range s.acces.EnvsDe(x.Projet) {
 		srv := []map[string]any{}
 		for _, id := range envs[e].Serveurs {
 			if noms[id] != "" {
@@ -235,8 +235,8 @@ func outilDemanderDeploiement(s *Serveur, x SessionHub, args json.RawMessage) (s
 		return "", err
 	}
 	env, commit := a.Environnement, strings.ToLower(strings.TrimSpace(a.Commit))
-	if !slices.Contains(envsProjet, env) {
-		return "", errors.New("unknown environment: dev, staging or prod")
+	if !s.acces.EnvConnu(x.Projet, env) {
+		return "", errors.New("unknown environment: one of the project's environments (lire_environnements)")
 	}
 	if env == "prod" && slices.ContainsFunc(lireMissions(), func(m Mission) bool { // R6: the mission's relay alone asks for prod
 		return (m.Etat == "lancee" || m.Etat == "en_pause") && slices.ContainsFunc(m.Voies, func(v VoieMission) bool { return v.Module == "dev" && v.Ref == x.Projet })
@@ -321,7 +321,7 @@ func outilDeploiementEtat(s *Serveur, x SessionHub, args json.RawMessage) (strin
 	if err := lireArguments(args, &a); err != nil {
 		return "", err
 	}
-	for _, env := range envsProjet {
+	for _, env := range s.acces.EnvsDe(x.Projet) {
 		for _, d := range historiqueDeploiements(x.Projet, env) {
 			if a.ID == "" || d.ID != a.ID {
 				continue

@@ -19,7 +19,7 @@ import (
 var envsProjet = []string{"dev", "staging", "prod"}
 
 const (
-	errAccesEnv      = erreurEntree("Unknown environment (dev, staging or prod)")
+	errAccesEnv      = erreurEntree("Unknown environment for this project")
 	errAccesVariable = erreurEntree("Invalid variable name: capital letters, digits and _, starting with a letter, and not a name that changes how commands run")
 	errAccesDoublon  = erreurEntree("This variable name is already used in this environment")
 	errAccesDeja     = erreurEntree("This entry is already given to this environment")
@@ -81,6 +81,8 @@ func ouvrirAcces(chemin string) (*Acces, error) {
 	if a.f.Projets == nil {
 		a.f.Projets = map[string]*ProjetAcces{}
 	}
+	inventaire, _ := lireServeurs()
+	marquerProduction(&a.f, inventaire)
 	return a, nil
 }
 
@@ -209,7 +211,7 @@ func libre(p *ProjetAcces, env, v string) string {
 
 // Ajouter grants entry e to the project for env, under variable (proposed when empty).
 func (a *Acces) Ajouter(projet string, e EntreeCoffre, env, variable, auto string) (AccesProjet, error) {
-	if !slices.Contains(envsProjet, env) {
+	if !a.EnvConnu(projet, env) {
 		return AccesProjet{}, errAccesEnv
 	}
 	variable = strings.TrimSpace(variable)
@@ -277,7 +279,7 @@ func (a *Acces) RenommerVariable(projet, entree, env, variable string) error {
 }
 
 func (a *Acces) ChangerEnv(projet, env string) error {
-	if !slices.Contains(envsProjet, env) {
+	if !a.EnvConnu(projet, env) {
 		return errAccesEnv
 	}
 	return a.modifier(func(f *fichierAcces) error {

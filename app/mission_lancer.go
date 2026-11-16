@@ -274,7 +274,7 @@ func (s *Serveur) etapesMission(c CarteMission, politique, qui, dossier string) 
 	for _, ec := range c.Envs {
 		e := actuels[ec.Nom]
 		e.URL, e.Protection, e.Serveurs = ec.URL, ec.Protection, ec.Serveurs // C81: never weakened (envSansAffaiblir)
-		e.Politique, e.DeployerAuJalon = ec.Politique, ec.Nom == "dev"
+		e.Politique, e.DeployerAuJalon = ec.Politique, ec.Nom == "dev" && !serveurRoleProd(ec.Serveurs, inventaire)
 		if e.Fournisseur == "" { // the Servers lane's DNS: the provider holding the host's zone, its token ticked on the card
 			e.Fournisseur = fournisseurCoche(hoteURL(ec.URL), c.Acces)
 		}

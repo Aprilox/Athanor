@@ -87,7 +87,7 @@ func (s *Serveur) etatAcces(projet string) map[string]any {
 	inj := s.etatInjection(pr)
 	r := resumerAcces(p, s.coffre.Liste())
 	r.Etat = inj.Etat
-	return map[string]any{"projet": projet, "env": p.Env, "envs": envsProjet, "forcer_infra_natif": p.ForcerInfraNatif, "natif": modeNatif.Load(), "acces": vus,
+	return map[string]any{"projet": projet, "env": p.Env, "envs": s.acces.EnvsDe(projet), "forcer_infra_natif": p.ForcerInfraNatif, "natif": modeNatif.Load(), "acces": vus,
 		"injection": inj, "resume": r}
 }
 

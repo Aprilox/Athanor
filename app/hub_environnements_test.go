@@ -32,8 +32,19 @@ func TestValiderEnvironnement(t *testing.T) {
 		t.Errorf("case: %q", r.URL) // B73: scheme and host in lower case, the path as typed
 	}
 	ok("staging", Environnement{URL: "https://xn--bcher-kva.fr:65535", Politique: "auto", Protection: "auth_proxy"})
-	ok("prod", Environnement{URL: "https://Exemple.fr", Serveurs: []string{"a1", "d4"}, Protection: "access"})
-	ok("staging", Environnement{Serveurs: []string{"d4"}}) // a VPS given both roles serves dev and prod
+	if r := ok("prod", Environnement{URL: "https://Exemple.fr", Serveurs: []string{"a1", "d4"}, Protection: "access"}); !r.Production {
+		t.Error("an environment named prod is Production")
+	}
+	if r := ok("staging", Environnement{Serveurs: []string{"d4"}}); r.Production { // a VPS given both roles served dev and prod
+		t.Error("a shared dev+prod VPS made staging Production")
+	}
+	// M246: free names, any server anywhere; a server with only the old prod role keeps its environment Production
+	if r := ok("dev", Environnement{Serveurs: []string{"a1"}}); !r.Production {
+		t.Error("a prod-role server must keep its environment Production")
+	}
+	if r := ok("demo.exemple.fr", Environnement{Serveurs: []string{"b2", "c3"}, Politique: "auto"}); r.Production || r.Politique != "auto" {
+		t.Errorf("free name: %+v", r)
+	}
 	if r := ok("dev", Environnement{}); r.URL != "" || r.Serveurs == nil {
 		t.Errorf("empty environment: %+v", r)
 	}
@@ -42,7 +53,10 @@ func TestValiderEnvironnement(t *testing.T) {
 		e   Environnement
 		mot string
 	}{
-		{"test", Environnement{}, "Unknown environment"},
+		{"Bad_Name", Environnement{}, "Invalid environment name"},
+		{"*", Environnement{}, "Invalid environment name"},
+		{"../x", Environnement{}, "Invalid environment name"},
+		{"", Environnement{}, "Invalid environment name"},
 		{"dev", Environnement{URL: "ftp://exemple.fr"}, "Invalid URL"},
 		{"dev", Environnement{URL: "https://moi:secret@exemple.fr"}, "Invalid URL"},
 		{"dev", Environnement{URL: "https://"}, "Invalid URL"},
@@ -64,10 +78,9 @@ func TestValiderEnvironnement(t *testing.T) {
 		{"dev", Environnement{URL: "HTTP://dev.exemple.fr", Protection: "auth_proxy"}, "needs an https:// address"},
 		{"dev", Environnement{Politique: "jamais"}, "Unknown policy"},
 		{"prod", Environnement{Politique: "auto"}, "always asks for your approval"},
+		{"site", Environnement{Production: true, Politique: "auto"}, "always asks for your approval"},
+		{"site", Environnement{Serveurs: []string{"a1"}, Politique: "auto"}, "always asks for your approval"},
 		{"dev", Environnement{Serveurs: []string{"zz"}}, "Unknown server"},
-		{"prod", Environnement{Serveurs: []string{"b2"}}, "vps-dev is not a production server"},
-		{"prod", Environnement{Serveurs: []string{"c3"}}, "nu is not a production server"},
-		{"dev", Environnement{Serveurs: []string{"a1"}}, "vps-prod is a production server"},
 		{"dev", Environnement{Fournisseur: "../x"}, "Unknown provider"},
 	} {
 		_, err := validerEnvironnement(c.nom, c.e, inv)
@@ -76,6 +89,62 @@ func TestValiderEnvironnement(t *testing.T) {
 		if err == nil || !(entree || avecArgs) || !strings.Contains(err.Error(), c.mot) {
 			t.Errorf("%s %+v: %v, want %q", c.nom, c.e, err, c.mot)
 		}
+	}
+}
+
+// TestEnvironnementsMigrationM246: a file of the dev/staging/prod era is read without loss, its prod (and an
+// environment on a server with only the prod role) reads as Production, and a mere read never rewrites it.
+func TestEnvironnementsMigrationM246(t *testing.T) {
+	_ = os.RemoveAll(dossierModule("servers"))
+	t.Cleanup(func() { _ = os.RemoveAll(dossierModule("servers")) })
+	if err := modifierServeurs(func(l []ServeurInventaire) ([]ServeurInventaire, error) {
+		return append(l, ServeurInventaire{ID: "p1", Nom: "vps-prod", Hote: "203.0.113.5", Port: 22, Roles: []string{"prod"}, Cree: time.Now()},
+			ServeurInventaire{ID: "m1", Nom: "mixte", Hote: "203.0.113.6", Port: 22, Roles: []string{"dev", "prod"}, Cree: time.Now()}), nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	chemin := filepath.Join(t.TempDir(), "acces.json")
+	ancien := `{"version":1,"projets":{"demo":{"env":"dev","forcer_infra_natif":false,"acces":[{"entree":"e1","env":"prod","variable":"API_KEY","cree":"2026-11-01T00:00:00Z"}],` +
+		`"environnements":{"dev":{"url":"https://dev.exemple.fr","serveurs":["m1"],"protection":"auth_proxy","politique":"auto","deployer_au_jalon":true},` +
+		`"staging":{"url":"https://pre.exemple.fr","serveurs":["p1"],"protection":"access","politique":"accord"},` +
+		`"prod":{"url":"https://exemple.fr","serveurs":["p1"],"protection":"aucune","politique":"accord","fournisseur":"cf1","certificat":"c9","deploiement":{"methode":"statique","source":"artefact"}}},` +
+		`"cle_deploiement":"k1"}},"auto_faits":["e1"]}`
+	if err := os.WriteFile(chemin, []byte(ancien), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	a, err := ouvrirAcces(chemin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := a.Environnements("demo")
+	if len(e) != 3 || !e["prod"].Production || !e["staging"].Production || e["dev"].Production {
+		t.Fatalf("Production after reading: %+v", e)
+	}
+	if d, p := e["dev"], e["prod"]; d.URL != "https://dev.exemple.fr" || d.Protection != "auth_proxy" || d.Politique != "auto" || !d.DeployerAuJalon ||
+		p.Fournisseur != "cf1" || p.Certificat != "c9" || p.Deploiement == nil || p.Deploiement.Methode != "statique" || p.CleDeploiement != "k1" ||
+		!slices.Equal(e["staging"].Serveurs, []string{"p1"}) {
+		t.Errorf("lost on reading: %+v", e)
+	}
+	if pa := a.Projet("demo"); len(pa.Acces) != 1 || pa.Acces[0].Env != "prod" || !a.EnvConnu("demo", "prod") || a.EnvConnu("demo", "qa") {
+		t.Errorf("grants: %+v", pa)
+	}
+	_ = a.EnvsDe("demo")
+	if b, _ := os.ReadFile(chemin); string(b) != ancien {
+		t.Fatal("a mere read rewrote the file")
+	}
+	// changed: written with Production, read back the same, the other environments untouched
+	if err := a.DefinirEnvironnement("demo", "site", Environnement{URL: "https://site.exemple.fr", Serveurs: []string{"m1"}, Politique: "accord"}); err != nil {
+		t.Fatal(err)
+	}
+	if a, err = ouvrirAcces(chemin); err != nil {
+		t.Fatal(err)
+	}
+	e = a.Environnements("demo")
+	if len(e) != 4 || !e["prod"].Production || e["site"].Production || e["site"].URL != "https://site.exemple.fr" || !slices.Contains(a.EnvsDe("demo"), "site") {
+		t.Errorf("after a change: %+v", e)
+	}
+	if b, _ := os.ReadFile(chemin); !strings.Contains(strings.ReplaceAll(string(b), " ", ""), `"production":true`) {
+		t.Error("Production not written once the file changed")
 	}
 }
 
@@ -90,8 +159,8 @@ func TestEnvironnementsAncienFichier(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if e := a.Environnements("demo"); len(e) != 3 || e["prod"].Politique != "accord" || e["dev"].Serveurs == nil {
-		t.Fatalf("defaults of an old file: %+v", e)
+	if e := a.Environnements("demo"); len(e) != 0 || !slices.Equal(a.EnvsDe("demo"), envsProjet) { // M246: no environment made up
+		t.Fatalf("environments of an old file: %+v", e)
 	}
 	if err := a.DefinirEnvironnement("demo", "dev", Environnement{URL: "https://dev.exemple.fr", Serveurs: []string{"b2"}, Protection: "aucune", Politique: "auto", CleDeploiement: "volee"}); err != nil {
 		t.Fatal(err)
@@ -156,9 +225,8 @@ func TestEnvironnementsAPI(t *testing.T) {
 		t.Errorf("unknown project: %d", code)
 	}
 	for _, c := range []string{
-		`{"env":"prod","serveurs":["` + dev + `"]}`, `{"env":"prod","serveurs":["` + prod + `"],"politique":"auto"}`,
-		`{"env":"dev","serveurs":["` + prod + `"]}`, `{"env":"dev","serveurs":["inconnu"]}`,
-		`{"env":"dev","url":"https://a:b@exemple.fr"}`, `{"env":"qa"}`, `pas du json`,
+		`{"env":"prod","serveurs":["` + prod + `"],"politique":"auto"}`, `{"env":"dev","serveurs":["inconnu"]}`,
+		`{"env":"dev","url":"https://a:b@exemple.fr"}`, `{"env":"Q A"}`, `{"env":"*"}`, `pas du json`,
 	} {
 		if code, v := appel("POST", "/api/projets/demo/environnements", c); code != 400 || v["erreur"] == nil {
 			t.Errorf("%s: %d %v", c, code, v)
@@ -221,12 +289,9 @@ func TestEnvironnementsAPI(t *testing.T) {
 		t.Errorf("deployments shown: %v", v["deploiements"])
 	}
 
-	// a role change that would break an environment is refused, naming it
-	if code, v := appel("POST", "/api/serveurs/"+dev, `{"roles":["prod"]}`); code != 409 || !strings.Contains(v["erreur"].(string), "demo/dev") {
-		t.Errorf("dev server made prod: %d %v", code, v)
-	}
-	if code, v := appel("POST", "/api/serveurs/"+prod, `{"roles":["dev"],"mot_de_passe":"`+mdpPreuveTest+`"}`); code != 409 || !strings.Contains(v["erreur"].(string), "demo/prod") {
-		t.Errorf("prod server made dev: %d %v", code, v)
+	// M246: no dev/prod role rule between servers and environments any more
+	if code, v := appel("POST", "/api/serveurs/"+dev, `{"roles":["dev","prod"]}`); code != 200 {
+		t.Errorf("role change: %d %v", code, v)
 	}
 
 	// renaming then deleting a project carries its environments along

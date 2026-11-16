@@ -305,7 +305,7 @@ func (s *Serveur) incidentsCourants(f fichierSante) []incidentLieu {
 		if p.Archive {
 			continue
 		}
-		for _, env := range envsProjet {
+		for _, env := range s.acces.EnvsDe(p.Nom) {
 			if i := s.incidentEnv(f, p.Nom, env); i != nil {
 				out = append(out, incidentLieu{p.Nom, env, i})
 			}
@@ -373,7 +373,7 @@ func (s *Serveur) santeEnvsFond() {
 // vueSante: env → its health for the environment card (absent: never checked and no incident).
 func (s *Serveur) vueSante(projet string) map[string]any {
 	f, m := lireSante(), map[string]any{}
-	for _, env := range envsProjet {
+	for _, env := range s.acces.EnvsDe(projet) {
 		sv, controle := f.Envs[projet+"/"+env]
 		i := s.incidentEnv(f, projet, env)
 		if !controle && i == nil {
@@ -471,7 +471,7 @@ func (s *Serveur) agirIncident(ctx context.Context, projet, env, action, cle, au
 		return nil, cmp.Or(err, errIncidentFini)
 	}
 	s.recontroler(ctx, projet, env)
-	return map[string]any{"deploiement": d, "deploiements": deploiementsAffiches(projet)[env], "sante": s.vueSante(projet)[env]}, nil
+	return map[string]any{"deploiement": d, "deploiements": s.deploiementsAffiches(projet)[env], "sante": s.vueSante(projet)[env]}, nil
 }
 
 // apiIncident: POST /api/projets/{nom}/incident {env, action: reessayer|revenir|main, cle, mot_de_passe}:
