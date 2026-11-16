@@ -76,10 +76,10 @@ func fournisseurCoche(h string, acces []AccesCarte) string {
 	return ""
 }
 
-// politiqueEnvMission: prod always waits for the owner; dev and staging deploy alone unless the mission's
-// policy is tout.
-func politiqueEnvMission(env, politique string) string {
-	if env == "prod" || politique == "tout" {
+// politiqueEnvMission: a Production environment always waits for the owner; the others deploy alone unless
+// the mission's policy is tout.
+func politiqueEnvMission(production bool, politique string) string {
+	if production || politique == "tout" {
 		return "accord"
 	}
 	return "auto"
@@ -274,7 +274,9 @@ func (s *Serveur) etapesMission(c CarteMission, politique, qui, dossier string) 
 	for _, ec := range c.Envs {
 		e := actuels[ec.Nom]
 		e.URL, e.Protection, e.Serveurs = ec.URL, ec.Protection, ec.Serveurs // C81: never weakened (envSansAffaiblir)
-		e.Politique, e.DeployerAuJalon = ec.Politique, ec.Nom == "dev" && !serveurRoleProd(ec.Serveurs, inventaire)
+		// M247: Production from the card (never lowered); the milestone relay on the first other environment only
+		e.Production = e.Production || ec.Production
+		e.Politique, e.DeployerAuJalon = ec.Politique, ec.Nom == envJalonCarte(c) && !e.Production && !serveurRoleProd(ec.Serveurs, inventaire)
 		if e.Fournisseur == "" { // the Servers lane's DNS: the provider holding the host's zone, its token ticked on the card
 			e.Fournisseur = fournisseurCoche(hoteURL(ec.URL), c.Acces)
 		}

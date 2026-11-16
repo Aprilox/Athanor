@@ -311,7 +311,7 @@ func avantBascule(d Deploiement) bool {
 // retourAutomatique (C76, ARCHITECTURE §Moteur): a version served then found failing goes back by itself in
 // dev and staging under the auto policy; never in prod.
 func retourAutomatique(e Environnement, d Deploiement) bool {
-	return d.Etat == "echec" && d.Bascule && d.Verification != nil && !d.Verification.OK && d.Env != "prod" && e.Politique == "auto"
+	return d.Etat == "echec" && d.Bascule && d.Verification != nil && !d.Verification.OK && !e.Production && d.Env != "prod" && e.Politique == "auto"
 }
 
 // scriptRecharger ($1 folder, $2 versions kept): Caddy reloaded when it is there (systemd, else its own command), then the

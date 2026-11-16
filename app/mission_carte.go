@@ -48,7 +48,7 @@ func nomsModes(m ModesCarte) string {
 }
 
 type EnvCarte struct {
-	Nom        string   `json:"nom"` // dev | staging | prod
+	Nom        string   `json:"nom"` // free (nomEnvValide): dev, site…
 	URL        string   `json:"url"`
 	Protection string   `json:"protection"` // aucune | auth_proxy | access
 	Serveurs   []string `json:"serveurs"`   // inventory ids
@@ -58,6 +58,9 @@ type EnvCarte struct {
 	Avant        *EnvCarte `json:"avant,omitempty"`
 	Proprietaire bool      `json:"proprietaire,omitempty"`
 	Plancher     string    `json:"plancher,omitempty"` // R5: "accord" when the existing environment already asked; no policy change goes under it
+	// M247: the orchestrator sets it when the request speaks of production (an accord for every risky action);
+	// also true for the old name prod or a server with the old prod role (validerEnvironnement); never lowered
+	Production bool `json:"production,omitempty"`
 }
 
 // AccesCarte: a vault entry the mission uses, by name; ID, Type and Portee come from the vault, ARemplir says
@@ -194,11 +197,11 @@ func validerCarte(c *CarteMission, x contexteCarte) error {
 			return erreurEntreeArgs{"The environment {0} is given twice", []string{e.Nom}}
 		}
 		vus[e.Nom] = true
-		v, err := validerEnvironnement(e.Nom, Environnement{URL: e.URL, Protection: e.Protection, Serveurs: e.Serveurs, Politique: "accord"}, x.inventaire)
+		v, err := validerEnvironnement(e.Nom, Environnement{URL: e.URL, Protection: e.Protection, Serveurs: e.Serveurs, Politique: "accord", Production: e.Production}, x.inventaire)
 		if err != nil {
 			return err
 		}
-		e.URL, e.Protection, e.Serveurs, e.Politique, e.Avant = v.URL, v.Protection, v.Serveurs, "", nil
+		e.URL, e.Protection, e.Serveurs, e.Politique, e.Avant, e.Production = v.URL, v.Protection, v.Serveurs, "", nil, v.Production
 		h := hoteURL(e.URL)
 		if h == "" {
 			continue
@@ -294,19 +297,20 @@ func calculerCarte(c CarteMission, politique string, x contexteCarte) CarteMissi
 	regle := func(r RegleAccord) bool { return politique != "tout" && x.regle != nil && x.regle(r) }
 	var durcir []string
 	for _, e := range c.Envs {
-		if e.Nom == "prod" {
+		if e.Production {
 			c.Approbations = append(c.Approbations, ApprobationPrevue{"mise_en_prod", e.URL})
 		}
 		if len(e.Serveurs) == 0 {
 			continue
 		}
 		// shortcut: a plan under the servers' rules still asks when it is destructive or builds; its steps are not known yet
-		if c.Serveurs.Brief != "" && (e.Nom == "prod" || slices.ContainsFunc(e.Serveurs, func(id string) bool {
-			return slices.Contains(nomServeur[id].Roles, "prod") || !regle(reglePlan(prefixeTache, id))
+		if c.Serveurs.Brief != "" && (e.Production || slices.ContainsFunc(e.Serveurs, func(id string) bool {
+			sv, connu := nomServeur[id]
+			return !connu || slices.Contains(sv.Roles, "prod") || !regle(reglePlan(prefixeTache, id))
 		})) {
 			c.Approbations = append(c.Approbations, ApprobationPrevue{"plan_serveurs", e.Nom})
 		}
-		if e.Nom != "prod" && e.Politique == "accord" && !regle(RegleAccord{Projet: c.Projet.Nom, Env: e.Nom, Action: actionDeploiement}) {
+		if !e.Production && e.Politique == "accord" && !regle(RegleAccord{Projet: c.Projet.Nom, Env: e.Nom, Action: actionDeploiement}) {
 			c.Approbations = append(c.Approbations, ApprobationPrevue{"deploiement", e.Nom})
 		}
 		for _, id := range e.Serveurs {
@@ -358,8 +362,9 @@ func calculerCarte(c CarteMission, politique string, x contexteCarte) CarteMissi
 // one; unless the owner gave e in Modify, an existing protection is never changed and existing servers never
 // replaced. Avant: the existing environment when the mission changes it, for the card's "before → after".
 func envSansAffaiblir(e EnvCarte, politique string, actuels map[string]Environnement, nouveau bool) EnvCarte {
-	e.Politique, e.Avant = politiqueEnvMission(e.Nom, politique), nil
 	a, ok := actuels[e.Nom]
+	e.Production = e.Production || ok && a.Production && !nouveau // an existing Production environment stays one
+	e.Politique, e.Avant = politiqueEnvMission(e.Production, politique), nil
 	if nouveau || !ok {
 		return e
 	}

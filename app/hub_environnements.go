@@ -168,6 +168,52 @@ func serveurRoleProd(ids []string, inventaire []ServeurInventaire) bool {
 	})
 }
 
+// prudenceRenforcee (M247): whether every risky action on env of projet waits for an accord no rule lifts: a
+// Production environment, the old name "prod", or one served by a server with the old prod role or that the
+// inventory does not know (in doubt, caution). The one predicate of the guards: never compare a name to "prod".
+func (s *Serveur) prudenceRenforcee(projet, env string) bool {
+	if env == "prod" {
+		return true
+	}
+	if s.acces == nil {
+		return false
+	}
+	e, ok := s.acces.Environnements(projet)[env]
+	if !ok || e.Production {
+		return e.Production
+	}
+	inventaire, err := lireServeurs()
+	return len(e.Serveurs) > 0 && (err != nil || serveurRoleProd(e.Serveurs, inventaire) || slices.ContainsFunc(e.Serveurs, func(id string) bool {
+		return !slices.ContainsFunc(inventaire, func(v ServeurInventaire) bool { return v.ID == id })
+	}))
+}
+
+// serveurPrudent (M247): a server with the old prod role, unknown to the inventory, or serving a Production
+// environment of any project: its plans always wait for the owner.
+func (s *Serveur) serveurPrudent(id string) bool {
+	if _, prod := serveurProd(id); prod || s.acces == nil {
+		return prod
+	}
+	return s.acces.ServeurProduction(id)
+}
+
+// ServeurProduction: whether server id serves a Production environment of some project.
+func (a *Acces) ServeurProduction(id string) bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for _, p := range a.f.Projets {
+		if p == nil {
+			continue
+		}
+		for _, e := range p.Environnements {
+			if e != nil && e.Production && slices.Contains(e.Serveurs, id) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // marquerProduction (M246): an older "prod" environment, or one on a server with the old prod role, reads as
 // Production; in memory only, the file is written again only when it is changed.
 func marquerProduction(f *fichierAcces, inventaire []ServeurInventaire) {
@@ -286,8 +332,10 @@ func (a *Acces) HotesProd() map[string]string {
 		if p == nil {
 			continue
 		}
-		if h := hoteEnv(p.Environnements["prod"]); h != "" {
-			r[h] = nomP + "/prod"
+		for nom, e := range p.Environnements {
+			if h := hoteEnv(e); h != "" && (e.Production || nom == "prod") { // the old name reads as Production, like prudenceRenforcee
+				r[h] = nomP + "/" + nom
+			}
 		}
 	}
 	return r
@@ -496,7 +544,7 @@ const actionDeploiement = "deploiement"
 // and why. Prod always does, and so does a destructive one (C64): neither a policy nor a rule lifts it.
 func (s *Serveur) politiqueDeploiement(projet, env string, destructif bool) (accordRequis bool, raison string) {
 	switch {
-	case env == "prod":
+	case s.prudenceRenforcee(projet, env):
 		return true, "production always asks the owner"
 	case destructif:
 		return true, "a destructive deployment always asks the owner"

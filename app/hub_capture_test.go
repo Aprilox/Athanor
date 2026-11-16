@@ -113,7 +113,7 @@ func TestCaptureHub(t *testing.T) {
 			Raison: "Le paiement de test du jalon M4 a besoin de la clé Stripe de test."},
 		{Projet: "projet-02", Env: "staging", Mission: "M9", Agent: "pilote", Action: actionDeploiement, Details: map[string]string{"commit": "4f2a9c1e8b7d60a3f5c2e9d14b8a7f60c3e2d1b9", "hote": "recette.boutique.fr", "serveurs": "c0ffee02"},
 			Raison: "commit 4f2a9c1e8b7d60a3f5c2e9d14b8a7f60c3e2d1b9 → recette.boutique.fr"},
-		{Projet: "projet-02", Env: "prod", Mission: "M9", Agent: "pilote", Action: actionDeploiement, Details: map[string]string{"commit": "4f2a9c1e8b7d60a3f5c2e9d14b8a7f60c3e2d1b9", "hote": "boutique.fr", "serveurs": "c0ffee01,c0ffee03"},
+		{Projet: "projet-02", Env: "prod", Production: true, Mission: "M9", Agent: "pilote", Action: actionDeploiement, Details: map[string]string{"commit": "4f2a9c1e8b7d60a3f5c2e9d14b8a7f60c3e2d1b9", "hote": "boutique.fr", "serveurs": "c0ffee01,c0ffee03"},
 			Raison: "commit 4f2a9c1e8b7d60a3f5c2e9d14b8a7f60c3e2d1b9 → boutique.fr"},
 	} {
 		if _, err := s.approbations.Demander(a); err != nil {

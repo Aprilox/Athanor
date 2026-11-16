@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"maps"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -45,9 +46,24 @@ func ecrireRelais(projet string, r RelaisJalon) {
 	_ = ecrireJSONFichier(fichierRelais(), m, 0o600)
 }
 
-// relaisActif: the project's dev environment asks to be deployed after each milestone.
+// relaisActif: the project's milestone environment asks to be deployed after each milestone.
 func (s *Serveur) relaisActif(projet string) bool {
-	return s.acces != nil && s.acces.Environnements(projet)["dev"].DeployerAuJalon
+	return s.acces != nil && s.acces.Environnements(projet)[s.envJalon(projet)].DeployerAuJalon
+}
+
+// envJalon (M247, free names): the environment deployed after each milestone: dev, or else the first by name
+// that asks it ("dev" without one; never a Production one, validerEnvironnement refuses it).
+func (s *Serveur) envJalon(projet string) string {
+	if s.acces == nil {
+		return "dev"
+	}
+	envs := s.acces.Environnements(projet)
+	for _, n := range append([]string{"dev"}, slices.Sorted(maps.Keys(envs))...) {
+		if envs[n].DeployerAuJalon {
+			return n
+		}
+	}
+	return "dev"
 }
 
 // noterJalonRelais: a milestone just done → its HEAD waits to be deployed to dev (never twice the same milestone).
@@ -62,7 +78,7 @@ func (s *Serveur) noterJalonRelais(p Projet, jalon string, quand time.Time) {
 		r.Etat, r.Erreur = "echec", "the project has no commit to deploy"
 	}
 	ecrireRelais(p.Nom, r)
-	s.ecrireAudit(LigneAudit{Type: "evenement", De: "hub", Vers: "hub", Projet: p.Nom, Env: "dev", Action: "relais après jalon", Resultat: jalon + " → " + r.Commit})
+	s.ecrireAudit(LigneAudit{Type: "evenement", De: "hub", Vers: "hub", Projet: p.Nom, Env: s.envJalon(p.Nom), Action: "relais après jalon", Resultat: jalon + " → " + r.Commit})
 }
 
 // avancerRelais: the waiting relay of p started once its commit can be fetched (git source: on a remote
@@ -72,7 +88,8 @@ func (s *Serveur) avancerRelais(p Projet, maintenant time.Time) <-chan struct{} 
 	if !ok || r.Etat != "attente" {
 		return nil
 	}
-	e := s.acces.Environnements(p.Nom)["dev"]
+	env := s.envJalon(p.Nom)
+	e := s.acces.Environnements(p.Nom)[env]
 	if !e.DeployerAuJalon || missionBloquee("dev", p.Nom) != "" { // a paused mission: the relay waits for Resume
 		return nil
 	}
@@ -86,7 +103,7 @@ func (s *Serveur) avancerRelais(p Projet, maintenant time.Time) <-chan struct{} 
 	if attendre {
 		return nil
 	}
-	d, suite, err := s.commencerDeploiement(p.Nom, "dev", r.Commit, OptionsDeploiement{Auteur: "relais", Accorde: accorde})
+	d, suite, err := s.commencerDeploiement(p.Nom, env, r.Commit, OptionsDeploiement{Auteur: "relais", Accorde: accorde})
 	if err != nil {
 		r.Etat, r.Erreur = "echec", s.masquerSecrets(err.Error())
 		ecrireRelais(p.Nom, r)
@@ -126,7 +143,7 @@ func (s *Serveur) etatRelais(projet string) *RelaisJalon {
 		return nil
 	}
 	if r.Etat == "lance" {
-		h := historiqueDeploiements(projet, "dev")
+		h := historiqueDeploiements(projet, s.envJalon(projet))
 		if i := slices.IndexFunc(h, func(d Deploiement) bool { return d.ID == r.ID }); i >= 0 {
 			r.Etat, r.Erreur = h[i].Etat, h[i].Erreur // en_cours | ok | echec | revenu
 			if h[i].Verification != nil && !h[i].Verification.OK && r.Erreur == "" {
@@ -148,7 +165,7 @@ func (s *Serveur) alertesRelais() []AlerteHub {
 			continue
 		}
 		v := s.etatRelais(p.Nom)
-		if v == nil || v.Etat != "echec" || v.ID != "" && s.incidentEnv(lireSante(), p.Nom, "dev") != nil { // a failed deployment: the incident rings
+		if v == nil || v.Etat != "echec" || v.ID != "" && s.incidentEnv(lireSante(), p.Nom, s.envJalon(p.Nom)) != nil { // a failed deployment: the incident rings
 			continue
 		}
 		h := sha256.Sum256([]byte("relais\x00" + p.Nom + "\x00" + v.Jalon + "\x00" + v.Commit))
@@ -164,12 +181,13 @@ func (s *Serveur) alertesRelais() []AlerteHub {
 // files changed since the last deployment the owner accepted: for those, the relay asks the owner once and
 // waits (attendre); accorde says the owner accepted this one. Refused or expired: the relay fails, said.
 func (s *Serveur) accordBuildRelais(p Projet, e Environnement, r *RelaisJalon) (accorde, attendre bool) {
-	f := fichiersBuildChanges(p, "dev", r.Commit, e.Deploiement)
+	env := s.envJalon(p.Nom)
+	f := fichiersBuildChanges(p, env, r.Commit, e.Deploiement)
 	if len(f) == 0 {
 		return false, false
 	}
 	liste := couper(strings.Join(f, ", "), 300)
-	ap := Approbation{Projet: p.Nom, Env: "dev", Agent: "relais", Action: actionDeploiement, Raison: "commit " + r.Commit + " → " + hoteEnv(&e) + "; build files changed: " + liste,
+	ap := Approbation{Projet: p.Nom, Env: env, Agent: "relais", Action: actionDeploiement, Raison: "commit " + r.Commit + " → " + hoteEnv(&e) + "; build files changed: " + liste,
 		Details: map[string]string{"commit": r.Commit, "hote": hoteEnv(&e), "serveurs": listeServeursAccord(e.Serveurs), "fichiers_build": liste}}
 	y, etat, err := s.approbations.Reprendre(ap)
 	switch {

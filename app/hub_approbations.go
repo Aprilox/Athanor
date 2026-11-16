@@ -59,6 +59,8 @@ type Approbation struct {
 	Par      string            `json:"par,omitempty"`
 	T        string            `json:"t,omitempty"`
 	Utilisee string            `json:"utilisee,omitempty"` // an accepted action done (I6: one accord, one action)
+	// M247: stronger caution (prudenceRenforcee) when it was asked, for the pages; decisions read it again live
+	Production bool `json:"production,omitempty"`
 }
 
 // RegleAccord: "do not ask again" for this action of this project in this environment; for an access,
@@ -98,6 +100,9 @@ func ouvrirApprobations(dossier string) (*Approbations, error) {
 	}
 	if len(errs) > 0 {
 		a.liste, a.regles = nil, nil // shortcut: an unreadable file loses the pending approvals, the agents ask again
+	}
+	for i := range a.liste { // M247: an approval saved before the Production field
+		a.liste[i].Production = a.liste[i].Production || a.liste[i].Env == "prod"
 	}
 	return a, errors.Join(errs...)
 }
@@ -405,6 +410,7 @@ func (s *Serveur) chargerApprobations() {
 
 // demanderApprobation: a new pending approval, in the audit log.
 func (s *Serveur) demanderApprobation(x Approbation) (Approbation, error) {
+	x.Production = x.Production || s.prudenceRenforcee(x.Projet, x.Env)
 	x, err := s.approbations.Demander(x)
 	res := "attente " + x.ID
 	if err != nil {
@@ -441,7 +447,7 @@ func (s *Serveur) messageApprobation(x Approbation) MessagePush {
 	titre := fmt.Sprintf(s.textePush("appr_titre"), moduleDev{}.Nom(), x.Projet, quoi)
 	if x.Action == actionDeploiement { // "Deploy martin.fr to production?", the project and commit below
 		titre, texte = fmt.Sprintf(s.textePush("appr_deploi"), x.Details["hote"], x.Env), x.Projet+" · commit "+cmp.Or(x.Details["commit"], x.Details["sha"])
-		if x.Env == "prod" {
+		if x.Production {
 			titre = fmt.Sprintf(s.textePush("appr_prod"), x.Details["hote"])
 		}
 		if m := x.Details["mission"]; m != "" { // M168: the mission's prod accord opens its page; P7: where and what changes
@@ -467,7 +473,8 @@ func (s *Serveur) messageApprobation(x Approbation) MessagePush {
 // approval (the same one when it is asked again) is returned with true.
 // shortcut: no "autonomous" mission yet (stage 6 adds it), so only a rule or an accord lifts the wait.
 func (s *Serveur) exigerAccord(x Approbation, destructif bool) (Approbation, bool, error) {
-	if x.Env != "prod" && !destructif || s.approbations.Regle(RegleAccord{Projet: x.Projet, Env: x.Env, Action: x.Action}) {
+	// M247: under stronger caution no rule lifts the wait
+	if prudent := s.prudenceRenforcee(x.Projet, x.Env); !prudent && (!destructif || s.approbations.Regle(RegleAccord{Projet: x.Projet, Env: x.Env, Action: x.Action})) {
 		return x, false, nil
 	}
 	y, etat, err := s.approbations.Reprendre(x)
@@ -567,7 +574,7 @@ func (s *Serveur) deciderApprobation(qui, id, decision, entree, envChoisi, varia
 		return x, http.StatusBadRequest, errApprobationDecision
 	case decision == "toujours" && x.Action == actionPlanServeur && x.Details["regle"] != "oui":
 		return x, http.StatusConflict, errPlanSansRegle
-	case decision == "toujours" && x.Action == actionDeploiement && x.Env == "prod": // I6: no rule ever lets prod through
+	case decision == "toujours" && x.Action != "demander_acces" && (x.Production || s.prudenceRenforcee(x.Projet, x.Env)): // I6, M247: no rule under stronger caution
 		return x, http.StatusConflict, errEnvProdAuto
 	case decision == "toujours" && x.Action == actionDeploiement && x.Details["fichiers_build"] != "": // C68
 		return x, http.StatusConflict, errBuildSansRegle

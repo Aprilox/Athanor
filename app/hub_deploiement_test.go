@@ -21,6 +21,7 @@ func TestDemanderDeploiement(t *testing.T) {
 	s.config.Langue = "fr"
 	depot, c := depotEssai(t, map[string]string{"a": "1"}, map[string]string{"a": "2"}, map[string]string{"a": "3"}, map[string]string{"a": "4"})
 	s.config.Projets[0].Dossier = depot
+	inventaireTest(t, nil, "s1") // M247: an unknown server reads as production
 	if err := s.acces.DefinirEnvironnement("demo", "dev", Environnement{URL: "https://dev.martin.fr", Serveurs: []string{"s1"}, Protection: "aucune", Politique: "auto"}); err != nil {
 		t.Fatal(err)
 	}

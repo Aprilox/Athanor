@@ -115,35 +115,45 @@ func TestExigerAccordI6(t *testing.T) {
 	if len(l) != 3 {
 		t.Fatalf("%d approvals, want 3", len(l))
 	}
-	var prod Approbation
+	var prod, vider Approbation
 	for _, x := range l {
-		if x.Env == "prod" {
+		switch x.Env {
+		case "prod":
 			prod = x
+		case "dev":
+			vider = x
 		}
 	}
-	if _, err := s.approbations.Decider(prod.ID, "toujours", "fenetre"); err != nil {
+	if _, err := s.approbations.Decider(vider.ID, "toujours", "fenetre"); err != nil {
 		t.Fatal(err)
 	}
-	if _, attend, _ := s.exigerAccord(Approbation{Projet: "demo", Env: "prod", Agent: "pilote", Action: "deployer"}, false); attend {
+	if _, attend, _ := s.exigerAccord(Approbation{Projet: "demo", Env: "dev", Agent: "pilote", Action: "vider_base"}, true); attend {
 		t.Error("the owner's rule did not lift the wait")
 	}
-	for _, x := range []Approbation{{Projet: "autre", Env: "prod", Action: "deployer"}, {Projet: "demo", Env: "prod", Action: "rollback"}} {
-		if _, attend, _ := s.exigerAccord(x, false); !attend {
+	for _, x := range []Approbation{{Projet: "autre", Env: "dev", Action: "vider_base"}, {Projet: "demo", Env: "dev", Action: "rollback"}} {
+		if _, attend, _ := s.exigerAccord(x, true); !attend {
 			t.Errorf("rule applied beyond its project and action: %+v", x)
 		}
 	}
+	// M247: under stronger caution no rule lifts the wait (and the decision route refuses "toujours")
+	if _, err := s.approbations.Decider(prod.ID, "toujours", "fenetre"); err != nil {
+		t.Fatal(err)
+	}
+	if _, attend, _ := s.exigerAccord(Approbation{Projet: "demo", Env: "prod", Agent: "pilote", Action: "deployer"}, false); !attend {
+		t.Error("a rule lifted a prod action")
+	}
 	// B52: Ask again removes only that rule (from a paired device too), then the wait is back
-	regle := map[string]string{"decision": "redemander", "projet": "demo", "env": "prod", "action": "deployer"}
+	regle := map[string]string{"decision": "redemander", "projet": "demo", "env": "dev", "action": "vider_base"}
 	if w := appelApprobation(t, s, "tel", regle); w.Code != 200 {
 		t.Fatalf("ask again: %d %s", w.Code, w.Body)
 	}
 	if w := appelApprobation(t, s, "", regle); w.Code != http.StatusNotFound {
 		t.Errorf("rule removed twice: %d", w.Code)
 	}
-	if _, attend, _ := s.exigerAccord(Approbation{Projet: "demo", Env: "prod", Agent: "pilote", Action: "deployer"}, false); !attend {
+	if _, attend, _ := s.exigerAccord(Approbation{Projet: "demo", Env: "dev", Agent: "pilote", Action: "vider_base"}, true); !attend {
 		t.Error("the rule still applies after Ask again")
 	}
-	if !strings.Contains(auditTexte(t), "règle retirée: deployer") {
+	if !strings.Contains(auditTexte(t), "règle retirée: vider_base") {
 		t.Error("rule removal not in the audit log")
 	}
 	if !strings.Contains(auditTexte(t), "approbation demandée: deployer") {

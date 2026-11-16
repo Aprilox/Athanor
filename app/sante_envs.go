@@ -324,7 +324,7 @@ func (s *Serveur) alertesIncidents() []AlerteHub {
 		}
 		action := func(id, libelle string) ActionAlerte {
 			return ActionAlerte{ID: id, Libelle: libelle, Route: "projets/" + url.PathEscape(x.Projet) + "/incident",
-				Corps: map[string]any{"env": x.Env, "action": id, "cle": x.Cle}, Distance: true, Accord: x.Env == "prod" && id != "main"}
+				Corps: map[string]any{"env": x.Env, "action": id, "cle": x.Cle}, Distance: true, Accord: id != "main" && s.prudenceRenforcee(x.Projet, x.Env)}
 		}
 		actions := []ActionAlerte{action("reessayer", "Retry"), action("revenir", "Go back to the previous version"), action("main", "I take over")}
 		if x.SansRetour {
@@ -484,14 +484,14 @@ func (s *Serveur) apiIncident(w http.ResponseWriter, r *http.Request) {
 		Cle        string `json:"cle"`
 		MotDePasse string `json:"mot_de_passe"`
 	}
-	if lireCorps(r, &c) != nil || !slices.Contains(envsProjet, c.Env) || !slices.Contains([]string{"reessayer", "revenir", "main"}, c.Action) {
+	if lireCorps(r, &c) != nil || !s.acces.EnvConnu(projet, c.Env) || !slices.Contains([]string{"reessayer", "revenir", "main"}, c.Action) {
 		s.erreur(w, http.StatusBadRequest, "Invalid request")
 		return
 	}
 	if !s.accesPret(w, projet) {
 		return
 	}
-	if c.Env == "prod" && c.Action != "main" {
+	if c.Action != "main" && s.prudenceRenforcee(projet, c.Env) {
 		if code, err := s.preuvePresence(r, c.MotDePasse); err != nil {
 			s.ecrireAudit(LigneAudit{Type: "evenement", De: deQui(r), Vers: "hub", Projet: projet, Env: c.Env, Action: "incident." + c.Action + " refusé", Resultat: err.Error()})
 			s.erreur(w, code, err.Error())

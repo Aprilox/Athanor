@@ -264,7 +264,8 @@ func (s *Serveur) apiServeurDurcir(w http.ResponseWriter, r *http.Request, id st
 	}
 	ctx, fin := context.WithTimeout(context.WithoutCancel(r.Context()), delaiCommande)
 	defer fin()
-	srv, prod := serveurProd(id)
+	srv, _ := serveurProd(id)
+	prod := s.serveurPrudent(id)
 	if srv.Hote == "" {
 		s.erreurServeurs(w, errServeurInconnu)
 		return

@@ -299,7 +299,7 @@ func (s *Serveur) apiRevenir(w http.ResponseWriter, r *http.Request) {
 	if !s.accesPret(w, projet) {
 		return
 	}
-	if c.Env == "prod" {
+	if s.prudenceRenforcee(projet, c.Env) {
 		if code, err := s.preuvePresence(r, c.MotDePasse); err != nil {
 			s.ecrireAudit(LigneAudit{Type: "evenement", De: deQui(r), Vers: "hub", Projet: projet, Env: c.Env, Action: "deploiement.retour refusé", Resultat: err.Error()})
 			s.erreur(w, code, err.Error())

@@ -250,6 +250,7 @@ func TestAccordBuildDeploiement(t *testing.T) {
 	s.mu.Lock()
 	s.config.Projets = append(s.config.Projets, p)
 	s.mu.Unlock()
+	inventaireTest(t, nil, "ab12") // M247: an unknown server reads as production
 	if err := s.acces.DefinirEnvironnement(p.Nom, "dev", Environnement{URL: "http://m143.test", Serveurs: []string{"ab12"}, Protection: "aucune", Politique: "auto", DeployerAuJalon: true}); err != nil {
 		t.Fatal(err)
 	}

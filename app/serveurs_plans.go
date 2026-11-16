@@ -191,9 +191,10 @@ func outilProposerPlan(s *Serveur, x SessionHub, args json.RawMessage) (string, 
 	if len(a.Etapes) == 0 || len(a.Etapes) > maxEtapesPlan {
 		return "", fmt.Errorf("a plan has 1 to %d steps", maxEtapesPlan)
 	}
-	srv, prod := serveurProd(a.Serveur)
+	srv, _ := serveurProd(a.Serveur)
+	prod := s.serveurPrudent(a.Serveur)
 	p := PlanServeur{Serveur: a.Serveur, Nom: srv.Nom, Env: "dev", Projet: x.Projet, Mission: x.Mission, Agent: x.Agent, Resume: resume}
-	if strings.HasSuffix(x.Env, "/prod") { // a task for a prod environment: its Cloudflare steps too (M116)
+	if projetEnv, env, ok := strings.Cut(x.Env, "/"); ok && s.prudenceRenforcee(projetEnv, env) { // a task for a prod environment: its Cloudflare steps too (M116)
 		prod = true
 	}
 	if prod {
@@ -246,10 +247,11 @@ func outilProposerPlan(s *Serveur, x SessionHub, args json.RawMessage) (string, 
 		if deploi { // M135: the task's own environment; prod's is a prod step (approval always)
 			var d argsDeploiementOutil
 			_ = json.Unmarshal(et.Arguments, &d)
-			if _, err := s.envTache(x, "proposer_plan", d.Env); err != nil {
+			projetEnv, err := s.envTache(x, "proposer_plan", d.Env)
+			if err != nil {
 				return "", fmt.Errorf("step %d: %w", i+1, err)
 			}
-			if d.Env == "prod" {
+			if s.prudenceRenforcee(projetEnv, d.Env) {
 				prod, p.Env = true, "prod"
 			}
 			construit = construit || strings.TrimSpace(d.Construire) != ""
@@ -431,7 +433,7 @@ func (s *Serveur) planOuRegle(x SessionHub, id string, e *Etape) error {
 		return nil
 	}
 	m := modeAutorisation(x, id)
-	if _, prod := serveurProd(id); e.Classe <= ClasseChangement && !prod && m != "manuel" && !(etapeInconnue(*e) && modeDemandeInconnue(m)) && s.approbations.Regle(reglePlan(x.Projet, id)) && !missionTout(x.Env) {
+	if prod := s.serveurPrudent(id); e.Classe <= ClasseChangement && !prod && m != "manuel" && !(etapeInconnue(*e) && modeDemandeInconnue(m)) && s.approbations.Regle(reglePlan(x.Projet, id)) && !missionTout(x.Env) {
 		audit("accordé : règle « ne plus demander » pour ce serveur (changement)")
 		return nil
 	}

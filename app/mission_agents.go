@@ -23,8 +23,10 @@ func consigneOrchestrateur(phrase string, mentions []string) string {
 		"4. Otherwise call proposer_mission with the card: titre; projet (an existing project's name, or a new valid name with " +
 		"nouveau true); dev.brief (everything the Studio must build, complete, in plain words); dev.modes only for a new project " +
 		"whose sentence asks for it (parallele: faster, more quota; eco: the quota first; rapide: built fast, everything " +
-		"verified at the end), each true or false; envs (nom dev, staging or prod, " +
-		"url, protection aucune, auth_proxy or access, serveurs by id); serveurs.brief (DNS, certificates, proxy, protection, " +
+		"verified at the end), each true or false; envs (nom: a short internal name, lower-case, e.g. site or dev; " +
+		"url, protection aucune, auth_proxy or access, serveurs by id; production true only when the owner's sentence speaks " +
+		"of production, a live site or real users: every risky action then waits for the owner's accord; otherwise leave it " +
+		"out, the site is deployed after each milestone; read it from the sentence, never ask); serveurs.brief (DNS, certificates, proxy, protection, " +
 		"firewall); acces (vault entries by name, pour = project/env or server id); jalons_estimes (1 to 60). A project named " +
 		"nom@instance (distant true) is on a remote Athanor: nouveau false, a dev.brief, and no envs, serveurs or acces " +
 		"(its own Athanor deploys it). If it returns an " +

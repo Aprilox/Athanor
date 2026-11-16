@@ -65,7 +65,7 @@ func (a *appTUI) titreApprTUI(x Approbation) string {
 		}
 		return t("Plan for {0}", firstNonEmpty(d["nom"], d["serveur"])) + " · " + x.Projet
 	case actionDeploiement:
-		if x.Env == "prod" {
+		if x.Production {
 			return t("Deploy {0} to production?", d["hote"])
 		}
 		return t("Deploy {0} to {1}?", d["hote"], x.Env)
@@ -86,7 +86,7 @@ func (a *appTUI) toujoursApprTUI(x Approbation) string {
 		}
 		return ""
 	case actionDeploiement:
-		if x.Env == "prod" || x.Details["fichiers_build"] != "" {
+		if x.Production || x.Details["fichiers_build"] != "" {
 			return ""
 		}
 	case actionMission:
@@ -141,7 +141,7 @@ func (a *appTUI) lignesApprTUI(x Approbation) []ligneCouleur {
 		if d["mission"] != "" { // P7: where it goes and what changes, as on the web
 			corps = append(corps, firstNonEmpty(d["url"], "—"), t("What changes: {0} new commit(s)", firstNonEmpty(d["commits"], "?"))+" "+d["changements"])
 		}
-		if x.Env == "prod" {
+		if x.Production {
 			corps = append(corps, t("Production always asks you: one accord, one deployment."))
 		}
 	case actionMission:

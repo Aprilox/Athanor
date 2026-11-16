@@ -26,16 +26,17 @@ var relaisProdMu sync.Mutex
 
 // accordProd: the accord the prod deployment of sha for mission m waits for (Reprendre compares all of it).
 func (s *Serveur) accordProd(m Mission, projet, sha string) Approbation {
-	e := s.acces.Environnements(projet)["prod"]
+	env := envFinalMission(m)
+	e := s.acces.Environnements(projet)[env]
 	hote := cmp.Or(hoteEnv(&e), projet)
-	avant, n, changements := s.changementsProd(projet, sha)
-	ap := Approbation{Projet: projet, Env: "prod", Mission: m.ID, Agent: "relais", Action: actionDeploiement,
+	avant, n, changements := s.changementsProd(projet, env, sha)
+	ap := Approbation{Projet: projet, Env: env, Mission: m.ID, Agent: "relais", Action: actionDeploiement,
 		Raison: "mission " + m.ID + ": commit " + sha + " → " + hote,
-		Details: map[string]string{"mission": m.ID, "empreinte": empreinteCarte(m), "sha": sha, "commit": shaCourt(sha), "env": "prod", "url": e.URL,
+		Details: map[string]string{"mission": m.ID, "empreinte": empreinteCarte(m), "sha": sha, "commit": shaCourt(sha), "env": env, "url": e.URL,
 			"hote": hote, "serveurs": listeServeursAccord(e.Serveurs), "avant": shaCourt(avant), "commits": n, "changements": changements}}
 	// R1 (C68, C69): the deployment runs with Accorde, so the owner reads the build files it would run first
 	if p, ok := s.projetParNom(projet); ok {
-		if f := fichiersBuildChanges(p, "prod", sha, s.configProdMission(projet)); len(f) > 0 {
+		if f := fichiersBuildChanges(p, env, sha, s.configProdMission(projet, env)); len(f) > 0 {
 			ap.Details["fichiers_build"] = couper(strings.Join(f, ", "), 300)
 			ap.Raison += "; build files changed: " + ap.Details["fichiers_build"]
 		}
@@ -43,17 +44,51 @@ func (s *Serveur) accordProd(m Mission, projet, sha string) Approbation {
 	return ap
 }
 
-// configProdMission: the method prod is deployed with: its own, or dev's checked one for its first deployment.
-func (s *Serveur) configProdMission(projet string) *ConfigDeploiement {
+// envFinal (M247): the card's environment of the final deployment, its first Production one ("" without; a
+// card written before M247 has no production field, its "prod" environment is it).
+func envFinal(c CarteMission) string {
+	for _, e := range c.Envs {
+		if e.Production || e.Nom == "prod" {
+			return e.Nom
+		}
+	}
+	return ""
+}
+
+// envJalonCarte (M247): the card's linked environment, deployed after each milestone: dev, or else its first
+// environment that is not Production ("" without one).
+func envJalonCarte(c CarteMission) string {
+	nom := ""
+	for _, e := range c.Envs {
+		if e.Nom == "dev" && !e.Production {
+			return "dev"
+		}
+		if nom == "" && !e.Production && e.Nom != "prod" {
+			nom = e.Nom
+		}
+	}
+	return nom
+}
+
+// envFinalMission: envFinal of m's card, "prod" without one (the relay never asks then).
+func envFinalMission(m Mission) string {
+	var c CarteMission
+	_ = json.Unmarshal(m.Carte, &c)
+	return cmp.Or(envFinal(c), "prod")
+}
+
+// configProdMission: the method env (Production) is deployed with: its own, or the milestone environment's
+// checked one for its first deployment.
+func (s *Serveur) configProdMission(projet, env string) *ConfigDeploiement {
 	envs := s.acces.Environnements(projet)
-	return cmp.Or(envs["prod"].Deploiement, envs["dev"].Deploiement)
+	return cmp.Or(envs[env].Deploiement, envs[s.envJalon(projet)].Deploiement)
 }
 
 // changementsProd (P7): what the prod deployment of sha changes, for the owner deciding from a phone: the version
 // prod serves now ("" before the first one), the number of commits since it and the newest three's subjects, the vault's values masked;
 // cut under bornerApprobation's length so that the same accord compares equal.
-func (s *Serveur) changementsProd(projet, sha string) (avant, n, changements string) {
-	h := historiqueDeploiements(projet, "prod")
+func (s *Serveur) changementsProd(projet, env, sha string) (avant, n, changements string) {
+	h := historiqueDeploiements(projet, env)
 	for _, d := range slices.Backward(h) {
 		if d.Etat == "ok" {
 			avant = d.Commit
@@ -100,16 +135,16 @@ func (s *Serveur) relaisProd(id string) {
 		return
 	}
 	head, _ := gitSortie(p.Dossier, "rev-parse", "HEAD")
-	r := *m.Relais
+	r, env := *m.Relais, envFinal(c)
 	if r.Etape != "prod_deploye" && s.attendCoffre(m) { // R7: the infra keys locked, the accord would be used for a deployment that cannot run
 		return
 	}
 	switch r.Etape {
 	case "dev_verifie":
-		if vues[i].Actuel != "termine" || r.Commit == "" || r.Commit != head || !prodPrete(vues, p.Nom) {
+		if vues[i].Actuel != "termine" || r.Commit == "" || r.Commit != head || !prodPrete(vues, p.Nom, cmp.Or(env, "prod")) {
 			return
 		}
-		if !slices.ContainsFunc(c.Envs, func(e EnvCarte) bool { return e.Nom == "prod" }) {
+		if env == "" { // M247: no Production environment, the delivery is the linked environment's (deployed at each milestone)
 			s.finirMission(id, "dev_verifie", "no prod on the card: dev checked on "+shaCourt(head))
 			return
 		}
@@ -130,13 +165,13 @@ func (s *Serveur) relaisProd(id string) {
 			s.accordOuDeployer(m, p.Nom, r.Commit)
 		} // pending: wait; refused or expired: Ask again (POST /api/missions/{id}/redemander)
 	case "prod_deploye":
-		h := historiqueDeploiements(p.Nom, "prod")
+		h := historiqueDeploiements(p.Nom, env)
 		j := slices.IndexFunc(h, func(d Deploiement) bool { return d.ID == r.DeploiementProd })
 		if j < 0 {
 			return
 		}
 		d := h[len(h)-1] // the newest since ours: Retry makes a new one
-		e := s.acces.Environnements(p.Nom)["prod"]
+		e := s.acces.Environnements(p.Nom)[env]
 		switch {
 		case d.Etat == "en_cours" || d.Etat == "ok" && d.Verification == nil:
 		case d.Etat == "ok" && d.Verification.OK && !d.Retour:
@@ -148,13 +183,13 @@ func (s *Serveur) relaisProd(id string) {
 	}
 }
 
-// prodPrete: every Servers task of the mission for the project's prod is done.
-func prodPrete(vues []VoieMission, projet string) bool {
+// prodPrete: every Servers task of the mission for the project's Production environment env is done.
+func prodPrete(vues []VoieMission, projet, env string) bool {
 	for _, v := range vues {
 		if v.Module != "servers" {
 			continue
 		}
-		if t, ok := tacheMission(v.Ref); ok && t.Env == projet+"/prod" && t.Etat != "finie" {
+		if t, ok := tacheMission(v.Ref); ok && t.Env == projet+"/"+env && t.Etat != "finie" {
 			return false
 		}
 	}
@@ -164,14 +199,15 @@ func prodPrete(vues []VoieMission, projet string) bool {
 // accordOuDeployer: the owner's accord for sha used now (the deployment starts), or asked (the relay waits for it).
 func (s *Serveur) accordOuDeployer(m Mission, projet, sha string) {
 	ap := s.accordProd(m, projet, sha)
+	env := ap.Env
 	y, etat, err := s.approbations.Reprendre(ap)
 	switch {
 	case err != nil:
 		return
 	case etat == "utilisee":
-		s.ecrireAudit(LigneAudit{Type: "evenement", De: "relais", Vers: "hub", Mission: m.ID, Projet: projet, Env: "prod",
+		s.ecrireAudit(LigneAudit{Type: "evenement", De: "relais", Vers: "hub", Mission: m.ID, Projet: projet, Env: env,
 			Agent: "relais", Action: "approbation utilisée: " + actionDeploiement, Resultat: y.ID})
-		s.deployerProdMission(m.ID, projet, sha, y.ID)
+		s.deployerProdMission(m.ID, projet, env, sha, y.ID)
 		return
 	case etat == "":
 		if y, err = s.demanderApprobation(ap); err != nil {
@@ -183,12 +219,12 @@ func (s *Serveur) accordOuDeployer(m Mission, projet, sha string) {
 
 // deployerProdMission: the engine started on prod with the owner's accord; not started → the accord given back
 // (the next step tries again) and said in the journal.
-func (s *Serveur) deployerProdMission(id, projet, sha, accord string) {
+func (s *Serveur) deployerProdMission(id, projet, env, sha, accord string) {
 	o := OptionsDeploiement{Auteur: "relais", Accorde: true} // the accord showed the build files (accordProd)
-	if s.acces.Environnements(projet)["prod"].Deploiement == nil {
-		o.Config = s.configProdMission(projet) // prod's first deployment: the method dev was checked with (recorded on prod once it went through)
+	if s.acces.Environnements(projet)[env].Deploiement == nil {
+		o.Config = s.configProdMission(projet, env) // prod's first deployment: the method dev was checked with (recorded on prod once it went through)
 	}
-	d, suite, err := commencerDeploiementMission(s, projet, "prod", sha, o)
+	d, suite, err := commencerDeploiementMission(s, projet, env, sha, o)
 	if err != nil {
 		s.approbations.Rendre(accord)
 		s.noterJournalMission(id, s.entreeJournal("prod:"+accord+":non_lance", time.Now(), "erreur",
@@ -196,7 +232,7 @@ func (s *Serveur) deployerProdMission(id, projet, sha, accord string) {
 		s.majRelais(id, "", func(r *RelaisMission) { r.Etape, r.Commit, r.Accord = "accord_prod", sha, accord })
 		return
 	}
-	s.ecrireAudit(LigneAudit{Type: "evenement", De: "relais", Vers: "hub", Mission: id, Projet: projet, Env: "prod",
+	s.ecrireAudit(LigneAudit{Type: "evenement", De: "relais", Vers: "hub", Mission: id, Projet: projet, Env: env,
 		Agent: "relais", Action: "déploiement prod de la mission", Resultat: "commit " + sha + " → " + d.ID})
 	s.majRelais(id, "", func(r *RelaisMission) {
 		r.Etape, r.Commit, r.Accord, r.DeploiementProd = "prod_deploye", sha, accord, d.ID

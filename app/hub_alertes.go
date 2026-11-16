@@ -96,7 +96,7 @@ func alertesApprobations(l []Approbation) []AlerteHub {
 		}
 		if x.Action == actionDeploiement {
 			raison, args = "Deploy {0} to {1}? Commit {2}", []any{x.Details["hote"], x.Env, cmp.Or(x.Details["commit"], x.Details["sha"])}
-			if x.Env == "prod" {
+			if x.Production {
 				raison, args = "Deploy {0} to production? Commit {1}", []any{x.Details["hote"], cmp.Or(x.Details["commit"], x.Details["sha"])}
 			}
 			if x.Details["mission"] != "" { // P7: a mission's prod accord says where and what changes, decided from a phone
@@ -115,7 +115,7 @@ func alertesApprobations(l []Approbation) []AlerteHub {
 			return ActionAlerte{ID: id, Libelle: libelle, Route: "hub/approbations", Corps: map[string]any{"id": x.ID, "decision": id}, Distance: true}
 		}
 		actions := []ActionAlerte{decision("accepter", "Accept"), decision("refuser", "Refuse"), decision("toujours", toujours)}
-		if x.Action == actionPlanServeur && x.Details["regle"] != "oui" || x.Action == actionDeploiement && (x.Env == "prod" || x.Details["fichiers_build"] != "") || x.Action == actionMission { // destructive, prod, changed build files or a mission: an accord every time
+		if x.Action == actionPlanServeur && x.Details["regle"] != "oui" || x.Production || x.Action == actionDeploiement && x.Details["fichiers_build"] != "" || x.Action == actionMission { // destructive, prod, changed build files or a mission: an accord every time
 			actions = actions[:2]
 		}
 		out = append(out, AlerteHub{Empreinte: "appr-" + x.ID, Module: module, Element: x.Projet, Titre: titre, Raison: raison, Args: args, Approbation: &x,

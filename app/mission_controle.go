@@ -278,7 +278,7 @@ func (s *Serveur) changerPolitiqueMission(id, qui, pol string) (Mission, error) 
 			continue
 		}
 		// R5: never under the existing environment's own policy, read when the card was worked out (C81)
-		cible := politiqueEnvMission(ec.Nom, pol)
+		cible := politiqueEnvMission(ec.Production || ec.Nom == "prod", pol)
 		if ec.Plancher == "accord" || ec.Avant != nil && ec.Avant.Politique == "accord" {
 			cible = "accord"
 		}

@@ -179,7 +179,7 @@ func (s *Serveur) evenementsMission(m Mission) ([]EntreeJournal, RelaisMission) 
 							noter("verif:"+d.ID+":echec", dateSource(d.Verification.T), "erreur", "{0} check failed: {1}", e.Nom, e.URL)
 						}
 					}
-					if e.Nom == "dev" && d.Etat == "ok" && !d.Retour {
+					if e.Nom == envJalonCarte(c) && d.Etat == "ok" && !d.Retour { // M247: the linked (milestone) environment
 						relais = RelaisMission{Etape: "dev_deploye", Commit: d.Commit, DeploiementDev: d.ID}
 						if d.Verification != nil && d.Verification.OK {
 							relais.Etape = "dev_verifie"

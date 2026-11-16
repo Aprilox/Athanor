@@ -117,8 +117,8 @@ func outilClientEnvoyerBus(s *Serveur, c ClientMCP, args json.RawMessage) (strin
 	m := MessageHub{De: "client:" + c.Nom, Vers: "servers", Action: a.Action, Donnees: a.Donnees}
 	if id, _ := a.Donnees["serveur"].(string); id != "" {
 		if l, err := lireServeurs(); err == nil {
-			if i := slices.IndexFunc(l, func(v ServeurInventaire) bool { return v.ID == id }); i >= 0 && slices.Contains(l[i].Roles, "prod") {
-				m.Env = "prod"
+			if slices.ContainsFunc(l, func(v ServeurInventaire) bool { return v.ID == id }) && s.serveurPrudent(id) {
+				m.Env = "prod" // M247: the marker of stronger caution (prudenceRenforcee), not an environment
 			}
 		}
 	}
