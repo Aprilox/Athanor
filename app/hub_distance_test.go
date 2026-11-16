@@ -117,6 +117,7 @@ func TestDistanceToutesRoutes(t *testing.T) {
 		{"GET", "/api/missions/x/y", true},
 		{"POST", "/api/missions", true},             // a mission is created on the PC (M155)
 		{"POST", "/api/missions/x/modifier", false}, // changed, answered and cancelled from an unlocked device
+		{"POST", "/api/missions/x/ressources", false},
 		{"POST", "/api/missions/x/repondre", false},
 		{"POST", "/api/missions/x/annuler", false},
 		{"POST", "/api/missions/x/lancer", false},

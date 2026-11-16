@@ -91,7 +91,7 @@ func TestMentionsMemeNom(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	l, _ := s.chercherMentions("boutique")
+	l, _ := s.chercherMentions("boutique", "")
 	if len(l) != 2 || l[0].Type != "projet" || l[0].Ref != "boutique" || l[1].Type != "serveur" || l[1].Ref != "srv9" {
 		t.Fatalf("list: %+v", l)
 	}

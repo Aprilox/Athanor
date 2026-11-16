@@ -461,3 +461,69 @@ func (s *Serveur) contexteCarte() contexteCarte {
 	x.distants = s.devDistants()
 	return x
 }
+
+// briefServeursDefaut: the Servers lane of a card the owner gave a server to (the preparation of M249 adapts it).
+const briefServeursDefaut = "Prepare the server for the project as soon as its plan is known, then deliver the project on it."
+
+// changerRessource ("Add a resource", M252): one resource of card c added or removed by the owner. A server goes
+// to the card's environment ("site", made when there is none) and brings the Servers lane; the last one removed
+// takes the lane away, with the accesses it carried. A vault entry, or a provider (the entry of its token), is an
+// access for the project; removed, every line of it goes. An unknown ref → errMentionInconnue. The caller checks
+// and computes the card again (validerCarte, calculerCarte).
+func changerRessource(c *CarteMission, typ, ref string, retirer bool, x contexteCarte, fournisseurs []Fournisseur) error {
+	switch typ {
+	case "serveur":
+		if ref == "" || !slices.ContainsFunc(x.inventaire, func(sv ServeurInventaire) bool { return sv.ID == ref }) {
+			return errMentionInconnue
+		}
+		dans := func(e EnvCarte) bool { return slices.Contains(e.Serveurs, ref) }
+		switch {
+		case retirer:
+			for i := range c.Envs {
+				c.Envs[i].Serveurs = slices.DeleteFunc(c.Envs[i].Serveurs, func(id string) bool { return id == ref })
+			}
+			c.Envs = slices.DeleteFunc(c.Envs, func(e EnvCarte) bool { return len(e.Serveurs) == 0 && e.URL == "" })
+			if !slices.ContainsFunc(c.Envs, func(e EnvCarte) bool { return len(e.Serveurs) > 0 }) {
+				c.Serveurs.Brief = ""
+			}
+			c.Acces = slices.DeleteFunc(c.Acces, func(a AccesCarte) bool { return !pourValide(a.Pour, c) })
+		case !slices.ContainsFunc(c.Envs, dans):
+			if len(c.Envs) == 0 {
+				c.Envs = []EnvCarte{{Nom: "site"}}
+			}
+			c.Envs[0].Serveurs, c.Envs[0].Proprietaire = append(c.Envs[0].Serveurs, ref), true
+			if c.Serveurs.Brief == "" {
+				c.Serveurs.Brief = briefServeursDefaut
+			}
+		}
+		return nil
+	case "fournisseur":
+		i := slices.IndexFunc(fournisseurs, func(f Fournisseur) bool { return f.ID == ref })
+		if ref == "" || i < 0 {
+			return errMentionInconnue
+		}
+		ref = fournisseurs[i].Cle
+	case "cle":
+	default:
+		return errMentionInconnue
+	}
+	j := slices.IndexFunc(x.entrees, func(e EntreeCoffre) bool { return e.ID == ref })
+	if ref == "" || j < 0 {
+		return errMentionInconnue
+	}
+	a := AccesCarte{Entree: x.entrees[j].Nom, Pour: c.Projet.Nom}
+	cette := func(b AccesCarte) bool { return b.ID == ref || strings.EqualFold(b.Entree, a.Entree) }
+	switch {
+	case retirer:
+		c.Acces = slices.DeleteFunc(c.Acces, cette)
+	case slices.ContainsFunc(c.Acces, func(b AccesCarte) bool { return memeAcces(a, b) }):
+		for i := range c.Acces { // added again: an unticked line is ticked again
+			if memeAcces(a, c.Acces[i]) {
+				c.Acces[i].Decoche = false
+			}
+		}
+	default:
+		c.Acces = append(c.Acces, a)
+	}
+	return nil
+}
