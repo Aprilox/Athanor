@@ -93,7 +93,7 @@ type opsSession struct {
 func nouveauServeur(config Config) *Serveur {
 	kit := Kit{config.Kit}
 	definirKitTextes(kit.Racine) // the texts of its local/ (textes.go)
-	if configNeuve && runtime.GOOS == "windows" {
+	if configNeuve.Load() && runtime.GOOS == "windows" {
 		_, err := os.Stat(filepath.Join(kit.Racine, "system", "distro.txt"))
 		config.ModeNatif = err != nil // a kit already installed in WSL stays in WSL
 	}

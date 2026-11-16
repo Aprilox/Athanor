@@ -268,6 +268,7 @@ func TestHubAncienneConfig(t *testing.T) {
 		m, _ := v.(map[string]any)
 		return m
 	}
+	configNeuve.Store(true) // as after an earlier test that read no config file: this read must not count as a first launch
 	for i := 1; i <= 2; i++ {
 		mux := demarrer()
 		e := appel(mux, "GET", "/api/etat", "")

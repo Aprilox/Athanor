@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -83,15 +84,16 @@ func cheminConfig() string {
 }
 
 // configNeuve: no configuration file yet (a first launch): native Windows is then the default mode, since
-// it needs nothing installed, unless this kit already has its WSL installation (nouveauServeur).
-var configNeuve bool
+// it needs nothing installed, unless this kit already has its WSL installation (nouveauServeur). The last
+// read decides: a test that read no file must not turn the next ones into first launches.
+var configNeuve atomic.Bool
 
 func lireConfig() Config {
 	c := configDefaut()
-	if b, err := os.ReadFile(cheminConfig()); err == nil {
+	b, err := os.ReadFile(cheminConfig())
+	configNeuve.Store(os.IsNotExist(err))
+	if err == nil {
 		_ = json.Unmarshal(b, &c)
-	} else if os.IsNotExist(err) {
-		configNeuve = true
 	}
 	// folders saved by older versions with a final dot or space ("montre3."): Windows drops it, Linux keeps
 	// it, so the pilot would have worked in another folder than the one shown in Explorer
