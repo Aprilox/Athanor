@@ -306,6 +306,86 @@ func TestMissionSuppression(t *testing.T) {
 		}
 	})
 
+	// M262b: the site removed from the servers by one Servers task per ticked environment, password retyped, only
+	// where the mission put something
+	t.Run("retrait_serveurs", func(t *testing.T) {
+		const mdp = `,"mot_de_passe":"mdp-test"}`
+		vide := stockee(t, "proposee", []VoieMission{})
+		if c, b := appel("POST", "/api/missions/"+vide+"/supprimer", `{"serveurs":["site"]`+mdp); c != http.StatusConflict || !existe(vide) {
+			t.Fatalf("a removal from servers the mission never used: %d %s", c, b)
+		}
+		id, tache := lancee(t)
+		var a ApercuSuppression
+		if _, b := appel("GET", "/api/missions/"+id+"/suppression", ""); json.Unmarshal([]byte(b), &a) != nil || len(a.Retirables) != 1 ||
+			a.Retirables[0].Nom != "site" || a.Retirables[0].URL != "https://atelier.example.fr" || !slices.Equal(a.Retirables[0].Serveurs, []string{"dev-4"}) {
+			t.Fatalf("preview: %s", b)
+		}
+		if c, b := appel("POST", "/api/missions/"+id+"/supprimer", `{"arret":"immediat","serveurs":["site"]}`); c == 200 || !existe(id) {
+			t.Fatalf("a removal from servers without the password: %d %s", c, b)
+		}
+		if c, b := appel("POST", "/api/missions/"+id+"/supprimer", `{"arret":"immediat","serveurs":["autre"]`+mdp); c != http.StatusConflict || !existe(id) {
+			t.Fatalf("an environment of no server: %d %s", c, b)
+		}
+		c, b := appel("POST", "/api/missions/"+id+"/supprimer", `{"arret":"immediat","serveurs":["site","site"]`+mdp)
+		if c != 200 || strings.Count(b, "site removal atelier/site") != 1 {
+			t.Fatalf("delete with the removal: %d %s", c, b)
+		}
+		partie(t, id, tache)
+		var retrait []TacheServeurs
+		tachesEnCours.Lock()
+		for _, e := range tachesEnCours.m {
+			if x := e.copie(); x.Env == "atelier/site" {
+				retrait = append(retrait, x)
+			}
+		}
+		tachesEnCours.Unlock()
+		if len(retrait) != 1 || !slices.Equal(retrait[0].Serveurs, []string{"a4"}) {
+			t.Fatalf("removal tasks: %+v", retrait)
+		}
+		consigne, _ := os.ReadFile(filepath.Join(dossierSessionTache(retrait[0].ID), "consigne.txt"))
+		for _, attendu := range []string{"Docker Compose project atelier-site", baseDeploiement("atelier", "site"), "/etc/caddy/sites/atelier.example.fr.caddy",
+			"caddy validate", "/etc/athanor/deploy/atelier", "DNS record of atelier.example.fr", "plan for the owner to accept", "Never touch the server itself"} {
+			if !strings.Contains(string(consigne), attendu) {
+				t.Errorf("removal brief without %q", attendu)
+			}
+		}
+		if s.arreterTache(retrait[0].ID) {
+			attendreFinTache(retrait[0].ID)
+		}
+
+		// after the milestone: the choice kept (never the password), the task launched once the follower deletes it
+		id, tache = lancee(t)
+		if c, b := appel("POST", "/api/missions/"+id+"/supprimer", `{"arret":"jalon","serveurs":["site"]`+mdp); c != 200 || !strings.Contains(b, `"differee":true`) {
+			t.Fatalf("removal after the milestone: %d %s", c, b)
+		}
+		if m, _ := lireMission(id); m.Suppression == nil || !slices.Equal(m.Suppression.Serveurs, []string{"site"}) {
+			t.Fatalf("the choice not kept: %+v", m.Suppression)
+		}
+		if f, _ := os.ReadFile(filepath.Join(dossierMissions(), id+".json")); strings.Contains(string(f), "mdp-test") {
+			t.Fatal("the password written in the mission")
+		}
+		_ = os.Remove(pid)
+		s.observerMission(id)
+		attendre(t, "the deletion once the milestone is done", func() bool { return !existe(id) })
+		partie(t, id, tache)
+		n := 0
+		tachesEnCours.Lock()
+		for _, e := range tachesEnCours.m {
+			if x := e.copie(); x.Env == "atelier/site" && x.ID != tache {
+				n++
+				defer func(id string) {
+					if s.arreterTache(id) {
+						attendreFinTache(id)
+					}
+				}(x.ID)
+			}
+		}
+		tachesEnCours.Unlock()
+		if n != 1 {
+			t.Fatalf("%d removal tasks after the milestone", n)
+		}
+	})
+
 	t.Run("vider", func(t *testing.T) {
 		for _, m := range lireMissions() {
 			_, _ = s.supprimerMission(m.ID, "test", OptionsSuppression{})

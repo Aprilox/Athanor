@@ -6031,19 +6031,30 @@ async function supprimerMissionUI(id) {
       ${a.dossier ? `<code class="petit">${h(a.dossier)}</code>` : ""}${a.dossier_non ? `<span class="muet petit">${h(t(a.dossier_non))}</span>` : ""}</span></label>` : ""}
     ${(a.acces || []).length ? `<label class="case"><input type="checkbox" data-suppr="acces"><span>${h(t("Also remove the access it gave: {0}", [a.acces.join(", ")]))}
       <span class="muet petit">${h(t("The vault entries stay."))}</span></span></label>` : ""}
+    ${(a.retirables || []).map((e) => `<label class="case"><input type="checkbox" data-suppr-srv="${h(e.nom)}"><span>${h(t("Also remove the site from the servers: {0}", [e.nom]))}
+      <span class="mis-url">${h(e.url)}</span> <span class="muet petit">${h((e.serveurs || []).join(", "))}</span></span></label>`).join("")}
+    ${(a.retirables || []).length ? `<p class="muet petit">${h(t("A Servers task per environment proposes the removal: you accept its plan. The servers, their keys and the other sites stay."))}</p>` : ""}
     ${a.depot ? `<p class="muet petit">${h(t("The GitHub repository stays:"))} ${lienDepot(a.depot)}</p>` : ""}
     ${enLigne.length ? `<p class="muet petit">${h(t("What it put online stays on the servers:"))} ${enLigne.map((e) => `${h(e.nom)} <span class="mis-url">${h(e.url)}</span>`).join(", ")}</p>` : ""}</div>`;
-  let r = null;
+  let r = null, corpsSuppr = null;
   const choix = await modaleSftp(t("Delete this mission?"), corps, [{ id: "", texte: t("Cancel") }, { id: "ok", texte: t("Delete the mission"), danger: true }], {
     large: true, valider: async (b, el) => {
       if (b !== "ok") return true;
       const coche = (x) => !!el.querySelector(`[data-suppr="${x}"]:checked`);
       const arret = a.en_cours ? (el.querySelector('[name="mis-arret"]:checked') || {}).value : undefined;
-      r = await api(`missions/${encodeURIComponent(id)}/supprimer`, "POST", { projet: coche("projet"), acces: coche("acces"), arret }).catch((e) => erreurModale(el, e.message));
+      const serveurs = [...el.querySelectorAll("[data-suppr-srv]:checked")].map((x) => x.dataset.supprSrv);
+      corpsSuppr = { projet: coche("projet"), acces: coche("acces"), arret, serveurs: serveurs.length ? serveurs : undefined };
+      if (serveurs.length) return true; // M262b: the password is asked next, as for launching a mission
+      r = await api(`missions/${encodeURIComponent(id)}/supprimer`, "POST", corpsSuppr).catch((e) => erreurModale(el, e.message));
       return !!r;
     } });
+  if (choix === "ok" && !r && corpsSuppr && corpsSuppr.serveurs) {
+    const p = await preuveMdp(t("Removing the site from the servers: retype Athanor's password."), { ok: t("Delete the mission"), danger: true });
+    if (p) r = await action(api(`missions/${encodeURIComponent(id)}/supprimer`, "POST", { ...corpsSuppr, ...p }), "");
+  }
   if (choix !== "ok" || !r) return;
-  toast(r.differee ? t("The mission will be deleted when the current milestone ends.") : t("Mission deleted."), "ok");
+  const retrait = (r.retire || []).some((x) => x.startsWith("site removal "));
+  toast(r.differee ? t("The mission will be deleted when the current milestone ends.") : retrait ? t("Mission deleted. A Servers task removes the site: accept its plan in Servers.") : t("Mission deleted."), "ok");
   if (!r.differee && etat.page === "mission") location.hash = "#missions"; else await rendrePage();
 }
 document.addEventListener("click", async (ev) => {

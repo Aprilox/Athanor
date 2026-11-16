@@ -20,6 +20,15 @@ import (
 type OptionsSuppression struct {
 	Projet bool `json:"projet,omitempty"` // the project the mission created, removed from Studio, its folder to the recycle bin
 	Acces  bool `json:"acces,omitempty"`  // the access the mission gave to its project (the vault entries stay)
+	// M262b: the environments whose site a Servers task removes from their servers (plan to accept, password asked)
+	Serveurs []string `json:"serveurs,omitempty"`
+}
+
+// RetraitEnv (M262b): an environment where the mission put something on servers, its site removable from them.
+type RetraitEnv struct {
+	Nom      string   `json:"nom"`
+	URL      string   `json:"url"`
+	Serveurs []string `json:"serveurs"` // the servers' names
 }
 
 // ApercuSuppression: what Delete will remove, shown in the confirmation before anything is done.
@@ -35,6 +44,7 @@ type ApercuSuppression struct {
 	Depot      string              `json:"depot,omitempty"`       // the GitHub repository: a link only, never deleted
 	Acces      []string            `json:"acces,omitempty"`       // "entry (env)" given by the mission
 	Envs       []EnvCarte          `json:"envs,omitempty"`        // what stays online on the servers
+	Retirables []RetraitEnv        `json:"retirables,omitempty"`  // M262b: what a Servers task can remove from them
 	Differee   *OptionsSuppression `json:"differee,omitempty"`    // already asked, done once the milestone ends
 }
 
@@ -113,6 +123,16 @@ func (s *Serveur) apercuSuppression(m Mission) ApercuSuppression {
 	}
 	p, non := s.projetSupprimable(m)
 	a.Projet, a.Dossier, a.DossierNon, a.DossierOK = p.Nom, p.Dossier, non, non == ""
+	liste, _ := lireServeurs()
+	for _, ec := range envsRetirables(m, c, p.Nom) {
+		r := RetraitEnv{Nom: ec.Nom, URL: ec.URL}
+		for _, id := range ec.Serveurs {
+			if i := slices.IndexFunc(liste, func(x ServeurInventaire) bool { return x.ID == id }); i >= 0 {
+				r.Serveurs = append(r.Serveurs, liste[i].Nom)
+			}
+		}
+		a.Retirables = append(a.Retirables, r)
+	}
 	for _, x := range s.accesDonnes(m, p.Nom) {
 		a.Acces = append(a.Acces, x.Entree+" ("+x.Pour+")")
 	}
@@ -134,7 +154,8 @@ func (s *Serveur) apiApercuSuppression(w http.ResponseWriter, r *http.Request) {
 func (s *Serveur) apiSupprimerMission(w http.ResponseWriter, r *http.Request) {
 	var c struct {
 		OptionsSuppression
-		Arret string `json:"arret"`
+		Arret      string `json:"arret"`
+		MotDePasse string `json:"mot_de_passe"`
 	}
 	if r.ContentLength != 0 && lireCorps(r, &c) != nil || !slices.Contains([]string{"", "immediat", "jalon"}, c.Arret) {
 		s.erreur(w, http.StatusBadRequest, "Invalid request")
@@ -145,6 +166,24 @@ func (s *Serveur) apiSupprimerMission(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		s.erreurMissionHTTP(w, err)
 		return
+	}
+	if len(c.Serveurs) > 0 { // M262b: acting on the servers, as launching a mission (C78)
+		if code, err := s.preuvePresence(r, c.MotDePasse); err != nil {
+			s.erreur(w, code, err.Error())
+			return
+		}
+		slices.Sort(c.Serveurs)
+		c.Serveurs = slices.Compact(c.Serveurs)
+		var carte CarteMission
+		_ = json.Unmarshal(m.Carte, &carte)
+		p, _ := s.projetMission(m)
+		ok := envsRetirables(m, carte, p.Nom)
+		for _, nom := range c.Serveurs {
+			if !slices.ContainsFunc(ok, func(ec EnvCarte) bool { return ec.Nom == nom }) {
+				s.erreur(w, http.StatusConflict, "This mission put nothing on the servers of this environment")
+				return
+			}
+		}
 	}
 	if c.Projet {
 		if _, non := s.projetSupprimable(m); non != "" {
@@ -206,6 +245,10 @@ func (s *Serveur) supprimerMission(id, qui string, o OptionsSuppression) ([]stri
 		return nil, err
 	}
 	taches := tachesDeMission(m) // read before the stop: a suspended preparation leaves its lane without its task
+	var c CarteMission
+	_ = json.Unmarshal(m.Carte, &c)
+	pm, _ := s.projetMission(m)
+	retirables := envsRetirables(m, c, pm.Nom) // M262b: before the stop too
 	if m.Etat == "lancee" || m.Etat == "arret_demande" || m.Etat == "en_pause" {
 		if m, err = s.arreterMission(id, qui); err != nil {
 			return nil, err
@@ -244,6 +287,24 @@ func (s *Serveur) supprimerMission(id, qui string, o OptionsSuppression) ([]stri
 		}
 		_ = os.RemoveAll(dossierSessionTache(t))
 		retire = append(retire, "Servers task "+t)
+	}
+	if len(o.Serveurs) > 0 { // M262b: launched while the project and its environments still exist (lancerTache reads them)
+		for _, ec := range retirables {
+			if !slices.Contains(o.Serveurs, ec.Nom) {
+				continue
+			}
+			env, natif := pm.Nom+"/"+ec.Nom, modeNatif.Load()
+			t, err := s.lancerTache(couper(briefRetrait(c, ec, pm.Nom), maxTexteTache-1), ec.Serveurs, natif, env)
+			if err != nil {
+				s.ecrireAudit(LigneAudit{Type: "evenement", De: qui, Vers: "servers", Projet: pm.Nom, Mission: id, Action: "retrait du site impossible", Resultat: env + " : " + err.Error()})
+				return retire, erreurMission{http.StatusConflict, "The Servers task that removes the site could not start: delete again, or remove it from the Servers page"}
+			}
+			if natif {
+				s.ecrireAudit(LigneAudit{Type: "evenement", De: qui, Vers: "servers", Projet: pm.Nom, Action: "voie Serveurs sans barrière",
+					Resultat: t.ID + " (" + env + ", retrait du site d'une mission supprimée en mode Windows natif)"})
+			}
+			retire = append(retire, "site removal "+env+" (Servers task "+t.ID+")")
+		}
 	}
 	if o.Acces && s.acces != nil && p.Nom == "" {
 		p, _ = s.projetMission(m)
@@ -289,6 +350,44 @@ func (s *Serveur) supprimerMission(id, qui string, o OptionsSuppression) ([]stri
 	s.ecrireAudit(LigneAudit{Type: "evenement", De: qui, Vers: "missions", Projet: prefixeMission + id, Mission: id, Action: "mission supprimée",
 		Resultat: s.masquerSecrets(strings.Join(retire, ", "))})
 	return retire, nil
+}
+
+// envsRetirables (M262b): c's environments with servers where m prepared (its Servers lane) or deployed something.
+func envsRetirables(m Mission, c CarteMission, projet string) []EnvCarte {
+	var l []EnvCarte
+	for _, ec := range c.Envs {
+		env := projet + "/" + ec.Nom
+		if len(ec.Serveurs) == 0 || projet == "" {
+			continue
+		}
+		if slices.ContainsFunc(m.Voies, func(v VoieMission) bool { return v.Module == "servers" && v.Ref != "" && v.Env == env }) ||
+			slices.ContainsFunc(m.Journal, func(e EntreeJournal) bool {
+				// prep: the follower launched it; suspendue: a pause took the task off its lane; deploi: a deployment
+				return e.ID == "prep:"+env && e.Niveau != "erreur" ||
+					(strings.HasPrefix(e.ID, "deploi:") || strings.HasPrefix(e.ID, "suspendue:")) && len(e.Params) > 0 && e.Params[0] == ec.Nom
+			}) {
+			l = append(l, ec)
+		}
+	}
+	return l
+}
+
+// briefRetrait (M262b): what the Servers task removes for ec's site, and what it never touches.
+func briefRetrait(c CarteMission, ec EnvCarte, projet string) string {
+	hote := hoteURL(ec.URL)
+	l := []string{"The owner deleted the mission \"" + c.Titre + "\" and asks to remove its site " + ec.URL + " (environment " + ec.Nom + " of the project " + projet +
+		") from these servers. Look first at what is there, then propose the whole removal as one plan for the owner to accept, and do it once accepted:",
+		"- stop and remove the Docker Compose project " + nomCompose(projet, ec.Nom) + " (its containers, networks and volumes), if it exists;",
+		"- delete the deployment folder " + baseDeploiement(projet, ec.Nom) + ";",
+		"- delete /etc/caddy/sites/" + hote + ".caddy, then caddy validate and reload caddy;",
+		"- delete the deploy key file /etc/athanor/deploy/" + nomProjetServeur(projet) + " unless another environment of this project still deploys on the server;",
+		"- what was installed for this site alone (its system user, its web server site, its certificate, its runtime if nothing else uses it);"}
+	if f := fournisseurCoche(hote, c.Acces); f != "" {
+		l = append(l, "- the DNS record of "+hote+" at the provider "+f+" (its token is given);")
+	} else {
+		l = append(l, "- the DNS record of "+hote+" if its provider can be reached with the tools given; otherwise say that it stays;")
+	}
+	return strings.Join(append(l, "Never touch the server itself (its system, its SSH access and firewall rules, its users other than the site's), its keys, nor any other site or project."), "\n")
 }
 
 // tachesDeMission: the Servers tasks m launched: its lanes', and those its journal names (suspended or ended since).
