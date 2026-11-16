@@ -438,6 +438,9 @@ func (t *sessionTerminal) rebrancher() error {
 		client.Close()
 		return nil
 	}
+	if n := len(t.ecran); n > 0 && t.ecran[n-1] != '\n' { // M275: the new shell's output starts on its own line, never after the old prompt
+		t.ecran = append(t.ecran, '\r', '\n')
+	}
 	vieux := t.client
 	t.client, t.sess, t.stdin = client, sess, stdin
 	t.tentative, t.perdue = 0, make(chan struct{})

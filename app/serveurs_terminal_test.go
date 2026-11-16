@@ -523,7 +523,7 @@ func TestTerminalSSHReconnexion(t *testing.T) {
 		t.Fatal("no new PTY")
 	}
 	l = lire(id)
-	l.attendre(t, "avant-coupure") // the screen so far, replayed
+	l.attendre(t, "avant-coupure\r\n") // the screen so far, replayed; the new shell on its own line (M275)
 	agir(id, map[string]any{"entree": "apres-reprise"})
 	l.attendre(t, "apres-reprise")
 

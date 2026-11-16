@@ -215,7 +215,7 @@ func (s *Serveur) finAction(t *tacheEnCours, n int, r ResultatOutil, err error) 
 			ecran += "\n"
 		}
 		if a.Etat == "erreur" {
-			ecran += "\x1b[31m✗ " + strings.TrimSpace(s.texteTerminal("Exit code {0}", a.Code)+" "+a.Detail) + "\x1b[0m\n"
+			ecran += "\x1b[31m✗ " + strings.TrimSpace(s.texteTerminal("Exit code {0}", a.Code)+" "+s.texteTerminal(a.Detail)) + "\x1b[0m\n" // M275: a known detail in the owner's language too
 		}
 	}
 	t.mu.Unlock()

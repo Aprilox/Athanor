@@ -318,7 +318,8 @@ func ouvrirBancIA(t *testing.T, repondre func(cmd string, entree []byte) (string
 func TestLibellesOutils(t *testing.T) {
 	cles := []string{"Assistant", "Exit code {0}", "The assistant's task ended: the keyboard is yours.",
 		"You have the keyboard; the assistant goes on in its own connection.", prefixeSFTPEchec,
-		"The assistant was stopped: the keyboard is yours.", "No command of the assistant is running: you can type until its next one."}
+		"The assistant was stopped: the keyboard is yours.", "No command of the assistant is running: you can type until its next one.",
+		"command stopped: the operation was cancelled (task stopped, session revoked or emergency stop)"} // M275: the detail of a command its task's Stop cut (serveurs_ssh.go)
 	for _, o := range outilsServeursMCP {
 		if o == "ssh_commande" { // shown as "$ command"
 			continue
