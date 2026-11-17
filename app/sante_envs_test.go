@@ -180,6 +180,7 @@ func TestSanteIncidents(t *testing.T) {
 		{`{"env":"dev","action":"reessayer","cle":"deploi-ancien"}`, 409, "This incident is over."},
 		{`{"env":"dev","action":"reessayer","cle":"deploi-dv1"}`, 409, "no deployment method"},
 		{`{"env":"dev","action":"revenir","cle":"deploi-dv1"}`, 409, "nothing was deployed"},
+		{`{"action":"revenir","cle":"deploi-dv1"}`, 409, "nothing was deployed"}, // M279: no env, the project's one deployment
 		{`{"env":"staging","action":"reessayer"}`, 200, ""},
 		{`{"env":"dev","action":"autre"}`, 400, "Invalid request"},
 	} {

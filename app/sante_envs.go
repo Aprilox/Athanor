@@ -474,7 +474,8 @@ func (s *Serveur) agirIncident(ctx context.Context, projet, env, action, cle, au
 	return map[string]any{"deploiement": d, "deploiements": s.deploiementsAffiches(projet)[env], "sante": s.vueSante(projet)[env]}, nil
 }
 
-// apiIncident: POST /api/projets/{nom}/incident {env, action: reessayer|revenir|main, cle, mot_de_passe}:
+// apiIncident: POST /api/projets/{nom}/incident {env, action: reessayer|revenir|main, cle, mot_de_passe};
+// env is optional (M279: the project's one deployment);
 // in prod, Retry and Go back only with the owner's accord (as apiRevenir).
 func (s *Serveur) apiIncident(w http.ResponseWriter, r *http.Request) {
 	projet := r.PathValue("nom")
@@ -484,7 +485,11 @@ func (s *Serveur) apiIncident(w http.ResponseWriter, r *http.Request) {
 		Cle        string `json:"cle"`
 		MotDePasse string `json:"mot_de_passe"`
 	}
-	if lireCorps(r, &c) != nil || !s.acces.EnvConnu(projet, c.Env) || !slices.Contains([]string{"reessayer", "revenir", "main"}, c.Action) {
+	err := lireCorps(r, &c)
+	if err == nil && c.Env == "" {
+		c.Env = s.deploiementProjet(projet)
+	}
+	if err != nil || !s.acces.EnvConnu(projet, c.Env) || !slices.Contains([]string{"reessayer", "revenir", "main"}, c.Action) {
 		s.erreur(w, http.StatusBadRequest, "Invalid request")
 		return
 	}

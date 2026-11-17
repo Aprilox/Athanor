@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"maps"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -51,20 +50,9 @@ func (s *Serveur) relaisActif(projet string) bool {
 	return s.acces != nil && s.acces.Environnements(projet)[s.envJalon(projet)].DeployerAuJalon
 }
 
-// envJalon (M247, free names): the environment deployed after each milestone: dev, or else the first by name
-// that asks it ("dev" without one; never a Production one, validerEnvironnement refuses it).
-func (s *Serveur) envJalon(projet string) string {
-	if s.acces == nil {
-		return "dev"
-	}
-	envs := s.acces.Environnements(projet)
-	for _, n := range append([]string{"dev"}, slices.Sorted(maps.Keys(envs))...) {
-		if envs[n].DeployerAuJalon {
-			return n
-		}
-	}
-	return "dev"
-}
+// envJalon (M279): the environment deployed after each milestone is the project's one deployment (never a
+// Production one, validerEnvironnement refuses it).
+func (s *Serveur) envJalon(projet string) string { return s.deploiementProjet(projet) }
 
 // noterJalonRelais: a milestone just done → its HEAD waits to be deployed to dev (never twice the same milestone).
 func (s *Serveur) noterJalonRelais(p Projet, jalon string, quand time.Time) {

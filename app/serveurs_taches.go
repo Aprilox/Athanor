@@ -297,6 +297,10 @@ func (s *Serveur) lancerTacheDans(texte string, serveurs []string, forcee bool, 
 		projet, nom, _ := strings.Cut(env, "/")
 		var e Environnement
 		if s.acces != nil && slices.Contains(s.nomsProjets(), projet) {
+			if nom == "" { // M279: "project" alone is its one deployment
+				nom = s.deploiementProjet(projet)
+				env = projet + "/" + nom
+			}
 			e = s.acces.Environnements(projet)[nom]
 		}
 		if len(e.Serveurs) == 0 || slices.ContainsFunc(serveurs, func(id string) bool { return !slices.Contains(e.Serveurs, id) }) {
@@ -696,7 +700,7 @@ func (s *Serveur) apiLancerTacheServeur(w http.ResponseWriter, r *http.Request) 
 	var c struct {
 		Texte      string `json:"texte"`
 		Forcer     bool   `json:"forcer"`
-		Env        string `json:"env"` // "projet/env", optional (M116)
+		Env        string `json:"env"` // "projet" (its one deployment, M279) or "projet/env", optional (M116)
 		MotDePasse string `json:"mot_de_passe"`
 		Terminal   string `json:"terminal"` // "live in my terminal": its open session on this server (M231f)
 		Depuis     string `json:"depuis"`   // the open terminal whose assistant panel sends it (M244f, M244k2)

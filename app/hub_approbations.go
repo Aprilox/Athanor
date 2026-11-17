@@ -102,7 +102,7 @@ func ouvrirApprobations(dossier string) (*Approbations, error) {
 		a.liste, a.regles = nil, nil // shortcut: an unreadable file loses the pending approvals, the agents ask again
 	}
 	for i := range a.liste { // M247: an approval saved before the Production field
-		a.liste[i].Production = a.liste[i].Production || a.liste[i].Env == "prod"
+		a.liste[i].Production = a.liste[i].Production || ancienProd(a.liste[i].Env)
 	}
 	return a, errors.Join(errs...)
 }

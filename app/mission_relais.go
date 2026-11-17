@@ -45,32 +45,30 @@ func (s *Serveur) accordProd(m Mission, projet, sha string) Approbation {
 }
 
 // envFinal (M247): the card's environment of the final deployment, its first Production one ("" without; a
-// card written before M247 has no production field, its "prod" environment is it).
+// card written before M247 has no production field, ancienProd reads it).
 func envFinal(c CarteMission) string {
 	for _, e := range c.Envs {
-		if e.Production || e.Nom == "prod" {
+		if e.Production || ancienProd(e.Nom) {
 			return e.Nom
 		}
 	}
 	return ""
 }
 
-// envJalonCarte (M247): the card's linked environment, deployed after each milestone: dev, or else its first
-// environment that is not Production ("" without one).
+// envJalonCarte (M279): the card's linked environment, deployed after each milestone: its one environment when
+// it is not Production; of several (a card of an older version), the first by name that is not, as
+// nomDeploiement ("" without one).
 func envJalonCarte(c CarteMission) string {
 	nom := ""
 	for _, e := range c.Envs {
-		if e.Nom == "dev" && !e.Production {
-			return "dev"
-		}
-		if nom == "" && !e.Production && e.Nom != "prod" {
+		if !e.Production && !ancienProd(e.Nom) && (nom == "" || e.Nom < nom) {
 			nom = e.Nom
 		}
 	}
 	return nom
 }
 
-// envFinalMission: envFinal of m's card, "prod" without one (the relay never asks then).
+// envFinalMission: envFinal of m's card; without one, the caution marker of M247 (the relay never asks then).
 func envFinalMission(m Mission) string {
 	var c CarteMission
 	_ = json.Unmarshal(m.Carte, &c)

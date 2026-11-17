@@ -312,7 +312,7 @@ func resumeCarteAccord(m Mission) map[string]string {
 	envs, acces, prod := []string{}, []string{}, ""
 	for _, e := range c.Envs {
 		envs = append(envs, strings.TrimSpace(e.Nom+" "+hoteURL(e.URL)))
-		if e.Production || e.Nom == "prod" {
+		if e.Production || ancienProd(e.Nom) {
 			prod = "oui"
 		}
 	}

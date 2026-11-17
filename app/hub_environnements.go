@@ -118,7 +118,7 @@ func validerEnvironnement(nom string, e Environnement, inventaire []ServeurInven
 	if !nomEnvValide(nom) {
 		return e, errEnvNom
 	}
-	e.Production = e.Production || nom == "prod" || serveurRoleProd(e.Serveurs, inventaire)
+	e.Production = e.Production || ancienProd(nom) || serveurRoleProd(e.Serveurs, inventaire)
 	var err error
 	if e.URL, err = validerURLEnv(e.URL); err != nil {
 		return e, err
@@ -173,7 +173,7 @@ func serveurRoleProd(ids []string, inventaire []ServeurInventaire) bool {
 // Production environment, the old name "prod", or one served by a server with the old prod role or that the
 // inventory does not know (in doubt, caution). The one predicate of the guards: never compare a name to "prod".
 func (s *Serveur) prudenceRenforcee(projet, env string) bool {
-	if env == "prod" {
+	if ancienProd(env) {
 		return true
 	}
 	if s.acces == nil {
@@ -215,6 +215,37 @@ func (a *Acces) ServeurProduction(id string) bool {
 	return false
 }
 
+// nomDeploiement (M279): the internal name of a project's one deployment among its environments: the only one;
+// of several (written by an older version), the one deployed after each milestone, or else the first by name
+// that is not Production, or else the first; "site" for none. Never the owner's to choose or to read.
+func nomDeploiement(envs map[string]Environnement) string {
+	noms := slices.Sorted(maps.Keys(envs))
+	for _, choisi := range []func(Environnement) bool{
+		func(e Environnement) bool { return e.DeployerAuJalon },
+		func(e Environnement) bool { return !e.Production },
+		func(Environnement) bool { return true },
+	} {
+		for _, n := range noms {
+			if choisi(envs[n]) {
+				return n
+			}
+		}
+	}
+	return "site"
+}
+
+// deploiementProjet: nomDeploiement of projet's environments.
+func (s *Serveur) deploiementProjet(projet string) string {
+	if s.acces == nil {
+		return "site"
+	}
+	return nomDeploiement(s.acces.Environnements(projet))
+}
+
+// ancienProd (M279): the one reading of an old environment name: "prod", written before the Production field
+// (M246), still reads as Production (files, cards and approvals of older versions; the caution marker of M247).
+func ancienProd(nom string) bool { return nom == "prod" }
+
 // marquerProduction (M246): an older "prod" environment, or one on a server with the old prod role, reads as
 // Production; in memory only, the file is written again only when it is changed.
 func marquerProduction(f *fichierAcces, inventaire []ServeurInventaire) {
@@ -223,7 +254,7 @@ func marquerProduction(f *fichierAcces, inventaire []ServeurInventaire) {
 			continue
 		}
 		for nom, e := range p.Environnements {
-			if e != nil && (nom == "prod" || serveurRoleProd(e.Serveurs, inventaire)) {
+			if e != nil && (ancienProd(nom) || serveurRoleProd(e.Serveurs, inventaire)) {
 				e.Production = true
 			}
 		}
@@ -334,7 +365,7 @@ func (a *Acces) HotesProd() map[string]string {
 			continue
 		}
 		for nom, e := range p.Environnements {
-			if h := hoteEnv(e); h != "" && (e.Production || nom == "prod") { // the old name reads as Production, like prudenceRenforcee
+			if h := hoteEnv(e); h != "" && (e.Production || ancienProd(nom)) { // the old name reads as Production, like prudenceRenforcee
 				r[h] = nomP + "/" + nom
 			}
 		}

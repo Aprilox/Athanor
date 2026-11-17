@@ -284,7 +284,8 @@ func (s *Serveur) deploiementsAffiches(projet string) map[string][]Deploiement {
 	return m
 }
 
-// apiRevenir: POST /api/projets/{nom}/revenir {env, mot_de_passe}: prod goes back only with the owner's accord
+// apiRevenir: POST /api/projets/{nom}/revenir {env, mot_de_passe}; env is optional (M279: the project's one
+// deployment). Prod goes back only with the owner's accord
 // (Athanor's password in this window, or a paired device unlocked with it).
 func (s *Serveur) apiRevenir(w http.ResponseWriter, r *http.Request) {
 	projet := r.PathValue("nom")
@@ -292,7 +293,11 @@ func (s *Serveur) apiRevenir(w http.ResponseWriter, r *http.Request) {
 		Env        string `json:"env"`
 		MotDePasse string `json:"mot_de_passe"`
 	}
-	if lireCorps(r, &c) != nil || !s.acces.EnvConnu(projet, c.Env) {
+	err := lireCorps(r, &c)
+	if err == nil && c.Env == "" {
+		c.Env = s.deploiementProjet(projet)
+	}
+	if err != nil || !s.acces.EnvConnu(projet, c.Env) {
 		s.erreur(w, http.StatusBadRequest, "Invalid request")
 		return
 	}

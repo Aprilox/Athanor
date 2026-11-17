@@ -153,6 +153,7 @@ const (
 	maxTitreCarte  = 120
 	maxBriefCarte  = 4000
 	maxAccesCarte  = 20
+	maxEnvsCarte   = 3 // as before M279, without naming them; one deployment per card comes with the new project model
 	maxEntreeCarte = 100
 	minutesDefaut  = 25.0
 )
@@ -181,8 +182,8 @@ func validerCarte(c *CarteMission, x contexteCarte) error {
 		return erreurEntree("Unknown permission mode (manuel, auto, modifications or ignorer)")
 	case c.JalonsEstimes < 1 || c.JalonsEstimes > 60:
 		return erreurEntree("jalons_estimes is between 1 and 60")
-	case len(c.Envs) > len(envsProjet):
-		return erreurEntree("One environment of each kind at most: dev, staging, prod")
+	case len(c.Envs) > maxEnvsCarte:
+		return erreurEntree(fmt.Sprintf("%d sites at most on a card", maxEnvsCarte))
 	case len(c.Acces) > maxAccesCarte:
 		return erreurEntree(fmt.Sprintf("%d vault entries at most", maxAccesCarte))
 	}
@@ -211,6 +212,9 @@ func validerCarte(c *CarteMission, x contexteCarte) error {
 	vus, avecServeurs := map[string]bool{}, false
 	for k := range c.Envs {
 		e := &c.Envs[k]
+		if e.Nom == "" { // M279: the name is internal, the project's one deployment
+			e.Nom = nomDeploiement(x.envs[c.Projet.Nom])
+		}
 		if vus[e.Nom] {
 			return erreurEntreeArgs{"The environment {0} is given twice", []string{e.Nom}}
 		}
