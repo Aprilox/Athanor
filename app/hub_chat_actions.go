@@ -6,6 +6,7 @@ package main
 
 import (
 	"bytes"
+	"cmp"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
@@ -23,7 +24,7 @@ import (
 
 // ActionChat: what the assistant proposes (and the user may change on the card before launching it).
 type ActionChat struct {
-	Type    string `json:"type"`              // projet (a new one, or an existing one's deployment) | pilote | demande | remarque | mission
+	Type    string `json:"type"`              // projet (a new one, or an existing one's deployment) | serveur (a task on servers, with API keys) | pilote | demande | remarque | mission
 	Projet  string `json:"projet,omitempty"`  // the project it acts on (projet: the new project's name)
 	Dossier string `json:"dossier,omitempty"` // projet: its folder (empty: next to the latest project)
 	Titre   string `json:"titre,omitempty"`   // demande: its title
@@ -54,6 +55,10 @@ type ActionChat struct {
 	SansPousse bool              `json:"sans_pousse,omitempty"`
 	Atelier    bool              `json:"atelier,omitempty"`
 	Reglages   map[string]string `json:"reglages,omitempty"`
+	// M296, serveur: the servers and the vault's API keys of its task (by id, or by name as the assistant writes
+	// them); always the proposal's, never the request's
+	Serveurs []string `json:"serveurs,omitempty"`
+	APIs     []string `json:"apis,omitempty"`
 }
 
 // CarteActionChat: the card the page shows, computed here (Quoi and Acces are i18n keys, Sur is data).
@@ -72,6 +77,9 @@ type CarteActionChat struct {
 	Empreinte string `json:"empreinte,omitempty"`
 	// projet (a new one): each project setting as Settings has it, for the card's own choices (not in the fingerprint)
 	Defauts []ReglageVue `json:"defauts,omitempty"`
+	// serveur, launched: where its task stands now and what it answered (read at each view, never kept)
+	EtatTache string `json:"etat_tache,omitempty"`
+	Bilan     string `json:"bilan,omitempty"`
 }
 
 var reAction = regexp.MustCompile(`(?s)<action>(.*?)</action>`)
@@ -91,7 +99,7 @@ user launches it):
 - {"type": "pilote", "projet": "an existing project"}: start the pilot of a project;
 - {"type": "demande", "projet": "an existing project", "titre": "a short title", "texte": "the request or the task, self-contained"}: add a request (a task) to a project's queue, its pilot takes it after the current one;
 - {"type": "remarque", "projet": "an existing project", "texte": "the remark, short and self-contained"}: leave a remark its pilot reads at its next cycle;
-- {"type": "mission", "texte": "the mission in one sentence, naming its projects and servers"}: prepare a mission (servers, deployments, several projects); Athanor's orchestrator then prepares its own card.
+- {"type": "serveur", "serveurs": ["the servers the user named, by their name"], "apis": ["the API keys of the vault the user named, by their name"], "texte": "what to do there, complete and self-contained, in the user's words", "permission": "manuel", "auto", "modifications" or "ignorer"}: run a task on servers, with API keys, or both (install, repair, check, configure, a DNS record), outside any project. "serveurs" or "apis" may be empty, never both, and never a server or a key the user did not name; "permission" only when the user asks for a mode;
 - {"type": "attribuer", "element": "agent" or "mcp", "nom": "the sub-agent's name or the MCP server's id, as in your library", "projets": ["exact project names"]}: switch a sub-agent or an MCP server of the library on in projects ("put it on my-shop").
 One action per answer, with the exact names of the projects below; a question gets an answer and no card.
 
@@ -290,7 +298,13 @@ func (s *Serveur) carteActionChat(a ActionChat) CarteActionChat {
 	c := CarteActionChat{Acces: []string{}}
 	k := s.kitCourant()
 	if a.Type != "projet" {
-		a.Deploiement, a.Permission = nil, ""
+		a.Deploiement = nil
+	}
+	if a.Type != "serveur" {
+		a.Serveurs, a.APIs = nil, nil
+		if a.Type != "projet" {
+			a.Permission = ""
+		}
 	}
 	sansTexte := false // projet: an existing project gets its deployment only, no request
 	// agent, mcp, attribuer: the projects it goes on, those the user ticked on the card
@@ -364,6 +378,42 @@ func (s *Serveur) carteActionChat(a ActionChat) CarteActionChat {
 			if err := s.deploiementCarteErr(a.Projet, d); err != nil && c.Erreur == "" {
 				c.Erreur = err.Error()
 			}
+		}
+	case "serveur":
+		a.Projet, a.Dossier, a.Titre, a.Permission = "", "", "", strings.TrimSpace(a.Permission)
+		d := DeploiementDemande{Serveurs: a.Serveurs, APIs: a.APIs}
+		noms := s.nommerDeploiement(&d)
+		a.Serveurs, a.APIs = d.Serveurs, d.APIs
+		inconnu := func(id string) bool { _, ok := noms[id]; return !ok }
+		var sur []string
+		for _, id := range slices.Concat(a.Serveurs, a.APIs) {
+			sur = append(sur, cmp.Or(noms[id], id))
+		}
+		c.Quoi, c.Sur = "Run a task on your servers, with your API keys", strings.Join(sur, ", ")
+		if len(a.Serveurs) == 0 {
+			c.Quoi = "Run a task with your API keys"
+		} else {
+			c.Acces = append(c.Acces, "Opens a session on the servers shown on this card: its agent runs commands and changes files there, under the permission mode shown (each server's own when none is shown).")
+		}
+		if len(a.APIs) == 0 {
+			c.Quoi = "Run a task on your servers"
+		} else {
+			c.Acces = append(c.Acces, "Uses the API keys shown on this card through Athanor's tools, on the zones of their sheets only: their value is never given to the agent.")
+		}
+		if a.Permission == "ignorer" {
+			c.Acces = append(c.Acces, "Ignore permissions: this task acts without asking you, dangerous commands included.")
+		}
+		switch {
+		case len(a.Serveurs)+len(a.APIs) == 0:
+			c.Erreur = "A task needs at least one server or one API"
+		case slices.ContainsFunc(a.Serveurs, inconnu):
+			c.Erreur = errServeurInconnu.Error()
+		case slices.ContainsFunc(a.APIs, inconnu):
+			c.Erreur = errCoffreInconnu.Error()
+		case a.Permission != "" && !slices.Contains(modesAutorisation, a.Permission):
+			c.Erreur = "Unknown permission mode (manuel, auto, modifications or ignorer)"
+		case modeNatif.Load() && !s.sansRappelsNatif(): // as the project's preparation: only once the owner turned native mode's reminders off
+			c.Erreur = "Native Windows mode has no barrier: this card starts no task here. Switch to WSL in Settings › Options, or tick “Don't show the native Windows mode warnings anymore” there, knowing the risk."
 		}
 	case "pilote":
 		a.Titre, a.Texte, a.Dossier = "", "", ""
@@ -470,7 +520,7 @@ func (s *Serveur) carteActionChat(a ActionChat) CarteActionChat {
 	default:
 		c.Erreur = "This card cannot be read: ask the assistant to propose it again."
 	}
-	if c.Erreur == "" && slices.Contains([]string{"projet", "demande", "remarque", "mission"}, a.Type) && a.Texte == "" && !sansTexte {
+	if c.Erreur == "" && slices.Contains([]string{"projet", "serveur", "demande", "remarque", "mission"}, a.Type) && a.Texte == "" && !sansTexte {
 		c.Erreur = "Write what it must do."
 	}
 	if c.Erreur == "" && utf8.RuneCountInString(a.Texte) > maxTexteAction {
@@ -480,7 +530,7 @@ func (s *Serveur) carteActionChat(a ActionChat) CarteActionChat {
 		c.Erreur = "The emergency stop is on: resume Athanor first."
 	}
 	c.ActionChat = a
-	if a.Type == "projet" {
+	if a.Type == "projet" || a.Type == "serveur" {
 		c.Empreinte = empreinteCarteChat(c)
 	}
 	return c
@@ -488,7 +538,7 @@ func (s *Serveur) carteActionChat(a ActionChat) CarteActionChat {
 
 // empreinteCarteChat: the card as the page shows it (what it does, on what, with which accesses, its fields).
 func empreinteCarteChat(c CarteActionChat) string {
-	c.Empreinte, c.Etat, c.Resultat, c.Args, c.Defauts = "", "", "", nil, nil
+	c.Empreinte, c.Etat, c.Resultat, c.Args, c.Defauts, c.EtatTache, c.Bilan = "", "", "", nil, nil, "", ""
 	b, _ := json.Marshal(c)
 	return fmt.Sprintf("%x", sha256.Sum256(b))[:24]
 }
@@ -587,6 +637,13 @@ func (s *Serveur) cartesConversation(conv conversationChat) map[string]CarteActi
 		c := s.carteActionChat(a)
 		if m.Action != nil { // decided: the card as it was launched or refused
 			c = *m.Action
+			if c.Type == "serveur" && c.Etat == "lancee" && len(c.Args) == 2 { // its task (Args[1]), as it is now
+				for _, t := range tachesServeur(slices.Concat(c.Serveurs, []string{serveurAPI})[0]) {
+					if t.ID == c.Args[1] {
+						c.EtatTache, c.Bilan = t.Etat, s.masquerSecrets(t.Resultat)
+					}
+				}
+			}
 		}
 		l[strconv.Itoa(i)] = c
 	}
@@ -696,6 +753,16 @@ func (s *Serveur) executerActionChat(c CarteActionChat, qui, message string) (st
 			return "Project “{0}” added, but its pilot did not start: {1}", []string{p.Nom, err.Error()}, nil
 		}
 		return "Project “{0}” added. {1}", []string{p.Nom, msg}, nil
+	case "serveur":
+		forcee := modeNatif.Load() && s.sansRappelsNatif()
+		t, err := s.lancerTacheDans(a.Texte, a.Serveurs, forcee, "", "", false, "", a.APIs, a.Permission)
+		if err != nil {
+			return "", nil, err
+		}
+		if forcee {
+			s.ecrireAudit(LigneAudit{Type: "evenement", De: qui, Vers: "servers", Mission: t.ID, Action: "tâche serveurs forcée sans rappel", Resultat: strings.Join(a.Serveurs, ",")})
+		}
+		return "Task started on {0}.", []string{c.Sur, t.ID}, nil // the task's id: cartesConversation reads its state
 	case "pilote":
 		p, _ := s.projetLocalChat(a.Projet)
 		msg, err := demarrerPiloteMission(s, p)
@@ -752,7 +819,7 @@ func (s *Serveur) apiHubChatAction(w http.ResponseWriter, r *http.Request) {
 		s.erreur(w, http.StatusConflict, "This card was already decided.")
 		return
 	}
-	c.Action.Type, c.Action.Fichiers = propose.Type, propose.Fichiers
+	c.Action.Type, c.Action.Fichiers, c.Action.Serveurs, c.Action.APIs = propose.Type, propose.Fichiers, propose.Serveurs, propose.APIs
 	carte := s.carteActionChat(c.Action)
 	carte.Defauts = nil // for the open card only, never kept with the decision
 	qui := deQui(r)
@@ -763,7 +830,7 @@ func (s *Serveur) apiHubChatAction(w http.ResponseWriter, r *http.Request) {
 	} else {
 		// R3: Launch from an older view (a project created or a server removed since) launches nothing, and a
 		// card changed into another action (a new project renamed into an existing one) neither
-		if vue := s.carteActionChat(propose); propose.Type == "projet" && (c.Empreinte != vue.Empreinte || carte.Quoi != vue.Quoi) {
+		if vue := s.carteActionChat(propose); vue.Empreinte != "" && (c.Empreinte != vue.Empreinte || carte.Quoi != vue.Quoi) {
 			s.erreur(w, http.StatusConflict, "This card changed since it was shown: read it again, then launch it.")
 			return
 		} else if appareilDe(r) != "" && carte.Dossier != vue.Dossier {

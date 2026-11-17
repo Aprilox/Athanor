@@ -2182,11 +2182,7 @@ document.addEventListener("focusout", (ev) => { if (ev.target.id === "accueil-te
 pages.accueil = async () => {
   // B4: /api/hub failing still shows the chat bar, with a readable notice above it
   const [d, sugg, mis] = await Promise.all([lireHub().catch((e) => ({ panne: e.message || String(e) })), api("mentions").catch(() => ({})), api("missions").catch(() => ({}))]), modules = d.modules || [];
-  // the card shown: the one followed in this window, else the newest still being prepared or proposed
-  const lm = mis.missions || [], vue = etat.missionVue, courante = (vue && lm.find((x) => x.id === vue.mission.id)) || lm.find((x) => ACTIVE_MISSION.includes(x.etat));
-  etat.missionVue = courante ? await api("missions/" + encodeURIComponent(courante.id)).catch(() => null) : null;
-  clearTimeout(minuterieMission);
-  if (etat.missionVue && travailleMission(etat.missionVue)) minuterieMission = setTimeout(lireMissionVue, 2000);
+  const lm = mis.missions || [];
   etat.hubSig = JSON.stringify([modules, d.elements || []]); if (!d.panne) rendreMenu(modules);
   etat.mentionsSugg = sugg.mentions || []; etat.mentionListe = null;
   const hc = etat.hubChat || { messages: [], pouvoirs: {} };
@@ -2205,12 +2201,10 @@ pages.accueil = async () => {
       <div class="ligne m0 puces-suggestions local-seul chat-replie" id="accueil-sugg" role="group" aria-label="${h(t("Add to your request"))}">${suggestionsMentions()}</div>
       <div class="ligne m0 mt-1 hub-chat-bas">${pouvoirsHub(hc.pouvoirs || {})}<span class="espace"></span>${boutonOptions("local-seul")}
         <button type="button" class="btn local-seul chat-replie" data-choisir-pieces="hc" title="${h(t("Images, PDF and text files, 20 MB at most each; you can also drop or paste them"))}">${t("Attach files")}</button>
-        <button type="button" class="btn local-seul chat-replie" id="accueil-mission">${t("Create a mission")}</button>
         <button type="button" class="btn local-seul" id="hub-chat-stop" ${hc.en_cours ? "" : "hidden"}>${t("Stop")}</button>
         <button type="submit" class="btn btn-primaire local-seul" id="hub-chat-envoyer" ${hc.en_cours ? "hidden" : ""}>${t("Send")}</button></div>
       <div class="muet petit local-seul chat-replie" id="accueil-aide">${t("Type @ to name a project, a server or an API.")}</div>
     </form>
-    <div id="mission-zone" aria-live="polite">${zoneMission()}</div>
     ${blocAttente(d.elements || [], modules)}
     ${blocEnCours(d.elements || [], modules, lm.filter((x) => ["acceptee", "lancee", "en_pause", "arret_demande"].includes(x.etat)))}
     <div class="grille-hub">${modules.filter((m) => ((m.resume || {}).stats || []).length).map(tuileModule).join("")}</div>
@@ -2483,15 +2477,6 @@ document.addEventListener("submit", async (ev) => {
   const texte = ($("#mis-q-libre").value || "").trim(); if (!texte) return;
   if (await actionMission("repondre", { question: ev.target.dataset.question, texte })) etat.missionReponse = "";
 });
-async function envoyerAccueil() {
-  const texte = ($("#accueil-texte").value || "").trim(); if (!texte || etat.envoiMission) return;
-  etat.envoiMission = true; // B86: a double click sends once
-  const r = await action(api("missions", "POST", { phrase: texte, mentions: (etat.accueilMentions || []).map((m) => ({ type: m.type, ref: m.ref })) }), "").finally(() => { etat.envoiMission = false; });
-  if (!r) return;
-  etat.accueilTexte = ""; etat.accueilMentions = []; $("#accueil-texte").value = ""; $("#accueil-texte").style.height = ""; majMentions();
-  etat.missionVue = { mission: r.mission, orchestrateur: r.mission.etat === "preparation" }; etat.missionEdition = null;
-  majZoneMission();
-}
 document.addEventListener("submit", (ev) => { if (ev.target.id === "accueil-form") { ev.preventDefault(); envoyerHubChat(); } });
 
 // M195: the home conversation (hub_chat.go), the project chat with the hub's scope. Its powers are the
@@ -2547,7 +2532,10 @@ function carteActionHub(c, i) {
   const existant = ty === "projet" && !c.dossier; // M295: an existing project gets its deployment only
   // M295b: a `projet` card is drawn from what the owner left on it (formCarteProjet); its fields exist on the open card only
   const f = ty === "projet" && !c.etat ? formCarteProjet(c, i) : null, ouverte = !!f && etat.carteProjetOuverte === i;
-  const champs = ty === "mission" ? "" : choixProjet;
+  // M296: a `serveur` card changes its text and its permission mode only; its servers and keys are the proposal's
+  const champs = ty === "mission" ? "" : ty !== "serveur" ? choixProjet : `<label class="champ"><span>${t("Permissions")}</span><select data-cact="permission">${[["", t("The mode of each server (Settings › Permissions for API keys alone)")], ...AUTORISATIONS_IA()].map(([k, n]) => `<option value="${k}" ${k === (c.permission || "") ? "selected" : ""}>${h(n)}</option>`).join("")}</select></label>`;
+  const [etatT, classeT] = ETATS_TACHE_SRV()[c.etat_tache] || [c.etat_tache, ""];
+  const tache = !c.etat_tache ? "" : `<div class="petit carte-action-tache"><span class="pv-etat ${classeT}">${h(etatT)}</span>${(c.serveurs || []).length ? ` <a href="#serveur/${encodeURIComponent(c.serveurs[0])}">${t("Follow this task on the server's page")}</a>` : ""}</div>${c.bilan ? `<div class="petit">${mdChat(c.bilan)}</div>` : ""}`;
   const equipe = ["agent", "mcp", "attribuer"].includes(ty) ? champsEquipeHub(c, [...new Set([...(c.projets || []), ...projets.filter((n) => n && n !== c.projet)])]) : null;
   const titre = ty === "demande" ? `<label class="champ"><span>${t("Title")}</span><input type="text" data-cact="titre" value="${v(c.titre)}"></label>` : "";
   // M295: the deployment and the permission mode of a `projet` card, shown only when the request uses them; Launch sends them back as shown
@@ -2558,7 +2546,7 @@ function carteActionHub(c, i) {
       <br>${t("{0}: {1}", [t("When to deploy"), t(dpl.moment === "jalon" ? "After each milestone" : "At delivery")])}${dpl.plan ? `<br>${v(dpl.plan)}` : ""}</div>`;
   const permission = perm && !ouverte ? `<div class="petit${perm === "ignorer" ? " attention" : ""}">${t("{0}: {1}", [t("Permissions"), h(titrePermission(perm))])}</div>` : "";
   const texte = ty === "pilote" || equipe || existant ? "" : `<label class="champ"><span>${t("Text")}</span><textarea data-cact="texte" rows="5">${v(c.texte)}</textarea></label>`;
-  const decide = c.etat ? `<div class="${c.etat === "lancee" ? "ok" : "muet"} petit" role="status">${c.etat === "lancee" ? (ic("ok") + " ") + t("Launched") : (ic("croix") + " ") + t("Refused")}${c.resultat ? " — " + h(t(c.resultat, (c.args || []).map((x) => t(x)))) : ""}${(c.args || []).includes(SANS_CLAUDE) ? ` <a href="#claude">${t("Open Settings › Claude")}</a>` : ""}</div>`
+  const decide = c.etat ? `<div class="${c.etat === "lancee" ? "ok" : "muet"} petit" role="status">${c.etat === "lancee" ? (ic("ok") + " ") + t("Launched") : (ic("croix") + " ") + t("Refused")}${c.resultat ? " — " + h(t(c.resultat, (c.args || []).map((x) => t(x)))) : ""}${(c.args || []).includes(SANS_CLAUDE) ? ` <a href="#claude">${t("Open Settings › Claude")}</a>` : ""}</div>${tache}`
     : `${c.erreur ? `<div class="attention petit" role="alert">${h(t(c.erreur))}</div>` : ""}
       ${equipe ? equipe.vue : ""}<div class="carte-action-champs"${ouverte ? "" : " hidden"}>${equipe ? equipe.champs : f ? (ouverte ? champsCarteProjet(c, f, existant) : "") : champs + titre + texte}</div>
       <div class="ligne m0 mt-1"><button type="button" class="btn btn-petit btn-primaire" data-cact-decision="lancer" data-index="${i}">${t("Launch")}</button>
@@ -2666,11 +2654,11 @@ document.addEventListener("click", async (ev) => {
     if (f.dep) a.deploiement = { ...f.dep, serveurs: refs(f.dep.serveurs), apis: refs(f.dep.apis) };
     if (c.dossier) Object.assign(a, { dossier: f.dossier, texte: f.texte, permission: f.permission, modes: f.modes || undefined, github: f.github, depot: f.depot, sans_pousse: f.sans_pousse, atelier: f.atelier, reglages: f.reglages });
     preuve = { empreinte: f.empreinte };
-    if (b.dataset.cactDecision === "lancer" && a.permission === "ignorer") {
-      const p = await confirmerIgnorer(t("This project will act on its servers without asking you, dangerous commands and production deployments included. Choose it only for servers you can rebuild."));
-      if (!p) return;
-      preuve = { ...preuve, confirmer: true, ...p };
-    }
+  } else if (a.type === "serveur") preuve = { empreinte: etat.hubChat.actions[+carte.dataset.carteAction].empreinte }; // M296: the card read
+  if (preuve.empreinte && b.dataset.cactDecision === "lancer" && a.permission === "ignorer") {
+    const p = await confirmerIgnorer(t(a.type === "serveur" ? "This task will act without asking you, dangerous commands included. Choose it only for servers you can rebuild." : "This project will act on its servers without asking you, dangerous commands and production deployments included. Choose it only for servers you can rebuild."));
+    if (!p) return;
+    preuve = { ...preuve, confirmer: true, ...p };
   }
   b.disabled = true;
   const r = await action(api("hub/chat/action", "POST", { index: Number(b.dataset.index), decision: b.dataset.cactDecision, action: a, ...preuve }).then((x) => ({ ...x, args: (x.args || []).map((y) => t(y)) }))); // an argument may be a message key (the pilot's start)
@@ -2780,7 +2768,6 @@ document.addEventListener("keydown", (ev) => {
 document.addEventListener("click", async (ev) => {
   const b = ev.target.closest("#hub-chat-aide, #accueil-mission, #hub-chat-stop, #hub-chat-nouveau, #hub-dossier-ajouter, [data-dossier-retirer]"); if (!b) return;
   if (b.id === "hub-chat-aide") return lancerTourChat();
-  if (b.id === "accueil-mission") return envoyerAccueil();
   if (b.id === "hub-dossier-ajouter") return ajouterDossierHub();
   if (b.dataset.dossierRetirer) return changerPouvoirs({ dossiers: (etat.hubChat.pouvoirs.dossiers || []).filter((x, i) => i !== +b.dataset.dossierRetirer) });
   if (b.id === "hub-chat-stop") { await action(api("hub/chat/arreter", "POST")); return majHubChat(true); }
@@ -3004,8 +2991,7 @@ const GUIDE = [
       ["What it reads", "Only what you give it: your messages, the files you attach (or drop or paste them: images, PDF and text files, 20 MB at most each) and the folders you point under *What the assistant can do* › *Folders*, each read only or read and write. *@* names a project, a server or a vault key."],
       ["Its powers", "*What the assistant can do* stays visible under the field. *Internet* lets it search and read the web; *Writing* lets it change files, only in the folders set to read and write. Both are off by default, and off again in each new conversation. It never runs a command, never uses an MCP server and never reaches a server by itself."],
       ["What it never sees", "The vault's values, secrets files (.env), Athanor's own folders and system folders are never given to it, and a vault value pasted in a message or a file is masked before it reads it. A file or a web page that gives it orders is data: the assistant tells you what it asks and does not follow it."],
-      ["Cards", "To act, it proposes a card: create a project and start its pilot, start a pilot, add a request, leave a remark, prepare a mission, create a sub-agent or an MCP server, switch one on in projects. The card says what, on what and with which accesses: *Launch*, *Change* or *Refuse*. Nothing runs before you press *Launch*, and each decision goes into the audit log."],
-      ["Missions", "*Create a mission* sends your sentence to the orchestrator, which prepares its own card under the conversation: lanes, environments, accesses, approvals, estimate. *Guide › Launch a mission* walks through one.", "#accueil", "Home"],
+      ["Cards", "To act, it proposes a card: create a project and start its pilot, start a pilot, add a request, leave a remark, run a task on your servers or with your API keys, create a sub-agent or an MCP server, switch one on in projects. The card says what, on what and with which accesses: *Launch*, *Change* or *Refuse*. Nothing runs before you press *Launch*, and each decision goes into the audit log."],
       ["From a phone", "On a paired device the conversation is read only: you read it and its powers, and you write to the assistant on the computer. Approvals and the emergency stop still work from the phone. The *?* at the top of the conversation replays its short tutorial."],
     ] },
   { id: "coffre", titre: "The vault", intro: "The vault keeps your keys, tokens and settings in one place, encrypted on the disk. A secret's value is shown only while you type it, never again, and no page or answer of Athanor contains it.",
