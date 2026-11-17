@@ -348,7 +348,7 @@ func (s *Serveur) definirEnvCarte(p Projet, c CarteMission, ec EnvCarte, politiq
 	}
 	v, err := validerEnvironnement(ec.Nom, e, inventaire)
 	if err == nil {
-		err = s.acces.DefinirEnvironnement(p.Nom, ec.Nom, v)
+		err = s.acces.definirAncien(p.Nom, ec.Nom, v)
 	}
 	if err != nil {
 		return errMoteur("the environment {0}: {1}", ec.Nom, err)

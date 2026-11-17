@@ -397,7 +397,7 @@ func TestMissionLancer(t *testing.T) {
 	echecPilote = false
 	// 7. C81: an existing staging (auth_proxy, a2, accord) never weakened by the mission (aucune, no server, policy prod):
 	// before → after on the card; the owner's Modify changes the protection, the policy stays the strictest
-	if err := s.acces.DefinirEnvironnement("boutique", "staging", Environnement{URL: "https://staging.boutique.fr", Protection: "auth_proxy",
+	if err := s.acces.definirAncien("boutique", "staging", Environnement{URL: "https://staging.boutique.fr", Protection: "auth_proxy",
 		Serveurs: []string{"a2"}, Politique: "accord"}); err != nil {
 		t.Fatal(err)
 	}

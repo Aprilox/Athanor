@@ -153,7 +153,7 @@ func TestDeployerRefus(t *testing.T) {
 	s.mu.Lock()
 	s.config.Projets = append(s.config.Projets, Projet{Nom: "m131", Dossier: depot})
 	s.mu.Unlock()
-	if err := s.acces.DefinirEnvironnement("m131", "dev", Environnement{URL: "http://m131.test", Serveurs: []string{"absent"}, Protection: "aucune", Politique: "auto"}); err != nil {
+	if err := s.acces.definirAncien("m131", "dev", Environnement{URL: "http://m131.test", Serveurs: []string{"absent"}, Protection: "aucune", Politique: "auto"}); err != nil {
 		t.Fatal(err)
 	}
 	ctx, cfg := context.Background(), &ConfigDeploiement{Methode: "statique", Source: "artefact", Dossier: "site"}
@@ -190,7 +190,7 @@ func TestDeployerRefus(t *testing.T) {
 		t.Fatal(err)
 	}
 	autre := &ConfigDeploiement{Methode: "statique", Source: "artefact", Dossier: "x"}
-	if err := s.acces.DefinirEnvironnement("m131", "dev", Environnement{URL: "http://m131.test", Serveurs: []string{"absent"}, Protection: "aucune", Politique: "auto", Deploiement: autre}); err != nil {
+	if err := s.acces.definirAncien("m131", "dev", Environnement{URL: "http://m131.test", Serveurs: []string{"absent"}, Protection: "aucune", Politique: "auto", Deploiement: autre}); err != nil {
 		t.Fatal(err)
 	}
 	if e := s.acces.Environnements("m131")["dev"]; e.Deploiement == nil || *e.Deploiement != *cfg {
@@ -212,7 +212,7 @@ func TestDeploiementStatiqueConteneur(t *testing.T) {
 	s.mu.Unlock()
 	const hote, base = "m131.test", "/srv/athanor/m131-dev"
 	resoudreTest(t, hote+":80", web)
-	if err := s.acces.DefinirEnvironnement("m131", "dev", Environnement{URL: "http://" + hote, Serveurs: []string{id}, Protection: "aucune", Politique: "auto"}); err != nil {
+	if err := s.acces.definirAncien("m131", "dev", Environnement{URL: "http://" + hote, Serveurs: []string{id}, Protection: "aucune", Politique: "auto"}); err != nil {
 		t.Fatal(err)
 	}
 	nettoyer := "sudo -n rm -rf " + base + " /etc/caddy/sites/" + hote + ".caddy /etc/caddy/sites/zz-casse.caddy; sudo -n caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null 2>&1; true"
@@ -349,7 +349,7 @@ func TestDeploiementStatiqueConteneur(t *testing.T) {
 	}
 	e := s.acces.Environnements("m131")["dev"]
 	e.Serveurs = []string{id, id + "-2"}
-	if err := s.acces.DefinirEnvironnement("m131", "dev", e); err != nil {
+	if err := s.acces.definirAncien("m131", "dev", e); err != nil {
 		t.Fatal(err)
 	}
 	echecBasculeTest = func(n int) bool { return n == 1 }
@@ -365,7 +365,7 @@ func TestDeploiementStatiqueConteneur(t *testing.T) {
 		}
 	}
 	e.Serveurs = []string{id}
-	if err := s.acces.DefinirEnvironnement("m131", "dev", e); err != nil {
+	if err := s.acces.definirAncien("m131", "dev", e); err != nil {
 		t.Fatal(err)
 	}
 	// a failed external check: the version stays served, the deployment is a failure

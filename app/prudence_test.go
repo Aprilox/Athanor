@@ -33,12 +33,12 @@ func TestPrudenceRenforcee(t *testing.T) {
 		"vitrine": {URL: "https://vitrine.martin.fr", Serveurs: []string{"v-prod"}},
 		"essai":   {URL: "https://essai.martin.fr", Serveurs: []string{"v-dev"}, Politique: "accord"},
 	} {
-		if err := s.acces.DefinirEnvironnement("demo", env, e); err != nil {
+		if err := s.acces.definirAncien("demo", env, e); err != nil {
 			t.Fatal(env, err)
 		}
 	}
 	// a server removed from the inventory after the environment was set: in doubt, caution
-	if err := s.acces.DefinirEnvironnement("demo", "orphelin", Environnement{URL: "https://orphelin.martin.fr", Serveurs: []string{"v-dev"}, Politique: "auto"}); err != nil {
+	if err := s.acces.definirAncien("demo", "orphelin", Environnement{URL: "https://orphelin.martin.fr", Serveurs: []string{"v-dev"}, Politique: "auto"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := modifierServeurs(func(l []ServeurInventaire) ([]ServeurInventaire, error) {
@@ -46,7 +46,7 @@ func TestPrudenceRenforcee(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.acces.DefinirEnvironnement("demo", "orphelin", Environnement{URL: "https://orphelin.martin.fr", Serveurs: []string{"v-tmp"}, Politique: "auto"}); err != nil {
+	if err := s.acces.definirAncien("demo", "orphelin", Environnement{URL: "https://orphelin.martin.fr", Serveurs: []string{"v-tmp"}, Politique: "auto"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := modifierServeurs(func(l []ServeurInventaire) ([]ServeurInventaire, error) { return l[:len(l)-1], nil }); err != nil {

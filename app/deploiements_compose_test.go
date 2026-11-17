@@ -140,7 +140,7 @@ func TestDeploiementComposeConteneur(t *testing.T) {
 	s.mu.Unlock()
 	const hote, base, temoin = "m134.test", "/srv/athanor/m134-dev", "temoin-compose-7311"
 	resoudreTest(t, hote+":80", web)
-	if err := s.acces.DefinirEnvironnement("m134", "dev", Environnement{URL: "http://" + hote, Serveurs: []string{id}, Protection: "aucune", Politique: "auto"}); err != nil {
+	if err := s.acces.definirAncien("m134", "dev", Environnement{URL: "http://" + hote, Serveurs: []string{id}, Protection: "aucune", Politique: "auto"}); err != nil {
 		t.Fatal(err)
 	}
 	e, err := s.coffre.Ajouter(EntreeCoffre{Nom: "DB m134", Famille: "secret", Type: "jeton", Portee: "code"}, temoin)

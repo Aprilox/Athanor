@@ -22,7 +22,7 @@ func TestDemanderDeploiement(t *testing.T) {
 	depot, c := depotEssai(t, map[string]string{"a": "1"}, map[string]string{"a": "2"}, map[string]string{"a": "3"}, map[string]string{"a": "4"})
 	s.config.Projets[0].Dossier = depot
 	inventaireTest(t, nil, "s1") // M247: an unknown server reads as production
-	if err := s.acces.DefinirEnvironnement("demo", "dev", Environnement{URL: "https://dev.martin.fr", Serveurs: []string{"s1"}, Protection: "aucune", Politique: "auto"}); err != nil {
+	if err := s.acces.definirAncien("demo", "dev", Environnement{URL: "https://dev.martin.fr", Serveurs: []string{"s1"}, Protection: "aucune", Politique: "auto"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := outilDemanderDeploiement(s, SessionHub{Projet: "demo", Agent: "pilote"}, json.RawMessage(`{"environnement":"dev","commit":"`+strings.Repeat("ab12", 10)+`"}`)); err == nil || !strings.Contains(err.Error(), "is made by the mission's Servers lane") {
@@ -34,7 +34,7 @@ func TestDemanderDeploiement(t *testing.T) {
 		"staging": {Serveurs: []string{"s1"}, Protection: "aucune", Politique: "accord"},
 		"prod":    {URL: "https://martin.fr/", Serveurs: []string{"s3", "s2"}, Protection: "aucune", Politique: "accord"},
 	} {
-		if err := s.acces.DefinirEnvironnement("demo", env, e); err != nil {
+		if err := s.acces.definirAncien("demo", env, e); err != nil {
 			t.Fatal(err)
 		}
 		if err := s.acces.NoterDeploiement("demo", env, *methode); err != nil {
@@ -142,7 +142,7 @@ func TestDemanderDeploiement(t *testing.T) {
 	}
 	idB := idDe(deployer("prod", shaB))
 	accepter(idB)
-	if err := s.acces.DefinirEnvironnement("demo", "prod", Environnement{URL: "https://martin.fr/", Serveurs: []string{"s2"}, Protection: "aucune", Politique: "accord"}); err != nil {
+	if err := s.acces.definirAncien("demo", "prod", Environnement{URL: "https://martin.fr/", Serveurs: []string{"s2"}, Protection: "aucune", Politique: "accord"}); err != nil {
 		t.Fatal(err)
 	}
 	if idB2 := idDe(deployer("prod", shaB)); idB2 == idB {

@@ -301,6 +301,12 @@ func TestEnvironnementsAPI(t *testing.T) {
 	if code, _ := appel("GET", "/api/projets/inconnu/environnements", ""); code != 404 {
 		t.Errorf("unknown project: %d", code)
 	}
+	// M281: a project has one deployment; this one is an older project with its three environments
+	for _, nom := range []string{"dev", "staging", "prod"} {
+		if err := s.acces.definirAncien("demo", nom, envDefaut()); err != nil {
+			t.Fatal(err)
+		}
+	}
 	for _, c := range []string{
 		`{"env":"prod","serveurs":["` + prod + `"],"politique":"auto"}`, `{"env":"dev","serveurs":["inconnu"]}`,
 		`{"env":"dev","url":"https://a:b@exemple.fr"}`, `{"env":"Q A"}`, `{"env":"*"}`, `pas du json`,
@@ -314,7 +320,7 @@ func TestEnvironnementsAPI(t *testing.T) {
 		t.Errorf("prod: %d %v", code, v)
 	}
 	if code, v := appel("POST", "/api/projets/demo/environnements", `{"env":"dev","url":"https://dev.exemple.fr","serveurs":["`+dev+`"],"politique":"auto"}`); code != 200 ||
-		env(v, "dev")["politique"] != "auto" || env(v, "prod")["protection"] != "access" || fmt.Sprint(v["envs"], v["prudence"]) != "[dev prod] [prod]" {
+		env(v, "dev")["politique"] != "auto" || env(v, "prod")["protection"] != "access" || fmt.Sprint(v["envs"], v["prudence"]) != "[dev prod staging] [prod]" {
 		t.Errorf("dev: %d %v", code, v)
 	}
 	// B71: saving an environment with "Ask for my accord" ends its "never ask again" deployment rule, only that one

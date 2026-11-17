@@ -45,6 +45,8 @@ type ProjetAcces struct {
 	Environnements map[string]*Environnement `json:"environnements,omitempty"`
 	// the GitHub deployment key's vault entry (hub_cle_deploiement.go), set by Athanor only
 	CleDeploiement string `json:"cle_deploiement,omitempty"`
+	// M281: the site (internal name) an older project with several deploys; absent: nomDeploiement chooses
+	DeploiementCourant string `json:"deploiement_courant,omitempty"`
 }
 
 type fichierAcces struct {
@@ -160,7 +162,7 @@ func (a *Acces) Projet(nom string) ProjetAcces {
 	defer a.mu.Unlock()
 	p := ProjetAcces{Env: "dev", Acces: []AccesProjet{}}
 	if x := a.f.Projets[nom]; x != nil {
-		p.Env, p.ForcerInfraNatif, p.Acces = x.Env, x.ForcerInfraNatif, slices.Clone(x.Acces)
+		p.Env, p.ForcerInfraNatif, p.Acces, p.DeploiementCourant = x.Env, x.ForcerInfraNatif, slices.Clone(x.Acces), x.DeploiementCourant
 	}
 	if p.Acces == nil {
 		p.Acces = []AccesProjet{}

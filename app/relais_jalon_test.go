@@ -56,7 +56,7 @@ func TestRelaisJalon(t *testing.T) {
 	oublierRelais(p.Nom)
 	t.Cleanup(func() { oublierRelais(p.Nom) })
 	env := Environnement{URL: "http://m136u.test", Serveurs: []string{"absent"}, Protection: "aucune", Politique: "accord", DeployerAuJalon: true}
-	if err := s.acces.DefinirEnvironnement(p.Nom, "dev", env); err != nil {
+	if err := s.acces.definirAncien(p.Nom, "dev", env); err != nil {
 		t.Fatal(err)
 	}
 	maintenant, faits, f := time.Now(), map[string]map[string]bool{}, filepath.Join(t.TempDir(), "jalons.json")
@@ -110,7 +110,7 @@ func TestRelaisJalon(t *testing.T) {
 	}
 	// relay off: a milestone is not recorded, the state is not shown, the bell is quiet
 	env.DeployerAuJalon = false
-	if err := s.acces.DefinirEnvironnement(p.Nom, "dev", env); err != nil {
+	if err := s.acces.definirAncien(p.Nom, "dev", env); err != nil {
 		t.Fatal(err)
 	}
 	s.noterJalonRelais(p, "M3 : Trois", maintenant)
@@ -138,7 +138,7 @@ func TestRelaisJalonConteneur(t *testing.T) {
 	resoudreTest(t, hote+":80", web)
 	for env, e := range map[string]Environnement{"dev": {URL: "http://" + hote, Serveurs: []string{id}, Protection: "aucune", Politique: "accord", DeployerAuJalon: true},
 		"prod": {URL: "http://" + hoteProd, Serveurs: []string{id}, Protection: "aucune", Politique: "accord"}} {
-		if err := s.acces.DefinirEnvironnement(p.Nom, env, e); err != nil {
+		if err := s.acces.definirAncien(p.Nom, env, e); err != nil {
 			t.Fatal(err)
 		}
 		if err := s.acces.NoterDeploiement(p.Nom, env, ConfigDeploiement{Methode: "statique", Source: "artefact", Dossier: "site"}); err != nil {

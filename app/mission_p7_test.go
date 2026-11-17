@@ -70,7 +70,7 @@ func TestMissionP7(t *testing.T) {
 	p := Projet{Nom: "site", Dossier: depot}
 	s.config.Projets, s.config.Langue = append(s.config.Projets, p), "fr"
 	for env, u := range map[string]string{"dev": "https://dev.site.test", "prod": "https://site.test"} {
-		if err := s.acces.DefinirEnvironnement("site", env, Environnement{URL: u, Serveurs: []string{"a1"}, Protection: "aucune", Politique: "accord"}); err != nil {
+		if err := s.acces.definirAncien("site", env, Environnement{URL: u, Serveurs: []string{"a1"}, Protection: "aucune", Politique: "accord"}); err != nil {
 			t.Fatal(err)
 		}
 	}

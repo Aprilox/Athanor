@@ -66,6 +66,11 @@ func TestSiteExempleTemoinConteneur(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	for _, nom := range []string{"dev", "staging"} { // M281: an older project, with several environments
+		if err := s.acces.definirAncien(projet, nom, envDefaut()); err != nil {
+			t.Fatal(err)
+		}
+	}
 	for _, e := range []map[string]any{
 		{"env": "dev", "url": "http://" + hoteDev, "serveurs": []string{id}, "protection": "aucune", "politique": "auto", "fournisseur": "f1"},
 		{"env": "staging", "url": "https://staging.exemple.fr", "serveurs": []string{id}, "protection": "auth_proxy", "politique": "accord", "fournisseur": "f1"},
@@ -76,7 +81,7 @@ func TestSiteExempleTemoinConteneur(t *testing.T) {
 	}
 	// shortcut: one container for every environment, while the API keeps a prod server for prod only (tested in
 	// hub_environnements_test.go); prod is written beside it, as the owner's panel would with a second server
-	if err := s.acces.DefinirEnvironnement(projet, "prod", Environnement{URL: "http://" + hoteProd, Serveurs: []string{id}, Protection: "aucune", Politique: "accord", Fournisseur: "f1"}); err != nil {
+	if err := s.acces.definirAncien(projet, "prod", Environnement{URL: "http://" + hoteProd, Serveurs: []string{id}, Protection: "aucune", Politique: "accord", Fournisseur: "f1"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.blocCaddyEnv(projet, "staging", id, "127.0.0.1:8080"); err != nil { // makes the proxy password

@@ -287,7 +287,7 @@ func (s *Serveur) remettreRelaisJalon(m Mission, p Projet) {
 	for _, ec := range c.Envs {
 		if e, ok := envs[ec.Nom]; ok && !e.DeployerAuJalon && relaisAuJalon(c, ec, e, inventaire) {
 			e.DeployerAuJalon = true
-			if err := s.acces.DefinirEnvironnement(p.Nom, ec.Nom, e); err != nil {
+			if err := s.acces.definirAncien(p.Nom, ec.Nom, e); err != nil {
 				s.noterJournalMission(m.ID, s.entreeJournal("reprise:jalon:"+ec.Nom+":"+time.Now().UTC().Format(formatCree), time.Now(), "erreur", "The deployment after each milestone of {0} did not start again: {1}", ec.Nom, err.Error()))
 			}
 		}
@@ -365,7 +365,7 @@ func (s *Serveur) arreterMission(id, qui string) (Mission, error) {
 		for _, ec := range c.Envs {
 			if e, ok := envs[ec.Nom]; ok && e.DeployerAuJalon {
 				e.DeployerAuJalon = false
-				if err := s.acces.DefinirEnvironnement(p.Nom, ec.Nom, e); err != nil {
+				if err := s.acces.definirAncien(p.Nom, ec.Nom, e); err != nil {
 					s.noterJournalMission(id, s.entreeJournal("arret:jalon:"+ec.Nom, time.Now(), "erreur", "The deployment after each milestone of {0} is still on: {1}", ec.Nom, err.Error()))
 				}
 			}
@@ -430,7 +430,7 @@ func (s *Serveur) changerPolitiqueMission(id, qui, pol string) (Mission, error) 
 			continue
 		}
 		e.Politique = cible
-		if err := s.acces.DefinirEnvironnement(c.Projet.Nom, ec.Nom, e); err != nil {
+		if err := s.acces.definirAncien(c.Projet.Nom, ec.Nom, e); err != nil {
 			s.noterJournalMission(id, s.entreeJournal("politique:env:"+ec.Nom+":"+cible, time.Now(), "erreur", "The environment {0} kept its policy: {1}", ec.Nom, err.Error()))
 			continue
 		}

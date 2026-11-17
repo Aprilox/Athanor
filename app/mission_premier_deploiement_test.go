@@ -38,7 +38,7 @@ func TestMissionPremierDeploiement(t *testing.T) {
 	}
 	head, _ := gitSortie(p.Dossier, "rev-parse", "HEAD")
 	s.config.Projets = append(s.config.Projets, p)
-	if err := s.acces.DefinirEnvironnement(p.Nom, "site", Environnement{URL: "https://vitrine.example.org", Serveurs: []string{"a1"}, Protection: "aucune", DeployerAuJalon: true}); err != nil {
+	if err := s.acces.definirAncien(p.Nom, "site", Environnement{URL: "https://vitrine.example.org", Serveurs: []string{"a1"}, Protection: "aucune", DeployerAuJalon: true}); err != nil {
 		t.Fatal(err)
 	}
 	_ = os.RemoveAll(dossierMissions())

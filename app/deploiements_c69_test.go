@@ -118,7 +118,7 @@ func TestDemanderDeploiementComposeChange(t *testing.T) {
 	s.mu.Lock()
 	s.config.Projets = append(s.config.Projets, p)
 	s.mu.Unlock()
-	if err := s.acces.DefinirEnvironnement(p.Nom, "dev", Environnement{URL: "http://m144.test", Serveurs: []string{"ab12"}, Protection: "aucune", Politique: "auto"}); err != nil {
+	if err := s.acces.definirAncien(p.Nom, "dev", Environnement{URL: "http://m144.test", Serveurs: []string{"ab12"}, Protection: "aucune", Politique: "auto"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.acces.NoterDeploiement(p.Nom, "dev", ConfigDeploiement{Methode: "compose", Source: "artefact"}); err != nil {

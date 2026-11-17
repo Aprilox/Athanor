@@ -99,7 +99,7 @@ func TestSanteIncidents(t *testing.T) {
 	inventaireTest(t, nil, "absent") // M247: an unknown server reads as production; this one is never reached
 	for env, e := range map[string]Environnement{"dev": {URL: "http://m137.test", Serveurs: []string{"absent"}, Protection: "aucune", Politique: "accord", DeployerAuJalon: true},
 		"staging": {URL: site.URL, Serveurs: []string{local}, Protection: "aucune", Politique: "accord"}, "prod": {URL: "https://m137p.test", Protection: "aucune", Politique: "accord"}} {
-		if err := s.acces.DefinirEnvironnement(projet, env, e); err != nil {
+		if err := s.acces.definirAncien(projet, env, e); err != nil {
 			t.Fatalf("%s: %v", env, err)
 		}
 	}

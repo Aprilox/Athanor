@@ -43,10 +43,10 @@ func TestComposeCaddyConteneur(t *testing.T) {
 	const hote, hoteS = "m145.test", "m145s.test"
 	resoudreTest(t, hote+":80", web)
 	resoudreTest(t, hoteS+":443", web) // the container's 443 is not published: the check from this PC fails, curl inside answers
-	if err := s.acces.DefinirEnvironnement("m145", "dev", Environnement{URL: "http://" + hote, Serveurs: []string{id}, Protection: "aucune", Politique: "auto"}); err != nil {
+	if err := s.acces.definirAncien("m145", "dev", Environnement{URL: "http://" + hote, Serveurs: []string{id}, Protection: "aucune", Politique: "auto"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.acces.DefinirEnvironnement("m145", "staging", Environnement{URL: "https://" + hoteS, Serveurs: []string{id}, Protection: "auth_proxy", Politique: "auto"}); err != nil {
+	if err := s.acces.definirAncien("m145", "staging", Environnement{URL: "https://" + hoteS, Serveurs: []string{id}, Protection: "auth_proxy", Politique: "auto"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.acces.NoterCertificat("m145", "staging", "essai", "2027-01-01"); err != nil {

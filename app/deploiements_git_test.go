@@ -85,7 +85,7 @@ func TestDeploiementGitConteneur(t *testing.T) {
 	}
 	const hote, base = "m132.test", "/srv/athanor/m132-dev"
 	resoudreTest(t, hote+":80", web)
-	if err := s.acces.DefinirEnvironnement("m132", "dev", Environnement{URL: "http://" + hote, Serveurs: []string{id}, Protection: "aucune", Politique: "auto"}); err != nil {
+	if err := s.acces.definirAncien("m132", "dev", Environnement{URL: "http://" + hote, Serveurs: []string{id}, Protection: "aucune", Politique: "auto"}); err != nil {
 		t.Fatal(err)
 	}
 	sur := func(cmd string) string { return appel("ssh_commande", map[string]any{"commande": cmd}).Sortie }

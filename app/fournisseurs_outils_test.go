@@ -161,7 +161,7 @@ func TestOutilsCloudflare(t *testing.T) {
 	if err := modifierFournisseurs(func(l []Fournisseur) ([]Fournisseur, error) { return append(l, f), nil }); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.acces.DefinirEnvironnement("demo", "dev", Environnement{URL: "https://App.exemple.fr/", Serveurs: []string{srv.ID},
+	if err := s.acces.definirAncien("demo", "dev", Environnement{URL: "https://App.exemple.fr/", Serveurs: []string{srv.ID},
 		Protection: "aucune", Politique: "auto", Fournisseur: "f1"}); err != nil {
 		t.Fatal(err)
 	}
@@ -318,7 +318,7 @@ func TestOutilsCloudflare(t *testing.T) {
 
 	// C56: another project's prod lives in the same zone; a dev task holding "do not ask again" for its server
 	// still cannot set the zone's SSL without the owner, and the card names the zone and that prod
-	if err := s.acces.DefinirEnvironnement("boutique", "prod", Environnement{URL: "https://www.exemple.fr", Protection: "aucune", Politique: "accord"}); err != nil {
+	if err := s.acces.definirAncien("boutique", "prod", Environnement{URL: "https://www.exemple.fr", Protection: "aucune", Politique: "accord"}); err != nil {
 		t.Fatal(err)
 	}
 	jd, err := s.jetons.CreerSession(SessionHub{Projet: "demo", Agent: agentServeurs, Outils: outilsServeursMCP, Serveurs: []string{srv.ID}, Env: "demo/dev", Hotes: []string{"app.exemple.fr"}})
@@ -378,13 +378,13 @@ func TestOutilsCloudflare(t *testing.T) {
 	}
 	// C57: no environment, in this project or another, takes a host name another one has
 	for _, c := range [][2]string{{"demo", "staging"}, {"autre", "dev"}} {
-		err := s.acces.DefinirEnvironnement(c[0], c[1], Environnement{URL: "https://WWW.exemple.fr/x", Protection: "aucune", Politique: "accord"})
+		err := s.acces.definirAncien(c[0], c[1], Environnement{URL: "https://WWW.exemple.fr/x", Protection: "aucune", Politique: "accord"})
 		var ea erreurEntreeArgs
 		if !errors.As(err, &ea) || ea.cle != errEnvHotePris || ea.args[1] != "boutique/prod" {
 			t.Errorf("%s/%s with prod's host: %v", c[0], c[1], err)
 		}
 	}
-	if err := s.acces.DefinirEnvironnement("boutique", "prod", Environnement{URL: "https://www.exemple.fr/v2", Protection: "aucune", Politique: "accord"}); err != nil {
+	if err := s.acces.definirAncien("boutique", "prod", Environnement{URL: "https://www.exemple.fr/v2", Protection: "aucune", Politique: "accord"}); err != nil {
 		t.Errorf("an environment keeps its own host: %v", err)
 	}
 
@@ -425,7 +425,7 @@ func TestCloudflareGardes(t *testing.T) {
 	}
 	for env, e := range map[string]Environnement{"dev": {URL: "https://app.exemple.fr", Protection: "access", Politique: "auto", Fournisseur: "f1"},
 		"staging": {Protection: "aucune", Politique: "auto", Fournisseur: "f1"}} {
-		if err := s.acces.DefinirEnvironnement("demo", env, e); err != nil {
+		if err := s.acces.definirAncien("demo", env, e); err != nil {
 			t.Fatal(err)
 		}
 	}

@@ -200,7 +200,7 @@ func (s *Serveur) appliquerCarte(m Mission, avant, apres CarteMission, qui strin
 			continue
 		}
 		e.Serveurs, e.DeployerAuJalon = nil, false
-		if err := s.acces.DefinirEnvironnement(p.Nom, ea.Nom, e); err != nil {
+		if err := s.acces.definirAncien(p.Nom, ea.Nom, e); err != nil {
 			echoue(errMoteur("the environment {0}: {1}", ea.Nom, err))
 			continue
 		}

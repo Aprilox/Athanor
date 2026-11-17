@@ -138,7 +138,7 @@ func TestAccessProteger(t *testing.T) {
 	if err := modifierFournisseurs(func(l []Fournisseur) ([]Fournisseur, error) { return append(l, f), nil }); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.acces.DefinirEnvironnement("demo", "dev", Environnement{URL: "https://app.exemple.fr", Serveurs: []string{srv.ID},
+	if err := s.acces.definirAncien("demo", "dev", Environnement{URL: "https://app.exemple.fr", Serveurs: []string{srv.ID},
 		Protection: "access", Politique: "auto", Fournisseur: "f1"}); err != nil {
 		t.Fatal(err)
 	}
@@ -302,7 +302,7 @@ func TestBlocCaddy(t *testing.T) {
 	}
 	for env, e := range map[string]Environnement{"dev": {URL: "https://dev.exemple.fr", Protection: "auth_proxy", Politique: "auto"},
 		"prod": {URL: "https://exemple.fr", Protection: "access", Politique: "accord"}} {
-		if err := s.acces.DefinirEnvironnement("demo", env, e); err != nil {
+		if err := s.acces.definirAncien("demo", env, e); err != nil {
 			t.Fatal(err)
 		}
 	}

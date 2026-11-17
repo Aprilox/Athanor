@@ -80,7 +80,7 @@ func TestHistoriqueMasque(t *testing.T) {
 	}
 	depot, c := depotEssai(t, map[string]string{"site/index.html": "v1"})
 	s.config.Projets[0].Dossier = depot
-	if err := s.acces.DefinirEnvironnement("demo", "dev", Environnement{URL: "https://dev.m148.test", Serveurs: []string{"s1"}, Protection: "aucune", Politique: "auto"}); err != nil {
+	if err := s.acces.definirAncien("demo", "dev", Environnement{URL: "https://dev.m148.test", Serveurs: []string{"s1"}, Protection: "aucune", Politique: "auto"}); err != nil {
 		t.Fatal(err)
 	}
 	// the published folder named as the witness: the engine's error repeats it, as a server repeats its input

@@ -136,7 +136,7 @@ func TestEnvironnementsTemoinConteneur(t *testing.T) {
 		"dev":  {URL: "https://app.exemple.fr", Serveurs: []string{id}, Protection: "access", Politique: "auto", Fournisseur: "f1"},
 		"prod": {URL: "https://www.exemple.fr", Serveurs: []string{id}, Protection: "auth_proxy", Politique: "accord", Fournisseur: "f1"},
 	} {
-		if err := s.acces.DefinirEnvironnement("demo", env, e); err != nil {
+		if err := s.acces.definirAncien("demo", env, e); err != nil {
 			t.Fatal(env, err)
 		}
 	}

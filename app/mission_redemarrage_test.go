@@ -200,7 +200,7 @@ func testRepriseExecutable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := a.DefinirEnvironnement("site", "dev", Environnement{URL: "https://dev.site.test", Protection: "aucune", Politique: "auto"}); err != nil {
+	if err := a.definirAncien("site", "dev", Environnement{URL: "https://dev.site.test", Protection: "aucune", Politique: "auto"}); err != nil {
 		t.Fatal(err)
 	}
 	accesAvant, _ := os.ReadFile(filepath.Join(kit, "hub", "acces.json"))

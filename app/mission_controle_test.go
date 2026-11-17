@@ -33,7 +33,7 @@ func TestMissionControle(t *testing.T) {
 	s.config.Projets = append(s.config.Projets, p)
 	for env, u := range map[string]string{"dev": "https://dev.site.test", "prod": "https://site.test"} {
 		pol := map[string]string{"dev": "auto", "prod": "accord"}[env]
-		if err := s.acces.DefinirEnvironnement("site", env, Environnement{URL: u, Serveurs: []string{"a1"}, Protection: "aucune", Politique: pol, DeployerAuJalon: env == "dev"}); err != nil {
+		if err := s.acces.definirAncien("site", env, Environnement{URL: u, Serveurs: []string{"a1"}, Protection: "aucune", Politique: pol, DeployerAuJalon: env == "dev"}); err != nil {
 			t.Fatal(err)
 		}
 	}

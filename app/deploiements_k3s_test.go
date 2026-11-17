@@ -49,7 +49,7 @@ func TestDeploiementK3sConteneur(t *testing.T) {
 	s.mu.Unlock()
 	const hote, base, temoin = "m139.test", "/srv/athanor/m139-dev", "temoin-kubeconfig-5521"
 	resoudreTest(t, hote+":80", web)
-	if err := s.acces.DefinirEnvironnement("m139", "dev", Environnement{URL: "http://" + hote, Serveurs: []string{id}, Protection: "aucune", Politique: "auto"}); err != nil {
+	if err := s.acces.definirAncien("m139", "dev", Environnement{URL: "http://" + hote, Serveurs: []string{id}, Protection: "aucune", Politique: "auto"}); err != nil {
 		t.Fatal(err)
 	}
 	sur := func(cmd string) string { return appel("ssh_commande", map[string]any{"commande": cmd}).Sortie }

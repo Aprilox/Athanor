@@ -49,6 +49,11 @@ const PREFIXES = ["no Studio lane: the vault entries are given", "no Studio lane
 
 const DICT = {
 fr: {
+  "Unknown site": "Site inconnu",
+  "This project already has its deployment: a project has only one": "Ce projet a déjà son déploiement : un projet n'en a qu'un",
+  "Unknown API: choose it among the vault's entries": "API inconnue : choisissez-la parmi les entrées du coffre",
+  "The deployment plan is too long: 4,000 characters at most": "Le plan de déploiement est trop long : 4 000 caractères au plus",
+  "Choose when the project is deployed: after each milestone or at delivery": "Choisissez quand le projet est déployé : après chaque jalon ou à la livraison",
   "Project setting saved.": "Réglage du projet enregistré.",
   "This value is not allowed for this project setting": "Cette valeur n'est pas admise pour ce réglage du projet",
   "Unknown project setting": "Réglage de projet inconnu",
@@ -827,6 +832,11 @@ fr: {
   "Run a command": "Lancer une commande", "The task failed without giving a reason.": "La tâche a échoué sans donner de raison.",
 },
 es: {
+  "Unknown site": "Sitio desconocido",
+  "This project already has its deployment: a project has only one": "Este proyecto ya tiene su despliegue: un proyecto solo tiene uno",
+  "Unknown API: choose it among the vault's entries": "API desconocida: elíjala entre las entradas de la caja fuerte",
+  "The deployment plan is too long: 4,000 characters at most": "El plan de despliegue es demasiado largo: 4000 caracteres como máximo",
+  "Choose when the project is deployed: after each milestone or at delivery": "Elija cuándo se despliega el proyecto: tras cada hito o en la entrega",
   "Project setting saved.": "Ajuste del proyecto guardado.",
   "This value is not allowed for this project setting": "Este valor no se admite para este ajuste del proyecto",
   "Unknown project setting": "Ajuste de proyecto desconocido",
@@ -1573,6 +1583,11 @@ es: {
   "Run a command": "Ejecutar un comando", "The task failed without giving a reason.": "La tarea falló sin dar un motivo.",
 },
 de: {
+  "Unknown site": "Unbekannte Website",
+  "This project already has its deployment: a project has only one": "Dieses Projekt hat bereits seine Bereitstellung: Ein Projekt hat nur eine",
+  "Unknown API: choose it among the vault's entries": "Unbekannte API: Wählen Sie sie unter den Einträgen des Tresors",
+  "The deployment plan is too long: 4,000 characters at most": "Der Bereitstellungsplan ist zu lang: höchstens 4.000 Zeichen",
+  "Choose when the project is deployed: after each milestone or at delivery": "Wählen Sie, wann das Projekt bereitgestellt wird: nach jedem Meilenstein oder bei der Lieferung",
   "Project setting saved.": "Projekteinstellung gespeichert.",
   "This value is not allowed for this project setting": "Dieser Wert ist für diese Projekteinstellung nicht zulässig",
   "Unknown project setting": "Unbekannte Projekteinstellung",
@@ -2313,6 +2328,11 @@ de: {
   "Run a command": "Einen Befehl ausführen", "The task failed without giving a reason.": "Die Aufgabe ist ohne Angabe eines Grundes fehlgeschlagen.",
 },
 it: {
+  "Unknown site": "Sito sconosciuto",
+  "This project already has its deployment: a project has only one": "Questo progetto ha già il suo rilascio: un progetto ne ha uno solo",
+  "Unknown API: choose it among the vault's entries": "API sconosciuta: sceglila tra le voci della cassaforte",
+  "The deployment plan is too long: 4,000 characters at most": "Il piano di rilascio è troppo lungo: al massimo 4.000 caratteri",
+  "Choose when the project is deployed: after each milestone or at delivery": "Scegli quando il progetto viene rilasciato: dopo ogni traguardo o alla consegna",
   "Project setting saved.": "Impostazione del progetto salvata.",
   "This value is not allowed for this project setting": "Questo valore non è ammesso per questa impostazione del progetto",
   "Unknown project setting": "Impostazione di progetto sconosciuta",
@@ -3053,6 +3073,11 @@ it: {
   "Run a command": "Eseguire un comando", "The task failed without giving a reason.": "L'attività non è riuscita senza indicare un motivo.",
 },
 pt: {
+  "Unknown site": "Site desconhecido",
+  "This project already has its deployment: a project has only one": "Este projeto já tem a sua implementação: um projeto tem apenas uma",
+  "Unknown API: choose it among the vault's entries": "API desconhecida: escolha-a entre as entradas do cofre",
+  "The deployment plan is too long: 4,000 characters at most": "O plano de implementação é demasiado longo: 4000 caracteres no máximo",
+  "Choose when the project is deployed: after each milestone or at delivery": "Escolha quando o projeto é implementado: depois de cada marco ou na entrega",
   "Project setting saved.": "Definição do projeto guardada.",
   "This value is not allowed for this project setting": "Este valor não é permitido para esta definição do projeto",
   "Unknown project setting": "Definição de projeto desconhecida",

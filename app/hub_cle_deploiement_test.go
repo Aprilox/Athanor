@@ -150,7 +150,7 @@ func TestCleDeploiement(t *testing.T) {
 		t.Fatalf("recorded: %q %+v", id, envs)
 	}
 	// saving an environment keeps it; already there: nothing, GitHub not called again
-	if err := s.acces.DefinirEnvironnement("demo", "dev", envDefaut()); err != nil || s.acces.Environnements("demo")["dev"].CleDeploiement != l[0].ID ||
+	if err := s.acces.definirAncien("demo", "dev", envDefaut()); err != nil || s.acces.Environnements("demo")["dev"].CleDeploiement != l[0].ID ||
 		vueEnvironnement(s.acces.Environnements("demo")["dev"], nil)["cle_deploiement_prete"] != true {
 		t.Fatal("kept on save:", err)
 	}

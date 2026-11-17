@@ -73,12 +73,14 @@ func TestDistanceToutesRoutes(t *testing.T) {
 		{"GET", "/api/hub", false},                          // allowed
 		{"POST", "/api/projets/demo/cle-deploiement", true}, // B68: a key registered on GitHub, at the computer only
 		{"GET", "/api/projets/demo/environnements", false},
-		{"GET", "/api/projets/demo/reglages", false},  // M280: a project's settings, read and chosen from a device
-		{"POST", "/api/projets/demo/reglages", false}, // (Ignore permissions is refused there by the route itself)
-		{"GET", "/api/coffre", false},                 // allowed (the vault's list, no secret value)
-		{"POST", "/api/hub", true},                    // hub route not in the allowlist
-		{"POST", "/api/hub/alertes", true},            // Ignore / Reopen: written on this computer only
-		{"GET", "/api/coffre/x", true},                // invented, no allowlist entry: refused by default
+		{"GET", "/api/projets/demo/deploiement", false}, // M281: the project's one deployment: read from a device,
+		{"POST", "/api/projets/demo/deploiement", true}, // changed at the computer only, like the environments it replaces
+		{"GET", "/api/projets/demo/reglages", false},    // M280: a project's settings, read and chosen from a device
+		{"POST", "/api/projets/demo/reglages", false},   // (Ignore permissions is refused there by the route itself)
+		{"GET", "/api/coffre", false},                   // allowed (the vault's list, no secret value)
+		{"POST", "/api/hub", true},                      // hub route not in the allowlist
+		{"POST", "/api/hub/alertes", true},              // Ignore / Reopen: written on this computer only
+		{"GET", "/api/coffre/x", true},                  // invented, no allowlist entry: refused by default
 		{"POST", "/api/coffre/x", true},
 		{"DELETE", "/api/coffre/x", true},
 		{"POST", "/api/coffre", true},

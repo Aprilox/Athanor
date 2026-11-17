@@ -79,7 +79,7 @@ func TestDeploiementAgentConteneur(t *testing.T) {
 	resoudreTest(t, hote+":80", web)
 	for env, e := range map[string]Environnement{"dev": {URL: "http://" + hote, Serveurs: []string{id}, Protection: "aucune", Politique: "auto"},
 		"prod": {URL: "http://" + hoteProd, Serveurs: []string{id}, Protection: "aucune", Politique: "accord"}} {
-		if err := s.acces.DefinirEnvironnement("m135", env, e); err != nil {
+		if err := s.acces.definirAncien("m135", env, e); err != nil {
 			t.Fatal(err)
 		}
 	}

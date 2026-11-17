@@ -109,7 +109,7 @@ func TestCertificatOrigine(t *testing.T) {
 	if err := modifierFournisseurs(func(l []Fournisseur) ([]Fournisseur, error) { return append(l, f), nil }); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.acces.DefinirEnvironnement("demo", "dev", Environnement{URL: "https://app.exemple.fr", Serveurs: []string{srv.ID},
+	if err := s.acces.definirAncien("demo", "dev", Environnement{URL: "https://app.exemple.fr", Serveurs: []string{srv.ID},
 		Protection: "aucune", Politique: "auto", Fournisseur: "f1"}); err != nil {
 		t.Fatal(err)
 	}
@@ -184,7 +184,7 @@ func TestCertificatOrigine(t *testing.T) {
 		t.Errorf("vault entries: %+v", certs)
 	}
 	// a request saved from the panel keeps what Athanor recorded
-	if err := s.acces.DefinirEnvironnement("demo", "dev", Environnement{URL: "https://app.exemple.fr", Serveurs: []string{srv.ID}, Protection: "aucune",
+	if err := s.acces.definirAncien("demo", "dev", Environnement{URL: "https://app.exemple.fr", Serveurs: []string{srv.ID}, Protection: "aucune",
 		Politique: "auto", Fournisseur: "f1", Certificat: "pirate", CertificatServeurs: []string{"pirate"}}); err != nil || s.acces.Environnements("demo")["dev"].Certificat != env.Certificat ||
 		!slices.Equal(s.acces.Environnements("demo")["dev"].CertificatServeurs, env.CertificatServeurs) {
 		t.Errorf("certificate after a panel save: %v %+v", err, s.acces.Environnements("demo")["dev"])

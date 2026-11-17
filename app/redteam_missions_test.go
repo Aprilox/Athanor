@@ -76,7 +76,7 @@ func nouveauBanRedTeam(t *testing.T) *banRedTeam {
 	p := Projet{Nom: "site", Dossier: depot}
 	s.config.Projets = append(s.config.Projets, p)
 	for env, u := range map[string]string{"dev": "https://dev.site.test", "prod": "https://site.test"} {
-		if err := s.acces.DefinirEnvironnement("site", env, Environnement{URL: u, Serveurs: []string{"a1"}, Protection: "aucune", Politique: "accord"}); err != nil {
+		if err := s.acces.definirAncien("site", env, Environnement{URL: u, Serveurs: []string{"a1"}, Protection: "aucune", Politique: "accord"}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -298,7 +298,7 @@ func TestRedTeamMissions(t *testing.T) {
 
 	t.Run("R5_politique_durcie_staging_descend", func(t *testing.T) {
 		b := nouveauBanRedTeam(t)
-		if err := b.s.acces.DefinirEnvironnement("site", "staging", Environnement{URL: "https://staging.site.test", Serveurs: []string{"a1"}, Protection: "aucune", Politique: "accord"}); err != nil {
+		if err := b.s.acces.definirAncien("site", "staging", Environnement{URL: "https://staging.site.test", Serveurs: []string{"a1"}, Protection: "aucune", Politique: "accord"}); err != nil {
 			t.Fatal(err)
 		}
 		c := CarteMission{Titre: "Préprod", Projet: ProjetCarte{Nom: "site"}, Dev: BriefCarte{Brief: "x"}, JalonsEstimes: 1,
