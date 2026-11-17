@@ -622,9 +622,14 @@ func (s *Serveur) apiChoisirProjet(w http.ResponseWriter, r *http.Request) {
 	s.erreur(w, http.StatusNotFound, "Unknown project")
 }
 
-// Removes a project from the list. The folder and its workshop are never deleted here.
+// apiRetirerProjet: DELETE /api/projets/{nom} {dossier}. The project leaves the list; its folder goes to the
+// recycle bin only when dossier is set.
 func (s *Serveur) apiRetirerProjet(w http.ResponseWriter, r *http.Request) {
 	nom := r.PathValue("nom")
+	var c struct {
+		Dossier bool `json:"dossier"`
+	}
+	_ = lireCorps(r, &c) // no body: the list only
 	s.mu.Lock()
 	var p Projet
 	trouve := false
@@ -647,11 +652,11 @@ func (s *Serveur) apiRetirerProjet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer s.liberer(nom)
-	if err := s.retirerProjet(p); err != nil {
-		s.erreur(w, http.StatusInternalServerError, err.Error())
-		return
+	mode := "liste"
+	if c.Dossier {
+		mode = "dossier"
 	}
-	s.msg(w, "Project removed from the list. Its folder is intact; delete its .athanor subfolder to clean it.")
+	s.supprimerProjet(w, p, mode)
 }
 
 // Small folder browser to pick a project's folder.

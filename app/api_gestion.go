@@ -598,52 +598,7 @@ func (s *Serveur) apiGestion(w http.ResponseWriter, r *http.Request) {
 		}
 
 	case "supprimer":
-		var cible string
-		switch c.Mode {
-		case "liste":
-		case "atelier":
-			cible = p.Atelier()
-		case "dossier":
-			cible = p.Dossier
-			// checked again now: never a system or personal folder, never another project's files
-			if cle := dossierInterdit(p.Dossier, s.kitCourant().Racine); cle != "" {
-				s.erreur(w, http.StatusBadRequest, cle)
-				return
-			}
-			if err := s.conflitProjets(p.Dossier, p.Nom); err != nil {
-				s.erreur(w, http.StatusBadRequest, err.Error())
-				return
-			}
-		default:
-			s.erreur(w, http.StatusBadRequest, "Unknown action")
-			return
-		}
-		if cible != "" {
-			if _, err := os.Lstat(cible); err == nil {
-				if err := mettreALaCorbeille(cible); err != nil {
-					s.erreur(w, http.StatusInternalServerError, "Cannot send it to the recycle bin: "+err.Error())
-					return
-				}
-			} else if !os.IsNotExist(err) {
-				s.erreur(w, http.StatusInternalServerError, "Cannot send it to the recycle bin: "+err.Error())
-				return
-			}
-		}
-		if err := s.retirerProjet(p); err != nil {
-			s.erreur(w, http.StatusInternalServerError, err.Error())
-			return
-		}
-		if c.Mode != "liste" {
-			s.oublierGitHub(p) // its GitHub key goes with its Athanor data (kept when only removed from the list)
-		}
-		switch c.Mode {
-		case "liste":
-			s.msg(w, "Project removed from the list. Its folder is intact; delete its .athanor subfolder to clean it.")
-		case "atelier":
-			s.msg(w, "Project removed; its workshop (.athanor) is in the recycle bin.")
-		default:
-			s.msg(w, "Project removed; its folder is in the recycle bin.")
-		}
+		s.supprimerProjet(w, p, c.Mode)
 
 	default:
 		s.erreur(w, http.StatusBadRequest, "Unknown action")

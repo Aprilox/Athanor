@@ -3284,10 +3284,8 @@ pages.projet = async () => {
       <button class="btn" data-gestion="archiver" ${dis}>${t("Archive the project")}</button>
     </div>
     <div class="bloc"><h2>${t("Delete")}</h2>
-      <label class="radio"><input type="radio" name="gp-suppr" value="liste" checked> ${t("Remove from the list only: the folder stays as it is")}</label>
-      <label class="radio"><input type="radio" name="gp-suppr" value="atelier"> ${t("Also send its workshop (.athanor: plan, requests, log) to the recycle bin")}</label>
-      <label class="radio"><input type="radio" name="gp-suppr" value="dossier"> ${t("Send the whole folder to the recycle bin")}</label>
-      <button class="btn btn-danger mt-2" data-gestion="supprimer" data-dossier="${h(p.dossier)}" ${dis}>${t("Delete the project")}</button>
+      <p class="muet petit">${t("The project leaves Studio, with its deployment, its follow-up and its own settings.")}</p>
+      <button class="btn btn-danger" data-gestion="supprimer" data-dossier="${h(p.dossier)}" ${dis}>${t("Delete the project")}</button>
     </div>
   </div>
   <details class="bloc plus-options"${decoches.length ? " open" : ""}><summary>${t("More options")}</summary>
@@ -3315,12 +3313,23 @@ pages.archives = async () => {
     <p class="muet petit">${t("Out of the project list and never restarted. Bring one back to work on it again.")}</p>
     ${l.length ? `<table class="tab tab-pile"><tbody>${l.map((p) => `<tr><td><b>${h(p.nom)}</b></td><td class="muet">${h(p.dossier)}</td><td class="droite"><div class="ligne fin">
       <button class="btn btn-petit" data-gestion="desarchiver" data-nom="${h(p.nom)}">${t("Bring back")}</button>
-      <select data-mode-suppr><option value="liste">${t("Remove from the list only")}</option><option value="atelier">${t("+ its workshop to the recycle bin")}</option><option value="dossier">${t("The whole folder to the recycle bin")}</option></select>
       <button class="btn btn-petit btn-danger" data-gestion="supprimer" data-nom="${h(p.nom)}" data-dossier="${h(p.dossier)}">${t("Delete")}</button></div></td></tr>`).join("")}</tbody></table>`
       : `<div class="vide">${t("No archived project.")}</div>`}
   </div>`;
 };
 
+// M299: what leaves with the project; its workshop or its folder only when ticked. "" when cancelled.
+async function modeSuppressionProjet(nom, dossier) {
+  let mode = "";
+  const choix = await modaleSftp(t("Delete the project “{0}”?", [nom]), `<div class="mis-suppr">
+    <p>${h(t("The project leaves Studio, with its deployment, its follow-up and its own settings."))}</p>
+    <label class="case"><input type="checkbox" data-suppr="atelier"><span>${h(t("Also send its workshop (.athanor: plan, requests, log) to the recycle bin"))}</span></label>
+    <label class="case"><input type="checkbox" data-suppr="dossier"><span>${h(t("Also send its whole folder to the recycle bin"))} <code class="petit">${h(dossier)}</code></span></label>
+    <p class="muet petit">${h(t("Nothing is removed from the servers: what the project put online stays there."))}</p></div>`,
+    [{ id: "", texte: t("Cancel") }, { id: "ok", texte: t("Delete the project"), danger: true }],
+    { large: true, valider: async (b, el) => { mode = ["dossier", "atelier"].find((x) => el.querySelector(`[data-suppr="${x}"]:checked`)) || "liste"; return true; } });
+  return choix === "ok" ? mode : "";
+}
 async function gererProjet(act, nom, bouton) {
   const corps = { nom, action: act };
   if (act === "renommer") corps.valeur = $("#gp-nom").value;
@@ -3332,14 +3341,8 @@ async function gererProjet(act, nom, bouton) {
   if (act === "verifier-claude") { corps.action = "verifier"; corps.mode = "claude"; }
   if (act === "archiver" && !(await confirmer(t("Archive “{0}”? It leaves the project list; bring it back at any time.", [nom]), { ok: t("Archive the project") }))) return;
   if (act === "supprimer") {
-    const sel = bouton && bouton.closest("tr") ? bouton.closest("tr").querySelector("[data-mode-suppr]") : null;
-    corps.mode = sel ? sel.value : ((document.querySelector("input[name=gp-suppr]:checked") || {}).value || "liste");
-    const textes = {
-      liste: t("Remove “{0}” from the list? Its folder stays intact.", [nom]),
-      atelier: t("Remove “{0}” and send its workshop (.athanor: plan, requests, log) to the recycle bin? The project's own files stay.", [nom]),
-      dossier: t("Send the whole folder of “{0}” to the recycle bin? {1} and everything in it go, and can be restored from the recycle bin.", [nom, (bouton && bouton.dataset.dossier) || ""]),
-    };
-    if (!(await confirmer(textes[corps.mode], { ok: t("Delete the project"), danger: true }))) return;
+    corps.mode = await modeSuppressionProjet(nom, (bouton && bouton.dataset.dossier) || "");
+    if (!corps.mode) return;
   }
   if (bouton) bouton.disabled = true;
   const r = await action(api("projets/gestion", "POST", corps));

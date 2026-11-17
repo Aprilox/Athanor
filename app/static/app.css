@@ -386,6 +386,7 @@ a[data-href] { cursor: pointer; }
 .btn-primaire { background: var(--accent); color: var(--sur-fort); border-color: transparent; font-weight: 600; }
 .btn-primaire:hover { background: var(--accent-2); }
 .btn-danger { color: var(--erreur-vif); } /* AA on the dark themes too */
+.btn-danger:hover { background: var(--panel-2); border-color: var(--erreur-vif); } /* the red text stays AA: on --panel-3 it falls to 4.16 on the light theme */
 .btn-petit { padding: 4px 10px; font-size: 13px; }
 .btn-fantome { background: none; border: 1px solid var(--line); border-radius: 6px; padding: 8px 12px; cursor: pointer; color: var(--muted); text-align: left; }
 .btn-fantome:hover { color: var(--ink); background: var(--panel-2); }
