@@ -133,9 +133,20 @@ func TestMissionCarteRessources(t *testing.T) {
 		t.Fatalf("history: %+v", m.Historique)
 	}
 
-	// the @ list: the providers asked by type, never in the home's groups; a provider chip resolves to its entry
-	if _, rep := appel("GET", "/api/mentions?type=fournisseur", ""); !strings.Contains(rep, `{"type":"fournisseur","ref":"cf1","nom":"Cloudflare perso","detail":"cloudflare"}`) || strings.Contains(rep, `"type":"cle"`) {
-		t.Fatalf("providers by type: %s", rep)
+	// the @ list (M287): the old types asked give the API of the vault (a provider is the entry of its token), one
+	// type "api"; the card posts it back and an old provider chip still resolves to its entry
+	for _, typ := range []string{"fournisseur", "cle", "api"} {
+		if _, rep := appel("GET", "/api/mentions?type="+typ, ""); !strings.Contains(rep, `{"type":"api","ref":"`+jeton.ID+`","nom":"Jeton Cloudflare","detail":"cloudflare"}`) || strings.Contains(rep, `"type":"cle"`) || strings.Contains(rep, `"type":"fournisseur"`) || strings.Contains(rep, "Cloudflare perso") {
+			t.Fatalf("API asked by type %s: %s", typ, rep)
+		}
+	}
+	ressource(`{"type":"api","ref":"`+jeton.ID+`"}`, http.StatusOK)
+	if _, c := lue(); !slices.Equal(noms(c), []string{"Mot de passe SMTP|boutique|" + smtp.ID, "Jeton Cloudflare|boutique|" + jeton.ID}) {
+		t.Fatalf("API added: %v", noms(c))
+	}
+	ressource(`{"type":"api","ref":"`+jeton.ID+`","retirer":true}`, http.StatusOK)
+	if _, c := lue(); !slices.Equal(noms(c), []string{"Mot de passe SMTP|boutique|" + smtp.ID}) {
+		t.Fatalf("API removed: %v", noms(c))
 	}
 	if _, rep := appel("GET", "/api/mentions", ""); strings.Contains(rep, `"fournisseur"`) {
 		t.Fatalf("a provider in the home's list: %s", rep)

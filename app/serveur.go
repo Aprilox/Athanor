@@ -120,6 +120,7 @@ func nouveauServeur(config Config) *Serveur {
 	}
 	s.chargerAcces() // before the vault: its import grants a key shared by two projects (accorderPartagee)
 	s.chargerCoffre()
+	s.migrerFournisseurs()
 	s.chargerSessions()
 	s.chargerApprobations()
 	s.bureau = NouveauBureau(kit)
@@ -389,6 +390,10 @@ func (s *Serveur) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/coffre", s.garde(false, s.apiCoffreAjouter))
 	mux.HandleFunc("POST /api/coffre/{id}", s.garde(false, s.apiCoffreModifier))
 	mux.HandleFunc("DELETE /api/coffre/{id}", s.garde(false, s.apiCoffreSupprimer))
+	mux.HandleFunc("GET /api/coffre/categories", s.garde(false, s.apiCoffreCategories))
+	mux.HandleFunc("POST /api/coffre/categories", s.garde(false, s.apiCoffreCategoriePoser))
+	mux.HandleFunc("POST /api/coffre/categories/{id}", s.garde(false, s.apiCoffreCategoriePoser))
+	mux.HandleFunc("DELETE /api/coffre/categories/{id}", s.garde(false, s.apiCoffreCategorieSupprimer))
 	mux.HandleFunc("POST /api/coffre/coller", s.garde(false, s.apiCoffreColler))
 	mux.HandleFunc("POST /api/coffre/tester", s.garde(false, s.apiCoffreTester))
 	mux.HandleFunc("POST /api/coffre/migration", s.garde(false, s.apiCoffreMigration))

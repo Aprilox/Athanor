@@ -57,6 +57,8 @@ type corpsCoffre struct {
 	Note    *string `json:"note"`
 	Portee  *string `json:"portee"`
 	Valeur  *string `json:"valeur"`
+	// M287: id of one of the owner's categories ("" takes the entry out of its category)
+	Categorie *string `json:"categorie"`
 	// M225: the production value when it differs ("" goes back to one value for every environment)
 	Prod *string `json:"prod"`
 	// Athanor's password, retyped to move an infra entry to code (hub_preuve.go)
@@ -111,7 +113,7 @@ func (s *Serveur) apiCoffreAjouter(w http.ResponseWriter, r *http.Request) {
 		s.erreurCoffre(w, err)
 		return
 	}
-	nouvelle := EntreeCoffre{Nom: val(c.Nom, ""), Famille: c.Famille, Type: val(c.Type, ""), Note: val(c.Note, ""), Portee: val(c.Portee, "")}
+	nouvelle := EntreeCoffre{Nom: val(c.Nom, ""), Famille: c.Famille, Type: val(c.Type, ""), Note: val(c.Note, ""), Portee: val(c.Portee, ""), Categorie: val(c.Categorie, "")}
 	if s.nomPris(nouvelle.Nom, porteeEntree(nouvelle), "") {
 		s.erreurCoffre(w, errNomPris)
 		return
@@ -169,6 +171,10 @@ func (s *Serveur) apiCoffreModifier(w http.ResponseWriter, r *http.Request) {
 		s.erreurCoffre(w, errNomPris)
 		return
 	}
+	if c.Categorie != nil && *c.Categorie != "" && !slices.ContainsFunc(s.coffre.Categories(), func(x CategorieCoffre) bool { return x.ID == *c.Categorie }) {
+		s.erreurCoffre(w, errCategorieInconnue) // before any change: all or nothing
+		return
+	}
 	versCode := e.Portee == "infra" && val(c.Portee, e.Portee) == "code"
 	if versCode { // C35: code reopens alone on this PC (DPAPI) and can be granted: never a server's key, always the owner
 		if s.cleDeServeur(w, id, "This key opens the server {0}: it stays in the infra scope") {
@@ -203,6 +209,13 @@ func (s *Serveur) apiCoffreModifier(w http.ResponseWriter, r *http.Request) {
 			e.DeuxValeurs = *c.Prod != ""
 		}
 		s.injecterTous(nil)
+	}
+	if c.Categorie != nil {
+		if err := s.coffre.Classer(id, *c.Categorie); err != nil {
+			s.erreurCoffre(w, err)
+			return
+		}
+		e.Categorie = *c.Categorie
 	}
 	if versCode {
 		s.ecrireAudit(LigneAudit{Type: "evenement", De: deQui(r), Vers: "hub", Action: "portée infra → code", Resultat: e.Nom})

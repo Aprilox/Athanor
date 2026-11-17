@@ -304,7 +304,8 @@ var prefixesHub = []string{"/api/hub", "/api/coffre", "/api/acces", "/api/serveu
 
 // autorisesDistance: "METHOD path" of the hub a device may call (reading only, never a secret value).
 var autorisesDistance = map[string]bool{"GET /api/hub": true, "GET /api/coffre": true, "GET /api/acces": true,
-	"GET /api/hub/audit": true, "POST /api/hub/audit/verifier": true, // the audit log: read and checked, never written
+	"GET /api/coffre/categories": true,                                       // M287: the names of the owner's categories (made, renamed, removed on the PC)
+	"GET /api/hub/audit":         true, "POST /api/hub/audit/verifier": true, // the audit log: read and checked, never written
 	"GET /api/hub/approbations": true, "POST /api/hub/approbations": true, // P7: the owner decides from the phone
 	"POST /api/hub/urgence": true,                                 // the emergency stop, from the phone too
 	"GET /api/hub/chat":     true,                                 // M199: the home conversation, read only (sent, powers, folders, cards: the computer only)

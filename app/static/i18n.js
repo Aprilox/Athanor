@@ -49,6 +49,10 @@ const PREFIXES = ["no Studio lane: the vault entries are given", "no Studio lane
 
 const DICT = {
 fr: {
+  "This category no longer exists": "Cette catégorie n'existe plus.",
+  "A category with this name already exists": "Une catégorie porte déjà ce nom.",
+  "The category name is too long (50 characters at most)": "Le nom de la catégorie est trop long (50 caractères au plus)",
+  "Give the category a name": "Donnez un nom à la catégorie",
   "A task needs at least one server or one API": "Une tâche a besoin d'au moins un serveur ou une API",
   "The servers of this project are still being prepared: try again once that task has ended": "Les serveurs de ce projet sont encore en préparation : réessayez une fois cette tâche terminée",
   "Nothing to prepare now: this project has no server, is already deployed, or a mission is deploying it": "Rien à préparer pour l'instant : ce projet n'a pas de serveur, est déjà déployé, ou une mission le déploie",
@@ -837,6 +841,10 @@ fr: {
   "Run a command": "Lancer une commande", "The task failed without giving a reason.": "La tâche a échoué sans donner de raison.",
 },
 es: {
+  "This category no longer exists": "Esta categoría ya no existe.",
+  "A category with this name already exists": "Ya existe una categoría con este nombre.",
+  "The category name is too long (50 characters at most)": "El nombre de la categoría es demasiado largo (50 caracteres como máximo)",
+  "Give the category a name": "Dé un nombre a la categoría",
   "A task needs at least one server or one API": "Una tarea necesita al menos un servidor o una API",
   "The servers of this project are still being prepared: try again once that task has ended": "Los servidores de este proyecto aún se están preparando: inténtelo de nuevo cuando esa tarea haya terminado",
   "Nothing to prepare now: this project has no server, is already deployed, or a mission is deploying it": "Nada que preparar por ahora: este proyecto no tiene servidor, ya está desplegado o una misión lo está desplegando",
@@ -1593,6 +1601,10 @@ es: {
   "Run a command": "Ejecutar un comando", "The task failed without giving a reason.": "La tarea falló sin dar un motivo.",
 },
 de: {
+  "This category no longer exists": "Diese Kategorie gibt es nicht mehr.",
+  "A category with this name already exists": "Es gibt bereits eine Kategorie mit diesem Namen.",
+  "The category name is too long (50 characters at most)": "Der Name der Kategorie ist zu lang (höchstens 50 Zeichen)",
+  "Give the category a name": "Geben Sie der Kategorie einen Namen",
   "A task needs at least one server or one API": "Eine Aufgabe braucht mindestens einen Server oder eine API",
   "The servers of this project are still being prepared: try again once that task has ended": "Die Server dieses Projekts werden noch vorbereitet: Versuchen Sie es erneut, sobald diese Aufgabe beendet ist",
   "Nothing to prepare now: this project has no server, is already deployed, or a mission is deploying it": "Derzeit nichts vorzubereiten: Dieses Projekt hat keinen Server, ist bereits bereitgestellt oder wird von einer Mission bereitgestellt",
@@ -2343,6 +2355,10 @@ de: {
   "Run a command": "Einen Befehl ausführen", "The task failed without giving a reason.": "Die Aufgabe ist ohne Angabe eines Grundes fehlgeschlagen.",
 },
 it: {
+  "This category no longer exists": "Questa categoria non esiste più.",
+  "A category with this name already exists": "Esiste già una categoria con questo nome.",
+  "The category name is too long (50 characters at most)": "Il nome della categoria è troppo lungo (al massimo 50 caratteri)",
+  "Give the category a name": "Dai un nome alla categoria",
   "A task needs at least one server or one API": "Un'attività richiede almeno un server o un'API",
   "The servers of this project are still being prepared: try again once that task has ended": "I server di questo progetto sono ancora in preparazione: riprova quando l'attività sarà terminata",
   "Nothing to prepare now: this project has no server, is already deployed, or a mission is deploying it": "Niente da preparare per ora: questo progetto non ha un server, è già stato distribuito o una missione lo sta distribuendo",
@@ -3093,6 +3109,10 @@ it: {
   "Run a command": "Eseguire un comando", "The task failed without giving a reason.": "L'attività non è riuscita senza indicare un motivo.",
 },
 pt: {
+  "This category no longer exists": "Esta categoria já não existe.",
+  "A category with this name already exists": "Já existe uma categoria com este nome.",
+  "The category name is too long (50 characters at most)": "O nome da categoria é demasiado longo (50 caracteres no máximo)",
+  "Give the category a name": "Dê um nome à categoria",
   "A task needs at least one server or one API": "Uma tarefa precisa de pelo menos um servidor ou uma API",
   "The servers of this project are still being prepared: try again once that task has ended": "Os servidores deste projeto ainda estão a ser preparados: tente novamente quando essa tarefa terminar",
   "Nothing to prepare now: this project has no server, is already deployed, or a mission is deploying it": "Nada a preparar por agora: este projeto não tem servidor, já está implementado ou uma missão está a implementá-lo",

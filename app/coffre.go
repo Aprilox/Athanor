@@ -97,6 +97,8 @@ type EntreeCoffre struct {
 	Valeur    string `json:"valeur"` // secret: base64(nonce‖AES-GCM); variable: clear
 	Source    string `json:"source,omitempty"`
 	Empreinte string `json:"empreinte,omitempty"`
+	// M287: id of the owner's category ("" = none); clear and outside aadEntree, so it changes without any key
+	Categorie string `json:"categorie,omitempty"`
 	// M225: the production value when it differs from Valeur (then the testing value), sealed under aadProd;
 	// older versions ignore these fields and use Valeur everywhere
 	Prod          string    `json:"prod,omitempty"`
@@ -123,7 +125,10 @@ type fichierCoffre struct {
 		} `json:"infra"`
 	} `json:"cles"`
 	Entrees []EntreeCoffre `json:"entrees"`
-	Maj     time.Time      `json:"maj"`
+	// M287 (coffre_categories.go): the owner's categories, and the mark of migrerFournisseurs, run once
+	Categories         []CategorieCoffre `json:"categories,omitempty"`
+	FournisseursMigres bool              `json:"fournisseurs_migres,omitempty"`
+	Maj                time.Time         `json:"maj"`
 }
 
 type Coffre struct {
@@ -245,7 +250,7 @@ func (c *Coffre) RepartirVide() (string, error) {
 	clear(c.cleCode)
 	clear(c.cleInfra)
 	c.cleCode, c.cleInfra = nil, nil
-	c.f = fichierCoffre{Version: 1}
+	c.f = fichierCoffre{Version: 1, FournisseursMigres: c.f.FournisseursMigres} // the migration stays done
 	c.f.KDF.Algo, c.f.KDF.Iter, c.f.KDF.Sel = prefixeMdp, iterMdp, aleatoire(16)
 	return copie, nil
 }
@@ -636,6 +641,9 @@ func (c *Coffre) Ajouter(e EntreeCoffre, valeur string) (EntreeCoffre, error) {
 	e.Portee = porteeEntree(e)
 	if err := verifierEntree(e); err != nil {
 		return EntreeCoffre{}, err
+	}
+	if e.Categorie != "" && c.indiceCategorie(e.Categorie) < 0 {
+		return EntreeCoffre{}, errCategorieInconnue
 	}
 	e.ID = aleatoire(8)
 	e.Cree = time.Now().UTC()

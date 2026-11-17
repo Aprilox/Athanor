@@ -525,7 +525,8 @@ func changerRessource(c *CarteMission, typ, ref string, retirer bool, x contexte
 			return errMentionInconnue
 		}
 		ref = fournisseurs[i].Cle
-	case "cle":
+	case "cle", "api": // api: what the lists give since M287
+		typ = "cle"
 	default:
 		return errMentionInconnue
 	}

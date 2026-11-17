@@ -53,7 +53,7 @@ func TestMentions(t *testing.T) {
 	if _, corps := appel("WEB"); !strings.Contains(corps, `{"type":"serveur","ref":"srv1","nom":"web-1","detail":"203.0.113.5"}`) {
 		t.Errorf("server by readable name: %s", corps)
 	}
-	if _, corps := appel("cloudflare"); !strings.Contains(corps, `"ref":"`+cle.ID+`","nom":"Jeton Cloudflare","detail":"cloudflare"`) || strings.Contains(corps, temoin) || strings.Contains(corps, "valeur") {
+	if _, corps := appel("cloudflare"); !strings.Contains(corps, `{"type":"api","ref":"`+cle.ID+`","nom":"Jeton Cloudflare","detail":"cloudflare"}`) || strings.Contains(corps, temoin) || strings.Contains(corps, "valeur") {
 		t.Errorf("vault entry by type: %s", corps)
 	}
 	// M244k7: the chips already chosen are left out before the cut, so the next ones come up
@@ -91,7 +91,7 @@ func TestMentionsMemeNom(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	l, _ := s.chercherMentions("boutique", "")
+	l, _ := s.chercherMentions("boutique", "", "")
 	if len(l) != 2 || l[0].Type != "projet" || l[0].Ref != "boutique" || l[1].Type != "serveur" || l[1].Ref != "srv9" {
 		t.Fatalf("list: %+v", l)
 	}

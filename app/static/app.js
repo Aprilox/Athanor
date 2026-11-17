@@ -2076,9 +2076,9 @@ const blocAttente = (tous, modules) => blocListeAccueil("a-repondre", "Waiting f
 const blocEnCours = (tous, modules, lm = []) => blocListeAccueil("en-cours", "In progress", tous.filter((e) => !e.attente && e.etat === "actif"), "Nothing in progress right now.", modules,
   lm.length ? `<ul class="mis-liste">${lm.slice(0, 3).map(ligneMission).join("")}</ul>` : "");
 // M151: mentions of the bar. A chip = { type: projet|serveur|cle|nouveau, ref, nom }; the Go checks the refs again.
-const TYPES_MENTION = { projet: "Project", serveur: "Server", cle: "Key", fournisseur: "Provider", dossier: "Folder", nouveau: "New project" };
-const GROUPES_MENTION = { projet: "Projects", serveur: "Servers", cle: "Vault keys", fournisseur: "Providers", dossier: "Folders" };
-const ICONES_MENTION = { projet: "projet", serveur: "serveur", cle: "cle", fournisseur: "lien", dossier: "dossier", nouveau: "plus" };
+const TYPES_MENTION = { projet: "Project", serveur: "Server", api: "Key", cle: "Key", fournisseur: "Provider", dossier: "Folder", nouveau: "New project" };
+const GROUPES_MENTION = { projet: "Projects", serveur: "Servers", api: "Vault keys", cle: "Vault keys", fournisseur: "Providers", dossier: "Folders" };
+const ICONES_MENTION = { projet: "projet", serveur: "serveur", api: "cle", cle: "cle", fournisseur: "lien", dossier: "dossier", nouveau: "plus" };
 // a chip shows its kind (icon + label) before the name: a project and a server of the same name never look alike
 const typeMention = (m) => `${ic(ICONES_MENTION[m.type])}${m.type === "nouveau" ? "" : `<span class="puce-type">${h(t(TYPES_MENTION[m.type]))}</span>`}`;
 const pucesMentions = () => (etat.accueilMentions || []).map((m, i) => `<span class="puce-mention puce-${m.type}" title="${h(t(TYPES_MENTION[m.type]))}">${typeMention(m)}${h(m.nom)}<button type="button" class="puce-x" data-retirer-mention="${i}" aria-label="${h(t("Remove {0}", [m.nom]))}">×</button></span>`).join("");
@@ -2373,7 +2373,7 @@ const estimationMission = (e) => `<h3>${t("Estimate")}</h3><p class="m0">${t(e.j
 function ressourcesMission() {
   const c = ((etat.missionVue || {}).mission || {}).carte || {}, l = [];
   const nom = (r) => ((etat.mentionsSugg || []).find((x) => x.type === "serveur" && x.ref === r) || {}).nom || (etat.nomsServeurs || {})[r] || r;
-  const vault = (n) => (etat.mentionsSugg || []).some((x) => x.type === "cle" && x.nom === n); // M275b: typed at the launch, it is no longer "to fill"
+  const vault = (n) => (etat.mentionsSugg || []).some((x) => x.type === "api" && x.nom === n); // M275b: typed at the launch, it is no longer "to fill"
   for (const e of c.envs || []) for (const r of e.serveurs || []) if (!l.some((x) => x.ref === r)) l.push({ type: "serveur", ref: r, nom: nom(r), env: e.nom });
   for (const a of c.acces || []) if (!a.decoche && !l.some((x) => x.type === "cle" && x.nom === a.entree)) l.push({ type: "cle", ref: a.id || a.entree, nom: a.entree, remplir: a.a_remplir && !vault(a.entree), pour: nom(a.pour) });
   return l;
