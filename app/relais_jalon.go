@@ -1,9 +1,11 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -22,6 +24,10 @@ type RelaisJalon struct {
 	ID     string `json:"id,omitempty"`     // the deployment, once started
 	Erreur string `json:"erreur,omitempty"` // why it did not start
 	Accord string `json:"accord,omitempty"` // the owner's accord asked for its changed build files (C68)
+	// M282: the last delivery noted (<project>/.athanor/done/.last-delivery) and whether the project's deliveries
+	// are watched yet (the first look only learns); both survive the relays that follow
+	Livraison    string `json:"livraison,omitempty"`
+	LivraisonVue bool   `json:"livraison_vue,omitempty"`
 }
 
 // attentePushRelais: how long a milestone's commit may wait to be on GitHub (git source) before the relay tries anyway.
@@ -45,35 +51,97 @@ func ecrireRelais(projet string, r RelaisJalon) {
 	_ = ecrireJSONFichier(fichierRelais(), m, 0o600)
 }
 
-// relaisActif: the project's milestone environment asks to be deployed after each milestone.
-func (s *Serveur) relaisActif(projet string) bool {
-	return s.acces != nil && s.acces.Environnements(projet)[s.envJalon(projet)].DeployerAuJalon
+// deplacerRelais: a renamed project keeps its record; nouveau "": the project is removed, it goes.
+func deplacerRelais(ancien, nouveau string) {
+	relaisMu.Lock()
+	defer relaisMu.Unlock()
+	m := lireRelais()
+	r, ok := m[ancien]
+	if !ok {
+		return
+	}
+	delete(m, ancien)
+	if nouveau != "" {
+		m[nouveau] = r
+	}
+	_ = ecrireJSONFichier(fichierRelais(), m, 0o600)
 }
+
+// momentRelais (M282): when the project's deployment is made by itself: jalon | livraison | "" (on request).
+func (s *Serveur) momentRelais(projet string) string {
+	if s.acces == nil {
+		return ""
+	}
+	return s.acces.Environnements(projet)[s.envJalon(projet)].Moment
+}
+
+// relaisActif: the project's deployment is made by itself, after each milestone or at delivery.
+func (s *Serveur) relaisActif(projet string) bool { return s.momentRelais(projet) != "" }
 
 // envJalon (M279): the environment deployed after each milestone is the project's one deployment (never a
 // Production one, validerEnvironnement refuses it).
 func (s *Serveur) envJalon(projet string) string { return s.deploiementProjet(projet) }
 
-// noterJalonRelais: a milestone just done → its HEAD waits to be deployed to dev (never twice the same milestone).
+// premierParMission (M275b, until M302): no method yet and a launched mission covers the project: its Servers lane
+// makes the first deployment (premierDeploiementMission), a relay failure would ring for nothing.
+func (s *Serveur) premierParMission(projet string) bool {
+	return s.acces.Environnements(projet)[s.envJalon(projet)].Deploiement == nil && slices.ContainsFunc(lireMissions(), func(m Mission) bool {
+		return missionSuivie(m.Etat) && slices.ContainsFunc(m.Voies, func(v VoieMission) bool { return v.Module == "dev" && v.Ref == projet })
+	})
+}
+
+// noterJalonRelais: a milestone just done → its HEAD waits to be deployed (never twice the same milestone), when
+// the project is deployed after each milestone (M282: not when it is deployed at delivery).
 func (s *Serveur) noterJalonRelais(p Projet, jalon string, quand time.Time) {
-	if !s.relaisActif(p.Nom) || lireRelais()[p.Nom].Jalon == jalon {
+	r := lireRelais()[p.Nom]
+	if s.momentRelais(p.Nom) != "jalon" || r.Jalon == jalon || s.premierParMission(p.Nom) {
 		return
 	}
-	// M275b: no method yet and a launched mission covers the project: its Servers lane makes the first deployment
-	// (premierDeploiementMission), a relay failure would ring for nothing
-	if s.acces.Environnements(p.Nom)[s.envJalon(p.Nom)].Deploiement == nil && slices.ContainsFunc(lireMissions(), func(m Mission) bool {
-		return missionSuivie(m.Etat) && slices.ContainsFunc(m.Voies, func(v VoieMission) bool { return v.Module == "dev" && v.Ref == p.Nom })
-	}) {
+	s.attendreRelais(p, r, jalon, "relais après jalon", quand)
+}
+
+// noterLivraison (M282): a delivery of the project (the pilot's .last-delivery changed) is noted before anything
+// else, so that a restart never deploys it twice; then, when the project has a moment (a delivery also closes
+// "after each milestone") and its HEAD is not what was last deployed with success, that HEAD waits to be
+// deployed. The first look at a project only learns: a delivery older than this version deploys nothing.
+func (s *Serveur) noterLivraison(p Projet, quand time.Time) {
+	b, _ := os.ReadFile(filepath.Join(p.DemandesFaites(), ".last-delivery"))
+	v, r := strings.TrimSpace(string(b)), lireRelais()[p.Nom]
+	if r.LivraisonVue && r.Livraison == v {
 		return
 	}
-	r := RelaisJalon{Jalon: jalon, Date: quand.UTC().Format(time.RFC3339), Etat: "attente"}
+	premier := !r.LivraisonVue
+	r.LivraisonVue, r.Livraison = true, v
+	ecrireRelais(p.Nom, r)
+	if premier || v == "" || !s.relaisActif(p.Nom) || s.premierParMission(p.Nom) {
+		return
+	}
+	sha, env, servi := sortieGit(p.Dossier, "rev-parse", "HEAD"), s.envJalon(p.Nom), ""
+	for _, d := range historiqueDeploiements(p.Nom, env) {
+		if d.Etat == "ok" {
+			servi = d.Commit
+		}
+		if d.Etat == "en_cours" && d.Commit == sha {
+			return // the last milestone's relay is deploying this HEAD
+		}
+	}
+	if servi == sha || r.Etat == "attente" && r.Commit == sha {
+		return
+	}
+	s.attendreRelais(p, r, s.textePush("livre"), "relais à la livraison", quand)
+}
+
+// attendreRelais: the project's HEAD waits to be deployed, for the milestone or the delivery named by jalon; what
+// avant noted of the deliveries stays.
+func (s *Serveur) attendreRelais(p Projet, avant RelaisJalon, jalon, action string, quand time.Time) {
+	r := RelaisJalon{Jalon: jalon, Date: quand.UTC().Format(time.RFC3339), Etat: "attente", Livraison: avant.Livraison, LivraisonVue: avant.LivraisonVue}
 	if sha, err := gitSortie(p.Dossier, "rev-parse", "HEAD"); err == nil && reCommitComplet.MatchString(sha) {
 		r.Commit = sha
 	} else {
 		r.Etat, r.Erreur = "echec", "the project has no commit to deploy"
 	}
 	ecrireRelais(p.Nom, r)
-	s.ecrireAudit(LigneAudit{Type: "evenement", De: "hub", Vers: "hub", Projet: p.Nom, Env: s.envJalon(p.Nom), Action: "relais après jalon", Resultat: jalon + " → " + r.Commit})
+	s.ecrireAudit(LigneAudit{Type: "evenement", De: "hub", Vers: "hub", Projet: p.Nom, Env: s.envJalon(p.Nom), Action: action, Resultat: jalon + " → " + r.Commit})
 }
 
 // avancerRelais: the waiting relay of p started once its commit can be fetched (git source: on a remote
@@ -85,7 +153,7 @@ func (s *Serveur) avancerRelais(p Projet, maintenant time.Time) <-chan struct{} 
 	}
 	env := s.envJalon(p.Nom)
 	e := s.acces.Environnements(p.Nom)[env]
-	if !e.DeployerAuJalon || missionBloquee("dev", p.Nom) != "" { // a paused mission: the relay waits for Resume
+	if e.Moment == "" || missionBloquee("dev", p.Nom) != "" { // a paused mission: the relay waits for Resume
 		return nil
 	}
 	if e.Deploiement != nil && e.Deploiement.Source == "git" {
@@ -175,14 +243,18 @@ func (s *Serveur) alertesRelais() []AlerteHub {
 // accordBuildRelais (C68): ticking "Deploy to dev at each milestone" accepts the deployments, not a build whose
 // files changed since the last deployment the owner accepted: for those, the relay asks the owner once and
 // waits (attendre); accorde says the owner accepted this one. Refused or expired: the relay fails, said.
+// M282: an older Production site, which a delivery can now deploy, always asks the same way.
 func (s *Serveur) accordBuildRelais(p Projet, e Environnement, r *RelaisJalon) (accorde, attendre bool) {
 	env := s.envJalon(p.Nom)
 	f := fichiersBuildChanges(p, env, r.Commit, e.Deploiement)
-	if len(f) == 0 {
+	if len(f) == 0 && !s.prudenceRenforcee(p.Nom, env) {
 		return false, false
 	}
-	liste := couper(strings.Join(f, ", "), 300)
-	ap := Approbation{Projet: p.Nom, Env: env, Agent: "relais", Action: actionDeploiement, Raison: "commit " + r.Commit + " → " + hoteEnv(&e) + "; build files changed: " + liste,
+	liste, raison := couper(strings.Join(f, ", "), 300), "commit "+r.Commit+" → "+hoteEnv(&e)
+	if liste != "" {
+		raison += "; build files changed: " + liste
+	}
+	ap := Approbation{Projet: p.Nom, Env: env, Agent: "relais", Action: actionDeploiement, Raison: raison,
 		Details: map[string]string{"commit": r.Commit, "hote": hoteEnv(&e), "serveurs": listeServeursAccord(e.Serveurs), "fichiers_build": liste}}
 	y, etat, err := s.approbations.Reprendre(ap)
 	switch {
@@ -194,7 +266,7 @@ func (s *Serveur) accordBuildRelais(p Projet, e Environnement, r *RelaisJalon) (
 		if y, ok := s.approbations.Lire(r.Accord); ok && y.Etat == "acceptee" {
 			return true, false
 		}
-		r.Etat, r.Erreur = "echec", "the owner did not accept the changed build files ("+liste+")"
+		r.Etat, r.Erreur = "echec", "the owner did not accept this deployment (changed build files: "+cmp.Or(liste, "none")+")"
 		ecrireRelais(p.Nom, *r)
 		s.notifierRelais(p.Nom, false, r.Jalon)
 		return false, true

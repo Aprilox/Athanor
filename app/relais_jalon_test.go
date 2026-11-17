@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -21,12 +22,22 @@ func planRelaisTest(t *testing.T, p Projet, lignes string) {
 	}
 }
 
-func oublierRelais(projet string) {
-	relaisMu.Lock()
-	defer relaisMu.Unlock()
-	m := lireRelais()
-	delete(m, projet)
-	_ = ecrireJSONFichier(fichierRelais(), m, 0o600)
+func oublierRelais(projet string) { deplacerRelais(projet, "") }
+
+// serveurRelaisTest: a server the inventory knows (an unknown one always asks the owner, prudenceRenforcee) and
+// that refuses the connection at once.
+func serveurRelaisTest(t *testing.T) string {
+	t.Helper()
+	err := modifierServeurs(func(l []ServeurInventaire) ([]ServeurInventaire, error) {
+		if slices.ContainsFunc(l, func(v ServeurInventaire) bool { return v.ID == "r1" }) {
+			return l, nil
+		}
+		return append(l, ServeurInventaire{ID: "r1", Nom: "relais", Hote: "127.0.0.1", Port: 1, Cree: time.Now()}), nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return "r1"
 }
 
 // TestRelaisJalon (M136): only dev takes the relay; a milestone done is relayed once (not again, not after a
@@ -55,7 +66,7 @@ func TestRelaisJalon(t *testing.T) {
 	s.mu.Unlock()
 	oublierRelais(p.Nom)
 	t.Cleanup(func() { oublierRelais(p.Nom) })
-	env := Environnement{URL: "http://m136u.test", Serveurs: []string{"absent"}, Protection: "aucune", Politique: "accord", DeployerAuJalon: true}
+	env := Environnement{URL: "http://m136u.test", Serveurs: []string{serveurRelaisTest(t)}, Protection: "aucune", Politique: "accord", DeployerAuJalon: true}
 	if err := s.acces.definirAncien(p.Nom, "dev", env); err != nil {
 		t.Fatal(err)
 	}

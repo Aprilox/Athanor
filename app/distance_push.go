@@ -418,6 +418,7 @@ func (s *Serveur) surveillerJalonsPush() {
 			if len(nouveaux) > 0 { // M136: the last one only, HEAD holds the others
 				s.noterJalonRelais(p, nouveaux[len(nouveaux)-1].Titre, time.Now())
 			}
+			s.noterLivraison(p, time.Now()) // M282: read from the pilot's file, livres below only rings
 			s.avancerRelais(p, time.Now())
 			r, _ := os.ReadFile(filepath.Join(p.Atelier(), "FINAL_REPORT.md"))
 			livre := reStatusDonePilote.Match(r)
