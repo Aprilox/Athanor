@@ -2779,11 +2779,11 @@ pages.suivi = async () => {
 };
 
 // M136: the dev deployment after the last milestone (relais_jalon.go)
-function ligneRelais(r) {
-  // M284: no deployment method yet is an information, never a failure (its button comes with the Deployment tab)
+function ligneRelais(r, lien = true) { // lien false: in the Deployment tab itself (M293)
+  // M284: no deployment method yet is an information, never a failure (its button is in the Deployment tab)
   if (r.etat === "a_preparer") return `<span class="badge">${h(t("First deployment to prepare"))}</span>`;
   const [icone, etiquette] = r.etat === "preparation" ? ["attente", "First deployment in progress"] : r.etat === "attente" ? ["attente", "Waiting for the milestone's commit on GitHub"] : r.etat === "lance" ? ETATS_DEPLOI.en_cours : ETATS_DEPLOI[r.etat] || ["", r.etat];
-  return `<span class="badge">${icone ? ic(icone) : ""} ${h(t(etiquette))}</span> <code>${h((r.commit || "").slice(0, 7))}</code> <span class="muet petit">${md(r.jalon)} · ${h(dateLisible(r.date))}</span>${r.erreur ? `<div class="petit attention">${h(t(r.erreur))}</div>` : ""} <a class="petit" href="#acces">${t("Environments")}</a>`;
+  return `<span class="badge">${icone ? ic(icone) : ""} ${h(t(etiquette))}</span> <code>${h((r.commit || "").slice(0, 7))}</code> <span class="muet petit">${[r.jalon ? md(r.jalon) : "", h(dateLisible(r.date))].filter(Boolean).join(" · ")}</span>${r.erreur ? `<div class="petit attention">${h(t(r.erreur))}</div>` : ""}${lien ? ` <a class="petit" href="#acces">${t("Environments")}</a>` : ""}`;
 }
 
 // the installers of this system: on Windows, one per mode (choosing it also selects that mode)
@@ -4512,12 +4512,28 @@ async function reordonner(fichier, sens) {
 }
 
 // --- M292: the Deployment tab: the project's one deployment (server, address, API, plan, moment), saved by
-// POST /api/projets/{nom}/deploiement in any state of the project; its state and history come with M293
+// POST /api/projets/{nom}/deploiement in any state of the project. M293: above the form, the state of the site
+// (never red while its first deployment is to prepare or in progress), its health, its history and the way back;
+// an older project with several sites has one sheet per address, and any of them can become its deployment
 const dep = { projet: "", f: null }; // f: the form as typed, kept until Save or Cancel
 const MOMENTS_DEPLOIEMENT = [["jalon", "After each milestone"], ["livraison", "At delivery"], ["", "Only when I ask"]];
 const pucesDeploiement = (cle) => dep.f[cle].map((m, i) => `<span class="puce-mention puce-${m.type}">${typeMention(m)}${h(m.nom)}${(etat.vue || {}).distant ? "" : `<button type="button" class="puce-x" data-dep-retirer="${cle}:${i}" aria-label="${h(t("Remove {0}", [m.nom]))}">×</button>`}</span>`).join("")
   || `<span class="muet petit">${t(cle === "serveurs" ? "No server chosen yet." : "No API chosen yet.")}</span>`;
 const actionsDeploiement = () => `<button type="submit" class="btn btn-primaire"${dep.f.modifie ? "" : " disabled"}>${t("Save")}</button>${dep.f.modifie ? `<button type="button" class="btn" data-dep-annuler>${t("Cancel")}</button>` : ""}`;
+function ficheSite(d, nom, nomSrv, distant) {
+  const e = d.sites[nom], courant = nom === d.courant, r = courant && d.relais, web = /^https?:\/\//.test(e.url || "");
+  return `<section class="env-carte${courant ? " dep-courant" : ""}" data-env="${h(nom)}" data-titre="${h(e.url || d.projet)}" data-protection="${h(e.protection || "aucune")}"${(d.prudence || []).includes(nom) ? " data-prudence" : ""} aria-label="${h(e.url || t("No address yet."))}">
+    <h3>${web ? `<a href="${h(e.url)}" target="_blank" rel="noopener">${h(e.url)}</a>` : `<span class="muet">${t("No address yet.")}</span>`}</h3>
+    ${r ? `<div class="dep-relais">${ligneRelais(r, false)}</div>` : ""}
+    ${r && r.etat === "a_preparer" ? `<p class="petit">${t("The first deployment is still to be made: an agent will read the project and your plan, set up the server and put the project online.")}</p>
+      ${distant ? "" : `<button type="button" class="btn btn-primaire btn-petit" data-dep-preparer>${t("Prepare now")}</button>`}` : ""}
+    ${courant ? "" : `<p class="muet petit">${(e.serveurs || []).length ? h(t("Servers") + " " + e.serveurs.map(nomSrv).join(", ")) : t("No server chosen yet.")}</p>`}
+    <p class="petit attention env-erreur" role="alert" hidden></p>
+    ${blocSante((d.sante || {})[nom], e)}
+    ${blocDeploiements(nom, e, (d.deploiements || {})[nom] || [], distant || !courant)}
+    ${courant || distant ? "" : `<button type="button" class="btn btn-petit" data-dep-courant="${h(nom)}">${t("Make this site the project's deployment")}</button>`}
+  </section>`;
+}
 pages.deploiement = async () => {
   const projet = (etat.vue && etat.vue.projet && etat.vue.projet.nom) || etat.projet;
   if (!projet) return `<div class="vide">${t("Choose a project")}</div>`;
@@ -4529,7 +4545,9 @@ pages.deploiement = async () => {
   dep.projet = projet;
   const f = dep.f, dis = distant ? " disabled" : "", perm = (rp.reglages || []).find((r) => r.cle === "permission");
   const moments = MOMENTS_DEPLOIEMENT.filter(([v]) => v || !e.moment); // "Only when I ask": an older project that already has it
-  return `<div class="deploiement"><form class="bloc" id="dep-form">
+  const sites = d.sites || {}, autres = Object.keys(sites).filter((n) => n !== d.courant).sort(), nomSrv = (id) => nom(sv.serveurs, id);
+  return `<div class="deploiement">${sites[d.courant] ? `<div class="bloc" id="dep-etat"><h2>${t("State")}</h2>${ficheSite(d, d.courant, nomSrv, distant)}</div>` : ""}
+  <form class="bloc" id="dep-form">
     <h2>${t("Deployment")}</h2>
     <p class="intro petit">${t((d.sites || {})[d.courant] ? "Where this project is online, and how. Athanor prepares the server from your plan, then deploys at the moment you choose." : "This project is not online yet. Choose a server and say how to put it online: Athanor prepares the server, then deploys at the moment you choose.")}</p>
     ${distant ? `<p class="muet petit">${t("The deployment is changed from the computer.")}</p>` : ""}
@@ -4551,7 +4569,10 @@ pages.deploiement = async () => {
       <div>${moments.map(([v, l]) => `<label class="radio"><input type="radio" name="dep-moment" value="${v}"${f.moment === v ? " checked" : ""}${dis}> ${t(l)}</label>`).join("")}</div></div>
     ${perm ? `<div class="reglage"><span class="nom-reglage">${t("Permissions")}</span><p class="m0">${badgePermission(perm.valeur)} <a class="petit" href="#projet@rp">${t("This project's settings")}</a></p></div>` : ""}
     ${distant ? "" : `<div class="ligne mt-3" id="dep-actions">${actionsDeploiement()}</div>`}
-  </form></div>`;
+  </form>
+  ${autres.length ? `<div class="bloc" id="dep-autres"><h2>${t("Other sites of this project")}</h2>
+    <p class="intro petit">${t("This project was set up with several sites. This tab changes the one above; any other one can take its place.")}</p>
+    <div class="env-cartes">${autres.map((n) => ficheSite(d, n, nomSrv, distant)).join("")}</div></div>` : ""}</div>`;
 };
 function majDeploiement(cle) { // after a change: the chips of that list, and Save
   dep.f.modifie = true;
@@ -4575,6 +4596,22 @@ document.addEventListener("click", (ev) => {
   const x = ev.target.closest("[data-dep-retirer]");
   if (x) { const [cle, i] = x.dataset.depRetirer.split(":"); dep.f[cle].splice(+i, 1); majDeploiement(cle); $(cle === "apis" ? "#dep-api-q" : "#dep-srv-q").focus(); }
   else if (ev.target.closest("[data-dep-annuler]")) { dep.f = null; rendrePage(); }
+});
+document.addEventListener("click", async (ev) => {
+  const b = ev.target.closest("[data-dep-preparer], [data-dep-courant]"); if (!b) return;
+  const url = "projets/" + encodeURIComponent(dep.projet);
+  if (b.dataset.depCourant) {
+    const q = t("Make {0} this project's deployment? This tab then shows and changes that site; the others stay as they are.", [b.closest("[data-env]").dataset.titre]);
+    if (!(await confirmer(q + (dep.f && dep.f.modifie ? " " + t("Your unsaved changes are dropped.") : ""), { ok: t("Make it the deployment") }))) return;
+    if (!(await action(api(url + "/deploiement", "POST", { courant: b.dataset.depCourant })))) return;
+    dep.f = null; toast(t("This site is now the project's deployment."), "ok");
+  } else {
+    b.disabled = true;
+    const r = await lancerSansBarriere(url + "/preparer-deploiement", {}).finally(() => { b.disabled = false; });
+    if (!r) return;
+    toast(t("The first deployment is being prepared."), "ok");
+  }
+  rendrePage();
 });
 document.addEventListener("submit", async (ev) => {
   if (ev.target.id !== "dep-form") return;
@@ -5697,16 +5734,17 @@ $("#page").addEventListener("change", async (ev) => {
 const AUTEURS_DEPLOI = { agent: "by the agent", relais: "after a milestone", proprietaire: "by you", auto: "automatically, after a failed check" };
 $("#page").addEventListener("click", async (ev) => {
   const b = ev.target.closest("[data-env-revenir]"); if (!b) return;
-  const c = b.closest("[data-env]"), env = c.dataset.env, err = c.querySelector(".env-erreur"), question = t("Serve the previous version of {0} again? It is checked from this PC right after.", [nomEnv(env)]);
+  const c = b.closest("[data-env]"), env = c.dataset.env, err = c.querySelector(".env-erreur"), nom = c.dataset.titre || nomEnv(env); // titre: the Deployment tab's sheet, named by its address
+  const question = t("Serve the previous version of {0} again? It is checked from this PC right after.", [nom]);
   const preuve = c.dataset.prudence ? await preuveMdp(question, { ok: t("Go back") }, question) : (await confirmer(question, { ok: t("Go back") })) ? {} : false;
   if (preuve === false) return;
   b.disabled = true; err.hidden = true; b.textContent = t("Going back…");
   try {
-    const r = await api("projets/" + encodeURIComponent(acc.projet) + "/revenir", "POST", { env, ...preuve }), tpl = document.createElement("template");
+    const r = await api("projets/" + encodeURIComponent(etat.page === "deploiement" ? dep.projet : acc.projet) + "/revenir", "POST", { env, ...preuve }), tpl = document.createElement("template");
     tpl.innerHTML = blocDeploiements(env, { ...(r.deploiement ? { deploiement: true } : {}), protection: c.dataset.protection }, r.deploiements || []);
     c.querySelector("[data-env-deploi]").replaceWith(tpl.content.firstElementChild);
     const d = r.deploiement || {};
-    toast(d.etat === "ok" ? t("{0} serves its previous version again.", [nomEnv(env)]) : d.message ? texteMessage(d.message) : t(d.erreur || "Failed"), d.etat === "ok" ? "ok" : "erreur");
+    toast(d.etat === "ok" ? t("{0} serves its previous version again.", [nom]) : d.message ? texteMessage(d.message) : t(d.erreur || "Failed"), d.etat === "ok" ? "ok" : "erreur");
   } catch (e) { err.textContent = e.message; err.hidden = false; b.disabled = false; b.textContent = t("Go back to the previous version"); }
 });
 // the project's GitHub deployment key (one for every environment), made on demand (M119)
@@ -6655,18 +6693,18 @@ $("#page").addEventListener("submit", async (ev) => {
 });
 // a task launched on a server (its sheet, the assistant beside its terminal); native Windows mode proposes WSL, or
 // forcing it with Athanor's password; null when nothing was launched (the error already shown)
-function lancerTacheSrv(id, texte, env, terminal, depuis, suite) {
-  const url = "serveurs/" + encodeURIComponent(id) + "/taches";
-  return api(url, "POST", { texte, env, terminal, depuis, suite }).catch(async (e) => {
+const lancerTacheSrv = (id, texte, env, terminal, depuis, suite) => lancerSansBarriere("serveurs/" + encodeURIComponent(id) + "/taches", { texte, env, terminal, depuis, suite });
+function lancerSansBarriere(url, corps) { // M293: also the project's first deployment ("Prepare now")
+  return api(url, "POST", corps).catch(async (e) => {
     if (!e.data || !e.data.proposer_wsl) throw e;
     const { choix: c, coche } = await choisir(t("Native Windows mode has no barrier: an agent working on your servers would run with all your rights on this PC. Switch to WSL, or force this task knowing the risk."),
       [{ id: "wsl", texte: t("Switch to WSL"), primaire: true }, { id: "forcer", texte: t("Force this task"), danger: true }, { id: "", texte: t("Cancel") }], { titre: t("Native Windows mode"), case: t("Don't remind me again") });
     if (c === "wsl") { location.hash = "#options@bloc-direct"; return null; }
     if (c !== "forcer") return null;
     // M240r2: the same switch as Settings › Options, the password once; this task then goes through without asking
-    if (coche) return (await rappelsNatif(true)) ? api(url, "POST", { texte, env, terminal, depuis, suite }) : null;
+    if (coche) return (await rappelsNatif(true)) ? api(url, "POST", corps) : null;
     const p = await preuveMdp(t("Forcing a Servers task without the barrier: retype Athanor's password."), { ok: t("Force this task"), danger: true }, t("Force this task without the barrier?"));
-    return p ? api(url, "POST", { texte, env, terminal, depuis, forcer: true, ...p }) : null;
+    return p ? api(url, "POST", { ...corps, forcer: true, ...p }) : null;
   }).catch((e) => { if (e.message !== t("Locked")) toast(e.message, "erreur"); return null; });
 }
 // native mode's reminders (the one switch, kept in the preferences): turning them off asks for Athanor's password

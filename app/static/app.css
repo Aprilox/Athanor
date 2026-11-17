@@ -1269,6 +1269,10 @@ a.mis-ligne:hover, a.mis-ligne:focus-visible { border-color: var(--accent); }
 .mis-res-liste { margin: 0; }
 .dep-champ { display: flex; flex-direction: column; gap: 8px; min-width: 0; } /* M292: chips, then the search field and its list */
 .dep-champ, .dep-champ .choix-api { position: relative; }
+.env-carte.dep-courant { border: 0; padding: 0; background: none; } /* M293: the current site's sheet fills its block */
+.env-carte.dep-courant h3 { font-size: 15px; overflow-wrap: anywhere; }
+.dep-relais { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.dep-relais .attention { flex-basis: 100%; }
 /* over the form, not in it: a list that closes when its field loses the focus must not move the button being clicked */
 .dep-champ .liste-mentions { position: absolute; top: 100%; left: 0; right: 0; z-index: 5; margin: 4px 0 0; box-shadow: 0 6px 18px rgba(0, 0, 0, .18); }
 .mis-remplir { color: var(--attention); border-color: currentColor; }

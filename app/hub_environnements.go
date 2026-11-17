@@ -531,13 +531,19 @@ func (s *Serveur) apiEnvironnements(w http.ResponseWriter, r *http.Request) {
 	}
 	// M248: only the environments the project has, read only on the page; prudence: those whose going back asks the password
 	envs := s.acces.Environnements(projet)
-	l, prudence := append([]string{}, slices.Sorted(maps.Keys(envs))...), []string{} // [] for an empty project, never null
-	for _, nom := range l {
+	l := append([]string{}, slices.Sorted(maps.Keys(envs))...) // [] for an empty project, never null
+	s.ecrireJSON(w, map[string]any{"projet": projet, "envs": l, "environnements": envs, "prudence": s.envsPrudents(projet, envs), "deploiements": s.deploiementsAffiches(projet), "sante": s.vueSante(projet)})
+}
+
+// envsPrudents: among envs, the names whose going back asks Athanor's password, sorted ([] for none, never null).
+func (s *Serveur) envsPrudents(projet string, envs map[string]Environnement) []string {
+	l := []string{}
+	for _, nom := range slices.Sorted(maps.Keys(envs)) {
 		if s.prudenceRenforcee(projet, nom) {
-			prudence = append(prudence, nom)
+			l = append(l, nom)
 		}
 	}
-	s.ecrireJSON(w, map[string]any{"projet": projet, "envs": l, "environnements": envs, "prudence": prudence, "deploiements": s.deploiementsAffiches(projet), "sante": s.vueSante(projet)})
+	return l
 }
 
 // apiEnvironnementModifier: POST /api/projets/{nom}/environnements {env, url, serveurs, protection,
@@ -607,7 +613,8 @@ func (s *Serveur) erreurEnv(w http.ResponseWriter, err error) {
 }
 
 // apiDeploiementProjet (M281): GET /api/projets/{nom}/deploiement: the project's one deployment (courant: its
-// internal name, only to send back) and, for an older project, every site it has with its history.
+// internal name, only to send back) and, for an older project, every site it has with its history. M293: relais,
+// the state of its last deployment (etatRelais), and prudence, the sites whose going back asks the password.
 func (s *Serveur) apiDeploiementProjet(w http.ResponseWriter, r *http.Request) {
 	projet := r.PathValue("nom")
 	if !s.accesPret(w, projet) {
@@ -620,7 +627,7 @@ func (s *Serveur) apiDeploiementProjet(w http.ResponseWriter, r *http.Request) {
 		d.Moment = "livraison"
 	}
 	s.ecrireJSON(w, map[string]any{"projet": projet, "courant": courant, "deploiement": d, "sites": envs,
-		"deploiements": s.deploiementsAffiches(projet), "sante": s.vueSante(projet)})
+		"deploiements": s.deploiementsAffiches(projet), "sante": s.vueSante(projet), "relais": s.etatRelais(projet), "prudence": s.envsPrudents(projet, envs)})
 }
 
 // apiDeploiementProjetModifier (M281): POST /api/projets/{nom}/deploiement {serveurs, url, plan, moment, apis}
