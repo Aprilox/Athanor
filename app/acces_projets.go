@@ -115,30 +115,22 @@ func (a *Acces) modifier(f func(*fichierAcces) error) error {
 // ResumeAcces: the badge next to Start, for the project's current environment. Total counts every grant
 // (infra ones included); Secrets and Variables only what the pilot receives (code scope).
 type ResumeAcces struct {
-	Env       string   `json:"env"`
-	Envs      []string `json:"envs"`
-	Total     int      `json:"total"`
-	Secrets   int      `json:"secrets"`
-	Variables int      `json:"variables"`
-	Infra     int      `json:"infra"`
-	Etat      string   `json:"etat"`             // the injection's state (EtatInjection.Etat)
-	Preuve    []string `json:"preuve,omitempty"` // RT2: the environments moving to needs Athanor's password (envDonneCles)
-	Uniformes bool     `json:"uniformes"`        // same keys under the same names everywhere: no environment to choose (accesUniformes in app.js)
+	Env       string `json:"env"`
+	Total     int    `json:"total"`
+	Secrets   int    `json:"secrets"`
+	Variables int    `json:"variables"`
+	Infra     int    `json:"infra"`
+	Etat      string `json:"etat"` // the injection's state (EtatInjection.Etat)
 }
 
 func resumerAcces(p ProjetAcces, entrees []EntreeCoffre) ResumeAcces {
-	r := ResumeAcces{Env: p.Env, Envs: envsProjet}
+	r := ResumeAcces{Env: p.Env}
 	refusee := modeNatif.Load() && !p.ForcerInfraNatif
 	par := map[string]EntreeCoffre{}
 	for _, e := range entrees {
 		par[e.ID] = e
 	}
-	// as the Access page sees them: grants of entries gone from the vault do not count
-	r.Uniformes = accesUniformes(slices.DeleteFunc(slices.Clone(p.Acces), func(a AccesProjet) bool { _, ok := par[a.Entree]; return !ok }))
 	for _, a := range p.Acces {
-		if a.Env != "dev" && !slices.Contains(r.Preuve, a.Env) {
-			r.Preuve = append(r.Preuve, a.Env)
-		}
 		e, ok := par[a.Entree]
 		if !ok || a.Env != p.Env || e.Portee != "code" && refusee {
 			continue // C-M218-9: an infra entry of a native project not forced is used by nobody
@@ -280,22 +272,6 @@ func (a *Acces) RenommerVariable(projet, entree, env, variable string) error {
 	})
 }
 
-func (a *Acces) ChangerEnv(projet, env string) error {
-	if !a.EnvConnu(projet, env) {
-		return errAccesEnv
-	}
-	return a.modifier(func(f *fichierAcces) error {
-		projetDe(f, projet).Env = env
-		return nil
-	})
-}
-
-// envDonneCles (RT2): moving the project to env (not dev, not the current one) gives the pilot keys granted for it.
-func (s *Serveur) envDonneCles(projet, env string) bool {
-	p := s.acces.Projet(projet)
-	return env != "dev" && env != p.Env && slices.ContainsFunc(p.Acces, func(a AccesProjet) bool { return a.Env == env })
-}
-
 // ForcerInfra sets the per-project "force, knowing the risk" of native Windows mode.
 func (a *Acces) ForcerInfra(projet string, oui bool) error {
 	return a.modifier(func(f *fichierAcces) error {
@@ -368,23 +344,4 @@ func (a *Acces) SupprimerProjet(nom string) error {
 		delete(f.Projets, nom)
 		return nil
 	})
-}
-
-// accesUniformes: every entry is given in every environment of the project, under one variable name.
-func accesUniformes(acces []AccesProjet) bool {
-	par := map[string][]AccesProjet{}
-	for _, a := range acces {
-		par[a.Entree] = append(par[a.Entree], a)
-	}
-	for _, l := range par {
-		for _, e := range envsProjet {
-			if !slices.ContainsFunc(l, func(a AccesProjet) bool { return a.Env == e && a.Variable == l[0].Variable }) {
-				return false
-			}
-		}
-		if slices.ContainsFunc(l, func(a AccesProjet) bool { return a.Variable != l[0].Variable }) {
-			return false
-		}
-	}
-	return true
 }

@@ -121,8 +121,8 @@ func envsVises(env string) []string {
 	return []string{env}
 }
 
-// apiAccesModifier: POST /api/acces {projet, action: ajouter|retirer|renommer|env|forcer, entree, env (or "*"),
-// variable, forcer, confirme}.
+// apiAccesModifier: POST /api/acces {projet, action: ajouter|retirer|renommer|forcer, entree, env (or "*"),
+// variable, forcer, confirme}. M294: no action changes the project's environment any more (ProjetAcces.Env is only read).
 func (s *Serveur) apiAccesModifier(w http.ResponseWriter, r *http.Request) {
 	var c struct {
 		Projet, Action, Entree, Env, Variable string
@@ -144,8 +144,7 @@ func (s *Serveur) apiAccesModifier(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	if c.Action == "ajouter" || c.Action == "forcer" && c.Forcer || // C25: giving a key, not taking one back
-		c.Action == "env" && s.envDonneCles(c.Projet, c.Env) { // RT2: staging or prod hands the pilot that env's keys
+	if c.Action == "ajouter" || c.Action == "forcer" && c.Forcer { // C25: giving a key, not taking one back
 		if code, err := s.preuvePresence(r, c.MotDePasse); err != nil {
 			s.ecrireAudit(LigneAudit{Type: "evenement", De: deQui(r), Vers: "hub", Projet: c.Projet, Action: "accès refusé: " + c.Action, Resultat: err.Error()})
 			s.erreur(w, code, err.Error())
@@ -227,8 +226,6 @@ func (s *Serveur) apiAccesModifier(w http.ResponseWriter, r *http.Request) {
 		if err == nil && !fait {
 			err = errAccesInconnu
 		}
-	case "env":
-		err = s.acces.ChangerEnv(c.Projet, c.Env)
 	default:
 		err = errCoffreRequete
 	}

@@ -1168,8 +1168,6 @@ ol.guide-access li { margin: 5px 0; }
 .acc-env h3 { margin: 0; font-size: 14px; }
 .acc-envs.acc-une { grid-template-columns: 1fr; }
 .acc-une .acc-env { min-height: 80px; }
-.acc-separer { margin-top: 12px; }
-.acc-separer p { margin: 4px 0 0; }
 .acc-courant { border-style: solid; border-color: var(--accent); }
 .acc-survol { background: var(--accent-halo); border-color: var(--accent); }
 .acc-var-ligne { display: flex; align-items: center; gap: 8px; margin-top: 4px; }

@@ -53,7 +53,7 @@ func TestResumeAcces(t *testing.T) {
 	t.Cleanup(func() { modeNatif.Store(natif) })
 	modeNatif.Store(false)
 	r := resumerAcces(p, entrees)
-	if r.Env != "dev" || r.Total != 4 || r.Secrets != 2 || r.Variables != 1 || r.Infra != 1 || len(r.Envs) != 3 {
+	if r.Env != "dev" || r.Total != 4 || r.Secrets != 2 || r.Variables != 1 || r.Infra != 1 {
 		t.Fatalf("dev: %+v", r)
 	}
 	// C-M218-9: native mode refuses the infra entry (not counted) until the project is forced
@@ -183,7 +183,7 @@ func TestAccesProjets(t *testing.T) {
 		"unknown entry":  {map[string]string{"projet": "demo", "action": "ajouter", "entree": "0000", "env": "dev"}, 404},
 		"rename dup":     {map[string]string{"projet": "demo", "action": "renommer", "entree": stripe2, "env": "dev", "variable": "STRIPE_KEY"}, 409},
 		"bad action":     {map[string]string{"projet": "demo", "action": "voler", "entree": stripe, "env": "dev"}, 400},
-		"unknown env":    {map[string]string{"projet": "demo", "action": "env", "env": "test"}, 400},
+		"env, removed":   {map[string]string{"projet": "demo", "action": "env", "env": "prod"}, 400}, // M294
 		"remove unknown": {map[string]string{"projet": "demo", "action": "retirer", "entree": stripe, "env": "prod"}, 404},
 	} {
 		if code, v := poster(c.corps); code != c.code {
@@ -195,7 +195,6 @@ func TestAccesProjets(t *testing.T) {
 		{"projet": "demo", "action": "ajouter", "entree": stripe2, "env": "prod", "variable": "STRIPE_KEY"},
 		{"projet": "demo", "action": "ajouter", "entree": var2.ID, "env": "staging"},
 		{"projet": "demo", "action": "renommer", "entree": stripe2, "env": "dev", "variable": "STRIPE_LIVE"},
-		{"projet": "demo", "action": "env", "env": "prod"},
 	} {
 		if code, v := poster(c); code != 200 {
 			t.Fatalf("%v: %d %v", c, code, v)
@@ -203,7 +202,7 @@ func TestAccesProjets(t *testing.T) {
 	}
 	_, v = appel("GET", "/api/acces?projet=demo", "")
 	g := acces(v)
-	if v["env"] != "prod" || g[stripe2+"|dev"]["variable"] != "STRIPE_LIVE" || g[stripe2+"|prod"]["variable"] != "STRIPE_KEY" || g[var2.ID+"|staging"]["variable"] != "SITE_URL" {
+	if v["env"] != "dev" || g[stripe2+"|dev"]["variable"] != "STRIPE_LIVE" || g[stripe2+"|prod"]["variable"] != "STRIPE_KEY" || g[var2.ID+"|staging"]["variable"] != "SITE_URL" {
 		t.Fatalf("after changes: %v", v)
 	}
 
@@ -241,7 +240,10 @@ func TestAccesProjets(t *testing.T) {
 		t.Fatal("automatic grant made again")
 	}
 
-	// the grants survive a restart
+	// the grants survive a restart, and so does the environment an older version chose (M294: read, never written)
+	if err := s.acces.ChangerEnv("demo", "prod"); err != nil {
+		t.Fatal(err)
+	}
 	if a, err := ouvrirAcces(s.acces.chemin); err != nil || len(a.Projet("demo").Acces) != 4 || a.Projet("demo").Env != "prod" {
 		t.Fatalf("reread: %v %+v", err, a.Projet("demo"))
 	}
@@ -490,24 +492,25 @@ func TestAccesAncienFichierInchange(t *testing.T) {
 	}
 }
 
-// TestAccesUniformes: no environment to choose next to Start while every key is given everywhere under one name.
-func TestAccesUniformes(t *testing.T) {
-	tous := func(entree, variable string) []AccesProjet {
-		var l []AccesProjet
-		for _, e := range envsProjet {
-			l = append(l, AccesProjet{Entree: entree, Env: e, Variable: variable})
-		}
-		return l
+// ChangerEnv: what a version before M294 wrote when the owner chose an environment next to Start. acces.json keeps
+// it and the pilot still receives that environment's keys, but nothing writes it any more.
+func (a *Acces) ChangerEnv(projet, env string) error {
+	if !a.EnvConnu(projet, env) {
+		return errAccesEnv
 	}
-	une := append(tous("a", "API_KEY"), tous("b", "MODE")...)
-	if !accesUniformes(nil) || !accesUniformes(une) || !resumerAcces(ProjetAcces{Env: "dev", Acces: append(une, AccesProjet{Entree: "disparue", Env: "dev"})}, []EntreeCoffre{{ID: "a"}, {ID: "b"}}).Uniformes {
-		t.Fatal("same keys everywhere: one list expected")
+	return a.modifier(func(f *fichierAcces) error {
+		projetDe(f, projet).Env = env
+		return nil
+	})
+}
+
+// envAncien: that older choice, then the pilot's file rewritten as the route did.
+func envAncien(t *testing.T, s *Serveur, projet, env string) {
+	t.Helper()
+	if err := s.acces.ChangerEnv(projet, env); err != nil {
+		t.Fatal(err)
 	}
-	if accesUniformes(une[1:]) {
-		t.Fatal("a key missing in one environment: separate lists expected")
-	}
-	autre := append(tous("a", "API_KEY")[:2], AccesProjet{Entree: "a", Env: "prod", Variable: "PROD_KEY"})
-	if accesUniformes(autre) {
-		t.Fatal("another variable name in production: separate lists expected")
+	if p, ok := s.projetNomme(projet); ok {
+		_, _ = s.injecterAcces(p, nil) // a locked vault leaves the file as it is
 	}
 }

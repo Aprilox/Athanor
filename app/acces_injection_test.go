@@ -114,9 +114,9 @@ func TestInjectionAcces(t *testing.T) {
 		t.Fatalf("Start did not inject:\n%s", lire())
 	}
 
-	// the environment changes through the API: prod's entry instead of dev's
-	avecMdpPreuve(s) // prod hands over its keys: Athanor's password retyped (RT2)
-	code, v := appel("POST", "/api/acces", `{"projet":"demo","action":"env","env":"prod","mot_de_passe":"`+mdpPreuveTest+`"}`)
+	// a project an older version left in prod: prod's entry instead of dev's
+	envAncien(t, s, "demo", "prod")
+	code, v := appel("GET", "/api/acces?projet=demo", "")
 	if c := lire(); code != 200 || !strings.Contains(c, tProd) || strings.Contains(c, tDev) {
 		t.Fatalf("env prod: %d\n%s", code, c)
 	}
@@ -130,7 +130,7 @@ func TestInjectionAcces(t *testing.T) {
 	if _, e := appel("GET", "/api/etat?p=demo", ""); e["projet"] == nil || e["projet"].(map[string]any)["acces"].(map[string]any)["env"] != "prod" {
 		t.Fatalf("GET /api/etat badge: %v", e["projet"])
 	}
-	appel("POST", "/api/acces", `{"projet":"demo","action":"env","env":"dev"}`)
+	envAncien(t, s, "demo", "dev")
 	// a granted value changed in the vault: the file follows
 	tDev2 := "temoin-dev2-" + sfx
 	if code, _ := appel("POST", "/api/coffre/"+dev.ID, `{"valeur":"`+tDev2+`"}`); code != 200 || !strings.Contains(lire(), tDev2) {
@@ -166,7 +166,7 @@ func TestInjectionAcces(t *testing.T) {
 	sys := s.coffre.systeme
 	s.coffre.systeme, s.coffre.cleCode = nil, nil
 	s.coffre.mu.Unlock()
-	appel("POST", "/api/acces", `{"projet":"demo","action":"env","env":"prod"}`)
+	envAncien(t, s, "demo", "prod")
 	_, v = appel("GET", "/api/acces?projet=demo", "")
 	if inj, _ := v["injection"].(map[string]any); inj["etat"] != "verrouille" || lire() != avant {
 		t.Fatalf("locked: %v\n%s", v, lire())
@@ -177,7 +177,7 @@ func TestInjectionAcces(t *testing.T) {
 	s.coffre.mu.Lock()
 	s.coffre.systeme = sys
 	s.coffre.mu.Unlock()
-	appel("POST", "/api/acces", `{"projet":"demo","action":"env","env":"dev"}`)
+	envAncien(t, s, "demo", "dev")
 
 	// Undo the import: the values it takes out of the vault go back into the files that had them
 	tImport := "temoin-import-" + sfx + "-" + strings.Repeat("q7", 10)
@@ -191,7 +191,7 @@ func TestInjectionAcces(t *testing.T) {
 	if !strings.Contains(lireAutre(), tImport) || !strings.Contains(lire(), tImport) {
 		t.Fatalf("the shared value left a file after the import:\n%s\n%s", lireAutre(), lire())
 	}
-	appel("POST", "/api/acces", `{"projet":"autre","action":"env","env":"staging"}`)
+	envAncien(t, s, "autre", "staging")
 	if strings.Contains(lireAutre(), tImport) {
 		t.Fatalf("not granted on staging, yet in the file:\n%s", lireAutre())
 	}

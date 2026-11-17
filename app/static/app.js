@@ -919,32 +919,23 @@ function garderFocus(zone, rendre, parRang = true) {
 }
 
 // ----------------------------------------------------------------------------- shell: header, sidebar, project picker
-// the environment given to the pilot and what it receives, next to Start (summary computed by the server)
-function blocAccesDemarrer(ac, distant, projet) {
+// what the pilot receives from the vault, next to Start (summary computed by the server)
+function blocAccesDemarrer(ac) {
   const pl = (n) => new Intl.PluralRules(document.documentElement.lang || "en").select(n) !== "one";
-  const dev = ac.env === "dev"; // C-M218-3: "test keys" only where they are test keys
-  const recu = [ac.secrets && (pl(ac.secrets) ? t(dev ? "{0} test keys" : "{0} keys", [ac.secrets]) : t(dev ? "{0} test key" : "{0} key", [ac.secrets])),
+  const recu = [ac.secrets && (pl(ac.secrets) ? t("{0} keys", [ac.secrets]) : t("{0} key", [ac.secrets])),
     ac.variables && (pl(ac.variables) ? t("{0} variables", [ac.variables]) : t("{0} variable", [ac.variables]))].filter(Boolean);
   // C-M218-2: the badge also counts the server keys Athanor keeps, so the sentence says them
   const phrase = (recu.length ? t("The pilot will have access to: {0}.", [recu.join(", ")]) : t("The pilot receives nothing from the vault."))
     + (ac.infra ? " " + t(pl(ac.infra) ? "{0} server keys kept by Athanor" : "{0} server key kept by Athanor", [ac.infra]) + "." : "");
   const verrou = ac.etat === "verrouille" ? `<span class="badge badge-infra" title="${h(t("The vault is locked: the pilot's file is not updated until you unlock it."))}">${t("vault locked")}</span>` : "";
-  const envs = (ac.envs || []).map((e) => `<option value="${h(e)}" ${e === ac.env ? "selected" : ""}>${h(nomEnv(e))}</option>`).join("");
-  let separer = !ac.uniformes;
-  try { separer ||= localStorage.getItem(cleSeparer(projet)) === "1"; } catch (e) { /* storage unavailable */ }
-  // M232c: one list (same keys everywhere): no environment to choose next to Start
-  const choix = !separer ? "" : distant ? `<span class="badge" title="${h(t("Environment"))}">${h(ac.env)}</span>` // a paired device only reads the grants
-    : `<select data-env-acces aria-label="${h(t("Environment"))}" title="${h(t("Environment given to the pilot: changing it rewrites its values at once."))}">${envs}</select>`;
-  return `<span class="acces-demarrer">${choix}`
-    + `<a class="badge" href="#acces" title="${h(t("Open the Access panel"))}">${pl(ac.total) ? t("{0} accesses", [ac.total]) : t("{0} access", [ac.total])}</a>${verrou}<span class="muet petit">${h(phrase)}</span></span>`;
+  return `<span class="acces-demarrer"><a class="badge" href="#acces" title="${h(t("Open the Access panel"))}">${pl(ac.total) ? t("{0} accesses", [ac.total]) : t("{0} access", [ac.total])}</a>${verrou}<span class="muet petit">${h(phrase)}</span></span>`;
 }
 
 function rendreBandeau(v) {
-  if (document.activeElement && document.activeElement.matches("[data-env-acces]")) return; // an open list is not redrawn under the mouse
   const mp = moduleDePage(pageParente(etat.page)), global = !avecProjet(mp);
   const p = global ? phraseGlobale(mp) : phraseEtat(v);
   const boutons = [];
-  if (v.projet && !global && v.projet.acces) boutons.push(blocAccesDemarrer(v.projet.acces, v.distant, v.projet.nom));
+  if (v.projet && !global && v.projet.acces) boutons.push(blocAccesDemarrer(v.projet.acces));
   if (v.kit_valide && v.projet && !global) {
     if (v.actif) {
       // what was changed while this pilot runs and that it has not taken yet (en_attente, from what the pilot
@@ -1055,19 +1046,6 @@ async function annulerArret(b) {
   await rafraichir();
 }
 
-$("#bandeau").addEventListener("change", async (ev) => {
-  const sel = ev.target.closest("[data-env-acces]"); if (!sel || !etat.vue || !etat.vue.projet) return;
-  sel.blur();
-  let corps = { projet: etat.vue.projet.nom, action: "env", env: sel.value };
-  if ((etat.vue.projet.acces?.preuve || []).includes(sel.value)) { // RT2: that environment's keys go to the pilot
-    const p = await preuveMdp(t("Moving to {0} gives the pilot this environment's keys: retype Athanor's password.", [sel.value]), { ok: t("Change") });
-    if (!p) return rafraichir();
-    corps = { ...corps, ...p };
-  }
-  await action(api("acces", "POST", corps)); // the server rewrites secrets.env
-  await rafraichir();
-  if (etat.page === "acces") rendrePage();
-});
 $("#bandeau").addEventListener("click", async (ev) => {
   const b = ev.target.closest("button"); if (!b) return;
   if (b.dataset.act === "demarrer") return demarrerPilote(b);
@@ -2736,7 +2714,7 @@ pages.suivi = async () => {
         <dt>${t("Milestone")}</dt><dd>${e.jalon_en_cours ? `<b>${md(titreJalon(e.jalon_en_cours))}</b>${(() => { const j = plan.find((x) => x.titre === titreJalon(e.jalon_en_cours)); return j && j.detail ? `<div class="muet petit">${md(j.detail)}</div>` : ""; })()}` : "—"}</dd>
         <dt>${t("Last commit, this computer")}</dt><dd class="muet">${h(e.dernier_commit || "—")}</dd>
         ${ligneGitHubSuivi(v.github, e.dernier_commit)}
-        ${v.relais ? `<dt>${t("Dev after milestones")}</dt><dd class="relais-suivi">${ligneRelais(v.relais)}</dd>` : ""}
+        ${v.relais ? `<dt>${t("Deployment")}</dt><dd class="relais-suivi">${ligneRelais(v.relais)}</dd>` : ""}
         ${e.reprise_prevue ? `<dt>${t("Resumes")}</dt><dd class="quota">${h(e.reprise_prevue)}</dd>` : ""}
         <dt>${t("Queued requests")}</dt><dd>${v.attente || 0}</dd>
         <dt>${t("Updated")}</dt><dd class="muet petit">${h(heureMaj(e.maj))}</dd>
@@ -2778,12 +2756,13 @@ pages.suivi = async () => {
   </div>`;
 };
 
-// M136: the dev deployment after the last milestone (relais_jalon.go)
+// M136: the project's deployment after a milestone or the delivery (relais_jalon.go)
 function ligneRelais(r, lien = true) { // lien false: in the Deployment tab itself (M293)
   // M284: no deployment method yet is an information, never a failure (its button is in the Deployment tab)
-  if (r.etat === "a_preparer") return `<span class="badge">${h(t("First deployment to prepare"))}</span>`;
+  const onglet = lien ? ` <a class="petit" href="#deploiement">${t("Open the Deployment tab")}</a>` : "";
+  if (r.etat === "a_preparer") return `<span class="badge">${h(t("First deployment to prepare"))}</span>${onglet}`;
   const [icone, etiquette] = r.etat === "preparation" ? ["attente", "First deployment in progress"] : r.etat === "attente" ? ["attente", "Waiting for the milestone's commit on GitHub"] : r.etat === "lance" ? ETATS_DEPLOI.en_cours : ETATS_DEPLOI[r.etat] || ["", r.etat];
-  return `<span class="badge">${icone ? ic(icone) : ""} ${h(t(etiquette))}</span> <code>${h((r.commit || "").slice(0, 7))}</code> <span class="muet petit">${[r.jalon ? md(r.jalon) : "", h(dateLisible(r.date))].filter(Boolean).join(" · ")}</span>${r.erreur ? `<div class="petit attention">${h(t(r.erreur))}</div>` : ""}${lien ? ` <a class="petit" href="#acces">${t("Environments")}</a>` : ""}`;
+  return `<span class="badge">${icone ? ic(icone) : ""} ${h(t(etiquette))}</span> <code>${h((r.commit || "").slice(0, 7))}</code> <span class="muet petit">${[r.jalon ? md(r.jalon) : "", h(dateLisible(r.date))].filter(Boolean).join(" · ")}</span>${r.erreur ? `<div class="petit attention">${h(t(r.erreur))}</div>` : ""}${onglet}`;
 }
 
 // the installers of this system: on Windows, one per mode (choosing it also selects that mode)
@@ -3306,12 +3285,13 @@ function choixGitHub(pre, nomPropose, v) {
     <input type="text" class="gh-champ" id="${pre}-gh-nom" placeholder="${h(nomPropose)}" value="${h(v && mode === "creer" && v.depot !== nomPropose ? v.depot || "" : "")}" aria-label="${h(t("Create a private repository"))}">
     <label class="radio"><input type="radio" name="${pre}-gh" value="existant"${coche("lier")}> ${t("Use one of my repositories")}</label>
     <input type="text" class="gh-champ" id="${pre}-gh-depot" placeholder="${h(t("OWNER/NAME, e.g. octocat/my-site"))}" value="${h(mode === "lier" ? v.depot || "" : "")}" aria-label="${h(t("Use one of my repositories"))}">
-    <label class="interrupteur"><input type="checkbox" id="${pre}-gh-auto"${v && v.sans_pousse ? "" : " checked"}><span>${t("Push automatically after each milestone")}</span></label>
+    ${caseAuto(`id="${pre}-gh-auto"`, !(v && v.sans_pousse))}
     ${caseAtelier(`id="${pre}-gh-atelier"`, !!(v && v.atelier))}
     ${(etat.ghConnexion || {}).connecte ? `<p class="muet petit">${etat.ghConnexion.acces_garde ? t("This computer is connected to GitHub as {0}: one of your repositories is linked at once, and a new one is created at once too (the access is kept).", [h(etat.ghConnexion.login)]) : t("This computer is connected to GitHub as {0}: one of your repositories is linked at once; creating a new one opens a sign-in.", [h(etat.ghConnexion.login)])}</p>`
       : pre !== "gh" ? `<p class="attention petit" data-avis-connexion>${t("To link a project, connect this computer to GitHub first, once (Settings › Options › GitHub).")} <button class="btn btn-petit" type="button" data-connexion-gh="connecter">${t("Connect to GitHub")}</button></p>` : ""}`;
 }
 // the workshop shared on GitHub: for someone who takes the project over with their Athanor (off by default)
+const caseAuto = (attribut, coche) => `<label class="interrupteur"><input type="checkbox" ${attribut} ${coche ? "checked" : ""}><span>${t("Push automatically after each milestone")}</span></label>`;
 function caseAtelier(attribut, coche) {
   return `<label class="interrupteur"><input type="checkbox" ${attribut} ${coche ? "checked" : ""}><span>${t("Share the workshop (.athanor/) on GitHub")}</span></label>
     <p class="muet petit">${t("For a repository shared with someone who goes on with the project in their own Athanor (git pull): the plan, the requests, the log and the documents go into the commits. Never secrets.env, the raw logs nor the pilot's state. To build it with several computers at once: Overview › Other computers (it switches this on). Unticked later, the workshop leaves the next push.")} ${lienGuide("pcs")}</p>`;
@@ -3388,7 +3368,7 @@ function rendreGitHub(r) {
       <div class="petit">${h(t(d.modele || d.message || "", d.args || []))}</div>
       ${(d.fichiers || []).length ? `<ul class="petit">${d.fichiers.map((x) => `<li><code>${h(x.f)}</code> — ${h(t(x.genre))}</li>`).join("")}</ul>` : ""}</div>`
       : `<p class="muet petit">${t("Nothing pushed yet.")}</p>`}
-    <label class="interrupteur"><input type="checkbox" data-gh-auto ${g.auto ? "checked" : ""}><span>${t("Push automatically after each milestone")}</span></label>
+    ${caseAuto("data-gh-auto", g.auto)}
     ${caseAtelier("data-gh-atelier", g.atelier)}
     ${rendreAuteur(g.identite)}
     <label class="champ mt-2"><span>${t("GitHub branch")}</span><div class="ligne"><input type="text" id="gh-branche" value="${h(g.branche)}"><button class="btn btn-petit" data-gh="branche">${t("Change")}</button></div></label>
@@ -4546,7 +4526,7 @@ pages.deploiement = async () => {
   const f = dep.f, dis = distant ? " disabled" : "", perm = (rp.reglages || []).find((r) => r.cle === "permission");
   const moments = MOMENTS_DEPLOIEMENT.filter(([v]) => v || !e.moment); // "Only when I ask": an older project that already has it
   const sites = d.sites || {}, autres = Object.keys(sites).filter((n) => n !== d.courant).sort(), nomSrv = (id) => nom(sv.serveurs, id);
-  return `<div class="deploiement">${sites[d.courant] ? `<div class="bloc" id="dep-etat"><h2>${t("State")}</h2>${ficheSite(d, d.courant, nomSrv, distant)}</div>` : ""}
+  return `<div class="deploiement">${sites[d.courant] ? `<div class="bloc" id="dep-etat"><h2>${t("State")}</h2>${ficheSite(d, d.courant, nomSrv, distant)}${blocCleDeploiement(sites, distant)}</div>` : ""}
   <form class="bloc" id="dep-form">
     <h2>${t("Deployment")}</h2>
     <p class="intro petit">${t((d.sites || {})[d.courant] ? "Where this project is online, and how. Athanor prepares the server from your plan, then deploys at the moment you choose." : "This project is not online yet. Choose a server and say how to put it online: Athanor prepares the server, then deploys at the moment you choose.")}</p>
@@ -5585,53 +5565,37 @@ const AUTO_ACCES = { migration: "imported", pourvous: "added automatically (For 
 // M224: environments on screen in plain words, internal ids (dev, staging, prod) unchanged
 const NOMS_ENV = { dev: "Testing", staging: "Pre-production", prod: "Production" };
 const nomEnv = (e) => NOMS_ENV[e] ? t(NOMS_ENV[e]) : e;
-// M224: one list unless the project's keys differ per environment, or the owner split them (remembered per browser)
-const cleSeparer = (projet) => "acces-separer:" + projet;
-function accesUniformes(acces, envs) {
-  const par = {};
-  for (const a of acces) (par[a.entree] ||= []).push(a);
-  return Object.values(par).every((l) => envs.every((e) => l.some((a) => a.env === e)) && new Set(l.map((a) => a.variable)).size === 1);
-}
+// M294: one list of keys. acces.json keeps one line per environment name, as older versions wrote it: the page
+// only says "*" (every one of them), and the pilot receives the lines of d.env, which nothing changes any more
 function ligneAcces(a, refusee) {
   const k = h(a.entree + "|" + a.env), auto = AUTO_ACCES[a.auto];
   return `<li class="acc-acces${refusee ? " acc-refusee" : ""}">
-    <div class="ligne m0"><b class="cp-nom" title="${h(a.nom)}">${h(a.nom)}</b>${auto ? `<span class="badge">${t(auto)}</span>` : ""}${refusee ? `<span class="badge badge-infra">${t("refused in native mode")}</span>` : ""}<button type="button" class="btn btn-petit" data-acc-retirer="${k}">${t("Remove")}</button></div>
-    ${a.portee === "infra" ? "" : `<label class="acc-var-ligne"><span class="muet petit">${t("Variable name")}</span><input type="text" class="acc-var" data-acc-var="${k}" value="${h(a.variable)}" maxlength="100" spellcheck="false" aria-label="${h(t("Variable name") + " — " + a.nom + (a.env === "*" ? "" : " (" + nomEnv(a.env) + ")"))}"></label>`}
+    <div class="ligne m0"><b class="cp-nom" title="${h(a.nom)}">${h(a.nom)}</b>${auto ? `<span class="badge">${t(auto)}</span>` : ""}${a.ailleurs && a.portee !== "infra" ? `<span class="badge badge-infra">${t("not given to the pilot")}</span><button type="button" class="btn btn-petit" data-acc-donner="${h(a.entree)}">${t("Give")}</button>` : ""}${refusee ? `<span class="badge badge-infra">${t("refused in native mode")}</span>` : ""}<button type="button" class="btn btn-petit" data-acc-retirer="${k}">${t("Remove")}</button></div>
+    ${a.portee === "infra" ? "" : `<label class="acc-var-ligne"><span class="muet petit">${t("Variable name")}</span><input type="text" class="acc-var" data-acc-var="${k}" value="${h(a.variable)}" maxlength="100" spellcheck="false" aria-label="${h(t("Variable name") + " — " + a.nom)}"></label>`}
   </li>`;
 }
 pages.acces = async () => {
   const projet = (etat.vue && etat.vue.projet && etat.vue.projet.nom) || etat.projet;
   if (!projet) return `<div class="vide">${t("Choose a project")}</div>`;
-  const [d, c, en, sv] = await Promise.all([api("acces?projet=" + encodeURIComponent(projet)), api("coffre"),
-    api("projets/" + encodeURIComponent(projet) + "/environnements"), api("serveurs").catch(() => ({}))]);
-  if (acc.projet !== projet) acc.attente = {}; // the boxes ticked or unticked, "entree|env" → given, until Save
+  const [d, c, dp] = await Promise.all([api("acces?projet=" + encodeURIComponent(projet)), api("coffre"),
+    api("projets/" + encodeURIComponent(projet) + "/deploiement").catch(() => ({}))]);
+  if (acc.projet !== projet) acc.attente = {}; // the boxes ticked or unticked, "entree|*" → given, until Save
   acc.projet = projet; acc.refusee = d.natif && !d.forcer_infra_natif; cof.d = c;
   const entrees = (c.entrees || []).slice().sort((a, b) => a.famille.localeCompare(b.famille) || a.nom.localeCompare(b.nom));
-  const inj = d.injection || {}, envs = d.envs || ["dev", "staging", "prod"];
-  const donne = (id, env) => d.acces.some((a) => a.entree === id && a.env === env);
+  const inj = d.injection || {}, refusee = acc.refusee; // C-M218-9: infra grants used by nobody until Force is ticked
   const coche = (k, oui) => (k in acc.attente ? acc.attente[k] : oui) ? " checked" : "";
-  const refusee = d.natif && !d.forcer_infra_natif; // C-M218-9: infra grants used by nobody until Force is ticked
-  const uniformes = accesUniformes(d.acces, envs);
-  let separer = !uniformes;
-  try { separer ||= localStorage.getItem(cleSeparer(projet)) === "1"; } catch (e) { /* storage unavailable */ }
-  const carte = (x) => `<li class="acc-entree" draggable="true" data-acc-entree="${h(x.id)}">
+  // one line per entry: the one the pilot receives, else the one an older version gave to another environment only
+  const par = new Map();
+  for (const a of d.acces) if (a.env === d.env || !par.has(a.entree)) par.set(a.entree, { ...a, ailleurs: a.env !== d.env, env: "*" });
+  const l = [...par.values()], code = l.filter((a) => a.portee !== "infra"), infra = l.filter((a) => a.portee === "infra");
+  const deploi = ((dp.deploiement || {}).apis || []).map((id) => entrees.find((x) => x.id === id)).filter(Boolean); // chosen in the Deployment tab: read only here
+  const carte = (x) => { const pris = deploi.includes(x); return `<li class="acc-entree"${pris ? "" : ' draggable="true"'} data-acc-entree="${h(x.id)}">
     <div class="ligne m0"><b class="cp-nom" title="${h(x.note || x.nom)}">${h(x.nom)}</b><span class="badge">${h(x.famille === "secret" ? typeCoffre(x.type) : t("Variable"))}</span>${x.famille === "secret" ? `<span class="badge${x.portee === "infra" ? " badge-infra" : ""}">${x.portee === "infra" ? "infra" : "code"}</span>` : ""}</div>
-    <div class="acc-cases" role="group" aria-label="${h(x.nom)}">${separer ? envs.map((e) => `<label><input type="checkbox" data-acc-case="${h(x.id + "|" + e)}"${coche(x.id + "|" + e, donne(x.id, e))}> ${h(nomEnv(e))}</label>`).join("")
-      : `<label><input type="checkbox" data-acc-case="${h(x.id + "|*")}"${coche(x.id + "|*", donne(x.id, envs[0]))}> ${t("Given to this project")}</label>`}</div>
-  </li>`;
-  const colonne = (env) => {
-    const tous = env === "*", l = tous ? d.acces.filter((a) => a.env === envs[0]).map((a) => ({ ...a, env })) : d.acces.filter((a) => a.env === env);
-    const code = l.filter((a) => a.portee !== "infra"), infra = l.filter((a) => a.portee === "infra");
-    return `<section class="acc-env${env === d.env || tous ? " acc-courant" : ""}" data-acc-env="${env}" aria-label="${h(tous ? t("Keys given to this project") : nomEnv(env))}">
-      ${tous ? "" : `<h3>${h(nomEnv(env))}${env === d.env ? ` <span class="muet petit">· ${t("current")}</span>` : ""}</h3>`}
-      ${code.length ? `<ul class="acc-liste">${code.map((a) => ligneAcces(a)).join("")}</ul>` : infra.length ? "" : `<p class="muet petit acc-depot">${t(tous ? "No key given yet: tick one on the left, or drop it here." : "Drop an entry here, or tick it on the left.")}</p>`}
-      ${infra.length ? `<div class="acc-garde"><b class="petit">${t("Kept by Athanor, never given to the pilot")}</b>
-        <p class="muet petit">${t("The keys of your servers stay with Athanor for its own actions (deployments): the pilot never receives them.")}</p>
-        <ul class="acc-liste">${infra.map((a) => ligneAcces(a, refusee)).join("")}</ul></div>` : ""}
-    </section>`;
-  };
+    ${pris ? `<p class="muet petit m0 acc-pris">${t("used by the deployment")}</p>`
+      : `<div class="acc-cases"><label><input type="checkbox" data-acc-case="${h(x.id + "|*")}"${coche(x.id + "|*", par.has(x.id) && !par.get(x.id).ailleurs)}> ${t("Given to this project")}</label></div>`}
+  </li>`; };
   return `<div class="acces">
-    <div class="bloc"><h2>${t("Access")}</h2><p class="intro petit">${t(separer ? "Drag an entry of the vault onto an environment, or tick it: the pilot receives the project keys and variables of the current environment, under the variable name shown." : "Tick a key of the vault, or drag it into the list: the project receives it under the variable name shown, whatever its environment.")}</p>
+    <div class="bloc"><h2>${t("Access")}</h2><p class="intro petit">${t("Tick a key of the vault, or drag it into the list: the project receives it under the variable name shown.")}</p>
       ${inj.etat === "verrouille" ? `<p class="petit attention">${t("The vault is locked: the pilot's file is not updated until you unlock it.")}</p>` : ""}
       ${d.natif ? `<div class="acc-natif"><p class="petit attention">${t(d.forcer_infra_natif ? "Forced: infra entries can be linked to this project, and its deployments' build command runs without a barrier. This choice is logged." : "Native Windows mode: this PC has no barrier, any agent can read every file. Infra entries (your servers' keys) are refused for this project; switch to WSL in Settings › Options to keep them out of reach.")}</p>
         <label class="petit"><input type="checkbox" data-acc-forcer${d.forcer_infra_natif ? " checked" : ""}> ${t("Force, knowing the risk")}</label> <a class="petit" href="#options">${t("Options")}</a></div>` : ""}</div>
@@ -5639,37 +5603,22 @@ pages.acces = async () => {
       <div class="bloc acc-coffre"><h2>${t("Vault")}</h2>
         ${entrees.length ? `<ul class="acc-liste">${entrees.map(carte).join("")}</ul>` : `<p class="muet">${t("The vault is empty.")} <a href="#coffre">${t("Vault")}</a></p>`}
         <div class="ligne acc-attente" id="acc-attente"${Object.keys(acc.attente).length ? "" : " hidden"}><button type="button" class="btn btn-primaire btn-petit" data-acc-enregistrer>${t("Save the changes")}</button><button type="button" class="btn btn-petit" data-acc-annuler>${t("Cancel")}</button></div></div>
-      <div class="bloc acc-projet"><h2>${t(separer ? "This project" : "Keys given to this project")}</h2>
-        <div class="acc-envs${separer ? "" : " acc-une"}">${(separer ? envs : ["*"]).map(colonne).join("")}</div>
-        <div class="acc-separer"><label class="petit"><input type="checkbox" data-acc-separer${separer ? " checked" : ""}${uniformes ? "" : " disabled"}> ${t("Separate testing and production")}</label>
-          <p class="muet petit">${t(uniformes ? "Many services give two keys, one to try things out (test) and one for real. Turn this on if you want to give a different key when the project is in testing and when it is live. Otherwise, leave it off." : "Some keys differ between testing and production: the split stays on until they are the same everywhere.")}</p></div>
+      <div class="bloc acc-projet"><h2>${t("Keys given to this project")}</h2>
+        <div class="acc-envs acc-une"><section class="acc-env acc-courant" data-acc-env="*" aria-label="${h(t("Keys given to this project"))}">
+          ${code.length ? `<ul class="acc-liste">${code.map((a) => ligneAcces(a)).join("")}</ul>` : infra.length ? "" : `<p class="muet petit acc-depot">${t("No key given yet: tick one on the left, or drop it here.")}</p>`}
+          ${infra.length ? `<div class="acc-garde"><b class="petit">${t("Kept by Athanor, never given to the pilot")}</b>
+            <p class="muet petit">${t("The keys of your servers stay with Athanor for its own actions (deployments): the pilot never receives them.")}</p>
+            <ul class="acc-liste">${infra.map((a) => ligneAcces(a, refusee)).join("")}</ul></div>` : ""}
+          ${deploi.length ? `<div class="acc-garde acc-deploi"><b class="petit">${t("Used by the deployment")}</b>
+            <p class="muet petit">${t("Chosen in the Deployment tab, where it is changed.")} <a href="#deploiement">${t("Open the Deployment tab")}</a></p>
+            <ul class="acc-liste">${deploi.map((x) => `<li class="acc-acces"><b class="cp-nom" title="${h(x.nom)}">${h(x.nom)}</b></li>`).join("")}</ul></div>` : ""}
+        </section></div>
         ${(inj.ignorees || []).length ? `<p class="petit attention acc-ignorees">${t("Not given to the pilot: a value on several lines does not fit its file ({0}).", [inj.ignorees.join(", ")])}</p>` : ""}
         ${(inj.repli || []).length ? `<div class="acc-repli">${inj.repli.map((n) => `<p class="ligne m0 petit"><code>${h(n)}</code><span class="muet croit">${t("in the old file, not in the vault")}</span><button type="button" class="btn btn-petit" data-acc-importer>${t("Import")}</button></p>`).join("")}</div>` : ""}
       </div>
     </div>
-    ${blocEnvironnements(en, sv.serveurs || [], !!(etat.vue || {}).distant)}
   </div>`;
 };
-// --- Environments (M248): the project's own, read only — made and changed by its missions; absent when it has none
-function blocEnvironnements(en, inventaire, distant) {
-  if (!(en.envs || []).length) return "";
-  const nomSrv = (id) => (inventaire.find((x) => x.id === id) || {}).nom || id, prudence = en.prudence || [];
-  const carte = (nom) => {
-    const e = en.environnements[nom], titre = nomEnv(nom);
-    return `<section class="env-carte${e.production ? " env-prod" : ""}" data-env="${h(nom)}" data-protection="${h(e.protection || "aucune")}"${prudence.includes(nom) ? " data-prudence" : ""} aria-label="${h(titre)}">
-      <h3>${h(titre)}${e.production && titre !== t("Production") ? badgeProd(true) : ""}</h3>
-      <p>${/^https?:\/\//.test(e.url || "") ? `<a href="${h(e.url)}" target="_blank" rel="noopener">${h(e.url)}</a>` : `<span class="muet">${t("No address yet.")}</span>`}</p>
-      <p class="muet petit">${(e.serveurs || []).length ? h(t("Servers") + " " + e.serveurs.map(nomSrv).join(", ")) : t("No server for this environment yet.")}</p>
-      <p class="petit attention env-erreur" role="alert" hidden></p>
-      ${blocSante((en.sante || {})[nom], e)}
-      ${blocDeploiements(nom, e, (en.deploiements || {})[nom] || [], distant)}
-    </section>`;
-  };
-  return `<div class="bloc environnements"><h2>${t("Environments")}</h2>
-    <p class="intro petit">${t("Where the project runs, as its missions set it up. To change one, describe it in a mission.")}</p>
-    <div class="env-cartes">${en.envs.map(carte).join("")}</div>
-    ${blocCleDeploiement(en, distant)}</div>`;
-}
 // M133: an environment's last deployments, their external check, and the way back to the previous version
 const ETATS_DEPLOI = { ok: ["ok", "Deployed"], echec: ["croix", "Failed"], revenu: ["retour", "Replaced by going back"], en_cours: ["attente", "Running"] };
 const PROBLEMES_VERIF = { injoignable: "The site does not answer: {1}", tls: "The certificate is not valid: {2}", statut: "Unexpected status {0}", ouvert: "The site opens without identification (status {0})" };
@@ -5734,34 +5683,34 @@ $("#page").addEventListener("change", async (ev) => {
 const AUTEURS_DEPLOI = { agent: "by the agent", relais: "after a milestone", proprietaire: "by you", auto: "automatically, after a failed check" };
 $("#page").addEventListener("click", async (ev) => {
   const b = ev.target.closest("[data-env-revenir]"); if (!b) return;
-  const c = b.closest("[data-env]"), env = c.dataset.env, err = c.querySelector(".env-erreur"), nom = c.dataset.titre || nomEnv(env); // titre: the Deployment tab's sheet, named by its address
+  const c = b.closest("[data-env]"), env = c.dataset.env, err = c.querySelector(".env-erreur"), nom = c.dataset.titre; // the Deployment tab's sheet, named by its address
   const question = t("Serve the previous version of {0} again? It is checked from this PC right after.", [nom]);
   const preuve = c.dataset.prudence ? await preuveMdp(question, { ok: t("Go back") }, question) : (await confirmer(question, { ok: t("Go back") })) ? {} : false;
   if (preuve === false) return;
   b.disabled = true; err.hidden = true; b.textContent = t("Going back…");
   try {
-    const r = await api("projets/" + encodeURIComponent(etat.page === "deploiement" ? dep.projet : acc.projet) + "/revenir", "POST", { env, ...preuve }), tpl = document.createElement("template");
+    const r = await api("projets/" + encodeURIComponent(dep.projet) + "/revenir", "POST", { env, ...preuve }), tpl = document.createElement("template");
     tpl.innerHTML = blocDeploiements(env, { ...(r.deploiement ? { deploiement: true } : {}), protection: c.dataset.protection }, r.deploiements || []);
     c.querySelector("[data-env-deploi]").replaceWith(tpl.content.firstElementChild);
     const d = r.deploiement || {};
     toast(d.etat === "ok" ? t("{0} serves its previous version again.", [nom]) : d.message ? texteMessage(d.message) : t(d.erreur || "Failed"), d.etat === "ok" ? "ok" : "erreur");
   } catch (e) { err.textContent = e.message; err.hidden = false; b.disabled = false; b.textContent = t("Go back to the previous version"); }
 });
-// the project's GitHub deployment key (one for every environment), made on demand (M119)
-function blocCleDeploiement(en, distant) {
-  const cle = en.envs.some((n) => en.environnements[n].cle_deploiement);
+// the project's GitHub deployment key, made on demand (M119)
+function blocCleDeploiement(sites, distant) {
+  const cle = Object.values(sites).some((e) => e.cle_deploiement);
   return `<div class="env-cle" data-env-cle-bloc><h3>${t("Deployment key")}</h3>
     <p class="petit">${cle ? `${ic("ok")} ${t("Created by Athanor, read-only on the repository")}` : t("A read-only key on the project's GitHub repository, kept in the vault: the servers use it to fetch the code.")}</p>
     ${cle || distant ? "" : `<button type="button" class="btn btn-petit" data-env-cle>${t("Create the deployment key")}</button>`}
     <p class="petit attention env-erreur" role="alert" hidden></p></div>`;
 }
 $("#page").addEventListener("click", async (ev) => {
-  if (etat.page !== "acces") return;
+  if (etat.page !== "deploiement") return;
   const b = ev.target.closest("[data-env-cle]"); if (!b) return;
   const err = b.closest("[data-env-cle-bloc]").querySelector(".env-erreur");
   b.disabled = true; err.hidden = true;
   try {
-    const r = await api("projets/" + encodeURIComponent(acc.projet) + "/cle-deploiement", "POST", {});
+    const r = await api("projets/" + encodeURIComponent(dep.projet) + "/cle-deploiement", "POST", {});
     toast(r.deja ? t("The deployment key already exists.") : t("Deployment key created, read-only on {0}.", [r.depot]), "ok"); rendrePage();
   } catch (e) { err.textContent = e.message; err.hidden = false; b.disabled = false; }
 });
@@ -5814,7 +5763,8 @@ $("#page").addEventListener("click", async (ev) => {
   if (etat.page !== "acces") return;
   if (ev.target.closest("[data-acc-enregistrer]")) return enregistrerAcces();
   if (ev.target.closest("[data-acc-annuler]")) { acc.attente = {}; return rendrePage(); }
-  const b = ev.target.closest("[data-acc-retirer], [data-acc-importer]"); if (!b) return;
+  const b = ev.target.closest("[data-acc-retirer], [data-acc-importer], [data-acc-donner]"); if (!b) return;
+  if (b.dataset.accDonner) { acc.attente[b.dataset.accDonner + "|*"] = true; return enregistrerAcces(); } // as its box ticked then Save
   if (b.dataset.accRetirer) { const [entree, env] = b.dataset.accRetirer.split("|"); return changerAcces({ action: "retirer", entree, env }); }
   b.disabled = true;
   const r = await action(api("coffre/migration", "POST")); if (r) toast(t("{0} keys imported.", [r.importees]), "ok");
@@ -5825,7 +5775,6 @@ $("#page").addEventListener("change", (ev) => {
   const x = ev.target;
   if (x.dataset.accCase) { const k = x.dataset.accCase; if (k in acc.attente) delete acc.attente[k]; else acc.attente[k] = x.checked; return majAttenteAcces(); }
   if (x.matches("[data-acc-forcer]")) return forcerInfraNatif(x.checked);
-  if (x.matches("[data-acc-separer]")) { try { if (x.checked) localStorage.setItem(cleSeparer(acc.projet), "1"); else localStorage.removeItem(cleSeparer(acc.projet)); } catch (e) { /* storage unavailable */ } return rendrePage(); }
   if (x.dataset.accVar) { const [entree, env] = x.dataset.accVar.split("|"); return changerAcces({ action: "renommer", entree, env, variable: x.value.trim() }); }
 });
 // native Windows mode: infra entries need a confirmed, logged "force" per project

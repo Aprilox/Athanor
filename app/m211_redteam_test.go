@@ -70,7 +70,8 @@ func TestRedTeamEmailHoteChange(t *testing.T) {
 	}
 }
 
-// RT2: moving a project to staging or prod, where it holds keys, needs Athanor's password retyped (C25).
+// RT2: nothing moves a project to another environment any more (M294): a key an older version gave to prod alone
+// reaches the pilot only when the owner gives it, with Athanor's password retyped (C25).
 func TestRedTeamEnvProd(t *testing.T) {
 	s := serveurCoffreTest(t)
 	_ = os.Remove(s.acces.chemin)
@@ -100,26 +101,23 @@ func TestRedTeamEnvProd(t *testing.T) {
 	appel := appelRedTeam(t, s)
 	fichier := filepath.Join(demo.Atelier(), "secrets.env")
 	lire := func() string { b, _ := os.ReadFile(fichier); return string(b) }
-	env := func(cible, mdp string) int {
-		code, _ := appel("POST", "/api/acces", map[string]string{"projet": "demo", "action": "env", "env": cible, "mot_de_passe": mdp})
+	poster := func(action, mdp string) int {
+		code, _ := appel("POST", "/api/acces", map[string]string{"projet": "demo", "action": action, "entree": e.ID, "env": "*", "mot_de_passe": mdp})
 		return code
 	}
 
-	if c := env("prod", ""); c != http.StatusForbidden || strings.Contains(lire(), tProd) { // no password for Athanor yet
-		t.Fatalf("prod without a password set: %d\n%s", c, lire())
+	if c := poster("ajouter", ""); c != http.StatusForbidden || strings.Contains(lire(), tProd) { // no password for Athanor yet
+		t.Fatalf("given without a password set: %d\n%s", c, lire())
 	}
 	avecMdpPreuve(s)
-	if c := env("prod", "faux"); c != http.StatusUnauthorized || strings.Contains(lire(), tProd) {
-		t.Fatalf("prod with a wrong password: %d\n%s", c, lire())
+	if c := poster("env", mdpPreuveTest); c != http.StatusBadRequest || strings.Contains(lire(), tProd) {
+		t.Fatalf("the removed env action: %d\n%s", c, lire())
 	}
-	if c := env("staging", ""); c != 200 { // no key on staging: nothing to prove
-		t.Fatalf("staging without keys: %d", c)
+	if c := poster("ajouter", "faux"); c != http.StatusUnauthorized || strings.Contains(lire(), tProd) {
+		t.Fatalf("given with a wrong password: %d\n%s", c, lire())
 	}
-	if c := env("prod", mdpPreuveTest); c != 200 || !strings.Contains(lire(), tProd) {
-		t.Fatalf("prod with the password: %d\n%s", c, lire())
-	}
-	if c := env("dev", ""); c != 200 || strings.Contains(lire(), tProd) { // going back to dev gives nothing
-		t.Fatalf("back to dev: %d\n%s", c, lire())
+	if c := poster("ajouter", mdpPreuveTest); c != 200 || !strings.Contains(lire(), tProd) {
+		t.Fatalf("given with the password: %d\n%s", c, lire())
 	}
 }
 

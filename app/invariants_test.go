@@ -158,18 +158,13 @@ func TestInvariantI1(t *testing.T) {
 	// Start injects (it fails afterwards here: no kit)
 	_, _ = m.s.demarrerPilote(m.demo)
 	attendu("dev", m.tDev)
-	avecMdpPreuve(m.s) // staging and prod hand over their keys: Athanor's password retyped (RT2)
-	if code, _ := m.appel(t, "POST", "/api/acces", `{"projet":"demo","action":"env","env":"prod","mot_de_passe":"`+mdpPreuveTest+`"}`); code != 200 {
-		t.Fatal("env prod:", code)
-	}
+	envAncien(t, m.s, "demo", "prod") // a project an older version left in prod, then in staging
 	attendu("prod", m.tProd)
-	if code, _ := m.appel(t, "POST", "/api/acces", `{"projet":"demo","action":"env","env":"staging","mot_de_passe":"`+mdpPreuveTest+`"}`); code != 200 {
-		t.Fatal("env staging:", code)
-	}
+	envAncien(t, m.s, "demo", "staging")
 	if got := lignesSecrets(t, m.demo); len(got) != 0 {
 		t.Fatalf("staging: nothing granted, got %d lines", len(got))
 	}
-	m.appel(t, "POST", "/api/acces", `{"projet":"demo","action":"env","env":"dev"}`)
+	envAncien(t, m.s, "demo", "dev")
 	attendu("dev again", m.tDev)
 
 	// a grant taken back: the value leaves the file at once
