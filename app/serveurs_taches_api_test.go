@@ -299,7 +299,7 @@ func TestTacheSansRessource(t *testing.T) {
 }
 
 // TestTacheAPISeuleConteneur (M286, the short trial on the test container): a task on an API alone, launched by the
-// route, reads its zone on the fake Cloudflare and cannot reach the inventory's server; then a task on that server,
+// route, reads its zone on the fake Cloudflare (M289: the API's sheet comes from the Vault's Test) and cannot reach the inventory's server; then a task on that server,
 // by the same route without apis nor mode, runs its command there as before and has no Cloudflare zone.
 func TestTacheAPISeuleConteneur(t *testing.T) {
 	s, appelAPI, id, _, _ := serveurConteneurTest(t)
@@ -313,11 +313,13 @@ func TestTacheAPISeuleConteneur(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	droits := []string{"dns:lire"}
-	if err := modifierFournisseurs(func(l []Fournisseur) ([]Fournisseur, error) {
-		return append(l, Fournisseur{ID: "f1", Type: "cloudflare", Nom: "Mon Cloudflare", Cle: cle.ID, Etat: "ok", Droits: droits, Zones: []ZoneFournisseur{{ID: "z1", Nom: "exemple.fr", Droits: droits}}}), nil
-	}); err != nil {
-		t.Fatal(err)
+	// M289: the API's sheet (zones, rights) is made by the Vault's Test, against the fake API
+	fauxCloudflare(t).jetons[jetonCF] = "ok"
+	if code, v := appelAPI("/api/coffre/tester", map[string]any{"id": cle.ID}); code != 200 || v["ok"] != true {
+		t.Fatalf("Test of the vault's API: %d %v", code, v)
+	}
+	if f := fichesCoffre()[cle.ID]; f.Etat != "ok" || len(f.Zones) != 2 || !slices.Contains(f.Zones[0].Droits, "dns:lire") {
+		t.Fatalf("sheet made by Test: %+v", f)
 	}
 	lancerFauxCFDNS(t, jetonCF)
 	mux := http.NewServeMux()

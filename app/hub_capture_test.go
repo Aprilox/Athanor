@@ -642,9 +642,9 @@ func accesCapture(t *testing.T, s *Serveur, p, p3 Projet) {
 	}
 }
 
-// fournisseursCapture: the Providers page (serveurs-fournisseurs-*): Cloudflare on a fake API (the script
-// presses Test: zones exemple.fr and autre.org), a never-tested provider used by projet-00/prod (its removal
-// is refused) and an expired one; fournisseurs.json is removed at the end.
+// fournisseursCapture: the sheet of the vault's Cloudflare API (coffre-api-cloudflare*): Cloudflare on a fake API
+// (the script presses Test on the Vault's card: zones exemple.fr and autre.org) and a sheet from before M289,
+// never tested, that projet-00/prod names: Test keeps its id; fournisseurs.json is removed at the end.
 func fournisseursCapture(t *testing.T, s *Serveur) {
 	cf := fauxCloudflare(t)
 	var cle EntreeCoffre
@@ -659,12 +659,9 @@ func fournisseursCapture(t *testing.T, s *Serveur) {
 	}
 	cf.jetons[jeton] = "ok"
 	t.Cleanup(func() { _ = os.Remove(fichierFournisseursChemin()) })
-	hier := time.Now().UTC().Add(-26 * time.Hour)
 	if err := modifierFournisseurs(func([]Fournisseur) ([]Fournisseur, error) {
 		return []Fournisseur{
 			{ID: "cf-capture", Type: "cloudflare", Nom: "Cloudflare – exemple.fr", Cle: cle.ID, Zones: []ZoneFournisseur{}, Droits: []string{}},
-			{ID: "cf-ancien", Type: "cloudflare", Nom: "Ancien compte", Cle: cle.ID, Zones: []ZoneFournisseur{}, Droits: []string{}, Teste: hier, Etat: "expire",
-				Bilan: &MessageTest{Cle: "This Cloudflare token has expired: create a new one and replace it in the Vault.", Args: []string{}}},
 		}, nil
 	}); err != nil {
 		t.Fatal(err)

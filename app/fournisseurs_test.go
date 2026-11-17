@@ -80,10 +80,11 @@ func fauxCloudflare(t *testing.T) *fauxCF {
 	return f
 }
 
-// TestFournisseurs: a provider added from an infra Cloudflare entry of the vault (any other refused),
-// fournisseurs.json 0600 without the token, Test (the exact calls received, zones and rights deduced and
-// saved, each call in the audit log), a refused / expired / zoneless token said plainly, the infra vault
-// closed → 423, removal refused while an environment uses the provider, and the token in no answer.
+// TestFournisseurs (M289): the sheet of a Cloudflare API is made by the Vault's Test (POST /api/coffre/tester)
+// for an infra entry only: fournisseurs.json 0600 without the token, the exact calls received, zones and rights
+// deduced, saved and listed by GET /api/coffre, each call in the audit log; a second Test keeps the sheet's id;
+// a refused / expired / zoneless token said plainly; the infra vault closed → 423; an environment names only a
+// known sheet; the sheet goes with its vault entry; the old /api/fournisseurs routes are gone; no token anywhere.
 func TestFournisseurs(t *testing.T) {
 	s := serveurCoffreTest(t)
 	motDePasseCoffreTest(t, s)
@@ -122,41 +123,37 @@ func TestFournisseurs(t *testing.T) {
 		}
 		return e.ID
 	}
+	tester := func(id string) (int, map[string]any) {
+		t.Helper()
+		return appel("POST", "/api/coffre/tester", `{"id":"`+id+`"}`)
+	}
+	// fiche: the sheet of a vault entry as GET /api/coffre lists it (nil without one)
+	fiche := func(id string) map[string]any {
+		t.Helper()
+		code, v := appel("GET", "/api/coffre", "")
+		fiches, ok := v["fiches"].(map[string]any)
+		if code != 200 || !ok {
+			t.Fatalf("GET /api/coffre: %d %v", code, v)
+		}
+		f, _ := fiches[id].(map[string]any)
+		return f
+	}
 	temoin := "témoin-" + aleatoire(12) // the token: built at run time, never in an answer or a file
 	cf.jetons[temoin] = "ok"
 	cle := entree("Cloudflare martin", "cloudflare", "infra", temoin)
 	cleCode := entree("Cloudflare du code", "cloudflare", "code", "témoin-code-"+aleatoire(8))
-	cleGH := entree("GitHub", "github", "infra", "témoin-gh-"+aleatoire(8))
 
-	if code, v := appel("GET", "/api/fournisseurs", ""); code != 200 || len(v["fournisseurs"].([]any)) != 0 {
-		t.Fatalf("no provider yet: %d %v", code, v)
+	// a Cloudflare API of the code scope: the short test, no sheet
+	cf.relever()
+	if code, v := tester(cleCode); code != 200 || v["ok"] != false || !slices.Equal(cf.relever(), []string{"GET /client/v4/user/tokens/verify"}) {
+		t.Errorf("code scope: %d %v", code, v)
 	}
-	for _, c := range []struct{ corps, erreur string }{
-		{`{"cle":"` + cleCode + `"}`, errFournisseurPortee.Error()},
-		{`{"cle":"` + cleGH + `"}`, errFournisseurCle.Error()},
-		{`{"cle":"inconnue"}`, errFournisseurCle.Error()},
-		{`{"cle":"` + cle + `","nom":"` + strings.Repeat("n", 101) + `"}`, errFournisseurNom.Error()},
-	} {
-		if code, v := appel("POST", "/api/fournisseurs", c.corps); code != 400 || v["erreur"] != c.erreur {
-			t.Errorf("%s: %d %v, want 400 %q", c.corps, code, v, c.erreur)
-		}
-	}
-	code, v := appel("POST", "/api/fournisseurs", `{"cle":"`+cle+`"}`)
-	id, _ := v["id"].(string)
-	if code != 200 || v["nom"] != "Cloudflare martin" || v["type"] != "cloudflare" || v["etat"] != "" || id == "" {
-		t.Fatalf("added: %d %v", code, v)
-	}
-	b, err := os.ReadFile(fichierFournisseursChemin())
-	if err != nil || !strings.Contains(string(b), cle) || strings.Contains(string(b), temoin) {
-		t.Fatalf("fournisseurs.json: %v %s", err, b)
-	}
-	if st, _ := os.Stat(fichierFournisseursChemin()); runtime.GOOS != "windows" && st.Mode().Perm() != 0o600 {
-		t.Errorf("fournisseurs.json mode %v", st.Mode().Perm())
+	if _, err := os.Stat(fichierFournisseursChemin()); err == nil || fiche(cleCode) != nil || fiche(cle) != nil {
+		t.Fatal("a sheet before any test of an infra API")
 	}
 
 	// Test: verify, zones, then the probes of each zone (the account's Access apps once)
-	cf.relever()
-	code, v = appel("POST", "/api/fournisseurs/"+id+"/tester", "")
+	code, v := tester(cle)
 	attendus := []string{"GET /client/v4/user/tokens/verify", "GET /client/v4/zones?per_page=50", "GET /client/v4/accounts/acc1/access/apps"}
 	for _, z := range []string{"z1", "z2"} {
 		attendus = append(attendus, "GET /client/v4/zones/"+z+"/dns_records?per_page=1", "POST /client/v4/zones/"+z+"/dns_records",
@@ -165,20 +162,36 @@ func TestFournisseurs(t *testing.T) {
 	if recus := cf.relever(); !slices.Equal(recus, attendus) {
 		t.Errorf("calls received:\n%s\nwant:\n%s", strings.Join(recus, "\n"), strings.Join(attendus, "\n"))
 	}
-	var f Fournisseur
+	var res ResultatTest
 	brut, _ := json.Marshal(v)
-	_ = json.Unmarshal(brut, &f)
-	if code != 200 || f.Etat != "ok" || f.Compte != "acc1" || len(f.Zones) != 2 || f.Teste.IsZero() ||
-		f.Bilan == nil || f.Bilan.Cle != "Cloudflare token active; zones: {0}" || f.Bilan.Args[0] != "exemple.fr, autre.org" {
+	_ = json.Unmarshal(brut, &res)
+	if code != 200 || !res.OK || res.Type != "cloudflare" || len(res.Resultat) != 1 || res.Resultat[0].Cle != "Cloudflare token active; zones: {0}" ||
+		res.Resultat[0].Args[0] != "exemple.fr, autre.org" || res.Note == nil || res.Note.Cle != "Cloudflare API token; zones: {0}" || res.Note.Args[0] != "exemple.fr, autre.org" {
 		t.Fatalf("tested: %d %s", code, brut)
+	}
+	b, err := os.ReadFile(fichierFournisseursChemin())
+	if err != nil || !strings.Contains(string(b), cle) || strings.Contains(string(b), temoin) {
+		t.Fatalf("fournisseurs.json: %v %s", err, b)
+	}
+	if st, _ := os.Stat(fichierFournisseursChemin()); runtime.GOOS != "windows" && st.Mode().Perm() != 0o600 {
+		t.Errorf("fournisseurs.json mode %v", st.Mode().Perm())
+	}
+	var f Fournisseur
+	brut, _ = json.Marshal(fiche(cle))
+	_ = json.Unmarshal(brut, &f)
+	if f.ID == "" || f.Cle != cle || f.Nom != "Cloudflare martin" || f.Etat != "ok" || f.Compte != "acc1" || len(f.Zones) != 2 || f.Teste.IsZero() {
+		t.Fatalf("sheet: %s", brut)
 	}
 	if !slices.Equal(f.Zones[0].Droits, droitsCloudflare) || !slices.Equal(f.Zones[1].Droits, []string{"dns:lire", "access"}) ||
 		!slices.Equal(f.Droits, droitsCloudflare) || f.Zones[0].Nom != "exemple.fr" || f.Zones[0].ID != "z1" {
 		t.Errorf("rights: %+v %v", f.Zones, f.Droits)
 	}
-	if _, v = appel("GET", "/api/fournisseurs", ""); len(v["fournisseurs"].([]any)) != 1 || v["fournisseurs"].([]any)[0].(map[string]any)["etat"] != "ok" {
-		t.Errorf("the test is not saved: %v", v)
+	// a second Test updates the same sheet: its id (what an older environment names) is kept
+	tester(cle)
+	if l, _ := lireFournisseurs(); len(l) != 1 || l[0].ID != f.ID {
+		t.Errorf("second test: %+v", l)
 	}
+	id := f.ID
 	var journal strings.Builder
 	_ = filepath.WalkDir(dossierJournalAudit(), func(p string, d os.DirEntry, err error) error {
 		if err == nil && !d.IsDir() {
@@ -187,8 +200,7 @@ func TestFournisseurs(t *testing.T) {
 		}
 		return nil
 	})
-	for _, a := range []string{`"cloudflare GET /user/tokens/verify","resultat":"200"`, `"cloudflare POST /zones/z2/dns_records","resultat":"403"`,
-		`"fournisseur testé"`, `"fournisseur ajouté"`} {
+	for _, a := range []string{`"cloudflare GET /user/tokens/verify","resultat":"200"`, `"cloudflare POST /zones/z2/dns_records","resultat":"403"`, `"API testée"`} {
 		if !strings.Contains(journal.String(), a) {
 			t.Errorf("audit log without %s", a)
 		}
@@ -207,47 +219,53 @@ func TestFournisseurs(t *testing.T) {
 		if c.profil != "" {
 			cf.jetons[valeur] = c.profil
 		}
-		_, v = appel("POST", "/api/fournisseurs", `{"cle":"`+entree("Cloudflare "+c.etat, "cloudflare", "infra", valeur)+`"}`)
-		_, v = appel("POST", "/api/fournisseurs/"+v["id"].(string)+"/tester", "")
-		if b, _ := v["bilan"].(map[string]any); v["etat"] != c.etat || b["cle"] != c.bilan || len(v["zones"].([]any)) != 0 {
-			t.Errorf("%s token: %v", c.etat, v)
+		x := entree("Cloudflare "+c.etat, "cloudflare", "infra", valeur)
+		_, v = tester(x)
+		r, _ := v["resultat"].([]any)
+		fx := fiche(x)
+		if bilan, _ := fx["bilan"].(map[string]any); v["ok"] != false || v["note"] != nil || len(r) != 1 || r[0].(map[string]any)["cle"] != c.bilan ||
+			fx["etat"] != c.etat || bilan["cle"] != c.bilan || len(fx["zones"].([]any)) != 0 {
+			t.Errorf("%s token: %v, sheet %v", c.etat, v, fx)
 		}
 	}
 
-	// the infra vault closed: no test (423), nothing called
+	// the infra vault closed: no test (423), nothing called; an unknown entry: 404
 	s.coffre.Verrouiller()
 	cf.relever()
-	if code, _ := appel("POST", "/api/fournisseurs/"+id+"/tester", ""); code != http.StatusLocked || len(cf.relever()) != 0 {
+	if code, _ := tester(cle); code != http.StatusLocked || len(cf.relever()) != 0 {
 		t.Errorf("infra vault closed: %d", code)
 	}
 	if err := s.coffre.Deverrouiller("mdp-test"); err != nil {
 		t.Fatal(err)
 	}
-	if code, _ := appel("POST", "/api/fournisseurs/inconnu/tester", ""); code != 404 {
-		t.Errorf("unknown provider tested: %d", code)
+	if code, _ := tester("inconnue"); code != 404 {
+		t.Errorf("unknown entry tested: %d", code)
 	}
 
-	// an environment names only a known provider, which cannot be removed while it is used
+	// an environment names only a known sheet
 	if code, v := appel("POST", "/api/projets/demo/environnements", `{"env":"staging","url":"https://staging.exemple.fr","protection":"aucune","politique":"accord","fournisseur":"abc123"}`); code != 400 || v["erreur"] != errEnvFourn.Error() {
-		t.Errorf("unknown provider in an environment: %d %v", code, v)
+		t.Errorf("unknown sheet in an environment: %d %v", code, v)
 	}
 	if code, v := appel("POST", "/api/projets/demo/environnements", `{"env":"staging","url":"https://staging.exemple.fr","protection":"aucune","politique":"accord","fournisseur":"`+id+`"}`); code != 200 {
-		t.Fatalf("environment with the provider: %d %v", code, v)
+		t.Fatalf("environment with the sheet: %d %v", code, v)
 	}
-	if code, v := appel("DELETE", "/api/fournisseurs/"+id, ""); code != 409 || v["erreur_key"] != errFournisseurUtilise || v["args"].([]any)[0] != "demo/staging" {
-		t.Errorf("removal of a used provider: %d %v", code, v)
+
+	// the old routes are gone, and the sheet goes with its vault entry
+	for _, c := range [][2]string{{"GET", "/api/fournisseurs"}, {"POST", "/api/fournisseurs"}, {"POST", "/api/fournisseurs/" + id + "/tester"}, {"DELETE", "/api/fournisseurs/" + id}} {
+		if code, _ := appel(c[0], c[1], ""); code != 404 && code != 405 {
+			t.Errorf("%s %s still answers: %d", c[0], c[1], code)
+		}
 	}
-	if _, v := appel("GET", "/api/fournisseurs", ""); v["environnements"].(map[string]any)[id].([]any)[0] != "demo/staging" {
-		t.Errorf("uses of the provider: %v", v)
+	if l, _ := lireFournisseurs(); len(l) != 4 {
+		t.Errorf("sheets after the old routes: %d, want 4", len(l))
 	}
-	appel("POST", "/api/projets/demo/environnements", `{"env":"staging","url":"https://staging.exemple.fr","protection":"aucune","politique":"accord"}`)
-	if code, v := appel("DELETE", "/api/fournisseurs/"+id, ""); code != 200 || len(v["fournisseurs"].([]any)) != 3 {
-		t.Errorf("removal: %d %v", code, v)
+	if code, v := appel("DELETE", "/api/coffre/"+cle, ""); code != 200 {
+		t.Fatalf("vault entry deleted: %d %v", code, v)
 	}
-	if code, _ := appel("DELETE", "/api/fournisseurs/"+id, ""); code != 404 {
-		t.Errorf("second removal: %d", code)
+	if l, _ := lireFournisseurs(); len(l) != 3 || fiche(cle) != nil {
+		t.Errorf("the sheet stays after its vault entry: %+v", l)
 	}
-	if strings.Contains(reponses.String(), "témoin") || strings.Contains(reponses.String(), `témoin`) {
+	if strings.Contains(reponses.String(), "témoin") {
 		t.Error("a token in an answer")
 	}
 }

@@ -376,7 +376,8 @@ func typeBlobSSH(blob []byte) string {
 }
 
 // apiCoffreTester: POST /api/coffre/tester {id} (a saved entry) or {texte, i} (proposal i of a pasted
-// text, analysed again here), with optional {type, hote}. The answer never holds the value.
+// text, analysed again here), with optional {type, hote}. The answer never holds the value. A saved Cloudflare
+// API of the infra vault gets the longer test (zones and rights), kept as its sheet (testerFiche).
 func (s *Serveur) apiCoffreTester(w http.ResponseWriter, r *http.Request) {
 	if !s.coffrePret(w) {
 		return
@@ -417,6 +418,20 @@ func (s *Serveur) apiCoffreTester(w http.ResponseWriter, r *http.Request) {
 	// C15: a saved entry is tested as its own type (a Stripe key never goes to GitHub because of the form)
 	if _, connu := typesCoffre[c.Type]; connu && c.ID == "" {
 		typ = c.Type
+	}
+	if e, err := s.cleFournisseur(c.ID); err == nil { // M289: a Cloudflare API of the infra vault keeps what Test learns
+		f, err := s.testerFiche(e, strings.TrimSpace(valeur), deQui(r))
+		if err != nil {
+			s.erreurCoffre(w, err)
+			return
+		}
+		res := ResultatTest{Type: typ, OK: f.Etat == "ok", Resultat: []MessageTest{*f.Bilan}}
+		if res.OK {
+			n := messageTest("Cloudflare API token; zones: {0}", f.Bilan.Args...)
+			res.Note = &n
+		}
+		s.ecrireJSON(w, res)
+		return
 	}
 	s.ecrireJSON(w, testerValeur(typ, valeur, c.Hote))
 }

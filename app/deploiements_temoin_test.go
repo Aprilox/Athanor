@@ -291,7 +291,7 @@ func TestSiteExempleTemoinConteneur(t *testing.T) {
 		cherche("a notification", enJSON(s.messageApprobation(ap)))
 	}
 	reponses := &strings.Builder{}
-	for _, c := range []string{"/api/projets/" + projet + "/environnements", "/api/serveurs/" + id, "/api/hub/approbations", "/api/fournisseurs"} {
+	for _, c := range []string{"/api/projets/" + projet + "/environnements", "/api/serveurs/" + id, "/api/hub/approbations", "/api/coffre"} {
 		if code := lireAPI(t, s, c, reponses); code != 200 {
 			t.Errorf("GET %s: %d", c, code)
 		}

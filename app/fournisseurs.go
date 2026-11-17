@@ -1,20 +1,18 @@
 package main
 
-// The Servers module's providers (Cloudflare): fournisseurs.json in its data folder (0600, written
-// atomically, never a token: the token is named by its infra vault entry id) and its API: list, add from a
-// vault entry, test (fournisseurs_cloudflare.go), remove.
+// The sheets of the vault's Cloudflare API: fournisseurs.json in the Servers module's data folder (0600, written
+// atomically, never a token: the token is named by its infra vault entry id). M289: a sheet is made and
+// updated by the Vault's Test (coffre_tester.go, fournisseurs_cloudflare.go) and goes with its vault entry.
 
 import (
 	"encoding/json"
 	"errors"
-	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
+	"strconv"
 	"sync"
 	"time"
-	"unicode/utf8"
 )
 
 // ZoneFournisseur: a zone the token sees and what it may do there (deduced by Test).
@@ -47,8 +45,6 @@ var (
 	errFournisseursFichier = errors.New("The providers file cannot be read")
 	errFournisseurCle      = erreurEntree("Choose a Cloudflare entry of the vault")
 	errFournisseurPortee   = erreurEntree("A provider's token must be in the infra scope: change its scope in the Vault first")
-	errFournisseurNom      = erreurEntree("Give the provider a name (100 characters at most)")
-	errFournisseurUtilise  = "Take this provider out of these environments first: {0}"
 )
 
 func fichierFournisseursChemin() string {
@@ -111,83 +107,55 @@ func (s *Serveur) cleFournisseur(id string) (EntreeCoffre, error) {
 	return e, nil
 }
 
-func (s *Serveur) erreurFournisseurs(w http.ResponseWriter, err error) {
-	switch {
-	case errors.Is(err, errServeurInconnu):
-		s.erreur(w, http.StatusNotFound, errEnvFourn.Error())
-	case errors.Is(err, errCoffreVerrouille), errors.Is(err, errCoffreSansMdp), errors.Is(err, errCoffreInconnu):
-		s.erreurCoffre(w, err)
-	case errors.As(err, new(erreurEntree)):
-		s.erreur(w, http.StatusBadRequest, err.Error())
-	default:
-		s.erreur(w, http.StatusInternalServerError, err.Error())
-	}
-}
-
-// apiFournisseurs: GET /api/fournisseurs, the providers and the environments that use each.
-func (s *Serveur) apiFournisseurs(w http.ResponseWriter, _ *http.Request) {
+// testerFiche (M289): Test on a Cloudflare API of the infra vault keeps what it learns (zones, rights, state)
+// as that API's sheet in fournisseurs.json, made on the first test and found again by its vault entry.
+func (s *Serveur) testerFiche(e EntreeCoffre, jeton, de string) (Fournisseur, error) {
 	l, err := lireFournisseurs()
 	if err != nil {
-		s.erreurFournisseurs(w, err)
-		return
+		return Fournisseur{}, err
 	}
-	s.ecrireJSON(w, map[string]any{"fournisseurs": l, "environnements": s.acces.UtilisationsFournisseurs()})
-}
-
-// apiFournisseurAjouter: POST /api/fournisseurs {nom, cle}: a Cloudflare provider from an infra vault entry.
-func (s *Serveur) apiFournisseurAjouter(w http.ResponseWriter, r *http.Request) {
-	var c struct {
-		Nom string `json:"nom"`
-		Cle string `json:"cle"`
+	f := Fournisseur{ID: aleatoire(8), Type: "cloudflare", Cle: e.ID}
+	if i := slices.IndexFunc(l, func(x Fournisseur) bool { return x.Cle == e.ID }); i >= 0 {
+		f = l[i]
 	}
-	if lireCorps(r, &c) != nil {
-		s.erreur(w, http.StatusBadRequest, "Invalid request")
-		return
-	}
-	if !s.coffrePret(w) {
-		return
-	}
-	c.Nom = strings.TrimSpace(c.Nom)
-	e, err := s.cleFournisseur(c.Cle)
-	if err == nil && c.Nom == "" {
-		c.Nom = e.Nom
-	}
-	if err == nil && (c.Nom == "" || utf8.RuneCountInString(c.Nom) > 100) {
-		err = errFournisseurNom
-	}
-	f := Fournisseur{ID: aleatoire(8), Type: "cloudflare", Nom: c.Nom, Cle: c.Cle, Zones: []ZoneFournisseur{}, Droits: []string{}}
-	if err == nil {
-		err = modifierFournisseurs(func(l []Fournisseur) ([]Fournisseur, error) { return append(l, f), nil })
-	}
-	if err != nil {
-		s.erreurFournisseurs(w, err)
-		return
-	}
-	s.ecrireAudit(LigneAudit{Type: "evenement", De: deQui(r), Vers: "hub", Action: "fournisseur ajouté",
-		Resultat: f.Nom + " [" + f.ID + "], clé " + e.Nom + " [" + e.ID + "]"})
-	s.ecrireJSON(w, f)
-}
-
-// apiFournisseurSupprimer: DELETE /api/fournisseurs/{id}, refused while an environment uses it (named).
-func (s *Serveur) apiFournisseurSupprimer(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	if envs := s.acces.UtilisationsFournisseurs()[id]; len(envs) > 0 {
-		s.erreurArgs(w, http.StatusConflict, errFournisseurUtilise, strings.Join(envs, ", "))
-		return
-	}
-	var nom string
-	err := modifierFournisseurs(func(l []Fournisseur) ([]Fournisseur, error) {
-		i := slices.IndexFunc(l, func(f Fournisseur) bool { return f.ID == id })
-		if i < 0 {
-			return nil, errServeurInconnu
+	f = s.testerFournisseur(f, jeton)
+	f.Nom = e.Nom
+	err = modifierFournisseurs(func(l []Fournisseur) ([]Fournisseur, error) {
+		vu := false
+		for j := range l {
+			if l[j].Cle == e.ID { // an older file may hold several sheets of one token: each keeps its id
+				x := f
+				x.ID, vu = l[j].ID, true
+				l[j] = x
+			}
 		}
-		nom = l[i].Nom
-		return slices.Delete(l, i, i+1), nil
+		if !vu {
+			l = append(l, f)
+		}
+		return l, nil
 	})
 	if err != nil {
-		s.erreurFournisseurs(w, err)
-		return
+		return Fournisseur{}, err
 	}
-	s.ecrireAudit(LigneAudit{Type: "evenement", De: deQui(r), Vers: "hub", Action: "fournisseur retiré", Resultat: nom + " [" + id + "]"})
-	s.apiFournisseurs(w, r)
+	s.ecrireAudit(LigneAudit{Type: "evenement", De: de, Vers: "cloudflare", Action: "API testée",
+		Resultat: e.Nom + " [" + e.ID + "]: " + f.Etat + ", " + strconv.Itoa(len(f.Zones)) + " zone(s)"})
+	return f, nil
+}
+
+// fichesCoffre: vault entry id → its sheet, for the Vault's cards (never a token).
+func fichesCoffre() map[string]Fournisseur {
+	m := map[string]Fournisseur{}
+	l, _ := lireFournisseurs()
+	for _, f := range slices.Backward(l) { // the first sheet of an entry wins
+		m[f.Cle] = f
+	}
+	return m
+}
+
+// oublierFiches: the sheets of a vault entry go with it.
+func oublierFiches(cle string) {
+	deCle := func(f Fournisseur) bool { return f.Cle == cle }
+	if l, _ := lireFournisseurs(); slices.ContainsFunc(l, deCle) {
+		_ = modifierFournisseurs(func(l []Fournisseur) ([]Fournisseur, error) { return slices.DeleteFunc(l, deCle), nil })
+	}
 }

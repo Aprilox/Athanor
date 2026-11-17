@@ -12,8 +12,7 @@ type moduleServeurs struct{}
 func (moduleServeurs) ID() string  { return "servers" }
 func (moduleServeurs) Nom() string { return "Servers" }
 func (moduleServeurs) Pages() []PageModule {
-	return []PageModule{{Hash: "#serveurs", Ordre: 30, Icone: "serveurs", Libelle: "Servers", Fils: []string{"#serveur", "#terminal", "#approbations"}},
-		{Hash: "#fournisseurs", Ordre: 31, Icone: "serveurs", Libelle: "Providers"}}
+	return []PageModule{{Hash: "#serveurs", Ordre: 30, Icone: "serveurs", Libelle: "Servers", Fils: []string{"#serveur", "#terminal", "#approbations"}}}
 }
 
 // Elements: a server whose host fingerprint changed waits for the owner (the bell); the others need nothing.
@@ -38,14 +37,14 @@ func (moduleServeurs) Elements(*Serveur) []ElementHub {
 	return out
 }
 
-// Tutoriel: the Servers page's 5 steps and the Providers page (a missing card: the bubble in the middle).
+// Tutoriel: the Servers page's 4 steps, then the Vault for the Cloudflare API (a missing card: the bubble in the middle).
 func (moduleServeurs) Tutoriel() []EtapeTutoriel {
 	return []EtapeTutoriel{
 		{Titre: "Your servers", Texte: "Add your VPS or your home server: Athanor checks its fingerprint first, then connects with a key kept in the vault. That key is never shown, not even to the agents.", Cible: "[data-srv-ajouter]"},
 		{Titre: "One card per server", Texte: "Each card says whether the server answers and what runs on it. Click its name to open its sheet: its environments, Harden this server and its tasks.", Cible: ".carte-serveur"},
 		{Titre: "Tasks for the Servers agent", Texte: "On a server's sheet, Tasks: say what should be done (“Install nginx and serve my site over HTTPS”). The agent shows a plan first: nothing changes before you accept it, and prod always waits for you."},
 		{Titre: "Health of the deployed sites", Texte: "Every 15 minutes, this PC checks your deployed sites and their servers. A problem rings the bell and your phone, with Retry, Go back to the previous version and I take over.", Cible: ".srv-reglage-sante"},
-		{Titre: "Providers", Texte: "Your Cloudflare token goes here, straight into the vault: the Servers agent then sets the DNS names and HTTPS of an environment, and of that name only. This tutorial stays in the “?”, with the guides “Add a server” and “Connect Cloudflare (DNS and HTTPS)”.", Cible: "[data-fou-ajouter]", Page: "#fournisseurs"},
+		{Titre: "Cloudflare, for DNS and HTTPS", Texte: "Your Cloudflare token goes into the Vault, as any API: Test shows its zones and what it may do there. The Servers agent then sets the DNS names and HTTPS of an environment, and of that name only. This tutorial stays in the “?”, with the guides “Add a server” and “Connect Cloudflare (DNS and HTTPS)”.", Cible: "[data-cof-ajouter]", Page: "#coffre"},
 	}
 }
 

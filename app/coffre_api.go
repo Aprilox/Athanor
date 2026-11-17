@@ -97,7 +97,8 @@ func (s *Serveur) apiCoffre(w http.ResponseWriter, r *http.Request) {
 	if !s.coffrePret(w) {
 		return
 	}
-	s.ecrireJSON(w, map[string]any{"entrees": s.coffre.Liste(), "etat": s.etatCoffre(), "migration": s.resumeMigration()})
+	// M289: fiches, the zones, rights and state Test learnt about a Cloudflare API (never a token)
+	s.ecrireJSON(w, map[string]any{"entrees": s.coffre.Liste(), "etat": s.etatCoffre(), "migration": s.resumeMigration(), "fiches": fichesCoffre()})
 }
 
 // apiCoffreAjouter: POST /api/coffre, a new entry.
@@ -253,6 +254,7 @@ func (s *Serveur) retirerDuCoffre(id string) error {
 	if err := s.coffre.Supprimer(id); err != nil {
 		return err
 	}
+	oublierFiches(id)
 	_ = s.synchroniserAcces()
 	return nil
 }

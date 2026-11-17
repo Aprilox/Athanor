@@ -694,11 +694,6 @@ func (a *Acces) UtilisationsServeurs() map[string][]string {
 	return a.utilisations(func(e *Environnement) []string { return e.Serveurs })
 }
 
-// UtilisationsFournisseurs: provider id → the "project/env" that use it, sorted.
-func (a *Acces) UtilisationsFournisseurs() map[string][]string {
-	return a.utilisations(func(e *Environnement) []string { return []string{e.Fournisseur} })
-}
-
 func (a *Acces) utilisations(ids func(*Environnement) []string) map[string][]string {
 	m := map[string][]string{}
 	if a == nil {

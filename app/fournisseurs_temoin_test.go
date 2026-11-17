@@ -369,7 +369,7 @@ func TestEnvironnementsTemoinConteneur(t *testing.T) {
 	}
 	cherche("a notification", notes.String())
 	reponses := &strings.Builder{}
-	for _, c := range []string{"/api/serveurs/" + id + "/taches", "/api/hub/approbations", "/api/serveurs/" + id, "/api/fournisseurs", "/api/projets/demo/environnements"} {
+	for _, c := range []string{"/api/serveurs/" + id + "/taches", "/api/hub/approbations", "/api/serveurs/" + id, "/api/coffre", "/api/projets/demo/environnements"} {
 		if code := lireAPI(t, s, c, reponses); code != 200 {
 			t.Errorf("GET %s: %d", c, code)
 		}

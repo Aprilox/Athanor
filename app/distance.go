@@ -300,7 +300,7 @@ func interditDistance(r *http.Request) bool {
 
 // prefixesHub: the hub's routes, closed to devices by default (an allowlist, unlike interditDistance):
 // a new route under these prefixes stays refused from a device until it is added to autorisesDistance.
-var prefixesHub = []string{"/api/hub", "/api/coffre", "/api/acces", "/api/serveurs", "/api/fournisseurs", "/api/missions", "/api/mentions"}
+var prefixesHub = []string{"/api/hub", "/api/coffre", "/api/acces", "/api/serveurs", "/api/missions", "/api/mentions"}
 
 // autorisesDistance: "METHOD path" of the hub a device may call (reading only, never a secret value).
 var autorisesDistance = map[string]bool{"GET /api/hub": true, "GET /api/coffre": true, "GET /api/acces": true,
@@ -315,8 +315,7 @@ var autorisesDistance = map[string]bool{"GET /api/hub": true, "GET /api/coffre":
 	"POST /api/missions/{id}/modifier": true, "POST /api/missions/{id}/ressources": true, "POST /api/missions/{id}/repondre": true, "POST /api/missions/{id}/annuler": true, "POST /api/missions/{id}/lancer": true, "POST /api/missions/{id}/redemander": true, // as the approvals: an unlocked device
 	"POST /api/missions/{id}/pause": true, "POST /api/missions/{id}/reprendre": true, "POST /api/missions/{id}/arreter": true, "POST /api/missions/{id}/politique": true, // P7
 	"GET /api/missions/{id}/suppression": true, "POST /api/missions/{id}/supprimer": true, "POST /api/missions/vider": true, // deleted as cancelled: an unlocked device
-	"GET /api/mentions":     true, // the @ list of the home bar: names and types, never a value
-	"GET /api/fournisseurs": true} // the providers, zones and rights (never a token); added, tested, removed on the PC
+	"GET /api/mentions": true} // the @ list of the home bar: names and types, never a value
 
 // refuseHubDistance: a hub route that is not in autorisesDistance (plain prefix: "/api/hubx" is refused too).
 func refuseHubDistance(r *http.Request) bool {
