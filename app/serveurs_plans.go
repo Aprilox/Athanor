@@ -303,6 +303,7 @@ func outilProposerPlan(s *Serveur, x SessionHub, args json.RawMessage) (string, 
 	// M244k7: in Auto or Modifications an unknown command waits for the owner, the rule included
 	parRegle := regle && m != "manuel" && !(inconnue && modeDemandeInconnue(m)) && s.approbations.Regle(reglePlan(x.Projet, p.Serveur)) && !missionTout(x.Env)
 	// M244f: the assistant's mode accepts it at once (auto, modifications: no dangerous step and no unknown command, M244k1; ignorer: any plan)
+	saute := m == "ignorer" && !parRegle // M285: a plan the owner would have read, said in the audit log below
 	if m == "ignorer" || m != "" && m != "manuel" && haut < ClasseDestructrice && !construit && !inconnue {
 		parRegle = true
 	}
@@ -330,6 +331,10 @@ func outilProposerPlan(s *Serveur, x SessionHub, args json.RawMessage) (string, 
 			return "", err
 		}
 		etat = ap.Etat
+		if projet, env, _ := strings.Cut(x.Env, "/"); saute {
+			s.ecrireAudit(LigneAudit{Type: "evenement", De: x.Agent, Vers: "hub", Projet: firstNonEmpty(projet, x.Projet), Mission: x.Mission, Env: env, Agent: x.Agent,
+				Action: "accord du plan non demandé: " + p.ID + " (" + haut.String() + ")", Resultat: "sans demander : mode Ignorer"})
+		}
 	}
 	s.ecrireAudit(LigneAudit{Type: "evenement", De: x.Agent, Vers: "serveur:" + p.Serveur, Projet: x.Projet, Mission: x.Mission, Env: p.Env,
 		Agent: x.Agent, Action: "serveurs.proposer_plan", Resultat: "plan " + p.ID + " → " + etat + " : " + strings.Join(resumeEtapes, ", ")})

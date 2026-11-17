@@ -112,6 +112,17 @@ func modeServeur(srv ServeurInventaire) string {
 // shown as Projects), else manuel.
 func modeProjet(projet string) string { return reglageProjet(projet, "permission") }
 
+// sautIgnorer (M285): projet, one of the owner's projects, is in the Ignorer mode: what would wait for the owner
+// (quoi) goes on without asking, and the audit log says so. False in any other mode: the caller asks as before.
+func (s *Serveur) sautIgnorer(projet, env, agent, quoi string) bool {
+	if projet == "" || modeProjet(projet) != "ignorer" || !slices.Contains(s.nomsProjets(), projet) {
+		return false
+	}
+	s.ecrireAudit(LigneAudit{Type: "evenement", De: agent, Vers: "hub", Projet: projet, Env: env, Agent: agent,
+		Action: quoi, Resultat: "sans demander : mode Ignorer du projet"})
+	return true
+}
+
 // modeMission (M271): the mode of mission id's Servers lane, its card's or else Settings › Permissions (missions);
 // "" for Manual or none: the plan rules of serveurs_plans.go (reads run, each change in a plan the owner accepts).
 func modeMission(id string) string {

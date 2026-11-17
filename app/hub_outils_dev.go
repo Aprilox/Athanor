@@ -299,6 +299,8 @@ func outilDemanderDeploiement(s *Serveur, x SessionHub, args json.RawMessage) (s
 		return accepte(raison, "")
 	} else if x.Mission != "" && modeMission(x.Mission) == "ignorer" { // M271: the owner chose to be asked nothing
 		return accepte("the mission's Ignore permissions mode, instead of: "+raison, "")
+	} else if x.Mission == "" && modeProjet(x.Projet) == "ignorer" { // M285: the same for a project without a mission
+		return accepte("sans demander : mode Ignorer du projet, instead of: "+raison, "")
 	}
 	y, etat, err := s.approbations.Reprendre(ap)
 	switch {

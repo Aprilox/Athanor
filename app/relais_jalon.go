@@ -299,6 +299,9 @@ func (s *Serveur) accordBuildRelais(p Projet, e Environnement, r *RelaisJalon) (
 	if liste != "" {
 		raison += "; build files changed: " + liste
 	}
+	if s.sautIgnorer(p.Nom, env, "relais", "accord de déploiement non demandé: "+raison) { // M285
+		return true, false
+	}
 	ap := Approbation{Projet: p.Nom, Env: env, Agent: "relais", Action: actionDeploiement, Raison: raison,
 		Details: map[string]string{"commit": r.Commit, "hote": hoteEnv(&e), "serveurs": listeServeursAccord(e.Serveurs), "fichiers_build": liste}}
 	y, etat, err := s.approbations.Reprendre(ap)

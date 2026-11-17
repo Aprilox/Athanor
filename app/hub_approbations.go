@@ -497,6 +497,9 @@ func (s *Serveur) exigerAccord(x Approbation, destructif bool) (Approbation, boo
 	if prudent := s.prudenceRenforcee(x.Projet, x.Env); !prudent && (!destructif || s.approbations.Regle(RegleAccord{Projet: x.Projet, Env: x.Env, Action: x.Action})) {
 		return x, false, nil
 	}
+	if x.Mission == "" && s.sautIgnorer(x.Projet, x.Env, x.Agent, "accord non demandé: "+x.Action) { // M285; a mission keeps its own mode
+		return x, false, nil
+	}
 	y, etat, err := s.approbations.Reprendre(x)
 	switch {
 	case err != nil:
