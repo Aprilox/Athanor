@@ -2,36 +2,17 @@ package main
 
 import (
 	"os"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 	"testing"
 )
 
-// clesJournalMission: the keys of a mission's journal (entreeJournal(id, t, niveau, "key", …) in mission_*.go) and
-// the words the live page gives t() through its tables (relay steps, journal parameters).
+// clesJournalMission: the words the page of an old mission gives t() through its table (journal parameters). The
+// journal's own keys were written by the missions' code (gone, M302): their translations stay in i18n.js for the
+// journals already on disk.
 func clesJournalMission(t *testing.T) []string {
-	fichiers, _ := filepath.Glob("mission_*.go")
-	re := regexp.MustCompile(`"(?:info|attention|erreur)",\s*("(?:[^"\\]|\\.)*")`)
 	var cles []string
-	for _, f := range fichiers {
-		if strings.HasSuffix(f, "_test.go") {
-			continue
-		}
-		b, err := os.ReadFile(f)
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, m := range re.FindAllStringSubmatch(string(b), -1) {
-			if c, err := strconv.Unquote(m[1]); err == nil {
-				cles = append(cles, c)
-			}
-		}
-	}
-	if len(cles) < 25 {
-		t.Fatalf("%d journal keys in mission_*.go", len(cles))
-	}
 	b, err := os.ReadFile("static/app.js")
 	if err != nil {
 		t.Fatal(err)
@@ -119,7 +100,6 @@ func TestWebTraduction(t *testing.T) {
 		"This Cloudflare token is disabled: enable it again on Cloudflare or replace it.",
 		"This Cloudflare token sees no zone: give it access to your domain's zone.") // the providers (M114)
 	cles = append(cles, errCleDeploiementNonLie.Error(), errCleDeploiementGH) // the deployment key (M119)
-	cles = append(cles, "The mission waits for the vault to be unlocked")     // the bell after a restart (M170)
 	cles = append(cles, errDossierAbsolu.Error(), errDossierPoints.Error(), errDossierAbsent.Error(), errDossierLien.Error(), errDossierSecret.Error(),
 		errDossierAthanor.Error(), errDossierSysteme.Error(), errDossiersTrop.Error(), errPieceAccueilTropGrosse.Error(),
 		"This type of file is not accepted: images, PDF and text files only.") // the home conversation's folders and files (M196)

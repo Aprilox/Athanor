@@ -188,7 +188,6 @@ func TestCaptureHub(t *testing.T) {
 		if r.URL.Query().Get("on") == "" {
 			return
 		}
-		ctx := s.contexteCarte()
 		c := CarteMission{Titre: "Site vitrine de la boulangerie Martin", Projet: ProjetCarte{Nom: "boulangerie-martin", Nouveau: true},
 			Dev: BriefCarte{Brief: "Un site vitrine : la boutique, les horaires, les pains du jour et un formulaire de commande pour le retrait."},
 			Envs: []EnvCarte{{Nom: "dev", URL: "https://dev.boulangerie-martin.fr", Protection: "auth_proxy", Serveurs: []string{"c0ffee02"}},
@@ -197,11 +196,7 @@ func TestCaptureHub(t *testing.T) {
 			Acces: []AccesCarte{{Entree: "CLOUDFLARE_API_TOKEN", Pour: "boulangerie-martin/prod"}, {Entree: "SSH_VPS_PROD", Pour: "c0ffee01"},
 				{Entree: "STRIPE_SECRET_KEY", Pour: "boulangerie-martin"}, {Entree: "SMTP_PASSWORD", Pour: "boulangerie-martin"}},
 			JalonsEstimes: 8}
-		if err := validerCarte(&c, ctx); err != nil {
-			http.Error(w, err.Error(), 500)
-			return
-		}
-		b, _ := json.Marshal(calculerCarte(c, "prod", ctx))
+		b, _ := json.Marshal(c)
 		cree := time.Now().UTC().Format(formatCree)
 		m := Mission{ID: "capture01", Phrase: "Un site vitrine pour la boulangerie Martin sur @VPS production, dev protégée, prod sur boulangerie-martin.fr",
 			Mentions: Mentions{Serveurs: []string{"c0ffee01"}, Nouveau: true}, Etat: "proposee", Carte: b, Politique: "prod",
@@ -222,11 +217,7 @@ func TestCaptureHub(t *testing.T) {
 			c := CarteMission{Titre: "Paiement en ligne de la boutique", Projet: ProjetCarte{Nom: "projet-02"}, Dev: BriefCarte{Brief: "Ajouter le paiement par carte au panier."},
 				Envs:     []EnvCarte{{Nom: "staging", URL: "https://recette.boutique.fr", Protection: "auth_proxy", Serveurs: []string{"c0ffee02"}}},
 				Serveurs: BriefCarte{Brief: "Nom DNS de recette, certificat et proxy."}, JalonsEstimes: 3}
-			if err := validerCarte(&c, ctx); err != nil {
-				http.Error(w, err.Error(), 500)
-				return
-			}
-			bc, _ := json.Marshal(calculerCarte(c, "tout", ctx))
+			bc, _ := json.Marshal(c)
 			// mission-direct-* (M171): capture06 launched, its dev checked (relay at the prod accord), a Servers task
 			// applying its plan, 52 journal entries (50 shown, See more), an attention and an error among them
 			tache6 := TacheServeurs{ID: "9b1d3e5f7a20", Texte: "Prod de projet-01", Serveurs: []string{"c0ffee01"}, Etat: "application", Env: "projet-01/prod",
@@ -239,11 +230,7 @@ func TestCaptureHub(t *testing.T) {
 				Envs: []EnvCarte{{Nom: "dev", URL: "https://dev.projet-01.fr", Protection: "auth_proxy", Serveurs: []string{"c0ffee02"}},
 					{Nom: "prod", URL: "https://projet-01.fr", Protection: "aucune", Serveurs: []string{"c0ffee01"}}},
 				Serveurs: BriefCarte{Brief: "Noms DNS, certificats et proxy de dev et de prod."}, JalonsEstimes: 4}
-			if err := validerCarte(&c6, ctx); err != nil {
-				http.Error(w, err.Error(), 500)
-				return
-			}
-			b6, _ := json.Marshal(calculerCarte(c6, "prod", ctx))
+			b6, _ := json.Marshal(c6)
 			var j6 []EntreeJournal
 			heure := time.Date(2026, 11, 12, 8, 0, 0, 0, time.UTC)
 			noter := func(id, niveau, cle string, p ...string) {

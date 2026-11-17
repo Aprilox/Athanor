@@ -1,8 +1,8 @@
 package main
 
-// Deleting a mission (note 2026-11-16 10h04): the mission, its Servers tasks, its history and its follow-up files go;
-// on request, the project and its folder the mission created (to the recycle bin) and the access it gave. Never a
-// vault entry, a key or a server.
+// Deleting an old mission (M302): its own files go (the mission, its journal, its former orchestrator's folder); on
+// request, the project it created and its folder (to the recycle bin). Otherwise its project keeps everything: its
+// pilot, its deployment, its access and its Servers tasks. Never a vault entry, a key or a server.
 
 import (
 	"encoding/json"
@@ -18,61 +18,36 @@ import (
 // OptionsSuppression: what goes with the mission besides its own files (unticked by default in the window).
 type OptionsSuppression struct {
 	Projet bool `json:"projet,omitempty"` // the project the mission created, removed from Studio, its folder to the recycle bin
-	Acces  bool `json:"acces,omitempty"`  // the access the mission gave to its project (the vault entries stay)
-	// M262b: the environments whose site a Servers task removes from their servers (plan to accept, password asked)
-	Serveurs []string `json:"serveurs,omitempty"`
 }
 
-// RetraitEnv (M262b): an environment where the mission put something on servers, its site removable from them.
-type RetraitEnv struct {
-	Nom      string   `json:"nom"`
-	URL      string   `json:"url"`
-	Serveurs []string `json:"serveurs"` // the servers' names
-}
-
-// ApercuSuppression: what Delete will remove, shown in the confirmation before anything is done.
+// ApercuSuppression: what Delete can also remove and what stays, shown in the confirmation before anything is done.
 type ApercuSuppression struct {
-	Etat       string              `json:"etat"`
-	EnCours    bool                `json:"en_cours"` // lancee or arret_demande: stopped first (immediat | jalon)
-	Taches     int                 `json:"taches"`
-	Historique int                 `json:"historique"`
-	Projet     string              `json:"projet,omitempty"`
-	Dossier    string              `json:"dossier,omitempty"`
-	DossierOK  bool                `json:"dossier_ok"`            // the project and its folder can be removed
-	DossierNon string              `json:"dossier_non,omitempty"` // why not (English, translated in the window)
-	Depot      string              `json:"depot,omitempty"`       // the GitHub repository: a link only, never deleted
-	Acces      []string            `json:"acces,omitempty"`       // "entry (env)" given by the mission
-	Envs       []EnvCarte          `json:"envs,omitempty"`        // what stays online on the servers
-	Retirables []RetraitEnv        `json:"retirables,omitempty"`  // M262b: what a Servers task can remove from them
-	Differee   *OptionsSuppression `json:"differee,omitempty"`    // already asked, done once the milestone ends
+	Projet     string     `json:"projet,omitempty"`
+	Dossier    string     `json:"dossier,omitempty"`
+	DossierOK  bool       `json:"dossier_ok"`            // the project and its folder can be removed
+	DossierNon string     `json:"dossier_non,omitempty"` // why not (English, translated in the window)
+	Depot      string     `json:"depot,omitempty"`       // the GitHub repository: a link only, never deleted
+	Envs       []EnvCarte `json:"envs,omitempty"`        // what stays online on the servers
 }
 
-var etatsFinis = []string{"terminee", "annulee", "echec", "arretee"}
+// projetMission: m's Dev lane's project (false: none, or gone).
+func (s *Serveur) projetMission(m Mission) (Projet, bool) {
+	for _, v := range m.Voies {
+		if v.Module == "dev" {
+			return s.projetParNom(v.Ref)
+		}
+	}
+	return Projet{}, false
+}
 
-// accesDonnes: the access m's launch gave to project nom (card entries ticked and given, still granted as "mission").
-func (s *Serveur) accesDonnes(m Mission, nom string) []AccesCarte {
-	var c CarteMission
-	if s.acces == nil || json.Unmarshal(m.Carte, &c) != nil || !faitMission(m, "access given: ") {
-		return nil
-	}
-	pa := s.acces.Projet(nom)
-	var l []AccesCarte
-	for _, a := range c.Acces {
-		if a.Decoche || a.ARemplir {
-			continue
-		}
-		env := envAcces(a.Pour, c)
-		if slices.ContainsFunc(pa.Acces, func(x AccesProjet) bool { return x.Entree == a.ID && x.Env == env && x.Auto == "mission" }) {
-			a.Pour = env
-			l = append(l, a)
-		}
-	}
-	return l
+// faitMission: a launch event of m starts with debut (what its launch did).
+func faitMission(m Mission, debut string) bool {
+	return slices.ContainsFunc(m.Historique, func(e EvenementMission) bool { return e.Etat == "lancee" && strings.HasPrefix(e.Detail, debut) })
 }
 
 // projetSupprimable: m's project and why its folder cannot go with the mission ("": it can). Only a project this
-// mission created, used by no other mission, whose folder is a real folder (no link, no junction) and never a drive,
-// the personal folder, a system folder or the tool's folder.
+// mission created, used by no other mission, whose pilot is stopped, whose folder is a real folder (no link, no
+// junction) and never a drive, the personal folder, a system folder or the tool's folder.
 func (s *Serveur) projetSupprimable(m Mission) (Projet, string) {
 	p, ok := s.projetMission(m)
 	if !ok {
@@ -86,12 +61,14 @@ func (s *Serveur) projetSupprimable(m Mission) (Projet, string) {
 			return p, "Another mission uses this project"
 		}
 	}
+	if p.PiloteActif() { // M302: an old mission no longer stops anything
+		return p, "Stop its pilot first"
+	}
 	return p, controlerDossierSupprime(p.Dossier, s.kitCourant().Racine)
 }
 
 func (s *Serveur) apercuSuppression(m Mission) ApercuSuppression {
-	a := ApercuSuppression{Etat: m.Etat, EnCours: m.Etat == "lancee" || m.Etat == "arret_demande", Historique: len(m.Historique), Differee: m.Suppression}
-	a.Taches = len(tachesDeMission(m))
+	var a ApercuSuppression
 	var c CarteMission
 	_ = json.Unmarshal(m.Carte, &c)
 	a.Depot, a.Envs = c.Projet.Depot, c.Envs
@@ -100,98 +77,18 @@ func (s *Serveur) apercuSuppression(m Mission) ApercuSuppression {
 	}
 	p, non := s.projetSupprimable(m)
 	a.Projet, a.Dossier, a.DossierNon, a.DossierOK = p.Nom, p.Dossier, non, non == ""
-	liste, _ := lireServeurs()
-	for _, ec := range envsRetirables(m, c, p.Nom) {
-		r := RetraitEnv{Nom: ec.Nom, URL: ec.URL}
-		for _, id := range ec.Serveurs {
-			if i := slices.IndexFunc(liste, func(x ServeurInventaire) bool { return x.ID == id }); i >= 0 {
-				r.Serveurs = append(r.Serveurs, liste[i].Nom)
-			}
-		}
-		a.Retirables = append(a.Retirables, r)
-	}
-	for _, x := range s.accesDonnes(m, p.Nom) {
-		a.Acces = append(a.Acces, x.Entree+" ("+x.Pour+")")
-	}
 	return a
 }
 
-// apiApercuSuppression: GET /api/missions/{id}/suppression: what Delete removes and what it can also remove.
-func (s *Serveur) apiApercuSuppression(w http.ResponseWriter, r *http.Request) {
-	m, err := lireMission(r.PathValue("id"))
-	if err != nil {
-		s.erreurMissionHTTP(w, err)
-		return
-	}
-	s.ecrireJSON(w, s.apercuSuppression(m))
-}
-
-// apiSupprimerMission: POST /api/missions/{id}/supprimer {projet, acces, arret: immediat|jalon}. A running mission
-// needs arret: immediat stops it then deletes it; jalon asks the stop after the milestone, the follower deletes it then.
+// apiSupprimerMission: DELETE /api/missions/{id} {projet}: the old mission deleted, with its project and folder
+// when asked.
 func (s *Serveur) apiSupprimerMission(w http.ResponseWriter, r *http.Request) {
-	var c struct {
-		OptionsSuppression
-		Arret      string `json:"arret"`
-		MotDePasse string `json:"mot_de_passe"`
-	}
-	if r.ContentLength != 0 && lireCorps(r, &c) != nil || !slices.Contains([]string{"", "immediat", "jalon"}, c.Arret) {
+	var o OptionsSuppression
+	if r.ContentLength != 0 && lireCorps(r, &o) != nil {
 		s.erreur(w, http.StatusBadRequest, "Invalid request")
 		return
 	}
-	id, qui := r.PathValue("id"), deQui(r)
-	m, err := lireMission(id)
-	if err != nil {
-		s.erreurMissionHTTP(w, err)
-		return
-	}
-	if len(c.Serveurs) > 0 { // M262b: acting on the servers, as launching a mission (C78)
-		if code, err := s.preuvePresence(r, c.MotDePasse); err != nil {
-			s.erreur(w, code, err.Error())
-			return
-		}
-		slices.Sort(c.Serveurs)
-		c.Serveurs = slices.Compact(c.Serveurs)
-		var carte CarteMission
-		_ = json.Unmarshal(m.Carte, &carte)
-		p, _ := s.projetMission(m)
-		ok := envsRetirables(m, carte, p.Nom)
-		for _, nom := range c.Serveurs {
-			if !slices.ContainsFunc(ok, func(ec EnvCarte) bool { return ec.Nom == nom }) {
-				s.erreur(w, http.StatusConflict, "This mission put nothing on the servers of this environment")
-				return
-			}
-		}
-	}
-	if c.Projet {
-		if _, non := s.projetSupprimable(m); non != "" {
-			s.erreur(w, http.StatusConflict, non)
-			return
-		}
-	}
-	if m.Etat == "lancee" || m.Etat == "arret_demande" {
-		switch {
-		case c.Arret == "":
-			s.erreur(w, http.StatusConflict, "This mission is running: choose how to stop it first")
-			return
-		case c.Arret == "jalon":
-			if m.Etat == "lancee" {
-				if _, err := s.demanderArretJalon(id, qui); err != nil {
-					s.erreurMissionHTTP(w, err)
-					return
-				}
-			}
-			o := c.OptionsSuppression
-			m, err = modifierMission(id, func(m *Mission) error { m.Suppression = &o; return nil })
-			if err != nil {
-				s.erreurMissionHTTP(w, err)
-				return
-			}
-			s.ecrireAudit(LigneAudit{Type: "evenement", De: qui, Vers: "missions", Projet: prefixeMission + id, Mission: id, Action: "mission suppression demandée après le jalon"})
-			s.ecrireJSON(w, map[string]any{"differee": true, "mission": s.voiesEnDirect(m)})
-			return
-		}
-	}
-	retire, err := s.supprimerMission(id, qui, c.OptionsSuppression)
+	retire, err := s.supprimerMission(r.PathValue("id"), deQui(r), o)
 	if err != nil {
 		s.erreurMissionHTTP(w, err)
 		return
@@ -199,103 +96,20 @@ func (s *Serveur) apiSupprimerMission(w http.ResponseWriter, r *http.Request) {
 	s.ecrireJSON(w, map[string]any{"supprimee": true, "retire": retire})
 }
 
-// apiViderMissions: POST /api/missions/vider: every finished, cancelled, failed or stopped mission deleted (its own
-// files only: projects and folders stay).
-func (s *Serveur) apiViderMissions(w http.ResponseWriter, r *http.Request) {
-	n := 0
-	for _, m := range lireMissions() {
-		if slices.Contains(etatsFinis, m.Etat) {
-			if _, err := s.supprimerMission(m.ID, deQui(r), OptionsSuppression{}); err == nil {
-				n++
-			}
-		}
-	}
-	s.ecrireJSON(w, map[string]any{"supprimees": n})
-}
-
-// supprimerMission: mission id stopped if it still runs (paused or stopping included), then its orchestrator, tokens,
-// pending requests, Servers tasks and files removed; with o, its project and folder, and the access it gave. The
-// list of what was removed is audited (names and paths only).
+// supprimerMission: mission id's files removed, whatever state it was left in (nothing is stopped: it was no longer
+// followed); with o.Projet, the project it created and its folder first. The list of what was removed is audited
+// (names and paths only).
 func (s *Serveur) supprimerMission(id, qui string, o OptionsSuppression) ([]string, error) {
 	m, err := lireMission(id)
 	if err != nil {
 		return nil, err
 	}
-	taches := tachesDeMission(m) // read before the stop: a suspended preparation leaves its lane without its task
-	var c CarteMission
-	_ = json.Unmarshal(m.Carte, &c)
-	pm, _ := s.projetMission(m)
-	retirables := envsRetirables(m, c, pm.Nom) // M262b: before the stop too
-	if m.Etat == "lancee" || m.Etat == "arret_demande" || m.Etat == "en_pause" {
-		if m, err = s.arreterMission(id, qui); err != nil {
-			return nil, err
-		}
-	}
-	var p Projet
-	if o.Projet { // checked again now: the stop may have taken a while
-		var non string
-		if p, non = s.projetSupprimable(m); non != "" {
+	retire := []string{"mission " + id}
+	if o.Projet {
+		p, non := s.projetSupprimable(m)
+		if non != "" {
 			return nil, erreurMission{http.StatusConflict, non}
 		}
-	}
-	retire := []string{"mission " + id}
-	for t := range tachesDeMission(m) {
-		taches[t] = true
-	}
-	s.revoquerJetons("mission supprimée", func(x SessionHub) bool { return x.Projet == prefixeMission+id || x.Mission != "" && taches[x.Mission] })
-	if s.approbations != nil {
-		l, _ := s.approbations.Liste()
-		for _, x := range l {
-			if x.Etat == "attente" && (x.Mission == id || x.Details["mission"] == id || x.Mission != "" && taches[x.Mission]) {
-				s.refuserAccordMission(x.ID, qui, "mission supprimée")
-			}
-		}
-	}
-	for t := range taches {
-		if s.arreterTache(t) {
-			attendreFinTache(t)
-		}
-		if x, ok := tacheMission(t); ok {
-			for _, srv := range x.Serveurs {
-				_ = os.Remove(filepath.Join(dossierTaches(srv), t+".json"))
-			}
-		}
-		_ = os.RemoveAll(dossierSessionTache(t))
-		retire = append(retire, "Servers task "+t)
-	}
-	if len(o.Serveurs) > 0 { // M262b: launched while the project and its environments still exist (lancerTache reads them)
-		for _, ec := range retirables {
-			if !slices.Contains(o.Serveurs, ec.Nom) {
-				continue
-			}
-			env, natif := pm.Nom+"/"+ec.Nom, modeNatif.Load()
-			t, err := s.lancerTache(couper(briefRetrait(c, ec, pm.Nom), maxTexteTache-1), ec.Serveurs, natif, env)
-			if err != nil {
-				s.ecrireAudit(LigneAudit{Type: "evenement", De: qui, Vers: "servers", Projet: pm.Nom, Mission: id, Action: "retrait du site impossible", Resultat: env + " : " + err.Error()})
-				return retire, erreurMission{http.StatusConflict, "The Servers task that removes the site could not start: delete again, or remove it from the Servers page"}
-			}
-			if natif {
-				s.ecrireAudit(LigneAudit{Type: "evenement", De: qui, Vers: "servers", Projet: pm.Nom, Action: "voie Serveurs sans barrière",
-					Resultat: t.ID + " (" + env + ", retrait du site d'une mission supprimée en mode Windows natif)"})
-			}
-			retire = append(retire, "site removal "+env+" (Servers task "+t.ID+")")
-		}
-	}
-	if o.Acces && s.acces != nil && p.Nom == "" {
-		p, _ = s.projetMission(m)
-	}
-	if o.Acces && p.Nom != "" {
-		n := 0
-		for _, a := range s.accesDonnes(m, p.Nom) {
-			if s.acces.Retirer(p.Nom, a.ID, a.Pour) == nil {
-				retire, n = append(retire, "access "+a.Entree+" ("+a.Pour+")"), n+1
-			}
-		}
-		if n > 0 && !o.Projet {
-			_, _ = s.injecterAcces(p, nil)
-		}
-	}
-	if o.Projet {
 		if _, err := os.Lstat(p.Dossier); err == nil {
 			// a pilot just stopped (or an indexer) releases its files a few seconds later: Windows refuses until then
 			err := corbeilleProjet(p.Dossier)
@@ -304,21 +118,20 @@ func (s *Serveur) supprimerMission(id, qui string, o OptionsSuppression) ([]stri
 				err = corbeilleProjet(p.Dossier)
 			}
 			if err != nil {
-				return retire, erreurMission{http.StatusInternalServerError, "Cannot send the project's folder to the recycle bin: close what uses it, then delete again"}
+				return nil, erreurMission{http.StatusInternalServerError, "Cannot send the project's folder to the recycle bin: close what uses it, then delete again"}
 			}
 		}
 		if err := s.retirerProjet(p); err != nil {
-			return retire, err
+			return nil, err
 		}
 		s.oublierGitHub(p)
 		retire = append(retire, "project "+p.Nom, "folder "+p.Dossier+" (recycle bin)")
 	}
-	verrouMissions.Lock() // a follower or a tool writing it now finds it gone (modifierMission never brings it back)
+	s.revoquerJetons("mission supprimée", func(x SessionHub) bool { return x.Projet == prefixeMission+id })
 	f := filepath.Join(dossierMissions(), id+".json")
 	err = retirerFichier(f) // Windows: the module reading it now (lireMissions at each hub request) holds it for a moment
 	_ = os.Remove(f + ".ancien")
 	_ = os.RemoveAll(dossierSessionMission(id))
-	verrouMissions.Unlock()
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return retire, err
 	}
@@ -327,92 +140,4 @@ func (s *Serveur) supprimerMission(id, qui string, o OptionsSuppression) ([]stri
 	return retire, nil
 }
 
-// envsRetirables (M262b): c's environments with servers where m prepared (its Servers lane) or deployed something.
-func envsRetirables(m Mission, c CarteMission, projet string) []EnvCarte {
-	var l []EnvCarte
-	for _, ec := range c.Envs {
-		env := projet + "/" + ec.Nom
-		if len(ec.Serveurs) == 0 || projet == "" {
-			continue
-		}
-		if slices.ContainsFunc(m.Voies, func(v VoieMission) bool { return v.Module == "servers" && v.Ref != "" && v.Env == env }) ||
-			slices.ContainsFunc(m.Journal, func(e EntreeJournal) bool {
-				// prep: the follower launched it; suspendue: a pause took the task off its lane; deploi: a deployment
-				return e.ID == "prep:"+env && e.Niveau != "erreur" ||
-					(strings.HasPrefix(e.ID, "deploi:") || strings.HasPrefix(e.ID, "suspendue:")) && len(e.Params) > 0 && e.Params[0] == ec.Nom
-			}) {
-			l = append(l, ec)
-		}
-	}
-	return l
-}
-
-// briefRetrait (M262b): what the Servers task removes for ec's site, and what it never touches.
-func briefRetrait(c CarteMission, ec EnvCarte, projet string) string {
-	hote := hoteURL(ec.URL)
-	l := []string{"The owner deleted the mission \"" + c.Titre + "\" and asks to remove its site " + ec.URL + " (environment " + ec.Nom + " of the project " + projet +
-		") from these servers. Look first at what is there, then propose the whole removal as one plan for the owner to accept, and do it once accepted:",
-		"- stop and remove the Docker Compose project " + nomCompose(projet, ec.Nom) + " (its containers, networks and volumes), if it exists;",
-		"- delete the deployment folder " + baseDeploiement(projet, ec.Nom) + ";",
-		"- delete /etc/caddy/sites/" + hote + ".caddy, then caddy validate and reload caddy;",
-		"- delete the deploy key file /etc/athanor/deploy/" + nomProjetServeur(projet) + " unless another environment of this project still deploys on the server;",
-		"- what was installed for this site alone (its system user, its web server site, its certificate, its runtime if nothing else uses it);"}
-	if f := fournisseurCoche(hote, c.Acces); f != "" {
-		l = append(l, "- the DNS record of "+hote+" at the provider "+f+" (its token is given);")
-	} else {
-		l = append(l, "- the DNS record of "+hote+" if its provider can be reached with the tools given; otherwise say that it stays;")
-	}
-	return strings.Join(append(l, "Never touch the server itself (its system, its SSH access and firewall rules, its users other than the site's), its keys, nor any other site or project."), "\n")
-}
-
-// tachesDeMission: the Servers tasks m launched: its lanes', and those its journal names (suspended or ended since).
-func tachesDeMission(m Mission) map[string]bool {
-	l := map[string]bool{}
-	for _, v := range m.Voies {
-		if v.Module == "servers" && v.Ref != "" {
-			l[v.Ref] = true
-		}
-	}
-	for _, e := range m.Journal {
-		for _, debut := range []string{"suspendue:", "tache:", "plan:"} {
-			if r, ok := strings.CutPrefix(e.ID, debut); ok {
-				if r, _, _ = strings.Cut(r, ":"); idMissionValide.MatchString(r) {
-					l[r] = true
-				}
-			}
-		}
-	}
-	return l
-}
-
 var pauseCorbeille = 500 * time.Millisecond // between two tries of the recycle bin (10 s in all)
-
-var errMissionSupprimee = errors.New("the mission was deleted by the owner")
-
-// attendreFinTache: a stopped task's goroutine has written its last state (2 s at most), so its file is not written
-// again once deleted.
-func attendreFinTache(id string) {
-	for i := 0; i < 100; i++ {
-		tachesEnCours.Lock()
-		_, ok := tachesEnCours.m[id]
-		tachesEnCours.Unlock()
-		if !ok {
-			return
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-}
-
-// suppressionApresJalon: called by the follower once a mission asked to be deleted after its milestone is paused.
-func (s *Serveur) suppressionApresJalon(m Mission) bool {
-	if m.Suppression == nil || m.Etat != "en_pause" {
-		return false
-	}
-	o := *m.Suppression
-	if _, err := s.supprimerMission(m.ID, "hub", o); err != nil && o.Projet { // the folder refused since: the mission still goes
-		o.Projet = false
-		_, err = s.supprimerMission(m.ID, "hub", o)
-		return err == nil
-	}
-	return true
-}

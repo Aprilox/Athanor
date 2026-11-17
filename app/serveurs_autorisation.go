@@ -13,7 +13,6 @@ package main
 // keep the plan rules of serveurs_plans.go. "ignorer" is chosen only with a password and the window unlocked.
 
 import (
-	"cmp"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -73,31 +72,15 @@ func modeAutorisation(x SessionHub, id string) string {
 		if !propre {
 			return ""
 		}
-		// M280: a task for a project follows the project's mode. Its own choice comes first; without one, a mission's
-		// Servers task still follows its mission (M271, until the missions leave in M302)
+		// M280, M302: a task for a project (an old mission's too) follows the project's mode
 		projet, _, _ := strings.Cut(env, "/")
-		mission := cmp.Or(missionDeTache(x.Mission), x.Mission)
-		if _, err := lireMission(mission); err == nil && mission != "" && (projet == "" || reglagePropre(lireConfig(), projet, "permission") == "") {
-			return modeMission(mission)
-		}
 		if m := modeProjet(projet); projet != "" && m != "manuel" {
 			return m
 		}
-		return "" // Manual: the plan rules of serveurs_plans.go, as for a mission
+		return "" // Manual: the plan rules of serveurs_plans.go
 	}
 	srv, _ := serveurProd(id)
 	return modeServeur(srv)
-}
-
-// missionDeTache (M275b): the mission whose Servers lane is task id, "" for none (a task's session carries the task's
-// own id, not its mission's).
-func missionDeTache(id string) string {
-	for _, m := range lireMissions() {
-		if slices.ContainsFunc(m.Voies, func(v VoieMission) bool { return v.Module == "servers" && v.Ref == id }) {
-			return m.ID
-		}
-	}
-	return ""
 }
 
 // modeServeur: srv's mode, manuel when never chosen.
@@ -124,20 +107,6 @@ func (s *Serveur) sautIgnorer(projet, env, agent, quoi string) bool {
 	s.ecrireAudit(LigneAudit{Type: "evenement", De: agent, Vers: "hub", Projet: projet, Env: env, Agent: agent,
 		Action: quoi, Resultat: "sans demander : mode Ignorer du projet"})
 	return true
-}
-
-// modeMission (M271): the mode of mission id's Servers lane, its card's or else Settings › Permissions (missions);
-// "" for Manual or none: the plan rules of serveurs_plans.go (reads run, each change in a plan the owner accepts).
-func modeMission(id string) string {
-	m, err := lireMission(id)
-	var c CarteMission
-	if err != nil || json.Unmarshal(m.Carte, &c) != nil {
-		return ""
-	}
-	if mode := cmp.Or(c.Permissions, lireConfig().PermissionsUsage["missions"]); mode != "manuel" && slices.Contains(modesAutorisation, mode) {
-		return mode
-	}
-	return ""
 }
 
 // choixIgnorer (M271): mode is a known mode; "ignorer" only from Athanor's window, confirmed, with the password

@@ -113,15 +113,14 @@ func (s *Serveur) briefPreparationProjet(p Projet, e Environnement) string {
 
 // preparerProjet (M283): the servers of p's deployment are prepared by a Servers task as soon as its plan holds a
 // milestone, once per fingerprint (servers, address, deployment plan) noted in the relay's record: a restart
-// launches nothing again, a change of one of them prepares again. Nothing without a server or a moment, nor
-// while a mission covers the project (its own Servers lane prepares, until M302). The first look at a project
+// launches nothing again, a change of one of them prepares again. Nothing without a server or a moment. The first look at a project
 // already deployed only learns: its servers serve it.
 func (s *Serveur) preparerProjet(p Projet) {
 	if s.acces == nil {
 		return
 	}
 	e := s.acces.Environnements(p.Nom)[s.envJalon(p.Nom)]
-	if len(e.Serveurs) == 0 || e.Moment == "" || !planPret(p) || missionSurProjet(p.Nom) || projetBloque("dev", p.Nom) != "" {
+	if len(e.Serveurs) == 0 || e.Moment == "" || !planPret(p) || projetBloque("dev", p.Nom) != "" {
 		return
 	}
 	serveurs := slices.Sorted(slices.Values(e.Serveurs))
@@ -184,7 +183,7 @@ func (s *Serveur) premierDeploiementProjet(p Projet, forcee bool) (TacheServeurs
 	env := s.envJalon(p.Nom)
 	e, r := s.acces.Environnements(p.Nom)[env], lireRelais()[p.Nom]
 	switch {
-	case len(e.Serveurs) == 0 || e.Deploiement != nil || missionSurProjet(p.Nom):
+	case len(e.Serveurs) == 0 || e.Deploiement != nil:
 		return TacheServeurs{}, errRienAPreparer
 	case tacheEnCoursID(r.Premier):
 		t, _ := tacheMission(r.Premier)

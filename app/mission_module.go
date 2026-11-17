@@ -19,26 +19,8 @@ func (moduleMissions) Pages() []PageModule {
 	return []PageModule{{Hash: "#missions", Ordre: 10, Icone: "missions", Libelle: "Old missions", Fils: []string{"#mission"}}}
 }
 
-// Elements: a mission that waits for the vault's infra key and a launch that stopped are in the bell.
-func (moduleMissions) Elements(s *Serveur) []ElementHub {
-	var out []ElementHub
-	for _, m := range lireMissions() {
-		if missionSuivie(m.Etat) && s.attendCoffre(m) { // I3: after a restart, until the infra key opens
-			out = append(out, ElementHub{ID: m.ID, Titre: titreMission(m), Etat: "actif", Lien: "#missions",
-				Attente: &AttenteElement{Raison: "The mission waits for the vault to be unlocked", Page: "#missions"}})
-		}
-		// a launch stopped by a failed step (mission_lancer.go): its reason, until the owner dismisses it
-		if e := raisonEchec(m); echecLancement(m) {
-			var raison any = e.Detail
-			if e.Message != nil { // B87: said in the page's language
-				raison = e.Message
-			}
-			out = append(out, ElementHub{ID: m.ID, Titre: titreMission(m), Etat: "termine", Lien: "#missions",
-				Attente: &AttenteElement{Raison: "The launch of the mission stopped: {0}", Args: []any{raison}, Page: "#missions"}})
-		}
-	}
-	return out
-}
+// Elements: an old mission is no longer followed, nothing of it rings.
+func (moduleMissions) Elements(*Serveur) []ElementHub { return nil }
 
 func (moduleMissions) Tutoriel() []EtapeTutoriel { return nil }
 

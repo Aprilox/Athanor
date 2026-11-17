@@ -121,23 +121,16 @@ func TestDistanceToutesRoutes(t *testing.T) {
 		{"GET", "/api/serveurs/local/sftp", true}, // this computer.s files (SFTP page, Local panel): refused unless the remote terminal is allowed
 		{"POST", "/api/serveurs/local/sftp", true},
 		{"GET", "/api/serveurs/x/sftp/y/texte", true},
-		{"GET", "/api/missions", false}, // the missions, read from a device (M150)
+		// M302: the old missions are only read and deleted; every other mission route is gone, so refused
+		{"GET", "/api/missions", false},
 		{"GET", "/api/missions/x", false},
+		{"DELETE", "/api/missions/x", false},
 		{"POST", "/api/missions/x", true},
 		{"GET", "/api/missions/x/y", true},
-		{"POST", "/api/missions", true},             // a mission is created on the PC (M155)
-		{"POST", "/api/missions/x/modifier", false}, // changed, answered and cancelled from an unlocked device
-		{"POST", "/api/missions/x/ressources", false},
-		{"POST", "/api/missions/x/repondre", false},
-		{"POST", "/api/missions/x/annuler", false},
-		{"POST", "/api/missions/x/lancer", false},
-		{"GET", "/api/missions/x/annuler", true},
-		{"POST", "/api/missions/x/supprimer", false}, // deleted as cancelled (note 10h04), the preview read
-		{"GET", "/api/missions/x/suppression", false},
-		{"POST", "/api/missions/vider", false},
-		{"GET", "/api/missions/vider", true},       // only the emptying is allowed by that exact path
-		{"POST", "/api/missions/x/detruire", true}, // invented: refused by default
-		{"POST", "/api/missions/x/y/annuler", true},
+		{"POST", "/api/missions", true},
+		{"POST", "/api/missions/x/lancer", true},
+		{"POST", "/api/missions/x/supprimer", true},
+		{"POST", "/api/missions/vider", true},
 		{"POST", "/api/serveurs/x/taches", true}, // launched and stopped on this computer only
 		{"POST", "/api/serveurs/x/taches/t/arreter", true},
 		{"POST", "/api/serveurs/x/taches/t/main", true}, // Take over (M231f)

@@ -241,11 +241,6 @@ func outilDemanderDeploiement(s *Serveur, x SessionHub, args json.RawMessage) (s
 	if !s.acces.EnvConnu(x.Projet, env) {
 		return "", errors.New("unknown environment: one of the project's environments (lire_environnements)")
 	}
-	if s.prudenceRenforcee(x.Projet, env) && slices.ContainsFunc(lireMissions(), func(m Mission) bool { // R6: the mission's relay alone asks for prod
-		return missionSuivie(m.Etat) && slices.ContainsFunc(m.Voies, func(v VoieMission) bool { return v.Module == "dev" && v.Ref == x.Projet })
-	}) {
-		return "", errors.New("a mission covers this project: its prod is deployed by the mission once dev is checked, after the owner's accord; do not ask for it, go on with your work")
-	}
 	if len(commit) == 64 && strings.Trim(commit, "0123456789abcdef") == "" { // B81: the engine archives SHA-1 commits only
 		return "", errors.New("this commit is a SHA-256 hash: Athanor's engine deploys only repositories with SHA-1 commits (40 hexadecimal characters); nothing was asked")
 	}
@@ -257,7 +252,7 @@ func outilDemanderDeploiement(s *Serveur, x SessionHub, args json.RawMessage) (s
 		return "", errors.New(env + " has no server yet: the owner adds one in the project's Environments panel; go on with work that does not need it")
 	}
 	if e.Deploiement == nil {
-		return "", errors.New(env + " has no deployment method yet: a first deployment is made by the mission's Servers lane (or a Servers task the owner launches from the environment's card); never ask for a server's access, go on with work that does not need it")
+		return "", errors.New(env + " has no deployment method yet: the first deployment is made by Athanor's own Servers task (started at the project's deployment moment, or by the owner from the Deployment tab); never ask for a server's access, go on with work that does not need it")
 	}
 	hote := x.Projet
 	if u, err := url.Parse(e.URL); err == nil && u.Hostname() != "" {
@@ -297,9 +292,7 @@ func outilDemanderDeploiement(s *Serveur, x SessionHub, args json.RawMessage) (s
 	}
 	if accord, raison := s.politiqueDeploiement(x.Projet, env, len(fichiers) > 0); !accord { // C69: changed build or container files are destructive
 		return accepte(raison, "")
-	} else if x.Mission != "" && modeMission(x.Mission) == "ignorer" { // M271: the owner chose to be asked nothing
-		return accepte("the mission's Ignore permissions mode, instead of: "+raison, "")
-	} else if x.Mission == "" && modeProjet(x.Projet) == "ignorer" { // M285: the same for a project without a mission
+	} else if modeProjet(x.Projet) == "ignorer" { // M285: the owner chose to be asked nothing
 		return accepte("sans demander : mode Ignorer du projet, instead of: "+raison, "")
 	}
 	y, etat, err := s.approbations.Reprendre(ap)

@@ -1,6 +1,6 @@
 package main
 
-// The Missions API: the former missions are read (M301: none is created, changed or answered any more).
+// The Missions API (M302): the old missions are read and deleted, nothing else (deletion: mission_supprimer.go).
 
 import (
 	"errors"
@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"time"
 )
 
 // erreurMission: a refusal with its HTTP code (409: the mission's state does not allow it, 404: unknown question).
@@ -40,10 +39,6 @@ func (s *Serveur) erreurMissionHTTP(w http.ResponseWriter, err error) {
 	}
 }
 
-func evenementMission(etat, detail string) EvenementMission {
-	return EvenementMission{T: time.Now().UTC().Format(formatCree), Etat: etat, Detail: detail}
-}
-
 // tacheMission: the Servers task id wherever its server is (a running one as it is now).
 func tacheMission(id string) (TacheServeurs, bool) {
 	if !idMissionValide.MatchString(id) {
@@ -58,8 +53,9 @@ func tacheMission(id string) (TacheServeurs, bool) {
 	return TacheServeurs{}, false
 }
 
-// voiesEnDirect: m's lanes with their state read now (and its frozen fields, M266), on the project's pilot (dev: travaille, termine, arrete) or
-// on the Servers task (its state and server); a project or task gone is "inconnu".
+// voiesEnDirect: m's lanes with their state read now, on the project's pilot (dev: travaille, termine, arrete) or
+// on the Servers task (its state and server); a project or task gone is "inconnu". A lane on a remote Athanor
+// (dev_distant) is no longer asked: it keeps what the file says.
 func (s *Serveur) voiesEnDirect(m Mission) Mission {
 	m.Voies = slices.Clone(m.Voies)
 	for i := range m.Voies {
@@ -81,8 +77,6 @@ func (s *Serveur) voiesEnDirect(m Mission) Mission {
 			if ok {
 				s.avancementVoie(v, p, e.JalonEnCours)
 			}
-		case moduleDevDistant:
-			s.voieDistanteEnDirect(v)
 		case "servers":
 			if t, ok := tacheMission(v.Ref); ok && len(t.Serveurs) > 0 {
 				v.Actuel, v.Serveur = t.Etat, t.Serveurs[0]
@@ -132,12 +126,12 @@ func (s *Serveur) apiMissions(w http.ResponseWriter, _ *http.Request) {
 	s.ecrireJSON(w, map[string]any{"missions": l})
 }
 
-// apiMission: GET /api/missions/{id}; unknown, damaged or hostile id → 404.
+// apiMission: GET /api/missions/{id}, with what its deletion can also remove; unknown, damaged or hostile id → 404.
 func (s *Serveur) apiMission(w http.ResponseWriter, r *http.Request) {
 	m, err := lireMission(r.PathValue("id"))
 	if err != nil {
 		s.erreur(w, http.StatusNotFound, err.Error())
 		return
 	}
-	s.ecrireJSON(w, map[string]any{"mission": s.voiesEnDirect(m)})
+	s.ecrireJSON(w, map[string]any{"mission": s.voiesEnDirect(m), "suppression": s.apercuSuppression(m)})
 }

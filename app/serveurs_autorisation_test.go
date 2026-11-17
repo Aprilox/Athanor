@@ -183,44 +183,16 @@ func TestAutorisationModes(t *testing.T) {
 	if !commande("systemctl restart caddy") { // the rule still holds outside the panel's Manual mode
 		t.Error("the rule no longer lets a sheet's task change the server")
 	}
-	// M271: a mission's Servers task follows the mission's mode: its card's, else Settings › Permissions (missions); Manual: the plan rules
+	// M302: an old mission on disk gives its Servers task nothing any more: whatever its card says, the plan rules
+	// hold (a task for a project follows the project's mode: TestModeProjet)
 	_ = os.RemoveAll(dossierMissions())
 	t.Cleanup(func() { _ = os.RemoveAll(dossierMissions()) })
-	carte := func(mode string) {
-		t.Helper()
-		b, _ := json.Marshal(CarteMission{Permissions: mode})
-		if err := enregistrerMission(Mission{ID: "m244fm", Etat: "lancee", Politique: "prod", Carte: b}); err != nil {
-			t.Fatal(err)
-		}
-	}
-	carte("ignorer")
-	if !commande("rm -rf /srv/m271") || plan("rm -rf /srv/m271b") != "acceptee" {
-		t.Error("a mission in ignorer: a dangerous command or plan waited for the owner")
-	}
-	carte("auto")
-	if !commande("uptime") || commande("rm -rf /srv/m271") || plan("rm -rf /srv/m271") != "attente" {
-		t.Error("a mission in auto: wrong decisions")
-	}
-	carte("")
-	s.config.PermissionsUsage = map[string]string{"missions": "ignorer"}
-	if err := ecrireConfig(s.config); err != nil {
-		t.Fatal(err)
-	}
-	if !commande("rm -rf /srv/m271c") {
-		t.Error("a mission without a mode does not take Settings › Permissions")
-	}
-	carte("manuel")
-	if !commande("uptime") || commande("rm -rf /srv/m271") {
-		t.Error("a mission in manuel does not keep the plan rules")
-	}
-	// M275b: as Athanor launches it (lancerTacheDans), a task's session carries the task's own id: its mission is the one
-	// whose Servers lane it is
 	bc, _ := json.Marshal(CarteMission{Permissions: "ignorer"})
-	if err := enregistrerMission(Mission{ID: "m275bm", Etat: "lancee", Politique: "prod", Carte: bc, Voies: []VoieMission{{Module: "servers", Ref: "m244f"}}}); err != nil {
+	if err := enregistrerMission(Mission{ID: "m244fm", Etat: "lancee", Politique: "prod", Carte: bc, Voies: []VoieMission{{Module: "servers", Ref: "m244f"}}}); err != nil {
 		t.Fatal(err)
 	}
-	if m := modeAutorisation(SessionHub{Mission: "m244f", Hache: hacherJeton(jeton)}, srv.ID); m != "ignorer" {
-		t.Errorf("a mission's task as launched: mode %q, want its mission's ignorer", m)
+	if m := modeAutorisation(SessionHub{Mission: "m244f", Hache: hacherJeton(jeton)}, srv.ID); m != "" || !commande("uptime") || commande("rm -rf /srv/m271") {
+		t.Errorf("an old mission in ignorer still loosens its Servers task: mode %q", m)
 	}
 	// the audit names the mode, never more than the class
 	b := journalAuditTexte(t)

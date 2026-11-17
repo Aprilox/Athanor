@@ -365,12 +365,6 @@ func (a *Acces) DefinirEnvironnement(projet, nom string, e Environnement) error 
 	})
 }
 
-// definirAncien: DefinirEnvironnement as before M281, a second name included: an older mission still writes
-// the several environments of its card, until the missions go (M302), and the tests write older projects.
-func (a *Acces) definirAncien(projet, nom string, e Environnement) error {
-	return a.modifier(func(f *fichierAcces) error { return poserEnvironnement(f, projet, nom, e) })
-}
-
 // poserEnvironnement writes environment nom in f, whatever the others.
 func poserEnvironnement(f *fichierAcces, projet, nom string, e Environnement) error {
 	p := projetDe(f, projet)
@@ -627,7 +621,7 @@ func (s *Serveur) apiDeploiementProjet(w http.ResponseWriter, r *http.Request) {
 		d.Moment = "livraison"
 	}
 	s.ecrireJSON(w, map[string]any{"projet": projet, "courant": courant, "deploiement": d, "sites": envs,
-		"deploiements": s.deploiementsAffiches(projet), "sante": s.vueSante(projet), "relais": s.etatRelais(projet), "prudence": s.envsPrudents(projet, envs)})
+		"deploiements": s.deploiementsAffiches(projet), "sante": s.vueSante(projet), "relais": s.etatRelais(projet), "prudence": s.envsPrudents(projet, envs), "anciens": s.anciensSitesProduction(projet)})
 }
 
 // DeploiementDemande: what the Deployment tab or a card of the home sends for the project's one deployment.

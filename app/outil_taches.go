@@ -30,12 +30,12 @@ const (
 var reJalon = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,19}$`)
 
 // M273: a server's access is never asked by a project (its texts or its secret names): the Studio builds, the
-// mission's Servers lane deploys with the vault's servers and keys.
+// project's own deployment (Deployment tab) deploys with the vault's servers and keys.
 var (
 	reAccesServeur    = regexp.MustCompile(`(?i)\bssh\b|private key|cl[ée]f? priv[ée]e|user@host|utilisateur@h[ôo]te|\b[a-z0-9_.-]+@\d{1,3}(\.\d{1,3}){3}\b`)
 	reSecretServeur   = regexp.MustCompile(`(^|_)SSH(_|$)|PRIVATE_KEY|(DEPLOY|SERVER|SERVEUR|VPS)_(HOST|USER|KEY|PORT|IP|PASSWORD)`)
 	refusAccesServeur = "a server's access (an SSH address, user@host, a port, a private key) is never asked by a project: " +
-		"the deployment is the Athanor mission's Servers lane, with the servers and keys of the vault. Leave the project " +
+		"the deployment is Athanor's job (the project's Deployment tab), with the servers and keys of the vault. Leave the project " +
 		"ready to deploy (build, tests, a deployment file when useful) and go on with the rest; nothing was asked"
 )
 

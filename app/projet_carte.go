@@ -14,7 +14,7 @@ import (
 type ProjetCarte struct {
 	Nom     string `json:"nom"`
 	Nouveau bool   `json:"nouveau"`
-	Distant string `json:"distant,omitempty"` // worked out by validerCarte: "remote id/project" of a nom@instance (mission_distant.go)
+	Distant string `json:"distant,omitempty"` // worked out by the validation: "remote id/project" of a nom@instance
 	// M254, a new project only, set by the owner (POST /projet, never the agent): its folder ("" = next to the
 	// other projects), its GitHub repository (github: "" none, lier an existing OWNER/NAME, creer a private name)
 	Dossier string `json:"dossier,omitempty"`

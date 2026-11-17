@@ -68,8 +68,8 @@ func main() {
 	s := nouveauServeur(config)
 	s.cleAcces = aleatoire(24) // only the windows Athanor opens can use the interface (acces.go)
 	s.demarrerProjetsAuto()
-	s.surveillerVerrouAuto() // the window locks itself after the owner's inactivity (verrou_auto.go)
-	s.reprendreMissions()    // after the vault and the tokens: the launched missions followed again (mission_suivi.go)
+	s.refuserLancementsMission() // M302: what an old mission still asked the owner is refused, with its reason
+	s.surveillerVerrouAuto()     // the window locks itself after the owner's inactivity (verrou_auto.go)
 	if config.MDNS {
 		_ = s.demarrerMDNS() // the owner turned the local network discovery on (hub_mdns.go)
 	}

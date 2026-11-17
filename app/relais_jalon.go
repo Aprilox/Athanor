@@ -114,24 +114,11 @@ func (s *Serveur) relaisActif(projet string) bool { return s.momentRelais(projet
 // Production one, validerEnvironnement refuses it).
 func (s *Serveur) envJalon(projet string) string { return s.deploiementProjet(projet) }
 
-// premierParMission (M275b, until M302): no method yet and a launched mission covers the project: its Servers lane
-// makes the first deployment (premierDeploiementMission), a relay failure would ring for nothing.
-func (s *Serveur) premierParMission(projet string) bool {
-	return s.acces.Environnements(projet)[s.envJalon(projet)].Deploiement == nil && missionSurProjet(projet)
-}
-
-// missionSurProjet: a launched mission covers projet (until M302).
-func missionSurProjet(projet string) bool {
-	return slices.ContainsFunc(lireMissions(), func(m Mission) bool {
-		return missionSuivie(m.Etat) && slices.ContainsFunc(m.Voies, func(v VoieMission) bool { return v.Module == "dev" && v.Ref == projet })
-	})
-}
-
 // noterJalonRelais: a milestone just done → its HEAD waits to be deployed (never twice the same milestone), when
 // the project is deployed after each milestone (M282: not when it is deployed at delivery).
 func (s *Serveur) noterJalonRelais(p Projet, jalon string, quand time.Time) {
 	r := lireRelais()[p.Nom]
-	if s.momentRelais(p.Nom) != "jalon" || r.Jalon == jalon || s.premierParMission(p.Nom) {
+	if s.momentRelais(p.Nom) != "jalon" || r.Jalon == jalon {
 		return
 	}
 	s.attendreRelais(p, r, jalon, "relais après jalon", quand)
@@ -150,7 +137,7 @@ func (s *Serveur) noterLivraison(p Projet, quand time.Time) {
 	premier := !r.LivraisonVue
 	r.LivraisonVue, r.Livraison = true, v
 	ecrireRelais(p.Nom, r)
-	if premier || v == "" || !s.relaisActif(p.Nom) || s.premierParMission(p.Nom) {
+	if premier || v == "" || !s.relaisActif(p.Nom) {
 		return
 	}
 	sha, env, servi := sortieGit(p.Dossier, "rev-parse", "HEAD"), s.envJalon(p.Nom), ""
@@ -199,7 +186,7 @@ func (s *Serveur) avancerRelais(p Projet, maintenant time.Time) <-chan struct{} 
 	if r.Etat != "attente" && !(sansMethodeRelais(r) && e.Deploiement == nil) {
 		return nil
 	}
-	if e.Moment == "" || len(e.Serveurs) == 0 || projetBloque("dev", p.Nom) != "" { // a paused mission: the relay waits for Resume
+	if e.Moment == "" || len(e.Serveurs) == 0 || projetBloque("dev", p.Nom) != "" { // a paused project: the relay waits for Start
 		return nil
 	}
 	if e.Deploiement == nil {
@@ -261,7 +248,7 @@ func (s *Serveur) etatRelais(projet string) *RelaisJalon {
 		return &r
 	case len(e.Serveurs) == 0 && r.ID == "":
 		return nil // no server: nothing to say (a deployment made before its server was unlinked stays readable)
-	case len(e.Serveurs) > 0 && e.Deploiement == nil && !missionSurProjet(projet) && (e.Moment == "" || r.Etat == "a_preparer" || sansMethodeRelais(r)):
+	case len(e.Serveurs) > 0 && e.Deploiement == nil && (e.Moment == "" || r.Etat == "a_preparer" || sansMethodeRelais(r)):
 		return &RelaisJalon{Etat: "a_preparer", Jalon: r.Jalon, Commit: r.Commit, Date: r.Date}
 	case e.Moment == "" || !ok || r.Etat == "" || r.Etat == "a_preparer":
 		return nil // nothing relayed yet (a record may only hold what was learnt of the deliveries)
@@ -301,6 +288,45 @@ func (s *Serveur) alertesRelais() []AlerteHub {
 	return out
 }
 
+// anciensSitesProduction (M302): the sites of projet that are not its deployment, marked Production and deployed
+// before: a mission put them online, nothing does any more until the owner chooses one as the project's deployment.
+func (s *Serveur) anciensSitesProduction(projet string) []string {
+	var out []string
+	courant := s.deploiementProjet(projet)
+	for nom, e := range s.acces.Environnements(projet) {
+		if nom != courant && e.Production && len(historiqueDeploiements(projet, nom)) > 0 {
+			out = append(out, nom)
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
+// texteAncienSite: what the Deployment tab and the bell say of such a site ({0}: its address).
+const texteAncienSite = "{0} was put online by a mission: make it the project's deployment to go on deploying it."
+
+// alertesAnciensSites: the bell's information (Info: never shown as a failure) for each of them.
+func (s *Serveur) alertesAnciensSites() []AlerteHub {
+	s.mu.Lock()
+	projets := append([]Projet{}, s.config.Projets...)
+	s.mu.Unlock()
+	out := []AlerteHub{}
+	for _, p := range projets {
+		if p.Archive || s.acces == nil {
+			continue
+		}
+		envs := s.acces.Environnements(p.Nom)
+		for _, nom := range s.anciensSitesProduction(p.Nom) {
+			e := envs[nom]
+			empreinte := "ancien-site-" + p.Nom + "-" + nom
+			out = append(out, AlerteHub{Empreinte: empreinte, Module: "dev", Element: p.Nom, Titre: p.Nom, Info: true,
+				Raison: texteAncienSite, Args: []any{cmp.Or(hoteEnv(&e), nom)}, Actions: []ActionAlerte{
+					{ID: "voir", Libelle: "View", Page: "acces", Projet: p.Nom}, ignorerOuRouvrir(empreinte, true)}})
+		}
+	}
+	return out
+}
+
 // accordBuildRelais (C68): ticking "Deploy to dev at each milestone" accepts the deployments, not a build whose
 // files changed since the last deployment the owner accepted: for those, the relay asks the owner once and
 // waits (attendre); accorde says the owner accepted this one. Refused or expired: the relay fails, said.
@@ -320,6 +346,9 @@ func (s *Serveur) accordBuildRelais(p Projet, e Environnement, r *RelaisJalon) (
 	}
 	ap := Approbation{Projet: p.Nom, Env: env, Agent: "relais", Action: actionDeploiement, Raison: raison,
 		Details: map[string]string{"commit": r.Commit, "hote": hoteEnv(&e), "serveurs": listeServeursAccord(e.Serveurs), "fichiers_build": liste}}
+	if c := s.etatCoffre(); len(e.Serveurs) > 0 && c.MotDePasse && !c.Infra { // R7: the infra keys locked, the accord would be used for a deployment that cannot run
+		return false, true
+	}
 	y, etat, err := s.approbations.Reprendre(ap)
 	switch {
 	case err != nil || etat == "attente":

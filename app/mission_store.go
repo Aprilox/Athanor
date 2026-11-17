@@ -1,12 +1,10 @@
 package main
 
-// Missions: one JSON file per mission in dossierAthanor()/hub/missions (0600, atomic writes); a damaged
-// file is skipped on reading, never fatal (ARCHITECTURE §Missions et orchestrateur).
+// Old missions (M302): one JSON file per mission in dossierAthanor()/hub/missions, written by Athanor 3.0.0 and
+// earlier. They are only read and, when the owner asks, deleted: never written again, never followed. A damaged
+// file is skipped on reading, never fatal.
 
 import (
-	"bytes"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"os"
@@ -15,12 +13,8 @@ import (
 	"runtime"
 	"slices"
 	"strings"
-	"sync"
 	"time"
 )
-
-// The states of a mission, in their usual order.
-var etatsMission = []string{"preparation", "proposee", "acceptee", "lancee", "arret_demande", "en_pause", "terminee", "arretee", "annulee", "echec"}
 
 // VoieMission: one lane of a launched mission (module dev or servers, ref = project or Servers task id).
 type VoieMission struct {
@@ -59,35 +53,21 @@ type EvenementMission struct {
 }
 
 type Mission struct {
-	ID          string              `json:"id"`
-	Phrase      string              `json:"phrase"` // masked by masquerSecrets, at most 4000 characters
-	Mentions    Mentions            `json:"mentions"`
-	Etat        string              `json:"etat"`
-	Carte       json.RawMessage     `json:"carte,omitempty"` // the mission card (CarteMission, M152)
-	Politique   string              `json:"politique"`       // prod | tout | autonome
-	Voies       []VoieMission       `json:"voies"`
-	Questions   []QuestionMission   `json:"questions"`
-	RefusCarte  *MessageMoteur      `json:"refus_carte,omitempty"` // M258: why the last card was refused, said if none follows
-	Historique  []EvenementMission  `json:"historique"`
-	Cree        string              `json:"cree"`
-	Session     string              `json:"session,omitempty"`      // the orchestrator's Claude session, resumed with --resume
-	Relais      *RelaisMission      `json:"relais,omitempty"`       // once launched (mission_suivi.go)
-	Journal     []EntreeJournal     `json:"journal,omitempty"`      // at most maxJournalMission, the oldest first
-	Suppression *OptionsSuppression `json:"suppression,omitempty"`  // asked while running: done once the milestone ends
-	InfraJusqua string              `json:"infra_jusqua,omitempty"` // former option (removed, note 19h03 §3): still read from older missions, never used
-}
-
-// MarshalJSON: the mission with its card's print (empreinteCarte), which the window sends back to launch it (R3).
-func (m Mission) MarshalJSON() ([]byte, error) {
-	type brute Mission
-	e := ""
-	if len(m.Carte) > 0 {
-		e = empreinteCarte(m)
-	}
-	return json.Marshal(struct {
-		brute
-		Empreinte string `json:"empreinte,omitempty"`
-	}{brute(m), e})
+	ID          string             `json:"id"`
+	Phrase      string             `json:"phrase"` // masked by masquerSecrets, at most 4000 characters
+	Mentions    Mentions           `json:"mentions"`
+	Etat        string             `json:"etat"`
+	Carte       json.RawMessage    `json:"carte,omitempty"` // the mission card (CarteMission, M152)
+	Politique   string             `json:"politique"`       // prod | tout | autonome
+	Voies       []VoieMission      `json:"voies"`
+	Questions   []QuestionMission  `json:"questions"`
+	RefusCarte  *MessageMoteur     `json:"refus_carte,omitempty"` // M258: why the last card was refused, said if none follows
+	Historique  []EvenementMission `json:"historique"`
+	Cree        string             `json:"cree"`
+	Session     string             `json:"session,omitempty"`      // the orchestrator's Claude session, resumed with --resume
+	Relais      *RelaisMission     `json:"relais,omitempty"`       // where its relay stood
+	Journal     []EntreeJournal    `json:"journal,omitempty"`      // at most maxJournalMission, the oldest first
+	InfraJusqua string             `json:"infra_jusqua,omitempty"` // former option (removed, note 19h03 §3): still read from older missions, never used
 }
 
 var (
@@ -96,34 +76,6 @@ var (
 )
 
 func dossierMissions() string { return filepath.Join(dossierAthanor(), "hub", "missions") }
-
-func enregistrerMission(m Mission) error {
-	if !idMissionValide.MatchString(m.ID) || !slices.Contains(etatsMission, m.Etat) {
-		return errors.New("invalid mission")
-	}
-	if err := os.MkdirAll(dossierMissions(), 0o700); err != nil {
-		return err
-	}
-	b, _ := json.MarshalIndent(m, "", "  ")
-	return ecrireAtomique(filepath.Join(dossierMissions(), m.ID+".json"), b, 0o600)
-}
-
-// verrouMissions: the orchestrator's end and its tools (M154) change the same files.
-var verrouMissions sync.Mutex
-
-// modifierMission: mission id read, changed by f and written under verrouMissions (f's error: nothing written).
-func modifierMission(id string, f func(*Mission) error) (Mission, error) {
-	verrouMissions.Lock()
-	defer verrouMissions.Unlock()
-	m, err := lireMission(id)
-	if err == nil {
-		err = f(&m)
-	}
-	if err == nil {
-		err = enregistrerMission(m)
-	}
-	return m, err
-}
 
 // lireMission: a hostile id (path, dots, capitals) is unknown, as is a damaged file.
 func lireMission(id string) (Mission, error) {
@@ -166,30 +118,6 @@ const prefixeMission = "missions:"
 // dossierSessionMission: where the former orchestrator's session of mission id worked (removed with the mission).
 func dossierSessionMission(id string) string { return filepath.Join(dossierMissions(), id+"-session") }
 
-// lanceeUneFois: m was launched at least once (a "lancee" event in its history).
-func lanceeUneFois(m Mission) bool {
-	return slices.ContainsFunc(m.Historique, func(e EvenementMission) bool { return e.Etat == "lancee" })
-}
-
-// raisonEchec: the event that put m in echec (its last "echec" event; the changes after it are "modifiee").
-func raisonEchec(m Mission) EvenementMission {
-	for i := len(m.Historique) - 1; i >= 0; i-- {
-		if m.Historique[i].Etat == "echec" {
-			return m.Historique[i]
-		}
-	}
-	return EvenementMission{}
-}
-
-// questionOuverte: the mission's unanswered question, if any.
-func questionOuverte(m Mission) (QuestionMission, bool) {
-	i := slices.IndexFunc(m.Questions, func(q QuestionMission) bool { return q.Reponse == "" })
-	if i < 0 {
-		return QuestionMission{}, false
-	}
-	return m.Questions[i], true
-}
-
 // titreMission: the card's title, or the start of the owner's sentence before a card exists.
 func titreMission(m Mission) string {
 	var c struct{ Titre string }
@@ -199,16 +127,21 @@ func titreMission(m Mission) string {
 	return couper(m.Phrase, 80)
 }
 
-// memeAcces: the same vault entry (its name in any case) for the same target.
-func memeAcces(a, b AccesCarte) bool {
-	return strings.EqualFold(a.Entree, b.Entree) && a.Pour == b.Pour
+// RelaisMission: where the mission's relay stood (construction → dev_deploye → dev_verifie → accord_prod →
+// prod_deploye → termine) and what it stood on.
+type RelaisMission struct {
+	Etape           string `json:"etape"`
+	Commit          string `json:"commit,omitempty"`
+	DeploiementDev  string `json:"deploiement_dev,omitempty"`
+	DeploiementProd string `json:"deploiement_prod,omitempty"`
+	Accord          string `json:"accord,omitempty"`
 }
 
-// empreinteCarte (C77): the stored card (compacted) and the policy, hashed; a launch carries it and launches
-// only that very card.
-func empreinteCarte(m Mission) string {
-	var b bytes.Buffer
-	_ = json.Compact(&b, m.Carte)
-	h := sha256.Sum256(append([]byte(m.Politique+"\n"), b.Bytes()...))
-	return hex.EncodeToString(h[:])
+// EntreeJournal: a translation key (an English template of i18n.js) and its parameters, never an agent's free text.
+type EntreeJournal struct {
+	ID     string   `json:"id"`
+	T      string   `json:"t"`
+	Cle    string   `json:"cle"`
+	Params []string `json:"params,omitempty"`
+	Niveau string   `json:"niveau"` // info | attention | erreur
 }

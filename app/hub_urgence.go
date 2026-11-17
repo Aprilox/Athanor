@@ -38,7 +38,6 @@ func (s *Serveur) arretUrgence(qui string) ResultatUrgence {
 		r.Jetons = len(s.jetons.Liste())
 	}
 	s.revoquerJetons("arrêt d'urgence", func(SessionHub) bool { return true })
-	s.pauserMissionsUrgence(qui)
 	chatMu.Lock() // the home conversation's turn stops too (its cards can no longer be launched: carteActionChat)
 	if en := chatsActifs[projetAccueil(s.kitCourant()).Dossier]; en != nil {
 		en.arrete = true

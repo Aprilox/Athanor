@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -711,9 +712,6 @@ func (s *Serveur) demarrerPilote(p Projet) (string, error) {
 		return "The pilot is already running on this project.", nil // message key
 	}
 	pauserProjet(p.Nom, false) // M298: Start lets the project's deployment go again, even when the pilot has nothing left to do
-	if id := projetBloque("dev", p.Nom); id != "" {
-		return "", errors.New("A mission on this project is paused: resume it on its page to start the pilot.")
-	}
 	// delivered, and nothing new since (livraison.go): the pilot would end at once
 	if projetLivre(p) && len(p.LireFileAttente()) == 0 && nouveauDepuisLivraison(p.Dossier).Vide() {
 		return "", errors.New(texteLivreRienDeNeuf)
@@ -1092,4 +1090,26 @@ func (s *Serveur) apiFinVue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.ecrireJSON(w, map[string]bool{"ok": true})
+}
+
+// dossierAvecFichiers: d holds something other than a workshop and the system's own files.
+func dossierAvecFichiers(d string) bool {
+	e, _ := os.ReadDir(d)
+	return slices.ContainsFunc(e, func(x os.DirEntry) bool {
+		n := x.Name()
+		return n != ".athanor" && n != ".DS_Store" && !strings.EqualFold(n, "desktop.ini") && !strings.EqualFold(n, "Thumbs.db")
+	})
+}
+
+// dossierProjetNeuf: where a card's new project goes, next to the most recent project of this PC (in the home
+// folder without one).
+func dossierProjetNeuf(nom string, projets []Projet) string {
+	parent, _ := os.UserHomeDir()
+	for i := len(projets) - 1; i >= 0; i-- {
+		if !projets[i].Archive && filepath.IsAbs(projets[i].Dossier) {
+			parent = filepath.Dir(filepath.Clean(projets[i].Dossier))
+			break
+		}
+	}
+	return filepath.Join(parent, nom)
 }

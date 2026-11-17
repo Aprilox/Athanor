@@ -43,7 +43,6 @@ func (s *Serveur) deverrouillerCoffre(mdp string) {
 	}
 	s.injecterTous(nil) // files left as they were while the code key was closed
 	s.signalerInfraOuverte()
-	s.missionsDeverrouillees()
 }
 
 // fermerCoffreSiPersonne closes the infra key when neither the computer's window nor any remote

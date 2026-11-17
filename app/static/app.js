@@ -799,7 +799,7 @@ function ligneAlerte(a, ignoree) {
   const distant = (etat.vue || {}).distant;
   const actions = (a.actions || []).map((x, i) => x.page ? `<a class="btn btn-petit" href="${h(x.page)}"${x.projet ? ` data-projet="${h(x.projet)}" data-cible="${h(x.page.slice(1))}"` : ""}>${h(t(x.libelle))}</a>`
     : `<button type="button" class="btn btn-petit${x.id === "accepter" ? " btn-primaire" : ""}" data-alerte="${h(x.id)}" data-empreinte="${h(a.empreinte)}" data-i="${i}"${distant && !x.distance ? ` disabled title="${h(t("On the computer only"))}"` : ""}>${h(t(x.libelle))}</button>`).join("");
-  return `<div class="alerte${ignoree ? " ignoree" : ""}${a.approbation ? " alerte-appr" : ""}" data-module="${h(a.module)}"><span class="dot${ignoree ? "" : " quota"}" aria-hidden="true"></span><span class="alerte-texte">${h(texte)}</span><span class="alerte-actions">${actions}</span></div>`;
+  return `<div class="alerte${ignoree ? " ignoree" : ""}${a.approbation ? " alerte-appr" : ""}" data-module="${h(a.module)}"><span class="dot${ignoree || a.info ? "" : " quota"}" aria-hidden="true"></span><span class="alerte-texte">${h(texte)}</span><span class="alerte-actions">${actions}</span></div>`;
 }
 function rendreNotifs(v) {
   const m = $("#notifs"), bouton = document.querySelector("[data-notifs]");
@@ -4316,6 +4316,7 @@ function ficheSite(d, nom, nomSrv, distant) {
     ${r && r.etat === "a_preparer" ? `<p class="petit">${t("The first deployment is still to be made: an agent will read the project and your plan, set up the server and put the project online.")}</p>
       ${distant ? "" : `<button type="button" class="btn btn-primaire btn-petit" data-dep-preparer>${t("Prepare now")}</button>`}` : ""}
     ${courant ? "" : `<p class="muet petit">${(e.serveurs || []).length ? h(t("Servers") + " " + e.serveurs.map(nomSrv).join(", ")) : t("No server chosen yet.")}</p>`}
+    ${!courant && (d.anciens || []).includes(nom) ? `<p class="petit dep-ancien" role="note">${h(t("{0} was put online by a mission: make it the project's deployment to go on deploying it.", [e.url || nom]))}</p>` : ""}
     <p class="petit attention env-erreur" role="alert" hidden></p>
     ${blocSante((d.sante || {})[nom], e)}
     ${blocDeploiements(nom, e, (d.deploiements || {})[nom] || [], distant || !courant)}
@@ -6032,48 +6033,30 @@ function journalMission(m) {
         : `<p class="muet m0">${t("Nothing in its journal.")}</p>`}
     </section>`;
 }
-// M261: delete a mission (mission_supprimer.go): what goes is read first; its project and folder, and the access it
-// gave, only when ticked (unticked by default); a running one is stopped first, after its milestone or now
+// M261, M302: delete an old mission (mission_supprimer.go): what goes is read first; its project and folder only
+// when ticked (unticked by default); nothing is stopped, an old mission is no longer followed
 const lienDepot = (d) => /^[\w.-]+\/[\w.-]+$/.test(d) ? `<a href="https://github.com/${h(d)}" target="_blank" rel="noopener noreferrer">${h(d)}</a>` : `<b>${h(d)}</b>`;
 async function supprimerMissionUI(id) {
-  const a = await api(`missions/${encodeURIComponent(id)}/suppression`).catch((e) => { toast(e.message, "erreur"); return null; });
-  if (!a) return;
-  const enLigne = ["preparation", "proposee", "acceptee"].includes(a.etat) ? [] : (a.envs || []).filter((e) => e.url);
+  const d = await api(`missions/${encodeURIComponent(id)}`).catch((e) => { toast(e.message, "erreur"); return null; });
+  if (!d) return;
+  const a = d.suppression || {};
+  const enLigne = ["preparation", "proposee", "acceptee"].includes(d.mission.etat) ? [] : (a.envs || []).filter((e) => e.url);
   const corps = `<div class="mis-suppr">
-    <p>${h(t("The mission, its journal and its follow-up files are deleted."))}${a.taches ? " " + h(t("Its Servers tasks too ({0}).", [a.taches])) : ""}</p>
-    ${a.differee ? `<p class="muet petit">${h(t("Its deletion is already asked: it is done when the current milestone ends."))}</p>` : ""}
-    ${a.en_cours ? `<fieldset><legend class="petit">${h(t("It is running:"))}</legend>
-      <label class="radio"><input type="radio" name="mis-arret" value="jalon" checked> ${h(t("Finish the current milestone, then delete it"))}</label>
-      <label class="radio"><input type="radio" name="mis-arret" value="immediat"> ${h(t("Stop it immediately, then delete it"))}</label></fieldset>` : ""}
+    <p>${h(t("The mission, its journal and its follow-up files are deleted."))}</p>
     ${a.projet ? `<label class="case"><input type="checkbox" data-suppr="projet"${a.dossier_ok ? "" : " disabled"}><span>${h(t("Also remove the project “{0}” from Studio and send its folder to the recycle bin", [a.projet]))}
       ${a.dossier ? `<code class="petit">${h(a.dossier)}</code>` : ""}${a.dossier_non ? `<span class="muet petit">${h(t(a.dossier_non))}</span>` : ""}</span></label>` : ""}
-    ${(a.acces || []).length ? `<label class="case"><input type="checkbox" data-suppr="acces"><span>${h(t("Also remove the access it gave: {0}", [a.acces.join(", ")]))}
-      <span class="muet petit">${h(t("The vault entries stay."))}</span></span></label>` : ""}
-    ${(a.retirables || []).map((e) => `<label class="case"><input type="checkbox" data-suppr-srv="${h(e.nom)}"><span>${h(t("Also remove the site from the servers: {0}", [e.nom]))}
-      <span class="mis-url">${h(e.url)}</span> <span class="muet petit">${h((e.serveurs || []).join(", "))}</span></span></label>`).join("")}
-    ${(a.retirables || []).length ? `<p class="muet petit">${h(t("A Servers task per environment proposes the removal: you accept its plan. The servers, their keys and the other sites stay."))}</p>` : ""}
     ${a.depot ? `<p class="muet petit">${h(t("The GitHub repository stays:"))} ${lienDepot(a.depot)}</p>` : ""}
     ${enLigne.length ? `<p class="muet petit">${h(t("What it put online stays on the servers:"))} ${enLigne.map((e) => `${h(e.nom)} <span class="mis-url">${h(e.url)}</span>`).join(", ")}</p>` : ""}</div>`;
-  let r = null, corpsSuppr = null;
+  let r = null;
   const choix = await modaleSftp(t("Delete this mission?"), corps, [{ id: "", texte: t("Cancel") }, { id: "ok", texte: t("Delete the mission"), danger: true }], {
     large: true, valider: async (b, el) => {
       if (b !== "ok") return true;
-      const coche = (x) => !!el.querySelector(`[data-suppr="${x}"]:checked`);
-      const arret = a.en_cours ? (el.querySelector('[name="mis-arret"]:checked') || {}).value : undefined;
-      const serveurs = [...el.querySelectorAll("[data-suppr-srv]:checked")].map((x) => x.dataset.supprSrv);
-      corpsSuppr = { projet: coche("projet"), acces: coche("acces"), arret, serveurs: serveurs.length ? serveurs : undefined };
-      if (serveurs.length) return true; // M262b: the password is asked next, as for launching a mission
-      r = await api(`missions/${encodeURIComponent(id)}/supprimer`, "POST", corpsSuppr).catch((e) => erreurModale(el, e.message));
+      r = await api(`missions/${encodeURIComponent(id)}`, "DELETE", { projet: !!el.querySelector('[data-suppr="projet"]:checked') }).catch((e) => erreurModale(el, e.message));
       return !!r;
     } });
-  if (choix === "ok" && !r && corpsSuppr && corpsSuppr.serveurs) {
-    const p = await preuveMdp(t("Removing the site from the servers: retype Athanor's password."), { ok: t("Delete the mission"), danger: true });
-    if (p) r = await action(api(`missions/${encodeURIComponent(id)}/supprimer`, "POST", { ...corpsSuppr, ...p }), "");
-  }
   if (choix !== "ok" || !r) return;
-  const retrait = (r.retire || []).some((x) => x.startsWith("site removal "));
-  toast(r.differee ? t("The mission will be deleted when the current milestone ends.") : retrait ? t("Mission deleted. A Servers task removes the site: accept its plan in Servers.") : t("Mission deleted."), "ok");
-  if (!r.differee && etat.page === "mission") location.hash = "#missions"; else await rendrePage();
+  toast(t("Mission deleted."), "ok");
+  if (etat.page === "mission") location.hash = "#missions"; else await rendrePage();
 }
 document.addEventListener("click", (ev) => {
   const b = ev.target.closest("[data-mis-suppr]"); if (!b) return;

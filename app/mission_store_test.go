@@ -1,12 +1,15 @@
 package main
 
 import (
+	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestMissionsStockage: round trip in 0600, a damaged file skipped, hostile ids refused, the API and the tile.
@@ -20,11 +23,6 @@ func TestMissionsStockage(t *testing.T) {
 	}
 	if err := enregistrerMission(Mission{ID: "def456", Etat: "lancee", Cree: "2026-11-13T11:00:00.000Z"}); err != nil {
 		t.Fatal(err)
-	}
-	for _, x := range []Mission{{ID: "../x", Etat: "proposee"}, {ID: "abc123", Etat: "invente"}} {
-		if enregistrerMission(x) == nil {
-			t.Errorf("%+v saved", x)
-		}
 	}
 	lu, err := lireMission("abc123")
 	if err != nil || lu.Phrase != m.Phrase || lu.Mentions.Projets[0] != "ma-boutique" || !strings.Contains(string(lu.Carte), `"Boutique"`) || len(lu.Historique) != 1 {
@@ -79,4 +77,20 @@ func TestMissionsStockage(t *testing.T) {
 	if strings.Join(ids, " ")[:len("hub missions dev")] != "hub missions dev" {
 		t.Errorf("menu order: %v", ids)
 	}
+}
+
+// enregistrerMission: a mission file as Athanor 3.0.0 and earlier wrote it (the product only reads and deletes them).
+func enregistrerMission(m Mission) error {
+	if !idMissionValide.MatchString(m.ID) {
+		return errors.New("invalid mission")
+	}
+	if err := os.MkdirAll(dossierMissions(), 0o700); err != nil {
+		return err
+	}
+	b, _ := json.MarshalIndent(m, "", "  ")
+	return os.WriteFile(filepath.Join(dossierMissions(), m.ID+".json"), b, 0o600)
+}
+
+func evenementMission(etat, detail string) EvenementMission {
+	return EvenementMission{T: time.Now().UTC().Format(formatCree), Etat: etat, Detail: detail}
 }

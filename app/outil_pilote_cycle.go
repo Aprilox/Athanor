@@ -585,8 +585,10 @@ boucleSurveillance:
 			}
 		}
 		if motif == "" && p.relayContextK > 0 && relaisOK && !cadrage && jalonVu == 0 && maintenant-dernierCtx >= 60 {
-			dernierCtx = maintenant
 			ctx := p.relaisContexte(journal)
+			if ctx > 0 { // a session that has not answered yet is read again at the next tick: its log is still tiny
+				dernierCtx = maintenant
+			}
 			if ctx >= p.relayContextK*1000 {
 				if relaisVu == 0 {
 					relaisVu = maintenant

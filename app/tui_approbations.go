@@ -370,3 +370,5 @@ func (a *appTUI) arretUrgenceTUI() {
 			}
 		})
 }
+
+func shaCourt(sha string) string { return sha[:min(len(sha), 7)] }

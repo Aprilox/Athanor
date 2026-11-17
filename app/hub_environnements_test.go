@@ -160,17 +160,6 @@ func TestDeploiementProjet(t *testing.T) {
 		t.Fatal("reading the deployment rewrote the file")
 	}
 
-	// the mission card (M279): an older card keeps its three environments, the linked one found without its name
-	trois := CarteMission{Envs: []EnvCarte{{Nom: "staging"}, {Nom: "dev"}, {Nom: "prod"}}}
-	sansNom := CarteMission{Titre: "t", Dev: BriefCarte{Brief: "b"}, JalonsEstimes: 1, Projet: ProjetCarte{Nom: "demo"}, Envs: []EnvCarte{{URL: "https://x.exemple.fr"}}}
-	x := contexteCarte{projets: []Projet{{Nom: "demo"}}, envs: map[string]map[string]Environnement{"demo": a.Environnements("demo")}}
-	if err := validerCarte(&sansNom, x); err != nil || sansNom.Envs[0].Nom != "dev" {
-		t.Errorf("a card's environment without a name: %v %+v", err, sansNom.Envs)
-	}
-	if envJalonCarte(trois) != "dev" || envFinal(trois) != "prod" || envJalonCarte(CarteMission{Envs: []EnvCarte{{Nom: "site"}}}) != "site" ||
-		envJalonCarte(CarteMission{Envs: []EnvCarte{{Nom: "site", Production: true}}}) != "" {
-		t.Errorf("the card's environments: %q %q", envJalonCarte(trois), envFinal(trois))
-	}
 }
 
 // TestEnvironnementsMigrationM246: a file of the dev/staging/prod era is read without loss, its prod (and an
@@ -402,4 +391,10 @@ func TestEnvironnementsAPI(t *testing.T) {
 	if e := s.acces.Environnements("demo"); e["prod"].URL != "" {
 		t.Errorf("deleted project kept its environments: %+v", e)
 	}
+}
+
+// definirAncien: DefinirEnvironnement as before M281, a second name included: the tests write the older
+// projects that still hold several environments.
+func (a *Acces) definirAncien(projet, nom string, e Environnement) error {
+	return a.modifier(func(f *fichierAcces) error { return poserEnvironnement(f, projet, nom, e) })
 }

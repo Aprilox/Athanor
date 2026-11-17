@@ -309,7 +309,7 @@ func outilProposerPlan(s *Serveur, x SessionHub, args json.RawMessage) (string, 
 	// M244k1: the Manual mode of the assistant asks every time, an old rule included
 	m := modeAutorisation(x, p.Serveur)
 	// M244k7: in Auto or Modifications an unknown command waits for the owner, the rule included
-	parRegle := regle && m != "manuel" && !(inconnue && modeDemandeInconnue(m)) && s.approbations.Regle(reglePlan(x.Projet, p.Serveur)) && !missionTout(x.Env)
+	parRegle := regle && m != "manuel" && !(inconnue && modeDemandeInconnue(m)) && s.approbations.Regle(reglePlan(x.Projet, p.Serveur))
 	// M244f: the assistant's mode accepts it at once (auto, modifications: no dangerous step and no unknown command, M244k1; ignorer: any plan)
 	saute := m == "ignorer" && !parRegle // M285: a plan the owner would have read, said in the audit log below
 	if m == "ignorer" || m != "" && m != "manuel" && haut < ClasseDestructrice && !construit && !inconnue {
@@ -430,7 +430,7 @@ func (s *Serveur) noterEtape(id string, n int, err error, sauvegardes []string) 
 // this non-prod server; otherwise refused.
 func (s *Serveur) planOuRegle(x SessionHub, id string, e *Etape) error {
 	if projetBloque("servers", x.Mission) != "" {
-		return errors.New("the mission of this task is paused: nothing changes on a server until the owner resumes it; wait, or end the task")
+		return errors.New("the project of this task is paused: nothing changes on a server until the owner resumes it; wait, or end the task")
 	}
 	p, n, info, err := s.etapeAccordee(x, id, *e)
 	if err != nil {
@@ -446,7 +446,7 @@ func (s *Serveur) planOuRegle(x SessionHub, id string, e *Etape) error {
 		return nil
 	}
 	m := modeAutorisation(x, id)
-	if prod := s.serveurPrudent(id); e.Classe <= ClasseChangement && !prod && m != "manuel" && !(etapeInconnue(*e) && modeDemandeInconnue(m)) && s.approbations.Regle(reglePlan(x.Projet, id)) && !missionTout(x.Env) {
+	if prod := s.serveurPrudent(id); e.Classe <= ClasseChangement && !prod && m != "manuel" && !(etapeInconnue(*e) && modeDemandeInconnue(m)) && s.approbations.Regle(reglePlan(x.Projet, id)) {
 		audit("accordé : règle « ne plus demander » pour ce serveur (changement)")
 		return nil
 	}

@@ -25,7 +25,7 @@ func TestDemanderDeploiement(t *testing.T) {
 	if err := s.acces.definirAncien("demo", "dev", Environnement{URL: "https://dev.martin.fr", Serveurs: []string{"s1"}, Protection: "aucune", Politique: "auto"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := outilDemanderDeploiement(s, SessionHub{Projet: "demo", Agent: "pilote"}, json.RawMessage(`{"environnement":"dev","commit":"`+strings.Repeat("ab12", 10)+`"}`)); err == nil || !strings.Contains(err.Error(), "is made by the mission's Servers lane") {
+	if _, err := outilDemanderDeploiement(s, SessionHub{Projet: "demo", Agent: "pilote"}, json.RawMessage(`{"environnement":"dev","commit":"`+strings.Repeat("ab12", 10)+`"}`)); err == nil || !strings.Contains(err.Error(), "is made by Athanor's own Servers task") {
 		t.Errorf("without a method: %v", err)
 	}
 	methode := &ConfigDeploiement{Methode: "statique", Source: "git"} // no deployment key: the engine never starts here

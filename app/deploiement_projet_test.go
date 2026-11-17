@@ -15,7 +15,7 @@ import (
 // TestPreparationProjet (M283): a project with a server and a moment has its servers prepared by one Servers task
 // as soon as its plan holds a milestone: nothing before the plan, one task and not two (a second look, which is
 // all a restart is: the record is read from its file; a milestone's relay keeps it), a new one when the
-// deployment's plan or its servers change, nothing without a moment nor while a mission covers the project; a
+// deployment's plan or its servers change, nothing without a moment; a
 // project already deployed is only learnt; the brief names the API, never a vault value, and asks the accord of a
 // production unless the project's mode is ignorer.
 func TestPreparationProjet(t *testing.T) {
@@ -134,17 +134,9 @@ func TestPreparationProjet(t *testing.T) {
 	env.Moment = "jalon"
 	env.DeployerAuJalon = true
 	poser()
-	if err := enregistrerMission(Mission{ID: "m283mission", Etat: "lancee", Voies: []VoieMission{{Module: "dev", Ref: p.Nom, Etat: "lancee"}}}); err != nil {
-		t.Fatal(err)
-	}
-	s.preparerProjet(p)
-	if n := taches(); n != 3 {
-		t.Fatalf("a mission covers the project: %d tasks", n)
-	}
-	_ = os.RemoveAll(dossierMissions())
 	s.preparerProjet(p)
 	if n := taches(); n != 4 {
-		t.Fatalf("the mission gone: %d tasks", n)
+		t.Fatalf("a moment and a plan: %d tasks", n)
 	}
 
 	// a project already deployed when first seen: its servers serve it, the fingerprint is only learnt

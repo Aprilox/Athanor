@@ -1,8 +1,6 @@
 package main
 
 import (
-	"encoding/json"
-	"strings"
 	"testing"
 	"time"
 )
@@ -108,43 +106,5 @@ func TestPrudenceRenforcee(t *testing.T) {
 		if _, attend, _ := s.exigerAccord(Approbation{Projet: "demo", Env: env, Agent: "pilote", Action: "lire_etat"}, false); attend == regle {
 			t.Errorf("%s: a non-destructive action waits = %v", env, attend)
 		}
-	}
-}
-
-// TestMissionCarteProduction (M247): the orchestrator's production flag reaches the card and its policy; the
-// card's final environment is its Production one, the milestone relay goes to the other.
-func TestMissionCarteProduction(t *testing.T) {
-	var c CarteMission
-	if err := json.Unmarshal([]byte(`{"envs":[{"nom":"site","url":"https://martin.fr","production":true},{"nom":"apercu","url":"https://apercu.martin.fr"}]}`), &c); err != nil {
-		t.Fatal(err)
-	}
-	if envFinal(c) != "site" || envJalonCarte(c) != "apercu" {
-		t.Errorf("final %q, milestone %q", envFinal(c), envJalonCarte(c))
-	}
-	if politiqueEnvMission(true, "autonome") != "accord" || politiqueEnvMission(false, "prod") != "auto" || politiqueEnvMission(false, "tout") != "accord" {
-		t.Error("policies")
-	}
-	x := contexteCarte{envs: map[string]map[string]Environnement{}}
-	cc := calculerCarte(c, "autonome", x)
-	if !strings.Contains(enJSON(cc.Approbations), "mise_en_prod") || cc.Envs[0].Politique != "accord" || cc.Envs[1].Politique != "auto" {
-		t.Errorf("card: %s", enJSON(cc))
-	}
-	// a "site de dev": no production, no final deployment, deployed at each milestone under the policy
-	var d CarteMission
-	_ = json.Unmarshal([]byte(`{"envs":[{"nom":"site","url":"https://dev.martin.fr"}]}`), &d)
-	if envFinal(d) != "" || envJalonCarte(d) != "site" || strings.Contains(enJSON(calculerCarte(d, "prod", x).Approbations), "mise_en_prod") {
-		t.Errorf("dev site: %q %q", envFinal(d), envJalonCarte(d))
-	}
-	// an existing Production environment stays one, whatever the agent sends
-	x.envs["demo"] = map[string]Environnement{"site": {URL: "https://martin.fr", Production: true, Politique: "accord"}}
-	d.Projet.Nom = "demo"
-	if e := calculerCarte(d, "autonome", x).Envs[0]; !e.Production || e.Politique != "accord" {
-		t.Errorf("Production lowered: %+v", e)
-	}
-	// a card written before M247: its "prod" environment is the final one
-	var v CarteMission
-	_ = json.Unmarshal([]byte(`{"envs":[{"nom":"dev"},{"nom":"prod"}]}`), &v)
-	if envFinal(v) != "prod" || envJalonCarte(v) != "dev" {
-		t.Errorf("old card: %q %q", envFinal(v), envJalonCarte(v))
 	}
 }

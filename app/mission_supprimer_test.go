@@ -1,8 +1,6 @@
 package main
 
 import (
-	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -10,15 +8,38 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 )
 
-// TestMissionSuppression (note 10h04): a mission deleted with its tasks and files; its project and folder only when
-// the mission created them and the path is safe; a running mission stopped first (now, or after its milestone by the
-// follower); nothing back after a restart; the finished missions emptied at once.
-func TestMissionSuppression(t *testing.T) {
+// missionAncienne: a mission file as Athanor 3.0.0 left it (its card computed, its relay, its journal), on project.
+func missionAncienne(id, etat, projet, cree string) string {
+	return `{
+  "id": "` + id + `",
+  "phrase": "Mets @` + projet + ` en ligne",
+  "mentions": {"projets": ["` + projet + `"], "serveurs": [], "cles": []},
+  "etat": "` + etat + `",
+  "carte": {"titre": "Mise en ligne", "projet": {"nom": "` + projet + `"}, "dev": {"brief": "Finir le site"}, "jalons_estimes": 2,
+    "envs": [{"nom": "site", "url": "https://` + projet + `.example.fr", "serveurs": ["a4"], "production": true, "politique": "accord"}],
+    "approbations": [{"action": "mise_en_prod", "quand": "accord"}], "touche": {"serveurs": ["dev-4"], "dns": [], "zones": [], "fichiers": []},
+    "estimation": {"jalons": 2, "minutes": 50}},
+  "politique": "prod",
+  "voies": [{"module": "dev", "ref": "` + projet + `", "etat": "lancee"}, {"module": "servers", "ref": "0a1b2c", "etat": "preparation"}],
+  "questions": [],
+  "historique": [{"t": "2026-11-10T08:00:00.000Z", "etat": "proposee"}, {"t": "2026-11-10T08:05:00.000Z", "etat": "lancee", "detail": "hub"}],
+  "cree": "` + cree + `",
+  "session": "0b9c2f6e-1111-4222-8333-444455556666",
+  "relais": {"etape": "accord_prod", "commit": "4f2a9c1e8b7d60a3f5c2e9d14b8a7f60c3e2d1b9", "deploiement_dev": "d16", "accord": "ap1"},
+  "journal": [{"id": "jalon:M1", "t": "2026-11-10T09:00:00.000Z", "cle": "Milestone delivered: {0}", "params": ["M1"], "niveau": "info"}]
+}
+`
+}
+
+// TestAnciennesMissionsLisibles (M302): the missions Athanor 3.0.0 left running, paused and finished are listed
+// and read, never rewritten nor followed; their project keeps its pilot and its deployment, and a paused one no
+// longer holds it; a mission is deleted on request whatever its state, its project's folder only when the mission
+// created it and the path is safe, never while its pilot runs.
+func TestAnciennesMissionsLisibles(t *testing.T) {
 	s := serveurCoffreTest(t)
 	motDePasseCoffreTest(t, s)
 	if err := ecrireConfig(s.config); err != nil {
@@ -27,55 +48,33 @@ func TestMissionSuppression(t *testing.T) {
 	s.mu.Lock()
 	s.session = "session-test"
 	s.mu.Unlock()
-	if err := modifierServeurs(func(l []ServeurInventaire) ([]ServeurInventaire, error) {
-		return append(l, ServeurInventaire{ID: "a4", Nom: "dev-4", Hote: "203.0.113.8"}), nil
-	}); err != nil {
+	var err error
+	if s.approbations, err = ouvrirApprobations(t.TempDir()); err != nil {
 		t.Fatal(err)
 	}
-	for _, f := range []string{dossierMissions(), fichierRelais()} {
+	for _, f := range []string{dossierMissions(), fichierRelais(), dossierJournalAudit()} {
 		_ = os.RemoveAll(f)
 		t.Cleanup(func() { _ = os.RemoveAll(f) })
 	}
 	base := t.TempDir()
 	atelier := Projet{Nom: "atelier", Dossier: filepath.Join(base, "atelier")}
-	ecrireFichier(t, atelier.Demande(), "# atelier\n\nUn site.\n", 0o644)
-	ecrireFichier(t, atelier.Plan(), "# Plan\n\n- [ ] M1 : Le site\n", 0o644)
+	ecrireFichier(t, atelier.Plan(), "# Plan\n\n- [x] M1 : Le site\n- [ ] M2 : La suite\n", 0o644)
 	neuf := Projet{Nom: "neuf", Dossier: filepath.Join(base, "neuf")}
 	ecrireFichier(t, filepath.Join(neuf.Dossier, "index.html"), "<p>neuf</p>", 0o644)
 	s.config.Projets = append(s.config.Projets, atelier, neuf)
 	pid := filepath.Join(atelier.Atelier(), "pilot.pid")
+	ecrireFichier(t, pid, "1", 0o644) // atelier's pilot works
+	site := Environnement{URL: "https://atelier.example.fr", Serveurs: []string{"a4"}, Protection: "aucune", Politique: "accord", Production: true, Moment: "livraison"}
+	if err := s.acces.definirAncien(atelier.Nom, "site", site); err != nil {
+		t.Fatal(err)
+	}
+	ecrireRelais(atelier.Nom, RelaisJalon{Jalon: "M1 : Le site", Etat: "attente", Commit: strings.Repeat("a", 40)})
 
-	var mu sync.Mutex
-	var appels, corbeille []string
-	noter := func(a string) { mu.Lock(); appels = append(appels, a); mu.Unlock() }
-	sessions := 0
-	ancienPilote, ancienArret, ancienneSession, ancienPas, ancienneCorbeille := demarrerPiloteProjet, arreterPiloteProjet, sessionTacheServeurs, pasSuiviMission, corbeilleProjet
-	t.Cleanup(func() {
-		demarrerPiloteProjet, arreterPiloteProjet, sessionTacheServeurs, pasSuiviMission, corbeilleProjet = ancienPilote, ancienArret, ancienneSession, ancienPas, ancienneCorbeille
-		tachesEnCours.Lock()
-		for _, e := range tachesEnCours.m {
-			e.annuler(errTacheArretee)
-		}
-		tachesEnCours.Unlock()
-		attendreFinTaches()
-	})
-	pasSuiviMission = time.Hour
-	demarrerPiloteProjet = func(_ *Serveur, p Projet) (string, error) {
-		noter("demarrer " + p.Nom)
-		ecrireFichier(t, pid, "1", 0o644)
-		return "Pilot started", nil
-	}
-	arreterPiloteProjet = func(_ *Serveur, p Projet) error { noter("arreter " + p.Nom); return os.Remove(pid) }
-	s.arretTest = func(p Projet) (string, error) { noter("fin_cycle " + p.Nom); return "", nil }
-	sessionTacheServeurs = func(_ *Serveur, ctx context.Context, _ string) error {
-		mu.Lock()
-		sessions++
-		mu.Unlock()
-		<-ctx.Done()
-		return context.Cause(ctx)
-	}
-	corbeilleProjet = func(d string) error { mu.Lock(); corbeille = append(corbeille, d); mu.Unlock(); return os.RemoveAll(d) }
-	nbSessions := func() int { mu.Lock(); defer mu.Unlock(); return sessions }
+	var corbeille, arrets []string
+	ancienArret, ancienneCorbeille := arreterPiloteProjet, corbeilleProjet
+	t.Cleanup(func() { arreterPiloteProjet, corbeilleProjet = ancienArret, ancienneCorbeille })
+	arreterPiloteProjet = func(_ *Serveur, p Projet) error { arrets = append(arrets, p.Nom); return nil }
+	corbeilleProjet = func(d string) error { corbeille = append(corbeille, d); return os.RemoveAll(d) }
 
 	mux := http.NewServeMux()
 	s.routes(mux)
@@ -99,101 +98,93 @@ func TestMissionSuppression(t *testing.T) {
 		}
 		return id
 	}
-	attendre := func(t *testing.T, quoi string, ok func() bool) {
-		t.Helper()
-		for range 400 {
-			if ok() {
-				return
-			}
-			time.Sleep(25 * time.Millisecond)
-		}
-		t.Fatalf("still not: %s", quoi)
+
+	// the three missions of the 3.0.0, and what its relay still asked the owner
+	anciennes := map[string]string{"encours1": "lancee", "enpause1": "en_pause", "finie001": "terminee"}
+	fichiers := map[string]string{}
+	for id, etat := range anciennes {
+		fichiers[id] = missionAncienne(id, etat, atelier.Nom, "2026-11-10T07:5"+id[len(id)-1:]+":00.000Z")
+		ecrireFichier(t, filepath.Join(dossierMissions(), id+".json"), fichiers[id], 0o600)
 	}
-	// a launched mission on atelier, its Servers preparation running: its task id
-	lancee := func(t *testing.T) (string, string) {
-		t.Helper()
-		c := CarteMission{Titre: "Atelier", Projet: ProjetCarte{Nom: atelier.Nom}, JalonsEstimes: 1, Dev: BriefCarte{Brief: "Un site"},
-			Serveurs: BriefCarte{Brief: "Préparer le serveur"}, Envs: []EnvCarte{{Nom: "site", URL: "https://atelier.example.fr", Serveurs: []string{"a4"}}}}
-		x := s.contexteCarte()
-		if err := validerCarte(&c, x); err != nil {
-			t.Fatal(err)
-		}
-		id := aleatoire(8)
-		if err := enregistrerMission(Mission{ID: id, Phrase: "mets mon atelier en ligne", Etat: "proposee", Politique: "prod", Carte: mustJSON(calculerCarte(c, "prod", x)),
-			Voies: []VoieMission{}, Questions: []QuestionMission{}, Historique: []EvenementMission{evenementMission("proposee", "")}, Cree: time.Now().UTC().Format(formatCree)}); err != nil {
-			t.Fatal(err)
-		}
-		avant := nbSessions()
-		if m, err := s.lancerMission(id, "proprietaire", "", ""); err != nil || m.Etat != "lancee" {
-			t.Fatalf("launch: %v %+v", err, m)
-		}
-		s.observerMission(id)
-		attendre(t, "the preparation's session", func() bool { return nbSessions() == avant+1 })
-		m, _ := lireMission(id)
-		i := slices.IndexFunc(m.Voies, func(v VoieMission) bool { return v.Module == "servers" && v.Ref != "" })
-		if i < 0 {
-			t.Fatalf("no Servers task: %+v", m.Voies)
-		}
-		return id, m.Voies[i].Ref
+	accord, err := s.approbations.Demander(Approbation{Projet: atelier.Nom, Env: "site", Mission: "encours1", Agent: "relais", Action: actionDeploiement,
+		Raison: "commit → atelier.example.fr", Details: map[string]string{"mission": "encours1", "commit": strings.Repeat("a", 40)}})
+	if err != nil {
+		t.Fatal(err)
 	}
-	partie := func(t *testing.T, id, tache string) {
-		t.Helper()
-		if existe(id) {
-			t.Fatalf("mission %s still there", id)
-		}
-		for _, f := range []string{filepath.Join(dossierMissions(), id+".json"), dossierSessionMission(id), filepath.Join(dossierTaches("a4"), tache+".json"), dossierSessionTache(tache)} {
-			if _, err := os.Stat(f); tache != "" && err == nil || tache == "" && strings.Contains(f, id) && err == nil {
-				t.Fatalf("%s left behind", f)
+	relaisAvant := lireRelais()[atelier.Nom]
+
+	s.refuserLancementsMission() // Athanor starts
+	if e := s.approbations.PourAgent(accord.ID); e != "refusee" {
+		t.Errorf("the old mission's accord to go online is %q, want refusee", e)
+	}
+	c, b := appel("GET", "/api/missions", "")
+	if c != 200 || strings.Count(b, `"phrase"`) != 3 {
+		t.Fatalf("list: %d %s", c, b)
+	}
+	for id, etat := range anciennes {
+		c, b := appel("GET", "/api/missions/"+id, "")
+		for _, attendu := range []string{`"etat":"` + etat + `"`, `"Mise en ligne"`, `"accord_prod"`, `"Milestone delivered: {0}"`, `"actuel":"travaille"`, `"fait":1`, `"total":2`, `"projet":"atelier"`, `"dossier_ok":false`} {
+			if c != 200 || !strings.Contains(b, attendu) {
+				t.Errorf("%s: %d without %s: %s", id, c, attendu, b)
 			}
 		}
 	}
+	for _, x := range [][2]string{{"POST", "/api/missions"}, {"POST", "/api/missions/encours1/pause"}, {"POST", "/api/missions/enpause1/reprendre"}, {"POST", "/api/missions/encours1/arreter"},
+		{"POST", "/api/missions/encours1/politique"}, {"POST", "/api/missions/encours1/redemander"}, {"POST", "/api/missions/finie001/supprimer"}, {"POST", "/api/missions/vider"}} {
+		if c, _ := appel(x[0], x[1], `{}`); c != http.StatusNotFound && c != http.StatusMethodNotAllowed {
+			t.Errorf("%s %s still answers: %d", x[0], x[1], c)
+		}
+	}
+	for id, avant := range fichiers {
+		if f, _ := os.ReadFile(filepath.Join(dossierMissions(), id+".json")); string(f) != avant {
+			t.Errorf("mission %s was rewritten", id)
+		}
+	}
+	// the project is the owner's alone: a paused mission no longer holds it, nothing stopped, its deployment as it was
+	if projetBloque("dev", atelier.Nom) != "" || len(arrets) != 0 || !atelier.PiloteActif() {
+		t.Errorf("the old missions still act on the project: blocked %q, stops %v", projetBloque("dev", atelier.Nom), arrets)
+	}
+	if e := s.acces.Environnements(atelier.Nom)["site"]; e.URL != site.URL || !e.Production || e.Moment != "livraison" || lireRelais()[atelier.Nom] != relaisAvant {
+		t.Errorf("the project's deployment changed: %+v, relay %+v", e, lireRelais()[atelier.Nom])
+	}
 
-	t.Run("simple", func(t *testing.T) {
-		id := stockee(t, "proposee", []VoieMission{})
-		ecrireFichier(t, filepath.Join(dossierSessionMission(id), "notes.md"), "suivi", 0o600)
-		var a ApercuSuppression
-		if c, b := appel("GET", "/api/missions/"+id+"/suppression", ""); c != 200 || json.Unmarshal([]byte(b), &a) != nil || a.EnCours || a.DossierOK || a.Historique != 1 {
-			t.Fatalf("preview: %d %s", c, b)
+	t.Run("supprimees_sur_demande", func(t *testing.T) {
+		ecrireFichier(t, filepath.Join(dossierSessionMission("encours1"), "notes.md"), "suivi", 0o600)
+		if c, _ := appel("DELETE", "/api/missions/encours1", `{"projet":true}`); c != http.StatusConflict || !existe("encours1") {
+			t.Fatalf("a project that existed before the mission removed with it: %d", c)
 		}
-		if c, b := appel("POST", "/api/missions/"+id+"/supprimer", `{}`); c != 200 || !strings.Contains(b, `"supprimee":true`) {
-			t.Fatalf("delete: %d %s", c, b)
+		for id := range anciennes {
+			if c, b := appel("DELETE", "/api/missions/"+id, ""); c != 200 || !strings.Contains(b, `"supprimee":true`) || existe(id) {
+				t.Fatalf("delete %s: %d %s", id, c, b)
+			}
 		}
-		partie(t, id, "")
-		if c, _ := appel("POST", "/api/missions/"+id+"/supprimer", `{}`); c != http.StatusNotFound {
-			t.Fatalf("deleted twice: %d", c)
+		if _, err := os.Stat(dossierSessionMission("encours1")); err == nil {
+			t.Error("the mission's session folder left behind")
 		}
-		if c, _ := appel("POST", "/api/missions/x/supprimer", `{"arret":"bientot"}`); c != http.StatusBadRequest {
-			t.Fatalf("unknown stop: %d", c)
+		if c, _ := appel("DELETE", "/api/missions/encours1", ""); c != http.StatusNotFound {
+			t.Errorf("deleted twice: %d", c)
 		}
-		p, err := (Audit{Dossier: dossierJournalAudit()}).Lire(FiltreAudit{Q: "mission supprimée"})
-		if err != nil || !slices.ContainsFunc(p.Lignes, func(l LigneAudit) bool { return l.Mission == id && strings.Contains(l.Resultat, "mission "+id) }) {
-			t.Fatalf("not audited: %v %+v", err, p.Lignes)
-		}
-	})
-
-	t.Run("projet_existant_garde", func(t *testing.T) {
-		id := stockee(t, "terminee", []VoieMission{{Module: "dev", Ref: atelier.Nom, Etat: "termine"}})
-		_, b := appel("GET", "/api/missions/"+id+"/suppression", "")
-		if !strings.Contains(b, `"dossier_ok":false`) || !strings.Contains(b, "existed before the mission") {
-			t.Fatalf("an existing project offered: %s", b)
-		}
-		if c, _ := appel("POST", "/api/missions/"+id+"/supprimer", `{"projet":true}`); c != http.StatusConflict || !existe(id) {
-			t.Fatalf("an existing project removed: %d", c)
-		}
-		if c, _ := appel("POST", "/api/missions/"+id+"/supprimer", `{}`); c != 200 {
-			t.Fatalf("delete: %d", c)
+		if _, ok := s.projetParNom(atelier.Nom); !ok || len(arrets) != 0 || !atelier.PiloteActif() || len(corbeille) != 0 || lireRelais()[atelier.Nom] != relaisAvant ||
+			s.acces.Environnements(atelier.Nom)["site"].URL != site.URL {
+			t.Errorf("deleting the missions touched the project: stops %v, recycle bin %v", arrets, corbeille)
 		}
 		if _, err := os.Stat(atelier.Plan()); err != nil {
-			t.Fatal("the project's files went with the mission")
+			t.Error("the project's files went with the mission")
+		}
+		p, err := (Audit{Dossier: dossierJournalAudit()}).Lire(FiltreAudit{Q: "mission supprimée"})
+		if err != nil || !slices.ContainsFunc(p.Lignes, func(l LigneAudit) bool {
+			return l.Mission == "encours1" && strings.Contains(l.Resultat, "mission encours1")
+		}) {
+			t.Errorf("not audited: %v %+v", err, p.Lignes)
 		}
 	})
 
 	creee := func(t *testing.T) string {
-		return stockee(t, "terminee", []VoieMission{{Module: "dev", Ref: neuf.Nom, Etat: "termine"}}, evenementMission("lancee", "project created: "+neuf.Dossier))
+		return stockee(t, "lancee", []VoieMission{{Module: "dev", Ref: neuf.Nom, Etat: "lancee"}}, evenementMission("lancee", "project created: "+neuf.Dossier))
 	}
 	t.Run("sans_dossier", func(t *testing.T) {
 		id := creee(t)
-		if c, _ := appel("POST", "/api/missions/"+id+"/supprimer", `{}`); c != 200 || existe(id) {
+		if c, _ := appel("DELETE", "/api/missions/"+id, `{}`); c != 200 || existe(id) {
 			t.Fatalf("delete: %d", c)
 		}
 		if _, ok := s.projetParNom(neuf.Nom); !ok || len(corbeille) != 0 {
@@ -203,13 +194,20 @@ func TestMissionSuppression(t *testing.T) {
 
 	t.Run("avec_dossier", func(t *testing.T) {
 		id, autre := creee(t), creee(t)
-		if _, b := appel("GET", "/api/missions/"+id+"/suppression", ""); !strings.Contains(b, "Another mission uses this project") {
+		if _, b := appel("GET", "/api/missions/"+id, ""); !strings.Contains(b, "Another mission uses this project") {
 			t.Fatalf("a project shared by two missions offered: %s", b)
 		}
-		if c, _ := appel("POST", "/api/missions/"+autre+"/supprimer", `{}`); c != 200 {
+		if c, _ := appel("DELETE", "/api/missions/"+autre, ""); c != 200 {
 			t.Fatal(c)
 		}
-		if _, b := appel("GET", "/api/missions/"+id+"/suppression", ""); !strings.Contains(b, `"dossier_ok":true`) || !strings.Contains(b, `"projet":"neuf"`) {
+		// its pilot works: the old mission stops nothing, the owner stops it first
+		pidNeuf := filepath.Join(neuf.Atelier(), "pilot.pid")
+		ecrireFichier(t, pidNeuf, "1", 0o644)
+		if c, b := appel("DELETE", "/api/missions/"+id, `{"projet":true}`); c != http.StatusConflict || !strings.Contains(b, "Stop its pilot first") || !existe(id) || len(arrets) != 0 {
+			t.Fatalf("a project removed while its pilot runs: %d %s, stops %v", c, b, arrets)
+		}
+		_ = os.Remove(pidNeuf)
+		if _, b := appel("GET", "/api/missions/"+id, ""); !strings.Contains(b, `"dossier_ok":true`) || !strings.Contains(b, `"projet":"neuf"`) {
 			t.Fatalf("preview: %s", b)
 		}
 		// the folder still held by the pilot just stopped: refused twice, then it goes
@@ -222,7 +220,7 @@ func TestMissionSuppression(t *testing.T) {
 			return normale(d)
 		}
 		defer func() { corbeilleProjet, pauseCorbeille = normale, 500*time.Millisecond }()
-		if c, b := appel("POST", "/api/missions/"+id+"/supprimer", `{"projet":true}`); c != 200 || !strings.Contains(b, "folder "+strings.ReplaceAll(neuf.Dossier, `\`, `\\`)) {
+		if c, b := appel("DELETE", "/api/missions/"+id, `{"projet":true}`); c != 200 || !strings.Contains(b, "folder "+strings.ReplaceAll(neuf.Dossier, `\`, `\\`)) {
 			t.Fatalf("delete with the folder: %d %s", c, b)
 		}
 		if _, ok := s.projetParNom(neuf.Nom); ok || !slices.Equal(corbeille, []string{neuf.Dossier}) {
@@ -251,152 +249,11 @@ func TestMissionSuppression(t *testing.T) {
 		perso := Projet{Nom: "perso", Dossier: home}
 		s.config.Projets = append(s.config.Projets, perso)
 		id := stockee(t, "terminee", []VoieMission{{Module: "dev", Ref: perso.Nom}}, evenementMission("lancee", "project created: "+home))
-		if c, _ := appel("POST", "/api/missions/"+id+"/supprimer", `{"projet":true}`); c != http.StatusConflict || !existe(id) || len(corbeille) != 1 {
+		if c, _ := appel("DELETE", "/api/missions/"+id, `{"projet":true}`); c != http.StatusConflict || !existe(id) || len(corbeille) != 1 {
 			t.Fatalf("the personal folder accepted: %d %v", c, corbeille)
 		}
-		_, _ = appel("POST", "/api/missions/"+id+"/supprimer", `{}`)
+		_, _ = appel("DELETE", "/api/missions/"+id, "")
 		s.config.Projets = slices.DeleteFunc(s.config.Projets, func(p Projet) bool { return p.Nom == perso.Nom })
-	})
-
-	t.Run("en_cours_immediat", func(t *testing.T) {
-		id, tache := lancee(t)
-		if c, b := appel("POST", "/api/missions/"+id+"/supprimer", `{}`); c != http.StatusConflict || !existe(id) {
-			t.Fatalf("a running mission deleted without a stop: %d %s", c, b)
-		}
-		if _, b := appel("GET", "/api/missions/"+id+"/suppression", ""); !strings.Contains(b, `"en_cours":true`) || !strings.Contains(b, `"taches":1`) {
-			t.Fatalf("preview: %s", b)
-		}
-		if c, b := appel("POST", "/api/missions/"+id+"/supprimer", `{"arret":"immediat"}`); c != 200 {
-			t.Fatalf("delete now: %d %s", c, b)
-		}
-		partie(t, id, tache)
-		if _, err := os.Stat(pid); err == nil {
-			t.Fatal("the pilot still runs")
-		}
-		if _, ok := tacheMission(tache); ok {
-			t.Fatal("the Servers task is still there")
-		}
-	})
-
-	t.Run("en_cours_jalon_et_relance", func(t *testing.T) {
-		id, tache := lancee(t)
-		if c, b := appel("POST", "/api/missions/"+id+"/supprimer", `{"arret":"jalon"}`); c != 200 || !strings.Contains(b, `"differee":true`) {
-			t.Fatalf("delete after the milestone: %d %s", c, b)
-		}
-		if m, _ := lireMission(id); m.Etat != "arret_demande" || m.Suppression == nil {
-			t.Fatalf("not waiting for the milestone: %+v", m)
-		}
-		s.observerMission(id) // the pilot still runs: nothing deleted
-		if !existe(id) {
-			t.Fatal("deleted before the end of the milestone")
-		}
-		_ = os.Remove(pid) // the milestone is done
-		avant := nbSessions()
-		suivisMission.Delete(id)
-		s.reprendreMissions() // Athanor restarted meanwhile
-		s.observerMission(id)
-		attendre(t, "the deletion once the milestone is done", func() bool { return !existe(id) }) // the restarted follower may do it
-		time.Sleep(100 * time.Millisecond)
-		partie(t, id, tache)
-		suivisMission.Delete(id)
-		s.reprendreMissions()
-		time.Sleep(100 * time.Millisecond)
-		if existe(id) || nbSessions() != avant || slices.ContainsFunc(lireMissions(), func(m Mission) bool { return m.ID == id }) {
-			t.Fatal("the deleted mission came back after a restart")
-		}
-	})
-
-	// M262b: the site removed from the servers by one Servers task per ticked environment, password retyped, only
-	// where the mission put something
-	t.Run("retrait_serveurs", func(t *testing.T) {
-		const mdp = `,"mot_de_passe":"mdp-test"}`
-		vide := stockee(t, "proposee", []VoieMission{})
-		if c, b := appel("POST", "/api/missions/"+vide+"/supprimer", `{"serveurs":["site"]`+mdp); c != http.StatusConflict || !existe(vide) {
-			t.Fatalf("a removal from servers the mission never used: %d %s", c, b)
-		}
-		id, tache := lancee(t)
-		var a ApercuSuppression
-		if _, b := appel("GET", "/api/missions/"+id+"/suppression", ""); json.Unmarshal([]byte(b), &a) != nil || len(a.Retirables) != 1 ||
-			a.Retirables[0].Nom != "site" || a.Retirables[0].URL != "https://atelier.example.fr" || !slices.Equal(a.Retirables[0].Serveurs, []string{"dev-4"}) {
-			t.Fatalf("preview: %s", b)
-		}
-		if c, b := appel("POST", "/api/missions/"+id+"/supprimer", `{"arret":"immediat","serveurs":["site"]}`); c == 200 || !existe(id) {
-			t.Fatalf("a removal from servers without the password: %d %s", c, b)
-		}
-		if c, b := appel("POST", "/api/missions/"+id+"/supprimer", `{"arret":"immediat","serveurs":["autre"]`+mdp); c != http.StatusConflict || !existe(id) {
-			t.Fatalf("an environment of no server: %d %s", c, b)
-		}
-		c, b := appel("POST", "/api/missions/"+id+"/supprimer", `{"arret":"immediat","serveurs":["site","site"]`+mdp)
-		if c != 200 || strings.Count(b, "site removal atelier/site") != 1 {
-			t.Fatalf("delete with the removal: %d %s", c, b)
-		}
-		partie(t, id, tache)
-		var retrait []TacheServeurs
-		tachesEnCours.Lock()
-		for _, e := range tachesEnCours.m {
-			if x := e.copie(); x.Env == "atelier/site" {
-				retrait = append(retrait, x)
-			}
-		}
-		tachesEnCours.Unlock()
-		if len(retrait) != 1 || !slices.Equal(retrait[0].Serveurs, []string{"a4"}) {
-			t.Fatalf("removal tasks: %+v", retrait)
-		}
-		consigne, _ := os.ReadFile(filepath.Join(dossierSessionTache(retrait[0].ID), "consigne.txt"))
-		for _, attendu := range []string{"Docker Compose project atelier-site", baseDeploiement("atelier", "site"), "/etc/caddy/sites/atelier.example.fr.caddy",
-			"caddy validate", "/etc/athanor/deploy/atelier", "DNS record of atelier.example.fr", "plan for the owner to accept", "Never touch the server itself"} {
-			if !strings.Contains(string(consigne), attendu) {
-				t.Errorf("removal brief without %q", attendu)
-			}
-		}
-		if s.arreterTache(retrait[0].ID) {
-			attendreFinTache(retrait[0].ID)
-		}
-
-		// after the milestone: the choice kept (never the password), the task launched once the follower deletes it
-		id, tache = lancee(t)
-		if c, b := appel("POST", "/api/missions/"+id+"/supprimer", `{"arret":"jalon","serveurs":["site"]`+mdp); c != 200 || !strings.Contains(b, `"differee":true`) {
-			t.Fatalf("removal after the milestone: %d %s", c, b)
-		}
-		if m, _ := lireMission(id); m.Suppression == nil || !slices.Equal(m.Suppression.Serveurs, []string{"site"}) {
-			t.Fatalf("the choice not kept: %+v", m.Suppression)
-		}
-		if f, _ := os.ReadFile(filepath.Join(dossierMissions(), id+".json")); strings.Contains(string(f), "mdp-test") {
-			t.Fatal("the password written in the mission")
-		}
-		_ = os.Remove(pid)
-		s.observerMission(id)
-		attendre(t, "the deletion once the milestone is done", func() bool { return !existe(id) })
-		partie(t, id, tache)
-		n := 0
-		tachesEnCours.Lock()
-		for _, e := range tachesEnCours.m {
-			if x := e.copie(); x.Env == "atelier/site" && x.ID != tache {
-				n++
-				defer func(id string) {
-					if s.arreterTache(id) {
-						attendreFinTache(id)
-					}
-				}(x.ID)
-			}
-		}
-		tachesEnCours.Unlock()
-		if n != 1 {
-			t.Fatalf("%d removal tasks after the milestone", n)
-		}
-	})
-
-	t.Run("vider", func(t *testing.T) {
-		for _, m := range lireMissions() {
-			_, _ = s.supprimerMission(m.ID, "test", OptionsSuppression{})
-		}
-		fini, annulee, echec, ouverte := stockee(t, "terminee", nil), stockee(t, "annulee", nil), stockee(t, "echec", nil), stockee(t, "proposee", nil)
-		if c, b := appel("POST", "/api/missions/vider", ""); c != 200 || !strings.Contains(b, `"supprimees":3`) {
-			t.Fatalf("empty: %d %s", c, b)
-		}
-		if existe(fini) || existe(annulee) || existe(echec) || !existe(ouverte) {
-			t.Fatal("wrong missions emptied")
-		}
 	})
 
 	// M300: the module reads the mission files at each hub request; Windows refuses to remove a file being read
@@ -420,17 +277,4 @@ func TestMissionSuppression(t *testing.T) {
 			}
 		}
 	})
-}
-
-// attendreFinTaches: every running Servers task's goroutine ended (they must not outlive a test).
-func attendreFinTaches() {
-	for range 400 {
-		tachesEnCours.Lock()
-		n := len(tachesEnCours.m)
-		tachesEnCours.Unlock()
-		if n == 0 {
-			return
-		}
-		time.Sleep(25 * time.Millisecond)
-	}
 }

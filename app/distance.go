@@ -310,11 +310,8 @@ var autorisesDistance = map[string]bool{"GET /api/hub": true, "GET /api/coffre":
 	"POST /api/hub/urgence": true,                                 // the emergency stop, from the phone too
 	"GET /api/hub/chat":     true,                                 // M199: the home conversation, read only (sent, powers, folders, cards: the computer only)
 	"GET /api/serveurs":     true, "GET /api/serveurs/{id}": true, // the inventory and a server's sheet, read only
-	"GET /api/serveurs/{id}/taches": true,                                 // a server's tasks, read only (plans are decided by the approval card)
-	"GET /api/missions":             true, "GET /api/missions/{id}": true, // the missions (created on the PC only)
-	"POST /api/missions/{id}/modifier": true, "POST /api/missions/{id}/ressources": true, "POST /api/missions/{id}/repondre": true, "POST /api/missions/{id}/annuler": true, "POST /api/missions/{id}/lancer": true, "POST /api/missions/{id}/redemander": true, // as the approvals: an unlocked device
-	"POST /api/missions/{id}/pause": true, "POST /api/missions/{id}/reprendre": true, "POST /api/missions/{id}/arreter": true, "POST /api/missions/{id}/politique": true, // P7
-	"GET /api/missions/{id}/suppression": true, "POST /api/missions/{id}/supprimer": true, "POST /api/missions/vider": true, // deleted as cancelled: an unlocked device
+	"GET /api/serveurs/{id}/taches": true,                                                                    // a server's tasks, read only (plans are decided by the approval card)
+	"GET /api/missions":             true, "GET /api/missions/{id}": true, "DELETE /api/missions/{id}": true, // the old missions: read, deleted as an approval is decided (an unlocked device)
 	"GET /api/mentions": true} // the @ list of the home bar: names and types, never a value
 
 // refuseHubDistance: a hub route that is not in autorisesDistance (plain prefix: "/api/hubx" is refused too).
@@ -322,10 +319,8 @@ func refuseHubDistance(r *http.Request) bool {
 	for _, p := range prefixesHub {
 		if strings.HasPrefix(r.URL.Path, p) {
 			chemin := r.URL.Path
-			if id, ok := strings.CutPrefix(chemin, "/api/missions/"); ok && id != "" && id != "vider" && !strings.Contains(id, "/") {
+			if id, ok := strings.CutPrefix(chemin, "/api/missions/"); ok && id != "" && !strings.Contains(id, "/") {
 				chemin = "/api/missions/{id}"
-			} else if id, action, ok := strings.Cut(strings.TrimPrefix(chemin, "/api/missions/"), "/"); ok && strings.HasPrefix(chemin, "/api/missions/") && id != "" && !strings.Contains(action, "/") {
-				chemin = "/api/missions/{id}/" + action
 			} else if id, ok := strings.CutPrefix(chemin, "/api/serveurs/"); ok && id != "" && !strings.Contains(id, "/") {
 				chemin = "/api/serveurs/{id}"
 			} else if id, ok := strings.CutSuffix(id, "/taches"); ok && id != "" && !strings.Contains(id, "/") {

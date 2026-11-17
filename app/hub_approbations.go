@@ -492,7 +492,7 @@ func (s *Serveur) exigerAccord(x Approbation, destructif bool) (Approbation, boo
 	if prudent := s.prudenceRenforcee(x.Projet, x.Env); !prudent && (!destructif || s.approbations.Regle(RegleAccord{Projet: x.Projet, Env: x.Env, Action: x.Action})) {
 		return x, false, nil
 	}
-	if x.Mission == "" && s.sautIgnorer(x.Projet, x.Env, x.Agent, "accord non demandé: "+x.Action) { // M285; a mission keeps its own mode
+	if s.sautIgnorer(x.Projet, x.Env, x.Agent, "accord non demandé: "+x.Action) { // M285
 		return x, false, nil
 	}
 	y, etat, err := s.approbations.Reprendre(x)
@@ -599,12 +599,6 @@ func (s *Serveur) deciderApprobation(qui, id, decision, entree, envChoisi, varia
 	case decision != "refuser" && x.Action == actionPlanServeur && s.critiqueEnCours(x.ID):
 		return x, http.StatusConflict, errCritiqueEnCours
 	}
-	if x.Action == actionDeploiement && x.Details["mission"] != "" && decision == "accepter" { // M168: only for the card it was asked for
-		if m, err := lireMission(x.Details["mission"]); err != nil || empreinteCarte(m) != x.Details["empreinte"] {
-			s.refuserAccordMission(id, qui, "carte changée")
-			return x, 0, errCarteChangee
-		}
-	}
 	accorde, idEntree := "", ""
 	if x.Action == "demander_acces" && decision != "refuser" {
 		if code, err := s.accesPretErr(x.Projet); err != nil {
@@ -656,16 +650,21 @@ func (s *Serveur) refuserAccordMission(id, par, motif string) {
 // to refuse the ones still pending.
 const actionMission = "mission"
 
-// refuserLancementsMission (M301): missions are no longer launched; the launch requests still pending are refused
-// with their reason when Athanor starts.
+// refuserLancementsMission (M301, M302): missions are no longer launched nor followed; their launch requests and
+// the accords their relay asked to put a site online (Details["mission"]) still pending are refused with their
+// reason when Athanor starts.
 func (s *Serveur) refuserLancementsMission() {
 	if s.approbations == nil {
 		return
 	}
 	l, _ := s.approbations.Liste()
 	for _, d := range l {
-		if d.Action == actionMission && d.Etat == "attente" {
+		switch {
+		case d.Etat != "attente":
+		case d.Action == actionMission:
 			s.refuserAccordMission(d.ID, "hub", "les missions ne se lancent plus : le déploiement se règle dans le projet")
+		case d.Action == actionDeploiement && d.Details["mission"] != "":
+			s.refuserAccordMission(d.ID, "hub", "les missions ne sont plus suivies : la mise en ligne se règle dans le déploiement du projet")
 		}
 	}
 }

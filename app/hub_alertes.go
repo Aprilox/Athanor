@@ -40,6 +40,7 @@ type AlerteHub struct {
 	Args      []any          `json:"args,omitempty"`
 	Actions   []ActionAlerte `json:"actions"`
 	Ignoree   string         `json:"ignoree,omitempty"` // when it was ignored (RFC 3339), history only
+	Info      bool           `json:"info,omitempty"`    // an information, never shown as something that failed (M302)
 	// an agent's pending approval (alertesApprobations): what the decision needs (env, details, expiry)
 	Approbation *Approbation `json:"approbation,omitempty"`
 }
@@ -121,10 +122,15 @@ func alertesApprobations(l []Approbation) []AlerteHub {
 	return out
 }
 
+// alertesIgnorables: every alert the owner may ignore: the elements', the relays', the incidents', the older sites'.
+func (s *Serveur) alertesIgnorables(el []ElementHub) []AlerteHub {
+	return slices.Concat(alertesDe(el), s.alertesRelais(), s.alertesIncidents(), s.alertesAnciensSites())
+}
+
 // alertesHub: the bell (the pending approvals first, then the modules' alerts not ignored) and the
 // history of the ignored ones, each with its Reopen.
 func (s *Serveur) alertesHub(el []ElementHub) (actives, cachees []AlerteHub) {
-	toutes := append(append(alertesDe(el), s.alertesRelais()...), s.alertesIncidents()...)
+	toutes := s.alertesIgnorables(el)
 	actives, cachees = trierAlertes(toutes, ignoreesCourantes(toutes))
 	for i := range cachees {
 		cachees[i].Actions = []ActionAlerte{ignorerOuRouvrir(cachees[i].Empreinte, false)}
@@ -216,7 +222,7 @@ func (s *Serveur) apiAlertes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_, el := s.vueHub()
-	if !ignorerAlerte(append(append(alertesDe(el), s.alertesRelais()...), s.alertesIncidents()...), c.Empreinte, c.Ignorer) {
+	if !ignorerAlerte(s.alertesIgnorables(el), c.Empreinte, c.Ignorer) {
 		s.erreur(w, http.StatusNotFound, "This alert no longer exists.")
 		return
 	}
