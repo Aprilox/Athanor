@@ -6,6 +6,7 @@ package main
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -32,6 +33,8 @@ func sessionChat(kit, projet, id, mode, modele, session string) int {
 		fmt.Fprintln(os.Stderr, "Project folder not found: "+projet)
 		return 2
 	}
+	// no model chosen for this message: the project's own (M290)
+	modele = cmp.Or(modele, variablesReglagesProjet(projet)["MODEL"])
 	internet := existeP(c + ".internet") // the user switched Internet on for this message
 	var dossiers []DossierChat           // the home conversation's folders (hub_chat_dossiers.go)
 	if b, err := os.ReadFile(c + ".dossiers"); err == nil && json.Unmarshal(b, &dossiers) != nil {

@@ -84,6 +84,7 @@ type pilote struct {
 	etatDebutCycle string
 	etatOuvriers   string
 	modeleCycle    string
+	modelesDepart  *[4]string // model, fallback, sub-agents, simple tasks as the pilot started with (prendreReglagesProjet)
 	fichierLog     string
 	verrouVu       bool
 	parallel       bool
@@ -828,8 +829,8 @@ func journalQuotaPilote(chemin string) bool {
 }
 
 func (p *pilote) seuilQuota() string {
-	regles := filepath.Join(p.kit, "logs", "quota-arret.json")
-	if st, err := os.Stat(regles); err != nil || st.Size() == 0 {
+	regles := reglesQuotaProjet(p.projet, filepath.Join(p.kit, "logs", "quota-arret.json"))
+	if len(regles) == 0 {
 		return ""
 	}
 	fs, _ := filepath.Glob(filepath.Join(p.etat, "logs", "*.jsonl"))
@@ -859,7 +860,7 @@ func (p *pilote) seuilQuota() string {
 	}
 	var s string
 
-	s = quotaVerifier(regles, noms)
+	s = quotaVerifierRegles(regles, noms)
 
 	s = strings.TrimSpace(s)
 	if i := strings.IndexByte(s, '\n'); i >= 0 {

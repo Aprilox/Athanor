@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"io/fs"
@@ -611,8 +612,7 @@ boucleSurveillance:
 				p.log("Windows session unlocked: the programs draw again.")
 			}
 		}
-		reglesQuota := filepath.Join(p.kit, "logs", "quota-arret.json")
-		if motif == "" && tailleFichierPilote(reglesQuota) > 0 && maintenant-dernierQuota >= 60 {
+		if motif == "" && maintenant-dernierQuota >= 60 { // (seuilQuota: nothing without a rule, the kit's or the project's)
 			dernierQuota = maintenant
 			lq := p.seuilQuota()
 			if strings.HasPrefix(lq, "maintenant\t") {
@@ -695,7 +695,19 @@ func (p *pilote) rangerSolutions(fichier, quoi string) {
 	_ = lancerSolutions([]string{"ranger", fichier, quoi})
 }
 
+// prendreReglagesProjet: the models of the cycle that starts: the project's own (variablesReglagesProjet), else
+// the ones the pilot started with. Read once per cycle: a change during a cycle waits for the next one (M290).
+func (p *pilote) prendreReglagesProjet() {
+	if p.modelesDepart == nil {
+		p.modelesDepart = &[4]string{p.model, p.fallbackModel, p.subagentModel, p.cheapModel}
+	}
+	v, d := variablesReglagesProjet(p.projet), p.modelesDepart
+	p.model, p.fallbackModel = cmp.Or(v["MODEL"], d[0]), cmp.Or(v["FALLBACK_MODEL"], d[1])
+	p.subagentModel, p.cheapModel = cmp.Or(v["SUBAGENT_MODEL"], d[2]), cmp.Or(v["CHEAP_MODEL"], d[3])
+}
+
 func (p *pilote) preparerEquipe() {
+	p.prendreReglagesProjet()
 	dossierAgents := filepath.Join(p.prive, "agents")
 
 	for _, l := range equipeImporter(p.kit, p.projet) {

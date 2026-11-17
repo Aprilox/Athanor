@@ -110,6 +110,52 @@ func reglageProjet(projet, cle string) string {
 	return cmp.Or(reglagePropre(cf, projet, cle), reglageGlobal(cf, cle))
 }
 
+// nomProjetDossier: the name of the project that works in this folder ("" when the application knows none).
+func nomProjetDossier(cf Config, dossier string) string {
+	for _, p := range cf.Projets {
+		if memeFichier(p.Dossier, dossier) {
+			return p.Nom
+		}
+	}
+	return ""
+}
+
+// variablesReglagesProjet: the variables of the kit's .env the project of this folder replaced by a model of its
+// own ({"MODEL": "opus"}, M290); empty when it follows the defaults. The pilot, the lead, the agents and the chat
+// read it when they start, in their own process: another project or a session under way never sees the change.
+// shortcut: a pilot running inside WSL does not see the Windows application's file and keeps the defaults, hand
+// the values over at launch if WSL projects need their own models.
+func variablesReglagesProjet(dossier string) map[string]string {
+	cf, v := lireConfig(), map[string]string{}
+	if nom := nomProjetDossier(cf, dossier); nom != "" {
+		for cle, variable := range reglagesModeles {
+			if propre := reglagePropre(cf, nom, cle); propre != "" {
+				v[variable] = propre
+			}
+		}
+	}
+	return v
+}
+
+// reglesQuotaProjet: the automatic stops of the kit (fichierRegles, quota-arret.json) with the project's own rule
+// in their place, window by window ("0": no stop for this project).
+func reglesQuotaProjet(dossier, fichierRegles string) map[string]regleSeuil {
+	r, cf := reglesSeuils(fichierRegles), lireConfig()
+	nom := nomProjetDossier(cf, dossier)
+	if nom == "" {
+		return r
+	}
+	for fenetre := range fenetresRegles {
+		seuil, action, _ := strings.Cut(reglagePropre(cf, nom, "quota_"+fenetre), ":")
+		if n, _ := strconv.Atoi(seuil); n > 0 {
+			r[fenetre] = regleSeuil{float64(n), action}
+		} else if seuil == "0" {
+			delete(r, fenetre)
+		}
+	}
+	return r
+}
+
 // definirReglageProjet: the project's own value of cle ("" or "defaut": back to the global one); returns the own
 // value it had before. An unknown setting or value is an erreurEntree.
 func definirReglageProjet(projet, cle, valeur string) (string, error) {

@@ -127,7 +127,11 @@ func titrePython(s string) string {
 }
 
 func quotaVerifier(fichierRegles string, journaux []string) string {
-	r := reglesSeuils(fichierRegles)
+	return quotaVerifierRegles(reglesSeuils(fichierRegles), journaux)
+}
+
+// quotaVerifierRegles: quotaVerifier on rules already read (the pilot's: reglesQuotaProjet).
+func quotaVerifierRegles(r map[string]regleSeuil, journaux []string) string {
 	if len(r) == 0 {
 		return ""
 	}

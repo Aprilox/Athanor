@@ -316,6 +316,9 @@ func (s *Serveur) apiAgents(w http.ResponseWriter, r *http.Request) {
 			reglages[l.Cle], presents[l.Cle] = strings.TrimSpace(l.Valeur), true
 		}
 	}
+	for v, propre := range variablesReglagesProjet(p.Dossier) { // the project's own models, as its pilot takes them (M290)
+		reglages[v], presents[v] = propre, true
+	}
 	simple := "haiku"
 	if presents["CHEAP_MODEL"] {
 		simple = reglages["CHEAP_MODEL"]
