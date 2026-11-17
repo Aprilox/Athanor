@@ -210,7 +210,7 @@ func TestPremierDeploiementProjet(t *testing.T) {
 	}
 	calme(p, "preparation")
 	b := briefs()
-	if len(b) != 1 || !strings.Contains(b[0], prefixePremierDeploiement+" of project m284 to environment site (https://m284.example.fr):") || !strings.Contains(b[0], c2) {
+	if len(b) != 1 || !strings.Contains(b[0], prefixePremierDeploiement+" of project m284 (https://m284.example.fr):") || !strings.Contains(b[0], c2) {
 		t.Fatalf("brief: %q", b)
 	}
 	audits := slices.DeleteFunc(lignesAudit(t, dossierJournalAudit()), func(l LigneAudit) bool { return l.Action != "premier déploiement" || l.Projet != p.Nom })

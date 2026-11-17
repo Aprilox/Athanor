@@ -42,7 +42,7 @@ type appAccess struct {
 // access: access_proteger or access_retirer (a.Emails empty) for a.Nom with provider f's token.
 func (s *Serveur) access(f Fournisseur, jeton string, a argsCloudflare) (any, error) {
 	if f.Compte == "" {
-		return nil, errors.New("the provider's account is not known: the owner clicks Test on the provider")
+		return nil, errors.New("the Cloudflare account is not known: the owner clicks Test on the Cloudflare API in the Vault")
 	}
 	apps := "/accounts/" + url.PathEscape(f.Compte) + "/access/apps"
 	var l []appAccess

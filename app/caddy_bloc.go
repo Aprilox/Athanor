@@ -43,7 +43,7 @@ var plagesCloudflare = []string{
 func blocCaddy(e Environnement, serveur, amont, email, hachage string) (string, error) {
 	u, err := url.Parse(e.URL)
 	if e.URL == "" || err != nil || u.Hostname() == "" {
-		return "", errors.New("the environment has no URL")
+		return "", errors.New("the site has no URL")
 	}
 	statique := strings.HasPrefix(amont, "/")
 	if statique && !reRacineCaddy.MatchString(amont) || !statique && !reAmontCaddy.MatchString(amont) {
@@ -122,7 +122,7 @@ func (s *Serveur) hachageProxy(projet, env string) (string, error) {
 func (s *Serveur) blocCaddyEnv(projet, env, serveur, amont string) (string, error) {
 	e, ok := s.acces.Environnements(projet)[env]
 	if !ok {
-		return "", errors.New("unknown environment")
+		return "", errors.New("unknown site")
 	}
 	email, hachage := "", ""
 	for _, v := range s.coffre.Liste() {

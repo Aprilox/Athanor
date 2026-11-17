@@ -32,12 +32,12 @@ func init() {
 	objet, texte := schemaObjet, schemaTexte
 	outilsHub["etat"] = OutilHub{Description: "Your project's state in Athanor: plan progress, phase, what waits for the owner, the names of the variables you receive, your access requests.",
 		Schema: objet(map[string]any{}), Faire: outilEtat}
-	outilsHub["environnements"] = OutilHub{Description: "Your project's environments: the current one and, for each, its URL, protection, deployment policy, the names of its servers and of the variables you receive (never their values).",
+	outilsHub["environnements"] = OutilHub{Description: "Your project's deployment: its URL, protection, policy, the names of its servers and of the variables you receive (never their values). An older project may list several sites.",
 		Schema: objet(map[string]any{}), Faire: outilEnvironnements}
 	outilsHub["demander_acces"] = OutilHub{Description: "Ask the owner for a key or secret you need (e.g. STRIPE_SECRET_KEY). Once accepted, it appears in .athanor/secrets.env, no restart needed.",
 		Schema: objet(map[string]any{"nom": texte("Variable name, e.g. STRIPE_SECRET_KEY"), "raison": texte("Why you need it, in one sentence")}, "nom", "raison"), Faire: outilDemanderAcces}
-	outilsHub["demander_deploiement"] = OutilHub{Description: "Ask for a deployment of a commit to dev, staging or prod. Prod always waits for the owner. Once accepted it runs with the recorded method: follow it with deploiement_etat.",
-		Schema: objet(map[string]any{"environnement": texte("dev, staging or prod"), "commit": texte("Full commit hash to deploy (git rev-parse HEAD)")}, "environnement", "commit"), Faire: outilDemanderDeploiement}
+	outilsHub["demander_deploiement"] = OutilHub{Description: "Ask for a deployment of a commit to your project's site. A production site always waits for the owner. Once accepted it runs with the recorded method: follow it with deploiement_etat.",
+		Schema: objet(map[string]any{"environnement": texte("Leave it empty: the project's deployment. Only an older project with several sites names one (see environnements)"), "commit": texte("Full commit hash to deploy (git rev-parse HEAD)")}, "commit"), Faire: outilDemanderDeploiement}
 	outilsHub["deploiement_etat"] = OutilHub{Description: "The state of a deployment of your project started by demander_deploiement: en_cours, ok, echec or revenu, with its external check.",
 		Schema: objet(map[string]any{"id": texte("The deployment's id, from demander_deploiement")}, "id"), Faire: outilDeploiementEtat}
 	outilsHub["signaler"] = OutilHub{Description: "Report a blocker to the owner: it shows in Athanor's bell. One short sentence.",
@@ -189,7 +189,7 @@ func outilDemanderAcces(s *Serveur, x SessionHub, args json.RawMessage) (string,
 		return "", err
 	}
 	if slices.Contains(recus[env], nom) {
-		return nom + " is already in .athanor/secrets.env (" + env + "): read it there, no request needed", nil
+		return nom + " is already in .athanor/secrets.env: read it there, no request needed", nil
 	}
 	l, _ := s.approbations.Liste()
 	for _, d := range l {
@@ -207,7 +207,7 @@ func outilDemanderAcces(s *Serveur, x SessionHub, args json.RawMessage) (string,
 	if id := s.approbations.EntreeRegle(x.Projet, env, ap.Action, nom); id != "" && s.cleCode(id) {
 		if d, err := s.approbations.Demander(ap); err == nil {
 			if _, _, err := s.deciderApprobation("regle", d.ID, "accepter", id, "", ""); err == nil {
-				return nom + " granted by the owner's rule for this project and environment: it is in .athanor/secrets.env (read it again, no restart needed)", nil
+				return nom + " granted by the owner's rule for this project: it is in .athanor/secrets.env (read it again, no restart needed)", nil
 			}
 			s.ecrireAudit(LigneAudit{Type: "evenement", De: x.Agent, Vers: "hub", Mission: x.Mission, Projet: x.Projet, Env: env,
 				Agent: x.Agent, Action: "approbation demandée: " + ap.Action, Resultat: "attente " + d.ID + " (the rule could not grant it)"})
@@ -238,8 +238,11 @@ func outilDemanderDeploiement(s *Serveur, x SessionHub, args json.RawMessage) (s
 		return "", err
 	}
 	env, commit := a.Environnement, strings.ToLower(strings.TrimSpace(a.Commit))
+	if env == "" { // M305b: a project has one deployment, nothing to name
+		env = s.deploiementProjet(x.Projet)
+	}
 	if !s.acces.EnvConnu(x.Projet, env) {
-		return "", errors.New("unknown environment: one of the project's environments (lire_environnements)")
+		return "", errors.New("unknown site: leave environnement empty for the project's deployment, or name one of its sites (environnements)")
 	}
 	if len(commit) == 64 && strings.Trim(commit, "0123456789abcdef") == "" { // B81: the engine archives SHA-1 commits only
 		return "", errors.New("this commit is a SHA-256 hash: Athanor's engine deploys only repositories with SHA-1 commits (40 hexadecimal characters); nothing was asked")
@@ -249,10 +252,10 @@ func outilDemanderDeploiement(s *Serveur, x SessionHub, args json.RawMessage) (s
 	}
 	e := s.acces.Environnements(x.Projet)[env]
 	if len(e.Serveurs) == 0 {
-		return "", errors.New(env + " has no server yet: the owner adds one in the project's Environments panel; go on with work that does not need it")
+		return "", errors.New("the project's deployment has no server yet: the owner adds one in the project's Deployment tab; go on with work that does not need it")
 	}
 	if e.Deploiement == nil {
-		return "", errors.New(env + " has no deployment method yet: the first deployment is made by Athanor's own Servers task (started at the project's deployment moment, or by the owner from the Deployment tab); never ask for a server's access, go on with work that does not need it")
+		return "", errors.New("this site has no deployment method yet: the first deployment is made by Athanor's own Servers task (started at the project's deployment moment, or by the owner from the Deployment tab); never ask for a server's access, go on with work that does not need it")
 	}
 	hote := x.Projet
 	if u, err := url.Parse(e.URL); err == nil && u.Hostname() != "" {
@@ -285,10 +288,10 @@ func outilDemanderDeploiement(s *Serveur, x SessionHub, args json.RawMessage) (s
 			return "", fmt.Errorf("deployment accepted (%s) but not started: %s", par, s.masquerSecrets(err.Error()))
 		}
 		go func() { _, _ = suite(context.Background()) }() // its result goes to the history (deploiement_etat)
-		return "deployment " + d.ID + " of " + commit + " to " + env + " accepted (" + par + ") and started: follow it with deploiement_etat; go on with your work", nil
+		return "deployment " + d.ID + " of " + commit + " to " + hote + " accepted (" + par + ") and started: follow it with deploiement_etat; go on with your work", nil
 	}
 	attente := func(id string) (string, error) {
-		return "waiting for the owner, id " + id + ": once accepted, call demander_deploiement again with the same environment and commit; go on with work that does not need it", nil
+		return "waiting for the owner, id " + id + ": once accepted, call demander_deploiement again with the same arguments; go on with work that does not need it", nil
 	}
 	if accord, raison := s.politiqueDeploiement(x.Projet, env, len(fichiers) > 0); !accord { // C69: changed build or container files are destructive
 		return accepte(raison, "")

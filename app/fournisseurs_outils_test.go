@@ -209,7 +209,7 @@ func TestOutilsCloudflare(t *testing.T) {
 			id, res = "sess-verif", "VERIFICATION: ok"
 		case n == 0:
 			n++
-			if !strings.Contains(consigne, "environment demo/dev (host names: app.exemple.fr)") {
+			if !strings.Contains(consigne, "the site of project demo (host names: app.exemple.fr)") {
 				t.Errorf("chef ops instructions: %q", consigne)
 			}
 			if txt, e := appel(jeton, "fournisseurs", `{}`); e || !strings.Contains(txt, `"exemple.fr"`) || !strings.Contains(txt, "dns:écrire") || strings.Contains(txt, "autre.org") || strings.Contains(txt, cle.ID) {

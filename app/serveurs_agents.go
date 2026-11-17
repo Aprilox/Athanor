@@ -73,7 +73,8 @@ func consigneEnv(env string, hotes []string) string {
 	if env == "" {
 		return ""
 	}
-	return "\nThis task is for environment " + env + " (host names: " + strings.Join(hotes, ", ") + "). The Cloudflare tools " +
+	projet, _, _ := strings.Cut(env, "/") // the site's internal name is never shown
+	return "\nThis task is for the site of project " + projet + " (host names: " + strings.Join(hotes, ", ") + "). The Cloudflare tools " +
 		"(fournisseurs, dns_lister, ssl_lire to read; dns_ecrire, dns_supprimer, ssl_regler to change) act only on these names. " +
 		"Their changes are plan steps like any other (proposer_plan, serveur = any of your servers). " +
 		"To publish the project, use deployer (method statique or compose, source artefact or git, the full commit hash) and, to undo it, " +

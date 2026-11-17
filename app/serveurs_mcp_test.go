@@ -110,6 +110,9 @@ func TestServeursMCP(t *testing.T) {
 		strings.Contains(txt, "temoin") || strings.Contains(txt, mem.hote) {
 		t.Errorf("environnement_lire: %v %s", e, txt)
 	}
+	if sans, e := appel(jeton, "environnement_lire", `{"projet":"demo"}`); e || sans != txt { // M305b: no site named, the project's deployment
+		t.Errorf("environnement_lire without env: %v %s", e, sans)
+	}
 	for _, a := range []string{`{"projet":"demo","env":"prod"}`, `{"projet":"demo","env":"staging"}`, `{"projet":"inconnu","env":"dev"}`, `{"projet":"demo","env":"qa"}`} {
 		if txt, e := appel(jeton, "environnement_lire", a); !e || txt != errEnvInconnu.Error() {
 			t.Errorf("environnement_lire %s: %v %q", a, e, txt)

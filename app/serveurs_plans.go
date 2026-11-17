@@ -255,11 +255,11 @@ func outilProposerPlan(s *Serveur, x SessionHub, args json.RawMessage) (string, 
 		if deploi { // M135: the task's own environment; prod's is a prod step (approval always)
 			var d argsDeploiementOutil
 			_ = json.Unmarshal(et.Arguments, &d)
-			projetEnv, err := s.envTache(x, "proposer_plan", d.Env)
+			projetEnv, envPlan, err := s.envTache(x, "proposer_plan", d.Env)
 			if err != nil {
 				return "", fmt.Errorf("step %d: %w", i+1, err)
 			}
-			if s.prudenceRenforcee(projetEnv, d.Env) {
+			if s.prudenceRenforcee(projetEnv, envPlan) {
 				prod, p.Env = true, "prod"
 			}
 			construit = construit || strings.TrimSpace(d.Construire) != ""

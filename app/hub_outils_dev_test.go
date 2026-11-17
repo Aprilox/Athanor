@@ -180,7 +180,7 @@ func TestOutilsDev(t *testing.T) {
 	l = l[:1]
 
 	// demander_deploiement: refused while the environment has no server (TestDemanderDeploiement for the policy)
-	if txt, er = appel("demander_deploiement", `{"environnement":"prod","commit":"0123456789abcdef0123456789abcdef01234567"}`); !er || !strings.Contains(txt, "prod has no server yet") {
+	if txt, er = appel("demander_deploiement", `{"environnement":"prod","commit":"0123456789abcdef0123456789abcdef01234567"}`); !er || !strings.Contains(txt, "the project's deployment has no server yet") {
 		t.Errorf("demander_deploiement: %v %s", er, txt)
 	}
 	if _, er = appel("demander_deploiement", `{"environnement":"ailleurs","commit":"abc123"}`); !er {

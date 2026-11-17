@@ -72,8 +72,8 @@ func init() {
 	}
 	outilsHub["serveurs_liste"] = OutilHub{Description: "The servers you may work on: id, name, roles, state, last seen.",
 		Schema: schemaObjet(map[string]any{}), Faire: outilServeursListe}
-	outilsHub["environnement_lire"] = OutilHub{Description: "A project's environment that runs on your servers: URL, protection, deployment policy and its servers you may work on.",
-		Schema: schemaObjet(map[string]any{"projet": schemaTexte("The project's name"), "env": schemaTexte("The environment")}, "projet", "env"), Faire: outilEnvironnementLire}
+	outilsHub["environnement_lire"] = OutilHub{Description: "A project's deployment that runs on your servers: URL, protection, deployment policy and its servers you may work on.",
+		Schema: schemaObjet(map[string]any{"projet": schemaTexte("The project's name"), "env": schemaTexte("Leave it empty: the project's deployment. Only an older project with several sites names one")}, "projet"), Faire: outilEnvironnementLire}
 	outilsHub["serveur_fiche"] = OutilHub{Description: "A server's sheet (system, resources, ports, software, services, containers), as Athanor last read it.",
 		Schema: schemaObjet(map[string]any{"serveur": srv}, "serveur"), Faire: outilServeurFiche}
 }
@@ -331,7 +331,7 @@ func outilServeurFiche(s *Serveur, x SessionHub, args json.RawMessage) (string, 
 	return enDonnees("server-sheet", "", strings.TrimSuffix(s.masquerSecrets(string(b)), "\n")), nil
 }
 
-var errEnvInconnu = errors.New("unknown environment, or none of its servers is yours")
+var errEnvInconnu = errors.New("unknown site, or none of its servers is yours")
 
 // outilEnvironnementLire: an environment is in a task's perimeter when one of its servers is; any other one
 // (or an unknown project) gets the same answer, and the owner reads the refusal in the audit log.
@@ -346,6 +346,9 @@ func outilEnvironnementLire(s *Serveur, x SessionHub, args json.RawMessage) (str
 	inv, err := lireServeurs()
 	if err != nil {
 		return "", err
+	}
+	if a.Env == "" { // M305b: the project's one deployment
+		a.Env = s.deploiementProjet(a.Projet)
 	}
 	var e Environnement
 	if s.acces != nil && s.acces.EnvConnu(a.Projet, a.Env) && slices.Contains(s.nomsProjets(), a.Projet) {

@@ -107,7 +107,7 @@ func (s *Serveur) poserCertificat(id, nom, crt, cle string) (lisible bool, err e
 func (s *Serveur) installerCertificat(projet, env string, serveurs []string) (map[string]string, error) {
 	e := s.acces.Environnements(projet)[env]
 	if e.Certificat == "" {
-		return nil, errors.New("the environment has no origin certificate")
+		return nil, errors.New("the site has no origin certificate")
 	}
 	nom := hoteEnv(&e)
 	v, err := s.coffre.Valeur(e.Certificat)
@@ -143,10 +143,10 @@ func (s *Serveur) installerCertificat(projet, env string, serveurs []string) (ma
 func (s *Serveur) certificatOrigine(x SessionHub, jeton, nom, serveur string) (any, error) {
 	projet, env, _ := strings.Cut(x.Env, "/")
 	if serveur == "" || projet == "" {
-		return nil, errors.New("certificat_origine runs only as a step of an accepted plan of a task launched for an environment")
+		return nil, errors.New("certificat_origine runs only as a step of an accepted plan of a task launched for a project's deployment")
 	}
 	if e := s.acces.Environnements(projet)[env]; !strings.EqualFold(nom, hoteEnv(&e)) { // the file Caddy's tls line names
-		return nil, fmt.Errorf("the origin certificate is for the environment's host name (%q)", hoteEnv(&e))
+		return nil, fmt.Errorf("the origin certificate is for the site's host name (%q)", hoteEnv(&e))
 	}
 	crt, cle, expire, err := s.emettreCertificat(jeton, nom)
 	if err != nil {

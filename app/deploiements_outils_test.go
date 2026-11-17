@@ -30,6 +30,8 @@ func TestClasserDeploiement(t *testing.T) {
 		{"deployer", `{"env":"../qa","methode":"statique","source":"artefact","commit":"` + sha + `"}`, 0, "env:"},
 		{"deployer", `{"env":"dev","methode":"statique","source":"artefact","commit":"` + sha + `","serveur":"x"}`, 0, "invalid arguments"},
 		{"revenir_version", `{"env":"prod"}`, ClasseChangement, ""},
+		{"revenir_version", `{}`, ClasseChangement, ""}, // M305b: env is optional
+		{"deployer", `{"methode":"statique","source":"artefact","commit":"` + sha + `"}`, ClasseChangement, ""},
 	} {
 		var a map[string]json.RawMessage
 		_ = json.Unmarshal([]byte(c.args), &a)
@@ -127,16 +129,16 @@ func TestDeploiementAgentConteneur(t *testing.T) {
 		}
 	}
 	ops := jeton(SessionHub{Projet: "m135", Mission: "t1", Agent: agentServeurs, Outils: outilsServeursMCP, Serveurs: []string{id}, Env: "m135/dev", Hotes: []string{hote}})
-	dep := `{"env":"dev","methode":"statique","source":"artefact","dossier":"dist","construire":"mkdir -p dist && cp -R site/. dist/ && echo construit-ok > dist/construit.txt","commit":"` + c3 + `"}`
+	dep := `{"methode":"statique","source":"artefact","dossier":"dist","construire":"mkdir -p dist && cp -R site/. dist/ && echo construit-ok > dist/construit.txt","commit":"` + c3 + `"}`
 
 	// the chef ops: refused without a plan, outside its environment; deployed as a step of an accepted plan
 	if txt, e := appel(ops, "deployer", dep); !e || !strings.Contains(txt, "plan required") {
 		t.Fatalf("without a plan: %v %s", e, txt)
 	}
-	if txt, e := appel(ops, "deployer", strings.Replace(dep, `"dev"`, `"prod"`, 1)); !e || txt != errEnvInconnu.Error() {
+	if txt, e := appel(ops, "deployer", strings.Replace(dep, "{", `{"env":"prod",`, 1)); !e || txt != errEnvInconnu.Error() {
 		t.Errorf("prod from a dev task: %v %s", e, txt)
 	}
-	if txt, e := appel(ops, "proposer_plan", `{"serveur":"`+id+`","resume":"r","etapes":[{"outil":"deployer","arguments":`+strings.Replace(dep, `"dev"`, `"prod"`, 1)+`,"pourquoi":"p"}]}`); !e || !strings.Contains(txt, errEnvInconnu.Error()) {
+	if txt, e := appel(ops, "proposer_plan", `{"serveur":"`+id+`","resume":"r","etapes":[{"outil":"deployer","arguments":`+strings.Replace(dep, "{", `{"env":"prod",`, 1)+`,"pourquoi":"p"}]}`); !e || !strings.Contains(txt, errEnvInconnu.Error()) {
 		t.Errorf("a dev task's plan for prod: %v %s", e, txt)
 	}
 	txt, e := appel(ops, "proposer_plan", `{"serveur":"`+id+`","resume":"Publier le site","etapes":[{"outil":"deployer","arguments":`+dep+`,"pourquoi":"p"}]}`)
@@ -168,7 +170,7 @@ func TestDeploiementAgentConteneur(t *testing.T) {
 
 	// the Dev agent: dev in auto, the recorded method (its build too), no owner
 	dev := jeton(SessionHub{Projet: "m135", Mission: "M1", Agent: "pilote", Outils: outilsPilote})
-	txt, e = appel(dev, "demander_deploiement", `{"environnement":"dev","commit":"`+c1+`"}`)
+	txt, e = appel(dev, "demander_deploiement", `{"commit":"`+c1+`"}`) // M305b: no site named, the project's deployment
 	idDep, _, ok := strings.Cut(strings.TrimPrefix(txt, "deployment "), " ")
 	if e || !ok || !strings.Contains(txt, "accepted (policy auto) and started") {
 		t.Fatalf("demander_deploiement: %v %s", e, txt)
@@ -202,7 +204,7 @@ func TestDeploiementAgentConteneur(t *testing.T) {
 
 	// prod: never without the owner
 	prod := jeton(SessionHub{Projet: "m135", Mission: "t2", Agent: agentServeurs, Outils: outilsServeursMCP, Serveurs: []string{id}, Env: "m135/prod", Hotes: []string{hoteProd}})
-	depProd := strings.Replace(dep, `"dev"`, `"prod"`, 1)
+	depProd := strings.Replace(dep, "{", `{"env":"prod",`, 1)
 	s.approbations.mu.Lock() // "do not ask again" for this server
 	s.approbations.regles = append(s.approbations.regles, reglePlan("m135", id))
 	s.approbations.mu.Unlock()

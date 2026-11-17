@@ -124,7 +124,7 @@ func TestRelaisJalon(t *testing.T) {
 		t.Fatal("started without a method")
 	}
 	calme("(b)", "preparation")
-	if b := briefs(); len(b) != 1 || !strings.Contains(b[0], prefixePremierDeploiement+" of project m136u to environment dev") || !strings.Contains(b[0], c2) {
+	if b := briefs(); len(b) != 1 || !strings.Contains(b[0], prefixePremierDeploiement+" of project m136u (") || !strings.Contains(b[0], c2) {
 		t.Fatalf("(b) the first deployment's task: %q", b)
 	}
 	s.avancerRelais(p, maintenant) // that task deployed nothing: to prepare, still no failure
@@ -230,7 +230,7 @@ func TestRelaisJalonConteneur(t *testing.T) {
 	if r := s.etatRelais(p.Nom); r == nil || r.Etat != "preparation" || r.Erreur != "" || len(s.alertesRelais()) != 0 {
 		t.Fatalf("the first deployment: %+v, bell %+v", r, s.alertesRelais())
 	}
-	if b := briefs(); len(b) != 2 || !strings.Contains(b[0], prefixePremierDeploiement+" of project m136 to environment dev") || len(*sorties) != 2 || !strings.Contains((*sorties)[1], `"etat": "ok"`) {
+	if b := briefs(); len(b) != 2 || !strings.Contains(b[0], prefixePremierDeploiement+" of project m136 (") || len(*sorties) != 2 || !strings.Contains((*sorties)[1], `"etat": "ok"`) {
 		t.Fatalf("the first deployment's task: %d sessions, deployer: %q", len(b), *sorties)
 	}
 	if h := historiqueDeploiements(p.Nom, "dev"); len(h) != 1 || h[0].Commit != c1 || h[0].Etat != "ok" || s.acces.Environnements(p.Nom)["dev"].Deploiement == nil {

@@ -23,10 +23,10 @@ import (
 var outilsCloudflare = []string{"fournisseurs", "dns_lister", "dns_ecrire", "dns_supprimer", "ssl_lire", "ssl_regler", "certificat_origine", "access_proteger", "access_retirer"}
 
 var (
-	errNomInconnu  = errors.New("unknown name: only your environment's host names, in a zone of its Cloudflare provider")
+	errNomInconnu  = errors.New("unknown name: only your task's host names, in a zone of its Cloudflare API")
 	typesDNS       = []string{"A", "AAAA", "CNAME", "TXT"}
 	modesSSL       = []string{"off", "flexible", "full", "strict"}
-	errSansFournis = errors.New("this environment has no Cloudflare provider: the owner chooses one in the project's Environments panel")
+	errSansFournis = errors.New("this project has no Cloudflare API: the owner gives one in the project's Deployment tab")
 )
 
 // argsCloudflare: the arguments of every Cloudflare tool (each one reads its own: argumentsDe), canonical
@@ -47,7 +47,7 @@ func init() {
 	parmi := func(d string, l ...string) map[string]any {
 		return map[string]any{"type": "string", "description": d, "enum": append([]string{}, l...)}
 	}
-	nom := schemaTexte("A host name of your environment (see fournisseurs)")
+	nom := schemaTexte("A host name of your task (see fournisseurs)")
 	classe := parmi("Your own class of this action; the code's class is kept when higher", "lecture", "changement", "destructrice")
 	type def struct {
 		nom, description string
@@ -55,25 +55,25 @@ func init() {
 		requis           []string
 	}
 	for _, d := range []def{
-		{"fournisseurs", "Your environment's host names and, for its Cloudflare provider, the zones holding them and the rights its token has there.",
+		{"fournisseurs", "Your task's host names and, for its Cloudflare API, the zones holding them and the rights its token has there.",
 			map[string]any{}, nil},
-		{"dns_lister", "The DNS records of your environment's host names (one name, or all of them).",
-			map[string]any{"nom": schemaTexte("A host name of your environment; all of them when empty")}, nil},
-		{"dns_ecrire", "Create or update a DNS record of a host name of your environment (A, AAAA and CNAME: the record of that type is replaced; TXT: added). A change: only as a step of an accepted plan.",
+		{"dns_lister", "The DNS records of your task's host names (one name, or all of them).",
+			map[string]any{"nom": schemaTexte("A host name of your task; all of them when empty")}, nil},
+		{"dns_ecrire", "Create or update a DNS record of a host name of your task (A, AAAA and CNAME: the record of that type is replaced; TXT: added). A change: only as a step of an accepted plan.",
 			map[string]any{"nom": nom, "type": parmi("Record type", typesDNS...), "contenu": schemaTexte("IPv4 (A), IPv6 (AAAA), target host (CNAME) or text (TXT)"),
-				"proxied": map[string]any{"type": "boolean", "description": "Through Cloudflare's proxy (A, AAAA, CNAME; false by default, always true when the environment is protected by Access)"},
+				"proxied": map[string]any{"type": "boolean", "description": "Through Cloudflare's proxy (A, AAAA, CNAME; false by default, always true when the site is protected by Access)"},
 				"ttl":     map[string]any{"type": "integer", "description": "Seconds, 60 to 86400; automatic when empty"}}, []string{"nom", "type", "contenu"}},
-		{"dns_supprimer", "Delete the DNS records of a host name of your environment of one type (only the one holding contenu when given). Destructive: only as a step of an accepted plan.",
+		{"dns_supprimer", "Delete the DNS records of a host name of your task of one type (only the one holding contenu when given). Destructive: only as a step of an accepted plan.",
 			map[string]any{"nom": nom, "type": parmi("Record type", typesDNS...), "contenu": schemaTexte("Only the record holding exactly this content")}, []string{"nom", "type"}},
-		{"ssl_lire", "The SSL/TLS encryption mode of the zone holding a host name of your environment.",
+		{"ssl_lire", "The SSL/TLS encryption mode of the zone holding a host name of your task.",
 			map[string]any{"nom": nom}, []string{"nom"}},
-		{"ssl_regler", "Set the SSL/TLS encryption mode of the zone holding a host name of your environment (off is destructive). Only as a step of an accepted plan.",
+		{"ssl_regler", "Set the SSL/TLS encryption mode of the zone holding a host name of your task (off is destructive). Only as a step of an accepted plan.",
 			map[string]any{"nom": nom, "mode": parmi("The mode (strict: the origin's certificate is checked)", modesSSL...)}, []string{"nom", "mode"}},
-		{"certificat_origine", "Have a Cloudflare origin certificate made for a host name of your environment and installed by Athanor on the plan's server, in " + dossierTLS + "/<name>.crt and .key (the key 0600 root, never shown to you). A change: only as a step of an accepted plan on that server.",
+		{"certificat_origine", "Have a Cloudflare origin certificate made for a host name of your task and installed by Athanor on the plan's server, in " + dossierTLS + "/<name>.crt and .key (the key 0600 root, never shown to you). A change: only as a step of an accepted plan on that server.",
 			map[string]any{"nom": nom}, []string{"nom"}},
-		{"access_proteger", "Protect a host name of your environment with Cloudflare Access: a self-hosted application whose only policy allows the given e-mail addresses (the owner's choice). A change: only as a step of an accepted plan.",
+		{"access_proteger", "Protect a host name of your task with Cloudflare Access: a self-hosted application whose only policy allows the given e-mail addresses (the owner's choice). A change: only as a step of an accepted plan.",
 			map[string]any{"nom": nom, "emails": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "The e-mail addresses allowed in (1 to 50)"}}, []string{"nom", "emails"}},
-		{"access_retirer", "Remove the Cloudflare Access application of a host name of your environment: the site is open to everyone again. Destructive: only as a step of an accepted plan.",
+		{"access_retirer", "Remove the Cloudflare Access application of a host name of your task: the site is open to everyone again. Destructive: only as a step of an accepted plan.",
 			map[string]any{"nom": nom}, []string{"nom"}},
 	} {
 		d.props["classe"] = classe
@@ -89,7 +89,7 @@ func classerCloudflare(outil string, brut []byte) (Classe, string, argsCloudflar
 	}
 	a.Nom = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(a.Nom)), ".")
 	if a.Nom != "" && (len(a.Nom) > 253 || !nomHoteValide.MatchString(a.Nom)) || a.Nom == "" && outil != "fournisseurs" && outil != "dns_lister" {
-		return 0, "", a, errors.New("nom: a host name of your environment")
+		return 0, "", a, errors.New("nom: a host name of your task")
 	}
 	switch outil {
 	case "fournisseurs", "dns_lister", "ssl_lire":
@@ -302,7 +302,7 @@ func (s *Serveur) fournisseurEnv(x SessionHub, nom string) (Fournisseur, string,
 		jeton, err = s.coffre.Valeur(f.Cle)
 	}
 	if err != nil {
-		return Fournisseur{}, "", fmt.Errorf("the provider's token cannot be read (%v): the owner opens the vault or checks the provider", err)
+		return Fournisseur{}, "", fmt.Errorf("the Cloudflare token cannot be read (%v): the owner opens the vault or tests the Cloudflare API there", err)
 	}
 	return f, jeton, nil
 }
@@ -429,7 +429,7 @@ func (s *Serveur) executerCloudflare(x SessionHub, outil string, a argsCloudflar
 		noms = x.Hotes
 	}
 	if len(noms) == 0 { // C66
-		return nil, errors.New("the environment has no URL: the owner sets it in the project's Environments panel")
+		return nil, errors.New("the project's deployment has no URL: the owner sets it in the project's Deployment tab")
 	}
 	lister := func(z ZoneFournisseur, nom, typ string) ([]enregistrementDNS, error) {
 		var l []enregistrementDNS
@@ -500,7 +500,7 @@ func (s *Serveur) executerCloudflare(x SessionHub, outil string, a argsCloudflar
 		var r enregistrementDNS
 		res := map[string]any{"resultat": "written"}
 		if force {
-			res["proxied"] = "forced to true: the environment is protected by Cloudflare Access"
+			res["proxied"] = "forced to true: the site is protected by Cloudflare Access"
 		}
 		switch {
 		case slices.ContainsFunc(l, pareil):

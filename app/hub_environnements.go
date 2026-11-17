@@ -756,7 +756,7 @@ func (s *Serveur) politiqueDeploiement(projet, env string, destructif bool) (acc
 	case s.acces.Environnements(projet)[env].Politique == "auto":
 		return false, "policy auto"
 	case s.approbations.Regle(RegleAccord{Projet: projet, Env: env, Action: actionDeploiement}):
-		return false, "the owner's rule for this environment"
+		return false, "the owner's rule for this project"
 	}
 	return true, "policy accord"
 }

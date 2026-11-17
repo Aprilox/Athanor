@@ -28,18 +28,18 @@ func init() {
 	parmi := func(d string, l ...string) map[string]any {
 		return map[string]any{"type": "string", "description": d, "enum": append([]string{}, l...)}
 	}
-	env := schemaTexte("The environment of your task")
+	env := schemaTexte("Leave it empty: your task's site")
 	classe := parmi("Your own class of this action; the code's class is kept when higher", "lecture", "changement", "destructrice")
-	outilsHub["deployer"] = OutilHub{Description: "Deploy a commit of the project to your task's environment with Athanor's engine (release, atomic switch, external check). " +
+	outilsHub["deployer"] = OutilHub{Description: "Deploy a commit of the project to your task's site with Athanor's engine (release, atomic switch, external check). " +
 		"The method is then recorded so that later deployments need no agent. A step of an accepted plan only.",
 		Schema: schemaObjet(map[string]any{"env": env, "methode": parmi("statique: Caddy serves a folder; compose: docker compose up of the release; k3s: kubectl apply of a manifests folder on a k3s server, only when the owner asked for Kubernetes", "statique", "compose", "k3s"),
 			"source":     parmi("artefact: the commit archived on this PC and sent; git: each server fetches it with the deployment key", "artefact", "git"),
 			"dossier":    map[string]any{"type": "string", "maxLength": maxDossierPublie, "description": "The published folder (statique), the compose file's folder or the manifests' folder (k3s), relative to the repository; empty: its root"},
 			"construire": schemaTexte("A build command run on this PC in a checkout of the commit before the archive (artefact source only)"),
-			"commit":     schemaTexte("The full commit hash"), "classe": classe}, "env", "methode", "source", "commit"),
+			"commit":     schemaTexte("The full commit hash"), "classe": classe}, "methode", "source", "commit"),
 		Faire: faireOutilDeploiement("deployer")}
-	outilsHub["revenir_version"] = OutilHub{Description: "Switch your task's environment back to the version served before the last deployment, then check it. A step of an accepted plan only.",
-		Schema: schemaObjet(map[string]any{"env": env, "classe": classe}, "env"), Faire: faireOutilDeploiement("revenir_version")}
+	outilsHub["revenir_version"] = OutilHub{Description: "Switch your task's site back to the version served before the last deployment, then check it. A step of an accepted plan only.",
+		Schema: schemaObjet(map[string]any{"env": env, "classe": classe}), Faire: faireOutilDeploiement("revenir_version")}
 }
 
 // classerDeploiement: a deployment tool's arguments checked and canonical, and its class: a change; a build
@@ -49,11 +49,11 @@ func classerDeploiement(outil string, brut json.RawMessage) (Classe, string, arg
 	if err := lireArguments(brut, &a); err != nil {
 		return 0, "", a, err
 	}
-	if !nomEnvValide(a.Env) { // the project's environment is checked when the deployment starts
-		return 0, "", a, errors.New("env: the name of your task's environment")
+	if a.Env != "" && !nomEnvValide(a.Env) { // the project's site is checked when the deployment starts
+		return 0, "", a, errors.New("env: leave it empty (your task's site)")
 	}
 	if outil == "revenir_version" {
-		return ClasseChangement, "switches " + a.Env + " back to its previous version", a, nil
+		return ClasseChangement, "switches the site back to its previous version", a, nil
 	}
 	a.Commit = strings.ToLower(strings.TrimSpace(a.Commit))
 	if !reCommitComplet.MatchString(a.Commit) {
@@ -62,7 +62,7 @@ func classerDeploiement(outil string, brut json.RawMessage) (Classe, string, arg
 	if err := validerConfigDeploiement(ConfigDeploiement{a.Methode, a.Source, a.Dossier, a.Construire}); err != nil {
 		return 0, "", a, err
 	}
-	c, raison := ClasseChangement, "deploys commit "+a.Commit[:12]+" to "+a.Env
+	c, raison := ClasseChangement, "deploys commit "+a.Commit[:12]+" to the site"
 	if a.Construire != "" {
 		if cc, r := classerCommande(a.Construire); cc > c {
 			c, raison = cc, raison+"; its build command: "+r
@@ -71,16 +71,16 @@ func classerDeploiement(outil string, brut json.RawMessage) (Classe, string, arg
 	return c, raison, a, nil
 }
 
-// envTache: env is the environment x's task was launched for; its project, else the unknown environment's
-// answer (the refusal audited).
-func (s *Serveur) envTache(x SessionHub, outil, env string) (string, error) {
+// envTache: env is the site x's task was launched for, or empty (M305b: a task has one site, nothing to name):
+// its project and its name, else the unknown site's answer (the refusal audited).
+func (s *Serveur) envTache(x SessionHub, outil, env string) (string, string, error) {
 	projet, nom, _ := strings.Cut(x.Env, "/")
-	if projet != "" && nom == env {
-		return projet, nil
+	if projet != "" && (env == "" || nom == env) {
+		return projet, nom, nil
 	}
 	s.ecrireAudit(LigneAudit{Type: "evenement", De: x.Agent, Vers: "hub", Projet: x.Projet, Mission: x.Mission, Agent: x.Agent,
 		Action: "serveurs." + outil, Resultat: "refusé : environnement hors de la tâche (" + couper(env, 10) + ")"})
-	return "", errEnvInconnu
+	return "", "", errEnvInconnu
 }
 
 // faireOutilDeploiement: the MCP side of deployer and revenir_version: the task's environment, a step of an
@@ -102,7 +102,7 @@ func faireOutilDeploiement(nom string) func(*Serveur, SessionHub, json.RawMessag
 		var projet string
 		if err == nil {
 			_ = json.Unmarshal(e.Arguments, &c)
-			projet, err = s.envTache(x, nom, c.Env)
+			projet, c.Env, err = s.envTache(x, nom, c.Env)
 		}
 		if err == nil {
 			err = s.etapeCloudflare(x, &e) // a step of an accepted plan, whatever the environment

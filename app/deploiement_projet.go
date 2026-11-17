@@ -48,7 +48,7 @@ func briefPreparation(d donneesPreparation, p Projet) string {
 			"propose your plan and wait for the owner's accord before anything goes online for the first time.\n")
 	}
 	if d.DNS != "" {
-		b.WriteString("DNS: the zone of " + hoteURL(d.URL) + " is at the provider " + d.DNS + ", its token is given.\n")
+		b.WriteString("DNS: the zone of " + hoteURL(d.URL) + " is at " + d.DNS + ", its token is given.\n")
 	}
 	if len(d.APIs) > 0 {
 		b.WriteString("Vault entries given (names only, never ask for a value): " + strings.Join(d.APIs, ", ") + ".\n")
@@ -149,12 +149,12 @@ func (s *Serveur) preparerProjet(p Projet) {
 // prefixePremierDeploiement: how the brief of a first deployment task starts.
 const prefixePremierDeploiement = "First deployment"
 
-// briefPremierDeploiement (M275b, M284): what the first deployment task does: commit head of p to its environment
-// env with one deployer step; pour names who asks after the address (a mission's title, until M302).
-func briefPremierDeploiement(env, url, pour string, p Projet, head string) string {
-	return prefixePremierDeploiement + " of project " + p.Nom + " to environment " + env + " (" + url + ")" + pour + ": " +
-		"its work is ready to go online and this environment has no deployment method yet. Propose one plan whose step is deployer " +
-		"(env " + env + ", commit " + head + ", source artefact; the method and the published folder from the project's files: " +
+// briefPremierDeploiement (M275b, M284): what the first deployment task does: commit head of p to its site
+// with one deployer step; pour names who asks after the address (a mission's title, until M302).
+func briefPremierDeploiement(url, pour string, p Projet, head string) string {
+	return prefixePremierDeploiement + " of project " + p.Nom + " (" + url + ")" + pour + ": " +
+		"its work is ready to go online and its site has no deployment method yet. Propose one plan whose step is deployer " +
+		"(commit " + head + ", source artefact; the method and the published folder from the project's files: " +
 		"statique for a static site, compose when it has a compose file), then apply it once accepted. Athanor then deploys " +
 		"each later milestone or delivery itself with that method.\n"
 }
@@ -195,7 +195,7 @@ func (s *Serveur) premierDeploiementProjet(p Projet, forcee bool) (TacheServeurs
 	if err != nil || !reCommitComplet.MatchString(head) {
 		return TacheServeurs{}, erreurEntree("the project has no commit to deploy")
 	}
-	t, err := s.lancerTache(couper(briefPremierDeploiement(env, e.URL, "", p, head), maxTexteTache-1), e.Serveurs, forcee, p.Nom)
+	t, err := s.lancerTache(couper(briefPremierDeploiement(e.URL, "", p, head), maxTexteTache-1), e.Serveurs, forcee, p.Nom)
 	r.Etat, r.Commit, r.ID, r.Erreur, r.Accord = "a_preparer", head, "", "", ""
 	if r.Date == "" {
 		r.Date = time.Now().UTC().Format(time.RFC3339)
