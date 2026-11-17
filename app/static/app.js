@@ -1019,11 +1019,12 @@ async function arreterPilote(b) {
     if (c === "maintenant") { b.disabled = true; await action(api("pilote/arreter", "POST")); setTimeout(rafraichir, 800); }
     return;
   }
-  // M251: a pilot alone has two ways (its pause is a stop now: Start picks it up where it stopped)
-  const c = await choisirArret(t("Stop the pilot?"), ["jalon", "immediat"], {
+  // M298: three ways, as the request asks: the pause keeps the server tasks of the project's deployment, a stop cancels them
+  const c = await choisirArret(t("Stop the pilot?"), ["jalon", "pause", "immediat"], {
     jalon: "Finish the current milestone: Claude completes it and saves it, then the pilot stops. Nothing is lost.",
-    immediat: "Stop now: the current cycle is cut off; what Claude has not saved yet is done again at the next Start." });
-  if (c === "immediat") { b.disabled = true; await action(api("pilote/arreter", "POST")); setTimeout(rafraichir, 800); }
+    pause: "Put on pause: the pilot stops now and the project's deployment waits. Its server tasks stay and change nothing until Start.",
+    immediat: "Stop immediately: the current cycle is cut off and the server tasks of the project's deployment are cancelled. Start does again what was not saved." });
+  if (c === "immediat" || c === "pause") { b.disabled = true; await action(api(c === "pause" ? "pilote/pause" : "pilote/arreter", "POST")); setTimeout(rafraichir, 800); }
   if (c === "jalon") return arreterApresCycle(b);
 }
 // M251: the ways to stop offered (jalon, pause, immediat), each said in one paragraph; the choice, or null

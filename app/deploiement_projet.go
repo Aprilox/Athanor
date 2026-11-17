@@ -121,7 +121,7 @@ func (s *Serveur) preparerProjet(p Projet) {
 		return
 	}
 	e := s.acces.Environnements(p.Nom)[s.envJalon(p.Nom)]
-	if len(e.Serveurs) == 0 || e.Moment == "" || !planPret(p) || missionSurProjet(p.Nom) {
+	if len(e.Serveurs) == 0 || e.Moment == "" || !planPret(p) || missionSurProjet(p.Nom) || projetBloque("dev", p.Nom) != "" {
 		return
 	}
 	serveurs := slices.Sorted(slices.Values(e.Serveurs))
@@ -260,6 +260,10 @@ func (s *Serveur) apiPreparerDeploiement(w http.ResponseWriter, r *http.Request)
 	}
 	if forcee && !sansRappel && !s.preuveServeur(w, r, c.MotDePasse, "premier déploiement forcé refusé", projet) {
 		return
+	}
+	if lireRelais()[p.Nom].Pause { // M298: the owner's request lets a paused or stopped project's deployment go again, its preparation first
+		pauserProjet(p.Nom, false)
+		s.preparerProjet(p)
 	}
 	t, err := s.premierDeploiementProjet(p, forcee)
 	if err != nil {

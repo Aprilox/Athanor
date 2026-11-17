@@ -34,6 +34,9 @@ type RelaisJalon struct {
 	Preparation *PreparationRelais `json:"preparation,omitempty"`
 	// M284: the Servers task of the first deployment (premierDeploiementProjet); survives the relays too
 	Premier string `json:"premier,omitempty"`
+	// M298: the owner paused or stopped the project: no preparation, no deployment, no plan of its tasks until
+	// Start; only pauserProjet changes it
+	Pause bool `json:"pause,omitempty"`
 }
 
 // attentePushRelais: how long a milestone's commit may wait to be on GitHub (git source) before the relay tries anyway.
@@ -53,8 +56,21 @@ func ecrireRelais(projet string, r RelaisJalon) {
 	relaisMu.Lock()
 	defer relaisMu.Unlock()
 	m := lireRelais()
+	r.Pause = m[projet].Pause // the owner's, whatever the caller read before they paused
 	m[projet] = r
 	_ = ecrireJSONFichier(fichierRelais(), m, 0o600)
+}
+
+// pauserProjet (M298): the project's deployment held (pause, stop now) or let go again (Start, Prepare now).
+func pauserProjet(projet string, pause bool) {
+	relaisMu.Lock()
+	defer relaisMu.Unlock()
+	m := lireRelais()
+	if r := m[projet]; r.Pause != pause {
+		r.Pause = pause
+		m[projet] = r
+		_ = ecrireJSONFichier(fichierRelais(), m, 0o600)
+	}
 }
 
 // deplacerRelais: a renamed project keeps its record; nouveau "": the project is removed, it goes.

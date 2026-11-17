@@ -27,6 +27,9 @@ type bancCarteProjet struct {
 func nouveauBancCarteProjet(t *testing.T, cartes ...string) *bancCarteProjet {
 	t.Helper()
 	s := serveurCoffreTest(t)
+	natif := modeNatif.Load() // on Windows nouveauServeur turns it on after a test that read no config file (as serveursAjoutTest)
+	t.Cleanup(func() { modeNatif.Store(natif) })
+	modeNatif.Store(false)
 	_ = os.Remove(s.acces.chemin) // a file left next to the test binary by an interrupted run
 	s.chargerAcces()
 	t.Cleanup(func() { _ = os.Remove(s.acces.chemin) })
