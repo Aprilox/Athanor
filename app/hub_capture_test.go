@@ -557,12 +557,20 @@ func coffreCapture(t *testing.T) *Coffre {
 		t.Fatal(err)
 	}
 	var migration etatMigration
+	dns, err := c.PoserCategorie("", "DNS") // M288: two of the owner's categories, one entry in each
+	if err != nil {
+		t.Fatal(err)
+	}
+	paiement, err := c.PoserCategorie("", "Paiement")
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, e := range []EntreeCoffre{
-		{Nom: "CLOUDFLARE_API_TOKEN", Famille: "secret", Type: "cloudflare", Portee: "infra", Note: "DNS et tunnels de example.org"},
+		{Nom: "CLOUDFLARE_API_TOKEN", Famille: "secret", Type: "cloudflare", Portee: "infra", Note: "DNS et tunnels de example.org", Categorie: dns.ID},
 		{Nom: "SSH_VPS_PROD", Famille: "secret", Type: "ssh", Portee: "infra", Note: "Serveur de production, utilisateur deploy"},
 		{Nom: "GITHUB_TOKEN", Famille: "secret", Type: "github", Portee: "code", Note: "Reads private repositories", Source: "projet:boutique"},
 		{Nom: "ANTHROPIC_API_KEY", Famille: "secret", Type: "anthropic", Portee: "code", Source: "mcp:assistant"},
-		{Nom: "STRIPE_SECRET_KEY", Famille: "secret", Type: "stripe", Portee: "code", Note: "Mode test de la boutique"},
+		{Nom: "STRIPE_SECRET_KEY", Famille: "secret", Type: "stripe", Portee: "code", Note: "Mode test de la boutique", Categorie: paiement.ID},
 		{Nom: "NODE_ENV", Famille: "variable", Note: "Mode des builds"},
 		{Nom: "SITE_URL", Famille: "variable"},
 	} {

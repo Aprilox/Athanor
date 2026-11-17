@@ -1122,13 +1122,21 @@ ol.guide-access li { margin: 5px 0; }
 .menu-coffre-liste { position: absolute; right: 0; top: calc(100% + 4px); z-index: 5; min-width: 190px; display: flex; flex-direction: column; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--ombre); padding: 4px; }
 .menu-coffre-liste button { background: none; border: 0; color: var(--ink); text-align: left; padding: 7px 10px; border-radius: 6px; cursor: pointer; font-size: 13.5px; }
 .menu-coffre-liste button:hover, .menu-coffre-liste button:focus-visible { background: var(--panel-3); }
-.menu-coffre-liste button.danger { color: var(--erreur); }
+.menu-coffre-liste button.danger { color: var(--erreur-vif); }
 .cof-tete { align-items: flex-end; }
 .cof-tete .onglets { margin-bottom: 0; border-bottom: 0; }
 .cof-form { margin: 12px 0 16px; max-width: 720px; }
 .cof-form h2 { margin: 0 0 4px; font-size: 16px; }
 .cof-form input, .cof-form select, .cof-form textarea { width: 100%; box-sizing: border-box; }
 .cof-choix { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+/* M288: the API picker (search field + filter by category) and the Categories panel of the vault */
+.choix-api { display: flex; flex-direction: column; gap: 8px; }
+.choix-api-champs { display: flex; gap: 8px; flex-wrap: wrap; }
+.choix-api-champs input { flex: 1 1 12em; width: auto; min-width: 0; }
+.choix-api-champs select { flex: 0 1 auto; max-width: 100%; }
+.coffre > .choix-api { margin: 12px 0; max-width: 720px; }
+.cof-cat-ligne { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+.cof-form .cof-cat-ligne input { flex: 1; min-width: 0; width: auto; }
 .cof-props { margin: 8px 0; border-top: 1px solid var(--line); }
 .cof-prop { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
 .cof-form .cof-prop input[type=text], .cof-form .cof-prop select { width: auto; }

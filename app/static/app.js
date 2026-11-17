@@ -2076,9 +2076,9 @@ const blocAttente = (tous, modules) => blocListeAccueil("a-repondre", "Waiting f
 const blocEnCours = (tous, modules, lm = []) => blocListeAccueil("en-cours", "In progress", tous.filter((e) => !e.attente && e.etat === "actif"), "Nothing in progress right now.", modules,
   lm.length ? `<ul class="mis-liste">${lm.slice(0, 3).map(ligneMission).join("")}</ul>` : "");
 // M151: mentions of the bar. A chip = { type: projet|serveur|cle|nouveau, ref, nom }; the Go checks the refs again.
-const TYPES_MENTION = { projet: "Project", serveur: "Server", api: "Key", cle: "Key", fournisseur: "Provider", dossier: "Folder", nouveau: "New project" };
-const GROUPES_MENTION = { projet: "Projects", serveur: "Servers", api: "Vault keys", cle: "Vault keys", fournisseur: "Providers", dossier: "Folders" };
-const ICONES_MENTION = { projet: "projet", serveur: "serveur", api: "cle", cle: "cle", fournisseur: "lien", dossier: "dossier", nouveau: "plus" };
+const TYPES_MENTION = { projet: "Project", serveur: "Server", api: "API", dossier: "Folder", nouveau: "New project" };
+const GROUPES_MENTION = { projet: "Projects", serveur: "Servers", api: "APIs", dossier: "Folders" };
+const ICONES_MENTION = { projet: "projet", serveur: "serveur", api: "cle", dossier: "dossier", nouveau: "plus" };
 // a chip shows its kind (icon + label) before the name: a project and a server of the same name never look alike
 const typeMention = (m) => `${ic(ICONES_MENTION[m.type])}${m.type === "nouveau" ? "" : `<span class="puce-type">${h(t(TYPES_MENTION[m.type]))}</span>`}`;
 const pucesMentions = () => (etat.accueilMentions || []).map((m, i) => `<span class="puce-mention puce-${m.type}" title="${h(t(TYPES_MENTION[m.type]))}">${typeMention(m)}${h(m.nom)}<button type="button" class="puce-x" data-retirer-mention="${i}" aria-label="${h(t("Remove {0}", [m.nom]))}">×</button></span>`).join("");
@@ -2107,7 +2107,26 @@ function motMention(champ) {
 const LISTES_MENTIONS = {
   "accueil-texte": { liste: "accueil-liste", opt: "mention-opt", cle: "mentionListe", mot: motMention, pris: () => etat.accueilMentions || [], choisir: choisirMentionAccueil },
   "mis-res-q": { liste: "mis-res-liste", opt: "mis-res-opt", cle: "missionResListe", mot: (c) => ({ q: c.value.trim(), debut: 0 }), pris: ressourcesMission, type: () => (etat.missionRes || {}).type, choisir: ajouterRessourceMission },
+  "cof-q": { filtrer: (q, cat) => filtrerCoffre(q, cat) }, // the vault page: its own cards are the list (every entry, the servers' keys too)
 };
+// M288: the owner's categories of API (GET /api/coffre/categories), read when a screen that filters by them opens
+const lireCategories = async () => etat.categoriesAPI = ((await api("coffre/categories").catch(() => ({}))).categories || []).sort((a, b) => a.nom.localeCompare(b.nom));
+const nomCategorie = (id) => ((etat.categoriesAPI || []).find((c) => c.id === id) || {}).nom || "";
+const optionsCategories = (choisie, vide) => `<option value="">${h(t(vide))}</option>${(etat.categoriesAPI || []).map((c) => `<option value="${h(c.id)}"${c.id === choisie ? " selected" : ""}>${h(c.nom)}</option>`).join("")}`;
+// M288: the one API picker (vault page, "Add a resource"; the Deployment tab and the home cards take it as is): a search
+// field (name or category), a filter by category shown once a category exists, and the list of LISTES_MENTIONS[id].
+// The chosen ones are the caller's chips (typeMention), listed by its "pris".
+function choixAPI(id, titre, q = "", cat = "") {
+  const liste = LISTES_MENTIONS[id].liste;
+  return `<div class="choix-api"><label for="${id}" class="petit">${t(titre)}</label>
+    <div class="choix-api-champs"><input type="text" id="${id}" value="${h(q)}" autocomplete="off" spellcheck="false"${liste ? ` role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="${liste}"` : ""}>
+      ${(etat.categoriesAPI || []).length ? `<select id="${id}-cat" aria-label="${h(t("Filter by category"))}">${optionsCategories(cat, "All categories")}<option value="sans"${cat === "sans" ? " selected" : ""}>${t("No category")}</option></select>` : ""}</div>
+    ${liste ? `<ul id="${liste}" class="liste-mentions mis-res-liste" role="listbox" aria-label="${h(t(titre))}" hidden></ul>` : ""}</div>`;
+}
+document.addEventListener("change", (ev) => { // the filter by category runs the search of its field again
+  const champ = ev.target.id.endsWith("-cat") && document.getElementById(ev.target.id.slice(0, -4));
+  if (champ && LISTES_MENTIONS[champ.id]) chercherMentions(champ);
+});
 function fermerListeMentions(id = "accueil-texte") {
   const cfg = LISTES_MENTIONS[id], liste = $("#" + cfg.liste), champ = $("#" + id);
   etat[cfg.cle] = null;
@@ -2119,19 +2138,21 @@ function rendreListeMentions(id = "accueil-texte") {
   if (!liste || !champ || !ml) return;
   // the Go sends them grouped by type: a heading opens each group (the card asks one type: no heading)
   liste.innerHTML = ml.items.length ? ml.items.map((m, i) => `${!cfg.type && (i === 0 || ml.items[i - 1].type !== m.type) ? `<li role="presentation" class="mention-groupe">${ic(ICONES_MENTION[m.type])}${h(t(GROUPES_MENTION[m.type]))}</li>` : ""}<li role="option" id="${o}-${i}" class="mention-opt puce-${m.type}${i === ml.actif ? " actif" : ""}" aria-selected="${i === ml.actif}" data-opt="${i}">
-    ${ic(ICONES_MENTION[m.type])}<span class="etiquette">${h(t(TYPES_MENTION[m.type]))}</span><b>${h(m.nom)}</b>${m.detail ? `<span class="muet petit">${h(m.detail)}</span>` : ""}</li>${(ml.autres || {})[m.type] && (i === ml.items.length - 1 || ml.items[i + 1].type !== m.type) ? `<li role="presentation" class="mention-autres muet petit">${h(ml.autres[m.type] === 1 ? t("1 more: type to filter") : t("{0} more: type to filter", [ml.autres[m.type]]))}</li>` : ""}`).join("")
+    ${ic(ICONES_MENTION[m.type])}<span class="etiquette">${h(t(TYPES_MENTION[m.type]))}</span><b>${h(m.nom)}</b>${m.detail ? `<span class="muet petit">${h(m.detail)}</span>` : ""}${m.categorie_nom ? `<span class="badge">${h(m.categorie_nom)}</span>` : ""}</li>${(ml.autres || {})[m.type] && (i === ml.items.length - 1 || ml.items[i + 1].type !== m.type) ? `<li role="presentation" class="mention-autres muet petit">${h(ml.autres[m.type] === 1 ? t("1 more: type to filter") : t("{0} more: type to filter", [ml.autres[m.type]]))}</li>` : ""}`).join("")
     : `<li class="mention-vide muet petit" role="option" aria-disabled="true">${t("Nothing matches.")}</li>`;
   liste.hidden = false; champ.setAttribute("aria-expanded", "true");
   if (ml.items.length) { champ.setAttribute("aria-activedescendant", `${o}-${ml.actif}`); $(`#${o}-${ml.actif}`).scrollIntoView({ block: "nearest" }); } else champ.removeAttribute("aria-activedescendant");
 }
 async function chercherMentions(champ) {
-  const cfg = LISTES_MENTIONS[champ.id], mot = cfg.mot(champ);
+  const cfg = LISTES_MENTIONS[champ.id], cat = (document.getElementById(champ.id + "-cat") || {}).value || "";
+  if (cfg.filtrer) return cfg.filtrer(champ.value.trim(), cat);
+  const mot = cfg.mot(champ);
   if (!mot) { fermerListeMentions(champ.id); return; }
   const n = cfg.n = (cfg.n || 0) + 1, type = cfg.type ? cfg.type() : "";
   let items = [], autres = {};
   try { // the chips already chosen are not offered again
     const pris = new Set(cfg.pris().map((m) => m.type + "\0" + m.ref));
-    const r = await api("mentions?q=" + encodeURIComponent(mot.q) + (type ? "&type=" + type : "") + [...pris].map((p) => "&sauf=" + encodeURIComponent(p.replace("\0", ":"))).join(""));
+    const r = await api("mentions?q=" + encodeURIComponent(mot.q) + (type ? "&type=" + type : "") + (cat ? "&categorie=" + encodeURIComponent(cat) : "") + [...pris].map((p) => "&sauf=" + encodeURIComponent(p.replace("\0", ":"))).join(""));
     items = (r.mentions || []).filter((m) => !pris.has(m.type + "\0" + m.ref)); autres = r.autres || {};
   } catch { /* no list: the text stays as typed */ }
   if (n !== cfg.n || !cfg.mot(champ) || !champ.isConnected) return; // a later keystroke won
@@ -2159,7 +2180,7 @@ document.addEventListener("keydown", (ev) => {
   }
   if (ml && ml.items.length && ev.key === "Enter") { ev.preventDefault(); choisirMention(id, ml.actif); return; }
   // Backspace at the very start removes the last chip
-  if (!carte && ev.key === "Backspace" && ev.target.selectionStart === 0 && ev.target.selectionEnd === 0 && (etat.accueilMentions || []).length) { etat.accueilMentions.pop(); majMentions(); }
+  if (id === "accueil-texte" && ev.key === "Backspace" && ev.target.selectionStart === 0 && ev.target.selectionEnd === 0 && (etat.accueilMentions || []).length) { etat.accueilMentions.pop(); majMentions(); }
 });
 document.addEventListener("mousedown", (ev) => {
   const o = ev.target.closest(".liste-mentions [data-opt]"), id = o && Object.keys(LISTES_MENTIONS).find((k) => LISTES_MENTIONS[k].liste === o.parentElement.id);
@@ -2202,7 +2223,7 @@ pages.accueil = async () => {
         <button type="button" class="btn local-seul chat-replie" id="accueil-mission">${t("Create a mission")}</button>
         <button type="button" class="btn local-seul" id="hub-chat-stop" ${hc.en_cours ? "" : "hidden"}>${t("Stop")}</button>
         <button type="submit" class="btn btn-primaire local-seul" id="hub-chat-envoyer" ${hc.en_cours ? "hidden" : ""}>${t("Send")}</button></div>
-      <div class="muet petit local-seul chat-replie" id="accueil-aide">${t("Type @ to name a project, a server or a vault key.")}</div>
+      <div class="muet petit local-seul chat-replie" id="accueil-aide">${t("Type @ to name a project, a server or an API.")}</div>
     </form>
     <div id="mission-zone" aria-live="polite">${zoneMission()}</div>
     ${blocAttente(d.elements || [], modules)}
@@ -2243,15 +2264,14 @@ function carteMission(d) {
   // M253: the resources chosen, as removable chips, and "Add a resource" (category, then a list with a search)
   const mr = modif && etat.missionRes && etat.missionRes.id === m.id ? etat.missionRes : null, res = ressourcesMission();
   const puce = (r, i) => `<span class="puce-mention puce-${r.type}${apres && figeRes(r) ? " puce-figee" : ""}"${apres && figeRes(r) ? ` title="${h(t(figeRes(r)))}"` : r.pour ? ` title="${h(t("used for {0}", [r.pour]))}"` : ""}>${typeMention(r)}${h(r.nom)}${r.remplir ? ` <span class="badge mis-remplir">${t("to fill")}</span>` : ""}${modif && !figeRes(r) ? `<button type="button" class="puce-x" data-mis-retirer="${i}" aria-label="${h(t("Remove {0}", [r.nom]))}">×</button>` : ""}</span>`;
-  const cats = [["serveur", "Server"], ["cle", "Key"], ["fournisseur", "API / provider"]].filter(([k]) => k !== "serveur" || !(etat.vue || {}).distant); // B84: a server is added on the PC
-  const chercher = { serveur: "Find a server", cle: "Find a vault key", fournisseur: "Find an API or a provider" };
-  const menu = !mr ? "" : `<div class="mis-res-menu" id="mis-res">${mr.type ? `<label for="mis-res-q" class="petit">${t(chercher[mr.type])}</label>
+  const cats = [["serveur", "Server"], ["api", "API"]].filter(([k]) => k !== "serveur" || !(etat.vue || {}).distant); // B84: a server is added on the PC
+  const menu = !mr ? "" : `<div class="mis-res-menu" id="mis-res">${mr.type === "api" ? choixAPI("mis-res-q", "Find an API") : mr.type ? `<label for="mis-res-q" class="petit">${t("Find a server")}</label>
       <input type="text" id="mis-res-q" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="mis-res-liste">
-      <ul id="mis-res-liste" class="liste-mentions mis-res-liste" role="listbox" aria-label="${h(t(chercher[mr.type]))}" hidden></ul>`
+      <ul id="mis-res-liste" class="liste-mentions mis-res-liste" role="listbox" aria-label="${h(t("Find a server"))}" hidden></ul>`
     : `<p class="m0 petit" id="mis-res-quoi">${t("What do you want to add?")}</p><div class="ligne m0" role="group" aria-labelledby="mis-res-quoi">${cats.map(([k, l]) => `<button type="button" class="btn btn-petit" data-mis-res-type="${k}">${ic(ICONES_MENTION[k])}${t(l)}</button>`).join("")}</div>`}
       <div class="ligne m0">${mr.type ? `<button type="button" class="btn btn-petit" data-mis-res-retour>${t("Back")}</button>` : ""}<span class="espace"></span><button type="button" class="btn btn-petit" data-mis-res-fermer>${t("Close")}</button></div></div>`;
   const ressources = `<div class="mis-ressources"><h3 id="mis-res-titre">${t("Resources")}</h3>${c.avertissement_infra && !c.avertissement_serveurs ? avert : ""}
-      <div class="ligne m0 mis-res-puces" role="group" aria-labelledby="mis-res-titre">${res.map(puce).join("") || `<span class="muet petit">${t("No resource yet: add a server, a key or an API if the project needs one.")}</span>`}
+      <div class="ligne m0 mis-res-puces" role="group" aria-labelledby="mis-res-titre">${res.map(puce).join("") || `<span class="muet petit">${t("No resource yet: add a server or an API if the project needs one.")}</span>`}
       ${modif && !fg.envs ? `<button type="button" class="btn btn-petit" id="mis-res-ajouter" aria-expanded="${!!mr}" aria-controls="mis-res">${ic("plus")}${t("Add a resource")}</button>` : ""}</div>${menu}
       ${raisons.map((x) => `<p class="muet petit m0 mis-fige">${ic("info")} ${h(t(x))}</p>`).join("")}</div>`;
   const pj = c.projet.nouveau && modif && !fg.projet && !c.projet.distant ? sectionProjet(c) : "";
@@ -2375,7 +2395,7 @@ function ressourcesMission() {
   const nom = (r) => ((etat.mentionsSugg || []).find((x) => x.type === "serveur" && x.ref === r) || {}).nom || (etat.nomsServeurs || {})[r] || r;
   const vault = (n) => (etat.mentionsSugg || []).some((x) => x.type === "api" && x.nom === n); // M275b: typed at the launch, it is no longer "to fill"
   for (const e of c.envs || []) for (const r of e.serveurs || []) if (!l.some((x) => x.ref === r)) l.push({ type: "serveur", ref: r, nom: nom(r), env: e.nom });
-  for (const a of c.acces || []) if (!a.decoche && !l.some((x) => x.type === "cle" && x.nom === a.entree)) l.push({ type: "cle", ref: a.id || a.entree, nom: a.entree, remplir: a.a_remplir && !vault(a.entree), pour: nom(a.pour) });
+  for (const a of c.acces || []) if (!a.decoche && !l.some((x) => x.type === "api" && x.nom === a.entree)) l.push({ type: "api", ref: a.id || a.entree, nom: a.entree, remplir: a.a_remplir && !vault(a.entree), pour: nom(a.pour) });
   return l;
 }
 function fermerRessources() { etat.missionRes = null; majZoneMission(); $("#mis-res-ajouter")?.focus(); }
@@ -2390,6 +2410,7 @@ document.addEventListener("click", async (ev) => {
     if (r && await actionMission("ressources", { type: r.type, ref: r.ref, retirer: true })) $("#mis-res-ajouter")?.focus();
   } else if (b.dataset.misResFermer !== undefined || (b.id === "mis-res-ajouter" && etat.missionRes)) fermerRessources();
   else {
+    if (b.dataset.misResType === "api") await lireCategories();
     etat.missionRes = { id: d.mission.id, type: b.dataset.misResType || "" }; majZoneMission();
     const q = $("#mis-res-q"); if (q) { q.focus(); chercherMentions(q); } else $("[data-mis-res-type]")?.focus();
   }
@@ -5676,7 +5697,7 @@ for (const type of ["dragover", "dragleave", "drop"]) $("#page").addEventListene
   if (entree && b && !c.querySelector(`[data-acc-retirer="${CSS.escape(k)}"]`)) { b.checked = true; acc.attente[k] = true; majAttenteAcces(); } // waits for Save, as a ticked box
 });
 // --- Vault (Coffre module): the entries of /api/coffre, one tab per family; a secret's value never comes back
-const cof = { onglet: "secret", form: null, colle: null, d: { entrees: [], etat: {} } }; // colle: {texte, props} of "Paste"
+const cof = { onglet: "secret", form: null, colle: null, d: { entrees: [], etat: {} }, q: "", cat: "", cats: false }; // colle: {texte, props} of "Paste"; q, cat: the search and the category filter; cats: the Categories panel is open
 const TYPES_COFFRE = ["cloudflare", "ssh", "certificat", "github", "aws", "anthropic", "openai", "stripe", "mot_de_passe", "jeton", "smtp", "autre"];
 const INFRA_COFFRE = new Set(["cloudflare", "ssh", "certificat", "github", "aws"]); // the scope proposed by type (ARCHITECTURE §Coffre)
 const typeCoffre = (x) => ({ ssh: t("SSH key"), certificat: t("Certificate"), mot_de_passe: t("Password"), jeton: t("Token"), smtp: t("E-mail account"), autre: t("Other"),
@@ -5703,7 +5724,7 @@ function carteCoffre(x) {
       </div></details></div>
     <div class="petit cof-valeur">${secret ? `<span class="muet">•••• ${t("saved")}${x.deux_valeurs ? " · " + h(t("testing and production")) : ""}</span>` : `<code>${h(x.valeur)}</code>${x.deux_valeurs ? ` · ${h(t("Production"))} <code>${h(x.prod)}</code>` : ""}`}</div>
     <div class="petit cof-note${x.note ? "" : " muet"}" title="${h(x.note)}">${x.note ? h(x.note) : t("No note for the AI")}</div>
-    <div class="muet petit">${x.source ? h(x.source.startsWith("serveurs:") ? t("Key made for a server") : t("Imported from {0}", [x.source])) + " · " : ""}${h(dateLisible(x.modifie))}</div>
+    <div class="muet petit">${nomCategorie(x.categorie) ? `<span class="etiquette cof-cat">${h(nomCategorie(x.categorie))}</span> ` : ""}${x.source ? h(x.source.startsWith("serveurs:") ? t("Key made for a server") : t("Imported from {0}", [x.source])) + " · " : ""}${h(dateLisible(x.modifie))}</div>
   </div>`;
 }
 // M225: the environment a key's prefix says (Stripe-style sk_/rk_/pk_ test or live), "" when it says nothing
@@ -5729,6 +5750,7 @@ function formulaireCoffre() {
   return `<form class="bloc cof-form" id="cof-form" autocomplete="off">
     <h2>${x ? h(x.nom) : secret ? t("New secret") : t("New variable")}</h2>
     <label class="champ"><span>${t("Name")}</span><input type="text" id="cof-nom" maxlength="100" spellcheck="false" value="${h(x ? x.nom : "")}" placeholder="${secret ? "CLOUDFLARE_API_TOKEN" : "NODE_ENV"}"></label>
+    ${(etat.categoriesAPI || []).length ? `<label class="champ"><span>${t("Category")}</span><select id="cof-categorie">${optionsCategories(x ? x.categorie : cof.cat, "No category")}</select></label>` : ""}
     ${secret ? `<div class="cof-choix">
       <label class="champ"><span>${t("Type")}</span><select id="cof-type">${TYPES_COFFRE.map((y) => `<option value="${y}"${y === type ? " selected" : ""}>${h(typeCoffre(y))}</option>`).join("")}</select></label>
       <label class="champ"><span>${t("Scope")}</span><select id="cof-portee"><option value="code">${t("code — reopens alone on this PC")}</option><option value="infra"${portee === "infra" ? " selected" : ""}${mdp ? "" : " disabled"}>${t("infra — only with your password")}</option></select></label>
@@ -5773,18 +5795,42 @@ async function analyserColle() {
   const r = await action(api("coffre/coller", "POST", { texte }));
   if (r) { cof.colle = { texte, analyse: texte, props: r.propositions || [] }; rendrePage(); }
 }
+// M288: the Categories panel: one small form per category (its name, typed in place, renames it), then the new one
+function panneauCategories() {
+  const cats = etat.categoriesAPI || [], n = (id) => (cof.d.entrees || []).filter((x) => x.categorie === id).length;
+  const sugg = ["DNS", t("Hosting"), t("E-mail")].filter((s) => !cats.some((c) => c.nom.toLowerCase() === s.toLowerCase()));
+  return `<div class="bloc cof-form cof-cats" id="cof-cats">
+    <h2>${t("Categories")}</h2>
+    ${cats.length ? cats.map((c) => `<form class="cof-cat-ligne" data-cof-cat="${h(c.id)}" autocomplete="off"><input type="text" class="cof-cat-nom" maxlength="50" value="${h(c.nom)}" aria-label="${h(t("Name of the category"))}"><span class="muet petit">${n(c.id)}</span>
+      <button type="submit" class="btn btn-petit">${t("Rename")}</button><button type="button" class="btn btn-petit btn-danger" data-cof-cat-supprimer="${h(c.id)}">${t("Delete")}</button></form>`).join("")
+      : `<p class="muet petit m0">${t("No category yet: create one to sort your APIs.")}</p>`}
+    <form class="cof-cat-ligne" id="cof-cat-form" autocomplete="off"><input type="text" id="cof-cat-nouvelle" maxlength="50" placeholder="${h(t("New category"))}" aria-label="${h(t("New category"))}"><button type="submit" class="btn btn-petit">${t("Create")}</button></form>
+    ${sugg.length ? `<p class="petit muet ligne m0" id="cof-cat-sugg">${t("Suggestions:")} ${sugg.map((s) => `<button type="button" class="btn btn-petit" data-cof-cat-sugg="${h(s)}">${h(s)}</button>`).join("")}</p>` : ""}
+    <div class="ligne"><button type="button" class="btn" data-cof-categories>${t("Close")}</button></div>
+  </div>`;
+}
+// the cards of the tab kept by the search (name, type or category, as the Go's chercherMentions) and by the category filter
+function grilleCoffre() {
+  const tous = (cof.d.entrees || []).filter((x) => x.famille === cof.onglet), q = cof.q.toLowerCase();
+  const liste = tous.filter((x) => (!cof.cat || (cof.cat === "sans" ? !nomCategorie(x.categorie) : x.categorie === cof.cat))
+    && [x.nom, x.type, typeCoffre(x.type), nomCategorie(x.categorie)].some((v) => (v || "").toLowerCase().includes(q))).sort((a, b) => a.nom.localeCompare(b.nom));
+  return liste.length ? `<div class="grille-projets">${liste.map(carteCoffre).join("")}</div>`
+    : `<div class="vide">${tous.length ? t("Nothing matches.") : cof.onglet === "secret" ? t("No secret yet.") : t("No variable yet.")}</div>`;
+}
+function filtrerCoffre(q, cat) { cof.q = q; cof.cat = cat; $("#cof-grille").innerHTML = grilleCoffre(); }
 pages.coffre = async () => {
-  const d = await api("coffre"); cof.d = d;
+  const [d] = await Promise.all([api("coffre"), lireCategories()]); cof.d = d;
+  if (cof.cat && cof.cat !== "sans" && !nomCategorie(cof.cat)) cof.cat = ""; // the category of the filter is gone
   const e = d.etat || {}, m = d.migration || {}, entrees = d.entrees || [], n = (f) => entrees.filter((x) => x.famille === f).length;
-  const liste = entrees.filter((x) => x.famille === cof.onglet).sort((a, b) => a.nom.localeCompare(b.nom));
   const onglet = (f, nom) => `<button type="button" class="${cof.onglet === f ? "actif" : ""}" data-cof-onglet="${f}">${nom} <span class="muet">${n(f)}</span></button>`;
   return `<div class="coffre">
     ${e.mot_de_passe && !e.infra ? `<form class="bloc cof-verrou" id="cof-verrou"><span class="croit">${t("Vault locked: the keys of your servers open only with your password")}</span>
       <span class="ligne m0"><input type="password" id="cof-mdp" autocomplete="current-password" placeholder="${h(t("Password"))}" aria-label="${h(t("Password"))}"><button type="submit" class="btn btn-primaire">${t("Unlock")}</button></span></form>` : ""}
-    <div class="ligne cof-tete"><div class="onglets">${onglet("secret", t("Secrets"))}${onglet("variable", t("Variables"))}</div><span class="espace"></span><button type="button" class="btn" data-cof-coller>${t("Paste")}</button><button type="button" class="btn btn-primaire" data-cof-ajouter>${t("Add")}</button></div>
+    <div class="ligne cof-tete"><div class="onglets">${onglet("secret", t("Secrets"))}${onglet("variable", t("Variables"))}</div><span class="espace"></span><button type="button" class="btn" data-cof-categories aria-expanded="${cof.cats}">${t("Categories")}</button><button type="button" class="btn" data-cof-coller>${t("Paste")}</button><button type="button" class="btn btn-primaire" data-cof-ajouter>${t("Add")}</button></div>
     ${e.mot_de_passe ? "" : `<p class="petit attention ligne m0 cof-sans-mdp"><span class="croit">${t("Set a password for Athanor to keep the keys of your servers in the vault.")}</span><a class="btn btn-petit" href="#options@bloc-verrou">${t("Set a password")}</a></p>`}
-    ${cof.colle ? formulaireColle() : cof.form ? formulaireCoffre() : ""}
-    ${liste.length ? `<div class="grille-projets">${liste.map(carteCoffre).join("")}</div>` : `<div class="vide">${cof.onglet === "secret" ? t("No secret yet.") : t("No variable yet.")}</div>`}
+    ${cof.colle ? formulaireColle() : cof.form ? formulaireCoffre() : cof.cats ? panneauCategories() : ""}
+    ${n(cof.onglet) ? choixAPI("cof-q", "Search by name or category", cof.q, cof.cat) : ""}
+    <div id="cof-grille">${grilleCoffre()}</div>
     <p class="muet petit cof-explication">${t("Your project keys reopen alone on this PC; the keys of your servers open only with your password, and a copy of the disk opens nothing.")}</p>
     ${m.importees || m.annulee ? `<details class="plus-options"><summary>${t("More options")}</summary>${m.importees ? `<p class="muet petit cof-migration">${t("{0} keys imported from your old files.", [m.importees])} <button type="button" class="btn btn-petit" data-cof-mig-annuler>${t("Undo the import")}</button></p>`
       : `<p class="muet petit cof-migration">${t("Import from your old files undone (the files themselves are unchanged).")} <button type="button" class="btn btn-petit" data-cof-mig-importer>${t("Import again")}</button></p>`}</details>` : ""}
@@ -5794,10 +5840,18 @@ pages.coffre = async () => {
 const rendreCoffre = (champ) => rendrePage().then(() => { const c = champ && document.getElementById(champ); if (c) c.focus(); });
 $("#page").addEventListener("click", async (ev) => {
   if (etat.page !== "coffre") return;
-  const b = ev.target.closest("[data-cof-onglet], [data-cof-ajouter], [data-cof-env], [data-cof-coller], [data-cof-analyser]:not([type=submit]), [data-cof-annuler], [data-cof-modifier], [data-cof-remplacer], [data-cof-supprimer], [data-cof-tester], [data-cof-test], [data-cof-p-tester], [data-cof-note], [data-cof-mig-annuler], [data-cof-mig-importer]");
+  const b = ev.target.closest("[data-cof-onglet], [data-cof-ajouter], [data-cof-env], [data-cof-coller], [data-cof-analyser]:not([type=submit]), [data-cof-annuler], [data-cof-modifier], [data-cof-remplacer], [data-cof-supprimer], [data-cof-tester], [data-cof-test], [data-cof-p-tester], [data-cof-note], [data-cof-mig-annuler], [data-cof-mig-importer], [data-cof-categories], [data-cof-cat-supprimer], [data-cof-cat-sugg]");
   if (!b) return;
   const d = b.dataset, menu = b.closest("details"); if (menu) menu.open = false;
   if (d.cofOnglet) { cof.onglet = d.cofOnglet; cof.form = cof.colle = null; return rendrePage(); }
+  if (d.cofCategories !== undefined) { cof.cats = !cof.cats; cof.form = cof.colle = null; return rendreCoffre(cof.cats ? "cof-cat-nouvelle" : ""); }
+  if (d.cofCatSugg) { if (await action(api("coffre/categories", "POST", { nom: d.cofCatSugg }))) rendreCoffre("cof-cat-nouvelle"); return; }
+  if (d.cofCatSupprimer) { // its entries stay in the vault: the Go takes them out of the category
+    const nom = nomCategorie(d.cofCatSupprimer);
+    if (!await confirmer(t("Delete the category {0}? Its entries stay in the vault, without category.", [nom]), { danger: true, ok: t("Delete") })) return;
+    if (await action(api("coffre/categories/" + encodeURIComponent(d.cofCatSupprimer), "DELETE"))) { toast(t("{0} deleted.", [nom]), "ok"); rendreCoffre("cof-cat-nouvelle"); }
+    return;
+  }
   if (d.cofMigAnnuler !== undefined) {
     if (!await confirmer(t("Remove the {0} keys imported from your old files? The old files stay as they are.", [cof.d.migration.importees]), { danger: true, ok: t("Undo the import") })) return;
     const r = await action(api("coffre/migration/annuler", "POST")); if (r) { toast(t("{0} keys removed from the vault.", [r.retirees]), "ok"); rendrePage(); }
@@ -5808,9 +5862,9 @@ $("#page").addEventListener("click", async (ev) => {
     return;
   }
   if (d.cofAnnuler !== undefined) { cof.form = cof.colle = null; return rendrePage(); }
-  if (d.cofColler !== undefined) { cof.form = null; cof.colle = {}; return rendreCoffre("cof-texte"); }
+  if (d.cofColler !== undefined) { cof.form = null; cof.cats = false; cof.colle = {}; return rendreCoffre("cof-texte"); }
   if (d.cofAnalyser !== undefined) return analyserColle();
-  if (d.cofAjouter !== undefined) { cof.form = {}; cof.colle = null; return rendreCoffre("cof-nom"); }
+  if (d.cofAjouter !== undefined) { cof.form = {}; cof.colle = null; cof.cats = false; return rendreCoffre("cof-nom"); }
   if (d.cofEnv) { // the two fields swap their values: the key goes where its prefix says
     const v = $("#cof-valeur"), p = $("#cof-prod"); [v.value, p.value] = [p.value, v.value];
     deuxValeursCoffre(true); indiceEnvCoffre(); return (d.cofEnv === "prod" ? v : p).focus();
@@ -5820,12 +5874,12 @@ $("#page").addEventListener("click", async (ev) => {
     const l = b.closest("[data-cof-prop]"), type = l.querySelector(".cof-p-type");
     return testerCoffre({ texte: cof.colle.analyse, i: +l.dataset.cofProp, type: type && type.value }, l.querySelector(".cof-resultat"), l.querySelector(".cof-p-note"));
   }
-  if (d.cofTester) { cof.form = { id: d.cofTester }; cof.colle = null; await rendreCoffre("cof-note"); }
+  if (d.cofTester) { cof.form = { id: d.cofTester }; cof.colle = null; cof.cats = false; await rendreCoffre("cof-note"); }
   if (d.cofTester || d.cofTest !== undefined) {
     const hote = $("#cof-hote");
     return testerCoffre({ id: cof.form.id, type: $("#cof-type").value, hote: hote ? hote.value.trim() : "" }, $("#cof-test"), $("#cof-note"));
   }
-  if (d.cofModifier || d.cofRemplacer) { cof.form = { id: d.cofModifier || d.cofRemplacer }; cof.colle = null; return rendreCoffre(d.cofRemplacer ? "cof-valeur" : "cof-nom"); }
+  if (d.cofModifier || d.cofRemplacer) { cof.form = { id: d.cofModifier || d.cofRemplacer }; cof.colle = null; cof.cats = false; return rendreCoffre(d.cofRemplacer ? "cof-valeur" : "cof-nom"); }
   const x = entreeCoffre(d.cofSupprimer); if (!x) return;
   if (!await confirmer(t("Delete {0} from the vault? This cannot be undone.", [x.nom]), { danger: true, ok: t("Delete") })) return;
   if (await action(api("coffre/" + encodeURIComponent(x.id), "DELETE"))) { if (cof.form && cof.form.id === x.id) cof.form = null; toast(t("{0} deleted.", [x.nom]), "ok"); rendrePage(); }
@@ -5868,9 +5922,17 @@ $("#page").addEventListener("submit", async (ev) => {
     toast(r.entrees.length === 1 ? t("{0} added.", [r.entrees[0].nom]) : t("{0} entries added.", [r.entrees.length]), "ok");
     return rendrePage();
   }
+  if (ev.target.matches(".cof-cat-ligne")) { // a category made, or renamed in place
+    const id = ev.target.dataset.cofCat || "", nom = ev.target.querySelector("input").value.trim();
+    if (!nom || nom === nomCategorie(id)) return;
+    const r = await action(api("coffre/categories" + (id ? "/" + encodeURIComponent(id) : ""), "POST", { nom }));
+    if (r) { toast(id ? t("{0} saved.", [r.nom]) : t("{0} added.", [r.nom]), "ok"); rendreCoffre("cof-cat-nouvelle"); }
+    return;
+  }
   if (ev.target.id !== "cof-form") return;
   const x = cof.form.id && entreeCoffre(cof.form.id), secret = (x ? x.famille : cof.onglet) === "secret";
-  const corps = { nom: $("#cof-nom").value.trim(), note: $("#cof-note").value.trim() }, valeur = $("#cof-valeur").value;
+  const corps = { nom: $("#cof-nom").value.trim(), note: $("#cof-note").value.trim() }, valeur = $("#cof-valeur").value, categorie = $("#cof-categorie");
+  if (categorie && categorie.value !== ((x && x.categorie) || "")) corps.categorie = categorie.value;
   if (secret) { corps.type = $("#cof-type").value; corps.portee = $("#cof-portee").value; }
   if (!x) { corps.famille = cof.onglet; if (!secret) corps.type = "autre"; }
   if (!x || (secret ? valeur !== "" : valeur !== x.valeur)) corps.valeur = valeur; // an empty secret field keeps the value
