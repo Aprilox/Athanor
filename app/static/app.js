@@ -875,6 +875,8 @@ async function deciderDepuisCloche(ap, x, b) {
   if (((ap.action === "demander_acces" || (ap.details || {}).seule_cle === "oui") && x.id !== "refuser") || r.mot_de_passe_requis || r.appareil_requis) {
     fermerNotifs(); etat.apprCible = ap.id;
     if (ap.action === "mission") { location.hash = "#pourvous"; return; } // its project is no Dev project
+    // a project removed since (owner's note, 2026-11-17): its card on Approvals, outside any project, never a dead end
+    if (!((etat.vue || {}).projets || []).some((p) => p.nom === ap.projet)) { location.hash = "#approbations"; return; }
     return allerProjet(ap.projet, "pourvous");
   }
   if (x.id === "toujours" && !(await confirmerToujours(ap))) { b.disabled = false; return; }

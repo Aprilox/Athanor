@@ -357,6 +357,26 @@ func (a *Approbations) RefuserTout(par string) ([]Approbation, error) {
 	return out, a.enregistrer()
 }
 
+// RefuserDuProjet (a project removed from Athanor): its pending approvals refused by par, a mission's launch
+// excepted (decided on the mission's card); the refused ones.
+func (a *Approbations) RefuserDuProjet(projet, par string) ([]Approbation, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.expirer()
+	var out []Approbation
+	t := a.maintenant().Format(time.RFC3339)
+	for i := range a.liste {
+		if x := &a.liste[i]; x.Etat == "attente" && x.Projet == projet && x.Action != actionMission {
+			x.Etat, x.Par, x.T = "refusee", par, t
+			out = append(out, *x)
+		}
+	}
+	if len(out) == 0 {
+		return nil, nil
+	}
+	return out, a.enregistrer()
+}
+
 // RetirerRegles removes the rules f selects (Ask again, emergency stop); the removed ones.
 func (a *Approbations) RetirerRegles(f func(RegleAccord) bool) ([]RegleAccord, error) {
 	a.mu.Lock()

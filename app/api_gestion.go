@@ -759,6 +759,7 @@ func (s *Serveur) retirerProjet(p Projet) error {
 			_, _ = s.injecterAcces(p, nil)
 		}
 	}
+	s.oublierApprobations(p.Nom)
 	k := s.kitCourant()
 	choix := lireChoix(k)
 	if _, ok := choix[p.Dossier]; ok {
@@ -768,6 +769,29 @@ func (s *Serveur) retirerProjet(p Projet) error {
 	dossierAgents(k, p.Dossier, "") // the library keeps its sub-agents
 	s.apresChangementProjets()
 	return nil
+}
+
+// oublierApprobations: a removed project's pending approvals are refused (they stayed in the bell, their project
+// gone, owner's note of 2026-11-17) and its "never ask again" rules go, so that a new project of the same name
+// starts with none.
+func (s *Serveur) oublierApprobations(nom string) {
+	if s.approbations == nil {
+		return
+	}
+	verrouDecision.Lock() // an accept in progress ends first
+	l, err := s.approbations.RefuserDuProjet(nom, "hub")
+	verrouDecision.Unlock()
+	for _, x := range l {
+		s.ecrireAudit(LigneAudit{Type: "evenement", De: "hub", Vers: "hub", Mission: x.Mission, Projet: x.Projet, Env: x.Env, Agent: x.Agent,
+			Action: "approbation refuser", Resultat: x.Action + " " + x.ID + " → refusee (projet supprimé)"})
+	}
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "project removed: approvals:", err)
+	}
+	regles, _ := s.approbations.RetirerRegles(func(r RegleAccord) bool { return r.Projet == nom })
+	for _, x := range regles {
+		s.ecrireAudit(LigneAudit{Type: "evenement", De: "hub", Vers: "hub", Projet: x.Projet, Env: x.Env, Action: "règle retirée: " + x.Action, Resultat: "projet supprimé"})
+	}
 }
 
 // verifierEnFond: while milestones wait for their files (after a folder change), the current project
