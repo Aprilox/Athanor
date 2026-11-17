@@ -1773,12 +1773,13 @@ function nomFenetre(n) {
   return n.replace(/_/g, " ");
 }
 // automatic stop of a window: the rule key ("modele" = every model's own week) and its two lists
+const SEUILS_QUOTA = [50, 60, 70, 75, 80, 85, 90, 95];
+const ACTIONS_QUOTA = () => [["apres", t("stop after the cycle")], ["maintenant", t("stop now")], ["pause", t("pause until the reset")]];
 function regleFenetre(n) { return n === "five_hour" || n === "seven_day" ? n : "modele"; }
 function arretAuto(nom, regles) {
   const cle = regleFenetre(nom), r = (regles || {})[cle] || { seuil: 0, action: "apres" };
-  const seuils = [0, 50, 60, 70, 75, 80, 85, 90, 95];
+  const seuils = [0, ...SEUILS_QUOTA], actions = ACTIONS_QUOTA();
   if (r.seuil && !seuils.includes(r.seuil)) seuils.push(r.seuil);
-  const actions = [["apres", t("stop after the cycle")], ["maintenant", t("stop now")], ["pause", t("pause until the reset")]];
   return `<div class="quota-arret petit"><span class="muet">${t("Auto stop")}</span>
     <select data-quota-seuil="${cle}">${seuils.sort((a, b) => a - b).map((s) => `<option value="${s}" ${r.seuil === s ? "selected" : ""}>${s ? t("at {0} %", [s]) : t("off")}</option>`).join("")}</select>
     ${r.seuil ? `<select data-quota-action="${cle}">${actions.map(([v, l]) => `<option value="${v}" ${r.action === v ? "selected" : ""}>${h(l)}</option>`).join("")}</select>` : ""}</div>`;
@@ -3160,6 +3161,40 @@ document.addEventListener("click", (ev) => {
 
 // --- new project
 // --- managing a project: name, folder, milestones check, archive, delete
+// --- M291: "This project's settings" (Manage): the settings of reglages_projets.go, and the working mode (/api/mode).
+// One control for all of them: its first entry is "Default (<the value of Settings>)", the others the project's own.
+const NOMS_REGLAGES_PROJET = { modele: "Model of the lead", modele_secours: "Fallback model", modele_sous_agents: "Model of the sub-agents", modele_taches_simples: "Cheap model", permission: "Permissions" };
+const nomReglageProjet = (cle) => cle.startsWith("quota_") ? t("{0}: {1}", [t("Auto stop"), cle === "quota_modele" ? t("This week, each model") : nomFenetre(cle.slice(6))]) : t(NOMS_REGLAGES_PROJET[cle]);
+function libelleReglageProjet(cle, v) {
+  if (cle === "permission") return titrePermission(v);
+  if (!cle.startsWith("quota_")) return v === "auto" ? t("chosen by the lead") : v || t("account default");
+  const [seuil, a] = v.split(":");
+  return a ? t("{0}: {1}", [t("at {0} %", [seuil]), (ACTIONS_QUOTA().find(([x]) => x === a) || [a, a])[1]]) : t("off");
+}
+function choixReglageProjet(r) {
+  const id = "rp-" + r.cle, defaut = t("Default ({0})", [libelleReglageProjet(r.cle, r.defaut)]);
+  if (r.cle === "permission") return selecteurPermissions(id, r.propre, { defaut, distant: (etat.vue || {}).distant });
+  const valeurs = r.cle.startsWith("quota_") ? ["0", ...SEUILS_QUOTA.flatMap((s) => ACTIONS_QUOTA().map(([a]) => s + ":" + a))] : etat.rp.modeles.concat(r.cle === "modele_sous_agents" ? ["auto"] : []);
+  if (r.propre && !valeurs.includes(r.propre)) valeurs.push(r.propre);
+  return `<select id="${id}">${["", ...valeurs].map((v) => `<option value="${h(v)}"${r.propre === v ? " selected" : ""}>${h(v ? libelleReglageProjet(r.cle, v) : defaut)}</option>`).join("")}</select>`;
+}
+const lignesReglagesProjet = () => etat.rp.reglages.map((r) => `<div class="reglage"><label for="rp-${r.cle}" class="nom-reglage">${h(nomReglageProjet(r.cle))}</label>
+  <div>${choixReglageProjet(r)}${r.cle === "permission" ? `<div class="petit mt-1" id="rp-permission-aide">${aidePermission(r.valeur, PERMISSIONS_MISSION())}</div>` : ""}</div></div>`).join("");
+async function rendreReglagesProjet() {
+  const [r, mod, mode] = await Promise.all([api("projets/" + encodeURIComponent(etat.projet) + "/reglages"), api("modeles").catch(() => ({})), rendreMode()]);
+  etat.rp = { reglages: r.reglages || [], modeles: mod.modeles || [] };
+  return `<details class="bloc plus-options" id="rp"${etat.rpOuvert ? " open" : ""}><summary>${t("This project's settings")}</summary>
+    <p class="muet petit">${t("Each setting follows Settings by default. A value chosen here applies to this project only, from its next cycle.")}</p>
+    ${mode}<div id="rp-liste">${lignesReglagesProjet()}</div></details>`;
+}
+async function changerReglageProjet(sel) {
+  const cle = sel.id.slice(3), valeur = sel.value, z = $("#rp-liste");
+  const p = cle === "permission" && valeur === "ignorer" ? await confirmerIgnorer(t("This project will act on its servers without asking you, dangerous commands and production deployments included. Choose it only for servers you can rebuild.")) : {};
+  const r = p && await action(api("projets/" + encodeURIComponent(etat.projet) + "/reglages", "POST", { cle, valeur, confirmer: valeur === "ignorer", ...p }));
+  if (r) etat.rp.reglages = r.reglages;
+  garderFocus(z, () => { z.innerHTML = lignesReglagesProjet(); }); // refused or cancelled: the value before comes back
+}
+
 pages.projet = async () => {
   if (!etat.projet) await rafraichir(); // opened straight on this page: the project is known after the first refresh
   if (!etat.projet) return `<div class="vide">${t("No project.")}</div>`;
@@ -3169,7 +3204,7 @@ pages.projet = async () => {
   setTimeout(() => majGitHub(), 0); // the GitHub block asks WSL: the last state known first, then updated
   return `<div class="gestion">
   ${p.actif ? `<div class="bloc"><p class="attention">${t("The pilot is running: stop it to rename, move, archive or delete the project.")}</p></div>` : ""}
-  ${await rendreMode()}
+  ${await rendreReglagesProjet()}
   <div class="bloc"><h2>${t("Name")}</h2>
       <div class="ligne"><input type="text" id="gp-nom" value="${h(p.nom)}"><button class="btn" data-gestion="renommer" ${dis}>${t("Rename")}</button></div>
       <p class="muet petit">${t("Only the name shown in Athanor: the folder keeps its name.")}</p>
@@ -4676,7 +4711,8 @@ function champReglage(l, modeles) {
 
 pages.reglages = async () => {
   const onglet = etat.ongletReglages === "claude" ? "claude" : "options";
-  const tete = `<div class="onglets"><button class="${onglet === "options" ? "actif" : ""}" data-onglet-reglages="options">${t("Options")}</button><button class="${onglet === "claude" ? "actif" : ""}" data-onglet-reglages="claude">${t("Claude")}</button></div>`;
+  const tete = `<div class="onglets"><button class="${onglet === "options" ? "actif" : ""}" data-onglet-reglages="options">${t("Options")}</button><button class="${onglet === "claude" ? "actif" : ""}" data-onglet-reglages="claude">${t("Claude")}</button></div>
+  <p class="muet petit">${t("The models and the permission mode chosen here are the default values of every project: a project can have its own in Manage › This project's settings.")}</p>`;
   if (onglet === "options") return tete + await rendreOptions();
   const [lignes, mod] = await Promise.all([api("env" + (etat.envSecrets ? "?secrets=1" : "")), api("modeles").catch(() => ({ modeles: [] }))]);
   const modeles = mod.modeles || [];
@@ -4866,6 +4902,7 @@ function pcsOuvert() {
 }
 document.addEventListener("toggle", (ev) => {
   if (ev.target && ev.target.id === "mis-projet") etat.missionProjetOuvert = ev.target.open; // M254: stays open across a save
+  if (ev.target && ev.target.id === "rp") etat.rpOuvert = ev.target.open; // M291: the same across a change of mode
   if (!ev.target || ev.target.id !== "pcs-repli") return;
   etat.pcsOuvert = ev.target.open;
   try { localStorage.setItem("pcsOuvert", etat.pcsOuvert ? "1" : "0"); } catch (e) { /* this device only */ }
@@ -8265,6 +8302,7 @@ $("#page").addEventListener("change", (ev) => {
   if (i.type === "checkbox" && i.dataset.cle) i.nextElementSibling.textContent = i.checked ? t("enabled") : t("disabled");
   if (etat.page === "reglages" && i.hasAttribute("data-option")) enregistrerOptions();
   if (etat.page === "reglages" && /^perm-(assistant|missions)$/.test(i.id)) changerPermissionsUsage(i);
+  if (i.closest("#rp-liste")) changerReglageProjet(i);
   if (i.id === "op-verrou-auto") verrouAuto(i);
   if (i.id === "op-sans-rappels") rappelsNatif(i.checked).then((ok) => { if (!ok) i.checked = !i.checked; });
   if (i.hasAttribute("data-gh-coauteur")) action(api("github", "POST", Object.assign({ action: "identite" }, lireAuteur()))).then((r) => { if (!r) i.checked = !i.checked; });

@@ -232,7 +232,7 @@ p:last-child { margin-bottom: 0; }
 .droite { text-align: right; }
 .ligne { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .espace { flex: 1; }
-.ok { color: var(--ok); } .quota, .attention { color: var(--attention); } .echec, .bloque { color: var(--erreur); }
+.ok { color: var(--ok); } .quota, .attention { color: var(--attention); } .echec, .bloque { color: var(--erreur-vif); } /* AA on a block of the dark themes too */
 
 /* ------------------------------------------------------------------ layout */
 /* the window never scrolls: the menu stays put, only the content area (#page) and the menu's list scroll */
