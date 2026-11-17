@@ -168,7 +168,7 @@ func tacheEnCoursID(id string) bool {
 var (
 	premierMu sync.Mutex // the relay and the owner's "Prepare now" at once: one task
 	// errRienAPreparer, errPreparationEnCours: why "Prepare now" launches nothing (translated by the interface)
-	errRienAPreparer      = erreurEntree("Nothing to prepare now: this project has no server, is already deployed, or a mission is deploying it")
+	errRienAPreparer      = erreurEntree("Nothing to prepare now: this project has no server or is already deployed")
 	errPreparationEnCours = erreurEntree("The servers of this project are still being prepared: try again once that task has ended")
 )
 

@@ -72,5 +72,6 @@ func clesMoteur(t *testing.T) []string {
 		"Caddy is not installed on this server ("+caddyfileServeur+" missing): install it first", "the archive changed on the way: its SHA-256 differs on the server",
 		"the archive could not be extracted", "archive refused: a link of the release points out of it once extracted", "the site file cannot be written",
 		"the vault is not available", "the build command needs Git for Windows' bash on this PC", errK3sUnServeur.Error(),
-		"the git source fetches from GitHub: the project's origin is not a GitHub repository (use the artefact source)", "Harden this server: {0}")
+		"the git source fetches from GitHub: the project's origin is not a GitHub repository (use the artefact source)", "Harden this server: {0}",
+		"the project's deployment needs a URL and at least one server", "the git source needs the project's deployment key: create it in the project's Deployment tab (or use the artefact source)") // M305a
 }

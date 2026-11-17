@@ -20,8 +20,8 @@ import (
 var variablesEmail = []string{"SMTP_HOST", "SMTP_PORT", "SMTP_SECURE", "SMTP_USER", "SMTP_FROM"}
 
 const (
-	errEmailConflit    = erreurEntree("This project already has another SMTP_ setting in this environment (another account or a vault entry): remove it first")
-	errEmailPasConfigu = erreurEntree("This account does not send for this project in this environment")
+	errEmailConflit    = erreurEntree("This project already has another SMTP_ setting (another account or a vault entry): remove it first")
+	errEmailPasConfigu = erreurEntree("This account does not send for this project")
 )
 
 // ProjetEmail: a project and environment an account sends for.

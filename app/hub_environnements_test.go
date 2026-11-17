@@ -54,10 +54,10 @@ func TestValiderEnvironnement(t *testing.T) {
 		e   Environnement
 		mot string
 	}{
-		{"Bad_Name", Environnement{}, "Invalid environment name"},
-		{"*", Environnement{}, "Invalid environment name"},
-		{"../x", Environnement{}, "Invalid environment name"},
-		{"", Environnement{}, "Invalid environment name"},
+		{"Bad_Name", Environnement{}, "Invalid site name"},
+		{"*", Environnement{}, "Invalid site name"},
+		{"../x", Environnement{}, "Invalid site name"},
+		{"", Environnement{}, "Invalid site name"},
 		{"dev", Environnement{URL: "ftp://exemple.fr"}, "Invalid URL"},
 		{"dev", Environnement{URL: "https://moi:secret@exemple.fr"}, "Invalid URL"},
 		{"dev", Environnement{URL: "https://"}, "Invalid URL"},
@@ -82,7 +82,7 @@ func TestValiderEnvironnement(t *testing.T) {
 		{"site", Environnement{Production: true, Politique: "auto"}, "always asks for your approval"},
 		{"site", Environnement{Serveurs: []string{"a1"}, Politique: "auto"}, "always asks for your approval"},
 		{"dev", Environnement{Serveurs: []string{"zz"}}, "Unknown server"},
-		{"dev", Environnement{Fournisseur: "../x"}, "Unknown provider"},
+		{"dev", Environnement{Fournisseur: "../x"}, "Unknown Cloudflare API"},
 	} {
 		_, err := validerEnvironnement(c.nom, c.e, inv)
 		_, entree := err.(erreurEntree)

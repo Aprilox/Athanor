@@ -41,10 +41,10 @@ func (moduleServeurs) Elements(*Serveur) []ElementHub {
 func (moduleServeurs) Tutoriel() []EtapeTutoriel {
 	return []EtapeTutoriel{
 		{Titre: "Your servers", Texte: "Add your VPS or your home server: Athanor checks its fingerprint first, then connects with a key kept in the vault. That key is never shown, not even to the agents.", Cible: "[data-srv-ajouter]"},
-		{Titre: "One card per server", Texte: "Each card says whether the server answers and what runs on it. Click its name to open its sheet: its environments, Harden this server and its tasks.", Cible: ".carte-serveur"},
+		{Titre: "One card per server", Texte: "Each card says whether the server answers and what runs on it. Click its name to open its sheet: the projects it serves, Harden this server and its tasks.", Cible: ".carte-serveur"},
 		{Titre: "Tasks for the Servers agent", Texte: "On a server's sheet, Tasks: say what should be done (“Install nginx and serve my site over HTTPS”). The agent shows a plan first: nothing changes before you accept it, and prod always waits for you."},
 		{Titre: "Health of the deployed sites", Texte: "Every 15 minutes, this PC checks your deployed sites and their servers. A problem rings the bell and your phone, with Retry, Go back to the previous version and I take over.", Cible: ".srv-reglage-sante"},
-		{Titre: "Cloudflare, for DNS and HTTPS", Texte: "Your Cloudflare token goes into the Vault, as any API: Test shows its zones and what it may do there. The Servers agent then sets the DNS names and HTTPS of an environment, and of that name only. This tutorial stays in the “?”, with the guides “Add a server” and “Connect Cloudflare (DNS and HTTPS)”.", Cible: "[data-cof-ajouter]", Page: "#coffre"},
+		{Titre: "Cloudflare, for DNS and HTTPS", Texte: "Your Cloudflare token goes into the Vault, as any API: Test shows its zones and what it may do there. The Servers agent then sets the DNS names and HTTPS of a project's site, and of that name only. This tutorial stays in the “?”, with the guides “Add a server” and “Connect Cloudflare (DNS and HTTPS)”.", Cible: "[data-cof-ajouter]", Page: "#coffre"},
 	}
 }
 

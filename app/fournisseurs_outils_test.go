@@ -380,7 +380,7 @@ func TestOutilsCloudflare(t *testing.T) {
 	for _, c := range [][2]string{{"demo", "staging"}, {"autre", "dev"}} {
 		err := s.acces.definirAncien(c[0], c[1], Environnement{URL: "https://WWW.exemple.fr/x", Protection: "aucune", Politique: "accord"})
 		var ea erreurEntreeArgs
-		if !errors.As(err, &ea) || ea.cle != errEnvHotePris || ea.args[1] != "boutique/prod" {
+		if !errors.As(err, &ea) || ea.cle != errEnvHotePris || ea.args[1] != "boutique" {
 			t.Errorf("%s/%s with prod's host: %v", c[0], c[1], err)
 		}
 	}

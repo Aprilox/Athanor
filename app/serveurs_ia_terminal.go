@@ -113,8 +113,8 @@ var libellesOutils = map[string]string{
 	"fichier_ecrire": "Write a file", "sftp_envoyer": "Send a file", "sftp_recuperer": "Fetch a file",
 	"service": "Service", "docker": "Docker", "pare_feu": "Firewall", "proposer_plan": "Propose a plan",
 	"confirmer_changement": "Confirm a change", "runbook_lire": "Read the runbook", "runbook_ajouter": "Add to the runbook",
-	"environnement_lire": "Read the environment", "deployer": "Deploy", "revenir_version": "Go back to the previous version",
-	"fournisseurs": "Providers", "dns_lister": "List the DNS records", "dns_ecrire": "Write a DNS record",
+	"environnement_lire": "Read the project's deployment", "deployer": "Deploy", "revenir_version": "Go back to the previous version",
+	"fournisseurs": "Cloudflare zones and rights", "dns_lister": "List the DNS records", "dns_ecrire": "Write a DNS record",
 	"dns_supprimer": "Delete a DNS record", "ssl_lire": "Read the SSL settings", "ssl_regler": "Set SSL",
 	"certificat_origine": "Origin certificate", "access_proteger": "Protect with Access", "access_retirer": "Remove the Access protection",
 }

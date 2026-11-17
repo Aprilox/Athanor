@@ -19,10 +19,10 @@ import (
 var envsProjet = []string{"dev", "staging", "prod"}
 
 const (
-	errAccesEnv      = erreurEntree("Unknown environment for this project")
+	errAccesEnv      = erreurEntree("Unknown site for this project")
 	errAccesVariable = erreurEntree("Invalid variable name: capital letters, digits and _, starting with a letter, and not a name that changes how commands run")
-	errAccesDoublon  = erreurEntree("This variable name is already used in this environment")
-	errAccesDeja     = erreurEntree("This entry is already given to this environment")
+	errAccesDoublon  = erreurEntree("This variable name is already used for this project")
+	errAccesDeja     = erreurEntree("This entry is already given to this project")
 	errAccesInconnu  = erreurEntree("Unknown access")
 	// native Windows mode has no barrier: an infra entry linked there could be read by any agent
 	errAccesInfraNatif = erreurEntree("Native Windows mode has no barrier: any agent can read every file of this PC, so infra entries are refused here. Switch to WSL in Settings › Options, or tick Force, knowing the risk for this project.")

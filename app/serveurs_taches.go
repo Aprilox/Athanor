@@ -315,7 +315,7 @@ func (s *Serveur) lancerTacheDans(texte string, serveurs []string, forcee bool, 
 			e = s.acces.Environnements(projet)[nom]
 		}
 		if len(e.Serveurs) == 0 || slices.ContainsFunc(serveurs, func(id string) bool { return !slices.Contains(e.Serveurs, id) }) {
-			return TacheServeurs{}, erreurEntree("Unknown environment, or this server is not one of its servers")
+			return TacheServeurs{}, erreurEntree("Unknown site, or this server is not one of its servers")
 		}
 		// all its servers, the given one first (it holds the task's file)
 		serveurs = append(serveurs[:1:1], slices.DeleteFunc(slices.Clone(e.Serveurs), func(id string) bool { return id == serveurs[0] })...)

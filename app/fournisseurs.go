@@ -42,9 +42,9 @@ type fichierFournisseurs struct {
 
 var (
 	fournisseursMu         sync.Mutex
-	errFournisseursFichier = errors.New("The providers file cannot be read")
+	errFournisseursFichier = errors.New("The Cloudflare APIs file cannot be read")
 	errFournisseurCle      = erreurEntree("Choose a Cloudflare entry of the vault")
-	errFournisseurPortee   = erreurEntree("A provider's token must be in the infra scope: change its scope in the Vault first")
+	errFournisseurPortee   = erreurEntree("A Cloudflare token must be in the infra scope: change its scope in the Vault first")
 )
 
 func fichierFournisseursChemin() string {

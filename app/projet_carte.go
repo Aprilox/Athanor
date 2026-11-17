@@ -105,7 +105,7 @@ var githubProjet = func(s *Serveur, p Projet, pc ProjetCarte) error {
 		return nil
 	}
 	if !v.ConnexionPC.AccesGarde { // no sign-in window in a launch
-		return errors.New("Creating a repository from a mission needs the access kept on this computer: Settings › Options › GitHub.")
+		return errors.New("Creating a repository from a card needs the access kept on this computer: Settings › Options › GitHub.")
 	}
 	out, err := s.executerGitHub(p, 15*time.Minute, "lier", "creer", depot, auto, "", atelier)
 	if gh, _ := s.etatGitHub(p); err != nil || !gh.Lie {

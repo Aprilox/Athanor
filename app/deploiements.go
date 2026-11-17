@@ -339,14 +339,14 @@ func (s *Serveur) deployer(ctx context.Context, projet, env, commit string, o Op
 func (s *Serveur) commencerDeploiement(projet, env, commit string, o OptionsDeploiement) (Deploiement, func(context.Context) (Deploiement, error), error) {
 	e, ok := s.acces.Environnements(projet)[env]
 	if !ok {
-		return Deploiement{}, nil, errors.New("unknown environment")
+		return Deploiement{}, nil, errors.New("unknown site")
 	}
 	cfg := e.Deploiement
 	if o.Config != nil {
 		cfg = o.Config
 	}
 	if cfg == nil {
-		return Deploiement{}, nil, errors.New("this environment has no deployment method yet: a first deployment is made by a Servers task")
+		return Deploiement{}, nil, errors.New("this site has no deployment method yet: a first deployment is made by a Servers task")
 	}
 	if err := validerConfigDeploiement(*cfg); err != nil {
 		return Deploiement{}, nil, err
@@ -356,18 +356,18 @@ func (s *Serveur) commencerDeploiement(projet, env, commit string, o OptionsDepl
 		return Deploiement{}, nil, errors.New("unknown project")
 	}
 	if len(e.Serveurs) == 0 || hoteEnv(&e) == "" {
-		return Deploiement{}, nil, errors.New("the environment needs a URL and at least one server")
+		return Deploiement{}, nil, errors.New("the project's deployment needs a URL and at least one server")
 	}
 	if cfg.Methode == "k3s" && len(e.Serveurs) != 1 {
 		return Deploiement{}, nil, errK3sUnServeur
 	}
 	if cfg.Source == "git" && e.CleDeploiement == "" {
-		return Deploiement{}, nil, errors.New("the git source needs the project's deployment key: create it in its Environments panel (or use the artefact source)")
+		return Deploiement{}, nil, errors.New("the git source needs the project's deployment key: create it in the project's Deployment tab (or use the artefact source)")
 	}
 	v, _ := verrousDeploiement.LoadOrStore(projet+"/"+env, &sync.Mutex{})
 	verrou := v.(*sync.Mutex)
 	if !verrou.TryLock() {
-		return Deploiement{}, nil, errors.New("a deployment of this environment is already running")
+		return Deploiement{}, nil, errors.New("a deployment of this site is already running")
 	}
 	sha, err := gitSortie(p.Dossier, "rev-parse", "--verify", "--quiet", "--end-of-options", commit+"^{commit}")
 	if err != nil || !reCommitComplet.MatchString(sha) {
@@ -420,7 +420,7 @@ func (s *Serveur) finirDeploiement(ctx context.Context, p Projet, e Environnemen
 	return d, err
 }
 
-var errK3sUnServeur = errors.New("the k3s method needs exactly one server in the environment: its cluster spreads the pods itself")
+var errK3sUnServeur = errors.New("the k3s method needs exactly one server for the site: its cluster spreads the pods itself")
 
 // deployerVersion: the commit prepared on every server (statique: the Caddy site validated; compose: the
 // containers started from the release), then current/previous switched everywhere.
@@ -475,7 +475,7 @@ func (s *Serveur) deployerVersion(ctx context.Context, p Projet, e Environnement
 	// gives root on the server: the k3s manifests read here, the Compose configuration on each server below
 	garde := !d.Accorde && d.Auteur != "proprietaire"
 	refus := func(r []string) error {
-		return errMoteur("refused without the owner's accord, this would give root on the server: {0}; the owner deploys it from the environment's card, or sets its policy to accord; nothing was switched", couper(strings.Join(r, "; "), 400))
+		return errMoteur("refused without the owner's accord, this would give root on the server: {0}; this deployment needs the owner's own approval; nothing was switched", couper(strings.Join(r, "; "), 400))
 	}
 	if garde && cfg.Methode == "k3s" {
 		if r := refusK3s(p.Dossier, d.Commit, cfg.Dossier); len(r) > 0 {

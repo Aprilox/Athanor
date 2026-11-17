@@ -60,8 +60,8 @@ var (
 	errEnvPolitique = erreurEntree("Unknown policy (accord or auto)")
 	errEnvProdAuto  = erreurEntree("Production always asks for your approval: its policy cannot be automatic")
 	errEnvRelais    = erreurEntree("Production is deployed on request only, never after each milestone")
-	errEnvNom       = erreurEntree("Invalid environment name: lower-case letters, digits, dots and dashes")
-	errEnvFourn     = erreurEntree("Unknown provider")
+	errEnvNom       = erreurEntree("Invalid site name: lower-case letters, digits, dots and dashes")
+	errEnvFourn     = erreurEntree("Unknown Cloudflare API")
 	errEnvAuthHTTP  = erreurEntree("The password protection needs an https:// address: over http:// the password would travel in clear")
 	errEnvMoment    = erreurEntree("Choose when the project is deployed: after each milestone or at delivery")
 	errEnvPlan      = erreurEntree("The deployment plan is too long: 4,000 characters at most")
@@ -84,7 +84,7 @@ func (e erreurEntreeArgs) Error() string {
 	return m
 }
 
-const errEnvHotePris = "{0} is already the address of {1}: one host name per environment"
+const errEnvHotePris = "{0} is already the address of {1}: one host name per site"
 
 // envDefaut: an environment not configured yet.
 func envDefaut() Environnement {
@@ -385,7 +385,7 @@ func poserEnvironnement(f *fichierAcces, projet, nom string, e Environnement) er
 			}
 			for nomE, x := range autre.Environnements {
 				if (nomP != projet || nomE != nom) && hoteEnv(x) == h {
-					return erreurEntreeArgs{errEnvHotePris, []string{h, nomP + "/" + nomE}}
+					return erreurEntreeArgs{errEnvHotePris, []string{h, nomP}}
 				}
 			}
 		}
@@ -468,7 +468,7 @@ func (a *Acces) NoterDeploiement(projet, nom string, c ConfigDeploiement) error 
 	return a.modifier(func(f *fichierAcces) error {
 		e := projetDe(f, projet).Environnements[nom]
 		if e == nil {
-			return errors.New("unknown environment")
+			return errors.New("unknown site")
 		}
 		e.Deploiement = &c
 		return nil
@@ -480,7 +480,7 @@ func (a *Acces) NoterServeursCertificat(projet, nom string, ids []string) error 
 	return a.modifier(func(f *fichierAcces) error {
 		e := projetDe(f, projet).Environnements[nom]
 		if e == nil {
-			return errors.New("unknown environment")
+			return errors.New("unknown site")
 		}
 		for _, id := range ids {
 			if !slices.Contains(e.CertificatServeurs, id) {

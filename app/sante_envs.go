@@ -468,7 +468,7 @@ func (s *Serveur) agirIncident(ctx context.Context, projet, env, action, cle, au
 	case action == "revenir":
 		d, err = s.revenir(ctx, projet, env, auteur, "")
 	case i.Commit == "":
-		err = errors.New("nothing to deploy again: no version of this environment is known")
+		err = errors.New("nothing to deploy again: no version of this site is known")
 	default:
 		d, err = s.deployer(ctx, projet, env, i.Commit, OptionsDeploiement{Auteur: auteur, Accorde: auteur == "proprietaire"})
 	}

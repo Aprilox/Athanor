@@ -140,7 +140,7 @@ func (s *Serveur) revenir(ctx context.Context, projet, env, auteur, cible string
 	v, _ := verrousDeploiement.LoadOrStore(projet+"/"+env, &sync.Mutex{})
 	verrou := v.(*sync.Mutex)
 	if !verrou.TryLock() {
-		return Deploiement{}, errors.New("a deployment of this environment is already running")
+		return Deploiement{}, errors.New("a deployment of this site is already running")
 	}
 	defer verrou.Unlock()
 	return s.revenirVerrouille(ctx, projet, env, auteur, cible)
@@ -154,9 +154,9 @@ func (s *Serveur) revenirVerrouille(ctx context.Context, projet, env, auteur, ci
 	e, ok := s.acces.Environnements(projet)[env]
 	switch {
 	case !ok:
-		return Deploiement{}, errors.New("unknown environment")
+		return Deploiement{}, errors.New("unknown site")
 	case e.Deploiement == nil || len(e.Serveurs) == 0:
-		return Deploiement{}, errors.New("nothing was deployed to this environment yet")
+		return Deploiement{}, errors.New("nothing was deployed to this site yet")
 	case e.Deploiement.Methode == "k3s" && len(e.Serveurs) != 1:
 		return Deploiement{}, errK3sUnServeur
 	case cible != "" && !reVersionDeploiement.MatchString(cible):
