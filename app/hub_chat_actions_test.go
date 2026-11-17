@@ -96,7 +96,7 @@ func TestHubChatActions(t *testing.T) {
 		t.Fatalf("audit:\n%s", j)
 	}
 	// a new project and its pilot
-	if c, v := appel("POST", "/api/hub/chat/action", map[string]any{"index": 3, "decision": "lancer", "action": map[string]any{"projet": "boutique", "texte": "Une boutique en ligne.", "dossier": neuf}}); c != 200 {
+	if c, v := appel("POST", "/api/hub/chat/action", map[string]any{"index": 3, "decision": "lancer", "action": map[string]any{"projet": "boutique", "texte": "Une boutique en ligne.", "dossier": neuf}, "empreinte": cartes["3"].(map[string]any)["empreinte"]}); c != 200 {
 		t.Fatalf("project: %d %v", c, v)
 	}
 	if _, ok := s.projetLocalChat("boutique"); !ok || len(pilotes) != 1 || pilotes[0] != "boutique" {

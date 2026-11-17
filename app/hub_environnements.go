@@ -630,18 +630,67 @@ func (s *Serveur) apiDeploiementProjet(w http.ResponseWriter, r *http.Request) {
 		"deploiements": s.deploiementsAffiches(projet), "sante": s.vueSante(projet), "relais": s.etatRelais(projet), "prudence": s.envsPrudents(projet, envs)})
 }
 
+// DeploiementDemande: what the Deployment tab or a card of the home sends for the project's one deployment.
+type DeploiementDemande struct {
+	Serveurs []string `json:"serveurs"`
+	URL      string   `json:"url"`
+	Plan     string   `json:"plan"`
+	Moment   string   `json:"moment"`
+	APIs     []string `json:"apis"`
+}
+
+// deploiementValide: the project's one deployment as c asks it, checked (servers of the inventory, API of the
+// vault, address, moment), under its internal name; its protection, policy and Production stay as they are.
+func (s *Serveur) deploiementValide(projet string, c DeploiementDemande) (string, Environnement, error) {
+	inventaire, err := lireServeurs()
+	if err != nil {
+		return "", Environnement{}, err
+	}
+	nom := s.deploiementProjet(projet)
+	e, existe := s.acces.Environnements(projet)[nom]
+	if !existe {
+		e = envDefaut()
+		if c.Moment == "" {
+			c.Moment = "livraison"
+		}
+	} else if c.Moment == "" && e.Moment != "" { // on request: only where an older project already has it
+		return "", Environnement{}, errEnvMoment
+	}
+	apis := slices.Compact(slices.Sorted(slices.Values(c.APIs)))
+	e.Serveurs, e.URL, e.Plan, e.Moment, e.APIs = c.Serveurs, c.URL, s.masquerSecrets(strings.TrimSpace(c.Plan)), c.Moment, apis
+	e.DeployerAuJalon = e.Moment == "jalon"
+	e, err = validerEnvironnement(nom, e, inventaire)
+	if coffre := s.coffre.Liste(); err == nil && slices.ContainsFunc(apis, func(id string) bool {
+		return !slices.ContainsFunc(coffre, func(x EntreeCoffre) bool { return x.ID == id })
+	}) {
+		err = errEnvAPI
+	}
+	return nom, e, err
+}
+
+// definirDeploiementProjet writes the project's one deployment (the Deployment tab, a card of the home) and
+// says so in the audit log.
+func (s *Serveur) definirDeploiementProjet(projet string, c DeploiementDemande, qui string) error {
+	nom, e, err := s.deploiementValide(projet, c)
+	if err == nil {
+		err = s.acces.DefinirEnvironnement(projet, nom, e)
+	}
+	if err != nil {
+		return err
+	}
+	s.ecrireAudit(LigneAudit{Type: "evenement", De: qui, Vers: "hub", Projet: projet, Action: "déploiement modifié",
+		Resultat: fmt.Sprintf("%s, %d serveur(s), %d API, %s", e.URL, len(e.Serveurs), len(e.APIs), cmp.Or(e.Moment, "on request"))})
+	return nil
+}
+
 // apiDeploiementProjetModifier (M281): POST /api/projets/{nom}/deploiement {serveurs, url, plan, moment, apis}
-// writes the project's one deployment, whatever its internal name; its protection, policy and Production stay
-// as they are. With {courant}, nothing but this: that site of an older project becomes its deployment.
+// writes the project's one deployment, whatever its internal name. With {courant}, nothing but this: that site
+// of an older project becomes its deployment.
 func (s *Serveur) apiDeploiementProjetModifier(w http.ResponseWriter, r *http.Request) {
 	projet := r.PathValue("nom")
 	var c struct {
-		Serveurs []string `json:"serveurs"`
-		URL      string   `json:"url"`
-		Plan     string   `json:"plan"`
-		Moment   string   `json:"moment"`
-		APIs     []string `json:"apis"`
-		Courant  string   `json:"courant"`
+		DeploiementDemande
+		Courant string `json:"courant"`
 	}
 	if lireCorps(r, &c) != nil {
 		s.erreur(w, http.StatusBadRequest, "Invalid request")
@@ -659,40 +708,10 @@ func (s *Serveur) apiDeploiementProjetModifier(w http.ResponseWriter, r *http.Re
 		s.apiDeploiementProjet(w, r)
 		return
 	}
-	inventaire, err := lireServeurs()
-	if err != nil {
-		s.erreurServeurs(w, err)
-		return
-	}
-	nom := s.deploiementProjet(projet)
-	e, existe := s.acces.Environnements(projet)[nom]
-	if !existe {
-		e = envDefaut()
-		if c.Moment == "" {
-			c.Moment = "livraison"
-		}
-	} else if c.Moment == "" && e.Moment != "" { // on request: only where an older project already has it
-		s.erreurEnv(w, errEnvMoment)
-		return
-	}
-	apis := slices.Compact(slices.Sorted(slices.Values(c.APIs)))
-	e.Serveurs, e.URL, e.Plan, e.Moment, e.APIs = c.Serveurs, c.URL, s.masquerSecrets(strings.TrimSpace(c.Plan)), c.Moment, apis
-	e.DeployerAuJalon = e.Moment == "jalon"
-	e, err = validerEnvironnement(nom, e, inventaire)
-	if coffre := s.coffre.Liste(); err == nil && slices.ContainsFunc(apis, func(id string) bool {
-		return !slices.ContainsFunc(coffre, func(x EntreeCoffre) bool { return x.ID == id })
-	}) {
-		err = errEnvAPI
-	}
-	if err == nil {
-		err = s.acces.DefinirEnvironnement(projet, nom, e)
-	}
-	if err != nil {
+	if err := s.definirDeploiementProjet(projet, c.DeploiementDemande, deQui(r)); err != nil {
 		s.erreurEnv(w, err)
 		return
 	}
-	s.ecrireAudit(LigneAudit{Type: "evenement", De: deQui(r), Vers: "hub", Projet: projet, Action: "déploiement modifié",
-		Resultat: fmt.Sprintf("%s, %d serveur(s), %d API, %s", e.URL, len(e.Serveurs), len(e.APIs), cmp.Or(e.Moment, "on request"))})
 	s.apiDeploiementProjet(w, r)
 }
 

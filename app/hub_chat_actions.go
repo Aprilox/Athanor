@@ -6,6 +6,7 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -21,7 +22,7 @@ import (
 
 // ActionChat: what the assistant proposes (and the user may change on the card before launching it).
 type ActionChat struct {
-	Type    string `json:"type"`              // projet | pilote | demande | remarque | mission
+	Type    string `json:"type"`              // projet (a new one, or an existing one's deployment) | pilote | demande | remarque | mission
 	Projet  string `json:"projet,omitempty"`  // the project it acts on (projet: the new project's name)
 	Dossier string `json:"dossier,omitempty"` // projet: its folder (empty: next to the latest project)
 	Titre   string `json:"titre,omitempty"`   // demande: its title
@@ -40,6 +41,10 @@ type ActionChat struct {
 	// mcp: the user's separate confirmation that a Windows server runs outside the cage with their rights
 	ConfirmeWindows bool     `json:"confirme_windows,omitempty"`
 	Fichiers        []string `json:"fichiers,omitempty"` // mcp: the files Claude wrote (names; their content comes from the message)
+	// M295, projet: its one deployment (servers and vault entries by id), only when the request uses one, and its
+	// own permission mode ("": the one of Settings). With the name of an existing project: only that deployment.
+	Deploiement *DeploiementDemande `json:"deploiement,omitempty"`
+	Permission  string              `json:"permission,omitempty"`
 }
 
 // CarteActionChat: the card the page shows, computed here (Quoi and Acces are i18n keys, Sur is data).
@@ -51,8 +56,11 @@ type CarteActionChat struct {
 	Erreur string   `json:"erreur,omitempty"` // why it cannot be launched as it is (i18n key)
 	Etat   string   `json:"etat,omitempty"`   // "": waits for the user; lancee | refusee
 	// what launching it gave (an i18n key and its arguments)
-	Resultat string   `json:"resultat,omitempty"`
-	Args     []string `json:"args,omitempty"`
+	Resultat string            `json:"resultat,omitempty"`
+	Args     []string          `json:"args,omitempty"`
+	Noms     map[string]string `json:"noms,omitempty"` // projet: the names of the card's servers and APIs, by id
+	// projet: the card as it is shown; Launch sends it back (an older view launches nothing)
+	Empreinte string `json:"empreinte,omitempty"`
 }
 
 var reAction = regexp.MustCompile(`(?s)<action>(.*?)</action>`)
@@ -68,7 +76,7 @@ Actions: you never act yourself. When the user wants one of these done, propose 
 the end of your answer, between <action> and </action>, as JSON, and say in one sentence that they launch, change
 or refuse it on the card (Athanor shows what it does, on what and with which accesses; nothing runs before the
 user launches it):
-- {"type": "projet", "projet": "the new project's name (letters, digits, spaces, dashes)", "texte": "its complete request, in the user's words", "dossier": "its full folder path, or empty: Athanor picks one next to the other projects"}: create a project and start its pilot;
+- {"type": "projet", "projet": "the new project's name (letters, digits, spaces, dashes)", "texte": "its complete request, in the user's words", "dossier": "its full folder path, or empty: Athanor picks one next to the other projects", "deploiement": {"serveurs": ["the servers the user named, by their name"], "apis": ["the API keys of the vault the user named, by their name"], "url": "the site's address, or empty", "plan": "how to deploy it, in the user's words, or empty", "moment": "jalon" (after each milestone) or "livraison" (at delivery, the default)}, "permission": "manuel", "auto", "modifications" or "ignorer"}: create a project and start its pilot. "deploiement" only when the request names a server, an API key or an address (a project built on this PC only has none), and never a server or a key the user did not name; "permission" only when the user asks for a mode. With the name of an existing project and "deploiement" ("deploy @site on @server"): set that project's deployment and nothing else, without "texte" nor "dossier";
 - {"type": "pilote", "projet": "an existing project"}: start the pilot of a project;
 - {"type": "demande", "projet": "an existing project", "titre": "a short title", "texte": "the request or the task, self-contained"}: add a request (a task) to a project's queue, its pilot takes it after the current one;
 - {"type": "remarque", "projet": "an existing project", "texte": "the remark, short and self-contained"}: leave a remark its pilot reads at its next cycle;
@@ -269,6 +277,10 @@ func (s *Serveur) carteActionChat(a ActionChat) CarteActionChat {
 		strings.TrimSpace(a.Dossier), strings.TrimSpace(a.Titre), strings.TrimSpace(a.Texte)
 	c := CarteActionChat{Acces: []string{}}
 	k := s.kitCourant()
+	if a.Type != "projet" {
+		a.Deploiement, a.Permission = nil, ""
+	}
+	sansTexte := false // projet: an existing project gets its deployment only, no request
 	// agent, mcp, attribuer: the projects it goes on, those the user ticked on the card
 	surProjets := func(nom string) string {
 		noms, _, inconnu := s.projetsChat(a.Projets)
@@ -291,16 +303,47 @@ func (s *Serveur) carteActionChat(a ActionChat) CarteActionChat {
 	}
 	switch a.Type {
 	case "projet":
-		if a.Dossier == "" && a.Projet != "" {
-			s.mu.Lock()
-			a.Dossier = dossierProjetNeuf(a.Projet, s.config.Projets)
-			s.mu.Unlock()
+		a.Permission = strings.TrimSpace(a.Permission)
+		if d := a.Deploiement; d != nil && len(d.Serveurs)+len(d.APIs) == 0 && strings.TrimSpace(d.URL+d.Plan) == "" {
+			a.Deploiement = nil // nothing in it: a project built on this PC only
 		}
-		c.Quoi, c.Sur = "Create the project and start its pilot", a.Projet+" — "+a.Dossier
-		c.Acces = []string{"Creates this folder and writes the project's first request in it.",
-			"Starts the pilot: it works in this folder only, with the accesses you give this project."}
-		if _, err := s.controlerProjetNeuf(a.Projet, a.Dossier); err != nil {
-			c.Erreur = err.Error()
+		if p, ok := s.projetLocalChat(a.Projet); ok && a.Deploiement != nil {
+			sansTexte = true
+			a.Projet, a.Dossier, a.Titre, a.Texte, a.Permission = p.Nom, "", "", "", ""
+			c.Quoi, c.Sur = "Set the project's deployment", p.Nom
+			c.Acces = []string{"Writes this project's deployment only: no project is created, no request is added."}
+		} else {
+			if a.Dossier == "" && a.Projet != "" {
+				s.mu.Lock()
+				a.Dossier = dossierProjetNeuf(a.Projet, s.config.Projets)
+				s.mu.Unlock()
+			}
+			c.Quoi, c.Sur = "Create the project and start its pilot", a.Projet+" — "+a.Dossier
+			c.Acces = []string{"Creates this folder and writes the project's first request in it.",
+				"Starts the pilot: it works in this folder only, with the accesses you give this project."}
+			if _, err := s.controlerProjetNeuf(a.Projet, a.Dossier); err != nil {
+				c.Erreur = err.Error()
+			}
+			if a.Permission == "ignorer" {
+				c.Acces = append(c.Acces, "Ignore permissions: this project acts on its servers without asking you, dangerous commands and production deployments included.")
+			} else if a.Permission != "" {
+				c.Acces = append(c.Acces, "Sets this project's own permission mode, instead of the one of Settings.")
+			}
+			if c.Erreur == "" && a.Permission != "" && !slices.Contains(modesAutorisation, a.Permission) {
+				c.Erreur = "Unknown permission mode (manuel, auto, modifications or ignorer)"
+			}
+		}
+		if a.Deploiement != nil {
+			d := *a.Deploiement
+			if d.Moment == "" {
+				d.Moment = "livraison"
+			}
+			c.Noms = s.nommerDeploiement(&d)
+			a.Deploiement = &d
+			c.Acces = append(c.Acces, "Gives its pilot the servers and the API keys shown on this card, and nothing else of your vault.")
+			if err := s.deploiementCarteErr(a.Projet, d); err != nil && c.Erreur == "" {
+				c.Erreur = err.Error()
+			}
 		}
 	case "pilote":
 		a.Titre, a.Texte, a.Dossier = "", "", ""
@@ -407,7 +450,7 @@ func (s *Serveur) carteActionChat(a ActionChat) CarteActionChat {
 	default:
 		c.Erreur = "This card cannot be read: ask the assistant to propose it again."
 	}
-	if c.Erreur == "" && slices.Contains([]string{"projet", "demande", "remarque", "mission"}, a.Type) && a.Texte == "" {
+	if c.Erreur == "" && slices.Contains([]string{"projet", "demande", "remarque", "mission"}, a.Type) && a.Texte == "" && !sansTexte {
 		c.Erreur = "Write what it must do."
 	}
 	if c.Erreur == "" && utf8.RuneCountInString(a.Texte) > maxTexteAction {
@@ -417,7 +460,63 @@ func (s *Serveur) carteActionChat(a ActionChat) CarteActionChat {
 		c.Erreur = "The emergency stop is on: resume Athanor first."
 	}
 	c.ActionChat = a
+	if a.Type == "projet" {
+		c.Empreinte = empreinteCarteChat(c)
+	}
 	return c
+}
+
+// empreinteCarteChat: the card as the page shows it (what it does, on what, with which accesses, its fields).
+func empreinteCarteChat(c CarteActionChat) string {
+	c.Empreinte, c.Etat, c.Resultat, c.Args = "", "", "", nil
+	b, _ := json.Marshal(c)
+	return fmt.Sprintf("%x", sha256.Sum256(b))[:24]
+}
+
+// nommerDeploiement (M295): the card's servers and APIs by id, whether the assistant wrote their id or their name
+// (as the owner mentions them), and their names for the card. An unknown one stays as written: deploiementValide
+// refuses it.
+func (s *Serveur) nommerDeploiement(d *DeploiementDemande) map[string]string {
+	noms := map[string]string{}
+	propre := func(x string) string { return strings.TrimPrefix(strings.TrimSpace(x), "@") }
+	inventaire, _ := lireServeurs()
+	d.Serveurs = slices.Clone(d.Serveurs)
+	for i, x := range d.Serveurs {
+		d.Serveurs[i] = propre(x)
+		for _, v := range inventaire {
+			if v.ID == propre(x) || strings.EqualFold(v.Nom, propre(x)) {
+				d.Serveurs[i], noms[v.ID] = v.ID, v.Nom
+				break
+			}
+		}
+	}
+	d.APIs = slices.Clone(d.APIs)
+	var coffre []EntreeCoffre
+	if s.coffre != nil {
+		coffre = s.coffre.Liste()
+	}
+	for i, x := range d.APIs {
+		d.APIs[i] = propre(x)
+		for _, v := range coffre {
+			if v.ID == propre(x) || strings.EqualFold(v.Nom, propre(x)) {
+				d.APIs[i], noms[v.ID] = v.ID, v.Nom
+				break
+			}
+		}
+	}
+	return noms
+}
+
+// deploiementCarteErr: why the deployment of a card cannot be written as it is (nil: it can).
+func (s *Serveur) deploiementCarteErr(projet string, d DeploiementDemande) error {
+	switch {
+	case s.coffre == nil || s.coffreErr != nil:
+		return errors.New("The vault file cannot be read")
+	case s.acces == nil || s.accesErr != nil:
+		return errors.New("The access file cannot be read")
+	}
+	_, _, err := s.deploiementValide(projet, d)
+	return err
 }
 
 // cartesConversation: the card of every message of the assistant that proposes an action, by message index.
@@ -501,9 +600,29 @@ func (s *Serveur) executerActionChat(c CarteActionChat, qui, message string) (st
 		}
 		return "“{0}” switched on in: {1}.", []string{a.Nom, strings.Join(a.Projets, ", ")}, nil
 	case "projet":
+		deployer := func(projet string) error {
+			if _, err := s.accesPretErr(projet); err != nil {
+				return err
+			}
+			return s.definirDeploiementProjet(projet, *a.Deploiement, qui)
+		}
+		if p, ok := s.projetLocalChat(a.Projet); ok && a.Deploiement != nil { // an existing project: its deployment only
+			return "Deployment of “{0}” saved.", []string{p.Nom}, deployer(p.Nom)
+		}
 		p, _, err := s.ajouterProjet(a.Projet, a.Dossier, a.Texte, false)
 		if err != nil {
 			return "", nil, err
+		}
+		if a.Deploiement != nil {
+			err = deployer(p.Nom)
+		}
+		if err == nil && a.Permission != "" {
+			if _, err = definirReglageProjet(p.Nom, "permission", a.Permission); err == nil {
+				s.ecrireAudit(LigneAudit{Type: "evenement", De: qui, Vers: "hub", Projet: p.Nom, Action: "reglage du projet: permission", Resultat: "defaut → " + a.Permission})
+			}
+		}
+		if err != nil { // never a pilot that would run without what the card said
+			return "Project “{0}” added, but its deployment or its permission mode was not saved and its pilot was not started: {1}", []string{p.Nom, err.Error()}, nil
 		}
 		msg, err := demarrerPiloteMission(s, p)
 		if err != nil {
@@ -539,6 +658,10 @@ func (s *Serveur) apiHubChatAction(w http.ResponseWriter, r *http.Request) {
 		Index    int        `json:"index"`
 		Decision string     `json:"decision"`
 		Action   ActionChat `json:"action"`
+		// projet: the card the owner read; Ignore permissions as everywhere (choixIgnorer)
+		Empreinte  string `json:"empreinte"`
+		Confirmer  bool   `json:"confirmer"`
+		MotDePasse string `json:"mot_de_passe"`
 	}
 	if err := lireCorps(r, &c); err != nil || (c.Decision != "lancer" && c.Decision != "refuser") {
 		s.erreur(w, http.StatusBadRequest, "Invalid request")
@@ -570,9 +693,23 @@ func (s *Serveur) apiHubChatAction(w http.ResponseWriter, r *http.Request) {
 		carte.Etat, carte.Resultat = "refusee", "Card refused: nothing was done."
 		audit.Resultat = "carte refusée"
 	} else {
+		// R3: Launch from an older view (a project created or a server removed since) launches nothing, and a
+		// card changed into another action (a new project renamed into an existing one) neither
+		if vue := s.carteActionChat(propose); propose.Type == "projet" && (c.Empreinte != vue.Empreinte || carte.Quoi != vue.Quoi) {
+			s.erreur(w, http.StatusConflict, "This card changed since it was shown: read it again, then launch it.")
+			return
+		}
 		if carte.Erreur != "" {
 			s.erreur(w, http.StatusBadRequest, carte.Erreur)
 			return
+		}
+		if carte.Permission != "" {
+			if code, err := s.choixIgnorer(r, carte.Permission, c.Confirmer, c.MotDePasse); err != nil {
+				audit.Resultat = "refusée : " + err.Error()
+				s.ecrireAudit(audit)
+				s.erreur(w, code, err.Error())
+				return
+			}
 		}
 		cle, args, err := s.executerActionChat(carte, qui, conv.Messages[c.Index].Texte)
 		if err != nil {

@@ -2539,23 +2539,30 @@ function carteActionHub(c, i) {
   const projets = (etat.mentionsSugg || []).filter((m) => m.type === "projet" && !m.detail).map((m) => m.nom);
   if (c.projet && !projets.includes(c.projet)) projets.unshift(c.projet);
   const choixProjet = `<label class="champ"><span>${t("Project")}</span><select data-cact="projet">${projets.map((n) => `<option ${n === c.projet ? "selected" : ""}>${h(n)}</option>`).join("")}</select></label>`;
-  const champs = ty === "projet" ? `<label class="champ"><span>${t("Name")}</span><input type="text" data-cact="projet" value="${v(c.projet)}"></label>
+  const existant = ty === "projet" && !c.dossier; // M295: an existing project gets its deployment only
+  const champs = existant ? `<input type="hidden" data-cact="projet" value="${v(c.projet)}">` : ty === "projet" ? `<label class="champ"><span>${t("Name")}</span><input type="text" data-cact="projet" value="${v(c.projet)}"></label>
       <label class="champ"><span>${t("Folder")}</span><input type="text" data-cact="dossier" value="${v(c.dossier)}" spellcheck="false"></label>`
     : ty === "mission" ? "" : choixProjet;
   const equipe = ["agent", "mcp", "attribuer"].includes(ty) ? champsEquipeHub(c, [...new Set([...(c.projets || []), ...projets.filter((n) => n && n !== c.projet)])]) : null;
   const titre = ty === "demande" ? `<label class="champ"><span>${t("Title")}</span><input type="text" data-cact="titre" value="${v(c.titre)}"></label>` : "";
-  const texte = ty === "pilote" || equipe ? "" : `<label class="champ"><span>${t("Text")}</span><textarea data-cact="texte" rows="5">${v(c.texte)}</textarea></label>`;
+  // M295: the deployment and the permission mode of a `projet` card, shown only when the request uses them; Launch sends them back as shown
+  const dpl = c.deploiement, nomme = (l) => (l || []).map((x) => h((c.noms || {})[x] || x)).join(", ");
+  const deploiement = !dpl ? "" : `<div class="petit carte-action-deploiement"><b>${t("Deployment")}</b>${dpl.url ? " — " + v(dpl.url) : ""}
+      ${(dpl.serveurs || []).length ? `<br>${t("{0}: {1}", [t("Servers"), nomme(dpl.serveurs)])}` : ""}${(dpl.apis || []).length ? `<br>${t("{0}: {1}", [t("API"), nomme(dpl.apis)])}` : ""}
+      <br>${t("{0}: {1}", [t("When to deploy"), t(dpl.moment === "jalon" ? "After each milestone" : "At delivery")])}${dpl.plan ? `<br>${v(dpl.plan)}` : ""}</div>`;
+  const permission = c.permission ? `<div class="petit${c.permission === "ignorer" ? " attention" : ""}">${t("{0}: {1}", [t("Permissions"), h(titrePermission(c.permission))])}</div>` : "";
+  const texte = ty === "pilote" || equipe || existant ? "" : `<label class="champ"><span>${t("Text")}</span><textarea data-cact="texte" rows="5">${v(c.texte)}</textarea></label>`;
   const decide = c.etat ? `<div class="${c.etat === "lancee" ? "ok" : "muet"} petit" role="status">${c.etat === "lancee" ? (ic("ok") + " ") + t("Launched") : (ic("croix") + " ") + t("Refused")}${c.resultat ? " — " + h(t(c.resultat, (c.args || []).map((x) => t(x)))) : ""}${(c.args || []).includes(SANS_CLAUDE) ? ` <a href="#claude">${t("Open Settings › Claude")}</a>` : ""}</div>`
     : `${c.erreur ? `<div class="attention petit" role="alert">${h(t(c.erreur))}</div>` : ""}
       ${equipe ? equipe.vue : ""}<div class="carte-action-champs" hidden>${equipe ? equipe.champs : champs + titre + texte}</div>
       <div class="ligne m0 mt-1"><button type="button" class="btn btn-petit btn-primaire" data-cact-decision="lancer" data-index="${i}">${t("Launch")}</button>
-        ${ty === "attribuer" ? "" : `<button type="button" class="btn btn-petit" data-cact-modifier aria-expanded="false">${t("Edit")}</button>`}
+        ${ty === "attribuer" || existant ? "" : `<button type="button" class="btn btn-petit" data-cact-modifier aria-expanded="false">${t("Edit")}</button>`}
         <button type="button" class="btn btn-petit" data-cact-decision="refuser" data-index="${i}">${t("Refuse")}</button></div>`;
-  return `<div class="chat-msg chat-claude"><div class="chat-bulle chat-note carte-action" data-carte-action="${i}" data-type="${v(ty)}" ${ty === "attribuer" ? `data-element="${v(c.element)}" data-nom="${v(c.nom)}"` : ""}>
+  return `<div class="chat-msg chat-claude"><div class="chat-bulle chat-note carte-action" data-carte-action="${i}" data-type="${v(ty)}" ${ty === "projet" ? `data-empreinte="${v(c.empreinte)}" data-permission="${v(c.permission)}" data-deploiement="${dpl ? v(JSON.stringify(dpl)) : ""}"` : ""} ${ty === "attribuer" ? `data-element="${v(c.element)}" data-nom="${v(c.nom)}"` : ""}>
     <div class="muet petit">${t("Action proposed: nothing runs before you launch it")}</div>
     <div><b>${h(t(c.quoi || "Action"))}</b></div>
     <div class="petit">${t("{0}: {1}", [t("On"), `<code class="croit">${v(c.sur)}</code>`])}</div>
-    ${c.titre ? `<div><b>${v(c.titre)}</b></div>` : ""}${c.texte ? `<div class="petit">${mdChat(c.texte)}</div>` : ""}
+    ${c.titre ? `<div><b>${v(c.titre)}</b></div>` : ""}${c.texte ? `<div class="petit">${mdChat(c.texte)}</div>` : ""}${deploiement}${permission}
     <div class="petit muet">${t("{0}: {1}", [t("With which accesses"), ""])}</div><ul class="petit m0">${(c.acces || []).map((a) => `<li>${h(t(a))}</li>`).join("")}</ul>
     ${decide}</div></div>`;
 }
@@ -2572,8 +2579,19 @@ document.addEventListener("click", async (ev) => {
   carte.querySelectorAll("[data-cact]").forEach((x) => { a[x.dataset.cact] = x.type === "checkbox" ? x.checked : x.value; });
   if (carte.querySelector(".carte-action-projets")) a.projets = [...carte.querySelectorAll("[data-cact-projet]:checked")].map((x) => x.value);
   if (a.type === "attribuer") { a.element = carte.dataset.element; a.nom = carte.dataset.nom; }
+  let preuve = {};
+  if (a.type === "projet") { // M295: the card as shown (its fingerprint); Ignore permissions confirmed as everywhere
+    if (carte.dataset.deploiement) a.deploiement = JSON.parse(carte.dataset.deploiement);
+    a.permission = carte.dataset.permission;
+    preuve = { empreinte: carte.dataset.empreinte };
+    if (b.dataset.cactDecision === "lancer" && a.permission === "ignorer") {
+      const p = await confirmerIgnorer(t("This project will act on its servers without asking you, dangerous commands and production deployments included. Choose it only for servers you can rebuild."));
+      if (!p) return;
+      preuve = { ...preuve, confirmer: true, ...p };
+    }
+  }
   b.disabled = true;
-  const r = await action(api("hub/chat/action", "POST", { index: Number(b.dataset.index), decision: b.dataset.cactDecision, action: a }).then((x) => ({ ...x, args: (x.args || []).map((y) => t(y)) }))); // an argument may be a message key (the pilot's start)
+  const r = await action(api("hub/chat/action", "POST", { index: Number(b.dataset.index), decision: b.dataset.cactDecision, action: a, ...preuve }).then((x) => ({ ...x, args: (x.args || []).map((y) => t(y)) }))); // an argument may be a message key (the pilot's start)
   b.disabled = false;
   if (r) majHubChat(true);
 });
