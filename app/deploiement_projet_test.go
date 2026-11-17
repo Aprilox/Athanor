@@ -1,244 +1,329 @@
 package main
 
 import (
-	"encoding/json"
-	"errors"
+	"context"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
 
-// ancienAccesM281: a project of the dev/staging/prod era, without grants (nothing for the vault to tidy).
-const ancienAccesM281 = `{"version":1,"projets":{"demo":{"env":"dev","forcer_infra_natif":false,"acces":[],` +
-	`"environnements":{"dev":{"url":"https://dev.exemple.fr","serveurs":["m1"],"protection":"auth_proxy","politique":"auto","deployer_au_jalon":true},` +
-	`"staging":{"url":"https://pre.exemple.fr","serveurs":["p1"],"protection":"access","politique":"accord"},` +
-	`"prod":{"url":"https://exemple.fr","serveurs":["p1"],"protection":"aucune","politique":"accord","fournisseur":"cf1","certificat":"c9","deploiement":{"methode":"statique","source":"artefact"}}}}}}`
-
-// deploiementTest: a server with projects demo, autre and neuf, servers m1 (old roles dev and prod), p1 (old role
-// prod) and a1 (no role), the access file given (none when empty), and a call through the real routes.
-func deploiementTest(t *testing.T, acces string) (*Serveur, func(methode, chemin, corps string) (int, map[string]any)) {
-	t.Helper()
-	s := serveurCoffreTest(t)
-	avecMdpPreuve(s)
-	_ = os.Remove(s.acces.chemin) // a file left next to the test binary by an interrupted run
-	if acces != "" {
-		if err := errors.Join(os.MkdirAll(filepath.Dir(s.acces.chemin), 0o700), os.WriteFile(s.acces.chemin, []byte(acces), 0o600)); err != nil {
-			t.Fatal(err)
-		}
-	}
-	t.Cleanup(func() { _ = os.Remove(s.acces.chemin) })
-	_ = os.RemoveAll(dossierModule("servers"))
-	t.Cleanup(func() { _ = os.RemoveAll(dossierModule("servers")) })
-	if err := modifierServeurs(func(l []ServeurInventaire) ([]ServeurInventaire, error) {
-		return append(l, ServeurInventaire{ID: "m1", Nom: "mixte", Hote: "203.0.113.6", Port: 22, Roles: []string{"dev", "prod"}, Cree: time.Now()},
-			ServeurInventaire{ID: "p1", Nom: "vps-prod", Hote: "203.0.113.5", Port: 22, Roles: []string{"prod"}, Cree: time.Now()},
-			ServeurInventaire{ID: "a1", Nom: "vps", Hote: "203.0.113.7", Port: 22, Cree: time.Now()}), nil
-	}); err != nil {
-		t.Fatal(err)
-	}
-	s.chargerAcces() // after the inventory: an older environment on a prod server reads as Production
-	d := t.TempDir()
-	s.mu.Lock()
-	s.config.Projets = []Projet{{Nom: "demo", Dossier: filepath.Join(d, "demo")}, {Nom: "autre", Dossier: filepath.Join(d, "autre")}, {Nom: "neuf", Dossier: filepath.Join(d, "neuf")}}
-	s.mu.Unlock()
-	mux := http.NewServeMux()
-	s.routes(mux)
-	return s, func(methode, chemin, corps string) (int, map[string]any) {
-		t.Helper()
-		r := httptest.NewRequest(methode, chemin, strings.NewReader(corps))
-		r.Header.Set("X-Athanor", "jeton")
-		r.AddCookie(&http.Cookie{Name: cookieAcces, Value: "cle"})
-		r.AddCookie(&http.Cookie{Name: "athanor_session", Value: s.session})
-		w := httptest.NewRecorder()
-		mux.ServeHTTP(w, r)
-		var v map[string]any
-		_ = json.Unmarshal(w.Body.Bytes(), &v)
-		return w.Code, v
-	}
-}
-
-// TestDeploiementProjetAPI (M281): GET and POST /api/projets/{nom}/deploiement read and write the project's one
-// deployment: each validation, the moment by default (at delivery), "on request" only where an older project
-// already has it, the plan stored without a vault value, and what the route does not carry left as it was.
-func TestDeploiementProjetAPI(t *testing.T) {
-	s, appel := deploiementTest(t, "")
-	const valeur = "temoin-valeur-m281-9f3k"
-	api, err := s.coffre.Ajouter(EntreeCoffre{Nom: "CLOUDFLARE_TOKEN", Famille: "secret", Type: "autre"}, valeur)
+// TestPreparationProjet (M283): a project with a server and a moment has its servers prepared by one Servers task
+// as soon as its plan holds a milestone: nothing before the plan, one task and not two (a second look, which is
+// all a restart is: the record is read from its file; a milestone's relay keeps it), a new one when the
+// deployment's plan or its servers change, nothing without a moment nor while a mission covers the project; a
+// project already deployed is only learnt; the brief names the API, never a vault value, and asks the accord of a
+// production unless the project's mode is ignorer.
+func TestPreparationProjet(t *testing.T) {
+	s, _, _ := serveursAjoutTest(t)
+	motDePasseCoffreTest(t, s)
+	temoin := "TEMOIN-" + aleatoire(10)
+	api, err := s.coffre.Ajouter(EntreeCoffre{Nom: "Jeton Cloudflare", Famille: "secret", Type: "cloudflare"}, temoin)
 	if err != nil {
 		t.Fatal(err)
 	}
-	dep := func(v map[string]any) map[string]any { d, _ := v["deploiement"].(map[string]any); return d }
-	const route = "/api/projets/demo/deploiement"
-
-	code, v := appel("GET", route, "")
-	if code != 200 || v["courant"] != "site" || dep(v)["moment"] != "livraison" || len(v["sites"].(map[string]any)) != 0 || len(dep(v)["serveurs"].([]any)) != 0 {
-		t.Fatalf("GET of a project without a deployment: %d %v", code, v)
+	_ = os.RemoveAll(dossierMissions())
+	t.Cleanup(func() { _ = os.RemoveAll(dossierMissions()) })
+	ancienne := sessionTacheServeurs
+	t.Cleanup(func() { sessionTacheServeurs = ancienne })
+	var mu sync.Mutex
+	var consignes []string
+	sessionTacheServeurs = func(_ *Serveur, _ context.Context, dossier string) error { // the fake chef ops: no plan
+		b, _ := os.ReadFile(filepath.Join(dossier, "consigne.txt"))
+		mu.Lock()
+		consignes = append(consignes, string(b))
+		mu.Unlock()
+		j := `{"type":"system","subtype":"init","session_id":"s"}` + "\n" + `{"type":"result","is_error":false,"result":"nothing to do"}` + "\n"
+		return os.WriteFile(filepath.Join(dossier, "session.jsonl"), []byte(j), 0o600)
 	}
-	if code, _ := appel("GET", "/api/projets/inconnu/deploiement", ""); code != 404 {
-		t.Errorf("unknown project: %d", code)
-	}
-	for _, c := range []string{
-		`{"serveurs":["inconnu"]}`, `{"url":"https://203.0.113.9"}`, `{"url":"https://a:b@exemple.fr"}`, `{"moment":"hebdo"}`,
-		`{"plan":"` + strings.Repeat("é", 4001) + `"}`, `{"apis":["inconnue"]}`, `{"courant":"absent"}`, `pas du json`,
-	} {
-		if code, v := appel("POST", route, c); code != 400 || v["erreur"] == nil {
-			t.Errorf("%s: %d %v", c[:min(len(c), 40)], code, v)
+	taches := func() int {
+		t.Helper()
+		for range 400 { // the tasks end (their goroutines must not outlive the test)
+			tachesEnCours.Lock()
+			n := len(tachesEnCours.m)
+			tachesEnCours.Unlock()
+			if n == 0 {
+				break
+			}
+			time.Sleep(25 * time.Millisecond)
 		}
-	}
-	if e := s.acces.Environnements("demo"); len(e) != 0 {
-		t.Fatalf("a refused request wrote: %+v", e)
-	}
-
-	// a new project: at delivery by default, stored under the internal name, never Production
-	code, v = appel("POST", route, `{"serveurs":["a1"],"url":"https://Site.exemple.fr","plan":" nginx on port 8080, token `+valeur+` ","apis":["`+api.ID+`","`+api.ID+`"]}`)
-	e := s.acces.Environnements("demo")["site"]
-	if code != 200 || v["courant"] != "site" || dep(v)["moment"] != "livraison" || e.Moment != "livraison" || e.DeployerAuJalon || e.Production ||
-		e.URL != "https://site.exemple.fr" || !slices.Equal(e.Serveurs, []string{"a1"}) || !slices.Equal(e.APIs, []string{api.ID}) ||
-		strings.Contains(e.Plan, valeur) || !strings.HasPrefix(e.Plan, "nginx on port 8080") || e.Protection != "aucune" || e.Politique != "accord" {
-		t.Fatalf("first write: %d %v %+v", code, v, e)
-	}
-	if b, _ := os.ReadFile(s.acces.chemin); strings.Contains(string(b), valeur) || strings.Contains(string(b), `"production"`) {
-		t.Error("the access file holds the secret or Production")
-	}
-	// after each milestone: both fields written, for an older reader; the relay reads it
-	if code, _ = appel("POST", route, `{"serveurs":["a1"],"url":"https://site.exemple.fr","moment":"jalon"}`); code != 200 {
-		t.Fatalf("jalon: %d", code)
-	}
-	if e = s.acces.Environnements("demo")["site"]; e.Moment != "jalon" || !e.DeployerAuJalon || !s.relaisActif("demo") || e.Plan != "" || len(e.APIs) != 0 {
-		t.Errorf("after each milestone: %+v", e)
-	}
-	// "on request" is not a choice for this project; a plan of exactly 4,000 characters is
-	if code, _ = appel("POST", route, `{"serveurs":["a1"],"url":"https://site.exemple.fr"}`); code != 400 {
-		t.Errorf("on request accepted for a project that never had it: %d", code)
-	}
-	if code, _ = appel("POST", route, `{"serveurs":["a1"],"moment":"livraison","plan":"`+strings.Repeat("é", 4000)+`"}`); code != 200 {
-		t.Errorf("a plan of 4,000 characters: %d", code)
-	}
-	if code, _ = appel("POST", route, `{"serveurs":["a1"],"url":"https://site.exemple.fr","moment":"livraison"}`); code != 200 {
-		t.Fatalf("livraison: %d", code)
-	}
-	// one host name per site, across projects
-	if code, v = appel("POST", "/api/projets/neuf/deploiement", `{"url":"https://SITE.exemple.fr/x"}`); code != 400 || !strings.Contains(v["erreur"].(string), "site.exemple.fr") {
-		t.Errorf("host already taken: %d %v", code, v)
+		mu.Lock()
+		defer mu.Unlock()
+		return len(consignes)
 	}
 
-	// an older project deployed on request keeps that choice while it sends it, with its protection and policy
-	if err := s.acces.DefinirEnvironnement("autre", "dev", Environnement{URL: "https://autre.exemple.fr", Serveurs: []string{"a1"}, Protection: "access", Politique: "auto"}); err != nil {
+	r1 := serveurRelaisTest(t)
+	env := Environnement{URL: "https://m283.example.fr", Serveurs: []string{r1}, Protection: "aucune", Politique: "accord", Moment: "livraison",
+		Plan: "Un conteneur Node derrière nginx", APIs: []string{api.ID}}
+	p, _ := projetRelaisTest(t, s, "m283", env)
+	ecrireFichier(t, p.Demande(), "# m283\n\nLa boutique en ligne de l'atelier.\n", 0o644)
+	if err := ecrireConfig(s.config); err != nil {
 		t.Fatal(err)
 	}
-	const autre = "/api/projets/autre/deploiement"
-	if code, v = appel("GET", autre, ""); code != 200 || v["courant"] != "dev" || dep(v)["moment"] != nil && dep(v)["moment"] != "" {
-		t.Fatalf("GET of an older project on request: %d %v", code, v)
-	}
-	if code, _ = appel("POST", autre, `{"serveurs":["a1"],"url":"https://autre.exemple.fr","plan":"uptime script"}`); code != 200 {
-		t.Fatalf("on request kept: %d", code)
-	}
-	if e = s.acces.Environnements("autre")["dev"]; e.Moment != "" || e.DeployerAuJalon || e.Plan != "uptime script" || e.Protection != "access" || e.Politique != "auto" || len(s.acces.Environnements("autre")) != 1 {
-		t.Errorf("an older project on request: %+v", e)
-	}
-	if code, _ = appel("POST", autre, `{"serveurs":["a1"],"url":"https://autre.exemple.fr","moment":"livraison"}`); code != 200 {
-		t.Fatalf("leaving on request: %d", code)
-	}
-	if code, _ = appel("POST", autre, `{"serveurs":["a1"],"url":"https://autre.exemple.fr"}`); code != 400 {
-		t.Errorf("back to on request: %d", code)
-	}
-	// an older writer stops the relay with DeployerAuJalon alone: the moment follows
-	if err := s.acces.DefinirEnvironnement("demo", "site", Environnement{Serveurs: []string{"a1"}, Moment: "jalon"}); err != nil || s.acces.Environnements("demo")["site"].Moment != "" {
-		t.Errorf("DeployerAuJalon false with Moment jalon: %v %+v", err, s.acces.Environnements("demo")["site"])
-	}
-}
-
-// TestUnSeulDeploiement (M281): a project has one deployment: a second name is refused; an older access file
-// with three environments is read without being rewritten, with each site's history; "courant" changes the
-// site deployed, and the request then writes that one only.
-func TestUnSeulDeploiement(t *testing.T) {
-	s, appel := deploiementTest(t, ancienAccesM281)
-	const route = "/api/projets/demo/deploiement"
-	for _, d := range []Deploiement{{ID: "d1", Projet: "demo", Env: "prod", Etat: "ok", Commit: strings.Repeat("a", 40)}, {ID: "d2", Projet: "demo", Env: "dev", Etat: "ok", Commit: strings.Repeat("b", 40)}} {
-		if err := noterHistorique(d); err != nil {
+	poser := func() {
+		t.Helper()
+		if err := s.acces.definirAncien(p.Nom, "site", env); err != nil {
 			t.Fatal(err)
 		}
 	}
-	site := func(v map[string]any, nom string) map[string]any {
-		m, _ := v["sites"].(map[string]any)
-		x, _ := m[nom].(map[string]any)
-		return x
+
+	s.preparerProjet(p)
+	if n := taches(); n != 0 || lireRelais()[p.Nom].Preparation != nil {
+		t.Fatalf("before the plan: %d tasks, %+v", n, lireRelais()[p.Nom])
 	}
-	histo := func(v map[string]any, nom string) string {
-		m, _ := v["deploiements"].(map[string]any)
-		l, _ := m[nom].([]any)
-		if len(l) != 1 {
-			return ""
+	planRelaisTest(t, p, "- [ ] M1 : Le site vitrine en Node\n- [ ] M2 : Le formulaire de contact\n")
+	s.preparerProjet(p)
+	prep := lireRelais()[p.Nom].Preparation
+	if n := taches(); n != 1 || prep == nil || prep.Tache == "" || prep.Empreinte == "" || prep.Erreur != "" {
+		t.Fatalf("the plan known: %d tasks, %+v", n, prep)
+	}
+	for _, attendu := range []string{`Project "m283"`, "https://m283.example.fr", "nginx", "Do not deploy", "the owner's accord", "Jeton Cloudflare",
+		"Un conteneur Node derrière nginx", "La boutique en ligne", "Le site vitrine en Node", "Le formulaire de contact"} {
+		if !strings.Contains(consignes[0], attendu) {
+			t.Errorf("brief without %q", attendu)
 		}
-		return l[0].(map[string]any)["id"].(string)
+	}
+	if strings.Contains(consignes[0], temoin) {
+		t.Fatal("a vault value in the brief")
+	}
+	audits := slices.DeleteFunc(lignesAudit(t, dossierJournalAudit()), func(l LigneAudit) bool { return l.Action != "préparation du serveur" || l.Projet != p.Nom })
+	if len(audits) != 1 || !strings.HasPrefix(audits[0].Resultat, prep.Tache) || strings.Contains(audits[0].Resultat, temoin) {
+		t.Fatalf("audit: %+v", audits)
 	}
 
-	// the older file: its three sites, the one deployed after each milestone is the project's, nothing rewritten
-	code, v := appel("GET", route, "")
-	if code != 200 || v["courant"] != "dev" || len(v["sites"].(map[string]any)) != 3 || v["deploiement"].(map[string]any)["moment"] != "jalon" ||
-		site(v, "prod")["production"] != true || site(v, "staging")["url"] != "https://pre.exemple.fr" || histo(v, "prod") != "d1" || histo(v, "dev") != "d2" || histo(v, "staging") != "" {
-		t.Fatalf("GET of an older project: %d %v", code, v)
-	}
-	if code, v = appel("POST", route, `{"courant":"absent"}`); code != 400 || v["erreur"] != "Unknown site" {
-		t.Errorf("an unknown site as the deployment: %d %v", code, v)
-	}
-	if b, _ := os.ReadFile(s.acces.chemin); string(b) != ancienAccesM281 {
-		t.Fatal("reading the deployment rewrote the older file")
+	s.preparerProjet(p) // a second look, a restart: nothing kept in memory
+	s.attendreRelais(p, lireRelais()[p.Nom], "M1 : Le site vitrine en Node", "relais après jalon", time.Now())
+	s.preparerProjet(p)
+	if n, apres := taches(), lireRelais()[p.Nom].Preparation; n != 1 || apres == nil || *apres != *prep {
+		t.Fatalf("a second look, a relay: %d tasks, %+v", n, apres)
 	}
 
-	// "courant": another site becomes the project's deployment, kept after a restart
-	if code, v = appel("POST", route, `{"courant":"prod","url":"https://ignore.exemple.fr"}`); code != 200 || v["courant"] != "prod" || s.deploiementProjet("demo") != "prod" || s.envJalon("demo") != "prod" {
-		t.Fatalf("courant: %d %v", code, v["courant"])
+	env.Plan = "Deux conteneurs et une base PostgreSQL"
+	poser()
+	s.preparerProjet(p)
+	s.preparerProjet(p)
+	plan := lireRelais()[p.Nom].Preparation
+	if n := taches(); n != 2 || plan.Tache == prep.Tache || plan.Empreinte == prep.Empreinte || !strings.Contains(consignes[1], "PostgreSQL") {
+		t.Fatalf("the plan changed: %d tasks, %+v", n, plan)
 	}
-	if a, err := ouvrirAcces(s.acces.chemin); err != nil || a.Projet("demo").DeploiementCourant != "prod" || len(a.Environnements("demo")) != 3 || a.Environnements("demo")["prod"].URL != "https://exemple.fr" {
-		t.Errorf("courant read back: %v", err)
-	}
-	// only the current site is written; what Athanor set on it stays, and its Production still refuses the milestones
-	if code, _ = appel("POST", route, `{"serveurs":["p1"],"url":"https://exemple.fr","moment":"jalon"}`); code != 400 {
-		t.Errorf("an older Production site after each milestone: %d", code)
-	}
-	if code, v = appel("POST", route, `{"serveurs":["p1"],"url":"https://exemple.fr","plan":"certificate, domain","moment":"livraison"}`); code != 200 || histo(v, "prod") != "d1" {
-		t.Fatalf("writing the current site: %d %v", code, v)
-	}
-	e := s.acces.Environnements("demo")
-	if p := e["prod"]; len(e) != 3 || p.Plan != "certificate, domain" || p.Moment != "livraison" || !p.Production || p.Fournisseur != "cf1" || p.Certificat != "c9" || p.Deploiement == nil ||
-		e["dev"].URL != "https://dev.exemple.fr" || !e["dev"].DeployerAuJalon || e["dev"].Plan != "" || e["staging"].Protection != "access" {
-		t.Errorf("the sites after writing the current one: %+v", e)
-	}
-	// a site that no longer exists is no longer the deployment
-	if err := s.acces.modifier(func(f *fichierAcces) error { delete(f.Projets["demo"].Environnements, "prod"); return nil }); err != nil || s.deploiementProjet("demo") != "dev" {
-		t.Errorf("the chosen site removed: %v %q", err, s.deploiementProjet("demo"))
-	}
-
-	// a new project: one name, a second one refused by the store and by the older route, the same one written again
-	un := Environnement{URL: "https://neuf.exemple.fr", Serveurs: []string{"a1"}, Protection: "aucune", Politique: "accord"}
-	if err := s.acces.DefinirEnvironnement("neuf", "site", un); err != nil {
+	if err := modifierServeurs(func(l []ServeurInventaire) ([]ServeurInventaire, error) {
+		return append(l, ServeurInventaire{ID: "r2", Nom: "relais-2", Hote: "127.0.0.1", Port: 1, Cree: time.Now()}), nil
+	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.acces.DefinirEnvironnement("neuf", "second", Environnement{Serveurs: []string{"a1"}}); err != errEnvUnSeul {
-		t.Errorf("a second name: %v", err)
+	env.Serveurs = []string{"r2", r1}
+	poser()
+	s.preparerProjet(p)
+	env.Serveurs = []string{r1, "r2"} // the same servers in another order
+	poser()
+	s.preparerProjet(p)
+	if n := taches(); n != 3 {
+		t.Fatalf("the servers changed: %d tasks", n)
 	}
-	if code, v = appel("POST", "/api/projets/neuf/environnements", `{"env":"second","serveurs":["a1"]}`); code != 400 || v["erreur"] != string(errEnvUnSeul) {
-		t.Errorf("a second name by the older route: %d %v", code, v)
+
+	env.Moment, env.Plan = "", "Autre chose"
+	poser()
+	s.preparerProjet(p)
+	if n := taches(); n != 3 {
+		t.Fatalf("without a moment: %d tasks", n)
 	}
-	un.Plan, un.Moment = "p", "livraison"
-	if err := s.acces.DefinirEnvironnement("neuf", "site", un); err != nil || len(s.acces.Environnements("neuf")) != 1 || s.acces.Environnements("neuf")["site"].Plan != "p" {
-		t.Errorf("the same name again: %v %+v", err, s.acces.Environnements("neuf"))
+	env.Moment = "jalon"
+	env.DeployerAuJalon = true
+	poser()
+	if err := enregistrerMission(Mission{ID: "m283mission", Etat: "lancee", Voies: []VoieMission{{Module: "dev", Ref: p.Nom, Etat: "lancee"}}}); err != nil {
+		t.Fatal(err)
 	}
-	// the older route does not know the plan, the moment nor the API: saving there keeps them
-	if code, _ = appel("POST", "/api/projets/neuf/environnements", `{"env":"site","url":"https://neuf.exemple.fr","serveurs":["a1"],"plan":"x","moment":"jalon"}`); code != 200 {
-		t.Fatalf("the older route on the one site: %d", code)
+	s.preparerProjet(p)
+	if n := taches(); n != 3 {
+		t.Fatalf("a mission covers the project: %d tasks", n)
 	}
-	if n := s.acces.Environnements("neuf")["site"]; n.Plan != "p" || n.Moment != "livraison" || n.DeployerAuJalon {
-		t.Errorf("the older route changed the plan or the moment: %+v", n)
+	_ = os.RemoveAll(dossierMissions())
+	s.preparerProjet(p)
+	if n := taches(); n != 4 {
+		t.Fatalf("the mission gone: %d tasks", n)
 	}
-	// the older project keeps its sites and may still write them (health, certificates)
-	if err := s.acces.DefinirEnvironnement("demo", "staging", e["staging"]); err != nil || len(s.acces.Environnements("demo")) != 2 {
-		t.Errorf("an older project's site: %v", err)
+
+	// a project already deployed when first seen: its servers serve it, the fingerprint is only learnt
+	oublierRelais(p.Nom)
+	if err := s.acces.NoterDeploiement(p.Nom, "site", ConfigDeploiement{Methode: "statique", Source: "git"}); err != nil {
+		t.Fatal(err)
+	}
+	s.preparerProjet(p)
+	if n, v := taches(), lireRelais()[p.Nom].Preparation; n != 4 || v == nil || v.Tache != "" || v.Empreinte == "" {
+		t.Fatalf("already deployed: %d tasks, %+v", n, v)
+	}
+	env.Plan = "Encore un autre"
+	poser()
+	s.preparerProjet(p)
+	if n := taches(); n != 5 {
+		t.Fatalf("already deployed, the plan changed: %d tasks", n)
+	}
+
+	// native Windows mode: no task without the owner; said once, tried again once the mode is gone
+	modeNatif.Store(true)
+	env.Plan = "Le dernier"
+	poser()
+	s.preparerProjet(p)
+	s.preparerProjet(p)
+	if n, v := taches(), lireRelais()[p.Nom].Preparation; n != 5 || v == nil || v.Erreur == "" || v.Empreinte != "" {
+		t.Fatalf("native mode: %d tasks, %+v", n, v)
+	}
+	modeNatif.Store(false)
+	s.preparerProjet(p)
+	if n, v := taches(), lireRelais()[p.Nom].Preparation; n != 6 || v.Erreur != "" || v.Tache == "" {
+		t.Fatalf("after the native mode: %d tasks, %+v", n, v)
+	}
+
+	if _, err := definirReglageProjet(p.Nom, "permission", "ignorer"); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { deplacerReglagesProjet(p.Nom, "") })
+	if b := s.briefPreparationProjet(p, env); strings.Contains(b, "the owner's accord") || !strings.Contains(b, "Do not deploy") {
+		t.Errorf("mode ignorer, brief: %s", b)
+	}
+}
+
+// TestFournisseurParAPI (M283): the provider of a deployment is the one whose token is among its API (the one
+// holding its host's zone first), else the older Fournisseur, else none; the Cloudflare tools read it that way.
+func TestFournisseurParAPI(t *testing.T) {
+	l := []Fournisseur{
+		{ID: "ancien", Cle: "c0", Zones: []ZoneFournisseur{{Nom: "example.fr"}}},
+		{ID: "autre", Cle: "c1", Zones: []ZoneFournisseur{{Nom: "ailleurs.test"}}},
+		{ID: "zone", Cle: "c2", Zones: []ZoneFournisseur{{Nom: "example.fr"}}},
+	}
+	for _, c := range []struct {
+		nom     string
+		e       Environnement
+		attendu string
+	}{
+		{"by its API", Environnement{URL: "https://x.test", APIs: []string{"zz", "c1"}}, "autre"},
+		{"the API holding the zone first", Environnement{URL: "https://site.example.fr", APIs: []string{"c1", "c2"}}, "zone"},
+		{"an API before the older provider", Environnement{URL: "https://site.example.fr", APIs: []string{"c1"}, Fournisseur: "ancien"}, "autre"},
+		{"the older provider", Environnement{URL: "https://site.example.fr", APIs: []string{"zz"}, Fournisseur: "ancien"}, "ancien"},
+		{"none", Environnement{URL: "https://site.example.fr", APIs: []string{"zz"}}, ""},
+		{"nothing chosen", Environnement{URL: "https://site.example.fr"}, ""},
+	} {
+		if f, ok := fournisseurDeploiement(c.e, l); f.ID != c.attendu || ok != (c.attendu != "") {
+			t.Errorf("%s: %q %v", c.nom, f.ID, ok)
+		}
+	}
+
+	s, _, _ := serveursAjoutTest(t)
+	if err := modifierFournisseurs(func([]Fournisseur) ([]Fournisseur, error) { return l, nil }); err != nil {
+		t.Fatal(err)
+	}
+	s.mu.Lock()
+	s.config.Projets = append(s.config.Projets, Projet{Nom: "m283f", Dossier: t.TempDir()})
+	s.mu.Unlock()
+	env := Environnement{URL: "https://site.example.fr", Serveurs: []string{serveurRelaisTest(t)}, Protection: "aucune", Politique: "accord",
+		APIs: []string{"c2"}, Fournisseur: "ancien"}
+	for _, c := range []struct{ apis, attendu string }{{"c2", "zone"}, {"", "ancien"}} {
+		env.APIs = strings.Fields(c.apis)
+		if err := s.acces.definirAncien("m283f", "site", env); err != nil {
+			t.Fatal(err)
+		}
+		if f, err := s.fournisseurDe(SessionHub{Env: "m283f/site"}); err != nil || f.ID != c.attendu {
+			t.Errorf("API %q: %q %v", c.apis, f.ID, err)
+		}
+	}
+	env.Fournisseur = ""
+	if err := s.acces.definirAncien("m283f", "site", env); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.fournisseurDe(SessionHub{Env: "m283f/site"}); err != errSansFournis {
+		t.Errorf("without a provider: %v", err)
+	}
+}
+
+// TestPreparationProjetConteneur (M283, the short trial on the test container): the deployment set by its route,
+// then PLAN.md written: one look launches one preparation on the project's server, in the project's mode
+// (ignorer here: no plan to accept); its ops lead, a scripted Claude through the real MCP route, reads the web
+// server's package and creates the site's folder, found on the container afterwards.
+func TestPreparationProjetConteneur(t *testing.T) {
+	s, appelAPI, id, _, direct := serveurConteneurTest(t)
+	mux := http.NewServeMux()
+	s.routes(mux)
+	p := Projet{Nom: "m283c", Dossier: filepath.Join(t.TempDir(), "m283c")}
+	s.mu.Lock()
+	s.config.Projets = append(s.config.Projets, p)
+	s.mu.Unlock()
+	if err := ecrireConfig(s.config); err != nil {
+		t.Fatal(err)
+	}
+	oublierRelais(p.Nom)
+	if _, err := definirReglageProjet(p.Nom, "permission", "ignorer"); err != nil {
+		t.Fatal(err)
+	}
+	const dossier = "/srv/athanor/m283c-essai"
+	direct("ssh_commande", map[string]any{"commande": "sudo -n rm -rf " + dossier})
+	t.Cleanup(func() {
+		direct("ssh_commande", map[string]any{"commande": "sudo -n rm -rf " + dossier})
+		oublierRelais(p.Nom)
+		deplacerReglagesProjet(p.Nom, "")
+	})
+	ancienne := sessionTacheServeurs
+	t.Cleanup(func() { sessionTacheServeurs = ancienne })
+	var mu sync.Mutex
+	var briefs, sorties []string
+	sessionTacheServeurs = func(_ *Serveur, _ context.Context, d string) error {
+		lire := func(f string) string {
+			b, _ := os.ReadFile(filepath.Join(d, f))
+			return strings.TrimSpace(string(b))
+		}
+		if c := lire("consigne.txt"); !strings.Contains(c, "security critic") && !strings.Contains(c, "external verifier") {
+			mu.Lock()
+			briefs = append(briefs, c)
+			for _, commande := range []string{"command -v caddy", "sudo -n mkdir -p " + dossier} {
+				rep := appelMCP(t, mux, "Bearer "+lire("hub-jeton"), appelOutil("ssh_commande", `{"serveur":"`+id+`","commande":"`+commande+`"}`))
+				if rep.Error != nil {
+					sorties = append(sorties, "ERROR "+rep.Error.Message)
+				} else {
+					sorties = append(sorties, map[bool]string{true: "ERROR "}[rep.Result.IsError]+rep.Result.Content[0].Text)
+				}
+			}
+			mu.Unlock()
+		}
+		j := `{"type":"system","subtype":"init","session_id":"s"}` + "\n" + `{"type":"result","is_error":false,"result":"Prepared."}` + "\n"
+		return os.WriteFile(filepath.Join(d, "session.jsonl"), []byte(j), 0o600)
+	}
+
+	if code, v := appelAPI("/api/projets/m283c/deploiement", map[string]any{"serveurs": []string{id}, "url": "http://m283c.test",
+		"plan": "Un site statique servi par Caddy", "moment": "livraison"}); code != 200 {
+		t.Fatalf("the deployment by its route: %d %v", code, v)
+	}
+	s.preparerProjet(p)
+	if v := lireRelais()[p.Nom].Preparation; v != nil {
+		t.Fatalf("before the plan: %+v", v)
+	}
+	planRelaisTest(t, p, "- [ ] M1 : Le site statique\n")
+	s.preparerProjet(p)
+	s.preparerProjet(p)
+	for range 2400 { // the task ends
+		tachesEnCours.Lock()
+		n := len(tachesEnCours.m)
+		tachesEnCours.Unlock()
+		if n == 0 {
+			break
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	prep := lireRelais()[p.Nom].Preparation
+	if prep == nil || prep.Tache == "" || prep.Erreur != "" || len(briefs) != 1 {
+		t.Fatalf("the preparation: %+v, %d sessions", prep, len(briefs))
+	}
+	if !strings.Contains(briefs[0], "Un site statique servi par Caddy") || !strings.Contains(briefs[0], "Le site statique") || strings.Contains(briefs[0], "the owner's accord") {
+		t.Errorf("brief: %s", briefs[0])
+	}
+	if len(sorties) != 2 || !strings.Contains(sorties[0], "caddy") || strings.Contains(strings.Join(sorties, "\n"), "ERROR ") {
+		t.Errorf("the ops lead's commands: %q", sorties)
+	}
+	if r := direct("ssh_commande", map[string]any{"commande": "test -d " + dossier + " && echo present"}); !strings.Contains(r.Sortie, "present") {
+		t.Errorf("the site's folder is not on the server: %+v", r)
 	}
 }

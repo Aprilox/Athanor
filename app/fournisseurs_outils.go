@@ -249,21 +249,22 @@ func (s *Serveur) envSession(x SessionHub) Environnement {
 	return s.acces.Environnements(projet)[env]
 }
 
-// fournisseurDe: the provider of x's environment, without its token.
+// fournisseurDe: the provider of x's environment, without its token (M283: the one whose token is among the
+// deployment's API, else the older Fournisseur).
 func (s *Serveur) fournisseurDe(x SessionHub) (Fournisseur, error) {
 	e := s.envSession(x)
-	if e.Fournisseur == "" {
+	if e.Fournisseur == "" && len(e.APIs) == 0 {
 		return Fournisseur{}, errSansFournis
 	}
 	l, err := lireFournisseurs()
 	if err != nil {
 		return Fournisseur{}, err
 	}
-	i := slices.IndexFunc(l, func(f Fournisseur) bool { return f.ID == e.Fournisseur })
-	if i < 0 {
+	f, ok := fournisseurDeploiement(e, l)
+	if !ok {
 		return Fournisseur{}, errSansFournis
 	}
-	return l[i], nil
+	return f, nil
 }
 
 // fournisseurEnv: the provider of x's environment and its token (read from the vault, kept in memory only).

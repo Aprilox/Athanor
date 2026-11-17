@@ -28,6 +28,8 @@ type RelaisJalon struct {
 	// are watched yet (the first look only learns); both survive the relays that follow
 	Livraison    string `json:"livraison,omitempty"`
 	LivraisonVue bool   `json:"livraison_vue,omitempty"`
+	// M283: the server preparation launched for the project's deployment (deploiement_projet.go); survives the relays too
+	Preparation *PreparationRelais `json:"preparation,omitempty"`
 }
 
 // attentePushRelais: how long a milestone's commit may wait to be on GitHub (git source) before the relay tries anyway.
@@ -85,7 +87,12 @@ func (s *Serveur) envJalon(projet string) string { return s.deploiementProjet(pr
 // premierParMission (M275b, until M302): no method yet and a launched mission covers the project: its Servers lane
 // makes the first deployment (premierDeploiementMission), a relay failure would ring for nothing.
 func (s *Serveur) premierParMission(projet string) bool {
-	return s.acces.Environnements(projet)[s.envJalon(projet)].Deploiement == nil && slices.ContainsFunc(lireMissions(), func(m Mission) bool {
+	return s.acces.Environnements(projet)[s.envJalon(projet)].Deploiement == nil && missionSurProjet(projet)
+}
+
+// missionSurProjet: a launched mission covers projet (until M302).
+func missionSurProjet(projet string) bool {
+	return slices.ContainsFunc(lireMissions(), func(m Mission) bool {
 		return missionSuivie(m.Etat) && slices.ContainsFunc(m.Voies, func(v VoieMission) bool { return v.Module == "dev" && v.Ref == projet })
 	})
 }
@@ -132,9 +139,9 @@ func (s *Serveur) noterLivraison(p Projet, quand time.Time) {
 }
 
 // attendreRelais: the project's HEAD waits to be deployed, for the milestone or the delivery named by jalon; what
-// avant noted of the deliveries stays.
+// avant noted of the deliveries and of the preparation stays.
 func (s *Serveur) attendreRelais(p Projet, avant RelaisJalon, jalon, action string, quand time.Time) {
-	r := RelaisJalon{Jalon: jalon, Date: quand.UTC().Format(time.RFC3339), Etat: "attente", Livraison: avant.Livraison, LivraisonVue: avant.LivraisonVue}
+	r := RelaisJalon{Jalon: jalon, Date: quand.UTC().Format(time.RFC3339), Etat: "attente", Livraison: avant.Livraison, LivraisonVue: avant.LivraisonVue, Preparation: avant.Preparation}
 	if sha, err := gitSortie(p.Dossier, "rev-parse", "HEAD"); err == nil && reCommitComplet.MatchString(sha) {
 		r.Commit = sha
 	} else {

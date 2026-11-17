@@ -69,7 +69,7 @@ func fournisseurCoche(h string, acces []AccesCarte) string {
 	l, _ := lireFournisseurs()
 	for _, f := range l {
 		coche := slices.ContainsFunc(acces, func(a AccesCarte) bool { return a.ID == f.Cle && !a.Decoche && !a.ARemplir })
-		if h != "" && coche && slices.ContainsFunc(f.Zones, func(z ZoneFournisseur) bool { return h == z.Nom || strings.HasSuffix(h, "."+z.Nom) }) {
+		if coche && tientHote(f, h) {
 			return f.ID
 		}
 	}
@@ -393,9 +393,6 @@ func demandeStudio(c CarteMission) string {
 		"Build it ready to deploy (build, tests, a deployment file when useful): no deployment milestone, no request for a server's access."
 }
 
-// planPret (M249): p's framing is done, its plan holds at least one milestone.
-func planPret(p Projet) bool { return len(p.LirePlan()) > 0 }
-
 // relaisAuJalon: ec (e as it will be written) is deployed after each milestone: the card's linked environment, never
 // a Production one nor one on a server of the old prod role. Read at the launch and at the resume of a stopped mission.
 func relaisAuJalon(c CarteMission, ec EnvCarte, e Environnement, inventaire []ServeurInventaire) bool {
@@ -407,7 +404,7 @@ func relaisAuJalon(c CarteMission, ec EnvCarte, e Environnement, inventaire []Se
 func (s *Serveur) lancerPreparation(c CarteMission, ec EnvCarte, p Projet, qui string) (VoieMission, error) {
 	env := p.Nom + "/" + ec.Nom
 	natif := modeNatif.Load()
-	t, err := s.lancerTache(couper(briefPreparation(c, ec, p), maxTexteTache-1), ec.Serveurs, natif, env)
+	t, err := s.lancerTache(couper(briefPreparationMission(c, ec, p), maxTexteTache-1), ec.Serveurs, natif, env)
 	if err != nil {
 		return VoieMission{}, err
 	}
@@ -418,39 +415,21 @@ func (s *Serveur) lancerPreparation(c CarteMission, ec EnvCarte, p Projet, qui s
 	return VoieMission{Module: "servers", Ref: t.ID, Etat: t.Etat, Env: env}, nil
 }
 
-// briefPreparation (M249): what the Servers task prepares before the first delivery: the card's brief, the standard
-// list adapted to the plan, the DNS provider, the vault entries given or still to fill (names only), the plan.
-func briefPreparation(c CarteMission, ec EnvCarte, p Projet) string {
-	var b strings.Builder
-	b.WriteString(c.Serveurs.Brief + "\n\nMission \"" + c.Titre + "\", environment " + ec.Nom + ": " + ec.URL + ", protection " + ec.Protection + ".\n" +
-		"Prepare these servers now, while the Studio builds the project, so that each delivery then only deploys it. " +
-		"Standard list, adapted to the project's plan below (skip what it does not need): the system packages and runtime it needs; " +
-		"nginx or an equivalent web server as reverse proxy; a dedicated system user; the site's folder; the TLS certificate of " +
-		"the host; the firewall (SSH, HTTP and HTTPS only). Do not deploy the application itself.\n")
-	if f := fournisseurCoche(hoteURL(ec.URL), c.Acces); f != "" {
-		b.WriteString("DNS: the zone of " + hoteURL(ec.URL) + " is at the provider " + f + ", its token is given.\n")
-	}
-	var donnees, aRemplir []string
+// briefPreparationMission (M249, until M302): the card's adapter of briefPreparation: the card's brief, the mission
+// and its environment, the provider whose token is ticked, the vault entries given or still to fill.
+func briefPreparationMission(c CarteMission, ec EnvCarte, p Projet) string {
+	d := donneesPreparation{Entete: c.Serveurs.Brief + "\n\nMission \"" + c.Titre + "\", environment " + ec.Nom, URL: ec.URL, Protection: ec.Protection,
+		DNS: fournisseurCoche(hoteURL(ec.URL), c.Acces)}
 	for _, a := range c.Acces {
 		switch {
 		case a.Decoche:
 		case a.ARemplir:
-			aRemplir = append(aRemplir, a.Entree)
+			d.ARemplir = append(d.ARemplir, a.Entree)
 		default:
-			donnees = append(donnees, a.Entree)
+			d.APIs = append(d.APIs, a.Entree)
 		}
 	}
-	if len(donnees) > 0 {
-		b.WriteString("Vault entries given (names only, never ask for a value): " + strings.Join(donnees, ", ") + ".\n")
-	}
-	if len(aRemplir) > 0 {
-		b.WriteString("Vault entries the owner has still to fill (leave what needs them for later): " + strings.Join(aRemplir, ", ") + ".\n")
-	}
-	b.WriteString("Project plan:\n")
-	for _, j := range p.LirePlan() {
-		b.WriteString("- " + couper(j.Titre, 160) + "\n")
-	}
-	return b.String()
+	return briefPreparation(d, p)
 }
 
 // missionTout (C82): a launched mission of policy tout covers env ("project/env"): its Servers plans and changes
