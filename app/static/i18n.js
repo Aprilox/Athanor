@@ -49,6 +49,7 @@ const PREFIXES = ["no Studio lane: the vault entries are given", "no Studio lane
 
 const DICT = {
 fr: {
+  "A task needs at least one server or one API": "Une tâche a besoin d'au moins un serveur ou une API",
   "The servers of this project are still being prepared: try again once that task has ended": "Les serveurs de ce projet sont encore en préparation : réessayez une fois cette tâche terminée",
   "Nothing to prepare now: this project has no server, is already deployed, or a mission is deploying it": "Rien à préparer pour l'instant : ce projet n'a pas de serveur, est déjà déployé, ou une mission le déploie",
   "First deployment in progress": "Premier déploiement en cours",
@@ -836,6 +837,7 @@ fr: {
   "Run a command": "Lancer une commande", "The task failed without giving a reason.": "La tâche a échoué sans donner de raison.",
 },
 es: {
+  "A task needs at least one server or one API": "Una tarea necesita al menos un servidor o una API",
   "The servers of this project are still being prepared: try again once that task has ended": "Los servidores de este proyecto aún se están preparando: inténtelo de nuevo cuando esa tarea haya terminado",
   "Nothing to prepare now: this project has no server, is already deployed, or a mission is deploying it": "Nada que preparar por ahora: este proyecto no tiene servidor, ya está desplegado o una misión lo está desplegando",
   "First deployment in progress": "Primer despliegue en curso",
@@ -1591,6 +1593,7 @@ es: {
   "Run a command": "Ejecutar un comando", "The task failed without giving a reason.": "La tarea falló sin dar un motivo.",
 },
 de: {
+  "A task needs at least one server or one API": "Eine Aufgabe braucht mindestens einen Server oder eine API",
   "The servers of this project are still being prepared: try again once that task has ended": "Die Server dieses Projekts werden noch vorbereitet: Versuchen Sie es erneut, sobald diese Aufgabe beendet ist",
   "Nothing to prepare now: this project has no server, is already deployed, or a mission is deploying it": "Derzeit nichts vorzubereiten: Dieses Projekt hat keinen Server, ist bereits bereitgestellt oder wird von einer Mission bereitgestellt",
   "First deployment in progress": "Erste Bereitstellung läuft",
@@ -2340,6 +2343,7 @@ de: {
   "Run a command": "Einen Befehl ausführen", "The task failed without giving a reason.": "Die Aufgabe ist ohne Angabe eines Grundes fehlgeschlagen.",
 },
 it: {
+  "A task needs at least one server or one API": "Un'attività richiede almeno un server o un'API",
   "The servers of this project are still being prepared: try again once that task has ended": "I server di questo progetto sono ancora in preparazione: riprova quando l'attività sarà terminata",
   "Nothing to prepare now: this project has no server, is already deployed, or a mission is deploying it": "Niente da preparare per ora: questo progetto non ha un server, è già stato distribuito o una missione lo sta distribuendo",
   "First deployment in progress": "Prima distribuzione in corso",
@@ -3089,6 +3093,7 @@ it: {
   "Run a command": "Eseguire un comando", "The task failed without giving a reason.": "L'attività non è riuscita senza indicare un motivo.",
 },
 pt: {
+  "A task needs at least one server or one API": "Uma tarefa precisa de pelo menos um servidor ou uma API",
   "The servers of this project are still being prepared: try again once that task has ended": "Os servidores deste projeto ainda estão a ser preparados: tente novamente quando essa tarefa terminar",
   "Nothing to prepare now: this project has no server, is already deployed, or a mission is deploying it": "Nada a preparar por agora: este projeto não tem servidor, já está implementado ou uma missão está a implementá-lo",
   "First deployment in progress": "Primeira implementação em curso",

@@ -180,7 +180,12 @@ func outilProposerPlan(s *Serveur, x SessionHub, args json.RawMessage) (string, 
 	if err := lireArguments(args, &a); err != nil {
 		return "", err
 	}
-	if err := s.serveurPerimetre(x, "proposer_plan", a.Serveur); err != nil {
+	api := apiSeule(x) && a.Serveur == serveurAPI // M286: the plan of a task on API alone: Cloudflare steps, no server
+	if api {
+		if err := s.accesServeursAgent(x); err != nil {
+			return "", err
+		}
+	} else if err := s.serveurPerimetre(x, "proposer_plan", a.Serveur); err != nil {
 		return "", err
 	}
 	resume, err := texteRequis("resume", a.Resume, 500)
@@ -192,7 +197,10 @@ func outilProposerPlan(s *Serveur, x SessionHub, args json.RawMessage) (string, 
 		return "", fmt.Errorf("a plan has 1 to %d steps", maxEtapesPlan)
 	}
 	srv, _ := serveurProd(a.Serveur)
-	prod := s.serveurPrudent(a.Serveur)
+	prod := !api && s.serveurPrudent(a.Serveur)
+	if api {
+		srv.Nom = strings.Join(x.Hotes, ", ")
+	}
 	p := PlanServeur{Serveur: a.Serveur, Nom: srv.Nom, Env: "dev", Projet: x.Projet, Mission: x.Mission, Agent: x.Agent, Resume: resume}
 	if projetEnv, env, ok := strings.Cut(x.Env, "/"); ok && s.prudenceRenforcee(projetEnv, env) { // a task for a prod environment: its Cloudflare steps too (M116)
 		prod = true
@@ -208,7 +216,7 @@ func outilProposerPlan(s *Serveur, x SessionHub, args json.RawMessage) (string, 
 			return "", err
 		}
 		cloudflare, deploi := slices.Contains(outilsCloudflare, e.Outil), slices.Contains(outilsDeploiement, e.Outil)
-		if _, ok := outilsServeurs[e.Outil]; !ok && !cloudflare && !deploi {
+		if _, ok := outilsServeurs[e.Outil]; !ok && !cloudflare && !deploi || api && !slices.Contains(outilsAPISeule, e.Outil) {
 			return echec(fmt.Errorf("step %d: unknown tool %q", i+1, couper(e.Outil, 40)))
 		}
 		if e.Arguments == nil {
@@ -294,7 +302,7 @@ func outilProposerPlan(s *Serveur, x SessionHub, args json.RawMessage) (string, 
 		resumeEtapes = append(resumeEtapes, et.Outil+" "+et.Classe.String())
 	}
 	// C68: a build command runs code of the repository on this PC: the owner reads the plan every time
-	regle := !prod && haut < ClasseDestructrice && !construit
+	regle := !prod && haut < ClasseDestructrice && !construit && !api // no "do not ask again" for what is not a server
 	demande := Approbation{Projet: x.Projet, Env: p.Env, Mission: x.Mission, Agent: x.Agent, Action: actionPlanServeur, Raison: resume,
 		Details: map[string]string{"serveur": p.Serveur, "nom": p.Nom, "classe": haut.String(), "etapes": strconv.Itoa(len(p.Etapes)), "regle": map[bool]string{true: "oui", false: "non"}[regle]}}
 	// the owner's "do not ask again for this server": the plan is accepted at once, without a ping (not in a tout mission, C82)

@@ -226,7 +226,7 @@ func TestFournisseurParAPI(t *testing.T) {
 		if err := s.acces.definirAncien("m283f", "site", env); err != nil {
 			t.Fatal(err)
 		}
-		if f, err := s.fournisseurDe(SessionHub{Env: "m283f/site"}); err != nil || f.ID != c.attendu {
+		if f, err := s.fournisseurDe(SessionHub{Env: "m283f/site"}, ""); err != nil || f.ID != c.attendu {
 			t.Errorf("API %q: %q %v", c.apis, f.ID, err)
 		}
 	}
@@ -234,7 +234,7 @@ func TestFournisseurParAPI(t *testing.T) {
 	if err := s.acces.definirAncien("m283f", "site", env); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.fournisseurDe(SessionHub{Env: "m283f/site"}); err != errSansFournis {
+	if _, err := s.fournisseurDe(SessionHub{Env: "m283f/site"}, ""); err != errSansFournis {
 		t.Errorf("without a provider: %v", err)
 	}
 }

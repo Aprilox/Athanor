@@ -64,8 +64,11 @@ func modeAutorisation(x SessionHub, id string) string {
 	}
 	t.mu.Lock()
 	panneau := t.t.Panneau && t.hache == x.Hache // the critic's or the verifier's session runs nothing
-	propre, env := t.hache == x.Hache, t.t.Env
+	propre, env, mode := t.hache == x.Hache, t.t.Env, t.t.Mode
 	t.mu.Unlock()
+	if propre && mode != "" { // M286: the mode its launcher gave the task comes before any other
+		return mode
+	}
 	if !panneau {
 		if !propre {
 			return ""

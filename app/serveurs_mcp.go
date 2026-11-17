@@ -24,6 +24,10 @@ const agentServeurs = "servers"
 var outilsServeursMCP = append([]string{"serveurs_liste", "serveur_fiche", "ssh_commande", "fichier_lire", "fichier_ecrire",
 	"sftp_envoyer", "sftp_recuperer", "service", "docker", "pare_feu", "proposer_plan", "confirmer_changement", "runbook_lire", "runbook_ajouter", "environnement_lire", "deployer", "revenir_version"}, outilsCloudflare...)
 
+// outilsAPISeule (M286): the tools of a task on the owner's API alone: no SSH, SFTP nor file tool, no deployment, and
+// no origin certificate (it is installed on a server).
+var outilsAPISeule = append([]string{"proposer_plan"}, slices.DeleteFunc(slices.Clone(outilsCloudflare), func(o string) bool { return o == "certificat_origine" })...)
+
 var (
 	errServeursAgent = errors.New("the Servers tools answer only a Servers agent's session")
 	// infoServeursNatif: a mission's card in native Windows mode (Servers lane, or an infra entry): not a refusal

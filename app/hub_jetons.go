@@ -39,8 +39,11 @@ type SessionHub struct {
 	Serveurs []string `json:"serveurs,omitempty"`
 	// Env and Hotes: a task launched for an environment ("projet/env") and the host names of its URL, the
 	// only names its Cloudflare tools act on (M116)
-	Env    string   `json:"env,omitempty"`
-	Hotes  []string `json:"hotes,omitempty"`
+	Env   string   `json:"env,omitempty"`
+	Hotes []string `json:"hotes,omitempty"`
+	// APIs (M286): the vault ids a task was given by the owner; its Hotes are then the zones of the providers'
+	// sheets holding these keys, and a name inside one of them is in its perimeter
+	APIs   []string `json:"apis,omitempty"`
 	Cree   string   `json:"cree"`
 	Vu     string   `json:"vu"`
 	Expire string   `json:"expire"`
@@ -101,7 +104,7 @@ func (j *Sessions) CreerSession(x SessionHub) (string, error) {
 	defer j.mu.Unlock()
 	t := j.maintenant().UTC()
 	j.retirer(func(y SessionHub) bool { return y.Projet == x.Projet && y.Agent == x.Agent })
-	x.Hache, x.Outils, x.Serveurs, x.Hotes = hacherJeton(jeton), append([]string{}, x.Outils...), slices.Clone(x.Serveurs), slices.Clone(x.Hotes)
+	x.Hache, x.Outils, x.Serveurs, x.Hotes, x.APIs = hacherJeton(jeton), append([]string{}, x.Outils...), slices.Clone(x.Serveurs), slices.Clone(x.Hotes), slices.Clone(x.APIs)
 	x.Cree, x.Vu, x.Expire = t.Format(time.RFC3339), t.Format(time.RFC3339), t.Add(dureeJeton).Format(time.RFC3339)
 	j.liste = append(j.liste, x)
 	if err := j.enregistrer(); err != nil {

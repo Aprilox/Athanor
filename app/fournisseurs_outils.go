@@ -151,9 +151,10 @@ func classerCloudflare(outil string, brut []byte) (Classe, string, argsCloudflar
 	return ClasseChangement, "writes a " + a.Type + " record of " + a.Nom, a, nil
 }
 
-// nomPerimetre: nom is one of x's host names; otherwise the unknown name's answer, the refusal audited.
+// nomPerimetre: nom is one of x's host names (M286: or a name inside one, the zones of a task given API); otherwise
+// the unknown name's answer, the refusal audited.
 func (s *Serveur) nomPerimetre(x SessionHub, outil, nom string) error {
-	if nom == "" || slices.Contains(x.Hotes, nom) {
+	if nom == "" || slices.Contains(x.Hotes, nom) || len(x.APIs) > 0 && slices.ContainsFunc(x.Hotes, func(z string) bool { return strings.HasSuffix(nom, "."+z) }) {
 		return nil
 	}
 	s.ecrireAudit(LigneAudit{Type: "evenement", De: x.Agent, Vers: "cloudflare", Projet: x.Projet, Mission: x.Mission, Agent: x.Agent,
@@ -180,7 +181,20 @@ func faireOutilCloudflare(nom string) func(*Serveur, SessionHub, json.RawMessage
 			_ = json.Unmarshal(e.Arguments, &c)
 			err = s.nomPerimetre(x, nom, c.Nom)
 		}
-		if err == nil && e.Classe > ClasseLecture {
+		// M286: a task on API alone follows its permission mode as a server's assistant does (decisionMode); any other
+		// session as before: reads run, a change is a step of an accepted plan
+		m := ""
+		if apiSeule(x) {
+			m = modeAutorisation(x, serveurAPI)
+		}
+		switch {
+		case err != nil:
+		case m != "" && decisionMode(m, e.Classe, false) == decisionLibre:
+			if e.Classe > ClasseLecture {
+				s.ecrireAudit(LigneAudit{Type: "evenement", De: x.Agent, Vers: "cloudflare", Projet: x.Projet, Mission: x.Mission, Agent: x.Agent,
+					Action: "serveurs." + nom, Resultat: "accordé : mode « " + m + " » de la tâche (" + e.Classe.String() + ")"})
+			}
+		case m != "" || e.Classe > ClasseLecture:
 			err = s.etapeCloudflare(x, &e)
 		}
 		if err == nil && nom == "certificat_origine" {
@@ -220,8 +234,11 @@ func (s *Serveur) etapeCloudflare(x SessionHub, e *Etape) error {
 	if missionBloquee("servers", x.Mission) != "" { // R2: a paused mission deploys nothing and leaves the DNS alone
 		return errors.New("the mission of this task is paused: nothing changes until the owner resumes it; wait, or end the task")
 	}
-	info := ""
-	for _, id := range x.Serveurs {
+	info, serveurs, ou := "", x.Serveurs, "one of your servers"
+	if apiSeule(x) {
+		serveurs, ou = []string{serveurAPI}, "\""+serveurAPI+"\""
+	}
+	for _, id := range serveurs {
 		p, n, pourquoi, err := s.etapeAccordee(x, id, *e)
 		if err != nil {
 			return err
@@ -237,8 +254,11 @@ func (s *Serveur) etapeCloudflare(x SessionHub, e *Etape) error {
 	if info != "" {
 		info = "; " + info
 	}
-	return fmt.Errorf("plan required: this is a %s action (%s); a change runs only as a step of a plan the owner accepted, with exactly its arguments: propose a plan (proposer_plan, serveur = one of your servers)%s", e.Classe, e.Raison, info)
+	return fmt.Errorf("plan required: this is a %s action (%s); a change runs only as a step of a plan the owner accepted, with exactly its arguments: propose a plan (proposer_plan, serveur = %s)%s", e.Classe, e.Raison, ou, info)
 }
+
+// apiSeule (M286): x is the session of a task on the owner's API alone, with no server.
+func apiSeule(x SessionHub) bool { return len(x.Serveurs) == 0 && len(x.APIs) > 0 }
 
 // envSession: the environment x's task was launched for (zero when none).
 func (s *Serveur) envSession(x SessionHub) Environnement {
@@ -250,9 +270,13 @@ func (s *Serveur) envSession(x SessionHub) Environnement {
 }
 
 // fournisseurDe: the provider of x's environment, without its token (M283: the one whose token is among the
-// deployment's API, else the older Fournisseur).
-func (s *Serveur) fournisseurDe(x SessionHub) (Fournisseur, error) {
+// deployment's API, else the older Fournisseur). M286: for a task given API, the sheet of one of them, the one
+// holding nom's zone first.
+func (s *Serveur) fournisseurDe(x SessionHub, nom string) (Fournisseur, error) {
 	e := s.envSession(x)
+	if len(x.APIs) > 0 {
+		e = Environnement{APIs: x.APIs, URL: "https://" + nom}
+	}
 	if e.Fournisseur == "" && len(e.APIs) == 0 {
 		return Fournisseur{}, errSansFournis
 	}
@@ -268,8 +292,8 @@ func (s *Serveur) fournisseurDe(x SessionHub) (Fournisseur, error) {
 }
 
 // fournisseurEnv: the provider of x's environment and its token (read from the vault, kept in memory only).
-func (s *Serveur) fournisseurEnv(x SessionHub) (Fournisseur, string, error) {
-	f, err := s.fournisseurDe(x)
+func (s *Serveur) fournisseurEnv(x SessionHub, nom string) (Fournisseur, string, error) {
+	f, err := s.fournisseurDe(x, nom)
 	if err != nil {
 		return Fournisseur{}, "", err
 	}
@@ -303,7 +327,7 @@ func (s *Serveur) prodTouchee(x SessionHub, outil, nom string) (zone string, env
 	if l := strings.Split(nom, "."); len(l) > 2 {
 		zone = strings.Join(l[len(l)-2:], ".") // no provider zone known: its last two labels, the widest guess
 	}
-	if f, err := s.fournisseurDe(x); err == nil {
+	if f, err := s.fournisseurDe(x, nom); err == nil {
 		if z, ok := zoneDe(f, nom); ok {
 			zone = z.Nom
 		}
@@ -374,7 +398,20 @@ func (s *Serveur) cloudflare(jeton, methode, chemin string, corps, v any) error 
 
 // executerCloudflare: the tool's calls for x (its arguments already checked and in its perimeter).
 func (s *Serveur) executerCloudflare(x SessionHub, outil string, a argsCloudflare) (any, error) {
-	f, jeton, err := s.fournisseurEnv(x)
+	if len(x.APIs) > 0 && outil == "fournisseurs" { // M286: every sheet of the task's API, whole zones
+		l, err := lireFournisseurs()
+		fiches := []map[string]any{}
+		for _, f := range l {
+			if slices.Contains(x.APIs, f.Cle) {
+				fiches = append(fiches, map[string]any{"nom": f.Nom, "type": f.Type, "etat": f.Etat, "zones": f.Zones})
+			}
+		}
+		return map[string]any{"hotes": x.Hotes, "fournisseurs": fiches}, err
+	}
+	if len(x.APIs) > 0 && a.Nom == "" && len(x.Hotes) > 1 {
+		return nil, errors.New("give nom: one of your zones (" + strings.Join(x.Hotes, ", ") + ") or a name inside one")
+	}
+	f, jeton, err := s.fournisseurEnv(x, cmp.Or(a.Nom, strings.Join(x.Hotes[:min(1, len(x.Hotes))], "")))
 	if err != nil {
 		return nil, err
 	}
@@ -396,7 +433,10 @@ func (s *Serveur) executerCloudflare(x SessionHub, outil string, a argsCloudflar
 	}
 	lister := func(z ZoneFournisseur, nom, typ string) ([]enregistrementDNS, error) {
 		var l []enregistrementDNS
-		q := url.Values{"name": {nom}, "per_page": {"100"}}
+		q := url.Values{"per_page": {"100"}}
+		if nom != "" {
+			q.Set("name", nom)
+		}
 		if typ != "" {
 			q.Set("type", typ)
 		}
@@ -427,6 +467,9 @@ func (s *Serveur) executerCloudflare(x SessionHub, outil string, a argsCloudflar
 		tous := []enregistrementDNS{}
 		for _, n := range noms {
 			if z, ok := zoneDe(f, n); ok {
+				if len(x.APIs) > 0 && n == z.Nom {
+					n = "" // M286: a zone's own name reads its whole DNS. shortcut: the first 100 records, page when a zone holds more
+				}
 				l, err := lister(z, n, "")
 				if err != nil {
 					return nil, err

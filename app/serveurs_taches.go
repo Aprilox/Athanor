@@ -10,6 +10,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -32,6 +33,9 @@ const (
 	delaiSessionTache = 20 * time.Minute   // one Claude session of a task
 	maxPlansTache     = 5                  // plans proposed, decided and applied in turn by one task
 	maxTexteTache     = 4000
+	// serveurAPI (M286): what stands for the server of a task on the owner's API alone: the folder of its file, the
+	// {id} of its routes and the "serveur" of its plans. Never an inventory id (16 hexadecimal characters).
+	serveurAPI = "api"
 )
 
 // TacheServeurs: one task, as stored and shown.
@@ -42,6 +46,8 @@ type TacheServeurs struct {
 	Etat         string             `json:"etat"`
 	Forcee       bool               `json:"forcee,omitempty"` // native Windows mode, forced by the owner with the password
 	Env          string             `json:"env,omitempty"`    // "projet/env": a task for an environment (M116)
+	APIs         []string           `json:"apis,omitempty"`   // vault ids it was given (M286); with no server, an API-only task
+	Mode         string             `json:"mode,omitempty"`   // the permission mode its launcher gave it (M286), "" for the older rules
 	Cree         string             `json:"cree"`
 	Fin          string             `json:"fin,omitempty"`
 	Plans        []string           `json:"plans,omitempty"`
@@ -257,7 +263,7 @@ func (e *tacheEnCours) copie() TacheServeurs {
 }
 
 func enregistrerTache(t TacheServeurs) error {
-	d := dossierTaches(t.Serveurs[0])
+	d := dossierTaches(slices.Concat(t.Serveurs, []string{serveurAPI})[0])
 	if err := os.MkdirAll(d, 0o700); err != nil {
 		return err
 	}
@@ -274,19 +280,24 @@ func (s *Serveur) lancerTacheServeurs(texte string, serveurs []string, forcee bo
 // lancerTache: env "projet/env" (M116) gives the task that environment's servers and the host name of its URL, the
 // only name its Cloudflare tools act on; serveurs must then be among the environment's.
 func (s *Serveur) lancerTache(texte string, serveurs []string, forcee bool, env string) (TacheServeurs, error) {
-	return s.lancerTacheDans(texte, serveurs, forcee, env, "", false, "")
+	return s.lancerTacheDans(texte, serveurs, forcee, env, "", false, "", nil, "")
 }
 
 // lancerTacheDans: terminal, an open terminal's session: the task works "live" in it (M231f); panneau, launched from
 // the terminal's assistant panel (its server's permission mode applies, M244f); contexte, what the agent reads
 // before the request (contexteSuite: the task the owner stopped to send it), never shown as the request.
-func (s *Serveur) lancerTacheDans(texte string, serveurs []string, forcee bool, env, terminal string, panneau bool, contexte string) (TacheServeurs, error) {
+// M286: apis, vault ids the task may use through the Cloudflare tools, on the zones of their providers' sheets; with
+// no server at all the token has no SSH, SFTP nor file tool. mode, the permission mode the launcher gives the task
+// ("" keeps the older rules; an API-only task then takes Settings › Permissions' assistant mode).
+func (s *Serveur) lancerTacheDans(texte string, serveurs []string, forcee bool, env, terminal string, panneau bool, contexte string, apis []string, mode string) (TacheServeurs, error) {
 	texte = strings.TrimSpace(s.masquerSecrets(texte))
 	switch {
 	case texte == "" || len([]rune(texte)) > maxTexteTache:
 		return TacheServeurs{}, erreurEntree(fmt.Sprintf("Say what to do, in %d characters at most", maxTexteTache))
-	case len(serveurs) == 0:
-		return TacheServeurs{}, erreurEntree("A task needs at least one server")
+	case len(serveurs) == 0 && len(apis) == 0:
+		return TacheServeurs{}, erreurEntree("A task needs at least one server or one API")
+	case len(apis) > 0 && env != "" || mode != "" && !slices.Contains(modesAutorisation, mode) || len(serveurs) == 0 && terminal != "":
+		return TacheServeurs{}, erreurEntree("Invalid request")
 	case modeNatif.Load() && !forcee:
 		return TacheServeurs{}, errServeursNatif
 	case s.jetons == nil || s.approbations == nil:
@@ -321,18 +332,44 @@ func (s *Serveur) lancerTacheDans(texte string, serveurs []string, forcee bool, 
 			return TacheServeurs{}, errServeurInconnu
 		}
 	}
-	t := TacheServeurs{ID: aleatoire(6), Texte: texte, Serveurs: slices.Clone(serveurs), Forcee: forcee, Env: env, Cree: time.Now().UTC().Format(formatCree),
-		Direct: terminal != "", Terminal: terminal, Panneau: panneau}
+	outils, consigne := outilsServeursMCP, consigneChefOps(contexte+texte, serveurs)+consigneEnv(env, hotes)
+	if len(apis) > 0 {
+		for _, id := range apis {
+			if s.coffre == nil || !slices.ContainsFunc(s.coffre.Liste(), func(e EntreeCoffre) bool { return e.ID == id }) {
+				return TacheServeurs{}, erreurEntree(errCoffreInconnu.Error())
+			}
+		}
+		fiches, err := lireFournisseurs()
+		if err != nil {
+			return TacheServeurs{}, err
+		}
+		for _, f := range fiches {
+			for _, z := range f.Zones {
+				if slices.Contains(apis, f.Cle) && !slices.Contains(hotes, z.Nom) {
+					hotes = append(hotes, z.Nom)
+				}
+			}
+		}
+		if len(hotes) > 0 { // an API without a provider sheet brings no zone
+			consigne += consigneZones(hotes)
+		}
+		if len(serveurs) == 0 {
+			outils, consigne = outilsAPISeule, consigneAPI(contexte+texte, hotes)
+			mode = cmp.Or(mode, modeServeur(ServeurInventaire{})) // Settings › Permissions (assistant), else manuel
+		}
+	}
+	t := TacheServeurs{ID: aleatoire(6), Texte: texte, Serveurs: append([]string{}, serveurs...), Forcee: forcee, Env: env, Cree: time.Now().UTC().Format(formatCree),
+		Direct: terminal != "", Terminal: terminal, Panneau: panneau, APIs: slices.Clone(apis), Mode: mode}
 	dossier := dossierSessionTache(t.ID)
 	if err := os.MkdirAll(filepath.Join(dossier, "travail"), 0o700); err != nil {
 		return TacheServeurs{}, err
 	}
-	jeton, err := s.jetons.CreerSession(SessionHub{Projet: prefixeTache + t.ID, Mission: t.ID, Agent: agentServeurs, Outils: outilsServeursMCP, Serveurs: t.Serveurs, Env: env, Hotes: hotes})
+	jeton, err := s.jetons.CreerSession(SessionHub{Projet: prefixeTache + t.ID, Mission: t.ID, Agent: agentServeurs, Outils: outils, Serveurs: t.Serveurs, Env: env, Hotes: hotes, APIs: apis})
 	if err == nil {
 		err = ecrireAtomique(filepath.Join(dossier, "hub-jeton"), []byte(jeton+"\n"), 0o600)
 	}
 	if err == nil {
-		err = os.WriteFile(filepath.Join(dossier, "consigne.txt"), []byte(consigneChefOps(contexte+texte, t.Serveurs)+consigneEnv(env, hotes)), 0o600)
+		err = os.WriteFile(filepath.Join(dossier, "consigne.txt"), []byte(consigne), 0o600)
 	}
 	if err != nil {
 		_, _ = s.jetons.Revoquer(func(x SessionHub) bool { return x.Projet == prefixeTache+t.ID })
@@ -346,7 +383,8 @@ func (s *Serveur) lancerTacheDans(texte string, serveurs []string, forcee bool, 
 	tachesEnCours.Unlock()
 	e.etat("preparation", "")
 	s.ecrireAudit(LigneAudit{Type: "evenement", De: "owner", Vers: "servers", Projet: prefixeTache + t.ID, Mission: t.ID, Agent: agentServeurs,
-		Action: "tâche serveurs lancée", Resultat: strings.Join(t.Serveurs, ", ") + map[bool]string{true: " (forcée en mode natif)"}[forcee]})
+		Action: "tâche serveurs lancée", Resultat: strings.Join(slices.Concat(t.Serveurs, t.APIs), ", ") + map[bool]string{true: " (API seule)"}[len(t.Serveurs) == 0] +
+			map[bool]string{true: " (mode " + mode + ")"}[mode != ""] + map[bool]string{true: " (forcée en mode natif)"}[forcee]})
 	go s.executerTache(ctx, e, dossier)
 	return e.copie(), nil
 }
@@ -389,11 +427,12 @@ func (s *Serveur) executerTache(ctx context.Context, e *tacheEnCours, dossier st
 		e.mu.Unlock()
 		e.etat("application", plan)
 		appliques = append(appliques, plan)
-		if err = os.WriteFile(filepath.Join(dossier, "consigne.txt"), []byte(consigneApplication(plan)), 0o600); err == nil {
+		if err = os.WriteFile(filepath.Join(dossier, "consigne.txt"), []byte(consigneApplication(plan, len(e.t.Serveurs) == 0)), 0o600); err == nil {
 			err = s.sessionTache(ctx, e, dossier)
 		}
 	}
-	if err == nil && ctx.Err() == nil && len(appliques) > 0 {
+	// M286: the external verifier visits servers; a task on an API alone has none, its agent's own reads are its check
+	if err == nil && ctx.Err() == nil && len(appliques) > 0 && len(e.t.Serveurs) > 0 {
 		e.etat("verification", appliques[len(appliques)-1])
 		if v := s.verifierTache(ctx, e, dossier, appliques); v.Verdict != "ok" && ctx.Err() == nil {
 			err = errors.New(prefixeVerifEchouee + strings.Join(v.Lignes, " · "))
@@ -633,7 +672,7 @@ func verrouPourSession(taches []TacheServeurs, session string) {
 // apiTachesServeur: GET /api/serveurs/{id}/taches (a paired device reads it too).
 func (s *Serveur) apiTachesServeur(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	if liste, err := lireServeurs(); err != nil || !slices.ContainsFunc(liste, func(x ServeurInventaire) bool { return x.ID == id }) {
+	if liste, err := lireServeurs(); id != serveurAPI && (err != nil || !slices.ContainsFunc(liste, func(x ServeurInventaire) bool { return x.ID == id })) {
 		s.erreurServeurs(w, errServeurInconnu)
 		return
 	}
@@ -696,21 +735,36 @@ func (s *Serveur) contexteSuite(id, suite string) string {
 
 // apiLancerTacheServeur: POST /api/serveurs/{id}/taches {texte, forcer, mot_de_passe}. Native Windows mode: refused
 // with the WSL proposal, unless the owner forces it, with Athanor's password retyped.
+// M286: apis (vault ids) and mode (the task's permission mode; "ignorer" as everywhere, choixIgnorer); {id} "api"
+// launches a task on these API alone, with no server.
 func (s *Serveur) apiLancerTacheServeur(w http.ResponseWriter, r *http.Request) {
 	var c struct {
-		Texte      string `json:"texte"`
-		Forcer     bool   `json:"forcer"`
-		Env        string `json:"env"` // "projet" (its one deployment, M279) or "projet/env", optional (M116)
-		MotDePasse string `json:"mot_de_passe"`
-		Terminal   string `json:"terminal"` // "live in my terminal": its open session on this server (M231f)
-		Depuis     string `json:"depuis"`   // the open terminal whose assistant panel sends it (M244f, M244k2)
-		Suite      string `json:"suite"`    // "Send now": the task stopped for it, whose request and last message go with it (M244k4)
+		Texte      string   `json:"texte"`
+		Forcer     bool     `json:"forcer"`
+		Env        string   `json:"env"` // "projet" (its one deployment, M279) or "projet/env", optional (M116)
+		MotDePasse string   `json:"mot_de_passe"`
+		Terminal   string   `json:"terminal"` // "live in my terminal": its open session on this server (M231f)
+		Depuis     string   `json:"depuis"`   // the open terminal whose assistant panel sends it (M244f, M244k2)
+		Suite      string   `json:"suite"`    // "Send now": the task stopped for it, whose request and last message go with it (M244k4)
+		APIs       []string `json:"apis"`
+		Mode       string   `json:"mode"`
+		Confirmer  bool     `json:"confirmer"` // the Ignore mode's warning was read
 	}
 	if lireCorps(r, &c) != nil {
 		s.erreur(w, http.StatusBadRequest, "Invalid request")
 		return
 	}
 	id := r.PathValue("id")
+	if c.Mode != "" {
+		if code, err := s.choixIgnorer(r, c.Mode, c.Confirmer, c.MotDePasse); err != nil {
+			s.erreur(w, code, err.Error())
+			return
+		}
+	}
+	serveurs := []string{id}
+	if id == serveurAPI {
+		serveurs = nil
+	}
 	for _, sess := range []string{c.Terminal, c.Depuis} {
 		if sess == "" {
 			continue
@@ -734,7 +788,7 @@ func (s *Serveur) apiLancerTacheServeur(w http.ResponseWriter, r *http.Request) 
 	if forcee && !sansRappel && !s.preuveServeur(w, r, c.MotDePasse, "tâche serveurs forcée refusée", id) {
 		return
 	}
-	t, err := s.lancerTacheDans(c.Texte, []string{id}, forcee, c.Env, c.Terminal, panneauDe(r, c.Depuis, id), s.contexteSuite(id, c.Suite))
+	t, err := s.lancerTacheDans(c.Texte, serveurs, forcee, c.Env, c.Terminal, panneauDe(r, c.Depuis, id), s.contexteSuite(id, c.Suite), c.APIs, c.Mode)
 	if err != nil {
 		s.erreurServeurs(w, err)
 		return
