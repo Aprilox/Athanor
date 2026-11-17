@@ -1,27 +1,14 @@
 package main
 
-// The Missions API (ARCHITECTURE §Missions et orchestrateur): read, create (a mission and its orchestrator's
-// session), change the card (boxes and policy without the agent; a change asked in words resumes the orchestrator),
-// answer the orchestrator's question, cancel. A paired unlocked device reads, changes, answers and cancels; a
-// mission is created on the PC (autorisesDistance).
+// The Missions API: the former missions are read (M301: none is created, changed or answered any more).
 
 import (
-	"cmp"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
-	"sync"
 	"time"
-)
-
-const (
-	maxPhraseMission   = 4000
-	maxConsigneMission = 2000
-	maxReponseMission  = 1000
 )
 
 // erreurMission: a refusal with its HTTP code (409: the mission's state does not allow it, 404: unknown question).
@@ -31,8 +18,6 @@ type erreurMission struct {
 }
 
 func (e erreurMission) Error() string { return e.msg }
-
-var errMissionAnnulee = errors.New("the mission was cancelled by the owner")
 
 // erreurMissionHTTP: err as the right answer (unknown mission 404, input 400, state 409, otherwise 500).
 func (s *Serveur) erreurMissionHTTP(w http.ResponseWriter, err error) {
@@ -46,8 +31,6 @@ func (s *Serveur) erreurMissionHTTP(w http.ResponseWriter, err error) {
 		s.erreur(w, http.StatusNotFound, err.Error())
 	case errors.Is(err, errMentionInconnue):
 		s.erreur(w, http.StatusBadRequest, "A mention no longer exists: remove it and send again")
-	case errors.Is(err, errOrchestrateurOccupe):
-		s.erreur(w, http.StatusConflict, err.Error())
 	case errors.As(err, &avecArgs):
 		s.erreurArgs(w, http.StatusBadRequest, avecArgs.cle, avecArgs.args...)
 	case errors.As(err, &entree):
@@ -57,56 +40,9 @@ func (s *Serveur) erreurMissionHTTP(w http.ResponseWriter, err error) {
 	}
 }
 
-// orchestrateurTravaille: an orchestrator's session runs for mission id.
-func orchestrateurTravaille(id string) bool {
-	orchestrateursEnCours.Lock()
-	defer orchestrateursEnCours.Unlock()
-	return orchestrateursEnCours.m[id] != nil
-}
-
 func evenementMission(etat, detail string) EvenementMission {
 	return EvenementMission{T: time.Now().UTC().Format(formatCree), Etat: etat, Detail: detail}
 }
-
-// echouerMission (B85, C85): the orchestrator's err ends a mission in preparation (echec); a card already
-// proposed stays launchable, the error in its history. Whether m went to echec.
-func (s *Serveur) echouerMission(m *Mission, err error) bool {
-	detail := couper(s.masquerSecrets(err.Error()), 300)
-	switch {
-	case m.Etat == "proposee" && len(m.Carte) > 0:
-		m.Historique = append(m.Historique, evenementMission("proposee", "error: "+detail))
-	case m.Etat == "preparation" || m.Etat == "proposee":
-		m.Etat = "echec"
-		e := evenementMission("echec", detail)
-		e.Message = messageDe(err).masquer(s.masquerSecrets) // M258: translated by the page
-		m.Historique = append(m.Historique, e)
-		return true
-	}
-	return false
-}
-
-// relancerOuEchec: the orchestrator resumed with enTete; if it cannot start, the mission is in echec with the
-// reason (a proposed card stays) and its pending launch request is refused.
-func (s *Serveur) relancerOuEchec(id, enTete string) Mission {
-	err := s.lancerOrchestrateur(id, enTete)
-	echec := false
-	m, _ := modifierMission(id, func(m *Mission) error {
-		if err != nil {
-			echec = s.echouerMission(m, err)
-		}
-		return nil
-	})
-	if echec {
-		s.fermerLancementMission(id, "hub", "refuser", "mission en échec")
-	}
-	return m
-}
-
-// maxOrchestrateurs (B86): orchestrators' sessions at once; a new mission beyond is refused (each uses quota).
-const maxOrchestrateurs = 3
-
-// verrouCreationMission (B86): two sends of the same sentence (a double click) give one mission.
-var verrouCreationMission sync.Mutex
 
 // tacheMission: the Servers task id wherever its server is (a running one as it is now).
 func tacheMission(id string) (TacheServeurs, bool) {
@@ -125,7 +61,7 @@ func tacheMission(id string) (TacheServeurs, bool) {
 // voiesEnDirect: m's lanes with their state read now (and its frozen fields, M266), on the project's pilot (dev: travaille, termine, arrete) or
 // on the Servers task (its state and server); a project or task gone is "inconnu".
 func (s *Serveur) voiesEnDirect(m Mission) Mission {
-	m.Voies, m.Figes = slices.Clone(m.Voies), s.champsFiges(m)
+	m.Voies = slices.Clone(m.Voies)
 	for i := range m.Voies {
 		v := &m.Voies[i]
 		switch v.Module {
@@ -196,353 +132,12 @@ func (s *Serveur) apiMissions(w http.ResponseWriter, _ *http.Request) {
 	s.ecrireJSON(w, map[string]any{"missions": l})
 }
 
-// apiMission: GET /api/missions/{id}; unknown, damaged or hostile id → 404. orchestrateur: its session runs now.
+// apiMission: GET /api/missions/{id}; unknown, damaged or hostile id → 404.
 func (s *Serveur) apiMission(w http.ResponseWriter, r *http.Request) {
 	m, err := lireMission(r.PathValue("id"))
 	if err != nil {
 		s.erreur(w, http.StatusNotFound, err.Error())
 		return
 	}
-	s.ecrireJSON(w, map[string]any{"mission": s.voiesEnDirect(m), "orchestrateur": orchestrateurTravaille(m.ID)})
-}
-
-// apiCreerMission: POST /api/missions {phrase, mentions[]{type, ref}} → a mission in preparation and its session.
-func (s *Serveur) apiCreerMission(w http.ResponseWriter, r *http.Request) {
-	var c struct {
-		Phrase   string            `json:"phrase"`
-		Mentions []MentionDemandee `json:"mentions"`
-	}
-	if lireCorps(r, &c) != nil {
-		s.erreur(w, http.StatusBadRequest, "Invalid request")
-		return
-	}
-	phrase := strings.TrimSpace(c.Phrase)
-	if phrase == "" || len([]rune(phrase)) > maxPhraseMission {
-		s.erreur(w, http.StatusBadRequest, "Say what you want in one sentence, 4000 characters at most")
-		return
-	}
-	mentions, err := s.resoudreMentions(c.Mentions)
-	if err != nil {
-		s.erreurMissionHTTP(w, err)
-		return
-	}
-	m, err := s.creerMission(phrase, mentions, deQui(r))
-	if n, occupe := err.(missionsOccupees); occupe {
-		s.erreurArgs(w, http.StatusTooManyRequests, "{0} missions are already being prepared: wait for one of their cards", strconv.Itoa(int(n)))
-		return
-	}
-	if err != nil {
-		s.erreur(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	s.ecrireJSON(w, map[string]any{"mission": m})
-}
-
-// missionsOccupees: that many orchestrators already prepare a card.
-type missionsOccupees int
-
-func (n missionsOccupees) Error() string {
-	return strconv.Itoa(int(n)) + " missions are already being prepared: wait for one of their cards"
-}
-
-// creerMission: a mission in preparation for phrase (checked by the caller) and its orchestrator's session; the
-// same sentence already being prepared gives that mission. qui goes to the audit log.
-func (s *Serveur) creerMission(phrase string, mentions Mentions, qui string) (Mission, error) {
-	verrouCreationMission.Lock()
-	defer verrouCreationMission.Unlock()
-	phrase = s.masquerSecrets(phrase)
-	l := lireMissions()
-	if i := slices.IndexFunc(l, func(m Mission) bool { return m.Etat == "preparation" && m.Phrase == phrase }); i >= 0 {
-		return l[i], nil
-	}
-	orchestrateursEnCours.Lock()
-	occupes := len(orchestrateursEnCours.m)
-	orchestrateursEnCours.Unlock()
-	if occupes >= maxOrchestrateurs {
-		return Mission{}, missionsOccupees(occupes)
-	}
-	cree := time.Now().UTC().Format(formatCree)
-	m := Mission{ID: aleatoire(8), Phrase: phrase, Mentions: mentions, Etat: "preparation", Politique: "prod",
-		Voies: []VoieMission{}, Questions: []QuestionMission{}, Historique: []EvenementMission{{T: cree, Etat: "preparation"}}, Cree: cree}
-	if err := enregistrerMission(m); err != nil {
-		return Mission{}, err
-	}
-	s.ecrireAudit(LigneAudit{Type: "evenement", De: qui, Vers: "missions", Projet: prefixeMission + m.ID, Mission: m.ID, Action: "mission créée"})
-	return s.relancerOuEchec(m.ID, ""), nil
-}
-
-// apiModifierMission: POST /api/missions/{id}/modifier {acces_decoches[]{entree, pour}, politique, envs, projet,
-// consigne}: the boxes, the policy, the environments and the project change the card, checked and computed again
-// by the Go; a consigne then resumes the orchestrator with the card and the change asked. Absent = unchanged.
-func (s *Serveur) apiModifierMission(w http.ResponseWriter, r *http.Request) {
-	var c struct {
-		AccesDecoches *[]AccesCarte `json:"acces_decoches"`
-		Politique     string        `json:"politique"`
-		Envs          *[]EnvCarte   `json:"envs"`
-		Projet        *ProjetCarte  `json:"projet"`
-		Consigne      string        `json:"consigne"`
-		BriefDev      *string       `json:"brief_dev"`      // M270: the briefs change in every changeable state, after a stop too
-		BriefServeurs *string       `json:"brief_serveurs"` // (the consigne rewrites the card through the orchestrator, before a launch only)
-		Permissions   *string       `json:"permissions"`    // M271: the Servers lane's mode ("" = Settings'); ignorer needs confirmer and the password
-		Confirmer     bool          `json:"confirmer"`
-		MotDePasse    string        `json:"mot_de_passe"`
-	}
-	if lireCorps(r, &c) != nil {
-		s.erreur(w, http.StatusBadRequest, "Invalid request")
-		return
-	}
-	if appareilDe(r) != "" && (c.Envs != nil || c.Projet != nil) { // B84: an environment's configuration is the PC's, as /environnements
-		s.erreur(w, http.StatusForbidden, "The environments and the project of a card are changed on the PC")
-		return
-	}
-	if c.Permissions != nil && *c.Permissions != "" {
-		if code, err := s.choixIgnorer(r, *c.Permissions, c.Confirmer, c.MotDePasse); err != nil {
-			s.erreur(w, code, err.Error())
-			return
-		}
-	}
-	consigne := strings.TrimSpace(c.Consigne)
-	switch {
-	case len([]rune(consigne)) > maxConsigneMission:
-		s.erreur(w, http.StatusBadRequest, "The change asked is 2000 characters at most")
-		return
-	case c.Politique != "" && !slices.Contains(politiquesMission, c.Politique):
-		s.erreur(w, http.StatusBadRequest, "Unknown policy (prod, tout or autonome)")
-		return
-	}
-	id := r.PathValue("id")
-	detail := "changed by the owner"
-	if consigne != "" {
-		detail = "change asked: " + couper(s.masquerSecrets(consigne), 280)
-	}
-	m, carte, err := s.changerCarte(id, deQui(r), detail, func(m *Mission, carte *CarteMission, _ contexteCarte) error {
-		if lanceeUneFois(*m) && consigne != "" { // M266: the orchestrator's card is closed once launched
-			return erreurMission{http.StatusConflict, figeConsigne}
-		}
-		if lanceeUneFois(*m) && c.Politique != "" && c.Politique != m.Politique {
-			return erreurMission{http.StatusConflict, figePolitique}
-		}
-		if _, ouverte := questionOuverte(*m); ouverte && consigne != "" {
-			return erreurMission{http.StatusConflict, "Answer the orchestrator's question first"}
-		}
-		if c.AccesDecoches != nil {
-			decoche := make([]bool, len(carte.Acces))
-			for _, d := range *c.AccesDecoches {
-				d.Entree, d.Pour = strings.TrimSpace(d.Entree), strings.TrimSpace(d.Pour)
-				trouve := false
-				for i, a := range carte.Acces { // B83: every copy of the same entry for the same target
-					if memeAcces(a, d) {
-						decoche[i], trouve = true, true
-					}
-				}
-				if !trouve {
-					return erreurEntreeArgs{"The card has no access {0} for {1}", []string{couper(d.Entree, 100), couper(d.Pour, 100)}}
-				}
-			}
-			for i := range carte.Acces {
-				carte.Acces[i].Decoche = decoche[i]
-			}
-		}
-		if c.Envs != nil {
-			carte.Envs = *c.Envs
-			for i := range carte.Envs { // C81: given by the owner, its protection and servers are kept as they are
-				carte.Envs[i].Proprietaire = true
-			}
-		}
-		if c.Projet != nil {
-			carte.Projet = *c.Projet
-		}
-		if c.Politique != "" {
-			m.Politique = c.Politique
-		}
-		if c.BriefDev != nil {
-			carte.Dev.Brief = *c.BriefDev
-		}
-		if c.BriefServeurs != nil {
-			carte.Serveurs.Brief = *c.BriefServeurs
-		}
-		if c.Permissions != nil {
-			carte.Permissions = *c.Permissions
-		}
-		return nil
-	})
-	if err != nil {
-		s.erreurMissionHTTP(w, err)
-		return
-	}
-	s.ecrireAudit(LigneAudit{Type: "evenement", De: deQui(r), Vers: "missions", Projet: prefixeMission + id, Mission: id,
-		Action: "carte de mission modifiée", Resultat: "politique " + m.Politique + ", permissions " + cmp.Or(carte.Permissions, "réglages")})
-	if consigne != "" {
-		b, _ := json.MarshalIndent(carte, "", " ")
-		m = s.relancerOuEchec(id, "The owner asks this change to the card: "+consigne+"\n\nThe card as it is now, with the owner's changes:\n"+string(b))
-	}
-	s.ecrireJSON(w, map[string]any{"mission": m})
-}
-
-// changerCarte: the card of mission id changed by f under the mission's lock, then checked and computed again
-// by the Go (validerCarte, calculerCarte) and noted in its history with detail; refused while a launch accord
-// waits (C77), while the orchestrator works, and in the states of no etatsModifiables. M266: launched once, the
-// fields an action in progress freezes stay (controlerFiges), the project is checked as it exists now, and the
-// change goes to the project at once by qui (appliquerCarte). A changed card changes its print (empreinteCarte).
-func (s *Serveur) changerCarte(id, qui, detail string, f func(*Mission, *CarteMission, contexteCarte) error) (Mission, CarteMission, error) {
-	if _, ok := s.accordMissionAttente(id); ok { // C77: the card asked to launch stays as it is (its print is checked too)
-		return Mission{}, CarteMission{}, erreurMission{http.StatusConflict, figeAccord}
-	}
-	ctx := s.contexteCarte()
-	var carte, avant CarteMission
-	m, err := modifierMission(id, func(m *Mission) error {
-		switch {
-		case !slices.Contains(etatsModifiables, m.Etat):
-			return erreurMission{http.StatusConflict, "This mission is " + m.Etat + ": its card can no longer be changed"}
-		case orchestrateurTravaille(id):
-			return erreurMission{http.StatusConflict, figeOrchestrateur}
-		case len(m.Carte) == 0:
-			return erreurMission{http.StatusConflict, "This mission has no card yet"}
-		}
-		if json.Unmarshal(m.Carte, &carte) != nil || json.Unmarshal(m.Carte, &avant) != nil {
-			return errors.New("the mission's card cannot be read")
-		}
-		if err := f(m, &carte, ctx); err != nil {
-			return err
-		}
-		lancee := lanceeUneFois(*m)
-		if lancee {
-			if err := controlerFiges(*m, avant, carte); err != nil {
-				return err
-			}
-		}
-		v := carte
-		if projetFige(*m, avant) { // the project exists now: checked as an existing one, the card keeps what it was
-			v.Projet.Nouveau, v.Dev.Modes = false, nil
-		}
-		if err := validerCarte(&v, ctx); err != nil {
-			return err
-		}
-		v.Projet.Nouveau, v.Dev.Modes = carte.Projet.Nouveau, carte.Dev.Modes
-		carte = calculerCarte(v, m.Politique, ctx)
-		b, err := json.Marshal(carte)
-		if err != nil {
-			return err
-		}
-		m.Carte = b
-		etat := m.Etat
-		if lancee { // M266: never hides the reason of a failure (raisonEchec)
-			etat = "modifiee"
-		}
-		m.Historique = append(m.Historique, evenementMission(etat, detail))
-		return nil
-	})
-	if err == nil && lanceeUneFois(m) {
-		m = s.appliquerCarte(m, avant, carte, qui)
-	}
-	return m, carte, err
-}
-
-// apiRessourceMission: POST /api/missions/{id}/ressources {type: serveur|cle|fournisseur, ref, retirer} ("Add a
-// resource", M252): one resource of a card added or removed (M266: launched too, given to its project at once) (changerRessource), the card checked
-// and computed again; its print changes, so a launch asked before is refused (errCarteChangee). A server is
-// changed on the PC only (B84, as the environments of /modifier).
-func (s *Serveur) apiRessourceMission(w http.ResponseWriter, r *http.Request) {
-	var c struct {
-		Type    string `json:"type"`
-		Ref     string `json:"ref"`
-		Retirer bool   `json:"retirer"`
-	}
-	if lireCorps(r, &c) != nil {
-		s.erreur(w, http.StatusBadRequest, "Invalid request")
-		return
-	}
-	if appareilDe(r) != "" && c.Type == "serveur" {
-		s.erreur(w, http.StatusForbidden, "The environments and the project of a card are changed on the PC")
-		return
-	}
-	fournisseurs, _ := lireFournisseurs() // unreadable: no provider to add (the ref is then unknown)
-	id, action := r.PathValue("id"), map[bool]string{false: "resource added: ", true: "resource removed: "}[c.Retirer]
-	m, _, err := s.changerCarte(id, deQui(r), action+c.Type, func(_ *Mission, carte *CarteMission, x contexteCarte) error {
-		return changerRessource(carte, c.Type, strings.TrimSpace(c.Ref), c.Retirer, x, fournisseurs)
-	})
-	if errors.Is(err, errMentionInconnue) {
-		s.erreur(w, http.StatusBadRequest, "This resource no longer exists: choose another one")
-		return
-	}
-	if err != nil {
-		s.erreurMissionHTTP(w, err)
-		return
-	}
-	s.ecrireAudit(LigneAudit{Type: "evenement", De: deQui(r), Vers: "missions", Projet: prefixeMission + id, Mission: id,
-		Action: "carte de mission modifiée", Resultat: action + c.Type})
-	s.ecrireJSON(w, map[string]any{"mission": m})
-}
-
-// apiRepondreMission: POST /api/missions/{id}/repondre {question, choix|texte}: the answer recorded, the
-// orchestrator's session resumed with it.
-func (s *Serveur) apiRepondreMission(w http.ResponseWriter, r *http.Request) {
-	var c struct {
-		Question string `json:"question"`
-		Choix    string `json:"choix"`
-		Texte    string `json:"texte"`
-	}
-	if lireCorps(r, &c) != nil {
-		s.erreur(w, http.StatusBadRequest, "Invalid request")
-		return
-	}
-	texte := strings.TrimSpace(c.Texte)
-	if c.Choix == "" && (texte == "" || len([]rune(texte)) > maxReponseMission) {
-		s.erreur(w, http.StatusBadRequest, "Pick a choice or write an answer, 1000 characters at most")
-		return
-	}
-	id := r.PathValue("id")
-	var q QuestionMission
-	_, err := modifierMission(id, func(m *Mission) error {
-		i := slices.IndexFunc(m.Questions, func(x QuestionMission) bool { return x.ID == c.Question })
-		switch {
-		case m.Etat != "preparation" && m.Etat != "proposee":
-			return erreurMission{http.StatusConflict, "This mission is " + m.Etat + ": its questions are closed"}
-		case i < 0:
-			return erreurMission{http.StatusNotFound, "Unknown question"}
-		case m.Questions[i].Reponse != "":
-			return erreurMission{http.StatusConflict, "This question is already answered"}
-		case orchestrateurTravaille(id):
-			return erreurMission{http.StatusConflict, "The orchestrator is still working: try again in a moment"}
-		case c.Choix != "" && !slices.Contains(m.Questions[i].Choix, c.Choix):
-			return erreurEntree("Unknown choice")
-		}
-		rep := c.Choix
-		if rep == "" {
-			rep = s.masquerSecrets(texte)
-		}
-		m.Questions[i].Reponse = rep
-		q = m.Questions[i]
-		m.Historique = append(m.Historique, evenementMission(m.Etat, "answered: "+couper(rep, 280)))
-		return nil
-	})
-	if err != nil {
-		s.erreurMissionHTTP(w, err)
-		return
-	}
-	s.ecrireAudit(LigneAudit{Type: "evenement", De: deQui(r), Vers: "missions", Projet: prefixeMission + id, Mission: id, Action: "question de mission répondue"})
-	s.ecrireJSON(w, map[string]any{"mission": s.relancerOuEchec(id, "The owner answers your question \""+q.Texte+"\": "+q.Reponse)})
-}
-
-// apiAnnulerMission: POST /api/missions/{id}/annuler: a mission not launched yet is cancelled, its orchestrator
-// stopped, its token revoked and its launch request refused.
-func (s *Serveur) apiAnnulerMission(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	m, err := modifierMission(id, func(m *Mission) error {
-		if !slices.Contains([]string{"preparation", "proposee", "acceptee"}, m.Etat) {
-			return erreurMission{http.StatusConflict, "This mission is " + m.Etat + ": it can no longer be cancelled"}
-		}
-		m.Etat = "annulee"
-		m.Historique = append(m.Historique, evenementMission("annulee", "cancelled by the owner"))
-		return nil
-	})
-	if err != nil {
-		s.erreurMissionHTTP(w, err)
-		return
-	}
-	s.arreterOrchestrateur(id, errMissionAnnulee)
-	s.revoquerJetons("mission annulée", func(x SessionHub) bool { return x.Projet == prefixeMission+id })
-	s.fermerLancementMission(id, deQui(r), "refuser", "mission annulée")
-	s.ecrireAudit(LigneAudit{Type: "evenement", De: deQui(r), Vers: "missions", Projet: prefixeMission + id, Mission: id, Action: "mission annulée"})
-	s.ecrireJSON(w, map[string]any{"mission": m})
+	s.ecrireJSON(w, map[string]any{"mission": s.voiesEnDirect(m)})
 }

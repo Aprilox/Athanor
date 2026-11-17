@@ -357,8 +357,7 @@ func (a *Approbations) RefuserTout(par string) ([]Approbation, error) {
 	return out, a.enregistrer()
 }
 
-// RefuserDuProjet (a project removed from Athanor): its pending approvals refused by par, a mission's launch
-// excepted (decided on the mission's card); the refused ones.
+// RefuserDuProjet (a project removed from Athanor): its pending approvals refused by par; the refused ones.
 func (a *Approbations) RefuserDuProjet(projet, par string) ([]Approbation, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -366,7 +365,7 @@ func (a *Approbations) RefuserDuProjet(projet, par string) ([]Approbation, error
 	var out []Approbation
 	t := a.maintenant().Format(time.RFC3339)
 	for i := range a.liste {
-		if x := &a.liste[i]; x.Etat == "attente" && x.Projet == projet && x.Action != actionMission {
+		if x := &a.liste[i]; x.Etat == "attente" && x.Projet == projet {
 			x.Etat, x.Par, x.T = "refusee", par, t
 			out = append(out, *x)
 		}
@@ -474,10 +473,6 @@ func (s *Serveur) messageApprobation(x Approbation) MessagePush {
 			texte = fmt.Sprintf(s.textePush("appr_prod_t"), x.Projet, x.Details["commit"], cmp.Or(x.Details["url"], "—"), cmp.Or(x.Details["commits"], "?"), cmp.Or(x.Details["changements"], "—"))
 			return MessagePush{Titre: titre, Texte: texte, URL: "/#missions/" + m, Tag: "appr-" + x.ID}
 		}
-	}
-	if x.Action == actionMission { // "Launch the mission …?", what accepting does below
-		titre, texte = fmt.Sprintf(s.textePush("appr_mission"), x.Details["titre"]), fmt.Sprintf(s.textePush("appr_mission_t"), x.Details["envs"], x.Details["acces"])
-		return MessagePush{Titre: titre, Texte: texte, URL: "/#missions/" + x.Mission, Tag: "appr-" + x.ID}
 	}
 	if x.Action == actionPlanServeur { // "Plan for web-1", the plan's summary below
 		titre, texte = fmt.Sprintf(s.textePush("appr_plan"), cmp.Or(x.Details["nom"], x.Details["serveur"])), x.Projet+" · "+x.Raison
@@ -603,21 +598,6 @@ func (s *Serveur) deciderApprobation(qui, id, decision, entree, envChoisi, varia
 		return x, http.StatusConflict, errBuildSansRegle
 	case decision != "refuser" && x.Action == actionPlanServeur && s.critiqueEnCours(x.ID):
 		return x, http.StatusConflict, errCritiqueEnCours
-	case decision == "toujours" && x.Action == actionMission:
-		return x, http.StatusConflict, errMissionSansRegle
-	}
-	if x.Action == actionMission && decision == "accepter" { // M158: launched as by Launch; refused by it, it stays pending
-		// C77: only the card it was asked for (an older request without a print never matches)
-		_, err := s.lancerMission(x.Mission, qui, "", cmp.Or(x.Details["empreinte"], "absente"))
-		if err == errCarteChangee { // that card is gone: the request is refused, the orchestrator asks again
-			if y, e := s.approbations.Decider(id, "refuser", qui); e == nil {
-				s.ecrireAudit(LigneAudit{Type: "evenement", De: qui, Vers: "hub", Mission: y.Mission, Projet: y.Projet, Agent: y.Agent,
-					Action: "approbation refuser", Resultat: y.Action + " " + y.ID + " → " + y.Etat + " (carte changée)"})
-			}
-		}
-		if err != nil {
-			return x, 0, err
-		}
 	}
 	if x.Action == actionDeploiement && x.Details["mission"] != "" && decision == "accepter" { // M168: only for the card it was asked for
 		if m, err := lireMission(x.Details["mission"]); err != nil || empreinteCarte(m) != x.Details["empreinte"] {
@@ -663,9 +643,6 @@ func (s *Serveur) deciderApprobation(qui, id, decision, entree, envChoisi, varia
 	return x, 0, nil
 }
 
-// errMissionSansRegle: a mission is launched by one accord, never by a rule.
-var errMissionSansRegle = erreurEntree("A mission is launched once: accept or refuse it")
-
 // refuserAccordMission: a pending accord of a mission's relay refused by par, because of motif (the mission
 // changed since it was asked).
 func (s *Serveur) refuserAccordMission(id, par, motif string) {
@@ -675,20 +652,20 @@ func (s *Serveur) refuserAccordMission(id, par, motif string) {
 	}
 }
 
-// fermerLancementMission: the pending launch request (lancer_mission) of mission id, decided by par: refused when
-// the owner cancelled the mission (accepting it later launches nothing), accepted when Launch launched it.
-func (s *Serveur) fermerLancementMission(id, par, decision, motif string) {
+// actionMission: the approval a mission's orchestrator asked for to launch its card (before M301); only read now,
+// to refuse the ones still pending.
+const actionMission = "mission"
+
+// refuserLancementsMission (M301): missions are no longer launched; the launch requests still pending are refused
+// with their reason when Athanor starts.
+func (s *Serveur) refuserLancementsMission() {
 	if s.approbations == nil {
 		return
 	}
 	l, _ := s.approbations.Liste()
 	for _, d := range l {
-		if d.Mission != id || d.Action != actionMission || d.Etat != "attente" {
-			continue
-		}
-		if x, err := s.approbations.Decider(d.ID, decision, par); err == nil {
-			s.ecrireAudit(LigneAudit{Type: "evenement", De: par, Vers: "hub", Mission: x.Mission, Projet: x.Projet, Agent: x.Agent,
-				Action: "approbation " + decision, Resultat: x.Action + " " + x.ID + " → " + x.Etat + " (" + motif + ")"})
+		if d.Action == actionMission && d.Etat == "attente" {
+			s.refuserAccordMission(d.ID, "hub", "les missions ne se lancent plus : le déploiement se règle dans le projet")
 		}
 	}
 }

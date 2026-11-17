@@ -239,12 +239,10 @@ func (s *Serveur) supprimerMission(id, qui string, o OptionsSuppression) ([]stri
 		}
 	}
 	retire := []string{"mission " + id}
-	s.arreterOrchestrateur(id, errMissionSupprimee)
 	for t := range tachesDeMission(m) {
 		taches[t] = true
 	}
 	s.revoquerJetons("mission supprimée", func(x SessionHub) bool { return x.Projet == prefixeMission+id || x.Mission != "" && taches[x.Mission] })
-	s.fermerLancementMission(id, qui, "refuser", "mission supprimée")
 	if s.approbations != nil {
 		l, _ := s.approbations.Liste()
 		for _, x := range l {

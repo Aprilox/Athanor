@@ -25,9 +25,6 @@ const graceJeton = 3 * time.Minute
 // outilsPilote: the hub's tools a project's main pilot may call (M61).
 var outilsPilote = []string{"etat", "environnements", "demander_acces", "demander_deploiement", "deploiement_etat", "signaler"}
 
-// outilsOrchestrateur: the tools of a mission's orchestrator (M154); nothing of Dev, Servers, Cloudflare or deployments.
-var outilsOrchestrateur = []string{"modules_etat", "proposer_mission", "demander_module", "question_proprietaire", "lancer_mission"}
-
 // SessionHub: one token, by its hash.
 type SessionHub struct {
 	Hache   string   `json:"hache"`
@@ -250,8 +247,8 @@ func (s *Serveur) verifierJeton(jeton string) (SessionHub, bool) {
 	if !ok {
 		return SessionHub{}, false
 	}
-	if strings.HasPrefix(x.Projet, prefixeTache) || strings.HasPrefix(x.Projet, prefixeMission) { // valid while the task or the orchestrator runs
-		if !tacheActive(x.Hache) && !orchestrateurActif(x.Hache) {
+	if strings.HasPrefix(x.Projet, prefixeTache) { // valid while the task runs
+		if !tacheActive(x.Hache) {
 			s.revoquerJetons("tâche terminée", func(y SessionHub) bool { return y.Hache == x.Hache })
 			return SessionHub{}, false
 		}
@@ -286,8 +283,8 @@ func (s *Serveur) revoquerJetonsArretes() {
 	}
 	s.mu.Unlock()
 	s.revoquerJetons("pilote arrêté", func(x SessionHub) bool {
-		if strings.HasPrefix(x.Projet, prefixeTache) || strings.HasPrefix(x.Projet, prefixeMission) {
-			return !tacheActive(x.Hache) && !orchestrateurActif(x.Hache)
+		if strings.HasPrefix(x.Projet, prefixeTache) {
+			return !tacheActive(x.Hache)
 		}
 		p, ok := projets[x.Projet]
 		return !ok || !s.piloteVu(p, x)

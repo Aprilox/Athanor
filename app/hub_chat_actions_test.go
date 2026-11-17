@@ -122,7 +122,7 @@ func TestHubChatActions(t *testing.T) {
 	cles = append(cles, "Unknown project: choose one of yours.", "This card cannot be read: ask the assistant to propose it again.", "Write what it must do.",
 		"This text is too long (20,000 characters at most).", "The emergency stop is on: resume Athanor first.", "Project “{0}” added, but its pilot did not start: {1}",
 		"Project “{0}” added. {1}", "It became the project's request: start its pilot to build it.", "Request added to the queue of {0}.",
-		"Remark sent: the pilot reads it at its next cycle.", "Mission prepared: its card appears on the Missions page.", "Card refused: nothing was done.",
+		"Remark sent: the pilot reads it at its next cycle.", "Missions are no longer created: ask again, and the assistant proposes a project or a server task.", "Prepare a mission", "Card refused: nothing was done.",
 		"This card was already decided.", "This message proposes no action")
 	for _, l := range []string{"fr", "es", "de", "it", "pt"} {
 		dico := dicoTUI(l)

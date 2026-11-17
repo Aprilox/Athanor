@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -40,12 +39,6 @@ func TestTUIApprobations(t *testing.T) {
 	if err := c.appel("POST", "deverrouiller", map[string]string{"mot_de_passe": mdpPreuveTest}, nil); err != nil {
 		t.Fatal(err)
 	}
-	// a mission whose card changed after its launch was asked (the request holds the old print)
-	carte, _ := json.Marshal(CarteMission{Titre: "Site de Martin", Projet: ProjetCarte{Nom: "martin"}, Envs: []EnvCarte{{Nom: "dev"}, {Nom: "prod"}}})
-	m := Mission{ID: "tuiappr1", Phrase: "Mettre le site de Martin en ligne", Etat: "proposee", Politique: "prod", Carte: carte, Cree: time.Now().UTC().Format(formatCree)}
-	if err := enregistrerMission(m); err != nil {
-		t.Fatal(err)
-	}
 	sha := "0123456789abcdef0123456789abcdef01234567"
 	demander := func(x Approbation) Approbation {
 		t.Helper()
@@ -55,9 +48,6 @@ func TestTUIApprobations(t *testing.T) {
 		}
 		return y
 	}
-	lancer := demander(Approbation{Projet: prefixeMission + m.ID, Mission: m.ID, Agent: "orchestrateur", Action: actionMission,
-		Details: map[string]string{"mission": m.ID, "titre": "Site de Martin", "empreinte": "ancienne", "envs": "dev dev.martin.test, prod martin.test",
-			"acces": "STRIPE_SECRET_KEY → dev", "prod": "oui"}, Raison: "Launch the mission: Site de Martin"})
 	prod := demander(Approbation{Projet: "demo", Env: "prod", Agent: "relais", Action: actionDeploiement, Raison: "commit " + sha + " → martin.test",
 		Details: map[string]string{"sha": sha, "env": "prod", "url": "https://martin.test", "hote": "martin.test", "serveurs": "vps-1"}})
 	acces := demander(Approbation{Projet: "demo", Env: "dev", Agent: "pilote", Action: "demander_acces", Details: map[string]string{"nom": "STRIPE_SECRET_KEY"}, Raison: "paiements de test"})
@@ -69,7 +59,7 @@ func TestTUIApprobations(t *testing.T) {
 	if a.page != pPourVous {
 		t.Fatalf("6: page %d", a.page)
 	}
-	attendreTUI(t, a, func() bool { return len(a.apprAttente()) == 3 })
+	attendreTUI(t, a, func() bool { return len(a.apprAttente()) == 2 })
 	n := 0
 	ecran := func(l, h int) string {
 		e := nouvelEcran(l, h)
@@ -104,17 +94,6 @@ func TestTUIApprobations(t *testing.T) {
 	etat := func(id, e string) func() bool {
 		return func() bool { return s.approbations.PourAgent(id) == e }
 	}
-	// the mission's launch: its environments, prod, its ticked access; no "never ask again"
-	choisir(lancer.ID)
-	contient("launch", ecran(140, 40), a.t("Launch the mission {0}?", "Site de Martin"), a.t("Environments: {0}", "dev dev.martin.test, prod martin.test"),
-		a.t("Access: {0}", "STRIPE_SECRET_KEY → dev"), "prod", a.t("Accepting launches the mission as its Launch button does."), "y "+a.t("Accept"), "r "+a.t("Refuse"))
-	if slices.ContainsFunc(a.raccourcisPage(), func(r raccourci) bool { return r.k == "t" }) {
-		t.Fatal("never ask again offered for a mission")
-	}
-	taper(a, "t")
-	if a.dialogue != nil || a.form != nil {
-		t.Fatal("t opened something for a mission")
-	}
 	// prod: the short SHA, its URL; never a rule
 	choisir(prod.ID)
 	d := ecran(140, 40)
@@ -143,21 +122,9 @@ func TestTUIApprobations(t *testing.T) {
 	a.form.champs[0].s.mettreTexte(mdpPreuveTest)
 	taper(a, "\r")
 	attendreTUI(t, a, etat(prod.ID, "acceptee"))
-	// the launch: its card changed since it was asked, so accepting it is refused and the request with it
-	attendreTUI(t, a, func() bool { return a.form == nil && len(a.apprAttente()) == 2 })
-	choisir(lancer.ID)
-	taper(a, "y")
-	a.form.champs[0].s.mettreTexte(mdpPreuveTest)
-	taper(a, "\r")
-	attendreTUI(t, a, etat(lancer.ID, "refusee"))
-	attendreTUI(t, a, func() bool { return a.form != nil && a.form.erreur != "" })
-	if mm, _ := lireMission(m.ID); mm.Etat != "proposee" {
-		t.Fatalf("a stale card launched: %s", mm.Etat)
-	}
-	a.form = nil // (Escape would ask whether to drop the typed password)
 	// an access: the vault's key chosen (its name only), the environment and variable proposed, then the password
 	a.derniere["approbations"] = time.Time{}
-	attendreTUI(t, a, func() bool { return len(a.apprAttente()) == 1 })
+	attendreTUI(t, a, func() bool { return a.form == nil && len(a.apprAttente()) == 1 })
 	choisir(acces.ID)
 	contient("access", ecran(140, 40), "demo · "+a.t("access requested"), a.t("proposed variable: {0}", "STRIPE_SECRET_KEY"), "paiements de test", "t "+a.t("Never ask again"))
 	taper(a, "y")

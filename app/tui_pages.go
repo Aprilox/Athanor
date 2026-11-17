@@ -83,8 +83,6 @@ func (a *appTUI) dessiner(e *ecranT) {
 			a.pageDistance(e, x, y, l, h)
 		case pAccueil:
 			a.pageAccueil(e, x, y, l, h)
-		case pMissions:
-			a.pageMissions(e, x, y, l, h)
 		}
 	}
 	a.barreBas(e)
@@ -274,11 +272,8 @@ func (a *appTUI) onglets(e *ecranT, y int) {
 
 // numeroPage: the key of a page (1…9, then 0 for the tenth).
 func numeroPage(i int) string {
-	switch i {
-	case pAccueil:
+	if i == pAccueil {
 		return "H"
-	case pMissions:
-		return "E"
 	}
 	return strconv.Itoa((i + 1) % 10)
 }
@@ -324,9 +319,7 @@ func (a *appTUI) raccourcisPage() []raccourci {
 	case pDistance:
 		r = a.raccourcisDistance()
 	case pAccueil:
-		r = []raccourci{{"Enter", t("Open")}, {"E", t("Missions")}, {"1…0", t("Studio pages")}}
-	case pMissions:
-		r = a.raccourcisMissions()
+		r = []raccourci{{"Enter", t("Open")}, {"1…0", t("Studio pages")}}
 	default:
 		r = a.raccourcisPages2()
 	}
@@ -1695,7 +1688,6 @@ func (a *appTUI) dessinerAide(e *ecranT) {
 		{"g", t("Get GitHub's work")},
 		{"!", t("Emergency stop")},
 		{"y · r · t", t("For you") + ": " + t("Accept") + " · " + t("Refuse") + " · " + t("Never ask again")},
-		{"E · p r a", t("Missions") + ": " + t("Pause") + " · " + t("Resume") + " · " + t("Stop")},
 		{"↑ ↓ PgUp PgDn", t("Scroll")},
 		{"n · e · d", t("New request") + " · " + t("Note along the way") + " · " + t("Delete")},
 		{"o r u / f", t("Log") + ": " + t("Tools") + ", " + t("Results") + ", " + t("Sub-agents") + ", " + t("filter…") + ", " + t("Follow")},

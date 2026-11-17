@@ -52,6 +52,7 @@ func TestMissionLancer(t *testing.T) {
 	s.config.Projets = append(s.config.Projets, boutique)
 	mux := http.NewServeMux()
 	s.routes(mux)
+	mux.HandleFunc("POST /api/missions/{id}/lancer", s.garde(false, s.apiLancerMission)) // M301: the route is gone, its code goes with M302
 	_ = os.RemoveAll(dossierMissions())
 	t.Cleanup(func() { _ = os.RemoveAll(dossierMissions()) })
 
@@ -369,9 +370,6 @@ func TestMissionLancer(t *testing.T) {
 	if code, m := lancer(infra, ""); code != 200 || m.Etat != "lancee" || !s.acces.Projet("boutique").ForcerInfraNatif {
 		t.Fatalf("infra in native mode: %d %+v", code, m)
 	}
-	if m, _ := lireMission(infra); resumeCarteAccord(m)["natif"] != "oui" { // M245: a lancer_mission request says it
-		t.Fatalf("native forcing not said in the accord request: %v", resumeCarteAccord(m))
-	}
 	if l := lignesAudit(t, dossierJournalAudit()); !slices.ContainsFunc(l, func(x LigneAudit) bool { // M245: as the Access page
 		return x.Projet == "boutique" && x.Action == "acces_accorde_force"
 	}) {
@@ -417,16 +415,6 @@ func TestMissionLancer(t *testing.T) {
 	if e := s.acces.Environnements("boutique")["staging"]; e.URL != "https://pre.boutique.fr" || e.Protection != "auth_proxy" ||
 		!slices.Equal(e.Serveurs, []string{"a2"}) || e.Politique != "accord" {
 		t.Fatalf("staging weakened: %+v", e)
-	}
-	staging = proposer(cStaging, "autonome", "proposee")
-	if w := appel("/api/missions/"+staging+"/modifier", `{"envs":[{"nom":"staging","url":"https://pre.boutique.fr","protection":"aucune","serveurs":[]}]}`); w.Code != 200 {
-		t.Fatalf("owner's modify: %d %s", w.Code, w.Body)
-	}
-	m, _ = lireMission(staging)
-	_ = json.Unmarshal(m.Carte, &c)
-	if e := c.Envs[0]; e.Protection != "aucune" || len(e.Serveurs) != 0 || e.Politique != "accord" || !e.Proprietaire ||
-		e.Avant == nil || e.Avant.Protection != "auth_proxy" {
-		t.Fatalf("owner's staging: %+v %+v", e, e.Avant)
 	}
 
 	// 8. B88: the new project's folder checked before lancee (relative, network, system, ../, taken, no parent) → 400, intact

@@ -100,8 +100,6 @@ func (s *Serveur) lancerMission(id, qui, dossier, empreinte string) (Mission, er
 		return m, err
 	case pasLancable(&m) != nil:
 		return m, pasLancable(&m)
-	case orchestrateurTravaille(id):
-		return m, erreurMission{http.StatusConflict, "The orchestrator is still working on this card: wait for it"}
 	case len(m.Carte) == 0:
 		return m, erreurMission{http.StatusConflict, "This mission has no card yet"}
 	case empreinte != "" && empreinte != empreinteCarte(m):
@@ -474,7 +472,6 @@ func (s *Serveur) apiLancerMission(w http.ResponseWriter, r *http.Request) {
 		s.erreurMissionHTTP(w, err)
 		return
 	}
-	s.fermerLancementMission(m.ID, deQui(r), "accepter", "mission lancée")
 	s.ecrireJSON(w, map[string]any{"mission": m})
 }
 

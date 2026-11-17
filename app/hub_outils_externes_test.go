@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"maps"
 	"net/http"
@@ -22,9 +21,6 @@ func TestMCPExterne(t *testing.T) {
 	t.Cleanup(func() { _ = os.Remove(cheminClients()) })
 	_ = os.RemoveAll(dossierMissions())
 	t.Cleanup(func() { _ = os.RemoveAll(dossierMissions()) })
-	ancienne := sessionOrchestrateur
-	sessionOrchestrateur = func(*Serveur, context.Context, string) error { return nil }
-	t.Cleanup(func() { sessionOrchestrateur = ancienne })
 
 	if !slices.Equal(slices.Sorted(maps.Keys(outilsExternes)), slices.Sorted(slices.Values(append(append([]string{}, outilsClients...), outilsAthanor...)))) {
 		t.Fatal("the tools offered at pairing and the client tools differ")
@@ -184,15 +180,13 @@ func TestMCPExterne(t *testing.T) {
 	if txt, err := outil(complet, "missions", `{"id":"missautre1"}`); err || !strings.Contains(txt, "Mettre autre en ligne") {
 		t.Fatal("mission detail:", txt)
 	}
-	txt, err2 := outil(complet, "proposer_mission", `{"phrase":"Mettre demo en ligne"}`)
-	var prop struct{ Mission, Etat string }
-	if err2 || json.Unmarshal([]byte(txt), &prop) != nil || prop.Mission == "" {
-		t.Fatal("proposer_mission:", txt)
+	// M301: proposer_mission keeps its name for the installed kits, refuses and points to ajouter_demande; no mission is made
+	avant := len(lireMissions())
+	if txt, err := outil(complet, "proposer_mission", `{"phrase":"Mettre demo en ligne"}`); !err || !strings.Contains(txt, "ajouter_demande") {
+		t.Fatal("proposer_mission is not refused with its replacement:", txt)
 	}
-	for _, m := range lireMissions() {
-		if !slices.Contains([]string{"preparation", "proposee", "echec"}, m.Etat) {
-			t.Fatalf("mission %s in state %s after the client tools", m.ID, m.Etat)
-		}
+	if n := len(lireMissions()); n != avant {
+		t.Fatalf("proposer_mission made a mission: %d → %d", avant, n)
 	}
 	for _, a := range approbations {
 		if x, _ := s.approbations.Lire(a.ID); x.Etat != "attente" {
@@ -250,7 +244,7 @@ func TestMCPExterne(t *testing.T) {
 			vu[l.De+" "+l.Action+" "+strings.SplitN(l.Resultat, " ", 2)[0]]++
 		}
 	}
-	for _, attendu := range []string{"client:Restreint mcp plan ok", "client:Restreint mcp plan erreur", "client:Limite mcp projets refusé", "client:Complet mcp proposer_mission ok", "client:Restreint mcp pilote ok"} {
+	for _, attendu := range []string{"client:Restreint mcp plan ok", "client:Restreint mcp plan erreur", "client:Limite mcp projets refusé", "client:Complet mcp proposer_mission erreur", "client:Restreint mcp pilote ok"} {
 		if vu[attendu] == 0 {
 			t.Fatalf("audit lacks %q: %v", attendu, vu)
 		}

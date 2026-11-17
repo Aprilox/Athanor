@@ -85,7 +85,4 @@ func TestStudioSansDeploiement(t *testing.T) {
 	if d := demandeStudio(c); !strings.HasPrefix(d, c.Dev.Brief) || !strings.Contains(d, "no deployment milestone, no request for a server's access") {
 		t.Errorf("request: %q", d)
 	}
-	if o := consigneOrchestrateur("un site", nil); !strings.Contains(o, "the Studio only develops: never ask it to deploy") {
-		t.Error("the orchestrator may put a deployment in the Dev brief")
-	}
 }

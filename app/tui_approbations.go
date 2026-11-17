@@ -69,8 +69,6 @@ func (a *appTUI) titreApprTUI(x Approbation) string {
 			return t("Deploy {0} to production?", d["hote"])
 		}
 		return t("Deploy {0} to {1}?", d["hote"], x.Env)
-	case actionMission:
-		return t("Launch the mission {0}?", d["titre"])
 	case "demander_acces":
 		return x.Projet + " · " + t("access requested")
 	}
@@ -89,8 +87,6 @@ func (a *appTUI) toujoursApprTUI(x Approbation) string {
 		if x.Production || x.Details["fichiers_build"] != "" {
 			return ""
 		}
-	case actionMission:
-		return ""
 	}
 	return a.t("Never ask again for this project and environment")
 }
@@ -99,9 +95,6 @@ func (a *appTUI) toujoursApprTUI(x Approbation) string {
 func (a *appTUI) ligneApprTUI(x Approbation, f couleurT) (string, string, styleT, styleT) {
 	p := a.pal
 	bas := []string{x.Env, x.Projet}
-	if x.Action == actionMission {
-		bas = []string{x.Mission}
-	}
 	if d, err := time.Parse(time.RFC3339Nano, x.Expire); err == nil {
 		bas = append(bas, a.t("expires {0}", d.Local().Format("02/01 15:04")))
 	}
@@ -144,12 +137,6 @@ func (a *appTUI) lignesApprTUI(x Approbation) []ligneCouleur {
 		if x.Production {
 			corps = append(corps, t("Production always asks you: one accord, one deployment."))
 		}
-	case actionMission:
-		if d["prod"] == "oui" {
-			meta = append(meta, "prod")
-		}
-		meta = append(meta, t("Environments: {0}", firstNonEmpty(d["envs"], "—")), t("Access: {0}", firstNonEmpty(d["acces"], "—")))
-		corps = []string{t("Accepting launches the mission as its Launch button does.")}
 	case "demander_acces":
 		if d["nom"] != "" {
 			meta = append(meta, t("proposed variable: {0}", d["nom"]))

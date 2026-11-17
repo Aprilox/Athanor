@@ -843,8 +843,6 @@ func (s *Serveur) apiArreterTacheServeur(w http.ResponseWriter, r *http.Request)
 func init() {
 	enregistrerCommande("session-serveurs", "session-serveurs FOLDER [INSTANCE_FILE]: one Claude session of a Servers task (launched by the application)",
 		func(args []string) int { return lancerSessionHub(args, delaiSessionTache) })
-	enregistrerCommande("session-orchestrateur", "session-orchestrateur FOLDER [INSTANCE_FILE]: one Claude session of a mission's orchestrator (launched by the application)",
-		func(args []string) int { return lancerSessionHub(args, delaiOrchestrateur) })
 }
 
 // argsSessionServeurs: the ops lead's Claude: the hub's tools only (no built-in tool, no other MCP server).

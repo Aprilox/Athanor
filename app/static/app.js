@@ -874,7 +874,6 @@ async function deciderDepuisCloche(ap, x, b) {
   const r = await api("hub/approbations").catch(() => ({}));
   if (((ap.action === "demander_acces" || (ap.details || {}).seule_cle === "oui") && x.id !== "refuser") || r.mot_de_passe_requis || r.appareil_requis) {
     fermerNotifs(); etat.apprCible = ap.id;
-    if (ap.action === "mission") { location.hash = "#pourvous"; return; } // its project is no Dev project
     // a project removed since (owner's note, 2026-11-17): its card on Approvals, outside any project, never a dead end
     if (!((etat.vue || {}).projets || []).some((p) => p.nom === ap.projet)) { location.hash = "#approbations"; return; }
     return allerProjet(ap.projet, "pourvous");
@@ -3545,10 +3544,6 @@ function carteApprobation(x, ap, codes) {
     (d.mission ? `${/^https?:\/\//.test(d.url || "") ? `<div class="pv-details"><a href="${h(d.url)}" target="_blank" rel="noopener">${h(d.url)}</a></div>` : ""}${d.commits ? `<div class="pv-details"><strong>${h(t("What changes: {0} new commit(s)", [d.commits]))}</strong>${d.changements ? ` <span class="appr-changements">${h(d.changements)}</span>` : ""}</div>` : ""}` : "") +
     (x.production ? `<div class="pv-details">${h(t("Production always asks you: one accord, one deployment."))}</div>` : d.fichiers_build ? `<div class="pv-details">${h(t("Its build command will run these changed files on this PC, inside the pilot's barrier: one accord, one deployment."))}</div>` : ""),
     !x.production && !d.fichiers_build && t("Never ask again for this project and environment"));
-  // M158: the orchestrator asks to launch its card; accepting launches it as Launch does (never a rule)
-  // C77: the environments, prod and the ticked access of the very card it launches
-  if (x.action === "mission") return carteDecision(x, ap, `${d.prod === "oui" ? `<span class="badge badge-infra">${t("Production")}</span> ` : ""}<strong>${h(t("Launch the mission {0}?", [d.titre]))}</strong>`,
-    [t("Environments: {0}", [d.envs || "—"]), t("Access: {0}", [d.acces || "—"])], `${d.natif === "oui" ? `<p class="mis-avert" role="note">${ic("alerte")} ${h(t("Native Windows mode: without a barrier, the servers' keys can be read by this mission's agents. This launch is logged."))}</p>` : ""}<div class="pv-details">${h(t("Accepting launches the mission as its Launch button does."))} <a href="#missions/${encodeURIComponent(x.mission || "")}">${h(t("See the card"))}</a></div>`, false);
   const acces = x.action === "demander_acces", f = etat.apprForm[x.id] || {}, nom = (x.details || {}).nom || "";
   const entree = f.entree ?? (codes.find((e) => e.nom === nom) || {}).id ?? "", env = f.env || x.env, variable = f.variable ?? nom;
   const champs = acces ? `<div class="appr-champs">

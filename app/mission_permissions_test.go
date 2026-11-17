@@ -25,6 +25,7 @@ func TestMissionPermissions(t *testing.T) {
 	t.Cleanup(func() { _ = os.RemoveAll(dossierMissions()) })
 	mux := http.NewServeMux()
 	s.routes(mux)
+	mux.HandleFunc("POST /api/missions/{id}/lancer", s.garde(false, s.apiLancerMission)) // M301: the route is gone, its code goes with M302
 	appel := func(chemin, corps string) (int, string) {
 		t.Helper()
 		r := httptest.NewRequest("POST", chemin, strings.NewReader(corps))
@@ -57,7 +58,6 @@ func TestMissionPermissions(t *testing.T) {
 		Questions: []QuestionMission{}, Historique: []EvenementMission{evenementMission("proposee", "")}, Cree: time.Now().UTC().Format(formatCree)}); err != nil {
 		t.Fatal(err)
 	}
-	chemin := "/api/missions/" + id + "/modifier"
 	if m := modeMission(id); m != "" {
 		t.Errorf("no mode and no setting: %q, want the plan rules", m)
 	}
@@ -67,38 +67,6 @@ func TestMissionPermissions(t *testing.T) {
 	}
 	if m := modeMission(id); m != "auto" {
 		t.Errorf("Settings › Permissions not applied: %q", m)
-	}
-	for _, k := range []struct {
-		corps string
-		code  int
-	}{
-		{`{"permissions":"tout"}`, http.StatusBadRequest},
-		{`{"permissions":"ignorer"}`, http.StatusConflict},
-		{`{"permissions":"ignorer","confirmer":true}`, http.StatusUnauthorized},
-		{`{"permissions":"ignorer","confirmer":true,"mot_de_passe":"faux"}`, http.StatusUnauthorized},
-	} {
-		if code, corps := appel(chemin, k.corps); code != k.code {
-			t.Errorf("%s: %d %s, want %d", k.corps, code, corps, k.code)
-		}
-		if m := modeMission(id); m != "auto" {
-			t.Fatalf("%s changed the mode: %q", k.corps, m)
-		}
-	}
-	if code, corps := appel(chemin, `{"permissions":"manuel"}`); code != http.StatusOK || modeMission(id) != "" {
-		t.Errorf("manuel: %d %s, mode %q (want the plan rules)", code, corps, modeMission(id))
-	}
-	if code, corps := appel(chemin, `{"permissions":"ignorer","confirmer":true,"mot_de_passe":"mdp-test"}`); code != http.StatusOK || modeMission(id) != "ignorer" {
-		t.Fatalf("ignorer with the password: %d %s, mode %q", code, corps, modeMission(id))
-	}
-	// M272: "" gives the mission back to Settings › Permissions (the card's "Settings default" option); absent changes nothing
-	if code, corps := appel(chemin, `{"permissions":""}`); code != http.StatusOK || modeMission(id) != "auto" {
-		t.Errorf("back to the settings: %d %s, mode %q", code, corps, modeMission(id))
-	}
-	if code, corps := appel(chemin, `{"permissions":"ignorer","confirmer":true,"mot_de_passe":"mdp-test"}`); code != http.StatusOK || modeMission(id) != "ignorer" {
-		t.Fatalf("ignorer again: %d %s, mode %q", code, corps, modeMission(id))
-	}
-	if code, corps := appel(chemin, `{}`); code != http.StatusOK || modeMission(id) != "ignorer" {
-		t.Errorf("an absent mode changed it: %d %s, mode %q", code, corps, modeMission(id))
 	}
 	// Settings › Permissions: a known use and mode, ignorer guarded as for a mission; the assistant's default is a server's without a mode
 	for _, k := range []struct {
@@ -164,7 +132,7 @@ func TestMissionPermissions(t *testing.T) {
 		t.Error("a second entry of the same name is kept")
 	}
 
-	vu, secretVu := false, false
+	secretVu := false
 	for _, l := range lignesAudit(t, dossierJournalAudit()) {
 		if strings.Contains(l.Resultat+l.Action, "valeur-secrete-271") {
 			t.Errorf("a value typed at the launch in the audit: %+v", l)
@@ -173,9 +141,8 @@ func TestMissionPermissions(t *testing.T) {
 		if strings.Contains(l.Resultat, "mdp-test") || strings.Contains(l.Action, "mdp-test") {
 			t.Errorf("the password in the audit: %+v", l)
 		}
-		vu = vu || l.Mission == id && strings.Contains(l.Resultat, "permissions ignorer")
 	}
-	if !vu || !secretVu {
-		t.Errorf("not audited: the mode chosen %v, the value kept at the launch %v", vu, secretVu)
+	if !secretVu {
+		t.Error("not audited: the value kept at the launch")
 	}
 }

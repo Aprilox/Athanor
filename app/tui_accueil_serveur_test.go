@@ -69,7 +69,7 @@ func TestTUIAccueilServeur(t *testing.T) {
 			}
 		}
 		if taille[0] >= 80 {
-			for _, x := range []string{"Studio", "Coffre", "Besoin de vous : 2", "Missions"} {
+			for _, x := range []string{"Studio", "Coffre", "Besoin de vous : 2"} {
 				if !strings.Contains(txt, x) {
 					t.Errorf("%v: no %q in\n%s", taille, x, txt)
 				}

@@ -187,3 +187,31 @@ func (s *Serveur) resoudreMentions(l []MentionDemandee) (Mentions, error) {
 	}
 	return m, nil
 }
+
+// mentionsLisibles: the mission's mentions by readable name (a server with its id and host, an entry with its type).
+func (s *Serveur) mentionsLisibles(m Mentions) []string {
+	var l []string
+	for _, p := range m.Projets {
+		l = append(l, "project "+p)
+	}
+	serveurs, _ := lireServeurs()
+	for _, id := range m.Serveurs {
+		if i := slices.IndexFunc(serveurs, func(x ServeurInventaire) bool { return x.ID == id }); i >= 0 {
+			l = append(l, "server "+serveurs[i].Nom+" (id "+id+", "+serveurs[i].Hote+")")
+		}
+	}
+	if s.coffre != nil && s.coffreErr == nil {
+		entrees := s.coffre.Liste()
+		for _, id := range m.Cles {
+			if i := slices.IndexFunc(entrees, func(e EntreeCoffre) bool { return e.ID == id }); i >= 0 {
+				l = append(l, "vault entry "+entrees[i].Nom+" ("+entrees[i].Type+")")
+			}
+		}
+	}
+	if m.Nouveau {
+		l = append(l, "a new project")
+	}
+	return l
+}
+
+// lancerOrchestrateur: one session for mission id, in the background. The first one gets the instructions; once

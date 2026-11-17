@@ -381,13 +381,12 @@ func cmpDate(t string, d time.Time) time.Time {
 // changed refused, a mission that needs the closed infra key waiting for the unlock (journal, bell), a preparation
 // cut by the stop back to its card or failed.
 func (s *Serveur) reprendreMissions() {
+	s.refuserLancementsMission()
 	t := time.Now()
 	id := "redemarrage:" + t.UTC().Format(formatCree)
 	for _, m := range lireMissions() {
 		s.refuserAccordsPerimes(m)
 		switch {
-		case m.Etat == "preparation" && !orchestrateurTravaille(m.ID):
-			s.reprendrePreparation(m.ID)
 		case !missionSuivie(m.Etat):
 			if slices.ContainsFunc(m.Voies, func(v VoieMission) bool { return v.Ordre != "" }) {
 				s.suivreMission(m.ID) // a stop its remote missed while offline: still owed

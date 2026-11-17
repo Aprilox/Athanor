@@ -1054,7 +1054,7 @@ func TestTUIAccueil(t *testing.T) {
 		e := nouvelEcran(taille[0], taille[1])
 		a.dessiner(e)
 		ecran := e.texteEcran()
-		for _, x := range []string{"Athanor", "Studio", "Inactif", "Projets en cours", "Besoin de vous : 0", "Missions", "Aucune mission pour l'instant", "Pages de Studio"} {
+		for _, x := range []string{"Athanor", "Studio", "Inactif", "Projets en cours", "Besoin de vous : 0", "Pages de Studio"} {
 			if !strings.Contains(ecran, x) {
 				t.Fatalf("%v: no %q in\n%s", taille, x, ecran)
 			}
@@ -1141,7 +1141,7 @@ func TestTUIEtroitEtCalme(t *testing.T) {
 	e := nouvelEcran(80, 24)
 	a.dessiner(e)
 	onglets := e.ligneTexte(1)
-	for _, k := range []string{" H ", " E ", " 1 ", " 5 ", " 8 ", "   0", "9 Réglages"} {
+	for _, k := range []string{" H ", " 1 ", " 5 ", " 8 ", "   0", "9 Réglages"} {
 		if !strings.Contains(onglets, k) {
 			t.Fatalf("tab %q missing: %q", k, onglets)
 		}

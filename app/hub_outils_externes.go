@@ -42,9 +42,9 @@ func init() {
 		Schema: objet(map[string]any{"projet": projet, "texte": texte("What the project should do or change, in plain words"), "titre": texte("A short title (optional)")}, "projet", "texte"), Faire: outilClientAjouterDemande}
 	outilsExternes["pilote"] = OutilClient{Description: "Start a project's pilot, stop it at the end of its current cycle (nothing lost), or stop it now.",
 		Schema: objet(map[string]any{"projet": projet, "action": map[string]any{"type": "string", "enum": []string{"demarrer", "pause_fin_cycle", "arreter"}}}, "projet", "action"), Faire: outilClientPilote}
-	outilsExternes["missions"] = OutilClient{Description: "The missions you may see; with an id, that mission's detail (lanes, journal). Launching, pausing or stopping one is the owner's, in Athanor.",
+	outilsExternes["missions"] = OutilClient{Description: "The former missions you may see; with an id, that mission's detail (lanes, journal). Missions are no longer created.",
 		Schema: objet(map[string]any{"id": texte("A mission's id, for its detail (optional)")}), Faire: outilClientMissions}
-	outilsExternes["proposer_mission"] = OutilClient{Description: "Propose a mission in one sentence: Athanor prepares its card, and only the owner can launch it, in Athanor.",
+	outilsExternes["proposer_mission"] = OutilClient{Description: "Removed: missions are no longer created. Use ajouter_demande to add a request to a project.",
 		Schema: objet(map[string]any{"phrase": texte("What you want done, in one sentence")}, "phrase"), Faire: outilClientProposerMission}
 	outilsExternes["approbations"] = OutilClient{Description: "The approvals waiting for the owner on the projects you may see. Only the owner decides, in Athanor's window or on a paired phone.",
 		Schema: objet(map[string]any{}), Faire: outilClientApprobations}
@@ -356,7 +356,7 @@ func outilClientMissions(s *Serveur, c ClientMCP, args json.RawMessage) (string,
 			journal = journal[len(journal)-20:]
 		}
 		return enJSON(map[string]any{"id": m.ID, "etat": m.Etat, "titre": titreMission(m), "phrase": m.Phrase, "politique": m.Politique,
-			"voies": m.Voies, "journal": journal, "cree": m.Cree, "suite": "Launching, pausing or stopping a mission is the owner's, on its page in Athanor."}), nil
+			"voies": m.Voies, "journal": journal, "cree": m.Cree}), nil
 	}
 	l := []map[string]any{}
 	for _, m := range lireMissions() {
@@ -367,26 +367,10 @@ func outilClientMissions(s *Serveur, c ClientMCP, args json.RawMessage) (string,
 	return enJSON(map[string]any{"missions": l}), nil
 }
 
-// outilClientProposerMission: a card in preparation; launching it stays the owner's (I6).
-func outilClientProposerMission(s *Serveur, c ClientMCP, args json.RawMessage) (string, error) {
-	var a struct{ Phrase string }
-	if err := lireArguments(args, &a); err != nil {
-		return "", err
-	}
-	phrase := strings.TrimSpace(a.Phrase)
-	if phrase == "" || len([]rune(phrase)) > maxPhraseMission {
-		return "", fmt.Errorf("say what you want in one sentence, %d characters at most", maxPhraseMission)
-	}
-	mentions, err := s.resoudreMentions(nil)
-	if err != nil {
-		return "", err
-	}
-	m, err := s.creerMission(phrase, mentions, "client:"+c.Nom)
-	if err != nil {
-		return "", err
-	}
-	return enJSON(map[string]any{"mission": m.ID, "etat": m.Etat,
-		"suite": "Athanor prepares the mission's card; the owner reviews it and alone can launch it, in Athanor."}), nil
+// outilClientProposerMission (M301): the name stays for the kits already installed; it refuses in Athanor's
+// language and points to ajouter_demande.
+func outilClientProposerMission(s *Serveur, _ ClientMCP, _ json.RawMessage) (string, error) {
+	return "", errors.New(libelle(s.langue(), "mission_retiree"))
 }
 
 func outilClientApprobations(s *Serveur, c ClientMCP, args json.RawMessage) (string, error) {

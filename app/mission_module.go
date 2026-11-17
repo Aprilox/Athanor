@@ -19,20 +19,10 @@ func (moduleMissions) Pages() []PageModule {
 	return []PageModule{{Hash: "#missions", Ordre: 10, Icone: "missions", Libelle: "Old missions", Fils: []string{"#mission"}}}
 }
 
-// Elements: a mission whose orchestrator asks the owner a question is in the bell until it is answered, as are a
-// mission that waits for the vault's infra key and a launch that stopped.
+// Elements: a mission that waits for the vault's infra key and a launch that stopped are in the bell.
 func (moduleMissions) Elements(s *Serveur) []ElementHub {
 	var out []ElementHub
 	for _, m := range lireMissions() {
-		if q, ok := questionOuverte(m); ok && preparable(Mission{Etat: m.Etat}) == nil {
-			choix := []ActionAlerte{} // M158: answered from the bell (a paired device too), the session resumed with it
-			for _, c := range q.Choix {
-				choix = append(choix, ActionAlerte{ID: "repondre", Libelle: c, Route: "missions/" + m.ID + "/repondre",
-					Corps: map[string]any{"question": q.ID, "choix": c}, Distance: true})
-			}
-			out = append(out, ElementHub{ID: m.ID, Titre: titreMission(m), Etat: "actif", Lien: "#missions",
-				Attente: &AttenteElement{Raison: "The orchestrator asks: {0}", Args: []any{q.Texte}, Page: "#missions", Cle: q.ID, Actions: choix}})
-		}
 		if missionSuivie(m.Etat) && s.attendCoffre(m) { // I3: after a restart, until the infra key opens
 			out = append(out, ElementHub{ID: m.ID, Titre: titreMission(m), Etat: "actif", Lien: "#missions",
 				Attente: &AttenteElement{Raison: "The mission waits for the vault to be unlocked", Page: "#missions"}})

@@ -65,9 +65,6 @@ func (s *Serveur) envoyerBus(m MessageHub) MessageHub {
 	return rep
 }
 
-// actionsOrchestrateur: what a mission's orchestrator may ask on the bus, by module (reading actions only).
-var actionsOrchestrateur = map[string][]string{"dev": {"etat_projet"}}
-
 func refusBus(raison string) MessageHub { return MessageHub{Etat: "refuse", Raison: raison} }
 
 func (s *Serveur) traiterBus(m MessageHub) MessageHub {
@@ -81,10 +78,6 @@ func (s *Serveur) traiterBus(m MessageHub) MessageHub {
 		}
 	}
 	switch {
-	case m.De == agentOrchestrateur: // a mission's orchestrator: the reading actions of its white list only
-		if !slices.Contains(actionsOrchestrateur[m.Vers], m.Action) {
-			return refusBus("action not allowed to the orchestrator")
-		}
 	case strings.HasPrefix(m.De, "client:"): // a paired hub (envoyer_bus): the Servers actions only, I6 below
 		if m.Vers != "servers" {
 			return refusBus("action not allowed to a client")

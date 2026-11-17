@@ -388,3 +388,34 @@ func TestApprobationDisqueEntier(t *testing.T) {
 		t.Error("the agent accepted its own request")
 	}
 }
+
+// TestAccordsMissionRefuses (M301): missions are no longer launched; at Athanor's start a pending launch request is
+// refused with its reason in the audit log, and nothing else is decided.
+func TestAccordsMissionRefuses(t *testing.T) {
+	s := serveurCoffreTest(t)
+	var err error
+	if s.approbations, err = ouvrirApprobations(t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	demander := func(x Approbation) Approbation {
+		t.Helper()
+		y, err := s.approbations.Demander(x)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return y
+	}
+	lancer := demander(Approbation{Projet: prefixeMission + "vieille1", Mission: "vieille1", Agent: "orchestrateur", Action: actionMission, Raison: "Launch the mission"})
+	acces := demander(Approbation{Projet: "demo", Env: "dev", Agent: "pilote", Action: "demander_acces", Raison: "essai"})
+	s.refuserLancementsMission()
+	if e, f := s.approbations.PourAgent(lancer.ID), s.approbations.PourAgent(acces.ID); e != "refusee" || f != "attente" {
+		t.Fatalf("the old launch is %q (want refusee), the access %q (want attente)", e, f)
+	}
+	l := lignesAudit(t, dossierJournalAudit())
+	if len(l) != 1 || l[0].Mission != "vieille1" || l[0].Action != "approbation refuser" || !strings.Contains(l[0].Resultat, "les missions ne se lancent plus") {
+		t.Fatalf("audit: %+v", l)
+	}
+	if _, _, err := s.deciderApprobation("fenetre", lancer.ID, "accepter", "", "", ""); err == nil { // a refused request is never accepted afterwards
+		t.Fatal("the refused launch was accepted")
+	}
+}

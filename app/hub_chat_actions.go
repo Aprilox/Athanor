@@ -434,14 +434,10 @@ func (s *Serveur) carteActionChat(a ActionChat) CarteActionChat {
 		existant()
 		c.Quoi, c.Sur = "Leave a remark to the project's pilot", a.Projet
 		c.Acces = []string{"Adds the remark to the project's notes: its pilot reads it at its next cycle."}
-	case "mission":
+	case "mission": // M301: a card of an older conversation is still read, never launched
 		a.Projet, a.Dossier, a.Titre = "", "", ""
 		c.Quoi, c.Sur = "Prepare a mission", "Athanor"
-		c.Acces = []string{"Athanor's orchestrator reads your projects and servers to prepare the mission's card.",
-			"Nothing runs on a server before you launch that card."}
-		if utf8.RuneCountInString(a.Texte) > maxPhraseMission {
-			c.Erreur = "Say what you want in one sentence, 4000 characters at most"
-		}
+		c.Erreur = "Missions are no longer created: ask again, and the assistant proposes a project or a server task."
 	case "agent":
 		a.Nom, a.Description, a.Consignes, a.Modele = strings.ToLower(strings.TrimSpace(a.Nom)), strings.TrimSpace(a.Description), strings.TrimSpace(a.Consignes), strings.TrimSpace(a.Modele)
 		a.Element, a.Source, a.Config, a.Windows, a.ConfirmeWindows, a.Fichiers = "", "", "", false, false, nil
@@ -778,9 +774,6 @@ func (s *Serveur) executerActionChat(c CarteActionChat, qui, message string) (st
 		p, _ := s.projetLocalChat(a.Projet)
 		return "Remark sent: the pilot reads it at its next cycle.", nil,
 			p.AjouterRemarque(a.Texte, libelle(s.langue(), "remarques"), libelle(s.langue(), "remarques_aide"))
-	case "mission":
-		_, err := s.creerMission(a.Texte, Mentions{Projets: []string{}, Serveurs: []string{}, Cles: []string{}}, qui)
-		return "Mission prepared: its card appears on the Missions page.", nil, err
 	}
 	return "", nil, errors.New("This card cannot be read: ask the assistant to propose it again.")
 }

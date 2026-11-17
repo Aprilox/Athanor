@@ -47,12 +47,12 @@ func TestProjetRetireApprobations(t *testing.T) {
 	if e := etat(acces.ID); e != "refusee" {
 		t.Errorf("the removed project's approval is %q, want refusee", e)
 	}
-	if e, f := etat(mission.ID), etat(ailleurs.ID); e != "attente" || f != "attente" {
-		t.Errorf("a mission's launch (%q) or another project's approval (%q) was decided", e, f)
+	if e, f := etat(mission.ID), etat(ailleurs.ID); e != "refusee" || f != "attente" { // M301: an old launch request goes with its project
+		t.Errorf("the project's old mission launch is %q (want refusee), another project's approval %q (want attente)", e, f)
 	}
 	l, regles := s.approbations.Liste()
 	for _, a := range alertesApprobations(l) {
-		if a.Element == "demo" && a.Approbation.Action != actionMission {
+		if a.Element == "demo" {
 			t.Errorf("still in the bell: %+v", a.Approbation)
 		}
 	}

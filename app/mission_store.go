@@ -4,6 +4,9 @@ package main
 // file is skipped on reading, never fatal (ARCHITECTURE §Missions et orchestrateur).
 
 import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"os"
@@ -72,8 +75,6 @@ type Mission struct {
 	Journal     []EntreeJournal     `json:"journal,omitempty"`      // at most maxJournalMission, the oldest first
 	Suppression *OptionsSuppression `json:"suppression,omitempty"`  // asked while running: done once the milestone ends
 	InfraJusqua string              `json:"infra_jusqua,omitempty"` // former option (removed, note 19h03 §3): still read from older missions, never used
-	// M266: what of the card cannot change now and why (champsFiges), worked out at each reading, never written
-	Figes map[string]string `json:"figes,omitempty"`
 }
 
 // MarshalJSON: the mission with its card's print (empreinteCarte), which the window sends back to launch it (R3).
@@ -97,7 +98,6 @@ var (
 func dossierMissions() string { return filepath.Join(dossierAthanor(), "hub", "missions") }
 
 func enregistrerMission(m Mission) error {
-	m.Figes = nil
 	if !idMissionValide.MatchString(m.ID) || !slices.Contains(etatsMission, m.Etat) {
 		return errors.New("invalid mission")
 	}
@@ -158,4 +158,57 @@ func lireMissions() []Mission {
 	}
 	slices.SortFunc(l, func(a, b Mission) int { return strings.Compare(b.Cree, a.Cree) })
 	return l
+}
+
+// prefixeMission: the audit's "project" of a mission (missions:<id>): never a real project.
+const prefixeMission = "missions:"
+
+// dossierSessionMission: where the former orchestrator's session of mission id worked (removed with the mission).
+func dossierSessionMission(id string) string { return filepath.Join(dossierMissions(), id+"-session") }
+
+// lanceeUneFois: m was launched at least once (a "lancee" event in its history).
+func lanceeUneFois(m Mission) bool {
+	return slices.ContainsFunc(m.Historique, func(e EvenementMission) bool { return e.Etat == "lancee" })
+}
+
+// raisonEchec: the event that put m in echec (its last "echec" event; the changes after it are "modifiee").
+func raisonEchec(m Mission) EvenementMission {
+	for i := len(m.Historique) - 1; i >= 0; i-- {
+		if m.Historique[i].Etat == "echec" {
+			return m.Historique[i]
+		}
+	}
+	return EvenementMission{}
+}
+
+// questionOuverte: the mission's unanswered question, if any.
+func questionOuverte(m Mission) (QuestionMission, bool) {
+	i := slices.IndexFunc(m.Questions, func(q QuestionMission) bool { return q.Reponse == "" })
+	if i < 0 {
+		return QuestionMission{}, false
+	}
+	return m.Questions[i], true
+}
+
+// titreMission: the card's title, or the start of the owner's sentence before a card exists.
+func titreMission(m Mission) string {
+	var c struct{ Titre string }
+	if json.Unmarshal(m.Carte, &c) == nil && c.Titre != "" {
+		return c.Titre
+	}
+	return couper(m.Phrase, 80)
+}
+
+// memeAcces: the same vault entry (its name in any case) for the same target.
+func memeAcces(a, b AccesCarte) bool {
+	return strings.EqualFold(a.Entree, b.Entree) && a.Pour == b.Pour
+}
+
+// empreinteCarte (C77): the stored card (compacted) and the policy, hashed; a launch carries it and launches
+// only that very card.
+func empreinteCarte(m Mission) string {
+	var b bytes.Buffer
+	_ = json.Compact(&b, m.Carte)
+	h := sha256.Sum256(append([]byte(m.Politique+"\n"), b.Bytes()...))
+	return hex.EncodeToString(h[:])
 }

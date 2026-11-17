@@ -331,7 +331,6 @@ func (s *Serveur) arreterMission(id, qui string) (Mission, error) {
 		}
 	}
 	s.ordreVoiesDistantes(m, "arreter")
-	s.arreterOrchestrateur(id, errMissionArretee)
 	s.revoquerJetons("mission arrêtée", func(x SessionHub) bool {
 		return x.Projet == prefixeMission+id || avecProjet && x.Projet == p.Nom || x.Mission != "" && taches[x.Mission]
 	})
@@ -356,15 +355,6 @@ func (s *Serveur) arreterMission(id, qui string) (Mission, error) {
 	}
 	s.ecrireAudit(LigneAudit{Type: "evenement", De: qui, Vers: "missions", Projet: prefixeMission + id, Mission: id, Action: "mission arrêtée"})
 	return lireMission(id)
-}
-
-// arreterOrchestrateur: mission id's orchestrator session (if one runs) cancelled with err.
-func (s *Serveur) arreterOrchestrateur(id string, err error) {
-	orchestrateursEnCours.Lock()
-	defer orchestrateursEnCours.Unlock()
-	if e := orchestrateursEnCours.m[id]; e != nil {
-		e.annuler(err)
-	}
 }
 
 // changerPolitiqueMission: mission id's policy set to pol and its environments' policies recalculated (prod

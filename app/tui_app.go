@@ -21,16 +21,15 @@ const (
 	pGitHub
 	pReglages
 	pDistance
-	pAccueil  // the hub's home (key H), drawn first in the lists
-	pMissions // the missions (key E, tui_missions.go)
+	pAccueil // the hub's home (key H), drawn first in the lists
 	nbPages
 )
 
 // clesPages: the pages' names (keys of the app's translations).
-var clesPages = [nbPages]string{"Overview", "Log", "Requests", "Chat", "Setup & health", "For you", "Team", "GitHub", "Settings", "Remote", "Home", "Missions"}
+var clesPages = [nbPages]string{"Overview", "Log", "Requests", "Chat", "Setup & health", "For you", "Team", "GitHub", "Settings", "Remote", "Home"}
 
 // ordrePages: the pages as the lists show them (the home first, then Dev's pages 1…9, 0).
-var ordrePages = [nbPages]int{pAccueil, pMissions, pSuivi, pJournal, pDemandes, pChat, pSante, pPourVous, pEquipe, pGitHub, pReglages, pDistance}
+var ordrePages = [nbPages]int{pAccueil, pSuivi, pJournal, pDemandes, pChat, pSante, pPourVous, pEquipe, pGitHub, pReglages, pDistance}
 
 type paletteTUI struct {
 	fond, panneau, ligne, bord, encre, muet, accent, surAccent, ok, attention, erreur, violet couleurT
@@ -235,9 +234,6 @@ type appTUI struct {
 	selApp         int
 	chiffresJusque time.Time // the 6 digits shown until then
 	// Missions (tui_missions.go)
-	missions   []Mission
-	selMis     int
-	misOuverte string // the mission shown in full ("": the list)
 	// executer: a command run in this terminal, in front of the user (the screen given back meanwhile), its
 	// exit code; nil where there is no terminal to hand over (the tests)
 	executer func(titre string, ligne []string, dossier string) (int, error)
@@ -383,9 +379,6 @@ func (a *appTUI) tic() {
 		if a.vue != nil && !a.vue.Verrouille && a.page == pAccueil {
 			a.chargerHub()
 		}
-		if a.vue != nil && !a.vue.Verrouille && (a.page == pAccueil || a.page == pMissions) {
-			a.chargerMissions()
-		}
 		return
 	}
 	apres := a.dernierN
@@ -437,9 +430,6 @@ func (a *appTUI) tic() {
 		a.chargerDistance()
 	case pAccueil:
 		a.chargerHub()
-		a.chargerMissions()
-	case pMissions:
-		a.chargerMissions()
 	}
 }
 

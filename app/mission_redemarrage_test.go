@@ -58,8 +58,6 @@ func testRepriseRegles(t *testing.T) {
 			Historique: []EvenementMission{evenementMission("lancee", "proprietaire")}, Relais: &RelaisMission{Etape: "construction"}}
 	}
 	missions := []Mission{
-		{ID: "prepsanscarte", Phrase: "un blog", Etat: "preparation", Politique: "prod", Cree: cree},
-		{ID: "prepaveccarte", Phrase: "un shop", Etat: "preparation", Carte: sansInfra, Politique: "prod", Cree: cree},
 		lancee("reprendre1", sansInfra),
 		lancee("attendinfra1", avecServeur),
 		func() Mission { m := lancee("pause1", sansInfra); m.Etat = "en_pause"; return m }(),
@@ -69,7 +67,6 @@ func testRepriseRegles(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	ecrireFichier(t, filepath.Join(dossierSessionMission("prepsanscarte"), "consigne.txt"), "x", 0o600) // left by the stop
 	// two pending prod accords of reprendre1: one for its card as it is, one for a card it no longer has
 	m1, _ := lireMission("reprendre1")
 	bon, err := s.demanderApprobation(s.accordProd(m1, "site", "aaaaaaa"))
@@ -85,20 +82,6 @@ func testRepriseRegles(t *testing.T) {
 
 	s.reprendreMissions()
 
-	t.Run("preparation_sans_carte", func(t *testing.T) {
-		m, _ := lireMission("prepsanscarte")
-		if h := m.Historique; m.Etat != "echec" || len(h) == 0 || !strings.Contains(h[len(h)-1].Detail, "send the mission again") {
-			t.Fatalf("mission: %s %+v", m.Etat, m.Historique)
-		}
-		if _, err := os.Stat(dossierSessionMission("prepsanscarte")); !os.IsNotExist(err) {
-			t.Fatal("the cut session's folder is still there")
-		}
-	})
-	t.Run("preparation_avec_carte", func(t *testing.T) {
-		if m, _ := lireMission("prepaveccarte"); m.Etat != "proposee" || len(m.Carte) == 0 {
-			t.Fatalf("mission: %s", m.Etat)
-		}
-	})
 	t.Run("accord_perime_refuse", func(t *testing.T) {
 		if x, _ := s.approbations.Lire(perime.ID); x.Etat != "refusee" {
 			t.Fatalf("accord for another card: %s", x.Etat)
