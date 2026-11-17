@@ -36,7 +36,7 @@ func clesJournalMission(t *testing.T) []string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, table := range []string{"RELAIS_MISSION", "ETATS_ETAPE", "MOTS_JOURNAL"} {
+	for _, table := range []string{"MOTS_JOURNAL"} {
 		i := strings.Index(string(b), "\nconst "+table+" = ")
 		j := strings.Index(string(b)[i+1:], ";\n")
 		if i < 0 || j < 0 {

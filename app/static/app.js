@@ -1487,7 +1487,6 @@ async function changerMode(changement, de) {
   const z = (de && de.closest(".mode-ligne")) || $("#page"), coche = (id) => z.querySelector("#md-" + id).checked;
   const corps = { parallele: coche("parallele"), parallele_max: maxModeActif(z), eco: coche("eco"), rapide: coche("rapide"), ...changement };
   if (z.closest("#cp-mode")) return changerCarteProjet({ modes: { ...carteProjetOuverte().modes, ...corps } }); // M295b: the home's project card
-  if ($("#mis-mode")) return enregistrerProjetMission({ modes: { ...((((etat.missionVue || {}).mission || {}).carte || {}).dev || {}).modes, ...corps } });
   if (etat.page === "nouveau") {
     Object.assign(etat.npMode, corps);
     const zone = $("#np-mode"); if (zone) zone.innerHTML = blocMode(etat.npMode);
@@ -2054,9 +2053,7 @@ function blocListeAccueil(cl, titre, liste, vide, modules, apres = "") {
   </section>`;
 }
 const blocAttente = (tous, modules) => blocListeAccueil("a-repondre", "Waiting for your answer", tous.filter((e) => e.attente), "Nothing waits for you.", modules);
-// the missions under way join "In progress" (no Missions block of its own: the Missions menu entry lists them all)
-const blocEnCours = (tous, modules, lm = []) => blocListeAccueil("en-cours", "In progress", tous.filter((e) => !e.attente && e.etat === "actif"), "Nothing in progress right now.", modules,
-  lm.length ? `<ul class="mis-liste">${lm.slice(0, 3).map(ligneMission).join("")}</ul>` : "");
+const blocEnCours = (tous, modules) => blocListeAccueil("en-cours", "In progress", tous.filter((e) => !e.attente && e.etat === "actif"), "Nothing in progress right now.", modules);
 // M151: mentions of the bar. A chip = { type: projet|serveur|cle|nouveau, ref, nom }; the Go checks the refs again.
 const TYPES_MENTION = { projet: "Project", serveur: "Server", api: "API", dossier: "Folder", nouveau: "New project" };
 const GROUPES_MENTION = { projet: "Projects", serveur: "Servers", api: "APIs", dossier: "Folders" };
@@ -2088,7 +2085,6 @@ function motMention(champ) {
 // ids, how the query is read, the chips already taken, the one type asked (card) and what a choice does; etat[cle] = the open list
 const LISTES_MENTIONS = {
   "accueil-texte": { liste: "accueil-liste", opt: "mention-opt", cle: "mentionListe", mot: motMention, pris: () => etat.accueilMentions || [], choisir: choisirMentionAccueil },
-  "mis-res-q": { liste: "mis-res-liste", opt: "mis-res-opt", cle: "missionResListe", mot: (c) => ({ q: c.value.trim(), debut: 0 }), pris: ressourcesMission, type: () => (etat.missionRes || {}).type, choisir: ajouterRessourceMission },
   "dep-srv-q": { liste: "dep-srv-liste", opt: "dep-srv-opt", cle: "depSrvListe", mot: (c) => ({ q: c.value.trim(), debut: 0 }), pris: () => dep.f.serveurs, type: () => "serveur", choisir: choisirDeploiement }, // M292: the Deployment tab
   "dep-api-q": { liste: "dep-api-liste", opt: "dep-api-opt", cle: "depApiListe", mot: (c) => ({ q: c.value.trim(), debut: 0 }), pris: () => dep.f.apis, type: () => "api", choisir: choisirDeploiement },
   "cp-srv-q": { liste: "cp-srv-liste", opt: "cp-srv-opt", cle: "cpSrvListe", mot: (c) => ({ q: c.value.trim(), debut: 0 }), pris: () => formDep("cp").serveurs, type: () => "serveur", choisir: choisirDeploiement }, // M295b: the home's project card
@@ -2159,8 +2155,8 @@ function choisirMentionAccueil(m, champ, ml) {
 }
 document.addEventListener("keydown", (ev) => {
   const id = ev.target.id, cfg = LISTES_MENTIONS[id]; if (!cfg) return;
-  const ml = etat[cfg.cle], carte = id === "mis-res-q";
-  if ((ml || carte) && ev.key === "Escape") { ev.preventDefault(); ev.stopPropagation(); if (carte) fermerRessources(); else fermerListeMentions(id); return; }
+  const ml = etat[cfg.cle];
+  if (ml && ev.key === "Escape") { ev.preventDefault(); ev.stopPropagation(); fermerListeMentions(id); return; }
   if (ml && ml.items.length && (ev.key === "ArrowDown" || ev.key === "ArrowUp")) {
     ev.preventDefault(); ml.actif = (ml.actif + (ev.key === "ArrowDown" ? 1 : ml.items.length - 1)) % ml.items.length; rendreListeMentions(id); return;
   }
@@ -2182,8 +2178,7 @@ document.addEventListener("click", (ev) => {
 document.addEventListener("focusout", (ev) => { if (ev.target.id === "accueil-texte" && etat.mentionListe) fermerListeMentions(); });
 pages.accueil = async () => {
   // B4: /api/hub failing still shows the chat bar, with a readable notice above it
-  const [d, sugg, mis] = await Promise.all([lireHub().catch((e) => ({ panne: e.message || String(e) })), api("mentions").catch(() => ({})), api("missions").catch(() => ({}))]), modules = d.modules || [];
-  const lm = mis.missions || [];
+  const [d, sugg] = await Promise.all([lireHub().catch((e) => ({ panne: e.message || String(e) })), api("mentions").catch(() => ({}))]), modules = d.modules || [];
   etat.hubSig = JSON.stringify([modules, d.elements || []]); if (!d.panne) rendreMenu(modules);
   etat.mentionsSugg = sugg.mentions || []; etat.mentionListe = null;
   const hc = etat.hubChat || { messages: [], pouvoirs: {} };
@@ -2207,109 +2202,18 @@ pages.accueil = async () => {
       <div class="muet petit local-seul chat-replie" id="accueil-aide">${t("Type @ to name a project, a server or an API.")}</div>
     </form>
     ${blocAttente(d.elements || [], modules)}
-    ${blocEnCours(d.elements || [], modules, lm.filter((x) => ["acceptee", "lancee", "en_pause", "arret_demande"].includes(x.etat)))}
+    ${blocEnCours(d.elements || [], modules)}
     <div class="grille-hub">${modules.filter((m) => ((m.resume || {}).stats || []).length).map(tuileModule).join("")}</div>
   </div>`;
 };
-// M156: Send creates a mission; its card shows under the bar (DESIGN §Missions). etat.missionVue = GET /api/missions/{id}.
-const ACTIVE_MISSION = ["preparation", "proposee"];
-const APPROBATIONS_PREVUES = { mise_en_prod: "Putting {0} in production", plan_serveurs: "Preparing the server {0}", deploiement: "Each deployment to {0}", durcissement: "Hardening the server {0}", deverrouiller_coffre: "Unlocking the infra vault" };
-// M258: no policy to choose any more (every risky action asks); the names stay for the journal of older missions
-// M258: an approval's target as the owner reads it: an environment's servers (plan) or address (deployment), not its name
-function cibleApprobation(c, a, nom) {
-  const e = (c.envs || []).find((x) => x.nom === a.cible);
-  if (!e || !["plan_serveurs", "deploiement"].includes(a.type)) return a.cible || "";
-  return a.type === "plan_serveurs" ? (e.serveurs || []).map(nom).join(", ") || a.cible : e.url || a.cible;
-}
-const POLITIQUES_MISSION = [["prod", "Ask me for production"], ["tout", "Ask me for everything"], ["autonome", "Autonomous"]];
-const travailleMission = (d) => d.orchestrateur || d.mission.etat === "preparation";
-const heuresMission = (m) => m < 90 ? `${m} min` : `${Math.round(m / 60)} h`;
-// C81: an environment of the card (its servers named by nom); sansUrl: the URL is shown apart. M248: no protection nor policy
-const envMission = (x, sansUrl, nom) => [sansUrl ? "" : x.url || "—", x.production ? t("Production") : "", (x.serveurs || []).length ? t("Servers") + " " + x.serveurs.map(nom).join(", ") : ""].filter(Boolean).join(" · ");
-// M248: a card without a server reads as a Studio project alone: no Servers lane, environments, DNS nor policy
-const serveurLie = (c) => !!(c && ((c.serveurs || {}).brief || (c.envs || []).some((x) => (x.serveurs || []).length) || ((c.touche || {}).serveurs || []).length));
-const badgeProd = (oui) => oui ? ` <span class="badge badge-infra">${t("Production")}</span>` : "";
-function carteMission(d) {
-  const m = d.mission, c = m.carte, ed = etat.missionEdition && etat.missionEdition.id === m.id ? etat.missionEdition : null;
-  const nomServeur = (r) => ((etat.mentionsSugg || []).find((x) => x.type === "serveur" && x.ref === r) || {}).nom || r;
-  const liste = (l) => l && l.length ? `<ul class="mis-puces">${l.map((x) => `<li>${h(x)}</li>`).join("")}</ul>` : `<span class="muet">—</span>`;
-  const e = c.estimation || {}, actif = !travailleMission(d) && m.etat === "proposee", srv = serveurLie(c);
-  // M267: launched once, the card still changes (its resources, a project not created yet) but what an action in
-  // progress freezes (m.figes, champsFiges in Go), said with its reason instead of its button
-  const fg = m.figes || {}, apres = lanceeMission(m) && ETATS_MODIFIABLES.includes(m.etat);
-  const modif = actif || (apres && !fg.carte), figeRes = (r) => fg.envs || (r.type === "serveur" && fg["env:" + r.env]) || "";
-  const raisons = apres ? [...new Set([fg.carte, fg.envs, fg.projet, ...ressourcesMission().map(figeRes)].filter(Boolean))] : [];
-  const avert = `<p class="mis-avert" role="note">${ic("alerte")} ${t("Native mode: this mission's agents can read the servers' keys (logged).")}</p>`;
-  const gauche = (srv ? `<h3>${t("Online")}</h3>${(c.envs || []).length ? `<ul class="mis-envs">${c.envs.map((x) => `<li><span class="mis-url">${h(x.url || "—")}</span>${badgeProd(x.production)}${x.avant ? `<div class="muet petit mis-avant">${h(t("Before: {0}", [envMission(x.avant, false, nomServeur)]))}</div>` : ""}</li>`).join("")}</ul>` : `<span class="muet">—</span>`}` : "");
-  // M253: the resources chosen, as removable chips, and "Add a resource" (category, then a list with a search)
-  const mr = modif && etat.missionRes && etat.missionRes.id === m.id ? etat.missionRes : null, res = ressourcesMission();
-  const puce = (r, i) => `<span class="puce-mention puce-${r.type}${apres && figeRes(r) ? " puce-figee" : ""}"${apres && figeRes(r) ? ` title="${h(t(figeRes(r)))}"` : r.pour ? ` title="${h(t("used for {0}", [r.pour]))}"` : ""}>${typeMention(r)}${h(r.nom)}${r.remplir ? ` <span class="badge mis-remplir">${t("to fill")}</span>` : ""}${modif && !figeRes(r) ? `<button type="button" class="puce-x" data-mis-retirer="${i}" aria-label="${h(t("Remove {0}", [r.nom]))}">×</button>` : ""}</span>`;
-  const cats = [["serveur", "Server"], ["api", "API"]].filter(([k]) => k !== "serveur" || !(etat.vue || {}).distant); // B84: a server is added on the PC
-  const menu = !mr ? "" : `<div class="mis-res-menu" id="mis-res">${mr.type === "api" ? choixAPI("mis-res-q", "Find an API") : mr.type ? `<label for="mis-res-q" class="petit">${t("Find a server")}</label>
-      <input type="text" id="mis-res-q" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="mis-res-liste">
-      <ul id="mis-res-liste" class="liste-mentions mis-res-liste" role="listbox" aria-label="${h(t("Find a server"))}" hidden></ul>`
-    : `<p class="m0 petit" id="mis-res-quoi">${t("What do you want to add?")}</p><div class="ligne m0" role="group" aria-labelledby="mis-res-quoi">${cats.map(([k, l]) => `<button type="button" class="btn btn-petit" data-mis-res-type="${k}">${ic(ICONES_MENTION[k])}${t(l)}</button>`).join("")}</div>`}
-      <div class="ligne m0">${mr.type ? `<button type="button" class="btn btn-petit" data-mis-res-retour>${t("Back")}</button>` : ""}<span class="espace"></span><button type="button" class="btn btn-petit" data-mis-res-fermer>${t("Close")}</button></div></div>`;
-  const ressources = `<div class="mis-ressources"><h3 id="mis-res-titre">${t("Resources")}</h3>${c.avertissement_infra && !c.avertissement_serveurs ? avert : ""}
-      <div class="ligne m0 mis-res-puces" role="group" aria-labelledby="mis-res-titre">${res.map(puce).join("") || `<span class="muet petit">${t("No resource yet: add a server or an API if the project needs one.")}</span>`}
-      ${modif && !fg.envs ? `<button type="button" class="btn btn-petit" id="mis-res-ajouter" aria-expanded="${!!mr}" aria-controls="mis-res">${ic("plus")}${t("Add a resource")}</button>` : ""}</div>${menu}
-      ${raisons.map((x) => `<p class="muet petit m0 mis-fige">${ic("info")} ${h(t(x))}</p>`).join("")}</div>`;
-  const pj = c.projet.nouveau && modif && !fg.projet && !c.projet.distant ? sectionProjet("mis", { ...c.projet, dossier: c.projet.dossier || c.touche.dossier }, c.dev.modes, etat.missionProjetErreur || "", etat.missionProjetOuvert) : "";
-  // only the rows that hold something: an empty "Files —" said nothing (M255)
-  const touche = [srv && (c.touche.dns || []).length ? `<dt>${t("DNS names")}</dt><dd>${liste(c.touche.dns)}</dd>` : "",
-    (c.touche.fichiers || []).length ? `<dt>${t("Files")}</dt><dd>${liste(c.touche.fichiers)}</dd>` : "",
-    pj ? "" : `<dt>${t("Folder")}</dt><dd>${c.touche.dossier ? h(c.touche.dossier) : t("A new folder for the project")}</dd>`].join("");
-  return `<div class="mis-voies${srv ? "" : " mis-une"}">
-      <div class="mis-voie"><h3>${c.dev.brief ? t((etat.hubModules || []).find((m) => m.id === "dev")?.nom || "dev") : t("Project")}</h3><p class="m0"><b>${h(c.projet.nom)}</b> <span class="etiquette">${t(c.projet.nouveau ? "New project" : "Existing project")}</span></p>${c.dev.brief ? `<p class="mis-brief">${h(c.dev.brief)}</p>` : ""}${c.dev.modes ? `<p class="m0">${[["parallele", "Parallel mode"], ["eco", "Eco mode"], ["rapide", "Fast mode"]].filter(([k]) => c.dev.modes[k]).map(([, n]) => `<span class="etiquette">${t(n)}</span>`).join(" ")}</p>` : ""}</div>
-      ${srv ? `<div class="mis-voie"><h3>${t("Servers")} ${badgePermission(modeEffectif(c))}</h3>${c.avertissement_serveurs ? avert : ""}<p class="mis-brief">${h(t(c.serveurs.brief || "Nothing to prepare on the servers."))}</p>${permissionsMission(m, modif || apres)}</div>` : ""}
-    </div>
-    ${pj}${ressources}
-    <div class="mis-grille">
-      ${gauche ? `<div>${gauche}</div>` : ""}
-      <div>${(c.approbations || []).length ? `<h3>${t("I will ask for your approval for")}</h3>${liste(c.approbations.map((a) => t(APPROBATIONS_PREVUES[a.type] || a.type, [cibleApprobation(c, a, nomServeur)])))}` : ""}
-        ${touche ? `<details class="mis-touche-plus"><summary><b>${t("What will be touched")}</b></summary><dl class="fiche mis-touche">${touche}</dl></details>` : ""}
-        ${gauche ? estimationMission(e) : ""}</div>
-      ${gauche ? "" : `<div>${estimationMission(e)}</div>`}
-    </div>
-    ${ed ? `${apres ? `${c.dev.brief ? `<label for="mis-brief-dev" class="petit">${t("Studio brief")}</label><textarea id="mis-brief-dev" rows="4" maxlength="4000">${h(ed.dev)}</textarea>` : ""}${c.serveurs.brief ? `<label for="mis-brief-srv" class="petit">${t("Servers brief")}</label><textarea id="mis-brief-srv" rows="3" maxlength="4000">${h(ed.srv)}</textarea>` : ""}
-      <p class="muet petit m0">${t("A new Studio brief reaches the project as a request; a new Servers brief prepares its environments again.")}</p>`
-      : `<label for="mis-consigne" class="petit">${t("Ask for a change (optional)")}</label><textarea id="mis-consigne" rows="2" maxlength="2000" placeholder="${h(t("For example: put the dev on the home server"))}">${h(ed.consigne)}</textarea>`}
-      <div class="ligne"><button type="button" class="btn btn-primaire" data-mis="appliquer">${t("Apply")}</button><button type="button" class="btn" data-mis="fermer">${t("Cancel")}</button></div>`
-    : actif ? `<div class="ligne"><button type="button" class="btn" data-mis="modifier">${t("Edit")}</button><button type="button" class="btn btn-primaire" data-mis="lancer">${t("Launch")}</button><span class="espace"></span><button type="button" class="btn" data-mis="annuler">${t("Cancel the mission")}</button></div>`
-    : modif && (c.dev.brief || c.serveurs.brief) ? `<div class="ligne"><button type="button" class="btn" data-mis="modifier">${t("Edit the brief")}</button></div>` : ""}`;
-}
-// M272: the Servers lane's permission mode: the card's, else Settings › Permissions (missions), else Manual
-const modeEffectif = (c) => (c && c.permissions) || (etat.permDefaut || {}).missions || "manuel";
 const badgePermission = (mode) => `<span class="badge mis-perm${mode === "ignorer" ? " badge-danger" : ""}" title="${h(t("Permissions"))}">${mode === "ignorer" ? ic("alerte") + " " : ""}${h(titrePermission(mode))}</span>`;
-function lirePermDefaut() { // read once; Settings › Permissions sets it back to null
-  if (etat.permDefaut) return;
-  etat.permDefaut = {}; api("reglages/permissions").then((r) => { etat.permDefaut = r.permissions || {}; majZoneMission(); }).catch(() => {});
-}
-// the entries still to fill of a mission in Ignore permissions not launched yet: typed once on its card (secrets[] of /lancer)
-const entreesARemplir = (m) => modeEffectif(m.carte) === "ignorer" && m.etat === "proposee" ? [...new Set((m.carte.acces || []).filter((a) => a.a_remplir && !a.decoche).map((a) => a.entree))] : [];
-function permissionsMission(m, modif) {
-  lirePermDefaut();
-  const c = m.carte, eff = modeEffectif(c), vals = (etat.missionSecrets || {})[m.id] || {}, l = entreesARemplir(m);
-  return `<div class="ia-autorisation mis-permissions${eff === "ignorer" ? " danger" : ""}"><label for="mis-permissions" class="petit">${t("Permissions")}</label>
-    ${selecteurPermissions("mis-permissions", c.permissions || "", { defaut: t("Settings default ({0})", [titrePermission((etat.permDefaut || {}).missions || "manuel")]), desactive: !modif, distant: (etat.vue || {}).distant })}
-    <span class="petit" id="mis-permissions-aide">${aidePermission(eff, PERMISSIONS_MISSION())}</span></div>
-    ${l.length ? `<fieldset class="mis-secrets"><legend>${t("Give now what the mission needs")}</legend>
-      <p class="muet petit m0">${t("Typed once, kept in the vault, never logged: the mission will not ask for it again.")}</p>
-      ${l.map((e, i) => `<label for="mis-secret-${i}" class="petit"><b>${h(e)}</b></label><textarea id="mis-secret-${i}" class="mis-secret" data-mis-secret="${h(e)}" rows="1" autocomplete="off" spellcheck="false" placeholder="${h(t("Password, or private key"))}">${h(vals[e] || "")}</textarea>`).join("")}</fieldset>` : ""}`;
-}
-async function changerPermissionsMission(sel) {
-  const m = (etat.missionVue || {}).mission; if (!m) return;
-  const mode = sel.value, avant = m.carte.permissions || "";
-  const p = mode !== "ignorer" ? {} : await confirmerIgnorer(t("The mission will act on its servers without asking you, dangerous commands and production deployments included, and will not stop to ask for a password. Choose it only for servers you can rebuild."));
-  if (!p || !(await actionMission("modifier", { permissions: mode, confirmer: mode === "ignorer", ...p }))) { sel.value = avant; sel.focus(); }
-}
 // M254: a new project's settings, folded: its folder, its working mode (the Manage block), its GitHub repository;
 // each change is saved on the card (POST /projet), the folder checked at once (its error under the field)
 const GITHUB_MISSION = { "": "No GitHub for now", lier: "Use one of my repositories", creer: "Create a private repository" };
 // M295b: pre "mis" (the mission card) or "cp" (the home's project card, its own settings in `plus`); p: {nom, dossier, github, depot, sans_pousse, atelier}
 function sectionProjet(pre, p, modes, err, ouvert, plus = "") {
   const distant = (etat.vue || {}).distant;
-  if (!etat.modeDefaut) { etat.modeDefaut = {}; api("mode?defaut=1").then((m) => { etat.modeDefaut = m; majZoneMission(); majCartesProjet(); }).catch(() => {}); }
+  if (!etat.modeDefaut) { etat.modeDefaut = {}; api("mode?defaut=1").then((m) => { etat.modeDefaut = m; majCartesProjet(); }).catch(() => {}); }
   const md = { cadrage_global: 25, duree_max_global: 0, ...etat.modeDefaut, parallele_max: 3, ...(modes || {}) };
   const modesChoisis = [["parallele", "Parallel mode"], ["eco", "Eco mode"], ["rapide", "Fast mode"]].filter(([k]) => md[k]).map(([, n]) => t(n)).join(", ") || t("usual mode");
   const resume = [p.dossier, modesChoisis, t(GITHUB_MISSION[p.github || ""] || GITHUB_MISSION[""]) + (p.depot ? " (" + p.depot + ")" : "")].filter(Boolean).join(" · ");
@@ -2324,160 +2228,6 @@ function sectionProjet(pre, p, modes, err, ouvert, plus = "") {
         ${choixGitHub(pre, nomDepot(p.nom), p)}
         <p class="muet petit m0">${t("The repository is linked right after the project is created, with this computer's GitHub connection.")}</p></fieldset>${plus}</details>`;
 }
-async function enregistrerProjetMission(change) {
-  const m = (etat.missionVue || {}).mission, c = m && m.carte; if (!c) return;
-  const corps = { dossier: c.projet.dossier || "", modes: c.dev.modes || null, github: c.projet.github || "", depot: c.projet.depot || "", auto: !c.projet.sans_pousse, atelier: !!c.projet.atelier, ...change };
-  etat.missionProjetOuvert = true;
-  try {
-    const r = await api("missions/" + encodeURIComponent(m.id) + "/projet", "POST", corps);
-    etat.missionProjetErreur = "";
-    if (r && r.mission) etat.missionVue = { ...etat.missionVue, mission: r.mission };
-  } catch (e) { if ("dossier" in change) etat.missionProjetErreur = e.message; else toast(e.message, "erreur"); }
-  majZoneMission();
-}
-// the launch stopped at a failed step (its last events: the launch, then the echec): resumed by Launch
-const echecLancement = (m) => m.etat === "echec" && lanceeMission(m);
-// M266: the states whose card changes (etatsModifiables in Go); lanceeMission: launched at least once (lanceeUneFois)
-const ETATS_MODIFIABLES = ["proposee", "echec", "lancee", "arret_demande", "en_pause", "arretee"];
-const lanceeMission = (m) => (m.historique || []).some((x) => x.etat === "lancee");
-// M267: a failed launch: its reason in the page's language, then Retry (launch again: what was done stays) and Edit
-// (the card below, on the mission's page; from the home, that page)
-function blocEchecLancement(m, ici) {
-  const fin = raisonEchec(m), raison = fin.message ? texteMessage(fin.message) : fin.detail || "";
-  const modifier = ici ? !m.carte ? "" : `<button type="button" class="btn btn-petit" data-mis-edition>${t("Edit the mission")}</button>` : `<a class="btn btn-petit" href="#missions/${encodeURIComponent(m.id)}">${t("Edit the mission")}</a>`;
-  return `<section class="bloc mis-carte mis-echec" role="alert"><b>${h(t("The launch of the mission stopped: {0}", [raison]))}</b>
-    <p class="muet petit m0">${t("Fix the cause or change the mission, then retry: what was already done stays.")}</p>
-    <div class="ligne"><button type="button" class="btn btn-primaire btn-petit" data-mis="lancer">${t("Retry")}</button>${modifier}${ici ? "" : `<button type="button" class="btn btn-petit" data-mis="oublier">${t("Close")}</button>`}</div></section>`;
-}
-// raisonEchec (M266): the event that put the mission in echec; the owner's changes after it are "modifiee"
-const raisonEchec = (m) => [...(m.historique || [])].reverse().find((x) => x.etat === "echec") || {};
-document.addEventListener("change", (ev) => {
-  const i = ev.target;
-  if (i.id === "mis-dossier") enregistrerProjetMission({ dossier: i.value.trim() });
-  else if (i.id === "mis-permissions") changerPermissionsMission(i);
-  // M264: the Manage › GitHub block (choixGitHub "mis"); a field typed in selects its option, an invalid repository said once typed
-  else if (i.name === "mis-gh") enregistrerProjetMission({ github: i.value === "existant" ? "lier" : i.value, depot: "" });
-  else if (i.id === "mis-gh-nom") enregistrerProjetMission({ github: "creer", depot: i.value.trim() ? nomDepot(i.value) : "" });
-  else if (i.id === "mis-gh-depot") {
-    const d = depotSaisi(i.value);
-    if (i.value.trim() && !d) { i.setAttribute("aria-invalid", "true"); toast(t("Write the repository as OWNER/NAME (e.g. octocat/my-site)."), "erreur"); return; }
-    enregistrerProjetMission({ github: "lier", depot: d });
-  } else if (i.id === "mis-gh-auto") enregistrerProjetMission({ auto: i.checked });
-  else if (i.id === "mis-gh-atelier") enregistrerProjetMission({ atelier: i.checked });
-});
-// the folder picker (parcourir) fills the field with a synthetic input event: saved as a typed change is
-document.addEventListener("input", (ev) => { if (ev.target.id === "mis-dossier" && !ev.isTrusted) enregistrerProjetMission({ dossier: ev.target.value.trim() }); });
-const estimationMission = (e) => `<h3>${t("Estimate")}</h3><p class="m0">${t(e.jalons === 1 ? "{0} to {1} of work, about 1 milestone" : "{0} to {1} of work, about {2} milestones", [heuresMission(e.minutes_min), heuresMission(e.minutes_max), e.jalons])}</p>
-        <p class="muet petit m0">${e.cout_max ? t("About {0} $ to {1} $ of quota (list price)", [e.cout_min, e.cout_max]) : ""}</p>`;
-// M253: the card's resources: its servers (one chip each) and its vault entries (one chip per entry, the unticked ones
-// left out); ref = what POST /ressources takes (an entry to fill, not in the vault yet, goes by its name)
-function ressourcesMission() {
-  const c = ((etat.missionVue || {}).mission || {}).carte || {}, l = [];
-  const nom = (r) => ((etat.mentionsSugg || []).find((x) => x.type === "serveur" && x.ref === r) || {}).nom || (etat.nomsServeurs || {})[r] || r;
-  const vault = (n) => (etat.mentionsSugg || []).some((x) => x.type === "api" && x.nom === n); // M275b: typed at the launch, it is no longer "to fill"
-  for (const e of c.envs || []) for (const r of e.serveurs || []) if (!l.some((x) => x.ref === r)) l.push({ type: "serveur", ref: r, nom: nom(r), env: e.nom });
-  for (const a of c.acces || []) if (!a.decoche && !l.some((x) => x.type === "api" && x.nom === a.entree)) l.push({ type: "api", ref: a.id || a.entree, nom: a.entree, remplir: a.a_remplir && !vault(a.entree), pour: nom(a.pour) });
-  return l;
-}
-function fermerRessources() { etat.missionRes = null; majZoneMission(); $("#mis-res-ajouter")?.focus(); }
-async function ajouterRessourceMission(m) {
-  if (m.type === "serveur") (etat.nomsServeurs = etat.nomsServeurs || {})[m.ref] = m.nom;
-  if (await actionMission("ressources", { type: m.type, ref: m.ref })) fermerRessources();
-}
-document.addEventListener("click", async (ev) => {
-  const d = etat.missionVue, b = ev.target.closest("#mis-res-ajouter, [data-mis-res-type], [data-mis-res-retour], [data-mis-res-fermer], [data-mis-retirer]"); if (!b || !d) return;
-  if (b.dataset.misRetirer !== undefined) {
-    const r = ressourcesMission()[+b.dataset.misRetirer];
-    if (r && await actionMission("ressources", { type: r.type, ref: r.ref, retirer: true })) $("#mis-res-ajouter")?.focus();
-  } else if (b.dataset.misResFermer !== undefined || (b.id === "mis-res-ajouter" && etat.missionRes)) fermerRessources();
-  else {
-    if (b.dataset.misResType === "api") await lireCategories();
-    etat.missionRes = { id: d.mission.id, type: b.dataset.misResType || "" }; majZoneMission();
-    const q = $("#mis-res-q"); if (q) { q.focus(); chercherMentions(q); } else $("[data-mis-res-type]")?.focus();
-  }
-});
-function zoneMission() {
-  const d = etat.missionVue; if (!d) return "";
-  const m = d.mission, q = (m.questions || []).find((x) => !x.reponse), fin = m.etat === "echec" ? raisonEchec(m) : (m.historique || []).slice(-1)[0] || {};
-  if (echecLancement(m)) return blocEchecLancement(m, false);
-  if (m.etat === "echec") return `<section class="bloc mis-carte mis-echec" role="alert"><b>${t("The orchestrator could not prepare the card.")}</b> <span class="muet">${h(fin.message ? texteMessage(fin.message) : fin.detail || "")}</span>
-    <div class="ligne"><button type="button" class="btn btn-petit" data-mis="oublier">${t("Close")}</button></div></section>`;
-  if (!ACTIVE_MISSION.includes(m.etat)) return m.etat === "annulee" ? "" : `<section class="bloc mis-carte"><b>${h(t(ETATS_MISSION[m.etat] || m.etat))}</b> · ${h((m.carte || {}).titre || "")} <a href="#missions">${t("See the missions")} →</a></section>`;
-  const prep = travailleMission(d) && !q ? `<div class="mis-prep" role="status"><span class="mis-anim" aria-hidden="true"></span>${t("The orchestrator is preparing the card…")}<span class="espace"></span>${m.carte ? "" : `<button type="button" class="btn btn-petit" data-mis="annuler">${t("Cancel")}</button>`}</div>` : "";
-  const question = q ? `<div class="mis-question" role="group" aria-labelledby="mis-q-texte"><b>${t("The orchestrator asks")}</b><p id="mis-q-texte" class="m0">${h(q.texte)}</p>
-    ${(q.choix || []).length ? `<div class="ligne m0">${q.choix.map((c, i) => `<button type="button" class="btn btn-petit" data-mis-choix="${i}">${h(c)}</button>`).join("")}</div>` : ""}
-    <form class="ligne m0" id="mis-q-form" data-question="${h(q.id)}"><input type="text" id="mis-q-libre" class="croit" maxlength="1000" aria-label="${h(t("Your answer"))}" placeholder="${h(t("Or write your answer…"))}" value="${h(etat.missionReponse || "")}"><button type="submit" class="btn">${t("Answer")}</button></form>
-    ${m.carte ? "" : `<div class="ligne m0"><span class="espace"></span><button type="button" class="btn btn-petit" data-mis="annuler">${t("Cancel the mission")}</button></div>`}</div>` : "";
-  return `<section class="bloc mis-carte${prep && m.carte ? " mis-attente" : ""}" aria-labelledby="mis-titre">
-    <div class="ligne m0 tuile-tete"><h2 class="m0" id="mis-titre">${h((m.carte || {}).titre || t("New mission"))}</h2><span class="badge mis-etat-${h(m.etat)}">${h(t(ETATS_MISSION[m.etat] || m.etat))}</span></div>
-    <p class="muet petit mis-phrase">${h(m.phrase)}</p>${prep}${question}${m.carte ? carteMission(d) : ""}</section>`;
-}
-let minuterieMission;
-function majZoneMission() {
-  const z = $("#mission-zone") || $("#mis-carte-detail"); if (!z) return;
-  garderFocus(z, () => { z.innerHTML = z.id === "mission-zone" ? zoneMission() : carteMission(etat.missionVue); });
-  clearTimeout(minuterieMission);
-  const d = etat.missionVue;
-  if (d && travailleMission(d) && ACTIVE_MISSION.includes(d.mission.etat)) minuterieMission = setTimeout(lireMissionVue, 2000); // the state is read every 2 s
-}
-async function lireMissionVue() {
-  const d = etat.missionVue;
-  if (!d || !["accueil", "mission"].includes(etat.page) || !$("#mission-zone")) return;
-  try { etat.missionVue = await api("missions/" + encodeURIComponent(d.mission.id)); } catch { /* next try in 2 s */ }
-  majZoneMission();
-}
-async function actionMission(chemin, corps) {
-  const d = etat.missionVue; if (!d) return null;
-  const r = await action(api("missions/" + encodeURIComponent(d.mission.id) + "/" + chemin, "POST", corps || {}), "");
-  if (r && r.mission) { etat.missionVue = { mission: r.mission, orchestrateur: chemin === "repondre" || !!(corps && corps.consigne) }; majZoneMission(); }
-  // the detail page of a mission just launched or cancelled: shown again with its lanes
-  if (r && r.mission && etat.page === "mission" && !ACTIVE_MISSION.includes(r.mission.etat)) await rendrePage();
-  return r;
-}
-document.addEventListener("click", async (ev) => {
-  const b = ev.target.closest("[data-mis], [data-mis-choix]"), d = etat.missionVue; if (!b || !d) return;
-  const m = d.mission, a = b.dataset.mis;
-  if (b.dataset.misChoix !== undefined) { const q = m.questions.find((x) => !x.reponse); etat.missionReponse = ""; await actionMission("repondre", { question: q.id, choix: q.choix[+b.dataset.misChoix] }); return; }
-  if (a === "modifier") { etat.missionEdition = { id: m.id, consigne: "", dev: m.carte.dev.brief || "", srv: m.carte.serveurs.brief || "" }; etat.missionRes = null; majZoneMission(); ($("#mis-consigne") || $("#mis-brief-dev") || $("#mis-brief-srv"))?.focus(); }
-  else if (a === "fermer") { etat.missionEdition = null; majZoneMission(); }
-  else if (a === "appliquer") {
-    const ed = etat.missionEdition, consigne = ed.consigne.trim();
-    const briefs = { ...(ed.dev.trim() !== (m.carte.dev.brief || "") ? { brief_dev: ed.dev.trim() } : {}), ...(ed.srv.trim() !== (m.carte.serveurs.brief || "") ? { brief_serveurs: ed.srv.trim() } : {}) };
-    const r = await actionMission("modifier", { acces_decoches: (m.carte.acces || []).filter((x) => x.decoche).map((x) => ({ entree: x.entree, pour: x.pour })), ...(consigne ? { consigne } : {}), ...briefs });
-    if (r) { etat.missionEdition = null; majZoneMission(); }
-  } else if (a === "lancer") { // C78: launching gives the card's keys, as the Access page does
-    const pc = (m.carte || {}).projet || {};
-    if (pc.nouveau && pc.github === "lier" && !pc.depot) { // R4 (M268): chosen, never typed: the field shown, not a refusal
-      etat.missionProjetOuvert = true; majZoneMission();
-      const f = $("#mis-gh-depot"); if (f) { f.scrollIntoView({ block: "center" }); f.focus(); }
-      toast(t("Write the repository to link as OWNER/NAME, then launch."), "erreur"); return;
-    }
-    const cles = (m.carte.acces || []).some((x) => !x.decoche); // M275b: said only when the card gives keys
-    const p = await preuveMdp(cles ? t("Launching the mission gives its keys to the project: retype Athanor's password.") : t("Launching the mission: retype Athanor's password."), { ok: t("Launch") });
-    const vals = (etat.missionSecrets || {})[m.id] || {}; // M272: typed once on the card, into the vault (never kept in the page after)
-    const secrets = entreesARemplir(m).filter((e) => (vals[e] || "").trim()).map((e) => /PRIVATE KEY-----/.test(vals[e]) ? { entree: e, type: "ssh", valeur: vals[e].trim() + "\n" } : { entree: e, type: "mot_de_passe", valeur: vals[e].replace(/\r?\n$/, "") });
-    if (p && await actionMission("lancer", { ...p, empreinte: m.empreinte, ...(secrets.length ? { secrets } : {}) })) delete (etat.missionSecrets || {})[m.id]; // R3: the card read, never a newer one
-  }
-  else if (a === "annuler") { if (await choisir(t("Cancel this mission? Nothing has been built or deployed yet."), [{ id: "non", texte: t("Keep it") }, { id: "oui", texte: t("Cancel the mission"), danger: true }]) === "oui") await actionMission("annuler"); }
-  else if (a === "oublier") { etat.missionVue = null; majZoneMission(); }
-});
-document.addEventListener("click", (ev) => {
-  if (!ev.target.closest("[data-mis-edition]")) return;
-  const c = $("#mis-carte-detail"); if (!c) return;
-  c.scrollIntoView({ block: "start", behavior: "smooth" });
-  ($("#mis-res-ajouter") || $("#mis-projet summary") || c).focus({ preventScroll: true });
-});
-document.addEventListener("input", (ev) => {
-  const s = ev.target.dataset.misSecret, m = (etat.missionVue || {}).mission;
-  if (s !== undefined && m) ((etat.missionSecrets ||= {})[m.id] ||= {})[s] = ev.target.value; // memory only, never stored
-});
-document.addEventListener("input", (ev) => { if (ev.target.id === "mis-consigne" && etat.missionEdition) etat.missionEdition.consigne = ev.target.value; else if (ev.target.id === "mis-brief-dev" && etat.missionEdition) etat.missionEdition.dev = ev.target.value; else if (ev.target.id === "mis-brief-srv" && etat.missionEdition) etat.missionEdition.srv = ev.target.value; else if (ev.target.id === "mis-q-libre") etat.missionReponse = ev.target.value; });
-document.addEventListener("submit", async (ev) => {
-  if (ev.target.id !== "mis-q-form") return;
-  ev.preventDefault();
-  const texte = ($("#mis-q-libre").value || "").trim(); if (!texte) return;
-  if (await actionMission("repondre", { question: ev.target.dataset.question, texte })) etat.missionReponse = "";
-});
 document.addEventListener("submit", (ev) => { if (ev.target.id === "accueil-form") { ev.preventDefault(); envoyerHubChat(); } });
 
 // M195: the home conversation (hub_chat.go), the project chat with the hub's scope. Its powers are the
@@ -2767,7 +2517,7 @@ document.addEventListener("keydown", (ev) => {
   entreeEnvoie(ev, envoyerHubChat);
 });
 document.addEventListener("click", async (ev) => {
-  const b = ev.target.closest("#hub-chat-aide, #accueil-mission, #hub-chat-stop, #hub-chat-nouveau, #hub-dossier-ajouter, [data-dossier-retirer]"); if (!b) return;
+  const b = ev.target.closest("#hub-chat-aide, #hub-chat-stop, #hub-chat-nouveau, #hub-dossier-ajouter, [data-dossier-retirer]"); if (!b) return;
   if (b.id === "hub-chat-aide") return lancerTourChat();
   if (b.id === "hub-dossier-ajouter") return ajouterDossierHub();
   if (b.dataset.dossierRetirer) return changerPouvoirs({ dossiers: (etat.hubChat.pouvoirs.dossiers || []).filter((x, i) => i !== +b.dataset.dossierRetirer) });
@@ -2980,8 +2730,6 @@ const GUIDE = [
       ["The tabs", "At the top of a module, one line of tabs holds its pages. *Studio*: the project picker, then *Overview*, *Team*, *Requests*, *Chat*, *For you*, *Access*, *Log* and *Manage*. *Settings*: *Settings*, *Skills & MCP*, *Setup & health* and *Remote*. On a phone, the line scrolls sideways.", "#suivi", "Overview"],
       ["The bell", "The bell, at the top of the window, gathers what needs you in every module, one line each with its reason (“Studio, my-shop: …”). *View* opens the right page. *Ignore* hides a line and deletes nothing: it waits under *Ignored alerts*, where *Reopen* brings it back, and it comes back by itself when its reason changes."],
       ["The “?” and the tutorials", "The *?* beside the bell opens this Guide. Home, Studio and the Vault each have a short tutorial, shown on your first visit (the Vault's also opens from a project's *Access* tab). *Tutorials*, at the top of the Guide, replays any of them; *Settings › Options* › *Show the first-launch guide and the tutorials again* shows them all once more."],
-      ["Deploy from home", "In the bar *What do you want to do?* of the home page, one sentence such as “Put @my-shop online at shop.example.com” becomes a mission card: Studio builds, Servers prepares where it runs, and nothing starts before you press *Launch*. *Guide › Launch a mission* walks through one.", "#accueil", "Home"],
-      ["Missions", "The *Missions* block, at the bottom of the home page, shows the last three missions with their state and their lanes; *See all* opens the *Missions* page. *Guide › Launch a mission* walks through one.", "#missions", "Missions"],
       ["Only Studio?", "If you only build projects, nothing changes for you: *Studio* works on its own, as Athanor did before, and the other modules ask for nothing until you open them.", "#suivi", "Overview"],
       ["In a terminal", "`./athanor tui` opens on the same home page: one block per module, what needs you and the missions. *H* or *Esc* comes back to it from any page, *Enter* opens the module, *1*–*9* and *0* still open Studio's pages."],
     ],
@@ -3106,32 +2854,6 @@ const GUIDE = [
       ["Change or stop", "Changing the account (a new password, another server) updates every project that sends through it at its next start or deployment. The *×* next to a project stops its sending; deleting the account takes its settings out of every project, after a confirmation that names them."],
     ],
     note: "The password never appears on a page, in an answer of Athanor, in the audit log nor on a paired phone (it sees the accounts, read only). The home assistant knows the accounts' names and the projects they send for, never their settings." },
-  { id: "missions", titre: "Launch a mission", intro: "One sentence on the home page, and several modules work together: Studio builds the project, Servers prepares where it will run. An orchestrator first turns your sentence into a mission card; nothing starts before you press *Launch*.",
-    etapes: [
-      ["The sentence and its mentions", "In the bar *What do you want to do?* of the home page, say what you want in one sentence, for example “Put @my-shop online at shop.example.com”. Type *@* to name a project, a server or a vault key (by its name, never its value): your choice becomes a chip, and its *×* takes it off. The *New project* chip under the bar asks for a new project. *Send* creates the mission.", "#accueil", "Home"],
-      ["The mission card", "The orchestrator reads the state of the modules, then proposes its card under the bar: what *Studio* will build (a new project with its folder, or one of yours), an estimate drawn from the cycles already measured on this PC and, folded, what will be touched (files, folder). When a server is linked, the card also shows what *Servers* will prepare (DNS, certificates, proxy, firewall) and the address where the site goes online, with a *Production* badge when your sentence speaks of production. Unless you choose another mode under *Permissions*, every risky action asks for your agreement, whatever the server. The orchestrator works out by itself what it can (new project or existing one, its name and folder, the resources) and asks only what it cannot guess. When it needs to know something, its question comes at the top of the card, with its choices as buttons and a field for your own answer."],
-      ["Resources", "The servers, vault keys and APIs the mission uses show as chips; the *×* of a chip takes it off. *Add a resource* offers *Server*, *Key* or *API / provider*, then a list with a search field, without what the card already has (a server is added on the computer only). Adding a server brings the Servers lane; taking the last one off removes it. A key the vault does not hold yet is marked *to fill*: add it in the *Vault*, the orchestrator never creates one. *I will ask for your approval for* is worked out by Athanor, not by the orchestrator: production always, hardening a server not hardened yet, unlocking the vault when an *infra* key is needed. After the launch the card stays changeable: a key, a server or an API added or taken off is given or taken back at once, and its lane picks it up at its next cycle."],
-      ["The project", "For a new project, the folded *Project* section is the *Manage this project* block of Studio: the folder (*Choose…*; an empty or new folder, never a system folder or another project's, checked at once), the working mode (the framing and the time limit stay in *Manage*) and the GitHub repository (*No repository* by default, an existing one to link, or a new private one, named after the project; automatic push and workshop as in *Manage*). *Link* shows the OWNER/NAME field at once and an error only comes after an invalid entry; a *link* left empty stays on the card, but the launch refuses it before creating the project."],
-      ["Edit the card", "*Edit* opens a field *Ask for a change* (“put the site on the home server”). *Apply* sends it back to the orchestrator, which proposes a new card. *Cancel the mission* drops it: nothing has been built or deployed yet. A launched mission is not locked: failed, launched, stopping, paused or stopped, its card still takes resources, its briefs (*Edit the brief*: a new Studio brief reaches the project as a request, a new Servers brief prepares its environments again and is refused while a Servers task runs) and, while the project is not created, its project section. Frozen fields (a project already created, the request, an environment whose Servers task is running, a remote project) show dotted, with no *×*, with their reason; a refused change says why."],
-      ["Permissions", "In the *Servers* lane of the card, *Permissions* sets how freely the mission's Servers tasks work, with the four modes of the SSH assistant. *Manual*: reads the servers freely; asks your accord for each plan of changes. *Auto*: runs reads and changes on the servers at once; asks you before a dangerous command or a command it does not know. *Accept changes*: applies its plans of changes without waiting for you; asks you only when a plan holds a dangerous command or one it does not know. *Ignore permissions*: does everything without asking you, dangerous commands and production deployments included, and never stops for a password. The first option, *Settings default*, follows *Settings* › *Permissions*, which sets the default mode of the SSH and SFTP assistant and of missions (*Manual* at first). The chosen mode shows as a badge beside *Servers* on the card (red for *Ignore permissions*). *Ignore permissions* is chosen in Athanor's window only, never from a phone, after the confirmation *Ignore permissions?* and Athanor's password retyped. Before the launch, a key still *to fill* is typed under *Give now what the mission needs* (a password or a private key: typed once, kept in the vault, never logged), as the mission will not ask for it again. In that mode the production accord is accepted by itself, with no notification and no password, and the audit log writes it as “deployment accepted without confirmation”, as it does every risky action done without asking."],
-      ["Launch the mission", "*Launch* does it all, once: the new project is created with its folder, mode and repository (or your request joins the queue of the existing one) and its pilot starts, the environments are set (the one that is not *Production* is deployed after each milestone), then the resources' access are given. With a server, Servers prepares it as soon as the project's plan exists, while Studio builds, its plans waiting as usual. The project itself never deploys and never asks for a server's access (address, user, key): it ends ready to deploy, and the Servers lane puts it online with the servers and keys of the vault. If the mission uses an *infra* key, unlock the vault first. A step that fails stops the next ones and rings the bell; what is done stays done, and the mission says why, with *Retry* (the same mission again, from the first step not done: nothing is created or given twice) and *Edit the mission* (to *Add a resource* on the card). *Missions*, in the menu, lists every mission with its state and its lanes.", "#missions", "Missions"],
-      ["From your phone", "On a paired phone, unlocked, the same card can be read, answered, edited, launched or cancelled. When the orchestrator asks you to launch, “Launch the mission …?” comes in the bell, on *For you* and as a notification: *Accept* launches it as *Launch* does (on the computer, with Athanor's password retyped). Its questions come in the bell too, with their choices as buttons.", "#pourvous", "For you"],
-      ["What the orchestrator cannot do", "The orchestrator is a Claude session with no tool of its own, in an empty folder, with no secret in its environment. It reads a summary of the modules (projects and their plan in one line, servers, environments, the names and types of the vault entries, never a value), proposes the card, asks you questions and asks you to launch. It cannot read a project's files, reach a server, call Cloudflare, build or deploy: those tools are refused to its token, and each of its calls is written to the audit log."],
-    ],
-    note: "Once launched, each lane follows its module's usual rules: the pilot's approvals, the Servers agent's plans and the deployments of *Guide › Put a site online*. What a mission does, step by step: docs/MISSIONS.md in the repository." },
-  { id: "mission-direct", titre: "Follow a mission", intro: "Once launched, a mission has its own page: what Studio and Servers are doing side by side, the relay from a delivered milestone to production, and a journal in plain words. You pause it or stop it there, and it carries on after Athanor restarts.",
-    etapes: [
-      ["The mission's page", "*Missions*, in the menu, lists every mission with its state and its lanes; click one to open its page: its sentence, its state and the *Stop* button at the top. The page reads the mission again every 2 seconds while you look at it: nothing to refresh.", "#missions", "Missions"],
-      ["The lanes", "*Lanes* shows the modules side by side (one under the other on a phone): *Studio* with its project and the milestone being built (“Milestone 3/8: contact form”), *Servers* with its task and the step of its plan, or *See the plan* when it waits for your agreement. Each name opens its page."],
-      ["The relay", "*Relay* follows the way online: *Milestone delivered*, *Going online*, *Verification*, then *Your accord* and *Production* when the card has a *Production* badge. The steps done are ticked, the current one moves gently, a failed one turns red. The addresses show below once they exist."],
-      ["The journal", "One line per event, the newest first, with its time and a short sentence: a milestone delivered, a deployment checked from outside, production waiting for your accord. Warnings are amber, errors red; 50 lines show, *See more* opens the rest. An incident on the mission's site comes at the top of the page with *Retry*, *Go back to the previous version* and *I take over*."],
-      ["Production, from your phone", "Once Studio's lane is done and dev is deployed and checked on the project's last commit, Athanor asks for your accord for production: the bell, *For you* and your phone get a card with the address, the commit, the version online now and what changes (the number of new commits and the subjects of the last ones). On a paired phone, unlocked, *Accept* is enough; on the computer, retype Athanor's password. The accord is good once, for that commit and that mission; refused or expired, *Ask again* on the mission's page asks once more. Only a mission you put in *Ignore permissions* yourself, with Athanor's password, accepts it without asking.", "#pourvous", "For you"],
-      ["Stop and resume", "*Stop* offers three ways: *Finish the current milestone* (the mission pauses once it is saved), *Put on pause* (the pilot stops now; the Servers tasks and the deployments wait) or *Stop immediately* (its pending accords are refused). Nothing is undone: the environments and the access stay. To change course, press *Stop*, edit what you need (*Edit the brief*, a key or a server to add), then *Resume*, with Athanor's password: the mission picks up where it stopped, with the new brief. A new Servers brief is refused while a Servers task runs. The emergency stop pauses every mission."],
-      ["Delete a mission", "*Delete the mission*, on its page or the *×* of its line on *Missions*, says first what goes: the mission, its journal and its Servers tasks. A running mission asks how to stop it first. Its project and folder (to the recycle bin) and the access it gave go only if you tick them, for a project the mission created; the GitHub repository and what is online stay. *Clear finished missions* empties the list; *d* in the terminal."],
-      ["After a restart", "Close Athanor or restart the PC: at the next start each launched mission is followed again where it was, never launched twice, and the journal says “Athanor restarted: the mission resumes”. A production accord asked before stays valid only if nothing changed since; otherwise it is refused, and *Ask again* asks once more. A mission that needs an *infra* key waits until you unlock the vault; a paused mission stays paused."],
-      ["In a terminal", "On Linux and macOS, *E* in the terminal opens the same list; *Enter* shows a mission with its lanes, its relay as text and the 10 newest lines of its journal. *p* pauses it, *r* resumes it with Athanor's password, *a* stops it after a confirmation. The production accord is decided on page *6* (*For you*): *y* accepts, *r* refuses."],
-    ],
-    note: "The relay never deploys to production without your accord, unless you put the mission in *Ignore permissions* yourself. What a mission does once launched, step by step: docs/MISSIONS.md in the repository." },
   { id: "brancher-claude", titre: "Connect Claude Desktop", intro: "Claude Desktop or Claude Code on this PC can follow your projects through Athanor's MCP: read their plan and requests, add a request, start or pause a pilot, prepare a mission card. Only the projects and tools you allow, never more.",
     etapes: [
       ["Open a code", "*Settings* › *MCP clients* › *Connect a client* shows a 6-digit code. It works once, for 10 minutes; *Close* withdraws it.", "#options@bloc-clients-mcp", "MCP clients"],
@@ -3247,7 +2969,7 @@ function choixReglageProjet(r) {
   return `<select id="${id}">${["", ...valeurs].map((v) => `<option value="${h(v)}"${r.propre === v ? " selected" : ""}>${h(v ? libelleReglageProjet(r.cle, v) : defaut)}</option>`).join("")}</select>`;
 }
 const lignesReglagesProjet = (l = etat.rp.reglages) => l.map((r) => `<div class="reglage"><label for="rp-${r.cle}" class="nom-reglage">${h(nomReglageProjet(r.cle))}</label>
-  <div>${choixReglageProjet(r)}${r.cle === "permission" ? `<div class="petit mt-1" id="rp-permission-aide">${aidePermission(r.valeur, PERMISSIONS_MISSION())}</div>` : ""}</div></div>`).join("");
+  <div>${choixReglageProjet(r)}${r.cle === "permission" ? `<div class="petit mt-1" id="rp-permission-aide">${aidePermission(r.valeur, PERMISSIONS_PROJET())}</div>` : ""}</div></div>`).join("");
 async function rendreReglagesProjet() {
   const [r, mod, mode] = await Promise.all([api("projets/" + encodeURIComponent(etat.projet) + "/reglages"), api("modeles").catch(() => ({})), rendreMode()]);
   etat.rp = { reglages: r.reglages || [], modeles: mod.modeles || [] };
@@ -3819,9 +3541,9 @@ function carteApprobation(x, ap, codes) {
   // a deployment (M120): prod is never decided by a rule
   if (x.action === "deploiement") return carteDecision(x, ap, `<span class="badge${x.production ? " badge-infra" : ""}">${h(x.production ? t("Production") : nomEnv(x.env))}</span> <strong>${h(x.production ? t("Deploy {0} to production?", [d.hote]) : t("Deploy {0} to {1}?", [d.hote, nomEnv(x.env)]))}</strong> <span>${h(x.projet)}</span>`,
     [t("Commit {0}", [d.commit || (d.sha || "").slice(0, 7)]), d.avant && t("Online now: version {0}", [d.avant]), d.serveurs && t("Servers: {0}", [d.serveurs]), d.fichiers_build && t("Build files changed: {0}", [d.fichiers_build])],
-    // P7: a mission's prod accord says where it goes, what changes and opens the mission
+    // P7: an old mission's prod accord says where it goes and what changes
     (d.mission ? `${/^https?:\/\//.test(d.url || "") ? `<div class="pv-details"><a href="${h(d.url)}" target="_blank" rel="noopener">${h(d.url)}</a></div>` : ""}${d.commits ? `<div class="pv-details"><strong>${h(t("What changes: {0} new commit(s)", [d.commits]))}</strong>${d.changements ? ` <span class="appr-changements">${h(d.changements)}</span>` : ""}</div>` : ""}` : "") +
-    (x.production ? `<div class="pv-details">${h(t("Production always asks you: one accord, one deployment."))}${d.mission ? ` <a href="#missions/${encodeURIComponent(d.mission)}">${h(t("See the mission"))}</a>` : ""}</div>` : d.fichiers_build ? `<div class="pv-details">${h(t("Its build command will run these changed files on this PC, inside the pilot's barrier: one accord, one deployment."))}</div>` : ""),
+    (x.production ? `<div class="pv-details">${h(t("Production always asks you: one accord, one deployment."))}</div>` : d.fichiers_build ? `<div class="pv-details">${h(t("Its build command will run these changed files on this PC, inside the pilot's barrier: one accord, one deployment."))}</div>` : ""),
     !x.production && !d.fichiers_build && t("Never ask again for this project and environment"));
   // M158: the orchestrator asks to launch its card; accepting launches it as Launch does (never a rule)
   // C77: the environments, prod and the ticked access of the very card it launches
@@ -5090,7 +4812,6 @@ function pcsOuvert() {
   return etat.pcsOuvert;
 }
 document.addEventListener("toggle", (ev) => {
-  if (ev.target && ev.target.id === "mis-projet") etat.missionProjetOuvert = ev.target.open; // M254: stays open across a save
   if (ev.target && ev.target.id === "cp-projet" && carteProjetOuverte()) carteProjetOuverte().pOuvert = ev.target.open; // M295b
   if (ev.target && ev.target.id === "rp") etat.rpOuvert = ev.target.open; // M291: the same across a change of mode
   if (!ev.target || ev.target.id !== "pcs-repli") return;
@@ -5382,7 +5103,7 @@ function afficherNonAppaire() {
 
 // M272: Settings › Permissions, the default mode of each use (usagesPermissions in Go), the same selector as the assistant's
 const USAGES_PERMISSIONS = () => [["assistant", t("SSH and SFTP assistant"), t("The assistant beside a server's terminal and files, on every server without a mode of its own."), AUTORISATIONS_IA()],
-  ["missions", t("Missions"), t("The Servers lane of every mission without a mode of its own."), PERMISSIONS_MISSION()]];
+  ["missions", t("Projects"), t("Every project without a mode of its own, on its servers."), PERMISSIONS_PROJET()]]; // "missions": the name the use keeps in the settings file
 const menuPermissions = (p) => USAGES_PERMISSIONS().map(([u, titre, quoi, phrases]) => {
   const mode = p[u] || "manuel";
   return `<div class="ia-autorisation perm-usage${mode === "ignorer" ? " danger" : ""}"><label for="perm-${u}"><b>${h(titre)}</b></label>${selecteurPermissions("perm-" + u, mode, { distant: (etat.vue || {}).distant })}
@@ -5397,10 +5118,10 @@ async function ouvrirPermissions(b) {
 async function changerPermissionsUsage(sel) {
   const usage = sel.id.slice(5), mode = sel.value, avant = etat.permReglages[usage] || "manuel";
   const p = mode !== "ignorer" ? {} : await confirmerIgnorer(t(usage === "missions"
-    ? "Every mission without a mode of its own will act on its servers without asking you, dangerous commands and production deployments included. Choose it only for servers you can rebuild."
+    ? "Every project without a mode of its own will act on its servers without asking you, dangerous commands and production deployments included. Choose it only for servers you can rebuild."
     : "The assistant will run every command without asking you on every server without a mode of its own, deleting, formatting, stopping or firewall changes included. Choose it only for servers you can rebuild."));
   if (!p || !(await action(api("reglages/permissions", "POST", { usage, mode, confirmer: mode === "ignorer", ...p }), ""))) { sel.value = avant; return sel.focus(); }
-  etat.permReglages[usage] = mode; etat.permDefaut = null; // the missions' cards read the new default
+  etat.permReglages[usage] = mode;
   const z = $("#perm-menu"); garderFocus(z, () => { z.innerHTML = menuPermissions(etat.permReglages); });
   toast(t("Default mode saved."), "ok");
 }
@@ -5440,7 +5161,7 @@ async function rendreOptions() {
       <div class="bloc" id="bloc-connexion-gh"><h2>GitHub</h2>${rendreConnexionGH(etat.ghConnexion)}</div>
       <div class="bloc" id="bloc-version"><h2>${t("Version")}</h2>${rendreBlocMaj(o)}</div>
       <div class="bloc" id="bloc-permissions"><h2>${t("Permissions")}</h2>
-        <p class="intro petit">${t("What Athanor's agents may do on your servers without asking you, for each use. A server or a mission can still choose its own mode.")}</p>
+        <p class="intro petit">${t("What Athanor's agents may do on your servers without asking you, for each use. A server or a project can still choose its own mode.")}</p>
         <button type="button" class="btn" id="op-permissions" aria-expanded="false" aria-controls="perm-menu">${t("Permissions")}</button>
         <div class="perm-menu" id="perm-menu" hidden></div></div>
     </div>
@@ -6259,104 +5980,40 @@ function assistantServeur(c) {
     <div class="ligne"><button type="submit" class="btn btn-primaire">${empreinte ? t("Add the server") : t("Continue")}</button><button type="button" class="btn" data-srv-fermer>${t("Cancel")}</button></div>
   </form>`;
 }
-// --- Missions (M159): one line per mission (state, sentence, lanes as they are now, date), its detail at #missions/<id>
+// --- Old missions (M300): Athanor no longer creates nor follows missions; the ones already there are read (state,
+// sentence, journal) at #missions and #missions/<id>, and deleted on request; the module shows only while one exists
 const ETATS_MISSION = { preparation: "Being prepared", proposee: "Proposed", acceptee: "Accepted", lancee: "Launched", terminee: "Finished", annulee: "Cancelled", echec: "Failed", en_pause: "Paused", arretee: "Stopped", arret_demande: "Stopping after the milestone" };
-const ETATS_VOIE_DEV = { travaille: ["Working", "pv-claude"], termine: ["Finished", "pv-ok"], arrete: ["Stopped", ""], hors_ligne: ["Offline: the mission waits", "pv-vous"], attente: ["Waiting to be sent", "pv-vous"] };
-// M190: a Studio lane, on this PC (dev) or on a remote Athanor (dev_distant, ref "remote id/project", nom = nom@instance)
-const voieStudio = (v) => v.module === "dev" || v.module === "dev_distant";
-// a lane's state read now by the API (voiesEnDirect): Studio = the project's pilot, Servers = its task
-function etatVoie(v, etatMission) {
-  if (v.etat === "refusee") return [t("Refused: native Windows mode"), "pv-vous"];
-  if (!v.actuel || v.actuel === "inconnu") return [t("Not found"), "pv-vous"];
-  if (v.actuel === "attente_plan") return [t("Waiting for the project's plan"), ""]; // M249: Servers prepares once the plan exists
-  if (voieStudio(v) && v.actuel === "arrete" && etatMission === "en_pause") return [t("Paused"), ""]; // M258: the pilot stopped by the pause
-  if (voieStudio(v)) { const [l, c] = ETATS_VOIE_DEV[v.actuel] || [v.actuel, ""]; return [t(l), c]; }
-  return ETATS_TACHE_SRV()[v.actuel] || [v.actuel, ""];
-}
-// lien: the project (selected, then its Overview) or the task's server; never inside a line that is a link itself
-function voieMission(v, lien, etatMission) {
-  const [libelle, classe] = etatVoie(v, etatMission), dev = voieStudio(v), distant = v.module === "dev_distant";
-  const mod = distant ? t("Remote Studio") : t((etat.hubModules || []).find((m) => m.id === v.module)?.nom || v.module);
-  const nom = distant ? v.nom || v.ref : dev ? v.ref : ((etat.mentionsSugg || []).find((x) => x.type === "serveur" && x.ref === v.serveur) || {}).nom || v.serveur || v.ref || v.env;
-  const cible = !lien || v.actuel === "inconnu" ? "" : distant ? `href="#global"` : dev ? `href="#suivi" data-projet="${h(v.ref)}" data-cible="suivi"` : v.serveur ? `href="#serveur/${encodeURIComponent(v.serveur)}"` : "";
-  return `<span class="mis-voie-etat"><span class="pastille-module"><span class="ico ico-${dev ? "dev" : "serveurs"}" aria-hidden="true"></span>${h(mod)}</span>${cible ? `<a ${cible}>${h(nom)}</a>` : `<b>${h(nom)}</b>`}<span class="pv-etat ${classe}">${h(libelle)}</span>${v.detail ? `<span class="muet petit mis-voie-detail">${h(v.detail)}</span>` : ""}</span>`;
-}
-// M172: the relay's step under way of a launched or paused mission ("Relay: Verification"), "" otherwise
-function etapeRelais(m) {
-  const rang = m.relais && ["lancee", "en_pause", "arret_demande"].includes(m.etat) ? RANG_RELAIS[m.relais.etape] ?? 0 : 5;
-  return rang < 5 ? t("Relay: {0}", [t(RELAIS_MISSION[rang])]) : "";
-}
-function ligneMission(m, suppr) {
+const POLITIQUES_MISSION = [["prod", "Ask me for production"], ["tout", "Ask me for everything"], ["autonome", "Autonomous"]];
+// raisonEchec (M266): the event that put the mission in echec; the owner's changes after it are "modifiee"
+const raisonEchec = (m) => [...(m.historique || [])].reverse().find((x) => x.etat === "echec") || {};
+const MISSION_FINIE = ["terminee", "annulee", "echec", "arretee"]; // etatsFinis in Go
+function ligneMission(m) {
   const titre = (m.carte || {}).titre, phrase = m.phrase.length > 140 ? m.phrase.slice(0, 140) + "…" : m.phrase;
   return `<li><a class="bloc mis-ligne" href="#missions/${encodeURIComponent(m.id)}"><span class="badge mis-etat-${h(m.etat)}">${h(t(ETATS_MISSION[m.etat] || m.etat))}</span>
     <span class="mis-phrase">${titre ? `<b>${h(titre)}</b> ` : ""}<span class="muet">${h(phrase)}</span></span>
-    <span class="muet petit">${h(new Date(m.cree).toLocaleDateString(document.documentElement.lang || "en"))}</span>
-    ${etapeRelais(m) ? `<span class="petit mis-relais-etape">${h(etapeRelais(m))}</span>` : ""}
-    ${(m.voies || []).length ? `<span class="mis-voies-ligne">${m.voies.map((v) => voieMission(v, false, m.etat)).join("")}</span>` : ""}</a>${suppr === true ? `<button type="button" class="btn btn-petit mis-suppr-btn" data-mis-suppr="${h(m.id)}" aria-label="${h(t("Delete the mission"))}" title="${h(t("Delete the mission"))}">${ic("croix")}</button>` : ""}</li>`;
+    <span class="muet petit">${h(new Date(m.cree).toLocaleDateString(document.documentElement.lang || "en"))}</span></a><button type="button" class="btn btn-petit mis-suppr-btn" data-mis-suppr="${h(m.id)}" aria-label="${h(t("Delete the mission"))}" title="${h(t("Delete the mission"))}">${ic("croix")}</button></li>`;
 }
-// Home's Missions block: the 3 newest, See all; the empty state says where to start
 pages.missions = async () => {
-  const [d, sugg] = await Promise.all([api("missions"), api("mentions").catch(() => ({}))]);
-  etat.mentionsSugg = sugg.mentions || [];
-  const finies = d.missions.filter((m) => ["terminee", "annulee", "echec", "arretee"].includes(m.etat)).length; // etatsFinis in Go
+  const d = await api("missions");
   return `<div class="missions">
-    <div class="ligne cof-tete"><h2 class="m0">${t("Missions")} <span class="muet">${d.missions.length}</span></h2>${d.missions.length ? `<span class="espace"></span>${finies ? `<button type="button" class="btn" data-mis-vider="${finies}">${t("Clear finished missions")}</button>` : ""}<a class="btn btn-primaire" href="#accueil@accueil-texte" data-nouvelle-mission>${t("New mission")}</a>` : ""}</div>
-    ${d.missions.length ? `<ul class="mis-liste mis-liste-suppr">${d.missions.map((m) => ligneMission(m, true)).join("")}</ul>`
-      : `<div class="vide srv-vide"><p><b>${t("No mission yet")}</b></p>
-      <p class="muet">${t("Say what you want in the bar of the home page, for example “Put @my-shop online at shop.example.com”. The orchestrator prepares a mission card first: what will be built and deployed, what will be touched, what it will ask your approval for. Nothing starts before you launch it.")}</p>
-      <a class="btn btn-primaire" href="#accueil">${t("Go to the home page")}</a></div>`}
+    <div class="ligne cof-tete"><h2 class="m0">${t("Old missions")} <span class="muet">${d.missions.length}</span></h2></div>
+    <p class="muet m0">${t("Athanor no longer creates nor follows missions: these ones stay here to be read or deleted. Their projects keep working on their own, each with its own deployment.")}</p>
+    ${d.missions.length ? `<ul class="mis-liste mis-liste-suppr">${d.missions.map(ligneMission).join("")}</ul>` : `<div class="vide">${t("No old mission left.")}</div>`}
   </div>`;
 };
-// One mission (#missions/<id>): its card (still to launch: the home's, with its buttons) and its lanes with their links
+// One old mission (#missions/<id>), read only: its sentence, the state it was left in, its journal
 pages.mission = async () => {
-  const [d, sugg] = await Promise.all([api("missions/" + encodeURIComponent(etat.missionId || "")), api("mentions").catch(() => ({}))]);
-  etat.mentionsSugg = sugg.mentions || []; etat.missionVue = d;
-  const m = d.mission, aLancer = ACTIVE_MISSION.includes(m.etat), fin = m.etat === "echec" ? raisonEchec(m) : (m.historique || []).slice(-1)[0] || {};
-  clearTimeout(minuterieMission);
-  if (aLancer && travailleMission(d)) minuterieMission = setTimeout(lireMissionVue, 2000);
-  const retour = `<div class="ligne m0"><a class="btn btn-petit" href="#missions">${ic("gauche")} ${t("Missions")}</a><span class="espace"></span><button type="button" class="btn btn-petit btn-danger" data-mis-suppr="${h(m.id)}">${t("Delete the mission")}</button></div>`;
-  // still being prepared or to launch: the home's card, its question and its buttons (the lanes come at the launch)
-  if (aLancer) return `<div class="missions mis-detail">${retour}<div id="mission-zone" aria-live="polite">${zoneMission()}</div></div>`;
+  const d = await api("missions/" + encodeURIComponent(etat.missionId || ""));
+  etat.missionVue = d;
+  const m = d.mission, titre = (m.carte || {}).titre, fin = m.etat === "echec" ? raisonEchec(m) : {};
   if (etat.missionJournalDe !== m.id) { etat.missionJournalDe = m.id; etat.missionJournalN = 50; }
-  suivreMissionDirect();
-  return `<div class="missions mis-detail">${retour}
-    <div><div class="ligne m0 tuile-tete"><h2 class="m0" id="mis-titre">${h((m.carte || {}).titre || t("New mission"))}</h2><span class="badge mis-etat-${h(m.etat)}" id="mis-badge">${h(t(ETATS_MISSION[m.etat] || m.etat))}</span></div>
-      <p class="muet petit mis-phrase">${h(m.phrase)}</p>${echecLancement(m) ? blocEchecLancement(m, true) : m.etat === "echec" && fin.detail ? `<p class="mis-avert" role="note">${h(fin.message ? texteMessage(fin.message) : fin.detail)}</p>` : ""}
-      ${["lancee", "en_pause", "arret_demande", "arretee"].includes(m.etat) ? controlesMission(m) : ""}</div>
-    <div id="mission-direct" class="mis-detail">${missionDirect(m)}</div>
-    ${m.carte ? `<section class="bloc mis-carte" id="mis-carte-detail" aria-labelledby="mis-titre">${carteMission(d)}</section>` : ""}
+  return `<div class="missions mis-detail"><div class="ligne m0"><a class="btn btn-petit" href="#missions">${ic("gauche")} ${t("Old missions")}</a><span class="espace"></span><button type="button" class="btn btn-petit btn-danger" data-mis-suppr="${h(m.id)}">${t("Delete the mission")}</button></div>
+    <div><div class="ligne m0 tuile-tete"><h2 class="m0" id="mis-titre">${h(titre || m.phrase)}</h2><span class="badge mis-etat-${h(m.etat)}" id="mis-badge">${h(t(ETATS_MISSION[m.etat] || m.etat))}</span></div>
+      ${titre ? `<p class="muet petit mis-phrase">${h(m.phrase)}</p>` : ""}${fin.detail ? `<p class="mis-avert" role="note">${h(fin.message ? texteMessage(fin.message) : fin.detail)}</p>` : ""}
+      ${MISSION_FINIE.includes(m.etat) ? "" : `<p class="m0" role="note">${t("No longer followed: its project continues on its own.")}</p>`}</div>
+    <div id="mission-journal" class="mis-detail">${journalMission(m)}</div>
   </div>`;
 };
-// M171: a launched mission, live (DESIGN §Mission en direct): its lanes side by side, the relay's steps and URLs, the
-// journal in plain words; read again every 2 s while the page is shown, the tab visible and the mission followed
-const RELAIS_MISSION = ["Milestone delivered", "Going online", "Verification", "Your accord", "Production"];
-const RANG_RELAIS = { construction: 0, dev_deploye: 2, dev_verifie: 3, accord_prod: 3, prod_deploye: 4, termine: 5 };
-const ETATS_ETAPE = { fait: "done", cours: "in progress", attente: "in progress", echec: "failed", "": "to come" };
-// the relay step of the newest journal entry when it is an error (a deployment, a check, the prod): red until it moves on
-function etapeEchec(j, dev, prod) {
-  const e = j[j.length - 1], env = ((e || {}).params || [])[0];
-  if (!e || e.niveau !== "erreur") return -1;
-  if (/^(incident|prod):/.test(e.id)) return 4;
-  if (/^(deploi|verif):.*:echec$/.test(e.id)) return prod && env === prod.nom ? 4 : dev && env === dev.nom ? (e.id.startsWith("deploi") ? 1 : 2) : -1;
-  return -1;
-}
-// M258: the card's environments as the relay uses them (envFinal, envJalonCarte in Go): the Production one (its
-// badge) closes the relay with the accord; the other one goes online after each milestone
-function envsRelais(c) {
-  const envs = (c || {}).envs || [], prod = envs.find((x) => x.production || x.nom === "prod");
-  return { prod, dev: envs.find((x) => x.nom === "dev" && !x.production) || envs.find((x) => !x.production && x.nom !== "prod") };
-}
-function friseRelais(m) {
-  const { dev, prod } = envsRelais(m.carte);
-  const rang = RANG_RELAIS[m.relais.etape] ?? 0, echec = etapeEchec(m.journal || [], dev, prod);
-  const etapes = (prod ? RELAIS_MISSION : RELAIS_MISSION.slice(0, 3)).map((l, i) => {
-    const c = echec >= 0 ? (i < echec ? "fait" : i === echec ? "echec" : "") : i < rang ? "fait" : i === rang ? (m.etat === "lancee" ? "cours" : "attente") : "";
-    return `<li class="r-${c || "avenir"}"${c === "cours" ? ' aria-current="step"' : ""}><span class="mis-pastille" aria-hidden="true"></span><span>${t(l)}</span><span class="cache-visuel"> (${t(ETATS_ETAPE[c])})</span></li>`;
-  }).join("");
-  const url = (e, l) => e && e.url ? `<span>${t(l)} <a href="${h(e.url)}" target="_blank" rel="noopener noreferrer" class="mis-url">${h(e.url)}</a></span>` : "";
-  const urls = [rang >= 2 ? url(dev, "Online:") : "", prod && rang >= 4 ? url(prod, "Production:") : ""].filter(Boolean);
-  return `<ol class="mis-relais">${etapes}</ol>${urls.length ? `<p class="ligne m0 petit mis-relais-url">${urls.join("")}</p>` : ""}`;
-}
 // a journal parameter said in the page's language: who acted, a state, a policy, an action; names and URLs as they are
 // shortcut: a parameter equal to one of these words is translated wherever it stands (an environment named "auto"), fine for the names a card uses
 const MOTS_JOURNAL = { fenetre: "from this computer", "emergency stop": "emergency stop", refusee: "refused", expiree: "expired", echec: "failed",
@@ -6373,62 +6030,13 @@ function ligneJournal(e) {
   const quand = d.toDateString() === new Date().toDateString() ? d.toLocaleTimeString(lang, { hour: "2-digit", minute: "2-digit" }) : d.toLocaleString(lang, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
   return `<li class="mis-j-${h(e.niveau)}"><time datetime="${h(e.t)}">${h(quand)}</time><span>${h(texteJournal(e))}</span></li>`;
 }
-// a lane, live: the module's line (state, link) then Studio's milestone n/N and what the project lead does
-function voieDirect(v, etatMission) {
-  const n = v.fait || 0, avance = !voieStudio(v) || !v.total ? "" : v.titre ? t("Milestone {0}/{1}: {2}", [Math.min(n + 1, v.total), v.total, v.titre]) : t("{0} / {1} milestones done", [n, v.total]);
-  const decider = v.actuel === "attente_accord" ? `<a class="btn btn-petit" href="#pourvous">${t("See the plan")}</a>` : "";
-  return `<li class="mis-voie">${voieMission(v, true, etatMission)}${avance ? `<p class="m0">${h(avance)}</p>` : ""}${v.activite ? `<p class="m0 muet petit">${h(t(v.activite))}</p>` : ""}${decider}</li>`;
-}
-function missionDirect(m) {
-  const lancee = (m.historique || []).find((x) => x.etat === "lancee"), j = [...(m.journal || [])].reverse(), n = etat.missionJournalN || 50;
-  const r = m.relais || {};
-  const nonDonne = m.etat === "lancee" && r.etape === "accord_prod" && (m.journal || []).some((e) => e.id === `accord:${r.accord}:refusee` || e.id === `accord:${r.accord}:expiree`);
-  // M268b: a keys-only mission has no lane and no relay once launched (its keys are given at the launch)
-  // M275b: the relay (online, checked) only for a Studio lane that puts something online (an environment on the card)
-  const sansVoie = lancee && !(m.voies || []).length, avecStudio = !!(m.carte && m.carte.dev && m.carte.dev.brief && (m.carte.envs || []).length);
-  return `${incidentMission(m)}${sansVoie ? "" : `<section class="bloc" aria-labelledby="mis-voies-titre"><div class="ligne m0 tuile-tete"><h2 class="m0" id="mis-voies-titre">${t("Lanes")}</h2></div>
-      ${(m.voies || []).length ? `<ul class="mis-voies-liste mis-voies-direct">${m.voies.map((v) => voieDirect(v, m.etat)).join("")}</ul>${lancee ? `<p class="muet petit m0">${t("Launched on {0}", [h(new Date(lancee.t).toLocaleString(document.documentElement.lang || "en"))])}</p>` : ""}`
-        : `<p class="muet m0">${t("The lanes start when the mission is launched.")}</p>`}
-    </section>`}
-    ${m.relais && avecStudio ? `<section class="bloc" aria-labelledby="mis-relais-titre"><h2 id="mis-relais-titre">${t("Relay")}</h2>${friseRelais(m)}
-      ${nonDonne ? `<p class="ligne m0 mis-redemander"><span>${t("The production accord was not given.")}</span><button type="button" class="btn btn-petit btn-primaire" data-mis-ctl="redemander">${t("Ask again")}</button></p>` : ""}</section>` : ""}
-    <section class="bloc" aria-labelledby="mis-journal-titre"><h2 id="mis-journal-titre">${t("Journal")} <span class="muet">${j.length}</span></h2>
+function journalMission(m) {
+  const j = [...(m.journal || [])].reverse(), n = etat.missionJournalN || 50;
+  return `<section class="bloc" aria-labelledby="mis-journal-titre"><h2 id="mis-journal-titre">${t("Journal")} <span class="muet">${j.length}</span></h2>
       ${j.length ? `<ol class="mis-journal">${j.slice(0, n).map(ligneJournal).join("")}</ol>${j.length > n ? `<button type="button" class="btn btn-petit" id="mis-plus" data-mis-plus>${t("See more")} (${j.length - n})</button>` : ""}`
-        : `<p class="muet m0">${t("No event yet: the journal fills in as the lanes move on.")}</p>`}
+        : `<p class="muet m0">${t("Nothing in its journal.")}</p>`}
     </section>`;
 }
-// M172: the header's controls of a launched, paused, stopping or stopped mission: Resume (the owner's password), Stop and its ways (M251: the milestone, a pause, now; nothing is undone)
-function controlesMission(m) {
-  return `<div class="ligne m0 mis-controles">
-    <span class="espace"></span>${m.etat === "arret_demande" ? `<span class="muet petit">${t("Stops at the end of the milestone in progress: Resume cancels this stop.")}</span>` : ""}
-    ${m.etat === "lancee" ? "" : `<button type="button" class="btn btn-primaire" data-mis-ctl="reprendre">${t("Resume")}</button>`}
-    ${m.etat === "arretee" ? "" : `<button type="button" class="btn${m.etat === "lancee" ? "" : " btn-danger"}" data-mis-ctl="arreter">${t(m.etat === "en_pause" ? "Stop immediately" : "Stop")}</button>`}</div>`;
-}
-// M251: the ways a mission can still stop, from its state (a paused one: only now)
-const MODES_ARRET_MISSION = { lancee: ["jalon", "pause", "immediat"], arret_demande: ["pause", "immediat"], en_pause: ["immediat"] };
-const TEXTES_ARRET_MISSION = { jalon: "Finish the current milestone: the pilot saves it, then the mission pauses.",
-  pause: "Put on pause: everything stops now and waits for Resume.",
-  immediat: "Stop immediately: the pending accords are refused, nothing is undone." };
-// P6: the incident of the mission's project (the bell's, from the health of its environments), its actions as the bell's
-function incidentMission(m) {
-  const projet = ((m.voies || []).find((v) => v.module === "dev") || {}).ref;
-  const a = projet && [...alertesHub(), ...((etat.hub || {}).ignorees || [])].find((x) => (x.element || "").startsWith(projet + "/") && (x.actions || []).some((y) => (y.route || "").endsWith("/incident")));
-  if (!a) return "";
-  const distant = (etat.vue || {}).distant;
-  return `<section class="bloc mis-incident" aria-labelledby="mis-inc-titre"><h2 id="mis-inc-titre" class="m0">${ic("croix")} ${t("Incident")}</h2>
-    <p class="m0">${h(t(a.raison, (a.args || []).map(texteMessage)))}</p>
-    <div class="ligne m0">${a.actions.map((x, i) => `<button type="button" class="btn btn-petit${i === 0 ? " btn-primaire" : ""}" data-mis-inc="${i}" data-empreinte="${h(a.empreinte)}"${distant && !x.distance ? ` disabled title="${h(t("On the computer only"))}"` : ""}>${h(t(x.libelle))}</button>`).join("")}</div></section>`;
-}
-document.addEventListener("click", async (ev) => {
-  const b = ev.target.closest("[data-mis-ctl]"), m = (etat.missionVue || {}).mission; if (!b || !m) return;
-  const a = b.dataset.misCtl;
-  const mode = a === "arreter" ? await choisirArret(t("Stop the mission?"), MODES_ARRET_MISSION[m.etat] || ["immediat"], TEXTES_ARRET_MISSION) : "";
-  if (a === "arreter" && !mode) return;
-  const p = a === "reprendre" ? await preuveMdp(t("Resuming the mission: retype Athanor's password."), { ok: t("Resume") }) : mode ? { mode } : {};
-  if (!p) return;
-  b.disabled = true;
-  if (!(await actionMission(a, p))) b.disabled = false;
-});
 // M261: delete a mission (mission_supprimer.go): what goes is read first; its project and folder, and the access it
 // gave, only when ticked (unticked by default); a running one is stopped first, after its milestone or now
 const lienDepot = (d) => /^[\w.-]+\/[\w.-]+$/.test(d) ? `<a href="https://github.com/${h(d)}" target="_blank" rel="noopener noreferrer">${h(d)}</a>` : `<b>${h(d)}</b>`;
@@ -6472,52 +6080,15 @@ async function supprimerMissionUI(id) {
   toast(r.differee ? t("The mission will be deleted when the current milestone ends.") : retrait ? t("Mission deleted. A Servers task removes the site: accept its plan in Servers.") : t("Mission deleted."), "ok");
   if (!r.differee && etat.page === "mission") location.hash = "#missions"; else await rendrePage();
 }
-document.addEventListener("click", async (ev) => {
-  const b = ev.target.closest("[data-mis-suppr], [data-mis-vider]"); if (!b) return;
+document.addEventListener("click", (ev) => {
+  const b = ev.target.closest("[data-mis-suppr]"); if (!b) return;
   ev.preventDefault();
-  if (b.dataset.misSuppr) return supprimerMissionUI(b.dataset.misSuppr);
-  const n = +b.dataset.misVider;
-  if (!(await confirmer(t("Delete the {0} finished, cancelled, failed or stopped missions? Only the missions and their journals go: their projects, folders and what they put online stay.", [n]), { titre: t("Clear finished missions"), ok: t("Delete them"), danger: true }))) return;
-  b.disabled = true;
-  const r = await action(api("missions/vider", "POST"), "");
-  if (r) toast(t("{0} missions deleted.", [r.supprimees]), "ok");
-  await rendrePage();
+  supprimerMissionUI(b.dataset.misSuppr);
 });
-document.addEventListener("click", async (ev) => {
-  const b = ev.target.closest("[data-mis-inc]"); if (!b) return;
-  const a = [...alertesHub(), ...((etat.hub || {}).ignorees || [])].find((x) => x.empreinte === b.dataset.empreinte), x = a && (a.actions || [])[+b.dataset.misInc];
-  if (!x) return;
-  b.disabled = true;
-  const r = await agirAlerte(x, b);
-  if (r && r.page) return allerProjet(r.projet, r.page.slice(1)); // I take over: the server's sheet
-  etat.hub = await api("hub").catch(() => etat.hub);
-  if (etat.vue) rendreBandeau(etat.vue);
-  if (r && etat.page === "mission") await rendrePage();
-});
-let minuterieDirect;
-function suivreMissionDirect() {
-  clearTimeout(minuterieDirect);
-  const m = (etat.missionVue || {}).mission;
-  if (!m || !["lancee", "en_pause", "arret_demande"].includes(m.etat)) return;
-  minuterieDirect = setTimeout(async () => {
-    const ici = () => etat.page === "mission" && $("#mission-direct") && (etat.missionVue || {}).mission?.id === m.id;
-    if (!ici()) return;
-    if (document.visibilityState === "visible") {
-      try {
-        const d = await api("missions/" + encodeURIComponent(m.id));
-        if (!ici()) return;
-        etat.missionVue = d;
-        if (d.mission.etat !== m.etat) { await rendrePage(); return; } // a new state: header and card again
-        const z = $("#mission-direct"); garderFocus(z, () => { z.innerHTML = missionDirect(d.mission); });
-      } catch { /* next try in 2 s */ }
-    }
-    suivreMissionDirect();
-  }, 2000);
-}
 document.addEventListener("click", (ev) => {
   if (!ev.target.closest("[data-mis-plus]") || !etat.missionVue) return;
   etat.missionJournalN = (etat.missionJournalN || 50) + 50;
-  const z = $("#mission-direct"); if (z) garderFocus(z, () => { z.innerHTML = missionDirect(etat.missionVue.mission); });
+  const z = $("#mission-journal"); if (z) garderFocus(z, () => { z.innerHTML = journalMission(etat.missionVue.mission); });
 });
 
 pages.serveurs = async () => {
@@ -7848,12 +7419,12 @@ const AUTORISATIONS_IA = () => [["manuel", t("Manual"), t("Asks you before every
   ["auto", t("Auto"), t("Runs reads and changes at once; asks you before a dangerous command (deleting, formatting, stopping, permissions, firewall…) or a command it does not know.")],
   ["modifications", t("Accept changes"), t("Writes its whole plan in the thread first, then applies it without waiting for you; asks you only when the plan holds a dangerous command or one it does not know.")],
   ["ignorer", t("Ignore permissions"), t("Does everything without asking you, dangerous commands included.")]];
-// M272: the same four modes for a mission's Servers lane (modeMission in Go: Manual keeps the plan rules)
-const PERMISSIONS_MISSION = () => [["manuel", t("Manual"), t("Reads the servers freely; asks your accord for each plan of changes.")],
+// M272: the same four modes for a project on its servers (Manual keeps the plan rules)
+const PERMISSIONS_PROJET = () => [["manuel", t("Manual"), t("Reads the servers freely; asks your accord for each plan of changes.")],
   ["auto", t("Auto"), t("Runs reads and changes on the servers at once; asks you before a dangerous command or a command it does not know.")],
   ["modifications", t("Accept changes"), t("Applies its plans of changes without waiting for you; asks you only when a plan holds a dangerous command or one it does not know.")],
   ["ignorer", t("Ignore permissions"), t("Does everything without asking you, dangerous commands and production deployments included, and never stops for a password.")]];
-// M272: the one permission selector (the terminal's assistant, a mission's Servers lane, Settings › Permissions);
+// M272: the one permission selector (the terminal's assistant, a project, Settings › Permissions);
 // defaut: the "" option (Settings' mode); distant: Ignore permissions is chosen in Athanor's window only
 function selecteurPermissions(id, mode, { defaut, desactive, distant } = {}) {
   const l = (defaut ? [["", defaut]] : []).concat(AUTORISATIONS_IA());

@@ -151,13 +151,14 @@ func modulesHub() []Module {
 	modulesMu.Lock()
 	m := append([]Module{}, modules...)
 	modulesMu.Unlock()
-	rang := func(x Module) int {
+	rang := map[string]int{} // Pages() once per module, not per comparison: the missions module reads its files there
+	for _, x := range m {
+		rang[x.ID()] = 1 << 30
 		if p := pagesModule(x); len(p) > 0 {
-			return p[0].Ordre
+			rang[x.ID()] = p[0].Ordre
 		}
-		return 1 << 30
 	}
-	sort.SliceStable(m, func(i, j int) bool { return rang(m[i]) < rang(m[j]) })
+	sort.SliceStable(m, func(i, j int) bool { return rang[m[i].ID()] < rang[m[j].ID()] })
 	return m
 }
 

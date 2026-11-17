@@ -85,7 +85,8 @@ func TestHubAPI(t *testing.T) {
 			dev = &v.Modules[i]
 		}
 	}
-	if len(v.Modules) < 4 || v.Modules[0].ID != "hub" || v.Modules[len(v.Modules)-1].ID != "reglages" {
+	menu := slices.DeleteFunc(slices.Clone(v.Modules), func(m ModuleVue) bool { return len(m.Pages) == 0 }) // no page (Old missions without a mission): not in the menu
+	if len(menu) < 4 || menu[0].ID != "hub" || menu[len(menu)-1].ID != "reglages" {
 		t.Fatalf("modules not in the menu's order (hub first, Settings last): %s", w.Body.String())
 	}
 	if dev == nil || dev.Nom != (moduleDev{}).Nom() || len(dev.Pages) == 0 || dev.Pages[0].Hash != "#suivi" || dev.Pages[0].Module != "dev" {
@@ -523,7 +524,7 @@ func TestTutoriels(t *testing.T) {
 			}
 		}
 	}
-	for _, id := range []string{"hub", "dev", "coffre", "email", "servers", "missions"} {
+	for _, id := range []string{"hub", "dev", "coffre", "email", "servers"} {
 		if n := tours[id]; n < 4 || n > 6 {
 			t.Fatalf("%s tour: %d steps, want 4 to 6 (%v)", id, n, tours)
 		}

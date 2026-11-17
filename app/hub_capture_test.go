@@ -174,42 +174,14 @@ func TestCaptureHub(t *testing.T) {
 			f.Envs["projet-00/dev"] = SanteEnv{Etat: "alerte", T: "2026-11-12T09:15:00Z", Problemes: []ProblemeSante{{Code: "certificat", Args: []any{10}}}}
 		})
 	})
-	// mission-carte-* (M156): the bakery's card, proposed (?on=1), with an open question (?question=1); removed otherwise
+	// anciennes-missions (M300): the old missions the read-only pages show (?on=1 the bakery's card, ?liste=1 four more, ?direct=1 capture06 and its journal); removed otherwise
 	t.Cleanup(func() { _ = os.RemoveAll(dossierMissions()) })
-	// mission-cloche-tel (M158): ?lancer=1 adds capture03, the same card whose orchestrator asks to launch it
 	// mission-pause-* (M172): Resume starts the project's pilot, Pause and Stop stop it; none in the screenshots' kit
 	demarrer, arreter := demarrerPiloteProjet, arreterPiloteProjet
 	demarrerPiloteProjet = func(*Serveur, Projet) (string, error) { return "", nil }
 	arreterPiloteProjet = func(*Serveur, Projet) error { return nil }
 	t.Cleanup(func() { demarrerPiloteProjet, arreterPiloteProjet = demarrer, arreter })
 	mux.HandleFunc("POST /test/mission", func(w http.ResponseWriter, r *http.Request) {
-		s.fermerLancementMission("capture03", "hub", "refuser", "capture") // never left pending for the next screenshots
-		enAttente, _ := s.approbations.Liste()
-		for _, x := range enAttente { // mission-accord-tel's prod accord neither
-			if x.Mission == "capture06" && x.Etat == "attente" {
-				s.refuserAccordMission(x.ID, "hub", "capture")
-			}
-		}
-		// M172: the follower Resume started ends before capture06 comes back
-		if _, suivie := suivisMission.Load("capture06"); suivie {
-			_, _ = modifierMission("capture06", func(m *Mission) error { m.Etat = "arretee"; return nil })
-			for i := 0; i < 80; i++ {
-				if _, ok := suivisMission.Load("capture06"); !ok {
-					break
-				}
-				time.Sleep(100 * time.Millisecond)
-			}
-		}
-		if f := lireSante(); f.Envs["projet-01/prod"].Etat != "" { // mission-incident-* (M172): its incident, gone with its taking over
-			modifierSante(func(f *fichierSante) {
-				delete(f.Envs, "projet-01/prod")
-				for k := range f.Mains {
-					if strings.HasPrefix(k, "sante-projet-01/prod") {
-						delete(f.Mains, k)
-					}
-				}
-			})
-		}
 		_ = os.RemoveAll(dossierMissions())
 		_ = os.Remove(filepath.Join(dossierTaches("c0ffee02"), "7a5c0e11d2b4.json")) // ?liste=1's task
 		_ = os.Remove(filepath.Join(dossierTaches("c0ffee01"), "9b1d3e5f7a20.json")) // and capture06's
@@ -225,9 +197,6 @@ func TestCaptureHub(t *testing.T) {
 			Acces: []AccesCarte{{Entree: "CLOUDFLARE_API_TOKEN", Pour: "boulangerie-martin/prod"}, {Entree: "SSH_VPS_PROD", Pour: "c0ffee01"},
 				{Entree: "STRIPE_SECRET_KEY", Pour: "boulangerie-martin"}, {Entree: "SMTP_PASSWORD", Pour: "boulangerie-martin"}},
 			JalonsEstimes: 8}
-		if r.URL.Query().Get("studio") != "" { // M248 (mission-carte-studio-*): a project alone, no server linked
-			c.Envs, c.Serveurs, c.Acces = nil, BriefCarte{}, c.Acces[2:]
-		}
 		if err := validerCarte(&c, ctx); err != nil {
 			http.Error(w, err.Error(), 500)
 			return
@@ -237,46 +206,8 @@ func TestCaptureHub(t *testing.T) {
 		m := Mission{ID: "capture01", Phrase: "Un site vitrine pour la boulangerie Martin sur @VPS production, dev protégée, prod sur boulangerie-martin.fr",
 			Mentions: Mentions{Serveurs: []string{"c0ffee01"}, Nouveau: true}, Etat: "proposee", Carte: b, Politique: "prod",
 			Voies: []VoieMission{}, Questions: []QuestionMission{}, Historique: []EvenementMission{{T: cree, Etat: "proposee"}}, Cree: cree}
-		if r.URL.Query().Get("question") != "" {
-			m.Questions = append(m.Questions, QuestionMission{ID: "q1", Texte: "Quel serveur pour l'environnement de dev ?", Choix: []string{"Home server", "VPS production"}, Cree: cree})
-			if r.URL.Query().Get("long") != "" { // mission-question-tel (B90): a choice longer than a phone's line
-				m.Questions[0].Choix = append(m.Questions[0].Choix, "autre domaine très long qui ne tient pas sur une ligne")
-			}
-		}
 		if err := enregistrerMission(m); err != nil {
 			http.Error(w, err.Error(), 500)
-		}
-		if r.URL.Query().Get("lancer") != "" {
-			m.ID, m.Questions = "capture03", []QuestionMission{}
-			if err := enregistrerMission(m); err != nil {
-				http.Error(w, err.Error(), 500)
-				return
-			}
-			if _, err := outilLancerMission(s, SessionHub{Mission: m.ID, Agent: agentOrchestrateur}, json.RawMessage(`{"id":"capture03"}`)); err != nil {
-				http.Error(w, err.Error(), 500)
-			}
-		}
-		// mission-echec-* (M267): ?echec=1, capture07 alone, its launch stopped at a vault key (M265's case), its card changeable
-		if r.URL.Query().Get("echec") != "" {
-			c7 := CarteMission{Titre: "Site de démonstration de la boulangerie", Projet: ProjetCarte{Nom: "boulangerie-demo", Nouveau: true},
-				Dev:      BriefCarte{Brief: "Une page d'accueil, les horaires et les pains du jour."},
-				Envs:     []EnvCarte{{Nom: "site", URL: "https://demo.boulangerie-martin.fr", Serveurs: []string{"c0ffee02"}}},
-				Serveurs: BriefCarte{Brief: "Nom DNS chez Cloudflare, certificat et proxy."},
-				Acces:    []AccesCarte{{Entree: "CLOUDFLARE_API_TOKEN", Pour: "c0ffee02"}}, JalonsEstimes: 3}
-			if err := validerCarte(&c7, ctx); err != nil {
-				http.Error(w, err.Error(), 500)
-				return
-			}
-			b7, _ := json.Marshal(calculerCarte(c7, "prod", ctx))
-			m7 := Mission{ID: "capture07", Phrase: "Mettre la démo de la boulangerie en ligne sur @Home server avec la clé Cloudflare", Etat: "echec", Carte: b7, Politique: "prod",
-				Voies: []VoieMission{}, Questions: []QuestionMission{}, Cree: "2026-11-12T09:00:00Z",
-				Historique: []EvenementMission{{T: "2026-11-12T09:01:00Z", Etat: "proposee"}, {T: "2026-11-12T09:02:00Z", Etat: "lancee", Detail: "hub"},
-					{T: "2026-11-12T09:02:01Z", Etat: "echec", Detail: "giving CLOUDFLARE_API_TOKEN: Unknown environment for this project",
-						Message: &MessageMoteur{Cle: "giving {0}: {1}", Args: []any{"CLOUDFLARE_API_TOKEN", &MessageMoteur{Cle: "Unknown environment for this project"}}}}}}
-			if err := enregistrerMission(m7); err != nil {
-				http.Error(w, err.Error(), 500)
-				return
-			}
 		}
 		// missions-* (M159): ?liste=1 adds missions launched (a project's pilot and a Servers task waiting for the
 		// owner), finished, failed and cancelled, older than the bakery's
@@ -349,68 +280,13 @@ func TestCaptureHub(t *testing.T) {
 				if x.ID == "capture06" && !direct || x.ID != "capture06" && !liste {
 					continue
 				}
-				// M172: ?refus=1, the prod accord refused (Ask again); ?incident=1, the prod deployed then red (P6)
-				if x.ID == "capture06" && r.URL.Query().Get("refus") != "" {
-					x.Relais = &RelaisMission{Etape: "accord_prod", Commit: x.Relais.Commit, DeploiementDev: "d16", Accord: "a9"}
-					x.Journal = append(slices.Clone(x.Journal), EntreeJournal{ID: "accord:a9:refusee", T: heure.Add(4 * time.Minute).Format(formatCree),
-						Cle: "Accord not given ({2}): {0} ({1})", Params: []string{"deploiement", "prod", "refusee"}, Niveau: "attention"})
-				}
-				// M249: ?prepa=attente, the Servers lane waits for the project's plan; ?prepa=lancee, it has just started
-				switch q := r.URL.Query().Get("prepa"); {
-				case x.ID != "capture06" || q == "":
-				case q == "attente":
-					x.Voies = []VoieMission{x.Voies[0], {Module: "servers", Etat: "attente_plan", Env: "projet-01/prod"}}
-				case q == "fige": // M267: its task prepares prod: that environment's servers frozen on the card
-					x.Voies = []VoieMission{x.Voies[0], {Module: "servers", Ref: tache6.ID, Etat: "preparation", Env: "projet-01/prod"}}
-				default:
-					x.Journal = append(slices.Clone(x.Journal), EntreeJournal{ID: "prep:projet-01/prod", T: heure.Add(4 * time.Minute).Format(formatCree),
-						Cle: "The plan is ready: the Servers lane prepares {0}", Params: []string{"prod"}, Niveau: "info"})
-				}
-				// M251: ?etat=arret_demande|en_pause|arretee, capture06 stopping, paused or stopped (no follower: it stays so)
-				if e := r.URL.Query().Get("etat"); x.ID == "capture06" && e != "" {
-					x.Etat = e
-				}
-				if x.ID == "capture06" && r.URL.Query().Get("incident") != "" {
-					x.Relais = &RelaisMission{Etape: "prod_deploye", Commit: x.Relais.Commit, DeploiementDev: "d16", DeploiementProd: "p1"}
-					x.Journal = append(slices.Clone(x.Journal), EntreeJournal{ID: "incident:p1", T: heure.Add(4 * time.Minute).Format(formatCree),
-						Cle: "Production incident on {0}: retry, go back to the previous version or take over", Params: []string{"projet-01.fr"}, Niveau: "erreur"})
-					echec := &VerifDeploiement{OK: false, Problemes: []string{"statut"}, HTTP: ResultatHTTP{URL: "https://projet-01.fr", Statut: 502}, T: "2026-11-12T09:15:00Z"}
-					modifierSante(func(f *fichierSante) {
-						f.Envs["projet-01/prod"] = SanteEnv{Etat: "incident", Rouges: 2, RougeDepuis: "2026-11-12T09:00:00Z", T: "2026-11-12T09:15:00Z", Verification: echec,
-							Problemes: []ProblemeSante{{Code: "verif", Rouge: true}}}
-					})
-				}
 				x.Mentions, x.Questions = Mentions{Projets: []string{}, Serveurs: []string{}, Cles: []string{}}, []QuestionMission{}
 				if err := enregistrerMission(x); err != nil {
 					http.Error(w, err.Error(), 500)
 					return
 				}
-				// mission-accord-tel (M175, P7): ?accord=1, capture06's prod accord pending, as the relay asks it
-				if x.ID == "capture06" && r.URL.Query().Get("accord") != "" {
-					sha := x.Relais.Commit
-					x.Relais = &RelaisMission{Etape: "accord_prod", Commit: sha, DeploiementDev: "d16"}
-					y, err := s.demanderApprobation(Approbation{Projet: "projet-01", Env: "prod", Mission: x.ID, Agent: "relais", Action: actionDeploiement,
-						Raison: "mission " + x.ID + ": commit " + sha + " → projet-01.fr",
-						Details: map[string]string{"mission": x.ID, "empreinte": empreinteCarte(x), "sha": sha, "commit": shaCourt(sha), "env": "prod", "url": "https://projet-01.fr",
-							"hote": "projet-01.fr", "serveurs": "VPS production", "avant": "3b8e0d2", "commits": "3",
-							"changements": "M4: envoi de l'e-mail de contact; M3: formulaire de contact; M2: page Contact dans le menu"}})
-					if err != nil {
-						http.Error(w, err.Error(), 500)
-						return
-					}
-					x.Relais.Accord = y.ID
-					if err := enregistrerMission(x); err != nil {
-						http.Error(w, err.Error(), 500)
-						return
-					}
-				}
 			}
 		}
-	})
-	// mission-direct-clair (M171): a new journal entry of capture06, shown by the live page within 2 s
-	mux.HandleFunc("POST /test/mission-journal", func(w http.ResponseWriter, r *http.Request) {
-		now := time.Now()
-		s.noterJournalMission("capture06", s.entreeJournal("test:"+now.UTC().Format(formatCree), now, "attention", "A Servers plan on {0} waits for your accord", "VPS production"))
 	})
 	// plan-serveur-* (M91): two Servers plans to decide, created after the appr-* screenshots so their counts stay
 	mux.HandleFunc("POST /test/plans", func(w http.ResponseWriter, r *http.Request) {

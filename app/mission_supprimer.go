@@ -317,7 +317,7 @@ func (s *Serveur) supprimerMission(id, qui string, o OptionsSuppression) ([]stri
 	}
 	verrouMissions.Lock() // a follower or a tool writing it now finds it gone (modifierMission never brings it back)
 	f := filepath.Join(dossierMissions(), id+".json")
-	err = os.Remove(f)
+	err = retirerFichier(f) // Windows: the module reading it now (lireMissions at each hub request) holds it for a moment
 	_ = os.Remove(f + ".ancien")
 	_ = os.RemoveAll(dossierSessionMission(id))
 	verrouMissions.Unlock()

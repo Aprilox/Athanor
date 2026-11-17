@@ -398,6 +398,28 @@ func TestMissionSuppression(t *testing.T) {
 			t.Fatal("wrong missions emptied")
 		}
 	})
+
+	// M300: the module reads the mission files at each hub request; Windows refuses to remove a file being read
+	t.Run("lue pendant la suppression", func(t *testing.T) {
+		for range 30 {
+			id, fin := stockee(t, "terminee", nil), make(chan struct{})
+			go func() {
+				for {
+					select {
+					case <-fin:
+						return
+					default:
+						_, _ = lireMission(id)
+					}
+				}
+			}()
+			_, err := s.supprimerMission(id, "test", OptionsSuppression{})
+			close(fin)
+			if err != nil {
+				t.Fatalf("deleted while read: %v", err)
+			}
+		}
+	})
 }
 
 // attendreFinTaches: every running Servers task's goroutine ended (they must not outlive a test).

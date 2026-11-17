@@ -1,15 +1,22 @@
 package main
 
-// The Missions module: its menu page (between Projects and Studio) and home tile; the API is in mission_api.go.
+// The Missions module (M300): missions are no longer created; the ones already on disk are read at #missions
+// ("Old missions"). No mission file: no menu entry and no home tile. The API is in mission_api.go.
 
 func init() { enregistrerModule(moduleMissions{}) }
 
 type moduleMissions struct{}
 
+// nbMissions: the missions the page lists (a damaged file is not one: it would keep an empty module).
+func nbMissions() int { return len(lireMissions()) }
+
 func (moduleMissions) ID() string  { return "missions" }
-func (moduleMissions) Nom() string { return "Missions" }
+func (moduleMissions) Nom() string { return "Old missions" }
 func (moduleMissions) Pages() []PageModule {
-	return []PageModule{{Hash: "#missions", Ordre: 10, Icone: "missions", Libelle: "Missions", Fils: []string{"#mission"}}}
+	if nbMissions() == 0 {
+		return nil
+	}
+	return []PageModule{{Hash: "#missions", Ordre: 10, Icone: "missions", Libelle: "Old missions", Fils: []string{"#mission"}}}
 }
 
 // Elements: a mission whose orchestrator asks the owner a question is in the bell until it is answered, as are a
@@ -43,40 +50,13 @@ func (moduleMissions) Elements(s *Serveur) []ElementHub {
 	return out
 }
 
-// Tutoriel: the Missions page's 5 steps (no mission yet: the bubble in the middle for the lanes).
-func (moduleMissions) Tutoriel() []EtapeTutoriel {
-	return []EtapeTutoriel{
-		{Titre: "One sentence is enough", Texte: "Say what you want in the bar of the home page, for example “Put @my-shop online at shop.example.com”. The orchestrator answers with a mission card.", Cible: ".missions .cof-tete"},
-		{Titre: "The card first", Texte: "The card says what will be built and deployed, what will be touched and what will ask for your accord. Change it or refuse it: nothing starts before you press Launch.", Cible: ".mis-liste, .missions .vide"},
-		{Titre: "Lanes", Texte: "A launched mission runs in lanes: the project's pilot builds, the Servers agent prepares the environments, then the DNS names and HTTPS. Click a mission to see each lane, its state and its links.", Cible: ".mis-liste"},
-		{Titre: "Your accord", Texte: "A plan, a deployment to prod or the infra vault waits for you: the bell and your phone ask, and you answer from there. Pause and Stop are at the top of the mission's page.", Cible: "[data-notifs]"},
-		{Titre: "Find it again", Texte: "This tutorial stays in the “?”, with the guide “Launch a mission”.", Cible: ".btn-guide"},
-	}
-}
+func (moduleMissions) Tutoriel() []EtapeTutoriel { return nil }
 
-// Resume: missions in progress (being prepared or launched), to launch (proposed or accepted), done.
+// Resume: how many old missions there are; none = no tile.
 func (moduleMissions) Resume(*Serveur) ResumeModule {
-	enCours, aLancer, finies := 0, 0, 0
-	for _, m := range lireMissions() {
-		switch m.Etat {
-		case "preparation", "lancee":
-			enCours++
-		case "proposee", "acceptee":
-			aLancer++
-		case "terminee":
-			finies++
-		}
+	n := nbMissions()
+	if n == 0 {
+		return ResumeModule{Etat: "inactif"}
 	}
-	r := ResumeModule{Stats: []StatModule{
-		{Cle: "In progress", Valeur: enCours, Page: "#missions"},
-		{Cle: "To launch", Valeur: aLancer, Page: "#missions"},
-		{Cle: "Finished", Valeur: finies, Page: "#missions"},
-	}, Etat: "inactif"}
-	switch {
-	case aLancer > 0:
-		r.Etat = "attention"
-	case enCours+finies > 0:
-		r.Etat = "ok"
-	}
-	return r
+	return ResumeModule{Stats: []StatModule{{Cle: "Old missions", Valeur: n, Page: "#missions"}}, Etat: "inactif"}
 }
