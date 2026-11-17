@@ -486,6 +486,7 @@ func (s *Serveur) apiGestion(w http.ResponseWriter, r *http.Request) {
 		delete(s.dernierActif, p.Nom)
 		delete(s.relancer, p.Nom)
 		s.mu.Unlock()
+		deplacerReglagesProjet(p.Nom, nouveau)
 		if s.acces != nil {
 			_ = s.acces.RenommerProjet(p.Nom, nouveau)
 		}
@@ -752,6 +753,7 @@ func (s *Serveur) retirerProjet(p Projet) error {
 	delete(s.dernierActif, p.Nom)
 	delete(s.relancer, p.Nom)
 	s.mu.Unlock()
+	deplacerReglagesProjet(p.Nom, "")
 	if s.acces != nil {
 		s.oublierCleDeploiement(p.Nom) // the vault entry goes with the grants (the repository: oublierGitHub)
 		_ = s.acces.SupprimerProjet(p.Nom)

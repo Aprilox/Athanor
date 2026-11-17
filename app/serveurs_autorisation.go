@@ -18,6 +18,7 @@ import (
 	"errors"
 	"net/http"
 	"slices"
+	"strings"
 )
 
 var modesAutorisation = []string{"manuel", "auto", "modifications", "ignorer"}
@@ -63,13 +64,23 @@ func modeAutorisation(x SessionHub, id string) string {
 	}
 	t.mu.Lock()
 	panneau := t.t.Panneau && t.hache == x.Hache // the critic's or the verifier's session runs nothing
-	propre := t.hache == x.Hache
+	propre, env := t.hache == x.Hache, t.t.Env
 	t.mu.Unlock()
 	if !panneau {
-		if propre && x.Mission != "" { // M271: a mission's Servers task follows the mission's mode
-			return modeMission(cmp.Or(missionDeTache(x.Mission), x.Mission))
+		if !propre {
+			return ""
 		}
-		return ""
+		// M280: a task for a project follows the project's mode. Its own choice comes first; without one, a mission's
+		// Servers task still follows its mission (M271, until the missions leave in M302)
+		projet, _, _ := strings.Cut(env, "/")
+		mission := cmp.Or(missionDeTache(x.Mission), x.Mission)
+		if _, err := lireMission(mission); err == nil && mission != "" && (projet == "" || reglagePropre(lireConfig(), projet, "permission") == "") {
+			return modeMission(mission)
+		}
+		if m := modeProjet(projet); projet != "" && m != "manuel" {
+			return m
+		}
+		return "" // Manual: the plan rules of serveurs_plans.go, as for a mission
 	}
 	srv, _ := serveurProd(id)
 	return modeServeur(srv)
@@ -96,6 +107,10 @@ func modeServeur(srv ServeurInventaire) string {
 	}
 	return "manuel"
 }
+
+// modeProjet (M280): the mode of a project's tasks: its own setting, else Settings › Permissions (the "missions" use,
+// shown as Projects), else manuel.
+func modeProjet(projet string) string { return reglageProjet(projet, "permission") }
 
 // modeMission (M271): the mode of mission id's Servers lane, its card's or else Settings › Permissions (missions);
 // "" for Manual or none: the plan rules of serveurs_plans.go (reads run, each change in a plan the owner accepts).

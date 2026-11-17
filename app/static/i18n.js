@@ -49,6 +49,9 @@ const PREFIXES = ["no Studio lane: the vault entries are given", "no Studio lane
 
 const DICT = {
 fr: {
+  "Project setting saved.": "Réglage du projet enregistré.",
+  "This value is not allowed for this project setting": "Cette valeur n'est pas admise pour ce réglage du projet",
+  "Unknown project setting": "Réglage de projet inconnu",
   "no Studio lane: the vault entries are given": "pas de voie Studio : les entrées du coffre sont données",
   "no Studio lane: the Servers tasks are done": "pas de voie Studio : les tâches Serveurs sont finies",
   "no environment on the card: the Studio lane finished the request": "aucun environnement sur la carte : la voie Studio a fini la demande",
@@ -824,6 +827,9 @@ fr: {
   "Run a command": "Lancer une commande", "The task failed without giving a reason.": "La tâche a échoué sans donner de raison.",
 },
 es: {
+  "Project setting saved.": "Ajuste del proyecto guardado.",
+  "This value is not allowed for this project setting": "Este valor no se admite para este ajuste del proyecto",
+  "Unknown project setting": "Ajuste de proyecto desconocido",
   "no Studio lane: the vault entries are given": "sin vía Estudio: las entradas de la caja fuerte están dadas",
   "no Studio lane: the Servers tasks are done": "sin vía Estudio: las tareas de Servidores están hechas",
   "no environment on the card: the Studio lane finished the request": "ningún entorno en la tarjeta: la vía Estudio terminó la solicitud",
@@ -1567,6 +1573,9 @@ es: {
   "Run a command": "Ejecutar un comando", "The task failed without giving a reason.": "La tarea falló sin dar un motivo.",
 },
 de: {
+  "Project setting saved.": "Projekteinstellung gespeichert.",
+  "This value is not allowed for this project setting": "Dieser Wert ist für diese Projekteinstellung nicht zulässig",
+  "Unknown project setting": "Unbekannte Projekteinstellung",
   "no Studio lane: the vault entries are given": "keine Studio-Spur: die Tresoreinträge sind übergeben",
   "no Studio lane: the Servers tasks are done": "keine Studio-Spur: die Server-Aufgaben sind erledigt",
   "no environment on the card: the Studio lane finished the request": "keine Umgebung auf der Karte: die Studio-Spur hat die Anfrage beendet",
@@ -2304,6 +2313,9 @@ de: {
   "Run a command": "Einen Befehl ausführen", "The task failed without giving a reason.": "Die Aufgabe ist ohne Angabe eines Grundes fehlgeschlagen.",
 },
 it: {
+  "Project setting saved.": "Impostazione del progetto salvata.",
+  "This value is not allowed for this project setting": "Questo valore non è ammesso per questa impostazione del progetto",
+  "Unknown project setting": "Impostazione di progetto sconosciuta",
   "no Studio lane: the vault entries are given": "nessuna corsia Studio: le voci della cassaforte sono date",
   "no Studio lane: the Servers tasks are done": "nessuna corsia Studio: i compiti Server sono finiti",
   "no environment on the card: the Studio lane finished the request": "nessun ambiente sulla scheda: la corsia Studio ha finito la richiesta",
@@ -3041,6 +3053,9 @@ it: {
   "Run a command": "Eseguire un comando", "The task failed without giving a reason.": "L'attività non è riuscita senza indicare un motivo.",
 },
 pt: {
+  "Project setting saved.": "Definição do projeto guardada.",
+  "This value is not allowed for this project setting": "Este valor não é permitido para esta definição do projeto",
+  "Unknown project setting": "Definição de projeto desconhecida",
   "no Studio lane: the vault entries are given": "sem via Estúdio: as entradas do cofre foram dadas",
   "no Studio lane: the Servers tasks are done": "sem via Estúdio: as tarefas de Servidores estão feitas",
   "no environment on the card: the Studio lane finished the request": "nenhum ambiente no cartão: a via Estúdio terminou o pedido",
