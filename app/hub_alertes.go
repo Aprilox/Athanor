@@ -87,16 +87,16 @@ func alertesApprobations(l []Approbation) []AlerteHub {
 		if x.Etat != "attente" {
 			continue
 		}
-		raison, args := "Approval requested ({0}, {1}): {2}", []any{x.Action, x.Env, x.Raison}
+		raison, args := "Approval requested ({0}): {1}", []any{x.Action, x.Raison}
 		if x.Action == "demander_acces" {
-			raison, args = "Access requested ({0}): {1}", []any{x.Env, x.Raison}
+			raison, args = "Access requested: {0}", []any{x.Raison}
 		}
-		toujours := "Never ask again for this project and environment"
+		toujours := "Never ask again for this project"
 		if x.Action == actionPlanServeur {
-			raison, args, toujours = "Plan for {0} ({1}): {2}", []any{cmp.Or(x.Details["nom"], x.Details["serveur"]), x.Env, x.Raison}, "Never ask again for this server"
+			raison, args, toujours = "Plan for {0}: {1}", []any{cmp.Or(x.Details["nom"], x.Details["serveur"]), x.Raison}, "Never ask again for this server"
 		}
 		if x.Action == actionDeploiement {
-			raison, args = "Deploy {0} to {1}? Commit {2}", []any{x.Details["hote"], x.Env, cmp.Or(x.Details["commit"], x.Details["sha"])}
+			raison, args = "Deploy {0}? Commit {1}", []any{x.Details["hote"], cmp.Or(x.Details["commit"], x.Details["sha"])}
 			if x.Production {
 				raison, args = "Deploy {0} to production? Commit {1}", []any{x.Details["hote"], cmp.Or(x.Details["commit"], x.Details["sha"])}
 			}

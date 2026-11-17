@@ -1,7 +1,7 @@
 package main
 
 // The terminal interface: the agents' pending approvals, first in the For you page's list (every project), as the
-// web's sectionApprobations: what is asked (environments, prod, ticked accesses, short SHA, a Servers plan step by
+// web's sectionApprobations: what is asked (prod, ticked accesses, short SHA, a Servers plan step by
 // step), y accepts, r refuses, t never asks again (only where the web offers it), through the same
 // POST /api/hub/approbations and the same proof (Athanor's password typed when the server asks for it); ! is the
 // emergency stop, confirmed.
@@ -68,7 +68,7 @@ func (a *appTUI) titreApprTUI(x Approbation) string {
 		if x.Production {
 			return t("Deploy {0} to production?", d["hote"])
 		}
-		return t("Deploy {0} to {1}?", d["hote"], x.Env)
+		return t("Deploy {0}?", d["hote"])
 	case "demander_acces":
 		return x.Projet + " · " + t("access requested")
 	}
@@ -88,13 +88,13 @@ func (a *appTUI) toujoursApprTUI(x Approbation) string {
 			return ""
 		}
 	}
-	return a.t("Never ask again for this project and environment")
+	return a.t("Never ask again for this project")
 }
 
-// ligneApprTUI: an approval in For you's list: its title, then its environment, project and expiry.
+// ligneApprTUI: an approval in For you's list: its title, then its project and expiry.
 func (a *appTUI) ligneApprTUI(x Approbation, f couleurT) (string, string, styleT, styleT) {
 	p := a.pal
-	bas := []string{x.Env, x.Projet}
+	bas := []string{x.Projet}
 	if d, err := time.Parse(time.RFC3339Nano, x.Expire); err == nil {
 		bas = append(bas, a.t("expires {0}", d.Local().Format("02/01 15:04")))
 	}
@@ -117,7 +117,7 @@ func (a *appTUI) lignesApprTUI(x Approbation) []ligneCouleur {
 	corps := []string{x.Raison}
 	switch x.Action {
 	case actionPlanServeur:
-		meta = append(meta, t("Server role: {0}", x.Env), tuiPluriel(t, firstNonEmpty(d["etapes"], "?"), "1 step", "{0} steps"))
+		meta = append(meta, tuiPluriel(t, firstNonEmpty(d["etapes"], "?"), "1 step", "{0} steps"))
 		corps = nil
 	case actionDeploiement:
 		meta = append(meta, x.Projet, t("Commit {0}", shaCourt(firstNonEmpty(d["commit"], d["sha"]))))
@@ -245,7 +245,7 @@ func (a *appTUI) raccourcisApprTUI(x Approbation) []raccourci {
 }
 
 // deciderApprTUI: y, r or t on the selected approval: "never ask again" confirmed, a hardening that leaves only
-// Athanor's key acknowledged, an access's vault key, environment and variable chosen, then Athanor's password
+// Athanor's key acknowledged, an access's vault key and variable chosen, then Athanor's password
 // when the server asks for it; the server checks it all again (the proof, the card's print, I6).
 func (a *appTUI) deciderApprTUI(decision string) {
 	x := a.apprChoisie()
@@ -271,14 +271,13 @@ func (a *appTUI) deciderApprTUI(decision string) {
 			a.annoncer(t("Accepted: the agent is told and carries on."), false)
 		}
 	}
-	// the last step: the fields the decision needs (an access's environment and variable, the password)
+	// the last step: the fields the decision needs (an access's variable, the password)
 	envoyer := func() {
 		var champs []champTUI
 		if acces {
-			env, v := &saisieT{}, &saisieT{}
-			env.mettreTexte(ap.Env)
+			v := &saisieT{}
 			v.mettreTexte(ap.Details["nom"])
-			champs = append(champs, champTUI{lib: t("Environment"), h: 1, s: env}, champTUI{lib: t("Variable name"), h: 1, s: v})
+			champs = append(champs, champTUI{lib: t("Variable name"), h: 1, s: v})
 		}
 		if mdp {
 			champs = append(champs, champTUI{lib: t("Athanor's password"), h: 1, s: &saisieT{masque: true}})
@@ -289,7 +288,7 @@ func (a *appTUI) deciderApprTUI(decision string) {
 		}
 		a.formulaire(a.titreApprTUI(ap), t(aideFormulaireLigne), champs, func(v []string) {
 			if acces {
-				corps["env"], corps["variable"] = strings.TrimSpace(v[0]), strings.TrimSpace(v[1])
+				corps["variable"] = strings.TrimSpace(v[0])
 			}
 			if mdp {
 				corps["mot_de_passe"] = v[len(v)-1]
@@ -349,7 +348,7 @@ func (a *appTUI) deciderApprTUI(decision string) {
 		seule()
 		return
 	}
-	texte := t("Accepted, and the next “{0}” requests of {1} in {2} are accepted without asking you.", ap.Action, ap.Projet, ap.Env)
+	texte := t("Accepted, and the next “{0}” requests of {1} are accepted without asking you.", ap.Action, ap.Projet)
 	if ap.Action == actionPlanServeur {
 		texte = t("Accepted, and the next plans of {0} on {1} that only change things (nothing destructive) are accepted without asking you.", ap.Projet, firstNonEmpty(ap.Details["nom"], ap.Details["serveur"]))
 	}

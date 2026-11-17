@@ -461,11 +461,11 @@ func (s *Serveur) messageApprobation(x Approbation) MessagePush {
 	}
 	texte := x.Raison
 	if n := x.Details["nom"]; n != "" {
-		texte = n + " (" + x.Env + ") · " + texte
+		texte = n + " · " + texte
 	}
 	titre := fmt.Sprintf(s.textePush("appr_titre"), moduleDev{}.Nom(), x.Projet, quoi)
 	if x.Action == actionDeploiement { // "Deploy martin.fr to production?", the project and commit below
-		titre, texte = fmt.Sprintf(s.textePush("appr_deploi"), x.Details["hote"], x.Env), x.Projet+" · commit "+cmp.Or(x.Details["commit"], x.Details["sha"])
+		titre, texte = fmt.Sprintf(s.textePush("appr_deploi"), x.Details["hote"]), x.Projet+" · commit "+cmp.Or(x.Details["commit"], x.Details["sha"])
 		if x.Production {
 			titre = fmt.Sprintf(s.textePush("appr_prod"), x.Details["hote"])
 		}
@@ -547,7 +547,10 @@ func (s *Serveur) apiApprobationDecider(w http.ResponseWriter, r *http.Request) 
 		s.erreur(w, code, err.Error())
 	}
 	if c.Decision == "redemander" { // B52: Ask again only lowers what agents get, so no password for it
-		l, err := s.approbations.RetirerRegles(func(x RegleAccord) bool { return x == RegleAccord{c.Projet, c.Env, c.Action, c.Entree, c.Nom} })
+		// no env named: the rule of this project and action whatever its (older) environment
+		l, err := s.approbations.RetirerRegles(func(x RegleAccord) bool {
+			return x == RegleAccord{c.Projet, cmp.Or(c.Env, x.Env), c.Action, c.Entree, c.Nom}
+		})
 		switch {
 		case err != nil:
 			refus(http.StatusInternalServerError, err)

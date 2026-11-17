@@ -314,6 +314,12 @@ func (s *Serveur) incidentsCourants(f fichierSante) []incidentLieu {
 	return out
 }
 
+// siteDe: the address an alert names for a project's deployment, the project's name while it has none.
+func (s *Serveur) siteDe(projet, env string) string {
+	e := s.acces.Environnements(projet)[env]
+	return cmp.Or(hoteEnv(&e), projet)
+}
+
 // alertesIncidents: the bell rings for each incident the owner has not taken over, with its three actions;
 // in prod, Retry and Go back ask for the owner's accord (the page asks for the password).
 func (s *Serveur) alertesIncidents() []AlerteHub {
@@ -332,7 +338,7 @@ func (s *Serveur) alertesIncidents() []AlerteHub {
 		}
 		h := sha256.Sum256([]byte("incident\x00" + x.Projet + "\x00" + x.Cle))
 		out = append(out, AlerteHub{Empreinte: hex.EncodeToString(h[:12]), Module: "servers", Element: x.Projet + "/" + x.Env, Titre: x.Projet,
-			Raison: "The {0} environment is in trouble. What failed: {1}. What was tried: {2}.", Args: []any{x.Env, echecLisible(s, x), x.Tente},
+			Raison: "The site {0} is in trouble. What failed: {1}. What was tried: {2}.", Args: []any{s.siteDe(x.Projet, x.Env), echecLisible(s, x), x.Tente},
 			Actions: actions})
 	}
 	return out

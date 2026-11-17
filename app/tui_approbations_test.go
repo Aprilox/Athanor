@@ -11,7 +11,7 @@ import (
 )
 
 // TestTUIApprobations: For you's approvals in the terminal against a server: the card of each (short SHA, URL,
-// environments, prod, ticked accesses), y/r/t through POST /api/hub/approbations with Athanor's password (none
+// prod, ticked accesses), y/r/t through POST /api/hub/approbations with Athanor's password (none
 // refused, a wrong one refused, the right one accepted), a launch whose card changed since it was asked refused
 // by its print, "never ask again" only where the web offers it, no witness value ever on screen, then ! the
 // emergency stop, confirmed.
@@ -122,7 +122,7 @@ func TestTUIApprobations(t *testing.T) {
 	a.form.champs[0].s.mettreTexte(mdpPreuveTest)
 	taper(a, "\r")
 	attendreTUI(t, a, etat(prod.ID, "acceptee"))
-	// an access: the vault's key chosen (its name only), the environment and variable proposed, then the password
+	// an access: the vault's key chosen (its name only), the variable proposed (no environment asked), then the password
 	a.derniere["approbations"] = time.Time{}
 	attendreTUI(t, a, func() bool { return a.form == nil && len(a.apprAttente()) == 1 })
 	choisir(acces.ID)
@@ -131,10 +131,10 @@ func TestTUIApprobations(t *testing.T) {
 	attendreTUI(t, a, func() bool { return a.dialogue != nil })
 	contient("vault keys", ecran(140, 40), "STRIPE_SECRET_KEY", a.t("Vault key (code)"))
 	taper(a, "\r")
-	if a.form == nil || len(a.form.champs) != 3 || a.form.champs[0].s.texte() != "dev" || a.form.champs[1].s.texte() != "STRIPE_SECRET_KEY" {
+	if a.form == nil || len(a.form.champs) != 2 || a.form.champs[0].s.texte() != "STRIPE_SECRET_KEY" {
 		t.Fatalf("access form: %+v", a.form)
 	}
-	a.form.champs[2].s.mettreTexte(mdpPreuveTest)
+	a.form.champs[1].s.mettreTexte(mdpPreuveTest)
 	_ = ecran(140, 40)
 	taper(a, "\x1bOQ") // F2: save (Enter goes to the next field)
 	attendreTUI(t, a, etat(acces.ID, "acceptee"))

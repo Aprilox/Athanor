@@ -115,7 +115,7 @@ func TestApprobationTelephone(t *testing.T) {
 	}
 	l, _ = s.approbations.Liste()
 	for _, a := range alertesApprobations(l) {
-		if a.Approbation.Action == actionPlanServeur && (a.Raison != "Plan for {0} ({1}): {2}" || fmt.Sprint(a.Args) != "[web-1 dev Mettre nginx à jour]" || len(a.Actions) != 3 || a.Actions[2].Libelle != "Never ask again for this server") {
+		if a.Approbation.Action == actionPlanServeur && (a.Raison != "Plan for {0}: {1}" || fmt.Sprint(a.Args) != "[web-1 Mettre nginx à jour]" || len(a.Actions) != 3 || a.Actions[2].Libelle != "Never ask again for this server") {
 			t.Fatalf("plan alert: %+v", a)
 		}
 	}

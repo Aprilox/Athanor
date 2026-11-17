@@ -110,7 +110,7 @@ func TestCaptureHub(t *testing.T) {
 	fournisseursCapture(t, s)
 	// the agents' pending approvals (cloche-*, appr-*): an access, a staging deploy, a prod one refused by the script
 	for _, a := range []Approbation{
-		{Projet: "projet-01", Env: "dev", Mission: "M4", Agent: "pilote", Action: "demander_acces", Details: map[string]string{"nom": "STRIPE_SECRET_KEY"},
+		{Projet: "projet-01", Env: "staging", Mission: "M4", Agent: "pilote", Action: "demander_acces", Details: map[string]string{"nom": "STRIPE_SECRET_KEY"},
 			Raison: "Le paiement de test du jalon M4 a besoin de la clé Stripe de test."},
 		{Projet: "projet-02", Env: "staging", Mission: "M9", Agent: "pilote", Action: actionDeploiement, Details: map[string]string{"commit": "4f2a9c1e8b7d60a3f5c2e9d14b8a7f60c3e2d1b9", "hote": "recette.boutique.fr", "serveurs": "c0ffee02"},
 			Raison: "commit 4f2a9c1e8b7d60a3f5c2e9d14b8a7f60c3e2d1b9 → recette.boutique.fr"},

@@ -144,7 +144,7 @@ func TestAlertesApprobations(t *testing.T) {
 		{ID: "a2", Projet: "boutique", Env: "prod", Action: "demander_deploiement", Raison: "v1", Etat: "refusee"},
 	}
 	al := alertesApprobations(l)
-	if len(al) != 1 || al[0].Empreinte != "appr-a1" || al[0].Approbation == nil || al[0].Raison != "Access requested ({0}): {1}" {
+	if len(al) != 1 || al[0].Empreinte != "appr-a1" || al[0].Approbation == nil || al[0].Raison != "Access requested: {0}" || len(al[0].Args) != 1 || al[0].Args[0] != "Stripe" {
 		t.Fatalf("alertes: %+v", al)
 	}
 	ids := []string{}

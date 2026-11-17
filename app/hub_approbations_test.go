@@ -142,8 +142,8 @@ func TestExigerAccordI6(t *testing.T) {
 	if _, attend, _ := s.exigerAccord(Approbation{Projet: "demo", Env: "prod", Agent: "pilote", Action: "deployer"}, false); !attend {
 		t.Error("a rule lifted a prod action")
 	}
-	// B52: Ask again removes only that rule (from a paired device too), then the wait is back
-	regle := map[string]string{"decision": "redemander", "projet": "demo", "env": "dev", "action": "vider_base"}
+	// B52: Ask again removes only that rule (from a paired device too), then the wait is back; no environment named
+	regle := map[string]string{"decision": "redemander", "projet": "demo", "action": "vider_base"}
 	if w := appelApprobation(t, s, "tel", regle); w.Code != 200 {
 		t.Fatalf("ask again: %d %s", w.Code, w.Body)
 	}
