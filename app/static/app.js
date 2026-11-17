@@ -2108,6 +2108,8 @@ function motMention(champ) {
 const LISTES_MENTIONS = {
   "accueil-texte": { liste: "accueil-liste", opt: "mention-opt", cle: "mentionListe", mot: motMention, pris: () => etat.accueilMentions || [], choisir: choisirMentionAccueil },
   "mis-res-q": { liste: "mis-res-liste", opt: "mis-res-opt", cle: "missionResListe", mot: (c) => ({ q: c.value.trim(), debut: 0 }), pris: ressourcesMission, type: () => (etat.missionRes || {}).type, choisir: ajouterRessourceMission },
+  "dep-srv-q": { liste: "dep-srv-liste", opt: "dep-srv-opt", cle: "depSrvListe", mot: (c) => ({ q: c.value.trim(), debut: 0 }), pris: () => dep.f.serveurs, type: () => "serveur", choisir: choisirDeploiement }, // M292: the Deployment tab
+  "dep-api-q": { liste: "dep-api-liste", opt: "dep-api-opt", cle: "depApiListe", mot: (c) => ({ q: c.value.trim(), debut: 0 }), pris: () => dep.f.apis, type: () => "api", choisir: choisirDeploiement },
   "cof-q": { filtrer: (q, cat) => filtrerCoffre(q, cat) }, // the vault page: its own cards are the list (every entry, the servers' keys too)
 };
 // M288: the owner's categories of API (GET /api/coffre/categories), read when a screen that filters by them opens
@@ -4508,6 +4510,79 @@ async function reordonner(fichier, sens) {
   await action(api("demandes/ordre", "POST", { ordre }));
   rendrePage();
 }
+
+// --- M292: the Deployment tab: the project's one deployment (server, address, API, plan, moment), saved by
+// POST /api/projets/{nom}/deploiement in any state of the project; its state and history come with M293
+const dep = { projet: "", f: null }; // f: the form as typed, kept until Save or Cancel
+const MOMENTS_DEPLOIEMENT = [["jalon", "After each milestone"], ["livraison", "At delivery"], ["", "Only when I ask"]];
+const pucesDeploiement = (cle) => dep.f[cle].map((m, i) => `<span class="puce-mention puce-${m.type}">${typeMention(m)}${h(m.nom)}${(etat.vue || {}).distant ? "" : `<button type="button" class="puce-x" data-dep-retirer="${cle}:${i}" aria-label="${h(t("Remove {0}", [m.nom]))}">×</button>`}</span>`).join("")
+  || `<span class="muet petit">${t(cle === "serveurs" ? "No server chosen yet." : "No API chosen yet.")}</span>`;
+const actionsDeploiement = () => `<button type="submit" class="btn btn-primaire"${dep.f.modifie ? "" : " disabled"}>${t("Save")}</button>${dep.f.modifie ? `<button type="button" class="btn" data-dep-annuler>${t("Cancel")}</button>` : ""}`;
+pages.deploiement = async () => {
+  const projet = (etat.vue && etat.vue.projet && etat.vue.projet.nom) || etat.projet;
+  if (!projet) return `<div class="vide">${t("Choose a project")}</div>`;
+  const distant = !!(etat.vue || {}).distant, chemin = "projets/" + encodeURIComponent(projet);
+  const [d, sv, c, rp] = await Promise.all([api(chemin + "/deploiement"), api("serveurs").catch(() => ({})), api("coffre").catch(() => ({})), api(chemin + "/reglages").catch(() => ({})), lireCategories()]);
+  const e = d.deploiement || {}, nom = (l, id) => ((l || []).find((x) => x.id === id) || {}).nom || id;
+  if (dep.projet !== projet || !dep.f || !dep.f.modifie) dep.f = { url: e.url || "", plan: e.plan || "", moment: e.moment || "", modifie: false, // the saved one, unless this project's form is being typed
+    serveurs: (e.serveurs || []).map((id) => ({ type: "serveur", ref: id, nom: nom(sv.serveurs, id) })), apis: (e.apis || []).map((id) => ({ type: "api", ref: id, nom: nom(c.entrees, id) })) };
+  dep.projet = projet;
+  const f = dep.f, dis = distant ? " disabled" : "", perm = (rp.reglages || []).find((r) => r.cle === "permission");
+  const moments = MOMENTS_DEPLOIEMENT.filter(([v]) => v || !e.moment); // "Only when I ask": an older project that already has it
+  return `<div class="deploiement"><form class="bloc" id="dep-form">
+    <h2>${t("Deployment")}</h2>
+    <p class="intro petit">${t((d.sites || {})[d.courant] ? "Where this project is online, and how. Athanor prepares the server from your plan, then deploys at the moment you choose." : "This project is not online yet. Choose a server and say how to put it online: Athanor prepares the server, then deploys at the moment you choose.")}</p>
+    ${distant ? `<p class="muet petit">${t("The deployment is changed from the computer.")}</p>` : ""}
+    <div class="reglage"><span class="nom-reglage" id="dep-srv-titre">${t("Server")}</span><div class="dep-champ">
+      <div class="ligne m0 mis-res-puces" id="dep-serveurs-puces" role="group" aria-labelledby="dep-srv-titre">${pucesDeploiement("serveurs")}</div>
+      ${distant ? "" : `<label for="dep-srv-q" class="petit">${t("Find a server")}</label>
+      <input type="text" id="dep-srv-q" autocomplete="off" spellcheck="false" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="dep-srv-liste">
+      <ul id="dep-srv-liste" class="liste-mentions mis-res-liste" role="listbox" aria-label="${h(t("Find a server"))}" hidden></ul>`}</div></div>
+    <div class="reglage"><label for="dep-url" class="nom-reglage">${t("Address")}</label><div>
+      <input type="text" inputmode="url" id="dep-url" value="${h(f.url)}" placeholder="https://app.example.com" autocomplete="off" spellcheck="false" aria-describedby="dep-url-aide"${dis}>
+      <p class="muet petit" id="dep-url-aide">${t("Where the project will answer. Leave it empty if it has no address yet.")}</p></div></div>
+    <div class="reglage"><span class="nom-reglage" id="dep-api-titre">${t("API")}</span><div class="dep-champ">
+      <div class="ligne m0 mis-res-puces" id="dep-apis-puces" role="group" aria-labelledby="dep-api-titre">${pucesDeploiement("apis")}</div>
+      ${distant ? "" : choixAPI("dep-api-q", "Find an API")}</div></div>
+    <div class="reglage"><label for="dep-plan" class="nom-reglage">${t("Plan")}</label><div>
+      <textarea id="dep-plan" rows="5" maxlength="4000" aria-describedby="dep-plan-aide"${dis}>${h(f.plan)}</textarea>
+      <p class="muet petit" id="dep-plan-aide">${t("Say in your own words what to set up, for example: nginx on a port, an uptime script, a certificate, the domain.")}</p></div></div>
+    <div class="reglage" role="radiogroup" aria-labelledby="dep-moment-titre"><span class="nom-reglage" id="dep-moment-titre">${t("When to deploy")}</span>
+      <div>${moments.map(([v, l]) => `<label class="radio"><input type="radio" name="dep-moment" value="${v}"${f.moment === v ? " checked" : ""}${dis}> ${t(l)}</label>`).join("")}</div></div>
+    ${perm ? `<div class="reglage"><span class="nom-reglage">${t("Permissions")}</span><p class="m0">${badgePermission(perm.valeur)} <a class="petit" href="#projet@rp">${t("This project's settings")}</a></p></div>` : ""}
+    ${distant ? "" : `<div class="ligne mt-3" id="dep-actions">${actionsDeploiement()}</div>`}
+  </form></div>`;
+};
+function majDeploiement(cle) { // after a change: the chips of that list, and Save
+  dep.f.modifie = true;
+  if (cle) $("#dep-" + cle + "-puces").innerHTML = pucesDeploiement(cle);
+  const z = $("#dep-actions"); if (z) garderFocus(z, () => { z.innerHTML = actionsDeploiement(); });
+}
+function choisirDeploiement(m, champ) {
+  const cle = m.type === "api" ? "apis" : "serveurs";
+  dep.f[cle].push({ type: m.type, ref: m.ref, nom: m.nom }); champ.value = "";
+  fermerListeMentions(champ.id); majDeploiement(cle);
+}
+const champDeploiement = (x) => x.id === "dep-srv-q" || x.id === "dep-api-q";
+document.addEventListener("focusin", (ev) => { if (champDeploiement(ev.target)) chercherMentions(ev.target).then(() => { if (document.activeElement !== ev.target) fermerListeMentions(ev.target.id); }); }); // the whole list at once (few servers and API); an answer that comes after the field was left opens nothing
+document.addEventListener("focusout", (ev) => { if (champDeploiement(ev.target)) fermerListeMentions(ev.target.id); });
+document.addEventListener("change", (ev) => { if (ev.target.id === "dep-api-q-cat") $("#dep-api-q").focus(); }); // the filtered list opens under its field
+document.addEventListener("input", (ev) => {
+  const cle = { "dep-url": "url", "dep-plan": "plan" }[ev.target.id] || (ev.target.name === "dep-moment" && "moment");
+  if (cle && dep.f) { dep.f[cle] = ev.target.value; majDeploiement(); }
+});
+document.addEventListener("click", (ev) => {
+  const x = ev.target.closest("[data-dep-retirer]");
+  if (x) { const [cle, i] = x.dataset.depRetirer.split(":"); dep.f[cle].splice(+i, 1); majDeploiement(cle); $(cle === "apis" ? "#dep-api-q" : "#dep-srv-q").focus(); }
+  else if (ev.target.closest("[data-dep-annuler]")) { dep.f = null; rendrePage(); }
+});
+document.addEventListener("submit", async (ev) => {
+  if (ev.target.id !== "dep-form") return;
+  ev.preventDefault();
+  const f = dep.f; if (!f || !f.modifie) return;
+  const r = await action(api("projets/" + encodeURIComponent(dep.projet) + "/deploiement", "POST", { serveurs: f.serveurs.map((m) => m.ref), url: f.url.trim(), plan: f.plan, moment: f.moment, apis: f.apis.map((m) => m.ref) }));
+  if (r) { dep.f = null; toast(t("Deployment saved."), "ok"); rendrePage(); }
+});
 
 // --- log
 pages.journal = async () => {

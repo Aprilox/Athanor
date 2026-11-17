@@ -464,8 +464,8 @@ label.champ > span { display: block; color: var(--muted); font-size: 13px; margi
 .bloc + .bloc, .grille + .bloc, .grille + .ligne, .bloc + .grille { margin-top: 16px; }
 .grille > .bloc + .bloc, .colonne > .bloc + .bloc { margin-top: 0; }
 /* Module pages: one vertical rhythm, their blocks (explanation, actions, content) spaced by the gap alone */
-:is(.projets, .email, .coffre, .serveurs, .missions, .acces) { display: flex; flex-direction: column; gap: 16px; }
-:is(.projets, .email, .coffre, .serveurs, .missions, .acces) > :is(*, .bloc + .bloc) { margin-top: 0; margin-bottom: 0; }
+:is(.projets, .email, .coffre, .serveurs, .missions, .acces, .deploiement) { display: flex; flex-direction: column; gap: 16px; }
+:is(.projets, .email, .coffre, .serveurs, .missions, .acces, .deploiement) > :is(*, .bloc + .bloc) { margin-top: 0; margin-bottom: 0; }
 .bloc h2 { margin-bottom: 10px; }
 .bloc-liste { padding: 6px 8px; }
 .grille { display: grid; gap: 16px; align-items: start; }
@@ -810,7 +810,7 @@ input.large { flex: 1; min-width: 200px; width: auto; }
 
 /* managing a project */
 .gestion .ligne input[type="text"] { flex: 1; min-width: 0; }
-.gestion label.radio { display: flex; align-items: center; gap: 8px; margin: 6px 0; font-size: 14px; }
+.gestion label.radio, .deploiement label.radio { display: flex; align-items: center; gap: 8px; margin: 6px 0; font-size: 14px; }
 .gestion .ligne.fin { justify-content: flex-end; }
 .gestion code { overflow-wrap: anywhere; }
 .badge { font-size: 11.5px; padding: 1px 7px; border-radius: 10px; border: 1px solid var(--line); color: var(--muted); }
@@ -1267,6 +1267,10 @@ a.mis-ligne:hover, a.mis-ligne:focus-visible { border-color: var(--accent); }
 .mis-res-menu { margin-top: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 8px; display: flex; flex-direction: column; gap: 8px; max-width: 520px; }
 .mis-res-menu [data-mis-res-type] .ic { margin-right: 4px; }
 .mis-res-liste { margin: 0; }
+.dep-champ { display: flex; flex-direction: column; gap: 8px; min-width: 0; } /* M292: chips, then the search field and its list */
+.dep-champ, .dep-champ .choix-api { position: relative; }
+/* over the form, not in it: a list that closes when its field loses the focus must not move the button being clicked */
+.dep-champ .liste-mentions { position: absolute; top: 100%; left: 0; right: 0; z-index: 5; margin: 4px 0 0; box-shadow: 0 6px 18px rgba(0, 0, 0, .18); }
 .mis-remplir { color: var(--attention); border-color: currentColor; }
 .mis-touche { margin: 0; }
 .mis-politique { border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px 10px; margin: 4px 0 0; display: flex; flex-wrap: wrap; gap: 8px 20px; }
