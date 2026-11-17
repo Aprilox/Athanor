@@ -131,7 +131,7 @@ func (s *Serveur) preparerProjet(p Projet) {
 		return
 	}
 	if r.Preparation != nil || e.Deploiement == nil {
-		t, err := s.lancerTache(couper(s.briefPreparationProjet(p, e), maxTexteTache-1), e.Serveurs, false, p.Nom)
+		t, err := s.lancerTache(couper(s.briefPreparationProjet(p, e), maxTexteTache-1), e.Serveurs, s.sansRappelsNatif(), p.Nom) // native Windows mode: only once the owner turned its reminders off, as for the first deployment
 		if err != nil {
 			prep = PreparationRelais{Erreur: s.masquerSecrets(err.Error())}
 			if r.Preparation != nil && *r.Preparation == prep {

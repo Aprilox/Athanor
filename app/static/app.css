@@ -118,6 +118,7 @@ html.cadre .dialogue, html.cadre .verrou, html.cadre .assistant { top: var(--bar
 .accueil-titre { font-size: 18px; font-weight: 600; }
 .accueil-barre .ligne { flex-wrap: nowrap; }
 .accueil-barre input { font-size: 16px; padding: 11px 14px; min-width: 0; }
+.accueil-barre input[type=radio], .accueil-barre input[type=checkbox] { padding: 0; } /* the boxes of a card keep their 16px */
 /* M151: the bar holds the mention chips; the field inside has no border of its own */
 .champ-mentions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 0 0 0 6px; min-width: 0; }
 .champ-mentions input[type=text] { border: 0; background: transparent; flex: 1 1 12em; outline: none; }
@@ -810,7 +811,7 @@ input.large { flex: 1; min-width: 200px; width: auto; }
 
 /* managing a project */
 .gestion .ligne input[type="text"] { flex: 1; min-width: 0; }
-.gestion label.radio, .deploiement label.radio { display: flex; align-items: center; gap: 8px; margin: 6px 0; font-size: 14px; }
+.gestion label.radio, .deploiement label.radio, .carte-action-dep label.radio { display: flex; align-items: center; gap: 8px; margin: 6px 0; font-size: 14px; }
 .gestion .ligne.fin { justify-content: flex-end; }
 .gestion code { overflow-wrap: anywhere; }
 .badge { font-size: 11.5px; padding: 1px 7px; border-radius: 10px; border: 1px solid var(--line); color: var(--muted); }
@@ -1708,5 +1709,6 @@ html.scene-pause .verrou * { animation-play-state: paused !important; }
 .mis-politique-plus[open] > .mis-politique, .mis-pol-plus[open] > .mis-pol-direct { margin-top: 6px; }
 .mis-projet { margin: 10px 0; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
 .mis-projet > summary { cursor: pointer; font-size: 13px; overflow-wrap: anywhere; } .mis-projet[open] > summary { margin-bottom: 8px; }
-.mis-projet .mode-ligne { margin: 8px 0; } .mis-projet #mis-dossier { min-width: 0; }
+.mis-projet .mode-ligne { margin: 8px 0; } .mis-projet input.croit { min-width: 0; }
+.carte-action-dep { border: 1px solid var(--line); border-radius: 6px; padding: 4px 10px 8px; margin: 6px 0; min-width: 0; } .carte-action-dep legend { padding: 0 4px; font-size: 13px; } /* M295b: the deployment under Edit, on the home's project card */
 .mis-projet .mis-github { display: grid; gap: 4px; margin: 0; }

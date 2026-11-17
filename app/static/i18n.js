@@ -49,9 +49,10 @@ const PREFIXES = ["no Studio lane: the vault entries are given", "no Studio lane
 
 const DICT = {
 fr: {
+  "Creates or links the GitHub repository chosen on this card, with this computer's GitHub connection.": "Crée ou lie le dépôt GitHub choisi sur cette carte, avec la connexion GitHub de cet ordinateur.",
   "Unknown permission mode (manuel, auto, modifications or ignorer)": "Mode de permission inconnu (manuel, auto, modifications ou ignorer)",
   "This card changed since it was shown: read it again, then launch it.": "Cette carte a changé depuis son affichage : relisez-la, puis lancez-la.",
-  "Project “{0}” added, but its deployment or its permission mode was not saved and its pilot was not started: {1}": "Projet « {0} » ajouté, mais son déploiement ou son mode de permission n'a pas été enregistré et son pilote n'a pas été démarré : {1}",
+  "Project “{0}” added, but its settings were not all saved and its pilot was not started: {1}": "Projet « {0} » ajouté, mais ses réglages n'ont pas tous été enregistrés et son pilote n'a pas été démarré : {1}",
   "Deployment of “{0}” saved.": "Déploiement de « {0} » enregistré.",
   "Gives its pilot the servers and the API keys shown on this card, and nothing else of your vault.": "Donne à son pilote les serveurs et les clés API affichés sur cette carte, et rien d'autre de votre coffre.",
   "Sets this project's own permission mode, instead of the one of Settings.": "Donne à ce projet son propre mode de permission, à la place de celui des Réglages.",
@@ -910,9 +911,10 @@ fr: {
   "Run a command": "Lancer une commande", "The task failed without giving a reason.": "La tâche a échoué sans donner de raison.",
 },
 es: {
+  "Creates or links the GitHub repository chosen on this card, with this computer's GitHub connection.": "Crea o vincula el repositorio de GitHub elegido en esta tarjeta, con la conexión de GitHub de este ordenador.",
   "Unknown permission mode (manuel, auto, modifications or ignorer)": "Modo de permisos desconocido (manuel, auto, modifications o ignorer)",
   "This card changed since it was shown: read it again, then launch it.": "Esta tarjeta ha cambiado desde que se mostró: léala de nuevo y luego láncela.",
-  "Project “{0}” added, but its deployment or its permission mode was not saved and its pilot was not started: {1}": "Proyecto «{0}» añadido, pero su despliegue o su modo de permisos no se guardó y su piloto no se inició: {1}",
+  "Project “{0}” added, but its settings were not all saved and its pilot was not started: {1}": "Proyecto «{0}» añadido, pero no se guardaron todos sus ajustes y su piloto no se inició: {1}",
   "Deployment of “{0}” saved.": "Despliegue de «{0}» guardado.",
   "Gives its pilot the servers and the API keys shown on this card, and nothing else of your vault.": "Da a su piloto los servidores y las claves API que muestra esta tarjeta, y nada más de su caja fuerte.",
   "Sets this project's own permission mode, instead of the one of Settings.": "Da a este proyecto su propio modo de permisos, en lugar del de Ajustes.",
@@ -1739,9 +1741,10 @@ es: {
   "Run a command": "Ejecutar un comando", "The task failed without giving a reason.": "La tarea falló sin dar un motivo.",
 },
 de: {
+  "Creates or links the GitHub repository chosen on this card, with this computer's GitHub connection.": "Erstellt oder verknüpft das auf dieser Karte gewählte GitHub-Repository mit der GitHub-Verbindung dieses Computers.",
   "Unknown permission mode (manuel, auto, modifications or ignorer)": "Unbekannter Berechtigungsmodus (manuel, auto, modifications oder ignorer)",
   "This card changed since it was shown: read it again, then launch it.": "Diese Karte hat sich seit der Anzeige geändert: Lesen Sie sie erneut und starten Sie sie dann.",
-  "Project “{0}” added, but its deployment or its permission mode was not saved and its pilot was not started: {1}": "Projekt „{0}“ hinzugefügt, aber seine Bereitstellung oder sein Berechtigungsmodus wurde nicht gespeichert und sein Pilot nicht gestartet: {1}",
+  "Project “{0}” added, but its settings were not all saved and its pilot was not started: {1}": "Projekt „{0}“ hinzugefügt, aber nicht alle seine Einstellungen wurden gespeichert und sein Pilot wurde nicht gestartet: {1}",
   "Deployment of “{0}” saved.": "Bereitstellung von „{0}“ gespeichert.",
   "Gives its pilot the servers and the API keys shown on this card, and nothing else of your vault.": "Gibt seinem Piloten die Server und API-Schlüssel, die diese Karte zeigt, und sonst nichts aus Ihrem Tresor.",
   "Sets this project's own permission mode, instead of the one of Settings.": "Gibt diesem Projekt einen eigenen Berechtigungsmodus anstelle des Modus der Einstellungen.",
@@ -2562,9 +2565,10 @@ de: {
   "Run a command": "Einen Befehl ausführen", "The task failed without giving a reason.": "Die Aufgabe ist ohne Angabe eines Grundes fehlgeschlagen.",
 },
 it: {
+  "Creates or links the GitHub repository chosen on this card, with this computer's GitHub connection.": "Crea o collega il repository GitHub scelto su questa scheda, con la connessione GitHub di questo computer.",
   "Unknown permission mode (manuel, auto, modifications or ignorer)": "Modalità di permesso sconosciuta (manuel, auto, modifications o ignorer)",
   "This card changed since it was shown: read it again, then launch it.": "Questa scheda è cambiata da quando è stata mostrata: la rilegga, poi la avvii.",
-  "Project “{0}” added, but its deployment or its permission mode was not saved and its pilot was not started: {1}": "Progetto «{0}» aggiunto, ma la sua distribuzione o la sua modalità di permesso non è stata salvata e il suo pilota non è stato avviato: {1}",
+  "Project “{0}” added, but its settings were not all saved and its pilot was not started: {1}": "Progetto «{0}» aggiunto, ma non tutte le sue impostazioni sono state salvate e il suo pilota non è stato avviato: {1}",
   "Deployment of “{0}” saved.": "Distribuzione di «{0}» salvata.",
   "Gives its pilot the servers and the API keys shown on this card, and nothing else of your vault.": "Dà al suo pilota i server e le chiavi API mostrati su questa scheda, e nient'altro della sua cassaforte.",
   "Sets this project's own permission mode, instead of the one of Settings.": "Dà a questo progetto una propria modalità di permesso, al posto di quella delle Impostazioni.",
@@ -3385,9 +3389,10 @@ it: {
   "Run a command": "Eseguire un comando", "The task failed without giving a reason.": "L'attività non è riuscita senza indicare un motivo.",
 },
 pt: {
+  "Creates or links the GitHub repository chosen on this card, with this computer's GitHub connection.": "Cria ou liga o repositório GitHub escolhido neste cartão, com a ligação GitHub deste computador.",
   "Unknown permission mode (manuel, auto, modifications or ignorer)": "Modo de permissão desconhecido (manuel, auto, modifications ou ignorer)",
   "This card changed since it was shown: read it again, then launch it.": "Este cartão mudou desde que foi mostrado: leia-o de novo e depois lance-o.",
-  "Project “{0}” added, but its deployment or its permission mode was not saved and its pilot was not started: {1}": "Projeto «{0}» adicionado, mas a sua implantação ou o seu modo de permissão não foi guardado e o seu piloto não foi iniciado: {1}",
+  "Project “{0}” added, but its settings were not all saved and its pilot was not started: {1}": "Projeto «{0}» adicionado, mas nem todas as suas definições foram guardadas e o seu piloto não foi iniciado: {1}",
   "Deployment of “{0}” saved.": "Implantação de «{0}» guardada.",
   "Gives its pilot the servers and the API keys shown on this card, and nothing else of your vault.": "Dá ao seu piloto os servidores e as chaves API mostrados neste cartão, e nada mais do seu cofre.",
   "Sets this project's own permission mode, instead of the one of Settings.": "Dá a este projeto o seu próprio modo de permissão, em vez do das Definições.",

@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"regexp"
 	"slices"
@@ -45,6 +46,14 @@ type ActionChat struct {
 	// own permission mode ("": the one of Settings). With the name of an existing project: only that deployment.
 	Deploiement *DeploiementDemande `json:"deploiement,omitempty"`
 	Permission  string              `json:"permission,omitempty"`
+	// M295b, projet (a new one): what the owner chose under Edit, never the assistant (lireActionChat drops them):
+	// its working modes, its GitHub repository ("" none | lier | creer) and its own settings (reglages_projets.go)
+	Modes      *ModesCarte       `json:"modes,omitempty"`
+	GitHub     string            `json:"github,omitempty"`
+	Depot      string            `json:"depot,omitempty"`
+	SansPousse bool              `json:"sans_pousse,omitempty"`
+	Atelier    bool              `json:"atelier,omitempty"`
+	Reglages   map[string]string `json:"reglages,omitempty"`
 }
 
 // CarteActionChat: the card the page shows, computed here (Quoi and Acces are i18n keys, Sur is data).
@@ -61,6 +70,8 @@ type CarteActionChat struct {
 	Noms     map[string]string `json:"noms,omitempty"` // projet: the names of the card's servers and APIs, by id
 	// projet: the card as it is shown; Launch sends it back (an older view launches nothing)
 	Empreinte string `json:"empreinte,omitempty"`
+	// projet (a new one): each project setting as Settings has it, for the card's own choices (not in the fingerprint)
+	Defauts []ReglageVue `json:"defauts,omitempty"`
 }
 
 var reAction = regexp.MustCompile(`(?s)<action>(.*?)</action>`)
@@ -178,6 +189,7 @@ func lireActionChat(texte string) (ActionChat, bool) {
 		if json.Unmarshal(brut(m), &a) != nil {
 			return ActionChat{}, true // a card that says it cannot be read
 		}
+		a.Modes, a.GitHub, a.Depot, a.SansPousse, a.Atelier, a.Reglages = nil, "", "", false, false, nil
 		return a, true
 	}
 	// M198: the <agent> and <mcp> cards of the project chat (api_chat.go), here added to the library and to projects
@@ -310,6 +322,7 @@ func (s *Serveur) carteActionChat(a ActionChat) CarteActionChat {
 		if p, ok := s.projetLocalChat(a.Projet); ok && a.Deploiement != nil {
 			sansTexte = true
 			a.Projet, a.Dossier, a.Titre, a.Texte, a.Permission = p.Nom, "", "", "", ""
+			a.Modes, a.GitHub, a.Depot, a.SansPousse, a.Atelier, a.Reglages = nil, "", "", false, false, nil
 			c.Quoi, c.Sur = "Set the project's deployment", p.Nom
 			c.Acces = []string{"Writes this project's deployment only: no project is created, no request is added."}
 		} else {
@@ -331,6 +344,13 @@ func (s *Serveur) carteActionChat(a ActionChat) CarteActionChat {
 			}
 			if c.Erreur == "" && a.Permission != "" && !slices.Contains(modesAutorisation, a.Permission) {
 				c.Erreur = "Unknown permission mode (manuel, auto, modifications or ignorer)"
+			}
+			if err := reglagesCarteErr(k, &a); err != nil && c.Erreur == "" {
+				c.Erreur = err.Error()
+			}
+			c.Defauts = vueReglagesProjet("")
+			if a.GitHub != "" {
+				c.Acces = append(c.Acces, "Creates or links the GitHub repository chosen on this card, with this computer's GitHub connection.")
 			}
 		}
 		if a.Deploiement != nil {
@@ -468,9 +488,43 @@ func (s *Serveur) carteActionChat(a ActionChat) CarteActionChat {
 
 // empreinteCarteChat: the card as the page shows it (what it does, on what, with which accesses, its fields).
 func empreinteCarteChat(c CarteActionChat) string {
-	c.Empreinte, c.Etat, c.Resultat, c.Args = "", "", "", nil
+	c.Empreinte, c.Etat, c.Resultat, c.Args, c.Defauts = "", "", "", nil, nil
 	b, _ := json.Marshal(c)
 	return fmt.Sprintf("%x", sha256.Sum256(b))[:24]
+}
+
+// reglagesCarteErr (M295b): the settings of a new project's card, checked as their own screens check them, the
+// repository normalised. The permission mode is the card's Permission only (choixIgnorer).
+func reglagesCarteErr(k Kit, a *ActionChat) error {
+	if err := validerModesCarte(a.Modes); err != nil {
+		return err
+	}
+	depot, err := depotMission(a.GitHub, a.Depot, a.Projet)
+	if err != nil {
+		return err
+	}
+	if a.GitHub == "lier" && depot == "" {
+		return erreurEntree("Write the repository as OWNER/NAME (e.g. octocat/my-site).")
+	}
+	if a.Depot = depot; a.GitHub == "" {
+		a.SansPousse, a.Atelier = false, false
+	}
+	a.Reglages = maps.Clone(a.Reglages)
+	delete(a.Reglages, "permission")
+	for cle, v := range a.Reglages {
+		switch {
+		case v == "":
+			delete(a.Reglages, cle)
+		case !slices.Contains(clesReglagesProjet, cle):
+			return erreurEntree("Unknown project setting")
+		case !reglageValide(k, cle, v):
+			return erreurEntree("This value is not allowed for this project setting")
+		}
+	}
+	if len(a.Reglages) == 0 {
+		a.Reglages = nil
+	}
+	return nil
 }
 
 // nommerDeploiement (M295): the card's servers and APIs by id, whether the assistant wrote their id or their name
@@ -613,16 +667,29 @@ func (s *Serveur) executerActionChat(c CarteActionChat, qui, message string) (st
 		if err != nil {
 			return "", nil, err
 		}
-		if a.Deploiement != nil {
+		if md := a.Modes; md != nil { // before its pilot starts: its first cycle reads them
+			err = p.ecrireMode(ModeVue{Parallele: md.Parallele, ParalleleMax: md.ParalleleMax, Eco: md.Eco, Rapide: md.Rapide, CadrageMax: md.CadrageMax, DureeMax: md.DureeMax})
+		}
+		if err == nil && a.Deploiement != nil {
 			err = deployer(p.Nom)
 		}
-		if err == nil && a.Permission != "" {
-			if _, err = definirReglageProjet(p.Nom, "permission", a.Permission); err == nil {
-				s.ecrireAudit(LigneAudit{Type: "evenement", De: qui, Vers: "hub", Projet: p.Nom, Action: "reglage du projet: permission", Resultat: "defaut → " + a.Permission})
+		for _, cle := range clesReglagesProjet {
+			v := a.Reglages[cle]
+			if cle == "permission" {
+				v = a.Permission
+			}
+			if err != nil || v == "" {
+				continue
+			}
+			if _, err = definirReglageProjet(p.Nom, cle, v); err == nil {
+				s.ecrireAudit(LigneAudit{Type: "evenement", De: qui, Vers: "hub", Projet: p.Nom, Action: "reglage du projet: " + cle, Resultat: "defaut → " + v})
 			}
 		}
+		if err == nil && a.GitHub != "" {
+			err = githubMission(s, p, ProjetCarte{Nom: p.Nom, GitHub: a.GitHub, Depot: a.Depot, SansPousse: a.SansPousse, Atelier: a.Atelier})
+		}
 		if err != nil { // never a pilot that would run without what the card said
-			return "Project “{0}” added, but its deployment or its permission mode was not saved and its pilot was not started: {1}", []string{p.Nom, err.Error()}, nil
+			return "Project “{0}” added, but its settings were not all saved and its pilot was not started: {1}", []string{p.Nom, err.Error()}, nil
 		}
 		msg, err := demarrerPiloteMission(s, p)
 		if err != nil {
@@ -687,6 +754,7 @@ func (s *Serveur) apiHubChatAction(w http.ResponseWriter, r *http.Request) {
 	}
 	c.Action.Type, c.Action.Fichiers = propose.Type, propose.Fichiers
 	carte := s.carteActionChat(c.Action)
+	carte.Defauts = nil // for the open card only, never kept with the decision
 	qui := deQui(r)
 	audit := LigneAudit{Type: "evenement", De: qui, Vers: "hub", Projet: carte.Projet, Action: "chat d'accueil : " + carte.Quoi + " (" + carte.Sur + ")"}
 	if c.Decision == "refuser" {
@@ -697,6 +765,9 @@ func (s *Serveur) apiHubChatAction(w http.ResponseWriter, r *http.Request) {
 		// card changed into another action (a new project renamed into an existing one) neither
 		if vue := s.carteActionChat(propose); propose.Type == "projet" && (c.Empreinte != vue.Empreinte || carte.Quoi != vue.Quoi) {
 			s.erreur(w, http.StatusConflict, "This card changed since it was shown: read it again, then launch it.")
+			return
+		} else if appareilDe(r) != "" && carte.Dossier != vue.Dossier {
+			s.erreur(w, http.StatusForbidden, "The folder is chosen on the PC.")
 			return
 		}
 		if carte.Erreur != "" {

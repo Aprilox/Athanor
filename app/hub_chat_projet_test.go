@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -217,7 +218,7 @@ func TestHubChatActionsProjet(t *testing.T) {
 	}
 	// every word of these cards is translated
 	cles := []string{"Set the project's deployment", "Deployment of “{0}” saved.", "This card changed since it was shown: read it again, then launch it.",
-		"Project “{0}” added, but its deployment or its permission mode was not saved and its pilot was not started: {1}",
+		"Project “{0}” added, but its settings were not all saved and its pilot was not started: {1}",
 		"Unknown permission mode (manuel, auto, modifications or ignorer)", errEnvAPI.Error()}
 	for _, i := range []int{2, 3, 4} {
 		cles = append(cles, b.carte(i).Acces...)
@@ -276,5 +277,98 @@ func TestCarteProjetMentions(t *testing.T) {
 	}
 	if code, _ := b.lancer(t, 2, "", map[string]any{"action": vue.ActionChat, "empreinte": vue.Empreinte}); code != http.StatusConflict || cree("blog") || len(b.pilotes) != 1 {
 		t.Fatalf("the card of an older view was launched: %d, pilots %v", code, b.pilotes)
+	}
+}
+
+// TestCarteProjetReglages (M295b): the settings chosen under Edit (working modes, GitHub, the project's own
+// settings) are applied by Launch before the pilot starts; the assistant cannot set them, a setting cannot carry
+// Ignore permissions, and a device does not choose the folder.
+func TestCarteProjetReglages(t *testing.T) {
+	b := nouveauBancCarteProjet(t)
+	b = nouveauBancCarteProjet(t,
+		`{"type":"projet","projet":"atelier","texte":"Un site.","dossier":"`+b.dossier("atelier")+`","modes":{"eco":true},"github":"creer","depot":"x","reglages":{"quota_five_hour":"80:pause"}}`,
+		`{"type":"projet","projet":"panne","texte":"Un site.","dossier":"`+b.dossier("panne")+`"}`,
+		`{"type":"projet","projet":"loin","texte":"Un site.","dossier":"`+b.dossier("loin")+`"}`)
+	s := b.s
+	var lies []ProjetCarte
+	ancien := githubMission
+	githubMission = func(_ *Serveur, p Projet, pc ProjetCarte) error {
+		if p.Nom == "panne" {
+			return errors.New("témoin-github-en-panne")
+		}
+		lies = append(lies, pc)
+		return nil
+	}
+	t.Cleanup(func() { githubMission = ancien })
+
+	vue := b.carte(1)
+	if vue.Modes != nil || vue.GitHub != "" || vue.Depot != "" || vue.Reglages != nil || vue.Erreur != "" {
+		t.Fatalf("settings written by the assistant are on the card: %+v", vue)
+	}
+	a := vue.ActionChat
+	// refused as their own screens refuse them, and nothing is created
+	for nom, change := range map[string]func(*ActionChat){
+		"repository to type": func(x *ActionChat) { x.GitHub = "lier" },
+		"unknown setting":    func(x *ActionChat) { x.Reglages = map[string]string{"inconnu": "1"} },
+		"invalid value":      func(x *ActionChat) { x.Reglages = map[string]string{"quota_five_hour": "80:exploser"} },
+		"too many workers":   func(x *ActionChat) { x.Modes = &ModesCarte{Parallele: true, ParalleleMax: 50} },
+	} {
+		x := a
+		change(&x)
+		if code, _ := b.lancer(t, 1, "", map[string]any{"action": x}); code != http.StatusBadRequest {
+			t.Errorf("%s: %d", nom, code)
+		}
+	}
+	if _, ok := s.projetLocalChat("atelier"); ok || len(b.pilotes) != 0 {
+		t.Fatal("a refused card created its project")
+	}
+	a.Modes = &ModesCarte{Parallele: true, ParalleleMax: 4, Eco: true}
+	a.GitHub, a.Depot, a.SansPousse = "lier", "https://github.com/octo/atelier.git", true
+	a.Reglages = map[string]string{"quota_five_hour": "80:pause", "modele": "", "permission": "ignorer"}
+	if code, txt := b.lancer(t, 1, "", map[string]any{"action": a}); code != 200 {
+		t.Fatalf("launch with settings: %d %s", code, txt)
+	}
+	p, ok := s.projetLocalChat("atelier")
+	if !ok || !slices.Equal(b.pilotes, []string{"atelier"}) {
+		t.Fatalf("project or pilot missing: %v", b.pilotes)
+	}
+	if m := p.LireMode(); !m.Parallele || m.ParalleleMax != 4 || !m.Eco || m.Rapide {
+		t.Errorf("working modes: %+v", m)
+	}
+	if r := lireReglagesProjets()["atelier"]; len(r) != 1 || r["quota_five_hour"] != "80:pause" {
+		t.Errorf("own settings (never Ignore permissions through them): %v", r)
+	}
+	if len(lies) != 1 || lies[0].GitHub != "lier" || lies[0].Depot != "octo/atelier" || !lies[0].SansPousse {
+		t.Errorf("GitHub: %+v", lies)
+	}
+
+	// a setting that fails: the project stays, its pilot is not started, the card says why
+	a = b.carte(2).ActionChat
+	a.GitHub = "creer"
+	if code, txt := b.lancer(t, 2, "", map[string]any{"action": a}); code != 200 || !strings.Contains(txt, "its settings were not all saved") || !strings.Contains(txt, "témoin-github-en-panne") {
+		t.Fatalf("failed setting: %d %s", code, txt)
+	}
+	if _, ok := s.projetLocalChat("panne"); !ok || len(b.pilotes) != 1 {
+		t.Fatalf("after a failed setting: pilots %v", b.pilotes)
+	}
+
+	// from a device: the folder proposed, never another one
+	a = b.carte(3).ActionChat
+	a.Dossier = b.dossier("ailleurs")
+	if code, _ := b.lancer(t, 3, "telephone", map[string]any{"action": a}); code != http.StatusForbidden {
+		t.Errorf("folder changed from a device: %d", code)
+	}
+	if code, txt := b.lancer(t, 3, "telephone", nil); code != 200 {
+		t.Errorf("card launched from a device as proposed: %d %s", code, txt)
+	}
+	for _, l := range []string{"fr", "es", "de", "it", "pt"} {
+		dico := dicoTUI(l)
+		for _, c := range []string{"Creates or links the GitHub repository chosen on this card, with this computer's GitHub connection.",
+			"Project “{0}” added, but its settings were not all saved and its pilot was not started: {1}", "The folder is chosen on the PC.",
+			"Write the repository as OWNER/NAME (e.g. octocat/my-site).", "Unknown project setting", "This value is not allowed for this project setting"} {
+			if _, ok := dico[c]; !ok {
+				t.Errorf("%s: no translation of %q", l, c)
+			}
+		}
 	}
 }

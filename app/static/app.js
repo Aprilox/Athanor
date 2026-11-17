@@ -181,7 +181,7 @@ function rendreConnexionGH(c) {
 function connexionConnueGH() {
   if (etat.ghConnexion || etat.ghConnexionLu) return etat.ghConnexion;
   etat.ghConnexionLu = true;
-  majConnexionGH().then((c) => { if (c && ["nouveau", "projet", "suivi"].includes(etat.page)) rendrePage(); });
+  majConnexionGH().then((c) => { if (c && ["nouveau", "projet", "suivi"].includes(etat.page)) rendrePage(); else if (c) majCartesProjet(); });
   return null;
 }
 async function majConnexionGH() {
@@ -1482,8 +1482,10 @@ function blocMode(m, carte) {
 // changerMode: the block as it is on the page, with one change. changement: { parallele, parallele_max, eco,
 // rapide, cadrage_max (0: back to Settings), duree_max (0: unlimited, -1: back to Settings) }; what is left
 // out stays as it is. On New project nothing is sent yet: the choice waits in etat.npMode for the creation.
-async function changerMode(changement) {
-  const corps = { parallele: $("#md-parallele").checked, parallele_max: maxModeActif(), eco: $("#md-eco").checked, rapide: $("#md-rapide").checked, ...changement };
+async function changerMode(changement, de) {
+  const z = (de && de.closest(".mode-ligne")) || $("#page"), coche = (id) => z.querySelector("#md-" + id).checked;
+  const corps = { parallele: coche("parallele"), parallele_max: maxModeActif(z), eco: coche("eco"), rapide: coche("rapide"), ...changement };
+  if (z.closest("#cp-mode")) return changerCarteProjet({ modes: { ...carteProjetOuverte().modes, ...corps } }); // M295b: the home's project card
   if ($("#mis-mode")) return enregistrerProjetMission({ modes: { ...((((etat.missionVue || {}).mission || {}).carte || {}).dev || {}).modes, ...corps } });
   if (etat.page === "nouveau") {
     Object.assign(etat.npMode, corps);
@@ -1493,7 +1495,7 @@ async function changerMode(changement) {
   const r = await action(api("mode", "POST", corps));
   if (r) rendrePage();
 }
-function maxModeActif() { const actif = $("#page .mode-ligne .choix button.actif[data-max]"); return actif ? Number(actif.dataset.max) : etat.modeMax || 3; }
+function maxModeActif(z = $("#page")) { const actif = z.querySelector(".mode-ligne .choix button.actif[data-max]"); return actif ? Number(actif.dataset.max) : etat.modeMax || 3; }
 
 // --- chat with Claude about the project (api_chat.go): by default Claude reads and answers, a change becomes
 // a note for the pilot; with "change the files" ticked, Claude changes them (Athanor commits them), after the
@@ -2088,6 +2090,8 @@ const LISTES_MENTIONS = {
   "mis-res-q": { liste: "mis-res-liste", opt: "mis-res-opt", cle: "missionResListe", mot: (c) => ({ q: c.value.trim(), debut: 0 }), pris: ressourcesMission, type: () => (etat.missionRes || {}).type, choisir: ajouterRessourceMission },
   "dep-srv-q": { liste: "dep-srv-liste", opt: "dep-srv-opt", cle: "depSrvListe", mot: (c) => ({ q: c.value.trim(), debut: 0 }), pris: () => dep.f.serveurs, type: () => "serveur", choisir: choisirDeploiement }, // M292: the Deployment tab
   "dep-api-q": { liste: "dep-api-liste", opt: "dep-api-opt", cle: "depApiListe", mot: (c) => ({ q: c.value.trim(), debut: 0 }), pris: () => dep.f.apis, type: () => "api", choisir: choisirDeploiement },
+  "cp-srv-q": { liste: "cp-srv-liste", opt: "cp-srv-opt", cle: "cpSrvListe", mot: (c) => ({ q: c.value.trim(), debut: 0 }), pris: () => formDep("cp").serveurs, type: () => "serveur", choisir: choisirDeploiement }, // M295b: the home's project card
+  "cp-api-q": { liste: "cp-api-liste", opt: "cp-api-opt", cle: "cpApiListe", mot: (c) => ({ q: c.value.trim(), debut: 0 }), pris: () => formDep("cp").apis, type: () => "api", choisir: choisirDeploiement },
   "cof-q": { filtrer: (q, cat) => filtrerCoffre(q, cat) }, // the vault page: its own cards are the list (every entry, the servers' keys too)
 };
 // M288: the owner's categories of API (GET /api/coffre/categories), read when a screen that filters by them opens
@@ -2255,7 +2259,7 @@ function carteMission(d) {
       <div class="ligne m0 mis-res-puces" role="group" aria-labelledby="mis-res-titre">${res.map(puce).join("") || `<span class="muet petit">${t("No resource yet: add a server or an API if the project needs one.")}</span>`}
       ${modif && !fg.envs ? `<button type="button" class="btn btn-petit" id="mis-res-ajouter" aria-expanded="${!!mr}" aria-controls="mis-res">${ic("plus")}${t("Add a resource")}</button>` : ""}</div>${menu}
       ${raisons.map((x) => `<p class="muet petit m0 mis-fige">${ic("info")} ${h(t(x))}</p>`).join("")}</div>`;
-  const pj = c.projet.nouveau && modif && !fg.projet && !c.projet.distant ? sectionProjet(c) : "";
+  const pj = c.projet.nouveau && modif && !fg.projet && !c.projet.distant ? sectionProjet("mis", { ...c.projet, dossier: c.projet.dossier || c.touche.dossier }, c.dev.modes, etat.missionProjetErreur || "", etat.missionProjetOuvert) : "";
   // only the rows that hold something: an empty "Files —" said nothing (M255)
   const touche = [srv && (c.touche.dns || []).length ? `<dt>${t("DNS names")}</dt><dd>${liste(c.touche.dns)}</dd>` : "",
     (c.touche.fichiers || []).length ? `<dt>${t("Files")}</dt><dd>${liste(c.touche.fichiers)}</dd>` : "",
@@ -2307,22 +2311,23 @@ async function changerPermissionsMission(sel) {
 // M254: a new project's settings, folded: its folder, its working mode (the Manage block), its GitHub repository;
 // each change is saved on the card (POST /projet), the folder checked at once (its error under the field)
 const GITHUB_MISSION = { "": "No GitHub for now", lier: "Use one of my repositories", creer: "Create a private repository" };
-function sectionProjet(c) {
-  const p = c.projet, distant = (etat.vue || {}).distant, err = etat.missionProjetErreur || "";
-  if (!etat.modeDefaut) { etat.modeDefaut = {}; api("mode?defaut=1").then((m) => { etat.modeDefaut = m; majZoneMission(); }).catch(() => {}); }
-  const md = { cadrage_global: 25, duree_max_global: 0, ...etat.modeDefaut, parallele_max: 3, ...(c.dev.modes || {}) };
-  const modes = [["parallele", "Parallel mode"], ["eco", "Eco mode"], ["rapide", "Fast mode"]].filter(([k]) => md[k]).map(([, n]) => t(n)).join(", ") || t("usual mode");
-  const resume = [p.dossier || c.touche.dossier, modes, t(GITHUB_MISSION[p.github || ""] || GITHUB_MISSION[""]) + (p.depot ? " (" + p.depot + ")" : "")].filter(Boolean).join(" · ");
-  return `<details class="mis-projet" id="mis-projet"${etat.missionProjetOuvert || err ? " open" : ""}><summary><b>${t("Project")}</b> <span class="muet petit">${h(resume)}</span></summary>
-      <label for="mis-dossier" class="petit"><b>${t("Folder")}</b></label>
-      <div class="ligne m0"><input type="text" id="mis-dossier" class="croit" value="${h(p.dossier || c.touche.dossier || "")}"${distant ? " readonly" : ""} aria-describedby="mis-dossier-aide${err ? " mis-dossier-err" : ""}"${err ? ' aria-invalid="true"' : ""}>
-        ${distant ? "" : `<button type="button" class="btn btn-petit" data-parcourir="mis-dossier" data-titre="${h(t("Choose the project's folder"))}">${t("Choose…")}</button>`}</div>
-      <p class="muet petit m0" id="mis-dossier-aide">${t(distant ? "The folder is chosen on the PC." : "An empty folder, or a new one in an existing folder. By default, next to your other projects.")}</p>
-      ${err ? `<p class="attention petit m0" id="mis-dossier-err" role="alert">${h(err)}</p>` : ""}
-      <div id="mis-mode">${blocMode(md, true)}</div>
+// M295b: pre "mis" (the mission card) or "cp" (the home's project card, its own settings in `plus`); p: {nom, dossier, github, depot, sans_pousse, atelier}
+function sectionProjet(pre, p, modes, err, ouvert, plus = "") {
+  const distant = (etat.vue || {}).distant;
+  if (!etat.modeDefaut) { etat.modeDefaut = {}; api("mode?defaut=1").then((m) => { etat.modeDefaut = m; majZoneMission(); majCartesProjet(); }).catch(() => {}); }
+  const md = { cadrage_global: 25, duree_max_global: 0, ...etat.modeDefaut, parallele_max: 3, ...(modes || {}) };
+  const modesChoisis = [["parallele", "Parallel mode"], ["eco", "Eco mode"], ["rapide", "Fast mode"]].filter(([k]) => md[k]).map(([, n]) => t(n)).join(", ") || t("usual mode");
+  const resume = [p.dossier, modesChoisis, t(GITHUB_MISSION[p.github || ""] || GITHUB_MISSION[""]) + (p.depot ? " (" + p.depot + ")" : "")].filter(Boolean).join(" · ");
+  return `<details class="mis-projet" id="${pre}-projet"${ouvert || err ? " open" : ""}><summary><b>${t("Project")}</b> <span class="muet petit">${h(resume)}</span></summary>
+      <label for="${pre}-dossier" class="petit"><b>${t("Folder")}</b></label>
+      <div class="ligne m0"><input type="text" id="${pre}-dossier" class="croit" value="${h(p.dossier || "")}"${distant ? " readonly" : ""} aria-describedby="${pre}-dossier-aide${err ? ` ${pre}-dossier-err` : ""}"${err ? ' aria-invalid="true"' : ""}>
+        ${distant ? "" : `<button type="button" class="btn btn-petit" data-parcourir="${pre}-dossier" data-titre="${h(t("Choose the project's folder"))}">${t("Choose…")}</button>`}</div>
+      <p class="muet petit m0" id="${pre}-dossier-aide">${t(distant ? "The folder is chosen on the PC." : "An empty folder, or a new one in an existing folder. By default, next to your other projects.")}</p>
+      ${err ? `<p class="attention petit m0" id="${pre}-dossier-err" role="alert">${h(err)}</p>` : ""}
+      <div id="${pre}-mode">${blocMode(md, true)}</div>
       <fieldset class="mis-github"><legend>${t("GitHub repository")}</legend>
-        ${choixGitHub("mis", nomDepot(p.nom), p)}
-        <p class="muet petit m0">${t("The repository is linked right after the project is created, with this computer's GitHub connection.")}</p></fieldset></details>`;
+        ${choixGitHub(pre, nomDepot(p.nom), p)}
+        <p class="muet petit m0">${t("The repository is linked right after the project is created, with this computer's GitHub connection.")}</p></fieldset>${plus}</details>`;
 }
 async function enregistrerProjetMission(change) {
   const m = (etat.missionVue || {}).mission, c = m && m.carte; if (!c) return;
@@ -2540,36 +2545,111 @@ function carteActionHub(c, i) {
   if (c.projet && !projets.includes(c.projet)) projets.unshift(c.projet);
   const choixProjet = `<label class="champ"><span>${t("Project")}</span><select data-cact="projet">${projets.map((n) => `<option ${n === c.projet ? "selected" : ""}>${h(n)}</option>`).join("")}</select></label>`;
   const existant = ty === "projet" && !c.dossier; // M295: an existing project gets its deployment only
-  const champs = existant ? `<input type="hidden" data-cact="projet" value="${v(c.projet)}">` : ty === "projet" ? `<label class="champ"><span>${t("Name")}</span><input type="text" data-cact="projet" value="${v(c.projet)}"></label>
-      <label class="champ"><span>${t("Folder")}</span><input type="text" data-cact="dossier" value="${v(c.dossier)}" spellcheck="false"></label>`
-    : ty === "mission" ? "" : choixProjet;
+  // M295b: a `projet` card is drawn from what the owner left on it (formCarteProjet); its fields exist on the open card only
+  const f = ty === "projet" && !c.etat ? formCarteProjet(c, i) : null, ouverte = !!f && etat.carteProjetOuverte === i;
+  const champs = ty === "mission" ? "" : choixProjet;
   const equipe = ["agent", "mcp", "attribuer"].includes(ty) ? champsEquipeHub(c, [...new Set([...(c.projets || []), ...projets.filter((n) => n && n !== c.projet)])]) : null;
   const titre = ty === "demande" ? `<label class="champ"><span>${t("Title")}</span><input type="text" data-cact="titre" value="${v(c.titre)}"></label>` : "";
   // M295: the deployment and the permission mode of a `projet` card, shown only when the request uses them; Launch sends them back as shown
-  const dpl = c.deploiement, nomme = (l) => (l || []).map((x) => h((c.noms || {})[x] || x)).join(", ");
-  const deploiement = !dpl ? "" : `<div class="petit carte-action-deploiement"><b>${t("Deployment")}</b>${dpl.url ? " — " + v(dpl.url) : ""}
+  const dpl = f ? f.dep : c.deploiement, nomme = (l) => (l || []).map((x) => h(x.nom || (c.noms || {})[x] || x)).join(", ");
+  const perm = f ? f.permission : c.permission;
+  const deploiement = !dpl || ouverte ? "" : `<div class="petit carte-action-deploiement"><b>${t("Deployment")}</b>${dpl.url ? " — " + v(dpl.url) : ""}
       ${(dpl.serveurs || []).length ? `<br>${t("{0}: {1}", [t("Servers"), nomme(dpl.serveurs)])}` : ""}${(dpl.apis || []).length ? `<br>${t("{0}: {1}", [t("API"), nomme(dpl.apis)])}` : ""}
       <br>${t("{0}: {1}", [t("When to deploy"), t(dpl.moment === "jalon" ? "After each milestone" : "At delivery")])}${dpl.plan ? `<br>${v(dpl.plan)}` : ""}</div>`;
-  const permission = c.permission ? `<div class="petit${c.permission === "ignorer" ? " attention" : ""}">${t("{0}: {1}", [t("Permissions"), h(titrePermission(c.permission))])}</div>` : "";
+  const permission = perm && !ouverte ? `<div class="petit${perm === "ignorer" ? " attention" : ""}">${t("{0}: {1}", [t("Permissions"), h(titrePermission(perm))])}</div>` : "";
   const texte = ty === "pilote" || equipe || existant ? "" : `<label class="champ"><span>${t("Text")}</span><textarea data-cact="texte" rows="5">${v(c.texte)}</textarea></label>`;
   const decide = c.etat ? `<div class="${c.etat === "lancee" ? "ok" : "muet"} petit" role="status">${c.etat === "lancee" ? (ic("ok") + " ") + t("Launched") : (ic("croix") + " ") + t("Refused")}${c.resultat ? " — " + h(t(c.resultat, (c.args || []).map((x) => t(x)))) : ""}${(c.args || []).includes(SANS_CLAUDE) ? ` <a href="#claude">${t("Open Settings › Claude")}</a>` : ""}</div>`
     : `${c.erreur ? `<div class="attention petit" role="alert">${h(t(c.erreur))}</div>` : ""}
-      ${equipe ? equipe.vue : ""}<div class="carte-action-champs" hidden>${equipe ? equipe.champs : champs + titre + texte}</div>
+      ${equipe ? equipe.vue : ""}<div class="carte-action-champs"${ouverte ? "" : " hidden"}>${equipe ? equipe.champs : f ? (ouverte ? champsCarteProjet(c, f, existant) : "") : champs + titre + texte}</div>
       <div class="ligne m0 mt-1"><button type="button" class="btn btn-petit btn-primaire" data-cact-decision="lancer" data-index="${i}">${t("Launch")}</button>
-        ${ty === "attribuer" || existant ? "" : `<button type="button" class="btn btn-petit" data-cact-modifier aria-expanded="false">${t("Edit")}</button>`}
+        ${ty === "attribuer" ? "" : `<button type="button" class="btn btn-petit" data-cact-modifier aria-expanded="${ouverte}">${t("Edit")}</button>`}
         <button type="button" class="btn btn-petit" data-cact-decision="refuser" data-index="${i}">${t("Refuse")}</button></div>`;
-  return `<div class="chat-msg chat-claude"><div class="chat-bulle chat-note carte-action" data-carte-action="${i}" data-type="${v(ty)}" ${ty === "projet" ? `data-empreinte="${v(c.empreinte)}" data-permission="${v(c.permission)}" data-deploiement="${dpl ? v(JSON.stringify(dpl)) : ""}"` : ""} ${ty === "attribuer" ? `data-element="${v(c.element)}" data-nom="${v(c.nom)}"` : ""}>
+  const sur = f && !existant ? f.projet + " — " + f.dossier : c.sur, texteVu = f ? f.texte : c.texte;
+  return `<div class="chat-msg chat-claude"><div class="chat-bulle chat-note carte-action" data-carte-action="${i}" data-type="${v(ty)}" ${ty === "attribuer" ? `data-element="${v(c.element)}" data-nom="${v(c.nom)}"` : ""}>
     <div class="muet petit">${t("Action proposed: nothing runs before you launch it")}</div>
     <div><b>${h(t(c.quoi || "Action"))}</b></div>
-    <div class="petit">${t("{0}: {1}", [t("On"), `<code class="croit">${v(c.sur)}</code>`])}</div>
-    ${c.titre ? `<div><b>${v(c.titre)}</b></div>` : ""}${c.texte ? `<div class="petit">${mdChat(c.texte)}</div>` : ""}${deploiement}${permission}
-    <div class="petit muet">${t("{0}: {1}", [t("With which accesses"), ""])}</div><ul class="petit m0">${(c.acces || []).map((a) => `<li>${h(t(a))}</li>`).join("")}</ul>
+    <div class="petit">${t("{0}: {1}", [t("On"), `<code class="croit">${v(sur)}</code>`])}</div>
+    ${c.titre ? `<div><b>${v(c.titre)}</b></div>` : ""}${texteVu && !ouverte ? `<div class="petit">${mdChat(texteVu)}</div>` : ""}${deploiement}${permission}
+    <div class="petit muet">${t("{0}: {1}", [t("With which accesses"), ""])}</div><ul class="petit m0" data-cp-acces>${accesCarteProjet(c, f)}</ul>
     ${decide}</div></div>`;
 }
+// M295b: the `projet` card as the owner changes it under Edit, kept by message until it is decided (a card proposed
+// again, its fingerprint changed, starts from the proposal). One card is open at a time: its fields carry ids.
+function formCarteProjet(c, i) {
+  const cp = etat.cartesProjet = etat.cartesProjet || {}, d = c.deploiement;
+  const puces = (l, type) => (l || []).map((ref) => ({ type, ref, nom: (c.noms || {})[ref] || ref }));
+  if (!cp[i] || cp[i].empreinte !== c.empreinte) cp[i] = { empreinte: c.empreinte, projet: c.projet || "", dossier: c.dossier || "", texte: c.texte || "", permission: c.permission || "",
+    dep: d ? { url: d.url || "", plan: d.plan || "", moment: d.moment || "livraison", serveurs: puces(d.serveurs, "serveur"), apis: puces(d.apis, "api") } : null,
+    modes: null, github: "", depot: "", sans_pousse: false, atelier: false, reglages: {}, pOuvert: false };
+  return cp[i];
+}
+const carteProjetOuverte = () => (etat.cartesProjet || {})[etat.carteProjetOuverte];
+// what the card does with the owner's choices, as the Go says it (carteActionChat): the lines of the proposal, then theirs
+const ACCES_CARTE_PROJET = { ignorer: "Ignore permissions: this project acts on its servers without asking you, dangerous commands and production deployments included.",
+  permission: "Sets this project's own permission mode, instead of the one of Settings.", github: "Creates or links the GitHub repository chosen on this card, with this computer's GitHub connection." };
+function accesCarteProjet(c, f) {
+  const choisis = f ? [f.permission === "ignorer" ? ACCES_CARTE_PROJET.ignorer : f.permission && ACCES_CARTE_PROJET.permission, f.github && ACCES_CARTE_PROJET.github].filter(Boolean) : [];
+  return (c.acces || []).filter((a) => !f || !Object.values(ACCES_CARTE_PROJET).includes(a)).concat(choisis).map((a) => `<li>${h(t(a))}</li>`).join("");
+}
+// the fields under Edit: only what the request uses (no deployment asked: none shown); a new project also gets its
+// permission mode and, folded, its folder, working modes, GitHub repository and own settings (the components of
+// the Deployment tab, of the mission card and of Manage)
+function champsCarteProjet(c, f, existant) {
+  const v = (x) => h(String(x || ""));
+  const dep = f.dep ? `<fieldset class="carte-action-dep"><legend>${t("Deployment")}</legend>${champsDeploiement("cp", f.dep, MOMENTS_DEPLOIEMENT.filter(([m]) => m), false)}</fieldset>` : "";
+  if (existant) return dep;
+  if (!etat.cpModeles) { etat.cpModeles = []; api("modeles").then((m) => { etat.cpModeles = m.modeles || []; majCartesProjet(); }).catch(() => {}); }
+  connexionConnueGH();
+  etat.rp = { modeles: etat.cpModeles, reglages: (c.defauts || []).map((r) => r.cle === "permission" ? { ...r, propre: f.permission, valeur: f.permission || r.defaut } : { ...r, propre: f.reglages[r.cle] || "" }) };
+  const lignes = (l) => `<div class="cp-reglages">${lignesReglagesProjet(l)}</div>`, estPerm = (r) => r.cle === "permission";
+  return `<label class="champ"><span>${t("Name")}</span><input type="text" data-cp="projet" value="${v(f.projet)}"></label>
+      <label class="champ"><span>${t("Text")}</span><textarea data-cp="texte" rows="5">${v(f.texte)}</textarea></label>
+      ${dep}${f.dep ? lignes(etat.rp.reglages.filter(estPerm)) : ""}
+      ${sectionProjet("cp", { ...f, nom: f.projet }, f.modes, "", f.pOuvert, `<h3>${t("This project's settings")}</h3>
+      <p class="muet petit">${t("Each setting follows Settings by default. A value chosen here applies to this project only, from its next cycle.")}</p>
+      ${lignes(etat.rp.reglages.filter((r) => !f.dep || !estPerm(r)))}`)}`;
+}
+// the project cards drawn again from their state (a choice made, Edit opened or closed), the focus kept
+function majCartesProjet() {
+  const fil = $("#hub-chat-fil"), a = (etat.hubChat || {}).actions || {}; if (!fil) return;
+  garderFocus(fil, () => fil.querySelectorAll('[data-carte-action][data-type="projet"]').forEach((el) => { el.closest(".chat-msg").outerHTML = carteActionHub(a[el.dataset.carteAction], +el.dataset.carteAction); }));
+}
+function changerCarteProjet(change) {
+  const f = carteProjetOuverte(); if (!f) return;
+  Object.assign(f, change); majCartesProjet();
+}
+// a text field changes the state only: a card drawn again under the pointer would lose the click on Launch
+document.addEventListener("input", (ev) => {
+  const i = ev.target, f = i.closest('[data-type="projet"]') && carteProjetOuverte(); if (!f) return;
+  if (i.dataset.cp) f[i.dataset.cp] = i.value;
+  else if (i.id === "cp-dossier") f.dossier = i.value.trim();
+  else if (i.id === "cp-gh-nom" || i.id === "cp-gh-depot") { // a repository typed selects its option, as on the mission card
+    const lier = i.id === "cp-gh-depot";
+    Object.assign(f, { github: lier ? "lier" : "creer", depot: lier ? depotSaisi(i.value) || i.value.trim() : i.value.trim() ? nomDepot(i.value) : "" });
+    i.closest("fieldset").querySelector(`[name="cp-gh"][value="${lier ? "existant" : "creer"}"]`).checked = true;
+    i.closest("[data-carte-action]").querySelector("[data-cp-acces]").innerHTML = accesCarteProjet(etat.hubChat.actions[etat.carteProjetOuverte], f);
+  }
+});
+document.addEventListener("change", (ev) => {
+  const i = ev.target, f = i.closest('[data-type="projet"]') && carteProjetOuverte(); if (!f) return;
+  if (i.name === "cp-gh") changerCarteProjet({ github: i.value === "existant" ? "lier" : i.value, depot: "" });
+  else if (i.id === "cp-gh-auto") changerCarteProjet({ sans_pousse: !i.checked });
+  else if (i.id === "cp-gh-atelier") changerCarteProjet({ atelier: i.checked });
+  else if (i.closest(".cp-reglages")) { // Ignore permissions is confirmed at Launch, with the rest of the card
+    const cle = i.id.slice(3);
+    changerCarteProjet(cle === "permission" ? { permission: i.value } : { reglages: { ...f.reglages, [cle]: i.value } });
+  }
+});
 document.addEventListener("click", async (ev) => {
   const m = ev.target.closest("[data-cact-modifier]");
   if (m) {
-    const z = m.closest("[data-carte-action]").querySelector(".carte-action-champs");
+    const carte = m.closest("[data-carte-action]"), z = carte.querySelector(".carte-action-champs");
+    if (carte.dataset.type === "projet") { // M295b: drawn from its state; opening one closes the other
+      const n = +carte.dataset.carteAction, sel = `[data-carte-action="${n}"] `;
+      etat.carteProjetOuverte = etat.carteProjetOuverte === n ? null : n; majCartesProjet();
+      $(sel + (etat.carteProjetOuverte === n ? ".carte-action-champs :is(input, select, textarea)" : "[data-cact-modifier]"))?.focus();
+      return;
+    }
     z.hidden = !z.hidden; m.setAttribute("aria-expanded", String(!z.hidden));
     if (!z.hidden) { const f = z.querySelector("input, select, textarea"); if (f) f.focus(); }
     return;
@@ -2580,10 +2660,12 @@ document.addEventListener("click", async (ev) => {
   if (carte.querySelector(".carte-action-projets")) a.projets = [...carte.querySelectorAll("[data-cact-projet]:checked")].map((x) => x.value);
   if (a.type === "attribuer") { a.element = carte.dataset.element; a.nom = carte.dataset.nom; }
   let preuve = {};
-  if (a.type === "projet") { // M295: the card as shown (its fingerprint); Ignore permissions confirmed as everywhere
-    if (carte.dataset.deploiement) a.deploiement = JSON.parse(carte.dataset.deploiement);
-    a.permission = carte.dataset.permission;
-    preuve = { empreinte: carte.dataset.empreinte };
+  if (a.type === "projet") { // M295: the card read (its fingerprint) and, M295b, what the owner left on it; Ignore permissions confirmed as everywhere
+    const n = +carte.dataset.carteAction, c = etat.hubChat.actions[n], f = formCarteProjet(c, n), refs = (l) => l.map((x) => x.ref);
+    a.projet = f.projet;
+    if (f.dep) a.deploiement = { ...f.dep, serveurs: refs(f.dep.serveurs), apis: refs(f.dep.apis) };
+    if (c.dossier) Object.assign(a, { dossier: f.dossier, texte: f.texte, permission: f.permission, modes: f.modes || undefined, github: f.github, depot: f.depot, sans_pousse: f.sans_pousse, atelier: f.atelier, reglages: f.reglages });
+    preuve = { empreinte: f.empreinte };
     if (b.dataset.cactDecision === "lancer" && a.permission === "ignorer") {
       const p = await confirmerIgnorer(t("This project will act on its servers without asking you, dangerous commands and production deployments included. Choose it only for servers you can rebuild."));
       if (!p) return;
@@ -3177,7 +3259,7 @@ function choixReglageProjet(r) {
   if (r.propre && !valeurs.includes(r.propre)) valeurs.push(r.propre);
   return `<select id="${id}">${["", ...valeurs].map((v) => `<option value="${h(v)}"${r.propre === v ? " selected" : ""}>${h(v ? libelleReglageProjet(r.cle, v) : defaut)}</option>`).join("")}</select>`;
 }
-const lignesReglagesProjet = () => etat.rp.reglages.map((r) => `<div class="reglage"><label for="rp-${r.cle}" class="nom-reglage">${h(nomReglageProjet(r.cle))}</label>
+const lignesReglagesProjet = (l = etat.rp.reglages) => l.map((r) => `<div class="reglage"><label for="rp-${r.cle}" class="nom-reglage">${h(nomReglageProjet(r.cle))}</label>
   <div>${choixReglageProjet(r)}${r.cle === "permission" ? `<div class="petit mt-1" id="rp-permission-aide">${aidePermission(r.valeur, PERMISSIONS_MISSION())}</div>` : ""}</div></div>`).join("");
 async function rendreReglagesProjet() {
   const [r, mod, mode] = await Promise.all([api("projets/" + encodeURIComponent(etat.projet) + "/reglages"), api("modeles").catch(() => ({})), rendreMode()]);
@@ -4515,7 +4597,8 @@ async function reordonner(fichier, sens) {
 // an older project with several sites has one sheet per address, and any of them can become its deployment
 const dep = { projet: "", f: null }; // f: the form as typed, kept until Save or Cancel
 const MOMENTS_DEPLOIEMENT = [["jalon", "After each milestone"], ["livraison", "At delivery"], ["", "Only when I ask"]];
-const pucesDeploiement = (cle) => dep.f[cle].map((m, i) => `<span class="puce-mention puce-${m.type}">${typeMention(m)}${h(m.nom)}${(etat.vue || {}).distant ? "" : `<button type="button" class="puce-x" data-dep-retirer="${cle}:${i}" aria-label="${h(t("Remove {0}", [m.nom]))}">×</button>`}</span>`).join("")
+const formDep = (pre) => pre === "cp" ? carteProjetOuverte().dep : dep.f; // the form of the tab, or of the home's open project card (M295b)
+const pucesDeploiement = (cle, pre = "dep") => formDep(pre)[cle].map((m, i) => `<span class="puce-mention puce-${m.type}">${typeMention(m)}${h(m.nom)}${pre === "dep" && (etat.vue || {}).distant ? "" : `<button type="button" class="puce-x" data-dep-retirer="${cle}:${i}" aria-label="${h(t("Remove {0}", [m.nom]))}">×</button>`}</span>`).join("")
   || `<span class="muet petit">${t(cle === "serveurs" ? "No server chosen yet." : "No API chosen yet.")}</span>`;
 const actionsDeploiement = () => `<button type="submit" class="btn btn-primaire"${dep.f.modifie ? "" : " disabled"}>${t("Save")}</button>${dep.f.modifie ? `<button type="button" class="btn" data-dep-annuler>${t("Cancel")}</button>` : ""}`;
 function ficheSite(d, nom, nomSrv, distant) {
@@ -4531,6 +4614,26 @@ function ficheSite(d, nom, nomSrv, distant) {
     ${blocDeploiements(nom, e, (d.deploiements || {})[nom] || [], distant || !courant)}
     ${courant || distant ? "" : `<button type="button" class="btn btn-petit" data-dep-courant="${h(nom)}">${t("Make this site the project's deployment")}</button>`}
   </section>`;
+}
+// M295b: the fields of a deployment, on the Deployment tab (pre "dep") and on the home's project card ("cp")
+function champsDeploiement(pre, f, moments, distant) {
+  const dis = distant ? " disabled" : "";
+  return `<div class="reglage"><span class="nom-reglage" id="${pre}-srv-titre">${t("Server")}</span><div class="dep-champ">
+      <div class="ligne m0 mis-res-puces" id="${pre}-serveurs-puces" role="group" aria-labelledby="${pre}-srv-titre">${pucesDeploiement("serveurs", pre)}</div>
+      ${distant ? "" : `<label for="${pre}-srv-q" class="petit">${t("Find a server")}</label>
+      <input type="text" id="${pre}-srv-q" autocomplete="off" spellcheck="false" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="${pre}-srv-liste">
+      <ul id="${pre}-srv-liste" class="liste-mentions mis-res-liste" role="listbox" aria-label="${h(t("Find a server"))}" hidden></ul>`}</div></div>
+    <div class="reglage"><label for="${pre}-url" class="nom-reglage">${t("Address")}</label><div>
+      <input type="text" inputmode="url" id="${pre}-url" value="${h(f.url)}" placeholder="https://app.example.com" autocomplete="off" spellcheck="false" aria-describedby="${pre}-url-aide"${dis}>
+      <p class="muet petit" id="${pre}-url-aide">${t("Where the project will answer. Leave it empty if it has no address yet.")}</p></div></div>
+    <div class="reglage"><span class="nom-reglage" id="${pre}-api-titre">${t("API")}</span><div class="dep-champ">
+      <div class="ligne m0 mis-res-puces" id="${pre}-apis-puces" role="group" aria-labelledby="${pre}-api-titre">${pucesDeploiement("apis", pre)}</div>
+      ${distant ? "" : choixAPI(pre + "-api-q", "Find an API")}</div></div>
+    <div class="reglage"><label for="${pre}-plan" class="nom-reglage">${t("Plan")}</label><div>
+      <textarea id="${pre}-plan" rows="5" maxlength="4000" aria-describedby="${pre}-plan-aide"${dis}>${h(f.plan)}</textarea>
+      <p class="muet petit" id="${pre}-plan-aide">${t("Say in your own words what to set up, for example: nginx on a port, an uptime script, a certificate, the domain.")}</p></div></div>
+    <div class="reglage" role="radiogroup" aria-labelledby="${pre}-moment-titre"><span class="nom-reglage" id="${pre}-moment-titre">${t("When to deploy")}</span>
+      <div>${moments.map(([v, l]) => `<label class="radio"><input type="radio" name="${pre}-moment" value="${v}"${f.moment === v ? " checked" : ""}${dis}> ${t(l)}</label>`).join("")}</div></div>`;
 }
 pages.deploiement = async () => {
   const projet = (etat.vue && etat.vue.projet && etat.vue.projet.nom) || etat.projet;
@@ -4549,22 +4652,7 @@ pages.deploiement = async () => {
     <h2>${t("Deployment")}</h2>
     <p class="intro petit">${t((d.sites || {})[d.courant] ? "Where this project is online, and how. Athanor prepares the server from your plan, then deploys at the moment you choose." : "This project is not online yet. Choose a server and say how to put it online: Athanor prepares the server, then deploys at the moment you choose.")}</p>
     ${distant ? `<p class="muet petit">${t("The deployment is changed from the computer.")}</p>` : ""}
-    <div class="reglage"><span class="nom-reglage" id="dep-srv-titre">${t("Server")}</span><div class="dep-champ">
-      <div class="ligne m0 mis-res-puces" id="dep-serveurs-puces" role="group" aria-labelledby="dep-srv-titre">${pucesDeploiement("serveurs")}</div>
-      ${distant ? "" : `<label for="dep-srv-q" class="petit">${t("Find a server")}</label>
-      <input type="text" id="dep-srv-q" autocomplete="off" spellcheck="false" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="dep-srv-liste">
-      <ul id="dep-srv-liste" class="liste-mentions mis-res-liste" role="listbox" aria-label="${h(t("Find a server"))}" hidden></ul>`}</div></div>
-    <div class="reglage"><label for="dep-url" class="nom-reglage">${t("Address")}</label><div>
-      <input type="text" inputmode="url" id="dep-url" value="${h(f.url)}" placeholder="https://app.example.com" autocomplete="off" spellcheck="false" aria-describedby="dep-url-aide"${dis}>
-      <p class="muet petit" id="dep-url-aide">${t("Where the project will answer. Leave it empty if it has no address yet.")}</p></div></div>
-    <div class="reglage"><span class="nom-reglage" id="dep-api-titre">${t("API")}</span><div class="dep-champ">
-      <div class="ligne m0 mis-res-puces" id="dep-apis-puces" role="group" aria-labelledby="dep-api-titre">${pucesDeploiement("apis")}</div>
-      ${distant ? "" : choixAPI("dep-api-q", "Find an API")}</div></div>
-    <div class="reglage"><label for="dep-plan" class="nom-reglage">${t("Plan")}</label><div>
-      <textarea id="dep-plan" rows="5" maxlength="4000" aria-describedby="dep-plan-aide"${dis}>${h(f.plan)}</textarea>
-      <p class="muet petit" id="dep-plan-aide">${t("Say in your own words what to set up, for example: nginx on a port, an uptime script, a certificate, the domain.")}</p></div></div>
-    <div class="reglage" role="radiogroup" aria-labelledby="dep-moment-titre"><span class="nom-reglage" id="dep-moment-titre">${t("When to deploy")}</span>
-      <div>${moments.map(([v, l]) => `<label class="radio"><input type="radio" name="dep-moment" value="${v}"${f.moment === v ? " checked" : ""}${dis}> ${t(l)}</label>`).join("")}</div></div>
+    ${champsDeploiement("dep", f, moments, distant)}
     ${perm ? `<div class="reglage"><span class="nom-reglage">${t("Permissions")}</span><p class="m0">${badgePermission(perm.valeur)} <a class="petit" href="#projet@rp">${t("This project's settings")}</a></p></div>` : ""}
     ${distant ? "" : `<div class="ligne mt-3" id="dep-actions">${actionsDeploiement()}</div>`}
   </form>
@@ -4572,27 +4660,28 @@ pages.deploiement = async () => {
     <p class="intro petit">${t("This project was set up with several sites. This tab changes the one above; any other one can take its place.")}</p>
     <div class="env-cartes">${autres.map((n) => ficheSite(d, n, nomSrv, distant)).join("")}</div></div>` : ""}</div>`;
 };
-function majDeploiement(cle) { // after a change: the chips of that list, and Save
+function majDeploiement(cle, pre = "dep") { // after a change: the chips of that list, and Save (the tab)
+  if (cle) $(`#${pre}-${cle}-puces`).innerHTML = pucesDeploiement(cle, pre);
+  if (pre !== "dep") return;
   dep.f.modifie = true;
-  if (cle) $("#dep-" + cle + "-puces").innerHTML = pucesDeploiement(cle);
   const z = $("#dep-actions"); if (z) garderFocus(z, () => { z.innerHTML = actionsDeploiement(); });
 }
 function choisirDeploiement(m, champ) {
-  const cle = m.type === "api" ? "apis" : "serveurs";
-  dep.f[cle].push({ type: m.type, ref: m.ref, nom: m.nom }); champ.value = "";
-  fermerListeMentions(champ.id); majDeploiement(cle);
+  const cle = m.type === "api" ? "apis" : "serveurs", pre = champ.id.split("-")[0];
+  formDep(pre)[cle].push({ type: m.type, ref: m.ref, nom: m.nom }); champ.value = "";
+  fermerListeMentions(champ.id); majDeploiement(cle, pre);
 }
-const champDeploiement = (x) => x.id === "dep-srv-q" || x.id === "dep-api-q";
+const champDeploiement = (x) => /^(dep|cp)-(srv|api)-q$/.test(x.id);
 document.addEventListener("focusin", (ev) => { if (champDeploiement(ev.target)) chercherMentions(ev.target).then(() => { if (document.activeElement !== ev.target) fermerListeMentions(ev.target.id); }); }); // the whole list at once (few servers and API); an answer that comes after the field was left opens nothing
 document.addEventListener("focusout", (ev) => { if (champDeploiement(ev.target)) fermerListeMentions(ev.target.id); });
-document.addEventListener("change", (ev) => { if (ev.target.id === "dep-api-q-cat") $("#dep-api-q").focus(); }); // the filtered list opens under its field
+document.addEventListener("change", (ev) => { if (/^(dep|cp)-api-q-cat$/.test(ev.target.id)) $("#" + ev.target.id.slice(0, -4)).focus(); }); // the filtered list opens under its field
 document.addEventListener("input", (ev) => {
-  const cle = { "dep-url": "url", "dep-plan": "plan" }[ev.target.id] || (ev.target.name === "dep-moment" && "moment");
-  if (cle && dep.f) { dep.f[cle] = ev.target.value; majDeploiement(); }
+  const [, pre, cle] = /^(dep|cp)-(url|plan|moment)$/.exec(ev.target.name || ev.target.id) || [];
+  if (cle && formDep(pre)) { formDep(pre)[cle] = ev.target.value; majDeploiement("", pre); }
 });
 document.addEventListener("click", (ev) => {
   const x = ev.target.closest("[data-dep-retirer]");
-  if (x) { const [cle, i] = x.dataset.depRetirer.split(":"); dep.f[cle].splice(+i, 1); majDeploiement(cle); $(cle === "apis" ? "#dep-api-q" : "#dep-srv-q").focus(); }
+  if (x) { const [cle, i] = x.dataset.depRetirer.split(":"), pre = x.closest("[id$=-puces]").id.split("-")[0]; formDep(pre)[cle].splice(+i, 1); majDeploiement(cle, pre); $(`#${pre}-${cle === "apis" ? "api" : "srv"}-q`).focus(); }
   else if (ev.target.closest("[data-dep-annuler]")) { dep.f = null; rendrePage(); }
 });
 document.addEventListener("click", async (ev) => {
@@ -5012,6 +5101,7 @@ function pcsOuvert() {
 }
 document.addEventListener("toggle", (ev) => {
   if (ev.target && ev.target.id === "mis-projet") etat.missionProjetOuvert = ev.target.open; // M254: stays open across a save
+  if (ev.target && ev.target.id === "cp-projet" && carteProjetOuverte()) carteProjetOuverte().pOuvert = ev.target.open; // M295b
   if (ev.target && ev.target.id === "rp") etat.rpOuvert = ev.target.open; // M291: the same across a change of mode
   if (!ev.target || ev.target.id !== "pcs-repli") return;
   etat.pcsOuvert = ev.target.open;
@@ -8226,10 +8316,10 @@ $("#page").addEventListener("click", async (ev) => {
   if (b.dataset.pv) return repondreTache(b);
   if (b.dataset.choisirPieces) return $("#" + b.dataset.choisirPieces + "-fichiers").click();
   if (b.dataset.retirerPiece) { const [id, i] = b.dataset.retirerPiece.split("|"); (etat.pieces[id] || []).splice(Number(i), 1); $("#" + id + "-liste").innerHTML = listePieces(id); return; }
-  const pageMode = page === "projet" || (page === "nouveau" && etat.npMode) || $("#mis-mode");
-  if (b.dataset.max && pageMode) return changerMode({ parallele_max: Number(b.dataset.max) });
-  if (b.dataset.cadrage !== undefined && pageMode) return changerMode({ cadrage_max: Number(b.dataset.cadrage) });
-  if (b.dataset.dureeMax !== undefined && pageMode) return changerMode({ duree_max: Number(b.dataset.dureeMax) });
+  const pageMode = page === "projet" || (page === "nouveau" && etat.npMode) || $("#mis-mode") || $("#cp-mode");
+  if (b.dataset.max && pageMode) return changerMode({ parallele_max: Number(b.dataset.max) }, b);
+  if (b.dataset.cadrage !== undefined && pageMode) return changerMode({ cadrage_max: Number(b.dataset.cadrage) }, b);
+  if (b.dataset.dureeMax !== undefined && pageMode) return changerMode({ duree_max: Number(b.dataset.dureeMax) }, b);
   if (b.dataset.detailReglage) return detailReglage(b.dataset.detailReglage);
   if (b.dataset.detailMode) return detailMode(b.dataset.detailMode);
   if (page === "nouveau") {
@@ -8389,7 +8479,7 @@ $("#page").addEventListener("change", (ev) => {
   if (i.id === "gh-auteur-email") { const a = $("#gh-auteur-autre"); a.hidden = i.value !== ""; if (!a.hidden) a.focus(); }
   if (i.hasAttribute("data-gh-auto")) action(api("github", "POST", { action: "auto", auto: i.checked })).then((r) => { if (!r) i.checked = !i.checked; });
   if (i.hasAttribute("data-gh-atelier")) action(api("github", "POST", { action: "atelier", atelier: i.checked })).then((r) => { if (!r) i.checked = !i.checked; });
-  if (i.id === "md-parallele" || i.id === "md-eco" || i.id === "md-rapide") changerMode({}); // the switches add up
+  if (i.id === "md-parallele" || i.id === "md-eco" || i.id === "md-rapide") changerMode({}, i); // the switches add up
   // the framing time box typed by hand (10 to 240 min) and the work time limit (1 to 87600 h), checked by the
   // server, saved when the field is left
   const entre = (min, max) => i.value !== "" && Number.isFinite(Number(i.value)) && Math.round(Number(i.value)) >= min && Math.round(Number(i.value)) <= max;
