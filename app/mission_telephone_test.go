@@ -50,9 +50,9 @@ func TestMissionTelephone(t *testing.T) {
 	var mu sync.Mutex
 	var recus []MessagePush
 	var pilotes, reprises []string
-	ancienClient, ancienPilote, ancienneSession := clientPush, demarrerPiloteMission, sessionOrchestrateur
+	ancienClient, ancienPilote, ancienneSession := clientPush, demarrerPiloteProjet, sessionOrchestrateur
 	t.Cleanup(func() {
-		clientPush, demarrerPiloteMission, sessionOrchestrateur = ancienClient, ancienPilote, ancienneSession
+		clientPush, demarrerPiloteProjet, sessionOrchestrateur = ancienClient, ancienPilote, ancienneSession
 	})
 	clientPush = &http.Client{Transport: allerRetour(func(r *http.Request) (*http.Response, error) {
 		var m MessagePush
@@ -63,7 +63,7 @@ func TestMissionTelephone(t *testing.T) {
 		mu.Unlock()
 		return &http.Response{StatusCode: http.StatusCreated, Body: http.NoBody, Request: r}, nil
 	})}
-	demarrerPiloteMission = func(_ *Serveur, p Projet) (string, error) {
+	demarrerPiloteProjet = func(_ *Serveur, p Projet) (string, error) {
 		mu.Lock()
 		defer mu.Unlock()
 		pilotes = append(pilotes, p.Nom)

@@ -69,7 +69,7 @@ func TestOrchestrateurSession(t *testing.T) {
 	nouvelle := func(id string) {
 		t.Helper()
 		m := Mission{ID: id, Phrase: "Mettre la boutique en ligne sur web-1 avec " + temoin, Etat: "preparation", Politique: "prod",
-			Mentions: MentionsMission{Projets: []string{"boutique"}, Serveurs: []string{"srv1"}, Cles: []string{cle.ID}},
+			Mentions: Mentions{Projets: []string{"boutique"}, Serveurs: []string{"srv1"}, Cles: []string{cle.ID}},
 			Cree:     time.Now().UTC().Format(formatCree)}
 		if err := enregistrerMission(m); err != nil {
 			t.Fatal(err)

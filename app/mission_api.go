@@ -247,7 +247,7 @@ func (n missionsOccupees) Error() string {
 
 // creerMission: a mission in preparation for phrase (checked by the caller) and its orchestrator's session; the
 // same sentence already being prepared gives that mission. qui goes to the audit log.
-func (s *Serveur) creerMission(phrase string, mentions MentionsMission, qui string) (Mission, error) {
+func (s *Serveur) creerMission(phrase string, mentions Mentions, qui string) (Mission, error) {
 	verrouCreationMission.Lock()
 	defer verrouCreationMission.Unlock()
 	phrase = s.masquerSecrets(phrase)

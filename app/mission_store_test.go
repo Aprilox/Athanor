@@ -13,7 +13,7 @@ import (
 func TestMissionsStockage(t *testing.T) {
 	s := serveurCoffreTest(t)
 	m := Mission{ID: "abc123", Phrase: "Mettre ma-boutique en ligne", Etat: "proposee", Politique: "prod",
-		Mentions: MentionsMission{Projets: []string{"ma-boutique"}}, Carte: []byte(`{"titre":"Boutique"}`),
+		Mentions: Mentions{Projets: []string{"ma-boutique"}}, Carte: []byte(`{"titre":"Boutique"}`),
 		Historique: []EvenementMission{{T: "2026-11-13T10:00:00.000Z", Etat: "proposee"}}, Cree: "2026-11-13T10:00:00.000Z"}
 	if err := enregistrerMission(m); err != nil {
 		t.Fatal(err)

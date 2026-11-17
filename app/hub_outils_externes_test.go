@@ -55,7 +55,7 @@ func TestMCPExterne(t *testing.T) {
 		approbations = append(approbations, a)
 	}
 	if err := enregistrerMission(Mission{ID: "missautre1", Phrase: "Mettre autre en ligne", Etat: "proposee", Politique: "prod",
-		Mentions: MentionsMission{Projets: []string{"autre"}}, Cree: "2026-11-13T10:00:00.000Z"}); err != nil {
+		Mentions: Mentions{Projets: []string{"autre"}}, Cree: "2026-11-13T10:00:00.000Z"}); err != nil {
 		t.Fatal(err)
 	}
 	arrets := []string{}

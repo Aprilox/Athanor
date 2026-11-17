@@ -49,9 +49,9 @@ func TestMissionSuppression(t *testing.T) {
 	var appels, corbeille []string
 	noter := func(a string) { mu.Lock(); appels = append(appels, a); mu.Unlock() }
 	sessions := 0
-	ancienPilote, ancienArret, ancienneSession, ancienPas, ancienneCorbeille := demarrerPiloteMission, arreterPiloteMission, sessionTacheServeurs, pasSuiviMission, corbeilleMission
+	ancienPilote, ancienArret, ancienneSession, ancienPas, ancienneCorbeille := demarrerPiloteProjet, arreterPiloteProjet, sessionTacheServeurs, pasSuiviMission, corbeilleProjet
 	t.Cleanup(func() {
-		demarrerPiloteMission, arreterPiloteMission, sessionTacheServeurs, pasSuiviMission, corbeilleMission = ancienPilote, ancienArret, ancienneSession, ancienPas, ancienneCorbeille
+		demarrerPiloteProjet, arreterPiloteProjet, sessionTacheServeurs, pasSuiviMission, corbeilleProjet = ancienPilote, ancienArret, ancienneSession, ancienPas, ancienneCorbeille
 		tachesEnCours.Lock()
 		for _, e := range tachesEnCours.m {
 			e.annuler(errTacheArretee)
@@ -60,12 +60,12 @@ func TestMissionSuppression(t *testing.T) {
 		attendreFinTaches()
 	})
 	pasSuiviMission = time.Hour
-	demarrerPiloteMission = func(_ *Serveur, p Projet) (string, error) {
+	demarrerPiloteProjet = func(_ *Serveur, p Projet) (string, error) {
 		noter("demarrer " + p.Nom)
 		ecrireFichier(t, pid, "1", 0o644)
 		return "Pilot started", nil
 	}
-	arreterPiloteMission = func(_ *Serveur, p Projet) error { noter("arreter " + p.Nom); return os.Remove(pid) }
+	arreterPiloteProjet = func(_ *Serveur, p Projet) error { noter("arreter " + p.Nom); return os.Remove(pid) }
 	s.arretTest = func(p Projet) (string, error) { noter("fin_cycle " + p.Nom); return "", nil }
 	sessionTacheServeurs = func(_ *Serveur, ctx context.Context, _ string) error {
 		mu.Lock()
@@ -74,7 +74,7 @@ func TestMissionSuppression(t *testing.T) {
 		<-ctx.Done()
 		return context.Cause(ctx)
 	}
-	corbeilleMission = func(d string) error { mu.Lock(); corbeille = append(corbeille, d); mu.Unlock(); return os.RemoveAll(d) }
+	corbeilleProjet = func(d string) error { mu.Lock(); corbeille = append(corbeille, d); mu.Unlock(); return os.RemoveAll(d) }
 	nbSessions := func() int { mu.Lock(); defer mu.Unlock(); return sessions }
 
 	mux := http.NewServeMux()
@@ -213,15 +213,15 @@ func TestMissionSuppression(t *testing.T) {
 			t.Fatalf("preview: %s", b)
 		}
 		// the folder still held by the pilot just stopped: refused twice, then it goes
-		refus, normale := 2, corbeilleMission
+		refus, normale := 2, corbeilleProjet
 		pauseCorbeille = time.Millisecond
-		corbeilleMission = func(d string) error {
+		corbeilleProjet = func(d string) error {
 			if refus--; refus >= 0 {
 				return errors.New("Windows refused (a file in use?)")
 			}
 			return normale(d)
 		}
-		defer func() { corbeilleMission, pauseCorbeille = normale, 500*time.Millisecond }()
+		defer func() { corbeilleProjet, pauseCorbeille = normale, 500*time.Millisecond }()
 		if c, b := appel("POST", "/api/missions/"+id+"/supprimer", `{"projet":true}`); c != 200 || !strings.Contains(b, "folder "+strings.ReplaceAll(neuf.Dossier, `\`, `\\`)) {
 			t.Fatalf("delete with the folder: %d %s", c, b)
 		}

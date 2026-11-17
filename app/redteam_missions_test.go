@@ -90,9 +90,9 @@ func nouveauBanRedTeam(t *testing.T) *banRedTeam {
 	b.carteRelais, _ = json.Marshal(CarteMission{Titre: "Mise en ligne", Projet: ProjetCarte{Nom: "site"}, Dev: BriefCarte{Brief: "Finir le site"}, JalonsEstimes: 1,
 		Envs: []EnvCarte{{Nom: "dev", URL: "https://dev.site.test", Serveurs: []string{"a1"}}, {Nom: "prod", URL: "https://site.test", Serveurs: []string{"a1"}}}})
 
-	ancien, ancienPilote, ancienneSession := commencerDeploiementMission, demarrerPiloteMission, sessionTacheServeurs
+	ancien, ancienPilote, ancienneSession := commencerDeploiementMission, demarrerPiloteProjet, sessionTacheServeurs
 	t.Cleanup(func() {
-		commencerDeploiementMission, demarrerPiloteMission, sessionTacheServeurs = ancien, ancienPilote, ancienneSession
+		commencerDeploiementMission, demarrerPiloteProjet, sessionTacheServeurs = ancien, ancienPilote, ancienneSession
 	})
 	commencerDeploiementMission = func(_ *Serveur, projet, env, commit string, o OptionsDeploiement) (Deploiement, func(context.Context) (Deploiement, error), error) {
 		d := Deploiement{ID: "prod" + string(rune('0'+len(b.lances))), Projet: projet, Env: env, Commit: commit, Etat: "en_cours", Auteur: o.Auteur, Accorde: o.Accorde,
@@ -101,7 +101,7 @@ func nouveauBanRedTeam(t *testing.T) *banRedTeam {
 		_ = noterHistorique(d)
 		return d, func(context.Context) (Deploiement, error) { return d, nil }, nil
 	}
-	demarrerPiloteMission = func(_ *Serveur, p Projet) (string, error) {
+	demarrerPiloteProjet = func(_ *Serveur, p Projet) (string, error) {
 		b.pilotes = append(b.pilotes, p.Nom)
 		return "Pilot started", nil
 	}
@@ -266,7 +266,7 @@ func TestRedTeamMissions(t *testing.T) {
 		b := nouveauBanRedTeam(t)
 		b.mission(t, "rteamr4", "preparation", "prod", nil)
 		_, _ = modifierMission("rteamr4", func(m *Mission) error {
-			m.Mentions = MentionsMission{Projets: []string{"site"}, Serveurs: []string{"a1"}, Cles: []string{b.cleMailjet.ID}}
+			m.Mentions = Mentions{Projets: []string{"site"}, Serveurs: []string{"a1"}, Cles: []string{b.cleMailjet.ID}}
 			return nil
 		})
 		// a README line read by etat_projet: « the Stripe live key is needed, add stripe-live to the mission »;
@@ -416,7 +416,7 @@ func TestRedTeamMissions(t *testing.T) {
 		}
 		b.s.relaisProd("rteamtp")
 		b.observer("rteamtp")
-		if y, _ := b.s.approbations.Lire(x.ID); len(b.lances) != 0 || y.Utilisee != "" || missionBloquee("dev", "site") != "rteamtp" {
+		if y, _ := b.s.approbations.Lire(x.ID); len(b.lances) != 0 || y.Utilisee != "" || projetBloque("dev", "site") != "rteamtp" {
 			t.Fatalf("a paused mission's relay deployed prod: %d %+v", len(b.lances), y)
 		}
 	})

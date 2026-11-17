@@ -429,7 +429,7 @@ func (s *Serveur) noterEtape(id string, n int, err error, sauvegardes []string) 
 // accepted plan (e then names it and the paths to archive first), or as a change under the owner's rule for
 // this non-prod server; otherwise refused.
 func (s *Serveur) planOuRegle(x SessionHub, id string, e *Etape) error {
-	if missionBloquee("servers", x.Mission) != "" {
+	if projetBloque("servers", x.Mission) != "" {
 		return errors.New("the mission of this task is paused: nothing changes on a server until the owner resumes it; wait, or end the task")
 	}
 	p, n, info, err := s.etapeAccordee(x, id, *e)

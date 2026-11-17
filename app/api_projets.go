@@ -384,7 +384,7 @@ func (s *Serveur) apiPilote(w http.ResponseWriter, r *http.Request) {
 		return
 	case "arreter", "pause": // M250: a project's pilot paused is stopped now; Start picks it up where it stopped
 		marqueAuto(p, false)
-		err = arreterPiloteMission(s, p)
+		err = arreterPiloteProjet(s, p)
 	case "arreter-apres-cycle": // M250: "finish the milestone in progress" (a cycle ends with its milestone)
 		marqueAuto(p, false)
 		sortie, err = s.demanderArretApresCycle(p)
@@ -701,7 +701,7 @@ func (s *Serveur) demarrerPilote(p Projet) (string, error) {
 	if p.PiloteActif() {
 		return "The pilot is already running on this project.", nil // message key
 	}
-	if id := missionBloquee("dev", p.Nom); id != "" {
+	if id := projetBloque("dev", p.Nom); id != "" {
 		return "", errors.New("A mission on this project is paused: resume it on its page to start the pilot.")
 	}
 	// delivered, and nothing new since (livraison.go): the pilot would end at once

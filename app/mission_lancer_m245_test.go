@@ -31,9 +31,9 @@ func TestMissionLancerNatifM245(t *testing.T) {
 	base := t.TempDir()
 	_ = os.RemoveAll(dossierMissions())
 	t.Cleanup(func() { _ = os.RemoveAll(dossierMissions()) })
-	ancienPilote, ancienneSession := demarrerPiloteMission, sessionTacheServeurs
-	t.Cleanup(func() { demarrerPiloteMission, sessionTacheServeurs = ancienPilote, ancienneSession })
-	demarrerPiloteMission = func(_ *Serveur, p Projet) (string, error) { return "Pilot started", nil }
+	ancienPilote, ancienneSession := demarrerPiloteProjet, sessionTacheServeurs
+	t.Cleanup(func() { demarrerPiloteProjet, sessionTacheServeurs = ancienPilote, ancienneSession })
+	demarrerPiloteProjet = func(_ *Serveur, p Projet) (string, error) { return "Pilot started", nil }
 	sessionTacheServeurs = func(_ *Serveur, _ context.Context, dossier string) error {
 		j := `{"type":"system","subtype":"init","session_id":"s"}` + "\n" + `{"type":"result","is_error":false,"result":"nothing to do"}` + "\n"
 		return os.WriteFile(filepath.Join(dossier, "session.jsonl"), []byte(j), 0o600)

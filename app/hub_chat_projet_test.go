@@ -58,12 +58,12 @@ func nouveauBancCarteProjet(t *testing.T, cartes ...string) *bancCarteProjet {
 			b.api = e.ID
 		}
 	}
-	ancien := demarrerPiloteMission
-	demarrerPiloteMission = func(_ *Serveur, x Projet) (string, error) {
+	ancien := demarrerPiloteProjet
+	demarrerPiloteProjet = func(_ *Serveur, x Projet) (string, error) {
 		b.pilotes = append(b.pilotes, x.Nom)
 		return "Pilot started.", nil
 	}
-	t.Cleanup(func() { demarrerPiloteMission = ancien })
+	t.Cleanup(func() { demarrerPiloteProjet = ancien })
 	k := s.kitCourant()
 	h := projetAccueil(k)
 	_ = os.MkdirAll(h.Dossier, 0o700)
@@ -291,15 +291,15 @@ func TestCarteProjetReglages(t *testing.T) {
 		`{"type":"projet","projet":"loin","texte":"Un site.","dossier":"`+b.dossier("loin")+`"}`)
 	s := b.s
 	var lies []ProjetCarte
-	ancien := githubMission
-	githubMission = func(_ *Serveur, p Projet, pc ProjetCarte) error {
+	ancien := githubProjet
+	githubProjet = func(_ *Serveur, p Projet, pc ProjetCarte) error {
 		if p.Nom == "panne" {
 			return errors.New("témoin-github-en-panne")
 		}
 		lies = append(lies, pc)
 		return nil
 	}
-	t.Cleanup(func() { githubMission = ancien })
+	t.Cleanup(func() { githubProjet = ancien })
 
 	vue := b.carte(1)
 	if vue.Modes != nil || vue.GitHub != "" || vue.Depot != "" || vue.Reglages != nil || vue.Erreur != "" {

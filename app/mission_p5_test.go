@@ -277,9 +277,9 @@ func TestMissionP5(t *testing.T) {
 	}
 
 	// the fakes: the orchestrator reads the hub's state then proposes Martin's card; the pilot's start is counted
-	ancienOrch, ancienPilote, ancienOps := sessionOrchestrateur, demarrerPiloteMission, sessionTacheServeurs
+	ancienOrch, ancienPilote, ancienOps := sessionOrchestrateur, demarrerPiloteProjet, sessionTacheServeurs
 	t.Cleanup(func() {
-		sessionOrchestrateur, demarrerPiloteMission, sessionTacheServeurs = ancienOrch, ancienPilote, ancienOps
+		sessionOrchestrateur, demarrerPiloteProjet, sessionTacheServeurs = ancienOrch, ancienPilote, ancienOps
 	})
 	sessionOrchestrateur = func(_ *Serveur, _ context.Context, dossier string) error {
 		lireDossier(dossier, "consigne.txt")
@@ -296,7 +296,7 @@ func TestMissionP5(t *testing.T) {
 		return session(dossier, "sess-orch", "ok")
 	}
 	var pilotes []string
-	demarrerPiloteMission = func(_ *Serveur, p Projet) (string, error) {
+	demarrerPiloteProjet = func(_ *Serveur, p Projet) (string, error) {
 		mu.Lock()
 		defer mu.Unlock()
 		pilotes = append(pilotes, p.Nom)

@@ -87,9 +87,9 @@ func TestMissionCarteMartin(t *testing.T) {
 
 	// the fake orchestrator: reads the hub's state, then proposes the card V§1 calls for
 	var consignes []string
-	ancien, ancienPilote, ancienneSession := sessionOrchestrateur, demarrerPiloteMission, sessionTacheServeurs
+	ancien, ancienPilote, ancienneSession := sessionOrchestrateur, demarrerPiloteProjet, sessionTacheServeurs
 	t.Cleanup(func() {
-		sessionOrchestrateur, demarrerPiloteMission, sessionTacheServeurs = ancien, ancienPilote, ancienneSession
+		sessionOrchestrateur, demarrerPiloteProjet, sessionTacheServeurs = ancien, ancienPilote, ancienneSession
 	})
 	sessionOrchestrateur = func(_ *Serveur, _ context.Context, dossier string) error {
 		c, _ := os.ReadFile(filepath.Join(dossier, "consigne.txt"))
@@ -123,7 +123,7 @@ func TestMissionCarteMartin(t *testing.T) {
 			`{"type":"result","is_error":false,"result":"ok"}`+"\n"), 0o600)
 	}
 	var pilotes, taches []string
-	demarrerPiloteMission = func(_ *Serveur, p Projet) (string, error) {
+	demarrerPiloteProjet = func(_ *Serveur, p Projet) (string, error) {
 		mu.Lock()
 		defer mu.Unlock()
 		pilotes = append(pilotes, p.Nom)

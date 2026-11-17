@@ -14,27 +14,10 @@ import (
 	"time"
 )
 
-// arreterPiloteMission: replaced by the tests (no kit script there).
-var arreterPiloteMission = func(s *Serveur, p Projet) error { _, err := s.arreterPiloteProjet(p); return err }
-
 var errMissionArretee = errors.New("the mission was stopped by the owner")
 
 // rigueurPolitique: the missions' policies, the loosest first.
 var rigueurPolitique = []string{"autonome", "prod", "tout"}
-
-// missionBloquee: the paused mission one of whose lanes is (module, ref) — a project name or a Servers task id —,
-// "" none. Read by the milestone relay, the Servers plans, demarrerPilote (the prod relay reads the state itself).
-func missionBloquee(module, ref string) string {
-	if ref == "" {
-		return ""
-	}
-	for _, m := range lireMissions() {
-		if m.Etat == "en_pause" && slices.ContainsFunc(m.Voies, func(v VoieMission) bool { return v.Module == module && v.Ref == ref }) {
-			return m.ID
-		}
-	}
-	return ""
-}
 
 // projetMission: m's Dev lane's project (false: none, or gone).
 func (s *Serveur) projetMission(m Mission) (Projet, bool) {
@@ -120,7 +103,7 @@ func (s *Serveur) pauserMission(id, qui string) (Mission, error) {
 	s.ordreVoiesDistantes(m, "pause_fin_cycle")
 	if p, ok := s.projetMission(m); ok && p.PiloteActif() {
 		marqueAuto(p, false)
-		if e := arreterPiloteMission(s, p); e != nil {
+		if e := arreterPiloteProjet(s, p); e != nil {
 			s.noterJournalMission(id, s.entreeJournal("pause:pilote:"+m.Historique[len(m.Historique)-1].T, time.Now(), "erreur", "The pilot of {0} did not stop: {1}", p.Nom, e.Error()))
 		}
 	}
@@ -263,7 +246,7 @@ func (s *Serveur) reprendreMission(id, qui string) (Mission, error) {
 		s.remettreRelaisJalon(m, p)
 	}
 	if ok && !p.PiloteActif() && !projetTermine(p) {
-		if _, e := demarrerPiloteMission(s, p); e != nil {
+		if _, e := demarrerPiloteProjet(s, p); e != nil {
 			s.noterJournalMission(id, s.entreeJournal("reprise:pilote:"+m.Historique[len(m.Historique)-1].T, time.Now(), "erreur", "The pilot of {0} did not start: {1}", p.Nom, e.Error()))
 		} else {
 			marqueAuto(p, true)
@@ -343,7 +326,7 @@ func (s *Serveur) arreterMission(id, qui string) (Mission, error) {
 	p, avecProjet := s.projetMission(m)
 	if avecProjet && p.PiloteActif() {
 		marqueAuto(p, false)
-		if e := arreterPiloteMission(s, p); e != nil {
+		if e := arreterPiloteProjet(s, p); e != nil {
 			s.noterJournalMission(id, s.entreeJournal("arret:pilote", time.Now(), "erreur", "The pilot of {0} did not stop: {1}", p.Nom, e.Error()))
 		}
 	}

@@ -26,12 +26,12 @@ func TestHubChatActions(t *testing.T) {
 	t.Cleanup(func() { _ = os.RemoveAll(dossierJournalAudit()) })
 	s, p, _, appel := serveurChatEssai(t)
 	var pilotes []string
-	ancien := demarrerPiloteMission
-	demarrerPiloteMission = func(_ *Serveur, x Projet) (string, error) {
+	ancien := demarrerPiloteProjet
+	demarrerPiloteProjet = func(_ *Serveur, x Projet) (string, error) {
 		pilotes = append(pilotes, x.Nom)
 		return "Pilot started.", nil
 	}
-	t.Cleanup(func() { demarrerPiloteMission = ancien })
+	t.Cleanup(func() { demarrerPiloteProjet = ancien })
 	ecrire(t, p.Demande(), "# A\n\nUn site.\n")
 	k := s.kitCourant()
 	h := projetAccueil(k)

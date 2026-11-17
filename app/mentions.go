@@ -149,17 +149,26 @@ func (s *Serveur) apiMentions(w http.ResponseWriter, r *http.Request) {
 	s.ecrireJSON(w, map[string]any{"mentions": l, "autres": autres})
 }
 
+// Mentions: what the owner mentioned (@project, @server, @key), resolved by the Go (resoudreMentions):
+// project names, server ids and vault entry ids (names are not unique); Nouveau: the "New project" chip.
+type Mentions struct {
+	Projets  []string `json:"projets"`
+	Serveurs []string `json:"serveurs"`
+	Cles     []string `json:"cles"`
+	Nouveau  bool     `json:"nouveau,omitempty"`
+}
+
 // resoudreMentions: the chips checked against what exists now (a removed server, a hostile ref → errMentionInconnue,
 // a 400 for the API); duplicates are dropped. Projets = names, Serveurs = ids, Cles = vault entry ids.
-func (s *Serveur) resoudreMentions(l []MentionDemandee) (MentionsMission, error) {
+func (s *Serveur) resoudreMentions(l []MentionDemandee) (Mentions, error) {
 	if len(l) > maxMentions {
-		return MentionsMission{}, errMentionInconnue
+		return Mentions{}, errMentionInconnue
 	}
 	connus := map[string]bool{}
 	for _, c := range s.candidatsMentions() {
 		connus[c.Type+"\x00"+c.Ref] = true
 	}
-	m := MentionsMission{Projets: []string{}, Serveurs: []string{}, Cles: []string{}}
+	m := Mentions{Projets: []string{}, Serveurs: []string{}, Cles: []string{}}
 	for _, d := range l {
 		if d.Type == "nouveau" {
 			m.Nouveau = true
@@ -169,7 +178,7 @@ func (s *Serveur) resoudreMentions(l []MentionDemandee) (MentionsMission, error)
 			continue
 		}
 		if d = mentionAPI(d); !connus[d.Type+"\x00"+d.Ref] {
-			return MentionsMission{}, errMentionInconnue
+			return Mentions{}, errMentionInconnue
 		}
 		cible := map[string]*[]string{"projet": &m.Projets, "serveur": &m.Serveurs, "api": &m.Cles}[d.Type]
 		if !slices.Contains(*cible, d.Ref) {

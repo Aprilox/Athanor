@@ -549,7 +549,7 @@ func reglagesCarteErr(k Kit, a *ActionChat) error {
 	if err := validerModesCarte(a.Modes); err != nil {
 		return err
 	}
-	depot, err := depotMission(a.GitHub, a.Depot, a.Projet)
+	depot, err := depotProjet(a.GitHub, a.Depot, a.Projet)
 	if err != nil {
 		return err
 	}
@@ -743,12 +743,12 @@ func (s *Serveur) executerActionChat(c CarteActionChat, qui, message string) (st
 			}
 		}
 		if err == nil && a.GitHub != "" {
-			err = githubMission(s, p, ProjetCarte{Nom: p.Nom, GitHub: a.GitHub, Depot: a.Depot, SansPousse: a.SansPousse, Atelier: a.Atelier})
+			err = githubProjet(s, p, ProjetCarte{Nom: p.Nom, GitHub: a.GitHub, Depot: a.Depot, SansPousse: a.SansPousse, Atelier: a.Atelier})
 		}
 		if err != nil { // never a pilot that would run without what the card said
 			return "Project “{0}” added, but its settings were not all saved and its pilot was not started: {1}", []string{p.Nom, err.Error()}, nil
 		}
-		msg, err := demarrerPiloteMission(s, p)
+		msg, err := demarrerPiloteProjet(s, p)
 		if err != nil {
 			return "Project “{0}” added, but its pilot did not start: {1}", []string{p.Nom, err.Error()}, nil
 		}
@@ -765,7 +765,7 @@ func (s *Serveur) executerActionChat(c CarteActionChat, qui, message string) (st
 		return "Task started on {0}.", []string{c.Sur, t.ID}, nil // the task's id: cartesConversation reads its state
 	case "pilote":
 		p, _ := s.projetLocalChat(a.Projet)
-		msg, err := demarrerPiloteMission(s, p)
+		msg, err := demarrerPiloteProjet(s, p)
 		return msg, nil, err
 	case "demande":
 		p, _ := s.projetLocalChat(a.Projet)
@@ -779,7 +779,7 @@ func (s *Serveur) executerActionChat(c CarteActionChat, qui, message string) (st
 		return "Remark sent: the pilot reads it at its next cycle.", nil,
 			p.AjouterRemarque(a.Texte, libelle(s.langue(), "remarques"), libelle(s.langue(), "remarques_aide"))
 	case "mission":
-		_, err := s.creerMission(a.Texte, MentionsMission{Projets: []string{}, Serveurs: []string{}, Cles: []string{}}, qui)
+		_, err := s.creerMission(a.Texte, Mentions{Projets: []string{}, Serveurs: []string{}, Cles: []string{}}, qui)
 		return "Mission prepared: its card appears on the Missions page.", nil, err
 	}
 	return "", nil, errors.New("This card cannot be read: ask the assistant to propose it again.")

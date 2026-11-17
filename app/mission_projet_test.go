@@ -39,15 +39,15 @@ func TestMissionProjet(t *testing.T) {
 	creations, echecsGH := 0, 1
 	lies := map[string]bool{}
 	var dernierPC ProjetCarte
-	ancienPilote, ancienGH := demarrerPiloteMission, githubMission
-	t.Cleanup(func() { demarrerPiloteMission, githubMission = ancienPilote, ancienGH })
-	demarrerPiloteMission = func(_ *Serveur, p Projet) (string, error) {
+	ancienPilote, ancienGH := demarrerPiloteProjet, githubProjet
+	t.Cleanup(func() { demarrerPiloteProjet, githubProjet = ancienPilote, ancienGH })
+	demarrerPiloteProjet = func(_ *Serveur, p Projet) (string, error) {
 		mu.Lock()
 		defer mu.Unlock()
 		pilotes = append(pilotes, p.Nom)
 		return "Pilot started", nil
 	}
-	githubMission = func(_ *Serveur, p Projet, pc ProjetCarte) error {
+	githubProjet = func(_ *Serveur, p Projet, pc ProjetCarte) error {
 		mode, depot := pc.GitHub, pc.Depot // a fake GitHub: fails echecsGH times first
 		mu.Lock()
 		defer mu.Unlock()

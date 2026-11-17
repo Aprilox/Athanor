@@ -17,9 +17,6 @@ import (
 	"strings"
 )
 
-// demarrerPiloteMission: replaced by the tests (a fake pilot).
-var demarrerPiloteMission = (*Serveur).demarrerPilote
-
 // errCarteChangee (C77, C79): the card or the policy changed since the launch was asked or read.
 var errCarteChangee = erreurMission{http.StatusConflict, "The card has changed: look at it again before launching it"}
 
@@ -250,7 +247,7 @@ func (s *Serveur) etapesMission(c CarteMission, politique, qui, dossier string, 
 	}
 	// M254: the GitHub repository the owner chose, linked before the pilot pushes anything (again on a resumed launch)
 	if c.Projet.GitHub != "" {
-		if err := githubMission(s, p, c.Projet); err != nil {
+		if err := githubProjet(s, p, c.Projet); err != nil {
 			return voies, faits, errMoteur("the project {0} is created in {1}, but its GitHub repository is not linked: {2}", p.Nom, p.Dossier, err)
 		}
 		faits = append(faits, evenementMission("lancee", "GitHub repository linked: "+c.Projet.Depot))
@@ -294,7 +291,7 @@ func (s *Serveur) etapesMission(c CarteMission, politique, qui, dossier string, 
 	}
 	// 4. the pilot (it injects the grants given above)
 	if c.Dev.Brief != "" {
-		if _, err := demarrerPiloteMission(s, p); err != nil {
+		if _, err := demarrerPiloteProjet(s, p); err != nil {
 			return voies, faits, errMoteur("starting the pilot: {0}", err)
 		}
 		audit(VoieMission{Module: "dev", Ref: p.Nom, Etat: "lancee"})

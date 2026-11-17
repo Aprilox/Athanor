@@ -46,17 +46,17 @@ func TestMissionArretReprise(t *testing.T) {
 	noter := func(a string) { mu.Lock(); appels = append(appels, a); mu.Unlock() }
 	vider := func() []string { mu.Lock(); defer mu.Unlock(); a := appels; appels = nil; return a }
 	sessions := 0
-	ancienPilote, ancienArret, ancienneSession, ancienPas := demarrerPiloteMission, arreterPiloteMission, sessionTacheServeurs, pasSuiviMission
+	ancienPilote, ancienArret, ancienneSession, ancienPas := demarrerPiloteProjet, arreterPiloteProjet, sessionTacheServeurs, pasSuiviMission
 	t.Cleanup(func() {
-		demarrerPiloteMission, arreterPiloteMission, sessionTacheServeurs, pasSuiviMission = ancienPilote, ancienArret, ancienneSession, ancienPas
+		demarrerPiloteProjet, arreterPiloteProjet, sessionTacheServeurs, pasSuiviMission = ancienPilote, ancienArret, ancienneSession, ancienPas
 	})
 	pasSuiviMission = time.Hour // the follower reads once, then the test reads itself
-	demarrerPiloteMission = func(_ *Serveur, p Projet) (string, error) {
+	demarrerPiloteProjet = func(_ *Serveur, p Projet) (string, error) {
 		noter("demarrer " + p.Nom)
 		ecrireFichier(t, pid, "1", 0o644)
 		return "Pilot started", nil
 	}
-	arreterPiloteMission = func(_ *Serveur, p Projet) error { noter("arreter " + p.Nom); return os.Remove(pid) }
+	arreterPiloteProjet = func(_ *Serveur, p Projet) error { noter("arreter " + p.Nom); return os.Remove(pid) }
 	s.arretTest = func(p Projet) (string, error) { noter("fin_cycle " + p.Nom); return "", nil }
 	sessionTacheServeurs = func(_ *Serveur, ctx context.Context, _ string) error {
 		mu.Lock()
@@ -203,7 +203,7 @@ func TestMissionArretReprise(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(p.Atelier(), "auto")); err == nil {
 			t.Fatal("the pilot would restart with the application")
 		}
-		if missionBloquee("dev", p.Nom) != "" {
+		if projetBloque("dev", p.Nom) != "" {
 			t.Fatal("the milestone relay is blocked while the milestone ends")
 		}
 		ecrireRelais(p.Nom, RelaisJalon{Jalon: "M1", Commit: strings.Repeat("ab12", 10), Etat: "attente", Date: time.Now().UTC().Format(time.RFC3339)})
@@ -229,7 +229,7 @@ func TestMissionArretReprise(t *testing.T) {
 			t.Fatalf("not paused once the milestone is done: %s", m.Etat)
 		}
 		suspendue(ref)
-		if missionBloquee("dev", p.Nom) != id {
+		if projetBloque("dev", p.Nom) != id {
 			t.Fatal("the paused mission does not lock its project")
 		}
 	})

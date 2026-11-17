@@ -32,12 +32,12 @@ func TestMissionPreparationServeurs(t *testing.T) {
 	}
 	_ = os.RemoveAll(dossierMissions())
 	t.Cleanup(func() { _ = os.RemoveAll(dossierMissions()) })
-	ancienPilote, ancienneSession, ancienPas := demarrerPiloteMission, sessionTacheServeurs, pasSuiviMission
+	ancienPilote, ancienneSession, ancienPas := demarrerPiloteProjet, sessionTacheServeurs, pasSuiviMission
 	t.Cleanup(func() {
-		demarrerPiloteMission, sessionTacheServeurs, pasSuiviMission = ancienPilote, ancienneSession, ancienPas
+		demarrerPiloteProjet, sessionTacheServeurs, pasSuiviMission = ancienPilote, ancienneSession, ancienPas
 	})
 	pasSuiviMission = time.Hour // the follower reads once at the launch, then the test reads itself
-	demarrerPiloteMission = func(_ *Serveur, p Projet) (string, error) { return "Pilot started", nil }
+	demarrerPiloteProjet = func(_ *Serveur, p Projet) (string, error) { return "Pilot started", nil }
 	var mu sync.Mutex
 	var consignes []string
 	sessionTacheServeurs = func(_ *Serveur, _ context.Context, dossier string) error {

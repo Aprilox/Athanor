@@ -178,10 +178,10 @@ func TestCaptureHub(t *testing.T) {
 	t.Cleanup(func() { _ = os.RemoveAll(dossierMissions()) })
 	// mission-cloche-tel (M158): ?lancer=1 adds capture03, the same card whose orchestrator asks to launch it
 	// mission-pause-* (M172): Resume starts the project's pilot, Pause and Stop stop it; none in the screenshots' kit
-	demarrer, arreter := demarrerPiloteMission, arreterPiloteMission
-	demarrerPiloteMission = func(*Serveur, Projet) (string, error) { return "", nil }
-	arreterPiloteMission = func(*Serveur, Projet) error { return nil }
-	t.Cleanup(func() { demarrerPiloteMission, arreterPiloteMission = demarrer, arreter })
+	demarrer, arreter := demarrerPiloteProjet, arreterPiloteProjet
+	demarrerPiloteProjet = func(*Serveur, Projet) (string, error) { return "", nil }
+	arreterPiloteProjet = func(*Serveur, Projet) error { return nil }
+	t.Cleanup(func() { demarrerPiloteProjet, arreterPiloteProjet = demarrer, arreter })
 	mux.HandleFunc("POST /test/mission", func(w http.ResponseWriter, r *http.Request) {
 		s.fermerLancementMission("capture03", "hub", "refuser", "capture") // never left pending for the next screenshots
 		enAttente, _ := s.approbations.Liste()
@@ -235,7 +235,7 @@ func TestCaptureHub(t *testing.T) {
 		b, _ := json.Marshal(calculerCarte(c, "prod", ctx))
 		cree := time.Now().UTC().Format(formatCree)
 		m := Mission{ID: "capture01", Phrase: "Un site vitrine pour la boulangerie Martin sur @VPS production, dev protégée, prod sur boulangerie-martin.fr",
-			Mentions: MentionsMission{Serveurs: []string{"c0ffee01"}, Nouveau: true}, Etat: "proposee", Carte: b, Politique: "prod",
+			Mentions: Mentions{Serveurs: []string{"c0ffee01"}, Nouveau: true}, Etat: "proposee", Carte: b, Politique: "prod",
 			Voies: []VoieMission{}, Questions: []QuestionMission{}, Historique: []EvenementMission{{T: cree, Etat: "proposee"}}, Cree: cree}
 		if r.URL.Query().Get("question") != "" {
 			m.Questions = append(m.Questions, QuestionMission{ID: "q1", Texte: "Quel serveur pour l'environnement de dev ?", Choix: []string{"Home server", "VPS production"}, Cree: cree})
@@ -380,7 +380,7 @@ func TestCaptureHub(t *testing.T) {
 							Problemes: []ProblemeSante{{Code: "verif", Rouge: true}}}
 					})
 				}
-				x.Mentions, x.Questions = MentionsMission{Projets: []string{}, Serveurs: []string{}, Cles: []string{}}, []QuestionMission{}
+				x.Mentions, x.Questions = Mentions{Projets: []string{}, Serveurs: []string{}, Cles: []string{}}, []QuestionMission{}
 				if err := enregistrerMission(x); err != nil {
 					http.Error(w, err.Error(), 500)
 					return

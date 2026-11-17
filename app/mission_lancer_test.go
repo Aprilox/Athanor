@@ -58,9 +58,9 @@ func TestMissionLancer(t *testing.T) {
 	var mu sync.Mutex
 	var pilotes, consignes []string
 	echecPilote := false
-	ancienPilote, ancienneSession := demarrerPiloteMission, sessionTacheServeurs
-	t.Cleanup(func() { demarrerPiloteMission, sessionTacheServeurs = ancienPilote, ancienneSession })
-	demarrerPiloteMission = func(_ *Serveur, p Projet) (string, error) {
+	ancienPilote, ancienneSession := demarrerPiloteProjet, sessionTacheServeurs
+	t.Cleanup(func() { demarrerPiloteProjet, sessionTacheServeurs = ancienPilote, ancienneSession })
+	demarrerPiloteProjet = func(_ *Serveur, p Projet) (string, error) {
 		mu.Lock()
 		defer mu.Unlock()
 		if echecPilote {

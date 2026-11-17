@@ -19,15 +19,6 @@ import (
 // The states of a mission, in their usual order.
 var etatsMission = []string{"preparation", "proposee", "acceptee", "lancee", "arret_demande", "en_pause", "terminee", "arretee", "annulee", "echec"}
 
-// MentionsMission: what the owner mentioned (@project, @server, @key), resolved by the Go (resoudreMentions):
-// project names, server ids and vault entry ids (names are not unique); Nouveau: the "New project" chip.
-type MentionsMission struct {
-	Projets  []string `json:"projets"`
-	Serveurs []string `json:"serveurs"`
-	Cles     []string `json:"cles"`
-	Nouveau  bool     `json:"nouveau,omitempty"`
-}
-
 // VoieMission: one lane of a launched mission (module dev or servers, ref = project or Servers task id).
 type VoieMission struct {
 	Module string `json:"module"`
@@ -67,7 +58,7 @@ type EvenementMission struct {
 type Mission struct {
 	ID          string              `json:"id"`
 	Phrase      string              `json:"phrase"` // masked by masquerSecrets, at most 4000 characters
-	Mentions    MentionsMission     `json:"mentions"`
+	Mentions    Mentions            `json:"mentions"`
 	Etat        string              `json:"etat"`
 	Carte       json.RawMessage     `json:"carte,omitempty"` // the mission card (CarteMission, M152)
 	Politique   string              `json:"politique"`       // prod | tout | autonome

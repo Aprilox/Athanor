@@ -50,14 +50,14 @@ func TestMissionControle(t *testing.T) {
 	var mu sync.Mutex
 	var appels []string
 	noter := func(a string) { mu.Lock(); appels = append(appels, a); mu.Unlock() }
-	ancienArret, ancienDemarrer, ancienUrgence := arreterPiloteMission, demarrerPiloteMission, arreterPiloteUrgence
+	ancienArret, ancienDemarrer, ancienUrgence := arreterPiloteProjet, demarrerPiloteProjet, arreterPiloteUrgence
 	t.Cleanup(func() {
-		arreterPiloteMission, demarrerPiloteMission, arreterPiloteUrgence = ancienArret, ancienDemarrer, ancienUrgence
+		arreterPiloteProjet, demarrerPiloteProjet, arreterPiloteUrgence = ancienArret, ancienDemarrer, ancienUrgence
 	})
-	arreterPiloteMission = func(_ *Serveur, p Projet) error { noter("arret " + p.Nom); return os.Remove(pilote) }
-	arreterPiloteUrgence = arreterPiloteMission
-	demarrerPiloteMission = func(s *Serveur, p Projet) (string, error) {
-		if id := missionBloquee("dev", p.Nom); id != "" { // as demarrerPilote
+	arreterPiloteProjet = func(_ *Serveur, p Projet) error { noter("arret " + p.Nom); return os.Remove(pilote) }
+	arreterPiloteUrgence = arreterPiloteProjet
+	demarrerPiloteProjet = func(s *Serveur, p Projet) (string, error) {
+		if id := projetBloque("dev", p.Nom); id != "" { // as demarrerPilote
 			return "", os.ErrPermission
 		}
 		noter("demarrer " + p.Nom)
@@ -109,8 +109,8 @@ func TestMissionControle(t *testing.T) {
 	})
 
 	t.Run("verrou", func(t *testing.T) {
-		if id := missionBloquee("dev", "site"); id != m.ID || missionBloquee("servers", tache.ID) != m.ID || missionBloquee("dev", tache.ID) != "" {
-			t.Fatalf("missionBloquee: %q", id)
+		if id := projetBloque("dev", "site"); id != m.ID || projetBloque("servers", tache.ID) != m.ID || projetBloque("dev", tache.ID) != "" {
+			t.Fatalf("projetBloque: %q", id)
 		}
 		if _, err := s.demarrerPilote(p); err == nil || !strings.Contains(err.Error(), "paused") {
 			t.Fatalf("demarrerPilote of a paused mission: %v", err)
@@ -138,7 +138,7 @@ func TestMissionControle(t *testing.T) {
 		if x, _ := lireMission(m.ID); x.Etat != "en_pause" {
 			t.Fatalf("resumed without the password: %s", x.Etat)
 		}
-		if c, x, b := appel(m.ID, "reprendre", mdp); c != 200 || x.Etat != "lancee" || missionBloquee("dev", "site") != "" {
+		if c, x, b := appel(m.ID, "reprendre", mdp); c != 200 || x.Etat != "lancee" || projetBloque("dev", "site") != "" {
 			t.Fatalf("resume: %d %s", c, b)
 		}
 		if a := vider(); !slices.Equal(a, []string{"demarrer site"}) {
@@ -264,7 +264,7 @@ func TestMissionControle(t *testing.T) {
 					t.Fatalf("%s a stopped mission: %d", a, c)
 				}
 			}
-			if id := missionBloquee("dev", "site"); id != "" {
+			if id := projetBloque("dev", "site"); id != "" {
 				t.Fatalf("a stopped mission still locks its project: %s", id)
 			}
 		})

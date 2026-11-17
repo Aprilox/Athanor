@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strings"
 	"time"
@@ -88,28 +87,6 @@ func (s *Serveur) projetSupprimable(m Mission) (Projet, string) {
 		}
 	}
 	return p, controlerDossierSupprime(p.Dossier, s.kitCourant().Racine)
-}
-
-// controlerDossierSupprime: "" when d may go to the recycle bin, else why not.
-func controlerDossierSupprime(d, kit string) string {
-	if !filepath.IsAbs(d) {
-		return "The project's folder path is not a full path"
-	}
-	if cle := dossierInterdit(d, kit); cle != "" {
-		return cle
-	}
-	fi, err := os.Lstat(d)
-	if errors.Is(err, os.ErrNotExist) {
-		return "" // already gone: the project is still removed from Studio
-	}
-	if err != nil || fi.Mode()&os.ModeSymlink != 0 || !fi.IsDir() {
-		return "The project's folder is a link or not a folder: it is never deleted"
-	}
-	reel := cheminReel(d)
-	if runtime.GOOS == "windows" && !strings.EqualFold(reel, filepath.Clean(d)) || runtime.GOOS != "windows" && reel != filepath.Clean(d) {
-		return "The project's folder leads elsewhere (a link or a junction): it is never deleted"
-	}
-	return ""
 }
 
 func (s *Serveur) apercuSuppression(m Mission) ApercuSuppression {
@@ -323,10 +300,10 @@ func (s *Serveur) supprimerMission(id, qui string, o OptionsSuppression) ([]stri
 	if o.Projet {
 		if _, err := os.Lstat(p.Dossier); err == nil {
 			// a pilot just stopped (or an indexer) releases its files a few seconds later: Windows refuses until then
-			err := corbeilleMission(p.Dossier)
+			err := corbeilleProjet(p.Dossier)
 			for i := 0; err != nil && i < 20; i++ {
 				time.Sleep(pauseCorbeille)
-				err = corbeilleMission(p.Dossier)
+				err = corbeilleProjet(p.Dossier)
 			}
 			if err != nil {
 				return retire, erreurMission{http.StatusInternalServerError, "Cannot send the project's folder to the recycle bin: close what uses it, then delete again"}
@@ -409,8 +386,6 @@ func tachesDeMission(m Mission) map[string]bool {
 	}
 	return l
 }
-
-var corbeilleMission = mettreALaCorbeille // a test sees what goes, without the real recycle bin
 
 var pauseCorbeille = 500 * time.Millisecond // between two tries of the recycle bin (10 s in all)
 

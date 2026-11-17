@@ -43,10 +43,10 @@ func TestMissionModifiable(t *testing.T) {
 	base := t.TempDir()
 	_ = os.RemoveAll(dossierMissions())
 	t.Cleanup(func() { _ = os.RemoveAll(dossierMissions()) })
-	ancienPilote, ancienneSession := demarrerPiloteMission, sessionTacheServeurs
-	t.Cleanup(func() { demarrerPiloteMission, sessionTacheServeurs = ancienPilote, ancienneSession })
+	ancienPilote, ancienneSession := demarrerPiloteProjet, sessionTacheServeurs
+	t.Cleanup(func() { demarrerPiloteProjet, sessionTacheServeurs = ancienPilote, ancienneSession })
 	piloteKO := true
-	demarrerPiloteMission = func(_ *Serveur, p Projet) (string, error) {
+	demarrerPiloteProjet = func(_ *Serveur, p Projet) (string, error) {
 		if piloteKO {
 			return "", errors.New("the pilot script is missing")
 		}

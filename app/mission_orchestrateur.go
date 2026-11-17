@@ -62,7 +62,7 @@ var sessionOrchestrateur = func(s *Serveur, ctx context.Context, dossier string)
 func dossierSessionMission(id string) string { return filepath.Join(dossierMissions(), id+"-session") }
 
 // mentionsLisibles: the mission's mentions by readable name (a server with its id and host, an entry with its type).
-func (s *Serveur) mentionsLisibles(m MentionsMission) []string {
+func (s *Serveur) mentionsLisibles(m Mentions) []string {
 	var l []string
 	for _, p := range m.Projets {
 		l = append(l, "project "+p)

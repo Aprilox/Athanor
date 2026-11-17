@@ -183,7 +183,7 @@ func (s *Serveur) avancerRelais(p Projet, maintenant time.Time) <-chan struct{} 
 	if r.Etat != "attente" && !(sansMethodeRelais(r) && e.Deploiement == nil) {
 		return nil
 	}
-	if e.Moment == "" || len(e.Serveurs) == 0 || missionBloquee("dev", p.Nom) != "" { // a paused mission: the relay waits for Resume
+	if e.Moment == "" || len(e.Serveurs) == 0 || projetBloque("dev", p.Nom) != "" { // a paused mission: the relay waits for Resume
 		return nil
 	}
 	if e.Deploiement == nil {

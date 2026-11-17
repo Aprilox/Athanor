@@ -13,35 +13,9 @@ import (
 	"strings"
 )
 
-type ProjetCarte struct {
-	Nom     string `json:"nom"`
-	Nouveau bool   `json:"nouveau"`
-	Distant string `json:"distant,omitempty"` // worked out by validerCarte: "remote id/project" of a nom@instance (mission_distant.go)
-	// M254, a new project only, set by the owner (POST /projet, never the agent): its folder ("" = next to the
-	// other projects), its GitHub repository (github: "" none, lier an existing OWNER/NAME, creer a private name)
-	Dossier string `json:"dossier,omitempty"`
-	GitHub  string `json:"github,omitempty"`
-	Depot   string `json:"depot,omitempty"`
-	// M264: the two boxes of Manage › GitHub (choixGitHub): automatic push off, workshop shared
-	SansPousse   bool `json:"sans_pousse,omitempty"`
-	Atelier      bool `json:"atelier,omitempty"`
-	Proprietaire bool `json:"proprietaire,omitempty"` // the owner set them: a new card from the agent keeps them (and the modes)
-}
-
 type BriefCarte struct {
 	Brief string      `json:"brief"`
 	Modes *ModesCarte `json:"modes,omitempty"` // Dev, a new project only: its working modes (as Manage › Working mode)
-}
-
-// ModesCarte: the three independent switches of a new project, written at the launch by Projet.ecrireMode.
-type ModesCarte struct {
-	Parallele bool `json:"parallele"`
-	Eco       bool `json:"eco"`
-	Rapide    bool `json:"rapide"`
-	// as POST /api/mode: workers at most (0: 3), framing time box in minutes, work time limit in hours (nil: Settings)
-	ParalleleMax int  `json:"parallele_max,omitempty"`
-	CadrageMax   *int `json:"cadrage_max,omitempty"`
-	DureeMax     *int `json:"duree_max,omitempty"`
 }
 
 // nomsModes: "parallel, eco, fast" (the switched-on ones), "usual" when none, for the mission's history.

@@ -329,7 +329,7 @@ func TestRedTeamOuverture(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := enregistrerMission(Mission{ID: "missdemo1", Phrase: "Mettre demo en ligne", Etat: "proposee", Politique: "prod",
-		Mentions: MentionsMission{Projets: []string{"demo"}}, Cree: "2026-11-13T10:00:00.000Z"}); err != nil {
+		Mentions: Mentions{Projets: []string{"demo"}}, Cree: "2026-11-13T10:00:00.000Z"}); err != nil {
 		t.Fatal(err)
 	}
 	intrus := aleatoire(32)
