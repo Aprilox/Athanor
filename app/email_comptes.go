@@ -149,7 +149,7 @@ func (s *Serveur) apiEmailComptes(w http.ResponseWriter, r *http.Request) {
 	for _, c := range liste {
 		vus = append(vus, compteVu{c, s.acces.projetsEmail(c.Entree)})
 	}
-	s.ecrireJSON(w, map[string]any{"comptes": vus, "projets_hub": s.nomsProjets(), "envs": envsProjet})
+	s.ecrireJSON(w, map[string]any{"comptes": vus, "projets_hub": s.nomsProjets()})
 }
 
 // apiEmailAjouter: POST /api/email/comptes, a new account; its password goes into the vault (type smtp).

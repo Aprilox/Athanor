@@ -13,6 +13,7 @@ import (
 	"slices"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -92,33 +93,35 @@ func (s *Serveur) variablesCompteEmail(c *CompteEmail) (bool, error) {
 
 // accorderEmail gives the account's entries to the project for env, all or nothing; a grant already there
 // stays, an SMTP_ name taken by another entry refuses everything.
-func (a *Acces) accorderEmail(projet, env string, g map[string]string) error {
+func (a *Acces) accorderEmail(projet string, envs []string, g map[string]string) error {
 	noms := append([]string{"SMTP_PASSWORD"}, variablesEmail...)
 	return a.modifier(func(f *fichierAcces) error {
 		p := projetDe(f, projet)
 		for _, n := range noms {
-			if slices.ContainsFunc(p.Acces, func(x AccesProjet) bool { return x.Env == env && x.Variable == n && x.Entree != g[n] }) {
-				return errEmailConflit
+			if slices.ContainsFunc(p.Acces, func(x AccesProjet) bool { return slices.Contains(envs, x.Env) && x.Variable == n && x.Entree != g[n] }) {
+				return errEmailConflit // nothing is written: all the environments or none
 			}
 		}
-		for _, n := range noms {
-			if !slices.ContainsFunc(p.Acces, func(x AccesProjet) bool { return x.Env == env && x.Entree == g[n] }) {
-				p.Acces = append(p.Acces, AccesProjet{Entree: g[n], Env: env, Variable: n, Auto: "email", Cree: time.Now().UTC()})
+		for _, env := range envs {
+			for _, n := range noms {
+				if !slices.ContainsFunc(p.Acces, func(x AccesProjet) bool { return x.Env == env && x.Entree == g[n] }) {
+					p.Acces = append(p.Acces, AccesProjet{Entree: g[n], Env: env, Variable: n, Auto: "email", Cree: time.Now().UTC()})
+				}
 			}
 		}
 		return nil
 	})
 }
 
-// retirerEmail takes the account's entries back from the project for env.
-func (a *Acces) retirerEmail(projet, env string, ids []string) error {
+// retirerEmail takes the account's entries back from the project for envs.
+func (a *Acces) retirerEmail(projet string, envs, ids []string) error {
 	return a.modifier(func(f *fichierAcces) error {
 		p := f.Projets[projet]
 		if p == nil {
 			return errEmailPasConfigu
 		}
 		avant := len(p.Acces)
-		p.Acces = slices.DeleteFunc(p.Acces, func(x AccesProjet) bool { return x.Env == env && slices.Contains(ids, x.Entree) })
+		p.Acces = slices.DeleteFunc(p.Acces, func(x AccesProjet) bool { return slices.Contains(envs, x.Env) && slices.Contains(ids, x.Entree) })
 		if len(p.Acces) == avant {
 			return errEmailPasConfigu
 		}
@@ -163,7 +166,10 @@ func (s *Serveur) apiEmailConfigurer(w http.ResponseWriter, r *http.Request) {
 	if !s.accesPret(w, c.Projet) {
 		return
 	}
-	if !s.acces.EnvConnu(c.Projet, c.Env) {
+	if c.Env == "" {
+		c.Env = tousEnvs // the whole project, like its keys (M304); an older configuration names its environment
+	}
+	if c.Env != tousEnvs && !s.acces.EnvConnu(c.Projet, c.Env) {
 		s.erreur(w, http.StatusBadRequest, errAccesEnv.Error())
 		return
 	}
@@ -190,7 +196,7 @@ func (s *Serveur) apiEmailConfigurer(w http.ResponseWriter, r *http.Request) {
 	action := "envoi e-mail configuré"
 	if c.Retirer {
 		action = "envoi e-mail retiré"
-		err = s.acces.retirerEmail(c.Projet, c.Env, entreesEmail(*compte))
+		err = s.acces.retirerEmail(c.Projet, envsVises(c.Env), entreesEmail(*compte))
 	} else {
 		var change bool
 		change, err = s.variablesCompteEmail(compte)
@@ -199,7 +205,7 @@ func (s *Serveur) apiEmailConfigurer(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if err == nil {
-			err = s.acces.accorderEmail(c.Projet, c.Env, grantsEmail(*compte))
+			err = s.acces.accorderEmail(c.Projet, envsVises(c.Env), grantsEmail(*compte))
 		}
 	}
 	switch {
@@ -218,6 +224,6 @@ func (s *Serveur) apiEmailConfigurer(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprintln(os.Stderr, "access injection:", p.Nom+":", err)
 		}
 	}
-	s.ecrireAudit(LigneAudit{Type: "evenement", De: deQui(r), Vers: "email", Projet: c.Projet, Action: action, Resultat: compte.Nom + " (" + c.Env + ")"})
+	s.ecrireAudit(LigneAudit{Type: "evenement", De: deQui(r), Vers: "email", Projet: c.Projet, Action: action, Resultat: compte.Nom + " (" + strings.Join(envsVises(c.Env), ", ") + ")"})
 	s.ecrireJSON(w, map[string]any{"compte": compte.ID, "projets": s.acces.projetsEmail(compte.Entree)})
 }

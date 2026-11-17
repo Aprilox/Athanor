@@ -1166,10 +1166,12 @@ func TestTUIEtroitEtCalme(t *testing.T) {
 	a.page = pChat
 	a.chat = &reponseChatTUI{EnCours: true}
 	a.dessiner(e)
-	avant := e.texteEcran()
+	// below the header: its clock may pass a minute during the wait (seen once in M304's full check)
+	sousEntete := func() string { _, r, _ := strings.Cut(e.texteEcran(), "╭"); return r }
+	avant := sousEntete()
 	time.Sleep(250 * time.Millisecond)
 	a.dessiner(e)
-	if e.texteEcran() != avant || strings.ContainsAny(avant, "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏") {
+	if sousEntete() != avant || avant == "" || strings.ContainsAny(avant, "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏") {
 		t.Fatalf("the chat moves:\n%s", avant)
 	}
 }

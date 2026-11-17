@@ -160,6 +160,20 @@ func TestEmailConfigurer(t *testing.T) {
 		t.Errorf("remove twice: %d", c)
 	}
 
+	// M304: no environment named = the whole project, given and taken back at once
+	if c, v := configurer("demo", "", mdpPreuveTest, false); c != 200 || len(v["projets"].([]any)) != 3 {
+		t.Fatalf("configure the project: %d %v", c, v)
+	}
+	if c, v := configurer("demo", "", "", true); c != 200 || len(v["projets"].([]any)) != 0 {
+		t.Errorf("remove the project: %d %v", c, v)
+	}
+	if c, _ := configurer("demo", "", "", true); c != 404 {
+		t.Errorf("remove the project twice: %d", c)
+	}
+	if c, v := configurer("demo", "", mdpPreuveTest, false); c != 200 || len(v["projets"].([]any)) != 3 {
+		t.Fatalf("configure the project again: %d %v", c, v)
+	}
+
 	// deleting the account takes every grant back and its variables leave the vault
 	if c, v := appel("DELETE", "/api/email/comptes/"+id, nil); c != 200 {
 		t.Fatalf("delete: %d %v", c, v)
