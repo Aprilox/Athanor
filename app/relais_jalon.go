@@ -19,8 +19,10 @@ import (
 type RelaisJalon struct {
 	Jalon  string `json:"jalon"`
 	Commit string `json:"commit"`
-	Date   string `json:"date"`             // when the milestone was seen done (RFC 3339)
-	Etat   string `json:"etat"`             // attente (not pushed yet) | lance | echec (not started)
+	Date   string `json:"date"` // when the milestone was seen done (RFC 3339)
+	// attente (not pushed yet) | lance | echec (not started); M284, a project without a deployment method yet:
+	// preparation (its first deployment's task works) | a_preparer (to prepare: an information, never a failure)
+	Etat   string `json:"etat"`
 	ID     string `json:"id,omitempty"`     // the deployment, once started
 	Erreur string `json:"erreur,omitempty"` // why it did not start
 	Accord string `json:"accord,omitempty"` // the owner's accord asked for its changed build files (C68)
@@ -30,6 +32,8 @@ type RelaisJalon struct {
 	LivraisonVue bool   `json:"livraison_vue,omitempty"`
 	// M283: the server preparation launched for the project's deployment (deploiement_projet.go); survives the relays too
 	Preparation *PreparationRelais `json:"preparation,omitempty"`
+	// M284: the Servers task of the first deployment (premierDeploiementProjet); survives the relays too
+	Premier string `json:"premier,omitempty"`
 }
 
 // attentePushRelais: how long a milestone's commit may wait to be on GitHub (git source) before the relay tries anyway.
@@ -69,12 +73,22 @@ func deplacerRelais(ancien, nouveau string) {
 	_ = ecrireJSONFichier(fichierRelais(), m, 0o600)
 }
 
-// momentRelais (M282): when the project's deployment is made by itself: jalon | livraison | "" (on request).
+// momentRelais (M282): when the project's deployment is made by itself: jalon | livraison | "" (on request, or
+// M284: no server, nothing is tried, noted nor said).
 func (s *Serveur) momentRelais(projet string) string {
 	if s.acces == nil {
 		return ""
 	}
-	return s.acces.Environnements(projet)[s.envJalon(projet)].Moment
+	e := s.acces.Environnements(projet)[s.envJalon(projet)]
+	if len(e.Serveurs) == 0 {
+		return ""
+	}
+	return e.Moment
+}
+
+// sansMethodeRelais (M284): a relay of an older version that failed for want of a deployment method.
+func sansMethodeRelais(r RelaisJalon) bool {
+	return r.Etat == "echec" && r.ID == "" && strings.Contains(r.Erreur, "no deployment method")
 }
 
 // relaisActif: the project's deployment is made by itself, after each milestone or at delivery.
@@ -114,8 +128,8 @@ func (s *Serveur) noterJalonRelais(p Projet, jalon string, quand time.Time) {
 func (s *Serveur) noterLivraison(p Projet, quand time.Time) {
 	b, _ := os.ReadFile(filepath.Join(p.DemandesFaites(), ".last-delivery"))
 	v, r := strings.TrimSpace(string(b)), lireRelais()[p.Nom]
-	if r.LivraisonVue && r.Livraison == v {
-		return
+	if r.LivraisonVue && r.Livraison == v || s.acces == nil || len(s.acces.Environnements(p.Nom)[s.envJalon(p.Nom)].Serveurs) == 0 {
+		return // M284: without a server nothing is noted (a server linked later first learns)
 	}
 	premier := !r.LivraisonVue
 	r.LivraisonVue, r.Livraison = true, v
@@ -141,7 +155,7 @@ func (s *Serveur) noterLivraison(p Projet, quand time.Time) {
 // attendreRelais: the project's HEAD waits to be deployed, for the milestone or the delivery named by jalon; what
 // avant noted of the deliveries and of the preparation stays.
 func (s *Serveur) attendreRelais(p Projet, avant RelaisJalon, jalon, action string, quand time.Time) {
-	r := RelaisJalon{Jalon: jalon, Date: quand.UTC().Format(time.RFC3339), Etat: "attente", Livraison: avant.Livraison, LivraisonVue: avant.LivraisonVue, Preparation: avant.Preparation}
+	r := RelaisJalon{Jalon: jalon, Date: quand.UTC().Format(time.RFC3339), Etat: "attente", Livraison: avant.Livraison, LivraisonVue: avant.LivraisonVue, Preparation: avant.Preparation, Premier: avant.Premier}
 	if sha, err := gitSortie(p.Dossier, "rev-parse", "HEAD"); err == nil && reCommitComplet.MatchString(sha) {
 		r.Commit = sha
 	} else {
@@ -153,14 +167,27 @@ func (s *Serveur) attendreRelais(p Projet, avant RelaisJalon, jalon, action stri
 
 // avancerRelais: the waiting relay of p started once its commit can be fetched (git source: on a remote
 // branch, or after attentePushRelais); returns a channel closed when that deployment ends (nil: none started).
+// M284: without a deployment method yet, the waiting relay (or an older version's failure for want of one) starts
+// the project's first deployment instead of failing, and the record follows that task.
 func (s *Serveur) avancerRelais(p Projet, maintenant time.Time) <-chan struct{} {
 	r, ok := lireRelais()[p.Nom]
-	if !ok || r.Etat != "attente" {
+	if !ok || s.acces == nil {
 		return nil
 	}
 	env := s.envJalon(p.Nom)
 	e := s.acces.Environnements(p.Nom)[env]
-	if e.Moment == "" || missionBloquee("dev", p.Nom) != "" { // a paused mission: the relay waits for Resume
+	if r.Etat == "preparation" {
+		s.suivrePremierDeploiement(p, e, r)
+		return nil
+	}
+	if r.Etat != "attente" && !(sansMethodeRelais(r) && e.Deploiement == nil) {
+		return nil
+	}
+	if e.Moment == "" || len(e.Serveurs) == 0 || missionBloquee("dev", p.Nom) != "" { // a paused mission: the relay waits for Resume
+		return nil
+	}
+	if e.Deploiement == nil {
+		_, _ = s.premierDeploiementProjet(p, modeNatif.Load() && s.sansRappelsNatif()) // its result is in the record
 		return nil
 	}
 	if e.Deploiement != nil && e.Deploiement.Source == "git" {
@@ -204,13 +231,24 @@ func (s *Serveur) notifierRelais(projet string, ok bool, jalon string) {
 }
 
 // etatRelais: the project's last relay with the state of its deployment (nil: relay off or nothing relayed yet).
+// M284: a project with servers and no deployment method yet is never a failure: "preparation" while its first
+// deployment's task works, else "a_preparer" when nothing makes it by itself (on request, or that task did not
+// make it), which the owner's "Prepare now" launches.
 func (s *Serveur) etatRelais(projet string) *RelaisJalon {
-	if !s.relaisActif(projet) {
+	if s.acces == nil {
 		return nil
 	}
+	e := s.acces.Environnements(projet)[s.envJalon(projet)]
 	r, ok := lireRelais()[projet]
-	if !ok {
-		return nil
+	switch {
+	case r.Etat == "preparation":
+		return &r
+	case len(e.Serveurs) == 0 && r.ID == "":
+		return nil // no server: nothing to say (a deployment made before its server was unlinked stays readable)
+	case len(e.Serveurs) > 0 && e.Deploiement == nil && !missionSurProjet(projet) && (e.Moment == "" || r.Etat == "a_preparer" || sansMethodeRelais(r)):
+		return &RelaisJalon{Etat: "a_preparer", Jalon: r.Jalon, Commit: r.Commit, Date: r.Date}
+	case e.Moment == "" || !ok || r.Etat == "" || r.Etat == "a_preparer":
+		return nil // nothing relayed yet (a record may only hold what was learnt of the deliveries)
 	}
 	if r.Etat == "lance" {
 		h := historiqueDeploiements(projet, s.envJalon(projet))

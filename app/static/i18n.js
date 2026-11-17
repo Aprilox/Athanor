@@ -49,6 +49,10 @@ const PREFIXES = ["no Studio lane: the vault entries are given", "no Studio lane
 
 const DICT = {
 fr: {
+  "The servers of this project are still being prepared: try again once that task has ended": "Les serveurs de ce projet sont encore en préparation : réessayez une fois cette tâche terminée",
+  "Nothing to prepare now: this project has no server, is already deployed, or a mission is deploying it": "Rien à préparer pour l'instant : ce projet n'a pas de serveur, est déjà déployé, ou une mission le déploie",
+  "First deployment in progress": "Premier déploiement en cours",
+  "First deployment to prepare": "Premier déploiement à préparer",
   "Unknown site": "Site inconnu",
   "This project already has its deployment: a project has only one": "Ce projet a déjà son déploiement : un projet n'en a qu'un",
   "Unknown API: choose it among the vault's entries": "API inconnue : choisissez-la parmi les entrées du coffre",
@@ -832,6 +836,10 @@ fr: {
   "Run a command": "Lancer une commande", "The task failed without giving a reason.": "La tâche a échoué sans donner de raison.",
 },
 es: {
+  "The servers of this project are still being prepared: try again once that task has ended": "Los servidores de este proyecto aún se están preparando: inténtelo de nuevo cuando esa tarea haya terminado",
+  "Nothing to prepare now: this project has no server, is already deployed, or a mission is deploying it": "Nada que preparar por ahora: este proyecto no tiene servidor, ya está desplegado o una misión lo está desplegando",
+  "First deployment in progress": "Primer despliegue en curso",
+  "First deployment to prepare": "Primer despliegue por preparar",
   "Unknown site": "Sitio desconocido",
   "This project already has its deployment: a project has only one": "Este proyecto ya tiene su despliegue: un proyecto solo tiene uno",
   "Unknown API: choose it among the vault's entries": "API desconocida: elíjala entre las entradas de la caja fuerte",
@@ -1583,6 +1591,10 @@ es: {
   "Run a command": "Ejecutar un comando", "The task failed without giving a reason.": "La tarea falló sin dar un motivo.",
 },
 de: {
+  "The servers of this project are still being prepared: try again once that task has ended": "Die Server dieses Projekts werden noch vorbereitet: Versuchen Sie es erneut, sobald diese Aufgabe beendet ist",
+  "Nothing to prepare now: this project has no server, is already deployed, or a mission is deploying it": "Derzeit nichts vorzubereiten: Dieses Projekt hat keinen Server, ist bereits bereitgestellt oder wird von einer Mission bereitgestellt",
+  "First deployment in progress": "Erste Bereitstellung läuft",
+  "First deployment to prepare": "Erste Bereitstellung vorzubereiten",
   "Unknown site": "Unbekannte Website",
   "This project already has its deployment: a project has only one": "Dieses Projekt hat bereits seine Bereitstellung: Ein Projekt hat nur eine",
   "Unknown API: choose it among the vault's entries": "Unbekannte API: Wählen Sie sie unter den Einträgen des Tresors",
@@ -2328,6 +2340,10 @@ de: {
   "Run a command": "Einen Befehl ausführen", "The task failed without giving a reason.": "Die Aufgabe ist ohne Angabe eines Grundes fehlgeschlagen.",
 },
 it: {
+  "The servers of this project are still being prepared: try again once that task has ended": "I server di questo progetto sono ancora in preparazione: riprova quando l'attività sarà terminata",
+  "Nothing to prepare now: this project has no server, is already deployed, or a mission is deploying it": "Niente da preparare per ora: questo progetto non ha un server, è già stato distribuito o una missione lo sta distribuendo",
+  "First deployment in progress": "Prima distribuzione in corso",
+  "First deployment to prepare": "Prima distribuzione da preparare",
   "Unknown site": "Sito sconosciuto",
   "This project already has its deployment: a project has only one": "Questo progetto ha già il suo rilascio: un progetto ne ha uno solo",
   "Unknown API: choose it among the vault's entries": "API sconosciuta: sceglila tra le voci della cassaforte",
@@ -3073,6 +3089,10 @@ it: {
   "Run a command": "Eseguire un comando", "The task failed without giving a reason.": "L'attività non è riuscita senza indicare un motivo.",
 },
 pt: {
+  "The servers of this project are still being prepared: try again once that task has ended": "Os servidores deste projeto ainda estão a ser preparados: tente novamente quando essa tarefa terminar",
+  "Nothing to prepare now: this project has no server, is already deployed, or a mission is deploying it": "Nada a preparar por agora: este projeto não tem servidor, já está implementado ou uma missão está a implementá-lo",
+  "First deployment in progress": "Primeira implementação em curso",
+  "First deployment to prepare": "Primeira implementação por preparar",
   "Unknown site": "Site desconhecido",
   "This project already has its deployment: a project has only one": "Este projeto já tem a sua implementação: um projeto tem apenas uma",
   "Unknown API: choose it among the vault's entries": "API desconhecida: escolha-a entre as entradas do cofre",

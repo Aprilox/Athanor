@@ -2756,7 +2756,9 @@ pages.suivi = async () => {
 
 // M136: the dev deployment after the last milestone (relais_jalon.go)
 function ligneRelais(r) {
-  const [icone, etiquette] = r.etat === "attente" ? ["attente", "Waiting for the milestone's commit on GitHub"] : r.etat === "lance" ? ETATS_DEPLOI.en_cours : ETATS_DEPLOI[r.etat] || ["", r.etat];
+  // M284: no deployment method yet is an information, never a failure (its button comes with the Deployment tab)
+  if (r.etat === "a_preparer") return `<span class="badge">${h(t("First deployment to prepare"))}</span>`;
+  const [icone, etiquette] = r.etat === "preparation" ? ["attente", "First deployment in progress"] : r.etat === "attente" ? ["attente", "Waiting for the milestone's commit on GitHub"] : r.etat === "lance" ? ETATS_DEPLOI.en_cours : ETATS_DEPLOI[r.etat] || ["", r.etat];
   return `<span class="badge">${icone ? ic(icone) : ""} ${h(t(etiquette))}</span> <code>${h((r.commit || "").slice(0, 7))}</code> <span class="muet petit">${md(r.jalon)} · ${h(dateLisible(r.date))}</span>${r.erreur ? `<div class="petit attention">${h(t(r.erreur))}</div>` : ""} <a class="petit" href="#acces">${t("Environments")}</a>`;
 }
 

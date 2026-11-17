@@ -3,9 +3,13 @@ package main
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
+	"net/http"
 	"os"
 	"slices"
 	"strings"
+	"sync"
+	"time"
 )
 
 // PreparationRelais (M283): the server preparation of a project's deployment, kept in its relay record.
@@ -141,4 +145,126 @@ func (s *Serveur) preparerProjet(p Projet) {
 	}
 	r.Preparation = &prep
 	ecrireRelais(p.Nom, r)
+}
+
+// prefixePremierDeploiement: how the brief of a first deployment task starts.
+const prefixePremierDeploiement = "First deployment"
+
+// briefPremierDeploiement (M275b, M284): what the first deployment task does: commit head of p to its environment
+// env with one deployer step; pour names who asks after the address (a mission's title, until M302).
+func briefPremierDeploiement(env, url, pour string, p Projet, head string) string {
+	return prefixePremierDeploiement + " of project " + p.Nom + " to environment " + env + " (" + url + ")" + pour + ": " +
+		"its work is ready to go online and this environment has no deployment method yet. Propose one plan whose step is deployer " +
+		"(env " + env + ", commit " + head + ", source artefact; the method and the published folder from the project's files: " +
+		"statique for a static site, compose when it has a compose file), then apply it once accepted. Athanor then deploys " +
+		"each later milestone or delivery itself with that method.\n"
+}
+
+// tacheEnCoursID: the Servers task id exists and has not ended.
+func tacheEnCoursID(id string) bool {
+	t, ok := tacheMission(id)
+	return ok && !slices.Contains([]string{"finie", "echec", "arretee"}, t.Etat)
+}
+
+var (
+	premierMu sync.Mutex // the relay and the owner's "Prepare now" at once: one task
+	// errRienAPreparer, errPreparationEnCours: why "Prepare now" launches nothing (translated by the interface)
+	errRienAPreparer      = erreurEntree("Nothing to prepare now: this project has no server, is already deployed, or a mission is deploying it")
+	errPreparationEnCours = erreurEntree("The servers of this project are still being prepared: try again once that task has ended")
+)
+
+// premierDeploiementProjet (M284): the first deployment of p, which has servers and no deployment method yet: one
+// Servers task in the project's mode (lancerTache with the project as environment), once its servers' preparation
+// has ended; the relay's record says "preparation" while it works (avancerRelais follows it). A task that cannot
+// start (native Windows mode, the vault closed) leaves "a_preparer": an information, never a failure, tried again
+// at the next milestone or delivery, or by the owner's "Prepare now" (forcee: forced by the owner in native mode).
+func (s *Serveur) premierDeploiementProjet(p Projet, forcee bool) (TacheServeurs, error) {
+	premierMu.Lock()
+	defer premierMu.Unlock()
+	env := s.envJalon(p.Nom)
+	e, r := s.acces.Environnements(p.Nom)[env], lireRelais()[p.Nom]
+	switch {
+	case len(e.Serveurs) == 0 || e.Deploiement != nil || missionSurProjet(p.Nom):
+		return TacheServeurs{}, errRienAPreparer
+	case tacheEnCoursID(r.Premier):
+		t, _ := tacheMission(r.Premier)
+		return t, nil // asked twice: the task at work
+	case r.Preparation != nil && tacheEnCoursID(r.Preparation.Tache):
+		return TacheServeurs{}, errPreparationEnCours
+	}
+	head, err := gitSortie(p.Dossier, "rev-parse", "HEAD")
+	if err != nil || !reCommitComplet.MatchString(head) {
+		return TacheServeurs{}, erreurEntree("the project has no commit to deploy")
+	}
+	t, err := s.lancerTache(couper(briefPremierDeploiement(env, e.URL, "", p, head), maxTexteTache-1), e.Serveurs, forcee, p.Nom)
+	r.Etat, r.Commit, r.ID, r.Erreur, r.Accord = "a_preparer", head, "", "", ""
+	if r.Date == "" {
+		r.Date = time.Now().UTC().Format(time.RFC3339)
+	}
+	if err == nil {
+		r.Etat, r.Premier = "preparation", t.ID
+		s.ecrireAudit(LigneAudit{Type: "evenement", De: "hub", Vers: "servers", Projet: p.Nom, Env: env,
+			Action: "premier déploiement", Resultat: t.ID + " (commit " + head + ")"})
+	}
+	ecrireRelais(p.Nom, r)
+	return t, err
+}
+
+// suivrePremierDeploiement (M284): the first deployment's task has ended: with a method now, the relay shows the
+// deployment that task made of its commit, or its commit waits for the regular relay (the task deployed an older
+// one); still without a method, the deployment is to prepare (said as an information).
+func (s *Serveur) suivrePremierDeploiement(p Projet, e Environnement, r RelaisJalon) {
+	if tacheEnCoursID(r.Premier) {
+		return
+	}
+	r.Etat = "a_preparer"
+	servi := false
+	if e.Deploiement != nil {
+		r.Etat = "attente"
+		for _, d := range historiqueDeploiements(p.Nom, s.envJalon(p.Nom)) {
+			if d.Commit == r.Commit {
+				r.Etat, r.ID, servi = "lance", d.ID, d.Etat == "ok" // the last one made of this commit
+			}
+		}
+	}
+	ecrireRelais(p.Nom, r)
+	if servi {
+		s.notifierRelais(p.Nom, true, r.Jalon)
+	}
+}
+
+// apiPreparerDeploiement (M284): POST /api/projets/{nom}/preparer-deploiement {forcer, mot_de_passe}: "Prepare
+// now", the first deployment of a project that has servers and no method yet, launched by the owner. Native
+// Windows mode: as for any Servers task, refused with the WSL proposal unless forced with Athanor's password.
+func (s *Serveur) apiPreparerDeploiement(w http.ResponseWriter, r *http.Request) {
+	var c struct {
+		Forcer     bool   `json:"forcer"`
+		MotDePasse string `json:"mot_de_passe"`
+	}
+	projet := r.PathValue("nom")
+	if lireCorps(r, &c) != nil {
+		s.erreur(w, http.StatusBadRequest, "Invalid request")
+		return
+	}
+	if !s.accesPret(w, projet) {
+		return
+	}
+	p, _ := s.projetNomme(projet)
+	sansRappel := s.sansRappelsNatif()
+	forcee := modeNatif.Load() && (c.Forcer || sansRappel)
+	if modeNatif.Load() && !forcee {
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.WriteHeader(http.StatusConflict)
+		_ = json.NewEncoder(w).Encode(map[string]any{"error": errServeursNatif.Error(), "proposer_wsl": true})
+		return
+	}
+	if forcee && !sansRappel && !s.preuveServeur(w, r, c.MotDePasse, "premier déploiement forcé refusé", projet) {
+		return
+	}
+	t, err := s.premierDeploiementProjet(p, forcee)
+	if err != nil {
+		s.erreurServeurs(w, err)
+		return
+	}
+	s.ecrireJSON(w, map[string]any{"tache": t, "relais": s.etatRelais(projet)})
 }

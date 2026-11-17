@@ -164,9 +164,6 @@ func (s *Serveur) preparerServeursMission(m Mission) Mission {
 	return m
 }
 
-// prefixePremierDeploiement: how the brief of a mission's first deployment task starts.
-const prefixePremierDeploiement = "First deployment"
-
 // premierDeploiementMission (M275b): once a milestone is delivered, the card's linked environment still without a
 // deployment method gets its first deployment from the Servers lane (a task, once, after its preparation); the
 // relay then deploys each later milestone with the method that task chose.
@@ -205,7 +202,7 @@ func (s *Serveur) premierDeploiementMission(m Mission) Mission {
 		!slices.ContainsFunc(lireJalonsFaits(fichierJalonsFaits()), func(j JalonFait) bool { return j.Projet == p.Dossier && !j.Date.Before(lance) }) {
 		return m
 	}
-	t, err := s.lancerTache(couper(briefPremierDeploiement(c, ec, p, head), maxTexteTache-1), ec.Serveurs, modeNatif.Load(), env)
+	t, err := s.lancerTache(couper(briefPremierDeploiement(ec.Nom, ec.URL, ", mission \""+c.Titre+"\"", p, head), maxTexteTache-1), ec.Serveurs, modeNatif.Load(), env)
 	now := time.Now()
 	e := s.entreeJournal("deploi1:"+env, now, "info", "A milestone is delivered: the Servers lane makes the first deployment to {0}", ec.Nom)
 	if err != nil {
@@ -230,15 +227,6 @@ func (s *Serveur) premierDeploiementMission(m Mission) Mission {
 	s.ecrireAudit(LigneAudit{Type: "evenement", De: "mission", Vers: "servers", Mission: m.ID, Projet: p.Nom, Env: ec.Nom,
 		Action: "premier déploiement", Resultat: cmp.Or(t.ID, "échec") + " (" + env + ", commit " + head + ")"})
 	return suite
-}
-
-// briefPremierDeploiement (M275b): what the first deployment task does: commit head of p to ec with one deployer step.
-func briefPremierDeploiement(c CarteMission, ec EnvCarte, p Projet, head string) string {
-	return prefixePremierDeploiement + " of project " + p.Nom + " to environment " + ec.Nom + " (" + ec.URL + "), mission \"" + c.Titre + "\": " +
-		"a milestone is delivered and this environment has no deployment method yet. Propose one plan whose step is deployer " +
-		"(env " + ec.Nom + ", commit " + head + ", source artefact; the method and the published folder from the project's files: " +
-		"statique for a static site, compose when it has a compose file), then apply it once accepted. Athanor then deploys " +
-		"each later milestone itself with that method.\n"
 }
 
 // ajouterJournal: evts not written yet added in time order; at maxJournalMission, the oldest removed, and an

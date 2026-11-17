@@ -452,6 +452,7 @@ func (s *Serveur) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/projets/{nom}/cle-deploiement", s.garde(false, s.apiCleDeploiement))
 	mux.HandleFunc("GET /api/projets/{nom}/deploiement", s.garde(false, s.apiDeploiementProjet))
 	mux.HandleFunc("POST /api/projets/{nom}/deploiement", s.garde(false, s.apiDeploiementProjetModifier))
+	mux.HandleFunc("POST /api/projets/{nom}/preparer-deploiement", s.garde(false, s.apiPreparerDeploiement))
 	mux.HandleFunc("GET /api/projets/{nom}/reglages", s.garde(false, s.apiReglagesProjet))
 	mux.HandleFunc("POST /api/projets/{nom}/reglages", s.garde(false, s.apiReglageProjetModifier))
 	mux.HandleFunc("POST /api/projets/{nom}/revenir", s.garde(false, s.apiRevenir))
