@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"net/http"
+	"os"
 	"slices"
 	"time"
 )
@@ -15,6 +16,16 @@ import (
 var ordreVerrouAuto = []string{"15m", "1h", "8h", "fermeture", "jamais"}
 
 var delaisVerrouAuto = map[string]time.Duration{"15m": 15 * time.Minute, "1h": time.Hour, "8h": 8 * time.Hour}
+
+// delaiVerrouAuto: the delay of a choice, 0 without a timer. The test harness shortens it with ATHANOR_VERROU_AUTO
+// (a duration), only under ATHANOR_TEST=1 and only below the chosen delay: it can never keep a window open longer.
+func delaiVerrouAuto(v string) time.Duration {
+	d := delaisVerrouAuto[verrouAutoDe(v)]
+	if c, err := time.ParseDuration(os.Getenv("ATHANOR_VERROU_AUTO")); err == nil && os.Getenv("ATHANOR_TEST") == "1" && c > 0 && c < d {
+		return c
+	}
+	return d
+}
 
 // horlogeVerrou: the auto-lock's clock (tests: a simulated one).
 var horlogeVerrou = time.Now
@@ -30,7 +41,7 @@ func verrouAutoDe(v string) string {
 // resteVerrouAuto: what is left before the window locks itself, -1 without a timer (no password, locked,
 // "until Athanor closes" or "never": Athanor still starts locked, I2/I3). Called with s.mu held.
 func (s *Serveur) resteVerrouAuto(t time.Time) time.Duration {
-	d := delaisVerrouAuto[verrouAutoDe(s.config.VerrouAuto)]
+	d := delaiVerrouAuto(s.config.VerrouAuto)
 	if d == 0 || s.config.MotDePasseHash == "" || s.session == "" {
 		return -1
 	}

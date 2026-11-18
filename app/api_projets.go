@@ -112,6 +112,7 @@ type EtatVue struct {
 	Projets     []ProjetVue           `json:"projets"`
 	Projet      *ProjetVue            `json:"projet"`
 	Actif       bool                  `json:"actif"`
+	TacheActive bool                  `json:"tache_active"` // a Servers task runs: the lock screen says the work goes on
 	Etat        *Etat                 `json:"etat"`
 	Contexte    int64                 `json:"contexte"`
 	Plan        []Jalon               `json:"plan"`
@@ -183,6 +184,9 @@ func (s *Serveur) apiEtat(w http.ResponseWriter, r *http.Request) {
 	if vue.VerrouDans = -1; !vue.Distant && !verrou {
 		vue.VerrouDans = verrouDans
 	}
+	tachesEnCours.Lock()
+	vue.TacheActive = len(tachesEnCours.m) > 0
+	tachesEnCours.Unlock()
 	vue.DistanceActive, vue.Connectes = s.connectesDistance()
 	if !vue.Distant {
 		vue.DernierAppareil = s.dernierAppareil()

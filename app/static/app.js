@@ -7429,7 +7429,7 @@ async function changerAutorisationIA(sel) {
   if (r) ia.autorisation = r.autorisation || mode;
   majAutorisationIA();
 }
-const ETATS_ACTION_IA = () => ({ en_cours: [t("running…"), "pv-claude"], ok: [t("Done"), "pv-ok"], erreur: [t("Failed"), "pv-vous"], refusee: [t("Refused"), "pv-vous"] });
+const ETATS_ACTION_IA = () => ({ en_cours: [t("running…"), "pv-claude"], ok: [t("Done"), "pv-ok"], erreur: [t("Failed"), "pv-vous"], refusee: [t("Refused"), "pv-vous"], plan_requis: [t("Needs a plan"), ""] });
 function panneauIA(distant) {
   const MODES = [["apart", "Separate connection", "It opens its own SSH session on the server, so it never gets in your way; you follow each command here."],
     ["direct", "Live in my terminal", "Its commands run in its own connection and are copied onto your terminal's screen as they run; your typing waits meanwhile. Your shell's folder, variables and history stay your own."]];
@@ -8077,7 +8077,7 @@ $("#page").addEventListener("input", (ev) => {
 // --- lock
 function afficherVerrou() {
   const v = $("#verrou"); v.hidden = !etat.verrouille; v.classList.remove("ouvre");
-  if (etat.verrouille) { const e = (etat.vue && etat.vue.etat) || {}; $("#verrou-etat").textContent = etat.vue && etat.vue.actif ? t("Claude keeps working{0}.", [e.cycle ? " (" + t("cycle {0}", [e.cycle]) + ")" : ""]) : t("The pilot is stopped."); setTimeout(() => $("#verrou-mdp").focus(), 50); }
+  if (etat.verrouille) { const e = (etat.vue && etat.vue.etat) || {}; $("#verrou-etat").classList.toggle("travail", !!(etat.vue && (etat.vue.actif || etat.vue.tache_active))); $("#verrou-etat").textContent = etat.vue && etat.vue.actif ? t("Claude keeps working{0}.", [e.cycle ? " (" + t("cycle {0}", [e.cycle]) + ")" : ""]) : etat.vue && etat.vue.tache_active ? t("A server task keeps working.") : t("The pilot is stopped."); setTimeout(() => $("#verrou-mdp").focus(), 50); }
 }
 // phone: the on-screen keyboard never hides the password field (without visualViewport the lock screen simply scrolls)
 if (window.visualViewport) visualViewport.addEventListener("resize", () => {

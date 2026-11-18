@@ -49,6 +49,9 @@ const PREFIXES = ["Resume: new request ", "Resume: what changed in .athanor/REQU
 
 const DICT = {
 fr: {
+  "A server task keeps working.": "Une tâche de serveur continue de travailler.",
+  "Not run: with these permissions it only runs as a step of an accepted plan.": "Non lancé : avec ces permissions, cela ne part que comme étape d'un plan accepté.",
+  "Needs a plan": "Plan requis",
 "Resume: new request ": "Reprise : nouvelle demande ",
 "Resume: what changed in .athanor/REQUEST.md since the delivery of ": "Reprise : ce qui a changé dans .athanor/REQUEST.md depuis la livraison du ",
   "Preparation of the servers of project {0}": "Préparation des serveurs du projet {0}",
@@ -866,6 +869,9 @@ fr: {
   "Run a command": "Lancer une commande", "The task failed without giving a reason.": "La tâche a échoué sans donner de raison.",
 },
 es: {
+  "A server task keeps working.": "Una tarea de servidor sigue trabajando.",
+  "Not run: with these permissions it only runs as a step of an accepted plan.": "No ejecutado: con estos permisos solo se ejecuta como paso de un plan aceptado.",
+  "Needs a plan": "Requiere un plan",
 "Resume: new request ": "Reanudación: nueva solicitud ",
 "Resume: what changed in .athanor/REQUEST.md since the delivery of ": "Reanudación: lo que cambió en .athanor/REQUEST.md desde la entrega del ",
   "Preparation of the servers of project {0}": "Preparación de los servidores del proyecto {0}",
@@ -1651,6 +1657,9 @@ es: {
   "Run a command": "Ejecutar un comando", "The task failed without giving a reason.": "La tarea falló sin dar un motivo.",
 },
 de: {
+  "A server task keeps working.": "Eine Serveraufgabe arbeitet weiter.",
+  "Not run: with these permissions it only runs as a step of an accepted plan.": "Nicht ausgeführt: Mit diesen Berechtigungen läuft das nur als Schritt eines angenommenen Plans.",
+  "Needs a plan": "Braucht einen Plan",
 "Resume: new request ": "Fortsetzung: neue Anfrage ",
 "Resume: what changed in .athanor/REQUEST.md since the delivery of ": "Fortsetzung: Änderungen in .athanor/REQUEST.md seit der Lieferung vom ",
   "Preparation of the servers of project {0}": "Vorbereitung der Server des Projekts {0}",
@@ -2430,6 +2439,9 @@ de: {
   "Run a command": "Einen Befehl ausführen", "The task failed without giving a reason.": "Die Aufgabe ist ohne Angabe eines Grundes fehlgeschlagen.",
 },
 it: {
+  "A server task keeps working.": "Un'attività sul server continua a lavorare.",
+  "Not run: with these permissions it only runs as a step of an accepted plan.": "Non eseguito: con questi permessi parte solo come passo di un piano accettato.",
+  "Needs a plan": "Richiede un piano",
 "Resume: new request ": "Ripresa: nuova richiesta ",
 "Resume: what changed in .athanor/REQUEST.md since the delivery of ": "Ripresa: cosa è cambiato in .athanor/REQUEST.md dalla consegna del ",
   "Preparation of the servers of project {0}": "Preparazione dei server del progetto {0}",
@@ -3209,6 +3221,9 @@ it: {
   "Run a command": "Eseguire un comando", "The task failed without giving a reason.": "L'attività non è riuscita senza indicare un motivo.",
 },
 pt: {
+  "A server task keeps working.": "Uma tarefa de servidor continua a trabalhar.",
+  "Not run: with these permissions it only runs as a step of an accepted plan.": "Não executado: com estas permissões só corre como passo de um plano aceite.",
+  "Needs a plan": "Requer um plano",
 "Resume: new request ": "Retomada: novo pedido ",
 "Resume: what changed in .athanor/REQUEST.md since the delivery of ": "Retomada: o que mudou em .athanor/REQUEST.md desde a entrega de ",
   "Preparation of the servers of project {0}": "Preparação dos servidores do projeto {0}",

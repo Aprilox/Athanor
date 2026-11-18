@@ -254,7 +254,7 @@ func (s *Serveur) etapeCloudflare(x SessionHub, e *Etape) error {
 	if info != "" {
 		info = "; " + info
 	}
-	return fmt.Errorf("plan required: this is a %s action (%s); a change runs only as a step of a plan the owner accepted, with exactly its arguments: propose a plan (proposer_plan, serveur = %s)%s", e.Classe, e.Raison, ou, info)
+	return fmt.Errorf("%w: this is a %s action (%s); a change runs only as a step of a plan the owner accepted, with exactly its arguments: propose a plan (proposer_plan, serveur = %s)%s", errPlanRequis, e.Classe, e.Raison, ou, info)
 }
 
 // apiSeule (M286): x is the session of a task on the owner's API alone, with no server.

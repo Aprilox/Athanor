@@ -103,7 +103,7 @@ func TestIATerminalActions(t *testing.T) {
 	if l[1].Etat != "ok" || !strings.Contains(l[1].Sortie, "40%") {
 		t.Errorf("df: %+v", l[1])
 	}
-	if l[2].Etat != "refusee" || l[2].Classe != "destructrice" || l[2].Quoi != "rm -rf /srv/app" || l[2].Detail == "" {
+	if l[2].Etat != "plan_requis" || l[2].Classe != "destructrice" || l[2].Quoi != "rm -rf /srv/app" || l[2].Detail != detailPlanRequis {
 		t.Errorf("rm without a plan: %+v", l[2])
 	}
 	mu.Lock()
@@ -117,7 +117,7 @@ func TestIATerminalActions(t *testing.T) {
 		t.Errorf("the session's instructions hold the witness (or are empty): %.200q", consigne)
 	}
 	var rep strings.Builder
-	if c := lireAPI(t, s, "/api/serveurs/ab12/taches", &rep); c != 200 || !strings.Contains(rep.String(), `"refusee"`) || strings.Contains(rep.String(), temoinOutils) {
+	if c := lireAPI(t, s, "/api/serveurs/ab12/taches", &rep); c != 200 || !strings.Contains(rep.String(), `"plan_requis"`) || strings.Contains(rep.String(), "plan required") || strings.Contains(rep.String(), temoinOutils) {
 		t.Errorf("API %d: witness present or refusal missing: %.300s", c, rep.String())
 	}
 	if strings.Contains(journalAuditTexte(t), temoinOutils) {

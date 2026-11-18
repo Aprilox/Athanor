@@ -1416,7 +1416,8 @@ a.mis-ligne:hover, a.mis-ligne:focus-visible { border-color: var(--accent); }
    the athanor waits, its glow breathes, a padlock is drawn in line; wrong password = a short shake; right = it opens */
 .verrou-scene, .verrou-nom { display: none; }
 html[data-scene] .verrou { background: var(--bg); transition: opacity .35s .15s ease; } /* the padlock opens first */
-html[data-scene] .verrou-cadenas, html[data-scene] #verrou-etat { display: none; }
+html[data-scene] .verrou-cadenas, html[data-scene] #verrou-etat:not(.travail) { display: none; } /* the scene stays bare, except to say that work goes on */
+html[data-scene] #verrou-etat { font-size: 13px; color: var(--muted); margin: 4px 0 0; }
 html[data-scene] .verrou-scene { display: block; margin: 0 auto; width: min(136px, 30vmin); height: auto; overflow: visible; }
 html[data-scene] .verrou-nom { display: block; animation: none; }
 html[data-scene] #verrou-titre { font-size: 15px; font-weight: 500; color: var(--muted); margin: 0; }
@@ -1634,6 +1635,7 @@ html.scene-pause .verrou * { animation-play-state: paused !important; }
 .ia-aide summary { cursor: pointer; color: var(--muted); width: fit-content; }
 .ia-aide[open] { display: flex; flex-direction: column; gap: 4px; }
 .ia-fil-zone { position: relative; flex: 1; min-height: 32px; display: flex; flex-direction: column; }
+@media (min-width: 901px) { .ia-fil-zone { min-height: 84px; } } /* beside the terminal the thread keeps two lines while a plan waits; stacked (tablet), the plan card comes first */
 .ia-dernier { position: absolute; bottom: 6px; left: 50%; transform: translateX(-50%); box-shadow: 0 2px 8px rgba(0, 0, 0, .25); white-space: nowrap; }
 .ia-decision { max-height: 60%; overflow-y: auto; flex: 0 1 auto; min-height: min(130px, 30%); } /* the thread gives its height first; the card scrolls before it pushes the input out */
 @media (max-width: 700px) { .ia-mode { min-height: 44px; } }

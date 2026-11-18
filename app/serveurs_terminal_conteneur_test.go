@@ -284,7 +284,7 @@ func TestTerminalConteneur(t *testing.T) {
 		if a[0].Etat != "ok" || !strings.Contains(a[0].Sortie, "mot de passe de la base") || strings.Contains(a[0].Sortie, temoinOutils) {
 			t.Errorf("read: %+v", a[0])
 		}
-		if a[1].Etat != "refusee" || a[1].Classe != "destructrice" {
+		if a[1].Etat != "plan_requis" || a[1].Classe != "destructrice" {
 			t.Errorf("rm -rf without a plan: %+v", a[1])
 		}
 		if a[2].Etat != "ok" || !strings.Contains(a[2].Sortie, "Linux") {
@@ -347,7 +347,7 @@ func TestTerminalConteneur(t *testing.T) {
 	if strings.Contains(ecran, temoinOutils) {
 		t.Error("the witness is on the terminal's screen")
 	}
-	if c, b, _ := requete("GET", "/api/serveurs/"+id+"/taches", ""); c != http.StatusOK || !strings.Contains(string(b), `"refusee"`) {
+	if c, b, _ := requete("GET", "/api/serveurs/"+id+"/taches", ""); c != http.StatusOK || !strings.Contains(string(b), `"plan_requis"`) {
 		t.Errorf("tasks: %d %.300s", c, b)
 	}
 	if strings.Contains(reponses.String(), temoinOutils) {

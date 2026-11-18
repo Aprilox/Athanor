@@ -455,7 +455,7 @@ func (s *Serveur) planOuRegle(x SessionHub, id string, e *Etape) error {
 	if info != "" {
 		info = "; " + info
 	}
-	return fmt.Errorf("plan required: this is a %s action (%s); a change runs only as a step of a plan the owner accepted, with exactly its arguments: propose a plan (proposer_plan)%s", e.Classe, e.Raison, info)
+	return fmt.Errorf("%w: this is a %s action (%s); a change runs only as a step of a plan the owner accepted, with exactly its arguments: propose a plan (proposer_plan)%s", errPlanRequis, e.Classe, e.Raison, info)
 }
 
 // plansAffiches: the plans of the approvals l, as the page shows them (arguments masked and cut).

@@ -105,3 +105,29 @@ func TestVerrouAuto(t *testing.T) {
 		t.Fatal("never: locked or a timer shown")
 	}
 }
+
+// TestDelaiVerrouAuto: the harness's shorter delay counts only under ATHANOR_TEST=1, never lengthens a delay
+// and never gives a timer to a choice that has none.
+func TestDelaiVerrouAuto(t *testing.T) {
+	for _, c := range []struct {
+		test, env, choix string
+		attendu          time.Duration
+	}{
+		{"", "", "15m", 15 * time.Minute},
+		{"", "20s", "15m", 15 * time.Minute},
+		{"1", "", "1h", time.Hour},
+		{"1", "20s", "15m", 20 * time.Second},
+		{"1", "20s", "inconnu", 20 * time.Second},
+		{"1", "30m", "15m", 15 * time.Minute},
+		{"1", "-5s", "15m", 15 * time.Minute},
+		{"1", "bientot", "15m", 15 * time.Minute},
+		{"1", "20s", "jamais", 0},
+		{"1", "20s", "fermeture", 0},
+	} {
+		t.Setenv("ATHANOR_TEST", c.test)
+		t.Setenv("ATHANOR_VERROU_AUTO", c.env)
+		if d := delaiVerrouAuto(c.choix); d != c.attendu {
+			t.Errorf("ATHANOR_TEST=%q ATHANOR_VERROU_AUTO=%q %s: %v, expected %v", c.test, c.env, c.choix, d, c.attendu)
+		}
+	}
+}

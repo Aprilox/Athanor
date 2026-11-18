@@ -14,6 +14,7 @@ package main
 import (
 	"cmp"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"strings"
@@ -155,6 +156,11 @@ func quoiAction(a map[string]json.RawMessage) string {
 	return strings.Join(l, " ")
 }
 
+// errPlanRequis: the step runs only inside an accepted plan; detailPlanRequis says it to the owner (a key of i18n.js).
+var errPlanRequis = errors.New("plan required")
+
+const detailPlanRequis = "Not run: with these permissions it only runs as a step of an accepted plan."
+
 // debutAction: a call of x's session starts, or was refused (refus); nil without a running task.
 func (s *Serveur) debutAction(x SessionHub, outil string, a map[string]json.RawMessage, e Etape, refus error) (*tacheEnCours, int) {
 	t := tacheDeSession(x.Hache)
@@ -167,6 +173,9 @@ func (s *Serveur) debutAction(x SessionHub, outil string, a map[string]json.RawM
 			act.Classe = c.Classe.String()
 		}
 		act.Etat, act.Code, act.Detail = "refusee", -1, couper(s.masquerSecrets(refus.Error()), 500)
+		if errors.Is(refus, errPlanRequis) { // nobody refused anything: the assistant proposes its plan next (the sentence is the owner's, the error the model's)
+			act.Etat, act.Detail = "plan_requis", detailPlanRequis
+		}
 	} else {
 		act.Classe = e.Classe.String()
 	}
@@ -183,7 +192,7 @@ func (s *Serveur) debutAction(x SessionHub, outil string, a map[string]json.RawM
 	_ = enregistrerTache(t.copie())
 	l := s.ligneAction(act)
 	if refus != nil {
-		l += "\x1b[33m✗ " + act.Detail + "\x1b[0m\n"
+		l += "\x1b[33m✗ " + s.texteTerminal(act.Detail) + "\x1b[0m\n"
 	}
 	ecrireDansTerminal(t, l)
 	return t, act.N
