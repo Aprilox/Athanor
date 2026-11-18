@@ -45,10 +45,12 @@ function t(cle, args) {
 }
 // B79: an engine message, {cle, args} whose arguments are texts or messages, said in the page's language
 const texteMessage = (m) => m && typeof m === "object" ? t(m.cle, (m.args || []).map(texteMessage)) : String(m ?? "");
-const PREFIXES = ["no Studio lane: the vault entries are given", "no Studio lane: the Servers tasks are done", "no environment on the card: the Studio lane finished the request", "The server could not do it: check its free disk space and this folder's rights, or try the same in the terminal. Its answer: ", "prod checked: ", "no prod on the card: dev checked on ", "the external verification failed: ", "Cannot download the marketplace: ", "Cannot download the plugin: ", "Needs a setting the registry does not give, add it by hand from its README: ", "Cannot download the repository: ", "missing key ", "Worker ", "Builds milestone ", "Runs: ", "Reads ", "Edits ", "Writes ", "Searches ", "Sub-agent ", "End of cycle: ", "Usage limit: ", "Session opened, model ", "Waits for sub-agent ", "Reviews the report of ", "Repair: ", "Claude repairs: ", "Claude: ", "Invalid setting: ", "Cannot create the folder: ", "Start with Windows: ", "Queued: ", "Claude is repairing “", "Invalid JSON: ", "Invalid file pattern (a name with * and ?, no folder): ", "Invalid process name: ", "A key is not a setting (write ${NAME} in the configuration and fill in its field below the server): "];
+const PREFIXES = ["Resume: new request ", "Resume: what changed in .athanor/REQUEST.md since the delivery of ", "no Studio lane: the vault entries are given", "no Studio lane: the Servers tasks are done", "no environment on the card: the Studio lane finished the request", "The server could not do it: check its free disk space and this folder's rights, or try the same in the terminal. Its answer: ", "prod checked: ", "no prod on the card: dev checked on ", "the external verification failed: ", "Cannot download the marketplace: ", "Cannot download the plugin: ", "Needs a setting the registry does not give, add it by hand from its README: ", "Cannot download the repository: ", "missing key ", "Worker ", "Builds milestone ", "Runs: ", "Reads ", "Edits ", "Writes ", "Searches ", "Sub-agent ", "End of cycle: ", "Usage limit: ", "Session opened, model ", "Waits for sub-agent ", "Reviews the report of ", "Repair: ", "Claude repairs: ", "Claude: ", "Invalid setting: ", "Cannot create the folder: ", "Start with Windows: ", "Queued: ", "Claude is repairing “", "Invalid JSON: ", "Invalid file pattern (a name with * and ?, no folder): ", "Invalid process name: ", "A key is not a setting (write ${NAME} in the configuration and fill in its field below the server): "];
 
 const DICT = {
 fr: {
+"Resume: new request ": "Reprise : nouvelle demande ",
+"Resume: what changed in .athanor/REQUEST.md since the delivery of ": "Reprise : ce qui a changé dans .athanor/REQUEST.md depuis la livraison du ",
   "Preparation of the servers of project {0}": "Préparation des serveurs du projet {0}",
   "First deployment of project {0}": "Premier déploiement du projet {0}",
   "The next ones": "Les suivants",
@@ -864,6 +866,8 @@ fr: {
   "Run a command": "Lancer une commande", "The task failed without giving a reason.": "La tâche a échoué sans donner de raison.",
 },
 es: {
+"Resume: new request ": "Reanudación: nueva solicitud ",
+"Resume: what changed in .athanor/REQUEST.md since the delivery of ": "Reanudación: lo que cambió en .athanor/REQUEST.md desde la entrega del ",
   "Preparation of the servers of project {0}": "Preparación de los servidores del proyecto {0}",
   "First deployment of project {0}": "Primer despliegue del proyecto {0}",
   "The next ones": "Los siguientes",
@@ -1647,6 +1651,8 @@ es: {
   "Run a command": "Ejecutar un comando", "The task failed without giving a reason.": "La tarea falló sin dar un motivo.",
 },
 de: {
+"Resume: new request ": "Fortsetzung: neue Anfrage ",
+"Resume: what changed in .athanor/REQUEST.md since the delivery of ": "Fortsetzung: Änderungen in .athanor/REQUEST.md seit der Lieferung vom ",
   "Preparation of the servers of project {0}": "Vorbereitung der Server des Projekts {0}",
   "First deployment of project {0}": "Erste Bereitstellung des Projekts {0}",
   "The next ones": "Die nächsten",
@@ -2424,6 +2430,8 @@ de: {
   "Run a command": "Einen Befehl ausführen", "The task failed without giving a reason.": "Die Aufgabe ist ohne Angabe eines Grundes fehlgeschlagen.",
 },
 it: {
+"Resume: new request ": "Ripresa: nuova richiesta ",
+"Resume: what changed in .athanor/REQUEST.md since the delivery of ": "Ripresa: cosa è cambiato in .athanor/REQUEST.md dalla consegna del ",
   "Preparation of the servers of project {0}": "Preparazione dei server del progetto {0}",
   "First deployment of project {0}": "Prima distribuzione del progetto {0}",
   "The next ones": "Le successive",
@@ -3201,6 +3209,8 @@ it: {
   "Run a command": "Eseguire un comando", "The task failed without giving a reason.": "L'attività non è riuscita senza indicare un motivo.",
 },
 pt: {
+"Resume: new request ": "Retomada: novo pedido ",
+"Resume: what changed in .athanor/REQUEST.md since the delivery of ": "Retomada: o que mudou em .athanor/REQUEST.md desde a entrega de ",
   "Preparation of the servers of project {0}": "Preparação dos servidores do projeto {0}",
   "First deployment of project {0}": "Primeira implementação do projeto {0}",
   "The next ones": "As seguintes",

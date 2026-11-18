@@ -96,6 +96,27 @@ func TestRouvrirApresLivraison(t *testing.T) {
 	}
 }
 
+// A queued request reopens the delivered project once: its own delivery is not reopened by the request (M310c).
+func TestDemandeEnFileRouvreUneFois(t *testing.T) {
+	p := projetLivreEssai(t)
+	noterLivraison(p.Dossier)
+	ecrireEssai(t, filepath.Join(p.Atelier(), "queue", "01-pricing.md"), "Add a pricing page.\n")
+	pl := &pilote{projet: p.Dossier, etat: p.Atelier(), prive: t.TempDir()}
+	if !pl.prochaineDemande() || projetLivre(p) {
+		t.Fatal("the queued request did not reopen the project")
+	}
+	plan := filepath.Join(p.Atelier(), "PLAN.md")
+	ecrireEssai(t, plan, strings.Replace(lire(t, plan), "- [ ] Resume", "- [x] Resume", 1)) // the pilot did it and delivers again
+	ecrireEssai(t, filepath.Join(p.Atelier(), "FINAL_REPORT.md"), "# Final Report\nSTATUS: DONE\n")
+	if pl.prochaineDemande() || pl.rouvrirApresLivraison() {
+		t.Fatalf("reopened a second time: %+v", nouveauDepuisLivraison(p.Dossier))
+	}
+	_ = p.AjouterRemarque("Add a dark mode", "## Notes", "(notes)")
+	if !pl.rouvrirApresLivraison() {
+		t.Fatal("a note written after the second delivery did not reopen it")
+	}
+}
+
 // Start on a delivered project to which nothing came: said, instead of a pilot that ends at once.
 func TestDemarrerLivreRienDeNeuf(t *testing.T) {
 	p := projetLivreEssai(t)

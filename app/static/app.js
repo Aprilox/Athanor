@@ -24,11 +24,13 @@ function etatDuJalon(j, premierLibre) {
   return premierLibre() ? "en-cours" : "a-faire";
 }
 
+// the milestones the pilot adds itself when a delivered project resumes: said in the page's language (PREFIXES)
+const titrePlan = (s) => s.startsWith("Resume: ") ? t(s) : s;
 function titreJalon(texte) {
   if (!texte) return "";
   texte = texte.replace(/^- \[[ xX]\] +/, "");
   const j = ((etat.vue && etat.vue.plan) || []).find((x) => x.complet === texte || texte.startsWith(x.complet) || x.complet.startsWith(texte));
-  if (j) return j.titre;
+  if (j) return titrePlan(j.titre);
   const coupe = texte.split(/ — | – /)[0];
   return coupe.length > 90 ? coupe.slice(0, 88) + "…" : coupe;
 }
@@ -49,7 +51,7 @@ function rendreJalon(j, etatJalon, compact) {
         ${peutEditer ? `<button class="btn btn-petit" data-jalon="${h(j.id)}" data-jalon-action="monter" title="${h(t("Move up"))}">${ic("haut")}</button><button class="btn btn-petit" data-jalon="${h(j.id)}" data-jalon-action="descendre" title="${h(t("Move down"))}">${ic("descendre")}</button><button class="btn btn-petit btn-danger" data-jalon="${h(j.id)}" data-jalon-action="retirer">${t("Remove from the plan")}</button>` : `<span class="muet petit">${j.fait ? t("Done: it stays in the plan.") : t("Being built: stop after the cycle to change it.")}</span>`}
       </div>` : ""}
     </div>` : "";
-  return `${j.vague ? `<li class="vague">${h(j.vague)}</li>` : ""}<li class="${etatJalon} ${ouvert ? "ouvert" : ""}${j.etape ? " etape" : ""}" data-jalon-cle="${h(cle)}"><span class="jalon-ico">${ico}</span><div class="jalon-corps"><div class="jalon-titre">${md(j.titre)}<span class="jalon-chevron">${ouvert ? ic("bas") : ic("droite")}</span></div>${details}</div></li>`;
+  return `${j.vague ? `<li class="vague">${h(j.vague)}</li>` : ""}<li class="${etatJalon} ${ouvert ? "ouvert" : ""}${j.etape ? " etape" : ""}" data-jalon-cle="${h(cle)}"><span class="jalon-ico">${ico}</span><div class="jalon-corps"><div class="jalon-titre">${md(titrePlan(j.titre))}<span class="jalon-chevron">${ouvert ? ic("bas") : ic("droite")}</span></div>${details}</div></li>`;
 }
 
 // A plan in stages (a large request): "Stage 2/5 · " before its progress, from the project's view.
