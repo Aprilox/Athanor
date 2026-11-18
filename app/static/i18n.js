@@ -434,7 +434,7 @@ fr: {
   "Usage limit reached, Claude is waiting": "Quota atteint, Claude patiente", "Resumes {0} · cycle {1}": "Reprise {0} · cycle {1}", "as soon as possible": "dès que possible",
   "Between two cycles": "Entre deux cycles", "Cycle {0} is done, the next one starts with a fresh context.": "Le cycle {0} est terminé, le suivant démarre avec un contexte neuf.",
   "Error, retry scheduled": "Erreur, nouvel essai prévu", "Connection problem": "Problème de connexion", "Folder not found": "Dossier introuvable", "The folder {0} is no longer there: on Manage, point the project to where it is now (Use another folder) or remove it from the list.": "Le dossier {0} n'existe plus : dans Gérer, indiquez où il se trouve maintenant (Utiliser un autre dossier) ou retirez le projet de la liste.", "Check the token in Settings, or go through Setup & health.": "Vérifiez le jeton dans Réglages, ou passez par Installation & santé.",
-  "Project finished": "Projet terminé", "The deliverable and the final report are in the project folder.": "Le deliverable et le rapport final sont dans le dossier du projet.", "Pilot started": "Pilote lancé",
+  "Project finished": "Projet terminé", "The deliverable and the final report are in the project folder.": "Le livrable et le rapport final sont dans le dossier du projet.", "Pilot started": "Pilote lancé",
   "Stop after cycle": "Arrêter après le cycle",
   "Stop now": "Arrêter maintenant", "Start": "Démarrer",
   "Go and see what Claude is showing (windows on the “Claude” desktop)": "Aller voir ce que Claude affiche (fenêtres sur le bureau « Claude »)", "View Claude's desktop": "Voir le bureau Claude",
