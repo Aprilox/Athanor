@@ -1173,14 +1173,37 @@ function blocMode(m) {
     <span class="espace"></span><div class="choix m0">${[-1, 72, 168, 336, 720, 0].map((n) => `<button type="button" data-duree-max="${n}" class="${(m.duree_max ?? -1) === n ? "actif" : ""}">${n >= 0 ? libelleDuree(n) : m.duree_max_global ? t("Like Settings ({0} h)", [m.duree_max_global]) : t("Like Settings (unlimited)")}</button>`).join("")}</div>
     <input type="number" id="md-duree-max" class="cadrage-autre" min="1" max="87600" inputmode="numeric" value="${m.duree_max > 0 && ![72, 168, 336, 720].includes(m.duree_max) ? m.duree_max : ""}" placeholder="${h(t("Other (h)"))}" aria-label="${h(t("Other (h)"))}" title="${h(t("Other (h)"))}">
     </div>
+    <div class="mode-suite modeles-projet">
+    <span class="petit"><b>${t("Models")}</b> <span class="muet">${t("this project's own; Like Settings follows Settings › Claude. Applies from the next cycle.")}</span></span>
+    <div class="modeles-grille">${CLES_MODELES_PROJET.map((cle) => choixModeleProjet(m, cle)).join("")}</div>
+    </div>
   </div></div>`;
 }
+// the project's own models (modeles_projet.go): each one "Like Settings" (Settings' value shown in it) or a
+// model; the names proposed are the ones of Settings › Claude (the aliases, then the models this PC used)
+const CLES_MODELES_PROJET = ["MODEL", "FALLBACK_MODEL", "FRAMING_MODEL", "WORKER_MODEL", "SUBAGENT_MODEL", "CHEAP_MODEL"];
+function nomModeleGlobal(m, cle) {
+  const g = m.modeles_globaux || {};
+  // a setting absent from Settings' file: the pilot's own default
+  const v = cle in g ? g[cle] : { WORKER_MODEL: "sonnet", CHEAP_MODEL: "haiku" }[cle] || "";
+  if (v.toLowerCase() === "auto") return t("chosen by the lead");
+  if (v) return v;
+  return t({ MODEL: "account default", FALLBACK_MODEL: "no fallback", CHEAP_MODEL: "same as the sub-agents" }[cle] || "same as the lead");
+}
+function choixModeleProjet(m, cle) {
+  const propre = (m.modeles || {})[cle] || "";
+  const valeurs = [...new Set([...(m.modeles_proposes || []), ...(cle === "SUBAGENT_MODEL" ? ["auto"] : []), ...(propre ? [propre] : [])])];
+  return `<label class="modele-projet m0"><span class="petit muet">${t((REGLAGES[cle] || [])[1] || cle)}</span><select data-modele-projet="${cle}" class="${propre ? "actif" : ""}">
+    <option value="">${h(t("Like Settings ({0})", [nomModeleGlobal(m, cle)]))}</option>${valeurs.map((v) => `<option value="${h(v)}" ${v === propre ? "selected" : ""}>${h(v === "auto" ? t("chosen by the lead") : v)}</option>`).join("")}</select></label>`;
+}
 // changerMode: the block as it is on the page, with one change. changement: { parallele, parallele_max, eco,
-// rapide, cadrage_max (0: back to Settings), duree_max (0: unlimited, -1: back to Settings) }; what is left
+// rapide, cadrage_max (0: back to Settings), duree_max (0: unlimited, -1: back to Settings), modeles ({ key:
+// model }, "": back to Settings) }; what is left
 // out stays as it is. On New project nothing is sent yet: the choice waits in etat.npMode for the creation.
 async function changerMode(changement) {
   const corps = { parallele: $("#md-parallele").checked, parallele_max: maxModeActif(), eco: $("#md-eco").checked, rapide: $("#md-rapide").checked, ...changement };
   if (etat.page === "nouveau") {
+    if (changement.modeles) corps.modeles = { ...(etat.npMode.modeles || {}), ...changement.modeles };
     Object.assign(etat.npMode, corps);
     const zone = $("#np-mode"); if (zone) zone.innerHTML = blocMode(etat.npMode);
     return;
@@ -4001,7 +4024,8 @@ $("#page").addEventListener("click", async (ev) => {
         if ((etat.pieces.np || []).length) await envoyerPieces("np", "demande", r.nom);
         // the settings chosen beside the form, when they differ from the defaults
         const md = etat.npMode; etat.npMode = null;
-        if (md && (md.parallele || md.eco || md.rapide || md.cadrage_max || md.duree_max !== -1)) await api("mode", "POST", { parallele: md.parallele, parallele_max: md.parallele_max, eco: md.eco, rapide: md.rapide, cadrage_max: md.cadrage_max || 0, duree_max: md.duree_max }).catch((e) => toast(e.message, "erreur"));
+        const mdModeles = Object.fromEntries(Object.entries((md && md.modeles) || {}).filter(([, v]) => v));
+        if (md && (md.parallele || md.eco || md.rapide || md.cadrage_max || md.duree_max !== -1 || Object.keys(mdModeles).length)) await api("mode", "POST", { parallele: md.parallele, parallele_max: md.parallele_max, eco: md.eco, rapide: md.rapide, cadrage_max: md.cadrage_max || 0, duree_max: md.duree_max, modeles: mdModeles }).catch((e) => toast(e.message, "erreur"));
         // the sign-in window opens (the link shows under Manage), or, with this computer connected, linked at once
         if (gh) { const rl = await action(api("github", "POST", gh)); if (rl && rl.lie_compte) await resultatLierCompte(rl, gh); if (rl && rl.cree) toast(t("Private repository created and linked: {0}", [rl.cree]), "ok"); }
         await rafraichir(); location.hash = "#suivi";
@@ -4100,6 +4124,7 @@ $("#page").addEventListener("change", (ev) => {
   if (i.hasAttribute("data-gh-auto")) action(api("github", "POST", { action: "auto", auto: i.checked })).then((r) => { if (!r) i.checked = !i.checked; });
   if (i.hasAttribute("data-gh-atelier")) action(api("github", "POST", { action: "atelier", atelier: i.checked })).then((r) => { if (!r) i.checked = !i.checked; });
   if (i.id === "md-parallele" || i.id === "md-eco" || i.id === "md-rapide") changerMode({}); // the switches add up
+  if (i.dataset.modeleProjet) changerMode({ modeles: { [i.dataset.modeleProjet]: i.value } }); // "": back to Settings
   // the framing time box typed by hand (10 to 240 min) and the work time limit (1 to 87600 h), checked by the
   // server, saved when the field is left
   const entre = (min, max) => i.value !== "" && Number.isFinite(Number(i.value)) && Math.round(Number(i.value)) >= min && Math.round(Number(i.value)) <= max;

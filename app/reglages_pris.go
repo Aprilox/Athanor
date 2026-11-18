@@ -48,7 +48,22 @@ func empreinteReglagesKit(kit string) string {
 
 // modesDemandes: the working modes a project's .athanor/.env asks for, as the pilot reads them when a cycle
 // starts (lireModeParallele): what is asked, before the pilot's own reasons to work otherwise for a cycle.
+// The project's own models (modeles_projet.go), read at the same moment, are added when it sets any.
 func modesDemandes(texteEnv string) string {
+	return modesBase(texteEnv) + suffixeModeles(resumeModeles(modelesProjetTexte(texteEnv)))
+}
+
+// suffixeModeles: the project's own models (resumeModeles) as the end of modesDemandes; nothing for none, so
+// the line of a project without them stays as before.
+func suffixeModeles(resume string) string {
+	if resume == "" {
+		return ""
+	}
+	return " models=" + strings.ReplaceAll(resume, " ", ",")
+}
+
+// modesBase: the working modes alone.
+func modesBase(texteEnv string) string {
 	par, maxi, eco, rapide := "0", "3", "0", "0"
 	un := func(v string) string {
 		if v == "1" {

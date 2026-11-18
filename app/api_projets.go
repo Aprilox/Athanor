@@ -290,6 +290,11 @@ func (s *Serveur) apiAgents(w http.ResponseWriter, r *http.Request) {
 			reglages[l.Cle], presents[l.Cle] = strings.TrimSpace(l.Valeur), true
 		}
 	}
+	for cle, v := range modelesProjet(p.envProjet()) { // the project's own (Manage › Working mode) first
+		if cle == "MODEL" || cle == "SUBAGENT_MODEL" || cle == "CHEAP_MODEL" {
+			reglages[cle], presents[cle] = v, true
+		}
+	}
 	simple := "haiku"
 	if presents["CHEAP_MODEL"] {
 		simple = reglages["CHEAP_MODEL"]
@@ -704,6 +709,13 @@ type ModeVue struct {
 	// back to the global value and nil leaves it as it is
 	DureeMax       *int `json:"duree_max,omitempty"`
 	DureeMaxGlobal int  `json:"duree_max_global"` // the global MAX_HOURS, for the page (0: unlimited)
+	// the project's own models (modeles_projet.go), key → model; a key left out follows Settings. In a POST,
+	// only the keys sent change ("": back to Settings), and nil leaves them all as they are
+	Modeles map[string]string `json:"modeles,omitempty"`
+	// for the page: the models of Settings (a key absent from the file is not sent: the pilot's default
+	// applies) and the names to propose
+	ModelesGlobaux  map[string]string `json:"modeles_globaux,omitempty"`
+	ModelesProposes []string          `json:"modeles_proposes,omitempty"`
 }
 
 // dureeMaxProjet: the work time limit a project set for itself, in hours (0: unlimited), and whether it set one.
@@ -757,6 +769,9 @@ func (p Projet) LireMode() ModeVue {
 	if n, ok := dureeMaxProjet(p.envProjet()); ok {
 		m.DureeMax = &n
 	}
+	if mp := modelesProjet(p.envProjet()); len(mp) > 0 {
+		m.Modeles = mp
+	}
 	return m
 }
 
@@ -784,7 +799,11 @@ func (s *Serveur) apiMode(w http.ResponseWriter, r *http.Request) {
 		m = p.LireMode()
 	}
 	m.CadrageGlobal, m.DureeMaxGlobal = 25, 0
+	m.ModelesGlobaux, m.ModelesProposes = map[string]string{}, modelesConnus(s.kitCourant())
 	for _, l := range LireEnv(s.kitCourant().Env()) {
+		if estCleModeleProjet(l.Cle) {
+			m.ModelesGlobaux[l.Cle] = strings.TrimSpace(l.Valeur)
+		}
 		if n, err := strconv.Atoi(strings.TrimSpace(l.Valeur)); l.Cle == "FRAMING_MAX_MIN" && err == nil && n >= 0 {
 			m.CadrageGlobal = n
 		} else if l.Cle == "MAX_HOURS" && err == nil && n >= 0 {
@@ -848,6 +867,14 @@ func (s *Serveur) apiEcrireMode(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	for cle, val := range m.Modeles {
+		val = strings.TrimSpace(val)
+		if !estCleModeleProjet(cle) || (val != "" && !modeleProjetValide(cle, val)) {
+			s.erreur(w, http.StatusBadRequest, "Unknown model name: letters, digits and . _ - : / @ [ ] only.")
+			return
+		}
+		v[cle] = val // empty: back to Settings
+	}
 	if err := os.MkdirAll(p.Atelier(), 0o755); err != nil {
 		s.erreur(w, http.StatusInternalServerError, err.Error())
 		return
@@ -859,6 +886,8 @@ func (s *Serveur) apiEcrireMode(w http.ResponseWriter, r *http.Request) {
 	// the message tells what this call changed (the modes are independent switches)
 	memesModes := m.Parallele == avant.Parallele && m.Eco == avant.Eco && m.Rapide == avant.Rapide
 	switch {
+	case len(m.Modeles) > 0 && memesModes:
+		s.msg(w, "Models saved for this project: a running pilot uses them from its next cycle.")
 	case m.DureeMax != nil && memesModes:
 		s.msg(w, "Work time limit saved for this project: a running pilot applies it before its next cycle.")
 	case m.CadrageMax != nil && memesModes:

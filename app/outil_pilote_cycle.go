@@ -1438,7 +1438,9 @@ func (p *pilote) lireModeParallele() {
 	p.parallel = false
 	p.parallelMax = 3
 	b, _ := os.ReadFile(filepath.Join(p.etat, ".env"))
-	p.modesLus = modesDemandes(string(b)) // what this cycle runs with, from the very bytes parsed below
+	// what this cycle runs with, from the very bytes parsed below; the models from the ones applied at the
+	// start of the cycle (appliquerModelesProjet)
+	p.modesLus = modesBase(string(b)) + suffixeModeles(p.modelesLus)
 	parStr, maxStr, ecoStr, rapideStr := "0", "3", "0", "0"
 	for _, l := range strings.Split(string(b), "\n") {
 		l = strings.TrimSuffix(l, "\r")
@@ -2137,6 +2139,7 @@ func lancerPilote(args []string) int {
 			p.ecranAvant[v] = val
 		}
 	}
+	p.appliquerModelesProjet(false) // the project's own models from the start (the guide of SUBAGENT_MODEL=auto)
 	_ = os.Setenv("CLAUDE_CODE_DISABLE_BACKGROUND_TASKS", defEnv("CLAUDE_CODE_DISABLE_BACKGROUND_TASKS", "1"))
 	_ = os.Setenv("ENABLE_CLAUDEAI_MCP_SERVERS", "false")
 	p.bashMax = defEnv("BASH_MAX_OUTPUT_LENGTH", "20000")
@@ -2631,6 +2634,7 @@ func lancerPilote(args []string) int {
 		p.preparerExtensions()
 		p.preparerCycle()
 		p.appliquerIdentite()
+		p.appliquerModelesProjet(true) // the project's own models, before the team and the cycle use them
 		p.preparerEquipe()
 		// several computers (pcs_pilote.go): the others' work merged, a milestone taken, or wait for one
 		if attendre, raison := p.avantCyclePC(); attendre {
