@@ -42,14 +42,14 @@
   <text class="k" x="60" y="262">THE HUB</text>
   <text class="t" x="60" y="289">Checks every link, logs it, asks you</text>
   <text class="s" x="60" y="313">home assistant, tiles, Projects page, one bell for every alert</text>
-  <text class="s" x="60" y="333">missions: one sentence, a card, lanes and a relay up to production</text>
+  <text class="s" x="60" y="333">one sentence, a card to check, Launch; each project has its deployment</text>
   <text class="s" x="60" y="353">audit log with a SHA-256 chain; prod and destructive actions wait</text>
   <text class="s" x="60" y="373">for your accord and your password</text>
   <rect class="vault" x="830" y="250" width="310" height="134" rx="14"/>
   <text class="r" x="850" y="280">THE VAULT · IN THE HUB</text>
   <text class="s" x="850" y="306">AES-256-GCM on disk</text>
   <text class="s" x="850" y="326">code keys: granted per project</text>
-  <text class="s" x="850" y="346">and per environment</text>
+  <text class="s" x="850" y="346">and nothing else of the vault</text>
   <text class="s" x="850" y="366">infra keys: never leave Athanor</text>
   <rect class="box" x="40" y="482" width="360" height="150" rx="14"/>
   <text class="k" x="60" y="512">STUDIO</text>
@@ -69,10 +69,10 @@
   <text class="k" x="820" y="512">E-MAIL</text>
   <text class="t" x="820" y="539">SMTP for your apps</text>
   <text class="s" x="820" y="563">test in one click, settings</text>
-  <text class="s" x="820" y="583">given to an environment</text>
+  <text class="s" x="820" y="583">given to a project</text>
   <text class="s" x="820" y="603">modules/email/</text>
   <path class="ln both" d="M980 476 V408"/>
   <path class="no" d="M400 560 H420"/>
   <path class="no" d="M780 560 H800"/>
-  <text class="not" x="40" y="668">✕ No direct link between modules: each keeps its own folder and asks the hub, which checks the link (this project, this server, this environment).</text>
+  <text class="not" x="40" y="668">✕ No direct link between modules: each keeps its own folder and asks the hub, which checks the link (this project, this server, this deployment).</text>
 </svg>
