@@ -5145,7 +5145,7 @@ async function rendreOptions() {
       <div class="bloc local-seul" id="bloc-verrou"><h2>${t("Lock")}</h2>
         <p class="intro petit">${t("With a password, the padlock locks the app: Claude keeps working, but nothing can be seen, changed or read (keys included) without the password. The app starts locked.")}</p>
         ${o.mot_de_passe ? `<label class="champ"><span>${t("Lock automatically")}</span><select id="op-verrou-auto" data-avant="${o.verrou_auto || "1h"}">${[["15m", "After 15 minutes of inactivity"], ["1h", "After 1 hour of inactivity"], ["8h", "After 8 hours of inactivity"], ["fermeture", "When Athanor closes"], ["jamais", "Never automatically"]].map(([v, l]) => `<option value="${v}"${o.verrou_auto === v ? " selected" : ""}>${t(l)}</option>`).join("")}</select></label>
-        <p class="muet petit">${t("Only the interface locks: the vault and its keys stay open, so AIs, pilots, missions, tasks, tunnels and open SSH sessions keep running, and the page comes back as you left it. Only your own actions in this window restart the delay. Athanor always starts locked; a longer delay asks for the password.")}</p>` : ""}
+        <p class="muet petit">${t("Only the interface locks: the vault and its keys stay open, so AIs, pilots, tasks, tunnels and open SSH sessions keep running, and the page comes back as you left it. Only your own actions in this window restart the delay. Athanor always starts locked; a longer delay asks for the password.")}</p>` : ""}
         ${o.coffre_ancien_mdp ? `<p class="avert-connexion petit" id="mdp-coffre-ancien">${t("This vault is protected by an old password. Type that old password to take the vault back with its keys. If it is lost, you can start from an empty vault.")}</p>` : ""}
         ${o.mot_de_passe || o.coffre_ancien_mdp ? `<label class="champ"><span>${t(o.mot_de_passe ? "Current password" : "Old password of the vault")}</span><input type="password" id="mdp-ancien" autocomplete="current-password"></label>` : ""}
         <label class="champ"><span>${o.mot_de_passe ? t("New password (empty to remove it)") : o.coffre_ancien_mdp ? t("New password (12 characters at least)") : t("Password")}</span><input type="password" id="mdp-nouveau" autocomplete="new-password"></label>
@@ -5229,7 +5229,7 @@ function rendreClientsMCP(c) {
   const bureau = JSON.stringify({ mcpServers: { athanor: { command: exe, args: ["mcp-client", "claude-desktop"] } } }, null, 2);
   const extrait = (id, titre, texte) => `<div class="muet petit mt-1">${titre}</div><div class="ligne m0"><pre class="code croit m0" id="${id}">${h(texte)}</pre><button class="btn btn-petit" type="button" data-clients="copier" data-cible="${id}">${t("Copy")}</button></div>`;
   return `<div class="bloc local-seul" id="bloc-clients-mcp"><h2>${t("MCP clients")}</h2>
-    <p class="intro petit">${t("Claude Desktop or Claude Code on this PC can follow your projects through Athanor's MCP: only the projects and tools you allow. No client can decide an approval, launch a mission or read the vault.")}</p>
+    <p class="intro petit">${t("Claude Desktop or Claude Code on this PC can follow your projects through Athanor's MCP: only the projects and tools you allow. No client can decide an approval or read the vault.")}</p>
     ${c.urgence ? `<p class="attention petit">${t("Emergency stop: the MCP clients are suspended and pairing is closed until Resume.")}</p>` : ""}
     ${code}${demandes}${liste}
     <details class="mt-1"><summary class="petit">${t("Ready-to-copy configuration")}</summary>
@@ -5378,8 +5378,6 @@ let numeroRendu = 0;
 const acc = { projet: "", attente: {} };
 const AUTO_ACCES = { migration: "imported", pourvous: "added automatically (For you)" };
 // M224: environments on screen in plain words, internal ids (dev, staging, prod) unchanged
-const NOMS_ENV = { dev: "Testing", staging: "Pre-production", prod: "Production" };
-const nomEnv = (e) => NOMS_ENV[e] ? t(NOMS_ENV[e]) : e;
 // M294: one list of keys. acces.json keeps one line per environment name, as older versions wrote it: the page
 // only says "*" (every one of them), and the pilot receives the lines of d.env, which nothing changes any more
 function ligneAcces(a, refusee) {
@@ -5679,7 +5677,7 @@ function formulaireCoffre() {
     ${x && secret ? `<p class="muet petit">${t("The value is never shown again: type a new one to replace it, or leave the field empty.")}</p>` : ""}
     ${x && secret && TESTABLES_COFFRE.has(x.type) ? `<div class="cof-test-bloc">
       ${x.type === "ssh" ? `<label class="champ"><span>${t("Server to try (optional)")}</span><input type="text" id="cof-hote" maxlength="255" spellcheck="false" placeholder="example.org:22"></label>` : ""}
-      <div class="ligne m0"><button type="button" class="btn" data-cof-test>${t("Test")}</button><span class="muet petit">${t("Athanor checks the key with its provider and proposes a note for the AI.")}</span></div>
+      <div class="ligne m0"><button type="button" class="btn" data-cof-test>${t("Test")}</button><span class="muet petit">${t("Athanor checks the key with its service and proposes a note for the AI.")}</span></div>
       <div class="petit cof-resultat" id="cof-test" aria-live="polite" hidden></div></div>` : ""}
     <div class="ligne"><button type="submit" class="btn btn-primaire">${x ? t("Save") : t("Add")}</button><button type="button" class="btn" data-cof-annuler>${t("Cancel")}</button></div>
   </form>`;
@@ -6244,7 +6242,7 @@ function blocTaches(ta, distant, annulations, envs) {
       <p class="muet petit m0">${t("The Servers agent reads the server, then proposes a plan. Nothing changes before you accept it on its card; a security critic reads it first, the paths a step names are archived before it runs, a file the agent rewrites keeps its previous copy, and an external check follows.")}</p>
       ${(ta || {}).natif ? `<p class="petit pv-vous m0">${t((ta || {}).sans_rappels ? "Native Windows mode has no barrier: your tasks are forced without asking (warnings turned off in Settings › Options), and logged." : "Native Windows mode has no barrier: a task runs only if you force it, with Athanor's password.")}</p>` : ""}
       ${envs.length ? `<label class="petit" for="srv-tache-env">${t("For the project")} <select id="srv-tache-env"><option value="">${t("None (this server only)")}</option>${envs.map((pe) => `<option value="${h(pe)}">${h(envs.filter((x) => projetDeSite(x) === projetDeSite(pe)).length > 1 ? pe : projetDeSite(pe))}</option>`).join("")}</select></label>
-      <p class="muet petit m0">${t("With an environment, the agent can also change the DNS, HTTPS and protection of its address, on that name only.")}</p>` : ""}
+      <p class="muet petit m0">${t("With a project, the agent can also change the DNS, HTTPS and protection of its site's address, on that name only.")}</p>` : ""}
       <div class="ligne m0"><button type="submit" class="btn btn-primaire">${t("Launch")}</button></div></form>`}
     ${annulations}
     ${ta ? l.length ? l.map((x) => carteTacheServeur(x, ta.plans || {}, distant)).join("") : `<p class="muet petit">${t("No task yet on this server.")}</p>` : `<p class="muet petit">${t("The tasks cannot be read right now.")}</p>`}

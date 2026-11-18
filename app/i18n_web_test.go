@@ -50,26 +50,31 @@ func clesWeb(t *testing.T) []string {
 	for _, c := range cles {
 		vu[c] = true
 	}
-	i := strings.Index(js, "\nconst GUIDE = [")
-	j := strings.Index(js[i+1:], "\n];")
-	if i < 0 || j < 0 {
-		t.Fatal("no GUIDE in app.js")
-	}
-	guide := js[i : i+1+j]
-	n := 0
-	for _, m := range regexp.MustCompile(`(id: )?"((?:[^"\\]|\\.)*)"`).FindAllStringSubmatch(guide, -1) {
-		cle := cleJS(m[2])
-		if m[1] != "" || strings.HasPrefix(cle, "#") {
-			continue
-		}
-		n++
+	guide := clesGuide(t, js)
+	for _, cle := range guide {
 		if !vu[cle] {
 			vu[cle] = true
 			cles = append(cles, cle)
 		}
 	}
-	if n < 80 || !vu["Home"] || !vu["Start a project"] {
-		t.Fatalf("keys not found: %d texts in the GUIDE, %d keys", n, len(cles))
+	if len(guide) < 80 || !vu["Home"] || !vu["Start a project"] {
+		t.Fatalf("keys not found: %d texts in the GUIDE, %d keys", len(guide), len(cles))
+	}
+	return cles
+}
+
+// clesGuide: every text of the GUIDE of app.js (ids and "#page" links left out).
+func clesGuide(t *testing.T, js string) []string {
+	i := strings.Index(js, "\nconst GUIDE = [")
+	j := strings.Index(js[i+1:], "\n];")
+	if i < 0 || j < 0 {
+		t.Fatal("no GUIDE in app.js")
+	}
+	var cles []string
+	for _, m := range regexp.MustCompile(`(id: )?"((?:[^"\\]|\\.)*)"`).FindAllStringSubmatch(js[i:i+1+j], -1) {
+		if cle := cleJS(m[2]); m[1] == "" && !strings.HasPrefix(cle, "#") {
+			cles = append(cles, cle)
+		}
 	}
 	return cles
 }
@@ -115,6 +120,74 @@ func TestWebTraduction(t *testing.T) {
 		for _, cle := range cles {
 			if _, ok := dico[cle]; !ok {
 				t.Errorf("%s: no translation of %q", l, cle)
+			}
+		}
+	}
+}
+
+// TestVocabulaireInterface (M306): a project has one deployment, with no environment to name, no mission to create
+// and no provider to add. No key of i18n.js and no translation says those words any more; each exception is listed
+// under its reason and must still be in the dictionary.
+func TestVocabulaireInterface(t *testing.T) {
+	en := regexp.MustCompile(`(?i)environment|\btesting\b|\bin test\b|pre-?production|\bstaging\b|\bmissions?\b|provider`)
+	traduit := map[string]*regexp.Regexp{
+		"fr": regexp.MustCompile(`(?i)environnement|pr[ée]-?production|\bmissions?\b|fournisseur|\ben essai\b|\bessai et\b`),
+		"es": regexp.MustCompile(`(?i)entorno|preproducci|\bmisi[oó]n(es)?\b|proveedor`),
+		"de": regexp.MustCompile(`(?i)umgebung|vorproduktion|\bmission(en)?\b|anbieter|\bstaging\b`),
+		"it": regexp.MustCompile(`(?i)\bambient[ei]\b|pre-?produzion|\bmission[ei]\b|fornitor`),
+		"pt": regexp.MustCompile(`(?i)\bambientes?\b|pr[ée]-?produ|\bmiss(ão|ões)\b|fornecedor|provedor`),
+	}
+	// the same words with another meaning: a sandbox in Spanish, a desktop in Portuguese
+	autreSens := regexp.MustCompile(`(?i)entorno aislado|ambientes? de trabalho`)
+	permis := map[string]bool{}
+	for _, cles := range [][]string{
+		// the old missions of Athanor 2 stay readable and deletable: their page, their deletion, the card of an older conversation
+		{"Old missions", "No old mission left.", "Delete the mission", "Delete this mission?", "Mission deleted.",
+			"Athanor no longer creates nor follows missions: these ones stay here to be read or deleted. Their projects keep working on their own, each with its own deployment.",
+			"The mission, its journal and its follow-up files are deleted.", "Another mission uses this project",
+			"This project existed before the mission: remove it from Studio if you want to", "No local project is linked to this mission",
+			"{0} was put online by a mission: make it the project's deployment to go on deploying it.", "Prepare a mission",
+			"Missions are no longer created: ask again, and the assistant proposes a project or a server task."},
+		// the journal of an old mission, written by code that is gone and still read on its page (keys and PREFIXES of i18n.js)
+		{"Mission paused: {0}", "Mission resumed: {0}", "Mission stopped: {0}. Nothing was undone", "Mission done: {0}",
+			"The environment {0} stays: {1}", "The environment {0} kept its policy: {1}", "The environment {0} now deploys: {1}",
+			"Athanor restarted: the mission waits for the vault to be unlocked", "Athanor restarted: the mission resumes",
+			"The vault is unlocked: the mission resumes", "The milestone in progress is done: the mission is paused",
+			"Stop asked by {0}: the mission pauses once the milestone in progress is done", "The remote Athanor {0} is offline: the mission waits for it",
+			"The remote Athanor did not take the mission for {0}: {1}", "no environment on the card: the Studio lane finished the request"},
+		// the e-mail provider (Gmail, OVH, Brevo…) of the E-mail page: the word its users know, nothing to add in Athanor
+		{"Provider", "The provider fills in the server, port and security: you can still change them.",
+			"Add an SMTP account (your provider's sending server): Athanor keeps its password in the vault, tests the sending and gives your deployed apps what they need to send emails.",
+			"Add the SMTP account of your provider (Gmail, Outlook, OVH, Brevo…): its server, its user name and its password. The password goes straight into the vault and is never shown again."},
+		// "testing" as what Athanor is doing or as a word to search skills with, never a place to deploy to
+		{"Testing…", "testing Claude's fix ({0}/3)…", "testing it as it is…", "e.g. front-end, testing, react, documentation",
+			"Nothing found: try another word, in English (e.g. testing, react, docs).",
+			"A repository or a folder holding one or several skills (a SKILL.md each), e.g. https://github.com/anthropics/skills/tree/main/skills/webapp-testing"},
+	} {
+		for _, c := range cles {
+			permis[c] = true
+			if _, ok := dicoTUI("fr")[c]; !ok {
+				t.Errorf("exception no longer in i18n.js, remove it: %q", c)
+			}
+		}
+	}
+	b, err := os.ReadFile("static/app.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range clesGuide(t, strings.ReplaceAll(string(b), "\r\n", "\n")) { // the Guide is rewritten in M309, which removes this loop
+		permis[c] = true
+	}
+	for l, re := range traduit {
+		for cle, v := range dicoTUI(l) {
+			if permis[cle] {
+				continue
+			}
+			if l == "fr" && en.MatchString(cle) {
+				t.Errorf("key %q", cle)
+			}
+			if m := re.FindString(autreSens.ReplaceAllString(v, "")); m != "" {
+				t.Errorf("%s: %q in the translation of %q", l, m, cle)
 			}
 		}
 	}
