@@ -1,6 +1,6 @@
 # Guide de test — Athanor Hub (branche `hub`)
 
-Ce guide sert à essayer à la main ce que la branche `hub` ajoute à Athanor : le hub (accueil, *Projets*, cloche, Guide), le coffre et les accès, Serveurs, les missions et approbations, E-mail, MCP et Athanor distants. La version est 3.0.0 : elle est prête, mais rien n'est poussé ni publié avant la relecture du propriétaire.
+Ce guide sert à essayer à la main ce que la branche `hub` ajoute à Athanor : le hub (accueil, *Projets*, cloche, Guide), le coffre et les accès, Serveurs, le déploiement des projets et les approbations, E-mail, MCP et Athanor distants. La version est 3.0.0 : elle est prête, mais rien n'est poussé ni publié avant la relecture du propriétaire.
 
 ## 1. Lancer
 
@@ -50,11 +50,11 @@ La CI (`.github/workflows/ci.yml`) refait tout cela sur Windows, Linux et macOS,
 | Module | Où | Ce qu'il faut voir |
 |---|---|---|
 | Hub | *Accueil*, *Projets*, la cloche, *Guide* | L'assistant de l'accueil, une tuile par module avec ses chiffres, ce qui vous attend ; *Projets* liste tout ce qui tourne, avec les filtres *Tous*, *Besoin de moi*, *En cours* |
-| Studio | *Studio* | Les projets construits par Claude, comme avant la branche, avec l'onglet *Accès* en plus |
-| Coffre et accès | *Coffre*, *Studio › Accès* | Clés chiffrées, reconnues au collage, testées chez le fournisseur, données par environnement (*dev*, *staging*, *prod*) |
+| Studio | *Studio* | Les projets construits par Claude, comme avant la branche, avec les onglets *Accès* et *Déploiement* en plus |
+| Coffre et accès | *Coffre*, *Studio › Accès* | Clés chiffrées, reconnues au collage, testées auprès de leur service, rangées par catégorie, données projet par projet |
 | Serveurs | *Serveurs* | Fiche du serveur en une minute, plans de l'agent à accepter, DNS et HTTPS Cloudflare, déploiements et retour arrière, santé toutes les 15 minutes |
-| Missions | *Accueil* (*Nouvelle mission*), *Missions*, *Pour vous*, *Journal d'audit* | Une phrase → une carte → *Lancer* → couloirs, approbations, bouton rouge |
-| E-mail | *E-mail* | Comptes SMTP, e-mail de test, réglages donnés à l'environnement d'un projet |
+| Déploiement et approbations | *Accueil*, *Studio › Déploiement*, *Pour vous*, *Journal d'audit* | Une phrase → une carte projet ou serveur → *Lancer* ; le serveur préparé, le site en ligne, les approbations, le bouton rouge |
+| E-mail | *E-mail* | Comptes SMTP, e-mail de test, réglages donnés à un projet |
 | MCP et distants | *Réglages › Athanor distants*, *Réglages › Clients MCP* | Appairage par code **et** accord à l'écran |
 
 Chaque partie a sa page dans *Guide* et un tutoriel dans *Guide › Tutoriels* ; le « ? » en haut à droite ouvre l'aide de la page.
@@ -69,9 +69,9 @@ Cochez au fur et à mesure. En clair puis en sombre, sur ordinateur puis sur té
 - [ ] **Menu.** Chaque entrée du menu ouvre sa page sans erreur ; la version affichée (*Réglages*, pied de page) est 3.0.0.
 - [ ] **Projets.** Les filtres changent la liste ; un projet en cours dit son jalon ; le lien mène au bon endroit.
 - [ ] **Cloche.** Une alerte (par exemple un e-mail de test qui échoue) y apparaît une seule fois et disparaît quand c'est réglé.
-- [ ] **Accès.** *Studio › Accès* d'un projet : glisser une clé sur *dev* fait apparaître le badge « N accès » avant *Démarrer* ; la phrase du badge dit ce qui est donné.
+- [ ] **Accès.** *Studio › Accès* d'un projet : cocher une clé puis *Enregistrer les modifications* fait apparaître le badge « N accès » à côté de *Démarrer* ; la phrase du badge dit ce qui est donné.
 - [ ] **Chat général.** L'assistant de l'accueil répond, connaît vos modules et vos projets, et ne donne jamais la valeur d'une clé.
-- [ ] **Fiche d'accord.** Une demande d'un agent (accès, déploiement) arrive dans *Pour vous* sous forme de fiche : *Accepter*, *Refuser*, ce qui sera fait, en mots simples ; une action en *prod* attend toujours votre accord.
+- [ ] **Fiche d'accord.** Une demande d'un agent (accès, déploiement) arrive dans *Pour vous* sous forme de fiche : *Accepter*, *Refuser*, ce qui sera fait, en mots simples ; une action destructrice attend toujours votre accord.
 
 ### Coffre
 
@@ -85,21 +85,25 @@ Cochez au fur et à mesure. En clair puis en sombre, sur ordinateur puis sur té
 - [ ] *Installation & santé → Tester l'agent Serveurs* (Docker Desktop requis) : verdict en six lignes, serveur et clé retirés à la fin.
 - [ ] Ajouter un vrai serveur de test (voir `docs/SERVEUR_DE_TEST.md`) : la fiche se remplit, le mot de passe n'est pas gardé.
 - [ ] Demander une tâche à l'agent : il propose un plan ; rien ne s'exécute avant *Accepter*.
-- [ ] Déployer un petit site, vérifier l'adresse, puis *Revenir à la version d'avant* et revérifier.
 
-### Missions
+### Déploiement et approbations
 
-- [ ] *Nouvelle mission* depuis l'accueil : une phrase donne une carte à vérifier ; *Lancer* crée les couloirs.
-- [ ] Un échec de déploiement (serveur éteint, par exemple) : la cloche sonne, la mission dit ce qui a échoué et ce que l'agent a tenté, avec *Réessayer*, *Revenir à la version d'avant*, *Je prends la main*.
+- [ ] Depuis l'accueil, une phrase comme « Fais un petit site et mets-le en ligne sur @serveur » donne une carte **projet** avec son déploiement à vérifier ; rien ne démarre avant *Lancer*.
+- [ ] Un projet dont l'onglet *Déploiement* n'a pas de serveur se construit sans rien demander d'un serveur, et rien ne s'en plaint.
+- [ ] *Studio › Déploiement* : le serveur, l'adresse, votre plan, puis *Après chaque jalon* ou *À la livraison*. L'onglet dit *Premier déploiement en cours*, jamais un échec rouge, puis l'adresse répond.
+- [ ] Une demande ajoutée après la livraison : le projet est relivré, puis redéployé une seule fois ; *Revenir à la version d'avant* remet l'ancienne version, à revérifier à l'adresse.
+- [ ] *Gérer › Réglages de ce projet* : un mode de permission choisi ici ne vaut que pour ce projet ; *Ignorer les permissions* demande une confirmation et le mot de passe d'Athanor.
+- [ ] Un échec de déploiement (serveur éteint, par exemple) : la cloche sonne et dit ce qui a échoué et ce qui a été tenté, avec *Réessayer*, *Revenir à la version d'avant*, *Je prends la main*.
 - [ ] Le bouton rouge arrête tout ; le *Journal d'audit* garde chaque étape, chaînée.
-- [ ] Depuis le téléphone (accès à distance appairé) : la notification « Mise en prod de … ? » arrive et s'approuve à distance.
+- [ ] Depuis le téléphone (accès à distance appairé) : une demande d'accord (le plan d'une tâche de serveur, par exemple) arrive en notification et s'approuve à distance.
+- [ ] Avec les données d'une version précédente : la page *Anciennes missions* les liste, en lecture seule (voir `docs/MISSIONS.fr.md`) ; un ancien projet garde ses sites sous *Autres sites de ce projet* et aucun mot de passe n'est redemandé.
 
 ### E-mail, avec un vrai compte
 
 - [ ] Ajouter un vrai compte (Gmail, Outlook ou Yahoo : un *mot de passe d'application*, pas le mot de passe du compte ; OVH, Brevo, Mailgun, SendGrid : les identifiants SMTP du service).
 - [ ] *Envoyer un e-mail de test* à votre adresse : le message arrive (regardez aussi les indésirables).
 - [ ] Un mauvais mot de passe : l'échec est dit en mots simples sur la carte et reste dans la cloche jusqu'à un test réussi ; « Retapez le mot de passe » apparaît.
-- [ ] *Configurer l'envoi* pour un projet en *dev* : les variables `SMTP_*` apparaissent dans ses accès ; le *×* les retire ; supprimer le compte demande confirmation en nommant les projets.
+- [ ] *Configurer l'envoi* pour un projet : les variables `SMTP_*` apparaissent dans ses accès ; le *×* les retire ; supprimer le compte demande confirmation en nommant les projets.
 - [ ] Le fichier `modules\email\comptes.json` du dossier d'Athanor ne contient aucun mot de passe.
 
 ### MCP et Athanor distants
@@ -115,7 +119,7 @@ Cochez au fur et à mesure. En clair puis en sombre, sur ordinateur puis sur té
 ## 4. Ce qui n'a pas été vérifié ici
 
 - La CI sur les 3 systèmes après le push de la branche (macOS en particulier : pas de Mac sur ce PC).
-- Le parcours de mission de bout en bout sur un vrai VPS de test, et l'envoi SMTP avec un vrai compte.
+- Le déploiement d'un projet de bout en bout sur un vrai VPS de test, et l'envoi SMTP avec un vrai compte.
 
 ## 5. Signaler un bug
 

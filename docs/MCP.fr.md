@@ -2,7 +2,7 @@
 
 *English: [MCP.md](MCP.md)*
 
-Athanor a un seul serveur MCP. Claude Desktop ou Claude Code, **sur ce PC**, peut s'en servir pour suivre vos projets : lire leur plan et leurs demandes, ajouter une demande, démarrer ou mettre en pause un pilote, préparer une carte de mission. Seulement les projets et les outils que vous autorisez, jamais plus. Dans l'application, *Guide › Brancher Claude Desktop* reprend les mêmes étapes ; un autre Athanor relié à celui-ci est dans [REMOTE.fr.md](REMOTE.fr.md).
+Athanor a un seul serveur MCP. Claude Desktop ou Claude Code, **sur ce PC**, peut s'en servir pour suivre vos projets : lire leur plan et leurs demandes, ajouter une demande, démarrer ou mettre en pause un pilote. Seulement les projets et les outils que vous autorisez, jamais plus. Dans l'application, *Guide › Brancher Claude Desktop* reprend les mêmes étapes ; un autre Athanor relié à celui-ci est dans [REMOTE.fr.md](REMOTE.fr.md).
 
 <p align="center">
   <img src="images/mcp-clients.png" alt="Réglages, bloc Clients MCP : Claude Code appairé avec son périmètre, une demande de Claude Desktop en attente avec les projets et les outils à cocher, et la configuration prête à copier ouverte" width="100%">
@@ -38,17 +38,17 @@ Athanor a un seul serveur MCP. Claude Desktop ou Claude Code, **sur ce PC**, peu
 | `etat` | les modules, leurs alertes, le nom de cette instance | oui |
 | `projets` | les projets de son périmètre, leur avancement et leur jalon en cours | oui |
 | `plan`, `demandes` | le plan d'un projet, ses demandes | oui |
-| `missions`, `approbations` | les missions et les accords en attente (avec un lien vers la page, jamais une décision) | oui |
+| `missions`, `approbations` | les anciennes missions (en lecture seule) et les accords en attente (avec un lien vers la page, jamais une décision) | oui |
 | `ajouter_demande` | ajoute une demande à un projet de son périmètre | non |
 | `pilote` | `demarrer`, `pause_fin_cycle` (s'arrête à la fin du cycle) ou `arreter` | non |
-| `proposer_mission` | prépare une carte de mission à partir d'une phrase ; *Lancer* reste à vous | non |
+| `proposer_mission` | retiré : répond que les missions ne se créent plus, et renvoie vers `ajouter_demande` | non |
 
 Demandez à Claude « Que font mes projets ? » : il appelle `etat` et `projets`, puis lit ce dont il a besoin. Chaque appel va dans le journal d'audit sous `client:claude-desktop`, avec l'outil et le projet.
 
 ## Ce qu'un client ne peut jamais faire
 
 - **Décider d'un accord.** Un accord demande une preuve de présence venant de la fenêtre d'Athanor ou d'un appareil appairé ; un jeton lu sur le disque n'en donne jamais.
-- **Lancer une mission**, lire une valeur du coffre, toucher un serveur : ces outils n'existent pas pour un client MCP, quoi que vous cochiez.
+- **Déployer**, lire une valeur du coffre, toucher un serveur : ces outils n'existent pas pour un client MCP, quoi que vous cochiez.
 - **Voir un projet hors de son périmètre** : pour lui, ce projet n'existe pas (même réponse qu'un nom inconnu).
 - **Servir son jeton ailleurs** : un jeton de client ne vaut que sur la route MCP, jamais sur les autres routes `/api/*` ni par le tunnel de l'accès à distance.
 

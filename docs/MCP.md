@@ -2,7 +2,7 @@
 
 *Français : [MCP.fr.md](MCP.fr.md)*
 
-Athanor has one MCP server. Claude Desktop or Claude Code, **on this PC**, can use it to follow your projects: read their plan and their requests, add a request, start or pause a pilot, prepare a mission card. Only the projects and the tools you allow, never more. In the app, *Guide › Connect Claude Desktop* walks through the same steps; another Athanor linked to this one is in [REMOTE.md](REMOTE.md).
+Athanor has one MCP server. Claude Desktop or Claude Code, **on this PC**, can use it to follow your projects: read their plan and their requests, add a request, start or pause a pilot. Only the projects and the tools you allow, never more. In the app, *Guide › Connect Claude Desktop* walks through the same steps; another Athanor linked to this one is in [REMOTE.md](REMOTE.md).
 
 <p align="center">
   <img src="images/mcp-clients.png" alt="Settings, MCP clients block: Claude Code paired with its scope, a request from Claude Desktop waiting with the projects and tools to tick, and the ready-to-copy configuration opened" width="100%">
@@ -38,17 +38,17 @@ Athanor has one MCP server. Claude Desktop or Claude Code, **on this PC**, can u
 | `etat` | the modules, their alerts, this instance's name | yes |
 | `projets` | the projects of its scope, their progress and current milestone | yes |
 | `plan`, `demandes` | a project's plan, its requests | yes |
-| `missions`, `approbations` | the missions and the approvals waiting (with a link to the page, never a decision) | yes |
+| `missions`, `approbations` | the old missions (read only) and the approvals waiting (with a link to the page, never a decision) | yes |
 | `ajouter_demande` | adds a request to a project of its scope | no |
 | `pilote` | `demarrer`, `pause_fin_cycle` (stops at the end of the cycle) or `arreter` | no |
-| `proposer_mission` | prepares a mission card from a sentence; *Launch* stays yours | no |
+| `proposer_mission` | removed: answers that missions are no longer created, and points to `ajouter_demande` | no |
 
 Ask Claude “What are my projects doing?”: it calls `etat` and `projets`, then reads what it needs. Every call goes to the audit log as `client:claude-desktop`, with the tool and the project.
 
 ## What a client can never do
 
 - **Decide an approval.** An approval needs a proof of presence from Athanor's window or a paired device; a token read on the disk never gives one.
-- **Launch a mission**, read a value of the vault, touch a server: those tools do not exist for an MCP client, whatever you tick.
+- **Deploy**, read a value of the vault, touch a server: those tools do not exist for an MCP client, whatever you tick.
 - **See a project outside its scope**: for it, the project does not exist (same answer as an unknown name).
 - **Use its token anywhere else**: a client token works on the MCP route only, never on the other `/api/*` routes nor through the remote access tunnel.
 

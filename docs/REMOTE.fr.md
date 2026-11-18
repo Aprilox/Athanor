@@ -18,9 +18,9 @@ Un autre Athanor, sur ce PC, sur votre réseau ou sur un VPS, peut être relié 
 ## Ce que vous obtenez
 
 - **Ses projets dans votre hub.** Un Athanor distant avec Studio apporte ses projets dans *Projets* et sur l'accueil sous la forme `nom@instance`, avec leur avancement et leur jalon, grisés tant qu'il est hors ligne (sa dernière liste reste). *Démarrer*, *Arrêter après le cycle* et *Arrêter maintenant* commandent son pilote d'ici s'il a prêté l'outil `pilote`.
-- **Missions.** Une mission peut viser un de ses projets avec `@nom@instance` : *Lancer* y ajoute la demande et démarre son pilote ; la page de la mission suit ses jalons. Un projet distant ne reçoit de votre hub ni environnement, ni serveur, ni relais vers la prod.
+- **Rien n'est déployé d'ici.** Le déploiement d'un projet distant, ses serveurs et ses clés d'API se règlent sur son propre Athanor : votre hub ne lui en donne aucun.
 - **Ses serveurs.** Un Athanor distant avec Serveurs montre ici ses serveurs et leurs tâches. Une action en prod attend toujours un accord, vérifié **des deux côtés** : le distant décide avec la preuve de présence de son propre propriétaire, jamais celle de votre hub.
-- **Hors ligne.** Il est lu toutes les 15 secondes ; hors ligne, il est grisé et rien ne l'attend. Un ordre envoyé pendant qu'il est hors ligne (le démarrage d'une mission) est renvoyé à son retour.
+- **Hors ligne.** Il est lu toutes les 15 secondes ; hors ligne, il est grisé et rien ne l'attend. Un ordre à son pilote est refusé tant qu'il est hors ligne, avec la raison.
 
 ## Des serveurs sur un VPS (un module sans fenêtre)
 

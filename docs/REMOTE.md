@@ -18,9 +18,9 @@ Another Athanor, on this PC, on your network or on a VPS, can be linked to this 
 ## What you get
 
 - **Its projects in your hub.** A remote Athanor with Studio brings its projects into *Projects* and the home page as `name@instance`, with their progress and their milestone, greyed while it is offline (its last list stays). *Start*, *Stop after cycle* and *Stop now* drive its pilot from here if it lent the `pilote` tool.
-- **Missions.** A mission can aim at one of its projects with `@name@instance`: *Launch* adds the request there and starts its pilot; the mission page follows its milestones. A remote project gets no environment, server or production relay from your hub.
+- **Nothing deployed from here.** A remote project's deployment, its servers and its API keys are set on its own Athanor: your hub gives it none.
 - **Its servers.** A remote Athanor with Servers shows its servers and their tasks here. A production action still waits for an approval, checked **on both sides**: the remote Athanor decides with its own owner's proof of presence, never your hub's.
-- **Offline.** It is read every 15 seconds; offline, it is greyed and nothing waits on it. An order sent while it is offline (a mission's start) is sent again when it comes back.
+- **Offline.** It is read every 15 seconds; offline, it is greyed and nothing waits on it. An order to its pilot is refused while it is offline, with the reason.
 
 ## Servers on a VPS (a module with no window)
 
