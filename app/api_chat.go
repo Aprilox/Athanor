@@ -287,6 +287,8 @@ type demandeChat struct {
 	Pieces   []string `json:"pieces"` // files attached, uploaded first (api_pieces.go, cible "chat")
 	// the home bar's chips, resolved by type and id (resoudreMentions), never by the name alone
 	Mentions []MentionDemandee `json:"mentions"`
+	// what the model reads after the message (the mentions by id and host), never shown in the owner's bubble
+	Annexe string `json:"-"`
 	// the home conversation's folders (hub_chat_dossiers.go), set by the server, never by the page
 	Dossiers []DossierChat `json:"-"`
 }
@@ -389,6 +391,7 @@ func (s *Serveur) envoyerChat(w http.ResponseWriter, p Projet, c demandeChat, ga
 		sujet = strings.TrimPrefix(pieces[0], prefixePieceChat)
 	}
 	en.sujet = sujet
+	texte += c.Annexe
 	if len(pieces) > 0 {
 		texte += "\n\nAttached files (read them):"
 		for _, x := range pieces {

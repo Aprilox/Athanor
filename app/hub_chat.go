@@ -73,7 +73,7 @@ func (s *Serveur) apiHubChatEnvoyer(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if len(l) > 0 {
-			c.Message += "\n\n@" + strings.Join(l, "\n@") // e.g. "@server web (id x1, 203.0.113.5)"
+			c.Annexe = "\n\n@" + strings.Join(l, "\n@") // e.g. "@server web (id x1, 203.0.113.5)"
 		}
 	}
 	alerte, err := s.examinerPiecesAccueil(p, c.Pieces)

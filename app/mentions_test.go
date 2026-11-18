@@ -17,13 +17,17 @@ func TestMentions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	mdp, err := s.coffre.Ajouter(EntreeCoffre{Nom: "SSH password web-1", Famille: "secret", Type: "mot_de_passe", Portee: "code"}, temoin)
+	if err != nil {
+		t.Fatal(err)
+	}
 	s.mu.Lock()
 	s.config.Projets = []Projet{{Nom: "ancien", Dossier: t.TempDir()}, {Nom: "boutique", Dossier: t.TempDir()},
 		{Nom: "range", Dossier: t.TempDir(), Archive: true}, {Nom: "vitrine", Dossier: t.TempDir()}}
 	s.config.ProjetActif = "boutique"
 	s.mu.Unlock()
 	if err := modifierServeurs(func(l []ServeurInventaire) ([]ServeurInventaire, error) {
-		l = append(l, ServeurInventaire{ID: "srv1", Nom: "web-1", Hote: "203.0.113.5"})
+		l = append(l, ServeurInventaire{ID: "srv1", Nom: "web-1", Hote: "203.0.113.5", Cle: mdp.ID, Auth: "mot_de_passe"})
 		for i := range 30 {
 			l = append(l, ServeurInventaire{ID: fmt.Sprintf("x%02d", i), Nom: fmt.Sprintf("noeud-%02d", i), Hote: "198.51.100.1"})
 		}
@@ -55,6 +59,9 @@ func TestMentions(t *testing.T) {
 	}
 	if _, corps := appel("cloudflare"); !strings.Contains(corps, `{"type":"api","ref":"`+cle.ID+`","nom":"Jeton Cloudflare","detail":"cloudflare"}`) || strings.Contains(corps, temoin) || strings.Contains(corps, "valeur") {
 		t.Errorf("vault entry by type: %s", corps)
+	}
+	if _, corps := appel("web-1"); strings.Contains(corps, mdp.ID) || !strings.Contains(corps, `"ref":"srv1"`) { // M311a
+		t.Errorf("the password a server is reached with is listed as an API: %s", corps)
 	}
 	// M244k7: the chips already chosen are left out before the cut, so the next ones come up
 	if _, corps := appel("noeud&sauf=serveur:x00&sauf=serveur:x01"); strings.Contains(corps, `"ref":"x00"`) || !strings.Contains(corps, `"ref":"x06"`) || !strings.Contains(corps, `"autres":{"serveur":23}`) {

@@ -84,8 +84,8 @@ func (s *Serveur) candidatsMentions() []MentionTrouvee {
 			categories[c.ID] = c.Nom
 		}
 		for _, e := range s.coffre.Liste() {
-			if e.Type == "ssh" && slices.ContainsFunc(serveurs, func(sv ServeurInventaire) bool { return sv.Cle == e.ID }) {
-				continue // the ssh key a server is reached with is part of that server, not an API
+			if slices.ContainsFunc(serveurs, func(sv ServeurInventaire) bool { return sv.Cle == e.ID }) {
+				continue // the key or the password a server is reached with is part of that server, not an API
 			}
 			l = append(l, MentionTrouvee{Type: "api", Ref: e.ID, Nom: e.Nom, Detail: e.Type, Categorie: e.Categorie, CategorieNom: categories[e.Categorie]})
 		}
