@@ -2289,7 +2289,7 @@ function carteActionHub(c, i) {
   // M296: a `serveur` card changes its text and its permission mode only; its servers and keys are the proposal's
   const champs = ty === "mission" ? "" : ty !== "serveur" ? choixProjet : `<label class="champ"><span>${t("Permissions")}</span><select data-cact="permission">${[["", t("The mode of each server (Settings › Permissions for API keys alone)")], ...AUTORISATIONS_IA()].map(([k, n]) => `<option value="${k}" ${k === (c.permission || "") ? "selected" : ""}>${h(n)}</option>`).join("")}</select></label>`;
   const [etatT, classeT] = ETATS_TACHE_SRV()[c.etat_tache] || [c.etat_tache, ""];
-  const tache = !c.etat_tache ? "" : `<div class="petit carte-action-tache"><span class="pv-etat ${classeT}">${h(etatT)}</span>${(c.serveurs || []).length ? ` <a href="#serveur/${encodeURIComponent(c.serveurs[0])}">${t("Follow this task on the server's page")}</a>` : ""}${c.etat_tache === "attente_accord" ? ` <a href="#approbations">${t("Accept or refuse its plan on the Approvals page")}</a>` : ""}</div>${c.bilan ? `<div class="petit">${mdChat(c.bilan)}</div>` : ""}`;
+  const tache = !c.etat_tache ? "" : `<div class="petit carte-action-tache"><span class="pv-etat ${classeT}">${h(etatT)}</span>${(c.serveurs || []).length ? ` <a href="#serveur/${encodeURIComponent(c.serveurs[0])}">${t("Follow this task on the server's page")}</a>` : ""}${c.etat_tache === "attente_accord" ? ` <a href="#approbations">${t("Accept or refuse its plan on the Approvals page")}</a>` : ""}</div>${c.bilan && tacheFinie({ etat: c.etat_tache }) ? `<div class="petit">${mdChat(c.bilan)}</div>` : ""}`; // its report once it is over: a session's text before the verification is not the outcome
   const equipe = ["agent", "mcp", "attribuer"].includes(ty) ? champsEquipeHub(c, [...new Set([...(c.projets || []), ...projets.filter((n) => n && n !== c.projet)])]) : null;
   const titre = ty === "demande" ? `<label class="champ"><span>${t("Title")}</span><input type="text" data-cact="titre" value="${v(c.titre)}"></label>` : "";
   // M295: the deployment and the permission mode of a `projet` card, shown only when the request uses them; Launch sends them back as shown
@@ -3541,7 +3541,7 @@ function carteApprobation(x, ap, codes) {
   const p = (ap.plans || {})[x.id];
   const durcir = x.agent === "durcissement"; // B80: Athanor's own plan, titled by the server (its project is internal)
   if (x.action === "plan_serveur") return carteDecision(x, ap, durcir ? `<strong>${h(t("Harden this server: {0}", [d.nom || d.serveur]))}</strong>`
-    : `${x.production ? `<span class="badge badge-infra">${t("Production")}</span> ` : ""}<strong>${h(t("Plan for {0}", [d.nom || d.serveur]))}</strong> <span>${h(x.projet)}</span>`,
+    : `${x.production ? `<span class="badge badge-infra">${t("Production")}</span> ` : ""}<strong>${h(t("Plan for {0}", [d.nom || d.serveur]))}</strong>${(x.projet || "").startsWith("servers:tache:") ? "" : ` <span>${h(x.projet)}</span>`}`,
     [tn(d.etapes || "?", "1 step", "{0} steps", [d.etapes || "?"])], blocPlan(x, p), d.regle === "oui" && t("Never ask again for this server"), p && p.critique && !p.critique.verdict);
   // a deployment (M120): prod is never decided by a rule
   if (x.action === "deploiement") return carteDecision(x, ap, `${x.production ? `<span class="badge badge-infra">${t("Production")}</span> ` : ""}<strong>${h(x.production ? t("Deploy {0} to production?", [d.hote]) : t("Deploy {0}?", [d.hote]))}</strong> <span>${h(x.projet)}</span>`,
@@ -7499,7 +7499,7 @@ function planCarteIA(x) {
 function tacheIA(x) {
   const a = assIA(x), fini = !vivanteIA(x), [lib, cl] = ETATS_TACHE_SRV()[{ arretee: "arretee", erreur: "echec" }[a] || x.etat] || [x.etat, ""], fin = (x.historique || []).slice(-1)[0] || {};
   const carte = a === "arretee" ? planCarteIA(x) : ""; // a stopped task with a plan: its card says it, once
-  return `<div class="ia-tache" data-tache="${h(x.id)}"><p class="ia-demande">${h(x.texte)}${x.direct ? ` <span class="pv-etat pv-claude">${t("Shown in your terminal")}</span>` : ""}</p>
+  return `<div class="ia-tache" data-tache="${h(x.id)}"><p class="ia-demande">${h(titreTache(x))}${x.direct ? ` <span class="pv-etat pv-claude">${t("Shown in your terminal")}</span>` : ""}</p>
     ${(x.actions || []).length ? `<ol class="ia-actions">${x.actions.map(actionIA).join("")}</ol>` : ""}
     ${carte}
     ${x.resultat ? `<div class="ia-reponse">${mdChat(x.resultat, true)}</div>` : ""}
