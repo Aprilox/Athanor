@@ -1185,7 +1185,9 @@ func (p *pilote) preparerCycle() {
 		_ = cmdMap.Run()
 	}
 
-	if p.natif || interopWindows() {
+	// a task made by an older version runs powershell.exe: its console window opens (in Windows Terminal) and takes
+	// the focus at every run; the health check asks for Repair (one UAC prompt), until then the cycle leaves it alone
+	if (p.natif || interopWindows()) && tacheAdminAJour(p.kit) {
 		sch := "schtasks.exe"
 		if runtime.GOOS == "windows" {
 			sch = "schtasks"

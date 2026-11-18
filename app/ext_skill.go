@@ -141,7 +141,7 @@ func trouverProgramme(nom string) string {
 func executerCourt(p string, args ...string) (string, error) {
 	ctx, fin := context.WithTimeout(context.Background(), 15*time.Second)
 	defer fin()
-	c := exec.CommandContext(ctx, p, args...)
+	c := commandeContexte(ctx, p, args...)
 	cacherFenetre(c)
 	b, err := c.CombinedOutput()
 	return strings.TrimSpace(string(b)), err
@@ -398,7 +398,7 @@ func diffDossiers(a, b string) string {
 		return ""
 	}
 	_ = os.Remove(filepath.Join(t, "b", ".athanor-correction.json"))
-	c := exec.Command("git", "-c", "core.quotepath=false", "diff", "--no-index", "--no-color", "--src-prefix=a/", "--dst-prefix=b/", "--", "a", "b")
+	c := commande("git", "-c", "core.quotepath=false", "diff", "--no-index", "--no-color", "--src-prefix=a/", "--dst-prefix=b/", "--", "a", "b")
 	c.Dir = t
 	cacherFenetre(c)
 	out, _ := c.Output()

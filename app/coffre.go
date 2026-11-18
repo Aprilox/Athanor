@@ -19,7 +19,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -69,7 +68,7 @@ func nouveauCompteCoffre() string { return "code-" + hex.EncodeToString(octetsAl
 func outilCoffre(entree string, nom string, args ...string) (string, error) {
 	ctx, fin := context.WithTimeout(context.Background(), 10*time.Second)
 	defer fin()
-	cmd := exec.CommandContext(ctx, nom, args...)
+	cmd := commandeContexte(ctx, nom, args...)
 	cmd.Stdin = strings.NewReader(entree)
 	out, err := cmd.Output()
 	if err != nil {

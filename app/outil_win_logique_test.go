@@ -120,3 +120,13 @@ func TestTacheAdminXML(t *testing.T) {
 		t.Fatal("UTF-16 output")
 	}
 }
+
+// The PC's task serves one kit: a test or trial world (its own kit) must not start it.
+func TestTacheAdminDuKit(t *testing.T) {
+	x := xmlTacheAdmin(`PC\Moi`, "S-1-5-21-1", `C:\ProgramData\Athanor\Athanor.exe`, `admin-tache --dossier "C:\Kit\tools\windows\admin-requests"`)
+	for kit, attendu := range map[string]bool{`C:\Kit`: true, `c:/kit/`: true, t.TempDir(): false, `C:\Kit\essai\kit`: false, `C:\Autre`: false} {
+		if tacheAdminDuKit(x, kit) != attendu {
+			t.Errorf("kit %q: want %v", kit, attendu)
+		}
+	}
+}

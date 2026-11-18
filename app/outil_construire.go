@@ -73,7 +73,7 @@ func lancerConstruire(args []string) int {
 			if filepath.Base(p)[:4] == "llvm" {
 				a = []string{"--target=pe-x86-64", "-i", "winres/athanor.rc", "-o", "rsrc_windows_amd64.syso"}
 			}
-			c := exec.Command(p, a...)
+			c := commande(p, a...)
 			c.Dir = src
 			if c.Run() == nil {
 				fmt.Println("resources compiled with " + rc)
@@ -98,7 +98,7 @@ func lancerConstruire(args []string) int {
 		if goos == "windows" {
 			drapeaux = "-s -w -H windowsgui"
 		}
-		c := exec.Command(goBin, "build", "-trimpath", "-tags", "embarque", "-ldflags", drapeaux, "-o", sortie, ".")
+		c := commande(goBin, "build", "-trimpath", "-tags", "embarque", "-ldflags", drapeaux, "-o", sortie, ".")
 		c.Dir = src
 		c.Env = append(os.Environ(), "CGO_ENABLED=0", "GOOS="+goos, "GOARCH="+goarch)
 		c.Stdout, c.Stderr = os.Stdout, os.Stderr

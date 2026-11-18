@@ -288,7 +288,7 @@ func demarrerConteneurTest(dire func(string)) (string, func(), error) {
 	run := func(delai time.Duration, args ...string) (string, error) {
 		ctx, fin := context.WithTimeout(context.Background(), delai)
 		defer fin()
-		c := exec.CommandContext(ctx, docker, args...)
+		c := commandeContexte(ctx, docker, args...)
 		cacherFenetre(c)
 		out, err := c.CombinedOutput()
 		return strings.TrimSpace(string(out)), err

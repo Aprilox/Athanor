@@ -322,14 +322,14 @@ func tacheAdminAJourXML(xml string) bool {
 	return strings.Contains(l, "athanor.exe") && strings.Contains(l, "admin-tache")
 }
 
-// tacheAdminEtat: the administrator task exists, and runs this version's worker. From Windows (schtasks.exe)
-// or from WSL (through interop, from /mnt/c).
-func tacheAdminEtat() (presente, aJour bool) {
+// tacheAdminXML: the administrator task's definition, from Windows (schtasks.exe) or from WSL (through interop,
+// from /mnt/c); false when the task does not exist.
+func tacheAdminXML() (string, bool) {
 	prog, dossier := "schtasks.exe", ""
 	if runtime.GOOS != "windows" {
 		prog = "/mnt/c/Windows/System32/schtasks.exe"
 		if _, err := os.Stat(prog); err != nil {
-			return false, false
+			return "", false
 		}
 		dossier = "/mnt/c"
 	}
@@ -338,12 +338,34 @@ func tacheAdminEtat() (presente, aJour bool) {
 	cacherFenetre(c)
 	out, err := c.Output()
 	if err != nil {
-		return false, false
+		return "", false
 	}
-	return true, tacheAdminAJourXML(texteUTF16(out))
+	return texteUTF16(out), true
+}
+
+// tacheAdminEtat: the administrator task exists, and runs this version's worker.
+func tacheAdminEtat() (presente, aJour bool) {
+	xml, ok := tacheAdminXML()
+	return ok, ok && tacheAdminAJourXML(xml)
+}
+
+// tacheAdminDuKit: the task serves this kit's requests folder. A test or trial world has a kit of its own: the PC's task
+// must not run for it. shortcut: a path with "&" is XML-escaped in the task, so it never matches; none so far.
+func tacheAdminDuKit(xml, kit string) bool {
+	kit = strings.ReplaceAll(kit, "/", "\\")
+	return strings.Contains(strings.ToLower(xml), strings.ToLower(strings.TrimRight(kit, `\`)+`\tools\windows\admin-requests`))
 }
 
 // racineKitAdmin: the tool folder from the requests folder (KIT\tools\windows\admin-requests).
 func racineKitAdmin(dossier string) string {
 	return filepath.Dir(filepath.Dir(filepath.Dir(dossier)))
+}
+
+// tacheAdminAJour: the task exists, is this version's and serves this kit (the pilot's cycle starts it only then).
+func tacheAdminAJour(kit string) bool {
+	xml, ok := tacheAdminXML()
+	if ok && runtime.GOOS != "windows" {
+		kit = cheminWindowsWSL(kit)
+	}
+	return ok && tacheAdminAJourXML(xml) && tacheAdminDuKit(xml, kit)
 }

@@ -69,7 +69,7 @@ func lancerConstruireDeploiement(args []string) int {
 			return 1
 		}
 		cage = func(src string) (*exec.Cmd, error) {
-			return exec.Command(exe, "mcp-cage", "construire", filepath.Join(kit, "tools"), "--rw", src, "--", "sh", "-c", commandeBuild), nil
+			return commande(exe, "mcp-cage", "construire", filepath.Join(kit, "tools"), "--rw", src, "--", "sh", "-c", commandeBuild), nil
 		}
 	}
 	if err := construireDeploiement(cheminOutil(pos[1]), pos[2], pos[3], cheminOutil(pos[4]), cage, os.Stderr); err != nil {
