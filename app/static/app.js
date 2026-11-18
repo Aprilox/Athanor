@@ -3502,7 +3502,8 @@ function carteTache(x) {
 }
 
 // the agents' pending approvals, every project, first on For you: what was asked, why, and what accepting gives
-const signatureAppr = (ap) => JSON.stringify(((ap || {}).approbations || []).filter((x) => x.etat === "attente").map((x) => x.id));
+// M310d: the critic's verdict is part of it: a plan's card unlocks Accept as soon as its critic has judged
+const signatureAppr = (ap) => JSON.stringify(((ap || {}).approbations || []).filter((x) => x.etat === "attente").map((x) => [x.id, !!(((ap.plans || {})[x.id] || {}).critique || {}).verdict]));
 // a Servers plan (M91): its steps as the code classed them; every text comes from the agent or the server, shown as text
 const CLASSES_ETAPE = () => ({ lecture: [t("read"), "pv-ok"], changement: [t("change"), "pv-claude"], destructrice: [t("destructive"), "pv-vous"] });
 function argumentsLisibles(l) {
@@ -8188,8 +8189,8 @@ async function rafraichir() {
         const r = await api("serveurs/" + encodeURIComponent(srv.id || "") + "/taches").catch(() => null);
         if (r && JSON.stringify(r) !== srv.tachesSig) rendrePage();
       }
-      if (etat.page === "pourvous" && !document.activeElement.matches("input, textarea, select") && ++etat.pvTic % 4 === 0) {
-        const [r, ap] = await Promise.all([api("pourvous").catch(() => null), api("hub/approbations").catch(() => null)]);
+      if ((etat.page === "pourvous" || etat.page === "approbations") && !document.activeElement.matches("input, textarea, select") && ++etat.pvTic % 4 === 0) {
+        const [r, ap] = await Promise.all([etat.page === "pourvous" ? api("pourvous").catch(() => null) : null, api("hub/approbations").catch(() => null)]); // M310d: the Approvals page follows its accords too
         if ((r && JSON.stringify(r.taches || []) !== etat.pvSignature) || (ap && signatureAppr(ap) !== etat.apprSignature)) rendrePage();
       }
       annoncerTaches(v);

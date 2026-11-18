@@ -101,6 +101,7 @@ func init() {
 		"Once accepted, call each step's tool with exactly its arguments, each step once, within 2 hours. A change outside an accepted plan is refused.",
 		Schema: schemaObjet(map[string]any{"serveur": schemaTexte("The server's id, from serveurs_liste (a plan of Cloudflare steps: any of your servers)"),
 			"resume": schemaTexte("What the plan does, in one or two sentences"),
+			"accord": map[string]any{"type": "boolean", "description": "true when the owner must read and accept this plan whatever the permission mode: a production going online for the first time"},
 			"etapes": map[string]any{"type": "array", "items": etape, "description": "The steps, in order"}}, "serveur", "resume", "etapes"),
 		Faire: outilProposerPlan}
 }
@@ -168,6 +169,7 @@ func outilProposerPlan(s *Serveur, x SessionHub, args json.RawMessage) (string, 
 	var a struct {
 		Serveur string `json:"serveur"`
 		Resume  string `json:"resume"`
+		Accord  bool   `json:"accord"` // M310d: the agent asks for the owner's own accord: no rule and no mode but ignorer accepts the plan alone
 		Etapes  []struct {
 			Outil          string                     `json:"outil"`
 			Arguments      map[string]json.RawMessage `json:"arguments"`
@@ -302,7 +304,7 @@ func outilProposerPlan(s *Serveur, x SessionHub, args json.RawMessage) (string, 
 		resumeEtapes = append(resumeEtapes, et.Outil+" "+et.Classe.String())
 	}
 	// C68: a build command runs code of the repository on this PC: the owner reads the plan every time
-	regle := !prod && haut < ClasseDestructrice && !construit && !api // no "do not ask again" for what is not a server
+	regle := !prod && haut < ClasseDestructrice && !construit && !api && !a.Accord // no "do not ask again" for what is not a server
 	demande := Approbation{Projet: x.Projet, Env: p.Env, Mission: x.Mission, Agent: x.Agent, Action: actionPlanServeur, Raison: resume,
 		Details: map[string]string{"serveur": p.Serveur, "nom": p.Nom, "classe": haut.String(), "etapes": strconv.Itoa(len(p.Etapes)), "regle": map[bool]string{true: "oui", false: "non"}[regle]}}
 	// the owner's "do not ask again for this server": the plan is accepted at once, without a ping (not in a tout mission, C82)
@@ -312,7 +314,7 @@ func outilProposerPlan(s *Serveur, x SessionHub, args json.RawMessage) (string, 
 	parRegle := regle && m != "manuel" && !(inconnue && modeDemandeInconnue(m)) && s.approbations.Regle(reglePlan(x.Projet, p.Serveur))
 	// M244f: the assistant's mode accepts it at once (auto, modifications: no dangerous step and no unknown command, M244k1; ignorer: any plan)
 	saute := m == "ignorer" && !parRegle // M285: a plan the owner would have read, said in the audit log below
-	if m == "ignorer" || m != "" && m != "manuel" && haut < ClasseDestructrice && !construit && !inconnue {
+	if m == "ignorer" || m != "" && m != "manuel" && haut < ClasseDestructrice && !construit && !inconnue && !a.Accord {
 		parRegle = true
 	}
 	var ap Approbation

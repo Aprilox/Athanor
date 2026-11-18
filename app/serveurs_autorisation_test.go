@@ -130,6 +130,11 @@ func TestAutorisationModes(t *testing.T) {
 		if got := plan("rm -rf /srv/vieux"); got != m.planDanger {
 			t.Errorf("%s, dangerous plan: %s", m.mode, got)
 		}
+		// M310d: the agent's own "accord" (a production going online) waits for the owner in every mode but ignorer
+		txt, e := appel("proposer_plan", `{"serveur":"`+srv.ID+`","resume":"r","accord":true,"etapes":[{"outil":"ssh_commande","arguments":{"commande":"systemctl restart nginx"},"pourquoi":"p"}]}`)
+		if want := map[bool]string{true: `"etat":"acceptee"`, false: `"etat":"attente"`}[m.mode == "ignorer"]; e || !strings.Contains(strings.ReplaceAll(txt, " ", ""), want) {
+			t.Errorf("%s, plan with accord: %s, want %s", m.mode, txt, want)
+		}
 	}
 	// modifications: a change runs only as a step of a plan (accepted at once)
 	choisir("modifications", false)

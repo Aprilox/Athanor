@@ -44,8 +44,7 @@ func briefPreparation(d donneesPreparation, p Projet) string {
 		"nginx or an equivalent web server as reverse proxy; a dedicated system user; the site's folder; the TLS certificate of " +
 		"the host; the firewall (SSH, HTTP and HTTPS only). Do not deploy the application itself.\n")
 	if d.Accord {
-		b.WriteString("If the deployment plan or the request below describes a production (real users or data, a public launch), " +
-			"propose your plan and wait for the owner's accord before anything goes online for the first time.\n")
+		b.WriteString(phraseAccordProduction)
 	}
 	if d.DNS != "" {
 		b.WriteString("DNS: the zone of " + hoteURL(d.URL) + " is at " + d.DNS + ", its token is given.\n")
@@ -69,6 +68,11 @@ func briefPreparation(d donneesPreparation, p Projet) string {
 	}
 	return b.String()
 }
+
+// phraseAccordProduction (M283, M310d): how a project's task asks the owner before a production first goes online:
+// the plan's own accord, which no mode but ignorer accepts alone (outilProposerPlan).
+const phraseAccordProduction = "If the deployment plan or the request below describes a production (real users or data, a public launch), " +
+	"propose your plan with accord set to true and wait for the owner's accord before anything goes online for the first time.\n"
 
 // tientHote: h is in one of f's zones.
 func tientHote(f Fournisseur, h string) bool {
@@ -195,7 +199,13 @@ func (s *Serveur) premierDeploiementProjet(p Projet, forcee bool) (TacheServeurs
 	if err != nil || !reCommitComplet.MatchString(head) {
 		return TacheServeurs{}, erreurEntree("the project has no commit to deploy")
 	}
-	t, err := s.lancerTache(couper(briefPremierDeploiement(e.URL, "", p, head), maxTexteTache-1), e.Serveurs, forcee, p.Nom)
+	brief := briefPremierDeploiement(e.URL, "", p, head)
+	if modeProjet(p.Nom) != "ignorer" { // M310d: the first deployment is what puts a production online: the agent judges it here too
+		b, _ := os.ReadFile(p.Demande())
+		brief += phraseAccordProduction + "Deployment plan (the owner's words):\n" + couper(strings.TrimSpace(e.Plan), 1500) + "\n" +
+			"Project's request (its start):\n" + couper(strings.TrimSpace(string(b)), 600) + "\n"
+	}
+	t, err := s.lancerTache(couper(brief, maxTexteTache-1), e.Serveurs, forcee, p.Nom)
 	r.Etat, r.Commit, r.ID, r.Erreur, r.Accord = "a_preparer", head, "", "", ""
 	if r.Date == "" {
 		r.Date = time.Now().UTC().Format(time.RFC3339)
