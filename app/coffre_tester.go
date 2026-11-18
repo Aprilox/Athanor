@@ -19,6 +19,7 @@ import (
 	"math/big"
 	"net"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -26,9 +27,18 @@ import (
 
 // the providers' base URLs: replaced only by the tests (httptest), never pointed at a real account there
 var (
-	urlCloudflare = "https://api.cloudflare.com"
+	urlCloudflare = baseCloudflare()
 	urlGitHub     = "https://api.github.com"
 )
+
+// baseCloudflare: the Cloudflare API, or the test harness's local stand-in ATHANOR_CLOUDFLARE_API: only under
+// ATHANOR_TEST=1 and only on this machine (a token never leaves for another host), never in a real launch.
+func baseCloudflare() string {
+	if u := os.Getenv("ATHANOR_CLOUDFLARE_API"); os.Getenv("ATHANOR_TEST") == "1" && strings.HasPrefix(u, "http://127.0.0.1:") {
+		return u
+	}
+	return "https://api.cloudflare.com"
+}
 
 const (
 	delaiTesteur    = 10 * time.Second

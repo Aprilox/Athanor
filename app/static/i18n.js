@@ -49,6 +49,8 @@ const PREFIXES = ["no Studio lane: the vault entries are given", "no Studio lane
 
 const DICT = {
 fr: {
+  "Preparation of the servers of project {0}": "Préparation des serveurs du projet {0}",
+  "First deployment of project {0}": "Premier déploiement du projet {0}",
   "The next ones": "Les suivants",
   "The server and the address": "Le serveur et l'adresse",
   "A project that was set up with several sites keeps them: the tab shows and changes one, and *Other sites of this project* lists the others by their address, each with *Make it the deployment*. An older project's production site still asks you before each deployment (“Deploy example.com?”), and a project that deployed only on request keeps *Only when I ask*. Nothing is rewritten, and no password is asked again.": "Un projet qui avait été réglé avec plusieurs sites les garde : l'onglet en montre et en change un, et *Autres sites de ce projet* liste les autres par leur adresse, chacun avec *En faire le déploiement*. Le site de production d'un ancien projet vous demande encore avant chaque déploiement (« Déployer example.com ? »), et un projet qui ne déployait que sur demande garde *Seulement quand je le demande*. Rien n'est réécrit, et aucun mot de passe n'est redemandé.",
@@ -862,6 +864,8 @@ fr: {
   "Run a command": "Lancer une commande", "The task failed without giving a reason.": "La tâche a échoué sans donner de raison.",
 },
 es: {
+  "Preparation of the servers of project {0}": "Preparación de los servidores del proyecto {0}",
+  "First deployment of project {0}": "Primer despliegue del proyecto {0}",
   "The next ones": "Los siguientes",
   "The server and the address": "El servidor y la dirección",
   "A project that was set up with several sites keeps them: the tab shows and changes one, and *Other sites of this project* lists the others by their address, each with *Make it the deployment*. An older project's production site still asks you before each deployment (“Deploy example.com?”), and a project that deployed only on request keeps *Only when I ask*. Nothing is rewritten, and no password is asked again.": "Un proyecto que se configuró con varios sitios los conserva: la pestaña muestra y cambia uno, y *Otros sitios de este proyecto* lista los demás por su dirección, cada uno con *Hacerlo el despliegue*. El sitio de producción de un proyecto antiguo todavía le pregunta antes de cada despliegue («¿Desplegar example.com?»), y un proyecto que solo desplegaba a petición conserva *Solo cuando lo pida*. No se reescribe nada, y no se vuelve a pedir ninguna contraseña.",
@@ -1643,6 +1647,8 @@ es: {
   "Run a command": "Ejecutar un comando", "The task failed without giving a reason.": "La tarea falló sin dar un motivo.",
 },
 de: {
+  "Preparation of the servers of project {0}": "Vorbereitung der Server des Projekts {0}",
+  "First deployment of project {0}": "Erste Bereitstellung des Projekts {0}",
   "The next ones": "Die nächsten",
   "The server and the address": "Der Server und die Adresse",
   "A project that was set up with several sites keeps them: the tab shows and changes one, and *Other sites of this project* lists the others by their address, each with *Make it the deployment*. An older project's production site still asks you before each deployment (“Deploy example.com?”), and a project that deployed only on request keeps *Only when I ask*. Nothing is rewritten, and no password is asked again.": "Ein Projekt, das mit mehreren Websites eingerichtet wurde, behält sie: Der Reiter zeigt eine davon und ändert sie, und *Weitere Websites dieses Projekts* listet die anderen nach ihrer Adresse auf, jede mit *Zur Bereitstellung machen*. Die Produktions-Website eines älteren Projekts fragt Sie weiterhin vor jeder Bereitstellung („example.com bereitstellen?“), und ein Projekt, das nur auf Anfrage bereitstellte, behält *Nur wenn ich es verlange*. Nichts wird umgeschrieben, und kein Passwort wird erneut abgefragt.",
@@ -2418,6 +2424,8 @@ de: {
   "Run a command": "Einen Befehl ausführen", "The task failed without giving a reason.": "Die Aufgabe ist ohne Angabe eines Grundes fehlgeschlagen.",
 },
 it: {
+  "Preparation of the servers of project {0}": "Preparazione dei server del progetto {0}",
+  "First deployment of project {0}": "Prima distribuzione del progetto {0}",
   "The next ones": "Le successive",
   "The server and the address": "Il server e l'indirizzo",
   "A project that was set up with several sites keeps them: the tab shows and changes one, and *Other sites of this project* lists the others by their address, each with *Make it the deployment*. An older project's production site still asks you before each deployment (“Deploy example.com?”), and a project that deployed only on request keeps *Only when I ask*. Nothing is rewritten, and no password is asked again.": "Un progetto che era stato configurato con più siti li mantiene: la scheda ne mostra e ne modifica uno, e *Altri siti di questo progetto* elenca gli altri con il loro indirizzo, ciascuno con *Rendilo la distribuzione*. Il sito di produzione di un progetto più vecchio ti chiede ancora conferma prima di ogni distribuzione («Distribuire example.com?»), e un progetto che distribuiva solo su richiesta mantiene *Solo quando lo chiedo*. Nulla viene riscritto, e nessuna password viene richiesta di nuovo.",
@@ -3193,6 +3201,8 @@ it: {
   "Run a command": "Eseguire un comando", "The task failed without giving a reason.": "L'attività non è riuscita senza indicare un motivo.",
 },
 pt: {
+  "Preparation of the servers of project {0}": "Preparação dos servidores do projeto {0}",
+  "First deployment of project {0}": "Primeira implementação do projeto {0}",
   "The next ones": "As seguintes",
   "The server and the address": "O servidor e o endereço",
   "A project that was set up with several sites keeps them: the tab shows and changes one, and *Other sites of this project* lists the others by their address, each with *Make it the deployment*. An older project's production site still asks you before each deployment (“Deploy example.com?”), and a project that deployed only on request keeps *Only when I ask*. Nothing is rewritten, and no password is asked again.": "Um projeto que tinha sido configurado com vários sites mantém-nos: o separador mostra e altera um, e *Outros sites deste projeto* lista os outros pelo seu endereço, cada um com *Torná-lo a implementação*. O site de produção de um projeto antigo ainda lhe pergunta antes de cada implementação («Implementar example.com?»), e um projeto que só implementava a pedido mantém *Só quando eu pedir*. Nada é reescrito, e nenhuma palavra-passe é pedida de novo.",

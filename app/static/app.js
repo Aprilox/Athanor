@@ -1662,7 +1662,9 @@ function aideChat() {
 
 // M227c: a thread follows its bottom only when the reader is there; scrolled up, "Go to the latest message" brings them back
 const auBas = (f) => f.scrollHeight - f.scrollTop - f.clientHeight < 80;
-function majBoutonBas(f) { const b = document.getElementById(f.id + "-bas"); if (b) b.hidden = auBas(f); }
+// never hidden while it holds the keyboard focus (the focus would fall to the page): it goes when the focus leaves it
+function majBoutonBas(f) { const b = document.getElementById(f.id + "-bas"); if (b) b.hidden = auBas(f) && document.activeElement !== b; }
+document.addEventListener("focusout", (ev) => { const f = ev.target.classList && ev.target.classList.contains("chat-bas") && document.getElementById(ev.target.id.slice(0, -4)); if (f) setTimeout(() => majBoutonBas(f)); });
 const boutonBas = (id) => `<button type="button" class="btn btn-petit chat-bas" id="${id}-bas" hidden>${t("Go to the latest message")}</button>`;
 document.addEventListener("scroll", (ev) => { if (ev.target.classList && ev.target.classList.contains("chat-fil")) majBoutonBas(ev.target); }, true);
 document.addEventListener("click", (ev) => {
@@ -2477,7 +2479,7 @@ async function majHubChat(force) {
   etat.hubChatSig = sig;
   const fil = $("#hub-chat-fil"); if (!fil) return;
   const enBas = auBas(fil);
-  fil.innerHTML = filHub(d);
+  garderFocus(fil, () => { fil.innerHTML = filHub(d); }); // a card's button or field keeps the keyboard focus across a refresh of the thread
   if (enBas || force) fil.scrollTop = fil.scrollHeight;
   majBoutonBas(fil);
   const pv = d.pouvoirs || {};
@@ -6208,6 +6210,11 @@ const ETATS_TACHE_SRV = () => ({ preparation: [t("Reading the server"), "pv-clau
   attente_accord: [t("Waiting for your decision"), "pv-vous"], application: [t("Applying the plan"), "pv-claude"], verification: [t("External check"), "pv-claude"],
   finie: [t("Done"), "pv-ok"], echec: [t("Failed"), "pv-vous"], arretee: [t("Stopped"), "pv-vous"] });
 const tacheFinie = (x) => ["finie", "echec", "arretee"].includes(x.etat);
+// the two tasks Athanor launches itself for a project's deployment carry an English brief for their agent: the list says them in the page's language
+function titreTache(x) {
+  const a = /^First deployment of project (.+?) \(/.exec(x.texte), b = /^Project "([^"]+)": .*Prepare these servers now/s.exec(x.texte);
+  return a ? t("First deployment of project {0}", [a[1]]) : b ? t("Preparation of the servers of project {0}", [b[1]]) : x.texte;
+}
 function dureeTache(x) {
   const s = Math.max(0, Math.round(((x.fin ? Date.parse(x.fin) : Date.now()) - Date.parse(x.cree)) / 1000));
   return s < 60 ? t("{0} s", [s]) : s < 3600 ? t("{0} min", [Math.round(s / 60)]) : t("{0} h", [(s / 3600).toFixed(1)]);
@@ -6223,7 +6230,7 @@ function carteTacheServeur(x, plans, distant) {
       ${attend ? `<p class="m0"><a href="#pourvous" class="btn btn-primaire" data-srv-tache-carte="${h(id)}">${t("Decide on its card")}</a></p>` : ""}</div>`;
   }).join("");
   const v = x.verification;
-  return `<details class="srv-tache" data-tache="${h(x.id)}"${srv.ouvertes.has(x.id) ? " open" : ""}><summary><span class="pv-etat ${cl}">${h(lib)}</span> <span class="srv-tache-texte">${h(x.texte)}</span>
+  return `<details class="srv-tache" data-tache="${h(x.id)}"${srv.ouvertes.has(x.id) ? " open" : ""}><summary><span class="pv-etat ${cl}">${h(lib)}</span> <span class="srv-tache-texte">${h(titreTache(x))}</span>
       <span class="muet petit">${h(dateLisible(x.cree))} · ${h(dureeTache(x))}</span></summary>
     <div class="srv-tache-corps"><p class="pv-details">${h(x.texte)}</p>
       ${x.forcee ? `<p class="petit pv-vous">${t("Forced in native Windows mode, without the barrier.")}</p>` : ""}

@@ -270,3 +270,22 @@ func TestCoffreTesterTraduction(t *testing.T) {
 		}
 	}
 }
+
+// TestBaseCloudflare: the stand-in address is taken only under ATHANOR_TEST=1 and only on this machine.
+func TestBaseCloudflare(t *testing.T) {
+	const vraie, locale = "https://api.cloudflare.com", "http://127.0.0.1:4567"
+	for _, c := range []struct{ test, api, attendu string }{
+		{"", "", vraie},
+		{"", locale, vraie},
+		{"1", "", vraie},
+		{"1", locale, locale},
+		{"1", "https://ailleurs.example", vraie},
+		{"1", "http://127.0.0.1.ailleurs.example:80", vraie},
+	} {
+		t.Setenv("ATHANOR_TEST", c.test)
+		t.Setenv("ATHANOR_CLOUDFLARE_API", c.api)
+		if u := baseCloudflare(); u != c.attendu {
+			t.Errorf("ATHANOR_TEST=%q ATHANOR_CLOUDFLARE_API=%q: %s, expected %s", c.test, c.api, u, c.attendu)
+		}
+	}
+}
