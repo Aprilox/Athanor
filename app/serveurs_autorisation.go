@@ -83,6 +83,19 @@ func modeAutorisation(x SessionHub, id string) string {
 	return modeServeur(srv)
 }
 
+// origineMode (M311d): whose mode ran x's call, for the audit line: the server's assistant (a terminal's panel) or
+// the task itself (its own mode, or its project's).
+func origineMode(x SessionHub) string {
+	if t := tacheDeSession(x.Hache); t != nil {
+		t.mu.Lock()
+		defer t.mu.Unlock()
+		if !t.t.Panneau {
+			return "de la tâche"
+		}
+	}
+	return "de l'assistant"
+}
+
 // modeServeur: srv's mode, manuel when never chosen.
 func modeServeur(srv ServeurInventaire) string {
 	if slices.Contains(modesAutorisation, srv.Autorisation) {

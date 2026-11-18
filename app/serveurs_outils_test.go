@@ -561,6 +561,10 @@ func TestServeursOutilsConteneur(t *testing.T) {
 	if _, err := s.appelerOutilServeur(ctx, "test", id, "ssh_commande", b, Sauvegarde{}); err == nil || !strings.Contains(err.Error(), "stopped after 2s") {
 		t.Errorf("delay: %v", err)
 	}
+	// the command's own exit code 124, long before the delay, stays a plain result
+	if r := appel("ssh_commande", map[string]any{"commande": "exit 124", "delai_s": 20}); r.Code != 124 {
+		t.Errorf("exit 124 before the delay: %+v", r)
+	}
 	annule, annuler := context.WithCancel(ctx)
 	time.AfterFunc(time.Second, annuler)
 	b, _ = json.Marshal(map[string]any{"commande": "sleep 6; touch /tmp/m94-annule", "delai_s": 30})

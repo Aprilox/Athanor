@@ -246,7 +246,13 @@ func outilSSHCommande(ctx context.Context, c *ssh.Client, _ ServeurInventaire, a
 	if a.DelaiS > 0 {
 		delai = min(time.Duration(a.DelaiS)*time.Second, delaiCommandeMax)
 	}
+	debut := time.Now()
 	r, err := executerSSH(ctx, c, commandeBornee(a.Commande, delai), nil, delai)
+	// the server's own `timeout` (commandeBornee) can end the command a moment before our timer on a loaded PC:
+	// the same stop, so the same error, not a bare code 124
+	if err == nil && r.Code == 124 && time.Since(debut) >= delai {
+		return ResultatOutil{Code: -1}, fmt.Errorf("command stopped after %s", delai)
+	}
 	return resultatSSH(r), err
 }
 

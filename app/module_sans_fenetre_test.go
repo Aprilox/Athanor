@@ -25,7 +25,17 @@ func TestModuleSansFenetre(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds the executable")
 	}
-	kit := t.TempDir()
+	// not t.TempDir: on a loaded Windows the killed module's folder stays held longer than the 2 s testing
+	// retries, which failed this test twice in a full check (M311b, M311d) though it checks nothing of it
+	kit, err := os.MkdirTemp("", "TestModuleSansFenetre")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		for i := 0; i < 100 && os.RemoveAll(kit) != nil; i++ {
+			time.Sleep(100 * time.Millisecond)
+		}
+	})
 	exe := filepath.Join(kit, "athanor")
 	if runtime.GOOS == "windows" {
 		exe += ".exe"

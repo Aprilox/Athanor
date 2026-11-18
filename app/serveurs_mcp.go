@@ -207,7 +207,7 @@ func (s *Serveur) avantOutil(x SessionHub, id, outil string, a map[string]json.R
 			break
 		}
 		s.ecrireAudit(LigneAudit{Type: "evenement", De: x.Agent, Vers: "serveur:" + id, Projet: x.Projet, Mission: x.Mission,
-			Agent: x.Agent, Action: "serveurs." + outil, Resultat: "accordé : mode « " + m + " » de l'assistant (" + e.Classe.String() + ")"})
+			Agent: x.Agent, Action: "serveurs." + outil, Resultat: "accordé : mode « " + m + " » " + origineMode(x) + " (" + e.Classe.String() + ")"})
 	default:
 		if err = s.planOuRegle(x, id, &e); err != nil && e.Classe == ClasseLecture {
 			err = fmt.Errorf("%w (the owner chose the Manual mode for this server's assistant: every command, a read too, runs as a step of an accepted plan)", err)

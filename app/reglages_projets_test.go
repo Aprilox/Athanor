@@ -266,6 +266,10 @@ func TestModeProjet(t *testing.T) {
 	if c := choisir("", "ignorer", confirme); c != 200 || modeProjet("demo") != "ignorer" || modeAutorisation(x, "srv") != "ignorer" {
 		t.Errorf("ignorer with the proof: %d, %q", c, modeProjet("demo"))
 	}
+	// M311d: the audit says whose mode let a call run: the project's task here, the terminal's assistant otherwise
+	if o, a := origineMode(x), origineMode(SessionHub{Hache: "aucune"}); o != "de la tâche" || a != "de l'assistant" {
+		t.Errorf("origin of the mode: task %q, no task %q", o, a)
+	}
 	if b := journalAuditTexte(t); !strings.Contains(b, "reglage du projet: permission") || !strings.Contains(b, "manuel → ignorer") || strings.Contains(b, mdpPreuveTest) {
 		t.Error("audit: the change to ignorer is missing, or the password is in the log")
 	}
