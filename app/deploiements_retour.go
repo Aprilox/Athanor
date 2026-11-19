@@ -181,16 +181,16 @@ func (s *Serveur) revenirVerrouille(ctx context.Context, projet, env, auteur, ci
 		}
 		c, err := s.connecterServeur(ctx, l[i])
 		if err != nil {
-			return Deploiement{}, errMoteur("{0}: {1}", id, err)
+			return Deploiement{}, errMoteur("{0}: {1}", nomServeur(id), err)
 		}
 		serveurs = append(serveurs, serveurPret{id, c})
 		r, err := executerSSH(ctx, c, commeRoot(scriptLireCible, base, cible), nil, delaiCommande)
 		if err := echecSSH(r, err); err != nil {
-			return Deploiement{}, errMoteur("{0}: {1}; nothing was switched", id, err)
+			return Deploiement{}, errMoteur("{0}: {1}; nothing was switched", nomServeur(id), err)
 		}
 		ct := strings.SplitN(strings.TrimSpace(string(r.Sortie)), "\n", 2)
 		if len(ct) != 2 || !strings.HasPrefix(ct[1], "releases/") {
-			return Deploiement{}, errMoteur("{0}: unexpected answer \"{1}\"", id, couper(string(r.Sortie), 200))
+			return Deploiement{}, errMoteur("{0}: unexpected answer \"{1}\"", nomServeur(id), couper(string(r.Sortie), 200))
 		}
 		t := strings.TrimPrefix(ct[1], "releases/")
 		if version != "" && t != version {
@@ -241,7 +241,7 @@ func (s *Serveur) revenirVerrouille(ctx context.Context, projet, env, auteur, ci
 			break
 		}
 		if err = servir(ctx, x.serveurPret, vise); err != nil {
-			err = errMoteur("{0}: {1}", x.id, err)
+			err = errMoteur("{0}: {1}", nomServeur(x.id), err)
 		}
 	}
 	d.Etat = "ok"
@@ -254,7 +254,7 @@ func (s *Serveur) revenirVerrouille(ctx context.Context, projet, env, auteur, ci
 		remettreLiens(ctx, touches, base)
 		for _, x := range touches {
 			if e2 := servir(context.WithoutCancel(ctx), x.serveurPret, quitte); e2 != nil {
-				d.Message = suite(d.Message, errMoteur("{0}: the version left could not be served again: {1}", x.id, e2))
+				d.Message = suite(d.Message, errMoteur("{0}: the version left could not be served again: {1}", nomServeur(x.id), e2))
 			}
 		}
 		d.Message = suite(d.Message, errMoteur("the links were put back on {0}", actuelle))

@@ -2604,8 +2604,8 @@ function ligneRelais(r, lien = true) { // lien false: in the Deployment tab itse
   const onglet = lien ? ` <a class="petit" href="#deploiement">${t("Open the Deployment tab")}</a>` : "";
   if (r.etat === "a_preparer") return `<span class="badge">${h(t("First deployment to prepare"))}</span>${onglet}`;
   // held by the owner's pause or stop: neither "in progress" nor "waiting for GitHub" would be true
-  const [icone, etiquette] = r.pause && (r.etat === "preparation" || r.etat === "attente") ? ["attente", "On hold until Start"] : r.etat === "preparation" ? ["attente", "First deployment in progress"] : r.etat === "attente" ? ["attente", "Waiting for the milestone's commit on GitHub"] : r.etat === "lance" ? ETATS_DEPLOI.en_cours : ETATS_DEPLOI[r.etat] || ["", r.etat];
-  return `<span class="badge">${icone ? ic(icone) : ""} ${h(t(etiquette))}</span> <code>${h((r.commit || "").slice(0, 7))}</code> <span class="muet petit">${[r.jalon ? md(r.jalon) : "", h(dateLisible(r.date))].filter(Boolean).join(" · ")}</span>${r.erreur ? `<div class="petit attention">${h(t(r.erreur))}</div>` : ""}${onglet}`;
+  const [icone, etiquette] = r.pause && (r.etat === "preparation" || r.etat === "attente") ? ["attente", "On hold until Start"] : r.etat === "preparation" ? ["attente", "First deployment in progress"] : r.etat === "attente" ? ["attente", "Waiting for the milestone's commit on GitHub"] : r.etat === "ailleurs" ? ["attente", "Not deployed at this address yet"] : r.etat === "lance" ? ETATS_DEPLOI.en_cours : ETATS_DEPLOI[r.etat] || ["", r.etat];
+  return `<span class="badge">${icone ? ic(icone) : ""} ${h(t(etiquette))}</span> <code>${h((r.commit || "").slice(0, 7))}</code> <span class="muet petit">${[r.jalon ? md(r.jalon) : "", h(dateLisible(r.date))].filter(Boolean).join(" · ")}</span>${r.erreur ? `<div class="petit attention">${h(r.message ? texteMessage(r.message) : t(r.erreur))}</div>` : ""}${onglet}`;
 }
 
 // the installers of this system: on Windows, one per mode (choosing it also selects that mode)
@@ -5455,10 +5455,12 @@ function texteVerif(v, protection) {
 // C71: a deployment that failed before its switch left the version served as it was: nothing to go back from
 const avantBascule = (d) => d.etat === "echec" && !d.retour && !d.bascule && !d.verification;
 function blocDeploiements(nom, e, liste, distant) {
+  const srv = (l) => [...(l || [])].sort().join(), hote = (u) => { try { return new URL(u).host; } catch { return ""; } }; // as etatRelais: only what both sides say is compared
+  const ici = (d) => (!(d.serveurs || []).length || !(e.serveurs || []).length || srv(d.serveurs) === srv(e.serveurs)) && (!d.verification || !hote(d.verification.http.url) || !hote(e.url) || hote(d.verification.http.url) === hote(e.url));
   const ligne = (d) => {
     const [icone, etiquette] = d.retour && d.etat === "ok" ? ["retour", "Back to the previous version"] : ETATS_DEPLOI[d.etat] || ["", d.etat];
     return `<li class="env-deploi-${h(d.etat)}"><div class="ligne m0 petit"><span class="badge">${icone ? ic(icone) : ""} ${h(t(etiquette))}</span><code>${h((d.commit || "").slice(0, 7))}</code>
-      <span class="muet">${h(dateLisible(d.debut))} · ${h(t(AUTEURS_DEPLOI[d.auteur] || d.auteur))}</span></div>
+      <span class="muet">${h(dateLisible(d.debut))} · ${h(t(AUTEURS_DEPLOI[d.auteur] || d.auteur))}${ici(d) ? "" : " · " + h(t("on the previous server or address"))}</span></div>
       ${d.verification ? `<p class="petit${d.verification.ok ? "" : " attention"}">${ic(d.verification.ok ? "ok" : "alerte")} ${h(texteVerif(d.verification, e.protection))}</p>` : d.erreur ? `<p class="petit attention">${h(d.message ? texteMessage(d.message) : t(d.erreur))}</p>` : ""}</li>`;
   };
   return `<div class="env-deploi" data-env-deploi><h4>${t("Deployments")}</h4>

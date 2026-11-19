@@ -276,3 +276,70 @@ func TestRelaisJalonConteneur(t *testing.T) {
 		t.Error("deployed twice")
 	}
 }
+
+// M312b: the relay's state follows the owner's Retry of a failed deployment, carries the message to translate, and
+// says nothing is deployed yet where the project's server or address changed since.
+func TestRelaisRelanceEtAilleurs(t *testing.T) {
+	s, _, _ := serveursAjoutTest(t)
+	p := Projet{Nom: "m312b", Dossier: t.TempDir()}
+	s.mu.Lock()
+	s.config.Projets = append(s.config.Projets, p)
+	s.mu.Unlock()
+	t.Cleanup(func() { oublierRelais(p.Nom); os.Remove(cheminHistorique(p.Nom, "dev")) })
+	env := Environnement{URL: "http://m312b.test", Serveurs: []string{serveurRelaisTest(t)}, Protection: "aucune", Politique: "accord",
+		DeployerAuJalon: true, Moment: "jalon", Deploiement: &ConfigDeploiement{Methode: "statique", Source: "git"}}
+	if err := s.acces.definirAncien(p.Nom, "dev", env); err != nil {
+		t.Fatal(err)
+	}
+	echec := errMoteur("{0}: {1}; nothing was switched", nomServeur("r1"), errServeurInjoignable)
+	d := Deploiement{ID: "d1", Projet: p.Nom, Env: "dev", Commit: "c1", Etat: "echec", Erreur: echec.Error(), Message: messageDe(echec), Auteur: "relais", Serveurs: env.Serveurs}
+	if err := noterHistorique(d); err != nil {
+		t.Fatal(err)
+	}
+	ecrireRelais(p.Nom, RelaisJalon{Jalon: "M2", Commit: "c1", Etat: "lance", ID: "d1"})
+	v := s.etatRelais(p.Nom)
+	if v == nil || v.Etat != "echec" || v.Message == nil || !strings.HasPrefix(v.Erreur, "relais: ") { // the server's name, never its id
+		t.Fatalf("failed deployment: %+v", v)
+	}
+	attend := func(cas string, n int) { // the project's card says the failure; the bell rings once
+		t.Helper()
+		var carte *AttenteElement
+		el := moduleDev{}.Elements(s)
+		for _, e := range el {
+			if e.ID == p.Nom {
+				carte = e.Attente
+			}
+		}
+		cloche := 0
+		for _, a := range s.alertesIgnorables(el) {
+			if a.Titre == p.Nom {
+				cloche++
+			}
+		}
+		if (carte != nil) != (n > 0) || cloche != n {
+			t.Fatalf("%s: card %+v, bell %d, wanted %d", cas, carte, cloche, n)
+		}
+	}
+	attend("failed", 1)
+	// the owner's Retry serves the same commit: the failure is over everywhere
+	ok := Deploiement{ID: "d2", Projet: p.Nom, Env: "dev", Commit: "c1", Etat: "ok", Auteur: "proprietaire", Serveurs: env.Serveurs,
+		Verification: &VerifDeploiement{OK: true, HTTP: ResultatHTTP{URL: env.URL, Statut: 200}}}
+	if err := noterHistorique(ok); err != nil {
+		t.Fatal(err)
+	}
+	if v = s.etatRelais(p.Nom); v == nil || v.Etat != "ok" || v.Erreur != "" || v.Message != nil {
+		t.Fatalf("after the retry: %+v", v)
+	}
+	attend("retried", 0)
+	// another address, then another server: nothing is deployed there yet
+	for _, c := range []Environnement{{URL: "http://autre.test", Serveurs: env.Serveurs}, {URL: env.URL, Serveurs: []string{"r2"}}} {
+		e := env
+		e.URL, e.Serveurs = c.URL, c.Serveurs
+		if err := s.acces.definirAncien(p.Nom, "dev", e); err != nil {
+			t.Fatal(err)
+		}
+		if v = s.etatRelais(p.Nom); v == nil || v.Etat != "ailleurs" || v.Commit != "" {
+			t.Fatalf("%s %v: %+v", c.URL, c.Serveurs, v)
+		}
+	}
+}

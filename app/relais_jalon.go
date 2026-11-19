@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -22,10 +23,11 @@ type RelaisJalon struct {
 	Date   string `json:"date"` // when the milestone was seen done (RFC 3339)
 	// attente (not pushed yet) | lance | echec (not started); M284, a project without a deployment method yet:
 	// preparation (its first deployment's task works) | a_preparer (to prepare: an information, never a failure)
-	Etat   string `json:"etat"`
-	ID     string `json:"id,omitempty"`     // the deployment, once started
-	Erreur string `json:"erreur,omitempty"` // why it did not start
-	Accord string `json:"accord,omitempty"` // the owner's accord asked for its changed build files (C68)
+	Etat    string         `json:"etat"`
+	ID      string         `json:"id,omitempty"`      // the deployment, once started
+	Erreur  string         `json:"erreur,omitempty"`  // why it did not start
+	Message *MessageMoteur `json:"message,omitempty"` // its deployment's Erreur to translate (etatRelais)
+	Accord  string         `json:"accord,omitempty"`  // the owner's accord asked for its changed build files (C68)
 	// M282: the last delivery noted (<project>/.athanor/done/.last-delivery) and whether the project's deliveries
 	// are watched yet (the first look only learns); both survive the relays that follow
 	Livraison    string `json:"livraison,omitempty"`
@@ -256,13 +258,45 @@ func (s *Serveur) etatRelais(projet string) *RelaisJalon {
 	if r.Etat == "lance" {
 		h := historiqueDeploiements(projet, s.envJalon(projet))
 		if i := slices.IndexFunc(h, func(d Deploiement) bool { return d.ID == r.ID }); i >= 0 {
-			r.Etat, r.Erreur = h[i].Etat, h[i].Erreur // en_cours | ok | echec | revenu
-			if h[i].Verification != nil && !h[i].Verification.OK && r.Erreur == "" {
+			d := h[i]
+			if d.Etat == "echec" { // the owner's Retry served that very commit since: the failure is over
+				if j := slices.IndexFunc(h[i+1:], func(x Deploiement) bool { return x.Commit == d.Commit && x.Etat == "ok" && !x.Retour }); j >= 0 {
+					d = h[i+1+j]
+				}
+			}
+			r.Etat, r.Erreur, r.Message = d.Etat, d.Erreur, d.Message // en_cours | ok | echec | revenu
+			if d.Verification != nil && !d.Verification.OK && r.Erreur == "" {
 				r.Erreur = "the external check failed"
+			}
+			// served on other servers or at another address than the project's deployment now: nothing is deployed there yet
+			if d.Etat == "ok" && (len(d.Serveurs) > 0 && len(e.Serveurs) > 0 && !memesServeurs(d.Serveurs, e.Serveurs) || d.Verification != nil && autreHote(d.Verification.HTTP.URL, e.URL)) {
+				return &RelaisJalon{Etat: "ailleurs", Pause: r.Pause}
 			}
 		}
 	}
 	return &r
+}
+
+// messageOuTexte: the message to translate when there is one, else its plain text (an alert's or a card's argument).
+func messageOuTexte(m *MessageMoteur, texte string) any {
+	if m != nil {
+		return m
+	}
+	return texte
+}
+
+// autreHote: both addresses name a host, and not the same one (an address not read says nothing).
+func autreHote(a, b string) bool {
+	ua, ea := url.Parse(a)
+	ub, eb := url.Parse(b)
+	return ea == nil && eb == nil && ua.Host != "" && ub.Host != "" && !strings.EqualFold(ua.Host, ub.Host)
+}
+
+func memesServeurs(a, b []string) bool {
+	a, b = slices.Clone(a), slices.Clone(b)
+	slices.Sort(a)
+	slices.Sort(b)
+	return slices.Equal(a, b)
 }
 
 // alertesRelais: the bell rings for a relay that failed (not started, or its deployment failed).
@@ -282,7 +316,7 @@ func (s *Serveur) alertesRelais() []AlerteHub {
 		h := sha256.Sum256([]byte("relais\x00" + p.Nom + "\x00" + v.Jalon + "\x00" + v.Commit))
 		empreinte := hex.EncodeToString(h[:12])
 		out = append(out, AlerteHub{Empreinte: empreinte, Module: "dev", Element: p.Nom, Titre: p.Nom,
-			Raison: "The project's deployment failed ({0}): {1}", Args: []any{v.Jalon, v.Erreur}, Actions: []ActionAlerte{
+			Raison: "The project's deployment failed ({0}): {1}", Args: []any{v.Jalon, messageOuTexte(v.Message, v.Erreur)}, Actions: []ActionAlerte{
 				{ID: "voir", Libelle: "View", Page: "acces", Projet: p.Nom}, ignorerOuRouvrir(empreinte, true)}})
 	}
 	return out

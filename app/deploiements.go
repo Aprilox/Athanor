@@ -290,7 +290,7 @@ func basculerTous(ctx context.Context, serveurs []serveurPret, base, version str
 		}
 		if e != nil {
 			remettreLiens(ctx, touches, base)
-			return nil, errMoteur("{0}: switch: {1}", x.id, e)
+			return nil, errMoteur("{0}: switch: {1}", nomServeur(x.id), e)
 		}
 	}
 	return touches, nil
@@ -519,7 +519,7 @@ func (s *Serveur) deployerVersion(ctx context.Context, p Projet, e Environnement
 		c, sortie, err := s.preparerVersion(ctx, l, id, archive, d.ID, g, d.Commit, base, d.Version, script, args, entree)
 		if err != nil {
 			annulerTout()
-			return errMoteur("{0}: {1}; nothing was switched", id, err)
+			return errMoteur("{0}: {1}; nothing was switched", nomServeur(id), err)
 		}
 		prets = append(prets, serveurPret{id, c})
 		if cfg.Methode != "compose" {
@@ -527,20 +527,20 @@ func (s *Serveur) deployerVersion(ctx context.Context, p Projet, e Environnement
 		}
 		if r := refusCompose(sortie, base+"/releases/"+d.Version); garde && len(r) > 0 {
 			annulerTout()
-			return errMoteur("{0}: {1}", id, refus(r))
+			return errMoteur("{0}: {1}", nomServeur(id), refus(r))
 		}
 		bloc := "" // C70: Caddy in front of the first port published on 127.0.0.1, with the protection; none: no site
 		if d.Amont = amontCompose(sortie); d.Amont != "" {
 			if bloc, err = s.blocCaddyEnv(d.Projet, d.Env, id, d.Amont); err != nil {
 				annulerTout()
-				return errMoteur("{0}: {1}; nothing was switched", id, err)
+				return errMoteur("{0}: {1}; nothing was switched", nomServeur(id), err)
 			}
 		}
 		if err := echecSSH(executerSSH(ctx, c, commeRoot(scriptLancerCompose, base, d.Version, cfg.Dossier, nomCompose(d.Projet, d.Env), hote), strings.NewReader(bloc), delaiDeploiement)); err != nil {
 			prets = prets[:len(prets)-1] // the release is already removed and the version served before started again
 			c.Close()
 			annulerTout()
-			return errMoteur("{0}: {1}; nothing was switched", id, err)
+			return errMoteur("{0}: {1}; nothing was switched", nomServeur(id), err)
 		}
 	}
 	// every server ready: the switch everywhere (C71: on a failure, the links put back and the releases removed),
@@ -556,7 +556,7 @@ func (s *Serveur) deployerVersion(ctx context.Context, p Projet, e Environnement
 	}
 	for _, x := range prets {
 		if err := echecSSH(executerSSH(ctx, x.c, commeRoot(recharger, base, fmt.Sprint(versionsGardees)), nil, delaiDeploiement)); err != nil {
-			return errMoteur("{0}: {1}", x.id, err)
+			return errMoteur("{0}: {1}", nomServeur(x.id), err)
 		}
 	}
 	return nil

@@ -156,6 +156,14 @@ func serveurProd(id string) (ServeurInventaire, bool) {
 	return ServeurInventaire{ID: id}, true
 }
 
+// nomServeur: the name the owner gave the server, its id when it is no longer in the inventory.
+func nomServeur(id string) string {
+	if v, _ := serveurProd(id); v.Nom != "" {
+		return v.Nom
+	}
+	return id
+}
+
 // reglePlan: the owner's "do not ask again for this server"; a task's plan gives it to the server, not to the
 // task (C54: a task's project dies with it).
 func reglePlan(projet, id string) RegleAccord {

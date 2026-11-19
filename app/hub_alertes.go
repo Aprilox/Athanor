@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -57,7 +58,7 @@ func empreinteAlerte(e ElementHub) string {
 func alertesDe(el []ElementHub) []AlerteHub {
 	out := []AlerteHub{}
 	for _, e := range el {
-		if e.Attente == nil {
+		if e.Attente == nil || strings.HasPrefix(e.Attente.Cle, "relais:") { // a failed deployment: alertesRelais or its incident rings already
 			continue
 		}
 		out = append(out, AlerteHub{Empreinte: empreinteAlerte(e), Module: e.Module, Element: e.ID, Titre: e.Titre,
