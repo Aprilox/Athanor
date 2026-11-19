@@ -1236,7 +1236,7 @@ function naviguer() {
   if (page === "options") { etat.ongletReglages = "options"; history.replaceState(null, "", "#reglages"); page = "reglages"; }
   if (page === "claude") { etat.ongletReglages = etat.ongletDemande = "claude"; history.replaceState(null, "", "#reglages"); page = "reglages"; }
   // joining a project: the second tab of the new project page
-  if (page === "rejoindre") { etat.npRejoindre = true; history.replaceState(null, "", "#nouveau"); page = "nouveau"; } else if (page === "nouveau" && etat.page !== "nouveau") etat.npRejoindre = false;
+  if (page === "rejoindre") { etat.npRejoindre = true; history.replaceState(null, "", "#nouveau"); page = "nouveau"; } else if (page === "nouveau" && etat.page !== "nouveau") etat.npRejoindre = etat.npPlus = false;
   // the settings always open on Options (or on the tab asked for, the guided tour)
   if (page === "reglages" && etat.page !== "reglages") { etat.ongletReglages = etat.ongletDemande || "options"; etat.ongletDemande = null; }
   if (page.startsWith("missions/")) { etat.missionId = decodeURIComponent(page.slice(9)); page = "mission"; } // one mission, its id in the hash
@@ -2106,9 +2106,9 @@ function motMention(champ) {
 const LISTES_MENTIONS = {
   "accueil-texte": { liste: "accueil-liste", opt: "mention-opt", cle: "mentionListe", mot: motMention, pris: () => etat.accueilMentions || [], choisir: choisirMentionAccueil },
   "dep-srv-q": { liste: "dep-srv-liste", opt: "dep-srv-opt", cle: "depSrvListe", mot: (c) => ({ q: c.value.trim(), debut: 0 }), pris: () => dep.f.serveurs, type: () => "serveur", choisir: choisirDeploiement }, // M292: the Deployment tab
-  "dep-api-q": { liste: "dep-api-liste", opt: "dep-api-opt", cle: "depApiListe", mot: (c) => ({ q: c.value.trim(), debut: 0 }), pris: () => dep.f.apis, type: () => "api", choisir: choisirDeploiement },
+  "dep-api-q": { liste: "dep-api-liste", opt: "dep-api-opt", cle: "depApiListe", mot: (c) => ({ q: c.value.trim(), debut: 0 }), pris: () => dep.f.apis, type: () => "api-deploiement", choisir: choisirDeploiement },
   "cp-srv-q": { liste: "cp-srv-liste", opt: "cp-srv-opt", cle: "cpSrvListe", mot: (c) => ({ q: c.value.trim(), debut: 0 }), pris: () => formDep("cp").serveurs, type: () => "serveur", choisir: choisirDeploiement }, // M295b: the home's project card
-  "cp-api-q": { liste: "cp-api-liste", opt: "cp-api-opt", cle: "cpApiListe", mot: (c) => ({ q: c.value.trim(), debut: 0 }), pris: () => formDep("cp").apis, type: () => "api", choisir: choisirDeploiement },
+  "cp-api-q": { liste: "cp-api-liste", opt: "cp-api-opt", cle: "cpApiListe", mot: (c) => ({ q: c.value.trim(), debut: 0 }), pris: () => formDep("cp").apis, type: () => "api-deploiement", choisir: choisirDeploiement },
   "cof-q": { filtrer: (q, cat) => filtrerCoffre(q, cat) }, // the vault page: its own cards are the list (every entry, the servers' keys too)
 };
 // M288: the owner's categories of API (GET /api/coffre/categories), read when a screen that filters by them opens
@@ -2408,6 +2408,7 @@ document.addEventListener("click", async (ev) => {
     if (carte.dataset.type === "projet") { // M295b: drawn from its state; opening one closes the other
       const n = +carte.dataset.carteAction, sel = `[data-carte-action="${n}"] `;
       etat.carteProjetOuverte = etat.carteProjetOuverte === n ? null : n; majCartesProjet();
+      if (etat.carteProjetOuverte === n && carteProjetOuverte().dep) api("serveurs").then((r) => { dep.dispo = r.serveurs || []; if ($("#cp-serveurs-puces")) majDeploiement("serveurs", "cp"); }).catch(() => {});
       $(sel + (etat.carteProjetOuverte === n ? ".carte-action-champs :is(input, select, textarea)" : "[data-cact-modifier]"))?.focus();
       return;
     }
@@ -3072,7 +3073,7 @@ async function modeSuppressionProjet(nom, dossier) {
     <p>${h(t("The project leaves Studio, with its deployment, its follow-up and its own settings."))}</p>
     <label class="case"><input type="checkbox" data-suppr="atelier"><span>${h(t("Also send its workshop (.athanor: plan, requests, log) to the recycle bin"))}</span></label>
     <label class="case"><input type="checkbox" data-suppr="dossier"><span>${h(t("Also send its whole folder to the recycle bin"))} <code class="petit">${h(dossier)}</code></span></label>
-    <p class="muet petit">${h(t("Nothing is removed from the servers: what the project put online stays there."))}</p></div>`,
+    <p class="muet petit">${h(t("With no box ticked, the folder and everything in it stay on your computer."))} ${h(t("Nothing is removed from the servers: what the project put online stays there."))}</p></div>`,
     [{ id: "", texte: t("Cancel") }, { id: "ok", texte: t("Delete the project"), danger: true }],
     { large: true, valider: async (b, el) => { mode = ["dossier", "atelier"].find((x) => el.querySelector(`[data-suppr="${x}"]:checked`)) || "liste"; return true; } });
   return choix === "ok" ? mode : "";
@@ -3104,7 +3105,8 @@ async function gererProjet(act, nom, bouton) {
   if ((act === "archiver" || act === "supprimer") && nom === etat.projet) { etat.projet = ""; etat.evenements = []; etat.dernierJournal = 0; }
   if (act === "desarchiver") { etat.projet = nom; etat.evenements = []; etat.dernierJournal = 0; }
   await rafraichir();
-  if (act === "desarchiver" || (act === "archiver" || act === "supprimer") && etat.page === "projet") { location.hash = "#suivi"; return; }
+  if (act === "supprimer" && etat.page === "projet") { location.hash = "#global"; return; } // S17 (M317): back to the list, not onto another project
+  if (act === "desarchiver" || act === "archiver" && etat.page === "projet") { location.hash = "#suivi"; return; }
   rendrePage();
 }
 
@@ -3306,9 +3308,13 @@ const ongletsNouveau = () => `<div class="onglets"><button class="${etat.npRejoi
 pages.nouveau = async () => {
   connexionConnueGH();
   if (!etat.npMode) { const m = await api("mode?defaut=1").catch(() => null); if (m) etat.npMode = { ...m, duree_max: -1 }; }
+  etat.npParent = ((await api("dossiers?neuf=1").catch(() => null)) || {}).chemin || ""; etat.npDossierAuto = "";
   return pageNouveau();
 };
-const pageNouveau = () => `${ongletsNouveau()}<div class="${etat.npRejoindre || !etat.npMode ? "page-etroite" : "np-colonnes"}">
+// S2 (M317): the folder proposed for a new project, next to the most recent one; it follows the name until the
+// folder field is edited
+const dossierNeuf = (nom) => { const p = (etat.npParent || "").replace(/[\\/]+$/, ""); return p && nom.trim() ? p + (p.includes("\\") ? "\\" : "/") + nom.trim() : ""; };
+const pageNouveau = () => `${ongletsNouveau()}<div class="page-etroite">
     ${etat.npRejoindre ? formulaireRejoindre() : `<div class="bloc"><h2>${t("New project")}</h2>
       <p class="intro petit">${t("A project = a development folder, anywhere on the PC (existing or new). The tool only adds a .athanor subfolder (request, plan, log, checks): delete it at the end and the project is clean.")}</p>
       <label class="champ"><span>${t("Name")}</span><input type="text" id="np-nom" placeholder="${h(t("e.g. watch-store"))}"></label>
@@ -3316,9 +3322,12 @@ const pageNouveau = () => `${ongletsNouveau()}<div class="${etat.npRejoindre || 
       <label class="champ"><span>${t("What you want (you can complete it later)")}</span><textarea id="np-demande" rows="7" placeholder="${h(t("Describe the expected result, for whom, on which platform. Technologies are free unless you impose one."))}"></textarea></label>
       ${barreAmeliorer("np-demande")}
       ${zonePieces("np")}
-      <div class="champ gh-nouveau"><span>GitHub</span>${choixGitHub("np", nomDepot(""))}</div>
+      <details class="plus-options" id="np-plus"${etat.npPlus ? " open" : ""}><summary>${t("More options")}</summary>
+        <div class="champ gh-nouveau"><span>GitHub</span>${choixGitHub("np", nomDepot(""))}</div>
+        ${etat.npMode ? `<div class="np-reglages"><p class="muet petit m0">${t("This project's settings: you can change them later in Manage.")}</p><div id="np-mode">${blocMode(etat.npMode)}</div></div>` : ""}
+      </details>
       <button class="btn btn-primaire" id="np-creer">${t("Create the project")}</button>
-    </div>${etat.npMode ? `<div class="np-reglages"><p class="muet petit m0">${t("This project's settings: you can change them later in Manage.")}</p><div id="np-mode">${blocMode(etat.npMode)}</div></div>` : ""}`}
+    </div>`}
   </div>`;
 
 // champDossier: a folder field with its Browse… button (the system's dialog, or Athanor's picker)
@@ -4270,6 +4279,16 @@ async function envoyerPieces(id, cible, projet) {
   if (ok) toast(t("{0} file(s) attached to the request.", [ok]), "ok");
 }
 
+// S12 (M317): the buttons of the one request form: a note (Right away), or a request (a stopped project can start on it)
+const actionsDemande = () => etat.ndVite ? `<button class="btn btn-primaire" id="nd-ajouter">${t("Add the note")}</button>`
+  : etat.vue && etat.vue.projet && etat.vue.kit_valide && !etat.vue.actif
+    ? `<button class="btn btn-primaire" id="nd-demarrer">${t("Add and start")}</button><button class="btn" id="nd-ajouter">${t("Add without starting")}</button>`
+    : `<button class="btn btn-primaire" id="nd-ajouter">${t("Add to the queue")}</button>`;
+document.addEventListener("change", (ev) => { // the typed text stays: only the title and the buttons change
+  if (ev.target.name !== "nd-quand") return;
+  etat.ndVite = ev.target.value === "vite";
+  $("#nd-titre-champ").hidden = etat.ndVite; $("#nd-actions").innerHTML = actionsDemande();
+});
 pages.demandes = async () => {
   const d = await api("demandes");
   const planTexte = (await api("plan").catch(() => ({ texte: "" }))).texte || "";
@@ -4280,25 +4299,21 @@ pages.demandes = async () => {
   <div class="grille grille-2">
     <div class="colonne">
       <div class="bloc"><h2>${t("New request")}</h2>
-        <p class="intro petit">${t("It is time-stamped and queued. Claude takes it when the current request is finished; you can change the order.")}</p>
-        <label class="champ"><span>${t("Short title")}</span><input type="text" id="nd-titre" placeholder="${h(t("e.g. ten levels, each with its own music"))}"></label>
+        <p class="intro petit">${t("A request changes the project. To ask a question without changing anything, use the Chat tab.")}</p>
+        <div class="nd-quand" role="radiogroup" aria-label="${h(t("When"))}">
+          <label class="radio srv-facon"><input type="radio" name="nd-quand" value=""${etat.ndVite ? "" : " checked"}> <span><b>${t("After the current request")}</b><br><span class="muet petit">${t("It is time-stamped and queued. Claude takes it when the current request is finished; you can change the order.")}</span></span></label>
+          <label class="radio srv-facon"><input type="radio" name="nd-quand" value="vite"${etat.ndVite ? " checked" : ""}> <span><b>${t("Right away")}</b><br><span class="muet petit">${t("To correct without waiting: Claude reads it at the start of the next cycle, during the current request.")}</span></span></label>
+        </div>
+        <label class="champ" id="nd-titre-champ"${etat.ndVite ? " hidden" : ""}><span>${t("Short title")}</span><input type="text" id="nd-titre" placeholder="${h(t("e.g. ten levels, each with its own music"))}"></label>
         <label class="champ"><span>${t("What you want")}</span><textarea id="nd-texte" rows="6" placeholder="${h(t("Describe the expected result, for whom, on which platform. Technologies are free unless you impose one."))}"></textarea></label>
         ${barreAmeliorer("nd-texte")}
         ${zonePieces("nd")}
-        ${etat.vue && etat.vue.projet && etat.vue.kit_valide && !etat.vue.actif
-          ? `<div class="ligne"><button class="btn btn-primaire" id="nd-demarrer">${t("Add and start")}</button><button class="btn" id="nd-ajouter">${t("Add without starting")}</button></div>`
-          : `<button class="btn btn-primaire" id="nd-ajouter">${t("Add to the queue")}</button>`}
+        <div class="ligne" id="nd-actions">${actionsDemande()}</div>
       </div>
-      <div class="bloc"><h2>${t("Note along the way")}</h2>
-        <p class="intro petit">${t("To correct without waiting: Claude reads it at the start of the next cycle, during the current request.")}</p>
-        <textarea id="rq-texte" rows="2" placeholder="${h(t("e.g. the footstep sounds are too high-pitched, lower them."))}"></textarea>
-        ${zonePieces("rq")}
-        <div class="ligne mt-1"><button class="btn" id="rq-ajouter">${t("Add the note")}</button></div>
-      </div>
-      <div class="bloc"><details><summary>${t("REQUEST.md, the full file")}</summary>
+      <div class="bloc"><details><summary>${t("Edit the request")}</summary>
         <textarea id="dm-texte" class="code" rows="18">${h(d.demande)}</textarea>
         <div class="ligne mt-1"><button class="btn" id="dm-enregistrer">${t("Save the file")}</button><button class="btn" data-ouvrir="demande">${t("Open in the editor")}</button></div></details></div>
-      <div class="bloc"><details><summary>${t("PLAN.md, the full plan")}</summary>
+      <div class="bloc"><details><summary>${t("Edit the plan")}</summary>
         <p class="muet petit">${t("Claude's working document: milestones, files, dependencies, acceptance criteria. Edit it here when the buttons on the milestones are not enough; Claude follows it from the next cycle.")}</p>
         <textarea id="pl-texte" class="code" rows="18">${h(planTexte)}</textarea>
         <div class="ligne mt-1"><button class="btn" id="pl-enregistrer">${t("Save the plan")}</button><button class="btn" data-ouvrir="plan">${t("Open in the editor")}</button></div></details></div>
@@ -4331,10 +4346,12 @@ async function reordonner(fichier, sens) {
 // POST /api/projets/{nom}/deploiement in any state of the project. M293: above the form, the state of the site
 // (never red while its first deployment is to prepare or in progress), its health, its history and the way back;
 // an older project with several sites has one sheet per address, and any of them can become its deployment
-const dep = { projet: "", f: null }; // f: the form as typed, kept until Save or Cancel
+const dep = { projet: "", f: null, dispo: [] }; // f: the form as typed, kept until Save or Cancel; dispo: the servers of this PC
 const MOMENTS_DEPLOIEMENT = [["jalon", "After each milestone"], ["livraison", "At delivery"], ["", "Only when I ask"]];
 const formDep = (pre) => pre === "cp" ? carteProjetOuverte().dep : dep.f; // the form of the tab, or of the home's open project card (M295b)
 const pucesDeploiement = (cle, pre = "dep") => formDep(pre)[cle].map((m, i) => `<span class="puce-mention puce-${m.type}">${typeMention(m)}${h(m.nom)}${pre === "dep" && (etat.vue || {}).distant ? "" : `<button type="button" class="puce-x" data-dep-retirer="${cle}:${i}" aria-label="${h(t("Remove {0}", [m.nom]))}">×</button>`}</span>`).join("")
+  // S6 (M317): the servers not chosen yet are offered at once, one click each (the field still searches)
+  + (cle !== "serveurs" || pre === "dep" && (etat.vue || {}).distant ? "" : dep.dispo.filter((x) => !formDep(pre).serveurs.some((m) => m.ref === x.id)).slice(0, 6).map((x) => `<button type="button" class="btn btn-petit puce-sugg" data-dep-sugg="${h(x.id)}" title="${h(x.hote || "")}">+ ${h(x.nom)}</button>`).join(""))
   || `<span class="muet petit">${t(cle === "serveurs" ? "No server chosen yet." : "No API chosen yet.")}</span>`;
 const actionsDeploiement = () => `<button type="submit" class="btn btn-primaire"${dep.f.modifie ? "" : " disabled"}>${t("Save")}</button>${dep.f.modifie ? `<button type="button" class="btn" data-dep-annuler>${t("Cancel")}</button>` : ""}`;
 function ficheSite(d, nom, nomSrv, distant) {
@@ -4380,19 +4397,19 @@ pages.deploiement = async () => {
   const e = d.deploiement || {}, nom = (l, id) => ((l || []).find((x) => x.id === id) || {}).nom || id;
   if (dep.projet !== projet || !dep.f || !dep.f.modifie) dep.f = { url: e.url || "", plan: e.plan || "", moment: e.moment || "", modifie: false, // the saved one, unless this project's form is being typed
     serveurs: (e.serveurs || []).map((id) => ({ type: "serveur", ref: id, nom: nom(sv.serveurs, id) })), apis: (e.apis || []).map((id) => ({ type: "api", ref: id, nom: nom(c.entrees, id) })) };
-  dep.projet = projet;
+  dep.projet = projet; dep.dispo = sv.serveurs || [];
   const f = dep.f, dis = distant ? " disabled" : "", perm = (rp.reglages || []).find((r) => r.cle === "permission");
   const moments = MOMENTS_DEPLOIEMENT.filter(([v]) => v || !e.moment); // "Only when I ask": an older project that already has it
   const sites = d.sites || {}, autres = Object.keys(sites).filter((n) => n !== d.courant).sort(), nomSrv = (id) => nom(sv.serveurs, id);
-  return `<div class="deploiement">${sites[d.courant] ? `<div class="bloc" id="dep-etat"><h2>${t("State")}</h2>${ficheSite(d, d.courant, nomSrv, distant)}${blocCleDeploiement(sites, distant)}</div>` : ""}
-  <form class="bloc" id="dep-form">
-    <h2>${t("Deployment")}</h2>
-    <p class="intro petit">${t((d.sites || {})[d.courant] ? "Where this project is online, and how. Athanor prepares the server from your plan, then deploys at the moment you choose." : "This project is not online yet. Choose a server and say how to put it online: Athanor prepares the server, then deploys at the moment you choose.")}</p>
+  return `<div class="deploiement"><div class="bloc"><h2>${t("Deployment")}</h2>
+  ${sites[d.courant] ? `<div id="dep-etat">${ficheSite(d, d.courant, nomSrv, distant)}${blocCleDeploiement(sites, distant)}</div>` : ""}
+  <form id="dep-form">
+    ${sites[d.courant] ? "" : `<p class="intro petit">${t("This project is not online yet. Choose a server and say how to put it online: Athanor prepares the server, then deploys at the moment you choose.")}</p>`}
     ${distant ? `<p class="muet petit">${t("The deployment is changed from the computer.")}</p>` : ""}
     ${champsDeploiement("dep", f, moments, distant)}
     ${perm ? `<div class="reglage"><span class="nom-reglage">${t("Permissions")}</span><p class="m0">${badgePermission(perm.valeur)} <a class="petit" href="#projet@rp">${t("This project's settings")}</a></p></div>` : ""}
     ${distant ? "" : `<div class="ligne mt-3" id="dep-actions">${actionsDeploiement()}</div>`}
-  </form>
+  </form></div>
   ${autres.length ? `<div class="bloc" id="dep-autres"><h2>${t("Other sites of this project")}</h2>
     <p class="intro petit">${t("This project was set up with several sites. This tab changes the one above; any other one can take its place.")}</p>
     <div class="env-cartes">${autres.map((n) => ficheSite(d, n, nomSrv, distant)).join("")}</div></div>` : ""}</div>`;
@@ -4417,8 +4434,9 @@ document.addEventListener("input", (ev) => {
   if (cle && formDep(pre)) { formDep(pre)[cle] = ev.target.value; majDeploiement("", pre); }
 });
 document.addEventListener("click", (ev) => {
-  const x = ev.target.closest("[data-dep-retirer]");
-  if (x) { const [cle, i] = x.dataset.depRetirer.split(":"), pre = x.closest("[id$=-puces]").id.split("-")[0]; formDep(pre)[cle].splice(+i, 1); majDeploiement(cle, pre); $(`#${pre}-${cle === "apis" ? "api" : "srv"}-q`).focus(); }
+  const x = ev.target.closest("[data-dep-retirer]"), sg = ev.target.closest("[data-dep-sugg]");
+  if (sg) { const pre = sg.closest("[id$=-puces]").id.split("-")[0], sv = dep.dispo.find((y) => y.id === sg.dataset.depSugg); formDep(pre).serveurs.push({ type: "serveur", ref: sv.id, nom: sv.nom }); majDeploiement("serveurs", pre); ($(`#${pre}-serveurs-puces [data-dep-sugg]`) || $(`#${pre}-srv-q`)).focus(); }
+  else if (x) { const [cle, i] = x.dataset.depRetirer.split(":"), pre = x.closest("[id$=-puces]").id.split("-")[0]; formDep(pre)[cle].splice(+i, 1); majDeploiement(cle, pre); $(`#${pre}-${cle === "apis" ? "api" : "srv"}-q`).focus(); }
   else if (ev.target.closest("[data-dep-annuler]")) { dep.f = null; rendrePage(); }
 });
 document.addEventListener("click", async (ev) => {
@@ -4870,6 +4888,7 @@ function pcsOuvert() {
 document.addEventListener("toggle", (ev) => {
   if (ev.target && ev.target.id === "cp-projet" && carteProjetOuverte()) carteProjetOuverte().pOuvert = ev.target.open; // M295b
   if (ev.target && ev.target.id === "rp") etat.rpOuvert = ev.target.open; // M291: the same across a change of mode
+  if (ev.target && ev.target.id === "np-plus") etat.npPlus = ev.target.open; // S3 (M317): open across the GitHub sign-in's refresh
   if (!ev.target || ev.target.id !== "pcs-repli") return;
   etat.pcsOuvert = ev.target.open;
   try { localStorage.setItem("pcsOuvert", etat.pcsOuvert ? "1" : "0"); } catch (e) { /* this device only */ }
@@ -5588,6 +5607,7 @@ $("#page").addEventListener("click", async (ev) => {
 // the project's GitHub deployment key, made on demand (M119)
 function blocCleDeploiement(sites, distant) {
   const cle = Object.values(sites).some((e) => e.cle_deploiement);
+  if (!cle && !((etat.vue || {}).github || {}).lie) return ""; // S7 (M317): no GitHub repository, no key to offer
   return `<div class="env-cle" data-env-cle-bloc><h3>${t("Deployment key")}</h3>
     <p class="petit">${cle ? `${ic("ok")} ${t("Created by Athanor, read-only on the repository")}` : t("A read-only key on the project's GitHub repository, kept in the vault: the servers use it to fetch the code.")}</p>
     ${cle || distant ? "" : `<button type="button" class="btn btn-petit" data-env-cle>${t("Create the deployment key")}</button>`}
@@ -6045,14 +6065,15 @@ function assistantServeur(c) {
       <label class="champ"><span>${t("Name (optional)")}</span><input type="text" id="srv-nom" maxlength="100" placeholder="${h(t("e.g. Production VPS"))}" value="${h(a.nom || "")}"></label>
     </div>
     ${empreinte ? `<div class="srv-empreinte">
-      <p class="petit">${t("The server presents this fingerprint. Check that it is your server's (on the server: {0}), then confirm it: Athanor will refuse any other.", [`<code>${h(a.commande || "ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub")}</code>`])}</p>
-      <p><code class="srv-empreinte-valeur">${h(a.empreinte)}</code>${a.typeCle ? ` <span class="petit">(${h(a.typeCle)})</span>` : ""}</p>
+      <p class="petit">${t("The server presents this fingerprint. If it is your server's, confirm it: Athanor will refuse any other.")}</p>
+      <p><code class="srv-empreinte-valeur">${h(a.empreinte)}</code></p>
+      <details class="plus-options"><summary>${t("How to check?")}</summary><p class="petit">${t("Type this on the server, or in your host's console, and compare its answer with the fingerprint above:")}<br><code>${h(a.commande || "ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub")}</code>${a.typeCle ? ` <span class="muet">(${h(a.typeCle)})</span>` : ""}</p></details>
       <label class="radio"><input type="checkbox" id="srv-confirme"${a.confirme ? " checked" : ""} required> ${t("It is my server's fingerprint")}</label>
       <fieldset class="srv-facons"><legend>${t("How should Athanor connect?")}</legend>
-        <label class="radio srv-facon"><input type="radio" name="srv-mode" value="mot_de_passe"${a.mode === "mot_de_passe" ? " checked" : ""}> <span><b>${t("The server's password")}</b><br><span class="muet petit">${t("Athanor keeps it in the vault and connects with it. No key is made.")}</span></span></label>
-        ${a.mode === "mot_de_passe" ? `<div class="srv-sous"><input type="password" id="srv-mdp-serveur" autocomplete="off" aria-label="${h(t("The server's password"))}" placeholder="${h(t("The server's password"))}" required></div>` : ""}
         <label class="radio srv-facon"><input type="radio" name="srv-mode" value="generee"${a.mode === "generee" ? " checked" : ""}> <span><b>${t("A new key made by Athanor")}</b><br><span class="muet petit">${t("Give the server's password once and Athanor puts the key there (the password is not kept), or leave it empty to copy the public part onto the server yourself.")}</span></span></label>
         ${a.mode === "generee" ? `<div class="srv-sous"><input type="password" id="srv-mdp-serveur" autocomplete="off" aria-label="${h(t("The server's password (optional, used once)"))}" placeholder="${h(t("The server's password (optional, used once)"))}"></div>` : ""}
+        <label class="radio srv-facon"><input type="radio" name="srv-mode" value="mot_de_passe"${a.mode === "mot_de_passe" ? " checked" : ""}> <span><b>${t("The server's password")}</b><br><span class="muet petit">${t("Athanor keeps it in the vault and connects with it. No key is made.")}</span></span></label>
+        ${a.mode === "mot_de_passe" ? `<div class="srv-sous"><input type="password" id="srv-mdp-serveur" autocomplete="off" aria-label="${h(t("The server's password"))}" placeholder="${h(t("The server's password"))}" required></div>` : ""}
         <label class="radio srv-facon"><input type="radio" name="srv-mode" value="importee"${a.mode === "importee" ? " checked" : ""}> <span><b>${t("An SSH key you already have")}</b><br><span class="muet petit">${t("Paste its private key or choose its file. Athanor keeps it in the vault.")}</span></span></label>
         ${a.mode === "importee" ? `<div class="srv-sous srv-import">
           <textarea id="srv-cle-importee" rows="4" class="code" spellcheck="false" autocomplete="off" aria-label="${h(t("Private key"))}" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----" required></textarea>
@@ -8013,18 +8034,17 @@ $("#page").addEventListener("click", async (ev) => {
     // one request / note per click, even on a double-click
     if (b.id === "nd-ajouter" || b.id === "nd-demarrer") { // nd-demarrer (M315): a stopped project takes the request at once
       if (b.disabled) return; b.disabled = true;
+      if (etat.ndVite) { // a note along the way: added to the current request, Claude takes it at the next cycle
+        const texte = $("#nd-texte").value, avecPieces = (etat.pieces.nd || []).length > 0;
+        const r = texte.trim() || !avecPieces ? await action(api("remarque", "POST", { texte })) : true;
+        if (r && avecPieces) await envoyerPieces("nd", "demande", etat.projet);
+        b.disabled = false; if (r) rendrePage(); return;
+      }
       const r = await action(api("demandes", "POST", { titre: $("#nd-titre").value, texte: $("#nd-texte").value }));
       if (r && (etat.pieces.nd || []).length) await envoyerPieces("nd", r.ou === "attente" && r.fichier ? r.fichier : "demande", etat.projet);
       b.disabled = false; if (r) rendrePage();
       if (r && b.id === "nd-demarrer") { await rafraichir(); demarrerPilote(null); }
       return;
-    }
-    if (b.id === "rq-ajouter") {
-      if (b.disabled) return; b.disabled = true;
-      const texte = $("#rq-texte").value, avecPieces = (etat.pieces.rq || []).length > 0;
-      const r = texte.trim() || !avecPieces ? await action(api("remarque", "POST", { texte })) : true;
-      if (r && avecPieces) await envoyerPieces("rq", "demande", etat.projet); // added to the current request: Claude takes them at the next cycle
-      b.disabled = false; if (r) rendrePage(); return;
     }
     if (b.id === "dm-enregistrer") return action(api("demande", "PUT", { texte: $("#dm-texte").value }));
     if (b.id === "pl-enregistrer") { const r = await action(api("plan", "PUT", { texte: $("#pl-texte").value })); if (r) { await rafraichir(); } return; }
@@ -8179,6 +8199,7 @@ $("#page").addEventListener("input", (ev) => {
   if (ev.target.id === "jr-recherche") { etat.recherche = ev.target.value; rendreJournal(); }
   if (ev.target.id === "ag-recherche") { etat.agRecherche = ev.target.value; filtrerAgents(); }
   if (ev.target.id === "np-nom" && $("#np-gh-nom")) $("#np-gh-nom").placeholder = nomDepot(ev.target.value);
+  if (ev.target.id === "np-nom" && !etat.npRejoindre && $("#np-dossier").value === (etat.npDossierAuto || "")) $("#np-dossier").value = etat.npDossierAuto = dossierNeuf(ev.target.value);
   // typing a repository picks its option
   const m = /^(np|gh)-gh-(nom|depot)$/.exec(ev.target.id);
   if (m) { const r = document.querySelector(`input[name=${m[1]}-gh][value=${m[2] === "nom" ? "creer" : "existant"}]`); if (r) r.checked = true; }

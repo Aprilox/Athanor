@@ -678,6 +678,13 @@ func (s *Serveur) apiDossiers(w http.ResponseWriter, r *http.Request) {
 		Nom    string `json:"nom"`
 		Chemin string `json:"chemin"`
 	}
+	if r.URL.Query().Get("neuf") != "" { // S2 (M317): the folder New project proposes its projects in
+		s.mu.Lock()
+		projets := append([]Projet{}, s.config.Projets...)
+		s.mu.Unlock()
+		s.ecrireJSON(w, map[string]string{"chemin": dossierProjetNeuf("", projets)})
+		return
+	}
 	chemin := r.URL.Query().Get("chemin")
 	if chemin == "" {
 		chemin, _ = os.UserHomeDir()

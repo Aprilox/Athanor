@@ -22,7 +22,16 @@ type MentionTrouvee struct {
 	// an API's category: its id (the filter) and its name (searched, shown)
 	Categorie    string `json:"categorie,omitempty"`
 	CategorieNom string `json:"categorie_nom,omitempty"`
+	// S6 (M317), an API only: a secret, and one of a provider type (the Deployment form lists those at once)
+	secret, fournisseur bool
 }
+
+// typesGeneriques: the vault types that name no provider (a password, a token, a key file).
+var typesGeneriques = []string{"ssh", "certificat", "mot_de_passe", "jeton", "autre"}
+
+// typeAPIDeploiement: the type the Deployment form asks: the API of a provider; a generic secret is found by
+// typing its name, a variable never (it is no API).
+const typeAPIDeploiement = "api-deploiement"
 
 // MentionDemandee: one chip the bar sends (type nouveau: "New project", no ref).
 type MentionDemandee struct {
@@ -87,7 +96,8 @@ func (s *Serveur) candidatsMentions() []MentionTrouvee {
 			if slices.ContainsFunc(serveurs, func(sv ServeurInventaire) bool { return sv.Cle == e.ID }) {
 				continue // the key or the password a server is reached with is part of that server, not an API
 			}
-			l = append(l, MentionTrouvee{Type: "api", Ref: e.ID, Nom: e.Nom, Detail: e.Type, Categorie: e.Categorie, CategorieNom: categories[e.Categorie]})
+			l = append(l, MentionTrouvee{Type: "api", Ref: e.ID, Nom: e.Nom, Detail: e.Type, Categorie: e.Categorie, CategorieNom: categories[e.Categorie],
+				secret: e.Famille == "secret", fournisseur: e.Famille == "secret" && !slices.Contains(typesGeneriques, e.Type)})
 		}
 	}
 	for _, d := range lireConversation(s.kitCourant(), projetAccueil(s.kitCourant())).Pouvoirs.Dossiers {
@@ -109,6 +119,10 @@ func boolInt(b bool) int {
 // sansCategorie); autres = how many more per type; sauf: the chips already chosen ("type:ref"), left out before
 // the cut (M244k7).
 func (s *Serveur) chercherMentions(q, typ, categorie string, sauf ...string) (l []MentionTrouvee, autres map[string]int) {
+	deploiement := typ == typeAPIDeploiement
+	if deploiement {
+		typ = "api"
+	}
 	q, typ = strings.ToLower(strings.TrimSpace(q)), mentionAPI(MentionDemandee{Type: typ}).Type
 	pris := map[string]bool{}
 	for _, x := range sauf {
@@ -119,6 +133,9 @@ func (s *Serveur) chercherMentions(q, typ, categorie string, sauf ...string) (l 
 	parType := map[string][]MentionTrouvee{}
 	for _, m := range s.candidatsMentions() {
 		if pris[m.Type+":"+m.Ref] {
+			continue
+		}
+		if deploiement && !m.fournisseur && (q == "" || !m.secret) {
 			continue
 		}
 		if categorie != "" && (m.Type != "api" || m.Categorie != categorie && (categorie != sansCategorie || m.Categorie != "")) {

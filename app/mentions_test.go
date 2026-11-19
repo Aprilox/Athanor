@@ -36,6 +36,23 @@ func TestMentions(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// S6 (M317): the Deployment form lists the API of a provider at once, a token by its typed name, never a variable
+	if _, err := s.coffre.Ajouter(EntreeCoffre{Nom: "JETON_DIVERS", Famille: "secret", Type: "jeton", Portee: "code"}, temoin); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.coffre.Ajouter(EntreeCoffre{Nom: "URL_DIVERSE", Famille: "variable", Type: "autre"}, "https://exemple.test"); err != nil {
+		t.Fatal(err)
+	}
+	if l, _ := s.chercherMentions("", typeAPIDeploiement, ""); len(l) != 1 || l[0].Ref != cle.ID || l[0].Type != "api" {
+		t.Fatalf("deployment API, nothing typed: %+v", l)
+	}
+	if l, _ := s.chercherMentions("divers", typeAPIDeploiement, ""); len(l) != 1 || l[0].Nom != "JETON_DIVERS" {
+		t.Fatalf("deployment API, name typed: %+v", l)
+	}
+	if l, _ := s.chercherMentions("divers", "api", ""); len(l) != 2 {
+		t.Fatalf("home API list: %+v", l)
+	}
+
 	mux := http.NewServeMux()
 	s.routes(mux)
 	appel := func(q string) (int, string) {
