@@ -535,7 +535,7 @@ func TestTutoriels(t *testing.T) {
 	for _, e := range (moduleCoffre{}).Tutoriel() {
 		acces.WriteString(e.Titre + " " + e.Texte + " " + e.Page + " ")
 	}
-	for _, v := range []string{"encrypted", "never shown again", "password", "the AI never receives their value", "only if you grant it", "as a variable", "badge", "#acces", "#suivi", "Remove"} {
+	for _, v := range []string{"encrypted", "never shown again", "password", "Claude never receives their value", "only if you grant it", "as a variable", "badge", "#acces", "#suivi", "Remove"} {
 		if !strings.Contains(acces.String(), v) {
 			t.Fatalf("access tour without %q: %s", v, acces.String())
 		}

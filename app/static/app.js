@@ -979,7 +979,7 @@ function rendreBandeau(v) {
   else if (maj.en_cours === "redemarrage") boutons.unshift(`<button class="btn btn-maj" disabled>${t("Athanor restarts…")}</button>`);
   else if (maj.disponible) boutons.unshift(`<button class="btn btn-maj" data-maj="voir" title="${h(t("Athanor {0} is available (you have {1})", [maj.derniere, v.version]))}">${ic("maj")} ${t("Update to {0}", [h(maj.derniere)])}</button>`);
   if (!cadre.actif) boutons.push(boutonCloche(v, "btn"), boutonGuide("btn"));
-  if (v.natif) boutons.unshift(`<a class="etiquette puce-natif" href="#options" role="status" title="${h(t("Native Windows mode: nothing separates the AI from the files of this PC. Settings › Options."))}">${t("Native mode: no barrier")}</a>`);
+  if (v.natif) boutons.unshift(`<a class="etiquette puce-natif" href="#options" role="status" title="${h(t("Athanor runs directly on Windows: nothing separates Claude from the files of this PC. To put a barrier between them, switch to WSL in Settings › Options."))}">${t("Native mode: no barrier")}</a>`);
   rendreBarre(v);
   const nomProjet = v.projet && !global ? `<div class="muet petit" title="${h(v.projet.dossier)}">${h(v.projet.nom)}</div>` : "";
   const nbActifs = (v.projets || []).filter((x) => x.actif).length;
@@ -2331,7 +2331,7 @@ function carteActionHub(c, i) {
     <div><b>${h(t(c.quoi || "Action"))}</b></div>`}
     <div class="petit">${t("{0}: {1}", [t("On"), `<code class="croit">${v(sur)}</code>`])}</div>
     ${c.titre ? `<div><b>${v(c.titre)}</b></div>` : ""}${texteVu && !ouverte ? `<div class="petit">${mdChat(texteVu)}</div>` : ""}${deploiement}${permission}
-    <div class="petit muet">${t("{0}: {1}", [t("With which accesses"), ""])}</div><ul class="petit m0" data-cp-acces>${accesCarteProjet(c, f)}</ul>
+    <ul class="petit m0" data-cp-acces>${accesCarteProjet(c, f)}</ul>
     ${c.etat ? "</details>" : ""}${decide}</div></div>`;
 }
 // M295b: the `projet` card as the owner changes it under Edit, kept by message until it is decided (a card proposed
@@ -2771,14 +2771,14 @@ const GUIDE = [
       ["Secrets and variables", "*Vault*, in the menu: *Secrets* hold what must stay hidden (a token, a password, a private key), *Variables* plain settings (a region, a user name), readable even while the vault is locked. *Add* creates one; the *Actions* menu of a card edits it, replaces its value or deletes it.", "#coffre", "Vault"],
       ["Paste", "*Paste* takes a whole `.env` block, an MCP configuration, a token or a private key. Athanor recognises each value (Cloudflare, GitHub, Anthropic, OpenAI, Stripe, AWS, SSH…) and proposes a name, a type and a scope; untick what you do not want to keep, then save. Only the names come back to the page, never the values."],
       ["Test", "*Test* checks a key with its own service before you rely on it: Cloudflare and GitHub say whether it works and what it may do (a Cloudflare key then shows its zones and its rights on its card), an SSH key gives its type and whether its server answers. The key goes nowhere else."],
-      ["The note for the AI", "After a test, Athanor proposes a short note from the result (the account, the zones, the rights). Change it as you like: it tells Claude what the key is for without showing it the value."],
+      ["The note for Claude", "After a test, Athanor proposes a short note from the result (the account, the zones, the rights). Change it as you like: it tells Claude what the key is for without showing it the value."],
       ["Categories", "*Categories* creates, renames and deletes your own (*Hosting* and *E-mail* are suggested); deleting one leaves its keys in the vault, without category. One search, by name or by category, serves the vault, the *@* mentions, the *Deployment* tab and the home cards."],
       ["Two scopes: code and infra", "*code*: what a project's code uses (an API key, a test token). *infra*: the keys of your servers and accounts (Cloudflare, SSH, GitHub, a certificate, AWS). Athanor proposes the scope from the type, and you can change it. *infra* keys never leave Athanor and need a password for Athanor: without one, the infra scope stays greyed out.", "#options@bloc-verrou", "Settings › Options › Lock"],
-      ["Locked, unlocked", "The *code* keys reopen by themselves when Athanor starts on this PC. The *infra* keys open when you unlock Athanor (in the window, or from a paired phone). The automatic lock only locks the window: AIs, deployments, tasks and SSH sessions keep running and keep the keys without asking for the password again; the padlock, the emergency stop, the end of the session or stopping Athanor close them. Locked, the page says so and offers *Unlock*. A paired phone sees the list, never a value, and cannot change it."],
+      ["Locked, unlocked", "The *code* keys reopen by themselves when Athanor starts on this PC. The *infra* keys open when you unlock Athanor (in the window, or from a paired phone). The automatic lock only locks the window: Claude's sessions, deployments, tasks and SSH sessions keep running and keep the keys without asking for the password again; the padlock, the emergency stop, the end of the session or stopping Athanor close them. Locked, the page says so and offers *Unlock*. A paired phone sees the list, never a value, and cannot change it."],
       ["Your old keys come along", "On start-up, Athanor copies into the vault the keys it already had: each project's `.athanor/secrets.env`, the keys of *Skills & MCP* and those of its own `.env`. It reads those files without changing them, and starting again imports nothing twice. A line at the top of *Vault* gives the count: *Undo the import* removes exactly those entries, *Import again* brings them back."],
     ],
     note: "Your project keys reopen alone on this PC; the keys of your servers open only with your password, and a copy of the disk opens nothing." },
-  { id: "acces", titre: "Project access", intro: "One key holds one value: give it to a project and the project gets it, wherever it runs. *Code* keys are given to the project, whose pilot reads their value as a variable; *infra* keys (servers, Cloudflare, SSH) stay with Athanor, which uses them itself and never gives them to the AI.",
+  { id: "acces", titre: "Project access", intro: "One key holds one value: give it to a project and the project gets it, wherever it runs. *Code* keys are given to the project, whose pilot reads their value as a variable; *infra* keys (servers, Cloudflare, SSH) stay with Athanor, which uses them itself and never gives them to Claude.",
     etapes: [
       ["The Access panel", "*Access*, a tab of *Studio*: the vault's entries on the left, the keys given to this project on the right. Drag an entry there, or tick its box, then *Save the changes* (the password is asked once): the pilot gets it under the variable name shown, which you can change. An API chosen in the project's *Deployment* tab shows here read only, *Used by the deployment*: it is changed there.", "#acces", "Access"],
       ["What the pilot receives", "Before each start, and at each change, Athanor itself rewrites the project's `.athanor/secrets.env` with exactly the *code* entries given to the project: Claude never holds the vault. A line of the old file whose value is not in the vault is kept, and the panel offers to import it. On a paired phone, the accesses are shown, never changed."],
@@ -2843,7 +2843,7 @@ const GUIDE = [
       ["The assistant beside it", "*Assistant* opens a chat beside the terminal: say what should be done, then *Send*. Choose its mode at the top. *Separate connection*, the default: it works in its own SSH connection and your terminal stays yours; each command, its output and the one running show in the panel, with *Stop* always visible. *Live in my terminal*: its commands are written in your terminal, where you watch them run."],
       ["While it works live", "Your typing is locked under the banner *The assistant is working*: *Stop* ends its task, *Take over* gives you the keyboard back and the assistant goes on in its own connection. When it is done, the keyboard is yours again."],
       ["Permissions and reconnection", "*Permissions*, under the assistant's input, is kept per server: *Manual* asks before every command, *Auto* only before a dangerous or unknown one, *Accept changes* applies its plan and asks only before a dangerous step, *Ignore permissions* asks nothing (it needs Athanor's password, is chosen in the window after a warning, and shows a red *No safeguard* badge). If the connection drops, the terminal reconnects by itself, up to 10 attempts at most 30 seconds apart, without asking for anything; a refused password or key (twice, 30 seconds apart, for a server that is rebooting), a changed fingerprint or a removed server stops it at once, and so does a link lost again after 3 reconnections in 5 minutes, with *Try again* or *Connect again*."],
-      ["The same guardrails", "In both modes the assistant goes through the guardrails of *Give a task to the Servers agent*: reading runs, a change or a destructive command waits for a plan you accept and is refused without it. The vault's values are masked in what it shows; the server's key and passwords never reach the page or the AI."],
+      ["The same guardrails", "In both modes the assistant goes through the guardrails of *Give a task to the Servers agent*: reading runs, a change or a destructive command waits for a plan you accept and is refused without it. The vault's values are masked in what it shows; the server's key and passwords never reach the page or Claude."],
       ["From a paired device", "A shell is the strongest right on a server: from a paired phone or computer, the terminal and the files are off. On this computer, *Allow the terminal and the server's files from paired devices* turns them on, after a confirmation. The audit log names each connection and each file changed, never what is typed nor a file's content.", "#serveurs", "Servers"],
     ],
     note: "Nothing to install on the server: Athanor uses its usual SSH connection, and the terminal itself (xterm.js) is part of Athanor." },
@@ -2853,7 +2853,7 @@ const GUIDE = [
       ["When to deploy", "*At delivery*, the default: when the project is delivered. *After each milestone*: each time the pilot ticks a milestone, the project's last commit goes online and is checked. Requests added after the delivery reopen the project; once they are done it is delivered again, and that delivery is deployed. A project without a server is never deployed, and nothing complains about it."],
       ["Prepared early", "As soon as the project's plan has a milestone, a Servers task prepares the server from your plan (packages, web server, user, folder, certificate, firewall, DNS) while Studio builds. The first deployment is a Servers task too; until it is done the tab says *First deployment in progress*, never a red failure, and *Prepare now* launches it without waiting. The deployments after it reuse its method, with no agent."],
       ["Permissions", "The permission mode says what the project's server tasks may do without asking: *Manual* asks your agreement for each plan of changes, *Auto* only before a dangerous or unknown command, *Accept changes* applies its plans and asks only before a dangerous step, *Ignore permissions* asks nothing (it is chosen in Athanor's window, with its password retyped). The tab shows the mode; it is chosen in *Manage › This project's settings*, and *Settings › Permissions* sets the default."],
-      ["This project's settings", "In *Manage*, the folded section *This project's settings*: the agents' models, the working mode, the stop on quota and the permission mode. Each follows *Settings* by default (*Default (…)* names the current value); a value chosen here applies to this project only, from its next cycle, and each change goes to the audit log."],
+      ["This project's settings", "In *Manage*, the folded section *This project's settings*: the agents' models, the working mode, the stop on quota and the permission mode. Each follows *Settings* by default (*As in Settings (…)* names the current value); a value chosen here applies to this project only, from its next cycle, and each change goes to the audit log."],
       ["A task for the project", "On the sheet of its server, *Tasks*: choose it under *For the project*, then say what should be done (“Point app.example.com at this server over HTTPS”). The agent may then read and change the DNS records, the HTTPS mode and the protection of the address of the project's site, and of that name only: another name or another zone is refused. Each change goes through a plan, as the project's permissions say.", "#serveurs", "Servers"],
       ["Projects from before 3.0", "A project that was set up with several sites keeps them: the tab shows and changes one, and *Other sites of this project* lists the others by their address, each with *Make it the deployment*. An older project's production site still asks you before each deployment (“Deploy example.com?”), and a project that deployed only on request keeps *Only when I ask*. Nothing is rewritten, and no password is asked again."],
     ],
@@ -2987,7 +2987,7 @@ function libelleReglageProjet(cle, v) {
   return a ? t("{0}: {1}", [t("at {0} %", [seuil]), (ACTIONS_QUOTA().find(([x]) => x === a) || [a, a])[1]]) : t("off");
 }
 function choixReglageProjet(r) {
-  const id = "rp-" + r.cle, defaut = t("Default ({0})", [libelleReglageProjet(r.cle, r.defaut)]);
+  const id = "rp-" + r.cle, defaut = t("As in Settings ({0})", [libelleReglageProjet(r.cle, r.defaut)]);
   if (r.cle === "permission") return selecteurPermissions(id, r.propre, { defaut, distant: (etat.vue || {}).distant });
   const valeurs = r.cle.startsWith("quota_") ? ["0", ...SEUILS_QUOTA.flatMap((s) => ACTIONS_QUOTA().map(([a]) => s + ":" + a))] : etat.rp.modeles.concat(r.cle === "modele_sous_agents" ? ["auto"] : []);
   if (r.propre && !valeurs.includes(r.propre)) valeurs.push(r.propre);
@@ -3537,7 +3537,7 @@ function blocPlan(x, p) {
     // C52: a step marked run waits for its result, then says applied or failed (and why)
     const fait = !e.executee ? "" : e.etat === "ok" ? ` <span class="pv-etat pv-ok">${ic("ok")} ${t("applied")}</span>` : e.etat === "echec" ? ` <span class="pv-etat pv-vous">${ic("croix")} ${t("failed")}</span>` : ` <span class="pv-etat pv-claude">${t("running…")}</span>`;
     return `<li><div class="plan-etape-tete">${e.libelle ? `<span class="plan-outil">${h(t(e.libelle))}</span>` : `<code>${h(e.outil)}</code>`} <span class="pv-etat ${cl}">${h(lib)}</span>${fait}</div>
-      ${e.raison ? `<div class="petit muet">${t("Why this class:")} <span lang="en">${h(e.raison)}</span></div>` : ""}${e.etat === "echec" && e.message ? `<div class="petit echec">${h(e.message)}</div>` : ""}
+      ${e.raison ? `<details class="petit muet"><summary>${t("Why this class?")}</summary><span lang="en">${h(e.raison)}</span></details>` : ""}${e.etat === "echec" && e.message ? `<div class="petit echec">${h(e.message)}</div>` : ""}
       <div class="plan-args">${argumentsLisibles(e.lisible)}</div><div class="pv-details m0">${h(e.durcir ? t(e.pourquoi) : e.pourquoi)}</div>
       ${(e.sauvegarde || []).length ? `<div class="petit plan-args">${h(t("Backed up first: {0}", [e.sauvegarde.join(", ")]))}</div>` : ""}${e.sans_sauvegarde ? `<div class="petit plan-args">${h(t("No backup: {0}", [e.durcir ? t(e.sans_sauvegarde) : e.sans_sauvegarde]))}</div>` : ""}${e.archive ? `<div class="petit plan-args">${h(t("Archive made: {0}", [e.archive]))}</div>` : ""}</li>`;
   }).join("");
@@ -4368,7 +4368,7 @@ function champsDeploiement(pre, f, moments, distant) {
       ${distant ? "" : choixAPI(pre + "-api-q", "Find an API")}</div></div>
     <div class="reglage"><label for="${pre}-plan" class="nom-reglage">${t("Plan")}</label><div>
       <textarea id="${pre}-plan" rows="5" maxlength="4000" aria-describedby="${pre}-plan-aide"${dis}>${h(f.plan)}</textarea>
-      <p class="muet petit" id="${pre}-plan-aide">${t("Say in your own words what to set up, for example: nginx on a port, an uptime script, a certificate, the domain.")}</p></div></div>
+      <p class="muet petit" id="${pre}-plan-aide">${t("Say in your own words what to set up, for example: nginx on a port, an uptime script, a certificate, the domain.")} ${t("A real site (real users or data, a public launch)? Say so here: Claude is then told to wait for your agreement before putting it online for the first time (in every mode but Ignore permissions).")}</p></div></div>
     <div class="reglage" role="radiogroup" aria-labelledby="${pre}-moment-titre"><span class="nom-reglage" id="${pre}-moment-titre">${t("When to deploy")}</span>
       <div>${moments.map(([v, l]) => `<label class="radio"><input type="radio" name="${pre}-moment" value="${v}"${f.moment === v ? " checked" : ""}${dis}> ${t(l)}</label>`).join("")}</div></div>`;
 }
@@ -4687,7 +4687,7 @@ pages.reglages = async () => {
   const ligne = (l) => {
     const nom = (REGLAGES[l.cle] || [])[1];
     const m = MODE_CONNEXION[l.cle];
-    return `<div class="reglage" ${m ? `data-connexion="${m}" ${m !== mode ? "hidden" : ""}` : ""}><div>${nom ? `<div class="nom-reglage">${h(t(nom))} <code class="cle-env">${h(l.cle)}</code>${boutonDetail(l.cle)}</div>` : `<div class="cle">${h(l.cle)}</div>`}<div class="aide">${h(t(l.aide))}</div></div><div>${champReglage(l, modeles)}</div></div>`;
+    return `<div class="reglage" ${m ? `data-connexion="${m}" ${m !== mode ? "hidden" : ""}` : ""}><div>${nom ? `<div class="nom-reglage"${m || l.cle === "CLAUDE_AUTH" ? ` title="${h(l.cle)}"` : ""}>${h(t(nom))}${m || l.cle === "CLAUDE_AUTH" ? "" : ` <code class="cle-env">${h(l.cle)}</code>`}${boutonDetail(l.cle)}</div>` : `<div class="cle">${h(l.cle)}</div>`}<div class="aide">${h(t(l.aide))}</div></div><div>${champReglage(l, modeles)}</div></div>`;
   };
   const rang = (c) => { const i = ORDRE_CONNEXION.indexOf(c); return i < 0 ? 99 : i; };
   const groupe = (g) => lignes.filter((l) => (REGLAGES[l.cle] || ["avance"])[0] === g).sort((a, b) => g === "connexion" ? rang(a.cle) - rang(b.cle) : 0);
@@ -5205,7 +5205,7 @@ async function rendreOptions() {
       <div class="bloc local-seul" id="bloc-verrou"><h2>${t("Lock")}</h2>
         <p class="intro petit">${t("With a password, the padlock locks the app: Claude keeps working, but nothing can be seen, changed or read (keys included) without the password. The app starts locked.")}</p>
         ${o.mot_de_passe ? `<label class="champ"><span>${t("Lock automatically")}</span><select id="op-verrou-auto" data-avant="${o.verrou_auto || "1h"}">${[["15m", "After 15 minutes of inactivity"], ["1h", "After 1 hour of inactivity"], ["8h", "After 8 hours of inactivity"], ["fermeture", "When Athanor closes"], ["jamais", "Never automatically"]].map(([v, l]) => `<option value="${v}"${o.verrou_auto === v ? " selected" : ""}>${t(l)}</option>`).join("")}</select></label>
-        <p class="muet petit">${t("Only the interface locks: the vault and its keys stay open, so AIs, pilots, tasks, tunnels and open SSH sessions keep running, and the page comes back as you left it. Only your own actions in this window restart the delay. Athanor always starts locked; a longer delay asks for the password.")}</p>` : ""}
+        <p class="muet petit">${t("Only the interface locks: the vault and its keys stay open, so Claude's sessions, pilots, tasks, tunnels and open SSH sessions keep running, and the page comes back as you left it. Only your own actions in this window restart the delay. Athanor always starts locked; a longer delay asks for the password.")}</p>` : ""}
         ${o.coffre_ancien_mdp ? `<p class="avert-connexion petit" id="mdp-coffre-ancien">${t("This vault is protected by an old password. Type that old password to take the vault back with its keys. If it is lost, you can start from an empty vault.")}</p>` : ""}
         ${o.mot_de_passe || o.coffre_ancien_mdp ? `<label class="champ"><span>${t(o.mot_de_passe ? "Current password" : "Old password of the vault")}</span><input type="password" id="mdp-ancien" autocomplete="current-password"></label>` : ""}
         <label class="champ"><span>${o.mot_de_passe ? t("New password (empty to remove it)") : o.coffre_ancien_mdp ? t("New password (12 characters at least)") : t("Password")}</span><input type="password" id="mdp-nouveau" autocomplete="new-password"></label>
@@ -5239,7 +5239,7 @@ async function rendreOptions() {
         <label class="interrupteur mt-1"><input type="checkbox" id="op-terminal" data-option ${o.terminal_pilote ? "checked" : ""}><span>${t("Show the pilot's terminal")}</span></label>
         <p class="muet petit">${t("Off: the programs a native pilot starts (bash, git, go, the checks) run in a hidden console, and no window opens. On: one minimised window in the taskbar shows the pilot live, without ever taking the focus. For the pilots started afterwards.")}</p>
         <label class="interrupteur mt-1"><input type="checkbox" id="op-sans-rappels"${o.sans_rappels_natif ? " checked" : ""}><span>${t("Don't show the native Windows mode warnings anymore")}</span></label>
-        <p class="muet petit">${t("In native mode, the AI can read the files of this PC. This setting only removes the reminders and their password before forcing a Servers task, not the risk. Every forcing stays logged; infra keys, production and destructive steps keep their own decision. Turning the warnings off asks for Athanor's password.")}</p>
+        <p class="muet petit">${t("In native mode, Claude can read the files of this PC. This setting only removes the reminders and their password before forcing a Servers task, not the risk. Every forcing stays logged; infra keys, production and destructive steps keep their own decision. Turning the warnings off asks for Athanor's password.")}</p>
       </div>
       <div class="bloc"${b.message === "Virtual desktop: Windows only." ? " hidden" : ""}><h2>${t("“Claude” desktop")}</h2>
         <label class="interrupteur"><input type="checkbox" id="op-bureau" data-option ${o.bureau_virtuel ? "checked" : ""}><span>${t("Open the programs Claude starts (Unreal, Blender, a game under test) on a desktop of their own")}</span></label>
@@ -5470,7 +5470,7 @@ pages.acces = async () => {
   return `<div class="acces">
     <div class="bloc"><h2>${t("Access")}</h2><p class="intro petit">${t("Tick a key of the vault, or drag it into the list: the project receives it under the variable name shown.")}</p>
       ${inj.etat === "verrouille" ? `<p class="petit attention">${t("The vault is locked: the pilot's file is not updated until you unlock it.")}</p>` : ""}
-      ${d.natif ? `<div class="acc-natif"><p class="petit attention">${t(d.forcer_infra_natif ? "Forced: infra entries can be linked to this project, and its deployments' build command runs without a barrier. This choice is logged." : "Native Windows mode: this PC has no barrier, any agent can read every file. Infra entries (your servers' keys) are refused for this project; switch to WSL in Settings › Options to keep them out of reach.")}</p>
+      ${d.natif ? `<div class="acc-natif"><p class="petit attention">${t(d.forcer_infra_natif ? "Forced: the keys of your servers and accounts (the infra entries) can be linked to this project, and the build command of its deployments runs with nothing between it and this PC. This choice is logged." : "Athanor runs directly on Windows: nothing separates Claude from the files of this PC. The keys of your servers and accounts (the infra entries) are therefore refused for this project. To use them while keeping them out of Claude's reach, switch to WSL, the Linux built into Windows, in Settings › Options.")}</p>
         <label class="petit"><input type="checkbox" data-acc-forcer${d.forcer_infra_natif ? " checked" : ""}> ${t("Force, knowing the risk")}</label> <a class="petit" href="#options">${t("Options")}</a></div>` : ""}</div>
     <div class="acc-grille">
       <div class="bloc acc-coffre"><h2>${t("Vault")}</h2>
@@ -5668,7 +5668,7 @@ $("#page").addEventListener("change", (ev) => {
 });
 // native Windows mode: infra entries need a confirmed, logged "force" per project
 async function forcerInfraNatif(oui) {
-  if (oui && !(await confirmer(t("Once forced, an agent working on this PC could read this project's infra entries, and its deployments' build command would run without a barrier. Force anyway? This choice is logged."), { ok: t("Force"), danger: true }))) return rendrePage();
+  if (oui && !(await confirmer(t("Once forced, Claude could read, on this PC, the keys of your servers and accounts linked to this project, and the build command of its deployments would run with nothing between it and this PC. Force anyway? This choice is logged."), { ok: t("Force"), danger: true }))) return rendrePage();
   return changerAcces({ action: "forcer", forcer: oui, confirme: oui });
 }
 $("#page").addEventListener("dragstart", (ev) => {
@@ -5730,7 +5730,7 @@ function carteCoffre(x) {
         ${secret && TESTABLES_COFFRE.has(x.type) && !aFiche(x) ? `<button type="button" data-cof-tester="${h(x.id)}">${t("Test")}</button>` : ""}<button type="button" data-cof-modifier="${h(x.id)}">${t("Edit")}</button><button type="button" data-cof-remplacer="${h(x.id)}">${t("Replace the value")}</button><button type="button" class="danger" data-cof-supprimer="${h(x.id)}">${t("Delete")}</button>
       </div></details></div>
     <div class="petit cof-valeur">${secret ? `<span class="muet">•••• ${t("saved")}${x.deux_valeurs ? " · " + h(t("two values (older projects)")) : ""}</span>` : `<code>${h(x.valeur)}</code>${x.deux_valeurs ? ` · ${h(t("Second value (older projects)"))} <code>${h(x.prod)}</code>` : ""}`}</div>
-    <div class="petit cof-note${x.note ? "" : " muet"}" title="${h(noteCoffre(x.note))}">${x.note ? h(noteCoffre(x.note)) : t("No note for the AI")}</div>
+    <div class="petit cof-note${x.note ? "" : " muet"}" title="${h(noteCoffre(x.note))}">${x.note ? h(noteCoffre(x.note)) : t("No note for Claude")}</div>
     ${ficheCoffre(x)}
     <div class="muet petit">${nomCategorie(x.categorie) ? `<span class="etiquette cof-cat">${h(nomCategorie(x.categorie))}</span> ` : ""}${x.source ? h(x.source.startsWith("serveurs:") ? t(x.type === "mot_de_passe" ? "Password kept for a server" : "Key made for a server") : t("Imported from {0}", [x.source])) + " · " : ""}${h(dateLisible(x.modifie))}</div>
   </div>`;
@@ -5747,9 +5747,9 @@ function formulaireCoffre() {
     ${(etat.categoriesAPI || []).length ? `<label class="champ"><span>${t("Category")}</span><select id="cof-categorie">${optionsCategories(x ? x.categorie : cof.cat, "No category")}</select></label>` : ""}
     ${secret ? `<div class="cof-choix">
       <label class="champ"><span>${t("Type")}</span><select id="cof-type">${TYPES_COFFRE.map((y) => `<option value="${y}"${y === type ? " selected" : ""}>${h(typeCoffre(y))}</option>`).join("")}</select></label>
-      <label class="champ"><span>${t("Scope")}</span><select id="cof-portee"><option value="code">${t("code — reopens alone on this PC")}</option><option value="infra"${portee === "infra" ? " selected" : ""}${mdp ? "" : " disabled"}>${t("infra — only with your password")}</option></select></label>
+      <label class="champ"><span>${t("Scope")}</span><select id="cof-portee"><option value="code">${t("code — your projects' keys")}</option><option value="infra"${portee === "infra" ? " selected" : ""}${mdp ? "" : " disabled"}>${t("infra — your servers and accounts")}</option></select></label>
     </div>${mdp ? "" : `<p class="muet petit">${t("The infra scope needs a password for Athanor.")} <a href="#options@bloc-verrou">${t("Settings › Options › Lock")}</a></p>`}` : ""}
-    <label class="champ"><span>${t("Note for the AI")}</span><textarea id="cof-note" rows="2" maxlength="2000" placeholder="${h(t("What it is for, e.g. DNS of example.org"))}">${h(x ? x.note : "")}</textarea></label>
+    <label class="champ"><span>${t("Note for Claude")}</span><textarea id="cof-note" rows="2" maxlength="2000" placeholder="${h(t("What it is for, e.g. DNS of example.org"))}">${h(x ? x.note : "")}</textarea></label>
     <label class="champ"><span>${t("Value")}</span><input type="${secret ? "password" : "text"}" id="cof-valeur" autocomplete="new-password" spellcheck="false" value="${h(x && !secret ? x.valeur : "")}" placeholder="${x && secret ? "•••• " + h(t("saved")) : ""}"></label>
     ${deux ? `<label class="petit cof-deux"><input type="checkbox" id="cof-deux" checked> ${t("Keep the second value (older projects)")}</label>
     <div id="cof-prod-bloc"><label class="champ"><span>${t("Second value (older projects)")}</span><input type="${secret ? "password" : "text"}" id="cof-prod" autocomplete="new-password" spellcheck="false" value="${h(!secret && x.prod || "")}" placeholder="${secret ? "•••• " + h(t("saved")) : ""}"></label>
@@ -5757,7 +5757,7 @@ function formulaireCoffre() {
     ${x && secret ? `<p class="muet petit">${t("The value is never shown again: type a new one to replace it, or leave the field empty.")}</p>` : ""}
     ${x && secret && TESTABLES_COFFRE.has(x.type) ? `<div class="cof-test-bloc">
       ${x.type === "ssh" ? `<label class="champ"><span>${t("Server to try (optional)")}</span><input type="text" id="cof-hote" maxlength="255" spellcheck="false" placeholder="example.org:22"></label>` : ""}
-      <div class="ligne m0"><button type="button" class="btn" data-cof-test>${t("Test")}</button><span class="muet petit">${t("Athanor checks the key with its service and proposes a note for the AI.")}</span></div>
+      <div class="ligne m0"><button type="button" class="btn" data-cof-test>${t("Test")}</button><span class="muet petit">${t("Athanor checks the key with its service and proposes a note for Claude.")}</span></div>
       <div class="petit cof-resultat" id="cof-test" aria-live="polite" hidden></div></div>` : ""}
     <div class="ligne"><button type="submit" class="btn btn-primaire">${x ? t("Save") : t("Add")}</button><button type="button" class="btn" data-cof-annuler>${t("Cancel")}</button></div>
   </form>`;
@@ -5771,7 +5771,7 @@ function formulaireColle() {
     ${p.famille === "secret" ? `<select class="cof-p-type" aria-label="${h(t("Type"))}">${TYPES_COFFRE.map((y) => `<option value="${y}"${y === p.type ? " selected" : ""}>${h(typeCoffre(y))}</option>`).join("")}</select>
     <select class="cof-p-portee" aria-label="${h(t("Scope"))}"><option value="code">code</option><option value="infra"${p.portee === "infra" ? " selected" : ""}${mdp ? "" : " disabled"}>infra</option></select>` : ""}
     <code class="petit">${h(p.indice)}</code>
-    <input type="text" class="cof-p-note" maxlength="2000" placeholder="${h(t("Note for the AI"))}" aria-label="${h(t("Note for the AI"))}">
+    <input type="text" class="cof-p-note" maxlength="2000" placeholder="${h(t("Note for Claude"))}" aria-label="${h(t("Note for Claude"))}">
     ${p.famille === "secret" ? `<button type="button" class="btn btn-petit" data-cof-p-tester>${t("Test")}</button><div class="petit cof-resultat" aria-live="polite" hidden></div>` : ""}
   </div>`;
   return `<form class="bloc cof-form" id="cof-colle" autocomplete="off">
@@ -6392,7 +6392,7 @@ const lancerTacheSrv = (id, texte, env, terminal, depuis, suite) => lancerSansBa
 function lancerSansBarriere(url, corps) { // M293: also the project's first deployment ("Prepare now")
   return api(url, "POST", corps).catch(async (e) => {
     if (!e.data || !e.data.proposer_wsl) throw e;
-    const { choix: c, coche } = await choisir(t("Native Windows mode has no barrier: an agent working on your servers would run with all your rights on this PC. Switch to WSL, or force this task knowing the risk."),
+    const { choix: c, coche } = await choisir(t("Athanor runs directly on Windows, with no barrier: Claude, while working on your servers, would act with all your rights on this PC. Switch to WSL, the Linux built into Windows, which puts that barrier, or force this task if you accept the risk."),
       [{ id: "wsl", texte: t("Switch to WSL"), primaire: true }, { id: "forcer", texte: t("Force this task"), danger: true }, { id: "", texte: t("Cancel") }], { titre: t("Native Windows mode"), case: t("Don't remind me again") });
     if (c === "wsl") { location.hash = "#options@bloc-direct"; return null; }
     if (c !== "forcer") return null;
@@ -7494,14 +7494,14 @@ function rendreTransferts() {
 const ia = { visible: localStorage.getItem("athanor.terminal.ia") === "1", mode: localStorage.getItem("athanor.terminal.ia.mode") === "direct" ? "direct" : "apart",
   verrou: "", taches: [], plans: {}, lu: "", minuteur: 0, ouvertes: new Set(), suivi: true, envoi: false, file: [], autorisation: "" };
 // M244f: the assistant's permission mode, kept per server and decided in Go (serveurs_autorisation.go)
-const AUTORISATIONS_IA = () => [["manuel", t("Manual"), t("Asks you before every command, reads included.")],
-  ["auto", t("Auto"), t("Runs reads and changes at once; asks you before a dangerous command (deleting, formatting, stopping, permissions, firewall…) or a command it does not know.")],
-  ["modifications", t("Accept changes"), t("Writes its whole plan in the thread first, then applies it without waiting for you; asks you only when the plan holds a dangerous command or one it does not know.")],
+const AUTORISATIONS_IA = () => [["manuel", t("Manual"), t("Asks you before every command, even to look at the disk space. Stricter than a project's Manual, which reads its servers freely.")],
+  ["auto", t("Auto"), t("Runs each command at once, with no plan to read first: installing a package goes through, deleting a folder waits for you. Asks you before a dangerous command (deleting, formatting, stopping, permissions, firewall…) or a command it does not know.")],
+  ["modifications", t("Accept changes"), t("Writes its whole plan in the thread first (for example: install nginx, write its configuration, reload it), then applies it without waiting for you. Asks you only when the plan holds a dangerous command or one it does not know.")],
   ["ignorer", t("Ignore permissions"), t("Does everything without asking you, dangerous commands included.")]];
 // M272: the same four modes for a project on its servers (Manual keeps the plan rules)
-const PERMISSIONS_PROJET = () => [["manuel", t("Manual"), t("Reads the servers freely; asks your accord for each plan of changes.")],
-  ["auto", t("Auto"), t("Runs reads and changes on the servers at once; asks you before a dangerous command or a command it does not know.")],
-  ["modifications", t("Accept changes"), t("Applies its plans of changes without waiting for you; asks you only when a plan holds a dangerous command or one it does not know.")],
+const PERMISSIONS_PROJET = () => [["manuel", t("Manual"), t("Reads the servers freely; asks your accord for each plan of changes, for example before installing nginx.")],
+  ["auto", t("Auto"), t("Runs reads and changes on the servers at once, with no plan to read first: installing nginx goes through, deleting a folder waits for you. Asks you before a dangerous command or a command it does not know.")],
+  ["modifications", t("Accept changes"), t("Still writes a plan of its changes (for example: install nginx, write its configuration), then applies it without waiting for you. Asks you only when a plan holds a dangerous command or one it does not know.")],
   ["ignorer", t("Ignore permissions"), t("Does everything without asking you, dangerous commands and production deployments included, and never stops for a password.")]];
 // M272: the one permission selector (the terminal's assistant, a project, Settings › Permissions);
 // defaut: the "" option (Settings' mode); distant: Ignore permissions is chosen in Athanor's window only

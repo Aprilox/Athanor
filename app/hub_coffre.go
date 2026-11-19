@@ -67,7 +67,7 @@ func (s *Serveur) etatCoffre() EtatCoffre {
 func (moduleCoffre) Tutoriel() []EtapeTutoriel {
 	return []EtapeTutoriel{
 		{Titre: "Your keys", Texte: "Add your keys and settings here. Secrets are stored encrypted: once saved, a secret's value is never shown again, you can only replace or delete it.", Cible: ".cof-tete"},
-		{Titre: "Infra keys", Texte: "Infra keys (Cloudflare, SSH, your servers) open only with your password. Athanor keeps them and uses them itself when an action needs them: the AI never receives their value.", Cible: ".carte-coffre .badge-infra"},
+		{Titre: "Infra keys", Texte: "Infra keys (Cloudflare, SSH, your servers) open only with your password. Athanor keeps them and uses them itself when an action needs them: Claude never receives their value.", Cible: ".carte-coffre .badge-infra"},
 		{Titre: "Code keys", Texte: "Code keys (a service's API key, for instance) reopen alone on this PC. A project's pilot gets one only if you grant it to that project: it then reads its value, as a variable.", Cible: ".acc-grille", Page: "#acces"},
 		{Titre: "Before the start", Texte: "Next to Start, this badge says exactly what the pilot will receive.", Cible: ".acces-demarrer", Page: "#suivi"},
 		{Titre: "Remove at any time", Texte: "Untick a box or press Remove: the value is taken out of the pilot's file at once; a pilot already working keeps what it has read until the end of its cycle. This tutorial stays in the “?”, at the top of the Guide.", Cible: ".acc-projet", Page: "#acces"},
