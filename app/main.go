@@ -68,6 +68,7 @@ func main() {
 	s := nouveauServeur(config)
 	s.cleAcces = aleatoire(24) // only the windows Athanor opens can use the interface (acces.go)
 	s.demarrerProjetsAuto()
+	s.fermerTachesInterrompues() // M312c: a Servers task cut by Athanor's stop is closed, its first deployment waits again
 	s.refuserLancementsMission() // M302: what an old mission still asked the owner is refused, with its reason
 	s.surveillerVerrouAuto()     // the window locks itself after the owner's inactivity (verrou_auto.go)
 	if config.MDNS {

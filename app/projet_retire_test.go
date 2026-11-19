@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -58,5 +59,61 @@ func TestProjetRetireApprobations(t *testing.T) {
 	}
 	if len(regles) != 1 || regles[0].Projet != "autre" {
 		t.Errorf("rules after the removal: %+v", regles)
+	}
+}
+
+// TestTachesProjetRetireEtInterrompues (M312c): a removed project's running Servers task is stopped (another
+// project's goes on); a task cut by Athanor's stop is closed at the next start, an ended one untouched, and the
+// first deployment it was making waits to be started again.
+func TestTachesProjetRetireEtInterrompues(t *testing.T) {
+	s := serveurCoffreTest(t)
+	demo := Projet{Nom: "demo312", Dossier: filepath.Join(t.TempDir(), "demo312")}
+	s.mu.Lock()
+	s.config.Projets = []Projet{demo}
+	s.mu.Unlock()
+	t.Cleanup(func() { _ = os.RemoveAll(dossierTaches("m312")); oublierRelais("demo312"); oublierRelais("autre312") })
+	en := map[string]*tacheEnCours{}
+	for id, env := range map[string]string{"t312a": "demo312", "t312b": "autre312"} {
+		ctx, annuler := context.WithCancelCause(context.Background())
+		en[id] = &tacheEnCours{t: TacheServeurs{ID: id, Env: env, Serveurs: []string{"m312"}}, hache: "h" + id, annuler: annuler, ctx: ctx}
+		tachesEnCours.Lock()
+		tachesEnCours.m[id] = en[id]
+		tachesEnCours.Unlock()
+		t.Cleanup(func() { annuler(nil); tachesEnCours.Lock(); delete(tachesEnCours.m, id); tachesEnCours.Unlock() })
+	}
+	ecrireRelais("demo312", RelaisJalon{Etat: "preparation", Premier: "t312a"})
+	ecrireRelais("autre312", RelaisJalon{Etat: "preparation", Premier: "t312b"})
+	if err := s.retirerProjet(demo); err != nil {
+		t.Fatal(err)
+	}
+	if !en["t312a"].arretee() || en["t312b"].arretee() {
+		t.Errorf("after the removal: the project's task stopped %v (want true), another project's %v (want false)", en["t312a"].arretee(), en["t312b"].arretee())
+	}
+	if _, reste := lireRelais()["demo312"]; reste {
+		t.Error("the removed project's relay is still there")
+	}
+
+	for _, x := range []TacheServeurs{{ID: "t312c", Etat: "preparation"}, {ID: "t312d", Etat: "finie", Fin: "2026-11-19T00:00:00Z"}, {ID: "t312e", Etat: "preparation"}} {
+		x.Serveurs = []string{"m312"}
+		if err := enregistrerTache(x); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ecrireRelais("demo312", RelaisJalon{Etat: "preparation", Premier: "t312c", Commit: "abc"})
+	ecrireRelais("autre312", RelaisJalon{Etat: "preparation", Premier: "t312d", Preparation: &PreparationRelais{Tache: "t312e"}})
+	s.fermerTachesInterrompues()
+	c, d := tacheParID("m312", "t312c"), tacheParID("m312", "t312d")
+	if c.Etat != "arretee" || c.Fin == "" || len(c.Historique) != 1 || c.Historique[0].Detail != tacheInterrompue {
+		t.Errorf("the task cut by Athanor's stop: %+v", c)
+	}
+	if d.Etat != "finie" || len(d.Historique) != 0 {
+		t.Errorf("an ended task was touched: %+v", d)
+	}
+	if r := lireRelais(); r["demo312"].Etat != "attente" || r["demo312"].Commit != "abc" || r["autre312"].Etat != "preparation" || r["autre312"].Preparation.Tache != "" {
+		t.Errorf("relays after the start: %+v, %+v", r["demo312"], r["autre312"])
+	}
+	s.fermerTachesInterrompues() // a second start changes nothing more
+	if c2 := tacheParID("m312", "t312c"); len(c2.Historique) != 1 || c2.Fin != c.Fin {
+		t.Errorf("closed twice: %+v", c2)
 	}
 }

@@ -628,6 +628,53 @@ func (s *Serveur) arreterTache(id string) bool {
 	return e != nil
 }
 
+// tacheInterrompue: why a task found unfinished at Athanor's start is closed (translated by the interface).
+const tacheInterrompue = "Athanor stopped while this task ran"
+
+// fermerTachesInterrompues (M312c): at Athanor's start no task runs, so one that never ended was cut by Athanor's
+// own stop (killed, computer turned off): it is closed as stopped, its token revoked and its pending plans refused,
+// instead of staying "at work" for ever with a relay waiting behind it; a project's first deployment or servers'
+// preparation cut that way is made again, once, by the relay.
+func (s *Serveur) fermerTachesInterrompues() {
+	fichiers, _ := filepath.Glob(filepath.Join(dossierModule("servers"), "*", "taches", "*.json"))
+	coupees := map[string]bool{}
+	for _, f := range fichiers {
+		var t TacheServeurs
+		b, err := os.ReadFile(f)
+		if err != nil || json.Unmarshal(b, &t) != nil || t.ID == "" || t.Fin != "" {
+			continue
+		}
+		tachesEnCours.Lock()
+		vivante := tachesEnCours.m[t.ID] != nil
+		tachesEnCours.Unlock()
+		if vivante {
+			continue
+		}
+		t.Etat, t.Fin = "arretee", time.Now().UTC().Format(time.RFC3339)
+		t.Historique = append(t.Historique, EvenementTache{T: t.Fin, Etat: "arretee", Detail: tacheInterrompue})
+		if enregistrerTache(t) != nil {
+			continue
+		}
+		coupees[t.ID] = true
+		projet := prefixeTache + t.ID
+		s.revoquerJetons("tâche interrompue", func(x SessionHub) bool { return x.Projet == projet || strings.HasPrefix(x.Projet, projet+":") })
+		s.refuserPlansEnAttente(projet)
+		s.ecrireAudit(LigneAudit{Type: "evenement", De: "hub", Vers: "servers", Projet: projet, Mission: t.ID, Agent: agentServeurs,
+			Action: "tâche serveurs arretee", Resultat: tacheInterrompue})
+	}
+	for nom, r := range lireRelais() {
+		switch { // as after "Stop immediately" (arreterTachesProjet): each is made again, once
+		case r.Etat == "preparation" && coupees[r.Premier]:
+			r.Etat = "attente"
+		case r.Preparation != nil && coupees[r.Preparation.Tache]:
+			r.Preparation = &PreparationRelais{}
+		default:
+			continue
+		}
+		ecrireRelais(nom, r)
+	}
+}
+
 // tachesServeur: the tasks of a server, newest first (50 at most); a running one as it is now.
 func tachesServeur(id string) []TacheServeurs {
 	fichiers, _ := filepath.Glob(filepath.Join(dossierTaches(id), "*.json"))

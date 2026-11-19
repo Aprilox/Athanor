@@ -709,6 +709,7 @@ func (s *Serveur) retirerProjet(p Projet) error {
 	delete(s.dernierActif, p.Nom)
 	delete(s.relancer, p.Nom)
 	s.mu.Unlock()
+	s.arreterTachesProjet(p.Nom) // M312c: before its relay goes, which names them: no agent stays at work for a removed project
 	deplacerReglagesProjet(p.Nom, "")
 	deplacerRelais(p.Nom, "")
 	if s.acces != nil {
