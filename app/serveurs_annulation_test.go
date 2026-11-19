@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -52,7 +53,13 @@ func TestServeursAnnulationConteneur(t *testing.T) {
 	}
 	etat := ""
 	for fin := time.Now().Add(30 * time.Second); time.Now().Before(fin); time.Sleep(time.Second) {
-		etat = appel("ssh_commande", map[string]any{"commande": "sudo -n ufw show added; sudo -n cat " + fichier + " /var/backups/athanor/annul-" + r.Annulation + ".log"}).Sortie
+		// a poll that falls while the server does not answer (sshd reloading, a loaded PC) is tried again, not fatal
+		b, _ := json.Marshal(map[string]any{"commande": "sudo -n ufw show added; sudo -n cat " + fichier + " /var/backups/athanor/annul-" + r.Annulation + ".log"})
+		lu, err := s.appelerOutilServeur(ctx, "test", id, "ssh_commande", b, Sauvegarde{})
+		if err != nil {
+			continue
+		}
+		etat = lu.Sortie
 		if !strings.Contains(etat, "8181") && strings.Contains(etat, "rolled back") {
 			break
 		}

@@ -624,7 +624,8 @@ function depuis(iso) {
 function phraseEtat(v) {
   const e = v.etat || {};
   // no saved work yet: the project was never started, so "resume" would mislead a newcomer
-  const arrete = () => e.dernier_commit ? { classe: "", titre: t("Pilot stopped"), sous: t("Last saved work: {0}", [e.dernier_commit]) } : { classe: "", titre: t("Ready to start"), sous: t("Click Start: Claude begins with your request.") };
+  // paused or stopped now (relais.pause): the deployment is held too, and the screen says so
+  const arrete = () => e.dernier_commit ? { classe: "", titre: t("Pilot stopped"), sous: t("Last saved work: {0}", [e.dernier_commit]) + (v.relais && v.relais.pause ? " · " + t("Its deployment waits for Start.") : "") } : { classe: "", titre: t("Ready to start"), sous: t("Click Start: Claude begins with your request.") };
   if (!v.kit_valide) return { classe: "", titre: t("Tool folder not found"), sous: t("Set it in Options.") };
   if (!v.projet) return { classe: "", titre: v.kit_installe ? t("No project yet") : t("Ready to install"), sous: v.kit_installe ? t("Add a project: its development folder, and what you want.") : t("Follow the steps below: everything happens in this window.") };
   if (!v.actif) {
@@ -2602,7 +2603,8 @@ function ligneRelais(r, lien = true) { // lien false: in the Deployment tab itse
   // M284: no deployment method yet is an information, never a failure (its button is in the Deployment tab)
   const onglet = lien ? ` <a class="petit" href="#deploiement">${t("Open the Deployment tab")}</a>` : "";
   if (r.etat === "a_preparer") return `<span class="badge">${h(t("First deployment to prepare"))}</span>${onglet}`;
-  const [icone, etiquette] = r.etat === "preparation" ? ["attente", "First deployment in progress"] : r.etat === "attente" ? ["attente", "Waiting for the milestone's commit on GitHub"] : r.etat === "lance" ? ETATS_DEPLOI.en_cours : ETATS_DEPLOI[r.etat] || ["", r.etat];
+  // held by the owner's pause or stop: neither "in progress" nor "waiting for GitHub" would be true
+  const [icone, etiquette] = r.pause && (r.etat === "preparation" || r.etat === "attente") ? ["attente", "On hold until Start"] : r.etat === "preparation" ? ["attente", "First deployment in progress"] : r.etat === "attente" ? ["attente", "Waiting for the milestone's commit on GitHub"] : r.etat === "lance" ? ETATS_DEPLOI.en_cours : ETATS_DEPLOI[r.etat] || ["", r.etat];
   return `<span class="badge">${icone ? ic(icone) : ""} ${h(t(etiquette))}</span> <code>${h((r.commit || "").slice(0, 7))}</code> <span class="muet petit">${[r.jalon ? md(r.jalon) : "", h(dateLisible(r.date))].filter(Boolean).join(" · ")}</span>${r.erreur ? `<div class="petit attention">${h(t(r.erreur))}</div>` : ""}${onglet}`;
 }
 
