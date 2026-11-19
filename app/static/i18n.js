@@ -49,6 +49,9 @@ const PREFIXES = ["Resume: new request ", "Resume: what changed in .athanor/REQU
 
 const DICT = {
 fr: {
+  "Athanor is stopped on this computer. Start it again from its shortcut: it opens a new window, and you can close this one.": "Athanor est arrêté sur cet ordinateur. Relancez-le depuis son raccourci : il ouvre une nouvelle fenêtre, et vous pouvez fermer celle-ci.",
+  "Athanor no longer answers: its computer is off or asleep, or Athanor is stopped there. This page resumes by itself as soon as it answers.": "Athanor ne répond plus : son ordinateur est éteint ou en veille, ou Athanor y est arrêté. Cette page reprend toute seule dès qu'il répond.",
+  "Athanor no longer answers.": "Athanor ne répond plus.",
   "A server already has this name: give this one another name": "Un serveur porte déjà ce nom : donnez-en un autre à celui-ci",
   "The brief Athanor gave its agent (in English)": "La consigne qu'Athanor a donnée à son agent (en anglais)",
   "A technical record, kept as it was written: action codes, and the answers given to the agents in their working language (English). Athanor translates the messages it knows; nothing here is rewritten.": "Un relevé technique, gardé tel qu'il a été écrit : des codes d'action, et les réponses données aux agents dans leur langue de travail (l'anglais). Athanor traduit les messages qu'il connaît ; rien ici n'est réécrit.",
@@ -916,6 +919,9 @@ fr: {
   "Run a command": "Lancer une commande", "The task failed without giving a reason.": "La tâche a échoué sans donner de raison.",
 },
 es: {
+  "Athanor is stopped on this computer. Start it again from its shortcut: it opens a new window, and you can close this one.": "Athanor está detenido en este ordenador. Vuelva a iniciarlo desde su acceso directo: abre una ventana nueva y puede cerrar esta.",
+  "Athanor no longer answers: its computer is off or asleep, or Athanor is stopped there. This page resumes by itself as soon as it answers.": "Athanor ya no responde: su ordenador está apagado o en reposo, o Athanor está detenido allí. Esta página se reanuda sola en cuanto responda.",
+  "Athanor no longer answers.": "Athanor ya no responde.",
   "A server already has this name: give this one another name": "Un servidor ya tiene este nombre: dé otro nombre a este",
   "The brief Athanor gave its agent (in English)": "La consigna que Athanor dio a su agente (en inglés)",
   "A technical record, kept as it was written: action codes, and the answers given to the agents in their working language (English). Athanor translates the messages it knows; nothing here is rewritten.": "Un registro técnico, guardado tal como se escribió: códigos de acción y las respuestas dadas a los agentes en su idioma de trabajo (inglés). Athanor traduce los mensajes que conoce; aquí no se reescribe nada.",
@@ -1751,6 +1757,9 @@ es: {
   "Run a command": "Ejecutar un comando", "The task failed without giving a reason.": "La tarea falló sin dar un motivo.",
 },
 de: {
+  "Athanor is stopped on this computer. Start it again from its shortcut: it opens a new window, and you can close this one.": "Athanor ist auf diesem Computer beendet. Starten Sie es über seine Verknüpfung neu: Es öffnet ein neues Fenster, und Sie können dieses schließen.",
+  "Athanor no longer answers: its computer is off or asleep, or Athanor is stopped there. This page resumes by itself as soon as it answers.": "Athanor antwortet nicht mehr: Sein Computer ist aus oder im Ruhezustand, oder Athanor ist dort beendet. Diese Seite macht von selbst weiter, sobald es antwortet.",
+  "Athanor no longer answers.": "Athanor antwortet nicht mehr.",
   "A server already has this name: give this one another name": "Ein Server trägt bereits diesen Namen: Geben Sie diesem einen anderen",
   "The brief Athanor gave its agent (in English)": "Der Auftrag, den Athanor seinem Agenten gab (auf Englisch)",
   "A technical record, kept as it was written: action codes, and the answers given to the agents in their working language (English). Athanor translates the messages it knows; nothing here is rewritten.": "Ein technisches Protokoll, so aufbewahrt, wie es geschrieben wurde: Aktionscodes und die Antworten an die Agenten in deren Arbeitssprache (Englisch). Athanor übersetzt die Meldungen, die es kennt; hier wird nichts umgeschrieben.",
@@ -2580,6 +2589,9 @@ de: {
   "Run a command": "Einen Befehl ausführen", "The task failed without giving a reason.": "Die Aufgabe ist ohne Angabe eines Grundes fehlgeschlagen.",
 },
 it: {
+  "Athanor is stopped on this computer. Start it again from its shortcut: it opens a new window, and you can close this one.": "Athanor è fermo su questo computer. Riavviatelo dal suo collegamento: apre una nuova finestra e potete chiudere questa.",
+  "Athanor no longer answers: its computer is off or asleep, or Athanor is stopped there. This page resumes by itself as soon as it answers.": "Athanor non risponde più: il suo computer è spento o in sospensione, oppure Athanor è fermo lì. Questa pagina riprende da sola appena risponde.",
+  "Athanor no longer answers.": "Athanor non risponde più.",
   "A server already has this name: give this one another name": "Un server ha già questo nome: dai un altro nome a questo",
   "The brief Athanor gave its agent (in English)": "La consegna che Athanor ha dato al suo agente (in inglese)",
   "A technical record, kept as it was written: action codes, and the answers given to the agents in their working language (English). Athanor translates the messages it knows; nothing here is rewritten.": "Un registro tecnico, conservato così come è stato scritto: codici di azione e le risposte date agli agenti nella loro lingua di lavoro (inglese). Athanor traduce i messaggi che conosce; qui nulla viene riscritto.",
@@ -3409,6 +3421,9 @@ it: {
   "Run a command": "Eseguire un comando", "The task failed without giving a reason.": "L'attività non è riuscita senza indicare un motivo.",
 },
 pt: {
+  "Athanor is stopped on this computer. Start it again from its shortcut: it opens a new window, and you can close this one.": "O Athanor está parado neste computador. Inicie-o de novo pelo atalho: ele abre uma nova janela e pode fechar esta.",
+  "Athanor no longer answers: its computer is off or asleep, or Athanor is stopped there. This page resumes by itself as soon as it answers.": "O Athanor já não responde: o computador dele está desligado ou em suspensão, ou o Athanor está parado lá. Esta página retoma sozinha assim que ele responder.",
+  "Athanor no longer answers.": "O Athanor já não responde.",
   "A server already has this name: give this one another name": "Um servidor já tem este nome: dê outro nome a este",
   "The brief Athanor gave its agent (in English)": "A instrução que o Athanor deu ao seu agente (em inglês)",
   "A technical record, kept as it was written: action codes, and the answers given to the agents in their working language (English). Athanor translates the messages it knows; nothing here is rewritten.": "Um registo técnico, guardado tal como foi escrito: códigos de ação e as respostas dadas aos agentes na sua língua de trabalho (inglês). O Athanor traduz as mensagens que conhece; aqui nada é reescrito.",

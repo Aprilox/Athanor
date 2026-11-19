@@ -106,10 +106,11 @@ function messageDe(r) {
 async function api(chemin, methode = "GET", corps) {
   if (methode !== "GET") etat.hubLu = 0; // a change: the next lireHub() asks again
   if (etat.projet) chemin += (chemin.includes("?") ? "&" : "?") + "p=" + encodeURIComponent(etat.projet);
+  // Athanor stopped or out of reach: said in plain words, never the browser's "Failed to fetch" (M313b3)
   const r = await fetch("/api/" + chemin, {
     method: methode, headers: { "X-Athanor": CSRF, "Content-Type": "application/json" },
     body: corps === undefined ? undefined : JSON.stringify(corps),
-  });
+  }).catch(() => { throw new Error(t("Athanor no longer answers.")); });
   const data = await r.json().catch(() => ({}));
   if (r.status === 401 && data.erreur_key === "Not paired") { afficherNonAppaire(); throw new Error(t("Not paired")); }
   if (r.status === 401 && data.erreur_key === "Locked") { etat.verrouille = true; afficherVerrou(); throw new Error(t("Locked")); }
@@ -788,7 +789,7 @@ const alertesHub = () => (etat.hub && etat.hub.alertes) || [];
 function boutonCloche(v, classe) {
   const n = alertesHub().length;
   if (!n && !projetsVisibles(v).length && !((etat.hub || {}).ignorees || []).length) return "";
-  const titre = n ? alertesVous(n) : t("Nothing needs you right now.");
+  const titre = etat.coupe ? t("Athanor no longer answers.") : n ? alertesVous(n) : t("Nothing needs you right now.");
   return `<button type="button" class="${classe} cloche${n ? " sonne" : ""}" data-notifs aria-haspopup="true" aria-expanded="${etat.notifsOuvert ? "true" : "false"}" aria-label="${h(titre)}" title="${h(titre)}"><svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.94 1.94 0 0 0 3.4 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>${n ? `<span class="cloche-n">${n}</span>` : ""}</button>`;
 }
 // the Guide: a "?" beside the bell (it is no menu entry any more)
@@ -810,7 +811,7 @@ function rendreNotifs(v) {
   if (m.hidden) return;
   const liste = alertesHub(), cachees = (etat.hub || {}).ignorees || [];
   const html = `<div class="notifs-titre" id="notifs-titre">${t("Alerts")}</div>
-    <div class="alertes">${liste.map((a) => ligneAlerte(a, false)).join("") || `<div class="muet petit notifs-vide">${t("Nothing needs you right now.")}</div>`}</div>
+    <div class="alertes">${liste.map((a) => ligneAlerte(a, false)).join("") || `<div class="muet petit notifs-vide">${etat.coupe ? t("Athanor no longer answers.") : t("Nothing needs you right now.")}</div>`}</div>
     ${cachees.length ? `<details class="alertes-ignorees"${etat.ignoreesOuvert ? " open" : ""}><summary>${t("Ignored alerts ({0})", [cachees.length])}</summary><div class="alertes">${cachees.map((a) => ligneAlerte(a, true)).join("")}</div></details>` : ""}
     <a href="#global" class="menu-nouveau">${t("Projects")} →</a>`;
   if (m.dataset.html !== html) { m.dataset.html = html; m.innerHTML = html; }
@@ -2187,7 +2188,7 @@ pages.accueil = async () => {
   etat.mentionsSugg = sugg.mentions || []; etat.mentionListe = null;
   const hc = etat.hubChat || { messages: [], pouvoirs: {} };
   setTimeout(() => majHubChat(true), 0);
-  return `<div class="accueil">${d.panne ? `<p class="bloc erreur" role="alert">${h(t("Athanor could not read its modules ({0}): the menu keeps its first entries. Reload the page in a moment.", [d.panne]))}</p>` : ""}
+  return `<div class="accueil">${d.panne ? `<p class="bloc erreur" role="alert">${h(d.panne === t("Athanor no longer answers.") ? d.panne : t("Athanor could not read its modules ({0}): the menu keeps its first entries. Reload the page in a moment.", [d.panne]))}</p>` : ""}
     <form class="bloc accueil-barre accueil-chat" id="accueil-form" data-pieces="hc">
       <div class="ligne m0 chat-tete"><label for="accueil-texte" class="accueil-titre croit">${t("What do you want to do?")}</label>
         <button type="button" class="btn btn-petit" id="hub-chat-aide" title="${h(t("How the assistant works"))}" aria-label="${h(t("How the assistant works"))}">?</button>
@@ -6408,7 +6409,9 @@ $("#page").addEventListener("click", async (ev) => {
   b.disabled = true;
   if (d.srvRafraichir !== undefined || d.srvDurcir) b.textContent = t("Reading the server…");
   try {
-    const r = await action(api(d.srvVerifier ? "serveurs/ajouter" : url, "POST", d.srvVerifier ? { id: x.id } : d.srvCouper ? { couper_mot_de_passe: true } : d.srvDurcir ? { durcir: true } : { rafraichir: true }));
+    // a refusal the terminal knows what to do about says it here too (M313b3)
+    const r = await action(api(d.srvVerifier ? "serveurs/ajouter" : url, "POST", d.srvVerifier ? { id: x.id } : d.srvCouper ? { couper_mot_de_passe: true } : d.srvDurcir ? { durcir: true } : { rafraichir: true })
+      .catch((e) => { const sol = SOLUTIONS_TERMINAL[e.data && e.data.erreur_key]; if (sol) e.message += " " + t(sol); throw e; }));
     if (!r) return;
     if (d.srvDurcir) { toast(r.deja ? t("{0} is already hardened: every step is in place.", [x.nom]) : t("Hardening plan ready ({0} steps): read it and accept it in Approvals.", [String(r.etapes.length)]), "ok"); return; }
     if (r.fiche_erreur) toast(t(r.fiche_erreur), "erreur");
@@ -8183,7 +8186,9 @@ async function rafraichir() {
   etat.rafraichiLe = Date.now();
   try {
     const demande = etat.projet;
-    const v = await fetch("/api/etat" + (demande ? "?p=" + encodeURIComponent(demande) : ""), { headers: { "X-Athanor": CSRF } }).then((r) => r.json());
+    const v = await fetch("/api/etat" + (demande ? "?p=" + encodeURIComponent(demande) : ""), { headers: { "X-Athanor": CSRF } }).then((r) => r.json()).catch((e) => { throw Object.assign(e, { coupure: true }); });
+    etat.echecs = 0;
+    if (etat.coupe) { etat.coupe = false; $("#coupure").hidden = true; rendrePage(); chargerMenu(); } // Athanor answers again: the page resumes by itself
     if (v.erreur_key === "Not paired") return afficherNonAppaire();
     if (etat.projet !== demande) return; // another project chosen meanwhile: this answer is stale, the choice refreshes again
     etat.vue = v;
@@ -8257,6 +8262,14 @@ async function rafraichir() {
     etat.majRedemarre = !!(v.maj && v.maj.en_cours === "redemarrage");
   } catch (e) {
     // server briefly unreachable; after an update, the new version opens its own window
+    // two refreshes in a row without an answer (3 s): said once in the page, until Athanor answers again (M313b3)
+    if (e.coupure && !etat.majRedemarre && (etat.echecs = (etat.echecs || 0) + 1) === 2) {
+      etat.coupe = true; const el = $("#coupure");
+      el.textContent = document.body.classList.contains("distant")
+        ? t("Athanor no longer answers: its computer is off or asleep, or Athanor is stopped there. This page resumes by itself as soon as it answers.")
+        : t("Athanor is stopped on this computer. Start it again from its shortcut: it opens a new window, and you can close this one.");
+      el.hidden = false;
+    }
     if (etat.majRedemarre && !etat.majAnnonce) { etat.majAnnonce = true; toast(t("Athanor restarts in a new window: you can close this one.")); try { window.close(); } catch (x) { /* not ours to close */ } }
   }
 }

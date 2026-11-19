@@ -363,6 +363,9 @@ a[data-href] { cursor: pointer; }
 
 /* --- header: the state in one living sentence */
 .principal { display: flex; flex-direction: column; min-width: 0; height: 100%; }
+/* Athanor stopped or out of reach (M313b3): said above the page until it answers again */
+.coupure { margin: 14px 32px 0; border-left: 4px solid var(--erreur); }
+@media (max-width: 1150px) { .coupure { margin: 10px 14px 0; } }
 .bandeau { padding: 22px 32px 16px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 14px 20px; flex-wrap: wrap; }
 .etat-phrase { flex: 1; min-width: 0; }
 .etat-phrase { flex-basis: 420px; }
