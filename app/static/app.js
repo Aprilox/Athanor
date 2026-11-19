@@ -6302,7 +6302,7 @@ function carteTacheServeur(x, plans, distant) {
       ${attend ? `<p class="m0"><a href="#pourvous" class="btn btn-primaire" data-srv-tache-carte="${h(id)}">${t("Decide on its card")}</a></p>` : ""}</div>`;
   }).join("");
   const v = x.verification;
-  return `<details class="srv-tache" data-tache="${h(x.id)}"${srv.ouvertes.has(x.id) ? " open" : ""}><summary><span class="pv-etat ${cl}">${h(lib)}</span> <span class="srv-tache-texte">${h(titreTache(x))}</span>
+  return `<details class="srv-tache" data-tache="${h(x.id)}"${srv.ouvertes.has(x.id) ? " open" : ""}><summary><span class="pv-etat ${cl}">${h(lib)}</span> <span class="srv-tache-texte" title="${h(titreTache(x))}">${h(titreTache(x))}</span>
       <span class="muet petit">${h(dateLisible(x.cree))} · ${h(dureeTache(x))}</span></summary>
     <div class="srv-tache-corps">${titreTache(x) === x.texte ? `<p class="pv-details">${h(x.texte)}</p>` /* B2: Athanor's own task says what it is in the page's language, its agent's English brief folded under it */
         : `<p class="pv-details">${h(titreTache(x))}</p><details class="petit"><summary class="muet">${t("The brief Athanor gave its agent (in English)")}</summary><p class="pv-details">${h(x.texte)}</p></details>`}
@@ -6760,7 +6760,7 @@ function typeSftp(x) {
 }
 function tailleSftp(n) {
   const u = n >= 1e9 ? ["gigabyte", 1e9] : n >= 1e6 ? ["megabyte", 1e6] : n >= 1e3 ? ["kilobyte", 1e3] : ["byte", 1];
-  return new Intl.NumberFormat(document.documentElement.lang || "en", { style: "unit", unit: u[0], unitDisplay: "short", maximumFractionDigits: u[1] > 1 ? 1 : 0 }).format(n / u[1]);
+  return new Intl.NumberFormat(document.documentElement.lang || "en", { style: "unit", unit: u[0], unitDisplay: u[1] > 1 ? "short" : "long" /* "220 bytes", never the short "220 byte" */, maximumFractionDigits: u[1] > 1 ? 1 : 0 }).format(n / u[1]);
 }
 function vuesSftp(p) {
   const f = p.filtre.trim().toLowerCase(), c = new Intl.Collator(document.documentElement.lang || "en", { numeric: true, sensitivity: "base" });
