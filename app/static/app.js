@@ -104,13 +104,13 @@ function messageDe(r) {
   return r.message || "";
 }
 async function api(chemin, methode = "GET", corps) {
-  if (methode !== "GET") etat.hubLu = 0; // a change: the next lireHub() asks again
+  if (methode !== "GET") { etat.hubLu = 0; etat.ecritLe = Infinity; } // a change: the next lireHub() asks again; ecritLe: see rafraichir
   if (etat.projet) chemin += (chemin.includes("?") ? "&" : "?") + "p=" + encodeURIComponent(etat.projet);
   // Athanor stopped or out of reach: said in plain words, never the browser's "Failed to fetch" (M313b3)
   const r = await fetch("/api/" + chemin, {
     method: methode, headers: { "X-Athanor": CSRF, "Content-Type": "application/json" },
     body: corps === undefined ? undefined : JSON.stringify(corps),
-  }).catch(() => { throw new Error(t("Athanor no longer answers.")); });
+  }).catch(() => { throw new Error(t("Athanor no longer answers.")); }).finally(() => { if (methode !== "GET") etat.ecritLe = Date.now(); });
   const data = await r.json().catch(() => ({}));
   if (r.status === 401 && data.erreur_key === "Not paired") { afficherNonAppaire(); throw new Error(t("Not paired")); }
   if (r.status === 401 && data.erreur_key === "Locked") { etat.verrouille = true; afficherVerrou(); throw new Error(t("Locked")); }
@@ -622,11 +622,26 @@ function depuis(iso) {
   const s = Math.max(0, (Date.now() - d.getTime()) / 1000);
   return s < 3600 ? t("{0} min", [Math.floor(s / 60)]) : t("{0} h {1} min", [Math.floor(s / 3600), String(Math.floor((s % 3600) / 60)).padStart(2, "0")]);
 }
+// M315: a stop asked for the end of the milestone shows in the header while Claude finishes it
 function phraseEtat(v) {
+  const p = phraseEtatSeule(v);
+  if (v.actif && v.arret_demande === "arret") p.sous = [t("Stops at the end of the milestone."), p.sous].filter(Boolean).join(" · ");
+  return p;
+}
+const TITRES_ARRET = { pause: "Paused", arret: "Project stopped", jalon: "Stopped at the end of the milestone" };
+function phraseEtatSeule(v) {
   const e = v.etat || {};
   // no saved work yet: the project was never started, so "resume" would mislead a newcomer
   // paused or stopped now (relais.pause): the deployment is held too, and the screen says so
-  const arrete = () => e.dernier_commit ? { classe: "", titre: t("Pilot stopped"), sous: t("Last saved work: {0}", [e.dernier_commit]) + (v.relais && v.relais.pause ? " · " + t("Its deployment waits for Start.") : "") } : { classe: "", titre: t("Ready to start"), sous: t("Click Start: Claude begins with your request.") };
+  const termine = { classe: "", titre: t("Project finished"), sous: t("The deliverable and the final report are in the project folder. To go on, add a request or a note, then Start.") };
+  // M315: which stop it was (the owner's choice, api_projets.go), a finished project never "stopped", and a click on Start shows at once
+  const arrete = () => {
+    const a = (v.projet || {}).arret;
+    if ((etat.demarrage[(v.projet || {}).nom] || 0) > Date.now()) return { classe: "", titre: t("Starting…"), sous: t("Claude takes a few seconds to show up.") };
+    if (e.phase === "termine") return termine;
+    if (!e.dernier_commit) return { classe: "", titre: t("Ready to start"), sous: t("Click Start: Claude begins with your request.") };
+    return { classe: "", titre: t(TITRES_ARRET[a] || "Pilot stopped"), sous: [t("Last saved work: {0}", [e.dernier_commit]), a === "pause" && t("Start picks it up where it stopped."), v.relais && v.relais.pause && t("Its deployment waits for Start.")].filter(Boolean).join(" · ") };
+  };
   if (!v.kit_valide) return { classe: "", titre: t("Tool folder not found"), sous: t("Set it in Options.") };
   if (!v.projet) return { classe: "", titre: v.kit_installe ? t("No project yet") : t("Ready to install"), sous: v.kit_installe ? t("Add a project: its development folder, and what you want.") : t("Follow the steps below: everything happens in this window.") };
   if (!v.actif) {
@@ -644,7 +659,7 @@ function phraseEtat(v) {
     case "entre_cycles": return { classe: "entre_cycles", titre: t("Between two cycles"), sous: t("Cycle {0} is done, the next one starts with a fresh context.", [e.cycle]) };
     case "erreur": return { classe: "erreur", titre: t("Error, retry scheduled"), sous: e.etat };
     case "connexion": return { classe: "connexion", titre: t("Connection problem"), sous: t("Check the token or the API key in Settings, or go through Setup & health: a new one is used at once.") };
-    case "termine": return { classe: "", titre: t("Project finished"), sous: t("The deliverable and the final report are in the project folder. To go on, add a request or a note, then Start.") };
+    case "termine": return termine;
     default: return { classe: "", titre: e.etat ? t(e.etat) : t("Pilot started"), sous: t("cycle {0}", [e.cycle || 0]) };
   }
 }
@@ -780,7 +795,7 @@ function besoinProjet(x) {
   return null;
 }
 function phraseProjet(x) {
-  if (!x.actif) return x.phase === "termine" ? t("Project finished") : t("Pilot stopped");
+  if (!x.actif) return x.phase === "termine" ? t("Project finished") : t(TITRES_ARRET[x.arret] || "Pilot stopped");
   return { travail: t("Claude is working"), quota: t("Usage limit reached, Claude is waiting"), budget: t("API budget or credit used up, Claude is waiting"), attente_vous: t("Claude is waiting for you"), entre_cycles: t("Between two cycles"), erreur: t("Error, retry scheduled"), connexion: t("Connection problem") }[x.phase] || t("Pilot started");
 }
 const projetsVisibles = (v) => (v.projets || []).filter((x) => !x.archive);
@@ -1024,7 +1039,7 @@ async function arreterPilote(b) {
   }
   // M298: three ways, as the request asks: the pause keeps the server tasks of the project's deployment, a stop cancels them
   const c = await choisirArret(t("Stop the pilot?"), ["jalon", "pause", "immediat"], {
-    jalon: "Finish the current milestone: Claude completes it and saves it, then the pilot stops. Nothing is lost.",
+    jalon: "Finish the current milestone: Claude completes it and saves it, then the pilot stops. Nothing is lost. A deployment set after each milestone still puts this milestone online.",
     pause: "Put on pause: the pilot stops now and the project's deployment waits. Its server tasks stay and change nothing until Start.",
     immediat: "Stop immediately: the current cycle is cut off and the server tasks of the project's deployment are cancelled. Start does again what was not saved." });
   if (c === "immediat" || c === "pause") { b.disabled = true; await action(api(c === "pause" ? "pilote/pause" : "pilote/arreter", "POST")); setTimeout(rafraichir, 800); }
@@ -1991,7 +2006,7 @@ function ligneElement(e, modules) {
   const lien = e.projet ? `href="${h(cible)}" data-projet="${h(e.projet)}" data-cible="${h(cible.replace(/^#/, ""))}"` : `href="${h(cible)}"`;
   return `<a ${lien} class="bloc carte-projet ligne-element${e.attente ? " besoin" : ""}${e.projet && etat.vue && etat.vue.projet && etat.vue.projet.nom === e.projet ? " courant" : ""}">
     <div class="cp-tete"><span class="dot ${classe}" aria-hidden="true"></span><b class="cp-nom" title="${h(e.titre)}">${h(e.titre)}</b><span class="pastille-module"><span class="ico ico-${h(m.id)}" aria-hidden="true"></span>${h(t(m.nom))}</span></div>
-    <div class="el-etat petit">${e.attente ? `<span class="cp-besoin">${t("Needs you")}</span> <span class="el-raison" title="${h(t(e.attente.raison, (e.attente.args || []).map(texteMessage)))}">${h(t(e.attente.raison, (e.attente.args || []).map(texteMessage)))}</span>` : `<span class="muet">${t(libelle)}</span>`}</div>
+    <div class="el-etat petit">${e.attente ? `<span class="cp-besoin">${t("Needs you")}</span> <span class="el-raison" title="${h(t(e.attente.raison, (e.attente.args || []).map(texteMessage)))}">${h(t(e.attente.raison, (e.attente.args || []).map(texteMessage)))}</span>` : `<span class="muet">${t(TITRES_ARRET[e.arret] || libelle)}</span>`}</div>
     ${act ? `<div class="cp-jalon petit" title="${h(act)}">${h(act)}</div>` : ""}
     ${a && a.total ? `<div class="barre"><i style="width:${(a.fait / a.total) * 100}%"></i></div>` : ""}${a && a.texte ? `<div class="muet petit">${a.total ? texteEtape({ etape: a.etape_plan, etapes: a.etapes_plan }) : ""}${h(t(a.texte, [a.fait, a.total]))}</div>` : ""}
   </a>`;
@@ -2302,20 +2317,22 @@ function carteActionHub(c, i) {
       <br>${t("{0}: {1}", [t("When to deploy"), t(dpl.moment === "jalon" ? "After each milestone" : "At delivery")])}${dpl.plan ? `<br>${v(dpl.plan)}` : ""}</div>`;
   const permission = perm && !ouverte ? `<div class="petit${perm === "ignorer" ? " attention" : ""}">${t("{0}: {1}", [t("Permissions"), h(titrePermission(perm))])}</div>` : "";
   const texte = ty === "pilote" || equipe || existant ? "" : `<label class="champ"><span>${t("Text")}</span><textarea data-cact="texte" rows="5">${v(c.texte)}</textarea></label>`;
+  // M315 (S20): a card refused with an error is to be edited first (Edit is its main button, when it has one); a decided card is folded
+  const aCorriger = !!c.erreur && ty !== "attribuer" && ty !== "mission";
   const decide = c.etat ? `<div class="${c.etat === "lancee" ? "ok" : "muet"} petit" role="status">${c.etat === "lancee" ? (ic("ok") + " ") + t("Launched") : (ic("croix") + " ") + t("Refused")}${c.resultat ? " — " + h(t(c.resultat, (c.args || []).map((x) => t(x)))) : ""}${(c.args || []).includes(SANS_CLAUDE) ? ` <a href="#claude">${t("Open Settings › Claude")}</a>` : ""}</div>${tache}`
     : `${c.erreur ? `<div class="attention petit" role="alert">${h(t(c.erreur))}</div>` : ""}
       ${equipe ? equipe.vue : ""}<div class="carte-action-champs"${ouverte ? "" : " hidden"}>${equipe ? equipe.champs : f ? (ouverte ? champsCarteProjet(c, f, existant) : "") : champs + titre + texte}</div>
-      <div class="ligne m0 mt-1">${ty === "mission" ? "" : `<button type="button" class="btn btn-petit btn-primaire" data-cact-decision="lancer" data-index="${i}">${t("Launch")}</button>`}
-        ${ty === "attribuer" || ty === "mission" ? "" : `<button type="button" class="btn btn-petit" data-cact-modifier aria-expanded="${ouverte}">${t("Edit")}</button>`}
+      <div class="ligne m0 mt-1">${ty === "mission" ? "" : `<button type="button" class="btn btn-petit${aCorriger ? "" : " btn-primaire"}" data-cact-decision="lancer" data-index="${i}">${t("Launch")}</button>`}
+        ${ty === "attribuer" || ty === "mission" ? "" : `<button type="button" class="btn btn-petit${aCorriger ? " btn-primaire" : ""}" data-cact-modifier aria-expanded="${ouverte}">${t("Edit")}</button>`}
         <button type="button" class="btn btn-petit" data-cact-decision="refuser" data-index="${i}">${t("Refuse")}</button></div>`;
   const sur = f && !existant ? f.projet + " — " + f.dossier : c.sur, texteVu = f ? f.texte : c.texte;
   return `<div class="chat-msg chat-claude"><div class="chat-bulle chat-note carte-action" data-carte-action="${i}" data-type="${v(ty)}" ${ty === "attribuer" ? `data-element="${v(c.element)}" data-nom="${v(c.nom)}"` : ""}>
-    <div class="muet petit">${t("Action proposed: nothing runs before you launch it")}</div>
-    <div><b>${h(t(c.quoi || "Action"))}</b></div>
+    ${c.etat ? `<details><summary><b>${h(t(c.quoi || "Action"))}</b></summary>` : `<div class="muet petit">${t("Action proposed: nothing runs before you launch it")}</div>
+    <div><b>${h(t(c.quoi || "Action"))}</b></div>`}
     <div class="petit">${t("{0}: {1}", [t("On"), `<code class="croit">${v(sur)}</code>`])}</div>
     ${c.titre ? `<div><b>${v(c.titre)}</b></div>` : ""}${texteVu && !ouverte ? `<div class="petit">${mdChat(texteVu)}</div>` : ""}${deploiement}${permission}
     <div class="petit muet">${t("{0}: {1}", [t("With which accesses"), ""])}</div><ul class="petit m0" data-cp-acces>${accesCarteProjet(c, f)}</ul>
-    ${decide}</div></div>`;
+    ${c.etat ? "</details>" : ""}${decide}</div></div>`;
 }
 // M295b: the `projet` card as the owner changes it under Edit, kept by message until it is decided (a card proposed
 // again, its fingerprint changed, starts from the proposal). One card is open at a time: its fields carry ids.
@@ -4268,7 +4285,9 @@ pages.demandes = async () => {
         <label class="champ"><span>${t("What you want")}</span><textarea id="nd-texte" rows="6" placeholder="${h(t("Describe the expected result, for whom, on which platform. Technologies are free unless you impose one."))}"></textarea></label>
         ${barreAmeliorer("nd-texte")}
         ${zonePieces("nd")}
-        <button class="btn btn-primaire" id="nd-ajouter">${t("Add to the queue")}</button>
+        ${etat.vue && etat.vue.projet && etat.vue.kit_valide && !etat.vue.actif
+          ? `<div class="ligne"><button class="btn btn-primaire" id="nd-demarrer">${t("Add and start")}</button><button class="btn" id="nd-ajouter">${t("Add without starting")}</button></div>`
+          : `<button class="btn btn-primaire" id="nd-ajouter">${t("Add to the queue")}</button>`}
       </div>
       <div class="bloc"><h2>${t("Note along the way")}</h2>
         <p class="intro petit">${t("To correct without waiting: Claude reads it at the start of the next cycle, during the current request.")}</p>
@@ -4291,7 +4310,7 @@ pages.demandes = async () => {
         ${enCours ? `<div class="carte-demande en-cours"><div class="num">${ic("lecture")}</div><div class="corps"><div class="titre">${h(titreDemande)}</div><div class="meta">${etat.vue && etat.vue.actif ? t("in progress") : t("current request, pilot stopped")}</div>
           ${plan.length ? `<ul class="plan jalons-mini">${listePlan(plan, true)}</ul>` : ""}
           </div></div>` : `<div class="vide">${t("No current request. Write the first one on the left: it becomes the project's request.")}</div>`}
-        ${d.attente.map((a, i) => `<div class="carte-demande" data-fichier="${h(a.fichier)}"><div class="num">${i + 1}</div><div class="corps"><div class="titre">${h(a.apercu || a.nom)}</div><div class="meta">${t("queued")} · ${h(a.nom)}</div></div>
+        ${d.attente.map((a, i) => `<div class="carte-demande" data-fichier="${h(a.fichier)}"><div class="num">${i + 1}</div><div class="corps"><div class="titre">${h(a.apercu || a.nom)}</div><div class="meta">${t("queued")}</div></div>
           <div class="tools"><button class="btn btn-petit" data-monter title="${h(t("Move up"))}" ${i === 0 ? "disabled" : ""}>${ic("haut")}</button><button class="btn btn-petit" data-descendre title="${h(t("Move down"))}" ${i === d.attente.length - 1 ? "disabled" : ""}>${ic("descendre")}</button><button class="btn btn-petit btn-danger" data-retirer title="${h(t("Remove"))}">${ic("croix")}</button></div></div>`).join("")}
       </div></div>
     </div>
@@ -4328,7 +4347,7 @@ function ficheSite(d, nom, nomSrv, distant) {
     ${courant ? "" : `<p class="muet petit">${(e.serveurs || []).length ? h(t("Servers") + " " + e.serveurs.map(nomSrv).join(", ")) : t("No server chosen yet.")}</p>`}
     ${!courant && (d.anciens || []).includes(nom) ? `<p class="petit dep-ancien" role="note">${h(t("{0} was put online by a mission: make it the project's deployment to go on deploying it.", [e.url || nom]))}</p>` : ""}
     <p class="petit attention env-erreur" role="alert" hidden></p>
-    ${blocSante((d.sante || {})[nom], e)}
+    ${blocSante((d.sante || {})[nom], e, d.projet + "/" + nom)}
     ${blocDeploiements(nom, e, (d.deploiements || {})[nom] || [], distant || !courant)}
     ${courant || distant ? "" : `<button type="button" class="btn btn-petit" data-dep-courant="${h(nom)}">${t("Make this site the project's deployment")}</button>`}
   </section>`;
@@ -5502,15 +5521,18 @@ function blocDeploiements(nom, e, liste, distant) {
 // M137: an environment's health (checked every 15 minutes by default) and its incident, if any
 const ETATS_SANTE = { ok: ["ok", "Healthy"], alerte: ["alerte", "Warning"], incident: ["croix", "Incident"] };
 const PROBLEMES_SANTE = { certificat: "The certificate expires in {0} days", disque: "Disk {1}% full on {0}", memoire: "Memory {1}% used on {0}" };
-function blocSante(s, e) {
+function blocSante(s, e, element) {
   if (!s) return "";
+  // M315: the incident's actions as the bell offers them (the same alert), without the detour by the bell
+  const al = alertesHub().find((x) => x.module === "servers" && x.element === element), distant = (etat.vue || {}).distant;
+  const boutons = !al ? "" : (al.actions || []).map((x, n) => x.page ? "" : `<button type="button" class="btn btn-petit${x.id === "reessayer" ? " btn-primaire" : ""}" data-incident="${h(al.empreinte)}" data-i="${n}"${distant && !x.distance ? ` disabled title="${h(t("On the computer only"))}"` : ""}>${h(t(x.libelle))}</button>`).join("");
   const [icone, etiquette] = ETATS_SANTE[s.etat] || ["", s.etat], i = s.incident;
   const probleme = (p) => p.code === "verif" && s.verification ? texteVerif(s.verification, e.protection) : t(PROBLEMES_SANTE[p.code] || p.code, (p.args || []).map(String));
   return `<div class="env-sante env-sante-${h(s.etat)}" data-env-sante><h4>${t("Health")}</h4>
     <p class="ligne m0 petit"><span class="badge">${icone ? ic(icone) : ""} ${h(t(etiquette))}</span>${s.t ? `<span class="muet">${h(t("Checked {0}", [dateLisible(s.t)]))}</span>` : ""}</p>
     ${(s.problemes || []).map((p) => `<p class="petit${p.rouge ? " attention" : ""}">${h(probleme(p))}</p>`).join("")}
     ${i ? `<p class="petit attention">${h(t("What failed: {0}.", [i.message ? texteMessage(i.message) : t(i.echec)]))} ${h(t("What was tried: {0}.", [i.tente]))}</p>
-      <p class="petit muet">${i.pris_en_main ? h(t("You took over {0}.", [dateLisible(i.pris_en_main)])) : t(i.sans_retour ? "The bell offers: Retry, I take over." : "The bell offers: Retry, Go back to the previous version, I take over.")}</p>` : ""}</div>`;
+      ${!i.pris_en_main && boutons ? `<div class="ligne m0">${boutons}</div>` : `<p class="petit muet">${i.pris_en_main ? h(t("You took over {0}.", [dateLisible(i.pris_en_main)])) : t(i.sans_retour ? "The bell offers: Retry, I take over." : "The bell offers: Retry, Go back to the previous version, I take over.")}</p>`}` : ""}</div>`;
 }
 // the Servers page: how often the deployed sites are checked (or not at all)
 function reglageSante(sa, distant) {
@@ -5535,6 +5557,17 @@ $("#page").addEventListener("change", async (ev) => {
   if (!(await action(api("serveurs/terminal-distance", "POST", { autoriser: oui, confirme: oui, ...(typeof preuve === "string" ? { mot_de_passe: preuve } : {}) })))) { c.checked = !oui; return; }
   srv.termDistance = oui;
   toast(oui ? t("The terminal can now be opened from your paired devices.") : t("The terminal is off from your paired devices."), "ok");
+});
+$("#page").addEventListener("click", async (ev) => {
+  const b = ev.target.closest("button[data-incident]"); if (!b) return;
+  const a = alertesHub().find((x) => x.empreinte === b.dataset.incident), x = a && (a.actions || [])[b.dataset.i];
+  if (!x) return;
+  b.disabled = true;
+  const r = await agirAlerte(x, b);
+  if (r && r.page) return allerProjet(r.projet, r.page.slice(1)); // I take over: the server's sheet
+  etat.hub = await api("hub").catch(() => etat.hub);
+  if (etat.vue) rendreBandeau(etat.vue);
+  rendrePage();
 });
 const AUTEURS_DEPLOI = { agent: "by the agent", relais: "by Athanor", proprietaire: "by you", auto: "automatically, after a failed check" };
 $("#page").addEventListener("click", async (ev) => {
@@ -6023,6 +6056,7 @@ function assistantServeur(c) {
         <label class="radio srv-facon"><input type="radio" name="srv-mode" value="importee"${a.mode === "importee" ? " checked" : ""}> <span><b>${t("An SSH key you already have")}</b><br><span class="muet petit">${t("Paste its private key or choose its file. Athanor keeps it in the vault.")}</span></span></label>
         ${a.mode === "importee" ? `<div class="srv-sous srv-import">
           <textarea id="srv-cle-importee" rows="4" class="code" spellcheck="false" autocomplete="off" aria-label="${h(t("Private key"))}" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----" required></textarea>
+          <p class="petit m0" id="srv-cle-chargee" role="status" hidden></p>
           <div class="ligne m0"><label class="btn btn-petit">${t("Choose a file")}<input type="file" id="srv-cle-fichier" class="cache-visuel"></label><input type="password" id="srv-phrase" autocomplete="off" aria-label="${h(t("Passphrase (if the key has one)"))}" placeholder="${h(t("Passphrase (if the key has one)"))}"></div></div>` : ""}
         <label class="radio srv-facon"><input type="radio" name="srv-mode" value="coffre"${a.mode === "coffre" ? " checked" : ""}${cles.length ? "" : " disabled"}> <span><b>${t("A key of the vault")}</b><br><span class="muet petit">${cles.length ? t("An SSH key you already use for this server.") : t("No SSH key in the vault yet.")}</span></span></label>
         ${a.mode === "coffre" && cles.length ? `<div class="srv-sous"><select id="srv-cle-coffre" aria-label="${h(t("A key of the vault"))}">${cles.map((e) => `<option value="${h(e.id)}"${e.id === a.cle ? " selected" : ""}>${h(e.nom)}</option>`).join("")}</select>
@@ -6183,7 +6217,8 @@ $("#page").addEventListener("change", (ev) => {
   ev.target.value = "";
   if (!f) return;
   if (f.size > 16384) return toast(t("This file is too large to be an SSH key."), "erreur");
-  f.text().then((v) => { $("#srv-cle-importee").value = v; $("#srv-phrase").focus(); });
+  // M315: a key read from a file is not shown: its file's name stands for it (the field keeps it for the form)
+  f.text().then((v) => { const c = $("#srv-cle-importee"), n = $("#srv-cle-chargee"); c.value = v; c.hidden = true; n.textContent = t("Key loaded: {0}", [f.name]); n.hidden = false; $("#srv-phrase").focus(); });
 });
 $("#page").addEventListener("submit", async (ev) => {
   if (etat.page !== "serveurs") return;
@@ -7976,11 +8011,13 @@ $("#page").addEventListener("click", async (ev) => {
   if (page === "demandes") {
     const carte = b.closest("[data-fichier]");
     // one request / note per click, even on a double-click
-    if (b.id === "nd-ajouter") {
+    if (b.id === "nd-ajouter" || b.id === "nd-demarrer") { // nd-demarrer (M315): a stopped project takes the request at once
       if (b.disabled) return; b.disabled = true;
       const r = await action(api("demandes", "POST", { titre: $("#nd-titre").value, texte: $("#nd-texte").value }));
       if (r && (etat.pieces.nd || []).length) await envoyerPieces("nd", r.ou === "attente" && r.fichier ? r.fichier : "demande", etat.projet);
-      b.disabled = false; if (r) rendrePage(); return;
+      b.disabled = false; if (r) rendrePage();
+      if (r && b.id === "nd-demarrer") { await rafraichir(); demarrerPilote(null); }
+      return;
     }
     if (b.id === "rq-ajouter") {
       if (b.disabled) return; b.disabled = true;
@@ -8196,7 +8233,7 @@ $("#btn-urgence").addEventListener("click", async () => {
 // --- refresh loop
 async function rafraichir() {
   if (etat.nonAppaire) return; // a device the computer removed: nothing more to ask
-  etat.rafraichiLe = Date.now();
+  const depart = etat.rafraichiLe = Date.now();
   try {
     const demande = etat.projet;
     const v = await fetch("/api/etat" + (demande ? "?p=" + encodeURIComponent(demande) : ""), { headers: { "X-Athanor": CSRF } }).then((r) => r.json()).catch((e) => { throw Object.assign(e, { coupure: true }); });
@@ -8212,9 +8249,11 @@ async function rafraichir() {
     }
     marquerDistance(v);
     // a language changed elsewhere (another window, a device, the TUI): the page too, not only the menu (never at start: B2)
-    if (v.langue && v.langue !== etat.langue) { const avant = etat.langue; etat.langue = v.langue; appliquerLangue(v.langue); traduireNav(); if (avant && etat.page && etat.assistant < 0) rendrePage(); }
-    if ((v.theme || "") !== etat.theme || (v.accent || "") !== etat.accent) { etat.theme = v.theme || ""; etat.accent = v.accent || ""; appliquerTheme(etat.theme, etat.accent); }
-    if (!v.verrouille && v.bienvenue && !v.distant && etat.assistant < 0) { etat.assistant = 0; rendreAssistant(); }
+    // a read that left before the page's last change was saved is older than the page: it must not put the old language or theme back, nor reopen the welcome
+    const perime = depart <= (etat.ecritLe || 0);
+    if (!perime && v.langue && v.langue !== etat.langue) { const avant = etat.langue; etat.langue = v.langue; appliquerLangue(v.langue); traduireNav(); if (avant && etat.page && etat.assistant < 0) rendrePage(); }
+    if (!perime && ((v.theme || "") !== etat.theme || (v.accent || "") !== etat.accent)) { etat.theme = v.theme || ""; etat.accent = v.accent || ""; appliquerTheme(etat.theme, etat.accent); }
+    if (!perime && !v.verrouille && v.bienvenue && !v.distant && etat.assistant < 0) { etat.assistant = 0; rendreAssistant(); }
     if (v.verrouille !== etat.verrouille) { etat.verrouille = v.verrouille; afficherVerrou(); if (!v.verrouille) { rendrePage(); chargerMenu(); } }
     rendreBandeau(v);
     afficherResteVerrou(v.verrou_dans);

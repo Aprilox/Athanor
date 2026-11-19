@@ -39,6 +39,8 @@ type RelaisJalon struct {
 	// M298: the owner paused or stopped the project: no preparation, no deployment, no plan of its tasks until
 	// Start; only pauserProjet changes it
 	Pause bool `json:"pause,omitempty"`
+	// M315: the stop the owner chose last (pause | arret | jalon), for the screen only; only noterArret changes it
+	Arret string `json:"arret,omitempty"`
 }
 
 // attentePushRelais: how long a milestone's commit may wait to be on GitHub (git source) before the relay tries anyway.
@@ -58,7 +60,7 @@ func ecrireRelais(projet string, r RelaisJalon) {
 	relaisMu.Lock()
 	defer relaisMu.Unlock()
 	m := lireRelais()
-	r.Pause = m[projet].Pause // the owner's, whatever the caller read before they paused
+	r.Pause, r.Arret = m[projet].Pause, m[projet].Arret // the owner's, whatever the caller read before they paused
 	m[projet] = r
 	_ = ecrireJSONFichier(fichierRelais(), m, 0o600)
 }
@@ -70,6 +72,19 @@ func pauserProjet(projet string, pause bool) {
 	m := lireRelais()
 	if r := m[projet]; r.Pause != pause {
 		r.Pause = pause
+		m[projet] = r
+		_ = ecrireJSONFichier(fichierRelais(), m, 0o600)
+	}
+}
+
+// noterArret (M315): the stop the owner chose (pause | arret | jalon), "" at Start or when it is withdrawn: the
+// screen tells a pause from a stop.
+func noterArret(projet, sorte string) {
+	relaisMu.Lock()
+	defer relaisMu.Unlock()
+	m := lireRelais()
+	if r := m[projet]; r.Arret != sorte {
+		r.Arret = sorte
 		m[projet] = r
 		_ = ecrireJSONFichier(fichierRelais(), m, 0o600)
 	}

@@ -34,7 +34,7 @@ func (moduleDev) Elements(s *Serveur) []ElementHub {
 		if pv.Archive {
 			continue
 		}
-		e := ElementHub{ID: pv.Nom, Titre: pv.Nom, Etat: "inactif", Lien: "#suivi", Projet: pv.Nom}
+		e := ElementHub{ID: pv.Nom, Titre: pv.Nom, Etat: "inactif", Lien: "#suivi", Projet: pv.Nom, Arret: pv.Arret}
 		e.Avancement = &Avancement{Texte: "No plan yet"}
 		if pv.Jalons > 0 {
 			e.Avancement = &Avancement{Fait: pv.Faits, Total: pv.Jalons, Texte: "{0} / {1} milestones done", Etape: "Milestone {0}/{1}", EtapePlan: pv.Etape, EtapesPlan: pv.Etapes}

@@ -94,7 +94,7 @@ func TestPauseProjet(t *testing.T) {
 
 	// finish the milestone: nothing held, the task goes on
 	action("arreter-apres-cycle")
-	if relais().Pause || !tacheEnCoursID(prep) || projetBloque("dev", p.Nom) != "" {
+	if relais().Pause || relais().Arret != "jalon" || !tacheEnCoursID(prep) || projetBloque("dev", p.Nom) != "" {
 		t.Fatalf("finish the milestone held the deployment: %+v", relais())
 	}
 
@@ -102,7 +102,7 @@ func TestPauseProjet(t *testing.T) {
 	action("pause")
 	livrerTest(t, p, "1")
 	s.noterLivraison(p, time.Now())
-	if r := relais(); !r.Pause || r.Etat != "attente" || !tacheEnCoursID(prep) || !jeton(prep) {
+	if r := relais(); !r.Pause || r.Arret != "pause" || r.Etat != "attente" || !tacheEnCoursID(prep) || !jeton(prep) {
 		t.Fatalf("pause: %+v, task running %v", r, tacheEnCoursID(prep))
 	}
 	if err := plan(prep); err == nil || !strings.Contains(err.Error(), "paused") {
@@ -117,7 +117,7 @@ func TestPauseProjet(t *testing.T) {
 
 	// Start: the delivery's first deployment goes, the preparation is not made twice
 	_, _ = s.demarrerPilote(p) // (no kit here: only what it does before launching)
-	if relais().Pause {
+	if relais().Pause || relais().Arret != "" {
 		t.Fatal("Start did not lift the pause")
 	}
 	regarder()
@@ -135,7 +135,7 @@ func TestPauseProjet(t *testing.T) {
 	if tk, _ := tacheMission(premier); tk.Etat != "arretee" || jeton(premier) {
 		t.Fatalf("stop now: task %s, token %v", tk.Etat, jeton(premier))
 	}
-	if r := relais(); !r.Pause || r.Etat != "attente" || r.Preparation.Tache != prep {
+	if r := relais(); !r.Pause || r.Arret != "arret" || r.Etat != "attente" || r.Preparation.Tache != prep {
 		t.Fatalf("stop now: %+v", r)
 	}
 	lacher <- struct{}{} // (the fake session of the cancelled task ends)

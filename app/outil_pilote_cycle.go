@@ -675,6 +675,15 @@ fluxTermine:
 	return 124
 }
 
+// livraisonANoter (M315): the delivery mark is missing or older than the report that says DONE. A start on a
+// project already delivered leaves its mark: rewritten, the app would take the next saved work for a delivery and
+// put it online before it is finished (relais_jalon.go, noterLivraison).
+func livraisonANoter(etat string) bool {
+	m, errM := os.Stat(filepath.Join(etat, "done", ".last-delivery"))
+	r, errR := os.Stat(filepath.Join(etat, "FINAL_REPORT.md"))
+	return errM != nil || errR != nil || r.ModTime().After(m.ModTime())
+}
+
 func fichierRegulierPilote(chemin string) bool {
 	st, err := os.Stat(chemin)
 	return err == nil && st.Mode().IsRegular()
@@ -2611,7 +2620,9 @@ func lancerPilote(args []string) int {
 			p.log("Delivery reopened: what was built in the fast mode is verified as a whole first (full check, tester, critic, every fix), then .athanor/FAST_DEBT is deleted.")
 		}
 		if p.estTermine() {
-			_ = os.WriteFile(filepath.Join(p.etat, "done", ".last-delivery"), []byte(time.Now().Format("20060102-150405")+"\n"), 0o644)
+			if livraisonANoter(p.etat) {
+				_ = os.WriteFile(filepath.Join(p.etat, "done", ".last-delivery"), []byte(time.Now().Format("20060102-150405")+"\n"), 0o644)
+			}
 			codeGH := p.githubPousser()
 			if codeGH == 4 && fichierRegulierPilote(filepath.Join(p.etat, "SECRETS_FOUND.md")) {
 				fRep := filepath.Join(p.etat, "FINAL_REPORT.md")

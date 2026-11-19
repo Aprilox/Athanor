@@ -258,3 +258,16 @@ func TestServeursTaches(t *testing.T) {
 		t.Errorf("%d task files, 4 expected", len(fichiers))
 	}
 }
+
+// N15 (M315): only a last call that could not be run at all turns the task into a failure.
+func TestDerniereActionEnPanne(t *testing.T) {
+	ok, code, panne := ActionTache{Etat: "ok"}, ActionTache{Etat: "erreur", Code: 1}, ActionTache{Etat: "erreur", Detail: "dial tcp: refused"}
+	for _, c := range []struct {
+		a    []ActionTache
+		veut string
+	}{{nil, ""}, {[]ActionTache{ok, code}, ""}, {[]ActionTache{panne, ok}, ""}, {[]ActionTache{ok, panne}, "dial tcp: refused"}} {
+		if d := derniereActionEnPanne(c.a); d != c.veut {
+			t.Fatalf("%+v: %q, wanted %q", c.a, d, c.veut)
+		}
+	}
+}

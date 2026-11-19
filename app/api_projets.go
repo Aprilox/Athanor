@@ -23,6 +23,7 @@ type ProjetVue struct {
 	Existe  bool   `json:"existe"`
 	Actif   bool   `json:"actif"`
 	Phase   string `json:"phase"`
+	Arret   string `json:"arret,omitempty"` // M315: stopped by the owner, and how (pause | arret | jalon)
 	Jalon   string `json:"jalon"`
 	// the title of the milestone in progress, when the plan has it (Jalon is what the pilot wrote)
 	JalonTitre  string   `json:"jalon_titre,omitempty"`
@@ -62,7 +63,7 @@ func (s *Serveur) vuesProjets(courant string) []ProjetVue {
 		vues[k] = x
 	}
 	s.mu.Unlock()
-	v := []ProjetVue{}
+	v, relais := []ProjetVue{}, lireRelais()
 	for _, p := range projets {
 		pv := ProjetVue{Nom: p.Nom, Dossier: p.Dossier, Existe: p.Existe(), Actif: p.PiloteActif(), Courant: p.Nom == courant, Archive: p.Archive}
 		if p.Archive {
@@ -79,6 +80,9 @@ func (s *Serveur) vuesProjets(courant string) []ProjetVue {
 			if e.Phase == "termine" && e.Maj != "" && vues[p.Dossier] != e.Maj {
 				pv.Fin = &FinVue{Cle: e.Maj, Livre: projetLivre(p), Message: e.Etat}
 			}
+		}
+		if !pv.Actif && pv.Phase != "termine" { // a project that ended on its own since is finished, not stopped
+			pv.Arret = relais[p.Nom].Arret
 		}
 		pv.Attente = len(p.LireFileAttente())
 		pv.idsPourVous = p.IDsPourVous()
@@ -390,13 +394,16 @@ func (s *Serveur) apiPilote(w http.ResponseWriter, r *http.Request) {
 	case "arreter", "pause": // M250: a project's pilot paused is stopped now; Start picks it up where it stopped
 		marqueAuto(p, false)
 		pauserProjet(p.Nom, true) // M298: its deployment waits for Start too; a stop also cancels its Servers tasks
+		noterArret(p.Nom, map[string]string{"arreter": "arret", "pause": "pause"}[r.PathValue("action")])
 		if r.PathValue("action") == "arreter" {
 			s.arreterTachesProjet(p.Nom)
 		}
 		err = arreterPiloteProjet(s, p)
 	case "arreter-apres-cycle": // M250: "finish the milestone in progress" (a cycle ends with its milestone)
 		marqueAuto(p, false)
-		sortie, err = s.demanderArretApresCycle(p)
+		if sortie, err = s.demanderArretApresCycle(p); err == nil {
+			noterArret(p.Nom, "jalon")
+		}
 	case "redemarrer-apres-cycle":
 		s.mu.Lock()
 		s.relancer[p.Nom] = true
@@ -407,6 +414,7 @@ func (s *Serveur) apiPilote(w http.ResponseWriter, r *http.Request) {
 		delete(s.relancer, p.Nom)
 		s.mu.Unlock()
 		err = retirerStop(p)
+		noterArret(p.Nom, "")
 		if err == nil && p.PiloteActif() {
 			marqueAuto(p, true)
 		}
@@ -716,6 +724,7 @@ func (s *Serveur) demarrerPilote(p Projet) (string, error) {
 		return "The pilot is already running on this project.", nil // message key
 	}
 	pauserProjet(p.Nom, false) // M298: Start lets the project's deployment go again, even when the pilot has nothing left to do
+	noterArret(p.Nom, "")
 	// delivered, and nothing new since (livraison.go): the pilot would end at once
 	if projetLivre(p) && len(p.LireFileAttente()) == 0 && nouveauDepuisLivraison(p.Dossier).Vide() {
 		return "", errors.New(texteLivreRienDeNeuf)

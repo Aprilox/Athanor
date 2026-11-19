@@ -82,7 +82,8 @@ type ElementHub struct {
 	Module     string          `json:"module"` // set by the hub
 	ID         string          `json:"id"`
 	Titre      string          `json:"titre"`
-	Etat       string          `json:"etat"` // "actif" | "inactif" | "termine"
+	Etat       string          `json:"etat"`            // "actif" | "inactif" | "termine"
+	Arret      string          `json:"arret,omitempty"` // M315: an idle project the owner stopped, and how (ProjetVue.Arret)
 	Avancement *Avancement     `json:"avancement,omitempty"`
 	Activite   string          `json:"activite,omitempty"` // what it is on (a milestone's title)
 	Action     string          `json:"action,omitempty"`   // what its worker does now (i18n key or text)

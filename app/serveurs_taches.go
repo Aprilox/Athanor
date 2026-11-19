@@ -438,6 +438,13 @@ func (s *Serveur) executerTache(ctx context.Context, e *tacheEnCours, dossier st
 			err = errors.New(prefixeVerifEchouee + strings.Join(v.Lignes, " · "))
 		}
 	}
+	if err == nil {
+		e.mu.Lock()
+		if d := derniereActionEnPanne(e.t.Actions); d != "" {
+			err = errors.New(d)
+		}
+		e.mu.Unlock()
+	}
 	close(surveillance)
 	switch cause := context.Cause(ctx); {
 	case cause != nil:
@@ -447,6 +454,16 @@ func (s *Serveur) executerTache(ctx context.Context, e *tacheEnCours, dossier st
 	}
 	_ = os.RemoveAll(dossier) // before the end is announced: a finished task leaves no token file behind
 	s.finirTache(e, fin, detail)
+}
+
+// derniereActionEnPanne (M315, N15): the task's last call could not be run at all (server unreachable, terminal
+// closed): its detail, and the task ends "echec" whatever the agent's last sentence says. A command that ran and
+// returned a code is the agent's to read: it has no detail.
+func derniereActionEnPanne(a []ActionTache) string {
+	if n := len(a); n > 0 && a[n-1].Etat == "erreur" {
+		return a[n-1].Detail
+	}
+	return ""
 }
 
 // surveillerTache: a revoked token (emergency stop, the owner's revocation, expiry) stops the task; during the

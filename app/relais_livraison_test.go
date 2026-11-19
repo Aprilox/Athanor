@@ -202,3 +202,23 @@ func TestRelaisMoment(t *testing.T) {
 		t.Fatalf("at delivery, a milestone: %+v, relay %v", r, s.relaisActif(p.Nom))
 	}
 }
+
+// M315: the pilot marks a delivery once; a start on a project already delivered leaves the mark as it is.
+func TestLivraisonANoter(t *testing.T) {
+	etat := t.TempDir()
+	rapport, marque := filepath.Join(etat, "FINAL_REPORT.md"), filepath.Join(etat, "done", ".last-delivery")
+	_ = os.MkdirAll(filepath.Dir(marque), 0o755)
+	_ = os.WriteFile(rapport, []byte("STATUS: DONE\n"), 0o644)
+	if !livraisonANoter(etat) {
+		t.Fatal("a delivery without its mark is to be noted")
+	}
+	_ = os.WriteFile(marque, []byte("x\n"), 0o644)
+	_ = os.Chtimes(marque, time.Now(), time.Now().Add(time.Second))
+	if livraisonANoter(etat) {
+		t.Fatal("already noted: a restart must not mark it again")
+	}
+	_ = os.Chtimes(rapport, time.Now(), time.Now().Add(2*time.Second)) // delivered again
+	if !livraisonANoter(etat) {
+		t.Fatal("a later delivery is to be noted")
+	}
+}
