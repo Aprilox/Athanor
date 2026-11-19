@@ -77,10 +77,23 @@ func TestAncienSiteProduction(t *testing.T) {
 		t.Errorf("the information cannot be reopened: %s", enJSON(cloche()))
 	}
 
-	if err := s.acces.ChoisirDeploiement("demo", "prod"); err != nil { // chosen: deployed by the project from now on
-		t.Fatal(err)
+	// chosen from the tab: deployed by the project from now on, and what the relay noted of the site before is forgotten
+	ecrireRelais("demo", RelaisJalon{Jalon: "M2", Etat: "lance", ID: "d-dev", Livraison: "l1", LivraisonVue: true, Preparation: &PreparationRelais{Empreinte: "dev"}})
+	t.Cleanup(func() { deplacerRelais("demo", "") })
+	r := httptest.NewRequest("POST", "/api/projets/demo/deploiement", strings.NewReader(`{"courant":"prod"}`))
+	r.Header.Set("X-Athanor", "jeton")
+	r.AddCookie(&http.Cookie{Name: cookieAcces, Value: "cle"})
+	r.AddCookie(&http.Cookie{Name: "athanor_session", Value: s.session})
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, r)
+	if rel := lireRelais()["demo"]; w.Code != http.StatusOK || rel != (RelaisJalon{Livraison: "l1", LivraisonVue: true}) {
+		t.Fatalf("the choice from the tab: %d %s, relay %+v", w.Code, w.Body, rel)
 	}
 	if a := cloche(); len(a) != 0 || anciens() != "" {
 		t.Fatalf("after the choice: bell %s, tab %q", enJSON(a), anciens())
+	}
+	// M312d: the chosen production site goes online at each delivery; a site that is not Production keeps its moment
+	if e := s.acces.Environnements("demo"); e["prod"].Moment != "livraison" || e["dev"].Moment != "" {
+		t.Errorf("moments after the choices: prod %q, dev %q", e["prod"].Moment, e["dev"].Moment)
 	}
 }

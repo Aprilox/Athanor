@@ -275,6 +275,11 @@ func (a *Acces) ChoisirDeploiement(projet, nom string) error {
 			return errEnvSite
 		}
 		p.DeploiementCourant = nom
+		// M312d: an older production site, which nothing deploys since its mission, goes online at each delivery
+		// from now on (it still asks before each one); "on request" would leave it with nothing to ask with
+		if e := p.Environnements[nom]; e.Production && e.Moment == "" && !e.DeployerAuJalon {
+			e.Moment = "livraison"
+		}
 		return nil
 	})
 }
@@ -697,6 +702,12 @@ func (s *Serveur) apiDeploiementProjetModifier(w http.ResponseWriter, r *http.Re
 		if err := s.acces.ChoisirDeploiement(projet, c.Courant); err != nil {
 			s.erreurEnv(w, err)
 			return
+		}
+		// M312d: what the relay noted of the site before (its last relay, its servers' preparation) is forgotten:
+		// the tab would show that relay as this site's, still "running", and the first look at this one only
+		// learns when its servers already serve it (preparerProjet) instead of preparing them again
+		if rel, ok := lireRelais()[projet]; ok {
+			ecrireRelais(projet, RelaisJalon{Livraison: rel.Livraison, LivraisonVue: rel.LivraisonVue, Pause: rel.Pause})
 		}
 		s.ecrireAudit(LigneAudit{Type: "evenement", De: deQui(r), Vers: "hub", Projet: projet, Action: "déploiement choisi", Resultat: c.Courant})
 		s.apiDeploiementProjet(w, r)

@@ -5412,7 +5412,7 @@ pages.acces = async () => {
   const l = [...par.values()], code = l.filter((a) => a.portee !== "infra"), infra = l.filter((a) => a.portee === "infra");
   const deploi = ((dp.deploiement || {}).apis || []).map((id) => entrees.find((x) => x.id === id)).filter(Boolean); // chosen in the Deployment tab: read only here
   const carte = (x) => { const pris = deploi.includes(x); return `<li class="acc-entree"${pris ? "" : ' draggable="true"'} data-acc-entree="${h(x.id)}">
-    <div class="ligne m0"><b class="cp-nom" title="${h(x.note || x.nom)}">${h(x.nom)}</b><span class="badge">${h(x.famille === "secret" ? typeCoffre(x.type) : t("Variable"))}</span>${x.famille === "secret" ? `<span class="badge${x.portee === "infra" ? " badge-infra" : ""}">${x.portee === "infra" ? "infra" : "code"}</span>` : ""}</div>
+    <div class="ligne m0"><b class="cp-nom" title="${h(noteCoffre(x.note) || x.nom)}">${h(x.nom)}</b><span class="badge">${h(x.famille === "secret" ? typeCoffre(x.type) : t("Variable"))}</span>${x.famille === "secret" ? `<span class="badge${x.portee === "infra" ? " badge-infra" : ""}">${x.portee === "infra" ? "infra" : "code"}</span>` : ""}</div>
     ${pris ? `<p class="muet petit m0 acc-pris">${t("used by the deployment")}</p>`
       : `<div class="acc-cases"><label><input type="checkbox" data-acc-case="${h(x.id + "|*")}"${coche(x.id + "|*", par.has(x.id) && !par.get(x.id).ailleurs)}> ${t("Given to this project")}</label></div>`}
   </li>`; };
@@ -5504,12 +5504,12 @@ $("#page").addEventListener("change", async (ev) => {
   srv.termDistance = oui;
   toast(oui ? t("The terminal can now be opened from your paired devices.") : t("The terminal is off from your paired devices."), "ok");
 });
-const AUTEURS_DEPLOI = { agent: "by the agent", relais: "after a milestone", proprietaire: "by you", auto: "automatically, after a failed check" };
+const AUTEURS_DEPLOI = { agent: "by the agent", relais: "by Athanor", proprietaire: "by you", auto: "automatically, after a failed check" };
 $("#page").addEventListener("click", async (ev) => {
   const b = ev.target.closest("[data-env-revenir]"); if (!b) return;
   const c = b.closest("[data-env]"), env = c.dataset.env, err = c.querySelector(".env-erreur"), nom = c.dataset.titre; // the Deployment tab's sheet, named by its address
   const question = t("Serve the previous version of {0} again? It is checked from this PC right after.", [nom]);
-  const preuve = c.dataset.prudence ? await preuveMdp(question, { ok: t("Go back") }, question) : (await confirmer(question, { ok: t("Go back") })) ? {} : false;
+  const preuve = "prudence" in c.dataset ? await preuveMdp(question + " " + t("Retype Athanor's password."), { ok: t("Go back") }, question) : (await confirmer(question, { ok: t("Go back") })) ? {} : false;
   if (preuve === false) return;
   b.disabled = true; err.hidden = true; b.textContent = t("Going back…");
   try {
@@ -5623,6 +5623,10 @@ for (const type of ["dragover", "dragleave", "drop"]) $("#page").addEventListene
 const cof = { onglet: "secret", form: null, colle: null, d: { entrees: [], etat: {} }, q: "", cat: "", cats: false }; // colle: {texte, props} of "Paste"; q, cat: the search and the category filter; cats: the Categories panel is open
 const TYPES_COFFRE = ["cloudflare", "ssh", "certificat", "github", "aws", "anthropic", "openai", "stripe", "mot_de_passe", "jeton", "smtp", "autre"];
 const INFRA_COFFRE = new Set(["cloudflare", "ssh", "certificat", "github", "aws"]); // the scope proposed by type (ARCHITECTURE §Coffre)
+// M312d: the notes Athanor itself writes on an entry (in English, for the AI) are shown in the reader's language; one the owner wrote stays as it is
+const NOTES_ATHANOR = [[/^Password of the SMTP account (.+)$/, "Password of the SMTP account {0}"], [/^GitHub deployment key of (.+) \(read-only on its repository\)$/, "GitHub deployment key of {0} (read-only on its repository)"],
+  [/^Token of the remote Athanor (.+)$/, "Token of the remote Athanor {0}"], [/^Password of the site's protection \(user (.+)\), made by Athanor$/, "Password of the site's protection (user {0}), made by Athanor"]];
+const noteCoffre = (n) => { for (const [re, cle] of NOTES_ATHANOR) { const m = re.exec(n || ""); if (m) return t(cle, [m[1]]); } return n || ""; };
 const typeCoffre = (x) => ({ ssh: t("SSH key"), certificat: t("Certificate"), mot_de_passe: t("Password"), jeton: t("Token"), smtp: t("E-mail account"), autre: t("Other"),
   cloudflare: "Cloudflare", github: "GitHub", aws: "AWS", anthropic: "Anthropic", openai: "OpenAI", stripe: "Stripe" })[x] || x;
 const entreeCoffre = (id) => (cof.d.entrees || []).find((x) => x.id === id);
@@ -5661,7 +5665,7 @@ function carteCoffre(x) {
         ${secret && TESTABLES_COFFRE.has(x.type) && !aFiche(x) ? `<button type="button" data-cof-tester="${h(x.id)}">${t("Test")}</button>` : ""}<button type="button" data-cof-modifier="${h(x.id)}">${t("Edit")}</button><button type="button" data-cof-remplacer="${h(x.id)}">${t("Replace the value")}</button><button type="button" class="danger" data-cof-supprimer="${h(x.id)}">${t("Delete")}</button>
       </div></details></div>
     <div class="petit cof-valeur">${secret ? `<span class="muet">•••• ${t("saved")}${x.deux_valeurs ? " · " + h(t("two values (older projects)")) : ""}</span>` : `<code>${h(x.valeur)}</code>${x.deux_valeurs ? ` · ${h(t("Second value (older projects)"))} <code>${h(x.prod)}</code>` : ""}`}</div>
-    <div class="petit cof-note${x.note ? "" : " muet"}" title="${h(x.note)}">${x.note ? h(x.note) : t("No note for the AI")}</div>
+    <div class="petit cof-note${x.note ? "" : " muet"}" title="${h(noteCoffre(x.note))}">${x.note ? h(noteCoffre(x.note)) : t("No note for the AI")}</div>
     ${ficheCoffre(x)}
     <div class="muet petit">${nomCategorie(x.categorie) ? `<span class="etiquette cof-cat">${h(nomCategorie(x.categorie))}</span> ` : ""}${x.source ? h(x.source.startsWith("serveurs:") ? t("Key made for a server") : t("Imported from {0}", [x.source])) + " · " : ""}${h(dateLisible(x.modifie))}</div>
   </div>`;
