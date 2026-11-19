@@ -712,6 +712,7 @@ textarea.en-attente { opacity: .55; }
 
 /* --- appearance: language, palette and accent pickers */
 .langues { display: flex; flex-wrap: wrap; gap: 8px; }
+.langues [aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 -3px 0 var(--accent); font-weight: 600; } /* the chosen language: a pressed state, not a second main action */
 .palettes { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 10px; }
 .palette { border: 2px solid var(--line); border-radius: 10px; padding: 8px; background: var(--bg); cursor: pointer; text-align: left; display: flex; flex-direction: column; gap: 8px; min-width: 0; overflow-wrap: anywhere; }
 .palette:hover { border-color: var(--muted); }
@@ -1111,7 +1112,8 @@ ol.guide-access li { margin: 5px 0; }
 
 /* Coffre (vault) page: entry cards, their Actions menu, the form and the locked banner */
 .carte-coffre { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-.carte-coffre .cp-nom { flex: 1; min-width: 0; overflow-wrap: anywhere; /* a key name is never cut: it wraps */ font-family: var(--mono, monospace); font-size: 13.5px; }
+.carte-coffre .cp-tete { flex-wrap: wrap; } .carte-coffre .menu-coffre { order: 1; } .carte-coffre .cp-tete .badge { order: 2; } /* R6: the name and its menu on the first line, the badges under them */
+.carte-coffre .cp-nom { flex: 1 1 calc(100% - 56px); min-width: 0; overflow-wrap: anywhere; white-space: normal; overflow: visible; /* a key name is never cut: it wraps */ font-family: var(--mono, monospace); font-size: 13.5px; }
 .badge-infra { color: var(--attention); border-color: var(--attention); }
 .badge-danger { color: var(--erreur-vif); border-color: var(--erreur-vif); font-weight: 600; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; }
 .acces-demarrer { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
@@ -1453,6 +1455,7 @@ html.scene-pause .verrou * { animation-play-state: paused !important; }
 /* Terminal (#terminal/<id>): xterm.js fills the space left under the bar, on every screen */
 .terminal-page { display: flex; flex-direction: column; gap: 10px; }
 .term-barre { flex-wrap: wrap; align-items: center; gap: 8px; }
+@media (max-width: 1500px) { .term-aide { display: none; } } /* R3: the shortcuts move to the buttons' tooltips so that Disconnect stays on the line */
 .term-message { display: flex; flex-direction: column; gap: 6px; border-left: 3px solid var(--attention, #d9a03f); }
 .term-zones { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; height: calc(100dvh - 210px); min-height: 260px; }
 .term-onglets { margin: 0; }

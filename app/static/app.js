@@ -1288,7 +1288,7 @@ function rendreAssistant() {
       <button class="btn btn-primaire" data-assistant="${n === ETAPES_ASSISTANT - 1 ? "fin" : "suite"}">${n === ETAPES_ASSISTANT - 1 ? t("Let's go") : t("Continue")}</button></div>
   </div>`;
 }
-function rendreLangues() { return `<div class="langues">${LANGUES.map((l) => `<button class="btn ${etat.langue === l.code ? "btn-primaire" : ""}" data-langue="${l.code}">${l.nom}</button>`).join("")}</div>`; }
+function rendreLangues() { return `<div class="langues">${LANGUES.map((l) => `<button class="btn" aria-pressed="${etat.langue === l.code}" data-langue="${l.code}">${l.nom}</button>`).join("")}</div>`; }
 function rendreApparence() {
   return `<div class="palettes">${THEMES.map((th) => `<button class="palette ${(etat.theme || "ardoise") === th.code ? "actif" : ""}" data-theme="${th.code}" style="--ap-bg:${th.ap[0]};--ap-panel:${th.ap[1]};--ap-line:${th.ap[2]};--ap-ink:${th.ap[3]};--ap-muted:${th.ap[4]}"><span class="apercu"><i class="ap-nav"></i><span class="ap-page"><i></i><i></i></span></span><span class="nom">${t(th.nom)}</span></button>`).join("")}</div>
   <div class="accents mt-3">${ACCENTS.map((a) => `<button class="accent ${(etat.accent || "sarcelle") === a.code ? "actif" : ""}" data-accent="${a.code}" style="--c:${a.c}" title="${t(a.nom)}" aria-label="${t(a.nom)}"></button>`).join("")}</div>`;
@@ -3805,7 +3805,7 @@ pages.extensions = async () => {
       <div class="ext-nom">${h(t(c.nom))} <span class="muet petit">${h(c.licence)}</span></div>
       <div class="ext-desc">${h(c.description)}</div>
       <div class="muet petit">${[c.depot ? h(c.depot.includes("://") ? c.depot.split("://")[1] : "github.com/" + c.depot) : "", c.prerequis ? t("needs {0}", [c.prerequis]) : ""].filter(Boolean).join(" · ")}${(c.secrets || []).length ? " · " + c.secrets.map((sc) => sc.optionnel ? t("optional key") : t("key required")).join(", ") : ""}${c.scripts ? " · " + t("scripts") : ""}</div>
-      <div class="ligne">${c.installe ? `<span class="ok petit">${ic("ok")} ${t("Installed")}</span>` : `<button class="btn btn-petit btn-primaire" data-ext-installer="${type}|${h(c.id)}" ${occupe(type + "|" + c.id)}>${ext.occupe === type + "|" + c.id ? t("Installing…") : t("Install")}</button>`}</div>
+      <div class="ligne">${c.installe ? `<span class="ok petit">${ic("ok")} ${t("Installed")}</span>` : `<button class="btn btn-petit" data-ext-installer="${type}|${h(c.id)}" ${occupe(type + "|" + c.id)}>${ext.occupe === type + "|" + c.id ? t("Installing…") : t("Install")}</button>`}</div>
     </div>`).join("");
   // search: SkillsMP for skills, the official MCP Registry for servers
   const rech = ext.recherche[o];
@@ -3814,13 +3814,13 @@ pages.extensions = async () => {
         ${x.description ? `<div class="ext-desc">${h(x.description)}</div>` : ""}<div class="muet petit ext-source">${h(x.url.replace(/^https:\/\//, ""))}</div>
         ${ext.apercu && ext.apercu.i === i ? (ext.apercu.texte === "…" ? `<div class="muet petit">${t("Downloading…")}</div>` : `<pre class="texte-agent ext-apercu">${h(ext.apercu.texte)}</pre>`) : ""}</div>
       <div class="ext-actions"><button class="btn btn-petit" data-ext-apercu="${i}">${ext.apercu && ext.apercu.i === i ? t("Close") : t("View")}</button>
-        ${x.installe ? `<span class="ok petit">${ic("ok")} ${t("Installed")}</span>` : `<button class="btn btn-petit btn-primaire" data-ext-installer-res="${i}" ${occupe("res|" + i)}>${ext.occupe === "res|" + i ? t("Installing…") : t("Install")}</button>`}</div></div>`
+        ${x.installe ? `<span class="ok petit">${ic("ok")} ${t("Installed")}</span>` : `<button class="btn btn-petit" data-ext-installer-res="${i}" ${occupe("res|" + i)}>${ext.occupe === "res|" + i ? t("Installing…") : t("Install")}</button>`}</div></div>`
     : `<div class="ext-ligne">
       <div class="ext-corps"><div class="ext-nom">${h(x.titre)} <span class="muet petit">${h(x.version || "")}</span>${x.genre ? ` <span class="etiquette">${x.genre === "remote" ? t("remote") : t("local, in a cage") + " · " + h(x.genre)}</span>` : ""}</div>
         ${x.description ? `<div class="ext-desc">${h(x.description)}</div>` : ""}
         <div class="muet petit ext-source">${h(x.nom)}${x.depot ? " · " + h(x.depot.replace(/^https:\/\//, "")) : ""}${x.cles && x.cles.length ? " · " + t("keys: {0}", [x.cles.join(", ")]) : ""}</div>
         ${x.installable ? "" : `<div class="muet petit">${h(t(x.raison || ""))}</div>`}</div>
-      <div class="ext-actions">${x.installe ? `<span class="ok petit">${ic("ok")} ${t("Installed")}</span>` : x.installable ? `<button class="btn btn-petit btn-primaire" data-ext-installer-res="${i}" ${occupe("res|" + i)}>${ext.occupe === "res|" + i ? t("Installing…") : t("Install")}</button>` : ""}</div></div>`).join("");
+      <div class="ext-actions">${x.installe ? `<span class="ok petit">${ic("ok")} ${t("Installed")}</span>` : x.installable ? `<button class="btn btn-petit" data-ext-installer-res="${i}" ${occupe("res|" + i)}>${ext.occupe === "res|" + i ? t("Installing…") : t("Install")}</button>` : ""}</div></div>`).join("");
   const blocRecherche = `<div class="bloc"><h2>${o === "skills" ? t("Search the community") : t("Search the MCP Registry")}</h2>
     <p class="muet petit">${o === "skills" ? t("Thousands of skills published on GitHub, found through SkillsMP. Not checked by hand: read a skill (View) before installing it.") : t("The official directory of MCP servers. Not checked by hand: only install servers you trust; local ones run in a cage.")}</p>
     <div class="ligne"><input type="text" id="ext-q" class="large" value="${h(rech.q)}" placeholder="${h(o === "skills" ? t("e.g. front-end, testing, react, documentation") : t("e.g. github, database, figma, search"))}"><button class="btn" data-ext-rechercher ${occupe("recherche")}>${ext.occupe === "recherche" ? t("Looking…") : t("Search")}</button></div>
@@ -4440,6 +4440,37 @@ pages.journal = async () => {
   <div class="journal" id="journal"></div>`;
 };
 
+// M313a2 (R1): the pilot writes its log in English (pilot.log); the lines of an ordinary run are said in the page's
+// language: each key is the pilot's own format, {n} standing for what it fills in (the most precise key first)
+const LIGNES_PILOTE = ["=== Athanor starting ===", "Helpers: Go ({0}).", "Skills & MCP: skills: {0} · plugins: {1} · MCP: {2}", "Commits by {0}.",
+  "Cycle {0}: Claude is working with {1}, framing (time box {2} min) (log: {3})", "Cycle {0}: Claude is working with {1}, framing (log: {2})",
+  "Cycle {0}: Claude is working with {1} (log: {2})", "Cycle {0}: Claude is working (log: {1})",
+  "Ponytail {0} on: Claude builds each milestone with the smallest complete change (never less than the request and the plan). Settings: PONYTAIL.",
+  "Framing done in {0} min: {1} milestones in the plan.", "Framing time box reached: the plan as it stands goes ahead ({0} milestones).",
+  "Cycle {0} succeeded: {1}", "(cycle closed by the pilot after the milestone: the next one starts with a fresh context)",
+  "Cycle {0} finished without a new commit ({1}/{2}).",
+  "DONE: the deliverable and FINAL_REPORT.md are in the project folder. To go on: add a request or a note, then start again.",
+  "Pilot stopped.", "Stop requested (STOP file).", "The pilot stays on standby. To stop it: stop",
+  "REQUEST.md has changed: Claude will take it into account on the next cycle.", "Request done: moving on to {0} (queue: {1} remaining).",
+  "You answered {0} task(s): Claude checks them first.", "Waiting for you: {0} task(s) on the For you page. The pilot resumes as soon as you answer one.",
+  "Resuming: an answer arrived (or the request changed).", "Quota reached: pausing until about {0}, then resuming automatically.",
+  "Quota threshold reached: {0}. Pausing until about {1}, then resuming automatically.", "Quota threshold: resuming.",
+  "Quota of {0} reached: switching to {1} until about {2}.", "Main model quota reopened: back to {0}.",
+  "Cycle {0}: context full ({1}k tokens). A fresh session takes over the milestone now, from the relay notes.",
+  "Error on cycle {0} (code {1}, {2} in a row). Retrying in {3} min.",
+  "Cycle {0} stopped by the watchdog ({1}). The work already done stays in the folder; resuming in {2} min.",
+  "Warning: milestone ticked without a visible successful full check; Claude will recheck first on the next cycle.",
+  "No request: write it in the application (or in .athanor/REQUEST.md), Claude will start on its own.",
+  "Uncommitted changes of the lead committed before the cycle.", "End of cycle: {0} turns, {1} min, {2} $ — {3}"];
+let motifsPilote;
+function lignePilote(l) {
+  const [, tete, corps] = /^((?:\[[^\]]+\] )*)(.*)$/s.exec(String(l ?? "")); // "[date] " and a worker's "[M4] " are kept
+  motifsPilote ||= LIGNES_PILOTE.map((k) => [k, new RegExp("^" + k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\\\{\d\\\}/g, "(.*?)") + "$", "s")]);
+  for (const [k, re] of motifsPilote) { const a = re.exec(corps); if (a) return tete + t(k, a.slice(1).map((x) => dictionnaireCourant[x] ?? x)); }
+  return t(l);
+}
+console.assert(lignePilote("[2026-11-19 10:58:58] Cycle 1: Claude is working with m, framing (time box 30 min) (log: .athanor/logs/c.jsonl)") !== undefined && motifsPilote[4][1].exec("Cycle 1: Claude is working with m, framing (time box 30 min) (log: c.jsonl)")?.[3] === "30", "lignePilote");
+
 function rendreJournal() {
   const el = $("#journal"); if (!el) return;
   const f = etat.filtres, q = etat.recherche.toLowerCase();
@@ -4453,7 +4484,7 @@ function rendreJournal() {
   etat.rendJournal = true; setTimeout(() => { etat.rendJournal = false; }, 0);
   el.innerHTML = items.slice(-1500).map((e) => f.brut
     ? `<div class="ev g-${h(e.genre)}"><span class="h">${h(e.heure)}</span><span class="m"></span><span class="t">${h(e.brut)}</span></div>`
-    : `<div class="ev g-${h(e.genre)} ${e.sous_agent ? "sous" : ""} ${e.detail ? "cliquable" : ""}" data-n="${e.n}"><span class="h">${h(e.heure)}</span><span class="m"></span><span class="t">${e.sous_agent ? (ic("sous") + " ") : ""}${h(t(e.titre))}</span></div>${etat.ouverts.has(e.n) && e.detail ? `<div class="ev-detail">${h(e.detail)}</div>` : ""}`
+    : `<div class="ev g-${h(e.genre)} ${e.sous_agent ? "sous" : ""} ${e.detail ? "cliquable" : ""}" data-n="${e.n}"><span class="h">${h(e.heure)}</span><span class="m"></span><span class="t">${e.sous_agent ? (ic("sous") + " ") : ""}${h(lignePilote(e.titre))}</span></div>${etat.ouverts.has(e.n) && e.detail ? `<div class="ev-detail">${h(e.detail)}</div>` : ""}`
   ).join("") || `<div class="vide">${t(etat.evenements.length ? "Nothing matches." : "No log yet: it fills in once the pilot runs.")}</div>`;
   el.classList.toggle("journal-vide", !items.length);
   if (etat.defilAuto.journal) el.scrollTop = el.scrollHeight;
@@ -4549,7 +4580,7 @@ async function rendreSortie() {
   const enBas = !ancienne || ancienne.scrollHeight - ancienne.scrollTop - ancienne.clientHeight < 40, haut = ancienne ? ancienne.scrollTop : 0;
   etat.sortieSig = sig;
   el.innerHTML = `<div class="bloc"><div class="ligne"><h2 class="m0">${h(t(tk.nom))}</h2><span class="${st[1]}" id="st-duree">${st[0]} · ${tk.duree_s} s</span><span class="espace"></span><button class="btn btn-petit" id="st-copier">${t("Copy output")}</button></div>
-    <div class="sortie">${r.evenements.map((e) => `<div class="ev g-${h(e.genre)} ${e.sous_agent ? "sous" : ""}"><span class="h"></span><span class="m"></span><span class="t">${h(t(e.titre))}</span></div>`).join("") || '<div class="ev"><span class="h"></span><span class="m"></span><span class="t muet">…</span></div>'}</div></div>`;
+    <div class="sortie">${r.evenements.map((e) => `<div class="ev g-${h(e.genre)} ${e.sous_agent ? "sous" : ""}"><span class="h"></span><span class="m"></span><span class="t">${h(lignePilote(e.titre))}</span></div>`).join("") || '<div class="ev"><span class="h"></span><span class="m"></span><span class="t muet">…</span></div>'}</div></div>`;
   const s = $(".sortie", el); s.scrollTop = enBas ? s.scrollHeight : haut;
   $("#st-copier").onclick = () => navigator.clipboard.writeText(tk.sortie.join("\n")).then(() => toast(t("Copied."), "ok"));
 }
@@ -5754,7 +5785,7 @@ pages.coffre = async () => {
   return `<div class="coffre">
     ${e.mot_de_passe && !e.infra ? `<form class="bloc cof-verrou" id="cof-verrou"><span class="croit">${t("Vault locked: the keys of your servers open only with your password")}</span>
       <span class="ligne m0"><input type="password" id="cof-mdp" autocomplete="current-password" placeholder="${h(t("Password"))}" aria-label="${h(t("Password"))}"><button type="submit" class="btn btn-primaire">${t("Unlock")}</button></span></form>` : ""}
-    <div class="ligne cof-tete"><div class="onglets">${onglet("secret", t("Secrets"))}${onglet("variable", t("Variables"))}</div><span class="espace"></span><button type="button" class="btn" data-cof-categories aria-expanded="${cof.cats}">${t("Categories")}</button><button type="button" class="btn" data-cof-coller>${t("Paste")}</button><button type="button" class="btn btn-primaire" data-cof-ajouter>${t("Add")}</button></div>
+    <div class="ligne cof-tete"><div class="onglets">${onglet("secret", t("Secrets"))}${onglet("variable", t("Variables"))}</div><span class="espace"></span><button type="button" class="btn" data-cof-categories aria-expanded="${cof.cats}">${t("Categories")}</button><button type="button" class="btn" data-cof-coller>${t("Paste")}</button><button type="button" class="btn${cof.form ? "" : " btn-primaire"}" data-cof-ajouter>${t("Add")}</button></div>
     ${e.mot_de_passe ? "" : `<p class="petit attention ligne m0 cof-sans-mdp"><span class="croit">${t("Set a password for Athanor to keep the keys of your servers in the vault.")}</span><a class="btn btn-petit" href="#options@bloc-verrou">${t("Set a password")}</a></p>`}
     ${cof.colle ? formulaireColle() : cof.form ? formulaireCoffre() : cof.cats ? panneauCategories() : ""}
     ${n(cof.onglet) ? choixAPI("cof-q", "Search by name or category", cof.q, cof.cat) : ""}
@@ -5884,9 +5915,19 @@ $("#page").addEventListener("submit", async (ev) => {
 // "error: <English message>" written by the Go: shown in the page's language (other results are codes)
 function resultatAudit(r) {
   const m = /^error: (.*)$/s.exec(r); if (m) return t("error: {0}", [t(m[1])]);
-  const c = /^(lancée|refusée|échec) : (.*)$/s.exec(r); if (!c) return r; // a home card's outcome: its message key, then its arguments
-  const [cle, ...args] = c[2].split(" | ");
-  return t("{0}: {1}", [t({ "lancée": "Launched", "refusée": "Refused" }[c[1]] || "Failed"), t(cle, args.map((x) => t(x)))]);
+  const c = /^(lancée|refusée|échec) : (.*)$/s.exec(r);
+  if (c) { // a home card's outcome: its message key, then its arguments
+    const [cle, ...args] = c[2].split(" | ");
+    return t("{0}: {1}", [t({ "lancée": "Launched", "refusée": "Refused" }[c[1]] || "Failed"), t(cle, args.map((x) => t(x)))]);
+  }
+  // M313a2 (R2): a tool's arguments are read as "name: value", never as raw JSON (a cut one stays as written)
+  if (r.startsWith("{")) for (let i = r.indexOf("}"); i >= 0; i = r.indexOf("}", i + 1)) { // the object, then " · code 0 · output"
+    try { return Object.entries(JSON.parse(r.slice(0, i + 1))).map(([k, v]) => t("{0}: {1}", [k, typeof v === "object" ? JSON.stringify(v) : v])).join(" · ") + r.slice(i + 1); } catch (e) { /* not the end of the object yet */ }
+  }
+  // a message Athanor knows, alone or after a name ("Account → address : message"), is said in the page's language
+  if (dictionnaireCourant[r] !== undefined) return t(r);
+  for (let i = r.indexOf(": "); i >= 0; i = r.indexOf(": ", i + 1)) { const fin = r.slice(i + 2); if (dictionnaireCourant[fin] !== undefined) return r.slice(0, i + 2) + t(fin); }
+  return r;
 }
 const actionAudit = (a) => a.replace(/^(chat d'accueil : )(.+?)( \(.*\))$/s, (_, p, q, s) => p + t(q) + s);
 // --- Audit log (#audit): what the modules asked, answered and did, newest first; read only (also from a paired device)
@@ -6079,7 +6120,7 @@ pages.serveurs = async () => {
   const liste = d.serveurs.map((x, i) => carteServeur(x, fiches[i], (d.environnements || {})[x.id], d.sante)).join("");
   return `<div class="serveurs">
     ${srv.aj ? messagesCoffreServeurs(c) : ""}
-    <div class="ligne cof-tete"><h2 class="m0">${t("Servers")} <span class="muet">${d.serveurs.length}</span></h2><span class="espace"></span>${distant ? `<span class="muet petit">${t("Adding a server is done on the computer.")}</span>` : srv.aj ? "" : `<button type="button" class="btn btn-primaire" data-srv-ajouter>${t("Add a server")}</button>`}</div>
+    <div class="ligne cof-tete"><h2 class="m0">${t("Servers")} <span class="muet">${d.serveurs.length}</span></h2><span class="espace"></span>${distant ? `<span class="muet petit">${t("Adding a server is done on the computer.")}</span>` : srv.aj ? "" : `<button type="button" class="btn${d.serveurs.length ? "" : " btn-primaire"}" data-srv-ajouter>${t("Add a server")}</button>`}</div>
     ${srv.aj ? assistantServeur(c) : ""}
     ${liste ? `<div class="grille-projets">${liste}</div>` : srv.aj ? "" : `<div class="vide srv-vide"><p><b>${t("No server yet")}</b></p>
       <p class="muet">${t("Add your VPS or your home server: Athanor checks its fingerprint, connects with a key kept in the vault, then reads what runs on it.")}</p>
@@ -6249,7 +6290,8 @@ function carteTacheServeur(x, plans, distant) {
   const v = x.verification;
   return `<details class="srv-tache" data-tache="${h(x.id)}"${srv.ouvertes.has(x.id) ? " open" : ""}><summary><span class="pv-etat ${cl}">${h(lib)}</span> <span class="srv-tache-texte">${h(titreTache(x))}</span>
       <span class="muet petit">${h(dateLisible(x.cree))} · ${h(dureeTache(x))}</span></summary>
-    <div class="srv-tache-corps"><p class="pv-details">${h(x.texte)}</p>
+    <div class="srv-tache-corps">${titreTache(x) === x.texte ? `<p class="pv-details">${h(x.texte)}</p>` /* B2: Athanor's own task says what it is in the page's language, its agent's English brief folded under it */
+        : `<p class="pv-details">${h(titreTache(x))}</p><details class="petit"><summary class="muet">${t("The brief Athanor gave its agent (in English)")}</summary><p class="pv-details">${h(x.texte)}</p></details>`}
       ${x.forcee ? `<p class="petit pv-vous">${t("Forced in native Windows mode, without the barrier.")}</p>` : ""}
       <ol class="srv-tache-etapes petit">${etapes}</ol>
       ${blocsPlans || (tacheFinie(x) ? `<p class="muet petit">${t("No plan: nothing was changed on the server.")}</p>` : "")}
@@ -6475,7 +6517,7 @@ pages.terminal = async () => {
     <div class="ligne m0 term-barre"><a href="#serveur/${encodeURIComponent(x.id)}" class="petit">${ic("gauche")} ${h(x.nom)}</a>
       <code class="muet petit term-adresse">${h(x.utilisateur)}@${h(x.hote)}</code>${badgeSansGarde(x, x.autorisation !== "ignorer")}<span class="pastille attend" id="term-etat">${t("Connecting…")}</span><span class="espace"></span>
       ${avis ? "" : `<span class="muet petit term-aide term-seul">${t(MAC ? "Copy: Cmd+C · Paste: Cmd+V" : "Copy: Ctrl+Shift+C · Paste: Ctrl+Shift+V")}</span>
-      <button type="button" class="btn btn-petit term-seul" data-term-copier>${t("Copy")}</button><button type="button" class="btn btn-petit term-seul" data-term-coller>${t("Paste")}</button>
+      <button type="button" class="btn btn-petit term-seul" data-term-copier title="${h(t(MAC ? "Copy: Cmd+C · Paste: Cmd+V" : "Copy: Ctrl+Shift+C · Paste: Ctrl+Shift+V"))}">${t("Copy")}</button><button type="button" class="btn btn-petit term-seul" data-term-coller title="${h(t(MAC ? "Copy: Cmd+C · Paste: Cmd+V" : "Copy: Ctrl+Shift+C · Paste: Ctrl+Shift+V"))}">${t("Paste")}</button>
       <button type="button" class="btn btn-petit term-bascule-ia" data-term-ia aria-pressed="${ia.visible}">${t("Assistant")}</button>
       <button type="button" class="btn btn-petit term-bouton-reglages term-seul" data-term-reglages aria-expanded="${!!term.essai}" aria-controls="term-reglages-zone" title="${h(t("Theme, text size, cursor"))}">${t("Settings")}</button>
       <button type="button" class="btn btn-petit" data-term-deconnecter>${t("Disconnect")}</button>`}</div>
@@ -7719,6 +7761,7 @@ pages.audit = async () => {
       <span class="espace"></span>
       <button type="button" class="btn" data-aud-verifier>${t("Check the log")}</button>
     </div>
+    <p class="muet petit m0">${t("A technical record, kept as it was written: action codes, and the answers given to the agents in their working language (English). Athanor translates the messages it knows; nothing here is rewritten.")}</p>
     ${v ? v.ok ? `<p class="bloc aud-verif ok">${ic("ok")} ${t("The log is intact: {0} lines checked, none changed, removed or inserted.", [v.lignes])}</p>`
       : `<p class="bloc aud-verif echec">${ic("croix")} ${t("Line {0} of {1} is {2}: the log was touched from that line on.", [v.ligne, v.fichier, t(RAISONS_AUDIT[v.raison] || v.raison)])}</p>` : ""}
     ${liste ? liste + "</ul>" : `<div class="vide">${Object.values(f).some(Boolean) ? t("No line matches these filters.") : t("Nothing in the audit log yet: the modules' requests, the access given or taken and the approvals will be written here.")}</div>`}
