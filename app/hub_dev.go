@@ -174,7 +174,7 @@ func (moduleDev) Tutoriel() []EtapeTutoriel {
 		{Titre: "The pilot", Texte: "Start launches the pilot: Claude works cycle after cycle, one milestone each time. Stop halts it; Start carries on where it was.", Cible: `[data-act="demarrer"], [data-act="arreter"]`, Page: "#suivi"},
 		{Titre: "Requests", Texte: "Ask for a change or a new feature at any time: it waits in the queue and joins the plan at the next cycle.", Cible: `#onglets-module a[data-page="demandes"]`},
 		{Titre: "For you", Texte: "What only you can do (create an account, give a key, check something by hand) waits here, step by step. Claude goes on with the rest meanwhile.", Cible: `#onglets-module a[data-page="pourvous"]`},
-		{Titre: "Chat", Texte: "Talk with Claude about the project: ask a question, explain an idea. This tutorial stays in the “?”, at the top of the Guide.", Cible: `#onglets-module a[data-page="chat"]`},
+		{Titre: "Chat", Texte: "Talk with Claude about the project: ask a question, explain an idea. This tutorial stays at the top of the Guide.", Cible: `#onglets-module a[data-page="chat"]`},
 	}
 }
 

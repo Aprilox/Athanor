@@ -118,10 +118,10 @@ async function api(chemin, methode = "GET", corps) {
   return data;
 }
 let toastTimer;
-function toast(msg, genre = "") {
+function toast(msg, genre = "", duree = 6000) {
   const el = $("#toast");
   el.textContent = msg; el.className = "toast " + genre; el.hidden = false;
-  clearTimeout(toastTimer); toastTimer = setTimeout(() => (el.hidden = true), 6000);
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => (el.hidden = true), duree);
 }
 async function action(promesse, genreOk = "ok") {
   try { const r = await promesse; const m = messageDe(r); if (m) toast(m, genreOk); return r; }
@@ -509,7 +509,7 @@ async function annoncerTaches(v) {
   if (await confirmer(t("Claude needs you for something it cannot do itself (an account, a payment, a key…). Open the For you page?"), { titre: t("“{0}”: a task for you", [cle]), ok: t("Open"), annuler: t("Later") })) location.hash = "#pourvous";
 }
 async function annoncerFins(v) {
-  if (v.verrouille || !$("#dialogue").hidden || !$("#assistant").hidden) return;
+  if (v.verrouille || document.hidden || !$("#assistant").hidden || !$("#toast").hidden) return; // said when someone can read it, one at a time
   const p = (v.projets || []).find((x) => x.fin && !finsAnnoncees.has(x.nom + "|" + x.fin.cle));
   if (!p) return;
   finsAnnoncees.add(p.nom + "|" + p.fin.cle);
@@ -517,9 +517,8 @@ async function annoncerFins(v) {
   const texte = livre ? t("The deliverable and the final report are in the project folder.")
     : /^Maximum duration reached/.test(p.fin.message || "") ? t("It reached its work time limit (in Settings, or in Manage › Working mode for this project). The work in progress is in the project folder: raise the limit or choose Unlimited, then start it again.")
     : t(p.fin.message || "");
-  const ouvrir = await confirmer(texte, { titre: livre ? t("“{0}” is finished", [p.nom]) : t("The pilot of “{0}” has stopped", [p.nom]), ok: t("Open the folder"), annuler: t("Close") });
+  toast((livre ? t("“{0}” is finished", [p.nom]) : t("The pilot of “{0}” has stopped", [p.nom])) + ". " + texte, livre ? "ok" : "", 15000);
   await api("fin-vue?p=" + encodeURIComponent(p.nom), "POST", { cle: p.fin.cle }).catch(() => {});
-  if (ouvrir) await api("ouvrir?p=" + encodeURIComponent(p.nom), "POST", { quoi: "projet" }).catch(() => {});
 }
 
 // ----------------------------------------------------------------------------- "Improve with Claude"
@@ -808,7 +807,7 @@ function boutonCloche(v, classe) {
   return `<button type="button" class="${classe} cloche${n ? " sonne" : ""}" data-notifs aria-haspopup="true" aria-expanded="${etat.notifsOuvert ? "true" : "false"}" aria-label="${h(titre)}" title="${h(titre)}"><svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.94 1.94 0 0 0 3.4 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>${n ? `<span class="cloche-n">${n}</span>` : ""}</button>`;
 }
 // the Guide: a "?" beside the bell (it is no menu entry any more)
-const boutonGuide = (classe) => `<a href="#guide" class="${classe} btn-guide"${etat.page === "guide" ? ' aria-current="page"' : ""} aria-label="${h(t("Guide"))}" title="${h(t("Guide"))}">?</a>`;
+const boutonGuide = (classe) => `<a href="#guide" class="${classe} btn-guide"${etat.page === "guide" ? ' aria-current="page"' : ""} >${t("Guide")}</a>`;
 // one alert on one line, "Dev, ma-boutique: why", and its actions as the server gives them: a page (View, through
 // allerProjet for a Dev project) or a POST (Ignore, Reopen, an approval's decision). From a paired device only the
 // actions marked distance stay active (the server refuses the others: 403).
@@ -953,7 +952,7 @@ function rendreBandeau(v) {
   const mp = moduleDePage(pageParente(etat.page)), global = !avecProjet(mp);
   const p = global ? phraseGlobale(mp) : phraseEtat(v);
   const boutons = [];
-  if (v.projet && !global && v.projet.acces) boutons.push(blocAccesDemarrer(v.projet.acces));
+  if (v.projet && !global && v.projet.acces && (v.projet.acces.total || v.projet.acces.etat === "verrouille")) boutons.push(blocAccesDemarrer(v.projet.acces));
   if (v.kit_valide && v.projet && !global) {
     if (v.actif) {
       // what was changed while this pilot runs and that it has not taken yet (en_attente, from what the pilot
@@ -981,9 +980,8 @@ function rendreBandeau(v) {
   if (!cadre.actif) boutons.push(boutonCloche(v, "btn"), boutonGuide("btn"));
   if (v.natif) boutons.unshift(`<a class="etiquette puce-natif" href="#options" role="status" title="${h(t("Athanor runs directly on Windows: nothing separates Claude from the files of this PC. To put a barrier between them, switch to WSL in Settings › Options."))}">${t("Native mode: no barrier")}</a>`);
   rendreBarre(v);
-  const nomProjet = v.projet && !global ? `<div class="muet petit" title="${h(v.projet.dossier)}">${h(v.projet.nom)}</div>` : "";
   const nbActifs = (v.projets || []).filter((x) => x.actif).length;
-  const html = `<div class="etat-phrase">${nomProjet}<h1 title="${h(p.titre)}"><span class="point ${p.classe}"></span><span>${h(p.titre)}</span></h1><div class="sous" title="${h(p.sous)}">${h(p.sous)}</div></div><div class="actions">${boutons.join("")}</div>`;
+  const html = `<div class="etat-phrase"><h1 title="${h(p.titre)}"><span class="point ${p.classe}"></span><span>${h(p.titre)}</span></h1><div class="sous" title="${h(p.sous)}">${h(p.sous)}</div></div><div class="actions">${boutons.join("")}</div>`;
   // rebuilt only when it changed, keeping the focus (the bell, the "?" under the keyboard)
   $("#bandeau").classList.toggle("bandeau-global", global); // C-M218-12: on a phone its title is already in the bar above
   if ($("#bandeau").dataset.html !== html) garderFocus($("#bandeau"), () => { $("#bandeau").innerHTML = html; $("#bandeau").dataset.html = html; });
@@ -1356,7 +1354,7 @@ function proposerTutoriel() {
   ids.forEach((id) => { etat.toursVus.add(id); (v.tours ||= {})[id] = true; });
   api("preferences", "POST", { tours: Object.fromEntries(ids.map((id) => [id, true])) }).catch(() => {});
   // someone who already uses the module (never this tour, never reset): a reminder, not the tour
-  if (connu) return toast(t("New: the tutorial is in the “?”."));
+  if (connu) return toast(t("New: the tutorial is in the Guide."));
   lancerTutoriel(m);
 }
 const TOUR_CHAT = "hub-chat";
@@ -1785,7 +1783,7 @@ function arretAuto(nom, regles) {
     ${r.seuil ? `<select data-quota-action="${cle}">${actions.map(([v, l]) => `<option value="${v}" ${r.action === v ? "selected" : ""}>${h(l)}</option>`).join("")}</select>` : ""}</div>`;
 }
 function rendreQuota(q, regles) {
-  if (!q || !(q.fenetres || []).length) return `<div class="bloc"><h2>${t("Subscription quota")}</h2><div class="vide petit">${t("Shown once a cycle has run: Claude Code reports it as it works.")}</div></div>`;
+  if (!q || !(q.fenetres || []).length) return ""; // shown once a cycle has run (M318)
   const maintenant = Date.now() / 1000;
   const lignes = q.fenetres.map((f) => {
     const passe = f.reinit && f.reinit < maintenant;
@@ -2203,7 +2201,7 @@ pages.accueil = async () => {
   etat.mentionsSugg = sugg.mentions || []; etat.mentionListe = null;
   const hc = etat.hubChat || { messages: [], pouvoirs: {} };
   setTimeout(() => majHubChat(true), 0);
-  return `<div class="accueil">${d.panne ? `<p class="bloc erreur" role="alert">${h(d.panne === t("Athanor no longer answers.") ? d.panne : t("Athanor could not read its modules ({0}): the menu keeps its first entries. Reload the page in a moment.", [d.panne]))}</p>` : ""}
+  return `<div class="accueil">${bandeauRaccourci()}${d.panne ? `<p class="bloc erreur" role="alert">${h(d.panne === t("Athanor no longer answers.") ? d.panne : t("Athanor could not read its modules ({0}): the menu keeps its first entries. Reload the page in a moment.", [d.panne]))}</p>` : ""}
     <form class="bloc accueil-barre accueil-chat" id="accueil-form" data-pieces="hc">
       <div class="ligne m0 chat-tete"><label for="accueil-texte" class="accueil-titre croit">${t("What do you want to do?")}</label>
         <button type="button" class="btn btn-petit" id="hub-chat-aide" title="${h(t("How the assistant works"))}" aria-label="${h(t("How the assistant works"))}">?</button>
@@ -2502,6 +2500,7 @@ async function majHubChat(force) {
   const fil = $("#hub-chat-fil"); if (!fil) return;
   const enBas = auBas(fil);
   garderFocus(fil, () => { fil.innerHTML = filHub(d); }); // a card's button or field keeps the keyboard focus across a refresh of the thread
+  $("#hub-chat-envoyer").classList.toggle("btn-primaire", !fil.querySelector(".btn-primaire")); // one main action: a waiting card's Launch, else Send (M318)
   if (enBas || force) fil.scrollTop = fil.scrollHeight;
   majBoutonBas(fil);
   const pv = d.pouvoirs || {};
@@ -2565,7 +2564,7 @@ pages.suivi = async () => {
   const cache = somme("cache_lu"), plein = somme("entree_tokens") + somme("cache_ecrit");
   const ratio = cache + plein ? Math.round((cache / (cache + plein)) * 100) : 0;
   const g = v.gains;
-  return `${bandeauRaccourci()}${v.pour_vous ? `<a class="bloc pv-bandeau" href="#pourvous"><strong>${t("Claude needs you")}</strong> · ${tn(v.pour_vous, "1 task on the For you page", "{0} tasks on the For you page", [v.pour_vous])} →</a>` : ""}
+  return `${v.pour_vous ? `<a class="bloc pv-bandeau" href="#pourvous"><strong>${t("Claude needs you")}</strong> · ${tn(v.pour_vous, "1 task on the For you page", "{0} tasks on the For you page", [v.pour_vous])} →</a>` : ""}
   <div class="grille grille-2">
     <div class="colonne"><div class="bloc"><h2>${t("Right now")}</h2>
       ${v.actif && v.pilote_ancien ? `<p class="muet petit">${v.version_pilote
@@ -2597,7 +2596,7 @@ pages.suivi = async () => {
   ${rendreBlocPCs(pcsDuProjet(v.projet.nom))}
   ${(pcsDuProjet(v.projet.nom) || {}).actif ? blocDirect(v.projet.nom) : ""}
   ${rendreAvancement(stats, plan, faits, v.actif)}
-  <div class="bloc"><h2>${t("Usage")}</h2>
+  <details class="bloc plus-options" id="conso"${etat.ouverts.has("conso") ? " open" : ""}><summary>${t("Usage")}</summary>
     ${stats.length ? `<div class="chiffres">
       <div class="chiffre"><b>${stats.filter((s) => !String(s.cycle).includes("·")).length}</b><span>${t("cycles")}</span></div>
       <div class="chiffre"><b>${(() => { const m = Math.round(somme("minutes")); return `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")}`; })()}</b><span>${t("of work")}</span></div>
@@ -2614,7 +2613,7 @@ pages.suivi = async () => {
     ${stats.slice(etat.ouverts.has("stats:tous") ? -200 : -5).reverse().map((s) => `<tr><td>${s.cycle}</td><td>${h((s.horodatage || "").slice(11, 16))}</td><td>${h(s.template)}</td><td class="${h(s.etat)}">${h(s.etat)}</td><td>${Math.round(s.minutes)}</td><td>${s.tours}</td><td${s.estime ? ` title="${h(t("≈: estimated from the turns of the lead and its sub-agents (cycle closed by the pilot); ?: price of this model not learned yet"))}"` : ""}>${s.estime && !Number(s.cout_usd) && s.tours ? "?" : (s.estime ? "≈ " : "") + Number(s.cout_usd).toFixed(2)}</td><td>${fmtTokens(s.contexte_max)}</td></tr>`).join("")}
     </tbody></table></div>
     ${stats.length > 5 ? `<button type="button" class="btn btn-petit mt-1" data-stats-tous>${etat.ouverts.has("stats:tous") ? t("Last 5 cycles only") : t("All {0} cycles", [stats.length])}</button>` : ""}` : `<div class="vide">${t("Numbers appear at the end of the first cycle.")}</div>`}
-  </div>`;
+  </details>`;
 };
 
 // M136: the project's deployment after a milestone or the delivery (relais_jalon.go)
@@ -2687,11 +2686,11 @@ function blocRaccourci(r, titre, plus, champ = "rc-dossier") {
   return `${titre ? `<h2>${t("Shortcut")}</h2>` : ""}<p class="muet petit m0">${explication}</p>
     ${faits.map((f) => `<p class="ok petit m0">${ic("ok")} <code title="${h(f)}">${h(nomRaccourci(f))}</code> <span class="muet">${h(f.replace(/[\\/][^\\/]*$/, ""))}</span></p>`).join("")}
     <label class="champ mt-1"><span>${t("Folder of the shortcut")}</span>${champDossier(champ, r.defaut || "", "", false, t("Choose the shortcut's folder"))}</label>
-    <div class="ligne mt-1"><button class="btn ${faits.length ? "" : "btn-primaire"}" data-raccourci="creer" data-champ="${champ}">${faits.length ? t("Make another shortcut") : t("Create the shortcut")}</button>${plus || ""}</div>`;
+    <div class="ligne mt-1"><button class="btn ${faits.length || champ === "rc-dossier" ? "" : "btn-primaire"}" data-raccourci="creer" data-champ="${champ}">${faits.length ? t("Make another shortcut") : t("Create the shortcut")}</button>${plus || ""}</div>`;
 }
 document.addEventListener("click", async (ev) => {
   const b = ev.target.closest("[data-raccourci]"); if (!b) return;
-  if (b.dataset.raccourci === "plus-tard") { etat.raccourciPlusTard = true; rendrePage(); return; }
+  if (b.dataset.raccourci === "plus-tard") { etat.raccourciPlusTard = true; localStorage.setItem("athanor.raccourci.plus-tard", "1"); toast(t("The shortcut stays in Settings › Options.")); rendrePage(); return; }
   if (b.dataset.raccourci === "relire") { etat.raccourciErreur = ""; raccourciConnu(); if (etat.assistant >= 0) rendreAssistant(); else rendrePage(); return; }
   b.disabled = true;
   const r = await action(api("raccourci", "POST", { dossier: ($("#" + (b.dataset.champ || "rc-dossier")) || {}).value || "" }));
@@ -2701,7 +2700,7 @@ document.addEventListener("click", async (ev) => {
 // the downloaded file opened this window: a shortcut to the installed Athanor is offered, once
 function bandeauRaccourci() {
   const r = raccourciConnu();
-  if (!r || !r.lancement || !r.lancement.telechargement || (r.raccourcis || []).length || etat.raccourciPlusTard) return "";
+  if (!r || !r.lancement || !r.lancement.telechargement || (r.raccourcis || []).length || etat.raccourciPlusTard || localStorage.getItem("athanor.raccourci.plus-tard")) return ""; // offered once on the home page, then Settings › Options (M318)
   return `<div class="bloc bandeau-raccourci"><h2>${t("Open Athanor directly next time")}</h2>
     <p class="petit">${h(t("You opened Athanor from the file you downloaded ({0}). Athanor is installed in its own folder and updates itself there: create a shortcut to open it, and that file is no longer needed.", [nomRaccourci(r.lancement.fichier || "")]))}</p>
     ${blocRaccourci(r, false, `<button class="btn" data-raccourci="plus-tard">${t("Not now")}</button>`)}</div>`;
@@ -2714,7 +2713,7 @@ function rendreGuide(v) {
     : !v.windows ? "Claude Code, the system sandbox (bubblewrap) and the tools, in a terminal; it asks for your password once."
     : v.natif ? "Native Windows: Git for Windows, jq, Python, Node.js and Claude Code for Windows, without WSL. Claude has no sandbox in this mode."
     : "WSL2 (the Linux built into Windows), Claude Code, the system sandbox. A window opens; Linux asks for a password once.";
-  return `${bandeauRaccourci()}<div class="bloc"><h2>${t("First steps")}</h2><p class="intro">${t("Five steps, all from this window. Then you can let it run for days, on several projects at once.")}</p>
+  return `<div class="bloc"><h2>${t("First steps")}</h2><p class="intro">${t("Five steps, all from this window. Then you can let it run for days, on several projects at once.")}</p>
   <div class="etapes">
     <div class="etape ${e1 ? "faite" : ""}"><div class="n">1</div><div><b>${t("Install the tooling")}</b><div class="d">${t(outillage)}</div>${v.windows ? `<div class="muet petit">${t("Current mode: {0}. To choose the other one: Setup & health.", [t(v.natif ? "Native Windows" : "WSL")])}</div>` : ""}</div>
       ${boutonsInstallation(v, !e1)}</div>
@@ -2729,7 +2728,7 @@ function rendreGuide(v) {
   </div>
   <h3 class="titre-plus-loin">${t("Going further")}</h3>
   <div class="cartes-guide">${["github", "distance", "pcs"].map((id) => { const g = GUIDE.find((x) => x.id === id); return `<a class="carte-guide" href="#guide" data-guide-sujet="${id}"><b>${t(g.titre)}</b><span class="muet petit">${mdGuide(t(g.intro))}</span><span class="lien-guide">${t("Read the guide")} →</span></a>`; }).join("")}</div>
-  <p class="muet petit mt-2">${t("The Guide, behind the “?” at the top of the window, keeps every step of these tutorials.")}</p></div>`;
+  <p class="muet petit mt-2">${t("The Guide, at the top of the window, keeps every step of these tutorials.")}</p></div>`;
 }
 
 // --- the Guide: short step-by-step tutorials (starting, GitHub, the phone, several computers), always in
@@ -2753,7 +2752,7 @@ const GUIDE = [
       ["Projects", "*Projects* lists everything under way in every module: its state, its progress, what it is doing now (“Milestone 5/14: …”) and what waits for you, with the reason. The filters show everything, only what needs you or only what is in progress; a click on a line opens its page. *New project* and *Join a project* are at the top.", "#global", "Projects"],
       ["The tabs", "At the top of a module, one line of tabs holds its pages. *Studio*: the project picker, then *Overview*, *Team*, *Requests*, *Chat*, *For you*, *Access*, *Log* and *Manage*. *Settings*: *Settings*, *Skills & MCP*, *Setup & health* and *Remote*. On a phone, the line scrolls sideways.", "#suivi", "Overview"],
       ["The bell", "The bell, at the top of the window, gathers what needs you in every module, one line each with its reason (“Studio, my-shop: …”). *View* opens the right page. *Ignore* hides a line and deletes nothing: it waits under *Ignored alerts*, where *Reopen* brings it back, and it comes back by itself when its reason changes."],
-      ["The “?” and the tutorials", "The *?* beside the bell opens this Guide. Home, Studio and the Vault each have a short tutorial, shown on your first visit (the Vault's also opens from a project's *Access* tab). *Tutorials*, at the top of the Guide, replays any of them; *Settings › Options* › *Show the first-launch guide and the tutorials again* shows them all once more."],
+      ["The Guide and the tutorials", "*Guide*, beside the bell, opens this page. Home, Studio and the Vault each have a short tutorial, shown on your first visit (the Vault's also opens from a project's *Access* tab). *Tutorials*, at the top of the Guide, replays any of them; *Settings › Options* › *Show the first-launch guide and the tutorials again* shows them all once more."],
       ["Only Studio?", "If you only build projects, nothing changes for you: *Studio* works on its own, as Athanor did before, and the other modules ask for nothing until you open them.", "#suivi", "Overview"],
       ["In a terminal", "`./athanor tui` opens on the same home page: one block per module and what needs you. *H* or *Esc* comes back to it from any page, *Enter* opens the module, *1*–*9* and *0* still open Studio's pages."],
     ],
@@ -4887,6 +4886,7 @@ function pcsOuvert() {
 }
 document.addEventListener("toggle", (ev) => {
   if (ev.target && ev.target.id === "cp-projet" && carteProjetOuverte()) carteProjetOuverte().pOuvert = ev.target.open; // M295b
+  if (ev.target && ev.target.id === "conso") etat.ouverts[ev.target.open ? "add" : "delete"]("conso");
   if (ev.target && ev.target.id === "rp") etat.rpOuvert = ev.target.open; // M291: the same across a change of mode
   if (ev.target && ev.target.id === "np-plus") etat.npPlus = ev.target.open; // S3 (M317): open across the GitHub sign-in's refresh
   if (!ev.target || ev.target.id !== "pcs-repli") return;
@@ -6188,7 +6188,7 @@ pages.serveurs = async () => {
   const liste = d.serveurs.map((x, i) => carteServeur(x, fiches[i], (d.environnements || {})[x.id], d.sante)).join("");
   return `<div class="serveurs">
     ${srv.aj ? messagesCoffreServeurs(c) : ""}
-    <div class="ligne cof-tete"><h2 class="m0">${t("Servers")} <span class="muet">${d.serveurs.length}</span></h2><span class="espace"></span>${distant ? `<span class="muet petit">${t("Adding a server is done on the computer.")}</span>` : srv.aj ? "" : `<button type="button" class="btn" data-srv-ajouter>${t("Add a server")}</button>`}</div>
+    <div class="ligne cof-tete"><h2 class="m0">${t("Servers")} <span class="muet">${d.serveurs.length}</span></h2><span class="espace"></span>${distant ? `<span class="muet petit">${t("Adding a server is done on the computer.")}</span>` : srv.aj ? "" : `<button type="button" class="btn${liste && !liste.includes("btn-primaire") ? " btn-primaire" : ""}" data-srv-ajouter>${t("Add a server")}</button>`}</div>
     ${srv.aj ? assistantServeur(c) : ""}
     ${liste ? `<div class="grille-projets">${liste}</div>` : srv.aj ? "" : `<div class="vide srv-vide"><p><b>${t("No server yet")}</b></p>
       <p class="muet">${t("Add your VPS or your home server: Athanor checks its fingerprint, connects with a key kept in the vault, then reads what runs on it.")}</p>
@@ -6381,7 +6381,7 @@ function blocTaches(ta, distant, annulations, envs) {
       ${(ta || {}).natif ? `<p class="petit pv-vous m0">${t((ta || {}).sans_rappels ? "Native Windows mode has no barrier: your tasks are forced without asking (warnings turned off in Settings › Options), and logged." : "Native Windows mode has no barrier: a task runs only if you force it, with Athanor's password.")}</p>` : ""}
       ${envs.length ? `<label class="petit" for="srv-tache-env">${t("For the project")} <select id="srv-tache-env"><option value="">${t("None (this server only)")}</option>${envs.map((pe) => `<option value="${h(pe)}">${h(envs.filter((x) => projetDeSite(x) === projetDeSite(pe)).length > 1 ? pe : projetDeSite(pe))}</option>`).join("")}</select></label>
       <p class="muet petit m0">${t("With a project, the agent can also change the DNS, HTTPS and protection of its site's address, on that name only.")}</p>` : ""}
-      <div class="ligne m0"><button type="submit" class="btn btn-primaire">${t("Launch")}</button></div></form>`}
+      <div class="ligne m0"><button type="submit" class="btn">${t("Launch")}</button></div></form>`}
     ${annulations}
     ${ta ? l.length ? l.map((x) => carteTacheServeur(x, ta.plans || {}, distant)).join("") : `<p class="muet petit">${t("No task yet on this server.")}</p>` : `<p class="muet petit">${t("The tasks cannot be read right now.")}</p>`}
   </div>`;

@@ -338,7 +338,6 @@ a[data-href] { cursor: pointer; }
 .onglets-module a .nb:empty { display: none; }
 /* the Guide: a round "?" beside the bell */
 .btn-guide { font-weight: 600; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
-.btn.btn-guide { min-width: 36px; padding-left: 0; padding-right: 0; }
 .fb-action.btn-guide { padding: 0 8px; }
 .btn-guide[aria-current="page"] { color: var(--accent); border-color: var(--accent); }
 
@@ -391,6 +390,8 @@ a[data-href] { cursor: pointer; }
 .btn:disabled, .btn[aria-disabled="true"] { opacity: .45; cursor: default; pointer-events: none; }
 .btn-primaire { background: var(--accent); color: var(--sur-fort); border-color: transparent; font-weight: 600; }
 .btn-primaire:hover { background: var(--accent-2); }
+/* one filled button per screen: under the tour or the lock screen, the page's own main button steps back (M318) */
+#app:has(> #visite:not([hidden]), > #verrou:not([hidden])) :is(#page, #bandeau) .btn-primaire { background: var(--panel-2); color: var(--ink); border-color: var(--line); font-weight: inherit; }
 .btn-danger { color: var(--erreur-vif); } /* AA on the dark themes too */
 .btn-danger:hover { background: var(--panel-2); border-color: var(--erreur-vif); } /* the red text stays AA: on --panel-3 it falls to 4.16 on the light theme */
 .btn-petit { padding: 4px 10px; font-size: 13px; }
@@ -1002,10 +1003,9 @@ input.large { flex: 1; min-width: 200px; width: auto; }
   .principal { flex: 1; min-height: 0; height: auto; }
   .bandeau { padding: 14px 14px 12px; gap: 10px; }
   .etat-phrase { flex-basis: 100%; }
-  .etat-phrase > .muet.petit { display: none; } /* the project's folder: the bar above names the project */
   .etat-phrase .sous { white-space: normal; }
   .bandeau .actions { display: flex; flex-wrap: wrap; gap: 8px; width: 100%; }
-  .bandeau .actions .btn:not(.cloche):not(.btn-guide) { flex: 1 1 auto; justify-content: center; } /* the bell and the “?” stay icons */
+  .bandeau .actions .btn:not(.cloche):not(.btn-guide) { flex: 1 1 auto; justify-content: center; } /* the bell and Guide keep their own width */
   /* a module page (no project): its title is in the bar above; the line of state, the bell and the “?” share one row */
   .bandeau-global h1 { display: none; }
   .bandeau-global .etat-phrase { flex: 1 1 150px; min-width: 0; }

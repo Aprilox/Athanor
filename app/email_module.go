@@ -82,7 +82,7 @@ func (moduleEmail) Tutoriel() []EtapeTutoriel {
 		{Titre: "Your e-mail accounts", Texte: "Add the SMTP account of your provider (Gmail, Outlook, OVH, Brevo…): its server, its user name and its password. The password goes straight into the vault and is never shown again.", Cible: "[data-em-ajouter]"},
 		{Titre: "Test the sending", Texte: "Send a test e-mail to check the account. A failure is said in plain words (password refused, wrong port…) and waits in the bell until a test passes.", Cible: "[data-em-tester]"},
 		{Titre: "Your apps send e-mails", Texte: "Configure sending gives a project SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_FROM and SMTP_PASSWORD: your deployed app reads them to send its e-mails. Athanor asks for its password first, if it has one.", Cible: "[data-em-configurer]"},
-		{Titre: "Stop at any time", Texte: "The × next to a project stops its sending; deleting the account takes its settings out of every project. This tutorial stays in the “?”, with the guide “Send e-mails from your apps”.", Cible: ".email-explication"},
+		{Titre: "Stop at any time", Texte: "The × next to a project stops its sending; deleting the account takes its settings out of every project. This tutorial stays in the Guide, with the topic “Send e-mails from your apps”.", Cible: ".email-explication"},
 	}
 }
 
