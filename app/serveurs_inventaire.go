@@ -143,6 +143,9 @@ func (s *Serveur) apiServeurs(w http.ResponseWriter, _ *http.Request) {
 		s.erreurServeurs(w, err)
 		return
 	}
+	if sondeAuto {
+		s.sonderServeurs(liste)
+	}
 	s.ecrireJSON(w, map[string]any{"serveurs": liste, "environnements": s.acces.UtilisationsServeurs(), "sante": s.santeServeurs(), "terminal_distance": s.shellDistanceAutorise()})
 }
 

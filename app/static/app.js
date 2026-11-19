@@ -87,7 +87,7 @@ function boutonDefil(quoi) {
 // ----------------------------------------------------------------------------- state
 const etat = {
   pieces: {}, // files waiting to be attached, per form
-  pvTic: 0, hubTic: 0, hubSig: "", accueilTexte: "", preRempli: null, pvAnnonces: {}, pvSignature: "",
+  pvTic: 0, srvEtatTic: 0, hubTic: 0, hubSig: "", accueilTexte: "", preRempli: null, pvAnnonces: {}, pvSignature: "",
   pvForm: {}, // answers being written on the For you page (text and secret values, per task; memory only)
   apprForm: {}, // choices being made on an approval of For you (vault entry, variable; never the password)
   // page: none until naviguer() reads the address (no flash of another page at load)
@@ -5916,6 +5916,7 @@ $("#page").addEventListener("submit", async (ev) => {
 // "error: <English message>" written by the Go: shown in the page's language (other results are codes)
 function resultatAudit(r) {
   const m = /^error: (.*)$/s.exec(r); if (m) return t("error: {0}", [t(m[1])]);
+  const o = /^(.*) · error: (.*)$/s.exec(r); if (o) return resultatAudit(o[1]) + " · " + t("error: {0}", [t(o[2])]); // a tool's error after its arguments and output (N11)
   const c = /^(lancée|refusée|échec) : (.*)$/s.exec(r);
   if (c) { // a home card's outcome: its message key, then its arguments
     const [cle, ...args] = c[2].split(" | ");
@@ -5948,13 +5949,24 @@ function ligneAudit(l, lang) {
 const srv = { aj: null, texte: "", ouvertes: new Set() }; // aj: the wizard ({etape: "adresse" | "empreinte" | "cle" | "coupure", …}), kept across renders
 // M244k2: Ignore permissions shown wherever the server is, not only in its assistant's panel
 const badgeSansGarde = (x, cache) => `<span class="badge badge-danger" data-sans-garde title="${h(t("Ignore permissions: the assistant runs every command on this server without asking you."))}"${cache ? " hidden" : ""}>${ic("alerte")} ${t("No safeguard")}</span>`;
+const etatServeur = (e) => [{ ok: t("Reachable"), injoignable: t("Unreachable"), empreinte_changee: t("Host fingerprint changed") }[e] || t("Waiting for its key"), "pastille " + (e === "ok" ? "travaille" : "attend")];
+const pastilleServeur = (x) => { const [txt, cls] = etatServeur(x.etat); return `<span class="${cls}" data-srv-etat="${h(x.id)}">${txt}</span>`; };
+// M313b4: while a Servers page is shown, the hub asks each server's SSH port (30 s apart at most); only the
+// pill is rewritten, never the page: an open form or an unfolded task stays as it is
+async function majEtatServeurs() {
+  const r = await api("serveurs").catch(() => null);
+  for (const x of (r || {}).serveurs || []) {
+    const p = document.querySelector(`[data-srv-etat="${CSS.escape(x.id)}"]`), [txt, cls] = etatServeur(x.etat);
+    if (p && p.textContent !== txt) { p.textContent = txt; p.className = cls; }
+  }
+}
 function carteServeur(x, fiche, envs, santeSites) {
-  const sante = { ok: t("Reachable"), injoignable: t("Unreachable"), empreinte_changee: t("Host fingerprint changed") }[x.etat] || t("Waiting for its key"), cls = x.etat === "ok" ? "travaille" : "attend", f = fiche || {};
+  const f = fiche || {};
   const tourne = [...(f.conteneurs || []).filter((c) => /^(up|running)/i.test(c.etat)).map((c) => c.nom), ...(f.services || [])];
   const resume = !fiche ? t("Its sheet is not made yet.")
     : tourne.length ? t("Running: {0}", [tourne.slice(0, 6).join(", ") + (tourne.length > 6 ? " +" + (tourne.length - 6) : "")]) : t("Nothing seen running.");
   return `<div class="bloc carte-serveur" data-srv-id="${h(x.id)}">
-    <div class="cp-tete"><a class="cp-nom" href="#serveur/${encodeURIComponent(x.id)}"><b>${h(x.nom)}</b></a>${x.autorisation === "ignorer" ? badgeSansGarde(x) : ""}<span class="pastille ${cls}">${sante}</span></div>
+    <div class="cp-tete"><a class="cp-nom" href="#serveur/${encodeURIComponent(x.id)}"><b>${h(x.nom)}</b></a>${x.autorisation === "ignorer" ? badgeSansGarde(x) : ""}${pastilleServeur(x)}</div>
     <div class="muet petit"><code>${h(x.utilisateur)}@${h(x.hote)}${x.port === 22 ? "" : ":" + x.port}</code>${f.systeme && f.systeme.nom ? " · " + h(f.systeme.nom) : ""}</div>
     ${(x.roles || []).includes("prod") ? `<div class="ligne m0"><span class="badge badge-infra">${t("Production")}</span></div>` : ""}
     <div class="petit srv-tourne" title="${h(tourne.join(", "))}">${h(resume)}</div>
@@ -6237,12 +6249,11 @@ pages.serveur = async () => {
   srv.tachesSig = JSON.stringify(ta);
   const x = d.serveur, f = d.fiche, attente = x.etat === "inconnu";
   srv.fiche = x; // the actions below act on the server shown
-  const sante = { ok: t("Reachable"), injoignable: t("Unreachable"), empreinte_changee: t("Host fingerprint changed") }[x.etat] || t("Waiting for its key");
   return `<div class="serveurs srv-fiche">
     <p class="m0"><a href="#serveurs" class="petit">${ic("gauche")} ${t("Servers")}</a></p>
     ${distant ? "" : messagesCoffreServeurs(c)}
     <div class="bloc srv-tete">
-      <div class="cp-tete"><h2 class="m0 cp-nom">${h(x.nom)}</h2>${(x.roles || []).includes("prod") ? `<span class="badge badge-infra">${t("Production")}</span>` : ""}${x.autorisation === "ignorer" ? badgeSansGarde(x) : ""}<span class="pastille ${x.etat === "ok" ? "travaille" : "attend"}">${sante}</span></div>
+      <div class="cp-tete"><h2 class="m0 cp-nom">${h(x.nom)}</h2>${(x.roles || []).includes("prod") ? `<span class="badge badge-infra">${t("Production")}</span>` : ""}${x.autorisation === "ignorer" ? badgeSansGarde(x) : ""}${pastilleServeur(x)}</div>
       <div class="muet petit"><code>${h(x.utilisateur)}@${h(x.hote)}${x.port === 22 ? "" : ":" + x.port}</code>${x.empreinte_hote ? ` · ${t("Fingerprint")} <code class="srv-empreinte-courte">${h(x.empreinte_hote)}</code>` : ""}</div>
       <div class="ligne m0 srv-utilise"><span class="muet petit">${t("Used by")}</span>${(d.environnements || []).length ? [...new Set(d.environnements.map(projetDeSite))].map((p) => `<a class="badge" href="#acces" data-projet="${h(p)}" data-cible="acces">${h(p)}</a>`).join("") : `<span class="muet petit">${t("No project uses this server yet.")}</span>`}</div>
       <div class="muet petit srv-auth">${t("Athanor connects with: {0}", [t(AUTH_SRV[x.auth] || "an SSH key")])}${x.auth === "mot_de_passe" ? "" : " · " + (x.mot_de_passe_coupe ? t("Password logins are cut: Athanor and you connect with keys only.") : t("Password logins are still open on this server."))}</div>
@@ -6278,9 +6289,11 @@ function dureeTache(x) {
   const s = Math.max(0, Math.round(((x.fin ? Date.parse(x.fin) : Date.now()) - Date.parse(x.cree)) / 1000));
   return s < 60 ? t("{0} s", [s]) : s < 3600 ? t("{0} min", [Math.round(s / 60)]) : t("{0} h", [(s / 3600).toFixed(1)]);
 }
+// N10: a failure Athanor knows what to do about says it right after its reason (the task's card, the assistant's thread)
+const raisonEtConseil = (d) => t(d) + (SOLUTIONS_TERMINAL[d] ? ". " + t(SOLUTIONS_TERMINAL[d]) : "");
 function carteTacheServeur(x, plans, distant) {
   const [lib, cl] = ETATS_TACHE_SRV()[x.etat] || [x.etat, ""], heure = (d) => new Date(d).toLocaleTimeString(document.documentElement.lang || "en", { hour: "2-digit", minute: "2-digit" });
-  const etapes = (x.historique || []).map((e) => `<li><span class="muet">${h(heure(e.t))}</span> ${h((ETATS_TACHE_SRV()[e.etat] || [e.etat])[0])}${["echec", "arretee"].includes(e.etat) && e.detail ? ` <span class="muet">— ${h(t(e.detail))}</span>` : ""}</li>`).join("");
+  const etapes = (x.historique || []).map((e) => `<li><span class="muet">${h(heure(e.t))}</span> ${h((ETATS_TACHE_SRV()[e.etat] || [e.etat])[0])}${["echec", "arretee"].includes(e.etat) && e.detail ? ` <span class="muet">— ${h(raisonEtConseil(e.detail))}</span>` : ""}</li>`).join("");
   const blocsPlans = (x.plans || []).map((id, i) => {
     const p = plans[id], attend = x.etat === "attente_accord" && i === x.plans.length - 1;
     if (!p) return `<p class="muet petit">${h(t("Plan {0}: no longer kept.", [i + 1]))}</p>`;
@@ -6411,7 +6424,7 @@ $("#page").addEventListener("click", async (ev) => {
   try {
     // a refusal the terminal knows what to do about says it here too (M313b3)
     const r = await action(api(d.srvVerifier ? "serveurs/ajouter" : url, "POST", d.srvVerifier ? { id: x.id } : d.srvCouper ? { couper_mot_de_passe: true } : d.srvDurcir ? { durcir: true } : { rafraichir: true })
-      .catch((e) => { const sol = SOLUTIONS_TERMINAL[e.data && e.data.erreur_key]; if (sol) e.message += " " + t(sol); throw e; }));
+      .catch((e) => { const sol = SOLUTIONS_TERMINAL[e.data && e.data.erreur_key]; if (sol) e.message += ". " + t(sol); throw e; }));
     if (!r) return;
     if (d.srvDurcir) { toast(r.deja ? t("{0} is already hardened: every step is in place.", [x.nom]) : t("Hardening plan ready ({0} steps): read it and accept it in Approvals.", [String(r.etapes.length)]), "ok"); return; }
     if (r.fiche_erreur) toast(t(r.fiche_erreur), "erreur");
@@ -7528,7 +7541,7 @@ async function chargerIA() {
 function actionIA(a) {
   const [lib, cl] = ETATS_ACTION_IA()[a.etat] || [a.etat, ""], cla = CLASSES_ETAPE()[a.classe];
   const quoi = a.outil === "ssh_commande" ? "$ " + a.quoi : t(a.libelle || a.outil) + (a.quoi ? " · " + a.quoi : "");
-  const corps = (a.sortie ? `<pre class="ia-sortie">${h(a.sortie)}${a.coupee ? "\n…" : ""}</pre>` : "") + (a.detail ? `<p class="petit m0 ${a.etat === "refusee" ? "pv-vous" : "muet"}">${h(t(a.detail))}</p>` : "")
+  const corps = (a.sortie ? `<pre class="ia-sortie">${h(a.sortie)}${a.coupee ? "\n…" : ""}</pre>` : "") + (a.detail ? `<p class="petit m0 ${a.etat === "refusee" ? "pv-vous" : "muet"}">${h(raisonEtConseil(a.detail))}</p>` : "")
     + (a.etat === "erreur" && !a.detail ? `<p class="petit muet m0">${h(t("Exit code {0}", [a.code]))}</p>` : "");
   const tete = `<code class="ia-quoi">${h(quoi)}</code> ${cla ? `<span class="pv-etat ${cla[1]}">${h(cla[0])}</span>` : ""} <span class="pv-etat ${cl}">${h(lib)}</span>`;
   const cle = a.t + "#" + a.n;
@@ -7562,7 +7575,7 @@ function tacheIA(x) {
     ${(x.actions || []).length ? `<ol class="ia-actions">${x.actions.map(actionIA).join("")}</ol>` : ""}
     ${carte}
     ${x.resultat ? `<div class="ia-reponse">${mdChat(x.resultat, true)}</div>` : ""}
-    ${!fini || carte ? "" : a === "erreur" ? `<p class="m0 petit ia-echec"><span class="echec">${h(fin.detail ? t(fin.detail) : t("The task failed without giving a reason."))}</span>${(etat.vue || {}).distant ? "" : ` <button type="button" class="btn btn-petit" data-ia-reessayer="${h(x.id)}">${t("Retry")}</button>`}</p>`
+    ${!fini || carte ? "" : a === "erreur" ? `<p class="m0 petit ia-echec"><span class="echec">${h(fin.detail ? raisonEtConseil(fin.detail) : t("The task failed without giving a reason."))}</span>${(etat.vue || {}).distant ? "" : ` <button type="button" class="btn btn-petit" data-ia-reessayer="${h(x.id)}">${t("Retry")}</button>`}</p>`
       : `<p class="m0 petit"><span class="pv-etat ${cl}">${h(lib)}</span>${x.etat === "arretee" && fin.detail ? ` <span class="muet">${h(t(fin.detail))}</span>` : ""}</p>`}</div>`;
 }
 function erreurIA(x) { // the status line of a failed task says why, as its thread does
@@ -8247,6 +8260,7 @@ async function rafraichir() {
         const sig = JSON.stringify(v.maj || {});
         if (sig !== etat.majSig) { etat.majSig = sig; blocMaj.innerHTML = `<h2>${t("Version")}</h2>${rendreBlocMaj(etat.optionsVue)}`; }
       }
+      if ((etat.page === "serveurs" || etat.page === "serveur") && ++etat.srvEtatTic % 3 === 0) await majEtatServeurs();
       if (etat.page === "serveur" && srv.tachesSig && !document.activeElement.matches("input, textarea, select") && ++etat.srvTic % 2 === 0) { // a task's states, live
         const r = await api("serveurs/" + encodeURIComponent(srv.id || "") + "/taches").catch(() => null);
         if (r && JSON.stringify(r) !== srv.tachesSig) rendrePage();
