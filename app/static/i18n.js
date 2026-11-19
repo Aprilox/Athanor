@@ -49,6 +49,7 @@ const PREFIXES = ["Resume: new request ", "Resume: what changed in .athanor/REQU
 
 const DICT = {
 fr: {
+  "Password kept for a server": "Mot de passe gardé pour un serveur",
   "by Athanor": "par Athanor",
   "Password of the site's protection (user {0}), made by Athanor": "Mot de passe de la protection du site (utilisateur {0}), créé par Athanor",
   "Token of the remote Athanor {0}": "Jeton de l'Athanor distant {0}",
@@ -876,6 +877,7 @@ fr: {
   "Run a command": "Lancer une commande", "The task failed without giving a reason.": "La tâche a échoué sans donner de raison.",
 },
 es: {
+  "Password kept for a server": "Contraseña guardada para un servidor",
   "by Athanor": "por Athanor",
   "Password of the site's protection (user {0}), made by Athanor": "Contraseña de la protección del sitio (usuario {0}), creada por Athanor",
   "Token of the remote Athanor {0}": "Token del Athanor remoto {0}",
@@ -1671,6 +1673,7 @@ es: {
   "Run a command": "Ejecutar un comando", "The task failed without giving a reason.": "La tarea falló sin dar un motivo.",
 },
 de: {
+  "Password kept for a server": "Für einen Server gespeichertes Passwort",
   "by Athanor": "von Athanor",
   "Password of the site's protection (user {0}), made by Athanor": "Passwort des Website-Schutzes (Benutzer {0}), von Athanor erstellt",
   "Token of the remote Athanor {0}": "Token des entfernten Athanor {0}",
@@ -2460,6 +2463,7 @@ de: {
   "Run a command": "Einen Befehl ausführen", "The task failed without giving a reason.": "Die Aufgabe ist ohne Angabe eines Grundes fehlgeschlagen.",
 },
 it: {
+  "Password kept for a server": "Password conservata per un server",
   "by Athanor": "da Athanor",
   "Password of the site's protection (user {0}), made by Athanor": "Password della protezione del sito (utente {0}), creata da Athanor",
   "Token of the remote Athanor {0}": "Token dell'Athanor remoto {0}",
@@ -3249,6 +3253,7 @@ it: {
   "Run a command": "Eseguire un comando", "The task failed without giving a reason.": "L'attività non è riuscita senza indicare un motivo.",
 },
 pt: {
+  "Password kept for a server": "Palavra-passe guardada para um servidor",
   "by Athanor": "pelo Athanor",
   "Password of the site's protection (user {0}), made by Athanor": "Palavra-passe da proteção do site (utilizador {0}), criada pelo Athanor",
   "Token of the remote Athanor {0}": "Token do Athanor remoto {0}",

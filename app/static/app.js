@@ -922,8 +922,8 @@ function garderFocus(zone, rendre, parRang = true) {
 
 // ----------------------------------------------------------------------------- shell: header, sidebar, project picker
 // what the pilot receives from the vault, next to Start (summary computed by the server)
+const pl = (n) => new Intl.PluralRules(document.documentElement.lang || "en").select(n) !== "one"; // plural in the page's language (0 is singular in French)
 function blocAccesDemarrer(ac) {
-  const pl = (n) => new Intl.PluralRules(document.documentElement.lang || "en").select(n) !== "one";
   const recu = [ac.secrets && (pl(ac.secrets) ? t("{0} keys", [ac.secrets]) : t("{0} key", [ac.secrets])),
     ac.variables && (pl(ac.variables) ? t("{0} variables", [ac.variables]) : t("{0} variable", [ac.variables]))].filter(Boolean);
   // C-M218-2: the badge also counts the server keys Athanor keeps, so the sentence says them
@@ -1666,7 +1666,7 @@ function aideChat() {
 // M227c: a thread follows its bottom only when the reader is there; scrolled up, "Go to the latest message" brings them back
 const auBas = (f) => f.scrollHeight - f.scrollTop - f.clientHeight < 80;
 // never hidden while it holds the keyboard focus (the focus would fall to the page): it goes when the focus leaves it
-function majBoutonBas(f) { const b = document.getElementById(f.id + "-bas"); if (b) b.hidden = auBas(f) && document.activeElement !== b; }
+function majBoutonBas(f) { const b = document.getElementById(f.id + "-bas"); if (b) b.hidden = (auBas(f) || !!f.querySelector(".carte-action-champs:not([hidden])")) && document.activeElement !== b; }
 document.addEventListener("focusout", (ev) => { const f = ev.target.classList && ev.target.classList.contains("chat-bas") && document.getElementById(ev.target.id.slice(0, -4)); if (f) setTimeout(() => majBoutonBas(f)); });
 const boutonBas = (id) => `<button type="button" class="btn btn-petit chat-bas" id="${id}-bas" hidden>${t("Go to the latest message")}</button>`;
 document.addEventListener("scroll", (ev) => { if (ev.target.classList && ev.target.classList.contains("chat-fil")) majBoutonBas(ev.target); }, true);
@@ -2304,8 +2304,8 @@ function carteActionHub(c, i) {
   const decide = c.etat ? `<div class="${c.etat === "lancee" ? "ok" : "muet"} petit" role="status">${c.etat === "lancee" ? (ic("ok") + " ") + t("Launched") : (ic("croix") + " ") + t("Refused")}${c.resultat ? " — " + h(t(c.resultat, (c.args || []).map((x) => t(x)))) : ""}${(c.args || []).includes(SANS_CLAUDE) ? ` <a href="#claude">${t("Open Settings › Claude")}</a>` : ""}</div>${tache}`
     : `${c.erreur ? `<div class="attention petit" role="alert">${h(t(c.erreur))}</div>` : ""}
       ${equipe ? equipe.vue : ""}<div class="carte-action-champs"${ouverte ? "" : " hidden"}>${equipe ? equipe.champs : f ? (ouverte ? champsCarteProjet(c, f, existant) : "") : champs + titre + texte}</div>
-      <div class="ligne m0 mt-1"><button type="button" class="btn btn-petit btn-primaire" data-cact-decision="lancer" data-index="${i}">${t("Launch")}</button>
-        ${ty === "attribuer" ? "" : `<button type="button" class="btn btn-petit" data-cact-modifier aria-expanded="${ouverte}">${t("Edit")}</button>`}
+      <div class="ligne m0 mt-1">${ty === "mission" ? "" : `<button type="button" class="btn btn-petit btn-primaire" data-cact-decision="lancer" data-index="${i}">${t("Launch")}</button>`}
+        ${ty === "attribuer" || ty === "mission" ? "" : `<button type="button" class="btn btn-petit" data-cact-modifier aria-expanded="${ouverte}">${t("Edit")}</button>`}
         <button type="button" class="btn btn-petit" data-cact-decision="refuser" data-index="${i}">${t("Refuse")}</button></div>`;
   const sur = f && !existant ? f.projet + " — " + f.dossier : c.sur, texteVu = f ? f.texte : c.texte;
   return `<div class="chat-msg chat-claude"><div class="chat-bulle chat-note carte-action" data-carte-action="${i}" data-type="${v(ty)}" ${ty === "attribuer" ? `data-element="${v(c.element)}" data-nom="${v(c.nom)}"` : ""}>
@@ -5667,7 +5667,7 @@ function carteCoffre(x) {
     <div class="petit cof-valeur">${secret ? `<span class="muet">•••• ${t("saved")}${x.deux_valeurs ? " · " + h(t("two values (older projects)")) : ""}</span>` : `<code>${h(x.valeur)}</code>${x.deux_valeurs ? ` · ${h(t("Second value (older projects)"))} <code>${h(x.prod)}</code>` : ""}`}</div>
     <div class="petit cof-note${x.note ? "" : " muet"}" title="${h(noteCoffre(x.note))}">${x.note ? h(noteCoffre(x.note)) : t("No note for the AI")}</div>
     ${ficheCoffre(x)}
-    <div class="muet petit">${nomCategorie(x.categorie) ? `<span class="etiquette cof-cat">${h(nomCategorie(x.categorie))}</span> ` : ""}${x.source ? h(x.source.startsWith("serveurs:") ? t("Key made for a server") : t("Imported from {0}", [x.source])) + " · " : ""}${h(dateLisible(x.modifie))}</div>
+    <div class="muet petit">${nomCategorie(x.categorie) ? `<span class="etiquette cof-cat">${h(nomCategorie(x.categorie))}</span> ` : ""}${x.source ? h(x.source.startsWith("serveurs:") ? t(x.type === "mot_de_passe" ? "Password kept for a server" : "Key made for a server") : t("Imported from {0}", [x.source])) + " · " : ""}${h(dateLisible(x.modifie))}</div>
   </div>`;
 }
 // the add/edit form: a secret's field stays empty ("•••• saved"), typing in it replaces the value
@@ -5729,7 +5729,7 @@ function panneauCategories() {
   const sugg = ["DNS", t("Hosting"), t("E-mail")].filter((s) => !cats.some((c) => c.nom.toLowerCase() === s.toLowerCase()));
   return `<div class="bloc cof-form cof-cats" id="cof-cats">
     <h2>${t("Categories")}</h2>
-    ${cats.length ? cats.map((c) => `<form class="cof-cat-ligne" data-cof-cat="${h(c.id)}" autocomplete="off"><input type="text" class="cof-cat-nom" maxlength="50" value="${h(c.nom)}" aria-label="${h(t("Name of the category"))}"><span class="muet petit">${n(c.id)}</span>
+    ${cats.length ? cats.map((c) => `<form class="cof-cat-ligne" data-cof-cat="${h(c.id)}" autocomplete="off"><input type="text" class="cof-cat-nom" maxlength="50" value="${h(c.nom)}" aria-label="${h(t("Name of the category"))}"><span class="muet petit">${t(pl(n(c.id)) ? "{0} keys" : "{0} key", [n(c.id)])}</span>
       <button type="submit" class="btn btn-petit">${t("Rename")}</button><button type="button" class="btn btn-petit btn-danger" data-cof-cat-supprimer="${h(c.id)}">${t("Delete")}</button></form>`).join("")
       : `<p class="muet petit m0">${t("No category yet: create one to sort your APIs.")}</p>`}
     <form class="cof-cat-ligne" id="cof-cat-form" autocomplete="off"><input type="text" id="cof-cat-nouvelle" maxlength="50" placeholder="${h(t("New category"))}" aria-label="${h(t("New category"))}"><button type="submit" class="btn btn-petit">${t("Create")}</button></form>
@@ -5882,7 +5882,13 @@ $("#page").addEventListener("submit", async (ev) => {
 });
 
 // "error: <English message>" written by the Go: shown in the page's language (other results are codes)
-function resultatAudit(r) { const m = /^error: (.*)$/s.exec(r); return m ? t("error: {0}", [t(m[1])]) : r; }
+function resultatAudit(r) {
+  const m = /^error: (.*)$/s.exec(r); if (m) return t("error: {0}", [t(m[1])]);
+  const c = /^(lancée|refusée|échec) : (.*)$/s.exec(r); if (!c) return r; // a home card's outcome: its message key, then its arguments
+  const [cle, ...args] = c[2].split(" | ");
+  return t("{0}: {1}", [t({ "lancée": "Launched", "refusée": "Refused" }[c[1]] || "Failed"), t(cle, args.map((x) => t(x)))]);
+}
+const actionAudit = (a) => a.replace(/^(chat d'accueil : )(.+?)( \(.*\))$/s, (_, p, q, s) => p + t(q) + s);
 // --- Audit log (#audit): what the modules asked, answered and did, newest first; read only (also from a paired device)
 const aud = { f: { mois: "", projet: "", type: "", q: "" }, pages: 1, verif: null };
 const TYPES_AUDIT = { demande: "Requests", reponse: "Answers", evenement: "Events" };
@@ -5893,7 +5899,7 @@ function ligneAudit(l, lang) {
   const d = new Date(l.t), heure = isNaN(d) ? l.t : d.toLocaleTimeString(lang, { hour: "2-digit", minute: "2-digit" });
   const qui = [l.mission, l.agent].filter(Boolean).join(" · ");
   return `<li class="aud-ligne aud-${h(l.type)}"><span class="muet aud-heure">${h(heure)}</span>
-    <span class="aud-texte"><b>${h(quiAudit(l.de))}</b> → ${h(quiAudit(l.vers))}${l.projet ? ", " + h(l.projet) : ""} : <code>${h(l.action || l.type)}</code>${l.resultat ? " — " + h(resultatAudit(l.resultat)) : ""}${qui ? ` <span class="muet">(${h(qui)})</span>` : ""}</span>
+    <span class="aud-texte"><b>${h(quiAudit(l.de))}</b> → ${h(quiAudit(l.vers))}${l.projet ? ", " + h(l.projet) : ""} : <code>${h(actionAudit(l.action || l.type))}</code>${l.resultat ? " — " + h(resultatAudit(l.resultat)) : ""}${qui ? ` <span class="muet">(${h(qui)})</span>` : ""}</span>
     <span class="muet petit aud-n" title="${h(l.id)}">#${l.n}</span></li>`;
 }
 // --- Servers (#serveurs): inventory cards and the add wizard (address → fingerprint to confirm → one of three ways)

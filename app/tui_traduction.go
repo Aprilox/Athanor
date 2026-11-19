@@ -117,6 +117,8 @@ func traduireTUI(d map[string]string, cle string, args ...any) string {
 			t = strconv.Itoa(x)
 		case int64:
 			t = strconv.FormatInt(x, 10)
+		case *MessageMoteur: // a message inside a message (an alert's reason), said in this language too
+			t = traduireTUI(d, x.Cle, x.Args...)
 		default:
 			b, _ := json.Marshal(x)
 			t = strings.Trim(string(b), `"`)

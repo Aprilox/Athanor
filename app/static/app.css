@@ -160,6 +160,7 @@ html.cadre .dialogue, html.cadre .verrou, html.cadre .assistant { top: var(--bar
 @media (max-width: 700px) { .grille-hub, :is(.a-repondre, .en-cours) .grille-projets { grid-template-columns: 1fr; } .accueil-barre .ligne { flex-wrap: wrap; } .accueil-barre .btn-primaire { width: 100%; justify-content: center; text-align: center; } }
 /* M195: the home conversation, history above, a large field at the bottom, its powers folded under it */
 .accueil .hub-chat-fil { flex: none; max-height: 46vh; min-height: 0; overflow: auto; margin: 0; }
+.accueil .hub-chat-fil:has(.carte-action-champs:not([hidden])) { max-height: 72vh; } /* an open card form shows its buttons */
 .hub-chat-fil .vide { padding: 10px 12px; border: 0; background: var(--panel-2); text-align: left; }
 .hub-chat-fil .vide:empty { display: none; } /* M258: an empty conversation says nothing: the label above already asks */
 /* E-mail: one framed card per account, its buttons wrapped (M203/M205) */
@@ -311,7 +312,8 @@ a[data-href] { cursor: pointer; }
 .ic { display: inline-block; width: 1em; height: 1em; vertical-align: -.14em; flex: none; background: currentColor; -webkit-mask: var(--ico) center / contain no-repeat; mask: var(--ico) center / contain no-repeat; --ico: var(--ic-point); }
 .ic-ok { --ico: var(--ic-ok); } .ic-croix { --ico: var(--ic-croix); } .ic-alerte { --ico: var(--ic-alerte); } .ic-lecture { --ico: var(--ic-lecture); } .ic-bas { --ico: var(--ic-bas); } .ic-droite { --ico: var(--ic-droite); } .ic-gauche { --ico: var(--ic-gauche); } .ic-haut { --ico: var(--ic-haut); } .ic-descendre { --ico: var(--ic-descendre); } .ic-retour { --ico: var(--ic-retour); } .ic-actualiser { --ico: var(--ic-actualiser); } .ic-point { --ico: var(--ic-point); } .ic-cercle { --ico: var(--ic-cercle); } .ic-losange { --ico: var(--ic-losange); } .ic-etoile { --ico: var(--ic-etoile); } .ic-maj { --ico: var(--ic-maj); } .ic-echange { --ico: var(--ic-echange); } .ic-sous { --ico: var(--ic-sous); } .ic-attente { --ico: var(--ic-attente); } .ic-actions { --ico: var(--ic-actions); } .ic-plus { --ico: var(--ic-plus); } .ic-info { --ico: var(--ic-info); } .ic-menu { --ico: var(--ic-menu); } .ic-dossier { --ico: var(--ic-dossier); } .ic-fichier { --ico: var(--ic-fichier); } .ic-lien { --ico: var(--ic-lien); } .ic-projet { --ico: var(--ic-projet); } .ic-serveur { --ico: var(--ic-serveur); } .ic-cle { --ico: var(--ic-cle); }
 .audit .journal-tools select { max-width: 170px; }
-.aud-jour { font-size: 13px; font-weight: 600; color: var(--muted); margin: 16px 0 6px; text-transform: capitalize; }
+.aud-jour { font-size: 13px; font-weight: 600; color: var(--muted); margin: 16px 0 6px; }
+.aud-jour::first-letter { text-transform: uppercase; }
 .aud-liste { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: var(--rayon); background: var(--panel); }
 .aud-ligne { display: flex; gap: 10px; align-items: baseline; padding: 7px 12px; border-top: 1px solid var(--line); overflow-wrap: anywhere; }
 .aud-ligne:first-child { border-top: none; }
@@ -1507,7 +1509,7 @@ html.scene-pause .verrou * { animation-play-state: paused !important; }
 .sftp-col-nom .ic { font-size: 16px; color: var(--muted); }
 .sftp-col-nom .ic-dossier { color: var(--accent); }
 .sftp-texte { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
-.sftp-nom, .sftp-sous { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sftp-nom, .sftp-sous { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 3px; } /* room for an italic last letter */
 .sftp-sous { font: 11.5px var(--mono); color: var(--muted); }
 .sftp-entree .sftp-col-date, .sftp-entree .sftp-col-taille, .sftp-entree .sftp-col-type { color: var(--muted); font-size: 12.5px; }
 .sftp-col-taille { text-align: right; justify-self: end; }

@@ -1175,3 +1175,11 @@ func TestTUIEtroitEtCalme(t *testing.T) {
 		t.Fatalf("the chat moves:\n%s", avant)
 	}
 }
+
+// M313a: an alert's argument that is itself a message (the failed test e-mail) is translated, never dumped as JSON.
+func TestTraduireTUIMessageImbrique(t *testing.T) {
+	d := map[string]string{"The test e-mail of {0} failed: {1}": "L'e-mail de test de {0} a échoué : {1}", "No answer": "Pas de réponse"}
+	if g := traduireTUI(d, "The test e-mail of {0} failed: {1}", "Pro", &MessageMoteur{Cle: "No answer"}); g != "L'e-mail de test de Pro a échoué : Pas de réponse" {
+		t.Fatal(g)
+	}
+}

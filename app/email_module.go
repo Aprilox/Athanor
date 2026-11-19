@@ -32,7 +32,7 @@ func (moduleEmail) Elements(*Serveur) []ElementHub {
 	for _, c := range liste {
 		if d := c.DernierTest; d != nil && !d.OK {
 			out = append(out, ElementHub{ID: c.ID, Titre: c.Nom, Etat: "erreur", Lien: "#email",
-				Attente: &AttenteElement{Raison: "The test e-mail of {0} failed: {1}", Args: []any{c.Nom, d.Message}, Page: "#email", Cle: d.T}})
+				Attente: &AttenteElement{Raison: "The test e-mail of {0} failed: {1}", Args: []any{c.Nom, &MessageMoteur{Cle: d.Message}}, Page: "#email", Cle: d.T}})
 		}
 	}
 	return out
