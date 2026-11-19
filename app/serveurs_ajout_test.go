@@ -304,10 +304,15 @@ func TestServeursAjout(t *testing.T) {
 		t.Errorf("added server: %v", x)
 	}
 
+	// a second server of the same name is refused, whatever the case: nobody could tell the two cards apart
+	if code, v := appel("/api/serveurs/ajouter", base(map[string]any{"nom": "vps", "mode": "coffre", "cle": cle.ID})); code != 400 || v["erreur_key"] != errServeurNomPris.Error() {
+		t.Errorf("same name twice: %d %v", code, v)
+	}
+
 	// 4) native mode: an existing infra key needs Athanor's password
 	modeNatif.Store(true)
 	for _, m := range []string{"", "mauvais"} {
-		if code, _ := appel("/api/serveurs/ajouter", base(map[string]any{"mode": "coffre", "cle": cle.ID, "mot_de_passe": m})); code != http.StatusUnauthorized {
+		if code, _ := appel("/api/serveurs/ajouter", base(map[string]any{"nom": "VPS 2", "mode": "coffre", "cle": cle.ID, "mot_de_passe": m})); code != http.StatusUnauthorized {
 			t.Errorf("native mode, password %q: %d", m, code)
 		}
 	}

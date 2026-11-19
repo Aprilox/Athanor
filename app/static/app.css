@@ -130,6 +130,7 @@ html.cadre .dialogue, html.cadre .verrou, html.cadre .assistant { top: var(--bar
 .liste-mentions { list-style: none; margin: -6px 0 0; padding: 4px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); max-height: 260px; overflow-y: auto; }
 .mention-opt { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 4px; cursor: pointer; }
 .mention-opt.actif, .mention-opt:hover { background: var(--line); }
+.mention-opt .etiquette, .mention-opt > .muet { flex: none; max-width: 50%; /* the type or the address is never squeezed to "jeto / n": the name wraps instead */ }
 .mention-vide { padding: 6px 8px; }
 .puces-suggestions { flex-wrap: wrap; gap: 6px; }
 .puce-sugg { border-radius: 12px; }
@@ -1219,7 +1220,7 @@ ol.guide-access li { margin: 5px 0; }
 /* Servers page (#serveurs): inventory cards and the add wizard */
 .carte-serveur { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .carte-serveur .cp-tete { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; } /* M275: badges go under a long name, never cut it */
-.carte-serveur .cp-nom { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.carte-serveur .cp-nom { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; white-space: normal; overflow: visible; /* a server name is never cut: it wraps */ }
 .carte-serveur code { overflow-wrap: anywhere; }
 #srv-cle-importee:not(:placeholder-shown) { -webkit-text-security: disc; } /* M275: a private key chosen or pasted is never shown in clear */
 .srv-tourne { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }

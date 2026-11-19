@@ -100,6 +100,7 @@ func TestServeursInventaire(t *testing.T) {
 		t.Errorf("rename: %d %v", code, v)
 	}
 	for _, c := range []struct{ corps, cle string }{{`{"nom":" "}`, "Give the server a name"}, {`{"roles":["root"]}`, "Unknown server role"},
+		{`{"nom":"VPS-1"}`, "A server already has this name: give this one another name"}, // the name of the other server, whatever the case
 		{`{"nom":"` + strings.Repeat("x", 101) + `"}`, "The name is too long (100 characters at most)"},
 		{`{"nom":"vps‮gnp"}`, "The name holds control or invisible characters"}, {`{"nom":"a​b"}`, "The name holds control or invisible characters"}} {
 		if code, v := appel("POST", "/api/serveurs/"+ids[1], c.corps); code != 400 || v["erreur_key"] != c.cle {

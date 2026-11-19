@@ -49,6 +49,7 @@ const PREFIXES = ["Resume: new request ", "Resume: what changed in .athanor/REQU
 
 const DICT = {
 fr: {
+  "A server already has this name: give this one another name": "Un serveur porte déjà ce nom : donnez-en un autre à celui-ci",
   "The brief Athanor gave its agent (in English)": "La consigne qu'Athanor a donnée à son agent (en anglais)",
   "A technical record, kept as it was written: action codes, and the answers given to the agents in their working language (English). Athanor translates the messages it knows; nothing here is rewritten.": "Un relevé technique, gardé tel qu'il a été écrit : des codes d'action, et les réponses données aux agents dans leur langue de travail (l'anglais). Athanor traduit les messages qu'il connaît ; rien ici n'est réécrit.",
   "End of cycle: {0} turns, {1} min, {2} $ — {3}": "Fin du cycle : {0} tour(s), {1} min, {2} $ — {3}",
@@ -915,6 +916,7 @@ fr: {
   "Run a command": "Lancer une commande", "The task failed without giving a reason.": "La tâche a échoué sans donner de raison.",
 },
 es: {
+  "A server already has this name: give this one another name": "Un servidor ya tiene este nombre: dé otro nombre a este",
   "The brief Athanor gave its agent (in English)": "La consigna que Athanor dio a su agente (en inglés)",
   "A technical record, kept as it was written: action codes, and the answers given to the agents in their working language (English). Athanor translates the messages it knows; nothing here is rewritten.": "Un registro técnico, guardado tal como se escribió: códigos de acción y las respuestas dadas a los agentes en su idioma de trabajo (inglés). Athanor traduce los mensajes que conoce; aquí no se reescribe nada.",
   "End of cycle: {0} turns, {1} min, {2} $ — {3}": "Fin del ciclo: {0} turno(s), {1} min, {2} $ — {3}",
@@ -1749,6 +1751,7 @@ es: {
   "Run a command": "Ejecutar un comando", "The task failed without giving a reason.": "La tarea falló sin dar un motivo.",
 },
 de: {
+  "A server already has this name: give this one another name": "Ein Server trägt bereits diesen Namen: Geben Sie diesem einen anderen",
   "The brief Athanor gave its agent (in English)": "Der Auftrag, den Athanor seinem Agenten gab (auf Englisch)",
   "A technical record, kept as it was written: action codes, and the answers given to the agents in their working language (English). Athanor translates the messages it knows; nothing here is rewritten.": "Ein technisches Protokoll, so aufbewahrt, wie es geschrieben wurde: Aktionscodes und die Antworten an die Agenten in deren Arbeitssprache (Englisch). Athanor übersetzt die Meldungen, die es kennt; hier wird nichts umgeschrieben.",
   "End of cycle: {0} turns, {1} min, {2} $ — {3}": "Zyklusende: {0} Runde(n), {1} Min., {2} $ — {3}",
@@ -2577,6 +2580,7 @@ de: {
   "Run a command": "Einen Befehl ausführen", "The task failed without giving a reason.": "Die Aufgabe ist ohne Angabe eines Grundes fehlgeschlagen.",
 },
 it: {
+  "A server already has this name: give this one another name": "Un server ha già questo nome: dai un altro nome a questo",
   "The brief Athanor gave its agent (in English)": "La consegna che Athanor ha dato al suo agente (in inglese)",
   "A technical record, kept as it was written: action codes, and the answers given to the agents in their working language (English). Athanor translates the messages it knows; nothing here is rewritten.": "Un registro tecnico, conservato così come è stato scritto: codici di azione e le risposte date agli agenti nella loro lingua di lavoro (inglese). Athanor traduce i messaggi che conosce; qui nulla viene riscritto.",
   "End of cycle: {0} turns, {1} min, {2} $ — {3}": "Fine del ciclo: {0} turno/i, {1} min, {2} $ — {3}",
@@ -3405,6 +3409,7 @@ it: {
   "Run a command": "Eseguire un comando", "The task failed without giving a reason.": "L'attività non è riuscita senza indicare un motivo.",
 },
 pt: {
+  "A server already has this name: give this one another name": "Um servidor já tem este nome: dê outro nome a este",
   "The brief Athanor gave its agent (in English)": "A instrução que o Athanor deu ao seu agente (em inglês)",
   "A technical record, kept as it was written: action codes, and the answers given to the agents in their working language (English). Athanor translates the messages it knows; nothing here is rewritten.": "Um registo técnico, guardado tal como foi escrito: códigos de ação e as respostas dadas aos agentes na sua língua de trabalho (inglês). O Athanor traduz as mensagens que conhece; aqui nada é reescrito.",
   "End of cycle: {0} turns, {1} min, {2} $ — {3}": "Fim do ciclo: {0} turno(s), {1} min, {2} $ — {3}",

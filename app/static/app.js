@@ -981,7 +981,7 @@ function rendreBandeau(v) {
   ecrire(nv, maj.disponible ? t("Athanor {0} is available (you have {1})", [maj.derniere, v.version]) : t("Version of Athanor: click to look for an update"), "title");
   const sel = $("#sel-projet");
   sel.setAttribute("aria-expanded", etat.selecteurOuvert ? "true" : "false");
-  sel.innerHTML = v.projet ? `<span class="dot ${classePhase(v.projet)}"></span><span class="nom">${h(v.projet.nom)}</span><span class="chevron">${ic("bas")}</span>` : `<span class="nom muet">${t("Choose a project")}</span><span class="chevron">${ic("bas")}</span>`;
+  sel.innerHTML = v.projet ? `<span class="dot ${classePhase(v.projet)}"></span><span class="nom" title="${h(v.projet.nom)}">${h(v.projet.nom)}</span><span class="chevron">${ic("bas")}</span>` : `<span class="nom muet">${t("Choose a project")}</span><span class="chevron">${ic("bas")}</span>`;
   marquerNav(v);
   ecrire($("#btn-verrou"), !v.mot_de_passe, "hidden");
   if (v.projet && etat.projet !== v.projet.nom) etat.projet = v.projet.nom;
@@ -999,7 +999,7 @@ function rendreSelecteur(v) {
   const avaitFocus = document.activeElement && document.activeElement.id === "sel-recherche";
   const pos = avaitFocus ? document.activeElement.selectionStart : 0;
   const html = `<input type="text" id="sel-recherche" placeholder="${h(t("Search a project…"))}" value="${h(etat.rechercheProjet || "")}">
-    <div class="menu-liste">${liste.map((x) => `<a href="#suivi" data-projet="${h(x.nom)}" class="${x.courant ? "actif" : ""}"><span class="dot ${classePhase(x)}"></span><span class="nom">${h(x.nom)}</span><span class="muet petit">${x.actif ? t(x.phase === "quota" || x.phase === "budget" || x.phase === "attente_vous" ? "waiting" : "running") : t("stopped")}${x.attente ? " · " + t("{0} queued", [x.attente]) : ""}${x.pour_vous ? " · " + t("{0} for you", [x.pour_vous]) : ""}</span></a>`).join("") || `<div class="vide">${t("No project.")}</div>`}</div>
+    <div class="menu-liste">${liste.map((x) => `<a href="#suivi" data-projet="${h(x.nom)}" title="${h(x.nom)}" class="${x.courant ? "actif" : ""}"><span class="dot ${classePhase(x)}"></span><span class="nom">${h(x.nom)}</span><span class="muet petit">${x.actif ? t(x.phase === "quota" || x.phase === "budget" || x.phase === "attente_vous" ? "waiting" : "running") : t("stopped")}${x.attente ? " · " + t("{0} queued", [x.attente]) : ""}${x.pour_vous ? " · " + t("{0} for you", [x.pour_vous]) : ""}</span></a>`).join("") || `<div class="vide">${t("No project.")}</div>`}</div>
     ${v.projet ? `<a href="#projet" class="menu-nouveau menu-gerer">${t("Manage this project")}</a>` : ""}
     <a href="#nouveau" class="menu-nouveau">+ ${t("New project")}</a>
     <a href="#rejoindre" class="menu-nouveau">${ic("echange")} ${t("Join a project")}</a>
@@ -2994,7 +2994,7 @@ async function changerReglageProjet(sel) {
 
 pages.projet = async () => {
   if (!etat.projet) await rafraichir(); // opened straight on this page: the project is known after the first refresh
-  if (!etat.projet) return `<div class="vide">${t("No project.")}</div>`;
+  if (!etat.projet) return `<div class="vide"><p>${t("No project.")}</p><a class="btn btn-primaire" href="#nouveau">${t("New project")}</a></div>`;
   const g = await api("projets/gestion?nom=" + encodeURIComponent(etat.projet));
   const p = g.projet, dis = p.actif ? "disabled" : "";
   const decoches = Object.entries(g.decoches || {});
@@ -5960,7 +5960,7 @@ function carteServeur(x, fiche, envs, santeSites) {
     ${(envs || []).length ? `<div class="ligne m0 petit srv-sante">${envs.map((pe) => { const st = ((santeSites || {}).envs || {})[pe], [ic, et] = ETATS_SANTE[st] || ["·", "Not checked yet"];
       return `<span class="badge srv-sante-${h(st || "aucun")}" title="${h(t(et))}">${ic} ${h(pe)}</span>`; }).join("")}</div>` : ""}
     <div class="muet petit">${x.vu ? h(t("Seen {0}", [dateLisible(x.vu)])) : h(t("Added {0}", [dateLisible(x.cree)]))}</div>
-    ${x.etat !== "inconnu" && (!(etat.vue || {}).distant || srv.termDistance) ? `<div class="ligne m0"><a class="btn btn-petit btn-primaire" href="#terminal/${encodeURIComponent(x.id)}" data-srv-connecter>${t("Connect")}</a></div>` : ""}
+    ${x.etat !== "inconnu" && (!(etat.vue || {}).distant || srv.termDistance) ? `<div class="ligne m0"><a class="btn btn-petit" href="#terminal/${encodeURIComponent(x.id)}" data-srv-connecter>${t("Connect")}</a></div>` : ""}
     ${x.etat === "inconnu" && !(etat.vue || {}).distant ? `<div class="ligne m0"><button type="button" class="btn btn-petit btn-primaire" data-srv-verifier="${h(x.id)}">${t("Verify")}</button><span class="muet petit">${t("once its public key is on the server")}</span></div>` : ""}
   </div>`;
 }
@@ -6120,7 +6120,7 @@ pages.serveurs = async () => {
   const liste = d.serveurs.map((x, i) => carteServeur(x, fiches[i], (d.environnements || {})[x.id], d.sante)).join("");
   return `<div class="serveurs">
     ${srv.aj ? messagesCoffreServeurs(c) : ""}
-    <div class="ligne cof-tete"><h2 class="m0">${t("Servers")} <span class="muet">${d.serveurs.length}</span></h2><span class="espace"></span>${distant ? `<span class="muet petit">${t("Adding a server is done on the computer.")}</span>` : srv.aj ? "" : `<button type="button" class="btn${d.serveurs.length ? "" : " btn-primaire"}" data-srv-ajouter>${t("Add a server")}</button>`}</div>
+    <div class="ligne cof-tete"><h2 class="m0">${t("Servers")} <span class="muet">${d.serveurs.length}</span></h2><span class="espace"></span>${distant ? `<span class="muet petit">${t("Adding a server is done on the computer.")}</span>` : srv.aj ? "" : `<button type="button" class="btn" data-srv-ajouter>${t("Add a server")}</button>`}</div>
     ${srv.aj ? assistantServeur(c) : ""}
     ${liste ? `<div class="grille-projets">${liste}</div>` : srv.aj ? "" : `<div class="vide srv-vide"><p><b>${t("No server yet")}</b></p>
       <p class="muet">${t("Add your VPS or your home server: Athanor checks its fingerprint, connects with a key kept in the vault, then reads what runs on it.")}</p>

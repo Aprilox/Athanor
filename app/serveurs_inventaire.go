@@ -217,6 +217,9 @@ func (s *Serveur) apiServeurModifier(w http.ResponseWriter, r *http.Request) {
 		case strings.IndexFunc(n, caractereInvisible) >= 0:
 			s.erreur(w, http.StatusBadRequest, errNomInvisible.Error())
 			return
+		case nomServeurPris(n, r.PathValue("id")):
+			s.erreur(w, http.StatusBadRequest, errServeurNomPris.Error())
+			return
 		}
 		c.Nom = &n
 	}

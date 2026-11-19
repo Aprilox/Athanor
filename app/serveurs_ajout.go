@@ -73,6 +73,14 @@ type corpsAjoutServeur struct {
 // modesAjout: mode of the request -> ServeurInventaire.Auth.
 var modesAjout = map[string]string{"mot_de_passe": "mot_de_passe", "generee": "cle_generee", "importee": "cle_importee", "coffre": "cle_coffre"}
 
+var errServeurNomPris = erreurEntree("A server already has this name: give this one another name")
+
+// nomServeurPris: another server (not sauf) already has this name, whatever the case: two cards nobody can tell apart.
+func nomServeurPris(nom, sauf string) bool {
+	l, _ := lireServeurs()
+	return slices.ContainsFunc(l, func(x ServeurInventaire) bool { return x.ID != sauf && strings.EqualFold(x.Nom, nom) })
+}
+
 func verifierAdresseServeur(hote string, port int) error {
 	switch {
 	case !reHoteServeur.MatchString(hote) || strings.HasPrefix(hote, "-"):
@@ -325,6 +333,8 @@ func (s *Serveur) apiServeursAjouter(w http.ResponseWriter, r *http.Request) {
 			err = erreurEntree("The name is too long (100 characters at most)")
 		case strings.IndexFunc(c.Nom, caractereInvisible) >= 0:
 			err = errNomInvisible
+		case nomServeurPris(c.Nom, ""):
+			err = errServeurNomPris
 		case !strings.HasPrefix(c.Empreinte, "SHA256:"):
 			err = errServeurEmpreinte
 		case modesAjout[c.Mode] == "":
