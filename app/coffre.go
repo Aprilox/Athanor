@@ -25,6 +25,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 )
 
 var (
@@ -87,15 +88,18 @@ func cleDuCompte(sortie string) ([]byte, error) {
 }
 
 type EntreeCoffre struct {
-	ID        string `json:"id"`
-	Nom       string `json:"nom"`
-	Famille   string `json:"famille"` // secret | variable
-	Type      string `json:"type"`
-	Note      string `json:"note"`
-	Portee    string `json:"portee"` // code | infra
-	Valeur    string `json:"valeur"` // secret: base64(nonce‖AES-GCM); variable: clear
-	Source    string `json:"source,omitempty"`
-	Empreinte string `json:"empreinte,omitempty"`
+	ID      string `json:"id"`
+	Nom     string `json:"nom"`
+	Famille string `json:"famille"` // secret | variable
+	Type    string `json:"type"`
+	Note    string `json:"note"`
+	Portee  string `json:"portee"` // code | infra
+	Valeur  string `json:"valeur"` // secret: base64(nonce‖AES-GCM); variable: clear
+	// the values that go with a secret (an SMTP account's server, port, sender…): clear, each delivered beside it under
+	// its own variable name, and bound to the sealed value (aadEntree): a field changed in the file no longer opens it
+	Champs    []ChampCoffre `json:"champs,omitempty"`
+	Source    string        `json:"source,omitempty"`
+	Empreinte string        `json:"empreinte,omitempty"`
 	// M287: id of the owner's category ("" = none); clear and outside aadEntree, so it changes without any key
 	Categorie string `json:"categorie,omitempty"`
 	// M225: the production value when it differs from Valeur (then the testing value), sealed under aadProd;
@@ -106,6 +110,17 @@ type EntreeCoffre struct {
 	Cree          time.Time `json:"cree"`
 	Modifie       time.Time `json:"modifie"`
 }
+
+// ChampCoffre: one value that goes with a secret, and the variable name a project receives it under.
+type ChampCoffre struct {
+	Nom    string `json:"nom"`
+	Valeur string `json:"valeur"`
+}
+
+const (
+	maxChampsCoffre      = 10
+	maxValeurChampCoffre = 500
+)
 
 type fichierCoffre struct {
 	Version int `json:"version"`
@@ -205,7 +220,11 @@ func aadCle(nom string) []byte { return []byte("athanor-coffre:" + nom) }
 // aadEntree binds a sealed value to its entry, name and type included (C12: two names swapped in the
 // file no longer open); aadEntreeV1 is the old binding, resealed by migrerAAD once the key is open.
 func aadEntree(e EntreeCoffre) []byte {
-	return fmt.Appendf(nil, "v2|%s|%s|%s|%q|%q", e.ID, e.Famille, e.Portee, e.Nom, e.Type)
+	a := fmt.Appendf(nil, "v2|%s|%s|%s|%q|%q", e.ID, e.Famille, e.Portee, e.Nom, e.Type)
+	for _, c := range e.Champs { // none: the binding of every entry made before the fields
+		a = fmt.Appendf(a, "|%q=%q", c.Nom, c.Valeur)
+	}
+	return a
 }
 func aadProd(e EntreeCoffre) []byte     { return append(aadEntree(e), "|prod"...) }
 func aadEntreeV1(e EntreeCoffre) []byte { return []byte(e.ID + "|" + e.Famille + "|" + e.Portee) }
@@ -551,6 +570,20 @@ func verifierEntree(e EntreeCoffre) error {
 		return erreurEntree("A variable cannot have the infra scope")
 	case typesCoffre[e.Type] == "":
 		return erreurEntree("Unknown entry type")
+	case len(e.Champs) > 0 && e.Famille != "secret":
+		return erreurEntree("Only a secret has fields")
+	case len(e.Champs) > maxChampsCoffre:
+		return erreurEntree("Too many fields (10 at most)")
+	}
+	vus := map[string]bool{}
+	for _, c := range e.Champs {
+		switch {
+		case !nomSecretValide(c.Nom) || vus[c.Nom]:
+			return erreurEntree("Invalid field name: capital letters, digits and _, starting with a letter, each name once")
+		case utf8.RuneCountInString(c.Valeur) > maxValeurChampCoffre || strings.ContainsAny(c.Valeur, "\r\n\x00"):
+			return erreurEntree("A field holds one line of 500 characters at most")
+		}
+		vus[c.Nom] = true
 	}
 	return nil
 }
@@ -637,7 +670,7 @@ func porteeEntree(e EntreeCoffre) string {
 func (c *Coffre) Ajouter(e EntreeCoffre, valeur string) (EntreeCoffre, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	e.Portee = porteeEntree(e)
+	e.Portee, e.Champs = porteeEntree(e), slices.Clone(e.Champs) // never the caller's array: the fields are bound to the value
 	if err := verifierEntree(e); err != nil {
 		return EntreeCoffre{}, err
 	}
@@ -662,9 +695,10 @@ func (c *Coffre) indice(id string) int {
 	return slices.IndexFunc(c.f.Entrees, func(e EntreeCoffre) bool { return e.ID == id })
 }
 
-// ModifierMeta changes the name, type, note and scope, and the value when valeur is not nil, all or
-// nothing (C16); a secret changing scope is re-encrypted under the other key (both must be open).
-func (c *Coffre) ModifierMeta(id, nom, typ, note, portee string, valeur *string) (EntreeCoffre, error) {
+// ModifierMeta changes the name, type, note and scope, the fields when champs is not nil, and the value when
+// valeur is not nil, all or nothing (C16); a secret whose binding changes (scope, name, type, fields) is sealed
+// again, under the other key for a new scope (both must be open).
+func (c *Coffre) ModifierMeta(id, nom, typ, note, portee string, champs *[]ChampCoffre, valeur *string) (EntreeCoffre, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	i := c.indice(id)
@@ -677,6 +711,10 @@ func (c *Coffre) ModifierMeta(id, nom, typ, note, portee string, valeur *string)
 		portee = ancienne.Portee
 	}
 	e.Nom, e.Type, e.Note, e.Portee = nom, typ, note, portee
+	if champs != nil {
+		e.Champs = slices.Clone(*champs)
+	}
+	lie := !slices.Equal(aadEntree(e), aadEntree(ancienne)) // the sealed values follow their new binding
 	if err := verifierEntree(e); err != nil {
 		return EntreeCoffre{}, err
 	}
@@ -684,7 +722,7 @@ func (c *Coffre) ModifierMeta(id, nom, typ, note, portee string, valeur *string)
 		if err := c.poserValeur(&e, *valeur); err != nil {
 			return EntreeCoffre{}, err
 		}
-	} else if e.Famille == "secret" && (e.Portee != ancienne.Portee || e.Nom != ancienne.Nom || e.Type != ancienne.Type) {
+	} else if e.Famille == "secret" && lie {
 		clair, err := c.dechiffrer(ancienne)
 		if err != nil {
 			return EntreeCoffre{}, err
@@ -693,7 +731,7 @@ func (c *Coffre) ModifierMeta(id, nom, typ, note, portee string, valeur *string)
 			return EntreeCoffre{}, err
 		}
 	}
-	if e.Famille == "secret" && ancienne.Prod != "" && (e.Portee != ancienne.Portee || e.Nom != ancienne.Nom || e.Type != ancienne.Type) {
+	if e.Famille == "secret" && ancienne.Prod != "" && lie {
 		clair, err := c.dechiffrerProd(ancienne)
 		if err != nil {
 			return EntreeCoffre{}, err
@@ -772,7 +810,7 @@ func (c *Coffre) Supprimer(id string) error {
 }
 
 func masquer(e EntreeCoffre) EntreeCoffre {
-	e.Empreinte, e.EmpreinteProd, e.DeuxValeurs = "", "", e.Prod != ""
+	e.Empreinte, e.EmpreinteProd, e.DeuxValeurs, e.Champs = "", "", e.Prod != "", slices.Clone(e.Champs)
 	if e.Famille == "secret" {
 		e.Valeur, e.Prod = "", ""
 	}

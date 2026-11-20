@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -31,42 +32,46 @@ func appelRedTeam(t *testing.T, s *Serveur) func(methode, chemin string, corps a
 	}
 }
 
-// RT1: an account moved to another SMTP server does not take the kept password along without it being retyped.
-func TestRedTeamEmailHoteChange(t *testing.T) {
+// RT1: a secret's fields (an SMTP account's server) do not change without its value retyped: the kept password never
+// follows its account to another server.
+func TestRedTeamChampsCoffre(t *testing.T) {
 	s := serveurCoffreTest(t)
 	avecMdpPreuve(s)
 	appel := appelRedTeam(t, s)
 	temoin := "témoin-" + aleatoire(12)
-	compte := map[string]any{"nom": "Boutique", "hote": "smtp.exemple.fr", "port": 587, "securite": "starttls",
-		"utilisateur": "contact@exemple.fr", "expediteur": "contact@exemple.fr", "mot_de_passe": temoin}
-	code, v := appel("POST", "/api/email/comptes", compte)
+	champs := []map[string]string{{"nom": "SMTP_HOST", "valeur": "smtp.exemple.fr"}, {"nom": "SMTP_PORT", "valeur": "587"}}
+	code, v := appel("POST", "/api/coffre", map[string]any{"nom": "Boutique", "famille": "secret", "type": "smtp", "portee": "code", "valeur": temoin, "champs": champs})
 	if code != 200 {
 		t.Fatalf("add: %d %v", code, v)
 	}
 	id := v["id"].(string)
-	t.Cleanup(func() { appel("DELETE", "/api/email/comptes/"+id, nil) })
-	compte["mot_de_passe"] = ""
-	for champ, valeur := range map[string]any{"hote": "pirate.exemple.net", "port": 2525, "securite": "tls"} {
-		modif := map[string]any{}
-		for k, x := range compte {
-			modif[k] = x
+	t.Cleanup(func() { appel("DELETE", "/api/coffre/"+id, nil) })
+	hote := func() string {
+		for _, e := range s.coffre.Liste() {
+			if e.ID == id && len(e.Champs) > 0 {
+				return e.Champs[0].Valeur
+			}
 		}
-		modif[champ] = valeur
-		if code, v := appel("POST", "/api/email/comptes/"+id, modif); code != http.StatusBadRequest || v["erreur"] != errEmailMdpServeur.Error() {
-			t.Errorf("%s changed without the password: %d %v", champ, code, v)
+		return ""
+	}
+	for _, pirate := range [][]map[string]string{{{"nom": "SMTP_HOST", "valeur": "pirate.exemple.net"}, champs[1]}, {champs[0], {"nom": "SMTP_PORT", "valeur": "2525"}}, {champs[0]}} {
+		if code, v := appel("POST", "/api/coffre/"+id, map[string]any{"champs": pirate}); code != http.StatusBadRequest || v["erreur"] != errChampsValeur.Error() {
+			t.Errorf("fields changed without the value: %d %v", code, v)
 		}
 	}
-	if c, _ := lireComptesEmail(); len(c) != 1 || c[0].Hote != "smtp.exemple.fr" || c[0].Port != 587 {
-		t.Fatalf("the refused change was written: %+v", c)
+	if h := hote(); h != "smtp.exemple.fr" {
+		t.Fatalf("the refused change was written: %q", h)
 	}
-	// renaming keeps the server: no password needed; a new server with its password retyped passes
-	compte["nom"] = "Boutique 2"
-	if code, v := appel("POST", "/api/email/comptes/"+id, compte); code != 200 {
-		t.Fatalf("rename: %d %v", code, v)
+	// the same fields with a new note need no value; another server with the value retyped passes, and it still opens
+	if code, v := appel("POST", "/api/coffre/"+id, map[string]any{"champs": champs, "note": "Envoi des commandes"}); code != 200 {
+		t.Fatalf("same fields: %d %v", code, v)
 	}
-	compte["hote"], compte["mot_de_passe"] = "smtp.autre.fr", temoin
-	if code, v := appel("POST", "/api/email/comptes/"+id, compte); code != 200 || v["hote"] != "smtp.autre.fr" {
-		t.Fatalf("new server with the password: %d %v", code, v)
+	champs[0]["valeur"] = "smtp.autre.fr"
+	if code, v := appel("POST", "/api/coffre/"+id, map[string]any{"champs": champs, "valeur": temoin}); code != 200 || hote() != "smtp.autre.fr" || strings.Contains(fmt.Sprint(v), temoin) {
+		t.Fatalf("new server with the value: %d %v", code, v)
+	}
+	if x, err := s.coffre.Valeur(id); err != nil || x != temoin {
+		t.Fatalf("the value after the move: %v", err)
 	}
 }
 

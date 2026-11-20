@@ -54,7 +54,6 @@ La CI (`.github/workflows/ci.yml`) refait tout cela sur Windows, Linux et macOS,
 | Coffre et accès | *Coffre*, *Studio › Accès* | Clés chiffrées, reconnues au collage, testées auprès de leur service, rangées par catégorie, données projet par projet |
 | Serveurs | *Serveurs* | Fiche du serveur en une minute, plans de l'agent à accepter, DNS et HTTPS Cloudflare, déploiements et retour arrière, santé toutes les 15 minutes |
 | Déploiement et approbations | *Accueil*, *Studio › Déploiement*, *Pour vous*, *Journal d'audit* | Une phrase → une carte projet ou serveur → *Lancer* ; le serveur préparé, le site en ligne, les approbations, le bouton rouge |
-| E-mail | *E-mail* | Comptes SMTP, e-mail de test, réglages donnés à un projet |
 | MCP et distants | *Réglages › Athanor distants*, *Réglages › Clients MCP* | Appairage par code **et** accord à l'écran |
 
 Chaque partie a sa page dans *Guide* et un tutoriel dans *Guide › Tutoriels* ; le « ? » en haut à droite ouvre l'aide de la page.
@@ -68,7 +67,7 @@ Cochez au fur et à mesure. En clair puis en sombre, sur ordinateur puis sur té
 - [ ] **Accueil.** L'accueil du hub s'affiche, avec la tuile Studio et vos projets ; la visite d'une ligne montre où ils sont.
 - [ ] **Menu.** Chaque entrée du menu ouvre sa page sans erreur ; la version affichée (« v3.0.0 », en haut du menu) est 3.0.0.
 - [ ] **Projets.** Les filtres changent la liste ; un projet en cours dit son jalon ; le lien mène au bon endroit.
-- [ ] **Cloche.** Une alerte (par exemple un e-mail de test qui échoue) y apparaît une seule fois et disparaît quand c'est réglé.
+- [ ] **Cloche.** Une alerte (par exemple un serveur injoignable) y apparaît une seule fois et disparaît quand c'est réglé.
 - [ ] **Accès.** *Studio › Accès* d'un projet : cocher une clé puis *Enregistrer les modifications* fait apparaître le badge « N accès » à côté de *Démarrer* ; la phrase du badge dit ce qui est donné.
 - [ ] **Chat général.** L'assistant de l'accueil répond, connaît vos modules et vos projets, et ne donne jamais la valeur d'une clé.
 - [ ] **Fiche d'accord.** Une demande d'un agent (accès, déploiement) arrive dans *Pour vous* sous forme de fiche : *Accepter*, *Refuser*, ce qui sera fait, en mots simples ; une action destructrice attend toujours votre accord.
@@ -109,13 +108,12 @@ Cochez au fur et à mesure. En clair puis en sombre, sur ordinateur puis sur té
 - [ ] Depuis le téléphone (accès à distance appairé) : une demande d'accord (le plan d'une tâche de serveur, par exemple) arrive en notification et s'approuve à distance.
 - [ ] Avec les données d'une version précédente : la page *Anciennes missions* les liste, en lecture seule (voir `docs/MISSIONS.fr.md`) ; un ancien projet garde ses sites sous *Autres sites de ce projet* et aucun mot de passe n'est redemandé.
 
-### E-mail, avec un vrai compte
+### Un compte SMTP dans le coffre
 
-- [ ] Ajouter un vrai compte (Gmail, Outlook ou Yahoo : un *mot de passe d'application*, pas le mot de passe du compte ; OVH, Brevo, Mailgun, SendGrid : les identifiants SMTP du service).
-- [ ] *Envoyer un e-mail de test* à votre adresse : le message arrive (regardez aussi les indésirables).
-- [ ] Un mauvais mot de passe : l'échec est dit en mots simples sur la carte et reste dans la cloche jusqu'à un test réussi ; « Retapez le mot de passe » apparaît.
-- [ ] *Configurer l'envoi* pour un projet : les variables `SMTP_*` apparaissent dans ses accès ; le *×* les retire ; supprimer le compte demande confirmation en nommant les projets.
-- [ ] Le fichier `modules\email\comptes.json` du dossier d'Athanor ne contient aucun mot de passe.
+- [ ] *Coffre › Ajouter*, type *SMTP (envoi d'e-mails)* : choisir un service (Gmail, Brevo…) remplit le serveur, le port et le chiffrement ; donner l'utilisateur, l'expéditeur et le mot de passe comme valeur (Gmail, Outlook, Yahoo : un *mot de passe d'application*).
+- [ ] La carte montre `SMTP_HOST`, `SMTP_PORT`… et leurs valeurs, jamais le mot de passe.
+- [ ] *Modifier* : changer le serveur sans retaper le mot de passe est refusé (« Les réglages ont changé : retapez la valeur… ») ; avec le mot de passe, c'est enregistré.
+- [ ] Donner la clé à un projet (*Studio › Accès*) : son pilote reçoit `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_FROM` et `SMTP_PASSWORD`.
 
 ### MCP et Athanor distants
 

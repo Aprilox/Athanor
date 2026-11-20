@@ -102,7 +102,7 @@ func TestM212CoffreNomsDansAAD(t *testing.T) {
 	if err := c.Deverrouiller("mdp"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := c.ModifierMeta(a.ID, "STRIPE_LIVE", "stripe", "n", "", nil); err != nil {
+	if _, err := c.ModifierMeta(a.ID, "STRIPE_LIVE", "stripe", "n", "", nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	valeurAttendue(t, c, a.ID, "temoin-stripe")

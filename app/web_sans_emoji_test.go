@@ -75,7 +75,7 @@ func TestWebIconesDefinies(t *testing.T) {
 		t.Fatal(err)
 	}
 	vus := 0
-	for _, f := range []string{"static/app.js", "static/email.js"} {
+	for _, f := range []string{"static/app.js"} {
 		b, err := os.ReadFile(f)
 		if err != nil {
 			t.Fatal(err)

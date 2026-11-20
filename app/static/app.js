@@ -2700,9 +2700,9 @@ const GUIDE = [
       ["Add along the way", "A new request waits in the queue and joins the plan at the next cycle. *Chat* answers your questions about the project at any time."],
     ],
     note: "*Stop* offers *Finish the current milestone*, which loses nothing, *Put on pause*, which stops the pilot now and keeps the server tasks of the project's deployment, or *Stop immediately*, which cuts the cycle and cancels them. Everything is kept in files: the pilot resumes where it stopped, even after the computer restarts." },
-  { id: "hub", titre: "Finding your way", intro: "Athanor Hub opens on its home page: what is going on and what needs you, at a glance. Each part of Athanor is a module with its own entry in the menu: *Studio*, the projects Claude builds, the *Vault*, your keys, then *Servers* and *E-mail*.",
+  { id: "hub", titre: "Finding your way", intro: "Athanor Hub opens on its home page: what is going on and what needs you, at a glance. Each part of Athanor is a module with its own entry in the menu: *Studio*, the projects Claude builds, the *Vault*, your keys, then *Servers*.",
     etapes: [
-      ["The menu", "On the left: *Home*, *Projects*, then one entry per module (*Studio*, *Vault*, *Servers*, *E-mail*), and *Settings* at the bottom. A module's entry opens the page you last saw in it. On a phone, the *Menu* button opens the menu, and a tap on an entry closes it.", "#accueil", "Home"],
+      ["The menu", "On the left: *Home*, *Projects*, then one entry per module (*Studio*, *Vault*, *Servers*), and *Settings* at the bottom. A module's entry opens the page you last saw in it. On a phone, the *Menu* button opens the menu, and a tap on an entry closes it.", "#accueil", "Home"],
       ["The home page", "*Home*: one tile per module, with its state (working, needs attention, idle) and its figures; a click on a figure opens its page, *Open* opens the module. Below, *In progress* shows what waits for you first, then what is working; *See all* opens *Projects*.", "#accueil", "Home"],
       ["The assistant", "The home page opens on a conversation: ask a question, or say what you want done. *Guide › Talk to the home assistant* explains what it reads, what it can do and its cards.", "#accueil", "Home"],
       ["Projects", "*Projects* lists everything under way in every module: its state, its progress, what it is doing now (“Milestone 5/14: …”) and what waits for you, with the reason. The filters show everything, only what needs you or only what is in progress; a click on a line opens its page. *New project* and *Join a project* are at the top.", "#global", "Projects"],
@@ -2826,15 +2826,14 @@ const GUIDE = [
       ["Health and incidents", "From this PC, every 15 minutes (*Health of the deployed sites* on the *Servers* page: 5 to 60 minutes, or off): the site's answer, its certificate, its security headers and protection, the disk and memory of its server. A failed deployment, or a site found unwell twice in a row, rings the bell and your phone with what failed and what was tried, and three actions: *Retry*, *Go back to the previous version*, *I take over* (stops the project's automatic deployments and opens the server's sheet).", "#serveurs", "Servers"],
     ],
     note: "The agent never holds a key: the server's key, the deployment key and the values of the project's *.env* stay in the vault, and only Athanor's engine uses them. What a deployment does on a server, step by step: docs/DEPLOY.md in the repository." },
-  { id: "email", titre: "Send e-mails from your apps", intro: "Your deployed apps send e-mails (sign-up, password reset, orders) through the SMTP account of your e-mail provider. Add it once on the *E-mail* page: Athanor keeps its password in the vault, tests it and gives each project the settings it needs.",
+  { id: "email", titre: "Send e-mails from your apps", intro: "Your deployed apps send e-mails (sign-up, password reset, orders) through an SMTP account. Keep it in the *Vault*, type *SMTP (sending e-mails)*: Athanor keeps its password and its settings together and gives them to the projects you choose.",
     etapes: [
-      ["The account", "At your provider, create an *app password* (Gmail, Outlook and Yahoo ask for one when two-step verification is on) or an SMTP key (Brevo, Mailgun, SendGrid…). Then *E-mail › Add an email account*: choose the provider (it fills in the server, the port and the security), give the user name, the sender and the password. The password goes straight into the vault (type *E-mail account*) and is never shown again.", "#email", "E-mail"],
-      ["Test", "*Send a test e-mail* sends a short message to the address you choose, within 20 seconds. A failure is said in plain words (password refused, server unreachable, wrong port or security, sender refused) and waits in the bell until a test passes. At most 5 tests a minute."],
-      ["Configure sending", "*Configure sending* on an account: choose a project. The project receives *SMTP_HOST*, *SMTP_PORT*, *SMTP_SECURE*, *SMTP_USER*, *SMTP_FROM* and *SMTP_PASSWORD* through its access: while it is built, in the pilot's secrets; once deployed, in the `.env` file of the app on its server. Athanor asks for its password first, if it has one."],
+      ["The account", "At your sending service, create an *app password* (Gmail, Outlook and Yahoo ask for one when two-step verification is on) or an SMTP key (Brevo, Mailgun, SendGrid…). Then *Vault › Add*, type *SMTP (sending e-mails)*: choose the service (it fills in the server, the port and the encryption), give the user name and the sender, and the password as the value. The password is never shown again.", "#coffre", "Vault"],
+      ["Give it to a project", "In the project's *Access* tab, give it this key: the project receives *SMTP_HOST*, *SMTP_PORT*, *SMTP_SECURE*, *SMTP_USER*, *SMTP_FROM* and *SMTP_PASSWORD* while Claude builds it, and in the `.env` of a deployment made with Docker Compose.", "#acces", "Access"],
       ["In your app", "Read these variables like any other: for instance, with Nodemailer, *host: process.env.SMTP_HOST, port: Number(process.env.SMTP_PORT), secure: process.env.SMTP_SECURE === \"true\", auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASSWORD }*, and *from: process.env.SMTP_FROM*. Ask the pilot in a request: “Send the order confirmation e-mail with the SMTP_* variables”."],
-      ["Change or stop", "Changing the account (a new password, another server) updates every project that sends through it at its next start or deployment. The *×* next to a project stops its sending; deleting the account takes its settings out of every project, after a confirmation that names them."],
+      ["Change or stop", "Changing the server, the port or another setting of the key asks for its password again, so it only goes where you chose. Taking the key away from a project stops its sending."],
     ],
-    note: "The password never appears on a page, in an answer of Athanor, in the audit log nor on a paired phone (it sees the accounts, read only). The home assistant knows the accounts' names and the projects they send for, never their settings." },
+    note: "The password never appears on a page, in an answer of Athanor, in the audit log nor on a paired phone. Its settings (server, port, sender) are not secret: they show on its card in the vault." },
   { id: "brancher-claude", titre: "Connect Claude Desktop", intro: "Claude Desktop or Claude Code on this PC can follow your projects through Athanor's MCP: read their plan and requests, add a request, start or pause a pilot. Only the projects and tools you allow, never more.",
     etapes: [
       ["Open a code", "*Settings* › *MCP clients* › *Connect a client* shows a 6-digit code. It works once, for 10 minutes; *Close* withdraws it.", "#options@bloc-clients-mcp", "MCP clients"],
@@ -2894,7 +2893,7 @@ const GUIDE = [
   { id: "terminal", titre: "In a terminal", intro: "On Linux and macOS, Athanor also runs in a terminal, like btop: the same projects, overview, log, requests, chat and checks, with the keyboard and the mouse. Handy on a server reached through SSH.",
     etapes: [
       ["Open it", "`./athanor tui` in a terminal, in Athanor's folder (or the downloaded file: `./Athanor-Linux-x64 tui`). Through SSH, or on a Linux without a screen, `./athanor` alone opens it."],
-      ["What stays in the window", "The terminal holds the home page and the Studio pages. The Vault, Servers, E-mail, Access and the home chat stay in the window: *w* opens it on a computer with a screen, and a paired phone reaches it through remote access."],
+      ["What stays in the window", "The terminal holds the home page and the Studio pages. The Vault, Servers, Access and the home chat stay in the window: *w* opens it on a computer with a screen, and a paired phone reaches it through remote access."],
       ["The window instead", "`./athanor gui` opens the window whatever the guess (a computer reached through SSH whose screen you use, say)."],
       ["Alongside the window", "With Athanor already open, `./athanor tui` shows the same Athanor in the terminal: both stay in step. In the terminal, *w* opens the window as well."],
       ["The keys", "*1*–*9* the pages, *s* Start, *a* Stop after cycle, *x* Stop now, *p* the project, *n* a request, *i* writes in the chat, *?* every key, *q* quits. The mouse works too."],
@@ -5690,9 +5689,28 @@ const INFRA_COFFRE = new Set(["cloudflare", "ssh", "certificat", "github", "aws"
 const NOTES_ATHANOR = [[/^Password of the SMTP account (.+)$/, "Password of the SMTP account {0}"], [/^GitHub deployment key of (.+) \(read-only on its repository\)$/, "GitHub deployment key of {0} (read-only on its repository)"],
   [/^Token of the remote Athanor (.+)$/, "Token of the remote Athanor {0}"], [/^Password of the site's protection \(user (.+)\), made by Athanor$/, "Password of the site's protection (user {0}), made by Athanor"]];
 const noteCoffre = (n) => { for (const [re, cle] of NOTES_ATHANOR) { const m = re.exec(n || ""); if (m) return t(cle, [m[1]]); } return n || ""; };
-const typeCoffre = (x) => ({ ssh: t("SSH key"), certificat: t("Certificate"), mot_de_passe: t("Password"), jeton: t("Token"), smtp: t("E-mail account"), autre: t("Other"),
+const typeCoffre = (x) => ({ ssh: t("SSH key"), certificat: t("Certificate"), mot_de_passe: t("Password"), jeton: t("Token"), smtp: t("SMTP (sending e-mails)"), autre: t("Other"),
   cloudflare: "Cloudflare", github: "GitHub", aws: "AWS", anthropic: "Anthropic", openai: "OpenAI", stripe: "Stripe" })[x] || x;
 const entreeCoffre = (id) => (cof.d.entrees || []).find((x) => x.id === id);
+// a type whose key comes with its settings: their fields are asked beside the value, and a project given the key
+// receives each one under its name (the vault binds them to the value: changing one asks for the value again)
+const CHAMPS_TYPE = { smtp: [{ nom: "SMTP_HOST", libelle: "Server", exemple: "smtp.example.com" }, { nom: "SMTP_PORT", libelle: "Port", exemple: "587" },
+  { nom: "SMTP_SECURE", libelle: "Encryption", choix: [["false", "STARTTLS (port 587)"], ["true", "TLS (port 465)"]] },
+  { nom: "SMTP_USER", libelle: "User name", exemple: "contact@example.com" }, { nom: "SMTP_FROM", libelle: "Sender", exemple: "Shop <contact@example.com>" }] };
+// the usual sending servers: choosing one fills in the server, the port and the encryption (still editable)
+const SERVICES_SMTP = [["gmail", "Gmail", "smtp.gmail.com", "587", "false"], ["outlook", "Outlook / Microsoft 365", "smtp.office365.com", "587", "false"],
+  ["ovh", "OVHcloud", "ssl0.ovh.net", "465", "true"], ["brevo", "Brevo", "smtp-relay.brevo.com", "587", "false"], ["mailgun", "Mailgun", "smtp.mailgun.org", "587", "false"],
+  ["sendgrid", "SendGrid", "smtp.sendgrid.net", "587", "false"]];
+function champsCoffre(type, x) {
+  const l = CHAMPS_TYPE[type]; if (!l) return "";
+  const val = (n, d = "") => (((x && x.champs) || []).find((c) => c.nom === n) || { valeur: d }).valeur;
+  return `<fieldset class="cof-champs"><legend>${t("Its settings")}</legend>
+    ${type === "smtp" ? `<label class="champ"><span>${t("Service")}</span><select id="cof-service"><option value="">${t("Choose to fill in the server…")}</option>${SERVICES_SMTP.map(([id, nom]) => `<option value="${id}">${h(nom)}</option>`).join("")}</select></label>` : ""}
+    ${l.map((c) => `<label class="champ"><span>${t(c.libelle)} <code class="muet">${c.nom}</code></span>${c.choix
+      ? `<select data-cof-champ="${c.nom}">${c.choix.map(([v, lib]) => `<option value="${v}"${val(c.nom, c.choix[0][0]) === v ? " selected" : ""}>${h(lib)}</option>`).join("")}</select>`
+      : `<input type="text" data-cof-champ="${c.nom}" maxlength="500" spellcheck="false" autocomplete="off" value="${h(val(c.nom))}" placeholder="${h(c.exemple)}">`}</label>`).join("")}
+    <p class="muet petit m0">${t(type === "smtp" ? "The value below is the account's password (for Gmail, Outlook and Yahoo, an app password). A project given this key receives these settings under their names, beside the password." : "A project given this key receives these settings under their names, beside its value.")}${x ? " " + t("Changing them asks for the value again.") : ""}</p></fieldset>`;
+}
 const TESTABLES_COFFRE = new Set(["cloudflare", "github", "ssh"]); // the types POST /api/coffre/tester checks
 // "Test": the server checks the key and answers {ok, resultat, note} as translation keys, never the value;
 // the proposed note fills an empty note field, otherwise a button offers it (the field stays editable)
@@ -5728,6 +5746,7 @@ function carteCoffre(x) {
         ${secret && TESTABLES_COFFRE.has(x.type) && !aFiche(x) ? `<button type="button" data-cof-tester="${h(x.id)}">${t("Test")}</button>` : ""}<button type="button" data-cof-modifier="${h(x.id)}">${t("Edit")}</button><button type="button" data-cof-remplacer="${h(x.id)}">${t("Replace the value")}</button><button type="button" class="danger" data-cof-supprimer="${h(x.id)}">${t("Delete")}</button>
       </div></details></div>
     <div class="petit cof-valeur">${secret ? `<span class="muet">•••• ${t("saved")}${x.deux_valeurs ? " · " + h(t("two values (older projects)")) : ""}</span>` : `<code>${h(x.valeur)}</code>${x.deux_valeurs ? ` · ${h(t("Second value (older projects)"))} <code>${h(x.prod)}</code>` : ""}`}</div>
+    ${(x.champs || []).length ? `<div class="petit cof-champs-vue">${x.champs.map((c) => `<code>${h(c.nom)}</code> ${h(c.valeur)}`).join(" · ")}</div>` : ""}
     <div class="petit cof-note${x.note ? "" : " muet"}" title="${h(noteCoffre(x.note))}">${x.note ? h(noteCoffre(x.note)) : t("No note for Claude")}</div>
     ${ficheCoffre(x)}
     <div class="muet petit">${nomCategorie(x.categorie) ? `<span class="etiquette cof-cat">${h(nomCategorie(x.categorie))}</span> ` : ""}${x.source ? h(x.source.startsWith("serveurs:") ? t(x.type === "mot_de_passe" ? "Password kept for a server" : "Key made for a server") : t("Imported from {0}", [x.source])) + " · " : ""}${h(dateLisible(x.modifie))}</div>
@@ -5747,6 +5766,7 @@ function formulaireCoffre() {
       <label class="champ"><span>${t("Type")}</span><select id="cof-type">${TYPES_COFFRE.map((y) => `<option value="${y}"${y === type ? " selected" : ""}>${h(typeCoffre(y))}</option>`).join("")}</select></label>
       <label class="champ"><span>${t("Scope")}</span><select id="cof-portee"><option value="code">${t("code — your projects' keys")}</option><option value="infra"${portee === "infra" ? " selected" : ""}${mdp ? "" : " disabled"}>${t("infra — your servers and accounts")}</option></select></label>
     </div>${mdp ? "" : `<p class="muet petit">${t("The infra scope needs a password for Athanor.")} <a href="#options@bloc-verrou">${t("Settings › Options › Lock")}</a></p>`}` : ""}
+    ${secret ? `<div id="cof-champs-zone">${champsCoffre(type, x)}</div>` : ""}
     <label class="champ"><span>${t("Note for Claude")}</span><textarea id="cof-note" rows="2" maxlength="2000" placeholder="${h(t("What it is for, e.g. DNS of example.org"))}">${h(x ? x.note : "")}</textarea></label>
     <label class="champ"><span>${t("Value")}</span><input type="${secret ? "password" : "text"}" id="cof-valeur" autocomplete="new-password" spellcheck="false" value="${h(x && !secret ? x.valeur : "")}" placeholder="${x && secret ? "•••• " + h(t("saved")) : ""}"></label>
     ${deux ? `<label class="petit cof-deux"><input type="checkbox" id="cof-deux" checked> ${t("Keep the second value (older projects)")}</label>
@@ -5887,9 +5907,15 @@ $("#page").addEventListener("change", (ev) => {
     p.value = infra ? "infra" : "code";
   }
   if (ev.target.id === "cof-deux") return void ($("#cof-prod-bloc").hidden = !ev.target.checked);
+  if (ev.target.id === "cof-service") {
+    const sv = SERVICES_SMTP.find(([id]) => id === ev.target.value);
+    if (sv) [["SMTP_HOST", sv[2]], ["SMTP_PORT", sv[3]], ["SMTP_SECURE", sv[4]]].forEach(([n, v]) => { const c = $(`[data-cof-champ="${n}"]`); if (c) c.value = v; });
+    return;
+  }
   if (ev.target.id !== "cof-type") return;
   const p = $("#cof-portee"), infra = INFRA_COFFRE.has(ev.target.value) && !p.querySelector('[value="infra"]').disabled;
   p.value = infra ? "infra" : "code";
+  const z = $("#cof-champs-zone"); if (z) z.innerHTML = champsCoffre(ev.target.value, cof.form && cof.form.id && entreeCoffre(cof.form.id));
 });
 $("#page").addEventListener("submit", async (ev) => {
   if (etat.page !== "coffre") return;
@@ -5926,6 +5952,8 @@ $("#page").addEventListener("submit", async (ev) => {
   const corps = { nom: $("#cof-nom").value.trim(), note: $("#cof-note").value.trim() }, valeur = $("#cof-valeur").value, categorie = $("#cof-categorie");
   if (categorie && categorie.value !== ((x && x.categorie) || "")) corps.categorie = categorie.value;
   if (secret) { corps.type = $("#cof-type").value; corps.portee = $("#cof-portee").value; }
+  const champs = [...document.querySelectorAll("#cof-form [data-cof-champ]")].map((c) => ({ nom: c.dataset.cofChamp, valeur: c.value.trim() })).filter((c) => c.valeur);
+  if (secret && (champs.length || (x && (x.champs || []).length))) corps.champs = champs; // none left: the fields go
   if (!x) { corps.famille = cof.onglet; if (!secret) corps.type = "autre"; }
   if (!x || (secret ? valeur !== "" : valeur !== x.valeur)) corps.valeur = valeur; // an empty secret field keeps the value
   if (x && x.deux_valeurs) { // an older entry's second value: kept, replaced, or dropped (one value everywhere)

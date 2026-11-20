@@ -39,11 +39,7 @@ func clesWeb(t *testing.T) []string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	email, err := os.ReadFile("static/email.js") // the e-mail module page (M201)
-	if err != nil {
-		t.Fatal(err)
-	}
-	js := strings.ReplaceAll(string(b)+"\n"+string(email), "\r\n", "\n")
+	js := strings.ReplaceAll(string(b), "\r\n", "\n")
 	// clesTUI also gives the terminal's own few keys (its pages, its form help): translated all the same
 	cles := clesTUI(js)
 	vu := map[string]bool{}
@@ -156,13 +152,6 @@ func TestVocabulaireInterface(t *testing.T) {
 			"The vault is unlocked: the mission resumes", "The milestone in progress is done: the mission is paused",
 			"Stop asked by {0}: the mission pauses once the milestone in progress is done", "The remote Athanor {0} is offline: the mission waits for it",
 			"The remote Athanor did not take the mission for {0}: {1}", "no environment on the card: the Studio lane finished the request"},
-		// the e-mail provider (Gmail, OVH, Brevo…) of the E-mail page: the word its users know, nothing to add in Athanor
-		{"Provider", "The provider fills in the server, port and security: you can still change them.",
-			"Add an SMTP account (your provider's sending server): Athanor keeps its password in the vault, tests the sending and gives your deployed apps what they need to send emails.",
-			"Add the SMTP account of your provider (Gmail, Outlook, OVH, Brevo…): its server, its user name and its password. The password goes straight into the vault and is never shown again.",
-			// the same word in the Guide's topic about e-mail
-			"Your deployed apps send e-mails (sign-up, password reset, orders) through the SMTP account of your e-mail provider. Add it once on the *E-mail* page: Athanor keeps its password in the vault, tests it and gives each project the settings it needs.",
-			"At your provider, create an *app password* (Gmail, Outlook and Yahoo ask for one when two-step verification is on) or an SMTP key (Brevo, Mailgun, SendGrid…). Then *E-mail › Add an email account*: choose the provider (it fills in the server, the port and the security), give the user name, the sender and the password. The password goes straight into the vault (type *E-mail account*) and is never shown again."},
 		// "testing" as what Athanor is doing or as a word to search skills with, never a place to deploy to
 		{"Testing…", "testing Claude's fix ({0}/3)…", "testing it as it is…", "e.g. front-end, testing, react, documentation",
 			"Nothing found: try another word, in English (e.g. testing, react, docs).",

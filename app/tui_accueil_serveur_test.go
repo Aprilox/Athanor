@@ -75,13 +75,6 @@ func TestTUIAccueilServeur(t *testing.T) {
 				}
 			}
 		}
-		if taille[0] >= 120 { // the e-mail module's tile (M205): its name and figures, from the registry
-			for _, x := range []string{"E-mail", "Comptes e-mail", "Non testé"} {
-				if !strings.Contains(txt, x) {
-					t.Errorf("%v: no %q in\n%s", taille, x, txt)
-				}
-			}
-		}
 	}
 	// "In progress" and the bell's alerts with their reason; a click on a line opens its project's page
 	txt := voir("accueil-120x40", 120, 40)

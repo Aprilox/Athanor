@@ -44,7 +44,7 @@ func TestCoffreValeurProd(t *testing.T) {
 	// reopened, renamed (the binding changes: both values resealed)
 	c = rouvrir(t, chemin, sys)
 	pour(c, "prod", tProd)
-	if _, err := c.ModifierMeta(e.ID, "STRIPE_KEY", "stripe", "", "code", nil); err != nil {
+	if _, err := c.ModifierMeta(e.ID, "STRIPE_KEY", "stripe", "", "code", nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	pour(c, "prod", tProd)

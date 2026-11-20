@@ -156,7 +156,7 @@ func (s *Serveur) certificatOrigine(x SessionHub, jeton, nom, serveur string) (a
 	valeur, note := crt+cle, "Cloudflare origin certificate of "+nom+", expires "+expire.Format(time.DateOnly)
 	id := s.acces.Environnements(projet)[env].Certificat // renewed: the same entry
 	if id == "" || func() error {
-		_, e := s.coffre.ModifierMeta(id, "TLS_ORIGIN "+nom, "certificat", note, "infra", &valeur)
+		_, e := s.coffre.ModifierMeta(id, "TLS_ORIGIN "+nom, "certificat", note, "infra", nil, &valeur)
 		return e
 	}() != nil {
 		n, err := s.coffre.Ajouter(EntreeCoffre{Nom: "TLS_ORIGIN " + nom, Famille: "secret", Type: "certificat", Portee: "infra", Note: note, Source: "env:" + x.Env}, valeur)

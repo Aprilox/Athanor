@@ -24,6 +24,7 @@ const (
 	errCoffreNomLong = erreurEntree("The name is too long (100 characters at most)")
 	errCoffreNote    = erreurEntree("The note is too long (2000 characters at most)")
 	errCoffreTaille  = erreurEntree("The value is too large (64 KiB at most)")
+	errChampsValeur  = erreurEntree("The fields changed: retype the value, so it only goes where you chose")
 )
 
 // erreurCoffre answers a vault error with its status: a closed key is 423, a bad entry 400.
@@ -61,6 +62,8 @@ type corpsCoffre struct {
 	Categorie *string `json:"categorie"`
 	// M225: the production value when it differs ("" goes back to one value for every environment)
 	Prod *string `json:"prod"`
+	// the values that go with a secret (nil: unchanged)
+	Champs *[]ChampCoffre `json:"champs"`
 	// Athanor's password, retyped to move an infra entry to code (hub_preuve.go)
 	MotDePasse string `json:"mot_de_passe"`
 }
@@ -115,6 +118,9 @@ func (s *Serveur) apiCoffreAjouter(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	nouvelle := EntreeCoffre{Nom: val(c.Nom, ""), Famille: c.Famille, Type: val(c.Type, ""), Note: val(c.Note, ""), Portee: val(c.Portee, ""), Categorie: val(c.Categorie, "")}
+	if c.Champs != nil {
+		nouvelle.Champs = *c.Champs
+	}
 	if s.nomPris(nouvelle.Nom, porteeEntree(nouvelle), "") {
 		s.erreurCoffre(w, errNomPris)
 		return
@@ -176,6 +182,13 @@ func (s *Serveur) apiCoffreModifier(w http.ResponseWriter, r *http.Request) {
 		s.erreurCoffre(w, errCategorieInconnue) // before any change: all or nothing
 		return
 	}
+	if c.Champs != nil && slices.Equal(*c.Champs, e.Champs) {
+		c.Champs = nil // the same fields: nothing to bind again
+	}
+	if c.Champs != nil && e.Famille == "secret" && c.Valeur == nil {
+		s.erreurCoffre(w, errChampsValeur) // RT1: the kept value never follows changed fields (another SMTP server) unless retyped
+		return
+	}
 	versCode := e.Portee == "infra" && val(c.Portee, e.Portee) == "code"
 	if versCode { // C35: code reopens alone on this PC (DPAPI) and can be granted: never a server's key, always the owner
 		if s.cleDeServeur(w, id, "This key opens the server {0}: it stays in the infra scope") {
@@ -187,7 +200,7 @@ func (s *Serveur) apiCoffreModifier(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if c.Nom != nil || c.Type != nil || c.Note != nil || c.Portee != nil || c.Valeur != nil || c.Prod != nil {
+	if c.Nom != nil || c.Type != nil || c.Note != nil || c.Portee != nil || c.Valeur != nil || c.Prod != nil || c.Champs != nil {
 		if e.Portee == "code" && val(c.Portee, e.Portee) == "infra" && s.acces != nil && s.accesErr == nil {
 			// code to infra: its grants go and the files are rewritten while it is still code (its fingerprint
 			// then recognises the value); an infra entry has none and would stay as an old-file line (M43 A1)
@@ -198,7 +211,7 @@ func (s *Serveur) apiCoffreModifier(w http.ResponseWriter, r *http.Request) {
 			}
 			s.injecterTous(nil)
 		}
-		if e, err = s.coffre.ModifierMeta(id, val(c.Nom, e.Nom), val(c.Type, e.Type), val(c.Note, e.Note), val(c.Portee, e.Portee), c.Valeur); err != nil {
+		if e, err = s.coffre.ModifierMeta(id, val(c.Nom, e.Nom), val(c.Type, e.Type), val(c.Note, e.Note), val(c.Portee, e.Portee), c.Champs, c.Valeur); err != nil {
 			s.erreurCoffre(w, err)
 			return
 		}

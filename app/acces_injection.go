@@ -94,6 +94,9 @@ func (s *Serveur) planInjection(p Projet, garder map[string]string) (lignes []li
 		if e.Famille == "variable" {
 			valeursVariables[e.Nom+"="+e.Valeur] = true
 		}
+		for _, c := range e.Champs { // a field no longer granted leaves the old file like a variable
+			valeursVariables[c.Nom+"="+c.Valeur] = true
+		}
 	}
 	empreintes := true
 	if len(entrees) > 0 {
@@ -105,6 +108,7 @@ func (s *Serveur) planInjection(p Projet, garder map[string]string) (lignes []li
 		}
 	}
 	donnees := map[string]string{}
+	var champs []ChampCoffre
 	pa := s.acces.Projet(p.Nom)
 	for _, a := range pa.Acces {
 		if e := entrees[a.Entree]; e.Famille == "variable" {
@@ -130,6 +134,14 @@ func (s *Serveur) planInjection(p Projet, garder map[string]string) (lignes []li
 			continue
 		}
 		donnees[a.Variable] = v
+		champs = append(champs, e.Champs...)
+	}
+	for _, c := range champs { // after every grant: a variable granted by its own name wins over a field
+		if _, pris := donnees[c.Nom]; pris {
+			etat.Ignorees = append(etat.Ignorees, c.Nom)
+			continue
+		}
+		donnees[c.Nom] = c.Valeur
 	}
 	connues := s.coffre.EmpreintesValeurs()
 	dansCoffre := func(nom, v string) bool {
@@ -230,7 +242,9 @@ func (s *Serveur) viderAccesUrgence(projets []Projet) int {
 		accordees := map[string]bool{}
 		for _, a := range pa.Acces {
 			if a.Env == pa.Env {
-				accordees[a.Variable] = true
+				for _, n := range s.variablesAcces(a) {
+					accordees[n] = true
+				}
 			}
 		}
 		avant, err := lireAtelier(p, "secrets.env", tailleTachesMax)
@@ -279,4 +293,19 @@ func (s *Serveur) injecterTous(garder map[string]map[string]string) {
 			fmt.Fprintln(os.Stderr, "access injection:", p.Nom+":", err) // the error of a file write, no value
 		}
 	}
+}
+
+// variablesAcces: the names a grant gives a project, its entry's fields included (no key needed).
+func (s *Serveur) variablesAcces(a AccesProjet) []string {
+	l := []string{a.Variable}
+	if s.coffre != nil {
+		for _, e := range s.coffre.Liste() {
+			if e.ID == a.Entree {
+				for _, c := range e.Champs {
+					l = append(l, c.Nom)
+				}
+			}
+		}
+	}
+	return l
 }

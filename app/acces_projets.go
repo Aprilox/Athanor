@@ -174,7 +174,7 @@ var variableParType = map[string]string{
 	"cloudflare": "CLOUDFLARE_API_TOKEN", "ssh": "SSH_PRIVATE_KEY", "certificat": "TLS_CERTIFICATE",
 	"github": "GITHUB_TOKEN", "anthropic": "APP_ANTHROPIC_API_KEY", "openai": "OPENAI_API_KEY",
 	"stripe": "STRIPE_KEY", "aws": "AWS_SECRET_ACCESS_KEY", "mot_de_passe": "APP_PASSWORD",
-	"jeton": "API_TOKEN", "autre": "APP_SECRET",
+	"jeton": "API_TOKEN", "smtp": "SMTP_PASSWORD", "autre": "APP_SECRET",
 }
 
 func variableProposee(e EntreeCoffre) string {

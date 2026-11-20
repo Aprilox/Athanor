@@ -25,7 +25,6 @@
   <a href="#vault-and-access"><b>Vault</b></a> ·
   <a href="#servers"><b>Servers</b></a> ·
   <a href="#deployment-and-approvals"><b>Deployment</b></a> ·
-  <a href="#e-mail"><b>E-mail</b></a> ·
   <a href="#mcp-and-remote-athanors"><b>MCP</b></a> ·
   <a href="#security-model"><b>Security</b></a> ·
   <a href="#faq"><b>FAQ</b></a> ·
@@ -61,7 +60,6 @@ Athanor answers with a **card**: the project Studio will build, with its folder,
 | **[Servers](#servers)** | Your VPS and home servers: a sheet read in a minute, an ops agent that proposes plans you accept, Cloudflare DNS and HTTPS, deployments with a one-click rollback, health checks every 15 minutes. | *Servers* |
 | **[Missions](#missions)** | One form links a Studio project, its servers and API keys (or servers only): what to do, the project, the server with one of three choices (*Needs me*, *Autonomous with the AI* or *Full autonomy*), the key; *Launch*. Each mission has its frame: the project and its milestones, the server and its state (terminal, stop, launch again), the key; pause, stop, resume, edit and delete in any state. | *Missions* |
 | **[Deployment and approvals](#deployment-and-approvals)** | Each project has one *Deployment* tab: a server, an address, a plan in your words and when to deploy; Athanor prepares the server and puts the project online. Every agent request comes to you as an approval; everything is written to a chained audit log; one red button stops it all. | *Studio › Deployment*, *For you*, *Audit log* |
-| **[E-mail](#e-mail)** | The SMTP accounts your deployed apps send through: a test in one click, the settings given to a project, the password kept in the vault. | *E-mail* |
 | **[MCP and remote Athanors](#mcp-and-remote-athanors)** | Claude Desktop or Claude Code drive Athanor through its MCP; another Athanor (a laptop, a VPS running Servers alone) joins yours. Always paired by a code **and** your yes on screen. | *Settings* |
 
 Each module keeps its own data (`modules/<name>/` in Athanor's folder) and talks to the others only through the hub, which checks, logs, and asks you when it matters. *Guide › Finding your way* walks through it, in the window and in the [terminal](#in-a-terminal).
@@ -69,7 +67,7 @@ Each module keeps its own data (`modules/<name>/` in Athanor's folder) and talks
 ---
 
 <p align="center">
-  <img src="docs/images/modules.svg" alt="The modules: you, MCP clients and remote Athanors reach the hub, always paired; the hub holds the vault and checks every link; Studio, Servers and E-mail each keep their own folder and never talk to each other directly" width="100%">
+  <img src="docs/images/modules.svg" alt="The modules: you, MCP clients and remote Athanors reach the hub, always paired; the hub holds the vault and checks every link; Studio and Servers each keep their own folder and never talk to each other directly" width="100%">
 </p>
 
 ## Quick start
@@ -139,7 +137,7 @@ Claude works in Seatbelt, the sandbox built into macOS (the same one Claude Code
 
 ### 3. Your first ten minutes
 
-1. **Home.** Athanor opens on its hub. Ask the assistant anything about Athanor, or say what you want done: it proposes a card, and nothing starts before you press *Launch*. *Guide*, beside the bell, opens the Guide; each module (Home, Studio, the Vault, Servers, E-mail) shows a short tour on your first visit, replayed from *Guide › Tutorials*.
+1. **Home.** Athanor opens on its hub. Ask the assistant anything about Athanor, or say what you want done: it proposes a card, and nothing starts before you press *Launch*. *Guide*, beside the bell, opens the Guide; each module (Home, Studio, the Vault, Servers) shows a short tour on your first visit, replayed from *Guide › Tutorials*.
 2. **A password.** *Settings → Options → Lock*. It locks the app, protects the vault's server keys and is asked again for every approval: set it before adding a server. Not set yet? The first action that needs it (giving a key to a project, for instance) asks you to choose it on the spot.
 3. **The vault.** *Vault → Paste*: a `.env` block, a token or an MCP configuration. Athanor recognises each key and keeps it encrypted; *Test* checks it with its own service. The keys of your existing projects are already there (imported at the first start, nothing changed for their pilots).
 4. **A project.** *Studio → New project*: a name and what you want, in your words; the folder is proposed for you (✨ *Improve with Claude* turns a few words into a complete request), then *Start*. Its *Access* tab says which vault keys the pilot gets.
@@ -172,13 +170,13 @@ The same on Windows (PowerShell), Linux and macOS: it builds `Athanor.exe` and `
 
 ## The hub
 
-**Home** is the page Athanor opens on: a conversation with the [home assistant](#the-home-assistant), one tile per module with its state and live figures (Studio: projects running, milestones done today, projects that need you, quota; Servers, E-mail…), each figure opening its page, and two lists, *Waiting for your answer* then *In progress*, each with *See all*.
+**Home** is the page Athanor opens on: a conversation with the [home assistant](#the-home-assistant), one tile per module with its state and live figures (Studio: projects running, milestones done today, projects that need you, quota; Servers…), each figure opening its page, and two lists, *Waiting for your answer* then *In progress*, each with *See all*.
 
 **Projects** lists everything under way in every module: its state, its progress, what it is doing now (“Milestone 5/14: …”), what waits for you and why, a direct link; filters *All*, *Needs me*, *In progress*; *New project*, *Join a project*, the archived projects. The projects of a [remote Athanor](#mcp-and-remote-athanors) come in as `name@instance`.
 
-**Finding your way**: the menu on the left has one level: *Home*, *Projects*, one entry per module (**Missions**, **Studio**, the projects Claude builds, the **Vault**, **Servers**, **E-mail**), the *Audit log* and *Settings* at the bottom; a module's entry reopens the page you last saw in it. A module's pages are tabs at the top: Studio's (the project picker, then Overview, Team, Requests, Chat, For you, Access, Deployment, Log, Manage) are the pages described above; Settings holds Settings, Skills & MCP, Setup & health and Remote. On a phone, ☰ opens the menu and the tabs scroll sideways. The **bell**, at the top of every page, gathers what needs you in every module, one line each with its reason: *View* opens the right page, *Ignore* hides the line without deleting anything (*Ignored alerts* keeps it, *Reopen* brings it back, and it returns by itself when its reason changes). **Guide**, beside it, opens the Guide. **Tutorials**: Home, Studio and the Vault each show a short tour on your first visit; the Guide's *Tutorials* replays them and *Settings → Options* shows them all again. The update to the hub moves nothing: projects, settings, keys and old links stay where they were. *Guide › Finding your way* walks through it, and the terminal opens on the same home page (*H*).
+**Finding your way**: the menu on the left has one level: *Home*, *Projects*, one entry per module (**Missions**, **Studio**, the projects Claude builds, the **Vault**, **Servers**), the *Audit log* and *Settings* at the bottom; a module's entry reopens the page you last saw in it. A module's pages are tabs at the top: Studio's (the project picker, then Overview, Team, Requests, Chat, For you, Access, Deployment, Log, Manage) are the pages described above; Settings holds Settings, Skills & MCP, Setup & health and Remote. On a phone, ☰ opens the menu and the tabs scroll sideways. The **bell**, at the top of every page, gathers what needs you in every module, one line each with its reason: *View* opens the right page, *Ignore* hides the line without deleting anything (*Ignored alerts* keeps it, *Reopen* brings it back, and it returns by itself when its reason changes). **Guide**, beside it, opens the Guide. **Tutorials**: Home, Studio and the Vault each show a short tour on your first visit; the Guide's *Tutorials* replays them and *Settings → Options* shows them all again. The update to the hub moves nothing: projects, settings, keys and old links stay where they were. *Guide › Finding your way* walks through it, and the terminal opens on the same home page (*H*).
 
-**Only Studio?** Nothing changes: Studio works on its own, for one project or many, as Athanor did before; Servers and E-mail ask for nothing until you open them, and a project with no server in its *Deployment* tab is never deployed. **A mission from home**: *New mission* on the home page opens the one form of a [mission](#missions); a sentence to the assistant (“Make a shop and put it online on @vps with @stripe”) opens the same form already filled, and nothing starts before you press *Launch*. A Studio project never deploys itself and never asks for a server's access: it ends ready to deploy, and Athanor puts it online with the keys of the vault.
+**Only Studio?** Nothing changes: Studio works on its own, for one project or many, as Athanor did before; Servers asks for nothing until you open it, and a project with no server in its *Deployment* tab is never deployed. **A mission from home**: *New mission* on the home page opens the one form of a [mission](#missions); a sentence to the assistant (“Make a shop and put it online on @vps with @stripe”) opens the same form already filled, and nothing starts before you press *Launch*. A Studio project never deploys itself and never asks for a server's access: it ends ready to deploy, and Athanor puts it online with the keys of the vault.
 
 **Start with the computer**: *Open Athanor when the computer starts* opens it with its window, on Windows, in a Linux desktop session and on macOS (at login). With *Restart the pilots that were running*, the projects you started and neither stopped nor saw delivered start again. Launching Athanor while it already runs only brings its window back: there is never a second copy.
 
@@ -526,6 +524,7 @@ The vault keeps the keys; *Access* decides which project gets which. One key hol
 - **Secrets and variables.** A secret's value is shown only while you type it: afterwards no page, API answer or log contains it. Variables (a region, a user name) are plain settings, readable even while the vault is locked.
 - **Paste.** A whole `.env` block, an MCP configuration, a token or a private key: Athanor recognises each value (Cloudflare, GitHub, Anthropic, OpenAI, Stripe, AWS, SSH, certificates, URLs with credentials) and proposes a name, a type and a scope. Only the names come back to the page.
 - **Test.** Checks a key with its own service and nowhere else (Cloudflare and GitHub: whether it works and what it may do; SSH: the key's type and the server's answer), then proposes a *note for Claude* that you can edit: it tells Claude what the key is for without showing the value. A Cloudflare key then shows its zones and its rights on its card.
+- **An SMTP account (sending e-mails).** *Vault › Add*, type *SMTP (sending e-mails)*: choose the service (Gmail, Outlook, OVH, Brevo, Mailgun, SendGrid: it fills in the server, the port and the encryption), give the user name and the sender, and the password as the value (for Gmail, Outlook and Yahoo, an *app password*). Given to a project, the key brings `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_FROM` and `SMTP_PASSWORD`: while Claude builds it, and in the `.env` of a deployment made with Docker Compose. Its settings are bound to its password: changing the server or another one asks for the password again. *Guide › Send e-mails from your apps* walks through it.
 - **Categories.** *Categories* creates, renames and deletes your own (*Hosting* and *E-mail* are suggested); deleting one leaves its keys in the vault, without category. One search, by name or category, with its filter by category, serves the vault, the `@` mentions, the *Deployment* tab and the home cards.
 - **Two scopes.** *code*: what a project's code uses (an API key, a test token). *infra*: the keys of your servers and accounts; they never leave Athanor's process, and need a password for Athanor (*Settings → Options → Lock*).
 - **Locking.** Your project keys reopen alone on this PC; the keys of your servers open only with your password, and a copy of the disk opens nothing. In detail: each scope has its own random AES-256-GCM key. The *code* key is wrapped by your password (PBKDF2-SHA256, 600,000 iterations) and by the system's keystore (DPAPI on Windows, the Keychain on macOS, the Secret Service on Linux); the *infra* key only by your password. It opens when you unlock Athanor, in the window or from a paired phone, and is wiped from memory when you press the padlock, on the emergency stop, when the session ends or when Athanor stops. The automatic lock (after a time without activity) only locks the window: the keys stay open, so AIs, deployments, tasks and SSH sessions go on without asking for the password again. A paired phone sees the list, never a value, and cannot change it.
@@ -609,21 +608,6 @@ While it works, the pilot talks to Athanor through a small MCP server of its own
 
 ---
 
-## E-mail
-
-*E-mail*, in the menu, keeps the SMTP accounts your deployed apps send their e-mails through (sign-up, password reset, orders). *Guide › Send e-mails from your apps* walks through it.
-
-<p align="center">
-  <img src="docs/images/email.png" alt="E-mail page: an SMTP account with its server, port and sender, the Send a test e-mail and Configure sending buttons" width="100%">
-</p>
-
-- **An account.** Choose the service (Gmail, Outlook, OVH, Brevo, Mailgun, SendGrid or another server: it fills in the server, the port and the security, which you can still change), then the user name, the sender and the password: for Gmail, Outlook and Yahoo, an *app password*. The password goes straight into the vault (type *E-mail account*, *code* scope) and is never shown again; the account's file, `modules/email/comptes.json`, holds no password.
-- **The test.** *Send a test e-mail* sends a short message to the address you choose (STARTTLS, implicit TLS on 465, or nothing to this PC only; 20 seconds at most; 5 tests a minute). A failure is said in plain words, never with the server's raw answer, stays on the card and waits in the bell until a test passes; each test is written to the audit log, without the password.
-- **Your apps.** *Configure sending* gives a project `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_FROM` and `SMTP_PASSWORD`, through the project's access: while it is built, in the pilot's secrets; once deployed, in the app's environment file. Athanor asks for its password first, if it has one. A changed account updates every project that sends through it; the *×* next to a project stops its sending; deleting the account takes its settings out of every project, after a confirmation that names them.
-- **Who sees what.** A paired phone sees the accounts, read only. The home assistant knows the accounts' names and the projects they send for, never their settings nor their password.
-
----
-
 ## MCP and remote Athanors
 
 | | |
@@ -642,7 +626,7 @@ Athanor's MCP opens to two kinds of clients, always by a 6-digit code **and** yo
 
 <img src="docs/images/terminal.png" alt="Athanor in a terminal: the projects and pages on the left, the state of the project, the subscription quota and the plan with its milestones">
 
-On Linux and macOS, Athanor also runs in the terminal, like btop or htop: the same Athanor as its window, on the same server, so both always show the same thing. Made for a server reached through SSH, a Linux without a desktop, or simply your own terminal. The terminal holds the home page and the Studio pages below; the Vault, Servers, E-mail, Access and the home chat stay in the window (open it on this computer with *w*, or from a paired phone through remote access).
+On Linux and macOS, Athanor also runs in the terminal, like btop or htop: the same Athanor as its window, on the same server, so both always show the same thing. Made for a server reached through SSH, a Linux without a desktop, or simply your own terminal. The terminal holds the home page and the Studio pages below; the Vault, Servers, Access and the home chat stay in the window (open it on this computer with *w*, or from a paired phone through remote access).
 
 - **Open it**: `./athanor tui` in Athanor's folder (or the downloaded file: `./Athanor-Linux-x64 tui`). Through SSH (`SSH_CONNECTION` set), or on a Linux without a screen (no `DISPLAY` nor `WAYLAND_DISPLAY`), `./athanor` alone opens it. `./athanor gui` opens the window whatever the guess.
 - **On a server**: run Athanor as a normal user, not as root: Claude Code refuses to work as root (Setup & health says so, and *Start* refuses). On a fresh VPS: `adduser NAME`, `usermod -aG sudo NAME`, log in as `NAME`, then `./Athanor-Linux-x64`.
@@ -841,9 +825,9 @@ Yes. Nothing is tied to a user name or a drive letter: paths come from your prof
 </details>
 
 <details>
-<summary><b>Do I need a server, Cloudflare or an e-mail account?</b></summary>
+<summary><b>Do I need a server or Cloudflare?</b></summary>
 
-No. Studio works alone, as Athanor always did: the other modules wait until you add a server, a Cloudflare token or an SMTP account. A project with no server in its *Deployment* tab is only built.
+No. Studio works alone, as Athanor always did: the other modules wait until you add a server or a Cloudflare token. A project with no server in its *Deployment* tab is only built.
 </details>
 
 <details>
@@ -880,7 +864,6 @@ Nothing you have to do. The update moves nothing: projects, settings, the reques
 | An installation needs administrator rights | *Setup & health* → *Administrator rights for installations* → *Repair* (once) |
 | “The vault is locked” on an action of Servers or a deployment | unlock Athanor (its password, in the window or on a paired phone): the *infra* key opens only with it |
 | A server refused with “the host key changed” | the server was reinstalled, or someone is in between: check the new fingerprint on the server itself (`for f in /etc/ssh/ssh_host_*_key.pub; do ssh-keygen -lf $f; done`), then remove and add the server again |
-| *Send a test e-mail* fails | the message says why in plain words; for Gmail, Outlook and Yahoo use an *app password*, not the account's own |
 
 ---
 

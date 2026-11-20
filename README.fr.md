@@ -25,7 +25,6 @@
   <a href="#coffre-et-accès"><b>Coffre</b></a> ·
   <a href="#serveurs"><b>Serveurs</b></a> ·
   <a href="#déploiement-et-approbations"><b>Déploiement</b></a> ·
-  <a href="#e-mail"><b>E-mail</b></a> ·
   <a href="#mcp-et-athanor-distants"><b>MCP</b></a> ·
   <a href="#modèle-de-sécurité"><b>Sécurité</b></a> ·
   <a href="#faq"><b>FAQ</b></a> ·
@@ -61,7 +60,6 @@ Athanor répond par une **carte** : le projet que Studio va construire, avec son
 | **[Serveurs](#serveurs)** | Vos VPS et serveurs maison : une fiche lue en une minute, un agent d'exploitation qui propose des plans que vous acceptez, DNS et HTTPS Cloudflare, des déploiements avec retour arrière en un clic, des bilans de santé toutes les 15 minutes. | *Serveurs* |
 | **[Missions](#missions)** | Un seul formulaire relie un projet Studio, ses serveurs et ses clés API (ou seulement des serveurs) : ce qu'il faut faire, le projet, le serveur avec un choix parmi trois (*A besoin de moi*, *Autonome avec l'IA* ou *Autonomie totale*), la clé ; *Lancer*. Chaque mission a son cadre : le projet et ses jalons, le serveur et son état (terminal, arrêter, relancer), la clé ; pause, arrêt, reprise, modification et suppression dans tout état. | *Missions* |
 | **[Déploiement et approbations](#déploiement-et-approbations)** | Chaque projet a un onglet *Déploiement* : un serveur, une adresse, un plan avec vos mots et quand déployer ; Athanor prépare le serveur et met le projet en ligne. Chaque demande d'un agent vous parvient sous forme d'approbation ; tout est écrit dans un journal d'audit chaîné ; un bouton rouge arrête tout. | *Studio › Déploiement*, *Pour vous*, *Journal d'audit* |
-| **[E-mail](#e-mail)** | Les comptes SMTP par lesquels vos applications déployées envoient : un test en un clic, les réglages donnés à un projet, le mot de passe gardé dans le coffre. | *E-mail* |
 | **[MCP et Athanor distants](#mcp-et-athanor-distants)** | Claude Desktop ou Claude Code pilotent Athanor par son MCP ; un autre Athanor (un portable, un VPS qui fait tourner Serveurs seul) rejoint le vôtre. Toujours appairé par un code **et** votre accord à l'écran. | *Réglages* |
 
 Chaque module garde ses propres données (`modules/<nom>/` dans le dossier d'Athanor) et ne parle aux autres que par le hub, qui vérifie, journalise et vous demande quand c'est important. *Guide › Se repérer* en fait le tour, dans la fenêtre et dans le [terminal](#dans-un-terminal).
@@ -69,7 +67,7 @@ Chaque module garde ses propres données (`modules/<nom>/` dans le dossier d'Ath
 ---
 
 <p align="center">
-  <img src="docs/images/modules.svg" alt="Les modules : vous, les clients MCP et les Athanor distants joignent le hub, toujours après appairage ; le hub tient le coffre et vérifie chaque lien ; Studio, Serveurs et E-mail gardent chacun leur dossier et ne se parlent jamais directement" width="100%">
+  <img src="docs/images/modules.svg" alt="Les modules : vous, les clients MCP et les Athanor distants joignent le hub, toujours après appairage ; le hub tient le coffre et vérifie chaque lien ; Studio et Serveurs gardent chacun leur dossier et ne se parlent jamais directement" width="100%">
 </p>
 
 ## Démarrage rapide
@@ -139,7 +137,7 @@ Claude travaille dans Seatbelt, la barrière intégrée à macOS (celle qu'utili
 
 ### 3. Vos dix premières minutes
 
-1. **L'accueil.** Athanor s'ouvre sur son hub. Posez à l'assistant n'importe quelle question sur Athanor, ou dites ce que vous voulez faire : il propose une carte, et rien ne démarre avant que vous appuyiez sur *Lancer*. *Guide*, à côté de la cloche, ouvre le Guide ; chaque module (Accueil, Studio, Coffre, Serveurs, E-mail) montre une courte visite à votre première venue, à rejouer depuis *Guide › Tutoriels*.
+1. **L'accueil.** Athanor s'ouvre sur son hub. Posez à l'assistant n'importe quelle question sur Athanor, ou dites ce que vous voulez faire : il propose une carte, et rien ne démarre avant que vous appuyiez sur *Lancer*. *Guide*, à côté de la cloche, ouvre le Guide ; chaque module (Accueil, Studio, Coffre, Serveurs) montre une courte visite à votre première venue, à rejouer depuis *Guide › Tutoriels*.
 2. **Un mot de passe.** *Réglages → Options → Verrouiller*. Il verrouille l'application, protège les clés de serveurs du coffre et est redemandé à chaque approbation : définissez-le avant d'ajouter un serveur. Pas encore défini ? La première action qui en a besoin (donner une clé à un projet, par exemple) vous demande de le choisir sur place.
 3. **Le coffre.** *Coffre → Coller* : un bloc `.env`, un jeton ou une configuration MCP. Athanor reconnaît chaque clé et la garde chiffrée ; *Tester* la vérifie auprès de son propre service. Les clés de vos projets existants y sont déjà (importées au premier démarrage, rien n'a changé pour leurs pilotes).
 4. **Un projet.** *Studio → Nouveau projet* : un nom et ce que vous voulez, avec vos mots ; le dossier vous est proposé (✨ *Améliorer avec Claude* transforme quelques mots en une demande complète), puis *Démarrer*. Son onglet *Accès* dit quelles clés du coffre le pilote reçoit.
@@ -172,13 +170,13 @@ Pareil sous Windows (PowerShell), Linux et macOS : cela construit `Athanor.exe` 
 
 ## Le hub
 
-**L'Accueil** est la page sur laquelle Athanor s'ouvre : une conversation avec l'[assistant d'accueil](#lassistant-daccueil), une tuile par module avec son état et ses chiffres en direct (Studio : projets en cours, jalons terminés aujourd'hui, projets qui ont besoin de vous, quota ; Serveurs, E-mail…), chaque chiffre ouvrant sa page, et deux listes, *Ce qui attend votre réponse* puis *En cours*, chacune avec *Tout voir*.
+**L'Accueil** est la page sur laquelle Athanor s'ouvre : une conversation avec l'[assistant d'accueil](#lassistant-daccueil), une tuile par module avec son état et ses chiffres en direct (Studio : projets en cours, jalons terminés aujourd'hui, projets qui ont besoin de vous, quota ; Serveurs…), chaque chiffre ouvrant sa page, et deux listes, *Ce qui attend votre réponse* puis *En cours*, chacune avec *Tout voir*.
 
 **Projets** liste tout ce qui est en cours dans chaque module : son état, son avancement, ce qu'il fait maintenant (« Jalon 5/14 : … »), ce qui vous attend et pourquoi, un lien direct ; des filtres *Tous*, *Besoin de moi*, *En cours* ; *Nouveau projet*, *Rejoindre un projet*, les projets archivés. Les projets d'un [Athanor distant](#mcp-et-athanor-distants) arrivent sous la forme `nom@instance`.
 
-**Se repérer** : le menu à gauche a un seul niveau : *Accueil*, *Projets*, une entrée par module (**Missions**, **Studio**, les projets que Claude construit, le **Coffre**, **Serveurs**, **E-mail**), le *Journal d'audit* et les *Réglages* en bas ; l'entrée d'un module rouvre la dernière page que vous y avez vue. Les pages d'un module sont des onglets en haut : ceux de Studio (le sélecteur de projet, puis Suivi, Équipe, Demandes, Discuter, Pour vous, Accès, Déploiement, Journal, Gérer) sont les pages décrites plus haut ; les Réglages regroupent Réglages, Skills & MCP, Installation & santé et À distance. Sur un téléphone, ☰ ouvre le menu et les onglets défilent sur le côté. La **cloche**, en haut de chaque page, réunit ce qui a besoin de vous dans chaque module, une ligne chacun avec sa raison : *Voir* ouvre la bonne page, *Ignorer* masque la ligne sans rien supprimer (*Alertes ignorées* la garde, *Rouvrir* la ramène, et elle revient d'elle-même quand sa raison change). **Guide**, à côté, ouvre le Guide. **Tutoriels** : l'Accueil, Studio et le Coffre montrent chacun une courte visite à votre première venue ; les *Tutoriels* du Guide les rejouent et *Réglages → Options* les réaffiche tous. La mise à jour vers le hub ne déplace rien : projets, réglages, clés et anciens liens restent où ils étaient. *Guide › Se repérer* en fait le tour, et le terminal s'ouvre sur la même page d'accueil (*H*).
+**Se repérer** : le menu à gauche a un seul niveau : *Accueil*, *Projets*, une entrée par module (**Missions**, **Studio**, les projets que Claude construit, le **Coffre**, **Serveurs**), le *Journal d'audit* et les *Réglages* en bas ; l'entrée d'un module rouvre la dernière page que vous y avez vue. Les pages d'un module sont des onglets en haut : ceux de Studio (le sélecteur de projet, puis Suivi, Équipe, Demandes, Discuter, Pour vous, Accès, Déploiement, Journal, Gérer) sont les pages décrites plus haut ; les Réglages regroupent Réglages, Skills & MCP, Installation & santé et À distance. Sur un téléphone, ☰ ouvre le menu et les onglets défilent sur le côté. La **cloche**, en haut de chaque page, réunit ce qui a besoin de vous dans chaque module, une ligne chacun avec sa raison : *Voir* ouvre la bonne page, *Ignorer* masque la ligne sans rien supprimer (*Alertes ignorées* la garde, *Rouvrir* la ramène, et elle revient d'elle-même quand sa raison change). **Guide**, à côté, ouvre le Guide. **Tutoriels** : l'Accueil, Studio et le Coffre montrent chacun une courte visite à votre première venue ; les *Tutoriels* du Guide les rejouent et *Réglages → Options* les réaffiche tous. La mise à jour vers le hub ne déplace rien : projets, réglages, clés et anciens liens restent où ils étaient. *Guide › Se repérer* en fait le tour, et le terminal s'ouvre sur la même page d'accueil (*H*).
 
-**Seulement Studio ?** Rien ne change : Studio marche seul, pour un projet ou plusieurs, comme Athanor avant ; Serveurs et E-mail ne demandent rien tant que vous ne les ouvrez pas, et un projet sans serveur dans son onglet *Déploiement* n'est jamais déployé. **Une mission depuis l'accueil** : *Nouvelle mission* sur l'accueil ouvre le formulaire unique d'une [mission](#missions) ; une phrase à l'assistant (« Fais une boutique et mets-la en ligne sur @vps avec @stripe ») ouvre le même formulaire déjà rempli, et rien ne démarre avant que vous appuyiez sur *Lancer*. Un projet Studio ne se déploie jamais lui-même et ne demande jamais d'accès à un serveur : il finit prêt à déployer, et Athanor le met en ligne avec les clés du coffre.
+**Seulement Studio ?** Rien ne change : Studio marche seul, pour un projet ou plusieurs, comme Athanor avant ; Serveurs ne demande rien tant que vous ne l'ouvrez pas, et un projet sans serveur dans son onglet *Déploiement* n'est jamais déployé. **Une mission depuis l'accueil** : *Nouvelle mission* sur l'accueil ouvre le formulaire unique d'une [mission](#missions) ; une phrase à l'assistant (« Fais une boutique et mets-la en ligne sur @vps avec @stripe ») ouvre le même formulaire déjà rempli, et rien ne démarre avant que vous appuyiez sur *Lancer*. Un projet Studio ne se déploie jamais lui-même et ne demande jamais d'accès à un serveur : il finit prêt à déployer, et Athanor le met en ligne avec les clés du coffre.
 
 **Démarrer avec l'ordinateur** : *Ouvrir Athanor au démarrage de l'ordinateur* l'ouvre avec sa fenêtre, sous Windows, dans une session de bureau Linux et sur macOS (à l'ouverture de session). Avec *Relancer les pilotes qui tournaient*, les projets que vous avez démarrés et que vous n'avez ni arrêtés ni vus livrés repartent. Lancer Athanor alors qu'il tourne déjà ne fait que ramener sa fenêtre : il n'y a jamais deux copies.
 
@@ -526,6 +524,7 @@ Le coffre garde les clés ; *Accès* décide quel projet reçoit lesquelles. Une
 - **Secrets et variables.** La valeur d'un secret n'est montrée que pendant que vous la tapez : ensuite, aucune page, aucune réponse d'API ni aucun journal ne la contient. Les variables (une région, un nom d'utilisateur) sont des réglages ordinaires, lisibles même coffre verrouillé.
 - **Coller.** Un bloc `.env` entier, une configuration MCP, un jeton ou une clé privée : Athanor reconnaît chaque valeur (Cloudflare, GitHub, Anthropic, OpenAI, Stripe, AWS, SSH, certificats, URL avec identifiants) et propose un nom, un type et une portée. Seuls les noms reviennent dans la page.
 - **Tester.** Vérifie une clé auprès de son propre service et de personne d'autre (Cloudflare et GitHub : si elle marche et ce qu'elle permet ; SSH : le type de clé et la réponse du serveur), puis propose une *note pour Claude*, modifiable : elle dit à Claude à quoi sert la clé sans en montrer la valeur. Une clé Cloudflare montre ensuite ses zones et ses droits sur sa fiche.
+- **Un compte SMTP (envoi d'e-mails).** *Coffre › Ajouter*, type *SMTP (envoi d'e-mails)* : choisissez le service (Gmail, Outlook, OVH, Brevo, Mailgun, SendGrid : il remplit le serveur, le port et le chiffrement), donnez le nom d'utilisateur et l'expéditeur, et le mot de passe comme valeur (pour Gmail, Outlook et Yahoo, un *mot de passe d'application*). Donnée à un projet, la clé apporte `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_FROM` et `SMTP_PASSWORD` : pendant que Claude le construit, et dans le `.env` d'un déploiement fait avec Docker Compose. Ses réglages sont liés à son mot de passe : changer le serveur ou un autre réglage redemande le mot de passe. *Guide › Envoyer des e-mails depuis vos applis* le détaille.
 - **Catégories.** *Catégories* crée, renomme et supprime les vôtres (*Hébergement* et *E-mail* sont proposées) ; en supprimer une laisse ses clés dans le coffre, sans catégorie. Une seule recherche, par nom ou par catégorie, avec son filtre par catégorie, sert le coffre, les mentions `@`, l'onglet *Déploiement* et les cartes de l'accueil.
 - **Deux portées.** *code* : ce que le code d'un projet utilise (une clé d'API, un jeton de test). *infra* : les clés de vos serveurs et de vos comptes ; elles ne quittent jamais le processus d'Athanor et demandent un mot de passe pour Athanor (*Réglages → Options → Verrouiller*).
 - **Verrouillage.** Les clés de vos projets se rouvrent seules sur ce PC ; celles de vos serveurs ne s'ouvrent qu'avec votre mot de passe, et une copie du disque n'ouvre rien. En détail : chaque portée a sa propre clé AES-256-GCM aléatoire. La clé *code* est enveloppée par votre mot de passe (PBKDF2-SHA256, 600 000 itérations) et par le coffre du système (DPAPI sous Windows, le Trousseau sous macOS, le Secret Service sous Linux) ; la clé *infra* seulement par votre mot de passe. Elle s'ouvre quand vous déverrouillez Athanor, dans la fenêtre ou depuis un téléphone appairé, et est effacée de la mémoire quand vous appuyez sur le cadenas, à l'arrêt d'urgence, à la fin de la session ou à l'arrêt d'Athanor. Le verrouillage automatique (après un temps sans activité) ne verrouille que la fenêtre : les clés restent ouvertes, donc IA, déploiements, tâches et sessions SSH continuent sans redemander le mot de passe. Un téléphone appairé voit la liste, jamais une valeur, et ne peut rien y changer.
@@ -609,21 +608,6 @@ Pendant qu'il travaille, le pilote parle à Athanor par un petit serveur MCP à 
 
 ---
 
-## E-mail
-
-*E-mail*, dans le menu, garde les comptes SMTP par lesquels vos applis déployées envoient leurs e-mails (inscription, mot de passe oublié, commandes). *Guide › Envoyer des e-mails depuis vos applis* le détaille.
-
-<p align="center">
-  <img src="docs/images/email.png" alt="Page E-mail : un compte SMTP avec son serveur, son port et son expéditeur, les boutons Envoyer un e-mail de test et Configurer l'envoi" width="100%">
-</p>
-
-- **Un compte.** Choisissez le service (Gmail, Outlook, OVH, Brevo, Mailgun, SendGrid ou un autre serveur : il remplit le serveur, le port et la sécurité, que vous pouvez encore changer), puis le nom d'utilisateur, l'expéditeur et le mot de passe : pour Gmail, Outlook et Yahoo, un *mot de passe d'application*. Le mot de passe va directement dans le coffre (type *Compte e-mail*, portée *code*) et n'est plus jamais affiché ; le fichier des comptes, `modules/email/comptes.json`, ne contient aucun mot de passe.
-- **Le test.** *Envoyer un e-mail de test* envoie un court message à l'adresse de votre choix (STARTTLS, TLS implicite sur 465, ou rien vers ce PC seulement ; 20 secondes au plus ; 5 tests par minute). Un échec est dit en mots simples, jamais avec la réponse brute du serveur, reste sur la carte et attend dans la cloche jusqu'à ce qu'un test passe ; chaque test est écrit au journal d'audit, sans le mot de passe.
-- **Vos applis.** *Configurer l'envoi* donne à un projet `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_FROM` et `SMTP_PASSWORD`, par les accès du projet : pendant sa construction, dans les secrets du pilote ; une fois déployée, dans le fichier d'environnement de l'appli. Athanor demande d'abord son mot de passe, s'il en a un. Un compte modifié met à jour chaque projet qui envoie par lui ; le *×* à côté d'un projet arrête son envoi ; supprimer le compte retire ses réglages de tous les projets, après une confirmation qui les nomme.
-- **Qui voit quoi.** Un téléphone appairé voit les comptes, en lecture seule. L'assistant de l'accueil connaît le nom des comptes et les projets pour lesquels ils envoient, jamais leurs réglages ni leur mot de passe.
-
----
-
 ## MCP et Athanor distants
 
 | | |
@@ -642,7 +626,7 @@ Le MCP d'Athanor s'ouvre à deux sortes de clients, toujours par un code à 6 ch
 
 <img src="docs/images/terminal.png" alt="Athanor dans un terminal : les projets et les pages à gauche, l'état du projet, le quota de l'abonnement et le plan avec ses jalons">
 
-Sous Linux et macOS, Athanor tourne aussi dans le terminal, comme btop ou htop : le même Athanor que sa fenêtre, sur le même serveur, donc les deux montrent toujours la même chose. Fait pour un serveur joint en SSH, un Linux sans bureau, ou simplement votre propre terminal. Le terminal réunit l'accueil et les pages du Studio ci-dessous ; le Coffre, les Serveurs, l'E-mail, les Accès et le chat d'accueil restent dans la fenêtre (ouvrez-la sur cet ordinateur avec *w*, ou depuis un téléphone appairé par l'accès à distance).
+Sous Linux et macOS, Athanor tourne aussi dans le terminal, comme btop ou htop : le même Athanor que sa fenêtre, sur le même serveur, donc les deux montrent toujours la même chose. Fait pour un serveur joint en SSH, un Linux sans bureau, ou simplement votre propre terminal. Le terminal réunit l'accueil et les pages du Studio ci-dessous ; le Coffre, les Serveurs, les Accès et le chat d'accueil restent dans la fenêtre (ouvrez-la sur cet ordinateur avec *w*, ou depuis un téléphone appairé par l'accès à distance).
 
 - **L'ouvrir** : `./athanor tui` dans le dossier d'Athanor (ou le fichier téléchargé : `./Athanor-Linux-x64 tui`). En SSH (`SSH_CONNECTION` défini), ou sur un Linux sans écran (ni `DISPLAY` ni `WAYLAND_DISPLAY`), `./athanor` seul l'ouvre. `./athanor gui` ouvre la fenêtre quoi qu'en dise la détection.
 - **Sur un serveur** : lancez Athanor avec un utilisateur normal, pas en root : Claude Code refuse de travailler en root (Installation & santé le dit, et *Démarrer* refuse). Sur un VPS neuf : `adduser NOM`, `usermod -aG sudo NOM`, connectez-vous en `NOM`, puis `./Athanor-Linux-x64`.
@@ -841,9 +825,9 @@ Oui. Rien n'est lié à un nom d'utilisateur ni à une lettre de disque : les ch
 </details>
 
 <details>
-<summary><b>Ai-je besoin d'un serveur, de Cloudflare ou d'un compte e-mail ?</b></summary>
+<summary><b>Ai-je besoin d'un serveur ou de Cloudflare ?</b></summary>
 
-Non. Studio fonctionne seul, comme Athanor l'a toujours fait : les autres modules attendent que vous ajoutiez un serveur, un jeton Cloudflare ou un compte SMTP. Un projet sans serveur dans son onglet *Déploiement* est seulement construit.
+Non. Studio fonctionne seul, comme Athanor l'a toujours fait : les autres modules attendent que vous ajoutiez un serveur ou un jeton Cloudflare. Un projet sans serveur dans son onglet *Déploiement* est seulement construit.
 </details>
 
 <details>
@@ -880,7 +864,6 @@ Rien que vous ayez à faire. La mise à jour ne déplace rien : projets, réglag
 | Une installation demande les droits administrateur | *Installation & santé* → *Droits administrateur pour les installations* → *Réparer* (une seule fois) |
 | « Le coffre est verrouillé » sur une action de Serveurs ou un déploiement | déverrouillez Athanor (son mot de passe, dans la fenêtre ou sur un téléphone appairé) : la clé *infra* ne s'ouvre qu'avec lui |
 | Un serveur refusé avec « la clé d'hôte a changé » | le serveur a été réinstallé, ou quelqu'un s'est glissé entre les deux : vérifiez la nouvelle empreinte sur le serveur lui-même (`for f in /etc/ssh/ssh_host_*_key.pub; do ssh-keygen -lf $f; done`), puis retirez et ajoutez de nouveau le serveur |
-| *Envoyer un e-mail de test* échoue | le message dit pourquoi en mots simples ; pour Gmail, Outlook et Yahoo, utilisez un *mot de passe d'application*, pas celui du compte |
 
 ---
 

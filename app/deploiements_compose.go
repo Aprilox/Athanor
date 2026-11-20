@@ -103,7 +103,7 @@ func (s *Serveur) fichierEnvCompose(projet, env string) (string, error) {
 	for _, e := range s.coffre.Liste() {
 		entrees[e.ID] = e
 	}
-	lignes := map[string]string{}
+	lignes, champs := map[string]string{}, map[string]string{}
 	pa := s.acces.Projet(projet)
 	// a project's one deployment (internal name "site", not one of the three older environments) also receives
 	// the keys given to the project, stored under the project's own environment; its own key wins
@@ -125,6 +125,17 @@ func (s *Serveur) fichierEnvCompose(projet, env string) (string, error) {
 			return "", errMoteur("the value of {0} has a quote or a line break, which a Compose .env cannot hold", a.Variable)
 		}
 		lignes[a.Variable] = a.Variable + "='" + v + "'\n"
+		for _, c := range e.Champs {
+			if strings.ContainsRune(c.Valeur, '\'') {
+				return "", errMoteur("the value of {0} has a quote or a line break, which a Compose .env cannot hold", c.Nom)
+			}
+			champs[c.Nom] = c.Nom + "='" + c.Valeur + "'\n"
+		}
+	}
+	for n, l := range champs { // a variable granted by its own name wins over a field
+		if _, pris := lignes[n]; !pris {
+			lignes[n] = l
+		}
 	}
 	var b strings.Builder
 	for _, n := range slices.Sorted(maps.Keys(lignes)) {

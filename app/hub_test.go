@@ -331,8 +331,6 @@ func TestHubPagesSansOrphelin(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	email, _ := os.ReadFile("static/email.js") // a module's page may live in its own file (M201)
-	js = append(append(js, '\n'), email...)
 	pagesJS := map[string]bool{}
 	for _, m := range regexp.MustCompile(`(?m)^pages\.([a-z]+) =`).FindAllStringSubmatch(string(js), -1) {
 		pagesJS["#"+m[1]] = true
@@ -457,7 +455,7 @@ func TestHubElements(t *testing.T) {
 	for _, e := range v.Elements {
 		el = append(el, e.Module+"/"+e.ID)
 	}
-	if g := strings.Join(ordre, " "); g != "hub missions dev serveurs email coffre reglages" {
+	if g := strings.Join(ordre, " "); g != "hub missions dev serveurs coffre reglages" {
 		t.Errorf("modules: %s", g)
 	}
 	if g := strings.Join(el, " "); g != "missions/m2 missions/m1 dev/ma-boutique serveurs/vps-1" {
@@ -524,7 +522,7 @@ func TestTutoriels(t *testing.T) {
 			}
 		}
 	}
-	for _, id := range []string{"hub", "dev", "coffre", "email", "servers"} {
+	for _, id := range []string{"hub", "dev", "coffre", "servers"} {
 		if n := tours[id]; n < 4 || n > 6 {
 			t.Fatalf("%s tour: %d steps, want 4 to 6 (%v)", id, n, tours)
 		}

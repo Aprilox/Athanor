@@ -14,15 +14,14 @@ import (
 
 // TestAnciennesDonneesLisibles (M321, verification §5): what an older installation left, all at once (the config,
 // acces.json with its three environments and an e-mail password granted per environment, the servers' inventory
-// with roles, a vault with a two-value entry and no "Fournisseurs" category, fournisseurs.json, an e-mail account
-// without sending settings, missions running, paused and finished) is read whole by a start of today's server and
+// with roles, a vault with a two-value entry and no "Fournisseurs" category, fournisseurs.json, missions running, paused and finished) is read whole by a start of today's server and
 // its reading pages. No file is rewritten, the vault apart: its provider token is sorted once, and nothing of it
 // is lost. No value of the vault shows in an answer nor in a file.
 func TestAnciennesDonneesLisibles(t *testing.T) {
 	s := serveurCoffreTest(t)
 	motDePasseCoffreTest(t, s)
 	_ = os.Remove(s.acces.chemin) // files left next to the test binary by an interrupted run
-	for _, f := range []string{s.acces.chemin, dossierMissions(), dossierModule("servers"), dossierModule("email")} {
+	for _, f := range []string{s.acces.chemin, dossierMissions(), dossierModule("servers")} {
 		t.Cleanup(func() { _ = os.RemoveAll(f) })
 	}
 	_ = os.RemoveAll(dossierMissions())
@@ -77,8 +76,6 @@ func TestAnciennesDonneesLisibles(t *testing.T) {
 			`{"id":"b2","nom":"vps-dev","hote":"203.0.113.6","port":2222,"utilisateur":"dev","cle":"0a1b2d","empreinte_hote":"SHA256:temoin2","roles":["dev"],"cree":"2026-10-01T08:05:00Z","etat":"inconnu","mot_de_passe_coupe":false}]}`,
 		fichierFournisseursChemin(): `{"version":1,"fournisseurs":[{"id":"cf1","type":"cloudflare","nom":"Cloudflare","cle":"` + cf.ID + `","compte":"compte-temoin",` +
 			`"zones":[{"id":"z1","nom":"exemple.fr","droits":["dns_lire","dns_ecrire"]}],"droits":["dns_lire","dns_ecrire"],"teste":"2026-11-01T10:00:00Z","etat":"ok"}]}`,
-		fichierComptesEmail(): `[{"id":"c1","nom":"Courrier","hote":"smtp.exemple.fr","port":587,"securite":"starttls","utilisateur":"envoi@exemple.fr",` +
-			`"expediteur":"envoi@exemple.fr","entree":"` + smtp.ID + `","cree":"2026-10-05T09:00:00Z","modifie":"2026-10-05T09:00:00Z"}]`,
 	}
 	etats := map[string]string{"encours1": "lancee", "enpause1": "en_pause", "finie001": "terminee"}
 	for id, etat := range etats {
@@ -111,7 +108,7 @@ func TestAnciennesDonneesLisibles(t *testing.T) {
 		}
 	}
 	for _, u := range []string{"/api/etat", "/api/hub", "/api/projets", "/api/projets/boutique/deploiement", "/api/acces?projet=boutique", "/api/coffre",
-		"/api/coffre/categories", "/api/serveurs", "/api/missions", "/api/email/comptes"} {
+		"/api/coffre/categories", "/api/serveurs", "/api/missions"} {
 		r := httptest.NewRequest("GET", u, nil)
 		r.Header.Set("X-Athanor", "jeton")
 		r.AddCookie(&http.Cookie{Name: cookieAcces, Value: "cle"})
@@ -134,12 +131,9 @@ func TestAnciennesDonneesLisibles(t *testing.T) {
 		!e["staging"].Production || !slices.Equal(e["staging"].Serveurs, []string{"a4"}) {
 		t.Errorf("environments lost on reading: %+v", e)
 	}
-	// the e-mail per environment
-	if l := s2.acces.projetsEmail(smtp.ID); !slices.Equal(l, []ProjetEmail{{"boutique", "dev"}, {"boutique", "prod"}}) {
-		t.Errorf("e-mail per environment: %+v", l)
-	}
-	if l, err := lireComptesEmail(); err != nil || len(l) != 1 || l[0].Entree != smtp.ID || l[0].Hote != "smtp.exemple.fr" || l[0].Port != 587 || l[0].Variables != nil {
-		t.Errorf("e-mail accounts: %+v, %v", l, err)
+	// the e-mail password granted per environment stays an ordinary grant of the vault
+	if p.Acces[2].Entree != smtp.ID || p.Acces[3].Variable != "SMTP_PASSWORD" || p.Acces[3].Env != "prod" {
+		t.Errorf("e-mail per environment: %+v", p.Acces)
 	}
 	// the inventory: roles kept, a server from before 3.0.0 is reached with its key
 	if l, err := lireServeurs(); err != nil || len(l) != 2 || !slices.Equal(l[0].Roles, []string{"prod"}) || !slices.Equal(l[1].Roles, []string{"dev"}) ||

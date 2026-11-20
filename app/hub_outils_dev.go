@@ -91,7 +91,7 @@ func (s *Serveur) recusParEnv(projet string) (string, map[string][]string, map[s
 	for _, a := range pa.Acces {
 		switch portee[a.Entree] {
 		case "code":
-			recus[a.Env] = append(recus[a.Env], a.Variable)
+			recus[a.Env] = append(recus[a.Env], s.variablesAcces(a)...)
 		case "":
 		default:
 			infra[a.Env]++

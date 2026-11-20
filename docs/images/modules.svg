@@ -51,28 +51,20 @@
   <text class="s" x="850" y="326">code keys: granted per project</text>
   <text class="s" x="850" y="346">and nothing else of the vault</text>
   <text class="s" x="850" y="366">infra keys: never leave Athanor</text>
-  <rect class="box" x="40" y="482" width="360" height="150" rx="14"/>
+  <rect class="box" x="40" y="482" width="550" height="150" rx="14"/>
   <text class="k" x="60" y="512">STUDIO</text>
   <text class="t" x="60" y="539">Projects Claude builds</text>
   <text class="s" x="60" y="563">one milestone per cycle,</text>
   <text class="s" x="60" y="583">in a sandbox</text>
   <text class="s" x="60" y="603">modules/dev/</text>
-  <path class="ln both" d="M220 476 V408"/>
-  <rect class="box" x="420" y="482" width="360" height="150" rx="14"/>
-  <text class="k" x="440" y="512">SERVERS</text>
-  <text class="t" x="440" y="539">VPS, DNS, deployments</text>
-  <text class="s" x="440" y="563">plans you accept, rollback,</text>
-  <text class="s" x="440" y="583">health checks</text>
-  <text class="s" x="440" y="603">modules/servers/</text>
-  <path class="ln both" d="M600 476 V408"/>
-  <rect class="box" x="800" y="482" width="360" height="150" rx="14"/>
-  <text class="k" x="820" y="512">E-MAIL</text>
-  <text class="t" x="820" y="539">SMTP for your apps</text>
-  <text class="s" x="820" y="563">test in one click, settings</text>
-  <text class="s" x="820" y="583">given to a project</text>
-  <text class="s" x="820" y="603">modules/email/</text>
-  <path class="ln both" d="M980 476 V408"/>
-  <path class="no" d="M400 560 H420"/>
-  <path class="no" d="M780 560 H800"/>
+  <path class="ln both" d="M315 476 V408"/>
+  <rect class="box" x="610" y="482" width="550" height="150" rx="14"/>
+  <text class="k" x="630" y="512">SERVERS</text>
+  <text class="t" x="630" y="539">VPS, DNS, deployments</text>
+  <text class="s" x="630" y="563">plans you accept, rollback,</text>
+  <text class="s" x="630" y="583">health checks</text>
+  <text class="s" x="630" y="603">modules/servers/</text>
+  <path class="ln both" d="M885 476 V408"/>
+  <path class="no" d="M590 560 H610"/>
   <text class="not" x="40" y="668">✕ No direct link between modules: each keeps its own folder and asks the hub, which checks the link (this project, this server, this deployment).</text>
 </svg>
