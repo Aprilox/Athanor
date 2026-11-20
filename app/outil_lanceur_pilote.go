@@ -114,6 +114,7 @@ func lancerDemarrer(args []string) int {
 	prive := priveDePilote(kit, projet, estWindows)
 	_ = os.MkdirAll(prive, 0o755)
 	sortie := filepath.Join(prive, "output.log")
+	tournerJournal(sortie) // started again for months: the previous output kept once, aside
 
 	// waits for the pilot to end (keeps WSL alive); a single keeper per project
 	garder := func() {
@@ -385,3 +386,11 @@ func lancerSuivre(args []string) int {
 }
 
 func existeLanceur(p string) bool { _, err := os.Lstat(p); return err == nil }
+
+// tournerJournal: a log over 20 MB becomes its .1 (the one before is dropped) before it is written again.
+func tournerJournal(f string) {
+	if fi, err := os.Stat(f); err == nil && fi.Size() > 20<<20 {
+		_ = os.Remove(f + ".1")
+		_ = os.Rename(f, f+".1")
+	}
+}

@@ -94,6 +94,16 @@ func TestClientsMCPAppairage(t *testing.T) {
 		t.Fatal("the window still shows the closed code")
 	}
 
+	// pairings that went through never add up: the 25th one from this PC still opens a request
+	for i := range 25 {
+		if c, _ := appairer(fenetre(`{"action":"code"}`).Code); c != 202 {
+			t.Fatalf("pairing %d from this PC refused: %d", i+1, c)
+		}
+	}
+	s.cli().mu.Lock()
+	s.cli().demandes = map[string]*demandeClient{}
+	s.cli().mu.Unlock()
+
 	// a new code: the right one opens a request, no token before the owner's yes
 	code = fenetre(`{"action":"code"}`).Code
 	c, dem := appairer(code)

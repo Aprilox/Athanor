@@ -282,7 +282,8 @@ func (s *Serveur) apiJournal(w http.ResponseWriter, r *http.Request) {
 	if ev == nil {
 		ev = []Evenement{}
 	}
-	s.ecrireJSON(w, map[string]any{"evenements": ev, "contexte": contexte, "fichier": filepath.Base(fichier)})
+	// a vault value a command or its output showed stays masked, here as in the chat and the audit log (to the phone too)
+	s.ecrireJSONMasque(w, map[string]any{"evenements": ev, "contexte": contexte, "fichier": filepath.Base(fichier)})
 }
 
 // MembreVue: a member of the team that can be called, with its model and who may call it.

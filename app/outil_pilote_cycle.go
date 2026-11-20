@@ -2686,6 +2686,7 @@ func lancerPilote(args []string) int {
 		p.cycle++
 		_ = os.WriteFile(filepath.Join(p.prive, "cycle"), []byte(strconv.Itoa(p.cycle)+"\n"), 0o644)
 		p.fichierLog = filepath.Join(p.etat, "logs", fmt.Sprintf("cycle-%s-%04d.jsonl", time.Now().Format("20060102-150405"), p.cycle))
+		purgerJournauxCycle(filepath.Join(p.etat, "logs")) // a pilot that runs for weeks does not fill the project's disk
 		avant := p.gitHead(p.projet)
 		cochesCycleDebut := p.cochesPlan()
 
@@ -3405,4 +3406,20 @@ func analyserJournalCycle(chemin string) (texteResultat string, enErreur bool, r
 		serveursMCP = serveursMCP[:10]
 	}
 	return
+}
+
+// maxJournauxCycle: the cycle logs a project keeps (the newest); each is a whole stream of Claude's (tool outputs,
+// files read, images), and only the newest ones are read again (the current cycle, the quota).
+const maxJournauxCycle = 200
+
+// purgerJournauxCycle: the oldest cycle-*.jsonl of dossier beyond maxJournauxCycle removed.
+func purgerJournauxCycle(dossier string) {
+	fs, _ := filepath.Glob(filepath.Join(dossier, "cycle-*.jsonl"))
+	if len(fs) <= maxJournauxCycle {
+		return
+	}
+	sort.Strings(fs) // cycle-<date>-<n>: their names sort by date
+	for _, f := range fs[:len(fs)-maxJournauxCycle] {
+		_ = os.Remove(f)
+	}
 }

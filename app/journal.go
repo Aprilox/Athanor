@@ -12,6 +12,9 @@ import (
 	"time"
 )
 
+// maxTexteJournal: the characters of an event's detail and raw line kept for the page.
+const maxTexteJournal = 16000
+
 type Evenement struct {
 	N         int64  `json:"n"`
 	Genre     string `json:"genre"` // pilote, texte, outil, resultat, erreur, sous_agent, fin, quota, system
@@ -137,7 +140,8 @@ func Traduire(ligne string) []Evenement {
 	outilID := ""
 	modele := ""
 	ev := func(genre, titre, detail string, contexte int64) {
-		out = append(out, Evenement{Genre: genre, Titre: titre, Detail: detail, SousAgent: sousAgent, Brut: ligne, Contexte: contexte, OutilID: outilID, ParentID: parent, Modele: modele})
+		// a tool result or a raw line can hold a whole file or an image: what the page shows of each is bounded
+		out = append(out, Evenement{Genre: genre, Titre: titre, Detail: couper(detail, maxTexteJournal), SousAgent: sousAgent, Brut: couper(ligne, maxTexteJournal), Contexte: contexte, OutilID: outilID, ParentID: parent, Modele: modele})
 	}
 	msg, _ := v["message"].(map[string]any)
 	modele = str(msg["model"])

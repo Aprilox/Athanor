@@ -64,6 +64,7 @@ type magasinClients struct {
 	essais   int
 	demandes map[string]*demandeClient // by the secret the client polls with
 	essaisIP map[string]int
+	essaisLe time.Time // the attempts per address count over fenetreEssaisIP, then start again
 }
 
 func cheminClients() string { return filepath.Join(dossierAthanor(), "hub", "clients.json") }
@@ -150,6 +151,9 @@ func (s *Serveur) apiAppairerClient(w http.ResponseWriter, r *http.Request) {
 	ip := ipAppel(r)
 	m := s.cli()
 	m.mu.Lock()
+	if time.Since(m.essaisLe) > fenetreEssaisIP {
+		m.essaisIP, m.essaisLe = map[string]int{}, time.Now()
+	}
 	m.essaisIP[ip]++
 	trop := m.essaisIP[ip] > 20
 	bon := m.code != "" && time.Now().Before(m.codeFin) &&
@@ -164,7 +168,8 @@ func (s *Serveur) apiAppairerClient(w http.ResponseWriter, r *http.Request) {
 	var d *demandeClient
 	secret := ""
 	if bon && !trop {
-		m.code = "" // a code is used once
+		delete(m.essaisIP, ip) // a pairing that went through counts against nobody
+		m.code = ""            // a code is used once
 		m.nettoyer()
 		secret = aleatoire(24)
 		d = &demandeClient{Ref: aleatoire(6), Nom: c.Nom, Sorte: c.Sorte, IP: ip, Quand: time.Now().Unix(), etat: "attente"}
@@ -428,3 +433,7 @@ func (s *Serveur) clientAthanor(r *http.Request) bool {
 	c, ok := s.verifierClient(strings.TrimSpace(jeton))
 	return ok && c.Sorte == "athanor"
 }
+
+// fenetreEssaisIP: 20 pairing attempts from one address in this time, then it waits (every local client comes from
+// 127.0.0.1: a count that never started again closed pairing until a restart).
+const fenetreEssaisIP = 10 * time.Minute

@@ -137,12 +137,7 @@ func auditTache(projet string) []LigneAudit {
 }
 
 func tacheParID(serveur, id string) TacheServeurs {
-	l := tachesServeur(serveur) // read once: a task written between two reads would shift the index
-	i := slices.IndexFunc(l, func(x TacheServeurs) bool { return x.ID == id })
-	if i < 0 {
-		return TacheServeurs{}
-	}
-	return l[i]
+	return tacheDeServeur(serveur, id) // its own file: an older task than the 50 newest is found too
 }
 
 // testerAgentServeurs: the whole test on the test sshd at cible (host:port); the server is removed whatever happens.

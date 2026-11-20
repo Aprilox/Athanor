@@ -148,19 +148,14 @@ func lireJSONFichier(chemin string, v any) {
 	}
 }
 
+// ecrireJSONFichier: through ecrireAtomique (its own temporary name, on disk before the rename, retried while a
+// reader holds the file on Windows): a fixed ".tmp" and one rename lost writes (the relay's pause) without a word.
 func ecrireJSONFichier(chemin string, v any, mode os.FileMode) error {
-	if err := os.MkdirAll(filepath.Dir(chemin), 0o755); err != nil {
-		return err
-	}
 	b, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
 		return err
 	}
-	t := chemin + ".tmp"
-	if err := os.WriteFile(t, b, mode); err != nil {
-		return err
-	}
-	return os.Rename(t, chemin)
+	return ecrireAtomique(chemin, b, mode)
 }
 
 func lireBiblio(k Kit) Bibliotheque {

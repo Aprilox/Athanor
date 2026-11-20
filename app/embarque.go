@@ -50,6 +50,9 @@ func ecrireAtomique(dest string, contenu []byte, mode os.FileMode) error {
 		return err
 	}
 	_, err = t.Write(contenu)
+	if err == nil {
+		err = t.Sync() // on disk before the rename: a power cut never leaves dest (the vault, the config) empty
+	}
 	if e := t.Close(); err == nil {
 		err = e
 	}

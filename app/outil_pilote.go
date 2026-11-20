@@ -275,20 +275,31 @@ func copierDossierModeles(src, dst string) {
 	})
 }
 
+// maxJournalPilote: the private pilot.log turns over past this size (pilot.log.1 keeps the one before). Its published
+// copy is the whole file: it only grows until it turns over, so the page's follower (journal.go, by position) reads
+// each line once; a sliding window of the last lines, rewritten at each line, sent it lines twice or cut them.
+var maxJournalPilote int64 = 512 << 10
+
 func (p *pilote) log(msg string) {
 	m := fmt.Sprintf("[%s] %s", time.Now().Format("2006-01-02 15:04:05"), msg)
 	fmt.Println(m)
 	jPrive := filepath.Join(p.prive, "pilot.log")
+	if fi, err := os.Stat(jPrive); err == nil && fi.Size() > maxJournalPilote {
+		_ = os.Remove(jPrive + ".1")
+		_ = os.Rename(jPrive, jPrive+".1") // a program still writing to it (Unreal, rojo, an MCP) goes on in .1
+	}
 	if f, err := os.OpenFile(jPrive, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
 		_, _ = f.WriteString(m + "\n")
 		f.Close()
 	}
 	if b, err := os.ReadFile(jPrive); err == nil {
-		lignes := strings.Split(strings.TrimRight(string(b), "\n"), "\n")
-		if len(lignes) > 3000 {
-			lignes = lignes[len(lignes)-3000:]
+		if int64(len(b)) > maxJournalPilote { // the rename refused (a program holds it on Windows): its end only
+			b = b[int64(len(b))-maxJournalPilote:]
+			if i := bytes.IndexByte(b, '\n'); i >= 0 {
+				b = b[i+1:]
+			}
 		}
-		_ = publierFichier(filepath.Join(p.etat, "pilot.log"), []byte(strings.Join(lignes, "\n")+"\n"))
+		_ = publierFichier(filepath.Join(p.etat, "pilot.log"), b)
 	}
 }
 

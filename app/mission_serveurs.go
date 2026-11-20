@@ -112,11 +112,12 @@ func (s *Serveur) lancerJalonSuivant(m *Mission) error {
 func (s *Serveur) suiteMission(t TacheServeurs) {
 	missionMu.Lock()
 	defer missionMu.Unlock()
-	i := slices.IndexFunc(lireMissions(), func(m Mission) bool { return m.Tache == t.ID && pilotee(m) })
+	l := lireMissions() // read once: a mission deleted meanwhile never shifts the one written back
+	i := slices.IndexFunc(l, func(m Mission) bool { return m.Tache == t.ID && pilotee(m) })
 	if i < 0 || t.Etat == "arretee" { // stopped by the owner: Launch again goes on from there
 		return
 	}
-	m := lireMissions()[i]
+	m := l[i]
 	var err error
 	switch k := slices.IndexFunc(m.Jalons, func(j JalonServeurs) bool { return j.Tache == t.ID }); {
 	case m.Planif:
@@ -213,11 +214,12 @@ func outilProposerJalons(s *Serveur, x SessionHub, args json.RawMessage) (string
 	}
 	missionMu.Lock()
 	defer missionMu.Unlock()
-	i := slices.IndexFunc(lireMissions(), func(m Mission) bool { return m.Tache == x.Mission && m.Planif })
+	l := lireMissions()
+	i := slices.IndexFunc(l, func(m Mission) bool { return m.Tache == x.Mission && m.Planif })
 	if i < 0 {
 		return "", errors.New("proposer_jalons is for the planning step of a servers mission only: propose a plan with proposer_plan")
 	}
-	m := lireMissions()[i]
+	m := l[i]
 	faits := slices.DeleteFunc(slices.Clone(m.Jalons), func(j JalonServeurs) bool { return j.Etat != "fait" })
 	if len(a.Jalons) == 0 || len(faits)+len(a.Jalons) > maxJalonsServeurs {
 		return "", fmt.Errorf("propose 1 to %d milestones", maxJalonsServeurs-len(faits))

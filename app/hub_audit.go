@@ -383,9 +383,9 @@ var typesAudit = []string{"demande", "reponse", "evenement"}
 
 // Lire: the lines matching f, newest first, parPageAudit at most. An unreadable line is left out (the check
 // points at it). shortcut: reads whole month files at each call, upgrade to reading backwards past a few MB.
+// Without the writers' lock: lines are only appended, and one being written as it is read is left out like an
+// unreadable one; holding it froze every agent's tool call (each one writes a line) while a long log was read.
 func (a Audit) Lire(f FiltreAudit) (PageAudit, error) {
-	auditMu.Lock()
-	defer auditMu.Unlock()
 	m, err := a.mois()
 	if err != nil {
 		return PageAudit{}, err

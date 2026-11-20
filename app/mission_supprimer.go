@@ -163,7 +163,9 @@ func (s *Serveur) supprimerMission(id, qui string, o OptionsSuppression) ([]stri
 	}
 	s.revoquerJetons("mission supprimée", func(x SessionHub) bool { return x.Projet == prefixeMission+id })
 	f := filepath.Join(dossierMissions(), id+".json")
+	missionMu.Lock()        // never while the servers pilot reads and writes it back (mission_serveurs.go)
 	err = retirerFichier(f) // Windows: the module reading it now (lireMissions at each hub request) holds it for a moment
+	missionMu.Unlock()
 	_ = os.Remove(f + ".ancien")
 	_ = os.RemoveAll(dossierSessionMission(id))
 	if err != nil && !errors.Is(err, os.ErrNotExist) {

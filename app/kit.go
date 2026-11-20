@@ -232,7 +232,39 @@ type LigneStat struct {
 	RTKEconomise int64   `json:"rtk_economise,omitempty"` // the tokens of those RTK did not pass on to Claude
 }
 
+// cacheStats: a project's statistics read again only when stats.tsv or pilot.log changed (each refresh of the page
+// asked for them, both files growing for months).
+var cacheStats = struct {
+	sync.Mutex
+	m map[string]statsLues
+}{m: map[string]statsLues{}}
+
+type statsLues struct {
+	cle string
+	l   []LigneStat
+}
+
 func (p Projet) LireStats() []LigneStat {
+	cle := ""
+	for _, f := range []string{p.StatsTSV(), p.PiloteLog()} {
+		if fi, err := os.Stat(f); err == nil {
+			cle += fi.ModTime().String() + "/" + strconv.FormatInt(fi.Size(), 10) + ";"
+		}
+	}
+	cacheStats.Lock()
+	c, ok := cacheStats.m[p.StatsTSV()]
+	cacheStats.Unlock()
+	if ok && c.cle == cle {
+		return c.l
+	}
+	l := p.lireStats()
+	cacheStats.Lock()
+	cacheStats.m[p.StatsTSV()] = statsLues{cle, l}
+	cacheStats.Unlock()
+	return l
+}
+
+func (p Projet) lireStats() []LigneStat {
 	b, err := os.ReadFile(p.StatsTSV())
 	if err != nil {
 		return nil

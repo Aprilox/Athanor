@@ -394,6 +394,7 @@ func (s *Serveur) lancerTacheDans(texte string, serveurs []string, forcee bool, 
 		Action: "tâche serveurs lancée", Resultat: strings.Join(slices.Concat(t.Serveurs, t.APIs), ", ") + map[bool]string{true: " (API seule)"}[len(t.Serveurs) == 0] +
 			map[bool]string{true: " (mode " + mode + ")"}[mode != ""] + map[bool]string{true: " (forcée en mode natif)"}[forcee]})
 	go s.executerTache(ctx, e, dossier)
+	go purgerTaches(slices.Concat(t.Serveurs, []string{serveurAPI})[0]) // a server keeps its newest finished tasks
 	return e.copie(), nil
 }
 
@@ -730,16 +731,99 @@ func tachesServeur(id string) []TacheServeurs {
 	fichiers, _ := filepath.Glob(filepath.Join(dossierTaches(id), "*.json"))
 	l := []TacheServeurs{}
 	for _, f := range fichiers {
-		var t TacheServeurs
-		b, err := os.ReadFile(f)
-		for i := 0; err != nil && !os.IsNotExist(err) && i < 5; i++ { // Windows refuses the read while ecrireAtomique renames over it
-			time.Sleep(20 * time.Millisecond)
-			b, err = os.ReadFile(f)
-		}
-		if err == nil && json.Unmarshal(b, &t) == nil {
+		if t, ok := lireFichierTache(f); ok {
 			l = append(l, t)
 		}
 	}
+	return avecEnCours(l)
+}
+
+// cacheTaches: a task file decoded once until it changes (its date and size): the hub, the missions and the
+// deployments' view read every server's tasks at each refresh.
+var cacheTaches = struct {
+	sync.Mutex
+	m map[string]tacheLue
+}{m: map[string]tacheLue{}}
+
+type tacheLue struct {
+	date   time.Time
+	taille int64
+	t      TacheServeurs
+}
+
+// lireFichierTache: one task file, from the cache while it has not changed.
+func lireFichierTache(f string) (TacheServeurs, bool) {
+	fi, err := os.Stat(f)
+	if err != nil {
+		return TacheServeurs{}, false
+	}
+	cacheTaches.Lock()
+	c, ok := cacheTaches.m[f]
+	cacheTaches.Unlock()
+	if ok && c.date.Equal(fi.ModTime()) && c.taille == fi.Size() {
+		return c.t, true
+	}
+	var t TacheServeurs
+	b, err := os.ReadFile(f)
+	for i := 0; err != nil && !os.IsNotExist(err) && i < 5; i++ { // Windows refuses the read while ecrireAtomique renames over it
+		time.Sleep(20 * time.Millisecond)
+		b, err = os.ReadFile(f)
+	}
+	if err != nil || json.Unmarshal(b, &t) != nil {
+		return TacheServeurs{}, false
+	}
+	cacheTaches.Lock()
+	cacheTaches.m[f] = tacheLue{fi.ModTime(), fi.Size(), t}
+	cacheTaches.Unlock()
+	return t, true
+}
+
+// tacheDeServeur: one task of server id, its own file read (none: an empty task).
+func tacheDeServeur(id, tache string) TacheServeurs {
+	if !idMissionValide.MatchString(tache) {
+		return TacheServeurs{}
+	}
+	t, ok := lireFichierTache(filepath.Join(dossierTaches(id), tache+".json"))
+	if !ok {
+		return TacheServeurs{}
+	}
+	return avecEnCours([]TacheServeurs{t})[0]
+}
+
+// maxTachesGardees: the finished tasks a server keeps (the newest); older ones are removed when a task starts.
+const maxTachesGardees = 100
+
+// purgerTaches: server id's oldest finished tasks beyond maxTachesGardees removed (a running one is never touched).
+func purgerTaches(id string) {
+	fichiers, _ := filepath.Glob(filepath.Join(dossierTaches(id), "*.json"))
+	if len(fichiers) <= maxTachesGardees {
+		return
+	}
+	type f struct {
+		chemin string
+		date   time.Time
+	}
+	var l []f
+	for _, c := range fichiers {
+		if fi, err := os.Stat(c); err == nil {
+			l = append(l, f{c, fi.ModTime()})
+		}
+	}
+	slices.SortFunc(l, func(a, b f) int { return b.date.Compare(a.date) })
+	tachesEnCours.Lock()
+	defer tachesEnCours.Unlock()
+	for _, x := range l[min(len(l), maxTachesGardees):] {
+		if tachesEnCours.m[strings.TrimSuffix(filepath.Base(x.chemin), ".json")] == nil {
+			_ = os.Remove(x.chemin)
+			cacheTaches.Lock()
+			delete(cacheTaches.m, x.chemin)
+			cacheTaches.Unlock()
+		}
+	}
+}
+
+// avecEnCours: the tasks read, a running one as it is now, the newest first, 50 at most.
+func avecEnCours(l []TacheServeurs) []TacheServeurs {
 	tachesEnCours.Lock()
 	for i := range l {
 		if e := tachesEnCours.m[l[i].ID]; e != nil {
