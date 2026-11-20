@@ -50,6 +50,10 @@ const PREFIXES = ["Resume: new request ", "Resume: what changed in .athanor/REQU
 
 const DICT = {
 fr: {
+  "A project to build (with its servers and API keys when you name them), or work on servers only, is a mission: its summary shows under the answer, with what to build and what runs on which server kept apart; *Review and launch* opens the *New mission* form filled with it, you check it, change what you want and press *Launch*. For the rest it proposes a card: start a pilot, add a request, leave a remark, create a sub-agent or an MCP server, switch one on in projects; *Launch*, *Change* or *Refuse*. Nothing runs before you launch it, and each decision goes into the audit log.": "Un projet à construire (avec ses serveurs et ses clés API quand vous les nommez), ou un travail sur des serveurs seulement, est une mission : son résumé s'affiche sous la réponse, ce qu'il faut construire et ce qui tourne sur quel serveur bien séparés ; *Vérifier et lancer* ouvre le formulaire *Nouvelle mission* rempli, vous vérifiez, corrigez ce que vous voulez et appuyez sur *Lancer*. Pour le reste, il propose une carte : démarrer un pilote, ajouter une demande, laisser une remarque, créer un sous-agent ou un serveur MCP, en activer un dans des projets ; *Lancer*, *Changer* ou *Refuser*. Rien ne s'exécute avant que vous lanciez, et chaque décision entre dans le journal d'audit.",
+  "Review and launch": "Vérifier et lancer",
+  "(new)": "(nouveau)",
+  "(one of your projects: the mission becomes its next request)": "(un de vos projets : la mission devient sa prochaine demande)",
   "The steps you already have in mind.": "Les étapes que vous avez déjà en tête.",
   "What must be done on the servers?": "Que faut-il faire sur les serveurs ?",
   "another role": "autre rôle",
@@ -1042,6 +1046,10 @@ fr: {
   "Run a command": "Lancer une commande", "The task failed without giving a reason.": "La tâche a échoué sans donner de raison.",
 },
 es: {
+  "A project to build (with its servers and API keys when you name them), or work on servers only, is a mission: its summary shows under the answer, with what to build and what runs on which server kept apart; *Review and launch* opens the *New mission* form filled with it, you check it, change what you want and press *Launch*. For the rest it proposes a card: start a pilot, add a request, leave a remark, create a sub-agent or an MCP server, switch one on in projects; *Launch*, *Change* or *Refuse*. Nothing runs before you launch it, and each decision goes into the audit log.": "Un proyecto que construir (con sus servidores y claves API cuando los nombra), o un trabajo solo en servidores, es una misión: su resumen aparece bajo la respuesta, con lo que hay que construir y lo que funciona en cada servidor bien separados; *Revisar y lanzar* abre el formulario *Nueva misión* rellenado, lo revisa, cambia lo que quiera y pulsa *Lanzar*. Para lo demás propone una tarjeta: iniciar un piloto, añadir una petición, dejar una nota, crear un subagente o un servidor MCP, activar uno en proyectos; *Lanzar*, *Cambiar* o *Rechazar*. Nada se ejecuta antes de que lo lance, y cada decisión va al registro de auditoría.",
+  "Review and launch": "Revisar y lanzar",
+  "(new)": "(nuevo)",
+  "(one of your projects: the mission becomes its next request)": "(uno de sus proyectos: la misión se convierte en su próxima petición)",
   "The steps you already have in mind.": "Los pasos que ya tiene en mente.",
   "What must be done on the servers?": "¿Qué hay que hacer en los servidores?",
   "another role": "otra función",
@@ -2002,6 +2010,10 @@ es: {
   "Run a command": "Ejecutar un comando", "The task failed without giving a reason.": "La tarea falló sin dar un motivo.",
 },
 de: {
+  "A project to build (with its servers and API keys when you name them), or work on servers only, is a mission: its summary shows under the answer, with what to build and what runs on which server kept apart; *Review and launch* opens the *New mission* form filled with it, you check it, change what you want and press *Launch*. For the rest it proposes a card: start a pilot, add a request, leave a remark, create a sub-agent or an MCP server, switch one on in projects; *Launch*, *Change* or *Refuse*. Nothing runs before you launch it, and each decision goes into the audit log.": "Ein Projekt zum Bauen (mit seinen Servern und API-Schlüsseln, wenn Sie sie nennen) oder Arbeit nur auf Servern ist eine Mission: Ihre Zusammenfassung erscheint unter der Antwort, das zu Bauende und das, was auf welchem Server läuft, sauber getrennt; *Prüfen und starten* öffnet das ausgefüllte Formular *Neue Mission*, Sie prüfen es, ändern, was Sie möchten, und drücken *Starten*. Für alles andere schlägt er eine Karte vor: einen Piloten starten, eine Anfrage hinzufügen, eine Bemerkung hinterlassen, einen Subagenten oder einen MCP-Server anlegen, einen in Projekten einschalten; *Starten*, *Ändern* oder *Ablehnen*. Nichts läuft, bevor Sie es starten, und jede Entscheidung kommt ins Audit-Protokoll.",
+  "Review and launch": "Prüfen und starten",
+  "(new)": "(neu)",
+  "(one of your projects: the mission becomes its next request)": "(eines Ihrer Projekte: Die Mission wird seine nächste Anfrage)",
   "The steps you already have in mind.": "Die Schritte, die Sie schon im Kopf haben.",
   "What must be done on the servers?": "Was soll auf den Servern getan werden?",
   "another role": "andere Rolle",
@@ -2956,6 +2968,10 @@ de: {
   "Run a command": "Einen Befehl ausführen", "The task failed without giving a reason.": "Die Aufgabe ist ohne Angabe eines Grundes fehlgeschlagen.",
 },
 it: {
+  "A project to build (with its servers and API keys when you name them), or work on servers only, is a mission: its summary shows under the answer, with what to build and what runs on which server kept apart; *Review and launch* opens the *New mission* form filled with it, you check it, change what you want and press *Launch*. For the rest it proposes a card: start a pilot, add a request, leave a remark, create a sub-agent or an MCP server, switch one on in projects; *Launch*, *Change* or *Refuse*. Nothing runs before you launch it, and each decision goes into the audit log.": "Un progetto da costruire (con i suoi server e le sue chiavi API quando li nomini), o un lavoro solo sui server, è una missione: il suo riepilogo appare sotto la risposta, con ciò che va costruito e ciò che gira su quale server ben separati; *Verifica e avvia* apre il modulo *Nuova missione* compilato, lo controlli, cambi ciò che vuoi e premi *Avvia*. Per il resto propone una scheda: avviare un pilota, aggiungere una richiesta, lasciare una nota, creare un sotto-agente o un server MCP, attivarne uno nei progetti; *Avvia*, *Cambia* o *Rifiuta*. Nulla parte prima che tu lo avvii, e ogni decisione va nel registro di audit.",
+  "Review and launch": "Verifica e avvia",
+  "(new)": "(nuovo)",
+  "(one of your projects: the mission becomes its next request)": "(uno dei tuoi progetti: la missione diventa la sua prossima richiesta)",
   "The steps you already have in mind.": "I passi che hai già in mente.",
   "What must be done on the servers?": "Che cosa bisogna fare sui server?",
   "another role": "altro ruolo",
@@ -3910,6 +3926,10 @@ it: {
   "Run a command": "Eseguire un comando", "The task failed without giving a reason.": "L'attività non è riuscita senza indicare un motivo.",
 },
 pt: {
+  "A project to build (with its servers and API keys when you name them), or work on servers only, is a mission: its summary shows under the answer, with what to build and what runs on which server kept apart; *Review and launch* opens the *New mission* form filled with it, you check it, change what you want and press *Launch*. For the rest it proposes a card: start a pilot, add a request, leave a remark, create a sub-agent or an MCP server, switch one on in projects; *Launch*, *Change* or *Refuse*. Nothing runs before you launch it, and each decision goes into the audit log.": "Um projeto a construir (com os seus servidores e chaves de API quando os nomeia), ou um trabalho só em servidores, é uma missão: o seu resumo aparece sob a resposta, com o que construir e o que corre em cada servidor bem separados; *Verificar e lançar* abre o formulário *Nova missão* preenchido, verifica, altera o que quiser e prime *Lançar*. Para o resto propõe um cartão: iniciar um piloto, acrescentar um pedido, deixar uma nota, criar um subagente ou um servidor MCP, ativar um em projetos; *Lançar*, *Alterar* ou *Recusar*. Nada é executado antes de o lançar, e cada decisão vai para o registo de auditoria.",
+  "Review and launch": "Verificar e lançar",
+  "(new)": "(novo)",
+  "(one of your projects: the mission becomes its next request)": "(um dos seus projetos: a missão torna-se o seu próximo pedido)",
   "The steps you already have in mind.": "Os passos que já tem em mente.",
   "What must be done on the servers?": "O que é preciso fazer nos servidores?",
   "another role": "outra função",

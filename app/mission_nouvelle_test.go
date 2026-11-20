@@ -17,7 +17,7 @@ import (
 // choice, or adds a request to an existing project; the frame reads them back; Edit, Pause, Stop, Resume and
 // Delete work in any state; a vault value written in the text never reaches the mission file.
 func TestMissionsSuivies(t *testing.T) {
-	b := nouveauBancCarteProjet(t, `{"type":"projet","projet":"vitrine","texte":"Un site vitrine.","plan":"1. accueil","deploiement":{"serveurs":["vps"],"apis":["Clé Stripe"]},"autonome":true}`)
+	b := nouveauBancCarteProjet(t, `{"type":"projet","projet":"vitrine","texte":"Un site vitrine.","plan":"1. accueil","deploiement":{"serveurs":["vps"],"apis":["Clé Stripe"],"plan":"nginx sur vps"},"autonome":true}`)
 	s := b.s
 	_ = os.RemoveAll(dossierMissions())
 	t.Cleanup(func() { _ = os.RemoveAll(dossierMissions()) })
@@ -53,8 +53,11 @@ func TestMissionsSuivies(t *testing.T) {
 
 	// the home's proposal fills the form: server and key by id, autonomous, the plan
 	c := s.cartesConversation(lireConversation(s.kitCourant(), projetAccueil(s.kitCourant())))["1"]
-	if m := c.Mission; m == nil || !slices.Equal(m.Serveurs, []string{b.vps}) || !slices.Equal(m.APIs, []string{b.api}) || m.Mode != "auto" || m.Plan != "1. accueil" || m.Projet != "vitrine" {
+	if m := c.Mission; m == nil || !slices.Equal(m.Serveurs, []string{b.vps}) || !slices.Equal(m.APIs, []string{b.api}) || m.Mode != "auto" || m.Plan != "1. accueil" || m.PlanDeploiement != "nginx sur vps" || m.Projet != "vitrine" {
 		t.Fatalf("proposal: %+v", c.Mission)
+	}
+	if c.Noms[b.vps] != "vps" || c.Noms[b.api] != "Clé Stripe" { // the summary under the answer names them
+		t.Errorf("names for the summary: %v", c.Noms)
 	}
 
 	// refused: no text, an unknown server, no name

@@ -2289,13 +2289,33 @@ function champsEquipeHub(c, projets) {
 }
 // 3.1: a `projet` proposal (and a `serveur` one, a mission without a project) is a mission: the New mission form opens
 // filled with it (bulleMission), never a card to fill
+// the summary of a mission the assistant prepared, under its answer: what, on which project, servers and keys, how;
+// "Review and launch" opens the New mission form filled with it (nothing opens by itself)
+function resumeMission(c) {
+  const m = c.mission || {}, noms = c.noms || {}, nom = (id) => h(noms[id] || id), court = (x, n) => x.length > n ? x.slice(0, n) + "…" : x;
+  const projets = projetsVisibles(etat.vue || {}).map((p) => p.nom), existant = m.projet && projets.includes(m.projet);
+  const role = (l) => m.sans_projet ? "" : ` <span class="muet">${t(l)}</span>`;
+  const serveurs = [...(m.serveurs || []).map((id) => nom(id) + role("the site")), ...(m.autres || []).map((id) => nom(id) + role("another role"))];
+  const ligne = (lib, val) => val ? `<div><dt>${t(lib)}</dt><dd>${val}</dd></div>` : "";
+  return `<dl class="mis-liens petit mis-resume">
+      ${ligne("Project", m.sans_projet ? `<span class="muet">${t("None: servers only")}</span>` : h(m.projet || "") + (existant ? ` <span class="muet">${t("(one of your projects: the mission becomes its next request)")}</span>` : ` <span class="muet">${t("(new)")}</span>`))}
+      ${ligne("Servers", serveurs.join(", "))}
+      ${ligne("API keys", (m.apis || []).map(nom).join(", "))}
+      ${serveurs.length || (m.apis || []).length ? ligne("On the servers", h(nomModeMission(m.mode))) : ""}
+      ${ligne("Plan", m.plan ? h(court(m.plan, 200)) : "")}
+      ${ligne("Plan for the servers", m.plan_deploiement ? h(court(m.plan_deploiement, 200)) : "")}
+      ${ligne("Address", m.url ? h(m.url) : "")}
+      ${!m.sans_projet && (m.serveurs || []).length ? ligne("When to deploy", t(m.moment === "jalon" ? "After each milestone" : "At delivery")) : ""}
+    </dl>`;
+}
 function bulleMission(c, i) {
   const m = c.mission || {}, lancee = c.etat === "lancee";
-  return `<div class="chat-msg chat-claude"><div class="chat-bulle chat-note carte-action" data-carte-action="${i}" data-type="projet">
+  return `<div class="chat-msg chat-claude"><div class="chat-bulle chat-note carte-action" data-carte-action="${i}" data-type="${h(c.type || "projet")}">
     <div class="muet petit">${t(c.etat ? (lancee ? "Mission launched" : "Mission refused") : "Mission prepared: nothing runs before you launch it")}</div>
-    <div><b>${h(m.projet || c.projet || (c.type === "serveur" ? t("None: servers only") : ""))}</b></div>${m.texte ? `<div class="petit">${mdChat(m.texte.length > 300 ? m.texte.slice(0, 300) + "…" : m.texte)}</div>` : ""}
+    ${c.etat ? `<div><b>${h(m.projet || c.projet || (c.type === "serveur" ? t("None: servers only") : ""))}</b></div>` : ""}${m.texte ? `<div class="petit">${mdChat(m.texte.length > 300 ? m.texte.slice(0, 300) + "…" : m.texte)}</div>` : ""}
+    ${c.etat ? "" : resumeMission(c)}
     ${c.etat ? (lancee ? `<p class="petit m0">${c.resultat && c.resultat !== "Mission launched: follow it in Missions." ? h(t(c.resultat, (c.args || []).map((x) => t(x)))) : `<a href="#missions">${t("Follow it in Missions")}</a>`}</p>` : "") // a project card of 3.0.0 says what it did
-      : `<div class="ligne m0 mt-1"><button type="button" class="btn btn-petit btn-primaire" data-nm-proposee="${i}">${t("Open the mission")}</button>
+      : `<div class="ligne m0 mt-1"><button type="button" class="btn btn-petit btn-primaire" data-nm-proposee="${i}">${t("Review and launch")}</button>
         <button type="button" class="btn btn-petit" data-cact-decision="refuser" data-index="${i}">${t("Refuse")}</button></div>`}</div></div>`;
 }
 const ouvrirMissionProposee = (i) => { const c = ((etat.hubChat || {}).actions || {})[i]; if (c && c.mission) nouvelleMission({ ...c.mission, reglages: {}, index: Number(i) }); };
@@ -2416,11 +2436,6 @@ async function majHubChat(force) {
   const sig = JSON.stringify([d.messages.length, d.en_cours, d.partiel, d.pouvoirs, d.actions]);
   if (!force && sig === etat.hubChatSig) return;
   etat.hubChatSig = sig;
-  // a mission the assistant just prepared opens in the New mission form, once (a thread read again opens nothing)
-  const props = Object.entries(d.actions || {}).filter(([, c]) => (c.type === "projet" || c.type === "serveur") && !c.etat && c.mission).map(([i, c]) => i + ":" + c.empreinte);
-  const neuve = etat.missionsVues ? props.find((x) => !etat.missionsVues.has(x)) : null;
-  etat.missionsVues = new Set([...(etat.missionsVues || []), ...props]);
-  if (neuve && !d.en_cours) return ouvrirMissionProposee(neuve.split(":")[0]);
   const fil = $("#hub-chat-fil"); if (!fil) return;
   const enBas = auBas(fil);
   garderFocus(fil, () => { fil.innerHTML = filHub(d); }); // a card's button or field keeps the keyboard focus across a refresh of the thread
@@ -2687,7 +2702,7 @@ const GUIDE = [
       ["What it reads", "Only what you give it: your messages, the files you attach (or drop or paste them: images, PDF and text files, 20 MB at most each) and the folders you point under *What the assistant can do* › *Folders*, each read only or read and write. *@* names a project, a server or a vault key."],
       ["Its powers", "*What the assistant can do* stays visible under the field. *Internet* lets it search and read the web; *Writing* lets it change files, only in the folders set to read and write. Both are off by default, and off again in each new conversation. It never runs a command, never uses an MCP server and never reaches a server by itself."],
       ["What it never sees", "The vault's values, secrets files (.env), Athanor's own folders and system folders are never given to it, and a vault value pasted in a message or a file is masked before it reads it. A file or a web page that gives it orders is data: the assistant tells you what it asks and does not follow it."],
-      ["Missions and cards", "A project to build (with its server and its API key when you name them) is a mission: the *New mission* form opens by itself, filled with what the assistant understood; check it, change what you want and press *Launch*. For the rest it proposes a card: start a pilot, add a request, leave a remark, run a task on your servers or with your API keys, create a sub-agent or an MCP server, switch one on in projects; *Launch*, *Change* or *Refuse*. Nothing runs before you launch it, and each decision goes into the audit log."],
+      ["Missions and cards", "A project to build (with its servers and API keys when you name them), or work on servers only, is a mission: its summary shows under the answer, with what to build and what runs on which server kept apart; *Review and launch* opens the *New mission* form filled with it, you check it, change what you want and press *Launch*. For the rest it proposes a card: start a pilot, add a request, leave a remark, create a sub-agent or an MCP server, switch one on in projects; *Launch*, *Change* or *Refuse*. Nothing runs before you launch it, and each decision goes into the audit log."],
       ["From a phone", "On a paired device the conversation is read only: you read it and its powers, and you write to the assistant on the computer. Approvals and the emergency stop still work from the phone. The *?* at the top of the conversation replays its short tutorial."],
     ] },
   { id: "coffre", titre: "The vault", intro: "The vault keeps your keys, tokens and settings in one place, encrypted on the disk. A secret's value is shown only while you type it, never again, and no page or answer of Athanor contains it.",

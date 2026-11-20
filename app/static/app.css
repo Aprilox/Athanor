@@ -1770,3 +1770,4 @@ html.scene-pause .verrou * { animation-play-state: paused !important; }
 .gestion-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 .gestion-col > .bloc { margin: 0; }
 .gestion-large { grid-column: 1 / -1; margin: 0; }
+.mis-resume { margin: 6px 0 8px; } /* the summary of a mission the assistant prepared, under its answer */

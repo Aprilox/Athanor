@@ -99,14 +99,15 @@ const consigneActionsAccueil = `
 
 Actions: you never act yourself. When the user wants one of these done, propose it: write it once, at the end
 of your answer, between <action> and </action>, as JSON, and say in one sentence what happens next. A "projet"
-action is a mission: Athanor opens its New mission form filled with what you wrote, the user checks it, changes
-it if they want and launches it. The other actions are a card the user launches or refuses. Nothing runs before
-the user launches it:
-- {"type": "projet", "projet": "the new project's name (letters, digits, spaces, dashes), or the exact name of an existing project", "texte": "what the mission must do, complete, in the user's words", "plan": "the steps the user gave, or empty", "dossier": "its full folder path, or empty: Athanor picks one next to the other projects", "deploiement": {"serveurs": ["the servers where the site goes online, by their name"], "autres": ["the project's other servers the user named (a database, a worker…), by their name"], "apis": ["the API keys of the vault the user named, by their name"], "url": "the site's address, or empty", "plan": "how to put it online, in the user's words, or empty", "moment": "jalon" (after each milestone) or "livraison" (at delivery, the default)}, "permission": "auto" when the user wants its server handled without being asked for each change, or "ignorer" only when they ask for full autonomy with no human action at all (they confirm it with Athanor's password), else left out}: a mission: a project built by its pilot, with its servers and API keys; "plan" of "deploiement" says what each server does when there are several. "deploiement" only when the request names a server, an API key or an address (a project built on this PC only has none), and never a server or a key the user did not name. With an existing project, the mission becomes its next request;
+action is a mission: Athanor shows its summary under your answer, with a button that opens the New mission form
+filled with what you wrote; the user checks it, changes it if they want and launches it. The other actions are a
+card the user launches or refuses. Nothing runs before the user launches it:
+- {"type": "projet", "projet": "the new project's name (letters, digits, spaces, dashes), or the exact name of an existing project", "texte": "what the mission must do, complete, in the user's words", "plan": "the steps the user gave, or empty", "dossier": "its full folder path, or empty: Athanor picks one next to the other projects", "deploiement": {"serveurs": ["the servers where the site goes online, by their name"], "autres": ["the project's other servers the user named (a database, a worker…), by their name"], "apis": ["the API keys of the vault the user named, by their name"], "url": "the site's address, or empty", "plan": "how to put it online, in the user's words, or empty", "moment": "jalon" (after each milestone) or "livraison" (at delivery, the default)}, "permission": "auto" when the user wants its server handled without being asked for each change, or "ignorer" only when they ask for full autonomy with no human action at all (they confirm it with Athanor's password), else left out}: a mission: a project built by its pilot, with its servers and API keys. "deploiement" only when the request names a server, an API key or an address (a project built on this PC only has none), and never a server or a key the user did not name. With an existing project, the mission becomes its next request.
+  Two plans, never mixed, nothing said in both: "texte" and "plan" are the code only, what the pilot builds (the pages, the features, the data it keeps and in which database, the look, the tests); "plan" of "deploiement" is the servers only, what runs where (the web server and its ports, the database server and who may reach it, which server does what and how they are linked, copies of the site, the domain and its certificate, the firewall, backups, monitoring, uptime checks). Each sentence of the user goes to the one it is about; a server's name never appears in "texte" nor "plan". Example: "a shop in Next.js with Stripe, nginx on port 8080 on @web, PostgreSQL on @db reachable from web only, and an uptime check" gives "texte": "A shop in Next.js with Stripe payments, its data in PostgreSQL", "deploiement": {"serveurs": ["web"], "autres": ["db"], "plan": "nginx on web, port 8080. PostgreSQL on db, reachable from web only. An uptime check of the site."};
 - {"type": "pilote", "projet": "an existing project"}: start the pilot of a project;
 - {"type": "demande", "projet": "an existing project", "titre": "a short title", "texte": "the request or the task, self-contained"}: add a request (a task) to a project's queue, its pilot takes it after the current one;
 - {"type": "remarque", "projet": "an existing project", "texte": "the remark, short and self-contained"}: leave a remark its pilot reads at its next cycle;
-- {"type": "serveur", "serveurs": ["the servers the user named, by their name"], "apis": ["the API keys of the vault the user named, by their name"], "texte": "what to do there, complete and self-contained, in the user's words", "permission": "manuel", "auto", "modifications" or "ignorer"}: run a task on servers, with API keys, or both (install, repair, check, configure, a DNS record), outside any project. "serveurs" or "apis" may be empty, never both, and never a server or a key the user did not name; "permission" only when the user asks for a mode;
+- {"type": "serveur", "serveurs": ["the servers the user named, by their name"], "apis": ["the API keys of the vault the user named, by their name"], "texte": "what to do there, complete and self-contained, in the user's words", "permission": "auto" or "ignorer" as for a project, else left out}: a mission without a project: run a task on servers, with API keys, or both (install a program, configure and link several servers, repair, check, a DNS record), when there is nothing to develop. "serveurs" or "apis" may be empty, never both, and never a server or a key the user did not name; "permission" only when the user asks for a mode;
 - {"type": "attribuer", "element": "agent" or "mcp", "nom": "the sub-agent's name or the MCP server's id, as in your library", "projets": ["exact project names"]}: switch a sub-agent or an MCP server of the library on in projects ("put it on my-shop").
 One action per answer, with the exact names of the projects below; a question gets an answer and no card.
 
@@ -639,7 +640,7 @@ func (s *Serveur) cartesConversation(conv conversationChat) map[string]CarteActi
 		}
 		c := s.carteActionChat(a)
 		if (c.Type == "projet" || c.Type == "serveur") && m.Action == nil {
-			c.Mission = s.missionProposee(a)
+			c.Mission, c.Noms = s.missionProposee(a)
 		}
 		if m.Action != nil { // decided: the card as it was launched or refused
 			c = *m.Action
@@ -871,14 +872,16 @@ func (s *Serveur) apiHubChatAction(w http.ResponseWriter, r *http.Request) {
 	s.ecrireJSON(w, map[string]any{"carte": carte, "message_key": carte.Resultat, "args": carte.Args})
 }
 
-// missionProposee: the New mission form filled with a `projet` proposal of the assistant: its server and key by id
-// when they are known (an unknown name stays as written: the form says so), an existing project by its name.
-func (s *Serveur) missionProposee(a ActionChat) *MissionDemande {
+// missionProposee: the New mission form filled with a `projet` (or `serveur`) proposal of the assistant: its servers
+// and keys by id when they are known (an unknown name stays as written: the form says so), an existing project by
+// its name; and their names by id, for the summary the conversation shows.
+func (s *Serveur) missionProposee(a ActionChat) (*MissionDemande, map[string]string) {
+	noms := map[string]string{}
 	d := &MissionDemande{Texte: strings.TrimSpace(a.Texte), Plan: strings.TrimSpace(a.Plan), Projet: strings.TrimSpace(a.Projet), Dossier: strings.TrimSpace(a.Dossier), Mode: "manuel",
 		Serveurs: []string{}, APIs: []string{}}
 	if a.Type == "serveur" { // a task on servers or keys: a mission without a project
 		x := DeploiementDemande{Serveurs: a.Serveurs, APIs: a.APIs}
-		s.nommerDeploiement(&x)
+		maps.Copy(noms, s.nommerDeploiement(&x))
 		d.SansProjet, d.Projet, d.Dossier, d.Serveurs, d.APIs = true, "", "", x.Serveurs, x.APIs
 	}
 	switch {
@@ -889,12 +892,12 @@ func (s *Serveur) missionProposee(a ActionChat) *MissionDemande {
 	}
 	if x := a.Deploiement; x != nil {
 		c := DeploiementDemande{Serveurs: slices.Concat(x.Serveurs, x.Autres), APIs: x.APIs}
-		s.nommerDeploiement(&c)
+		maps.Copy(noms, s.nommerDeploiement(&c))
 		d.Serveurs, d.Autres, d.APIs = c.Serveurs[:len(x.Serveurs)], c.Serveurs[len(x.Serveurs):], c.APIs
 		d.URL, d.PlanDeploiement, d.Moment = strings.TrimSpace(x.URL), strings.TrimSpace(x.Plan), x.Moment
 	}
 	if p, ok := s.projetLocalChat(d.Projet); ok {
 		d.Projet, d.Dossier = p.Nom, ""
 	}
-	return d
+	return d, noms
 }
