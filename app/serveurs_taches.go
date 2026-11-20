@@ -336,6 +336,9 @@ func (s *Serveur) lancerTacheDans(texte string, serveurs []string, forcee bool, 
 		}
 	}
 	outils, consigne := outilsServeursMCP, consigneChefOps(contexte+texte, serveurs)+consigneEnv(env, hotes)
+	if env != "" { // a project's deployment: the keys of its Access tab may go on its servers (an .env the app reads)
+		consigne += s.lignesClesTache(nil, s.clesProjetEnv(env))
+	}
 	if len(apis) > 0 {
 		for _, id := range apis {
 			if s.coffre == nil || !slices.ContainsFunc(s.coffre.Liste(), func(e EntreeCoffre) bool { return e.ID == id }) {
@@ -360,7 +363,7 @@ func (s *Serveur) lancerTacheDans(texte string, serveurs []string, forcee bool, 
 			outils, consigne = outilsAPISeule, consigneAPI(contexte+texte, hotes)
 			mode = cmp.Or(mode, modeServeur(ServeurInventaire{})) // Settings › Permissions (assistant), else manuel
 		} else {
-			consigne += s.lignesClesTache(apis) // the keys it may put on its servers, by name
+			consigne += s.lignesClesTache(apis, nil) // the keys it may put on its servers, by name
 		}
 	}
 	t := TacheServeurs{ID: aleatoire(6), Texte: texte, Serveurs: append([]string{}, serveurs...), Forcee: forcee, Env: env, Cree: time.Now().UTC().Format(formatCree),

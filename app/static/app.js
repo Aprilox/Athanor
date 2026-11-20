@@ -3536,7 +3536,8 @@ const CLASSES_ETAPE = () => ({ lecture: [t("read"), "pv-ok"], changement: [t("ch
 // C15: the tools' argument names (French identifiers in the code) said in the page's language; an unknown one stays as it came
 const NOMS_ARGUMENTS = { serveur: "Server", commande: "Command", chemin: "File", contenu: "Content", action: "Action", nom: "Name", port: "Port", proto: "Protocol",
   regle: "Rule", dossier: "Folder", lignes: "Lines", sudo: "As administrator", local: "On this computer", distant: "On the server", delai_s: "Time limit (s)",
-  env: "Deployment", methode: "Method", source: "Source", commit: "Commit", type: "Type", projet: "Project", valeur: "Value" };
+  env: "Deployment", methode: "Method", source: "Source", commit: "Commit", type: "Type", projet: "Project", valeur: "Value",
+  racine: "Folder on the servers", avant: "Before going online", apres: "Once online", retour: "Way back", construire: "Build on this computer", proxy: "Web server" };
 function argumentsLisibles(l) {
   let o; try { o = JSON.parse(l); } catch { return h(l || ""); } // cut at 4000 characters: shown as it came
   return Object.entries(o || {}).filter(([, v]) => v !== "").map(([k, v]) => `<span class="muet">${h(NOMS_ARGUMENTS[k] ? t(NOMS_ARGUMENTS[k]) : k)}</span> ${h(typeof v === "string" ? v : JSON.stringify(v))}`).join("<br>");

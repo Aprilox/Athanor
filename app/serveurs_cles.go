@@ -27,12 +27,28 @@ func clesNommees(contenu string) []string {
 	return l
 }
 
-// cleDeTache: the vault entry name n designates among the keys x was given (its name, any case), else an error the
-// agent can act on.
+// clesProjetEnv: a deployment task's keys: those given to its project (its Access tab), with the variable each
+// one is read as.
+func (s *Serveur) clesProjetEnv(env string) map[string]string {
+	m := map[string]string{}
+	projet, _, _ := strings.Cut(env, "/")
+	if projet == "" || s.acces == nil {
+		return m
+	}
+	for _, a := range s.acces.Projet(projet).Acces {
+		m[a.Entree] = a.Variable
+	}
+	return m
+}
+
+// cleDeTache: the vault entry name n designates among the keys x was given (its name, any case; a deployment task:
+// its project's keys too), else an error the agent can act on.
 func (s *Serveur) cleDeTache(x SessionHub, n string) (EntreeCoffre, error) {
+	projet := s.clesProjetEnv(x.Env)
 	if s.coffre != nil {
 		for _, e := range s.coffre.Liste() {
-			if slices.Contains(x.APIs, e.ID) && e.Famille == "secret" && strings.EqualFold(e.Nom, n) {
+			_, duProjet := projet[e.ID]
+			if (slices.Contains(x.APIs, e.ID) || duProjet) && e.Famille == "secret" && strings.EqualFold(e.Nom, n) {
 				return e, nil
 			}
 		}
@@ -119,15 +135,21 @@ func (s *Serveur) fermerFichierCles(ctx context.Context, de, id string, args jso
 	_, _ = s.appelerOutilServeur(ctx, de, id, "ssh_commande", b, Sauvegarde{})
 }
 
-// lignesClesTache: what the agent is told about the keys it was given: their names and kinds, never a value.
-func (s *Serveur) lignesClesTache(apis []string) string {
-	if s.coffre == nil || len(apis) == 0 {
+// lignesClesTache: what the agent is told about the keys it was given: their names and kinds (and the variable the
+// project reads each as), never a value.
+func (s *Serveur) lignesClesTache(apis []string, variables map[string]string) string {
+	if s.coffre == nil || len(apis)+len(variables) == 0 {
 		return ""
 	}
 	var l []string
 	for _, e := range s.coffre.Liste() {
-		if slices.Contains(apis, e.ID) && e.Famille == "secret" {
-			l = append(l, fmt.Sprintf("- %s (%s, %s)", e.Nom, e.Type, e.Portee))
+		v, duProjet := variables[e.ID]
+		if (slices.Contains(apis, e.ID) || duProjet) && e.Famille == "secret" {
+			ligne := fmt.Sprintf("- %s (%s, %s)", e.Nom, e.Type, e.Portee)
+			if v != "" {
+				ligne += ", read by the app as " + v
+			}
+			l = append(l, ligne)
 		}
 	}
 	if len(l) == 0 {

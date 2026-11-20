@@ -166,13 +166,15 @@ const prefixePremierDeploiement = "First deployment"
 // with one deployer step; pour names who asks after the address (a mission's title, until M302).
 func briefPremierDeploiement(url, pour string, p Projet, head string) string {
 	return prefixePremierDeploiement + " of project " + p.Nom + " (" + url + ")" + pour + ": " +
-		"its work is ready to go online and its site has no deployment method yet. Propose one plan whose step is deployer " +
-		"(commit " + head + ", source artefact; the method and the published folder from the project's files: " +
-		"statique for a static site, compose when it has a compose file), then apply it once accepted. Athanor then deploys " +
-		"each later milestone or delivery itself with that method. Web server: Athanor's engine writes a Caddy site by default; when " +
-		"the deployment plan names another web server (nginx, Apache…), set it up on the servers yourself to serve the site's folder " +
-		"current release (statique, its published folder inside) or to proxy to the published port (compose), and give deployer proxy aucun: never install Caddy " +
-		"against the owner's plan.\n"
+		"its work is ready to go online and its site has no deployment method yet. Set up the servers as the deployment plan says, then put it " +
+		"online with a plan step deployer (commit " + head + "), then apply it once accepted: the method you give deployer is recorded, and " +
+		"Athanor deploys each later milestone or delivery the same way. Choose it all from the owner's plan and the conventions of the project's " +
+		"stack, nothing else: racine (where the site lives: /var/www/<site>, /srv/<app>, /opt/<app>…), the method (statique: a folder a web server " +
+		"serves; compose: its compose file; commande: nothing is sent, each server updates itself with apres, for a stack that pulls its code " +
+		"or deploys on push, with retour as its way back), the published folder, avant (in each new release before it goes online: install, " +
+		"build) and apres (once online: reload a service, restart a process manager, tell a platform). Web server: with proxy aucun you set up " +
+		"the one the plan names to serve racine's current release (statique) or proxy to the published port (compose); never install Caddy " +
+		"against the owner's plan. Keep a README on the servers beside the site: where it lives, how it runs, how to update and go back.\n"
 }
 
 // phraseDNS: what the agent does about host's DNS record (the external check needs it to resolve).
@@ -185,7 +187,7 @@ func phraseDNS(hote string) string {
 // address's DNS record, the owner's plan always (the web server it names is the one used, full autonomy included:
 // M310d's production accord only without it), the request's start.
 func briefPremierProjet(p Projet, e Environnement, env, head string, ignorer bool) string {
-	brief := briefPremierDeploiement(e.URL, "", p, head) + "The site's folder on the servers: " + baseDeploiement(p.Nom, env) + " (its current release: " + baseDeploiement(p.Nom, env) + "/current).\n" +
+	brief := briefPremierDeploiement(e.URL, "", p, head) + "The project's keys the owner gave it can go on the servers with {{coffre:NAME}} in fichier_ecrire (an .env the app reads): your instructions list them.\n" +
 		"The servers are yours to set up: install whatever the deployment plan needs that is missing (system packages, the web server it names, tools), then deploy; never stop at a missing package.\n"
 	if !ignorer {
 		brief += phraseAccordProduction

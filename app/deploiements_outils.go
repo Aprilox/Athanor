@@ -23,6 +23,16 @@ type argsDeploiementOutil struct {
 	Construire string `json:"construire,omitempty"`
 	Proxy      string `json:"proxy,omitempty"`
 	Commit     string `json:"commit,omitempty"`
+	Racine     string `json:"racine,omitempty"`
+	Avant      string `json:"avant,omitempty"`
+	Apres      string `json:"apres,omitempty"`
+	Retour     string `json:"retour,omitempty"`
+}
+
+// config: the deployment method these arguments describe.
+func (a argsDeploiementOutil) config() ConfigDeploiement {
+	return ConfigDeploiement{Methode: a.Methode, Source: a.Source, Dossier: a.Dossier, Construire: a.Construire, Proxy: a.Proxy,
+		Racine: a.Racine, Avant: a.Avant, Apres: a.Apres, Retour: a.Retour}
 }
 
 func init() {
@@ -33,12 +43,17 @@ func init() {
 	classe := parmi("Your own class of this action; the code's class is kept when higher", "lecture", "changement", "destructrice")
 	outilsHub["deployer"] = OutilHub{Description: "Deploy a commit of the project to your task's site with Athanor's engine (release, atomic switch, external check). " +
 		"The method is then recorded so that later deployments need no agent. A step of an accepted plan only.",
-		Schema: schemaObjet(map[string]any{"env": env, "methode": parmi("statique: Caddy serves a folder; compose: docker compose up of the release; k3s: kubectl apply of a manifests folder on a k3s server, only when the owner asked for Kubernetes", "statique", "compose", "k3s"),
+		Schema: schemaObjet(map[string]any{"env": env, "methode": parmi("statique: a folder served by a web server (Caddy, or the one you set up with proxy aucun); compose: docker compose up of the release; k3s: kubectl apply of a manifests folder on a k3s server, only when the owner asked for Kubernetes; commande: nothing is sent, each server runs apres to update itself (a stack that pulls its code or deploys on push)", "statique", "compose", "k3s", "commande"),
 			"source":     parmi("artefact: the commit archived on this PC and sent; git: each server fetches it with the deployment key", "artefact", "git"),
 			"dossier":    map[string]any{"type": "string", "maxLength": maxDossierPublie, "description": "The published folder (statique), the compose file's folder or the manifests' folder (k3s), relative to the repository; empty: its root"},
 			"construire": schemaTexte("A build command run on this PC in a checkout of the commit before the archive (artefact source only)"),
 			"proxy":      parmi("caddy (the default): Athanor writes and reloads the site's Caddy block; aucun: the deployment plan names another web server (nginx, Apache…): you set it up once to serve the site's folder current release (statique) or to proxy to the published port (compose), Athanor only switches the versions", "caddy", "aucun"),
-			"commit":     schemaTexte("The full commit hash"), "classe": classe}, "methode", "source", "commit"),
+			"commit":     schemaTexte("The full commit hash"),
+			"racine":     schemaTexte("The site's folder on the servers, your choice from the owner's plan and the stack's conventions (/var/www/<site>, /srv/<app>, /opt/<app>, /home/<user>/<app>…); its versions go in releases/, the one online behind current. Empty: Athanor's own folder"),
+			"avant":      schemaTexte("A command run as root in each new release on the servers before it goes online (install the dependencies, build); a failure switches nothing"),
+			"apres":      schemaTexte("A command run as root in current once a version is online and after going back (reload a service, restart a process manager, tell a platform); commande: the update itself"),
+			"retour":     schemaTexte("commande only: the command that puts the previous version back on each server"),
+			"classe":     classe}, "methode", "source", "commit"),
 		Faire: faireOutilDeploiement("deployer")}
 	outilsHub["revenir_version"] = OutilHub{Description: "Switch your task's site back to the version served before the last deployment, then check it. A step of an accepted plan only.",
 		Schema: schemaObjet(map[string]any{"env": env, "classe": classe}), Faire: faireOutilDeploiement("revenir_version")}
@@ -61,13 +76,22 @@ func classerDeploiement(outil string, brut json.RawMessage) (Classe, string, arg
 	if !reCommitComplet.MatchString(a.Commit) {
 		return 0, "", a, errors.New("commit must be the full commit hash (40 hexadecimal characters, git rev-parse HEAD)")
 	}
-	if err := validerConfigDeploiement(ConfigDeploiement{a.Methode, a.Source, a.Dossier, a.Construire, a.Proxy}); err != nil {
+	if err := validerConfigDeploiement(a.config()); err != nil {
 		return 0, "", a, err
 	}
 	c, raison := ClasseChangement, "deploys commit "+a.Commit[:12]+" to the site"
 	if a.Construire != "" {
 		if cc, r := classerCommande(a.Construire); cc > c {
 			c, raison = cc, raison+"; its build command: "+r
+		}
+	}
+	for _, x := range []struct{ quoi, cmd string }{{"preparation", a.Avant}, {"command after going online", a.Apres}, {"way back", a.Retour}} {
+		if x.cmd == "" {
+			continue
+		}
+		raison += "; its " + x.quoi + " on the servers: " + couper(x.cmd, 120)
+		if cc, r := classerCommande(x.cmd); cc > c {
+			c, raison = cc, raison+" ("+r+")"
 		}
 	}
 	return c, raison, a, nil
@@ -119,7 +143,7 @@ func faireOutilDeploiement(nom string) func(*Serveur, SessionHub, json.RawMessag
 		ctx := s.contexteSession(x.Hache)
 		var d Deploiement
 		if nom == "deployer" {
-			d, err = s.deployer(ctx, projet, c.Env, c.Commit, OptionsDeploiement{Config: &ConfigDeploiement{c.Methode, c.Source, c.Dossier, c.Construire, c.Proxy}, Auteur: "agent", Accorde: true})
+			d, err = s.deployer(ctx, projet, c.Env, c.Commit, OptionsDeploiement{Config: func() *ConfigDeploiement { x := c.config(); return &x }(), Auteur: "agent", Accorde: true})
 		} else {
 			d, err = s.revenir(ctx, projet, c.Env, "agent", "")
 		}

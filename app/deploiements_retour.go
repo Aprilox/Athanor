@@ -163,11 +163,14 @@ func (s *Serveur) revenirVerrouille(ctx context.Context, projet, env, auteur, ci
 	case cible != "" && !reVersionDeploiement.MatchString(cible):
 		return Deploiement{}, errors.New("invalid version")
 	}
+	if e.Deploiement.Methode == "commande" { // no release kept: its recorded way back
+		return s.revenirCommande(ctx, projet, env, auteur, e)
+	}
 	l, err := lireServeurs()
 	if err != nil {
 		return Deploiement{}, err
 	}
-	base := baseDeploiement(projet, env)
+	base := baseDe(e.Deploiement, projet, env)
 	var serveurs []serveurPret
 	defer func() {
 		for _, x := range serveurs {
@@ -234,7 +237,13 @@ func (s *Serveur) revenirVerrouille(ctx context.Context, projet, env, auteur, ci
 		if err := echecSSH(executerSSH(ctx, x.c, commeRoot(scriptSite, base, hoteEnv(&e)), strings.NewReader(bloc), delaiCommande)); err != nil {
 			return err
 		}
-		return echecSSH(executerSSH(ctx, x.c, commeRoot(scriptRecharger, base, fmt.Sprint(versionsGardees)), nil, delaiDeploiement))
+		if err := echecSSH(executerSSH(ctx, x.c, commeRoot(scriptRecharger, base, fmt.Sprint(versionsGardees)), nil, delaiDeploiement)); err != nil {
+			return err
+		}
+		if e.Deploiement != nil && e.Deploiement.Apres != "" { // the agent's command after going online, as after a deployment
+			return s.lancerSur(ctx, []serveurPret{x}, base+"/current", e.Deploiement.Apres, errApres, delaiConstruction)
+		}
+		return nil
 	}
 	touches, err := basculerTous(ctx, serveurs, base, version)
 	for _, x := range touches {

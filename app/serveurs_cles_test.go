@@ -58,7 +58,7 @@ func TestClesSurServeur(t *testing.T) {
 	if m := s.masquerSecrets(string(args)); strings.Contains(m, tGH) {
 		t.Error("the audit line would show the value")
 	}
-	l := s.lignesClesTache(x.APIs)
+	l := s.lignesClesTache(x.APIs, nil)
 	if !strings.Contains(l, "GitHub (github, infra)") || !strings.Contains(l, "STRIPE_KEY (stripe, code)") || strings.Contains(l, "AUTRE") ||
 		strings.Contains(l, tGH) || strings.Contains(l, tApp) || !strings.Contains(l, "{{coffre:NAME}}") {
 		t.Errorf("what the agent is told: %s", l)

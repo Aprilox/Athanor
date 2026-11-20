@@ -46,6 +46,12 @@ type ConfigDeploiement struct {
 	// the site's web server: "" Caddy (Athanor writes its site block); "aucun": another one the deployment plan names
 	// (nginx, Apache…), set up by the agent to serve the folder's current release; Athanor only switches versions
 	Proxy string `json:"proxy,omitempty"`
+	// the agent's choices (deploiements_generique.go): the site's folder ("" Athanor's older one), a command in each new
+	// release before it goes online, one once it is online and after going back, and commande's way back
+	Racine string `json:"racine,omitempty"`
+	Avant  string `json:"avant,omitempty"`
+	Apres  string `json:"apres,omitempty"`
+	Retour string `json:"retour,omitempty"`
 }
 
 // sansProxy: Athanor writes no Caddy site for this deployment (another web server serves it).
@@ -91,9 +97,9 @@ const maxDossierPublie = 300
 
 func validerConfigDeploiement(c ConfigDeploiement) error {
 	switch {
-	case c.Methode != "statique" && c.Methode != "compose" && c.Methode != "k3s":
-		return errors.New("deployment method: statique, compose or k3s")
-	case c.Source != "artefact" && c.Source != "git":
+	case c.Methode != "statique" && c.Methode != "compose" && c.Methode != "k3s" && c.Methode != "commande":
+		return errors.New("deployment method: statique, compose, k3s or commande")
+	case c.Methode != "commande" && c.Source != "artefact" && c.Source != "git":
 		return errors.New("deployment source: artefact or git")
 	case len(c.Dossier) > maxDossierPublie || c.Dossier != "" && !reDossierPublie.MatchString(c.Dossier):
 		return fmt.Errorf("dossier: a folder of the repository, relative, of %d characters at most, without \"..\", spaces, hidden parts or a part starting with \"-\"", maxDossierPublie)
@@ -106,7 +112,7 @@ func validerConfigDeploiement(c ConfigDeploiement) error {
 	case c.Proxy == "aucun" && c.Methode == "k3s":
 		return errors.New("proxy: aucun is for statique and compose")
 	}
-	return nil
+	return validerChoixAgent(c)
 }
 
 // baseDeploiement: the environment's folder on its servers.
@@ -416,6 +422,8 @@ func (s *Serveur) finirDeploiement(ctx context.Context, p Projet, e Environnemen
 	} else {
 		if e2 := s.acces.NoterDeploiement(d.Projet, d.Env, cfg); e2 != nil {
 			d.Message = messageDe(errMoteur("deployed, but the method could not be recorded: {0}", e2))
+		} else if e.Deploiement == nil || *e.Deploiement != cfg {
+			s.ecrireDeploiementMD(p, e, cfg, d.Env) // the project says how it is deployed, as recorded
 		}
 		err = s.verifierApres(ctx, e, &d)
 	}
@@ -440,6 +448,9 @@ var errK3sUnServeur = errors.New("the k3s method needs exactly one server for th
 // deployerVersion: the commit prepared on every server (statique: the Caddy site validated; compose: the
 // containers started from the release), then current/previous switched everywhere.
 func (s *Serveur) deployerVersion(ctx context.Context, p Projet, e Environnement, cfg ConfigDeploiement, d *Deploiement) error {
+	if cfg.Methode == "commande" { // nothing sent: each server updates itself
+		return s.deployerCommande(ctx, cfg, d)
+	}
 	dossier := filepath.Join(dossierModule("servers"), "deploiements")
 	if err := os.MkdirAll(dossier, 0o700); err != nil {
 		return err
@@ -476,7 +487,7 @@ func (s *Serveur) deployerVersion(ctx context.Context, p Projet, e Environnement
 	if err != nil {
 		return err
 	}
-	base, hote := baseDeploiement(d.Projet, d.Env), hoteEnv(&e)
+	base, hote := baseDe(&cfg, d.Projet, d.Env), hoteEnv(&e)
 	var envCompose, genere string
 	if cfg.Methode == "compose" {
 		if envCompose, err = s.fichierEnvCompose(d.Projet, d.Env); err != nil {
@@ -542,6 +553,16 @@ func (s *Serveur) deployerVersion(ctx context.Context, p Projet, e Environnement
 			return errMoteur("{0}: {1}; nothing was switched", nomServeur(id), err)
 		}
 		prets = append(prets, serveurPret{id, c})
+		if cfg.Avant != "" { // the agent's preparation in the new release (install, build) before anything is switched
+			rel := base + "/releases/" + d.Version
+			if cfg.Dossier != "" {
+				rel += "/" + cfg.Dossier
+			}
+			if err := s.lancerSur(ctx, prets[len(prets)-1:], rel, cfg.Avant, errAvant, delaiConstruction); err != nil {
+				annulerTout()
+				return errMoteur("{0}; nothing was switched", err)
+			}
+		}
 		if cfg.Methode != "compose" {
 			continue
 		}
@@ -578,6 +599,9 @@ func (s *Serveur) deployerVersion(ctx context.Context, p Projet, e Environnement
 		if err := echecSSH(executerSSH(ctx, x.c, commeRoot(recharger, base, fmt.Sprint(versionsGardees)), nil, delaiDeploiement)); err != nil {
 			return errMoteur("{0}: {1}", nomServeur(x.id), err)
 		}
+	}
+	if cfg.Apres != "" { // the agent's command once it is online (reload a service, a process manager…)
+		return s.lancerSur(ctx, prets, base+"/current", cfg.Apres, errApres, delaiConstruction)
 	}
 	return nil
 }
