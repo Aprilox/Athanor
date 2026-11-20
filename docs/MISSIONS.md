@@ -18,7 +18,7 @@ A mission links what Athanor manages: a **Studio project**, its **servers** and 
 
 ## Missions of earlier versions
 
-Missions made by Athanor 3.0.0 and earlier show in *Missions* as read-only frames (*No longer followed*): a mission opens on its **journal**, and *Delete* removes it (its project and folder only when ticked). Nothing was lost in the update and nothing is rewritten when they are read; their projects keep working on their own.
+Missions made by an earlier build of the hub show in *Missions* as read-only frames (*No longer followed*): a mission opens on its **journal**, and *Delete* removes it (its project and folder only when ticked). Nothing was lost in the update and nothing is rewritten when they are read; their projects keep working on their own.
 
 ## MCP clients
 

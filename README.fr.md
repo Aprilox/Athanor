@@ -45,6 +45,9 @@ Athanor Hub est un **hub** : un seul programme, une seule fenêtre, d'où vous p
 
 Athanor répond par une **carte** : le projet que Studio va construire, avec son dossier, et son déploiement (le serveur, l'adresse, les clés d'API dont il a besoin, le plan avec vos mots, quand déployer). Vous appuyez sur **Lancer**. Votre VPS est préparé pendant que le site se construit, le premier déploiement se fait tout seul, puis le projet passe en ligne au moment que vous avez choisi, après chaque jalon ou à la livraison, et est vérifié de l'extérieur. L'IA demande ; Athanor agit avec la clé, qu'il ne remet jamais. Vous pouvez fermer l'application, la verrouiller ou aller dormir : le four continue de brûler.
 
+> [!TIP]
+> **La 3.0 est un tournant.** Athanor était un pilote qui construisait un projet avec Claude ; il devient un hub qui prépare et fait aussi tourner vos serveurs (un pilote serveurs autonome, un déploiement décidé par votre plan), garde chaque clé hors de portée de l'IA, et relie le tout en missions, depuis votre ordinateur ou votre téléphone. Le Studio marche toujours seul, comme avant. [Nouveautés de la 3.0.0](docs/releases/3.0.0.md).
+
 > [!NOTE]
 > Athanor est un projet indépendant à source disponible. Il n'est ni affilié à Anthropic ni approuvé par Anthropic. Il pilote la commande officielle Claude Code avec votre propre abonnement. Le programme, ses fichiers de téléchargement et son dossier de données gardent le nom *Athanor* : chaque ancien Athanor se met à jour vers Athanor Hub tout seul.
 
@@ -593,7 +596,7 @@ Un projet Studio se construit comme avant, sans rien d'un serveur. Il est aussi 
 - **Supprimer un projet.** *Gérer › Supprimer le projet* : le projet quitte Studio, avec son déploiement, son suivi et ses propres réglages. *Mettre aussi tout son dossier à la corbeille* est décoché par défaut : sans case cochée, le dossier et tout ce qu'il contient restent sur votre ordinateur. Un dossier qui est un lien ou mène ailleurs n'est jamais supprimé. Rien n'est retiré des serveurs : ce que le projet a mis en ligne y reste. Vous revenez à la liste *Projets*.
 - **Studio ne déploie pas.** Un projet Studio ne se déploie jamais lui-même et ne demande jamais d'accès à un serveur (adresse SSH, utilisateur@hôte, port, clé privée), ni par une tâche pour vous ni par `demander_acces` ; `athanor todo add` et `demander_acces` refusent une telle demande. Il finit prêt à déployer (construction, tests et, si utile, un fichier de déploiement comme un `Dockerfile`) : Athanor le met en ligne, avec les serveurs et les clés du coffre.
 - **Projets d'avant la 3.0.** Un projet qui avait été réglé avec plusieurs sites les garde : l'onglet en montre et en change un, et *Autres sites de ce projet* liste les autres par leur adresse, chacun avec *En faire le déploiement*. Un site qu'une mission a mis en ligne le dit jusqu'à ce que vous en fassiez le déploiement du projet ; le site de production d'un ancien projet vous demande encore avant chaque déploiement (« Mise en ligne de example.com ? », dans la cloche, sur *Pour vous* et sur votre téléphone) ; un projet qui ne déployait que sur demande garde *Seulement quand je le demande*. Rien n'est réécrit quand on le lit, et aucun mot de passe n'est redemandé.
-- **Anciennes missions.** Les missions faites par une version précédente (3.0.0 et avant) apparaissent dans *Missions* en cadres à lire seulement, à lire ou supprimer ; leurs projets continuent seuls : [docs/MISSIONS.md](docs/MISSIONS.md).
+- **Anciennes missions.** Les missions faites par une construction précédente du hub apparaissent dans *Missions* en cadres à lire seulement, à lire ou supprimer ; leurs projets continuent seuls : [docs/MISSIONS.md](docs/MISSIONS.md).
 
 ### Approbations, journal d'audit et arrêt d'urgence
 

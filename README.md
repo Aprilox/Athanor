@@ -45,6 +45,9 @@ Athanor Hub is a **hub**: one program, one window, from which you drive **module
 
 Athanor answers with a **card**: the project Studio will build, with its folder, and its deployment (the server, the address, the API keys it needs, the plan in your words, when to deploy). You press **Launch**. Your VPS is prepared while the site is built, the first deployment is made by itself, then the project goes online at the moment you chose, after each milestone or at delivery, and is checked from outside. The AI asks; Athanor acts with the key, which it never hands over. You can close the app, lock it or go to bed: the furnace keeps burning.
 
+> [!TIP]
+> **3.0 is a turning point.** Athanor was a pilot that built one project with Claude; it becomes a hub that also sets up and runs your servers (an autonomous servers pilot, a deployment your plan decides), keeps every key out of the AI's reach, and ties it all in missions, from your computer or your phone. The Studio still works alone, as before. [What's new in 3.0.0](docs/releases/3.0.0.md).
+
 > [!NOTE]
 > Athanor is an independent, source-available project. It is not affiliated with or endorsed by Anthropic. It drives the official Claude Code CLI with your own subscription. The program, its download files and its data folder keep the name *Athanor*, so every older Athanor updates to Athanor Hub by itself.
 
@@ -593,7 +596,7 @@ A Studio project is built as before, with nothing of a server. It is also deploy
 - **Deleting a project.** *Manage › Delete the project*: the project leaves Studio, with its deployment, its follow-up and its own settings. *Also send its whole folder to the recycle bin* is unticked by default: with no box ticked, the folder and everything in it stay on your computer. A folder that is a link or leads elsewhere is never deleted. Nothing is removed from the servers: what the project put online stays there. You come back to the *Projects* list.
 - **Studio does not deploy.** A Studio project never deploys itself and never asks for a server's access (SSH address, user@host, port, private key), neither in a task for you nor through `demander_acces`; `athanor todo add` and `demander_acces` refuse such a request. It ends ready to deploy (build, tests and, when useful, a deployment file such as a `Dockerfile`): Athanor puts it online, with the servers and keys of the vault.
 - **Projects from before 3.0.** A project that was set up with several sites keeps them: the tab shows and changes one, and *Other sites of this project* lists the others by their address, each with *Make it the deployment*. A site that a mission put online says so until you make it the project's deployment; an older project's production site still asks you before each deployment (“Deploy example.com?”, in the bell, on *For you* and on your phone); a project that deployed only on request keeps *Only when I ask*. Nothing is rewritten when it is read, and no password is asked again.
-- **Old missions.** Missions made by an earlier version (3.0.0 and before) show in *Missions* as read-only frames, to be read or deleted; their projects keep working on their own: [docs/MISSIONS.md](docs/MISSIONS.md).
+- **Old missions.** Missions made by an earlier build of the hub show in *Missions* as read-only frames, to be read or deleted; their projects keep working on their own: [docs/MISSIONS.md](docs/MISSIONS.md).
 
 ### Approvals, the audit log and the emergency stop
 

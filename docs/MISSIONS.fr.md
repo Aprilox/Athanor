@@ -18,7 +18,7 @@ Une mission relie ce qu'Athanor gère : un **projet Studio**, ses **serveurs** e
 
 ## Missions des versions précédentes
 
-Les missions faites par Athanor 3.0.0 et avant apparaissent dans *Missions* en cadres à lire seulement (*Plus suivie*) : une mission s'ouvre sur son **journal**, et *Supprimer* la retire (son projet et son dossier seulement si c'est coché). Rien n'a été perdu à la mise à jour et rien n'est réécrit à la lecture ; leurs projets continuent seuls.
+Les missions faites par une construction précédente du hub apparaissent dans *Missions* en cadres à lire seulement (*Plus suivie*) : une mission s'ouvre sur son **journal**, et *Supprimer* la retire (son projet et son dossier seulement si c'est coché). Rien n'a été perdu à la mise à jour et rien n'est réécrit à la lecture ; leurs projets continuent seuls.
 
 ## Clients MCP
 
