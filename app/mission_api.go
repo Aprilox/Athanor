@@ -1,6 +1,6 @@
 package main
 
-// The Missions API (M302): the old missions are read and deleted, nothing else (deletion: mission_supprimer.go).
+// The Missions API: read and delete (mission_supprimer.go); launch, change and act: mission_nouvelle.go.
 
 import (
 	"errors"
@@ -28,6 +28,8 @@ func (s *Serveur) erreurMissionHTTP(w http.ResponseWriter, err error) {
 		s.erreur(w, em.code, em.msg)
 	case errors.Is(err, errMissionInconnue):
 		s.erreur(w, http.StatusNotFound, err.Error())
+	case errors.Is(err, errServeurInconnu), errors.Is(err, errCoffreInconnu):
+		s.erreur(w, http.StatusBadRequest, err.Error())
 	case errors.Is(err, errMentionInconnue):
 		s.erreur(w, http.StatusBadRequest, "A mention no longer exists: remove it and send again")
 	case errors.As(err, &avecArgs):
@@ -117,13 +119,13 @@ func (s *Serveur) avancementVoie(v *VoieMission, p Projet, jalon string) {
 	}
 }
 
-// apiMissions: GET /api/missions, every mission, the newest first, its lanes as they are now.
+// apiMissions: GET /api/missions, every mission, the newest first, its project and server as they are now.
 func (s *Serveur) apiMissions(w http.ResponseWriter, _ *http.Request) {
-	l := lireMissions()
-	for i := range l {
-		l[i] = s.voiesEnDirect(l[i])
+	l := []VueMission{}
+	for _, m := range lireMissions() {
+		l = append(l, s.vueMission(m))
 	}
-	s.ecrireJSON(w, map[string]any{"missions": l})
+	s.ecrireJSON(w, map[string]any{"missions": l, "reglages": vueReglagesProjet("")}) // reglages: a new project's defaults, for the form
 }
 
 // apiMission: GET /api/missions/{id}, with what its deletion can also remove; unknown, damaged or hostile id → 404.
@@ -133,5 +135,5 @@ func (s *Serveur) apiMission(w http.ResponseWriter, r *http.Request) {
 		s.erreur(w, http.StatusNotFound, err.Error())
 		return
 	}
-	s.ecrireJSON(w, map[string]any{"mission": s.voiesEnDirect(m), "suppression": s.apercuSuppression(m)})
+	s.ecrireJSON(w, map[string]any{"mission": s.vueMission(m), "suppression": s.apercuSuppression(m)})
 }

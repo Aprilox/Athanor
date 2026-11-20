@@ -131,8 +131,9 @@ func TestAnciennesMissionsLisibles(t *testing.T) {
 	}
 	for _, x := range [][2]string{{"POST", "/api/missions"}, {"POST", "/api/missions/encours1/pause"}, {"POST", "/api/missions/enpause1/reprendre"}, {"POST", "/api/missions/encours1/arreter"},
 		{"POST", "/api/missions/encours1/politique"}, {"POST", "/api/missions/encours1/redemander"}, {"POST", "/api/missions/finie001/supprimer"}, {"POST", "/api/missions/vider"}} {
-		if c, _ := appel(x[0], x[1], `{}`); c != http.StatusNotFound && c != http.StatusMethodNotAllowed {
-			t.Errorf("%s %s still answers: %d", x[0], x[1], c)
+		// 3.1: the missions routes exist again for the new missions; an old one is never launched, changed nor acted on
+		if c, _ := appel(x[0], x[1], `{}`); c != http.StatusNotFound && c != http.StatusMethodNotAllowed && c != http.StatusConflict && c != http.StatusBadRequest {
+			t.Errorf("%s %s answers %d on an old mission", x[0], x[1], c)
 		}
 	}
 	for id, avant := range fichiers {

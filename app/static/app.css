@@ -1728,3 +1728,23 @@ html.scene-pause .verrou * { animation-play-state: paused !important; }
 .mis-projet .mode-ligne { margin: 8px 0; } .mis-projet input.croit { min-width: 0; }
 .carte-action-dep { border: 1px solid var(--line); border-radius: 6px; padding: 4px 10px 8px; margin: 6px 0; min-width: 0; } .carte-action-dep legend { padding: 0 4px; font-size: 13px; } /* M295b: the deployment under Edit, on the home's project card */
 .mis-projet .mis-github { display: grid; gap: 4px; margin: 0; }
+
+/* Missions (3.1): one frame per mission, its project, server and API key; the New mission form */
+.mis-cadres { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); gap: 12px; margin-top: 12px; }
+.mis-cadre { display: flex; flex-direction: column; gap: 8px; margin: 0; min-width: 0; }
+.mis-cadre h3 { overflow-wrap: anywhere; }
+.mis-progres { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.mis-progres > span { display: block; height: 100%; background: var(--accent); transition: width .3s; }
+.mis-liens { display: grid; grid-template-columns: max-content 1fr; gap: 6px 12px; margin: 0; }
+.mis-liens > div { display: contents; }
+.mis-liens dt { color: var(--muted); font-size: .9em; }
+.mis-liens dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.mis-details .mis-journal { margin: 6px 0; }
+.mis-cadre .badge.ok { color: var(--ok, inherit); border-color: currentColor; }
+.mis-cadre .badge.attention { color: var(--attention, inherit); border-color: currentColor; }
+.accueil-actions { gap: 10px; flex-wrap: wrap; }
+.nm form { display: flex; flex-direction: column; gap: 12px; }
+.nm .nm-mode { border: 0; padding: 0; margin-top: 8px; }
+.nm .nm-mode label.radio { display: flex; gap: 8px; align-items: flex-start; }
+.nm #nm-en-ligne { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; }
+@media (max-width: 600px) { .mis-liens { grid-template-columns: 1fr; } .mis-liens dt { margin-top: 4px; } }

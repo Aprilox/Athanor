@@ -1,8 +1,8 @@
 package main
 
-// Deleting an old mission (M302): its own files go (the mission, its journal, its former orchestrator's folder); on
-// request, the project it created and its folder (to the recycle bin). Otherwise its project keeps everything: its
-// pilot, its deployment, its access and its Servers tasks. Never a vault entry, a key or a server.
+// Deleting a mission: its own files go (the mission, its journal, an old one's orchestrator folder); a mission of 3.1
+// still working is stopped first (its pilot, its server tasks); on request, the project it created and its folder
+// (to the recycle bin). Otherwise its project keeps its deployment and access. Never a vault entry, a key or a server.
 
 import (
 	"encoding/json"
@@ -26,6 +26,7 @@ type ApercuSuppression struct {
 	Dossier    string     `json:"dossier,omitempty"`
 	DossierOK  bool       `json:"dossier_ok"`            // the project and its folder can be removed
 	DossierNon string     `json:"dossier_non,omitempty"` // why not (English, translated in the window)
+	Arrete     bool       `json:"arrete,omitempty"`      // a mission of 3.1 whose work runs: deleting it stops its pilot and server tasks
 	Depot      string     `json:"depot,omitempty"`       // the GitHub repository: a link only, never deleted
 	Envs       []EnvCarte `json:"envs,omitempty"`        // what stays online on the servers
 }
@@ -61,7 +62,7 @@ func (s *Serveur) projetSupprimable(m Mission) (Projet, string) {
 			return p, "Another mission uses this project"
 		}
 	}
-	if p.PiloteActif() { // M302: an old mission no longer stops anything
+	if p.PiloteActif() && m.Projet == "" { // M302: an old mission no longer stops anything (a mission of 3.1 is stopped first)
 		return p, "Stop its pilot first"
 	}
 	return p, controlerDossierSupprime(p.Dossier, s.kitCourant().Racine)
@@ -77,6 +78,13 @@ func (s *Serveur) apercuSuppression(m Mission) ApercuSuppression {
 	}
 	p, non := s.projetSupprimable(m)
 	a.Projet, a.Dossier, a.DossierNon, a.DossierOK = p.Nom, p.Dossier, non, non == ""
+	if m.Projet != "" {
+		e := s.acces.Environnements(p.Nom)[s.envJalon(p.Nom)]
+		a.Arrete = p.PiloteActif()
+		if e.URL != "" && e.Deploiement != nil {
+			a.Envs = []EnvCarte{{URL: e.URL}}
+		}
+	}
 	return a
 }
 
@@ -105,6 +113,13 @@ func (s *Serveur) supprimerMission(id, qui string, o OptionsSuppression) ([]stri
 		return nil, err
 	}
 	retire := []string{"mission " + id}
+	if p, ok := s.projetLocalChat(m.Projet); ok && m.Projet != "" && (p.PiloteActif() || tacheEnCoursID(lireRelais()[p.Nom].Premier)) {
+		// a mission of 3.1 still working: deleted cleanly, its pilot and its server tasks stopped first
+		if err := s.arreterProjet(p, "arreter"); err != nil {
+			return nil, err
+		}
+		retire = append(retire, "pilot of "+p.Nom+" stopped")
+	}
 	if o.Projet {
 		p, non := s.projetSupprimable(m)
 		if non != "" {

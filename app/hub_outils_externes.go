@@ -42,9 +42,9 @@ func init() {
 		Schema: objet(map[string]any{"projet": projet, "texte": texte("What the project should do or change, in plain words"), "titre": texte("A short title (optional)")}, "projet", "texte"), Faire: outilClientAjouterDemande}
 	outilsExternes["pilote"] = OutilClient{Description: "Start a project's pilot, stop it at the end of its current cycle (nothing lost), or stop it now.",
 		Schema: objet(map[string]any{"projet": projet, "action": map[string]any{"type": "string", "enum": []string{"demarrer", "pause_fin_cycle", "arreter"}}}, "projet", "action"), Faire: outilClientPilote}
-	outilsExternes["missions"] = OutilClient{Description: "The former missions you may see; with an id, that mission's detail (lanes, journal). Missions are no longer created.",
+	outilsExternes["missions"] = OutilClient{Description: "The missions you may see (a project with its server and API key); with an id, that mission's detail. Only the owner launches a mission, in Athanor's window.",
 		Schema: objet(map[string]any{"id": texte("A mission's id, for its detail (optional)")}), Faire: outilClientMissions}
-	outilsExternes["proposer_mission"] = OutilClient{Description: "Removed: missions are no longer created. Use ajouter_demande to add a request to a project.",
+	outilsExternes["proposer_mission"] = OutilClient{Description: "A client never launches a mission: the owner does, in Athanor's window. Use ajouter_demande to add a request to a project.",
 		Schema: objet(map[string]any{"phrase": texte("What you want done, in one sentence")}, "phrase"), Faire: outilClientProposerMission}
 	outilsExternes["approbations"] = OutilClient{Description: "The approvals waiting for the owner on the projects you may see. Only the owner decides, in Athanor's window or on a paired phone.",
 		Schema: objet(map[string]any{}), Faire: outilClientApprobations}

@@ -73,6 +73,15 @@ Cochez au fur et à mesure. En clair puis en sombre, sur ordinateur puis sur té
 - [ ] **Chat général.** L'assistant de l'accueil répond, connaît vos modules et vos projets, et ne donne jamais la valeur d'une clé.
 - [ ] **Fiche d'accord.** Une demande d'un agent (accès, déploiement) arrive dans *Pour vous* sous forme de fiche : *Accepter*, *Refuser*, ce qui sera fait, en mots simples ; une action destructrice attend toujours votre accord.
 
+### Missions
+
+- [ ] **Nouvelle mission à la main.** Accueil → *Nouvelle mission* : texte, nom du projet (proposé depuis le texte), serveur, « A besoin de moi » ou « Autonome avec l'IA », clé API ; *Plus d'options* reste replié. *Lancer* : un clic, aucune autre question, la page *Missions* s'ouvre.
+- [ ] **Depuis l'assistant.** Demandez « Fais une boutique et mets-la en ligne sur @serveur avec @clé » : le formulaire *Nouvelle mission* s'ouvre seul, rempli ; corrigez si vous voulez, puis *Lancer*. Dans la conversation, la proposition dit « Mission lancée ».
+- [ ] **Le cadre.** Projet et son état, barre des jalons, serveur et son état (préparation, mise en ligne, en ligne, échec et sa raison), clé API, choix de permission ; *Détails* replie l'historique et le lien vers le journal complet.
+- [ ] **Le serveur depuis le cadre.** *Terminal* ouvre le terminal du serveur ; *Arrêter le travail sur le serveur* coupe une préparation en cours ; *Relancer le travail sur le serveur* refait la mise en ligne.
+- [ ] **Arrêter, modifier, reprendre.** *Pause* ou *Arrêter* pendant un jalon, *Modifier* (un texte changé devient une nouvelle demande du projet), *Reprendre* : le projet repart et finit.
+- [ ] **Supprimer.** Une mission qui travaille s'arrête d'abord ; « Retirer aussi le projet… » n'est jamais coché d'avance ; le serveur et la clé restent.
+
 ### Coffre
 
 - [ ] Sans mot de passe du coffre : le bandeau propose « Définissez un mot de passe » et son bouton.

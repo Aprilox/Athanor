@@ -1,7 +1,7 @@
 package main
 
-// Old missions (M302): one JSON file per mission in dossierAthanor()/hub/missions, written by Athanor 3.0.0 and
-// earlier. They are only read and, when the owner asks, deleted: never written again, never followed. A damaged
+// Missions: one JSON file per mission in dossierAthanor()/hub/missions. Those of 3.0.0 and earlier (no Projet)
+// are only read and, when the owner asks, deleted; those of 3.1 are written by mission_nouvelle.go. A damaged
 // file is skipped on reading, never fatal.
 
 import (
@@ -68,6 +68,12 @@ type Mission struct {
 	Relais      *RelaisMission     `json:"relais,omitempty"`       // where its relay stood
 	Journal     []EntreeJournal    `json:"journal,omitempty"`      // at most maxJournalMission, the oldest first
 	InfraJusqua string             `json:"infra_jusqua,omitempty"` // former option (removed, note 19h03 §3): still read from older missions, never used
+	// a mission of 3.1 (mission_nouvelle.go): its project, server (inventory id) and API key (vault id), and its
+	// permission choice; Projet "" = an old mission, read only
+	Projet   string `json:"projet,omitempty"`
+	Serveur  string `json:"serveur,omitempty"`
+	API      string `json:"api,omitempty"`
+	Autonome bool   `json:"autonome,omitempty"`
 }
 
 var (

@@ -1,37 +1,25 @@
-# Anciennes missions
+# Missions
 
 *English: [MISSIONS.md](MISSIONS.md)*
 
-Avant la version 3.0, une mission était une phrase que Studio et Serveurs réalisaient ensemble. Athanor ne crée plus de missions et n'en suit plus : un projet a maintenant son propre déploiement, réglé dans son onglet *Déploiement* ([README](../README.fr.md#le-déploiement-dun-projet), [DEPLOY.fr.md](DEPLOY.fr.md)). Cette page dit ce que deviennent les missions laissées par une version précédente.
+Une mission relie ce qu'Athanor gère : un **projet Studio**, au plus un **serveur** et au plus une **clé API** du coffre, avec un seul choix de permission pour le serveur. Le [README](../README.fr.md#missions) décrit le formulaire et le cadre ; cette page dit de quoi une mission est faite et ce que deviennent les missions des versions précédentes.
 
-## Ce qui les remplace
+## Ce qu'est une mission
 
-- **Une phrase sur la page d'accueil** fait toujours le travail : l'assistant de l'accueil propose une carte **projet** (Studio seul, ou avec son déploiement) ou une carte **serveur**, et rien ne démarre avant *Lancer*.
-- **Le projet porte son déploiement** : le serveur, l'adresse, les API du coffre, votre plan et le moment du déploiement sont dans *Studio › Déploiement* ; le mode de permission est dans *Gérer › Réglages de ce projet*.
-- **Plus d'orchestrateur** entre vous et le projet : le pilote du projet construit, Athanor prépare le serveur et déploie, avec les mêmes garde-fous qu'avant.
+- **Un seul formulaire.** *Nouvelle mission* (sur l'accueil ou dans *Missions*), ou l'assistant de l'accueil, qui ouvre le même formulaire déjà rempli d'après votre phrase. Ce qu'il faut faire, le projet (un nom nouveau le crée dans Studio, le nom d'un des vôtres lui ajoute la mission comme prochaine demande), le serveur et son choix (*A besoin de moi* = le mode *Manuel* du projet, *Autonome avec l'IA* = son mode *Auto*), la clé API. Un plan, comment et quand le mettre en ligne, le dossier, les modes de travail, GitHub et les réglages propres du projet sont repliés sous *Plus d'options*. *Lancer* : un clic.
+- **Rien de nouveau dessous.** Lancer écrit ce que vous régleriez à la main : le projet dans Studio, son onglet *Déploiement* (serveur, clé, adresse, plan, moment), son mode de permission, puis démarre son pilote. Changez-les dans les onglets du projet et le cadre de la mission le montre ; changez-les dans la mission (*Modifier*) et les onglets du projet le montrent.
+- **Son état se lit, il n'est jamais recopié.** Le cadre lit le projet (en cours, en pause, arrêté, terminé, ses jalons) et son déploiement (en préparation, mise en ligne, en ligne, échec et pourquoi) à chaque affichage.
+- **Arrêter, reprendre, modifier, supprimer dans tout état.** *Pause* et *Arrêter* sont les arrêts du projet (un arrêt annule aussi ses tâches serveur) ; *Reprendre* redémarre son pilote ; *Modifier* change le serveur, la clé et le choix, et un texte modifié devient une nouvelle demande du projet. *Supprimer* arrête d'abord une mission qui travaille, puis retire la mission ; son projet et son dossier ne partent que si vous le cochez, jamais une clé, un serveur ni une entrée du coffre.
+- **Le serveur depuis le cadre.** *Terminal* ouvre le terminal du serveur ; *Arrêter le travail sur le serveur* annule la préparation ou la première mise en ligne en cours ; *Relancer le travail sur le serveur* fait la première mise en ligne, ou redéploie le dernier commit du projet.
 
-## La page Anciennes missions
+## Missions des versions précédentes
 
-*Anciennes missions* n'est dans le menu que tant qu'il en reste une. Elle liste chaque mission avec son état (*Plus suivie* pour une mission qui n'était pas finie ; l'état où elle a été laissée reste en infobulle), sa phrase, sa date et son heure ; une mission s'ouvre sur son **journal**, en lecture seule (*Voir plus* montre les lignes plus anciennes). Une mission qui n'était pas finie dit *Plus suivie : son projet continue seul*, et le `@projet` de sa phrase ouvre ce projet : rien n'est repris, mis en pause ni relancé depuis cette page.
-
-Rien n'a été perdu à la mise à jour, et rien n'est réécrit à la lecture : les fichiers des missions restent tels qu'ils étaient, et aucun mot de passe n'est redemandé.
-
-## Leurs projets
-
-Un projet qu'une mission a créé ou mené est un projet Studio comme un autre : vous le *Démarrez*, vous lui ajoutez des demandes, vous réglez son déploiement.
-
-- Un projet qui avait été réglé avec plusieurs sites les garde : son onglet *Déploiement* en montre et en change un, et *Autres sites de ce projet* liste les autres par leur adresse, chacun avec *En faire le déploiement*.
-- Un site qu'une mission a mis en ligne le dit jusqu'à ce que vous en fassiez le déploiement du projet. D'ici là, rien ne s'y déploie tout seul.
-- Un site de production de cette époque vous demande encore avant chaque déploiement (« Mise en ligne de example.com ? », dans la cloche, sur *Pour vous* et sur votre téléphone).
-
-## Supprimer une mission
-
-*Supprimer la mission*, sur la liste (la croix) ou sur la page de la mission, montre d'abord ce qui part : la mission, son journal et ses fichiers de suivi. *Retirer aussi le projet « … » de Studio et mettre son dossier à la corbeille* est décochée par défaut, et grisée, avec la raison, pour un dossier qu'Athanor ne peut pas supprimer. Le dépôt GitHub reste, comme ce que la mission a mis en ligne sur les serveurs ; aucune clé, aucun serveur ni aucune entrée du coffre n'est retiré.
+Les missions faites par Athanor 3.0.0 et avant apparaissent dans *Missions* en cadres à lire seulement (*Plus suivie*) : une mission s'ouvre sur son **journal**, et *Supprimer* la retire (son projet et son dossier seulement si c'est coché). Rien n'a été perdu à la mise à jour et rien n'est réécrit à la lecture ; leurs projets continuent seuls.
 
 ## Clients MCP
 
-Pour un client branché sur le serveur MCP d'Athanor ([MCP.fr.md](MCP.fr.md)), `missions` liste les anciennes missions qu'il peut voir et `proposer_mission` répond que les missions ne se créent plus : utilisez `ajouter_demande` pour ajouter une demande à un projet.
+Pour un client branché sur le serveur MCP d'Athanor ([MCP.fr.md](MCP.fr.md)), `missions` liste les missions qu'il peut voir et `proposer_mission` répond que seul le propriétaire lance une mission, dans la fenêtre d'Athanor : utilisez `ajouter_demande` pour ajouter une demande à un projet.
 
 ## Où elles sont gardées
 
-Un fichier par mission dans le dossier d'Athanor, `hub/missions/<id>.json` (lisible par votre compte seulement) : la phrase, la carte, les voies, l'historique et le journal. Athanor ne fait que lire ces fichiers, et en retire un quand vous supprimez sa mission.
+Un fichier par mission dans le dossier d'Athanor, `hub/missions/<id>.json` (lisible par votre compte seulement) : son texte (une valeur du coffre écrite dedans est masquée), son projet, son serveur et sa clé par identifiant, son choix et son historique. Athanor le retire quand vous supprimez sa mission.

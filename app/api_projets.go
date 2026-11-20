@@ -392,13 +392,7 @@ func (s *Serveur) apiPilote(w http.ResponseWriter, r *http.Request) {
 		s.msg(w, cle)
 		return
 	case "arreter", "pause": // M250: a project's pilot paused is stopped now; Start picks it up where it stopped
-		marqueAuto(p, false)
-		pauserProjet(p.Nom, true) // M298: its deployment waits for Start too; a stop also cancels its Servers tasks
-		noterArret(p.Nom, map[string]string{"arreter": "arret", "pause": "pause"}[r.PathValue("action")])
-		if r.PathValue("action") == "arreter" {
-			s.arreterTachesProjet(p.Nom)
-		}
-		err = arreterPiloteProjet(s, p)
+		err = s.arreterProjet(p, r.PathValue("action"))
 	case "arreter-apres-cycle": // M250: "finish the milestone in progress" (a cycle ends with its milestone)
 		marqueAuto(p, false)
 		if sortie, err = s.demanderArretApresCycle(p); err == nil {

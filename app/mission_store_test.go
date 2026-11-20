@@ -66,10 +66,10 @@ func TestMissionsStockage(t *testing.T) {
 		}
 	}
 	r := moduleMissions{}.Resume(s)
-	if len(r.Stats) != 1 || r.Stats[0].Valeur != 2 || r.Stats[0].Page != "#missions" || r.Etat != "inactif" {
+	if len(r.Stats) != 1 || r.Stats[0].Valeur != 0 || r.Stats[0].Cle != "Missions in progress" || r.Stats[0].Page != "#missions" || r.Etat != "inactif" { // old missions run nothing
 		t.Errorf("tile: %+v", r)
 	}
-	// the menu while an old mission exists: Home, Projects, Old missions, Studio
+	// the menu: Home, Projects, Missions, Studio
 	var ids []string
 	for _, x := range modulesHub() {
 		ids = append(ids, x.ID())

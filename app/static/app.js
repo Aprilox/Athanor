@@ -184,7 +184,7 @@ function rendreConnexionGH(c) {
 function connexionConnueGH() {
   if (etat.ghConnexion || etat.ghConnexionLu) return etat.ghConnexion;
   etat.ghConnexionLu = true;
-  majConnexionGH().then((c) => { if (c && ["nouveau", "projet", "suivi"].includes(etat.page)) rendrePage(); else if (c) majCartesProjet(); });
+  majConnexionGH().then((c) => { if (c && ["nouveau", "projet", "suivi", "nouvelle-mission"].includes(etat.page)) rendrePage(); });
   return null;
 }
 async function majConnexionGH() {
@@ -499,14 +499,14 @@ document.addEventListener("focusin", (e) => { if (e.target.matches && e.target.m
 // A pilot that ended on its own (delivery, maximum duration…) is announced once, inside the app, for
 // every project in the list; the end stays announced until the user has seen it (even after a restart).
 const finsAnnoncees = new Set();
-// a new task for the user in the current project: a dialog (once per task and round), unless already on the page
+// a new task for the user in the current project: a short notice (once per task and round), unless already on the page
 async function annoncerTaches(v) {
   if (v.verrouille || !v.projet || !$("#dialogue").hidden || !$("#assistant").hidden) return;
   const n = v.pour_vous || 0, cle = v.projet.nom;
   const avant = etat.pvAnnonces[cle];
   etat.pvAnnonces[cle] = n;
   if (avant === undefined || n <= avant || etat.page === "pourvous") return;
-  if (await confirmer(t("Claude needs you for something it cannot do itself (an account, a payment, a key…). Open the For you page?"), { titre: t("“{0}”: a task for you", [cle]), ok: t("Open"), annuler: t("Later") })) location.hash = "#pourvous";
+  toast(t("“{0}”: a task for you", [cle]) + " — " + t("For you")); // a short notice, never a window that takes the screen: the bell and the For you page keep it
 }
 async function annoncerFins(v) {
   if (v.verrouille || document.hidden || !$("#assistant").hidden || !$("#toast").hidden) return; // said when someone can read it, one at a time
@@ -1513,7 +1513,11 @@ function blocMode(m, carte) {
 async function changerMode(changement, de) {
   const z = (de && de.closest(".mode-ligne")) || $("#page"), coche = (id) => z.querySelector("#md-" + id).checked;
   const corps = { parallele: coche("parallele"), parallele_max: maxModeActif(z), eco: coche("eco"), rapide: coche("rapide"), ...changement };
-  if (z.closest("#cp-mode")) return changerCarteProjet({ modes: { ...carteProjetOuverte().modes, ...corps } }); // M295b: the home's project card
+  if (z.closest("#nm-mode") && nm.f) { // the New mission form: kept with the form, sent at Launch
+    nm.f.modes = { ...nm.f.modes, ...corps };
+    z.closest("#nm-mode").innerHTML = blocMode({ cadrage_global: 25, duree_max_global: 0, ...etat.modeDefaut, parallele_max: 3, ...nm.f.modes }, true);
+    return;
+  }
   if (etat.page === "nouveau") {
     Object.assign(etat.npMode, corps);
     const zone = $("#np-mode"); if (zone) zone.innerHTML = blocMode(etat.npMode);
@@ -2116,8 +2120,6 @@ const LISTES_MENTIONS = {
   "accueil-texte": { liste: "accueil-liste", opt: "mention-opt", cle: "mentionListe", mot: motMention, pris: () => etat.accueilMentions || [], choisir: choisirMentionAccueil },
   "dep-srv-q": { liste: "dep-srv-liste", opt: "dep-srv-opt", cle: "depSrvListe", mot: (c) => ({ q: c.value.trim(), debut: 0 }), pris: () => dep.f.serveurs, type: () => "serveur", choisir: choisirDeploiement }, // M292: the Deployment tab
   "dep-api-q": { liste: "dep-api-liste", opt: "dep-api-opt", cle: "depApiListe", mot: (c) => ({ q: c.value.trim(), debut: 0 }), pris: () => dep.f.apis, type: () => "api-deploiement", choisir: choisirDeploiement },
-  "cp-srv-q": { liste: "cp-srv-liste", opt: "cp-srv-opt", cle: "cpSrvListe", mot: (c) => ({ q: c.value.trim(), debut: 0 }), pris: () => formDep("cp").serveurs, type: () => "serveur", choisir: choisirDeploiement }, // M295b: the home's project card
-  "cp-api-q": { liste: "cp-api-liste", opt: "cp-api-opt", cle: "cpApiListe", mot: (c) => ({ q: c.value.trim(), debut: 0 }), pris: () => formDep("cp").apis, type: () => "api-deploiement", choisir: choisirDeploiement },
   "cof-q": { filtrer: (q, cat) => filtrerCoffre(q, cat) }, // the vault page: its own cards are the list (every entry, the servers' keys too)
 };
 // M288: the owner's categories of API (GET /api/coffre/categories), read when a screen that filters by them opens
@@ -2213,6 +2215,8 @@ pages.accueil = async () => {
   const hc = etat.hubChat || { messages: [], pouvoirs: {} };
   setTimeout(() => majHubChat(true), 0);
   return `<div class="accueil">${bandeauRaccourci()}${d.panne ? `<p class="bloc erreur" role="alert">${h(d.panne === t("Athanor no longer answers.") ? d.panne : t("Athanor could not read its modules ({0}): the menu keeps its first entries. Reload the page in a moment.", [d.panne]))}</p>` : ""}
+    <div class="ligne m0 accueil-actions local-seul"><button type="button" class="btn" data-nm-nouvelle>${t("New mission")}</button>
+      <span class="muet petit">${t("A project, a server and an API key in one form, launched in one click.")}</span></div>
     <form class="bloc accueil-barre accueil-chat" id="accueil-form" data-pieces="hc">
       <div class="ligne m0 chat-tete"><label for="accueil-texte" class="accueil-titre croit">${t("What do you want to do?")}</label>
         <button type="button" class="btn btn-petit" id="hub-chat-aide" title="${h(t("How the assistant works"))}" aria-label="${h(t("How the assistant works"))}">?</button>
@@ -2239,10 +2243,10 @@ const badgePermission = (mode) => `<span class="badge mis-perm${mode === "ignore
 // M254: a new project's settings, folded: its folder, its working mode (the Manage block), its GitHub repository;
 // each change is saved on the card (POST /projet), the folder checked at once (its error under the field)
 const GITHUB_MISSION = { "": "No GitHub for now", lier: "Use one of my repositories", creer: "Create a private repository" };
-// M295b: pre "mis" (the mission card) or "cp" (the home's project card, its own settings in `plus`); p: {nom, dossier, github, depot, sans_pousse, atelier}
+// pre "nm" (the New mission form, its own settings in `plus`); p: {nom, dossier, github, depot, sans_pousse, atelier}
 function sectionProjet(pre, p, modes, err, ouvert, plus = "") {
   const distant = (etat.vue || {}).distant;
-  if (!etat.modeDefaut) { etat.modeDefaut = {}; api("mode?defaut=1").then((m) => { etat.modeDefaut = m; majCartesProjet(); }).catch(() => {}); }
+  if (!etat.modeDefaut) { etat.modeDefaut = {}; api("mode?defaut=1").then((m) => { etat.modeDefaut = m; }).catch(() => {}); }
   const md = { cadrage_global: 25, duree_max_global: 0, ...etat.modeDefaut, parallele_max: 3, ...(modes || {}) };
   const modesChoisis = [["parallele", "Parallel mode"], ["eco", "Eco mode"], ["rapide", "Fast mode"]].filter(([k]) => md[k]).map(([, n]) => t(n)).join(", ");
   // C16: the folder's name only (its full path in the tooltip and in the field below), the mode said only when one is chosen
@@ -2305,123 +2309,52 @@ function champsEquipeHub(c, projets) {
       <label class="interrupteur m0"><input type="checkbox" data-cact="windows" ${c.windows ? "checked" : ""}><span>${t("Windows program: runs on Windows, outside the cage, with your rights")}</span></label>`,
   };
 }
+// 3.1: a `projet` proposal is a mission: the New mission form opens filled with it (bulleMission), never a card to fill
+function bulleMission(c, i) {
+  const m = c.mission || {}, lancee = c.etat === "lancee";
+  return `<div class="chat-msg chat-claude"><div class="chat-bulle chat-note carte-action" data-carte-action="${i}" data-type="projet">
+    <div class="muet petit">${t(c.etat ? (lancee ? "Mission launched" : "Mission refused") : "Mission prepared: nothing runs before you launch it")}</div>
+    <div><b>${h(m.projet || c.projet || "")}</b></div>${m.texte ? `<div class="petit">${mdChat(m.texte.length > 300 ? m.texte.slice(0, 300) + "…" : m.texte)}</div>` : ""}
+    ${c.etat ? (lancee ? `<p class="petit m0">${c.resultat && c.resultat !== "Mission launched: follow it in Missions." ? h(t(c.resultat, (c.args || []).map((x) => t(x)))) : `<a href="#missions">${t("Follow it in Missions")}</a>`}</p>` : "") // a project card of 3.0.0 says what it did
+      : `<div class="ligne m0 mt-1"><button type="button" class="btn btn-petit btn-primaire" data-nm-proposee="${i}">${t("Open the mission")}</button>
+        <button type="button" class="btn btn-petit" data-cact-decision="refuser" data-index="${i}">${t("Refuse")}</button></div>`}</div></div>`;
+}
+const ouvrirMissionProposee = (i) => { const c = ((etat.hubChat || {}).actions || {})[i]; if (c && c.mission) nouvelleMission({ ...c.mission, reglages: {}, index: Number(i) }); };
+document.addEventListener("click", (ev) => { const b = ev.target.closest("[data-nm-proposee]"); if (b) ouvrirMissionProposee(b.dataset.nmProposee); });
 function carteActionHub(c, i) {
   const v = (x) => h(String(x || "")), ty = c.type;
+  if (ty === "projet") return bulleMission(c, i);
   const projets = (etat.mentionsSugg || []).filter((m) => m.type === "projet" && !m.detail).map((m) => m.nom);
   if (c.projet && !projets.includes(c.projet)) projets.unshift(c.projet);
   const choixProjet = `<label class="champ"><span>${t("Project")}</span><select data-cact="projet">${projets.map((n) => `<option ${n === c.projet ? "selected" : ""}>${h(n)}</option>`).join("")}</select></label>`;
-  const existant = ty === "projet" && !c.dossier; // M295: an existing project gets its deployment only
-  // M295b: a `projet` card is drawn from what the owner left on it (formCarteProjet); its fields exist on the open card only
-  const f = ty === "projet" && !c.etat ? formCarteProjet(c, i) : null, ouverte = !!f && etat.carteProjetOuverte === i;
   // M296: a `serveur` card changes its text and its permission mode only; its servers and keys are the proposal's
   const champs = ty === "mission" ? "" : ty !== "serveur" ? choixProjet : `<label class="champ"><span>${t("Permissions")}</span><select data-cact="permission">${[["", t("The mode of each server (Settings › Permissions for API keys alone)")], ...AUTORISATIONS_IA()].map(([k, n]) => `<option value="${k}" ${k === (c.permission || "") ? "selected" : ""}>${h(n)}</option>`).join("")}</select></label>`;
   const [etatT, classeT] = ETATS_TACHE_SRV()[c.etat_tache] || [c.etat_tache, ""];
   const tache = !c.etat_tache ? "" : `<div class="petit carte-action-tache"><span class="pv-etat ${classeT}">${h(etatT)}</span>${(c.serveurs || []).length ? ` <a href="#serveur/${encodeURIComponent(c.serveurs[0])}">${t("Follow this task on the server's page")}</a>` : ""}${c.etat_tache === "attente_accord" ? ` <a href="#approbations">${t("Accept or refuse its plan on the Approvals page")}</a>` : ""}</div>${c.bilan && tacheFinie({ etat: c.etat_tache }) ? `<div class="petit">${mdChat(c.bilan)}</div>` : ""}`; // its report once it is over: a session's text before the verification is not the outcome
   const equipe = ["agent", "mcp", "attribuer"].includes(ty) ? champsEquipeHub(c, [...new Set([...(c.projets || []), ...projets.filter((n) => n && n !== c.projet)])]) : null;
   const titre = ty === "demande" ? `<label class="champ"><span>${t("Title")}</span><input type="text" data-cact="titre" value="${v(c.titre)}"></label>` : "";
-  // M295: the deployment and the permission mode of a `projet` card, shown only when the request uses them; Launch sends them back as shown
-  const dpl = f ? f.dep : c.deploiement, nomme = (l) => (l || []).map((x) => h(x.nom || (c.noms || {})[x] || x)).join(", ");
-  const perm = f ? f.permission : c.permission;
-  const deploiement = !dpl || ouverte ? "" : `<div class="petit carte-action-deploiement"><b>${t("Deployment")}</b>${dpl.url ? " — " + v(dpl.url) : ""}
-      ${(dpl.serveurs || []).length ? `<br>${t("{0}: {1}", [t("Servers"), nomme(dpl.serveurs)])}` : ""}${(dpl.apis || []).length ? `<br>${t("{0}: {1}", [t("API"), nomme(dpl.apis)])}` : ""}
-      <br>${t("{0}: {1}", [t("When to deploy"), t(dpl.moment === "jalon" ? "After each milestone" : "At delivery")])}${dpl.plan ? `<br>${v(dpl.plan)}` : ""}</div>`;
-  const permission = perm && !ouverte ? `<div class="petit${perm === "ignorer" ? " attention" : ""}">${t("{0}: {1}", [t("Permissions"), h(titrePermission(perm))])}</div>` : "";
-  const texte = ty === "pilote" || equipe || existant ? "" : `<label class="champ"><span>${t("Text")}</span><textarea data-cact="texte" rows="5">${v(c.texte)}</textarea></label>`;
+  const permission = c.permission ? `<div class="petit${c.permission === "ignorer" ? " attention" : ""}">${t("{0}: {1}", [t("Permissions"), h(titrePermission(c.permission))])}</div>` : "";
+  const texte = ty === "pilote" || equipe ? "" : `<label class="champ"><span>${t("Text")}</span><textarea data-cact="texte" rows="5">${v(c.texte)}</textarea></label>`;
   // M315 (S20): a card refused with an error is to be edited first (Edit is its main button, when it has one); a decided card is folded
   const aCorriger = !!c.erreur && ty !== "attribuer" && ty !== "mission";
   const decide = c.etat ? `<div class="${c.etat === "lancee" ? "ok" : "muet"} petit" role="status">${c.etat === "lancee" ? (ic("ok") + " ") + t("Launched") : (ic("croix") + " ") + t("Refused")}${c.resultat ? " — " + h(t(c.resultat, (c.args || []).map((x) => t(x)))) : ""}${(c.args || []).includes(SANS_CLAUDE) ? ` <a href="#claude">${t("Open Settings › Claude")}</a>` : ""}</div>${tache}`
     : `${c.erreur ? `<div class="attention petit" role="alert">${h(t(c.erreur))}</div>` : ""}
-      ${equipe ? equipe.vue : ""}<div class="carte-action-champs"${ouverte ? "" : " hidden"}>${equipe ? equipe.champs : f ? (ouverte ? champsCarteProjet(c, f, existant) : "") : champs + titre + texte}</div>
+      ${equipe ? equipe.vue : ""}<div class="carte-action-champs" hidden>${equipe ? equipe.champs : champs + titre + texte}</div>
       <div class="ligne m0 mt-1">${ty === "mission" ? "" : `<button type="button" class="btn btn-petit${aCorriger ? "" : " btn-primaire"}" data-cact-decision="lancer" data-index="${i}">${t("Launch")}</button>`}
-        ${ty === "attribuer" || ty === "mission" ? "" : `<button type="button" class="btn btn-petit${aCorriger ? " btn-primaire" : ""}" data-cact-modifier aria-expanded="${ouverte}">${t("Edit")}</button>`}
+        ${ty === "attribuer" || ty === "mission" ? "" : `<button type="button" class="btn btn-petit${aCorriger ? " btn-primaire" : ""}" data-cact-modifier aria-expanded="false">${t("Edit")}</button>`}
         <button type="button" class="btn btn-petit" data-cact-decision="refuser" data-index="${i}">${t("Refuse")}</button></div>`;
-  const sur = f && !existant ? f.projet + " — " + f.dossier : c.sur, texteVu = f ? f.texte : c.texte;
   return `<div class="chat-msg chat-claude"><div class="chat-bulle chat-note carte-action" data-carte-action="${i}" data-type="${v(ty)}" ${ty === "attribuer" ? `data-element="${v(c.element)}" data-nom="${v(c.nom)}"` : ""}>
     ${c.etat ? `<details><summary><b>${h(t(c.quoi || "Action"))}</b></summary>` : `<div class="muet petit">${t("Action proposed: nothing runs before you launch it")}</div>
     <div><b>${h(t(c.quoi || "Action"))}</b></div>`}
-    <div class="petit">${t("{0}: {1}", [t("On"), `<code class="croit">${v(sur)}</code>`])}</div>
-    ${c.titre ? `<div><b>${v(c.titre)}</b></div>` : ""}${texteVu && !ouverte ? `<div class="petit">${mdChat(texteVu)}</div>` : ""}${deploiement}${permission}
-    <ul class="petit m0" data-cp-acces>${accesCarteProjet(c, f)}</ul>
+    <div class="petit">${t("{0}: {1}", [t("On"), `<code class="croit">${v(c.sur)}</code>`])}</div>
+    ${c.titre ? `<div><b>${v(c.titre)}</b></div>` : ""}${c.texte ? `<div class="petit">${mdChat(c.texte)}</div>` : ""}${permission}
+    <ul class="petit m0">${(c.acces || []).map((a) => `<li>${h(t(a))}</li>`).join("")}</ul>
     ${c.etat ? "</details>" : ""}${decide}</div></div>`;
 }
-// M295b: the `projet` card as the owner changes it under Edit, kept by message until it is decided (a card proposed
-// again, its fingerprint changed, starts from the proposal). One card is open at a time: its fields carry ids.
-function formCarteProjet(c, i) {
-  const cp = etat.cartesProjet = etat.cartesProjet || {}, d = c.deploiement;
-  const puces = (l, type) => (l || []).map((ref) => ({ type, ref, nom: (c.noms || {})[ref] || ref }));
-  if (!cp[i] || cp[i].empreinte !== c.empreinte) cp[i] = { empreinte: c.empreinte, projet: c.projet || "", dossier: c.dossier || "", texte: c.texte || "", permission: c.permission || "",
-    dep: d ? { url: d.url || "", plan: d.plan || "", moment: d.moment || "livraison", serveurs: puces(d.serveurs, "serveur"), apis: puces(d.apis, "api") } : null,
-    modes: null, github: "", depot: "", sans_pousse: false, atelier: false, reglages: {}, pOuvert: false };
-  return cp[i];
-}
-const carteProjetOuverte = () => (etat.cartesProjet || {})[etat.carteProjetOuverte];
-// what the card does with the owner's choices, as the Go says it (carteActionChat): the lines of the proposal, then theirs
-const ACCES_CARTE_PROJET = { ignorer: "Ignore permissions: this project acts on its servers without asking you, dangerous commands and production deployments included.",
-  permission: "Sets this project's own permission mode, instead of the one of Settings.", github: "Creates or links the GitHub repository chosen on this card, with this computer's GitHub connection." };
-function accesCarteProjet(c, f) {
-  const choisis = f ? [f.permission === "ignorer" ? ACCES_CARTE_PROJET.ignorer : f.permission && ACCES_CARTE_PROJET.permission, f.github && ACCES_CARTE_PROJET.github].filter(Boolean) : [];
-  return (c.acces || []).filter((a) => !f || !Object.values(ACCES_CARTE_PROJET).includes(a)).concat(choisis).map((a) => `<li>${h(t(a))}</li>`).join("");
-}
-// the fields under Edit: only what the request uses (no deployment asked: none shown); a new project also gets its
-// permission mode and, folded, its folder, working modes, GitHub repository and own settings (the components of
-// the Deployment tab, of the mission card and of Manage)
-function champsCarteProjet(c, f, existant) {
-  const v = (x) => h(String(x || ""));
-  const dep = f.dep ? `<fieldset class="carte-action-dep"><legend>${t("Deployment")}</legend>${champsDeploiement("cp", f.dep, MOMENTS_DEPLOIEMENT.filter(([m]) => m), false)}</fieldset>` : "";
-  if (existant) return dep;
-  if (!etat.cpModeles) { etat.cpModeles = []; api("modeles").then((m) => { etat.cpModeles = m.modeles || []; majCartesProjet(); }).catch(() => {}); }
-  connexionConnueGH();
-  etat.rp = { modeles: etat.cpModeles, reglages: (c.defauts || []).map((r) => r.cle === "permission" ? { ...r, propre: f.permission, valeur: f.permission || r.defaut } : { ...r, propre: f.reglages[r.cle] || "" }) };
-  const lignes = (l) => `<div class="cp-reglages">${lignesReglagesProjet(l)}</div>`, estPerm = (r) => r.cle === "permission";
-  return `<label class="champ"><span>${t("Name")}</span><input type="text" data-cp="projet" value="${v(f.projet)}"></label>
-      <label class="champ"><span>${t("Text")}</span><textarea data-cp="texte" rows="5">${v(f.texte)}</textarea></label>
-      ${dep}${f.dep ? lignes(etat.rp.reglages.filter(estPerm)) : ""}
-      ${sectionProjet("cp", { ...f, nom: f.projet }, f.modes, "", f.pOuvert, `<h3>${t("This project's settings")}</h3>
-      <p class="muet petit">${t("Each setting follows Settings by default. A value chosen here applies to this project only, from its next cycle.")}</p>
-      ${lignes(etat.rp.reglages.filter((r) => !f.dep || !estPerm(r)))}`)}`;
-}
-// the project cards drawn again from their state (a choice made, Edit opened or closed), the focus kept
-function majCartesProjet() {
-  const fil = $("#hub-chat-fil"), a = (etat.hubChat || {}).actions || {}; if (!fil) return;
-  garderFocus(fil, () => fil.querySelectorAll('[data-carte-action][data-type="projet"]').forEach((el) => { el.closest(".chat-msg").outerHTML = carteActionHub(a[el.dataset.carteAction], +el.dataset.carteAction); }));
-}
-function changerCarteProjet(change) {
-  const f = carteProjetOuverte(); if (!f) return;
-  Object.assign(f, change); majCartesProjet();
-}
-// a text field changes the state only: a card drawn again under the pointer would lose the click on Launch
-document.addEventListener("input", (ev) => {
-  const i = ev.target, f = i.closest('[data-type="projet"]') && carteProjetOuverte(); if (!f) return;
-  if (i.dataset.cp) f[i.dataset.cp] = i.value;
-  else if (i.id === "cp-dossier") f.dossier = i.value.trim();
-  else if (i.id === "cp-gh-nom" || i.id === "cp-gh-depot") { // a repository typed selects its option, as on the mission card
-    const lier = i.id === "cp-gh-depot";
-    Object.assign(f, { github: lier ? "lier" : "creer", depot: lier ? depotSaisi(i.value) || i.value.trim() : i.value.trim() ? nomDepot(i.value) : "" });
-    i.closest("fieldset").querySelector(`[name="cp-gh"][value="${lier ? "existant" : "creer"}"]`).checked = true;
-    i.closest("[data-carte-action]").querySelector("[data-cp-acces]").innerHTML = accesCarteProjet(etat.hubChat.actions[etat.carteProjetOuverte], f);
-  }
-});
-document.addEventListener("change", (ev) => {
-  const i = ev.target, f = i.closest('[data-type="projet"]') && carteProjetOuverte(); if (!f) return;
-  if (i.name === "cp-gh") changerCarteProjet({ github: i.value === "existant" ? "lier" : i.value, depot: "" });
-  else if (i.id === "cp-gh-auto") changerCarteProjet({ sans_pousse: !i.checked });
-  else if (i.id === "cp-gh-atelier") changerCarteProjet({ atelier: i.checked });
-  else if (i.closest(".cp-reglages")) { // Ignore permissions is confirmed at Launch, with the rest of the card
-    const cle = i.id.slice(3);
-    changerCarteProjet(cle === "permission" ? { permission: i.value } : { reglages: { ...f.reglages, [cle]: i.value } });
-  }
-});
 document.addEventListener("click", async (ev) => {
   const m = ev.target.closest("[data-cact-modifier]");
   if (m) {
     const carte = m.closest("[data-carte-action]"), z = carte.querySelector(".carte-action-champs");
-    if (carte.dataset.type === "projet") { // M295b: drawn from its state; opening one closes the other
-      const n = +carte.dataset.carteAction, sel = `[data-carte-action="${n}"] `;
-      etat.carteProjetOuverte = etat.carteProjetOuverte === n ? null : n; majCartesProjet();
-      if (etat.carteProjetOuverte === n && carteProjetOuverte().dep) api("serveurs").then((r) => { dep.dispo = r.serveurs || []; if ($("#cp-serveurs-puces")) majDeploiement("serveurs", "cp"); }).catch(() => {});
-      $(sel + (etat.carteProjetOuverte === n ? ".carte-action-champs :is(input, select, textarea)" : "[data-cact-modifier]"))?.focus();
-      return;
-    }
     z.hidden = !z.hidden; m.setAttribute("aria-expanded", String(!z.hidden));
     if (!z.hidden) { const f = z.querySelector("input, select, textarea"); if (f) f.focus(); }
     return;
@@ -2432,13 +2365,8 @@ document.addEventListener("click", async (ev) => {
   if (carte.querySelector(".carte-action-projets")) a.projets = [...carte.querySelectorAll("[data-cact-projet]:checked")].map((x) => x.value);
   if (a.type === "attribuer") { a.element = carte.dataset.element; a.nom = carte.dataset.nom; }
   let preuve = {};
-  if (a.type === "projet") { // M295: the card read (its fingerprint) and, M295b, what the owner left on it; Ignore permissions confirmed as everywhere
-    const n = +carte.dataset.carteAction, c = etat.hubChat.actions[n], f = formCarteProjet(c, n), refs = (l) => l.map((x) => x.ref);
-    a.projet = f.projet;
-    if (f.dep) a.deploiement = { ...f.dep, serveurs: refs(f.dep.serveurs), apis: refs(f.dep.apis) };
-    if (c.dossier) Object.assign(a, { dossier: f.dossier, texte: f.texte, permission: f.permission, modes: f.modes || undefined, github: f.github, depot: f.depot, sans_pousse: f.sans_pousse, atelier: f.atelier, reglages: f.reglages });
-    preuve = { empreinte: f.empreinte };
-  } else if (a.type === "serveur") preuve = { empreinte: etat.hubChat.actions[+carte.dataset.carteAction].empreinte }; // M296: the card read
+  if (a.type === "projet") preuve = { empreinte: etat.hubChat.actions[+carte.dataset.carteAction].empreinte }; // a mission refused from the thread
+  else if (a.type === "serveur") preuve = { empreinte: etat.hubChat.actions[+carte.dataset.carteAction].empreinte }; // M296: the card read
   if (preuve.empreinte && b.dataset.cactDecision === "lancer" && a.permission === "ignorer") {
     const p = await confirmerIgnorer(t(a.type === "serveur" ? "This task will act without asking you, dangerous commands included. Choose it only for servers you can rebuild." : "This project will act on its servers without asking you, dangerous commands and production deployments included. Choose it only for servers you can rebuild."));
     if (!p) return;
@@ -2509,6 +2437,11 @@ async function majHubChat(force) {
   const sig = JSON.stringify([d.messages.length, d.en_cours, d.partiel, d.pouvoirs, d.actions]);
   if (!force && sig === etat.hubChatSig) return;
   etat.hubChatSig = sig;
+  // a mission the assistant just prepared opens in the New mission form, once (a thread read again opens nothing)
+  const props = Object.entries(d.actions || {}).filter(([, c]) => c.type === "projet" && !c.etat && c.mission).map(([i, c]) => i + ":" + c.empreinte);
+  const neuve = etat.missionsVues ? props.find((x) => !etat.missionsVues.has(x)) : null;
+  etat.missionsVues = new Set([...(etat.missionsVues || []), ...props]);
+  if (neuve && !d.en_cours) return ouvrirMissionProposee(neuve.split(":")[0]);
   const fil = $("#hub-chat-fil"); if (!fil) return;
   const enBas = auBas(fil);
   garderFocus(fil, () => { fil.innerHTML = filHub(d); }); // a card's button or field keeps the keyboard focus across a refresh of the thread
@@ -2775,7 +2708,7 @@ const GUIDE = [
       ["What it reads", "Only what you give it: your messages, the files you attach (or drop or paste them: images, PDF and text files, 20 MB at most each) and the folders you point under *What the assistant can do* › *Folders*, each read only or read and write. *@* names a project, a server or a vault key."],
       ["Its powers", "*What the assistant can do* stays visible under the field. *Internet* lets it search and read the web; *Writing* lets it change files, only in the folders set to read and write. Both are off by default, and off again in each new conversation. It never runs a command, never uses an MCP server and never reaches a server by itself."],
       ["What it never sees", "The vault's values, secrets files (.env), Athanor's own folders and system folders are never given to it, and a vault value pasted in a message or a file is masked before it reads it. A file or a web page that gives it orders is data: the assistant tells you what it asks and does not follow it."],
-      ["Cards", "To act, it proposes a card: create a project and start its pilot, set the deployment of a project you already have, start a pilot, add a request, leave a remark, run a task on your servers or with your API keys, create a sub-agent or an MCP server, switch one on in projects. The card shows only what your request uses (for a project that goes online: its server, its address, its APIs, your plan and when to deploy): *Launch*, *Change* or *Refuse*. Nothing runs before you press *Launch*, and each decision goes into the audit log."],
+      ["Missions and cards", "A project to build (with its server and its API key when you name them) is a mission: the *New mission* form opens by itself, filled with what the assistant understood; check it, change what you want and press *Launch*. For the rest it proposes a card: start a pilot, add a request, leave a remark, run a task on your servers or with your API keys, create a sub-agent or an MCP server, switch one on in projects; *Launch*, *Change* or *Refuse*. Nothing runs before you launch it, and each decision goes into the audit log."],
       ["From a phone", "On a paired device the conversation is read only: you read it and its powers, and you write to the assistant on the computer. Approvals and the emergency stop still work from the phone. The *?* at the top of the conversation replays its short tutorial."],
     ] },
   { id: "coffre", titre: "The vault", intro: "The vault keeps your keys, tokens and settings in one place, encrypted on the disk. A secret's value is shown only while you type it, never again, and no page or answer of Athanor contains it.",
@@ -4364,7 +4297,7 @@ async function reordonner(fichier, sens) {
 // an older project with several sites has one sheet per address, and any of them can become its deployment
 const dep = { projet: "", f: null, dispo: [] }; // f: the form as typed, kept until Save or Cancel; dispo: the servers of this PC
 const MOMENTS_DEPLOIEMENT = [["jalon", "After each milestone"], ["livraison", "At delivery"], ["", "Only when I ask"]];
-const formDep = (pre) => pre === "cp" ? carteProjetOuverte().dep : dep.f; // the form of the tab, or of the home's open project card (M295b)
+const formDep = () => dep.f; // the form of the Deployment tab
 const pucesDeploiement = (cle, pre = "dep") => formDep(pre)[cle].map((m, i) => `<span class="puce-mention puce-${m.type}">${typeMention(m)}${h(m.nom)}${pre === "dep" && (etat.vue || {}).distant ? "" : `<button type="button" class="puce-x" data-dep-retirer="${cle}:${i}" aria-label="${h(t("Remove {0}", [m.nom]))}">×</button>`}</span>`).join("")
   // S6 (M317): the servers not chosen yet are offered at once, one click each (the field still searches)
   + (cle !== "serveurs" || pre === "dep" && (etat.vue || {}).distant ? "" : dep.dispo.filter((x) => !formDep(pre).serveurs.some((m) => m.ref === x.id)).slice(0, 6).map((x) => `<button type="button" class="btn btn-petit puce-sugg" data-dep-sugg="${h(x.id)}" title="${h(x.hote || "")}">+ ${h(x.nom)}</button>`).join(""))
@@ -4385,7 +4318,7 @@ function ficheSite(d, nom, nomSrv, distant) {
     ${courant || distant ? "" : `<button type="button" class="btn btn-petit" data-dep-courant="${h(nom)}">${t("Make this site the project's deployment")}</button>`}
   </section>`;
 }
-// M295b: the fields of a deployment, on the Deployment tab (pre "dep") and on the home's project card ("cp")
+// M295b: the fields of a deployment, on the Deployment tab (pre "dep")
 function champsDeploiement(pre, f, moments, distant) {
   const dis = distant ? " disabled" : "";
   return `<div class="reglage"><span class="nom-reglage" id="${pre}-srv-titre">${t("Server")}</span><div class="dep-champ">
@@ -4442,12 +4375,12 @@ function choisirDeploiement(m, champ) {
   formDep(pre)[cle].push({ type: m.type, ref: m.ref, nom: m.nom }); champ.value = "";
   fermerListeMentions(champ.id); majDeploiement(cle, pre);
 }
-const champDeploiement = (x) => /^(dep|cp)-(srv|api)-q$/.test(x.id);
+const champDeploiement = (x) => /^dep-(srv|api)-q$/.test(x.id);
 document.addEventListener("focusin", (ev) => { if (champDeploiement(ev.target)) chercherMentions(ev.target).then(() => { if (document.activeElement !== ev.target) fermerListeMentions(ev.target.id); }); }); // the whole list at once (few servers and API); an answer that comes after the field was left opens nothing
 document.addEventListener("focusout", (ev) => { if (champDeploiement(ev.target)) fermerListeMentions(ev.target.id); });
-document.addEventListener("change", (ev) => { if (/^(dep|cp)-api-q-cat$/.test(ev.target.id)) $("#" + ev.target.id.slice(0, -4)).focus(); }); // the filtered list opens under its field
+document.addEventListener("change", (ev) => { if (ev.target.id === "dep-api-q-cat") $("#" + ev.target.id.slice(0, -4)).focus(); }); // the filtered list opens under its field
 document.addEventListener("input", (ev) => {
-  const [, pre, cle] = /^(dep|cp)-(url|plan|moment)$/.exec(ev.target.name || ev.target.id) || [];
+  const [, pre, cle] = /^(dep)-(url|plan|moment)$/.exec(ev.target.name || ev.target.id) || [];
   if (cle && formDep(pre)) { formDep(pre)[cle] = ev.target.value; majDeploiement("", pre); }
 });
 document.addEventListener("click", (ev) => {
@@ -4905,7 +4838,6 @@ function pcsOuvert() {
   return etat.pcsOuvert;
 }
 document.addEventListener("toggle", (ev) => {
-  if (ev.target && ev.target.id === "cp-projet" && carteProjetOuverte()) carteProjetOuverte().pOuvert = ev.target.open; // M295b
   if (ev.target && ev.target.id === "conso") etat.ouverts[ev.target.open ? "add" : "delete"]("conso");
   if (ev.target && ev.target.id === "rp") etat.rpOuvert = ev.target.open; // M291: the same across a change of mode
   if (ev.target && ev.target.id === "np-plus") etat.npPlus = ev.target.open; // S3 (M317): open across the GitHub sign-in's refresh
@@ -6106,8 +6038,7 @@ function assistantServeur(c) {
     <div class="ligne"><button type="submit" class="btn btn-primaire">${empreinte ? t("Add the server") : t("Continue")}</button><button type="button" class="btn" data-srv-fermer>${t("Cancel")}</button></div>
   </form>`;
 }
-// --- Old missions (M300): Athanor no longer creates nor follows missions; the ones already there are read (state,
-// sentence, journal) at #missions and #missions/<id>, and deleted on request; the module shows only while one exists
+// --- Old missions (M300, 3.0.0 and before): read (state, sentence, journal) at #missions/<id>, deleted on request
 const ETATS_MISSION = { preparation: "Being prepared", proposee: "Proposed", acceptee: "Accepted", lancee: "Launched", terminee: "Finished", annulee: "Cancelled", echec: "Failed", en_pause: "Paused", arretee: "Stopped", arret_demande: "Stopping after the milestone" };
 const POLITIQUES_MISSION = [["prod", "Ask me for production"], ["tout", "Ask me for everything"], ["autonome", "Autonomous"]];
 // raisonEchec (M266): the event that put the mission in echec; the owner's changes after it are "modifiee"
@@ -6121,27 +6052,14 @@ const badgeMission = (m, id) => { const e = t(ETATS_MISSION[m.etat] || m.etat), 
 // shortcut: a project whose name holds a space is not linked, upgrade if old missions named such projects
 const phraseMission = (s) => { const noms = projetsVisibles(etat.vue || {}).map((p) => p.nom);
   return h(s).replace(/@([\w-]+(?:\.[\w-]+)*)/g, (tout, n) => noms.includes(n) ? `<a href="#suivi" data-mis-projet="${n}">${tout}</a>` : tout); };
-function ligneMission(m) {
-  const titre = (m.carte || {}).titre, phrase = m.phrase.length > 140 ? m.phrase.slice(0, 140) + "…" : m.phrase;
-  return `<li><a class="bloc mis-ligne" href="#missions/${encodeURIComponent(m.id)}">${badgeMission(m)}
-    <span class="mis-phrase">${titre ? `<b>${h(titre)}</b> ` : ""}<span class="muet">${h(phrase)}</span></span>
-    <span class="muet petit">${h(new Date(m.cree).toLocaleString(document.documentElement.lang || "en", { dateStyle: "short", timeStyle: "short" }))}</span></a><button type="button" class="btn btn-petit mis-suppr-btn" data-mis-suppr="${h(m.id)}" aria-label="${h(t("Delete the mission"))}" title="${h(t("Delete the mission"))}">${ic("croix")}</button></li>`;
-}
-pages.missions = async () => {
-  const d = await api("missions");
-  return `<div class="missions">
-    <div class="ligne cof-tete"><h2 class="m0">${t("Old missions")} <span class="muet">${d.missions.length}</span></h2></div>
-    <p class="muet m0">${t("Athanor no longer creates nor follows missions: these ones stay here to be read or deleted. Their projects keep working on their own, each with its own deployment.")}</p>
-    ${d.missions.length ? `<ul class="mis-liste mis-liste-suppr">${d.missions.map(ligneMission).join("")}</ul>` : `<div class="vide">${t("No old mission left.")}</div>`}
-  </div>`;
-};
 // One old mission (#missions/<id>), read only: its sentence, the state it was left in, its journal
 pages.mission = async () => {
   const d = await api("missions/" + encodeURIComponent(etat.missionId || ""));
   etat.missionVue = d;
+  if (d.mission.suivie) return `<div class="missions mis-detail"><div class="ligne m0"><a class="btn btn-petit" href="#missions">${ic("gauche")} ${t("Missions")}</a></div>${cadreMission(d.mission)}</div>`; // a mission of 3.1: its frame
   const m = d.mission, titre = (m.carte || {}).titre, fin = m.etat === "echec" ? raisonEchec(m) : {};
   if (etat.missionJournalDe !== m.id) { etat.missionJournalDe = m.id; etat.missionJournalN = 50; }
-  return `<div class="missions mis-detail"><div class="ligne m0"><a class="btn btn-petit" href="#missions">${ic("gauche")} ${t("Old missions")}</a><span class="espace"></span><button type="button" class="btn btn-petit btn-danger" data-mis-suppr="${h(m.id)}">${t("Delete the mission")}</button></div>
+  return `<div class="missions mis-detail"><div class="ligne m0"><a class="btn btn-petit" href="#missions">${ic("gauche")} ${t("Missions")}</a><span class="espace"></span><button type="button" class="btn btn-petit btn-danger" data-mis-suppr="${h(m.id)}">${t("Delete the mission")}</button></div>
     <div><div class="ligne m0 tuile-tete"><h2 class="m0" id="mis-titre">${titre ? h(titre) : phraseMission(m.phrase)}</h2>${badgeMission(m, "mis-badge")}</div>
       ${titre ? `<p class="muet petit mis-phrase">${phraseMission(m.phrase)}</p>` : ""}${fin.detail ? `<p class="mis-avert" role="note">${h(fin.message ? texteMessage(fin.message) : fin.detail)}</p>` : ""}
       ${MISSION_FINIE.includes(m.etat) ? "" : `<p class="m0" role="note">${t("No longer followed: its project continues on its own.")}</p>`}</div>
@@ -6181,6 +6099,7 @@ async function supprimerMissionUI(id) {
   const enLigne = ["preparation", "proposee", "acceptee"].includes(d.mission.etat) ? [] : (a.envs || []).filter((e) => e.url);
   const corps = `<div class="mis-suppr">
     <p>${h(t("The mission, its journal and its follow-up files are deleted."))}</p>
+    ${a.arrete ? `<p>${h(t("Its work stops first: the project's pilot and its server tasks."))}</p>` : ""}
     ${a.projet ? `<label class="case"><input type="checkbox" data-suppr="projet"${a.dossier_ok ? "" : " disabled"}><span>${h(t("Also remove the project “{0}” from Studio and send its folder to the recycle bin", [a.projet]))}
       ${a.dossier ? `<code class="petit">${h(a.dossier)}</code>` : ""}${a.dossier_non ? `<span class="muet petit">${h(t(a.dossier_non))}</span>` : ""}</span></label>` : ""}
     ${a.depot ? `<p class="muet petit">${h(t("The GitHub repository stays:"))} ${lienDepot(a.depot)}</p>` : ""}
@@ -6194,7 +6113,7 @@ async function supprimerMissionUI(id) {
     } });
   if (choix !== "ok" || !r) return;
   toast(t("Mission deleted."), "ok");
-  if (etat.page === "mission") location.hash = "#missions"; else await rendrePage();
+  if (etat.page !== "missions") location.hash = "#missions"; else await rendrePage();
 }
 document.addEventListener("click", (ev) => {
   const b = ev.target.closest("[data-mis-suppr]"); if (!b) return;
@@ -6204,12 +6123,193 @@ document.addEventListener("click", (ev) => {
 document.addEventListener("click", (ev) => {
   const a = ev.target.closest("[data-mis-projet]"); if (!a) return;
   ev.preventDefault();
-  allerProjet(a.dataset.misProjet, "suivi");
+  allerProjet(a.dataset.misProjet, a.dataset.page || "suivi");
 });
 document.addEventListener("click", (ev) => {
   if (!ev.target.closest("[data-mis-plus]") || !etat.missionVue) return;
   etat.missionJournalN = (etat.missionJournalN || 50) + 50;
   const z = $("#mission-journal"); if (z) garderFocus(z, () => { z.innerHTML = journalMission(etat.missionVue.mission); });
+});
+
+// --- Missions (3.1, mission_nouvelle.go): a mission links a Studio project, at most one server and one API key.
+// #missions: one frame per mission, its project and server read now, managed in place; #nouvelle-mission: the one
+// form that launches a mission (by hand, or filled by the home's assistant) or changes one
+const STATUTS_MISSION = { en_cours: ["ok", "In progress"], arret_jalon: ["", "Stops after this milestone"], pause: ["attention", "Paused"], arretee: ["", "Stopped"], terminee: ["ok", "Finished"], perdue: ["attention", "Its project no longer exists"] };
+const ETATS_SRV_MISSION = { aucun: ["muet", "Not used"], attente: ["", "Ready, waits for the project's work"], prepare: ["ok", "Being prepared"], deploie: ["ok", "Going online"], en_ligne: ["ok", "Online"], echec: ["echec", "Failed"], a_preparer: ["attention", "First deployment to make"], arrete: ["", "Stopped"] };
+const EVENEMENTS_MISSION = { lancee: "Launched", modifiee: "Changed", pause: "Paused", arretee: "Stopped", reprise: "Resumed", serveur_arrete: "Server work stopped", serveur_relance: "Server work launched again" };
+const dateMission = (x) => new Date(x).toLocaleString(document.documentElement.lang || "en", { dateStyle: "short", timeStyle: "short" });
+function cadreMission(m) {
+  const id = h(m.id);
+  if (!m.suivie) return `<section class="bloc mis-cadre mis-ancienne" data-mission="${id}"><div class="ligne m0 tuile-tete"><a class="croit" href="#missions/${encodeURIComponent(m.id)}"><b>${h((m.carte || {}).titre || (m.phrase.length > 140 ? m.phrase.slice(0, 140) + "…" : m.phrase))}</b></a>${badgeMission(m)}</div>
+    <div class="ligne m0"><span class="muet petit">${h(dateMission(m.cree))}</span><span class="espace"></span><button type="button" class="btn btn-petit" data-mis-suppr="${id}">${t("Delete")}</button></div></section>`;
+  const [cl, lib] = STATUTS_MISSION[m.statut] || ["", m.statut], a = m.avance || {}, pct = a.total ? Math.round(100 * a.fait / a.total) : 0;
+  const actif = ["en_cours", "arret_jalon"].includes(m.statut), perdue = m.statut === "perdue";
+  const [scl, slib] = ETATS_SRV_MISSION[m.serveur_etat] || ["", m.serveur_etat || ""];
+  const srvErr = m.serveur_message ? texteMessage(m.serveur_message) : m.serveur_erreur ? t(m.serveur_erreur) : "";
+  const histo = [...(m.historique || [])].reverse().slice(0, 30);
+  return `<section class="bloc mis-cadre" data-mission="${id}" aria-labelledby="mis-t-${id}">
+    <div class="ligne m0 tuile-tete"><h3 class="m0 croit" id="mis-t-${id}">${h(m.phrase.split("\n")[0].slice(0, 120))}</h3><span class="badge ${cl}">${t(lib)}</span></div>
+    ${perdue ? "" : `<div class="mis-progres" role="progressbar" aria-label="${h(t("Progress"))}" aria-valuemin="0" aria-valuemax="${a.total || 0}" aria-valuenow="${a.fait || 0}"><span style="width:${pct}%"></span></div>
+    <p class="petit m0">${a.total ? h(t("{0}: {1}", [t("Milestones"), a.fait + "/" + a.total])) : t("The plan is being written")}${a.titre ? " · " + h(a.titre) : ""}</p>
+    ${a.activite && actif ? `<p class="muet petit m0">${h(a.activite)}</p>` : ""}`}
+    <dl class="mis-liens">
+      <div><dt>${t("Project")}</dt><dd>${perdue ? h(m.projet) : `<a href="#suivi" data-mis-projet="${h(m.projet)}">${h(m.projet)}</a>`}</dd></div>
+      <div><dt>${t("Server")}</dt><dd>${m.serveur_nom ? `<b>${h(m.serveur_nom)}</b> · ` : ""}<span class="${scl}">${t(slib)}</span>${m.url && /^https?:\/\//.test(m.url) ? ` · <a href="${h(m.url)}" target="_blank" rel="noopener">${h(m.url)}</a>` : ""}
+        ${srvErr ? `<p class="petit attention m0">${h(srvErr)}</p>` : ""}
+        ${m.serveur && !perdue ? `<div class="ligne m0 mt-1 local-seul"><a class="btn btn-petit" href="#terminal/${encodeURIComponent(m.serveur)}">${t("Terminal")}</a>
+          <button type="button" class="btn btn-petit" data-mis-act="serveur-arreter"${m.serveur_tache ? "" : " disabled"}>${t("Stop the server's work")}</button>
+          <button type="button" class="btn btn-petit" data-mis-act="serveur-relancer">${t("Launch the server's work again")}</button></div>` : ""}</dd></div>
+      <div><dt>${t("API key")}</dt><dd>${m.api_nom ? h(m.api_nom) : `<span class="muet">${t("No API key")}</span>`}</dd></div>
+      ${m.serveur ? `<div><dt>${t("On the server")}</dt><dd>${t(m.autonome ? "Autonomous with the AI" : "Needs me")}</dd></div>` : ""}
+    </dl>
+    <div class="ligne m0 local-seul">${perdue ? "" : actif ? `<button type="button" class="btn btn-petit" data-mis-act="pause">${t("Pause")}</button><button type="button" class="btn btn-petit" data-mis-act="arreter">${t("Stop")}</button>`
+      : `<button type="button" class="btn btn-petit" data-mis-act="reprendre">${t("Resume")}</button>`}
+      ${perdue ? "" : `<button type="button" class="btn btn-petit" data-mis-modifier="${id}">${t("Edit")}</button>`}<span class="espace"></span>
+      <button type="button" class="btn btn-petit" data-mis-suppr="${id}">${t("Delete")}</button></div>
+    <details class="plus-options mis-details"><summary>${t("Details")}</summary>
+      <ol class="mis-journal">${histo.map((e) => `<li><time datetime="${h(e.t)}">${h(dateMission(e.t))}</time><span>${h(t(EVENEMENTS_MISSION[e.etat] || e.etat))}</span></li>`).join("")}</ol>
+      <p class="petit m0">${h(m.phrase)}</p>
+      ${perdue ? "" : `<p class="petit m0"><a href="#journal" data-mis-projet="${h(m.projet)}" data-page="journal">${t("Full log of the project")}</a></p>`}</details>
+  </section>`;
+}
+pages.missions = async () => {
+  const d = await api("missions"), l = d.missions || [];
+  etat.missionsSig = JSON.stringify(l);
+  return `<div class="missions">
+    <div class="ligne cof-tete"><h2 class="m0 croit">${t("Missions")} <span class="muet">${l.length}</span></h2><button type="button" class="btn btn-primaire local-seul" data-nm-nouvelle>${t("New mission")}</button></div>
+    <p class="muet m0">${t("A mission links a Studio project, a server and an API key. Follow and manage each one in its frame.")}</p>
+    ${l.length ? `<div class="mis-cadres">${l.map(cadreMission).join("")}</div>` : `<div class="vide">${t("No mission yet: launch one with New mission, or ask the assistant of the home page.")}</div>`}
+  </div>`;
+};
+// a mission's frame follows its project and server live, unless a field or a menu of the page is in use
+async function suivreMissions() {
+  if (etat.page !== "missions" || document.activeElement.matches("input, textarea, select") || document.querySelector(".modale")) return;
+  const d = await api("missions").catch(() => null);
+  if (d && etat.page === "missions" && JSON.stringify(d.missions || []) !== etat.missionsSig) rendrePage();
+}
+document.addEventListener("click", async (ev) => {
+  const b = ev.target.closest("[data-mis-act], [data-mis-modifier], [data-nm-nouvelle]"); if (!b) return;
+  if (b.dataset.nmNouvelle !== undefined) return nouvelleMission();
+  const id = b.closest("[data-mission]")?.dataset.mission || b.dataset.misModifier;
+  if (b.dataset.misModifier) {
+    const d = await api("missions/" + encodeURIComponent(id)).catch((e) => { toast(e.message, "erreur"); return null; });
+    const m = d && d.mission; if (!m) return;
+    return nouvelleMission({ id: m.id, texte: m.phrase, projet: m.projet, serveur: m.serveur || "", api: m.api || "", autonome: !!m.autonome, url: m.url || "" });
+  }
+  b.disabled = true;
+  const r = await action(api(`missions/${encodeURIComponent(id)}/${b.dataset.misAct}`, "POST"));
+  b.disabled = false;
+  if (r) rendrePage();
+});
+
+// the New mission form: what to do, the project (a new name, or one of yours), the server and its permission
+// choice, the API key; the plan, the way online and the project's settings folded. nm.f: the form as typed, kept
+// across a refresh until Launch, Save or Cancel; index: the home conversation's proposal it comes from
+const nm = { f: null };
+const MISSION_VIDE = () => ({ texte: "", plan: "", projet: "", dossier: "", serveur: "", api: "", url: "", plan_deploiement: "", moment: "livraison", autonome: false, modes: null, github: "", depot: "", sans_pousse: false, atelier: false, reglages: {} });
+function nouvelleMission(pre) {
+  nm.f = { ...MISSION_VIDE(), ...(pre || {}) };
+  nm.f.reglages = { ...(nm.f.reglages || {}) };
+  if (etat.page === "nouvelle-mission") rendrePage(); else location.hash = "#nouvelle-mission";
+}
+// a new project's name from the mission's first words (the owner can change it)
+const nomMissionPropose = (texte) => String(texte || "").split("\n")[0].replace(/[^\p{L}\p{N} -]+/gu, " ").trim().split(/\s+/).slice(0, 4).join(" ").slice(0, 40);
+pages["nouvelle-mission"] = async () => {
+  if (!nm.f) nm.f = MISSION_VIDE();
+  const f = nm.f, edition = !!f.id, distant = !!(etat.vue || {}).distant;
+  const [sv, cof, mis, mod, md] = await Promise.all([api("serveurs").catch(() => ({})), api("coffre").catch(() => ({})), api("missions").catch(() => ({})),
+    etat.cpModeles ? { modeles: etat.cpModeles } : api("modeles").catch(() => ({})), etat.modeDefaut && etat.modeDefaut.cadrage_global !== undefined ? etat.modeDefaut : api("mode?defaut=1").catch(() => ({})), lireCategories(), connexionConnueGH()]);
+  etat.cpModeles = mod.modeles || []; etat.modeDefaut = md;
+  const serveurs = sv.serveurs || [], cles = serveurs.map((x) => x.cle).filter(Boolean);
+  const apis = (cof.entrees || []).filter((e) => !cles.includes(e.id)).sort((a, b) => a.nom.localeCompare(b.nom));
+  const projets = projetsVisibles(etat.vue || {}).map((p) => p.nom), existant = projets.find((n) => n.toLowerCase() === f.projet.trim().toLowerCase());
+  const cats = etat.categoriesAPI || [], groupe = (c) => apis.filter((e) => (e.categorie || "") === c).map((e) => `<option value="${h(e.id)}"${e.id === f.api ? " selected" : ""}>${h(e.nom)}</option>`).join("");
+  const optionsAPI = groupe("") + cats.map((c) => { const o = groupe(c.id); return o ? `<optgroup label="${h(c.nom)}">${o}</optgroup>` : ""; }).join("");
+  const srvInconnu = f.serveur && !serveurs.some((x) => x.id === f.serveur), apiInconnue = f.api && !apis.some((x) => x.id === f.api);
+  etat.rp = { modeles: etat.cpModeles, reglages: (mis.reglages || []).filter((r) => r.cle !== "permission").map((r) => ({ ...r, propre: f.reglages[r.cle] || "" })) };
+  const v = (x) => h(String(x || ""));
+  return `<div class="missions nm">
+    <div class="ligne m0"><a class="btn btn-petit" href="#missions" data-nm-annuler>${ic("gauche")} ${t("Missions")}</a></div>
+    <form class="bloc" id="nm-form" novalidate>
+      <h2 class="m0">${t(edition ? "Edit the mission" : "New mission")}</h2>
+      ${f.index !== undefined ? `<p class="muet petit m0" role="note">${t("Filled by the assistant from your request: check it, change what you want, then launch it.")}</p>` : ""}
+      <label class="champ"><span>${t("What must the mission do?")}</span><textarea id="nm-texte" rows="5" maxlength="20000" required>${v(f.texte)}</textarea>
+        ${edition ? `<span class="muet petit">${t("A changed text is added to the project as a new request.")}</span>` : ""}</label>
+      <div class="reglage"><label for="nm-nom" class="nom-reglage">${t("Project")}</label><div>
+        <input type="text" id="nm-nom" list="nm-projets" value="${v(f.projet)}" maxlength="60" autocomplete="off" spellcheck="false"${edition ? " readonly" : ""} aria-describedby="nm-projet-aide">
+        <datalist id="nm-projets">${projets.map((n) => `<option value="${h(n)}">`).join("")}</datalist>
+        <p class="muet petit m0" id="nm-projet-aide">${edition ? t("The mission's project.") : existant ? t("One of your projects: the mission becomes its next request.") : t("A new project in Studio. Type the name of one of yours to add the mission to it.")}</p></div></div>
+      <div class="reglage"><label for="nm-serveur" class="nom-reglage">${t("Server")}</label><div>
+        <select id="nm-serveur"><option value="">${t("None: the project stays on this computer")}</option>${srvInconnu ? `<option value="${v(f.serveur)}" selected>${v(f.serveur)}</option>` : ""}${serveurs.map((x) => `<option value="${h(x.id)}"${x.id === f.serveur ? " selected" : ""}>${h(x.nom)}</option>`).join("")}</select>
+        ${srvInconnu ? `<p class="attention petit m0" role="alert">${t("Unknown server: choose one of yours, or add it on the Servers page.")}</p>` : ""}
+        <fieldset class="nm-mode m0" id="nm-mode-srv"${f.serveur ? "" : " hidden"}><legend class="petit">${t("On the server")}</legend>
+          <label class="radio"><input type="radio" name="nm-autonome" value=""${f.autonome ? "" : " checked"}> <span><b>${t("Needs me")}</b><br><span class="muet petit">${t("Claude reads the server freely and asks your accord before each change.")}</span></span></label>
+          <label class="radio"><input type="radio" name="nm-autonome" value="1"${f.autonome ? " checked" : ""}> <span><b>${t("Autonomous with the AI")}</b><br><span class="muet petit">${t("Claude works on the server without waiting for you; it still asks before a dangerous command (deleting, stopping, firewall…).")}</span></span></label></fieldset></div></div>
+      <div class="reglage"><label for="nm-api" class="nom-reglage">${t("API key")}</label><div>
+        <select id="nm-api"><option value="">${t("No API key")}</option>${apiInconnue ? `<option value="${v(f.api)}" selected>${v(f.api)}</option>` : ""}${optionsAPI}</select>
+        ${apiInconnue ? `<p class="attention petit m0" role="alert">${t("Unknown API key: choose one of the vault, or add it there.")}</p>` : `<p class="muet petit m0">${t("Its value is never shown to Claude: Athanor's tools use it for the project.")}</p>`}</div></div>
+      <details class="plus-options" id="nm-plus"${f.plusOuvert ? " open" : ""}><summary>${t("More options")}</summary>
+        <label class="champ"><span>${t("Plan (optional)")}</span><textarea id="nm-plan" rows="4" maxlength="8000" placeholder="${h(t("The steps you already have in mind. Without them, the project's architect writes the plan."))}">${v(f.plan)}</textarea></label>
+        <fieldset class="m0" id="nm-en-ligne"${f.serveur ? "" : " hidden"}><legend>${t("Putting it online")}</legend>
+          <div class="reglage"><label for="nm-url" class="nom-reglage">${t("Address")}</label><div><input type="text" inputmode="url" id="nm-url" value="${v(f.url)}" placeholder="https://app.example.com" autocomplete="off" spellcheck="false">
+            <p class="muet petit m0">${t("Where the project will answer. Leave it empty if it has no address yet.")}</p></div></div>
+          <div class="reglage"><label for="nm-plan-dep" class="nom-reglage">${t("How")}</label><div><textarea id="nm-plan-dep" rows="3" maxlength="4000">${v(f.plan_deploiement)}</textarea>
+            <p class="muet petit m0">${t("Say in your own words what to set up, for example: nginx on a port, an uptime script, a certificate, the domain.")}</p></div></div>
+          <div class="reglage" role="radiogroup" aria-labelledby="nm-moment-t"><span class="nom-reglage" id="nm-moment-t">${t("When to deploy")}</span><div>
+            ${[["livraison", "At delivery"], ["jalon", "After each milestone"]].map(([x, l]) => `<label class="radio"><input type="radio" name="nm-moment" value="${x}"${(f.moment || "livraison") === x ? " checked" : ""}> ${t(l)}</label>`).join("")}</div></div></fieldset>
+        ${edition || existant ? (existant && !edition ? `<p class="muet petit">${t("This project keeps its own settings: change them in Studio, under Manage.")}</p>` : "")
+          : sectionProjet("nm", { ...f, nom: f.projet }, f.modes, "", !!f.pOuvert, `<h3>${t("This project's settings")}</h3>
+          <p class="muet petit">${t("Each setting follows Settings by default. A value chosen here applies to this project only, from its next cycle.")}</p>
+          <div class="nm-reglages">${lignesReglagesProjet()}</div>`)}
+      </details>
+      <p class="petit attention m0" id="nm-erreur" role="alert" hidden></p>
+      ${distant ? `<p class="muet petit">${t("Missions are launched from the computer.")}</p>` : `<div class="ligne mt-1"><button type="submit" class="btn btn-primaire" id="nm-lancer">${t(edition ? "Save" : "Launch")}</button><a class="btn" href="#missions" data-nm-annuler>${t("Cancel")}</a></div>`}
+    </form></div>`;
+};
+// every change is kept in nm.f at once: a refresh of the page (the GitHub connection, a model list) loses nothing
+function lireFormMission() {
+  const f = nm.f, z = $("#nm-form"); if (!f || !z) return f;
+  const val = (id) => ($("#" + id) || {}).value;
+  Object.assign(f, { texte: val("nm-texte") ?? f.texte, projet: (val("nm-nom") ?? f.projet), serveur: val("nm-serveur") ?? f.serveur, api: val("nm-api") ?? f.api,
+    plan: val("nm-plan") ?? f.plan, url: (val("nm-url") ?? f.url).trim(), plan_deploiement: val("nm-plan-dep") ?? f.plan_deploiement,
+    autonome: !!(z.querySelector("[name=nm-autonome]:checked") || {}).value, moment: (z.querySelector("[name=nm-moment]:checked") || {}).value || "livraison", plusOuvert: !!($("#nm-plus") || {}).open });
+  if ($("#nm-dossier")) f.dossier = val("nm-dossier").trim();
+  if ($("details#nm-projet")) f.pOuvert = $("details#nm-projet").open;
+  return f;
+}
+document.addEventListener("input", (ev) => { if (ev.target.closest("#nm-form")) lireFormMission(); });
+document.addEventListener("toggle", (ev) => { if (ev.target.closest && ev.target.closest("#nm-form")) lireFormMission(); }, true);
+document.addEventListener("change", (ev) => {
+  const i = ev.target; if (!i.closest("#nm-form")) return;
+  const f = lireFormMission();
+  if (i.id === "nm-serveur") { $("#nm-mode-srv").hidden = $("#nm-en-ligne").hidden = !f.serveur; }
+  else if (i.id === "nm-nom") rendrePage(); // a new project or one of yours: its settings shown or not
+  else if (i.name === "nm-gh") Object.assign(f, { github: i.value === "existant" ? "lier" : i.value, depot: "" });
+  else if (i.id === "nm-gh-auto") f.sans_pousse = !i.checked;
+  else if (i.id === "nm-gh-atelier") f.atelier = i.checked;
+  else if (i.id === "nm-gh-nom" || i.id === "nm-gh-depot") Object.assign(f, i.id === "nm-gh-depot" ? { github: "lier", depot: depotSaisi(i.value) || i.value.trim() } : { github: "creer", depot: i.value.trim() ? nomDepot(i.value) : "" });
+  else if (i.closest(".nm-reglages")) f.reglages = { ...f.reglages, [i.id.slice(3)]: i.value };
+});
+document.addEventListener("focusout", (ev) => { // the text written first: the new project's name proposed from it
+  if (ev.target.id !== "nm-texte" || !nm.f || nm.f.id) return;
+  const p = $("#nm-nom"); if (p && !p.value.trim()) { p.value = nomMissionPropose(ev.target.value); lireFormMission(); }
+});
+document.addEventListener("click", (ev) => { if (ev.target.closest("[data-nm-annuler]")) nm.f = null; });
+document.addEventListener("submit", async (ev) => {
+  if (ev.target.id !== "nm-form") return;
+  ev.preventDefault();
+  const f = lireFormMission(), err = $("#nm-erreur"), b = $("#nm-lancer");
+  if (!f.projet.trim() && !f.id) { f.projet = nomMissionPropose(f.texte); $("#nm-nom").value = f.projet; }
+  const corps = { ...f, moment: f.serveur ? f.moment : "" };
+  delete corps.plusOuvert; delete corps.pOuvert; delete corps.id;
+  if (!corps.reglages || !Object.values(corps.reglages).some(Boolean)) delete corps.reglages;
+  b.disabled = true; err.hidden = true;
+  const r = await api(f.id ? "missions/" + encodeURIComponent(f.id) : "missions", "POST", corps).catch((e) => { err.textContent = e.message; err.hidden = false; return null; });
+  b.disabled = false;
+  if (!r) return;
+  toast(t(r.message_key || "Mission saved.", (r.args || []).map((x) => t(x))), "ok");
+  nm.f = null;
+  location.hash = "#missions";
 });
 
 pages.serveurs = async () => {
@@ -8012,7 +8112,7 @@ $("#page").addEventListener("click", async (ev) => {
   if (b.dataset.pv) return repondreTache(b);
   if (b.dataset.choisirPieces) return $("#" + b.dataset.choisirPieces + "-fichiers").click();
   if (b.dataset.retirerPiece) { const [id, i] = b.dataset.retirerPiece.split("|"); (etat.pieces[id] || []).splice(Number(i), 1); $("#" + id + "-liste").innerHTML = listePieces(id); return; }
-  const pageMode = page === "projet" || (page === "nouveau" && etat.npMode) || $("#mis-mode") || $("#cp-mode");
+  const pageMode = page === "projet" || (page === "nouveau" && etat.npMode) || $("#nm-mode");
   if (b.dataset.max && pageMode) return changerMode({ parallele_max: Number(b.dataset.max) }, b);
   if (b.dataset.cadrage !== undefined && pageMode) return changerMode({ cadrage_max: Number(b.dataset.cadrage) }, b);
   if (b.dataset.dureeMax !== undefined && pageMode) return changerMode({ duree_max: Number(b.dataset.dureeMax) }, b);
@@ -8318,6 +8418,7 @@ async function rafraichir() {
       await lireJournal();
       // the Team page follows live, except while text is selected in it (a brief, a report)
       if (!String(window.getSelection() || "") && ((etat.page === "equipe" && !etat.agForm) || (etat.page === "suivi" && !document.activeElement.matches("input, textarea, select")))) rendrePage();
+      if (etat.page === "missions" && !String(window.getSelection() || "")) suivreMissions();
       // /api/hub every other tick (every tick on Projects): the bell's alerts; Projects and Home are rebuilt only
       // when a module's tile or an element changed (the card or the bar under the keyboard keeps its focus)
       if (etat.page === "global" || ++etat.hubTic % 2 === 0 || !etat.hub) {

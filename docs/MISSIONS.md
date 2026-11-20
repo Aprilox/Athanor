@@ -1,37 +1,25 @@
-# Old missions
+# Missions
 
 *Français : [MISSIONS.fr.md](MISSIONS.fr.md)*
 
-Before version 3.0, a mission was one sentence that Studio and Servers carried out together. Athanor no longer creates nor follows missions: a project now has its own deployment, set in its *Deployment* tab ([README](../README.md#a-projects-deployment), [DEPLOY.md](DEPLOY.md)). This page says what becomes of the missions an earlier version left.
+A mission links what Athanor manages: a **Studio project**, at most one **server** and at most one **API key** of the vault, with one permission choice for the server. The [README](../README.md#missions) describes the form and the frame; this page says what a mission is made of and what becomes of the missions of earlier versions.
 
-## What replaced them
+## What a mission is
 
-- **One sentence on the home page** still does the work: the home assistant proposes a **project** card (Studio alone, or with its deployment) or a **server** card, and nothing starts before *Launch*.
-- **The project carries its deployment**: the server, the address, the APIs of the vault, your plan and when to deploy are in *Studio › Deployment*; the permission mode is in *Manage › This project's settings*.
-- **No orchestrator** stands between you and the project any more: the project's pilot builds, Athanor prepares the server and deploys, under the same guardrails as before.
+- **One form.** *New mission* (on the home page or in *Missions*), or the home assistant, which opens the same form already filled from your sentence. What to do, the project (a new name creates it in Studio, the name of one of yours adds the mission to it as its next request), the server and its choice (*Needs me* = the project's *Manual* mode, *Autonomous with the AI* = its *Auto* mode), the API key. A plan, how and when to put it online, the folder, working modes, GitHub and the project's own settings are folded under *More options*. *Launch* is one click.
+- **Nothing new underneath.** Launching writes what you would set by hand: the project in Studio, its *Deployment* tab (server, key, address, plan, moment), its permission mode, then starts its pilot. Change them on the project's tabs and the mission's frame shows the change; change them in the mission (*Edit*) and the project's tabs show it.
+- **Its state is read, never copied.** The frame reads the project (in progress, paused, stopped, finished, its milestones) and its deployment (being prepared, going online, online, failed and why) each time it is drawn.
+- **Stop, resume, edit, delete in any state.** *Pause* and *Stop* are the project's own stops (a stop also cancels its server tasks); *Resume* starts its pilot again; *Edit* changes the server, the key and the choice, and a changed text becomes a new request of the project. *Delete* stops a mission that works first, then removes the mission; its project and folder go only when you tick it, and never a key, a server or a vault entry.
+- **The server from the frame.** *Terminal* opens the server's terminal; *Stop the server's work* cancels the preparation or the first deployment in progress; *Launch the server's work again* makes the first deployment, or deploys the project's last commit again.
 
-## The Old missions page
+## Missions of earlier versions
 
-*Old missions* is in the menu only while one is left. It lists each mission with its state (*No longer followed* for one that was not finished; the state it was left in shows on hover), its sentence, its date and time; a mission opens on its **journal**, read only (*See more* shows the older lines). A mission that was not finished says *No longer followed: its project continues on its own*, and the `@project` of its sentence opens that project: nothing is resumed, paused or retried from this page.
-
-Nothing was lost in the update, and nothing is rewritten when it is read: the mission files stay as they were, and no password is asked again.
-
-## Their projects
-
-A project that a mission created or drove is a Studio project like any other: *Start* it, add requests to it, set its deployment.
-
-- A project that was set up with several sites keeps them: its *Deployment* tab shows and changes one, and *Other sites of this project* lists the others by their address, each with *Make it the deployment*.
-- A site that a mission put online says so until you make it the project's deployment. Until then nothing deploys there by itself.
-- A production site of that time still asks you before each deployment (“Deploy example.com?”, in the bell, on *For you* and on your phone).
-
-## Deleting a mission
-
-*Delete the mission*, on the list (the cross) or on the mission's page, first shows what goes: the mission, its journal and its follow-up files. *Also remove the project “…” from Studio and send its folder to the recycle bin* is unticked by default, and greyed, with the reason, for a folder Athanor may not delete. The GitHub repository stays, and so does what the mission put online on the servers; no key, server or vault entry is removed.
+Missions made by Athanor 3.0.0 and earlier show in *Missions* as read-only frames (*No longer followed*): a mission opens on its **journal**, and *Delete* removes it (its project and folder only when ticked). Nothing was lost in the update and nothing is rewritten when they are read; their projects keep working on their own.
 
 ## MCP clients
 
-For a client connected to Athanor's MCP server ([MCP.md](MCP.md)), `missions` lists the old missions it may see and `proposer_mission` answers that missions are no longer created: use `ajouter_demande` to add a request to a project.
+For a client connected to Athanor's MCP server ([MCP.md](MCP.md)), `missions` lists the missions it may see and `proposer_mission` answers that only the owner launches a mission, in Athanor's window: use `ajouter_demande` to add a request to a project.
 
 ## Where they are kept
 
-One file per mission in Athanor's folder, `hub/missions/<id>.json` (readable by your account only): the sentence, the card, the lanes, the history and the journal. Athanor only reads these files, and removes one when you delete its mission.
+One file per mission in Athanor's folder, `hub/missions/<id>.json` (readable by your account only): its text (a vault value written in it is masked), its project, server and key by id, its choice and its history. Athanor removes it when you delete its mission.

@@ -125,17 +125,18 @@ func TestWebTraduction(t *testing.T) {
 	}
 }
 
-// TestVocabulaireInterface (M306): a project has one deployment, with no environment to name, no mission to create
-// and no provider to add. No key of i18n.js and no translation says those words any more; each exception is listed
-// under its reason and must still be in the dictionary.
+// TestVocabulaireInterface (M306): a project has one deployment, with no environment to name and no provider to
+// add. No key of i18n.js and no translation says those words any more; each exception is listed under its reason
+// and must still be in the dictionary. Missions came back in 3.1 (a project, a server and a key linked): the word is
+// allowed again.
 func TestVocabulaireInterface(t *testing.T) {
-	en := regexp.MustCompile(`(?i)environment|\btesting\b|\bin test\b|pre-?production|\bstaging\b|\bmissions?\b|provider`)
+	en := regexp.MustCompile(`(?i)environment|\btesting\b|\bin test\b|pre-?production|\bstaging\b|provider`)
 	traduit := map[string]*regexp.Regexp{
-		"fr": regexp.MustCompile(`(?i)environnement|pr[ée]-?production|\bmissions?\b|fournisseur|\ben essai\b|\bessai et\b`),
-		"es": regexp.MustCompile(`(?i)entorno|preproducci|\bmisi[oó]n(es)?\b|proveedor`),
-		"de": regexp.MustCompile(`(?i)umgebung|vorproduktion|\bmission(en)?\b|anbieter|\bstaging\b`),
-		"it": regexp.MustCompile(`(?i)\bambient[ei]\b|pre-?produzion|\bmission[ei]\b|fornitor`),
-		"pt": regexp.MustCompile(`(?i)\bambientes?\b|pr[ée]-?produ|\bmiss(ão|ões)\b|fornecedor|provedor`),
+		"fr": regexp.MustCompile(`(?i)environnement|pr[ée]-?production|fournisseur|\ben essai\b|\bessai et\b`),
+		"es": regexp.MustCompile(`(?i)entorno|preproducci|proveedor`),
+		"de": regexp.MustCompile(`(?i)umgebung|vorproduktion|anbieter|\bstaging\b`),
+		"it": regexp.MustCompile(`(?i)\bambient[ei]\b|pre-?produzion|fornitor`),
+		"pt": regexp.MustCompile(`(?i)\bambientes?\b|pr[ée]-?produ|fornecedor|provedor`),
 	}
 	// the same words with another meaning: a sandbox in Spanish, a desktop in Portuguese
 	autreSens := regexp.MustCompile(`(?i)entorno aislado|ambientes? de trabalho`)
@@ -147,7 +148,7 @@ func TestVocabulaireInterface(t *testing.T) {
 			"The mission, its journal and its follow-up files are deleted.", "Another mission uses this project",
 			"This project existed before the mission: remove it from Studio if you want to", "No local project is linked to this mission",
 			"Prepare a mission",
-			"Missions are no longer created: ask again, and the assistant proposes a project or a server task."},
+			"This card of an older conversation is no longer launched: ask again, and the assistant fills the New mission form."},
 		// the journal of an old mission, written by code that is gone and still read on its page (keys and PREFIXES of i18n.js)
 		{"Mission paused: {0}", "Mission resumed: {0}", "Mission stopped: {0}. Nothing was undone", "Mission done: {0}",
 			"The environment {0} stays: {1}", "The environment {0} kept its policy: {1}", "The environment {0} now deploys: {1}",
