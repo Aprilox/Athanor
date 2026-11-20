@@ -5993,7 +5993,7 @@ function carteServeur(x, fiche, envs, santeSites) {
   const resume = !fiche ? t("Its sheet is not made yet.")
     : tourne.length ? t("Running: {0}", [tourne.slice(0, 6).join(", ") + (tourne.length > 6 ? " +" + (tourne.length - 6) : "")]) : t("Nothing seen running.");
   return `<div class="bloc carte-serveur" data-srv-id="${h(x.id)}">
-    <div class="cp-tete"><a class="cp-nom" href="#serveur/${encodeURIComponent(x.id)}"><b>${h(x.nom)}</b></a>${x.autorisation === "ignorer" ? badgeSansGarde(x) : ""}${pastilleServeur(x)}</div>
+    <div class="cp-tete"><a class="cp-nom" href="#serveur/${encodeURIComponent(x.id)}"><b>${h(x.nom)}</b></a>${pastilleServeur(x)}</div>
     <div class="muet petit"><code>${h(x.utilisateur)}@${h(x.hote)}${x.port === 22 ? "" : ":" + x.port}</code>${f.systeme && f.systeme.nom ? " · " + h(f.systeme.nom) : ""}</div>
     ${(x.roles || []).includes("prod") ? `<div class="ligne m0"><span class="badge badge-infra">${t("Production")}</span></div>` : ""}
     <div class="petit srv-tourne" title="${h(tourne.join(", "))}">${h(resume)}</div>
@@ -6548,7 +6548,7 @@ pages.serveur = async () => {
     <p class="m0"><a href="#serveurs" class="petit">${ic("gauche")} ${t("Servers")}</a></p>
     ${distant ? "" : messagesCoffreServeurs(c)}
     <div class="bloc srv-tete">
-      <div class="cp-tete"><h2 class="m0 cp-nom">${h(x.nom)}</h2>${(x.roles || []).includes("prod") ? `<span class="badge badge-infra">${t("Production")}</span>` : ""}${x.autorisation === "ignorer" ? badgeSansGarde(x) : ""}${pastilleServeur(x)}</div>
+      <div class="cp-tete"><h2 class="m0 cp-nom">${h(x.nom)}</h2>${(x.roles || []).includes("prod") ? `<span class="badge badge-infra">${t("Production")}</span>` : ""}${pastilleServeur(x)}</div>
       <div class="muet petit"><code>${h(x.utilisateur)}@${h(x.hote)}${x.port === 22 ? "" : ":" + x.port}</code>${x.empreinte_hote ? ` · ${t("Fingerprint")} <code class="srv-empreinte-courte">${h(x.empreinte_hote)}</code>` : ""}</div>
       <div class="ligne m0 srv-utilise"><span class="muet petit">${t("Used by")}</span>${(d.environnements || []).length ? [...new Set(d.environnements.map(projetDeSite))].map((p) => `<a class="badge" href="#acces" data-projet="${h(p)}" data-cible="acces">${h(p)}</a>`).join("") : `<span class="muet petit">${t("No project uses this server yet.")}</span>`}</div>
       <div class="muet petit srv-auth">${t("Athanor connects with: {0}", [t(AUTH_SRV[x.auth] || "an SSH key")])}${x.auth === "mot_de_passe" ? "" : " · " + (x.mot_de_passe_coupe ? t("Password logins are cut: Athanor and you connect with keys only.") : t("Password logins are still open on this server."))}</div>
@@ -6818,7 +6818,7 @@ function chargerXterm() {
 // The connection's tabs (one server): several terminals (each its own SSH session, kept reading while another is
 // shown), several SFTP views, and the assistant's own connection when it works apart (what it types, what comes back).
 // term holds the terminal shown; the others wait in their tab (etat); sf.local/sf.serveur the SFTP shown.
-const ong = { serveur: "", liste: [], ssh: "", sftp: "", n: 0, ia: [], minuteur: null };
+const ong = { serveur: "", liste: [], ssh: "", sftp: "", n: 0, ia: [], dep: [], vue: "ia", minuteur: null };
 const TACHE_FINIE = ["finie", "echec", "arretee"];
 const CHAMPS_TERM = ["x", "fit", "el", "session", "lecteur", "msg", "attente", "enVol", "reco", "obs"];
 const cleSession = () => "athanor.terminal." + term.id + (ong.ssh && ong.ssh !== "t1" ? "." + ong.ssh : "");
@@ -6834,10 +6834,12 @@ function ongletsConnexion() {
     const actif = o.type === "ssh" ? vue === "terminal" && ong.ssh === o.cle : vue === "sftp" && ong.sftp === o.cle, seul = ong.liste.filter((x) => x.type === o.type).length === 1;
     return `<span class="term-tab${actif ? " actif" : ""}"><button type="button" role="tab" aria-selected="${actif}" data-term-tab="${o.cle}" title="${h(t("Double-click to rename"))}">${h(nomOnglet(o))}</button>${seul ? "" : `<button type="button" class="term-tab-x" data-term-tab-fermer="${o.cle}" aria-label="${h(t("Close {0}", [nomOnglet(o)]))}">×</button>`}</span>`;
   };
-  const enCours = ong.ia.some((x) => !TACHE_FINIE.includes(x.etat));
+  const projets = [...new Set(ong.dep.map((x) => x.env.split("/")[0]))];
+  const tabIA = (cle, nom, l) => `<span class="term-tab term-tab-ia${vue === "ia-vue" && ong.vue === cle ? " actif" : ""}"><button type="button" role="tab" aria-selected="${vue === "ia-vue" && ong.vue === cle}" data-term-tab="${h(cle)}">${l.some((x) => !TACHE_FINIE.includes(x.etat)) ? ic("lecture") + " " : ""}${h(nom)}</button></span>`;
   return `<div class="onglets term-onglets term-tabs" role="tablist" aria-label="${h(t("Connection views"))}">
     ${ong.liste.map(bouton).join("")}
-    ${ong.ia.length ? `<span class="term-tab term-tab-ia${vue === "ia-vue" ? " actif" : ""}"><button type="button" role="tab" aria-selected="${vue === "ia-vue"}" data-term-tab="ia">${enCours ? ic("lecture") + " " : ""}${t("AI · its own connection")}</button></span>` : ""}
+    ${ong.ia.length ? tabIA("ia", t("AI · assistant (separate connection)"), ong.ia) : ""}
+    ${projets.map((p) => tabIA("dep:" + p, t("Deployment · {0}", [p]), ong.dep.filter((x) => x.env.split("/")[0] === p))).join("")}
     <button type="button" class="btn btn-petit" data-term-tab-nouveau="ssh">+ ${t("Terminal")}</button><button type="button" class="btn btn-petit" data-term-tab-nouveau="sftp">+ ${t("SFTP")}</button>
     <span class="espace"></span><button type="button" class="btn btn-petit" data-term-detacher title="${h(t("Open this view in a window of its own"))}">${t("Detach")}</button>
     <button type="button" role="tab" class="term-onglet-ia" aria-selected="${vue === "ia"}" data-term-onglet="ia">${t("Assistant")}</button></div>`;
@@ -6887,15 +6889,18 @@ async function suivreIA() {
   const id = term.id, r = await api(`serveurs/${encodeURIComponent(id)}/taches`).catch(() => null);
   if (etat.page !== "terminal" || id !== term.id) return;
   if (r) {
-    const l = (r.taches || []).filter((x) => !x.direct && (x.actions || []).length).slice(-3), avant = JSON.stringify(ong.ia.map((x) => [x.id, x.etat, (x.actions || []).length]));
-    ong.ia = l;
-    if (JSON.stringify(l.map((x) => [x.id, x.etat, (x.actions || []).length])) !== avant) { majOnglets(); rendreVueIA(); }
+    const vus = (r.taches || []).filter((x) => (x.actions || []).length), sig = (l) => JSON.stringify(l.map((x) => [x.id, x.etat, (x.actions || []).length]));
+    const avant = sig([...ong.ia, ...ong.dep]);
+    ong.ia = vus.filter((x) => !x.env && !x.direct).slice(-3); // the owner's assistant in its own connection
+    ong.dep = vus.filter((x) => x.env).slice(-3); // a project's deployment on this server: its own session and settings
+    if (sig([...ong.ia, ...ong.dep]) !== avant) { majOnglets(); rendreVueIA(); }
   }
   ong.minuteur = setTimeout(suivreIA, 3000);
 }
 function rendreVueIA() {
   const z = $("#term-ia-vue"); if (!z) return;
-  z.innerHTML = ong.ia.map((x) => `<div class="ia-vue-tache"><div class="ia-vue-tete">${h(x.env ? t("AI · {0} deploys", [x.env.split("/")[0]]) : t("AI · assistant (separate connection)"))} <span class="muet">· ${t(TACHE_FINIE.includes(x.etat) ? "finished" : "working")}</span></div>
+  const l = ong.vue === "ia" ? ong.ia : ong.dep.filter((x) => "dep:" + x.env.split("/")[0] === ong.vue);
+  z.innerHTML = l.map((x) => `<div class="ia-vue-tache"><div class="ia-vue-tete">${h(x.env ? t("Deployment · {0}", [x.env.split("/")[0]]) : t("AI · assistant (separate connection)"))} <span class="muet">· ${t(TACHE_FINIE.includes(x.etat) ? "finished" : "working")}</span></div>
     ${(x.actions || []).map((a) => `<div class="ia-vue-cmd${a.etat === "erreur" || a.etat === "refusee" ? " erreur" : ""}">$ ${h(a.quoi || a.outil)}</div>${a.sortie ? `<pre class="ia-vue-sortie">${h(a.sortie)}</pre>` : ""}`).join("")}</div>`).join("")
     || `<p class="muet">${t("Nothing yet.")}</p>`;
   if (sf.onglet === "ia-vue") z.scrollTop = z.scrollHeight;
@@ -6912,7 +6917,7 @@ $("#page").addEventListener("click", (ev) => {
     ong.liste.splice(apres + 1, 0, { cle, type, num });
     return type === "ssh" ? montrerSsh(cle) : montrerSftp(cle);
   }
-  if (d.termTab === "ia") { ongletTerminal("ia-vue"); majOnglets(); return rendreVueIA(); }
+  if (d.termTab === "ia" || d.termTab.startsWith("dep:")) { ong.vue = d.termTab; ongletTerminal("ia-vue"); majOnglets(); return rendreVueIA(); }
   const o = ong.liste.find((x) => x.cle === d.termTab); if (!o) return;
   // a double click renames (counted here: the first click draws the tabs again, the browser's dblclick is lost)
   const maint = Date.now(), double = ong.clic && ong.clic.cle === o.cle && maint - ong.clic.t < 450;
@@ -6955,7 +6960,7 @@ pages.terminal = async () => {
     ${avis ? `<div class="bloc term-message"><p class="m0"><b>${h(avis[0])}</b></p><p class="muet m0">${h(avis[1])}</p><div class="ligne m0"><a class="btn" href="#serveur/${encodeURIComponent(x.id)}">${t("Back to the server")}</a></div></div>`
       : `<div class="bloc term-message" id="term-message" role="alert" hidden></div><div id="term-reglages-zone">${term.essai ? panneauReglagesTerminal() : ""}</div>
       ${ongletsConnexion()}
-      <div class="term-zones${ia.visible ? " avec-ia" : ""}" id="term-zones"${largeurIAGardee() ? ` style="--ia-largeur:${largeurIAGardee()}px"` : ""}><div class="term-hote" id="term-hote" role="tabpanel" aria-labelledby="term-onglet-terminal"></div><section class="sftp" id="sftp" role="tabpanel" aria-labelledby="term-onglet-sftp"></section><section class="term-ia-vue" id="term-ia-vue" role="tabpanel" aria-label="${h(t("AI · its own connection"))}"></section><div class="term-separateur" role="separator" tabindex="0" aria-orientation="vertical" aria-controls="ia" aria-label="${h(t("Width of the assistant"))}" title="${h(t("Drag or use the arrow keys to resize; double-click to reset"))}" data-term-separateur></div>${panneauIA(distant)}</div>`}
+      <div class="term-zones${ia.visible ? " avec-ia" : ""}" id="term-zones"${largeurIAGardee() ? ` style="--ia-largeur:${largeurIAGardee()}px"` : ""}><div class="term-hote" id="term-hote" role="tabpanel" aria-labelledby="term-onglet-terminal"></div><section class="sftp" id="sftp" role="tabpanel" aria-labelledby="term-onglet-sftp"></section><section class="term-ia-vue" id="term-ia-vue" role="tabpanel" aria-label="${h(t("What the AI types on this server"))}"></section><div class="term-separateur" role="separator" tabindex="0" aria-orientation="vertical" aria-controls="ia" aria-label="${h(t("Width of the assistant"))}" title="${h(t("Drag or use the arrow keys to resize; double-click to reset"))}" data-term-separateur></div>${panneauIA(distant)}</div>`}
   </div>`;
 };
 // note 19h03 §8: the line between the terminal and the assistant sets the assistant's width, kept on this device;
@@ -7045,8 +7050,10 @@ async function monterTerminal() {
     term.x.reset(); term.session = sessionStorage.getItem("athanor.terminal." + term.id) || ""; term.serveur = term.id;
   }
   if (!term.lecteur) connecterTerminal();
-  else { etatTerminal(t("Connected"), "travaille"); term.x.focus(); }
+  else { etatTerminal(t("Connected"), "travaille"); focusTerminal(); }
 }
+// the terminal takes the keyboard, unless the owner is typing in a field (a tab being renamed, the assistant)
+const focusTerminal = () => { const a = document.activeElement; if (term.x && !(a && a.matches && a.matches("input, textarea, select"))) term.x.focus(); };
 async function connecterTerminal() {
   messageTerminal(null); etatTerminal(t("Connecting…"), "attend");
   const id = term.id, neuve = !term.session;
@@ -7075,7 +7082,7 @@ async function lireTerminal(id, session, neuve) {
       return erreurTerminal(d.erreur_key || "", d.erreur_key ? t(d.erreur_key) : t("Error {0}", [r.status]));
     }
     term.x.reset(); // the Go side replays the screen so far
-    etatTerminal(t("Connected"), "travaille"); term.x.options.disableStdin = !!ia.verrou; term.x.focus();
+    etatTerminal(t("Connected"), "travaille"); term.x.options.disableStdin = !!ia.verrou; focusTerminal();
     agirTerminal({ cols: term.x.cols, lignes: term.x.rows }); // the size it had when the page was away
     chargerPanneau("serveur", sf.serveur.serveur === id && sf.serveur.chemin || "", "actualiser");
     const lu = r.body.getReader();
@@ -7951,7 +7958,7 @@ async function chargerIA() {
   if (etat.page !== "terminal" || term.id !== id) return;
   if (!r !== !!ia.hs) { ia.hs = !r; ia.lu = ""; if (!r) rendreIA(); }
   if (r && r.autorisation && r.autorisation !== ia.autorisation) { ia.autorisation = r.autorisation; majAutorisationIA(); }
-  if (r) { const sig = JSON.stringify(r.taches) + JSON.stringify(r.plans); if (sig !== ia.lu || !$("#ia-fil").childElementCount) { ia.lu = sig; ia.taches = r.taches || []; ia.plans = r.plans || {}; rendreIA(); } }
+  if (r) { const sig = JSON.stringify(r.taches) + JSON.stringify(r.plans); if (sig !== ia.lu || !$("#ia-fil").childElementCount) { ia.lu = sig; ia.taches = (r.taches || []).filter((x) => !x.env); ia.plans = r.plans || {}; rendreIA(); } }
   if (ia.taches.some((x) => !tacheFinie(x))) ia.minuteur = setTimeout(chargerIA, 1500);
 }
 function actionIA(a) {
