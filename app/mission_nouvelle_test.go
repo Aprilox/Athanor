@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -175,6 +176,25 @@ func TestMissionsSuivies(t *testing.T) {
 		if j := s.jalonsDeploiement("vitrine"); j[len(j)-1].Titre != titre {
 			t.Errorf("moment %s: the servers' plan says %q", moment, j[len(j)-1].Titre)
 		}
+	}
+	// the same failure in a row is one line with its tries; a later success takes the failures off the plan
+	for i, debut := range []string{"2026-11-20T18:43:00Z", "2026-11-20T18:45:00Z", "2026-11-20T18:48:00Z"} {
+		_ = noterHistorique(Deploiement{ID: "dd" + strconv.Itoa(i), Projet: "vitrine", Env: s.envJalon("vitrine"), Commit: "a977e023caf2", Etat: "echec", Erreur: "the site does not answer", Debut: debut})
+	}
+	echecs := func() (l []string) {
+		for _, j := range s.jalonsDeploiement("vitrine") {
+			if j.Etat == "echec" && !j.Critere && j.Titre != "First deployment" {
+				l = append(l, j.Titre+" "+strings.Join(j.Args, ","))
+			}
+		}
+		return l
+	}
+	if l := echecs(); len(l) != 2 || l[1] != "Version {0} failed ({1} tries) a977e02,3" {
+		t.Errorf("failures in a row: %v", l)
+	}
+	_ = noterHistorique(Deploiement{ID: "dd9", Projet: "vitrine", Env: s.envJalon("vitrine"), Commit: "fe1af61aa", Etat: "ok", Debut: "2026-11-20T20:50:00Z"})
+	if l := echecs(); len(l) != 0 {
+		t.Errorf("failures fixed since still on the plan: %v", l)
 	}
 	if j := s.jalonsDeploiement("site"); j != nil {
 		t.Errorf("a project without a server has deployment milestones: %+v", j)

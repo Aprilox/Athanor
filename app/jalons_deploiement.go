@@ -3,6 +3,7 @@ package main
 import (
 	"cmp"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -15,6 +16,7 @@ type JalonDeploiement struct {
 	Detail  string         `json:"detail,omitempty"`  // why it failed, in the engine's or the task's words
 	Message *MessageMoteur `json:"message,omitempty"` // that failure for the page to translate (the Deployment tab's)
 	Date    string         `json:"date,omitempty"`
+	Fois    int            `json:"-"`                 // the same failure in a row, counted
 	Critere bool           `json:"critere,omitempty"` // an acceptance criterion of the servers' plan, as its last check found it
 }
 
@@ -64,8 +66,21 @@ func (s *Serveur) jalonsDeploiement(projet string) []JalonDeploiement {
 		premier.Etat = "echec"
 	}
 	l = append(l, premier)
-	for _, d := range h[max(0, len(h)-5):] {
-		j := JalonDeploiement{Titre: "Version {0} online", Args: []string{commitCourt(d.Commit)}, Date: cmp.Or(d.Fin, d.Debut)}
+	// the versions: a failure fixed since (a later success, or the site found healthy after it) leaves the plan, the
+	// same failure in a row is one line with its tries; the Deployment tab keeps the whole history
+	sante, derniereOK := lireSante().Envs[projet+"/"+env], ""
+	for _, d := range h {
+		if d.Etat == "ok" {
+			derniereOK = cmp.Or(d.Fin, d.Debut)
+		}
+	}
+	var versions []JalonDeploiement
+	for _, d := range h {
+		quand := cmp.Or(d.Fin, d.Debut)
+		if d.Etat == "echec" && (derniereOK > quand || sante.Etat == "ok" && sante.T > quand) {
+			continue
+		}
+		j := JalonDeploiement{Titre: "Version {0} online", Args: []string{commitCourt(d.Commit)}, Date: quand}
 		switch d.Etat {
 		case "ok":
 			j.Etat = "fait"
@@ -79,8 +94,20 @@ func (s *Serveur) jalonsDeploiement(projet string) []JalonDeploiement {
 		if d.Retour {
 			j.Titre = "Back to version {0}"
 		}
-		l = append(l, j)
+		if n := len(versions); n > 0 && j.Etat == "echec" && versions[n-1].Etat == "echec" && versions[n-1].Args[0] == j.Args[0] && versions[n-1].Detail == j.Detail {
+			versions[n-1].Fois++
+			versions[n-1].Date = quand
+			continue
+		}
+		j.Fois = 1
+		versions = append(versions, j)
 	}
+	for i := range versions {
+		if versions[i].Fois > 1 {
+			versions[i].Titre, versions[i].Args = "Version {0} failed ({1} tries)", append(versions[i].Args, strconv.Itoa(versions[i].Fois))
+		}
+	}
+	l = append(l, versions[max(0, len(versions)-5):]...)
 	if v := derniereVerification(projet, e.tousServeurs()); v != nil { // its acceptance criteria, as a milestone's
 		for _, c := range v.Criteres {
 			l = append(l, JalonDeploiement{Titre: c.Texte, Etat: map[bool]string{true: "fait", false: "echec"}[c.OK], Critere: true, Date: v.T})

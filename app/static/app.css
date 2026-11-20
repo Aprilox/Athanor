@@ -862,6 +862,9 @@ input.large { flex: 1; min-width: 200px; width: auto; }
 .pv-etat { font-size: 12px; padding: 1px 8px; border-radius: 10px; border: 1px solid currentColor; white-space: nowrap; }
 .pv-vous { color: var(--attention); }
 .puce-natif { color: var(--attention); border-color: var(--attention); text-decoration: none; align-self: center; }
+.puce-natif-groupe { display: inline-flex; align-items: center; gap: 4px; align-self: center; }
+.puce-natif-ok { font: inherit; font-size: 12px; background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 10px; padding: 1px 8px; cursor: pointer; }
+.puce-natif-ok:hover { color: var(--ink); }
 #choix-case { display: flex; gap: 8px; align-items: center; margin: 4px 0 12px; }
 .pv-claude { color: var(--accent); }
 .pv-ok { color: var(--ok); }
@@ -1636,9 +1639,6 @@ html.scene-pause .verrou * { animation-play-state: paused !important; }
 .ia-autorisation #ia-autorisation-aide { flex: 1 1 100%; color: var(--muted); }
 /* the mode's sentence only in the Ignore warning: elsewhere the panel needs the height (the list's tooltip, screen readers and How does it work? keep it) */
 .ia-autorisation:not(.danger) #ia-autorisation-aide { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-.ia-autorisation.danger { padding: 6px 8px; border: 1px solid var(--erreur); border-radius: 6px; background: color-mix(in srgb, var(--erreur) 10%, transparent); }
-.ia-autorisation.danger #ia-autorisation-aide { color: var(--ink); font-weight: 600; }
-.ia-autorisation.danger .ic { color: var(--erreur); }
 /* M272: the same selector on a mission's Servers lane and in Settings › Permissions, its sentence always shown */
 .mis-permissions, .perm-usage { margin-top: 8px; }
 .mis-permissions #mis-permissions-aide, .perm-usage .perm-quoi, .perm-usage [id$="-aide"] { flex: 1 1 100%; color: var(--muted); }

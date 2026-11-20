@@ -802,6 +802,8 @@ const projetsVisibles = (v) => (v.projets || []).filter((x) => !x.archive);
 const alertesHub = () => (etat.hub && etat.hub.alertes) || [];
 // M319: an information (a project's old site) counts on the bell and the menu until it has been seen (the bell
 // opened, or its project's Deployment tab), remembered on this computer; it stays listed in the bell
+// the native-mode reminder, once understood, stays hidden on this device (Settings › Options still shows the mode)
+const natifCompris = () => { try { return localStorage.getItem("athanor.natifCompris") === "1"; } catch (e) { return false; } };
 const infosVues = () => { try { return JSON.parse(localStorage.getItem("athanor.infosVues") || "[]"); } catch (e) { return []; } };
 const alertesComptees = () => { const vues = infosVues(); return alertesHub().filter((a) => !a.info || !vues.includes(a.empreinte)); };
 function marquerInfosVues(projet) {
@@ -989,7 +991,7 @@ function rendreBandeau(v) {
   else if (maj.en_cours === "redemarrage") boutons.unshift(`<button class="btn btn-maj" disabled>${t("Athanor restarts…")}</button>`);
   else if (maj.disponible) boutons.unshift(`<button class="btn btn-maj" data-maj="voir" title="${h(t("Athanor {0} is available (you have {1})", [maj.derniere, v.version]))}">${ic("maj")} ${t("Update to {0}", [h(maj.derniere)])}</button>`);
   if (!cadre.actif) boutons.push(boutonCloche(v, "btn"), boutonGuide("btn"));
-  if (v.natif) boutons.unshift(`<a class="etiquette puce-natif" href="#options" role="status" title="${h(t("Athanor runs directly on Windows: nothing separates Claude from the files of this PC. To put a barrier between them, switch to WSL in Settings › Options."))}">${t("Native mode: no barrier")}</a>`);
+  if (v.natif && !natifCompris()) boutons.unshift(`<span class="puce-natif-groupe"><a class="etiquette puce-natif" href="#options" role="status" title="${h(t("Athanor runs directly on Windows: nothing separates Claude from the files of this PC. To put a barrier between them, switch to WSL in Settings › Options."))}">${t("Native mode: no barrier")}</a><button type="button" class="puce-natif-ok" data-natif-compris title="${h(t("Got it: hide this reminder. Settings › Options still shows the mode."))}">${t("Got it")}</button></span>`);
   rendreBarre(v);
   const nbActifs = (v.projets || []).filter((x) => x.actif).length;
   const html = `<div class="etat-phrase"><h1 title="${h(p.titre)}"><span class="point ${p.classe}"></span><span>${h(p.titre)}</span></h1><div class="sous" title="${h(p.sous)}">${h(p.sous)}</div></div><div class="actions">${boutons.join("")}</div>`;
@@ -1076,6 +1078,7 @@ async function annulerArret(b) {
 
 $("#bandeau").addEventListener("click", async (ev) => {
   const b = ev.target.closest("button"); if (!b) return;
+  if (b.hasAttribute("data-natif-compris")) { try { localStorage.setItem("athanor.natifCompris", "1"); } catch (e) { /* storage off: it comes back */ } b.closest(".puce-natif-groupe").remove(); return; }
   if (b.dataset.act === "demarrer") return demarrerPilote(b);
   if (b.dataset.act === "arreter") return arreterPilote(b);
   if (b.dataset.act === "arreter-apres-cycle") return arreterApresCycle(b);
@@ -2242,7 +2245,7 @@ pages.accueil = async () => {
     <div class="grille-hub">${modules.filter((m) => ((m.resume || {}).stats || []).length).map(tuileModule).join("")}</div>
   </div>`;
 };
-const badgePermission = (mode) => `<span class="badge mis-perm${mode === "ignorer" ? " badge-danger" : ""}" title="${h(t("Permissions"))}">${mode === "ignorer" ? ic("alerte") + " " : ""}${h(titrePermission(mode))}</span>`;
+const badgePermission = (mode) => `<span class="badge mis-perm" title="${h(t("Permissions"))}">${h(titrePermission(mode))}</span>`;
 document.addEventListener("submit", (ev) => { if (ev.target.id === "accueil-form") { ev.preventDefault(); envoyerHubChat(); } });
 
 // M195: the home conversation (hub_chat.go), the project chat with the hub's scope. Its powers are the
@@ -2795,7 +2798,7 @@ const GUIDE = [
       ["Its look", "*Settings*, in the terminal's bar: the theme (Athanor light or dark, Solarized, Nord, Dracula, Gruvbox, One Dark), the text size, the line spacing and the cursor's shape. The terminal shows each choice at once; *Save* keeps it, *Cancel* or Esc puts the previous one back."],
       ["The assistant beside it", "*Assistant* opens a chat beside the terminal: say what should be done, then *Send*. Choose its mode at the top. *Separate connection*, the default: it works in its own SSH connection and your terminal stays yours; each command, its output and the one running show in the panel, with *Stop* always visible. *Live in my terminal*: its commands are written in your terminal, where you watch them run."],
       ["While it works live", "Your typing is locked under the banner *The assistant is working*: *Stop* ends its task, *Take over* gives you the keyboard back and the assistant goes on in its own connection. When it is done, the keyboard is yours again."],
-      ["Permissions and reconnection", "*Permissions*, under the assistant's input, is kept per server: *Manual* asks before every command, *Auto* only before a dangerous or unknown one, *Accept changes* applies its plan and asks only before a dangerous step, *Ignore permissions* asks nothing (it needs Athanor's password, is chosen in the window after a warning, and shows a red *No safeguard* badge). If the connection drops, the terminal reconnects by itself, up to 10 attempts at most 30 seconds apart, without asking for anything; a refused password or key (twice, 30 seconds apart, for a server that is rebooting), a changed fingerprint or a removed server stops it at once, and so does a link lost again after 3 reconnections in 5 minutes, with *Try again* or *Connect again*."],
+      ["Permissions and reconnection", "*Permissions*, under the assistant's input, is kept per server: *Manual* asks before every command, *Auto* only before a dangerous or unknown one, *Accept changes* applies its plan and asks only before a dangerous step, *Ignore permissions* asks nothing (it needs Athanor's password, is chosen in the window after a warning; it is your own assistant, so no warning stays on the screen once chosen). If the connection drops, the terminal reconnects by itself, up to 10 attempts at most 30 seconds apart, without asking for anything; a refused password or key (twice, 30 seconds apart, for a server that is rebooting), a changed fingerprint or a removed server stops it at once, and so does a link lost again after 3 reconnections in 5 minutes, with *Try again* or *Connect again*."],
       ["The same guardrails", "In both modes the assistant goes through the guardrails of *Give a task to the Servers agent*: reading runs, a change or a destructive command waits for a plan you accept and is refused without it. The vault's values are masked in what it shows; the server's key and passwords never reach the page or Claude."],
       ["From a paired device", "A shell is the strongest right on a server: from a paired phone or computer, the terminal and the files are off. On this computer, *Allow the terminal and the server's files from paired devices* turns them on, after a confirmation. The audit log names each connection and each file changed, never what is typed nor a file's content.", "#serveurs", "Servers"],
     ],
@@ -2948,7 +2951,7 @@ function choixReglageProjet(r) {
   return `<select id="${id}">${["", ...valeurs].map((v) => `<option value="${h(v)}"${r.propre === v ? " selected" : ""}>${h(v ? libelleReglageProjet(r.cle, v) : defaut)}</option>`).join("")}</select>`;
 }
 const lignesReglagesProjet = (l = etat.rp.reglages) => l.map((r) => `<div class="reglage"><label for="rp-${r.cle}" class="nom-reglage">${h(nomReglageProjet(r.cle))}</label>
-  <div>${choixReglageProjet(r)}${r.cle === "permission" ? `<div class="petit mt-1" id="rp-permission-aide">${aidePermission(r.valeur, PERMISSIONS_PROJET())}</div>` : ""}</div></div>`).join("");
+  <div>${choixReglageProjet(r)}${r.cle === "permission" ? `<div class="petit mt-1" id="rp-permission-aide">${aidePermission(r.valeur, PERMISSIONS_PROJET())}</div><p class="muet petit m0 mt-1">${t("It covers this project's pilot and its deployment on the servers. When it deploys is in the Deployment tab; your own assistant in a server's terminal has its own permission, chosen there.")} <a href="#deploiement">${t("Deployment")}</a></p>` : ""}</div></div>`).join("");
 async function rendreReglagesProjet() {
   const [r, mod, mode] = await Promise.all([api("projets/" + encodeURIComponent(etat.projet) + "/reglages"), api("modeles").catch(() => ({})), rendreMode()]);
   etat.rp = { reglages: r.reglages || [], modeles: mod.modeles || [] };
@@ -4379,7 +4382,7 @@ pages.deploiement = async () => {
     ${distant ? `<p class="muet petit">${t("The deployment is changed from the computer.")}</p>` : ""}
     ${champsDeploiement("dep", f, moments, distant)}
     ${e.notes_chef ? `<div class="reglage"><span class="nom-reglage">${t("The project lead's notes")}</span><div><p class="muet petit m0">${t("How the project is built and run, as the lead told the server manager.")}</p><div class="petit dep-notes">${mdChat(e.notes_chef)}</div></div></div>` : ""}
-    ${perm ? `<div class="reglage"><span class="nom-reglage">${t("Permissions")}</span><p class="m0">${badgePermission(perm.valeur)} <a class="petit" href="#projet@rp">${t("This project's settings")}</a></p></div>` : ""}
+    ${perm ? `<div class="reglage"><span class="nom-reglage">${t("Permissions")}</span><p class="m0">${badgePermission(perm.valeur)} <a class="petit" href="#projet@rp">${t("This project's settings")}</a></p><p class="muet petit m0">${t("The project's permission, chosen in Manage: its pilot and this deployment follow it.")}</p></div>` : ""}
     ${distant ? "" : `<div class="ligne mt-3" id="dep-actions">${actionsDeploiement()}</div>`}
   </form></div>
   ${autres.length ? `<div class="bloc" id="dep-autres"><h2>${t("Other sites of this project")}</h2>
@@ -5976,7 +5979,6 @@ function ligneAudit(l, lang) {
 // --- Servers (#serveurs): inventory cards and the add wizard (address → fingerprint to confirm → one of three ways)
 const srv = { aj: null, texte: "", ouvertes: new Set() }; // aj: the wizard ({etape: "adresse" | "empreinte" | "cle" | "coupure", …}), kept across renders
 // M244k2: Ignore permissions shown wherever the server is, not only in its assistant's panel
-const badgeSansGarde = (x, cache) => `<span class="badge badge-danger" data-sans-garde title="${h(t("Ignore permissions: the assistant runs every command on this server without asking you."))}"${cache ? " hidden" : ""}>${ic("alerte")} ${t("No safeguard")}</span>`;
 const etatServeur = (e) => [{ ok: t("Reachable"), injoignable: t("Unreachable"), empreinte_changee: t("Host fingerprint changed") }[e] || t("Waiting for its key"), "pastille " + (e === "ok" ? "travaille" : "attend")];
 const pastilleServeur = (x) => { const [txt, cls] = etatServeur(x.etat); return `<span class="${cls}" data-srv-etat="${h(x.id)}">${txt}</span>`; };
 // M313b4: while a Servers page is shown, the hub asks each server's SSH port (30 s apart at most); only the
@@ -6553,6 +6555,7 @@ pages.serveur = async () => {
       <div class="muet petit"><code>${h(x.utilisateur)}@${h(x.hote)}${x.port === 22 ? "" : ":" + x.port}</code>${x.empreinte_hote ? ` · ${t("Fingerprint")} <code class="srv-empreinte-courte">${h(x.empreinte_hote)}</code>` : ""}</div>
       <div class="ligne m0 srv-utilise"><span class="muet petit">${t("Used by")}</span>${(d.environnements || []).length ? [...new Set(d.environnements.map(projetDeSite))].map((p) => `<a class="badge" href="#acces" data-projet="${h(p)}" data-cible="acces">${h(p)}</a>`).join("") : `<span class="muet petit">${t("No project uses this server yet.")}</span>`}</div>
       <div class="muet petit srv-auth">${t("Athanor connects with: {0}", [t(AUTH_SRV[x.auth] || "an SSH key")])}${x.auth === "mot_de_passe" ? "" : " · " + (x.mot_de_passe_coupe ? t("Password logins are cut: Athanor and you connect with keys only.") : t("Password logins are still open on this server."))}</div>
+      ${!distant && (x.roles || []).includes("prod") ? `<div class="ligne m0 srv-role-prod"><span class="muet petit">${t("Old Production role: every plan on this server waits for your accord. Production is now chosen on each project's deployment.")}</span><button type="button" class="btn btn-petit" data-srv-sans-prod>${t("Remove the Production role")}</button></div>` : ""}
       <div class="muet petit">${f && f.date ? h(t("Sheet read {0}", [dateLisible(f.date)])) : ""}${x.vu ? (f && f.date ? " · " : "") + h(t("Seen {0}", [dateLisible(x.vu)])) : ""}</div>
       ${distant ? `<p class="muet petit m0">${t("Read only from this device: the server is changed on the computer.")}</p>${srv.termDistance && !attente ? `<div class="ligne m0"><a class="btn btn-primaire" href="#terminal/${encodeURIComponent(x.id)}">${t("Connect")}</a></div>` : ""}` : `<div class="ligne m0">
         ${attente ? "" : `<a class="btn btn-primaire" href="#terminal/${encodeURIComponent(x.id)}" data-srv-connecter>${t("Connect")}</a>`}
@@ -6690,7 +6693,7 @@ $("#page").addEventListener("click", async (ev) => {
   if (etat.page !== "serveur") return;
   const tout = ev.target.closest("[data-srv-tout]");
   if (tout) { const c = tout.dataset.srvTout; if (srv.ouvertes.has(c)) srv.ouvertes.delete(c); else srv.ouvertes.add(c); return rendrePage(); }
-  const b = ev.target.closest("[data-srv-rafraichir], [data-srv-couper], [data-srv-durcir], [data-srv-verifier], [data-srv-retirer], [data-srv-garder], [data-srv-tache-arreter], [data-srv-tache-carte]");
+  const b = ev.target.closest("[data-srv-rafraichir], [data-srv-couper], [data-srv-durcir], [data-srv-verifier], [data-srv-retirer], [data-srv-garder], [data-srv-tache-arreter], [data-srv-tache-carte], [data-srv-sans-prod]");
   if (!b) return;
   const x = srv.fiche, url = "serveurs/" + encodeURIComponent(x.id), d = b.dataset;
   if (d.srvTacheCarte) { etat.apprCible = d.srvTacheCarte; return; } // the link opens For you, where the card is scrolled to
@@ -6703,6 +6706,13 @@ $("#page").addEventListener("click", async (ev) => {
   if (d.srvGarder) {
     b.disabled = true;
     if (await action(api(url, "POST", { garder: d.srvGarder }))) toast(t("Change kept: its automatic rollback is cancelled."), "ok");
+    return rendrePage();
+  }
+  if (d.srvSansProd !== undefined) {
+    const q = t("Remove the Production role from {0}? Its plans then follow the permissions, unless it serves a project's Production deployment.", [x.nom]);
+    const p = await preuveMdp(q + " " + t("Retype Athanor's password."), { ok: t("Remove the role") }, q); // C37
+    if (!p || !(await action(api(url, "POST", { roles: (x.roles || []).filter((r) => r !== "prod"), ...p })))) return;
+    toast(t("{0} no longer has the Production role.", [x.nom]), "ok");
     return rendrePage();
   }
   if (d.srvRetirer !== undefined) {
@@ -6945,7 +6955,7 @@ pages.terminal = async () => {
   term.nom = x.nom;
   return `<div class="serveurs terminal-page" data-onglet="${sf.onglet}">
     <div class="ligne m0 term-barre"><a href="#serveur/${encodeURIComponent(x.id)}" class="petit">${ic("gauche")} ${h(x.nom)}</a>
-      <code class="muet petit term-adresse">${h(x.utilisateur)}@${h(x.hote)}</code>${badgeSansGarde(x, x.autorisation !== "ignorer")}<span class="pastille attend" id="term-etat">${t("Connecting…")}</span><span class="espace"></span>
+      <code class="muet petit term-adresse">${h(x.utilisateur)}@${h(x.hote)}</code><span class="pastille attend" id="term-etat">${t("Connecting…")}</span><span class="espace"></span>
       ${avis ? "" : `<span class="muet petit term-aide term-seul">${t(MAC ? "Copy: Cmd+C · Paste: Cmd+V" : "Copy: Ctrl+Shift+C · Paste: Ctrl+Shift+V")}</span>
       <button type="button" class="btn btn-petit term-seul" data-term-copier title="${h(t(MAC ? "Copy: Cmd+C · Paste: Cmd+V" : "Copy: Ctrl+Shift+C · Paste: Ctrl+Shift+V"))}">${t("Copy")}</button><button type="button" class="btn btn-petit term-seul" data-term-coller title="${h(t(MAC ? "Copy: Cmd+C · Paste: Cmd+V" : "Copy: Ctrl+Shift+C · Paste: Ctrl+Shift+V"))}">${t("Paste")}</button>
       <button type="button" class="btn btn-petit term-bascule-ia" data-term-ia aria-pressed="${ia.visible}">${t("Assistant")}</button>
@@ -7907,8 +7917,7 @@ function aideAutorisationIA() {
 }
 function majAutorisationIA() {
   const sel = $("#ia-autorisation"), z = $("#ia-autorisation-zone"); if (!sel || !z) return;
-  const b = $(".term-barre [data-sans-garde]"); if (b && ia.autorisation) b.hidden = ia.autorisation !== "ignorer";
-  sel.value = ia.autorisation; sel.disabled = !ia.autorisation || !$("#ia-form"); z.classList.toggle("danger", ia.autorisation === "ignorer"); $("#ia-autorisation-aide").innerHTML = aideAutorisationIA();
+  sel.value = ia.autorisation; sel.disabled = !ia.autorisation || !$("#ia-form"); $("#ia-autorisation-aide").innerHTML = aideAutorisationIA();
 }
 async function changerAutorisationIA(sel) {
   const mode = sel.value, avant = ia.autorisation;
@@ -7926,9 +7935,10 @@ function panneauIA(distant) {
   return `<aside class="ia" id="ia" aria-label="${h(t("Assistant"))}">
     <fieldset class="ia-modes"><legend class="cache-visuel">${t("How the assistant works")}</legend>
       ${MODES.map(([v, titre]) => `<label class="ia-mode${ia.mode === v ? " actif" : ""}"><input type="radio" name="ia-mode" value="${v}"${ia.mode === v ? " checked" : ""}><b>${t(titre)}</b></label>`).join("")}</fieldset>
-    <div class="ia-autorisation${ia.autorisation === "ignorer" ? " danger" : ""}" id="ia-autorisation-zone"><label for="ia-autorisation" class="petit">${t("Permissions")}</label>
+    <div class="ia-autorisation" id="ia-autorisation-zone"><label for="ia-autorisation" class="petit">${t("Permissions")}</label>
       ${selecteurPermissions("ia-autorisation", ia.autorisation, { desactive: distant || !ia.autorisation })}
-      <span class="petit" id="ia-autorisation-aide">${aideAutorisationIA()}</span></div>
+      <span class="petit" id="ia-autorisation-aide">${aideAutorisationIA()}</span>
+      <span class="muet petit">${t("Only for your tasks with this assistant: a project's deployment follows that project's permission (Manage).")}</span></div>
     <details class="ia-aide"><summary class="petit">${t("How does it work?")}</summary>
       ${MODES.map(([, titre, phrase]) => `<p class="petit m0"><b>${t(titre)}</b> — ${t(phrase)}</p>`).join("")}
       ${AUTORISATIONS_IA().map(([, titre, phrase]) => `<p class="petit m0"><b>${h(titre)}</b> — ${h(phrase)}</p>`).join("")}</details>
