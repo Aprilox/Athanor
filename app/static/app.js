@@ -2526,11 +2526,11 @@ pages.suivi = async () => {
         <button class="btn btn-petit" data-ouvrir="deliverable">${t("Deliverable")}</button></div></details>
     </div>
     ${v.depense ? rendreDepense(v.depense) : rendreQuota(v.quota, v.quota_arret)}</div>
-    <div class="bloc bloc-plan"><div class="bloc-tete"><h2>${t("Project plan")}</h2>${plan.length ? boutonDefil("plan") : ""}</div>
+    <div class="colonne"><div class="bloc bloc-plan"><div class="bloc-tete"><h2>${t("Project plan")}</h2>${plan.length ? boutonDefil("plan") : ""}</div>
       ${plan.length ? `<div class="barre"><i style="width:${(faits / plan.length) * 100}%"></i></div><div class="muet petit">${texteEtape(v.projet)}${t("{0} / {1} milestones done", [faits, plan.length])}</div>
       <ul class="plan">${listePlan(plan, false)}</ul>`
         : `<div class="vide">${t("No plan yet: Claude writes it during the first cycle (framing).")}</div>`}
-    </div>
+    </div>${blocJalonsDeploiement(v.jalons_deploiement)}</div>
   </div>
   ${rendreBlocPCs(pcsDuProjet(v.projet.nom))}
   ${(pcsDuProjet(v.projet.nom) || {}).actif ? blocDirect(v.projet.nom) : ""}
@@ -2556,6 +2556,14 @@ pages.suivi = async () => {
 };
 
 // M136: the project's deployment after a milestone or the delivery (relais_jalon.go)
+// the project's work on its servers, drawn as its code milestones are (Suivi): prepared, first deployment, each version, the next one
+const ETATS_JALON_DEP = { fait: ["ok", "coche"], en_cours: ["lecture", "en-cours"], echec: ["croix", "echec"], a_faire: ["cercle", "a-faire"], revenu: ["retour", "coche"] };
+function blocJalonsDeploiement(l) {
+  if (!l || !l.length) return "";
+  return `<div class="bloc bloc-deploiement"><div class="bloc-tete"><h2>${t("Deployment on the servers")}</h2><a class="petit" href="#deploiement">${t("Open the Deployment tab")}</a></div>
+    <ul class="plan">${l.map((j) => { const [icone, cls] = ETATS_JALON_DEP[j.etat] || ETATS_JALON_DEP.a_faire;
+      return `<li class="${cls}"><span class="jalon-ico">${ic(icone)}</span><div class="jalon-corps"><div class="jalon-titre">${h(t(j.titre, j.args || []))}</div>${j.detail ? `<div class="muet petit">${h(j.message ? texteMessage(j.message) : t(j.detail))}</div>` : ""}${j.date ? `<div class="muet petit">${h(dateLisible(j.date))}</div>` : ""}</div></li>`; }).join("")}</ul></div>`;
+}
 function ligneRelais(r, lien = true) { // lien false: in the Deployment tab itself (M293)
   // M284: no deployment method yet is an information, never a failure (its button is in the Deployment tab)
   const onglet = lien ? ` <a class="petit" href="#deploiement">${t("Open the Deployment tab")}</a>` : "";

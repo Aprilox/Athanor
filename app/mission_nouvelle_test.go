@@ -115,6 +115,15 @@ func TestMissionsSuivies(t *testing.T) {
 		modeProjet("vitrine") != "auto" || !slices.Equal(b.pilotes, []string{"vitrine"}) {
 		t.Fatalf("project: %+v, mode %s, pilots %v", e, modeProjet("vitrine"), b.pilotes)
 	}
+	// Studio shows its work on the servers step by step: prepared, first deployment, each version, the next one
+	_ = noterHistorique(Deploiement{ID: "d1", Projet: "vitrine", Env: s.envJalon("vitrine"), Commit: "59c2a7f3c89a", Etat: "echec", Erreur: "Caddy is not installed", Debut: "2026-11-20T12:19:00Z"})
+	if j := s.jalonsDeploiement("vitrine"); len(j) != 4 || j[0].Titre != "Prepare the servers" || j[0].Etat != "fait" || j[1].Titre != "First deployment" || j[1].Etat != "a_faire" ||
+		j[2].Titre != "Version {0} failed" || j[2].Args[0] != "59c2a7f" || j[2].Detail != "Caddy is not installed" || j[3].Titre != "Next deployment: at delivery" {
+		t.Errorf("deployment milestones: %+v", j)
+	}
+	if j := s.jalonsDeploiement("site"); j != nil {
+		t.Errorf("a project without a server has deployment milestones: %+v", j)
+	}
 	if u := s.acces.UtilisationsServeurs(); len(u[base]) != 1 || len(u[b.vps]) != 1 {
 		t.Errorf("the servers page does not say both servers serve the project: %v", u)
 	}

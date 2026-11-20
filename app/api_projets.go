@@ -141,9 +141,11 @@ type EtatVue struct {
 	Maj         *EtatMaj              `json:"maj,omitempty"`    // updates of Athanor (maj.go)
 	GitHub      *SuiviGitHub          `json:"github,omitempty"` // the Overview's GitHub line (.athanor/github.json)
 	Relais      *RelaisJalon          `json:"relais,omitempty"` // the dev deployment after the last milestone (M136)
-	Eco         bool                  `json:"eco,omitempty"`    // the project's eco mode (.athanor/.env ECO=1)
-	Rapide      bool                  `json:"rapide,omitempty"` // the project's fast mode (.athanor/.env FAST=1)
-	Gains       *GainsVue             `json:"gains,omitempty"`  // the savings measured on the project's cycles (gains.go)
+	// its work on its servers, step by step, beside its code milestones (nil without a server)
+	JalonsDeploiement []JalonDeploiement `json:"jalons_deploiement,omitempty"`
+	Eco               bool               `json:"eco,omitempty"`    // the project's eco mode (.athanor/.env ECO=1)
+	Rapide            bool               `json:"rapide,omitempty"` // the project's fast mode (.athanor/.env FAST=1)
+	Gains             *GainsVue          `json:"gains,omitempty"`  // the savings measured on the project's cycles (gains.go)
 	// a stop asked for the end of the current cycle: "arret" (Stop after cycle), "relance" (restart to
 	// apply settings); the buttons say so
 	ArretDemande string `json:"arret_demande,omitempty"`
@@ -251,6 +253,7 @@ func (s *Serveur) apiEtat(w http.ResponseWriter, r *http.Request) {
 		vue.Attente = len(p.LireFileAttente())
 		vue.PourVous = p.PourVous()
 		vue.Relais = s.etatRelais(p.Nom)
+		vue.JalonsDeploiement = s.jalonsDeploiement(p.Nom)
 		vue.Stats = p.LireStats()
 		vue.Gains = calculerGains(vue.Stats, ponytailDansEnv(kit.Env()))
 		vue.Eco = p.EcoActif()

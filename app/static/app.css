@@ -527,6 +527,8 @@ details[open] summary { margin-bottom: 10px; }
 .plan .jalon-detail { font-weight: 400; color: var(--muted); }
 .plan .jalon-accept { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
 .plan .coche .jalon-ico, .plan .coche .jalon-titre { color: var(--ok); }
+.plan .echec .jalon-ico, .plan .echec .jalon-titre { color: var(--erreur); } /* a deployment step that failed (Suivi) */
+.bloc-deploiement .bloc-tete { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
 .plan .en-cours .jalon-ico, .plan .en-cours .jalon-titre { color: var(--attention); }
 .plan .a-faire .jalon-ico { color: var(--faible); }
 .plan .a-faire .jalon-titre { color: var(--muted); }
@@ -1778,6 +1780,9 @@ html.scene-pause .verrou * { animation-play-state: paused !important; }
 /* Manage: everything in view, the settings and GitHub on the left, the rest on the right; one column below 1000 px */
 .gestion-colonnes { display: grid; grid-template-columns: 1fr; gap: 16px; align-items: start; }
 @media (min-width: 1000px) { .gestion-colonnes { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+/* a settings row in a half column (Manage, a new project in New mission): its control under its name, never past the column */
+.gestion-colonnes .reglage, .nm-reglages .reglage { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+.gestion-colonnes .reglage select, .nm-reglages .reglage select, .gestion-colonnes .reglage input:not([type=checkbox]):not([type=radio]), .nm-reglages .reglage input:not([type=checkbox]):not([type=radio]) { max-width: 100%; }
 .gestion-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 .gestion-col > .bloc { margin: 0; }
 .gestion-large { grid-column: 1 / -1; margin: 0; }
