@@ -13,6 +13,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"maps"
 	"net/http"
 	"path/filepath"
 	"slices"
@@ -30,12 +31,14 @@ type MissionDemande struct {
 	Dossier string `json:"dossier"` // a new project's folder ("": next to the other projects)
 	// no Studio project: one Servers task on Serveurs and APIs
 	SansProjet bool     `json:"sans_projet,omitempty"`
-	Serveurs   []string `json:"serveurs"`          // inventory ids or names: where the project is deployed (without a project: every server)
-	Autres     []string `json:"autres,omitempty"`  // a project's other servers (a database…), never deployed to
-	APIs       []string `json:"apis"`              // vault ids or names
-	Serveur    string   `json:"serveur,omitempty"` // read: one server, as the first 3.1 forms and proposals sent it
-	API        string   `json:"api,omitempty"`     // read: one key, likewise
-	URL        string   `json:"url"`
+	Serveurs   []string `json:"serveurs"`         // inventory ids or names: where the project is deployed (without a project: every server)
+	Autres     []string `json:"autres,omitempty"` // a project's other servers (a database…), never deployed to
+	// what a server does, in the owner's words (id or name → text): required for each of Autres, optional otherwise
+	Roles   map[string]string `json:"roles,omitempty"`
+	APIs    []string          `json:"apis"`              // vault ids or names
+	Serveur string            `json:"serveur,omitempty"` // read: one server, as the first 3.1 forms and proposals sent it
+	API     string            `json:"api,omitempty"`     // read: one key, likewise
+	URL     string            `json:"url"`
 	// the servers' plan, in the owner's words (how to put it online, what each server does), and when (jalon |
 	// livraison, "": livraison)
 	PlanDeploiement string `json:"plan_deploiement"`
@@ -56,6 +59,7 @@ type MachineVue struct {
 	ID   string `json:"id"`
 	Nom  string `json:"nom"`
 	Site bool   `json:"site"`
+	Role string `json:"role,omitempty"` // what it does, in the owner's words
 }
 
 // VueMission: a mission as the Missions page shows it, its project, servers and task read now.
@@ -77,6 +81,8 @@ type VueMission struct {
 }
 
 var missionMu sync.Mutex // one change of a mission file at a time
+
+const maxRoleServeur = 200 // a server's role, in the owner's words
 
 func ecrireMission(m Mission) error {
 	b, err := json.MarshalIndent(m, "", "  ")
@@ -104,13 +110,27 @@ func texteMission(texte, plan string) string {
 	return texte + "\n\n## Plan\n\n" + plan
 }
 
-// texteTacheMission: what a servers mission's task does: the mission, its plan, its servers' plan.
-func texteTacheMission(texte, plan, planServeurs string) string {
+// texteTacheMission: what a servers mission's task does: the mission, its plan, each server's role, its servers' plan.
+func texteTacheMission(texte, plan, roles, planServeurs string) string {
 	t := texteMission(texte, plan)
+	if roles != "" {
+		t += "\n\n## Servers\n\n" + roles
+	}
 	if p := strings.TrimSpace(planServeurs); p != "" {
 		t += "\n\n## Servers plan\n\n" + p
 	}
 	return t
+}
+
+// lignesRoles: one line per server of ids that has a role ("- name: role"), "" when none has.
+func lignesRoles(ids []string, roles map[string]string) string {
+	var l []string
+	for i, n := range nomsServeurs(ids) {
+		if r := roles[ids[i]]; r != "" {
+			l = append(l, "- "+n+": "+r)
+		}
+	}
+	return strings.Join(l, "\n")
 }
 
 // serveursMission, apisDe: m's servers and keys, an early 3.1 file's single ones read too.
@@ -134,7 +154,8 @@ func deploiementMission(d MissionDemande) *DeploiementDemande {
 		return nil
 	}
 	x := &DeploiementDemande{URL: strings.TrimSpace(d.URL), Plan: d.PlanDeploiement, Moment: cmp.Or(d.Moment, "livraison"),
-		Serveurs: slices.Clone(d.Serveurs), Autres: append([]string{}, d.Autres...), APIs: slices.Clone(d.APIs)}
+		Serveurs: slices.Clone(d.Serveurs), Autres: append([]string{}, d.Autres...), APIs: slices.Clone(d.APIs), Roles: map[string]string{}}
+	maps.Copy(x.Roles, d.Roles)
 	return x
 }
 
@@ -194,8 +215,6 @@ func (s *Serveur) nettoyerDemande(d *MissionDemande) error {
 		return erreurEntree("This text is too long (20,000 characters at most).")
 	case d.SansProjet && len(d.Serveurs)+len(d.APIs) == 0:
 		return erreurEntree("A task needs at least one server or one API")
-	case d.SansProjet && utf8.RuneCountInString(texteTacheMission(d.Texte, d.Plan, d.PlanDeploiement)) > maxTexteTache:
-		return erreurEntree("A servers mission holds 4,000 characters at most (its text and its plans).")
 	case len(d.Autres) > 0 && len(d.Serveurs) == 0:
 		return erreurEntree("Choose at least one server where the project is deployed.")
 	case d.Moment != "" && d.Moment != "jalon" && d.Moment != "livraison":
@@ -205,7 +224,7 @@ func (s *Serveur) nettoyerDemande(d *MissionDemande) error {
 	case s.coffre != nil && s.coffre.Urgence() != "":
 		return erreurEntree("The emergency stop is on: resume Athanor first.")
 	}
-	x := DeploiementDemande{Serveurs: slices.Concat(d.Serveurs, d.Autres), APIs: d.APIs}
+	x := DeploiementDemande{Serveurs: slices.Concat(d.Serveurs, d.Autres), APIs: d.APIs, Roles: d.Roles}
 	noms := s.nommerDeploiement(&x)
 	for _, id := range x.Serveurs {
 		if _, ok := noms[id]; !ok {
@@ -219,12 +238,27 @@ func (s *Serveur) nettoyerDemande(d *MissionDemande) error {
 	}
 	d.Serveurs, d.Autres, d.APIs = x.Serveurs[:len(d.Serveurs)], slices.DeleteFunc(slices.Clone(x.Serveurs[len(d.Serveurs):]), func(id string) bool { return slices.Contains(x.Serveurs[:len(d.Serveurs)], id) }), x.APIs
 	d.Mode = cmp.Or(d.Mode, "manuel")
+	// each server's role: trimmed, secrets masked, only the mission's servers'; one of another role says what it does
+	d.Roles = map[string]string{}
+	for _, id := range slices.Concat(d.Serveurs, d.Autres) {
+		if r := s.masquerSecrets(strings.TrimSpace(x.Roles[id])); r != "" {
+			d.Roles[id] = r
+		}
+	}
+	switch {
+	case slices.ContainsFunc(d.Autres, func(id string) bool { return d.Roles[id] == "" }):
+		return erreurEntree("Say what each server with another role does.")
+	case slices.ContainsFunc(slices.Collect(maps.Values(d.Roles)), func(r string) bool { return utf8.RuneCountInString(r) > maxRoleServeur }):
+		return erreurEntree("A server's role holds 200 characters at most.")
+	case d.SansProjet && utf8.RuneCountInString(texteTacheMission(d.Texte, d.Plan, lignesRoles(d.Serveurs, d.Roles), d.PlanDeploiement)) > maxTexteTache:
+		return erreurEntree("A servers mission holds 4,000 characters at most (its text and its plans).")
+	}
 	return nil
 }
 
 // lancerTacheMission: a servers mission's task (native Windows mode: only once its reminders are off, as a card).
 func (s *Serveur) lancerTacheMission(m Mission) (TacheServeurs, error) {
-	return s.lancerTacheDans(texteTacheMission(m.Phrase, m.Plan, m.PlanServeurs), serveursMission(m), modeNatif.Load() && s.sansRappelsNatif(), "", "", false, "", apisDe(m), modeDe(m))
+	return s.lancerTacheDans(texteTacheMission(m.Phrase, m.Plan, lignesRoles(serveursMission(m), m.Roles), m.PlanServeurs), serveursMission(m), modeNatif.Load() && s.sansRappelsNatif(), "", "", false, "", apisDe(m), modeDe(m))
 }
 
 // lancerMission: the mission launched as d says; the mission and what its launch said (an i18n key and its args).
@@ -233,7 +267,7 @@ func (s *Serveur) lancerMission(d MissionDemande, qui string) (Mission, string, 
 		return Mission{}, "", nil, err
 	}
 	m := Mission{ID: aleatoire(8), Phrase: s.masquerSecrets(d.Texte), Etat: "lancee", Cree: time.Now().UTC().Format(time.RFC3339),
-		Serveurs: d.Serveurs, Autres: d.Autres, APIs: d.APIs, Mode: d.Mode, Plan: s.masquerSecrets(strings.TrimSpace(d.Plan)),
+		Serveurs: d.Serveurs, Autres: d.Autres, Roles: d.Roles, APIs: d.APIs, Mode: d.Mode, Plan: s.masquerSecrets(strings.TrimSpace(d.Plan)),
 		PlanServeurs: s.masquerSecrets(strings.TrimSpace(d.PlanDeploiement)), Mentions: Mentions{}, Questions: []QuestionMission{}}
 	var cle string
 	var args []string
@@ -420,14 +454,14 @@ func (s *Serveur) apiModifierMission(w http.ResponseWriter, r *http.Request) {
 	}
 	qui := deQui(r)
 	changes := []string{}
-	if !slices.Equal(d.Serveurs, serveursMission(m)) || !slices.Equal(d.Autres, m.Autres) || !slices.Equal(d.APIs, apisDe(m)) || d.Mode != modeDe(m) || strings.TrimSpace(d.PlanDeploiement) != m.PlanServeurs {
-		changes = append(changes, "servers, keys, plan or permission")
+	if !slices.Equal(d.Serveurs, serveursMission(m)) || !slices.Equal(d.Autres, m.Autres) || !slices.Equal(d.APIs, apisDe(m)) || d.Mode != modeDe(m) || strings.TrimSpace(d.PlanDeploiement) != m.PlanServeurs || !maps.Equal(d.Roles, m.Roles) {
+		changes = append(changes, "servers, roles, keys, plan or permission")
 	}
 	if m.Projet != "" {
 		if x := deploiementMission(d); x != nil || len(serveursMission(m))+len(m.Autres)+len(apisDe(m)) > 0 {
 			if x == nil { // all unlinked: the project keeps its address and plan, without server nor key
 				e := s.acces.Environnements(p.Nom)[s.deploiementProjet(p.Nom)]
-				x = &DeploiementDemande{URL: e.URL, Plan: e.Plan, Moment: cmp.Or(e.Moment, "livraison"), Serveurs: []string{}, Autres: []string{}, APIs: []string{}}
+				x = &DeploiementDemande{URL: e.URL, Plan: e.Plan, Moment: cmp.Or(e.Moment, "livraison"), Serveurs: []string{}, Autres: []string{}, APIs: []string{}, Roles: map[string]string{}}
 			}
 			if _, err := s.accesPretErr(p.Nom); err == nil {
 				err = s.definirDeploiementProjet(p.Nom, *x, qui)
@@ -455,7 +489,7 @@ func (s *Serveur) apiModifierMission(w http.ResponseWriter, r *http.Request) {
 		changes = append(changes, "text")
 	}
 	m.Phrase, m.Plan, m.PlanServeurs = s.masquerSecrets(d.Texte), s.masquerSecrets(strings.TrimSpace(d.Plan)), s.masquerSecrets(strings.TrimSpace(d.PlanDeploiement))
-	m.Serveurs, m.Autres, m.APIs, m.Mode, m.Serveur, m.API, m.Autonome = d.Serveurs, d.Autres, d.APIs, d.Mode, "", "", false
+	m.Serveurs, m.Autres, m.Roles, m.APIs, m.Mode, m.Serveur, m.API, m.Autonome = d.Serveurs, d.Autres, d.Roles, d.APIs, d.Mode, "", "", false
 	evenement(&m, "modifiee", strings.Join(changes, ", "))
 	if err := ecrireMission(m); err != nil {
 		s.erreurMissionHTTP(w, err)
@@ -601,14 +635,14 @@ func (s *Serveur) apiAgirMission(w http.ResponseWriter, r *http.Request) {
 	s.ecrireJSON(w, map[string]any{"mission": s.vueMission(m), "message_key": cle, "args": args})
 }
 
-// machines: the frame's servers: where the project is deployed, then the others.
-func machines(site, autres []string) []MachineVue {
+// machines: the frame's servers: where the project is deployed, then the others, each with its role.
+func machines(site, autres []string, roles map[string]string) []MachineVue {
 	l := []MachineVue{}
 	for i, n := range nomsServeurs(site) {
-		l = append(l, MachineVue{ID: site[i], Nom: n, Site: true})
+		l = append(l, MachineVue{ID: site[i], Nom: n, Site: true, Role: roles[site[i]]})
 	}
 	for i, n := range nomsServeurs(autres) {
-		l = append(l, MachineVue{ID: autres[i], Nom: n})
+		l = append(l, MachineVue{ID: autres[i], Nom: n, Role: roles[autres[i]]})
 	}
 	return l
 }
@@ -637,7 +671,7 @@ func (s *Serveur) vueMission(m Mission) VueMission {
 	v.Mode, v.Autonome, v.Serveurs, v.APIs, v.Serveur, v.API = modeDe(m), false, serveursMission(m), apisDe(m), "", ""
 	v.APINoms = s.nomsAPIs(v.APIs)
 	if m.Projet == "" { // a servers mission: its task
-		v.Machines = machines(nil, v.Serveurs)
+		v.Machines = machines(nil, v.Serveurs, v.Roles)
 		t, ok := tacheMission(m.Tache)
 		switch {
 		case !ok:
@@ -682,7 +716,7 @@ func (s *Serveur) vueMission(m Mission) VueMission {
 	}
 	// the project's deployment is the truth: changed on its tab, it shows here too
 	dep := s.acces.Environnements(p.Nom)[s.envJalon(p.Nom)]
-	v.URL, v.Serveurs, v.Autres, v.Machines, v.PlanServeurs = dep.URL, dep.Serveurs, dep.Autres, machines(dep.Serveurs, dep.Autres), dep.Plan
+	v.URL, v.Serveurs, v.Autres, v.Roles, v.Machines, v.PlanServeurs = dep.URL, dep.Serveurs, dep.Autres, dep.Roles, machines(dep.Serveurs, dep.Autres, dep.Roles), dep.Plan
 	if len(dep.APIs) > 0 {
 		v.APIs, v.APINoms = dep.APIs, s.nomsAPIs(dep.APIs)
 	}

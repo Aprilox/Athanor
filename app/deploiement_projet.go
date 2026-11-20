@@ -49,7 +49,7 @@ func briefPreparation(d donneesPreparation, p Projet) string {
 	}
 	if len(d.Autres) > 0 {
 		b.WriteString("Servers: the project is deployed on " + strings.Join(d.Site, ", ") + "; the project's other servers (" + strings.Join(d.Autres, ", ") +
-			") are never deployed to: give each the role the plan below says (a database, a worker…) and link them to the servers the project is deployed on.\n")
+			") are never deployed to: give each the role written next to it and the plan below says (a database, a worker…), and link them to the servers the project is deployed on.\n")
 	}
 	if d.DNS != "" {
 		b.WriteString("DNS: the zone of " + hoteURL(d.URL) + " is at " + d.DNS + ", its token is given.\n")
@@ -103,7 +103,7 @@ func fournisseurDeploiement(e Environnement, l []Fournisseur) (Fournisseur, bool
 // briefPreparationProjet: the preparation brief of p's deployment e.
 func (s *Serveur) briefPreparationProjet(p Projet, e Environnement) string {
 	d := donneesPreparation{Entete: "Project \"" + p.Nom + "\"", URL: e.URL, Protection: e.Protection, Plan: e.Plan,
-		Accord: modeProjet(p.Nom) != "ignorer", Site: nomsServeurs(e.Serveurs), Autres: nomsServeurs(e.Autres)}
+		Accord: modeProjet(p.Nom) != "ignorer", Site: nomsRoles(e.Serveurs, e.Roles), Autres: nomsRoles(e.Autres, e.Roles)}
 	if s.coffre != nil {
 		for _, x := range s.coffre.Liste() {
 			if slices.Contains(e.APIs, x.ID) {
@@ -291,6 +291,17 @@ func (s *Serveur) apiPreparerDeploiement(w http.ResponseWriter, r *http.Request)
 }
 
 // nomsServeurs: the inventory names of ids (an id the inventory no longer knows stays as it is).
+// nomsRoles: the names of ids, each with its role in the owner's words in brackets when it has one.
+func nomsRoles(ids []string, roles map[string]string) []string {
+	l := nomsServeurs(ids)
+	for i, id := range ids {
+		if r := roles[id]; r != "" {
+			l[i] += " (" + r + ")"
+		}
+	}
+	return l
+}
+
 func nomsServeurs(ids []string) []string {
 	l, _ := lireServeurs()
 	noms := []string{}

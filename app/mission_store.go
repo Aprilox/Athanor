@@ -72,17 +72,18 @@ type Mission struct {
 	// "" without: an old mission, read only), its servers (inventory ids: where the project is deployed, and the
 	// project's others), its API keys (vault ids), its plans and its permission choice (Mode manuel | auto |
 	// ignorer). Serveur, API and Autonome: as the first 3.1 builds wrote them (one server, one key, auto)
-	Projet       string   `json:"projet,omitempty"`
-	Tache        string   `json:"tache,omitempty"`
-	Serveurs     []string `json:"serveurs,omitempty"`
-	Autres       []string `json:"autres,omitempty"`
-	APIs         []string `json:"apis,omitempty"`
-	Plan         string   `json:"plan,omitempty"`
-	PlanServeurs string   `json:"plan_serveurs,omitempty"`
-	Mode         string   `json:"mode,omitempty"`
-	Serveur      string   `json:"serveur,omitempty"`
-	API          string   `json:"api,omitempty"`
-	Autonome     bool     `json:"autonome,omitempty"`
+	Projet       string            `json:"projet,omitempty"`
+	Tache        string            `json:"tache,omitempty"`
+	Serveurs     []string          `json:"serveurs,omitempty"`
+	Autres       []string          `json:"autres,omitempty"`
+	Roles        map[string]string `json:"roles,omitempty"` // a server's role in the owner's words (id → text)
+	APIs         []string          `json:"apis,omitempty"`
+	Plan         string            `json:"plan,omitempty"`
+	PlanServeurs string            `json:"plan_serveurs,omitempty"`
+	Mode         string            `json:"mode,omitempty"`
+	Serveur      string            `json:"serveur,omitempty"`
+	API          string            `json:"api,omitempty"`
+	Autonome     bool              `json:"autonome,omitempty"`
 }
 
 var (

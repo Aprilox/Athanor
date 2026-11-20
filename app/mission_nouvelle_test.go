@@ -84,23 +84,34 @@ func TestMissionsSuivies(t *testing.T) {
 	}
 	inventaire, _ := lireServeurs()
 	base := inventaire[slices.IndexFunc(inventaire, func(x ServeurInventaire) bool { return x.Nom == "base" })].ID
+	// the assistant names a role by its server's name: the form gets it by id
+	if d, _ := s.missionProposee(ActionChat{Type: "projet", Projet: "x", Deploiement: &DeploiementDemande{Serveurs: []string{"vps"}, Autres: []string{"base"}, Roles: map[string]string{"Base": "PostgreSQL"}}}); d.Roles[base] != "PostgreSQL" {
+		t.Errorf("roles of the proposal: %v", d.Roles)
+	}
+	// a server of another role says what it does, in 200 characters at most
+	for _, roles := range []map[string]string{nil, {"base": "  "}, {"base": strings.Repeat("é", maxRoleServeur+1)}} {
+		if code, v := appel("POST", "/api/missions", MissionDemande{Texte: "x", Projet: "x", Serveurs: []string{"vps"}, Autres: []string{"base"}, Roles: roles}); code != 400 {
+			t.Errorf("another role %v: %d %v", roles, code, v)
+		}
+	}
 
 	// a new project, launched from the home's proposal (index 1): the site on vps, the database on base; the
 	// vault value in the text is masked
 	i := 1
 	code, v := appel("POST", "/api/missions", MissionDemande{Texte: "Un site vitrine, clé valeur-Clé Stripe.", Plan: "1. accueil", Projet: "vitrine", Dossier: b.dossier("vitrine"),
-		Serveurs: []string{"vps"}, Autres: []string{"base", "vps"}, APIs: []string{"Clé Stripe"}, PlanDeploiement: "nginx sur vps, postgres sur base", Mode: "auto", Index: &i})
+		Serveurs: []string{"vps"}, Autres: []string{"base", "vps"}, Roles: map[string]string{"@base": " PostgreSQL, clé valeur-Clé Stripe ", "fantome": "rien"}, APIs: []string{"Clé Stripe"},
+		PlanDeploiement: "nginx sur vps, postgres sur base", Mode: "auto", Index: &i})
 	if code != 200 {
 		t.Fatalf("launch: %d %v", code, v)
 	}
 	l := lireMissions()
 	if len(l) != 1 || l[0].Projet != "vitrine" || !slices.Equal(l[0].Serveurs, []string{b.vps}) || !slices.Equal(l[0].Autres, []string{base}) || !slices.Equal(l[0].APIs, []string{b.api}) ||
-		l[0].Mode != "auto" || strings.Contains(l[0].Phrase, "valeur-Clé Stripe") {
+		l[0].Mode != "auto" || strings.Contains(l[0].Phrase, "valeur-Clé Stripe") || len(l[0].Roles) != 1 || !strings.HasPrefix(l[0].Roles[base], "PostgreSQL, clé ") || strings.Contains(l[0].Roles[base], "valeur-") {
 		t.Fatalf("mission written: %+v", l)
 	}
 	id := l[0].ID
 	e := s.acces.Environnements("vitrine")[s.deploiementProjet("vitrine")]
-	if !slices.Equal(e.Serveurs, []string{b.vps}) || !slices.Equal(e.Autres, []string{base}) || !slices.Equal(e.APIs, []string{b.api}) || e.Plan != "nginx sur vps, postgres sur base" ||
+	if !slices.Equal(e.Serveurs, []string{b.vps}) || !slices.Equal(e.Autres, []string{base}) || !slices.Equal(e.APIs, []string{b.api}) || e.Plan != "nginx sur vps, postgres sur base" || e.Roles[base] != l[0].Roles[base] ||
 		modeProjet("vitrine") != "auto" || !slices.Equal(b.pilotes, []string{"vitrine"}) {
 		t.Fatalf("project: %+v, mode %s, pilots %v", e, modeProjet("vitrine"), b.pilotes)
 	}
@@ -108,13 +119,13 @@ func TestMissionsSuivies(t *testing.T) {
 		t.Errorf("the servers page does not say both servers serve the project: %v", u)
 	}
 	brief := s.briefPreparationProjet(Projet{Nom: "vitrine"}, e)
-	if !strings.Contains(brief, "the project is deployed on vps") || !strings.Contains(brief, "other servers (base)") {
+	if !strings.Contains(brief, "the project is deployed on vps") || !strings.Contains(brief, "other servers (base (PostgreSQL, clé ") || strings.Contains(brief, "valeur-") {
 		t.Errorf("the preparation does not say the servers' roles: %s", brief)
 	}
 	// the Deployment tab does not show the other servers: saving it keeps them
 	if err := s.definirDeploiementProjet("vitrine", DeploiementDemande{Serveurs: []string{b.vps}, APIs: []string{b.api}, URL: "", Plan: e.Plan, Moment: "livraison"}, "test"); err != nil ||
-		!slices.Equal(s.acces.Environnements("vitrine")[s.deploiementProjet("vitrine")].Autres, []string{base}) {
-		t.Errorf("the Deployment tab lost the other servers: %v", err)
+		!slices.Equal(s.acces.Environnements("vitrine")[s.deploiementProjet("vitrine")].Autres, []string{base}) || s.acces.Environnements("vitrine")[s.deploiementProjet("vitrine")].Roles[base] == "" {
+		t.Errorf("the Deployment tab lost the other servers or their roles: %v", err)
 	}
 	if p, _ := s.projetLocalChat("vitrine"); !strings.Contains(lireTexte(p.Demande()), "## Plan") {
 		t.Error("the plan is not in the project's request")
@@ -138,7 +149,7 @@ func TestMissionsSuivies(t *testing.T) {
 	// the frame: server and key named, the project's state
 	_, v = appel("GET", "/api/missions", nil)
 	j, _ := json.Marshal(v)
-	if !strings.Contains(string(j), `"nom":"vps","site":true`) || !strings.Contains(string(j), `"api_noms":["Clé Stripe"]`) || !strings.Contains(string(j), `"suivie":true`) || strings.Contains(string(j), "valeur-") {
+	if !strings.Contains(string(j), `"nom":"vps","site":true`) || !strings.Contains(string(j), `"nom":"base","role":"PostgreSQL, clé ***"`) || !strings.Contains(string(j), `"api_noms":["Clé Stripe"]`) || !strings.Contains(string(j), `"suivie":true`) || strings.Contains(string(j), "valeur-") {
 		t.Errorf("list: %s", j)
 	}
 
@@ -150,7 +161,8 @@ func TestMissionsSuivies(t *testing.T) {
 		t.Errorf("edit: %+v, mode %s", m, modeProjet("vitrine"))
 	}
 
-	if m, _ := lireMission(id); len(m.Autres) != 0 || len(s.acces.Environnements("vitrine")[s.deploiementProjet("vitrine")].Autres) != 0 {
+	if m, _ := lireMission(id); len(m.Autres) != 0 || len(m.Roles) != 0 || len(s.acces.Environnements("vitrine")[s.deploiementProjet("vitrine")].Autres) != 0 ||
+		len(s.acces.Environnements("vitrine")[s.deploiementProjet("vitrine")].Roles) != 0 {
 		t.Errorf("edit without other servers kept them: %+v", m.Autres)
 	}
 
@@ -289,7 +301,7 @@ func TestMissionsSansProjet(t *testing.T) {
 		t.Errorf("no server and no key: %d", code)
 	}
 	i := 1
-	code, v := appel("POST", "/api/missions", MissionDemande{SansProjet: true, Texte: "Installe nginx et relie-les.", Serveurs: []string{"vps"}, Autres: []string{"base"}, APIs: []string{b.api},
+	code, v := appel("POST", "/api/missions", MissionDemande{SansProjet: true, Texte: "Installe nginx et relie-les.", Serveurs: []string{"vps"}, Autres: []string{"base"}, APIs: []string{b.api}, Roles: map[string]string{"base": "la base"},
 		PlanDeploiement: "nginx sur vps, postgres sur base", Mode: "auto", Index: &i})
 	if code != 200 {
 		t.Fatalf("launch: %d %v", code, v)
@@ -299,10 +311,10 @@ func TestMissionsSansProjet(t *testing.T) {
 		t.Fatalf("mission: %+v, pilots %v", l, b.pilotes)
 	}
 	id, tache := l[0].ID, l[0].Tache
-	if x, ok := tacheMission(tache); !ok || !strings.Contains(x.Texte, "## Servers plan") || len(x.Serveurs) != 2 || !slices.Equal(x.APIs, []string{b.api}) {
+	if x, ok := tacheMission(tache); !ok || !strings.Contains(x.Texte, "## Servers\n\n- base: la base\n\n## Servers plan") || len(x.Serveurs) != 2 || !slices.Equal(x.APIs, []string{b.api}) {
 		t.Fatalf("its task: %+v", x)
 	}
-	if w := vue(id); !w.Suivie || w.Statut != "en_cours" || !w.ServeurTache || len(w.Machines) != 2 || w.Machines[0].Site || !slices.Equal(w.APINoms, []string{"Clé Stripe"}) {
+	if w := vue(id); !w.Suivie || w.Statut != "en_cours" || !w.ServeurTache || len(w.Machines) != 2 || w.Machines[0].Site || w.Machines[1].Role != "la base" || w.Machines[0].Role != "" || !slices.Equal(w.APINoms, []string{"Clé Stripe"}) {
 		t.Fatalf("frame while it works: %+v", w)
 	}
 	if code, _ := appel("POST", "/api/missions/"+id+"/reprendre", nil); code != http.StatusConflict {

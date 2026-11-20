@@ -48,6 +48,8 @@ type Environnement struct {
 	// the project's other servers (a database, a worker, a cache…): set up by its tasks as the plan says, never
 	// deployed to; Serveurs are those the project is deployed on
 	Autres []string `json:"autres,omitempty"`
+	// what a server does, in the owner's words (server id → text), told to the tasks with its name
+	Roles map[string]string `json:"roles,omitempty"`
 }
 
 // tousServeurs: the servers of e's tasks: where the project is deployed, then the others.
@@ -199,6 +201,11 @@ func validerEnvironnement(nom string, e Environnement, inventaire []ServeurInven
 	e.Autres = nil
 	if len(autres) > 0 {
 		e.Autres = autres
+	}
+	e.Roles = maps.Clone(e.Roles) // a role of a server the deployment no longer has goes
+	maps.DeleteFunc(e.Roles, func(id, r string) bool { return r == "" || !slices.Contains(e.tousServeurs(), id) })
+	if len(e.Roles) == 0 {
+		e.Roles = nil
 	}
 	return e, nil
 }
@@ -653,12 +660,13 @@ func (s *Serveur) apiDeploiementProjet(w http.ResponseWriter, r *http.Request) {
 
 // DeploiementDemande: what the Deployment tab or a card of the home sends for the project's one deployment.
 type DeploiementDemande struct {
-	Serveurs []string `json:"serveurs"`
-	Autres   []string `json:"autres,omitempty"` // nil: kept as they are (the Deployment tab does not show them)
-	URL      string   `json:"url"`
-	Plan     string   `json:"plan"`
-	Moment   string   `json:"moment"`
-	APIs     []string `json:"apis"`
+	Serveurs []string          `json:"serveurs"`
+	Autres   []string          `json:"autres,omitempty"` // nil: kept as they are (the Deployment tab does not show them)
+	Roles    map[string]string `json:"roles,omitempty"`  // nil: kept as they are; server id (or name, nommerDeploiement) → its role
+	URL      string            `json:"url"`
+	Plan     string            `json:"plan"`
+	Moment   string            `json:"moment"`
+	APIs     []string          `json:"apis"`
 }
 
 // deploiementValide: the project's one deployment as c asks it, checked (servers of the inventory, API of the
@@ -682,6 +690,12 @@ func (s *Serveur) deploiementValide(projet string, c DeploiementDemande) (string
 	e.Serveurs, e.URL, e.Plan, e.Moment, e.APIs = c.Serveurs, c.URL, s.masquerSecrets(strings.TrimSpace(c.Plan)), c.Moment, apis
 	if c.Autres != nil {
 		e.Autres = c.Autres
+	}
+	if c.Roles != nil {
+		e.Roles = map[string]string{}
+		for id, r := range c.Roles {
+			e.Roles[id] = s.masquerSecrets(strings.TrimSpace(r))
+		}
 	}
 	e.DeployerAuJalon = e.Moment == "jalon"
 	e, err = validerEnvironnement(nom, e, inventaire)

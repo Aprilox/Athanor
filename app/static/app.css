@@ -1763,6 +1763,7 @@ html.scene-pause .verrou * { animation-play-state: paused !important; }
 .nm-choix { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
 .nm-choix > label { flex: 1 1 14em; min-width: 0; }
 .nm-cat { margin-top: 4px; }
+.nm-choix .nm-fait { flex: 1 1 100%; } /* what a server does, under its name */
 .nm-projet-reglages { display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--line); padding-top: 10px; }
 .mis-machines { display: flex; flex-direction: column; gap: 4px; }
 .mis-machine { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
