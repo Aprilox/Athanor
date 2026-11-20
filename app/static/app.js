@@ -2513,7 +2513,7 @@ pages.suivi = async () => {
         <dt>${t("Milestone")}</dt><dd>${e.jalon_en_cours ? `<b>${md(titreJalon(e.jalon_en_cours))}</b>${(() => { const j = plan.find((x) => x.titre === titreJalon(e.jalon_en_cours)); return j && j.detail ? `<div class="muet petit">${md(j.detail)}</div>` : ""; })()}` : "—"}</dd>
         <dt>${t("Last commit, this computer")}</dt><dd class="muet">${h(e.dernier_commit || "—")}</dd>
         ${ligneGitHubSuivi(v.github, e.dernier_commit)}
-        ${v.relais ? `<dt>${t("Deployment")}</dt><dd class="relais-suivi">${ligneRelais(v.relais)}</dd>` : ""}
+        ${v.relais && !(v.jalons_deploiement || []).length ? `<dt>${t("Deployment")}</dt><dd class="relais-suivi">${ligneRelais(v.relais)}</dd>` : ""}
         ${e.reprise_prevue ? `<dt>${t("Resumes")}</dt><dd class="quota">${h(e.reprise_prevue)}</dd>` : ""}
         <dt>${t("Queued requests")}</dt><dd>${v.attente || 0}</dd>
         <dt>${t("Updated")}</dt><dd class="muet petit">${h(heureMaj(e.maj))}</dd>
@@ -2525,12 +2525,13 @@ pages.suivi = async () => {
         <button class="btn btn-petit" data-ouvrir="atelier">${t("Workshop (.athanor)")}</button>
         <button class="btn btn-petit" data-ouvrir="deliverable">${t("Deliverable")}</button></div></details>
     </div>
+    ${blocJalonsDeploiement(v.jalons_deploiement)}
     ${v.depense ? rendreDepense(v.depense) : rendreQuota(v.quota, v.quota_arret)}</div>
     <div class="colonne"><div class="bloc bloc-plan"><div class="bloc-tete"><h2>${t("Project plan")}</h2>${plan.length ? boutonDefil("plan") : ""}</div>
       ${plan.length ? `<div class="barre"><i style="width:${(faits / plan.length) * 100}%"></i></div><div class="muet petit">${texteEtape(v.projet)}${t("{0} / {1} milestones done", [faits, plan.length])}</div>
       <ul class="plan">${listePlan(plan, false)}</ul>`
         : `<div class="vide">${t("No plan yet: Claude writes it during the first cycle (framing).")}</div>`}
-    </div>${blocJalonsDeploiement(v.jalons_deploiement)}</div>
+    </div></div>
   </div>
   ${rendreBlocPCs(pcsDuProjet(v.projet.nom))}
   ${(pcsDuProjet(v.projet.nom) || {}).actif ? blocDirect(v.projet.nom) : ""}
@@ -2558,9 +2559,11 @@ pages.suivi = async () => {
 // M136: the project's deployment after a milestone or the delivery (relais_jalon.go)
 // the project's work on its servers, drawn as its code milestones are (Suivi): prepared, first deployment, each version, the next one
 const ETATS_JALON_DEP = { fait: ["ok", "coche"], en_cours: ["lecture", "en-cours"], echec: ["croix", "echec"], a_faire: ["cercle", "a-faire"], revenu: ["retour", "coche"] };
-function blocJalonsDeploiement(l) {
+function blocJalonsDeploiement(l, lien = true) { // lien false: in the Deployment tab itself
   if (!l || !l.length) return "";
-  return `<div class="bloc bloc-deploiement"><div class="bloc-tete"><h2>${t("Deployment on the servers")}</h2><a class="petit" href="#deploiement">${t("Open the Deployment tab")}</a></div>
+  const faits = l.filter((j) => j.etat === "fait").length;
+  return `<div class="bloc bloc-deploiement"><div class="bloc-tete"><h2>${t("Servers' plan")}</h2>${lien ? `<a class="petit" href="#deploiement">${t("Open the Deployment tab")}</a>` : ""}</div>
+    <div class="barre"><i style="width:${(faits / l.length) * 100}%"></i></div><div class="muet petit">${t("{0} / {1} steps done", [faits, l.length])}</div>
     <ul class="plan">${l.map((j) => { const [icone, cls] = ETATS_JALON_DEP[j.etat] || ETATS_JALON_DEP.a_faire;
       return `<li class="${cls}"><span class="jalon-ico">${ic(icone)}</span><div class="jalon-corps"><div class="jalon-titre">${h(t(j.titre, j.args || []))}</div>${j.detail ? `<div class="muet petit">${h(j.message ? texteMessage(j.message) : t(j.detail))}</div>` : ""}${j.date ? `<div class="muet petit">${h(dateLisible(j.date))}</div>` : ""}</div></li>`; }).join("")}</ul></div>`;
 }
@@ -4333,8 +4336,8 @@ function champsDeploiement(pre, f, moments, distant) {
     <div class="reglage"><span class="nom-reglage" id="${pre}-api-titre">${t("API")}</span><div class="dep-champ">
       <div class="ligne m0 mis-res-puces" id="${pre}-apis-puces" role="group" aria-labelledby="${pre}-api-titre">${pucesDeploiement("apis", pre)}</div>
       ${distant ? "" : choixAPI(pre + "-api-q", "Find an API")}</div></div>
-    <div class="reglage"><label for="${pre}-plan" class="nom-reglage">${t("Plan")}</label><div>
-      <textarea id="${pre}-plan" rows="5" maxlength="4000" aria-describedby="${pre}-plan-aide"${dis}>${h(f.plan)}</textarea>
+    <div class="reglage"><label for="${pre}-plan" class="nom-reglage">${t("Plan for the servers")}</label><div>
+      <textarea id="${pre}-plan" rows="5" maxlength="4000" aria-describedby="${pre}-plan-aide"${dis}>${h(f.plan)}</textarea>${distant ? "" : barreAmeliorer(pre + "-plan", "serveurs")}
       <p class="muet petit" id="${pre}-plan-aide">${t("Say in your own words what to set up, for example: nginx on a port, an uptime script, a certificate, the domain.")} ${t("A real site (real users or data, a public launch)? Say so here: Claude is then told to wait for your agreement before putting it online for the first time (in every mode but Ignore permissions).")}</p></div></div>
     <div class="reglage" role="radiogroup" aria-labelledby="${pre}-moment-titre"><span class="nom-reglage" id="${pre}-moment-titre">${t("When to deploy")}</span>
       <div>${moments.map(([v, l]) => `<label class="radio"><input type="radio" name="${pre}-moment" value="${v}"${f.moment === v ? " checked" : ""}${dis}> ${t(l)}</label>`).join("")}</div></div>`;
@@ -4352,10 +4355,11 @@ pages.deploiement = async () => {
   const f = dep.f, dis = distant ? " disabled" : "", perm = (rp.reglages || []).find((r) => r.cle === "permission");
   const moments = MOMENTS_DEPLOIEMENT.filter(([v]) => v || !e.moment); // "Only when I ask": an older project that already has it
   const sites = d.sites || {}, autres = Object.keys(sites).filter((n) => n !== d.courant).sort(), nomSrv = (id) => nom(sv.serveurs, id);
-  return `<div class="deploiement"><div class="bloc"><h2>${t("Deployment")}</h2>
-  ${sites[d.courant] ? `<div id="dep-etat">${ficheSite(d, d.courant, nomSrv, distant)}${blocCleDeploiement(sites, distant)}</div>` : ""}
-  <form id="dep-form">
-    ${sites[d.courant] ? "" : `<p class="intro petit">${t("This project is not online yet. Choose a server and say how to put it online: Athanor prepares the server, then deploys at the moment you choose.")}</p>`}
+  return `<div class="deploiement"><div class="dep-colonnes"><div class="colonne">
+    ${blocJalonsDeploiement((etat.vue || {}).jalons_deploiement, false)}
+    <div class="bloc"><h2>${t("Online")}</h2>
+    ${sites[d.courant] ? `<div id="dep-etat">${ficheSite(d, d.courant, nomSrv, distant)}${blocCleDeploiement(sites, distant)}</div>` : `<p class="intro petit m0">${t("This project is not online yet. Choose a server and say how to put it online: Athanor prepares the server, then deploys at the moment you choose.")}</p>`}</div></div>
+  <form id="dep-form" class="bloc"><h2>${t("Deployment settings")}</h2>
     ${distant ? `<p class="muet petit">${t("The deployment is changed from the computer.")}</p>` : ""}
     ${champsDeploiement("dep", f, moments, distant)}
     ${perm ? `<div class="reglage"><span class="nom-reglage">${t("Permissions")}</span><p class="m0">${badgePermission(perm.valeur)} <a class="petit" href="#projet@rp">${t("This project's settings")}</a></p></div>` : ""}
