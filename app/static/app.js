@@ -1251,7 +1251,6 @@ function naviguer() {
   if (page.startsWith("missions/")) { etat.missionId = decodeURIComponent(page.slice(9)); page = "mission"; } // one mission, its id in the hash
   if (page.startsWith("serveur/")) { srv.id = decodeURIComponent(page.slice(8)); page = "serveur"; } // one server's sheet, its id in the hash
   const termAvant = etat.page === "terminal" ? term.id : null;
-  if (page.startsWith("terminal/") && page.endsWith("/sftp")) { page = page.slice(0, -5); sf.onglet = "sftp"; } // a detached SFTP window opens on its tab
   if (page.startsWith("terminal/")) { term.id = decodeURIComponent(page.slice(9)); page = "terminal"; if (term.id !== termAvant) ia.autorisation = ""; } // a server's terminal; its mode read again (M244k2)
   if (termAvant !== null && (page !== "terminal" || term.id !== termAvant)) quitterTerminal();
   if (!pages[page]) { page = "accueil"; history.replaceState(null, "", "#accueil"); } // an unknown hash: Home
@@ -6841,7 +6840,7 @@ function ongletsConnexion() {
     ${ong.ia.length ? tabIA("ia", t("AI · assistant (separate connection)"), ong.ia) : ""}
     ${projets.map((p) => tabIA("dep:" + p, t("Deployment · {0}", [p]), ong.dep.filter((x) => x.env.split("/")[0] === p))).join("")}
     <button type="button" class="btn btn-petit" data-term-tab-nouveau="ssh">+ ${t("Terminal")}</button><button type="button" class="btn btn-petit" data-term-tab-nouveau="sftp">+ ${t("SFTP")}</button>
-    <span class="espace"></span><button type="button" class="btn btn-petit" data-term-detacher title="${h(t("Open this view in a window of its own"))}">${t("Detach")}</button>
+    <span class="espace"></span>
     <button type="button" role="tab" class="term-onglet-ia" aria-selected="${vue === "ia"}" data-term-onglet="ia">${t("Assistant")}</button></div>`;
 }
 function majOnglets() { const z = $(".term-tabs"); if (z) z.outerHTML = ongletsConnexion(); }
@@ -6907,10 +6906,9 @@ function rendreVueIA() {
 }
 $("#page").addEventListener("click", (ev) => {
   if (etat.page !== "terminal") return;
-  const b = ev.target.closest("[data-term-tab], [data-term-tab-nouveau], [data-term-tab-fermer], [data-term-detacher]"); if (!b) return;
+  const b = ev.target.closest("[data-term-tab], [data-term-tab-nouveau], [data-term-tab-fermer]"); if (!b) return;
   const d = b.dataset;
   if (d.termTabFermer) return fermerOnglet(d.termTabFermer);
-  if (d.termDetacher !== undefined) return detacherTerminal(term.id, sf.onglet === "sftp");
   if (d.termTabNouveau) {
     const type = d.termTabNouveau, num = Math.max(0, ...ong.liste.filter((x) => x.type === type).map((x) => x.num)) + 1, cle = (type === "ssh" ? "t" : "s") + (++ong.n) + "_" + num;
     const apres = ong.liste.findLastIndex((x) => x.type === type); // the terminals together, then the SFTP views
@@ -6933,12 +6931,6 @@ function renommerOnglet(o) { // in place: Enter keeps, Escape leaves
   const fin = (garder) => { if (fait) return; fait = true; if (garder && c.value.trim()) o.nom = c.value.trim(); majOnglets(); };
   c.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); fin(true); } else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); fin(false); } });
   c.addEventListener("blur", () => fin(true), { once: true });
-}
-// a window of its own, opened by Athanor (Windows, Linux, macOS) and signed in by a single-use link: the new one
-// opens its own session, this one keeps its tabs
-async function detacherTerminal(id, sftp) {
-  const r = await action(api("fenetre/page", "POST", { page: `terminal/${id}${sftp ? "/sftp" : ""}` }));
-  if (r) toast(t("The window opens: arrange it as you like on your desktop."), "ok");
 }
 pages.terminal = async () => {
   const distant = !!(etat.vue || {}).distant, d = await api("serveurs"), x = d.serveurs.find((s) => s.id === term.id);
