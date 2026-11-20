@@ -6,7 +6,7 @@ Ce guide sert à essayer à la main ce que la branche `hub` ajoute à Athanor : 
 
 ### L'exécutable de test (Windows)
 
-L'exécutable de test est `deliverable/Athanor-hub.exe` à la racine du dépôt (il n'est pas dans git). Il embarque le kit, l'icône et le manifeste, comme une version publiée.
+L'exécutable de test est `deliverable/Athanor-hub.exe` à la racine du dépôt (il n'est pas dans git ni dans le zip du code ; c'est le même fichier que `Athanor-Windows-x64.exe`). Il embarque le kit, l'icône et le manifeste, comme une version publiée.
 
 **N'abîmez pas votre Athanor installé.** Une seule instance d'Athanor tourne à la fois par dossier de données : lancé tel quel, le nouvel exécutable parlerait à votre Athanor ouvert au lieu de démarrer. Deux façons de faire :
 
@@ -66,7 +66,7 @@ Cochez au fur et à mesure. En clair puis en sombre, sur ordinateur puis sur té
 ### En premier (dix minutes)
 
 - [ ] **Accueil.** L'accueil du hub s'affiche, avec la tuile Studio et vos projets ; la visite d'une ligne montre où ils sont.
-- [ ] **Menu.** Chaque entrée du menu ouvre sa page sans erreur ; la version affichée (*Réglages*, pied de page) est 3.0.0.
+- [ ] **Menu.** Chaque entrée du menu ouvre sa page sans erreur ; la version affichée (« v3.0.0 », en haut du menu) est 3.0.0.
 - [ ] **Projets.** Les filtres changent la liste ; un projet en cours dit son jalon ; le lien mène au bon endroit.
 - [ ] **Cloche.** Une alerte (par exemple un e-mail de test qui échoue) y apparaît une seule fois et disparaît quand c'est réglé.
 - [ ] **Accès.** *Studio › Accès* d'un projet : cocher une clé puis *Enregistrer les modifications* fait apparaître le badge « N accès » à côté de *Démarrer* ; la phrase du badge dit ce qui est donné.
