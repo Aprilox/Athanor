@@ -12,7 +12,7 @@ Before version 3.0, a mission was one sentence that Studio and Servers carried o
 
 ## The Old missions page
 
-*Old missions* is in the menu only while one is left. It lists each mission with the state it was left in, its sentence and its date; a mission opens on its **journal**, read only (*See more* shows the older lines). A mission that was not finished says *No longer followed: its project continues on its own*: nothing is resumed, paused or retried from this page.
+*Old missions* is in the menu only while one is left. It lists each mission with its state (*No longer followed* for one that was not finished; the state it was left in shows on hover), its sentence, its date and time; a mission opens on its **journal**, read only (*See more* shows the older lines). A mission that was not finished says *No longer followed: its project continues on its own*, and the `@project` of its sentence opens that project: nothing is resumed, paused or retried from this page.
 
 Nothing was lost in the update, and nothing is rewritten when it is read: the mission files stay as they were, and no password is asked again.
 

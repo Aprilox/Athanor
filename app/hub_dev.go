@@ -64,7 +64,7 @@ func (moduleDev) Elements(s *Serveur) []ElementHub {
 			e.Attente = &AttenteElement{Raison: "The pilot reports a blocker: {0}", Args: []any{g.Texte}, Page: "#suivi", Cle: g.ID}
 		}
 		if r := s.etatRelais(pv.Nom); r != nil && r.Etat == "echec" && e.Attente == nil {
-			e.Attente = &AttenteElement{Raison: "The project's deployment failed ({0}): {1}", Args: []any{r.Jalon, messageOuTexte(r.Message, r.Erreur)}, Page: "#deploiement", Cle: "relais:" + r.Commit}
+			e.Attente = &AttenteElement{Raison: "Deployment failed ({0}): {1}", Args: []any{r.Jalon, messageOuTexte(r.Message, r.Erreur)}, Page: "#deploiement", Cle: "relais:" + r.Commit}
 		}
 		out = append(out, e)
 	}

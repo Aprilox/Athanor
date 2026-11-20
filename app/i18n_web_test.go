@@ -146,7 +146,7 @@ func TestVocabulaireInterface(t *testing.T) {
 			"Athanor no longer creates nor follows missions: these ones stay here to be read or deleted. Their projects keep working on their own, each with its own deployment.",
 			"The mission, its journal and its follow-up files are deleted.", "Another mission uses this project",
 			"This project existed before the mission: remove it from Studio if you want to", "No local project is linked to this mission",
-			"{0} was put online by a mission: make it the project's deployment to go on deploying it.", "Prepare a mission",
+			"Prepare a mission",
 			"Missions are no longer created: ask again, and the assistant proposes a project or a server task."},
 		// the journal of an old mission, written by code that is gone and still read on its page (keys and PREFIXES of i18n.js)
 		{"Mission paused: {0}", "Mission resumed: {0}", "Mission stopped: {0}. Nothing was undone", "Mission done: {0}",

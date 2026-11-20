@@ -51,7 +51,7 @@ Every 15 minutes by default (*Health of the deployed sites* on the *Servers* pag
 
 ## Hardening a new server
 
-*Harden this server*, on a server's sheet, is a fixed plan written by Athanor's code, shown step by step and run once you accept it: a non-root user with sudo and Athanor's key, SSH keys only, `PermitRootLogin no` (checked with `sshd -t`, with a scheduled undo), ufw refusing all but 22, 80 and 443 (with a scheduled undo), `unattended-upgrades`, `systemd-timesyncd`, Caddy from its official repository. A step already in place is skipped.
+*Harden this server*, on the sheet of a server Athanor reaches with a key (not offered while it connects with a password), is a fixed plan written by Athanor's code, shown step by step and run once you accept it: a non-root user with sudo and Athanor's key, SSH keys only, `PermitRootLogin no` (checked with `sshd -t`, with a scheduled undo), ufw refusing all but 22, 80 and 443 (with a scheduled undo), `unattended-upgrades`, `systemd-timesyncd`, Caddy from its official repository. A step already in place is skipped.
 
 ## What never reaches the AI
 

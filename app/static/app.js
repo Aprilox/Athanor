@@ -81,7 +81,7 @@ function boutonDefil(quoi) {
   const actif = etat.defilAuto[quoi];
   const titre = quoi === "plan" ? (actif ? t("Auto-scroll on: the plan keeps the milestone being built in view. Click to turn it off.") : t("Auto-scroll off: the plan stays where you leave it. Click to follow the milestone being built."))
     : (actif ? t("Auto-scroll on: the log follows the new lines. Click to turn it off (scrolling up pauses it too).") : t("Auto-scroll off: the log stays where you leave it. Click to follow the new lines."));
-  return `<button type="button" class="defil-auto ${actif ? "actif" : ""}" data-defil="${quoi}" title="${h(titre)}" aria-label="${h(titre)}" aria-pressed="${actif}">${ICONE_DEFIL}</button>`;
+  return `<button type="button" class="defil-auto ${actif ? "actif" : ""}" data-defil="${quoi}" title="${h(titre)}" aria-label="${h(titre)}" aria-pressed="${actif}">${ICONE_DEFIL}<span>${t("Auto-scroll")}</span></button>`;
 }
 
 // ----------------------------------------------------------------------------- state
@@ -800,8 +800,19 @@ function phraseProjet(x) {
 const projetsVisibles = (v) => (v.projets || []).filter((x) => !x.archive);
 // the bell: in Athanor's title bar (Windows), else at the end of the header; the alerts of every module (/api/hub)
 const alertesHub = () => (etat.hub && etat.hub.alertes) || [];
+// M319: an information (a project's old site) counts on the bell and the menu until it has been seen (the bell
+// opened, or its project's Deployment tab), remembered on this computer; it stays listed in the bell
+const infosVues = () => { try { return JSON.parse(localStorage.getItem("athanor.infosVues") || "[]"); } catch (e) { return []; } };
+const alertesComptees = () => { const vues = infosVues(); return alertesHub().filter((a) => !a.info || !vues.includes(a.empreinte)); };
+function marquerInfosVues(projet) {
+  const infos = alertesHub().filter((a) => a.info), vues = infosVues();
+  const neuves = infos.filter((a) => (!projet || a.element === projet) && !vues.includes(a.empreinte)).map((a) => a.empreinte);
+  if (!neuves.length) return;
+  // the ones that are gone are forgotten: the list never grows
+  try { localStorage.setItem("athanor.infosVues", JSON.stringify([...vues.filter((x) => infos.some((a) => a.empreinte === x)), ...neuves])); } catch (e) { /* storage off */ }
+}
 function boutonCloche(v, classe) {
-  const n = alertesHub().length;
+  const n = alertesComptees().length;
   if (!n && !projetsVisibles(v).length && !((etat.hub || {}).ignorees || []).length) return "";
   const titre = etat.coupe ? t("Athanor no longer answers.") : n ? alertesVous(n) : t("Nothing needs you right now.");
   return `<button type="button" class="${classe} cloche${n ? " sonne" : ""}" data-notifs aria-haspopup="true" aria-expanded="${etat.notifsOuvert ? "true" : "false"}" aria-label="${h(titre)}" title="${h(titre)}"><svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.94 1.94 0 0 0 3.4 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>${n ? `<span class="cloche-n">${n}</span>` : ""}</button>`;
@@ -836,7 +847,7 @@ function rendreNotifs(v) {
 function fermerNotifs(clavier) { etat.notifsOuvert = false; if (etat.vue) rendreBandeau(etat.vue); if (clavier) document.querySelector("[data-notifs]")?.focus(); }
 document.addEventListener("click", (ev) => {
   if (ev.target.closest("[data-notifs]")) {
-    etat.notifsOuvert = !etat.notifsOuvert; if (etat.vue) rendreBandeau(etat.vue);
+    etat.notifsOuvert = !etat.notifsOuvert; if (etat.notifsOuvert) marquerInfosVues(); if (etat.vue) rendreBandeau(etat.vue);
     // opened from the keyboard (no pointer: detail 0): the list sits at the end of the page, so the focus goes into it
     if (etat.notifsOuvert && ev.detail === 0) $("#notifs").querySelector("a, button, summary")?.focus();
   }
@@ -914,7 +925,7 @@ async function deciderApprobation(corps) {
 
 // the header of a page outside a project: the module's name, and what runs and waits in every module (as the bell counts)
 function phraseGlobale(m) {
-  const n = alertesHub().length, actifs = ((etat.hub || {}).elements || []).filter((e) => e.etat === "actif").length;
+  const n = alertesComptees().length, actifs = ((etat.hub || {}).elements || []).filter((e) => e.etat === "actif").length;
   const page = m && m.id === "hub" ? m.pages.find((x) => x.hash === "#" + pageParente(etat.page)) : null; // Home, Projects
   return { classe: n ? "quota" : actifs ? "travaille" : "", titre: page ? t(page.libelle) : m ? t(m.nom) : etat.page === "guide" ? t("Guide") : "Athanor Hub", sous: [actifs ? t("{0} in progress", [actifs]) : t("idle"), n && alertesVous(n)].filter(Boolean).join(" · ") };
 }
@@ -1196,7 +1207,7 @@ function marquerNav(v) {
     if (b.textContent !== txt) b.textContent = txt;
     if (b.title !== ti) b.title = ti;
   };
-  const besoins = etat.hub ? alertesHub().length : projetsVisibles(v).filter(besoinProjet).length; // every module, as the bell counts
+  const besoins = etat.hub ? alertesComptees().length : projetsVisibles(v).filter(besoinProjet).length; // every module, as the bell counts
   nb('#nav-menu a[data-page="global"]', besoins, true, alertesVous(besoins));
   nb('#onglets-module a[data-page="demandes"]', v.attente);
   nb('#onglets-module a[data-page="pourvous"]', v.pour_vous, true);
@@ -2623,7 +2634,7 @@ function ligneRelais(r, lien = true) { // lien false: in the Deployment tab itse
   if (r.etat === "a_preparer") return `<span class="badge">${h(t("First deployment to prepare"))}</span>${onglet}`;
   // held by the owner's pause or stop: neither "in progress" nor "waiting for GitHub" would be true
   const [icone, etiquette] = r.pause && (r.etat === "preparation" || r.etat === "attente") ? ["attente", "On hold until Start"] : r.etat === "preparation" ? ["attente", "First deployment in progress"] : r.etat === "attente" ? ["attente", "Waiting for the milestone's commit on GitHub"] : r.etat === "ailleurs" ? ["attente", "Not deployed at this address yet"] : r.etat === "lance" ? ETATS_DEPLOI.en_cours : ETATS_DEPLOI[r.etat] || ["", r.etat];
-  return `<span class="badge">${icone ? ic(icone) : ""} ${h(t(etiquette))}</span> <code>${h((r.commit || "").slice(0, 7))}</code> <span class="muet petit">${[r.jalon ? md(r.jalon) : "", h(dateLisible(r.date))].filter(Boolean).join(" · ")}</span>${r.erreur ? `<div class="petit attention">${h(r.message ? texteMessage(r.message) : t(r.erreur))}</div>` : ""}${onglet}`;
+  return `<span class="badge">${icone ? ic(icone) : ""} ${h(t(etiquette))}</span> <code>${h((r.commit || "").slice(0, 7))}</code> <span class="muet petit">${[r.jalon ? md(titrePlan(r.jalon)) : "", h(dateLisible(r.date))].filter(Boolean).join(" · ")}</span>${r.erreur ? `<div class="petit attention">${h(r.message ? texteMessage(r.message) : t(r.erreur))}</div>` : ""}${onglet}`;
 }
 
 // the installers of this system: on Windows, one per mode (choosing it also selects that mode)
@@ -2737,7 +2748,7 @@ const GUIDE = [
   { id: "debut", titre: "Start a project", intro: "Athanor builds a whole project with Claude, milestone after milestone, while you do something else.",
     etapes: [
       ["Install and check", "*Setup & health*: *Install everything* once, then *Check everything*. Each problem has its own *Repair* or *Ask Claude* button.", "#sante", "Open the check"],
-      ["Add the project", "In the project picker, *New project*: a name, its folder (new or existing, anywhere on the computer) and what you want.", "#nouveau", "Add a project"],
+      ["Add the project", "On the *Projects* page, *New project*: a name, its folder (new or existing, anywhere on the computer) and what you want.", "#nouveau", "Add a project"],
       ["Say what you want", "*Requests*: describe the result you expect and attach what helps (mock-ups, a specification, photos). *Improve with Claude* makes it clearer. Technologies are free unless you impose some.", "#demandes", "Requests"],
       ["Start", "*Start*, at the top of the window. Claude first writes the plan (the framing), then builds and checks one milestone per cycle."],
       ["Follow and answer", "*Overview* shows the milestone in progress, the plan and your quota. *For you* lists what only you can do (create an account, give a key, read a code received by SMS): answer there, Claude checks it.", "#pourvous", "For you"],
@@ -2861,7 +2872,7 @@ const GUIDE = [
   { id: "deployer", titre: "Put a site online", intro: "From a project on this PC to a site anyone can open: Athanor deploys a commit to the project's server, checks it from outside, keeps the version before it, and watches the site afterwards.",
     etapes: [
       ["The server and the address", "In the project's *Deployment* tab, choose the server and give the address (“app.example.com”), as in *Guide › A project's deployment*; or say it all in one sentence on the home page (“put my site online at app.example.com on @vps”) and *Launch* the card. Each project has its own folder on its server, `/srv/athanor/<project>-site/`, with its versions side by side.", "#deploiement", "Deployment"],
-      ["Harden a new server", "On a server you have just added, *Harden this server* shows a fixed plan written by Athanor, not by an agent: a user with sudo instead of root, SSH keys only, no root login, a firewall that refuses all but SSH, 80 and 443, security updates, the clock synchronised, Caddy. Each step already in place is skipped; you accept the plan first.", "#serveurs", "Servers"],
+      ["Harden a new server", "On a server Athanor reaches with a key (not a password), *Harden this server* shows a fixed plan written by Athanor, not by an agent: a user with sudo instead of root, SSH keys only, no root login, a firewall that refuses all but SSH, 80 and 443, security updates, the clock synchronised, Caddy. Each step already in place is skipped; you accept the plan first.", "#serveurs", "Servers"],
       ["The first deployment", "Athanor launches it by itself, as a Servers task, or at once with *Prepare now*. The agent reads the project and your plan and picks the method: a static site served by Caddy, Docker Compose when the project has a compose file or a Dockerfile, or k3s only if you ask for it; the code comes from GitHub with the deployment key, or as an archive made on this PC. Athanor's own engine then deploys and remembers the method for the next ones."],
       ["The deployment key", "For a project linked to GitHub, *Create the deployment key*, in the *Deployment* tab, makes a key kept in the vault and adds it read-only to the repository: the servers will fetch the code with it and can never push. Unlinking or removing the project takes it off the repository and out of the vault."],
       ["The next ones", "With no agent, at the moment the project chose: *After each milestone*, each time the pilot ticks one, or *At delivery*. The pilot can also ask for one. The project's last commit goes to the server and is checked from outside. An older project's production site still waits for your agreement, in the bell, on *For you* and on your phone, unless the project is in *Ignore permissions*.", "#pourvous", "For you"],
@@ -4361,7 +4372,7 @@ function ficheSite(d, nom, nomSrv, distant) {
     ${r && r.etat === "a_preparer" ? `<p class="petit">${t("The first deployment is still to be made: an agent will read the project and your plan, set up the server and put the project online.")}</p>
       ${distant ? "" : `<button type="button" class="btn btn-primaire btn-petit" data-dep-preparer>${t("Prepare now")}</button>`}` : ""}
     ${courant ? "" : `<p class="muet petit">${(e.serveurs || []).length ? h(t("Servers") + " " + e.serveurs.map(nomSrv).join(", ")) : t("No server chosen yet.")}</p>`}
-    ${!courant && (d.anciens || []).includes(nom) ? `<p class="petit dep-ancien" role="note">${h(t("{0} was put online by a mission: make it the project's deployment to go on deploying it.", [e.url || nom]))}</p>` : ""}
+    ${!courant && (d.anciens || []).includes(nom) ? `<p class="petit dep-ancien" role="note">${h(t("Athanor no longer updates {0}: make it the project's deployment to go on deploying it.", [e.url || nom]))}</p>` : ""}
     <p class="petit attention env-erreur" role="alert" hidden></p>
     ${blocSante((d.sante || {})[nom], e, d.projet + "/" + nom)}
     ${blocDeploiements(nom, e, (d.deploiements || {})[nom] || [], distant || !courant)}
@@ -4394,6 +4405,7 @@ pages.deploiement = async () => {
   const distant = !!(etat.vue || {}).distant, chemin = "projets/" + encodeURIComponent(projet);
   const [d, sv, c, rp] = await Promise.all([api(chemin + "/deploiement"), api("serveurs").catch(() => ({})), api("coffre").catch(() => ({})), api(chemin + "/reglages").catch(() => ({})), lireCategories()]);
   const e = d.deploiement || {}, nom = (l, id) => ((l || []).find((x) => x.id === id) || {}).nom || id;
+  if ((d.anciens || []).length) marquerInfosVues(projet); // its note is on this page
   if (dep.projet !== projet || !dep.f || !dep.f.modifie) dep.f = { url: e.url || "", plan: e.plan || "", moment: e.moment || "", modifie: false, // the saved one, unless this project's form is being typed
     serveurs: (e.serveurs || []).map((id) => ({ type: "serveur", ref: id, nom: nom(sv.serveurs, id) })), apis: (e.apis || []).map((id) => ({ type: "api", ref: id, nom: nom(c.entrees, id) })) };
   dep.projet = projet; dep.dispo = sv.serveurs || [];
@@ -4863,7 +4875,7 @@ $("#page").addEventListener("change", async (ev) => {
 function etatPC(p) {
   if (!p.en_ligne) return `<span class="muet">${t("Offline")}${p.maj ? " · " + h(t("last seen {0}", [dateLisible(p.maj)])) : ""}</span>`;
   if (p.pilote && p.jalon) {
-    const nom = p.jalon === "cadrage" ? t("the plan (framing)") : p.jalon === "livraison" ? t("the final report") : p.jalon_titre || p.jalon;
+    const nom = p.jalon === "cadrage" ? t("the plan (framing)") : p.jalon === "livraison" ? t("the final report") : titrePlan(p.jalon_titre || p.jalon);
     return `<b class="ok">${h(t("Builds {0}", [nom]))}</b>${p.depuis ? ` <span class="muet">· ${h(t("since {0}", [dateLisible(p.depuis)]))}</span>` : ""}`;
   }
   if (p.pilote) return `<span class="ok">${t("Pilot running")}</span>`;
@@ -4937,7 +4949,7 @@ function rendreBlocPCs(vp) {
     <table class="tab appareils pcs">${lignes}</table>
     ${vp.erreur ? `<p class="petit attention">${ic("croix")} ${h(erreurPCs(vp.erreur))}</p>` : ""}
     ${(vp.notes || []).length ? `<h3 class="mt-2">${t("Notes between the computers")}</h3><ul class="notes-pcs muet petit">${vp.notes.map((n) => `<li>${md(n.replace(/^-\s*/, ""))}</li>`).join("")}</ul>` : ""}
-    ${!(vp.pcs || []).length ? `<p class="muet petit">${t("No other computer yet. On the other computer: Join a project (in the project picker), with this same repository and branch.")}</p>` : ""}
+    ${!(vp.pcs || []).length ? `<p class="muet petit">${t("No other computer yet. On the other computer: New project › Join a project, with this same repository and branch.")}</p>` : ""}
     <div class="ligne mt-2"><a class="btn btn-petit" href="#distance">${t("What this computer is good at")}</a>${lienGuide("pcs")}<span class="espace"></span>
       <label class="interrupteur m0"><input type="checkbox" data-pcs-actif checked><span>${t("Work with other computers")}</span></label></div>
   </div>`;
@@ -5519,7 +5531,7 @@ function texteVerif(v, protection) {
   if (v.ok) l.push(t("Responds from this PC ({0})", [x.statut]) + (protection !== "aucune" ? ", " + t("closed without identification") : ""));
   else l.push((v.problemes || []).map((p) => t(PROBLEMES_VERIF[p] || p, [x.statut, x.erreur || "", tls.erreur_certificat || ""])).join(" · "));
   if (x.tls && tls.certificat_valide) l.push(t("certificate valid, {0} days left", [tls.jours_restants]));
-  if ((x.en_tetes_manquants || []).length) l.push(t("missing security headers: {0}", [x.en_tetes_manquants.join(", ")]));
+  if ((x.en_tetes_manquants || []).length) l.push(t("site protections not turned on (optional): {0}", [x.en_tetes_manquants.join(", ")]));
   return l.join(" · ");
 }
 // C71: a deployment that failed before its switch left the version served as it was: nothing to go back from
@@ -6093,11 +6105,19 @@ const POLITIQUES_MISSION = [["prod", "Ask me for production"], ["tout", "Ask me 
 // raisonEchec (M266): the event that put the mission in echec; the owner's changes after it are "modifiee"
 const raisonEchec = (m) => [...(m.historique || [])].reverse().find((x) => x.etat === "echec") || {};
 const MISSION_FINIE = ["terminee", "annulee", "echec", "arretee"]; // etatsFinis in Go
+// S21 (M319): a mission that was not finished says "No longer followed", not the state it was left in ("Paused" read as
+// if it could resume): that state stays in the tooltip
+const badgeMission = (m, id) => { const e = t(ETATS_MISSION[m.etat] || m.etat), fini = MISSION_FINIE.includes(m.etat);
+  return `<span class="badge${fini ? " mis-etat-" + h(m.etat) : ""}"${id ? ` id="${id}"` : ""}${fini ? "" : ` title="${h(e)}"`}>${h(fini ? e : t("No longer followed"))}</span>`; };
+// the @project of its sentence opens that project, when it is still in the list
+// shortcut: a project whose name holds a space is not linked, upgrade if old missions named such projects
+const phraseMission = (s) => { const noms = projetsVisibles(etat.vue || {}).map((p) => p.nom);
+  return h(s).replace(/@([\w-]+(?:\.[\w-]+)*)/g, (tout, n) => noms.includes(n) ? `<a href="#suivi" data-mis-projet="${n}">${tout}</a>` : tout); };
 function ligneMission(m) {
   const titre = (m.carte || {}).titre, phrase = m.phrase.length > 140 ? m.phrase.slice(0, 140) + "…" : m.phrase;
-  return `<li><a class="bloc mis-ligne" href="#missions/${encodeURIComponent(m.id)}"><span class="badge mis-etat-${h(m.etat)}">${h(t(ETATS_MISSION[m.etat] || m.etat))}</span>
+  return `<li><a class="bloc mis-ligne" href="#missions/${encodeURIComponent(m.id)}">${badgeMission(m)}
     <span class="mis-phrase">${titre ? `<b>${h(titre)}</b> ` : ""}<span class="muet">${h(phrase)}</span></span>
-    <span class="muet petit">${h(new Date(m.cree).toLocaleDateString(document.documentElement.lang || "en"))}</span></a><button type="button" class="btn btn-petit mis-suppr-btn" data-mis-suppr="${h(m.id)}" aria-label="${h(t("Delete the mission"))}" title="${h(t("Delete the mission"))}">${ic("croix")}</button></li>`;
+    <span class="muet petit">${h(new Date(m.cree).toLocaleString(document.documentElement.lang || "en", { dateStyle: "short", timeStyle: "short" }))}</span></a><button type="button" class="btn btn-petit mis-suppr-btn" data-mis-suppr="${h(m.id)}" aria-label="${h(t("Delete the mission"))}" title="${h(t("Delete the mission"))}">${ic("croix")}</button></li>`;
 }
 pages.missions = async () => {
   const d = await api("missions");
@@ -6114,8 +6134,8 @@ pages.mission = async () => {
   const m = d.mission, titre = (m.carte || {}).titre, fin = m.etat === "echec" ? raisonEchec(m) : {};
   if (etat.missionJournalDe !== m.id) { etat.missionJournalDe = m.id; etat.missionJournalN = 50; }
   return `<div class="missions mis-detail"><div class="ligne m0"><a class="btn btn-petit" href="#missions">${ic("gauche")} ${t("Old missions")}</a><span class="espace"></span><button type="button" class="btn btn-petit btn-danger" data-mis-suppr="${h(m.id)}">${t("Delete the mission")}</button></div>
-    <div><div class="ligne m0 tuile-tete"><h2 class="m0" id="mis-titre">${h(titre || m.phrase)}</h2><span class="badge mis-etat-${h(m.etat)}" id="mis-badge">${h(t(ETATS_MISSION[m.etat] || m.etat))}</span></div>
-      ${titre ? `<p class="muet petit mis-phrase">${h(m.phrase)}</p>` : ""}${fin.detail ? `<p class="mis-avert" role="note">${h(fin.message ? texteMessage(fin.message) : fin.detail)}</p>` : ""}
+    <div><div class="ligne m0 tuile-tete"><h2 class="m0" id="mis-titre">${titre ? h(titre) : phraseMission(m.phrase)}</h2>${badgeMission(m, "mis-badge")}</div>
+      ${titre ? `<p class="muet petit mis-phrase">${phraseMission(m.phrase)}</p>` : ""}${fin.detail ? `<p class="mis-avert" role="note">${h(fin.message ? texteMessage(fin.message) : fin.detail)}</p>` : ""}
       ${MISSION_FINIE.includes(m.etat) ? "" : `<p class="m0" role="note">${t("No longer followed: its project continues on its own.")}</p>`}</div>
     <div id="mission-journal" class="mis-detail">${journalMission(m)}</div>
   </div>`;
@@ -6172,6 +6192,11 @@ document.addEventListener("click", (ev) => {
   const b = ev.target.closest("[data-mis-suppr]"); if (!b) return;
   ev.preventDefault();
   supprimerMissionUI(b.dataset.misSuppr);
+});
+document.addEventListener("click", (ev) => {
+  const a = ev.target.closest("[data-mis-projet]"); if (!a) return;
+  ev.preventDefault();
+  allerProjet(a.dataset.misProjet, "suivi");
 });
 document.addEventListener("click", (ev) => {
   if (!ev.target.closest("[data-mis-plus]") || !etat.missionVue) return;
@@ -6666,6 +6691,7 @@ async function monterTerminal() {
     term.x = new window.Terminal({ cursorBlink: true, scrollback: 5000, fontSize: r.taille, cursorStyle: r.curseur, lineHeight: r.interligne, theme: paletteTerminal(r),
       fontFamily: 'ui-monospace, "Cascadia Mono", Consolas, "DejaVu Sans Mono", Menlo, monospace' });
     term.fit = new window.FitAddon.FitAddon(); term.x.loadAddon(term.fit); term.x.open(term.el);
+    term.x.textarea?.setAttribute("aria-label", t("Terminal input")); // xterm names it in English only
     term.x.onData(taperTerminal);
     term.x.onResize(({ cols, rows }) => { if (term.session) agirTerminal({ cols, lignes: rows }); });
     term.x.attachCustomKeyEventHandler((e) => {

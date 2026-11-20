@@ -51,7 +51,7 @@ Toutes les 15 minutes par défaut (*Santé des sites déployés* sur la page *Se
 
 ## Durcir un serveur neuf
 
-*Durcir ce serveur*, sur la fiche d'un serveur, est un plan fixe écrit par le code d'Athanor, montré étape par étape et exécuté une fois accepté : un utilisateur non root avec sudo et la clé d'Athanor, les clés SSH seules, `PermitRootLogin no` (contrôlé par `sshd -t`, avec un retour arrière programmé), ufw qui refuse tout sauf 22, 80 et 443 (avec un retour arrière programmé), `unattended-upgrades`, `systemd-timesyncd`, Caddy depuis son dépôt officiel. Une étape déjà en place est sautée.
+*Durcir ce serveur*, sur la fiche d'un serveur où Athanor se connecte avec une clé (pas proposé tant qu'il se connecte par mot de passe), est un plan fixe écrit par le code d'Athanor, montré étape par étape et exécuté une fois accepté : un utilisateur non root avec sudo et la clé d'Athanor, les clés SSH seules, `PermitRootLogin no` (contrôlé par `sshd -t`, avec un retour arrière programmé), ufw qui refuse tout sauf 22, 80 et 443 (avec un retour arrière programmé), `unattended-upgrades`, `systemd-timesyncd`, Caddy depuis son dépôt officiel. Une étape déjà en place est sautée.
 
 ## Ce qui n'atteint jamais l'IA
 

@@ -12,7 +12,7 @@ Avant la version 3.0, une mission était une phrase que Studio et Serveurs réal
 
 ## La page Anciennes missions
 
-*Anciennes missions* n'est dans le menu que tant qu'il en reste une. Elle liste chaque mission avec l'état où elle a été laissée, sa phrase et sa date ; une mission s'ouvre sur son **journal**, en lecture seule (*Voir plus* montre les lignes plus anciennes). Une mission qui n'était pas finie dit *Plus suivie : son projet continue seul* : rien n'est repris, mis en pause ni relancé depuis cette page.
+*Anciennes missions* n'est dans le menu que tant qu'il en reste une. Elle liste chaque mission avec son état (*Plus suivie* pour une mission qui n'était pas finie ; l'état où elle a été laissée reste en infobulle), sa phrase, sa date et son heure ; une mission s'ouvre sur son **journal**, en lecture seule (*Voir plus* montre les lignes plus anciennes). Une mission qui n'était pas finie dit *Plus suivie : son projet continue seul*, et le `@projet` de sa phrase ouvre ce projet : rien n'est repris, mis en pause ni relancé depuis cette page.
 
 Rien n'a été perdu à la mise à jour, et rien n'est réécrit à la lecture : les fichiers des missions restent tels qu'ils étaient, et aucun mot de passe n'est redemandé.
 
