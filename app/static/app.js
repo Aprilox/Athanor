@@ -5967,8 +5967,9 @@ function carteServeur(x, fiche, envs, santeSites) {
     <div class="muet petit"><code>${h(x.utilisateur)}@${h(x.hote)}${x.port === 22 ? "" : ":" + x.port}</code>${f.systeme && f.systeme.nom ? " · " + h(f.systeme.nom) : ""}</div>
     ${(x.roles || []).includes("prod") ? `<div class="ligne m0"><span class="badge badge-infra">${t("Production")}</span></div>` : ""}
     <div class="petit srv-tourne" title="${h(tourne.join(", "))}">${h(resume)}</div>
-    ${(envs || []).length ? `<div class="ligne m0 petit srv-sante">${envs.map((pe) => { const st = ((santeSites || {}).envs || {})[pe], [ic, et] = ETATS_SANTE[st] || ["·", "Not checked yet"];
-      return `<span class="badge srv-sante-${h(st || "aucun")}" title="${h(t(et))}">${ic} ${h(pe)}</span>`; }).join("")}</div>` : ""}
+    ${(envs || []).length ? `<div class="ligne m0 petit srv-sante">${envs.map((pe) => { const st = ((santeSites || {}).envs || {})[pe], [icone, et] = ETATS_SANTE[st] || ["", "Not checked yet"];
+      const [p, e] = pe.split("/"), nom = e && e !== "site" ? `${p} (${e})` : p; // the project's one deployment: its internal name "site" is never shown
+      return `<span class="badge srv-sante-${h(st || "aucun")}" title="${h(t(et))}">${icone ? ic(icone) : "·"} ${h(nom)}</span>`; }).join("")}</div>` : ""}
     <div class="muet petit">${x.vu ? h(t("Seen {0}", [dateLisible(x.vu)])) : h(t("Added {0}", [dateLisible(x.cree)]))}</div>
     ${x.etat !== "inconnu" && (!(etat.vue || {}).distant || srv.termDistance) ? `<div class="ligne m0"><a class="btn btn-petit" href="#terminal/${encodeURIComponent(x.id)}" data-srv-connecter>${t("Connect")}</a></div>` : ""}
     ${x.etat === "inconnu" && !(etat.vue || {}).distant ? `<div class="ligne m0"><button type="button" class="btn btn-petit btn-primaire" data-srv-verifier="${h(x.id)}">${t("Verify")}</button><span class="muet petit">${t("once its public key is on the server")}</span></div>` : ""}
@@ -6009,9 +6010,12 @@ function assistantServeur(c) {
       <label class="champ"><span>${t("Name (optional)")}</span><input type="text" id="srv-nom" maxlength="100" placeholder="${h(t("e.g. Production VPS"))}" value="${h(a.nom || "")}"></label>
     </div>
     ${empreinte ? `<div class="srv-empreinte">
-      <p class="petit">${t("The server presents this fingerprint. If it is your server's, confirm it: Athanor will refuse any other.")}</p>
-      <p><code class="srv-empreinte-valeur">${h(a.empreinte)}</code></p>
-      <details class="plus-options"><summary>${t("How to check?")}</summary><p class="petit">${t("Type this on the server, or in your host's console, and compare its answer with the fingerprint above:")}<br><code>${h(a.commande || "ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub")}</code>${a.typeCle ? ` <span class="muet">(${h(a.typeCle)})</span>` : ""}</p></details>
+      <h3 class="m0">${t("The server's identity")}</h3>
+      <p class="petit">${t("An SSH server proves who it is with its host key. Athanor has just read it: below is its fingerprint, a short summary of that key. Once you confirm it, Athanor remembers it and refuses to connect if one day the server shows another one (reinstalled, or someone posing as it).")}</p>
+      <p class="m0"><span class="muet petit">${a.typeCle ? h(t("Host key {0}", [a.typeCle])) : t("Key")}</span> <code class="srv-empreinte-valeur">${h(a.empreinte)}</code></p>
+      <p class="petit m0">${t("To check it (recommended): run this command on the server, or in your host's web console; its answer must hold the same fingerprint.")}</p>
+      <div class="ligne m0"><textarea readonly rows="1" class="code croit" id="srv-empreinte-cmd" aria-label="${h(t("Command to check the fingerprint"))}">${h(a.commande || "for f in /etc/ssh/ssh_host_*_key.pub; do ssh-keygen -lf $f; done")}</textarea><button type="button" class="btn btn-petit" data-srv-copier="srv-empreinte-cmd">${t("Copy")}</button></div>
+      <p class="muet petit m0">${t("A server has several host keys (ED25519, ECDSA, RSA): this is the one Athanor will use. The ssh command of your computer may show another one: that is normal.")}</p>
       <label class="radio"><input type="checkbox" id="srv-confirme"${a.confirme ? " checked" : ""} required> ${t("It is my server's fingerprint")}</label>
       <fieldset class="srv-facons"><legend>${t("How should Athanor connect?")}</legend>
         <label class="radio srv-facon"><input type="radio" name="srv-mode" value="generee"${a.mode === "generee" ? " checked" : ""}> <span><b>${t("A new key made by Athanor")}</b><br><span class="muet petit">${t("Give the server's password once and Athanor puts the key there (the password is not kept), or leave it empty to copy the public part onto the server yourself.")}</span></span></label>

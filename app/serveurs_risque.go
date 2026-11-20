@@ -737,6 +737,24 @@ func valeursOption(a []string, courte byte, longues ...string) []string {
 	return v
 }
 
+// curlSortieNulle: every -o/--output of curl's arguments a is /dev/null, each written so valeursOption reads it (a
+// grouped -sox, whose output it would miss, keeps the rule).
+func curlSortieNulle(a []string) bool {
+	v := valeursOption(a, 'o', "--output")
+	if len(v) == 0 || slices.ContainsFunc(v, func(x string) bool { return x != "/dev/null" }) {
+		return false
+	}
+	for _, x := range a {
+		if x == "--" {
+			break
+		}
+		if len(x) > 2 && x[0] == '-' && x[1] != '-' && x[1] != 'o' && x[len(x)-1] != 'o' && strings.ContainsRune(x, 'o') {
+			return false
+		}
+	}
+	return true
+}
+
 // destination: where cp, ln or install write (-t dir, --target-directory=dir, or the last operand).
 func destination(a []string) []string {
 	if t := valeursOption(a, 't', "--target-directory"); len(t) > 0 {
@@ -935,7 +953,11 @@ var reglesCommandes = map[string]regle{
 		if slices.ContainsFunc(append(valeursOption(a, 'o', "--output"), valeursOption(a, 0, "--output-dir")...), cheminSysteme) {
 			return ClasseDestructrice, "curl overwrites a system file"
 		}
-		if optionShell(a, "oOdXTFKcD", "--output", "--remote-name", "--remote-name-all", "--output-dir", "--data", "--data-raw", "--data-binary", "--data-urlencode", "--data-ascii", "--json", "--request", "--upload-file", "--form", "--form-string", "--config", "--cookie-jar", "--dump-header", "--trace", "--trace-ascii", "--stderr", "--libcurl", "--etag-save", "--hsts", "--alt-svc") {
+		courtes, longues := "oOdXTFKcD", []string{"--output", "--remote-name", "--remote-name-all", "--output-dir", "--data", "--data-raw", "--data-binary", "--data-urlencode", "--data-ascii", "--json", "--request", "--upload-file", "--form", "--form-string", "--config", "--cookie-jar", "--dump-header", "--trace", "--trace-ascii", "--stderr", "--libcurl", "--etag-save", "--hsts", "--alt-svc"}
+		if curlSortieNulle(a) { // -o /dev/null only drops the body: the usual status check (-w '%{http_code}') reads
+			courtes, longues = "OdXTFKcD", longues[1:]
+		}
+		if optionShell(a, courtes, longues...) {
 			return ClasseChangement, "curl writes a file or sends data"
 		}
 		return ClasseLecture, ""

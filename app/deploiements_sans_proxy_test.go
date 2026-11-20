@@ -27,6 +27,17 @@ func TestConfigDeploiementProxy(t *testing.T) {
 			t.Errorf("%+v: %v", x.c, err)
 		}
 	}
+	// full autonomy too: the owner's plan (nginx) reaches the first deployment, and the address's DNS record is asked for
+	e := Environnement{URL: "https://demo.a.test", Plan: "nginx sur web-1, port 5050"}
+	for _, ignorer := range []bool{true, false} {
+		b := briefPremierProjet(Projet{Nom: "a"}, e, "site", strings.Repeat("a", 40), ignorer)
+		if !strings.Contains(b, "nginx sur web-1, port 5050") || !strings.Contains(b, "If demo.a.test has no DNS record yet") || strings.Contains(b, phraseAccordProduction) != !ignorer {
+			t.Errorf("first deployment's brief (full autonomy %v): %s", ignorer, b)
+		}
+	}
+	if b := briefPremierProjet(Projet{Nom: "a"}, Environnement{}, "site", strings.Repeat("a", 40), true); strings.Contains(b, "DNS") || strings.Contains(b, "Deployment plan") {
+		t.Errorf("no address nor plan: %s", b)
+	}
 	if !strings.Contains(briefPremierDeploiement("https://a.test", "", Projet{Nom: "a"}, strings.Repeat("a", 40)), "proxy aucun") {
 		t.Error("the first deployment's brief does not say how to keep the plan's web server")
 	}

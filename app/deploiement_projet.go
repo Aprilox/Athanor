@@ -52,7 +52,7 @@ func briefPreparation(d donneesPreparation, p Projet) string {
 			") are never deployed to: give each the role written next to it and the plan below says (a database, a worker…), and link them to the servers the project is deployed on.\n")
 	}
 	if d.DNS != "" {
-		b.WriteString("DNS: the zone of " + hoteURL(d.URL) + " is at " + d.DNS + ", its token is given.\n")
+		b.WriteString("DNS: the zone of " + hoteURL(d.URL) + " is at " + d.DNS + ", its token is given. " + phraseDNS(hoteURL(d.URL)))
 	}
 	if len(d.APIs) > 0 {
 		b.WriteString("Vault entries given (names only, never ask for a value): " + strings.Join(d.APIs, ", ") + ".\n")
@@ -171,6 +171,32 @@ func briefPremierDeploiement(url, pour string, p Projet, head string) string {
 		"against the owner's plan.\n"
 }
 
+// phraseDNS: what the agent does about host's DNS record (the external check needs it to resolve).
+func phraseDNS(hote string) string {
+	return "If " + hote + " has no DNS record yet (dns_lister), put its dns_ecrire step in your plan, before deployer: an A record to the public " +
+		"address the deployment plan names, else to the server's. Without the Cloudflare tools of its zone, say in your answer that the owner must create that record.\n"
+}
+
+// briefPremierProjet: the first deployment's brief of p's deployment e under env: the method, the site's folder, the
+// address's DNS record, the owner's plan always (the web server it names is the one used, full autonomy included:
+// M310d's production accord only without it), the request's start.
+func briefPremierProjet(p Projet, e Environnement, env, head string, ignorer bool) string {
+	brief := briefPremierDeploiement(e.URL, "", p, head) + "The site's folder on the servers: " + baseDeploiement(p.Nom, env) + " (its current release: " + baseDeploiement(p.Nom, env) + "/current).\n"
+	if !ignorer {
+		brief += phraseAccordProduction
+	}
+	if h := hoteURL(e.URL); h != "" {
+		brief += phraseDNS(h)
+	}
+	if t := strings.TrimSpace(e.Plan); t != "" {
+		brief += "Deployment plan (the owner's words):\n" + couper(t, 1500) + "\n"
+	}
+	if b, _ := os.ReadFile(p.Demande()); strings.TrimSpace(string(b)) != "" {
+		brief += "Project's request (its start):\n" + couper(strings.TrimSpace(string(b)), 600) + "\n"
+	}
+	return brief
+}
+
 // tacheEnCoursID: the Servers task id exists and has not ended.
 func tacheEnCoursID(id string) bool {
 	t, ok := tacheMission(id)
@@ -207,13 +233,7 @@ func (s *Serveur) premierDeploiementProjet(p Projet, forcee bool) (TacheServeurs
 	if err != nil || !reCommitComplet.MatchString(head) {
 		return TacheServeurs{}, erreurEntree("the project has no commit to deploy")
 	}
-	brief := briefPremierDeploiement(e.URL, "", p, head) + "The site's folder on the servers: " + baseDeploiement(p.Nom, env) + " (its current release: " + baseDeploiement(p.Nom, env) + "/current).\n"
-	if modeProjet(p.Nom) != "ignorer" { // M310d: the first deployment is what puts a production online: the agent judges it here too
-		b, _ := os.ReadFile(p.Demande())
-		brief += phraseAccordProduction + "Deployment plan (the owner's words):\n" + couper(strings.TrimSpace(e.Plan), 1500) + "\n" +
-			"Project's request (its start):\n" + couper(strings.TrimSpace(string(b)), 600) + "\n"
-	}
-	t, err := s.lancerTache(couper(brief, maxTexteTache-1), e.Serveurs, forcee, p.Nom)
+	t, err := s.lancerTache(couper(briefPremierProjet(p, e, env, head, modeProjet(p.Nom) == "ignorer"), maxTexteTache-1), e.Serveurs, forcee, p.Nom)
 	r.Etat, r.Commit, r.ID, r.Erreur, r.Accord = "a_preparer", head, "", "", ""
 	if r.Date == "" {
 		r.Date = time.Now().UTC().Format(time.RFC3339)
