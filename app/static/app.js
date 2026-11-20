@@ -2254,9 +2254,41 @@ pages.accueil = async () => {
     </form>
     ${blocAttente(d.elements || [], modules)}
     ${blocEnCours(d.elements || [], modules)}
-    <div class="grille-hub">${modules.filter((m) => ((m.resume || {}).stats || []).length).map(tuileModule).join("")}</div>
+    <div class="grille-hub">${modules.filter((m) => ((m.resume || {}).stats || []).length).map(tuileModule).join("")}${tuileMachine()}</div>
   </div>`;
 };
+// This computer (machine.go): processors, memory, each disk and each network link, read every 2 s while the home shows
+const debitLisible = (o) => o >= 1048576 ? t("{0} MB/s", [(o / 1048576).toFixed(1)]) : o >= 1024 ? t("{0} KB/s", [Math.round(o / 1024)]) : t("{0} B/s", [Math.round(o)]);
+const goOctets = (o) => t("{0} GB", [(o / 1073741824).toFixed(o >= 10737418240 ? 0 : 1)]);
+const barreMachine = (pct) => `<span class="quota-ligne ${pct >= 90 ? "plein" : pct >= 70 ? "haut" : ""}"><span class="barre m0"><i style="width:${Math.min(100, Math.round(pct))}%"></i></span></span>`;
+function tuileMachine() {
+  return `<section class="bloc tuile-module tuile-machine" id="tuile-machine" aria-labelledby="machine-titre">
+    <div class="ligne m0 tuile-tete"><span class="dot travaille" aria-hidden="true"></span><h2 class="m0" id="machine-titre">${t("This computer")}</h2><span class="muet petit" id="machine-sys"></span></div>
+    <div id="machine-corps" aria-live="off">${derniereMachine ? corpsMachine(derniereMachine) : `<p class="muet petit">${t("Reading…")}</p>`}</div>
+  </section>`;
+}
+let derniereMachine = null; // the last reading: a home drawn again keeps its figures until the next one
+
+function corpsMachine(v) {
+  const ram = v.ram_total ? 100 * v.ram_util / v.ram_total : 0;
+  const ligne = (nom, valeur, pct, detail) => `<div class="machine-ligne"><div class="ligne m0"><span>${h(nom)}</span><span class="espace"></span><b>${valeur}</b></div>${pct == null ? "" : barreMachine(pct)}${detail ? `<div class="muet petit">${detail}</div>` : ""}</div>`;
+  const disques = (v.disques || []).map((d) => { const pct = d.total ? 100 * (d.total - d.libre) / d.total : 0;
+    const act = d.activite >= 0 ? t("Activity {0} %", [Math.round(d.activite)]) + (d.lecture >= 0 ? ` · ${t("read")} ${debitLisible(d.lecture)} · ${t("write")} ${debitLisible(d.ecriture)}` : "") : "";
+    return ligne(t("Disk {0}", [d.nom]), `${Math.round(pct)} %`, pct, h(t("{0} free of {1}", [goOctets(d.libre), goOctets(d.total)])) + (act ? " · " + h(act) : "")); }).join("");
+  const reseaux = (v.reseaux || []).map((x) => `<div class="machine-ligne ligne m0"><span>${h(x.nom)}</span><span class="espace"></span><span class="petit" title="${h(t("Received"))}">${ic("bas")} ${debitLisible(x.entree)}</span><span class="petit" title="${h(t("Sent"))}">${ic("haut")} ${debitLisible(x.sortie)}</span></div>`).join("");
+  return ligne(t("Processors"), v.cpu >= 0 ? `${Math.round(v.cpu)} %` : "…", v.cpu >= 0 ? v.cpu : null, "")
+    + ligne(t("Memory"), `${Math.round(ram)} %`, ram, h(t("{0} used of {1}", [goOctets(v.ram_util), goOctets(v.ram_total)])))
+    + disques + (reseaux ? `<h3 class="petit muet m0 mt-1">${t("Network")}</h3>${reseaux}` : "");
+}
+async function majMachine() {
+  const z = $("#machine-corps"); if (!z) return;
+  const v = await api("machine").catch(() => null);
+  if (!v || !$("#machine-corps")) return;
+  derniereMachine = v;
+  $("#machine-corps").innerHTML = corpsMachine(v);
+  $("#machine-sys").textContent = t("{0} processors", [v.coeurs]);
+}
+setInterval(() => { if (document.visibilityState === "visible" && $("#machine-corps")) majMachine(); }, 2000); // only while the home shows
 const badgePermission = (mode) => `<span class="badge mis-perm" title="${h(t("Permissions"))}">${h(titrePermission(mode))}</span>`;
 document.addEventListener("submit", (ev) => { if (ev.target.id === "accueil-form") { ev.preventDefault(); envoyerHubChat(); } });
 

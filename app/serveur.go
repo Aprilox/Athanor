@@ -380,6 +380,7 @@ func (s *Serveur) routes(mux *http.ServeMux) {
 	// reachable even when locked (reduced answers)
 	mux.HandleFunc("GET /api/etat", s.garde(true, s.apiEtat))
 	mux.HandleFunc("GET /api/hub", s.garde(false, s.apiHub))
+	mux.HandleFunc("GET /api/machine", s.garde(false, s.apiMachine)) // this computer's load (machine.go)
 	mux.HandleFunc("POST /api/hub/alertes", s.garde(false, s.apiAlertes))
 	mux.HandleFunc("GET /api/hub/audit", s.garde(false, s.apiAudit))
 	mux.HandleFunc("POST /api/hub/audit/verifier", s.garde(false, s.apiAuditVerifier))

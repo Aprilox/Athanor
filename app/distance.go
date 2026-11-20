@@ -300,10 +300,10 @@ func interditDistance(r *http.Request) bool {
 
 // prefixesHub: the hub's routes, closed to devices by default (an allowlist, unlike interditDistance):
 // a new route under these prefixes stays refused from a device until it is added to autorisesDistance.
-var prefixesHub = []string{"/api/hub", "/api/coffre", "/api/acces", "/api/serveurs", "/api/missions", "/api/mentions"}
+var prefixesHub = []string{"/api/hub", "/api/machine", "/api/coffre", "/api/acces", "/api/serveurs", "/api/missions", "/api/mentions"}
 
 // autorisesDistance: "METHOD path" of the hub a device may call (reading only, never a secret value).
-var autorisesDistance = map[string]bool{"GET /api/hub": true, "GET /api/coffre": true, "GET /api/acces": true,
+var autorisesDistance = map[string]bool{"GET /api/hub": true, "GET /api/machine": true, "GET /api/coffre": true, "GET /api/acces": true,
 	"GET /api/coffre/categories": true,                                       // M287: the names of the owner's categories (made, renamed, removed on the PC)
 	"GET /api/hub/audit":         true, "POST /api/hub/audit/verifier": true, // the audit log: read and checked, never written
 	"GET /api/hub/approbations": true, "POST /api/hub/approbations": true, // P7: the owner decides from the phone

@@ -1817,3 +1817,9 @@ html.scene-pause .verrou * { animation-play-state: paused !important; }
 .cof-p-portee { max-width: 100%; }
 .mis-jalons-srv { margin: 4px 0 0; padding-left: 20px; display: grid; gap: 4px; }
 .mis-jalons-srv li { overflow-wrap: anywhere; }
+.tuile-machine #machine-corps { display: grid; gap: 8px; margin-top: 12px; }
+.machine-ligne { min-width: 0; }
+.machine-ligne .quota-ligne { display: block; padding: 0; }
+.machine-ligne .quota-ligne .barre { display: block; margin: 4px 0 2px; height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; }
+.machine-ligne .ligne { gap: 8px; }
+.machine-ligne > .ligne > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
