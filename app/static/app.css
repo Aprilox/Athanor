@@ -1790,16 +1790,22 @@ html.scene-pause .verrou * { animation-play-state: paused !important; }
 .gestion-col > .bloc { margin: 0; }
 .gestion-large { grid-column: 1 / -1; margin: 0; }
 .mis-resume { margin: 6px 0 8px; } /* the summary of a mission the assistant prepared, under its answer */
-/* the terminals' list of the connection bar: opens on hover, a click or the keyboard */
-.term-liste-zone { position: relative; }
-.term-liste { display: none; position: absolute; top: 100%; left: 0; z-index: 40; width: min(560px, 92vw); max-height: 70vh; overflow-y: auto; margin-top: 4px; padding: 6px; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 10px 28px rgba(0, 0, 0, .25); }
-.term-liste-zone.ouvert .term-liste { display: block; }
-.term-l { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 8px; padding: 8px; border-radius: 8px; align-items: center; }
-.term-l + .term-l { border-top: 1px solid var(--line); }
-.term-l:hover, .term-l.actif { background: color-mix(in srgb, var(--accent) 7%, transparent); }
-.term-l-nom { min-width: 0; overflow-wrap: anywhere; color: inherit; text-decoration: none; }
-.term-l-badges { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
-.term-l-ia { border-color: var(--accent); color: var(--accent); }
-.term-l-actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 4px; }
-.term-l-champ { width: 100%; max-width: 260px; }
-.term-l-pied { padding: 8px 8px 2px; }
+/* the connection's tabs: several terminals and SFTP views of one server, and the assistant's own connection */
+.term-tabs { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; }
+.term-tab { display: inline-flex; align-items: center; border-bottom: 2px solid transparent; }
+.term-tab.actif { border-bottom-color: var(--accent); }
+.term-tab > button[role=tab] { background: none; border: 0; padding: 8px 10px; color: inherit; cursor: pointer; font: inherit; min-height: 44px; }
+.term-tab.actif > button[role=tab] { font-weight: 600; }
+.term-tab-x { background: none; border: 0; color: var(--muted); cursor: pointer; padding: 0 6px; font-size: 1.1em; line-height: 1; }
+.term-tab-x:hover, .term-tab-x:focus-visible { color: var(--erreur); }
+.term-tab-ia > button[role=tab] { color: var(--accent); }
+.term-tab-champ { width: 150px; margin: 4px; }
+.term-ia-vue { display: none; height: 100%; min-height: 0; overflow: auto; background: #141b24; color: #e9eef3; font: 13px/1.45 ui-monospace, "Cascadia Mono", Consolas, monospace; padding: 12px; border-radius: 8px; }
+.terminal-page[data-onglet="ia-vue"] .term-ia-vue { display: block; }
+.terminal-page[data-onglet="ia-vue"] .term-hote, .terminal-page[data-onglet="ia-vue"] .sftp, .terminal-page[data-onglet="ia-vue"] .term-seul, .terminal-page[data-onglet="ia-vue"] #term-reglages-zone { display: none; }
+.ia-vue-tache + .ia-vue-tache { border-top: 1px solid #3a4b60; margin-top: 10px; padding-top: 6px; }
+.ia-vue-tete { color: #3fc6a5; margin: 4px 0; }
+.ia-vue-tete .muet { color: #9aa7b4; }
+.ia-vue-cmd { color: #9ccfff; margin-top: 6px; overflow-wrap: anywhere; }
+.ia-vue-cmd.erreur { color: #ff9a9c; }
+.ia-vue-sortie { margin: 2px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; color: #c9d1d9; font: inherit; }

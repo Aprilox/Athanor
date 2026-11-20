@@ -6815,69 +6815,126 @@ function chargerXterm() {
   if (!document.querySelector('link[href="xterm/xterm.css"]')) { const l = document.createElement("link"); l.rel = "stylesheet"; l.href = "xterm/xterm.css"; document.head.append(l); }
   return (xtermCharge ||= script("xterm/xterm.js").then(() => script("xterm/addon-fit.js")).catch((e) => { xtermCharge = null; throw e; }));
 }
-// The terminals' list (the connection bar): every server, the pinned ones first, the open one marked, and the AI at
-// work on each (a project's deployment, the assistant in its own connection or live in the terminal); rename, pin,
-// detach a terminal or its SFTP in a window of its own (several at once), a new connection. Names and pins: this device.
-const prefsTerminaux = () => { try { return JSON.parse(localStorage.getItem("athanor.terminaux") || "{}"); } catch (e) { return {}; } };
-function garderPrefTerminal(id, champ, v) {
-  const p = prefsTerminaux(); p[id] = { ...(p[id] || {}), [champ]: v };
-  try { localStorage.setItem("athanor.terminaux", JSON.stringify(p)); } catch (e) { /* this view only */ }
-}
-const nomTerminal = (x) => (prefsTerminaux()[x.id] || {}).nom || x.nom;
-const zoneTerminaux = () => `<div class="term-liste-zone" data-term-liste-zone><button type="button" class="btn btn-petit" data-term-liste aria-expanded="false" aria-controls="term-liste">${ic("serveur")} ${t("Terminals")} ${ic("bas")}</button>
-  <div class="term-liste" id="term-liste" role="group" aria-label="${h(t("Terminals"))}"></div></div>`;
+// The connection's tabs (one server): several terminals (each its own SSH session, kept reading while another is
+// shown), several SFTP views, and the assistant's own connection when it works apart (what it types, what comes back).
+// term holds the terminal shown; the others wait in their tab (etat); sf.local/sf.serveur the SFTP shown.
+const ong = { serveur: "", liste: [], ssh: "", sftp: "", n: 0, ia: [], minuteur: null };
 const TACHE_FINIE = ["finie", "echec", "arretee"];
-function badgesIA(taches) {
-  return taches.filter((x) => !TACHE_FINIE.includes(x.etat)).map((x) => x.env ? t("AI · {0} deploys", [x.env.split("/")[0]]) : x.panneau ? t(x.direct ? "AI · live in this terminal" : "AI · assistant (separate connection)") : t("AI · task"))
-    .filter((v, i, l) => l.indexOf(v) === i).map((b) => `<span class="badge term-l-ia">${ic("lecture")} ${h(b)}</span>`).join("");
+const CHAMPS_TERM = ["x", "fit", "el", "session", "lecteur", "msg", "attente", "enVol", "reco", "obs"];
+const cleSession = () => "athanor.terminal." + term.id + (ong.ssh && ong.ssh !== "t1" ? "." + ong.ssh : "");
+function initOnglets() {
+  if (ong.serveur === term.id) return;
+  for (const o of ong.liste) if (o.etat && o.etat.lecteur) o.etat.lecteur.abort(); // another server: its tabs' readers stop
+  Object.assign(ong, { serveur: term.id, liste: [{ cle: "t1", type: "ssh", num: 1 }, { cle: "s1", type: "sftp", num: 1 }], ssh: "t1", sftp: "s1", n: 1, ia: [] });
 }
-async function remplirTerminaux() {
-  const z = $("#term-liste"); if (!z) return;
-  const d = await api("serveurs").catch(() => ({ serveurs: [] })), p = prefsTerminaux(), l = (d.serveurs || []).filter((x) => x.etat !== "inconnu");
-  const taches = await Promise.all(l.map((x) => api(`serveurs/${encodeURIComponent(x.id)}/taches`).then((r) => r.taches || []).catch(() => [])));
-  const lignes = l.map((x, i) => ({ x, taches: taches[i], pin: !!(p[x.id] || {}).epingle })).sort((a, b) => (b.x.id === term.id) - (a.x.id === term.id) || b.pin - a.pin);
-  z.innerHTML = lignes.map(({ x, taches: tc, pin }) => `<div class="term-l${x.id === term.id ? " actif" : ""}" data-term-l="${h(x.id)}">
-      <a class="term-l-nom" href="#terminal/${encodeURIComponent(x.id)}"${x.id === term.id ? ' aria-current="page"' : ""}>${pin ? ic("etoile") + " " : ""}<b>${h(nomTerminal(x))}</b> <span class="muet petit">${h(x.hote || "")}</span></a>
-      <span class="term-l-badges">${x.id === term.id ? `<span class="badge">${t("Open here")}</span>` : ""}${badgesIA(tc)}</span>
-      <span class="term-l-actions">
-        <button type="button" class="btn btn-petit" data-term-l-renommer>${t("Rename")}</button>
-        <button type="button" class="btn btn-petit" data-term-l-epingler aria-pressed="${pin}">${t(pin ? "Unpin" : "Pin")}</button>
-        <button type="button" class="btn btn-petit" data-term-l-detacher>${t("Detach")}</button>
-        <button type="button" class="btn btn-petit" data-term-l-detacher="sftp">${t("Detach the SFTP")}</button></span></div>`).join("")
-    + `<div class="ligne m0 term-l-pied"><button type="button" class="btn btn-petit btn-primaire" data-term-l-nouveau>+ ${t("New connection")}</button></div>`;
+const nomOnglet = (o) => o.nom || (o.type === "ssh" ? t("Terminal {0}", [o.num]) : t("SFTP {0}", [o.num]));
+function ongletsConnexion() {
+  initOnglets();
+  const vue = sf.onglet, bouton = (o) => {
+    const actif = o.type === "ssh" ? vue === "terminal" && ong.ssh === o.cle : vue === "sftp" && ong.sftp === o.cle, seul = ong.liste.filter((x) => x.type === o.type).length === 1;
+    return `<span class="term-tab${actif ? " actif" : ""}"><button type="button" role="tab" aria-selected="${actif}" data-term-tab="${o.cle}" title="${h(t("Double-click to rename"))}">${h(nomOnglet(o))}</button>${seul ? "" : `<button type="button" class="term-tab-x" data-term-tab-fermer="${o.cle}" aria-label="${h(t("Close {0}", [nomOnglet(o)]))}">×</button>`}</span>`;
+  };
+  const enCours = ong.ia.some((x) => !TACHE_FINIE.includes(x.etat));
+  return `<div class="onglets term-onglets term-tabs" role="tablist" aria-label="${h(t("Connection views"))}">
+    ${ong.liste.map(bouton).join("")}
+    ${ong.ia.length ? `<span class="term-tab term-tab-ia${vue === "ia-vue" ? " actif" : ""}"><button type="button" role="tab" aria-selected="${vue === "ia-vue"}" data-term-tab="ia">${enCours ? ic("lecture") + " " : ""}${t("AI · its own connection")}</button></span>` : ""}
+    <button type="button" class="btn btn-petit" data-term-tab-nouveau="ssh">+ ${t("Terminal")}</button><button type="button" class="btn btn-petit" data-term-tab-nouveau="sftp">+ ${t("SFTP")}</button>
+    <span class="espace"></span><button type="button" class="btn btn-petit" data-term-detacher title="${h(t("Open this view in a window of its own"))}">${t("Detach")}</button>
+    <button type="button" role="tab" class="term-onglet-ia" aria-selected="${vue === "ia"}" data-term-onglet="ia">${t("Assistant")}</button></div>`;
 }
-function ouvrirTerminaux(ouvrir) {
-  const z = $("[data-term-liste-zone]"); if (!z) return;
-  z.classList.toggle("ouvert", ouvrir); z.querySelector("[data-term-liste]").setAttribute("aria-expanded", ouvrir);
-  if (ouvrir) remplirTerminaux();
-}
-document.addEventListener("mouseover", (ev) => { const z = ev.target.closest && ev.target.closest("[data-term-liste-zone]"); if (z && !z.classList.contains("ouvert")) ouvrirTerminaux(true); });
-document.addEventListener("mouseout", (ev) => { const z = ev.target.closest && ev.target.closest("[data-term-liste-zone]"); if (z && !z.contains(ev.relatedTarget) && !z.contains(document.activeElement)) ouvrirTerminaux(false); });
-document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && $("[data-term-liste-zone].ouvert")) { ouvrirTerminaux(false); $("[data-term-liste]")?.focus(); } });
-document.addEventListener("click", (ev) => {
-  const zone = $("[data-term-liste-zone]"); if (!zone) return;
-  if (!ev.target.closest("[data-term-liste-zone]")) { if (zone.classList.contains("ouvert")) ouvrirTerminaux(false); return; }
-  const b = ev.target.closest("button"); if (!b) return;
-  const ligne = b.closest("[data-term-l]"), id = ligne && ligne.dataset.termL;
-  if (b.hasAttribute("data-term-liste")) return ouvrirTerminaux(!zone.classList.contains("ouvert"));
-  if (b.hasAttribute("data-term-l-nouveau")) { srv.aj = { etape: "adresse" }; location.hash = "#serveurs"; return; }
-  if (b.hasAttribute("data-term-l-epingler")) { garderPrefTerminal(id, "epingle", !(prefsTerminaux()[id] || {}).epingle); return remplirTerminaux(); }
-  if (b.hasAttribute("data-term-l-renommer")) {
-    const a = ligne.querySelector(".term-l-nom b"), ancien = a.textContent;
-    a.outerHTML = `<input type="text" class="term-l-champ" maxlength="60" value="${h(ancien)}" aria-label="${h(t("Name of this terminal"))}">`;
-    const c = ligne.querySelector(".term-l-champ"); c.focus(); c.select();
-    const fin = (garder) => { garderPrefTerminal(id, "nom", garder ? c.value.trim() : (prefsTerminaux()[id] || {}).nom || ""); remplirTerminaux(); if (id === term.id) { const l = $(".term-barre > a.petit"); if (l) l.lastChild.textContent = " " + (c.value.trim() || ancien); } };
-    c.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); fin(true); } else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); fin(false); } });
-    c.addEventListener("blur", () => fin(true), { once: true });
-    return;
+function majOnglets() { const z = $(".term-tabs"); if (z) z.outerHTML = ongletsConnexion(); }
+// the terminal shown changes: the one left keeps its session and its reader, only its screen leaves the page
+function montrerSsh(cle) {
+  const avant = ong.liste.find((o) => o.cle === ong.ssh), cible = ong.liste.find((o) => o.cle === cle);
+  if (!cible) return;
+  if (cle !== ong.ssh) {
+    if (avant) { avant.etat = Object.fromEntries(CHAMPS_TERM.map((k) => [k, term[k]])); if (term.el) term.el.remove(); if (term.obs) term.obs.disconnect(); }
+    Object.assign(term, { x: null, fit: null, el: null, session: "", lecteur: null, msg: null, attente: "", enVol: false, reco: "", obs: null }, cible.etat || {}, { serveur: term.id });
+    ong.ssh = cle;
+    if (!term.msg) messageTerminal(null); // the message of the terminal left stays with it
   }
-  if (b.hasAttribute("data-term-l-detacher")) { // a window of its own: this one leaves that terminal, the new one opens its own session
-    const sftp = b.dataset.termLDetacher === "sftp", f = window.open(`${location.pathname}${location.search}#terminal/${encodeURIComponent(id)}${sftp ? "/sftp" : ""}`, `athanor-${id}${sftp ? "-sftp" : ""}`, "popup=yes,width=1100,height=720");
-    if (!f) return toast(t("Could not open a window: allow pop-up windows for Athanor."), "erreur");
-    if (id === term.id) location.hash = "#serveurs";
-    return ouvrirTerminaux(false);
+  ongletTerminal("terminal"); majOnglets(); monterTerminal();
+}
+function montrerSftp(cle) {
+  const avant = ong.liste.find((o) => o.cle === ong.sftp), cible = ong.liste.find((o) => o.cle === cle);
+  if (!cible) return;
+  if (cle !== ong.sftp) {
+    if (avant) avant.etat = { local: sf.local, serveur: sf.serveur };
+    sf.local = cible.etat ? cible.etat.local : panneauSftp(); sf.serveur = cible.etat ? cible.etat.serveur : panneauSftp();
+    ong.sftp = cle;
+    if (!cible.etat) { chargerPanneau("local", ""); chargerPanneau("serveur", ""); }
   }
+  ongletTerminal("sftp"); majOnglets();
+}
+function fermerOnglet(cle) {
+  const o = ong.liste.find((x) => x.cle === cle); if (!o) return;
+  const autre = ong.liste.find((x) => x.type === o.type && x.cle !== cle); if (!autre) return;
+  if (o.type === "ssh") {
+    const montre = cle === ong.ssh;
+    if (montre) { if (term.session) agirTerminal({ fermer: true }); montrerSsh(autre.cle); }
+    const e = o.etat || {};
+    if (e.lecteur) e.lecteur.abort();
+    if (e.session && !montre) fetch(`/api/serveurs/${encodeURIComponent(term.id)}/terminal/${encodeURIComponent(e.session)}`, { method: "POST", headers: { "X-Athanor": CSRF, "Content-Type": "application/json" }, body: '{"fermer":true}' }).catch(() => {});
+    if (e.obs) e.obs.disconnect(); if (e.x) e.x.dispose();
+  } else if (cle === ong.sftp) montrerSftp(autre.cle);
+  ong.liste = ong.liste.filter((x) => x.cle !== cle); majOnglets();
+}
+// the assistant's work in its own connection on this server (and a project's deployment there): read every 3 s
+// while the page shows the server; its tab appears once there is something to see
+async function suivreIA() {
+  clearTimeout(ong.minuteur);
+  if (etat.page !== "terminal" || !term.id) return;
+  const id = term.id, r = await api(`serveurs/${encodeURIComponent(id)}/taches`).catch(() => null);
+  if (etat.page !== "terminal" || id !== term.id) return;
+  if (r) {
+    const l = (r.taches || []).filter((x) => !x.direct && (x.actions || []).length).slice(-3), avant = JSON.stringify(ong.ia.map((x) => [x.id, x.etat, (x.actions || []).length]));
+    ong.ia = l;
+    if (JSON.stringify(l.map((x) => [x.id, x.etat, (x.actions || []).length])) !== avant) { majOnglets(); rendreVueIA(); }
+  }
+  ong.minuteur = setTimeout(suivreIA, 3000);
+}
+function rendreVueIA() {
+  const z = $("#term-ia-vue"); if (!z) return;
+  z.innerHTML = ong.ia.map((x) => `<div class="ia-vue-tache"><div class="ia-vue-tete">${h(x.env ? t("AI · {0} deploys", [x.env.split("/")[0]]) : t("AI · assistant (separate connection)"))} <span class="muet">· ${t(TACHE_FINIE.includes(x.etat) ? "finished" : "working")}</span></div>
+    ${(x.actions || []).map((a) => `<div class="ia-vue-cmd${a.etat === "erreur" || a.etat === "refusee" ? " erreur" : ""}">$ ${h(a.quoi || a.outil)}</div>${a.sortie ? `<pre class="ia-vue-sortie">${h(a.sortie)}</pre>` : ""}`).join("")}</div>`).join("")
+    || `<p class="muet">${t("Nothing yet.")}</p>`;
+  if (sf.onglet === "ia-vue") z.scrollTop = z.scrollHeight;
+}
+$("#page").addEventListener("click", (ev) => {
+  if (etat.page !== "terminal") return;
+  const b = ev.target.closest("[data-term-tab], [data-term-tab-nouveau], [data-term-tab-fermer], [data-term-detacher]"); if (!b) return;
+  const d = b.dataset;
+  if (d.termTabFermer) return fermerOnglet(d.termTabFermer);
+  if (d.termDetacher !== undefined) return detacherTerminal(term.id, sf.onglet === "sftp");
+  if (d.termTabNouveau) {
+    const type = d.termTabNouveau, num = Math.max(0, ...ong.liste.filter((x) => x.type === type).map((x) => x.num)) + 1, cle = (type === "ssh" ? "t" : "s") + (++ong.n) + "_" + num;
+    const apres = ong.liste.findLastIndex((x) => x.type === type); // the terminals together, then the SFTP views
+    ong.liste.splice(apres + 1, 0, { cle, type, num });
+    return type === "ssh" ? montrerSsh(cle) : montrerSftp(cle);
+  }
+  if (d.termTab === "ia") { ongletTerminal("ia-vue"); majOnglets(); return rendreVueIA(); }
+  const o = ong.liste.find((x) => x.cle === d.termTab); if (!o) return;
+  // a double click renames (counted here: the first click draws the tabs again, the browser's dblclick is lost)
+  const maint = Date.now(), double = ong.clic && ong.clic.cle === o.cle && maint - ong.clic.t < 450;
+  ong.clic = double ? null : { cle: o.cle, t: maint };
+  if (double) return renommerOnglet(o);
+  return o.type === "ssh" ? montrerSsh(o.cle) : montrerSftp(o.cle);
 });
+function renommerOnglet(o) { // in place: Enter keeps, Escape leaves
+  const b = $(`.term-tabs [data-term-tab="${o.cle}"]`); if (!b) return;
+  b.outerHTML = `<input type="text" class="term-tab-champ" maxlength="40" value="${h(nomOnglet(o))}" aria-label="${h(t("Name of this tab"))}">`;
+  const c = $(".term-tab-champ"); c.focus(); c.select();
+  let fait = false; // Enter draws the tabs again, which blurs the field: once only
+  const fin = (garder) => { if (fait) return; fait = true; if (garder && c.value.trim()) o.nom = c.value.trim(); majOnglets(); };
+  c.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); fin(true); } else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); fin(false); } });
+  c.addEventListener("blur", () => fin(true), { once: true });
+}
+// a window of its own, opened by Athanor (Windows, Linux, macOS) and signed in by a single-use link: the new one
+// opens its own session, this one keeps its tabs
+async function detacherTerminal(id, sftp) {
+  const r = await action(api("fenetre/page", "POST", { page: `terminal/${id}${sftp ? "/sftp" : ""}` }));
+  if (r) toast(t("The window opens: arrange it as you like on your desktop."), "ok");
+}
 pages.terminal = async () => {
   const distant = !!(etat.vue || {}).distant, d = await api("serveurs"), x = d.serveurs.find((s) => s.id === term.id);
   srv.termDistance = !!d.terminal_distance;
@@ -6888,7 +6945,7 @@ pages.terminal = async () => {
     : x.etat === "inconnu" ? [t("Athanor cannot reach this server with its key yet."), t("Put its public key on the server, then press Verify on its sheet.")] : null;
   term.nom = x.nom;
   return `<div class="serveurs terminal-page" data-onglet="${sf.onglet}">
-    <div class="ligne m0 term-barre">${distant ? "" : zoneTerminaux()}<a href="#serveur/${encodeURIComponent(x.id)}" class="petit">${ic("gauche")} ${h(nomTerminal(x))}</a>
+    <div class="ligne m0 term-barre"><a href="#serveur/${encodeURIComponent(x.id)}" class="petit">${ic("gauche")} ${h(x.nom)}</a>
       <code class="muet petit term-adresse">${h(x.utilisateur)}@${h(x.hote)}</code>${badgeSansGarde(x, x.autorisation !== "ignorer")}<span class="pastille attend" id="term-etat">${t("Connecting…")}</span><span class="espace"></span>
       ${avis ? "" : `<span class="muet petit term-aide term-seul">${t(MAC ? "Copy: Cmd+C · Paste: Cmd+V" : "Copy: Ctrl+Shift+C · Paste: Ctrl+Shift+V")}</span>
       <button type="button" class="btn btn-petit term-seul" data-term-copier title="${h(t(MAC ? "Copy: Cmd+C · Paste: Cmd+V" : "Copy: Ctrl+Shift+C · Paste: Ctrl+Shift+V"))}">${t("Copy")}</button><button type="button" class="btn btn-petit term-seul" data-term-coller title="${h(t(MAC ? "Copy: Cmd+C · Paste: Cmd+V" : "Copy: Ctrl+Shift+C · Paste: Ctrl+Shift+V"))}">${t("Paste")}</button>
@@ -6897,8 +6954,8 @@ pages.terminal = async () => {
       <button type="button" class="btn btn-petit" data-term-deconnecter>${t("Disconnect")}</button>`}</div>
     ${avis ? `<div class="bloc term-message"><p class="m0"><b>${h(avis[0])}</b></p><p class="muet m0">${h(avis[1])}</p><div class="ligne m0"><a class="btn" href="#serveur/${encodeURIComponent(x.id)}">${t("Back to the server")}</a></div></div>`
       : `<div class="bloc term-message" id="term-message" role="alert" hidden></div><div id="term-reglages-zone">${term.essai ? panneauReglagesTerminal() : ""}</div>
-      <div class="onglets term-onglets" role="tablist" aria-label="${h(t("Connection views"))}">${[["terminal", t("Terminal"), "term-hote"], ["sftp", t("SFTP"), "sftp"], ["ia", t("Assistant"), "ia"]].map(([o, nom, zone]) => `<button type="button" role="tab" id="term-onglet-${o}" class="term-onglet-${o}${sf.onglet === o ? " actif" : ""}" aria-selected="${sf.onglet === o}" aria-controls="${zone}" tabindex="${sf.onglet === o ? 0 : -1}" data-term-onglet="${o}">${nom}</button>`).join("")}</div>
-      <div class="term-zones${ia.visible ? " avec-ia" : ""}" id="term-zones"${largeurIAGardee() ? ` style="--ia-largeur:${largeurIAGardee()}px"` : ""}><div class="term-hote" id="term-hote" role="tabpanel" aria-labelledby="term-onglet-terminal"></div><section class="sftp" id="sftp" role="tabpanel" aria-labelledby="term-onglet-sftp"></section><div class="term-separateur" role="separator" tabindex="0" aria-orientation="vertical" aria-controls="ia" aria-label="${h(t("Width of the assistant"))}" title="${h(t("Drag or use the arrow keys to resize; double-click to reset"))}" data-term-separateur></div>${panneauIA(distant)}</div>`}
+      ${ongletsConnexion()}
+      <div class="term-zones${ia.visible ? " avec-ia" : ""}" id="term-zones"${largeurIAGardee() ? ` style="--ia-largeur:${largeurIAGardee()}px"` : ""}><div class="term-hote" id="term-hote" role="tabpanel" aria-labelledby="term-onglet-terminal"></div><section class="sftp" id="sftp" role="tabpanel" aria-labelledby="term-onglet-sftp"></section><section class="term-ia-vue" id="term-ia-vue" role="tabpanel" aria-label="${h(t("AI · its own connection"))}"></section><div class="term-separateur" role="separator" tabindex="0" aria-orientation="vertical" aria-controls="ia" aria-label="${h(t("Width of the assistant"))}" title="${h(t("Drag or use the arrow keys to resize; double-click to reset"))}" data-term-separateur></div>${panneauIA(distant)}</div>`}
   </div>`;
 };
 // note 19h03 §8: the line between the terminal and the assistant sets the assistant's width, kept on this device;
@@ -6980,7 +7037,7 @@ async function monterTerminal() {
     });
     term.obs = new ResizeObserver(() => requestAnimationFrame(() => { hauteurTerminal(); ariaSeparateur(); if (term.el.isConnected && term.el.offsetWidth) term.fit.fit(); rendreLignes("local"); rendreLignes("serveur"); }));
   } else hote.append(term.el);
-  term.obs.disconnect(); term.obs.observe($("#page")); term.obs.observe(hote); majIA(); hauteurTerminal(); rendreSftp();
+  term.obs.disconnect(); term.obs.observe($("#page")); term.obs.observe(hote); majIA(); hauteurTerminal(); rendreSftp(); suivreIA(); rendreVueIA();
   appliquerReglagesTerminal();
   if (term.msg) return messageTerminal(...term.msg);
   if (term.serveur !== term.id) { // another server: its own screen and session
@@ -6996,14 +7053,14 @@ async function connecterTerminal() {
   if (!term.session) {
     try {
       const r = await api("serveurs/" + encodeURIComponent(id) + "/terminal", "POST", { cols: term.x.cols, lignes: term.x.rows });
-      term.session = r.session; sessionStorage.setItem("athanor.terminal." + id, r.session);
+      term.session = r.session; sessionStorage.setItem(cleSession(), r.session);
     } catch (e) { return id === term.id && erreurTerminal((e.data || {}).erreur_key || "", e.message); }
   }
   lireTerminal(id, term.session, neuve);
 }
 // the output, read as a byte stream until the terminal ends (or the page leaves: aborted)
 async function lireTerminal(id, session, neuve) {
-  const ctl = new AbortController(); term.lecteur = ctl;
+  const ctl = new AbortController(), x = term.x, cleS = cleSession(); term.lecteur = ctl;
   try {
     const r = await fetch(`/api/serveurs/${encodeURIComponent(id)}/terminal/${encodeURIComponent(session)}`, { headers: { "X-Athanor": CSRF }, signal: ctl.signal });
     if (!r.ok) {
@@ -7012,7 +7069,7 @@ async function lireTerminal(id, session, neuve) {
       if (d.reconnexion) return suivreReconnexion(id, session, d);
       if (r.status === 410) { // closed meanwhile (a reload after it ended): a new one, once; never for one just
         // opened (C1-19: a shell that exits at once, nologin, would loop and could trip fail2ban)
-        sessionStorage.removeItem("athanor.terminal." + id); term.session = "";
+        sessionStorage.removeItem(cleS); term.session = "";
         return !neuve && (d.fin === "abandoned" || d.fin === "ended") ? connecterTerminal() : finTerminal(d.fin, d.tentatives);
       }
       return erreurTerminal(d.erreur_key || "", d.erreur_key ? t(d.erreur_key) : t("Error {0}", [r.status]));
@@ -7022,9 +7079,9 @@ async function lireTerminal(id, session, neuve) {
     agirTerminal({ cols: term.x.cols, lignes: term.x.rows }); // the size it had when the page was away
     chargerPanneau("serveur", sf.serveur.serveur === id && sf.serveur.chemin || "", "actualiser");
     const lu = r.body.getReader();
-    for (;;) { const { value, done } = await lu.read(); if (done) break; term.x.write(value); }
+    for (;;) { const { value, done } = await lu.read(); if (done) break; x.write(value); }
   } catch (e) { if (ctl.signal.aborted) return; }
-  if (term.lecteur !== ctl) return;
+  if (term.lecteur !== ctl) { for (const o of ong.liste) if (o.etat && o.etat.lecteur === ctl) o.etat.lecteur = null; return; }
   term.lecteur = null;
   // the stream ended: the terminal closed; the Go side says why
   const f = await fetch(`/api/serveurs/${encodeURIComponent(id)}/terminal/${encodeURIComponent(session)}`, { method: "POST", headers: { "X-Athanor": CSRF, "Content-Type": "application/json" }, body: "{}" })
@@ -7052,7 +7109,7 @@ async function suivreReconnexion(id, session, f) {
   finTerminal((f && f.fin) || "ended", f && f.tentatives);
 }
 function finTerminal(raison, tentatives) {
-  sessionStorage.removeItem("athanor.terminal." + term.id); term.session = "";
+  sessionStorage.removeItem(cleSession()); term.session = "";
   if (term.x) term.x.options.disableStdin = true;
   etatTerminal(t("Disconnected"), "attend"); chargerPanneau("serveur");
   messageTerminal(t("Disconnected"), t(FINS_TERMINAL[raison] || FINS_TERMINAL.ended, [String(tentatives || 10)]), raison === "reconnect_failed" || raison === "unstable" ? "Try again" : "Connect again");
@@ -7081,7 +7138,7 @@ function copierTerminal() {
   navigator.clipboard.writeText(s).then(() => toast(t("Copied."), "ok"), () => toast(t("The browser refused to copy."), "erreur"));
 }
 // leaving the page: the stream stops; the Go side ends the terminal a minute later unless the page comes back
-function quitterTerminal() { clearTimeout(ia.minuteur); if (term.lecteur) { term.lecteur.abort(); term.lecteur = null; } if (term.obs) term.obs.disconnect(); term.msg = null; term.essai = null; }
+function quitterTerminal() { clearTimeout(ia.minuteur); clearTimeout(ong.minuteur); for (const o of ong.liste) if (o.etat && o.etat.lecteur) { o.etat.lecteur.abort(); o.etat.lecteur = null; } if (term.lecteur) { term.lecteur.abort(); term.lecteur = null; } if (term.obs) term.obs.disconnect(); term.msg = null; term.essai = null; }
 // --- SFTP tab (note 12h34): this computer's files on the left (serveurs_sftp_local.go), the server's on the right
 // through the terminal's own SSH connection (serveurs_sftp.go). Each panel: a path bar (crumbs, or a field on a click
 // or Ctrl+L), back / forward / parent, a filter, sortable columns, folders first, hidden files faded or hidden, and a
