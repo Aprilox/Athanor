@@ -20,6 +20,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -780,7 +781,7 @@ func lireFichierTache(f string) (TacheServeurs, bool) {
 
 // tacheDeServeur: one task of server id, its own file read (none: an empty task).
 func tacheDeServeur(id, tache string) TacheServeurs {
-	if !idMissionValide.MatchString(tache) {
+	if !reFichierTache.MatchString(tache) { // a name of its own folder only: never a path
 		return TacheServeurs{}
 	}
 	t, ok := lireFichierTache(filepath.Join(dossierTaches(id), tache+".json"))
@@ -789,6 +790,8 @@ func tacheDeServeur(id, tache string) TacheServeurs {
 	}
 	return avecEnCours([]TacheServeurs{t})[0]
 }
+
+var reFichierTache = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
 
 // maxTachesGardees: the finished tasks a server keeps (the newest); older ones are removed when a task starts.
 const maxTachesGardees = 100
