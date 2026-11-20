@@ -271,14 +271,12 @@ func (s *Serveur) lancerMission(d MissionDemande, qui string) (Mission, string, 
 		PlanServeurs: s.masquerSecrets(strings.TrimSpace(d.PlanDeploiement)), Mentions: Mentions{}, Questions: []QuestionMission{}}
 	var cle string
 	var args []string
-	if d.SansProjet {
-		t, err := s.lancerTacheMission(m)
-		if err != nil {
+	if d.SansProjet { // the servers pilot: its milestones planned first, then run one by one (mission_serveurs.go)
+		if err := s.lancerPlanification(&m, ""); err != nil {
 			return Mission{}, "", nil, err
 		}
-		m.Tache = t.ID
-		cle, args = "Task started on {0}.", []string{strings.Join(nomsServeurs(m.Serveurs), ", "), t.ID}
-		evenement(&m, "lancee", "servers task: "+t.ID)
+		cle, args = "Task started on {0}.", []string{strings.Join(nomsServeurs(m.Serveurs), ", "), m.Tache}
+		evenement(&m, "lancee", "servers task: "+m.Tache)
 	} else if p, ok := s.projetLocalChat(d.Projet); ok {
 		// an existing project: its deployment and permission when the mission links a server or a key, the
 		// mission as a new request, its pilot started
@@ -561,6 +559,12 @@ func (s *Serveur) agirTacheMission(m *Mission, action string) (string, string, e
 		if tacheEnCoursID(m.Tache) {
 			return "", "", erreurEntree("Its task still works: stop it first.")
 		}
+		if pilotee(*m) { // the milestone that stopped or failed runs again
+			if err := s.relancerMissionServeurs(m); err != nil {
+				return "", "", err
+			}
+			return "Task started on {0}.", "reprise", nil
+		}
 		t, err := s.lancerTacheMission(*m)
 		if err != nil {
 			return "", "", err
@@ -624,7 +628,7 @@ func (s *Serveur) apiAgirMission(w http.ResponseWriter, r *http.Request) {
 	}
 	missionMu.Lock() // the pilot's start or stop may take a while: the file is read again and written alone
 	if lu, err := lireMission(m.ID); err == nil {
-		lu.Tache = m.Tache // a servers mission launched again: its new task
+		lu.Tache, lu.Planif, lu.Jalons = m.Tache, m.Planif, m.Jalons // a servers mission launched again: its new task
 		m = lu
 	}
 	evenement(&m, action, "")
@@ -675,6 +679,10 @@ func (s *Serveur) vueMission(m Mission) VueMission {
 	v.APINoms = s.nomsAPIs(v.APIs)
 	if m.Projet == "" { // a servers mission: its task
 		v.Machines = machines(nil, v.Serveurs, v.Roles)
+		if pilotee(m) {
+			s.vueMissionServeurs(m, &v)
+			return v
+		}
 		t, ok := tacheMission(m.Tache)
 		switch {
 		case !ok:

@@ -211,6 +211,36 @@ func TestAnciennesMissionsLisibles(t *testing.T) {
 		if _, b := appel("GET", "/api/missions/"+id, ""); !strings.Contains(b, `"dossier_ok":true`) || !strings.Contains(b, `"projet":"neuf"`) {
 			t.Fatalf("preview: %s", b)
 		}
+		// a preview server left running holds the folder: named at once (no wait), stopped only once confirmed
+		vivant, essais, tues := true, 0, []int{}
+		ancienBloquants, ancienTuer, avantCorbeille := programmesBloquants, tuerProgramme, corbeilleProjet
+		programmesBloquants = func(d string) []ProgrammeBloquant {
+			if d == neuf.Dossier && vivant {
+				return []ProgrammeBloquant{{PID: 4242, Nom: "Node.js JavaScript Runtime", Arretable: true}}
+			}
+			return nil
+		}
+		tuerProgramme = func(pid int) error { tues = append(tues, pid); vivant = false; return nil }
+		corbeilleProjet = func(d string) error {
+			if essais++; vivant {
+				return errCorbeilleRefus
+			}
+			return avantCorbeille(d)
+		}
+		if c, b := appel("DELETE", "/api/missions/"+id, `{"projet":true}`); c != http.StatusConflict || !strings.Contains(b, "Node.js JavaScript Runtime (4242)") ||
+			!strings.Contains(b, `"bloquants"`) || essais != 1 || len(tues) != 0 || !existe(id) {
+			t.Fatalf("a held folder: %d %s, tries %d, stopped %v", c, b, essais, tues)
+		}
+		programmesBloquants, tuerProgramme, corbeilleProjet = ancienBloquants, ancienTuer, avantCorbeille
+		vivant = true
+		programmesBloquants = func(d string) []ProgrammeBloquant {
+			if d == neuf.Dossier && vivant {
+				return []ProgrammeBloquant{{PID: 4242, Nom: "Node.js JavaScript Runtime", Arretable: true}}
+			}
+			return nil
+		}
+		tuerProgramme = func(pid int) error { tues = append(tues, pid); vivant = false; return nil }
+		defer func() { programmesBloquants, tuerProgramme = ancienBloquants, ancienTuer }()
 		// the folder still held by the pilot just stopped: refused twice, then it goes
 		refus, normale := 2, corbeilleProjet
 		pauseCorbeille = time.Millisecond
@@ -221,8 +251,10 @@ func TestAnciennesMissionsLisibles(t *testing.T) {
 			return normale(d)
 		}
 		defer func() { corbeilleProjet, pauseCorbeille = normale, 500*time.Millisecond }()
-		if c, b := appel("DELETE", "/api/missions/"+id, `{"projet":true}`); c != 200 || !strings.Contains(b, "folder "+strings.ReplaceAll(neuf.Dossier, `\`, `\\`)) {
-			t.Fatalf("delete with the folder: %d %s", c, b)
+		// confirmed: the program is stopped, then the folder still held a moment by the pilot just stopped goes
+		if c, b := appel("DELETE", "/api/missions/"+id, `{"projet":true,"arreter":[4242,9999]}`); c != 200 || !strings.Contains(b, "folder "+strings.ReplaceAll(neuf.Dossier, `\`, `\\`)) ||
+			!slices.Equal(tues, []int{4242}) || !strings.Contains(b, "programs stopped: Node.js JavaScript Runtime (4242)") {
+			t.Fatalf("delete with the folder: %d %s, stopped %v", c, b, tues)
 		}
 		if _, ok := s.projetParNom(neuf.Nom); ok || !slices.Equal(corbeille, []string{neuf.Dossier}) {
 			t.Fatalf("project still listed or folder not in the recycle bin: %v", corbeille)

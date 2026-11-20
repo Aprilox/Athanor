@@ -6180,16 +6180,25 @@ async function supprimerMissionUI(id) {
       ${a.dossier ? `<code class="petit">${h(a.dossier)}</code>` : ""}${a.dossier_non ? `<span class="muet petit">${h(t(a.dossier_non))}</span>` : ""}</span></label>` : ""}
     ${a.depot ? `<p class="muet petit">${h(t("The GitHub repository stays:"))} ${lienDepot(a.depot)}</p>` : ""}
     ${enLigne.length ? `<p class="muet petit">${h(t("What it put online stays on the servers:"))} ${enLigne.map((e) => `${h(e.nom)} <span class="mis-url">${h(e.url)}</span>`).join(", ")}</p>` : ""}</div>`;
-  let r = null;
+  let r = null, enVol = null, arreter = [];
+  const fini = () => { toast(t("Mission deleted."), "ok"); if (etat.page !== "missions") location.hash = "#missions"; else return rendrePage(); };
   const choix = await modaleSftp(t("Delete this mission?"), corps, [{ id: "", texte: t("Cancel") }, { id: "ok", texte: t("Delete the mission"), danger: true }], {
-    large: true, valider: async (b, el) => {
+    large: true, enCours: t("Deleting…"), valider: async (b, el) => {
       if (b !== "ok") return true;
-      r = await api(`missions/${encodeURIComponent(id)}`, "DELETE", { projet: !!el.querySelector('[data-suppr="projet"]:checked') }).catch((e) => erreurModale(el, e.message));
-      return !!r;
+      enVol = api(`missions/${encodeURIComponent(id)}`, "DELETE", { projet: !!el.querySelector('[data-suppr="projet"]:checked'), arreter }).then((x) => (r = x)).catch((e) => {
+        const l = ((e.data && e.data.bloquants) || []).filter((x) => x.arretable);
+        if (!el.isConnected) { toast(e.message, "erreur"); return null; }
+        erreurModale(el, e.message);
+        if (l.length) { arreter = l.map((x) => x.pid); el.querySelector('[data-m="ok"]').dataset.texte = t("Stop them and delete"); }
+        return null;
+      });
+      const ok = !!(await enVol);
+      const bouton = el.querySelector('[data-m="ok"]');
+      if (!ok && bouton && bouton.dataset.texte) setTimeout(() => { bouton.textContent = bouton.dataset.texte; }); // after the window puts its label back
+      return ok;
     } });
-  if (choix !== "ok" || !r) return;
-  toast(t("Mission deleted."), "ok");
-  if (etat.page !== "missions") location.hash = "#missions"; else await rendrePage();
+  if (choix === "ok" && r) return fini();
+  if (enVol) enVol.then((x) => { if (x) fini(); }); // closed while it worked: its end is said here
 }
 document.addEventListener("click", (ev) => {
   const b = ev.target.closest("[data-mis-suppr]"); if (!b) return;
@@ -6218,7 +6227,12 @@ const MODES_MISSION = [["manuel", "Needs me", "Claude reads the server freely an
   ["auto", "Autonomous with the AI", "Claude works on the server without waiting for you; it still asks before a dangerous command (deleting, stopping, firewall…)."],
   ["ignorer", "Full autonomy", "No human action needed: Claude never asks you anything on the server, dangerous commands and putting it online included. For a server you can rebuild."]];
 const nomModeMission = (m) => t((MODES_MISSION.find(([x]) => x === m) || MODES_MISSION[0])[1]);
-const EVENEMENTS_MISSION = { lancee: "Launched", modifiee: "Changed", pause: "Paused", arretee: "Stopped", reprise: "Resumed", serveur_arrete: "Server work stopped", serveur_relance: "Server work launched again" };
+const EVENEMENTS_MISSION = { lancee: "Launched", modifiee: "Changed", pause: "Paused", arretee: "Stopped", reprise: "Resumed", serveur_arrete: "Server work stopped", serveur_relance: "Server work launched again",
+  planification: "Planning the milestones", jalons: "Milestones planned", jalon: "Milestone started", terminee: "Finished", attente: "Waiting for you", echec: "Failed", erreur: "Error" };
+// a servers mission's milestones (mission_serveurs.go), drawn like a project's
+const ETATS_JALON_SRV = { a_faire: ["", "To do"], en_cours: ["pv-claude", "In progress"], fait: ["pv-ok", "Done"], echec: ["pv-vous", "Failed"] };
+const jalonsServeursMission = (m) => `<ol class="mis-jalons-srv">${m.jalons_serveurs.map((j) => { const [cl, lib] = ETATS_JALON_SRV[j.etat] || ["", j.etat];
+  return `<li><span class="pv-etat ${cl}">${t(lib)}</span> <span>${h(j.titre)}</span>${j.etat === "echec" && j.resultat ? `<div class="petit attention">${h(j.resultat)}</div>` : ""}</li>`; }).join("")}</ol>`;
 const dateMission = (x) => new Date(x).toLocaleString(document.documentElement.lang || "en", { dateStyle: "short", timeStyle: "short" });
 // a mission's servers: each with its role and its terminal, one click away
 const machinesMission = (m, perdue) => (m.machines || []).map((x) => `<span class="mis-machine"><b>${h(x.nom)}</b> ${m.projet || x.role ? `<span class="muet petit">${x.role ? h(x.role) : t(x.site ? "receives the project" : "another role")}</span>` : ""}${perdue ? "" : ` <a class="btn btn-petit local-seul" href="#terminal/${encodeURIComponent(x.id)}" aria-label="${h(t("Terminal") + " " + x.nom)}">${t("Terminal")}</a>`}</span>`).join("");
@@ -6236,9 +6250,11 @@ function cadreMission(m) {
     : `<button type="button" class="btn btn-petit" data-mis-act="reprendre">${t("Resume")}</button>`;
   return `<section class="bloc mis-cadre" data-mission="${id}" aria-labelledby="mis-t-${id}">
     <div class="ligne m0 tuile-tete"><h3 class="m0 croit" id="mis-t-${id}">${h(m.phrase.split("\n")[0].slice(0, 120))}</h3><span class="badge ${cl}">${t(lib)}</span></div>
-    ${taches || perdue ? "" : `<div class="mis-progres" role="progressbar" aria-label="${h(t("Progress"))}" aria-valuemin="0" aria-valuemax="${a.total || 0}" aria-valuenow="${a.fait || 0}"><span style="width:${pct}%"></span></div>
+    ${taches && m.planif && !a.total ? `<p class="petit m0">${t("Planning the milestones…")}</p>` : ""}
+    ${perdue || taches && !a.total ? "" : `<div class="mis-progres" role="progressbar" aria-label="${h(t("Progress"))}" aria-valuemin="0" aria-valuemax="${a.total || 0}" aria-valuenow="${a.fait || 0}"><span style="width:${pct}%"></span></div>
     <p class="petit m0">${a.total ? h(t("{0}: {1}", [t("Milestones"), a.fait + "/" + a.total])) : t("The plan is being written")}${a.titre ? " · " + h(a.titre) : ""}</p>
     ${a.activite && actif ? `<p class="muet petit m0">${h(a.activite)}</p>` : ""}`}
+    ${taches && (m.jalons_serveurs || []).length ? jalonsServeursMission(m) : ""}
     ${m.statut === "attente" ? `<p class="petit m0"><a href="#approbations">${t("Accept or refuse its plan on the Approvals page")}</a></p>` : ""}
     ${taches && m.bilan ? `<p class="petit m0 mis-bilan">${h(m.bilan.length > 280 ? m.bilan.slice(0, 280) + "…" : m.bilan)}</p>` : ""}
     <dl class="mis-liens">
@@ -7615,10 +7631,18 @@ function modaleSftp(titre, corps, boutons, o = {}) {
   (fond.querySelector("input:not([type=checkbox]), textarea") || fond.querySelector("[data-m]")).focus();
   return new Promise((resoudre) => {
     let occupe = false;
-    const fin = (v) => { fond.remove(); document.removeEventListener("keydown", clavier, true); if (avant?.isConnected) avant.focus(); resoudre(v); };
+    const fin = (v) => { if (!fond.isConnected) return; fond.remove(); document.removeEventListener("keydown", clavier, true); if (avant?.isConnected) avant.focus(); resoudre(v); };
+    // while the action works, its button says so; Cancel and Escape still close the window (the work goes on, its
+    // caller says how it ended): a window never traps the owner
     const choisir = async (id) => {
-      if (occupe) return;
-      if (o.valider) { occupe = true; const ok = await o.valider(id, fond).catch(() => false); occupe = false; if (!ok) return; }
+      if (occupe) { if (!id) fin(null); return; }
+      if (o.valider) {
+        const b = id && fond.querySelector(`[data-m="${CSS.escape(id)}"]`), texte = b && b.textContent;
+        occupe = true; if (b) { b.disabled = true; b.textContent = o.enCours || t("Working…"); }
+        const ok = await o.valider(id, fond).catch(() => false);
+        occupe = false; if (b) { b.disabled = false; b.textContent = texte; }
+        if (!ok) return;
+      }
       fin(id);
     };
     const clavier = (e) => {

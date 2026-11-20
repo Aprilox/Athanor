@@ -22,7 +22,7 @@ const agentServeurs = "servers"
 
 // outilsServeursMCP: the tools of a Servers agent's token.
 var outilsServeursMCP = append([]string{"serveurs_liste", "serveur_fiche", "ssh_commande", "fichier_lire", "fichier_ecrire",
-	"sftp_envoyer", "sftp_recuperer", "service", "docker", "pare_feu", "proposer_plan", "confirmer_changement", "runbook_lire", "runbook_ajouter", "environnement_lire", "deployer", "revenir_version"}, outilsCloudflare...)
+	"sftp_envoyer", "sftp_recuperer", "service", "docker", "pare_feu", "proposer_plan", "confirmer_changement", "runbook_lire", "runbook_ajouter", "environnement_lire", "deployer", "revenir_version", "proposer_jalons"}, outilsCloudflare...)
 
 // outilsAPISeule (M286): the tools of a task on the owner's API alone: no SSH, SFTP nor file tool, no deployment, and
 // no origin certificate (it is installed on a server).
@@ -123,7 +123,18 @@ func faireOutilServeur(nom string) func(*Serveur, SessionHub, json.RawMessage) (
 		if err != nil {
 			return "", errors.New(s.masquerSecrets(err.Error()))
 		}
-		r, err := s.appelerOutilServeur(s.contexteSession(x.Hache), x.Agent, id, nom, e.Arguments, sauvegardeDe(e))
+		ctx := s.contexteSession(x.Hache)
+		args, cles, err := s.avecCles(x, nom, e.Arguments) // {{coffre:NAME}}: the value put in now, never shown to the agent
+		if cles && e.Plan == "" && err == nil {
+			err = errors.New("a vault key goes on a server only in a step of an accepted plan: propose it with proposer_plan")
+		}
+		var r ResultatOutil
+		if err == nil {
+			r, err = s.appelerOutilServeur(ctx, x.Agent, id, nom, args, sauvegardeDe(e))
+		}
+		if cles && err == nil && r.Code == 0 {
+			s.fermerFichierCles(ctx, x.Agent, id, e.Arguments)
+		}
 		s.finAction(tache, n, r, err)
 		if e.Classe > ClasseLecture {
 			s.noterRunbook(id, e, r, err)

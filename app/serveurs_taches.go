@@ -359,6 +359,8 @@ func (s *Serveur) lancerTacheDans(texte string, serveurs []string, forcee bool, 
 		if len(serveurs) == 0 {
 			outils, consigne = outilsAPISeule, consigneAPI(contexte+texte, hotes)
 			mode = cmp.Or(mode, modeServeur(ServeurInventaire{})) // Settings › Permissions (assistant), else manuel
+		} else {
+			consigne += s.lignesClesTache(apis) // the keys it may put on its servers, by name
 		}
 	}
 	t := TacheServeurs{ID: aleatoire(6), Texte: texte, Serveurs: append([]string{}, serveurs...), Forcee: forcee, Env: env, Cree: time.Now().UTC().Format(formatCree),
@@ -400,9 +402,10 @@ func (s *Serveur) executerTache(ctx context.Context, e *tacheEnCours, dossier st
 	err := s.sessionTache(ctx, e, dossier)
 	fin, detail := "finie", ""
 	var appliques []string
-	n := 0            // plans handled in this task, every pass included
-	plans := func() { // the plans the session proposed, each decided then applied in turn
-		for ; err == nil && n < maxPlansTache; n++ {
+	n := 0                                       // plans handled in this task, every pass included
+	plansMax := plansMaxTache(len(e.t.Serveurs)) // a plan works on one server: a task on several gets room for each
+	plans := func() {                            // the plans the session proposed, each decided then applied in turn
+		for ; err == nil && n < plansMax; n++ {
 			plan := s.planNeufTache(projet, e)
 			if plan == "" {
 				break
@@ -447,7 +450,7 @@ func (s *Serveur) executerTache(ctx context.Context, e *tacheEnCours, dossier st
 		if v.Verdict == "ok" || ctx.Err() != nil {
 			break
 		}
-		if avant := len(appliques); corrections < maxCorrectionsTache && n < maxPlansTache {
+		if avant := len(appliques); corrections < maxCorrectionsTache && n < plansMax {
 			if err = os.WriteFile(filepath.Join(dossier, "consigne.txt"), []byte(consigneCorrectionServeurs(v)), 0o600); err == nil {
 				err = s.sessionTache(ctx, e, dossier)
 			}
@@ -636,6 +639,7 @@ func (s *Serveur) finirTache(e *tacheEnCours, etat, detail string) {
 	}
 	s.ecrireAudit(LigneAudit{Type: "evenement", De: "hub", Vers: "servers", Projet: projet, Mission: e.t.ID, Agent: agentServeurs,
 		Action: "tâche serveurs " + etat, Resultat: couper(detail, 300)})
+	go s.suiteMission(e.copie()) // a servers mission's next milestone (mission_serveurs.go)
 }
 
 // refuserPlansEnAttente: the plans of a task's project still waiting for the owner, refused by the hub.
@@ -1003,3 +1007,7 @@ func lancerSessionHub(args []string, delai time.Duration) int {
 // formatCree: RFC 3339 with a fixed-width fraction, so that two tasks created within a second still sort
 // as strings (the newest first).
 const formatCree = "2006-01-02T15:04:05.000Z07:00"
+
+// plansMaxTache: the plans one task may handle: maxPlansTache, and two more for each server after the first (a plan
+// works on one server), at most 15.
+func plansMaxTache(serveurs int) int { return min(15, maxPlansTache+2*max(0, serveurs-1)) }

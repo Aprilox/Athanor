@@ -14,7 +14,8 @@ func consigneChefOps(texte string, serveurs []string) string {
 		"1. Read before anything: serveurs_liste, serveur_fiche and runbook_lire for each server, then the state you need " +
 		"(read-only calls: fichier_lire, ssh_commande with read commands, service status, docker ps or logs, pare_feu status).\n" +
 		"2. If nothing must change, answer the owner in a few plain sentences and stop.\n" +
-		"3. Otherwise call proposer_plan once: the smallest set of steps, each with its exact tool and arguments, why, its criteres (the " +
+		"3. Otherwise call proposer_plan: a plan works on one server, so with several servers propose the first one the work needs; once it is " +
+		"applied you are resumed and propose the next, until the goal is reached. A plan is the smallest set of steps, each with its exact tool and arguments, why, its criteres (the " +
 		"acceptance criteria of the owner's goal, from their request and plan for the servers: what must be true once done, one verifiable " +
 		"statement each, as a milestone has its acceptance), and " +
 		"for a destructive step the paths to back up (sauvegarde) or why nothing needs keeping (sans_sauvegarde). A firewall " +
@@ -23,7 +24,13 @@ func consigneChefOps(texte string, serveurs []string) string {
 		"4. Never try to change anything outside an accepted plan: the code refuses it anyway.\n" +
 		"5. Reach the owner's goal the way a developer would: when something is missing, install or set it up yourself; when it fails, find why and try another way. " +
 		"Only what the owner alone can do (an account, a payment, an access or a key you are not given, a DNS zone you have no token for, a decision) ends your answer with one line: " +
-		"OWNER NEEDED: <what they must do, in one sentence>. Athanor puts it on their For you page, marked Servers.\n\n" +
+		"OWNER NEEDED: <what they must do, in one sentence>. Athanor puts it on their For you page, marked Servers.\n" +
+		"6. Where things live and how they run follow the owner's plan for the servers first, then the usual conventions of the tools chosen " +
+		"(a static site behind nginx in /var/www/<domain>, an app run by pm2 or systemd under /srv/<app> or its service user's home, a Compose " +
+		"project beside its compose file, a platform such as Coolify where its installer puts it); no folder or name of Athanor's own unless " +
+		"the owner asks. Several servers: open between them only the ports the work needs (pare_feu) and test from one to the other " +
+		"(ssh_commande with curl, nc or the service's client). Keep a README of what you set up on the server, beside what it describes: where " +
+		"each part lives, how it runs, how to update, restart and go back.\n\n" +
 		demandeProprietaire(texte)
 }
 
@@ -72,7 +79,8 @@ func consigneApplication(plan string, apiSeule bool) string {
 		"2. For a firewall or SSH change, check you can still read the server, then call confirmer_changement with its id.\n" +
 		"3. Check the result with read-only calls (the service answers, the file holds what it should).\n" +
 		"4. Call runbook_ajouter once: what changed, the backups Athanor reported, how to go back.\n" +
-		"5. Answer the owner in a few plain sentences: done or not, and what was checked. If the goal needs what the owner alone can do (an account, " +
+		"5. If the goal needs more work (another server, a next stage), call proposer_plan for it now and stop the same way. Otherwise " +
+		"answer the owner in a few plain sentences: done or not, and what was checked. If the goal needs what the owner alone can do (an account, " +
 		"a payment, an access or a key you are not given, a decision), end with one line: OWNER NEEDED: <what they must do, in one sentence>.\n" + consigneSobre
 }
 

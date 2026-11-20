@@ -18,7 +18,14 @@ import (
 // OptionsSuppression: what goes with the mission besides its own files (unticked by default in the window).
 type OptionsSuppression struct {
 	Projet bool `json:"projet,omitempty"` // the project the mission created, removed from Studio, its folder to the recycle bin
+	// the programs holding the project's folder the owner chose to stop first (after a refusal that named them)
+	Arreter []int `json:"arreter,omitempty"`
 }
+
+// erreurBloquee: the project's folder is held by programs, named for the owner (the window offers to stop them).
+type erreurBloquee struct{ l []ProgrammeBloquant }
+
+func (e erreurBloquee) Error() string { return "programs are using the project's files" }
 
 // ApercuSuppression: what Delete can also remove and what stays, shown in the confirmation before anything is done.
 type ApercuSuppression struct {
@@ -131,8 +138,15 @@ func (s *Serveur) supprimerMission(id, qui string, o OptionsSuppression) ([]stri
 			return nil, erreurMission{http.StatusConflict, non}
 		}
 		if _, err := os.Lstat(p.Dossier); err == nil {
-			// a pilot just stopped (or an indexer) releases its files a few seconds later: Windows refuses until then
+			if noms := arreterBloquants(p.Dossier, o.Arreter); len(noms) > 0 {
+				retire = append(retire, "programs stopped: "+strings.Join(noms, ", "))
+			}
+			// a pilot just stopped (or an indexer) releases its files a few seconds later: Windows refuses until then;
+			// a program still running there (a preview server left by Claude) is named at once instead
 			err := corbeilleProjet(p.Dossier)
+			if l := programmesBloquants(p.Dossier); err != nil && len(o.Arreter) == 0 && slices.ContainsFunc(l, func(b ProgrammeBloquant) bool { return b.Arretable }) {
+				return nil, erreurBloquee{l}
+			}
 			for i := 0; err != nil && i < 20; i++ {
 				time.Sleep(pauseCorbeille)
 				err = corbeilleProjet(p.Dossier)

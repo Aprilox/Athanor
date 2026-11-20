@@ -194,6 +194,9 @@ func outilProposerPlan(s *Serveur, x SessionHub, args json.RawMessage) (string, 
 	if err := lireArguments(args, &a); err != nil {
 		return "", err
 	}
+	if slices.ContainsFunc(lireMissions(), func(m Mission) bool { return m.Tache == x.Mission && m.Planif }) {
+		return "", errors.New("this is the planning step of a servers mission: call proposer_jalons with its milestones, then stop (each one runs afterwards as its own task)")
+	}
 	api := apiSeule(x) && a.Serveur == serveurAPI // M286: the plan of a task on API alone: Cloudflare steps, no server
 	if api {
 		if err := s.accesServeursAgent(x); err != nil {
@@ -252,6 +255,9 @@ func outilProposerPlan(s *Serveur, x SessionHub, args json.RawMessage) (string, 
 			e.Arguments["classe"], _ = json.Marshal(e.Classe)
 		}
 		et, err := classerEtape(e.Outil, e.Arguments)
+		if err == nil {
+			err = s.classerCles(x, e.Outil, &et) // a vault key put on the server: the task's own, an infra one with the owner's accord
+		}
 		if err != nil {
 			return echec(fmt.Errorf("step %d: %w", i+1, err))
 		}

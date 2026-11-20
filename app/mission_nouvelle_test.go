@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -331,12 +333,39 @@ func TestMissionsSansProjet(t *testing.T) {
 	ancienne := sessionTacheServeurs
 	t.Cleanup(func() { sessionTacheServeurs = ancienne })
 	lente := make(chan struct{})
-	sessionTacheServeurs = func(_ *Serveur, ctx context.Context, dossier string) error { // the fake operator: works until stopped or released
+	var operateurMu sync.Mutex
+	echecs := map[string]int{"Relier la base": 1}                                          // the second milestone fails once: the plan is made again
+	sessionTacheServeurs = func(srv *Serveur, ctx context.Context, dossier string) error { // the fake operator: works until stopped or released
 		select {
 		case <-lente:
 		case <-ctx.Done():
+			return nil
 		}
-		j := `{"type":"system","subtype":"init","session_id":"s"}` + "\n" + `{"type":"result","is_error":false,"result":"nginx installé"}` + "\n"
+		id, resultat := filepath.Base(dossier), "nginx installé"
+		x, _ := tacheMission(id)
+		operateurMu.Lock()
+		defer operateurMu.Unlock()
+		switch {
+		case strings.HasPrefix(x.Texte, "Plan the milestones"): // planning: the milestones of the mission
+			jalons := `{"jalons":[{"titre":"Installer nginx","but":"nginx sur vps","criteres":["nginx répond sur 80"],"serveurs":["vps"]},{"titre":"Relier la base","but":"vps joint la base"}]}`
+			if slices.ContainsFunc(lireMissions(), func(m Mission) bool { return m.Replans > 0 }) {
+				jalons = `{"jalons":[{"titre":"Relier la base autrement","but":"un tunnel WireGuard"}]}`
+			}
+			if _, err := outilProposerJalons(srv, SessionHub{Mission: id, Agent: agentServeurs}, json.RawMessage(jalons)); err != nil {
+				return err
+			}
+			resultat = "plan fait"
+		default:
+			titre := strings.TrimPrefix(strings.SplitN(x.Texte, "\n", 2)[0], "Milestone ")
+			for n, e := range echecs {
+				if strings.HasSuffix(titre, ": "+n) && e > 0 {
+					echecs[n]--
+					return errors.New("the database refuses the connection")
+				}
+			}
+			resultat = "fait : " + titre
+		}
+		j := `{"type":"system","subtype":"init","session_id":"s"}` + "\n" + `{"type":"result","is_error":false,"result":` + strconv.Quote(resultat) + `}` + "\n"
 		return os.WriteFile(filepath.Join(dossier, "session.jsonl"), []byte(j), 0o600)
 	}
 	t.Cleanup(func() {
@@ -395,14 +424,22 @@ func TestMissionsSansProjet(t *testing.T) {
 		t.Fatalf("mission: %+v, pilots %v", l, b.pilotes)
 	}
 	id, tache := l[0].ID, l[0].Tache
-	if x, ok := tacheMission(tache); !ok || !strings.Contains(x.Texte, "## Servers\n\n- base: la base\n\n## Servers plan") || len(x.Serveurs) != 2 || !slices.Equal(x.APIs, []string{b.api}) {
-		t.Fatalf("its task: %+v", x)
+	// the servers pilot: its first task plans the milestones, on every server and with the keys
+	if x, ok := tacheMission(tache); !ok || !strings.HasPrefix(x.Texte, "Plan the milestones of the mission: Installe nginx") || len(x.Serveurs) != 2 || !slices.Equal(x.APIs, []string{b.api}) || !l[0].Planif {
+		t.Fatalf("its planning task: %+v, %+v", x, l[0])
 	}
 	if w := vue(id); !w.Suivie || w.Statut != "en_cours" || !w.ServeurTache || len(w.Machines) != 2 || w.Machines[0].Site || w.Machines[1].Role != "la base" || w.Machines[0].Role != "" || !slices.Equal(w.APINoms, []string{"Clé Stripe"}) {
 		t.Fatalf("frame while it works: %+v", w)
 	}
 	if code, _ := appel("POST", "/api/missions/"+id+"/reprendre", nil); code != http.StatusConflict {
 		t.Errorf("launched again while it works: %d", code)
+	}
+	// a plan proposed while it plans is refused: the planning step only records milestones
+	if _, err := outilProposerPlan(s, SessionHub{Mission: tache, Agent: agentServeurs, Serveurs: []string{b.vps}}, json.RawMessage(`{"serveur":"`+b.vps+`","resume":"r","etapes":[{"outil":"service","arguments":{"action":"status","nom":"ssh"},"pourquoi":"p"}]}`)); err == nil || !strings.Contains(err.Error(), "proposer_jalons") {
+		t.Errorf("a plan while it plans: %v", err)
+	}
+	if _, err := outilProposerJalons(s, SessionHub{Mission: "autre1"}, json.RawMessage(`{"jalons":[{"titre":"t","but":"b"}]}`)); err == nil {
+		t.Error("milestones outside a planning task")
 	}
 	if code, v := appel("POST", "/api/missions/"+id+"/arreter", nil); code != 200 {
 		t.Fatalf("stop: %d %v", code, v)
@@ -413,23 +450,36 @@ func TestMissionsSansProjet(t *testing.T) {
 	if w := vue(id); w.Statut != "arretee" || w.ServeurTache {
 		t.Fatalf("frame once stopped: %+v", w)
 	}
-	// Edit: kept for the next launch; Launch again: a new task with the change
-	if code, v := appel("POST", "/api/missions/"+id, MissionDemande{Texte: "Installe nginx et caddy.", Serveurs: []string{b.vps}, Mode: "manuel"}); code != 200 {
+	// Edit: kept for the next launch; Launch again plans again, then each milestone runs in turn as its own task
+	if code, v := appel("POST", "/api/missions/"+id, MissionDemande{Texte: "Installe nginx et caddy.", Serveurs: []string{b.vps}, Autres: []string{"base"}, Mode: "manuel"}); code != 200 {
 		t.Fatalf("edit: %d %v", code, v)
 	}
 	close(lente)
 	if code, v := appel("POST", "/api/missions/"+id+"/serveur-relancer", nil); code != 200 {
 		t.Fatalf("launch again: %d %v", code, v)
 	}
-	m, _ := lireMission(id)
-	if x, ok := tacheMission(m.Tache); m.Tache == tache || !ok || !strings.Contains(x.Texte, "caddy") || !slices.Equal(x.Serveurs, []string{b.vps}) {
-		t.Fatalf("launched again: %+v %+v", m, x)
+	if m, _ := lireMission(id); m.Tache == tache || !m.Planif {
+		t.Fatalf("launched again: %+v", m)
 	}
-	for k := 0; k < 200 && vue(id).Statut == "en_cours"; k++ {
+	for k := 0; k < 400 && vue(id).Statut != "terminee" && vue(id).Statut != "echec"; k++ {
 		time.Sleep(50 * time.Millisecond)
 	}
-	if w := vue(id); w.Statut != "terminee" || !strings.Contains(w.Bilan, "nginx") {
-		t.Errorf("frame once over: %+v", w)
+	m, _ := lireMission(id)
+	var titres, etats []string
+	for _, j := range m.Jalons {
+		titres, etats = append(titres, j.Titre), append(etats, j.Etat)
+	}
+	if w := vue(id); w.Statut != "terminee" || w.Avance.Fait != 2 || w.Avance.Total != 2 || m.Replans != 1 ||
+		strings.Join(titres, "|") != "Installer nginx|Relier la base autrement" || strings.Join(etats, "|") != "fait|fait" ||
+		!slices.Equal(m.Jalons[0].Serveurs, []string{b.vps}) || !strings.Contains(m.Jalons[1].Resultat, "2 of 2: Relier la base autrement") || !strings.Contains(w.Bilan, "Relier la base autrement") {
+		t.Fatalf("frame once over: %+v, mission %+v", vue(id), m)
+	}
+	var etapes []string
+	for _, e := range m.Historique {
+		etapes = append(etapes, e.Etat)
+	}
+	if n := strings.Count(strings.Join(etapes, ","), "planification"); n != 2 || !slices.Contains(etapes, "terminee") || strings.Count(strings.Join(etapes, ","), "jalon,") < 3 {
+		t.Errorf("its journal: %v", etapes)
 	}
 	if code, v := appel("DELETE", "/api/missions/"+id, OptionsSuppression{}); code != 200 {
 		t.Fatalf("delete: %d %v", code, v)

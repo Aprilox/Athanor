@@ -23,7 +23,10 @@ func (s *Serveur) erreurMissionHTTP(w http.ResponseWriter, err error) {
 	var em erreurMission
 	var avecArgs erreurEntreeArgs
 	var entree erreurEntree
+	var bloquee erreurBloquee
 	switch {
+	case errors.As(err, &bloquee):
+		s.erreurBloquants(w, bloquee.l)
 	case errors.As(err, &em):
 		s.erreur(w, em.code, em.msg)
 	case errors.Is(err, errMissionInconnue):

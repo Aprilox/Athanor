@@ -84,6 +84,11 @@ type Mission struct {
 	Serveur      string            `json:"serveur,omitempty"`
 	API          string            `json:"api,omitempty"`
 	Autonome     bool              `json:"autonome,omitempty"`
+	// a servers mission run by milestones (mission_serveurs.go): its milestones, whether its task now plans them,
+	// and how often the plan was made again after a failed milestone
+	Jalons  []JalonServeurs `json:"jalons_serveurs,omitempty"`
+	Planif  bool            `json:"planif,omitempty"`
+	Replans int             `json:"replans,omitempty"`
 }
 
 var (
