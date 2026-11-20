@@ -1564,11 +1564,14 @@ function messageChat(m, i) {
   const note = (m.texte.match(/<note>([\s\S]*?)<\/note>/) || [])[1];
   const agent = (m.texte.match(/<agent>([\s\S]*?)<\/agent>/) || [])[1];
   const mcp = (m.texte.match(/<mcp>([\s\S]*?)<\/mcp>/) || [])[1];
-  const texte = m.texte.replace(/<(note|agent|mcp)>[\s\S]*?<\/\1>/g, "").trim();
+  const pourServeurs = (m.texte.match(/<serveurs>([\s\S]*?)<\/serveurs>/) || [])[1];
+  const texte = m.texte.replace(/<(note|agent|mcp|serveurs)>[\s\S]*?<\/\1>/g, "").trim();
   const actions = (m.outils || []).length ? `<details class="chat-actions"><summary>${t("{0} action(s)", [m.outils.length])}</summary>${m.outils.map((o) => `<div>${h(t(o))}</div>`).join("")}</details>` : "";
   return `<div class="chat-msg chat-claude"><div class="chat-bulle">${mdChat(texte, true)}
     ${note ? `<div class="chat-note"><div class="muet petit">${t("Note for the pilot")}</div><div>${mdChat(note.trim())}</div>
       <div class="ligne m0 mt-1">${m.note ? `<span class="ok petit">${ic("ok")} ${t("Sent to the pilot")}</span>` : `<button type="button" class="btn btn-petit btn-primaire" data-chat-note="${i}">${t("Send to the pilot")}</button>`}</div></div>` : ""}
+    ${pourServeurs ? `<div class="chat-note"><div class="muet petit">${t("For the servers")}</div><div>${mdChat(pourServeurs.trim())}</div>
+      <div class="ligne m0 mt-1">${m.serveurs ? `<span class="ok petit">${ic("ok")} ${t("Added to the plan for the servers")}</span>` : `<button type="button" class="btn btn-petit btn-primaire" data-chat-serveurs="${i}">${t("Add to the plan for the servers")}</button>`}</div></div>` : ""}
     ${agent !== undefined ? carteAgentChat(agent, m, i) : ""}
     ${mcp !== undefined ? carteMCPChat(mcp, m, i) : ""}
     ${actions}</div>
@@ -4313,7 +4316,9 @@ function ficheSite(d, nom, nomSrv, distant) {
     <h3>${web ? `<a href="${h(e.url)}" target="_blank" rel="noopener">${h(e.url)}</a>` : `<span class="muet">${t("No address yet.")}</span>`}</h3>
     ${r ? `<div class="dep-relais">${ligneRelais(r, false)}</div>` : ""}
     ${r && r.etat === "a_preparer" ? `<p class="petit">${t("The first deployment is still to be made: an agent will read the project and your plan, set up the server and put the project online.")}</p>
-      ${distant ? "" : `<button type="button" class="btn btn-primaire btn-petit" data-dep-preparer>${t("Prepare now")}</button>`}` : ""}
+      ${distant ? "" : `<button type="button" class="btn btn-primaire btn-petit" data-dep-preparer>${t("Prepare now")}</button>`}`
+    : courant && !e.deploiement && (e.serveurs || []).length && !(r && r.etat === "preparation") && ((d.deploiements || {})[nom] || []).length ? `<p class="petit">${t("The first deployment did not go through. Relaunch it: an agent reads your plan for the servers again, installs what is missing and puts the project online.")}</p>
+      ${distant ? "" : `<button type="button" class="btn btn-primaire btn-petit" data-dep-preparer>${t("Relaunch the first deployment")}</button>`}` : ""}
     ${courant ? "" : `<p class="muet petit">${(e.serveurs || []).length ? h(t("Servers") + " " + e.serveurs.map(nomSrv).join(", ")) : t("No server chosen yet.")}</p>`}
     ${!courant && (d.anciens || []).includes(nom) ? `<p class="petit dep-ancien" role="note">${h(t("Athanor no longer updates {0}: make it the project's deployment to go on deploying it.", [e.url || nom]))}</p>` : ""}
     <p class="petit attention env-erreur" role="alert" hidden></p>
@@ -8300,6 +8305,7 @@ $("#page").addEventListener("click", async (ev) => {
     if (b.dataset.chatAgent !== undefined) return ajouterAgentChat(b);
     if (b.dataset.chatMcp !== undefined) return ajouterMCPChat(b);
     if (b.dataset.chatNote !== undefined) { b.disabled = true; await action(api("chat/note", "POST", { index: Number(b.dataset.chatNote) })); return majChat(true); }
+    if (b.dataset.chatServeurs !== undefined) { b.disabled = true; await action(api("chat/serveurs", "POST", { index: Number(b.dataset.chatServeurs) })); return majChat(true); }
   }
   if (page === "reglages") {
     if (b.dataset.ongletReglages) { etat.ongletReglages = b.dataset.ongletReglages; return rendrePage(); }

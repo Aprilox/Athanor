@@ -595,6 +595,9 @@ func (s *Serveur) apiAgirMission(w http.ResponseWriter, r *http.Request) {
 		if cle, err = demarrerPiloteProjet(s, p); err != nil && err.Error() == texteLivreRienDeNeuf {
 			marqueAuto(p, false)
 		}
+		if err == nil || err.Error() == texteLivreRienDeNeuf {
+			s.reprendreDeploiement(p) // a first deployment that failed goes again, with the plan as it is now
+		}
 		action = "reprise"
 	case action == "serveur-arreter":
 		s.arreterTachesProjet(p.Nom)

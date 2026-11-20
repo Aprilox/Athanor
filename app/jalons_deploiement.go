@@ -56,11 +56,10 @@ func (s *Serveur) jalonsDeploiement(projet string) []JalonDeploiement {
 	switch {
 	case e.Deploiement != nil:
 		premier.Etat = "fait"
-	case r.Premier != "":
-		premier.Etat = etatTacheServeurs(r.Premier)
-		if premier.Etat == "fait" { // its task ended without recording a method: the deployment did not go through
-			premier.Etat = "echec"
-		}
+	case r.Premier != "" && etatTacheServeurs(r.Premier) == "en_cours":
+		premier.Etat = "en_cours"
+	case r.Premier != "" || len(h) > 0: // tried, and no method recorded: it did not go through (the Deployment tab relaunches it)
+		premier.Etat = "echec"
 	}
 	l = append(l, premier)
 	for _, d := range h[max(0, len(h)-5):] {

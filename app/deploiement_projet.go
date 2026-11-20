@@ -181,7 +181,8 @@ func phraseDNS(hote string) string {
 // address's DNS record, the owner's plan always (the web server it names is the one used, full autonomy included:
 // M310d's production accord only without it), the request's start.
 func briefPremierProjet(p Projet, e Environnement, env, head string, ignorer bool) string {
-	brief := briefPremierDeploiement(e.URL, "", p, head) + "The site's folder on the servers: " + baseDeploiement(p.Nom, env) + " (its current release: " + baseDeploiement(p.Nom, env) + "/current).\n"
+	brief := briefPremierDeploiement(e.URL, "", p, head) + "The site's folder on the servers: " + baseDeploiement(p.Nom, env) + " (its current release: " + baseDeploiement(p.Nom, env) + "/current).\n" +
+		"The servers are yours to set up: install whatever the deployment plan needs that is missing (system packages, the web server it names, tools), then deploy; never stop at a missing package.\n"
 	if !ignorer {
 		brief += phraseAccordProduction
 	}
@@ -333,4 +334,45 @@ func nomsServeurs(ids []string) []string {
 		noms = append(noms, n)
 	}
 	return noms
+}
+
+// premierARelancer: a first deployment that did not go through (servers, no method recorded, no task of it at work,
+// and a try made: its task or a version deployed by hand); never tried, the relay starts it at its moment as before.
+func premierARelancer(e Environnement, r RelaisJalon, essais int) bool {
+	return len(e.Serveurs) > 0 && e.Deploiement == nil && r.Etat != "preparation" && !tacheEnCoursID(r.Premier) && (r.Premier != "" || essais > 0)
+}
+
+// reprendreDeploiement: the owner's Start (Studio, a mission's Resume) takes the project's deployment up where it
+// failed: its first deployment launched again with the plan as it is now (its result in the relay's record).
+func (s *Serveur) reprendreDeploiement(p Projet) {
+	if s.acces == nil {
+		return
+	}
+	env := s.envJalon(p.Nom)
+	if premierARelancer(s.acces.Environnements(p.Nom)[env], lireRelais()[p.Nom], len(historiqueDeploiements(p.Nom, env))) {
+		_, _ = s.premierDeploiementProjet(p, modeNatif.Load() && s.sansRappelsNatif())
+	}
+}
+
+// ajouterPlanServeurs: texte added at the end of the plan for the servers of p's deployment (Discuss: a remark for
+// the servers); the changed plan prepares the servers again (preparerProjet), a stuck first deployment goes again.
+func (s *Serveur) ajouterPlanServeurs(p Projet, texte, qui string) error {
+	texte = strings.TrimSpace(texte)
+	if s.acces == nil || texte == "" {
+		return erreurEntree("This message has no addition for the servers")
+	}
+	e := s.acces.Environnements(p.Nom)[s.deploiementProjet(p.Nom)]
+	if len(e.Serveurs) == 0 {
+		return erreurEntree("This project has no server")
+	}
+	plan := strings.TrimSpace(e.Plan)
+	if plan != "" {
+		plan += "\n\n"
+	}
+	if err := s.definirDeploiementProjet(p.Nom, DeploiementDemande{Serveurs: e.Serveurs, URL: e.URL, Plan: plan + texte, Moment: e.Moment, APIs: e.APIs}, qui); err != nil {
+		return err
+	}
+	s.preparerProjet(p)
+	s.reprendreDeploiement(p)
+	return nil
 }

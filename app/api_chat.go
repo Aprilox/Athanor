@@ -45,8 +45,9 @@ type MessageChat struct {
 	// what Claude Code said the whole session cost so far: a resumed session (--resume) reports its total,
 	// this turn's cost is the difference with the turn before (coutTourChat)
 	CoutSession float64 `json:"cout_session,omitempty"`
-	Note        bool    `json:"note,omitempty"`  // the note was sent to the pilot
-	Agent       string  `json:"agent,omitempty"` // the sub-agent it proposed, added to the team under this name
+	Note        bool    `json:"note,omitempty"`     // the note was sent to the pilot
+	Serveurs    bool    `json:"serveurs,omitempty"` // its <serveurs> addition went to the plan for the servers
+	Agent       string  `json:"agent,omitempty"`    // the sub-agent it proposed, added to the team under this name
 	// Internet: the user let Claude search and read the web for this message (when the request needs it)
 	Internet bool     `json:"internet,omitempty"`
 	Pieces   []string `json:"pieces,omitempty"` // the files attached (.athanor/attachments/chat/…)
@@ -216,9 +217,10 @@ cannot run commands. Keep the change small and focused, never touch .athanor/ (t
 asked, and end with the list of the files you changed. Athanor commits your changes for you.`
 
 var (
-	reNote  = regexp.MustCompile(`(?s)<note>(.*?)</note>`)
-	reAgent = regexp.MustCompile(`(?s)<agent>(.*?)</agent>`)
-	reMCP   = regexp.MustCompile(`(?s)<mcp>(.*?)</mcp>`)
+	reNote     = regexp.MustCompile(`(?s)<note>(.*?)</note>`)
+	reServeurs = regexp.MustCompile(`(?s)<serveurs>(.*?)</serveurs>`)
+	reAgent    = regexp.MustCompile(`(?s)<agent>(.*?)</agent>`)
+	reMCP      = regexp.MustCompile(`(?s)<mcp>(.*?)</mcp>`)
 )
 
 const prefixePieceChat = ".athanor/attachments/chat/"
@@ -319,7 +321,28 @@ func (s *Serveur) apiChatEnvoyer(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	s.envoyerChat(w, p, c, consigneChat, consigneQuestion, consigneModif)
+	question, modif := consigneQuestion, consigneModif
+	if x := s.consigneServeursChat(p); x != "" { // a project with servers: a remark may be for them
+		question, modif = question+x, modif+x
+	}
+	s.envoyerChat(w, p, c, consigneChat, question, modif)
+}
+
+// consigneServeursChat: what Discuss adds for a project whose deployment has servers ("" without): ask whether a
+// remark is for the code or the servers, and write the servers' one for their plan.
+func (s *Serveur) consigneServeursChat(p Projet) string {
+	if s.acces == nil {
+		return ""
+	}
+	e := s.acces.Environnements(p.Nom)[s.deploiementProjet(p.Nom)]
+	if len(e.Serveurs) == 0 {
+		return ""
+	}
+	return "\n\nThis project also has servers (" + strings.Join(nomsServeurs(e.tousServeurs()), ", ") + "), set up by Athanor's Servers agent from the " +
+		"plan for the servers; the pilot never touches them. When the user gives a remark or asks for a change, ask them in one short question " +
+		"whether it is for the code (the pilot) or for the servers, unless their message already says which. For the code: as above. For the " +
+		"servers: change no file and write what to add to the plan for the servers, on its own, between <serveurs> and </serveurs> (short, " +
+		"precise, in the user's language): Athanor shows it with a button that adds it to that plan, and the Servers agent then sets it up."
 }
 
 // consigneSobre: how Claude writes in every conversation (project chat, the Studio's "Discuss", the home chat),
@@ -708,6 +731,40 @@ func (s *Serveur) apiChatNote(w http.ResponseWriter, r *http.Request) {
 	conv.Messages[c.Index].Note = true
 	ecrireConversation(k, p, conv)
 	s.msg(w, "Note sent: the pilot reads it at its next cycle.")
+}
+
+// apiChatServeurs: POST /api/chat/serveurs {index}: Claude's <serveurs> of a message is added to the plan for the
+// servers of the project's deployment (ajouterPlanServeurs).
+func (s *Serveur) apiChatServeurs(w http.ResponseWriter, r *http.Request) {
+	var c struct {
+		Index int `json:"index"`
+	}
+	if err := lireCorps(r, &c); err != nil {
+		s.erreur(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	p, ok := s.projetRequis(w, r)
+	if !ok || !s.accesPret(w, p.Nom) {
+		return
+	}
+	k := s.kitCourant()
+	conv := lireConversation(k, p)
+	if c.Index < 0 || c.Index >= len(conv.Messages) || conv.Messages[c.Index].Role != "claude" {
+		s.erreur(w, http.StatusBadRequest, "Unknown message")
+		return
+	}
+	m := reServeurs.FindStringSubmatch(conv.Messages[c.Index].Texte)
+	if m == nil {
+		s.erreur(w, http.StatusBadRequest, "This message has no addition for the servers")
+		return
+	}
+	if err := s.ajouterPlanServeurs(p, m[1], deQui(r)); err != nil {
+		s.erreurMissionHTTP(w, err)
+		return
+	}
+	conv.Messages[c.Index].Serveurs = true
+	ecrireConversation(k, p, conv)
+	s.msg(w, "Added to the plan for the servers: the Servers agent sets it up.")
 }
 
 // noteAvecPieces: the note names the files attached to the user's message it answers (the pilot then reads

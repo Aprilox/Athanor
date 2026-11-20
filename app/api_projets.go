@@ -384,6 +384,9 @@ func (s *Serveur) apiPilote(w http.ResponseWriter, r *http.Request) {
 	switch r.PathValue("action") {
 	case "demarrer":
 		cle, err := s.demarrerPiloteAuto(p)
+		if err == nil || err.Error() == texteLivreRienDeNeuf { // delivered or not: a first deployment that failed goes again
+			s.reprendreDeploiement(p)
+		}
 		if err != nil {
 			code := http.StatusInternalServerError
 			if m := err.Error(); m == texteSansClaude || m == texteLivreRienDeNeuf { // a refusal the page explains, not a failure

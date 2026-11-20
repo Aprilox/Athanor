@@ -483,6 +483,7 @@ func (s *Serveur) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/chat/arreter", s.garde(false, s.apiChatArreter))
 	mux.HandleFunc("POST /api/chat/effacer", s.garde(false, s.apiChatEffacer))
 	mux.HandleFunc("POST /api/chat/note", s.garde(false, s.apiChatNote))
+	mux.HandleFunc("POST /api/chat/serveurs", s.garde(false, s.apiChatServeurs))
 	mux.HandleFunc("POST /api/chat/agent", s.garde(false, s.apiChatAgent))
 	mux.HandleFunc("POST /api/chat/mcp", s.garde(false, s.apiChatMCP))
 	mux.HandleFunc("GET /api/hub/chat", s.garde(false, s.apiHubChat)) // the home conversation (hub_chat.go)

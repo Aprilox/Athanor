@@ -115,9 +115,34 @@ func TestMissionsSuivies(t *testing.T) {
 		modeProjet("vitrine") != "auto" || !slices.Equal(b.pilotes, []string{"vitrine"}) {
 		t.Fatalf("project: %+v, mode %s, pilots %v", e, modeProjet("vitrine"), b.pilotes)
 	}
+	// Discuss: a project with servers asks code or servers, and adds a remark for the servers to their plan
+	pv, _ := s.projetLocalChat("vitrine")
+	if c := s.consigneServeursChat(pv); !strings.Contains(c, "vps") || !strings.Contains(c, "<serveurs>") {
+		t.Errorf("Discuss's servers instruction: %q", c)
+	}
+	if ps, _ := s.projetLocalChat("site"); s.consigneServeursChat(ps) != "" || s.ajouterPlanServeurs(ps, "x", "test") == nil {
+		t.Error("a project without a server gets the servers instruction or a servers' plan")
+	}
+	if err := s.ajouterPlanServeurs(pv, " Un pare-feu qui ne laisse que 80 et 443. ", "test"); err != nil ||
+		s.acces.Environnements("vitrine")[s.deploiementProjet("vitrine")].Plan != "nginx sur vps, postgres sur base\n\nUn pare-feu qui ne laisse que 80 et 443." {
+		t.Errorf("a remark for the servers added to their plan: %v %q", err, s.acces.Environnements("vitrine")[s.deploiementProjet("vitrine")].Plan)
+	}
+	// Start relaunches a first deployment that did not go through, never one not tried yet nor one at work
+	for _, x := range []struct {
+		e      Environnement
+		r      RelaisJalon
+		essais int
+		ok     bool
+	}{{Environnement{Serveurs: []string{"v"}}, RelaisJalon{}, 1, true}, {Environnement{Serveurs: []string{"v"}}, RelaisJalon{}, 0, false},
+		{Environnement{Serveurs: []string{"v"}}, RelaisJalon{Etat: "preparation"}, 1, false}, {Environnement{Serveurs: []string{"v"}, Deploiement: &ConfigDeploiement{}}, RelaisJalon{}, 1, false},
+		{Environnement{}, RelaisJalon{}, 1, false}} {
+		if premierARelancer(x.e, x.r, x.essais) != x.ok {
+			t.Errorf("relaunch %+v %+v %d: want %v", x.e, x.r, x.essais, x.ok)
+		}
+	}
 	// Studio shows its work on the servers step by step: prepared, first deployment, each version, the next one
 	_ = noterHistorique(Deploiement{ID: "d1", Projet: "vitrine", Env: s.envJalon("vitrine"), Commit: "59c2a7f3c89a", Etat: "echec", Erreur: "Caddy is not installed", Debut: "2026-11-20T12:19:00Z"})
-	if j := s.jalonsDeploiement("vitrine"); len(j) != 4 || j[0].Titre != "Prepare the servers" || j[0].Etat != "fait" || j[1].Titre != "First deployment" || j[1].Etat != "a_faire" ||
+	if j := s.jalonsDeploiement("vitrine"); len(j) != 4 || j[0].Titre != "Prepare the servers" || j[0].Etat != "fait" || j[1].Titre != "First deployment" || j[1].Etat != "echec" ||
 		j[2].Titre != "Version {0} failed" || j[2].Args[0] != "59c2a7f" || j[2].Detail != "Caddy is not installed" || j[3].Titre != "Next deployment: at delivery" {
 		t.Errorf("deployment milestones: %+v", j)
 	}
