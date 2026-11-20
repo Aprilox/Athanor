@@ -33,9 +33,10 @@ type CritiquePlan struct {
 
 // VerificationTache: the external verifier's report on a task's applied plans.
 type VerificationTache struct {
-	Verdict string   `json:"verdict"` // "ok" | "echec"
-	Lignes  []string `json:"lignes,omitempty"`
-	T       string   `json:"t"`
+	Verdict  string           `json:"verdict"` // "ok" | "echec"
+	Lignes   []string         `json:"lignes,omitempty"`
+	Criteres []CritereVerifie `json:"criteres,omitempty"` // each acceptance criterion and whether it holds
+	T        string           `json:"t"`
 }
 
 var (
@@ -59,7 +60,7 @@ func (s *Serveur) planEnDonnees(p PlanServeur) string {
 			"classe": e.Classe, "pourquoi": e.Pourquoi, "sauvegarde": e.Sauvegarde, "sans_sauvegarde": e.SansSauvegarde})
 	}
 	return enDonnees("plan", fmt.Sprintf(` id="%s" server="%s" env="%s"`, p.ID, p.Serveur, p.Env),
-		enJSON(map[string]any{"resume": p.Resume, "etapes": etapes}))
+		enJSON(map[string]any{"resume": p.Resume, "etapes": etapes, "criteres": p.Criteres}))
 }
 
 func consigneCritique(plan string) string {
@@ -76,8 +77,10 @@ func consigneVerificateur(texte string, plans []string) string {
 	return "You are Athanor's external verifier. The owner asked: <owner-request>" + strings.ReplaceAll(texte, "<", "&lt;") +
 		"</owner-request>\nThe plans below were applied. Test the result as a visitor would: verifier_http on the addresses " +
 		"concerned (status, TLS and its expiry, security headers, whether a password is asked when it should be), and " +
-		"read-only checks on the server (the service runs, the port listens). You change nothing and nobody answers questions.\n\n" +
-		"Answer with exactly this form and nothing before it:\nVERIFICATION: ok\nor\nVERIFICATION: echec\n- one finding per line, plain and short\n\n" +
+		"read-only checks on the server (the service runs, the port listens). Check every acceptance criterion of the plans (criteres): " +
+		"the result passes only when each holds. You change nothing and nobody answers questions.\n\n" +
+		"Answer with exactly this form and nothing before it:\nVERIFICATION: ok\nor\nVERIFICATION: echec\n" +
+		"- [ok] <a criterion, as written>: what you saw (one line per criterion; [echec] for one that does not hold)\n- any other finding, one per line, plain and short\n\n" +
 		strings.Join(plans, "\n\n")
 }
 
@@ -175,6 +178,7 @@ func (s *Serveur) verifierTache(ctx context.Context, e *tacheEnCours, dossier st
 	res, err := s.sessionAnnexe(ctx, e, dossier, "verificateur", consigneVerificateur(e.t.Texte, plans), outilsVerificateur)
 	v := VerificationTache{T: time.Now().UTC().Format(time.RFC3339)}
 	v.Verdict, v.Lignes = s.lireVerdict(res, "verification", []string{"ok", "echec"})
+	v.Criteres = criteresVerifies(v.Lignes)
 	if err != nil || v.Verdict == "" {
 		pourquoi := "no report in its answer"
 		if err != nil {
@@ -226,7 +230,7 @@ var entetesSecurite = []string{"Strict-Transport-Security", "Content-Security-Po
 
 func init() {
 	outilsHub["verifier_http"] = OutilHub{Description: "Visit an address of your servers as a visitor would (GET, redirects not followed): status, TLS version, certificate validity and expiry, security headers, whether a password is asked.",
-		Schema: schemaObjet(map[string]any{"url": schemaTexte("http:// or https:// address whose host is one of your servers (its address or a name pointing to it)")}, "url"),
+		Schema: schemaObjet(map[string]any{"url": schemaTexte("http:// or https:// address whose host is one of your servers (its address or a name pointing to it), or a project's site address")}, "url"),
 		Faire:  outilVerifierHTTP}
 }
 
@@ -256,7 +260,7 @@ func outilVerifierHTTP(s *Serveur, x SessionHub, args json.RawMessage) (string, 
 	}
 	ctx, fin := context.WithTimeout(s.contexteSession(x.Hache), 20*time.Second)
 	defer fin()
-	r := verifierHTTP(ctx, u, hotes)
+	r := verifierHTTP(ctx, u, hotes, s.adresseDeploiement(u.Hostname())) // a site's own address: through its CDN or proxy too
 	s.ecrireAudit(LigneAudit{Type: "evenement", De: x.Agent, Vers: "url:" + couper(u.Host, 80), Projet: x.Projet, Mission: x.Mission,
 		Agent: x.Agent, Action: "serveurs.verifier_http", Resultat: fmt.Sprintf("%d %s", r.Statut, couper(r.Erreur, 120))})
 	return enDonnees("server-output", ` tool="verifier_http"`, enJSON(r)), nil
@@ -278,9 +282,11 @@ func adressesPermises(ctx context.Context, hotes []string) map[string]bool {
 	return ok
 }
 
-// verifierHTTP: one GET of u, connected only to an address of hotes (checked at the connection itself, so a
-// name that changes between two lookups gains nothing); no proxy, no redirect followed, body read 64 KB at most.
-func verifierHTTP(ctx context.Context, u *url.URL, hotes []string) ResultatHTTP {
+// verifierHTTP: one GET of u, connected only to an address of hotes, or (public: u is a site's address the owner set)
+// to any public one, whatever stands in front of the servers (a CDN such as Cloudflare, a proxy on another machine);
+// checked at the connection itself, so a name that changes between two lookups gains nothing; no proxy, no redirect
+// followed, body read 64 KB at most.
+func verifierHTTP(ctx context.Context, u *url.URL, hotes []string, public bool) ResultatHTTP {
 	r := ResultatHTTP{URL: u.String(), Authentification: "aucune", EnTetes: map[string]string{}, Manquants: []string{}}
 	permises := adressesPermises(ctx, hotes)
 	var info *InfoTLS
@@ -299,7 +305,7 @@ func verifierHTTP(ctx context.Context, u *url.URL, hotes []string) ResultatHTTP 
 				return nil, err
 			}
 			for _, ip := range ips {
-				if permises[ip.IP.String()] {
+				if permises[ip.IP.String()] || public && adressePublique(ip.IP) {
 					return (&net.Dialer{Timeout: 10 * time.Second}).DialContext(ctx, reseau, net.JoinHostPort(ip.IP.String(), port))
 				}
 			}
@@ -355,4 +361,28 @@ func verifierHTTP(ctx context.Context, u *url.URL, hotes []string) ResultatHTTP 
 		}
 	}
 	return r
+}
+
+// CritereVerifie: an acceptance criterion as the verifier found it.
+type CritereVerifie struct {
+	Texte string `json:"texte"`
+	OK    bool   `json:"ok"`
+}
+
+// criteresVerifies: the verifier's "[ok] ..." and "[echec] ..." lines, in order.
+func criteresVerifies(lignes []string) []CritereVerifie {
+	var l []CritereVerifie
+	for _, x := range lignes {
+		x = strings.TrimSpace(x)
+		for _, m := range []struct {
+			pre string
+			ok  bool
+		}{{"[ok]", true}, {"[echec]", false}, {"[échec]", false}, {"[fail]", false}} {
+			if len(x) > len(m.pre) && strings.EqualFold(x[:len(m.pre)], m.pre) {
+				l = append(l, CritereVerifie{Texte: couper(strings.TrimSpace(x[len(m.pre):]), 300), OK: m.ok})
+				break
+			}
+		}
+	}
+	return l
 }

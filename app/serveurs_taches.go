@@ -27,12 +27,13 @@ import (
 )
 
 const (
-	prefixeTache      = "servers:tache:"   // the project of a task's session: never a real project
-	prefixeServeur    = "servers:serveur:" // the project of a "do not ask again" rule a task's plan gives (C54)
-	maxCommande       = 2000               // characters of a command (C51)
-	delaiSessionTache = 20 * time.Minute   // one Claude session of a task
-	maxPlansTache     = 5                  // plans proposed, decided and applied in turn by one task
-	maxTexteTache     = 4000
+	prefixeTache        = "servers:tache:"   // the project of a task's session: never a real project
+	prefixeServeur      = "servers:serveur:" // the project of a "do not ask again" rule a task's plan gives (C54)
+	maxCommande         = 2000               // characters of a command (C51)
+	delaiSessionTache   = 20 * time.Minute   // one Claude session of a task
+	maxPlansTache       = 5                  // plans proposed, decided and applied in turn by one task
+	maxCorrectionsTache = 2                  // a failed check sends the agent back with its report at most this often
+	maxTexteTache       = 4000
 	// serveurAPI (M286): what stands for the server of a task on the owner's API alone: the folder of its file, the
 	// {id} of its routes and the "serveur" of its plans. Never an inventory id (16 hexadecimal characters).
 	serveurAPI = "api"
@@ -57,7 +58,8 @@ type TacheServeurs struct {
 	Actions      []ActionTache      `json:"actions,omitempty"` // every tool call of its agents, live (M231e)
 	Direct       bool               `json:"direct,omitempty"`  // "live in my terminal" (M231f): shown in the owner's terminal, its typing locked
 	Terminal     string             `json:"-"`                 // that terminal's session (never sent: it opens a shell)
-	Panneau      bool               `json:"panneau,omitempty"` // launched from the terminal's assistant panel: the server's permission mode applies (M244f)
+	Panneau      bool               `json:"panneau,omitempty"`
+	Besoin       string             `json:"besoin,omitempty"` // what the owner alone can do for it (its answer's OWNER NEEDED line): their For you page // launched from the terminal's assistant panel: the server's permission mode applies (M244f)
 	// Assistant: repos | travail | attente_decision | arretee | erreur, the one state the page's banner, chat and
 	// terminal lock read; Verrou: one of its commands runs now in the owner's terminal, whose typing and files are
 	// locked then, and only then (M242a).
@@ -398,46 +400,68 @@ func (s *Serveur) executerTache(ctx context.Context, e *tacheEnCours, dossier st
 	err := s.sessionTache(ctx, e, dossier)
 	fin, detail := "finie", ""
 	var appliques []string
-	for n := 0; err == nil && n < maxPlansTache; n++ {
-		plan := s.planNeufTache(projet, e)
-		if plan == "" {
-			break
-		}
-		if s.critiqueEnCours(plan) { // a plan accepted by the owner's rule is not presented: no critique
-			e.etat("critique", plan)
-			s.critiquerPlan(ctx, e, dossier, plan)
-			if ctx.Err() != nil {
+	n := 0            // plans handled in this task, every pass included
+	plans := func() { // the plans the session proposed, each decided then applied in turn
+		for ; err == nil && n < maxPlansTache; n++ {
+			plan := s.planNeufTache(projet, e)
+			if plan == "" {
 				break
 			}
-		}
-		e.etat("attente_accord", plan)
-		ap, errA := s.attendreDecision(ctx, plan)
-		if errA != nil {
-			err = errA
-			break
-		}
-		if ap.Etat != "acceptee" {
-			fin, detail = "finie", "plan "+plan+" "+ap.Etat
+			if s.critiqueEnCours(plan) { // a plan accepted by the owner's rule is not presented: no critique
+				e.etat("critique", plan)
+				s.critiquerPlan(ctx, e, dossier, plan)
+				if ctx.Err() != nil {
+					break
+				}
+			}
+			e.etat("attente_accord", plan)
+			ap, errA := s.attendreDecision(ctx, plan)
+			if errA != nil {
+				err = errA
+				break
+			}
+			if ap.Etat != "acceptee" {
+				fin, detail = "finie", "plan "+plan+" "+ap.Etat
+				e.mu.Lock()
+				e.t.Resultat = "Plan " + plan + " " + ap.Etat + ": nothing was changed."
+				e.mu.Unlock()
+				break
+			}
 			e.mu.Lock()
-			e.t.Resultat = "Plan " + plan + " " + ap.Etat + ": nothing was changed."
+			e.applique = plan
 			e.mu.Unlock()
-			break
-		}
-		e.mu.Lock()
-		e.applique = plan
-		e.mu.Unlock()
-		e.etat("application", plan)
-		appliques = append(appliques, plan)
-		if err = os.WriteFile(filepath.Join(dossier, "consigne.txt"), []byte(consigneApplication(plan, len(e.t.Serveurs) == 0)), 0o600); err == nil {
-			err = s.sessionTache(ctx, e, dossier)
+			e.etat("application", plan)
+			appliques = append(appliques, plan)
+			if err = os.WriteFile(filepath.Join(dossier, "consigne.txt"), []byte(consigneApplication(plan, len(e.t.Serveurs) == 0)), 0o600); err == nil {
+				err = s.sessionTache(ctx, e, dossier)
+			}
 		}
 	}
-	// M286: the external verifier visits servers; a task on an API alone has none, its agent's own reads are its check
-	if err == nil && ctx.Err() == nil && len(appliques) > 0 && len(e.t.Serveurs) > 0 {
+	plans()
+	// M286: the external verifier visits servers; a task on an API alone has none, its agent's own reads are its check.
+	// Like the dev pilot: each acceptance criterion is checked; one that fails sends the agent back with the report for
+	// another way (maxCorrectionsTache), else the task fails with it (an OWNER NEEDED line goes to For you).
+	for corrections := 0; err == nil && ctx.Err() == nil && len(appliques) > 0 && len(e.t.Serveurs) > 0; corrections++ {
 		e.etat("verification", appliques[len(appliques)-1])
-		if v := s.verifierTache(ctx, e, dossier, appliques); v.Verdict != "ok" && ctx.Err() == nil {
+		v := s.verifierTache(ctx, e, dossier, appliques)
+		if v.Verdict == "ok" || ctx.Err() != nil {
+			break
+		}
+		if avant := len(appliques); corrections < maxCorrectionsTache && n < maxPlansTache {
+			if err = os.WriteFile(filepath.Join(dossier, "consigne.txt"), []byte(consigneCorrectionServeurs(v)), 0o600); err == nil {
+				err = s.sessionTache(ctx, e, dossier)
+			}
+			if err == nil {
+				plans()
+			}
+			if err == nil && len(appliques) > avant {
+				continue // checked again
+			}
+		}
+		if err == nil {
 			err = errors.New(prefixeVerifEchouee + strings.Join(v.Lignes, " · "))
 		}
+		break
 	}
 	if err == nil {
 		e.mu.Lock()
@@ -516,6 +540,7 @@ func (s *Serveur) sessionTache(ctx context.Context, e *tacheEnCours, dossier str
 	}
 	if resultat != "" {
 		e.t.Resultat = couper(s.masquerSecrets(resultat), maxTexteTache)
+		e.t.Besoin = besoinProprietaire(e.t.Resultat)
 	}
 	e.mu.Unlock()
 	if err == nil && enErreur {

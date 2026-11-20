@@ -50,6 +50,8 @@ const PREFIXES = ["Resume: new request ", "Resume: what changed in .athanor/REQU
 
 const DICT = {
 fr: {
+  "Servers: the deployment of {0} needs you on {1}: {2}": "Serveurs : le déploiement de {0} a besoin de vous sur {1} : {2}",
+  "Servers: the agent needs you on {0}: {1}": "Serveurs : l'agent a besoin de vous sur {0} : {1}",
   "What the AI types on this server": "Ce que l'IA tape sur ce serveur",
   "Deployment · {0}": "Déploiement · {0}",
   "Nothing yet.": "Rien pour l'instant.",
@@ -1094,6 +1096,8 @@ fr: {
   "Run a command": "Lancer une commande", "The task failed without giving a reason.": "La tâche a échoué sans donner de raison.",
 },
 es: {
+  "Servers: the deployment of {0} needs you on {1}: {2}": "Servidores: el despliegue de {0} le necesita en {1}: {2}",
+  "Servers: the agent needs you on {0}: {1}": "Servidores: el agente le necesita en {0}: {1}",
   "What the AI types on this server": "Lo que la IA escribe en este servidor",
   "Deployment · {0}": "Despliegue · {0}",
   "Nothing yet.": "Nada por ahora.",
@@ -2106,6 +2110,8 @@ es: {
   "Run a command": "Ejecutar un comando", "The task failed without giving a reason.": "La tarea falló sin dar un motivo.",
 },
 de: {
+  "Servers: the deployment of {0} needs you on {1}: {2}": "Server: Die Bereitstellung von {0} braucht Sie auf {1}: {2}",
+  "Servers: the agent needs you on {0}: {1}": "Server: Der Agent braucht Sie auf {0}: {1}",
   "What the AI types on this server": "Was die KI auf diesem Server eingibt",
   "Deployment · {0}": "Bereitstellung · {0}",
   "Nothing yet.": "Noch nichts.",
@@ -3112,6 +3118,8 @@ de: {
   "Run a command": "Einen Befehl ausführen", "The task failed without giving a reason.": "Die Aufgabe ist ohne Angabe eines Grundes fehlgeschlagen.",
 },
 it: {
+  "Servers: the deployment of {0} needs you on {1}: {2}": "Server: la distribuzione di {0} ha bisogno di te su {1}: {2}",
+  "Servers: the agent needs you on {0}: {1}": "Server: l'agente ha bisogno di te su {0}: {1}",
   "What the AI types on this server": "Cosa digita l'IA su questo server",
   "Deployment · {0}": "Distribuzione · {0}",
   "Nothing yet.": "Ancora niente.",
@@ -4118,6 +4126,8 @@ it: {
   "Run a command": "Eseguire un comando", "The task failed without giving a reason.": "L'attività non è riuscita senza indicare un motivo.",
 },
 pt: {
+  "Servers: the deployment of {0} needs you on {1}: {2}": "Servidores: a implementação de {0} precisa de si em {1}: {2}",
+  "Servers: the agent needs you on {0}: {1}": "Servidores: o agente precisa de si em {0}: {1}",
   "What the AI types on this server": "O que a IA escreve neste servidor",
   "Deployment · {0}": "Implementação · {0}",
   "Nothing yet.": "Nada por agora.",

@@ -37,7 +37,7 @@ func TestVerifierHTTP(t *testing.T) {
 	ctx := context.Background()
 	visite := func(base, chemin string, hotes ...string) ResultatHTTP {
 		u, _ := url.Parse(base + chemin)
-		return verifierHTTP(ctx, u, hotes)
+		return verifierHTTP(ctx, u, hotes, false)
 	}
 	if r := visite(ts.URL, "/prive", "127.0.0.1"); r.Statut != 401 || r.Authentification != "demandee" || !strings.Contains(r.WWWAuthenticate, "Basic") || r.Erreur != "" {
 		t.Errorf("401: %+v", r)
@@ -154,6 +154,11 @@ func TestServeursCritiqueVerification(t *testing.T) {
 			if txt, e := appel(jeton, "fichier_ecrire", `{"serveur":"ab12","chemin":"/tmp/x","contenu":"x"}`); !e {
 				t.Errorf("the verifier could write: %s", txt)
 			}
+		case strings.Contains(c, "does not meet the goal yet"): // the check failed: the agent gets its report and says what only the owner can do
+			id, res = "sess-ops", "Le port 443 est fermé chez l'hébergeur.\nOWNER NEEDED: Ouvrez le port 443 dans le pare-feu de votre hébergeur."
+			if !strings.Contains(c, "<check-report>") || !strings.Contains(c, "mot de passe") {
+				t.Errorf("the correction lacks the check's report: %q", c)
+			}
 		case strings.Contains(c, "ACCEPTED"):
 			id, res = "sess-ops", "Appliqué."
 			if txt, e := appel(jeton, "ssh_commande", `{"serveur":"ab12","commande":"systemctl restart nginx","delai_s":30}`); e {
@@ -212,7 +217,8 @@ func TestServeursCritiqueVerification(t *testing.T) {
 	if critiques != 1 || verifs != 1 {
 		t.Errorf("%d critic and %d verifier sessions", critiques, verifs)
 	}
-	if fin.Etat != "echec" || fin.Verification == nil || fin.Verification.Verdict != "echec" || !strings.Contains(fin.Historique[len(fin.Historique)-1].Detail, "mot de passe") {
+	if fin.Etat != "echec" || fin.Verification == nil || fin.Verification.Verdict != "echec" || !strings.Contains(fin.Historique[len(fin.Historique)-1].Detail, "mot de passe") ||
+		!strings.Contains(fin.Besoin, "port 443") {
 		t.Fatalf("failed verification: %+v %+v", fin, fin.Verification)
 	}
 	var etats []string

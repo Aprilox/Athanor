@@ -60,7 +60,8 @@ func jugerVerification(e Environnement, r ResultatHTTP) VerifDeploiement {
 	return v
 }
 
-// verifierEnvironnement: the environment's URL visited from this PC, connected only to its servers.
+// verifierEnvironnement: the environment's URL visited from this PC, connected to its servers or to what stands in front
+// of them on the internet (verifierHTTP public).
 func (s *Serveur) verifierEnvironnement(ctx context.Context, e Environnement) *VerifDeploiement {
 	u, err := url.Parse(e.URL)
 	if err != nil {
@@ -76,7 +77,7 @@ func (s *Serveur) verifierEnvironnement(ctx context.Context, e Environnement) *V
 	}
 	ctx, fin := context.WithTimeout(ctx, 20*time.Second)
 	defer fin()
-	v := jugerVerification(e, verifierHTTP(ctx, u, hotes))
+	v := jugerVerification(e, verifierHTTP(ctx, u, hotes, true)) // the owner's address: through its CDN or proxy too
 	return &v
 }
 

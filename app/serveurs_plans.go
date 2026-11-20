@@ -25,6 +25,7 @@ const (
 	actionPlanServeur = "plan_serveur"
 	dureePlan         = 2 * time.Hour // a plan not decided, or not run, within this delay is over
 	maxEtapesPlan     = 30
+	maxCriteresPlan   = 10 // a plan's acceptance criteria
 	maxSauvegardes    = 20
 )
 
@@ -67,6 +68,7 @@ type PlanServeur struct {
 	Mission  string        `json:"mission,omitempty"`
 	Agent    string        `json:"agent"`
 	Resume   string        `json:"resume"`
+	Criteres []string      `json:"criteres,omitempty"` // what must be true once applied, one verifiable statement each (the verifier checks them)
 	Cree     string        `json:"cree"`
 	Expire   string        `json:"expire"`
 	Critique *CritiquePlan `json:"critique,omitempty"`  // the security critic's verdict (M98), a task's plan only
@@ -100,9 +102,10 @@ func init() {
 	outilsHub["proposer_plan"] = OutilHub{Description: "Propose the changes you want to make on a server as a plan for the owner. " +
 		"Once accepted, call each step's tool with exactly its arguments, each step once, within 2 hours. A change outside an accepted plan is refused.",
 		Schema: schemaObjet(map[string]any{"serveur": schemaTexte("The server's id, from serveurs_liste (a plan of Cloudflare steps: any of your servers)"),
-			"resume": schemaTexte("What the plan does, in one or two sentences"),
-			"accord": map[string]any{"type": "boolean", "description": "true when the owner must read and accept this plan whatever the permission mode: a production going online for the first time"},
-			"etapes": map[string]any{"type": "array", "items": etape, "description": "The steps, in order"}}, "serveur", "resume", "etapes"),
+			"resume":   schemaTexte("What the plan does, in one or two sentences"),
+			"accord":   map[string]any{"type": "boolean", "description": "true when the owner must read and accept this plan whatever the permission mode: a production going online for the first time"},
+			"etapes":   map[string]any{"type": "array", "items": etape, "description": "The steps, in order"},
+			"criteres": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "The acceptance criteria of the owner's goal: what must be true once applied, one verifiable statement each (a service runs, a port listens or is closed, an address answers, a file holds a value), from their request and plan for the servers. 1 to 10"}}, "serveur", "resume", "etapes"),
 		Faire: outilProposerPlan}
 }
 
@@ -175,10 +178,11 @@ func reglePlan(projet, id string) RegleAccord {
 
 func outilProposerPlan(s *Serveur, x SessionHub, args json.RawMessage) (string, error) {
 	var a struct {
-		Serveur string `json:"serveur"`
-		Resume  string `json:"resume"`
-		Accord  bool   `json:"accord"` // M310d: the agent asks for the owner's own accord: no rule and no mode but ignorer accepts the plan alone
-		Etapes  []struct {
+		Serveur  string   `json:"serveur"`
+		Resume   string   `json:"resume"`
+		Accord   bool     `json:"accord"` // M310d: the agent asks for the owner's own accord: no rule and no mode but ignorer accepts the plan alone
+		Criteres []string `json:"criteres"`
+		Etapes   []struct {
 			Outil          string                     `json:"outil"`
 			Arguments      map[string]json.RawMessage `json:"arguments"`
 			Classe         string                     `json:"classe"`
@@ -211,7 +215,16 @@ func outilProposerPlan(s *Serveur, x SessionHub, args json.RawMessage) (string, 
 	if api {
 		srv.Nom = strings.Join(x.Hotes, ", ")
 	}
-	p := PlanServeur{Serveur: a.Serveur, Nom: srv.Nom, Env: "dev", Projet: x.Projet, Mission: x.Mission, Agent: x.Agent, Resume: resume}
+	if len(a.Criteres) > maxCriteresPlan {
+		return "", fmt.Errorf("a plan has %d acceptance criteria at most", maxCriteresPlan)
+	}
+	var criteres []string
+	for _, c := range a.Criteres {
+		if c = strings.TrimSpace(c); c != "" {
+			criteres = append(criteres, couper(s.masquerSecrets(c), 200))
+		}
+	}
+	p := PlanServeur{Serveur: a.Serveur, Nom: srv.Nom, Env: "dev", Projet: x.Projet, Mission: x.Mission, Agent: x.Agent, Resume: resume, Criteres: criteres}
 	if projetEnv, env, ok := strings.Cut(x.Env, "/"); ok && s.prudenceRenforcee(projetEnv, env) { // a task for a prod environment: its Cloudflare steps too (M116)
 		prod = true
 	}

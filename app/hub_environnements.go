@@ -657,7 +657,7 @@ func (s *Serveur) apiDeploiementProjet(w http.ResponseWriter, r *http.Request) {
 		d.Moment = "livraison"
 	}
 	s.ecrireJSON(w, map[string]any{"projet": projet, "courant": courant, "deploiement": d, "sites": envs,
-		"deploiements": s.deploiementsAffiches(projet), "sante": s.vueSante(projet), "relais": s.etatRelais(projet), "prudence": s.envsPrudents(projet, envs), "anciens": s.anciensSitesProduction(projet)})
+		"deploiements": s.deploiementsAffiches(projet), "sante": s.vueSante(projet), "relais": s.etatRelais(projet), "jalons": s.jalonsDeploiement(projet), "prudence": s.envsPrudents(projet, envs), "anciens": s.anciensSitesProduction(projet)})
 }
 
 // DeploiementDemande: what the Deployment tab or a card of the home sends for the project's one deployment.

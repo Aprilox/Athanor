@@ -528,6 +528,7 @@ details[open] summary { margin-bottom: 10px; }
 .plan .jalon-accept { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
 .plan .coche .jalon-ico, .plan .coche .jalon-titre { color: var(--ok); }
 .plan .echec .jalon-ico, .plan .echec .jalon-titre { color: var(--erreur); } /* a deployment step that failed (Suivi) */
+.plan .jalon-critere { padding-left: 22px; } /* an acceptance criterion of the servers' plan, under its step */
 .bloc-deploiement .bloc-tete { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
 .plan .en-cours .jalon-ico, .plan .en-cours .jalon-titre { color: var(--attention); }
 .plan .a-faire .jalon-ico { color: var(--faible); }

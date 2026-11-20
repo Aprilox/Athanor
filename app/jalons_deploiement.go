@@ -3,6 +3,7 @@ package main
 import (
 	"cmp"
 	"slices"
+	"strings"
 )
 
 // JalonDeploiement: one step of a project's work on its servers, shown in Studio beside its code milestones.
@@ -14,6 +15,7 @@ type JalonDeploiement struct {
 	Detail  string         `json:"detail,omitempty"`  // why it failed, in the engine's or the task's words
 	Message *MessageMoteur `json:"message,omitempty"` // that failure for the page to translate (the Deployment tab's)
 	Date    string         `json:"date,omitempty"`
+	Critere bool           `json:"critere,omitempty"` // an acceptance criterion of the servers' plan, as its last check found it
 }
 
 // etatTacheServeurs: a Servers task's state as a milestone's (an unknown id: done long ago, its file gone).
@@ -79,6 +81,11 @@ func (s *Serveur) jalonsDeploiement(projet string) []JalonDeploiement {
 		}
 		l = append(l, j)
 	}
+	if v := derniereVerification(projet, e.tousServeurs()); v != nil { // its acceptance criteria, as a milestone's
+		for _, c := range v.Criteres {
+			l = append(l, JalonDeploiement{Titre: c.Texte, Etat: map[bool]string{true: "fait", false: "echec"}[c.OK], Critere: true, Date: v.T})
+		}
+	}
 	if !slices.ContainsFunc(l, func(j JalonDeploiement) bool { return j.Etat == "en_cours" }) {
 		suivant := map[string]string{"jalon": "Next deployment: after the next milestone", "livraison": "Next deployment: at delivery"}[e.Moment]
 		if suivant != "" {
@@ -90,3 +97,17 @@ func (s *Serveur) jalonsDeploiement(projet string) []JalonDeploiement {
 
 // commitCourt: a commit's first 7 characters.
 func commitCourt(commit string) string { return commit[:min(len(commit), 7)] }
+
+// derniereVerification: the last check of projet's tasks on its servers that wrote acceptance criteria (nil: none).
+func derniereVerification(projet string, serveurs []string) *VerificationTache {
+	var v *VerificationTache
+	for _, id := range serveurs {
+		for _, t := range tachesServeur(id) {
+			if p, _, _ := strings.Cut(t.Env, "/"); p == projet && t.Verification != nil && len(t.Verification.Criteres) > 0 && (v == nil || t.Verification.T > v.T) {
+				x := *t.Verification
+				v = &x
+			}
+		}
+	}
+	return v
+}

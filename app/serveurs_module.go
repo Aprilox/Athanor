@@ -29,6 +29,15 @@ func (moduleServeurs) Elements(*Serveur) []ElementHub {
 			out = append(out, ElementHub{ID: x.ID + ":verification", Titre: x.Nom, Etat: "erreur", Lien: "#serveur/" + x.ID,
 				Attente: &AttenteElement{Raison: "The external check of a task on {0} failed: {1}", Args: []any{x.Nom, strings.Join(t[0].Verification.Lignes, " · ")}, Page: "#serveur/" + x.ID, Cle: t[0].ID}})
 		}
+		// the last task ended on what only the owner can do (OWNER NEEDED): For you, marked Servers (never the Studio's)
+		if t := tachesServeur(x.ID); len(t) > 0 && t[0].Besoin != "" && tacheFinieEtat(t[0].Etat) {
+			raison, args := "Servers: the agent needs you on {0}: {1}", []any{x.Nom, t[0].Besoin}
+			if p, _, ok := strings.Cut(t[0].Env, "/"); ok {
+				raison, args = "Servers: the deployment of {0} needs you on {1}: {2}", []any{p, x.Nom, t[0].Besoin}
+			}
+			out = append(out, ElementHub{ID: x.ID + ":besoin:" + t[0].ID, Titre: x.Nom, Etat: "erreur", Lien: "#serveur/" + x.ID,
+				Attente: &AttenteElement{Raison: raison, Args: args, Page: "#serveur/" + x.ID, Cle: t[0].ID}})
+		}
 		for _, r := range retoursNonVerifiesDe(x.ID) { // C49: a rollback the server could not be seen doing
 			out = append(out, ElementHub{ID: x.ID + ":retour:" + r.ID, Titre: x.Nom, Etat: "erreur", Lien: "#serveur/" + x.ID,
 				Attente: &AttenteElement{Raison: "The automatic rollback of {0} on {1} is not verified ({2}): check it with {3}", Args: []any{r.Quoi, x.Nom, r.Pourquoi, r.Verifier}, Page: "#serveur/" + x.ID, Cle: r.ID}})

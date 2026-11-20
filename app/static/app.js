@@ -2568,7 +2568,7 @@ function blocJalonsDeploiement(l, lien = true) { // lien false: in the Deploymen
   return `<div class="bloc bloc-deploiement"><div class="bloc-tete"><h2>${t("Servers' plan")}</h2>${lien ? `<a class="petit" href="#deploiement">${t("Open the Deployment tab")}</a>` : ""}</div>
     <div class="barre"><i style="width:${(faits / l.length) * 100}%"></i></div><div class="muet petit">${t("{0} / {1} steps done", [faits, l.length])}</div>
     <ul class="plan">${l.map((j) => { const [icone, cls] = ETATS_JALON_DEP[j.etat] || ETATS_JALON_DEP.a_faire;
-      return `<li class="${cls}"><span class="jalon-ico">${ic(icone)}</span><div class="jalon-corps"><div class="jalon-titre">${h(t(j.titre, j.args || []))}</div>${j.detail ? `<div class="muet petit">${h(j.message ? texteMessage(j.message) : t(j.detail))}</div>` : ""}${j.date ? `<div class="muet petit">${h(dateLisible(j.date))}</div>` : ""}</div></li>`; }).join("")}</ul></div>`;
+      return `<li class="${cls}${j.critere ? " jalon-critere" : ""}"><span class="jalon-ico">${ic(icone)}</span><div class="jalon-corps"><div class="jalon-titre">${h(t(j.titre, j.args || []))}</div>${j.detail ? `<div class="muet petit">${h(j.message ? texteMessage(j.message) : t(j.detail))}</div>` : ""}${j.date ? `<div class="muet petit">${h(dateLisible(j.date))}</div>` : ""}</div></li>`; }).join("")}</ul></div>`;
 }
 function ligneRelais(r, lien = true) { // lien false: in the Deployment tab itself (M293)
   // M284: no deployment method yet is an information, never a failure (its button is in the Deployment tab)
@@ -4372,7 +4372,7 @@ pages.deploiement = async () => {
   const moments = MOMENTS_DEPLOIEMENT.filter(([v]) => v || !e.moment); // "Only when I ask": an older project that already has it
   const sites = d.sites || {}, autres = Object.keys(sites).filter((n) => n !== d.courant).sort(), nomSrv = (id) => nom(sv.serveurs, id);
   return `<div class="deploiement"><div class="dep-colonnes"><div class="colonne">
-    ${blocJalonsDeploiement((etat.vue || {}).jalons_deploiement, false)}
+    ${blocJalonsDeploiement(d.jalons, false)}
     <div class="bloc"><h2>${t("Online")}</h2>
     ${sites[d.courant] ? `<div id="dep-etat">${ficheSite(d, d.courant, nomSrv, distant)}${blocCleDeploiement(sites, distant)}</div>` : `<p class="intro petit m0">${t("This project is not online yet. Choose a server and say how to put it online: Athanor prepares the server, then deploys at the moment you choose.")}</p>`}</div></div>
   <form id="dep-form" class="bloc"><h2>${t("Deployment settings")}</h2>
@@ -4432,7 +4432,7 @@ document.addEventListener("submit", async (ev) => {
   ev.preventDefault();
   const f = dep.f; if (!f || !f.modifie) return;
   const r = await action(api("projets/" + encodeURIComponent(dep.projet) + "/deploiement", "POST", { serveurs: f.serveurs.map((m) => m.ref), url: f.url.trim(), plan: f.plan, moment: f.moment, apis: f.apis.map((m) => m.ref) }));
-  if (r) { dep.f = null; toast(t("Deployment saved."), "ok"); rendrePage(); }
+  if (r) { dep.f = null; toast(t("Deployment saved."), "ok"); await rafraichir(); rendrePage(); } // the servers' plan and Overview read the new moment at once
 });
 
 // --- log

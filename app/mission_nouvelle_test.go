@@ -158,6 +158,24 @@ func TestMissionsSuivies(t *testing.T) {
 		j[2].Titre != "Version {0} failed" || j[2].Args[0] != "59c2a7f" || j[2].Detail != "Caddy is not installed" || j[3].Titre != "Next deployment: at delivery" {
 		t.Errorf("deployment milestones: %+v", j)
 	}
+	// the servers' plan shows the acceptance criteria its last check found, as a milestone's
+	_ = os.MkdirAll(dossierTaches(b.vps), 0o700)
+	tv, _ := json.Marshal(TacheServeurs{ID: "c1a2b3c4d5e6", Env: "vitrine/site", Serveurs: []string{b.vps}, Etat: "finie", Cree: "2026-11-20T18:40:00Z",
+		Verification: &VerificationTache{Verdict: "echec", T: "2026-11-20T18:48:00Z", Criteres: []CritereVerifie{{Texte: "nginx écoute sur 5050", OK: true}, {Texte: "https://vitrine répond 200", OK: false}}}})
+	_ = os.WriteFile(filepath.Join(dossierTaches(b.vps), "c1a2b3c4d5e6.json"), tv, 0o600)
+	if j := s.jalonsDeploiement("vitrine"); len(j) != 6 || !j[3].Critere || j[3].Titre != "nginx écoute sur 5050" || j[3].Etat != "fait" || j[4].Etat != "echec" {
+		t.Errorf("the servers' plan without its criteria: %+v", j)
+	}
+	// the moment chosen is the one the servers' plan says, right after it is saved
+	ev2 := s.acces.Environnements("vitrine")[s.deploiementProjet("vitrine")]
+	for moment, titre := range map[string]string{"jalon": "Next deployment: after the next milestone", "livraison": "Next deployment: at delivery"} {
+		if err := s.definirDeploiementProjet("vitrine", DeploiementDemande{Serveurs: ev2.Serveurs, URL: ev2.URL, Plan: ev2.Plan, Moment: moment, APIs: ev2.APIs}, "test"); err != nil {
+			t.Fatal(err)
+		}
+		if j := s.jalonsDeploiement("vitrine"); j[len(j)-1].Titre != titre {
+			t.Errorf("moment %s: the servers' plan says %q", moment, j[len(j)-1].Titre)
+		}
+	}
 	if j := s.jalonsDeploiement("site"); j != nil {
 		t.Errorf("a project without a server has deployment milestones: %+v", j)
 	}
