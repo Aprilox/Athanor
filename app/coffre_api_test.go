@@ -99,7 +99,7 @@ func TestCoffreTemoinNullePart(t *testing.T) {
 	}
 	id := v["id"].(string)
 	// the same name in the same scope (here the default one): refused, nothing added
-	if code, v = appel("POST", "/api/coffre", entree(map[string]string{"nom": "API_URL", "famille": "variable", "type": "autre", "valeur": "y"})); code != http.StatusBadRequest || v["erreur"] != "An entry with this name already exists in this scope" {
+	if code, v = appel("POST", "/api/coffre", entree(map[string]string{"nom": "API_URL", "famille": "variable", "type": "autre", "valeur": "y"})); code != http.StatusBadRequest || v["erreur"] != "Another entry already has this name: give this one another name" {
 		t.Fatalf("duplicate: %d %v", code, v)
 	}
 	if code, v = appel("POST", "/api/coffre", entree(map[string]string{"nom": "api_url", "famille": "variable", "type": "autre", "valeur": "y"})); code != http.StatusBadRequest {

@@ -466,7 +466,7 @@ func (s *Serveur) apiGestion(w http.ResponseWriter, r *http.Request) {
 		if err := s.modifierProjet(p.Nom, func(cf *Config, x *Projet) error {
 			for _, y := range cf.Projets {
 				if y.Nom != p.Nom && strings.EqualFold(y.Nom, nouveau) {
-					return errors.New("A project with this name or folder already exists")
+					return errors.New("A project already has this name: choose another name")
 				}
 			}
 			x.Nom = nouveau

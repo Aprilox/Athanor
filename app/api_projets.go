@@ -526,9 +526,13 @@ func (s *Serveur) controlerProjetNeuf(nom, brut string) (string, error) {
 	}
 	s.mu.Lock()
 	for _, p := range s.config.Projets {
-		if strings.EqualFold(p.Nom, nom) || strings.EqualFold(filepath.Clean(p.Dossier), dossier) {
+		if strings.EqualFold(p.Nom, nom) {
 			s.mu.Unlock()
-			return "", errors.New("A project with this name or folder already exists")
+			return "", errors.New("A project already has this name: choose another name")
+		}
+		if strings.EqualFold(filepath.Clean(p.Dossier), dossier) {
+			s.mu.Unlock()
+			return "", errors.New("A project already uses this folder: choose another folder")
 		}
 	}
 	s.mu.Unlock()

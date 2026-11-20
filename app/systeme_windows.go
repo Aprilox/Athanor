@@ -600,7 +600,7 @@ func (b *Bureau) boucle() {
 			b.marquerIsole(false)
 			b.regles.Store(&reglesBureau{numClaude: -1})
 			// Programs started while the option was on stay on Claude's desktop until they close: it stays
-			// reachable ("View Claude's desktop") as long as windows remain there, to go and close them.
+			// reachable ("See the windows Claude opened") as long as windows remain there, to go and close them.
 			if b.isole == 0 {
 				b.isole = ouvrirBureauIsoleExistant()
 			}

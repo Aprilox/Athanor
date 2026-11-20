@@ -138,7 +138,7 @@ func (s *Serveur) apiCoffreAjouter(w http.ResponseWriter, r *http.Request) {
 
 // errNomPris: two entries of one name in one scope could not be told apart in a grant, nor in what a pilot
 // receives (case ignored: Windows variables have none).
-var errNomPris = erreurEntree("An entry with this name already exists in this scope")
+var errNomPris = erreurEntree("Another entry already has this name: give this one another name")
 
 // nomPris: another entry than sauf already has this name (any case) in this scope.
 func (s *Serveur) nomPris(nom, portee, sauf string) bool {

@@ -94,7 +94,7 @@ const etat = {
   page: "", projet: "", vue: null, verrouille: false, langue: "en", theme: document.documentElement.dataset.theme || "", accent: document.documentElement.dataset.accent || "", assistant: -1, visite: -1, demarrage: {},
   dernierJournal: 0, evenements: [], ouverts: new Set(),
   filtres: { pilote: true, texte: true, outil: true, resultat: false, sous_agent: true, brut: false }, recherche: "",
-  tacheChoisie: null, verifChoisie: null, envSecrets: false, defilAuto: lireDefilAuto(), explorateur: "", selecteurOuvert: false, rechercheProjet: "",
+  tacheChoisie: null, verifChoisie: null, envSecrets: false, defilAuto: lireDefilAuto(), srvTic: 0, explorateur: "", selecteurOuvert: false, rechercheProjet: "",
 };
 
 // ----------------------------------------------------------------------------- api
@@ -678,7 +678,7 @@ function rendreBarre(v) {
   const b = v.bureau || {}, act = [boutonCloche(v, "fb-action"), boutonGuide("fb-action")];
   if (b.disponible && b.ecran) act.push(`<button type="button" class="fb-action" data-ecran title="${h(t("Go and see what Claude is showing (windows on the “Claude” desktop)"))}">${t("View Claude's screen")}</button>`);
   else {
-    if (b.disponible) act.push(`<button type="button" class="fb-action" data-bureau="voir" title="${h(t("Go and see what Claude is showing (windows on the “Claude” desktop)"))}">${t("View Claude's desktop")}</button>`);
+    if (b.disponible) act.push(`<button type="button" class="fb-action" data-bureau="voir" title="${h(t("Go and see what Claude is showing (windows on the “Claude” desktop)"))}">${t("See the windows Claude opened")}</button>`);
     if (b.isole && !v.natif) act.push(`<button type="button" class="fb-action" data-ecran title="${h(t("The Linux windows Claude opens (a game under test, Godot, a browser) go to a private screen: never on yours, never taking the focus."))}">${t("Claude's Linux screen")}</button>`);
   }
   const html = act.join("");
@@ -981,8 +981,8 @@ function rendreBandeau(v) {
       boutons.push(`<button class="btn btn-primaire" data-act="demarrer" ${enDemarrage ? "disabled" : ""}>${enDemarrage ? t("Starting…") : t("Start")}</button>`);
     }
     if (v.bureau && v.bureau.disponible && !cadre.actif) boutons.push(v.bureau.ecran
-      ? `<button class="btn" data-ecran title="${h(t("Go and see what Claude is showing (windows on the “Claude” desktop)"))}">${t("View Claude's desktop")}</button>`
-      : `<button class="btn" data-bureau="voir" title="${h(t("Go and see what Claude is showing (windows on the “Claude” desktop)"))}">${t("View Claude's desktop")}</button>`);
+      ? `<button class="btn" data-ecran title="${h(t("Go and see what Claude is showing (windows on the “Claude” desktop)"))}">${t("See the windows Claude opened")}</button>`
+      : `<button class="btn" data-bureau="voir" title="${h(t("Go and see what Claude is showing (windows on the “Claude” desktop)"))}">${t("See the windows Claude opened")}</button>`);
   }
   const maj = v.maj || {};
   if (maj.en_cours === "telechargement") boutons.unshift(`<button class="btn btn-maj" disabled>${t("Downloading the update… {0} %", [maj.avancement || 0])}</button>`);
@@ -2244,9 +2244,10 @@ function sectionProjet(pre, p, modes, err, ouvert, plus = "") {
   const distant = (etat.vue || {}).distant;
   if (!etat.modeDefaut) { etat.modeDefaut = {}; api("mode?defaut=1").then((m) => { etat.modeDefaut = m; majCartesProjet(); }).catch(() => {}); }
   const md = { cadrage_global: 25, duree_max_global: 0, ...etat.modeDefaut, parallele_max: 3, ...(modes || {}) };
-  const modesChoisis = [["parallele", "Parallel mode"], ["eco", "Eco mode"], ["rapide", "Fast mode"]].filter(([k]) => md[k]).map(([, n]) => t(n)).join(", ") || t("usual mode");
-  const resume = [p.dossier, modesChoisis, t(GITHUB_MISSION[p.github || ""] || GITHUB_MISSION[""]) + (p.depot ? " (" + p.depot + ")" : "")].filter(Boolean).join(" · ");
-  return `<details class="mis-projet" id="${pre}-projet"${ouvert || err ? " open" : ""}><summary><b>${t("Project")}</b> <span class="muet petit">${h(resume)}</span></summary>
+  const modesChoisis = [["parallele", "Parallel mode"], ["eco", "Eco mode"], ["rapide", "Fast mode"]].filter(([k]) => md[k]).map(([, n]) => t(n)).join(", ");
+  // C16: the folder's name only (its full path in the tooltip and in the field below), the mode said only when one is chosen
+  const resume = [(p.dossier || "").split(/[\\/]/).filter(Boolean).pop(), modesChoisis, t(GITHUB_MISSION[p.github || ""] || GITHUB_MISSION[""]) + (p.depot ? " (" + p.depot + ")" : "")].filter(Boolean).join(" · ");
+  return `<details class="mis-projet" id="${pre}-projet"${ouvert || err ? " open" : ""}><summary><b>${t("Project")}</b> <span class="muet petit" title="${h(p.dossier || "")}">${h(resume)}</span></summary>
       <label for="${pre}-dossier" class="petit"><b>${t("Folder")}</b></label>
       <div class="ligne m0"><input type="text" id="${pre}-dossier" class="croit" value="${h(p.dossier || "")}"${distant ? " readonly" : ""} aria-describedby="${pre}-dossier-aide${err ? ` ${pre}-dossier-err` : ""}"${err ? ' aria-invalid="true"' : ""}>
         ${distant ? "" : `<button type="button" class="btn btn-petit" data-parcourir="${pre}-dossier" data-titre="${h(t("Choose the project's folder"))}">${t("Choose…")}</button>`}</div>
@@ -2591,7 +2592,7 @@ pages.suivi = async () => {
         <dt>${t("Updated")}</dt><dd class="muet petit">${h(heureMaj(e.maj))}</dd>
       </dl>
       <div class="ligne mt-2">
-        <button class="btn btn-petit" data-ouvrir="projet">${t("Open the project")}</button>
+        <button class="btn btn-petit" data-ouvrir="projet">${t("Open the project's folder")}</button>
       </div>
       <details class="plus-options"><summary>${t("More options")}</summary><div class="ligne m0">
         <button class="btn btn-petit" data-ouvrir="atelier">${t("Workshop (.athanor)")}</button>
@@ -2842,7 +2843,7 @@ const GUIDE = [
       ["Your agreement", "The plan waits in the bell and on *For you* for 2 hours. *Accept* decides it in the window you unlocked with Athanor's password (the assistant's chat beside the terminal too), or from a paired phone; *Refuse*, and nothing runs. Each accepted step runs once, exactly as shown: any other step needs a new plan. *Never ask again for this server* accepts its next changes once for all; destructive steps, and anything on a server that carries the production site of an older project, always wait for you.", "#pourvous", "For you"],
       ["Backups first", "Before a file is replaced, its old version is kept away from it, in `/var/backups/athanor/prev/<path>`, readable by root only (the result gives its former mode and owner). A destructive step names what to keep: it is archived in `/var/backups/athanor/`, readable by root only, before the step runs; the step is refused if the archive fails or would take more than half the free space, and the 10 newest archives are kept."],
       ["Automatic undo", "A firewall rule or an SSH setting could lock Athanor out. Before one, the previous state is kept on the server and an undo is scheduled there. Athanor then connects again; *Keep this change*, on the server's sheet with its countdown, or the agent's confirmation cancels the undo. Without it, the server puts everything back by itself after 5 minutes."],
-      ["Check and RUNBOOK", "After applying, an external verifier, another read-only session, checks the result from outside: HTTP status, certificate and its expiry, security headers, password asked. A failed check puts the task in failure and rings the bell. Each server has its `RUNBOOK.md` (*Runbook* on its sheet): access without secrets, role, what runs, the history of plans, the backups and how to go back."],
+      ["Check and RUNBOOK", "After applying, an external verifier, another read-only session, checks the result from outside: HTTP status, certificate and its expiry, security headers, password asked. A failed check puts the task in failure and rings the bell. Each server has its `RUNBOOK.md` (*Server logbook* on its sheet): access without secrets, role, what runs, the history of plans, the backups and how to go back."],
       ["Follow, stop, try", "Each task has its card on the sheet: state, dated steps, plans, check, the agent's answer. *Stop* ends it at once: the running command is cut and the agent loses its tools. To see it all on a server of no importance, *Test the Servers agent* plays a real task on Athanor's test container (Docker).", "#sante", "Setup & health"],
     ],
     note: "The agent never holds a server's key: it calls Athanor's tools, which check every step against your agreement and leave a line in the audit log." },
@@ -2964,15 +2965,16 @@ const lienGuide = (sujet, texte) => `<a class="lien-guide" href="#guide" data-gu
 pages.guide = async () => {
   const sujet = GUIDE.find((g) => g.id === etat.guideSujet) || GUIDE[0];
   const tours = (etat.hubModules || []).filter((m) => (m.tutoriel || []).length);
-  return `${tours.length ? `<div class="bloc ligne tutoriels"><b>${t("Tutorials")}</b><span class="muet petit croit">${t("A short tutorial of each part, shown at your first visit. Replay one:")}</span>
-    ${tours.map((m) => `<button type="button" class="btn btn-petit" data-tutoriel="${h(m.id)}">${h(t(m.nom))}</button>`).join("")}</div>` : ""}
-  <div class="onglets onglets-guide">${GUIDE.map((g) => `<button class="${g === sujet ? "actif" : ""}" data-guide-sujet="${g.id}">${t(g.titre)}</button>`).join("")}</div>
+  // C20: the page opens on its topics, "Start a project" first; the tutorials to replay come after the text
+  return `<div class="onglets onglets-guide">${GUIDE.map((g) => `<button class="${g === sujet ? "actif" : ""}" data-guide-sujet="${g.id}">${t(g.titre)}</button>`).join("")}</div>
   <div class="bloc guide"><h2>${t(sujet.titre)}</h2><p class="intro">${mdGuide(t(sujet.intro))}</p>
     <div class="etapes">${sujet.etapes.map(([titre, texte, lien, libelle], i) => `<div class="etape ${lien ? "" : "sans-lien"}"><div class="n">${i + 1}</div>
       <div><b>${t(titre)}</b><div class="d">${mdGuide(t(texte))}</div></div>
       ${lien ? `<a class="btn btn-petit" href="${lien}">${t(libelle)}</a>` : ""}</div>`).join("")}</div>
     ${sujet.note ? `<p class="muet petit mt-2">${mdGuide(t(sujet.note))}</p>` : ""}
-  </div>`;
+  </div>
+  ${tours.length ? `<div class="bloc ligne tutoriels"><b>${t("Tutorials")}</b><span class="muet petit croit">${t("A short tutorial of each part, shown at your first visit. Replay one:")}</span>
+    ${tours.map((m) => `<button type="button" class="btn btn-petit" data-tutoriel="${h(m.id)}">${h(t(m.nom))}</button>`).join("")}</div>` : ""}`;
 };
 document.addEventListener("click", (ev) => {
   const b = ev.target.closest("[data-tutoriel]"); if (!b) return;
@@ -3545,9 +3547,13 @@ function carteTache(x) {
 const signatureAppr = (ap) => JSON.stringify(((ap || {}).approbations || []).filter((x) => x.etat === "attente").map((x) => [x.id, !!(((ap.plans || {})[x.id] || {}).critique || {}).verdict]));
 // a Servers plan (M91): its steps as the code classed them; every text comes from the agent or the server, shown as text
 const CLASSES_ETAPE = () => ({ lecture: [t("read"), "pv-ok"], changement: [t("change"), "pv-claude"], destructrice: [t("destructive"), "pv-vous"] });
+// C15: the tools' argument names (French identifiers in the code) said in the page's language; an unknown one stays as it came
+const NOMS_ARGUMENTS = { serveur: "Server", commande: "Command", chemin: "File", contenu: "Content", action: "Action", nom: "Name", port: "Port", proto: "Protocol",
+  regle: "Rule", dossier: "Folder", lignes: "Lines", sudo: "As administrator", local: "On this computer", distant: "On the server", delai_s: "Time limit (s)",
+  env: "Deployment", methode: "Method", source: "Source", commit: "Commit", type: "Type", projet: "Project", valeur: "Value" };
 function argumentsLisibles(l) {
   let o; try { o = JSON.parse(l); } catch { return h(l || ""); } // cut at 4000 characters: shown as it came
-  return Object.entries(o || {}).map(([k, v]) => `<span class="muet">${h(k)}</span> ${h(typeof v === "string" ? v : JSON.stringify(v))}`).join("<br>");
+  return Object.entries(o || {}).filter(([, v]) => v !== "").map(([k, v]) => `<span class="muet">${h(NOMS_ARGUMENTS[k] ? t(NOMS_ARGUMENTS[k]) : k)}</span> ${h(typeof v === "string" ? v : JSON.stringify(v))}`).join("<br>");
 }
 function blocPlan(x, p) {
   if (!p) return `<div class="pv-details">${h(x.raison)}</div>`;
@@ -4515,7 +4521,9 @@ let motifsPilote;
 function lignePilote(l) {
   const [, tete, corps] = /^((?:\[[^\]]+\] )*)(.*)$/s.exec(String(l ?? "")); // "[date] " and a worker's "[M4] " are kept
   motifsPilote ||= LIGNES_PILOTE.map((k) => [k, new RegExp("^" + k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\\\{\d\\\}/g, "(.*?)") + "$", "s")]);
-  for (const [k, re] of motifsPilote) { const a = re.exec(corps); if (a) return tete + t(k, a.slice(1).map((x) => dictionnaireCourant[x] ?? x)); }
+  // the cycle's log file path is for support: shown in "Raw" only (any language: the parenthesis that ends with .jsonl)
+  const sansChemin = (x) => (etat.filtres.brut ? x : x.replace(/ \([^()]*\.jsonl\)$/, ""));
+  for (const [k, re] of motifsPilote) { const a = re.exec(corps); if (a) return sansChemin(tete + t(k, a.slice(1).map((x) => dictionnaireCourant[x] ?? x))); }
   return t(l);
 }
 console.assert(lignePilote("[2026-11-19 10:58:58] Cycle 1: Claude is working with m, framing (time box 30 min) (log: .athanor/logs/c.jsonl)") !== undefined && motifsPilote[4][1].exec("Cycle 1: Claude is working with m, framing (time box 30 min) (log: c.jsonl)")?.[3] === "30", "lignePilote");
@@ -4708,7 +4716,7 @@ function champReglage(l, modeles) {
 pages.reglages = async () => {
   const onglet = etat.ongletReglages === "claude" ? "claude" : "options";
   const tete = `<div class="onglets"><button class="${onglet === "options" ? "actif" : ""}" data-onglet-reglages="options">${t("Options")}</button><button class="${onglet === "claude" ? "actif" : ""}" data-onglet-reglages="claude">${t("Claude")}</button></div>
-  <p class="muet petit">${t("The models and the permission mode chosen here are the default values of every project: a project can have its own in Manage › This project's settings.")}</p>`;
+  <p class="muet petit">${onglet === "options" ? t("The permission mode chosen here is the default of every project: a project can have its own in Manage › This project's settings.") : t("The models chosen here are the default of every project: a project can have its own in Manage › This project's settings.")}</p>`;
   if (onglet === "options") return tete + await rendreOptions();
   const [lignes, mod] = await Promise.all([api("env" + (etat.envSecrets ? "?secrets=1" : "")), api("modeles").catch(() => ({ modeles: [] }))]);
   const modeles = mod.modeles || [];
@@ -5281,8 +5289,8 @@ async function rendreOptions() {
         <label class="interrupteur mt-1"><input type="checkbox" id="op-son" data-option ${o.entendre_bureau ? "checked" : ""}><span>${t("Hear Claude's desktop")}</span></label>
         <p class="muet petit">${t("Off: while a pilot runs, the programs on Claude's desktop make no sound (you hear them while you look at it).")}</p>
         ${!o.bureau_virtuel && b.restantes ? `<p class="petit attention">${t("{0} window(s) still open on Claude's desktop: close them there, they will then open on your screen.", [b.restantes])}</p>` : ""}
-        <div class="ligne"><button class="btn btn-petit" data-bureau="voir" ${b.disponible ? "" : "disabled"}>${t("View Claude's desktop")}</button><button class="btn btn-petit" data-ecran title="${h(t("The Linux windows Claude opens (a game under test, Godot, a browser) go to a private screen: never on yours, never taking the focus."))}">${t("Claude's Linux screen")}</button></div>`
-        : `<div class="ligne"><button class="btn btn-petit" data-bureau="voir" ${b.disponible ? "" : "disabled"}>${t("View Claude's desktop")}</button><button class="btn btn-petit" data-bureau="revenir" ${b.disponible ? "" : "disabled"}>${t("Come back")}</button><button class="btn btn-petit" data-bureau="ramener" ${b.disponible ? "" : "disabled"}>${t("Bring the windows back here")}</button><span class="muet petit">${t("{0} window(s) moved", [b.deplacees || 0])}</span></div>
+        <div class="ligne"><button class="btn btn-petit" data-bureau="voir" ${b.disponible ? "" : "disabled"}>${t("See the windows Claude opened")}</button><button class="btn btn-petit" data-ecran title="${h(t("The Linux windows Claude opens (a game under test, Godot, a browser) go to a private screen: never on yours, never taking the focus."))}">${t("Claude's Linux screen")}</button></div>`
+        : `<div class="ligne"><button class="btn btn-petit" data-bureau="voir" ${b.disponible ? "" : "disabled"}>${t("See the windows Claude opened")}</button><button class="btn btn-petit" data-bureau="revenir" ${b.disponible ? "" : "disabled"}>${t("Come back")}</button><button class="btn btn-petit" data-bureau="ramener" ${b.disponible ? "" : "disabled"}>${t("Bring the windows back here")}</button><span class="muet petit">${t("{0} window(s) moved", [b.deplacees || 0])}</span></div>
         ${(b.vues || []).length ? `<ul class="muet petit mt-1">${b.vues.slice(0, 10).map((f) => `<li>${h(f)}</li>`).join("")}</ul>` : ""}`}
         <label class="champ mt-2"${b.isole || b.ecran ? " hidden" : ""}><span>${t("Recognized: programs inside the projects and in tools\\, “Athanor” windows, and these executables (one per line)")}</span><textarea id="op-programmes" data-option class="code" rows="5">${h(o.programmes_supplementaires)}</textarea></label>
         <p class="muet petit"${b.isole || b.ecran ? " hidden" : ""}>${t("Windows shortcut to switch desktops: Ctrl + Win + ← / →.")}</p>
@@ -6349,7 +6357,7 @@ pages.serveur = async () => {
       <p class="muet petit">${t("Athanor put a safety net on these firewall or SSH changes: unless you keep them, the server undoes them by itself when the countdown ends.")}</p>
       ${d.annulations.map((a) => `<div class="ligne m0"><code>${h(a.quoi)}</code><span class="muet petit" data-srv-echeance="${h(a.echeance)}"></span>${distant ? "" : `<button type="button" class="btn btn-primaire" data-srv-garder="${h(a.id)}">${t("Keep this change")}</button>`}</div>`).join("")}</div>` : "", d.environnements || [])}
     ${f ? ficheServeur(f) : `<div class="vide">${attente ? t("Its sheet is made once Athanor reaches the server with its key.") : t("Its sheet is not made yet.")}</div>`}
-    ${d.runbook ? `<details class="bloc srv-runbook"><summary><b>${t("Runbook")}</b> <span class="muet petit">${t("What was done on this server, its backups and how to go back, kept by Athanor and its agents.")}</span></summary><pre class="chat-code srv-runbook-texte">${h(d.runbook)}</pre></details>` : ""}
+    ${d.runbook ? `<details class="bloc srv-runbook"><summary><b>${t("Server logbook")}</b> <span class="muet petit">${t("What was done on this server, its backups and how to go back, kept by Athanor and its agents.")}</span></summary><pre class="chat-code srv-runbook-texte">${h(d.runbook)}</pre></details>` : ""}
     ${distant ? "" : `<div class="bloc srv-retirer"><h3>${t("Remove this server")}</h3>
       <p class="muet petit">${t("Athanor forgets it and its sheet; nothing is changed on the server. Its key stays in the vault unless you tick the box.")}</p>
       <label class="radio"><input type="checkbox" id="srv-retirer-cle"${x.cle ? "" : " disabled"}> ${t("Also remove its key from the vault")}</label>
@@ -6480,7 +6488,7 @@ $("#page").addEventListener("click", async (ev) => {
   const x = srv.fiche, url = "serveurs/" + encodeURIComponent(x.id), d = b.dataset;
   if (d.srvTacheCarte) { etat.apprCible = d.srvTacheCarte; return; } // the link opens For you, where the card is scrolled to
   if (d.srvTacheArreter) {
-    if (!(await confirmer(t("Stop this task? Its agent is cut at once and its access revoked; a change already made stays (see the Runbook)."), { ok: t("Stop"), danger: true }))) return;
+    if (!(await confirmer(t("Stop this task? Its agent is cut at once and its access revoked; a change already made stays (see the server logbook)."), { ok: t("Stop"), danger: true }))) return;
     b.disabled = true;
     if (await action(api(url + "/taches/" + encodeURIComponent(d.srvTacheArreter) + "/arreter", "POST"))) toast(t("Task stopped."), "ok");
     return rendrePage();

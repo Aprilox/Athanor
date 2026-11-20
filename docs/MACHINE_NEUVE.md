@@ -36,7 +36,7 @@ What an accepted plan can leave on the server, besides the change itself:
 - It never installs software of its own, opens a port, creates a user or touches another server than the one of the task.
 - *Remove this server* forgets it in Athanor and changes nothing on the server (its key in `authorized_keys` stays until you remove it).
 
-The history of what was done, the backups and how to go back are in the server's `RUNBOOK.md` (*Runbook* on its sheet), kept by Athanor on your computer, never on the server.
+The history of what was done, the backups and how to go back are in the server's `RUNBOOK.md` (*Server logbook* on its sheet), kept by Athanor on your computer, never on the server.
 
 ## Français
 
@@ -72,4 +72,4 @@ Ce qu'un plan accepté peut laisser sur le serveur, en plus du changement lui-m�
 - Il n'installe jamais de logiciel à lui, n'ouvre pas de port, ne crée pas d'utilisateur et ne touche à aucun autre serveur que celui de la tâche.
 - *Retirer ce serveur* l'oublie dans Athanor et ne change rien sur le serveur (sa clé dans `authorized_keys` reste jusqu'à ce que vous la retiriez).
 
-L'historique de ce qui a été fait, les sauvegardes et la façon de revenir en arrière sont dans le `RUNBOOK.md` du serveur (*Runbook* sur sa fiche), gardé par Athanor sur votre ordinateur, jamais sur le serveur.
+L'historique de ce qui a été fait, les sauvegardes et la façon de revenir en arrière sont dans le `RUNBOOK.md` du serveur (*Cahier d'exploitation* sur sa fiche), gardé par Athanor sur votre ordinateur, jamais sur le serveur.
