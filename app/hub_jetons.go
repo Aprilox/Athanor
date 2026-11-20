@@ -23,7 +23,7 @@ const dureeJeton = 24 * time.Hour
 const graceJeton = 3 * time.Minute
 
 // outilsPilote: the hub's tools a project's main pilot may call (M61).
-var outilsPilote = []string{"etat", "environnements", "demander_acces", "demander_deploiement", "deploiement_etat", "signaler"}
+var outilsPilote = []string{"etat", "environnements", "demander_acces", "demander_deploiement", "deploiement_etat", "signaler", "informer_serveurs"}
 
 // SessionHub: one token, by its hash.
 type SessionHub struct {

@@ -50,6 +50,8 @@ type Environnement struct {
 	Autres []string `json:"autres,omitempty"`
 	// what a server does, in the owner's words (server id → text), told to the tasks with its name
 	Roles map[string]string `json:"roles,omitempty"`
+	// what the project's lead told the server manager (informer_serveurs): how the project is built and run
+	NotesChef string `json:"notes_chef,omitempty"`
 }
 
 // tousServeurs: the servers of e's tasks: where the project is deployed, then the others.

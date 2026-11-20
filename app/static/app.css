@@ -1790,3 +1790,16 @@ html.scene-pause .verrou * { animation-play-state: paused !important; }
 .gestion-col > .bloc { margin: 0; }
 .gestion-large { grid-column: 1 / -1; margin: 0; }
 .mis-resume { margin: 6px 0 8px; } /* the summary of a mission the assistant prepared, under its answer */
+/* the terminals' list of the connection bar: opens on hover, a click or the keyboard */
+.term-liste-zone { position: relative; }
+.term-liste { display: none; position: absolute; top: 100%; left: 0; z-index: 40; width: min(560px, 92vw); max-height: 70vh; overflow-y: auto; margin-top: 4px; padding: 6px; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 10px 28px rgba(0, 0, 0, .25); }
+.term-liste-zone.ouvert .term-liste { display: block; }
+.term-l { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 8px; padding: 8px; border-radius: 8px; align-items: center; }
+.term-l + .term-l { border-top: 1px solid var(--line); }
+.term-l:hover, .term-l.actif { background: color-mix(in srgb, var(--accent) 7%, transparent); }
+.term-l-nom { min-width: 0; overflow-wrap: anywhere; color: inherit; text-decoration: none; }
+.term-l-badges { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
+.term-l-ia { border-color: var(--accent); color: var(--accent); }
+.term-l-actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 4px; }
+.term-l-champ { width: 100%; max-width: 260px; }
+.term-l-pied { padding: 8px 8px 2px; }

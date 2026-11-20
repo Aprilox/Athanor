@@ -127,6 +127,18 @@ func TestMissionsSuivies(t *testing.T) {
 		s.acces.Environnements("vitrine")[s.deploiementProjet("vitrine")].Plan != "nginx sur vps, postgres sur base\n\nUn pare-feu qui ne laisse que 80 et 443." {
 		t.Errorf("a remark for the servers added to their plan: %v %q", err, s.acces.Environnements("vitrine")[s.deploiementProjet("vitrine")].Plan)
 	}
+	// the lead tells the server manager how the project runs: kept with the deployment, secrets masked, in its briefs
+	if r, err := outilInformerServeurs(s, SessionHub{Projet: "vitrine"}, json.RawMessage(`{"note":"Site statique dans dist/, npm run build. Clé valeur-Clé Stripe."}`)); err != nil || !strings.HasPrefix(r, "noted") {
+		t.Fatalf("informer_serveurs: %q %v", r, err)
+	}
+	ev := s.acces.Environnements("vitrine")[s.deploiementProjet("vitrine")]
+	if !strings.Contains(ev.NotesChef, "npm run build") || strings.Contains(ev.NotesChef, "valeur-") || !strings.Contains(s.briefPreparationProjet(pv, ev), "npm run build") ||
+		!strings.Contains(briefPremierProjet(pv, ev, "site", strings.Repeat("a", 40), true), "npm run build") {
+		t.Errorf("the lead's notes: %q", ev.NotesChef)
+	}
+	if _, err := outilInformerServeurs(s, SessionHub{Projet: "site"}, json.RawMessage(`{"note":"x"}`)); err == nil {
+		t.Error("a project without a server took notes for the servers")
+	}
 	// Start relaunches a first deployment that did not go through, never one not tried yet nor one at work
 	for _, x := range []struct {
 		e      Environnement

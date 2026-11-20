@@ -40,6 +40,8 @@ func init() {
 		Schema: objet(map[string]any{"environnement": texte("Leave it empty: the project's deployment. Only an older project with several sites names one (see environnements)"), "commit": texte("Full commit hash to deploy (git rev-parse HEAD)")}, "commit"), Faire: outilDemanderDeploiement}
 	outilsHub["deploiement_etat"] = OutilHub{Description: "The state of a deployment of your project started by demander_deploiement: en_cours, ok, echec or revenu, with its external check.",
 		Schema: objet(map[string]any{"id": texte("The deployment's id, from demander_deploiement")}, "id"), Faire: outilDeploiementEtat}
+	outilsHub["informer_serveurs"] = OutilHub{Description: "Tell your project's server manager how the project is built and run (published folder or port, build, runtime, variable names). Read at its next task; you never act on the servers.",
+		Schema: objet(map[string]any{"note": texte("What the deployment needs to know about the project, in a few lines")}, "note"), Faire: outilInformerServeurs}
 	outilsHub["signaler"] = OutilHub{Description: "Report a blocker to the owner: it shows in Athanor's bell. One short sentence.",
 		Schema: objet(map[string]any{"blocage": texte("What blocks you, in one sentence")}, "blocage"), Faire: outilSignaler}
 }
@@ -165,6 +167,33 @@ func outilEnvironnements(s *Serveur, x SessionHub, args json.RawMessage) (string
 
 // outilDemanderAcces: a pending approval for the project's current environment (the same one when it
 // is already waiting, so that a pilot asking at every cycle does not pile them up).
+// outilInformerServeurs: the lead's note for the server manager, kept with the project's deployment (secrets masked)
+// and given to its next task (briefPreparation, briefPremierProjet).
+func outilInformerServeurs(s *Serveur, x SessionHub, args json.RawMessage) (string, error) {
+	var a struct{ Note string }
+	if err := lireArguments(args, &a); err != nil {
+		return "", err
+	}
+	note, err := texteRequis("note", a.Note, 2000)
+	if err != nil {
+		return "", err
+	}
+	if s.acces == nil {
+		return "", errors.New("the access file cannot be read")
+	}
+	nom := s.deploiementProjet(x.Projet)
+	e, ok := s.acces.Environnements(x.Projet)[nom]
+	if !ok || len(e.Serveurs) == 0 {
+		return "", errors.New("this project has no server: nothing to tell")
+	}
+	e.NotesChef = s.masquerSecrets(note)
+	if err := s.acces.DefinirEnvironnement(x.Projet, nom, e); err != nil {
+		return "", err
+	}
+	s.ecrireAudit(LigneAudit{Type: "evenement", De: "pilote", Vers: "hub", Projet: x.Projet, Action: "notes pour les serveurs", Resultat: couper(e.NotesChef, 160)})
+	return "noted: the server manager reads it at its next task (preparation, first deployment)", nil
+}
+
 func outilDemanderAcces(s *Serveur, x SessionHub, args json.RawMessage) (string, error) {
 	var a struct{ Nom, Raison string }
 	if err := lireArguments(args, &a); err != nil {

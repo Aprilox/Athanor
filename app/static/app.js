@@ -1251,6 +1251,7 @@ function naviguer() {
   if (page.startsWith("missions/")) { etat.missionId = decodeURIComponent(page.slice(9)); page = "mission"; } // one mission, its id in the hash
   if (page.startsWith("serveur/")) { srv.id = decodeURIComponent(page.slice(8)); page = "serveur"; } // one server's sheet, its id in the hash
   const termAvant = etat.page === "terminal" ? term.id : null;
+  if (page.startsWith("terminal/") && page.endsWith("/sftp")) { page = page.slice(0, -5); sf.onglet = "sftp"; } // a detached SFTP window opens on its tab
   if (page.startsWith("terminal/")) { term.id = decodeURIComponent(page.slice(9)); page = "terminal"; if (term.id !== termAvant) ia.autorisation = ""; } // a server's terminal; its mode read again (M244k2)
   if (termAvant !== null && (page !== "terminal" || term.id !== termAvant)) quitterTerminal();
   if (!pages[page]) { page = "accueil"; history.replaceState(null, "", "#accueil"); } // an unknown hash: Home
@@ -3668,6 +3669,7 @@ pages.equipe = async () => {
       <div class="muet petit">${m.appele_par === "chef_ouvriers" ? t("called by the lead and the workers") : t("called by the lead")}${appelsCycle[m.nom] ? " · " + t("called {0}× this cycle", [appelsCycle[m.nom]]) : ""}</div></div>`).join("");
   return `<p class="intro">${t("Who works on this cycle and who called whom. Click a sub-agent to read the brief it was given and the report it handed back.")}</p>
   ${rendreSession(chef, appelsDe("chef"), t("Project lead"), t("Leads the current milestone: reads the plan, codes, checks, commits."), ((w) => (w[0][0] + (w.length > 1 ? w[w.length - 1][0] : w[0][1] || "")).toUpperCase())(t("Project lead").split(/\s+/)))}
+  ${blocGestionnaireServeurs(v)}
   ${ouvriers.length ? `<h3 class="equipe-section">${t("Workers in parallel ({0})", [ouvriers.length])}</h3>
     <div class="equipe">${ouvriers.map((o) => rendreSession(o, appelsDe(o.id), t("Worker " + o.jalon), o.mission || t("Builds milestone " + o.jalon), o.jalon.replace(/_/g, "."))).join("")}</div>` : ""}
   ${membres ? `<h3 class="equipe-section">${t("Who can be called")}</h3><div class="roster">${membres}</div>` : ""}
@@ -3675,6 +3677,16 @@ pages.equipe = async () => {
   ${blocBibliothequeAgents(r.bibliotheque || [])}`;
 };
 
+// the server manager of a project with servers (Team): Athanor's Servers agent, in its own session; the lead calls it
+// (its plan ready, each milestone or the delivery) and tells it how the project runs (informer_serveurs)
+function blocGestionnaireServeurs(v) {
+  const l = v.jalons_deploiement || []; if (!l.length) return "";
+  const actif = l.find((j) => j.etat === "en_cours"), dernier = [...l].reverse().find((j) => j.etat !== "a_faire") || l[0];
+  return `<h3 class="equipe-section">${t("Server manager")}</h3><div class="roster"><div class="membre${actif ? " utilise" : ""}">
+    <div class="membre-nom">${t("Server manager")} <span class="muet">· ${t(actif ? "working" : "waiting for its next call")}</span></div>
+    <div class="membre-role">${t("Sets up the project's servers and deploys it, in its own session: called when the plan is ready (in parallel with the development), then at each milestone or at delivery. The lead tells it how the project runs; it never touches the servers itself.")}</div>
+    <div class="muet petit">${h(t((actif || dernier).titre, (actif || dernier).args || []))} · <a href="#deploiement">${t("Servers' plan")}</a></div></div></div>`;
+}
 // The library of sub-agents (extensions/agents.json): kept in Athanor, switched on per project like the
 // skills. The lead sees its project's ones in .athanor/TEAM.md (athanor equipe).
 function blocBibliothequeAgents(biblio) {
@@ -4367,6 +4379,7 @@ pages.deploiement = async () => {
   <form id="dep-form" class="bloc"><h2>${t("Deployment settings")}</h2>
     ${distant ? `<p class="muet petit">${t("The deployment is changed from the computer.")}</p>` : ""}
     ${champsDeploiement("dep", f, moments, distant)}
+    ${e.notes_chef ? `<div class="reglage"><span class="nom-reglage">${t("The project lead's notes")}</span><div><p class="muet petit m0">${t("How the project is built and run, as the lead told the server manager.")}</p><div class="petit dep-notes">${mdChat(e.notes_chef)}</div></div></div>` : ""}
     ${perm ? `<div class="reglage"><span class="nom-reglage">${t("Permissions")}</span><p class="m0">${badgePermission(perm.valeur)} <a class="petit" href="#projet@rp">${t("This project's settings")}</a></p></div>` : ""}
     ${distant ? "" : `<div class="ligne mt-3" id="dep-actions">${actionsDeploiement()}</div>`}
   </form></div>
@@ -6802,6 +6815,69 @@ function chargerXterm() {
   if (!document.querySelector('link[href="xterm/xterm.css"]')) { const l = document.createElement("link"); l.rel = "stylesheet"; l.href = "xterm/xterm.css"; document.head.append(l); }
   return (xtermCharge ||= script("xterm/xterm.js").then(() => script("xterm/addon-fit.js")).catch((e) => { xtermCharge = null; throw e; }));
 }
+// The terminals' list (the connection bar): every server, the pinned ones first, the open one marked, and the AI at
+// work on each (a project's deployment, the assistant in its own connection or live in the terminal); rename, pin,
+// detach a terminal or its SFTP in a window of its own (several at once), a new connection. Names and pins: this device.
+const prefsTerminaux = () => { try { return JSON.parse(localStorage.getItem("athanor.terminaux") || "{}"); } catch (e) { return {}; } };
+function garderPrefTerminal(id, champ, v) {
+  const p = prefsTerminaux(); p[id] = { ...(p[id] || {}), [champ]: v };
+  try { localStorage.setItem("athanor.terminaux", JSON.stringify(p)); } catch (e) { /* this view only */ }
+}
+const nomTerminal = (x) => (prefsTerminaux()[x.id] || {}).nom || x.nom;
+const zoneTerminaux = () => `<div class="term-liste-zone" data-term-liste-zone><button type="button" class="btn btn-petit" data-term-liste aria-expanded="false" aria-controls="term-liste">${ic("serveur")} ${t("Terminals")} ${ic("bas")}</button>
+  <div class="term-liste" id="term-liste" role="group" aria-label="${h(t("Terminals"))}"></div></div>`;
+const TACHE_FINIE = ["finie", "echec", "arretee"];
+function badgesIA(taches) {
+  return taches.filter((x) => !TACHE_FINIE.includes(x.etat)).map((x) => x.env ? t("AI · {0} deploys", [x.env.split("/")[0]]) : x.panneau ? t(x.direct ? "AI · live in this terminal" : "AI · assistant (separate connection)") : t("AI · task"))
+    .filter((v, i, l) => l.indexOf(v) === i).map((b) => `<span class="badge term-l-ia">${ic("lecture")} ${h(b)}</span>`).join("");
+}
+async function remplirTerminaux() {
+  const z = $("#term-liste"); if (!z) return;
+  const d = await api("serveurs").catch(() => ({ serveurs: [] })), p = prefsTerminaux(), l = (d.serveurs || []).filter((x) => x.etat !== "inconnu");
+  const taches = await Promise.all(l.map((x) => api(`serveurs/${encodeURIComponent(x.id)}/taches`).then((r) => r.taches || []).catch(() => [])));
+  const lignes = l.map((x, i) => ({ x, taches: taches[i], pin: !!(p[x.id] || {}).epingle })).sort((a, b) => (b.x.id === term.id) - (a.x.id === term.id) || b.pin - a.pin);
+  z.innerHTML = lignes.map(({ x, taches: tc, pin }) => `<div class="term-l${x.id === term.id ? " actif" : ""}" data-term-l="${h(x.id)}">
+      <a class="term-l-nom" href="#terminal/${encodeURIComponent(x.id)}"${x.id === term.id ? ' aria-current="page"' : ""}>${pin ? ic("etoile") + " " : ""}<b>${h(nomTerminal(x))}</b> <span class="muet petit">${h(x.hote || "")}</span></a>
+      <span class="term-l-badges">${x.id === term.id ? `<span class="badge">${t("Open here")}</span>` : ""}${badgesIA(tc)}</span>
+      <span class="term-l-actions">
+        <button type="button" class="btn btn-petit" data-term-l-renommer>${t("Rename")}</button>
+        <button type="button" class="btn btn-petit" data-term-l-epingler aria-pressed="${pin}">${t(pin ? "Unpin" : "Pin")}</button>
+        <button type="button" class="btn btn-petit" data-term-l-detacher>${t("Detach")}</button>
+        <button type="button" class="btn btn-petit" data-term-l-detacher="sftp">${t("Detach the SFTP")}</button></span></div>`).join("")
+    + `<div class="ligne m0 term-l-pied"><button type="button" class="btn btn-petit btn-primaire" data-term-l-nouveau>+ ${t("New connection")}</button></div>`;
+}
+function ouvrirTerminaux(ouvrir) {
+  const z = $("[data-term-liste-zone]"); if (!z) return;
+  z.classList.toggle("ouvert", ouvrir); z.querySelector("[data-term-liste]").setAttribute("aria-expanded", ouvrir);
+  if (ouvrir) remplirTerminaux();
+}
+document.addEventListener("mouseover", (ev) => { const z = ev.target.closest && ev.target.closest("[data-term-liste-zone]"); if (z && !z.classList.contains("ouvert")) ouvrirTerminaux(true); });
+document.addEventListener("mouseout", (ev) => { const z = ev.target.closest && ev.target.closest("[data-term-liste-zone]"); if (z && !z.contains(ev.relatedTarget) && !z.contains(document.activeElement)) ouvrirTerminaux(false); });
+document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && $("[data-term-liste-zone].ouvert")) { ouvrirTerminaux(false); $("[data-term-liste]")?.focus(); } });
+document.addEventListener("click", (ev) => {
+  const zone = $("[data-term-liste-zone]"); if (!zone) return;
+  if (!ev.target.closest("[data-term-liste-zone]")) { if (zone.classList.contains("ouvert")) ouvrirTerminaux(false); return; }
+  const b = ev.target.closest("button"); if (!b) return;
+  const ligne = b.closest("[data-term-l]"), id = ligne && ligne.dataset.termL;
+  if (b.hasAttribute("data-term-liste")) return ouvrirTerminaux(!zone.classList.contains("ouvert"));
+  if (b.hasAttribute("data-term-l-nouveau")) { srv.aj = { etape: "adresse" }; location.hash = "#serveurs"; return; }
+  if (b.hasAttribute("data-term-l-epingler")) { garderPrefTerminal(id, "epingle", !(prefsTerminaux()[id] || {}).epingle); return remplirTerminaux(); }
+  if (b.hasAttribute("data-term-l-renommer")) {
+    const a = ligne.querySelector(".term-l-nom b"), ancien = a.textContent;
+    a.outerHTML = `<input type="text" class="term-l-champ" maxlength="60" value="${h(ancien)}" aria-label="${h(t("Name of this terminal"))}">`;
+    const c = ligne.querySelector(".term-l-champ"); c.focus(); c.select();
+    const fin = (garder) => { garderPrefTerminal(id, "nom", garder ? c.value.trim() : (prefsTerminaux()[id] || {}).nom || ""); remplirTerminaux(); if (id === term.id) { const l = $(".term-barre > a.petit"); if (l) l.lastChild.textContent = " " + (c.value.trim() || ancien); } };
+    c.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); fin(true); } else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); fin(false); } });
+    c.addEventListener("blur", () => fin(true), { once: true });
+    return;
+  }
+  if (b.hasAttribute("data-term-l-detacher")) { // a window of its own: this one leaves that terminal, the new one opens its own session
+    const sftp = b.dataset.termLDetacher === "sftp", f = window.open(`${location.pathname}${location.search}#terminal/${encodeURIComponent(id)}${sftp ? "/sftp" : ""}`, `athanor-${id}${sftp ? "-sftp" : ""}`, "popup=yes,width=1100,height=720");
+    if (!f) return toast(t("Could not open a window: allow pop-up windows for Athanor."), "erreur");
+    if (id === term.id) location.hash = "#serveurs";
+    return ouvrirTerminaux(false);
+  }
+});
 pages.terminal = async () => {
   const distant = !!(etat.vue || {}).distant, d = await api("serveurs"), x = d.serveurs.find((s) => s.id === term.id);
   srv.termDistance = !!d.terminal_distance;
@@ -6812,7 +6888,7 @@ pages.terminal = async () => {
     : x.etat === "inconnu" ? [t("Athanor cannot reach this server with its key yet."), t("Put its public key on the server, then press Verify on its sheet.")] : null;
   term.nom = x.nom;
   return `<div class="serveurs terminal-page" data-onglet="${sf.onglet}">
-    <div class="ligne m0 term-barre"><a href="#serveur/${encodeURIComponent(x.id)}" class="petit">${ic("gauche")} ${h(x.nom)}</a>
+    <div class="ligne m0 term-barre">${distant ? "" : zoneTerminaux()}<a href="#serveur/${encodeURIComponent(x.id)}" class="petit">${ic("gauche")} ${h(nomTerminal(x))}</a>
       <code class="muet petit term-adresse">${h(x.utilisateur)}@${h(x.hote)}</code>${badgeSansGarde(x, x.autorisation !== "ignorer")}<span class="pastille attend" id="term-etat">${t("Connecting…")}</span><span class="espace"></span>
       ${avis ? "" : `<span class="muet petit term-aide term-seul">${t(MAC ? "Copy: Cmd+C · Paste: Cmd+V" : "Copy: Ctrl+Shift+C · Paste: Ctrl+Shift+V")}</span>
       <button type="button" class="btn btn-petit term-seul" data-term-copier title="${h(t(MAC ? "Copy: Cmd+C · Paste: Cmd+V" : "Copy: Ctrl+Shift+C · Paste: Ctrl+Shift+V"))}">${t("Copy")}</button><button type="button" class="btn btn-petit term-seul" data-term-coller title="${h(t(MAC ? "Copy: Cmd+C · Paste: Cmd+V" : "Copy: Ctrl+Shift+C · Paste: Ctrl+Shift+V"))}">${t("Paste")}</button>

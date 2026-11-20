@@ -31,6 +31,7 @@ type donneesPreparation struct {
 	APIs, ARemplir  []string // names of the vault entries given, and of those the owner has still to fill
 	Site, Autres    []string // names of the servers the project is deployed on, and of the project's other servers
 	Plan            string   // the deployment's plan, in the owner's words
+	NotesChef       string   // what the project's lead told the server manager (informer_serveurs)
 	Demande         string   // the project's request
 	Accord          bool     // a production is submitted to the owner before it first goes online
 }
@@ -63,6 +64,9 @@ func briefPreparation(d donneesPreparation, p Projet) string {
 	// both cut: a task's text holds maxTexteTache characters, the project's plan comes last
 	if t := strings.TrimSpace(d.Plan); t != "" {
 		b.WriteString("Deployment plan (the owner's words):\n" + couper(t, 1500) + "\n")
+	}
+	if t := strings.TrimSpace(d.NotesChef); t != "" {
+		b.WriteString("The project lead's notes (how it is built and run):\n" + couper(t, 1200) + "\n")
 	}
 	if t := strings.TrimSpace(d.Demande); t != "" {
 		b.WriteString("Project's request (its start):\n" + couper(t, 600) + "\n")
@@ -103,7 +107,7 @@ func fournisseurDeploiement(e Environnement, l []Fournisseur) (Fournisseur, bool
 // briefPreparationProjet: the preparation brief of p's deployment e.
 func (s *Serveur) briefPreparationProjet(p Projet, e Environnement) string {
 	d := donneesPreparation{Entete: "Project \"" + p.Nom + "\"", URL: e.URL, Protection: e.Protection, Plan: e.Plan,
-		Accord: modeProjet(p.Nom) != "ignorer", Site: nomsRoles(e.Serveurs, e.Roles), Autres: nomsRoles(e.Autres, e.Roles)}
+		Accord: modeProjet(p.Nom) != "ignorer", Site: nomsRoles(e.Serveurs, e.Roles), Autres: nomsRoles(e.Autres, e.Roles), NotesChef: e.NotesChef}
 	if s.coffre != nil {
 		for _, x := range s.coffre.Liste() {
 			if slices.Contains(e.APIs, x.ID) {
@@ -191,6 +195,9 @@ func briefPremierProjet(p Projet, e Environnement, env, head string, ignorer boo
 	}
 	if t := strings.TrimSpace(e.Plan); t != "" {
 		brief += "Deployment plan (the owner's words):\n" + couper(t, 1500) + "\n"
+	}
+	if t := strings.TrimSpace(e.NotesChef); t != "" {
+		brief += "The project lead's notes (how it is built and run):\n" + couper(t, 1200) + "\n"
 	}
 	if b, _ := os.ReadFile(p.Demande()); strings.TrimSpace(string(b)) != "" {
 		brief += "Project's request (its start):\n" + couper(strings.TrimSpace(string(b)), 600) + "\n"
