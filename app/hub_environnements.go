@@ -46,11 +46,11 @@ type Environnement struct {
 	Moment string   `json:"moment,omitempty"`
 	APIs   []string `json:"apis,omitempty"`
 	// the project's other servers (a database, a worker, a cache…): set up by its tasks as the plan says, never
-	// deployed to; Serveurs are those where the site goes online
+	// deployed to; Serveurs are those the project is deployed on
 	Autres []string `json:"autres,omitempty"`
 }
 
-// tousServeurs: the servers of e's tasks: where the site goes online, then the others.
+// tousServeurs: the servers of e's tasks: where the project is deployed, then the others.
 func (e Environnement) tousServeurs() []string { return slices.Concat(e.Serveurs, e.Autres) }
 
 var (
@@ -194,7 +194,7 @@ func validerEnvironnement(nom string, e Environnement, inventaire []ServeurInven
 		}
 	}
 	if len(autres) > 0 && len(ids) == 0 {
-		return e, erreurEntree("Choose at least one server where the site goes online.")
+		return e, erreurEntree("Choose at least one server where the project is deployed.")
 	}
 	e.Autres = nil
 	if len(autres) > 0 {

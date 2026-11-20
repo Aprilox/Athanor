@@ -29,7 +29,7 @@ type donneesPreparation struct {
 	URL, Protection string   // the site's address and its protection
 	DNS             string   // the provider holding the host's zone, its token given ("" none)
 	APIs, ARemplir  []string // names of the vault entries given, and of those the owner has still to fill
-	Site, Autres    []string // names of the servers where the site goes online, and of the project's other servers
+	Site, Autres    []string // names of the servers the project is deployed on, and of the project's other servers
 	Plan            string   // the deployment's plan, in the owner's words
 	Demande         string   // the project's request
 	Accord          bool     // a production is submitted to the owner before it first goes online
@@ -48,8 +48,8 @@ func briefPreparation(d donneesPreparation, p Projet) string {
 		b.WriteString(phraseAccordProduction)
 	}
 	if len(d.Autres) > 0 {
-		b.WriteString("Servers: the site goes online on " + strings.Join(d.Site, ", ") + "; the project's other servers (" + strings.Join(d.Autres, ", ") +
-			") are never deployed to: give each the role the plan below says (a database, a worker…) and link them to the site's servers.\n")
+		b.WriteString("Servers: the project is deployed on " + strings.Join(d.Site, ", ") + "; the project's other servers (" + strings.Join(d.Autres, ", ") +
+			") are never deployed to: give each the role the plan below says (a database, a worker…) and link them to the servers the project is deployed on.\n")
 	}
 	if d.DNS != "" {
 		b.WriteString("DNS: the zone of " + hoteURL(d.URL) + " is at " + d.DNS + ", its token is given.\n")

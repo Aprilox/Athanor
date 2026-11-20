@@ -2295,7 +2295,7 @@ function resumeMission(c) {
   const m = c.mission || {}, noms = c.noms || {}, nom = (id) => h(noms[id] || id), court = (x, n) => x.length > n ? x.slice(0, n) + "…" : x;
   const projets = projetsVisibles(etat.vue || {}).map((p) => p.nom), existant = m.projet && projets.includes(m.projet);
   const role = (l) => m.sans_projet ? "" : ` <span class="muet">${t(l)}</span>`;
-  const serveurs = [...(m.serveurs || []).map((id) => nom(id) + role("the site")), ...(m.autres || []).map((id) => nom(id) + role("another role"))];
+  const serveurs = [...(m.serveurs || []).map((id) => nom(id) + role("receives the project")), ...(m.autres || []).map((id) => nom(id) + role("another role"))];
   const ligne = (lib, val) => val ? `<div><dt>${t(lib)}</dt><dd>${val}</dd></div>` : "";
   return `<dl class="mis-liens petit mis-resume">
       ${ligne("Project", m.sans_projet ? `<span class="muet">${t("None: servers only")}</span>` : h(m.projet || "") + (existant ? ` <span class="muet">${t("(one of your projects: the mission becomes its next request)")}</span>` : ` <span class="muet">${t("(new)")}</span>`))}
@@ -2304,7 +2304,7 @@ function resumeMission(c) {
       ${serveurs.length || (m.apis || []).length ? ligne("On the servers", h(nomModeMission(m.mode))) : ""}
       ${ligne("Plan", m.plan ? h(court(m.plan, 200)) : "")}
       ${ligne("Plan for the servers", m.plan_deploiement ? h(court(m.plan_deploiement, 200)) : "")}
-      ${ligne("Address", m.url ? h(m.url) : "")}
+      ${ligne("Public address", m.url ? h(m.url) : "")}
       ${!m.sans_projet && (m.serveurs || []).length ? ligne("When to deploy", t(m.moment === "jalon" ? "After each milestone" : "At delivery")) : ""}
     </dl>`;
 }
@@ -6137,7 +6137,7 @@ const nomModeMission = (m) => t((MODES_MISSION.find(([x]) => x === m) || MODES_M
 const EVENEMENTS_MISSION = { lancee: "Launched", modifiee: "Changed", pause: "Paused", arretee: "Stopped", reprise: "Resumed", serveur_arrete: "Server work stopped", serveur_relance: "Server work launched again" };
 const dateMission = (x) => new Date(x).toLocaleString(document.documentElement.lang || "en", { dateStyle: "short", timeStyle: "short" });
 // a mission's servers: each with its role and its terminal, one click away
-const machinesMission = (m, perdue) => (m.machines || []).map((x) => `<span class="mis-machine"><b>${h(x.nom)}</b> ${m.projet ? `<span class="muet petit">${t(x.site ? "the site" : "another role")}</span>` : ""}${perdue ? "" : ` <a class="btn btn-petit local-seul" href="#terminal/${encodeURIComponent(x.id)}" aria-label="${h(t("Terminal") + " " + x.nom)}">${t("Terminal")}</a>`}</span>`).join("");
+const machinesMission = (m, perdue) => (m.machines || []).map((x) => `<span class="mis-machine"><b>${h(x.nom)}</b> ${m.projet ? `<span class="muet petit">${t(x.site ? "receives the project" : "another role")}</span>` : ""}${perdue ? "" : ` <a class="btn btn-petit local-seul" href="#terminal/${encodeURIComponent(x.id)}" aria-label="${h(t("Terminal") + " " + x.nom)}">${t("Terminal")}</a>`}</span>`).join("");
 function cadreMission(m) {
   const id = h(m.id);
   if (!m.suivie) return `<section class="bloc mis-cadre mis-ancienne" data-mission="${id}"><div class="ligne m0 tuile-tete"><a class="croit" href="#missions/${encodeURIComponent(m.id)}"><b>${h((m.carte || {}).titre || (m.phrase.length > 140 ? m.phrase.slice(0, 140) + "…" : m.phrase))}</b></a>${badgeMission(m)}</div>
@@ -6210,9 +6210,10 @@ document.addEventListener("click", async (ev) => {
   if (r) rendrePage();
 });
 
-// the New mission form, everything in view, no fold: the mission on the left (what to do, its project or none, its
-// plan, the new project's settings), its servers and keys on the right (each server's role, the permission choice,
-// the servers' plan, the address); one column on a phone. nm.f: the form as typed, kept across a refresh until
+// the New mission form, everything in view, no fold: the goal of the mission on top (with Improve with Claude), then
+// two blocks to tick, side by side on a computer: Studio project (any kind of project: its name, its plan, a new
+// project's settings) and Server management (the servers and their role, the permission choice, the servers' plan,
+// the public address); the Vault's API keys below, always there. nm.f: the form as typed, kept across a refresh until
 // Launch, Save or Cancel; index: the home conversation's proposal it comes from
 const nm = { f: null };
 const MISSION_VIDE = () => ({ texte: "", plan: "", projet: "", dossier: "", sans_projet: false, serveurs: [], autres: [], apis: [], url: "", plan_deploiement: "", moment: "livraison", mode: "manuel",
@@ -6223,6 +6224,7 @@ function nouvelleMission(pre) {
   if (nm.f.serveur && !nm.f.serveurs.includes(nm.f.serveur)) nm.f.serveurs.unshift(nm.f.serveur); // a proposal of the first 3.1 builds
   if (nm.f.api && !nm.f.apis.includes(nm.f.api)) nm.f.apis.unshift(nm.f.api);
   delete nm.f.serveur; delete nm.f.api;
+  if (nm.f.gestion === undefined) nm.f.gestion = !!(nm.f.sans_projet || nm.f.serveurs.length || nm.f.autres.length); // Server management ticked when servers come with it
   nm.f.reglages = { ...(nm.f.reglages || {}) };
   if (etat.page === "nouvelle-mission") rendrePage(); else location.hash = "#nouvelle-mission";
 }
@@ -6231,38 +6233,43 @@ const nomMissionPropose = (texte) => String(texte || "").split("\n")[0].replace(
 pages["nouvelle-mission"] = async () => {
   if (!nm.f) nm.f = MISSION_VIDE();
   lireFormMission(); // drawn again (a choice, an answer): what is typed now, Claude's rewrite included
-  const f = nm.f, edition = !!f.id, distant = !!(etat.vue || {}).distant, sans = !!f.sans_projet;
+  const f = nm.f, edition = !!f.id, distant = !!(etat.vue || {}).distant, studio = !f.sans_projet, gestion = !!f.gestion;
   const [sv, cof, mis, mod, md] = await Promise.all([api("serveurs").catch(() => ({})), api("coffre").catch(() => ({})), api("missions").catch(() => ({})),
     etat.cpModeles ? { modeles: etat.cpModeles } : api("modeles").catch(() => ({})), etat.modeDefaut && etat.modeDefaut.cadrage_global !== undefined ? etat.modeDefaut : api("mode?defaut=1").catch(() => ({})), lireCategories(), connexionConnueGH()]);
   etat.cpModeles = mod.modeles || []; etat.modeDefaut = md;
   const serveurs = sv.serveurs || [], cles = serveurs.map((x) => x.cle).filter(Boolean);
   const apis = (cof.entrees || []).filter((e) => !cles.includes(e.id)).sort((a, b) => a.nom.localeCompare(b.nom));
   const projets = projetsVisibles(etat.vue || {}).map((p) => p.nom), existant = projets.find((n) => n.toLowerCase() === f.projet.trim().toLowerCase());
-  const pris = [...f.serveurs, ...f.autres], inconnus = [...pris.filter((x) => !serveurs.some((s) => s.id === x)), ...f.apis.filter((x) => !apis.some((a) => a.id === x))];
-  const avecServeurs = pris.some((x) => serveurs.some((s) => s.id === x)), avecCles = f.apis.length > 0, site = f.serveurs.some((x) => serveurs.some((s) => s.id === x));
+  const pris = [...f.serveurs, ...f.autres], inconnus = [...(gestion ? pris.filter((x) => !serveurs.some((s) => s.id === x)) : []), ...f.apis.filter((x) => !apis.some((a) => a.id === x))];
+  const avecServeurs = gestion && pris.some((x) => serveurs.some((s) => s.id === x)), recoit = studio && gestion && f.serveurs.some((x) => serveurs.some((s) => s.id === x));
   etat.rp = { modeles: etat.cpModeles, reglages: (mis.reglages || []).filter((r) => r.cle !== "permission").map((r) => ({ ...r, propre: f.reglages[r.cle] || "" })) };
   const v = (x) => h(String(x || "")), mdv = { cadrage_global: 25, duree_max_global: 0, ...md, parallele_max: 3, ...(f.modes || {}) };
   const ligneServeur = (x) => { const coche = pris.includes(x.id), autre = f.autres.includes(x.id);
     return `<div class="nm-choix"><label class="case m0"><input type="checkbox" name="nm-srv" id="nm-srv-${h(x.id)}" value="${h(x.id)}"${coche ? " checked" : ""}> <span><b>${h(x.nom)}</b> <span class="muet petit">${h(x.hote || "")}</span></span></label>
-      ${coche && !sans ? `<select id="nm-role-${h(x.id)}" aria-label="${h(t("Role of {0}", [x.nom]))}"><option value="site"${autre ? "" : " selected"}>${t("The site goes online here")}</option><option value="autre"${autre ? " selected" : ""}>${t("Another role (database, worker…)")}</option></select>` : ""}</div>`; };
+      ${coche && studio ? `<select id="nm-role-${h(x.id)}" aria-label="${h(t("Role of {0}", [x.nom]))}"><option value="site"${autre ? "" : " selected"}>${t("The project is deployed here")}</option><option value="autre"${autre ? " selected" : ""}>${t("Another role (database, worker…)")}</option></select>` : ""}</div>`; };
   const cats = etat.categoriesAPI || [], ligneCle = (e) => `<label class="case m0 nm-choix"><input type="checkbox" name="nm-api" id="nm-api-${h(e.id)}" value="${h(e.id)}"${f.apis.includes(e.id) ? " checked" : ""}> <span>${h(e.nom)}</span></label>`;
-  const groupeCles = (c, nom) => { const l = apis.filter((e) => (e.categorie || "") === c); return l.length ? `${nom ? `<p class="petit muet m0 nm-cat">${h(nom)}</p>` : ""}${l.map(ligneCle).join("")}` : ""; };
-  const projetNeuf = !sans && !edition && !existant;
+  const groupeCles = (c, nom) => { const l = apis.filter((e) => (e.categorie || "") === c); return l.length ? `<div class="nm-cles-groupe">${nom ? `<p class="petit muet m0 nm-cat">${h(nom)}</p>` : ""}${l.map(ligneCle).join("")}</div>` : ""; };
+  const projetNeuf = studio && !edition && !existant;
+  const bloc = (id, coche, titre, aide, desactive) => `<label class="nm-bloc-choix${coche ? " actif" : ""}"><input type="checkbox" id="${id}"${coche ? " checked" : ""}${desactive ? " disabled" : ""}> <span><b>${t(titre)}</b><br><span class="muet petit">${t(aide)}</span></span></label>`;
   return `<div class="missions nm">
     <div class="ligne m0"><a class="btn btn-petit" href="#missions" data-nm-annuler>${ic("gauche")} ${t("Missions")}</a></div>
     <form class="bloc" id="nm-form" novalidate>
       <h2 class="m0">${t(edition ? "Edit the mission" : "New mission")}</h2>
       ${f.index !== undefined ? `<p class="muet petit m0" role="note">${t("Filled by the assistant from your request: check it, change what you want, then launch it.")}</p>` : ""}
+      <div class="champ nm-but"><label for="nm-texte"><b>${t("Goal of the mission")}</b></label>
+        <p class="muet petit m0" id="nm-texte-aide">${t("The end result you want, in your words. Improve with Claude turns it into a clear brief.")}${edition && studio ? " " + t("A changed text is added to the project as a new request.") : ""}</p>
+        <textarea id="nm-texte" rows="5" maxlength="20000" required aria-describedby="nm-texte-aide">${v(f.texte)}</textarea>${barreAmeliorer("nm-texte", studio ? "" : "serveurs")}</div>
+      <div class="nm-blocs" role="group" aria-label="${h(t("What the mission uses"))}">
+        ${bloc("nm-studio", studio, "Studio project", "Claude develops a project of any kind: plan, milestones, code, tests.", edition)}
+        ${bloc("nm-gestion", gestion, "Server management", "Claude installs, configures and links your servers, and deploys the project there when there is one.", false)}
+      </div>
       <div class="nm-colonnes">
-        <section class="nm-col" aria-labelledby="nm-t-mission"><h3 class="m0" id="nm-t-mission">${t("The mission")}</h3>
-          <label class="champ"><span>${t(sans ? "What must be done on the servers?" : "What must the mission do?")}</span><textarea id="nm-texte" rows="5" maxlength="20000" required>${v(f.texte)}</textarea>
-            ${edition && !sans ? `<span class="muet petit">${t("A changed text is added to the project as a new request.")}</span>` : ""}</label>
-          ${edition ? "" : `<label class="case m0"><input type="checkbox" id="nm-sans-projet"${sans ? " checked" : ""}> <span>${t("No Studio project: only set up servers")}<br><span class="muet petit">${t("For example: install a program from GitHub on several servers and link them together. One task on the servers, no development.")}</span></span></label>`}
-          ${sans ? "" : `<div class="champ"><label for="nm-nom">${t("Project")}</label>
+        ${studio ? `<section class="nm-col nm-bloc" aria-labelledby="nm-t-studio"><h3 class="m0" id="nm-t-studio">${t("Studio project")}</h3>
+          <div class="champ"><label for="nm-nom">${t("Project")}</label>
             <input type="text" id="nm-nom" list="nm-projets" value="${v(f.projet)}" maxlength="60" autocomplete="off" spellcheck="false"${edition ? " readonly" : ""} aria-describedby="nm-projet-aide">
             <datalist id="nm-projets">${projets.map((n) => `<option value="${h(n)}">`).join("")}</datalist>
-            <p class="muet petit m0" id="nm-projet-aide">${edition ? t("The mission's project.") : existant ? t("One of your projects: the mission becomes its next request. Its settings stay in Studio, under Manage.") : t("A new project in Studio. Type the name of one of yours to add the mission to it.")}</p></div>`}
-          <div class="champ"><label for="nm-plan">${t("Plan (optional)")}</label><textarea id="nm-plan" rows="4" maxlength="8000" placeholder="${h(t(sans ? "The steps you already have in mind." : "The steps you already have in mind. Without them, the project's architect writes the plan."))}">${v(f.plan)}</textarea>${barreAmeliorer("nm-plan")}</div>
+            <p class="muet petit m0" id="nm-projet-aide">${edition ? t("The mission's project.") : existant ? t("One of your projects: the mission becomes its next request. Its settings stay in Studio, under Manage.") : t("A new project in Studio. Type the name of one of yours to add the mission to it.")}</p></div>
+          <div class="champ"><label for="nm-plan">${t("Plan (optional)")}</label><textarea id="nm-plan" rows="4" maxlength="8000" placeholder="${h(t("The steps you already have in mind. Without them, the project's architect writes the plan."))}">${v(f.plan)}</textarea>${barreAmeliorer("nm-plan")}</div>
           ${projetNeuf ? `<div class="nm-projet-reglages"><h4 class="m0">${t("Project settings")}</h4>
             <div class="champ"><label for="nm-dossier">${t("Folder")}</label><div class="ligne m0"><input type="text" id="nm-dossier" class="croit" value="${v(f.dossier)}"${distant ? " readonly" : ""} aria-describedby="nm-dossier-aide">
               ${distant ? "" : `<button type="button" class="btn btn-petit" data-parcourir="nm-dossier" data-titre="${h(t("Choose the project's folder"))}">${t("Choose…")}</button>`}</div>
@@ -6272,38 +6279,38 @@ pages["nouvelle-mission"] = async () => {
             <h4 class="m0">${t("This project's settings")}</h4>
             <p class="muet petit m0">${t("Each setting follows Settings by default. A value chosen here applies to this project only, from its next cycle.")}</p>
             <div class="nm-reglages">${lignesReglagesProjet()}</div></div>` : ""}
-        </section>
-        <section class="nm-col" aria-labelledby="nm-t-serveurs"><h3 class="m0" id="nm-t-serveurs">${t("Servers and API keys")}</h3>
+        </section>` : ""}
+        ${gestion ? `<section class="nm-col nm-bloc" aria-labelledby="nm-t-serveurs"><h3 class="m0" id="nm-t-serveurs">${t("Server management")}</h3>
           <fieldset class="nm-liste"><legend>${t("Servers")}</legend>
             ${serveurs.length ? serveurs.map(ligneServeur).join("") : `<p class="muet petit m0">${t("No server yet: add one on the Servers page.")}</p>`}
-            ${sans || !avecServeurs ? "" : `<p class="muet petit m0">${t("The site goes online on the servers marked so; the others get the role the servers' plan gives them.")}</p>`}</fieldset>
-          <fieldset class="nm-liste"><legend>${t("API keys")}</legend>
-            ${apis.length ? groupeCles("", "") + cats.map((c) => groupeCles(c.id, c.nom)).join("") : `<p class="muet petit m0">${t("No API key in the vault yet.")}</p>`}
-            ${avecCles ? `<p class="muet petit m0">${t("Their values are never shown to Claude: Athanor's tools use them.")}</p>` : ""}</fieldset>
-          ${inconnus.length ? `<p class="attention petit m0" role="alert">${h(t("Not found here, choose again: {0}", [inconnus.join(", ")]))}</p>` : ""}
-          ${avecServeurs || avecCles ? `<fieldset class="nm-mode m0" id="nm-mode-srv"><legend>${t("On the servers")}</legend>
+            ${studio && avecServeurs ? `<p class="muet petit m0">${t("The project is deployed on the servers marked so; the others get the role the servers' plan gives them.")}</p>` : ""}</fieldset>
+          ${avecServeurs || f.apis.length ? `<fieldset class="nm-mode m0" id="nm-mode-srv"><legend>${t("On the servers")}</legend>
             ${MODES_MISSION.map(([x, nom, aide]) => `<label class="radio"><input type="radio" name="nm-perm" value="${x}"${(f.mode || "manuel") === x ? " checked" : ""}> <span><b>${t(nom)}</b><br><span class="muet petit">${t(aide)}</span></span></label>`).join("")}</fieldset>` : ""}
-          ${avecServeurs ? `<div class="champ"><label for="nm-plan-dep">${t("Plan for the servers")}</label><textarea id="nm-plan-dep" rows="5" maxlength="4000" placeholder="${h(t("What each server does and how they are linked, for example: nginx on web-1 on port 8080, PostgreSQL on db-1 reachable from web-1 only, web-2 a copy of web-1, an uptime check."))}">${v(f.plan_deploiement)}</textarea>${barreAmeliorer("nm-plan-dep", "serveurs")}</div>` : ""}
-          ${site && !sans ? `<div class="champ"><label for="nm-url">${t("Address")}</label><input type="text" inputmode="url" id="nm-url" value="${v(f.url)}" placeholder="https://app.example.com" autocomplete="off" spellcheck="false" aria-describedby="nm-url-aide">
-            <p class="muet petit m0" id="nm-url-aide">${t("Where the project will answer. Leave it empty if it has no address yet.")}</p></div>
+          <div class="champ"><label for="nm-plan-dep">${t("Plan for the servers")}</label><textarea id="nm-plan-dep" rows="5" maxlength="4000" placeholder="${h(t("What each server does and how they are linked, for example: nginx on web-1 on port 8080, PostgreSQL on db-1 reachable from web-1 only, web-2 a copy of web-1, an uptime check."))}">${v(f.plan_deploiement)}</textarea>${barreAmeliorer("nm-plan-dep", "serveurs")}</div>
+          ${recoit ? `<div class="champ"><label for="nm-url">${t("Public address (optional)")}</label><input type="text" inputmode="url" id="nm-url" value="${v(f.url)}" placeholder="https://app.example.com" autocomplete="off" spellcheck="false" aria-describedby="nm-url-aide">
+            <p class="muet petit m0" id="nm-url-aide">${t("If the project answers on the web (a site, an API…). Leave it empty otherwise.")}</p></div>
             <fieldset class="m0" role="radiogroup"><legend>${t("When to deploy")}</legend>
             ${[["livraison", "At delivery"], ["jalon", "After each milestone"]].map(([x, l]) => `<label class="radio"><input type="radio" name="nm-moment" value="${x}"${(f.moment || "livraison") === x ? " checked" : ""}> ${t(l)}</label>`).join("")}</fieldset>` : ""}
-        </section>
+        </section>` : ""}
       </div>
-      <p class="petit attention m0" id="nm-erreur" role="alert" hidden></p>
-      ${distant ? `<p class="muet petit">${t("Missions are launched from the computer.")}</p>` : `<div class="ligne mt-1"><button type="submit" class="btn btn-primaire" id="nm-lancer">${t(edition ? "Save" : "Launch")}</button><a class="btn" href="#missions" data-nm-annuler>${t("Cancel")}</a></div>`}
+      <section class="nm-coffre" aria-labelledby="nm-t-coffre"><h3 class="m0" id="nm-t-coffre">${t("Vault: API keys")}</h3>
+        <p class="muet petit m0">${t("The keys this mission may use. Their values are never shown to Claude: Athanor's tools use them.")}</p>
+        <div class="nm-cles">${apis.length ? groupeCles("", "") + cats.map((c) => groupeCles(c.id, c.nom)).join("") : `<p class="muet petit m0">${t("No API key in the vault yet.")}</p>`}</div></section>
+      ${inconnus.length ? `<p class="attention petit m0" role="alert">${h(t("Not found here, choose again: {0}", [inconnus.join(", ")]))}</p>` : ""}
+      <p class="petit attention m0" id="nm-erreur" role="alert"${studio || gestion ? " hidden" : ""}>${studio || gestion ? "" : t("Tick Studio project, Server management, or both.")}</p>
+      ${distant ? `<p class="muet petit">${t("Missions are launched from the computer.")}</p>` : `<div class="ligne mt-1"><button type="submit" class="btn btn-primaire" id="nm-lancer"${studio || gestion ? "" : " disabled"}>${t(edition ? "Save" : "Launch")}</button><a class="btn" href="#missions" data-nm-annuler>${t("Cancel")}</a></div>`}
     </form></div>`;
 };
 // every change is kept in nm.f at once: a refresh of the page (a choice, the GitHub connection) loses nothing
 function lireFormMission() {
   const f = nm.f, z = $("#nm-form"); if (!f || !z) return f;
   const val = (id) => ($("#" + id) || {}).value;
-  const sans = $("#nm-sans-projet") ? $("#nm-sans-projet").checked : !!f.sans_projet;
+  const studio = $("#nm-studio") ? $("#nm-studio").checked : !f.sans_projet, gestion = $("#nm-gestion") ? $("#nm-gestion").checked : !!f.gestion;
   const coches = [...z.querySelectorAll("[name=nm-srv]")].filter((x) => x.checked).map((x) => x.value), affiches = [...z.querySelectorAll("[name=nm-srv]")].map((x) => x.value);
-  const garde = (l) => l.filter((x) => !affiches.includes(x)); // a proposed server not found here stays (it is said so)
+  const garde = (l) => l.filter((x) => !affiches.includes(x)); // a proposed server not found here (or the block not shown) stays
   const role = (id) => (($("#nm-role-" + CSS.escape(id)) || {}).value || (f.autres.includes(id) ? "autre" : "site"));
-  const autres = sans ? [] : coches.filter((id) => role(id) === "autre");
-  Object.assign(f, { texte: val("nm-texte") ?? f.texte, projet: val("nm-nom") ?? f.projet, sans_projet: sans, plan: val("nm-plan") ?? f.plan, url: (val("nm-url") ?? f.url).trim(),
+  const autres = studio ? coches.filter((id) => role(id) === "autre") : [];
+  Object.assign(f, { texte: val("nm-texte") ?? f.texte, projet: val("nm-nom") ?? f.projet, sans_projet: !studio, gestion, plan: val("nm-plan") ?? f.plan, url: (val("nm-url") ?? f.url).trim(),
     plan_deploiement: val("nm-plan-dep") ?? f.plan_deploiement, serveurs: [...garde(f.serveurs), ...coches.filter((id) => !autres.includes(id))], autres: [...garde(f.autres), ...autres],
     apis: [...f.apis.filter((x) => !z.querySelector(`[name=nm-api][value="${CSS.escape(x)}"]`)), ...[...z.querySelectorAll("[name=nm-api]:checked")].map((x) => x.value)],
     mode: (z.querySelector("[name=nm-perm]:checked") || {}).value || f.mode || "manuel", moment: (z.querySelector("[name=nm-moment]:checked") || {}).value || f.moment || "livraison" });
@@ -6315,14 +6322,14 @@ document.addEventListener("change", (ev) => {
   const i = ev.target; if (!i.closest("#nm-form")) return;
   const f = lireFormMission();
   // a choice that shows or hides a part of the form: drawn again from nm.f
-  if (i.id === "nm-sans-projet" || i.name === "nm-srv" || i.name === "nm-api" || i.id.startsWith("nm-role-") || i.id === "nm-nom") rendrePage();
+  if (i.id === "nm-studio" || i.id === "nm-gestion" || i.name === "nm-srv" || i.name === "nm-api" || i.id.startsWith("nm-role-") || i.id === "nm-nom") rendrePage();
   else if (i.name === "nm-gh") { Object.assign(f, { github: i.value === "existant" ? "lier" : i.value, depot: "" }); rendrePage(); } // the connection's notice only with a repository chosen
   else if (i.id === "nm-gh-auto") f.sans_pousse = !i.checked;
   else if (i.id === "nm-gh-atelier") f.atelier = i.checked;
   else if (i.id === "nm-gh-nom" || i.id === "nm-gh-depot") Object.assign(f, i.id === "nm-gh-depot" ? { github: "lier", depot: depotSaisi(i.value) || i.value.trim() } : { github: "creer", depot: i.value.trim() ? nomDepot(i.value) : "" });
   else if (i.closest(".nm-reglages")) f.reglages = { ...f.reglages, [i.id.slice(3)]: i.value };
 });
-document.addEventListener("focusout", (ev) => { // the text written first: the new project's name proposed from it
+document.addEventListener("focusout", (ev) => { // the goal written first: the new project's name proposed from it
   if (ev.target.id !== "nm-texte" || !nm.f || nm.f.id) return;
   const p = $("#nm-nom"); if (p && !p.value.trim()) { p.value = nomMissionPropose(ev.target.value); lireFormMission(); }
 });
@@ -6331,14 +6338,19 @@ document.addEventListener("submit", async (ev) => {
   if (ev.target.id !== "nm-form") return;
   ev.preventDefault();
   const f = lireFormMission(), err = $("#nm-erreur"), b = $("#nm-lancer");
+  if (f.sans_projet && !f.gestion) { err.textContent = t("Tick Studio project, Server management, or both."); err.hidden = false; return; }
   if (!f.sans_projet && !f.projet.trim() && !f.id) { f.projet = nomMissionPropose(f.texte); $("#nm-nom").value = f.projet; }
-  const corps = { ...f, moment: f.serveurs.length ? f.moment : "" };
-  delete corps.id; delete corps.modeAvant;
-  if (f.mode === "ignorer" && f.modeAvant !== "ignorer") { // full autonomy: confirmed once, with Athanor's password, when it is chosen
+  // what a block left unticked holds is kept in the form, never sent
+  const corps = { ...f, ...(f.gestion ? {} : { serveurs: [], autres: [], plan_deploiement: "", url: "" }) };
+  corps.moment = corps.serveurs.length ? f.moment : "";
+  if (f.sans_projet) Object.assign(corps, { projet: "", plan: "", dossier: "", autres: [], serveurs: [...corps.serveurs, ...corps.autres] }); // the Studio block's fields stay in the form
+  delete corps.id; delete corps.modeAvant; delete corps.gestion;
+  if (corps.mode === "ignorer" && f.modeAvant !== "ignorer" && (corps.serveurs.length || corps.apis.length)) { // full autonomy: confirmed once, with Athanor's password, when it is chosen
     const p = await confirmerIgnorer(t("Full autonomy: Claude will do everything on these servers without asking you, dangerous commands and putting it online included. Choose it only for servers you can rebuild."));
     if (!p) return;
     Object.assign(corps, { confirmer: true }, p);
   }
+  if (!corps.serveurs.length && !corps.apis.length) corps.mode = "manuel"; // no server, no key: no permission to give
   if (!corps.reglages || !Object.values(corps.reglages).some(Boolean)) delete corps.reglages;
   b.disabled = true; err.hidden = true;
   const r = await api(f.id ? "missions/" + encodeURIComponent(f.id) : "missions", "POST", corps).catch((e) => { err.textContent = e.message; err.hidden = false; return null; });

@@ -1744,9 +1744,19 @@ html.scene-pause .verrou * { animation-play-state: paused !important; }
 .mis-cadre .badge.attention { color: var(--attention, inherit); border-color: currentColor; }
 .accueil-actions { gap: 10px; flex-wrap: wrap; }
 .nm form { display: flex; flex-direction: column; gap: 12px; }
-/* the form uses the width: the mission on the left, its servers and keys on the right; one column below 1000 px */
-.nm-colonnes { display: grid; grid-template-columns: 1fr; gap: 16px 28px; align-items: start; }
-@media (min-width: 1000px) { .nm-colonnes { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+/* the form uses the width: the goal on top, the two blocks ticked side by side (one alone takes the row), the vault's
+   keys below in columns; everything stacked on a phone */
+.nm-but textarea { width: 100%; }
+.nm-blocs { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 10px 16px; }
+.nm-bloc-choix { display: flex; gap: 10px; align-items: flex-start; border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; cursor: pointer; }
+.nm-bloc-choix:has(input:checked) { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.nm-bloc-choix:has(input:disabled) { cursor: default; }
+.nm-bloc-choix input { margin-top: 3px; }
+.nm-colonnes { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr)); gap: 16px 28px; align-items: start; }
+.nm-bloc { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+.nm-coffre { display: flex; flex-direction: column; gap: 8px; border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+.nm-cles { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); gap: 6px 24px; align-items: start; }
+.nm-cles-groupe { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .nm-col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .nm-col textarea { width: 100%; }
 .nm-liste { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; margin: 0; display: flex; flex-direction: column; gap: 6px; }

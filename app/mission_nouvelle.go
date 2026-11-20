@@ -2,7 +2,7 @@ package main
 
 // Missions (3.1, note "simplicité d'abord"): a mission links a Studio project, servers and API keys of the vault,
 // with one permission choice ("needs me" = manuel, "autonomous" = auto, "full autonomy" = ignorer, confirmed with
-// Athanor's password once). With a project: its servers where the site goes online, its other servers (a database,
+// Athanor's password once). With a project: its servers the project is deployed on, its other servers (a database,
 // a worker…) set up as the servers' plan says; launching it is the home's project card launch (create the project,
 // its deployment, its settings, start its pilot), or for an existing project its deployment and a new request.
 // Without a project: one Servers task on its servers and keys (install, configure, link them). Its state is read
@@ -30,7 +30,7 @@ type MissionDemande struct {
 	Dossier string `json:"dossier"` // a new project's folder ("": next to the other projects)
 	// no Studio project: one Servers task on Serveurs and APIs
 	SansProjet bool     `json:"sans_projet,omitempty"`
-	Serveurs   []string `json:"serveurs"`          // inventory ids or names: where the site goes online (without a project: every server)
+	Serveurs   []string `json:"serveurs"`          // inventory ids or names: where the project is deployed (without a project: every server)
 	Autres     []string `json:"autres,omitempty"`  // a project's other servers (a database…), never deployed to
 	APIs       []string `json:"apis"`              // vault ids or names
 	Serveur    string   `json:"serveur,omitempty"` // read: one server, as the first 3.1 forms and proposals sent it
@@ -51,7 +51,7 @@ type MissionDemande struct {
 	Index      *int              `json:"index,omitempty"` // the home conversation's message whose proposal this launches
 }
 
-// MachineVue: a server of a mission as its frame names it; Site: the site goes online there (else another role).
+// MachineVue: a server of a mission as its frame names it; Site: the project is deployed there (else another role).
 type MachineVue struct {
 	ID   string `json:"id"`
 	Nom  string `json:"nom"`
@@ -184,7 +184,7 @@ func (s *Serveur) nettoyerDemande(d *MissionDemande) error {
 	d.Texte, d.Projet, d.Dossier = strings.TrimSpace(d.Texte), strings.TrimSpace(d.Projet), strings.TrimSpace(d.Dossier)
 	d.Serveurs, d.APIs = sansDoublon(append([]string{d.Serveur}, d.Serveurs...)), sansDoublon(append([]string{d.API}, d.APIs...))
 	d.Autres, d.Serveur, d.API = sansDoublon(d.Autres), "", ""
-	if d.SansProjet { // no site: every server is one of the task's
+	if d.SansProjet { // no project: every server is one of the task's
 		d.Serveurs, d.Autres, d.Projet, d.Dossier = sansDoublon(append(d.Serveurs, d.Autres...)), nil, "", ""
 	}
 	switch {
@@ -197,7 +197,7 @@ func (s *Serveur) nettoyerDemande(d *MissionDemande) error {
 	case d.SansProjet && utf8.RuneCountInString(texteTacheMission(d.Texte, d.Plan, d.PlanDeploiement)) > maxTexteTache:
 		return erreurEntree("A servers mission holds 4,000 characters at most (its text and its plans).")
 	case len(d.Autres) > 0 && len(d.Serveurs) == 0:
-		return erreurEntree("Choose at least one server where the site goes online.")
+		return erreurEntree("Choose at least one server where the project is deployed.")
 	case d.Moment != "" && d.Moment != "jalon" && d.Moment != "livraison":
 		return erreurEntree("Invalid request")
 	case d.Mode != "" && !slices.Contains(modesMission, d.Mode):
@@ -601,7 +601,7 @@ func (s *Serveur) apiAgirMission(w http.ResponseWriter, r *http.Request) {
 	s.ecrireJSON(w, map[string]any{"mission": s.vueMission(m), "message_key": cle, "args": args})
 }
 
-// machines: the frame's servers: where the site goes online, then the others.
+// machines: the frame's servers: where the project is deployed, then the others.
 func machines(site, autres []string) []MachineVue {
 	l := []MachineVue{}
 	for i, n := range nomsServeurs(site) {

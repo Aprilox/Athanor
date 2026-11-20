@@ -69,7 +69,7 @@ type Mission struct {
 	Journal     []EntreeJournal    `json:"journal,omitempty"`      // at most maxJournalMission, the oldest first
 	InfraJusqua string             `json:"infra_jusqua,omitempty"` // former option (removed, note 19h03 §3): still read from older missions, never used
 	// a mission of 3.1 (mission_nouvelle.go): its project ("" with Tache: a servers mission, its Servers task;
-	// "" without: an old mission, read only), its servers (inventory ids: where the site goes online, and the
+	// "" without: an old mission, read only), its servers (inventory ids: where the project is deployed, and the
 	// project's others), its API keys (vault ids), its plans and its permission choice (Mode manuel | auto |
 	// ignorer). Serveur, API and Autonome: as the first 3.1 builds wrote them (one server, one key, auto)
 	Projet       string   `json:"projet,omitempty"`

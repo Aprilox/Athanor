@@ -78,7 +78,7 @@ func TestMissionsSuivies(t *testing.T) {
 		t.Fatal("a refused mission was written or started")
 	}
 
-	// other servers without one where the site goes online: refused
+	// other servers without one the project is deployed on: refused
 	if code, _ := appel("POST", "/api/missions", MissionDemande{Texte: "x", Projet: "x", Autres: []string{"base"}}); code != 400 {
 		t.Errorf("other servers without a site's server: %d", code)
 	}
@@ -108,7 +108,7 @@ func TestMissionsSuivies(t *testing.T) {
 		t.Errorf("the servers page does not say both servers serve the project: %v", u)
 	}
 	brief := s.briefPreparationProjet(Projet{Nom: "vitrine"}, e)
-	if !strings.Contains(brief, "the site goes online on vps") || !strings.Contains(brief, "other servers (base)") {
+	if !strings.Contains(brief, "the project is deployed on vps") || !strings.Contains(brief, "other servers (base)") {
 		t.Errorf("the preparation does not say the servers' roles: %s", brief)
 	}
 	// the Deployment tab does not show the other servers: saving it keeps them
